@@ -7,20 +7,23 @@ Type identifier = “:string”;
 
 Datatype:
   type
-  = Uint word5 (* the bit size divided by 8 *)
-  | Int word5
-  | Tuple (type list)
-  | DynArray type num
-  | Void
-  | Bool
+  = UintT word5 (* the bit size divided by 8 *)
+  | IntT word5
+  | TupleT (type list)
+  | DynArrayT type num
+  | VoidT
+  | BoolT
+  | StringT
+  | HexT
+  | BytesT
 End
 
 Datatype:
   literal
-  = Str string
-  | Hex string
-  | Bytes (word8 list)
-  | Int int
+  = StrL string
+  | HexL string
+  | BytesL (word8 list)
+  | IntL int
 End
 
 Datatype:
@@ -78,26 +81,26 @@ Definition test_if_control_flow_ast_def:
   test_if_control_flow_ast =
   FunctionDef "foo" [External] []
   [
-    AnnAssign "a" (Uint (n2w (256 DIV 8))) (Literal (Int 1));
-    If (Compare (Name "a") Eq (Literal (Int 1)))
+    AnnAssign "a" (UintT (n2w (256 DIV 8))) (Literal (IntL 1));
+    If (Compare (Name "a") Eq (Literal (IntL 1)))
     [
-      Assign "a" (Literal (Int 2))
+      Assign "a" (Literal (IntL 2))
     ]
     [
-      Assign "a" (Literal (Int 3))
+      Assign "a" (Literal (IntL 3))
     ];
-    Return (SOME (BinOp (Name "a") Add (Literal (Int 42))))
-  ] (Uint (n2w (256 DIV 8)))
+    Return (SOME (BinOp (Name "a") Add (Literal (IntL 42))))
+  ] (UintT (n2w (256 DIV 8)))
 End
 
 Definition test_for_control_flow_ast_def:
   test_for_control_flow_ast =
   FunctionDef "foo" [External] []
   [
-     AnnAssign "a" (DynArray (Uint (n2w (256 DIV 8))) 10)
-       (ArrayLit [Literal (Int 1); Literal (Int 2); Literal (Int 3)]);
-     AnnAssign "counter" (Uint (n2w (256 DIV 8))) (Literal (Int 0));
-     For "i" (Uint (n2w (256 DIV 8))) (Name "a")
+     AnnAssign "a" (DynArrayT (UintT (n2w (256 DIV 8))) 10)
+       (ArrayLit [Literal (IntL 1); Literal (IntL 2); Literal (IntL 3)]);
+     AnnAssign "counter" (UintT (n2w (256 DIV 8))) (Literal (IntL 0));
+     For "i" (UintT (n2w (256 DIV 8))) (Name "a")
      [ OpAssign "counter" Add (Name "i") ]
   ]
 End
