@@ -56,7 +56,7 @@ Datatype:
   | For identifier type expr (stmt list)
   | If expr (stmt list) (stmt list)
   | Assert expr string
-  | Raise (string option)
+  | Raise string
   | Return (expr option)
   | Assign identifier (* TODO: could be a tuple *) expr
   | OpAssign identifier operator expr
