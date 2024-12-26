@@ -45,6 +45,12 @@ Definition evaluate_cmp_def:
   evaluate_cmp _ _ _ = TypeError
 End
 
+Definition evaluate_binop_def:
+  evaluate_binop Add (IntV i1) (IntV i2) = Vs [IntV (i1 + i2)] ∧
+  evaluate_binop Sub (IntV i1) (IntV i2) = Vs [IntV (i1 - i2)] ∧
+  evaluate_binop _ _ _ = TypeError
+End
+
 Definition expr_nodes_def:
   expr_nodes (NamedExpr e1 e2) = 1n + expr_nodes e1 + expr_nodes e2 ∧
   expr_nodes (Name _) = 1 + 1 ∧
@@ -66,6 +72,10 @@ Definition evaluate_exps_def:
   evaluate_exps [Compare e1 cmp e2] =
   (case evaluate_exps [e1; e2] of Vs [v1; v2] =>
      evaluate_cmp cmp v1 v2
+   | _ => TypeError) ∧
+  evaluate_exps [BinOp e1 bop e2] =
+  (case evaluate_exps [e1; e2] of Vs [v1; v2] =>
+     evaluate_binop bop v1 v2
    | _ => TypeError) ∧
   evaluate_exps [] = Vs [] ∧
   evaluate_exps [e1] = TypeError ∧
