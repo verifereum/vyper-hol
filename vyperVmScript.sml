@@ -48,7 +48,7 @@ End
 Definition evaluate_binop_def:
   evaluate_binop Add (IntV i1) (IntV i2) = Vs [IntV (i1 + i2)] ∧
   evaluate_binop Sub (IntV i1) (IntV i2) = Vs [IntV (i1 - i2)] ∧
-  evaluate_binop _ _ _ = TypeError
+  evaluate_binop (_: operator) _ _ = TypeError
 End
 
 Definition expr_nodes_def:
@@ -64,27 +64,30 @@ Termination
 End
 
 Definition evaluate_exps_def:
-  evaluate_exps [Literal l] = Vs [evaluate_literal l] ∧
-  evaluate_exps [IfExp e1 e2 e3] =
-  (case evaluate_exps [e1] of Vs [BoolV b] =>
-     if b then evaluate_exps [e2] else evaluate_exps [e3]
+  evaluate_exps env [Literal l] = Vs [evaluate_literal l] ∧
+  evaluate_exps env [Name id] =
+  (case FLOOKUP env id of SOME v => Vs [v]
    | _ => TypeError) ∧
-  evaluate_exps [Compare e1 cmp e2] =
-  (case evaluate_exps [e1; e2] of Vs [v1; v2] =>
+  evaluate_exps env [IfExp e1 e2 e3] =
+  (case evaluate_exps env [e1] of Vs [BoolV b] =>
+     if b then evaluate_exps env [e2] else evaluate_exps env [e3]
+   | _ => TypeError) ∧
+  evaluate_exps env [Compare e1 cmp e2] =
+  (case evaluate_exps env [e1; e2] of Vs [v1; v2] =>
      evaluate_cmp cmp v1 v2
    | _ => TypeError) ∧
-  evaluate_exps [BinOp e1 bop e2] =
-  (case evaluate_exps [e1; e2] of Vs [v1; v2] =>
+  evaluate_exps env [BinOp e1 bop e2] =
+  (case evaluate_exps env [e1; e2] of Vs [v1; v2] =>
      evaluate_binop bop v1 v2
    | _ => TypeError) ∧
-  evaluate_exps [] = Vs [] ∧
-  evaluate_exps [e1] = TypeError ∧
-  evaluate_exps (e1::es) =
-  (case evaluate_exps [e1] of Vs [v1] =>
-    (case evaluate_exps es of Vs vs => Vs (v1::vs) | x => x)
+  evaluate_exps env [] = Vs [] ∧
+  evaluate_exps env [e1] = TypeError ∧
+  evaluate_exps env (e1::es) =
+  (case evaluate_exps env [e1] of Vs [v1] =>
+    (case evaluate_exps env es of Vs vs => Vs (v1::vs) | x => x)
    | x => x)
 Termination
-  WF_REL_TAC`measure (λls. LENGTH ls + SUM (MAP expr_nodes ls))`
+  WF_REL_TAC`measure ((λls. LENGTH ls + SUM (MAP expr_nodes ls)) o SND)`
   \\ rw[expr_nodes_def]
 End
 
