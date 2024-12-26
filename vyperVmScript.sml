@@ -97,6 +97,7 @@ Datatype:
   exception
   = BreakException
   | ContinueException
+  | ReturnException value
   | RaiseException string
   | AssertException string
   | Error
@@ -132,10 +133,10 @@ Definition new_variable_def:
 End
 
 Definition assign_target_def:
-  assign_target id typ v ctx =
+  assign_target id v ctx =
   case ctx.scopes of [] => raise Error ctx
   | env::rest => if id ∉ FDOM env then raise Error ctx else
-    (* check that v has type typ here ? *)
+    (* check that v has same type as current value here ? *)
     ctx with scopes := (env |+ (id, v))::rest
 End
 
@@ -147,6 +148,24 @@ Definition execute_stmts_def:
   execute_stmts n [Continue] ctx = raise ContinueException ctx ∧
   execute_stmts n [Break] ctx = raise BreakException ctx ∧
   execute_stmts n [Raise s] ctx = raise (RaiseException s) ctx ∧
+  execute_stmts n [Return NONE] ctx = raise (ReturnException VoidV) ctx ∧
+  execute_stmts n [Return (SOME e)] ctx =
+  (case ctx.scopes of [] => raise Error ctx | env::_ =>
+   (case evaluate_exps env [e] of Vs [v] =>
+      raise (ReturnException v) ctx
+    | _ => raise Error ctx)) ∧
+  execute_stmts n [AnnAssign id typ e] ctx =
+  (let ctx = new_variable id typ ctx in
+   if IS_SOME ctx.raised then ctx else
+   case ctx.scopes of [] => raise Error ctx | env::_ =>
+   (case evaluate_exps env [e] of Vs [v] =>
+      assign_target id v ctx
+    | _ => raise Error ctx)) ∧
+  execute_stmts n [Assign id e] ctx =
+  (case ctx.scopes of [] => raise Error ctx | env::_ =>
+   (case evaluate_exps env [e] of Vs [v] =>
+     assign_target id v ctx
+    | _ => raise Error ctx)) ∧
   execute_stmts n [If e s1 s2] ctx =
   (case ctx.scopes of [] => raise Error ctx | env::_ =>
    if n = 0 then raise Timeout ctx else
@@ -176,7 +195,7 @@ Definition execute_stmts_def:
     if IS_SOME ctx.raised then ctx else
       pop_scope ctx) ∧
   execute_for n id typ ss (v::vs) ctx =
-  (let ctx = assign_target id typ v ctx in
+  (let ctx = assign_target id v ctx in
     if IS_SOME ctx.raised then ctx else
     if n = 0 then raise Timeout ctx else
    let ctx = execute_stmts (PRE n) ss ctx in
