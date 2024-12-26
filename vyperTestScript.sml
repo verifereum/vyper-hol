@@ -1,4 +1,5 @@
-open HolKernel boolLib bossLib Parse;
+open HolKernel boolLib bossLib Parse intLib;
+open finite_mapTheory;
 open vyperAstTheory vyperVmTheory;
 
 val () = new_theory "vyperTest";
@@ -18,6 +19,22 @@ Definition test_if_control_flow_ast_def:
     Return (SOME (BinOp (Name "a") Add (Literal (IntL 42))))
   ] (UintT (n2w (256 DIV 8)))
 End
+
+Theorem evaluate_test_if_control_flow_body:
+  execute_stmts 10
+    (function_body test_if_control_flow_ast)
+    initial_function_context = result_ctx
+  ==>
+  result_ctx.raised = SOME (ReturnException (IntV 44))
+Proof
+  rw[function_body_def, test_if_control_flow_ast_def]
+  \\ simp[execute_stmts_def, new_variable_def,
+          initial_function_context_def,
+          evaluate_exps_def, assign_target_def,
+          evaluate_cmp_def, evaluate_literal_def,
+          evaluate_binop_def,
+          raise_def, FLOOKUP_UPDATE]
+QED
 
 Definition test_for_control_flow_ast_def:
   test_for_control_flow_ast =

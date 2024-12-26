@@ -111,6 +111,13 @@ Datatype:
   |>
 End
 
+Definition initial_function_context_def:
+  initial_function_context = <|
+    scopes := [FEMPTY]
+  ; raised := NONE
+  |>
+End
+
 Definition raise_def:
   raise err ctx = ctx with raised := SOME err
 End

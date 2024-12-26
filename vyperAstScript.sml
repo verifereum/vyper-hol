@@ -76,4 +76,8 @@ Datatype:
   = FunctionDef string (decorator list) (argument list) (stmt list) type
 End
 
+Definition function_body_def:
+  function_body (FunctionDef _ _ _ body _) = body
+End
+
 val () = export_theory();
