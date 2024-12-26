@@ -14,14 +14,13 @@ Datatype:
   | VoidT
   | BoolT
   | StringT
-  | HexT
   | BytesT
 End
 
 Datatype:
   literal
-  = StrL string
-  | HexL string
+  = BoolL bool
+  | StringL string
   | BytesL (word8 list)
   | IntL int
 End
