@@ -52,6 +52,14 @@ Termination
   WF_REL_TAC`measure expr_size`
 End
 
+Definition lookup_scopes_def:
+  lookup_scopes id [] = NONE ∧
+  lookup_scopes id (env::rest) =
+  case FLOOKUP env id of NONE =>
+    lookup_scopes id rest
+  | SOME v => SOME v
+End
+
 Definition evaluate_exps_def:
   evaluate_exps env [Literal l] = Vs [evaluate_literal l] ∧
   evaluate_exps env [ArrayLit es] =
@@ -59,7 +67,7 @@ Definition evaluate_exps_def:
         Vs vs => Vs [ArrayV vs]
       | _ => Err) ∧
   evaluate_exps env [Name id] =
-  (case FLOOKUP env id of SOME v => Vs [v]
+  (case lookup_scopes id env of SOME v => Vs [v]
    | _ => Err) ∧
   evaluate_exps env [IfExp e1 e2 e3] =
   (case evaluate_exps env [e1] of Vs [BoolV b] =>
@@ -143,16 +151,28 @@ Definition new_variable_def:
     ctx with scopes := (env |+ (id, default_value typ))::rest
 End
 
-Definition assign_target_def:
-  assign_target id v ctx =
-  case ctx.scopes of [] => raise Error ctx
-  | env::rest => if id ∉ FDOM env then raise Error ctx else
-    (* check that v has same type as current value here ? *)
-    ctx with scopes := (env |+ (id, v))::rest
+Definition find_containing_scope_def:
+  find_containing_scope id [] = NONE ∧
+  find_containing_scope id (env::rest) =
+  if id ∈ FDOM env then SOME ([], env, rest)
+  else OPTION_MAP (λ(p,q). (env::p, q)) (find_containing_scope id rest)
 End
 
+Definition assign_target_def:
+  assign_target id v ctx =
+  case find_containing_scope id ctx.scopes of
+    NONE => raise Error ctx
+  | SOME (pre, env, rest) =>
+    (* check that v has same type as current value here ? *)
+    ctx with scopes := pre ++ (env |+ (id, v))::rest
+End
+
+(* TODO: remove clock:
+* - ensure For statement bound (DynArray max size, or range max) is present on syntax
+* - define bound on execution steps for statements syntactically
+* - use that to craft the termination measure *)
+
 (* TODO: use state-exception monad *)
-(* TODO: remove clock? it should be bounded... *)
 
 Definition execute_stmts_def:
   execute_stmts n [Pass] ctx = ctx ∧
@@ -161,31 +181,33 @@ Definition execute_stmts_def:
   execute_stmts n [Raise s] ctx = raise (RaiseException s) ctx ∧
   execute_stmts n [Return NONE] ctx = raise (ReturnException VoidV) ctx ∧
   execute_stmts n [Return (SOME e)] ctx =
-  (case ctx.scopes of [] => raise Error ctx | env::_ =>
-   (case evaluate_exps env [e] of Vs [v] =>
-      raise (ReturnException v) ctx
-    | _ => raise Error ctx)) ∧
+  (case evaluate_exps ctx.scopes [e] of Vs [v] =>
+     raise (ReturnException v) ctx
+   | _ => raise Error ctx) ∧
   execute_stmts n [AnnAssign id typ e] ctx =
   (let ctx = new_variable id typ ctx in
    if IS_SOME ctx.raised then ctx else
-   case ctx.scopes of [] => raise Error ctx | env::_ =>
-   (case evaluate_exps env [e] of Vs [v] =>
+   (case evaluate_exps ctx.scopes [e] of Vs [v] =>
       assign_target id v ctx
     | _ => raise Error ctx)) ∧
+  execute_stmts n [OpAssign id bop e2] ctx =
+  (case lookup_scopes id ctx.scopes of NONE => raise Error ctx | SOME v1 =>
+   case evaluate_exps ctx.scopes [e2] of Vs [v2] =>
+   (case evaluate_binop bop v1 v2 of Vs [v] =>
+      assign_target id v ctx
+    | _ => raise Error ctx)
+   | _ => raise Error ctx) ∧
   execute_stmts n [Assign id e] ctx =
-  (case ctx.scopes of [] => raise Error ctx | env::_ =>
-   (case evaluate_exps env [e] of Vs [v] =>
+   (case evaluate_exps ctx.scopes [e] of Vs [v] =>
      assign_target id v ctx
-    | _ => raise Error ctx)) ∧
+    | _ => raise Error ctx) ∧
   execute_stmts n [If e s1 s2] ctx =
-  (case ctx.scopes of [] => raise Error ctx | env::_ =>
-   if n = 0 then raise Timeout ctx else
-   (case evaluate_exps env [e] of Vs [BoolV b] =>
+  (if n = 0 then raise Timeout ctx else
+   (case evaluate_exps ctx.scopes [e] of Vs [BoolV b] =>
      execute_stmts (PRE n) (if b then s1 else s2) ctx
     | _ => raise Error ctx)) ∧
   execute_stmts n [For id typ e ss] ctx =
-  (case ctx.scopes of [] => raise Error ctx | env::_ =>
-   case evaluate_exps env [e] of Vs [ArrayV vs] =>
+  (case evaluate_exps ctx.scopes [e] of Vs [ArrayV vs] =>
    let
      ctx = push_scope ctx;
      ctx = new_variable id typ ctx;
@@ -201,15 +223,15 @@ Definition execute_stmts_def:
     let ctx = execute_stmts (PRE n) [s1] ctx in
       if IS_SOME ctx.raised then ctx else
       execute_stmts (PRE n) ss ctx) ∧
-  execute_for n id typ ss [] ctx =
-  (let ctx = pop_scope ctx in
-    if IS_SOME ctx.raised then ctx else
-      pop_scope ctx) ∧
+  execute_for n id typ ss [] ctx = pop_scope ctx ∧
   execute_for n id typ ss (v::vs) ctx =
-  (let ctx = assign_target id v ctx in
+  (let ctx = push_scope ctx in
+   let ctx = assign_target id v ctx in
     if IS_SOME ctx.raised then ctx else
     if n = 0 then raise Timeout ctx else
    let ctx = execute_stmts (PRE n) ss ctx in
+    if IS_SOME ctx.raised then ctx else
+   let ctx = pop_scope ctx in
     if IS_SOME ctx.raised then ctx else
    execute_for (PRE n) id typ ss vs ctx)
 Termination
