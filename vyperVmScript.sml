@@ -45,7 +45,7 @@ Definition expr_nodes_def:
   expr_nodes (Name _) = 1 + 1 ∧
   expr_nodes (IfExp e1 e2 e3) = 1 + expr_nodes e1 + expr_nodes e2 + expr_nodes e3 ∧
   expr_nodes (Literal _) = 1 + 1 ∧
-  expr_nodes (ArrayLit es) = 1 + SUM (MAP expr_nodes es) ∧
+  expr_nodes (ArrayLit es) = 1 + LENGTH es + SUM (MAP expr_nodes es) ∧
   expr_nodes (Compare e1 _ e2) = 1 + expr_nodes e1 + 1 + expr_nodes e2 ∧
   expr_nodes (BinOp e1 _ e2) = 1 + expr_nodes e1 + 1 + expr_nodes e2
 Termination
@@ -54,6 +54,10 @@ End
 
 Definition evaluate_exps_def:
   evaluate_exps env [Literal l] = Vs [evaluate_literal l] ∧
+  evaluate_exps env [ArrayLit es] =
+  (case evaluate_exps env es of
+        Vs vs => Vs [ArrayV vs]
+      | _ => Err) ∧
   evaluate_exps env [Name id] =
   (case FLOOKUP env id of SOME v => Vs [v]
    | _ => Err) ∧
@@ -77,7 +81,7 @@ Definition evaluate_exps_def:
    | x => x)
 Termination
   WF_REL_TAC`measure ((λls. LENGTH ls + SUM (MAP expr_nodes ls)) o SND)`
-  \\ rw[expr_nodes_def]
+  \\ rw[expr_nodes_def, ETA_AX]
 End
 
 Definition default_value_def:
