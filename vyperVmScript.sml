@@ -116,9 +116,11 @@ Datatype:
   | Timeout
 End
 
+Type scope = “:identifier |-> value”;
+
 Datatype:
   function_context = <|
-    scopes: (identifier |-> value) list
+    scopes: scope list
   ; raised: exception option
   |>
 End
@@ -151,20 +153,67 @@ Definition new_variable_def:
     ctx with scopes := (env |+ (id, default_value typ))::rest
 End
 
+Type containing_scope = “: scope list # scope # scope list”;
+
 Definition find_containing_scope_def:
-  find_containing_scope id [] = NONE ∧
+  find_containing_scope id [] = NONE : containing_scope option ∧
   find_containing_scope id (env::rest) =
   if id ∈ FDOM env then SOME ([], env, rest)
   else OPTION_MAP (λ(p,q). (env::p, q)) (find_containing_scope id rest)
 End
 
-Definition assign_target_def:
-  assign_target id v ctx =
+Datatype:
+  subscript
+  = IntSubscript int
+  (* TODO: add others as needed *)
+End
+
+Datatype:
+  base_assignment_value
+  = NameTargetV (containing_scope # identifier)
+  | SubscriptTargetV base_assignment_value subscript
+End
+
+Datatype:
+  assignment_value
+  = BaseTargetV base_assignment_value
+  | TupleTargetV (assignment_value list)
+End
+
+Definition evaluate_base_target_def:
+  evaluate_base_target env (NameTarget id) =
+    OPTION_MAP (λcs. NameTargetV (cs,id))
+      (find_containing_scope id env) ∧
+  evaluate_base_target env (SubscriptTarget t e) =
+  (case evaluate_base_target env t of NONE => NONE | SOME v =>
+   (case evaluate_exps env [e] of Vs [IntV i] =>
+      SOME $ SubscriptTargetV v (IntSubscript i)
+    | _ => NONE))
+End
+
+Definition evaluate_target_def:
+  evaluate_target env (BaseTarget b) =
+  OPTION_MAP BaseTargetV (evaluate_base_target env b) ∧
+  evaluate_target env (TupleTarget []) = SOME $ TupleTargetV [] ∧
+  evaluate_target env (TupleTarget (t::ts)) =
+  (case evaluate_target env t of NONE => NONE | SOME v =>
+   case evaluate_target env (TupleTarget ts) of SOME (TupleTargetV vs) =>
+     SOME (TupleTargetV (v::vs)) | _ => NONE)
+End
+
+Definition set_variable_def:
+  set_variable id v ctx =
   case find_containing_scope id ctx.scopes of
     NONE => raise Error ctx
   | SOME (pre, env, rest) =>
     (* check that v has same type as current value here ? *)
     ctx with scopes := pre ++ (env |+ (id, v))::rest
+End
+
+Definition assign_target_def:
+  assign_target (BaseTargetV (NameTargetV ((pre,env,rest),id))) v ctx =
+  ctx with scopes := pre ++ (env |+ (id, v))::rest ∧
+  assign_target _ _ ctx = raise Error ctx
 End
 
 (* TODO: remove clock:
@@ -188,18 +237,20 @@ Definition execute_stmts_def:
   (let ctx = new_variable id typ ctx in
    if IS_SOME ctx.raised then ctx else
    (case evaluate_exps ctx.scopes [e] of Vs [v] =>
-      assign_target id v ctx
+      set_variable id v ctx
     | _ => raise Error ctx)) ∧
-  execute_stmts n [OpAssign id bop e2] ctx =
+  execute_stmts n [AugAssign id bop e2] ctx =
   (case lookup_scopes id ctx.scopes of NONE => raise Error ctx | SOME v1 =>
    case evaluate_exps ctx.scopes [e2] of Vs [v2] =>
    (case evaluate_binop bop v1 v2 of Vs [v] =>
-      assign_target id v ctx
+      set_variable id v ctx
     | _ => raise Error ctx)
    | _ => raise Error ctx) ∧
-  execute_stmts n [Assign id e] ctx =
+  execute_stmts n [Assign tgt e] ctx =
    (case evaluate_exps ctx.scopes [e] of Vs [v] =>
-     assign_target id v ctx
+    (case evaluate_target ctx.scopes tgt of SOME tv =>
+      assign_target tv v ctx
+     | _ => raise Error ctx)
     | _ => raise Error ctx) ∧
   execute_stmts n [If e s1 s2] ctx =
   (if n = 0 then raise Timeout ctx else
@@ -226,7 +277,7 @@ Definition execute_stmts_def:
   execute_for n id typ ss [] ctx = pop_scope ctx ∧
   execute_for n id typ ss (v::vs) ctx =
   (let ctx = push_scope ctx in
-   let ctx = assign_target id v ctx in
+   let ctx = set_variable id v ctx in
     if IS_SOME ctx.raised then ctx else
     if n = 0 then raise Timeout ctx else
    let ctx = execute_stmts (PRE n) ss ctx in

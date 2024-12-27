@@ -43,9 +43,24 @@ Datatype:
   | Name identifier
   | IfExp expr expr expr
   | Literal literal
+  (* TODO: add Tuple *)
   | ArrayLit (expr list)
+  | Subscript expr expr
   | Compare expr cmpop expr
   | BinOp expr operator expr
+End
+
+Datatype:
+  base_assignment_target
+  = NameTarget identifier
+  | SubscriptTarget base_assignment_target expr
+  | AttributeTarget base_assignment_target identifier
+End
+
+Datatype:
+  assignment_target
+  = BaseTarget base_assignment_target
+  | TupleTarget (assignment_target list)
 End
 
 Datatype:
@@ -58,8 +73,8 @@ Datatype:
   | Assert expr string
   | Raise string
   | Return (expr option)
-  | Assign identifier (* TODO: could be a tuple *) expr
-  | OpAssign identifier operator expr
+  | Assign assignment_target expr (* TODO: allow tuple rhs *)
+  | AugAssign identifier (* TODO: or subscript or attribute? *) operator expr
   | AnnAssign identifier type expr
 End
 
