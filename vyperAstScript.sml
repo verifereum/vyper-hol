@@ -88,11 +88,11 @@ Type argument = “:string # type”;
 
 Datatype:
   toplevel
-  = FunctionDef string (decorator list) (argument list) (stmt list) type
+  = FunctionDef string (decorator list) (argument list) type (stmt list)
 End
 
 Definition function_body_def:
-  function_body (FunctionDef _ _ _ body _) = body
+  function_body (FunctionDef _ _ _ _ body) = body
 End
 
 val () = export_theory();

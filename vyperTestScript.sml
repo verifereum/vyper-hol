@@ -6,7 +6,7 @@ val () = new_theory "vyperTest";
 
 Definition test_if_control_flow_ast_def:
   test_if_control_flow_ast =
-  FunctionDef "foo" [External] []
+  FunctionDef "foo" [External] [] (UintT (n2w (256 DIV 8)))
   [
     AnnAssign "a" (UintT (n2w (256 DIV 8))) (Literal (IntL 1));
     If (Compare (Name "a") Eq (Literal (IntL 1)))
@@ -17,7 +17,7 @@ Definition test_if_control_flow_ast_def:
       Assign (BaseTarget (NameTarget "a")) (Literal (IntL 3))
     ];
     Return (SOME (BinOp (Name "a") Add (Literal (IntL 42))))
-  ] (UintT (n2w (256 DIV 8)))
+  ]
 End
 
 Theorem evaluate_test_if_control_flow_body:
@@ -40,7 +40,7 @@ QED
 
 Definition test_for_control_flow_ast_def:
   test_for_control_flow_ast =
-  FunctionDef "foo" [External] []
+  FunctionDef "foo" [External] [] (UintT (n2w (256 DIV 8)))
   [
      AnnAssign "a" (DynArrayT (UintT (n2w (256 DIV 8))) 10)
        (ArrayLit [Literal (IntL 1); Literal (IntL 2); Literal (IntL 3)]);
@@ -48,7 +48,7 @@ Definition test_for_control_flow_ast_def:
      For "i" (UintT (n2w (256 DIV 8))) (Name "a")
      [ AugAssign "counter" Add (Name "i") ];
      Return (SOME (Name "counter"))
-  ] (UintT (n2w (256 DIV 8)))
+  ]
 End
 
 Theorem evaluate_test_for_control_flow_body:
@@ -71,7 +71,7 @@ QED
 
 Definition test_array_assign_ast_def:
   test_array_assign_ast =
-  FunctionDef "foo" [External] []
+  FunctionDef "foo" [External] [] (UintT (n2w (256 DIV 8)))
   [
     AnnAssign "bar" (DynArrayT (UintT (n2w (256 DIV 8))) 10)
       (ArrayLit [Literal (IntL 1); Literal (IntL 2)]);
