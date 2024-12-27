@@ -47,7 +47,8 @@ Definition expr_nodes_def:
   expr_nodes (Literal _) = 1 + 1 ∧
   expr_nodes (ArrayLit es) = 1 + LENGTH es + SUM (MAP expr_nodes es) ∧
   expr_nodes (Compare e1 _ e2) = 1 + expr_nodes e1 + 1 + expr_nodes e2 ∧
-  expr_nodes (BinOp e1 _ e2) = 1 + expr_nodes e1 + 1 + expr_nodes e2
+  expr_nodes (BinOp e1 _ e2) = 1 + expr_nodes e1 + 1 + expr_nodes e2 ∧
+  expr_nodes (Subscript e1 e2) = 1 + 2 + expr_nodes e1 + expr_nodes e2
 Termination
   WF_REL_TAC`measure expr_size`
 End
@@ -60,6 +61,25 @@ Definition lookup_scopes_def:
   | SOME v => SOME v
 End
 
+Definition extract_elements_def:
+  extract_elements (ArrayV vs) = SOME vs ∧
+  extract_elements (TupleV vs) = SOME vs ∧
+  extract_elements _ = NONE
+End
+
+Definition replace_elements_def:
+  replace_elements (ArrayV _) vs = SOME (ArrayV vs) ∧
+  replace_elements (TupleV _) vs = SOME (TupleV vs) ∧
+  replace_elements _ _ = NONE
+End
+
+Definition integer_index_def:
+  integer_index vs i =
+   if Num i < LENGTH vs then
+     SOME $ if 0 ≤ i then Num i else LENGTH vs - Num i
+   else NONE
+End
+
 Definition evaluate_exps_def:
   evaluate_exps env [Literal l] = Vs [evaluate_literal l] ∧
   evaluate_exps env [ArrayLit es] =
@@ -69,6 +89,11 @@ Definition evaluate_exps_def:
   evaluate_exps env [Name id] =
   (case lookup_scopes id env of SOME v => Vs [v]
    | _ => Err) ∧
+  evaluate_exps env [Subscript e1 e2] =
+  (case evaluate_exps env [e1; e2] of Vs [av; IntV i] =>
+   (case extract_elements av of SOME vs =>
+    (case integer_index vs i of SOME j => Vs [EL j vs]
+     | _ => Err) | _ => Err) | _ => Err) ∧
   evaluate_exps env [IfExp e1 e2 e3] =
   (case evaluate_exps env [e1] of Vs [BoolV b] =>
      if b then evaluate_exps env [e2] else evaluate_exps env [e3]
@@ -171,13 +196,18 @@ End
 Datatype:
   base_assignment_value
   = NameTargetV (containing_scope # identifier)
-  | SubscriptTargetV base_assignment_value subscript
+  | SubscriptTargetV (containing_scope # identifier) (subscript list)
 End
 
 Datatype:
   assignment_value
   = BaseTargetV base_assignment_value
   | TupleTargetV (assignment_value list)
+End
+
+Definition add_subscript_def:
+  add_subscript (NameTargetV csi) i = SubscriptTargetV csi [i] ∧
+  add_subscript (SubscriptTargetV csi ls) i = SubscriptTargetV csi (i::ls)
 End
 
 Definition evaluate_base_target_def:
@@ -187,7 +217,7 @@ Definition evaluate_base_target_def:
   evaluate_base_target env (SubscriptTarget t e) =
   (case evaluate_base_target env t of NONE => NONE | SOME v =>
    (case evaluate_exps env [e] of Vs [IntV i] =>
-      SOME $ SubscriptTargetV v (IntSubscript i)
+      SOME $ add_subscript v (IntSubscript i)
     | _ => NONE))
 End
 
@@ -210,9 +240,27 @@ Definition set_variable_def:
     ctx with scopes := pre ++ (env |+ (id, v))::rest
 End
 
+Definition assign_subscripts_def:
+  assign_subscripts a [] v = SOME v ∧
+  assign_subscripts a ((IntSubscript i)::is) v =
+  (case extract_elements a of SOME vs =>
+   (case integer_index vs i of SOME j =>
+    (case assign_subscripts (EL j vs) is v of SOME vj =>
+       replace_elements a (TAKE j vs ++ [vj] ++ DROP (SUC j) vs)
+     | _ => NONE)
+    | _ => NONE)
+   | _ => NONE)
+End
+
 Definition assign_target_def:
   assign_target (BaseTargetV (NameTargetV ((pre,env,rest),id))) v ctx =
   ctx with scopes := pre ++ (env |+ (id, v))::rest ∧
+  assign_target (BaseTargetV (SubscriptTargetV ((pre,env,rest),id) is)) v ctx =
+  (case FLOOKUP env id of SOME a =>
+   (case assign_subscripts a is v of SOME a' =>
+      ctx with scopes := pre ++ (env |+ (id, a'))::rest
+    | _ => raise Error ctx)
+   | _ => raise Error ctx) ∧
   assign_target _ _ ctx = raise Error ctx
 End
 
