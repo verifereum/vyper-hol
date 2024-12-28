@@ -48,7 +48,8 @@ Definition expr_nodes_def:
   expr_nodes (ArrayLit es) = 1 + LENGTH es + SUM (MAP expr_nodes es) ∧
   expr_nodes (Compare e1 _ e2) = 1 + expr_nodes e1 + 1 + expr_nodes e2 ∧
   expr_nodes (BinOp e1 _ e2) = 1 + expr_nodes e1 + 1 + expr_nodes e2 ∧
-  expr_nodes (Subscript e1 e2) = 1 + 2 + expr_nodes e1 + expr_nodes e2
+  expr_nodes (Subscript e1 e2) = 1 + 2 + expr_nodes e1 + expr_nodes e2 ∧
+  expr_nodes (Attribute e _) = 1 + expr_nodes e + 1
 Termination
   WF_REL_TAC`measure expr_size`
 End

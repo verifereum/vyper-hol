@@ -46,6 +46,7 @@ Datatype:
   (* TODO: add Tuple *)
   | ArrayLit (expr list)
   | Subscript expr expr
+  | Attribute expr identifier
   | Compare expr cmpop expr
   | BinOp expr operator expr
 End
@@ -84,15 +85,25 @@ Datatype:
   | Internal
 End
 
-Type argument = “:string # type”;
+Datatype:
+  visibility = Public | Private
+End
+
+Datatype:
+  mutability = Constant expr | Immutable | Transient | Storage
+End
+
+Type argument = “:identifier # type”;
 
 Datatype:
   toplevel
-  = FunctionDef string (decorator list) (argument list) type (stmt list)
+  = FunctionDef identifier (decorator list) (argument list) type (stmt list)
+  | VariableDecl identifier type visibility mutability
 End
 
 Definition function_body_def:
-  function_body (FunctionDef _ _ _ _ body) = body
+  function_body (FunctionDef _ _ _ _ body) = body ∧
+  function_body _ = []
 End
 
 val () = export_theory();
