@@ -29,7 +29,7 @@ Theorem evaluate_test_if_control_flow_body:
 Proof
   rw[function_body_def, test_if_control_flow_ast_def]
   \\ simp[execute_stmts_def, new_variable_def,
-          initial_function_context_def,
+          initial_function_context_def, assign_subscripts_def,
           evaluate_exps_def, assign_target_def, set_variable_def,
           evaluate_target_def, evaluate_base_target_def,
           evaluate_cmp_def, evaluate_literal_def,

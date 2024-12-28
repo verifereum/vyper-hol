@@ -191,30 +191,22 @@ End
 Datatype:
   subscript
   = IntSubscript int
-  (* TODO: add others as needed *)
-End
-
-Datatype:
-  base_assignment_value
-  = NameTargetV (containing_scope # identifier)
-  | SubscriptTargetV (containing_scope # identifier) (subscript list)
+  | AttrSubscript identifier
 End
 
 Datatype:
   assignment_value
-  = BaseTargetV base_assignment_value
+  = BaseTargetV (containing_scope # identifier # (subscript list))
   | TupleTargetV (assignment_value list)
 End
 
 Definition add_subscript_def:
-  add_subscript (NameTargetV csi) i = SubscriptTargetV csi [i] ∧
-  add_subscript (SubscriptTargetV csi ls) i = SubscriptTargetV csi (i::ls)
+  add_subscript (cs: containing_scope,id: identifier,ls) (i: subscript) = (cs,id,i::ls)
 End
 
 Definition evaluate_base_target_def:
   evaluate_base_target env (NameTarget id) =
-    OPTION_MAP (λcs. NameTargetV (cs,id))
-      (find_containing_scope id env) ∧
+    OPTION_MAP (λcs. (cs,id,[])) (find_containing_scope id env) ∧
   evaluate_base_target env (SubscriptTarget t e) =
   (case evaluate_base_target env t of NONE => NONE | SOME v =>
    (case evaluate_exps env [e] of Vs [IntV i] =>
@@ -250,19 +242,18 @@ Definition assign_subscripts_def:
        replace_elements a (TAKE j vs ++ [vj] ++ DROP (SUC j) vs)
      | _ => NONE)
     | _ => NONE)
-   | _ => NONE)
+   | _ => NONE) ∧
+  assign_subscripts a _ v = NONE (* TODO: handle AttrSubscript *)
 End
 
 Definition assign_target_def:
-  assign_target (BaseTargetV (NameTargetV ((pre,env,rest),id))) v ctx =
-  ctx with scopes := pre ++ (env |+ (id, v))::rest ∧
-  assign_target (BaseTargetV (SubscriptTargetV ((pre,env,rest),id) is)) v ctx =
+  assign_target (BaseTargetV ((pre,env,rest),id,is)) v ctx =
   (case FLOOKUP env id of SOME a =>
    (case assign_subscripts a is v of SOME a' =>
       ctx with scopes := pre ++ (env |+ (id, a'))::rest
     | _ => raise Error ctx)
    | _ => raise Error ctx) ∧
-  assign_target _ _ ctx = raise Error ctx
+  assign_target _ _ ctx = raise Error ctx (* TODO: handle TupleTargetV *)
 End
 
 (* TODO: remove clock:
