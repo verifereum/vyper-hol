@@ -106,16 +106,16 @@ Definition test_storage_array_assign_ast_def:
   test_storage_array_assign_ast = [
     VariableDecl "a" (DynArrayT (UintT (n2w (256 DIV 8))) 10) Private Storage;
     FunctionDef "foo" [External] [] (UintT (n2w (256 DIV 8))) [
-      Assign (BaseTarget (AttributeTarget (NameTarget "self") "a"))
+      Assign (BaseTarget (GlobalNameTarget "a"))
         (ArrayLit [Literal (IntL 1); Literal (IntL 2)]);
       Assign (BaseTarget
-               (SubscriptTarget (AttributeTarget (NameTarget "self") "a")
+               (SubscriptTarget (GlobalNameTarget "a")
                                 (Literal (IntL 0))))
              (Literal (IntL 3));
       Return (SOME (BinOp
-        (Subscript (Attribute (Name "self") "a") (Literal (IntL 0)))
+        (Subscript (GlobalName "a") (Literal (IntL 0)))
         Add
-        (Subscript (Attribute (Name "self") "a") (Literal (IntL 1)))))
+        (Subscript (GlobalName "a") (Literal (IntL 1)))))
     ]
   ]
 End

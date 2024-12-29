@@ -1,5 +1,5 @@
 open HolKernel boolLib bossLib Parse
-open listTheory finite_mapTheory
+open listTheory alistTheory finite_mapTheory
 open vyperAstTheory vfmContextTheory
 
 val () = new_theory "vyperVm";
@@ -13,6 +13,7 @@ Datatype:
   | IntV int
   | StringV string
   | BytesV (word8 list)
+  | StructV ((identifier, value) alist)
 End
 
 Definition evaluate_literal_def:
@@ -43,6 +44,7 @@ End
 Definition expr_nodes_def:
   expr_nodes (NamedExpr e1 e2) = 1n + expr_nodes e1 + expr_nodes e2 ∧
   expr_nodes (Name _) = 1 + 1 ∧
+  expr_nodes (GlobalName _) = 1 + 1 ∧
   expr_nodes (IfExp e1 e2 e3) = 1 + expr_nodes e1 + expr_nodes e2 + expr_nodes e3 ∧
   expr_nodes (Literal _) = 1 + 1 ∧
   expr_nodes (ArrayLit es) = 1 + LENGTH es + SUM (MAP expr_nodes es) ∧
@@ -82,39 +84,45 @@ Definition integer_index_def:
 End
 
 Definition evaluate_exps_def:
-  evaluate_exps env [Literal l] = Vs [evaluate_literal l] ∧
-  evaluate_exps env [ArrayLit es] =
-  (case evaluate_exps env es of
+  evaluate_exps gbs env [Literal l] = Vs [evaluate_literal l] ∧
+  evaluate_exps gbs env [ArrayLit es] =
+  (case evaluate_exps gbs env es of
         Vs vs => Vs [ArrayV vs]
       | _ => Err) ∧
-  evaluate_exps env [Name id] =
+  evaluate_exps gbs env [Name id] =
   (case lookup_scopes id env of SOME v => Vs [v]
    | _ => Err) ∧
-  evaluate_exps env [Subscript e1 e2] =
-  (case evaluate_exps env [e1; e2] of Vs [av; IntV i] =>
+  evaluate_exps gbs env [GlobalName id] =
+  (case FLOOKUP gbs id of SOME v => Vs [v] | _ => Err) ∧
+  evaluate_exps gbs env [Subscript e1 e2] =
+  (case evaluate_exps gbs env [e1; e2] of Vs [av; IntV i] =>
    (case extract_elements av of SOME vs =>
     (case integer_index vs i of SOME j => Vs [EL j vs]
      | _ => Err) | _ => Err) | _ => Err) ∧
-  evaluate_exps env [IfExp e1 e2 e3] =
-  (case evaluate_exps env [e1] of Vs [BoolV b] =>
-     if b then evaluate_exps env [e2] else evaluate_exps env [e3]
+  evaluate_exps gbs env [Attribute e id] =
+  (case evaluate_exps gbs env [e] of Vs [StructV kvs] =>
+   (case ALOOKUP kvs id of SOME v => Vs [v]
+       | _ => Err) | _ => Err) ∧
+  evaluate_exps gbs env [IfExp e1 e2 e3] =
+  (case evaluate_exps gbs env [e1] of Vs [BoolV b] =>
+     if b then evaluate_exps gbs env [e2] else evaluate_exps gbs env [e3]
    | _ => Err) ∧
-  evaluate_exps env [Compare e1 cmp e2] =
-  (case evaluate_exps env [e1; e2] of Vs [v1; v2] =>
+  evaluate_exps gbs env [Compare e1 cmp e2] =
+  (case evaluate_exps gbs env [e1; e2] of Vs [v1; v2] =>
      evaluate_cmp cmp v1 v2
    | _ => Err) ∧
-  evaluate_exps env [BinOp e1 bop e2] =
-  (case evaluate_exps env [e1; e2] of Vs [v1; v2] =>
+  evaluate_exps gbs env [BinOp e1 bop e2] =
+  (case evaluate_exps gbs env [e1; e2] of Vs [v1; v2] =>
      evaluate_binop bop v1 v2
    | _ => Err) ∧
-  evaluate_exps env [] = Vs [] ∧
-  evaluate_exps env [e1] = Err ∧
-  evaluate_exps env (e1::es) =
-  (case evaluate_exps env [e1] of Vs [v1] =>
-    (case evaluate_exps env es of Vs vs => Vs (v1::vs) | x => x)
+  evaluate_exps gbs env [] = Vs [] ∧
+  evaluate_exps gbs env [e1] = Err ∧
+  evaluate_exps gbs env (e1::es) =
+  (case evaluate_exps gbs env [e1] of Vs [v1] =>
+    (case evaluate_exps gbs env es of Vs vs => Vs (v1::vs) | x => x)
    | x => x)
 Termination
-  WF_REL_TAC`measure ((λls. LENGTH ls + SUM (MAP expr_nodes ls)) o SND)`
+  WF_REL_TAC`measure ((λls. LENGTH ls + SUM (MAP expr_nodes ls)) o SND o SND)`
   \\ rw[expr_nodes_def, ETA_AX]
 End
 
@@ -147,6 +155,7 @@ Type scope = “:identifier |-> value”;
 Datatype:
   function_context = <|
     scopes: scope list
+  ; globals: scope
   ; raised: exception option
   |>
 End
@@ -154,6 +163,7 @@ End
 Definition initial_function_context_def:
   initial_function_context = <|
     scopes := [FEMPTY]
+  ; globals := FEMPTY
   ; raised := NONE
   |>
 End
@@ -189,38 +199,49 @@ Definition find_containing_scope_def:
 End
 
 Datatype:
+  location
+  = ScopedVar containing_scope identifier
+  | Global identifier
+End
+
+Datatype:
   subscript
   = IntSubscript int
+  | StrSubscript string
   | AttrSubscript identifier
 End
 
 Datatype:
   assignment_value
-  = BaseTargetV (containing_scope # identifier # (subscript list))
+  = BaseTargetV location (subscript list)
   | TupleTargetV (assignment_value list)
 End
 
 Definition add_subscript_def:
-  add_subscript (cs: containing_scope,id: identifier,ls) (i: subscript) = (cs,id,i::ls)
+  add_subscript (l: location, ls) (i: subscript) = (l, i::ls)
 End
 
 Definition evaluate_base_target_def:
-  evaluate_base_target env (NameTarget id) =
-    OPTION_MAP (λcs. (cs,id,[])) (find_containing_scope id env) ∧
-  evaluate_base_target env (SubscriptTarget t e) =
-  (case evaluate_base_target env t of NONE => NONE | SOME v =>
-   (case evaluate_exps env [e] of Vs [IntV i] =>
+  evaluate_base_target gbs env (NameTarget id) =
+    OPTION_MAP (λcs. (ScopedVar cs id,[])) (find_containing_scope id env) ∧
+  evaluate_base_target gbs env (GlobalNameTarget id) = SOME $ (Global id, []) ∧
+  evaluate_base_target gbs env (SubscriptTarget t e) =
+  (case evaluate_base_target gbs env t of NONE => NONE | SOME v =>
+   (case evaluate_exps gbs env [e] of Vs [IntV i] =>
       SOME $ add_subscript v (IntSubscript i)
-    | _ => NONE))
+    | _ => NONE)) ∧
+  evaluate_base_target gbs env (AttributeTarget t id) =
+  (case evaluate_base_target gbs env t of NONE => NONE | SOME v =>
+   SOME $ add_subscript v (AttrSubscript id))
 End
 
 Definition evaluate_target_def:
-  evaluate_target env (BaseTarget b) =
-  OPTION_MAP BaseTargetV (evaluate_base_target env b) ∧
-  evaluate_target env (TupleTarget []) = SOME $ TupleTargetV [] ∧
-  evaluate_target env (TupleTarget (t::ts)) =
-  (case evaluate_target env t of NONE => NONE | SOME v =>
-   case evaluate_target env (TupleTarget ts) of SOME (TupleTargetV vs) =>
+  evaluate_target gbs env (BaseTarget b) =
+  OPTION_MAP (UNCURRY BaseTargetV) (evaluate_base_target gbs env b) ∧
+  evaluate_target gbs env (TupleTarget []) = SOME $ TupleTargetV [] ∧
+  evaluate_target gbs env (TupleTarget (t::ts)) =
+  (case evaluate_target gbs env t of NONE => NONE | SOME v =>
+   case evaluate_target gbs env (TupleTarget ts) of SOME (TupleTargetV vs) =>
      SOME (TupleTargetV (v::vs)) | _ => NONE)
 End
 
@@ -247,10 +268,16 @@ Definition assign_subscripts_def:
 End
 
 Definition assign_target_def:
-  assign_target (BaseTargetV ((pre,env,rest),id,is)) v ctx =
+  assign_target (BaseTargetV (ScopedVar (pre,env,rest) id) is) v ctx =
   (case FLOOKUP env id of SOME a =>
    (case assign_subscripts a is v of SOME a' =>
       ctx with scopes := pre ++ (env |+ (id, a'))::rest
+    | _ => raise Error ctx)
+   | _ => raise Error ctx) ∧
+  assign_target (BaseTargetV (Global id) is) v ctx =
+  (case FLOOKUP ctx.globals id of SOME a =>
+   (case assign_subscripts a is v of SOME a' =>
+     ctx with globals := ctx.globals |+ (id, a')
     | _ => raise Error ctx)
    | _ => raise Error ctx) ∧
   assign_target _ _ ctx = raise Error ctx (* TODO: handle TupleTargetV *)
@@ -270,35 +297,35 @@ Definition execute_stmts_def:
   execute_stmts n [Raise s] ctx = raise (RaiseException s) ctx ∧
   execute_stmts n [Return NONE] ctx = raise (ReturnException VoidV) ctx ∧
   execute_stmts n [Return (SOME e)] ctx =
-  (case evaluate_exps ctx.scopes [e] of Vs [v] =>
+  (case evaluate_exps ctx.globals ctx.scopes [e] of Vs [v] =>
      raise (ReturnException v) ctx
    | _ => raise Error ctx) ∧
   execute_stmts n [AnnAssign id typ e] ctx =
   (let ctx = new_variable id typ ctx in
    if IS_SOME ctx.raised then ctx else
-   (case evaluate_exps ctx.scopes [e] of Vs [v] =>
+   (case evaluate_exps ctx.globals ctx.scopes [e] of Vs [v] =>
       set_variable id v ctx
     | _ => raise Error ctx)) ∧
   execute_stmts n [AugAssign id bop e2] ctx =
   (case lookup_scopes id ctx.scopes of NONE => raise Error ctx | SOME v1 =>
-   case evaluate_exps ctx.scopes [e2] of Vs [v2] =>
+   case evaluate_exps ctx.globals ctx.scopes [e2] of Vs [v2] =>
    (case evaluate_binop bop v1 v2 of Vs [v] =>
       set_variable id v ctx
     | _ => raise Error ctx)
    | _ => raise Error ctx) ∧
   execute_stmts n [Assign tgt e] ctx =
-   (case evaluate_exps ctx.scopes [e] of Vs [v] =>
-    (case evaluate_target ctx.scopes tgt of SOME tv =>
+   (case evaluate_exps ctx.globals ctx.scopes [e] of Vs [v] =>
+    (case evaluate_target ctx.globals ctx.scopes tgt of SOME tv =>
       assign_target tv v ctx
      | _ => raise Error ctx)
     | _ => raise Error ctx) ∧
   execute_stmts n [If e s1 s2] ctx =
   (if n = 0 then raise Timeout ctx else
-   (case evaluate_exps ctx.scopes [e] of Vs [BoolV b] =>
+   (case evaluate_exps ctx.globals ctx.scopes [e] of Vs [BoolV b] =>
      execute_stmts (PRE n) (if b then s1 else s2) ctx
     | _ => raise Error ctx)) ∧
   execute_stmts n [For id typ e ss] ctx =
-  (case evaluate_exps ctx.scopes [e] of Vs [ArrayV vs] =>
+  (case evaluate_exps ctx.globals ctx.scopes [e] of Vs [ArrayV vs] =>
    let
      ctx = push_scope ctx;
      ctx = new_variable id typ ctx;

@@ -41,6 +41,7 @@ Datatype:
   expr
   = NamedExpr expr expr
   | Name identifier
+  | GlobalName identifier
   | IfExp expr expr expr
   | Literal literal
   (* TODO: add Tuple *)
@@ -54,6 +55,7 @@ End
 Datatype:
   base_assignment_target
   = NameTarget identifier
+  | GlobalNameTarget identifier
   | SubscriptTarget base_assignment_target expr
   | AttributeTarget base_assignment_target identifier
 End
