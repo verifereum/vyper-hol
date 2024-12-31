@@ -6,15 +6,25 @@ val () = new_theory "vyperAst";
 Type identifier = “:string”;
 
 Datatype:
-  type
+  base_type
   = UintT word5 (* the bit size divided by 8 *)
   | IntT word5
+  | BoolT
+  (* TODO: decimals? *)
+  | StringT (* TODO: length limit *)
+  (* TODO: fixed-size bytes *)
+  (* TODO: flags *)
+  | BytesT (* TODO: length limit *)
+  (* TODO: address *)
+End
+
+Datatype:
+  type
+  = BaseT base_type
   | TupleT (type list)
   | DynArrayT type num
-  | VoidT
-  | BoolT
-  | StringT
-  | BytesT
+  (* TODO: fixed-size lists *)
+  | VoidT (* TODO: is this needed? *)
 End
 
 Datatype:

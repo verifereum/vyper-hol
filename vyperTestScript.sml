@@ -4,11 +4,13 @@ open vyperAstTheory vyperVmTheory;
 
 val () = new_theory "vyperTest";
 
+Overload uint256 = “BaseT (UintT (n2w (256 DIV 8)))”
+
 Definition test_if_control_flow_ast_def:
   test_if_control_flow_ast =
-  FunctionDef "foo" [External] [] (UintT (n2w (256 DIV 8)))
+  FunctionDef "foo" [External] [] uint256
   [
-    AnnAssign "a" (UintT (n2w (256 DIV 8))) (Literal (IntL 1));
+    AnnAssign "a" uint256 (Literal (IntL 1));
     If (Compare (Name "a") Eq (Literal (IntL 1)))
     [
       Assign (BaseTarget (NameTarget "a")) (Literal (IntL 2))
@@ -40,12 +42,12 @@ QED
 
 Definition test_for_control_flow_ast_def:
   test_for_control_flow_ast =
-  FunctionDef "foo" [External] [] (UintT (n2w (256 DIV 8)))
+  FunctionDef "foo" [External] [] uint256
   [
-     AnnAssign "a" (DynArrayT (UintT (n2w (256 DIV 8))) 10)
+     AnnAssign "a" (DynArrayT uint256 10)
        (ArrayLit [Literal (IntL 1); Literal (IntL 2); Literal (IntL 3)]);
-     AnnAssign "counter" (UintT (n2w (256 DIV 8))) (Literal (IntL 0));
-     For "i" (UintT (n2w (256 DIV 8))) (Name "a")
+     AnnAssign "counter" uint256 (Literal (IntL 0));
+     For "i" uint256 (Name "a")
      [ AugAssign "counter" Add (Name "i") ];
      Return (SOME (Name "counter"))
   ]
@@ -71,9 +73,9 @@ QED
 
 Definition test_array_assign_ast_def:
   test_array_assign_ast =
-  FunctionDef "foo" [External] [] (UintT (n2w (256 DIV 8)))
+  FunctionDef "foo" [External] [] uint256
   [
-    AnnAssign "bar" (DynArrayT (UintT (n2w (256 DIV 8))) 10)
+    AnnAssign "bar" (DynArrayT uint256 10)
       (ArrayLit [Literal (IntL 1); Literal (IntL 2)]);
     Assign (BaseTarget (SubscriptTarget (NameTarget "bar") (Literal (IntL 0))))
       (Literal (IntL 3));
@@ -102,10 +104,13 @@ Proof
        raise_def, FLOOKUP_UPDATE]
 QED
 
+(* TODO: evaluate a list of toplevels to a contract context (globals + functions) *)
+(* TODO: make the tests evaluate an external call in a given context *)
+
 Definition test_storage_array_assign_ast_def:
   test_storage_array_assign_ast = [
-    VariableDecl "a" (DynArrayT (UintT (n2w (256 DIV 8))) 10) Private Storage;
-    FunctionDef "foo" [External] [] (UintT (n2w (256 DIV 8))) [
+    VariableDecl "a" (DynArrayT uint256 10) Private Storage;
+    FunctionDef "foo" [External] [] uint256 [
       Assign (BaseTarget (GlobalNameTarget "a"))
         (ArrayLit [Literal (IntL 1); Literal (IntL 2)]);
       Assign (BaseTarget

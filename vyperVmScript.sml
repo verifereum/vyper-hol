@@ -56,9 +56,11 @@ Termination
   WF_REL_TAC`measure expr_size`
 End
 
+Type scope = “:identifier |-> value”;
+
 Definition lookup_scopes_def:
   lookup_scopes id [] = NONE ∧
-  lookup_scopes id (env::rest) =
+  lookup_scopes id ((env: scope)::rest) =
   case FLOOKUP env id of NONE =>
     lookup_scopes id rest
   | SOME v => SOME v
@@ -83,6 +85,10 @@ Definition integer_index_def:
    else NONE
 End
 
+Datatype:
+  toplevel_value = Value value | HashMap ((value, toplevel_value) alist)
+End
+
 Definition evaluate_exps_def:
   evaluate_exps gbs env [Literal l] = Vs [evaluate_literal l] ∧
   evaluate_exps gbs env [ArrayLit es] =
@@ -93,7 +99,7 @@ Definition evaluate_exps_def:
   (case lookup_scopes id env of SOME v => Vs [v]
    | _ => Err) ∧
   evaluate_exps gbs env [GlobalName id] =
-  (case FLOOKUP gbs id of SOME v => Vs [v] | _ => Err) ∧
+  (case FLOOKUP gbs id of SOME (Value v) => Vs [v] | _ => Err) ∧
   evaluate_exps gbs env [Subscript e1 e2] =
   (case evaluate_exps gbs env [e1; e2] of Vs [av; IntV i] =>
    (case extract_elements av of SOME vs =>
@@ -127,14 +133,14 @@ Termination
 End
 
 Definition default_value_def:
-  default_value (UintT _) = IntV 0 ∧
-  default_value (IntT _) = IntV 0 ∧
+  default_value (BaseT (UintT _)) = IntV 0 ∧
+  default_value (BaseT (IntT _)) = IntV 0 ∧
   default_value (TupleT ts) = TupleV (MAP default_value ts) ∧
   default_value (DynArrayT _ _) = ArrayV [] ∧
   default_value VoidT = VoidV ∧
-  default_value BoolT = BoolV F ∧
-  default_value StringT = StringV "" ∧
-  default_value BytesT = BytesV []
+  default_value (BaseT BoolT) = BoolV F ∧
+  default_value (BaseT StringT) = StringV "" ∧
+  default_value (BaseT BytesT) = BytesV []
 Termination
   WF_REL_TAC ‘measure type_size’
 End
@@ -150,12 +156,10 @@ Datatype:
   | Timeout
 End
 
-Type scope = “:identifier |-> value”;
-
 Datatype:
   function_context = <|
     scopes: scope list
-  ; globals: scope
+  ; globals: identifier |-> toplevel_value
   ; raised: exception option
   |>
 End
@@ -275,9 +279,10 @@ Definition assign_target_def:
     | _ => raise Error ctx)
    | _ => raise Error ctx) ∧
   assign_target (BaseTargetV (Global id) is) v ctx =
-  (case FLOOKUP ctx.globals id of SOME a =>
+  (* TODO: add assignment to hashmaps *)
+  (case FLOOKUP ctx.globals id of SOME (Value a) =>
    (case assign_subscripts a is v of SOME a' =>
-     ctx with globals := ctx.globals |+ (id, a')
+     ctx with globals := ctx.globals |+ (id, Value a')
     | _ => raise Error ctx)
    | _ => raise Error ctx) ∧
   assign_target _ _ ctx = raise Error ctx (* TODO: handle TupleTargetV *)
