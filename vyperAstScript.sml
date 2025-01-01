@@ -92,13 +92,14 @@ Datatype:
 End
 
 Datatype:
-  decorator
+  function_visibility
   = External
   | Internal
+  | Deploy
 End
 
 Datatype:
-  visibility = Public | Private
+  variable_visibility = Public | Private
 End
 
 Datatype:
@@ -109,8 +110,8 @@ Type argument = “:identifier # type”;
 
 Datatype:
   toplevel
-  = FunctionDef identifier (decorator list) (argument list) type (stmt list)
-  | VariableDecl identifier type visibility mutability
+  = FunctionDef identifier function_visibility (argument list) type (stmt list)
+  | VariableDecl identifier type variable_visibility mutability
 End
 
 Definition function_body_def:

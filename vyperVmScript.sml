@@ -159,15 +159,31 @@ End
 Datatype:
   function_context = <|
     scopes: scope list
+  ; return_to: expr option (* TODO *)
+  ; continuation: stmt list
+  |>
+End
+
+Datatype:
+  execution_context = <|
+    call_stack: function_context list
   ; globals: identifier |-> toplevel_value
   ; raised: exception option
   |>
 End
 
 Definition initial_function_context_def:
-  initial_function_context = <|
-    scopes := [FEMPTY]
-  ; globals := FEMPTY
+  initial_function_context args body = <|
+    scopes := [args]
+  ; return_to := NONE
+  ; continuation := body
+  |>
+End
+
+Definition initial_execution_context_def:
+  initial_execution_context gbs fc = <|
+    call_stack := [fc]
+  ; globals := gbs
   ; raised := NONE
   |>
 End
@@ -177,20 +193,28 @@ Definition raise_def:
 End
 
 Definition push_scope_def:
-  push_scope ctx = ctx with scopes updated_by CONS FEMPTY
+  push_scope ctx =
+  case ctx.call_stack of fc::rest =>
+    ctx with call_stack := (fc with scopes updated_by CONS FEMPTY) :: rest
+  | _ => raise Error ctx
 End
 
 Definition pop_scope_def:
   pop_scope ctx =
-  case ctx.scopes of [] => raise Error ctx
-  | (_::rest) => ctx with scopes := rest
+  case ctx.call_stack of fc::fcs =>
+    (case fc.scopes of [] => raise Error ctx
+     | (_::rest) => ctx with call_stack := (fc with scopes := rest)::fcs)
+  | _ => raise Error ctx
 End
 
 Definition new_variable_def:
   new_variable id typ ctx =
-  case ctx.scopes of [] => raise Error ctx
-  | env::rest => if id ∈ FDOM env then raise Error ctx else
-    ctx with scopes := (env |+ (id, default_value typ))::rest
+  case ctx.call_stack of fc::fcs =>
+    (case fc.scopes of [] => raise Error ctx
+     | env::rest => if id ∈ FDOM env then raise Error ctx else
+       ctx with call_stack :=
+         (fc with scopes := (env |+ (id, default_value typ))::rest)::fcs)
+  | _ => raise Error ctx
 End
 
 Type containing_scope = “: scope list # scope # scope list”;
@@ -251,11 +275,14 @@ End
 
 Definition set_variable_def:
   set_variable id v ctx =
-  case find_containing_scope id ctx.scopes of
-    NONE => raise Error ctx
-  | SOME (pre, env, rest) =>
-    (* check that v has same type as current value here ? *)
-    ctx with scopes := pre ++ (env |+ (id, v))::rest
+  case ctx.call_stack of fc::fcs =>
+    (case find_containing_scope id fc.scopes of
+       NONE => raise Error ctx
+     | SOME (pre, env, rest) =>
+       (* check that v has same type as current value here ? *)
+       ctx with call_stack :=
+         (fc with scopes := pre ++ (env |+ (id, v))::rest)::fcs)
+  | _ => raise Error ctx
 End
 
 Definition assign_subscripts_def:
@@ -273,10 +300,13 @@ End
 
 Definition assign_target_def:
   assign_target (BaseTargetV (ScopedVar (pre,env,rest) id) is) v ctx =
-  (case FLOOKUP env id of SOME a =>
-   (case assign_subscripts a is v of SOME a' =>
-      ctx with scopes := pre ++ (env |+ (id, a'))::rest
-    | _ => raise Error ctx)
+  (case ctx.call_stack of fc::fcs =>
+    (case FLOOKUP env id of SOME a =>
+     (case assign_subscripts a is v of SOME a' =>
+        ctx with call_stack :=
+          (fc with scopes := pre ++ (env |+ (id, a'))::rest)::fcs
+      | _ => raise Error ctx)
+     | _ => raise Error ctx)
    | _ => raise Error ctx) ∧
   assign_target (BaseTargetV (Global id) is) v ctx =
   (* TODO: add assignment to hashmaps *)
@@ -302,42 +332,54 @@ Definition execute_stmts_def:
   execute_stmts n [Raise s] ctx = raise (RaiseException s) ctx ∧
   execute_stmts n [Return NONE] ctx = raise (ReturnException VoidV) ctx ∧
   execute_stmts n [Return (SOME e)] ctx =
-  (case evaluate_exps ctx.globals ctx.scopes [e] of Vs [v] =>
+  (case ctx.call_stack of fc::_ =>
+   (case evaluate_exps ctx.globals fc.scopes [e] of Vs [v] =>
      raise (ReturnException v) ctx
+    | _ => raise Error ctx)
    | _ => raise Error ctx) ∧
   execute_stmts n [AnnAssign id typ e] ctx =
   (let ctx = new_variable id typ ctx in
    if IS_SOME ctx.raised then ctx else
-   (case evaluate_exps ctx.globals ctx.scopes [e] of Vs [v] =>
-      set_variable id v ctx
+   (case ctx.call_stack of fc::_ =>
+     (case evaluate_exps ctx.globals fc.scopes [e] of Vs [v] =>
+        set_variable id v ctx
+      | _ => raise Error ctx)
     | _ => raise Error ctx)) ∧
   execute_stmts n [AugAssign id bop e2] ctx =
-  (case lookup_scopes id ctx.scopes of NONE => raise Error ctx | SOME v1 =>
-   case evaluate_exps ctx.globals ctx.scopes [e2] of Vs [v2] =>
-   (case evaluate_binop bop v1 v2 of Vs [v] =>
-      set_variable id v ctx
-    | _ => raise Error ctx)
+  (case ctx.call_stack of fc::_ =>
+    (case lookup_scopes id fc.scopes of NONE => raise Error ctx | SOME v1 =>
+     case evaluate_exps ctx.globals fc.scopes [e2] of Vs [v2] =>
+     (case evaluate_binop bop v1 v2 of Vs [v] =>
+        set_variable id v ctx
+      | _ => raise Error ctx)
+     | _ => raise Error ctx)
    | _ => raise Error ctx) ∧
   execute_stmts n [Assign tgt e] ctx =
-   (case evaluate_exps ctx.globals ctx.scopes [e] of Vs [v] =>
-    (case evaluate_target ctx.globals ctx.scopes tgt of SOME tv =>
-      assign_target tv v ctx
-     | _ => raise Error ctx)
+   (case ctx.call_stack of fc::_ =>
+     (case evaluate_exps ctx.globals fc.scopes [e] of Vs [v] =>
+      (case evaluate_target ctx.globals fc.scopes tgt of SOME tv =>
+        assign_target tv v ctx
+       | _ => raise Error ctx)
+      | _ => raise Error ctx)
     | _ => raise Error ctx) ∧
   execute_stmts n [If e s1 s2] ctx =
   (if n = 0 then raise Timeout ctx else
-   (case evaluate_exps ctx.globals ctx.scopes [e] of Vs [BoolV b] =>
-     execute_stmts (PRE n) (if b then s1 else s2) ctx
-    | _ => raise Error ctx)) ∧
+   (case ctx.call_stack of fc::_ =>
+     (case evaluate_exps ctx.globals fc.scopes [e] of Vs [BoolV b] =>
+       execute_stmts (PRE n) (if b then s1 else s2) ctx
+      | _ => raise Error ctx)
+   | _ => raise Error ctx)) ∧
   execute_stmts n [For id typ e ss] ctx =
-  (case evaluate_exps ctx.globals ctx.scopes [e] of Vs [ArrayV vs] =>
-   let
-     ctx = push_scope ctx;
-     ctx = new_variable id typ ctx;
-   in
-     if IS_SOME ctx.raised then ctx else
-     if n = 0 then raise Timeout ctx else
-       execute_for (PRE n) id typ ss vs ctx
+  (case ctx.call_stack of fc::_ =>
+    (case evaluate_exps ctx.globals fc.scopes [e] of Vs [ArrayV vs] =>
+     let
+       ctx = push_scope ctx;
+       ctx = new_variable id typ ctx;
+     in
+       if IS_SOME ctx.raised then ctx else
+       if n = 0 then raise Timeout ctx else
+         execute_for (PRE n) id typ ss vs ctx
+     | _ => raise Error ctx)
    | _ => raise Error ctx) ∧
   execute_stmts n [_] ctx = raise Error ctx ∧
   execute_stmts n [] ctx = ctx ∧
@@ -362,10 +404,48 @@ Termination
     (INR (n,_) => n) | (INL (n,_) => n))`
 End
 
-Datatype:
-  execution_context = <|
-    function_contexts: function_context list
-  |>
+(* TODO: assumes unique identifiers, but should check? *)
+Definition initial_globals_def:
+  initial_globals [] = FEMPTY ∧
+  initial_globals (VariableDecl id typ _ Storage :: ts) =
+  initial_globals ts |+ (id, Value $ default_value typ) ∧
+  initial_globals (VariableDecl id typ _ Transient :: ts) =
+  initial_globals ts |+ (id, Value $ default_value typ) ∧
+  (* TODO: handle Constants and  Immutables *)
+  initial_globals (t :: ts) = initial_globals ts
+  (* TODO: hashmap toplevels *)
+End
+
+Definition lookup_external_function_def:
+  lookup_external_function name [] = NONE ∧
+  lookup_external_function name (FunctionDef id External args ret body :: ts) =
+  (if id = name then SOME (args, ret, body)
+   else lookup_external_function name ts) ∧
+  lookup_external_function name (_ :: ts) =
+    lookup_external_function name ts
+End
+
+(* TODO: check types? *)
+Definition bind_arguments_def:
+  bind_arguments ([]: argument list) [] = SOME (FEMPTY: scope) ∧
+  bind_arguments ((id, typ)::params) (v::vs) =
+    OPTION_MAP (λm. m |+ (id, v)) (bind_arguments params vs) ∧
+  bind_arguments _ _ = NONE
+End
+
+Definition external_call_def:
+  external_call n name args ts =
+  let gbs = initial_globals ts in
+  case lookup_external_function name ts of
+    SOME (params, _, body) =>
+    (case bind_arguments params args of
+       SOME env =>
+       (let fc = initial_function_context env body in
+        let ctx = initial_execution_context gbs fc in
+        let ctx = execute_stmts n body ctx in
+          ctx.raised)
+     | _ => SOME Error)
+  | _ => SOME Error
 End
 
 val () = export_theory();
