@@ -23,6 +23,17 @@ Definition test_if_control_flow_ast_def:
   ]
 End
 
+val execute_tac =
+  simp[execute_stmts_def, new_variable_def,
+       assign_subscripts_def, add_subscript_def,
+       extract_elements_def, replace_elements_def, integer_index_def,
+       evaluate_exps_def, assign_target_def, set_variable_def,
+       evaluate_target_def, evaluate_base_target_def,
+       evaluate_cmp_def, evaluate_literal_def,
+       evaluate_binop_def, lookup_scopes_def,
+       find_containing_scope_def, push_scope_def, pop_scope_def,
+       raise_def, FLOOKUP_UPDATE]
+
 Theorem test_if_control_flow:
   external_call 10 "foo" [] test_if_control_flow_ast
   = SOME (ReturnException (IntV 44))
@@ -32,13 +43,7 @@ Proof
      lookup_external_function_def, bind_arguments_def,
      initial_execution_context_def, initial_globals_def,
      initial_function_context_def ]
-  \\ simp[execute_stmts_def, new_variable_def, assign_subscripts_def,
-          evaluate_exps_def, assign_target_def, set_variable_def,
-          evaluate_target_def, evaluate_base_target_def,
-          evaluate_cmp_def, evaluate_literal_def,
-          evaluate_binop_def, lookup_scopes_def,
-          find_containing_scope_def,
-          raise_def, FLOOKUP_UPDATE]
+  \\ execute_tac
 QED
 
 Definition test_for_control_flow_ast_def:
@@ -64,13 +69,7 @@ Proof
      lookup_external_function_def, bind_arguments_def,
      initial_execution_context_def, initial_globals_def,
      initial_function_context_def ]
-  \\ simp[execute_stmts_def, new_variable_def,
-       set_variable_def, evaluate_base_target_def, evaluate_target_def,
-       evaluate_exps_def, assign_target_def,
-       evaluate_cmp_def, evaluate_literal_def,
-       evaluate_binop_def, push_scope_def, lookup_scopes_def,
-       find_containing_scope_def, pop_scope_def,
-       raise_def, FLOOKUP_UPDATE]
+  \\ execute_tac
 QED
 
 Definition test_array_assign_ast_def:
@@ -97,14 +96,7 @@ Proof
      lookup_external_function_def, bind_arguments_def,
      initial_execution_context_def, initial_globals_def,
      initial_function_context_def ]
-  \\ simp[execute_stmts_def, new_variable_def,
-       set_variable_def, evaluate_base_target_def, evaluate_target_def,
-       evaluate_exps_def, assign_target_def, add_subscript_def,
-       assign_subscripts_def, extract_elements_def, replace_elements_def,
-       evaluate_cmp_def, evaluate_literal_def, integer_index_def,
-       evaluate_binop_def, push_scope_def, lookup_scopes_def,
-       find_containing_scope_def, pop_scope_def,
-       raise_def, FLOOKUP_UPDATE]
+  \\ execute_tac
 QED
 
 Definition test_storage_array_assign_ast_def:
@@ -134,14 +126,7 @@ Proof
      lookup_external_function_def, bind_arguments_def,
      initial_execution_context_def, initial_globals_def,
      initial_function_context_def ]
-  \\ simp[execute_stmts_def, new_variable_def,
-       set_variable_def, evaluate_base_target_def, evaluate_target_def,
-       evaluate_exps_def, assign_target_def, add_subscript_def,
-       assign_subscripts_def, extract_elements_def, replace_elements_def,
-       evaluate_cmp_def, evaluate_literal_def, integer_index_def,
-       evaluate_binop_def, push_scope_def, lookup_scopes_def,
-       find_containing_scope_def, pop_scope_def,
-       raise_def, FLOOKUP_UPDATE]
+  \\ execute_tac
 QED
 
 val () = export_theory();
