@@ -60,6 +60,7 @@ Datatype:
   | Attribute expr identifier
   | Compare expr cmpop expr
   | BinOp expr operator expr
+  | Call identifier (expr list)
 End
 
 Datatype:

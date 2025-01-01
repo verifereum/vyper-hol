@@ -5,20 +5,21 @@ open vyperAstTheory vyperVmTheory;
 val () = new_theory "vyperTest";
 
 Overload uint256 = “BaseT (UintT (n2w (256 DIV 8)))”
+Overload intlit = “λi. Literal (IntL i)”
 
 Definition test_if_control_flow_ast_def:
   test_if_control_flow_ast = [
     FunctionDef "foo" External [] uint256
     [
-      AnnAssign "a" uint256 (Literal (IntL 1));
-      If (Compare (Name "a") Eq (Literal (IntL 1)))
+      AnnAssign "a" uint256 (intlit 1);
+      If (Compare (Name "a") Eq (intlit 1))
       [
-        Assign (BaseTarget (NameTarget "a")) (Literal (IntL 2))
+        Assign (BaseTarget (NameTarget "a")) (intlit 2)
       ]
       [
-        Assign (BaseTarget (NameTarget "a")) (Literal (IntL 3))
+        Assign (BaseTarget (NameTarget "a")) (intlit 3)
       ];
-      Return (SOME (BinOp (Name "a") Add (Literal (IntL 42))))
+      Return (SOME (BinOp (Name "a") Add (intlit 42)))
     ]
   ]
 End
@@ -51,8 +52,8 @@ Definition test_for_control_flow_ast_def:
     FunctionDef "foo" External [] uint256
     [
        AnnAssign "a" (DynArrayT uint256 10)
-         (ArrayLit [Literal (IntL 1); Literal (IntL 2); Literal (IntL 3)]);
-       AnnAssign "counter" uint256 (Literal (IntL 0));
+         (ArrayLit [intlit 1; intlit 2; intlit 3]);
+       AnnAssign "counter" uint256 (intlit 0);
        For "i" uint256 (Name "a")
        [ AugAssign "counter" Add (Name "i") ];
        Return (SOME (Name "counter"))
@@ -77,12 +78,12 @@ Definition test_array_assign_ast_def:
     FunctionDef "foo" External [] uint256
     [
       AnnAssign "bar" (DynArrayT uint256 10)
-        (ArrayLit [Literal (IntL 1); Literal (IntL 2)]);
-      Assign (BaseTarget (SubscriptTarget (NameTarget "bar") (Literal (IntL 0))))
-        (Literal (IntL 3));
-      Return (SOME (BinOp (BinOp (Subscript (Name "bar") (Literal (IntL 0))) Add
-                                 (Subscript (Name "bar") (Literal (IntL 1)))) Add
-                          (Literal (IntL 42))))
+        (ArrayLit [intlit 1; intlit 2]);
+      Assign (BaseTarget (SubscriptTarget (NameTarget "bar") (intlit 0)))
+        (intlit 3);
+      Return (SOME (BinOp (BinOp (Subscript (Name "bar") (intlit 0)) Add
+                                 (Subscript (Name "bar") (intlit 1))) Add
+                          (intlit 42)))
     ]
   ]
 End
@@ -104,15 +105,15 @@ Definition test_storage_array_assign_ast_def:
     VariableDecl "a" (DynArrayT uint256 10) Private Storage;
     FunctionDef "foo" External [] uint256 [
       Assign (BaseTarget (GlobalNameTarget "a"))
-        (ArrayLit [Literal (IntL 1); Literal (IntL 2)]);
+        (ArrayLit [intlit 1; intlit 2]);
       Assign (BaseTarget
                (SubscriptTarget (GlobalNameTarget "a")
-                                (Literal (IntL 0))))
-             (Literal (IntL 3));
+                                (intlit 0)))
+             (intlit 3);
       Return (SOME (BinOp
-        (Subscript (GlobalName "a") (Literal (IntL 0)))
+        (Subscript (GlobalName "a") (intlit 0))
         Add
-        (Subscript (GlobalName "a") (Literal (IntL 1)))))
+        (Subscript (GlobalName "a") (intlit 1))))
     ]
   ]
 End
@@ -128,5 +129,30 @@ Proof
      initial_function_context_def ]
   \\ execute_tac
 QED
+
+Definition test_internal_call_ast_def:
+  test_internal_call = [
+    FunctionDef "bar" Internal [] uint256 [
+      AnnAssign "a" (DynArrayT uint256 10)
+        (ArrayLit [intlit 1; intlit 2; intlit 3]);
+      AnnAssign "counter" uint256 (intlit 0);
+      For "i" uint256 (Name "a") [
+        AugAssign "counter" Add (Name "i")
+      ];
+      Return (SOME (Name "counter"))
+    ];
+    FunctionDef "foo" External [] uint256 [
+      AnnAssign "a" (DynArrayT uint256 10)
+        (ArrayLit [intlit 1; intlit 2; intlit 3]);
+      AnnAssign "counter" uint256 (intlit 0);
+      For "i" uint256 (Name "a") [
+        AugAssign "counter" Add (Name "i")
+      ];
+      Return (SOME (BinOp
+        (Name "counter") Add
+        (Call "bar" [])))
+    ]
+  ]
+End
 
 val () = export_theory();
