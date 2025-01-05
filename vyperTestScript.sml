@@ -1,5 +1,5 @@
 open HolKernel boolLib bossLib Parse intLib;
-open finite_mapTheory;
+open numeralTheory arithmeticTheory finite_mapTheory;
 open vyperAstTheory vyperVmTheory;
 
 val () = new_theory "vyperTest";
@@ -24,27 +24,25 @@ Definition test_if_control_flow_ast_def:
   ]
 End
 
-val execute_tac =
-  simp[execute_stmts_def, new_variable_def,
-       assign_subscripts_def, add_subscript_def,
-       extract_elements_def, replace_elements_def, integer_index_def,
-       evaluate_exps_def, assign_target_def, set_variable_def,
-       evaluate_target_def, evaluate_base_target_def,
-       evaluate_cmp_def, evaluate_literal_def,
-       evaluate_binop_def, lookup_scopes_def,
-       find_containing_scope_def, push_scope_def, pop_scope_def,
-       raise_def, FLOOKUP_UPDATE]
-
 Theorem test_if_control_flow:
-  external_call 10 "foo" [] test_if_control_flow_ast
-  = SOME (ReturnException (IntV 44))
+  external_call 21 "foo" [] test_if_control_flow_ast
+  = SOME (IntV 44)
 Proof
   rw[external_call_def,
      test_if_control_flow_ast_def,
      lookup_external_function_def, bind_arguments_def,
      initial_execution_context_def, initial_globals_def,
      initial_function_context_def ]
-  \\ execute_tac
+  \\ ntac 22 (
+     rw[Once numeral_funpow, Once step_stmt_def, set_stmt_def,
+        step_expr_def, exception_raised_def, new_variable_def,
+        set_variable_def, find_containing_scope_def,
+        evaluate_literal_def, evaluate_binop_def, evaluate_cmp_def,
+        step_target_def, step_base_target_def, assign_target_def,
+        assign_subscripts_def,
+        lookup_scopes_def, next_stmt_def, raise_def,
+        Once pop_call_def, FLOOKUP_UPDATE]
+     )
 QED
 
 Definition test_for_control_flow_ast_def:

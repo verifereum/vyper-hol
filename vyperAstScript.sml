@@ -49,8 +49,10 @@ End
 
 Datatype:
   expr
+  (*
   = NamedExpr expr expr
-  | Name identifier
+  *)
+  = Name identifier
   | GlobalName identifier
   | IfExp expr expr expr
   | Literal literal
