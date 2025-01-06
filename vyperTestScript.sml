@@ -204,4 +204,51 @@ Proof
   CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
+Definition test_internal_call_with_args2_ast_def:
+  test_internal_call_with_args2_ast = [
+    FunctionDef "baz" Internal [("a", uint256)] uint256 [
+      Return (SOME (Name "a"))
+    ];
+    FunctionDef "bar" Internal [("a", uint256)] uint256 [
+      Return (SOME (BinOp (Call "baz" [intlit 3]) Add (Name "a")))
+    ];
+    FunctionDef "foo" External [] uint256 [
+      AnnAssign "a" uint256 (intlit 1);
+      Return (SOME (BinOp (Call "bar" [intlit 2]) Add (Name "a")))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_internal_call_with_args2_ast_def;
+
+Theorem test_internal_call_with_args2:
+  external_call "foo" [] test_internal_call_with_args2_ast
+  = INL (IntV 6)
+Proof
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+QED
+
+Definition test_storage_variables_ast_def:
+  test_storage_variables_ast = [
+    VariableDecl "d" uint256 Private Storage;
+    FunctionDef "foo" External [] uint256 [
+      AnnAssign "a" uint256 (intlit 1);
+      Assign (BaseTarget (GlobalNameTarget "d")) (Name "a");
+      If (Compare (Name "a") Eq (intlit 1))
+        [Assign (BaseTarget (NameTarget "a")) (intlit 2)]
+        [Assign (BaseTarget (NameTarget "a")) (intlit 3)];
+      Return (SOME (BinOp (GlobalName "d") Add (intlit 42)))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_storage_variables_ast_def;
+
+Theorem test_storage_variables:
+  external_call "foo" [] test_storage_variables_ast
+  = INL (IntV 43)
+Proof
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+QED
+
 val () = export_theory();
