@@ -242,7 +242,7 @@ Datatype:
   | LiftCall identifier (value list) expr_continuation
   | DoneExpr value
   | ReturnExpr
-  | ErrorExpr
+  | ErrorExpr string
 End
 
 Type containing_scope = “: scope list # scope # scope list”;
@@ -283,14 +283,14 @@ Datatype:
   | BaseTargetK base_tgt_continuation
   | LiftCallTgt identifier (value list) tgt_continuation
   | DoneTgt assignment_value
-  | ErrorTgt
+  | ErrorTgt string
 End
 
 Datatype:
   exception
   = RaiseException string
   | AssertException string
-  | Error
+  | Error string
   | ExternalReturn value
 End
 
@@ -323,7 +323,7 @@ Definition evaluate_cmp_def:
   evaluate_cmp Eq    (IntV i1)    (IntV i2)    = DoneExpr (BoolV (i1 = i2)) ∧
   evaluate_cmp NotEq (StringV s1) (StringV s2) = DoneExpr (BoolV (s1 ≠ s2)) ∧
   evaluate_cmp NotEq (IntV i1)    (IntV i2)    = DoneExpr (BoolV (i1 ≠ i2)) ∧
-  evaluate_cmp _ _ _ = ErrorExpr
+  evaluate_cmp _ _ _ = ErrorExpr "cmp"
 End
 
 val () = cv_auto_trans evaluate_cmp_def;
@@ -331,7 +331,7 @@ val () = cv_auto_trans evaluate_cmp_def;
 Definition evaluate_binop_def:
   evaluate_binop Add (IntV i1) (IntV i2) = DoneExpr (IntV (i1 + i2)) ∧
   evaluate_binop Sub (IntV i1) (IntV i2) = DoneExpr (IntV (i1 - i2)) ∧
-  evaluate_binop (_: operator) _ _ = ErrorExpr
+  evaluate_binop (_: operator) _ _ = ErrorExpr "binop"
 End
 
 val () = cv_auto_trans evaluate_binop_def;
@@ -365,9 +365,9 @@ Definition evaluate_subscript_def:
   evaluate_subscript av (IntV i) =
   (case extract_elements av of SOME vs =>
     (case integer_index vs i of SOME j => DoneExpr (EL j vs)
-     | _ => ErrorExpr)
-   | _ => ErrorExpr) ∧
-  evaluate_subscript _ _ = ErrorExpr
+     | _ => ErrorExpr "integer_index")
+   | _ => ErrorExpr "extract_elements") ∧
+  evaluate_subscript _ _ = ErrorExpr "evaluate_subscript"
 End
 
 val evaluate_subscript_pre_def = cv_auto_trans_pre evaluate_subscript_def;
@@ -384,8 +384,8 @@ QED
 Definition evaluate_attribute_def:
   evaluate_attribute (StructV kvs) id =
   (case ALOOKUP kvs id of SOME v => DoneExpr v
-   | _ => ErrorExpr) ∧
-  evaluate_attribute _ _ = ErrorExpr
+   | _ => ErrorExpr "attribute") ∧
+  evaluate_attribute _ _ = ErrorExpr "evaluate_attribute"
 End
 
 val () = cv_auto_trans evaluate_attribute_def;
@@ -400,11 +400,11 @@ Definition step_expr_def:
   step_expr gbs env (StartExpr (Name id)) =
     (case lookup_scopes (string_to_num id) env
      of SOME v => DoneExpr v
-      | _ => ErrorExpr) ∧
+      | _ => ErrorExpr "lookup_scopes") ∧
   step_expr gbs env (StartExpr (GlobalName id)) =
     (case FLOOKUP gbs (string_to_num id)
      of SOME (Value v) => DoneExpr v
-      | _ => ErrorExpr) ∧
+      | _ => ErrorExpr "lookup gbs") ∧
   step_expr gbs env (StartExpr (Subscript e1 e2)) =
     SubscriptK1 (StartExpr e1) e2 ∧
   step_expr gbs env (StartExpr (Attribute e id)) =
@@ -433,14 +433,14 @@ Definition step_expr_def:
   *)
   step_expr gbs env (IfExpK k e2 e3) =
   (case step_expr gbs env k
-   of ErrorExpr => ErrorExpr
+   of ErrorExpr msg => ErrorExpr msg
     | DoneExpr v1 => (case v1 of BoolV b => StartExpr (if b then e2 else e3)
-                               | _ => ErrorExpr)
+                               | _ => ErrorExpr "IfExpK value")
     | LiftCall id vs k => LiftCall id vs (IfExpK k e2 e3)
     | k => IfExpK k e2 e3) ∧
   step_expr gbs env (ArrayLitK vs k es) =
   (case step_expr gbs env k
-   of ErrorExpr => ErrorExpr
+   of ErrorExpr msg => ErrorExpr msg
     | DoneExpr v =>
         (case es of (e::es) => ArrayLitK (SNOC v vs) (StartExpr e) es
                   | [] => DoneExpr (ArrayV (SNOC v vs)))
@@ -448,49 +448,49 @@ Definition step_expr_def:
     | k => ArrayLitK vs k es) ∧
   step_expr gbs env (SubscriptK1 k e) =
   (case step_expr gbs env k
-   of ErrorExpr => ErrorExpr
+   of ErrorExpr msg => ErrorExpr msg
     | DoneExpr v => SubscriptK2 v (StartExpr e)
     | LiftCall id vs k => LiftCall id vs (SubscriptK1 k e)
     | k => SubscriptK1 k e) ∧
   step_expr gbs env (SubscriptK2 v1 k) =
   (case step_expr gbs env k
-   of ErrorExpr => ErrorExpr
+   of ErrorExpr msg => ErrorExpr msg
     | DoneExpr v2 => evaluate_subscript v1 v2
     | LiftCall id vs k => LiftCall id vs (SubscriptK2 v1 k)
     | k => SubscriptK2 v1 k) ∧
   step_expr gbs env (AttributeK k id) =
   (case step_expr gbs env k
-   of ErrorExpr => ErrorExpr
+   of ErrorExpr msg => ErrorExpr msg
     | DoneExpr v => evaluate_attribute v id
     | LiftCall id vs k => LiftCall id vs (AttributeK k id)
     | k => AttributeK k id) ∧
   step_expr gbs env (CompareK1 k cmp e2) =
   (case step_expr gbs env k
-   of ErrorExpr => ErrorExpr
+   of ErrorExpr msg => ErrorExpr msg
     | DoneExpr v1 => CompareK2 v1 cmp (StartExpr e2)
     | LiftCall id vs k => LiftCall id vs (CompareK1 k cmp e2)
     | k => CompareK1 k cmp e2) ∧
   step_expr gbs env (CompareK2 v1 cmp k) =
   (case step_expr gbs env k
-   of ErrorExpr => ErrorExpr
+   of ErrorExpr msg => ErrorExpr msg
     | DoneExpr v2 => evaluate_cmp cmp v1 v2
     | LiftCall id vs k => LiftCall id vs (CompareK2 v1 cmp k)
     | k => CompareK2 v1 cmp k) ∧
   step_expr gbs env (BinOpK1 k bop e2) =
   (case step_expr gbs env k
-   of ErrorExpr => ErrorExpr
+   of ErrorExpr msg => ErrorExpr msg
     | DoneExpr v1 => BinOpK2 v1 bop (StartExpr e2)
     | LiftCall id vs k => LiftCall id vs (BinOpK1 k bop e2)
     | k => BinOpK1 k bop e2) ∧
   step_expr gbs env (BinOpK2 v1 bop k) =
   (case step_expr gbs env k
-   of ErrorExpr => ErrorExpr
+   of ErrorExpr msg => ErrorExpr msg
     | DoneExpr v2 => evaluate_binop bop v1 v2
     | LiftCall id vs k => LiftCall id vs (BinOpK2 v1 bop k)
     | k => BinOpK2 v1 bop k) ∧
   step_expr gbs env (CallK id vs k es) =
   (case step_expr gbs env k
-   of ErrorExpr => ErrorExpr
+   of ErrorExpr msg => ErrorExpr msg
     | DoneExpr v =>
         (case es of (e::es) => CallK id (SNOC v vs) (StartExpr e) es
                   | [] => LiftCall id (SNOC v vs) ReturnExpr)
@@ -499,7 +499,7 @@ Definition step_expr_def:
   step_expr gbs env (LiftCall id vs k) = LiftCall id vs k ∧
   step_expr gbs env (DoneExpr v) = DoneExpr v ∧
   step_expr gbs env ReturnExpr = ReturnExpr ∧
-  step_expr gbs env ErrorExpr = ErrorExpr
+  step_expr gbs env (ErrorExpr msg) = ErrorExpr msg
 End
 
 val () = cv_auto_trans step_expr_def;
@@ -534,7 +534,8 @@ End
 Definition initial_function_context_def:
   initial_function_context args ss = <|
     scopes := [args]
-  ; current_stmt := (case ss of s::_ => StartK s | _ => ExceptionK Error)
+  ; current_stmt := (case ss of s::_ => StartK s
+                        | _ => ExceptionK (Error "initial_function_context"))
   ; remaining_stmts := TL ss
   ; loop := NONE
   |>
@@ -584,7 +585,7 @@ val () = cv_auto_trans push_scope_def;
 Definition pop_scope_def:
   pop_scope ctx =
   case ctx.current_fc.scopes
-    of [] => raise Error ctx
+    of [] => raise (Error "pop_scope") ctx
      | (_::rest) => ctx with current_fc updated_by (λfc. fc with scopes := rest)
 End
 
@@ -593,9 +594,9 @@ val () = cv_auto_trans pop_scope_def;
 Definition new_variable_def:
   new_variable id typ ctx =
   case ctx.current_fc.scopes
-    of [] => raise Error ctx
+    of [] => raise (Error "new_variable") ctx
      | env::rest =>
-         if id ∈ FDOM env then raise Error ctx
+         if id ∈ FDOM env then raise (Error "var exists") ctx
          else ctx with current_fc updated_by
            (λfc. fc with scopes := (env |+ (id, default_value typ))::rest)
 End
@@ -634,7 +635,7 @@ Definition step_base_target_def:
    (case step_expr gbs env k
     of DoneExpr (IntV i) => SOME $ DoneBaseTgt l ((IntSubscript i)::s)
      | DoneExpr _ => NONE
-     | ErrorExpr => NONE
+     | ErrorExpr msg => NONE
      | LiftCall fn vs k => SOME $ LiftCallBaseTgt fn vs (SubscriptTargetK2 l s k)
      | k => SOME $ SubscriptTargetK2 l s k) ∧
   step_base_target gbs env (AttributeTargetK k id) =
@@ -668,17 +669,17 @@ Definition step_target_def:
                | (t::ts) => TupleTargetK (SNOC v vs) (StartTgt t) ts)
     | LiftCallTgt fn as k =>
         LiftCallTgt fn as (TupleTargetK vs k ts)
-    | ErrorTgt => ErrorTgt
+    | ErrorTgt msg => ErrorTgt msg
     | k => TupleTargetK vs k ts) ∧
   step_target gbs env (BaseTargetK k) =
   (case step_base_target gbs env k
    of SOME (DoneBaseTgt l s) => DoneTgt $ BaseTargetV l s
     | SOME (LiftCallBaseTgt fn vs k) => LiftCallTgt fn vs (BaseTargetK k)
     | SOME k => BaseTargetK k
-    | _ => ErrorTgt) ∧
+    | _ => ErrorTgt "step_base_target") ∧
   step_target gbs env (LiftCallTgt fn vs k) = LiftCallTgt fn vs k ∧
   step_target gbs env (DoneTgt v) = DoneTgt v ∧
-  step_target gbs env _ = ErrorTgt
+  step_target gbs env (ErrorTgt msg) = ErrorTgt msg
 End
 
 val () = cv_auto_trans step_target_def;
@@ -686,7 +687,7 @@ val () = cv_auto_trans step_target_def;
 Definition set_variable_def:
   set_variable id v ctx =
   case find_containing_scope id ctx.current_fc.scopes
-    of NONE => raise Error ctx
+    of NONE => raise (Error "find_containing_scope") ctx
      | SOME (pre, env, rest) =>
          (* check that v has same type as current value here ? *)
          ctx with current_fc updated_by
@@ -728,17 +729,17 @@ Definition assign_target_def:
      (case assign_subscripts a is v of SOME a' =>
         ctx with current_fc updated_by
           (λfc. fc with scopes := pre ++ (env |+ (nid, a'))::rest)
-      | _ => raise Error ctx)
-     | _ => raise Error ctx)) ∧
+      | _ => raise (Error "assign_subscripts ScopedVar") ctx)
+     | _ => raise (Error "assign_target lookup") ctx)) ∧
   assign_target (BaseTargetV (Global id) is) v ctx =
   (let nid = string_to_num id in
   (* TODO: add assignment to hashmaps *)
   (case FLOOKUP ctx.globals nid of SOME (Value a) =>
    (case assign_subscripts a is v of SOME a' =>
      ctx with globals := ctx.globals |+ (nid, Value a')
-    | _ => raise Error ctx)
-   | _ => raise Error ctx)) ∧
-  assign_target _ _ ctx = raise Error ctx (* TODO: handle TupleTargetV *)
+    | _ => raise (Error "assign_subscripts Global") ctx)
+   | _ => raise (Error "assign_target globals lookup") ctx)) ∧
+  assign_target _ _ ctx = raise (Error "TODO: TupleTargetV") ctx
 End
 
 val () = cv_auto_trans assign_target_def;
@@ -774,8 +775,8 @@ Definition push_call_def:
          ctx with <|
            call_stack updated_by CONS ctx.current_fc
          ; current_fc := fc |>
-     | _ => raise Error ctx)
-  | _ => raise Error ctx
+     | _ => raise (Error "bind_arguments") ctx)
+  | _ => raise (Error "lookup_external_function") ctx
 End
 
 val () = cv_auto_trans push_call_def;
@@ -789,7 +790,7 @@ End
 val () = cv_auto_trans update_current_stmt_def;
 
 Definition return_expr_def:
-  return_expr v (StartExpr _) = ErrorExpr ∧
+  return_expr v (StartExpr _) = ErrorExpr "return StartExpr" ∧
   return_expr v (IfExpK k e1 e2) = IfExpK (return_expr v k) e1 e2  ∧
   return_expr v (ArrayLitK vs k es) = ArrayLitK vs (return_expr v k) es ∧
   return_expr v (SubscriptK1 k e) = SubscriptK1 (return_expr v k) e ∧
@@ -801,9 +802,9 @@ Definition return_expr_def:
   return_expr v (BinOpK2 w bop k) = BinOpK2 w bop (return_expr v k) ∧
   return_expr v (CallK id vs k es) = CallK id vs (return_expr v k) es ∧
   return_expr v (LiftCall fn vs k) = LiftCall fn vs (return_expr v k) ∧
-  return_expr v (DoneExpr _) = ErrorExpr ∧
+  return_expr v (DoneExpr _) = ErrorExpr "return DoneExpr" ∧
   return_expr v ReturnExpr = DoneExpr v ∧
-  return_expr v ErrorExpr = ErrorExpr
+  return_expr v (ErrorExpr msg) = ErrorExpr msg
 End
 
 val () = cv_auto_trans return_expr_def;
@@ -824,16 +825,16 @@ End
 val () = cv_auto_trans return_base_tgt_def;
 
 Definition return_tgt_def:
-  return_tgt v (StartTgt _) = ErrorTgt ∧
+  return_tgt v (StartTgt _) = ErrorTgt "return StartTgt" ∧
   return_tgt v (TupleTargetK vs k as) =
     TupleTargetK vs (return_tgt v k) as ∧
   return_tgt v (BaseTargetK t) =
-    (case return_base_tgt v t of NONE => ErrorTgt
+    (case return_base_tgt v t of NONE => ErrorTgt "return_base_tgt"
         | SOME t => BaseTargetK t) ∧
   return_tgt v (LiftCallTgt fn vs k) =
     LiftCallTgt fn vs (return_tgt v k) ∧
-  return_tgt v (DoneTgt _) = ErrorTgt ∧
-  return_tgt v ErrorTgt = ErrorTgt
+  return_tgt v (DoneTgt _) = ErrorTgt "return DoneTgt" ∧
+  return_tgt v (ErrorTgt msg) = ErrorTgt msg
 End
 
 val () = cv_auto_trans return_tgt_def;
@@ -847,7 +848,9 @@ Definition return_def:
   return v (AssignK2 a k) = AssignK2 a (return_expr v k) ∧
   return v (AugAssignK id op k) = AugAssignK id op (return_expr v k) ∧
   return v (AnnAssignK id typ k) = AnnAssignK id typ (return_expr v k) ∧
-  return v _ = ExceptionK Error
+  return v (StartK _) = ExceptionK (Error "return StartK") ∧
+  return v (DoneK) = ExceptionK (Error "return DoneK") ∧
+  return v (ExceptionK err) = ExceptionK (Error "return ExceptionK")
 End
 
 val () = cv_auto_trans return_def;
@@ -915,7 +918,7 @@ Definition push_loop_def:
       |>
     |> ∧
   push_loop _ _ [] (_::_) ctx = set_stmt DoneK ctx ∧
-  push_loop _ _ _ _ ctx = raise Error ctx
+  push_loop _ _ _ _ ctx = raise (Error "push_loop") ctx
 End
 
 val () = cv_auto_trans push_loop_def;
@@ -923,7 +926,7 @@ val () = cv_auto_trans push_loop_def;
 Definition pop_loop_def:
   pop_loop ctx =
   case ctx.call_stack of
-     | [] => raise Error ctx
+     | [] => raise (Error "pop_loop") ctx
      | fc::fcs => ctx with <| current_fc := fc; call_stack := fcs |>
 End
 
@@ -947,7 +950,7 @@ Definition continue_loop_def:
     let ctx = pop_scope ctx in
       if exception_raised ctx then ctx else
         next_iteration li ctx
-  ) | _ => raise Error ctx
+  ) | _ => raise (Error "continue_loop") ctx
 End
 
 val () = cv_auto_trans continue_loop_def;
@@ -958,7 +961,7 @@ Definition break_loop_def:
     let ctx = pop_scope ctx in
       if exception_raised ctx then ctx else
         pop_loop ctx
-  ) | _ => raise Error ctx
+  ) | _ => raise (Error "break_loop") ctx
 End
 
 val () = cv_auto_trans break_loop_def;
@@ -1003,10 +1006,10 @@ Definition step_stmt_def:
             ctx with current_fc := fc with
               <| current_stmt := StartK s
                ; remaining_stmts updated_by (λx. ss ++ x) |>
-          | _ => raise Error ctx)
-      | IfK (DoneExpr _) _ _ => raise Error ctx
-      | IfK ErrorExpr _ _ => raise Error ctx
-      | IfK ReturnExpr _ _ => raise Error ctx
+          | _ => raise (Error "IfK body") ctx)
+      | IfK (DoneExpr _) _ _ => raise (Error "IfK DoneExpr") ctx
+      | IfK (ErrorExpr msg) _ _ => raise (Error ("IfK " ++ msg)) ctx
+      | IfK ReturnExpr _ _ => raise (Error "IfK ReturnExpr") ctx
       | IfK (LiftCall fn vs k) s1 s2 =>
           push_call fn vs
             (set_stmt (IfK k s1 s2) ctx)
@@ -1016,17 +1019,17 @@ Definition step_stmt_def:
       | AssertK (DoneExpr (BoolV b)) s => (
           if b then set_stmt DoneK ctx
           else raise (AssertException s) ctx)
-      | AssertK (DoneExpr _) _ => raise Error ctx
-      | AssertK ErrorExpr _ => raise Error ctx
-      | AssertK ReturnExpr _ => raise Error ctx
+      | AssertK (DoneExpr _) _ => raise (Error "AssertK DoneExpr") ctx
+      | AssertK (ErrorExpr msg) _ => raise (Error "AssertK ErrorExpr") ctx
+      | AssertK ReturnExpr _ => raise (Error "AssertK ReturnExpr") ctx
       | AssertK (LiftCall fn vs k) s =>
           push_call fn vs
             (set_stmt (AssertK k s) ctx)
       | AssertK k s =>
           set_stmt (AssertK (step_expr ctx.globals fc.scopes k) s) ctx
       | ReturnSomeK (DoneExpr v) => pop_call v ctx
-      | ReturnSomeK ErrorExpr => raise Error ctx
-      | ReturnSomeK ReturnExpr => raise Error ctx
+      | ReturnSomeK (ErrorExpr msg) => raise (Error "ReturnSomeK err") ctx
+      | ReturnSomeK ReturnExpr => raise (Error "ReturnSomeK ReturnExpr") ctx
       | ReturnSomeK (LiftCall fn vs k) =>
           push_call fn vs
             (set_stmt (ReturnSomeK k) ctx)
@@ -1035,7 +1038,7 @@ Definition step_stmt_def:
             (ReturnSomeK (step_expr ctx.globals fc.scopes k)) ctx
       | AssignK1 (DoneTgt av) e =>
           set_stmt (AssignK2 av (StartExpr e)) ctx
-      | AssignK1 ErrorTgt e => raise Error ctx
+      | AssignK1 (ErrorTgt msg) e => raise (Error "AssignK1 err") ctx
       | AssignK1 (LiftCallTgt fn vs tk) e =>
           push_call fn vs
             (set_stmt (AssignK1 tk e) ctx)
@@ -1044,8 +1047,8 @@ Definition step_stmt_def:
             (AssignK1 (step_target ctx.globals fc.scopes tk) e) ctx
       | AssignK2 tv (DoneExpr v) =>
           set_stmt DoneK (assign_target tv v ctx)
-      | AssignK2 tv ErrorExpr => raise Error ctx
-      | AssignK2 tv ReturnExpr => raise Error ctx
+      | AssignK2 tv (ErrorExpr msg) => raise (Error "AssignK2 err") ctx
+      | AssignK2 tv ReturnExpr => raise (Error "AssignK2 ReturnExpr") ctx
       | AssignK2 tv (LiftCall fn vs k) =>
           push_call fn vs
             (set_stmt (AssignK2 tv k) ctx)
@@ -1055,13 +1058,13 @@ Definition step_stmt_def:
       | AugAssignK id bop (DoneExpr v2) =>
         (let nid = string_to_num id in
         (case lookup_scopes nid fc.scopes
-           of NONE => raise Error ctx
+           of NONE => raise (Error "AugAssignK lookup_scopes") ctx
             | SOME v1 =>
               (case evaluate_binop bop v1 v2
                  of DoneExpr v => set_stmt DoneK (set_variable nid v ctx)
-                  | _ => raise Error ctx)))
-      | AugAssignK id bop ErrorExpr => raise Error ctx
-      | AugAssignK id bop ReturnExpr => raise Error ctx
+                  | _ => raise (Error "AugAssignK bop") ctx)))
+      | AugAssignK id bop (ErrorExpr msg) => raise (Error "AugAssignK err") ctx
+      | AugAssignK id bop ReturnExpr => raise (Error "AugAssignK ReturnExpr") ctx
       | AugAssignK id bop (LiftCall fn vs k) =>
           push_call fn vs
             (set_stmt (AugAssignK id bop k) ctx)
@@ -1073,8 +1076,8 @@ Definition step_stmt_def:
           let ctx = new_variable nid typ ctx in
             if exception_raised ctx then ctx else
               set_stmt DoneK (set_variable nid v ctx))
-      | AnnAssignK id typ ErrorExpr => raise Error ctx
-      | AnnAssignK id typ ReturnExpr => raise Error ctx
+      | AnnAssignK id typ (ErrorExpr msg) => raise (Error "AnnAssignK err") ctx
+      | AnnAssignK id typ ReturnExpr => raise (Error "AnnAssignK ReturnExpr") ctx
       | AnnAssignK id typ (LiftCall fn vs k) =>
           push_call fn vs
             (set_stmt (AnnAssignK id typ k) ctx)
@@ -1086,9 +1089,9 @@ Definition step_stmt_def:
           set_stmt DoneK ctx
       | ForK id typ (DoneExpr (ArrayV vs)) ss =>
           push_loop (string_to_num id) typ vs ss ctx
-      | ForK id typ (DoneExpr _) _ => raise Error ctx
-      | ForK id typ ErrorExpr _ => raise Error ctx
-      | ForK id typ ReturnExpr _ => raise Error ctx
+      | ForK id typ (DoneExpr _) _ => raise (Error "ForK DoneExpr") ctx
+      | ForK id typ (ErrorExpr msg) _ => raise (Error "ForK err") ctx
+      | ForK id typ ReturnExpr _ => raise (Error "ForK ReturnExpr") ctx
       | ForK id typ (LiftCall fn vs k) ss =>
           push_call fn vs
             (set_stmt (ForK id typ k ss) ctx)
@@ -1108,10 +1111,11 @@ Definition external_call_def:
         let ctx = initial_execution_context ts fc in
         let ctx = FUNPOW step_stmt n ctx in
         (case ctx.current_fc.current_stmt
-           of ExceptionK (ExternalReturn v) => SOME v
-            | _ => NONE))
-     | _ => NONE)
-  | _ => NONE
+           of ExceptionK (ExternalReturn v) => INL v
+            | ExceptionK (Error msg) => INR msg
+            | _ => INR "current_stmt"))
+     | _ => INR "external bind_arguments")
+  | _ => INR "external lookup"
 End
 
 val () = cv_auto_trans external_call_def;
