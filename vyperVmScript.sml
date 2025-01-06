@@ -297,6 +297,7 @@ End
 Datatype:
   stmt_continuation
   = StartK stmt
+  | ExprK expr_continuation
   | IfK expr_continuation (stmt list) (stmt list)
   | AssertK expr_continuation string
   | ReturnSomeK expr_continuation
@@ -856,6 +857,7 @@ Definition return_def:
   return v (AugAssignK id op k) = AugAssignK id op (return_expr v k) ∧
   return v (AnnAssignK id typ k) = AnnAssignK id typ (return_expr v k) ∧
   return v (StartK _) = ExceptionK (Error "return StartK") ∧
+  return v (ExprK k) = ExprK (return_expr v k) ∧
   return v (DoneK) = ExceptionK (Error "return DoneK") ∧
   return v (ExceptionK err) = ExceptionK (Error "return ExceptionK")
 End
@@ -1002,6 +1004,7 @@ Definition step_stmt_def:
       | StartK Pass => set_stmt DoneK ctx
       | StartK Continue => continue_loop ctx
       | StartK Break => break_loop ctx
+      | StartK (Expr e) => set_stmt (ExprK (StartExpr e)) ctx
       | StartK (Raise s) => raise (RaiseException s) ctx
       | StartK (Assert e s) => set_stmt (AssertK (StartExpr e) s) ctx
       | StartK (Return NONE) => pop_call VoidV ctx
@@ -1017,6 +1020,11 @@ Definition step_stmt_def:
           set_stmt (IfK (StartExpr e) s1 s2) ctx
       | StartK (For id typ e s) =>
           set_stmt (ForK id typ (StartExpr e) s) ctx
+      | ExprK (DoneExpr _) => set_stmt DoneK ctx
+      | ExprK (ErrorExpr msg) => raise (Error "ExprK err") ctx
+      | ExprK (LiftCall fn vs k) =>
+          push_call fn vs (set_stmt (ExprK k) ctx)
+      | ExprK k => set_stmt (ExprK (step_expr ctx.globals fc.scopes k)) ctx
       | IfK (DoneExpr (BoolV b)) s1 s2 => (
           case (if b then s1 else s2) of s::ss =>
             ctx with current_fc := fc with
@@ -1116,6 +1124,11 @@ Definition step_stmt_def:
 End
 
 val () = cv_auto_trans step_stmt_def;
+
+(*
+Definition step_bound_def:
+  step_bound ctx
+*)
 
 Definition step_stmt_till_exception_def:
   step_stmt_till_exception ctx =

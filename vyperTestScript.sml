@@ -158,4 +158,26 @@ Proof
   CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
+Definition test_internal_call_without_return_ast_def:
+  test_internal_call_without_return_ast = [
+    VariableDecl "a" uint256 Private Storage;
+    FunctionDef "bar" Internal [] VoidT [
+      Assign (BaseTarget (GlobalNameTarget "a")) (intlit 42)
+    ];
+    FunctionDef "foo" External [] uint256 [
+      Expr (Call "bar" []);
+      Return (SOME (GlobalName "a"))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_internal_call_without_return_ast_def;
+
+Theorem test_internal_call_without_return:
+  external_call "foo" [] test_internal_call_without_return_ast
+  = INL (IntV 42)
+Proof
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+QED
+
 val () = export_theory();

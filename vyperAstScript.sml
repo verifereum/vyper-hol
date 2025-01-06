@@ -24,7 +24,7 @@ Datatype:
   | TupleT (type list)
   | DynArrayT type num
   (* TODO: fixed-size lists *)
-  | VoidT (* TODO: is this needed? *)
+  | VoidT (* for functions with no return type *)
 End
 
 Datatype:
@@ -84,6 +84,7 @@ Datatype:
   = Pass
   | Continue
   | Break
+  | Expr expr
   | For identifier type expr (stmt list)
   | If expr (stmt list) (stmt list)
   | Assert expr string
