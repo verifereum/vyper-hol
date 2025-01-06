@@ -1110,15 +1110,25 @@ End
 
 val () = cv_auto_trans step_stmt_def;
 
+Definition step_stmt_till_exception_def:
+  step_stmt_till_exception ctx =
+  if exception_raised ctx then ctx
+  else step_stmt_till_exception (step_stmt ctx)
+Termination
+  cheat (* TODO: need to define a step bound - maybe possible given Vyper is bounded *)
+End
+
+val () = cv_auto_trans step_stmt_till_exception_def;
+
 Definition external_call_def:
-  external_call n name args ts =
+  external_call name args ts =
   case lookup_function name External ts of
     SOME (params, _, body) =>
     (case bind_arguments params args of
        SOME env =>
        (let fc = initial_function_context env body in
         let ctx = initial_execution_context ts fc in
-        let ctx = FUNPOW step_stmt n ctx in
+        let ctx = step_stmt_till_exception ctx in
         (case ctx.current_fc.current_stmt
            of ExceptionK (ExternalReturn v) => INL v
             | ExceptionK (Error msg) => INR msg

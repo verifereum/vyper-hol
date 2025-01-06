@@ -44,7 +44,7 @@ End
 val () = cv_trans_deep_embedding EVAL test_if_control_flow_ast_def;
 
 Theorem test_if_control_flow:
-  external_call 21 "foo" [] test_if_control_flow_ast
+  external_call "foo" [] test_if_control_flow_ast
   = INL (IntV 44)
 Proof
   CONV_TAC(LAND_CONV cv_eval) \\ rw[]
@@ -67,7 +67,7 @@ End
 val () = cv_trans_deep_embedding EVAL test_for_control_flow_ast_def;
 
 Theorem test_for_control_flow:
-  external_call 30 "foo" [] test_for_control_flow_ast
+  external_call "foo" [] test_for_control_flow_ast
   = INL (IntV 6)
 Proof
   CONV_TAC(LAND_CONV cv_eval) \\ rw[]
@@ -91,7 +91,7 @@ End
 val () = cv_trans_deep_embedding EVAL test_array_assign_ast_def;
 
 Theorem test_array_assign:
-  external_call 30 "foo" [] test_array_assign_ast
+  external_call "foo" [] test_array_assign_ast
   = INL (IntV 47)
 Proof
   CONV_TAC(LAND_CONV cv_eval) \\ rw[]
@@ -118,7 +118,7 @@ End
 val () = cv_trans_deep_embedding EVAL test_storage_array_assign_ast_def;
 
 Theorem test_storage_array_assign:
-  external_call 30 "foo" [] test_storage_array_assign_ast
+  external_call "foo" [] test_storage_array_assign_ast
   = INL (IntV 5)
 Proof
   CONV_TAC(LAND_CONV cv_eval) \\ rw[]
@@ -152,7 +152,7 @@ End
 val () = cv_trans_deep_embedding EVAL test_internal_call_ast_def;
 
 Theorem test_internal_call:
-  external_call 75 "foo" [] test_internal_call_ast
+  external_call "foo" [] test_internal_call_ast
   = INL (IntV 12)
 Proof
   CONV_TAC(LAND_CONV cv_eval) \\ rw[]
