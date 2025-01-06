@@ -180,4 +180,28 @@ Proof
   CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
+Definition test_internal_call_with_args_ast_def:
+  test_internal_call_with_args_ast = [
+    FunctionDef "baz" Internal [("a", uint256)] uint256 [
+      Return (SOME (Name "a"))
+    ];
+    FunctionDef "bar" Internal [("a", uint256)] uint256 [
+      Return (SOME (BinOp (Name "a") Add (Call "baz" [intlit 3])))
+    ];
+    FunctionDef "foo" External [] uint256 [
+      AnnAssign "a" uint256 (intlit 1);
+      Return (SOME (BinOp (Name "a") Add (Call "bar" [intlit 2])))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_internal_call_with_args_ast_def;
+
+Theorem test_internal_call_with_args:
+  external_call "foo" [] test_internal_call_with_args_ast
+  = INL (IntV 6)
+Proof
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+QED
+
 val () = export_theory();
