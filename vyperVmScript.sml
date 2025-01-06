@@ -755,19 +755,19 @@ End
 val () = cv_auto_trans bind_arguments_def;
 
 Definition lookup_external_function_def:
-  lookup_external_function name [] = NONE ∧
-  lookup_external_function name (FunctionDef id External args ret body :: ts) =
-  (if id = name then SOME (args, ret, body)
-   else lookup_external_function name ts) ∧
-  lookup_external_function name (_ :: ts) =
-    lookup_external_function name ts
+  lookup_function name vis [] = NONE ∧
+  lookup_function name vis (FunctionDef id fv args ret body :: ts) =
+  (if id = name ∧ vis = fv then SOME (args, ret, body)
+   else lookup_function name vis ts) ∧
+  lookup_function name vis (_ :: ts) =
+    lookup_function name vis ts
 End
 
 val () = cv_auto_trans lookup_external_function_def;
 
 Definition push_call_def:
   push_call fn args ctx =
-  case lookup_external_function fn ctx.contract of
+  case lookup_function fn Internal ctx.contract of
   | SOME (params, ret, body) =>
     (case bind_arguments params args of
      | SOME env =>
@@ -776,7 +776,7 @@ Definition push_call_def:
            call_stack updated_by CONS ctx.current_fc
          ; current_fc := fc |>
      | _ => raise (Error "bind_arguments") ctx)
-  | _ => raise (Error "lookup_external_function") ctx
+  | _ => raise (Error "lookup_function Internal") ctx
 End
 
 val () = cv_auto_trans push_call_def;
@@ -1112,7 +1112,7 @@ val () = cv_auto_trans step_stmt_def;
 
 Definition external_call_def:
   external_call n name args ts =
-  case lookup_external_function name ts of
+  case lookup_function name External ts of
     SOME (params, _, body) =>
     (case bind_arguments params args of
        SOME env =>

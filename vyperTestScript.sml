@@ -151,13 +151,11 @@ End
 
 val () = cv_trans_deep_embedding EVAL test_internal_call_ast_def;
 
-(* doesn't work yet
 Theorem test_internal_call:
-  external_call 40 "foo" [] test_internal_call_ast
-  = INL (IntV 5)
+  external_call 75 "foo" [] test_internal_call_ast
+  = INL (IntV 12)
 Proof
   CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
-*)
 
 val () = export_theory();
