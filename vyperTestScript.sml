@@ -1,11 +1,28 @@
-open HolKernel boolLib bossLib Parse intLib;
+open HolKernel boolLib bossLib Parse intLib wordsLib cv_transLib;
 open numeralTheory arithmeticTheory finite_mapTheory;
 open vyperAstTheory vyperVmTheory;
 
 val () = new_theory "vyperTest";
 
-Overload uint256 = “BaseT (UintT (n2w (256 DIV 8)))”
+Overload uint256 = “BaseT (UintT (n2w 32 (* 256 DIV 8 *)))”
 Overload intlit = “λi. Literal (IntL i)”
+
+(*
+  rw[external_call_def,
+     test_for_control_flow_ast_def,
+     lookup_external_function_def, bind_arguments_def,
+     initial_execution_context_def, initial_globals_def,
+     initial_function_context_def ]
+     rw[Once numeral_funpow, Once step_stmt_def, set_stmt_def,
+        step_expr_def, exception_raised_def, new_variable_def,
+        set_variable_def, find_containing_scope_def,
+        evaluate_literal_def, evaluate_binop_def, evaluate_cmp_def,
+        step_target_def, step_base_target_def, assign_target_def,
+        assign_subscripts_def, string_to_num_def, numposrepTheory.l2n_def,
+        lookup_scopes_def, next_stmt_def, raise_def,
+        push_loop_def, next_iteration_def, pop_loop_def,
+        Once pop_call_def, FLOOKUP_UPDATE]
+*)
 
 Definition test_if_control_flow_ast_def:
   test_if_control_flow_ast = [
@@ -24,25 +41,13 @@ Definition test_if_control_flow_ast_def:
   ]
 End
 
+val () = cv_trans_deep_embedding EVAL test_if_control_flow_ast_def;
+
 Theorem test_if_control_flow:
   external_call 21 "foo" [] test_if_control_flow_ast
-  = SOME (IntV 44)
+  = INL (IntV 44)
 Proof
-  rw[external_call_def,
-     test_if_control_flow_ast_def,
-     lookup_external_function_def, bind_arguments_def,
-     initial_execution_context_def, initial_globals_def,
-     initial_function_context_def ]
-  \\ ntac 22 (
-     rw[Once numeral_funpow, Once step_stmt_def, set_stmt_def,
-        step_expr_def, exception_raised_def, new_variable_def,
-        set_variable_def, find_containing_scope_def,
-        evaluate_literal_def, evaluate_binop_def, evaluate_cmp_def,
-        step_target_def, step_base_target_def, assign_target_def,
-        assign_subscripts_def,
-        lookup_scopes_def, next_stmt_def, raise_def,
-        Once pop_call_def, FLOOKUP_UPDATE]
-     )
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
 Definition test_for_control_flow_ast_def:
@@ -59,16 +64,13 @@ Definition test_for_control_flow_ast_def:
   ]
 End
 
+val () = cv_trans_deep_embedding EVAL test_for_control_flow_ast_def;
+
 Theorem test_for_control_flow:
-  external_call 10 "foo" [] test_for_control_flow_ast
-  = SOME (ReturnException (IntV 6))
+  external_call 30 "foo" [] test_for_control_flow_ast
+  = INL (IntV 6)
 Proof
-  rw[external_call_def,
-     test_for_control_flow_ast_def,
-     lookup_external_function_def, bind_arguments_def,
-     initial_execution_context_def, initial_globals_def,
-     initial_function_context_def ]
-  \\ execute_tac
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
 Definition test_array_assign_ast_def:
@@ -86,16 +88,13 @@ Definition test_array_assign_ast_def:
   ]
 End
 
+val () = cv_trans_deep_embedding EVAL test_array_assign_ast_def;
+
 Theorem test_array_assign:
-  external_call 10 "foo" [] test_array_assign_ast
-  = SOME (ReturnException (IntV 47))
+  external_call 30 "foo" [] test_array_assign_ast
+  = INL (IntV 47)
 Proof
-  rw[external_call_def,
-     test_array_assign_ast_def,
-     lookup_external_function_def, bind_arguments_def,
-     initial_execution_context_def, initial_globals_def,
-     initial_function_context_def ]
-  \\ execute_tac
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
 Definition test_storage_array_assign_ast_def:
@@ -116,20 +115,17 @@ Definition test_storage_array_assign_ast_def:
   ]
 End
 
+val () = cv_trans_deep_embedding EVAL test_storage_array_assign_ast_def;
+
 Theorem test_storage_array_assign:
-  external_call 10 "foo" [] test_storage_array_assign_ast
-  = SOME (ReturnException (IntV 5))
+  external_call 30 "foo" [] test_storage_array_assign_ast
+  = INL (IntV 5)
 Proof
-  rw[external_call_def,
-     test_storage_array_assign_ast_def,
-     lookup_external_function_def, bind_arguments_def,
-     initial_execution_context_def, initial_globals_def,
-     initial_function_context_def ]
-  \\ execute_tac
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
 Definition test_internal_call_ast_def:
-  test_internal_call = [
+  test_internal_call_ast = [
     FunctionDef "bar" Internal [] uint256 [
       AnnAssign "a" (DynArrayT uint256 10)
         (ArrayLit [intlit 1; intlit 2; intlit 3]);
@@ -152,5 +148,16 @@ Definition test_internal_call_ast_def:
     ]
   ]
 End
+
+val () = cv_trans_deep_embedding EVAL test_internal_call_ast_def;
+
+(* doesn't work yet
+Theorem test_internal_call:
+  external_call 40 "foo" [] test_internal_call_ast
+  = INL (IntV 5)
+Proof
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+QED
+*)
 
 val () = export_theory();

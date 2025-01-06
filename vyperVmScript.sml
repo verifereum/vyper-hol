@@ -927,7 +927,13 @@ Definition pop_loop_def:
   pop_loop ctx =
   case ctx.call_stack of
      | [] => raise (Error "pop_loop") ctx
-     | fc::fcs => ctx with <| current_fc := fc; call_stack := fcs |>
+     | fc::fcs => ctx with <|
+         current_fc := (fc with <|
+           current_stmt := DoneK (* check it was ForK? *)
+         ; scopes := ctx.current_fc.scopes
+             (* TODO: is this a reason to maybe not have a loop context?  *)
+         |>)
+       ; call_stack := fcs |>
 End
 
 val () = cv_auto_trans pop_loop_def;
@@ -974,7 +980,10 @@ Definition next_stmt_def:
                ; remaining_stmts := ss |>)
   | _ => (case ctx.current_fc.loop
             of NONE => pop_call VoidV ctx
-             | SOME li => next_iteration li ctx)
+             | SOME li =>
+                 let ctx = pop_scope ctx in
+                   if exception_raised ctx then ctx
+                   else next_iteration li ctx)
 End
 
 val () = cv_auto_trans next_stmt_def;
