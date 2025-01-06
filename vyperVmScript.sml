@@ -1130,9 +1130,54 @@ End
 
 val () = cv_auto_trans step_stmt_def;
 
+Definition expr_bound_def:
+  expr_bound (Name _, fns) = (1n, fns) ∧
+  expr_bound (GlobalName _, fns) = (1, fns) ∧
+  expr_bound (IfExp e1 e2 e3, fns) = (
+    let (n1, fns) = expr_bound (e1, fns) in
+    let (n2, fns) = expr_bound (e2, fns) in
+    let (n3, fns) = expr_bound (e3, fns) in
+      (1 + n1 + MAX n2 n3, fns) ) ∧
+  expr_bound (Literal _, fns) = (1, fns) ∧
+  expr_bound (ArrayLit es, fns) = (
+  let (ns, fns) = expr_bound_list (es, fns) in
+    (1 + ns, fns) ) ∧
+  expr_bound (Subscript e1 e2, fns) = (
+  let (n1, fns) = expr_bound (e1, fns) in
+  let (n2, fns) = expr_bound (e2, fns) in
+    (1 + n1 + n2, fns) ) ∧
+  expr_bound (Attribute e _, fns) = (
+  let (n, fns) = expr_bound (e, fns) in
+    (1 + n, fns) ) ∧
+  expr_bound (Compare e1 _ e2, fns) = (
+  let (n1, fns) = expr_bound (e1, fns) in
+  let (n2, fns) = expr_bound (e2, fns) in
+    (1 + n1 + n2, fns) ) ∧
+  expr_bound (BinOp e1 _ e2, fns) = (
+  let (n1, fns) = expr_bound (e1, fns) in
+  let (n2, fns) = expr_bound (e2, fns) in
+    (1 + n1 + n2, fns) ) ∧
+  expr_bound (Call fn es, fns) = (
+  let (ns, fns) = expr_bound_list (es, fns) in
+    (1 + ns, (fn INSERT fns)) ) ∧
+  expr_bound_list ([], fns) = (0, fns) ∧
+  expr_bound_list (e::es, fns) = (
+  let (n, fns) = expr_bound (e, fns) in
+  let (ns, fns) = expr_bound_list (es, fns) in
+    (1 + n + ns, fns) )
+Termination
+  WF_REL_TAC`measure (λx.
+    case x of INL (e, _) => expr_size e
+            | INR (es, _) => expr1_size es)`
+End
+
 (*
+Definition stmt_bound_def:
+  stmt_bound
+
 Definition step_bound_def:
-  step_bound ctx
+  step_bound ctx =
+End
 *)
 
 Definition step_stmt_till_exception_def:
