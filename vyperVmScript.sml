@@ -514,11 +514,15 @@ Datatype:
 End
 
 Datatype:
+  function_or_loop = Fn identifier | Loop loop_info
+End
+
+Datatype:
   function_context =
   <| scopes: scope list
    ; current_stmt: stmt_continuation
    ; remaining_stmts: stmt list
-   ; loop: loop_info option
+   ; name: function_or_loop
    |>
 End
 
@@ -532,12 +536,12 @@ Datatype:
 End
 
 Definition initial_function_context_def:
-  initial_function_context args ss = <|
+  initial_function_context fn args ss = <|
     scopes := [args]
   ; current_stmt := (case ss of s::_ => StartK s
                         | _ => ExceptionK (Error "initial_function_context"))
   ; remaining_stmts := TL ss
-  ; loop := NONE
+  ; name := Fn fn
   |>
 End
 
@@ -767,11 +771,14 @@ val () = cv_auto_trans lookup_external_function_def;
 
 Definition push_call_def:
   push_call fn args ctx =
+  if ctx.current_fc.name = Fn fn ∨
+     EXISTS (λfc. fc.name = Fn fn) ctx.call_stack
+  then raise (Error "recursive call") ctx else
   case lookup_function fn Internal ctx.contract of
   | SOME (params, ret, body) =>
     (case bind_arguments params args of
      | SOME env =>
-         let fc = initial_function_context env body in
+         let fc = initial_function_context fn env body in
          ctx with <|
            call_stack updated_by CONS ctx.current_fc
          ; current_fc := fc |>
@@ -858,7 +865,7 @@ val () = cv_auto_trans return_def;
 Definition pop_call_def:
   pop_call v ctx =
   case ctx.call_stack of fc::fcs =>
-    if IS_SOME fc.loop then
+    if case fc.name of Loop _ => T | _ => F then
       pop_call v (ctx with call_stack := fcs)
     else
       ctx with <|
@@ -909,7 +916,7 @@ Definition push_loop_def:
         scopes := (FEMPTY |+ (id,v))::ctx.current_fc.scopes
       ; current_stmt := (StartK s)
       ; remaining_stmts := ss
-      ; loop := SOME <|
+      ; name := Loop <|
           loop_var := id
         ; remaining_values := vs
         ; loop_first_stmt := s
@@ -945,14 +952,14 @@ Definition next_iteration_def:
         fc with <| scopes updated_by CONS (FEMPTY |+ (li.loop_var, v))
                  ; current_stmt := StartK li.loop_first_stmt
                  ; remaining_stmts := li.loop_rest_stmts
-                 ; loop := SOME (li with remaining_values := vs) |>)
+                 ; name := Loop (li with remaining_values := vs) |>)
 End
 
 val () = cv_auto_trans next_iteration_def;
 
 Definition continue_loop_def:
   continue_loop ctx =
-  case ctx.current_fc.loop of SOME li => (
+  case ctx.current_fc.name of Loop li => (
     let ctx = pop_scope ctx in
       if exception_raised ctx then ctx else
         next_iteration li ctx
@@ -963,7 +970,7 @@ val () = cv_auto_trans continue_loop_def;
 
 Definition break_loop_def:
   break_loop ctx =
-  case ctx.current_fc.loop of SOME li => (
+  case ctx.current_fc.name of Loop li => (
     let ctx = pop_scope ctx in
       if exception_raised ctx then ctx else
         pop_loop ctx
@@ -978,9 +985,9 @@ Definition next_stmt_def:
     ctx with current_fc updated_by (λfc.
       fc with <| current_stmt := StartK s
                ; remaining_stmts := ss |>)
-  | _ => (case ctx.current_fc.loop
-            of NONE => pop_call VoidV ctx
-             | SOME li =>
+  | _ => (case ctx.current_fc.name
+            of Fn _ => pop_call VoidV ctx
+             | Loop li =>
                  let ctx = pop_scope ctx in
                    if exception_raised ctx then ctx
                    else next_iteration li ctx)
@@ -1126,7 +1133,7 @@ Definition external_call_def:
     SOME (params, _, body) =>
     (case bind_arguments params args of
        SOME env =>
-       (let fc = initial_function_context env body in
+       (let fc = initial_function_context name env body in
         let ctx = initial_execution_context ts fc in
         let ctx = step_stmt_till_exception ctx in
         (case ctx.current_fc.current_stmt
