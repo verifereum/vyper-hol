@@ -58,7 +58,7 @@ Definition test_for_control_flow_ast_def:
          (ArrayLit [intlit 1; intlit 2; intlit 3]);
        AnnAssign "counter" uint256 (intlit 0);
        For "i" uint256 (Name "a")
-       [ AugAssign "counter" Add (Name "i") ];
+       [ AugAssign (NameTarget "counter") Add (Name "i") ];
        Return (SOME (Name "counter"))
     ]
   ]
@@ -131,7 +131,7 @@ Definition test_internal_call_ast_def:
         (ArrayLit [intlit 1; intlit 2; intlit 3]);
       AnnAssign "counter" uint256 (intlit 0);
       For "i" uint256 (Name "a") [
-        AugAssign "counter" Add (Name "i")
+        AugAssign (NameTarget "counter") Add (Name "i")
       ];
       Return (SOME (Name "counter"))
     ];
@@ -140,7 +140,7 @@ Definition test_internal_call_ast_def:
         (ArrayLit [intlit 1; intlit 2; intlit 3]);
       AnnAssign "counter" uint256 (intlit 0);
       For "i" uint256 (Name "a") [
-        AugAssign "counter" Add (Name "i")
+        AugAssign (NameTarget "counter") Add (Name "i")
       ];
       Return (SOME (BinOp
         (Name "counter") Add
@@ -247,6 +247,60 @@ val () = cv_trans_deep_embedding EVAL test_storage_variables_ast_def;
 Theorem test_storage_variables:
   external_call "foo" [] test_storage_variables_ast
   = INL (IntV 43)
+Proof
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+QED
+
+Definition test_storage_variables2_ast_def:
+  test_storage_variables2_ast = [
+    VariableDecl "d" uint256 Private Storage;
+    VariableDecl "k" uint256 Private Storage;
+    FunctionDef "foo" External [] uint256 [
+      Assign (BaseTarget (GlobalNameTarget "k")) (intlit 1);
+      Assign (BaseTarget (GlobalNameTarget "d")) (GlobalName "k");
+      AugAssign (GlobalNameTarget "d") Add (GlobalName "k");
+      Return (SOME (BinOp (GlobalName "d") Add (GlobalName "k")))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_storage_variables2_ast_def;
+
+Theorem test_storage_variables2:
+  external_call "foo" [] test_storage_variables2_ast
+  = INL (IntV 3)
+Proof
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+QED
+
+Definition test_storage_variables3_ast_def:
+  test_storage_variables3_ast = [
+    VariableDecl "d" uint256 Private Storage;
+    FunctionDef "bar" Internal [] VoidT [
+      AnnAssign "a" (DynArrayT uint256 10)
+        (ArrayLit [intlit 1; intlit 2; intlit 3]);
+      For "i" uint256 (Name "a") [
+        AugAssign (GlobalNameTarget "d") Add (Name "i")
+      ]
+    ];
+    FunctionDef "foo" External [] uint256 [
+      AnnAssign "a" (DynArrayT uint256 10)
+        (ArrayLit [intlit 1; intlit 2; intlit 3]);
+      AnnAssign "counter" uint256 (intlit 0);
+      For "i" uint256 (Name "a") [
+        AugAssign (GlobalNameTarget "d") Add (Name "i")
+      ];
+      Expr (Call "bar" []);
+      Return (SOME (GlobalName "d"))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_storage_variables3_ast_def;
+
+Theorem test_storage_variables3:
+  external_call "foo" [] test_storage_variables3_ast
+  = INL (IntV 12)
 Proof
   CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
