@@ -217,11 +217,6 @@ Definition lookup_scopes_def:
   | SOME v => SOME v
 End
 
-(*
-TODO: somehow rework to use num_maps?
-val () = cv_auto_trans lookup_scopes_def;
-*)
-
 Datatype:
   expr_continuation
   = StartExpr expr
@@ -274,6 +269,7 @@ Datatype:
   | AttributeTargetK base_tgt_continuation identifier
   | LiftCallBaseTgt identifier (value list) base_tgt_continuation
   | DoneBaseTgt location (subscript list)
+  | ErrorBaseTgt string
 End
 
 Datatype:
@@ -303,7 +299,8 @@ Datatype:
   | ReturnSomeK expr_continuation
   | AssignK1 tgt_continuation expr
   | AssignK2 assignment_value expr_continuation
-  | AugAssignK identifier operator expr_continuation
+  | AugAssignK1 base_tgt_continuation operator expr
+  | AugAssignK2 location (subscript list) operator expr_continuation
   | AnnAssignK identifier type expr_continuation
   | ForK identifier type expr_continuation (stmt list)
   | DoneK
@@ -620,42 +617,36 @@ val () = cv_auto_trans (REWRITE_RULE[TO_FLOOKUP]find_containing_scope_def);
 Definition step_base_target_def:
   step_base_target gbs env (StartBaseTgt (NameTarget id)) =
     (case find_containing_scope (string_to_num id) env
-     of SOME cs => SOME $ DoneBaseTgt (ScopedVar cs id) []
-      | _ => NONE) ∧
+     of SOME cs => DoneBaseTgt (ScopedVar cs id) []
+      | _ => ErrorBaseTgt "step_base_target find_containing_scope" ) ∧
   step_base_target gbs env (StartBaseTgt (GlobalNameTarget id)) =
-    SOME $ DoneBaseTgt (Global id) [] ∧
+    DoneBaseTgt (Global id) [] ∧
   step_base_target gbs env (StartBaseTgt (SubscriptTarget t e)) =
-  SOME $ SubscriptTargetK1 (StartBaseTgt t) e ∧
+    SubscriptTargetK1 (StartBaseTgt t) e ∧
   step_base_target gbs env (StartBaseTgt (AttributeTarget t id)) =
-  SOME $ AttributeTargetK (StartBaseTgt t) id ∧
+    AttributeTargetK (StartBaseTgt t) id ∧
   step_base_target gbs env (SubscriptTargetK1 k e) =
     (case step_base_target gbs env k of
-     | SOME (DoneBaseTgt l s) =>
-         SOME $ SubscriptTargetK2 l s (StartExpr e)
-     | SOME (LiftCallBaseTgt fn vs k) =>
-         SOME $ LiftCallBaseTgt fn vs (SubscriptTargetK1 k e)
-     | SOME k => SOME $ SubscriptTargetK1 k e
-     | _ => NONE) ∧
+     | DoneBaseTgt l s => SubscriptTargetK2 l s (StartExpr e)
+     | LiftCallBaseTgt fn vs k => LiftCallBaseTgt fn vs (SubscriptTargetK1 k e)
+     | ErrorBaseTgt msg => ErrorBaseTgt msg
+     | k => SubscriptTargetK1 k e) ∧
   step_base_target gbs env (SubscriptTargetK2 l s k) =
    (case step_expr gbs env k
-    of DoneExpr (IntV i) => SOME $ DoneBaseTgt l ((IntSubscript i)::s)
-     | DoneExpr _ => NONE
-     | ErrorExpr msg => NONE
-     | LiftCall fn vs k => SOME $ LiftCallBaseTgt fn vs (SubscriptTargetK2 l s k)
-     | k => SOME $ SubscriptTargetK2 l s k) ∧
+    of DoneExpr (IntV i) => DoneBaseTgt l ((IntSubscript i)::s)
+     | DoneExpr _ => ErrorBaseTgt "SubscriptTargetK2 DoneExpr"
+     | ErrorExpr msg => ErrorBaseTgt msg
+     | LiftCall fn vs k => LiftCallBaseTgt fn vs (SubscriptTargetK2 l s k)
+     | k => SubscriptTargetK2 l s k) ∧
   step_base_target gbs env (AttributeTargetK k id) =
   (case step_base_target gbs env k
-   of NONE => NONE
-    | SOME (DoneBaseTgt l s) =>
-        SOME $ DoneBaseTgt l ((AttrSubscript id)::s)
-    | SOME (LiftCallBaseTgt fn vs k) =>
-        SOME $ LiftCallBaseTgt fn vs (AttributeTargetK k id)
-    | SOME k => SOME $ AttributeTargetK k id
-    | _ => NONE) ∧
-  step_base_target gbs env (LiftCallBaseTgt fn vs k) =
-    SOME $ LiftCallBaseTgt fn vs k ∧
-  step_base_target gbs env (DoneBaseTgt l s) =
-    SOME $ DoneBaseTgt l s
+   of ErrorBaseTgt msg => ErrorBaseTgt msg
+    | DoneBaseTgt l s => DoneBaseTgt l ((AttrSubscript id)::s)
+    | LiftCallBaseTgt fn vs k => LiftCallBaseTgt fn vs (AttributeTargetK k id)
+    | k => AttributeTargetK k id) ∧
+  step_base_target gbs env (LiftCallBaseTgt fn vs k) = LiftCallBaseTgt fn vs k ∧
+  step_base_target gbs env (DoneBaseTgt l s) = DoneBaseTgt l s ∧
+  step_base_target gbs env (ErrorBaseTgt msg) = ErrorBaseTgt msg
 End
 
 val () = cv_auto_trans step_base_target_def;
@@ -678,10 +669,10 @@ Definition step_target_def:
     | k => TupleTargetK vs k ts) ∧
   step_target gbs env (BaseTargetK k) =
   (case step_base_target gbs env k
-   of SOME (DoneBaseTgt l s) => DoneTgt $ BaseTargetV l s
-    | SOME (LiftCallBaseTgt fn vs k) => LiftCallTgt fn vs (BaseTargetK k)
-    | SOME k => BaseTargetK k
-    | _ => ErrorTgt "step_base_target") ∧
+   of DoneBaseTgt l s => DoneTgt $ BaseTargetV l s
+    | LiftCallBaseTgt fn vs k => LiftCallTgt fn vs (BaseTargetK k)
+    | ErrorBaseTgt msg => ErrorTgt msg
+    | k => BaseTargetK k) ∧
   step_target gbs env (LiftCallTgt fn vs k) = LiftCallTgt fn vs k ∧
   step_target gbs env (DoneTgt v) = DoneTgt v ∧
   step_target gbs env (ErrorTgt msg) = ErrorTgt msg
@@ -701,17 +692,25 @@ End
 
 val () = cv_auto_trans set_variable_def;
 
+Datatype:
+  assign_operation = Replace value | Update operator value
+End
+
 Definition assign_subscripts_def:
-  assign_subscripts a [] v = SOME v ∧
-  assign_subscripts a ((IntSubscript i)::is) v =
+  assign_subscripts a [] (Replace v) = SOME v ∧
+  assign_subscripts a [] (Update bop v) =
+  (case evaluate_binop bop a v
+     of DoneExpr w => SOME w
+      | _ => NONE) ∧
+  assign_subscripts a ((IntSubscript i)::is) ao =
   (case extract_elements a of SOME vs =>
    (case integer_index vs i of SOME j =>
-    (case assign_subscripts (EL j vs) is v of SOME vj =>
+    (case assign_subscripts (EL j vs) is ao of SOME vj =>
        replace_elements a (TAKE j vs ++ [vj] ++ DROP (SUC j) vs)
      | _ => NONE)
     | _ => NONE)
    | _ => NONE) ∧
-  assign_subscripts a _ v = NONE (* TODO: handle AttrSubscript *)
+  assign_subscripts _ _ _ = NONE (* TODO: handle AttrSubscript *)
 End
 
 val assign_subscripts_pre_def = cv_auto_trans_pre assign_subscripts_def;
@@ -728,19 +727,19 @@ Proof
 QED
 
 Definition assign_target_def:
-  assign_target (BaseTargetV (ScopedVar (pre,env,rest) id) is) v ctx =
+  assign_target (BaseTargetV (ScopedVar (pre,env,rest) id) is) ao ctx =
     (let nid = string_to_num id in
     (case FLOOKUP env nid of SOME a =>
-     (case assign_subscripts a is v of SOME a' =>
+     (case assign_subscripts a is ao of SOME a' =>
         ctx with current_fc updated_by
           (λfc. fc with scopes := pre ++ (env |+ (nid, a'))::rest)
       | _ => raise (Error "assign_subscripts ScopedVar") ctx)
      | _ => raise (Error "assign_target lookup") ctx)) ∧
-  assign_target (BaseTargetV (Global id) is) v ctx =
+  assign_target (BaseTargetV (Global id) is) ao ctx =
   (let nid = string_to_num id in
   (* TODO: add assignment to hashmaps *)
   (case FLOOKUP ctx.globals nid of SOME (Value a) =>
-   (case assign_subscripts a is v of SOME a' =>
+   (case assign_subscripts a is ao of SOME a' =>
      ctx with globals := ctx.globals |+ (nid, Value a')
     | _ => raise (Error "assign_subscripts Global") ctx)
    | _ => raise (Error "assign_target globals lookup") ctx)) ∧
@@ -818,16 +817,17 @@ End
 val () = cv_auto_trans return_expr_def;
 
 Definition return_base_tgt_def:
-  return_base_tgt v (StartBaseTgt _) = NONE ∧
+  return_base_tgt v (StartBaseTgt _) = ErrorBaseTgt "return_base_tgt Start" ∧
   return_base_tgt v (SubscriptTargetK1 k e) =
-    OPTION_MAP (λk. SubscriptTargetK1 k e) (return_base_tgt v k) ∧
+    SubscriptTargetK1 (return_base_tgt v k) e ∧
   return_base_tgt v (SubscriptTargetK2 l s k) =
-    SOME (SubscriptTargetK2 l s (return_expr v k)) ∧
+    SubscriptTargetK2 l s (return_expr v k) ∧
   return_base_tgt v (AttributeTargetK k id) =
-    OPTION_MAP (λk. AttributeTargetK k id) (return_base_tgt v k) ∧
+    AttributeTargetK (return_base_tgt v k) id ∧
   return_base_tgt v (LiftCallBaseTgt fn vs k) =
-    OPTION_MAP (λk. LiftCallBaseTgt fn vs k) (return_base_tgt v k) ∧
-  return_base_tgt _ _ = NONE
+    LiftCallBaseTgt fn vs (return_base_tgt v k) ∧
+  return_base_tgt _ (DoneBaseTgt _ _) = ErrorBaseTgt "return_base_tgt Done" ∧
+  return_base_tgt _ (ErrorBaseTgt msg) = ErrorBaseTgt msg
 End
 
 val () = cv_auto_trans return_base_tgt_def;
@@ -837,8 +837,8 @@ Definition return_tgt_def:
   return_tgt v (TupleTargetK vs k as) =
     TupleTargetK vs (return_tgt v k) as ∧
   return_tgt v (BaseTargetK t) =
-    (case return_base_tgt v t of NONE => ErrorTgt "return_base_tgt"
-        | SOME t => BaseTargetK t) ∧
+    (case return_base_tgt v t of ErrorBaseTgt msg => ErrorTgt msg
+        | t => BaseTargetK t) ∧
   return_tgt v (LiftCallTgt fn vs k) =
     LiftCallTgt fn vs (return_tgt v k) ∧
   return_tgt v (DoneTgt _) = ErrorTgt "return DoneTgt" ∧
@@ -854,7 +854,8 @@ Definition return_def:
   return v (ReturnSomeK k) = ReturnSomeK (return_expr v k) ∧
   return v (AssignK1 t e) = AssignK1 (return_tgt v t) e ∧
   return v (AssignK2 a k) = AssignK2 a (return_expr v k) ∧
-  return v (AugAssignK id op k) = AugAssignK id op (return_expr v k) ∧
+  return v (AugAssignK1 bt op e) = AugAssignK1 (return_base_tgt v bt) op e ∧
+  return v (AugAssignK2 l sl op k) = AugAssignK2 l sl op (return_expr v k) ∧
   return v (AnnAssignK id typ k) = AnnAssignK id typ (return_expr v k) ∧
   return v (StartK _) = ExceptionK (Error "return StartK") ∧
   return v (ExprK k) = ExprK (return_expr v k) ∧
@@ -1012,8 +1013,8 @@ Definition step_stmt_def:
           set_stmt (ReturnSomeK (StartExpr e)) ctx
       | StartK (AnnAssign id typ e) =>
           set_stmt (AnnAssignK id typ (StartExpr e)) ctx
-      | StartK (AugAssign id bop e) =>
-          set_stmt (AugAssignK id bop (StartExpr e)) ctx
+      | StartK (AugAssign bt bop e) =>
+          set_stmt (AugAssignK1 (StartBaseTgt bt) bop e) ctx
       | StartK (Assign tgt e) =>
           set_stmt (AssignK1 (StartTgt tgt) e) ctx
       | StartK (If e s1 s2) =>
@@ -1070,7 +1071,9 @@ Definition step_stmt_def:
           set_stmt
             (AssignK1 (step_target ctx.globals fc.scopes tk) e) ctx
       | AssignK2 tv (DoneExpr v) =>
-          set_stmt DoneK (assign_target tv v ctx)
+          let ctx = assign_target tv (Replace v) ctx in
+            if exception_raised ctx then ctx else
+              set_stmt DoneK ctx
       | AssignK2 tv (ErrorExpr msg) => raise (Error "AssignK2 err") ctx
       | AssignK2 tv ReturnExpr => raise (Error "AssignK2 ReturnExpr") ctx
       | AssignK2 tv (LiftCall fn vs k) =>
@@ -1079,22 +1082,24 @@ Definition step_stmt_def:
       | AssignK2 tv k =>
           set_stmt
             (AssignK2 tv (step_expr ctx.globals fc.scopes k)) ctx
-      | AugAssignK id bop (DoneExpr v2) =>
-        (let nid = string_to_num id in
-        (case lookup_scopes nid fc.scopes
-           of NONE => raise (Error "AugAssignK lookup_scopes") ctx
-            | SOME v1 =>
-              (case evaluate_binop bop v1 v2
-                 of DoneExpr v => set_stmt DoneK (set_variable nid v ctx)
-                  | _ => raise (Error "AugAssignK bop") ctx)))
-      | AugAssignK id bop (ErrorExpr msg) => raise (Error "AugAssignK err") ctx
-      | AugAssignK id bop ReturnExpr => raise (Error "AugAssignK ReturnExpr") ctx
-      | AugAssignK id bop (LiftCall fn vs k) =>
-          push_call fn vs
-            (set_stmt (AugAssignK id bop k) ctx)
-      | AugAssignK id bop k =>
+      | AugAssignK1 (DoneBaseTgt l sl) bop e =>
+          set_stmt (AugAssignK2 l sl bop (StartExpr e)) ctx
+      | AugAssignK1 (LiftCallBaseTgt fn vs bk) bop e =>
+          push_call fn vs (set_stmt (AugAssignK1 bk bop e) ctx)
+      | AugAssignK1 bk bop e =>
           set_stmt
-            (AugAssignK id bop (step_expr ctx.globals fc.scopes k)) ctx
+            (AugAssignK1 (step_base_target ctx.globals fc.scopes bk) bop e) ctx
+      | AugAssignK2 l sl bop (DoneExpr v2) =>
+          let ctx = assign_target (BaseTargetV l sl) (Update bop v2) ctx in
+            if exception_raised ctx then ctx else set_stmt DoneK ctx
+      | AugAssignK2 _ _ bop (ErrorExpr msg) => raise (Error "AugAssignK err") ctx
+      | AugAssignK2 _ _ bop ReturnExpr => raise (Error "AugAssignK ReturnExpr") ctx
+      | AugAssignK2 l sl bop (LiftCall fn vs k) =>
+          push_call fn vs
+            (set_stmt (AugAssignK2 l sl bop k) ctx)
+      | AugAssignK2 l sl bop k =>
+          set_stmt
+            (AugAssignK2 l sl bop (step_expr ctx.globals fc.scopes k)) ctx
       | AnnAssignK id typ (DoneExpr v) => (
           let nid = string_to_num id in
           let ctx = new_variable nid typ ctx in

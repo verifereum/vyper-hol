@@ -91,7 +91,7 @@ Datatype:
   | Raise string
   | Return (expr option)
   | Assign assignment_target expr (* TODO: allow tuple rhs *)
-  | AugAssign identifier (* TODO: or subscript or attribute? *) operator expr
+  | AugAssign base_assignment_target operator expr
   | AnnAssign identifier type expr
 End
 
