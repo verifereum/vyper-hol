@@ -1,4 +1,4 @@
-open HolKernel boolLib bossLib Parse dep_rewrite
+open HolKernel boolLib bossLib Parse wordsLib dep_rewrite
 open listTheory alistTheory finite_mapTheory arithmeticTheory
      numposrepTheory stringTheory combinTheory
      cv_typeTheory cv_stdTheory cv_transLib
@@ -133,14 +133,20 @@ Proof
 *)
 
 Datatype:
+  bound
+  = Fixed num
+  | Dynamic num
+End
+
+Datatype:
   value
   = VoidV
   | BoolV bool
   | TupleV (value list)
-  | ArrayV (value list)
+  | ArrayV bound (value list)
   | IntV int
   | StringV string
-  | BytesV (word8 list)
+  | BytesV bound (word8 list)
   | StructV ((identifier, value) alist)
 End
 
@@ -152,11 +158,12 @@ Definition default_value_def:
   default_value (BaseT (UintT _)) = IntV 0 ∧
   default_value (BaseT (IntT _)) = IntV 0 ∧
   default_value (TupleT ts) = TupleV (default_value_list ts) ∧
-  default_value (DynArrayT _ _) = ArrayV [] ∧
+  default_value (DynArrayT _ n) = ArrayV (Dynamic n) [] ∧
   default_value VoidT = VoidV ∧
   default_value (BaseT BoolT) = BoolV F ∧
   default_value (BaseT StringT) = StringV "" ∧
-  default_value (BaseT BytesT) = BytesV [] ∧
+  default_value (BaseT (BytesMT n)) = BytesV (Fixed n) (REPLICATE n 0w) ∧
+  default_value (BaseT (BytesT n)) = BytesV (Dynamic n) [] ∧
   default_value_list [] = [] ∧
   default_value_list (t::ts) = default_value t :: default_value_list ts
 Termination
@@ -310,7 +317,7 @@ End
 Definition evaluate_literal_def:
   evaluate_literal (BoolL b)   = BoolV b ∧
   evaluate_literal (StringL s) = StringV s ∧
-  evaluate_literal (BytesL bs) = BytesV bs ∧
+  evaluate_literal (BytesL bs) = BytesV (Fixed 0) (* TODO: add annotation to BytesL? *) bs ∧
   evaluate_literal (IntL i)    = IntV i
 End
 
@@ -335,7 +342,7 @@ End
 val () = cv_auto_trans evaluate_binop_def;
 
 Definition extract_elements_def:
-  extract_elements (ArrayV vs) = SOME vs ∧
+  extract_elements (ArrayV _ vs) = SOME vs ∧
   extract_elements (TupleV vs) = SOME vs ∧
   extract_elements _ = NONE
 End
@@ -343,7 +350,7 @@ End
 val () = cv_auto_trans extract_elements_def;
 
 Definition replace_elements_def:
-  replace_elements (ArrayV _) vs = SOME (ArrayV vs) ∧
+  replace_elements (ArrayV b _) vs = SOME (ArrayV b vs) ∧
   replace_elements (TupleV _) vs = SOME (TupleV vs) ∧
   replace_elements _ _ = NONE
 End
@@ -392,7 +399,7 @@ Definition step_expr_def:
   step_expr gbs env (StartExpr (Literal l)) =
     DoneExpr (evaluate_literal l) ∧
   step_expr gbs env (StartExpr (ArrayLit [])) =
-    DoneExpr (ArrayV []) ∧
+    DoneExpr (ArrayV (Fixed 0) (* TODO: add type annotation to ArrayLit? *) []) ∧
   step_expr gbs env (StartExpr (ArrayLit (e::es))) =
     ArrayLitK [] (StartExpr e) es ∧
   step_expr gbs env (StartExpr (Name id)) =
@@ -441,7 +448,7 @@ Definition step_expr_def:
    of ErrorExpr msg => ErrorExpr msg
     | DoneExpr v =>
         (case es of (e::es) => ArrayLitK (SNOC v vs) (StartExpr e) es
-                  | [] => DoneExpr (ArrayV (SNOC v vs)))
+                  | [] => DoneExpr (ArrayV (Fixed 0) (*TODO*) (SNOC v vs)))
     | LiftCall id as k => LiftCall id as (ArrayLitK vs k es)
     | k => ArrayLitK vs k es) ∧
   step_expr gbs env (SubscriptK1 k e) =
@@ -1114,9 +1121,9 @@ Definition step_stmt_def:
           set_stmt (AnnAssignK id typ (step_expr ctx.globals fc.scopes k)) ctx
       | ExceptionK err => ctx
       | DoneK => next_stmt ctx
-      | ForK id typ (DoneExpr (ArrayV [])) (st::ss) =>
+      | ForK id typ (DoneExpr (ArrayV _ [])) (st::ss) =>
           set_stmt DoneK ctx
-      | ForK id typ (DoneExpr (ArrayV vs)) ss =>
+      | ForK id typ (DoneExpr (ArrayV _ vs)) ss =>
           push_loop (string_to_num id) typ vs ss ctx
       | ForK id typ (DoneExpr _) _ => raise (Error "ForK DoneExpr") ctx
       | ForK id typ (ErrorExpr msg) _ => raise (Error "ForK err") ctx

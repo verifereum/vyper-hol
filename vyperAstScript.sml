@@ -14,7 +14,8 @@ Datatype:
   | StringT (* TODO: length limit *)
   (* TODO: fixed-size bytes *)
   (* TODO: flags *)
-  | BytesT (* TODO: length limit *)
+  | BytesMT num
+  | BytesT num
   (* TODO: address *)
 End
 
