@@ -762,7 +762,7 @@ End
 
 val () = cv_auto_trans bind_arguments_def;
 
-Definition lookup_external_function_def:
+Definition lookup_function_def:
   lookup_function name vis [] = NONE ∧
   lookup_function name vis (FunctionDef id fv args ret body :: ts) =
   (if id = name ∧ vis = fv then SOME (args, ret, body)
@@ -771,7 +771,7 @@ Definition lookup_external_function_def:
     lookup_function name vis ts
 End
 
-val () = cv_auto_trans lookup_external_function_def;
+val () = cv_auto_trans lookup_function_def;
 
 Definition push_call_def:
   push_call fn args ctx =
