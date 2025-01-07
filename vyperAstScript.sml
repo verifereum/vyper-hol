@@ -6,16 +6,20 @@ val () = new_theory "vyperAst";
 Type identifier = “:string”;
 
 Datatype:
+  bound
+  = Fixed num
+  | Dynamic num
+End
+
+Datatype:
   base_type
   = UintT word5 (* the bit size divided by 8 *)
   | IntT word5
   | BoolT
   (* TODO: decimals? *)
-  | StringT (* TODO: length limit *)
-  (* TODO: fixed-size bytes *)
+  | StringT num
   (* TODO: flags *)
-  | BytesMT num
-  | BytesT num
+  | BytesT bound
   (* TODO: address *)
 End
 
@@ -23,16 +27,15 @@ Datatype:
   type
   = BaseT base_type
   | TupleT (type list)
-  | DynArrayT type num
-  (* TODO: fixed-size lists *)
+  | ArrayT type bound
   | VoidT (* for functions with no return type *)
 End
 
 Datatype:
   literal
   = BoolL bool
-  | StringL string
-  | BytesL (word8 list)
+  | StringL num string
+  | BytesL bound (word8 list)
   | IntL int
 End
 
@@ -58,7 +61,7 @@ Datatype:
   | IfExp expr expr expr
   | Literal literal
   (* TODO: add Tuple *)
-  | ArrayLit (expr list)
+  | ArrayLit bound (expr list)
   | Subscript expr expr
   | Attribute expr identifier
   | Compare expr cmpop expr

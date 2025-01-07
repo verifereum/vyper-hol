@@ -133,19 +133,13 @@ Proof
 *)
 
 Datatype:
-  bound
-  = Fixed num
-  | Dynamic num
-End
-
-Datatype:
   value
   = VoidV
   | BoolV bool
   | TupleV (value list)
   | ArrayV bound (value list)
   | IntV int
-  | StringV string
+  | StringV num string
   | BytesV bound (word8 list)
   | StructV ((identifier, value) alist)
 End
@@ -158,12 +152,14 @@ Definition default_value_def:
   default_value (BaseT (UintT _)) = IntV 0 ∧
   default_value (BaseT (IntT _)) = IntV 0 ∧
   default_value (TupleT ts) = TupleV (default_value_list ts) ∧
-  default_value (DynArrayT _ n) = ArrayV (Dynamic n) [] ∧
+  default_value (ArrayT _ (Dynamic n)) = ArrayV (Dynamic n) [] ∧
+  default_value (ArrayT t (Fixed n)) =
+    ArrayV (Fixed n) (REPLICATE n (default_value t)) ∧
   default_value VoidT = VoidV ∧
   default_value (BaseT BoolT) = BoolV F ∧
-  default_value (BaseT StringT) = StringV "" ∧
-  default_value (BaseT (BytesMT n)) = BytesV (Fixed n) (REPLICATE n 0w) ∧
-  default_value (BaseT (BytesT n)) = BytesV (Dynamic n) [] ∧
+  default_value (BaseT (StringT n)) = StringV n "" ∧
+  default_value (BaseT (BytesT (Fixed n))) = BytesV (Fixed n) (REPLICATE n 0w) ∧
+  default_value (BaseT (BytesT (Dynamic n))) = BytesV (Dynamic n) [] ∧
   default_value_list [] = [] ∧
   default_value_list (t::ts) = default_value t :: default_value_list ts
 Termination
@@ -232,7 +228,7 @@ Datatype:
   | NamedExprK2 value expr_continuation
   *)
   | IfExpK expr_continuation expr expr
-  | ArrayLitK (value list) expr_continuation (expr list)
+  | ArrayLitK bound (value list) expr_continuation (expr list)
   | SubscriptK1 expr_continuation expr
   | SubscriptK2 value expr_continuation
   | AttributeK expr_continuation identifier
@@ -316,17 +312,17 @@ End
 
 Definition evaluate_literal_def:
   evaluate_literal (BoolL b)   = BoolV b ∧
-  evaluate_literal (StringL s) = StringV s ∧
-  evaluate_literal (BytesL bs) = BytesV (Fixed 0) (* TODO: add annotation to BytesL? *) bs ∧
+  evaluate_literal (StringL n s) = StringV n s ∧
+  evaluate_literal (BytesL b bs) = BytesV b bs ∧
   evaluate_literal (IntL i)    = IntV i
 End
 
 val () = cv_auto_trans evaluate_literal_def;
 
 Definition evaluate_cmp_def:
-  evaluate_cmp Eq    (StringV s1) (StringV s2) = DoneExpr (BoolV (s1 = s2)) ∧
+  evaluate_cmp Eq    (StringV _ s1) (StringV _ s2) = DoneExpr (BoolV (s1 = s2)) ∧
   evaluate_cmp Eq    (IntV i1)    (IntV i2)    = DoneExpr (BoolV (i1 = i2)) ∧
-  evaluate_cmp NotEq (StringV s1) (StringV s2) = DoneExpr (BoolV (s1 ≠ s2)) ∧
+  evaluate_cmp NotEq (StringV _ s1) (StringV _ s2) = DoneExpr (BoolV (s1 ≠ s2)) ∧
   evaluate_cmp NotEq (IntV i1)    (IntV i2)    = DoneExpr (BoolV (i1 ≠ i2)) ∧
   evaluate_cmp _ _ _ = ErrorExpr "cmp"
 End
@@ -398,10 +394,10 @@ val () = cv_auto_trans evaluate_attribute_def;
 Definition step_expr_def:
   step_expr gbs env (StartExpr (Literal l)) =
     DoneExpr (evaluate_literal l) ∧
-  step_expr gbs env (StartExpr (ArrayLit [])) =
-    DoneExpr (ArrayV (Fixed 0) (* TODO: add type annotation to ArrayLit? *) []) ∧
-  step_expr gbs env (StartExpr (ArrayLit (e::es))) =
-    ArrayLitK [] (StartExpr e) es ∧
+  step_expr gbs env (StartExpr (ArrayLit b [])) =
+    DoneExpr (ArrayV b []) ∧ (* TODO: check the bound *)
+  step_expr gbs env (StartExpr (ArrayLit b (e::es))) =
+    ArrayLitK b [] (StartExpr e) es ∧ (* TODO: check the bound *)
   step_expr gbs env (StartExpr (Name id)) =
     (case lookup_scopes (string_to_num id) env
      of SOME v => DoneExpr v
@@ -443,14 +439,14 @@ Definition step_expr_def:
                                | _ => ErrorExpr "IfExpK value")
     | LiftCall id vs k => LiftCall id vs (IfExpK k e2 e3)
     | k => IfExpK k e2 e3) ∧
-  step_expr gbs env (ArrayLitK vs k es) =
+  step_expr gbs env (ArrayLitK b vs k es) =
   (case step_expr gbs env k
    of ErrorExpr msg => ErrorExpr msg
     | DoneExpr v =>
-        (case es of (e::es) => ArrayLitK (SNOC v vs) (StartExpr e) es
-                  | [] => DoneExpr (ArrayV (Fixed 0) (*TODO*) (SNOC v vs)))
-    | LiftCall id as k => LiftCall id as (ArrayLitK vs k es)
-    | k => ArrayLitK vs k es) ∧
+        (case es of (e::es) => ArrayLitK b (SNOC v vs) (StartExpr e) es
+                  | [] => DoneExpr (ArrayV b (SNOC v vs)))
+    | LiftCall id as k => LiftCall id as (ArrayLitK b vs k es)
+    | k => ArrayLitK b vs k es) ∧
   step_expr gbs env (SubscriptK1 k e) =
   (case step_expr gbs env k
    of ErrorExpr msg => ErrorExpr msg
@@ -806,7 +802,7 @@ val () = cv_auto_trans update_current_stmt_def;
 Definition return_expr_def:
   return_expr v (StartExpr _) = ErrorExpr "return StartExpr" ∧
   return_expr v (IfExpK k e1 e2) = IfExpK (return_expr v k) e1 e2  ∧
-  return_expr v (ArrayLitK vs k es) = ArrayLitK vs (return_expr v k) es ∧
+  return_expr v (ArrayLitK b vs k es) = ArrayLitK b vs (return_expr v k) es ∧
   return_expr v (SubscriptK1 k e) = SubscriptK1 (return_expr v k) e ∧
   return_expr v (SubscriptK2 w k) = SubscriptK2 w (return_expr v k) ∧
   return_expr v (AttributeK k id) = AttributeK (return_expr v k) id ∧
@@ -1146,7 +1142,7 @@ Definition expr_bound_def:
     let (n3, fns) = expr_bound (e3, fns) in
       (1 + n1 + MAX n2 n3, fns) ) ∧
   expr_bound (Literal _, fns) = (1, fns) ∧
-  expr_bound (ArrayLit es, fns) = (
+  expr_bound (ArrayLit _ es, fns) = (
   let (ns, fns) = expr_bound_list (es, fns) in
     (1 + ns, fns) ) ∧
   expr_bound (Subscript e1 e2, fns) = (

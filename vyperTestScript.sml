@@ -54,8 +54,8 @@ Definition test_for_control_flow_ast_def:
   test_for_control_flow_ast = [
     FunctionDef "foo" External [] uint256
     [
-       AnnAssign "a" (DynArrayT uint256 10)
-         (ArrayLit [intlit 1; intlit 2; intlit 3]);
+       AnnAssign "a" (ArrayT uint256 (Dynamic 10))
+         (ArrayLit (Dynamic 10) [intlit 1; intlit 2; intlit 3]);
        AnnAssign "counter" uint256 (intlit 0);
        For "i" uint256 (Name "a")
        [ AugAssign (NameTarget "counter") Add (Name "i") ];
@@ -77,8 +77,8 @@ Definition test_array_assign_ast_def:
   test_array_assign_ast = [
     FunctionDef "foo" External [] uint256
     [
-      AnnAssign "bar" (DynArrayT uint256 10)
-        (ArrayLit [intlit 1; intlit 2]);
+      AnnAssign "bar" (ArrayT uint256 (Dynamic 10))
+        (ArrayLit (Dynamic 10) [intlit 1; intlit 2]);
       Assign (BaseTarget (SubscriptTarget (NameTarget "bar") (intlit 0)))
         (intlit 3);
       Return (SOME (BinOp (BinOp (Subscript (Name "bar") (intlit 0)) Add
@@ -99,10 +99,10 @@ QED
 
 Definition test_storage_array_assign_ast_def:
   test_storage_array_assign_ast = [
-    VariableDecl "a" (DynArrayT uint256 10) Private Storage;
+    VariableDecl "a" (ArrayT uint256 (Dynamic 10)) Private Storage;
     FunctionDef "foo" External [] uint256 [
       Assign (BaseTarget (GlobalNameTarget "a"))
-        (ArrayLit [intlit 1; intlit 2]);
+        (ArrayLit (Dynamic 10) [intlit 1; intlit 2]);
       Assign (BaseTarget
                (SubscriptTarget (GlobalNameTarget "a")
                                 (intlit 0)))
@@ -127,8 +127,8 @@ QED
 Definition test_internal_call_ast_def:
   test_internal_call_ast = [
     FunctionDef "bar" Internal [] uint256 [
-      AnnAssign "a" (DynArrayT uint256 10)
-        (ArrayLit [intlit 1; intlit 2; intlit 3]);
+      AnnAssign "a" (ArrayT uint256 (Dynamic 10))
+        (ArrayLit (Dynamic 10) [intlit 1; intlit 2; intlit 3]);
       AnnAssign "counter" uint256 (intlit 0);
       For "i" uint256 (Name "a") [
         AugAssign (NameTarget "counter") Add (Name "i")
@@ -136,8 +136,8 @@ Definition test_internal_call_ast_def:
       Return (SOME (Name "counter"))
     ];
     FunctionDef "foo" External [] uint256 [
-      AnnAssign "a" (DynArrayT uint256 10)
-        (ArrayLit [intlit 1; intlit 2; intlit 3]);
+      AnnAssign "a" (ArrayT uint256 (Dynamic 10))
+        (ArrayLit (Dynamic 10) [intlit 1; intlit 2; intlit 3]);
       AnnAssign "counter" uint256 (intlit 0);
       For "i" uint256 (Name "a") [
         AugAssign (NameTarget "counter") Add (Name "i")
@@ -277,15 +277,15 @@ Definition test_storage_variables3_ast_def:
   test_storage_variables3_ast = [
     VariableDecl "d" uint256 Private Storage;
     FunctionDef "bar" Internal [] VoidT [
-      AnnAssign "a" (DynArrayT uint256 10)
-        (ArrayLit [intlit 1; intlit 2; intlit 3]);
+      AnnAssign "a" (ArrayT uint256 (Dynamic 10))
+        (ArrayLit (Dynamic 10) [intlit 1; intlit 2; intlit 3]);
       For "i" uint256 (Name "a") [
         AugAssign (GlobalNameTarget "d") Add (Name "i")
       ]
     ];
     FunctionDef "foo" External [] uint256 [
-      AnnAssign "a" (DynArrayT uint256 10)
-        (ArrayLit [intlit 1; intlit 2; intlit 3]);
+      AnnAssign "a" (ArrayT uint256 (Dynamic 10))
+        (ArrayLit (Dynamic 10) [intlit 1; intlit 2; intlit 3]);
       AnnAssign "counter" uint256 (intlit 0);
       For "i" uint256 (Name "a") [
         AugAssign (GlobalNameTarget "d") Add (Name "i")
