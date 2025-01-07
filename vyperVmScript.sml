@@ -332,6 +332,7 @@ val () = cv_auto_trans evaluate_cmp_def;
 Definition evaluate_binop_def:
   evaluate_binop Add (IntV i1) (IntV i2) = DoneExpr (IntV (i1 + i2)) ∧
   evaluate_binop Sub (IntV i1) (IntV i2) = DoneExpr (IntV (i1 - i2)) ∧
+  evaluate_binop Mul (IntV i1) (IntV i2) = DoneExpr (IntV (i1 * i2)) ∧
   evaluate_binop (_: operator) _ _ = ErrorExpr "binop"
 End
 

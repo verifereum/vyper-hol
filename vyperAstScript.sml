@@ -49,6 +49,7 @@ Datatype:
   operator
   = Add
   | Sub
+  | Mul
 End
 
 Datatype:
