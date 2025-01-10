@@ -2,7 +2,7 @@ open HolKernel boolLib bossLib Parse wordsLib dep_rewrite
 open listTheory alistTheory finite_mapTheory arithmeticTheory
      numposrepTheory stringTheory combinTheory
      cv_typeTheory cv_stdTheory cv_transLib
-open vyperAstTheory vfmContextTheory
+open vyperAstTheory vfmTypesTheory vfmContextTheory
 
 val () = new_theory "vyperVm";
 
@@ -528,15 +528,6 @@ Datatype:
    |>
 End
 
-Datatype:
-  execution_context = <|
-    current_fc : function_context
-  ; call_stack : function_context list
-  ; globals: (* identifier *) num |-> toplevel_value
-  ; contract: toplevel list
-  |>
-End
-
 Definition initial_function_context_def:
   initial_function_context fn args ss = <|
     scopes := [args]
@@ -563,12 +554,46 @@ End
 
 val () = cv_auto_trans initial_globals_def;
 
+Datatype:
+  contract = <|
+    src: toplevel list
+  ; globals: (* identifier *) num |-> toplevel_value
+  |>
+End
+
+Datatype:
+  execution_context = <|
+    current_fc : function_context
+  ; call_stack : function_context list
+  ; current_contract: contract
+  |>
+End
+
+Datatype:
+  machine_state = <|
+    contracts : (address, contract) alist (* TODO: use a function (sptree under cv) *)
+  |>
+End
+
+Definition initial_machine_state_def:
+  initial_machine_state = <| contracts := [] |>
+End
+
+val () = cv_auto_trans initial_machine_state_def;
+
+Definition load_contract_def:
+  load_contract ms a ts =
+  ms with contracts updated_by
+    CONS (a, <|src := ts; globals := initial_globals ts |>)
+End
+
+val () = cv_auto_trans load_contract_def;
+
 Definition initial_execution_context_def:
-  initial_execution_context ts fc = <|
+  initial_execution_context c fc = <|
     current_fc := fc
   ; call_stack := []
-  ; globals := initial_globals ts
-  ; contract := ts
+  ; current_contract := c
   |>
 End
 
@@ -742,9 +767,10 @@ Definition assign_target_def:
   assign_target (BaseTargetV (Global id) is) ao ctx =
   (let nid = string_to_num id in
   (* TODO: add assignment to hashmaps *)
-  (case FLOOKUP ctx.globals nid of SOME (Value a) =>
+  (case FLOOKUP ctx.current_contract.globals nid of SOME (Value a) =>
    (case assign_subscripts a is ao of SOME a' =>
-     ctx with globals := ctx.globals |+ (nid, Value a')
+     ctx with current_contract updated_by
+       (λcc. cc with globals := cc.globals |+ (nid, Value a'))
     | _ => raise (Error "assign_subscripts Global") ctx)
    | _ => raise (Error "assign_target globals lookup") ctx)) ∧
   assign_target _ _ ctx = raise (Error "TODO: TupleTargetV") ctx
@@ -778,7 +804,7 @@ Definition push_call_def:
   if ctx.current_fc.name = Fn fn ∨
      EXISTS (λfc. fc.name = Fn fn) ctx.call_stack
   then raise (Error "recursive call") ctx else
-  case lookup_function fn Internal ctx.contract of
+  case lookup_function fn Internal ctx.current_contract.src of
   | SOME (params, ret, body) =>
     (case bind_arguments params args of
      | SOME env =>
@@ -1005,6 +1031,7 @@ val () = cv_auto_trans next_stmt_def;
 Definition step_stmt_def:
   step_stmt ctx =
   let fc = ctx.current_fc in
+  let gbs = ctx.current_contract.globals in
   (case fc.current_stmt of
       | StartK Pass => set_stmt DoneK ctx
       | StartK Continue => continue_loop ctx
@@ -1029,7 +1056,7 @@ Definition step_stmt_def:
       | ExprK (ErrorExpr msg) => raise (Error "ExprK err") ctx
       | ExprK (LiftCall fn vs k) =>
           push_call fn vs (set_stmt (ExprK k) ctx)
-      | ExprK k => set_stmt (ExprK (step_expr ctx.globals fc.scopes k)) ctx
+      | ExprK k => set_stmt (ExprK (step_expr gbs fc.scopes k)) ctx
       | IfK (DoneExpr (BoolV b)) s1 s2 => (
           case (if b then s1 else s2) of s::ss =>
             ctx with current_fc := fc with
@@ -1044,7 +1071,7 @@ Definition step_stmt_def:
             (set_stmt (IfK k s1 s2) ctx)
       | IfK k s1 s2 =>
           set_stmt
-            (IfK (step_expr ctx.globals fc.scopes k) s1 s2) ctx
+            (IfK (step_expr gbs fc.scopes k) s1 s2) ctx
       | AssertK (DoneExpr (BoolV b)) s => (
           if b then set_stmt DoneK ctx
           else raise (AssertException s) ctx)
@@ -1055,7 +1082,7 @@ Definition step_stmt_def:
           push_call fn vs
             (set_stmt (AssertK k s) ctx)
       | AssertK k s =>
-          set_stmt (AssertK (step_expr ctx.globals fc.scopes k) s) ctx
+          set_stmt (AssertK (step_expr gbs fc.scopes k) s) ctx
       | ReturnSomeK (DoneExpr v) => pop_call v ctx
       | ReturnSomeK (ErrorExpr msg) => raise (Error "ReturnSomeK err") ctx
       | ReturnSomeK ReturnExpr => raise (Error "ReturnSomeK ReturnExpr") ctx
@@ -1064,7 +1091,7 @@ Definition step_stmt_def:
             (set_stmt (ReturnSomeK k) ctx)
       | ReturnSomeK k =>
           set_stmt
-            (ReturnSomeK (step_expr ctx.globals fc.scopes k)) ctx
+            (ReturnSomeK (step_expr gbs fc.scopes k)) ctx
       | AssignK1 (DoneTgt av) e =>
           set_stmt (AssignK2 av (StartExpr e)) ctx
       | AssignK1 (ErrorTgt msg) e => raise (Error "AssignK1 err") ctx
@@ -1073,7 +1100,7 @@ Definition step_stmt_def:
             (set_stmt (AssignK1 tk e) ctx)
       | AssignK1 tk e =>
           set_stmt
-            (AssignK1 (step_target ctx.globals fc.scopes tk) e) ctx
+            (AssignK1 (step_target gbs fc.scopes tk) e) ctx
       | AssignK2 tv (DoneExpr v) =>
           let ctx = assign_target tv (Replace v) ctx in
             if exception_raised ctx then ctx else
@@ -1085,14 +1112,14 @@ Definition step_stmt_def:
             (set_stmt (AssignK2 tv k) ctx)
       | AssignK2 tv k =>
           set_stmt
-            (AssignK2 tv (step_expr ctx.globals fc.scopes k)) ctx
+            (AssignK2 tv (step_expr gbs fc.scopes k)) ctx
       | AugAssignK1 (DoneBaseTgt l sl) bop e =>
           set_stmt (AugAssignK2 l sl bop (StartExpr e)) ctx
       | AugAssignK1 (LiftCallBaseTgt fn vs bk) bop e =>
           push_call fn vs (set_stmt (AugAssignK1 bk bop e) ctx)
       | AugAssignK1 bk bop e =>
           set_stmt
-            (AugAssignK1 (step_base_target ctx.globals fc.scopes bk) bop e) ctx
+            (AugAssignK1 (step_base_target gbs fc.scopes bk) bop e) ctx
       | AugAssignK2 l sl bop (DoneExpr v2) =>
           let ctx = assign_target (BaseTargetV l sl) (Update bop v2) ctx in
             if exception_raised ctx then ctx else set_stmt DoneK ctx
@@ -1103,7 +1130,7 @@ Definition step_stmt_def:
             (set_stmt (AugAssignK2 l sl bop k) ctx)
       | AugAssignK2 l sl bop k =>
           set_stmt
-            (AugAssignK2 l sl bop (step_expr ctx.globals fc.scopes k)) ctx
+            (AugAssignK2 l sl bop (step_expr gbs fc.scopes k)) ctx
       | AnnAssignK id typ (DoneExpr v) => (
           let nid = string_to_num id in
           let ctx = new_variable nid typ ctx in
@@ -1115,7 +1142,7 @@ Definition step_stmt_def:
           push_call fn vs
             (set_stmt (AnnAssignK id typ k) ctx)
       | AnnAssignK id typ k =>
-          set_stmt (AnnAssignK id typ (step_expr ctx.globals fc.scopes k)) ctx
+          set_stmt (AnnAssignK id typ (step_expr gbs fc.scopes k)) ctx
       | ExceptionK err => ctx
       | DoneK => next_stmt ctx
       | ForK id typ (DoneExpr (ArrayV _ [])) (st::ss) =>
@@ -1129,7 +1156,7 @@ Definition step_stmt_def:
           push_call fn vs
             (set_stmt (ForK id typ k ss) ctx)
       | ForK id typ k ss =>
-          set_stmt (ForK id typ (step_expr ctx.globals fc.scopes k) ss) ctx)
+          set_stmt (ForK id typ (step_expr gbs fc.scopes k) ss) ctx)
 End
 
 val () = cv_auto_trans step_stmt_def;
@@ -1194,21 +1221,33 @@ End
 
 val () = cv_auto_trans step_stmt_till_exception_def;
 
+Definition external_call_contract_def:
+ external_call_contract ctr name args =
+ case lookup_function name External ctr.src of
+   NONE => (INR "lookup_function External", ctr)
+ | SOME (params, _, body) =>
+   (case bind_arguments params args of
+      SOME env =>
+      (let fc = initial_function_context name env body in
+       let ctx = initial_execution_context ctr fc in
+       let ctx = step_stmt_till_exception ctx in
+       let ctr = ctx.current_contract in
+       (case ctx.current_fc.current_stmt
+          of ExceptionK (ExternalReturn v) => (INL v, ctr)
+           | ExceptionK (Error msg) => (INR msg, ctr)
+           | _ => (INR "current_stmt", ctr)))
+    | _ => (INR "external bind_arguments", ctr))
+End
+
+val () = cv_auto_trans external_call_contract_def;
+
 Definition external_call_def:
-  external_call name args ts =
-  case lookup_function name External ts of
-    SOME (params, _, body) =>
-    (case bind_arguments params args of
-       SOME env =>
-       (let fc = initial_function_context name env body in
-        let ctx = initial_execution_context ts fc in
-        let ctx = step_stmt_till_exception ctx in
-        (case ctx.current_fc.current_stmt
-           of ExceptionK (ExternalReturn v) => INL v
-            | ExceptionK (Error msg) => INR msg
-            | _ => INR "current_stmt"))
-     | _ => INR "external bind_arguments")
-  | _ => INR "external lookup"
+  external_call ms addr name args =
+  case ALOOKUP ms.contracts addr of NONE => (INR "no contract at addr", ms)
+     | SOME ctr =>
+  case external_call_contract ctr name args of
+       (res, ctr) =>
+       (res, ms with contracts updated_by CONS (addr, ctr))
 End
 
 val () = cv_auto_trans external_call_def;
