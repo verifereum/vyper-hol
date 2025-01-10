@@ -90,7 +90,7 @@ Datatype:
   | Continue
   | Break
   | Expr expr
-  | For identifier type expr (stmt list)
+  | For identifier type expr num (stmt list)
   | If expr (stmt list) (stmt list)
   | Assert expr string
   | Raise string

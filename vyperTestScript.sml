@@ -64,7 +64,7 @@ Definition test_for_control_flow_ast_def:
        AnnAssign "a" (ArrayT uint256 (Dynamic 10))
          (ArrayLit (Dynamic 10) [intlit 1; intlit 2; intlit 3]);
        AnnAssign "counter" uint256 (intlit 0);
-       For "i" uint256 (Name "a")
+       For "i" uint256 (Name "a") 10
        [ AugAssign (NameTarget "counter") Add (Name "i") ];
        Return (SOME (Name "counter"))
     ]
@@ -152,7 +152,7 @@ Definition test_internal_call_ast_def:
       AnnAssign "a" (ArrayT uint256 (Dynamic 10))
         (ArrayLit (Dynamic 10) [intlit 1; intlit 2; intlit 3]);
       AnnAssign "counter" uint256 (intlit 0);
-      For "i" uint256 (Name "a") [
+      For "i" uint256 (Name "a") 10 [
         AugAssign (NameTarget "counter") Add (Name "i")
       ];
       Return (SOME (Name "counter"))
@@ -161,7 +161,7 @@ Definition test_internal_call_ast_def:
       AnnAssign "a" (ArrayT uint256 (Dynamic 10))
         (ArrayLit (Dynamic 10) [intlit 1; intlit 2; intlit 3]);
       AnnAssign "counter" uint256 (intlit 0);
-      For "i" uint256 (Name "a") [
+      For "i" uint256 (Name "a") 10 [
         AugAssign (NameTarget "counter") Add (Name "i")
       ];
       Return (SOME (BinOp
@@ -331,7 +331,7 @@ Definition test_storage_variables3_ast_def:
     FunctionDef "bar" Internal [] VoidT [
       AnnAssign "a" (ArrayT uint256 (Dynamic 10))
         (ArrayLit (Dynamic 10) [intlit 1; intlit 2; intlit 3]);
-      For "i" uint256 (Name "a") [
+      For "i" uint256 (Name "a") 10 [
         AugAssign (GlobalNameTarget "d") Add (Name "i")
       ]
     ];
@@ -339,7 +339,7 @@ Definition test_storage_variables3_ast_def:
       AnnAssign "a" (ArrayT uint256 (Dynamic 10))
         (ArrayLit (Dynamic 10) [intlit 1; intlit 2; intlit 3]);
       AnnAssign "counter" uint256 (intlit 0);
-      For "i" uint256 (Name "a") [
+      For "i" uint256 (Name "a") 10 [
         AugAssign (GlobalNameTarget "d") Add (Name "i")
       ];
       Expr (Call "bar" []);

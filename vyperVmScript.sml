@@ -305,7 +305,7 @@ Datatype:
   | AugAssignK1 base_tgt_continuation operator expr
   | AugAssignK2 location (subscript list) operator expr_continuation
   | AnnAssignK identifier type expr_continuation
-  | ForK identifier type expr_continuation (stmt list)
+  | ForK identifier type expr_continuation num (stmt list)
   | DoneK
   | ExceptionK exception
 End
@@ -878,7 +878,7 @@ End
 val () = cv_auto_trans return_tgt_def;
 
 Definition return_def:
-  return v (ForK id typ k ss) = ForK id typ (return_expr v k) ss ∧
+  return v (ForK id typ k n ss) = ForK id typ (return_expr v k) n ss ∧
   return v (IfK k s1 s2) = IfK (return_expr v k) s1 s2 ∧
   return v (AssertK k s) = AssertK (return_expr v k) s ∧
   return v (ReturnSomeK k) = ReturnSomeK (return_expr v k) ∧
@@ -1050,8 +1050,8 @@ Definition step_stmt_def:
           set_stmt (AssignK1 (StartTgt tgt) e) ctx
       | StartK (If e s1 s2) =>
           set_stmt (IfK (StartExpr e) s1 s2) ctx
-      | StartK (For id typ e s) =>
-          set_stmt (ForK id typ (StartExpr e) s) ctx
+      | StartK (For id typ e n s) =>
+          set_stmt (ForK id typ (StartExpr e) n s) ctx
       | ExprK (DoneExpr _) => set_stmt DoneK ctx
       | ExprK (ErrorExpr msg) => raise (Error "ExprK err") ctx
       | ExprK (LiftCall fn vs k) =>
@@ -1145,18 +1145,20 @@ Definition step_stmt_def:
           set_stmt (AnnAssignK id typ (step_expr gbs fc.scopes k)) ctx
       | ExceptionK err => ctx
       | DoneK => next_stmt ctx
-      | ForK id typ (DoneExpr (ArrayV _ [])) (st::ss) =>
+      | ForK id typ (DoneExpr (ArrayV _ [])) n (st::ss) =>
           set_stmt DoneK ctx
-      | ForK id typ (DoneExpr (ArrayV _ vs)) ss =>
-          push_loop (string_to_num id) typ vs ss ctx
-      | ForK id typ (DoneExpr _) _ => raise (Error "ForK DoneExpr") ctx
-      | ForK id typ (ErrorExpr msg) _ => raise (Error "ForK err") ctx
-      | ForK id typ ReturnExpr _ => raise (Error "ForK ReturnExpr") ctx
-      | ForK id typ (LiftCall fn vs k) ss =>
+      | ForK id typ (DoneExpr (ArrayV _ vs)) n ss =>
+          if LENGTH vs ≤ n then
+            push_loop (string_to_num id) typ vs ss ctx
+          else raise (Error "ForK bound") ctx
+      | ForK id typ (DoneExpr _) _ _ => raise (Error "ForK DoneExpr") ctx
+      | ForK id typ (ErrorExpr msg) _ _ => raise (Error "ForK err") ctx
+      | ForK id typ ReturnExpr _ _ => raise (Error "ForK ReturnExpr") ctx
+      | ForK id typ (LiftCall fn vs k) n ss =>
           push_call fn vs
-            (set_stmt (ForK id typ k ss) ctx)
-      | ForK id typ k ss =>
-          set_stmt (ForK id typ (step_expr gbs fc.scopes k) ss) ctx)
+            (set_stmt (ForK id typ k n ss) ctx)
+      | ForK id typ k n ss =>
+          set_stmt (ForK id typ (step_expr gbs fc.scopes k) n ss) ctx)
 End
 
 val () = cv_auto_trans step_stmt_def;
@@ -1204,8 +1206,23 @@ End
 
 (*
 Definition stmt_bound_def:
-  stmt_bound
+  stmt_bound (Pass, fns) = (1n, fns) ∧
+  stmt_bound (Continue, fns) = (1, fns) ∧
+  stmt_bound (Break, fns) = (1, fns) ∧
+  stmt_bound (Expr e, fns) = expr_bound (e, fns) ∧
+  stmt_bound (For _ _ e n ss, fns) =
+    let (ne, fns) = expr_bound (e, fns) in
+    let (ns, fns) = stmt_bound_list (ss, fns) in
+      (ne + n * ns, fns) ∧
+  stmt_bound_list ([], fns) = (0, fns) ∧
+  stmt_bound_list (s::ss, fns) =
+    let (n, fns) = stmt_bound (s, fns) in
+    let (ns, fns) = stmt_bound_list (ss, fns) in
+      (1 + n + ns, fns)
+End
+*)
 
+(*
 Definition step_bound_def:
   step_bound ctx =
 End
