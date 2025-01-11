@@ -1204,23 +1204,51 @@ Termination
             | INR (es, _) => expr1_size es)`
 End
 
-(*
 Definition stmt_bound_def:
   stmt_bound (Pass, fns) = (1n, fns) ∧
   stmt_bound (Continue, fns) = (1, fns) ∧
   stmt_bound (Break, fns) = (1, fns) ∧
-  stmt_bound (Expr e, fns) = expr_bound (e, fns) ∧
-  stmt_bound (For _ _ e n ss, fns) =
+  stmt_bound (Expr e, fns) = (
+    let (ne, fns) = expr_bound (e, fns) in
+      (1 + ne, fns)) ∧
+  stmt_bound (For _ _ e n ss, fns) = (
     let (ne, fns) = expr_bound (e, fns) in
     let (ns, fns) = stmt_bound_list (ss, fns) in
-      (ne + n * ns, fns) ∧
+      (1 + ne + n * ns, fns)) ∧
+  stmt_bound (If e s1 s2, fns) = (
+    let (ne, fns) = expr_bound (e, fns) in
+    let (n1, fns) = stmt_bound_list (s1, fns) in
+    let (n2, fns) = stmt_bound_list (s2, fns) in
+      (1 + ne + n1 + n2, fns)) ∧
+  stmt_bound (Assert e _, fns) = (
+    let (ne, fns) = expr_bound (e, fns) in
+      (1 + ne, fns)) ∧
+  stmt_bound (Raise _, fns) = (1, fns) ∧
+  stmt_bound (Return NONE, fns) = (1, fns) ∧
+  stmt_bound (Return (SOME e), fns) = (
+    let (ne, fns) = expr_bound (e, fns) in
+      (1 + ne, fns)) ∧
+  stmt_bound (Assign tgt e, fns) = (
+    let (ne, fns) = expr_bound (e, fns) in
+    (* TODO: bound on tgt *)
+      (1 + ne, fns)) ∧
+  stmt_bound (AugAssign bt _ e, fns) = (
+    let (ne, fns) = expr_bound (e, fns) in
+    (* TODO: bound on bt *)
+      (1 + ne, fns)) ∧
+  stmt_bound (AnnAssign _ _ e, fns) = (
+    let (ne, fns) = expr_bound (e, fns) in
+      (1 + ne, fns)) ∧
   stmt_bound_list ([], fns) = (0, fns) ∧
-  stmt_bound_list (s::ss, fns) =
+  stmt_bound_list (s::ss, fns) = (
     let (n, fns) = stmt_bound (s, fns) in
     let (ns, fns) = stmt_bound_list (ss, fns) in
-      (1 + n + ns, fns)
+      (1 + n + ns, fns))
+Termination
+  WF_REL_TAC`measure (λx.
+    case x of INL (e, _) => stmt_size e
+            | INR (es, _) => stmt1_size es)`
 End
-*)
 
 (*
 Definition step_bound_def:
