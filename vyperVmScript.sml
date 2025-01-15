@@ -1,6 +1,6 @@
 open HolKernel boolLib bossLib Parse wordsLib dep_rewrite
 open listTheory alistTheory finite_mapTheory arithmeticTheory
-     numposrepTheory stringTheory combinTheory
+     numposrepTheory stringTheory combinTheory pred_setTheory
      cv_typeTheory cv_stdTheory cv_transLib
 open vyperAstTheory vfmTypesTheory vfmContextTheory
 
@@ -1163,15 +1163,15 @@ End
 
 val () = cv_auto_trans step_stmt_def;
 
-Definition expr_bound_def:
-  expr_bound (Name _, fns) = (1n, fns) ∧
-  expr_bound (GlobalName _, fns) = (1, fns) ∧
+Definition expr_bound_def[simp]:
+  expr_bound (Name _, fns) = (0n, fns) ∧
+  expr_bound (GlobalName _, fns) = (0, fns) ∧
   expr_bound (IfExp e1 e2 e3, fns) = (
     let (n1, fns) = expr_bound (e1, fns) in
     let (n2, fns) = expr_bound (e2, fns) in
     let (n3, fns) = expr_bound (e3, fns) in
       (1 + n1 + MAX n2 n3, fns) ) ∧
-  expr_bound (Literal _, fns) = (1, fns) ∧
+  expr_bound (Literal _, fns) = (0, fns) ∧
   expr_bound (ArrayLit _ es, fns) = (
   let (ns, fns) = expr_bound_list (es, fns) in
     (1 + ns, fns) ) ∧
@@ -1204,7 +1204,122 @@ Termination
             | INR (es, _) => expr1_size es)`
 End
 
-Definition stmt_bound_def:
+Definition exprk_bound_def[simp]:
+  exprk_bound (StartExpr e, fns) = (
+    let (n, fns) = expr_bound (e, fns) in
+      (2 + n, fns)) ∧
+  exprk_bound (IfExpK k e1 e2, fns) = (
+    let (n, fns) = exprk_bound (k, fns) in
+    let (n1, fns) = expr_bound (e1, fns) in
+    let (n2, fns) = expr_bound (e2, fns) in
+      (1 + n + n2 + n2, fns)) ∧
+  exprk_bound (ArrayLitK _ _ k es, fns) = (
+    let (n, fns) = exprk_bound (k, fns) in
+    let (ns, fns) = expr_bound_list (es, fns) in
+      (1 + n + ns, fns)) ∧
+  exprk_bound (SubscriptK1 k e, fns) = (
+    let (n, fns) = exprk_bound (k, fns) in
+    let (ne, fns) = expr_bound (e, fns) in
+      (1 + n + ne, fns)) ∧
+  exprk_bound (SubscriptK2 _ k, fns) = (
+    let (n, fns) = exprk_bound (k, fns) in
+      (1 + n, fns)) ∧
+  exprk_bound (AttributeK k _, fns) = (
+    let (n, fns) = exprk_bound (k, fns) in
+      (1 + n, fns)) ∧
+  exprk_bound (CompareK1 k _ e, fns) = (
+    let (n, fns) = exprk_bound (k, fns) in
+    let (ne, fns) = expr_bound (e, fns) in
+      (1 + n + ne, fns)) ∧
+  exprk_bound (CompareK2 _ _ k, fns) = (
+    let (n, fns) = exprk_bound (k, fns) in
+      (1 + n, fns)) ∧
+  exprk_bound (BinOpK1 k _ e, fns) = (
+    let (n, fns) = exprk_bound (k, fns) in
+    let (ne, fns) = expr_bound (e, fns) in
+      (1 + n + ne, fns)) ∧
+  exprk_bound (BinOpK2 _ _ k, fns) = (
+    let (n, fns) = exprk_bound (k, fns) in
+      (1 + n, fns)) ∧
+  exprk_bound (CallK _ _ k es, fns) = (
+    let (n, fns) = exprk_bound (k, fns) in
+    let (ns, fns) = expr_bound_list (es, fns) in
+      (1 + n + ns, fns)) ∧
+  exprk_bound (LiftCall _ _ k, fns) = (
+    let (n, fns) = exprk_bound (k, fns) in
+      (1 + n, fns)) ∧
+  exprk_bound (DoneExpr _, fns) = (1, fns) ∧
+  exprk_bound (ReturnExpr, fns) = (1, fns) ∧
+  exprk_bound (ErrorExpr _, fns) = (1, fns)
+End
+
+Definition base_tgt_bound_def[simp]:
+  base_tgt_bound (AttributeTarget t _, fns) =(
+  let (nt, fns) = base_tgt_bound (t, fns) in
+    (1 + nt, fns)) ∧
+  base_tgt_bound (SubscriptTarget t e, fns) = (
+  let (nt, fns) = base_tgt_bound (t, fns) in
+  let (ne, fns) = expr_bound (e, fns) in
+    (1 + nt + ne, fns)) ∧
+  base_tgt_bound (_, fns) = (1n, fns)
+End
+
+Definition tgt_bound_def[simp]:
+  tgt_bound (BaseTarget t, fns) = (
+  let (n, fns) = base_tgt_bound (t, fns) in
+    (1 + n, fns)) ∧
+  tgt_bound (TupleTarget ts, fns) = (
+  let (ns, fns) = tgt_bound_list (ts, fns) in
+    (1 + ns, fns)) ∧
+  tgt_bound_list ([], fns) = (0, fns) ∧
+  tgt_bound_list ((t::ts), fns) = (
+  let (n, fns) = tgt_bound (t, fns) in
+  let (ns, fns) = tgt_bound_list (ts, fns) in
+    (1 + n + ns, fns))
+Termination
+  WF_REL_TAC`measure (λx.
+    case x of INR (x, _) => assignment_target1_size x
+       | INL (x, _) => assignment_target_size x)`
+End
+
+Definition base_tgtk_bound_def[simp]:
+  base_tgtk_bound (StartBaseTgt t, fns) = (
+  let (n, fns) = base_tgt_bound (t, fns) in
+    (2 + n, fns)) ∧
+  base_tgtk_bound (SubscriptTargetK1 k e, fns) = (
+  let (n, fns) = base_tgtk_bound (k, fns) in
+  let (ne, fns) = expr_bound (e, fns) in
+    (1 + n + ne, fns)) ∧
+  base_tgtk_bound (SubscriptTargetK2 _ _ k, fns) = (
+  let (n, fns) = exprk_bound (k, fns) in
+    (1 + n, fns)) ∧
+  base_tgtk_bound (AttributeTargetK k _, fns) = (
+  let (n, fns) = base_tgtk_bound (k, fns) in
+    (1 + n, fns)) ∧
+  base_tgtk_bound (LiftCallBaseTgt _ _ k, fns) = (
+  let (n, fns) = base_tgtk_bound (k, fns) in
+    (1 + n, fns)) ∧
+  base_tgtk_bound (_, fns) = (1, fns)
+End
+
+Definition tgtk_bound_def[simp]:
+  tgtk_bound (StartTgt t, fns) = (
+  let (n, fns) = tgt_bound (t, fns) in
+    (2 + n, fns)) ∧
+  tgtk_bound (TupleTargetK _ k ts, fns) = (
+  let (n, fns) = tgtk_bound (k, fns) in
+  let (ns, fns) = tgt_bound_list (ts, fns) in
+    (1 + n + ns, fns)) ∧
+  tgtk_bound (BaseTargetK bk, fns) = (
+  let (n, fns) = base_tgtk_bound (bk, fns) in
+    (1 + n, fns)) ∧
+  tgtk_bound (LiftCallTgt _ _ k, fns) = (
+  let (n, fns) = tgtk_bound (k, fns) in
+    (1 + n, fns)) ∧
+  tgtk_bound (_, fns) = (1, fns)
+End
+
+Definition stmt_bound_def[simp]:
   stmt_bound (Pass, fns) = (1n, fns) ∧
   stmt_bound (Continue, fns) = (1, fns) ∧
   stmt_bound (Break, fns) = (1, fns) ∧
@@ -1230,12 +1345,12 @@ Definition stmt_bound_def:
       (1 + ne, fns)) ∧
   stmt_bound (Assign tgt e, fns) = (
     let (ne, fns) = expr_bound (e, fns) in
-    (* TODO: bound on tgt *)
-      (1 + ne, fns)) ∧
+    let (nt, fns) = tgt_bound (tgt, fns) in
+      (1 + ne + nt, fns)) ∧
   stmt_bound (AugAssign bt _ e, fns) = (
     let (ne, fns) = expr_bound (e, fns) in
-    (* TODO: bound on bt *)
-      (1 + ne, fns)) ∧
+    let (nb, fns) = base_tgt_bound (bt, fns) in
+      (1 + ne + nb, fns)) ∧
   stmt_bound (AnnAssign _ _ e, fns) = (
     let (ne, fns) = expr_bound (e, fns) in
       (1 + ne, fns)) ∧
@@ -1250,18 +1365,136 @@ Termination
             | INR (es, _) => stmt1_size es)`
 End
 
-(*
+Definition stmtk_bound_def[simp]:
+  stmtk_bound (StartK s, fns) = (
+    let (n, fns) = stmt_bound (s, fns) in
+      (3 + n, fns)) ∧
+  stmtk_bound (ExprK k, fns) = (
+    let (n, fns) = exprk_bound (k, fns) in
+      (1 + n, fns)) ∧
+  stmtk_bound (IfK k s1 s2, fns) = (
+    let (n, fns) = exprk_bound (k, fns) in
+    let (n1, fns) = stmt_bound_list (s1, fns) in
+    let (n2, fns) = stmt_bound_list (s2, fns) in
+      (1 + n + n1 + n2, fns)) ∧
+  stmtk_bound (AssertK k _, fns) = (
+    let (n, fns) = exprk_bound (k, fns) in
+      (1 + n, fns)) ∧
+  stmtk_bound (ReturnSomeK k, fns) = (
+    let (n, fns) = exprk_bound (k, fns) in
+      (1 + n, fns)) ∧
+  stmtk_bound (AssignK1 tk e, fns) = (
+    let (nt, fns) = tgtk_bound (tk, fns) in
+    let (ne, fns) = expr_bound (e, fns) in
+      (1 + nt + ne, fns)) ∧
+  stmtk_bound (AssignK2 _ k, fns) = (
+    let (n, fns) = exprk_bound (k, fns) in
+      (1 + n, fns)) ∧
+  stmtk_bound (AugAssignK1 k _ e, fns) = (
+    let (n, fns) = base_tgtk_bound (k, fns) in
+    let (ne, fns) = expr_bound (e, fns) in
+      (1 + n + ne, fns)) ∧
+  stmtk_bound (AugAssignK2 _ _ _ k, fns) = (
+    let (n, fns) = exprk_bound (k, fns) in
+      (1 + n, fns)) ∧
+  stmtk_bound (AnnAssignK _ _ k, fns) = (
+    let (n, fns) = exprk_bound (k, fns) in
+      (1 + n, fns)) ∧
+  stmtk_bound (ForK _ _ k n s, fns) = (
+    let (nk, fns) = exprk_bound (k, fns) in
+    let (ns, fns) = stmt_bound_list (s, fns) in
+      (1 + nk + n * ns, fns)) ∧
+  stmtk_bound (_, fns) = (1, fns)
+End
+
+Definition fns_from_context_def:
+  fns_from_context fc =
+  case fc.name of Fn fn => {fn} | _ => {}
+End
+
+Definition all_fns_def[simp]:
+  all_fns [] = {} ∧
+  all_fns (FunctionDef id fv args ret body :: ts) =
+    id INSERT (all_fns ts) ∧
+  all_fns (_ :: ts) = all_fns ts
+End
+
+Definition fn_bound_def:
+  fn_bound ts all seen fns =
+  if FINITE all ∧ DISJOINT seen fns ∧ fns ⊆ all ∧ seen ⊆ all then
+    if fns = {} then 0 else
+      let fn = CHOICE fns in
+      let rest = REST fns in
+      let seen = fn INSERT seen in
+        case lookup_function fn Internal ts of
+           | NONE => fn_bound ts all seen rest
+           | SOME (_, _, body) =>
+             let (n, x) = stmt_bound_list (body, {}) in
+               n + fn_bound ts all seen (rest UNION (x DIFF seen))
+  else 0
+Termination
+  WF_REL_TAC`measure (λ(_,all,seen,_). CARD (all DIFF seen))`
+  \\ rw[]
+  \\ qmatch_goalsub_abbrev_tac`CARD s1 < CARD s2`
+  \\ `s2 = CHOICE fns INSERT s1`
+  by (
+    simp[Abbr`s1`, Abbr`s2`, EXTENSION]
+    \\ gs[IN_DISJOINT, SUBSET_DEF]
+    \\ rw[EQ_IMP_THM]
+    \\ metis_tac[CHOICE_DEF] )
+  \\ `FINITE s1` by rw[Abbr`s1`]
+  \\ rw[CARD_INSERT, Abbr`s1`]
+End
+
 Definition step_bound_def:
   step_bound ctx =
+  let current_fns =
+    fns_from_context ctx.current_fc ∪
+    BIGUNION (IMAGE fns_from_context (set ctx.call_stack)) in
+  let ts = ctx.current_contract.src in
+  let (ns, fns) = stmtk_bound (ctx.current_fc.current_stmt, {}) in
+  let (nr, fns) = stmt_bound_list (ctx.current_fc.remaining_stmts, fns) in
+    ns + nr +
+      fn_bound ts (all_fns ts) current_fns (fns DIFF current_fns)
 End
-*)
+
+Theorem set_stmt_simps[simp]:
+  (set_stmt k ctx).current_contract = ctx.current_contract ∧
+  (set_stmt k ctx).call_stack = ctx.call_stack ∧
+  (set_stmt k ctx).current_fc.current_stmt = k ∧
+  (set_stmt k ctx).current_fc.remaining_stmts = ctx.current_fc.remaining_stmts
+Proof
+  rw[set_stmt_def]
+QED
+
+Theorem fns_from_context_set_stmt[simp]:
+  fns_from_context (set_stmt k ctx).current_fc =
+  fns_from_context ctx.current_fc
+Proof
+  rw[set_stmt_def, fns_from_context_def]
+QED
 
 Definition step_stmt_till_exception_def:
   step_stmt_till_exception ctx =
   if exception_raised ctx then ctx
   else step_stmt_till_exception (step_stmt ctx)
 Termination
-  cheat (* TODO: need to define a step bound - maybe possible given Vyper is bounded *)
+  cheat
+  (*
+  WF_REL_TAC`measure step_bound`
+  \\ rw[step_stmt_def]
+  \\ CASE_TAC
+  >- (
+    CASE_TAC
+    >- ( rw[step_bound_def] \\ pairarg_tac \\ fs[])
+    >- ( rw[step_bound_def] \\ cheat )
+    >- ( rw[step_bound_def] \\ cheat )
+    >- ( rw[step_bound_def] \\ rpt(pairarg_tac \\ gvs[]))
+    >- ( rw[step_bound_def] \\ rpt(pairarg_tac \\ gvs[]))
+    >- ( rw[step_bound_def] \\ rpt(pairarg_tac \\ gvs[]))
+    >- ( rw[step_bound_def] \\ rpt(pairarg_tac \\ gvs[]))
+    >- ( rw[step_bound_def] \\ rpt(pairarg_tac \\ gvs[raise_def]))
+  *)
 End
 
 val () = cv_auto_trans step_stmt_till_exception_def;
