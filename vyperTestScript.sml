@@ -362,4 +362,80 @@ Proof
   \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
+Definition test_statefulness_of_storage_ast_def:
+  test_statefulness_of_storage_ast = [
+    VariableDecl "d" uint256 Private Storage;
+    FunctionDef "foo" External [] uint256 [
+      AugAssign (GlobalNameTarget "d") Add (intlit 1);
+      Return (SOME (GlobalName "d"))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_statefulness_of_storage_ast_def;
+
+Theorem test_statefulness_of_storage:
+  let ms = load_contract initial_machine_state addr
+             test_statefulness_of_storage_ast in
+  let (r1, ms) = external_call ms addr "foo" [] in
+  let (r2, ms) = external_call ms addr "foo" [] in
+  let (r3, ms) = external_call ms addr "foo" [] in
+  let (r4, ms) = external_call ms addr "foo" [] in
+  let (r5, ms) = external_call ms addr "foo" [] in
+    r1 = INL (IntV 1) ∧
+    r2 = INL (IntV 2) ∧
+    r3 = INL (IntV 3) ∧
+    r4 = INL (IntV 4) ∧
+    r5 = INL (IntV 5)
+Proof
+  rw[external_call_def, load_contract_def, initial_machine_state_def,
+     SimpLHS, pair_case_rand]
+  \\ CONV_TAC cv_eval
+QED
+
+Definition test_statefulness_of_storage2_ast_def:
+  test_statefulness_of_storage2_ast = [
+    VariableDecl "d" uint256 Private Storage;
+    FunctionDef "foo" External [] uint256 [
+      AugAssign (GlobalNameTarget "d") Add (intlit 1);
+      Return (SOME (GlobalName "d"))
+    ];
+    FunctionDef "bar" External [] uint256 [
+      AugAssign (GlobalNameTarget "d") Add (intlit 1);
+      Return (SOME (GlobalName "d"))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_statefulness_of_storage2_ast_def;
+
+Theorem test_statefulness_of_storage2:
+  let ms = load_contract initial_machine_state addr
+             test_statefulness_of_storage2_ast in
+  let (f1, ms) = external_call ms addr "foo" [] in
+  let (b1, ms) = external_call ms addr "bar" [] in
+  let (f2, ms) = external_call ms addr "foo" [] in
+  let (b2, ms) = external_call ms addr "bar" [] in
+  let (f3, ms) = external_call ms addr "foo" [] in
+  let (b3, ms) = external_call ms addr "bar" [] in
+  let (f4, ms) = external_call ms addr "foo" [] in
+  let (b4, ms) = external_call ms addr "bar" [] in
+  let (f5, ms) = external_call ms addr "foo" [] in
+  let (b5, ms) = external_call ms addr "bar" [] in
+    f1 = INL (IntV (0 * 2 + 1)) ∧
+    f2 = INL (IntV (1 * 2 + 1)) ∧
+    f3 = INL (IntV (2 * 2 + 1)) ∧
+    f4 = INL (IntV (3 * 2 + 1)) ∧
+    f5 = INL (IntV (4 * 2 + 1)) ∧
+    b1 = INL (IntV (0 * 2 + 2)) ∧
+    b2 = INL (IntV (1 * 2 + 2)) ∧
+    b3 = INL (IntV (2 * 2 + 2)) ∧
+    b4 = INL (IntV (3 * 2 + 2)) ∧
+    b5 = INL (IntV (4 * 2 + 2))
+Proof
+  rw[external_call_def, load_contract_def, initial_machine_state_def,
+     SimpLHS, pair_case_rand]
+  \\ CONV_TAC cv_eval
+QED
+
 val () = export_theory();
