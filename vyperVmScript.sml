@@ -6,6 +6,21 @@ open vyperAstTheory vfmTypesTheory vfmContextTheory
 
 val () = new_theory "vyperVm";
 
+(* TODO: move *)
+Theorem cv_rep_DOMSUB[cv_rep]:
+  from_fmap f (m \\ k) = cv_delete (Num k) (from_fmap f m)
+Proof
+  rw[from_fmap_def, GSYM cv_delete_thm]
+  \\ AP_TERM_TAC
+  \\ DEP_REWRITE_TAC[sptreeTheory.spt_eq_thm]
+  \\ rw[sptreeTheory.wf_fromAList, sptreeTheory.wf_delete]
+  \\ rw[sptreeTheory.lookup_delete, sptreeTheory.lookup_fromAList]
+  \\ rw[DOMSUB_FLOOKUP_THM]
+QED
+
+val () = cv_auto_trans sptreeTheory.size_def;
+(* -- *)
+
 Definition string_to_num_def:
   string_to_num s = l2n 257 (MAP (SUC o ORD) s)
 End
@@ -144,65 +159,121 @@ Datatype:
   | StructV ((identifier, value) alist)
 End
 
+val from_to_value = cv_typeLib.from_to_thm_for “:value”;
+
 Datatype:
   toplevel_value = Value value | HashMap ((value, toplevel_value) alist)
 End
 
-Theorem type2_size_UNCURRY[simp]:
-  type2_size p = 1 + list_size char_size (FST p) + type_size (SND p)
-Proof
-  Cases_on`p` \\ rw[type_size_def]
-QED
-
-Theorem type1_size_MAP[simp]:
-  ∀ls. type1_size ls =
-       SUM (MAP (list_size char_size o FST) ls) +
-       LENGTH ls +
-       type3_size (MAP SND ls)
-Proof
-  Induct \\ rw[type_size_def]
-QED
-
 Definition default_value_def:
-  default_value (BaseT (UintT _)) = IntV 0 ∧
-  default_value (BaseT (IntT _)) = IntV 0 ∧
-  default_value (TupleT ts) = TupleV (default_value_list ts) ∧
-  default_value (ArrayT _ (Dynamic n)) = ArrayV (Dynamic n) [] ∧
-  default_value (ArrayT t (Fixed n)) =
-    ArrayV (Fixed n) (REPLICATE n (default_value t)) ∧
-  default_value (StructT ts) =
-    StructV (ZIP (MAP FST ts, default_value_snd_list ts)) ∧
-  default_value VoidT = VoidV ∧
-  default_value (BaseT BoolT) = BoolV F ∧
-  default_value (BaseT (StringT n)) = StringV n "" ∧
-  default_value (BaseT (BytesT (Fixed n))) = BytesV (Fixed n) (REPLICATE n 0w) ∧
-  default_value (BaseT (BytesT (Dynamic n))) = BytesV (Dynamic n) [] ∧
-  default_value_list [] = [] ∧
-  default_value_list (t::ts) = default_value t :: default_value_list ts ∧
-  default_value_snd_list [] = [] ∧
-  default_value_snd_list ((_,t)::ps) =
-    default_value t :: default_value_snd_list ps
+  default_value env (BaseT (UintT _)) = IntV 0 ∧
+  default_value env (BaseT (IntT _)) = IntV 0 ∧
+  default_value env (TupleT ts) = default_value_tuple env [] ts ∧
+  default_value env (ArrayT _ (Dynamic n)) = ArrayV (Dynamic n) [] ∧
+  default_value env (ArrayT t (Fixed n)) =
+    ArrayV (Fixed n) (REPLICATE n (default_value env t)) ∧
+  default_value env (StructT id) =
+    (let nid = string_to_num id in
+     case FLOOKUP env nid
+       of NONE => StructV []
+        | SOME args => default_value_struct (env \\ nid) [] args) ∧
+  default_value env VoidT = VoidV ∧
+  default_value env (BaseT BoolT) = BoolV F ∧
+  default_value env (BaseT (StringT n)) = StringV n "" ∧
+  default_value env (BaseT (BytesT (Fixed n))) = BytesV (Fixed n) (REPLICATE n 0w) ∧
+  default_value env (BaseT (BytesT (Dynamic n))) = BytesV (Dynamic n) [] ∧
+  default_value_tuple env acc [] = TupleV (REVERSE acc) ∧
+  default_value_tuple env acc (t::ts) =
+    default_value_tuple env (default_value env t :: acc) ts ∧
+  default_value_struct env acc [] = StructV (REVERSE acc) ∧
+  default_value_struct env acc ((id,t)::ps) =
+    default_value_struct env ((id,default_value env t)::acc) ps
 Termination
-  WF_REL_TAC ‘measure
-    (λx. case x of INL t => type_size t
-                 | INR (INL t) => type3_size t
-                 | INR (INR t) => type1_size t)’
+  WF_REL_TAC ‘inv_image ($< LEX $<) (λx.
+    case x
+      of INL (env, t) => (CARD (FDOM env), type_size t)
+       | INR (INL (env, _, ts)) => (CARD (FDOM env), type1_size ts)
+       | INR (INR (env, _, ps)) => (CARD (FDOM env), type1_size (MAP SND ps)))’
+  \\ rw[type_size_def, FLOOKUP_DEF]
+  \\ disj1_tac
+  \\ CCONTR_TAC
+  \\ fs[]
 End
 
-Theorem default_value_list_MAP:
-  default_value_list ls = MAP default_value ls
+Theorem cv_ispair_cv_add:
+  cv_ispair (cv_add x y) = Num 0
 Proof
-  Induct_on`ls` \\ rw[default_value_def]
+  Cases_on`x` \\ Cases_on`y` \\ rw[]
 QED
 
-Theorem default_value_snd_list_MAP:
-  default_value_snd_list ls = MAP (default_value o SND) ls
+Theorem c2n_cv_add_Num:
+  cv$c2n (cv_add cv (Num n)) =
+  cv$c2n cv + n
 Proof
-  Induct_on`ls` \\ rw[default_value_def]
-  \\ Cases_on`h` \\ rw[default_value_def]
+  Cases_on`cv` \\ rw[]
 QED
 
-val () = cv_auto_trans default_value_def;
+val () = cv_trans_rec default_value_def (
+(*
+  WF_REL_TAC ‘inv_image ($< LEX $<) (λx.
+    case x
+      of INL (env, t) => (cv$c2n $ cv_size' env, cv_size t)
+       | INR (INL (env, _, ts)) => (cv$c2n (cv_size' env), cv_size ts)
+       | INR (INR (env, _, ps)) => (cv$c2n (cv_size' env), cv_size ps))’
+  \\ rw[]
+  \\ TRY(Cases_on`cv_v` \\ gs[] \\ NO_TAC)
+  \\ TRY(Cases_on`cv_v` \\ gs[]
+         \\ qmatch_asmsub_rename_tac`cv_ispair cv_v`
+         \\ Cases_on`cv_v` \\ gs[] \\ NO_TAC)
+  \\ TRY(Cases_on`cv_v` \\ gs[]
+         \\ qmatch_goalsub_rename_tac`cv_fst cv_v`
+         \\ Cases_on`cv_v` \\ gs[] \\ NO_TAC)
+  \\ disj1_tac
+  \\ pop_assum mp_tac
+  \\ qmatch_goalsub_abbrev_tac`cv_lookup ck`
+  \\ `cv_ispair ck = Num 0`
+  by (
+    rw[Abbr`ck`, definition"cv_string_to_num_def"]
+    \\ rw[Once keccakTheory.cv_l2n_def]
+    \\ rw[cv_ispair_cv_add] )
+  \\ pop_assum mp_tac
+  \\ qid_spec_tac`cv_env`
+  \\ qid_spec_tac`ck`
+  \\ rpt (pop_assum kall_tac)
+  \\ ho_match_mp_tac cv_stdTheory.cv_delete_ind
+  \\ rpt gen_tac \\ strip_tac
+  \\ simp[Once cv_lookup_def]
+  \\ IF_CASES_TAC \\ gs[]
+  \\ strip_tac \\ gs[]
+  \\ reverse(IF_CASES_TAC \\ gs[])
+  >- (
+    Cases_on`ck` \\ gs[]
+    \\ IF_CASES_TAC \\ gs[]
+    \\ Cases_on`cv_env` \\ gs[]
+    \\ Cases_on`0 < m` \\ gs[]
+    \\ simp[Once cv_delete_def]
+    \\ rw[Once cv_stdTheory.cv_size'_def]
+    \\ rw[Once cv_stdTheory.cv_size'_def] )
+  \\ Cases_on`cv_env` \\ gs[]
+  \\ Cases_on`ck` \\ gs[]
+  \\ strip_tac
+  \\ simp[Once cv_delete_def]
+  \\ Cases_on`g` \\ gs[]
+  \\ IF_CASES_TAC \\ gs[]
+  \\ Cases_on`m=0` \\ gs[]
+  >- (
+    rw[] \\ gs[]
+    \\ rw[Once cv_stdTheory.cv_size'_def]
+    \\ rw[Once cv_stdTheory.cv_size'_def, SimpR``prim_rec$<``]
+    \\ rw[c2n_cv_add_Num] )
+  \\ simp[Once cv_stdTheory.cv_size'_def, SimpR``prim_rec$<``]
+  \\ qmatch_goalsub_rename_tac`2 < p`
+  \\ Cases_on`p=0` \\ gs[]
+  \\ Cases_on`p=1` \\ gs[]
+  \\ Cases_on`p=2` \\ gs[]
+  *)
+  cheat
+);
 
 (*
 We don't use this directly to support cv which prefers num keys
@@ -571,16 +642,13 @@ val () = cv_auto_trans initial_function_context_def;
 
 (* TODO: assumes unique identifiers, but should check? *)
 Definition initial_globals_def:
-  initial_globals [] = FEMPTY ∧
-  initial_globals (VariableDecl id typ _ Storage :: ts) =
-  initial_globals ts |+ (string_to_num id, Value $ default_value typ) ∧
-  initial_globals (VariableDecl id typ _ Transient :: ts) =
-  initial_globals ts |+ (string_to_num id, Value $ default_value typ) ∧
+  initial_globals env [] = FEMPTY ∧
+  initial_globals env (VariableDecl id typ _ Storage :: ts) =
+  initial_globals env ts |+ (string_to_num id, Value $ default_value env typ) ∧
+  initial_globals env (VariableDecl id typ _ Transient :: ts) =
+  initial_globals env ts |+ (string_to_num id, Value $ default_value env typ) ∧
   (* TODO: handle Constants and  Immutables *)
-  initial_globals (StructDef id args :: ts) =
-  initial_globals ts |+
-    (string_to_num id, Value (default_value (StructT args))) ∧
-  initial_globals (t :: ts) = initial_globals ts
+  initial_globals env (t :: ts) = initial_globals env ts
   (* TODO: hashmap toplevels *)
 End
 
@@ -613,10 +681,19 @@ End
 
 val () = cv_auto_trans initial_machine_state_def;
 
+Definition type_env_def:
+  type_env [] = FEMPTY ∧
+  type_env (StructDef id args :: ts) =
+    type_env ts |+ (string_to_num id, args) ∧
+  type_env (_ :: ts) = type_env ts
+End
+
+val () = cv_auto_trans type_env_def;
+
 Definition load_contract_def:
   load_contract ms a ts =
   ms with contracts updated_by
-    CONS (a, <|src := ts; globals := initial_globals ts |>)
+    CONS (a, <|src := ts; globals := initial_globals (type_env ts) ts |>)
 End
 
 val () = cv_auto_trans load_contract_def;
@@ -656,12 +733,13 @@ val () = cv_auto_trans pop_scope_def;
 
 Definition new_variable_def:
   new_variable id typ ctx =
+  let tenv = type_env ctx.current_contract.src in
   case ctx.current_fc.scopes
     of [] => raise (Error "new_variable") ctx
      | env::rest =>
          if id ∈ FDOM env then raise (Error "var exists") ctx
          else ctx with current_fc updated_by
-           (λfc. fc with scopes := (env |+ (id, default_value typ))::rest)
+           (λfc. fc with scopes := (env |+ (id, default_value tenv typ))::rest)
 End
 
 val () = cv_auto_trans (REWRITE_RULE[TO_FLOOKUP]new_variable_def);

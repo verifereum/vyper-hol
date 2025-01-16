@@ -28,7 +28,7 @@ Datatype:
   = BaseT base_type
   | TupleT (type list)
   | ArrayT type bound
-  | StructT ((identifier # type) list)
+  | StructT identifier
   | VoidT (* for functions with no return type *)
 End
 
