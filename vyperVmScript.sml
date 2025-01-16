@@ -577,6 +577,9 @@ Definition initial_globals_def:
   initial_globals (VariableDecl id typ _ Transient :: ts) =
   initial_globals ts |+ (string_to_num id, Value $ default_value typ) ∧
   (* TODO: handle Constants and  Immutables *)
+  initial_globals (StructDef id args :: ts) =
+  initial_globals ts |+
+    (string_to_num id, Value (default_value (StructT args))) ∧
   initial_globals (t :: ts) = initial_globals ts
   (* TODO: hashmap toplevels *)
 End

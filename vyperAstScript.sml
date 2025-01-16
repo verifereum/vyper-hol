@@ -122,6 +122,7 @@ Datatype:
   toplevel
   = FunctionDef identifier function_visibility (argument list) type (stmt list)
   | VariableDecl identifier type variable_visibility mutability
+  | StructDef identifier (argument list)
 End
 
 Definition function_body_def:
