@@ -148,6 +148,21 @@ Datatype:
   toplevel_value = Value value | HashMap ((value, toplevel_value) alist)
 End
 
+Theorem type2_size_UNCURRY[simp]:
+  type2_size p = 1 + list_size char_size (FST p) + type_size (SND p)
+Proof
+  Cases_on`p` \\ rw[type_size_def]
+QED
+
+Theorem type1_size_MAP[simp]:
+  ∀ls. type1_size ls =
+       SUM (MAP (list_size char_size o FST) ls) +
+       LENGTH ls +
+       type3_size (MAP SND ls)
+Proof
+  Induct \\ rw[type_size_def]
+QED
+
 Definition default_value_def:
   default_value (BaseT (UintT _)) = IntV 0 ∧
   default_value (BaseT (IntT _)) = IntV 0 ∧
@@ -155,22 +170,36 @@ Definition default_value_def:
   default_value (ArrayT _ (Dynamic n)) = ArrayV (Dynamic n) [] ∧
   default_value (ArrayT t (Fixed n)) =
     ArrayV (Fixed n) (REPLICATE n (default_value t)) ∧
+  default_value (StructT ts) =
+    StructV (ZIP (MAP FST ts, default_value_snd_list ts)) ∧
   default_value VoidT = VoidV ∧
   default_value (BaseT BoolT) = BoolV F ∧
   default_value (BaseT (StringT n)) = StringV n "" ∧
   default_value (BaseT (BytesT (Fixed n))) = BytesV (Fixed n) (REPLICATE n 0w) ∧
   default_value (BaseT (BytesT (Dynamic n))) = BytesV (Dynamic n) [] ∧
   default_value_list [] = [] ∧
-  default_value_list (t::ts) = default_value t :: default_value_list ts
+  default_value_list (t::ts) = default_value t :: default_value_list ts ∧
+  default_value_snd_list [] = [] ∧
+  default_value_snd_list ((_,t)::ps) =
+    default_value t :: default_value_snd_list ps
 Termination
   WF_REL_TAC ‘measure
-    (λx. case x of INR t => type1_size t | INL t => type_size t)’
+    (λx. case x of INL t => type_size t
+                 | INR (INL t) => type3_size t
+                 | INR (INR t) => type1_size t)’
 End
 
 Theorem default_value_list_MAP:
   default_value_list ls = MAP default_value ls
 Proof
   Induct_on`ls` \\ rw[default_value_def]
+QED
+
+Theorem default_value_snd_list_MAP:
+  default_value_snd_list ls = MAP (default_value o SND) ls
+Proof
+  Induct_on`ls` \\ rw[default_value_def]
+  \\ Cases_on`h` \\ rw[default_value_def]
 QED
 
 val () = cv_auto_trans default_value_def;
