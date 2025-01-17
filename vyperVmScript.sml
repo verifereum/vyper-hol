@@ -1190,7 +1190,7 @@ Definition step_stmt_def:
             ctx with current_fc := fc with
               <| current_stmt := StartK s
                ; remaining_stmts updated_by (λx. ss ++ x) |>
-          | _ => raise (Error "IfK body") ctx)
+          | _ => set_stmt DoneK ctx)
       | IfK (DoneExpr _) _ _ => raise (Error "IfK DoneExpr") ctx
       | IfK (ErrorExpr msg) _ _ => raise (Error ("IfK " ++ msg)) ctx
       | IfK ReturnExpr _ _ => raise (Error "IfK ReturnExpr") ctx
