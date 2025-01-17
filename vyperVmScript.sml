@@ -19,6 +19,54 @@ Proof
 QED
 
 val () = cv_auto_trans sptreeTheory.size_def;
+
+Theorem cv_ispair_cv_add[simp]:
+  cv_ispair (cv_add x y) = Num 0
+Proof
+  Cases_on`x` \\ Cases_on`y` \\ rw[]
+QED
+
+Theorem c2n_cv_add[simp]:
+  cv$c2n (cv_add v1 v2) = cv$c2n v1 + cv$c2n v2
+Proof
+  Cases_on`v1` \\ Cases_on`v2` \\ rw[]
+QED
+
+Theorem cv_size'_cv_mk_BN[simp]:
+  cv_size' (cv_mk_BN x y) =
+  cv_add (cv_size' x) (cv_size' y)
+Proof
+  rw[cv_mk_BN_def]
+  \\ TRY (
+    rw[Once cv_size'_def]
+    \\ rw[Once cv_size'_def]
+    \\ Cases_on`x` \\ gs[]
+    \\ rw[Once cv_size'_def, SimpRHS]
+    \\ NO_TAC)
+  \\ rw[Once cv_size'_def]
+  \\ rw[Once cv_size'_def]
+  \\ Cases_on`y` \\ gs[]
+  \\ rw[Once cv_size'_def, SimpRHS]
+  \\ rw[Once cv_size'_def, SimpRHS]
+  \\ rw[Once cv_size'_def]
+QED
+
+Theorem cv_size'_Num[simp]:
+  cv_size' (Num m) = Num 0
+Proof
+  rw[Once cv_size'_def]
+QED
+
+Theorem cv_size'_cv_mk_BS[simp]:
+  cv_size' (cv_mk_BS x y z) =
+  cv_add (cv_add (cv_size' x) (cv_size' z)) (Num 1)
+Proof
+  rw[cv_mk_BS_def]
+  \\ rw[Q.SPEC`Pair x y`cv_size'_def]
+  \\ Cases_on`x` \\ Cases_on`z` \\ gvs[]
+  \\ gvs[Q.SPEC`Pair x y`cv_size'_def]
+QED
+
 (* -- *)
 
 Definition string_to_num_def:
@@ -200,21 +248,7 @@ Termination
   \\ fs[]
 End
 
-Theorem cv_ispair_cv_add:
-  cv_ispair (cv_add x y) = Num 0
-Proof
-  Cases_on`x` \\ Cases_on`y` \\ rw[]
-QED
-
-Theorem c2n_cv_add_Num:
-  cv$c2n (cv_add cv (Num n)) =
-  cv$c2n cv + n
-Proof
-  Cases_on`cv` \\ rw[]
-QED
-
 val () = cv_trans_rec default_value_def (
-(*
   WF_REL_TAC ‘inv_image ($< LEX $<) (λx.
     case x
       of INL (env, t) => (cv$c2n $ cv_size' env, cv_size t)
@@ -259,20 +293,19 @@ val () = cv_trans_rec default_value_def (
   \\ strip_tac
   \\ simp[Once cv_delete_def]
   \\ Cases_on`g` \\ gs[]
-  \\ IF_CASES_TAC \\ gs[]
   \\ Cases_on`m=0` \\ gs[]
   >- (
     rw[] \\ gs[]
     \\ rw[Once cv_stdTheory.cv_size'_def]
     \\ rw[Once cv_stdTheory.cv_size'_def, SimpR``prim_rec$<``]
-    \\ rw[c2n_cv_add_Num] )
+    \\ rw[] )
   \\ simp[Once cv_stdTheory.cv_size'_def, SimpR``prim_rec$<``]
   \\ qmatch_goalsub_rename_tac`2 < p`
   \\ Cases_on`p=0` \\ gs[]
   \\ Cases_on`p=1` \\ gs[]
-  \\ Cases_on`p=2` \\ gs[]
-  *)
-  cheat
+  \\ Cases_on`p=2` \\ gvs[]
+  >- (IF_CASES_TAC \\ gs[cv_size'_cv_mk_BN])
+  \\ IF_CASES_TAC \\ gs[]
 );
 
 (*
