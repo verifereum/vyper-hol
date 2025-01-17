@@ -437,4 +437,41 @@ Proof
   \\ CONV_TAC cv_eval
 QED
 
+(* TODO: tstorage tests *)
+
+Definition test_default_storage_values_ast_def:
+  test_default_storage_values_ast = [
+    StructDef "S" [("a", uint256)];
+    VariableDecl "a" uint256 Private Storage;
+    VariableDecl "b" uint256 Private Storage;
+    VariableDecl "c" (ArrayT uint256 (Dynamic 10)) Private Storage;
+    VariableDecl "d" (StructT "S") Private Storage;
+    VariableDecl "e" (BaseT (BytesT (Dynamic 10))) Private Storage;
+    VariableDecl "f" (BaseT (StringT 10)) Private Storage;
+    FunctionDef "foo" External [] uint256 [
+      Assert (GlobalName "a" == intlit 0) "";
+      Assert (GlobalName "b" == intlit 0) "";
+      Assert (len (GlobalName "c") == intlit 0) "";
+      Assert (Attribute (GlobalName "d") "a" == intlit 0) "";
+      Assert (len (GlobalName "e") == intlit 0) "";
+      Assert (len (GlobalName "f") == intlit 0) "";
+      Return (SOME (intlit 1))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_default_storage_values_ast_def;
+
+Theorem test_default_storage_values:
+  FST $ external_call
+   (load_contract initial_machine_state
+      addr test_default_storage_values_ast)
+    addr "foo" []
+  = INL (IntV 1)
+Proof
+  rw[external_call_def, load_contract_def, initial_machine_state_def,
+     SimpLHS, pair_case_rand]
+  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+QED
+
 val () = export_theory();
