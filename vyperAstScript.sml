@@ -41,16 +41,18 @@ Datatype:
 End
 
 Datatype:
-  cmpop
-  = Eq
-  | NotEq
-End
-
-Datatype:
-  operator
+  binop
   = Add
   | Sub
   | Mul
+End
+
+Datatype:
+  builtin
+  = Len
+  | Eq
+  | Not
+  | Bop binop
 End
 
 Datatype:
@@ -66,8 +68,7 @@ Datatype:
   | ArrayLit bound (expr list)
   | Subscript expr expr
   | Attribute expr identifier
-  | Compare expr cmpop expr
-  | BinOp expr operator expr
+  | Builtin builtin (expr list)
   | Call identifier (expr list)
 End
 
@@ -97,7 +98,7 @@ Datatype:
   | Raise string
   | Return (expr option)
   | Assign assignment_target expr (* TODO: allow tuple rhs *)
-  | AugAssign base_assignment_target operator expr
+  | AugAssign base_assignment_target binop expr
   | AnnAssign identifier type expr
 End
 

@@ -6,6 +6,9 @@ val () = new_theory "vyperTest";
 
 Overload uint256 = “BaseT (UintT (n2w 32 (* 256 DIV 8 *)))”
 Overload intlit = “λi. Literal (IntL i)”
+Overload "==" = “λe1 e2. Builtin Eq [e1; e2]”
+Overload "+" = “λe1 e2. Builtin (Bop Add) [e1; e2]”
+Overload len = “λe. Builtin Len [e]”
 
 (*
   rw[external_call_def,
@@ -29,14 +32,14 @@ Definition test_if_control_flow_ast_def:
     FunctionDef "foo" External [] uint256
     [
       AnnAssign "a" uint256 (intlit 1);
-      If (Compare (Name "a") Eq (intlit 1))
+      If (Name "a" == intlit 1)
       [
         Assign (BaseTarget (NameTarget "a")) (intlit 2)
       ]
       [
         Assign (BaseTarget (NameTarget "a")) (intlit 3)
       ];
-      Return (SOME (BinOp (Name "a") Add (intlit 42)))
+      Return (SOME (Name "a" + intlit 42))
     ]
   ]
 End
@@ -93,9 +96,9 @@ Definition test_array_assign_ast_def:
         (ArrayLit (Dynamic 10) [intlit 1; intlit 2]);
       Assign (BaseTarget (SubscriptTarget (NameTarget "bar") (intlit 0)))
         (intlit 3);
-      Return (SOME (BinOp (BinOp (Subscript (Name "bar") (intlit 0)) Add
-                                 (Subscript (Name "bar") (intlit 1))) Add
-                          (intlit 42)))
+      Return (SOME (Subscript (Name "bar") (intlit 0) +
+                    Subscript (Name "bar") (intlit 1) +
+                    intlit 42))
     ]
   ]
 End
@@ -124,10 +127,8 @@ Definition test_storage_array_assign_ast_def:
                (SubscriptTarget (GlobalNameTarget "a")
                                 (intlit 0)))
              (intlit 3);
-      Return (SOME (BinOp
-        (Subscript (GlobalName "a") (intlit 0))
-        Add
-        (Subscript (GlobalName "a") (intlit 1))))
+      Return (SOME (Subscript (GlobalName "a") (intlit 0) +
+                    Subscript (GlobalName "a") (intlit 1)))
     ]
   ]
 End
@@ -164,9 +165,7 @@ Definition test_internal_call_ast_def:
       For "i" uint256 (Name "a") 10 [
         AugAssign (NameTarget "counter") Add (Name "i")
       ];
-      Return (SOME (BinOp
-        (Name "counter") Add
-        (Call "bar" [])))
+      Return (SOME (Name "counter" + Call "bar" []))
     ]
   ]
 End
@@ -218,11 +217,11 @@ Definition test_internal_call_with_args_ast_def:
       Return (SOME (Name "a"))
     ];
     FunctionDef "bar" Internal [("a", uint256)] uint256 [
-      Return (SOME (BinOp (Name "a") Add (Call "baz" [intlit 3])))
+      Return (SOME (Name "a" + Call "baz" [intlit 3]))
     ];
     FunctionDef "foo" External [] uint256 [
       AnnAssign "a" uint256 (intlit 1);
-      Return (SOME (BinOp (Name "a") Add (Call "bar" [intlit 2])))
+      Return (SOME (Name "a" + Call "bar" [intlit 2]))
     ]
   ]
 End
@@ -247,11 +246,11 @@ Definition test_internal_call_with_args2_ast_def:
       Return (SOME (Name "a"))
     ];
     FunctionDef "bar" Internal [("a", uint256)] uint256 [
-      Return (SOME (BinOp (Call "baz" [intlit 3]) Add (Name "a")))
+      Return (SOME (Call "baz" [intlit 3] + Name "a"))
     ];
     FunctionDef "foo" External [] uint256 [
       AnnAssign "a" uint256 (intlit 1);
-      Return (SOME (BinOp (Call "bar" [intlit 2]) Add (Name "a")))
+      Return (SOME (Call "bar" [intlit 2] + Name "a"))
     ]
   ]
 End
@@ -276,10 +275,10 @@ Definition test_storage_variables_ast_def:
     FunctionDef "foo" External [] uint256 [
       AnnAssign "a" uint256 (intlit 1);
       Assign (BaseTarget (GlobalNameTarget "d")) (Name "a");
-      If (Compare (Name "a") Eq (intlit 1))
+      If (Name "a" == intlit 1)
         [Assign (BaseTarget (NameTarget "a")) (intlit 2)]
         [Assign (BaseTarget (NameTarget "a")) (intlit 3)];
-      Return (SOME (BinOp (GlobalName "d") Add (intlit 42)))
+      Return (SOME (GlobalName "d" + intlit 42))
     ]
   ]
 End
@@ -306,7 +305,7 @@ Definition test_storage_variables2_ast_def:
       Assign (BaseTarget (GlobalNameTarget "k")) (intlit 1);
       Assign (BaseTarget (GlobalNameTarget "d")) (GlobalName "k");
       AugAssign (GlobalNameTarget "d") Add (GlobalName "k");
-      Return (SOME (BinOp (GlobalName "d") Add (GlobalName "k")))
+      Return (SOME (GlobalName "d" + GlobalName "k"))
     ]
   ]
 End

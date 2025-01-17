@@ -365,10 +365,7 @@ Datatype:
   | SubscriptK1 expr_continuation expr
   | SubscriptK2 value expr_continuation
   | AttributeK expr_continuation identifier
-  | CompareK1 expr_continuation cmpop expr
-  | CompareK2 value cmpop expr_continuation
-  | BinOpK1 expr_continuation operator expr
-  | BinOpK2 value operator expr_continuation
+  | BuiltinK builtin (value list) expr_continuation (expr list)
   | CallK identifier (value list) expr_continuation (expr list)
   | LiftCall identifier (value list) expr_continuation
   | DoneExpr value
@@ -435,8 +432,8 @@ Datatype:
   | ReturnSomeK expr_continuation
   | AssignK1 tgt_continuation expr
   | AssignK2 assignment_value expr_continuation
-  | AugAssignK1 base_tgt_continuation operator expr
-  | AugAssignK2 location (subscript list) operator expr_continuation
+  | AugAssignK1 base_tgt_continuation binop expr
+  | AugAssignK2 location (subscript list) binop expr_continuation
   | AnnAssignK identifier type expr_continuation
   | ForK identifier type expr_continuation num (stmt list)
   | DoneK
@@ -452,24 +449,27 @@ End
 
 val () = cv_auto_trans evaluate_literal_def;
 
-Definition evaluate_cmp_def:
-  evaluate_cmp Eq    (StringV _ s1) (StringV _ s2) = DoneExpr (BoolV (s1 = s2)) ∧
-  evaluate_cmp Eq    (IntV i1)    (IntV i2)    = DoneExpr (BoolV (i1 = i2)) ∧
-  evaluate_cmp NotEq (StringV _ s1) (StringV _ s2) = DoneExpr (BoolV (s1 ≠ s2)) ∧
-  evaluate_cmp NotEq (IntV i1)    (IntV i2)    = DoneExpr (BoolV (i1 ≠ i2)) ∧
-  evaluate_cmp _ _ _ = ErrorExpr "cmp"
-End
-
-val () = cv_auto_trans evaluate_cmp_def;
-
 Definition evaluate_binop_def:
-  evaluate_binop Add (IntV i1) (IntV i2) = DoneExpr (IntV (i1 + i2)) ∧
+  evaluate_binop (Add:binop) (IntV i1) (IntV i2) = DoneExpr (IntV (i1 + i2)) ∧
   evaluate_binop Sub (IntV i1) (IntV i2) = DoneExpr (IntV (i1 - i2)) ∧
   evaluate_binop Mul (IntV i1) (IntV i2) = DoneExpr (IntV (i1 * i2)) ∧
-  evaluate_binop (_: operator) _ _ = ErrorExpr "binop"
+  evaluate_binop _ _ _ = ErrorExpr "binop"
 End
 
 val () = cv_auto_trans evaluate_binop_def;
+
+Definition evaluate_builtin_def:
+  evaluate_builtin Len [BytesV _ ls] = DoneExpr (IntV &(LENGTH ls)) ∧
+  evaluate_builtin Len [StringV _ ls] = DoneExpr (IntV &(LENGTH ls)) ∧
+  evaluate_builtin Len [ArrayV _ ls] = DoneExpr (IntV &(LENGTH ls)) ∧
+  evaluate_builtin Eq [StringV _ s1; StringV _ s2] = DoneExpr (BoolV (s1 = s2)) ∧
+  evaluate_builtin Eq  [IntV i1; IntV i2] = DoneExpr (BoolV (i1 = i2)) ∧
+  evaluate_builtin Not [BoolV b] = DoneExpr (BoolV (¬b)) ∧
+  evaluate_builtin (Bop bop) [v1; v2] = evaluate_binop bop v1 v2 ∧
+  evaluate_builtin _ _ = ErrorExpr "builtin"
+End
+
+val () = cv_auto_trans evaluate_builtin_def;
 
 Definition extract_elements_def:
   extract_elements (ArrayV _ vs) = SOME vs ∧
@@ -546,10 +546,11 @@ Definition step_expr_def:
     AttributeK (StartExpr e) id ∧
   step_expr gbs env (StartExpr (IfExp e1 e2 e3)) =
     IfExpK (StartExpr e1) e2 e3 ∧
-  step_expr gbs env (StartExpr (Compare e1 cmp e2)) =
-    CompareK1 (StartExpr e1) cmp e2 ∧
-  step_expr gbs env (StartExpr (BinOp e1 bop e2)) =
-    BinOpK1 (StartExpr e1) bop e2 ∧
+  step_expr gbs env (StartExpr (Builtin bt [])) =
+    ErrorExpr "builtin no args" ∧
+  step_expr gbs env (StartExpr (Builtin bt (e::es))) =
+    (* TODO: check arguments length *)
+    BuiltinK bt [] (StartExpr e) es ∧
   step_expr gbs env (StartExpr (Call id [])) =
     LiftCall id [] ReturnExpr ∧
   step_expr gbs env (StartExpr (Call id (e::es))) =
@@ -599,37 +600,24 @@ Definition step_expr_def:
     | DoneExpr v => evaluate_attribute v id
     | LiftCall id vs k => LiftCall id vs (AttributeK k id)
     | k => AttributeK k id) ∧
-  step_expr gbs env (CompareK1 k cmp e2) =
+  step_expr gbs env (BuiltinK bt vs k es) =
   (case step_expr gbs env k
    of ErrorExpr msg => ErrorExpr msg
-    | DoneExpr v1 => CompareK2 v1 cmp (StartExpr e2)
-    | LiftCall id vs k => LiftCall id vs (CompareK1 k cmp e2)
-    | k => CompareK1 k cmp e2) ∧
-  step_expr gbs env (CompareK2 v1 cmp k) =
-  (case step_expr gbs env k
-   of ErrorExpr msg => ErrorExpr msg
-    | DoneExpr v2 => evaluate_cmp cmp v1 v2
-    | LiftCall id vs k => LiftCall id vs (CompareK2 v1 cmp k)
-    | k => CompareK2 v1 cmp k) ∧
-  step_expr gbs env (BinOpK1 k bop e2) =
-  (case step_expr gbs env k
-   of ErrorExpr msg => ErrorExpr msg
-    | DoneExpr v1 => BinOpK2 v1 bop (StartExpr e2)
-    | LiftCall id vs k => LiftCall id vs (BinOpK1 k bop e2)
-    | k => BinOpK1 k bop e2) ∧
-  step_expr gbs env (BinOpK2 v1 bop k) =
-  (case step_expr gbs env k
-   of ErrorExpr msg => ErrorExpr msg
-    | DoneExpr v2 => evaluate_binop bop v1 v2
-    | LiftCall id vs k => LiftCall id vs (BinOpK2 v1 bop k)
-    | k => BinOpK2 v1 bop k) ∧
+    | DoneExpr v1 =>
+        (let vs = SNOC v1 vs in
+         case es of (e::es) =>
+           BuiltinK bt vs (StartExpr e) es
+          | [] => evaluate_builtin bt vs)
+    | LiftCall id ws k => LiftCall id ws (BuiltinK bt vs k es)
+    | k => BuiltinK bt vs k es) ∧
   step_expr gbs env (CallK id vs k es) =
   (case step_expr gbs env k
    of ErrorExpr msg => ErrorExpr msg
     | DoneExpr v =>
-        (case es of (e::es) => CallK id (SNOC v vs) (StartExpr e) es
-                  | [] => LiftCall id (SNOC v vs) ReturnExpr)
-    | LiftCall id vs k => LiftCall id vs (CallK id vs k es)
+        (let vs = SNOC v vs in
+         case es of (e::es) => CallK id vs (StartExpr e) es
+                  | [] => LiftCall id vs ReturnExpr)
+    | LiftCall id ws k => LiftCall id ws (CallK id vs k es)
     | k => CallK id vs k es) ∧
   step_expr gbs env (LiftCall id vs k) = LiftCall id vs k ∧
   step_expr gbs env (DoneExpr v) = DoneExpr v ∧
@@ -865,7 +853,7 @@ End
 val () = cv_auto_trans set_variable_def;
 
 Datatype:
-  assign_operation = Replace value | Update operator value
+  assign_operation = Replace value | Update binop value
 End
 
 Definition assign_subscripts_def:
@@ -976,10 +964,7 @@ Definition return_expr_def:
   return_expr v (SubscriptK1 k e) = SubscriptK1 (return_expr v k) e ∧
   return_expr v (SubscriptK2 w k) = SubscriptK2 w (return_expr v k) ∧
   return_expr v (AttributeK k id) = AttributeK (return_expr v k) id ∧
-  return_expr v (CompareK1 k cmp e) = CompareK1 (return_expr v k) cmp e ∧
-  return_expr v (CompareK2 w cmp k) = CompareK2 w cmp (return_expr v k) ∧
-  return_expr v (BinOpK1 k bop e) = BinOpK1 (return_expr v k) bop e ∧
-  return_expr v (BinOpK2 w bop k) = BinOpK2 w bop (return_expr v k) ∧
+  return_expr v (BuiltinK bt vs k es) = BuiltinK bt vs (return_expr v k) es ∧
   return_expr v (CallK id vs k es) = CallK id vs (return_expr v k) es ∧
   return_expr v (LiftCall fn vs k) = LiftCall fn vs (return_expr v k) ∧
   return_expr v (DoneExpr _) = ErrorExpr "return DoneExpr" ∧
@@ -1227,7 +1212,7 @@ Definition step_stmt_def:
       | AssertK k s =>
           set_stmt (AssertK (step_expr gbs fc.scopes k) s) ctx
       | ReturnSomeK (DoneExpr v) => pop_call v ctx
-      | ReturnSomeK (ErrorExpr msg) => raise (Error "ReturnSomeK err") ctx
+      | ReturnSomeK (ErrorExpr msg) => raise (Error ("ReturnSomeK " ++ msg)) ctx
       | ReturnSomeK ReturnExpr => raise (Error "ReturnSomeK ReturnExpr") ctx
       | ReturnSomeK (LiftCall fn vs k) =>
           push_call fn vs
@@ -1325,14 +1310,9 @@ Definition expr_bound_def[simp]:
   expr_bound (Attribute e _, fns) = (
   let (n, fns) = expr_bound (e, fns) in
     (1 + n, fns) ) ∧
-  expr_bound (Compare e1 _ e2, fns) = (
-  let (n1, fns) = expr_bound (e1, fns) in
-  let (n2, fns) = expr_bound (e2, fns) in
-    (1 + n1 + n2, fns) ) ∧
-  expr_bound (BinOp e1 _ e2, fns) = (
-  let (n1, fns) = expr_bound (e1, fns) in
-  let (n2, fns) = expr_bound (e2, fns) in
-    (1 + n1 + n2, fns) ) ∧
+  expr_bound (Builtin _ es, fns) = (
+  let (ns, fns) = expr_bound_list (es, fns) in
+    (1 + ns, fns) ) ∧
   expr_bound (Call fn es, fns) = (
   let (ns, fns) = expr_bound_list (es, fns) in
     (1 + ns, (fn INSERT fns)) ) ∧
@@ -1370,20 +1350,10 @@ Definition exprk_bound_def[simp]:
   exprk_bound (AttributeK k _, fns) = (
     let (n, fns) = exprk_bound (k, fns) in
       (1 + n, fns)) ∧
-  exprk_bound (CompareK1 k _ e, fns) = (
+  exprk_bound (BuiltinK _ _ k es, fns) = (
     let (n, fns) = exprk_bound (k, fns) in
-    let (ne, fns) = expr_bound (e, fns) in
-      (1 + n + ne, fns)) ∧
-  exprk_bound (CompareK2 _ _ k, fns) = (
-    let (n, fns) = exprk_bound (k, fns) in
-      (1 + n, fns)) ∧
-  exprk_bound (BinOpK1 k _ e, fns) = (
-    let (n, fns) = exprk_bound (k, fns) in
-    let (ne, fns) = expr_bound (e, fns) in
-      (1 + n + ne, fns)) ∧
-  exprk_bound (BinOpK2 _ _ k, fns) = (
-    let (n, fns) = exprk_bound (k, fns) in
-      (1 + n, fns)) ∧
+    let (ns, fns) = expr_bound_list (es, fns) in
+      (1 + n + ns, fns)) ∧
   exprk_bound (CallK _ _ k es, fns) = (
     let (n, fns) = exprk_bound (k, fns) in
     let (ns, fns) = expr_bound_list (es, fns) in
