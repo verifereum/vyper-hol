@@ -437,7 +437,94 @@ Proof
   \\ CONV_TAC cv_eval
 QED
 
-(* TODO: tstorage tests *)
+Definition test_tstorage_variables0_ast_def:
+  test_tstorage_variables0_ast = [
+    VariableDecl "d" uint256 Private Transient;
+    VariableDecl "k" uint256 Private Transient;
+    FunctionDef "foo" External [] uint256 [
+      Assign (BaseTarget (GlobalNameTarget "k")) (intlit 1);
+      Assign (BaseTarget (GlobalNameTarget "d")) (GlobalName "k");
+      AugAssign (GlobalNameTarget "d") Add (GlobalName "k");
+      Return (SOME (GlobalName "d" + GlobalName "k"))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_tstorage_variables0_ast_def;
+
+Theorem test_tstorage_variables0:
+  FST $ external_call
+   (load_contract initial_machine_state
+      addr test_tstorage_variables0_ast)
+    addr "foo" []
+  = INL (IntV 3)
+Proof
+  rw[external_call_def, load_contract_def, initial_machine_state_def,
+     SimpLHS, pair_case_rand]
+  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+QED
+
+Definition test_tstorage_variables2_ast_def:
+  test_tstorage_variables2_ast = [
+    VariableDecl "d" uint256 Private Transient;
+    VariableDecl "k" uint256 Private Transient;
+    FunctionDef "foo" External [] uint256 [
+      If (GlobalName "k" == intlit 0) [
+        Assign (BaseTarget (GlobalNameTarget "k")) (intlit 1)
+      ] [];
+      Assign (BaseTarget (GlobalNameTarget "d")) (GlobalName "k");
+      AugAssign (GlobalNameTarget "d") Add (GlobalName "k");
+      Return (SOME (GlobalName "d" + GlobalName "k"))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_tstorage_variables2_ast_def;
+
+Theorem test_tstorage_variables2:
+  FST $ external_call
+   (load_contract initial_machine_state
+      addr test_tstorage_variables2_ast)
+    addr "foo" []
+  = INL (IntV 3)
+Proof
+  rw[external_call_def, load_contract_def, initial_machine_state_def,
+     SimpLHS, pair_case_rand]
+  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+QED
+
+(* TODO add
+
+def test_statefulness_of_tstorage():
+    src = """
+d: transient(uint256)
+
+interface Bar:
+    def bar() -> uint256: payable
+
+@external
+def foo() -> uint256:
+    self.d += 1
+    return extcall Bar(self).bar()
+
+@external
+def bar() -> uint256:
+    self.d += 1
+    return self.d
+    """
+
+    c = loads(src)
+    for i in range(3):
+        assert c.foo() == 2
+
+Definition test_statefulness_of_tstorage_ast_def:
+  test_statefulness_of_tstorage_ast = [
+    VariableDecl "d" uint256 Private Transient;
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_statefulness_of_tstorage_ast_def;
+*)
 
 Definition test_default_storage_values_ast_def:
   test_default_storage_values_ast = [
@@ -572,5 +659,113 @@ Proof
      SimpLHS, pair_case_rand]
   \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
+
+(* TODO: test abi_encode *)
+
+(* TODO: test self call *)
+
+(* TODO: test default arg value *)
+
+Definition test_external_func_arg_ast_def:
+  test_external_func_arg_ast = [
+    FunctionDef "foo" External [("a", uint256)] uint256 [
+      Return (SOME (Name "a"))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_external_func_arg_ast_def;
+
+Theorem test_external_func_arg:
+  FST $ external_call
+   (load_contract initial_machine_state
+      addr test_external_func_arg_ast)
+    addr "foo" [IntV 42]
+  = INL (IntV 42)
+Proof
+  rw[external_call_def, load_contract_def, initial_machine_state_def,
+     SimpLHS, pair_case_rand]
+  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+QED
+
+(* TODO add tests
+
+def test_external_func_arg2():
+    src = """
+@external
+def foo(a: DynArray[uint256, 10], s: String[100]) -> (DynArray[uint256, 10], String[100]):
+    return a, s
+    """
+
+    c = loads(src)
+    assert c.foo([1, 2, 3], "hello") == ([1, 2, 3], "hello")
+
+
+def test_external_func_arg3():
+    dynarray_t = "DynArray[DynArray[uint256, 10], 10]"
+    src = f"""
+@external
+def foo(a: DynArray[uint256, 10], s: String[100], b: {dynarray_t}) -> (DynArray[uint256, 10], String[100], {dynarray_t}):
+    return a, s, b
+    """
+
+    c = loads(src)
+    complex_array = [[4, 5, 6], [7, 8, 9, 10, 11], [], [12]]
+    assert c.foo([1, 2, 3], "hello", complex_array) == (
+        [1, 2, 3],
+        "hello",
+        complex_array,
+    )
+
+
+def test_external_func_arg4():
+    tuple_t = "(String[93], DynArray[DynArray[uint256, 10], 10])"
+    src = f"""
+@external
+def foo(a: DynArray[uint256, 10], s: String[100], b: {tuple_t}) -> (DynArray[uint256, 10], String[100], {tuple_t}):
+    return a, s, b
+    """
+
+    c = loads(src)
+    complex_tuple = ("apollo", [[4, 5, 6], [7, 8, 9, 10, 11], [], [12]])
+    assert c.foo([1, 2, 3], "hello", complex_tuple) == (
+        [1, 2, 3],
+        "hello",
+        complex_tuple,
+    )
+
+
+def test_empty_builtin():
+    src = """
+@external
+def foo() -> uint256:
+    return empty(uint256)
+    """
+
+    c = loads(src)
+    assert c.foo() == 0
+
+
+def test_empty_builtin2():
+    src = """
+@external
+def foo() -> String[56]:
+    return empty(String[56])
+    """
+
+    c = loads(src)
+    assert c.foo() == ""
+
+
+def test_empty_builtin3():
+    src = """
+@external
+def foo() -> DynArray[String[32], 10]:
+    return empty(DynArray[String[32], 10])
+    """
+
+    c = loads(src)
+    assert c.foo() == []
+*)
 
 val () = export_theory();
