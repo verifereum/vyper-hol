@@ -500,4 +500,77 @@ Proof
   \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
+Definition test_len_builtin2_ast_def:
+  test_len_builtin2_ast = [
+    VariableDecl "d" (ArrayT uint256 (Dynamic 3)) Private Storage;
+    FunctionDef "foo" External [] uint256 [
+      Return (SOME (len (GlobalName "d")))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_len_builtin2_ast_def;
+
+Theorem test_len_builtin2:
+  FST $ external_call
+   (load_contract initial_machine_state
+      addr test_len_builtin2_ast)
+    addr "foo" []
+  = INL (IntV 0)
+Proof
+  rw[external_call_def, load_contract_def, initial_machine_state_def,
+     SimpLHS, pair_case_rand]
+  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+QED
+
+Definition test_len_builtin3_ast_def:
+  test_len_builtin3_ast = [
+    VariableDecl "s" (BaseT (StringT 10)) Private Storage;
+    FunctionDef "foo" External [] uint256 [
+      Assign (BaseTarget (GlobalNameTarget "s")) (Literal (StringL 10 "hello"));
+      Return (SOME (len (GlobalName "s")))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_len_builtin3_ast_def;
+
+Theorem test_len_builtin3:
+  FST $ external_call
+   (load_contract initial_machine_state
+      addr test_len_builtin3_ast)
+    addr "foo" []
+  = INL (IntV 5)
+Proof
+  rw[external_call_def, load_contract_def, initial_machine_state_def,
+     SimpLHS, pair_case_rand]
+  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+QED
+
+Definition test_len_builtin4_ast_def:
+  test_len_builtin4_ast = [
+    VariableDecl "s" (BaseT (BytesT (Dynamic 10))) Private Storage;
+    FunctionDef "foo" External [] uint256 [
+      Assign (BaseTarget (GlobalNameTarget "s"))
+        (Literal (BytesL (Dynamic 10)
+          ^(rhs $ concl $ EVAL “MAP (n2w o ORD) "hello" : word8 list”)));
+      Return (SOME (len (GlobalName "s")))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_len_builtin4_ast_def;
+
+Theorem test_len_builtin4:
+  FST $ external_call
+   (load_contract initial_machine_state
+      addr test_len_builtin4_ast)
+    addr "foo" []
+  = INL (IntV 5)
+Proof
+  rw[external_call_def, load_contract_def, initial_machine_state_def,
+     SimpLHS, pair_case_rand]
+  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+QED
+
 val () = export_theory();
