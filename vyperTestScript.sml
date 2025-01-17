@@ -474,4 +474,30 @@ Proof
   \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
+(* TODO range builtin tests *)
+
+Definition test_len_builtin_ast_def:
+  test_len_builtin_ast = [
+    FunctionDef "foo" External [] uint256 [
+      AnnAssign "a" (ArrayT uint256 (Dynamic 3))
+        (ArrayLit (Dynamic 3) [intlit 1; intlit 2; intlit 3]);
+      Return (SOME (len (Name "a")))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_len_builtin_ast_def;
+
+Theorem test_len_builtin:
+  FST $ external_call
+   (load_contract initial_machine_state
+      addr test_len_builtin_ast)
+    addr "foo" []
+  = INL (IntV 3)
+Proof
+  rw[external_call_def, load_contract_def, initial_machine_state_def,
+     SimpLHS, pair_case_rand]
+  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+QED
+
 val () = export_theory();
