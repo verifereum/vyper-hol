@@ -20,7 +20,7 @@ Datatype:
   | StringT num
   (* TODO: flags *)
   | BytesT bound
-  (* TODO: address *)
+  | AddressT
 End
 
 Datatype:
@@ -120,10 +120,15 @@ End
 Type argument = “:identifier # type”;
 
 Datatype:
+  value_type = Type type | HashMapT type value_type
+End
+
+Datatype:
   toplevel
   = FunctionDef identifier function_visibility (argument list) type (stmt list)
   | VariableDecl identifier type variable_visibility mutability
   | StructDef identifier (argument list)
+  | HashMapDecl identifier type value_type
 End
 
 Definition function_body_def:

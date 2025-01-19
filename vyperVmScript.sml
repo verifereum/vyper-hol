@@ -227,6 +227,7 @@ Definition default_value_def:
         | SOME args => default_value_struct (env \\ nid) [] args) ∧
   default_value env VoidT = VoidV ∧
   default_value env (BaseT BoolT) = BoolV F ∧
+  default_value env (BaseT AddressT) = BytesV (Fixed 20) (REPLICATE 20 0w) ∧
   default_value env (BaseT (StringT n)) = StringV n "" ∧
   default_value env (BaseT (BytesT (Fixed n))) = BytesV (Fixed n) (REPLICATE n 0w) ∧
   default_value env (BaseT (BytesT (Dynamic n))) = BytesV (Dynamic n) [] ∧
@@ -463,6 +464,8 @@ Definition evaluate_builtin_def:
   evaluate_builtin Len [StringV _ ls] = DoneExpr (IntV &(LENGTH ls)) ∧
   evaluate_builtin Len [ArrayV _ ls] = DoneExpr (IntV &(LENGTH ls)) ∧
   evaluate_builtin Eq [StringV _ s1; StringV _ s2] = DoneExpr (BoolV (s1 = s2)) ∧
+  evaluate_builtin Eq [BytesV _ s1; BytesV _ s2] = DoneExpr (BoolV (s1 = s2)) ∧
+  evaluate_builtin Eq [BoolV b1; BoolV b2] = DoneExpr (BoolV (b1 = b2)) ∧
   evaluate_builtin Eq  [IntV i1; IntV i2] = DoneExpr (BoolV (i1 = i2)) ∧
   evaluate_builtin Not [BoolV b] = DoneExpr (BoolV (¬b)) ∧
   evaluate_builtin (Bop bop) [v1; v2] = evaluate_binop bop v1 v2 ∧
@@ -669,8 +672,9 @@ Definition initial_globals_def:
   initial_globals env (VariableDecl id typ _ Transient :: ts) =
   initial_globals env ts |+ (string_to_num id, Value $ default_value env typ) ∧
   (* TODO: handle Constants and  Immutables *)
+  initial_globals env (HashMapDecl id kt vt :: ts) =
+  initial_globals env ts |+ (string_to_num id, HashMap []) ∧
   initial_globals env (t :: ts) = initial_globals env ts
-  (* TODO: hashmap toplevels *)
 End
 
 val () = cv_auto_trans initial_globals_def;
