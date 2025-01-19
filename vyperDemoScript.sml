@@ -36,6 +36,12 @@ Definition demo_ast_def:
       Assert (not (GlobalName "goal_reached")) "Goal was reached";
       If (intlit 0 < Subscript (GlobalName "contributions") msg_sender)
       [(* TODO: send *)] []
+    ];
+    defun "withdraw" [] NoneT [
+      Assert (not (GlobalName "is_active")) "Still active";
+      Assert (not (GlobalName "goal_reached")) "Goal was reached";
+      Assert (msg_sender == GlobalName "creator") "Only creator"
+      (* TODO: send *)
     ]
   ]
 End
