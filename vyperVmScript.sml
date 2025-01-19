@@ -199,8 +199,7 @@ Datatype:
   value
   = VoidV
   | BoolV bool
-  | TupleV (value list)
-  | ArrayV bound (value list)
+  | ArrayV (bound option) (value list)
   | IntV int
   | StringV num string
   | BytesV bound (word8 list)
@@ -217,9 +216,9 @@ Definition default_value_def:
   default_value env (BaseT (UintT _)) = IntV 0 ∧
   default_value env (BaseT (IntT _)) = IntV 0 ∧
   default_value env (TupleT ts) = default_value_tuple env [] ts ∧
-  default_value env (ArrayT _ (Dynamic n)) = ArrayV (Dynamic n) [] ∧
+  default_value env (ArrayT _ (Dynamic n)) = ArrayV (SOME (Dynamic n)) [] ∧
   default_value env (ArrayT t (Fixed n)) =
-    ArrayV (Fixed n) (REPLICATE n (default_value env t)) ∧
+    ArrayV (SOME (Fixed n)) (REPLICATE n (default_value env t)) ∧
   default_value env (StructT id) =
     (let nid = string_to_num id in
      case FLOOKUP env nid
@@ -231,7 +230,7 @@ Definition default_value_def:
   default_value env (BaseT (StringT n)) = StringV n "" ∧
   default_value env (BaseT (BytesT (Fixed n))) = BytesV (Fixed n) (REPLICATE n 0w) ∧
   default_value env (BaseT (BytesT (Dynamic n))) = BytesV (Dynamic n) [] ∧
-  default_value_tuple env acc [] = TupleV (REVERSE acc) ∧
+  default_value_tuple env acc [] = ArrayV NONE (REVERSE acc) ∧
   default_value_tuple env acc (t::ts) =
     default_value_tuple env (default_value env t :: acc) ts ∧
   default_value_struct env acc [] = StructV (REVERSE acc) ∧
@@ -362,7 +361,7 @@ Datatype:
   | NamedExprK2 value expr_continuation
   *)
   | IfExpK expr_continuation expr expr
-  | ArrayLitK bound (value list) expr_continuation (expr list)
+  | ArrayLitK (bound option) (value list) expr_continuation (expr list)
   | SubscriptK1 expr_continuation expr
   | SubscriptK2 value expr_continuation
   | AttributeK expr_continuation identifier
@@ -477,7 +476,6 @@ val () = cv_auto_trans evaluate_builtin_def;
 
 Definition extract_elements_def:
   extract_elements (ArrayV _ vs) = SOME vs ∧
-  extract_elements (TupleV vs) = SOME vs ∧
   extract_elements _ = NONE
 End
 
@@ -485,7 +483,6 @@ val () = cv_auto_trans extract_elements_def;
 
 Definition replace_elements_def:
   replace_elements (ArrayV b _) vs = SOME (ArrayV b vs) ∧
-  replace_elements (TupleV _) vs = SOME (TupleV vs) ∧
   replace_elements _ _ = NONE
 End
 

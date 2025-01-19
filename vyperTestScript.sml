@@ -10,6 +10,8 @@ Overload "==" = “λe1 e2. Builtin Eq [e1; e2]”
 Overload "+" = “λe1 e2. Builtin (Bop Add) [e1; e2]”
 Overload len = “λe. Builtin Len [e]”
 Overload defun = “λid args ret body. FunctionDef External Nonpayable id args ret body”
+Overload DynArray = “λt n. ArrayT t (Dynamic n)”
+Overload DynArlit = “λn ls. ArrayLit (SOME (Dynamic n)) ls”
 
 (*
   rw[external_call_def,
@@ -65,8 +67,8 @@ Definition test_for_control_flow_ast_def:
   test_for_control_flow_ast = [
     defun "foo" [] uint256
     [
-       AnnAssign "a" (ArrayT uint256 (Dynamic 10))
-         (ArrayLit (Dynamic 10) [intlit 1; intlit 2; intlit 3]);
+       AnnAssign "a" (DynArray uint256 10)
+         (DynArlit 10 [intlit 1; intlit 2; intlit 3]);
        AnnAssign "counter" uint256 (intlit 0);
        For "i" uint256 (Name "a") 10
        [ AugAssign (NameTarget "counter") Add (Name "i") ];
@@ -93,8 +95,8 @@ Definition test_array_assign_ast_def:
   test_array_assign_ast = [
     defun "foo" [] uint256
     [
-      AnnAssign "bar" (ArrayT uint256 (Dynamic 10))
-        (ArrayLit (Dynamic 10) [intlit 1; intlit 2]);
+      AnnAssign "bar" (DynArray uint256 10)
+        (DynArlit 10 [intlit 1; intlit 2]);
       Assign (BaseTarget (SubscriptTarget (NameTarget "bar") (intlit 0)))
         (intlit 3);
       Return (SOME (Subscript (Name "bar") (intlit 0) +
@@ -120,10 +122,10 @@ QED
 
 Definition test_storage_array_assign_ast_def:
   test_storage_array_assign_ast = [
-    VariableDecl Private Storage "a" (ArrayT uint256 (Dynamic 10));
+    VariableDecl Private Storage "a" (DynArray uint256 10);
     defun "foo" [] uint256 [
       Assign (BaseTarget (GlobalNameTarget "a"))
-        (ArrayLit (Dynamic 10) [intlit 1; intlit 2]);
+        (DynArlit 10 [intlit 1; intlit 2]);
       Assign (BaseTarget
                (SubscriptTarget (GlobalNameTarget "a")
                                 (intlit 0)))
@@ -151,8 +153,8 @@ QED
 Definition test_internal_call_ast_def:
   test_internal_call_ast = [
     FunctionDef Internal Nonpayable "bar" [] uint256 [
-      AnnAssign "a" (ArrayT uint256 (Dynamic 10))
-        (ArrayLit (Dynamic 10) [intlit 1; intlit 2; intlit 3]);
+      AnnAssign "a" (DynArray uint256 10)
+        (DynArlit 10 [intlit 1; intlit 2; intlit 3]);
       AnnAssign "counter" uint256 (intlit 0);
       For "i" uint256 (Name "a") 10 [
         AugAssign (NameTarget "counter") Add (Name "i")
@@ -160,8 +162,8 @@ Definition test_internal_call_ast_def:
       Return (SOME (Name "counter"))
     ];
     defun "foo" [] uint256 [
-      AnnAssign "a" (ArrayT uint256 (Dynamic 10))
-        (ArrayLit (Dynamic 10) [intlit 1; intlit 2; intlit 3]);
+      AnnAssign "a" (DynArray uint256 10)
+        (DynArlit 10 [intlit 1; intlit 2; intlit 3]);
       AnnAssign "counter" uint256 (intlit 0);
       For "i" uint256 (Name "a") 10 [
         AugAssign (NameTarget "counter") Add (Name "i")
@@ -329,15 +331,15 @@ Definition test_storage_variables3_ast_def:
   test_storage_variables3_ast = [
     VariableDecl Private Storage "d" uint256;
     FunctionDef Internal Nonpayable "bar" [] VoidT [
-      AnnAssign "a" (ArrayT uint256 (Dynamic 10))
-        (ArrayLit (Dynamic 10) [intlit 1; intlit 2; intlit 3]);
+      AnnAssign "a" (DynArray uint256 10)
+        (DynArlit 10 [intlit 1; intlit 2; intlit 3]);
       For "i" uint256 (Name "a") 10 [
         AugAssign (GlobalNameTarget "d") Add (Name "i")
       ]
     ];
     defun "foo" [] uint256 [
-      AnnAssign "a" (ArrayT uint256 (Dynamic 10))
-        (ArrayLit (Dynamic 10) [intlit 1; intlit 2; intlit 3]);
+      AnnAssign "a" (DynArray uint256 10)
+        (DynArlit 10 [intlit 1; intlit 2; intlit 3]);
       AnnAssign "counter" uint256 (intlit 0);
       For "i" uint256 (Name "a") 10 [
         AugAssign (GlobalNameTarget "d") Add (Name "i")
@@ -532,7 +534,7 @@ Definition test_default_storage_values_ast_def:
     StructDef "S" [("a", uint256)];
     VariableDecl Private Storage "a" uint256;
     VariableDecl Private Storage "b" uint256;
-    VariableDecl Private Storage "c" (ArrayT uint256 (Dynamic 10));
+    VariableDecl Private Storage "c" (DynArray uint256 10);
     VariableDecl Private Storage "d" (StructT "S");
     VariableDecl Private Storage "e" (BaseT (BytesT (Dynamic 10)));
     VariableDecl Private Storage "f" (BaseT (StringT 10));
@@ -567,8 +569,8 @@ QED
 Definition test_len_builtin_ast_def:
   test_len_builtin_ast = [
     defun "foo" [] uint256 [
-      AnnAssign "a" (ArrayT uint256 (Dynamic 3))
-        (ArrayLit (Dynamic 3) [intlit 1; intlit 2; intlit 3]);
+      AnnAssign "a" (DynArray uint256 3)
+        (DynArlit 3 [intlit 1; intlit 2; intlit 3]);
       Return (SOME (len (Name "a")))
     ]
   ]
@@ -590,7 +592,7 @@ QED
 
 Definition test_len_builtin2_ast_def:
   test_len_builtin2_ast = [
-    VariableDecl Private Storage "d" (ArrayT uint256 (Dynamic 3));
+    VariableDecl Private Storage "d" (DynArray uint256 3);
     defun "foo" [] uint256 [
       Return (SOME (len (GlobalName "d")))
     ]

@@ -65,8 +65,7 @@ Datatype:
   | GlobalName identifier
   | IfExp expr expr expr
   | Literal literal
-  (* TODO: add Tuple *)
-  | ArrayLit bound (expr list)
+  | ArrayLit (bound option (* NONE for tuples *)) (expr list)
   | Subscript expr expr
   | Attribute expr identifier
   (* TODO: short-circuiting builtins *)
@@ -99,7 +98,7 @@ Datatype:
   | Assert expr string
   | Raise string
   | Return (expr option)
-  | Assign assignment_target expr (* TODO: allow tuple rhs *)
+  | Assign assignment_target expr
   | AugAssign base_assignment_target binop expr
   | AnnAssign identifier type expr
 End
