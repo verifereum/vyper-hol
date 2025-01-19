@@ -197,7 +197,7 @@ Proof
 
 Datatype:
   value
-  = VoidV
+  = NoneV
   | BoolV bool
   | ArrayV (bound option) (value list)
   | IntV int
@@ -224,7 +224,7 @@ Definition default_value_def:
      case FLOOKUP env nid
        of NONE => StructV []
         | SOME args => default_value_struct (env \\ nid) [] args) ∧
-  default_value env VoidT = VoidV ∧
+  default_value env NoneT = NoneV ∧
   default_value env (BaseT BoolT) = BoolV F ∧
   default_value env (BaseT AddressT) = BytesV (Fixed 20) (REPLICATE 20 0w) ∧
   default_value env (BaseT (StringT n)) = StringV n "" ∧
@@ -1151,7 +1151,7 @@ Definition next_stmt_def:
       fc with <| current_stmt := StartK s
                ; remaining_stmts := ss |>)
   | _ => (case ctx.current_fc.name
-            of Fn _ => pop_call VoidV ctx
+            of Fn _ => pop_call NoneV ctx
              | Loop li =>
                  let ctx = pop_scope ctx in
                    if exception_raised ctx then ctx
@@ -1171,7 +1171,7 @@ Definition step_stmt_def:
       | StartK (Expr e) => set_stmt (ExprK (StartExpr e)) ctx
       | StartK (Raise s) => raise (RaiseException s) ctx
       | StartK (Assert e s) => set_stmt (AssertK (StartExpr e) s) ctx
-      | StartK (Return NONE) => pop_call VoidV ctx
+      | StartK (Return NONE) => pop_call NoneV ctx
       | StartK (Return (SOME e)) =>
           set_stmt (ReturnSomeK (StartExpr e)) ctx
       | StartK (AnnAssign id typ e) =>

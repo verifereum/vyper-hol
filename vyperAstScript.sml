@@ -29,7 +29,7 @@ Datatype:
   | TupleT (type list)
   | ArrayT type bound
   | StructT identifier
-  | VoidT (* for functions with no return type *)
+  | NoneT
 End
 
 Datatype:

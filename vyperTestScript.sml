@@ -198,7 +198,7 @@ QED
 Definition test_internal_call_without_return_ast_def:
   test_internal_call_without_return_ast = [
     privar "a" uint256;
-    FunctionDef Internal Nonpayable "bar" [] VoidT [
+    FunctionDef Internal Nonpayable "bar" [] NoneT [
       AssignSelf "a" (intlit 42)
     ];
     defun "foo" [] uint256 [
@@ -338,7 +338,7 @@ QED
 Definition test_storage_variables3_ast_def:
   test_storage_variables3_ast = [
     privar "d" uint256;
-    FunctionDef Internal Nonpayable "bar" [] VoidT [
+    FunctionDef Internal Nonpayable "bar" [] NoneT [
       AnnAssign "a" (DynArray uint256 10)
         (DynArlit 10 [intlit 1; intlit 2; intlit 3]);
       For "i" uint256 (Name "a") 10 [
