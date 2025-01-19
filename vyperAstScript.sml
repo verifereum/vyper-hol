@@ -110,11 +110,19 @@ Datatype:
 End
 
 Datatype:
+  function_mutability
+  = Pure
+  | View
+  | Nonpayable
+  | Payable
+End
+
+Datatype:
   variable_visibility = Public | Private
 End
 
 Datatype:
-  mutability = Constant expr | Immutable | Transient | Storage
+  variable_mutability = Constant expr | Immutable | Transient | Storage
 End
 
 Type argument = “:identifier # type”;
@@ -125,15 +133,10 @@ End
 
 Datatype:
   toplevel
-  = FunctionDef identifier function_visibility (argument list) type (stmt list)
-  | VariableDecl identifier type variable_visibility mutability
+  = FunctionDef function_visibility function_mutability identifier (argument list) type (stmt list)
+  | VariableDecl variable_visibility variable_mutability identifier type
   | StructDef identifier (argument list)
   | HashMapDecl identifier type value_type
-End
-
-Definition function_body_def:
-  function_body (FunctionDef _ _ _ _ body) = body ∧
-  function_body _ = []
 End
 
 val () = export_theory();

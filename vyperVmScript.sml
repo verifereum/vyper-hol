@@ -667,9 +667,9 @@ val () = cv_auto_trans initial_function_context_def;
 (* TODO: assumes unique identifiers, but should check? *)
 Definition initial_globals_def:
   initial_globals env [] = FEMPTY ∧
-  initial_globals env (VariableDecl id typ _ Storage :: ts) =
+  initial_globals env (VariableDecl _ Storage id typ :: ts) =
   initial_globals env ts |+ (string_to_num id, Value $ default_value env typ) ∧
-  initial_globals env (VariableDecl id typ _ Transient :: ts) =
+  initial_globals env (VariableDecl _ Transient id typ :: ts) =
   initial_globals env ts |+ (string_to_num id, Value $ default_value env typ) ∧
   (* TODO: handle Constants and  Immutables *)
   initial_globals env (HashMapDecl id kt vt :: ts) =
@@ -925,7 +925,7 @@ val () = cv_auto_trans bind_arguments_def;
 
 Definition lookup_function_def:
   lookup_function name vis [] = NONE ∧
-  lookup_function name vis (FunctionDef id fv args ret body :: ts) =
+  lookup_function name vis (FunctionDef fv fm id args ret body :: ts) =
   (if id = name ∧ vis = fv then SOME (args, ret, body)
    else lookup_function name vis ts) ∧
   lookup_function name vis (_ :: ts) =
@@ -1531,7 +1531,7 @@ End
 
 Definition all_fns_def[simp]:
   all_fns [] = {} ∧
-  all_fns (FunctionDef id fv args ret body :: ts) =
+  all_fns (FunctionDef fv fm id args ret body :: ts) =
     id INSERT (all_fns ts) ∧
   all_fns (_ :: ts) = all_fns ts
 End
