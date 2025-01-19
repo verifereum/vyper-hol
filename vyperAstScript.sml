@@ -52,6 +52,7 @@ Datatype:
   = Len
   | Eq
   | Not
+  | Lt
   | Bop binop
 End
 
@@ -68,6 +69,7 @@ Datatype:
   | ArrayLit bound (expr list)
   | Subscript expr expr
   | Attribute expr identifier
+  (* TODO: short-circuiting builtins *)
   | Builtin builtin (expr list)
   | Call identifier (expr list)
 End
