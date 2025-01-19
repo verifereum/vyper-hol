@@ -547,6 +547,7 @@ Definition step_expr_def:
     AttributeK (StartExpr e) id ∧
   step_expr gbs env (StartExpr (IfExp e1 e2 e3)) =
     IfExpK (StartExpr e1) e2 e3 ∧
+  (* TODO: handle Msg builtins *)
   step_expr gbs env (StartExpr (Builtin bt [])) =
     ErrorExpr "builtin no args" ∧
   step_expr gbs env (StartExpr (Builtin bt (e::es))) =
@@ -670,7 +671,7 @@ Definition initial_globals_def:
   initial_globals env (VariableDecl _ Transient id typ :: ts) =
   initial_globals env ts |+ (string_to_num id, Value $ default_value env typ) ∧
   (* TODO: handle Constants and  Immutables *)
-  initial_globals env (HashMapDecl id kt vt :: ts) =
+  initial_globals env (HashMapDecl _ id kt vt :: ts) =
   initial_globals env ts |+ (string_to_num id, HashMap []) ∧
   initial_globals env (t :: ts) = initial_globals env ts
 End
@@ -926,6 +927,7 @@ Definition lookup_function_def:
   lookup_function name vis (FunctionDef fv fm id args ret body :: ts) =
   (if id = name ∧ vis = fv then SOME (args, ret, body)
    else lookup_function name vis ts) ∧
+  (* TODO: handle public variables *)
   lookup_function name vis (_ :: ts) =
     lookup_function name vis ts
 End

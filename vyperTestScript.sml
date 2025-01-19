@@ -5,6 +5,7 @@ open vyperAstTheory vyperVmTheory;
 val () = new_theory "vyperTest";
 
 Overload uint256 = “BaseT (UintT (n2w 32 (* 256 DIV 8 *)))”
+Overload address = “BaseT AddressT”
 Overload intlit = “λi. Literal (IntL i)”
 Overload "==" = “λe1 e2. Builtin Eq [e1; e2]”
 Overload "+" = “λe1 e2. Builtin (Bop Add) [e1; e2]”

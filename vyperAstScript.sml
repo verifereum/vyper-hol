@@ -48,12 +48,19 @@ Datatype:
 End
 
 Datatype:
+  message_item
+  = Sender
+  | ValueSent
+End
+
+Datatype:
   builtin
   = Len
   | Eq
   | Not
   | Lt
   | Bop binop
+  | Msg message_item
 End
 
 Datatype:
@@ -137,7 +144,7 @@ Datatype:
   = FunctionDef function_visibility function_mutability identifier (argument list) type (stmt list)
   | VariableDecl variable_visibility variable_mutability identifier type
   | StructDef identifier (argument list)
-  | HashMapDecl identifier type value_type
+  | HashMapDecl variable_visibility identifier type value_type
 End
 
 val () = export_theory();
