@@ -1591,6 +1591,34 @@ Proof
   rw[set_stmt_def, fns_from_context_def]
 QED
 
+Theorem raise_simps[simp]:
+  (raise e ctx).current_contract = ctx.current_contract ∧
+  (raise e ctx).call_stack = ctx.call_stack ∧
+  (raise e ctx).current_fc = ctx.current_fc with current_stmt := ExceptionK e
+Proof
+  rw[raise_def]
+QED
+
+Theorem exception_raised_raise[simp]:
+  exception_raised (raise e ctx)
+Proof
+  rw[exception_raised_def]
+QED
+
+Theorem pop_loop_simps[simp]:
+  (pop_loop ctx).current_contract = ctx.current_contract
+Proof
+  rw[pop_loop_def]
+  \\ CASE_TAC \\ rw[]
+QED
+
+Theorem next_iteration_current_contract[simp]:
+  (next_iteration li ctx).current_contract = ctx.current_contract
+Proof
+  rw[next_iteration_def]
+  \\ CASE_TAC \\ rw[]
+QED
+
 Definition step_stmt_till_exception_def:
   step_stmt_till_exception ctx =
   if exception_raised ctx then ctx
@@ -1604,14 +1632,38 @@ Termination
   >- (
     CASE_TAC
     >- ( rw[step_bound_def] \\ pairarg_tac \\ fs[])
-    >- ( rw[step_bound_def] \\ cheat )
-    >- ( rw[step_bound_def] \\ cheat )
+    >- ( rw[step_bound_def]
+      \\ pairarg_tac \\ gvs[]
+      \\ gs[continue_loop_def]
+      \\ Cases_on`ctx.current_fc.name` \\ gs[]
+      >- (
+        gs[fns_from_context_def]
+        \\ pairarg_tac \\ gvs[] )
+      \\ pairarg_tac \\ gvs[]
+      \\ pairarg_tac \\ gvs[]
+      \\ gs[pop_scope_def]
+      \\ Cases_on`ctx.current_fc.scopes` \\ gvs[]
+      >- gs[fns_from_context_def]
+      \\ IF_CASES_TAC
+      >- gs[exception_raised_def]
+      \\ cheat )
+    >- ( rw[step_bound_def]
+      \\ pairarg_tac \\ gs[]
+      \\ gs[break_loop_def]
+      \\ Cases_on`ctx.current_fc.name` \\ gs[]
+      >- (
+        gs[fns_from_context_def]
+        \\ pairarg_tac \\ gvs[] )
+      \\ pairarg_tac \\ gvs[]
+
+
+    \\ cheat )
     >- ( rw[step_bound_def] \\ rpt(pairarg_tac \\ gvs[]))
     >- ( rw[step_bound_def] \\ rpt(pairarg_tac \\ gvs[]))
     >- ( rw[step_bound_def] \\ rpt(pairarg_tac \\ gvs[]))
     >- ( rw[step_bound_def] \\ rpt(pairarg_tac \\ gvs[]))
     >- ( rw[step_bound_def] \\ rpt(pairarg_tac \\ gvs[raise_def]))
-  *)
+    *)
 End
 
 val () = cv_auto_trans step_stmt_till_exception_def;
