@@ -35,13 +35,14 @@ Definition demo_ast_def:
       Assert (not (GlobalName "is_active")) "Still active";
       Assert (not (GlobalName "goal_reached")) "Goal was reached";
       If (intlit 0 < Subscript (GlobalName "contributions") msg_sender)
-      [(* TODO: send *)] []
+        [Expr $ Call Send [msg_sender; Subscript (GlobalName "contributions") msg_sender]]
+        []
     ];
     defun "withdraw" [] NoneT [
       Assert (not (GlobalName "is_active")) "Still active";
       Assert (not (GlobalName "goal_reached")) "Goal was reached";
-      Assert (msg_sender == GlobalName "creator") "Only creator"
-      (* TODO: send *)
+      Assert (msg_sender == GlobalName "creator") "Only creator";
+      Expr $ Call Send [GlobalName "creator"; GlobalName "balance" (* TODO *)]
     ]
   ]
 End

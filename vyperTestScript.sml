@@ -21,6 +21,7 @@ Overload DynArlit = “λn ls. ArrayLit (SOME (Dynamic n)) ls”
 Overload msg_sender = “Builtin (Msg Sender) []”
 Overload msg_value = “Builtin (Msg ValueSent) []”
 Overload AssignSelf = “λid e. Assign (BaseTarget (GlobalNameTarget id)) e”
+Overload call = “λid args. Call (GlobalFn id) args”
 
 (*
   rw[external_call_def,
@@ -176,7 +177,7 @@ Definition test_internal_call_ast_def:
       For "i" uint256 (Name "a") 10 [
         AugAssign (NameTarget "counter") Add (Name "i")
       ];
-      Return (SOME (Name "counter" + Call "bar" []))
+      Return (SOME (Name "counter" + call "bar" []))
     ]
   ]
 End
@@ -202,7 +203,7 @@ Definition test_internal_call_without_return_ast_def:
       AssignSelf "a" (intlit 42)
     ];
     defun "foo" [] uint256 [
-      Expr (Call "bar" []);
+      Expr (call "bar" []);
       Return (SOME (GlobalName "a"))
     ]
   ]
@@ -228,11 +229,11 @@ Definition test_internal_call_with_args_ast_def:
       Return (SOME (Name "a"))
     ];
     FunctionDef Internal Nonpayable "bar" [("a", uint256)] uint256 [
-      Return (SOME (Name "a" + Call "baz" [intlit 3]))
+      Return (SOME (Name "a" + call "baz" [intlit 3]))
     ];
     defun "foo" [] uint256 [
       AnnAssign "a" uint256 (intlit 1);
-      Return (SOME (Name "a" + Call "bar" [intlit 2]))
+      Return (SOME (Name "a" + call "bar" [intlit 2]))
     ]
   ]
 End
@@ -257,11 +258,11 @@ Definition test_internal_call_with_args2_ast_def:
       Return (SOME (Name "a"))
     ];
     FunctionDef Internal Nonpayable "bar" [("a", uint256)] uint256 [
-      Return (SOME (Call "baz" [intlit 3] + Name "a"))
+      Return (SOME (call "baz" [intlit 3] + Name "a"))
     ];
     defun "foo" [] uint256 [
       AnnAssign "a" uint256 (intlit 1);
-      Return (SOME (Call "bar" [intlit 2] + Name "a"))
+      Return (SOME (call "bar" [intlit 2] + Name "a"))
     ]
   ]
 End
@@ -352,7 +353,7 @@ Definition test_storage_variables3_ast_def:
       For "i" uint256 (Name "a") 10 [
         AugAssign (GlobalNameTarget "d") Add (Name "i")
       ];
-      Expr (Call "bar" []);
+      Expr (call "bar" []);
       Return (SOME (GlobalName "d"))
     ]
   ]

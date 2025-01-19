@@ -64,6 +64,13 @@ Datatype:
 End
 
 Datatype:
+  call_target
+  = GlobalFn identifier
+  | Send
+  (* TODO: external raw call *)
+End
+
+Datatype:
   expr
   (*
   = NamedExpr expr expr
@@ -77,7 +84,7 @@ Datatype:
   | Attribute expr identifier
   (* TODO: short-circuiting builtins *)
   | Builtin builtin (expr list)
-  | Call identifier (expr list)
+  | Call call_target (expr list)
 End
 
 Datatype:

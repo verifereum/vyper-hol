@@ -366,8 +366,8 @@ Datatype:
   | SubscriptK2 value expr_continuation
   | AttributeK expr_continuation identifier
   | BuiltinK builtin (value list) expr_continuation (expr list)
-  | CallK identifier (value list) expr_continuation (expr list)
-  | LiftCall identifier (value list) expr_continuation
+  | CallK call_target (value list) expr_continuation (expr list)
+  | LiftCall call_target (value list) expr_continuation
   | DoneExpr value
   | ReturnExpr
   | ErrorExpr string
@@ -400,7 +400,7 @@ Datatype:
   | SubscriptTargetK1 base_tgt_continuation expr
   | SubscriptTargetK2 location (subscript list) expr_continuation
   | AttributeTargetK base_tgt_continuation identifier
-  | LiftCallBaseTgt identifier (value list) base_tgt_continuation
+  | LiftCallBaseTgt call_target (value list) base_tgt_continuation
   | DoneBaseTgt location (subscript list)
   | ErrorBaseTgt string
 End
@@ -410,7 +410,7 @@ Datatype:
   = StartTgt assignment_target
   | TupleTargetK (assignment_value list) tgt_continuation (assignment_target list)
   | BaseTargetK base_tgt_continuation
-  | LiftCallTgt identifier (value list) tgt_continuation
+  | LiftCallTgt call_target (value list) tgt_continuation
   | DoneTgt assignment_value
   | ErrorTgt string
 End
@@ -600,7 +600,7 @@ Definition step_expr_def:
   (case step_expr gbs env k
    of ErrorExpr msg => ErrorExpr msg
     | DoneExpr v => evaluate_attribute v id
-    | LiftCall id vs k => LiftCall id vs (AttributeK k id)
+    | LiftCall fn vs k => LiftCall fn vs (AttributeK k id)
     | k => AttributeK k id) ∧
   step_expr gbs env (BuiltinK bt vs k es) =
   (case step_expr gbs env k
@@ -935,20 +935,22 @@ End
 val () = cv_auto_trans lookup_function_def;
 
 Definition push_call_def:
-  push_call fn args ctx =
-  if ctx.current_fc.name = Fn fn ∨
-     EXISTS (λfc. fc.name = Fn fn) ctx.call_stack
-  then raise (Error "recursive call") ctx else
-  case lookup_function fn Internal ctx.current_contract.src of
-  | SOME (params, ret, body) =>
-    (case bind_arguments params args of
-     | SOME env =>
-         let fc = initial_function_context fn env body in
-         ctx with <|
-           call_stack updated_by CONS ctx.current_fc
-         ; current_fc := fc |>
-     | _ => raise (Error "bind_arguments") ctx)
-  | _ => raise (Error "lookup_function Internal") ctx
+  push_call ct args ctx =
+  case ct of GlobalFn fn =>
+    if ctx.current_fc.name = Fn fn ∨
+       EXISTS (λfc. fc.name = Fn fn) ctx.call_stack
+    then raise (Error "recursive call") ctx else (
+    case lookup_function fn Internal ctx.current_contract.src of
+    | SOME (params, ret, body) =>
+      (case bind_arguments params args of
+       | SOME env =>
+           let fc = initial_function_context fn env body in
+           ctx with <|
+             call_stack updated_by CONS ctx.current_fc
+           ; current_fc := fc |>
+       | _ => raise (Error "bind_arguments") ctx)
+    | _ => raise (Error "lookup_function Internal") ctx )
+  | _ => raise (Error "unsupported call") ctx
 End
 
 val () = cv_auto_trans push_call_def;
@@ -1317,9 +1319,9 @@ Definition expr_bound_def[simp]:
   expr_bound (Builtin _ es, fns) = (
   let (ns, fns) = expr_bound_list (es, fns) in
     (1 + ns, fns) ) ∧
-  expr_bound (Call fn es, fns) = (
+  expr_bound (Call ct es, fns) = (
   let (ns, fns) = expr_bound_list (es, fns) in
-    (1 + ns, (fn INSERT fns)) ) ∧
+    (1 + ns, (case ct of GlobalFn fn => fn INSERT fns | _ => fns)) ) ∧
   expr_bound_list ([], fns) = (0, fns) ∧
   expr_bound_list (e::es, fns) = (
   let (n, fns) = expr_bound (e, fns) in
