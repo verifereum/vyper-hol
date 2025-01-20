@@ -922,12 +922,25 @@ End
 
 val () = cv_auto_trans bind_arguments_def;
 
+Definition is_ArrayT_def[simp]:
+  is_ArrayT (ArrayT _ _) = T ∧
+  is_ArrayT _ = F
+End
+
 Definition lookup_function_def:
   lookup_function name vis [] = NONE ∧
   lookup_function name vis (FunctionDef fv fm id args ret body :: ts) =
   (if id = name ∧ vis = fv then SOME (args, ret, body)
    else lookup_function name vis ts) ∧
-  (* TODO: handle public variables *)
+  lookup_function name External (VariableDecl Public _ id typ :: ts) =
+  (if id = name ∧ ¬is_ArrayT typ then SOME ([], typ, [Return (SOME (GlobalName id))])
+   else lookup_function name External ts) ∧
+ (* TODO: handle arrays, array of array, hashmap of array, etc. *)
+ (* TODO
+  lookup_function name External (HashMapDecl Public id kt vt :: ts) =
+  (if id = name then SOME ([("], typ, [Return (SOME (GlobalName "id"))])
+   else lookup_function name External ts) ∧
+ *)
   lookup_function name vis (_ :: ts) =
     lookup_function name vis ts
 End
