@@ -212,6 +212,8 @@ Datatype:
   toplevel_value = Value value | HashMap ((value, toplevel_value) alist)
 End
 
+Type hmap = “:(value, toplevel_value) alist”
+
 Definition default_value_def:
   default_value env (BaseT (UintT _)) = IntV 0 ∧
   default_value env (BaseT (IntT _)) = IntV 0 ∧
@@ -364,11 +366,13 @@ Datatype:
   | ArrayLitK (bound option) (value list) expr_continuation (expr list)
   | SubscriptK1 expr_continuation expr
   | SubscriptK2 value expr_continuation
+  | SubscriptMapK hmap expr_continuation
   | AttributeK expr_continuation identifier
   | BuiltinK builtin (value list) expr_continuation (expr list)
   | CallK call_target (value list) expr_continuation (expr list)
   | LiftCall call_target (value list) expr_continuation
   | DoneExpr value
+  | DoneExprMap hmap
   | ReturnExpr
   | ErrorExpr string
 End
@@ -540,6 +544,7 @@ Definition step_expr_def:
   step_expr gbs env (StartExpr (GlobalName id)) =
     (case FLOOKUP gbs (string_to_num id)
      of SOME (Value v) => DoneExpr v
+      | SOME (HashMap ls) => DoneExprMap ls
       | _ => ErrorExpr "lookup gbs") ∧
   step_expr gbs env (StartExpr (Subscript e1 e2)) =
     SubscriptK1 (StartExpr e1) e2 ∧
@@ -588,6 +593,7 @@ Definition step_expr_def:
   (case step_expr gbs env k
    of ErrorExpr msg => ErrorExpr msg
     | DoneExpr v => SubscriptK2 v (StartExpr e)
+    | DoneExprMap hm => SubscriptMapK hm (StartExpr e)
     | LiftCall id vs k => LiftCall id vs (SubscriptK1 k e)
     | k => SubscriptK1 k e) ∧
   step_expr gbs env (SubscriptK2 v1 k) =
@@ -596,6 +602,15 @@ Definition step_expr_def:
     | DoneExpr v2 => evaluate_subscript v1 v2
     | LiftCall id vs k => LiftCall id vs (SubscriptK2 v1 k)
     | k => SubscriptK2 v1 k) ∧
+  step_expr gbs env (SubscriptMapK hm k) =
+  (case step_expr gbs env k
+   of ErrorExpr msg => ErrorExpr msg
+    | DoneExpr v2 => (case ALOOKUP hm v2 of
+                           SOME (Value v) => DoneExpr v
+                           (* TODO: more hashmaps *)
+                         | _ => ErrorExpr "SubscriptMapK lookup")
+    | LiftCall id vs k => LiftCall id vs (SubscriptMapK hm k)
+    | k => SubscriptMapK hm k) ∧
   step_expr gbs env (AttributeK k id) =
   (case step_expr gbs env k
    of ErrorExpr msg => ErrorExpr msg
@@ -623,6 +638,7 @@ Definition step_expr_def:
     | k => CallK id vs k es) ∧
   step_expr gbs env (LiftCall id vs k) = LiftCall id vs k ∧
   step_expr gbs env (DoneExpr v) = DoneExpr v ∧
+  step_expr gbs env (DoneExprMap ls) = DoneExprMap ls ∧
   step_expr gbs env ReturnExpr = ReturnExpr ∧
   step_expr gbs env (ErrorExpr msg) = ErrorExpr msg
 End
@@ -982,11 +998,13 @@ Definition return_expr_def:
   return_expr v (ArrayLitK b vs k es) = ArrayLitK b vs (return_expr v k) es ∧
   return_expr v (SubscriptK1 k e) = SubscriptK1 (return_expr v k) e ∧
   return_expr v (SubscriptK2 w k) = SubscriptK2 w (return_expr v k) ∧
+  return_expr v (SubscriptMapK h k) = SubscriptMapK h (return_expr v k) ∧
   return_expr v (AttributeK k id) = AttributeK (return_expr v k) id ∧
   return_expr v (BuiltinK bt vs k es) = BuiltinK bt vs (return_expr v k) es ∧
   return_expr v (CallK id vs k es) = CallK id vs (return_expr v k) es ∧
   return_expr v (LiftCall fn vs k) = LiftCall fn vs (return_expr v k) ∧
   return_expr v (DoneExpr _) = ErrorExpr "return DoneExpr" ∧
+  return_expr v (DoneExprMap _) = ErrorExpr "return DoneExprMap" ∧
   return_expr v ReturnExpr = DoneExpr v ∧
   return_expr v (ErrorExpr msg) = ErrorExpr msg
 End
@@ -1200,6 +1218,7 @@ Definition step_stmt_def:
       | StartK (For id typ e n s) =>
           set_stmt (ForK id typ (StartExpr e) n s) ctx
       | ExprK (DoneExpr _) => set_stmt DoneK ctx
+      | ExprK (DoneExprMap _) => raise (Error "ExprK Map") ctx
       | ExprK (ErrorExpr msg) => raise (Error "ExprK err") ctx
       | ExprK (LiftCall fn vs k) =>
           push_call fn vs (set_stmt (ExprK k) ctx)
@@ -1211,6 +1230,7 @@ Definition step_stmt_def:
                ; remaining_stmts updated_by (λx. ss ++ x) |>
           | _ => set_stmt DoneK ctx)
       | IfK (DoneExpr _) _ _ => raise (Error "IfK DoneExpr") ctx
+      | IfK (DoneExprMap _) _ _ => raise (Error "IfK DoneExprMap") ctx
       | IfK (ErrorExpr msg) _ _ => raise (Error ("IfK " ++ msg)) ctx
       | IfK ReturnExpr _ _ => raise (Error "IfK ReturnExpr") ctx
       | IfK (LiftCall fn vs k) s1 s2 =>
@@ -1223,6 +1243,7 @@ Definition step_stmt_def:
           if b then set_stmt DoneK ctx
           else raise (AssertException s) ctx)
       | AssertK (DoneExpr _) _ => raise (Error "AssertK DoneExpr") ctx
+      | AssertK (DoneExprMap _) _ => raise (Error "AssertK DoneExprMap") ctx
       | AssertK (ErrorExpr msg) _ => raise (Error "AssertK ErrorExpr") ctx
       | AssertK ReturnExpr _ => raise (Error "AssertK ReturnExpr") ctx
       | AssertK (LiftCall fn vs k) s =>
@@ -1231,6 +1252,7 @@ Definition step_stmt_def:
       | AssertK k s =>
           set_stmt (AssertK (step_expr gbs fc.scopes k) s) ctx
       | ReturnSomeK (DoneExpr v) => pop_call v ctx
+      | ReturnSomeK (DoneExprMap _) => raise (Error "ReturnSomeK Map") ctx
       | ReturnSomeK (ErrorExpr msg) => raise (Error ("ReturnSomeK " ++ msg)) ctx
       | ReturnSomeK ReturnExpr => raise (Error "ReturnSomeK ReturnExpr") ctx
       | ReturnSomeK (LiftCall fn vs k) =>
@@ -1252,6 +1274,7 @@ Definition step_stmt_def:
           let ctx = assign_target tv (Replace v) ctx in
             if exception_raised ctx then ctx else
               set_stmt DoneK ctx
+      | AssignK2 tv (DoneExprMap _) => raise (Error "AssignK2 Map") ctx
       | AssignK2 tv (ErrorExpr msg) => raise (Error "AssignK2 err") ctx
       | AssignK2 tv ReturnExpr => raise (Error "AssignK2 ReturnExpr") ctx
       | AssignK2 tv (LiftCall fn vs k) =>
@@ -1270,6 +1293,7 @@ Definition step_stmt_def:
       | AugAssignK2 l sl bop (DoneExpr v2) =>
           let ctx = assign_target (BaseTargetV l sl) (Update bop v2) ctx in
             if exception_raised ctx then ctx else set_stmt DoneK ctx
+      | AugAssignK2 _ _ bop (DoneExprMap _) => raise (Error "AugAssignK Map") ctx
       | AugAssignK2 _ _ bop (ErrorExpr msg) => raise (Error "AugAssignK err") ctx
       | AugAssignK2 _ _ bop ReturnExpr => raise (Error "AugAssignK ReturnExpr") ctx
       | AugAssignK2 l sl bop (LiftCall fn vs k) =>
@@ -1283,6 +1307,7 @@ Definition step_stmt_def:
           let ctx = new_variable nid typ ctx in
             if exception_raised ctx then ctx else
               set_stmt DoneK (set_variable nid v ctx))
+      | AnnAssignK id typ (DoneExprMap _) => raise (Error "AnnAssignK Map") ctx
       | AnnAssignK id typ (ErrorExpr msg) => raise (Error "AnnAssignK err") ctx
       | AnnAssignK id typ ReturnExpr => raise (Error "AnnAssignK ReturnExpr") ctx
       | AnnAssignK id typ (LiftCall fn vs k) =>
@@ -1299,6 +1324,7 @@ Definition step_stmt_def:
             push_loop (string_to_num id) typ vs ss ctx
           else raise (Error "ForK bound") ctx
       | ForK id typ (DoneExpr _) _ _ => raise (Error "ForK DoneExpr") ctx
+      | ForK id typ (DoneExprMap _) _ _ => raise (Error "ForK DoneExprMap") ctx
       | ForK id typ (ErrorExpr msg) _ _ => raise (Error "ForK err") ctx
       | ForK id typ ReturnExpr _ _ => raise (Error "ForK ReturnExpr") ctx
       | ForK id typ (LiftCall fn vs k) n ss =>
@@ -1366,6 +1392,9 @@ Definition exprk_bound_def[simp]:
   exprk_bound (SubscriptK2 _ k, fns) = (
     let (n, fns) = exprk_bound (k, fns) in
       (1 + n, fns)) ∧
+  exprk_bound (SubscriptMapK _ k, fns) = (
+    let (n, fns) = exprk_bound (k, fns) in
+      (1 + n, fns)) ∧
   exprk_bound (AttributeK k _, fns) = (
     let (n, fns) = exprk_bound (k, fns) in
       (1 + n, fns)) ∧
@@ -1381,6 +1410,7 @@ Definition exprk_bound_def[simp]:
     let (n, fns) = exprk_bound (k, fns) in
       (1 + n, fns)) ∧
   exprk_bound (DoneExpr _, fns) = (1, fns) ∧
+  exprk_bound (DoneExprMap _, fns) = (1, fns) ∧
   exprk_bound (ReturnExpr, fns) = (1, fns) ∧
   exprk_bound (ErrorExpr _, fns) = (1, fns)
 End
