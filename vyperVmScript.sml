@@ -725,10 +725,21 @@ Datatype:
 End
 
 Datatype:
+  transaction = <|
+    sender: address
+  ; target: address
+  ; function_name: identifier
+  ; args: value list
+  ; value: num
+  |>
+End
+
+Datatype:
   execution_context = <|
     current_fc : function_context
   ; call_stack : function_context list
   ; current_contract: contract
+  ; current_transaction: transaction
   |>
 End
 
@@ -763,10 +774,11 @@ End
 val () = cv_auto_trans load_contract_def;
 
 Definition initial_execution_context_def:
-  initial_execution_context c fc = <|
+  initial_execution_context t c fc = <|
     current_fc := fc
   ; call_stack := []
   ; current_contract := c
+  ; current_transaction := t
   |>
 End
 
@@ -1738,14 +1750,14 @@ End
 val () = cv_auto_trans step_stmt_till_exception_def;
 
 Definition external_call_contract_def:
- external_call_contract ctr name args =
- case lookup_function name External ctr.src of
+ external_call_contract ctr tx =
+ case lookup_function tx.function_name External ctr.src of
    NONE => (INR "lookup_function External", ctr)
  | SOME (params, _, body) =>
-   (case bind_arguments params args of
+   (case bind_arguments params tx.args of
       SOME env =>
-      (let fc = initial_function_context name env body in
-       let ctx = initial_execution_context ctr fc in
+      (let fc = initial_function_context tx.function_name env body in
+       let ctx = initial_execution_context tx ctr fc in
        let ctx = step_stmt_till_exception ctx in
        let ctr = ctx.current_contract in
        (case ctx.current_fc.current_stmt
@@ -1758,10 +1770,11 @@ End
 val () = cv_auto_trans external_call_contract_def;
 
 Definition external_call_def:
-  external_call ms addr name args =
+  external_call ms tx =
+  let addr = tx.target in
   case ALOOKUP ms.contracts addr of NONE => (INR "no contract at addr", ms)
      | SOME ctr =>
-  case external_call_contract ctr name args of
+  case external_call_contract ctr tx of
        (res, ctr) =>
        (res, ms with contracts updated_by CONS (addr, ctr))
 End
