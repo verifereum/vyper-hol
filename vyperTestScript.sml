@@ -4,25 +4,6 @@ open vyperAstTheory vyperVmTheory;
 
 val () = new_theory "vyperTest";
 
-Overload uint256 = “BaseT (UintT (n2w 32 (* 256 DIV 8 *)))”
-Overload address = “BaseT AddressT”
-Overload bool = “BaseT BoolT”
-Overload intlit = “λi. Literal (IntL i)”
-Overload "==" = “λe1 e2. Builtin Eq [e1; e2]”
-Overload "not" = “λe. Builtin Not [e]”
-Overload "+" = “λe1 e2. Builtin (Bop Add) [e1; e2]”
-Overload "<" = “λe1 e2. Builtin Lt [e1; e2]”
-Overload len = “λe. Builtin Len [e]”
-Overload defun = “λid args ret body. FunctionDef External Nonpayable id args ret body”
-Overload pubvar = “λid typ. VariableDecl Public Storage id typ”
-Overload privar = “λid typ. VariableDecl Private Storage id typ”
-Overload DynArray = “λt n. ArrayT t (Dynamic n)”
-Overload DynArlit = “λn ls. ArrayLit (SOME (Dynamic n)) ls”
-Overload msg_sender = “Builtin (Msg Sender) []”
-Overload msg_value = “Builtin (Msg ValueSent) []”
-Overload AssignSelf = “λid e. Assign (BaseTarget (GlobalNameTarget id)) e”
-Overload call = “λid args. Call (GlobalFn id) args”
-
 (*
   rw[external_call_def,
      test_for_control_flow_ast_def,
@@ -42,17 +23,17 @@ Overload call = “λid args. Call (GlobalFn id) args”
 
 Definition test_if_control_flow_ast_def:
   test_if_control_flow_ast = [
-    defun "foo" [] uint256
+    def "foo" [] uint256
     [
-      AnnAssign "a" uint256 (intlit 1);
-      If (Name "a" == intlit 1)
+      AnnAssign "a" uint256 (li 1);
+      If (Name "a" == li 1)
       [
-        Assign (BaseTarget (NameTarget "a")) (intlit 2)
+        Assign (BaseTarget (NameTarget "a")) (li 2)
       ]
       [
-        Assign (BaseTarget (NameTarget "a")) (intlit 3)
+        Assign (BaseTarget (NameTarget "a")) (li 3)
       ];
-      Return (SOME (Name "a" + intlit 42))
+      Return (SOME (Name "a" + li 42))
     ]
   ]
 End
@@ -75,11 +56,11 @@ QED
 
 Definition test_for_control_flow_ast_def:
   test_for_control_flow_ast = [
-    defun "foo" [] uint256
+    def "foo" [] uint256
     [
        AnnAssign "a" (DynArray uint256 10)
-         (DynArlit 10 [intlit 1; intlit 2; intlit 3]);
-       AnnAssign "counter" uint256 (intlit 0);
+         (DynArlit 10 [li 1; li 2; li 3]);
+       AnnAssign "counter" uint256 (li 0);
        For "i" uint256 (Name "a") 10
        [ AugAssign (NameTarget "counter") Add (Name "i") ];
        Return (SOME (Name "counter"))
@@ -103,15 +84,15 @@ QED
 
 Definition test_array_assign_ast_def:
   test_array_assign_ast = [
-    defun "foo" [] uint256
+    def "foo" [] uint256
     [
       AnnAssign "bar" (DynArray uint256 10)
-        (DynArlit 10 [intlit 1; intlit 2]);
-      Assign (BaseTarget (SubscriptTarget (NameTarget "bar") (intlit 0)))
-        (intlit 3);
-      Return (SOME (Subscript (Name "bar") (intlit 0) +
-                    Subscript (Name "bar") (intlit 1) +
-                    intlit 42))
+        (DynArlit 10 [li 1; li 2]);
+      Assign (BaseTarget (SubscriptTarget (NameTarget "bar") (li 0)))
+        (li 3);
+      Return (SOME (Subscript (Name "bar") (li 0) +
+                    Subscript (Name "bar") (li 1) +
+                    li 42))
     ]
   ]
 End
@@ -133,14 +114,14 @@ QED
 Definition test_storage_array_assign_ast_def:
   test_storage_array_assign_ast = [
     privar "a" (DynArray uint256 10);
-    defun "foo" [] uint256 [
-      AssignSelf "a" (DynArlit 10 [intlit 1; intlit 2]);
+    def "foo" [] uint256 [
+      AssignSelf "a" (DynArlit 10 [li 1; li 2]);
       Assign (BaseTarget
                (SubscriptTarget (GlobalNameTarget "a")
-                                (intlit 0)))
-             (intlit 3);
-      Return (SOME (Subscript (GlobalName "a") (intlit 0) +
-                    Subscript (GlobalName "a") (intlit 1)))
+                                (li 0)))
+             (li 3);
+      Return (SOME (Subscript (GlobalName "a") (li 0) +
+                    Subscript (GlobalName "a") (li 1)))
     ]
   ]
 End
@@ -161,19 +142,19 @@ QED
 
 Definition test_internal_call_ast_def:
   test_internal_call_ast = [
-    FunctionDef Internal Nonpayable "bar" [] uint256 [
+    itl_def "bar" [] uint256 [
       AnnAssign "a" (DynArray uint256 10)
-        (DynArlit 10 [intlit 1; intlit 2; intlit 3]);
-      AnnAssign "counter" uint256 (intlit 0);
+        (DynArlit 10 [li 1; li 2; li 3]);
+      AnnAssign "counter" uint256 (li 0);
       For "i" uint256 (Name "a") 10 [
         AugAssign (NameTarget "counter") Add (Name "i")
       ];
       Return (SOME (Name "counter"))
     ];
-    defun "foo" [] uint256 [
+    def "foo" [] uint256 [
       AnnAssign "a" (DynArray uint256 10)
-        (DynArlit 10 [intlit 1; intlit 2; intlit 3]);
-      AnnAssign "counter" uint256 (intlit 0);
+        (DynArlit 10 [li 1; li 2; li 3]);
+      AnnAssign "counter" uint256 (li 0);
       For "i" uint256 (Name "a") 10 [
         AugAssign (NameTarget "counter") Add (Name "i")
       ];
@@ -199,10 +180,10 @@ QED
 Definition test_internal_call_without_return_ast_def:
   test_internal_call_without_return_ast = [
     privar "a" uint256;
-    FunctionDef Internal Nonpayable "bar" [] NoneT [
-      AssignSelf "a" (intlit 42)
+    itl_def "bar" [] NoneT [
+      AssignSelf "a" (li 42)
     ];
-    defun "foo" [] uint256 [
+    def "foo" [] uint256 [
       Expr (call "bar" []);
       Return (SOME (GlobalName "a"))
     ]
@@ -225,15 +206,15 @@ QED
 
 Definition test_internal_call_with_args_ast_def:
   test_internal_call_with_args_ast = [
-    FunctionDef Internal Nonpayable "baz" [("a", uint256)] uint256 [
+    itl_def "baz" [("a", uint256)] uint256 [
       Return (SOME (Name "a"))
     ];
-    FunctionDef Internal Nonpayable "bar" [("a", uint256)] uint256 [
-      Return (SOME (Name "a" + call "baz" [intlit 3]))
+    itl_def "bar" [("a", uint256)] uint256 [
+      Return (SOME (Name "a" + call "baz" [li 3]))
     ];
-    defun "foo" [] uint256 [
-      AnnAssign "a" uint256 (intlit 1);
-      Return (SOME (Name "a" + call "bar" [intlit 2]))
+    def "foo" [] uint256 [
+      AnnAssign "a" uint256 (li 1);
+      Return (SOME (Name "a" + call "bar" [li 2]))
     ]
   ]
 End
@@ -254,15 +235,15 @@ QED
 
 Definition test_internal_call_with_args2_ast_def:
   test_internal_call_with_args2_ast = [
-    FunctionDef Internal Nonpayable "baz" [("a", uint256)] uint256 [
+    itl_def "baz" [("a", uint256)] uint256 [
       Return (SOME (Name "a"))
     ];
-    FunctionDef Internal Nonpayable "bar" [("a", uint256)] uint256 [
-      Return (SOME (call "baz" [intlit 3] + Name "a"))
+    itl_def "bar" [("a", uint256)] uint256 [
+      Return (SOME (call "baz" [li 3] + Name "a"))
     ];
-    defun "foo" [] uint256 [
-      AnnAssign "a" uint256 (intlit 1);
-      Return (SOME (call "bar" [intlit 2] + Name "a"))
+    def "foo" [] uint256 [
+      AnnAssign "a" uint256 (li 1);
+      Return (SOME (call "bar" [li 2] + Name "a"))
     ]
   ]
 End
@@ -284,13 +265,13 @@ QED
 Definition test_storage_variables_ast_def:
   test_storage_variables_ast = [
     privar "d" uint256;
-    defun "foo" [] uint256 [
-      AnnAssign "a" uint256 (intlit 1);
+    def "foo" [] uint256 [
+      AnnAssign "a" uint256 (li 1);
       AssignSelf "d" (Name "a");
-      If (Name "a" == intlit 1)
-        [Assign (BaseTarget (NameTarget "a")) (intlit 2)]
-        [Assign (BaseTarget (NameTarget "a")) (intlit 3)];
-      Return (SOME (GlobalName "d" + intlit 42))
+      If (Name "a" == li 1)
+        [Assign (BaseTarget (NameTarget "a")) (li 2)]
+        [Assign (BaseTarget (NameTarget "a")) (li 3)];
+      Return (SOME (GlobalName "d" + li 42))
     ]
   ]
 End
@@ -313,8 +294,8 @@ Definition test_storage_variables2_ast_def:
   test_storage_variables2_ast = [
     privar "d" uint256;
     privar "k" uint256;
-    defun "foo" [] uint256 [
-      AssignSelf "k" (intlit 1);
+    def "foo" [] uint256 [
+      AssignSelf "k" (li 1);
       AssignSelf "d" (GlobalName "k");
       AugAssign (GlobalNameTarget "d") Add (GlobalName "k");
       Return (SOME (GlobalName "d" + GlobalName "k"))
@@ -339,17 +320,17 @@ QED
 Definition test_storage_variables3_ast_def:
   test_storage_variables3_ast = [
     privar "d" uint256;
-    FunctionDef Internal Nonpayable "bar" [] NoneT [
+    itl_def "bar" [] NoneT [
       AnnAssign "a" (DynArray uint256 10)
-        (DynArlit 10 [intlit 1; intlit 2; intlit 3]);
+        (DynArlit 10 [li 1; li 2; li 3]);
       For "i" uint256 (Name "a") 10 [
         AugAssign (GlobalNameTarget "d") Add (Name "i")
       ]
     ];
-    defun "foo" [] uint256 [
+    def "foo" [] uint256 [
       AnnAssign "a" (DynArray uint256 10)
-        (DynArlit 10 [intlit 1; intlit 2; intlit 3]);
-      AnnAssign "counter" uint256 (intlit 0);
+        (DynArlit 10 [li 1; li 2; li 3]);
+      AnnAssign "counter" uint256 (li 0);
       For "i" uint256 (Name "a") 10 [
         AugAssign (GlobalNameTarget "d") Add (Name "i")
       ];
@@ -376,8 +357,8 @@ QED
 Definition test_statefulness_of_storage_ast_def:
   test_statefulness_of_storage_ast = [
     privar "d" uint256;
-    defun "foo" [] uint256 [
-      AugAssign (GlobalNameTarget "d") Add (intlit 1);
+    def "foo" [] uint256 [
+      AugAssign (GlobalNameTarget "d") Add (li 1);
       Return (SOME (GlobalName "d"))
     ]
   ]
@@ -407,12 +388,12 @@ QED
 Definition test_statefulness_of_storage2_ast_def:
   test_statefulness_of_storage2_ast = [
     privar "d" uint256;
-    defun "foo" [] uint256 [
-      AugAssign (GlobalNameTarget "d") Add (intlit 1);
+    def "foo" [] uint256 [
+      AugAssign (GlobalNameTarget "d") Add (li 1);
       Return (SOME (GlobalName "d"))
     ];
-    defun "bar" [] uint256 [
-      AugAssign (GlobalNameTarget "d") Add (intlit 1);
+    def "bar" [] uint256 [
+      AugAssign (GlobalNameTarget "d") Add (li 1);
       Return (SOME (GlobalName "d"))
     ]
   ]
@@ -453,8 +434,8 @@ Definition test_tstorage_variables0_ast_def:
   test_tstorage_variables0_ast = [
     VariableDecl Private Transient "d" uint256;
     VariableDecl Private Transient "k" uint256;
-    defun "foo" [] uint256 [
-      AssignSelf "k" (intlit 1);
+    def "foo" [] uint256 [
+      AssignSelf "k" (li 1);
       AssignSelf "d" (GlobalName "k");
       AugAssign (GlobalNameTarget "d") Add (GlobalName "k");
       Return (SOME (GlobalName "d" + GlobalName "k"))
@@ -480,9 +461,9 @@ Definition test_tstorage_variables2_ast_def:
   test_tstorage_variables2_ast = [
     VariableDecl Private Transient "d" uint256;
     VariableDecl Private Transient "k" uint256;
-    defun "foo" [] uint256 [
-      If (GlobalName "k" == intlit 0) [
-        AssignSelf "k" (intlit 1)
+    def "foo" [] uint256 [
+      If (GlobalName "k" == li 0) [
+        AssignSelf "k" (li 1)
       ] [];
       AssignSelf "d" (GlobalName "k");
       AugAssign (GlobalNameTarget "d") Add (GlobalName "k");
@@ -547,14 +528,14 @@ Definition test_default_storage_values_ast_def:
     privar "d" (StructT "S");
     privar "e" (BaseT (BytesT (Dynamic 10)));
     privar "f" (BaseT (StringT 10));
-    defun "foo" [] uint256 [
-      Assert (GlobalName "a" == intlit 0) "";
-      Assert (GlobalName "b" == intlit 0) "";
-      Assert (len (GlobalName "c") == intlit 0) "";
-      Assert (Attribute (GlobalName "d") "a" == intlit 0) "";
-      Assert (len (GlobalName "e") == intlit 0) "";
-      Assert (len (GlobalName "f") == intlit 0) "";
-      Return (SOME (intlit 1))
+    def "foo" [] uint256 [
+      Assert (GlobalName "a" == li 0) "";
+      Assert (GlobalName "b" == li 0) "";
+      Assert (len (GlobalName "c") == li 0) "";
+      Assert (Attribute (GlobalName "d") "a" == li 0) "";
+      Assert (len (GlobalName "e") == li 0) "";
+      Assert (len (GlobalName "f") == li 0) "";
+      Return (SOME (li 1))
     ]
   ]
 End
@@ -577,9 +558,9 @@ QED
 
 Definition test_len_builtin_ast_def:
   test_len_builtin_ast = [
-    defun "foo" [] uint256 [
+    def "foo" [] uint256 [
       AnnAssign "a" (DynArray uint256 3)
-        (DynArlit 3 [intlit 1; intlit 2; intlit 3]);
+        (DynArlit 3 [li 1; li 2; li 3]);
       Return (SOME (len (Name "a")))
     ]
   ]
@@ -602,7 +583,7 @@ QED
 Definition test_len_builtin2_ast_def:
   test_len_builtin2_ast = [
     privar "d" (DynArray uint256 3);
-    defun "foo" [] uint256 [
+    def "foo" [] uint256 [
       Return (SOME (len (GlobalName "d")))
     ]
   ]
@@ -625,7 +606,7 @@ QED
 Definition test_len_builtin3_ast_def:
   test_len_builtin3_ast = [
     privar "s" (BaseT (StringT 10));
-    defun "foo" [] uint256 [
+    def "foo" [] uint256 [
       AssignSelf "s" (Literal (StringL 10 "hello"));
       Return (SOME (len (GlobalName "s")))
     ]
@@ -649,7 +630,7 @@ QED
 Definition test_len_builtin4_ast_def:
   test_len_builtin4_ast = [
     privar "s" (BaseT (BytesT (Dynamic 10)));
-    defun "foo" [] uint256 [
+    def "foo" [] uint256 [
       AssignSelf "s"
         (Literal (BytesL (Dynamic 10)
           ^(rhs $ concl $ EVAL “MAP (n2w o ORD) "hello" : word8 list”)));
@@ -680,7 +661,7 @@ QED
 
 Definition test_external_func_arg_ast_def:
   test_external_func_arg_ast = [
-    defun "foo" [("a", uint256)] uint256 [
+    def "foo" [("a", uint256)] uint256 [
       Return (SOME (Name "a"))
     ]
   ]

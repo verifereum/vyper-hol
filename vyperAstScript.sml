@@ -154,4 +154,29 @@ Datatype:
   | HashMapDecl variable_visibility identifier type value_type
 End
 
+Overload uint256 = “BaseT (UintT (n2w 32 (* 256 DIV 8 *)))”
+Overload address = “BaseT AddressT”
+Overload bool = “BaseT BoolT”
+Overload li = “λi. Literal (IntL i)”
+Overload lb = “λb. Literal (BoolL b)”
+Overload "==" = “λe1 e2. Builtin Eq [e1; e2]”
+Overload "not" = “λe. Builtin Not [e]”
+Overload "+" = “λe1 e2. Builtin (Bop Add) [e1; e2]”
+Overload "<" = “λe1 e2. Builtin Lt [e1; e2]”
+Overload len = “λe. Builtin Len [e]”
+Overload def = “λid args ret body. FunctionDef External Nonpayable id args ret body”
+Overload itl_def = “λid args ret body. FunctionDef Internal Nonpayable id args ret body”
+Overload pay_def = “λid args ret body. FunctionDef External Payable id args ret body”
+Overload deploy_def = “λid args ret body. FunctionDef Deploy Nonpayable id args ret body”
+Overload pubvar = “λid typ. VariableDecl Public Storage id typ”
+Overload pubmap = “λid kt vt. HashMapDecl Public id kt vt”
+Overload privar = “λid typ. VariableDecl Private Storage id typ”
+Overload DynArray = “λt n. ArrayT t (Dynamic n)”
+Overload DynArlit = “λn ls. ArrayLit (SOME (Dynamic n)) ls”
+Overload msg_sender = “Builtin (Msg Sender) []”
+Overload msg_value = “Builtin (Msg ValueSent) []”
+Overload AssignSelf = “λid e. Assign (BaseTarget (GlobalNameTarget id)) e”
+Overload self_ = “λid. GlobalName id”
+Overload call = “λid args. Call (GlobalFn id) args”
+
 val () = export_theory();

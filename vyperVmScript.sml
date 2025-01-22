@@ -732,6 +732,7 @@ val () = cv_auto_trans type_env_def;
 
 Definition load_contract_def:
   load_contract ms a ts =
+  (* TODO: take args and run Deploy function if any *)
   ms with contracts updated_by
     CONS (a, <|src := ts; globals := initial_globals (type_env ts) ts |>)
 End
@@ -1144,23 +1145,23 @@ End
 val () = cv_auto_trans pop_loop_def;
 
 Definition next_iteration_def:
-  next_iteration li ctx =
-  case li.remaining_values of [] => pop_loop ctx
+  next_iteration lp ctx =
+  case lp.remaining_values of [] => pop_loop ctx
      | v::vs => ctx with current_fc updated_by (λfc.
-        fc with <| scopes updated_by CONS (FEMPTY |+ (li.loop_var, v))
-                 ; current_stmt := StartK li.loop_first_stmt
-                 ; remaining_stmts := li.loop_rest_stmts
-                 ; name := Loop (li with remaining_values := vs) |>)
+        fc with <| scopes updated_by CONS (FEMPTY |+ (lp.loop_var, v))
+                 ; current_stmt := StartK lp.loop_first_stmt
+                 ; remaining_stmts := lp.loop_rest_stmts
+                 ; name := Loop (lp with remaining_values := vs) |>)
 End
 
 val () = cv_auto_trans next_iteration_def;
 
 Definition continue_loop_def:
   continue_loop ctx =
-  case ctx.current_fc.name of Loop li => (
+  case ctx.current_fc.name of Loop lp => (
     let ctx = pop_scope ctx in
       if exception_raised ctx then ctx else
-        next_iteration li ctx
+        next_iteration lp ctx
   ) | _ => raise (Error "continue_loop") ctx
 End
 
@@ -1168,7 +1169,7 @@ val () = cv_auto_trans continue_loop_def;
 
 Definition break_loop_def:
   break_loop ctx =
-  case ctx.current_fc.name of Loop li => (
+  case ctx.current_fc.name of Loop lp => (
     let ctx = pop_scope ctx in
       if exception_raised ctx then ctx else
         pop_loop ctx
@@ -1185,10 +1186,10 @@ Definition next_stmt_def:
                ; remaining_stmts := ss |>)
   | _ => (case ctx.current_fc.name
             of Fn _ => pop_call NoneV ctx
-             | Loop li =>
+             | Loop lp =>
                  let ctx = pop_scope ctx in
                    if exception_raised ctx then ctx
-                   else next_iteration li ctx)
+                   else next_iteration lp ctx)
 End
 
 val () = cv_auto_trans next_stmt_def;
@@ -1658,7 +1659,7 @@ Proof
 QED
 
 Theorem next_iteration_current_contract[simp]:
-  (next_iteration li ctx).current_contract = ctx.current_contract
+  (next_iteration lp ctx).current_contract = ctx.current_contract
 Proof
   rw[next_iteration_def]
   \\ CASE_TAC \\ rw[]
