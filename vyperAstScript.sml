@@ -79,7 +79,7 @@ Datatype:
   | GlobalName identifier
   | IfExp expr expr expr
   | Literal literal
-  | ArrayLit (bound option (* NONE for tuples *)) (expr list)
+  | ArrayLit bound (expr list)
   | Subscript expr expr
   | Attribute expr identifier
   (* TODO: short-circuiting builtins *)
@@ -172,7 +172,7 @@ Overload pubvar = “λid typ. VariableDecl Public Storage id typ”
 Overload pubmap = “λid kt vt. HashMapDecl Public id kt vt”
 Overload privar = “λid typ. VariableDecl Private Storage id typ”
 Overload DynArray = “λt n. ArrayT t (Dynamic n)”
-Overload DynArlit = “λn ls. ArrayLit (SOME (Dynamic n)) ls”
+Overload DynArlit = “λn ls. ArrayLit (Dynamic n) ls”
 Overload msg_sender = “Builtin (Msg Sender) []”
 Overload msg_value = “Builtin (Msg ValueSent) []”
 Overload AssignSelf = “λid e. Assign (BaseTarget (GlobalNameTarget id)) e”

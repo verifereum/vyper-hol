@@ -199,7 +199,7 @@ Datatype:
   value
   = NoneV
   | BoolV bool
-  | ArrayV (bound option) (value list)
+  | ArrayV bound (value list)
   | IntV int
   | StringV num string
   | BytesV bound (word8 list)
@@ -218,9 +218,9 @@ Definition default_value_def:
   default_value env (BaseT (UintT _)) = IntV 0 ∧
   default_value env (BaseT (IntT _)) = IntV 0 ∧
   default_value env (TupleT ts) = default_value_tuple env [] ts ∧
-  default_value env (ArrayT _ (Dynamic n)) = ArrayV (SOME (Dynamic n)) [] ∧
+  default_value env (ArrayT _ (Dynamic n)) = ArrayV (Dynamic n) [] ∧
   default_value env (ArrayT t (Fixed n)) =
-    ArrayV (SOME (Fixed n)) (REPLICATE n (default_value env t)) ∧
+    ArrayV (Fixed n) (REPLICATE n (default_value env t)) ∧
   default_value env (StructT id) =
     (let nid = string_to_num id in
      case FLOOKUP env nid
@@ -232,7 +232,7 @@ Definition default_value_def:
   default_value env (BaseT (StringT n)) = StringV n "" ∧
   default_value env (BaseT (BytesT (Fixed n))) = BytesV (Fixed n) (REPLICATE n 0w) ∧
   default_value env (BaseT (BytesT (Dynamic n))) = BytesV (Dynamic n) [] ∧
-  default_value_tuple env acc [] = ArrayV NONE (REVERSE acc) ∧
+  default_value_tuple env acc [] = ArrayV (Fixed (LENGTH acc)) (REVERSE acc) ∧
   default_value_tuple env acc (t::ts) =
     default_value_tuple env (default_value env t :: acc) ts ∧
   default_value_struct env acc [] = StructV (REVERSE acc) ∧
@@ -363,7 +363,7 @@ Datatype:
   | NamedExprK2 value expr_continuation
   *)
   | IfExpK expr_continuation expr expr
-  | ArrayLitK (bound option) (value list) expr_continuation (expr list)
+  | ArrayLitK bound (value list) expr_continuation (expr list)
   | SubscriptK1 expr_continuation expr
   | SubscriptK2 value expr_continuation
   | SubscriptMapK hmap expr_continuation
@@ -530,13 +530,35 @@ End
 
 val () = cv_auto_trans evaluate_attribute_def;
 
+Definition compatible_bound_def:
+  compatible_bound (Fixed n) m = (n = m) ∧
+  compatible_bound (Dynamic n) m = (m ≤ n)
+End
+
+val () = cv_auto_trans compatible_bound_def;
+
+Definition builtin_args_length_ok_def:
+  builtin_args_length_ok Len n = (n = 1n) ∧
+  builtin_args_length_ok Not n = (n = 1) ∧
+  builtin_args_length_ok Eq n = (n = 2) ∧
+  builtin_args_length_ok Lt n = (n = 2) ∧
+  builtin_args_length_ok (Bop _) n = (n = 2) ∧
+  builtin_args_length_ok (Msg _) n = (n = 0)
+End
+
+val () = cv_auto_trans builtin_args_length_ok_def;
+
 Definition step_expr_def:
   step_expr gbs env (StartExpr (Literal l)) =
     DoneExpr (evaluate_literal l) ∧
-  step_expr gbs env (StartExpr (ArrayLit b [])) =
-    DoneExpr (ArrayV b []) ∧ (* TODO: check the bound *)
-  step_expr gbs env (StartExpr (ArrayLit b (e::es))) =
-    ArrayLitK b [] (StartExpr e) es ∧ (* TODO: check the bound *)
+  step_expr gbs env (StartExpr (ArrayLit b [])) = (
+    if compatible_bound b 0
+    then DoneExpr (ArrayV b [])
+    else ErrorExpr "ArrayLit [] bound" ) ∧
+  step_expr gbs env (StartExpr (ArrayLit b (e::es))) = (
+    if compatible_bound b (LENGTH (e::es))
+    then ArrayLitK b [] (StartExpr e) es
+    else ErrorExpr "ArrayLit :: bound" ) ∧
   step_expr gbs env (StartExpr (Name id)) =
     (case lookup_scopes (string_to_num id) env
      of SOME v => DoneExpr v
@@ -555,9 +577,10 @@ Definition step_expr_def:
   (* TODO: handle Msg builtins *)
   step_expr gbs env (StartExpr (Builtin bt [])) =
     ErrorExpr "builtin no args" ∧
-  step_expr gbs env (StartExpr (Builtin bt (e::es))) =
-    (* TODO: check arguments length *)
-    BuiltinK bt [] (StartExpr e) es ∧
+  step_expr gbs env (StartExpr (Builtin bt (e::es))) = (
+    if builtin_args_length_ok bt (LENGTH (e::es))
+    then BuiltinK bt [] (StartExpr e) es
+    else ErrorExpr "builtin args length" ) ∧
   step_expr gbs env (StartExpr (Call id [])) =
     LiftCall id [] ReturnExpr ∧
   step_expr gbs env (StartExpr (Call id (e::es))) =
