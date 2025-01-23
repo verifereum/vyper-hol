@@ -211,10 +211,18 @@ Overload AddressV = “λw: address. BytesV (Fixed 20) (word_to_bytes w T)”
 val from_to_value = cv_typeLib.from_to_thm_for “:value”;
 
 Datatype:
-  toplevel_value = Value value | HashMap ((value, toplevel_value) alist)
+  subscript
+  = IntSubscript int
+  | StrSubscript string
+  | BytesSubscript (word8 list)
+  | AttrSubscript identifier
 End
 
-Type hmap = “:(value, toplevel_value) alist”
+Datatype:
+  toplevel_value = Value value | HashMap ((subscript, toplevel_value) alist)
+End
+
+Type hmap = “:(subscript, toplevel_value) alist”
 
 Definition default_value_def:
   default_value env (BaseT (UintT _)) = IntV 0 ∧
@@ -388,13 +396,6 @@ Datatype:
 End
 
 Datatype:
-  subscript
-  = IntSubscript int
-  | StrSubscript string
-  | AttrSubscript identifier
-End
-
-Datatype:
   assignment_value
   = BaseTargetV location (subscript list)
   | TupleTargetV (assignment_value list)
@@ -560,6 +561,15 @@ Datatype:
   |>
 End
 
+Definition value_to_key_def:
+  value_to_key (IntV i) = SOME $ IntSubscript i ∧
+  value_to_key (StringV _ s) = SOME $ StrSubscript s ∧
+  value_to_key (BytesV _ bs) = SOME $ BytesSubscript bs ∧
+  value_to_key _ = NONE
+End
+
+val () = cv_auto_trans value_to_key_def;
+
 Definition step_expr_def:
   step_expr tx gbs env (StartExpr (Literal l)) =
     DoneExpr (evaluate_literal l) ∧
@@ -643,10 +653,13 @@ Definition step_expr_def:
   step_expr tx gbs env (SubscriptMapK hm k) =
   (case step_expr tx gbs env k
    of ErrorExpr msg => ErrorExpr msg
-    | DoneExpr v2 => (case ALOOKUP hm v2 of
-                           SOME (Value v) => DoneExpr v
-                           (* TODO: more hashmaps *)
-                         | _ => ErrorExpr "SubscriptMapK lookup")
+    | DoneExpr v2 =>
+        (case value_to_key v2 of SOME k =>
+          (case ALOOKUP hm k of
+           SOME (Value v) => DoneExpr v
+           (* TODO: more hashmaps *)
+           | _ => ErrorExpr "SubscriptMapK lookup")
+         | _ => ErrorExpr "value_to_key")
     | LiftCall id vs k => LiftCall id vs (SubscriptMapK hm k)
     | k => SubscriptMapK hm k) ∧
   step_expr tx gbs env (AttributeK k id) =
@@ -845,6 +858,9 @@ Definition step_base_target_def:
   step_base_target tx gbs env (SubscriptTargetK2 l s k) =
    (case step_expr tx gbs env k
     of DoneExpr (IntV i) => DoneBaseTgt l ((IntSubscript i)::s)
+     | DoneExpr (BytesV _ bs) => DoneBaseTgt l ((BytesSubscript bs)::s)
+     | DoneExpr (StringV _ st) => DoneBaseTgt l ((StrSubscript st)::s)
+     (* TODO use value_to_key *)
      | DoneExpr _ => ErrorBaseTgt "SubscriptTargetK2 DoneExpr"
      | ErrorExpr msg => ErrorBaseTgt msg
      | LiftCall fn vs k => LiftCallBaseTgt fn vs (SubscriptTargetK2 l s k)
@@ -937,6 +953,25 @@ Proof
   \\ Cases_on`v0` \\ gs[]
 QED
 
+Definition assign_hashmap_def:
+  assign_hashmap hm [] _ = NONE ∧
+  assign_hashmap hm [k] (Replace v) =
+    SOME $ (k,Value v)::(ADELKEY k hm) ∧
+  assign_hashmap hm [k] (Update bop v2) =
+  (case ALOOKUP hm k of SOME (Value v1) =>
+     (case evaluate_binop bop v1 v2 of DoneExpr w =>
+        SOME $ (k,Value w)::(ADELKEY k hm) | _ => NONE)
+   | _ => NONE) ∧
+  assign_hashmap hm (k::ks) ao =
+  (case ALOOKUP hm k of SOME (HashMap hm') =>
+    (case assign_hashmap hm' ks ao of
+     | SOME hm' => SOME $ (k, HashMap hm') :: (ADELKEY k hm)
+     | _ => NONE)
+    | _ => NONE)
+End
+
+val () = cv_auto_trans assign_hashmap_def;
+
 Definition assign_target_def:
   assign_target (BaseTargetV (ScopedVar (pre,env,rest) id) is) ao ctx =
     (let nid = string_to_num id in
@@ -948,12 +983,17 @@ Definition assign_target_def:
      | _ => raise (Error "assign_target lookup") ctx)) ∧
   assign_target (BaseTargetV (Global id) is) ao ctx =
   (let nid = string_to_num id in
-  (* TODO: add assignment to hashmaps *)
-  (case FLOOKUP ctx.current_contract.globals nid of SOME (Value a) =>
-   (case assign_subscripts a is ao of SOME a' =>
-     ctx with current_contract updated_by
-       (λcc. cc with globals := cc.globals |+ (nid, Value a'))
-    | _ => raise (Error "assign_subscripts Global") ctx)
+  (case FLOOKUP ctx.current_contract.globals nid
+   of SOME (Value a) =>
+     (case assign_subscripts a is ao of SOME a' =>
+       ctx with current_contract updated_by
+         (λcc. cc with globals := cc.globals |+ (nid, Value a'))
+      | _ => raise (Error "assign_subscripts Global") ctx)
+   | SOME (HashMap hm) =>
+     (case assign_hashmap hm is ao of SOME hm' =>
+       ctx with current_contract updated_by
+         (λcc. cc with globals := cc.globals |+ (nid, HashMap hm'))
+      | _ => raise (Error "assign_hashmap Global") ctx)
    | _ => raise (Error "assign_target globals lookup") ctx)) ∧
   assign_target _ _ ctx = raise (Error "TODO: TupleTargetV") ctx
 End
