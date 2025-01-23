@@ -63,16 +63,26 @@ QED
 val () = cv_trans_deep_embedding EVAL call_foo_tx_def;
 val () = cv_trans_deep_embedding EVAL call_bar_tx_def;
 
+Definition deploy_tx_def:
+  deploy_tx = transaction ^sender_addr ^contract_addr "__init__" [] 0
+End
+
+val () = cv_trans_deep_embedding EVAL deploy_tx_def;
+
+Definition load_and_call_foo_def:
+  load_and_call_foo ts =
+  case load_contract initial_machine_state deploy_tx ts
+    of INL ms => FST $ external_call ms call_foo_tx
+     | INR msg => INR msg
+End
+
+val () = cv_auto_trans load_and_call_foo_def;
+
 Theorem test_if_control_flow:
-  FST $ external_call
-    (load_contract initial_machine_state
-       ^contract_addr test_if_control_flow_ast)
-    call_foo_tx
+  load_and_call_foo test_if_control_flow_ast
   = INL (IntV 44)
 Proof
-  rw[external_call_def, load_contract_def, initial_machine_state_def,
-     SimpLHS, pair_case_rand]
-  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
 Definition test_for_control_flow_ast_def:
@@ -92,15 +102,10 @@ End
 val () = cv_trans_deep_embedding EVAL test_for_control_flow_ast_def;
 
 Theorem test_for_control_flow:
-  FST $ external_call
-    (load_contract initial_machine_state
-       ^contract_addr test_for_control_flow_ast)
-    call_foo_tx
+  load_and_call_foo test_for_control_flow_ast
   = INL (IntV 6)
 Proof
-  rw[external_call_def, load_contract_def, initial_machine_state_def,
-     SimpLHS, pair_case_rand]
-  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
 Definition test_array_assign_ast_def:
@@ -121,15 +126,10 @@ End
 val () = cv_trans_deep_embedding EVAL test_array_assign_ast_def;
 
 Theorem test_array_assign:
-  FST $ external_call
-   (load_contract initial_machine_state
-      ^contract_addr test_array_assign_ast)
-    call_foo_tx
+  load_and_call_foo test_array_assign_ast
   = INL (IntV 47)
 Proof
-  rw[external_call_def, load_contract_def, initial_machine_state_def,
-     SimpLHS, pair_case_rand]
-  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
 Definition test_storage_array_assign_ast_def:
@@ -150,15 +150,10 @@ End
 val () = cv_trans_deep_embedding EVAL test_storage_array_assign_ast_def;
 
 Theorem test_storage_array_assign:
-  FST $ external_call
-   (load_contract initial_machine_state
-      ^contract_addr test_storage_array_assign_ast)
-    call_foo_tx
+  load_and_call_foo test_storage_array_assign_ast
   = INL (IntV 5)
 Proof
-  rw[external_call_def, load_contract_def, initial_machine_state_def,
-     SimpLHS, pair_case_rand]
-  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
 Definition test_internal_call_ast_def:
@@ -187,15 +182,10 @@ End
 val () = cv_trans_deep_embedding EVAL test_internal_call_ast_def;
 
 Theorem test_internal_call:
-  FST $ external_call
-   (load_contract initial_machine_state
-      ^contract_addr test_internal_call_ast)
-    call_foo_tx
+  load_and_call_foo test_internal_call_ast
   = INL (IntV 12)
 Proof
-  rw[external_call_def, load_contract_def, initial_machine_state_def,
-     SimpLHS, pair_case_rand]
-  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
 Definition test_internal_call_without_return_ast_def:
@@ -214,15 +204,10 @@ End
 val () = cv_trans_deep_embedding EVAL test_internal_call_without_return_ast_def;
 
 Theorem test_internal_call_without_return:
-  FST $ external_call
-   (load_contract initial_machine_state
-      ^contract_addr test_internal_call_without_return_ast)
-    call_foo_tx
+  load_and_call_foo test_internal_call_without_return_ast
   = INL (IntV 42)
 Proof
-  rw[external_call_def, load_contract_def, initial_machine_state_def,
-     SimpLHS, pair_case_rand]
-  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
 Definition test_internal_call_with_args_ast_def:
@@ -243,15 +228,10 @@ End
 val () = cv_trans_deep_embedding EVAL test_internal_call_with_args_ast_def;
 
 Theorem test_internal_call_with_args:
-  FST $ external_call
-   (load_contract initial_machine_state
-      ^contract_addr test_internal_call_with_args_ast)
-    call_foo_tx
+  load_and_call_foo test_internal_call_with_args_ast
   = INL (IntV 6)
 Proof
-  rw[external_call_def, load_contract_def, initial_machine_state_def,
-     SimpLHS, pair_case_rand]
-  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
 Definition test_internal_call_with_args2_ast_def:
@@ -272,15 +252,10 @@ End
 val () = cv_trans_deep_embedding EVAL test_internal_call_with_args2_ast_def;
 
 Theorem test_internal_call_with_args2:
-  FST $ external_call
-   (load_contract initial_machine_state
-      ^contract_addr test_internal_call_with_args2_ast)
-    call_foo_tx
+  load_and_call_foo test_internal_call_with_args2_ast
   = INL (IntV 6)
 Proof
-  rw[external_call_def, load_contract_def, initial_machine_state_def,
-     SimpLHS, pair_case_rand]
-  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
 Definition test_storage_variables_ast_def:
@@ -300,15 +275,10 @@ End
 val () = cv_trans_deep_embedding EVAL test_storage_variables_ast_def;
 
 Theorem test_storage_variables:
-  FST $ external_call
-   (load_contract initial_machine_state
-      ^contract_addr test_storage_variables_ast)
-    call_foo_tx
+  load_and_call_foo test_storage_variables_ast
   = INL (IntV 43)
 Proof
-  rw[external_call_def, load_contract_def, initial_machine_state_def,
-     SimpLHS, pair_case_rand]
-  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
 Definition test_storage_variables2_ast_def:
@@ -327,15 +297,10 @@ End
 val () = cv_trans_deep_embedding EVAL test_storage_variables2_ast_def;
 
 Theorem test_storage_variables2:
-  FST $ external_call
-   (load_contract initial_machine_state
-      ^contract_addr test_storage_variables2_ast)
-    call_foo_tx
+  load_and_call_foo test_storage_variables2_ast
   = INL (IntV 3)
 Proof
-  rw[external_call_def, load_contract_def, initial_machine_state_def,
-     SimpLHS, pair_case_rand]
-  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
 Definition test_storage_variables3_ast_def:
@@ -364,15 +329,10 @@ End
 val () = cv_trans_deep_embedding EVAL test_storage_variables3_ast_def;
 
 Theorem test_storage_variables3:
-  FST $ external_call
-   (load_contract initial_machine_state
-      ^contract_addr test_storage_variables3_ast)
-    call_foo_tx
+  load_and_call_foo test_storage_variables3_ast
   = INL (IntV 12)
 Proof
-  rw[external_call_def, load_contract_def, initial_machine_state_def,
-     SimpLHS, pair_case_rand]
-  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
 Definition test_statefulness_of_storage_ast_def:
@@ -388,22 +348,22 @@ End
 val () = cv_trans_deep_embedding EVAL test_statefulness_of_storage_ast_def;
 
 Theorem test_statefulness_of_storage:
-  let ms = load_contract initial_machine_state ^contract_addr
-             test_statefulness_of_storage_ast in
-  let (r1, ms) = external_call ms call_foo_tx in
-  let (r2, ms) = external_call ms call_foo_tx in
-  let (r3, ms) = external_call ms call_foo_tx in
-  let (r4, ms) = external_call ms call_foo_tx in
-  let (r5, ms) = external_call ms call_foo_tx in
-    r1 = INL (IntV 1) ∧
-    r2 = INL (IntV 2) ∧
-    r3 = INL (IntV 3) ∧
-    r4 = INL (IntV 4) ∧
-    r5 = INL (IntV 5)
+  case load_contract initial_machine_state deploy_tx
+    test_statefulness_of_storage_ast
+  of INR msg => F
+   | INL ms =>
+     let (r1, ms) = external_call ms call_foo_tx in
+     let (r2, ms) = external_call ms call_foo_tx in
+     let (r3, ms) = external_call ms call_foo_tx in
+     let (r4, ms) = external_call ms call_foo_tx in
+     let (r5, ms) = external_call ms call_foo_tx in
+       r1 = INL (IntV 1) ∧
+       r2 = INL (IntV 2) ∧
+       r3 = INL (IntV 3) ∧
+       r4 = INL (IntV 4) ∧
+       r5 = INL (IntV 5)
 Proof
-  rw[external_call_def, load_contract_def, initial_machine_state_def,
-     SimpLHS, pair_case_rand]
-  \\ CONV_TAC cv_eval
+  CONV_TAC cv_eval
 QED
 
 Definition test_statefulness_of_storage2_ast_def:
@@ -423,8 +383,10 @@ End
 val () = cv_trans_deep_embedding EVAL test_statefulness_of_storage2_ast_def;
 
 Theorem test_statefulness_of_storage2:
-  let ms = load_contract initial_machine_state ^contract_addr
-             test_statefulness_of_storage2_ast in
+  case load_contract initial_machine_state deploy_tx
+    test_statefulness_of_storage2_ast
+  of INR msg => F
+   | INL ms =>
   let (f1, ms) = external_call ms call_foo_tx in
   let (b1, ms) = external_call ms call_bar_tx in
   let (f2, ms) = external_call ms call_foo_tx in
@@ -446,9 +408,7 @@ Theorem test_statefulness_of_storage2:
     b4 = INL (IntV (3 * 2 + 2)) ∧
     b5 = INL (IntV (4 * 2 + 2))
 Proof
-  rw[external_call_def, load_contract_def, initial_machine_state_def,
-     SimpLHS, pair_case_rand]
-  \\ CONV_TAC cv_eval
+  CONV_TAC cv_eval
 QED
 
 Definition test_tstorage_variables0_ast_def:
@@ -467,15 +427,10 @@ End
 val () = cv_trans_deep_embedding EVAL test_tstorage_variables0_ast_def;
 
 Theorem test_tstorage_variables0:
-  FST $ external_call
-   (load_contract initial_machine_state
-      ^contract_addr test_tstorage_variables0_ast)
-    call_foo_tx
+  load_and_call_foo test_tstorage_variables0_ast
   = INL (IntV 3)
 Proof
-  rw[external_call_def, load_contract_def, initial_machine_state_def,
-     SimpLHS, pair_case_rand]
-  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
 Definition test_tstorage_variables2_ast_def:
@@ -496,15 +451,10 @@ End
 val () = cv_trans_deep_embedding EVAL test_tstorage_variables2_ast_def;
 
 Theorem test_tstorage_variables2:
-  FST $ external_call
-   (load_contract initial_machine_state
-      ^contract_addr test_tstorage_variables2_ast)
-    call_foo_tx
+  load_and_call_foo test_tstorage_variables2_ast
   = INL (IntV 3)
 Proof
-  rw[external_call_def, load_contract_def, initial_machine_state_def,
-     SimpLHS, pair_case_rand]
-  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
 (* TODO add
@@ -564,15 +514,10 @@ End
 val () = cv_trans_deep_embedding EVAL test_default_storage_values_ast_def;
 
 Theorem test_default_storage_values:
-  FST $ external_call
-   (load_contract initial_machine_state
-      ^contract_addr test_default_storage_values_ast)
-    call_foo_tx
+  load_and_call_foo test_default_storage_values_ast
   = INL (IntV 1)
 Proof
-  rw[external_call_def, load_contract_def, initial_machine_state_def,
-     SimpLHS, pair_case_rand]
-  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
 (* TODO range builtin tests *)
@@ -590,15 +535,10 @@ End
 val () = cv_trans_deep_embedding EVAL test_len_builtin_ast_def;
 
 Theorem test_len_builtin:
-  FST $ external_call
-   (load_contract initial_machine_state
-      ^contract_addr test_len_builtin_ast)
-    call_foo_tx
+  load_and_call_foo test_len_builtin_ast
   = INL (IntV 3)
 Proof
-  rw[external_call_def, load_contract_def, initial_machine_state_def,
-     SimpLHS, pair_case_rand]
-  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
 Definition test_len_builtin2_ast_def:
@@ -613,15 +553,10 @@ End
 val () = cv_trans_deep_embedding EVAL test_len_builtin2_ast_def;
 
 Theorem test_len_builtin2:
-  FST $ external_call
-   (load_contract initial_machine_state
-      ^contract_addr test_len_builtin2_ast)
-    call_foo_tx
+  load_and_call_foo test_len_builtin2_ast
   = INL (IntV 0)
 Proof
-  rw[external_call_def, load_contract_def, initial_machine_state_def,
-     SimpLHS, pair_case_rand]
-  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
 Definition test_len_builtin3_ast_def:
@@ -637,15 +572,10 @@ End
 val () = cv_trans_deep_embedding EVAL test_len_builtin3_ast_def;
 
 Theorem test_len_builtin3:
-  FST $ external_call
-   (load_contract initial_machine_state
-      ^contract_addr test_len_builtin3_ast)
-    call_foo_tx
+  load_and_call_foo test_len_builtin3_ast
   = INL (IntV 5)
 Proof
-  rw[external_call_def, load_contract_def, initial_machine_state_def,
-     SimpLHS, pair_case_rand]
-  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
 Definition test_len_builtin4_ast_def:
@@ -663,15 +593,10 @@ End
 val () = cv_trans_deep_embedding EVAL test_len_builtin4_ast_def;
 
 Theorem test_len_builtin4:
-  FST $ external_call
-   (load_contract initial_machine_state
-      ^contract_addr test_len_builtin4_ast)
-    call_foo_tx
+  load_and_call_foo test_len_builtin4_ast
   = INL (IntV 5)
 Proof
-  rw[external_call_def, load_contract_def, initial_machine_state_def,
-     SimpLHS, pair_case_rand]
-  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+  CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
 (* TODO: test abi_encode *)
@@ -691,15 +616,15 @@ End
 val () = cv_trans_deep_embedding EVAL test_external_func_arg_ast_def;
 
 Theorem test_external_func_arg:
-  FST $ external_call
-   (load_contract initial_machine_state
-      ^contract_addr test_external_func_arg_ast)
-    (transaction ^sender_addr ^contract_addr "foo" [IntV 42] 0)
-  = INL (IntV 42)
+  case load_contract initial_machine_state deploy_tx
+    test_external_func_arg_ast
+  of INR _ => F
+  |  INL ms =>
+      FST $ external_call ms
+          $ transaction ^sender_addr ^contract_addr "foo" [IntV 42] 0
+      = INL (IntV 42)
 Proof
-  rw[external_call_def, load_contract_def, initial_machine_state_def,
-     SimpLHS, pair_case_rand]
-  \\ CONV_TAC(LAND_CONV cv_eval) \\ rw[]
+  CONV_TAC cv_eval
 QED
 
 (* TODO add tests

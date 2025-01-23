@@ -769,15 +769,6 @@ End
 
 val () = cv_auto_trans type_env_def;
 
-Definition load_contract_def:
-  load_contract ms a ts =
-  (* TODO: take args and run Deploy function if any *)
-  ms with contracts updated_by
-    CONS (a, <|src := ts; globals := initial_globals (type_env ts) ts |>)
-End
-
-val () = cv_auto_trans load_contract_def;
-
 Definition initial_execution_context_def:
   initial_execution_context t c fc = <|
     current_fc := fc
@@ -985,6 +976,7 @@ Definition is_ArrayT_def[simp]:
 End
 
 Definition lookup_function_def:
+  lookup_function name Deploy [] = SOME ([], NoneT, [Pass]) ∧
   lookup_function name vis [] = NONE ∧
   lookup_function name vis (FunctionDef fv fm id args ret body :: ts) =
   (if id = name ∧ vis = fv then SOME (args, ret, body)
@@ -1755,11 +1747,8 @@ End
 
 val () = cv_auto_trans step_stmt_till_exception_def;
 
-Definition external_call_contract_def:
- external_call_contract ctr tx =
- case lookup_function tx.function_name External ctr.src of
-   NONE => (INR "lookup_function External", ctr)
- | SOME (params, _, body) =>
+Definition step_external_function_def:
+  step_external_function tx ctr params body =
    (case bind_arguments params tx.args of
       SOME env =>
       (let fc = initial_function_context tx.function_name env body in
@@ -1771,6 +1760,15 @@ Definition external_call_contract_def:
            | ExceptionK (Error msg) => (INR msg, ctr)
            | _ => (INR "current_stmt", ctr)))
     | _ => (INR "external bind_arguments", ctr))
+End
+
+val () = cv_auto_trans step_external_function_def;
+
+Definition external_call_contract_def:
+ external_call_contract ctr tx =
+ case lookup_function tx.function_name External ctr.src of
+   NONE => (INR "lookup_function External", ctr)
+ | SOME (params, _, body) => step_external_function tx ctr params body
 End
 
 val () = cv_auto_trans external_call_contract_def;
@@ -1786,5 +1784,20 @@ Definition external_call_def:
 End
 
 val () = cv_auto_trans external_call_def;
+
+Definition load_contract_def:
+  load_contract ms tx ts =
+  let addr = tx.target in
+  let ctr = <|src := ts; globals := initial_globals (type_env ts) ts |> in
+  case lookup_function tx.function_name Deploy ts of
+    | NONE => INR "no constructor"
+    | SOME (params, _, body) => (
+      case step_external_function tx ctr params body of
+      | (INR msg, _) => INR msg
+      | (INL _, ctr) => INL $ ms with contracts updated_by (CONS (addr, ctr))
+    )
+End
+
+val () = cv_auto_trans load_contract_def;
 
 val () = export_theory();
