@@ -65,25 +65,25 @@ End
 
 Datatype:
   call_target
-  = GlobalFn identifier
+  = GlobalFn identifier (* TODO: rename TopLevelFn? InternalFn? *)
   | Send
   (* TODO: external raw call *)
 End
 
 Datatype:
   expr
-  (*
-  = NamedExpr expr expr
-  *)
   = Name identifier
+  (* TODO: rename to TopLevelName? they are scoped *)
   | GlobalName identifier
   | IfExp expr expr expr
   | Literal literal
   | ArrayLit bound (expr list)
+  (* TODO: struct literals *)
   | Subscript expr expr
   | Attribute expr identifier
-  (* TODO: short-circuiting builtins *)
   | Builtin builtin (expr list)
+  (* TODO: add the `in` operator *)
+  (* TODO: ensure `in` on literals short-circuits (or decide about that..) *)
   | Call call_target (expr list)
 End
 
@@ -107,8 +107,9 @@ Datatype:
   | Continue
   | Break
   | Expr expr
-  | For identifier type expr num (stmt list)
+  | For identifier type expr (* TODO also range *) num (stmt list)
   | If expr (stmt list) (stmt list)
+  (* TODO: add Log *)
   | Assert expr string
   | Raise string
   | Return (expr option)
@@ -152,6 +153,8 @@ Datatype:
   | VariableDecl variable_visibility variable_mutability identifier type
   | StructDef identifier (argument list)
   | HashMapDecl variable_visibility identifier type value_type
+  (* TODO: interfaces *)
+  (* TODO: flags *)
 End
 
 Overload uint256 = “BaseT (UintT (n2w 32 (* 256 DIV 8 *)))”
@@ -161,6 +164,9 @@ Overload li = “λi. Literal (IntL i)”
 Overload lb = “λb. Literal (BoolL b)”
 Overload "==" = “λe1 e2. Builtin Eq [e1; e2]”
 Overload "not" = “λe. Builtin Not [e]”
+Overload "or" = “λe1 e2. IfExp e1 (lb T) e2”
+Overload "and" = “λe1 e2. IfExp e1 e2 (lb F)”
+(* TODO: make "or" and "and" infix *)
 Overload "+" = “λe1 e2. Builtin (Bop Add) [e1; e2]”
 Overload "<" = “λe1 e2. Builtin Lt [e1; e2]”
 Overload len = “λe. Builtin Len [e]”
