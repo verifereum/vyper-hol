@@ -1785,6 +1785,18 @@ End
 
 val () = cv_auto_trans step_stmt_till_exception_def;
 
+Definition process_exception_def:
+  process_exception (ExceptionK (ExternalReturn v)) = INL v ∧
+  process_exception (ExceptionK (AssertException msg)) =
+    INR ("Assertion Failed: " ++ msg) ∧
+  process_exception (ExceptionK (RaiseException msg)) =
+    INR ("Exception Raised: " ++ msg) ∧
+  process_exception (ExceptionK (Error msg)) = INR msg ∧
+  process_exception _ = INR "process_exception"
+End
+
+val () = cv_auto_trans process_exception_def;
+
 Definition step_external_function_def:
   step_external_function tx ctr params body =
    (case bind_arguments params tx.args of
@@ -1793,10 +1805,7 @@ Definition step_external_function_def:
        let ctx = initial_execution_context tx ctr fc in
        let ctx = step_stmt_till_exception ctx in
        let ctr = ctx.current_contract in
-       (case ctx.current_fc.current_stmt
-          of ExceptionK (ExternalReturn v) => (INL v, ctr)
-           | ExceptionK (Error msg) => (INR msg, ctr)
-           | _ => (INR "current_stmt", ctr)))
+         (process_exception ctx.current_fc.current_stmt, ctr))
     | _ => (INR "external bind_arguments", ctr))
 End
 
