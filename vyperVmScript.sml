@@ -858,11 +858,8 @@ Definition step_base_target_def:
      | k => SubscriptTargetK1 k e) ∧
   step_base_target tx gbs env (SubscriptTargetK2 l s k) =
    (case step_expr tx gbs env k
-    of DoneExpr (IntV i) => DoneBaseTgt l ((IntSubscript i)::s)
-     | DoneExpr (BytesV _ bs) => DoneBaseTgt l ((BytesSubscript bs)::s)
-     | DoneExpr (StringV _ st) => DoneBaseTgt l ((StrSubscript st)::s)
-     (* TODO use value_to_key *)
-     | DoneExpr _ => ErrorBaseTgt "SubscriptTargetK2 DoneExpr"
+    of DoneExpr v => (case value_to_key v of SOME k => DoneBaseTgt l (k::s)
+                      | _ => ErrorBaseTgt "SubscriptTargetK2 value_to_key")
      | ErrorExpr msg => ErrorBaseTgt msg
      | LiftCall fn vs k => LiftCallBaseTgt fn vs (SubscriptTargetK2 l s k)
      | k => SubscriptTargetK2 l s k) ∧
