@@ -763,12 +763,13 @@ End
 
 Datatype:
   machine_state = <|
-    contracts : (address, contract) alist (* TODO: use a function (sptree under cv) *)
+    contracts: (address, contract) alist (* TODO: use a function (sptree under cv) *)
+  ; balances: (address, num) alist (* TODO: similarly *)
   |>
 End
 
 Definition initial_machine_state_def:
-  initial_machine_state = <| contracts := [] |>
+  initial_machine_state = <| contracts := []; balances := [] |>
 End
 
 val () = cv_auto_trans initial_machine_state_def;
