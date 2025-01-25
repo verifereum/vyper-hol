@@ -625,6 +625,7 @@ Definition step_expr_def:
   step_expr tx gbs env (IfExpK k e2 e3) =
   (case step_expr tx gbs env k
    of ErrorExpr msg => ErrorExpr msg
+    | DoneExprMap _ => ErrorExpr "IfExpK Map"
     | DoneExpr v1 => (case v1 of BoolV b => StartExpr (if b then e2 else e3)
                                | _ => ErrorExpr "IfExpK value")
     | LiftCall id vs k => LiftCall id vs (IfExpK k e2 e3)
@@ -632,6 +633,7 @@ Definition step_expr_def:
   step_expr tx gbs env (ArrayLitK b vs k es) =
   (case step_expr tx gbs env k
    of ErrorExpr msg => ErrorExpr msg
+    | DoneExprMap _ => ErrorExpr "ArrayLitK Map"
     | DoneExpr v =>
         (case es of (e::es) => ArrayLitK b (SNOC v vs) (StartExpr e) es
                   | [] => DoneExpr (ArrayV b (SNOC v vs)))
@@ -647,12 +649,14 @@ Definition step_expr_def:
   step_expr tx gbs env (SubscriptK2 v1 k) =
   (case step_expr tx gbs env k
    of ErrorExpr msg => ErrorExpr msg
+    | DoneExprMap _ => ErrorExpr "SubscriptK2 Map"
     | DoneExpr v2 => evaluate_subscript v1 v2
     | LiftCall id vs k => LiftCall id vs (SubscriptK2 v1 k)
     | k => SubscriptK2 v1 k) ∧
   step_expr tx gbs env (SubscriptMapK hm k) =
   (case step_expr tx gbs env k
    of ErrorExpr msg => ErrorExpr msg
+    | DoneExprMap _ => ErrorExpr "SubscriptMapK Map"
     | DoneExpr v2 =>
         (case value_to_key v2 of SOME k =>
           (case ALOOKUP hm k of
@@ -665,12 +669,14 @@ Definition step_expr_def:
   step_expr tx gbs env (AttributeK k id) =
   (case step_expr tx gbs env k
    of ErrorExpr msg => ErrorExpr msg
+    | DoneExprMap _ => ErrorExpr "AttributeK Map"
     | DoneExpr v => evaluate_attribute v id
     | LiftCall fn vs k => LiftCall fn vs (AttributeK k id)
     | k => AttributeK k id) ∧
   step_expr tx gbs env (BuiltinK bt vs k es) =
   (case step_expr tx gbs env k
    of ErrorExpr msg => ErrorExpr msg
+    | DoneExprMap _ => ErrorExpr "BuiltinK Map"
     | DoneExpr v1 =>
         (let vs = SNOC v1 vs in
          case es of (e::es) =>
@@ -681,6 +687,7 @@ Definition step_expr_def:
   step_expr tx gbs env (CallK id vs k es) =
   (case step_expr tx gbs env k
    of ErrorExpr msg => ErrorExpr msg
+    | DoneExprMap _ => ErrorExpr "CallK Map"
     | DoneExpr v =>
         (let vs = SNOC v vs in
          case es of (e::es) => CallK id vs (StartExpr e) es
@@ -860,6 +867,7 @@ Definition step_base_target_def:
    (case step_expr tx gbs env k
     of DoneExpr v => (case value_to_key v of SOME k => DoneBaseTgt l (k::s)
                       | _ => ErrorBaseTgt "SubscriptTargetK2 value_to_key")
+     | DoneExprMap _ => ErrorBaseTgt "SubscriptTargetK2 Map"
      | ErrorExpr msg => ErrorBaseTgt msg
      | LiftCall fn vs k => LiftCallBaseTgt fn vs (SubscriptTargetK2 l s k)
      | k => SubscriptTargetK2 l s k) ∧
