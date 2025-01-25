@@ -13,8 +13,8 @@ End
 
 Datatype:
   base_type
-  = UintT word5 (* the bit size divided by 8 *)
-  | IntT word5
+  = UintT num (* bit size *)
+  | IntT num
   | BoolT
   (* TODO: decimals? *)
   | StringT num
@@ -157,7 +157,7 @@ Datatype:
   (* TODO: flags *)
 End
 
-Overload uint256 = “BaseT (UintT (n2w 32 (* 256 DIV 8 *)))”
+Overload uint256 = “BaseT (UintT 256)”
 Overload address = “BaseT AddressT”
 Overload bool = “BaseT BoolT”
 Overload li = “λi. Literal (IntL i)”
