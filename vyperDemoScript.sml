@@ -1,4 +1,4 @@
-open HolKernel boolLib bossLib Parse intLib wordsLib cv_transLib;
+open HolKernel boolLib bossLib Parse intLib wordsLib cv_transLib blastLib;
 open vyperAstTheory vyperVmTheory vyperTestTheory;
 
 val () = new_theory "vyperDemo";
@@ -66,10 +66,13 @@ End
 
 val deploy_demo_pre_def = cv_auto_trans_pre deploy_demo_def;
 
-fun cv_eval_match pat tm = let
+fun mk_eval_match eval pat tm = let
   val t1 = find_term (can $ match_term pat) tm
-  val th = cv_eval t1
+  val th = eval t1
 in PURE_REWRITE_CONV [th] tm end
+
+val cv_eval_match = mk_eval_match cv_eval
+val eval_match = mk_eval_match EVAL
 
 Theorem deploy_demo_pre[cv_pre]:
   deploy_demo_pre
@@ -94,40 +97,36 @@ Theorem demo_check_end_campaign_other:
 Proof
   rw[]
   >- CONV_TAC cv_eval
+  \\ rewrite_tac[deploy_demo_eq]
+  \\ rewrite_tac[GSYM demo_ast_def]
   \\ simp[external_call_def]
-  \\ rewrite_tac[Once deploy_demo_eq]
-  \\ qmatch_goalsub_abbrev_tac`contract src gbs`
+  \\ qmatch_goalsub_abbrev_tac`contract _ gbs`
   \\ simp[external_call_contract_def]
-  \\ qunabbrev_tac`src`
   \\ CONV_TAC(cv_eval_match “lookup_function _ _ _”)
-  \\ qmatch_goalsub_abbrev_tac`contract src gbs`
   \\ simp[step_external_function_def]
   \\ CONV_TAC(cv_eval_match “bind_arguments _ _”)
   \\ simp[]
   \\ CONV_TAC(cv_eval_match “initial_function_context _ _ _”)
-  \\ simp[Once step_stmt_till_exception_def]
-  \\ simp[Once initial_execution_context_def, exception_raised_def]
-  \\ simp[Once initial_execution_context_def]
-  \\ simp[Once step_stmt_def, set_stmt_def]
+  \\ simp[Once step_stmt_till_exception_def,
+          initial_execution_context_def,
+          exception_raised_def]
+  \\ CONV_TAC(eval_match “step_stmt _”) \\ rewrite_tac[GSYM demo_ast_def]
   \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
-  \\ simp[Once step_stmt_def, set_stmt_def]
-  \\ simp[step_expr_def]
-  \\ CONV_TAC(cv_eval_match “AssertK _ _”)
+  \\ CONV_TAC(eval_match “step_stmt _”) \\ rewrite_tac[GSYM demo_ast_def]
   \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
-  \\ simp[Once step_stmt_def, set_stmt_def]
-  \\ simp[step_expr_def]
+  \\ CONV_TAC(eval_match “step_stmt _”) \\ rewrite_tac[GSYM demo_ast_def]
+  \\ qmatch_goalsub_abbrev_tac`BuiltinK Eq [addrv]`
+  \\ `addrv = AddressV addr` by (unabbrev_all_tac \\ EVAL_TAC)
   \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
-  \\ simp[Once step_stmt_def, set_stmt_def]
-  \\ simp[step_expr_def]
   \\ qunabbrev_tac`gbs`
-  \\ CONV_TAC(cv_eval_match “FLOOKUP _ _”)
-  \\ simp[evaluate_builtin_def]
-  \\ qmatch_goalsub_abbrev_tac`contract src gbs`
+  \\ CONV_TAC(eval_match “step_stmt _”) \\ rewrite_tac[GSYM demo_ast_def]
+  \\ qmatch_goalsub_abbrev_tac`contract _ gbs`
   \\ qmatch_goalsub_abbrev_tac`BoolV b`
-  \\ `b = (addr = 66w)` by cheat (* word_to_bytes_word_of_bytes_20 *)
-  \\ gvs[Abbr`b`]
+  \\ `b = (addr = 66w)` by ( unabbrev_all_tac \\ BBLAST_TAC )
+  \\ `¬b` by rw[]
+  \\ BasicProvers.VAR_EQ_TAC
   \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
-  \\ simp[Once step_stmt_def, set_stmt_def, raise_def]
+  \\ CONV_TAC(eval_match “step_stmt _”) \\ rewrite_tac[GSYM demo_ast_def]
   \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
   \\ CONV_TAC cv_eval
 QED
