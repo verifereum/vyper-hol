@@ -1,5 +1,5 @@
 open HolKernel boolLib bossLib Parse intLib wordsLib cv_transLib blastLib;
-open vyperAstTheory vyperVmTheory vyperTestTheory;
+open finite_mapTheory vyperAstTheory vyperVmTheory vyperTestTheory;
 
 val () = new_theory "vyperDemo";
 
@@ -129,6 +129,338 @@ Proof
   \\ CONV_TAC(eval_match “step_stmt _”) \\ rewrite_tac[GSYM demo_ast_def]
   \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
   \\ CONV_TAC cv_eval
+QED
+
+Theorem lookup_function_demo_ast:
+  lookup_function fn vis demo_ast = SOME x
+  ⇒
+  fn ∈ {
+    "creator";
+    "contributions";
+    "total_contributions";
+    "refund_claimed";
+    "is_active";
+    "goal_reached";
+    "goal";
+    "contribute";
+    "end_campaign";
+    "refund";
+    "withdraw"
+  } ∧ vis = External
+  ∨ vis = Deploy
+Proof
+  Cases_on`vis`
+  \\ EVAL_TAC
+  \\ rw[]
+QED
+
+Theorem bind_arguments_nil_SOME[simp]:
+  bind_arguments [] args = SOME env ⇔ args = [] ∧ env = FEMPTY
+Proof
+  Cases_on`args` \\ rw[bind_arguments_def]
+QED
+
+Theorem demo_cannot_become_active:
+  ALOOKUP ms0.contracts addr = SOME ctr0 ∧
+  ctr0.src = demo_ast ∧
+  FLOOKUP ctr0.globals (string_to_num "is_active") = SOME (Value (BoolV F)) ∧
+  external_call ms0 tx = (res, ms1)
+  ⇒
+  ∃ctr1.
+    ALOOKUP ms1.contracts addr = SOME ctr1 ∧
+    FLOOKUP ctr1.globals (string_to_num "is_active") = SOME (Value (BoolV F))
+Proof
+  rw[external_call_def, CaseEq"prod", CaseEq"option"]
+  \\ rw[]
+  \\ gvs[external_call_contract_def, CaseEq"option", CaseEq"prod"]
+  \\ drule lookup_function_demo_ast
+  \\ simp[]
+  \\ strip_tac
+  \\ qhdtm_x_assum`lookup_function`mp_tac
+  \\ gvs[]
+  \\ CONV_TAC(cv_eval_match “lookup_function _ _ _”) \\ rw[]
+  \\ qhdtm_x_assum`step_external_function`mp_tac
+  \\ simp[step_external_function_def, CaseEq"option"]
+  \\ strip_tac \\ gvs[]
+  \\ CONV_TAC(cv_eval_match “initial_function_context _ _ _”)
+  \\ simp[Once step_stmt_till_exception_def,
+          initial_execution_context_def,
+          exception_raised_def]
+  \\ CONV_TAC(eval_match “step_stmt _”)
+  \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+  >> TRY (
+    rename1 ‘tx.function_name = "contribute"’
+    \\ cheat )
+  >> TRY (
+    CONV_TAC(eval_match “step_stmt _”)
+    \\ qmatch_goalsub_abbrev_tac`option_CASE opt`
+    \\ Cases_on`opt`
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ TRY (Cases_on`x`)
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ NO_TAC)
+  >- (
+    rename1 ‘tx.function_name = "end_campaign"’
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ qmatch_goalsub_abbrev_tac`BuiltinK Eq [sender]`
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ qmatch_goalsub_abbrev_tac`option_CASE opt`
+    \\ Cases_on`opt`
+    >- (
+      simp[Once step_stmt_till_exception_def, exception_raised_def]
+      \\ CONV_TAC(eval_match “step_stmt _”)
+      \\ simp[Once step_stmt_till_exception_def, exception_raised_def] )
+    \\ reverse(Cases_on`x`) \\ simp[]
+    >- (
+      simp[Once step_stmt_till_exception_def, exception_raised_def]
+      \\ CONV_TAC(eval_match “step_stmt _”)
+      \\ simp[Once step_stmt_till_exception_def, exception_raised_def])
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ qunabbrev_tac`sender` \\ Cases_on`v` \\ rw[evaluate_builtin_def]
+    \\ TRY (
+      CONV_TAC(eval_match “step_stmt _”)
+      \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+      \\ NO_TAC)
+    \\ qmatch_goalsub_abbrev_tac`BoolV bb`
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ reverse (Cases_on`bb`)
+    >- rw[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ qmatch_goalsub_abbrev_tac`option_CASE opt`
+    \\ Cases_on`opt`
+    >- simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ reverse(Cases_on`x`)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ rw[FLOOKUP_UPDATE] )
+  >- (
+    CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ qmatch_goalsub_abbrev_tac`option_CASE opt`
+    \\ Cases_on`opt`
+    >- (
+      simp[Once step_stmt_till_exception_def, exception_raised_def]
+      \\ CONV_TAC(eval_match “step_stmt _”)
+      \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    )
+    \\ reverse(Cases_on`x`)
+    >- (
+      simp[Once step_stmt_till_exception_def, exception_raised_def]
+      \\ CONV_TAC(eval_match “step_stmt _”)
+      \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    )
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ Cases_on`v`
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ rw[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ gvs[]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ qmatch_goalsub_abbrev_tac`option_CASE opt`
+    \\ Cases_on`opt`
+    >- (
+      simp[Once step_stmt_till_exception_def, exception_raised_def]
+      \\ CONV_TAC(eval_match “step_stmt _”)
+      \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    )
+    \\ reverse(Cases_on`x`)
+    >- (
+      simp[Once step_stmt_till_exception_def, exception_raised_def]
+      \\ CONV_TAC(eval_match “step_stmt _”)
+      \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    )
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ Cases_on`v`
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ rw[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ gvs[]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ qmatch_goalsub_abbrev_tac`option_CASE opt`
+    \\ Cases_on`opt`
+    >- (
+      simp[Once step_stmt_till_exception_def, exception_raised_def]
+      \\ CONV_TAC(eval_match “step_stmt _”)
+      \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    )
+    \\ Cases_on`x`
+    >- (
+      simp[Once step_stmt_till_exception_def, exception_raised_def]
+      \\ CONV_TAC(eval_match “step_stmt _”)
+      \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+      \\ CONV_TAC(eval_match “step_stmt _”)
+      \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    )
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ qmatch_goalsub_abbrev_tac`option_CASE opt`
+    \\ Cases_on`opt`
+    >- (
+      simp[Once step_stmt_till_exception_def, exception_raised_def]
+      \\ CONV_TAC(eval_match “step_stmt _”)
+      \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    )
+    \\ reverse(Cases_on`x`)
+    >- (
+      simp[Once step_stmt_till_exception_def, exception_raised_def]
+      \\ CONV_TAC(eval_match “step_stmt _”)
+      \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    )
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ Cases_on`v`
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ rw[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ gvs[]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+  )
+  >- (
+    CONV_TAC(eval_match “step_stmt _”)
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ qmatch_goalsub_abbrev_tac`option_CASE opt`
+    \\ Cases_on`opt`
+    >- (
+      simp[Once step_stmt_till_exception_def, exception_raised_def]
+      \\ CONV_TAC(eval_match “step_stmt _”)
+      \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    )
+    \\ reverse(Cases_on`x`)
+    >- (
+      simp[Once step_stmt_till_exception_def, exception_raised_def]
+      \\ CONV_TAC(eval_match “step_stmt _”)
+      \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    )
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ Cases_on`v`
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ rw[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ gvs[]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ rw[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ rw[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ rw[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ qmatch_goalsub_abbrev_tac`option_CASE opt`
+    \\ Cases_on`opt`
+    >- (
+      simp[Once step_stmt_till_exception_def, exception_raised_def]
+      \\ CONV_TAC(eval_match “step_stmt _”)
+      \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    )
+    \\ reverse(Cases_on`x`)
+    >- (
+      simp[Once step_stmt_till_exception_def, exception_raised_def]
+      \\ CONV_TAC(eval_match “step_stmt _”)
+      \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    )
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ Cases_on`v`
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ rw[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ gvs[]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ rw[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ rw[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ rw[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ rw[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ qmatch_goalsub_abbrev_tac`option_CASE opt`
+    \\ Cases_on`opt`
+    >- (
+      simp[Once step_stmt_till_exception_def, exception_raised_def]
+      \\ CONV_TAC(eval_match “step_stmt _”)
+      \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    )
+    \\ reverse(Cases_on`x`)
+    >- (
+      simp[Once step_stmt_till_exception_def, exception_raised_def]
+      \\ CONV_TAC(eval_match “step_stmt _”)
+      \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    )
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ Cases_on`v`
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ rw[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ gvs[]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ rw[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ rw[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ rw[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ rw[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ rw[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ qmatch_goalsub_abbrev_tac`option_CASE opt`
+    \\ Cases_on`opt`
+    >- (
+      simp[Once step_stmt_till_exception_def, exception_raised_def]
+      \\ CONV_TAC(eval_match “step_stmt _”)
+      \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    )
+    \\ reverse(Cases_on`x`)
+    >- (
+      simp[Once step_stmt_till_exception_def, exception_raised_def]
+      \\ CONV_TAC(eval_match “step_stmt _”)
+      \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    )
+    \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ CONV_TAC(eval_match “step_stmt _”)
+    \\ rw[]
+  )
 QED
 
 val () = export_theory();
