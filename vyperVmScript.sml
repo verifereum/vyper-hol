@@ -546,7 +546,8 @@ Definition builtin_args_length_ok_def:
   builtin_args_length_ok Eq n = (n = 2) ∧
   builtin_args_length_ok Lt n = (n = 2) ∧
   builtin_args_length_ok (Bop _) n = (n = 2) ∧
-  builtin_args_length_ok (Msg _) n = (n = 0)
+  builtin_args_length_ok (Msg _) n = (n = 0) ∧
+  builtin_args_length_ok (Acc _) n = (n = 1)
 End
 
 val () = cv_auto_trans builtin_args_length_ok_def;
@@ -598,6 +599,8 @@ Definition step_expr_def:
     IfExpK (StartExpr e1) e2 e3 ∧
   step_expr tx gbs env (StartExpr (Builtin (Msg Sender) [])) =
     DoneExpr (AddressV tx.sender) ∧
+  step_expr tx gbs env (StartExpr (Builtin (Msg SelfAddr) [])) =
+    DoneExpr (AddressV tx.target) ∧
   step_expr tx gbs env (StartExpr (Builtin (Msg ValueSent) [])) =
     DoneExpr (IntV &tx.value) ∧
   step_expr tx gbs env (StartExpr (Builtin bt [])) =
@@ -681,6 +684,7 @@ Definition step_expr_def:
         (let vs = SNOC v1 vs in
          case es of (e::es) =>
            BuiltinK bt vs (StartExpr e) es
+           (* TODO: handle Acc -- use a record for the step_expr * context *)
           | [] => evaluate_builtin bt vs)
     | LiftCall id ws k => LiftCall id ws (BuiltinK bt vs k es)
     | k => BuiltinK bt vs k es) ∧

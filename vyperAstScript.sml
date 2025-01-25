@@ -50,7 +50,13 @@ End
 Datatype:
   message_item
   = Sender
+  | SelfAddr
   | ValueSent
+End
+
+Datatype:
+  account_item
+  = Balance
 End
 
 Datatype:
@@ -61,6 +67,7 @@ Datatype:
   | Lt
   | Bop binop
   | Msg message_item
+  | Acc account_item
 End
 
 Datatype:
@@ -183,6 +190,7 @@ Overload msg_sender = “Builtin (Msg Sender) []”
 Overload msg_value = “Builtin (Msg ValueSent) []”
 Overload AssignSelf = “λid e. Assign (BaseTarget (GlobalNameTarget id)) e”
 Overload self_ = “λid. GlobalName id”
+Overload self_balance = “Builtin (Acc Balance) [Builtin (Msg SelfAddr) []]”
 Overload call = “λid args. Call (GlobalFn id) args”
 
 val () = export_theory();
