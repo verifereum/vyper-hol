@@ -1,6 +1,6 @@
 open HolKernel boolLib bossLib Parse wordsLib dep_rewrite
 open listTheory alistTheory finite_mapTheory arithmeticTheory
-     numposrepTheory stringTheory combinTheory pred_setTheory
+     pairTheory numposrepTheory stringTheory combinTheory pred_setTheory
      cv_typeTheory cv_stdTheory cv_transLib
 open vyperAstTheory vfmTypesTheory vfmContextTheory
 
@@ -1276,75 +1276,84 @@ End
 
 val () = cv_auto_trans next_stmt_def;
 
+Definition step_stmt_start_def:
+  step_stmt_start Pass ctx = set_stmt DoneK ctx ∧
+  step_stmt_start Continue ctx = continue_loop ctx ∧
+  step_stmt_start Break ctx = break_loop ctx ∧
+  step_stmt_start (Expr e) ctx = set_stmt (ExprK (StartExpr e)) ctx ∧
+  step_stmt_start (Raise s) ctx = raise (RaiseException s) ctx ∧
+  step_stmt_start (Assert e s) ctx = set_stmt (AssertK (StartExpr e) s) ctx ∧
+  step_stmt_start (Return NONE) ctx = pop_call NoneV ctx ∧
+  step_stmt_start (Return (SOME e)) ctx =
+    set_stmt (ReturnSomeK (StartExpr e)) ctx ∧
+  step_stmt_start (AnnAssign id typ e) ctx =
+    set_stmt (AnnAssignK id typ (StartExpr e)) ctx ∧
+  step_stmt_start (AugAssign bt bop e) ctx =
+    set_stmt (AugAssignK1 (StartBaseTgt bt) bop e) ctx ∧
+  step_stmt_start (Assign tgt e) ctx =
+    set_stmt (AssignK1 (StartTgt tgt) e) ctx ∧
+  step_stmt_start (If e s1 s2) ctx =
+    set_stmt (IfK (StartExpr e) s1 s2) ctx ∧
+  step_stmt_start (For id typ e n s) ctx =
+    set_stmt (ForK id typ (StartExpr e) n s) ctx
+End
+
+val () = cv_auto_trans step_stmt_start_def;
+
+Datatype:
+  step_stmt_expr_result
+  = RVal value
+  | RErr string
+  | RCall call_target (value list) expr_continuation
+  | RElse expr_continuation
+End
+
+Definition step_stmt_expr_case_def:
+  step_stmt_expr_case (DoneExpr v) = RVal v ∧
+  step_stmt_expr_case (DoneExprMap _) = RErr "Map" ∧
+  step_stmt_expr_case (ErrorExpr msg) = RErr msg ∧
+  step_stmt_expr_case (LiftCall fn vs k) = RCall fn vs k ∧
+  step_stmt_expr_case k = RElse k
+End
+
+val () = cv_auto_trans step_stmt_expr_case_def;
+
 Definition step_stmt_def:
   step_stmt ctx =
   let fc = ctx.current_fc in
   let gbs = ctx.current_contract.globals in
   let tx = ctx.current_transaction in
   (case fc.current_stmt of
-      | StartK Pass => set_stmt DoneK ctx
-      | StartK Continue => continue_loop ctx
-      | StartK Break => break_loop ctx
-      | StartK (Expr e) => set_stmt (ExprK (StartExpr e)) ctx
-      | StartK (Raise s) => raise (RaiseException s) ctx
-      | StartK (Assert e s) => set_stmt (AssertK (StartExpr e) s) ctx
-      | StartK (Return NONE) => pop_call NoneV ctx
-      | StartK (Return (SOME e)) =>
-          set_stmt (ReturnSomeK (StartExpr e)) ctx
-      | StartK (AnnAssign id typ e) =>
-          set_stmt (AnnAssignK id typ (StartExpr e)) ctx
-      | StartK (AugAssign bt bop e) =>
-          set_stmt (AugAssignK1 (StartBaseTgt bt) bop e) ctx
-      | StartK (Assign tgt e) =>
-          set_stmt (AssignK1 (StartTgt tgt) e) ctx
-      | StartK (If e s1 s2) =>
-          set_stmt (IfK (StartExpr e) s1 s2) ctx
-      | StartK (For id typ e n s) =>
-          set_stmt (ForK id typ (StartExpr e) n s) ctx
-      | ExprK (DoneExpr _) => set_stmt DoneK ctx
-      | ExprK (DoneExprMap _) => raise (Error "ExprK Map") ctx
-      | ExprK (ErrorExpr msg) => raise (Error "ExprK err") ctx
-      | ExprK (LiftCall fn vs k) =>
-          push_call fn vs (set_stmt (ExprK k) ctx)
-      | ExprK k => set_stmt (ExprK (step_expr tx gbs fc.scopes k)) ctx
-      | IfK (DoneExpr (BoolV b)) s1 s2 => (
-          case (if b then s1 else s2) of s::ss =>
-            ctx with current_fc := fc with
-              <| current_stmt := StartK s
-               ; remaining_stmts updated_by (λx. ss ++ x) |>
-          | _ => set_stmt DoneK ctx)
-      | IfK (DoneExpr _) _ _ => raise (Error "IfK DoneExpr") ctx
-      | IfK (DoneExprMap _) _ _ => raise (Error "IfK DoneExprMap") ctx
-      | IfK (ErrorExpr msg) _ _ => raise (Error ("IfK " ++ msg)) ctx
-      | IfK ReturnExpr _ _ => raise (Error "IfK ReturnExpr") ctx
-      | IfK (LiftCall fn vs k) s1 s2 =>
-          push_call fn vs
-            (set_stmt (IfK k s1 s2) ctx)
-      | IfK k s1 s2 =>
-          set_stmt
-            (IfK (step_expr tx gbs fc.scopes k) s1 s2) ctx
-      | AssertK (DoneExpr (BoolV b)) s => (
-          if b then set_stmt DoneK ctx
-          else raise (AssertException s) ctx)
-      | AssertK (DoneExpr _) _ => raise (Error "AssertK DoneExpr") ctx
-      | AssertK (DoneExprMap _) _ => raise (Error "AssertK DoneExprMap") ctx
-      | AssertK (ErrorExpr msg) _ => raise (Error "AssertK ErrorExpr") ctx
-      | AssertK ReturnExpr _ => raise (Error "AssertK ReturnExpr") ctx
-      | AssertK (LiftCall fn vs k) s =>
-          push_call fn vs
-            (set_stmt (AssertK k s) ctx)
-      | AssertK k s =>
-          set_stmt (AssertK (step_expr tx gbs fc.scopes k) s) ctx
-      | ReturnSomeK (DoneExpr v) => pop_call v ctx
-      | ReturnSomeK (DoneExprMap _) => raise (Error "ReturnSomeK Map") ctx
-      | ReturnSomeK (ErrorExpr msg) => raise (Error ("ReturnSomeK " ++ msg)) ctx
-      | ReturnSomeK ReturnExpr => raise (Error "ReturnSomeK ReturnExpr") ctx
-      | ReturnSomeK (LiftCall fn vs k) =>
-          push_call fn vs
-            (set_stmt (ReturnSomeK k) ctx)
-      | ReturnSomeK k =>
-          set_stmt
-            (ReturnSomeK (step_expr tx gbs fc.scopes k)) ctx
+      | StartK st => step_stmt_start st ctx
+      | ExprK k => (case step_stmt_expr_case k of
+          RVal _ => set_stmt DoneK ctx
+        | RErr msg => raise (Error ("ExprK " ++ msg)) ctx
+        | RCall fn vs k => push_call fn vs (set_stmt (ExprK k) ctx)
+        | RElse k => set_stmt (ExprK (step_expr tx gbs fc.scopes k)) ctx)
+      | IfK k s1 s2 => (case step_stmt_expr_case k of
+          RVal (BoolV b) => (
+            case (if b then s1 else s2) of s::ss =>
+              ctx with current_fc := fc with
+                <| current_stmt := StartK s
+                 ; remaining_stmts updated_by (λx. ss ++ x) |>
+            | _ => set_stmt DoneK ctx)
+        | RVal _ => raise (Error "IfK not BoolV") ctx
+        | RErr msg => raise (Error ("IfK " ++ msg)) ctx
+        | RCall fn vs k => push_call fn vs (set_stmt (IfK k s1 s2) ctx)
+        | RElse k => set_stmt (IfK (step_expr tx gbs fc.scopes k) s1 s2) ctx)
+      | AssertK k s => (case step_stmt_expr_case k of
+          RVal (BoolV b) => (
+            if b then set_stmt DoneK ctx
+            else raise (AssertException s) ctx)
+        | RVal _ => raise (Error "AssertK not BoolV") ctx
+        | RErr msg => raise (Error ("AssertK " ++ msg)) ctx
+        | RCall fn vs k => push_call fn vs (set_stmt (AssertK k s) ctx)
+        | RElse k => set_stmt (AssertK (step_expr tx gbs fc.scopes k) s) ctx)
+      | ReturnSomeK k => (case step_stmt_expr_case k of
+          RVal v => pop_call v ctx
+        | RErr msg => raise (Error ("ReturnSomeK " ++ msg)) ctx
+        | RCall fn vs k => push_call fn vs (set_stmt (ReturnSomeK k) ctx)
+        | RElse k => set_stmt (ReturnSomeK (step_expr tx gbs fc.scopes k)) ctx)
       | AssignK1 (DoneTgt av) e =>
           set_stmt (AssignK2 av (StartExpr e)) ctx
       | AssignK1 (ErrorTgt msg) e => raise (Error "AssignK1 err") ctx
@@ -1354,19 +1363,14 @@ Definition step_stmt_def:
       | AssignK1 tk e =>
           set_stmt
             (AssignK1 (step_target tx gbs fc.scopes tk) e) ctx
-      | AssignK2 tv (DoneExpr v) =>
+      | AssignK2 tv k => (case step_stmt_expr_case k of
+          RVal v =>
           let ctx = assign_target tv (Replace v) ctx in
             if exception_raised ctx then ctx else
               set_stmt DoneK ctx
-      | AssignK2 tv (DoneExprMap _) => raise (Error "AssignK2 Map") ctx
-      | AssignK2 tv (ErrorExpr msg) => raise (Error "AssignK2 err") ctx
-      | AssignK2 tv ReturnExpr => raise (Error "AssignK2 ReturnExpr") ctx
-      | AssignK2 tv (LiftCall fn vs k) =>
-          push_call fn vs
-            (set_stmt (AssignK2 tv k) ctx)
-      | AssignK2 tv k =>
-          set_stmt
-            (AssignK2 tv (step_expr tx gbs fc.scopes k)) ctx
+        | RErr msg => raise (Error ("AssignK2 " ++ msg)) ctx
+        | RCall fn vs k => push_call fn vs (set_stmt (AssignK2 tv k) ctx)
+        | RElse k => set_stmt (AssignK2 tv (step_expr tx gbs fc.scopes k)) ctx)
       | AugAssignK1 (DoneBaseTgt l sl) bop e =>
           set_stmt (AugAssignK2 l sl bop (StartExpr e)) ctx
       | AugAssignK1 (LiftCallBaseTgt fn vs bk) bop e =>
@@ -1374,31 +1378,22 @@ Definition step_stmt_def:
       | AugAssignK1 bk bop e =>
           set_stmt
             (AugAssignK1 (step_base_target tx gbs fc.scopes bk) bop e) ctx
-      | AugAssignK2 l sl bop (DoneExpr v2) =>
+      | AugAssignK2 l sl bop k => (case step_stmt_expr_case k of
+          RVal v2 =>
           let ctx = assign_target (BaseTargetV l sl) (Update bop v2) ctx in
             if exception_raised ctx then ctx else set_stmt DoneK ctx
-      | AugAssignK2 _ _ bop (DoneExprMap _) => raise (Error "AugAssignK Map") ctx
-      | AugAssignK2 _ _ bop (ErrorExpr msg) => raise (Error "AugAssignK err") ctx
-      | AugAssignK2 _ _ bop ReturnExpr => raise (Error "AugAssignK ReturnExpr") ctx
-      | AugAssignK2 l sl bop (LiftCall fn vs k) =>
-          push_call fn vs
-            (set_stmt (AugAssignK2 l sl bop k) ctx)
-      | AugAssignK2 l sl bop k =>
-          set_stmt
-            (AugAssignK2 l sl bop (step_expr tx gbs fc.scopes k)) ctx
-      | AnnAssignK id typ (DoneExpr v) => (
+        | RErr msg => raise (Error ("AugAssignK2 " ++ msg)) ctx
+        | RCall fn vs k => push_call fn vs (set_stmt (AugAssignK2 l sl bop k) ctx)
+        | RElse k => set_stmt (AugAssignK2 l sl bop (step_expr tx gbs fc.scopes k)) ctx)
+      | AnnAssignK id typ k => (case step_stmt_expr_case k of
+          RVal v =>
           let nid = string_to_num id in
           let ctx = new_variable nid typ ctx in
             if exception_raised ctx then ctx else
-              set_stmt DoneK (set_variable nid v ctx))
-      | AnnAssignK id typ (DoneExprMap _) => raise (Error "AnnAssignK Map") ctx
-      | AnnAssignK id typ (ErrorExpr msg) => raise (Error "AnnAssignK err") ctx
-      | AnnAssignK id typ ReturnExpr => raise (Error "AnnAssignK ReturnExpr") ctx
-      | AnnAssignK id typ (LiftCall fn vs k) =>
-          push_call fn vs
-            (set_stmt (AnnAssignK id typ k) ctx)
-      | AnnAssignK id typ k =>
-          set_stmt (AnnAssignK id typ (step_expr tx gbs fc.scopes k)) ctx
+              set_stmt DoneK (set_variable nid v ctx)
+        | RErr msg => raise (Error ("AnnAssignK " ++ msg)) ctx
+        | RCall fn vs k => push_call fn vs (set_stmt (AnnAssignK id typ k) ctx)
+        | RElse k => set_stmt (AnnAssignK id typ (step_expr tx gbs fc.scopes k)) ctx)
       | ExceptionK err => ctx
       | DoneK => next_stmt ctx
       | ForK id typ (DoneExpr (ArrayV _ [])) n (st::ss) =>
@@ -1748,15 +1743,63 @@ Proof
   \\ CASE_TAC \\ rw[]
 QED
 
+(*
+Theorem expr_bound_acc:
+  (∀p e fns n fns'.
+     p = (e, fns) ∧
+     expr_bound (e,fns) = (n,fns') ⇒
+     fns ⊆ fns' ∧
+     (fns DIFF fns') ⊆ SND(expr_bound(e,∅)) ∧
+     ∀fns0. ∃fns1.
+       expr_bound (e,fns0) = (n,fns1) ∧
+       fns0 ⊆ fns1 ∧
+       (fns1 DIFF fns0) ⊆ SND(expr_bound(e,∅))) ∧
+  (∀p es fns n fns'.
+     p = (es, fns) ∧
+     expr_bound_list (es,fns) = (n,fns') ⇒
+     fns ⊆ fns' ∧
+     (fns DIFF fns') ⊆ SND(expr_bound(e,∅)) ∧
+     ∀fns0. ∃fns1.
+       expr_bound_list (es,fns0) = (n,fns1) ∧
+       fns0 ⊆ fns1 ∧
+       (fns1 DIFF fns0) ⊆ SND(expr_bound_list(es,∅)))
+Proof
+  ho_match_mp_tac expr_bound_ind
+  \\ rw[] \\ gvs[expr_bound_def]
+  \\ rpt (pairarg_tac \\ gvs[])
+  \\ gvs[SUBSET_DEF]
+
+  \\ TRY (
+    reverse CASE_TAC
+    \\ gvs[]
+    >- metis_tac[PAIR_EQ]
+    \\ first_assum(qspec_then`fns0`mp_tac)
+    \\ strip_tac \\ gvs[] \\ rw[]
+    \\ metis_tac[]
+
+  \\ metis_tac[PAIR_EQ, SND, pair_CASES, NOT_IN_EMPTY]
+
+
+Theorem step_bound_stp_stmt_start:
+  ¬exception_raised ctx ∧
+  ctx.current_fc.current_stmt = StartK k ⇒
+  step_bound (step_stmt_start k ctx) < step_bound ctx
+Proof
+  Cases_on`k` \\ rw[step_stmt_start_def]
+  \\ rw[step_bound_def]
+  \\ rpt(pairarg_tac \\ gvs[])
+  \\ TRY (gvs[fns_from_context_def] \\ NO_TAC)
+*)
+
 Definition step_stmt_till_exception_def:
   step_stmt_till_exception ctx =
   if exception_raised ctx then ctx
   else step_stmt_till_exception (step_stmt ctx)
 Termination
   cheat
-  (*
+(*
   WF_REL_TAC`measure step_bound`
-  \\ rw[step_stmt_def]
+  \\ rw[step_stmt_def, Excl"APPEND"]
   \\ CASE_TAC
   >- (
     CASE_TAC
