@@ -457,37 +457,29 @@ Proof
   CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
-(* TODO add
-
-def test_statefulness_of_tstorage():
-    src = """
-d: transient(uint256)
-
-interface Bar:
-    def bar() -> uint256: payable
-
-@external
-def foo() -> uint256:
-    self.d += 1
-    return extcall Bar(self).bar()
-
-@external
-def bar() -> uint256:
-    self.d += 1
-    return self.d
-    """
-
-    c = loads(src)
-    for i in range(3):
-        assert c.foo() == 2
-
 Definition test_statefulness_of_tstorage_ast_def:
   test_statefulness_of_tstorage_ast = [
-    VariableDecl "d" uint256 Private Transient;
+    VariableDecl Private Transient "d" uint256;
+    (* omitted: interface Bar *)
+    def "foo" [] uint256 [
+      AugAssign (GlobalNameTarget "d") Add (li 1);
+      Return (SOME (Call (ExtCall "bar") [self]))
+    ];
+    def "bar" [] uint256 [
+      AugAssign (GlobalNameTarget "d") Add (li 1);
+      Return (SOME (self_ "d"))
+    ]
   ]
 End
 
 val () = cv_trans_deep_embedding EVAL test_statefulness_of_tstorage_ast_def;
+
+(* TODO: add
+
+Theorem test_statefulness_of_tstorage:
+    for i in range(3):
+        assert c.foo() == 2
+
 *)
 
 Definition test_default_storage_values_ast_def:

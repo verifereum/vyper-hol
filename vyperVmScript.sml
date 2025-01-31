@@ -1127,6 +1127,7 @@ Definition push_call_def:
            ; current_fc := fc |>
        | _ => raise (Error "bind_arguments") ctx)
     | _ => raise (Error "lookup_function Internal") ctx )
+  (* TODO: support Send and ExtCall *)
   | _ => raise (Error "unsupported call") ctx
 End
 

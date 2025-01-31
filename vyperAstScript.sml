@@ -73,6 +73,7 @@ End
 Datatype:
   call_target
   = GlobalFn identifier (* TODO: rename TopLevelFn? InternalFn? *)
+  | ExtCall identifier (* external call passing Vyper values *)
   | Send
   (* TODO: external raw call *)
 End
@@ -190,7 +191,8 @@ Overload msg_sender = “Builtin (Msg Sender) []”
 Overload msg_value = “Builtin (Msg ValueSent) []”
 Overload AssignSelf = “λid e. Assign (BaseTarget (GlobalNameTarget id)) e”
 Overload self_ = “λid. GlobalName id”
-Overload self_balance = “Builtin (Acc Balance) [Builtin (Msg SelfAddr) []]”
+Overload self = “Builtin (Msg SelfAddr) []”
+Overload self_balance = “Builtin (Acc Balance) [self]”
 Overload call = “λid args. Call (GlobalFn id) args”
 
 val () = export_theory();

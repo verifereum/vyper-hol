@@ -198,7 +198,7 @@ val step_tac =
     \\ simp[]
   ) ORELSE
   (
-    qmatch_goalsub_abbrev_tac ‘evaluate_builtin Not [v]’
+    qmatch_goalsub_abbrev_tac ‘evaluate_builtin _ Not [v]’
     \\ Cases_on`v`
     \\ CONV_TAC(eval_match “step_stmt _”)
     \\ rw[Once step_stmt_till_exception_def, exception_raised_def]
