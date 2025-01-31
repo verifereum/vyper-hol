@@ -80,7 +80,7 @@ Proof
   rw[deploy_demo_pre_def, load_contract_def]
   \\ CONV_TAC(cv_eval_match“lookup_function _ _ _”)
   \\ rw[]
-  \\ CONV_TAC(cv_eval_match“step_external_function _ _ _ _”)
+  \\ CONV_TAC(cv_eval_match“step_external_function _ _ _ _ _”)
   \\ rw[]
 QED
 

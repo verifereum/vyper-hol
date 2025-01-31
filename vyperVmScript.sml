@@ -1,7 +1,7 @@
-open HolKernel boolLib bossLib Parse wordsLib dep_rewrite
-open listTheory alistTheory finite_mapTheory arithmeticTheory
+open HolKernel boolLib bossLib Parse wordsLib dep_rewrite blastLib
+open listTheory alistTheory finite_mapTheory arithmeticTheory byteTheory
      pairTheory numposrepTheory stringTheory combinTheory pred_setTheory
-     cv_typeTheory cv_stdTheory cv_transLib
+     wordsTheory cv_typeTheory cv_stdTheory cv_transLib
 open vyperAstTheory vfmTypesTheory vfmContextTheory
 
 val () = new_theory "vyperVm";
@@ -66,6 +66,57 @@ Proof
   \\ Cases_on`x` \\ Cases_on`z` \\ gvs[]
   \\ gvs[Q.SPEC`Pair x y`cv_size'_def]
 QED
+
+Theorem set_byte_160:
+  set_byte a b (w: 160 word) be =
+  let i = byte_index a be in
+       if i =   0 then w2w b        || w && 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00w
+  else if i =   8 then w2w b <<   8 || w && 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00FFw
+  else if i =  16 then w2w b <<  16 || w && 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00FFFFw
+  else if i =  24 then w2w b <<  24 || w && 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00FFFFFFw
+  else if i =  32 then w2w b <<  32 || w && 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00FFFFFFFFw
+  else if i =  40 then w2w b <<  40 || w && 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFF00FFFFFFFFFFw
+  else if i =  48 then w2w b <<  48 || w && 0xFFFFFFFFFFFFFFFFFFFFFFFFFF00FFFFFFFFFFFFw
+  else if i =  56 then w2w b <<  56 || w && 0xFFFFFFFFFFFFFFFFFFFFFFFF00FFFFFFFFFFFFFFw
+  else if i =  64 then w2w b <<  64 || w && 0xFFFFFFFFFFFFFFFFFFFFFF00FFFFFFFFFFFFFFFFw
+  else if i =  72 then w2w b <<  72 || w && 0xFFFFFFFFFFFFFFFFFFFF00FFFFFFFFFFFFFFFFFFw
+  else if i =  80 then w2w b <<  80 || w && 0xFFFFFFFFFFFFFFFFFF00FFFFFFFFFFFFFFFFFFFFw
+  else if i =  88 then w2w b <<  88 || w && 0xFFFFFFFFFFFFFFFF00FFFFFFFFFFFFFFFFFFFFFFw
+  else if i =  96 then w2w b <<  96 || w && 0xFFFFFFFFFFFFFF00FFFFFFFFFFFFFFFFFFFFFFFFw
+  else if i = 104 then w2w b << 104 || w && 0xFFFFFFFFFFFF00FFFFFFFFFFFFFFFFFFFFFFFFFFw
+  else if i = 112 then w2w b << 112 || w && 0xFFFFFFFFFF00FFFFFFFFFFFFFFFFFFFFFFFFFFFFw
+  else if i = 120 then w2w b << 120 || w && 0xFFFFFFFF00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFw
+  else if i = 128 then w2w b << 128 || w && 0xFFFFFF00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFw
+  else if i = 136 then w2w b << 136 || w && 0xFFFF00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFw
+  else if i = 144 then w2w b << 144 || w && 0xFF00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFw
+  else if i = 152 then w2w b << 152 || w && 0x00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFw
+  else                 w2w b << 160 || w && 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFw
+Proof
+  rw_tac std_ss [set_byte_def, word_slice_alt_def]
+  \\ reverse(rpt IF_CASES_TAC)
+  >- (
+    `i = 160`
+    by (
+      qunabbrev_tac`i`
+      \\ full_simp_tac (std_ss ++ boolSimps.LET_ss ++ ARITH_ss) [
+            byte_index_def, EVAL``dimindex(:160)``]
+      \\ `w2n a MOD 20 < 20` by rw[]
+      \\ pop_assum mp_tac
+      \\ qmatch_goalsub_abbrev_tac`z < 20 ⇒ f`
+      \\ simp_tac std_ss [wordsTheory.NUMERAL_LESS_THM]
+      \\ strip_tac \\ gs[Abbr`f`]
+      \\ rw[] \\ gs[] )
+    \\ asm_simp_tac std_ss []
+    \\ simp_tac (srw_ss()) []
+    \\ BBLAST_TAC)
+  \\ asm_simp_tac std_ss []
+  \\ simp_tac (srw_ss()) []
+  \\ BBLAST_TAC
+QED
+
+val () = cv_auto_trans set_byte_160;
+
+val () = cv_auto_trans (INST_TYPE [alpha |-> “:160”] word_of_bytes_def);
 
 (* -- *)
 
@@ -466,17 +517,21 @@ End
 val () = cv_auto_trans evaluate_binop_def;
 
 Definition evaluate_builtin_def:
-  evaluate_builtin Len [BytesV _ ls] = DoneExpr (IntV &(LENGTH ls)) ∧
-  evaluate_builtin Len [StringV _ ls] = DoneExpr (IntV &(LENGTH ls)) ∧
-  evaluate_builtin Len [ArrayV _ ls] = DoneExpr (IntV &(LENGTH ls)) ∧
-  evaluate_builtin Eq [StringV _ s1; StringV _ s2] = DoneExpr (BoolV (s1 = s2)) ∧
-  evaluate_builtin Eq [BytesV _ s1; BytesV _ s2] = DoneExpr (BoolV (s1 = s2)) ∧
-  evaluate_builtin Eq [BoolV b1; BoolV b2] = DoneExpr (BoolV (b1 = b2)) ∧
-  evaluate_builtin Eq  [IntV i1; IntV i2] = DoneExpr (BoolV (i1 = i2)) ∧
-  evaluate_builtin Lt  [IntV i1; IntV i2] = DoneExpr (BoolV (i1 < i2)) ∧
-  evaluate_builtin Not [BoolV b] = DoneExpr (BoolV (¬b)) ∧
-  evaluate_builtin (Bop bop) [v1; v2] = evaluate_binop bop v1 v2 ∧
-  evaluate_builtin _ _ = ErrorExpr "builtin"
+  evaluate_builtin _ Len [BytesV _ ls] = DoneExpr (IntV &(LENGTH ls)) ∧
+  evaluate_builtin _ Len [StringV _ ls] = DoneExpr (IntV &(LENGTH ls)) ∧
+  evaluate_builtin _ Len [ArrayV _ ls] = DoneExpr (IntV &(LENGTH ls)) ∧
+  evaluate_builtin _ Eq [StringV _ s1; StringV _ s2] = DoneExpr (BoolV (s1 = s2)) ∧
+  evaluate_builtin _ Eq [BytesV _ s1; BytesV _ s2] = DoneExpr (BoolV (s1 = s2)) ∧
+  evaluate_builtin _ Eq [BoolV b1; BoolV b2] = DoneExpr (BoolV (b1 = b2)) ∧
+  evaluate_builtin _ Eq  [IntV i1; IntV i2] = DoneExpr (BoolV (i1 = i2)) ∧
+  evaluate_builtin _ Lt  [IntV i1; IntV i2] = DoneExpr (BoolV (i1 < i2)) ∧
+  evaluate_builtin _ Not [BoolV b] = DoneExpr (BoolV (¬b)) ∧
+  evaluate_builtin _ (Bop bop) [v1; v2] = evaluate_binop bop v1 v2 ∧
+  evaluate_builtin bal (Acc Balance) [BytesV _ bs] =
+    (case ALOOKUP bal (word_of_bytes T (0w:address) bs) of
+          SOME n => DoneExpr (IntV &n)
+        | NONE => ErrorExpr "missing balance") ∧
+  evaluate_builtin _ _ _ = ErrorExpr "builtin"
 End
 
 val () = cv_auto_trans evaluate_builtin_def;
@@ -571,47 +626,56 @@ End
 
 val () = cv_auto_trans value_to_key_def;
 
+Datatype:
+  expr_ctxt = <|
+    tx: transaction
+  ; gbs: num |-> toplevel_value
+  ; env: scope list
+  ; bal: (address, num) alist
+  |>
+End
+
 Definition step_expr_def:
-  step_expr tx gbs env (StartExpr (Literal l)) =
+  step_expr ctx (StartExpr (Literal l)) =
     DoneExpr (evaluate_literal l) ∧
-  step_expr tx gbs env (StartExpr (ArrayLit b [])) = (
+  step_expr ctx (StartExpr (ArrayLit b [])) = (
     if compatible_bound b 0
     then DoneExpr (ArrayV b [])
     else ErrorExpr "ArrayLit [] bound" ) ∧
-  step_expr tx gbs env (StartExpr (ArrayLit b (e::es))) = (
+  step_expr ctx (StartExpr (ArrayLit b (e::es))) = (
     if compatible_bound b (LENGTH (e::es))
     then ArrayLitK b [] (StartExpr e) es
     else ErrorExpr "ArrayLit :: bound" ) ∧
-  step_expr tx gbs env (StartExpr (Name id)) =
-    (case lookup_scopes (string_to_num id) env
+  step_expr ctx (StartExpr (Name id)) =
+    (case lookup_scopes (string_to_num id) ctx.env
      of SOME v => DoneExpr v
       | _ => ErrorExpr "lookup_scopes") ∧
-  step_expr tx gbs env (StartExpr (GlobalName id)) =
-    (case FLOOKUP gbs (string_to_num id)
+  step_expr ctx (StartExpr (GlobalName id)) =
+    (case FLOOKUP ctx.gbs (string_to_num id)
      of SOME (Value v) => DoneExpr v
       | SOME (HashMap ls) => DoneExprMap ls
       | _ => ErrorExpr "lookup gbs") ∧
-  step_expr tx gbs env (StartExpr (Subscript e1 e2)) =
+  step_expr ctx (StartExpr (Subscript e1 e2)) =
     SubscriptK1 (StartExpr e1) e2 ∧
-  step_expr tx gbs env (StartExpr (Attribute e id)) =
+  step_expr ctx (StartExpr (Attribute e id)) =
     AttributeK (StartExpr e) id ∧
-  step_expr tx gbs env (StartExpr (IfExp e1 e2 e3)) =
+  step_expr ctx (StartExpr (IfExp e1 e2 e3)) =
     IfExpK (StartExpr e1) e2 e3 ∧
-  step_expr tx gbs env (StartExpr (Builtin (Msg Sender) [])) =
-    DoneExpr (AddressV tx.sender) ∧
-  step_expr tx gbs env (StartExpr (Builtin (Msg SelfAddr) [])) =
-    DoneExpr (AddressV tx.target) ∧
-  step_expr tx gbs env (StartExpr (Builtin (Msg ValueSent) [])) =
-    DoneExpr (IntV &tx.value) ∧
-  step_expr tx gbs env (StartExpr (Builtin bt [])) =
+  step_expr ctx (StartExpr (Builtin (Msg Sender) [])) =
+    DoneExpr (AddressV ctx.tx.sender) ∧
+  step_expr ctx (StartExpr (Builtin (Msg SelfAddr) [])) =
+    DoneExpr (AddressV ctx.tx.target) ∧
+  step_expr ctx (StartExpr (Builtin (Msg ValueSent) [])) =
+    DoneExpr (IntV &ctx.tx.value) ∧
+  step_expr ctx (StartExpr (Builtin bt [])) =
     ErrorExpr "builtin no args" ∧
-  step_expr tx gbs env (StartExpr (Builtin bt (e::es))) = (
+  step_expr ctx (StartExpr (Builtin bt (e::es))) = (
     if builtin_args_length_ok bt (LENGTH (e::es))
     then BuiltinK bt [] (StartExpr e) es
     else ErrorExpr "builtin args length" ) ∧
-  step_expr tx gbs env (StartExpr (Call id [])) =
+  step_expr ctx (StartExpr (Call id [])) =
     LiftCall id [] ReturnExpr ∧
-  step_expr tx gbs env (StartExpr (Call id (e::es))) =
+  step_expr ctx (StartExpr (Call id (e::es))) =
     CallK id [] (StartExpr e) es ∧
   (*
   step_expr gbs env (NamedExprK1 k e) =
@@ -625,16 +689,16 @@ Definition step_expr_def:
      of ErrorExpr => ErrorExpr
       | DoneExpr v2 =>
   *)
-  step_expr tx gbs env (IfExpK k e2 e3) =
-  (case step_expr tx gbs env k
+  step_expr ctx (IfExpK k e2 e3) =
+  (case step_expr ctx k
    of ErrorExpr msg => ErrorExpr msg
     | DoneExprMap _ => ErrorExpr "IfExpK Map"
     | DoneExpr v1 => (case v1 of BoolV b => StartExpr (if b then e2 else e3)
                                | _ => ErrorExpr "IfExpK value")
     | LiftCall id vs k => LiftCall id vs (IfExpK k e2 e3)
     | k => IfExpK k e2 e3) ∧
-  step_expr tx gbs env (ArrayLitK b vs k es) =
-  (case step_expr tx gbs env k
+  step_expr ctx (ArrayLitK b vs k es) =
+  (case step_expr ctx k
    of ErrorExpr msg => ErrorExpr msg
     | DoneExprMap _ => ErrorExpr "ArrayLitK Map"
     | DoneExpr v =>
@@ -642,22 +706,22 @@ Definition step_expr_def:
                   | [] => DoneExpr (ArrayV b (SNOC v vs)))
     | LiftCall id as k => LiftCall id as (ArrayLitK b vs k es)
     | k => ArrayLitK b vs k es) ∧
-  step_expr tx gbs env (SubscriptK1 k e) =
-  (case step_expr tx gbs env k
+  step_expr ctx (SubscriptK1 k e) =
+  (case step_expr ctx k
    of ErrorExpr msg => ErrorExpr msg
     | DoneExpr v => SubscriptK2 v (StartExpr e)
     | DoneExprMap hm => SubscriptMapK hm (StartExpr e)
     | LiftCall id vs k => LiftCall id vs (SubscriptK1 k e)
     | k => SubscriptK1 k e) ∧
-  step_expr tx gbs env (SubscriptK2 v1 k) =
-  (case step_expr tx gbs env k
+  step_expr ctx (SubscriptK2 v1 k) =
+  (case step_expr ctx k
    of ErrorExpr msg => ErrorExpr msg
     | DoneExprMap _ => ErrorExpr "SubscriptK2 Map"
     | DoneExpr v2 => evaluate_subscript v1 v2
     | LiftCall id vs k => LiftCall id vs (SubscriptK2 v1 k)
     | k => SubscriptK2 v1 k) ∧
-  step_expr tx gbs env (SubscriptMapK hm k) =
-  (case step_expr tx gbs env k
+  step_expr ctx (SubscriptMapK hm k) =
+  (case step_expr ctx k
    of ErrorExpr msg => ErrorExpr msg
     | DoneExprMap _ => ErrorExpr "SubscriptMapK Map"
     | DoneExpr v2 =>
@@ -669,27 +733,26 @@ Definition step_expr_def:
          | _ => ErrorExpr "value_to_key")
     | LiftCall id vs k => LiftCall id vs (SubscriptMapK hm k)
     | k => SubscriptMapK hm k) ∧
-  step_expr tx gbs env (AttributeK k id) =
-  (case step_expr tx gbs env k
+  step_expr ctx (AttributeK k id) =
+  (case step_expr ctx k
    of ErrorExpr msg => ErrorExpr msg
     | DoneExprMap _ => ErrorExpr "AttributeK Map"
     | DoneExpr v => evaluate_attribute v id
     | LiftCall fn vs k => LiftCall fn vs (AttributeK k id)
     | k => AttributeK k id) ∧
-  step_expr tx gbs env (BuiltinK bt vs k es) =
-  (case step_expr tx gbs env k
+  step_expr ctx (BuiltinK bt vs k es) =
+  (case step_expr ctx k
    of ErrorExpr msg => ErrorExpr msg
     | DoneExprMap _ => ErrorExpr "BuiltinK Map"
     | DoneExpr v1 =>
         (let vs = SNOC v1 vs in
          case es of (e::es) =>
            BuiltinK bt vs (StartExpr e) es
-           (* TODO: handle Acc -- use a record for the step_expr * context *)
-          | [] => evaluate_builtin bt vs)
+          | [] => evaluate_builtin ctx.bal bt vs)
     | LiftCall id ws k => LiftCall id ws (BuiltinK bt vs k es)
     | k => BuiltinK bt vs k es) ∧
-  step_expr tx gbs env (CallK id vs k es) =
-  (case step_expr tx gbs env k
+  step_expr ctx (CallK id vs k es) =
+  (case step_expr ctx k
    of ErrorExpr msg => ErrorExpr msg
     | DoneExprMap _ => ErrorExpr "CallK Map"
     | DoneExpr v =>
@@ -698,11 +761,11 @@ Definition step_expr_def:
                   | [] => LiftCall id vs ReturnExpr)
     | LiftCall id ws k => LiftCall id ws (CallK id vs k es)
     | k => CallK id vs k es) ∧
-  step_expr tx gbs env (LiftCall id vs k) = LiftCall id vs k ∧
-  step_expr tx gbs env (DoneExpr v) = DoneExpr v ∧
-  step_expr tx gbs env (DoneExprMap ls) = DoneExprMap ls ∧
-  step_expr tx gbs env ReturnExpr = ReturnExpr ∧
-  step_expr tx gbs env (ErrorExpr msg) = ErrorExpr msg
+  step_expr ctx (LiftCall id vs k) = LiftCall id vs k ∧
+  step_expr ctx (DoneExpr v) = DoneExpr v ∧
+  step_expr ctx (DoneExprMap ls) = DoneExprMap ls ∧
+  step_expr ctx ReturnExpr = ReturnExpr ∧
+  step_expr ctx (ErrorExpr msg) = ErrorExpr msg
 End
 
 val () = cv_auto_trans step_expr_def;
@@ -769,6 +832,7 @@ Datatype:
   ; call_stack : function_context list
   ; current_contract: contract
   ; current_transaction: transaction
+  ; current_balances: (address, num) alist
   |>
 End
 
@@ -795,11 +859,12 @@ End
 val () = cv_auto_trans type_env_def;
 
 Definition initial_execution_context_def:
-  initial_execution_context t c fc = <|
+  initial_execution_context t c b fc = <|
     current_fc := fc
   ; call_stack := []
   ; current_contract := c
   ; current_transaction := t
+  ; current_balances := b
   |>
 End
 
@@ -851,52 +916,52 @@ End
 val () = cv_auto_trans (REWRITE_RULE[TO_FLOOKUP]find_containing_scope_def);
 
 Definition step_base_target_def:
-  step_base_target tx gbs env (StartBaseTgt (NameTarget id)) =
-    (case find_containing_scope (string_to_num id) env
+  step_base_target ctx (StartBaseTgt (NameTarget id)) =
+    (case find_containing_scope (string_to_num id) ctx.env
      of SOME cs => DoneBaseTgt (ScopedVar cs id) []
       | _ => ErrorBaseTgt "step_base_target find_containing_scope" ) ∧
-  step_base_target tx gbs env (StartBaseTgt (GlobalNameTarget id)) =
+  step_base_target ctx (StartBaseTgt (GlobalNameTarget id)) =
     DoneBaseTgt (Global id) [] ∧
-  step_base_target tx gbs env (StartBaseTgt (SubscriptTarget t e)) =
+  step_base_target ctx (StartBaseTgt (SubscriptTarget t e)) =
     SubscriptTargetK1 (StartBaseTgt t) e ∧
-  step_base_target tx gbs env (StartBaseTgt (AttributeTarget t id)) =
+  step_base_target cxt (StartBaseTgt (AttributeTarget t id)) =
     AttributeTargetK (StartBaseTgt t) id ∧
-  step_base_target tx gbs env (SubscriptTargetK1 k e) =
-    (case step_base_target tx gbs env k of
+  step_base_target ctx (SubscriptTargetK1 k e) =
+    (case step_base_target ctx k of
      | DoneBaseTgt l s => SubscriptTargetK2 l s (StartExpr e)
      | LiftCallBaseTgt fn vs k => LiftCallBaseTgt fn vs (SubscriptTargetK1 k e)
      | ErrorBaseTgt msg => ErrorBaseTgt msg
      | k => SubscriptTargetK1 k e) ∧
-  step_base_target tx gbs env (SubscriptTargetK2 l s k) =
-   (case step_expr tx gbs env k
+  step_base_target ctx (SubscriptTargetK2 l s k) =
+   (case step_expr ctx k
     of DoneExpr v => (case value_to_key v of SOME k => DoneBaseTgt l (k::s)
                       | _ => ErrorBaseTgt "SubscriptTargetK2 value_to_key")
      | DoneExprMap _ => ErrorBaseTgt "SubscriptTargetK2 Map"
      | ErrorExpr msg => ErrorBaseTgt msg
      | LiftCall fn vs k => LiftCallBaseTgt fn vs (SubscriptTargetK2 l s k)
      | k => SubscriptTargetK2 l s k) ∧
-  step_base_target tx gbs env (AttributeTargetK k id) =
-  (case step_base_target tx gbs env k
+  step_base_target ctx (AttributeTargetK k id) =
+  (case step_base_target ctx k
    of ErrorBaseTgt msg => ErrorBaseTgt msg
     | DoneBaseTgt l s => DoneBaseTgt l ((AttrSubscript id)::s)
     | LiftCallBaseTgt fn vs k => LiftCallBaseTgt fn vs (AttributeTargetK k id)
     | k => AttributeTargetK k id) ∧
-  step_base_target tx gbs env (LiftCallBaseTgt fn vs k) = LiftCallBaseTgt fn vs k ∧
-  step_base_target tx gbs env (DoneBaseTgt l s) = DoneBaseTgt l s ∧
-  step_base_target tx gbs env (ErrorBaseTgt msg) = ErrorBaseTgt msg
+  step_base_target ctx (LiftCallBaseTgt fn vs k) = LiftCallBaseTgt fn vs k ∧
+  step_base_target ctx (DoneBaseTgt l s) = DoneBaseTgt l s ∧
+  step_base_target ctx (ErrorBaseTgt msg) = ErrorBaseTgt msg
 End
 
 val () = cv_auto_trans step_base_target_def;
 
 Definition step_target_def:
-  step_target tx gbs env (StartTgt (BaseTarget b)) =
+  step_target ctx (StartTgt (BaseTarget b)) =
     BaseTargetK (StartBaseTgt b) ∧
-  step_target tx gbs env (StartTgt (TupleTarget [])) =
+  step_target ctx (StartTgt (TupleTarget [])) =
     DoneTgt (TupleTargetV []) ∧
-  step_target tx gbs env (StartTgt (TupleTarget (t::ts))) =
+  step_target ctx (StartTgt (TupleTarget (t::ts))) =
     TupleTargetK [] (StartTgt t) ts ∧
-  step_target tx gbs env (TupleTargetK vs k ts) =
-  (case step_target tx gbs env k
+  step_target ctx (TupleTargetK vs k ts) =
+  (case step_target ctx k
    of DoneTgt v =>
      (case ts of [] => DoneTgt (TupleTargetV (SNOC v vs))
                | (t::ts) => TupleTargetK (SNOC v vs) (StartTgt t) ts)
@@ -904,15 +969,15 @@ Definition step_target_def:
         LiftCallTgt fn as (TupleTargetK vs k ts)
     | ErrorTgt msg => ErrorTgt msg
     | k => TupleTargetK vs k ts) ∧
-  step_target tx gbs env (BaseTargetK k) =
-  (case step_base_target tx gbs env k
+  step_target ctx (BaseTargetK k) =
+  (case step_base_target ctx k
    of DoneBaseTgt l s => DoneTgt $ BaseTargetV l s
     | LiftCallBaseTgt fn vs k => LiftCallTgt fn vs (BaseTargetK k)
     | ErrorBaseTgt msg => ErrorTgt msg
     | k => BaseTargetK k) ∧
-  step_target tx gbs env (LiftCallTgt fn vs k) = LiftCallTgt fn vs k ∧
-  step_target tx gbs env (DoneTgt v) = DoneTgt v ∧
-  step_target tx gbs env (ErrorTgt msg) = ErrorTgt msg
+  step_target ctx (LiftCallTgt fn vs k) = LiftCallTgt fn vs k ∧
+  step_target ctx (DoneTgt v) = DoneTgt v ∧
+  step_target ctx (ErrorTgt msg) = ErrorTgt msg
 End
 
 val () = cv_auto_trans step_target_def;
@@ -1323,13 +1388,16 @@ Definition step_stmt_def:
   let fc = ctx.current_fc in
   let gbs = ctx.current_contract.globals in
   let tx = ctx.current_transaction in
+  let ectx =
+    <| tx := tx; gbs := gbs; env := fc.scopes;
+       bal := ctx.current_balances |> in
   (case fc.current_stmt of
       | StartK st => step_stmt_start st ctx
       | ExprK k => (case step_stmt_expr_case k of
           RVal _ => set_stmt DoneK ctx
         | RErr msg => raise (Error ("ExprK " ++ msg)) ctx
         | RCall fn vs k => push_call fn vs (set_stmt (ExprK k) ctx)
-        | RElse k => set_stmt (ExprK (step_expr tx gbs fc.scopes k)) ctx)
+        | RElse k => set_stmt (ExprK (step_expr ectx k)) ctx)
       | IfK k s1 s2 => (case step_stmt_expr_case k of
           RVal (BoolV b) => (
             case (if b then s1 else s2) of s::ss =>
@@ -1340,7 +1408,7 @@ Definition step_stmt_def:
         | RVal _ => raise (Error "IfK not BoolV") ctx
         | RErr msg => raise (Error ("IfK " ++ msg)) ctx
         | RCall fn vs k => push_call fn vs (set_stmt (IfK k s1 s2) ctx)
-        | RElse k => set_stmt (IfK (step_expr tx gbs fc.scopes k) s1 s2) ctx)
+        | RElse k => set_stmt (IfK (step_expr ectx k) s1 s2) ctx)
       | AssertK k s => (case step_stmt_expr_case k of
           RVal (BoolV b) => (
             if b then set_stmt DoneK ctx
@@ -1348,12 +1416,12 @@ Definition step_stmt_def:
         | RVal _ => raise (Error "AssertK not BoolV") ctx
         | RErr msg => raise (Error ("AssertK " ++ msg)) ctx
         | RCall fn vs k => push_call fn vs (set_stmt (AssertK k s) ctx)
-        | RElse k => set_stmt (AssertK (step_expr tx gbs fc.scopes k) s) ctx)
+        | RElse k => set_stmt (AssertK (step_expr ectx k) s) ctx)
       | ReturnSomeK k => (case step_stmt_expr_case k of
           RVal v => pop_call v ctx
         | RErr msg => raise (Error ("ReturnSomeK " ++ msg)) ctx
         | RCall fn vs k => push_call fn vs (set_stmt (ReturnSomeK k) ctx)
-        | RElse k => set_stmt (ReturnSomeK (step_expr tx gbs fc.scopes k)) ctx)
+        | RElse k => set_stmt (ReturnSomeK (step_expr ectx k)) ctx)
       | AssignK1 (DoneTgt av) e =>
           set_stmt (AssignK2 av (StartExpr e)) ctx
       | AssignK1 (ErrorTgt msg) e => raise (Error "AssignK1 err") ctx
@@ -1362,7 +1430,7 @@ Definition step_stmt_def:
             (set_stmt (AssignK1 tk e) ctx)
       | AssignK1 tk e =>
           set_stmt
-            (AssignK1 (step_target tx gbs fc.scopes tk) e) ctx
+            (AssignK1 (step_target ectx tk) e) ctx
       | AssignK2 tv k => (case step_stmt_expr_case k of
           RVal v =>
           let ctx = assign_target tv (Replace v) ctx in
@@ -1370,21 +1438,21 @@ Definition step_stmt_def:
               set_stmt DoneK ctx
         | RErr msg => raise (Error ("AssignK2 " ++ msg)) ctx
         | RCall fn vs k => push_call fn vs (set_stmt (AssignK2 tv k) ctx)
-        | RElse k => set_stmt (AssignK2 tv (step_expr tx gbs fc.scopes k)) ctx)
+        | RElse k => set_stmt (AssignK2 tv (step_expr ectx k)) ctx)
       | AugAssignK1 (DoneBaseTgt l sl) bop e =>
           set_stmt (AugAssignK2 l sl bop (StartExpr e)) ctx
       | AugAssignK1 (LiftCallBaseTgt fn vs bk) bop e =>
           push_call fn vs (set_stmt (AugAssignK1 bk bop e) ctx)
       | AugAssignK1 bk bop e =>
           set_stmt
-            (AugAssignK1 (step_base_target tx gbs fc.scopes bk) bop e) ctx
+            (AugAssignK1 (step_base_target ectx bk) bop e) ctx
       | AugAssignK2 l sl bop k => (case step_stmt_expr_case k of
           RVal v2 =>
           let ctx = assign_target (BaseTargetV l sl) (Update bop v2) ctx in
             if exception_raised ctx then ctx else set_stmt DoneK ctx
         | RErr msg => raise (Error ("AugAssignK2 " ++ msg)) ctx
         | RCall fn vs k => push_call fn vs (set_stmt (AugAssignK2 l sl bop k) ctx)
-        | RElse k => set_stmt (AugAssignK2 l sl bop (step_expr tx gbs fc.scopes k)) ctx)
+        | RElse k => set_stmt (AugAssignK2 l sl bop (step_expr ectx k)) ctx)
       | AnnAssignK id typ k => (case step_stmt_expr_case k of
           RVal v =>
           let nid = string_to_num id in
@@ -1393,7 +1461,7 @@ Definition step_stmt_def:
               set_stmt DoneK (set_variable nid v ctx)
         | RErr msg => raise (Error ("AnnAssignK " ++ msg)) ctx
         | RCall fn vs k => push_call fn vs (set_stmt (AnnAssignK id typ k) ctx)
-        | RElse k => set_stmt (AnnAssignK id typ (step_expr tx gbs fc.scopes k)) ctx)
+        | RElse k => set_stmt (AnnAssignK id typ (step_expr ectx k)) ctx)
       | ExceptionK err => ctx
       | DoneK => next_stmt ctx
       | ForK id typ (DoneExpr (ArrayV _ [])) n (st::ss) =>
@@ -1410,7 +1478,7 @@ Definition step_stmt_def:
           push_call fn vs
             (set_stmt (ForK id typ k n ss) ctx)
       | ForK id typ k n ss =>
-          set_stmt (ForK id typ (step_expr tx gbs fc.scopes k) n ss) ctx)
+          set_stmt (ForK id typ (step_expr ectx k) n ss) ctx)
 End
 
 val () = cv_auto_trans step_stmt_def;
@@ -1853,11 +1921,11 @@ End
 val () = cv_auto_trans process_exception_def;
 
 Definition step_external_function_def:
-  step_external_function tx ctr params body =
+  step_external_function tx ctr bal params body =
    (case bind_arguments params tx.args of
       SOME env =>
       (let fc = initial_function_context tx.function_name env body in
-       let ctx = initial_execution_context tx ctr fc in
+       let ctx = initial_execution_context tx ctr bal fc in
        let ctx = step_stmt_till_exception ctx in
        let ctr = ctx.current_contract in
          (process_exception ctx.current_fc.current_stmt, ctr))
@@ -1867,10 +1935,11 @@ End
 val () = cv_auto_trans step_external_function_def;
 
 Definition external_call_contract_def:
- external_call_contract ctr tx =
+ external_call_contract ctr bal tx =
  case lookup_function tx.function_name External ctr.src of
    NONE => (INR "lookup_function External", ctr)
- | SOME (params, _, body) => step_external_function tx ctr params body
+  (* TODO: update balances on return *)
+ | SOME (params, _, body) => step_external_function tx ctr bal params body
 End
 
 val () = cv_auto_trans external_call_contract_def;
@@ -1880,7 +1949,8 @@ Definition external_call_def:
   let addr = tx.target in
   case ALOOKUP ms.contracts addr of NONE => (INR "no contract at addr", ms)
      | SOME ctr =>
-  case external_call_contract ctr tx of
+  (* TODO: update balances on return *)
+  case external_call_contract ctr ms.balances tx of
        (res, ctr) =>
        (res, ms with contracts updated_by CONS (addr, ctr))
 End
@@ -1894,7 +1964,8 @@ Definition load_contract_def:
   case lookup_function tx.function_name Deploy ts of
     | NONE => INR "no constructor"
     | SOME (params, _, body) => (
-      case step_external_function tx ctr params body of
+    (* TODO: update balances on return *)
+      case step_external_function tx ctr ms.balances params body of
       | (INR msg, _) => INR msg
       | (INL _, ctr) => INL $ ms with contracts updated_by (CONS (addr, ctr))
     )

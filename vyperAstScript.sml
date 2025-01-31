@@ -160,7 +160,7 @@ Datatype:
   | VariableDecl variable_visibility variable_mutability identifier type
   | StructDef identifier (argument list)
   | HashMapDecl variable_visibility identifier type value_type
-  (* TODO: interfaces *)
+  (* TODO: interfaces -- would these be a no-op except for type-checking? *)
   (* TODO: flags *)
 End
 
