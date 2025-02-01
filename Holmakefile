@@ -1,1 +1,1 @@
-INCLUDES=$(VFMDIR)
+INCLUDES=$(VFMDIR)/util $(VFMDIR)/spec
