@@ -4,7 +4,7 @@ open listTheory alistTheory finite_mapTheory arithmeticTheory byteTheory
      wordsTheory cv_typeTheory cv_stdTheory cv_transLib
 open vyperAstTheory vfmTypesTheory vfmContextTheory
 
-val () = new_theory "vyperVm";
+val () = new_theory "vyperSmallStep";
 
 (* TODO: move *)
 Theorem cv_rep_DOMSUB[cv_rep]:
