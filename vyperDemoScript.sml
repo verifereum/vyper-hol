@@ -1,5 +1,5 @@
 open HolKernel boolLib bossLib Parse intLib wordsLib cv_transLib blastLib;
-open finite_mapTheory vyperAstTheory vyperVmTheory vyperTestTheory;
+open finite_mapTheory vyperAstTheory vyperSmallStepTheory vyperTestTheory;
 
 val () = new_theory "vyperDemo";
 
