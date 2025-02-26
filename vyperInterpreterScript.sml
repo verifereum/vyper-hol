@@ -1,4 +1,4 @@
-open HolKernel boolLib bossLib Parse wordsLib blastLib dep_rewrite
+open HolKernel boolLib bossLib Parse wordsLib blastLib dep_rewrite monadsyntax
      byteTheory finite_mapTheory
      cv_typeTheory cv_stdTheory cv_transLib
 open vfmTypesTheory vfmStateTheory vyperAstTheory
@@ -297,22 +297,42 @@ End
 
 val () = cv_auto_trans evaluate_binop_def;
 
+Datatype:
+  call_txn = <|
+    sender: address
+  ; target: address
+  ; function_name: identifier
+  ; args: value list
+  ; value: num
+  |>
+End
+
+Datatype:
+  evaluation_context = <|
+    env: scope list
+  ; stk: identifier list (* add loops *)
+  ; txn: call_txn
+  |>
+End
+
 Definition evaluate_builtin_def:
-  evaluate_builtin _ Len [BytesV _ ls] = INL (IntV &(LENGTH ls)) ∧
-  evaluate_builtin _ Len [StringV _ ls] = INL (IntV &(LENGTH ls)) ∧
-  evaluate_builtin _ Len [ArrayV _ ls] = INL (IntV &(LENGTH ls)) ∧
-  evaluate_builtin _ Eq [StringV _ s1; StringV _ s2] = INL (BoolV (s1 = s2)) ∧
-  evaluate_builtin _ Eq [BytesV _ s1; BytesV _ s2] = INL (BoolV (s1 = s2)) ∧
-  evaluate_builtin _ Eq [BoolV b1; BoolV b2] = INL (BoolV (b1 = b2)) ∧
-  evaluate_builtin _ Eq  [IntV i1; IntV i2] = INL (BoolV (i1 = i2)) ∧
-  evaluate_builtin _ Lt  [IntV i1; IntV i2] = INL (BoolV (i1 < i2)) ∧
-  evaluate_builtin _ Not [BoolV b] = INL (BoolV (¬b)) ∧
-  evaluate_builtin _ (Bop bop) [v1; v2] = evaluate_binop bop v1 v2 ∧
-  evaluate_builtin bal (Acc Balance) [BytesV _ bs] =
-    (case ALOOKUP bal (word_of_bytes T (0w:address) bs) of
-          SOME n => INL (IntV &n)
-        | NONE => INR "missing balance") ∧
-  evaluate_builtin _ _ _ = INR "builtin"
+  evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV &(LENGTH ls)) ∧
+  evaluate_builtin cx _ Len [StringV _ ls] = INL (IntV &(LENGTH ls)) ∧
+  evaluate_builtin cx _ Len [ArrayV _ ls] = INL (IntV &(LENGTH ls)) ∧
+  evaluate_builtin cx _ Eq [StringV _ s1; StringV _ s2] = INL (BoolV (s1 = s2)) ∧
+  evaluate_builtin cx _ Eq [BytesV _ s1; BytesV _ s2] = INL (BoolV (s1 = s2)) ∧
+  evaluate_builtin cx _ Eq [BoolV b1; BoolV b2] = INL (BoolV (b1 = b2)) ∧
+  evaluate_builtin cx _ Eq  [IntV i1; IntV i2] = INL (BoolV (i1 = i2)) ∧
+  evaluate_builtin cx _ Lt  [IntV i1; IntV i2] = INL (BoolV (i1 < i2)) ∧
+  evaluate_builtin cx _ Not [BoolV b] = INL (BoolV (¬b)) ∧
+  evaluate_builtin cx _ (Bop bop) [v1; v2] = evaluate_binop bop v1 v2 ∧
+  evaluate_builtin cx _ (Msg Sender) [] = INL $ AddressV cx.txn.sender ∧
+  evaluate_builtin cx _ (Msg SelfAddr) [] = INL $ AddressV cx.txn.target ∧
+  evaluate_builtin cx _ (Msg ValueSent) [] = INL $ IntV &cx.txn.value ∧
+  evaluate_builtin cx acc (Acc Balance) [BytesV _ bs] =
+    (let a = lookup_account (word_of_bytes T (0w:address) bs) acc in
+          INL (IntV &a.balance)) ∧
+  evaluate_builtin _ _ _ _ = INR "builtin"
 End
 
 val () = cv_auto_trans evaluate_builtin_def;
@@ -389,24 +409,6 @@ End
 val () = cv_auto_trans builtin_args_length_ok_def;
 
 Datatype:
-  call_txn = <|
-    sender: address
-  ; target: address
-  ; function_name: identifier
-  ; args: value list
-  ; value: num
-  |>
-End
-
-Datatype:
-  evaluation_context = <|
-    env: scope list
-  ; stk: identifier list (* add loops *)
-  ; txn: call_txn
-  |>
-End
-
-Datatype:
   contract = <|
     src: toplevel list
   ; globals: (* identifier *) num |-> toplevel_value
@@ -422,49 +424,159 @@ End
 
 Datatype:
   exception
-  = RaiseException string
-  | AssertException string
+  = AssertException string
   | Error string
   | BreakException
   | ContinueException
+  | ReturnException value
 End
 
-Datatype:
-  result = Done α | Exc exception
-End
-
-Type evaluation_result = “:α result # evaluation_state”
+Type evaluation_result = “:(α + exception) # evaluation_state”
 
 Definition return_def:
-  return x s = (Done x, s) : α evaluation_result
+  return x s = (INL x, s) : α evaluation_result
 End
 
-Definition fail_def:
-  fail e s = (Exc e, s) : α evaluation_result
+Definition raise_def:
+  raise e s = (INR e, s) : α evaluation_result
 End
 
 Definition bind_def:
   bind f g (s: evaluation_state) : α evaluation_result =
-  case f s of (Done x, s) => g x s | (Exc e, s) => (Exc e, s)
+  case f s of (INL x, s) => g x s | (INR e, s) => (INR e, s)
 End
 
 Definition ignore_bind_def:
   ignore_bind f g = bind f (λx. g)
 End
 
-Definition ignore_def:
-  ignore (Done x, s) = (Done (), s) ∧
-  ignore (Exc e, s) = (Exc e, s) : unit evaluation_result
+Definition assert_def:
+  assert b e s = ((if b then INL () else INR e), s) : unit evaluation_result
+End
+
+val () = declare_monad ("vyper_evaluation",
+  { bind = “bind”, unit = “return”,
+    ignorebind = SOME “ignore_bind”, choice = NONE,
+    fail = SOME “raise”, guard = SOME “assert”
+  });
+val () = enable_monad "vyper_evaluation";
+val () = enable_monadsyntax();
+
+Definition handle_def:
+  handle f h s : α evaluation_result =
+  case f s of (INR e, s) => h e s | x => x
+End
+
+Definition get_current_contract_def:
+  get_current_contract cx st =
+  (case ALOOKUP st.contracts cx.txn.target
+     of NONE => raise $ Error "get_current_contract"
+      | SOME ctr => return ctr) st
+End
+
+Definition get_current_globals_def:
+  get_current_globals cx = do
+    ctr <- get_current_contract cx;
+    return ctr.globals
+  od
+End
+
+Definition lookup_global_def:
+  lookup_global cx n = do
+    gbs <- get_current_globals cx;
+    case FLOOKUP gbs n
+      of NONE => raise $ Error "lookup_global"
+       | SOME v => return v
+  od
+End
+
+Definition get_accounts_def:
+  get_accounts st = return st.accounts st
 End
 
 Definition evaluate_def:
   eval_stmt cx Pass = return () ∧
-  eval_stmt cx Continue = fail ContinueException ∧
-  eval_stmt cx Break = fail BreakException ∧
-  eval_stmt cx (Expr e) = ignore o eval_expr cx e ∧
-  eval_expr cx (Literal l) = return $ evaluate_literal l ∧
+  eval_stmt cx Continue = raise ContinueException ∧
+  eval_stmt cx Break = raise BreakException ∧
+  eval_stmt cx (Return NONE) = raise $ ReturnException NoneV ∧
+  eval_stmt cx (Return (SOME e)) = do
+    tv <- eval_expr cx e;
+    (case tv of Value v => raise $ ReturnException v
+     | _ => raise $ Error "Return not Value")
+  od ∧
+  eval_stmt cx (Raise str) = raise $ AssertException str ∧
+  eval_stmt cx (Assert e str) = do
+    v <- eval_expr cx e;
+    if v = Value $ BoolV T then
+      return ()
+    else if v = Value $ BoolV F then
+      raise $ AssertException str
+    else raise $ Error "Assert not BoolV"
+  od ∧
+  eval_stmt cx (If e ss1 ss2) = do
+    v <- eval_expr cx e;
+    if v = Value $ BoolV T then
+      eval_stmts cx ss1
+    else if v = Value $ BoolV F then
+      eval_stmts cx ss2
+    else raise $ Error "If not BoolV"
+  od ∧
+  (*
+  eval_stmt cx (For id typ e n body) = do
+
+  od ∧
+  *)
+  eval_stmt cx (Expr e) = do
+    tv <- eval_expr cx e;
+    case tv of Value _ => return () | _ => raise $ Error "Expr not Value"
+  od ∧
+  eval_stmts cx [] = return () ∧
+  eval_stmts cx (s::ss) = do
+    eval_stmt cx s; eval_stmts cx ss
+  od ∧
+  eval_expr cx (Name id) =
+    (case lookup_scopes (string_to_num id) cx.env
+       of NONE => raise $ Error "lookup name"
+        | SOME v => return $ Value v) ∧
+  eval_expr cx (GlobalName id) = lookup_global cx (string_to_num id) ∧
+  eval_expr cx (IfExp e1 e2 e3) = do
+    v <- eval_expr cx e1;
+    if v = Value $ BoolV T then
+      eval_expr cx e2
+    else if v = Value $ BoolV F then
+      eval_expr cx e3
+    else raise $ Error "IfExp not BoolV"
+  od ∧
+  eval_expr cx (Literal l) = return $ Value $ evaluate_literal l ∧
+  eval_expr cx (ArrayLit b es) =
+    (if compatible_bound b (LENGTH es) then do
+       vs <- eval_exprs cx es;
+       return $ Value $ ArrayV b vs
+     od else raise $ Error "ArrayLit bound") ∧
+  eval_expr cx (Builtin bt es) =
+    (if builtin_args_length_ok bt (LENGTH es) then do
+       vs <- eval_exprs cx es;
+       acc <- get_accounts;
+       case evaluate_builtin cx acc bt vs
+         of INL v => return $ Value v
+          | INR str => raise $ Error str
+     od else raise $ Error "Builtin args") ∧
   eval_expr cx (Call t es) = (* TODO *)
-    ignore_bind (eval_stmt cx Pass) (return NoneV)
+    ignore_bind (eval_stmt cx Pass) (return $ Value NoneV) ∧
+  eval_exprs cx [] = return [] ∧
+  eval_exprs cx (e::es) = do
+    tv <- eval_expr cx e;
+    case tv of Value v => do
+      vs <- eval_exprs cx es;
+      return $ v::vs
+    od | _ => raise $ Error "exprs not Value"
+  od
+Termination
+  WF_REL_TAC ‘measure (λx. case x of
+  | INR (INR (INR (_, es))) => list_size expr_size es
+  | INR (INR (INL (_, e))) => expr_size e
+  | INR (INL (_, ss)) => list_size stmt_size ss
+  | INL (_, s) => stmt_size s)’
 End
 
 Definition value_to_key_def:
