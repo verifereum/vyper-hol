@@ -650,7 +650,7 @@ Definition step_expr_def:
     (case lookup_scopes (string_to_num id) ctx.env
      of SOME v => DoneExpr v
       | _ => ErrorExpr "lookup_scopes") ∧
-  step_expr ctx (StartExpr (GlobalName id)) =
+  step_expr ctx (StartExpr (TopLevelName id)) =
     (case FLOOKUP ctx.gbs (string_to_num id)
      of SOME (Value v) => DoneExpr v
       | SOME (HashMap ls) => DoneExprMap ls
@@ -920,7 +920,7 @@ Definition step_base_target_def:
     (case find_containing_scope (string_to_num id) ctx.env
      of SOME cs => DoneBaseTgt (ScopedVar cs id) []
       | _ => ErrorBaseTgt "step_base_target find_containing_scope" ) ∧
-  step_base_target ctx (StartBaseTgt (GlobalNameTarget id)) =
+  step_base_target ctx (StartBaseTgt (TopLevelNameTarget id)) =
     DoneBaseTgt (Global id) [] ∧
   step_base_target ctx (StartBaseTgt (SubscriptTarget t e)) =
     SubscriptTargetK1 (StartBaseTgt t) e ∧
@@ -1097,12 +1097,12 @@ Definition lookup_function_def:
   (if id = name ∧ vis = fv then SOME (args, ret, body)
    else lookup_function name vis ts) ∧
   lookup_function name External (VariableDecl Public _ id typ :: ts) =
-  (if id = name ∧ ¬is_ArrayT typ then SOME ([], typ, [Return (SOME (GlobalName id))])
+  (if id = name ∧ ¬is_ArrayT typ then SOME ([], typ, [Return (SOME (TopLevelName id))])
    else lookup_function name External ts) ∧
  (* TODO: handle arrays, array of array, hashmap of array, etc. *)
  (* TODO
   lookup_function name External (HashMapDecl Public id kt vt :: ts) =
-  (if id = name then SOME ([("], typ, [Return (SOME (GlobalName "id"))])
+  (if id = name then SOME ([("], typ, [Return (SOME (TopLevelName "id"))])
    else lookup_function name External ts) ∧
  *)
   lookup_function name vis (_ :: ts) =
@@ -1113,7 +1113,7 @@ val () = cv_auto_trans lookup_function_def;
 
 Definition push_call_def:
   push_call ct args ctx =
-  case ct of GlobalFn fn =>
+  case ct of IntCall fn =>
     if ctx.current_fc.name = Fn fn ∨
        EXISTS (λfc. fc.name = Fn fn) ctx.call_stack
     then raise (Error "recursive call") ctx else (
@@ -1486,7 +1486,7 @@ val () = cv_auto_trans step_stmt_def;
 
 Definition expr_bound_def[simp]:
   expr_bound (Name _, fns) = (0n, fns) ∧
-  expr_bound (GlobalName _, fns) = (0, fns) ∧
+  expr_bound (TopLevelName _, fns) = (0, fns) ∧
   expr_bound (IfExp e1 e2 e3, fns) = (
     let (n1, fns) = expr_bound (e1, fns) in
     let (n2, fns) = expr_bound (e2, fns) in
@@ -1508,7 +1508,7 @@ Definition expr_bound_def[simp]:
     (1 + ns, fns) ) ∧
   expr_bound (Call ct es, fns) = (
   let (ns, fns) = expr_bound_list (es, fns) in
-    (1 + ns, (case ct of GlobalFn fn => fn INSERT fns | _ => fns)) ) ∧
+    (1 + ns, (case ct of IntCall fn => fn INSERT fns | _ => fns)) ) ∧
   expr_bound_list ([], fns) = (0, fns) ∧
   expr_bound_list (e::es, fns) = (
   let (n, fns) = expr_bound (e, fns) in

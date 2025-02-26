@@ -19,10 +19,10 @@ Definition demo_ast_def:
     ];
     pay_def "contribute" [] NoneT [
       Assert (self_ "is_active") "Not active";
-      AugAssign (SubscriptTarget (GlobalNameTarget "contributions")
+      AugAssign (SubscriptTarget (TopLevelNameTarget "contributions")
                                  msg_sender)
                 Add msg_value;
-      AugAssign (GlobalNameTarget "total_contributions")
+      AugAssign (TopLevelNameTarget "total_contributions")
                 Add msg_value;
       AssignSelf "goal_reached"
         (not (self_ "goal" < self_ "total_contributions"))

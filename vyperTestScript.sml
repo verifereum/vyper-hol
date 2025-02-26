@@ -138,11 +138,11 @@ Definition test_storage_array_assign_ast_def:
     def "foo" [] uint256 [
       AssignSelf "a" (DynArlit 10 [li 1; li 2]);
       Assign (BaseTarget
-               (SubscriptTarget (GlobalNameTarget "a")
+               (SubscriptTarget (TopLevelNameTarget "a")
                                 (li 0)))
              (li 3);
-      Return (SOME (Subscript (GlobalName "a") (li 0) +
-                    Subscript (GlobalName "a") (li 1)))
+      Return (SOME (Subscript (TopLevelName "a") (li 0) +
+                    Subscript (TopLevelName "a") (li 1)))
     ]
   ]
 End
@@ -196,7 +196,7 @@ Definition test_internal_call_without_return_ast_def:
     ];
     def "foo" [] uint256 [
       Expr (call "bar" []);
-      Return (SOME (GlobalName "a"))
+      Return (SOME (TopLevelName "a"))
     ]
   ]
 End
@@ -267,7 +267,7 @@ Definition test_storage_variables_ast_def:
       If (Name "a" == li 1)
         [Assign (BaseTarget (NameTarget "a")) (li 2)]
         [Assign (BaseTarget (NameTarget "a")) (li 3)];
-      Return (SOME (GlobalName "d" + li 42))
+      Return (SOME (TopLevelName "d" + li 42))
     ]
   ]
 End
@@ -287,9 +287,9 @@ Definition test_storage_variables2_ast_def:
     privar "k" uint256;
     def "foo" [] uint256 [
       AssignSelf "k" (li 1);
-      AssignSelf "d" (GlobalName "k");
-      AugAssign (GlobalNameTarget "d") Add (GlobalName "k");
-      Return (SOME (GlobalName "d" + GlobalName "k"))
+      AssignSelf "d" (TopLevelName "k");
+      AugAssign (TopLevelNameTarget "d") Add (TopLevelName "k");
+      Return (SOME (TopLevelName "d" + TopLevelName "k"))
     ]
   ]
 End
@@ -310,7 +310,7 @@ Definition test_storage_variables3_ast_def:
       AnnAssign "a" (DynArray uint256 10)
         (DynArlit 10 [li 1; li 2; li 3]);
       For "i" uint256 (Name "a") 10 [
-        AugAssign (GlobalNameTarget "d") Add (Name "i")
+        AugAssign (TopLevelNameTarget "d") Add (Name "i")
       ]
     ];
     def "foo" [] uint256 [
@@ -318,10 +318,10 @@ Definition test_storage_variables3_ast_def:
         (DynArlit 10 [li 1; li 2; li 3]);
       AnnAssign "counter" uint256 (li 0);
       For "i" uint256 (Name "a") 10 [
-        AugAssign (GlobalNameTarget "d") Add (Name "i")
+        AugAssign (TopLevelNameTarget "d") Add (Name "i")
       ];
       Expr (call "bar" []);
-      Return (SOME (GlobalName "d"))
+      Return (SOME (TopLevelName "d"))
     ]
   ]
 End
@@ -339,8 +339,8 @@ Definition test_statefulness_of_storage_ast_def:
   test_statefulness_of_storage_ast = [
     privar "d" uint256;
     def "foo" [] uint256 [
-      AugAssign (GlobalNameTarget "d") Add (li 1);
-      Return (SOME (GlobalName "d"))
+      AugAssign (TopLevelNameTarget "d") Add (li 1);
+      Return (SOME (TopLevelName "d"))
     ]
   ]
 End
@@ -370,12 +370,12 @@ Definition test_statefulness_of_storage2_ast_def:
   test_statefulness_of_storage2_ast = [
     privar "d" uint256;
     def "foo" [] uint256 [
-      AugAssign (GlobalNameTarget "d") Add (li 1);
-      Return (SOME (GlobalName "d"))
+      AugAssign (TopLevelNameTarget "d") Add (li 1);
+      Return (SOME (TopLevelName "d"))
     ];
     def "bar" [] uint256 [
-      AugAssign (GlobalNameTarget "d") Add (li 1);
-      Return (SOME (GlobalName "d"))
+      AugAssign (TopLevelNameTarget "d") Add (li 1);
+      Return (SOME (TopLevelName "d"))
     ]
   ]
 End
@@ -417,9 +417,9 @@ Definition test_tstorage_variables0_ast_def:
     VariableDecl Private Transient "k" uint256;
     def "foo" [] uint256 [
       AssignSelf "k" (li 1);
-      AssignSelf "d" (GlobalName "k");
-      AugAssign (GlobalNameTarget "d") Add (GlobalName "k");
-      Return (SOME (GlobalName "d" + GlobalName "k"))
+      AssignSelf "d" (TopLevelName "k");
+      AugAssign (TopLevelNameTarget "d") Add (TopLevelName "k");
+      Return (SOME (TopLevelName "d" + TopLevelName "k"))
     ]
   ]
 End
@@ -438,12 +438,12 @@ Definition test_tstorage_variables2_ast_def:
     VariableDecl Private Transient "d" uint256;
     VariableDecl Private Transient "k" uint256;
     def "foo" [] uint256 [
-      If (GlobalName "k" == li 0) [
+      If (TopLevelName "k" == li 0) [
         AssignSelf "k" (li 1)
       ] [];
-      AssignSelf "d" (GlobalName "k");
-      AugAssign (GlobalNameTarget "d") Add (GlobalName "k");
-      Return (SOME (GlobalName "d" + GlobalName "k"))
+      AssignSelf "d" (TopLevelName "k");
+      AugAssign (TopLevelNameTarget "d") Add (TopLevelName "k");
+      Return (SOME (TopLevelName "d" + TopLevelName "k"))
     ]
   ]
 End
@@ -462,11 +462,11 @@ Definition test_statefulness_of_tstorage_ast_def:
     VariableDecl Private Transient "d" uint256;
     (* omitted: interface Bar *)
     def "foo" [] uint256 [
-      AugAssign (GlobalNameTarget "d") Add (li 1);
+      AugAssign (TopLevelNameTarget "d") Add (li 1);
       Return (SOME (Call (ExtCall "bar") [self]))
     ];
     def "bar" [] uint256 [
-      AugAssign (GlobalNameTarget "d") Add (li 1);
+      AugAssign (TopLevelNameTarget "d") Add (li 1);
       Return (SOME (self_ "d"))
     ]
   ]
@@ -492,12 +492,12 @@ Definition test_default_storage_values_ast_def:
     privar "e" (BaseT (BytesT (Dynamic 10)));
     privar "f" (BaseT (StringT 10));
     def "foo" [] uint256 [
-      Assert (GlobalName "a" == li 0) "";
-      Assert (GlobalName "b" == li 0) "";
-      Assert (len (GlobalName "c") == li 0) "";
-      Assert (Attribute (GlobalName "d") "a" == li 0) "";
-      Assert (len (GlobalName "e") == li 0) "";
-      Assert (len (GlobalName "f") == li 0) "";
+      Assert (TopLevelName "a" == li 0) "";
+      Assert (TopLevelName "b" == li 0) "";
+      Assert (len (TopLevelName "c") == li 0) "";
+      Assert (Attribute (TopLevelName "d") "a" == li 0) "";
+      Assert (len (TopLevelName "e") == li 0) "";
+      Assert (len (TopLevelName "f") == li 0) "";
       Return (SOME (li 1))
     ]
   ]
@@ -537,7 +537,7 @@ Definition test_len_builtin2_ast_def:
   test_len_builtin2_ast = [
     privar "d" (DynArray uint256 3);
     def "foo" [] uint256 [
-      Return (SOME (len (GlobalName "d")))
+      Return (SOME (len (TopLevelName "d")))
     ]
   ]
 End
@@ -556,7 +556,7 @@ Definition test_len_builtin3_ast_def:
     privar "s" (BaseT (StringT 10));
     def "foo" [] uint256 [
       AssignSelf "s" (Literal (StringL 10 "hello"));
-      Return (SOME (len (GlobalName "s")))
+      Return (SOME (len (TopLevelName "s")))
     ]
   ]
 End
@@ -577,7 +577,7 @@ Definition test_len_builtin4_ast_def:
       AssignSelf "s"
         (Literal (BytesL (Dynamic 10)
           ^(rhs $ concl $ EVAL “MAP (n2w o ORD) "hello" : word8 list”)));
-      Return (SOME (len (GlobalName "s")))
+      Return (SOME (len (TopLevelName "s")))
     ]
   ]
 End

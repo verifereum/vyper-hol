@@ -72,7 +72,7 @@ End
 
 Datatype:
   call_target
-  = GlobalFn identifier (* TODO: rename TopLevelFn? InternalFn? *)
+  = IntCall identifier
   | ExtCall identifier (* external call passing Vyper values *)
   | Send
   (* TODO: external raw call *)
@@ -81,8 +81,7 @@ End
 Datatype:
   expr
   = Name identifier
-  (* TODO: rename to TopLevelName? they are scoped *)
-  | GlobalName identifier
+  | TopLevelName identifier
   | IfExp expr expr expr
   | Literal literal
   | ArrayLit bound (expr list)
@@ -98,7 +97,7 @@ End
 Datatype:
   base_assignment_target
   = NameTarget identifier
-  | GlobalNameTarget identifier
+  | TopLevelNameTarget identifier
   | SubscriptTarget base_assignment_target expr
   | AttributeTarget base_assignment_target identifier
 End
@@ -189,10 +188,10 @@ Overload DynArray = “λt n. ArrayT t (Dynamic n)”
 Overload DynArlit = “λn ls. ArrayLit (Dynamic n) ls”
 Overload msg_sender = “Builtin (Msg Sender) []”
 Overload msg_value = “Builtin (Msg ValueSent) []”
-Overload AssignSelf = “λid e. Assign (BaseTarget (GlobalNameTarget id)) e”
-Overload self_ = “λid. GlobalName id”
+Overload AssignSelf = “λid e. Assign (BaseTarget (TopLevelNameTarget id)) e”
+Overload self_ = “λid. TopLevelName id”
 Overload self = “Builtin (Msg SelfAddr) []”
 Overload self_balance = “Builtin (Acc Balance) [self]”
-Overload call = “λid args. Call (GlobalFn id) args”
+Overload call = “λid args. Call (IntCall id) args”
 
 val () = export_theory();

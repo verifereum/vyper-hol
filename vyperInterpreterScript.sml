@@ -588,7 +588,7 @@ Definition evaluate_def:
     v <- lift_option (lookup_scopes (string_to_num id) cx.env) "lookup Name";
     return $ Value v
   od ∧
-  eval_expr cx (GlobalName id) = lookup_global cx (string_to_num id) ∧
+  eval_expr cx (TopLevelName id) = lookup_global cx (string_to_num id) ∧
   eval_expr cx (IfExp e1 e2 e3) = do
     tv <- eval_expr cx e1;
     switch_BoolV tv
