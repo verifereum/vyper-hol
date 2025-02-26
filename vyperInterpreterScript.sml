@@ -494,6 +494,21 @@ Definition get_accounts_def:
   get_accounts st = return st.accounts st
 End
 
+Definition lift_option_def:
+  lift_option x str =
+    case x of SOME v => return v | NONE => raise $ Error str
+End
+
+Definition lift_sum_def:
+  lift_sum x =
+    case x of INL v => return v | INR str => raise $ Error str
+End
+
+Definition get_Value_def:
+  get_Value (Value v) = return v ∧
+  get_Value _ = raise $ Error "not Value"
+End
+
 Definition evaluate_def:
   eval_stmt cx Pass = return () ∧
   eval_stmt cx Continue = raise ContinueException ∧
@@ -501,8 +516,8 @@ Definition evaluate_def:
   eval_stmt cx (Return NONE) = raise $ ReturnException NoneV ∧
   eval_stmt cx (Return (SOME e)) = do
     tv <- eval_expr cx e;
-    (case tv of Value v => raise $ ReturnException v
-     | _ => raise $ Error "Return not Value")
+    v <- get_Value tv;
+    raise $ ReturnException v
   od ∧
   eval_stmt cx (Raise str) = raise $ AssertException str ∧
   eval_stmt cx (Assert e str) = do
@@ -523,21 +538,28 @@ Definition evaluate_def:
   od ∧
   (*
   eval_stmt cx (For id typ e n body) = do
-
+    v <- eval_expr cx e;
+    vs <- lift_option (extract_elements v) "For not ArrayV";
+    check length of vs against n
+    eval_for cx id typ body
+      bind loop variable to current value
+      evaluate body statements
+        handle break or continue exceptions
   od ∧
   *)
   eval_stmt cx (Expr e) = do
     tv <- eval_expr cx e;
-    case tv of Value _ => return () | _ => raise $ Error "Expr not Value"
+    get_Value tv;
+    return ()
   od ∧
   eval_stmts cx [] = return () ∧
   eval_stmts cx (s::ss) = do
     eval_stmt cx s; eval_stmts cx ss
   od ∧
-  eval_expr cx (Name id) =
-    (case lookup_scopes (string_to_num id) cx.env
-       of NONE => raise $ Error "lookup name"
-        | SOME v => return $ Value v) ∧
+  eval_expr cx (Name id) = do
+    v <- lift_option (lookup_scopes (string_to_num id) cx.env) "lookup Name";
+    return $ Value v
+  od ∧
   eval_expr cx (GlobalName id) = lookup_global cx (string_to_num id) ∧
   eval_expr cx (IfExp e1 e2 e3) = do
     v <- eval_expr cx e1;
@@ -557,19 +579,17 @@ Definition evaluate_def:
     (if builtin_args_length_ok bt (LENGTH es) then do
        vs <- eval_exprs cx es;
        acc <- get_accounts;
-       case evaluate_builtin cx acc bt vs
-         of INL v => return $ Value v
-          | INR str => raise $ Error str
+       v <- lift_sum $ evaluate_builtin cx acc bt vs;
+       return $ Value v
      od else raise $ Error "Builtin args") ∧
   eval_expr cx (Call t es) = (* TODO *)
     ignore_bind (eval_stmt cx Pass) (return $ Value NoneV) ∧
   eval_exprs cx [] = return [] ∧
   eval_exprs cx (e::es) = do
     tv <- eval_expr cx e;
-    case tv of Value v => do
-      vs <- eval_exprs cx es;
-      return $ v::vs
-    od | _ => raise $ Error "exprs not Value"
+    v <- get_Value tv;
+    vs <- eval_exprs cx es;
+    return $ v::vs
   od
 Termination
   WF_REL_TAC ‘measure (λx. case x of
