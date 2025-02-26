@@ -279,19 +279,6 @@ Datatype:
   | TupleTargetV (assignment_value list)
 End
 
-Datatype:
-  exception
-  = RaiseException string
-  | AssertException string
-  | Error string
-  | BreakException
-  | ContinueException
-End
-
-Datatype:
-  result = Done α | Exc exception
-End
-
 Definition evaluate_literal_def:
   evaluate_literal (BoolL b)   = BoolV b ∧
   evaluate_literal (StringL n s) = StringV n s ∧
@@ -302,30 +289,30 @@ End
 val () = cv_auto_trans evaluate_literal_def;
 
 Definition evaluate_binop_def:
-  evaluate_binop (Add:binop) (IntV i1) (IntV i2) = Done (IntV (i1 + i2)) ∧
-  evaluate_binop Sub (IntV i1) (IntV i2) = Done (IntV (i1 - i2)) ∧
-  evaluate_binop Mul (IntV i1) (IntV i2) = Done (IntV (i1 * i2)) ∧
-  evaluate_binop _ _ _ = Exc $ Error "binop"
+  evaluate_binop (Add:binop) (IntV i1) (IntV i2) = INL (IntV (i1 + i2)) ∧
+  evaluate_binop Sub (IntV i1) (IntV i2) = INL (IntV (i1 - i2)) ∧
+  evaluate_binop Mul (IntV i1) (IntV i2) = INL (IntV (i1 * i2)) ∧
+  evaluate_binop _ _ _ = INR "binop"
 End
 
 val () = cv_auto_trans evaluate_binop_def;
 
 Definition evaluate_builtin_def:
-  evaluate_builtin _ Len [BytesV _ ls] = Done (IntV &(LENGTH ls)) ∧
-  evaluate_builtin _ Len [StringV _ ls] = Done (IntV &(LENGTH ls)) ∧
-  evaluate_builtin _ Len [ArrayV _ ls] = Done (IntV &(LENGTH ls)) ∧
-  evaluate_builtin _ Eq [StringV _ s1; StringV _ s2] = Done (BoolV (s1 = s2)) ∧
-  evaluate_builtin _ Eq [BytesV _ s1; BytesV _ s2] = Done (BoolV (s1 = s2)) ∧
-  evaluate_builtin _ Eq [BoolV b1; BoolV b2] = Done (BoolV (b1 = b2)) ∧
-  evaluate_builtin _ Eq  [IntV i1; IntV i2] = Done (BoolV (i1 = i2)) ∧
-  evaluate_builtin _ Lt  [IntV i1; IntV i2] = Done (BoolV (i1 < i2)) ∧
-  evaluate_builtin _ Not [BoolV b] = Done (BoolV (¬b)) ∧
+  evaluate_builtin _ Len [BytesV _ ls] = INL (IntV &(LENGTH ls)) ∧
+  evaluate_builtin _ Len [StringV _ ls] = INL (IntV &(LENGTH ls)) ∧
+  evaluate_builtin _ Len [ArrayV _ ls] = INL (IntV &(LENGTH ls)) ∧
+  evaluate_builtin _ Eq [StringV _ s1; StringV _ s2] = INL (BoolV (s1 = s2)) ∧
+  evaluate_builtin _ Eq [BytesV _ s1; BytesV _ s2] = INL (BoolV (s1 = s2)) ∧
+  evaluate_builtin _ Eq [BoolV b1; BoolV b2] = INL (BoolV (b1 = b2)) ∧
+  evaluate_builtin _ Eq  [IntV i1; IntV i2] = INL (BoolV (i1 = i2)) ∧
+  evaluate_builtin _ Lt  [IntV i1; IntV i2] = INL (BoolV (i1 < i2)) ∧
+  evaluate_builtin _ Not [BoolV b] = INL (BoolV (¬b)) ∧
   evaluate_builtin _ (Bop bop) [v1; v2] = evaluate_binop bop v1 v2 ∧
   evaluate_builtin bal (Acc Balance) [BytesV _ bs] =
     (case ALOOKUP bal (word_of_bytes T (0w:address) bs) of
-          SOME n => Done (IntV &n)
-        | NONE => Exc $ Error "missing balance") ∧
-  evaluate_builtin _ _ _ = Exc $ Error "builtin"
+          SOME n => INL (IntV &n)
+        | NONE => INR "missing balance") ∧
+  evaluate_builtin _ _ _ = INR "builtin"
 End
 
 val () = cv_auto_trans evaluate_builtin_def;
@@ -356,10 +343,10 @@ val () = cv_auto_trans integer_index_def;
 Definition evaluate_subscript_def:
   evaluate_subscript av (IntV i) =
   (case extract_elements av of SOME vs =>
-    (case integer_index vs i of SOME j => Done (EL j vs)
-     | _ => Exc $ Error "integer_index")
-   | _ => Exc $ Error "extract_elements") ∧
-  evaluate_subscript _ _ = Exc $ Error "evaluate_subscript"
+    (case integer_index vs i of SOME j => INL (EL j vs)
+     | _ => INR "integer_index")
+   | _ => INR "extract_elements") ∧
+  evaluate_subscript _ _ = INR "evaluate_subscript"
 End
 
 val evaluate_subscript_pre_def = cv_auto_trans_pre evaluate_subscript_def;
@@ -375,9 +362,9 @@ QED
 
 Definition evaluate_attribute_def:
   evaluate_attribute (StructV kvs) id =
-  (case ALOOKUP kvs id of SOME v => Done v
-   | _ => Exc $ Error "attribute") ∧
-  evaluate_attribute _ _ = Exc $ Error "evaluate_attribute"
+  (case ALOOKUP kvs id of SOME v => INL v
+   | _ => INR "attribute") ∧
+  evaluate_attribute _ _ = INR "evaluate_attribute"
 End
 
 val () = cv_auto_trans evaluate_attribute_def;
@@ -433,11 +420,52 @@ Datatype:
   |>
 End
 
-(*
+Datatype:
+  exception
+  = RaiseException string
+  | AssertException string
+  | Error string
+  | BreakException
+  | ContinueException
+End
+
+Datatype:
+  result = Done α | Exc exception
+End
+
+Type evaluation_result = “:α result # evaluation_state”
+
+Definition return_def:
+  return x s = (Done x, s) : α evaluation_result
+End
+
+Definition fail_def:
+  fail e s = (Exc e, s) : α evaluation_result
+End
+
+Definition bind_def:
+  bind f g (s: evaluation_state) : α evaluation_result =
+  case f s of (Done x, s) => g x s | (Exc e, s) => (Exc e, s)
+End
+
+Definition ignore_bind_def:
+  ignore_bind f g = bind f (λx. g)
+End
+
+Definition ignore_def:
+  ignore (Done x, s) = (Done (), s) ∧
+  ignore (Exc e, s) = (Exc e, s) : unit evaluation_result
+End
+
 Definition evaluate_def:
-  eval_stmt cx st Pass = Done st ∧
-  eval_stmt cx st Continue
-*)
+  eval_stmt cx Pass = return () ∧
+  eval_stmt cx Continue = fail ContinueException ∧
+  eval_stmt cx Break = fail BreakException ∧
+  eval_stmt cx (Expr e) = ignore o eval_expr cx e ∧
+  eval_expr cx (Literal l) = return $ evaluate_literal l ∧
+  eval_expr cx (Call t es) = (* TODO *)
+    ignore_bind (eval_stmt cx Pass) (return NoneV)
+End
 
 Definition value_to_key_def:
   value_to_key (IntV i) = SOME $ IntSubscript i ∧
