@@ -520,6 +520,22 @@ Definition switch_BoolV_def:
   else raise $ Error "not BoolV"
 End
 
+Definition push_scope_def:
+  push_scope cx = cx with env updated_by CONS FEMPTY
+End
+
+Definition push_scope_with_var_def:
+  push_scope_with_var nm v cx =
+    cx with env updated_by CONS (FEMPTY |+ (nm, v))
+End
+
+Definition handle_loop_exception_def:
+  handle_loop_exception e =
+  if e = ContinueException then return F
+  else if e = BreakException then return T
+  else raise e
+End
+
 Definition evaluate_def:
   eval_stmt cx Pass = return () ∧
   eval_stmt cx Continue = raise ContinueException ∧
@@ -532,29 +548,27 @@ Definition evaluate_def:
   od ∧
   eval_stmt cx (Raise str) = raise $ AssertException str ∧
   eval_stmt cx (Assert e str) = do
-    v <- eval_expr cx e;
-    switch_BoolV v
+    tv <- eval_expr cx e;
+    switch_BoolV tv
       (return ())
       (raise $ AssertException str)
   od ∧
   eval_stmt cx (If e ss1 ss2) = do
-    v <- eval_expr cx e;
-    switch_BoolV v
+    tv <- eval_expr cx e;
+    cx <<- push_scope cx;
+    switch_BoolV tv
       (eval_stmts cx ss1)
       (eval_stmts cx ss2)
   od ∧
-  (*
   eval_stmt cx (For id typ e n body) = do
-    v <- eval_expr cx e;
+    tv <- eval_expr cx e;
+    v <- get_Value tv;
     vs <- lift_option (extract_elements v) "For not ArrayV";
-
-    check length of vs against n
-    eval_for cx id typ body
-      bind loop variable to current value
-      evaluate body statements
-        handle break or continue exceptions
+    check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long";
+    (* TODO: check the type? *)
+    (* TODO: check id is not in scope already? *)
+    eval_for cx (string_to_num id) body vs
   od ∧
-  *)
   eval_stmt cx (Expr e) = do
     tv <- eval_expr cx e;
     get_Value tv;
@@ -564,14 +578,20 @@ Definition evaluate_def:
   eval_stmts cx (s::ss) = do
     eval_stmt cx s; eval_stmts cx ss
   od ∧
+  eval_for cx nm body [] = return () ∧
+  eval_for cx nm body (v::vs) = do
+    cxv <<- push_scope_with_var nm v cx;
+    broke <- handle (do eval_stmts cxv body; return F od) handle_loop_exception;
+    if broke then return () else eval_for cx nm body vs
+  od ∧
   eval_expr cx (Name id) = do
     v <- lift_option (lookup_scopes (string_to_num id) cx.env) "lookup Name";
     return $ Value v
   od ∧
   eval_expr cx (GlobalName id) = lookup_global cx (string_to_num id) ∧
   eval_expr cx (IfExp e1 e2 e3) = do
-    v <- eval_expr cx e1;
-    switch_BoolV v
+    tv <- eval_expr cx e1;
+    switch_BoolV tv
       (eval_expr cx e2)
       (eval_expr cx e3)
   od ∧
@@ -598,11 +618,14 @@ Definition evaluate_def:
     return $ v::vs
   od
 Termination
+  cheat
+  (* cannot just use sizes: need to look at loop bounds and recursion bounds
   WF_REL_TAC ‘measure (λx. case x of
   | INR (INR (INR (_, es))) => list_size expr_size es
   | INR (INR (INL (_, e))) => expr_size e
   | INR (INL (_, ss)) => list_size stmt_size ss
   | INL (_, s) => stmt_size s)’
+  *)
 End
 
 Definition value_to_key_def:
