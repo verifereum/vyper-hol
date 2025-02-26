@@ -509,6 +509,17 @@ Definition get_Value_def:
   get_Value _ = raise $ Error "not Value"
 End
 
+Definition check_def:
+  check b str = assert b (Error str)
+End
+
+Definition switch_BoolV_def:
+  switch_BoolV v f g =
+  if v = Value $ BoolV T then f
+  else if v = Value $ BoolV F then g
+  else raise $ Error "not BoolV"
+End
+
 Definition evaluate_def:
   eval_stmt cx Pass = return () ∧
   eval_stmt cx Continue = raise ContinueException ∧
@@ -522,24 +533,21 @@ Definition evaluate_def:
   eval_stmt cx (Raise str) = raise $ AssertException str ∧
   eval_stmt cx (Assert e str) = do
     v <- eval_expr cx e;
-    if v = Value $ BoolV T then
-      return ()
-    else if v = Value $ BoolV F then
-      raise $ AssertException str
-    else raise $ Error "Assert not BoolV"
+    switch_BoolV v
+      (return ())
+      (raise $ AssertException str)
   od ∧
   eval_stmt cx (If e ss1 ss2) = do
     v <- eval_expr cx e;
-    if v = Value $ BoolV T then
-      eval_stmts cx ss1
-    else if v = Value $ BoolV F then
-      eval_stmts cx ss2
-    else raise $ Error "If not BoolV"
+    switch_BoolV v
+      (eval_stmts cx ss1)
+      (eval_stmts cx ss2)
   od ∧
   (*
   eval_stmt cx (For id typ e n body) = do
     v <- eval_expr cx e;
     vs <- lift_option (extract_elements v) "For not ArrayV";
+
     check length of vs against n
     eval_for cx id typ body
       bind loop variable to current value
@@ -563,25 +571,23 @@ Definition evaluate_def:
   eval_expr cx (GlobalName id) = lookup_global cx (string_to_num id) ∧
   eval_expr cx (IfExp e1 e2 e3) = do
     v <- eval_expr cx e1;
-    if v = Value $ BoolV T then
-      eval_expr cx e2
-    else if v = Value $ BoolV F then
-      eval_expr cx e3
-    else raise $ Error "IfExp not BoolV"
+    switch_BoolV v
+      (eval_expr cx e2)
+      (eval_expr cx e3)
   od ∧
   eval_expr cx (Literal l) = return $ Value $ evaluate_literal l ∧
-  eval_expr cx (ArrayLit b es) =
-    (if compatible_bound b (LENGTH es) then do
-       vs <- eval_exprs cx es;
-       return $ Value $ ArrayV b vs
-     od else raise $ Error "ArrayLit bound") ∧
-  eval_expr cx (Builtin bt es) =
-    (if builtin_args_length_ok bt (LENGTH es) then do
-       vs <- eval_exprs cx es;
-       acc <- get_accounts;
-       v <- lift_sum $ evaluate_builtin cx acc bt vs;
-       return $ Value v
-     od else raise $ Error "Builtin args") ∧
+  eval_expr cx (ArrayLit b es) = do
+    check (compatible_bound b (LENGTH es)) "ArrayLit bound";
+    vs <- eval_exprs cx es;
+    return $ Value $ ArrayV b vs
+  od ∧
+  eval_expr cx (Builtin bt es) = do
+    check (builtin_args_length_ok bt (LENGTH es)) "Builtin args";
+    vs <- eval_exprs cx es;
+    acc <- get_accounts;
+    v <- lift_sum $ evaluate_builtin cx acc bt vs;
+    return $ Value v
+  od ∧
   eval_expr cx (Call t es) = (* TODO *)
     ignore_bind (eval_stmt cx Pass) (return $ Value NoneV) ∧
   eval_exprs cx [] = return [] ∧
