@@ -1,5 +1,5 @@
 open HolKernel boolLib bossLib Parse wordsLib blastLib dep_rewrite monadsyntax
-     byteTheory finite_mapTheory
+     alistTheory rich_listTheory byteTheory finite_mapTheory
      cv_typeTheory cv_stdTheory cv_transLib
 open vfmTypesTheory vfmStateTheory vyperAstTheory
 
@@ -115,6 +115,20 @@ QED
 val () = cv_auto_trans set_byte_160;
 
 val () = cv_auto_trans (INST_TYPE [alpha |-> “:160”] word_of_bytes_def);
+
+Theorem SUM_MAP_FILTER_MEM_LE:
+  MEM x ls /\ ~P x ==>
+  SUM (MAP f (FILTER P ls)) + f x <= SUM (MAP f ls)
+Proof
+  qid_spec_tac`x`
+  \\ Induct_on`ls`
+  \\ rw[] \\ gs[]
+  >- (
+    irule SUM_SUBLIST \\ simp[]
+    \\ irule MAP_SUBLIST \\ simp[]
+    \\ irule FILTER_sublist )
+  \\ first_x_assum drule \\ rw[]
+QED
 
 (* -- *)
 
@@ -310,7 +324,7 @@ End
 Datatype:
   evaluation_context = <|
     env: scope list
-  ; stk: identifier list (* add loops *)
+  ; stk: identifier list
   ; txn: call_txn
   |>
 End
@@ -536,6 +550,72 @@ Definition handle_loop_exception_def:
   else raise e
 End
 
+Definition bound_def:
+  stmt_bound ts Pass = 0n ∧
+  stmt_bound ts Continue = 0 ∧
+  stmt_bound ts Break = 0 ∧
+  stmt_bound ts (Return NONE) = 0 ∧
+  stmt_bound ts (Return (SOME e)) =
+    1 + expr_bound ts e ∧
+  stmt_bound ts (Raise _) = 0 ∧
+  stmt_bound ts (Assert e _) =
+    1 + expr_bound ts e ∧
+  stmt_bound ts (If e ss1 ss2) =
+    1 + expr_bound ts e +
+     MAX (stmts_bound ts ss1)
+         (stmts_bound ts ss2) ∧
+  stmt_bound ts (For _ _ e n ss) =
+    1 + expr_bound ts e +
+    n * (stmts_bound ts ss) ∧
+  stmt_bound ts (Expr e) =
+    1 + expr_bound ts e ∧
+  stmts_bound ts [] = 0 ∧
+  stmts_bound ts (s::ss) =
+    1 + stmt_bound ts s
+      + stmts_bound ts ss ∧
+  expr_bound ts (Name _) = 0 ∧
+  expr_bound ts (TopLevelName _) = 0 ∧
+  expr_bound ts (IfExp e1 e2 e3) =
+    1 + expr_bound ts e1
+      + MAX (expr_bound ts e2)
+            (expr_bound ts e3) ∧
+  expr_bound ts (Literal _) = 0 ∧
+  expr_bound ts (ArrayLit _ es) =
+    1 + exprs_bound ts es ∧
+  expr_bound ts (Builtin _ es) =
+    1 + exprs_bound ts es ∧
+  expr_bound ts (Call (IntCall fn) es) =
+    1 + exprs_bound ts es
+      + (case ALOOKUP ts fn of NONE => 0 |
+         SOME ss => stmts_bound (ADELKEY fn ts) ss) ∧
+  expr_bound ts (Call t es) =
+    1 + exprs_bound ts es ∧
+  exprs_bound ts [] = 0 ∧
+  exprs_bound ts (e::es) =
+    1 + expr_bound ts e
+      + exprs_bound ts es
+Termination
+  WF_REL_TAC ‘measure (λx. case x of
+  | INR (INR (INR (ts, es))) =>
+      SUM (MAP (list_size stmt_size o SND) ts) +
+      list_size expr_size es
+  | INR (INR (INL (ts, e))) =>
+      SUM (MAP (list_size stmt_size o SND) ts) +
+      expr_size e
+  | INR (INL (ts, ss)) =>
+      SUM (MAP (list_size stmt_size o SND) ts) +
+      list_size stmt_size ss
+  | INL (ts, s) =>
+      SUM (MAP (list_size stmt_size o SND) ts) +
+      stmt_size s)’
+  \\ rw[]
+  \\ drule ALOOKUP_MEM
+  \\ rw[ADELKEY_def]
+  \\ qmatch_goalsub_abbrev_tac`MAP f (FILTER P ts)`
+  \\ drule_then(qspecl_then[`f`,`P`]mp_tac) SUM_MAP_FILTER_MEM_LE
+  \\ simp[Abbr`P`, Abbr`f`]
+End
+
 Definition evaluate_def:
   eval_stmt cx Pass = return () ∧
   eval_stmt cx Continue = raise ContinueException ∧
@@ -619,12 +699,12 @@ Definition evaluate_def:
   od
 Termination
   cheat
-  (* cannot just use sizes: need to look at loop bounds and recursion bounds
+  (* need access to the state st to define ts from cx and st
   WF_REL_TAC ‘measure (λx. case x of
-  | INR (INR (INR (_, es))) => list_size expr_size es
-  | INR (INR (INL (_, e))) => expr_size e
-  | INR (INL (_, ss)) => list_size stmt_size ss
-  | INL (_, s) => stmt_size s)’
+  | INR (INR (INR (cx, es))) => exprs_bound ts es
+  | INR (INR (INL (cx, e))) => expr_bound ts e
+  | INR (INL (cx, ss)) => stmts_bound ts ss
+  | INL (cx, s) => stmt_bound ts s)’
   *)
 End
 
