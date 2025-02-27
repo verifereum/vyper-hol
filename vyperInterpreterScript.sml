@@ -508,6 +508,10 @@ Definition get_accounts_def:
   get_accounts st = return st.accounts st
 End
 
+Definition update_accounts_def:
+  update_accounts f st = return () (st with accounts updated_by f)
+End
+
 Definition lift_option_def:
   lift_option x str =
     case x of SOME v => return v | NONE => raise $ Error str
@@ -548,6 +552,84 @@ Definition handle_loop_exception_def:
   if e = ContinueException then return F
   else if e = BreakException then return T
   else raise e
+End
+
+Definition dest_NumV_def:
+  dest_NumV (IntV i) =
+    (if i < 0 then NONE else SOME (Num i)) ∧
+  dest_NumV _ = NONE
+End
+
+Definition dest_AddressV_def:
+  dest_AddressV (BytesV (Fixed b) bs) =
+    (if b = 20 ∧ LENGTH bs = 20 then
+      SOME (word_of_bytes T (0w:address) bs)
+     else NONE) ∧
+  dest_AddressV _ = NONE
+End
+
+Definition transfer_value_def:
+  transfer_value fromAddr toAddr amount = do
+    acc <- get_accounts;
+    sender <<- lookup_account fromAddr acc;
+    check (amount <= sender.balance) "transfer_value amount";
+    recipient <<- lookup_account toAddr acc;
+    update_accounts (
+      update_account fromAddr (sender with balance updated_by (flip $- amount)) o
+      update_account toAddr (recipient with balance updated_by ($+ amount)));
+  od
+End
+
+Definition get_self_code_def:
+  get_self_code cx st =
+  lift_option
+    (OPTION_MAP (λctr. ctr.src)
+       (ALOOKUP st.contracts cx.txn.target))
+    "get_self_code" st
+End
+
+Definition is_ArrayT_def[simp]:
+  is_ArrayT (ArrayT _ _) = T ∧
+  is_ArrayT _ = F
+End
+
+Definition lookup_function_def:
+  lookup_function name Deploy [] = SOME ([], NoneT, [Pass]) ∧
+  lookup_function name vis [] = NONE ∧
+  lookup_function name vis (FunctionDef fv fm id args ret body :: ts) =
+  (if id = name ∧ vis = fv then SOME (args, ret, body)
+   else lookup_function name vis ts) ∧
+  lookup_function name External (VariableDecl Public _ id typ :: ts) =
+  (if id = name ∧ ¬is_ArrayT typ then SOME ([], typ, [Return (SOME (TopLevelName id))])
+   else lookup_function name External ts) ∧
+ (* TODO: handle arrays, array of array, hashmap of array, etc. *)
+ (* TODO
+  lookup_function name External (HashMapDecl Public id kt vt :: ts) =
+  (if id = name then SOME ([("], typ, [Return (SOME (TopLevelName "id"))])
+   else lookup_function name External ts) ∧
+ *)
+  lookup_function name vis (_ :: ts) =
+    lookup_function name vis ts
+End
+
+(* TODO: check types? *)
+Definition bind_arguments_def:
+  bind_arguments ([]: argument list) [] = SOME (FEMPTY: scope) ∧
+  bind_arguments ((id, typ)::params) (v::vs) =
+    OPTION_MAP (λm. m |+ (string_to_num id, v)) (bind_arguments params vs) ∧
+  bind_arguments _ _ = NONE
+End
+
+Definition push_function_def:
+  push_function fn sc cx =
+  cx with <| env := [sc]; stk updated_by CONS fn |>
+End
+
+Definition handle_function_def:
+  handle_function (ReturnException v) = return v ∧
+  handle_function (Error str) = raise $ Error str ∧
+  handle_function (AssertException str) = raise $ AssertException str ∧
+  handle_function _ = raise $ Error "handle_function"
 End
 
 Definition bound_def:
@@ -688,8 +770,27 @@ Definition evaluate_def:
     v <- lift_sum $ evaluate_builtin cx acc bt vs;
     return $ Value v
   od ∧
-  eval_expr cx (Call t es) = (* TODO *)
-    ignore_bind (eval_stmt cx Pass) (return $ Value NoneV) ∧
+  eval_expr cx (Call Send es) = do
+    check (LENGTH es = 2) "Send args";
+    vs <- eval_exprs cx es;
+    toAddr <- lift_option (dest_AddressV $ EL 0 vs) "Send not AddressV";
+    amount <- lift_option (dest_NumV $ EL 1 vs) "Send not NumV";
+    transfer_value cx.txn.sender toAddr amount;
+    return $ Value $ NoneV
+  od ∧
+  (* TODO ExtCall (via oracle?) *)
+  eval_expr cx (Call (IntCall fn) es) = do
+    check (¬MEM fn cx.stk) "recursion";
+    ts <- get_self_code cx;
+    (args, ret, body) <-
+      lift_option (lookup_function fn Internal ts) "IntCall lookup_function";
+    check (LENGTH args = LENGTH es) "IntCall args length"; (* TODO: needed? *)
+    vs <- eval_exprs cx es;
+    env <- lift_option (bind_arguments args vs) "IntCall bind_arguments";
+    cxf <<- push_function fn env cx;
+    rv <- handle (do eval_stmts cxf body; return NoneV od) handle_function;
+    return $ Value rv
+  od ∧
   eval_exprs cx [] = return [] ∧
   eval_exprs cx (e::es) = do
     tv <- eval_expr cx e;
