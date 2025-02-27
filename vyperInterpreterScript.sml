@@ -371,8 +371,8 @@ End
 val () = cv_auto_trans extract_elements_def;
 
 Definition replace_elements_def:
-  replace_elements (ArrayV b _) vs = SOME (ArrayV b vs) ∧
-  replace_elements _ _ = NONE
+  replace_elements (ArrayV b _) vs = INL (ArrayV b vs) ∧
+  replace_elements _ _ = INR "replace_elements"
 End
 
 val () = cv_auto_trans replace_elements_def;
@@ -507,6 +507,12 @@ Definition get_current_contract_def:
       | SOME ctr => return ctr) st
 End
 
+Definition set_current_contract_def:
+  set_current_contract cx ctr st =
+  let addr = cx.txn.target in
+  return () $ st with contracts updated_by (λal. (addr, ctr) :: ADELKEY addr al)
+End
+
 Definition get_current_globals_def:
   get_current_globals cx = do
     ctr <- get_current_contract cx;
@@ -520,6 +526,14 @@ Definition lookup_global_def:
     case FLOOKUP gbs n
       of NONE => raise $ Error "lookup_global"
        | SOME v => return v
+  od
+End
+
+Definition set_global_def:
+  set_global cx n v = do
+    ctr <- get_current_contract cx;
+    set_current_contract cx $
+      ctr with globals updated_by flip FUPDATE (n,v)
   od
 End
 
@@ -700,6 +714,80 @@ Definition handle_function_def:
   handle_function _ = raise $ Error "handle_function"
 End
 
+Definition assign_subscripts_def:
+  assign_subscripts a [] (Replace v) = INL v ∧
+  assign_subscripts a [] (Update bop v) = evaluate_binop bop a v ∧
+  assign_subscripts a ((IntSubscript i)::is) ao =
+  (case extract_elements a of SOME vs =>
+   (case integer_index vs i of SOME j =>
+    (case assign_subscripts (EL j vs) is ao of INL vj =>
+       replace_elements a (TAKE j vs ++ [vj] ++ DROP (SUC j) vs)
+     | INR err => INR err)
+    | _ => INR "assign_subscripts integer_index")
+   | _ => INR "assign_subscripts extract_elements") ∧
+  assign_subscripts _ _ _ = INR "TODO: handle AttrSubscript"
+End
+
+val assign_subscripts_pre_def = cv_auto_trans_pre assign_subscripts_def;
+
+Theorem assign_subscripts_pre[cv_pre]:
+  !a b c. assign_subscripts_pre a b c
+Proof
+  ho_match_mp_tac assign_subscripts_ind
+  \\ rw[Once assign_subscripts_pre_def]
+  \\ rw[Once assign_subscripts_pre_def]
+  \\ gvs[integer_index_def] \\ rw[]
+  \\ qmatch_asmsub_rename_tac`0i ≤ v0`
+  \\ Cases_on`v0` \\ gs[]
+QED
+
+Definition assign_hashmap_def:
+  assign_hashmap hm [] _ = INR "assign_hashmap null" ∧
+  assign_hashmap hm [k] (Replace v) =
+    INL $ (k,Value v)::(ADELKEY k hm) ∧
+  assign_hashmap hm [k] (Update bop v2) =
+  (case ALOOKUP hm k of SOME (Value v1) =>
+     (case evaluate_binop bop v1 v2 of INL w =>
+        INL $ (k,Value w)::(ADELKEY k hm) | INR err => INR err)
+   | _ => INR "assign_hashmap Update not found") ∧
+  assign_hashmap hm (k::ks) ao =
+  (case ALOOKUP hm k of SOME (HashMap hm') =>
+    (case assign_hashmap hm' ks ao of
+     | INL hm' => INL $ (k, HashMap hm') :: (ADELKEY k hm)
+     | INR err => INR err)
+    | _ => INR "assign_hashmap HashMap not found")
+End
+
+val () = cv_auto_trans assign_hashmap_def;
+
+Definition sum_map_left_def:
+  sum_map_left f (INL x) = INL (f x) ∧
+  sum_map_left _ (INR y) = INR y
+End
+
+Definition assign_toplevel_def:
+  assign_toplevel (Value a) is ao =
+    sum_map_left Value $ assign_subscripts a is ao ∧
+  assign_toplevel (HashMap hm) is ao =
+    sum_map_left HashMap $ assign_hashmap hm is ao
+End
+
+Definition assign_target_def:
+  assign_target cx (BaseTargetV (ScopedVar (pre,env,rest) id) is) ao = do
+    ni <<- string_to_num id;
+    a <- lift_option (FLOOKUP env ni) "assign_target lookup";
+    a' <- lift_sum $ assign_subscripts a is ao;
+    set_scopes $ pre ++ env |+ (ni, a') :: rest
+  od ∧
+  assign_target cx (BaseTargetV (TopLevelVar id) is) ao = do
+    ni <<- string_to_num id;
+    tv <- lookup_global cx ni;
+    tv' <- lift_sum $ assign_toplevel tv is ao;
+    set_global cx ni tv'
+  od ∧
+  assign_target _ _ _ = raise (Error "TODO: TupleTargetV")
+End
+
 Definition bound_def:
   stmt_bound ts Pass = 0n ∧
   stmt_bound ts Continue = 0 ∧
@@ -792,7 +880,14 @@ Definition evaluate_def:
   eval_stmt cx (Assign g e) = do
     gv <- eval_target cx g;
     tv <- eval_expr cx e;
-    return () (* TODO *)
+    v <- get_Value tv;
+    assign_target cx gv (Replace v)
+  od ∧
+  eval_stmt cx (AugAssign t bop e) = do
+    (loc, sbs) <- eval_base_target cx t;
+    tv <- eval_expr cx e;
+    v <- get_Value tv;
+    assign_target cx (BaseTargetV loc sbs) (Update bop v)
   od ∧
   eval_stmt cx (If e ss1 ss2) = do
     tv <- eval_expr cx e;
@@ -880,6 +975,16 @@ Definition evaluate_def:
     vs <- eval_exprs cx es;
     return $ Value $ ArrayV b vs
   od ∧
+  eval_expr cx (Subscript e1 e2) = do
+    tv1 <- eval_expr cx e1;
+    (* TODO: handle subscripting hashmaps *)
+    tv2 <- eval_expr cx e2;
+    v1 <- get_Value tv1; (* TODO *)
+    v2 <- get_Value tv2;
+    v <- lift_sum $ evaluate_subscript v1 v2;
+    return $ Value $ v
+  od ∧
+  (* TODO: Attribute *)
   eval_expr cx (Builtin bt es) = do
     check (builtin_args_length_ok bt (LENGTH es)) "Builtin args";
     vs <- eval_exprs cx es;
