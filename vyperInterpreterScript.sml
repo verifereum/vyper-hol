@@ -1,5 +1,6 @@
 open HolKernel boolLib bossLib Parse wordsLib blastLib dep_rewrite monadsyntax
      alistTheory rich_listTheory byteTheory finite_mapTheory
+     combinTheory pairTheory
      cv_typeTheory cv_stdTheory cv_transLib
 open vfmTypesTheory vfmStateTheory vyperAstTheory
 
@@ -464,9 +465,13 @@ Definition return_def:
   return x s = (INL x, s) : α evaluation_result
 End
 
+val () = cv_auto_trans return_def;
+
 Definition raise_def:
   raise e s = (INR e, s) : α evaluation_result
 End
+
+val () = cv_auto_trans raise_def;
 
 Definition bind_def:
   bind f g (s: evaluation_state) : α evaluation_result =
@@ -480,6 +485,8 @@ End
 Definition assert_def:
   assert b e s = ((if b then INL () else INR e), s) : unit evaluation_result
 End
+
+val () = cv_auto_trans assert_def;
 
 val () = declare_monad ("vyper_evaluation",
   { bind = “bind”, unit = “return”,
@@ -507,11 +514,29 @@ Definition get_current_contract_def:
       | SOME ctr => return ctr) st
 End
 
+val option_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
+
+val sum_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="sum",Tyop="sum"}));
+
+val list_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="list",Tyop="list"}));
+
+val () = get_current_contract_def
+  |> SRULE [option_CASE_rator]
+  |> cv_auto_trans;
+
 Definition set_current_contract_def:
   set_current_contract cx ctr st =
   let addr = cx.txn.target in
   return () $ st with contracts updated_by (λal. (addr, ctr) :: ADELKEY addr al)
 End
+
+val () = cv_auto_trans set_current_contract_def;
 
 Definition get_current_globals_def:
   get_current_globals cx = do
@@ -519,6 +544,10 @@ Definition get_current_globals_def:
     return ctr.globals
   od
 End
+
+val () = get_current_globals_def
+  |> SRULE [bind_def, FUN_EQ_THM]
+  |> cv_auto_trans;
 
 Definition lookup_global_def:
   lookup_global cx n = do
@@ -529,6 +558,10 @@ Definition lookup_global_def:
   od
 End
 
+val () = lookup_global_def
+  |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator]
+  |> cv_auto_trans;
+
 Definition set_global_def:
   set_global cx n v = do
     ctr <- get_current_contract cx;
@@ -537,9 +570,15 @@ Definition set_global_def:
   od
 End
 
+val () = set_global_def
+  |> SRULE [bind_def, FUN_EQ_THM, C_DEF]
+  |> cv_auto_trans;
+
 Definition get_accounts_def:
   get_accounts st = return st.accounts st
 End
+
+val () = cv_auto_trans get_accounts_def;
 
 Definition update_accounts_def:
   update_accounts f st = return () (st with accounts updated_by f)
@@ -550,19 +589,33 @@ Definition lift_option_def:
     case x of SOME v => return v | NONE => raise $ Error str
 End
 
+val () = lift_option_def
+  |> SRULE [FUN_EQ_THM, option_CASE_rator]
+  |> cv_auto_trans;
+
 Definition lift_sum_def:
   lift_sum x =
     case x of INL v => return v | INR str => raise $ Error str
 End
+
+val () = lift_sum_def
+  |> SRULE [FUN_EQ_THM, sum_CASE_rator]
+  |> cv_auto_trans;
 
 Definition get_Value_def:
   get_Value (Value v) = return v ∧
   get_Value _ = raise $ Error "not Value"
 End
 
+val () = get_Value_def
+  |> SRULE [FUN_EQ_THM]
+  |> cv_auto_trans;
+
 Definition check_def:
   check b str = assert b (Error str)
 End
+
+val () = cv_auto_trans check_def;
 
 Definition switch_BoolV_def:
   switch_BoolV v f g =
@@ -575,10 +628,14 @@ Definition push_scope_def:
   push_scope st = return () $ st with scopes updated_by CONS FEMPTY
 End
 
+val () = cv_auto_trans push_scope_def;
+
 Definition push_scope_with_var_def:
   push_scope_with_var nm v st =
     return () $  st with scopes updated_by CONS (FEMPTY |+ (nm, v))
 End
+
+val () = cv_auto_trans push_scope_with_var_def;
 
 Definition pop_scope_def:
   pop_scope st =
@@ -587,6 +644,8 @@ Definition pop_scope_def:
        | _::tl => return () (st with scopes := tl)
 End
 
+val () = cv_auto_trans pop_scope_def;
+
 Definition handle_loop_exception_def:
   handle_loop_exception e =
   if e = ContinueException then return F
@@ -594,11 +653,17 @@ Definition handle_loop_exception_def:
   else raise e
 End
 
+val () = handle_loop_exception_def
+  |> SRULE [FUN_EQ_THM, COND_RATOR]
+  |> cv_auto_trans;
+
 Definition dest_NumV_def:
   dest_NumV (IntV i) =
     (if i < 0 then NONE else SOME (Num i)) ∧
   dest_NumV _ = NONE
 End
+
+val () = cv_auto_trans dest_NumV_def;
 
 Definition dest_AddressV_def:
   dest_AddressV (BytesV (Fixed b) bs) =
@@ -607,6 +672,8 @@ Definition dest_AddressV_def:
      else NONE) ∧
   dest_AddressV _ = NONE
 End
+
+val () = cv_auto_trans dest_AddressV_def;
 
 Definition transfer_value_def:
   transfer_value fromAddr toAddr amount = do
@@ -620,6 +687,11 @@ Definition transfer_value_def:
   od
 End
 
+val () = transfer_value_def
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def,
+            LET_RATOR, update_accounts_def, o_DEF, C_DEF]
+  |> cv_auto_trans;
+
 Definition get_self_code_def:
   get_self_code cx st =
   lift_option
@@ -628,10 +700,16 @@ Definition get_self_code_def:
     "get_self_code" st
 End
 
+val () = get_self_code_def
+  |> SRULE [lift_option_def, option_CASE_rator]
+  |> cv_auto_trans;
+
 Definition is_ArrayT_def[simp]:
   is_ArrayT (ArrayT _ _) = T ∧
   is_ArrayT _ = F
 End
+
+val () = cv_auto_trans is_ArrayT_def;
 
 Definition lookup_function_def:
   lookup_function name Deploy [] = SOME ([], NoneT, [Pass]) ∧
@@ -652,6 +730,8 @@ Definition lookup_function_def:
     lookup_function name vis ts
 End
 
+val () = cv_auto_trans lookup_function_def;
+
 (* TODO: check types? *)
 Definition bind_arguments_def:
   bind_arguments ([]: argument list) [] = SOME (FEMPTY: scope) ∧
@@ -660,13 +740,19 @@ Definition bind_arguments_def:
   bind_arguments _ _ = NONE
 End
 
+val () = cv_auto_trans bind_arguments_def;
+
 Definition get_scopes_def:
   get_scopes st = return st.scopes st
 End
 
+val () = cv_auto_trans get_scopes_def;
+
 Definition set_scopes_def:
   set_scopes env st = return () $ st with scopes := env
 End
+
+val () = cv_auto_trans set_scopes_def;
 
 Definition push_function_def:
   push_function fn sc cx st =
@@ -674,9 +760,13 @@ Definition push_function_def:
     $ st with scopes := [sc]
 End
 
+val () = cv_auto_trans push_function_def;
+
 Definition pop_function_def:
   pop_function prev = set_scopes prev
 End
+
+val () = cv_auto_trans pop_function_def;
 
 Definition new_variable_def:
   new_variable id v = do
@@ -688,6 +778,11 @@ Definition new_variable_def:
   od
 End
 
+val () = new_variable_def
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def,
+            LET_RATOR, list_CASE_rator]
+  |> cv_auto_trans;
+
 Definition set_variable_def:
   set_variable id v = do
     n <<- string_to_num id;
@@ -697,6 +792,11 @@ Definition set_variable_def:
     set_scopes (pre ++ (env |+ (n, v))::rest)
   od
 End
+
+val () = set_variable_def
+  |> SRULE [FUN_EQ_THM, bind_def, lift_option_def,
+            LET_RATOR, UNCURRY, option_CASE_rator]
+  |> cv_auto_trans;
 
 Definition value_to_key_def:
   value_to_key (IntV i) = SOME $ IntSubscript i ∧
@@ -713,6 +813,10 @@ Definition handle_function_def:
   handle_function (AssertException str) = raise $ AssertException str ∧
   handle_function _ = raise $ Error "handle_function"
 End
+
+val () = handle_function_def
+  |> SRULE [FUN_EQ_THM]
+  |> cv_auto_trans;
 
 Definition assign_subscripts_def:
   assign_subscripts a [] (Replace v) = INL v ∧
@@ -772,6 +876,10 @@ Definition assign_toplevel_def:
     sum_map_left HashMap $ assign_hashmap hm is ao
 End
 
+val () = assign_toplevel_def
+  |> SRULE [oneline sum_map_left_def]
+  |> cv_auto_trans;
+
 Definition assign_target_def:
   assign_target cx (BaseTargetV (ScopedVar (pre,env,rest) id) is) ao = do
     ni <<- string_to_num id;
@@ -787,6 +895,11 @@ Definition assign_target_def:
   od ∧
   assign_target _ _ _ = raise (Error "TODO: TupleTargetV")
 End
+
+val () = assign_target_def
+  |> SRULE [FUN_EQ_THM, bind_def, LET_RATOR,
+            option_CASE_rator, lift_option_def]
+  |> cv_auto_trans;
 
 Definition bound_def:
   stmt_bound ts Pass = 0n ∧
