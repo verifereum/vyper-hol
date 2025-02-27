@@ -281,16 +281,29 @@ End
 
 Type containing_scope = “:scope list # scope # scope list”;
 
+Definition find_containing_scope_def:
+  find_containing_scope id [] = NONE : containing_scope option ∧
+  find_containing_scope id (env::rest) =
+  if id ∈ FDOM env then SOME ([], env, rest)
+  else OPTION_MAP (λ(p,q). (env::p, q)) (find_containing_scope id rest)
+End
+
+val () = cv_auto_trans (REWRITE_RULE[TO_FLOOKUP]find_containing_scope_def);
+
 Datatype:
   location
   = ScopedVar containing_scope identifier
-  | Global identifier
+  | TopLevelVar identifier
 End
 
 Datatype:
   assignment_value
   = BaseTargetV location (subscript list)
   | TupleTargetV (assignment_value list)
+End
+
+Datatype:
+  assign_operation = Replace value | Update binop value
 End
 
 Definition evaluate_literal_def:
@@ -637,6 +650,10 @@ Definition get_scopes_def:
   get_scopes st = return st.scopes st
 End
 
+Definition set_scopes_def:
+  set_scopes env st = return () $ st with scopes := env
+End
+
 Definition push_function_def:
   push_function fn sc cx st =
   return (cx with stk updated_by CONS fn)
@@ -644,8 +661,37 @@ Definition push_function_def:
 End
 
 Definition pop_function_def:
-  pop_function prev st = return () $ st with scopes := prev
+  pop_function prev = set_scopes prev
 End
+
+Definition new_variable_def:
+  new_variable id v = do
+    n <<- string_to_num id;
+    env <- get_scopes;
+    check (IS_NONE (lookup_scopes n env)) "new_variable bound";
+    case env of [] => raise $ Error "new_variable null"
+    | e::es => set_scopes ((e |+ (n, v))::es)
+  od
+End
+
+Definition set_variable_def:
+  set_variable id v = do
+    n <<- string_to_num id;
+    sc <- get_scopes;
+    (pre, env, rest) <-
+      lift_option (find_containing_scope n sc) "set_variable not found";
+    set_scopes (pre ++ (env |+ (n, v))::rest)
+  od
+End
+
+Definition value_to_key_def:
+  value_to_key (IntV i) = SOME $ IntSubscript i ∧
+  value_to_key (StringV _ s) = SOME $ StrSubscript s ∧
+  value_to_key (BytesV _ bs) = SOME $ BytesSubscript bs ∧
+  value_to_key _ = NONE
+End
+
+val () = cv_auto_trans value_to_key_def;
 
 Definition handle_function_def:
   handle_function (ReturnException v) = return v ∧
@@ -737,13 +783,17 @@ Definition evaluate_def:
       (return ())
       (raise $ AssertException str)
   od ∧
-  (*
   eval_stmt cx (AnnAssign id typ e) = do
-    v <- eval_expr cx e;
-    (* TODO: check type? *)
-    bind_var id v cx
-  od
-  *)
+    tv <- eval_expr cx e;
+    v <- get_Value tv;
+    (* TODO: check type *)
+    new_variable id v
+  od ∧
+  eval_stmt cx (Assign g e) = do
+    gv <- eval_target cx g;
+    tv <- eval_expr cx e;
+    return () (* TODO *)
+  od ∧
   eval_stmt cx (If e ss1 ss2) = do
     tv <- eval_expr cx e;
     push_scope;
@@ -770,6 +820,39 @@ Definition evaluate_def:
   eval_stmts cx [] = return () ∧
   eval_stmts cx (s::ss) = do
     eval_stmt cx s; eval_stmts cx ss
+  od ∧
+  eval_target cx (BaseTarget t) = do
+    (loc, sbs) <- eval_base_target cx t;
+    return $ BaseTargetV loc sbs
+  od ∧
+  eval_target cx (TupleTarget gs) = do
+    gvs <- eval_targets cx gs;
+    return $ TupleTargetV gvs
+  od ∧
+  eval_targets cx [] = return [] ∧
+  eval_targets cx (g::gs) = do
+    gv <- eval_target cx g;
+    gvs <- eval_targets cx gs;
+    return $ gv::gvs
+  od ∧
+  eval_base_target cx (NameTarget id) = do
+    sc <- get_scopes;
+    n <<- string_to_num id;
+    cs <- lift_option (find_containing_scope n sc) "NameTarget lookup";
+    return $ (ScopedVar cs id, [])
+  od ∧
+  eval_base_target cx (TopLevelNameTarget id) =
+    return $ (TopLevelVar id, []) ∧
+  eval_base_target cx (AttributeTarget t id) = do
+    (loc, sbs) <- eval_base_target cx t;
+    return $ (loc, AttrSubscript id :: sbs)
+  od ∧
+  eval_base_target cx (SubscriptTarget t e) = do
+    (loc, sbs) <- eval_base_target cx t;
+    tv <- eval_expr cx e;
+    v <- get_Value tv;
+    k <- lift_option (value_to_key v) "SubscriptTarget value_to_key";
+    return $ (loc, k :: sbs)
   od ∧
   eval_for cx nm body [] = return () ∧
   eval_for cx nm body (v::vs) = do
@@ -845,15 +928,6 @@ Termination
   | INL (cx, s) => stmt_bound ts s)’
   *)
 End
-
-Definition value_to_key_def:
-  value_to_key (IntV i) = SOME $ IntSubscript i ∧
-  value_to_key (StringV _ s) = SOME $ StrSubscript s ∧
-  value_to_key (BytesV _ bs) = SOME $ BytesSubscript bs ∧
-  value_to_key _ = NONE
-End
-
-val () = cv_auto_trans value_to_key_def;
 
 (* TODO: assumes unique identifiers, but should check? *)
 Definition initial_globals_def:
