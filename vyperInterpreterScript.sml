@@ -323,8 +323,7 @@ End
 
 Datatype:
   evaluation_context = <|
-    env: scope list
-  ; stk: identifier list
+    stk: identifier list
   ; txn: call_txn
   |>
 End
@@ -432,6 +431,7 @@ End
 Datatype:
   evaluation_state = <|
     contracts: (address, contract) alist
+  ; scopes: scope list
   ; accounts: evm_accounts
   |>
 End
@@ -476,9 +476,15 @@ val () = declare_monad ("vyper_evaluation",
 val () = enable_monad "vyper_evaluation";
 val () = enable_monadsyntax();
 
-Definition handle_def:
-  handle f h s : α evaluation_result =
+Definition try_def:
+  try f h s : α evaluation_result =
   case f s of (INR e, s) => h e s | x => x
+End
+
+Definition finally_def:
+  finally f g s : α evaluation_result =
+  case f s of (INL x, s) => ignore_bind g (return x) s
+     | (INR e, s) => ignore_bind g (raise e) s
 End
 
 Definition get_current_contract_def:
@@ -539,12 +545,19 @@ Definition switch_BoolV_def:
 End
 
 Definition push_scope_def:
-  push_scope cx = cx with env updated_by CONS FEMPTY
+  push_scope st = return () $ st with scopes updated_by CONS FEMPTY
 End
 
 Definition push_scope_with_var_def:
-  push_scope_with_var nm v cx =
-    cx with env updated_by CONS (FEMPTY |+ (nm, v))
+  push_scope_with_var nm v st =
+    return () $  st with scopes updated_by CONS (FEMPTY |+ (nm, v))
+End
+
+Definition pop_scope_def:
+  pop_scope st =
+    case st.scopes
+    of [] => raise (Error "pop_scope") st
+       | _::tl => return () (st with scopes := tl)
 End
 
 Definition handle_loop_exception_def:
@@ -620,9 +633,18 @@ Definition bind_arguments_def:
   bind_arguments _ _ = NONE
 End
 
+Definition get_scopes_def:
+  get_scopes st = return st.scopes st
+End
+
 Definition push_function_def:
-  push_function fn sc cx =
-  cx with <| env := [sc]; stk updated_by CONS fn |>
+  push_function fn sc cx st =
+  return (cx with stk updated_by CONS fn)
+    $ st with scopes := [sc]
+End
+
+Definition pop_function_def:
+  pop_function prev st = return () $ st with scopes := prev
 End
 
 Definition handle_function_def:
@@ -715,12 +737,21 @@ Definition evaluate_def:
       (return ())
       (raise $ AssertException str)
   od ∧
+  (*
+  eval_stmt cx (AnnAssign id typ e) = do
+    v <- eval_expr cx e;
+    (* TODO: check type? *)
+    bind_var id v cx
+  od
+  *)
   eval_stmt cx (If e ss1 ss2) = do
     tv <- eval_expr cx e;
-    cx <<- push_scope cx;
-    switch_BoolV tv
-      (eval_stmts cx ss1)
-      (eval_stmts cx ss2)
+    push_scope;
+    finally (
+      switch_BoolV tv
+        (eval_stmts cx ss1)
+        (eval_stmts cx ss2)
+    ) pop_scope
   od ∧
   eval_stmt cx (For id typ e n body) = do
     tv <- eval_expr cx e;
@@ -742,12 +773,15 @@ Definition evaluate_def:
   od ∧
   eval_for cx nm body [] = return () ∧
   eval_for cx nm body (v::vs) = do
-    cxv <<- push_scope_with_var nm v cx;
-    broke <- handle (do eval_stmts cxv body; return F od) handle_loop_exception;
+    push_scope_with_var nm v;
+    broke <- finally
+      (try (do eval_stmts cx body; return F od) handle_loop_exception)
+      pop_scope ;
     if broke then return () else eval_for cx nm body vs
   od ∧
   eval_expr cx (Name id) = do
-    v <- lift_option (lookup_scopes (string_to_num id) cx.env) "lookup Name";
+    env <- get_scopes;
+    v <- lift_option (lookup_scopes (string_to_num id) env) "lookup Name";
     return $ Value v
   od ∧
   eval_expr cx (TopLevelName id) = lookup_global cx (string_to_num id) ∧
@@ -787,8 +821,11 @@ Definition evaluate_def:
     check (LENGTH args = LENGTH es) "IntCall args length"; (* TODO: needed? *)
     vs <- eval_exprs cx es;
     env <- lift_option (bind_arguments args vs) "IntCall bind_arguments";
-    cxf <<- push_function fn env cx;
-    rv <- handle (do eval_stmts cxf body; return NoneV od) handle_function;
+    prev <- get_scopes;
+    cxf <- push_function fn env cx;
+    rv <- finally
+      (try (do eval_stmts cxf body; return NoneV od) handle_function)
+      (pop_function prev);
     return $ Value rv
   od ∧
   eval_exprs cx [] = return [] ∧
