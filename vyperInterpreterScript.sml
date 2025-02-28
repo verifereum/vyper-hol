@@ -886,6 +886,14 @@ Definition bound_def:
   stmt_bound ts (Raise _) = 0 ∧
   stmt_bound ts (Assert e _) =
     1 + expr_bound ts e ∧
+  stmt_bound ts (AnnAssign _ _ e) =
+    1 + expr_bound ts e ∧
+  stmt_bound ts (Assign g e) =
+    1 + target_bound ts g
+      + expr_bound ts e ∧
+  stmt_bound ts (AugAssign bt _ e) =
+    1 + base_target_bound ts bt
+      + expr_bound ts e ∧
   stmt_bound ts (If e ss1 ss2) =
     1 + expr_bound ts e +
      MAX (stmts_bound ts ss1)
@@ -899,6 +907,21 @@ Definition bound_def:
   stmts_bound ts (s::ss) =
     1 + stmt_bound ts s
       + stmts_bound ts ss ∧
+  target_bound ts (BaseTarget bt) =
+    1 + base_target_bound ts bt ∧
+  target_bound ts (TupleTarget gs) =
+    1 + targets_bound ts gs ∧
+  targets_bound ts [] = 0 ∧
+  targets_bound ts (g::gs) =
+    1 + target_bound ts g
+      + targets_bound ts gs ∧
+  base_target_bound ts (NameTarget _) = 0 ∧
+  base_target_bound ts (TopLevelNameTarget _) = 0 ∧
+  base_target_bound ts (AttributeTarget bt _) =
+    1 + base_target_bound ts bt ∧
+  base_target_bound ts (SubscriptTarget bt e) =
+    1 + base_target_bound ts bt
+      + expr_bound ts e ∧
   expr_bound ts (Name _) = 0 ∧
   expr_bound ts (TopLevelName _) = 0 ∧
   expr_bound ts (IfExp e1 e2 e3) =
@@ -922,12 +945,21 @@ Definition bound_def:
       + exprs_bound ts es
 Termination
   WF_REL_TAC ‘measure (λx. case x of
-  | INR (INR (INR (ts, es))) =>
+  | INR (INR (INR (INR (INR (INR (ts, es)))))) =>
       SUM (MAP (list_size stmt_size o SND) ts) +
       list_size expr_size es
-  | INR (INR (INL (ts, e))) =>
+  | INR (INR (INR (INR (INR (INL (ts, e)))))) =>
       SUM (MAP (list_size stmt_size o SND) ts) +
       expr_size e
+  | INR (INR (INR (INR (INL (ts, bt))))) =>
+      SUM (MAP (list_size stmt_size o SND) ts) +
+      base_assignment_target_size bt
+  | INR (INR (INR (INL (ts, gs)))) =>
+      SUM (MAP (list_size stmt_size o SND) ts) +
+      list_size assignment_target_size gs
+  | INR (INR (INL (ts, g))) =>
+      SUM (MAP (list_size stmt_size o SND) ts) +
+      assignment_target_size g
   | INR (INL (ts, ss)) =>
       SUM (MAP (list_size stmt_size o SND) ts) +
       list_size stmt_size ss
@@ -1141,7 +1173,7 @@ Termination
   | INL (cx, s) => stmt_bound (remcode cx) s)’
   \\ rw[bound_def, MAX_DEF]
   \\ cheat
-  (* TODO: define the missing bound functions *)
+  (* TODO: define the missing bound cases: Subscript *)
   (* TODO: need congruence rules for lift_option, lookup_function *)
   (* TODO: need some kind of rule for check to propagate that it succeeded *)
 End
