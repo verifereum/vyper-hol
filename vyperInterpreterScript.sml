@@ -900,7 +900,7 @@ Definition bound_def:
          (stmts_bound ts ss2) ∧
   stmt_bound ts (For _ _ e n ss) =
     1 + expr_bound ts e +
-    n * (stmts_bound ts ss) ∧
+    1 + n + n * (stmts_bound ts ss) ∧
   stmt_bound ts (Expr e) =
     1 + expr_bound ts e ∧
   stmts_bound ts [] = 0 ∧
@@ -928,6 +928,9 @@ Definition bound_def:
     1 + expr_bound ts e1
       + MAX (expr_bound ts e2)
             (expr_bound ts e3) ∧
+  expr_bound ts (Subscript e1 e2) =
+    1 + expr_bound ts e1
+      + expr_bound ts e2 ∧
   expr_bound ts (Literal _) = 0 ∧
   expr_bound ts (ArrayLit _ es) =
     1 + exprs_bound ts es ∧
@@ -985,6 +988,85 @@ Definition remcode_def:
      | SOME ts => FILTER (λ(fn,ss). ¬MEM fn cx.stk)
           (FLAT (MAP dest_Internal_FunctionDef ts))
 End
+
+Theorem bind_cong[defncong]:
+  (f s = f' s) ∧
+  (∀x t. f s = (INL x, t) ==> g x t = g' x t) ∧
+  (s = s')
+  ⇒
+  bind f g s = bind f' g' s'
+Proof
+  rw[bind_def] \\ CASE_TAC \\ CASE_TAC \\ gs[]
+QED
+
+Theorem bind_cong_implicit[defncong]:
+  (f = f') ∧
+  (∀s x t. f s = (INL x, t) ==> g x t = g' x t)
+  ⇒
+  bind f g = bind f' g'
+Proof
+  rw[bind_def, FUN_EQ_THM] \\ CASE_TAC \\ CASE_TAC \\ gs[]
+  \\ first_x_assum irule \\ goal_assum drule
+QED
+
+Theorem ignore_bind_cong[defncong]:
+  (f s = f' s) ∧
+  (∀x t. f s = (INL x, t) ⇒ g t = g' t) ∧
+  (s = s')
+  ⇒
+  ignore_bind f g s = ignore_bind f' g' s'
+Proof
+  rw[ignore_bind_def]
+  \\ irule bind_cong
+  \\ rw[]
+QED
+
+Theorem ignore_bind_implicit_cong[defncong]:
+  (f = f') ∧
+  (∀s x t. f s = (INL x, t) ⇒ g = g')
+  ⇒
+  ignore_bind f g = ignore_bind f' g'
+Proof
+  rw[ignore_bind_def]
+  \\ irule bind_cong_implicit
+  \\ rw[] \\ AP_THM_TAC
+  \\ first_x_assum irule
+  \\ goal_assum drule
+QED
+
+Theorem try_cong[defncong]:
+  (f s = f' s) ∧
+  (∀e t. f s = (INR e, t) ⇒ h e t = h' e t) ∧
+  (s = s')
+  ⇒
+  try f h s = try f' h' s'
+Proof
+  rw[try_def] \\ CASE_TAC \\ CASE_TAC \\ gs[]
+QED
+
+Theorem try_cong_implicit[defncong]:
+  (f = f') ∧
+  (∀s e t. f s = (INR e, t) ⇒ h e t = h' e t)
+  ⇒
+  try f h = try f' h'
+Proof
+  rw[FUN_EQ_THM]
+  \\ irule try_cong \\ rw[]
+  \\ first_x_assum irule
+  \\ metis_tac[]
+QED
+
+Theorem finally_cong[defncong]:
+  (f s = f' s) ∧
+  (∀x t. f s = (x, t) ⇒ g t = g' t) ∧
+  (s = s')
+  ⇒
+  finally f g s = finally f' g' s'
+Proof
+  rw[finally_def]
+  \\ CASE_TAC \\ CASE_TAC
+  \\ irule ignore_bind_cong \\ gs[]
+QED
 
 Definition evaluate_def:
   eval_stmt cx Pass = return () ∧
@@ -1132,11 +1214,11 @@ Definition evaluate_def:
     transfer_value cx.txn.sender toAddr amount;
     return $ Value $ NoneV
   od ∧
-  (* TODO ExtCall (via oracle?) *)
+  (* TODO ExtCall (via oracle or via EVM semantics?) *)
   eval_expr cx (Call (IntCall fn) es) = do
     check (¬MEM fn cx.stk) "recursion";
     ts <- lift_option (get_self_code cx) "IntCall get_self_code";
-    (args, ret, body) <-
+    (args,ret,body) <-
       lift_option (lookup_function fn Internal ts) "IntCall lookup_function";
     check (LENGTH args = LENGTH es) "IntCall args length"; (* TODO: needed? *)
     vs <- eval_exprs cx es;
@@ -1162,7 +1244,7 @@ Termination
   | INR (INR (INR (INR (INR (INR (INL (cx, e)))))))
     => expr_bound (remcode cx) e
   | INR (INR (INR (INR (INR (INL (cx, nm, body, vs))))))
-    => LENGTH vs * (stmts_bound (remcode cx) body)
+    => 1 + LENGTH vs + (LENGTH vs) * (stmts_bound (remcode cx) body)
   | INR (INR (INR (INR (INL (cx, t)))))
     => base_target_bound (remcode cx) t
   | INR (INR (INR (INL (cx, gs))))
@@ -1171,11 +1253,15 @@ Termination
     => target_bound (remcode cx) g
   | INR (INL (cx, ss)) => stmts_bound (remcode cx) ss
   | INL (cx, s) => stmt_bound (remcode cx) s)’
-  \\ rw[bound_def, MAX_DEF]
-  \\ cheat
-  (* TODO: define the missing bound cases: Subscript *)
-  (* TODO: need congruence rules for lift_option, lookup_function *)
-  (* TODO: need some kind of rule for check to propagate that it succeeded *)
+  \\ rw[bound_def, MAX_DEF, MULT]
+  >- (
+    gvs[compatible_bound_def, check_def, assert_def]
+    \\ qmatch_goalsub_abbrev_tac`(LENGTH vs) * x`
+    \\ irule LESS_EQ_LESS_TRANS
+    \\ qexists_tac`LENGTH vs + n * x + 1` \\ simp[]
+    \\ metis_tac[MULT_COMM, LESS_MONO_MULT])
+  \\ gvs[check_def, assert_def]
+  \\ cheat (* congruence rules in function case ? *)
 End
 
 (* TODO: assumes unique identifiers, but should check? *)
