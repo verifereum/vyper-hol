@@ -990,7 +990,7 @@ Definition remcode_def:
 End
 
 Theorem bind_cong[defncong]:
-  (f s = f' s) ∧
+  (f s = f' s') ∧
   (∀x t. f s = (INL x, t) ==> g x t = g' x t) ∧
   (s = s')
   ⇒
@@ -1009,8 +1009,20 @@ Proof
   \\ first_x_assum irule \\ goal_assum drule
 QED
 
+(*
+Theorem bind_cong_implicit_hyp[defncong]:
+  (f = f') ∧
+  (∀s x t. f s = (INL x, t) ==> g x = g' x)
+  ⇒
+  bind f g = bind f' g'
+Proof
+  rw[bind_def, FUN_EQ_THM] \\ CASE_TAC \\ CASE_TAC \\ gs[]
+  \\ first_x_assum irule \\ goal_assum drule
+QED
+*)
+
 Theorem ignore_bind_cong[defncong]:
-  (f s = f' s) ∧
+  (f s = f' s') ∧
   (∀x t. f s = (INL x, t) ⇒ g t = g' t) ∧
   (s = s')
   ⇒
@@ -1021,7 +1033,21 @@ Proof
   \\ rw[]
 QED
 
-Theorem ignore_bind_implicit_cong[defncong]:
+Theorem ignore_bind_cong_implicit[defncong]:
+  (f = f') ∧
+  (∀s x t. f s = (INL x, t) ⇒ g t = g' t)
+  ⇒
+  ignore_bind f g = ignore_bind f' g'
+Proof
+  rw[ignore_bind_def]
+  \\ irule bind_cong_implicit
+  \\ rw[]
+  \\ first_x_assum irule
+  \\ goal_assum drule
+QED
+
+(*
+Theorem ignore_bind_cong_implicit_hyp[defncong]:
   (f = f') ∧
   (∀s x t. f s = (INL x, t) ⇒ g = g')
   ⇒
@@ -1033,9 +1059,10 @@ Proof
   \\ first_x_assum irule
   \\ goal_assum drule
 QED
+*)
 
 Theorem try_cong[defncong]:
-  (f s = f' s) ∧
+  (f s = f' s') ∧
   (∀e t. f s = (INR e, t) ⇒ h e t = h' e t) ∧
   (s = s')
   ⇒
@@ -1056,8 +1083,22 @@ Proof
   \\ metis_tac[]
 QED
 
+(*
+Theorem try_cong_implicit_hyp[defncong]:
+  (f = f') ∧
+  (∀s e t. f s = (INR e, t) ⇒ h e = h' e)
+  ⇒
+  try f h = try f' h'
+Proof
+  rw[FUN_EQ_THM]
+  \\ irule try_cong \\ rw[]
+  \\ first_x_assum irule
+  \\ metis_tac[]
+QED
+*)
+
 Theorem finally_cong[defncong]:
-  (f s = f' s) ∧
+  (f s = f' s') ∧
   (∀x t. f s = (x, t) ⇒ g t = g' t) ∧
   (s = s')
   ⇒
@@ -1218,8 +1259,8 @@ Definition evaluate_def:
   eval_expr cx (Call (IntCall fn) es) = do
     check (¬MEM fn cx.stk) "recursion";
     ts <- lift_option (get_self_code cx) "IntCall get_self_code";
-    (args,ret,body) <-
-      lift_option (lookup_function fn Internal ts) "IntCall lookup_function";
+    tup <- lift_option (lookup_function fn Internal ts) "IntCall lookup_function";
+    args <<- FST tup; body <<- SND $ SND tup;
     check (LENGTH args = LENGTH es) "IntCall args length"; (* TODO: needed? *)
     vs <- eval_exprs cx es;
     env <- lift_option (bind_arguments args vs) "IntCall bind_arguments";
@@ -1228,6 +1269,7 @@ Definition evaluate_def:
     rv <- finally
       (try (do eval_stmts cxf body; return NoneV od) handle_function)
       (pop_function prev);
+    (* TODO: check return type? *)
     return $ Value rv
   od ∧
   eval_exprs cx [] = return [] ∧
