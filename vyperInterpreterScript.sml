@@ -1,6 +1,6 @@
 open HolKernel boolLib bossLib Parse wordsLib blastLib dep_rewrite monadsyntax
      alistTheory rich_listTheory byteTheory finite_mapTheory
-     combinTheory pairTheory
+     arithmeticTheory combinTheory pairTheory
      cv_typeTheory cv_stdTheory cv_transLib
 open vfmTypesTheory vfmStateTheory vyperAstTheory
 
@@ -339,6 +339,7 @@ Datatype:
   evaluation_context = <|
     stk: identifier list
   ; txn: call_txn
+  ; sources: (address, toplevel list) alist
   |>
 End
 
@@ -436,15 +437,8 @@ End
 val () = cv_auto_trans builtin_args_length_ok_def;
 
 Datatype:
-  contract = <|
-    src: toplevel list
-  ; globals: (* identifier *) num |-> toplevel_value
-  |>
-End
-
-Datatype:
   evaluation_state = <|
-    contracts: (address, contract) alist
+    globals: (address, num |-> toplevel_value) alist
   ; scopes: scope list
   ; accounts: evm_accounts
   |>
@@ -507,13 +501,6 @@ Definition finally_def:
      | (INR e, s) => ignore_bind g (raise e) s
 End
 
-Definition get_current_contract_def:
-  get_current_contract cx st =
-  (case ALOOKUP st.contracts cx.txn.target
-     of NONE => raise $ Error "get_current_contract"
-      | SOME ctr => return ctr) st
-End
-
 val option_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
@@ -525,64 +512,6 @@ val sum_CASE_rator =
 val list_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="list",Tyop="list"}));
-
-val () = get_current_contract_def
-  |> SRULE [option_CASE_rator]
-  |> cv_auto_trans;
-
-Definition set_current_contract_def:
-  set_current_contract cx ctr st =
-  let addr = cx.txn.target in
-  return () $ st with contracts updated_by (λal. (addr, ctr) :: ADELKEY addr al)
-End
-
-val () = cv_auto_trans set_current_contract_def;
-
-Definition get_current_globals_def:
-  get_current_globals cx = do
-    ctr <- get_current_contract cx;
-    return ctr.globals
-  od
-End
-
-val () = get_current_globals_def
-  |> SRULE [bind_def, FUN_EQ_THM]
-  |> cv_auto_trans;
-
-Definition lookup_global_def:
-  lookup_global cx n = do
-    gbs <- get_current_globals cx;
-    case FLOOKUP gbs n
-      of NONE => raise $ Error "lookup_global"
-       | SOME v => return v
-  od
-End
-
-val () = lookup_global_def
-  |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator]
-  |> cv_auto_trans;
-
-Definition set_global_def:
-  set_global cx n v = do
-    ctr <- get_current_contract cx;
-    set_current_contract cx $
-      ctr with globals updated_by flip FUPDATE (n,v)
-  od
-End
-
-val () = set_global_def
-  |> SRULE [bind_def, FUN_EQ_THM, C_DEF]
-  |> cv_auto_trans;
-
-Definition get_accounts_def:
-  get_accounts st = return st.accounts st
-End
-
-val () = cv_auto_trans get_accounts_def;
-
-Definition update_accounts_def:
-  update_accounts f st = return () (st with accounts updated_by f)
-End
 
 Definition lift_option_def:
   lift_option x str =
@@ -601,6 +530,58 @@ End
 val () = lift_sum_def
   |> SRULE [FUN_EQ_THM, sum_CASE_rator]
   |> cv_auto_trans;
+
+Definition get_current_globals_def:
+  get_current_globals cx st =
+    lift_option (ALOOKUP st.globals cx.txn.target) "get_current_globals" st
+End
+
+val () = get_current_globals_def
+  |> SRULE [lift_option_def, option_CASE_rator]
+  |> cv_auto_trans;
+
+Definition set_current_globals_def:
+  set_current_globals cx gbs st =
+  let addr = cx.txn.target in
+    return () $ st with globals updated_by
+      (λal. (addr, gbs) :: (ADELKEY addr al))
+End
+
+val () = cv_auto_trans set_current_globals_def;
+
+Definition lookup_global_def:
+  lookup_global cx n = do
+    gbs <- get_current_globals cx;
+    case FLOOKUP gbs n
+      of NONE => raise $ Error "lookup_global"
+       | SOME v => return v
+  od
+End
+
+val () = lookup_global_def
+  |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator]
+  |> cv_auto_trans;
+
+Definition set_global_def:
+  set_global cx n v = do
+    gbs <- get_current_globals cx;
+    set_current_globals cx $ gbs |+ (n,v)
+  od
+End
+
+val () = set_global_def
+  |> SRULE [bind_def, FUN_EQ_THM]
+  |> cv_auto_trans;
+
+Definition get_accounts_def:
+  get_accounts st = return st.accounts st
+End
+
+val () = cv_auto_trans get_accounts_def;
+
+Definition update_accounts_def:
+  update_accounts f st = return () (st with accounts updated_by f)
+End
 
 Definition get_Value_def:
   get_Value (Value v) = return v ∧
@@ -693,16 +674,10 @@ val () = transfer_value_def
   |> cv_auto_trans;
 
 Definition get_self_code_def:
-  get_self_code cx st =
-  lift_option
-    (OPTION_MAP (λctr. ctr.src)
-       (ALOOKUP st.contracts cx.txn.target))
-    "get_self_code" st
+  get_self_code cx = ALOOKUP cx.sources cx.txn.target
 End
 
-val () = get_self_code_def
-  |> SRULE [lift_option_def, option_CASE_rator]
-  |> cv_auto_trans;
+val () = cv_auto_trans get_self_code_def;
 
 Definition is_ArrayT_def[simp]:
   is_ArrayT (ArrayT _ _) = T ∧
@@ -967,6 +942,18 @@ Termination
   \\ simp[Abbr`P`, Abbr`f`]
 End
 
+Definition dest_Internal_FunctionDef_def:
+  dest_Internal_FunctionDef (FunctionDef Internal _ fn _ _ ss) = [(fn, ss)] ∧
+  dest_Internal_FunctionDef _ = []
+End
+
+Definition remcode_def:
+  remcode cx =
+  case get_self_code cx of NONE => []
+     | SOME ts => FILTER (λ(fn,ss). ¬MEM fn cx.stk)
+          (FLAT (MAP dest_Internal_FunctionDef ts))
+End
+
 Definition evaluate_def:
   eval_stmt cx Pass = return () ∧
   eval_stmt cx Continue = raise ContinueException ∧
@@ -1116,7 +1103,7 @@ Definition evaluate_def:
   (* TODO ExtCall (via oracle?) *)
   eval_expr cx (Call (IntCall fn) es) = do
     check (¬MEM fn cx.stk) "recursion";
-    ts <- get_self_code cx;
+    ts <- lift_option (get_self_code cx) "IntCall get_self_code";
     (args, ret, body) <-
       lift_option (lookup_function fn Internal ts) "IntCall lookup_function";
     check (LENGTH args = LENGTH es) "IntCall args length"; (* TODO: needed? *)
@@ -1137,14 +1124,26 @@ Definition evaluate_def:
     return $ v::vs
   od
 Termination
-  cheat
-  (* need access to the state st to define ts from cx and st
   WF_REL_TAC ‘measure (λx. case x of
-  | INR (INR (INR (cx, es))) => exprs_bound ts es
-  | INR (INR (INL (cx, e))) => expr_bound ts e
-  | INR (INL (cx, ss)) => stmts_bound ts ss
-  | INL (cx, s) => stmt_bound ts s)’
-  *)
+  | INR (INR (INR (INR (INR (INR (INR (cx, es)))))))
+    => exprs_bound (remcode cx) es
+  | INR (INR (INR (INR (INR (INR (INL (cx, e)))))))
+    => expr_bound (remcode cx) e
+  | INR (INR (INR (INR (INR (INL (cx, nm, body, vs))))))
+    => LENGTH vs * (stmts_bound (remcode cx) body)
+  | INR (INR (INR (INR (INL (cx, t)))))
+    => base_target_bound (remcode cx) t
+  | INR (INR (INR (INL (cx, gs))))
+    => targets_bound (remcode cx) gs
+  | INR (INR (INL (cx, g)))
+    => target_bound (remcode cx) g
+  | INR (INL (cx, ss)) => stmts_bound (remcode cx) ss
+  | INL (cx, s) => stmt_bound (remcode cx) s)’
+  \\ rw[bound_def, MAX_DEF]
+  \\ cheat
+  (* TODO: define the missing bound functions *)
+  (* TODO: need congruence rules for lift_option, lookup_function *)
+  (* TODO: need some kind of rule for check to propagate that it succeeded *)
 End
 
 (* TODO: assumes unique identifiers, but should check? *)
