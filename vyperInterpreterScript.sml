@@ -1239,7 +1239,12 @@ Definition evaluate_def:
     v <- lift_sum $ evaluate_subscript v1 v2;
     return $ Value $ v
   od ∧
-  (* TODO: Attribute *)
+  eval_expr cx (Attribute e id) = do
+    tv <- eval_expr cx e;
+    sv <- get_Value tv;
+    v <- lift_sum $ evaluate_attribute sv id;
+    return $ Value $ v
+  od ∧
   eval_expr cx (Builtin bt es) = do
     check (builtin_args_length_ok bt (LENGTH es)) "Builtin args";
     vs <- eval_exprs cx es;
@@ -1255,7 +1260,7 @@ Definition evaluate_def:
     transfer_value cx.txn.sender toAddr amount;
     return $ Value $ NoneV
   od ∧
-  (* TODO ExtCall (via oracle or via EVM semantics?) *)
+  eval_expr cx (Call (ExtCall _) _) = raise $ Error "TODO: ExtCall" ∧
   eval_expr cx (Call (IntCall fn) es) = do
     check (¬MEM fn cx.stk) "recursion";
     ts <- lift_option (get_self_code cx) "IntCall get_self_code";
