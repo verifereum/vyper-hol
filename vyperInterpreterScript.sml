@@ -388,12 +388,26 @@ End
 
 val () = cv_auto_trans integer_index_def;
 
+Definition value_to_key_def:
+  value_to_key (IntV i) = SOME $ IntSubscript i ∧
+  value_to_key (StringV _ s) = SOME $ StrSubscript s ∧
+  value_to_key (BytesV _ bs) = SOME $ BytesSubscript bs ∧
+  value_to_key _ = NONE
+End
+
+val () = cv_auto_trans value_to_key_def;
+
 Definition evaluate_subscript_def:
-  evaluate_subscript av (IntV i) =
+  evaluate_subscript (Value av) (IntV i) =
   (case extract_elements av of SOME vs =>
-    (case integer_index vs i of SOME j => INL (EL j vs)
+    (case integer_index vs i of SOME j => INL $ Value (EL j vs)
      | _ => INR "integer_index")
    | _ => INR "extract_elements") ∧
+  evaluate_subscript (HashMap hm) kv =
+  (case value_to_key kv of SOME k =>
+    (case ALOOKUP hm k of SOME tv => INL tv
+        | _ => INR "ALOOKUP HashMap")
+   | _ => INR "evaluate_subscript value_to_key") ∧
   evaluate_subscript _ _ = INR "evaluate_subscript"
 End
 
@@ -404,8 +418,8 @@ Theorem evaluate_subscript_pre[cv_pre]:
 Proof
   rw[evaluate_subscript_pre_def, integer_index_def]
   \\ rw[]
-  \\ qmatch_asmsub_rename_tac`0i ≤ v0`
-  \\ Cases_on`v0` \\ gs[]
+  \\ qmatch_asmsub_rename_tac`0i ≤ w`
+  \\ Cases_on`w` \\ gs[]
 QED
 
 Definition evaluate_attribute_def:
@@ -772,15 +786,6 @@ val () = set_variable_def
   |> SRULE [FUN_EQ_THM, bind_def, lift_option_def,
             LET_RATOR, UNCURRY, option_CASE_rator]
   |> cv_auto_trans;
-
-Definition value_to_key_def:
-  value_to_key (IntV i) = SOME $ IntSubscript i ∧
-  value_to_key (StringV _ s) = SOME $ StrSubscript s ∧
-  value_to_key (BytesV _ bs) = SOME $ BytesSubscript bs ∧
-  value_to_key _ = NONE
-End
-
-val () = cv_auto_trans value_to_key_def;
 
 Definition handle_function_def:
   handle_function (ReturnException v) = return v ∧
@@ -1232,12 +1237,10 @@ Definition evaluate_def:
   od ∧
   eval_expr cx (Subscript e1 e2) = do
     tv1 <- eval_expr cx e1;
-    (* TODO: handle subscripting hashmaps *)
     tv2 <- eval_expr cx e2;
-    v1 <- get_Value tv1; (* TODO *)
     v2 <- get_Value tv2;
-    v <- lift_sum $ evaluate_subscript v1 v2;
-    return $ Value $ v
+    tv <- lift_sum $ evaluate_subscript tv1 v2;
+    return tv
   od ∧
   eval_expr cx (Attribute e id) = do
     tv <- eval_expr cx e;
