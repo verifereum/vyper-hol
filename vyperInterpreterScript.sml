@@ -809,7 +809,13 @@ Definition assign_subscripts_def:
      | INR err => INR err)
     | _ => INR "assign_subscripts integer_index")
    | _ => INR "assign_subscripts extract_elements") ∧
-  assign_subscripts _ _ _ = INR "TODO: handle AttrSubscript"
+  assign_subscripts (StructV al) ((AttrSubscript id)::is) ao =
+  (case ALOOKUP al id of SOME v =>
+    (case assign_subscripts v is ao of INL v' =>
+      INL $ StructV ((id,v')::(ADELKEY id al))
+     | INR err => INR err)
+   | _ => INR "assign_subscripts AttrSubscript") ∧
+  assign_subscripts _ _ _ = INR "assign_subscripts"
 End
 
 val assign_subscripts_pre_def = cv_auto_trans_pre assign_subscripts_def;
@@ -821,8 +827,8 @@ Proof
   \\ rw[Once assign_subscripts_pre_def]
   \\ rw[Once assign_subscripts_pre_def]
   \\ gvs[integer_index_def] \\ rw[]
-  \\ qmatch_asmsub_rename_tac`0i ≤ v0`
-  \\ Cases_on`v0` \\ gs[]
+  \\ qmatch_asmsub_rename_tac`0i ≤ w`
+  \\ Cases_on`w` \\ gs[]
 QED
 
 Definition assign_hashmap_def:
