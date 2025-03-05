@@ -1320,6 +1320,15 @@ Termination
   \\ cheat (* congruence rules in function case ? *)
 End
 
+Definition type_env_def:
+  type_env [] = FEMPTY ∧
+  type_env (StructDef id args :: ts) =
+    type_env ts |+ (string_to_num id, args) ∧
+  type_env (_ :: ts) = type_env ts
+End
+
+val () = cv_auto_trans type_env_def;
+
 (* TODO: assumes unique identifiers, but should check? *)
 Definition initial_globals_def:
   initial_globals env [] = FEMPTY ∧
@@ -1334,5 +1343,39 @@ Definition initial_globals_def:
 End
 
 val () = cv_auto_trans initial_globals_def;
+
+Definition initial_execution_context_def:
+  initial_execution_context srcs tx =
+  <| sources := srcs
+   ; txn := tx
+   ; stk := [tx.function_name]
+   |>
+End
+
+Definition initial_state_def:
+  initial_state (ms, gbs) env =
+  <| accounts := ms
+   ; globals := gbs
+   ; scopes := [env]
+   |>
+End
+
+Definition call_external_def:
+  call_external srcs msgb tx =
+  let cx = initial_execution_context srcs tx in
+  case get_self_code cx
+  of NONE => (SOME $ Error "call get_self_code", msgb)
+   | SOME ts =>
+  case lookup_function tx.function_name External ts
+  of NONE => (SOME $ Error "call lookup_function", msgb)
+   | SOME (args, ret, body) =>
+  case bind_arguments args tx.args
+  of NONE => (SOME $ Error "call bind_arguments", msgb)
+   | SOME env =>
+  let st = initial_state msgb env in
+  case eval_stmts cx body st
+  of (INR e, st) => (SOME e, (st.accounts, st.globals))
+   | (_, st) => (NONE, (st.accounts, st.globals))
+End
 
 val () = export_theory();
