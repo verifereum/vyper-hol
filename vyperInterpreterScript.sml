@@ -1320,6 +1320,35 @@ Termination
   \\ cheat (* congruence rules in function case ? *)
 End
 
+Triviality LET_PROD_RATOR:
+  (let (x,y) = M in N x y) b = let (x,y) = M in N x y b
+Proof
+  rw[LET_THM, UNCURRY]
+QED
+
+Triviality LET_UNCURRY:
+  (let (x,y) = M in N x y) = let p = M; x = FST p; y = SND p in N x y
+Proof
+  rw[UNCURRY]
+QED
+
+val subscript_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vyperInterpreter",Tyop="subscript"}));
+
+(* TODO
+val () = evaluate_def
+  |> SIMP_RULE std_ss [
+       FUN_EQ_THM, UNCURRY,
+       bind_def, ignore_bind_def, try_def, finally_def,
+       LET_UNCURRY, LET_PROD_RATOR, LET_RATOR, COND_RATOR,
+       subscript_CASE_rator, sum_CASE_rator, option_CASE_rator,
+       switch_BoolV_def, lift_option_def, lift_sum_def
+     ]
+  |> cv_trans_rec
+  |> curry (flip (op $)) cheat ;
+*)
+
 Definition type_env_def:
   type_env [] = FEMPTY ∧
   type_env (StructDef id args :: ts) =
@@ -1344,38 +1373,85 @@ End
 
 val () = cv_auto_trans initial_globals_def;
 
-Definition initial_execution_context_def:
-  initial_execution_context srcs tx =
+Definition initial_evaluation_context_def:
+  initial_evaluation_context srcs tx =
   <| sources := srcs
    ; txn := tx
    ; stk := [tx.function_name]
    |>
 End
 
+val () = cv_auto_trans initial_evaluation_context_def;
+
+Datatype:
+  abstract_machine = <|
+    sources: (address, toplevel list) alist
+  ; globals: (address, num |-> toplevel_value) alist
+  ; accounts: evm_accounts
+  |>
+End
+
 Definition initial_state_def:
-  initial_state (ms, gbs) env =
-  <| accounts := ms
-   ; globals := gbs
+  initial_state (am: abstract_machine) env : evaluation_state =
+  <| accounts := am.accounts
+   ; globals := am.globals
    ; scopes := [env]
    |>
 End
 
+val () = cv_auto_trans initial_state_def;
+
+Definition abstract_machine_from_state_def:
+  abstract_machine_from_state srcs (st: evaluation_state) =
+  <| sources := srcs
+   ; globals := st.globals
+   ; accounts := st.accounts
+   |> : abstract_machine
+End
+
+val () = cv_auto_trans abstract_machine_from_state_def;
+
+Definition call_external_function_def:
+  call_external_function am cx args vals body =
+  case bind_arguments args vals
+  of NONE => (SOME $ Error "call bind_arguments", am)
+   | SOME env =>
+  let st = initial_state am env in
+  case eval_stmts cx body st
+  of (INR e, st) => (SOME e, abstract_machine_from_state am.sources st)
+   | (_, st) => (NONE, abstract_machine_from_state am.sources st)
+End
+
+(* TODO
+val () = cv_trans call_external_function_def;
+*)
+
 Definition call_external_def:
-  call_external srcs msgb tx =
-  let cx = initial_execution_context srcs tx in
+  call_external am tx =
+  let cx = initial_evaluation_context am.sources tx in
   case get_self_code cx
-  of NONE => (SOME $ Error "call get_self_code", msgb)
+  of NONE => (SOME $ Error "call get_self_code", am)
    | SOME ts =>
   case lookup_function tx.function_name External ts
-  of NONE => (SOME $ Error "call lookup_function", msgb)
+  of NONE => (SOME $ Error "call lookup_function", am)
    | SOME (args, ret, body) =>
-  case bind_arguments args tx.args
-  of NONE => (SOME $ Error "call bind_arguments", msgb)
-   | SOME env =>
-  let st = initial_state msgb env in
-  case eval_stmts cx body st
-  of (INR e, st) => (SOME e, (st.accounts, st.globals))
-   | (_, st) => (NONE, (st.accounts, st.globals))
+       call_external_function am cx args tx.args body
+End
+
+(* TODO
+val () = cv_auto_trans call_external_def;
+*)
+
+Definition load_contract_def:
+  load_contract am tx ts =
+  case lookup_function tx.function_name Deploy ts of
+     | NONE => INR $ Error "no constructor"
+     | SOME (args, ret, body) =>
+       (* TODO: update balances on return *)
+       let cx = initial_evaluation_context am.sources tx in
+       case call_external_function am cx args tx.args body
+         of (SOME e, _) => INR e
+          | (_, am') => INL am'
 End
 
 val () = export_theory();
