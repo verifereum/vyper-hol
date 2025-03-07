@@ -303,6 +303,8 @@ Datatype:
   | TupleTargetV (assignment_value list)
 End
 
+Type base_target_value = “:location # subscript list”;
+
 Datatype:
   assign_operation = Replace value | Update binop value
 End
@@ -1320,6 +1322,90 @@ Termination
   \\ cheat (* congruence rules in function case ? *)
 End
 
+Datatype:
+  eval_continuation
+  = StmtsK (stmt list) eval_continuation
+  | TargetsK (assignment_target list) eval_continuation
+  | ErrorK exception
+  | ReturnK eval_continuation
+  | AssertK string eval_continuation
+  | AnnAssignK identifier eval_continuation
+  | AssignK1 expr eval_continuation
+  | AssignK2 assignment_value expr eval_continuation
+  | AugAssignK1 binop expr eval_continuation
+  | AugAssignK2 base_target_value binop expr eval_continuation
+  | IfK (stmt list) (stmt list) eval_continuation
+  | ForK identifier num (stmt list) eval_continuation
+  | AttributeTargetK identifier eval_continuation
+  | SubscriptTargetK1 expr eval_continuation
+  | SubscriptTargetK2 base_target_value expr eval_continuation
+End
+
+Definition fill_base_def:
+  fill_base (v, sbs) (AugAssignK1 bop e k) =
+    AugAssignK2 (v, sbs) bop e k ∧
+  fill_base (v, sbs) (AttributeTargetK id k) =
+    fill_base (v, AttrSubscript id :: sbs) k ∧
+  fill_base (v, sbs) (SubscriptTargetK1 e k) =
+    SubscriptTargetK2 (v, sbs) e k ∧
+  fill_base (v, sbs) (AssignK1 e k) =
+    AssignK2 (BaseTargetV v sbs) e k ∧
+  fill_base (v, sbs) k = ErrorK $ Error "fill_base"
+End
+
+Definition fill_base_monad_def:
+  fill_base_monad (x, st) k =
+  case x of INL bv => (fill_base bv k, st)
+     | INR e => (ErrorK e, st)
+End
+
+Definition evaluate_base_target_cps_def:
+  evalk_base_target cx (NameTarget id) st k = (
+    let n = string_to_num id in
+    let r = do
+      sc <- get_scopes;
+      cs <- lift_option (find_containing_scope n sc) "NameTarget lookup";
+      return (ScopedVar cs id, []) od st in
+    fill_base_monad r k ) ∧
+  evalk_base_target cx (TopLevelNameTarget id) st k =
+    (fill_base (TopLevelVar id, []) k, st) ∧
+  evalk_base_target cx (AttributeTarget t id) st k =
+    evalk_base_target cx t st (AttributeTargetK id k) ∧
+  evalk_base_target cx (SubscriptTarget t e) st k =
+    evalk_base_target cx t st (SubscriptTargetK1 e k)
+End
+
+(*
+Definition evaluate_cps_def:
+  evalk_stmt cx Pass st k = (fill k, st) ∧
+  evalk_stmt ck Continue st k = (fill_err ContinueException k, st) ∧
+  evalk_stmt ck Break st k = (fill_err BreakException k, st) ∧
+  evalk_stmt cx (Return NONE) st k = (fill_err (ReturnException NoneV) k, st) ∧
+  evalk_stmt cx (Return (SOME e)) st k = evalk_expr ck e st (ReturnK k) ∧
+  evalk_stmt cx (Raise str) st k = (fill_err (AssertException str) k, st) ∧
+  evalk_stmt cx (Assert e str) st k = evalk_expr ck e st (AssertK str k) ∧
+  evalk_stmt cx (AnnAssign id typ e) st k = evalk_expr ck e st (AnnAssignK id k) ∧
+  evalk_stmt cx (Assign g e) st k = evalk_target cx g st (AssignK1 e k) ∧
+  evalk_stmt cx (AugAssign t bop e) st k =
+    evalk_base_target cx t st (AugAssignK1 bop e k) ∧
+  evalk_stmt cx (If e ss1 ss2) st k =
+    evalk_expr ck e st (IfK ss1 ss2 k) ∧
+  evalk_stmt cx (For id typ e n body) st k =
+    evalk_expr ck e st (ForK id n body k) ∧
+  evalk_stmt cx (Expr e) st k = evalk_expr ck e st k ∧
+  evalk_stmts cx [] st k = (fill k, st) ∧
+  evalk_stmts cx (s::ss) st k =
+    evalk_stmt cx s st (StmtsK ss k) ∧
+  evalk_target cx (BaseTarget t) st k =
+    evalk_base_target cx t st k ∧
+  evalk_target cx (TupleTarget gs) st k =
+    evalk_targets cx gs st k ∧
+  evalk_targets cx [] st k = (fill_list k, st) ∧
+  evalk_targets cx (g::gs) st k =
+    evalk_target cx g st (TargetsK gs k) ∧
+End
+*)
+
 Triviality LET_PROD_RATOR:
   (let (x,y) = M in N x y) b = let (x,y) = M in N x y b
 Proof
@@ -1336,8 +1422,8 @@ val subscript_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="vyperInterpreter",Tyop="subscript"}));
 
-(* TODO
-val () = evaluate_def
+(*
+val evaluate_pre_def = evaluate_def
   |> SIMP_RULE std_ss [
        FUN_EQ_THM, UNCURRY,
        bind_def, ignore_bind_def, try_def, finally_def,
@@ -1345,7 +1431,7 @@ val () = evaluate_def
        subscript_CASE_rator, sum_CASE_rator, option_CASE_rator,
        switch_BoolV_def, lift_option_def, lift_sum_def
      ]
-  |> cv_trans_rec
+  |> cv_trans_pre_rec
   |> curry (flip (op $)) cheat ;
 *)
 
