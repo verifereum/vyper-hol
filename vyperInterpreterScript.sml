@@ -1371,14 +1371,114 @@ Datatype:
   | DoneK ((α + exception) # evaluation_state)
 End
 
-(*
-Definition evaluate_cps_def:
-  eval_stmt_cps cx Pass st k = apply cx st k ∧
-  eval_stmt_cps cx Continue st k = apply_exc cx ContinueException st k ∧
-  eval_stmt_cps cx Break st k = apply_exc cx BreakException st k ∧
-  eval_stmt_cps cx (Return NONE) st k = apply_exc cx (ReturnException NoneV) st k ∧
+Datatype:
+  apply_base_continuation
+  = Apply
+  | ApplyExc exception
+  | ApplyTargets (assignment_value list)
+  | ApplyBaseTarget base_target_value
+  | ApplyTv toplevel_value
+  | ApplyVal value
+  | ApplyVals (value list)
+End
+
+Datatype:
+  apply_continuation
+  = AK evaluation_context apply_base_continuation
+       evaluation_state (α eval_continuation)
+  | MK evaluation_context ((apply_base_continuation + exception) # evaluation_state)
+       (α eval_continuation)
+End
+
+Definition liftk_def:
+  liftk a (INL x, st) = (INL (a x), (st:evaluation_state)) ∧
+  liftk a (INR (ex:exception), st) = (INR ex, st)
+End
+
+Definition eval_expr_cps_def:
+  eval_expr_cps cx (Name id) st k =
+    MK cx (liftk ApplyTv
+      (do env <- get_scopes;
+          v <- lift_option (lookup_scopes (string_to_num id) env) "lookup Name";
+          return $ Value v od st)) k ∧
+  eval_expr_cps cx (TopLevelName id) st k =
+    MK cx
+      (liftk ApplyTv (lookup_global cx (string_to_num id) st)) k ∧
+  eval_expr_cps cx (IfExp e1 e2 e3) st k =
+    eval_expr_cps cx e1 st (IfExpK e2 e3 k) ∧
+  eval_expr_cps cx (Literal l) st k =
+    AK cx (ApplyTv (Value $ evaluate_literal l)) st k ∧
+  eval_expr_cps cx (ArrayLit b es) st k =
+    (case check (compatible_bound b (LENGTH es)) "ArrayLit bound" st of
+       (INR ex, st) => AK cx (ApplyExc ex) st k
+     | (INL (), st) => eval_exprs_cps cx es st (ArrayLitK b k)) ∧
+  eval_expr_cps cx (Subscript e1 e2) st k =
+    eval_expr_cps cx e1 st (SubscriptK e2 k) ∧
+  eval_expr_cps cx (Attribute e id) st k =
+    eval_expr_cps cx e st (AttributeK id k) ∧
+  eval_expr_cps cx (Builtin bt es) st k =
+    (case check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st of
+       (INR ex, st) => AK cx (ApplyExc ex) st k
+     | (INL (), st) => eval_exprs_cps cx es st (BuiltinK bt k)) ∧
+  eval_expr_cps cx (Call Send es) st k =
+    (case check (LENGTH es = 2) "Send args" st of
+       (INR ex, st) => AK cx (ApplyExc ex) st k
+     | (INL (), st) => eval_exprs_cps cx es st (CallSendK k)) ∧
+  eval_expr_cps cx (Call (ExtCall _) _) st k =
+    AK cx (ApplyExc (Error "TODO: ExtCall")) st k ∧
+  eval_expr_cps cx (Call (IntCall fn) es) st k =
+    (case do
+      check (¬MEM fn cx.stk) "recursion";
+      ts <- lift_option (get_self_code cx) "IntCall get_self_code";
+      tup <- lift_option (lookup_function fn Internal ts) "IntCall lookup_function";
+      args <<- FST tup; body <<- SND $ SND tup;
+      check (LENGTH args = LENGTH es) "IntCall args length";
+      return (args, body) od st
+     of (INR ex, st) => AK cx (ApplyExc ex) st k
+      | (INL (args, body), st) =>
+          eval_exprs_cps cx es st (IntCallK fn args body k)) ∧
+  eval_exprs_cps cx [] st k = AK cx (ApplyVals []) st k ∧
+  eval_exprs_cps cx (e::es) st k =
+    eval_expr_cps cx e st (ExprsK es k)
+Termination
+  WF_REL_TAC ‘measure (λx. case x of
+    | INL (cx,e,st,k) => expr_size e
+    | INR (cx,es,st,k) => list_size expr_size es)’
+End
+
+Definition eval_base_target_cps_def:
+  eval_base_target_cps cx (NameTarget id) st k =
+    (let r = do
+        sc <- get_scopes;
+        n <<- string_to_num id;
+        cs <- lift_option (find_containing_scope n sc) "NameTarget lookup";
+        return $ (ScopedVar cs id, []) od st in
+     MK cx (liftk ApplyBaseTarget r) k) ∧
+  eval_base_target_cps cx (TopLevelNameTarget id) st k =
+    AK cx (ApplyBaseTarget (TopLevelVar id, [])) st k ∧
+  eval_base_target_cps cx (AttributeTarget t id) st k =
+    eval_base_target_cps cx t st (AttributeTargetK id k) ∧
+  eval_base_target_cps cx (SubscriptTarget t e) st k =
+    eval_base_target_cps cx t st (SubscriptTargetK e k)
+End
+
+Definition eval_target_cps_def:
+  eval_target_cps cx (BaseTarget t) st k =
+    eval_base_target_cps cx t st (BaseTargetK k) ∧
+  eval_target_cps cx (TupleTarget gs) st k =
+    eval_targets_cps cx gs st (TupleTargetK k) ∧
+  eval_targets_cps cx [] st k = AK cx (ApplyTargets []) st k ∧
+  eval_targets_cps cx (g::gs) st k =
+    eval_target_cps cx g st (TargetsK gs k)
+End
+
+Definition eval_stmt_cps_def:
+  eval_stmt_cps cx Pass st k = AK cx Apply st k ∧
+  eval_stmt_cps cx Continue st k = AK cx (ApplyExc ContinueException) st k ∧
+  eval_stmt_cps cx Break st k = AK cx (ApplyExc BreakException) st k ∧
+  eval_stmt_cps cx (Return NONE) st k = AK cx (ApplyExc (ReturnException NoneV)) st k ∧
   eval_stmt_cps cx (Return (SOME e)) st k = eval_expr_cps cx e st (ReturnK k) ∧
-  eval_stmt_cps cx (Raise str) st k = apply_exc cx (AssertException str) st k ∧
+  eval_stmt_cps cx (Raise str) st k = AK cx (ApplyExc (AssertException str)) st k ∧
   eval_stmt_cps cx (Assert e str) st k = eval_expr_cps cx e st (AssertK str k) ∧
   eval_stmt_cps cx (AnnAssign id typ e) st k =
     eval_expr_cps cx e st (AnnAssignK id k) ∧
@@ -1391,79 +1491,25 @@ Definition evaluate_cps_def:
   eval_stmt_cps cx (For id typ e n body) st k =
     eval_expr_cps cx e st (ForK id n body k) ∧
   eval_stmt_cps cx (Expr e) st k =
-    eval_expr_cps cx e st (ExprK k) ∧
-  eval_stmts_cps cx [] st k = apply cx st k ∧
+    eval_expr_cps cx e st (ExprK k)
+End
+
+Definition eval_stmts_cps_def:
+  eval_stmts_cps cx [] st k = AK cx Apply st k ∧
   eval_stmts_cps cx (s::ss) st k =
-    eval_stmt_cps cx s st (StmtsK ss k) ∧
-  eval_target_cps cx (BaseTarget t) st k =
-    eval_base_target_cps cx t st (BaseTargetK k) ∧
-  eval_target_cps cx (TupleTarget gs) st k =
-    eval_targets_cps cx gs st (TupleTargetK k) ∧
-  eval_targets_cps cx [] st k = apply_targets cx [] st k ∧
-  eval_targets_cps cx (g::gs) st k =
-    eval_target_cps cx g st (TargetsK gs k) ∧
-  eval_base_target_cps cx (NameTarget id) st k =
-    (let r = do
-        sc <- get_scopes;
-        n <<- string_to_num id;
-        cs <- lift_option (find_containing_scope n sc) "NameTarget lookup";
-        return $ (ScopedVar cs id, []) od st in
-     apply_monadic_base_target cx r k) ∧
-  eval_base_target_cps cx (TopLevelNameTarget id) st k =
-    apply_base_target cx (TopLevelVar id, []) st k ∧
-  eval_base_target_cps cx (AttributeTarget t id) st k =
-    eval_base_target_cps cx t st (AttributeTargetK id k) ∧
-  eval_base_target_cps cx (SubscriptTarget t e) st k =
-    eval_base_target_cps cx t st (SubscriptTargetK e k) ∧
-  eval_for_cps cx nm body [] st k = apply cx st k ∧
+    eval_stmt_cps cx s st (StmtsK ss k)
+End
+
+Definition eval_for_cps_def:
+  eval_for_cps cx nm body [] st k = AK cx Apply st k ∧
   eval_for_cps cx nm body (v::vs) st k =
   (case push_scope_with_var nm v st of
-        (INR ex, st) => apply_exc cx ex st k
-      | (INL (), st) => eval_stmts_cps cx body st (ForK1 nm body vs k)) ∧
-  eval_expr_cps cx (Name id) st k =
-    apply_monadic_tv cx
-      (do env <- get_scopes;
-          v <- lift_option (lookup_scopes (string_to_num id) env) "lookup Name";
-          return $ Value v od st) k ∧
-  eval_expr_cps cx (TopLevelName id) st k =
-    apply_monadic_tv cx
-      (lookup_global cx (string_to_num id) st) k ∧
-  eval_expr_cps cx (IfExp e1 e2 e3) st k =
-    eval_expr_cps cx e1 st (IfExpK e2 e3 k) ∧
-  eval_expr_cps cx (Literal l) st k =
-    apply_tv cx (Value $ evaluate_literal l) st k ∧
-  eval_expr_cps cx (ArrayLit b es) st k =
-    (case check (compatible_bound b (LENGTH es)) "ArrayLit bound" st of
-       (INR ex, st) => apply_exc cx ex st k
-     | (INL (), st) => eval_exprs_cps cx es st (ArrayLitK b k)) ∧
-  eval_expr_cps cx (Subscript e1 e2) st k =
-    eval_expr_cps cx e1 st (SubscriptK e2 k) ∧
-  eval_expr_cps cx (Attribute e id) st k =
-    eval_expr_cps cx e st (AttributeK id k) ∧
-  eval_expr_cps cx (Builtin bt es) st k =
-    (case check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st of
-       (INR ex, st) => apply_exc cx ex st k
-     | (INL (), st) => eval_exprs_cps cx es st (BuiltinK bt k)) ∧
-  eval_expr_cps cx (Call Send es) st k =
-    (case check (LENGTH es = 2) "Send args" st of
-       (INR ex, st) => apply_exc cx ex st k
-     | (INL (), st) => eval_exprs_cps cx es st (CallSendK k)) ∧
-  eval_expr_cps cx (Call (ExtCall _) _) st k =
-    apply_exc cx (Error "TODO: ExtCall") st k ∧
-  eval_expr_cps cx (Call (IntCall fn) es) st k =
-    (case do
-      check (¬MEM fn cx.stk) "recursion";
-      ts <- lift_option (get_self_code cx) "IntCall get_self_code";
-      tup <- lift_option (lookup_function fn Internal ts) "IntCall lookup_function";
-      args <<- FST tup; body <<- SND $ SND tup;
-      check (LENGTH args = LENGTH es) "IntCall args length";
-      return (args, body) od st
-     of (INR ex, st) => apply_exc cx ex st k
-      | (INL (args, body), st) =>
-          eval_exprs_cps cx es st (IntCallK fn args body k)) ∧
-  eval_exprs_cps cx [] st k = apply_vals cx [] st k ∧
-  eval_exprs_cps cx (e::es) st k =
-    eval_expr_cps cx e st (ExprsK es k) ∧
+        (INR ex, st) => AK cx (ApplyExc ex) st k
+      | (INL (), st) => eval_stmts_cps cx body st (ForK1 nm body vs k))
+End
+
+(*
+Definition
   apply cx st (StmtsK [] k) = apply cx st k ∧
   apply cx st (StmtsK (s::ss) k) =
     eval_stmt_cps cx s st (StmtsK ss k) ∧
@@ -1611,7 +1657,6 @@ Definition evaluate_cps_def:
   apply_vals cx vs st _ = DoneK (INR (Error "apply_vals k"), st) ∧
   apply_monadic cx (INR ex, st) k = apply_exc cx ex st k ∧
   apply_monadic cx (INL (), st) k = apply cx st k
-End
 *)
 
 Triviality LET_PROD_RATOR:
