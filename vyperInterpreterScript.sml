@@ -1328,9 +1328,11 @@ End
     continuation argument. make the state argument explicit.
   - whenever there's a recursive call, make it a tail call and store anything
     required for the remainder on top of the given continuation
-  - whenever there's a return (or raise), call a "step" function (these are
+  - whenever there's a return (or raise), call an "apply" function (these are
     additional compared to evaluate_def) that applies the continuation to the
-    result
+    result (there will be a kind of apply function for each kind of result)
+  - applying a continuation to a result that it doesn't expect is an error: find
+    the results it could expect by looking at where it was created
 *)
 
 Datatype:
@@ -1340,8 +1342,10 @@ Datatype:
   | AnnAssignK identifier eval_continuation
   | AssignK expr eval_continuation
   | AugAssignK binop expr eval_continuation
+  | AugAssignK1 base_target_value binop eval_continuation
   | IfK (stmt list) (stmt list) eval_continuation
   | ForK identifier num (stmt list) eval_continuation
+  | ForK1 identifier (stmt list) (value list) eval_continuation
   | ExprK eval_continuation
   | StmtsK (stmt list) eval_continuation
   | BaseTargetK eval_continuation
@@ -1349,25 +1353,27 @@ Datatype:
   | TargetsK (assignment_target list) eval_continuation
   | AttributeTargetK identifier eval_continuation
   | SubscriptTargetK expr eval_continuation
-  | ForK1 identifier (stmt list) (value list) eval_continuation
+  | SubscriptTargetK1 base_target_value eval_continuation
   | IfExpK expr expr eval_continuation
   | ArrayLitK bound eval_continuation
   | SubscriptK expr eval_continuation
+  | SubscriptK1 toplevel_value eval_continuation
   | AttributeK identifier eval_continuation
   | BuiltinK builtin (expr list) eval_continuation
   | CallSendK eval_continuation
+  | IntCallK identifier ((identifier # type) list) (stmt list) eval_continuation
   | ExprsK (expr list) eval_continuation
   | DoneK ((α + exception) # evaluation_state)
 End
 
 (*
 Definition evaluate_cps_def:
-  eval_stmt_cps cx Pass st k = step cx st k ∧
-  eval_stmt_cps cx Continue st k = step_exc cx ContinueException st k ∧
-  eval_stmt_cps cx Break st k = step_exc cx BreakException st k ∧
-  eval_stmt_cps cx (Return NONE) st k = step_exc cx (ReturnException NoneV) st k ∧
+  eval_stmt_cps cx Pass st k = apply cx st k ∧
+  eval_stmt_cps cx Continue st k = apply_exc cx ContinueException st k ∧
+  eval_stmt_cps cx Break st k = apply_exc cx BreakException st k ∧
+  eval_stmt_cps cx (Return NONE) st k = apply_exc cx (ReturnException NoneV) st k ∧
   eval_stmt_cps cx (Return (SOME e)) st k = eval_expr_cps cx e st (ReturnK k) ∧
-  eval_stmt_cps cx (Raise str) st k = step_exc cx (AssertException str) st k ∧
+  eval_stmt_cps cx (Raise str) st k = apply_exc cx (AssertException str) st k ∧
   eval_stmt_cps cx (Assert e str) st k = eval_expr_cps cx e st (AssertK str k) ∧
   eval_stmt_cps cx (AnnAssign id typ e) st k =
     eval_expr_cps cx e st (AnnAssignK id k) ∧
@@ -1381,14 +1387,14 @@ Definition evaluate_cps_def:
     eval_expr_cps cx e st (ForK id n body k) ∧
   eval_stmt_cps cx (Expr e) st k =
     eval_expr_cps cx e st (ExprK k) ∧
-  eval_stmts_cps cx [] st k = step cx st k ∧
+  eval_stmts_cps cx [] st k = apply cx st k ∧
   eval_stmts_cps cx (s::ss) st k =
     eval_stmt_cps cx s st (StmtsK ss k) ∧
   eval_target_cps cx (BaseTarget t) st k =
     eval_base_target_cps cx t st (BaseTargetK k) ∧
   eval_target_cps cx (TupleTarget gs) st k =
     eval_targets_cps cx gs st (TupleTargetK k) ∧
-  eval_targets_cps cx [] st k = step_targets cx k ∧
+  eval_targets_cps cx [] st k = apply_targets cx st k ∧
   eval_targets_cps cx (g::gs) st k =
     eval_target_cps cx g st (TargetsK gs k) ∧
   eval_base_target_cps cx (NameTarget id) st k =
@@ -1397,33 +1403,33 @@ Definition evaluate_cps_def:
        n <- string_to_num id;
        cs <- lift_option (find_containing_scope n sc) "NameTarget lookup";
        return $ (ScopedVar cs id, []) od st in
-    step_monadic_base_target cx r k ∧
+    apply_monadic_base_target cx r k ∧
   eval_base_target_cps cx (TopLevelNameTarget id) st k =
-    step_base_target (TopLevelVar id, []) st k ∧
+    apply_base_target cx (TopLevelVar id, []) st k ∧
   eval_base_target_cps cx (AttributeTarget t id) st k =
     eval_base_target_cps cx t st (AttributeTargetK id k) ∧
   eval_base_target_cps cx (SubscriptTarget t e) st k =
     eval_base_target_cps cx t st (SubscriptTargetK e k) ∧
-  eval_for_cps cx nm body [] st k = step cx st k ∧
+  eval_for_cps cx nm body [] st k = apply cx st k ∧
   eval_for_cps cx nm body (v::vs) st k =
   (case push_scope_with_var nm v st of
-        (INR e, st) => step_exc cx e st k
+        (INR e, st) => apply_exc cx e st k
       | (INL (), st) => eval_stmts_cps cx body st (ForK1 nm body vs k)) ∧
   eval_expr_cps cx (Name id) st k =
-    step_monadic_val cx
+    apply_monadic_tv cx
       (do env <- get_scopes;
           v <- lift_option (lookup_scopes (string_to_num id) env) "lookup Name";
           return $ Value v od st) k ∧
   eval_expr_cps cx (TopLevelName id) st k =
-    step_monadic_val cx
+    apply_monadic_tv cx
       (lookup_global cx (string_to_num id) st) k ∧
   eval_expr_cps cx (IfExp e1 e2 e3) st k =
     eval_expr_cps cx e1 st (IfExpK e2 e3 k) ∧
   eval_expr_cps cx (Literal l) st k =
-    step_val cx (Value $ evaluate_literal l st) st k ∧
+    apply_tv cx (Value $ evaluate_literal l st) st k ∧
   eval_expr_cps cx (ArrayLit b es) st k =
     (case check (compatible_bound b (LENGTH es)) "ArrayLit bound" st of
-       (INR e, st) => step_exc cx e st k
+       (INR e, st) => apply_exc cx e st k
      | (INL (), st) => eval_exprs_cps cx es st (ArrayLitK b k)) ∧
   eval_expr_cps cx (Subscript e1 e2) st k =
     eval_expr_cps cx e1 st (SubscriptK e2 k) ∧
@@ -1431,14 +1437,14 @@ Definition evaluate_cps_def:
     eval_expr_cps cx e st (AttributeK id k) ∧
   eval_expr_cps cx (Builtin bt es) st k =
     (case check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st of
-       (INR e, st) => step_exc cx e st k
+       (INR e, st) => apply_exc cx e st k
      | (INL (), st) => eval_exprs_cps cx es st (BuiltinK bt k)) ∧
   eval_expr_cps cx (Call Send es) st k =
     (case check (LENGTH es = 2) "Send args" st of
-       (INR e, st) => step_exc cx e st k
+       (INR e, st) => apply_exc cx e st k
      | (INL (), st) => eval_exprs_cps cx es st (CallSendK k)) ∧
   eval_expr_cps cx (Call (ExtCall _) _) st k =
-    step_exc cx (Error "TODO: ExtCall") st k ∧
+    apply_exc cx (Error "TODO: ExtCall") st k ∧
   eval_expr_cps cx (Call (IntCall fn) es) st k =
     (case do
       check (¬MEM fn cx.stk) "recursion";
@@ -1447,145 +1453,76 @@ Definition evaluate_cps_def:
       args <<- FST tup; body <<- SND $ SND tup;
       check (LENGTH args = LENGTH es) "IntCall args length";
       return (args, body) od st
-     of (INR e, st) => step_exc cx e st k
+     of (INR e, st) => apply_exc cx e st k
       | (INL (args, body), st) =>
           eval_exprs_cps cx es st (IntCallK fn args body k)) ∧
-  eval_exprs_cps cx [] st k = step_exprs cx st k ∧
+  eval_exprs_cps cx [] st k = apply_vals cx st k ∧
   eval_exprs_cps cx (e::es) st k =
     eval_expr_cps cx e st (ExprsK es k) ∧
-  step cx st (StmtsK [] k) = step cx st k ∧
-  step cx st (StmtsK (s::ss) k) =
+  apply cx st (StmtsK [] k) = apply cx st k ∧
+  apply cx st (StmtsK (s::ss) k) =
     eval_stmt_cps cx s st (StmtsK ss k) ∧
-  step cx st (ForK1 nm body vs k) =
+  apply cx st (ForK1 nm body vs k) =
     (case pop_scope st
      of (INR e, st) => step_exc cx e st k
       | (INL (), st) => eval_for_cps cx nm body vs st k) ∧
-*)
-
-(*
-Datatype:
-  eval_continuation
-  = StmtsK (stmt list) eval_continuation
-  | TargetsK (assignment_value list) (assignment_target list) eval_continuation
-  | ErrorK exception
-  | ReturnK eval_continuation
-  | AssertK string eval_continuation
-  | AnnAssignK identifier eval_continuation
-  | AssignK1 expr eval_continuation
-  | AssignK2 assignment_value expr eval_continuation
-  | AugAssignK1 binop expr eval_continuation
-  | AugAssignK2 base_target_value binop expr eval_continuation
-  | IfK1 (stmt list) (stmt list) eval_continuation
-  | IfK2 (stmt list) eval_continuation
-  | ForK1 identifier num (stmt list) eval_continuation
-  | ForK2 identifier (value list) (stmt list) (stmt list) eval_continuation
-  | AttributeTargetK identifier eval_continuation
-  | SubscriptTargetK1 expr eval_continuation
-  | SubscriptTargetK2 base_target_value expr eval_continuation
-End
-
-Definition fill_base_def:
-  fill_base (v, sbs) (AugAssignK1 bop e k) =
-    AugAssignK2 (v, sbs) bop e k ∧
-  fill_base (v, sbs) (AttributeTargetK id k) =
-    fill_base (v, AttrSubscript id :: sbs) k ∧
-  fill_base (v, sbs) (SubscriptTargetK1 e k) =
-    SubscriptTargetK2 (v, sbs) e k ∧
-  fill_base (v, sbs) (AssignK1 e k) =
-    AssignK2 (BaseTargetV v sbs) e k ∧
-  fill_base (v, sbs) (TargetsK vs gs k) =
-    TargetsK (BaseTargetV v sbs::vs) gs k ∧
-  fill_base (v, sbs) k = ErrorK $ Error "fill_base"
-End
-
-Definition fill_base_monad_def:
-  fill_base_monad (x, st) k =
-  case x of INL bv => (fill_base bv k, st)
-     | INR e => (ErrorK e, st)
-End
-
-Definition evaluate_base_target_cps_def:
-  evalk_base_target cx (NameTarget id) st k = (
-    let n = string_to_num id in
-    let r = do
-      sc <- get_scopes;
-      cs <- lift_option (find_containing_scope n sc) "NameTarget lookup";
-      return (ScopedVar cs id, []) od st in
-    fill_base_monad r k ) ∧
-  evalk_base_target cx (TopLevelNameTarget id) st k =
-    (fill_base (TopLevelVar id, []) k, st) ∧
-  evalk_base_target cx (AttributeTarget t id) st k =
-    evalk_base_target cx t st (AttributeTargetK id k) ∧
-  evalk_base_target cx (SubscriptTarget t e) st k =
-    evalk_base_target cx t st (SubscriptTargetK1 e k)
-End
-
-Definition fill_target_def:
-  fill_target gv (AssignK1 e k) = AssignK2 gv e k ∧
-  fill_target gv (TargetsK vs gs k) = TargetsK (gv::vs) gs k ∧
-  fill_target gv k = ErrorK $ Error "fill_target"
-End
-
-Definition fill_tuple_def:
-  fill_tuple (TargetsK vs [] k) = fill_target (TupleTargetV (REVERSE vs)) k ∧
-  fill_tuple k = ErrorK $ Error "fill_tuple"
-End
-
-Definition evaluate_target_cps_def:
-  evalk_target cx (BaseTarget t) st k =
-    evalk_base_target cx t st k ∧
-  evalk_target cx (TupleTarget gs) st k =
-    evalk_targets cx gs st k ∧
-  evalk_targets cx [] st k = (fill_tuple k, st) ∧
-  evalk_targets cx (g::gs) st k =
-    evalk_target cx g st (TargetsK [] gs k)
-End
-
-Definition fill_nil_def:
-  fill_nil (StmtsK [] k) = k ∧
-  fill_nil (IfK2 [] k) = k ∧
-  fill_nil (ForK2 id vs body [] k) = ForK2 id vs body body k ∧
-  fill_nil _ = ErrorK $ Error "fill_nil"
-End
-
-Definition evaluate_expression_cps_def:
-  evalk_expr cx (Name id) st k =
-  let r = do
-    env <- get_scopes;
-    v <- lift_option (lookup_scopes (string_to_num id) env) "lookup Name";
-    return (Value v) od st in
-    fill_value_monad r k ∧
-
-Definition evaluate_cps_def:
-  evalk_stmt cx Pass st k = step cx k st ∧
-  evalk_stmt cx Continue st k = step_exc ContinueException k st ∧
-  evalk_stmt cx Break st k = step_exc BreakException k st ∧
-  evalk_stmt cx (Return NONE) st k = step_exc (ReturnException NoneV) k st ∧
-  evalk_stmt cx (Return (SOME e)) st k = evalk_expr cx e st (ReturnK k) ∧
-  evalk_stmt cx (Raise str) st k = step_exc (AssertException str) k st ∧
-  evalk_stmt cx (Assert e str) st k = evalk_expr cx e st (AssertK str k) ∧
-  evalk_stmt cx (AnnAssign id typ e) st k = evalk_expr cx e st (AnnAssignK id k) ∧
-  evalk_stmt cx (Assign g e) st k = evalk_target cx g st (AssignK1 e k) ∧
-  evalk_stmt cx (AugAssign t bop e) st k =
-    evalk_base_target cx t st (AugAssignK1 bop e k) ∧
-  evalk_stmt cx (If e ss1 ss2) st k =
-    evalk_expr cx e st (IfK1 ss1 ss2 k) ∧
-  evalk_stmt cx (For id typ e n body) st k =
-    evalk_expr cx e st (ForK1 id n body k) ∧
-  evalk_stmt cx (Expr e) st k = evalk_expr cx e st k ∧
-  step cx (StmtsK [] k) st = step cx k st ∧
-  step cx (StmtsK (s::ss) k) st = evalk_stmt cx s st (StmtsK ss k) ∧
-  step cx (ErrorK e) st = (ErrorK e, st) ∧
-  step cx (IfK2 [] k) st = step cx k st ∧
-  step cx (IfK2 (s::ss) k) st = evalk_stmt cx s st (IfK2 ss k) ∧
-  step cx (ForK2 _ [] _ [] k) st = step cx k st ∧
-  step cx (ForK2 id (v::vs) body [] k) st =
-    push_scope_with_var id v;
-    broke <- finally
-      (try (do eval_stmts cx body; return F od) handle_loop_exception)
-      pop_scope ;
-    if broke then step cx k st else evalk_stmt cx (For id typ e n body) st k ∧
-
+  apply cx st (DoneK r) = DoneK r ∧
+  apply cx st _ = DoneK (INR (Error "apply k"), st) ∧
+  apply_exc cx e st (ReturnK k) = apply_exc cx e st k ∧
+  apply_exc cx e st (AssertK _ k) = apply_exc cx e st k ∧
+  apply_exc cx e st (AnnAssignK _ k) = apply_exc cx e st k ∧
+  apply_exc cx e st (AssignK _ k) = apply_exc cx e st k ∧
+  apply_exc cx e st (AugAssignK _ _ k) = apply_exc cx e st k ∧
+  apply_exc cx e st (AugAssignK1 _ _ k) = apply_exc cx e st k ∧
+  apply_exc cx e st (IfK _ _ k) = apply_exc cx e st k ∧
+  apply_exc cx e st (ForK _ _ _ k) = apply_exc cx e st k ∧
+  apply_exc cx e st (ForK1 nm body vs k) =
+    (case finally (handle_loop_exception e) pop_scope st
+     of (INR e, st) => apply_exc cx e st k
+      | (INL broke, st) =>
+          if broke then apply cx st k
+          else eval_for_cps cx nm body vs st k) ∧
+  apply_exc cx e st (ExprK k) = apply_exc cx e st k ∧
+  apply_exc cx e st (StmtsK _ k) = apply_exc cx e st k ∧
+  apply_exc cx e st (BaseTargetK k) = apply_exc cx e st k ∧
+  apply_exc cx e st (TupleTargetK k) = apply_exc cx e st k ∧
+  apply_exc cx e st (TargetsK _ k) = apply_exc cx e st k ∧
+  apply_exc cx e st (AttributeTargetK _ k) = apply_exc cx e st k ∧
+  apply_exc cx e st (SubscriptTargetK _ k) = apply_exc cx e st k ∧
+  apply_exc cx e st (SubscriptTargetK1 _ k) = apply_exc cx e st k ∧
+  apply_exc cx e st (IfExpK _ _ k) = apply_exc cx e st k ∧
+  apply_exc cx e st (ArrayLitK _ k) = apply_exc cx e st k ∧
+  apply_exc cx e st (SubscriptK _ k) = apply_exc cx e st k ∧
+  apply_exc cx e st (AttributeK _ k) = apply_exc cx e st k ∧
+  apply_exc cx e st (BuiltinK _ k) = apply_exc cx e st k ∧
+  apply_exc cx e st (CallSendK k) = apply_exc cx e st k ∧
+  apply_exc cx e st (IntCallK _ _ _ k) = apply_exc cx e st k ∧
+  apply_exc cx e st (ExprsK _ k) = apply_exc cx e st k ∧
+  apply_exc cx e st (DoneK r) = DoneK r (* TODO: what should it be? *) ∧
+  apply_targets cx st (TargetsK gs k) =
+    eval_targets_cps cx gs st k ∧
+  apply_targets cx st (DoneK r) = DoneK r ∧
+  apply_targets cx st _ = DoneK (INR (Error "apply_targets k"), st) ∧
+  apply_monadic_base_target cx (INR e, st) k = apply_exc cx e st k ∧
+  apply_monadic_base_target cx (INL r, st) k = apply_base_target cx r st k ∧
+  apply_base_target cx (loc, sbs) st (BaseTargetK k) =
+    apply_target cx (BaseTargetV loc sbs) st k ∧
+  apply_base_target cx (loc, sbs) st (AttributeTargetK id k) =
+    apply_base_target cx (loc, AttrSubscript id :: sbs) st k ∧
+  apply_base_target cx (loc, sbs) st (SubscriptTargetK e k) =
+    eval_expr_cps cx e st (SubscriptTargetK1 (loc, sbs) k) ∧
+  apply_base_target cx (loc, sbs) st (AugAssignK bop e k) =
+    eval_expr_cps cx e st (AugAssignK1 (loc, sbs) bop k) ∧
+  apply_base_target cx _ st (DoneK r) = DoneK r ∧
+  apply_base_target cx _ st _ =
+    DoneK (INR (Error "apply_base_target k"), st) ∧
+  apply_monadic_tv cx (INR e, st) k = apply_exc cx e st k ∧
+  apply_monadic_tv cx (INL tv, st) k = apply_tv cx tv st k ∧
+  apply_tv cx tv st (SubscriptK e k) =
+    eval_expr_cps cx e st (SubscriptK1 tv k) ∧
+  apply_tv cx tv st (DoneK r) = DoneK r ∧
+  apply_tv cx tv st k =
+    apply_monadic_val cx (get_Value tv st) k ∧
 End
 *)
 
