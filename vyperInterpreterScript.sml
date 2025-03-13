@@ -1522,102 +1522,109 @@ Definition eval_for_cps_def:
 End
 
 Definition apply_def:
-  apply (AK cx Apply st (StmtsK [] k)) = AK cx Apply st k ∧
-  apply (AK cx Apply st (StmtsK (s::ss) k)) =
+  apply cx st (StmtsK [] k) = AK cx Apply st k ∧
+  apply cx st (StmtsK (s::ss) k) =
     eval_stmt_cps cx s st (StmtsK ss k) ∧
-  apply (AK cx Apply st (ForK1 nm body vs k)) =
+  apply cx st (ForK1 nm body vs k) =
     (case pop_scope st
      of (INR ex, st) => AK cx (ApplyExc ex) st k
       | (INL (), st) => eval_for_cps cx nm body vs st k) ∧
-  apply (AK cx Apply st DoneK) = AK cx Apply st DoneK ∧
-  apply (AK cx Apply st _) = AK cx (ApplyExc $ Error "apply k") st DoneK ∧
-  apply (AK cx (ApplyExc ex) st (ReturnK k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (AssertK _ k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (AnnAssignK _ k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (AssignK _ k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (AssignK1 _ k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (AugAssignK _ _ k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (AugAssignK1 _ _ k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (IfK _ _ k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (IfK1 _ _ _ k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (ForK _ _ _ k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (ForK1 nm body vs k)) =
+  apply cx st DoneK = AK cx Apply st DoneK ∧
+  apply cx st _ = AK cx (ApplyExc $ Error "apply k") st DoneK
+End
+
+Definition apply_exc_def:
+  apply_exc cx ex st (ReturnK k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (AssertK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (AnnAssignK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (AssignK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (AssignK1 _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (AugAssignK _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (AugAssignK1 _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (IfK _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (IfK1 _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (ForK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (ForK1 nm body vs k) =
     (case finally (handle_loop_exception ex) pop_scope st
      of (INR ex, st) => AK cx (ApplyExc ex) st k
       | (INL broke, st) =>
           if broke then AK cx Apply st k
           else eval_for_cps cx nm body vs st k) ∧
-  apply (AK cx (ApplyExc ex) st (ExprK k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (StmtsK _ k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (BaseTargetK k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (TupleTargetK k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (TargetsK _ k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (TargetsK1 _ k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (AttributeTargetK _ k)) =
-    AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (SubscriptTargetK _ k)) =
-    AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (SubscriptTargetK1 _ k)) =
-    AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (IfExpK _ _ k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (ArrayLitK _ k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (SubscriptK _ k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (SubscriptK1 _ k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (AttributeK _ k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (BuiltinK _ k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (CallSendK k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (IntCallK _ _ _ k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (IntCallK1 _ k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (ExprsK _ k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st (ExprsK1 _ k)) = AK cx (ApplyExc ex) st k ∧
-  apply (AK cx (ApplyExc ex) st DoneK) = AK cx (ApplyExc ex) st DoneK ∧
-  apply (AK cx (ApplyTargets gvs) st (TargetsK1 gv k)) =
+  apply_exc cx ex st (ExprK k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (StmtsK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (BaseTargetK k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (TupleTargetK k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (TargetsK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (TargetsK1 _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (AttributeTargetK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (SubscriptTargetK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (SubscriptTargetK1 _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (IfExpK _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (ArrayLitK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (SubscriptK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (SubscriptK1 _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (AttributeK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (BuiltinK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (CallSendK k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (IntCallK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (IntCallK1 _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (ExprsK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (ExprsK1 _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st DoneK = AK cx (ApplyExc ex) st DoneK
+End
+
+Definition apply_targets_def:
+  apply_targets cx gvs st (TargetsK1 gv k) =
     AK cx (ApplyTargets (gv::gvs)) st k ∧
-  apply (AK cx (ApplyTargets gvs) st (TupleTargetK k)) =
+  apply_targets cx gvs st (TupleTargetK k) =
       AK cx (ApplyTarget (TupleTargetV gvs)) st k ∧
-  apply (AK cx (ApplyTargets _) st _) =
-    AK cx (ApplyExc $ Error "apply_targets k") st DoneK ∧
-  apply (AK cx (ApplyBaseTarget (loc, sbs)) st (BaseTargetK k)) =
+  apply_targets cx _ st _ =
+    AK cx (ApplyExc $ Error "apply_targets k") st DoneK
+End
+
+Definition apply_base_target_def:
+  apply_base_target cx (loc, sbs) st (BaseTargetK k) =
     AK cx (ApplyTarget (BaseTargetV loc sbs)) st k ∧
-  apply (AK cx (ApplyBaseTarget (loc, sbs)) st (AttributeTargetK id k)) =
+  apply_base_target cx (loc, sbs) st (AttributeTargetK id k) =
     AK cx (ApplyBaseTarget (loc, AttrSubscript id :: sbs)) st k ∧
-  apply (AK cx (ApplyBaseTarget (loc, sbs)) st (SubscriptTargetK e k)) =
+  apply_base_target cx (loc, sbs) st (SubscriptTargetK e k) =
     eval_expr_cps cx e st (SubscriptTargetK1 (loc, sbs) k) ∧
-  apply (AK cx (ApplyBaseTarget (loc, sbs)) st (AugAssignK bop e k)) =
+  apply_base_target cx (loc, sbs) st (AugAssignK bop e k) =
     eval_expr_cps cx e st (AugAssignK1 (loc, sbs) bop k) ∧
-  apply (AK cx (ApplyBaseTarget _) st _) =
+  apply_base_target cx _ st _ =
     AK cx (ApplyExc $ Error "apply_base_target k") st DoneK
 End
 
-(*
+Definition apply_target_def:
   apply_target cx gv st (AssignK e k) =
     eval_expr_cps cx e st (AssignK1 gv k) ∧
   apply_target cx gv st (TargetsK gs k) =
     eval_targets_cps cx gs st (TargetsK1 gv k) ∧
-  apply_target cx gv st (DoneK r) = DoneK r ∧
-  apply_target cx gv st _ = DoneK (INR (Error "apply_target k"), st) ∧
-  apply_monadic_tv cx (INR ex, st) k = apply_exc cx ex st k ∧
-  apply_monadic_tv cx (INL tv, st) k = apply_tv cx tv st k ∧
+  apply_target cx gv st _ =
+    AK cx (ApplyExc $ Error "apply_target k") st DoneK
+End
+
+Definition apply_tv_def:
   apply_tv cx tv st (SubscriptK e k) =
     eval_expr_cps cx e st (SubscriptK1 tv k) ∧
   apply_tv cx tv st (IfK ss1 ss2 k) =
-    apply_monadic cx (push_scope st) (IfK1 tv ss1 ss2 k) ∧
-  apply_tv cx tv st (DoneK r) = DoneK r ∧
+    liftk cx (K Apply) (push_scope st) (IfK1 tv ss1 ss2 k) ∧
   apply_tv cx tv st k =
-    apply_monadic_val cx (get_Value tv st) k ∧
-  apply_monadic_val cx (INR ex, st) k = apply_exc cx ex st k ∧
-  apply_monadic_val cx (INL v, st) k = apply_val cx v st k ∧
+    liftk cx ApplyVal (get_Value tv st) k
+End
+
+Definition apply_val_def:
   apply_val cx v st (ReturnK k) = apply_exc cx (ReturnException v) st k ∧
   apply_val cx (BoolV T) st (AssertK str k) = apply cx st k ∧
   apply_val cx (BoolV F) st (AssertK str k) =
     apply_exc cx (AssertException str) st k ∧
   apply_val cx v st (AssertK _ k) = apply_exc cx (Error "not BoolV") st k ∧
   apply_val cx v st (AnnAssignK id k) =
-    apply_monadic cx (new_variable id v st) k ∧
+    liftk cx (K Apply) (new_variable id v st) k ∧
   apply_val cx v st (AssignK1 gv k) =
-    apply_monadic cx (assign_target cx gv (Replace v) st) k ∧
+    liftk cx (K Apply) (assign_target cx gv (Replace v) st) k ∧
   apply_val cx v st (AugAssignK1 (loc, sbs) bop k) =
-    apply_monadic cx (assign_target cx (BaseTargetV loc sbs) (Update bop v) st) k ∧
+    liftk cx (K Apply) (assign_target cx (BaseTargetV loc sbs) (Update bop v) st) k ∧
   apply_val cx v st (ForK id n body k) =
     (case do vs <- lift_option (extract_elements v) "For not ArrayV";
              check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long";
@@ -1636,24 +1643,27 @@ End
   apply_val cx v st (IfExpK _ _ k) =
     apply_exc cx (Error "not BoolV") st k ∧
   apply_val cx v2 st (SubscriptK1 tv1 k) =
-    apply_monadic_tv cx (lift_sum (evaluate_subscript tv1 v2) st) k ∧
+    liftk cx ApplyTv (lift_sum (evaluate_subscript tv1 v2) st) k ∧
   apply_val cx v st (AttributeK id k) =
-    apply_monadic_val cx (lift_sum (evaluate_attribute v id) st) k ∧
+    liftk cx ApplyVal (lift_sum (evaluate_attribute v id) st) k ∧
   apply_val cx v st (ExprsK es k) =
     eval_exprs_cps cx es st (ExprsK1 v k) ∧
-  apply_val cx v st (DoneK r) = DoneK r ∧
-  apply_val cx v st _ = DoneK (INR (Error "apply_val k"), st) ∧
+  apply_val cx v st _ =
+    AK cx (ApplyExc $ Error "apply_val k") st DoneK
+End
+
+Definition apply_vals_def:
   apply_vals cx vs st (ExprsK1 v k) =
     apply_vals cx (v::vs) st k ∧
   apply_vals cx vs st (ArrayLitK b k) =
     apply_val cx (ArrayV b vs) st k ∧
   apply_vals cx vs st (BuiltinK bt k) =
-    apply_monadic_val cx (do
+    liftk cx ApplyVal (do
       acc <- get_accounts;
       lift_sum $ evaluate_builtin cx acc bt vs
     od st) k ∧
   apply_vals cx vs st (CallSendK k) =
-    apply_monadic_val cx (do
+    liftk cx ApplyVal (do
       toAddr <- lift_option (dest_AddressV $ EL 0 vs) "Send not AddressV";
       amount <- lift_option (dest_NumV $ EL 1 vs) "Send not NumV";
       transfer_value cx.txn.sender toAddr amount;
@@ -1668,11 +1678,9 @@ End
      of (INR ex, st) => apply_exc cx ex st k
       | (INL (prev, cxf, body), st) =>
           eval_stmts_cps cxf body st (IntCallK1 prev k)) ∧
-  apply_vals cx vs st (DoneK r) = DoneK r ∧
-  apply_vals cx vs st _ = DoneK (INR (Error "apply_vals k"), st) ∧
-  apply_monadic cx (INR ex, st) k = apply_exc cx ex st k ∧
-  apply_monadic cx (INL (), st) k = apply cx st k
-*)
+  apply_vals cx vs st _ =
+    AK cx (ApplyExc $ Error "apply_vals k") st DoneK
+End
 
 Triviality LET_PROD_RATOR:
   (let (x,y) = M in N x y) b = let (x,y) = M in N x y b
