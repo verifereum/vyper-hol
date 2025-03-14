@@ -1400,64 +1400,79 @@ End
 
 val liftk1 = oneline liftk_def;
 
+Definition no_recursion_def:
+  no_recursion (fn:identifier) stk ⇔ ¬MEM fn stk
+End
+
+val () = cv_auto_trans no_recursion_def;
+
 Definition eval_expr_cps_def:
-  eval_expr_cps cx (Name id) st k =
-    liftk cx ApplyTv
+  eval_expr_cps cx1 (Name id) st k =
+    liftk cx1 ApplyTv
       (do env <- get_scopes;
           v <- lift_option (lookup_scopes (string_to_num id) env) "lookup Name";
           return $ Value v od st) k ∧
-  eval_expr_cps cx (TopLevelName id) st k =
-    liftk cx ApplyTv (lookup_global cx (string_to_num id) st) k ∧
-  eval_expr_cps cx (IfExp e1 e2 e3) st k =
-    eval_expr_cps cx e1 st (IfExpK e2 e3 k) ∧
-  eval_expr_cps cx (Literal l) st k =
-    AK cx (ApplyTv (Value $ evaluate_literal l)) st k ∧
-  eval_expr_cps cx (ArrayLit b es) st k =
+  eval_expr_cps cx2 (TopLevelName id) st k =
+    liftk cx2 ApplyTv (lookup_global cx2 (string_to_num id) st) k ∧
+  eval_expr_cps cx3 (IfExp e1 e2 e3) st k =
+    eval_expr_cps cx3 e1 st (IfExpK e2 e3 k) ∧
+  eval_expr_cps cx4 (Literal l) st k =
+    AK cx4 (ApplyTv (Value $ evaluate_literal l)) st k ∧
+  eval_expr_cps cx5 (ArrayLit b es) st k =
     (case check (compatible_bound b (LENGTH es)) "ArrayLit bound" st of
-       (INR ex, st) => AK cx (ApplyExc ex) st k
-     | (INL (), st) => eval_exprs_cps cx es st (ArrayLitK b k)) ∧
-  eval_expr_cps cx (Subscript e1 e2) st k =
-    eval_expr_cps cx e1 st (SubscriptK e2 k) ∧
-  eval_expr_cps cx (Attribute e id) st k =
-    eval_expr_cps cx e st (AttributeK id k) ∧
-  eval_expr_cps cx (Builtin bt es) st k =
+       (INR ex, st) => AK cx5 (ApplyExc ex) st k
+     | (INL (), st) => eval_exprs_cps cx5 es st (ArrayLitK b k)) ∧
+  eval_expr_cps cx6 (Subscript e1 e2) st k =
+    eval_expr_cps cx6 e1 st (SubscriptK e2 k) ∧
+  eval_expr_cps cx7 (Attribute e id) st k =
+    eval_expr_cps cx7 e st (AttributeK id k) ∧
+  eval_expr_cps cx8 (Builtin bt es) st k =
     (case check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st of
-       (INR ex, st) => AK cx (ApplyExc ex) st k
-     | (INL (), st) => eval_exprs_cps cx es st (BuiltinK bt k)) ∧
-  eval_expr_cps cx (Call Send es) st k =
+       (INR ex, st) => AK cx8 (ApplyExc ex) st k
+     | (INL (), st) => eval_exprs_cps cx8 es st (BuiltinK bt k)) ∧
+  eval_expr_cps cx9 (Call Send es) st k =
     (case check (LENGTH es = 2) "Send args" st of
-       (INR ex, st) => AK cx (ApplyExc ex) st k
-     | (INL (), st) => eval_exprs_cps cx es st (CallSendK k)) ∧
-  eval_expr_cps cx (Call (ExtCall _) _) st k =
-    AK cx (ApplyExc (Error "TODO: ExtCall")) st k ∧
-  eval_expr_cps cx (Call (IntCall fn) es) st k =
+       (INR ex, st) => AK cx9 (ApplyExc ex) st k
+     | (INL (), st) => eval_exprs_cps cx9 es st (CallSendK k)) ∧
+  eval_expr_cps cx10 (Call (ExtCall _) _) st k =
+    AK cx10 (ApplyExc (Error "TODO: ExtCall")) st k ∧
+  eval_expr_cps cx10 (Call (IntCall fn) es) st k =
     (case do
-      check (¬MEM fn cx.stk) "recursion";
-      ts <- lift_option (get_self_code cx) "IntCall get_self_code";
+      check (no_recursion fn cx10.stk) "recursion";
+      ts <- lift_option (get_self_code cx10) "IntCall get_self_code";
       tup <- lift_option (lookup_function fn Internal ts) "IntCall lookup_function";
       args <<- FST tup; body <<- SND $ SND tup;
       check (LENGTH args = LENGTH es) "IntCall args length";
       return (args, body) od st
-     of (INR ex, st) => AK cx (ApplyExc ex) st k
+     of (INR ex, st) => AK cx10 (ApplyExc ex) st k
       | (INL (args, body), st) =>
-          eval_exprs_cps cx es st (IntCallK fn args body k)) ∧
-  eval_exprs_cps cx [] st k = AK cx (ApplyVals []) st k ∧
-  eval_exprs_cps cx (e::es) st k =
-    eval_expr_cps cx e st (ExprsK es k)
+          eval_exprs_cps cx10 es st (IntCallK fn args body k)) ∧
+  eval_exprs_cps cx11 [] st k = AK cx11 (ApplyVals []) st k ∧
+  eval_exprs_cps cx12 (e::es) st k =
+    eval_expr_cps cx12 e st (ExprsK es k)
 Termination
   WF_REL_TAC ‘measure (λx. case x of
     | INL (cx,e,st,k) => expr_size e
     | INR (cx,es,st,k) => list_size expr_size es)’
 End
 
-(* TODO
-val () = eval_expr_cps_def
-   |> SIMP_RULE std_ss
+val eval_expr_cps_pre_def = eval_expr_cps_def
+   |> SRULE
         [liftk1, bind_def, ignore_bind_def,
          LET_RATOR, option_CASE_rator,
          sum_CASE_rator, prod_CASE_rator, lift_option_def]
-   |> cv_trans;
-*)
+   |> cv_auto_trans_pre;
+
+Theorem eval_expr_cps_pre[cv_pre]:
+  (∀a b c d. eval_expr_cps_pre a b c d) ∧
+  (∀x y z w. eval_exprs_cps_pre x y z w)
+Proof
+  ho_match_mp_tac eval_expr_cps_ind \\ rw[]
+  \\ rw[Once eval_expr_cps_pre_def]
+  \\ gvs[CaseEq"prod", CaseEq"sum", CaseEq"option", raise_def, check_def]
+  \\ first_x_assum irule
+  \\ gvs[bind_def, ignore_bind_def, lift_option_def]
+QED
 
 Definition eval_base_target_cps_def:
   eval_base_target_cps cx (NameTarget id) st k =
@@ -1475,6 +1490,13 @@ Definition eval_base_target_cps_def:
     eval_base_target_cps cx t st (SubscriptTargetK e k)
 End
 
+val () = eval_base_target_cps_def
+  |> SRULE [bind_def, ignore_bind_def,
+            LET_RATOR, lift_option_def,
+            prod_CASE_rator, sum_CASE_rator,
+            option_CASE_rator, liftk1]
+  |> cv_auto_trans;
+
 Definition eval_target_cps_def:
   eval_target_cps cx (BaseTarget t) st k =
     eval_base_target_cps cx t st (BaseTargetK k) ∧
@@ -1484,6 +1506,8 @@ Definition eval_target_cps_def:
   eval_targets_cps cx (g::gs) st k =
     eval_target_cps cx g st (TargetsK gs k)
 End
+
+val () = eval_target_cps_def |> cv_auto_trans;
 
 Definition eval_stmt_cps_def:
   eval_stmt_cps cx Pass st k = AK cx Apply st k ∧
@@ -1507,11 +1531,15 @@ Definition eval_stmt_cps_def:
     eval_expr_cps cx e st (ExprK k)
 End
 
+val () = cv_auto_trans eval_stmt_cps_def;
+
 Definition eval_stmts_cps_def:
   eval_stmts_cps cx [] st k = AK cx Apply st k ∧
   eval_stmts_cps cx (s::ss) st k =
     eval_stmt_cps cx s st (StmtsK ss k)
 End
+
+val () = cv_auto_trans eval_stmts_cps_def;
 
 Definition eval_for_cps_def:
   eval_for_cps cx nm body [] st k = AK cx Apply st k ∧
@@ -1520,6 +1548,8 @@ Definition eval_for_cps_def:
         (INR ex, st) => AK cx (ApplyExc ex) st k
       | (INL (), st) => eval_stmts_cps cx body st (ForK1 nm body vs k))
 End
+
+val () = cv_auto_trans eval_for_cps_def;
 
 Definition apply_def:
   apply cx st (StmtsK [] k) = AK cx Apply st k ∧
@@ -1532,6 +1562,8 @@ Definition apply_def:
   apply cx st DoneK = AK cx Apply st DoneK ∧
   apply cx st _ = AK cx (ApplyExc $ Error "apply k") st DoneK
 End
+
+val () = cv_auto_trans apply_def;
 
 Definition apply_exc_def:
   apply_exc cx ex st (ReturnK k) = AK cx (ApplyExc ex) st k ∧
@@ -1573,6 +1605,10 @@ Definition apply_exc_def:
   apply_exc cx ex st DoneK = AK cx (ApplyExc ex) st DoneK
 End
 
+val () = apply_exc_def
+  |> SRULE [finally_def, bind_def, ignore_bind_def]
+  |> cv_auto_trans;
+
 Definition apply_targets_def:
   apply_targets cx gvs st (TargetsK1 gv k) =
     AK cx (ApplyTargets (gv::gvs)) st k ∧
@@ -1581,6 +1617,8 @@ Definition apply_targets_def:
   apply_targets cx _ st _ =
     AK cx (ApplyExc $ Error "apply_targets k") st DoneK
 End
+
+val () = cv_auto_trans apply_targets_def;
 
 Definition apply_base_target_def:
   apply_base_target cx (loc, sbs) st (BaseTargetK k) =
@@ -1595,6 +1633,10 @@ Definition apply_base_target_def:
     AK cx (ApplyExc $ Error "apply_base_target k") st DoneK
 End
 
+(* TODO
+val () = cv_auto_trans apply_base_target_def;
+*)
+
 Definition apply_target_def:
   apply_target cx gv st (AssignK e k) =
     eval_expr_cps cx e st (AssignK1 gv k) ∧
@@ -1604,6 +1646,8 @@ Definition apply_target_def:
     AK cx (ApplyExc $ Error "apply_target k") st DoneK
 End
 
+val () = cv_auto_trans apply_target_def;
+
 Definition apply_tv_def:
   apply_tv cx tv st (SubscriptK e k) =
     eval_expr_cps cx e st (SubscriptK1 tv k) ∧
@@ -1612,6 +1656,10 @@ Definition apply_tv_def:
   apply_tv cx tv st k =
     liftk cx ApplyVal (get_Value tv st) k
 End
+
+val () = apply_tv_def
+  |> SRULE [liftk1, prod_CASE_rator, sum_CASE_rator]
+  |> cv_auto_trans;
 
 Definition apply_val_def:
   apply_val cx v st (ReturnK k) = apply_exc cx (ReturnException v) st k ∧
