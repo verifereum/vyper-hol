@@ -533,6 +533,10 @@ val prod_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
 
+val toplevel_value_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vyperInterpreter",Tyop="toplevel_value"}));
+
 Definition lift_option_def:
   lift_option x str =
     case x of SOME v => return v | NONE => raise $ Error str
@@ -609,7 +613,7 @@ Definition get_Value_def[simp]:
 End
 
 val () = get_Value_def
-  |> SRULE [FUN_EQ_THM]
+  |> SIMP_RULE std_ss [FUN_EQ_THM]
   |> cv_auto_trans;
 
 Definition check_def:
@@ -618,11 +622,16 @@ End
 
 val () = cv_auto_trans check_def;
 
+Definition is_Value_def[simp]:
+  (is_Value (Value _) ⇔ T) ∧
+  (is_Value _ ⇔ F)
+End
+
 Definition switch_BoolV_def:
   switch_BoolV v f g =
   if v = Value $ BoolV T then f
   else if v = Value $ BoolV F then g
-  else raise $ Error "not BoolV"
+  else raise $ Error (if is_Value v then "not BoolV" else "not Value")
 End
 
 Definition push_scope_def:
@@ -1784,7 +1793,7 @@ Proof
   \\ rw[Once OWHILE_THM, stepk_def]
 *)
 
-(* TODO
+(*
 Theorem eval_cps_eq:
   (∀cx s st k.
      cont (eval_stmt_cps cx s st k) =
@@ -1871,14 +1880,64 @@ Proof
     \\ CASE_TAC \\ rw[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     \\ rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
-    \\ reverse (rw[switch_BoolV_def, return_def, raise_def])
+    \\ reverse (Cases_on `x`) \\ simp[switch_BoolV_def, raise_def]
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    \\ simp[return_def, Once OWHILE_THM, stepk_def]
+    \\ rw[apply_val_def, return_def, raise_def]
     >- (
-      Cases_on`x` \\ rw[return_def, raise_def]
-      >- (
-        rw[Once OWHILE_THM, stepk_def]
-        \\ Cases_on`v` \\ rw[apply_val_def]
-        \\ Cases_on`k` \\ rw[Once OWHILE_THM, stepk_def]
-        \\ gvs[]
+      rw[Once OWHILE_THM, SimpRHS, stepk_def] \\ gvs[]
+      \\ rw[apply_def]
+      \\ rw[Once OWHILE_THM] )
+    >- (
+      rw[Once OWHILE_THM, SimpRHS, stepk_def] \\ gvs[]
+      \\ rw[apply_exc_def, Once OWHILE_THM] )
+    >- (
+      rw[Once OWHILE_THM, SimpRHS, stepk_def] \\ gvs[]
+      \\ Cases_on`v` \\ rw[apply_val_def, apply_exc_def]
+      \\ rw[Once OWHILE_THM] ))
+  >- (
+    rw[eval_stmt_cps_def, evaluate_def, bind_def]
+    \\ CASE_TAC \\ rw[cont_def] \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    >> rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
+    \\ reverse CASE_TAC \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    >> rw[Once OWHILE_THM, stepk_def, liftk1, apply_val_def] )
+  >- (
+    rw[eval_stmt_cps_def, evaluate_def, bind_def]
+    \\ CASE_TAC \\ rw[cont_def] \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    >> rw[Once OWHILE_THM, stepk_def, apply_target_def]
+    \\ gvs[cont_def]
+    \\ CASE_TAC \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    >> rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
+    \\ CASE_TAC \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    >> rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1] )
+  >- (
+    rw[eval_stmt_cps_def, evaluate_def, bind_def, UNCURRY]
+    \\ CASE_TAC \\ gs[cont_def] \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    >> rw[Once OWHILE_THM, stepk_def, apply_base_target_def]
+    \\ CASE_TAC \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    >> rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
+    \\ CASE_TAC \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    \\ gvs[oneline get_Value_def, toplevel_value_CASE_rator,
+           CaseEq"toplevel_value", CaseEq"prod", raise_def, return_def]
+    \\ qmatch_goalsub_rename_tac`AugAssignK1 p` \\ Cases_on`p`
+    >> rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1] )
+  >- (
+    rw[eval_stmt_cps_def, evaluate_def, bind_def, ignore_bind_def, UNCURRY]
+    \\ CASE_TAC \\ gs[cont_def] \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    >> rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
+    \\ CASE_TAC \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    >> rw[Once OWHILE_THM, stepk_def, apply_def]
+    TODO: fix apply_def for IfK1
 *)
 
 Definition type_env_def:
