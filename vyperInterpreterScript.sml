@@ -1,6 +1,6 @@
 open HolKernel boolLib bossLib Parse wordsLib blastLib dep_rewrite monadsyntax
      alistTheory rich_listTheory byteTheory finite_mapTheory
-     arithmeticTheory combinTheory pairTheory
+     arithmeticTheory combinTheory pairTheory whileTheory
      cv_typeTheory cv_stdTheory cv_transLib
 open vfmTypesTheory vfmStateTheory vyperAstTheory
 
@@ -603,7 +603,7 @@ Definition update_accounts_def:
   update_accounts f st = return () (st with accounts updated_by f)
 End
 
-Definition get_Value_def:
+Definition get_Value_def[simp]:
   get_Value (Value v) = return v ∧
   get_Value _ = raise $ Error "not Value"
 End
@@ -1749,6 +1749,137 @@ Proof
   \\ gvs[check_def, assert_def]
   \\ strip_tac \\ gvs[]
 QED
+
+Definition nextk_def[simp]:
+  nextk (AK _ _ _ k) = k
+End
+
+val () = cv_auto_trans nextk_def;
+
+Definition stepk_def:
+  stepk (AK cx ak st k) =
+  case ak of
+     | Apply => apply cx st k
+     | ApplyExc ex => apply_exc cx ex st k
+     | ApplyTarget gv => apply_target cx gv st k
+     | ApplyTargets gvs => apply_targets cx gvs st k
+     | ApplyBaseTarget bv => apply_base_target cx bv st k
+     | ApplyTv tv => apply_tv cx tv st k
+     | ApplyVal v => apply_val cx v st k
+     | ApplyVals vs => apply_vals cx vs st k
+End
+
+val () = cv_auto_trans stepk_def;
+
+Definition cont_def:
+  cont ak = OWHILE (λak. nextk ak ≠ DoneK) stepk ak
+End
+
+(* not true because some exceptions are handled
+Theorem cont_ApplyExc:
+  cont (AK cx (ApplyExc ex) st k) =
+  SOME (AK cx (ApplyExc ex) st DoneK)
+Proof
+  rw[cont_def]
+  \\ rw[Once OWHILE_THM, stepk_def]
+*)
+
+(* TODO
+Theorem eval_cps_eq:
+  (∀cx s st k.
+     cont (eval_stmt_cps cx s st k) =
+     cont ((
+       case eval_stmt cx s st
+         of (INL (), st1) => (AK cx Apply st1)
+          | (INR ex, st1) => (AK cx (ApplyExc ex) st1)
+     ) k)) ∧
+  (∀cx ss st k.
+     cont (eval_stmts_cps cx ss st k) =
+     cont ((
+       case eval_stmts cx ss st
+         of (INL (), st1) => (AK cx Apply st1)
+          | (INR ex, st1) => (AK cx (ApplyExc ex) st1)
+     ) k)) ∧
+  (∀cx g st k.
+     cont (eval_target_cps cx g st k) =
+     cont ((
+       case eval_target cx g st
+         of (INL gv, st1) => (AK cx (ApplyTarget gv) st1)
+          | (INR ex, st1) => (AK cx (ApplyExc ex) st1)
+     ) k)) ∧
+  (∀cx gs st k.
+     cont (eval_targets_cps cx gs st k) =
+     cont ((
+       case eval_targets cx gs st
+         of (INL gvs, st1) => (AK cx (ApplyTargets gvs) st1)
+          | (INR ex, st1) => (AK cx (ApplyExc ex) st1)
+     ) k)) ∧
+  (∀cx bt st k.
+     cont (eval_base_target_cps cx bt st k) =
+     cont ((
+       case eval_base_target cx bt st
+         of (INL bv, st1) => (AK cx (ApplyBaseTarget bv) st1)
+          | (INR ex, st1) => (AK cx (ApplyExc ex) st1)
+     ) k)) ∧
+  (∀cx nm body vs st k.
+     cont (eval_for_cps cx nm body vs st k) =
+     cont ((
+       case eval_for cx nm body vs st
+         of (INL (), st1) => (AK cx Apply st1)
+          | (INR ex, st1) => (AK cx (ApplyExc ex) st1)
+     ) k)) ∧
+  (∀cx e st k.
+     cont (eval_expr_cps cx e st k) =
+     cont ((
+       case eval_expr cx e st
+         of (INL tv, st1) => (AK cx (ApplyTv tv) st1)
+          | (INR ex, st1) => (AK cx (ApplyExc ex) st1)
+     ) k)) ∧
+  (∀cx es st k.
+     cont (eval_exprs_cps cx es st k) =
+     cont ((
+       case eval_exprs cx es st
+         of (INL vs, st1) => (AK cx (ApplyVals vs) st1)
+          | (INR ex, st1) => (AK cx (ApplyExc ex) st1)
+     ) k))
+Proof
+  ho_match_mp_tac evaluate_ind
+  \\ rpt conj_tac
+  >- rw[eval_stmt_cps_def, evaluate_def, return_def]
+  >- rw[eval_stmt_cps_def, evaluate_def, raise_def]
+  >- rw[eval_stmt_cps_def, evaluate_def, raise_def]
+  >- rw[eval_stmt_cps_def, evaluate_def, raise_def]
+  >- (
+    rw[eval_stmt_cps_def, evaluate_def, bind_def]
+    \\ CASE_TAC \\ reverse CASE_TAC
+    >- (
+      rw[cont_def]
+      \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def] )
+    \\ rw[cont_def]
+    \\ rw[Once OWHILE_THM, stepk_def]
+    \\ rw[apply_tv_def, liftk1]
+    \\ CASE_TAC \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    \\ rw[raise_def]
+    \\ rw[Once OWHILE_THM, stepk_def, apply_val_def]
+    \\ rw[Once OWHILE_THM, stepk_def, SimpRHS] \\ gvs[]
+    \\ rw[apply_exc_def]
+    \\ rw[Once OWHILE_THM, stepk_def] )
+  >- rw[eval_stmt_cps_def, evaluate_def, raise_def]
+  >- (
+    rw[eval_stmt_cps_def, evaluate_def, bind_def]
+    \\ CASE_TAC \\ rw[cont_def] \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    \\ rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
+    \\ reverse (rw[switch_BoolV_def, return_def, raise_def])
+    >- (
+      Cases_on`x` \\ rw[return_def, raise_def]
+      >- (
+        rw[Once OWHILE_THM, stepk_def]
+        \\ Cases_on`v` \\ rw[apply_val_def]
+        \\ Cases_on`k` \\ rw[Once OWHILE_THM, stepk_def]
+        \\ gvs[]
+*)
 
 Definition type_env_def:
   type_env [] = FEMPTY ∧
