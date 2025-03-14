@@ -1621,21 +1621,19 @@ End
 val () = cv_auto_trans apply_targets_def;
 
 Definition apply_base_target_def:
-  apply_base_target cx (loc, sbs) st (BaseTargetK k) =
-    AK cx (ApplyTarget (BaseTargetV loc sbs)) st k ∧
-  apply_base_target cx (loc, sbs) st (AttributeTargetK id k) =
-    AK cx (ApplyBaseTarget (loc, AttrSubscript id :: sbs)) st k ∧
-  apply_base_target cx (loc, sbs) st (SubscriptTargetK e k) =
-    eval_expr_cps cx e st (SubscriptTargetK1 (loc, sbs) k) ∧
-  apply_base_target cx (loc, sbs) st (AugAssignK bop e k) =
-    eval_expr_cps cx e st (AugAssignK1 (loc, sbs) bop k) ∧
+  apply_base_target cx btv st (BaseTargetK k) =
+    AK cx (ApplyTarget (BaseTargetV (FST btv) (SND btv))) st k ∧
+  apply_base_target cx btv st (AttributeTargetK id k) =
+    AK cx (ApplyBaseTarget (FST btv, AttrSubscript id :: SND btv)) st k ∧
+  apply_base_target cx btv st (SubscriptTargetK e k) =
+    eval_expr_cps cx e st (SubscriptTargetK1 btv k) ∧
+  apply_base_target cx btv st (AugAssignK bop e k) =
+    eval_expr_cps cx e st (AugAssignK1 btv bop k) ∧
   apply_base_target cx _ st _ =
     AK cx (ApplyExc $ Error "apply_base_target k") st DoneK
 End
 
-(* TODO
 val () = cv_auto_trans apply_base_target_def;
-*)
 
 Definition apply_target_def:
   apply_target cx gv st (AssignK e k) =
@@ -1700,6 +1698,12 @@ Definition apply_val_def:
     AK cx (ApplyExc $ Error "apply_val k") st DoneK
 End
 
+val () = apply_val_def
+  |> SRULE [liftk1, prod_CASE_rator, sum_CASE_rator,
+            option_CASE_rator, lift_option_def, lift_sum_def,
+            bind_def, ignore_bind_def]
+  |> cv_auto_trans;
+
 Definition apply_vals_def:
   apply_vals cx vs st (ExprsK1 v k) =
     apply_vals cx (v::vs) st k ∧
@@ -1712,6 +1716,7 @@ Definition apply_vals_def:
     od st) k ∧
   apply_vals cx vs st (CallSendK k) =
     liftk cx ApplyVal (do
+      check (LENGTH vs = 2) "CallSendK nargs";
       toAddr <- lift_option (dest_AddressV $ EL 0 vs) "Send not AddressV";
       amount <- lift_option (dest_NumV $ EL 1 vs) "Send not NumV";
       transfer_value cx.txn.sender toAddr amount;
@@ -1730,34 +1735,20 @@ Definition apply_vals_def:
     AK cx (ApplyExc $ Error "apply_vals k") st DoneK
 End
 
-Triviality LET_PROD_RATOR:
-  (let (x,y) = M in N x y) b = let (x,y) = M in N x y b
+val apply_vals_pre_def = apply_vals_def
+  |> SRULE [liftk1, bind_def, ignore_bind_def, lift_option_def,
+            lift_sum_def, prod_CASE_rator,
+            sum_CASE_rator, option_CASE_rator]
+  |> cv_auto_trans_pre;
+
+Theorem apply_vals_pre[cv_pre]:
+  ∀a b c d. apply_vals_pre a b c d
 Proof
-  rw[LET_THM, UNCURRY]
+  ho_match_mp_tac apply_vals_ind \\ rw[]
+  \\ rw[Once apply_vals_pre_def]
+  \\ gvs[check_def, assert_def]
+  \\ strip_tac \\ gvs[]
 QED
-
-Triviality LET_UNCURRY:
-  (let (x,y) = M in N x y) = let p = M; x = FST p; y = SND p in N x y
-Proof
-  rw[UNCURRY]
-QED
-
-val subscript_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="vyperInterpreter",Tyop="subscript"}));
-
-(*
-val evaluate_pre_def = evaluate_def
-  |> SIMP_RULE std_ss [
-       FUN_EQ_THM, UNCURRY,
-       bind_def, ignore_bind_def, try_def, finally_def,
-       LET_UNCURRY, LET_PROD_RATOR, LET_RATOR, COND_RATOR,
-       subscript_CASE_rator, sum_CASE_rator, option_CASE_rator,
-       switch_BoolV_def, lift_option_def, lift_sum_def
-     ]
-  |> cv_trans_pre_rec
-  |> curry (flip (op $)) cheat ;
-*)
 
 Definition type_env_def:
   type_env [] = FEMPTY ∧
