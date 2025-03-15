@@ -1652,6 +1652,7 @@ Definition apply_base_target_def:
     eval_expr_cps cx e st (SubscriptTargetK1 btv k) ∧
   apply_base_target cx btv st (AugAssignK bop e k) =
     eval_expr_cps cx e st (AugAssignK1 btv bop k) ∧
+  apply_base_target cx btv st DoneK = AK cx (ApplyBaseTarget btv) st DoneK ∧
   apply_base_target cx _ st _ =
     AK cx (ApplyExc $ Error "apply_base_target k") st DoneK
 End
@@ -2035,7 +2036,60 @@ Proof
     \\ rw[Once OWHILE_THM, stepk_def, apply_target_def]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-
+    >> rw[Once OWHILE_THM, stepk_def, apply_targets_def] )
+  \\ conj_tac >- rw[eval_base_target_cps_def, evaluate_def, liftk1]
+  \\ conj_tac >- rw[eval_base_target_cps_def, evaluate_def, return_def]
+  \\ conj_tac >- (
+    rw[eval_base_target_cps_def, evaluate_def, bind_def, UNCURRY, return_def]
+    \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    \\ rw[Once OWHILE_THM, stepk_def, apply_base_target_def] )
+  \\ conj_tac >- (
+    rw[eval_base_target_cps_def, evaluate_def, bind_def, UNCURRY]
+    \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    \\ rw[Once OWHILE_THM, stepk_def, apply_base_target_def]
+    \\ CASE_TAC \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    \\ rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
+    \\ CASE_TAC \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    \\ qmatch_asmsub_rename_tac`get_Value tv`
+    \\ Cases_on`tv` \\ gvs[get_Value_def, raise_def, return_def]
+    \\ qmatch_goalsub_rename_tac`SubscriptTargetK1 p`
+    \\ Cases_on`p`
+    \\ rw[Once OWHILE_THM, stepk_def, apply_val_def]
+    \\ CASE_TAC \\ reverse CASE_TAC
+    >- (
+      gvs[lift_option_def, option_CASE_rator, CaseEq"option",
+          raise_def, return_def]
+      \\ rw[Once OWHILE_THM, SimpRHS, stepk_def, apply_exc_def]
+      \\ gvs[]
+      \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def] )
+    \\ rw[Once OWHILE_THM, SimpRHS, stepk_def, apply_exc_def]
+    \\ gvs[]
+    \\ rw[Once OWHILE_THM, stepk_def, apply_base_target_def] )
+  \\ conj_tac >- rw[eval_for_cps_def, evaluate_def, return_def]
+  \\ conj_tac >- (
+    rw[eval_for_cps_def, evaluate_def, ignore_bind_def, bind_def]
+    \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC \\ gvs[]
+    \\ first_assum drule \\ simp_tac std_ss [] \\ disch_then kall_tac
+    \\ rw[finally_def, try_def, bind_def]
+    \\ CASE_TAC \\ reverse CASE_TAC
+    >- (
+      rw[Once OWHILE_THM, stepk_def, apply_exc_def, finally_def]
+      \\ CASE_TAC \\ CASE_TAC
+      \\ rw[ignore_bind_def, bind_def, return_def, raise_def]
+      \\ CASE_TAC \\ CASE_TAC
+      \\ rw[return_def]
+      \\ last_x_assum drule \\ rw[] )
+    \\ rw[return_def]
+    \\ rw[Once OWHILE_THM, stepk_def, apply_def, ignore_bind_def, bind_def]
+    \\ CASE_TAC \\ reverse CASE_TAC
+    \\ rw[return_def]
+    \\ last_x_assum drule \\ rw[] )
+  \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, liftk1]
+  \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, liftk1]
 *)
 
 Definition type_env_def:
