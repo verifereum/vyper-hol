@@ -2339,9 +2339,95 @@ Definition call_external_function_def:
    | (_, st) => (NONE, abstract_machine_from_state am.sources st)
 End
 
-(* TODO
-val () = cv_trans call_external_function_def;
-*)
+Definition empty_state_def:
+  empty_state : evaluation_state = <|
+    accounts := empty_accounts;
+    globals := [];
+    scopes := []
+  |>
+End
+
+val () = cv_trans empty_state_def;
+
+Definition fromk_def[simp]:
+  fromk (SOME (AK cx Apply st DoneK)) = (INL (), st) ∧
+  fromk (SOME (AK cx (ApplyExc ex) st DoneK)) = (INR ex, st) ∧
+  fromk _ = (INR $ Error "fromk", empty_state)
+End
+
+val () = cv_trans fromk_def;
+
+Theorem cont_tr:
+  cont ak = if nextk ak = DoneK then SOME ak else cont (stepk ak)
+Proof
+  simp[Once cont_def]
+  \\ simp[Once OWHILE_THM]
+  \\ IF_CASES_TAC \\ gs[]
+  \\ simp[Once cont_def]
+QED
+
+val cont_tr_pre_def = cv_trans_pre cont_tr;
+
+Theorem IS_SOME_cont:
+  IS_SOME (cont ak) ⇔
+  ∃n. nextk (FUNPOW stepk n ak) = DoneK
+Proof
+  rw[cont_def, OWHILE_def]
+QED
+
+Theorem cont_pre_IS_SOME_cont:
+  cont_pre ak ⇔ IS_SOME (cont ak)
+Proof
+  EQ_TAC
+  >- (
+    qid_spec_tac`ak`
+    \\ ho_match_mp_tac (theorem "cont_pre_ind")
+    \\ rw[cont_def, OWHILE_def] \\ gs[]
+    >- (
+      first_x_assum(qspec_then`SUC n`mp_tac)
+      \\ rw[FUNPOW] )
+    \\ first_x_assum(qspec_then`0`mp_tac)
+    \\ rw[] )
+  \\ rw[IS_SOME_cont]
+  \\ pop_assum mp_tac
+  \\ qid_spec_tac`ak`
+  \\ Induct_on`n` \\ rw[]
+  >- rw[cont_tr_pre_def]
+  \\ rw[Once cont_tr_pre_def]
+  \\ first_x_assum irule
+  \\ gs[FUNPOW]
+QED
+
+Theorem eval_stmts_eq_cont_cps:
+  eval_stmts cx body st = fromk $ cont (eval_stmts_cps cx body st DoneK)
+Proof
+  Cases_on`eval_stmts cx body st`
+  \\ qmatch_goalsub_rename_tac`res,st1`
+  \\ qspecl_then[`cx`,`body`,`st`,`DoneK`]mp_tac(cj 2 eval_cps_eq)
+  \\ simp[cont_def] \\ strip_tac
+  \\ simp[Once OWHILE_THM]
+  \\ IF_CASES_TAC
+  >- (Cases_on `res` \\ gvs[])
+  \\ CASE_TAC \\ simp[]
+QED
+
+val call_external_function_pre_def = call_external_function_def
+     |> SRULE [eval_stmts_eq_cont_cps]
+     |> cv_auto_trans_pre;
+
+Theorem call_external_function_pre[cv_pre]:
+  call_external_function_pre am cx args vals body
+Proof
+  rw[call_external_function_pre_def]
+  \\ rw[cont_pre_IS_SOME_cont]
+  \\ qmatch_goalsub_abbrev_tac`eval_stmts_cps cx ss st k`
+  \\ qspecl_then[`cx`,`ss`,`st`,`k`]mp_tac  $ cj 2 eval_cps_eq
+  \\ rw[]
+  \\ CASE_TAC
+  \\ CASE_TAC
+  \\ rw[Abbr`k`, cont_def]
+  \\ rw[Once OWHILE_THM]
+QED
 
 Definition call_external_def:
   call_external am tx =
@@ -2355,9 +2441,7 @@ Definition call_external_def:
        call_external_function am cx args tx.args body
 End
 
-(* TODO
 val () = cv_auto_trans call_external_def;
-*)
 
 Definition load_contract_def:
   load_contract am tx ts =
@@ -2370,5 +2454,7 @@ Definition load_contract_def:
          of (SOME e, _) => INR e
           | (_, am') => INL am'
 End
+
+val () = cv_auto_trans load_contract_def;
 
 val () = export_theory();
