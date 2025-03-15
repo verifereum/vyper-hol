@@ -1578,11 +1578,16 @@ Definition apply_def:
     AK cx (ApplyExc $ Error "not BoolV") st (IfK2 k) ∧
   apply cx st (IfK1 _ ss1 ss2 k) =
     AK cx (ApplyExc $ Error "not Value") st (IfK2 k) ∧
+  apply cx st (IntCallK1 prev k) =
+    liftk (cx with stk updated_by TL) (ApplyTv o Value)
+      (do pop_function prev; return NoneV od st) k ∧
   apply cx st DoneK = AK cx Apply st DoneK ∧
   apply cx st _ = AK cx (ApplyExc $ Error "apply k") st DoneK
 End
 
-val () = cv_auto_trans apply_def;
+val () = apply_def
+  |> SRULE [liftk1, ignore_bind_def, bind_def, prod_CASE_rator, sum_CASE_rator]
+  |> cv_auto_trans;
 
 Definition apply_exc_def:
   apply_exc cx ex st (ReturnK k) = AK cx (ApplyExc ex) st k ∧
@@ -1622,14 +1627,18 @@ Definition apply_exc_def:
   apply_exc cx ex st (BuiltinK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CallSendK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IntCallK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (IntCallK1 _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (IntCallK1 prev k) =
+    liftk (cx with stk updated_by TL) (ApplyTv o Value)
+      (finally (handle_function ex) (pop_function prev) st)
+      k ∧
   apply_exc cx ex st (ExprsK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (ExprsK1 _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st DoneK = AK cx (ApplyExc ex) st DoneK
 End
 
 val () = apply_exc_def
-  |> SRULE [finally_def, bind_def, ignore_bind_def]
+  |> SRULE [finally_def, bind_def, ignore_bind_def,
+            liftk1, prod_CASE_rator, sum_CASE_rator]
   |> cv_auto_trans;
 
 Definition apply_targets_def:
@@ -1758,6 +1767,7 @@ Definition apply_vals_def:
      of (INR ex, st) => apply_exc cx ex st k
       | (INL (prev, cxf, body), st) =>
           eval_stmts_cps cxf body st (IntCallK1 prev k)) ∧
+  apply_vals cx vs st DoneK = AK cx (ApplyVals vs) st DoneK ∧
   apply_vals cx vs st _ =
     AK cx (ApplyExc $ Error "apply_vals k") st DoneK
 End
@@ -1813,7 +1823,12 @@ Proof
   \\ goal_assum drule
 QED
 
-(*
+Theorem with_stk_updated_by_id[simp]:
+  (cx with stk updated_by (λx. x)) = cx
+Proof
+  rw[theorem"evaluation_context_component_equality"]
+QED
+
 Theorem eval_cps_eq:
   (∀cx s st k.
      cont (eval_stmt_cps cx s st k) =
@@ -2185,10 +2200,71 @@ Proof
     \\ rw[] )
   \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, raise_def]
   \\ conj_tac >- (
-    rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
-
+    rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def,
+       no_recursion_def]
+    \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
+    \\ reverse CASE_TAC
+    >- CASE_TAC
+    \\ reverse CASE_TAC
+    \\ reverse CASE_TAC
+    >- CASE_TAC
+    \\ CASE_TAC
+    \\ reverse CASE_TAC
+    >- CASE_TAC
+    \\ CASE_TAC
+    \\ rw[return_def]
+    \\ gvs[]
+    \\ first_assum drule \\ simp_tac std_ss [] \\ disch_then kall_tac
+    \\ CASE_TAC
+    \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    >> rw[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def]
+    \\ CASE_TAC
+    \\ reverse CASE_TAC
+    \\ reverse CASE_TAC
+    >- (
+      CASE_TAC
+      \\ rw[Once OWHILE_THM, stepk_def, SimpRHS]
+      \\ gvs[apply_exc_def] \\ rw[Once OWHILE_THM] )
+    \\ reverse CASE_TAC
+    >- (
+      rw[Once OWHILE_THM, stepk_def, SimpRHS]
+      \\ gvs[apply_exc_def] \\ rw[Once OWHILE_THM] )
+    \\ reverse CASE_TAC
+    \\ reverse CASE_TAC
+    >- (
+      rw[Once OWHILE_THM, stepk_def, SimpRHS]
+      \\ gvs[apply_exc_def] \\ rw[Once OWHILE_THM] )
+    \\ rw[return_def, finally_def, try_def, bind_def]
+    \\ last_x_assum drule \\ simp_tac std_ss [] \\ disch_then kall_tac
+    \\ reverse CASE_TAC
+    \\ reverse CASE_TAC
+    >- (
+      rw[Once OWHILE_THM, stepk_def, apply_exc_def, liftk1, finally_def]
+      \\ CASE_TAC \\ CASE_TAC \\ CASE_TAC \\ CASE_TAC
+      \\ gvs[ignore_bind_def, bind_def, pop_function_def, return_def,
+             set_scopes_def, lift_option_def, option_CASE_rator, CaseEq"option",
+             raise_def, push_function_def, o_DEF] )
+    \\ rw[Once OWHILE_THM, stepk_def, apply_def, liftk1]
+    \\ CASE_TAC
+    \\ reverse CASE_TAC
+    \\ gvs[push_function_def, return_def, o_DEF] )
+  \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, return_def]
+  \\ rw[eval_expr_cps_def, evaluate_def, bind_def]
+  \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
+  >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+  >> rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
+  \\ CASE_TAC \\ reverse CASE_TAC
+  >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+  >> rw[Once OWHILE_THM, stepk_def, apply_val_def]
+  \\ CASE_TAC \\ reverse CASE_TAC
+  >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+  \\ rw[return_def]
+  >> rw[Once OWHILE_THM, stepk_def, apply_vals_def]
+  >> rw[Once OWHILE_THM, SimpRHS, stepk_def, apply_vals_def]
+  \\ gvs[apply_vals_def]
+  \\ rw[Once OWHILE_THM, stepk_def]
 QED
-*)
 
 Definition type_env_def:
   type_env [] = FEMPTY ∧
