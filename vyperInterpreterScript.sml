@@ -2308,6 +2308,14 @@ Datatype:
   |>
 End
 
+Definition initial_machine_state_def:
+  initial_machine_state : abstract_machine = <|
+    sources := []
+  ; globals := []
+  ; accounts := empty_accounts
+  |>
+End
+
 Definition initial_state_def:
   initial_state (am: abstract_machine) env : evaluation_state =
   <| accounts := am.accounts
@@ -2331,12 +2339,15 @@ val () = cv_auto_trans abstract_machine_from_state_def;
 Definition call_external_function_def:
   call_external_function am cx args vals body =
   case bind_arguments args vals
-  of NONE => (SOME $ Error "call bind_arguments", am)
+  of NONE => (INR $ Error "call bind_arguments", am)
    | SOME env =>
-  let st = initial_state am env in
-  case eval_stmts cx body st
-  of (INR e, st) => (SOME e, abstract_machine_from_state am.sources st)
-   | (_, st) => (NONE, abstract_machine_from_state am.sources st)
+  (let st = initial_state am env in
+   let srcs = am.sources in
+   (case eval_stmts cx body st
+    of
+     | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs st)
+     | (INR (ReturnException v), st) => (INL v, abstract_machine_from_state srcs st)
+     | (INR e, st) => (INR e, abstract_machine_from_state srcs st)))
 End
 
 Definition empty_state_def:
@@ -2433,10 +2444,10 @@ Definition call_external_def:
   call_external am tx =
   let cx = initial_evaluation_context am.sources tx in
   case get_self_code cx
-  of NONE => (SOME $ Error "call get_self_code", am)
+  of NONE => (INR $ Error "call get_self_code", am)
    | SOME ts =>
   case lookup_function tx.function_name External ts
-  of NONE => (SOME $ Error "call lookup_function", am)
+  of NONE => (INR $ Error "call lookup_function", am)
    | SOME (args, ret, body) =>
        call_external_function am cx args tx.args body
 End
@@ -2451,8 +2462,8 @@ Definition load_contract_def:
        (* TODO: update balances on return *)
        let cx = initial_evaluation_context am.sources tx in
        case call_external_function am cx args tx.args body
-         of (SOME e, _) => INR e
-          | (_, am') => INL am'
+         of (INR e, _) => INR e
+          | (_, am') => INL (am' with sources updated_by CONS (tx.target, ts))
 End
 
 val () = cv_auto_trans load_contract_def;
