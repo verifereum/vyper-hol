@@ -335,11 +335,11 @@ Theorem test_statefulness_of_storage:
     test_statefulness_of_storage_ast
   of INR msg => F
    | INL ms =>
-     let (r1, ms) = external_call ms call_foo_tx in
-     let (r2, ms) = external_call ms call_foo_tx in
-     let (r3, ms) = external_call ms call_foo_tx in
-     let (r4, ms) = external_call ms call_foo_tx in
-     let (r5, ms) = external_call ms call_foo_tx in
+     let (r1, ms) = call_external ms call_foo_tx in
+     let (r2, ms) = call_external ms call_foo_tx in
+     let (r3, ms) = call_external ms call_foo_tx in
+     let (r4, ms) = call_external ms call_foo_tx in
+     let (r5, ms) = call_external ms call_foo_tx in
        r1 = INL (IntV 1) ∧
        r2 = INL (IntV 2) ∧
        r3 = INL (IntV 3) ∧
@@ -370,16 +370,16 @@ Theorem test_statefulness_of_storage2:
     test_statefulness_of_storage2_ast
   of INR msg => F
    | INL ms =>
-  let (f1, ms) = external_call ms call_foo_tx in
-  let (b1, ms) = external_call ms call_bar_tx in
-  let (f2, ms) = external_call ms call_foo_tx in
-  let (b2, ms) = external_call ms call_bar_tx in
-  let (f3, ms) = external_call ms call_foo_tx in
-  let (b3, ms) = external_call ms call_bar_tx in
-  let (f4, ms) = external_call ms call_foo_tx in
-  let (b4, ms) = external_call ms call_bar_tx in
-  let (f5, ms) = external_call ms call_foo_tx in
-  let (b5, ms) = external_call ms call_bar_tx in
+  let (f1, ms) = call_external ms call_foo_tx in
+  let (b1, ms) = call_external ms call_bar_tx in
+  let (f2, ms) = call_external ms call_foo_tx in
+  let (b2, ms) = call_external ms call_bar_tx in
+  let (f3, ms) = call_external ms call_foo_tx in
+  let (b3, ms) = call_external ms call_bar_tx in
+  let (f4, ms) = call_external ms call_foo_tx in
+  let (b4, ms) = call_external ms call_bar_tx in
+  let (f5, ms) = call_external ms call_foo_tx in
+  let (b5, ms) = call_external ms call_bar_tx in
     f1 = INL (IntV (0 * 2 + 1)) ∧
     f2 = INL (IntV (1 * 2 + 1)) ∧
     f3 = INL (IntV (2 * 2 + 1)) ∧
@@ -595,8 +595,8 @@ Theorem test_external_func_arg:
     test_external_func_arg_ast
   of INR _ => F
   |  INL ms =>
-      FST $ external_call ms
-          $ transaction ^sender_addr ^contract_addr "foo" [IntV 42] 0
+      FST $ call_external ms
+          $ call_txn ^sender_addr ^contract_addr "foo" [IntV 42] 0
       = INL (IntV 42)
 Proof
   CONV_TAC cv_eval

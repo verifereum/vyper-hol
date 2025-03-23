@@ -2456,6 +2456,10 @@ val () = cv_auto_trans call_external_def;
 
 Definition load_contract_def:
   load_contract am tx ts =
+  let addr = tx.target in
+  let tenv = type_env ts in
+  let gbs = initial_globals tenv ts in
+  let am = am with globals updated_by CONS (addr, gbs) in
   case lookup_function tx.function_name Deploy ts of
      | NONE => INR $ Error "no constructor"
      | SOME (args, ret, body) =>
@@ -2463,7 +2467,7 @@ Definition load_contract_def:
        let cx = initial_evaluation_context am.sources tx in
        case call_external_function am cx args tx.args body
          of (INR e, _) => INR e
-          | (_, am') => INL (am' with sources updated_by CONS (tx.target, ts))
+          | (_, am) => INL (am with sources updated_by CONS (addr, ts))
 End
 
 val () = cv_auto_trans load_contract_def;
