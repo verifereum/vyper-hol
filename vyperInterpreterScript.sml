@@ -957,6 +957,8 @@ Definition bound_def:
   expr_bound ts (Subscript e1 e2) =
     1 + expr_bound ts e1
       + expr_bound ts e2 ∧
+  expr_bound ts (Attribute e _) =
+    1 + expr_bound ts e ∧
   expr_bound ts (Literal _) = 0 ∧
   expr_bound ts (ArrayLit _ es) =
     1 + exprs_bound ts es ∧
@@ -1133,6 +1135,16 @@ Proof
   rw[finally_def]
   \\ CASE_TAC \\ CASE_TAC
   \\ irule ignore_bind_cong \\ gs[]
+QED
+
+Theorem lookup_function_Internal_imp_ALOOKUP_FLAT:
+  ∀fn vis ts x y z. vis = Internal ∧
+  lookup_function fn vis ts = SOME (x,y,z) ⇒
+  ALOOKUP (FLAT (MAP dest_Internal_FunctionDef ts)) fn = SOME z
+Proof
+  ho_match_mp_tac lookup_function_ind
+  \\ rw[lookup_function_def, dest_Internal_FunctionDef_def]
+  \\ Cases_on`fv` \\ gvs[dest_Internal_FunctionDef_def]
 QED
 
 Definition evaluate_def:
@@ -1324,19 +1336,26 @@ Termination
     => target_bound (remcode cx) g
   | INR (INL (cx, ss)) => stmts_bound (remcode cx) ss
   | INL (cx, s) => stmt_bound (remcode cx) s)’
-  \\ rw[bound_def, MAX_DEF, MULT]
+  \\ reverse(rw[bound_def, MAX_DEF, MULT])
   >- (
     gvs[compatible_bound_def, check_def, assert_def]
     \\ qmatch_goalsub_abbrev_tac`(LENGTH vs) * x`
     \\ irule LESS_EQ_LESS_TRANS
     \\ qexists_tac`LENGTH vs + n * x + 1` \\ simp[]
-    \\ metis_tac[MULT_COMM, LESS_MONO_MULT])
+    \\ PROVE_TAC[MULT_COMM, LESS_MONO_MULT])
   \\ gvs[check_def, assert_def]
-  \\ cheat (* congruence rules in function case ? *)
+  \\ gvs[push_function_def, return_def]
+  \\ gvs[lift_option_def, CaseEq"option", CaseEq"prod", option_CASE_rator,
+         raise_def, return_def]
+  \\ gvs[remcode_def, get_self_code_def, ADELKEY_def]
+  \\ qpat_x_assum`OUTR _ _ = _`kall_tac
+  \\ gvs[ALOOKUP_FILTER]
+  \\ drule (SRULE [] lookup_function_Internal_imp_ALOOKUP_FLAT)
+  \\ rw[FILTER_FILTER, LAMBDA_PROD]
 End
 
 (*
-  overall plan:
+  plan for cps version:
   - define the same functions as in evaluate_def, but with an additional
     continuation argument. make the state argument explicit.
   - whenever there's a recursive call, make it a tail call and store anything
