@@ -88,7 +88,7 @@ Datatype:
   | IfExp expr expr expr
   | Literal literal
   | ArrayLit bound (expr list)
-  (* TODO: struct literals *)
+  | StructLit identifier ((identifier # expr) list)
   | Subscript expr expr
   | Attribute expr identifier
   | Builtin builtin (expr list)

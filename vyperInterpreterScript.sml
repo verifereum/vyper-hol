@@ -945,6 +945,33 @@ val () = assign_target_def
             option_CASE_rator, lift_option_def]
   |> cv_auto_trans;
 
+Theorem expr1_size_map:
+  expr1_size ls = LENGTH ls + SUM (MAP expr2_size ls)
+Proof
+  Induct_on`ls` \\ rw[expr_size_def]
+QED
+
+Theorem expr2_size_map:
+  expr2_size x = 1 + list_size char_size (FST x) + expr_size (SND x)
+Proof
+  Cases_on`x` \\ rw[expr_size_def]
+QED
+
+Theorem SUM_MAP_expr2_size:
+  SUM (MAP expr2_size ls) =
+  LENGTH ls +
+  SUM (MAP (list_size char_size o FST) ls) +
+  SUM (MAP (expr_size o SND) ls)
+Proof
+  Induct_on`ls` \\ rw[expr2_size_map]
+QED
+
+Theorem list_size_SUM_MAP:
+  list_size f ls = LENGTH ls + SUM (MAP f ls)
+Proof
+  Induct_on `ls` \\ rw[listTheory.list_size_def]
+QED
+
 Definition bound_def:
   stmt_bound ts Pass = 0n ∧
   stmt_bound ts Continue = 0 ∧
@@ -993,6 +1020,7 @@ Definition bound_def:
       + expr_bound ts e ∧
   expr_bound ts (Name _) = 0 ∧
   expr_bound ts (TopLevelName _) = 0 ∧
+  expr_bound ts (FlagMember _ _) = 0 ∧
   expr_bound ts (IfExp e1 e2 e3) =
     1 + expr_bound ts e1
       + MAX (expr_bound ts e2)
@@ -1005,6 +1033,8 @@ Definition bound_def:
   expr_bound ts (Literal _) = 0 ∧
   expr_bound ts (ArrayLit _ es) =
     1 + exprs_bound ts es ∧
+  expr_bound ts (StructLit _ kes) =
+    1 + exprs_bound ts (MAP SND kes) ∧
   expr_bound ts (Builtin _ es) =
     1 + exprs_bound ts es ∧
   expr_bound ts (Call (IntCall fn) es) =
@@ -1040,7 +1070,8 @@ Termination
   | INL (ts, s) =>
       SUM (MAP (list_size stmt_size o SND) ts) +
       stmt_size s)’
-  \\ rw[]
+  \\ rw[expr1_size_map, expr2_size_map, list_size_SUM_MAP, SUM_MAP_expr2_size,
+        MAP_MAP_o]
   \\ drule ALOOKUP_MEM
   \\ rw[ADELKEY_def]
   \\ qmatch_goalsub_abbrev_tac`MAP f (FILTER P ts)`
@@ -1270,6 +1301,12 @@ Definition evaluate_def:
     check (compatible_bound b (LENGTH es)) "ArrayLit bound";
     vs <- eval_exprs cx es;
     return $ Value $ ArrayV b vs
+  od ∧
+  eval_expr cx (StructLit id kes) = do
+    (* TODO: check argument lengths and types *)
+    ks <<- MAP FST kes;
+    vs <- eval_exprs cx (MAP SND kes);
+    return $ Value $ StructV $ ZIP (ks, vs)
   od ∧
   eval_expr cx (Subscript e1 e2) = do
     tv1 <- eval_expr cx e1;

@@ -1,6 +1,6 @@
 open HolKernel boolLib bossLib Parse
      cv_transLib whileTheory pairTheory combinTheory
-     arithmeticTheory vyperInterpreterTheory
+     listTheory arithmeticTheory vyperInterpreterTheory
 
 val () = new_theory "vyperSmallStep";
 
@@ -42,6 +42,7 @@ Datatype:
   | SubscriptTargetK1 base_target_value eval_continuation
   | IfExpK expr expr eval_continuation
   | ArrayLitK bound eval_continuation
+  | StructLitK (identifier list) eval_continuation
   | SubscriptK expr eval_continuation
   | SubscriptK1 toplevel_value eval_continuation
   | AttributeK identifier eval_continuation
@@ -103,6 +104,8 @@ Definition eval_expr_cps_def:
     (case check (compatible_bound b (LENGTH es)) "ArrayLit bound" st of
        (INR ex, st) => AK cx5 (ApplyExc ex) st k
      | (INL (), st) => eval_exprs_cps cx5 es st (ArrayLitK b k)) ∧
+  eval_expr_cps cx5 (StructLit id kes) st k =
+    eval_exprs_cps cx5 (MAP SND kes) st (StructLitK (MAP FST kes) k) ∧
   eval_expr_cps cx6 (Subscript e1 e2) st k =
     eval_expr_cps cx6 e1 st (SubscriptK e2 k) ∧
   eval_expr_cps cx7 (Attribute e id) st k =
@@ -135,6 +138,7 @@ Termination
   WF_REL_TAC ‘measure (λx. case x of
     | INL (cx,e,st,k) => expr_size e
     | INR (cx,es,st,k) => list_size expr_size es)’
+  \\ rw[expr1_size_map, SUM_MAP_expr2_size, list_size_SUM_MAP, MAP_MAP_o]
 End
 
 val option_CASE_rator =
@@ -308,6 +312,7 @@ Definition apply_exc_def:
   apply_exc cx ex st (SubscriptTargetK1 _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IfExpK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (ArrayLitK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (StructLitK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (SubscriptK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (SubscriptK1 _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AttributeK _ k) = AK cx (ApplyExc ex) st k ∧
@@ -431,6 +436,8 @@ Definition apply_vals_def:
     apply_vals cx (v::vs) st k ∧
   apply_vals cx vs st (ArrayLitK b k) =
     apply_tv cx (Value $ ArrayV b vs) st k ∧
+  apply_vals cx vs st (StructLitK ks k) =
+    apply_tv cx (Value $ StructV (ZIP (ks, vs))) st k ∧
   apply_vals cx vs st (BuiltinK bt k) =
     liftk cx ApplyTv (do
       acc <- get_accounts;
@@ -841,6 +848,15 @@ Proof
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     \\ rw[return_def]
+    \\ rw[Once OWHILE_THM, stepk_def, apply_vals_def]
+    \\ rw[Once OWHILE_THM, SimpRHS, stepk_def]
+    \\ gvs[]
+    \\ simp[apply_tv_def]
+    \\ rw[Once OWHILE_THM, stepk_def] )
+  \\ conj_tac >- (
+    rw[eval_expr_cps_def, evaluate_def, bind_def, return_def]
+    \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     \\ rw[Once OWHILE_THM, stepk_def, apply_vals_def]
     \\ rw[Once OWHILE_THM, SimpRHS, stepk_def]
     \\ gvs[]
