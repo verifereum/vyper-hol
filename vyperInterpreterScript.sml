@@ -1017,53 +1017,19 @@ Definition remcode_def:
           (FLAT (MAP dest_Internal_FunctionDef ts))
 End
 
-Theorem bind_cong[defncong]:
-  (f s = f' s') ∧
-  (∀x t. f s = (INL x, t) ==> g x t = g' x t) ∧
-  (s = s')
-  ⇒
-  bind f g s = bind f' g' s'
-Proof
-  rw[bind_def] \\ CASE_TAC \\ CASE_TAC \\ gs[]
-QED
-
 Theorem bind_cong_implicit[defncong]:
   (f = f') ∧
-  (∀s x t. f s = (INL x, t) ==> g x t = g' x t)
+  (∀s x t. f' s = (INL x, t) ==> g x t = g' x t)
   ⇒
   bind f g = bind f' g'
 Proof
   rw[bind_def, FUN_EQ_THM] \\ CASE_TAC \\ CASE_TAC \\ gs[]
   \\ first_x_assum irule \\ goal_assum drule
-QED
-
-(*
-Theorem bind_cong_implicit_hyp[defncong]:
-  (f = f') ∧
-  (∀s x t. f s = (INL x, t) ==> g x = g' x)
-  ⇒
-  bind f g = bind f' g'
-Proof
-  rw[bind_def, FUN_EQ_THM] \\ CASE_TAC \\ CASE_TAC \\ gs[]
-  \\ first_x_assum irule \\ goal_assum drule
-QED
-*)
-
-Theorem ignore_bind_cong[defncong]:
-  (f s = f' s') ∧
-  (∀x t. f s = (INL x, t) ⇒ g t = g' t) ∧
-  (s = s')
-  ⇒
-  ignore_bind f g s = ignore_bind f' g' s'
-Proof
-  rw[ignore_bind_def]
-  \\ irule bind_cong
-  \\ rw[]
 QED
 
 Theorem ignore_bind_cong_implicit[defncong]:
   (f = f') ∧
-  (∀s x t. f s = (INL x, t) ⇒ g t = g' t)
+  (∀s x t. f' s = (INL x, t) ⇒ g t = g' t)
   ⇒
   ignore_bind f g = ignore_bind f' g'
 Proof
@@ -1074,24 +1040,9 @@ Proof
   \\ goal_assum drule
 QED
 
-(*
-Theorem ignore_bind_cong_implicit_hyp[defncong]:
-  (f = f') ∧
-  (∀s x t. f s = (INL x, t) ⇒ g = g')
-  ⇒
-  ignore_bind f g = ignore_bind f' g'
-Proof
-  rw[ignore_bind_def]
-  \\ irule bind_cong_implicit
-  \\ rw[] \\ AP_THM_TAC
-  \\ first_x_assum irule
-  \\ goal_assum drule
-QED
-*)
-
 Theorem try_cong[defncong]:
   (f s = f' s') ∧
-  (∀e t. f s = (INR e, t) ⇒ h e t = h' e t) ∧
+  (∀e t. f' s = (INR e, t) ⇒ h e t = h' e t) ∧
   (s = s')
   ⇒
   try f h s = try f' h' s'
@@ -1101,7 +1052,7 @@ QED
 
 Theorem try_cong_implicit[defncong]:
   (f = f') ∧
-  (∀s e t. f s = (INR e, t) ⇒ h e t = h' e t)
+  (∀s e t. f' s = (INR e, t) ⇒ h e t = h' e t)
   ⇒
   try f h = try f' h'
 Proof
@@ -1111,23 +1062,31 @@ Proof
   \\ metis_tac[]
 QED
 
-(*
-Theorem try_cong_implicit_hyp[defncong]:
-  (f = f') ∧
-  (∀s e t. f s = (INR e, t) ⇒ h e = h' e)
+Theorem bind_cong[defncong]:
+  (f s = f' s') ∧
+  (∀x t. f' s = (INL x, t) ==> g x t = g' x t) ∧
+  (s = s')
   ⇒
-  try f h = try f' h'
+  bind f g s = bind f' g' s'
 Proof
-  rw[FUN_EQ_THM]
-  \\ irule try_cong \\ rw[]
-  \\ first_x_assum irule
-  \\ metis_tac[]
+  rw[bind_def] \\ CASE_TAC \\ CASE_TAC \\ gs[]
 QED
-*)
+
+Theorem ignore_bind_cong[defncong]:
+  (f s = f' s') ∧
+  (∀x t. f' s = (INL x, t) ⇒ g t = g' t) ∧
+  (s = s')
+  ⇒
+  ignore_bind f g s = ignore_bind f' g' s'
+Proof
+  rw[ignore_bind_def]
+  \\ irule bind_cong
+  \\ rw[]
+QED
 
 Theorem finally_cong[defncong]:
   (f s = f' s') ∧
-  (∀x t. f s = (x, t) ⇒ g t = g' t) ∧
+  (∀x t. f' s = (x, t) ⇒ g t = g' t) ∧
   (s = s')
   ⇒
   finally f g s = finally f' g' s'
@@ -1962,6 +1921,7 @@ Proof
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_target_def]
     \\ gvs[cont_def]
+    \\ first_x_assum drule \\ rw[]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
@@ -1973,6 +1933,8 @@ Proof
     \\ CASE_TAC \\ gs[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_base_target_def]
+    \\ qmatch_goalsub_rename_tac`AugAssignK1 p` \\ Cases_on`p`
+    \\ first_x_assum drule \\ rw[]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
@@ -1980,8 +1942,7 @@ Proof
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     \\ gvs[oneline get_Value_def, toplevel_value_CASE_rator,
            CaseEq"toplevel_value", CaseEq"prod", raise_def, return_def]
-    \\ qmatch_goalsub_rename_tac`AugAssignK1 p` \\ Cases_on`p`
-    >> rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1] )
+    >> rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1])
   \\ conj_tac >- (
     rw[eval_stmt_cps_def, evaluate_def, bind_def, ignore_bind_def, UNCURRY]
     \\ CASE_TAC \\ gs[cont_def] \\ reverse CASE_TAC
@@ -1990,6 +1951,8 @@ Proof
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_def]
+    \\ first_x_assum drule \\ rw[]
+    \\ first_x_assum drule \\ rw[]
     \\ gvs[switch_BoolV_def]
     \\ IF_CASES_TAC \\ gvs[]
     >- (
@@ -2045,7 +2008,11 @@ Proof
       \\ gvs[]
       \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def] )
     \\ rw[return_def]
-    \\ gvs[check_def, assert_def, raise_def] )
+    \\ last_x_assum drule \\ rw[]
+    \\ last_x_assum drule \\ rw[]
+    \\ last_x_assum drule \\ rw[]
+    \\ gvs[]
+    \\ last_x_assum drule \\ rw[])
   \\ conj_tac >- (
     rw[eval_stmt_cps_def, evaluate_def, bind_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
@@ -2064,8 +2031,8 @@ Proof
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     \\ rw[Once OWHILE_THM, stepk_def, apply_def]
-    \\ cheat (* RESTRICTed defn appears in induction theorem... *)
-    )
+    \\ gvs[]
+    \\ first_x_assum drule \\ rw[])
   \\ conj_tac >- (
     rw[eval_target_cps_def, evaluate_def, bind_def, return_def, UNCURRY]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
@@ -2082,6 +2049,7 @@ Proof
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     \\ rw[Once OWHILE_THM, stepk_def, apply_target_def]
+    \\ first_x_assum drule \\ rw[]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_targets_def] )
@@ -2097,6 +2065,8 @@ Proof
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     \\ rw[Once OWHILE_THM, stepk_def, apply_base_target_def]
+    \\ qmatch_asmsub_rename_tac`INL p` \\ PairCases_on`p`
+    \\ first_x_assum drule \\ rw[]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     \\ rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
@@ -2104,8 +2074,6 @@ Proof
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     \\ qmatch_asmsub_rename_tac`get_Value tv`
     \\ Cases_on`tv` \\ gvs[get_Value_def, raise_def, return_def]
-    \\ qmatch_goalsub_rename_tac`SubscriptTargetK1 p`
-    \\ Cases_on`p`
     \\ rw[Once OWHILE_THM, stepk_def, apply_val_def]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- (
@@ -2130,18 +2098,31 @@ Proof
       \\ rw[ignore_bind_def, bind_def, return_def, raise_def]
       \\ CASE_TAC \\ CASE_TAC
       \\ rw[return_def]
-      \\ last_x_assum drule \\ rw[] )
+      \\ last_x_assum drule \\ rw[]
+      \\ last_x_assum drule \\ rw[]
+      \\ gvs[finally_def, bind_def, try_def, CaseEq"prod", CaseEq"sum",
+             PULL_EXISTS, ignore_bind_def, return_def, raise_def]
+      \\ fsrw_tac[DNF_ss][]
+      \\ last_x_assum drule \\ rw[])
     \\ rw[return_def]
     \\ rw[Once OWHILE_THM, stepk_def, apply_def, ignore_bind_def, bind_def]
     \\ CASE_TAC \\ reverse CASE_TAC
     \\ rw[return_def]
-    \\ last_x_assum drule \\ rw[] )
+    \\ last_x_assum drule \\ rw[]
+    \\ gvs[finally_def, bind_def, try_def, CaseEq"prod", CaseEq"sum",
+           PULL_EXISTS, ignore_bind_def, return_def, raise_def]
+    \\ fsrw_tac[DNF_ss][]
+    \\ last_x_assum drule \\ rw[]
+    \\ last_x_assum drule \\ rw[])
   \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, liftk1]
   \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, liftk1]
   \\ conj_tac >- (
     rw[eval_expr_cps_def, evaluate_def, bind_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    \\ first_x_assum drule
+    \\ first_x_assum drule
+    \\ rw[]
     \\ simp[switch_BoolV_def]
     >> simp[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
     \\ IF_CASES_TAC \\ gvs[return_def]
@@ -2177,6 +2158,7 @@ Proof
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_tv_def]
+    \\ first_x_assum drule \\ rw[]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
@@ -2233,7 +2215,8 @@ Proof
     \\ CASE_TAC
     \\ rw[return_def]
     \\ gvs[]
-    \\ first_assum drule \\ simp_tac std_ss [] \\ disch_then kall_tac
+    \\ first_assum (drule_then (drule_then (drule_then drule)))
+    \\ simp_tac std_ss [] \\ disch_then kall_tac
     \\ CASE_TAC
     \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
@@ -2255,7 +2238,8 @@ Proof
       rw[Once OWHILE_THM, stepk_def, SimpRHS]
       \\ gvs[apply_exc_def] \\ rw[Once OWHILE_THM] )
     \\ rw[return_def, finally_def, try_def, bind_def]
-    \\ last_x_assum drule \\ simp_tac std_ss [] \\ disch_then kall_tac
+    \\ last_x_assum $ funpow 7 drule_then drule
+    \\ simp_tac std_ss [] \\ disch_then kall_tac
     \\ reverse CASE_TAC
     \\ reverse CASE_TAC
     >- (
@@ -2276,6 +2260,7 @@ Proof
   \\ CASE_TAC \\ reverse CASE_TAC
   >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
   >> rw[Once OWHILE_THM, stepk_def, apply_val_def]
+  \\ first_x_assum (drule_then drule) \\ rw[]
   \\ CASE_TAC \\ reverse CASE_TAC
   >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
   \\ rw[return_def]
