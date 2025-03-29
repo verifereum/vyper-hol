@@ -1,6 +1,6 @@
 open HolKernel boolLib bossLib Parse intLib wordsLib cv_transLib;
 open numeralTheory arithmeticTheory finite_mapTheory;
-open vyperAstTheory vyperInterpreterTheory;
+open vyperAstTheory vyperInterpreterTheory vyperSmallStepTheory;
 
 val () = new_theory "vyperTest";
 
