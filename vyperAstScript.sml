@@ -16,7 +16,7 @@ Datatype:
   = UintT num (* bit size *)
   | IntT num
   | BoolT
-  (* TODO: decimals? *)
+  | DecimalT
   | StringT num
   (* TODO: flags *)
   | BytesT bound
@@ -45,6 +45,8 @@ Datatype:
   = Add
   | Sub
   | Mul
+  | Div
+  | Mod
 End
 
 Datatype:

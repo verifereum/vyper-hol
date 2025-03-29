@@ -173,6 +173,7 @@ Type hmap = “:(subscript, toplevel_value) alist”
 Definition default_value_def:
   default_value env (BaseT (UintT _)) = IntV 0 ∧
   default_value env (BaseT (IntT _)) = IntV 0 ∧
+  default_value env (BaseT DecimalT) = IntV 0 ∧
   default_value env (TupleT ts) = default_value_tuple env [] ts ∧
   default_value env (ArrayT _ (Dynamic n)) = ArrayV (Dynamic n) [] ∧
   default_value env (ArrayT t (Fixed n)) =
@@ -318,10 +319,15 @@ End
 
 val () = cv_auto_trans evaluate_literal_def;
 
+(* TODO: IntV should carry bounds info for overflow checking *)
+(* TODO: add unsafe ops and make these ones safe *)
+
 Definition evaluate_binop_def:
   evaluate_binop (Add:binop) (IntV i1) (IntV i2) = INL (IntV (i1 + i2)) ∧
   evaluate_binop Sub (IntV i1) (IntV i2) = INL (IntV (i1 - i2)) ∧
   evaluate_binop Mul (IntV i1) (IntV i2) = INL (IntV (i1 * i2)) ∧
+  evaluate_binop Div (IntV i1) (IntV i2) = (if i2 = 0 then INR "Div0" else INL (IntV (i1 / i2))) ∧
+  evaluate_binop Mod (IntV i1) (IntV i2) = (if i2 = 0 then INR "Mod0" else INL (IntV (i1 % i2))) ∧
   evaluate_binop _ _ _ = INR "binop"
 End
 
