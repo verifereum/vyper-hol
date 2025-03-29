@@ -183,6 +183,7 @@ Definition default_value_def:
      case FLOOKUP env nid
        of NONE => StructV []
         | SOME args => default_value_struct (env \\ nid) [] args) ∧
+  default_value env (FlagsT id) = IntV 0 ∧
   default_value env NoneT = NoneV ∧
   default_value env (BaseT BoolT) = BoolV F ∧
   default_value env (BaseT AddressT) = AddressV 0w ∧

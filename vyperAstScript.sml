@@ -18,7 +18,6 @@ Datatype:
   | BoolT
   | DecimalT
   | StringT num
-  (* TODO: flags *)
   | BytesT bound
   | AddressT
 End
@@ -29,6 +28,7 @@ Datatype:
   | TupleT (type list)
   | ArrayT type bound
   | StructT identifier
+  | FlagsT identifier
   | NoneT
 End
 
@@ -162,8 +162,8 @@ Datatype:
   | VariableDecl variable_visibility variable_mutability identifier type
   | StructDef identifier (argument list)
   | HashMapDecl variable_visibility identifier type value_type
+  | FlagsDef identifier (identifier list)
   (* TODO: interfaces -- would these be a no-op except for type-checking? *)
-  (* TODO: flags *)
 End
 
 Overload uint256 = “BaseT (UintT 256)”
