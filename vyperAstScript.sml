@@ -28,7 +28,7 @@ Datatype:
   | TupleT (type list)
   | ArrayT type bound
   | StructT identifier
-  | FlagsT identifier
+  | FlagT identifier
   | NoneT
 End
 
@@ -84,6 +84,7 @@ Datatype:
   expr
   = Name identifier
   | TopLevelName identifier
+  | FlagMember identifier identifier
   | IfExp expr expr expr
   | Literal literal
   | ArrayLit bound (expr list)
@@ -162,7 +163,7 @@ Datatype:
   | VariableDecl variable_visibility variable_mutability identifier type
   | StructDef identifier (argument list)
   | HashMapDecl variable_visibility identifier type value_type
-  | FlagsDef identifier (identifier list)
+  | FlagDef identifier (identifier list)
   (* TODO: interfaces -- would these be a no-op except for type-checking? *)
 End
 

@@ -93,6 +93,8 @@ Definition eval_expr_cps_def:
           return $ Value v od st) k ∧
   eval_expr_cps cx2 (TopLevelName id) st k =
     liftk cx2 ApplyTv (lookup_global cx2 (string_to_num id) st) k ∧
+  eval_expr_cps cx2 (FlagMember fid mid) st k =
+    liftk cx2 ApplyTv (lookup_flag_mem cx2 fid mid st) k ∧
   eval_expr_cps cx3 (IfExp e1 e2 e3) st k =
     eval_expr_cps cx3 e1 st (IfExpK e2 e3 k) ∧
   eval_expr_cps cx4 (Literal l) st k =
@@ -804,6 +806,7 @@ Proof
     \\ fsrw_tac[DNF_ss][]
     \\ last_x_assum drule \\ rw[]
     \\ last_x_assum drule \\ rw[])
+  \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, liftk1]
   \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, liftk1]
   \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, liftk1]
   \\ conj_tac >- (

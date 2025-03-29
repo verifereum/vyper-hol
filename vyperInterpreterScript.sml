@@ -8,6 +8,14 @@ val () = new_theory "vyperInterpreter";
 
 (* TODO: move *)
 
+Theorem INDEX_OF_pre[cv_pre]:
+  INDEX_OF_pre x y
+Proof
+  qid_spec_tac`x`
+  \\ Induct_on`y`
+  \\ rw[Once INDEX_OF_pre_cases]
+QED
+
 Theorem cv_rep_DOMSUB[cv_rep]:
   from_fmap f (m \\ k) = cv_delete (Num k) (from_fmap f m)
 Proof
@@ -183,7 +191,7 @@ Definition default_value_def:
      case FLOOKUP env nid
        of NONE => StructV []
         | SOME args => default_value_struct (env \\ nid) [] args) ∧
-  default_value env (FlagsT id) = IntV 0 ∧
+  default_value env (FlagT id) = IntV 0 ∧
   default_value env NoneT = NoneV ∧
   default_value env (BaseT BoolT) = BoolV F ∧
   default_value env (BaseT AddressT) = AddressV 0w ∧
@@ -717,6 +725,32 @@ End
 
 val () = cv_auto_trans get_self_code_def;
 
+Definition lookup_flag_def:
+  lookup_flag fid [] = NONE ∧
+  lookup_flag fid (FlagDef id ls :: ts) =
+    (if fid = id then SOME ls else lookup_flag fid ts) ∧
+  lookup_flag fid (t :: ts) = lookup_flag fid ts
+End
+
+val () = cv_auto_trans lookup_flag_def;
+
+Definition lookup_flag_mem_def:
+  lookup_flag_mem cx fid mid =
+  case get_self_code cx
+    of NONE => raise $ Error "lookup_flag_mem code"
+     | SOME ts =>
+  case lookup_flag fid ts
+    of NONE => raise $ Error "lookup_flag"
+     | SOME ls =>
+  case INDEX_OF mid ls
+    of NONE => raise $ Error "lookup_flag_mem index"
+     | SOME i => return $ Value $ IntV $ &(2 ** i)
+End
+
+val () = lookup_flag_mem_def
+  |> SRULE [FUN_EQ_THM, option_CASE_rator]
+  |> cv_auto_trans;
+
 Definition is_ArrayT_def[simp]:
   is_ArrayT (ArrayT _ _) = T ∧
   is_ArrayT _ = F
@@ -1224,6 +1258,7 @@ Definition evaluate_def:
     return $ Value v
   od ∧
   eval_expr cx (TopLevelName id) = lookup_global cx (string_to_num id) ∧
+  eval_expr cx (FlagMember fid mid) = lookup_flag_mem cx fid mid ∧
   eval_expr cx (IfExp e1 e2 e3) = do
     tv <- eval_expr cx e1;
     switch_BoolV tv
