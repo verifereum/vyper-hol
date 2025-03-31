@@ -602,6 +602,57 @@ Proof
   CONV_TAC cv_eval
 QED
 
+Definition test_empty_builtin_ast_def:
+  test_empty_builtin_ast = [
+    def "foo" [] uint256 [
+      Return (SOME (Empty uint256))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_empty_builtin_ast_def;
+
+Theorem test_empty_builtin:
+  load_and_call_foo test_empty_builtin_ast
+  = INL (IntV 0)
+Proof
+  CONV_TAC cv_eval
+QED
+
+Definition test_empty_builtin2_ast_def:
+  test_empty_builtin2_ast = [
+    def "foo" [] uint256 [
+      Return (SOME (Empty (BaseT (StringT 56))))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_empty_builtin2_ast_def;
+
+Theorem test_empty_builtin2:
+  load_and_call_foo test_empty_builtin2_ast
+  = INL (StringV 56 "")
+Proof
+  CONV_TAC cv_eval
+QED
+
+Definition test_empty_builtin3_ast_def:
+  test_empty_builtin3_ast = [
+    def "foo" [] uint256 [
+      Return (SOME (Empty (ArrayT (BaseT (StringT 32)) (Dynamic 10))))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_empty_builtin3_ast_def;
+
+Theorem test_empty_builtin3:
+  load_and_call_foo test_empty_builtin3_ast
+  = INL (ArrayV (Dynamic 10) [])
+Proof
+  CONV_TAC cv_eval
+QED
+
 (* TODO add tests
 
 def test_external_func_arg2():
@@ -649,37 +700,6 @@ def foo(a: DynArray[uint256, 10], s: String[100], b: {tuple_t}) -> (DynArray[uin
     )
 
 
-def test_empty_builtin():
-    src = """
-@external
-def foo() -> uint256:
-    return empty(uint256)
-    """
-
-    c = loads(src)
-    assert c.foo() == 0
-
-
-def test_empty_builtin2():
-    src = """
-@external
-def foo() -> String[56]:
-    return empty(String[56])
-    """
-
-    c = loads(src)
-    assert c.foo() == ""
-
-
-def test_empty_builtin3():
-    src = """
-@external
-def foo() -> DynArray[String[32], 10]:
-    return empty(DynArray[String[32], 10])
-    """
-
-    c = loads(src)
-    assert c.foo() == []
 *)
 
 val () = export_theory();
