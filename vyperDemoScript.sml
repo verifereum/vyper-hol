@@ -1,5 +1,6 @@
-open HolKernel boolLib bossLib Parse intLib wordsLib cv_transLib blastLib;
-open finite_mapTheory vyperAstTheory vyperSmallStepTheory vyperTestTheory;
+open HolKernel boolLib bossLib Parse intLib wordsLib cv_transLib blastLib
+     finite_mapTheory whileTheory vyperAstTheory
+     vyperInterpreterTheory vyperSmallStepTheory vyperTestTheory
 
 val () = new_theory "vyperDemo";
 
@@ -60,7 +61,7 @@ Definition deploy_demo_def:
   let deployer = ^deployer in
   let addr = ^contract in
   let goal_amount = 10 ** 18 in
-  let deploy_tx = transaction deployer addr "__init__" [IntV &goal_amount] 0 in
+  let deploy_tx = call_txn deployer addr "__init__" [IntV &goal_amount] 0 in
     OUTL $ load_contract initial_machine_state deploy_tx demo_ast
 End
 
@@ -91,44 +92,43 @@ Theorem demo_check_end_campaign_other:
           value := 0; args := [];
           function_name := "end_campaign" |>
   ==>
-  FST $ external_call deploy_demo tx =
+  FST $ call_external deploy_demo tx =
   if addr = ^deployer then INL NoneV
-  else INR "Assertion Failed: Only creator"
+  else INR $ AssertException "Only creator"
 Proof
   rw[]
   >- CONV_TAC cv_eval
   \\ rewrite_tac[deploy_demo_eq]
   \\ rewrite_tac[GSYM demo_ast_def]
-  \\ simp[external_call_def]
-  \\ qmatch_goalsub_abbrev_tac`contract _ gbs`
-  \\ simp[external_call_contract_def]
+  \\ simp[call_external_def]
+  \\ qmatch_goalsub_abbrev_tac`abstract_machine _ gbs`
+  \\ simp[get_self_code_def, initial_evaluation_context_def]
   \\ CONV_TAC(cv_eval_match “lookup_function _ _ _”)
-  \\ simp[step_external_function_def]
+  \\ simp[call_external_function_def]
   \\ CONV_TAC(cv_eval_match “bind_arguments _ _”)
   \\ simp[]
-  \\ CONV_TAC(cv_eval_match “initial_function_context _ _ _”)
-  \\ simp[Once step_stmt_till_exception_def,
-          initial_execution_context_def,
-          exception_raised_def]
-  \\ CONV_TAC(eval_match “step_stmt _”) \\ rewrite_tac[GSYM demo_ast_def]
-  \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
-  \\ CONV_TAC(eval_match “step_stmt _”) \\ rewrite_tac[GSYM demo_ast_def]
-  \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
-  \\ CONV_TAC(eval_match “step_stmt _”) \\ rewrite_tac[GSYM demo_ast_def]
-  \\ qmatch_goalsub_abbrev_tac`BuiltinK Eq [addrv]`
-  \\ `addrv = AddressV addr` by (unabbrev_all_tac \\ EVAL_TAC)
-  \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
-  \\ qunabbrev_tac`gbs`
-  \\ CONV_TAC(eval_match “step_stmt _”) \\ rewrite_tac[GSYM demo_ast_def]
-  \\ qmatch_goalsub_abbrev_tac`contract _ gbs`
+  \\ simp[evaluate_def]
+  \\ simp[bind_def, ignore_bind_def]
+  \\ CONV_TAC(cv_eval_match “builtin_args_length_ok _ _”)
+  \\ simp[Once check_def, Once assert_def]
+  \\ CONV_TAC(cv_eval_match “builtin_args_length_ok _ _”)
+  \\ simp[Once check_def, Once assert_def]
+  \\ simp[return_def]
+  \\ simp[Once get_accounts_def, return_def]
+  \\ simp[Once evaluate_builtin_def, lift_sum_def, return_def]
+  \\ simp[Once lookup_global_def, bind_def, ignore_bind_def, get_current_globals_def]
+  \\ simp[Once initial_state_def]
+  \\ simp[Abbr`gbs`, lift_option_def, return_def]
+  \\ CONV_TAC(cv_eval_match “string_to_num _”)
+  \\ simp[FLOOKUP_UPDATE, return_def]
+  \\ simp[Once get_accounts_def, return_def]
+  \\ simp[Once evaluate_builtin_def, lift_sum_def, return_def]
+  \\ qmatch_goalsub_abbrev_tac`abstract_machine _ gbs`
   \\ qmatch_goalsub_abbrev_tac`BoolV b`
-  \\ `b = (addr = 66w)` by ( unabbrev_all_tac \\ BBLAST_TAC )
+  \\ `b = (addr = 66w)` by ( unabbrev_all_tac \\ EVAL_TAC \\ BBLAST_TAC )
   \\ `¬b` by rw[]
   \\ BasicProvers.VAR_EQ_TAC
-  \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
-  \\ CONV_TAC(eval_match “step_stmt _”) \\ rewrite_tac[GSYM demo_ast_def]
-  \\ simp[Once step_stmt_till_exception_def, exception_raised_def]
-  \\ CONV_TAC cv_eval
+  \\ simp[Once switch_BoolV_def, raise_def]
 QED
 
 Theorem lookup_function_demo_ast:
@@ -159,6 +159,9 @@ Theorem bind_arguments_nil_SOME[simp]:
 Proof
   Cases_on`args` \\ rw[bind_arguments_def]
 QED
+
+(*
+TODO update?
 
 val step_stmt_pat = “step_stmt _”
 val option_case_pat = “option_CASE opt”
@@ -286,5 +289,7 @@ Proof
     \\ gvs[]
     \\ rpt step_tac )
 QED
+
+*)
 
 val () = export_theory();
