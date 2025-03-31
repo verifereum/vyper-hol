@@ -727,7 +727,7 @@ val () = cv_auto_trans get_self_code_def;
 
 Definition lookup_flag_def:
   lookup_flag fid [] = NONE ∧
-  lookup_flag fid (FlagDef id ls :: ts) =
+  lookup_flag fid (FlagDecl id ls :: ts) =
     (if fid = id then SOME ls else lookup_flag fid ts) ∧
   lookup_flag fid (t :: ts) = lookup_flag fid ts
 End
@@ -761,7 +761,7 @@ val () = cv_auto_trans is_ArrayT_def;
 Definition lookup_function_def:
   lookup_function name Deploy [] = SOME ([], NoneT, [Pass]) ∧
   lookup_function name vis [] = NONE ∧
-  lookup_function name vis (FunctionDef fv fm id args ret body :: ts) =
+  lookup_function name vis (FunctionDecl fv fm id args ret body :: ts) =
   (if id = name ∧ vis = fv then SOME (args, ret, body)
    else lookup_function name vis ts) ∧
   lookup_function name External (VariableDecl Public _ id typ :: ts) =
@@ -1080,7 +1080,7 @@ Termination
 End
 
 Definition dest_Internal_FunctionDef_def:
-  dest_Internal_FunctionDef (FunctionDef Internal _ fn _ _ ss) = [(fn, ss)] ∧
+  dest_Internal_FunctionDef (FunctionDecl Internal _ fn _ _ ss) = [(fn, ss)] ∧
   dest_Internal_FunctionDef _ = []
 End
 
@@ -1407,7 +1407,7 @@ QED
 
 Definition type_env_def:
   type_env [] = FEMPTY ∧
-  type_env (StructDef id args :: ts) =
+  type_env (StructDecl id args :: ts) =
     type_env ts |+ (string_to_num id, args) ∧
   type_env (_ :: ts) = type_env ts
 End

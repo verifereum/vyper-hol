@@ -467,7 +467,7 @@ Theorem test_statefulness_of_tstorage:
 
 Definition test_default_storage_values_ast_def:
   test_default_storage_values_ast = [
-    StructDef "S" [("a", uint256)];
+    StructDecl "S" [("a", uint256)];
     privar "a" uint256;
     privar "b" uint256;
     privar "c" (DynArray uint256 10);

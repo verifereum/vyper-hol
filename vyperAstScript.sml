@@ -159,11 +159,11 @@ End
 
 Datatype:
   toplevel
-  = FunctionDef function_visibility function_mutability identifier (argument list) type (stmt list)
+  = FunctionDecl function_visibility function_mutability identifier (argument list) type (stmt list)
   | VariableDecl variable_visibility variable_mutability identifier type
-  | StructDef identifier (argument list)
+  | StructDecl identifier (argument list)
   | HashMapDecl variable_visibility identifier type value_type
-  | FlagDef identifier (identifier list)
+  | FlagDecl identifier (identifier list)
   (* TODO: interfaces -- would these be a no-op except for type-checking? *)
 End
 
@@ -180,10 +180,10 @@ Overload "and" = “λe1 e2. IfExp e1 e2 (lb F)”
 Overload "+" = “λe1 e2. Builtin (Bop Add) [e1; e2]”
 Overload "<" = “λe1 e2. Builtin Lt [e1; e2]”
 Overload len = “λe. Builtin Len [e]”
-Overload def = “λid args ret body. FunctionDef External Nonpayable id args ret body”
-Overload itl_def = “λid args ret body. FunctionDef Internal Nonpayable id args ret body”
-Overload pay_def = “λid args ret body. FunctionDef External Payable id args ret body”
-Overload deploy_def = “λid args ret body. FunctionDef Deploy Nonpayable id args ret body”
+Overload def = “λid args ret body. FunctionDecl External Nonpayable id args ret body”
+Overload itl_def = “λid args ret body. FunctionDecl Internal Nonpayable id args ret body”
+Overload pay_def = “λid args ret body. FunctionDecl External Payable id args ret body”
+Overload deploy_def = “λid args ret body. FunctionDecl Deploy Nonpayable id args ret body”
 Overload pubvar = “λid typ. VariableDecl Public Storage id typ”
 Overload pubmap = “λid kt vt. HashMapDecl Public id kt vt”
 Overload privar = “λid typ. VariableDecl Private Storage id typ”
