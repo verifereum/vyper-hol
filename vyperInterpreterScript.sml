@@ -954,6 +954,15 @@ val () = assign_target_def
             option_CASE_rator, lift_option_def]
   |> cv_auto_trans;
 
+Definition type_env_def:
+  type_env [] = FEMPTY ∧
+  type_env (StructDecl id args :: ts) =
+    type_env ts |+ (string_to_num id, args) ∧
+  type_env (_ :: ts) = type_env ts
+End
+
+val () = cv_auto_trans type_env_def;
+
 Theorem expr1_size_map:
   expr1_size ls = LENGTH ls + SUM (MAP expr2_size ls)
 Proof
@@ -1048,6 +1057,7 @@ Definition bound_def:
     1 + exprs_bound ts (MAP SND kes) ∧
   expr_bound ts (Builtin _ es) =
     1 + exprs_bound ts es ∧
+  expr_bound ts (Empty _) = 0 ∧
   expr_bound ts (Call (IntCall fn) es) =
     1 + exprs_bound ts es
       + (case ALOOKUP ts fn of NONE => 0 |
@@ -1344,6 +1354,10 @@ Definition evaluate_def:
     v <- lift_sum $ evaluate_builtin cx acc bt vs;
     return $ Value v
   od ∧
+  eval_expr cx (Empty typ) = do
+    ts <- lift_option (get_self_code cx) "Empty get_self_code";
+    return $ Value $ default_value (type_env ts) typ
+  od ∧
   eval_expr cx (Call Send es) = do
     check (LENGTH es = 2) "Send args";
     vs <- eval_exprs cx es;
@@ -1420,15 +1434,6 @@ Proof
   \\ first_x_assum irule
   \\ goal_assum drule
 QED
-
-Definition type_env_def:
-  type_env [] = FEMPTY ∧
-  type_env (StructDecl id args :: ts) =
-    type_env ts |+ (string_to_num id, args) ∧
-  type_env (_ :: ts) = type_env ts
-End
-
-val () = cv_auto_trans type_env_def;
 
 (* TODO: assumes unique identifiers, but should check? *)
 Definition initial_globals_def:

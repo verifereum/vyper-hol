@@ -115,6 +115,12 @@ Definition eval_expr_cps_def:
     (case check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st of
        (INR ex, st) => AK cx8 (ApplyExc ex) st k
      | (INL (), st) => eval_exprs_cps cx8 es st (BuiltinK bt k)) ∧
+  eval_expr_cps cx8 (Empty typ) st k =
+    (case do
+       ts <- lift_option (get_self_code cx8) "Empty get_self_code";
+       return $ Value $ default_value (type_env ts) typ od st
+     of (INR ex, st) => AK cx8 (ApplyExc ex) st k
+      | (INL tv, st) => AK cx8 (ApplyTv tv) st k) ∧
   eval_expr_cps cx9 (Call Send es) st k =
     (case check (LENGTH es = 2) "Send args" st of
        (INR ex, st) => AK cx9 (ApplyExc ex) st k
@@ -903,6 +909,10 @@ Proof
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def, liftk1] )
+  \\ conj_tac >- (
+    rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
+    \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
+    \\ rw[return_def])
   \\ conj_tac >- (
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC

@@ -91,9 +91,8 @@ Datatype:
   | StructLit identifier ((identifier # expr) list)
   | Subscript expr expr
   | Attribute expr identifier
-  | Builtin builtin (expr list)
-  (* TODO: add the `in` operator *)
-  (* TODO: ensure `in` on literals short-circuits (or decide about that..) *)
+  | Builtin builtin (expr list) (* TODO: ensure `in` on literals short-circuits (or decide about that..) *)
+  | Empty type
   | Call call_target (expr list)
 End
 
