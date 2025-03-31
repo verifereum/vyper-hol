@@ -119,8 +119,8 @@ Datatype:
   | Expr expr
   | For identifier type expr (* TODO also range *) num (stmt list)
   | If expr (stmt list) (stmt list)
-  (* TODO: add Log *)
   | Assert expr string
+  | Log identifier (expr list)
   | Raise string
   | Return (expr option)
   | Assign assignment_target expr
@@ -161,8 +161,9 @@ Datatype:
   toplevel
   = FunctionDecl function_visibility function_mutability identifier (argument list) type (stmt list)
   | VariableDecl variable_visibility variable_mutability identifier type
-  | StructDecl identifier (argument list)
   | HashMapDecl variable_visibility identifier type value_type
+  | StructDecl identifier (argument list)
+  | EventDecl identifier (argument list)
   | FlagDecl identifier (identifier list)
   (* TODO: interfaces -- would these be a no-op except for type-checking? *)
 End

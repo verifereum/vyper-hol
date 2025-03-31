@@ -473,9 +473,12 @@ End
 
 val () = cv_auto_trans builtin_args_length_ok_def;
 
+Type log = “:identifier # (value list)”;
+
 Datatype:
   evaluation_state = <|
     globals: (address, num |-> toplevel_value) alist
+  ; logs: log list
   ; scopes: scope list
   ; accounts: evm_accounts
   |>
@@ -801,6 +804,12 @@ End
 
 val () = cv_auto_trans set_scopes_def;
 
+Definition push_log_def:
+  push_log log st = return () $ st with logs updated_by CONS log
+End
+
+val () = cv_auto_trans push_log_def;
+
 Definition push_function_def:
   push_function fn sc cx st =
   return (cx with stk updated_by CONS fn)
@@ -982,6 +991,8 @@ Definition bound_def:
   stmt_bound ts (Raise _) = 0 ∧
   stmt_bound ts (Assert e _) =
     1 + expr_bound ts e ∧
+  stmt_bound ts (Log _ es) =
+    1 + exprs_bound ts es ∧
   stmt_bound ts (AnnAssign _ _ e) =
     1 + expr_bound ts e ∧
   stmt_bound ts (Assign g e) =
@@ -1196,6 +1207,11 @@ Definition evaluate_def:
     switch_BoolV tv
       (return ())
       (raise $ AssertException str)
+  od ∧
+  eval_stmt cx (Log id es) = do
+    (* TODO: check arguments length and types *)
+    vs <- eval_exprs cx es;
+    push_log (id, vs)
   od ∧
   eval_stmt cx (AnnAssign id typ e) = do
     tv <- eval_expr cx e;
@@ -1459,6 +1475,7 @@ Definition initial_state_def:
   initial_state (am: abstract_machine) env : evaluation_state =
   <| accounts := am.accounts
    ; globals := am.globals
+   ; logs := []
    ; scopes := [env]
    |>
 End
@@ -1493,6 +1510,7 @@ Definition empty_state_def:
   empty_state : evaluation_state = <|
     accounts := empty_accounts;
     globals := [];
+    logs := [];
     scopes := []
   |>
 End

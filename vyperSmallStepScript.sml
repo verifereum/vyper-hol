@@ -21,6 +21,7 @@ Datatype:
   eval_continuation
   = ReturnK eval_continuation
   | AssertK string eval_continuation
+  | LogK identifier eval_continuation
   | AnnAssignK identifier eval_continuation
   | AssignK expr eval_continuation
   | AssignK1 assignment_value eval_continuation
@@ -218,6 +219,7 @@ Definition eval_stmt_cps_def:
   eval_stmt_cps cx (Return (SOME e)) st k = eval_expr_cps cx e st (ReturnK k) ∧
   eval_stmt_cps cx (Raise str) st k = AK cx (ApplyExc (AssertException str)) st k ∧
   eval_stmt_cps cx (Assert e str) st k = eval_expr_cps cx e st (AssertK str k) ∧
+  eval_stmt_cps cx (Log id es) st k = eval_exprs_cps cx es st (LogK id k) ∧
   eval_stmt_cps cx (AnnAssign id typ e) st k =
     eval_expr_cps cx e st (AnnAssignK id k) ∧
   eval_stmt_cps cx (Assign g e) st k =
@@ -283,6 +285,7 @@ val () = apply_def
 Definition apply_exc_def:
   apply_exc cx ex st (ReturnK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AssertK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (LogK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AnnAssignK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AssignK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AssignK1 _ k) = AK cx (ApplyExc ex) st k ∧
@@ -444,6 +447,8 @@ Definition apply_vals_def:
       v <- lift_sum $ evaluate_builtin cx acc bt vs;
       return $ Value v
     od st) k ∧
+  apply_vals cx vs st (LogK id k) =
+    liftk cx (K Apply) (push_log (id, vs) st) k ∧
   apply_vals cx vs st (CallSendK k) =
     liftk cx ApplyTv (do
       check (LENGTH vs = 2) "CallSendK nargs";
@@ -606,6 +611,11 @@ Proof
       rw[Once OWHILE_THM, SimpRHS, stepk_def] \\ gvs[]
       \\ Cases_on`v` \\ rw[apply_val_def, apply_exc_def]
       \\ rw[Once OWHILE_THM] ))
+  \\ conj_tac >- (
+    rw[eval_stmt_cps_def, evaluate_def, bind_def]
+    \\ CASE_TAC \\ rw[cont_def] \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    \\ rw[Once OWHILE_THM, stepk_def, apply_vals_def, liftk1])
   \\ conj_tac >- (
     rw[eval_stmt_cps_def, evaluate_def, bind_def]
     \\ CASE_TAC \\ rw[cont_def] \\ reverse CASE_TAC
