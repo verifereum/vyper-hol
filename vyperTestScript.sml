@@ -75,7 +75,7 @@ Definition test_for_control_flow_ast_def:
        AnnAssign "a" (DynArray uint256 10)
          (DynArlit 10 [li 1; li 2; li 3]);
        AnnAssign "counter" uint256 (li 0);
-       For "i" uint256 (Name "a") 10
+       For "i" uint256 (Array (Name "a")) 10
        [ AugAssign (NameTarget "counter") Add (Name "i") ];
        Return (SOME (Name "counter"))
     ]
@@ -145,7 +145,7 @@ Definition test_internal_call_ast_def:
       AnnAssign "a" (DynArray uint256 10)
         (DynArlit 10 [li 1; li 2; li 3]);
       AnnAssign "counter" uint256 (li 0);
-      For "i" uint256 (Name "a") 10 [
+      For "i" uint256 (Array (Name "a")) 10 [
         AugAssign (NameTarget "counter") Add (Name "i")
       ];
       Return (SOME (Name "counter"))
@@ -154,7 +154,7 @@ Definition test_internal_call_ast_def:
       AnnAssign "a" (DynArray uint256 10)
         (DynArlit 10 [li 1; li 2; li 3]);
       AnnAssign "counter" uint256 (li 0);
-      For "i" uint256 (Name "a") 10 [
+      For "i" uint256 (Array (Name "a")) 10 [
         AugAssign (NameTarget "counter") Add (Name "i")
       ];
       Return (SOME (Name "counter" + call "bar" []))
@@ -292,7 +292,7 @@ Definition test_storage_variables3_ast_def:
     itl_def "bar" [] NoneT [
       AnnAssign "a" (DynArray uint256 10)
         (DynArlit 10 [li 1; li 2; li 3]);
-      For "i" uint256 (Name "a") 10 [
+      For "i" uint256 (Array (Name "a")) 10 [
         AugAssign (TopLevelNameTarget "d") Add (Name "i")
       ]
     ];
@@ -300,7 +300,7 @@ Definition test_storage_variables3_ast_def:
       AnnAssign "a" (DynArray uint256 10)
         (DynArlit 10 [li 1; li 2; li 3]);
       AnnAssign "counter" uint256 (li 0);
-      For "i" uint256 (Name "a") 10 [
+      For "i" uint256 (Array (Name "a")) 10 [
         AugAssign (TopLevelNameTarget "d") Add (Name "i")
       ];
       Expr (call "bar" []);
