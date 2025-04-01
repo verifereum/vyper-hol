@@ -111,12 +111,22 @@ Datatype:
 End
 
 Datatype:
+  iterator
+  = Array expr
+  | Range expr expr (* start end; use Literal (IntL 0) for start when missing *)
+  (* the For syntax always includes a bound *)
+  (* for Array, this should be derived from the type of the expression *)
+  (* for Range, if the bound is not given explicitly, use end - start (which
+   * should both be literal integers) *)
+End
+
+Datatype:
   stmt
   = Pass
   | Continue
   | Break
   | Expr expr
-  | For identifier type expr (* TODO also range *) num (stmt list)
+  | For identifier type iterator num (stmt list)
   | If expr (stmt list) (stmt list)
   | Assert expr string
   | Log identifier (expr list)

@@ -1014,8 +1014,8 @@ Definition bound_def:
     1 + expr_bound ts e +
      MAX (stmts_bound ts ss1)
          (stmts_bound ts ss2) ∧
-  stmt_bound ts (For _ _ e n ss) =
-    1 + expr_bound ts e +
+  stmt_bound ts (For _ _ it n ss) =
+    1 + iterator_bound ts it +
     1 + n + n * (stmts_bound ts ss) ∧
   stmt_bound ts (Expr e) =
     1 + expr_bound ts e ∧
@@ -1023,6 +1023,11 @@ Definition bound_def:
   stmts_bound ts (s::ss) =
     1 + stmt_bound ts s
       + stmts_bound ts ss ∧
+  iterator_bound ts (Array e) =
+    1 + expr_bound ts e ∧
+  iterator_bound ts (Range e1 e2) =
+    1 + expr_bound ts e1
+      + expr_bound ts e2 ∧
   target_bound ts (BaseTarget bt) =
     1 + base_target_bound ts bt ∧
   target_bound ts (TupleTarget gs) =
@@ -1070,21 +1075,24 @@ Definition bound_def:
       + exprs_bound ts es
 Termination
   WF_REL_TAC ‘measure (λx. case x of
-  | INR (INR (INR (INR (INR (INR (ts, es)))))) =>
+  | INR (INR (INR (INR (INR (INR (INR (ts, es))))))) =>
       SUM (MAP (list_size stmt_size o SND) ts) +
       list_size expr_size es
-  | INR (INR (INR (INR (INR (INL (ts, e)))))) =>
+  | INR (INR (INR (INR (INR (INR (INL (ts, e))))))) =>
       SUM (MAP (list_size stmt_size o SND) ts) +
       expr_size e
-  | INR (INR (INR (INR (INL (ts, bt))))) =>
+  | INR (INR (INR (INR (INR (INL (ts, bt)))))) =>
       SUM (MAP (list_size stmt_size o SND) ts) +
       base_assignment_target_size bt
-  | INR (INR (INR (INL (ts, gs)))) =>
+  | INR (INR (INR (INR (INL (ts, gs))))) =>
       SUM (MAP (list_size stmt_size o SND) ts) +
       list_size assignment_target_size gs
-  | INR (INR (INL (ts, g))) =>
+  | INR (INR (INR (INL (ts, g)))) =>
       SUM (MAP (list_size stmt_size o SND) ts) +
       assignment_target_size g
+  | INR (INR (INL (ts, it))) =>
+      SUM (MAP (list_size stmt_size o SND) ts) +
+      iterator_size it
   | INR (INL (ts, ss)) =>
       SUM (MAP (list_size stmt_size o SND) ts) +
       list_size stmt_size ss
@@ -1250,10 +1258,8 @@ Definition evaluate_def:
         (eval_stmts cx ss2)
     ) pop_scope
   od ∧
-  eval_stmt cx (For id typ e n body) = do
-    tv <- eval_expr cx e;
-    v <- get_Value tv;
-    vs <- lift_option (extract_elements v) "For not ArrayV";
+  eval_stmt cx (For id typ it n body) = do
+    vs <- eval_iterator cx it;
     check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long";
     (* TODO: check the type? *)
     (* TODO: check id is not in scope already? *)
@@ -1267,6 +1273,23 @@ Definition evaluate_def:
   eval_stmts cx [] = return () ∧
   eval_stmts cx (s::ss) = do
     eval_stmt cx s; eval_stmts cx ss
+  od ∧
+  eval_iterator cx (Array e) = do
+    tv <- eval_expr cx e;
+    v <- get_Value tv;
+    vs <- lift_option (extract_elements v) "For not ArrayV";
+    return vs
+  od ∧
+  eval_iterator cx (Range e1 e2) = do
+    tv1 <- eval_expr cx e1;
+    v1 <- get_Value tv1;
+    n1 <- lift_option (dest_NumV v1) "start not NumV";
+    tv2 <- eval_expr cx e2;
+    v2 <- get_Value tv2;
+    n2 <- lift_option (dest_NumV v2) "end not NumV";
+    (* TODO: check e1 and e2 are same type? *)
+    check (n1 < n2) "no range";
+    return $ GENLIST (λn. IntV &(n1 + n)) (n2 - n1)
   od ∧
   eval_target cx (BaseTarget t) = do
     (loc, sbs) <- eval_base_target cx t;
@@ -1392,18 +1415,20 @@ Definition evaluate_def:
   od
 Termination
   WF_REL_TAC ‘measure (λx. case x of
-  | INR (INR (INR (INR (INR (INR (INR (cx, es)))))))
+  | INR (INR (INR (INR (INR (INR (INR (INR (cx, es))))))))
     => exprs_bound (remcode cx) es
-  | INR (INR (INR (INR (INR (INR (INL (cx, e)))))))
+  | INR (INR (INR (INR (INR (INR (INR (INL (cx, e))))))))
     => expr_bound (remcode cx) e
-  | INR (INR (INR (INR (INR (INL (cx, nm, body, vs))))))
+  | INR (INR (INR (INR (INR (INR (INL (cx, nm, body, vs)))))))
     => 1 + LENGTH vs + (LENGTH vs) * (stmts_bound (remcode cx) body)
-  | INR (INR (INR (INR (INL (cx, t)))))
+  | INR (INR (INR (INR (INR (INL (cx, t))))))
     => base_target_bound (remcode cx) t
-  | INR (INR (INR (INL (cx, gs))))
+  | INR (INR (INR (INR (INL (cx, gs)))))
     => targets_bound (remcode cx) gs
-  | INR (INR (INL (cx, g)))
+  | INR (INR (INR (INL (cx, g))))
     => target_bound (remcode cx) g
+  | INR (INR (INL (cx, it)))
+    => iterator_bound (remcode cx) it
   | INR (INL (cx, ss)) => stmts_bound (remcode cx) ss
   | INL (cx, s) => stmt_bound (remcode cx) s)’
   \\ reverse(rw[bound_def, MAX_DEF, MULT])
