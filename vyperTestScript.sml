@@ -495,7 +495,90 @@ Proof
   CONV_TAC(LAND_CONV cv_eval) \\ rw[]
 QED
 
-(* TODO range builtin tests *)
+Definition test_range_builtin_ast_def:
+  test_range_builtin_ast = [
+    privar "a" uint256;
+    def "foo" [] uint256 [
+      For "i" uint256 (Range (li 0) (li 10)) 10 [
+        AugAssign (TopLevelNameTarget "a") Add (Name "i")
+      ];
+      Return (SOME (TopLevelName "a"))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_range_builtin_ast_def;
+
+Theorem test_range_builtin:
+  load_and_call_foo test_range_builtin_ast
+  = INL (IntV &(SUM (COUNT_LIST 10)))
+Proof
+  CONV_TAC (LAND_CONV cv_eval)
+  \\ EVAL_TAC
+QED
+
+Definition test_range_builtin2_ast_def:
+  test_range_builtin2_ast = [
+    privar "a" uint256;
+    def "foo" [] uint256 [
+      AnnAssign "k" uint256 (li 5);
+      For "i" uint256 (Range (li 0) (Name "k")) 5 [
+        AugAssign (TopLevelNameTarget "a") Add (Name "i")
+      ];
+      Return (SOME (TopLevelName "a"))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_range_builtin2_ast_def;
+
+Theorem test_range_builtin2:
+  load_and_call_foo test_range_builtin2_ast
+  = INL (IntV &(SUM (COUNT_LIST 5)))
+Proof
+  CONV_TAC (LAND_CONV cv_eval)
+  \\ EVAL_TAC
+QED
+
+(* TODO  add
+
+def test_range_builtin3():
+    src = """
+a: uint256
+
+@external
+def foo() -> uint256:
+    for i: uint256 in range(1, 5):
+        self.a += i
+    return self.a
+    """
+
+    c = loads(src)
+    expected = 0
+    for i in range(1, 5):
+        expected += i
+    assert c.foo() == expected
+
+
+def test_range_builtin4():
+    src = """
+a: uint256
+
+@external
+def foo() -> uint256:
+    k: uint256 = 1
+    for i: uint256 in range(k, 5, bound=4):
+        self.a += i
+    return self.a
+    """
+
+    c = loads(src)
+    expected = 0
+    for i in range(1, 5):
+        expected += i
+    assert c.foo() == expected
+
+*)
 
 Definition test_len_builtin_ast_def:
   test_len_builtin_ast = [
