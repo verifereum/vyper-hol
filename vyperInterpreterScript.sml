@@ -122,6 +122,9 @@ val () = int_xor_def
   |> SRULE [FUN_EQ_THM, int_bitwise_def, GSYM bits_bitwise_xor_def]
   |> cv_trans;
 
+val () = cv_auto_trans int_shift_left_def;
+val () = cv_auto_trans int_shift_right_def;
+
 Theorem INDEX_OF_pre[cv_pre]:
   INDEX_OF_pre x y
 Proof
@@ -459,7 +462,12 @@ Definition evaluate_binop_def:
   evaluate_binop And (BoolV b1) (BoolV b2) = INL (BoolV (b1 ∧ b2)) ∧
   evaluate_binop  Or (BoolV b1) (BoolV b2) = INL (BoolV (b1 ∨ b2)) ∧
   evaluate_binop XOr (BoolV b1) (BoolV b2) = INL (BoolV (b1 ≠ b2)) ∧
-  (* TODO: shifts *)
+  evaluate_binop ShL (IntV i1) (IntV i2) = (if i2 < 0 then INR "ShL0"
+                                            else INL $ IntV $
+                                                 int_shift_left (Num i2) i1) ∧
+  evaluate_binop ShR (IntV i1) (IntV i2) = (if i2 < 0 then INR "ShR0"
+                                            else INL $ IntV $
+                                                 int_shift_right (Num i2) i1) ∧
   (* TODO: in *)
   evaluate_binop _ _ _ = INR "binop"
 End
