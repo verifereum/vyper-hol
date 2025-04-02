@@ -540,45 +540,50 @@ Proof
   \\ EVAL_TAC
 QED
 
-(* TODO  add
+Definition test_range_builtin3_ast_def:
+  test_range_builtin3_ast = [
+    privar "a" uint256;
+    def "foo" [] uint256 [
+      For "i" uint256 (Range (li 1) (li 5)) (5 - 1) [
+        AugAssign (TopLevelNameTarget "a") Add (Name "i")
+      ];
+      Return (SOME (TopLevelName "a"))
+    ]
+  ]
+End
 
-def test_range_builtin3():
-    src = """
-a: uint256
+val () = cv_trans_deep_embedding EVAL test_range_builtin3_ast_def;
 
-@external
-def foo() -> uint256:
-    for i: uint256 in range(1, 5):
-        self.a += i
-    return self.a
-    """
+Theorem test_range_builtin3:
+  load_and_call_foo test_range_builtin3_ast
+  = INL (IntV &(SUM (MAP ((+) 1) (COUNT_LIST (5 - 1)))))
+Proof
+  CONV_TAC (LAND_CONV cv_eval)
+  \\ EVAL_TAC
+QED
 
-    c = loads(src)
-    expected = 0
-    for i in range(1, 5):
-        expected += i
-    assert c.foo() == expected
+Definition test_range_builtin4_ast_def:
+  test_range_builtin4_ast = [
+    privar "a" uint256;
+    def "foo" [] uint256 [
+      AnnAssign "k" uint256 (li 1);
+      For "i" uint256 (Range (Name "k") (li 5)) 4 [
+        AugAssign (TopLevelNameTarget "a") Add (Name "i")
+      ];
+      Return (SOME (TopLevelName "a"))
+    ]
+  ]
+End
 
+val () = cv_trans_deep_embedding EVAL test_range_builtin4_ast_def;
 
-def test_range_builtin4():
-    src = """
-a: uint256
-
-@external
-def foo() -> uint256:
-    k: uint256 = 1
-    for i: uint256 in range(k, 5, bound=4):
-        self.a += i
-    return self.a
-    """
-
-    c = loads(src)
-    expected = 0
-    for i in range(1, 5):
-        expected += i
-    assert c.foo() == expected
-
-*)
+Theorem test_range_builtin4:
+  load_and_call_foo test_range_builtin4_ast
+  = INL (IntV &(SUM (MAP ((+) 1) (COUNT_LIST (5 - 1)))))
+Proof
+  CONV_TAC (LAND_CONV cv_eval)
+  \\ EVAL_TAC
+QED
 
 Definition test_len_builtin_ast_def:
   test_len_builtin_ast = [
@@ -736,6 +741,121 @@ Proof
   CONV_TAC cv_eval
 QED
 
+Definition test_struct_ast_def:
+  test_struct_ast = [
+    StructDecl "S" [
+      ("a", uint256);
+      ("b", uint256)
+    ];
+    def "foo" [] uint256 [
+      AnnAssign "s" (StructT "S")
+        (StructLit "S" [("a", li 1); ("b", li 2)]);
+      Return (SOME (Attribute (Name "s") "a"))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_struct_ast_def;
+
+Theorem test_struct:
+  load_and_call_foo test_struct_ast
+  = INL (IntV 1)
+Proof
+  CONV_TAC cv_eval
+QED
+
+Definition test_struct2_ast_def:
+  test_struct2_ast = [
+    StructDecl "S" [
+      ("a", uint256);
+      ("b", uint256)
+    ];
+    StructDecl "T" [
+      ("s", StructT "S");
+      ("c", uint256)
+    ];
+    def "foo" [] uint256 [
+      AnnAssign "s" (StructT "S")
+        (StructLit "S" [("a", li 1); ("b", li 2)]);
+      AnnAssign "t" (StructT "T")
+        (StructLit "T" [("s", Name "s"); ("c", li 3)]);
+      Return (SOME $
+        (Attribute (Attribute (Name "t") "s") "a") +
+        (Attribute (Attribute (Name "t") "s") "b") +
+        (Attribute (Name "t") "c")
+      )
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_struct2_ast_def;
+
+Theorem test_struct2:
+  load_and_call_foo test_struct2_ast
+  = INL (IntV 6)
+Proof
+  CONV_TAC cv_eval
+QED
+
+Definition test_struct3_ast_def:
+  test_struct3_ast = [
+    StructDecl "S" [
+      ("a", uint256);
+      ("b", uint256)
+    ];
+    privar "d" (DynArray (StructT "S") 3);
+    def "foo" [] uint256 [
+      AssignSelf "d" $
+        DynArlit 3 [
+          StructLit "S" [("a", li 0); ("b", li 1)];
+          StructLit "S" [("a", li 2); ("b", li 3)];
+          StructLit "S" [("a", li 4); ("b", li 5)]
+        ];
+      AnnAssign "acc" uint256 (li 0);
+      For "s" (StructT "S") (Array (TopLevelName "d")) 3 [
+        AugAssign (NameTarget "acc") Add $
+          Attribute (Name "s") "a" +
+          Attribute (Name "s") "b"
+      ];
+      Return $ SOME $ Name "acc"
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_struct3_ast_def;
+
+Theorem test_struct3:
+  load_and_call_foo test_struct3_ast
+  = INL (IntV $ 1 + 2 + 3 + 4 + 5)
+Proof
+  CONV_TAC cv_eval
+QED
+
+Definition test_struct4_ast_def:
+  test_struct4_ast = [
+    StructDecl "S" [
+      ("a", uint256);
+      ("b", uint256)
+    ];
+    privar "s" (StructT "S");
+    def "foo" [] uint256 [
+      AssignSelf "s" $
+        StructLit "S" [("a", li 1); ("b", li 2)];
+      Assign (BaseTarget (AttributeTarget (TopLevelNameTarget "s") "a")) (li 3);
+      Return $ SOME $ Attribute (self_ "s") "a" + Attribute (self_ "s") "b"
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_struct4_ast_def;
+
+Theorem test_struct4:
+  load_and_call_foo test_struct4_ast
+  = INL (IntV $ 3 + 2)
+Proof
+  CONV_TAC cv_eval
+QED
+
 (* TODO add tests
 
 def test_external_func_arg2():
@@ -782,6 +902,194 @@ def foo(a: DynArray[uint256, 10], s: String[100], b: {tuple_t}) -> (DynArray[uin
         complex_tuple,
     )
 
+
+def test_tstorage_clearing():
+    src = """
+
+t: transient(uint256)
+
+@external
+def foo() -> uint256:
+    self.t = 42
+    return self.t
+
+@external
+def bar() -> uint256:
+    return self.t
+    """
+
+    c = loads(src)
+    assert c.foo() == 42
+    assert c.bar() == 0
+    assert c.foo() == 42
+
+
+def test_tstorage_clearing2():
+    src = """
+struct S:
+    a: uint256
+
+a: transient(uint256)
+b: transient(uint256)
+c: transient(DynArray[uint256, 10])
+d: transient(S)
+e: transient(Bytes[10])
+f: transient(String[10])
+
+@external
+def foo():
+    assert self.a == 0
+    assert self.b == 0
+    assert len(self.c) == 0
+    assert self.d.a == 0
+    assert len(self.e) == 0
+    assert len(self.f) == 0
+
+@external
+def bar():
+    self.a = 1
+    self.b = 1
+    self.c = [1, 2, 3]
+    self.d.a = 1
+    self.e = b"hello"
+    self.f = "hello"
+    """
+
+    c = loads(src)
+    c.foo()
+    c.bar()
+    c.foo()
+
+def test_hash_map():
+    src = """
+
+var: public(HashMap[uint256, uint256])
+
+@external
+def foo() -> uint256:
+    self.var[0] = 42
+    return self.var[0] + self.var[1]
+        """
+
+    c = loads(src)
+    assert c.foo() == 42
+    assert c.var(0) == 42
+    assert c.var(1) == 0
+
+
+@pytest.mark.parametrize(
+    "public,typ,value",
+    [
+        (True, "uint256", 42),
+        (False, "uint256", 42),
+        (True, "DynArray[uint256, 10]", [1, 2, 3]),
+        (False, "DynArray[uint256, 10]", [1, 2, 3]),
+        (True, "String[10]", "hello"),
+        (False, "String[10]", "hello"),
+        (True, "Bytes[10]", b"hello"),
+        (False, "Bytes[10]", b"hello"),
+    ],
+)
+def test_public_var_getter(public, typ, value):
+    src = f"""
+    var: {"public(" + typ + ")" if public else typ}
+
+    @external
+    def foo():
+        self.var = {repr(value)}
+        """
+
+    c = loads(src)
+    c.foo()
+
+    if public:
+        if isinstance(value, list):
+            for i, v in enumerate(value):
+                assert c.var(i) == v
+        else:
+            assert c.var() == value
+    else:
+        with pytest.raises(AttributeError):
+            c.var()
+
+
+def test_encode_address():
+    src = """
+    @external
+    def foo() -> address:
+        return self
+        """
+
+    c = loads(src)
+    assert c.foo() == c.address
+
+
+def test_init(get_contract):
+    src = """
+d: public(uint256)
+
+@deploy
+def __init__(a: uint256):
+    self.d = a
+    """
+
+    c = get_contract(src, 42)
+    assert c.d() == 42
+
+
+def test_init2(get_contract):
+    src = """
+d: public(uint256)
+
+@deploy
+def __init__(a: uint256):
+    self.bar()
+
+
+def bar():
+    self.d = self.foo()
+
+def foo() -> uint256:
+    return 42
+    """
+
+    c = get_contract(src, 42)
+    assert c.d() == 42
+
+
+def test_init3(get_contract):
+    src = """
+d: public(uint256)
+
+@deploy
+def __init__():
+    assert self.is_contract == False
+    """
+
+    _ = get_contract(src)
+
+
+def test_init4(get_contract):
+    src = """
+interface C:
+    def foo(a: uint256): nonpayable
+
+@deploy
+def __init__(callback: address, a: uint256):
+    extcall C(callback).foo(a)
+    """
+
+    callback = """
+d: public(uint256)
+
+@external
+def foo(a: uint256):
+    self.d = a
+"""
+
+    callback = get_contract(callback)
+    _ = get_contract(src, callback, 42)
+    assert callback.d() == 42
 
 *)
 
