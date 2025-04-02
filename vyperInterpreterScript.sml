@@ -468,7 +468,9 @@ Definition evaluate_binop_def:
   evaluate_binop ShR (IntV i1) (IntV i2) = (if i2 < 0 then INR "ShR0"
                                             else INL $ IntV $
                                                  int_shift_right (Num i2) i1) ∧
-  (* TODO: in *)
+  evaluate_binop In (IntV i1) (IntV i2) = (if i1 < 0 ∨ i2 < 0 then INR "In~"
+                                           else INL $ BoolV
+                                                (int_and i1 i2 ≠ 0)) ∧
   evaluate_binop _ _ _ = INR "binop"
 End
 
