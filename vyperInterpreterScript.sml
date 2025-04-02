@@ -1,12 +1,126 @@
 open HolKernel boolLib bossLib Parse wordsLib blastLib dep_rewrite monadsyntax
      alistTheory rich_listTheory byteTheory finite_mapTheory
-     arithmeticTheory combinTheory pairTheory whileTheory
+     int_bitwiseTheory arithmeticTheory combinTheory pairTheory whileTheory
      cv_typeTheory cv_stdTheory cv_transLib
 open vfmTypesTheory vfmStateTheory vyperAstTheory
 
 val () = new_theory "vyperInterpreter";
 
 (* TODO: move *)
+
+val int_exp_pre_def = cv_auto_trans_pre integerTheory.int_exp;
+
+Theorem int_exp_pre[cv_pre]:
+  int_exp_pre p v
+Proof
+  qid_spec_tac`p`
+  \\ Induct_on `v`
+  \\ rw[Once int_exp_pre_def]
+QED
+
+(* TODO: I don't know if this is the best way to translate this... *)
+val () = cv_auto_trans num_of_bits_def;
+val () = cv_auto_trans int_of_bits_def;
+val () = cv_auto_trans bits_of_int_def;
+
+Definition bits_bitwise_and_def:
+  bits_bitwise_and = bits_bitwise $/\
+End
+
+val bits_bitwise_and_pre_def = bits_bitwise_def
+ |> oneline
+ |> Q.GEN`f`
+ |> Q.ISPEC`$/\`
+ |> SRULE [GSYM bits_bitwise_and_def]
+ |> (curry $ flip $ uncurry cv_trans_pre_rec)
+    (WF_REL_TAC `inv_image ($< LEX $<) (λ(x,y). (cv_size x, cv_size y))`
+     \\ rw[]
+     \\ Cases_on`cv_v` \\ gvs[]
+     \\ Cases_on`cv_v0` \\ gvs[]
+     \\ qmatch_assum_rename_tac`_ (cv_ispair p)`
+     \\ Cases_on`p` \\ gvs[]
+     \\ qmatch_assum_rename_tac`_ (cv_ispair p)`
+     \\ Cases_on`p` \\ gvs[]);
+
+Theorem bits_bitwise_and_pre[cv_pre]:
+  ∀x y. bits_bitwise_and_pre x y
+Proof
+  simp[FORALL_PROD]
+  \\ qid_spec_tac`f:bool -> bool -> bool`
+  \\ ho_match_mp_tac bits_bitwise_ind
+  \\ rw[]
+  \\ rw[Once bits_bitwise_and_pre_def]
+QED
+
+val () = int_and_def
+  |> SRULE [FUN_EQ_THM, int_bitwise_def, GSYM bits_bitwise_and_def]
+  |> cv_trans;
+
+Definition bits_bitwise_or_def:
+  bits_bitwise_or = bits_bitwise $\/
+End
+
+val bits_bitwise_or_pre_def = bits_bitwise_def
+ |> oneline
+ |> Q.GEN`f`
+ |> Q.ISPEC`$\/`
+ |> SRULE [GSYM bits_bitwise_or_def]
+ |> (curry $ flip $ uncurry cv_trans_pre_rec)
+    (WF_REL_TAC `inv_image ($< LEX $<) (λ(x,y). (cv_size x, cv_size y))`
+     \\ rw[]
+     \\ Cases_on`cv_v` \\ gvs[]
+     \\ Cases_on`cv_v0` \\ gvs[]
+     \\ qmatch_assum_rename_tac`_ (cv_ispair p)`
+     \\ Cases_on`p` \\ gvs[]
+     \\ qmatch_assum_rename_tac`_ (cv_ispair p)`
+     \\ Cases_on`p` \\ gvs[]);
+
+Theorem bits_bitwise_or_pre[cv_pre]:
+  ∀x y. bits_bitwise_or_pre x y
+Proof
+  simp[FORALL_PROD]
+  \\ qid_spec_tac`f:bool -> bool -> bool`
+  \\ ho_match_mp_tac bits_bitwise_ind
+  \\ rw[]
+  \\ rw[Once bits_bitwise_or_pre_def]
+QED
+
+val () = int_or_def
+  |> SRULE [FUN_EQ_THM, int_bitwise_def, GSYM bits_bitwise_or_def]
+  |> cv_trans;
+
+Definition bits_bitwise_xor_def:
+  bits_bitwise_xor = bits_bitwise ((≠) : bool -> bool -> bool)
+End
+
+val bits_bitwise_xor_pre_def = bits_bitwise_def
+ |> oneline
+ |> Q.GEN`f`
+ |> Q.ISPEC`λx:bool y. x ≠ y`
+ |> SRULE [GSYM bits_bitwise_xor_def]
+ |> (curry $ flip $ uncurry cv_trans_pre_rec)
+    (WF_REL_TAC `inv_image ($< LEX $<) (λ(x,y). (cv_size x, cv_size y))`
+     \\ rw[]
+     \\ Cases_on`cv_v` \\ gvs[]
+     \\ Cases_on`cv_v0` \\ gvs[]
+     \\ qmatch_assum_rename_tac`_ (cv_ispair p)`
+     \\ Cases_on`p` \\ gvs[]
+     \\ qmatch_assum_rename_tac`_ (cv_ispair p)`
+     \\ Cases_on`p` \\ gvs[]);
+
+Theorem bits_bitwise_xor_pre[cv_pre]:
+  ∀x y. bits_bitwise_xor_pre x y
+Proof
+  simp[FORALL_PROD]
+  \\ qid_spec_tac`f:bool -> bool -> bool`
+  \\ ho_match_mp_tac bits_bitwise_ind
+  \\ rw[]
+  \\ rw[Once bits_bitwise_xor_pre_def]
+QED
+
+val () = int_xor_def
+  |> SRULE [FUN_EQ_THM, int_bitwise_def, GSYM bits_bitwise_xor_def]
+  |> cv_trans;
 
 Theorem INDEX_OF_pre[cv_pre]:
   INDEX_OF_pre x y
@@ -337,6 +451,16 @@ Definition evaluate_binop_def:
   evaluate_binop Mul (IntV i1) (IntV i2) = INL (IntV (i1 * i2)) ∧
   evaluate_binop Div (IntV i1) (IntV i2) = (if i2 = 0 then INR "Div0" else INL (IntV (i1 / i2))) ∧
   evaluate_binop Mod (IntV i1) (IntV i2) = (if i2 = 0 then INR "Mod0" else INL (IntV (i1 % i2))) ∧
+  evaluate_binop Exp (IntV i1) (IntV i2) = (if i2 < 0 then INR "Exp~"
+                                            else INL (IntV (i1 ** (Num i2)))) ∧
+  evaluate_binop And (IntV i1) (IntV i2) = INL (IntV (int_and i1 i2)) ∧
+  evaluate_binop  Or (IntV i1) (IntV i2) = INL (IntV (int_or i1 i2)) ∧
+  evaluate_binop XOr (IntV i1) (IntV i2) = INL (IntV (int_xor i1 i2)) ∧
+  evaluate_binop And (BoolV b1) (BoolV b2) = INL (BoolV (b1 ∧ b2)) ∧
+  evaluate_binop  Or (BoolV b1) (BoolV b2) = INL (BoolV (b1 ∨ b2)) ∧
+  evaluate_binop XOr (BoolV b1) (BoolV b2) = INL (BoolV (b1 ≠ b2)) ∧
+  (* TODO: shifts *)
+  (* TODO: in *)
   evaluate_binop _ _ _ = INR "binop"
 End
 
@@ -376,6 +500,8 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ Eq  [IntV i1; IntV i2] = INL (BoolV (i1 = i2)) ∧
   evaluate_builtin cx _ Lt  [IntV i1; IntV i2] = INL (BoolV (i1 < i2)) ∧
   evaluate_builtin cx _ Not [BoolV b] = INL (BoolV (¬b)) ∧
+  evaluate_builtin cx _ Not [IntV i] =
+    (if 0 ≤ i then INL (IntV (int_not i)) else INR "signed Not") ∧
   evaluate_builtin cx _ (Bop bop) [v1; v2] = evaluate_binop bop v1 v2 ∧
   evaluate_builtin cx _ (Msg Sender) [] = INL $ AddressV cx.txn.sender ∧
   evaluate_builtin cx _ (Msg SelfAddr) [] = INL $ AddressV cx.txn.target ∧

@@ -47,6 +47,13 @@ Datatype:
   | Mul
   | Div
   | Mod
+  | Exp
+  | And
+  | Or
+  | XOr
+  | ShL
+  | ShR
+  | In
 End
 
 Datatype:
@@ -59,6 +66,10 @@ End
 Datatype:
   account_item
   = Balance
+  | Codehash
+  | Codesize
+  | IsContract
+  | Code
 End
 
 Datatype:
