@@ -290,7 +290,7 @@ Datatype:
 End
 
 Datatype:
-  toplevel_value = Value value | HashMap ((subscript, toplevel_value) alist)
+  toplevel_value = Value value | HashMap value_type ((subscript, toplevel_value) alist)
 End
 
 Type hmap = “:(subscript, toplevel_value) alist”
@@ -570,24 +570,35 @@ End
 
 val () = cv_auto_trans value_to_key_def;
 
+Definition type_env_def:
+  type_env [] = FEMPTY ∧
+  type_env (StructDecl id args :: ts) =
+    type_env ts |+ (string_to_num id, args) ∧
+  type_env (_ :: ts) = type_env ts
+End
+
+val () = cv_auto_trans type_env_def;
+
 Definition evaluate_subscript_def:
-  evaluate_subscript (Value av) (IntV i) =
+  evaluate_subscript ts (Value av) (IntV i) =
   (case extract_elements av of SOME vs =>
     (case integer_index vs i of SOME j => INL $ Value (EL j vs)
      | _ => INR "integer_index")
    | _ => INR "extract_elements") ∧
-  evaluate_subscript (HashMap hm) kv =
+  evaluate_subscript ts (HashMap vt hm) kv =
   (case value_to_key kv of SOME k =>
     (case ALOOKUP hm k of SOME tv => INL tv
-        | _ => INR "ALOOKUP HashMap")
+        | _ => (case vt of Type typ =>
+                  INL $ Value $ default_value (type_env ts) typ
+                | _ => INR "HashMap final value type" ))
    | _ => INR "evaluate_subscript value_to_key") ∧
-  evaluate_subscript _ _ = INR "evaluate_subscript"
+  evaluate_subscript _ _ _ = INR "evaluate_subscript"
 End
 
 val evaluate_subscript_pre_def = cv_auto_trans_pre evaluate_subscript_def;
 
 Theorem evaluate_subscript_pre[cv_pre]:
-  evaluate_subscript_pre av v
+  evaluate_subscript_pre ts av v
 Proof
   rw[evaluate_subscript_pre_def, integer_index_def]
   \\ rw[]
@@ -1059,14 +1070,21 @@ Definition assign_hashmap_def:
         INL $ (k,Value w)::(ADELKEY k hm) | INR err => INR err)
    | _ => INR "assign_hashmap Update not found") ∧
   assign_hashmap hm (k::ks) ao =
-  (case ALOOKUP hm k of SOME (HashMap hm') =>
+  (case ALOOKUP hm k of SOME (HashMap vt hm') =>
     (case assign_hashmap hm' ks ao of
-     | INL hm' => INL $ (k, HashMap hm') :: (ADELKEY k hm)
+     | INL hm' => INL $ (k, HashMap vt hm') :: (ADELKEY k hm)
      | INR err => INR err)
     | _ => INR "assign_hashmap HashMap not found")
 End
 
-val () = cv_auto_trans assign_hashmap_def;
+val assign_hashmap_pre_def = cv_auto_trans_pre assign_hashmap_def;
+
+Theorem assign_hashmap_pre[cv_pre]:
+  ∀x y z. assign_hashmap_pre x y z
+Proof
+  ho_match_mp_tac assign_hashmap_ind \\ rw[]
+  \\ rw[Once assign_hashmap_pre_def]
+QED
 
 Definition sum_map_left_def:
   sum_map_left f (INL x) = INL (f x) ∧
@@ -1076,8 +1094,8 @@ End
 Definition assign_toplevel_def:
   assign_toplevel (Value a) is ao =
     sum_map_left Value $ assign_subscripts a is ao ∧
-  assign_toplevel (HashMap hm) is ao =
-    sum_map_left HashMap $ assign_hashmap hm is ao
+  assign_toplevel (HashMap vt hm) is ao =
+    sum_map_left (HashMap vt) $ assign_hashmap hm is ao
 End
 
 val () = assign_toplevel_def
@@ -1104,15 +1122,6 @@ val () = assign_target_def
   |> SRULE [FUN_EQ_THM, bind_def, LET_RATOR,
             option_CASE_rator, lift_option_def]
   |> cv_auto_trans;
-
-Definition type_env_def:
-  type_env [] = FEMPTY ∧
-  type_env (StructDecl id args :: ts) =
-    type_env ts |+ (string_to_num id, args) ∧
-  type_env (_ :: ts) = type_env ts
-End
-
-val () = cv_auto_trans type_env_def;
 
 Theorem expr1_size_map:
   expr1_size ls = LENGTH ls + SUM (MAP expr2_size ls)
@@ -1512,7 +1521,8 @@ Definition evaluate_def:
     tv1 <- eval_expr cx e1;
     tv2 <- eval_expr cx e2;
     v2 <- get_Value tv2;
-    tv <- lift_sum $ evaluate_subscript tv1 v2;
+    ts <- lift_option (get_self_code cx) "Subscript get_self_code";
+    tv <- lift_sum $ evaluate_subscript ts tv1 v2;
     return tv
   od ∧
   eval_expr cx (Attribute e id) = do
@@ -1620,7 +1630,7 @@ Definition initial_globals_def:
   initial_globals env ts |+ (string_to_num id, Value $ default_value env typ) ∧
   (* TODO: handle Constants and  Immutables *)
   initial_globals env (HashMapDecl _ id kt vt :: ts) =
-  initial_globals env ts |+ (string_to_num id, HashMap []) ∧
+  initial_globals env ts |+ (string_to_num id, HashMap vt []) ∧
   initial_globals env (t :: ts) = initial_globals env ts
 End
 

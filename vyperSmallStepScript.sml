@@ -447,7 +447,10 @@ Definition apply_val_def:
   apply_val cx v st (IfExpK _ _ k) =
     apply_exc cx (Error "not BoolV") st k ∧
   apply_val cx v2 st (SubscriptK1 tv1 k) =
-    liftk cx ApplyTv (lift_sum (evaluate_subscript tv1 v2) st) k ∧
+    liftk cx ApplyTv (do
+      ts <- lift_option (get_self_code cx) "Subscript get_self_code";
+      lift_sum (evaluate_subscript ts tv1 v2)
+    od st) k ∧
   apply_val cx v st (AttributeK id k) =
     liftk cx (ApplyTv o Value) (lift_sum (evaluate_attribute v id) st) k ∧
   apply_val cx v st (ExprsK es k) =
@@ -952,9 +955,10 @@ Proof
     >> rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    >> rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1]
+    >> rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1, bind_def]
     \\ CASE_TAC \\ reverse CASE_TAC
-    \\ rw[return_def] )
+    \\ rw[return_def]
+    \\ CASE_TAC \\ reverse CASE_TAC)
   \\ conj_tac >- (
     rw[eval_expr_cps_def, evaluate_def, bind_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
