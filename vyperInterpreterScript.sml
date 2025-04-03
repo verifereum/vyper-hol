@@ -1,5 +1,5 @@
 open HolKernel boolLib bossLib Parse wordsLib blastLib dep_rewrite monadsyntax
-     alistTheory rich_listTheory byteTheory finite_mapTheory
+     alistTheory rich_listTheory byteTheory finite_mapTheory keccakTheory
      int_bitwiseTheory arithmeticTheory combinTheory pairTheory whileTheory
      cv_typeTheory cv_stdTheory cv_transLib
 open vfmTypesTheory vfmStateTheory vyperAstTheory
@@ -512,6 +512,10 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ Not [BoolV b] = INL (BoolV (¬b)) ∧
   evaluate_builtin cx _ Not [IntV i] =
     (if 0 ≤ i then INL (IntV (int_not i)) else INR "signed Not") ∧
+  evaluate_builtin cx _ Keccak256 [BytesV _ ls] = INL $ BytesV (Fixed 32) $
+    Keccak_256_w64 ls ∧
+  (* TODO: reject BytesV with invalid bounds for Keccak256 *)
+  (* TODO: support Keccak256 on strings *)
   evaluate_builtin cx _ (Bop bop) [v1; v2] = evaluate_binop bop v1 v2 ∧
   evaluate_builtin cx _ (Msg Sender) [] = INL $ AddressV cx.txn.sender ∧
   evaluate_builtin cx _ (Msg SelfAddr) [] = INL $ AddressV cx.txn.target ∧
@@ -602,6 +606,7 @@ Definition builtin_args_length_ok_def:
   builtin_args_length_ok Not n = (n = 1) ∧
   builtin_args_length_ok Eq n = (n = 2) ∧
   builtin_args_length_ok Lt n = (n = 2) ∧
+  builtin_args_length_ok Keccak256 n = (n = 1) ∧
   builtin_args_length_ok (Bop _) n = (n = 2) ∧
   builtin_args_length_ok (Msg _) n = (n = 0) ∧
   builtin_args_length_ok (Acc _) n = (n = 1)
