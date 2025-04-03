@@ -500,6 +500,16 @@ Proof
   rw[theorem"evaluation_context_component_equality"]
 QED
 
+Definition evaluate_account_op_def:
+  evaluate_account_op Balance a = IntV &a.balance ∧
+  evaluate_account_op Codehash a = BytesV (Fixed 32) (Keccak_256_w64 a.code) ∧
+  evaluate_account_op Codesize a = IntV $ &LENGTH a.code ∧
+  evaluate_account_op IsContract a = BoolV (a.code ≠ []) ∧
+  evaluate_account_op Code a = BytesV (Dynamic (LENGTH a.code)) a.code
+End
+
+val () = cv_auto_trans evaluate_account_op_def;
+
 Definition evaluate_builtin_def:
   evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV &(LENGTH ls)) ∧
   evaluate_builtin cx _ Len [StringV _ ls] = INL (IntV &(LENGTH ls)) ∧
@@ -520,9 +530,9 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ (Msg Sender) [] = INL $ AddressV cx.txn.sender ∧
   evaluate_builtin cx _ (Msg SelfAddr) [] = INL $ AddressV cx.txn.target ∧
   evaluate_builtin cx _ (Msg ValueSent) [] = INL $ IntV &cx.txn.value ∧
-  evaluate_builtin cx acc (Acc Balance) [BytesV _ bs] =
+  evaluate_builtin cx acc (Acc aop) [BytesV _ bs] =
     (let a = lookup_account (word_of_bytes T (0w:address) bs) acc in
-          INL (IntV &a.balance)) ∧
+      INL $ evaluate_account_op aop a) ∧
   evaluate_builtin _ _ _ _ = INR "builtin"
 End
 
