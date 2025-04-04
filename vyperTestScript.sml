@@ -895,6 +895,61 @@ Proof
   \\ rw[]
 QED
 
+Definition test_public_var_getter_ast_def:
+  test_public_var_getter_ast public typ ve = [
+    VariableDecl
+      (if public then Public else Private)
+      Storage "var" typ;
+    def "foo" [] NoneT [
+      Assign (BaseTarget $ TopLevelNameTarget "var") ve
+    ]
+  ]
+End
+
+val () = cv_auto_trans test_public_var_getter_ast_def;
+
+(* TODO: fix
+Theorem test_public_var_getter:
+  msg = Error "call lookup_function" ∧
+  MEM (public, typ, ve, vv) [
+    (T, uint256, li 42, INL $ INL $ IntV 42);
+    (F, uint256, li 42, INL $ INR msg);
+    (T, DynArray uint256 10,
+        ArrayLit (Dynamic 10) [li 1; li 2; li 3],
+        INR $ MAP (INL o IntV) [1;2;3]);
+    (F, DynArray uint256 10,
+        ArrayLit (Dynamic 10) [li 1; li 2; li 3],
+        INR $ MAP (K (INR msg)) [1;2;3]);
+    (T, BaseT $ StringT 10,
+        Literal $ StringL 10 "hello",
+        INL $ INL $ StringV 10 "hello");
+    (F, BaseT $ StringT 10,
+        Literal $ StringL 10 "hello",
+        INL $ INR msg);
+    (T, BaseT $ BytesT (Fixed 10),
+        Literal $ BytesL (Fixed 10) (MAP (n2w o ORD) "hello"),
+        INL $ INL $ BytesV (Fixed 10) (MAP (n2w o ORD) "hello"));
+    (F, BaseT $ BytesT (Fixed 10),
+        Literal $ BytesL (Fixed 10) (MAP (n2w o ORD) "hello"),
+        INL $ INR msg)
+  ] ⇒
+  let txns_ers =
+    case vv of INL v => [(call_txn ^sender_addr ^contract_addr "var" [] 0, v)]
+             | INR ls => MAPi (λi v. (call_txn ^sender_addr ^contract_addr "var"
+                                        [IntV &i] 0, v)) ls in
+  (case load_contract initial_machine_state deploy_tx $
+        test_public_var_getter_ast public typ ve of
+   | INR msg => []
+   | INL am => FST $ call_transactions am (call_foo_tx::(MAP FST txns_ers)))
+  =
+  (INL NoneV)::(MAP SND txns_ers)
+Proof
+  rw[] \\ rw[]
+  \\ CONV_TAC $ LAND_CONV cv_eval
+  \\ rw[]
+QED
+*)
+
 (* TODO add tests
 
 def test_external_func_arg2():
@@ -998,42 +1053,6 @@ def bar():
     c.foo()
     c.bar()
     c.foo()
-
-@pytest.mark.parametrize(
-    "public,typ,value",
-    [
-        (True, "uint256", 42),
-        (False, "uint256", 42),
-        (True, "DynArray[uint256, 10]", [1, 2, 3]),
-        (False, "DynArray[uint256, 10]", [1, 2, 3]),
-        (True, "String[10]", "hello"),
-        (False, "String[10]", "hello"),
-        (True, "Bytes[10]", b"hello"),
-        (False, "Bytes[10]", b"hello"),
-    ],
-)
-def test_public_var_getter(public, typ, value):
-    src = f"""
-    var: {"public(" + typ + ")" if public else typ}
-
-    @external
-    def foo():
-        self.var = {repr(value)}
-        """
-
-    c = loads(src)
-    c.foo()
-
-    if public:
-        if isinstance(value, list):
-            for i, v in enumerate(value):
-                assert c.var(i) == v
-        else:
-            assert c.var() == value
-    else:
-        with pytest.raises(AttributeError):
-            c.var()
-
 
 def test_encode_address():
     src = """
