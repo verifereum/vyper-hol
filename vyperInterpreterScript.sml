@@ -8,6 +8,40 @@ val () = new_theory "vyperInterpreter";
 
 (* TODO: move *)
 
+Definition MAP_HEX_def:
+  MAP_HEX [] = [] ∧
+  MAP_HEX (x::xs) = HEX x :: MAP_HEX xs
+End
+
+val MAP_HEX_pre_def = cv_auto_trans_pre MAP_HEX_def;
+
+Theorem MAP_HEX_pre_EVERY:
+  MAP_HEX_pre ls = EVERY (λx. x < 16) ls
+Proof
+  Induct_on`ls` \\ rw[Once MAP_HEX_pre_def]
+QED
+
+Theorem MAP_HEX_MAP:
+  MAP_HEX = MAP HEX
+Proof
+  simp[FUN_EQ_THM]
+  \\ Induct \\ rw[MAP_HEX_def]
+QED
+
+val num_to_dec_string_pre_def =
+  ASCIInumbersTheory.num_to_dec_string_def
+  |> SRULE [ASCIInumbersTheory.n2s_def, FUN_EQ_THM, GSYM MAP_HEX_MAP]
+  |> cv_trans_pre;
+
+Theorem num_to_dec_string_pre[cv_pre]:
+  num_to_dec_string_pre x
+Proof
+  rw[num_to_dec_string_pre_def, MAP_HEX_pre_EVERY]
+  \\ qspecl_then[`10`,`x`]mp_tac numposrepTheory.n2l_BOUND
+  \\ rw[listTheory.EVERY_MEM]
+  \\ first_x_assum drule \\ rw[]
+QED
+
 val int_exp_pre_def = cv_auto_trans_pre integerTheory.int_exp;
 
 Theorem int_exp_pre[cv_pre]:
@@ -923,6 +957,29 @@ End
 
 val () = cv_auto_trans is_ArrayT_def;
 
+Definition build_hashmap_accessor_def:
+  build_hashmap_accessor e kt (Type vt) n =
+    (let vn = num_to_dec_string n in
+     ([(vn, kt)], vt, Subscript e (Name vn))) ∧
+  build_hashmap_accessor e kt (HashMapT typ vtyp) n =
+    (let vn = num_to_dec_string n in
+     let (args, ret, exp) =
+       build_hashmap_accessor (Subscript e (Name vn)) typ vtyp (SUC n) in
+     ((vn, kt)::args, ret, exp))
+End
+
+val () = cv_auto_trans build_hashmap_accessor_def;
+
+Definition hashmap_accessor_def:
+  hashmap_accessor id kt vt =
+  let (args, ret, exp) =
+    build_hashmap_accessor (TopLevelName id) kt vt 0
+  in
+    (args, ret, [Return $ SOME exp])
+End
+
+val () = cv_auto_trans hashmap_accessor_def;
+
 Definition lookup_function_def:
   lookup_function name Deploy [] = SOME ([], NoneT, [Pass]) ∧
   lookup_function name vis [] = NONE ∧
@@ -933,11 +990,9 @@ Definition lookup_function_def:
   (if id = name ∧ ¬is_ArrayT typ then SOME ([], typ, [Return (SOME (TopLevelName id))])
    else lookup_function name External ts) ∧
  (* TODO: handle arrays, array of array, hashmap of array, etc. *)
- (* TODO
   lookup_function name External (HashMapDecl Public id kt vt :: ts) =
-  (if id = name then SOME ([("], typ, [Return (SOME (TopLevelName "id"))])
+  (if id = name then SOME $ hashmap_accessor id kt vt
    else lookup_function name External ts) ∧
- *)
   lookup_function name vis (_ :: ts) =
     lookup_function name vis ts
 End
@@ -1626,6 +1681,7 @@ Definition initial_globals_def:
   initial_globals env [] = FEMPTY ∧
   initial_globals env (VariableDecl _ Storage id typ :: ts) =
   initial_globals env ts |+ (string_to_num id, Value $ default_value env typ) ∧
+  (* TODO: treat them as transient in the semantics *)
   initial_globals env (VariableDecl _ Transient id typ :: ts) =
   initial_globals env ts |+ (string_to_num id, Value $ default_value env typ) ∧
   (* TODO: handle Constants and  Immutables *)

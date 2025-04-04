@@ -856,6 +856,45 @@ Proof
   CONV_TAC cv_eval
 QED
 
+Definition test_hash_map_ast_def:
+  test_hash_map_ast = [
+    HashMapDecl Public "var" uint256 (Type uint256);
+    def "foo" [] uint256 [
+      Assign
+        (BaseTarget (SubscriptTarget (TopLevelNameTarget "var") (li 0)))
+        (li 42);
+      Return $ SOME $ Subscript (self_ "var") (li 0) +
+                      Subscript (self_ "var") (li 1)
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_hash_map_ast_def;
+
+Definition call_transactions_def:
+  call_transactions am [] = ([], am) ∧
+  call_transactions am (t::ts) =
+  let (r, am) = call_external am t in
+  let (rs, am) = call_transactions am ts in
+    (r::rs, am)
+End
+
+val () = cv_auto_trans call_transactions_def;
+
+Theorem test_hash_map:
+  (case load_contract initial_machine_state deploy_tx test_hash_map_ast of
+     INL am =>
+     FST $ call_transactions am
+       [call_foo_tx;
+        call_txn ^sender_addr ^contract_addr "var" [IntV 0] 0;
+        call_txn ^sender_addr ^contract_addr "var" [IntV 1] 0]
+   | _ => [])
+  = [INL (IntV 42); INL (IntV 42); INL (IntV 0)]
+Proof
+  CONV_TAC $ LAND_CONV cv_eval
+  \\ rw[]
+QED
+
 (* TODO add tests
 
 def test_external_func_arg2():
@@ -959,23 +998,6 @@ def bar():
     c.foo()
     c.bar()
     c.foo()
-
-def test_hash_map():
-    src = """
-
-var: public(HashMap[uint256, uint256])
-
-@external
-def foo() -> uint256:
-    self.var[0] = 42
-    return self.var[0] + self.var[1]
-        """
-
-    c = loads(src)
-    assert c.foo() == 42
-    assert c.var(0) == 42
-    assert c.var(1) == 0
-
 
 @pytest.mark.parametrize(
     "public,typ,value",
