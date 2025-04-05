@@ -957,28 +957,55 @@ End
 
 val () = cv_auto_trans is_ArrayT_def;
 
-Definition build_hashmap_accessor_def:
-  build_hashmap_accessor e kt (Type vt) n =
-    (let vn = num_to_dec_string n in
-     ([(vn, kt)], vt, Subscript e (Name vn))) ∧
-  build_hashmap_accessor e kt (HashMapT typ vtyp) n =
-    (let vn = num_to_dec_string n in
-     let (args, ret, exp) =
-       build_hashmap_accessor (Subscript e (Name vn)) typ vtyp (SUC n) in
-     ((vn, kt)::args, ret, exp))
+Definition ArrayT_type_def[simp]:
+  ArrayT_type (ArrayT t _) = t ∧
+  ArrayT_type _ = NoneT
 End
 
-val () = cv_auto_trans build_hashmap_accessor_def;
+val () = cv_auto_trans ArrayT_type_def;
 
-Definition hashmap_accessor_def:
-  hashmap_accessor id kt vt =
+Definition build_getter_def:
+  build_getter e kt (Type vt) n =
+    (let vn = num_to_dec_string n in
+      if is_ArrayT vt then
+        (let (args, ret, exp) =
+           build_getter (Subscript e (Name vn))
+             uint256 (Type (ArrayT_type vt)) (SUC n) in
+           ((vn, kt)::args, ret, exp))
+      else ([(vn, kt)], vt, Subscript e (Name vn))) ∧
+  build_getter e kt (HashMapT typ vtyp) n =
+    (let vn = num_to_dec_string n in
+     let (args, ret, exp) =
+       build_getter (Subscript e (Name vn)) typ vtyp (SUC n) in
+     ((vn, kt)::args, ret, exp))
+Termination
+  WF_REL_TAC ‘measure (value_type_size o FST o SND o SND)’
+  \\ Cases \\ rw[type_size_def]
+End
+
+val () = cv_auto_trans_rec build_getter_def (
+  WF_REL_TAC ‘measure (cv_size o FST o SND o SND)’
+  \\ conj_tac \\ Cases \\ rw[]
+  >- (
+    qmatch_goalsub_rename_tac`cv_snd p`
+    \\ Cases_on`p` \\ rw[] )
+  \\ qmatch_asmsub_rename_tac`cv_is_ArrayT a`
+  \\ Cases_on `a` \\ gvs[definition"cv_is_ArrayT_def",
+                         definition"cv_ArrayT_type_def"]
+  \\ rw[] \\ gvs[]
+  \\ qmatch_goalsub_rename_tac`cv_fst p`
+  \\ Cases_on `p` \\ gvs[]
+);
+
+Definition getter_def:
+  getter id kt vt =
   let (args, ret, exp) =
-    build_hashmap_accessor (TopLevelName id) kt vt 0
+    build_getter (TopLevelName id) kt vt 0
   in
     (args, ret, [Return $ SOME exp])
 End
 
-val () = cv_auto_trans hashmap_accessor_def;
+val () = cv_auto_trans getter_def;
 
 Definition lookup_function_def:
   lookup_function name Deploy [] = SOME ([], NoneT, [Pass]) ∧
@@ -987,11 +1014,13 @@ Definition lookup_function_def:
   (if id = name ∧ vis = fv then SOME (args, ret, body)
    else lookup_function name vis ts) ∧
   lookup_function name External (VariableDecl Public _ id typ :: ts) =
-  (if id = name ∧ ¬is_ArrayT typ then SOME ([], typ, [Return (SOME (TopLevelName id))])
+  (if id = name then
+    if ¬is_ArrayT typ
+    then SOME ([], typ, [Return (SOME (TopLevelName id))])
+    else SOME $ getter id uint256 (Type (ArrayT_type typ))
    else lookup_function name External ts) ∧
- (* TODO: handle arrays, array of array, hashmap of array, etc. *)
   lookup_function name External (HashMapDecl Public id kt vt :: ts) =
-  (if id = name then SOME $ hashmap_accessor id kt vt
+  (if id = name then SOME $ getter id kt vt
    else lookup_function name External ts) ∧
   lookup_function name vis (_ :: ts) =
     lookup_function name vis ts

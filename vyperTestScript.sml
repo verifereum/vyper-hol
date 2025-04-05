@@ -908,7 +908,6 @@ End
 
 val () = cv_auto_trans test_public_var_getter_ast_def;
 
-(* TODO: fix
 Theorem test_public_var_getter:
   msg = Error "call lookup_function" ∧
   MEM (public, typ, ve, vv) [
@@ -948,7 +947,6 @@ Proof
   \\ CONV_TAC $ LAND_CONV cv_eval
   \\ rw[]
 QED
-*)
 
 (* TODO add tests
 
