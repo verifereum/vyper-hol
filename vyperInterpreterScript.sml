@@ -225,6 +225,20 @@ Proof
   \\ gvs[Q.SPEC`Pair x y`cv_size'_def]
 QED
 
+Theorem cv_map_snd_cases[simp]:
+  cv_map_snd (Pair x y) = Pair (cv_snd x) (cv_map_snd y) ∧
+  cv_map_snd (Num n) = Num 0
+Proof
+  rw[Once cv_map_snd_def]
+  \\ rw[Once cv_map_snd_def]
+QED
+
+Theorem cv_mul_0[simp]:
+  cv_mul (Num 0) x = Num 0
+Proof
+  Cases_on`x` \\ rw[]
+QED
+
 Theorem set_byte_160:
   set_byte a b (w: 160 word) be =
   let i = byte_index a be in
@@ -302,14 +316,21 @@ Datatype:
   value
   = NoneV
   | BoolV bool
-  | ArrayV bound (value list)
   | IntV int
   | StringV num string
   | BytesV bound (word8 list)
-  | StructV ((identifier, value) alist)
+  | RefV num
 End
 
 Overload AddressV = “λw: address. BytesV (Fixed 20) (word_to_bytes w T)”
+
+Datatype:
+  mutable_value
+  = ArrayV bound (value list)
+  | StructV ((identifier, value) alist)
+End
+
+Type heap = “:mutable_value list”
 
 val from_to_value_thm = cv_typeLib.from_to_thm_for “:value”;
 val from_value = from_to_value_thm |> concl |> rator |> rand
@@ -329,59 +350,145 @@ End
 
 Type hmap = “:(subscript, toplevel_value) alist”
 
+Theorem type1_size_map:
+  type1_size ls = LENGTH ls + SUM (MAP type_size ls)
+Proof
+  Induct_on`ls` \\ rw[type_size_def]
+QED
+
+Definition type_bound_def:
+  type_bound (TupleT ts) = 1 + type_bound_list ts ∧
+  type_bound (ArrayT t (Dynamic _)) = 1 + type_bound t ∧
+  type_bound (ArrayT t (Fixed n)) = 1 + n + n * type_bound t ∧
+  type_bound _ = 0 ∧
+  type_bound_list [] = 0 ∧
+  type_bound_list (t::ts) = 1 + type_bound t + type_bound_list ts
+Termination
+  WF_REL_TAC ‘measure (λx.
+    case x of INL t => type_size t | INR ts => type1_size ts)’
+End
+
+val () = cv_auto_trans type_bound_def;
+
+Theorem type_bound_list_map:
+  type_bound_list ls = LENGTH ls + SUM (MAP type_bound ls)
+Proof
+  Induct_on`ls` \\ rw[type_bound_def]
+QED
+
 Definition default_value_def:
-  default_value env (BaseT (UintT _)) = IntV 0 ∧
-  default_value env (BaseT (IntT _)) = IntV 0 ∧
-  default_value env (BaseT DecimalT) = IntV 0 ∧
-  default_value env (TupleT ts) = default_value_tuple env [] ts ∧
-  default_value env (ArrayT _ (Dynamic n)) = ArrayV (Dynamic n) [] ∧
-  default_value env (ArrayT t (Fixed n)) =
-    ArrayV (Fixed n) (REPLICATE n (default_value env t)) ∧
-  default_value env (StructT id) =
+  default_value env heap (BaseT (UintT _)) = (IntV 0, heap) ∧
+  default_value env heap (BaseT (IntT _)) = (IntV 0, heap) ∧
+  default_value env heap (BaseT DecimalT) = (IntV 0, heap) ∧
+  default_value env heap (TupleT ts) = default_value_tuple env heap [] ts ∧
+  default_value env heap (ArrayT _ (Dynamic n)) =
+    (RefV (LENGTH heap), SNOC (ArrayV (Dynamic n) []) heap) ∧
+  default_value env heap (ArrayT t (Fixed n)) =
+    default_value_tuple env heap [] (REPLICATE n t) ∧
+  default_value env heap (StructT id) =
     (let nid = string_to_num id in
      case FLOOKUP env nid
-       of NONE => StructV []
-        | SOME args => default_value_struct (env \\ nid) [] args) ∧
-  default_value env (FlagT id) = IntV 0 ∧
-  default_value env NoneT = NoneV ∧
-  default_value env (BaseT BoolT) = BoolV F ∧
-  default_value env (BaseT AddressT) = AddressV 0w ∧
-  default_value env (BaseT (StringT n)) = StringV n "" ∧
-  default_value env (BaseT (BytesT (Fixed n))) = BytesV (Fixed n) (REPLICATE n 0w) ∧
-  default_value env (BaseT (BytesT (Dynamic n))) = BytesV (Dynamic n) [] ∧
-  default_value_tuple env acc [] = ArrayV (Fixed (LENGTH acc)) (REVERSE acc) ∧
-  default_value_tuple env acc (t::ts) =
-    default_value_tuple env (default_value env t :: acc) ts ∧
-  default_value_struct env acc [] = StructV (REVERSE acc) ∧
-  default_value_struct env acc ((id,t)::ps) =
-    default_value_struct env ((id,default_value env t)::acc) ps
+       of NONE => (RefV (LENGTH heap), heap)
+        | SOME args => default_value_struct (env \\ nid) heap [] args) ∧
+  default_value env heap (FlagT id) = (IntV 0, heap) ∧
+  default_value env heap NoneT = (NoneV, heap) ∧
+  default_value env heap (BaseT BoolT) = (BoolV F, heap) ∧
+  default_value env heap (BaseT AddressT) = (AddressV 0w, heap) ∧
+  default_value env heap (BaseT (StringT n)) = (StringV n "", heap) ∧
+  default_value env heap (BaseT (BytesT (Fixed n))) =
+    (BytesV (Fixed n) (REPLICATE n 0w), heap) ∧
+  default_value env heap (BaseT (BytesT (Dynamic n))) =
+    (BytesV (Dynamic n) [], heap) ∧
+  default_value_tuple env heap acc [] =
+    (RefV (LENGTH heap), SNOC (ArrayV (Fixed (LENGTH acc)) (REVERSE acc)) heap) ∧
+  default_value_tuple env heap acc (t::ts) =
+    (let (v, heap) = default_value env heap t in
+       default_value_tuple env heap (v::acc) ts) ∧
+  default_value_struct env heap pac [] =
+    (RefV (LENGTH heap), SNOC (StructV (REVERSE pac)) heap) ∧
+  default_value_struct env heap pac ((id,t)::ps) =
+    (let (v, heap) = default_value env heap t in
+       default_value_struct env heap ((id,v)::pac) ps)
 Termination
   WF_REL_TAC ‘inv_image ($< LEX $<) (λx.
     case x
-      of INL (env, t) => (CARD (FDOM env), type_size t)
-       | INR (INL (env, _, ts)) => (CARD (FDOM env), type1_size ts)
-       | INR (INR (env, _, ps)) => (CARD (FDOM env), type1_size (MAP SND ps)))’
-  \\ rw[type_size_def, FLOOKUP_DEF]
-  \\ disj1_tac
-  \\ CCONTR_TAC
-  \\ fs[]
+      of INL (env, _, t) => (CARD (FDOM env), type_bound t)
+       | INR (INL (env, _, _, ts)) => (CARD (FDOM env), type_bound_list ts)
+       | INR (INR (env, _, _, ps)) =>
+           (CARD (FDOM env), type_bound_list (MAP SND ps)))’
+  \\ rw[type_bound_def, FLOOKUP_DEF]
+  >- ( CCONTR_TAC \\ fs[] )
+  \\ rw[type_bound_list_map]
 End
+
+val cv_type_bound_def = theorem"cv_type_bound_def";
+
+Theorem cv_type_bound_list_cases[simp]:
+  cv_type_bound_list (Pair x y) =
+    cv_add (cv_add (Num 1) (cv_type_bound x))
+      (cv_type_bound_list y) ∧
+  cv_type_bound_list (Num n) = Num 0
+Proof
+  rw[Once cv_type_bound_def]
+  \\ rw[Once cv_type_bound_def]
+QED
+
+Theorem cv_type_bound_list_ispair[simp]:
+  cv_ispair (cv_type_bound_list x) = Num 0
+Proof
+  rw[Once cv_type_bound_def]
+QED
+
+Theorem cv_type_bound_ispair[simp]:
+  cv_ispair (cv_type_bound x) = Num 0
+Proof
+  rw[Once cv_type_bound_def]
+QED
+
+Theorem cv_type_bound_list_cv_replicate:
+  cv_type_bound_list (cv_replicate_acc n t ls) =
+  cv_add (cv_add n (cv_mul n (cv_type_bound t)))
+         (cv_type_bound_list ls)
+Proof
+  qid_spec_tac`t`
+  \\ qid_spec_tac`ls`
+  \\ reverse(Cases_on`n`)
+  >- (
+    rw[cv_REPLICATE_def] \\
+    rw[Once cv_replicate_acc_def]
+    \\ Cases_on`cv_type_bound_list ls` \\ gs[]
+    \\ pop_assum(mp_tac o Q.AP_TERM`cv_ispair`)
+    \\ simp[])
+  \\ Induct_on`m`
+  \\ rw[Once cv_replicate_acc_def]
+  >- (
+    Cases_on`cv_type_bound_list ls` \\ gs[]
+    \\ pop_assum(mp_tac o Q.AP_TERM`cv_ispair`)
+    \\ simp[])
+  \\ reverse(Cases_on`cv_type_bound t` \\ gs[])
+  >- ( pop_assum(mp_tac o Q.AP_TERM`cv_ispair`) \\ simp[])
+  \\ reverse(Cases_on`cv_type_bound_list ls` \\ gs[])
+  >- ( pop_assum(mp_tac o Q.AP_TERM`cv_ispair`) \\ simp[])
+  \\ rw[ADD1]
+QED
 
 val () = cv_auto_trans_rec default_value_def (
   WF_REL_TAC ‘inv_image ($< LEX $<) (λx.
     case x
-      of INL (env, t) => (cv$c2n $ cv_size' env, cv_size t)
-       | INR (INL (env, _, ts)) => (cv$c2n (cv_size' env), cv_size ts)
-       | INR (INR (env, _, ps)) => (cv$c2n (cv_size' env), cv_size ps))’
-  \\ rw[]
+      of INL (env, _, t) => (cv$c2n $ cv_size' env, cv$c2n $ cv_type_bound t)
+       | INR (INL (env, _, _, ts)) =>
+           (cv$c2n (cv_size' env), cv$c2n $ cv_type_bound_list ts)
+       | INR (INR (env, _, _, ps)) =>
+           (cv$c2n (cv_size' env), cv$c2n $ cv_type_bound_list (cv_map_snd ps)))’
+  \\ reverse(rw[])
   \\ TRY(Cases_on`cv_v` \\ gs[] \\ NO_TAC)
-  \\ TRY(Cases_on`cv_v` \\ gs[]
-         \\ qmatch_asmsub_rename_tac`cv_ispair cv_v`
-         \\ Cases_on`cv_v` \\ gs[] \\ NO_TAC)
-  \\ TRY(Cases_on`cv_v` \\ gs[]
-         \\ qmatch_goalsub_rename_tac`cv_fst cv_v`
-         \\ Cases_on`cv_v` \\ gs[] \\ NO_TAC)
-  \\ disj1_tac
+  \\ gs[Once $ cv_type_bound_def |> cj 1]
+  \\ Cases_on`cv_v` \\ gs[]
+  >- (
+    qmatch_goalsub_rename_tac`cv_snd p`
+    \\ Cases_on`p` \\ gs[]
+    \\ gs[cv_REPLICATE_def]
+    \\ gs[cv_type_bound_list_cv_replicate] )
   \\ pop_assum mp_tac
   \\ qmatch_goalsub_abbrev_tac`cv_lookup ck`
   \\ `cv_ispair ck = Num 0`
