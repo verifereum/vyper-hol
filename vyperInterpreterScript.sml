@@ -313,28 +313,20 @@ End
 val () = cv_auto_trans string_to_num_def;
 
 Datatype:
+  refloc = StorageRef | TransientRef | MemoryRef
+End
+
+Datatype:
   value
   = NoneV
   | BoolV bool
   | IntV int
   | StringV num string
   | BytesV bound (word8 list)
-  | RefV num
+  | RefV refloc num
 End
 
 Overload AddressV = “λw: address. BytesV (Fixed 20) (word_to_bytes w T)”
-
-Datatype:
-  mutable_value
-  = ArrayV bound (value list)
-  | StructV ((identifier, value) alist)
-End
-
-Type heap = “:mutable_value list”
-
-val from_to_value_thm = cv_typeLib.from_to_thm_for “:value”;
-val from_value = from_to_value_thm |> concl |> rator |> rand
-val to_value = from_to_value_thm |> concl |> rand
 
 Datatype:
   subscript
@@ -345,10 +337,17 @@ Datatype:
 End
 
 Datatype:
-  toplevel_value = Value value | HashMap value_type ((subscript, toplevel_value) alist)
+  mutable_value
+  = ArrayV bound (value list)
+  | StructV ((identifier, value) alist)
+  | MappingV value_type ((subscript, value) alist)
 End
 
-Type hmap = “:(subscript, toplevel_value) alist”
+Type heap = “:mutable_value list”
+
+val from_to_value_thm = cv_typeLib.from_to_thm_for “:value”;
+val from_value = from_to_value_thm |> concl |> rator |> rand
+val to_value = from_to_value_thm |> concl |> rand
 
 Theorem type1_size_map:
   type1_size ls = LENGTH ls + SUM (MAP type_size ls)
@@ -377,44 +376,47 @@ Proof
 QED
 
 Definition default_value_def:
-  default_value env heap (BaseT (UintT _)) = (IntV 0, heap) ∧
-  default_value env heap (BaseT (IntT _)) = (IntV 0, heap) ∧
-  default_value env heap (BaseT DecimalT) = (IntV 0, heap) ∧
-  default_value env heap (TupleT ts) = default_value_tuple env heap [] ts ∧
-  default_value env heap (ArrayT _ (Dynamic n)) =
-    (RefV (LENGTH heap), SNOC (ArrayV (Dynamic n) []) heap) ∧
-  default_value env heap (ArrayT t (Fixed n)) =
-    default_value_tuple env heap [] (REPLICATE n t) ∧
-  default_value env heap (StructT id) =
+  default_value env loc heap (BaseT (UintT _)) = (IntV 0, heap) ∧
+  default_value env loc heap (BaseT (IntT _)) = (IntV 0, heap) ∧
+  default_value env loc heap (BaseT DecimalT) = (IntV 0, heap) ∧
+  default_value env loc heap (TupleT ts) = default_value_tuple env loc heap [] ts ∧
+  default_value env loc heap (ArrayT _ (Dynamic n)) =
+    (RefV loc (LENGTH heap),
+     SNOC (ArrayV (Dynamic n) []) heap) ∧
+  default_value env loc heap (ArrayT t (Fixed n)) =
+    default_value_tuple env loc heap [] (REPLICATE n t) ∧
+  default_value env loc heap (StructT id) =
     (let nid = string_to_num id in
      case FLOOKUP env nid
-       of NONE => (RefV (LENGTH heap), heap)
-        | SOME args => default_value_struct (env \\ nid) heap [] args) ∧
-  default_value env heap (FlagT id) = (IntV 0, heap) ∧
-  default_value env heap NoneT = (NoneV, heap) ∧
-  default_value env heap (BaseT BoolT) = (BoolV F, heap) ∧
-  default_value env heap (BaseT AddressT) = (AddressV 0w, heap) ∧
-  default_value env heap (BaseT (StringT n)) = (StringV n "", heap) ∧
-  default_value env heap (BaseT (BytesT (Fixed n))) =
+       of NONE => (RefV loc (LENGTH heap), heap)
+        | SOME args => default_value_struct (env \\ nid) loc heap [] args) ∧
+  default_value env loc heap (FlagT id) = (IntV 0, heap) ∧
+  default_value env loc heap NoneT = (NoneV, heap) ∧
+  default_value env loc heap (BaseT BoolT) = (BoolV F, heap) ∧
+  default_value env loc heap (BaseT AddressT) = (AddressV 0w, heap) ∧
+  default_value env loc heap (BaseT (StringT n)) = (StringV n "", heap) ∧
+  default_value env loc heap (BaseT (BytesT (Fixed n))) =
     (BytesV (Fixed n) (REPLICATE n 0w), heap) ∧
-  default_value env heap (BaseT (BytesT (Dynamic n))) =
+  default_value env loc heap (BaseT (BytesT (Dynamic n))) =
     (BytesV (Dynamic n) [], heap) ∧
-  default_value_tuple env heap acc [] =
-    (RefV (LENGTH heap), SNOC (ArrayV (Fixed (LENGTH acc)) (REVERSE acc)) heap) ∧
-  default_value_tuple env heap acc (t::ts) =
-    (let (v, heap) = default_value env heap t in
-       default_value_tuple env heap (v::acc) ts) ∧
-  default_value_struct env heap pac [] =
-    (RefV (LENGTH heap), SNOC (StructV (REVERSE pac)) heap) ∧
-  default_value_struct env heap pac ((id,t)::ps) =
-    (let (v, heap) = default_value env heap t in
-       default_value_struct env heap ((id,v)::pac) ps)
+  default_value_tuple env loc heap acc [] =
+    (RefV loc (LENGTH heap),
+     SNOC (ArrayV (Fixed (LENGTH acc)) (REVERSE acc)) heap) ∧
+  default_value_tuple env loc heap acc (t::ts) =
+    (let (v, heap) = default_value env loc heap t in
+       default_value_tuple env loc heap (v::acc) ts) ∧
+  default_value_struct env loc heap pac [] =
+    (RefV loc (LENGTH heap),
+     SNOC (StructV (REVERSE pac)) heap) ∧
+  default_value_struct env loc heap pac ((id,t)::ps) =
+    (let (v, heap) = default_value env loc heap t in
+       default_value_struct env loc heap ((id,v)::pac) ps)
 Termination
   WF_REL_TAC ‘inv_image ($< LEX $<) (λx.
     case x
-      of INL (env, _, t) => (CARD (FDOM env), type_bound t)
-       | INR (INL (env, _, _, ts)) => (CARD (FDOM env), type_bound_list ts)
-       | INR (INR (env, _, _, ps)) =>
+      of INL (env, _, _, t) => (CARD (FDOM env), type_bound t)
+       | INR (INL (env, _, _, _, ts)) => (CARD (FDOM env), type_bound_list ts)
+       | INR (INR (env, _, _, _, ps)) =>
            (CARD (FDOM env), type_bound_list (MAP SND ps)))’
   \\ rw[type_bound_def, FLOOKUP_DEF]
   >- ( CCONTR_TAC \\ fs[] )
@@ -722,43 +724,38 @@ End
 
 val () = cv_auto_trans type_env_def;
 
-Definition evaluate_subscript_def:
-  evaluate_subscript ts heap (Value (RefV ptr)) (IntV i) =
-  (case oEL ptr heap of SOME (ArrayV _ vs) =>
-    (case integer_index vs i of SOME j =>
-            INL $ (Value (EL j vs), heap)
-     | _ => INR "integer_index")
-   | _ => INR "evaluate_subscript oEL") ∧
-  evaluate_subscript ts heap (HashMap vt hm) kv =
-  (case value_to_key kv of SOME k =>
-    (case ALOOKUP hm k of SOME tv => INL (tv, heap)
-        | _ => (case vt of Type typ =>
-                  (let (v, heap) = default_value (type_env ts) heap typ in
-                     INL $ (Value v, heap))
-                | _ => INR "HashMap final value type" ))
-   | _ => INR "evaluate_subscript value_to_key") ∧
-  evaluate_subscript _ _ _ _ = INR "evaluate_subscript"
+Datatype:
+  lookup_subscript_result
+  = FoundValue value
+  | DefaultValue value_type
+  | NotFoundValue string
 End
 
-val evaluate_subscript_pre_def = cv_auto_trans_pre evaluate_subscript_def;
+Definition lookup_subscript_def:
+  lookup_subscript (ArrayV _ vs) (IntSubscript i) =
+    (case integer_index vs i of SOME j =>
+       FoundValue (EL j vs)
+     | _ => NotFoundValue "integer_index") ∧
+  lookup_subscript (StructV al) (AttrSubscript id) =
+    (case ALOOKUP al id of SOME v => FoundValue v
+     | _ => NotFoundValue "StructV ALOOKUP") ∧
+  lookup_subscript (MappingV vt hm) k =
+    (case ALOOKUP hm k of SOME v => FoundValue v
+        | _ => DefaultValue vt) ∧
+  lookup_subscript _ _ = NotFoundValue "lookup_subscript"
+End
 
-Theorem evaluate_subscript_pre[cv_pre]:
-  evaluate_subscript_pre ts heap av v
+val lookup_subscript_pre_def = cv_auto_trans_pre lookup_subscript_def;
+
+Theorem lookup_subscript_pre[cv_pre]:
+  ∀x y. lookup_subscript_pre x y
 Proof
-  rw[evaluate_subscript_pre_def, integer_index_def]
-  \\ rw[]
+  ho_match_mp_tac lookup_subscript_ind
+  \\ rw[] \\ rw[Once lookup_subscript_pre_def]
+  \\ gvs[integer_index_def] \\ rw[]
   \\ qmatch_asmsub_rename_tac`0i ≤ w`
   \\ Cases_on`w` \\ gs[]
 QED
-
-Definition evaluate_attribute_def:
-  evaluate_attribute (StructV kvs) id =
-  (case ALOOKUP kvs id of SOME v => INL v
-   | _ => INR "attribute") ∧
-  evaluate_attribute _ _ = INR "evaluate_attribute"
-End
-
-val () = cv_auto_trans evaluate_attribute_def;
 
 Definition compatible_bound_def:
   compatible_bound (Fixed n) m = (n = m) ∧
@@ -781,6 +778,8 @@ End
 val () = cv_auto_trans builtin_args_length_ok_def;
 
 Type log = “:identifier # (value list)”;
+
+TODO: we need to separate storage, transient, and memory mutable values
 
 Datatype:
   evaluation_state = <|
@@ -1223,6 +1222,42 @@ val () = handle_function_def
   |> SRULE [FUN_EQ_THM]
   |> cv_auto_trans;
 
+TODO:
+  assign_subscripts should take a heap and a pointer and return the modified heap
+
+Definition update_value_def:
+  update_value v1 (Replace v2) = INL v2 ∧
+  update_value v1 (Update bop v2) = evaluate_binop bop v1 v2
+End
+
+Definition update_mutable_value_def:
+  update_mutable_value (IntSubscript i) (ArrayV b vs) ao =
+    (case integer_index vs i of SOME j =>
+      (case update_value (EL j vs) ao of INL vj =>
+       | INL $ ArrayV b (TAKE j vs ++ [vj] ++ DROP (SUC j) vs)
+       | INR err => INR err)
+     | _ => INR "update_mutable_value integer_index") ∧
+  update_mutable_value (AttrSubscript id) (StructV al) ao =
+    (case ALOOKUP al id of SOME v =>
+      (case update_value v ao of INL v' =>
+       | INL $ StructV ((id,v')::(ADELKEY id al))
+       | INR err => INR err)
+     | _ => INR "update_mutable_value AttrSubscript") ∧
+  update_mutable_value _ _ _ = INR "update_mutable_value"
+End
+
+Definition assign_subscripts_def:
+  assign_subscripts ptr heap ao [] = INR "assign_subscripts nil" ∧
+  assign_subscripts ptr heap ao [i] =
+    (case oEL ptr heap of SOME mv =>
+      (case update_mutable_value i mv ao of INL mv' =>
+       | INL $ (TAKE ptr heap ++ [mv'] ++ DROP (SUC ptr) heap)
+       | INR err => INR err)
+     | _ => INR "assign_subscripts last") ∧
+  assign_subscripts ptr heap ao (i::is) =
+    (case oEL ptr heap of SOME mv =>
+
+
 Definition assign_subscripts_def:
   assign_subscripts a [] (Replace v) = INL v ∧
   assign_subscripts a [] (Update bop v) = evaluate_binop bop a v ∧
@@ -1255,6 +1290,10 @@ Proof
   \\ qmatch_asmsub_rename_tac`0i ≤ w`
   \\ Cases_on`w` \\ gs[]
 QED
+
+TODO:
+fix assign_hashmap to support hashmaps containing arrays or structs (i.e. things
+that need further subscripting)
 
 Definition assign_hashmap_def:
   assign_hashmap hm [] _ = INR "assign_hashmap null" ∧
