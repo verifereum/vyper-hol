@@ -652,29 +652,31 @@ End
 val () = cv_auto_trans evaluate_account_op_def;
 
 Definition evaluate_builtin_def:
-  evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV &(LENGTH ls)) ∧
-  evaluate_builtin cx _ Len [StringV _ ls] = INL (IntV &(LENGTH ls)) ∧
-  evaluate_builtin cx _ Len [ArrayV _ ls] = INL (IntV &(LENGTH ls)) ∧
-  evaluate_builtin cx _ Eq [StringV _ s1; StringV _ s2] = INL (BoolV (s1 = s2)) ∧
-  evaluate_builtin cx _ Eq [BytesV _ s1; BytesV _ s2] = INL (BoolV (s1 = s2)) ∧
-  evaluate_builtin cx _ Eq [BoolV b1; BoolV b2] = INL (BoolV (b1 = b2)) ∧
-  evaluate_builtin cx _ Eq  [IntV i1; IntV i2] = INL (BoolV (i1 = i2)) ∧
-  evaluate_builtin cx _ Lt  [IntV i1; IntV i2] = INL (BoolV (i1 < i2)) ∧
-  evaluate_builtin cx _ Not [BoolV b] = INL (BoolV (¬b)) ∧
-  evaluate_builtin cx _ Not [IntV i] =
+  evaluate_builtin cx _ _ Len [BytesV _ ls] = INL (IntV &(LENGTH ls)) ∧
+  evaluate_builtin cx _ _ Len [StringV _ ls] = INL (IntV &(LENGTH ls)) ∧
+  evaluate_builtin cx hp _ Len [RefV ptr] =
+    (case oEL ptr hp of SOME (ArrayV _ ls) => INL (IntV &(LENGTH ls))
+        | _ => INR "Len RefV") ∧
+  evaluate_builtin cx _ _ Eq [StringV _ s1; StringV _ s2] = INL (BoolV (s1 = s2)) ∧
+  evaluate_builtin cx _ _ Eq [BytesV _ s1; BytesV _ s2] = INL (BoolV (s1 = s2)) ∧
+  evaluate_builtin cx _ _ Eq [BoolV b1; BoolV b2] = INL (BoolV (b1 = b2)) ∧
+  evaluate_builtin cx _ _ Eq  [IntV i1; IntV i2] = INL (BoolV (i1 = i2)) ∧
+  evaluate_builtin cx _ _ Lt  [IntV i1; IntV i2] = INL (BoolV (i1 < i2)) ∧
+  evaluate_builtin cx _ _ Not [BoolV b] = INL (BoolV (¬b)) ∧
+  evaluate_builtin cx _ _ Not [IntV i] =
     (if 0 ≤ i then INL (IntV (int_not i)) else INR "signed Not") ∧
-  evaluate_builtin cx _ Keccak256 [BytesV _ ls] = INL $ BytesV (Fixed 32) $
+  evaluate_builtin cx _ _ Keccak256 [BytesV _ ls] = INL $ BytesV (Fixed 32) $
     Keccak_256_w64 ls ∧
   (* TODO: reject BytesV with invalid bounds for Keccak256 *)
   (* TODO: support Keccak256 on strings *)
-  evaluate_builtin cx _ (Bop bop) [v1; v2] = evaluate_binop bop v1 v2 ∧
-  evaluate_builtin cx _ (Msg Sender) [] = INL $ AddressV cx.txn.sender ∧
-  evaluate_builtin cx _ (Msg SelfAddr) [] = INL $ AddressV cx.txn.target ∧
-  evaluate_builtin cx _ (Msg ValueSent) [] = INL $ IntV &cx.txn.value ∧
-  evaluate_builtin cx acc (Acc aop) [BytesV _ bs] =
+  evaluate_builtin cx _ _ (Bop bop) [v1; v2] = evaluate_binop bop v1 v2 ∧
+  evaluate_builtin cx _ _ (Msg Sender) [] = INL $ AddressV cx.txn.sender ∧
+  evaluate_builtin cx _ _ (Msg SelfAddr) [] = INL $ AddressV cx.txn.target ∧
+  evaluate_builtin cx _ _ (Msg ValueSent) [] = INL $ IntV &cx.txn.value ∧
+  evaluate_builtin cx _ acc (Acc aop) [BytesV _ bs] =
     (let a = lookup_account (word_of_bytes T (0w:address) bs) acc in
       INL $ evaluate_account_op aop a) ∧
-  evaluate_builtin _ _ _ _ = INR "builtin"
+  evaluate_builtin _ _ _ _ _ = INR "builtin"
 End
 
 val () = cv_auto_trans evaluate_builtin_def;
@@ -721,25 +723,27 @@ End
 val () = cv_auto_trans type_env_def;
 
 Definition evaluate_subscript_def:
-  evaluate_subscript ts (Value av) (IntV i) =
-  (case extract_elements av of SOME vs =>
-    (case integer_index vs i of SOME j => INL $ Value (EL j vs)
+  evaluate_subscript ts heap (Value (RefV ptr)) (IntV i) =
+  (case oEL ptr heap of SOME (ArrayV _ vs) =>
+    (case integer_index vs i of SOME j =>
+            INL $ (Value (EL j vs), heap)
      | _ => INR "integer_index")
-   | _ => INR "extract_elements") ∧
-  evaluate_subscript ts (HashMap vt hm) kv =
+   | _ => INR "evaluate_subscript oEL") ∧
+  evaluate_subscript ts heap (HashMap vt hm) kv =
   (case value_to_key kv of SOME k =>
-    (case ALOOKUP hm k of SOME tv => INL tv
+    (case ALOOKUP hm k of SOME tv => INL (tv, heap)
         | _ => (case vt of Type typ =>
-                  INL $ Value $ default_value (type_env ts) typ
+                  (let (v, heap) = default_value (type_env ts) heap typ in
+                     INL $ (Value v, heap))
                 | _ => INR "HashMap final value type" ))
    | _ => INR "evaluate_subscript value_to_key") ∧
-  evaluate_subscript _ _ _ = INR "evaluate_subscript"
+  evaluate_subscript _ _ _ _ = INR "evaluate_subscript"
 End
 
 val evaluate_subscript_pre_def = cv_auto_trans_pre evaluate_subscript_def;
 
 Theorem evaluate_subscript_pre[cv_pre]:
-  evaluate_subscript_pre ts av v
+  evaluate_subscript_pre ts heap av v
 Proof
   rw[evaluate_subscript_pre_def, integer_index_def]
   \\ rw[]
@@ -781,8 +785,9 @@ Type log = “:identifier # (value list)”;
 Datatype:
   evaluation_state = <|
     globals: (address, num |-> toplevel_value) alist
-  ; logs: log list
+  ; heap: heap
   ; scopes: scope list
+  ; logs: log list
   ; accounts: evm_accounts
   |>
 End
