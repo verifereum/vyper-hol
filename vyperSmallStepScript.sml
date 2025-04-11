@@ -22,6 +22,9 @@ Datatype:
   = ReturnK eval_continuation
   | AssertK string eval_continuation
   | LogK identifier eval_continuation
+  | PopK eval_continuation
+  | AppendK expr eval_continuation
+  | AppendK1 base_target_value eval_continuation
   | AnnAssignK identifier eval_continuation
   | AssignK expr eval_continuation
   | AssignK1 assignment_value eval_continuation
@@ -90,6 +93,45 @@ End
 
 val () = cv_auto_trans no_recursion_def;
 
+val option_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
+
+val sum_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="sum",Tyop="sum"}));
+
+val prod_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
+
+val toplevel_value_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vyperInterpreter",Tyop="toplevel_value"}));
+
+Definition eval_base_target_cps_def:
+  eval_base_target_cps cx (NameTarget id) st k =
+    (let r = do
+        sc <- get_scopes;
+        n <<- string_to_num id;
+        cs <- lift_option (find_containing_scope n sc) "NameTarget lookup";
+        return $ (ScopedVar cs id, []) od st in
+     liftk cx ApplyBaseTarget r k) ∧
+  eval_base_target_cps cx (TopLevelNameTarget id) st k =
+    AK cx (ApplyBaseTarget (TopLevelVar id, [])) st k ∧
+  eval_base_target_cps cx (AttributeTarget t id) st k =
+    eval_base_target_cps cx t st (AttributeTargetK id k) ∧
+  eval_base_target_cps cx (SubscriptTarget t e) st k =
+    eval_base_target_cps cx t st (SubscriptTargetK e k)
+End
+
+val () = eval_base_target_cps_def
+  |> SRULE [bind_def, ignore_bind_def,
+            LET_RATOR, lift_option_def,
+            prod_CASE_rator, sum_CASE_rator,
+            option_CASE_rator, liftk1]
+  |> cv_auto_trans;
+
 Definition eval_expr_cps_def:
   eval_expr_cps cx1 (Name id) st k =
     liftk cx1 ApplyTv
@@ -118,6 +160,8 @@ Definition eval_expr_cps_def:
     (case check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st of
        (INR ex, st) => AK cx8 (ApplyExc ex) st k
      | (INL (), st) => eval_exprs_cps cx8 es st (BuiltinK bt k)) ∧
+  eval_expr_cps cx8 (Pop bt) st k =
+    eval_base_target_cps cx8 bt st (PopK k) ∧
   eval_expr_cps cx8 (Empty typ) st k =
     (case do
        ts <- lift_option (get_self_code cx8) "Empty get_self_code";
@@ -151,22 +195,6 @@ Termination
   \\ rw[expr1_size_map, SUM_MAP_expr2_size, list_size_SUM_MAP, MAP_MAP_o]
 End
 
-val option_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
-
-val sum_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="sum",Tyop="sum"}));
-
-val prod_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
-
-val toplevel_value_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="vyperInterpreter",Tyop="toplevel_value"}));
-
 val eval_expr_cps_pre_def = eval_expr_cps_def
    |> SRULE
         [liftk1, bind_def, ignore_bind_def,
@@ -194,29 +222,6 @@ End
 
 val () = cv_auto_trans eval_iterator_cps_def;
 
-Definition eval_base_target_cps_def:
-  eval_base_target_cps cx (NameTarget id) st k =
-    (let r = do
-        sc <- get_scopes;
-        n <<- string_to_num id;
-        cs <- lift_option (find_containing_scope n sc) "NameTarget lookup";
-        return $ (ScopedVar cs id, []) od st in
-     liftk cx ApplyBaseTarget r k) ∧
-  eval_base_target_cps cx (TopLevelNameTarget id) st k =
-    AK cx (ApplyBaseTarget (TopLevelVar id, [])) st k ∧
-  eval_base_target_cps cx (AttributeTarget t id) st k =
-    eval_base_target_cps cx t st (AttributeTargetK id k) ∧
-  eval_base_target_cps cx (SubscriptTarget t e) st k =
-    eval_base_target_cps cx t st (SubscriptTargetK e k)
-End
-
-val () = eval_base_target_cps_def
-  |> SRULE [bind_def, ignore_bind_def,
-            LET_RATOR, lift_option_def,
-            prod_CASE_rator, sum_CASE_rator,
-            option_CASE_rator, liftk1]
-  |> cv_auto_trans;
-
 Definition eval_target_cps_def:
   eval_target_cps cx (BaseTarget t) st k =
     eval_base_target_cps cx t st (BaseTargetK k) ∧
@@ -240,6 +245,8 @@ Definition eval_stmt_cps_def:
   eval_stmt_cps cx (Log id es) st k = eval_exprs_cps cx es st (LogK id k) ∧
   eval_stmt_cps cx (AnnAssign id typ e) st k =
     eval_expr_cps cx e st (AnnAssignK id k) ∧
+  eval_stmt_cps cx (Append t e) st k =
+    eval_base_target_cps cx t st (AppendK e k) ∧
   eval_stmt_cps cx (Assign g e) st k =
     eval_target_cps cx g st (AssignK e k) ∧
   eval_stmt_cps cx (AugAssign t bop e) st k =
@@ -304,6 +311,8 @@ Definition apply_exc_def:
   apply_exc cx ex st (ReturnK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AssertK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (LogK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (AppendK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (AppendK1 _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AnnAssignK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AssignK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AssignK1 _ k) = AK cx (ApplyExc ex) st k ∧
@@ -340,6 +349,7 @@ Definition apply_exc_def:
   apply_exc cx ex st (SubscriptK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (SubscriptK1 _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AttributeK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (PopK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (BuiltinK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CallSendK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IntCallK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
@@ -377,12 +387,60 @@ Definition apply_base_target_def:
     eval_expr_cps cx e st (SubscriptTargetK1 btv k) ∧
   apply_base_target cx btv st (AugAssignK bop e k) =
     eval_expr_cps cx e st (AugAssignK1 btv bop k) ∧
+  apply_base_target cx btv st (AppendK e k) =
+    eval_expr_cps cx e st (AppendK1 btv k) ∧
+  apply_base_target cx btv st (PopK k) =
+    liftk cx ApplyTv (do
+      tv <- assign_target cx (BaseTargetV (FST btv) (SND btv)) PopOp;
+      v <- get_Value tv;
+      vs <- lift_option (extract_elements v) "pop not ArrayV";
+      return $ Value $ LAST vs od st) k ∧
   apply_base_target cx btv st DoneK = AK cx (ApplyBaseTarget btv) st DoneK ∧
   apply_base_target cx _ st _ =
     AK cx (ApplyExc $ Error "apply_base_target k") st DoneK
 End
 
-val () = cv_auto_trans apply_base_target_def;
+val apply_base_target_pre_def = apply_base_target_def
+  |> SRULE [liftk1, prod_CASE_rator, sum_CASE_rator,
+            bind_def, ignore_bind_def]
+  |> cv_auto_trans_pre;
+
+Theorem assign_subscripts_PopOp_not_empty:
+  ∀v is ao b. ao = PopOp ∧ v = ArrayV b [] ⇒
+              ISR $ assign_subscripts v is ao
+Proof
+  ho_match_mp_tac assign_subscripts_ind
+  \\ rw[]
+  \\ rw[assign_subscripts_def, oneline pop_element_def]
+  \\ CASE_TAC \\ rw[]
+  \\ CASE_TAC \\ rw[]
+  \\ CASE_TAC \\ rw[]
+  \\ gvs[replace_elements_def, extract_elements_def]
+  \\ gvs[integer_index_def]
+QED
+
+Theorem apply_base_target_pre[cv_pre]:
+  apply_base_target_pre cx btv st v
+Proof
+  rw[apply_base_target_pre_def]
+  \\ Cases_on`btv` \\ gvs[]
+  \\ simp[lift_option_def]
+  \\ qmatch_goalsub_rename_tac`extract_elements a`
+  \\ Cases_on`a` \\ gvs[extract_elements_def, raise_def, return_def]
+  \\ rpt strip_tac \\ gvs[]
+  \\ qmatch_asmsub_rename_tac`get_Value tv`
+  \\ Cases_on`tv` \\ gvs[raise_def, return_def]
+  \\ qmatch_asmsub_rename_tac`BaseTargetV loc sbs`
+  \\ Cases_on`loc` \\ TRY (PairCases_on`p`)
+  \\ gvs[assign_target_def, bind_def, ignore_bind_def,
+         CaseEq"prod", CaseEq"sum", return_def, lift_sum_def,
+         lift_option_def, sum_CASE_rator, option_CASE_rator,
+         CaseEq"option", raise_def, assign_toplevel_def,
+         oneline sum_map_left_def]
+  \\ qspecl_then[`ArrayV b []`,`sbs`,`PopOp`]mp_tac
+       assign_subscripts_PopOp_not_empty
+  \\ simp[]
+QED
 
 Definition apply_target_def:
   apply_target cx gv st (AssignK e k) =
@@ -421,6 +479,8 @@ Definition apply_val_def:
     liftk cx (K Apply) (assign_target cx gv (Replace v) st) k ∧
   apply_val cx v st (AugAssignK1 (loc, sbs) bop k) =
     liftk cx (K Apply) (assign_target cx (BaseTargetV loc sbs) (Update bop v) st) k ∧
+  apply_val cx v st (AppendK1 (loc, sbs) k) =
+    liftk cx (K Apply) (assign_target cx (BaseTargetV loc sbs) (AppendOp v) st) k ∧
   apply_val cx v st (ExprK k) = apply cx st k ∧
   apply_val cx v st (ArrayK k) =
     liftk cx ApplyVals
@@ -669,6 +729,22 @@ Proof
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, liftk1, apply_val_def] )
   \\ conj_tac >- (
+    rw[eval_stmt_cps_def, evaluate_def, bind_def, UNCURRY, ignore_bind_def]
+    \\ CASE_TAC \\ gs[cont_def] \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    >> rw[Once OWHILE_THM, stepk_def, apply_base_target_def]
+    \\ qmatch_goalsub_rename_tac`AppendK1 btv`
+    \\ Cases_on`btv`
+    \\ first_x_assum drule \\ rw[]
+    \\ CASE_TAC \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    >> rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
+    \\ CASE_TAC \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    >> rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1]
+    \\ CASE_TAC \\ reverse CASE_TAC
+    \\ rw[return_def] )
+  \\ conj_tac >- (
     rw[eval_stmt_cps_def, evaluate_def, bind_def]
     \\ CASE_TAC \\ rw[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
@@ -680,7 +756,10 @@ Proof
     >> rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    >> rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1] )
+    >> rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1,
+          ignore_bind_def, bind_def]
+    \\ CASE_TAC \\ reverse CASE_TAC
+    \\ rw[return_def])
   \\ conj_tac >- (
     rw[eval_stmt_cps_def, evaluate_def, bind_def, UNCURRY]
     \\ CASE_TAC \\ gs[cont_def] \\ reverse CASE_TAC
@@ -695,7 +774,10 @@ Proof
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     \\ gvs[oneline get_Value_def, toplevel_value_CASE_rator,
            CaseEq"toplevel_value", CaseEq"prod", raise_def, return_def]
-    >> rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1])
+    >> rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1, bind_def,
+          ignore_bind_def]
+    \\ CASE_TAC \\ reverse CASE_TAC
+    \\ rw[return_def])
   \\ conj_tac >- (
     rw[eval_stmt_cps_def, evaluate_def, bind_def, ignore_bind_def, UNCURRY]
     \\ CASE_TAC \\ gs[cont_def] \\ reverse CASE_TAC
@@ -976,6 +1058,11 @@ Proof
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def, liftk1] )
+  \\ conj_tac >- (
+    rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def, UNCURRY]
+    \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    >> rw[Once OWHILE_THM, stepk_def, apply_base_target_def, bind_def, liftk1] )
   \\ conj_tac >- (
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
