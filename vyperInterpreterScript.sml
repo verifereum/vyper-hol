@@ -467,7 +467,11 @@ End
 Type base_target_value = “:location # subscript list”;
 
 Datatype:
-  assign_operation = Replace value | Update binop value
+  assign_operation
+  = Replace value
+  | Update binop value
+  | AppendOp value
+  | PopOp
 End
 
 Definition evaluate_literal_def:
@@ -1111,9 +1115,30 @@ val () = handle_function_def
   |> SRULE [FUN_EQ_THM]
   |> cv_auto_trans;
 
+Definition append_element_def:
+  append_element (ArrayV bd vs) v =
+    (if compatible_bound bd (SUC (LENGTH vs))
+     then INL $ ArrayV bd (SNOC v vs)
+     else INR "Append Overflow") ∧
+  append_element _ _ = INR "append_element"
+End
+
+val () = cv_auto_trans append_element_def;
+
+Definition pop_element_def:
+  pop_element (ArrayV (Dynamic n) vs) =
+    (if vs = [] then INR "Pop empty"
+     else INL $ ArrayV (Dynamic n) (FRONT vs)) ∧
+  pop_element _ = INR "pop_element"
+End
+
+val () = cv_auto_trans pop_element_def;
+
 Definition assign_subscripts_def:
   assign_subscripts a [] (Replace v) = INL v ∧
   assign_subscripts a [] (Update bop v) = evaluate_binop bop a v ∧
+  assign_subscripts a [] (AppendOp v) = append_element a v ∧
+  assign_subscripts a [] PopOp = pop_element a ∧
   assign_subscripts a ((IntSubscript i)::is) ao =
   (case extract_elements a of SOME vs =>
    (case integer_index vs i of SOME j =>
@@ -1145,26 +1170,42 @@ Proof
 QED
 
 Definition assign_hashmap_def:
-  assign_hashmap hm [] _ = INR "assign_hashmap null" ∧
-  assign_hashmap hm [k] (Replace v) =
+  assign_hashmap _ hm [] _ = INR "assign_hashmap null" ∧
+  assign_hashmap _ hm [k] (Replace v) =
     INL $ (k,Value v)::(ADELKEY k hm) ∧
-  assign_hashmap hm [k] (Update bop v2) =
+  assign_hashmap _ hm [k] (Update bop v2) =
   (case ALOOKUP hm k of SOME (Value v1) =>
      (case evaluate_binop bop v1 v2 of INL w =>
         INL $ (k,Value w)::(ADELKEY k hm) | INR err => INR err)
    | _ => INR "assign_hashmap Update not found") ∧
-  assign_hashmap hm (k::ks) ao =
+  assign_hashmap vt hm [k] (AppendOp v2) =
+  (case ALOOKUP hm k
+   of SOME (Value av) =>
+     (case append_element av v2 of INL w =>
+        INL $ (k,Value w)::(ADELKEY k hm) | INR err => INR err)
+   | NONE =>
+     (case vt of Type (ArrayT _ bd) =>
+       INL $ (k, Value (ArrayV bd [v2])) :: hm
+      | _ => INR "assign_hashmap AppendOp type")
+   | _ => INR "assign_hashmap AppendOp HashMap") ∧
+  assign_hashmap _ hm [k] PopOp =
+  (case ALOOKUP hm k of SOME (Value v) =>
+     (case pop_element v of INL w =>
+        INL $ (k,Value w)::(ADELKEY k hm) | INR err => INR err)
+   | _ => INR "assign_hashmap Pop not found") ∧
+  assign_hashmap _ hm (k::ks) ao =
   (case ALOOKUP hm k of SOME (HashMap vt hm') =>
-    (case assign_hashmap hm' ks ao of
+    (case assign_hashmap vt hm' ks ao of
      | INL hm' => INL $ (k, HashMap vt hm') :: (ADELKEY k hm)
      | INR err => INR err)
+    (* TODO: support assigning to hashmap of array *)
     | _ => INR "assign_hashmap HashMap not found")
 End
 
 val assign_hashmap_pre_def = cv_auto_trans_pre assign_hashmap_def;
 
 Theorem assign_hashmap_pre[cv_pre]:
-  ∀x y z. assign_hashmap_pre x y z
+  ∀v x y z. assign_hashmap_pre v x y z
 Proof
   ho_match_mp_tac assign_hashmap_ind \\ rw[]
   \\ rw[Once assign_hashmap_pre_def]
@@ -1179,7 +1220,7 @@ Definition assign_toplevel_def:
   assign_toplevel (Value a) is ao =
     sum_map_left Value $ assign_subscripts a is ao ∧
   assign_toplevel (HashMap vt hm) is ao =
-    sum_map_left (HashMap vt) $ assign_hashmap hm is ao
+    sum_map_left (HashMap vt) $ assign_hashmap vt hm is ao
 End
 
 val () = assign_toplevel_def
@@ -1191,19 +1232,21 @@ Definition assign_target_def:
     ni <<- string_to_num id;
     a <- lift_option (FLOOKUP env ni) "assign_target lookup";
     a' <- lift_sum $ assign_subscripts a is ao;
-    set_scopes $ pre ++ env |+ (ni, a') :: rest
+    set_scopes $ pre ++ env |+ (ni, a') :: rest;
+    return $ Value a
   od ∧
   assign_target cx (BaseTargetV (TopLevelVar id) is) ao = do
     ni <<- string_to_num id;
     tv <- lookup_global cx ni;
     tv' <- lift_sum $ assign_toplevel tv is ao;
-    set_global cx ni tv'
+    set_global cx ni tv';
+    return tv
   od ∧
   assign_target _ _ _ = raise (Error "TODO: TupleTargetV")
 End
 
 val () = assign_target_def
-  |> SRULE [FUN_EQ_THM, bind_def, LET_RATOR,
+  |> SRULE [FUN_EQ_THM, bind_def, LET_RATOR, ignore_bind_def,
             option_CASE_rator, lift_option_def]
   |> cv_auto_trans;
 
@@ -1248,6 +1291,9 @@ Definition bound_def:
     1 + exprs_bound ts es ∧
   stmt_bound ts (AnnAssign _ _ e) =
     1 + expr_bound ts e ∧
+  stmt_bound ts (Append bt e) =
+    1 + base_target_bound ts bt
+      + expr_bound ts e ∧
   stmt_bound ts (Assign g e) =
     1 + target_bound ts g
       + expr_bound ts e ∧
@@ -1306,6 +1352,8 @@ Definition bound_def:
     1 + exprs_bound ts (MAP SND kes) ∧
   expr_bound ts (Builtin _ es) =
     1 + exprs_bound ts es ∧
+  expr_bound ts (Pop bt) =
+    1 + base_target_bound ts bt ∧
   expr_bound ts (Empty _) = 0 ∧
   expr_bound ts (Call (IntCall fn) es) =
     1 + exprs_bound ts es
@@ -1481,17 +1529,26 @@ Definition evaluate_def:
     (* TODO: check type *)
     new_variable id v
   od ∧
+  eval_stmt cx (Append t e) = do
+    (loc, sbs) <- eval_base_target cx t;
+    tv <- eval_expr cx e;
+    v <- get_Value tv;
+    assign_target cx (BaseTargetV loc sbs) (AppendOp v);
+    return ()
+  od ∧
   eval_stmt cx (Assign g e) = do
     gv <- eval_target cx g;
     tv <- eval_expr cx e;
     v <- get_Value tv;
-    assign_target cx gv (Replace v)
+    assign_target cx gv (Replace v);
+    return ()
   od ∧
   eval_stmt cx (AugAssign t bop e) = do
     (loc, sbs) <- eval_base_target cx t;
     tv <- eval_expr cx e;
     v <- get_Value tv;
-    assign_target cx (BaseTargetV loc sbs) (Update bop v)
+    assign_target cx (BaseTargetV loc sbs) (Update bop v);
+    return ()
   od ∧
   eval_stmt cx (If e ss1 ss2) = do
     tv <- eval_expr cx e;
@@ -1621,6 +1678,13 @@ Definition evaluate_def:
     acc <- get_accounts;
     v <- lift_sum $ evaluate_builtin cx acc bt vs;
     return $ Value v
+  od ∧
+  eval_expr cx (Pop bt) = do
+    (loc, sbs) <- eval_base_target cx bt;
+    tv <- assign_target cx (BaseTargetV loc sbs) PopOp;
+    v <- get_Value tv;
+    vs <- lift_option (extract_elements v) "pop not ArrayV";
+    return $ Value $ LAST vs
   od ∧
   eval_expr cx (Empty typ) = do
     ts <- lift_option (get_self_code cx) "Empty get_self_code";

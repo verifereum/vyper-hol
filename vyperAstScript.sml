@@ -105,11 +105,9 @@ Datatype:
   | Attribute expr identifier
   | Builtin builtin (expr list)
   | Empty type
+  | Pop base_assignment_target
   | Call call_target (expr list)
-End
-
-Datatype:
-  base_assignment_target
+; base_assignment_target
   = NameTarget identifier
   | TopLevelNameTarget identifier
   | SubscriptTarget base_assignment_target expr
@@ -146,6 +144,7 @@ Datatype:
   | Return (expr option)
   | Assign assignment_target expr
   | AugAssign base_assignment_target binop expr
+  | Append base_assignment_target expr
   | AnnAssign identifier type expr
 End
 
