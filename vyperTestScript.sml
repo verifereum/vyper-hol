@@ -948,6 +948,120 @@ Proof
   \\ rw[]
 QED
 
+Definition test_darray_append_ast_def:
+  test_darray_append_ast = [
+    pubvar "a" (DynArray uint256 10);
+    def "foo" [] uint256 [
+      AssignSelf "a" (DynArlit 10 []);
+      Append (TopLevelNameTarget "a") (li 1);
+      Return $ SOME (Subscript (self_ "a") (li 0))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_darray_append_ast_def;
+
+Theorem test_darray_append:
+  load_and_call_foo test_darray_append_ast
+  = INL (IntV 1)
+Proof
+  CONV_TAC cv_eval
+QED
+
+(* TODO
+def test_darray_append2(get_contract):
+    src = """
+a: public(DynArray[uint256, 1])
+
+@external
+def foo() -> uint256:
+    self.a = []
+    self.a.append(1)
+    self.a.append(1)
+    return self.a[0]
+    """
+
+    c = get_contract(src)
+    with pytest.raises(ValueError) as e:
+        c.foo()
+
+    assert "Cannot exceed maximum length 1" in str(e.value)
+
+
+def test_darray_append3(get_contract):
+    src = """
+a: public(DynArray[DynArray[uint256, 1], 2])
+
+@external
+def foo() -> DynArray[uint256, 10]:
+    self.a = []
+    self.a.append([1])
+    self.a.append([2])
+    return self.a[0]
+    """
+
+    c = get_contract(src)
+    assert c.foo() == [1]
+
+
+def test_darray_pop(get_contract):
+    src = """
+a: public(DynArray[DynArray[uint256, 1], 2])
+
+def bar() -> DynArray[uint256, 1]:
+    return []
+
+@external
+def foo() -> uint256:
+    self.a = []
+    self.a.append([1])
+    u: uint256 = self.a.pop()[0]
+    return u
+    """
+
+    c = get_contract(src)
+    assert c.foo() == 1
+
+
+def test_darray_pop2(get_contract):
+    src = """
+a: public(DynArray[DynArray[uint256, 1], 2])
+
+def bar() -> DynArray[uint256, 1]:
+    return []
+
+@external
+def foo() -> uint256:
+    self.a = []
+    self.a.append([1])
+    u: DynArray[uint256, 10] = self.a.pop()
+    return u.pop()
+    """
+
+    c = get_contract(src)
+    assert c.foo() == 1
+
+
+def test_darray_pop3(get_contract):
+    src = """
+a: public(DynArray[DynArray[uint256, 1], 2])
+
+def bar() -> DynArray[uint256, 1]:
+    return []
+
+@external
+def foo() -> uint256:
+    self.a = []
+    self.a.append([1])
+    self.a.append([2])
+    u: DynArray[uint256, 10] = self.a.pop()
+    return u.pop() + self.a.pop()[0]
+    """
+
+    c = get_contract(src)
+    assert c.foo() == 3
+*)
+
 (* TODO add tests
 
 def test_external_func_arg2():
