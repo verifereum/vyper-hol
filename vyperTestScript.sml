@@ -968,99 +968,121 @@ Proof
   CONV_TAC cv_eval
 QED
 
-(* TODO
-def test_darray_append2(get_contract):
-    src = """
-a: public(DynArray[uint256, 1])
+Definition test_darray_append2_ast_def:
+  test_darray_append2_ast = [
+    pubvar "a" (DynArray uint256 1);
+    def "foo" [] uint256 [
+      AssignSelf "a" (DynArlit 1 []);
+      Append (TopLevelNameTarget "a") (li 1);
+      Append (TopLevelNameTarget "a") (li 1);
+      Return $ SOME (Subscript (self_ "a") (li 0))
+    ]
+  ]
+End
 
-@external
-def foo() -> uint256:
-    self.a = []
-    self.a.append(1)
-    self.a.append(1)
-    return self.a[0]
-    """
+val () = cv_trans_deep_embedding EVAL test_darray_append2_ast_def;
 
-    c = get_contract(src)
-    with pytest.raises(ValueError) as e:
-        c.foo()
+Theorem test_darray_append2:
+  load_and_call_foo test_darray_append2_ast
+  = INR (Error "Append Overflow")
+Proof
+  CONV_TAC cv_eval
+QED
 
-    assert "Cannot exceed maximum length 1" in str(e.value)
+Definition test_darray_append3_ast_def:
+  test_darray_append3_ast = [
+    pubvar "a" (DynArray (DynArray uint256 1) 2);
+    def "foo" [] uint256 [
+      AssignSelf "a" (DynArlit 2 []);
+      Append (TopLevelNameTarget "a") (DynArlit 1 [li 1]);
+      Append (TopLevelNameTarget "a") (DynArlit 1 [li 2]);
+      Return $ SOME (Subscript (self_ "a") (li 0))
+    ]
+  ]
+End
 
+val () = cv_trans_deep_embedding EVAL test_darray_append3_ast_def;
 
-def test_darray_append3(get_contract):
-    src = """
-a: public(DynArray[DynArray[uint256, 1], 2])
+Theorem test_darray_append3:
+  load_and_call_foo test_darray_append3_ast
+  = INL (ArrayV (Dynamic 1) [IntV 1])
+Proof
+  CONV_TAC cv_eval
+QED
 
-@external
-def foo() -> DynArray[uint256, 10]:
-    self.a = []
-    self.a.append([1])
-    self.a.append([2])
-    return self.a[0]
-    """
+Definition test_darray_pop_ast_def:
+  test_darray_pop_ast = [
+    pubvar "a" (DynArray (DynArray uint256 1) 2);
+    itl_def "bar" [] (DynArray uint256 1) [
+      Return $ SOME $ DynArlit 1 []
+    ];
+    def "foo" [] uint256 [
+      AssignSelf "a" (DynArlit 2 []);
+      Append (TopLevelNameTarget "a") (DynArlit 1 [li 1]);
+      AnnAssign "u" uint256 $ Subscript (Pop (TopLevelNameTarget "a")) (li 0);
+      Return $ SOME $ Name "u"
+    ]
+  ]
+End
 
-    c = get_contract(src)
-    assert c.foo() == [1]
+val () = cv_trans_deep_embedding EVAL test_darray_pop_ast_def;
 
+Theorem test_darray_pop:
+  load_and_call_foo test_darray_pop_ast
+  = INL (IntV 1)
+Proof
+  CONV_TAC cv_eval
+QED
 
-def test_darray_pop(get_contract):
-    src = """
-a: public(DynArray[DynArray[uint256, 1], 2])
+Definition test_darray_pop2_ast_def:
+  test_darray_pop2_ast = [
+    pubvar "a" (DynArray (DynArray uint256 1) 2);
+    itl_def "bar" [] (DynArray uint256 1) [
+      Return $ SOME $ DynArlit 1 []
+    ];
+    def "foo" [] uint256 [
+      AssignSelf "a" (DynArlit 2 []);
+      Append (TopLevelNameTarget "a") (DynArlit 1 [li 1]);
+      AnnAssign "u" (DynArray uint256 10) $ Pop (TopLevelNameTarget "a");
+      Return $ SOME $ Pop (NameTarget "u")
+    ]
+  ]
+End
 
-def bar() -> DynArray[uint256, 1]:
-    return []
+val () = cv_trans_deep_embedding EVAL test_darray_pop2_ast_def;
 
-@external
-def foo() -> uint256:
-    self.a = []
-    self.a.append([1])
-    u: uint256 = self.a.pop()[0]
-    return u
-    """
+Theorem test_darray_pop2:
+  load_and_call_foo test_darray_pop2_ast
+  = INL (IntV 1)
+Proof
+  CONV_TAC cv_eval
+QED
 
-    c = get_contract(src)
-    assert c.foo() == 1
+Definition test_darray_pop3_ast_def:
+  test_darray_pop3_ast = [
+    pubvar "a" (DynArray (DynArray uint256 1) 2);
+    itl_def "bar" [] (DynArray uint256 1) [
+      Return $ SOME $ DynArlit 1 []
+    ];
+    def "foo" [] uint256 [
+      AssignSelf "a" (DynArlit 2 []);
+      Append (TopLevelNameTarget "a") (DynArlit 1 [li 1]);
+      Append (TopLevelNameTarget "a") (DynArlit 1 [li 2]);
+      AnnAssign "u" (DynArray uint256 10) $ Pop (TopLevelNameTarget "a");
+      Return $ SOME $ Pop (NameTarget "u") +
+                      Subscript (Pop (TopLevelNameTarget "a")) (li 0)
+    ]
+  ]
+End
 
+val () = cv_trans_deep_embedding EVAL test_darray_pop3_ast_def;
 
-def test_darray_pop2(get_contract):
-    src = """
-a: public(DynArray[DynArray[uint256, 1], 2])
-
-def bar() -> DynArray[uint256, 1]:
-    return []
-
-@external
-def foo() -> uint256:
-    self.a = []
-    self.a.append([1])
-    u: DynArray[uint256, 10] = self.a.pop()
-    return u.pop()
-    """
-
-    c = get_contract(src)
-    assert c.foo() == 1
-
-
-def test_darray_pop3(get_contract):
-    src = """
-a: public(DynArray[DynArray[uint256, 1], 2])
-
-def bar() -> DynArray[uint256, 1]:
-    return []
-
-@external
-def foo() -> uint256:
-    self.a = []
-    self.a.append([1])
-    self.a.append([2])
-    u: DynArray[uint256, 10] = self.a.pop()
-    return u.pop() + self.a.pop()[0]
-    """
-
-    c = get_contract(src)
-    assert c.foo() == 3
-*)
+Theorem test_darray_pop3:
+  load_and_call_foo test_darray_pop3_ast
+  = INL (IntV 3)
+Proof
+  CONV_TAC cv_eval
+QED
 
 (* TODO add tests
 
