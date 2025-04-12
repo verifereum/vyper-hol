@@ -8,6 +8,18 @@ val () = new_theory "vyperInterpreter";
 
 (* TODO: move *)
 
+val FUPDATE_LIST_pre_def = FUPDATE_LIST_THM
+ |> SRULE [FORALL_PROD]
+ |> INST_TYPE [alpha |-> “:num”]
+ |> cv_auto_trans_pre;
+
+Theorem FUPDATE_LIST_pre[cv_pre]:
+  ∀f ls. FUPDATE_LIST_pre f ls
+Proof
+  Induct_on`ls`
+  \\ rw[Once FUPDATE_LIST_pre_def]
+QED
+
 Definition MAP_HEX_def:
   MAP_HEX [] = [] ∧
   MAP_HEX (x::xs) = HEX x :: MAP_HEX xs
@@ -677,7 +689,7 @@ Type log = “:identifier # (value list)”;
 
 Datatype:
   evaluation_state = <|
-    globals: (address, num |-> toplevel_value) alist
+    globals: (address, (num |-> toplevel_value) # (num # toplevel_value) list) alist
   ; logs: log list
   ; scopes: scope list
   ; accounts: evm_accounts
@@ -795,7 +807,7 @@ val () = cv_auto_trans set_current_globals_def;
 
 Definition lookup_global_def:
   lookup_global cx n = do
-    gbs <- get_current_globals cx;
+    (gbs, trs) <- get_current_globals cx;
     case FLOOKUP gbs n
       of NONE => raise $ Error "lookup_global"
        | SOME v => return v
@@ -803,18 +815,18 @@ Definition lookup_global_def:
 End
 
 val () = lookup_global_def
-  |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator]
+  |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator, UNCURRY]
   |> cv_auto_trans;
 
 Definition set_global_def:
   set_global cx n v = do
-    gbs <- get_current_globals cx;
-    set_current_globals cx $ gbs |+ (n,v)
+    (gbs, trs) <- get_current_globals cx;
+    set_current_globals cx $ (gbs |+ (n,v), trs)
   od
 End
 
 val () = set_global_def
-  |> SRULE [bind_def, FUN_EQ_THM]
+  |> SRULE [bind_def, FUN_EQ_THM, UNCURRY]
   |> cv_auto_trans;
 
 Definition get_accounts_def:
@@ -1771,15 +1783,24 @@ QED
 
 (* TODO: assumes unique identifiers, but should check? *)
 Definition initial_globals_def:
-  initial_globals env [] = FEMPTY ∧
+  initial_globals env [] = (FEMPTY, []) ∧
   initial_globals env (VariableDecl _ Storage id typ :: ts) =
-  initial_globals env ts |+ (string_to_num id, Value $ default_value env typ) ∧
-  (* TODO: treat them as transient in the semantics *)
+  (let (vals, tras) = initial_globals env ts in
+   let key = string_to_num id in
+     (vals |+ (key, Value $ default_value env typ),
+      tras)) ∧
   initial_globals env (VariableDecl _ Transient id typ :: ts) =
-  initial_globals env ts |+ (string_to_num id, Value $ default_value env typ) ∧
+  (let (vals, tras) = initial_globals env ts in
+   let key = string_to_num id in
+   let iv = Value $ default_value env typ in
+     (vals |+ (key, iv),
+      (key, iv) :: tras)) ∧
   (* TODO: handle Constants and  Immutables *)
   initial_globals env (HashMapDecl _ id kt vt :: ts) =
-  initial_globals env ts |+ (string_to_num id, HashMap vt []) ∧
+  (let (vals, tras) = initial_globals env ts in
+   let key = string_to_num id in
+     (vals |+ (key, HashMap vt []),
+      tras)) ∧
   initial_globals env (t :: ts) = initial_globals env ts
 End
 
@@ -1798,7 +1819,7 @@ val () = cv_auto_trans initial_evaluation_context_def;
 Datatype:
   abstract_machine = <|
     sources: (address, toplevel list) alist
-  ; globals: (address, num |-> toplevel_value) alist
+  ; globals: (address, (num |-> toplevel_value) # (num # toplevel_value) list) alist
   ; accounts: evm_accounts
   |>
 End
@@ -1832,6 +1853,21 @@ End
 
 val () = cv_auto_trans abstract_machine_from_state_def;
 
+Definition reset_transient_globals_def:
+  reset_transient_globals (gbs:num |-> toplevel_value, trs) = (gbs |++ trs, trs)
+End
+
+val () = cv_auto_trans reset_transient_globals_def;
+
+Definition reset_all_transient_globals_def:
+  reset_all_transient_globals [] = [] ∧
+  reset_all_transient_globals ((k,v)::ls) =
+    (k, reset_transient_globals v) ::
+    reset_all_transient_globals ls
+End
+
+val () = cv_auto_trans reset_all_transient_globals_def;
+
 Definition call_external_function_def:
   call_external_function am cx args vals body =
   case bind_arguments args vals
@@ -1839,11 +1875,13 @@ Definition call_external_function_def:
    | SOME env =>
   (let st = initial_state am env in
    let srcs = am.sources in
-   (case eval_stmts cx body st
-    of
-     | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs st)
-     | (INR (ReturnException v), st) => (INL v, abstract_machine_from_state srcs st)
-     | (INR e, st) => (INR e, abstract_machine_from_state srcs st)))
+   let (res, st) =
+     (case eval_stmts cx body st
+      of
+       | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs st)
+       | (INR (ReturnException v), st) => (INL v, abstract_machine_from_state srcs st)
+       | (INR e, st) => (INR e, abstract_machine_from_state srcs st)) in
+    (res, st with globals updated_by reset_all_transient_globals))
 End
 
 Definition empty_state_def:
