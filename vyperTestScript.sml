@@ -706,7 +706,105 @@ Proof
   CONV_TAC cv_eval
 QED
 
-(* TODO: external_func_arg2, 3, 4 *)
+Definition test_external_func_arg2_ast_def:
+  test_external_func_arg2_ast = [
+    def "foo"
+      [("a", DynArray uint256 10); ("s", BaseT (StringT 100))]
+      (TupleT [DynArray uint256 10; BaseT (StringT 100)]) [
+      Return (SOME (ArrayLit (Fixed 2) [Name "a"; Name "s"]))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_external_func_arg2_ast_def;
+
+Theorem test_external_func_arg2:
+  a = ArrayV (Dynamic 10) [IntV 1; IntV 2; IntV 3] ∧
+  s = StringV 100 "hello"
+  ⇒
+  (case load_contract initial_machine_state deploy_tx
+     test_external_func_arg2_ast
+   of INR msg => INR msg
+   |  INL ms =>
+       FST $ call_external ms
+           $ call_txn ^sender_addr ^contract_addr "foo" [a; s] 0)
+      = INL $ ArrayV (Fixed 2) [a; s]
+Proof
+  rw[]
+  \\ CONV_TAC $ cv_eval
+QED
+
+Definition test_external_func_arg3_ast_def:
+  test_external_func_arg3_ast =
+  let dynarray_t = DynArray (DynArray uint256 10) 10 in [
+    def "foo" [("a", DynArray uint256 10);
+               ("s", BaseT (StringT 100));
+               ("b", dynarray_t)]
+      (TupleT [DynArray uint256 10; BaseT (StringT 100); dynarray_t]) [
+      Return $ SOME $ ArrayLit (Fixed 3) [Name "a"; Name "s"; Name "b"]
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_external_func_arg3_ast_def;
+
+Theorem test_external_func_arg3:
+  complex_array = ArrayV (Dynamic 10) [
+    ArrayV (Dynamic 10) [IntV 4; IntV 5; IntV 6];
+    ArrayV (Dynamic 10) [IntV 7; IntV 8; IntV 9; IntV 10; IntV 11];
+    ArrayV (Dynamic 10) [];
+    ArrayV (Dynamic 10) [IntV 12]] ∧
+  a = ArrayV (Dynamic 10) [IntV 1; IntV 2; IntV 3] ∧
+  s = StringV 100 "hello"
+  ⇒
+  (case load_contract initial_machine_state deploy_tx
+     test_external_func_arg3_ast
+   of INR msg => INR msg
+   |  INL ms =>
+       FST $ call_external ms
+           $ call_txn ^sender_addr ^contract_addr "foo" [a; s; complex_array] 0)
+      = INL $ ArrayV (Fixed 3) [a; s; complex_array]
+Proof
+  rw[]
+  \\ CONV_TAC $ cv_eval
+QED
+
+Definition test_external_func_arg4_ast_def:
+  test_external_func_arg4_ast =
+  let tuple_t = TupleT [BaseT(StringT 93);
+                        DynArray (DynArray uint256 10) 10] in [
+    def "foo" [("a", DynArray uint256 10);
+               ("s", BaseT (StringT 100));
+               ("b", tuple_t)]
+              (TupleT [DynArray uint256 10; BaseT(StringT 100); tuple_t]) [
+      Return $ SOME $ ArrayLit (Fixed 3) [Name "a"; Name "s"; Name "b"]
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_external_func_arg4_ast_def;
+
+Theorem test_external_func_arg4:
+  complex_array = ArrayV (Dynamic 10) [
+    ArrayV (Dynamic 10) [IntV 4; IntV 5; IntV 6];
+    ArrayV (Dynamic 10) [IntV 7; IntV 8; IntV 9; IntV 10; IntV 11];
+    ArrayV (Dynamic 10) [];
+    ArrayV (Dynamic 10) [IntV 12]] ∧
+  complex_tuple = ArrayV (Fixed 2) [StringV 93 "apollo"; complex_array] ∧
+  a = ArrayV (Dynamic 10) [IntV 1; IntV 2; IntV 3] ∧
+  s = StringV 100 "hello"
+  ⇒
+  (case load_contract initial_machine_state deploy_tx
+     test_external_func_arg4_ast
+   of INR msg => INR msg
+   |  INL ms =>
+       FST $ call_external ms
+           $ call_txn ^sender_addr ^contract_addr "foo" [a; s; complex_tuple] 0)
+      = INL $ ArrayV (Fixed 3) [a; s; complex_tuple]
+Proof
+  rw[]
+  \\ CONV_TAC $ cv_eval
+QED
 
 Definition test_empty_builtin_ast_def:
   test_empty_builtin_ast = [
