@@ -1243,14 +1243,14 @@ Definition assign_target_def:
   assign_target cx (BaseTargetV (ScopedVar (pre,env,rest) id) is) ao = do
     ni <<- string_to_num id;
     a <- lift_option (FLOOKUP env ni) "assign_target lookup";
-    a' <- lift_sum $ assign_subscripts a is ao;
+    a' <- lift_sum $ assign_subscripts a (REVERSE is) ao;
     set_scopes $ pre ++ env |+ (ni, a') :: rest;
     return $ Value a
   od ∧
   assign_target cx (BaseTargetV (TopLevelVar id) is) ao = do
     ni <<- string_to_num id;
     tv <- lookup_global cx ni;
-    tv' <- lift_sum $ assign_toplevel tv is ao;
+    tv' <- lift_sum $ assign_toplevel tv (REVERSE is) ao;
     set_global cx ni tv';
     return tv
   od ∧

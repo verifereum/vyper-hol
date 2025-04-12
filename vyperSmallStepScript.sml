@@ -437,7 +437,7 @@ Proof
          lift_option_def, sum_CASE_rator, option_CASE_rator,
          CaseEq"option", raise_def, assign_toplevel_def,
          oneline sum_map_left_def]
-  \\ qspecl_then[`ArrayV b []`,`sbs`,`PopOp`]mp_tac
+  \\ qspecl_then[`ArrayV b []`,`REVERSE sbs`,`PopOp`]mp_tac
        assign_subscripts_PopOp_not_empty
   \\ simp[]
 QED

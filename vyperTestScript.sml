@@ -1332,7 +1332,187 @@ Proof
   CONV_TAC cv_eval
 QED
 
-(* TODO: pass by value tests *)
+Definition test_pass_by_value_ast_def:
+  test_pass_by_value_ast = [
+    pubvar "a" $ DynArray uint256 2;
+    itl_def "bar" [("d", DynArray uint256 2)] NoneT [
+      Assign (BaseTarget (SubscriptTarget (NameTarget "d") (li 0)))
+        (li 0)
+    ];
+    def "foo" [] (DynArray uint256 2) [
+      AssignSelf "a" (DynArlit 2 [li 1; li 1]);
+      Expr (call "bar" [TopLevelName "a"]);
+      Return $ SOME $ TopLevelName "a"
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_pass_by_value_ast_def;
+
+Theorem test_pass_by_value:
+  load_and_call_foo test_pass_by_value_ast =
+  INL (ArrayV (Dynamic 2) [IntV 1; IntV 1])
+Proof
+  CONV_TAC cv_eval
+QED
+
+Definition test_pass_by_value2_ast_def:
+  test_pass_by_value2_ast = [
+    itl_def "bar" [("d", DynArray uint256 2)] NoneT [
+      Assign (BaseTarget (SubscriptTarget (NameTarget "d") (li 0)))
+        (li 0)
+    ];
+    def "foo" [] (DynArray uint256 2) [
+      AnnAssign "d" (DynArray uint256 2) (DynArlit 2 [li 1; li 1]);
+      Expr (call "bar" [Name "d"]);
+      Return $ SOME $ Name "d"
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_pass_by_value2_ast_def;
+
+Theorem test_pass_by_value2:
+  load_and_call_foo test_pass_by_value2_ast =
+  INL (ArrayV (Dynamic 2) [IntV 1; IntV 1])
+Proof
+  CONV_TAC cv_eval
+QED
+
+Definition test_pass_by_value3_ast_def:
+  test_pass_by_value3_ast = [
+    def "foo" [] (DynArray uint256 2) [
+      AnnAssign "d" (DynArray uint256 2) (DynArlit 2 [li 1; li 1]);
+      AnnAssign "d2" (DynArray uint256 2) (Name "d");
+      Assign (BaseTarget (SubscriptTarget (NameTarget "d2") (li 0))) (li 0);
+      Return $ SOME $ Name "d"
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_pass_by_value3_ast_def;
+
+Theorem test_pass_by_value3:
+  load_and_call_foo test_pass_by_value3_ast =
+  INL (ArrayV (Dynamic 2) [IntV 1; IntV 1])
+Proof
+  CONV_TAC cv_eval
+QED
+
+Definition test_pass_by_value4_ast_def:
+  test_pass_by_value4_ast = [
+    def "foo" [] (DynArray uint256 2) [
+      AnnAssign "d" (DynArray uint256 2) (DynArlit 2 [li 1; li 1]);
+      AnnAssign "d2" (DynArray uint256 2) (Name "d");
+      AugAssign (SubscriptTarget (NameTarget "d2") (li 0)) Add (li 1);
+      Return $ SOME $ Name "d"
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_pass_by_value4_ast_def;
+
+Theorem test_pass_by_value4:
+  load_and_call_foo test_pass_by_value4_ast =
+  INL (ArrayV (Dynamic 2) [IntV 1; IntV 1])
+Proof
+  CONV_TAC cv_eval
+QED
+
+Definition test_pass_by_value5_ast_def:
+  test_pass_by_value5_ast = [
+    pubvar "a" $ DynArray uint256 2;
+    itl_def "bar" [] (DynArray uint256 2) [
+      Return $ SOME $ self_ "a"
+    ];
+    def "foo" [] (DynArray uint256 2) [
+      AssignSelf "a" (DynArlit 2 [li 1; li 1]);
+      AnnAssign "d" (DynArray uint256 2) (call "bar" []);
+      Assign (BaseTarget (SubscriptTarget (NameTarget "d") (li 0))) (li 0);
+      Return $ SOME $ TopLevelName "a"
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_pass_by_value5_ast_def;
+
+Theorem test_pass_by_value5:
+  load_and_call_foo test_pass_by_value5_ast =
+  INL (ArrayV (Dynamic 2) [IntV 1; IntV 1])
+Proof
+  CONV_TAC cv_eval
+QED
+
+Definition test_pass_by_value6_ast_def:
+  test_pass_by_value6_ast = [
+    StructDecl "Foo" [("a", uint256); ("b", DynArray uint256 2)];
+    privar "f" (StructT "Foo");
+    itl_def "bar" [] (StructT "Foo") [
+      Return $ SOME $ self_ "f"
+    ];
+    def "foo" [] (StructT "Foo") [
+      AssignSelf "f"
+        (StructLit "Foo" [("a", li 1); ("b", DynArlit 2 [li 1; li 1])]);
+      AnnAssign "d" (StructT "Foo") (call "bar" []);
+      Assign (BaseTarget (AttributeTarget (NameTarget "d") "a")) (li 0);
+      Assign (BaseTarget (SubscriptTarget
+                           (AttributeTarget (NameTarget "d") "b")
+                           (li 0))) (li 0);
+      Return $ SOME $ TopLevelName "f"
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_pass_by_value6_ast_def;
+
+Theorem test_pass_by_value6:
+  load_and_call_foo test_pass_by_value6_ast =
+  INL (StructV [("a", IntV 1); ("b", ArrayV (Dynamic 2) [IntV 1; IntV 1])])
+Proof
+  CONV_TAC cv_eval
+QED
+
+(*
+
+
+    c = get_contract(src)
+    assert c.foo() == (1, [1, 1])
+
+
+def test_pass_by_value7(get_contract):
+    src = """
+h: HashMap[uint256, DynArray[uint256, 2]]
+
+@external
+def foo() -> DynArray[uint256, 2]:
+    self.h[0] = [1, 1]
+    d: DynArray[uint256, 2] = self.h[0]
+    d[0] = 0
+    return self.h[0]
+    """
+
+    c = get_contract(src)
+    assert c.foo() == [1, 1]
+
+
+def test_pass_by_value8(get_contract):
+    src = """
+struct Foo:
+    a: uint256
+    b: DynArray[uint256, 2]
+
+@external
+def foo() -> Foo:
+    f: Foo = Foo(a=1, b=[1, 1])
+    d: DynArray[uint256, 2] = f.b
+    d[0] = 0
+    return f
+    """
+
+    c = get_contract(src)
+    assert c.foo() == (1, [1, 1])
+
+TODO: pass by value tests *)
 
 (* TODO: max builtin *)
 
