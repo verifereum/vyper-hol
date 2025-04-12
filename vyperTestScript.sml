@@ -404,6 +404,37 @@ Proof
   CONV_TAC cv_eval
 QED
 
+Definition test_statefulness_of_tstorage_ast_def:
+  test_statefulness_of_tstorage_ast = [
+    VariableDecl Private Transient "d" uint256;
+    (* omitted: interface Bar *)
+    def "foo" [] uint256 [
+      AugAssign (TopLevelNameTarget "d") Add (li 1);
+      Return (SOME (Call (ExtCall "bar") [self]))
+    ];
+    def "bar" [] uint256 [
+      AugAssign (TopLevelNameTarget "d") Add (li 1);
+      Return (SOME (self_ "d"))
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_statefulness_of_tstorage_ast_def;
+
+(* needs ExtCall
+Theorem test_statefulness_of_tstorage:
+  (case load_contract initial_machine_state deploy_tx
+          test_statefulness_of_tstorage_ast of
+     INL am =>
+     FST $ call_transactions am
+       [call_foo_tx; call_foo_tx; call_foo_tx]
+   | _ => [])
+  = [INL (IntV 2); INL (IntV 2); INL (IntV 2)]
+Proof
+  CONV_TAC $ LAND_CONV cv_eval
+QED
+*)
+
 Definition test_tstorage_variables0_ast_def:
   test_tstorage_variables0_ast = [
     VariableDecl Private Transient "d" uint256;
@@ -448,107 +479,6 @@ Theorem test_tstorage_variables2:
   = INL (IntV 3)
 Proof
   CONV_TAC(LAND_CONV cv_eval) \\ rw[]
-QED
-
-Definition test_statefulness_of_tstorage_ast_def:
-  test_statefulness_of_tstorage_ast = [
-    VariableDecl Private Transient "d" uint256;
-    (* omitted: interface Bar *)
-    def "foo" [] uint256 [
-      AugAssign (TopLevelNameTarget "d") Add (li 1);
-      Return (SOME (Call (ExtCall "bar") [self]))
-    ];
-    def "bar" [] uint256 [
-      AugAssign (TopLevelNameTarget "d") Add (li 1);
-      Return (SOME (self_ "d"))
-    ]
-  ]
-End
-
-val () = cv_trans_deep_embedding EVAL test_statefulness_of_tstorage_ast_def;
-
-(* needs ExtCall
-Theorem test_statefulness_of_tstorage:
-  (case load_contract initial_machine_state deploy_tx
-          test_statefulness_of_tstorage_ast of
-     INL am =>
-     FST $ call_transactions am
-       [call_foo_tx; call_foo_tx; call_foo_tx]
-   | _ => [])
-  = [INL (IntV 2); INL (IntV 2); INL (IntV 2)]
-Proof
-  CONV_TAC $ LAND_CONV cv_eval
-QED
-*)
-
-Definition test_tstorage_clearing_ast_def:
-  test_tstorage_clearing_ast = [
-    VariableDecl Private Transient "t" uint256;
-    def "foo" [] uint256 [
-      AssignSelf "t" (li 42);
-      Return $ SOME (self_ "t")
-    ];
-    def "bar" [] uint256 [
-      Return $ SOME (self_ "t")
-    ]
-  ]
-End
-
-val () = cv_trans_deep_embedding EVAL test_tstorage_clearing_ast_def;
-
-Theorem test_tstorage_clearing:
-  (case load_contract initial_machine_state deploy_tx
-          test_tstorage_clearing_ast of
-     INL am =>
-     FST $ call_transactions am
-       [call_foo_tx; call_bar_tx; call_foo_tx]
-   | _ => [])
-  = [INL (IntV 42); INL (IntV 0); INL (IntV 42)]
-Proof
-  CONV_TAC $ cv_eval
-QED
-
-Definition test_tstorage_clearing2_ast_def:
-  test_tstorage_clearing2_ast = [
-    StructDecl "S" [("a", uint256)];
-    VariableDecl Private Transient "a" uint256;
-    VariableDecl Private Transient "b" uint256;
-    VariableDecl Private Transient "c" (DynArray uint256 10);
-    VariableDecl Private Transient "d" (StructT "S");
-    VariableDecl Private Transient "e" (BaseT (BytesT (Dynamic 10)));
-    VariableDecl Private Transient "f" (BaseT (StringT 10));
-    def "foo" [] NoneT [
-      Assert (self_ "a" == li 0) "";
-      Assert (self_ "b" == li 0) "";
-      Assert (len (self_ "c") == li 0) "";
-      Assert (Attribute (self_ "d") "a" == li 0) "";
-      Assert (len (self_ "e") == li 0) "";
-      Assert (len (self_ "f") == li 0) ""
-    ];
-    def "bar" [] NoneT [
-      AssignSelf "a" (li 1);
-      AssignSelf "b" (li 1);
-      AssignSelf "c" (DynArlit 10 [li 1; li 2; li 3]);
-      Assign (BaseTarget (AttributeTarget (TopLevelNameTarget "d") "a")) (li 1);
-      AssignSelf "e" $
-        Literal $ BytesL (Dynamic 10) (MAP (n2w o ORD) "hello");
-      AssignSelf "f" $ Literal $ StringL 10 "hello"
-    ]
-  ]
-End
-
-val () = cv_trans_deep_embedding EVAL test_tstorage_clearing2_ast_def;
-
-Theorem test_tstorage_clearing2:
-  (case load_contract initial_machine_state deploy_tx
-          test_tstorage_clearing2_ast of
-     INL am =>
-     FST $ call_transactions am
-       [call_foo_tx; call_bar_tx; call_foo_tx]
-   | _ => [])
-  = [INL NoneV; INL NoneV; INL NoneV]
-Proof
-  CONV_TAC $ cv_eval
 QED
 
 Definition test_default_storage_values_ast_def:
@@ -776,6 +706,8 @@ Proof
   CONV_TAC cv_eval
 QED
 
+(* TODO: external_func_arg2, 3, 4 *)
+
 Definition test_empty_builtin_ast_def:
   test_empty_builtin_ast = [
     def "foo" [] uint256 [
@@ -826,6 +758,14 @@ Theorem test_empty_builtin3:
 Proof
   CONV_TAC cv_eval
 QED
+
+(* TODO raw_call tests *)
+
+(* TODO static call tests *)
+
+(* TODO abi encode tests *)
+
+(* TODO interface call tests *)
 
 Definition test_struct_ast_def:
   test_struct_ast = [
@@ -942,6 +882,78 @@ Proof
   CONV_TAC cv_eval
 QED
 
+Definition test_tstorage_clearing_ast_def:
+  test_tstorage_clearing_ast = [
+    VariableDecl Private Transient "t" uint256;
+    def "foo" [] uint256 [
+      AssignSelf "t" (li 42);
+      Return $ SOME (self_ "t")
+    ];
+    def "bar" [] uint256 [
+      Return $ SOME (self_ "t")
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_tstorage_clearing_ast_def;
+
+Theorem test_tstorage_clearing:
+  (case load_contract initial_machine_state deploy_tx
+          test_tstorage_clearing_ast of
+     INL am =>
+     FST $ call_transactions am
+       [call_foo_tx; call_bar_tx; call_foo_tx]
+   | _ => [])
+  = [INL (IntV 42); INL (IntV 0); INL (IntV 42)]
+Proof
+  CONV_TAC $ cv_eval
+QED
+
+Definition test_tstorage_clearing2_ast_def:
+  test_tstorage_clearing2_ast = [
+    StructDecl "S" [("a", uint256)];
+    VariableDecl Private Transient "a" uint256;
+    VariableDecl Private Transient "b" uint256;
+    VariableDecl Private Transient "c" (DynArray uint256 10);
+    VariableDecl Private Transient "d" (StructT "S");
+    VariableDecl Private Transient "e" (BaseT (BytesT (Dynamic 10)));
+    VariableDecl Private Transient "f" (BaseT (StringT 10));
+    def "foo" [] NoneT [
+      Assert (self_ "a" == li 0) "";
+      Assert (self_ "b" == li 0) "";
+      Assert (len (self_ "c") == li 0) "";
+      Assert (Attribute (self_ "d") "a" == li 0) "";
+      Assert (len (self_ "e") == li 0) "";
+      Assert (len (self_ "f") == li 0) ""
+    ];
+    def "bar" [] NoneT [
+      AssignSelf "a" (li 1);
+      AssignSelf "b" (li 1);
+      AssignSelf "c" (DynArlit 10 [li 1; li 2; li 3]);
+      Assign (BaseTarget (AttributeTarget (TopLevelNameTarget "d") "a")) (li 1);
+      AssignSelf "e" $
+        Literal $ BytesL (Dynamic 10) (MAP (n2w o ORD) "hello");
+      AssignSelf "f" $ Literal $ StringL 10 "hello"
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_tstorage_clearing2_ast_def;
+
+Theorem test_tstorage_clearing2:
+  (case load_contract initial_machine_state deploy_tx
+          test_tstorage_clearing2_ast of
+     INL am =>
+     FST $ call_transactions am
+       [call_foo_tx; call_bar_tx; call_foo_tx]
+   | _ => [])
+  = [INL NoneV; INL NoneV; INL NoneV]
+Proof
+  CONV_TAC $ cv_eval
+QED
+
+(* TODO abi encode struct *)
+
 Definition test_hash_map_ast_def:
   test_hash_map_ast = [
     HashMapDecl Public "var" uint256 (Type uint256);
@@ -1023,6 +1035,14 @@ Proof
   \\ CONV_TAC $ LAND_CONV cv_eval
   \\ rw[]
 QED
+
+(* TODO: encode address *)
+
+(* TODO: init tests *)
+
+(* TODO: library storage tests *)
+
+(* TODO: module struct attribute *)
 
 Definition test_darray_append_ast_def:
   test_darray_append_ast = [
@@ -1160,131 +1180,34 @@ Proof
   CONV_TAC cv_eval
 QED
 
-(* TODO add tests
+(* TODO: pass by value tests *)
 
-def test_external_func_arg2():
-    src = """
-@external
-def foo(a: DynArray[uint256, 10], s: String[100]) -> (DynArray[uint256, 10], String[100]):
-    return a, s
-    """
+(* TODO: max builtin *)
 
-    c = loads(src)
-    assert c.foo([1, 2, 3], "hello") == ([1, 2, 3], "hello")
+(* TODO: return constant *)
 
+(* TODO: create minimal proxy tests *)
 
-def test_external_func_arg3():
-    dynarray_t = "DynArray[DynArray[uint256, 10], 10]"
-    src = f"""
-@external
-def foo(a: DynArray[uint256, 10], s: String[100], b: {dynarray_t}) -> (DynArray[uint256, 10], String[100], {dynarray_t}):
-    return a, s, b
-    """
+(* TODO: create copy tests *)
 
-    c = loads(src)
-    complex_array = [[4, 5, 6], [7, 8, 9, 10, 11], [], [12]]
-    assert c.foo([1, 2, 3], "hello", complex_array) == (
-        [1, 2, 3],
-        "hello",
-        complex_array,
-    )
+(* TODO: test log *)
 
+(* TODO: test encode static array *)
 
-def test_external_func_arg4():
-    tuple_t = "(String[93], DynArray[DynArray[uint256, 10], 10])"
-    src = f"""
-@external
-def foo(a: DynArray[uint256, 10], s: String[100], b: {tuple_t}) -> (DynArray[uint256, 10], String[100], {tuple_t}):
-    return a, s, b
-    """
+(* TODO: test storage dump *)
 
-    c = loads(src)
-    complex_tuple = ("apollo", [[4, 5, 6], [7, 8, 9, 10, 11], [], [12]])
-    assert c.foo([1, 2, 3], "hello", complex_tuple) == (
-        [1, 2, 3],
-        "hello",
-        complex_tuple,
-    )
+(* TODO: test elif condition *)
 
+(* TODO: assert tests *)
+(* TODO: raise tests *)
 
-def test_encode_address():
-    src = """
-    @external
-    def foo() -> address:
-        return self
-        """
+(* TODO: raw_revert *)
+(* TODO: raw_call into acc *)
+(* TODO: extcall into acc *)
+(* TODO: identity precompile tests *)
 
-    c = loads(src)
-    assert c.foo() == c.address
+(* TODO: test_blah *)
 
-
-def test_init(get_contract):
-    src = """
-d: public(uint256)
-
-@deploy
-def __init__(a: uint256):
-    self.d = a
-    """
-
-    c = get_contract(src, 42)
-    assert c.d() == 42
-
-
-def test_init2(get_contract):
-    src = """
-d: public(uint256)
-
-@deploy
-def __init__(a: uint256):
-    self.bar()
-
-
-def bar():
-    self.d = self.foo()
-
-def foo() -> uint256:
-    return 42
-    """
-
-    c = get_contract(src, 42)
-    assert c.d() == 42
-
-
-def test_init3(get_contract):
-    src = """
-d: public(uint256)
-
-@deploy
-def __init__():
-    assert self.is_contract == False
-    """
-
-    _ = get_contract(src)
-
-
-def test_init4(get_contract):
-    src = """
-interface C:
-    def foo(a: uint256): nonpayable
-
-@deploy
-def __init__(callback: address, a: uint256):
-    extcall C(callback).foo(a)
-    """
-
-    callback = """
-d: public(uint256)
-
-@external
-def foo(a: uint256):
-    self.d = a
-"""
-
-    callback = get_contract(callback)
-    _ = get_contract(src, callback, 42)
-    assert callback.d() == 42
-
-*)
+(* TODO: raw_call_with_revert *)
 
 val () = export_theory();
