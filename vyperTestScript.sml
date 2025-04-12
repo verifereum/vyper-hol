@@ -61,6 +61,16 @@ End
 
 val () = cv_auto_trans load_and_call_foo_def;
 
+Definition call_transactions_def:
+  call_transactions am [] = ([], am) ∧
+  call_transactions am (t::ts) =
+  let (r, am) = call_external am t in
+  let (rs, am) = call_transactions am ts in
+    (r::rs, am)
+End
+
+val () = cv_auto_trans call_transactions_def;
+
 Theorem test_if_control_flow:
   load_and_call_foo test_if_control_flow_ast
   = INL (IntV 44)
@@ -457,13 +467,89 @@ End
 
 val () = cv_trans_deep_embedding EVAL test_statefulness_of_tstorage_ast_def;
 
-(* TODO: add
-
+(* needs ExtCall
 Theorem test_statefulness_of_tstorage:
-    for i in range(3):
-        assert c.foo() == 2
-
+  (case load_contract initial_machine_state deploy_tx
+          test_statefulness_of_tstorage_ast of
+     INL am =>
+     FST $ call_transactions am
+       [call_foo_tx; call_foo_tx; call_foo_tx]
+   | _ => [])
+  = [INL (IntV 2); INL (IntV 2); INL (IntV 2)]
+Proof
+  CONV_TAC $ LAND_CONV cv_eval
+QED
 *)
+
+Definition test_tstorage_clearing_ast_def:
+  test_tstorage_clearing_ast = [
+    VariableDecl Private Transient "t" uint256;
+    def "foo" [] uint256 [
+      AssignSelf "t" (li 42);
+      Return $ SOME (self_ "t")
+    ];
+    def "bar" [] uint256 [
+      Return $ SOME (self_ "t")
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_tstorage_clearing_ast_def;
+
+Theorem test_tstorage_clearing:
+  (case load_contract initial_machine_state deploy_tx
+          test_tstorage_clearing_ast of
+     INL am =>
+     FST $ call_transactions am
+       [call_foo_tx; call_bar_tx; call_foo_tx]
+   | _ => [])
+  = [INL (IntV 42); INL (IntV 0); INL (IntV 42)]
+Proof
+  CONV_TAC $ cv_eval
+QED
+
+Definition test_tstorage_clearing2_ast_def:
+  test_tstorage_clearing2_ast = [
+    StructDecl "S" [("a", uint256)];
+    VariableDecl Private Transient "a" uint256;
+    VariableDecl Private Transient "b" uint256;
+    VariableDecl Private Transient "c" (DynArray uint256 10);
+    VariableDecl Private Transient "d" (StructT "S");
+    VariableDecl Private Transient "e" (BaseT (BytesT (Dynamic 10)));
+    VariableDecl Private Transient "f" (BaseT (StringT 10));
+    def "foo" [] NoneT [
+      Assert (self_ "a" == li 0) "";
+      Assert (self_ "b" == li 0) "";
+      Assert (len (self_ "c") == li 0) "";
+      Assert (Attribute (self_ "d") "a" == li 0) "";
+      Assert (len (self_ "e") == li 0) "";
+      Assert (len (self_ "f") == li 0) ""
+    ];
+    def "bar" [] NoneT [
+      AssignSelf "a" (li 1);
+      AssignSelf "b" (li 1);
+      AssignSelf "c" (DynArlit 10 [li 1; li 2; li 3]);
+      Assign (BaseTarget (AttributeTarget (TopLevelNameTarget "d") "a")) (li 1);
+      AssignSelf "e" $
+        Literal $ BytesL (Dynamic 10) (MAP (n2w o ORD) "hello");
+      AssignSelf "f" $ Literal $ StringL 10 "hello"
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_tstorage_clearing2_ast_def;
+
+Theorem test_tstorage_clearing2:
+  (case load_contract initial_machine_state deploy_tx
+          test_tstorage_clearing2_ast of
+     INL am =>
+     FST $ call_transactions am
+       [call_foo_tx; call_bar_tx; call_foo_tx]
+   | _ => [])
+  = [INL NoneV; INL NoneV; INL NoneV]
+Proof
+  CONV_TAC $ cv_eval
+QED
 
 Definition test_default_storage_values_ast_def:
   test_default_storage_values_ast = [
@@ -871,16 +957,6 @@ End
 
 val () = cv_trans_deep_embedding EVAL test_hash_map_ast_def;
 
-Definition call_transactions_def:
-  call_transactions am [] = ([], am) ∧
-  call_transactions am (t::ts) =
-  let (r, am) = call_external am t in
-  let (rs, am) = call_transactions am ts in
-    (r::rs, am)
-End
-
-val () = cv_auto_trans call_transactions_def;
-
 Theorem test_hash_map:
   (case load_contract initial_machine_state deploy_tx test_hash_map_ast of
      INL am =>
@@ -1130,63 +1206,6 @@ def foo(a: DynArray[uint256, 10], s: String[100], b: {tuple_t}) -> (DynArray[uin
         complex_tuple,
     )
 
-
-def test_tstorage_clearing():
-    src = """
-
-t: transient(uint256)
-
-@external
-def foo() -> uint256:
-    self.t = 42
-    return self.t
-
-@external
-def bar() -> uint256:
-    return self.t
-    """
-
-    c = loads(src)
-    assert c.foo() == 42
-    assert c.bar() == 0
-    assert c.foo() == 42
-
-
-def test_tstorage_clearing2():
-    src = """
-struct S:
-    a: uint256
-
-a: transient(uint256)
-b: transient(uint256)
-c: transient(DynArray[uint256, 10])
-d: transient(S)
-e: transient(Bytes[10])
-f: transient(String[10])
-
-@external
-def foo():
-    assert self.a == 0
-    assert self.b == 0
-    assert len(self.c) == 0
-    assert self.d.a == 0
-    assert len(self.e) == 0
-    assert len(self.f) == 0
-
-@external
-def bar():
-    self.a = 1
-    self.b = 1
-    self.c = [1, 2, 3]
-    self.d.a = 1
-    self.e = b"hello"
-    self.f = "hello"
-    """
-
-    c = loads(src)
-    c.foo()
-    c.bar()
-    c.foo()
 
 def test_encode_address():
     src = """
