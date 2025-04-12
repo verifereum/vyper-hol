@@ -1136,7 +1136,61 @@ QED
 
 (* TODO: encode address *)
 
-(* TODO: init tests *)
+Definition test_init_ast_def:
+  test_init_ast = [
+    pubvar "d" uint256;
+    deploy_def "__init__" [("a", uint256)] NoneT [
+      AssignSelf "d" (Name "a")
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_init_ast_def;
+
+Theorem test_init:
+  (case load_contract initial_machine_state
+        (call_txn ^sender_addr ^contract_addr "__init__" [IntV 42] 0)
+        test_init_ast of
+     INL am =>
+     FST $ call_external am $ call_txn ^sender_addr ^contract_addr "d" [] 0
+   | INR x => INR x)
+  = INL (IntV 42)
+Proof
+  CONV_TAC cv_eval
+QED
+
+Definition test_init2_ast_def:
+  test_init2_ast = [
+    pubvar "d" uint256;
+    deploy_def "__init__" [("a", uint256)] NoneT [
+      Expr $ call "bar" []
+    ];
+    itl_def "bar" [] NoneT [
+      AssignSelf "d" (call "foo" [])
+    ];
+    itl_def "foo" [] uint256 [
+      Return $ SOME (li 42)
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_init2_ast_def;
+
+(* TODO: make code available during init
+Theorem test_init2:
+  (case load_contract initial_machine_state
+        (call_txn ^sender_addr ^contract_addr "__init__" [IntV 42] 0)
+        test_init2_ast of
+     INL am =>
+     FST $ call_external am $ call_txn ^sender_addr ^contract_addr "d" [] 0
+   | INR x => INR x)
+  = INL (IntV 42)
+Proof
+  CONV_TAC cv_eval
+QED
+*)
+
+(* TODO: init tests 3 4 *)
 
 (* TODO: library storage tests *)
 
