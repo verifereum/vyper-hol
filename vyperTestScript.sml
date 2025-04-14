@@ -1472,47 +1472,48 @@ Proof
   CONV_TAC cv_eval
 QED
 
-(*
+Definition test_pass_by_value7_ast_def:
+  test_pass_by_value7_ast = [
+    HashMapDecl Private "h" uint256 (Type (DynArray uint256 2));
+    def "foo" [] (DynArray uint256 2) [
+      assign (sub (TopLevelNameTarget "h") (li 0)) (DynArlit 2 [li 1; li 1]);
+      AnnAssign "d" (DynArray uint256 2) (Subscript (self_ "h") (li 0));
+      assign (sub (NameTarget "d") (li 0)) (li 0);
+      return (Subscript (self_ "h") (li 0))
+    ]
+  ]
+End
 
+val () = cv_trans_deep_embedding EVAL test_pass_by_value7_ast_def;
 
-    c = get_contract(src)
-    assert c.foo() == (1, [1, 1])
+Theorem test_pass_by_value7:
+  load_and_call_foo test_pass_by_value7_ast =
+  INL $ ArrayV (Dynamic 2) [IntV 1; IntV 1]
+Proof
+  CONV_TAC cv_eval
+QED
 
+Definition test_pass_by_value8_ast_def:
+  test_pass_by_value8_ast = [
+    StructDecl "Foo" [("a", uint256); ("b", DynArray uint256 2)];
+    def "foo" [] (StructT "Foo") [
+      AnnAssign "f" (StructT "Foo")
+        (StructLit "Foo" [("a", li 1); ("b", DynArlit 2 [li 1; li 1])]);
+      AnnAssign "d" (DynArray uint256 2) (Attribute (Name "f") "b");
+      assign (sub (NameTarget "d") (li 0)) (li 0);
+      return (Name "f")
+    ]
+  ]
+End
 
-def test_pass_by_value7(get_contract):
-    src = """
-h: HashMap[uint256, DynArray[uint256, 2]]
+val () = cv_trans_deep_embedding EVAL test_pass_by_value8_ast_def;
 
-@external
-def foo() -> DynArray[uint256, 2]:
-    self.h[0] = [1, 1]
-    d: DynArray[uint256, 2] = self.h[0]
-    d[0] = 0
-    return self.h[0]
-    """
-
-    c = get_contract(src)
-    assert c.foo() == [1, 1]
-
-
-def test_pass_by_value8(get_contract):
-    src = """
-struct Foo:
-    a: uint256
-    b: DynArray[uint256, 2]
-
-@external
-def foo() -> Foo:
-    f: Foo = Foo(a=1, b=[1, 1])
-    d: DynArray[uint256, 2] = f.b
-    d[0] = 0
-    return f
-    """
-
-    c = get_contract(src)
-    assert c.foo() == (1, [1, 1])
-
-TODO: pass by value tests *)
+Theorem test_pass_by_value8:
+  load_and_call_foo test_pass_by_value8_ast =
+  INL $ StructV [("a", IntV 1); ("b", ArrayV (Dynamic 2) [IntV 1; IntV 1])]
+Proof
+  CONV_TAC cv_eval
+QED
 
 (* TODO: max builtin *)
 
