@@ -93,6 +93,10 @@ Datatype:
 End
 
 Datatype:
+  type_builtin = Empty | MaxValue | MinValue | Epsilon
+End
+
+Datatype:
   expr
   = Name identifier
   | TopLevelName identifier
@@ -104,7 +108,7 @@ Datatype:
   | Subscript expr expr
   | Attribute expr identifier
   | Builtin builtin (expr list)
-  | Empty type
+  | TypeBuiltin type_builtin type
   | Pop base_assignment_target
   | Call call_target (expr list)
 ; base_assignment_target

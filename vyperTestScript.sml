@@ -809,7 +809,7 @@ QED
 Definition test_empty_builtin_ast_def:
   test_empty_builtin_ast = [
     def "foo" [] uint256 [
-      Return (SOME (Empty uint256))
+      Return (SOME (TypeBuiltin Empty uint256))
     ]
   ]
 End
@@ -826,7 +826,7 @@ QED
 Definition test_empty_builtin2_ast_def:
   test_empty_builtin2_ast = [
     def "foo" [] uint256 [
-      Return (SOME (Empty (BaseT (StringT 56))))
+      Return (SOME (TypeBuiltin Empty (BaseT (StringT 56))))
     ]
   ]
 End
@@ -843,7 +843,7 @@ QED
 Definition test_empty_builtin3_ast_def:
   test_empty_builtin3_ast = [
     def "foo" [] uint256 [
-      Return (SOME (Empty (ArrayT (BaseT (StringT 32)) (Dynamic 10))))
+      Return (SOME (TypeBuiltin Empty (ArrayT (BaseT (StringT 32)) (Dynamic 10))))
     ]
   ]
 End
@@ -1515,7 +1515,21 @@ Proof
   CONV_TAC cv_eval
 QED
 
-(* TODO: max builtin *)
+Definition test_max_builtin_ast_def:
+  test_max_builtin_ast = [
+    def "foo" [] uint256 [
+      return $ TypeBuiltin MaxValue uint256
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_max_builtin_ast_def;
+
+Theorem test_max_builtin:
+  ISL $ load_and_call_foo test_max_builtin_ast
+Proof
+  CONV_TAC cv_eval
+QED
 
 (* TODO: return constant *)
 
