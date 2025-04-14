@@ -1228,12 +1228,53 @@ Proof
   \\ CASE_TAC \\ simp[]
 QED
 
+Definition fromtvk_def:
+  fromtvk (SOME (AK cx (ApplyTv tv) st DoneK)) = (INL tv, st) ∧
+  fromtvk (SOME (AK cx (ApplyExc ex) st DoneK)) = (INR ex, st) ∧
+  fromtvk _ = (INR $ Error "fromtvk", empty_state)
+End
+
+val () = cv_auto_trans fromtvk_def;
+
+Theorem eval_expr_eq_cont_cps:
+  eval_expr cx e st = fromtvk $ cont (eval_expr_cps cx e st DoneK)
+Proof
+  Cases_on`eval_expr cx e st`
+  \\ qmatch_goalsub_rename_tac`res,st1`
+  \\ qspecl_then[`cx`,`e`,`st`,`DoneK`]mp_tac(cj 8 eval_cps_eq)
+  \\ simp[cont_def] \\ strip_tac
+  \\ simp[Once OWHILE_THM]
+  \\ IF_CASES_TAC
+  \\ Cases_on `res` \\ gvs[]
+  \\ simp[fromtvk_def]
+QED
+
+val constants_env_pre_def = constants_env_def
+  |> SRULE [eval_expr_eq_cont_cps]
+  |> cv_auto_trans_pre;
+
+Theorem constants_env_pre[cv_pre]:
+  ∀x. constants_env_pre x
+Proof
+  ho_match_mp_tac constants_env_ind
+  \\ rw[]
+  \\ rw[Once constants_env_pre_def]
+  \\ gs[eval_expr_eq_cont_cps]
+  \\ rw[cont_pre_IS_SOME_cont]
+  \\ qmatch_goalsub_abbrev_tac`eval_expr_cps ec ee es dk`
+  \\ qspecl_then[`ec`,`ee`,`es`,`dk`]mp_tac $ cj 8 eval_cps_eq
+  \\ rw[cont_def]
+  \\ CASE_TAC
+  \\ CASE_TAC \\ gvs[]
+  \\ rw[Once OWHILE_THM, Abbr`dk`]
+QED
+
 val call_external_function_pre_def = call_external_function_def
      |> SRULE [eval_stmts_eq_cont_cps]
      |> cv_auto_trans_pre;
 
 Theorem call_external_function_pre[cv_pre]:
-  call_external_function_pre am cx args vals body
+  call_external_function_pre am cx ts args vals body
 Proof
   rw[call_external_function_pre_def]
   \\ rw[cont_pre_IS_SOME_cont]

@@ -105,6 +105,8 @@ Proof
   \\ simp[get_self_code_def, initial_evaluation_context_def]
   \\ CONV_TAC(cv_eval_match “lookup_function _ _ _”)
   \\ simp[call_external_function_def]
+  \\ CONV_TAC(cv_eval_match “constants_env _”)
+  \\ simp[]
   \\ CONV_TAC(cv_eval_match “bind_arguments _ _”)
   \\ simp[]
   \\ simp[evaluate_def]

@@ -550,6 +550,26 @@ Proof
   rw[theorem"evaluation_context_component_equality"]
 QED
 
+Definition empty_call_txn_def:
+  empty_call_txn = <|
+    sender := 0w;
+    target := 0w;
+    function_name := "";
+    args := [];
+    value := 0
+  |>
+End
+
+Definition empty_evaluation_context_def:
+  empty_evaluation_context = <|
+    stk := []
+  ; txn := empty_call_txn
+  ; sources := []
+  |>
+End
+
+val () = cv_auto_trans empty_evaluation_context_def;
+
 Definition evaluate_account_op_def:
   evaluate_account_op Balance a = IntV &a.balance ∧
   evaluate_account_op Codehash a = BytesV (Fixed 32) (Keccak_256_w64 a.code) ∧
@@ -1850,11 +1870,11 @@ Definition initial_machine_state_def:
 End
 
 Definition initial_state_def:
-  initial_state (am: abstract_machine) env : evaluation_state =
+  initial_state (am: abstract_machine) scs : evaluation_state =
   <| accounts := am.accounts
    ; globals := am.globals
    ; logs := []
-   ; scopes := [env]
+   ; scopes := scs
    |>
 End
 
@@ -1885,22 +1905,6 @@ End
 
 val () = cv_auto_trans reset_all_transient_globals_def;
 
-Definition call_external_function_def:
-  call_external_function am cx args vals body =
-  case bind_arguments args vals
-  of NONE => (INR $ Error "call bind_arguments", am)
-   | SOME env =>
-  (let st = initial_state am env in
-   let srcs = am.sources in
-   let (res, st) =
-     (case eval_stmts cx body st
-      of
-       | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs st)
-       | (INR (ReturnException v), st) => (INL v, abstract_machine_from_state srcs st)
-       | (INR e, st) => (INR e, abstract_machine_from_state srcs st)) in
-    (res, st with globals updated_by reset_all_transient_globals))
-End
-
 Definition empty_state_def:
   empty_state : evaluation_state = <|
     accounts := empty_accounts;
@@ -1912,6 +1916,35 @@ End
 
 val () = cv_trans empty_state_def;
 
+(* TODO: state should have other constants in scope? *)
+Definition constants_env_def:
+  constants_env [] = SOME FEMPTY ∧
+  constants_env ((VariableDecl vis (Constant e) id typ)::ts) =
+    (case FST $ eval_expr empty_evaluation_context e empty_state of
+     | INL (Value v) => OPTION_MAP (λm. m |+ (string_to_num id, v)) (constants_env ts)
+     | _ => NONE) ∧
+  constants_env (t::ts) = constants_env ts
+End
+
+Definition call_external_function_def:
+  call_external_function am cx ts args vals body =
+  case bind_arguments args vals
+  of NONE => (INR $ Error "call bind_arguments", am)
+   | SOME env =>
+  (case constants_env ts
+   of NONE => (INR $ Error "call constants_env", am)
+    | SOME cenv =>
+   let st = initial_state am [env; cenv] in
+   let srcs = am.sources in
+   let (res, st) =
+     (case eval_stmts cx body st
+      of
+       | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs st)
+       | (INR (ReturnException v), st) => (INL v, abstract_machine_from_state srcs st)
+       | (INR e, st) => (INR e, abstract_machine_from_state srcs st)) in
+    (res, st with globals updated_by reset_all_transient_globals))
+End
+
 Definition call_external_def:
   call_external am tx =
   let cx = initial_evaluation_context am.sources tx in
@@ -1921,7 +1954,7 @@ Definition call_external_def:
   case lookup_function tx.function_name External ts
   of NONE => (INR $ Error "call lookup_function", am)
    | SOME (args, ret, body) =>
-       call_external_function am cx args tx.args body
+       call_external_function am cx ts args tx.args body
 End
 
 Definition load_contract_def:
@@ -1935,7 +1968,7 @@ Definition load_contract_def:
      | SOME (args, ret, body) =>
        (* TODO: update balances on return *)
        let cx = initial_evaluation_context am.sources tx in
-       case call_external_function am cx args tx.args body
+       case call_external_function am cx ts args tx.args body
          of (INR e, _) => INR e
           | (_, am) => INL (am with sources updated_by CONS (addr, ts))
 End

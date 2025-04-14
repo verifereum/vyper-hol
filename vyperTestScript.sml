@@ -1531,7 +1531,23 @@ Proof
   CONV_TAC cv_eval
 QED
 
-(* TODO: return constant *)
+Definition test_return_constant_ast_def:
+  test_return_constant_ast = [
+    VariableDecl Private (Constant (li 1)) "u" uint256;
+    def "foo" [] uint256 [
+      return (Name "u")
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_return_constant_ast_def;
+
+Theorem test_return_constant:
+  load_and_call_foo test_return_constant_ast
+  = INL (IntV 1)
+Proof
+  CONV_TAC cv_eval
+QED
 
 (* TODO: create minimal proxy tests *)
 
