@@ -1555,6 +1555,23 @@ QED
 
 (* TODO: test log *)
 
+Definition test_log_ast_def:
+  test_log_ast = [
+    EventDecl "Foo" [("a", uint256)];
+    def "foo" [] NoneT [
+      Log "Foo" [li 1]
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_log_ast_def;
+
+Theorem test_log:
+  ISL $ load_and_call_foo test_log_ast
+Proof
+  CONV_TAC cv_eval
+QED
+
 (* TODO: test encode static array *)
 
 (* TODO: test storage dump *)
