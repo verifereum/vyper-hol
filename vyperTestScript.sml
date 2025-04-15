@@ -1572,18 +1572,166 @@ Proof
   CONV_TAC cv_eval
 QED
 
-(* TODO: test encode static array *)
+Definition test_encode_static_array_ast_def:
+  test_encode_static_array_ast = [
+    privar "a" (ArrayT uint256 (Fixed 3));
+    def "foo" [] (ArrayT uint256 (Fixed 3)) [
+      assign (sub (TopLevelNameTarget "a") (li 0)) (li 1);
+      assign (sub (TopLevelNameTarget "a") (li 1)) (li 2);
+      return $ TopLevelName "a"
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_encode_static_array_ast_def;
+
+Theorem test_encode_static_array:
+  load_and_call_foo test_encode_static_array_ast =
+  INL (ArrayV (Fixed 3) [IntV 1; IntV 2; IntV 0])
+Proof
+  CONV_TAC cv_eval
+QED
 
 (* TODO: test storage dump *)
 
-(* TODO: test elif condition *)
+Definition test_elif_condition_ast_def:
+  test_elif_condition_ast = [
+    def "foo" [("a", uint256)] uint256 [
+      If (Name "a" == li 10) [ return $ li 1 ] [
+      If (Name "a" == li 11) [ return $ li 2 ] [
+      If (Name "a" == li 12) [ return $ li 3 ] [
+        return $ li 4 ]
+      ]]
+    ]
+  ]
+End
 
-(* TODO: assert tests *)
-(* TODO: raise tests *)
+val () = cv_trans_deep_embedding EVAL test_elif_condition_ast_def;
+
+Theorem test_elif_condition:
+  (case load_contract initial_machine_state deploy_tx
+        test_elif_condition_ast of
+     | INL am => FST $ call_transactions am [
+         call_txn ^sender_addr ^contract_addr "foo" [IntV 10] 0;
+         call_txn ^sender_addr ^contract_addr "foo" [IntV 11] 0;
+         call_txn ^sender_addr ^contract_addr "foo" [IntV 12] 0;
+         call_txn ^sender_addr ^contract_addr "foo" [IntV 66] 0
+       ]
+     | _ => [])
+  = MAP INL [IntV 1; IntV 2; IntV 3; IntV 4]
+Proof
+  CONV_TAC $ LAND_CONV cv_eval
+  \\ rw[]
+QED
+
+Definition test_assert_passes_ast_def:
+  test_assert_passes_ast = [
+    def "foo" [] NoneT [
+      Assert (lb T) ""
+    ]
+  ]
+End
+
+val () = cv_auto_trans test_assert_passes_ast_def;
+
+Theorem test_assert_passes:
+  ISL $ load_and_call_foo test_assert_passes_ast
+Proof
+  CONV_TAC cv_eval
+QED
+
+Definition test_assert_passes2_ast_def:
+  test_assert_passes2_ast = [
+    def "foo" [("a", uint256)] NoneT [
+      Assert ($and (lb T) (Name "a" > li 10)) "";
+      Assert (or (Name "a" == li 25) ($and (lb T) (Name "a" == li 29))) ""
+    ]
+  ]
+End
+
+val () = cv_auto_trans test_assert_passes2_ast_def;
+
+Theorem test_assert_passes2:
+  (case load_contract initial_machine_state deploy_tx
+        test_assert_passes2_ast of
+     | INL am => FST $ call_transactions am [
+         call_txn ^sender_addr ^contract_addr "foo" [IntV 29] 0;
+         call_txn ^sender_addr ^contract_addr "foo" [IntV 25] 0
+       ]
+     | _ => [])
+  = MAP INL [NoneV; NoneV]
+Proof
+  CONV_TAC $ LAND_CONV cv_eval
+  \\ rw[]
+QED
+
+Theorem test_assert_fails:
+  (case load_contract initial_machine_state deploy_tx
+        test_assert_passes2_ast of
+     | INL am => FST $ call_transactions am [
+         call_txn ^sender_addr ^contract_addr "foo" [IntV 11] 0;
+         call_txn ^sender_addr ^contract_addr "foo" [IntV 26] 0;
+         call_txn ^sender_addr ^contract_addr "foo" [IntV 30] 0
+       ]
+     | _ => [])
+  = [INR $ AssertException "";
+     INR $ AssertException "";
+     INR $ AssertException ""]
+Proof
+  CONV_TAC $ LAND_CONV cv_eval
+  \\ rw[]
+QED
+
+Definition test_assert_fails_with_message_ast_def:
+  test_assert_fails_with_message_ast = [
+    def "foo" [("a", uint256)] NoneT [
+      Assert ($and (lb T) (Name "a" > li 10)) "";
+      Assert (or (Name "a" == li 25) ($and (lb T) (Name "a" == li 29)))
+        "assertion failed"
+    ]
+  ]
+End
+
+val () = cv_auto_trans test_assert_fails_with_message_ast_def;
+
+Theorem test_assert_fails_with_message:
+  (case load_contract initial_machine_state deploy_tx
+        test_assert_fails_with_message_ast of
+     | INL am => FST $ call_transactions am [
+         call_txn ^sender_addr ^contract_addr "foo" [IntV 11] 0;
+         call_txn ^sender_addr ^contract_addr "foo" [IntV 26] 0;
+         call_txn ^sender_addr ^contract_addr "foo" [IntV 30] 0
+       ]
+     | _ => [])
+  = [INR $ AssertException "assertion failed";
+     INR $ AssertException "assertion failed";
+     INR $ AssertException "assertion failed"]
+Proof
+  CONV_TAC $ LAND_CONV cv_eval
+  \\ rw[]
+QED
+
+Definition test_raise_raises_ast_def:
+  test_raise_raises_ast = [
+    def "foo" [] NoneT [
+      Raise "you shall not pass"
+    ]
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL test_raise_raises_ast_def;
+
+Theorem test_raise_raises:
+  load_and_call_foo test_raise_raises_ast =
+  INR $ AssertException "you shall not pass"
+Proof
+  CONV_TAC cv_eval
+QED
 
 (* TODO: raw_revert *)
 (* TODO: raw_call into acc *)
 (* TODO: extcall into acc *)
+
 (* TODO: identity precompile tests *)
 
 (* TODO: test_blah *)
