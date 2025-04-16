@@ -3,7 +3,7 @@ Formal semantics for the [Vyper](https://vyperlang.org) programming language in 
 
 ## Status: Progress and Limitations
 
-Currently, this repository includes a _formal_ and _executable_ definition of a subset of the semantics of Vyper, expressed as a _definitional interpreter_ in higher-order logic. The main function for executing Vyper statements is `eval_stmts` defined in `vyperInterpreterTheory` (`evaluate_def`).
+Currently, this repository includes a _formal_ and _executable_ definition of a subset of the semantics of Vyper, expressed as a _definitional interpreter_ in higher-order logic. The main function for executing Vyper statements is `eval_stmts` defined in `vyperInterpreterTheory` (`evaluate_def`). Top-level entry points are `load_contract` and `call_external`, defined in the same theory. Examples of calling these functions and executing the interpreter can be found in `vyperTestScript.sml`.
 
 The interpreter operates on abstract syntax (defined in `vyperAstTheory`) and produces effects on an abstract machine state (`abstract_machine`, defined in `vyperInterpreterTheory`) that represents the Ethereum virtual machine.
 
