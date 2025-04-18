@@ -19,7 +19,31 @@ The following aspects of Vyper are currently not part of the formal model:
 
 ## Repository Structure
 
-The HOL4 script files that produce the formal theories are all in the root of the repository. We describe the main idea and contents of each theory as follows: TODO.
+The HOL4 script files that produce the formal theories are all in the root of the repository. We describe the main idea and contents of each theory as follows:
+
+### vyperAst
+
+The abstract syntax tree (AST) for Vyper is defined in `vyperAstScript.sml`. The main datatypes are `expr` for expressions, `stmt` for statements, and `toplevel` for top-level declarations.
+
+We syntactically restrict the targets for assignment statements/expressions, using the `assignment_target` type which can be seen as a restriction of the expression syntax to only variables (`x`), subscripting (`x[3]`), and attribute selection (`x.y`) with arbitrary nesting. This in particular also applies to the `append` and `pop` builtin functions on arrays, which are stateful (mutating) operations that we treat as assignments.
+
+### vyperInterpreter
+
+TODO
+- definitional interpreter as monadic function
+- termination is proved, i.e., all programs (calls into a contract) terminate (even though we ignore gas), validating Vyper's design as a total language
+
+### vyperSmallStep
+
+This theory defines a continuation-passing version of the interpreter from `vyperInterpreterTheory`, where each function in the interpreter takes a small step before returning a continuation. The small-step interpreter is proved equivalent to the normal (big-step) interpreter (theorem: `eval_cps_eq`).
+
+The main purpose of the small-step interpreter is to make it easier to produce the executable version of the interpreter using HOL4's `cv_compute` mechanism. In particular, the relatively simple termination proofs for the small-step functions make the automatic translation via `cv_compute` work more smoothly.
+
+### vyperTest
+
+TODO
+
+There is also a `vyperDemo` theory that has some initial steps towards defining a larger contract and proving some properties about it at the level of its Vyper source code.
 
 ## Dependencies
 
