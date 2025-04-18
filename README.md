@@ -21,6 +21,8 @@ The following aspects of Vyper are currently not part of the formal model:
 
 The HOL4 script files that produce the formal theories are all in the root of the repository. We describe the main idea and contents of each theory as follows: TODO.
 
-## Dependencies and Interactive Use
+## Dependencies
 
-TODO: HOL and Verifereum dependencies and commits that are known to work
+This work is developed in the [HOL4 theorem prover](https://hol-theorem-prover.org), and makes use of the Ethereum Virtual Machine (EVM) formalisation in the [Verifereum](https://verifereum.org) project. The [Verifereum repository](https://github.com/verifereum/verifereum) includes instructions on how to build HOL4. The following commits are known to work for building the theories in this project:
+  - HOL4: [e64fb78f42098918d99c7831ec2609e5ce47f77c](https://github.com/HOL-Theorem-Prover/HOL/tree/e64fb78f42098918d99c7831ec2609e5ce47f77c)
+  - Verifereum: [4648cc50227c619eeffcdaa7393186549e11fa72](https://github.com/verifereum/verifereum/tree/4648cc50227c619eeffcdaa7393186549e11fa72)
