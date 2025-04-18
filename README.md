@@ -41,7 +41,9 @@ The main purpose of the small-step interpreter is to make it easier to produce t
 
 ### vyperTest
 
-TODO
+This theory proves theorems (by execution in logic) stating that the formal semantics passes each of the tests in the Ivy Vyper interpreter's [end-to-end test suite](https://github.com/cyberthirst/ivy/blob/aae6aa671e3dc6106708d992f34d3b1b61c45bbe/tests/test_e2e.py), for the tests that are applicable to the subset of the language formalised.
+
+The test code is loaded at a fixed contract address from a fixed sender address for these tests, because a fully concrete machine state is required for our approach to fast execution in logic.
 
 There is also a `vyperDemo` theory that has some initial steps towards defining a larger contract and proving some properties about it at the level of its Vyper source code.
 
