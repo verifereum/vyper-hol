@@ -29,9 +29,13 @@ We syntactically restrict the targets for assignment statements/expressions, usi
 
 ### vyperInterpreter
 
-TODO
-- definitional interpreter as monadic function
-- termination is proved, i.e., all programs (calls into a contract) terminate (even though we ignore gas), validating Vyper's design as a total language
+The formal semantics for Vyper is defined in `vyperInterpreterScript.sml`. The top-level entry-points are `load_contract` (for running a contract-deployment transaction given the Vyper source code of the contract), and `call_external` (for calling an external function of an already-deployed contract). These entry-points use the `eval_stmts` function defined in `evaluate_def` for interpreting Vyper code.
+
+The interpreter  in `evaluate_def` is written in a state-exception monad; the state contains the EVM machine state, Vyper-level globals in contracts, logs generated so far during execution, and the environment with variable bindings (since variables can be assigned to statefully). The non-stateful environment for the interpreter contains the stack of names of (internal) functions that have been called, information about the transaction that initiated the call, and the source code of existing contracts (including the current one). Exceptions are used for semantic errors (e.g., looking up a variable that was not bound, or in general attempting to interpret a badly-typed program), for legitimate runtime exceptions (e.g., failed assertions in user code, attempting to call a non-existent external function, etc.), and to manage control flow for internal function calls and loops (`return`, `break`, `continue`).
+
+Termination is proved for the interpreter, validating Vyper's design as a total language (n.b., this does not rely on gas consumption, which is invisible at the Vyper source level). The termination argument uses the facts that internal function calls cannot recurse (even indirectly) and that all loops have an explicit (syntactic) bound.
+
+At present external calls are not implemented, and when they are added they could pose a problem for the termination argument above. Our plan is to define the semantics of external calls by deferring entirely to low-level EVM execution. This will make termination trivial since the interpreter will not be recursive for external calls. Ultimately in the case of external calls termination will then depend on gas consumption (and this being sufficient has already been proven in Verifereum).
 
 ### vyperSmallStep
 
