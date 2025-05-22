@@ -26,8 +26,7 @@ Termination
   WF_REL_TAC ‘measure type_size’
 End
 
-(*
-Definition abi_to_vyper_def:
+Definition abi_to_vyper_def[simp]:
   abi_to_vyper (BaseT $ UintT z) (NumV n) = SOME $ IntV (&n) ∧
   abi_to_vyper (BaseT $ IntT z) (IntV i) = SOME $ IntV i ∧
   abi_to_vyper (BaseT $ AddressT) (NumV n) = SOME $ AddressV (n2w n) ∧
@@ -35,9 +34,30 @@ Definition abi_to_vyper_def:
   abi_to_vyper (BaseT $ BytesT b) (BytesV bs) =
     (if compatible_bound b (LENGTH bs) then SOME $ BytesV b bs else NONE) ∧
   abi_to_vyper (BaseT $ StringT z) (BytesV bs) =
-    (if LENGTH bs ≤ z then SOME $ StringV z (MAP (CHR o w2n) sb) else NONE) ∧
+    (if LENGTH bs ≤ z then SOME $ StringV z (MAP (CHR o w2n) bs) else NONE) ∧
   abi_to_vyper (TupleT ts) (ListV vs) =
-  (* cover every case in has_type *)
-*)
+    (case abi_to_vyper_list ts vs of NONE => NONE
+        | SOME vs => SOME $ ArrayV (Fixed (LENGTH ts)) vs) ∧
+  abi_to_vyper (ArrayT t b) (ListV vs) = (
+    let n = LENGTH vs in
+      if compatible_bound b n then
+        case abi_to_vyper_list (REPLICATE n t) vs of NONE => NONE
+           | SOME vs => SOME $ ArrayV b vs
+      else NONE ) ∧
+  abi_to_vyper NoneT (ListV ls) = (if NULL ls then SOME NoneV else NONE) ∧
+  abi_to_vyper _ _ = NONE ∧
+  (* TODO: decimals *)
+  (* TODO: flags *)
+  (* TODO: structs *)
+  abi_to_vyper_list [] [] = SOME [] ∧
+  abi_to_vyper_list (t::ts) (v::vs) =
+    (case abi_to_vyper t v of NONE => NONE | SOME v =>
+       case abi_to_vyper_list ts vs of NONE => NONE | SOME vs =>
+         SOME (v::vs)) ∧
+  abi_to_vyper_list _ _ = NONE
+Termination
+  WF_REL_TAC ‘measure (λx. case x of INL (_, v) => abi_value_size v
+                                   | INR (_, vs) => list_size abi_value_size vs)’
+End
 
 val () = export_theory();
