@@ -1,4 +1,4 @@
-structure vyperTestLib = struct
+structure vyperTestLib :> vyperTestLib = struct
 
 open HolKernel JSONDecode JSONUtil
      pairSyntax listSyntax stringSyntax optionSyntax
