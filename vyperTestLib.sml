@@ -1,7 +1,8 @@
 structure vyperTestLib = struct
 
 open HolKernel JSONDecode JSONUtil
-     vyperAstTheory pairSyntax listSyntax stringSyntax
+     pairSyntax listSyntax stringSyntax optionSyntax intSyntax
+     contractABITheory vyperAstTheory
 
 val json_path = "test_export.py.json"
 val test_jsons = decodeFile rawObject json_path
@@ -56,11 +57,14 @@ val call : call decoder =
 val toplevel_ty = mk_thy_type{Thy="vyperAst",Tyop="toplevel",Args=[]}
 val type_ty = mk_thy_type{Thy="vyperAst",Tyop="type",Args=[]}
 val stmt_ty = mk_thy_type{Thy="vyperAst",Tyop="stmt",Args=[]}
+val expr_ty = mk_thy_type{Thy="vyperAst",Tyop="expr",Args=[]}
 val identifier_ty = string_ty
 val argument_ty = pairSyntax.mk_prod(identifier_ty, type_ty)
 val BaseT_tm = prim_mk_const{Name="BaseT",Thy="vyperAst"}
 val BoolT_tm = prim_mk_const{Name="BoolT",Thy="vyperAst"}
+val UintT_tm = prim_mk_const{Name="UintT",Thy="vyperAst"}
 val bool_tm = mk_comb(BaseT_tm, BoolT_tm)
+val uint256_tm = mk_comb(BaseT_tm, mk_comb(UintT_tm, numSyntax.term_of_int 256))
 val FunctionDecl_tm = prim_mk_const{Name="FunctionDecl",Thy="vyperAst"}
 val External_tm = prim_mk_const{Name="External",Thy="vyperAst"}
 val Internal_tm = prim_mk_const{Name="Internal",Thy="vyperAst"}
@@ -71,8 +75,20 @@ val Nonpayable_tm = prim_mk_const{Name="Nonpayable",Thy="vyperAst"}
 val Payable_tm = prim_mk_const{Name="Payable",Thy="vyperAst"}
 fun mk_FunctionDecl v m n a t b = list_mk_comb(FunctionDecl_tm, [v,m,n,a,t,b])
 val Pass_tm = prim_mk_const{Name="Pass",Thy="vyperAst"}
+val Assert_tm = prim_mk_const{Name="Assert",Thy="vyperAst"}
+val Name_tm = prim_mk_const{Name="Name",Thy="vyperAst"}
+val Return_tm = prim_mk_const{Name="Return",Thy="vyperAst"}
+val Literal_tm = prim_mk_const{Name="Literal",Thy="vyperAst"}
+val IntL_tm = prim_mk_const{Name="IntL",Thy="vyperAst"}
+fun mk_Name s = mk_comb(Name_tm, fromMLstring s)
+fun mk_Assert e s = list_mk_comb(Assert_tm, [e, fromMLstring s])
+fun mk_li i = mk_comb(Literal_tm, mk_comb(IntL_tm, intSyntax.term_of_int i))
+fun mk_Return tmo = mk_comb(Return_tm, lift_option (mk_option expr_ty) I tmo)
 
-val astType : term decoder = succeed bool_tm (* TODO *)
+val astType : term decoder = choose [
+    check_field "id" "uint256" $ succeed uint256_tm,
+    check_field "id" "bool" $ succeed bool_tm
+  ]
 
 val arg : term decoder =
   check_ast_type "arg" $
@@ -84,7 +100,24 @@ val args : term decoder =
   andThen (fn ls => succeed $ mk_list(ls, argument_ty))
     (array arg)
 
-val statement : term decoder = succeed Pass_tm (* TODO *)
+fun theoptstring NONE = "" | theoptstring (SOME s) = s
+
+val expression : term decoder = choose [
+    check_ast_type "Name" $
+    field "id" (JSONDecode.map mk_Name string),
+    check_ast_type "Int" $
+    field "value" (JSONDecode.map (mk_li o Arbint.fromInt) int)
+  ]
+
+val statement : term decoder = choose [
+    check_ast_type "Pass" $ succeed Pass_tm,
+    check_ast_type "Assert" $
+    andThen (fn (e,s) => succeed $ mk_Assert e s)
+      (tuple2 (field "test" expression,
+               field "msg" (JSONDecode.map theoptstring (nullable string)))),
+    check_ast_type "Return" $
+    field "value" (JSONDecode.map mk_Return (try expression))
+  ]
 
 val statements : term decoder =
   andThen (fn ls => succeed $ mk_list(ls, stmt_ty)) (array statement)
@@ -112,7 +145,9 @@ val functionDef : term decoder =
              tuple2 (field "returns" astType,
                      field "body" statements)))
 
-val toplevel : term decoder = functionDef (* TODO: or others *)
+val toplevel : term decoder = choose [
+    functionDef
+  ]
 
 val toplevels : term decoder =
   andThen (fn ls => succeed $ mk_list(ls, toplevel_ty))
