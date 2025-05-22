@@ -1,30 +1,36 @@
 structure vyperTestLib = struct
 
 open HolKernel JSONDecode JSONUtil
-     pairSyntax listSyntax stringSyntax optionSyntax intSyntax
+     pairSyntax listSyntax stringSyntax optionSyntax
+     intSyntax wordsSyntax fcpSyntax
      contractABITheory vyperAstTheory
 
-val json_path = "test_export.py.json"
-val test_jsons = decodeFile rawObject json_path
-val (test_name, test_json) = el 1 test_jsons
+type abi_function = {
+  name: string,
+  inputs: (string * term) list,
+  outputs: (string * term) list,
+  mutability: term
+}
+
+datatype abi_entry = Function of abi_function (* TODO others *)
 
 type deployment = {
   sourceCode: term,
-  abi: JSON.value, (* TODO: SML value or HOL term? *)
-  deployedAddress: string,
+  abi: abi_entry list,
+  deployedAddress: term,
   expectSuccess: bool,
   value: string
 }
 
 type call = {
-  sender: string,
-  callData: string,
+  sender: term,
+  callData: term,
   value: string,
   gasLimit: string,
   gasPrice: string,
-  target: string,
+  target: term,
   static: bool,
-  expectedOutput: string option
+  expectedOutput: term option
 }
 
 fun check_field lab req d =
@@ -38,6 +44,30 @@ fun check_ast_type req = check_field "ast_type" req
 val intAsString = JSONDecode.map Int.toString JSONDecode.int
 val stringtm = JSONDecode.map fromMLstring string
 
+val address_bits_ty = mk_int_numeric_type 160
+val address_ty = mk_word_type address_bits_ty
+val mk_num_tm = numSyntax.mk_numeral o Arbnum.fromHexString
+fun mk_address_tm hex = mk_n2w(mk_num_tm hex, address_bits_ty)
+val address : term decoder = JSONDecode.map mk_address_tm string
+
+val byte_bits_ty = mk_int_numeric_type 8
+val byte_ty = mk_word_type byte_bits_ty
+val bytes_ty = mk_list_type byte_ty
+fun mk_bytes_tms hex = let
+  fun loop i a = if i = 0 then a else let
+    val i = i - 1
+    val y = String.sub(hex, i)
+    val i = i - 1
+    val x = String.sub(hex, i)
+    val b = Arbnum.fromHexString (String.implode [x, y])
+    val t = mk_n2w(numSyntax.mk_numeral b, byte_bits_ty)
+  in loop i (t::a) end
+in
+  loop (String.size hex) []
+end
+fun mk_bytes_tm hex = mk_list(mk_bytes_tms hex, byte_ty)
+val bytes : term decoder = JSONDecode.map mk_bytes_tm string
+
 val call : call decoder =
   check_trace_type "call" $
   andThen (fn (((s,c,v,g),(p,t,m)),e) => succeed {
@@ -45,14 +75,14 @@ val call : call decoder =
               gasPrice=p, target=t, static=not m, expectedOutput=e})
           (tuple2 (
             field "call_args" (tuple2 (
-              tuple4 (field "sender" string,
-                      field "calldata" string,
+              tuple4 (field "sender" address,
+                      field "calldata" bytes,
                       field "value" intAsString,
                       field "gas" intAsString),
               tuple3 (field "gas_price" intAsString,
-                      field "to" string,
+                      field "to" address,
                       field "is_modifying" bool))),
-            field "output" (nullable string)))
+            field "output" (nullable bytes)))
 
 val toplevel_ty = mk_thy_type{Thy="vyperAst",Tyop="toplevel",Args=[]}
 val type_ty = mk_thy_type{Thy="vyperAst",Tyop="type",Args=[]}
@@ -84,6 +114,10 @@ fun mk_Name s = mk_comb(Name_tm, fromMLstring s)
 fun mk_Assert e s = list_mk_comb(Assert_tm, [e, fromMLstring s])
 fun mk_li i = mk_comb(Literal_tm, mk_comb(IntL_tm, intSyntax.term_of_int i))
 fun mk_Return tmo = mk_comb(Return_tm, lift_option (mk_option expr_ty) I tmo)
+
+val abiBool_tm = prim_mk_const{Name="Bool",Thy="contractABI"}
+val abiUint_tm = prim_mk_const{Name="Uint",Thy="contractABI"}
+val abiUint256_tm = mk_comb(abiUint_tm, numSyntax.term_of_int 256)
 
 val astType : term decoder = choose [
     check_field "id" "uint256" $ succeed uint256_tm,
@@ -153,6 +187,31 @@ val toplevels : term decoder =
   andThen (fn ls => succeed $ mk_list(ls, toplevel_ty))
     (array toplevel)
 
+val abiType : term decoder =
+  andThen (fn s =>
+    if s = "bool" then succeed abiBool_tm else
+    if s = "uint256" then succeed abiUint256_tm else
+    fail ("abiType: " ^ s)) string
+
+val abiArg : (string * term) decoder =
+  tuple2 (field "name" string,
+          field "type" abiType)
+
+val abiMutability : term decoder =
+  andThen (fn s =>
+    if s = "nonpayable" then succeed Nonpayable_tm else
+    fail ("abiMutability: " ^ s)) string
+
+val abi : abi_entry decoder = choose [
+    check_field "type" "function" $
+    andThen (fn (n,is,os,m) => succeed $ Function
+               {name=n, inputs=is, outputs=os, mutability=m})
+      (tuple4 (field "name" string,
+               field "inputs" (array abiArg),
+               field "outputs" (array abiArg),
+               field "stateMutability" abiMutability))
+  ]
+
 val deployment : deployment decoder =
   check_trace_type "deployment" $
   andThen (fn ((c,i,a,v),e) => succeed {
@@ -160,8 +219,8 @@ val deployment : deployment decoder =
              value=v, expectSuccess=e })
           (tuple2 (tuple4 (field "annotated_ast"
                              (field "ast" (field "body" toplevels)),
-                           field "contract_abi" raw,
-                           field "deployed_address" string,
+                           field "contract_abi" (array abi),
+                           field "deployed_address" address,
                            field "value" intAsString),
                    field "deployment_succeeded" bool))
 
@@ -173,6 +232,11 @@ val trace : trace decoder =
   orElse (JSONDecode.map Call call,
           JSONDecode.map Deployment deployment)
 
-val traces = decode (array trace) test_json
+fun read_test_json json_path = let
+  val test_jsons = decodeFile rawObject json_path
+  fun mapthis (name, json) = (name, decode (array trace) json)
+in
+  List.map mapthis test_jsons
+end
 
 end
