@@ -14,15 +14,16 @@ signature vyperTestLib = sig
     abi: abi_entry list,
     deployedAddress: term,
     expectSuccess: bool,
-    value: string
+    callData: term,
+    value: term
   }
 
   type call = {
     sender: term,
     callData: term,
-    value: string,
-    gasLimit: string,
-    gasPrice: string,
+    value: term,
+    gasLimit: term,
+    gasPrice: term,
     target: term,
     static: bool,
     expectedOutput: term option

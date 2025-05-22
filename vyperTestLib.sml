@@ -19,15 +19,16 @@ type deployment = {
   abi: abi_entry list,
   deployedAddress: term,
   expectSuccess: bool,
-  value: string
+  callData: term,
+  value: term
 }
 
 type call = {
   sender: term,
   callData: term,
-  value: string,
-  gasLimit: string,
-  gasPrice: string,
+  value: term,
+  gasLimit: term,
+  gasPrice: term,
   target: term,
   static: bool,
   expectedOutput: term option
@@ -41,7 +42,7 @@ fun check_trace_type req = check_field "trace_type" req
 
 fun check_ast_type req = check_field "ast_type" req
 
-val intAsString = JSONDecode.map Int.toString JSONDecode.int
+val numtm = JSONDecode.map numSyntax.term_of_int int
 val stringtm = JSONDecode.map fromMLstring string
 
 val address_bits_ty = mk_int_numeric_type 160
@@ -77,9 +78,9 @@ val call : call decoder =
             field "call_args" (tuple2 (
               tuple4 (field "sender" address,
                       field "calldata" bytes,
-                      field "value" intAsString,
-                      field "gas" intAsString),
-              tuple3 (field "gas_price" intAsString,
+                      field "value" numtm,
+                      field "gas" numtm),
+              tuple3 (field "gas_price" numtm,
                       field "to" address,
                       field "is_modifying" bool))),
             field "output" (nullable bytes)))
@@ -214,14 +215,17 @@ val abi : abi_entry decoder = choose [
 
 val deployment : deployment decoder =
   check_trace_type "deployment" $
-  andThen (fn ((c,i,a,v),e) => succeed {
+  andThen (fn ((c,i,a,(d,v)),e) => succeed {
              sourceCode=c, abi=i, deployedAddress=a,
-             value=v, expectSuccess=e })
+             callData=d, value=v, expectSuccess=e })
           (tuple2 (tuple4 (field "annotated_ast"
                              (field "ast" (field "body" toplevels)),
                            field "contract_abi" (array abi),
                            field "deployed_address" address,
-                           field "value" intAsString),
+                           tuple2 (field "calldata" $
+                                   JSONDecode.map (mk_bytes_tm o theoptstring)
+                                     (nullable string),
+                                   field "value" numtm)),
                    field "deployment_succeeded" bool))
 
 datatype trace =
