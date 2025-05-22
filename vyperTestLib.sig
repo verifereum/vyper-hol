@@ -1,5 +1,7 @@
 signature vyperTestLib = sig
 
+  type term = Term.term
+
   type abi_function = {
     name: string,
     inputs: (string * term) list,
