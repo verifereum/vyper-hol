@@ -2,7 +2,7 @@ open HolKernel boolLib bossLib Parse intLib wordsLib cv_transLib;
 open numeralTheory arithmeticTheory finite_mapTheory;
 open vyperAstTheory vyperInterpreterTheory vyperSmallStepTheory;
 
-val () = new_theory "vyperTest";
+val () = new_theory "vyperManualTest";
 
 Definition test_if_control_flow_ast_def:
   test_if_control_flow_ast = [
