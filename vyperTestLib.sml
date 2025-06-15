@@ -3,36 +3,7 @@ structure vyperTestLib :> vyperTestLib = struct
 open HolKernel JSONDecode JSONUtil
      pairSyntax listSyntax stringSyntax optionSyntax
      intSyntax wordsSyntax fcpSyntax
-     contractABITheory vyperAstTheory
-
-type abi_function = {
-  name: string,
-  inputs: (string * term) list,
-  outputs: (string * term) list,
-  mutability: term
-}
-
-datatype abi_entry = Function of abi_function (* TODO others *)
-
-type deployment = {
-  sourceCode: term,
-  abi: abi_entry list,
-  deployedAddress: term,
-  expectSuccess: bool,
-  callData: term,
-  value: term
-}
-
-type call = {
-  sender: term,
-  callData: term,
-  value: term,
-  gasLimit: term,
-  gasPrice: term,
-  target: term,
-  static: bool,
-  expectedOutput: term option
-}
+     vyperAbiTheory vyperAstTheory vyperTestRunnerTheory
 
 fun check_field lab req d =
   andThen (fn x => if x <> req then fail (lab ^ " not " ^ req) else d)
@@ -44,6 +15,9 @@ fun check_ast_type req = check_field "ast_type" req
 
 val numtm = JSONDecode.map numSyntax.term_of_int int
 val stringtm = JSONDecode.map fromMLstring string
+val negbooltm = JSONDecode.map (mk_bool o not) bool
+
+fun from_term_option ty = lift_option (mk_option ty) I
 
 val address_bits_ty = mk_int_numeric_type 160
 val address_ty = mk_word_type address_bits_ty
@@ -69,11 +43,21 @@ end
 fun mk_bytes_tm hex = mk_list(mk_bytes_tms hex, byte_ty)
 val bytes : term decoder = JSONDecode.map mk_bytes_tm string
 
-val call : call decoder =
+val Call_tm = prim_mk_const{Thy="vyperTestRunner",Name="Call"}
+val call_trace_ty = #1 $ dom_rng $ type_of Call_tm
+
+val call : term decoder =
   check_trace_type "call" $
-  andThen (fn (((s,c,v,g),(p,t,m)),e) => succeed {
-              sender=s, callData=c, value=v, gasLimit=g,
-              gasPrice=p, target=t, static=not m, expectedOutput=e})
+  andThen (fn (((s,c,v,g),(p,t,a)),e) => succeed $
+              TypeBase.mk_record (call_trace_ty, [
+                ("sender", s),
+                ("target", t),
+                ("callData", c),
+                ("value", v),
+                ("gasLimit", g),
+                ("gasPrice", p),
+                ("static", a),
+                ("expectedOutput", e)]))
           (tuple2 (
             field "call_args" (tuple2 (
               tuple4 (field "sender" address,
@@ -82,8 +66,9 @@ val call : call decoder =
                       field "gas" numtm),
               tuple3 (field "gas_price" numtm,
                       field "to" address,
-                      field "is_modifying" bool))),
-            field "output" (nullable bytes)))
+                      field "is_modifying" negbooltm))),
+            field "output" (JSONDecode.map (from_term_option bytes_ty) $
+                            nullable bytes)))
 
 val toplevel_ty = mk_thy_type{Thy="vyperAst",Tyop="toplevel",Args=[]}
 val type_ty = mk_thy_type{Thy="vyperAst",Tyop="type",Args=[]}
