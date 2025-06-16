@@ -171,14 +171,6 @@ val () = int_xor_def
 val () = cv_auto_trans int_shift_left_def;
 val () = cv_auto_trans int_shift_right_def;
 
-Theorem INDEX_OF_pre[cv_pre]:
-  INDEX_OF_pre x y
-Proof
-  qid_spec_tac`x`
-  \\ Induct_on`y`
-  \\ rw[Once INDEX_OF_pre_cases]
-QED
-
 Theorem cv_rep_DOMSUB[cv_rep]:
   from_fmap f (m \\ k) = cv_delete (Num k) (from_fmap f m)
 Proof
@@ -371,8 +363,8 @@ Termination
   WF_REL_TAC ‘inv_image ($< LEX $<) (λx.
     case x
       of INL (env, t) => (CARD (FDOM env), type_size t)
-       | INR (INL (env, _, ts)) => (CARD (FDOM env), type1_size ts)
-       | INR (INR (env, _, ps)) => (CARD (FDOM env), type1_size (MAP SND ps)))’
+       | INR (INL (env, _, ts)) => (CARD (FDOM env), list_size type_size ts)
+       | INR (INR (env, _, ps)) => (CARD (FDOM env), list_size type_size (MAP SND ps)))’
   \\ rw[type_size_def, FLOOKUP_DEF]
   \\ disj1_tac
   \\ CCONTR_TAC
@@ -1319,6 +1311,15 @@ Proof
   Induct_on `ls` \\ rw[listTheory.list_size_def]
 QED
 
+Theorem list_size_pair_size_map:
+  list_size (pair_size f1 f2) ls =
+  list_size f1 (MAP FST ls) +
+  list_size f2 (MAP SND ls)
+Proof
+  Induct_on`ls` \\ rw[]
+  \\ Cases_on`h` \\ gvs[]
+QED
+
 Definition bound_def:
   stmt_bound ts Pass = 0n ∧
   stmt_bound ts Continue = 0 ∧
@@ -1433,8 +1434,8 @@ Termination
   | INL (ts, s) =>
       SUM (MAP (list_size stmt_size o SND) ts) +
       stmt_size s)’
-  \\ rw[expr1_size_map, expr2_size_map, list_size_SUM_MAP, SUM_MAP_expr2_size,
-        MAP_MAP_o]
+  \\ rw[expr1_size_map, expr2_size_map, SUM_MAP_expr2_size,
+        MAP_MAP_o, list_size_pair_size_map]
   \\ drule ALOOKUP_MEM
   \\ rw[ADELKEY_def]
   \\ qmatch_goalsub_abbrev_tac`MAP f (FILTER P ts)`
