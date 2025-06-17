@@ -15,6 +15,7 @@ fun check_ast_type req = check_field "ast_type" req
 
 val numtm = JSONDecode.map numSyntax.term_of_int int
 val stringtm = JSONDecode.map fromMLstring string
+val booltm = JSONDecode.map mk_bool bool
 val negbooltm = JSONDecode.map (mk_bool o not) bool
 
 fun from_term_option ty = lift_option (mk_option ty) I
@@ -29,6 +30,7 @@ val byte_bits_ty = mk_int_numeric_type 8
 val byte_ty = mk_word_type byte_bits_ty
 val bytes_ty = mk_list_type byte_ty
 fun mk_bytes_tms hex = let
+  val hex = if String.isPrefix "0x" hex then String.extract(hex,2,NONE) else hex
   fun loop i a = if i = 0 then a else let
     val i = i - 1
     val y = String.sub(hex, i)
@@ -79,8 +81,11 @@ val argument_ty = pairSyntax.mk_prod(identifier_ty, type_ty)
 val BaseT_tm = prim_mk_const{Name="BaseT",Thy="vyperAst"}
 val BoolT_tm = prim_mk_const{Name="BoolT",Thy="vyperAst"}
 val UintT_tm = prim_mk_const{Name="UintT",Thy="vyperAst"}
+val NoneT_tm = prim_mk_const{Name="NoneT",Thy="vyperAst"}
+val AddressT_tm = prim_mk_const{Name="AddressT",Thy="vyperAst"}
 val bool_tm = mk_comb(BaseT_tm, BoolT_tm)
 val uint256_tm = mk_comb(BaseT_tm, mk_comb(UintT_tm, numSyntax.term_of_int 256))
+val address_tm = mk_comb(BaseT_tm, AddressT_tm)
 val FunctionDecl_tm = prim_mk_const{Name="FunctionDecl",Thy="vyperAst"}
 val External_tm = prim_mk_const{Name="External",Thy="vyperAst"}
 val Internal_tm = prim_mk_const{Name="Internal",Thy="vyperAst"}
@@ -92,22 +97,50 @@ val Payable_tm = prim_mk_const{Name="Payable",Thy="vyperAst"}
 fun mk_FunctionDecl v m n a t b = list_mk_comb(FunctionDecl_tm, [v,m,n,a,t,b])
 val Pass_tm = prim_mk_const{Name="Pass",Thy="vyperAst"}
 val Assert_tm = prim_mk_const{Name="Assert",Thy="vyperAst"}
+val AnnAssign_tm = prim_mk_const{Name="AnnAssign",Thy="vyperAst"}
 val Name_tm = prim_mk_const{Name="Name",Thy="vyperAst"}
 val Return_tm = prim_mk_const{Name="Return",Thy="vyperAst"}
 val Literal_tm = prim_mk_const{Name="Literal",Thy="vyperAst"}
+val Builtin_tm = prim_mk_const{Name="Builtin",Thy="vyperAst"}
+val Bop_tm = prim_mk_const{Name="Bop",Thy="vyperAst"}
+val In_tm = prim_mk_const{Name="In",Thy="vyperAst"}
 val IntL_tm = prim_mk_const{Name="IntL",Thy="vyperAst"}
+val Fixed_tm = prim_mk_const{Name="Fixed",Thy="vyperAst"}
+val BytesL_tm = prim_mk_const{Name="BytesL",Thy="vyperAst"}
+val ArrayLit_tm = prim_mk_const{Name="ArrayLit",Thy="vyperAst"}
 fun mk_Name s = mk_comb(Name_tm, fromMLstring s)
-fun mk_Assert e s = list_mk_comb(Assert_tm, [e, fromMLstring s])
+fun mk_Assert e s = list_mk_comb(Assert_tm, [e, s])
 fun mk_li i = mk_comb(Literal_tm, mk_comb(IntL_tm, intSyntax.term_of_int i))
 fun mk_Return tmo = mk_comb(Return_tm, lift_option (mk_option expr_ty) I tmo)
+fun mk_AnnAssign s t e = list_mk_comb(AnnAssign_tm, [s, t, e])
+fun mk_Hex s = let
+  val s = if String.isPrefix "0x" s then String.extract(s,2,NONE) else s
+  val n = numSyntax.term_of_int $ String.size s div 2
+  val b = mk_comb(Fixed_tm, n)
+in
+  mk_comb(Literal_tm,
+    list_mk_comb(BytesL_tm, [b, mk_bytes_tm s]))
+end
+fun mk_Builtin b es = list_mk_comb(Builtin_tm, [b, es])
+fun mk_Bop b = mk_comb(Bop_tm, b)
+fun mk_ArrayLit ls = let
+  val n = numSyntax.term_of_int $ List.length ls
+  val b = mk_comb(Fixed_tm, n)
+in
+  list_mk_comb(ArrayLit_tm, [b, mk_list(ls, expr_ty)])
+end
 
 val abiBool_tm = prim_mk_const{Name="Bool",Thy="contractABI"}
 val abiUint_tm = prim_mk_const{Name="Uint",Thy="contractABI"}
 val abiUint256_tm = mk_comb(abiUint_tm, numSyntax.term_of_int 256)
 
-val astType : term decoder = choose [
+fun achoose err ls = orElse(choose ls, fail err)
+
+val astType : term decoder = achoose "astType" [
     check_field "id" "uint256" $ succeed uint256_tm,
-    check_field "id" "bool" $ succeed bool_tm
+    check_field "id" "bool" $ succeed bool_tm,
+    check_field "id" "address" $ succeed address_tm,
+    null NoneT_tm
   ]
 
 val arg : term decoder =
@@ -122,21 +155,48 @@ val args : term decoder =
 
 fun theoptstring NONE = "" | theoptstring (SOME s) = s
 
-val expression : term decoder = choose [
+val binop : term decoder = achoose "binop" [
+  check_ast_type "In" $ succeed In_tm
+]
+
+fun d_expression () : term decoder = achoose "expr" [
     check_ast_type "Name" $
     field "id" (JSONDecode.map mk_Name string),
     check_ast_type "Int" $
-    field "value" (JSONDecode.map (mk_li o Arbint.fromInt) int)
+    field "value" (JSONDecode.map (mk_li o Arbint.fromInt) int),
+    check_ast_type "Hex" $
+    field "value" (JSONDecode.map mk_Hex string),
+    check_ast_type "Compare" $
+    andThen (fn (l,b,r) => succeed $
+      mk_Builtin (mk_Bop b) $
+      mk_list ([l,r], expr_ty)
+    ) $
+    tuple3 (
+      field "left" (delay d_expression),
+      field "op" binop,
+      field "right" (delay d_expression)
+    ),
+    check_ast_type "List" $
+    andThen (succeed o mk_ArrayLit) $ (* TODO: also handle dynamic arrays *)
+    field "elements" (array (delay d_expression))
   ]
+val expression = delay d_expression
 
-val statement : term decoder = choose [
+val statement : term decoder = achoose "stmt" [
     check_ast_type "Pass" $ succeed Pass_tm,
     check_ast_type "Assert" $
     andThen (fn (e,s) => succeed $ mk_Assert e s)
       (tuple2 (field "test" expression,
-               field "msg" (JSONDecode.map theoptstring (nullable string)))),
+               field "msg" (check_ast_type "Str" (field "value" stringtm)))),
     check_ast_type "Return" $
-    field "value" (JSONDecode.map mk_Return (try expression))
+    field "value" (JSONDecode.map mk_Return (try expression)),
+    check_ast_type "AnnAssign" $
+    andThen (fn (s,t,e) => succeed $ mk_AnnAssign s t e) $
+    tuple3 (
+      field "target" (check_ast_type "Name" (field "id" stringtm)),
+      field "annotation" astType,
+      field "value" expression
+    )
   ]
 
 val statements : term decoder =
@@ -165,14 +225,25 @@ val functionDef : term decoder =
              tuple2 (field "returns" astType,
                      field "body" statements)))
 
-val toplevel : term decoder = choose [
+val toplevel : term decoder = achoose "tl" [
     functionDef
   ]
+
+(*
+decode (field "decorator_list" (array (field "id" string))) obj
+decode (field "name" stringtm) obj
+decode (field "args" (
+                     check_ast_type "arguments" $
+                     field "args" args)) obj
+decode (field "returns" astType) obj
+decode (field "body" statements) obj
+*)
 
 val toplevels : term decoder =
   andThen (fn ls => succeed $ mk_list(ls, toplevel_ty))
     (array toplevel)
 
+(*
 val abiType : term decoder =
   andThen (fn s =>
     if s = "bool" then succeed abiBool_tm else
@@ -188,7 +259,10 @@ val abiMutability : term decoder =
     if s = "nonpayable" then succeed Nonpayable_tm else
     fail ("abiMutability: " ^ s)) string
 
-val abi : abi_entry decoder = choose [
+val Function_tm = prim_mk_const{Thy="vyperTestRunner",Name="Function"}
+val vyper_abi_function_ty = #1 $ dom_rng $ type_of $ Function_tm
+
+val abi : term decoder = choose [
     check_field "type" "function" $
     andThen (fn (n,is,os,m) => succeed $ Function
                {name=n, inputs=is, outputs=os, mutability=m})
@@ -197,35 +271,56 @@ val abi : abi_entry decoder = choose [
                field "outputs" (array abiArg),
                field "stateMutability" abiMutability))
   ]
+*)
 
-val deployment : deployment decoder =
+val Deployment_tm = prim_mk_const{Thy="vyperTestRunner",Name="Deployment"}
+val deployment_trace_ty = #1 $ dom_rng $ type_of Deployment_tm
+
+val deployment : term decoder =
   check_trace_type "deployment" $
-  andThen (fn ((c,i,a,(d,v)),e) => succeed {
-             sourceCode=c, abi=i, deployedAddress=a,
-             callData=d, value=v, expectSuccess=e })
+  andThen (fn ((c,s,a,(d,v)),e) => succeed $
+             TypeBase.mk_record (deployment_trace_ty, [
+               ("sourceAst", c),
+               ("deployedAddress", a),
+               ("deployer", s),
+               ("deploymentSuccess", e),
+               ("value", v),
+               ("callData", d)
+             ]))
           (tuple2 (tuple4 (field "annotated_ast"
                              (field "ast" (field "body" toplevels)),
-                           field "contract_abi" (array abi),
+                           field "deployer" address,
                            field "deployed_address" address,
                            tuple2 (field "calldata" $
                                    JSONDecode.map (mk_bytes_tm o theoptstring)
                                      (nullable string),
                                    field "value" numtm)),
-                   field "deployment_succeeded" bool))
+                   field "deployment_succeeded" booltm))
 
-datatype trace =
-    Deployment of deployment
-  | Call of call
-
-val trace : trace decoder =
-  orElse (JSONDecode.map Call call,
-          JSONDecode.map Deployment deployment)
+val trace : term decoder =
+  orElse (JSONDecode.map (curry mk_comb Call_tm) call,
+          JSONDecode.map (curry mk_comb Deployment_tm) deployment)
 
 fun read_test_json json_path = let
   val test_jsons = decodeFile rawObject json_path
-  fun mapthis (name, json) = (name, decode (array trace) json)
+  val decoder = (check_field "item_type" "test" $
+                 field "traces" (array trace))
+  fun mapthis (name, json) = (name, decode decoder json)
 in
   List.map mapthis test_jsons
 end
+
+(*
+  val json_path = "test_comparison.json"
+
+  val obj =
+  (read_test_json json_path; JSON.NULL)
+  handle JSONError (_, obj) => obj
+
+  length test_jsons
+  val (name, json) = el 1 test_jsons
+  decode decoder json
+  val res = read_test_json "test_exports.json"
+*)
 
 end
