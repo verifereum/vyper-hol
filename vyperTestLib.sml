@@ -87,6 +87,13 @@ val bool_tm = mk_comb(BaseT_tm, BoolT_tm)
 val uint256_tm = mk_comb(BaseT_tm, mk_comb(UintT_tm, numSyntax.term_of_int 256))
 val address_tm = mk_comb(BaseT_tm, AddressT_tm)
 val FunctionDecl_tm = prim_mk_const{Name="FunctionDecl",Thy="vyperAst"}
+val VariableDecl_tm = prim_mk_const{Name="VariableDecl",Thy="vyperAst"}
+val Public_tm = prim_mk_const{Name="Public",Thy="vyperAst"}
+val Private_tm = prim_mk_const{Name="Private",Thy="vyperAst"}
+val Immutable_tm = prim_mk_const{Name="Immutable",Thy="vyperAst"}
+val Transient_tm = prim_mk_const{Name="Transient",Thy="vyperAst"}
+val Storage_tm = prim_mk_const{Name="Storage",Thy="vyperAst"}
+val Constant_tm = prim_mk_const{Name="Constant",Thy="vyperAst"}
 val External_tm = prim_mk_const{Name="External",Thy="vyperAst"}
 val Internal_tm = prim_mk_const{Name="Internal",Thy="vyperAst"}
 val Deploy_tm = prim_mk_const{Name="Deploy",Thy="vyperAst"}
@@ -95,6 +102,7 @@ val View_tm = prim_mk_const{Name="View",Thy="vyperAst"}
 val Nonpayable_tm = prim_mk_const{Name="Nonpayable",Thy="vyperAst"}
 val Payable_tm = prim_mk_const{Name="Payable",Thy="vyperAst"}
 fun mk_FunctionDecl v m n a t b = list_mk_comb(FunctionDecl_tm, [v,m,n,a,t,b])
+fun mk_VariableDecl v m n t = list_mk_comb(VariableDecl_tm, [v,m,n,t])
 val Pass_tm = prim_mk_const{Name="Pass",Thy="vyperAst"}
 val Assert_tm = prim_mk_const{Name="Assert",Thy="vyperAst"}
 val AnnAssign_tm = prim_mk_const{Name="AnnAssign",Thy="vyperAst"}
@@ -225,8 +233,29 @@ val functionDef : term decoder =
              tuple2 (field "returns" astType,
                      field "body" statements)))
 
+val variableDecl : term decoder =
+  check_ast_type "VariableDecl" $
+  andThen (fn (vis,mut,id,typ) => succeed $
+             mk_VariableDecl vis mut id typ) $
+  tuple4 (
+    field "is_public" (JSONDecode.map
+      (fn b => if b then Public_tm else Private_tm) bool),
+    andThen (fn (im,tr,con) => succeed (
+      if im then Immutable_tm else
+      if tr then Transient_tm else
+      case con of SOME e => mk_comb(Constant_tm, e)
+                | NONE => Storage_tm)) $
+    tuple3 (
+      field "is_immutable" bool,
+      field "is_transient" bool,
+      andThen (fn b => (if b then field "value" (JSONDecode.map SOME expression)
+                        else succeed NONE)) (field "is_constant" bool)),
+    field "target" (check_ast_type "Name" (field "id" stringtm)),
+    field "annotation" astType)
+
 val toplevel : term decoder = achoose "tl" [
-    functionDef
+    functionDef,
+    variableDecl
   ]
 
 (*
@@ -317,10 +346,7 @@ end
   (read_test_json json_path; JSON.NULL)
   handle JSONError (_, obj) => obj
 
-  length test_jsons
-  val (name, json) = el 1 test_jsons
-  decode decoder json
-  val res = read_test_json "test_exports.json"
+  val res = read_test_json json_path
 *)
 
 end
