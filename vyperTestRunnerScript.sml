@@ -3,6 +3,24 @@ open HolKernel boolLib bossLib Parse
 
 val () = new_theory "vyperTestRunner";
 
+(* TODO: move to contractABI?
+
+Datatype:
+  abi_function = <|
+    name: string
+  ; inputs: (string # abi_type) list
+  ; outputs: (string # abi_type) list
+  ; mutability: function_mutability (* TODO: not dependent on Vyper *)
+  |>
+End
+
+Datatype:
+  abi_entry = Function abi_function (* TODO: event, etc. *)
+End
+
+*)
+
+(*
 Datatype:
   vyper_abi_function = <|
     name: identifier
@@ -15,11 +33,12 @@ Datatype:
   vyper_contract_abi_entry
   = Function vyper_abi_function
 End
+*)
 
 Datatype:
   deployment_trace = <|
     sourceAst: toplevel list
-  ; contractAbi: vyper_contract_abi_entry list
+  (* ; contractAbi: abi_entry list -- not actually needed if we have sourceAst? *)
   ; deployedAddress: address
   ; deployer: address
   ; deploymentSuccess: bool
