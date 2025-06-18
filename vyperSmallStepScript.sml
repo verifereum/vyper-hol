@@ -199,7 +199,8 @@ Termination
   WF_REL_TAC ‘measure (λx. case x of
     | INL (cx,e,st,k) => expr_size e
     | INR (cx,es,st,k) => list_size expr_size es)’
-  \\ rw[expr1_size_map, SUM_MAP_expr2_size, list_size_SUM_MAP, MAP_MAP_o]
+  \\ rw[expr1_size_map, SUM_MAP_expr2_size, list_size_SUM_MAP, MAP_MAP_o,
+        list_size_pair_size_map]
 End
 
 val eval_expr_cps_pre_def = eval_expr_cps_def
