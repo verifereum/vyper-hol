@@ -1,7 +1,7 @@
 open HolKernel boolLib bossLib Parse cv_transLib
      vfmTypesTheory vyperAstTheory
      vyperAbiTheory contractABITheory
-     vyperInterpreterTheory
+     vyperInterpreterTheory vyperSmallStepTheory
 
 val () = new_theory "vyperTestRunner";
 
@@ -83,25 +83,48 @@ Definition find_function_args_by_name_def:
   find_function_args_by_name n ts
 End
 
+Definition compute_vyper_args_def:
+  compute_vyper_args ts name argTys cd = let
+    abiArgsTup = dec (Tuple argTys) cd;
+    vyTys = MAP SND $ find_function_args_by_name name ts;
+    vyArgsTup = abi_to_vyper (TupleT vyTys) abiArgsTup;
+  in
+    case OPTION_BIND vyArgsTup extract_elements
+      of NONE => [] | SOME ls => ls
+End
+
 Definition run_deployment_def:
   run_deployment am dt = let
     sns = compute_selector_names dt.contractAbi;
     sel = TAKE 4 dt.callData;
     fna = case ALOOKUP sns sel of SOME fna => fna | NONE => ("__init__", []);
-    name = FST fna;
-    argTys = SND fna;
-    abiArgsTup = dec (Tuple argTys) (DROP 4 dt.callData);
-    vyTys = MAP SND $ find_function_args_by_name name dt.sourceAst;
-    vyArgsTup = abi_to_vyper (TupleT vyTys) abiArgsTup;
-    vyArgs = (case OPTION_BIND vyArgsTup extract_elements
-                of NONE => [] | SOME ls => ls);
+    name = FST fna; argTys = SND fna;
     tx = <| sender := dt.deployer
-            ; target := dt.deployedAddress
-            ; function_name := name
-            ; args := vyArgs
-            ; value := dt.value |>;
-  in load_contract am tx dt.sourceAst
+          ; target := dt.deployedAddress
+          ; function_name := name
+          ; args := compute_vyper_args dt.sourceAst name
+                      argTys (DROP 4 dt.callData)
+          ; value := dt.value |>;
+  in (sns, load_contract am tx dt.sourceAst)
   (* TODO: check dt.deploymentSuccess *)
 End
+
+val () = cv_auto_trans run_deployment_def;
+
+Definition run_call_def:
+  run_call sns am ct = let
+    sel = TAKE 4 ct.callData;
+    fna = case ALOOKUP sns sel of SOME fna => fna | NONE => ("__default__", []);
+    name = FST fna; argTys = SND fna;
+    ts = case ALOOKUP am.sources ct.target of SOME ts => ts | _ => [];
+    tx = <| sender := ct.sender
+          ; target := ct.target
+          ; function_name := name
+          ; args := compute_vyper_args ts name argTys (DROP 4 ct.callData)
+          ; value := ct.value |>;
+  in call_external am tx
+End
+
+val () = cv_auto_trans run_call_def;
 
 val () = export_theory();
