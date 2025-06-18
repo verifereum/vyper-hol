@@ -1,9 +1,9 @@
 open HolKernel boolLib bossLib Parse
-     vfmTypesTheory vyperAstTheory
+     contractABITheory vfmTypesTheory vyperAstTheory
 
 val () = new_theory "vyperTestRunner";
 
-(* TODO: move to contractABI?
+(* TODO: move to contractABITheory? *)
 
 Datatype:
   abi_function = <|
@@ -17,8 +17,6 @@ End
 Datatype:
   abi_entry = Function abi_function (* TODO: event, etc. *)
 End
-
-*)
 
 (*
 Datatype:
@@ -38,7 +36,7 @@ End
 Datatype:
   deployment_trace = <|
     sourceAst: toplevel list
-  (* ; contractAbi: abi_entry list -- not actually needed if we have sourceAst? *)
+  ; contractAbi: abi_entry list
   ; deployedAddress: address
   ; deployer: address
   ; deploymentSuccess: bool

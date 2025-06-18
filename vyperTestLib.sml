@@ -141,6 +141,7 @@ end
 val abiBool_tm = prim_mk_const{Name="Bool",Thy="contractABI"}
 val abiUint_tm = prim_mk_const{Name="Uint",Thy="contractABI"}
 val abiUint256_tm = mk_comb(abiUint_tm, numSyntax.term_of_int 256)
+val abiAddress_tm = prim_mk_const{Name="Address",Thy="contractABI"}
 
 fun achoose err ls = orElse(choose ls, fail err)
 
@@ -272,44 +273,53 @@ val toplevels : term decoder =
   andThen (fn ls => succeed $ mk_list(ls, toplevel_ty))
     (array toplevel)
 
-(*
 val abiType : term decoder =
   andThen (fn s =>
     if s = "bool" then succeed abiBool_tm else
     if s = "uint256" then succeed abiUint256_tm else
+    if s = "address" then succeed abiAddress_tm else
     fail ("abiType: " ^ s)) string
 
-val abiArg : (string * term) decoder =
-  tuple2 (field "name" string,
+val abiArg : term decoder =
+  andThen (succeed o mk_pair) $
+  tuple2 (field "name" stringtm,
           field "type" abiType)
 
 val abiMutability : term decoder =
   andThen (fn s =>
     if s = "nonpayable" then succeed Nonpayable_tm else
+    if s = "view" then succeed View_tm else
+    if s = "payable" then succeed Payable_tm else
     fail ("abiMutability: " ^ s)) string
 
 val Function_tm = prim_mk_const{Thy="vyperTestRunner",Name="Function"}
-val vyper_abi_function_ty = #1 $ dom_rng $ type_of $ Function_tm
+val (abi_function_ty, abi_entry_ty) = dom_rng $ type_of $ Function_tm
+val abi_type_ty = mk_thy_type{Args=[],Thy="contractABI",Tyop="abi_type"}
+val abi_arg_ty = mk_prod(string_ty, abi_type_ty)
 
-val abi : term decoder = choose [
+val abiEntry : term decoder = choose [
     check_field "type" "function" $
-    andThen (fn (n,is,os,m) => succeed $ Function
-               {name=n, inputs=is, outputs=os, mutability=m})
-      (tuple4 (field "name" string,
+    andThen (fn (n,is,os,m) => succeed $ mk_comb(Function_tm,
+             TypeBase.mk_record (abi_function_ty, [
+               ("name", n),
+               ("inputs", mk_list(is, abi_arg_ty)),
+               ("outputs", mk_list(os, abi_arg_ty)),
+               ("mutability", m)])))
+      (tuple4 (field "name" stringtm,
                field "inputs" (array abiArg),
                field "outputs" (array abiArg),
                field "stateMutability" abiMutability))
   ]
-*)
 
 val Deployment_tm = prim_mk_const{Thy="vyperTestRunner",Name="Deployment"}
 val deployment_trace_ty = #1 $ dom_rng $ type_of Deployment_tm
 
 val deployment : term decoder =
   check_trace_type "deployment" $
-  andThen (fn ((c,s,a,(d,v)),e) => succeed $
+  andThen (fn ((c,i,(s,a),(d,v)),e) => succeed $
              TypeBase.mk_record (deployment_trace_ty, [
                ("sourceAst", c),
+               ("contractAbi", mk_list(i, abi_entry_ty)),
                ("deployedAddress", a),
                ("deployer", s),
                ("deploymentSuccess", e),
@@ -318,8 +328,9 @@ val deployment : term decoder =
              ]))
           (tuple2 (tuple4 (field "annotated_ast"
                              (field "ast" (field "body" toplevels)),
-                           field "deployer" address,
-                           field "deployed_address" address,
+                           field "contract_abi" (array abiEntry),
+                           tuple2 (field "deployer" address,
+                                   field "deployed_address" address),
                            tuple2 (field "calldata" $
                                    JSONDecode.map (mk_bytes_tm o theoptstring)
                                      (nullable string),
