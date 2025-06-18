@@ -183,4 +183,21 @@ Proof
   \\ strip_tac \\ gvs[]
 QED
 
+Definition run_test_loop_def:
+  run_test_loop snss am [] = INL () ∧
+  run_test_loop snss am (tr::trs) =
+  case run_trace snss am tr of
+       (snss, INL am) => run_test_loop snss am trs
+     | (_, INR ex) => INR ex
+End
+
+val () = cv_auto_trans run_test_loop_def;
+
+Definition run_test_def:
+  run_test trs = run_test_loop []
+    initial_machine_state trs
+End
+
+val () = cv_auto_trans run_test_def;
+
 val () = export_theory();
