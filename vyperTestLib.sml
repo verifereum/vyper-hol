@@ -5,9 +5,11 @@ open HolKernel JSONDecode JSONUtil cv_transLib wordsLib
      intSyntax wordsSyntax fcpSyntax
      vyperAbiTheory vyperAstTheory vyperTestRunnerTheory
 
-fun check_field lab req d =
-  andThen (fn x => if x <> req then fail (lab ^ " not " ^ req) else d)
-    (field lab string)
+fun check cd pred err d =
+  andThen (fn x => if pred x then d else fail err) cd
+
+fun check_field lab req =
+  check (field lab string) (equal req) (lab ^ " not " ^ req)
 
 fun check_trace_type req = check_field "trace_type" req
 
@@ -106,6 +108,9 @@ val Payable_tm = prim_mk_const{Name="Payable",Thy="vyperAst"}
 fun mk_FunctionDecl v m n a t b = list_mk_comb(FunctionDecl_tm, [v,m,n,a,t,b])
 fun mk_VariableDecl v m n t = list_mk_comb(VariableDecl_tm, [v,m,n,t])
 val Pass_tm = prim_mk_const{Name="Pass",Thy="vyperAst"}
+val Expr_tm = prim_mk_const{Name="Expr",Thy="vyperAst"}
+val AstCall_tm = prim_mk_const{Name="Call",Thy="vyperAst"}
+val IntCall_tm = prim_mk_const{Name="IntCall",Thy="vyperAst"}
 val Assert_tm = prim_mk_const{Name="Assert",Thy="vyperAst"}
 val If_tm = prim_mk_const{Name="If",Thy="vyperAst"}
 val AnnAssign_tm = prim_mk_const{Name="AnnAssign",Thy="vyperAst"}
@@ -119,13 +124,18 @@ val NotIn_tm = prim_mk_const{Name="NotIn",Thy="vyperAst"}
 val Eq_tm = prim_mk_const{Name="Eq",Thy="vyperAst"}
 val NotEq_tm = prim_mk_const{Name="NotEq",Thy="vyperAst"}
 val IntL_tm = prim_mk_const{Name="IntL",Thy="vyperAst"}
+val BoolL_tm = prim_mk_const{Name="BoolL",Thy="vyperAst"}
 val Fixed_tm = prim_mk_const{Name="Fixed",Thy="vyperAst"}
 val BytesL_tm = prim_mk_const{Name="BytesL",Thy="vyperAst"}
 val ArrayLit_tm = prim_mk_const{Name="ArrayLit",Thy="vyperAst"}
+fun mk_Expr e = mk_comb(Expr_tm, e)
 fun mk_Name s = mk_comb(Name_tm, fromMLstring s)
+fun mk_IntCall s = mk_comb(IntCall_tm, s)
+fun mk_Call ct args = list_mk_comb(AstCall_tm, [ct, mk_list (args, expr_ty)])
 fun mk_Assert e s = list_mk_comb(Assert_tm, [e, s])
 fun mk_If e s1 s2 = list_mk_comb(If_tm, [e,s1,s2])
 fun mk_li i = mk_comb(Literal_tm, mk_comb(IntL_tm, intSyntax.term_of_int i))
+fun mk_lb b = mk_comb(Literal_tm, mk_comb(BoolL_tm, b))
 fun mk_Return tmo = mk_comb(Return_tm, lift_option (mk_option expr_ty) I tmo)
 fun mk_AnnAssign s t e = list_mk_comb(AnnAssign_tm, [s, t, e])
 fun mk_Hex s = let
@@ -184,6 +194,8 @@ val binop : term decoder = achoose "binop" [
 fun d_expression () : term decoder = achoose "expr" [
     check_ast_type "Name" $
     field "id" (JSONDecode.map mk_Name string),
+    check_ast_type "NameConstant" $
+    field "value" (JSONDecode.map mk_lb booltm),
     check_ast_type "Int" $
     field "value" (JSONDecode.map (mk_li o Arbint.fromInt) int),
     check_ast_type "Hex" $
@@ -200,7 +212,19 @@ fun d_expression () : term decoder = achoose "expr" [
     ),
     check_ast_type "List" $
     andThen (succeed o mk_ArrayLit) $ (* TODO: also handle dynamic arrays *)
-    field "elements" (array (delay d_expression))
+    field "elements" (array (delay d_expression)),
+    check_ast_type "Call" $
+    andThen (fn (i,a) => succeed $ mk_Call (mk_IntCall i) a) $
+    tuple2 (
+      field "func" (
+        check_ast_type "Attribute" $
+        check (field "value" (tuple2 (field "ast_type" string,
+                                      field "id" string)))
+              (equal ("Name", "self"))
+              "non-internal Call"
+              (field "attr" stringtm)),
+      field "args" (array (delay d_expression))
+    )
   ]
 val expression = delay d_expression
 
@@ -209,6 +233,8 @@ val d_statements = andThen (succeed o mk_statements) o array
 
 fun d_statement () : term decoder = achoose "stmt" [
     check_ast_type "Pass" $ succeed Pass_tm,
+    check_ast_type "Expr" $
+    field "value" (JSONDecode.map mk_Expr expression),
     check_ast_type "Assert" $
     andThen (fn (e,s) => succeed $ mk_Assert e s)
       (tuple2 (field "test" expression,
@@ -398,11 +424,14 @@ end
   val json_path = "test_conditionals.json"
   val tests = read_test_json json_path
 
-  val (name, json) = el 2 test_jsons
+  val test_jsons = decodeFile rawObject json_path
+  val (name, json) = el 3 test_jsons
+  val traces = decode (field "traces" (array trace)) json
   val traces = decode (field "traces" (array raw)) json
   val tr = el 1 traces
+  val tr = decode trace tr
   val tls = decode (field "annotated_ast" (field "ast" (field "body" (array raw)))) tr
-  val tl = el 2 tls
+  val tl = el 1 tls
   decode (field "body" statements) tl
 
   val stmts = decode (field "body" statements) tl
