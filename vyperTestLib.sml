@@ -1,6 +1,6 @@
 structure vyperTestLib :> vyperTestLib = struct
 
-open HolKernel JSONDecode JSONUtil
+open HolKernel JSONDecode JSONUtil cv_transLib wordsLib
      pairSyntax listSyntax stringSyntax optionSyntax
      intSyntax wordsSyntax fcpSyntax
      vyperAbiTheory vyperAstTheory vyperTestRunnerTheory
@@ -350,14 +350,34 @@ in
   List.map mapthis test_jsons
 end
 
+val trace_ty = mk_thy_type{Thy="vyperTestRunner",Tyop="trace",Args=[]}
+val run_test_tm = prim_mk_const{Thy="vyperTestRunner",Name="run_test"}
+
+fun run_test (name, trtms) = let
+  val trs = mk_list(trtms, trace_ty)
+  val ttm = mk_comb(run_test_tm, trs)
+  val () = Feedback.HOL_MESG ("Testing " ^ name)
+  val eth = cv_eval ttm
+  val result = if sumSyntax.is_inr $ rhs $ concl eth
+               then "Failed"
+               else "Passed"
+in
+  Feedback.HOL_MESG result
+end
+
 (*
   val json_path = "test_comparison.json"
 
+  (*
   val obj =
   (read_test_json json_path; JSON.NULL)
   handle JSONError (_, obj) => obj
+  *)
 
-  val res = read_test_json json_path
+  val tests = read_test_json json_path
+  val (name, trtms) = el 1 tests
+
+  List.app run_test tests
 *)
 
 end
