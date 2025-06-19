@@ -490,6 +490,13 @@ val () = cv_auto_trans evaluate_literal_def;
 (* TODO: IntV should carry bounds info for overflow checking *)
 (* TODO: add unsafe ops and make these ones safe *)
 
+Definition evaluate_in_array_def:
+  evaluate_in_array v ls =
+  INL $ BoolV $ MEM v ls
+End
+
+val () = cv_auto_trans evaluate_in_array_def;
+
 Definition evaluate_binop_def:
   evaluate_binop (Add:binop) (IntV i1) (IntV i2) = INL (IntV (i1 + i2)) ∧
   evaluate_binop Sub (IntV i1) (IntV i2) = INL (IntV (i1 - i2)) ∧
@@ -513,6 +520,7 @@ Definition evaluate_binop_def:
   evaluate_binop In (IntV i1) (IntV i2) = (if i1 < 0 ∨ i2 < 0 then INR "In~"
                                            else INL $ BoolV
                                                 (int_and i1 i2 ≠ 0)) ∧
+  evaluate_binop In v (ArrayV _ ls) = evaluate_in_array v ls ∧
   evaluate_binop _ _ _ = INR "binop"
 End
 
