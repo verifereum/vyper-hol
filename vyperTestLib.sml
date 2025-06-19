@@ -113,6 +113,8 @@ val Builtin_tm = prim_mk_const{Name="Builtin",Thy="vyperAst"}
 val Bop_tm = prim_mk_const{Name="Bop",Thy="vyperAst"}
 val In_tm = prim_mk_const{Name="In",Thy="vyperAst"}
 val NotIn_tm = prim_mk_const{Name="NotIn",Thy="vyperAst"}
+val Eq_tm = prim_mk_const{Name="Eq",Thy="vyperAst"}
+val NotEq_tm = prim_mk_const{Name="NotEq",Thy="vyperAst"}
 val IntL_tm = prim_mk_const{Name="IntL",Thy="vyperAst"}
 val Fixed_tm = prim_mk_const{Name="Fixed",Thy="vyperAst"}
 val BytesL_tm = prim_mk_const{Name="BytesL",Thy="vyperAst"}
@@ -167,7 +169,9 @@ fun theoptstring NONE = "" | theoptstring (SOME s) = s
 
 val binop : term decoder = achoose "binop" [
   check_ast_type "In" $ succeed In_tm,
-  check_ast_type "NotIn" $ succeed NotIn_tm
+  check_ast_type "NotIn" $ succeed NotIn_tm,
+  check_ast_type "Eq" $ succeed Eq_tm,
+  check_ast_type "NotEq" $ succeed NotEq_tm
 ]
 
 fun d_expression () : term decoder = achoose "expr" [

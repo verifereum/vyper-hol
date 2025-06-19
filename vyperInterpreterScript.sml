@@ -529,11 +529,14 @@ Definition evaluate_binop_def:
                                                 (int_and i1 i2 ≠ 0)) ∧
   evaluate_binop In v (ArrayV _ ls) = evaluate_in_array v ls ∧
   evaluate_binop NotIn v1 v2 = binop_negate $ evaluate_binop In v1 v2 ∧
+  evaluate_binop Eq (StringV _ s1) (StringV _ s2) = INL (BoolV (s1 = s2)) ∧
+  evaluate_binop Eq (BytesV _ s1) (BytesV _ s2) = INL (BoolV (s1 = s2)) ∧
+  evaluate_binop Eq (BoolV b1) (BoolV b2) = INL (BoolV (b1 = b2)) ∧
+  evaluate_binop Eq (IntV i1) (IntV i2) = INL (BoolV (i1 = i2)) ∧
+  evaluate_binop NotEq v1 v2 = binop_negate $ evaluate_binop Eq v1 v2 ∧
   evaluate_binop _ _ _ = INR "binop"
 Termination
-  WF_REL_TAC ‘inv_image $< (λ(b,x,y). if b = NotIn then 2n
-                                      else if b = In then 1n
-                                      else 0n)’
+  WF_REL_TAC ‘inv_image $< (λ(b,x,y). if b = NotIn ∨ b = NotEq then 2n else 0n)’
   \\ rw[]
 End
 
@@ -597,10 +600,6 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV &(LENGTH ls)) ∧
   evaluate_builtin cx _ Len [StringV _ ls] = INL (IntV &(LENGTH ls)) ∧
   evaluate_builtin cx _ Len [ArrayV _ ls] = INL (IntV &(LENGTH ls)) ∧
-  evaluate_builtin cx _ Eq [StringV _ s1; StringV _ s2] = INL (BoolV (s1 = s2)) ∧
-  evaluate_builtin cx _ Eq [BytesV _ s1; BytesV _ s2] = INL (BoolV (s1 = s2)) ∧
-  evaluate_builtin cx _ Eq [BoolV b1; BoolV b2] = INL (BoolV (b1 = b2)) ∧
-  evaluate_builtin cx _ Eq  [IntV i1; IntV i2] = INL (BoolV (i1 = i2)) ∧
   evaluate_builtin cx _ Lt  [IntV i1; IntV i2] = INL (BoolV (i1 < i2)) ∧
   evaluate_builtin cx _ Not [BoolV b] = INL (BoolV (¬b)) ∧
   evaluate_builtin cx _ Not [IntV i] =
@@ -718,7 +717,6 @@ val () = cv_auto_trans compatible_bound_def;
 Definition builtin_args_length_ok_def:
   builtin_args_length_ok Len n = (n = 1n) ∧
   builtin_args_length_ok Not n = (n = 1) ∧
-  builtin_args_length_ok Eq n = (n = 2) ∧
   builtin_args_length_ok Lt n = (n = 2) ∧
   builtin_args_length_ok Keccak256 n = (n = 1) ∧
   builtin_args_length_ok (Bop _) n = (n = 2) ∧

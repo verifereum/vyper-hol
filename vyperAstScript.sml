@@ -55,6 +55,8 @@ Datatype:
   | ShR
   | In
   | NotIn
+  | Eq
+  | NotEq
 End
 
 Datatype:
@@ -76,7 +78,6 @@ End
 Datatype:
   builtin
   = Len
-  | Eq
   | Not
   | Lt
   | Keccak256
@@ -198,7 +199,7 @@ Overload address = “BaseT AddressT”
 Overload bool = “BaseT BoolT”
 Overload li = “λi. Literal (IntL i)”
 Overload lb = “λb. Literal (BoolL b)”
-Overload "==" = “λe1 e2. Builtin Eq [e1; e2]”
+Overload "==" = “λe1 e2. Builtin (Bop Eq) [e1; e2]”
 Overload "not" = “λe. Builtin Not [e]”
 Overload "or" = “λe1 e2. IfExp e1 (lb T) e2”
 Overload "and" = “λe1 e2. IfExp e1 e2 (lb F)”
