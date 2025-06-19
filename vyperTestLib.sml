@@ -155,6 +155,11 @@ in
   list_mk_comb(ArrayLit_tm, [b, mk_list(ls, expr_ty)])
 end
 
+val Msg_tm = prim_mk_const{Name="Msg",Thy="vyperAst"}
+val Sender_tm = prim_mk_const{Name="Sender",Thy="vyperAst"}
+val msg_sender_tm = list_mk_comb(Builtin_tm, [
+  mk_comb(Msg_tm, Sender_tm), mk_list([], expr_ty)])
+
 val abiBool_tm = prim_mk_const{Name="Bool",Thy="contractABI"}
 val abiUint_tm = prim_mk_const{Name="Uint",Thy="contractABI"}
 val abiInt_tm = prim_mk_const{Name="Int",Thy="contractABI"}
@@ -213,6 +218,15 @@ fun d_expression () : term decoder = achoose "expr" [
     check_ast_type "List" $
     andThen (succeed o mk_ArrayLit) $ (* TODO: also handle dynamic arrays *)
     field "elements" (array (delay d_expression)),
+    check_ast_type "Attribute" $
+    check (field "value" (tuple2 (field "ast_type" string,
+                                  field "id" string)))
+          (equal ("Name", "msg"))
+          "Attribute not msg"
+          (check (field "attr" string)
+                 (equal "sender")
+                 "not msg.sender"
+                 (succeed msg_sender_tm)),
     check_ast_type "Call" $
     andThen (fn (i,a) => succeed $ mk_Call (mk_IntCall i) a) $
     tuple2 (
