@@ -54,6 +54,7 @@ Datatype:
   | ShL
   | ShR
   | In
+  | NotIn
 End
 
 Datatype:

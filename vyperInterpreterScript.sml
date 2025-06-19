@@ -497,6 +497,13 @@ End
 
 val () = cv_auto_trans evaluate_in_array_def;
 
+Definition binop_negate_def:
+  binop_negate (INL (BoolV b)) = INL (BoolV (¬b)) ∧
+  binop_negate x = x
+End
+
+val () = cv_auto_trans binop_negate_def;
+
 Definition evaluate_binop_def:
   evaluate_binop (Add:binop) (IntV i1) (IntV i2) = INL (IntV (i1 + i2)) ∧
   evaluate_binop Sub (IntV i1) (IntV i2) = INL (IntV (i1 - i2)) ∧
@@ -521,7 +528,13 @@ Definition evaluate_binop_def:
                                            else INL $ BoolV
                                                 (int_and i1 i2 ≠ 0)) ∧
   evaluate_binop In v (ArrayV _ ls) = evaluate_in_array v ls ∧
+  evaluate_binop NotIn v1 v2 = binop_negate $ evaluate_binop In v1 v2 ∧
   evaluate_binop _ _ _ = INR "binop"
+Termination
+  WF_REL_TAC ‘inv_image $< (λ(b,x,y). if b = NotIn then 2n
+                                      else if b = In then 1n
+                                      else 0n)’
+  \\ rw[]
 End
 
 val () = cv_auto_trans evaluate_binop_def;
