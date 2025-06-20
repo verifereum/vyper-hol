@@ -5,20 +5,58 @@ open HolKernel JSONDecode JSONUtil cv_transLib wordsLib
      intSyntax wordsSyntax fcpSyntax
      vyperAbiTheory vyperAstTheory vyperTestRunnerTheory
 
-fun check cd pred err d =
-  andThen (fn x => if pred x then d else fail err) cd
-
-fun check_field lab req =
-  check (field lab string) (equal req) (lab ^ " not " ^ req)
-
-fun check_trace_type req = check_field "trace_type" req
-
-fun check_ast_type req = check_field "ast_type" req
-
-val numtm = JSONDecode.map numSyntax.term_of_int int
-val stringtm = JSONDecode.map fromMLstring string
-val booltm = JSONDecode.map mk_bool bool
-val negbooltm = JSONDecode.map (mk_bool o not) bool
+fun astk s = prim_mk_const{Thy="vyperAst",Name=s}
+val Fixed_tm        = astk"Fixed"
+val Dynamic_tm      = astk"Dynamic"
+val UintT_tm        = astk"UintT"
+val IntT_tm         = astk"IntT"
+val BoolT_tm        = astk"BoolT"
+val AddressT_tm     = astk"AddressT"
+val BaseT_tm        = astk"BaseT"
+val NoneT_tm        = astk"NoneT"
+val BoolL_tm        = astk"BoolL"
+val BytesL_tm       = astk"BytesL"
+val IntL_tm         = astk"IntL"
+val In_tm           = astk"In"
+val NotIn_tm        = astk"NotIn"
+val Eq_tm           = astk"Eq"
+val NotEq_tm        = astk"NotEq"
+val Sender_tm       = astk"Sender"
+val Lt_tm           = astk"Lt"
+val Bop_tm          = astk"Bop"
+val Msg_tm          = astk"Msg"
+val IntCall_tm      = astk"IntCall"
+val Name_tm         = astk"Name"
+val Literal_tm      = astk"Literal"
+val ArrayLit_tm     = astk"ArrayLit"
+val Subscript_tm    = astk"Subscript"
+val Attribute_tm    = astk"Attribute"
+val Builtin_tm      = astk"Builtin"
+val AstCall_tm      = astk"Call"
+val Array_tm        = astk"Array"
+val Range_tm        = astk"Range"
+val Pass_tm         = astk"Pass"
+val Expr_tm         = astk"Expr"
+val For_tm          = astk"For"
+val If_tm           = astk"If"
+val Assert_tm       = astk"Assert"
+val Return_tm       = astk"Return"
+val AnnAssign_tm    = astk"AnnAssign"
+val External_tm     = astk"External"
+val Internal_tm     = astk"Internal"
+val Deploy_tm       = astk"Deploy"
+val Pure_tm         = astk"Pure"
+val View_tm         = astk"View"
+val Nonpayable_tm   = astk"Nonpayable"
+val Payable_tm      = astk"Payable"
+val Public_tm       = astk"Public"
+val Private_tm      = astk"Private"
+val Constant_tm     = astk"Constant"
+val Immutable_tm    = astk"Immutable"
+val Transient_tm    = astk"Transient"
+val Storage_tm      = astk"Storage"
+val FunctionDecl_tm = astk"FunctionDecl"
+val VariableDecl_tm = astk"VariableDecl"
 
 fun from_term_option ty = lift_option (mk_option ty) I
 
@@ -26,7 +64,6 @@ val address_bits_ty = mk_int_numeric_type 160
 val address_ty = mk_word_type address_bits_ty
 val mk_num_tm = numSyntax.mk_numeral o Arbnum.fromHexString
 fun mk_address_tm hex = mk_n2w(mk_num_tm hex, address_bits_ty)
-val address : term decoder = JSONDecode.map mk_address_tm string
 
 val byte_bits_ty = mk_int_numeric_type 8
 val byte_ty = mk_word_type byte_bits_ty
@@ -45,6 +82,73 @@ in
   loop (String.size hex) []
 end
 fun mk_bytes_tm hex = mk_list(mk_bytes_tms hex, byte_ty)
+
+val toplevel_ty = mk_thy_type{Thy="vyperAst",Tyop="toplevel",Args=[]}
+val type_ty = mk_thy_type{Thy="vyperAst",Tyop="type",Args=[]}
+val stmt_ty = mk_thy_type{Thy="vyperAst",Tyop="stmt",Args=[]}
+val expr_ty = mk_thy_type{Thy="vyperAst",Tyop="expr",Args=[]}
+val identifier_ty = string_ty
+val argument_ty = pairSyntax.mk_prod(identifier_ty, type_ty)
+val bool_tm = mk_comb(BaseT_tm, BoolT_tm)
+val uint256_tm = mk_comb(BaseT_tm, mk_comb(UintT_tm, numSyntax.term_of_int 256))
+val int128_tm = mk_comb(BaseT_tm, mk_comb(IntT_tm, numSyntax.term_of_int 128))
+val address_tm = mk_comb(BaseT_tm, AddressT_tm)
+fun mk_FunctionDecl v m n a t b = list_mk_comb(FunctionDecl_tm, [v,m,n,a,t,b])
+fun mk_VariableDecl v m n t = list_mk_comb(VariableDecl_tm, [v,m,n,t])
+fun mk_Expr e = mk_comb(Expr_tm, e)
+fun mk_For s t i n b = list_mk_comb(For_tm, [s,t,i,n,b])
+fun mk_Name s = mk_comb(Name_tm, fromMLstring s)
+fun mk_IntCall s = mk_comb(IntCall_tm, s)
+fun mk_Call ct args = list_mk_comb(AstCall_tm, [ct, mk_list (args, expr_ty)])
+fun mk_Assert e s = list_mk_comb(Assert_tm, [e, s])
+fun mk_Subscript e1 e2 = list_mk_comb(Subscript_tm, [e1, e2])
+fun mk_If e s1 s2 = list_mk_comb(If_tm, [e,s1,s2])
+fun mk_li i = mk_comb(Literal_tm, mk_comb(IntL_tm, i))
+fun mk_lb b = mk_comb(Literal_tm, mk_comb(BoolL_tm, b))
+fun mk_Return tmo = mk_comb(Return_tm, lift_option (mk_option expr_ty) I tmo)
+fun mk_AnnAssign s t e = list_mk_comb(AnnAssign_tm, [s, t, e])
+fun mk_Hex s = let
+  val s = if String.isPrefix "0x" s then String.extract(s,2,NONE) else s
+  val n = numSyntax.term_of_int $ String.size s div 2
+  val b = mk_comb(Fixed_tm, n)
+in
+  mk_comb(Literal_tm,
+    list_mk_comb(BytesL_tm, [b, mk_bytes_tm s]))
+end
+fun mk_Builtin b es = list_mk_comb(Builtin_tm, [b, es])
+fun mk_Bop b = mk_comb(Bop_tm, b)
+fun mk_ArrayLit ls = let
+  val n = numSyntax.term_of_int $ List.length ls
+  val b = mk_comb(Fixed_tm, n)
+in
+  list_mk_comb(ArrayLit_tm, [b, mk_list(ls, expr_ty)])
+end
+val msg_sender_tm = list_mk_comb(Builtin_tm, [
+  mk_comb(Msg_tm, Sender_tm), mk_list([], expr_ty)])
+
+val abiBool_tm = prim_mk_const{Name="Bool",Thy="contractABI"}
+val abiUint_tm = prim_mk_const{Name="Uint",Thy="contractABI"}
+val abiInt_tm = prim_mk_const{Name="Int",Thy="contractABI"}
+val abiUint256_tm = mk_comb(abiUint_tm, numSyntax.term_of_int 256)
+val abiInt128_tm = mk_comb(abiInt_tm, numSyntax.term_of_int 128)
+val abiAddress_tm = prim_mk_const{Name="Address",Thy="contractABI"}
+
+fun check cd pred err d =
+  andThen (fn x => if pred x then d else fail err) cd
+
+fun check_field lab req =
+  check (field lab string) (equal req) (lab ^ " not " ^ req)
+
+fun check_trace_type req = check_field "trace_type" req
+
+fun check_ast_type req = check_field "ast_type" req
+
+val numtm = JSONDecode.map numSyntax.term_of_int int
+val stringtm = JSONDecode.map fromMLstring string
+val booltm = JSONDecode.map mk_bool bool
+val negbooltm = JSONDecode.map (mk_bool o not) bool
+
+val address : term decoder = JSONDecode.map mk_address_tm string
 val bytes : term decoder = JSONDecode.map mk_bytes_tm string
 
 val Call_tm = prim_mk_const{Thy="vyperTestRunner",Name="Call"}
@@ -74,108 +178,18 @@ val call : term decoder =
             field "output" (JSONDecode.map (from_term_option bytes_ty) $
                             nullable bytes)))
 
-val toplevel_ty = mk_thy_type{Thy="vyperAst",Tyop="toplevel",Args=[]}
-val type_ty = mk_thy_type{Thy="vyperAst",Tyop="type",Args=[]}
-val stmt_ty = mk_thy_type{Thy="vyperAst",Tyop="stmt",Args=[]}
-val expr_ty = mk_thy_type{Thy="vyperAst",Tyop="expr",Args=[]}
-val identifier_ty = string_ty
-val argument_ty = pairSyntax.mk_prod(identifier_ty, type_ty)
-val BaseT_tm = prim_mk_const{Name="BaseT",Thy="vyperAst"}
-val BoolT_tm = prim_mk_const{Name="BoolT",Thy="vyperAst"}
-val UintT_tm = prim_mk_const{Name="UintT",Thy="vyperAst"}
-val IntT_tm = prim_mk_const{Name="IntT",Thy="vyperAst"}
-val NoneT_tm = prim_mk_const{Name="NoneT",Thy="vyperAst"}
-val AddressT_tm = prim_mk_const{Name="AddressT",Thy="vyperAst"}
-val bool_tm = mk_comb(BaseT_tm, BoolT_tm)
-val uint256_tm = mk_comb(BaseT_tm, mk_comb(UintT_tm, numSyntax.term_of_int 256))
-val int128_tm = mk_comb(BaseT_tm, mk_comb(IntT_tm, numSyntax.term_of_int 128))
-val address_tm = mk_comb(BaseT_tm, AddressT_tm)
-val FunctionDecl_tm = prim_mk_const{Name="FunctionDecl",Thy="vyperAst"}
-val VariableDecl_tm = prim_mk_const{Name="VariableDecl",Thy="vyperAst"}
-val Public_tm = prim_mk_const{Name="Public",Thy="vyperAst"}
-val Private_tm = prim_mk_const{Name="Private",Thy="vyperAst"}
-val Immutable_tm = prim_mk_const{Name="Immutable",Thy="vyperAst"}
-val Transient_tm = prim_mk_const{Name="Transient",Thy="vyperAst"}
-val Storage_tm = prim_mk_const{Name="Storage",Thy="vyperAst"}
-val Constant_tm = prim_mk_const{Name="Constant",Thy="vyperAst"}
-val External_tm = prim_mk_const{Name="External",Thy="vyperAst"}
-val Internal_tm = prim_mk_const{Name="Internal",Thy="vyperAst"}
-val Deploy_tm = prim_mk_const{Name="Deploy",Thy="vyperAst"}
-val Pure_tm = prim_mk_const{Name="Pure",Thy="vyperAst"}
-val View_tm = prim_mk_const{Name="View",Thy="vyperAst"}
-val Nonpayable_tm = prim_mk_const{Name="Nonpayable",Thy="vyperAst"}
-val Payable_tm = prim_mk_const{Name="Payable",Thy="vyperAst"}
-fun mk_FunctionDecl v m n a t b = list_mk_comb(FunctionDecl_tm, [v,m,n,a,t,b])
-fun mk_VariableDecl v m n t = list_mk_comb(VariableDecl_tm, [v,m,n,t])
-val Pass_tm = prim_mk_const{Name="Pass",Thy="vyperAst"}
-val Expr_tm = prim_mk_const{Name="Expr",Thy="vyperAst"}
-val AstCall_tm = prim_mk_const{Name="Call",Thy="vyperAst"}
-val IntCall_tm = prim_mk_const{Name="IntCall",Thy="vyperAst"}
-val Assert_tm = prim_mk_const{Name="Assert",Thy="vyperAst"}
-val If_tm = prim_mk_const{Name="If",Thy="vyperAst"}
-val AnnAssign_tm = prim_mk_const{Name="AnnAssign",Thy="vyperAst"}
-val Name_tm = prim_mk_const{Name="Name",Thy="vyperAst"}
-val Return_tm = prim_mk_const{Name="Return",Thy="vyperAst"}
-val Literal_tm = prim_mk_const{Name="Literal",Thy="vyperAst"}
-val Builtin_tm = prim_mk_const{Name="Builtin",Thy="vyperAst"}
-val Bop_tm = prim_mk_const{Name="Bop",Thy="vyperAst"}
-val In_tm = prim_mk_const{Name="In",Thy="vyperAst"}
-val NotIn_tm = prim_mk_const{Name="NotIn",Thy="vyperAst"}
-val Eq_tm = prim_mk_const{Name="Eq",Thy="vyperAst"}
-val NotEq_tm = prim_mk_const{Name="NotEq",Thy="vyperAst"}
-val IntL_tm = prim_mk_const{Name="IntL",Thy="vyperAst"}
-val BoolL_tm = prim_mk_const{Name="BoolL",Thy="vyperAst"}
-val Fixed_tm = prim_mk_const{Name="Fixed",Thy="vyperAst"}
-val BytesL_tm = prim_mk_const{Name="BytesL",Thy="vyperAst"}
-val ArrayLit_tm = prim_mk_const{Name="ArrayLit",Thy="vyperAst"}
-fun mk_Expr e = mk_comb(Expr_tm, e)
-fun mk_Name s = mk_comb(Name_tm, fromMLstring s)
-fun mk_IntCall s = mk_comb(IntCall_tm, s)
-fun mk_Call ct args = list_mk_comb(AstCall_tm, [ct, mk_list (args, expr_ty)])
-fun mk_Assert e s = list_mk_comb(Assert_tm, [e, s])
-fun mk_If e s1 s2 = list_mk_comb(If_tm, [e,s1,s2])
-fun mk_li i = mk_comb(Literal_tm, mk_comb(IntL_tm, intSyntax.term_of_int i))
-fun mk_lb b = mk_comb(Literal_tm, mk_comb(BoolL_tm, b))
-fun mk_Return tmo = mk_comb(Return_tm, lift_option (mk_option expr_ty) I tmo)
-fun mk_AnnAssign s t e = list_mk_comb(AnnAssign_tm, [s, t, e])
-fun mk_Hex s = let
-  val s = if String.isPrefix "0x" s then String.extract(s,2,NONE) else s
-  val n = numSyntax.term_of_int $ String.size s div 2
-  val b = mk_comb(Fixed_tm, n)
-in
-  mk_comb(Literal_tm,
-    list_mk_comb(BytesL_tm, [b, mk_bytes_tm s]))
-end
-fun mk_Builtin b es = list_mk_comb(Builtin_tm, [b, es])
-fun mk_Bop b = mk_comb(Bop_tm, b)
-fun mk_ArrayLit ls = let
-  val n = numSyntax.term_of_int $ List.length ls
-  val b = mk_comb(Fixed_tm, n)
-in
-  list_mk_comb(ArrayLit_tm, [b, mk_list(ls, expr_ty)])
-end
-
-val Msg_tm = prim_mk_const{Name="Msg",Thy="vyperAst"}
-val Sender_tm = prim_mk_const{Name="Sender",Thy="vyperAst"}
-val msg_sender_tm = list_mk_comb(Builtin_tm, [
-  mk_comb(Msg_tm, Sender_tm), mk_list([], expr_ty)])
-
-val abiBool_tm = prim_mk_const{Name="Bool",Thy="contractABI"}
-val abiUint_tm = prim_mk_const{Name="Uint",Thy="contractABI"}
-val abiInt_tm = prim_mk_const{Name="Int",Thy="contractABI"}
-val abiUint256_tm = mk_comb(abiUint_tm, numSyntax.term_of_int 256)
-val abiInt128_tm = mk_comb(abiInt_tm, numSyntax.term_of_int 128)
-val abiAddress_tm = prim_mk_const{Name="Address",Thy="contractABI"}
-
 fun achoose err ls = orElse(choose ls, fail err)
 
-val astType : term decoder = achoose "astType" [
-    check_field "id" "uint256" $ succeed uint256_tm,
-    check_field "id" "int128" $ succeed int128_tm,
-    check_field "id" "bool" $ succeed bool_tm,
-    check_field "id" "address" $ succeed address_tm,
-    null NoneT_tm
-  ]
+val astType : term decoder =
+  orElse (
+    check_ast_type "Name" $
+    achoose "astType" [
+      check_field "id" "uint256" $ succeed uint256_tm,
+      check_field "id" "int128" $ succeed int128_tm,
+      check_field "id" "bool" $ succeed bool_tm,
+      check_field "id" "address" $ succeed address_tm
+    ],
+    null NoneT_tm)
 
 val arg : term decoder =
   check_ast_type "arg" $
@@ -193,7 +207,8 @@ val binop : term decoder = achoose "binop" [
   check_ast_type "In" $ succeed In_tm,
   check_ast_type "NotIn" $ succeed NotIn_tm,
   check_ast_type "Eq" $ succeed Eq_tm,
-  check_ast_type "NotEq" $ succeed NotEq_tm
+  check_ast_type "NotEq" $ succeed NotEq_tm,
+  check_ast_type "Lt" $ succeed Lt_tm
 ]
 
 fun d_expression () : term decoder = achoose "expr" [
@@ -202,7 +217,7 @@ fun d_expression () : term decoder = achoose "expr" [
     check_ast_type "NameConstant" $
     field "value" (JSONDecode.map mk_lb booltm),
     check_ast_type "Int" $
-    field "value" (JSONDecode.map (mk_li o Arbint.fromInt) int),
+    field "value" (JSONDecode.map (mk_li o intSyntax.term_of_int o Arbint.fromInt) int),
     check_ast_type "Hex" $
     field "value" (JSONDecode.map mk_Hex string),
     check_ast_type "Compare" $
@@ -218,6 +233,10 @@ fun d_expression () : term decoder = achoose "expr" [
     check_ast_type "List" $
     andThen (succeed o mk_ArrayLit) $ (* TODO: also handle dynamic arrays *)
     field "elements" (array (delay d_expression)),
+    check_ast_type "Subscript" $
+    andThen (fn (e1,e2) => succeed $ mk_Subscript e1 e2) $
+    tuple2 (field "value" (delay d_expression),
+            field "slice" (delay d_expression)),
     check_ast_type "Attribute" $
     check (field "value" (tuple2 (field "ast_type" string,
                                   field "id" string)))
@@ -242,6 +261,22 @@ fun d_expression () : term decoder = achoose "expr" [
   ]
 val expression = delay d_expression
 
+(* TODO: support variable (expr) args with explicit bounds *)
+fun rangeArgs ls = let
+  val (s, e) = case ls of [x,y] => (x,y) | [x] => (0,x) | _ => (0,0)
+  val b = e - s
+  val [s,e] = List.map (intSyntax.term_of_int o Arbint.fromInt) [s,e]
+  val t = list_mk_comb(Range_tm, [mk_li s, mk_li e])
+in (t, numSyntax.term_of_int b) end
+
+val iterator : (term * term) decoder = achoose "iterator" [
+  check_ast_type "Call" $
+  check (field "func" (field "id" string))
+        (equal "range") "not range" $
+  andThen (succeed o rangeArgs) $
+  field "args" (array (check_ast_type "Int" (field "value" int)))
+]
+
 fun mk_statements ls = mk_list(ls, stmt_ty)
 val d_statements = andThen (succeed o mk_statements) o array
 
@@ -249,17 +284,27 @@ fun d_statement () : term decoder = achoose "stmt" [
     check_ast_type "Pass" $ succeed Pass_tm,
     check_ast_type "Expr" $
     field "value" (JSONDecode.map mk_Expr expression),
+    check_ast_type "For" $
+    andThen (fn ((s,t),(i,n),b) => succeed $ mk_For s t i n b) $
+    tuple3 (field "target" $
+            check_ast_type "AnnAssign" $
+            tuple2 (field "target" $
+                    check_ast_type "Name" $
+                    field "id" stringtm,
+                    field "annotation" astType),
+            field "iter" iterator,
+            field "body" (d_statements (delay d_statement))),
+    check_ast_type "If" $
+    andThen (fn (e,s1,s2) => succeed $ mk_If e s1 s2) $
+    tuple3 (field "test" expression,
+            field "body" (d_statements (delay d_statement)),
+            field "orelse" (d_statements (delay d_statement))),
     check_ast_type "Assert" $
     andThen (fn (e,s) => succeed $ mk_Assert e s)
       (tuple2 (field "test" expression,
                field "msg" $
                  orElse(check_ast_type "Str" (field "value" stringtm),
                         null emptystring_tm))),
-    check_ast_type "If" $
-    andThen (fn (e,s1,s2) => succeed $ mk_If e s1 s2) $
-    tuple3 (field "test" expression,
-            field "body" (d_statements (delay d_statement)),
-            field "orelse" (d_statements (delay d_statement))),
     check_ast_type "Return" $
     field "value" (JSONDecode.map mk_Return (try expression)),
     check_ast_type "AnnAssign" $
@@ -339,6 +384,7 @@ val toplevels : term decoder =
 
 val abiType : term decoder =
   andThen (fn s =>
+  (* TODO: parse the string to invert type_to_string *)
     if s = "bool" then succeed abiBool_tm else
     if s = "uint256" then succeed abiUint256_tm else
     if s = "int128" then succeed abiInt128_tm else
@@ -435,20 +481,40 @@ end
   val tests = read_test_json json_path
   val () = List.app run_test tests
 
+  val json_path = "test_assert.json"
+  val tests = read_test_json json_path
+  val () = List.app run_test tests
+
   val json_path = "test_conditionals.json"
   val tests = read_test_json json_path
 
   val test_jsons = decodeFile rawObject json_path
-  val (name, json) = el 3 test_jsons
+  val (name, json) = el 1 test_jsons
   val traces = decode (field "traces" (array trace)) json
   val traces = decode (field "traces" (array raw)) json
   val tr = el 1 traces
+  decode (field "contract_abi" (array abiEntry)) tr
   val tr = decode trace tr
   val tls = decode (field "annotated_ast" (field "ast" (field "body" (array raw)))) tr
   val tl = el 1 tls
-  decode (field "body" statements) tl
-
   val stmts = decode (field "body" statements) tl
+
+  val stmts = decode (field "body" (array raw)) tl
+  val stmt = el 1 stmts
+  decode statement stmt
+  val stmts = decode (field "body" (array raw)) stmt
+  val stmt = el 1 stmts
+  val expr = decode (field "test" raw) stmt
+  decode (field "right" expression) expr
+  decode expression expr
+
+  decode (field "iter" (field "args" (array (field "value" int)))) stmt
+  val ls = [3]
+
+  val stmt = decode statement stmt
+  val stmts = decode (field "body" (array raw)) stmt
+  val stmt = el 1 stmts
+  decode (field "value" expression) stmt
 
   val estmts = decode (field "orelse" (array raw)) (el 1 stmts)
   val estmt = el 1 estmts
