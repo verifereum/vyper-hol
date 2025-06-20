@@ -534,6 +534,7 @@ Definition evaluate_binop_def:
   evaluate_binop Eq (BoolV b1) (BoolV b2) = INL (BoolV (b1 = b2)) ∧
   evaluate_binop Eq (IntV i1) (IntV i2) = INL (BoolV (i1 = i2)) ∧
   evaluate_binop NotEq v1 v2 = binop_negate $ evaluate_binop Eq v1 v2 ∧
+  evaluate_binop Lt (IntV i1) (IntV i2) = INL (BoolV (i1 < i2)) ∧
   evaluate_binop _ _ _ = INR "binop"
 Termination
   WF_REL_TAC ‘inv_image $< (λ(b,x,y). if b = NotIn ∨ b = NotEq then 2n else 0n)’
@@ -600,7 +601,6 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV &(LENGTH ls)) ∧
   evaluate_builtin cx _ Len [StringV _ ls] = INL (IntV &(LENGTH ls)) ∧
   evaluate_builtin cx _ Len [ArrayV _ ls] = INL (IntV &(LENGTH ls)) ∧
-  evaluate_builtin cx _ Lt  [IntV i1; IntV i2] = INL (BoolV (i1 < i2)) ∧
   evaluate_builtin cx _ Not [BoolV b] = INL (BoolV (¬b)) ∧
   evaluate_builtin cx _ Not [IntV i] =
     (if 0 ≤ i then INL (IntV (int_not i)) else INR "signed Not") ∧
@@ -717,7 +717,6 @@ val () = cv_auto_trans compatible_bound_def;
 Definition builtin_args_length_ok_def:
   builtin_args_length_ok Len n = (n = 1n) ∧
   builtin_args_length_ok Not n = (n = 1) ∧
-  builtin_args_length_ok Lt n = (n = 2) ∧
   builtin_args_length_ok Keccak256 n = (n = 1) ∧
   builtin_args_length_ok (Bop _) n = (n = 2) ∧
   builtin_args_length_ok (Msg _) n = (n = 0) ∧
