@@ -11,6 +11,7 @@ val Dynamic_tm      = astk"Dynamic"
 val UintT_tm        = astk"UintT"
 val IntT_tm         = astk"IntT"
 val BoolT_tm        = astk"BoolT"
+val ArrayT_tm       = astk"ArrayT"
 val AddressT_tm     = astk"AddressT"
 val BaseT_tm        = astk"BaseT"
 val NoneT_tm        = astk"NoneT"
@@ -93,6 +94,7 @@ val bool_tm = mk_comb(BaseT_tm, BoolT_tm)
 val uint256_tm = mk_comb(BaseT_tm, mk_comb(UintT_tm, numSyntax.term_of_int 256))
 val int128_tm = mk_comb(BaseT_tm, mk_comb(IntT_tm, numSyntax.term_of_int 128))
 val address_tm = mk_comb(BaseT_tm, AddressT_tm)
+fun mk_Fixed n = mk_comb(Fixed_tm, n)
 fun mk_FunctionDecl v m n a t b = list_mk_comb(FunctionDecl_tm, [v,m,n,a,t,b])
 fun mk_VariableDecl v m n t = list_mk_comb(VariableDecl_tm, [v,m,n,t])
 fun mk_Expr e = mk_comb(Expr_tm, e)
@@ -127,6 +129,7 @@ val msg_sender_tm = list_mk_comb(Builtin_tm, [
   mk_comb(Msg_tm, Sender_tm), mk_list([], expr_ty)])
 
 
+val abi_type_ty = mk_thy_type{Args=[],Thy="contractABI",Tyop="abi_type"}
 val abiBool_tm = prim_mk_const{Name="Bool",Thy="contractABI"}
 val abiString_tm = prim_mk_const{Name="String",Thy="contractABI"}
 val abiBytes_tm = prim_mk_const{Name="Bytes",Thy="contractABI"}
@@ -261,16 +264,27 @@ val call : term decoder =
 
 fun achoose err ls = orElse(choose ls, fail err)
 
-val astType : term decoder =
-  orElse (
+fun d_astType () : term decoder =
+  achoose "astType" [
     check_ast_type "Name" $
-    achoose "astType" [
-      check_field "id" "uint256" $ succeed uint256_tm,
+    achoose "astType Name" [
+      check_field "id" "uint256" $ succeed uint256_tm, (* TODO: handle arbitrary bit sizes *)
       check_field "id" "int128" $ succeed int128_tm,
       check_field "id" "bool" $ succeed bool_tm,
       check_field "id" "address" $ succeed address_tm
-    ], (* TODO: do this properly recursively, handle Subscript *)
-    null NoneT_tm)
+    ],
+    check_ast_type "Subscript" $
+    andThen (fn (t,b) => succeed $ list_mk_comb(ArrayT_tm, [t,b])) $
+    tuple2 (
+      field "value" (delay d_astType),
+      field "slice" $
+      check_ast_type "Int" $
+      field "value" (JSONDecode.map (mk_Fixed o numSyntax.term_of_int) int)
+    ),
+    null NoneT_tm
+  ]
+
+val astType = delay d_astType
 
 val arg : term decoder =
   check_ast_type "arg" $
@@ -480,7 +494,6 @@ val abiMutability : term decoder =
 
 val Function_tm = prim_mk_const{Thy="vyperTestRunner",Name="Function"}
 val (abi_function_ty, abi_entry_ty) = dom_rng $ type_of $ Function_tm
-val abi_type_ty = mk_thy_type{Args=[],Thy="contractABI",Tyop="abi_type"}
 val abi_arg_ty = mk_prod(string_ty, abi_type_ty)
 
 val abiEntry : term decoder = achoose "abiEntry" [
