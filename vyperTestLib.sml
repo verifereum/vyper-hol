@@ -11,9 +11,10 @@ val Dynamic_tm      = astk"Dynamic"
 val UintT_tm        = astk"UintT"
 val IntT_tm         = astk"IntT"
 val BoolT_tm        = astk"BoolT"
-val ArrayT_tm       = astk"ArrayT"
+val StringT_tm      = astk"StringT"
 val AddressT_tm     = astk"AddressT"
 val BaseT_tm        = astk"BaseT"
+val ArrayT_tm       = astk"ArrayT"
 val NoneT_tm        = astk"NoneT"
 val BoolL_tm        = astk"BoolL"
 val BytesL_tm       = astk"BytesL"
@@ -97,6 +98,7 @@ val address_tm = mk_comb(BaseT_tm, AddressT_tm)
 fun mk_Fixed n = mk_comb(Fixed_tm, n)
 fun mk_FunctionDecl v m n a t b = list_mk_comb(FunctionDecl_tm, [v,m,n,a,t,b])
 fun mk_VariableDecl v m n t = list_mk_comb(VariableDecl_tm, [v,m,n,t])
+fun mk_String n = mk_comb(BaseT_tm, mk_comb(StringT_tm, n))
 fun mk_Expr e = mk_comb(Expr_tm, e)
 fun mk_For s t i n b = list_mk_comb(For_tm, [s,t,i,n,b])
 fun mk_Name s = mk_comb(Name_tm, fromMLstring s)
@@ -273,6 +275,13 @@ fun d_astType () : term decoder =
       check_field "id" "bool" $ succeed bool_tm,
       check_field "id" "address" $ succeed address_tm
     ],
+    check_ast_type "Subscript" $
+    andThen (succeed o mk_String) $
+    check (field "value" (check_ast_type "Name" $ field "id" string))
+    (equal "String") "not a String" $
+    field "slice" $
+    check_ast_type "Int" $
+    field "value" $ JSONDecode.map numSyntax.term_of_int int,
     check_ast_type "Subscript" $
     andThen (fn (t,b) => succeed $ list_mk_comb(ArrayT_tm, [t,b])) $
     tuple2 (
