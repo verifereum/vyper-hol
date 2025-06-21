@@ -27,6 +27,7 @@ val NotEq_tm        = astk"NotEq"
 val Sender_tm       = astk"Sender"
 val Lt_tm           = astk"Lt"
 val Gt_tm           = astk"Gt"
+val Concat_tm       = astk"Concat"
 val Bop_tm          = astk"Bop"
 val Msg_tm          = astk"Msg"
 val IntCall_tm      = astk"IntCall"
@@ -98,6 +99,7 @@ val uint256_tm = mk_comb(BaseT_tm, mk_comb(UintT_tm, numSyntax.term_of_int 256))
 val int128_tm = mk_comb(BaseT_tm, mk_comb(IntT_tm, numSyntax.term_of_int 128))
 val address_tm = mk_comb(BaseT_tm, AddressT_tm)
 fun mk_Fixed n = mk_comb(Fixed_tm, n)
+fun mk_Dynamic n = mk_comb(Dynamic_tm, n)
 fun mk_FunctionDecl v m n a t b = list_mk_comb(FunctionDecl_tm, [v,m,n,a,t,b])
 fun mk_VariableDecl v m n t = list_mk_comb(VariableDecl_tm, [v,m,n,t])
 fun mk_String n = mk_comb(BaseT_tm, mk_comb(StringT_tm, n))
@@ -125,6 +127,7 @@ in
     list_mk_comb(BytesL_tm, [b, mk_bytes_tm s]))
 end
 fun mk_Builtin b es = list_mk_comb(Builtin_tm, [b, es])
+fun mk_Concat b = mk_comb(Concat_tm, b)
 fun mk_Bop b = mk_comb(Bop_tm, b)
 fun mk_ArrayLit ls = let
   val n = numSyntax.term_of_int $ List.length ls
@@ -359,6 +362,24 @@ fun d_expression () : term decoder = achoose "expr" [
                  "not msg.sender"
                  (succeed msg_sender_tm)),
     check_ast_type "Call" $
+    andThen (fn (b,es) => succeed $ mk_Builtin (mk_Concat b) es) $
+    tuple2 (
+      check (field "func" (tuple2 (
+               field "ast_type" string,
+               field "id" string)))
+            (equal ("Name", "concat"))
+            "not concat" $
+      field "type" $ choose [
+        check_field "name" "String" $
+        JSONDecode.map (mk_Dynamic o numSyntax.term_of_int)
+          (field "length" int)
+        (* TODO: concat returning bytes *)
+      ],
+      field "args" $ JSONDecode.map
+        (fn ls => mk_list(ls, expr_ty)) $
+        array (delay d_expression)
+    ),
+    check_ast_type "Call" $
     andThen (fn (i,a) => succeed $ mk_Call (mk_IntCall i) a) $
     tuple2 (
       field "func" (
@@ -592,19 +613,28 @@ end
   val tests = read_test_json json_path
 
   val test_jsons = decodeFile rawObject json_path
-  val (name, json) = el 1 test_jsons
+  val (name, json) = el 2 test_jsons
   val traces = decode (field "traces" (array trace)) json
   val traces = decode (field "traces" (array raw)) json
   val tr = el 1 traces
   decode (field "contract_abi" (array abiEntry)) tr
   val tr = decode trace tr
   val tls = decode (field "annotated_ast" (field "ast" (field "body" (array raw)))) tr
-  val tl = el 1 tls
-  val stmts = decode (field "body" statements) tl
+  val tl = el 3 tls
+  decode toplevel tl
 
+  decode (field "args" (field "args" (array (field "annotation" raw)))) tl
+
+  val stmts = decode (field "body" statements) tl
   val stmts = decode (field "body" (array raw)) tl
-  val stmt = el 1 stmts
+
+  val stmt = el 3 stmts
+  decode (field "test" expression) stmt
+  val expr = decode (field "msg" raw) stmt
+
+  decode (field "body" statements) stmt
   decode statement stmt
+
   val stmts = decode (field "body" (array raw)) stmt
   val stmt = el 1 stmts
   val expr = decode (field "test" raw) stmt
