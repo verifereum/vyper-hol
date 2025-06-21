@@ -958,6 +958,13 @@ End
 
 val () = cv_auto_trans dest_AddressV_def;
 
+Definition dest_StringV_def:
+  dest_StringV (StringV _ s) = SOME s ∧
+  dest_StringV _ = NONE
+End
+
+val () = cv_auto_trans dest_StringV_def;
+
 Definition transfer_value_def:
   transfer_value fromAddr toAddr amount = do
     acc <- get_accounts;
@@ -1346,9 +1353,11 @@ Definition bound_def:
   stmt_bound ts (Return NONE) = 0 ∧
   stmt_bound ts (Return (SOME e)) =
     1 + expr_bound ts e ∧
-  stmt_bound ts (Raise _) = 0 ∧
-  stmt_bound ts (Assert e _) =
+  stmt_bound ts (Raise e) =
     1 + expr_bound ts e ∧
+  stmt_bound ts (Assert e1 e2) =
+    1 + expr_bound ts e1
+      + expr_bound ts e2 ∧
   stmt_bound ts (Log _ es) =
     1 + exprs_bound ts es ∧
   stmt_bound ts (AnnAssign _ _ e) =
@@ -1573,12 +1582,20 @@ Definition evaluate_def:
     v <- get_Value tv;
     raise $ ReturnException v
   od ∧
-  eval_stmt cx (Raise str) = raise $ AssertException str ∧
-  eval_stmt cx (Assert e str) = do
+  eval_stmt cx (Raise e) = do
+    tv <- eval_expr cx e;
+    v <- get_Value tv;
+    s <- lift_option (dest_StringV v) "raise not StringV";
+    raise $ AssertException s
+  od ∧
+  eval_stmt cx (Assert e se) = do
+    stv <- eval_expr cx se;
+    sv <- get_Value stv;
+    s <- lift_option (dest_StringV sv) "assert not StringV";
     tv <- eval_expr cx e;
     switch_BoolV tv
       (return ())
-      (raise $ AssertException str)
+      (raise $ AssertException s)
   od ∧
   eval_stmt cx (Log id es) = do
     (* TODO: check arguments length and types *)

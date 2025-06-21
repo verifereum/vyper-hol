@@ -17,6 +17,7 @@ val BaseT_tm        = astk"BaseT"
 val ArrayT_tm       = astk"ArrayT"
 val NoneT_tm        = astk"NoneT"
 val BoolL_tm        = astk"BoolL"
+val StringL_tm      = astk"StringL"
 val BytesL_tm       = astk"BytesL"
 val IntL_tm         = astk"IntL"
 val In_tm           = astk"In"
@@ -110,6 +111,9 @@ fun mk_Subscript e1 e2 = list_mk_comb(Subscript_tm, [e1, e2])
 fun mk_If e s1 s2 = list_mk_comb(If_tm, [e,s1,s2])
 fun mk_li i = mk_comb(Literal_tm, mk_comb(IntL_tm, i))
 fun mk_lb b = mk_comb(Literal_tm, mk_comb(BoolL_tm, b))
+fun mk_ls s = mk_comb(Literal_tm,
+  list_mk_comb(StringL_tm, [numSyntax.term_of_int (String.size s),
+                            stringSyntax.fromMLstring s]))
 fun mk_Return tmo = mk_comb(Return_tm, lift_option (mk_option expr_ty) I tmo)
 fun mk_AnnAssign s t e = list_mk_comb(AnnAssign_tm, [s, t, e])
 fun mk_Hex s = let
@@ -322,6 +326,8 @@ fun d_expression () : term decoder = achoose "expr" [
     field "id" (JSONDecode.map mk_Name string),
     check_ast_type "NameConstant" $
     field "value" (JSONDecode.map mk_lb booltm),
+    check_ast_type "Str" $
+    JSONDecode.map mk_ls $ field "value" string,
     check_ast_type "Int" $
     field "value" (JSONDecode.map (mk_li o intSyntax.term_of_int o Arbint.fromInt) int),
     check_ast_type "Hex" $
@@ -408,9 +414,7 @@ fun d_statement () : term decoder = achoose "stmt" [
     check_ast_type "Assert" $
     andThen (fn (e,s) => succeed $ mk_Assert e s)
       (tuple2 (field "test" expression,
-               field "msg" $
-                 orElse(check_ast_type "Str" (field "value" stringtm),
-                        null emptystring_tm))),
+               field "msg" (orElse (expression, null (mk_ls ""))))),
     check_ast_type "Return" $
     field "value" (JSONDecode.map mk_Return (try expression)),
     check_ast_type "AnnAssign" $

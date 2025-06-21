@@ -145,9 +145,9 @@ Datatype:
   | Expr expr
   | For identifier type iterator num (stmt list)
   | If expr (stmt list) (stmt list)
-  | Assert expr string
+  | Assert expr expr
   | Log identifier (expr list)
-  | Raise string
+  | Raise expr
   | Return (expr option)
   | Assign assignment_target expr
   | AugAssign base_assignment_target binop expr

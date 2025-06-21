@@ -20,7 +20,9 @@ val () = new_theory "vyperSmallStep";
 Datatype:
   eval_continuation
   = ReturnK eval_continuation
-  | AssertK string eval_continuation
+  | AssertK expr eval_continuation
+  | AssertK1 string eval_continuation
+  | RaiseK eval_continuation
   | LogK identifier eval_continuation
   | PopK eval_continuation
   | AppendK expr eval_continuation
@@ -248,8 +250,8 @@ Definition eval_stmt_cps_def:
   eval_stmt_cps cx Break st k = AK cx (ApplyExc BreakException) st k ∧
   eval_stmt_cps cx (Return NONE) st k = AK cx (ApplyExc (ReturnException NoneV)) st k ∧
   eval_stmt_cps cx (Return (SOME e)) st k = eval_expr_cps cx e st (ReturnK k) ∧
-  eval_stmt_cps cx (Raise str) st k = AK cx (ApplyExc (AssertException str)) st k ∧
-  eval_stmt_cps cx (Assert e str) st k = eval_expr_cps cx e st (AssertK str k) ∧
+  eval_stmt_cps cx (Raise se) st k = eval_expr_cps cx se st (RaiseK k) ∧
+  eval_stmt_cps cx (Assert e se) st k = eval_expr_cps cx se st (AssertK e k) ∧
   eval_stmt_cps cx (Log id es) st k = eval_exprs_cps cx es st (LogK id k) ∧
   eval_stmt_cps cx (AnnAssign id typ e) st k =
     eval_expr_cps cx e st (AnnAssignK id k) ∧
@@ -318,6 +320,8 @@ val () = apply_def
 Definition apply_exc_def:
   apply_exc cx ex st (ReturnK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AssertK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (AssertK1 _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (RaiseK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (LogK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AppendK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AppendK1 _ k) = AK cx (ApplyExc ex) st k ∧
@@ -477,10 +481,18 @@ val () = apply_tv_def
 
 Definition apply_val_def:
   apply_val cx v st (ReturnK k) = apply_exc cx (ReturnException v) st k ∧
-  apply_val cx (BoolV T) st (AssertK str k) = apply cx st k ∧
-  apply_val cx (BoolV F) st (AssertK str k) =
+  apply_val cx (BoolV T) st (AssertK1 str k) = apply cx st k ∧
+  apply_val cx (BoolV F) st (AssertK1 str k) =
     apply_exc cx (AssertException str) st k ∧
-  apply_val cx v st (AssertK _ k) = apply_exc cx (Error "not BoolV") st k ∧
+  apply_val cx v st (AssertK1 _ k) = apply_exc cx (Error "not BoolV") st k ∧
+  apply_val cx (StringV _ str) st (AssertK e k) =
+    eval_expr_cps cx e st (AssertK1 str k) ∧
+  apply_val cx (StringV _ str) st (RaiseK k) =
+    apply_exc cx (AssertException str) st k ∧
+  apply_val cx _ st (RaiseK k) =
+    apply_exc cx (Error "raise not StringV") st k ∧
+  apply_val cx _ st (AssertK e k) =
+    apply_exc cx (Error "assert not StringV") st k ∧
   apply_val cx v st (AnnAssignK id k) =
     liftk cx (K Apply) (new_variable id v st) k ∧
   apply_val cx v st (AssignK1 gv k) =
@@ -702,7 +714,6 @@ Proof
     \\ rw[Once OWHILE_THM, stepk_def, SimpRHS] \\ gvs[]
     \\ rw[apply_exc_def]
     \\ rw[Once OWHILE_THM, stepk_def] )
-  \\ conj_tac >- rw[eval_stmt_cps_def, evaluate_def, raise_def]
   \\ conj_tac >- (
     rw[eval_stmt_cps_def, evaluate_def, bind_def]
     \\ CASE_TAC \\ rw[cont_def] \\ reverse CASE_TAC
@@ -711,18 +722,50 @@ Proof
     \\ reverse (Cases_on `x`) \\ simp[switch_BoolV_def, raise_def]
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     \\ simp[return_def, Once OWHILE_THM, stepk_def]
-    \\ rw[apply_val_def, return_def, raise_def]
+    \\ Cases_on`v`
+    \\ simp[dest_StringV_def, lift_option_def, return_def,
+            raise_def, apply_val_def, apply_exc_def]
+    \\ rw[Once OWHILE_THM, SimpRHS, stepk_def] \\ gvs[]
+    \\ rw[apply_exc_def] \\ rw[Once OWHILE_THM] )
+  \\ conj_tac >- (
+    rw[eval_stmt_cps_def, evaluate_def, bind_def]
+    \\ CASE_TAC \\ rw[cont_def] \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    \\ rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
+    \\ CASE_TAC
+    \\ CASE_TAC \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    \\ qmatch_goalsub_rename_tac`dest_StringV v`
+    \\ first_x_assum $ drule_then drule
+    \\ rw[cont_def]
+    \\ CASE_TAC \\ CASE_TAC \\ gvs[]
+    \\ BasicProvers.TOP_CASE_TAC \\ gvs[]
+    \\ pop_assum mp_tac
+    \\ reverse BasicProvers.TOP_CASE_TAC \\ gvs[]
+    \\ strip_tac \\ gvs[]
     >- (
-      rw[Once OWHILE_THM, SimpRHS, stepk_def] \\ gvs[]
-      \\ rw[apply_def]
-      \\ rw[Once OWHILE_THM] )
+      Cases_on`v` \\ gvs[dest_StringV_def, lift_option_def, raise_def,
+                         apply_val_def, return_def]
+      \\ rw[Once OWHILE_THM, SimpRHS, stepk_def, apply_exc_def] \\ gvs[]
+      \\ rw[apply_exc_def] \\ rw[Once OWHILE_THM] )
+    \\ Cases_on`v` \\ gvs[dest_StringV_def, lift_option_def, raise_def,
+                       apply_val_def, return_def]
+    \\ pop_assum mp_tac
+    \\ reverse CASE_TAC \\ strip_tac \\ gvs[]
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    \\ rw[Once OWHILE_THM, stepk_def] \\ gvs[apply_tv_def, liftk1, return_def]
+    \\ qmatch_goalsub_rename_tac`get_Value v`
+    \\ Cases_on`v` \\ gvs[return_def, raise_def]
+    \\ rw[Once OWHILE_THM, stepk_def, apply_val_def, apply_exc_def]
+    \\ gvs[switch_BoolV_def, raise_def]
+    \\ pop_assum mp_tac
+    \\ reverse(rw[return_def, raise_def]) \\ rw[apply_val_def]
     >- (
-      rw[Once OWHILE_THM, SimpRHS, stepk_def] \\ gvs[]
+      qmatch_goalsub_rename_tac`apply_val _ v`
+      \\ Cases_on`v` \\ rw[apply_val_def]
+      \\ rw[Once OWHILE_THM, stepk_def, SimpRHS] \\ gvs[]
       \\ rw[apply_exc_def, Once OWHILE_THM] )
-    >- (
-      rw[Once OWHILE_THM, SimpRHS, stepk_def] \\ gvs[]
-      \\ Cases_on`v` \\ rw[apply_val_def, apply_exc_def]
-      \\ rw[Once OWHILE_THM] ))
+    \\ rw[Once OWHILE_THM, stepk_def, SimpRHS] \\ gvs[]
+    \\ rw[Once OWHILE_THM, apply_def, apply_exc_def] )
   \\ conj_tac >- (
     rw[eval_stmt_cps_def, evaluate_def, bind_def]
     \\ CASE_TAC \\ rw[cont_def] \\ reverse CASE_TAC
