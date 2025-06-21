@@ -73,7 +73,10 @@ Datatype:
 End
 
 Datatype:
-  trace = Deployment deployment_trace | Call call_trace
+  trace
+  = Deployment deployment_trace
+  | Call call_trace
+  | SetBalance address num
 End
 
 Definition find_function_args_by_name_def:
@@ -144,6 +147,11 @@ Definition run_trace_def:
       snss = (dt.deployedAddress,sns)::snss;
     in
       (snss, SND result)
+   | SetBalance addr bal => (snss,
+       INL (am with accounts updated_by
+            (update_account addr
+             ((lookup_account addr am.accounts) with balance := bal)))
+     )
    | Call ct => (snss,
      case ALOOKUP snss ct.target
      of NONE => if IS_NONE ct.expectedOutput then INL am

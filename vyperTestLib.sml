@@ -586,6 +586,8 @@ val abiEntry : term decoder = achoose "abiEntry" [
 val Deployment_tm = prim_mk_const{Thy="vyperTestRunner",Name="Deployment"}
 val deployment_trace_ty = #1 $ dom_rng $ type_of Deployment_tm
 
+val SetBalance_tm = prim_mk_const{Thy="vyperTestRunner",Name="SetBalance"}
+
 val deployment : term decoder =
   check_trace_type "deployment" $
   andThen (fn ((c,i,(s,a),(d,v)),e) => succeed $
@@ -610,8 +612,14 @@ val deployment : term decoder =
                    field "deployment_succeeded" booltm))
 
 val trace : term decoder =
-  orElse (JSONDecode.map (curry mk_comb Call_tm) call,
-          JSONDecode.map (curry mk_comb Deployment_tm) deployment)
+  achoose "trace" [
+    JSONDecode.map (curry mk_comb Call_tm) call,
+    JSONDecode.map (curry mk_comb Deployment_tm) deployment,
+    andThen (fn (a,b) => succeed $ list_mk_comb(SetBalance_tm, [a,b])) $
+    tuple2 (
+      field "address" address,
+      field "value" numtm)
+  ]
 
 fun read_test_json json_path = let
   val test_jsons = decodeFile rawObject json_path
