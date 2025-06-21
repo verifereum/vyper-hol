@@ -20,6 +20,7 @@ val BoolL_tm        = astk"BoolL"
 val StringL_tm      = astk"StringL"
 val BytesL_tm       = astk"BytesL"
 val IntL_tm         = astk"IntL"
+val Add_tm          = astk"Add"
 val In_tm           = astk"In"
 val NotIn_tm        = astk"NotIn"
 val Eq_tm           = astk"Eq"
@@ -38,6 +39,9 @@ val Subscript_tm    = astk"Subscript"
 val Attribute_tm    = astk"Attribute"
 val Builtin_tm      = astk"Builtin"
 val AstCall_tm      = astk"Call"
+val TopLevelNameTarget_tm =  astk"TopLevelNameTarget"
+val BaseTarget_tm   = astk"BaseTarget"
+val TupleTarget_tm  = astk"TupleTarget"
 val Array_tm        = astk"Array"
 val Range_tm        = astk"Range"
 val Pass_tm         = astk"Pass"
@@ -45,7 +49,9 @@ val Expr_tm         = astk"Expr"
 val For_tm          = astk"For"
 val If_tm           = astk"If"
 val Assert_tm       = astk"Assert"
+val Raise_tm        = astk"Raise"
 val Return_tm       = astk"Return"
+val Assign_tm       = astk"Assign"
 val AnnAssign_tm    = astk"AnnAssign"
 val External_tm     = astk"External"
 val Internal_tm     = astk"Internal"
@@ -316,6 +322,7 @@ val args : term decoder =
 fun theoptstring NONE = "" | theoptstring (SOME s) = s
 
 val binop : term decoder = achoose "binop" [
+  check_ast_type "Add" $ succeed Add_tm,
   check_ast_type "In" $ succeed In_tm,
   check_ast_type "NotIn" $ succeed NotIn_tm,
   check_ast_type "Eq" $ succeed Eq_tm,
@@ -361,6 +368,12 @@ fun d_expression () : term decoder = achoose "expr" [
                  (equal "sender")
                  "not msg.sender"
                  (succeed msg_sender_tm)),
+    check_ast_type "Attribute" $
+    andThen (fn (e,s) => succeed $ list_mk_comb(Attribute_tm, [e,s])) $
+    tuple2 (
+      field "value" (delay d_expression),
+      field "attr" stringtm
+    ),
     check_ast_type "Call" $
     andThen (fn (b,es) => succeed $ mk_Builtin (mk_Concat b) es) $
     tuple2 (
@@ -410,6 +423,21 @@ val iterator : (term * term) decoder = achoose "iterator" [
   field "args" (array (check_ast_type "Int" (field "value" int)))
 ]
 
+fun d_baseAssignmentTarget () : term decoder = achoose "bt" [
+  check_ast_type "Attribute" $
+  check (field "value" (tuple2 (field "ast_type" string, field "id" string)))
+        (equal ("Name", "self"))
+        "not self.target" $
+  JSONDecode.map (curry mk_comb TopLevelNameTarget_tm) $
+    field "attr" stringtm
+]
+val baseAssignmentTarget = delay d_baseAssignmentTarget
+
+fun d_assignmentTarget () : term decoder = achoose "tgt" [
+  JSONDecode.map (curry mk_comb BaseTarget_tm) baseAssignmentTarget
+]
+val assignmentTarget = delay d_assignmentTarget
+
 fun mk_statements ls = mk_list(ls, stmt_ty)
 val d_statements = andThen (succeed o mk_statements) o array
 
@@ -432,6 +460,9 @@ fun d_statement () : term decoder = achoose "stmt" [
     tuple3 (field "test" expression,
             field "body" (d_statements (delay d_statement)),
             field "orelse" (d_statements (delay d_statement))),
+    check_ast_type "Raise" $
+    JSONDecode.map (curry mk_comb Raise_tm) $
+    field "exc" $ orElse(expression, null $ mk_ls ""),
     check_ast_type "Assert" $
     andThen (fn (e,s) => succeed $ mk_Assert e s)
       (tuple2 (field "test" expression,
@@ -443,6 +474,12 @@ fun d_statement () : term decoder = achoose "stmt" [
     tuple3 (
       field "target" (check_ast_type "Name" (field "id" stringtm)),
       field "annotation" astType,
+      field "value" expression
+    ),
+    check_ast_type "Assign" $
+    andThen (fn (t,e) => succeed $ list_mk_comb(Assign_tm, [t,e])) $
+    tuple2 (
+      field "target" assignmentTarget,
       field "value" expression
     )
   ]
@@ -620,7 +657,7 @@ end
   decode (field "contract_abi" (array abiEntry)) tr
   val tr = decode trace tr
   val tls = decode (field "annotated_ast" (field "ast" (field "body" (array raw)))) tr
-  val tl = el 3 tls
+  val tl = el 5 tls
   decode toplevel tl
 
   decode (field "args" (field "args" (array (field "annotation" raw)))) tl
@@ -628,8 +665,7 @@ end
   val stmts = decode (field "body" statements) tl
   val stmts = decode (field "body" (array raw)) tl
 
-  val stmt = el 3 stmts
-  decode (field "test" expression) stmt
+  val stmt = el 2 stmts
   val expr = decode (field "msg" raw) stmt
 
   decode (field "body" statements) stmt
