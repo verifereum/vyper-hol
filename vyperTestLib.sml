@@ -25,6 +25,7 @@ val Eq_tm           = astk"Eq"
 val NotEq_tm        = astk"NotEq"
 val Sender_tm       = astk"Sender"
 val Lt_tm           = astk"Lt"
+val Gt_tm           = astk"Gt"
 val Bop_tm          = astk"Bop"
 val Msg_tm          = astk"Msg"
 val IntCall_tm      = astk"IntCall"
@@ -312,7 +313,8 @@ val binop : term decoder = achoose "binop" [
   check_ast_type "NotIn" $ succeed NotIn_tm,
   check_ast_type "Eq" $ succeed Eq_tm,
   check_ast_type "NotEq" $ succeed NotEq_tm,
-  check_ast_type "Lt" $ succeed Lt_tm
+  check_ast_type "Lt" $ succeed Lt_tm,
+  check_ast_type "Gt" $ succeed Gt_tm
 ]
 
 fun d_expression () : term decoder = achoose "expr" [

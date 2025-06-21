@@ -58,6 +58,7 @@ Datatype:
   | Eq
   | NotEq
   | Lt
+  | Gt
 End
 
 Datatype:
@@ -206,7 +207,7 @@ Overload "and" = “λe1 e2. IfExp e1 e2 (lb F)”
 (* TODO: make "or" and "and" infix *)
 Overload "+" = “λe1 e2. Builtin (Bop Add) [e1; e2]”
 Overload "<" = “λe1 e2. Builtin (Bop Lt) [e1; e2]”
-Overload ">" = “λe1 e2. Builtin (Bop Lt) [e2; e1]”
+Overload ">" = “λe1 e2. Builtin (Bop Gt) [e1; e2]”
 Overload len = “λe. Builtin Len [e]”
 Overload def = “λid args ret body. FunctionDecl External Nonpayable id args ret body”
 Overload itl_def = “λid args ret body. FunctionDecl Internal Nonpayable id args ret body”

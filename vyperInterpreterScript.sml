@@ -535,6 +535,7 @@ Definition evaluate_binop_def:
   evaluate_binop Eq (IntV i1) (IntV i2) = INL (BoolV (i1 = i2)) ∧
   evaluate_binop NotEq v1 v2 = binop_negate $ evaluate_binop Eq v1 v2 ∧
   evaluate_binop Lt (IntV i1) (IntV i2) = INL (BoolV (i1 < i2)) ∧
+  evaluate_binop Gt (IntV i1) (IntV i2) = INL (BoolV (i1 > i2)) ∧
   evaluate_binop _ _ _ = INR "binop"
 Termination
   WF_REL_TAC ‘inv_image $< (λ(b,x,y). if b = NotIn ∨ b = NotEq then 2n else 0n)’
