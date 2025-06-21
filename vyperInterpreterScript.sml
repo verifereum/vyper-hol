@@ -598,6 +598,60 @@ End
 
 val () = cv_auto_trans evaluate_account_op_def;
 
+Definition compatible_bound_def:
+  compatible_bound (Fixed n) m = (n = m) ∧
+  compatible_bound (Dynamic n) m = (m ≤ n)
+End
+
+val () = cv_auto_trans compatible_bound_def;
+
+Definition init_concat_output_def:
+  init_concat_output (Fixed n) (StringV _ s) = SOME $ StringV n s ∧
+  init_concat_output (Fixed n) (BytesV _ bs) = SOME $ BytesV (Fixed n) bs ∧
+  init_concat_output (Dynamic n) (BytesV _ bs) = SOME $ BytesV (Dynamic n) bs ∧
+  init_concat_output _ _ = NONE
+End
+
+val () = cv_auto_trans init_concat_output_def;
+
+Definition evaluate_concat_loop_def:
+  evaluate_concat_loop (StringV n s1) sa ba [] =
+  (let s = FLAT $ REV sa [s1] in
+   (if compatible_bound (Dynamic n) (LENGTH s)
+    then INL (StringV n s)
+    else INR "concat bound")) ∧
+  evaluate_concat_loop (BytesV b b1) sa ba [] =
+  (let bs = FLAT $ REV ba [b1] in
+   (if compatible_bound b (LENGTH bs)
+    then INL (BytesV b bs)
+    else INR "concat bound")) ∧
+  evaluate_concat_loop (StringV n s1) sa ba ((StringV _ s2)::vs) =
+  evaluate_concat_loop (StringV n s1) (s2::sa) ba vs ∧
+  evaluate_concat_loop (BytesV b b1) sa ba ((BytesV _ b2)::vs) =
+  evaluate_concat_loop (BytesV b b1) sa (b2::ba) vs ∧
+  evaluate_concat_loop _ _ _ _ = INR "concat types"
+End
+
+val () = cv_auto_trans evaluate_concat_loop_def;
+
+Definition evaluate_concat_def:
+  evaluate_concat b vs =
+  if NULL vs ∨ NULL (TL vs) then INR "concat <2"
+  else
+    case init_concat_output b (HD vs)
+      of SOME v => evaluate_concat_loop v [] [] (TL vs)
+       | NONE => INR "concat type or bound"
+End
+
+val evaluate_concat_pre_def = cv_auto_trans_pre evaluate_concat_def;
+
+Theorem evaluate_concat_pre[cv_pre]:
+  evaluate_concat_pre b vs
+Proof
+  rw[evaluate_concat_pre_def]
+  \\ strip_tac \\ gvs[]
+QED
+
 Definition evaluate_builtin_def:
   evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV &(LENGTH ls)) ∧
   evaluate_builtin cx _ Len [StringV _ ls] = INL (IntV &(LENGTH ls)) ∧
@@ -613,6 +667,7 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ (Msg Sender) [] = INL $ AddressV cx.txn.sender ∧
   evaluate_builtin cx _ (Msg SelfAddr) [] = INL $ AddressV cx.txn.target ∧
   evaluate_builtin cx _ (Msg ValueSent) [] = INL $ IntV &cx.txn.value ∧
+  evaluate_builtin cx _ (Concat b) vs = evaluate_concat b vs ∧
   evaluate_builtin cx acc (Acc aop) [BytesV _ bs] =
     (let a = lookup_account (word_of_bytes T (0w:address) bs) acc in
       INL $ evaluate_account_op aop a) ∧
@@ -708,17 +763,11 @@ End
 
 val () = cv_auto_trans evaluate_attribute_def;
 
-Definition compatible_bound_def:
-  compatible_bound (Fixed n) m = (n = m) ∧
-  compatible_bound (Dynamic n) m = (m ≤ n)
-End
-
-val () = cv_auto_trans compatible_bound_def;
-
 Definition builtin_args_length_ok_def:
   builtin_args_length_ok Len n = (n = 1n) ∧
   builtin_args_length_ok Not n = (n = 1) ∧
   builtin_args_length_ok Keccak256 n = (n = 1) ∧
+  builtin_args_length_ok (Concat _) n = (2 ≤ n) ∧
   builtin_args_length_ok (Bop _) n = (n = 2) ∧
   builtin_args_length_ok (Msg _) n = (n = 0) ∧
   builtin_args_length_ok (Acc _) n = (n = 1)

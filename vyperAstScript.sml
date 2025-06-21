@@ -82,6 +82,7 @@ Datatype:
   = Len
   | Not
   | Keccak256
+  | Concat bound
   | Bop binop
   | Msg message_item
   | Acc account_item
