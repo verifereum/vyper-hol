@@ -632,13 +632,18 @@ val trace : term decoder =
       field "value" numtm)
   ]
 
+val test_decoder =
+  (check_field "item_type" "test" $
+   field "traces" (array trace))
+
+fun trydecode ((name,json),(s,f)) =
+  ((name, decode test_decoder json)::s, f)
+  handle JSONError e => (s, (name, e)::f)
+
 fun read_test_json json_path = let
   val test_jsons = decodeFile rawObject json_path
-  val decoder = (check_field "item_type" "test" $
-                 field "traces" (array trace))
-  fun mapthis (name, json) = (name, decode decoder json)
 in
-  List.map mapthis test_jsons
+  List.foldl trydecode ([],[]) test_jsons
 end
 
 val trace_ty = mk_thy_type{Thy="vyperTestRunner",Tyop="trace",Args=[]}
@@ -658,33 +663,35 @@ end
 
 (*
   val json_path = "test_comparison.json"
-  val tests = read_test_json json_path
+  val (tests, fails) = read_test_json json_path
   val () = List.app run_test tests
 
   val json_path = "test_assert.json"
-  val tests = read_test_json json_path
+  val (tests, fails) = read_test_json json_path
   val () = List.app run_test tests
 
   val json_path = "test_conditionals.json"
-  val tests = read_test_json json_path
+  val (tests, fails) = read_test_json json_path
+  val () = List.app run_test tests
 
   val test_jsons = decodeFile rawObject json_path
-  val (name, json) = el 2 test_jsons
+  val (name, json) = el 5 test_jsons
   val traces = decode (field "traces" (array trace)) json
   val traces = decode (field "traces" (array raw)) json
-  val tr = el 1 traces
+  val tr = el 2 traces
   decode (field "contract_abi" (array abiEntry)) tr
   val tr = decode trace tr
   val tls = decode (field "annotated_ast" (field "ast" (field "body" (array raw)))) tr
-  val tl = el 5 tls
-  decode toplevel tl
+  val tl = el 2 tls
 
   decode (field "args" (field "args" (array (field "annotation" raw)))) tl
 
   val stmts = decode (field "body" statements) tl
   val stmts = decode (field "body" (array raw)) tl
 
-  val stmt = el 2 stmts
+  val stmt = el 1 stmts
+  decode statement stmt
+
   val expr = decode (field "msg" raw) stmt
 
   decode (field "body" statements) stmt
