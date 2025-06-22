@@ -52,6 +52,7 @@ val Assert_tm       = astk"Assert"
 val Raise_tm        = astk"Raise"
 val Return_tm       = astk"Return"
 val Assign_tm       = astk"Assign"
+val AugAssign_tm    = astk"AugAssign"
 val AnnAssign_tm    = astk"AnnAssign"
 val External_tm     = astk"External"
 val Internal_tm     = astk"Internal"
@@ -124,6 +125,7 @@ fun mk_ls s = mk_comb(Literal_tm,
                             stringSyntax.fromMLstring s]))
 fun mk_Return tmo = mk_comb(Return_tm, lift_option (mk_option expr_ty) I tmo)
 fun mk_AnnAssign s t e = list_mk_comb(AnnAssign_tm, [s, t, e])
+fun mk_AugAssign t b e = list_mk_comb(AugAssign_tm, [t, b, e])
 fun mk_Hex s = let
   val s = if String.isPrefix "0x" s then String.extract(s,2,NONE) else s
   val n = numSyntax.term_of_int $ String.size s div 2
@@ -469,6 +471,13 @@ fun d_statement () : term decoder = achoose "stmt" [
                field "msg" (orElse (expression, null (mk_ls ""))))),
     check_ast_type "Return" $
     field "value" (JSONDecode.map mk_Return (try expression)),
+    check_ast_type "AugAssign" $
+    JSONDecode.map (fn (t,b,e) => mk_AugAssign t b e) $
+    tuple3 (
+      field "target" baseAssignmentTarget,
+      field "op" binop,
+      field "value" expression
+    ),
     check_ast_type "AnnAssign" $
     andThen (fn (s,t,e) => succeed $ mk_AnnAssign s t e) $
     tuple3 (
