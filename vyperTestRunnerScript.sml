@@ -138,6 +138,40 @@ End
 
 val () = cv_auto_trans run_call_def;
 
+Definition is_transfer_def:
+  is_transfer ct ⇔
+  NULL ct.callData ∧ ¬ct.static ∧
+  ct.expectedOutput = SOME []
+End
+
+val () = cv_auto_trans is_transfer_def;
+
+Definition do_transfer_def:
+  do_transfer ct am = let
+    acc = am.accounts;
+    saddr = ct.sender;
+    taddr = ct.target;
+    sender = lookup_account saddr acc;
+    target = lookup_account taddr acc;
+    value = ct.value;
+    sbal = sender.balance;
+    (* TODO: charge gas too *)
+  in
+    if value ≤ sbal then
+      INL $
+      am with accounts updated_by
+        (update_account saddr
+          (sender with <| balance updated_by (flip $- value);
+                          nonce updated_by SUC |>) o
+          (update_account taddr
+            (target with balance updated_by ($+ value))))
+    else INR (Error "do_transfer")
+End
+
+val () = do_transfer_def
+  |> SRULE [combinTheory.o_DEF, combinTheory.C_DEF]
+  |> cv_auto_trans;
+
 Definition run_trace_def:
   run_trace snss am tr =
   case tr
@@ -153,6 +187,7 @@ Definition run_trace_def:
              ((lookup_account addr am.accounts) with balance := bal)))
      )
    | Call ct => (snss,
+     if is_transfer ct then do_transfer ct am else
      case ALOOKUP snss ct.target
      of NONE => if IS_NONE ct.expectedOutput then INL am
                 else INR (Error "sns not found")
