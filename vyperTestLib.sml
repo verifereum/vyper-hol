@@ -25,12 +25,14 @@ val In_tm           = astk"In"
 val NotIn_tm        = astk"NotIn"
 val Eq_tm           = astk"Eq"
 val NotEq_tm        = astk"NotEq"
-val Sender_tm       = astk"Sender"
 val Lt_tm           = astk"Lt"
 val Gt_tm           = astk"Gt"
+val Sender_tm       = astk"Sender"
+val Balance_tm      = astk"Balance"
 val Concat_tm       = astk"Concat"
 val Bop_tm          = astk"Bop"
 val Msg_tm          = astk"Msg"
+val Acc_tm          = astk"Acc"
 val IntCall_tm      = astk"IntCall"
 val Name_tm         = astk"Name"
 val TopLevelName_tm = astk"TopLevelName"
@@ -386,6 +388,14 @@ fun d_expression () : term decoder = achoose "expr" [
           "Attribute not self" $
     JSONDecode.map (curry mk_comb TopLevelName_tm) $
     (field "attr" stringtm),
+    check_ast_type "Attribute" $
+    check (tuple2 (field "value" (field "type" (field "name" string)),
+                   field "attr" string))
+          (equal ("address", "balance"))
+          "Attribute address.balance" $
+    JSONDecode.map (fn e => mk_Builtin (mk_comb(Acc_tm, Balance_tm))
+                                       (mk_list([e], expr_ty))) $
+    field "value" (delay d_expression),
     check_ast_type "Attribute" $
     JSONDecode.map (fn (e,s) => list_mk_comb(Attribute_tm, [e,s])) $
     tuple2 (
