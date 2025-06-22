@@ -665,36 +665,61 @@ end
 val trace_ty = mk_thy_type{Thy="vyperTestRunner",Tyop="trace",Args=[]}
 val run_test_tm = prim_mk_const{Thy="vyperTestRunner",Name="run_test"}
 
-fun run_test (name, trtms) = let
-  val trs = mk_list(trtms, trace_ty)
+fun run_test ((name, traces),(s,f)) = let
+  val trs = mk_list(traces, trace_ty)
   val ttm = mk_comb(run_test_tm, trs)
   val () = Feedback.HOL_MESG ("Testing " ^ name)
   val eth = cv_eval ttm
-  val result = if sumSyntax.is_inr $ rhs $ concl eth
-               then "Failed"
-               else "Passed"
+  val pass = sumSyntax.is_inl $ rhs $ concl eth
+  val () = Feedback.HOL_MESG (if pass then "Passed" else "Failed")
 in
-  Feedback.HOL_MESG result
+  if pass then (name::s,f) else (s,name::f)
 end
 
+val run_tests = List.foldl run_test ([],[])
+
+val test_files = [
+  "test_address_balance.json",
+  "test_clampers.json",
+  "test_export.py.json",
+  "test_logging_bytes_extended.json",
+  "test_memory_dealloc.json",
+  "test_string_map_keys.json",
+  "test_assert.json",
+  "test_comments.json",
+  "test_exports.json",
+  "test_logging_from_call.json",
+  "test_packing.json",
+  "test_ternary.json",
+  "test_assert_unreachable.json",
+  "test_comparison.json",
+  "test_gas.json",
+  "test_logging.json",
+  "test_reverting.json",
+  "test_transient.json",
+  "test_assignment.json",
+  "test_conditionals.json",
+  "test_immutable.json",
+  "test_mana.json",
+  "test_selfdestruct.json",
+  "test_bytes_map_keys.json",
+  "test_constructor.json",
+  "test_init.json",
+  "test_memory_alloc.json",
+  "test_short_circuiting.json"
+]
+
 (*
-  val json_path = "test_comparison.json"
-  val (tests, fails) = read_test_json json_path
-  val () = List.app run_test tests
 
-  val json_path = "test_assert.json"
-  val (tests, fails) = read_test_json json_path
-  val () = List.app run_test tests
-
-  val json_path = "test_conditionals.json"
-  val (tests, fails) = read_test_json json_path
-  val () = List.app run_test tests
+  val json_path = el 7 test_files
+  val (tests, decode_fails) = read_test_json json_path
+  val (passes, fails) = run_tests tests
 
   val test_jsons = decodeFile rawObject json_path
-  val (name, json) = el 5 test_jsons
+  val (name, json) = el 2 test_jsons
   val traces = decode (field "traces" (array trace)) json
   val traces = decode (field "traces" (array raw)) json
-  val tr = el 2 traces
+  val tr = el 1 traces
   decode (field "contract_abi" (array abiEntry)) tr
   val tr = decode trace tr
   val tls = decode (field "annotated_ast" (field "ast" (field "body" (array raw)))) tr
@@ -705,8 +730,9 @@ end
   val stmts = decode (field "body" statements) tl
   val stmts = decode (field "body" (array raw)) tl
 
-  val stmt = el 1 stmts
+  val stmt = el 2 stmts
   decode statement stmt
+  decode (field "value" expression) stmt
 
   val expr = decode (field "msg" raw) stmt
 
