@@ -542,7 +542,8 @@ val variableDecl : term decoder =
 
 val toplevel : term decoder = achoose "tl" [
     functionDef,
-    variableDecl
+    variableDecl,
+    check_ast_type "InterfaceDef" (succeed F)
   ]
 
 (*
@@ -556,8 +557,9 @@ decode (field "body" statements) obj
 *)
 
 val toplevels : term decoder =
-  andThen (fn ls => succeed $ mk_list(ls, toplevel_ty))
-    (array toplevel)
+  JSONDecode.map (fn ls =>
+    mk_list(List.filter (equal toplevel_ty o type_of) ls, toplevel_ty)
+  ) (array toplevel)
 
 val abiType : term decoder =
   andThen (succeed o parse_abi_type) string
