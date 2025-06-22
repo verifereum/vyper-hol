@@ -478,7 +478,7 @@ fun d_statement () : term decoder = achoose "stmt" [
       (tuple2 (field "test" expression,
                field "msg" (orElse (expression, null (mk_ls ""))))),
     check_ast_type "Return" $
-    field "value" (JSONDecode.map mk_Return (try expression)),
+    field "value" (JSONDecode.map mk_Return (nullable expression)),
     check_ast_type "AugAssign" $
     JSONDecode.map (fn (t,b,e) => mk_AugAssign t b e) $
     tuple3 (
