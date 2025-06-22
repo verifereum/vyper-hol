@@ -334,6 +334,10 @@ val binop : term decoder = achoose "binop" [
   check_ast_type "Gt" $ succeed Gt_tm
 ]
 
+fun mk_BinOp (l,b,r) =
+  mk_Builtin (mk_Bop b) $
+  mk_list ([l,r], expr_ty)
+
 fun d_expression () : term decoder = achoose "expr" [
     check_ast_type "Name" $
     field "id" (JSONDecode.map mk_Name string),
@@ -345,11 +349,15 @@ fun d_expression () : term decoder = achoose "expr" [
     field "value" (JSONDecode.map (mk_li o intSyntax.term_of_int o Arbint.fromInt) int),
     check_ast_type "Hex" $
     field "value" (JSONDecode.map mk_Hex string),
+    check_ast_type "BinOp" $
+    JSONDecode.map mk_BinOp $
+    tuple3 (
+      field "left" (delay d_expression),
+      field "op" binop,
+      field "right" (delay d_expression)
+    ),
     check_ast_type "Compare" $
-    andThen (fn (l,b,r) => succeed $
-      mk_Builtin (mk_Bop b) $
-      mk_list ([l,r], expr_ty)
-    ) $
+    JSONDecode.map mk_BinOp $
     tuple3 (
       field "left" (delay d_expression),
       field "op" binop,
