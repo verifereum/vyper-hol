@@ -33,6 +33,7 @@ val Bop_tm          = astk"Bop"
 val Msg_tm          = astk"Msg"
 val IntCall_tm      = astk"IntCall"
 val Name_tm         = astk"Name"
+val TopLevelName_tm = astk"TopLevelName"
 val Literal_tm      = astk"Literal"
 val ArrayLit_tm     = astk"ArrayLit"
 val Subscript_tm    = astk"Subscript"
@@ -371,7 +372,14 @@ fun d_expression () : term decoder = achoose "expr" [
                  "not msg.sender"
                  (succeed msg_sender_tm)),
     check_ast_type "Attribute" $
-    andThen (fn (e,s) => succeed $ list_mk_comb(Attribute_tm, [e,s])) $
+    check (field "value" (tuple2 (field "ast_type" string,
+                                  field "id" string)))
+          (equal ("Name", "self"))
+          "Attribute not self" $
+    JSONDecode.map (curry mk_comb TopLevelName_tm) $
+    (field "attr" stringtm),
+    check_ast_type "Attribute" $
+    JSONDecode.map (fn (e,s) => list_mk_comb(Attribute_tm, [e,s])) $
     tuple2 (
       field "value" (delay d_expression),
       field "attr" stringtm
