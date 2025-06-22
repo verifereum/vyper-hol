@@ -606,9 +606,9 @@ End
 val () = cv_auto_trans compatible_bound_def;
 
 Definition init_concat_output_def:
-  init_concat_output (Fixed n) (StringV _ s) = SOME $ StringV n s ∧
   init_concat_output (Fixed n) (BytesV _ bs) = SOME $ BytesV (Fixed n) bs ∧
   init_concat_output (Dynamic n) (BytesV _ bs) = SOME $ BytesV (Dynamic n) bs ∧
+  init_concat_output (Dynamic n) (StringV _ s) = SOME $ StringV n s ∧
   init_concat_output _ _ = NONE
 End
 
