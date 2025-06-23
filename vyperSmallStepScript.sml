@@ -164,18 +164,20 @@ Definition eval_expr_cps_def:
      | (INL (), st) => eval_exprs_cps cx8 es st (BuiltinK bt k)) ∧
   eval_expr_cps cx8 (Pop bt) st k =
     eval_base_target_cps cx8 bt st (PopK k) ∧
-  eval_expr_cps cx8 (TypeBuiltin Empty typ) st k =
+  eval_expr_cps cx8 (TypeBuiltin Empty typ es) st k =
     (case do
+       check (NULL es) "Empty args";
        ts <- lift_option (get_self_code cx8) "Empty get_self_code";
        return $ Value $ default_value (type_env ts) typ od st
      of (INR ex, st) => AK cx8 (ApplyExc ex) st k
       | (INL tv, st) => AK cx8 (ApplyTv tv) st k) ∧
-  eval_expr_cps cx8 (TypeBuiltin MaxValue typ) st k =
+  eval_expr_cps cx8 (TypeBuiltin MaxValue typ es) st k =
     liftk cx8 ApplyTv (do
+      check (NULL es) "MaxValue args";
       v <- lift_sum $ evaluate_max_value typ;
       return $ Value v
     od st) k ∧
-  eval_expr_cps cx8 (TypeBuiltin _ typ) st k =
+  eval_expr_cps cx8 (TypeBuiltin _ typ _) st k =
     AK cx8 (ApplyExc (Error "TODO: TypeBuiltin")) st k ∧
   eval_expr_cps cx9 (Call Send es) st k =
     (case check (LENGTH es = 2) "Send args" st of
@@ -1117,9 +1119,12 @@ Proof
   \\ conj_tac >- (
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
+    \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
     \\ rw[return_def])
   \\ conj_tac >- (
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def, liftk1])
+  \\ conj_tac >- (
+    rw[eval_expr_cps_def, evaluate_def, raise_def, bind_def, liftk1])
   \\ conj_tac >- (
     rw[eval_expr_cps_def, evaluate_def, raise_def, bind_def, liftk1])
   \\ conj_tac >- (

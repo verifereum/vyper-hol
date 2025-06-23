@@ -1474,7 +1474,8 @@ Definition bound_def:
     1 + exprs_bound ts es ∧
   expr_bound ts (Pop bt) =
     1 + base_target_bound ts bt ∧
-  expr_bound ts (TypeBuiltin _ _) = 0 ∧
+  expr_bound ts (TypeBuiltin _ _ es) =
+    1 + exprs_bound ts es ∧
   expr_bound ts (Call (IntCall fn) es) =
     1 + exprs_bound ts es
       + (case ALOOKUP ts fn of NONE => 0 |
@@ -1814,15 +1815,17 @@ Definition evaluate_def:
     vs <- lift_option (extract_elements v) "pop not ArrayV";
     return $ Value $ LAST vs
   od ∧
-  eval_expr cx (TypeBuiltin Empty typ) = do
+  eval_expr cx (TypeBuiltin Empty typ es) = do
+    check (NULL es) "Empty args";
     ts <- lift_option (get_self_code cx) "Empty get_self_code";
     return $ Value $ default_value (type_env ts) typ
   od ∧
-  eval_expr cx (TypeBuiltin MaxValue typ) = do
+  eval_expr cx (TypeBuiltin MaxValue typ es) = do
+    check (NULL es) "MaxValue args";
     v <- lift_sum $ evaluate_max_value typ;
     return $ Value $ v
   od ∧
-  eval_expr cx (TypeBuiltin _ typ) = do
+  eval_expr cx (TypeBuiltin _ typ _) = do
     raise $ Error "TODO: TypeBuiltin"
   od ∧
   eval_expr cx (Call Send es) = do

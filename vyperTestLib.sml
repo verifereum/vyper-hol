@@ -857,23 +857,48 @@ val test_files = [
   val (passes, fails) = run_tests tests
   *)
 
-  (* unsupported feature: export
   val json_path = el 3 test_files
-  val (tests, decode_fails) = read_test_json json_path
-  *)
+  val (tests, []) = read_test_json json_path
+  val (passes, []) = run_tests tests
 
   val json_path = el 4 test_files
-  val (tests, []) = read_test_json json_path
+  val (tests, [extcall]) = read_test_json json_path
+  (* unsupported: external call *)
   val (passes, []) = run_tests tests
 
-  (* TODO: extcall
   val json_path = el 5 test_files
-  val (tests, decode_fails) = read_test_json json_path
+  val (tests, []) = read_test_json json_path
   val (passes, []) = run_tests tests
-  *)
 
   val json_path = el 6 test_files
+  val (tests, [raw_call, proxy, static_call]) = read_test_json json_path
+  (* unsupported: raw_call *)
+  (* unsupported: create_minimal_proxy_to *)
+  (* unsupported: static external call *)
+  val (passes, []) = run_tests tests
+
+  val json_path = el 7 test_files
   val (tests, []) = read_test_json json_path
+  val (passes, []) = run_tests tests
+
+  val json_path = el 8 test_files
+  val (tests, [exports]) = read_test_json json_path
+  (* unsupported: exports *)
+  val (passes, []) = run_tests tests
+
+  val json_path = el 9 test_files
+  (* TODO: add slice, convert *)
+  val (tests, decode_fails) = read_test_json json_path
+  print $ decode (field "source_code" string) $ #2 $ #2 $ el 1 decode_fails
+  val (passes, []) = run_tests tests
+
+  val json_path = el 10 test_files
+  (* TODO: add structs *)
+  val (tests, [decode_fail]) = read_test_json json_path
+  print $ decode (field "source_code" string) $ #2 $ #2 $ decode_fail
+
+  val json_path = el 11 test_files
+  val (tests, decode_fails) = read_test_json json_path
   val (passes, []) = run_tests tests
 
   val test_jsons = decodeFile rawObject json_path
@@ -885,7 +910,7 @@ val test_files = [
   val tr = decode trace tr
 
   val tls = decode (field "annotated_ast" (field "ast" (field "body" (array raw)))) tr
-  val tl = el 2 tls
+  val tl = el 1 tls
   decode toplevel tl
   decode (field "target" (field "type" (field "key_type" astType))) tl
   decode (field "ast_type" string) tl
@@ -895,8 +920,15 @@ val test_files = [
   val stmts = decode (field "body" statements) tl
   val stmts = decode (field "body" (array raw)) tl
 
-  val stmt = el 3 stmts
+  val stmt = el 1 stmts
   decode statement stmt
+  decode (field "ast_type" string) stmt
+  val expr = decode (field "value" raw) stmt
+
+  decode (field "orelse" expression) expr
+  val expr = decode (field "orelse" raw) expr
+  val expr = decode (field "right" raw) expr
+
   decode (field "target" (field "ast_type" string)) stmt
   decode (field "target" (field "slice" raw)) stmt
 

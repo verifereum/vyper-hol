@@ -97,7 +97,7 @@ Datatype:
 End
 
 Datatype:
-  type_builtin = Empty | MaxValue | MinValue | Epsilon
+  type_builtin = Empty | MaxValue | MinValue | Epsilon | Convert
 End
 
 Datatype:
@@ -112,7 +112,7 @@ Datatype:
   | Subscript expr expr
   | Attribute expr identifier
   | Builtin builtin (expr list)
-  | TypeBuiltin type_builtin type
+  | TypeBuiltin type_builtin type (expr list)
   | Pop base_assignment_target
   | Call call_target (expr list)
 ; base_assignment_target
