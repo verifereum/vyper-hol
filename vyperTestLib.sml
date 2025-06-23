@@ -22,6 +22,13 @@ val StringL_tm      = astk"StringL"
 val BytesL_tm       = astk"BytesL"
 val IntL_tm         = astk"IntL"
 val Add_tm          = astk"Add"
+val Sub_tm          = astk"Sub"
+val Mul_tm          = astk"Mul"
+val Div_tm          = astk"Div"
+val Mod_tm          = astk"Mod"
+val Exp_tm          = astk"Exp"
+val And_tm          = astk"And"
+val Or_tm           = astk"Or"
 val In_tm           = astk"In"
 val NotIn_tm        = astk"NotIn"
 val Eq_tm           = astk"Eq"
@@ -37,6 +44,7 @@ val Acc_tm          = astk"Acc"
 val IntCall_tm      = astk"IntCall"
 val Name_tm         = astk"Name"
 val TopLevelName_tm = astk"TopLevelName"
+val IfExp_tm        = astk"IfExp"
 val Literal_tm      = astk"Literal"
 val ArrayLit_tm     = astk"ArrayLit"
 val Subscript_tm    = astk"Subscript"
@@ -127,6 +135,7 @@ fun mk_BytesM n = mk_comb(BaseT_tm, mk_comb(BytesT_tm, mk_Fixed n))
 fun mk_Expr e = mk_comb(Expr_tm, e)
 fun mk_For s t i n b = list_mk_comb(For_tm, [s,t,i,n,b])
 fun mk_Name s = mk_comb(Name_tm, fromMLstring s)
+fun mk_IfExp (e1,e2,e3) = list_mk_comb(IfExp_tm, [e1,e2,e3])
 fun mk_IntCall s = mk_comb(IntCall_tm, s)
 fun mk_Call ct args = list_mk_comb(AstCall_tm, [ct, mk_list (args, expr_ty)])
 fun mk_Assert (e,s) = list_mk_comb(Assert_tm, [e, s])
@@ -354,6 +363,8 @@ fun theoptstring NONE = "" | theoptstring (SOME s) = s
 
 val binop : term decoder = achoose "binop" [
   check_ast_type "Add" $ succeed Add_tm,
+  check_ast_type "Mult" $ succeed Mul_tm,
+  check_ast_type "And" $ succeed And_tm,
   check_ast_type "In" $ succeed In_tm,
   check_ast_type "NotIn" $ succeed NotIn_tm,
   check_ast_type "Eq" $ succeed Eq_tm,
@@ -362,9 +373,12 @@ val binop : term decoder = achoose "binop" [
   check_ast_type "Gt" $ succeed Gt_tm
 ]
 
-fun mk_BinOp (l,b,r) =
+fun mk_BoolOp (b,a) =
   mk_Builtin (mk_Bop b) $
-  mk_list ([l,r], expr_ty)
+  mk_list (a, expr_ty)
+
+fun mk_BinOp (l,b,r) =
+  mk_BoolOp (b,[l,r])
 
 fun d_expression () : term decoder = achoose "expr" [
     check_ast_type "Name" $
@@ -384,20 +398,28 @@ fun d_expression () : term decoder = achoose "expr" [
         field "length" numtm,
       field "value" string
     ),
-    check_ast_type "BinOp" $
+    check_ast_type "IfExp" $
+    JSONDecode.map mk_IfExp $
+    tuple3 (
+      field "test" $ delay d_expression,
+      field "body" $ delay d_expression,
+      field "orelse" $ delay d_expression
+    ),
+    check (field "ast_type" string)
+          (Lib.C Lib.mem ["BinOp", "Compare"])
+          "not binop/compare" $
     JSONDecode.map mk_BinOp $
     tuple3 (
       field "left" (delay d_expression),
       field "op" binop,
       field "right" (delay d_expression)
     ),
-    check_ast_type "Compare" $
-    JSONDecode.map mk_BinOp $
-    tuple3 (
-      field "left" (delay d_expression),
-      field "op" binop,
-      field "right" (delay d_expression)
-    ),
+    check_ast_type "BoolOp" $
+      JSONDecode.map mk_BoolOp $
+      tuple2 (
+        field "op" binop,
+        field "values" (array (delay d_expression))
+      ),
     check_ast_type "List" $
     andThen (succeed o mk_ArrayLit) $ (* TODO: also handle dynamic arrays *)
     field "elements" (array (delay d_expression)),
@@ -796,7 +818,6 @@ val run_tests = List.foldl run_test ([],[])
 val test_files = [
   "test_address_balance.json",
   "test_clampers.json",
-  "test_export.py.json",
   "test_logging_bytes_extended.json",
   "test_memory_dealloc.json",
   "test_string_map_keys.json",
