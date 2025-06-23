@@ -12,6 +12,7 @@ val UintT_tm        = astk"UintT"
 val IntT_tm         = astk"IntT"
 val BoolT_tm        = astk"BoolT"
 val StringT_tm      = astk"StringT"
+val BytesT_tm       = astk"BytesT"
 val AddressT_tm     = astk"AddressT"
 val BaseT_tm        = astk"BaseT"
 val ArrayT_tm       = astk"ArrayT"
@@ -72,6 +73,7 @@ val Transient_tm    = astk"Transient"
 val Storage_tm      = astk"Storage"
 val FunctionDecl_tm = astk"FunctionDecl"
 val VariableDecl_tm = astk"VariableDecl"
+val EventDecl_tm    = astk"EventDecl"
 
 fun from_term_option ty = lift_option (mk_option ty) I
 
@@ -113,6 +115,8 @@ fun mk_Dynamic n = mk_comb(Dynamic_tm, n)
 fun mk_FunctionDecl v m n a t b = list_mk_comb(FunctionDecl_tm, [v,m,n,a,t,b])
 fun mk_VariableDecl v m n t = list_mk_comb(VariableDecl_tm, [v,m,n,t])
 fun mk_String n = mk_comb(BaseT_tm, mk_comb(StringT_tm, n))
+fun mk_Bytes n = mk_comb(BaseT_tm, mk_comb(BytesT_tm, mk_Dynamic n))
+fun mk_BytesM n = mk_comb(BaseT_tm, mk_comb(BytesT_tm, mk_Fixed n))
 fun mk_Expr e = mk_comb(Expr_tm, e)
 fun mk_For s t i n b = list_mk_comb(For_tm, [s,t,i,n,b])
 fun mk_Name s = mk_comb(Name_tm, fromMLstring s)
@@ -295,12 +299,19 @@ fun d_astType () : term decoder =
       check_field "id" "address" $ succeed address_tm
     ],
     check_ast_type "Subscript" $
-    andThen (succeed o mk_String) $
+    JSONDecode.map mk_String $
     check (field "value" (check_ast_type "Name" $ field "id" string))
-    (equal "String") "not a String" $
+          (equal "String") "not a String" $
     field "slice" $
-    check_ast_type "Int" $
-    field "value" $ JSONDecode.map numSyntax.term_of_int int,
+      check_ast_type "Int" $
+      field "value" $ JSONDecode.map numSyntax.term_of_int int,
+    check_ast_type "Subscript" $
+    JSONDecode.map mk_Bytes $
+    check (field "value" (check_ast_type "Name" $ field "id" string))
+          (equal "Bytes") "not a Bytes" $
+    field "slice" $
+      check_ast_type "Int" $
+      field "value" $ JSONDecode.map numSyntax.term_of_int int,
     check_ast_type "Subscript" $
     andThen (fn (t,b) => succeed $ list_mk_comb(ArrayT_tm, [t,b])) $
     tuple2 (
@@ -566,9 +577,28 @@ val variableDecl : term decoder =
     field "target" (check_ast_type "Name" (field "id" stringtm)),
     field "annotation" astType)
 
+val eventArg : term decoder =
+  check_ast_type "AnnAssign" $
+  JSONDecode.map mk_pair $
+  tuple2 (
+    field "target" $
+    check_ast_type "Name" $
+    field "id" stringtm,
+    field "annotation" astType)
+
+val eventDef : term decoder =
+  check_ast_type "EventDef" $
+  JSONDecode.map (fn (n,a) =>
+    list_mk_comb(EventDecl_tm, [n, mk_list(a, argument_ty)])) $
+  tuple2 (
+    field "name" stringtm,
+    field "body" (array eventArg)
+  )
+
 val toplevel : term decoder = achoose "tl" [
     functionDef,
     variableDecl,
+    eventDef,
     check_ast_type "InterfaceDef" (succeed F)
   ]
 
