@@ -43,7 +43,10 @@ val Subscript_tm    = astk"Subscript"
 val Attribute_tm    = astk"Attribute"
 val Builtin_tm      = astk"Builtin"
 val AstCall_tm      = astk"Call"
-val TopLevelNameTarget_tm =  astk"TopLevelNameTarget"
+val NameTarget_tm         = astk"NameTarget"
+val TopLevelNameTarget_tm = astk"TopLevelNameTarget"
+val SubscriptTarget_tm    = astk"SubscriptTarget"
+val AttributeTarget_tm    = astk"AttributeTarget"
 val BaseTarget_tm   = astk"BaseTarget"
 val TupleTarget_tm  = astk"TupleTarget"
 val Array_tm        = astk"Array"
@@ -72,8 +75,10 @@ val Constant_tm     = astk"Constant"
 val Immutable_tm    = astk"Immutable"
 val Transient_tm    = astk"Transient"
 val Storage_tm      = astk"Storage"
+val Type_tm         = astk"Type"
 val FunctionDecl_tm = astk"FunctionDecl"
 val VariableDecl_tm = astk"VariableDecl"
+val HashMapDecl_tm  = astk"HashMapDecl"
 val EventDecl_tm    = astk"EventDecl"
 
 fun from_term_option ty = lift_option (mk_option ty) I
@@ -114,7 +119,8 @@ val address_tm = mk_comb(BaseT_tm, AddressT_tm)
 fun mk_Fixed n = mk_comb(Fixed_tm, n)
 fun mk_Dynamic n = mk_comb(Dynamic_tm, n)
 fun mk_FunctionDecl v m n a t b = list_mk_comb(FunctionDecl_tm, [v,m,n,a,t,b])
-fun mk_VariableDecl v m n t = list_mk_comb(VariableDecl_tm, [v,m,n,t])
+fun mk_VariableDecl (v,m,n,t) = list_mk_comb(VariableDecl_tm, [v,m,n,t])
+fun mk_HashMapDecl (v,n,t,vt) = list_mk_comb(HashMapDecl_tm, [v,n,t,vt])
 fun mk_String n = mk_comb(BaseT_tm, mk_comb(StringT_tm, n))
 fun mk_Bytes n = mk_comb(BaseT_tm, mk_comb(BytesT_tm, mk_Dynamic n))
 fun mk_BytesM n = mk_comb(BaseT_tm, mk_comb(BytesT_tm, mk_Fixed n))
@@ -484,7 +490,21 @@ fun d_baseAssignmentTarget () : term decoder = achoose "bt" [
         (equal ("Name", "self"))
         "not self.target" $
   JSONDecode.map (curry mk_comb TopLevelNameTarget_tm) $
-    field "attr" stringtm
+    field "attr" stringtm,
+  check_ast_type "Attribute" $
+  JSONDecode.map
+    (fn (t,n) => list_mk_comb(AttributeTarget_tm, [t,n])) $
+    tuple2 (
+      field "value" $ delay d_baseAssignmentTarget,
+      field "attr" stringtm
+    ),
+  check_ast_type "Subscript" $
+  JSONDecode.map
+    (fn (t,e) => list_mk_comb(SubscriptTarget_tm, [t,e])) $
+    tuple2 (
+      field "value" $ delay d_baseAssignmentTarget,
+      field "slice" expression
+    )
 ]
 val baseAssignmentTarget = delay d_baseAssignmentTarget
 
@@ -583,13 +603,15 @@ val functionDef : term decoder =
              tuple2 (field "returns" astType,
                      field "body" statements)))
 
+val variableVisibility : term decoder =
+  field "is_public" (JSONDecode.map
+    (fn b => if b then Public_tm else Private_tm) bool)
+
 val variableDecl : term decoder =
   check_ast_type "VariableDecl" $
-  andThen (fn (vis,mut,id,typ) => succeed $
-             mk_VariableDecl vis mut id typ) $
+  JSONDecode.map mk_VariableDecl $
   tuple4 (
-    field "is_public" (JSONDecode.map
-      (fn b => if b then Public_tm else Private_tm) bool),
+    variableVisibility,
     andThen (fn (im,tr,con) => succeed (
       if im then Immutable_tm else
       if tr then Transient_tm else
@@ -602,6 +624,28 @@ val variableDecl : term decoder =
                         else succeed NONE)) (field "is_constant" bool)),
     field "target" (check_ast_type "Name" (field "id" stringtm)),
     field "annotation" astType)
+
+val astHmType : term decoder = achoose "astHmType" [
+  check_field "name" "String" $
+  JSONDecode.map mk_String (field "length" numtm),
+  check_field "name" "bool" $ succeed bool_tm
+]
+
+val astValueType : term decoder = achoose "astValueType" [
+  JSONDecode.map (fn t => mk_comb(Type_tm, t)) $
+    astHmType
+  (* TODO: add HashMapT *)
+]
+
+val hashMapDecl : term decoder =
+  check_ast_type "VariableDecl" $
+  JSONDecode.map mk_HashMapDecl $
+  tuple4 (
+    variableVisibility,
+    field "target" (check_ast_type "Name" (field "id" stringtm)),
+    field "target" (field "type" (field "key_type" astHmType)),
+    field "target" (field "type" (field "value_type" astValueType))
+  )
 
 val eventArg : term decoder =
   check_ast_type "AnnAssign" $
@@ -623,6 +667,7 @@ val eventDef : term decoder =
 
 val toplevel : term decoder = achoose "tl" [
     functionDef,
+    hashMapDecl,
     variableDecl,
     eventDef,
     check_ast_type "InterfaceDef" (succeed F)
@@ -806,11 +851,9 @@ val test_files = [
   val (passes, []) = run_tests tests
   *)
 
-  (* TODO: add HashMap
   val json_path = el 6 test_files
-  val (tests, decode_fails) = read_test_json json_path
-  el 1  decode_fails
-  *)
+  val (tests, []) = read_test_json json_path
+  val (passes, []) = run_tests tests
 
   val test_jsons = decodeFile rawObject json_path
   val (name, json) = el 1 test_jsons
@@ -823,15 +866,18 @@ val test_files = [
   val tls = decode (field "annotated_ast" (field "ast" (field "body" (array raw)))) tr
   val tl = el 2 tls
   decode toplevel tl
+  decode (field "target" (field "type" (field "key_type" astType))) tl
+  decode (field "ast_type" string) tl
 
   decode (field "args" (field "args" (array (field "annotation" raw)))) tl
 
   val stmts = decode (field "body" statements) tl
   val stmts = decode (field "body" (array raw)) tl
 
-  val stmt = el 1 stmts
+  val stmt = el 3 stmts
   decode statement stmt
-  decode (field "value" expression) stmt
+  decode (field "target" (field "ast_type" string)) stmt
+  decode (field "target" (field "slice" raw)) stmt
 
   val expr = decode (field "msg" raw) stmt
 
