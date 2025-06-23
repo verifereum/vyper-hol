@@ -53,6 +53,7 @@ val Expr_tm         = astk"Expr"
 val For_tm          = astk"For"
 val If_tm           = astk"If"
 val Assert_tm       = astk"Assert"
+val Log_tm          = astk"Log"
 val Raise_tm        = astk"Raise"
 val Return_tm       = astk"Return"
 val Assign_tm       = astk"Assign"
@@ -122,7 +123,8 @@ fun mk_For s t i n b = list_mk_comb(For_tm, [s,t,i,n,b])
 fun mk_Name s = mk_comb(Name_tm, fromMLstring s)
 fun mk_IntCall s = mk_comb(IntCall_tm, s)
 fun mk_Call ct args = list_mk_comb(AstCall_tm, [ct, mk_list (args, expr_ty)])
-fun mk_Assert e s = list_mk_comb(Assert_tm, [e, s])
+fun mk_Assert (e,s) = list_mk_comb(Assert_tm, [e, s])
+fun mk_Log (id,es) = list_mk_comb(Log_tm, [id, es])
 fun mk_Subscript e1 e2 = list_mk_comb(Subscript_tm, [e1, e2])
 fun mk_If e s1 s2 = list_mk_comb(If_tm, [e,s1,s2])
 fun mk_li i = mk_comb(Literal_tm, mk_comb(IntL_tm, i))
@@ -133,6 +135,13 @@ fun mk_ls s = mk_comb(Literal_tm,
 fun mk_Return tmo = mk_comb(Return_tm, lift_option (mk_option expr_ty) I tmo)
 fun mk_AnnAssign s t e = list_mk_comb(AnnAssign_tm, [s, t, e])
 fun mk_AugAssign t b e = list_mk_comb(AugAssign_tm, [t, b, e])
+fun mk_Hex_dyn (n, s) = let
+  val s = if String.isPrefix "0x" s then String.extract(s,2,NONE) else s
+  val b = mk_comb(Dynamic_tm, n)
+in
+  mk_comb(Literal_tm,
+    list_mk_comb(BytesL_tm, [b, mk_bytes_tm s]))
+end
 fun mk_Hex s = let
   val s = if String.isPrefix "0x" s then String.extract(s,2,NONE) else s
   val n = numSyntax.term_of_int $ String.size s div 2
@@ -362,6 +371,13 @@ fun d_expression () : term decoder = achoose "expr" [
     field "value" (JSONDecode.map (mk_li o intSyntax.term_of_int o Arbint.fromInt) int),
     check_ast_type "Hex" $
     field "value" (JSONDecode.map mk_Hex string),
+    check_ast_type "Bytes" $
+    JSONDecode.map mk_Hex_dyn $
+    tuple2 (
+      field "type" $ check_field "name" "Bytes" $
+        field "length" numtm,
+      field "value" string
+    ),
     check_ast_type "BinOp" $
     JSONDecode.map mk_BinOp $
     tuple3 (
@@ -503,9 +519,19 @@ fun d_statement () : term decoder = achoose "stmt" [
     JSONDecode.map (curry mk_comb Raise_tm) $
     field "exc" $ orElse(expression, null $ mk_ls ""),
     check_ast_type "Assert" $
-    andThen (fn (e,s) => succeed $ mk_Assert e s)
+    JSONDecode.map mk_Assert
       (tuple2 (field "test" expression,
                field "msg" (orElse (expression, null (mk_ls ""))))),
+    check_ast_type "Log" $
+    JSONDecode.map mk_Log $
+      field "value" $
+      check_ast_type "Call" $
+      tuple2 (
+        field "func" $ check_ast_type "Name" $ field "id" stringtm,
+        (* TODO: handle unnamed arguments? *)
+        JSONDecode.map (fn ls => mk_list(ls, expr_ty)) $
+          field "keywords" (array $ field "value" expression)
+      ),
     check_ast_type "Return" $
     field "value" (JSONDecode.map mk_Return (nullable expression)),
     check_ast_type "AugAssign" $
@@ -633,6 +659,7 @@ val abiMutability : term decoder =
     fail ("abiMutability: " ^ s)) string
 
 val Function_tm = prim_mk_const{Thy="vyperTestRunner",Name="Function"}
+val Event_tm = prim_mk_const{Thy="vyperTestRunner",Name="Event"}
 val (abi_function_ty, abi_entry_ty) = dom_rng $ type_of $ Function_tm
 val abi_arg_ty = mk_prod(string_ty, abi_type_ty)
 
@@ -647,7 +674,10 @@ val abiEntry : term decoder = achoose "abiEntry" [
       (tuple4 (field "name" stringtm,
                field "inputs" (array abiArg),
                field "outputs" (array abiArg),
-               field "stateMutability" abiMutability))
+               field "stateMutability" abiMutability)),
+    check_field "type" "event" $
+    JSONDecode.map (fn s => mk_comb(Event_tm, s)) $
+    field "name" stringtm
   ]
 
 val Deployment_tm = prim_mk_const{Thy="vyperTestRunner",Name="Deployment"}
@@ -751,26 +781,55 @@ val test_files = [
 
 (*
 
-  val json_path = el 7 test_files
+  val json_path = el 1 test_files
+  val (tests, []) = read_test_json json_path
+  val (passes, []) = run_tests tests
+
+  (* TODO: many decode fails, and tests too slow to run
+  val json_path = el 2 test_files
   val (tests, decode_fails) = read_test_json json_path
   val (passes, fails) = run_tests tests
+  *)
+
+  (* unsupported feature: export
+  val json_path = el 3 test_files
+  val (tests, decode_fails) = read_test_json json_path
+  *)
+
+  val json_path = el 4 test_files
+  val (tests, []) = read_test_json json_path
+  val (passes, []) = run_tests tests
+
+  (* TODO: extcall
+  val json_path = el 5 test_files
+  val (tests, decode_fails) = read_test_json json_path
+  val (passes, []) = run_tests tests
+  *)
+
+  (* TODO: add HashMap
+  val json_path = el 6 test_files
+  val (tests, decode_fails) = read_test_json json_path
+  el 1  decode_fails
+  *)
 
   val test_jsons = decodeFile rawObject json_path
-  val (name, json) = el 2 test_jsons
+  val (name, json) = el 1 test_jsons
   val traces = decode (field "traces" (array trace)) json
   val traces = decode (field "traces" (array raw)) json
   val tr = el 1 traces
   decode (field "contract_abi" (array abiEntry)) tr
   val tr = decode trace tr
+
   val tls = decode (field "annotated_ast" (field "ast" (field "body" (array raw)))) tr
   val tl = el 2 tls
+  decode toplevel tl
 
   decode (field "args" (field "args" (array (field "annotation" raw)))) tl
 
   val stmts = decode (field "body" statements) tl
   val stmts = decode (field "body" (array raw)) tl
 
-  val stmt = el 2 stmts
+  val stmt = el 1 stmts
   decode statement stmt
   decode (field "value" expression) stmt
 
@@ -781,6 +840,7 @@ val test_files = [
 
   val stmts = decode (field "body" (array raw)) stmt
   val stmt = el 1 stmts
+  decode (field "value" (field "keywords" (array (field "value" raw)))) stmt
   val expr = decode (field "test" raw) stmt
   decode (field "right" expression) expr
   decode expression expr

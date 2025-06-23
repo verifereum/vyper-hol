@@ -17,7 +17,9 @@ Datatype:
 End
 
 Datatype:
-  abi_entry = Function abi_function (* TODO: event, etc. *)
+  abi_entry
+  = Function abi_function
+  | Event string (* TODO need any info on event args? *)
 End
 
 (*
@@ -49,12 +51,13 @@ End
 
 Definition compute_selector_names_def:
   compute_selector_names [] = [] ∧
-  compute_selector_names (Function x::ls) =
+  compute_selector_names (Function x::ls) = (
   let name = x.name in
   let argTypes = MAP SND x.inputs in
   let retTypes = MAP SND x.outputs in
   let sel = function_selector name argTypes in
-    (sel, name, argTypes, retTypes)::compute_selector_names ls
+    (sel, name, argTypes, retTypes)::compute_selector_names ls ) ∧
+  compute_selector_names (e::ls) = compute_selector_names ls
 End
 
 val () = cv_auto_trans compute_selector_names_def;
