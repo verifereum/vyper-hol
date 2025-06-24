@@ -718,6 +718,7 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ (Msg ValueSent) [] = INL $ IntV &cx.txn.value ∧
   evaluate_builtin cx _ (Concat n) vs = evaluate_concat n vs ∧
   evaluate_builtin cx _ (Slice n) [v1; v2; v3] = evaluate_slice v1 v2 v3 n ∧
+  evaluate_builtin cx _ (MakeArray bd) vs = INL $ ArrayV bd vs ∧
   evaluate_builtin cx acc (Acc aop) [BytesV _ bs] =
     (let a = lookup_account (word_of_bytes T (0w:address) bs) acc in
       INL $ evaluate_account_op aop a) ∧
@@ -829,6 +830,7 @@ Definition builtin_args_length_ok_def:
   builtin_args_length_ok Keccak256 n = (n = 1) ∧
   builtin_args_length_ok (Concat _) n = (2 ≤ n) ∧
   builtin_args_length_ok (Slice _) n = (n = 3) ∧
+  builtin_args_length_ok (MakeArray b) n = compatible_bound b n ∧
   builtin_args_length_ok (Bop _) n = (n = 2) ∧
   builtin_args_length_ok (Msg _) n = (n = 0) ∧
   builtin_args_length_ok (Acc _) n = (n = 1)
@@ -1516,8 +1518,6 @@ Definition bound_def:
   expr_bound ts (Attribute e _) =
     1 + expr_bound ts e ∧
   expr_bound ts (Literal _) = 0 ∧
-  expr_bound ts (ArrayLit _ es) =
-    1 + exprs_bound ts es ∧
   expr_bound ts (StructLit _ kes) =
     1 + exprs_bound ts (MAP SND kes) ∧
   expr_bound ts (Builtin _ es) =
@@ -1828,11 +1828,6 @@ Definition evaluate_def:
       (eval_expr cx e3)
   od ∧
   eval_expr cx (Literal l) = return $ Value $ evaluate_literal l ∧
-  eval_expr cx (ArrayLit b es) = do
-    check (compatible_bound b (LENGTH es)) "ArrayLit bound";
-    vs <- eval_exprs cx es;
-    return $ Value $ ArrayV b vs
-  od ∧
   eval_expr cx (StructLit id kes) = do
     (* TODO: check argument lengths and types *)
     ks <<- MAP FST kes;

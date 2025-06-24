@@ -49,7 +49,6 @@ Datatype:
   | SubscriptTargetK expr eval_continuation
   | SubscriptTargetK1 base_target_value eval_continuation
   | IfExpK expr expr eval_continuation
-  | ArrayLitK bound eval_continuation
   | StructLitK (identifier list) eval_continuation
   | SubscriptK expr eval_continuation
   | SubscriptK1 toplevel_value eval_continuation
@@ -148,10 +147,6 @@ Definition eval_expr_cps_def:
     eval_expr_cps cx3 e1 st (IfExpK e2 e3 k) ∧
   eval_expr_cps cx4 (Literal l) st k =
     AK cx4 (ApplyTv (Value $ evaluate_literal l)) st k ∧
-  eval_expr_cps cx5 (ArrayLit b es) st k =
-    (case check (compatible_bound b (LENGTH es)) "ArrayLit bound" st of
-       (INR ex, st) => AK cx5 (ApplyExc ex) st k
-     | (INL (), st) => eval_exprs_cps cx5 es st (ArrayLitK b k)) ∧
   eval_expr_cps cx5 (StructLit id kes) st k =
     eval_exprs_cps cx5 (MAP SND kes) st (StructLitK (MAP FST kes) k) ∧
   eval_expr_cps cx6 (Subscript e1 e2) st k =
@@ -347,7 +342,6 @@ Definition apply_exc_def:
   apply_exc cx ex st (SubscriptTargetK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (SubscriptTargetK1 _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IfExpK _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (ArrayLitK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (StructLitK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (SubscriptK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (SubscriptK1 _ k) = AK cx (ApplyExc ex) st k ∧
@@ -541,8 +535,6 @@ Definition apply_vals_def:
              return vs od st
      of (INR ex, st) => apply_exc cx ex st k
       | (INL vs, st) => eval_for_cps cx (string_to_num id) body vs st k) ∧
-  apply_vals cx vs st (ArrayLitK b k) =
-    apply_tv cx (Value $ ArrayV b vs) st k ∧
   apply_vals cx vs st (StructLitK ks k) =
     apply_tv cx (Value $ StructV (ZIP (ks, vs))) st k ∧
   apply_vals cx vs st (BuiltinK bt k) =
@@ -1060,19 +1052,6 @@ Proof
     \\ gvs[raise_def]
     \\ rw[Once OWHILE_THM, stepk_def, apply_val_def, apply_exc_def] )
   \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, return_def]
-  \\ conj_tac >- (
-    rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
-    \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
-    \\ gvs[]
-    \\ first_x_assum drule \\ rw[]
-    \\ CASE_TAC \\ reverse CASE_TAC
-    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    \\ rw[return_def]
-    \\ rw[Once OWHILE_THM, stepk_def, apply_vals_def]
-    \\ rw[Once OWHILE_THM, SimpRHS, stepk_def]
-    \\ gvs[]
-    \\ simp[apply_tv_def]
-    \\ rw[Once OWHILE_THM, stepk_def] )
   \\ conj_tac >- (
     rw[eval_expr_cps_def, evaluate_def, bind_def, return_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC

@@ -40,6 +40,7 @@ val Sender_tm       = astk"Sender"
 val Balance_tm      = astk"Balance"
 val Concat_tm       = astk"Concat"
 val Slice_tm        = astk"Slice"
+val MakeArray_tm = astk"MakeArray"
 val Bop_tm          = astk"Bop"
 val Msg_tm          = astk"Msg"
 val Acc_tm          = astk"Acc"
@@ -49,7 +50,6 @@ val Name_tm         = astk"Name"
 val TopLevelName_tm = astk"TopLevelName"
 val IfExp_tm        = astk"IfExp"
 val Literal_tm      = astk"Literal"
-val ArrayLit_tm     = astk"ArrayLit"
 val Subscript_tm    = astk"Subscript"
 val Attribute_tm    = astk"Attribute"
 val Builtin_tm      = astk"Builtin"
@@ -177,15 +177,23 @@ fun mk_Builtin b es = list_mk_comb(Builtin_tm, [b, es])
 fun mk_Concat n = mk_comb(Concat_tm, n)
 fun mk_Slice n = mk_comb(Slice_tm, n)
 fun mk_Bop b = mk_comb(Bop_tm, b)
-fun mk_ArrayLit ls = let
+fun mk_MakeArray b ls =
+  mk_Builtin (mk_comb(MakeArray_tm, b))
+    (mk_list (ls, expr_ty))
+fun mk_Tuple ls = let
   val n = numSyntax.term_of_int $ List.length ls
   val b = mk_comb(Fixed_tm, n)
 in
-  list_mk_comb(ArrayLit_tm, [b, mk_list(ls, expr_ty)])
+  mk_MakeArray b ls
+end
+fun mk_DynArray ls = let
+  val n = numSyntax.term_of_int $ List.length ls
+  val b = mk_comb(Dynamic_tm, n)
+in
+  mk_MakeArray b ls
 end
 val msg_sender_tm = list_mk_comb(Builtin_tm, [
   mk_comb(Msg_tm, Sender_tm), mk_list([], expr_ty)])
-
 
 val abi_type_ty = mk_thy_type{Args=[],Thy="contractABI",Tyop="abi_type"}
 val abiBool_tm = prim_mk_const{Name="Bool",Thy="contractABI"}
@@ -450,7 +458,7 @@ fun d_expression () : term decoder = achoose "expr" [
         field "values" (array (delay d_expression))
       ),
     check_ast_type "List" $
-    andThen (succeed o mk_ArrayLit) $ (* TODO: also handle dynamic arrays *)
+    JSONDecode.map mk_Tuple $ (* TODO: also handle dynamic arrays *)
     field "elements" (array (delay d_expression)),
     check_ast_type "Subscript" $
     andThen (fn (e1,e2) => succeed $ mk_Subscript e1 e2) $
