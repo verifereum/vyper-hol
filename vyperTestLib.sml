@@ -15,6 +15,7 @@ val StringT_tm      = astk"StringT"
 val BytesT_tm       = astk"BytesT"
 val AddressT_tm     = astk"AddressT"
 val BaseT_tm        = astk"BaseT"
+val TupleT_tm       = astk"TupleT"
 val ArrayT_tm       = astk"ArrayT"
 val NoneT_tm        = astk"NoneT"
 val BoolL_tm        = astk"BoolL"
@@ -155,7 +156,7 @@ fun mk_ls s = mk_comb(Literal_tm,
   list_mk_comb(StringL_tm, [numSyntax.term_of_int (String.size s),
                             stringSyntax.fromMLstring s]))
 fun mk_Return tmo = mk_comb(Return_tm, lift_option (mk_option expr_ty) I tmo)
-fun mk_AnnAssign s t e = list_mk_comb(AnnAssign_tm, [s, t, e])
+fun mk_AnnAssign (s,t,e) = list_mk_comb(AnnAssign_tm, [s, t, e])
 fun mk_AugAssign t b e = list_mk_comb(AugAssign_tm, [t, b, e])
 fun mk_Hex_dyn (n, s) = let
   val s = if String.isPrefix "0x" s then String.extract(s,2,NONE) else s
@@ -358,6 +359,23 @@ fun d_astType () : term decoder =
       check_ast_type "Int" $
       field "value" (JSONDecode.map mk_Fixed numtm)
     ),
+    check_ast_type "Subscript" $
+    JSONDecode.map (fn (t,b) => list_mk_comb(ArrayT_tm, [t,b])) $
+    check (field "value" (check_ast_type "Name" $ field "id" string))
+          (equal "DynArray") "not a DynArray" $
+    field "slice" $
+    check_ast_type "Tuple" $
+    field "elements" $
+    tuple2 (
+      JSONDecode.sub 0 (delay d_astType),
+      JSONDecode.sub 1 $ check_ast_type "Int" $
+        field "value" $ JSONDecode.map mk_Dynamic numtm
+    ),
+    check_ast_type "Tuple" $
+    JSONDecode.map (curry mk_comb TupleT_tm) $
+      field "elements" $
+      JSONDecode.map (fn ls => mk_list(ls, type_ty)) $
+        array (delay d_astType),
     null NoneT_tm
   ]
 
@@ -556,6 +574,9 @@ fun d_baseAssignmentTarget () : term decoder = achoose "bt" [
         "not self.target" $
   JSONDecode.map (curry mk_comb TopLevelNameTarget_tm) $
     field "attr" stringtm,
+  check_ast_type "Name" $
+  JSONDecode.map (curry mk_comb NameTarget_tm) $
+    field "id" stringtm,
   check_ast_type "Attribute" $
   JSONDecode.map
     (fn (t,n) => list_mk_comb(AttributeTarget_tm, [t,n])) $
@@ -627,7 +648,7 @@ fun d_statement () : term decoder = achoose "stmt" [
       field "value" expression
     ),
     check_ast_type "AnnAssign" $
-    andThen (fn (s,t,e) => succeed $ mk_AnnAssign s t e) $
+    JSONDecode.map mk_AnnAssign $
     tuple3 (
       field "target" (check_ast_type "Name" (field "id" stringtm)),
       field "annotation" astType,
@@ -947,11 +968,41 @@ val test_files = [
 
   val json_path = el 12 test_files
   val (tests, []) = read_test_json json_path
-  (* TODO: fix Assert: needs to short-circuit *)
+  val (passes, []) = run_tests tests
+
+  val json_path = el 13 test_files
+  val (tests, []) = read_test_json json_path
+  val (passes, []) = run_tests tests
+
+  val json_path = el 14 test_files
+  val (tests, []) = read_test_json json_path
+  (* TODO: decode msg.gas *)
+  val (passes, []) = run_tests tests
+
+  val json_path = el 15 test_files
+  val (tests, decode_fails) = read_test_json json_path
+  (* TODO: add decimals *)
+  (* TODO: add pass *)
+  (* unsupported?: raw_log *)
+  val (passes, []) = run_tests tests
+
+  val json_path = el 16 test_files
+  val (tests, decode_fails) = read_test_json json_path
+  (* unsupported?: raw_revert *)
+  val (passes, []) = run_tests tests
+
+  val json_path = el 17 test_files
+  (* TODO: add structs *)
+  val (tests, decode_fails) = read_test_json json_path
+  val (passes, []) = run_tests tests
+
+  val json_path = el 18 test_files
+  val (tests, decode_fails) = read_test_json json_path
+  (* TODO: ... *)
   val (passes, []) = run_tests tests
 
   val test_jsons = decodeFile rawObject json_path
-  val (name, json) = el 1 test_jsons
+  val (name, json) = el 3 test_jsons
   val traces = decode (field "traces" (array trace)) json
   val traces = decode (field "traces" (array raw)) json
   val tr = el 1 traces
@@ -959,7 +1010,7 @@ val test_files = [
   val tr = decode trace tr
 
   val tls = decode (field "annotated_ast" (field "ast" (field "body" (array raw)))) tr
-  val tl = el 2 tls
+  val tl = el 1 tls
   decode toplevel tl
   decode (field "target" (field "type" (field "key_type" astType))) tl
   decode (field "ast_type" string) tl
@@ -976,7 +1027,10 @@ val test_files = [
   val stmt = el 1 stmts
   decode statement stmt
   decode (field "ast_type" string) stmt
-  val expr = decode (field "value" raw) stmt
+  val expr = decode (field "value" expression) stmt
+  decode (field "annotation" (field "slice" astType)) stmt
+  decode (field "annotation" astType) stmt
+  val tgt = decode (field "target" baseAssignmentTarget) stmt
 
   decode (field "ast_type" string) expr
   decode (field "func" raw) expr
@@ -1032,6 +1086,56 @@ check_ast_type "Call" $
   val obj =
   (read_test_json json_path; JSON.NULL)
   handle JSONError (_, obj) => obj
+
+  val (name, traces) = el 1 tests
+
+  traces
+
+cv_eval “let
+  trs = ^trs;
+  am = initial_machine_state;
+  snss = [];
+  tr = HD trs;
+  (snss, res) = run_trace snss am tr;
+  am = OUTL res;
+  trs = TL trs;
+  tr = HD trs;
+  (snss, res) = run_trace snss am tr;
+  am = OUTL res;
+  trs = TL trs;
+  tr = HD trs;
+  ct = case tr of Call ct => ct;
+  snsx = ALOOKUP snss ct.target;
+  sns = THE snsx;
+  cr = run_call sns am ct;
+  call_res = FST cr;
+  am = SND call_res;
+  rets = SND cr;
+  abiRetTys = FST rets;
+  abiRetTy = Tuple abiRetTys;
+  rawVyRetTy = SND rets;
+  alreadyTuple = (rawVyRetTy = NoneT ∨ is_TupleT rawVyRetTy);
+  vyRetTy = if alreadyTuple then rawVyRetTy
+            else TupleT [rawVyRetTy];
+  fna = THE $ ALOOKUP sns (TAKE 4 ct.callData);
+    name = FST fna; argTys = FST (SND fna);
+  ts = THE $ ALOOKUP am.sources ct.target;
+  ar = compute_vyper_args ts name argTys (DROP 4 ct.callData)
+in (ar, name, ts) ”
+
+  vyRetTy = if is_TupleT rawVyRetTy
+    then rawVyRetTy else TupleT [rawVyRetTy];
+in (abiRetTy, vyRetTy)”
+
+  abiRetTy = Tuple abiRetTys;
+  vyRetTy = SND rets;
+  out = THE ct.expectedOutput;
+  abiret = dec abiRetTy out;
+  vyret = abi_to_vyper (TupleT [vyRetTy]) abiret;
+in (FST call_res, abiRetTy, vyRetTy, out, abiret, vyret)”
+
+cv_eval “enc String (BytesV [119w; 111w; 114w; 108w; 100w])”
+
 *)
 
 end
