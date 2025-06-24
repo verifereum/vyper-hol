@@ -38,10 +38,12 @@ val Gt_tm           = astk"Gt"
 val Sender_tm       = astk"Sender"
 val Balance_tm      = astk"Balance"
 val Concat_tm       = astk"Concat"
+val Slice_tm        = astk"Slice"
 val Bop_tm          = astk"Bop"
 val Msg_tm          = astk"Msg"
 val Acc_tm          = astk"Acc"
 val IntCall_tm      = astk"IntCall"
+val Convert_tm      = astk"Convert"
 val Name_tm         = astk"Name"
 val TopLevelName_tm = astk"TopLevelName"
 val IfExp_tm        = astk"IfExp"
@@ -50,6 +52,7 @@ val ArrayLit_tm     = astk"ArrayLit"
 val Subscript_tm    = astk"Subscript"
 val Attribute_tm    = astk"Attribute"
 val Builtin_tm      = astk"Builtin"
+val TypeBuiltin_tm  = astk"TypeBuiltin"
 val AstCall_tm      = astk"Call"
 val NameTarget_tm         = astk"NameTarget"
 val TopLevelNameTarget_tm = astk"TopLevelNameTarget"
@@ -126,6 +129,8 @@ val int128_tm = mk_comb(BaseT_tm, mk_comb(IntT_tm, numSyntax.term_of_int 128))
 val address_tm = mk_comb(BaseT_tm, AddressT_tm)
 fun mk_Fixed n = mk_comb(Fixed_tm, n)
 fun mk_Dynamic n = mk_comb(Dynamic_tm, n)
+val bytes32_tm = mk_comb(BaseT_tm, mk_comb(BytesT_tm, mk_Fixed $
+                                             numSyntax.term_of_int 32))
 fun mk_FunctionDecl v m n a t b = list_mk_comb(FunctionDecl_tm, [v,m,n,a,t,b])
 fun mk_VariableDecl (v,m,n,t) = list_mk_comb(VariableDecl_tm, [v,m,n,t])
 fun mk_HashMapDecl (v,n,t,vt) = list_mk_comb(HashMapDecl_tm, [v,n,t,vt])
@@ -137,6 +142,8 @@ fun mk_For s t i n b = list_mk_comb(For_tm, [s,t,i,n,b])
 fun mk_Name s = mk_comb(Name_tm, fromMLstring s)
 fun mk_IfExp (e1,e2,e3) = list_mk_comb(IfExp_tm, [e1,e2,e3])
 fun mk_IntCall s = mk_comb(IntCall_tm, s)
+fun mk_Convert (t,v) = list_mk_comb(TypeBuiltin_tm, [
+  Convert_tm, t, mk_list([v], expr_ty)])
 fun mk_Call ct args = list_mk_comb(AstCall_tm, [ct, mk_list (args, expr_ty)])
 fun mk_Assert (e,s) = list_mk_comb(Assert_tm, [e, s])
 fun mk_Log (id,es) = list_mk_comb(Log_tm, [id, es])
@@ -167,6 +174,7 @@ in
 end
 fun mk_Builtin b es = list_mk_comb(Builtin_tm, [b, es])
 fun mk_Concat b = mk_comb(Concat_tm, b)
+fun mk_Slice b = mk_comb(Slice_tm, b)
 fun mk_Bop b = mk_comb(Bop_tm, b)
 fun mk_ArrayLit ls = let
   val n = numSyntax.term_of_int $ List.length ls
@@ -319,6 +327,7 @@ fun d_astType () : term decoder =
     achoose "astType Name" [
       check_field "id" "uint256" $ succeed uint256_tm, (* TODO: handle arbitrary bit sizes *)
       check_field "id" "int128" $ succeed int128_tm,
+      check_field "id" "bytes32" $ succeed bytes32_tm,
       check_field "id" "bool" $ succeed bool_tm,
       check_field "id" "address" $ succeed address_tm
     ],
@@ -381,10 +390,6 @@ fun mk_BinOp (l,b,r) =
   mk_BoolOp (b,[l,r])
 
 fun d_expression () : term decoder = achoose "expr" [
-    check_ast_type "Name" $
-    field "id" (JSONDecode.map mk_Name string),
-    check_ast_type "NameConstant" $
-    field "value" (JSONDecode.map mk_lb booltm),
     check_ast_type "Str" $
     JSONDecode.map mk_ls $ field "value" string,
     check_ast_type "Int" $
@@ -458,23 +463,59 @@ fun d_expression () : term decoder = achoose "expr" [
       field "attr" stringtm
     ),
     check_ast_type "Call" $
-    andThen (fn (b,es) => succeed $ mk_Builtin (mk_Concat b) es) $
+    JSONDecode.map (fn (b,es) => mk_Builtin (mk_Concat b) es) $
     tuple2 (
       check (field "func" (tuple2 (
                field "ast_type" string,
                field "id" string)))
             (equal ("Name", "concat"))
             "not concat" $
+      field "type" $
+        check (field "name" string)
+          (Lib.C Lib.mem ["String","Bytes"])
+          "concat type not String or Bytes" $
+        JSONDecode.map (mk_Dynamic o numSyntax.term_of_int)
+          (field "length" int),
+      field "args" $ JSONDecode.map
+        (fn ls => mk_list(ls, expr_ty)) $
+        array (delay d_expression)
+    ),
+    check_ast_type "Call" $
+    JSONDecode.map (fn (b,es) => mk_Builtin (mk_Slice b) es) $
+    tuple2 (
+      check (field "func" (tuple2 (
+               field "ast_type" string,
+               field "id" string)))
+            (equal ("Name", "slice"))
+            "not slice" $
       field "type" $ choose [
         check_field "name" "String" $
         JSONDecode.map (mk_Dynamic o numSyntax.term_of_int)
+          (field "length" int),
+        check_field "name" "Bytes" $
+        JSONDecode.map (mk_Dynamic o numSyntax.term_of_int)
           (field "length" int)
-        (* TODO: concat returning bytes *)
       ],
       field "args" $ JSONDecode.map
         (fn ls => mk_list(ls, expr_ty)) $
         array (delay d_expression)
     ),
+    check_ast_type "Call" $
+    JSONDecode.map mk_Convert $
+    check (field "func" $ tuple2 (
+             field "ast_type" string,
+             field "id" string))
+          (equal ("Name", "convert"))
+          "not convert" $
+    field "args" $
+    tuple2 (
+      JSONDecode.sub 1 astType,
+      JSONDecode.sub 0 (delay d_expression)
+    ),
+    check_ast_type "Name" $
+    field "id" (JSONDecode.map mk_Name string),
+    check_ast_type "NameConstant" $
+    field "value" (JSONDecode.map mk_lb booltm),
     check_ast_type "Call" $
     andThen (fn (i,a) => succeed $ mk_Call (mk_IntCall i) a) $
     tuple2 (
@@ -910,10 +951,14 @@ val test_files = [
   val tr = decode trace tr
 
   val tls = decode (field "annotated_ast" (field "ast" (field "body" (array raw)))) tr
-  val tl = el 1 tls
+  val tl = el 2 tls
   decode toplevel tl
   decode (field "target" (field "type" (field "key_type" astType))) tl
   decode (field "ast_type" string) tl
+
+  val ags = decode (field "body" (array raw)) tl
+  decode eventArg (el 1 ags)
+
 
   decode (field "args" (field "args" (array (field "annotation" raw)))) tl
 
@@ -924,6 +969,29 @@ val test_files = [
   decode statement stmt
   decode (field "ast_type" string) stmt
   val expr = decode (field "value" raw) stmt
+
+  decode (field "ast_type" string) expr
+  decode (field "func" raw) expr
+  val ags = decode (field "args" (array raw)) expr
+  decode expression expr
+  val decoder =
+check_ast_type "Call" $
+    JSONDecode.map mk_Convert $
+    check (field "func" $ tuple2 (
+             field "ast_type" string,
+             field "id" string))
+          (equal ("Name", "convert"))
+          "not convert" $
+    field "args" $
+    tuple2 (
+      JSONDecode.sub 1 astType,
+      JSONDecode.sub 0 (delay d_expression)
+    )
+  decode expression $ el 3 $
+  decode (field "args" (array expression)) (el 1 ags)
+  decode (field "func" raw) (el 1 ags)
+  decode expression (el 1 ags)
+
 
   decode (field "orelse" expression) expr
   val expr = decode (field "orelse" raw) expr
