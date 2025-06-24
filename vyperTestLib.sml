@@ -925,9 +925,8 @@ val test_files = [
   val (passes, []) = run_tests tests
 
   val json_path = el 9 test_files
-  (* TODO: add slice, convert *)
-  val (tests, decode_fails) = read_test_json json_path
-  print $ decode (field "source_code" string) $ #2 $ #2 $ el 1 decode_fails
+  val (tests, []) = read_test_json json_path
+  (* TODO: implement convert *)
   val (passes, []) = run_tests tests
 
   val json_path = el 10 test_files
@@ -936,7 +935,14 @@ val test_files = [
   print $ decode (field "source_code" string) $ #2 $ #2 $ decode_fail
 
   val json_path = el 11 test_files
+  (* TODO: add tuple expressions, DynArray *)
   val (tests, decode_fails) = read_test_json json_path
+  (* TODO: implement convert *)
+  val (passes, []) = run_tests tests
+
+  val json_path = el 12 test_files
+  val (tests, []) = read_test_json json_path
+  (* TODO: fix Assert: needs to short-circuit *)
   val (passes, []) = run_tests tests
 
   val test_jsons = decodeFile rawObject json_path
@@ -1008,9 +1014,6 @@ check_ast_type "Call" $
   val expr = decode (field "test" raw) stmt
   decode (field "right" expression) expr
   decode expression expr
-
-  decode (field "iter" (field "args" (array (field "value" int)))) stmt
-  val ls = [3]
 
   val stmt = decode statement stmt
   val stmts = decode (field "body" (array raw)) stmt

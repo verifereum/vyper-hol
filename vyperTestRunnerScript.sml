@@ -22,6 +22,14 @@ Datatype:
   | Event string (* TODO need any info on event args? *)
 End
 
+(* TODO: move? *)
+Definition is_TupleT_def[simp]:
+  is_TupleT (TupleT _) = T ∧
+  is_TupleT _ = F
+End
+
+val () = cv_auto_trans is_TupleT_def;
+
 (*
 Datatype:
   vyper_abi_function = <|
@@ -82,25 +90,18 @@ Datatype:
   | SetBalance address num
 End
 
-Definition find_function_args_by_name_def:
-  find_function_args_by_name n [] = ([], NoneT) ∧
-  find_function_args_by_name n (FunctionDecl _ _ id args ret _ :: ts) =
-  (if n = id then (args, ret) else find_function_args_by_name n ts) ∧
-  find_function_args_by_name n (_ :: ts) =
-  find_function_args_by_name n ts
-End
-
 Definition compute_vyper_args_def:
-  compute_vyper_args ts name argTys cd = let
+  compute_vyper_args ts vis name argTys cd = let
     abiArgsTup = dec (Tuple argTys) cd;
-    argsret = find_function_args_by_name name ts;
-    args = FST argsret;
-    vyTys = MAP SND $ args;
+    vyTysRet = case lookup_function name vis ts
+                of SOME (args,ret,_) => (MAP SND args, ret)
+                  | NONE => ([], NoneT);
+    vyTys = FST vyTysRet;
     vyArgsTup = abi_to_vyper (TupleT vyTys) abiArgsTup;
     vyArgs = (case OPTION_BIND vyArgsTup extract_elements
                 of NONE => [] | SOME ls => ls)
   in
-    (vyArgs, SND argsret)
+    (vyArgs, SND vyTysRet)
 End
 
 Definition run_deployment_def:
@@ -114,7 +115,7 @@ Definition run_deployment_def:
           ; target := dt.deployedAddress
           ; function_name := name
           ; args := FST $ compute_vyper_args dt.sourceAst
-                          name argTys (DROP 4 dt.callData)
+                          Deploy name argTys (DROP 4 dt.callData)
           ; value := dt.value |>;
   in (sns, load_contract am tx dt.sourceAst)
 End
@@ -128,7 +129,7 @@ Definition run_call_def:
              | NONE => ("__default__", [], []);
     name = FST fna; argTys = FST (SND fna);
     ts = case ALOOKUP am.sources ct.target of SOME ts => ts | _ => [];
-    ar = compute_vyper_args ts name argTys (DROP 4 ct.callData);
+    ar = compute_vyper_args ts External name argTys (DROP 4 ct.callData);
     tx = <| sender := ct.sender
           ; target := ct.target
           ; function_name := name
@@ -208,26 +209,22 @@ Definition run_trace_def:
           | SOME out => let
               rets = SND cr;
               abiRetTys = FST rets;
-              abiRetTy = if NULL abiRetTys
-                         then Tuple []
-                         else HD abiRetTys; (* TODO: could there be multiple? *)
-              vyRetTy = SND rets;
+              abiRetTy = Tuple abiRetTys;
+              rawVyRetTy = SND rets;
+              alreadyTuple = (rawVyRetTy = NoneT ∨ is_TupleT rawVyRetTy);
+              vyRetTy = if alreadyTuple then rawVyRetTy
+                        else TupleT [rawVyRetTy];
               abiret = dec abiRetTy out;
               vyret = abi_to_vyper vyRetTy abiret;
+              expect = if alreadyTuple then v
+                       else ArrayV (Fixed 1) [v];
             in
-              if vyret = SOME v
+              if vyret = SOME expect
               then INL am
               else INR (Error "output mismatch"))
 End
 
-val run_trace_pre_def = cv_auto_trans_pre run_trace_def;
-
-Theorem run_trace_pre[cv_pre]:
-  run_trace_pre x y z
-Proof
-  rw[run_trace_pre_def]
-  \\ strip_tac \\ gvs[]
-QED
+val () = cv_auto_trans run_trace_def;
 
 Definition run_test_loop_def:
   run_test_loop snss am [] = INL () ∧
