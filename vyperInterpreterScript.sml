@@ -1685,17 +1685,19 @@ Definition evaluate_def:
   eval_stmt cx (Raise e) = do
     tv <- eval_expr cx e;
     v <- get_Value tv;
-    s <- lift_option (dest_StringV v) "raise not StringV";
+    s <- lift_option (dest_StringV v) "not StringV";
     raise $ AssertException s
   od ∧
   eval_stmt cx (Assert e se) = do
-    stv <- eval_expr cx se;
-    sv <- get_Value stv;
-    s <- lift_option (dest_StringV sv) "assert not StringV";
     tv <- eval_expr cx e;
     switch_BoolV tv
       (return ())
-      (raise $ AssertException s)
+      (do
+         stv <- eval_expr cx se;
+         sv <- get_Value stv;
+         s <- lift_option (dest_StringV sv) "not StringV";
+         raise $ AssertException s
+       od)
   od ∧
   eval_stmt cx (Log id es) = do
     (* TODO: check arguments length and types *)
