@@ -284,7 +284,12 @@ fun check_trace_type req = check_field "trace_type" req
 
 fun check_ast_type req = check_field "ast_type" req
 
-val numtm = JSONDecode.map numSyntax.term_of_int int
+val numOfLargeInt =
+  intSyntax.dest_injected o
+  intSyntax.term_of_int o
+  Arbint.fromLargeInt
+
+val numtm = JSONDecode.map numOfLargeInt intInf
 val stringtm = JSONDecode.map fromMLstring string
 val booltm = JSONDecode.map mk_bool bool
 val negbooltm = JSONDecode.map (mk_bool o not) bool
@@ -337,21 +342,21 @@ fun d_astType () : term decoder =
           (equal "String") "not a String" $
     field "slice" $
       check_ast_type "Int" $
-      field "value" $ JSONDecode.map numSyntax.term_of_int int,
+      field "value" numtm,
     check_ast_type "Subscript" $
     JSONDecode.map mk_Bytes $
     check (field "value" (check_ast_type "Name" $ field "id" string))
           (equal "Bytes") "not a Bytes" $
     field "slice" $
       check_ast_type "Int" $
-      field "value" $ JSONDecode.map numSyntax.term_of_int int,
+      field "value" numtm,
     check_ast_type "Subscript" $
     andThen (fn (t,b) => succeed $ list_mk_comb(ArrayT_tm, [t,b])) $
     tuple2 (
       field "value" (delay d_astType),
       field "slice" $
       check_ast_type "Int" $
-      field "value" (JSONDecode.map (mk_Fixed o numSyntax.term_of_int) int)
+      field "value" (JSONDecode.map mk_Fixed numtm)
     ),
     null NoneT_tm
   ]
@@ -393,7 +398,8 @@ fun d_expression () : term decoder = achoose "expr" [
     check_ast_type "Str" $
     JSONDecode.map mk_ls $ field "value" string,
     check_ast_type "Int" $
-    field "value" (JSONDecode.map (mk_li o intSyntax.term_of_int o Arbint.fromInt) int),
+    field "value" (JSONDecode.map (mk_li o intSyntax.term_of_int o
+                                   Arbint.fromLargeInt) intInf),
     check_ast_type "Hex" $
     field "value" (JSONDecode.map mk_Hex string),
     check_ast_type "Bytes" $
@@ -474,8 +480,7 @@ fun d_expression () : term decoder = achoose "expr" [
         check (field "name" string)
           (Lib.C Lib.mem ["String","Bytes"])
           "concat type not String or Bytes" $
-        JSONDecode.map (mk_Dynamic o numSyntax.term_of_int)
-          (field "length" int),
+          field "length" numtm,
       field "args" $ JSONDecode.map
         (fn ls => mk_list(ls, expr_ty)) $
         array (delay d_expression)
@@ -532,16 +537,16 @@ val expression = delay d_expression
 fun rangeArgs ls = let
   val (s, e) = case ls of [x,y] => (x,y) | [x] => (0,x) | _ => (0,0)
   val b = e - s
-  val [s,e] = List.map (intSyntax.term_of_int o Arbint.fromInt) [s,e]
+  val [s,e] = List.map (intSyntax.term_of_int o Arbint.fromLargeInt) [s,e]
   val t = list_mk_comb(Range_tm, [mk_li s, mk_li e])
-in (t, numSyntax.term_of_int b) end
+in (t, numOfLargeInt b) end
 
 val iterator : (term * term) decoder = achoose "iterator" [
   check_ast_type "Call" $
   check (field "func" (field "id" string))
         (equal "range") "not range" $
   andThen (succeed o rangeArgs) $
-  field "args" (array (check_ast_type "Int" (field "value" int)))
+  field "args" (array (check_ast_type "Int" (field "value" intInf)))
 ]
 
 fun d_baseAssignmentTarget () : term decoder = achoose "bt" [
