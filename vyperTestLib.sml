@@ -457,9 +457,12 @@ fun d_expression () : term decoder = achoose "expr" [
         field "op" binop,
         field "values" (array (delay d_expression))
       ),
-    check_ast_type "List" $
-    JSONDecode.map mk_Tuple $ (* TODO: also handle dynamic arrays *)
-    field "elements" (array (delay d_expression)),
+    check_ast_type "Tuple" $
+      JSONDecode.map mk_Tuple $
+      field "elements" (array (delay d_expression)),
+    check_ast_type "List" $ (* TODO: how is this different from Tuple? *)
+      JSONDecode.map mk_Tuple $ (* TODO: also handle dynamic arrays *)
+      field "elements" (array (delay d_expression)),
     check_ast_type "Subscript" $
     andThen (fn (e1,e2) => succeed $ mk_Subscript e1 e2) $
     tuple2 (field "value" (delay d_expression),
@@ -783,10 +786,10 @@ val toplevels : term decoder =
   ) (array toplevel)
 
 val abiType : term decoder =
-  andThen (succeed o parse_abi_type) string
+  JSONDecode.map parse_abi_type string
 
 val abiArg : term decoder =
-  andThen (succeed o mk_pair) $
+  JSONDecode.map mk_pair $
   tuple2 (field "name" stringtm,
           field "type" abiType)
 
@@ -802,18 +805,27 @@ val Event_tm = prim_mk_const{Thy="vyperTestRunner",Name="Event"}
 val (abi_function_ty, abi_entry_ty) = dom_rng $ type_of $ Function_tm
 val abi_arg_ty = mk_prod(string_ty, abi_type_ty)
 
-val abiEntry : term decoder = achoose "abiEntry" [
-    check_field "type" "function" $
-    andThen (fn (n,is,os,m) => succeed $ mk_comb(Function_tm,
+fun mk_Function (n,is,os,m) =
+  mk_comb(Function_tm,
              TypeBase.mk_record (abi_function_ty, [
                ("name", n),
                ("inputs", mk_list(is, abi_arg_ty)),
                ("outputs", mk_list(os, abi_arg_ty)),
-               ("mutability", m)])))
-      (tuple4 (field "name" stringtm,
-               field "inputs" (array abiArg),
-               field "outputs" (array abiArg),
-               field "stateMutability" abiMutability)),
+               ("mutability", m)]))
+
+val abiEntry : term decoder = achoose "abiEntry" [
+    check_field "type" "function" $
+    JSONDecode.map mk_Function $
+      tuple4 (field "name" stringtm,
+              field "inputs" (array abiArg),
+              field "outputs" (array abiArg),
+              field "stateMutability" abiMutability),
+    check_field "type" "constructor" $
+    JSONDecode.map mk_Function $
+      tuple4 (succeed $ fromMLstring "__init__",
+              field "inputs" (array abiArg),
+              field "outputs" (array abiArg),
+              field "stateMutability" abiMutability),
     check_field "type" "event" $
     JSONDecode.map (fn s => mk_comb(Event_tm, s)) $
     field "name" stringtm
@@ -969,8 +981,7 @@ val test_files = [
   print $ decode (field "source_code" string) $ #2 $ #2 $ decode_fail
 
   val json_path = el 11 test_files
-  (* TODO: add tuple expressions, DynArray *)
-  val (tests, decode_fails) = read_test_json json_path
+  val (tests, []) = read_test_json json_path
   (* TODO: implement convert *)
   val (passes, []) = run_tests tests
 
@@ -1006,8 +1017,10 @@ val test_files = [
 
   val json_path = el 18 test_files
   val (tests, decode_fails) = read_test_json json_path
-  (* TODO: ... *)
+  (* TODO: HashMap, flag, div, ... *)
   val (passes, []) = run_tests tests
+
+  val (_, (_, tr)) = el 1 decode_fails
 
   val test_jsons = decodeFile rawObject json_path
   val (name, json) = el 3 test_jsons
@@ -1015,10 +1028,12 @@ val test_files = [
   val traces = decode (field "traces" (array raw)) json
   val tr = el 1 traces
   decode (field "contract_abi" (array abiEntry)) tr
+  val cabi = decode (field "contract_abi" (array raw)) tr
+  decode (field "name" stringtm) (el 2 cabi)
   val tr = decode trace tr
 
   val tls = decode (field "annotated_ast" (field "ast" (field "body" (array raw)))) tr
-  val tl = el 1 tls
+  val tl = el 3 tls
   decode toplevel tl
   decode (field "target" (field "type" (field "key_type" astType))) tl
   decode (field "ast_type" string) tl
@@ -1026,21 +1041,24 @@ val test_files = [
   val ags = decode (field "body" (array raw)) tl
   decode eventArg (el 1 ags)
 
-
   decode (field "args" (field "args" (array (field "annotation" raw)))) tl
 
   val stmts = decode (field "body" statements) tl
   val stmts = decode (field "body" (array raw)) tl
 
-  val stmt = el 1 stmts
+  val stmt = el 2 stmts
   decode statement stmt
   decode (field "ast_type" string) stmt
   val expr = decode (field "value" expression) stmt
+  val expr = decode (field "value" raw) stmt
   decode (field "annotation" (field "slice" astType)) stmt
   decode (field "annotation" astType) stmt
   val tgt = decode (field "target" baseAssignmentTarget) stmt
 
   decode (field "ast_type" string) expr
+  val expr = decode (field "body" raw) expr
+
+
   decode (field "func" raw) expr
   val ags = decode (field "args" (array raw)) expr
   decode expression expr
