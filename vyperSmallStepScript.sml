@@ -56,6 +56,7 @@ Datatype:
   | SubscriptK1 toplevel_value eval_continuation
   | AttributeK identifier eval_continuation
   | BuiltinK builtin eval_continuation
+  | TypeBuiltinK type_builtin type eval_continuation
   | CallSendK eval_continuation
   | IntCallK identifier ((identifier # type) list) (stmt list) eval_continuation
   | IntCallK1 (scope list) eval_continuation
@@ -164,21 +165,11 @@ Definition eval_expr_cps_def:
      | (INL (), st) => eval_exprs_cps cx8 es st (BuiltinK bt k)) ∧
   eval_expr_cps cx8 (Pop bt) st k =
     eval_base_target_cps cx8 bt st (PopK k) ∧
-  eval_expr_cps cx8 (TypeBuiltin Empty typ es) st k =
-    (case do
-       check (NULL es) "Empty args";
-       ts <- lift_option (get_self_code cx8) "Empty get_self_code";
-       return $ Value $ default_value (type_env ts) typ od st
-     of (INR ex, st) => AK cx8 (ApplyExc ex) st k
-      | (INL tv, st) => AK cx8 (ApplyTv tv) st k) ∧
-  eval_expr_cps cx8 (TypeBuiltin MaxValue typ es) st k =
-    liftk cx8 ApplyTv (do
-      check (NULL es) "MaxValue args";
-      v <- lift_sum $ evaluate_max_value typ;
-      return $ Value v
-    od st) k ∧
-  eval_expr_cps cx8 (TypeBuiltin _ typ _) st k =
-    AK cx8 (ApplyExc (Error "TODO: TypeBuiltin")) st k ∧
+  eval_expr_cps cx8 (TypeBuiltin tb typ es) st k =
+    (case check (type_builtin_args_length_ok tb (LENGTH es))
+            "TypeBuiltin args" st of
+        (INR ex, st) => AK cx8 (ApplyExc ex) st k
+      | (INL tv, st) => eval_exprs_cps cx8 es st (TypeBuiltinK tb typ k)) ∧
   eval_expr_cps cx9 (Call Send es) st k =
     (case check (LENGTH es = 2) "Send args" st of
        (INR ex, st) => AK cx9 (ApplyExc ex) st k
@@ -365,6 +356,7 @@ Definition apply_exc_def:
   apply_exc cx ex st (AttributeK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (PopK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (BuiltinK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (TypeBuiltinK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CallSendK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IntCallK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IntCallK1 prev k) =
@@ -564,6 +556,11 @@ Definition apply_vals_def:
     liftk cx ApplyTv (do
       acc <- get_accounts;
       v <- lift_sum $ evaluate_builtin cx acc bt vs;
+      return $ Value v
+    od st) k ∧
+  apply_vals cx vs st (TypeBuiltinK tb typ k) =
+    liftk cx ApplyTv (do
+      v <- lift_sum $ evaluate_type_builtin cx tb typ vs;
       return $ Value v
     od st) k ∧
   apply_vals cx vs st (LogK id k) =
@@ -1119,16 +1116,10 @@ Proof
   \\ conj_tac >- (
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
+    \\ gvs[] \\ first_x_assum drule \\ rw[]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
-    \\ rw[return_def])
-  \\ conj_tac >- (
-    rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def, liftk1])
-  \\ conj_tac >- (
-    rw[eval_expr_cps_def, evaluate_def, raise_def, bind_def, liftk1])
-  \\ conj_tac >- (
-    rw[eval_expr_cps_def, evaluate_def, raise_def, bind_def, liftk1])
-  \\ conj_tac >- (
-    rw[eval_expr_cps_def, evaluate_def, raise_def, bind_def, liftk1])
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    >> rw[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def, liftk1] )
   \\ conj_tac >- (
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC

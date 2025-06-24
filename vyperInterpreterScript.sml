@@ -676,6 +676,16 @@ End
 
 val () = cv_auto_trans evaluate_builtin_def;
 
+Definition type_builtin_args_length_ok_def:
+  type_builtin_args_length_ok Empty n = (n = 0n) ∧
+  type_builtin_args_length_ok MaxValue n = (n = 0) ∧
+  type_builtin_args_length_ok MinValue n = (n = 0) ∧
+  type_builtin_args_length_ok Epsilon n = (n = 0) ∧
+  type_builtin_args_length_ok Convert n = (n = 1)
+End
+
+val () = cv_auto_trans type_builtin_args_length_ok_def;
+
 Definition evaluate_max_value_def:
   evaluate_max_value (BaseT (UintT n)) = INL $ IntV (&(2 ** n) - 1) ∧
   evaluate_max_value (BaseT (IntT n)) = (if n = 0
@@ -1036,6 +1046,20 @@ Definition get_self_code_def:
 End
 
 val () = cv_auto_trans get_self_code_def;
+
+Definition evaluate_type_builtin_def:
+  evaluate_type_builtin cx Empty typ vs =
+  (case get_self_code cx
+     of SOME ts =>
+        INL $ default_value (type_env ts) typ
+      | _ => INR "Empty get_self_code") ∧
+  evaluate_type_builtin cx MaxValue typ vs =
+    evaluate_max_value typ ∧
+  evaluate_type_builtin _ _ _ _ =
+    INR "TODO: TypeBuiltin"
+End
+
+val () = cv_auto_trans evaluate_type_builtin_def;
 
 Definition lookup_flag_def:
   lookup_flag fid [] = NONE ∧
@@ -1815,18 +1839,11 @@ Definition evaluate_def:
     vs <- lift_option (extract_elements v) "pop not ArrayV";
     return $ Value $ LAST vs
   od ∧
-  eval_expr cx (TypeBuiltin Empty typ es) = do
-    check (NULL es) "Empty args";
-    ts <- lift_option (get_self_code cx) "Empty get_self_code";
-    return $ Value $ default_value (type_env ts) typ
-  od ∧
-  eval_expr cx (TypeBuiltin MaxValue typ es) = do
-    check (NULL es) "MaxValue args";
-    v <- lift_sum $ evaluate_max_value typ;
-    return $ Value $ v
-  od ∧
-  eval_expr cx (TypeBuiltin _ typ _) = do
-    raise $ Error "TODO: TypeBuiltin"
+  eval_expr cx (TypeBuiltin tb typ es) = do
+    check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args";
+    vs <- eval_exprs cx es;
+    v <- lift_sum $ evaluate_type_builtin cx tb typ vs;
+    return $ Value v
   od ∧
   eval_expr cx (Call Send es) = do
     check (LENGTH es = 2) "Send args";
