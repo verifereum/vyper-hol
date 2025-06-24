@@ -83,6 +83,7 @@ Datatype:
   | Not
   | Keccak256
   | Concat bound
+  | Slice bound
   | Bop binop
   | Msg message_item
   | Acc account_item

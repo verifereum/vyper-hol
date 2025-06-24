@@ -598,6 +598,31 @@ End
 
 val () = cv_auto_trans evaluate_account_op_def;
 
+Definition dest_NumV_def:
+  dest_NumV (IntV i) =
+    (if i < 0 then NONE else SOME (Num i)) ∧
+  dest_NumV _ = NONE
+End
+
+val () = cv_auto_trans dest_NumV_def;
+
+Definition dest_AddressV_def:
+  dest_AddressV (BytesV (Fixed b) bs) =
+    (if b = 20 ∧ LENGTH bs = 20 then
+      SOME (word_of_bytes T (0w:address) bs)
+     else NONE) ∧
+  dest_AddressV _ = NONE
+End
+
+val () = cv_auto_trans dest_AddressV_def;
+
+Definition dest_StringV_def:
+  dest_StringV (StringV _ s) = SOME s ∧
+  dest_StringV _ = NONE
+End
+
+val () = cv_auto_trans dest_StringV_def;
+
 Definition compatible_bound_def:
   compatible_bound (Fixed n) m = (n = m) ∧
   compatible_bound (Dynamic n) m = (m ≤ n)
@@ -652,6 +677,32 @@ Proof
   \\ strip_tac \\ gvs[]
 QED
 
+Definition evaluate_slice_def:
+  evaluate_slice v sv lv b =
+  case dest_NumV sv of NONE => INR "evaluate_slice start" | SOME start =>
+  case dest_NumV lv of NONE => INR "evaluate_slice length" | SOME length =>
+  case v
+  of BytesV bb bs => (
+       if (case bb of Fixed m => m = 32 | _ => T) then
+       if start + length < LENGTH bs then
+       if compatible_bound b length then
+         INL $ BytesV b (TAKE length (DROP start bs))
+       else INR "evaluate_slice bound"
+       else INR "evaluate_slice range"
+       else INR "evaluate_slice BytesV bound")
+   | StringV n s => (
+       case b of Dynamic m => (
+       if start + length < LENGTH s then
+       if compatible_bound b length then
+         INL $ StringV m (TAKE length (DROP start s))
+       else INR "evaluate_slice bound"
+       else INR "evaluate_slice range")
+       | _ => INR "evaluate_slice StringV bound")
+  | _ => INR "evaluate_slice v"
+End
+
+val () = cv_auto_trans evaluate_slice_def;
+
 Definition evaluate_builtin_def:
   evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV &(LENGTH ls)) ∧
   evaluate_builtin cx _ Len [StringV _ ls] = INL (IntV &(LENGTH ls)) ∧
@@ -668,6 +719,7 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ (Msg SelfAddr) [] = INL $ AddressV cx.txn.target ∧
   evaluate_builtin cx _ (Msg ValueSent) [] = INL $ IntV &cx.txn.value ∧
   evaluate_builtin cx _ (Concat b) vs = evaluate_concat b vs ∧
+  evaluate_builtin cx _ (Slice b) [v1; v2; v3] = evaluate_slice v1 v2 v3 b ∧
   evaluate_builtin cx acc (Acc aop) [BytesV _ bs] =
     (let a = lookup_account (word_of_bytes T (0w:address) bs) acc in
       INL $ evaluate_account_op aop a) ∧
@@ -778,6 +830,7 @@ Definition builtin_args_length_ok_def:
   builtin_args_length_ok Not n = (n = 1) ∧
   builtin_args_length_ok Keccak256 n = (n = 1) ∧
   builtin_args_length_ok (Concat _) n = (2 ≤ n) ∧
+  builtin_args_length_ok (Slice _) n = (n = 3) ∧
   builtin_args_length_ok (Bop _) n = (n = 2) ∧
   builtin_args_length_ok (Msg _) n = (n = 0) ∧
   builtin_args_length_ok (Acc _) n = (n = 1)
@@ -998,31 +1051,6 @@ End
 val () = handle_loop_exception_def
   |> SRULE [FUN_EQ_THM, COND_RATOR]
   |> cv_auto_trans;
-
-Definition dest_NumV_def:
-  dest_NumV (IntV i) =
-    (if i < 0 then NONE else SOME (Num i)) ∧
-  dest_NumV _ = NONE
-End
-
-val () = cv_auto_trans dest_NumV_def;
-
-Definition dest_AddressV_def:
-  dest_AddressV (BytesV (Fixed b) bs) =
-    (if b = 20 ∧ LENGTH bs = 20 then
-      SOME (word_of_bytes T (0w:address) bs)
-     else NONE) ∧
-  dest_AddressV _ = NONE
-End
-
-val () = cv_auto_trans dest_AddressV_def;
-
-Definition dest_StringV_def:
-  dest_StringV (StringV _ s) = SOME s ∧
-  dest_StringV _ = NONE
-End
-
-val () = cv_auto_trans dest_StringV_def;
 
 Definition transfer_value_def:
   transfer_value fromAddr toAddr amount = do
