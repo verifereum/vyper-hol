@@ -631,9 +631,8 @@ End
 val () = cv_auto_trans compatible_bound_def;
 
 Definition init_concat_output_def:
-  init_concat_output (Fixed n) (BytesV _ bs) = SOME $ BytesV (Fixed n) bs ∧
-  init_concat_output (Dynamic n) (BytesV _ bs) = SOME $ BytesV (Dynamic n) bs ∧
-  init_concat_output (Dynamic n) (StringV _ s) = SOME $ StringV n s ∧
+  init_concat_output n (BytesV _ bs) = SOME $ BytesV (Dynamic n) bs ∧
+  init_concat_output n (StringV _ s) = SOME $ StringV n s ∧
   init_concat_output _ _ = NONE
 End
 
@@ -660,10 +659,10 @@ End
 val () = cv_auto_trans evaluate_concat_loop_def;
 
 Definition evaluate_concat_def:
-  evaluate_concat b vs =
+  evaluate_concat n vs =
   if NULL vs ∨ NULL (TL vs) then INR "concat <2"
   else
-    case init_concat_output b (HD vs)
+    case init_concat_output n (HD vs)
       of SOME v => evaluate_concat_loop v [] [] (TL vs)
        | NONE => INR "concat type or bound"
 End
@@ -678,7 +677,8 @@ Proof
 QED
 
 Definition evaluate_slice_def:
-  evaluate_slice v sv lv b =
+  evaluate_slice v sv lv n =
+  let b = Dynamic n in
   case dest_NumV sv of NONE => INR "evaluate_slice start" | SOME start =>
   case dest_NumV lv of NONE => INR "evaluate_slice length" | SOME length =>
   case v
@@ -691,13 +691,11 @@ Definition evaluate_slice_def:
        else INR "evaluate_slice range"
        else INR "evaluate_slice BytesV bound")
    | StringV n s => (
-       case b of Dynamic m => (
        if start + length < LENGTH s then
        if compatible_bound b length then
-         INL $ StringV m (TAKE length (DROP start s))
+         INL $ StringV n (TAKE length (DROP start s))
        else INR "evaluate_slice bound"
        else INR "evaluate_slice range")
-       | _ => INR "evaluate_slice StringV bound")
   | _ => INR "evaluate_slice v"
 End
 
@@ -718,8 +716,8 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ (Msg Sender) [] = INL $ AddressV cx.txn.sender ∧
   evaluate_builtin cx _ (Msg SelfAddr) [] = INL $ AddressV cx.txn.target ∧
   evaluate_builtin cx _ (Msg ValueSent) [] = INL $ IntV &cx.txn.value ∧
-  evaluate_builtin cx _ (Concat b) vs = evaluate_concat b vs ∧
-  evaluate_builtin cx _ (Slice b) [v1; v2; v3] = evaluate_slice v1 v2 v3 b ∧
+  evaluate_builtin cx _ (Concat n) vs = evaluate_concat n vs ∧
+  evaluate_builtin cx _ (Slice n) [v1; v2; v3] = evaluate_slice v1 v2 v3 n ∧
   evaluate_builtin cx acc (Acc aop) [BytesV _ bs] =
     (let a = lookup_account (word_of_bytes T (0w:address) bs) acc in
       INL $ evaluate_account_op aop a) ∧

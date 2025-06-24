@@ -173,8 +173,8 @@ in
     list_mk_comb(BytesL_tm, [b, mk_bytes_tm s]))
 end
 fun mk_Builtin b es = list_mk_comb(Builtin_tm, [b, es])
-fun mk_Concat b = mk_comb(Concat_tm, b)
-fun mk_Slice b = mk_comb(Slice_tm, b)
+fun mk_Concat n = mk_comb(Concat_tm, n)
+fun mk_Slice n = mk_comb(Slice_tm, n)
 fun mk_Bop b = mk_comb(Bop_tm, b)
 fun mk_ArrayLit ls = let
   val n = numSyntax.term_of_int $ List.length ls
@@ -463,8 +463,8 @@ fun d_expression () : term decoder = achoose "expr" [
       field "attr" stringtm
     ),
     check_ast_type "Call" $
-    JSONDecode.map (fn (b,es) => mk_Builtin (mk_Concat b) es) $
-    tuple2 (
+    JSONDecode.map (fn (n,es) => mk_Builtin (mk_Concat n) es) $
+    tuple2 ( (* TODO: abstract out this builtin decoding *)
       check (field "func" (tuple2 (
                field "ast_type" string,
                field "id" string)))
@@ -488,14 +488,11 @@ fun d_expression () : term decoder = achoose "expr" [
                field "id" string)))
             (equal ("Name", "slice"))
             "not slice" $
-      field "type" $ choose [
-        check_field "name" "String" $
-        JSONDecode.map (mk_Dynamic o numSyntax.term_of_int)
-          (field "length" int),
-        check_field "name" "Bytes" $
-        JSONDecode.map (mk_Dynamic o numSyntax.term_of_int)
-          (field "length" int)
-      ],
+      field "type" $
+        check (field "name" string)
+          (Lib.C Lib.mem ["String","Bytes"])
+          "concat type not String or Bytes" $
+          field "length" numtm,
       field "args" $ JSONDecode.map
         (fn ls => mk_list(ls, expr_ty)) $
         array (delay d_expression)

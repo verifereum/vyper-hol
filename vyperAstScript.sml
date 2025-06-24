@@ -82,8 +82,8 @@ Datatype:
   = Len
   | Not
   | Keccak256
-  | Concat bound
-  | Slice bound
+  | Concat num (* return type dynamic bound *)
+  | Slice num (* ditto *)
   | Bop binop
   | Msg message_item
   | Acc account_item
