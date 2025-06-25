@@ -1075,6 +1075,27 @@ End
 
 val () = cv_auto_trans get_self_code_def;
 
+Definition evaluate_convert_def:
+  evaluate_convert (IntV i) (BaseT BoolT) = INL $ BoolV (i ≠ 0) ∧
+  evaluate_convert (BytesV _ bs) (BaseT (BytesT b)) =
+    (if compatible_bound b (LENGTH bs)
+     then INL $ BytesV b bs
+     else INR "convert BytesV bound") ∧
+  evaluate_convert (IntV i) (BaseT (IntT n)) =
+    (* TODO: check width *) INL $ IntV i ∧
+  evaluate_convert (IntV i) (BaseT (UintT n)) =
+    (if i < 0 then INR "convert neg" else INL $ IntV i) ∧
+  evaluate_convert (IntV i) (BaseT (BytesT b)) =
+  (* TODO: IntV needs to know its width *)
+    (if compatible_bound b 32
+     then INL $ BytesV b (word_to_bytes ((i2w i):bytes32) T)
+     else INR "convert int to bytes") ∧
+  (* TODO: more conversions *)
+  evaluate_convert _ _ = INR "convert"
+End
+
+val () = cv_auto_trans evaluate_convert_def;
+
 Definition evaluate_type_builtin_def:
   evaluate_type_builtin cx Empty typ vs =
   (case get_self_code cx
@@ -1083,6 +1104,8 @@ Definition evaluate_type_builtin_def:
       | _ => INR "Empty get_self_code") ∧
   evaluate_type_builtin cx MaxValue typ vs =
     evaluate_max_value typ ∧
+  evaluate_type_builtin cx Convert typ [v] =
+    evaluate_convert v typ ∧
   evaluate_type_builtin _ _ _ _ =
     INR "TODO: TypeBuiltin"
 End
