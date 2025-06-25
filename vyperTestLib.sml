@@ -403,8 +403,11 @@ fun theoptstring NONE = "" | theoptstring (SOME s) = s
 
 val binop : term decoder = achoose "binop" [
   check_ast_type "Add" $ succeed Add_tm,
+  check_ast_type "Sub" $ succeed Sub_tm,
   check_ast_type "Mult" $ succeed Mul_tm,
+  check_ast_type "Div" $ succeed Div_tm,
   check_ast_type "And" $ succeed And_tm,
+  check_ast_type "Or" $ succeed Or_tm,
   check_ast_type "In" $ succeed In_tm,
   check_ast_type "NotIn" $ succeed NotIn_tm,
   check_ast_type "Eq" $ succeed Eq_tm,
@@ -996,7 +999,7 @@ val test_files = [
 
   val json_path = el 11 test_files
   val (tests, []) = read_test_json json_path
-  (* TODO: implement convert *)
+  (* TODO: decode assigning immutable vars properly *)
   val (passes, []) = run_tests tests
 
   val json_path = el 12 test_files
@@ -1034,6 +1037,48 @@ val test_files = [
   (* TODO: HashMap, flag, div, ... *)
   val (passes, []) = run_tests tests
 
+  val json_path = el 19 test_files
+  val (tests, [raw_call]) = read_test_json json_path
+  val (passes, []) = run_tests tests
+
+  val json_path = el 20 test_files
+  val (tests, df) = read_test_json json_path
+  (* TODO: immutables *)
+  val (passes, []) = run_tests tests
+
+  val json_path = el 21 test_files
+  val (tests, []) = read_test_json json_path
+  (* TODO: msg.mana *)
+  val (passes, []) = run_tests tests
+
+  val json_path = el 22 test_files
+  val (tests, [selfdestruct1, selfdestruct2]) = read_test_json json_path
+  val (passes, []) = run_tests tests
+
+  val json_path = el 23 test_files
+  val (tests, []) = read_test_json json_path
+  (* TODO: HashMap *)
+  val (passes, []) = run_tests tests
+
+  val json_path = el 24 test_files
+  val (tests, df) = read_test_json json_path
+  (* TODO: Neg, HashMap, len, arbitrary width astType uint int bytes *)
+  val (passes, []) = run_tests tests
+
+  val json_path = el 25 test_files
+  val (tests, df) = read_test_json json_path
+  (* TODO: ... *)
+  val (passes, []) = run_tests tests
+
+  val json_path = el 26 test_files
+  val (tests, []) = read_test_json json_path
+  val (passes, []) = run_tests tests
+
+  val json_path = el 27 test_files
+  val (tests, []) = read_test_json json_path
+  (* TODO: ... *)
+  val (passes, []) = run_tests tests
+
   val (_, (_, tr)) = el 1 decode_fails
 
   val test_jsons = decodeFile rawObject json_path
@@ -1047,7 +1092,7 @@ val test_files = [
   val tr = decode trace tr
 
   val tls = decode (field "annotated_ast" (field "ast" (field "body" (array raw)))) tr
-  val tl = el 3 tls
+  val tl = el 5 tls
   decode toplevel tl
   decode (field "target" (field "type" (field "key_type" astType))) tl
   decode (field "ast_type" string) tl
@@ -1060,7 +1105,7 @@ val test_files = [
   val stmts = decode (field "body" statements) tl
   val stmts = decode (field "body" (array raw)) tl
 
-  val stmt = el 2 stmts
+  val stmt = el 1 stmts
   decode statement stmt
   decode (field "ast_type" string) stmt
   val expr = decode (field "value" expression) stmt
@@ -1070,6 +1115,7 @@ val test_files = [
   val tgt = decode (field "target" baseAssignmentTarget) stmt
 
   decode (field "ast_type" string) expr
+  decode (field "op" raw) expr
   val expr = decode (field "body" raw) expr
 
 
