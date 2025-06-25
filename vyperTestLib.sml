@@ -37,6 +37,9 @@ val NotEq_tm        = astk"NotEq"
 val Lt_tm           = astk"Lt"
 val Gt_tm           = astk"Gt"
 val Sender_tm       = astk"Sender"
+(* TODO add
+val Gas_tm          = astk"Gas"
+*)
 val Balance_tm      = astk"Balance"
 val Concat_tm       = astk"Concat"
 val Slice_tm        = astk"Slice"
@@ -125,13 +128,12 @@ val expr_ty = mk_thy_type{Thy="vyperAst",Tyop="expr",Args=[]}
 val identifier_ty = string_ty
 val argument_ty = pairSyntax.mk_prod(identifier_ty, type_ty)
 val bool_tm = mk_comb(BaseT_tm, BoolT_tm)
-val uint256_tm = mk_comb(BaseT_tm, mk_comb(UintT_tm, numSyntax.term_of_int 256))
-val int128_tm = mk_comb(BaseT_tm, mk_comb(IntT_tm, numSyntax.term_of_int 128))
 val address_tm = mk_comb(BaseT_tm, AddressT_tm)
 fun mk_Fixed n = mk_comb(Fixed_tm, n)
 fun mk_Dynamic n = mk_comb(Dynamic_tm, n)
-val bytes32_tm = mk_comb(BaseT_tm, mk_comb(BytesT_tm, mk_Fixed $
-                                             numSyntax.term_of_int 32))
+fun mk_uint n = mk_comb(BaseT_tm, mk_comb(UintT_tm, n))
+fun mk_int n = mk_comb(BaseT_tm, mk_comb(IntT_tm, n))
+fun mk_bytes n = mk_comb(BaseT_tm, mk_comb(BytesT_tm, mk_Fixed n))
 fun mk_FunctionDecl v m n a t b = list_mk_comb(FunctionDecl_tm, [v,m,n,a,t,b])
 fun mk_VariableDecl (v,m,n,t) = list_mk_comb(VariableDecl_tm, [v,m,n,t])
 fun mk_HashMapDecl (v,n,t,vt) = list_mk_comb(HashMapDecl_tm, [v,n,t,vt])
@@ -194,6 +196,10 @@ in
 end
 val msg_sender_tm = list_mk_comb(Builtin_tm, [
   mk_comb(Msg_tm, Sender_tm), mk_list([], expr_ty)])
+(*
+val msg_gas_tm = list_mk_comb(Builtin_tm, [
+  mk_comb(Msg_tm, Gas_tm), mk_list([], expr_ty)])
+*)
 
 val abi_type_ty = mk_thy_type{Args=[],Thy="contractABI",Tyop="abi_type"}
 val abiBool_tm = prim_mk_const{Name="Bool",Thy="contractABI"}
@@ -335,13 +341,24 @@ val call : term decoder =
 
 fun achoose err ls = orElse(choose ls, fail err)
 
+fun triml n s = String.extract(s,n,NONE)
+val stringToNumTm =
+  numSyntax.term_of_int o
+  Option.valOf o Int.fromString
+
 fun d_astType () : term decoder =
   achoose "astType" [
     check_ast_type "Name" $
     achoose "astType Name" [
-      check_field "id" "uint256" $ succeed uint256_tm, (* TODO: handle arbitrary bit sizes *)
-      check_field "id" "int128" $ succeed int128_tm,
-      check_field "id" "bytes32" $ succeed bytes32_tm,
+      check (field "id" string) (String.isPrefix "uint") "not uint" $
+        JSONDecode.map (mk_uint o stringToNumTm o triml 4) $
+        field "id" string,
+      check (field "id" string) (String.isPrefix "int") "not int" $
+        JSONDecode.map (mk_int o stringToNumTm o triml 3) $
+        field "id" string,
+      check (field "id" string) (String.isPrefix "bytes") "not bytes" $
+        JSONDecode.map (mk_bytes o stringToNumTm o triml 5) $
+        field "id" string,
       check_field "id" "bool" $ succeed bool_tm,
       check_field "id" "address" $ succeed address_tm
     ],
@@ -384,6 +401,13 @@ fun d_astType () : term decoder =
       field "elements" $
       JSONDecode.map (fn ls => mk_list(ls, type_ty)) $
         array (delay d_astType),
+    check_ast_type "Call" $
+      check (field "func" (tuple2 (field "ast_type" string,
+                                   field "id" string)))
+            (equal ("Name", "indexed"))
+            "not indexed" $
+      field "args" $
+      JSONDecode.sub 0 (delay d_astType),
     null NoneT_tm
   ]
 
@@ -494,6 +518,17 @@ fun d_expression () : term decoder = achoose "expr" [
                  (equal "sender")
                  "not msg.sender"
                  (succeed msg_sender_tm)),
+    (*
+    check_ast_type "Attribute" $
+    check (field "value" (tuple2 (field "ast_type" string,
+                                  field "id" string)))
+          (equal ("Name", "msg"))
+          "Attribute not msg"
+          (check (field "attr" string)
+                 (Lib.C Lib.mem ["gas","mana"])
+                 "not msg.gas"
+                 (succeed msg_gas_tm)),
+    *)
     check_ast_type "Attribute" $
     check (field "value" (tuple2 (field "ast_type" string,
                                   field "id" string)))
@@ -1012,13 +1047,13 @@ val test_files = [
 
   val json_path = el 14 test_files
   val (tests, []) = read_test_json json_path
-  (* TODO: decode msg.gas *)
+  (* TODO: decode msg.gas - or unsupported? *)
   val (passes, []) = run_tests tests
 
   val json_path = el 15 test_files
-  val (tests, decode_fails) = read_test_json json_path
+  val (tests, df) = read_test_json json_path
   (* TODO: add decimals *)
-  (* TODO: add pass *)
+  (* TODO: event with no args (pass) *)
   (* unsupported?: raw_log *)
   val (passes, []) = run_tests tests
 
@@ -1062,7 +1097,7 @@ val test_files = [
 
   val json_path = el 24 test_files
   val (tests, df) = read_test_json json_path
-  (* TODO: Neg, HashMap, len, arbitrary width astType uint int bytes *)
+  (* TODO: Neg, HashMap, len, constants in types *)
   val (passes, []) = run_tests tests
 
   val json_path = el 25 test_files
@@ -1079,7 +1114,7 @@ val test_files = [
   (* TODO: ... *)
   val (passes, []) = run_tests tests
 
-  val (_, (_, tr)) = el 1 decode_fails
+  val (_, (_, tr)) = el 2 df
 
   val test_jsons = decodeFile rawObject json_path
   val (name, json) = el 3 test_jsons
@@ -1092,13 +1127,14 @@ val test_files = [
   val tr = decode trace tr
 
   val tls = decode (field "annotated_ast" (field "ast" (field "body" (array raw)))) tr
-  val tl = el 5 tls
+  val tl = el 1 tls
   decode toplevel tl
   decode (field "target" (field "type" (field "key_type" astType))) tl
   decode (field "ast_type" string) tl
+  decode (field "annotation" astType) tl
 
   val ags = decode (field "body" (array raw)) tl
-  decode eventArg (el 1 ags)
+  decode (field "annotation" astType) (el 1 ags)
 
   decode (field "args" (field "args" (array (field "annotation" raw)))) tl
 
