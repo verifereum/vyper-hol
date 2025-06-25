@@ -17,6 +17,7 @@ val AddressT_tm     = astk"AddressT"
 val BaseT_tm        = astk"BaseT"
 val TupleT_tm       = astk"TupleT"
 val ArrayT_tm       = astk"ArrayT"
+val StructT_tm      = astk"StructT"
 val NoneT_tm        = astk"NoneT"
 val BoolL_tm        = astk"BoolL"
 val StringL_tm      = astk"StringL"
@@ -53,6 +54,7 @@ val Name_tm         = astk"Name"
 val TopLevelName_tm = astk"TopLevelName"
 val IfExp_tm        = astk"IfExp"
 val Literal_tm      = astk"Literal"
+val StructLit_tm    = astk"StructLit"
 val Subscript_tm    = astk"Subscript"
 val Attribute_tm    = astk"Attribute"
 val Builtin_tm      = astk"Builtin"
@@ -94,6 +96,7 @@ val Type_tm         = astk"Type"
 val FunctionDecl_tm = astk"FunctionDecl"
 val VariableDecl_tm = astk"VariableDecl"
 val HashMapDecl_tm  = astk"HashMapDecl"
+val StructDecl_tm   = astk"StructDecl"
 val EventDecl_tm    = astk"EventDecl"
 
 fun from_term_option ty = lift_option (mk_option ty) I
@@ -143,6 +146,8 @@ fun mk_BytesM n = mk_comb(BaseT_tm, mk_comb(BytesT_tm, mk_Fixed n))
 fun mk_Expr e = mk_comb(Expr_tm, e)
 fun mk_For s t i n b = list_mk_comb(For_tm, [s,t,i,n,b])
 fun mk_Name s = mk_comb(Name_tm, fromMLstring s)
+fun mk_StructLit (s,ls) = list_mk_comb(StructLit_tm, [
+  s, mk_list(ls, mk_prod(string_ty, expr_ty))])
 fun mk_IfExp (e1,e2,e3) = list_mk_comb(IfExp_tm, [e1,e2,e3])
 fun mk_IntCall s = mk_comb(IntCall_tm, s)
 fun mk_Convert (t,v) = list_mk_comb(TypeBuiltin_tm, [
@@ -360,7 +365,9 @@ fun d_astType () : term decoder =
         JSONDecode.map (mk_bytes o stringToNumTm o triml 5) $
         field "id" string,
       check_field "id" "bool" $ succeed bool_tm,
-      check_field "id" "address" $ succeed address_tm
+      check_field "id" "address" $ succeed address_tm,
+      JSONDecode.map (curry mk_comb StructT_tm) $
+        field "id" stringtm
     ],
     check_ast_type "Subscript" $
     JSONDecode.map mk_String $
@@ -596,6 +603,15 @@ fun d_expression () : term decoder = achoose "expr" [
       JSONDecode.sub 1 astType,
       JSONDecode.sub 0 (delay d_expression)
     ),
+    check_ast_type "Call" $
+      check (field "type" (field "typeclass" string))
+            (equal "struct") "not a struct" $
+      JSONDecode.map mk_StructLit $
+      tuple2 (
+        field "func" $ check_ast_type "Name" $
+          field "id" stringtm,
+        field "keywords" (array (delay d_keyword))
+      ),
     check_ast_type "Name" $
     field "id" (JSONDecode.map mk_Name string),
     check_ast_type "NameConstant" $
@@ -613,6 +629,12 @@ fun d_expression () : term decoder = achoose "expr" [
       field "args" (array (delay d_expression))
     )
   ]
+and d_keyword () : term decoder =
+  JSONDecode.map mk_pair $
+  tuple2 (
+    field "arg" stringtm,
+    field "value" $ delay d_expression
+  )
 val expression = delay d_expression
 
 (* TODO: support variable (expr) args with explicit bounds *)
@@ -815,11 +837,21 @@ val eventDef : term decoder =
     field "body" (array eventArg)
   )
 
+val structDef : term decoder =
+  check_ast_type "StructDef" $
+  JSONDecode.map (fn (n,a) =>
+    list_mk_comb(StructDecl_tm, [n, mk_list(a, argument_ty)])) $
+  tuple2 (
+    field "name" stringtm,
+    field "body" (array eventArg)
+  )
+
 val toplevel : term decoder = achoose "tl" [
     functionDef,
     hashMapDecl,
     variableDecl,
     eventDef,
+    structDef,
     check_ast_type "InterfaceDef" (succeed F)
   ]
 
@@ -1028,9 +1060,8 @@ val test_files = [
   val (passes, []) = run_tests tests
 
   val json_path = el 10 test_files
-  (* TODO: add structs *)
-  val (tests, [decode_fail]) = read_test_json json_path
-  print $ decode (field "source_code" string) $ #2 $ #2 $ decode_fail
+  val (tests, []) = read_test_json json_path
+  val (passes, []) = run_tests tests
 
   val json_path = el 11 test_files
   val (tests, []) = read_test_json json_path
@@ -1083,7 +1114,7 @@ val test_files = [
 
   val json_path = el 21 test_files
   val (tests, []) = read_test_json json_path
-  (* TODO: msg.mana *)
+  (* msg.mana unsupported ?*)
   val (passes, []) = run_tests tests
 
   val json_path = el 22 test_files
@@ -1114,7 +1145,7 @@ val test_files = [
   (* TODO: ... *)
   val (passes, []) = run_tests tests
 
-  val (_, (_, tr)) = el 2 df
+  val (_, (_, tr)) = el 1 df
 
   val test_jsons = decodeFile rawObject json_path
   val (name, json) = el 3 test_jsons
@@ -1127,30 +1158,39 @@ val test_files = [
   val tr = decode trace tr
 
   val tls = decode (field "annotated_ast" (field "ast" (field "body" (array raw)))) tr
-  val tl = el 1 tls
+  val tl = el 8 tls
   decode toplevel tl
   decode (field "target" (field "type" (field "key_type" astType))) tl
   decode (field "ast_type" string) tl
   decode (field "annotation" astType) tl
 
   val ags = decode (field "body" (array raw)) tl
-  decode (field "annotation" astType) (el 1 ags)
+  decode (field "annotation" astType) (el 2 ags)
+  print $ decode (field "source_code" string )tr
 
   decode (field "args" (field "args" (array (field "annotation" raw)))) tl
 
   val stmts = decode (field "body" statements) tl
   val stmts = decode (field "body" (array raw)) tl
 
-  val stmt = el 1 stmts
+  val stmt = el 3 stmts
   decode statement stmt
   decode (field "ast_type" string) stmt
+
   val expr = decode (field "value" expression) stmt
   val expr = decode (field "value" raw) stmt
+
   decode (field "annotation" (field "slice" astType)) stmt
   decode (field "annotation" astType) stmt
+  decode (field "target" raw) stmt
   val tgt = decode (field "target" baseAssignmentTarget) stmt
 
   decode (field "ast_type" string) expr
+  decode (field "func" raw) expr
+  val kwds = decode (field "keywords" (array raw)) expr
+  decode (field "arg" string) $ el 1 kwds
+
+
   decode (field "op" raw) expr
   val expr = decode (field "body" raw) expr
 
