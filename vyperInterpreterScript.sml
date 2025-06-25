@@ -684,7 +684,7 @@ Definition evaluate_slice_def:
   case v
   of BytesV bb bs => (
        if (case bb of Fixed m => m = 32 | _ => T) then
-       if start + length < LENGTH bs then
+       if start + length ≤ LENGTH bs then
        if compatible_bound b length then
          INL $ BytesV b (TAKE length (DROP start bs))
        else INR "evaluate_slice bound"
