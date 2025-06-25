@@ -152,9 +152,9 @@ fun mk_Subscript e1 e2 = list_mk_comb(Subscript_tm, [e1, e2])
 fun mk_If e s1 s2 = list_mk_comb(If_tm, [e,s1,s2])
 fun mk_li i = mk_comb(Literal_tm, mk_comb(IntL_tm, i))
 fun mk_lb b = mk_comb(Literal_tm, mk_comb(BoolL_tm, b))
-fun mk_ls s = mk_comb(Literal_tm,
-  list_mk_comb(StringL_tm, [numSyntax.term_of_int (String.size s),
-                            stringSyntax.fromMLstring s]))
+fun mk_ls (n,s) = mk_comb(Literal_tm,
+  list_mk_comb(StringL_tm, [n, stringSyntax.fromMLstring s]))
+val empty_lstr = mk_ls(numSyntax.zero_tm, "")
 fun mk_Return tmo = mk_comb(Return_tm, lift_option (mk_option expr_ty) I tmo)
 fun mk_AnnAssign (s,t,e) = list_mk_comb(AnnAssign_tm, [s, t, e])
 fun mk_AugAssign t b e = list_mk_comb(AugAssign_tm, [t, b, e])
@@ -177,20 +177,20 @@ fun mk_Builtin b es = list_mk_comb(Builtin_tm, [b, es])
 fun mk_Concat n = mk_comb(Concat_tm, n)
 fun mk_Slice n = mk_comb(Slice_tm, n)
 fun mk_Bop b = mk_comb(Bop_tm, b)
-fun mk_MakeArray b ls =
+fun mk_MakeArray (b,ls) =
   mk_Builtin (mk_comb(MakeArray_tm, b))
     (mk_list (ls, expr_ty))
 fun mk_Tuple ls = let
   val n = numSyntax.term_of_int $ List.length ls
   val b = mk_comb(Fixed_tm, n)
 in
-  mk_MakeArray b ls
+  mk_MakeArray (b, ls)
 end
 fun mk_DynArray ls = let
   val n = numSyntax.term_of_int $ List.length ls
   val b = mk_comb(Dynamic_tm, n)
 in
-  mk_MakeArray b ls
+  mk_MakeArray (b, ls)
 end
 val msg_sender_tm = list_mk_comb(Builtin_tm, [
   mk_comb(Msg_tm, Sender_tm), mk_list([], expr_ty)])
@@ -422,7 +422,11 @@ fun mk_BinOp (l,b,r) =
 
 fun d_expression () : term decoder = achoose "expr" [
     check_ast_type "Str" $
-    JSONDecode.map mk_ls $ field "value" string,
+    JSONDecode.map mk_ls $
+      tuple2 (
+        field "type" (field "length" numtm),
+        field "value" string
+      ),
     check_ast_type "Int" $
     field "value" (JSONDecode.map (mk_li o intSyntax.term_of_int o
                                    Arbint.fromLargeInt) intInf),
@@ -460,9 +464,20 @@ fun d_expression () : term decoder = achoose "expr" [
     check_ast_type "Tuple" $
       JSONDecode.map mk_Tuple $
       field "elements" (array (delay d_expression)),
-    check_ast_type "List" $ (* TODO: how is this different from Tuple? *)
-      JSONDecode.map mk_Tuple $ (* TODO: also handle dynamic arrays *)
+    check_ast_type "List" $
+      check (field "type" (field "name" string))
+            (equal "$SArray") "not a $SArray" $
+      JSONDecode.map mk_Tuple $
       field "elements" (array (delay d_expression)),
+    check_ast_type "List" $
+      check (field "type" (field "name" string))
+            (equal "DynArray") "not a DynArray" $
+      JSONDecode.map mk_MakeArray $
+      tuple2 (
+        JSONDecode.map mk_Dynamic $
+          field "type" (field "length" numtm),
+        field "elements" (array (delay d_expression))
+      ),
     check_ast_type "Subscript" $
     andThen (fn (e1,e2) => succeed $ mk_Subscript e1 e2) $
     tuple2 (field "value" (delay d_expression),
@@ -634,11 +649,11 @@ fun d_statement () : term decoder = achoose "stmt" [
             field "orelse" (d_statements (delay d_statement))),
     check_ast_type "Raise" $
     JSONDecode.map (curry mk_comb Raise_tm) $
-    field "exc" $ orElse(expression, null $ mk_ls ""),
+    field "exc" $ orElse(expression, null $ empty_lstr),
     check_ast_type "Assert" $
     JSONDecode.map mk_Assert
       (tuple2 (field "test" expression,
-               field "msg" (orElse (expression, null (mk_ls ""))))),
+               field "msg" (orElse (expression, null $ empty_lstr)))),
     check_ast_type "Log" $
     JSONDecode.map mk_Log $
       field "value" $
@@ -972,7 +987,6 @@ val test_files = [
 
   val json_path = el 9 test_files
   val (tests, []) = read_test_json json_path
-  (* TODO: implement convert *)
   val (passes, []) = run_tests tests
 
   val json_path = el 10 test_files
