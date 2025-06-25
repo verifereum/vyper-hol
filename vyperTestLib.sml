@@ -38,9 +38,6 @@ val NotEq_tm        = astk"NotEq"
 val Lt_tm           = astk"Lt"
 val Gt_tm           = astk"Gt"
 val Sender_tm       = astk"Sender"
-(* TODO add
-val Gas_tm          = astk"Gas"
-*)
 val Balance_tm      = astk"Balance"
 val Concat_tm       = astk"Concat"
 val Slice_tm        = astk"Slice"
@@ -292,7 +289,7 @@ fun parse_abi_type s =
   else if s = "bool" then abiBool_tm
   else if s = "address" then abiAddress_tm
   else if s = "string" then abiString_tm
-  else raise Fail s
+  else raise Fail ("parse_abi_type: " ^ s)
 
 fun check cd pred err d =
   andThen (fn x => if pred x then d else fail err) cd
@@ -870,13 +867,21 @@ val toplevels : term decoder =
     mk_list(List.filter (equal toplevel_ty o type_of) ls, toplevel_ty)
   ) (array toplevel)
 
-val abiType : term decoder =
+val abiBaseType : term decoder =
   JSONDecode.map parse_abi_type string
+
+fun d_abiType () : term decoder = achoose "abiType" [
+  check_field "type" "tuple" $
+    JSONDecode.map (curry mk_comb abiTuple_tm o
+                    (curry $ flip mk_list) abi_type_ty) $
+    field "components" (array (delay d_abiType)),
+  field "type" abiBaseType
+]
+val abiType = delay d_abiType
 
 val abiArg : term decoder =
   JSONDecode.map mk_pair $
-  tuple2 (field "name" stringtm,
-          field "type" abiType)
+  tuple2 (field "name" stringtm, abiType)
 
 val abiMutability : term decoder =
   andThen (fn s =>
@@ -1078,8 +1083,7 @@ val test_files = [
 
   val json_path = el 14 test_files
   val (tests, []) = read_test_json json_path
-  (* TODO: decode msg.gas - or unsupported? *)
-  val (passes, []) = run_tests tests
+  val (passes, [msg_gas]) = run_tests tests
 
   val json_path = el 15 test_files
   val (tests, df) = read_test_json json_path
@@ -1094,8 +1098,11 @@ val test_files = [
   val (passes, []) = run_tests tests
 
   val json_path = el 17 test_files
-  (* TODO: add structs *)
-  val (tests, decode_fails) = read_test_json json_path
+  val (tests, df) = read_test_json json_path
+  (* unsupported staticcall *)
+  (* unsupport import *)
+  (* TODO: HashMap nesting *)
+  (* TODO: clear_transient_storage trace *)
   val (passes, []) = run_tests tests
 
   val json_path = el 18 test_files
