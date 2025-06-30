@@ -433,7 +433,9 @@ val binop : term decoder = achoose "binop" [
   check_ast_type "Add" $ succeed Add_tm,
   check_ast_type "Sub" $ succeed Sub_tm,
   check_ast_type "Mult" $ succeed Mul_tm,
+  check_ast_type "FloorDiv" $ succeed Div_tm,
   check_ast_type "Div" $ succeed Div_tm,
+  check_ast_type "Mod" $ succeed Mod_tm,
   check_ast_type "And" $ succeed And_tm,
   check_ast_type "Or" $ succeed Or_tm,
   check_ast_type "In" $ succeed In_tm,
@@ -797,7 +799,12 @@ val variableDecl : term decoder =
 val astHmType : term decoder = achoose "astHmType" [
   check_field "name" "String" $
   JSONDecode.map mk_String (field "length" numtm),
-  check_field "name" "bool" $ succeed bool_tm
+  check_field "name" "bool" $ succeed bool_tm,
+  check_field "name" "uint256" $ succeed $ mk_uint $ stringToNumTm "256",
+  check_field "name" "int128" $ succeed $ mk_int $ stringToNumTm "128",
+  check_field "typeclass" "struct" $
+    JSONDecode.map (curry mk_comb StructT_tm) $
+      field "name" stringtm
 ]
 
 val astValueType : term decoder = achoose "astValueType" [
@@ -1038,6 +1045,8 @@ val test_files = [
   val json_path = el 4 test_files
   val (tests, [extcall]) = read_test_json json_path
   (* unsupported: external call *)
+  val true = String.isSubstring "extcall" $
+             decode (field "source_code" string) (#2(#2 extcall))
   val (passes, []) = run_tests tests
 
   val json_path = el 5 test_files
@@ -1047,8 +1056,14 @@ val test_files = [
   val json_path = el 6 test_files
   val (tests, [raw_call, proxy, static_call]) = read_test_json json_path
   (* unsupported: raw_call *)
+  val true = String.isSubstring "raw_call" $
+             decode (field "source_code" string) (#2(#2 raw_call))
   (* unsupported: create_minimal_proxy_to *)
+  val true = String.isSubstring "create_minimal_proxy_to" $
+             decode (field "source_code" string) (#2(#2 proxy))
   (* unsupported: static external call *)
+  val true = String.isSubstring "staticcall" $
+             decode (field "source_code" string) (#2(#2 static_call))
   val (passes, []) = run_tests tests
 
   val json_path = el 7 test_files
@@ -1058,6 +1073,8 @@ val test_files = [
   val json_path = el 8 test_files
   val (tests, [exports]) = read_test_json json_path
   (* unsupported: exports *)
+  val true = String.isSubstring "exports" $
+             decode (field "source_code" string) (#2(#2 exports))
   val (passes, []) = run_tests tests
 
   val json_path = el 9 test_files
@@ -1093,25 +1110,48 @@ val test_files = [
   val (passes, []) = run_tests tests
 
   val json_path = el 16 test_files
-  val (tests, decode_fails) = read_test_json json_path
-  (* unsupported?: raw_revert *)
+  val (tests, [raw_revert1, raw_revert2, raw_revert3]) = read_test_json json_path
+  val true = String.isSubstring "raw_revert" $
+             decode (field "source_code" string) (#2(#2 raw_revert1))
+  val true = String.isSubstring "raw_revert" $
+             decode (field "source_code" string) (#2(#2 raw_revert2))
+  val true = String.isSubstring "raw_revert" $
+             decode (field "source_code" string) (#2(#2 raw_revert3))
   val (passes, []) = run_tests tests
 
   val json_path = el 17 test_files
   val (tests, df) = read_test_json json_path
-  (* unsupported staticcall *)
-  (* unsupport import *)
-  (* TODO: HashMap nesting *)
   (* TODO: clear_transient_storage trace *)
+  val df1 = List.filter (fn (_,(_,j)) => not $
+    equal "clear_transient_storage" $ decode (field "trace_type" string) j) df
+  (* unsupported: import *)
+  val df2 = List.filter (fn (_,(_,j)) => not $
+    String.isSubstring "import" $
+    decode (field "source_code" string) j) df1
+  (* unsupported staticcall *)
+  val true = List.all (fn (_,(_, j)) =>
+    String.isSubstring "staticcall" $
+    decode (field "source_code" string) j) df2
   val (passes, []) = run_tests tests
 
   val json_path = el 18 test_files
-  val (tests, decode_fails) = read_test_json json_path
-  (* TODO: HashMap, flag, div, ... *)
+  val (tests, [flag1, flag2, extcall1, extcall2, staticcall1]) = read_test_json json_path
+  val true = String.isSubstring "flag" $
+             decode (field "source_code" string) (#2(#2 flag1))
+  val true = String.isSubstring "flag" $
+             decode (field "source_code" string) (#2(#2 flag2))
+  val true = String.isSubstring "extcall" $
+             decode (field "source_code" string) (#2(#2 extcall1))
+  val true = String.isSubstring "extcall" $
+             decode (field "source_code" string) (#2(#2 extcall2))
+  val true = String.isSubstring "staticcall" $
+             decode (field "source_code" string) (#2(#2 staticcall1))
   val (passes, []) = run_tests tests
 
   val json_path = el 19 test_files
   val (tests, [raw_call]) = read_test_json json_path
+  val true = String.isSubstring "raw_call" $
+             decode (field "source_code" string) (#2(#2 raw_call))
   val (passes, []) = run_tests tests
 
   val json_path = el 20 test_files
@@ -1129,8 +1169,8 @@ val test_files = [
   val (passes, []) = run_tests tests
 
   val json_path = el 23 test_files
-  val (tests, []) = read_test_json json_path
-  (* TODO: HashMap *)
+  val (tests, df) = read_test_json json_path
+  (* TODO: HashMap bytes in key type *)
   val (passes, []) = run_tests tests
 
   val json_path = el 24 test_files
@@ -1153,6 +1193,8 @@ val test_files = [
   val (passes, []) = run_tests tests
 
   val (_, (_, tr)) = el 1 df
+  val (name, json) = el 133 test_jsons
+  trydecode $ (el 133 test_jsons, ([],[]))
 
   val test_jsons = decodeFile rawObject json_path
   val (name, json) = el 3 test_jsons
@@ -1165,7 +1207,7 @@ val test_files = [
   val tr = decode trace tr
 
   val tls = decode (field "annotated_ast" (field "ast" (field "body" (array raw)))) tr
-  val tl = el 8 tls
+  val tl = el 4 tls
   decode toplevel tl
   decode (field "target" (field "type" (field "key_type" astType))) tl
   decode (field "ast_type" string) tl
@@ -1180,7 +1222,7 @@ val test_files = [
   val stmts = decode (field "body" statements) tl
   val stmts = decode (field "body" (array raw)) tl
 
-  val stmt = el 3 stmts
+  val stmt = el 2 stmts
   decode statement stmt
   decode (field "ast_type" string) stmt
 
@@ -1193,7 +1235,8 @@ val test_files = [
   val tgt = decode (field "target" baseAssignmentTarget) stmt
 
   decode (field "ast_type" string) expr
-  decode (field "func" raw) expr
+  decode (field "op" binop) stmt
+  val expr = decode (field "left" raw) expr
   val kwds = decode (field "keywords" (array raw)) expr
   decode (field "arg" string) $ el 1 kwds
 
