@@ -551,6 +551,7 @@ Datatype:
   ; function_name: identifier
   ; args: value list
   ; value: num
+  ; is_creation: bool
   |>
 End
 
@@ -574,7 +575,8 @@ Definition empty_call_txn_def:
     target := 0w;
     function_name := "";
     args := [];
-    value := 0
+    value := 0;
+    is_creation := F
   |>
 End
 
@@ -1815,6 +1817,7 @@ Definition evaluate_def:
     return $ gv::gvs
   od ∧
   eval_base_target cx (NameTarget id) = do
+    is_creation <<- cx.txn.is_creation;
     sc <- get_scopes;
     n <<- string_to_num id;
     cs <- lift_option (find_containing_scope n sc) "NameTarget lookup";
@@ -1989,6 +1992,12 @@ Definition initial_globals_def:
      (vals |+ (key, iv),
       (key, iv) :: tras)) ∧
   (* TODO: handle Constants and  Immutables *)
+  (* Immutables: make a separate field? (alongside globals)
+  * and reuse NameTarget lookup and assign for these
+  * (but assign only allowed during is_creation = T, and error if local var with
+  * same name)
+  * lookup error if in both locals and immutables, otherwise use the one it's in *)
+  (* Constants: ignore for now (assume values are folded into AST)? *)
   initial_globals env (HashMapDecl _ id kt vt :: ts) =
   (let (vals, tras) = initial_globals env ts in
    let key = string_to_num id in

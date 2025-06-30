@@ -116,7 +116,8 @@ Definition run_deployment_def:
           ; function_name := name
           ; args := FST $ compute_vyper_args dt.sourceAst
                           Deploy name argTys (DROP 4 dt.callData)
-          ; value := dt.value |>;
+          ; value := dt.value
+          ; is_creation := T |>;
   in (sns, load_contract am tx dt.sourceAst)
 End
 
@@ -134,7 +135,8 @@ Definition run_call_def:
           ; target := ct.target
           ; function_name := name
           ; args := FST ar
-          ; value := ct.value |>;
+          ; value := ct.value
+          ; is_creation := F |>;
   (* TODO: set static based on ct.static *)
   (* TODO: set env data somewhere? *)
   in (call_external am tx, (SND (SND fna), SND ar))
