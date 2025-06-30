@@ -11,6 +11,7 @@ val Dynamic_tm      = astk"Dynamic"
 val UintT_tm        = astk"UintT"
 val IntT_tm         = astk"IntT"
 val BoolT_tm        = astk"BoolT"
+val DecimalT_tm     = astk"DecimalT"
 val StringT_tm      = astk"StringT"
 val BytesT_tm       = astk"BytesT"
 val AddressT_tm     = astk"AddressT"
@@ -129,6 +130,7 @@ val identifier_ty = string_ty
 val argument_ty = pairSyntax.mk_prod(identifier_ty, type_ty)
 val bool_tm = mk_comb(BaseT_tm, BoolT_tm)
 val address_tm = mk_comb(BaseT_tm, AddressT_tm)
+val decimal_tm = mk_comb(BaseT_tm, DecimalT_tm)
 fun mk_Fixed n = mk_comb(Fixed_tm, n)
 fun mk_Dynamic n = mk_comb(Dynamic_tm, n)
 fun mk_uint n = mk_comb(BaseT_tm, mk_comb(UintT_tm, n))
@@ -363,6 +365,7 @@ fun d_astType () : term decoder =
         field "id" string,
       check_field "id" "bool" $ succeed bool_tm,
       check_field "id" "address" $ succeed address_tm,
+      check_field "id" "decimal" $ succeed decimal_tm,
       JSONDecode.map (curry mk_comb StructT_tm) $
         field "id" stringtm
     ],
@@ -453,6 +456,18 @@ fun mk_BoolOp (b,a) =
 fun mk_BinOp (l,b,r) =
   mk_BoolOp (b,[l,r])
 
+fun parseDecimal s = let
+  val ss = Substring.full s
+  val (bd,dd) = Substring.splitl(not o equal #".") ss
+  val ad = Substring.triml 1 dd
+  val ad = StringCvt.padRight #"0" 10 (Substring.string ad)
+  val ds = String.^(Substring.string bd,ad)
+  val n = Arbint.fromString ds
+  val t = intSyntax.term_of_int n
+in
+  t
+end
+
 fun d_expression () : term decoder = achoose "expr" [
     check_ast_type "Str" $
     JSONDecode.map mk_ls $
@@ -463,6 +478,8 @@ fun d_expression () : term decoder = achoose "expr" [
     check_ast_type "Int" $
     field "value" (JSONDecode.map (mk_li o intSyntax.term_of_int o
                                    Arbint.fromLargeInt) intInf),
+    check_ast_type "Decimal" $
+    field "value" (JSONDecode.map (mk_li o parseDecimal) string),
     check_ast_type "Hex" $
     field "value" (JSONDecode.map mk_Hex string),
     check_ast_type "Bytes" $
@@ -838,7 +855,9 @@ val eventDef : term decoder =
     list_mk_comb(EventDecl_tm, [n, mk_list(a, argument_ty)])) $
   tuple2 (
     field "name" stringtm,
-    field "body" (array eventArg)
+    field "body" $ orElse (
+      array eventArg,
+      JSONDecode.sub 0 (check_ast_type "Pass" (succeed [])))
   )
 
 val structDef : term decoder =
@@ -1103,10 +1122,11 @@ val test_files = [
   val (passes, [msg_gas]) = run_tests tests
 
   val json_path = el 15 test_files
-  val (tests, df) = read_test_json json_path
-  (* TODO: add decimals *)
-  (* TODO: event with no args (pass) *)
-  (* unsupported?: raw_log *)
+  val (tests, raw_logs) = read_test_json json_path
+  val true = List.all (fn (_,(_,j)) =>
+    String.isSubstring "raw_log" $
+    decode (field "source_code" string) j) raw_logs
+  (* TODO: ... *)
   val (passes, []) = run_tests tests
 
   val json_path = el 16 test_files
@@ -1146,6 +1166,7 @@ val test_files = [
              decode (field "source_code" string) (#2(#2 extcall2))
   val true = String.isSubstring "staticcall" $
              decode (field "source_code" string) (#2(#2 staticcall1))
+  (* TODO: ... *)
   val (passes, []) = run_tests tests
 
   val json_path = el 19 test_files
@@ -1176,10 +1197,11 @@ val test_files = [
   val json_path = el 24 test_files
   val (tests, df) = read_test_json json_path
   (* TODO: Neg, HashMap, len, constants in types *)
+  (* TODO: ... *)
   val (passes, []) = run_tests tests
 
   val json_path = el 25 test_files
-  val (tests, df) = read_test_json json_path
+  val (tests, []) = read_test_json json_path
   (* TODO: ... *)
   val (passes, []) = run_tests tests
 
@@ -1207,7 +1229,7 @@ val test_files = [
   val tr = decode trace tr
 
   val tls = decode (field "annotated_ast" (field "ast" (field "body" (array raw)))) tr
-  val tl = el 4 tls
+  val tl = el 2 tls
   decode toplevel tl
   decode (field "target" (field "type" (field "key_type" astType))) tl
   decode (field "ast_type" string) tl
@@ -1222,7 +1244,7 @@ val test_files = [
   val stmts = decode (field "body" statements) tl
   val stmts = decode (field "body" (array raw)) tl
 
-  val stmt = el 2 stmts
+  val stmt = el 1 stmts
   decode statement stmt
   decode (field "ast_type" string) stmt
 
