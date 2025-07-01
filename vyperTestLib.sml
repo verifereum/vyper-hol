@@ -951,6 +951,8 @@ val Deployment_tm = prim_mk_const{Thy="vyperTestRunner",Name="Deployment"}
 val deployment_trace_ty = #1 $ dom_rng $ type_of Deployment_tm
 
 val SetBalance_tm = prim_mk_const{Thy="vyperTestRunner",Name="SetBalance"}
+val ClearTransientStorage_tm =
+  prim_mk_const{Thy="vyperTestRunner",Name="ClearTransientStorage"}
 
 val deployment : term decoder =
   check_trace_type "deployment" $
@@ -979,7 +981,9 @@ val trace : term decoder =
   achoose "trace" [
     JSONDecode.map (curry mk_comb Call_tm) call,
     JSONDecode.map (curry mk_comb Deployment_tm) deployment,
-    andThen (fn (a,b) => succeed $ list_mk_comb(SetBalance_tm, [a,b])) $
+    check_trace_type "clear_transient_storage" $
+      succeed ClearTransientStorage_tm,
+    JSONDecode.map (fn (a,b) => list_mk_comb(SetBalance_tm, [a,b])) $
     tuple2 (
       field "address" address,
       field "value" numtm)
@@ -1141,17 +1145,15 @@ val test_files = [
 
   val json_path = el 17 test_files
   val (tests, df) = read_test_json json_path
-  (* TODO: clear_transient_storage trace *)
-  val df1 = List.filter (fn (_,(_,j)) => not $
-    equal "clear_transient_storage" $ decode (field "trace_type" string) j) df
   (* unsupported: import *)
   val df2 = List.filter (fn (_,(_,j)) => not $
     String.isSubstring "import" $
-    decode (field "source_code" string) j) df1
+    decode (field "source_code" string) j) df
   (* unsupported staticcall *)
   val true = List.all (fn (_,(_, j)) =>
     String.isSubstring "staticcall" $
     decode (field "source_code" string) j) df2
+  (* TODO: ... *)
   val (passes, []) = run_tests tests
 
   val json_path = el 18 test_files
@@ -1182,7 +1184,7 @@ val test_files = [
 
   val json_path = el 21 test_files
   val (tests, []) = read_test_json json_path
-  (* msg.mana unsupported ?*)
+  (* TODO: msg.mana unsupported *)
   val (passes, []) = run_tests tests
 
   val json_path = el 22 test_files

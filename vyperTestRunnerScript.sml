@@ -88,6 +88,7 @@ Datatype:
   = Deployment deployment_trace
   | Call call_trace
   | SetBalance address num
+  | ClearTransientStorage
 End
 
 Definition compute_vyper_args_def:
@@ -187,6 +188,7 @@ Definition run_trace_def:
       snss = (dt.deployedAddress,sns)::snss;
     in
       (snss, SND result)
+   | ClearTransientStorage => (snss, INL am) (* TODO actually clear tstore *)
    | SetBalance addr bal => (snss,
        INL (am with accounts updated_by
             (update_account addr
