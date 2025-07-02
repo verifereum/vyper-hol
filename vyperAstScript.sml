@@ -81,6 +81,7 @@ Datatype:
   builtin
   = Len
   | Not
+  | Neg
   | Keccak256
   | Concat num (* return type dynamic bound *)
   | Slice num (* ditto *)

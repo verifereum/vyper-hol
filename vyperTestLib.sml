@@ -41,6 +41,9 @@ val Gt_tm           = astk"Gt"
 val Sender_tm       = astk"Sender"
 val SelfAddr_tm     = astk"SelfAddr"
 val Balance_tm      = astk"Balance"
+val Len_tm          = astk"Len"
+val Not_tm          = astk"Not"
+val Neg_tm          = astk"Neg"
 val Concat_tm       = astk"Concat"
 val Slice_tm        = astk"Slice"
 val MakeArray_tm = astk"MakeArray"
@@ -183,6 +186,7 @@ end
 fun mk_Builtin b es = list_mk_comb(Builtin_tm, [b, es])
 fun mk_Concat n = mk_comb(Concat_tm, n)
 fun mk_Slice n = mk_comb(Slice_tm, n)
+fun mk_Neg t = mk_Builtin Neg_tm (mk_list([t], expr_ty))
 fun mk_Bop b = mk_comb(Bop_tm, b)
 fun mk_MakeArray (b,ls) =
   mk_Builtin (mk_comb(MakeArray_tm, b))
@@ -499,6 +503,12 @@ fun d_expression () : term decoder = achoose "expr" [
       field "body" $ delay d_expression,
       field "orelse" $ delay d_expression
     ),
+    check_ast_type "UnaryOp" $
+    check (field "op" (field "ast_type" string))
+          (equal "USub")
+          "not USub" $
+    JSONDecode.map mk_Neg $
+    field "operand" $ delay d_expression,
     check (field "ast_type" string)
           (Lib.C Lib.mem ["BinOp", "Compare"])
           "not binop/compare" $
@@ -824,6 +834,8 @@ val variableDecl : term decoder =
 val astHmType : term decoder = achoose "astHmType" [
   check_field "name" "String" $
   JSONDecode.map mk_String (field "length" numtm),
+  check_field "name" "Bytes" $
+  JSONDecode.map mk_Bytes (field "length" numtm),
   check_field "name" "bool" $ succeed bool_tm,
   check_field "name" "uint256" $ succeed $ mk_uint $ stringToNumTm "256",
   check_field "name" "int128" $ succeed $ mk_int $ stringToNumTm "128",
@@ -1163,8 +1175,10 @@ val test_files = [
   val true = List.all (fn (_,(_, j)) =>
     String.isSubstring "staticcall" $
     decode (field "source_code" string) j) df2
-  (* TODO: ... *)
   val (passes, []) = run_tests tests
+  (* TODO: actually do transient variables...
+  val SOME (_, traces) = List.find (equal (el 1 fails) o #1) tests
+  *)
 
   val json_path = el 18 test_files
   val (tests, [flag1, flag2, extcall1, extcall2, staticcall1]) = read_test_json json_path
@@ -1178,8 +1192,11 @@ val test_files = [
              decode (field "source_code" string) (#2(#2 extcall2))
   val true = String.isSubstring "staticcall" $
              decode (field "source_code" string) (#2(#2 staticcall1))
-  (* TODO: ... *)
+  (* TODO: abi_to_vyper Struct support, assign to hashmap of struct *)
   val (passes, []) = run_tests tests
+  (*
+  val SOME (name, traces) = List.find (equal (el 3 fails) o #1) tests
+  *)
 
   val json_path = el 19 test_files
   val (tests, [raw_call]) = read_test_json json_path
@@ -1202,13 +1219,12 @@ val test_files = [
   val (passes, []) = run_tests tests
 
   val json_path = el 23 test_files
-  val (tests, df) = read_test_json json_path
-  (* TODO: HashMap bytes in key type *)
+  val (tests, []) = read_test_json json_path
   val (passes, []) = run_tests tests
 
   val json_path = el 24 test_files
   val (tests, df) = read_test_json json_path
-  (* TODO: Neg, HashMap, len, constants in types *)
+  (* TODO: HashMap bytes, len, constants in types *)
   (* TODO: ... *)
   val (passes, []) = run_tests tests
 
@@ -1243,7 +1259,7 @@ val test_files = [
   val tls = decode (field "annotated_ast" (field "ast" (field "body" (array raw)))) tr
   val tl = el 2 tls
   decode toplevel tl
-  decode (field "target" (field "type" (field "key_type" astType))) tl
+  decode (field "target" (field "type" (field "key_type" astHmType))) tl
   decode (field "ast_type" string) tl
   decode (field "annotation" astType) tl
 
@@ -1262,6 +1278,9 @@ val test_files = [
 
   val expr = decode (field "value" expression) stmt
   val expr = decode (field "value" raw) stmt
+  decode (field "ast_type" string) expr
+  el 1 $ decode (field "elements" (array raw)) $ el 2 $ decode (field "elements" (array raw)) $ el 2 $ decode (field "elements" (array raw)) expr
+
 
   decode (field "annotation" (field "slice" astType)) stmt
   decode (field "annotation" astType) stmt

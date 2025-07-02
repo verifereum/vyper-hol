@@ -710,6 +710,7 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ Not [BoolV b] = INL (BoolV (¬b)) ∧
   evaluate_builtin cx _ Not [IntV i] =
     (if 0 ≤ i then INL (IntV (int_not i)) else INR "signed Not") ∧
+  evaluate_builtin cx _ Neg [IntV i] = INL (IntV (-i)) ∧
   evaluate_builtin cx _ Keccak256 [BytesV _ ls] = INL $ BytesV (Fixed 32) $
     Keccak_256_w64 ls ∧
   (* TODO: reject BytesV with invalid bounds for Keccak256 *)
@@ -829,6 +830,7 @@ val () = cv_auto_trans evaluate_attribute_def;
 Definition builtin_args_length_ok_def:
   builtin_args_length_ok Len n = (n = 1n) ∧
   builtin_args_length_ok Not n = (n = 1) ∧
+  builtin_args_length_ok Neg n = (n = 1) ∧
   builtin_args_length_ok Keccak256 n = (n = 1) ∧
   builtin_args_length_ok (Concat _) n = (2 ≤ n) ∧
   builtin_args_length_ok (Slice _) n = (n = 3) ∧
