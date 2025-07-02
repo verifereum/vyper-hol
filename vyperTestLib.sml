@@ -39,6 +39,7 @@ val NotEq_tm        = astk"NotEq"
 val Lt_tm           = astk"Lt"
 val Gt_tm           = astk"Gt"
 val Sender_tm       = astk"Sender"
+val SelfAddr_tm     = astk"SelfAddr"
 val Balance_tm      = astk"Balance"
 val Concat_tm       = astk"Concat"
 val Slice_tm        = astk"Slice"
@@ -200,6 +201,8 @@ in
 end
 val msg_sender_tm = list_mk_comb(Builtin_tm, [
   mk_comb(Msg_tm, Sender_tm), mk_list([], expr_ty)])
+val self_addr_tm = list_mk_comb(Builtin_tm, [
+  mk_comb(Msg_tm, SelfAddr_tm), mk_list([], expr_ty)])
 (*
 val msg_gas_tm = list_mk_comb(Builtin_tm, [
   mk_comb(Msg_tm, Gas_tm), mk_list([], expr_ty)])
@@ -628,6 +631,11 @@ fun d_expression () : term decoder = achoose "expr" [
           field "id" stringtm,
         field "keywords" (array (delay d_keyword))
       ),
+    check_ast_type "Name" $
+    check (tuple2 (field "id" string, field "type" (field "name" string)))
+          (equal ("self", "address"))
+          "not self:address" $
+          succeed $ self_addr_tm,
     check_ast_type "Name" $
     field "id" (JSONDecode.map mk_Name string),
     check_ast_type "NameConstant" $
@@ -1130,8 +1138,10 @@ val test_files = [
   val true = List.all (fn (_,(_,j)) =>
     String.isSubstring "raw_log" $
     decode (field "source_code" string) j) raw_logs
-  (* TODO: ... *)
   val (passes, []) = run_tests tests
+  (* TODO: block.timestamp builtin
+  val SOME (_, traces) = List.find (equal (el 2 fails) o #1) tests
+  *)
 
   val json_path = el 16 test_files
   val (tests, [raw_revert1, raw_revert2, raw_revert3]) = read_test_json json_path
