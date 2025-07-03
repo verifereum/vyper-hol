@@ -1870,7 +1870,8 @@ Definition evaluate_def:
     tv1 <- eval_expr cx e1;
     tv2 <- eval_expr cx e2;
     v2 <- get_Value tv2;
-    ts <- lift_option (get_self_code cx) "Subscript get_self_code";
+    (* TODO: do we need this to work differently in deploy? *)
+    ts <<- (case get_self_code cx of SOME ts => ts | _ (* in deploy *) => []);
     tv <- lift_sum $ evaluate_subscript ts tv1 v2;
     return tv
   od ∧

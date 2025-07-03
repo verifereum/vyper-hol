@@ -509,7 +509,7 @@ Definition apply_val_def:
     apply_exc cx (Error "not BoolV") st k ∧
   apply_val cx v2 st (SubscriptK1 tv1 k) =
     liftk cx ApplyTv (do
-      ts <- lift_option (get_self_code cx) "Subscript get_self_code";
+      ts <<- (case get_self_code cx of SOME ts => ts | _ => []);
       lift_sum (evaluate_subscript ts tv1 v2)
     od st) k ∧
   apply_val cx v st (AttributeK id k) =
@@ -524,7 +524,7 @@ End
 val () = apply_val_def
   |> SRULE [liftk1, prod_CASE_rator, sum_CASE_rator,
             option_CASE_rator, lift_option_def, lift_sum_def,
-            bind_def, ignore_bind_def]
+            LET_RATOR, bind_def, ignore_bind_def]
   |> cv_auto_trans;
 
 Definition apply_vals_def:

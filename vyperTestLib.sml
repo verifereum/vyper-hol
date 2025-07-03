@@ -1244,7 +1244,7 @@ val test_files = [
 
   val json_path = el 24 test_files
   val (tests, []) = read_test_json json_path
-  (* TODO: ... *)
+  (* TODO: immutables, clampers *)
   val (passes, []) = run_tests tests
 
   val json_path = el 25 test_files
