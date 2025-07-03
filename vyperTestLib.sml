@@ -188,6 +188,7 @@ fun mk_Concat n = mk_comb(Concat_tm, n)
 fun mk_Slice n = mk_comb(Slice_tm, n)
 fun mk_Neg t = mk_Builtin Neg_tm (mk_list([t], expr_ty))
 fun mk_Bop b = mk_comb(Bop_tm, b)
+fun mk_Len e = mk_Builtin Len_tm (mk_list([e], expr_ty))
 fun mk_MakeArray (b,ls) =
   mk_Builtin (mk_comb(MakeArray_tm, b))
     (mk_list (ls, expr_ty))
@@ -377,39 +378,47 @@ fun d_astType () : term decoder =
         field "id" stringtm
     ],
     check_ast_type "Subscript" $
-    JSONDecode.map mk_String $
-    check (field "value" (check_ast_type "Name" $ field "id" string))
-          (equal "String") "not a String" $
-    field "slice" $
-      check_ast_type "Int" $
-      field "value" numtm,
-    check_ast_type "Subscript" $
-    JSONDecode.map mk_Bytes $
-    check (field "value" (check_ast_type "Name" $ field "id" string))
-          (equal "Bytes") "not a Bytes" $
-    field "slice" $
-      check_ast_type "Int" $
-      field "value" numtm,
-    check_ast_type "Subscript" $
-    andThen (fn (t,b) => succeed $ list_mk_comb(ArrayT_tm, [t,b])) $
-    tuple2 (
-      field "value" (delay d_astType),
+      JSONDecode.map mk_String $
+      check (field "value" (check_ast_type "Name" $ field "id" string))
+            (equal "String") "not a String" $
       field "slice" $
-      check_ast_type "Int" $
-      field "value" (JSONDecode.map mk_Fixed numtm)
-    ),
+        check_ast_type "Int" $
+        field "value" numtm,
     check_ast_type "Subscript" $
-    JSONDecode.map (fn (t,b) => list_mk_comb(ArrayT_tm, [t,b])) $
-    check (field "value" (check_ast_type "Name" $ field "id" string))
-          (equal "DynArray") "not a DynArray" $
-    field "slice" $
-    check_ast_type "Tuple" $
-    field "elements" $
-    tuple2 (
-      JSONDecode.sub 0 (delay d_astType),
-      JSONDecode.sub 1 $ check_ast_type "Int" $
-        field "value" $ JSONDecode.map mk_Dynamic numtm
-    ),
+      JSONDecode.map mk_Bytes $
+      check (field "value" (check_ast_type "Name" $ field "id" string))
+            (equal "Bytes") "not a Bytes" $
+      field "slice" $
+        check_ast_type "Int" $
+        field "value" numtm,
+    check_ast_type "Subscript" $
+      JSONDecode.map (fn (t,b) => list_mk_comb(ArrayT_tm, [t,b])) $
+      check (field "value" (check_ast_type "Name" $ field "id" string))
+            (equal "DynArray") "not a DynArray" $
+      field "slice" $
+      check_ast_type "Tuple" $
+      field "elements" $
+      tuple2 (
+        JSONDecode.sub 0 (delay d_astType),
+        JSONDecode.sub 1 $ achoose "DynArray slice"
+        let val di = check_ast_type "Int" $
+                     field "value" $
+                     JSONDecode.map mk_Dynamic numtm in
+          [di, field "folded_value" di]
+        end
+      ),
+    check_ast_type "Subscript" $
+      JSONDecode.map (fn (t,b) => list_mk_comb(ArrayT_tm, [t,b])) $
+      tuple2 (
+        field "value" (delay d_astType),
+        field "slice" $
+        achoose "Array slice"
+        let val di = check_ast_type "Int" $
+                     field "value" $
+                     JSONDecode.map mk_Fixed numtm in
+          [di, field "folded_value" di]
+        end
+      ),
     check_ast_type "Tuple" $
     JSONDecode.map (curry mk_comb TupleT_tm) $
       field "elements" $
@@ -586,6 +595,15 @@ fun d_expression () : term decoder = achoose "expr" [
       field "value" (delay d_expression),
       field "attr" stringtm
     ),
+    check_ast_type "Call" $
+      check (field "func" $ tuple2 (field "ast_type" string,
+                                    field "id" string))
+            (equal ("Name", "len"))
+            "not len" $
+      JSONDecode.map mk_Len $
+      field "args" $
+      JSONDecode.sub 0 $
+      delay d_expression,
     check_ast_type "Call" $
     JSONDecode.map (fn (n,es) => mk_Builtin (mk_Concat n) es) $
     tuple2 ( (* TODO: abstract out this builtin decoding *)
@@ -833,9 +851,11 @@ val variableDecl : term decoder =
 
 val astHmType : term decoder = achoose "astHmType" [
   check_field "name" "String" $
-  JSONDecode.map mk_String (field "length" numtm),
+    JSONDecode.map mk_String (field "length" numtm),
   check_field "name" "Bytes" $
-  JSONDecode.map mk_Bytes (field "length" numtm),
+    JSONDecode.map mk_Bytes (field "length" numtm),
+  check_field "typeclass" "bytes_m" $
+    JSONDecode.map mk_BytesM $ field "m" numtm,
   check_field "name" "bool" $ succeed bool_tm,
   check_field "name" "uint256" $ succeed $ mk_uint $ stringToNumTm "256",
   check_field "name" "int128" $ succeed $ mk_int $ stringToNumTm "128",
@@ -1223,8 +1243,7 @@ val test_files = [
   val (passes, []) = run_tests tests
 
   val json_path = el 24 test_files
-  val (tests, df) = read_test_json json_path
-  (* TODO: HashMap bytes, len, constants in types *)
+  val (tests, []) = read_test_json json_path
   (* TODO: ... *)
   val (passes, []) = run_tests tests
 
@@ -1288,7 +1307,7 @@ val test_files = [
   val tgt = decode (field "target" baseAssignmentTarget) stmt
 
   decode (field "ast_type" string) expr
-  decode (field "op" binop) stmt
+  decode (field "op" binop) expr
   val expr = decode (field "left" raw) expr
   val kwds = decode (field "keywords" (array raw)) expr
   decode (field "arg" string) $ el 1 kwds
