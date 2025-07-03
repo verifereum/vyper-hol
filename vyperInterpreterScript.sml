@@ -845,8 +845,16 @@ val () = cv_auto_trans builtin_args_length_ok_def;
 Type log = “:identifier # (value list)”;
 
 Datatype:
+  globals_state = <|
+    mutables: num |-> toplevel_value
+  ; transients: (num # toplevel_value) list
+  ; immutables: num |-> value option
+  |>
+End
+
+Datatype:
   evaluation_state = <|
-    globals: (address, (num |-> toplevel_value) # (num # toplevel_value) list) alist
+    globals: (address, globals_state) alist
   ; logs: log list
   ; scopes: scope list
   ; accounts: evm_accounts
@@ -964,8 +972,8 @@ val () = cv_auto_trans set_current_globals_def;
 
 Definition lookup_global_def:
   lookup_global cx n = do
-    (gbs, trs) <- get_current_globals cx;
-    case FLOOKUP gbs n
+    gbs <- get_current_globals cx;
+    case FLOOKUP gbs.mutables n
       of NONE => raise $ Error "lookup_global"
        | SOME v => return v
   od
@@ -977,8 +985,9 @@ val () = lookup_global_def
 
 Definition set_global_def:
   set_global cx n v = do
-    (gbs, trs) <- get_current_globals cx;
-    set_current_globals cx $ (gbs |+ (n,v), trs)
+    gbs <- get_current_globals cx;
+    set_current_globals cx $
+      gbs with mutables updated_by (λm. m |+ (n,v))
   od
 End
 
@@ -1980,32 +1989,45 @@ Proof
   \\ goal_assum drule
 QED
 
-(* TODO: assumes unique identifiers, but should check? *)
-Definition initial_globals_def:
-  initial_globals env [] = (FEMPTY, []) ∧
-  initial_globals env (VariableDecl _ Storage id typ :: ts) =
-  (let (vals, tras) = initial_globals env ts in
-   let key = string_to_num id in
-     (vals |+ (key, Value $ default_value env typ),
-      tras)) ∧
-  initial_globals env (VariableDecl _ Transient id typ :: ts) =
-  (let (vals, tras) = initial_globals env ts in
-   let key = string_to_num id in
-   let iv = Value $ default_value env typ in
-     (vals |+ (key, iv),
-      (key, iv) :: tras)) ∧
-  (* TODO: handle Constants and  Immutables *)
-  (* Immutables: make a separate field? (alongside globals)
-  * and reuse NameTarget lookup and assign for these
+Definition empty_globals_def:
+  empty_globals = <|
+    mutables := FEMPTY
+  ; transients := []
+  ; immutables := FEMPTY
+  |>
+End
+
+  (* TODO: Immutables: make NameTarget lookup and assign work for them
   * (but assign only allowed during is_creation = T, and error if local var with
   * same name)
   * lookup error if in both locals and immutables, otherwise use the one it's in *)
-  (* Constants: ignore for now (assume values are folded into AST)? *)
-  initial_globals env (HashMapDecl _ id kt vt :: ts) =
-  (let (vals, tras) = initial_globals env ts in
+
+(* TODO: assumes unique identifiers, but should check? *)
+Definition initial_globals_def:
+  initial_globals env [] = empty_globals ∧
+  initial_globals env (VariableDecl _ Storage id typ :: ts) =
+  (let gbs = initial_globals env ts in
    let key = string_to_num id in
-     (vals |+ (key, HashMap vt []),
-      tras)) ∧
+     gbs with mutables updated_by
+       (λm. m |+ (key, Value $ default_value env typ))) ∧
+  initial_globals env (VariableDecl _ Transient id typ :: ts) =
+  (let gbs = initial_globals env ts in
+   let key = string_to_num id in
+   let iv = Value $ default_value env typ in
+     gbs with <|
+       mutables updated_by (λm. m |+ (key, iv))
+     ; transients updated_by (λtrs. (key,iv)::trs)
+     |>) ∧
+  initial_globals env (VariableDecl _ Immutable id typ :: ts) =
+  (let gbs = initial_globals env ts in
+   let key = string_to_num id in
+     gbs with immutables updated_by (λim. im |+ (key, NONE))) ∧
+  (* TODO: handle Constants? or ignore since assuming folded into AST *)
+  initial_globals env (HashMapDecl _ id kt vt :: ts) =
+  (let gbs = initial_globals env ts in
+   let key = string_to_num id in
+     gbs with mutables updated_by
+       (λm. m |+ (key, HashMap vt []))) ∧
   initial_globals env (t :: ts) = initial_globals env ts
 End
 
@@ -2024,7 +2046,7 @@ val () = cv_auto_trans initial_evaluation_context_def;
 Datatype:
   abstract_machine = <|
     sources: (address, toplevel list) alist
-  ; globals: (address, (num |-> toplevel_value) # (num # toplevel_value) list) alist
+  ; globals: (address, globals_state) alist
   ; accounts: evm_accounts
   |>
 End
@@ -2059,7 +2081,8 @@ End
 val () = cv_auto_trans abstract_machine_from_state_def;
 
 Definition reset_transient_globals_def:
-  reset_transient_globals (gbs:num |-> toplevel_value, trs) = (gbs |++ trs, trs)
+  reset_transient_globals gbs =
+  gbs with mutables updated_by (λm. m |++ gbs.transients)
 End
 
 val () = cv_auto_trans reset_transient_globals_def;
