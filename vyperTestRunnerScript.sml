@@ -70,6 +70,25 @@ End
 
 val () = cv_auto_trans compute_selector_names_def;
 
+Definition find_deploy_function_name_def:
+  find_deploy_function_name [] = "__init__" ∧
+  find_deploy_function_name ((FunctionDecl Deploy _ name _ _ _)::_) = name ∧
+  find_deploy_function_name (_::ts) = find_deploy_function_name ts
+End
+
+val () = cv_auto_trans find_deploy_function_name_def;
+
+Definition find_args_by_name_def:
+  find_args_by_name n [] = [] ∧
+  find_args_by_name n (Function x::ls) =
+  (if n = x.name then MAP SND x.inputs else
+     find_args_by_name n ls) ∧
+  find_args_by_name n (_::ls) =
+  find_args_by_name n ls
+End
+
+val () = cv_auto_trans find_args_by_name_def;
+
 Datatype:
   call_trace = <|
     sender: address
@@ -108,15 +127,13 @@ End
 Definition run_deployment_def:
   run_deployment am dt = let
     sns = compute_selector_names dt.contractAbi;
-    sel = TAKE 4 dt.callData;
-    fna = case ALOOKUP sns sel of SOME fna => fna
-             | NONE => ("__init__", [], []);
-    name = FST fna; argTys = FST (SND fna);
+    name = find_deploy_function_name dt.sourceAst;
+    argTys = find_args_by_name name dt.contractAbi;
     tx = <| sender := dt.deployer
           ; target := dt.deployedAddress
           ; function_name := name
           ; args := FST $ compute_vyper_args dt.sourceAst
-                          Deploy name argTys (DROP 4 dt.callData)
+                          Deploy name argTys dt.callData
           ; value := dt.value
           ; is_creation := T |>;
   in (sns, load_contract am tx dt.sourceAst)
