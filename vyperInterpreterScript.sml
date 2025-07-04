@@ -1879,8 +1879,7 @@ Definition evaluate_def:
     tv1 <- eval_expr cx e1;
     tv2 <- eval_expr cx e2;
     v2 <- get_Value tv2;
-    (* TODO: do we need this to work differently in deploy? *)
-    ts <<- (case get_self_code cx of SOME ts => ts | _ (* in deploy *) => []);
+    ts <- lift_option (get_self_code cx) "Subscript get_self_code";
     tv <- lift_sum $ evaluate_subscript ts tv1 v2;
     return tv
   od ∧
@@ -2158,7 +2157,7 @@ Definition load_contract_def:
      | NONE => INR $ Error "no constructor"
      | SOME (args, ret, body) =>
        (* TODO: update balances on return *)
-       let cx = initial_evaluation_context am.sources tx in
+       let cx = initial_evaluation_context ((addr,ts)::am.sources) tx in
        case call_external_function am cx ts args tx.args body
          of (INR e, _) => INR e
           | (_, am) => INL (am with sources updated_by CONS (addr, ts))
