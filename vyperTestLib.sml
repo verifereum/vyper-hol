@@ -1169,9 +1169,9 @@ val test_files = [
   val true = List.all (fn (_,(_,j)) =>
     String.isSubstring "raw_log" $
     decode (field "source_code" string) j) raw_logs
-  val (passes, []) = run_tests tests
+  val (passes, [block_timestamp1, block_timestamp2]) = run_tests tests
   (* TODO: block.timestamp builtin
-  val SOME (_, traces) = List.find (equal (el 2 fails) o #1) tests
+  val SOME (_, traces) = List.find (equal block_timestamp1 o #1) tests
   *)
 
   val json_path = el 16 test_files
@@ -1195,8 +1195,8 @@ val test_files = [
     String.isSubstring "staticcall" $
     decode (field "source_code" string) j) df2
   val (passes, []) = run_tests tests
-  (* TODO: actually do transient variables...
-  val SOME (_, traces) = List.find (equal (el 1 fails) o #1) tests
+  (* TODO: clear transient storage, struct in abi_to_vyper, ...
+  val SOME (_, traces) = List.find (equal (el 5 fails) o #1) tests
   *)
 
   val json_path = el 18 test_files
@@ -1225,9 +1225,14 @@ val test_files = [
 
   val json_path = el 20 test_files
   val (tests, [TODO_raw_init_code, create_copy_of]) = read_test_json json_path
-  (* TODO: check the decode failures *)
-  (* TODO: immutables *)
-  val (passes, []) = run_tests tests
+  val true = decode (field "source_code" (null true)) (#2(#2 TODO_raw_init_code))
+  val true = String.isSubstring "create_copy_of" $
+             decode (field "source_code" string) (#2(#2 create_copy_of))
+  (* TODO: abi_to_vyper Struct, immutables initial value, ... *)
+  val (passes, fails) = run_tests tests
+  (*
+  val SOME (name, traces) = List.find (equal (el 6 fails) o #1) tests
+  *)
 
   val json_path = el 21 test_files
   val (tests, []) = read_test_json json_path
@@ -1249,8 +1254,8 @@ val test_files = [
 
   val json_path = el 25 test_files
   val (tests, []) = read_test_json json_path
-  (* TODO: ... *)
-  val (passes, []) = run_tests tests
+  (* TODO: clampers (in convert) *)
+  val (passes, fails) = run_tests tests
 
   val json_path = el 26 test_files
   val (tests, []) = read_test_json json_path
@@ -1258,8 +1263,8 @@ val test_files = [
 
   val json_path = el 27 test_files
   val (tests, []) = read_test_json json_path
-  (* TODO: ... *)
-  val (passes, []) = run_tests tests
+  (* TODO: And and Or can take multiple arguments *)
+  val (passes, fails) = run_tests tests
 
   val (_, (_, tr)) = el 1 df
   val (name, json) = el 133 test_jsons
