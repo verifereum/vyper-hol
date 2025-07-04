@@ -459,6 +459,7 @@ val () = cv_auto_trans (REWRITE_RULE[TO_FLOOKUP]find_containing_scope_def);
 Datatype:
   location
   = ScopedVar containing_scope identifier
+  | ImmutableVar identifier
   | TopLevelVar identifier
 End
 
@@ -995,6 +996,29 @@ val () = set_global_def
   |> SRULE [bind_def, FUN_EQ_THM, UNCURRY]
   |> cv_auto_trans;
 
+Definition get_immutables_def:
+  get_immutables cx = do
+    gbs <- get_current_globals cx;
+    return gbs.immutables
+  od
+End
+
+val () = get_immutables_def
+  |> SRULE [bind_def]
+  |> cv_auto_trans;
+
+Definition set_immutable_def:
+  set_immutable cx n v = do
+    gbs <- get_current_globals cx;
+    set_current_globals cx $
+      gbs with immutables updated_by (λim. im |+ (n, SOME v))
+  od
+End
+
+val () = set_immutable_def
+  |> SRULE [bind_def]
+  |> cv_auto_trans;
+
 Definition get_accounts_def:
   get_accounts st = return st.accounts st
 End
@@ -1218,10 +1242,11 @@ Definition lookup_function_def:
   lookup_function name vis (FunctionDecl fv fm id args ret body :: ts) =
   (if id = name ∧ vis = fv then SOME (args, ret, body)
    else lookup_function name vis ts) ∧
-  lookup_function name External (VariableDecl Public _ id typ :: ts) =
+  lookup_function name External (VariableDecl Public mut id typ :: ts) =
   (if id = name then
     if ¬is_ArrayT typ
-    then SOME ([], typ, [Return (SOME (TopLevelName id))])
+    then SOME ([], typ, [Return (SOME (if mut = Immutable then Name id
+                                       else TopLevelName id))])
     else SOME $ getter id uint256 (Type (ArrayT_type typ))
    else lookup_function name External ts) ∧
   lookup_function name External (HashMapDecl Public id kt vt :: ts) =
@@ -1442,6 +1467,13 @@ Definition assign_target_def:
     tv' <- lift_sum $ assign_toplevel tv (REVERSE is) ao;
     set_global cx ni tv';
     return tv
+  od ∧
+  assign_target cx (BaseTargetV (ImmutableVar id) is) ao = do
+    ni <<- string_to_num id;
+    a <<- NoneV;
+    a' <- lift_sum $ assign_subscripts a (REVERSE is) ao;
+    set_immutable cx ni a';
+    return $ Value a
   od ∧
   assign_target _ _ _ = raise (Error "TODO: TupleTargetV")
 End
@@ -1712,6 +1744,31 @@ Proof
   \\ Cases_on`fv` \\ gvs[dest_Internal_FunctionDef_def]
 QED
 
+Definition exactly_one_option_def:
+  exactly_one_option NONE NONE = INR "no option" ∧
+  exactly_one_option (SOME _) (SOME _) = INR "two options" ∧
+  exactly_one_option (SOME x) _ = INL x ∧
+  exactly_one_option _ (SOME y) = INL y
+End
+
+val () = cv_auto_trans exactly_one_option_def;
+
+Definition immutable_target_def:
+  immutable_target (imms: num |-> value option) id n =
+  case FLOOKUP imms n of SOME NONE => SOME $ ImmutableVar id
+     | _ => NONE
+End
+
+val () = cv_auto_trans immutable_target_def;
+
+Definition scoped_var_target_def:
+  scoped_var_target sc id n =
+  case find_containing_scope n sc of NONE => NONE |
+    SOME cs => SOME $ ScopedVar cs id
+End
+
+val () = cv_auto_trans scoped_var_target_def;
+
 Definition evaluate_def:
   eval_stmt cx Pass = return () ∧
   eval_stmt cx Continue = raise ContinueException ∧
@@ -1828,11 +1885,16 @@ Definition evaluate_def:
     return $ gv::gvs
   od ∧
   eval_base_target cx (NameTarget id) = do
-    is_creation <<- cx.txn.is_creation;
     sc <- get_scopes;
     n <<- string_to_num id;
-    cs <- lift_option (find_containing_scope n sc) "NameTarget lookup";
-    return $ (ScopedVar cs id, [])
+    svo <<- scoped_var_target sc id n;
+    ivo <- if cx.txn.is_creation
+           then do imms <- get_immutables cx;
+                   return $ immutable_target imms id n
+                od
+           else return NONE;
+    v <- lift_sum $ exactly_one_option svo ivo;
+    return $ (v, [])
   od ∧
   eval_base_target cx (TopLevelNameTarget id) =
     return $ (TopLevelVar id, []) ∧
@@ -1857,7 +1919,10 @@ Definition evaluate_def:
   od ∧
   eval_expr cx (Name id) = do
     env <- get_scopes;
-    v <- lift_option (lookup_scopes (string_to_num id) env) "lookup Name";
+    imms <- get_immutables cx;
+    n <<- string_to_num id;
+    v <- lift_sum $ exactly_one_option
+           (lookup_scopes n env) (OPTION_JOIN (FLOOKUP imms n));
     return $ Value v
   od ∧
   eval_expr cx (TopLevelName id) = lookup_global cx (string_to_num id) ∧
@@ -1996,11 +2061,6 @@ Definition empty_globals_def:
   |>
 End
 
-  (* TODO: Immutables: make NameTarget lookup and assign work for them
-  * (but assign only allowed during is_creation = T, and error if local var with
-  * same name)
-  * lookup error if in both locals and immutables, otherwise use the one it's in *)
-
 (* TODO: assumes unique identifiers, but should check? *)
 Definition initial_globals_def:
   initial_globals env [] = empty_globals ∧
@@ -2123,7 +2183,7 @@ Definition call_external_function_def:
    | SOME env =>
   (case constants_env ts
    of NONE => (INR $ Error "call constants_env", am)
-    | SOME cenv =>
+    | SOME cenv => (* TODO: how do we stop constants being assigned to? *)
    let st = initial_state am [env; cenv] in
    let srcs = am.sources in
    let (res, st) =

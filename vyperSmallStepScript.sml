@@ -115,8 +115,14 @@ Definition eval_base_target_cps_def:
     (let r = do
         sc <- get_scopes;
         n <<- string_to_num id;
-        cs <- lift_option (find_containing_scope n sc) "NameTarget lookup";
-        return $ (ScopedVar cs id, []) od st in
+        svo <<- scoped_var_target sc id n;
+        ivo <- if cx.txn.is_creation
+               then do imms <- get_immutables cx;
+                       return $ immutable_target imms id n
+                    od
+               else return NONE;
+        v <- lift_sum $ exactly_one_option svo ivo;
+        return $ (v, []) od st in
      liftk cx ApplyBaseTarget r k) ∧
   eval_base_target_cps cx (TopLevelNameTarget id) st k =
     AK cx (ApplyBaseTarget (TopLevelVar id, [])) st k ∧
@@ -128,7 +134,7 @@ End
 
 val () = eval_base_target_cps_def
   |> SRULE [bind_def, ignore_bind_def,
-            LET_RATOR, lift_option_def,
+            LET_RATOR, COND_RATOR, lift_option_def,
             prod_CASE_rator, sum_CASE_rator,
             option_CASE_rator, liftk1]
   |> cv_auto_trans;
@@ -137,7 +143,10 @@ Definition eval_expr_cps_def:
   eval_expr_cps cx1 (Name id) st k =
     liftk cx1 ApplyTv
       (do env <- get_scopes;
-          v <- lift_option (lookup_scopes (string_to_num id) env) "lookup Name";
+          imms <- get_immutables cx1;
+          n <<- string_to_num id;
+          v <- lift_sum $ exactly_one_option
+                 (lookup_scopes n env) (OPTION_JOIN (FLOOKUP imms n));
           return $ Value v od st) k ∧
   eval_expr_cps cx2 (TopLevelName id) st k =
     liftk cx2 ApplyTv (lookup_global cx2 (string_to_num id) st) k ∧

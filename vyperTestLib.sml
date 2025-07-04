@@ -1150,7 +1150,6 @@ val test_files = [
 
   val json_path = el 11 test_files
   val (tests, []) = read_test_json json_path
-  (* TODO: decode assigning immutable vars properly *)
   val (passes, []) = run_tests tests
 
   val json_path = el 12 test_files
@@ -1225,7 +1224,8 @@ val test_files = [
   val (passes, []) = run_tests tests
 
   val json_path = el 20 test_files
-  val (tests, df) = read_test_json json_path
+  val (tests, [TODO_raw_init_code, create_copy_of]) = read_test_json json_path
+  (* TODO: check the decode failures *)
   (* TODO: immutables *)
   val (passes, []) = run_tests tests
 
