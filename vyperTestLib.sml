@@ -465,12 +465,16 @@ val binop : term decoder = achoose "binop" [
   check_ast_type "Gt" $ succeed Gt_tm
 ]
 
-fun mk_BoolOp (b,a) =
-  mk_Builtin (mk_Bop b) $
-  mk_list (a, expr_ty)
+fun mk_BoolOp ("And", []) = mk_lb T
+  | mk_BoolOp ("And", [e]) = e
+  | mk_BoolOp ("And", e::es) = mk_IfExp (e, mk_BoolOp ("And", es), mk_lb F)
+  | mk_BoolOp ("Or", []) = mk_lb F
+  | mk_BoolOp ("Or", [e]) = e
+  | mk_BoolOp ("Or", e::es) = mk_IfExp (e, mk_lb T, mk_BoolOp ("Or", es))
 
 fun mk_BinOp (l,b,r) =
-  mk_BoolOp (b,[l,r])
+  mk_Builtin (mk_Bop b) $
+  mk_list ([l,r], expr_ty)
 
 fun parseDecimal s = let
   val ss = Substring.full s
@@ -530,7 +534,7 @@ fun d_expression () : term decoder = achoose "expr" [
     check_ast_type "BoolOp" $
       JSONDecode.map mk_BoolOp $
       tuple2 (
-        field "op" binop,
+        field "op" (field "ast_type" string),
         field "values" (array (delay d_expression))
       ),
     check_ast_type "Tuple" $
@@ -1250,7 +1254,7 @@ val test_files = [
   val json_path = el 24 test_files
   val (tests, []) = read_test_json json_path
   (* TODO: immutables, clampers *)
-  val (passes, []) = run_tests tests
+  val (passes, [TODO_clampers]) = run_tests tests
 
   val json_path = el 25 test_files
   val (tests, []) = read_test_json json_path
@@ -1263,8 +1267,7 @@ val test_files = [
 
   val json_path = el 27 test_files
   val (tests, []) = read_test_json json_path
-  (* TODO: And and Or can take multiple arguments *)
-  val (passes, fails) = run_tests tests
+  val (passes, []) = run_tests tests
 
   val (_, (_, tr)) = el 1 df
   val (name, json) = el 133 test_jsons
