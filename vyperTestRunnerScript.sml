@@ -206,7 +206,8 @@ Definition run_trace_def:
       snss = (dt.deployedAddress,sns)::snss;
     in
       (snss, SND result)
-   | ClearTransientStorage => (snss, INL am) (* TODO actually clear tstore *)
+   | ClearTransientStorage => (snss,
+       INL (am with globals updated_by reset_all_transient_globals))
    | SetBalance addr bal => (snss,
        INL (am with accounts updated_by
             (update_account addr

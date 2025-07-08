@@ -2192,7 +2192,7 @@ Definition call_external_function_def:
        | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs st)
        | (INR (ReturnException v), st) => (INL v, abstract_machine_from_state srcs st)
        | (INR e, st) => (INR e, abstract_machine_from_state srcs st)) in
-    (res, st with globals updated_by reset_all_transient_globals))
+    (res, st (* with globals updated_by reset_all_transient_globals -- done separately *)))
 End
 
 Definition call_external_def:
