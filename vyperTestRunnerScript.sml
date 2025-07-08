@@ -117,11 +117,12 @@ Definition compute_vyper_args_def:
                 of SOME (args,ret,_) => (MAP SND args, ret)
                   | NONE => ([], NoneT);
     vyTys = FST vyTysRet;
-    vyArgsTup = abi_to_vyper (TupleT vyTys) abiArgsTup;
+    tenv = type_env ts;
+    vyArgsTup = abi_to_vyper tenv (TupleT vyTys) abiArgsTup;
     vyArgs = (case OPTION_BIND vyArgsTup extract_elements
                 of NONE => [] | SOME ls => ls)
   in
-    (vyArgs, SND vyTysRet)
+    (vyArgs, SND vyTysRet, tenv)
 End
 
 Definition run_deployment_def:
@@ -231,12 +232,13 @@ Definition run_trace_def:
               rets = SND cr;
               abiRetTys = FST rets;
               abiRetTy = Tuple abiRetTys;
-              rawVyRetTy = SND rets;
+              ar = SND rets;
+              rawVyRetTy = FST ar; tenv = SND ar;
               alreadyTuple = (rawVyRetTy = NoneT ∨ is_TupleT rawVyRetTy);
               vyRetTy = if alreadyTuple then rawVyRetTy
                         else TupleT [rawVyRetTy];
               abiret = dec abiRetTy out;
-              vyret = abi_to_vyper vyRetTy abiret;
+              vyret = abi_to_vyper tenv vyRetTy abiret;
               expect = if alreadyTuple then v
                        else ArrayV (Fixed 1) [v];
             in

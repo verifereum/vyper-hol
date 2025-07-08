@@ -27,37 +27,41 @@ Termination
 End
 
 Definition abi_to_vyper_def[simp]:
-  abi_to_vyper (BaseT $ UintT z) (NumV n) = SOME $ IntV (&n) ∧
-  abi_to_vyper (BaseT $ IntT z) (IntV i) = SOME $ IntV i ∧
-  abi_to_vyper (BaseT $ AddressT) (NumV n) = SOME $ AddressV (n2w n) ∧
-  abi_to_vyper (BaseT $ BoolT) (NumV n) = SOME $ BoolV (0 < n) ∧
-  abi_to_vyper (BaseT $ BytesT b) (BytesV bs) =
+  abi_to_vyper env (BaseT $ UintT z) (NumV n) = SOME $ IntV (&n) ∧
+  abi_to_vyper env (BaseT $ IntT z) (IntV i) = SOME $ IntV i ∧
+  abi_to_vyper env (BaseT $ AddressT) (NumV n) = SOME $ AddressV (n2w n) ∧
+  abi_to_vyper env (BaseT $ BoolT) (NumV n) = SOME $ BoolV (0 < n) ∧
+  abi_to_vyper env (BaseT $ BytesT b) (BytesV bs) =
     (if compatible_bound b (LENGTH bs) then SOME $ BytesV b bs else NONE) ∧
-  abi_to_vyper (BaseT $ StringT z) (BytesV bs) =
+  abi_to_vyper env (BaseT $ StringT z) (BytesV bs) =
     (if LENGTH bs ≤ z then SOME $ StringV z (MAP (CHR o w2n) bs) else NONE) ∧
-  abi_to_vyper (TupleT ts) (ListV vs) =
-    (case abi_to_vyper_list ts vs of NONE => NONE
+  abi_to_vyper env (BaseT $ DecimalT) (IntV i) = SOME $ IntV i ∧
+  abi_to_vyper env (TupleT ts) (ListV vs) =
+    (case abi_to_vyper_list env ts vs of NONE => NONE
         | SOME vs => SOME $ ArrayV (Fixed (LENGTH ts)) vs) ∧
-  abi_to_vyper (ArrayT t b) (ListV vs) = (
+  abi_to_vyper env (ArrayT t b) (ListV vs) = (
     let n = LENGTH vs in
       if compatible_bound b n then
-        case abi_to_vyper_list (REPLICATE n t) vs of NONE => NONE
+        case abi_to_vyper_list env (REPLICATE n t) vs of NONE => NONE
            | SOME vs => SOME $ ArrayV b vs
       else NONE ) ∧
-  abi_to_vyper NoneT (ListV ls) = (if NULL ls then SOME NoneV else NONE) ∧
-  abi_to_vyper _ _ = NONE ∧
-  (* TODO: decimals *)
-  (* TODO: flags *)
+  abi_to_vyper env NoneT (ListV ls) = (if NULL ls then SOME NoneV else NONE) ∧
+  abi_to_vyper env (StructT id) (ListV vs) =
+    (case FLOOKUP env (string_to_num id) of NONE => NONE
+       | SOME args => case abi_to_vyper_list env (MAP SND args) vs of NONE => NONE
+       | SOME vs => SOME $ StructV $ ZIP (MAP FST args, vs)) ∧
+  abi_to_vyper _ _ _ = NONE ∧
   (* TODO: structs *)
-  abi_to_vyper_list [] [] = SOME [] ∧
-  abi_to_vyper_list (t::ts) (v::vs) =
-    (case abi_to_vyper t v of NONE => NONE | SOME v =>
-       case abi_to_vyper_list ts vs of NONE => NONE | SOME vs =>
+  (* TODO: flags *)
+  abi_to_vyper_list env [] [] = SOME [] ∧
+  abi_to_vyper_list env (t::ts) (v::vs) =
+    (case abi_to_vyper env t v of NONE => NONE | SOME v =>
+       case abi_to_vyper_list env ts vs of NONE => NONE | SOME vs =>
          SOME (v::vs)) ∧
-  abi_to_vyper_list _ _ = NONE
+  abi_to_vyper_list _ _ _ = NONE
 Termination
-  WF_REL_TAC ‘measure (λx. case x of INL (_, v) => abi_value_size v
-                                   | INR (_, vs) => list_size abi_value_size vs)’
+  WF_REL_TAC ‘measure (λx. case x of INL (_, _, v) => abi_value_size v
+                                   | INR (_, _, vs) => list_size abi_value_size vs)’
 End
 
 Definition CHR_o_w2n_def:
@@ -86,8 +90,8 @@ val abi_to_vyper_pre_def =
   |> cv_auto_trans_pre;
 
 Theorem abi_to_vyper_pre[cv_pre]:
-  (!v0 v. abi_to_vyper_pre v0 v) ∧
-  (!v0 v. abi_to_vyper_list_pre v0 v)
+  (!v1 v0 v. abi_to_vyper_pre v1 v0 v) ∧
+  (!v1 v0 v. abi_to_vyper_list_pre v1 v0 v)
 Proof
   ho_match_mp_tac abi_to_vyper_ind
   \\ rw[]
