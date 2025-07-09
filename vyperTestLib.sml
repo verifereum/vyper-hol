@@ -1199,8 +1199,8 @@ val test_files = [
     String.isSubstring "staticcall" $
     decode (field "source_code" string) j) df2
   val (passes, [TODO_transient1, TODO_transient2]) = run_tests tests
-  (* TODO: clear transient storage
-  val SOME (_, traces) = List.find (equal (el 1 fails) o #1) tests
+  (* TODO: assign struct in hashmap
+  val SOME (_, traces) = List.find (equal TODO_transient1 o #1) tests
   *)
 
   val json_path = el 18 test_files
@@ -1232,12 +1232,7 @@ val test_files = [
   val true = decode (field "source_code" (null true)) (#2(#2 TODO_raw_init_code))
   val true = String.isSubstring "create_copy_of" $
              decode (field "source_code" string) (#2(#2 create_copy_of))
-  (* TODO: immutables initial value *)
-  val (passes, [TODO_immutable_init1, TODO_immutable_init2,
-                TODO_immutable_init3, TODO_immutable_init4]) = run_tests tests
-  (*
-  val SOME (name, traces) = List.find (equal (el 6 fails) o #1) tests
-  *)
+  val (passes, []) = run_tests tests
 
   val json_path = el 21 test_files
   val (tests, []) = read_test_json json_path

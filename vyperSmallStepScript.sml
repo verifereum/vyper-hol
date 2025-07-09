@@ -146,7 +146,7 @@ Definition eval_expr_cps_def:
           imms <- get_immutables cx1;
           n <<- string_to_num id;
           v <- lift_sum $ exactly_one_option
-                 (lookup_scopes n env) (OPTION_JOIN (FLOOKUP imms n));
+                 (lookup_scopes n env) (FLOOKUP imms n);
           return $ Value v od st) k ∧
   eval_expr_cps cx2 (TopLevelName id) st k =
     liftk cx2 ApplyTv (lookup_global cx2 (string_to_num id) st) k ∧

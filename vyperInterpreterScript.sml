@@ -849,7 +849,7 @@ Datatype:
   globals_state = <|
     mutables: num |-> toplevel_value
   ; transients: (num # toplevel_value) list
-  ; immutables: num |-> value option
+  ; immutables: num |-> value
   |>
 End
 
@@ -1011,7 +1011,7 @@ Definition set_immutable_def:
   set_immutable cx n v = do
     gbs <- get_current_globals cx;
     set_current_globals cx $
-      gbs with immutables updated_by (λim. im |+ (n, SOME v))
+      gbs with immutables updated_by (λim. im |+ (n, v))
   od
 End
 
@@ -1470,7 +1470,8 @@ Definition assign_target_def:
   od ∧
   assign_target cx (BaseTargetV (ImmutableVar id) is) ao = do
     ni <<- string_to_num id;
-    a <<- NoneV;
+    imms <- get_immutables cx;
+    a <- lift_option (FLOOKUP imms ni) "assign_target ImmutableVar";
     a' <- lift_sum $ assign_subscripts a (REVERSE is) ao;
     set_immutable cx ni a';
     return $ Value a
@@ -1754,8 +1755,8 @@ End
 val () = cv_auto_trans exactly_one_option_def;
 
 Definition immutable_target_def:
-  immutable_target (imms: num |-> value option) id n =
-  case FLOOKUP imms n of SOME NONE => SOME $ ImmutableVar id
+  immutable_target (imms: num |-> value) id n =
+  case FLOOKUP imms n of SOME _ => SOME $ ImmutableVar id
      | _ => NONE
 End
 
@@ -1922,7 +1923,7 @@ Definition evaluate_def:
     imms <- get_immutables cx;
     n <<- string_to_num id;
     v <- lift_sum $ exactly_one_option
-           (lookup_scopes n env) (OPTION_JOIN (FLOOKUP imms n));
+           (lookup_scopes n env) (FLOOKUP imms n);
     return $ Value v
   od ∧
   eval_expr cx (TopLevelName id) = lookup_global cx (string_to_num id) ∧
@@ -2080,7 +2081,8 @@ Definition initial_globals_def:
   initial_globals env (VariableDecl _ Immutable id typ :: ts) =
   (let gbs = initial_globals env ts in
    let key = string_to_num id in
-     gbs with immutables updated_by (λim. im |+ (key, NONE))) ∧
+     gbs with immutables updated_by
+       (λim. im |+ (key, default_value env typ))) ∧
   (* TODO: handle Constants? or ignore since assuming folded into AST *)
   initial_globals env (HashMapDecl _ id kt vt :: ts) =
   (let gbs = initial_globals env ts in
