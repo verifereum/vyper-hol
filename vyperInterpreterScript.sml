@@ -1249,7 +1249,7 @@ Definition lookup_function_def:
                                        else TopLevelName id))])
     else SOME $ getter id uint256 (Type (ArrayT_type typ))
    else lookup_function name External ts) ∧
-  lookup_function name External (HashMapDecl Public id kt vt :: ts) =
+  lookup_function name External (HashMapDecl Public _ id kt vt :: ts) =
   (if id = name then SOME $ getter id kt vt
    else lookup_function name External ts) ∧
   lookup_function name vis (_ :: ts) =
@@ -1397,29 +1397,6 @@ QED
 
 Definition assign_hashmap_def:
   assign_hashmap _ _ hm [] _ = INR "assign_hashmap null" ∧
-  (* TODO: are special cases for single [k] necessary? *)
-  assign_hashmap _ _ hm [k] (Replace v) =
-    INL $ (k,Value v)::(ADELKEY k hm) ∧
-  assign_hashmap _ _ hm [k] (Update bop v2) =
-  (case ALOOKUP hm k of SOME (Value v1) =>
-     (case evaluate_binop bop v1 v2 of INL w =>
-        INL $ (k,Value w)::(ADELKEY k hm) | INR err => INR err)
-   | _ => INR "assign_hashmap Update not found") ∧
-  assign_hashmap _ vt hm [k] (AppendOp v2) =
-  (case ALOOKUP hm k
-   of SOME (Value av) =>
-     (case append_element av v2 of INL w =>
-        INL $ (k,Value w)::(ADELKEY k hm) | INR err => INR err)
-   | NONE =>
-     (case vt of Type (ArrayT _ bd) =>
-       INL $ (k, Value (ArrayV bd [v2])) :: hm
-      | _ => INR "assign_hashmap AppendOp type")
-   | _ => INR "assign_hashmap AppendOp HashMap") ∧
-  assign_hashmap _ _ hm [k] PopOp =
-  (case ALOOKUP hm k of SOME (Value v) =>
-     (case pop_element v of INL w =>
-        INL $ (k,Value w)::(ADELKEY k hm) | INR err => INR err)
-   | _ => INR "assign_hashmap Pop not found") ∧
   assign_hashmap ts vt hm (k::ks) ao =
   (case ALOOKUP hm k
    of SOME (HashMap vt hm') =>
@@ -1446,8 +1423,7 @@ val assign_hashmap_pre_def = cv_auto_trans_pre assign_hashmap_def;
 Theorem assign_hashmap_pre[cv_pre]:
   ∀v w x y z. assign_hashmap_pre v w x y z
 Proof
-  ho_match_mp_tac assign_hashmap_ind \\ rw[]
-  \\ rw[Once assign_hashmap_pre_def]
+  Induct_on `y` \\ rw[Once assign_hashmap_pre_def]
 QED
 
 Definition sum_map_left_def:
@@ -2098,11 +2074,14 @@ Definition initial_globals_def:
      gbs with immutables updated_by
        (λim. im |+ (key, default_value env typ))) ∧
   (* TODO: handle Constants? or ignore since assuming folded into AST *)
-  initial_globals env (HashMapDecl _ id kt vt :: ts) =
+  initial_globals env (HashMapDecl _ is_transient id kt vt :: ts) =
   (let gbs = initial_globals env ts in
    let key = string_to_num id in
-     gbs with mutables updated_by
-       (λm. m |+ (key, HashMap vt []))) ∧
+   let iv = HashMap vt [] in
+   let gbs = gbs with mutables updated_by (λm. m |+ (key, iv)) in
+     if is_transient
+     then gbs with transients updated_by (λtrs. (key,iv)::trs)
+     else gbs) ∧
   initial_globals env (t :: ts) = initial_globals env ts
 End
 

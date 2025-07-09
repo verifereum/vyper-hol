@@ -191,7 +191,7 @@ Datatype:
   toplevel
   = FunctionDecl function_visibility function_mutability identifier (argument list) type (stmt list)
   | VariableDecl variable_visibility variable_mutability identifier type
-  | HashMapDecl variable_visibility identifier type value_type
+  | HashMapDecl variable_visibility bool (* transient? *) identifier type value_type
   | StructDecl identifier (argument list)
   | EventDecl identifier (argument list)
   | FlagDecl identifier (identifier list)

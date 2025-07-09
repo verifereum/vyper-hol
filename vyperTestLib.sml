@@ -142,7 +142,7 @@ fun mk_int n = mk_comb(BaseT_tm, mk_comb(IntT_tm, n))
 fun mk_bytes n = mk_comb(BaseT_tm, mk_comb(BytesT_tm, mk_Fixed n))
 fun mk_FunctionDecl v m n a t b = list_mk_comb(FunctionDecl_tm, [v,m,n,a,t,b])
 fun mk_VariableDecl (v,m,n,t) = list_mk_comb(VariableDecl_tm, [v,m,n,t])
-fun mk_HashMapDecl (v,n,t,vt) = list_mk_comb(HashMapDecl_tm, [v,n,t,vt])
+fun mk_HashMapDecl (v,bt,n,t,vt) = list_mk_comb(HashMapDecl_tm, [v,bt,n,t,vt])
 fun mk_String n = mk_comb(BaseT_tm, mk_comb(StringT_tm, n))
 fun mk_Bytes n = mk_comb(BaseT_tm, mk_comb(BytesT_tm, mk_Dynamic n))
 fun mk_BytesM n = mk_comb(BaseT_tm, mk_comb(BytesT_tm, mk_Fixed n))
@@ -876,12 +876,15 @@ val astValueType : term decoder = achoose "astValueType" [
 
 val hashMapDecl : term decoder =
   check_ast_type "VariableDecl" $
-  JSONDecode.map mk_HashMapDecl $
+  JSONDecode.map (fn (v,b,n,(kt,vt)) => mk_HashMapDecl (v,b,n,kt,vt)) $
   tuple4 (
     variableVisibility,
+    field "is_transient" booltm,
     field "target" (check_ast_type "Name" (field "id" stringtm)),
-    field "target" (field "type" (field "key_type" astHmType)),
-    field "target" (field "type" (field "value_type" astValueType))
+    tuple2 (
+      field "target" (field "type" (field "key_type" astHmType)),
+      field "target" (field "type" (field "value_type" astValueType))
+    )
   )
 
 val eventArg : term decoder =
@@ -1198,10 +1201,7 @@ val test_files = [
   val true = List.all (fn (_,(_, j)) =>
     String.isSubstring "staticcall" $
     decode (field "source_code" string) j) df2
-  val (passes, [TODO_transient1, TODO_transient2]) = run_tests tests
-  (* TODO: ??? investigate
-  val SOME (_, traces) = List.find (equal TODO_transient1 o #1) tests
-  *)
+  val (passes, []) = run_tests tests
 
   val json_path = el 18 test_files
   val (tests, [flag1, flag2, extcall1, extcall2, staticcall1]) = read_test_json json_path
@@ -1276,7 +1276,7 @@ val test_files = [
   val tr = decode trace tr
 
   val tls = decode (field "annotated_ast" (field "ast" (field "body" (array raw)))) tr
-  val tl = el 2 tls
+  val tl = el 1 tls
   decode toplevel tl
   decode (field "target" (field "type" (field "key_type" astHmType))) tl
   decode (field "ast_type" string) tl
