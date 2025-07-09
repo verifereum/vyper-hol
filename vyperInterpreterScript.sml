@@ -1396,15 +1396,16 @@ Proof
 QED
 
 Definition assign_hashmap_def:
-  assign_hashmap _ hm [] _ = INR "assign_hashmap null" ∧
-  assign_hashmap _ hm [k] (Replace v) =
+  assign_hashmap _ _ hm [] _ = INR "assign_hashmap null" ∧
+  (* TODO: are special cases for single [k] necessary? *)
+  assign_hashmap _ _ hm [k] (Replace v) =
     INL $ (k,Value v)::(ADELKEY k hm) ∧
-  assign_hashmap _ hm [k] (Update bop v2) =
+  assign_hashmap _ _ hm [k] (Update bop v2) =
   (case ALOOKUP hm k of SOME (Value v1) =>
      (case evaluate_binop bop v1 v2 of INL w =>
         INL $ (k,Value w)::(ADELKEY k hm) | INR err => INR err)
    | _ => INR "assign_hashmap Update not found") ∧
-  assign_hashmap vt hm [k] (AppendOp v2) =
+  assign_hashmap _ vt hm [k] (AppendOp v2) =
   (case ALOOKUP hm k
    of SOME (Value av) =>
      (case append_element av v2 of INL w =>
@@ -1414,24 +1415,36 @@ Definition assign_hashmap_def:
        INL $ (k, Value (ArrayV bd [v2])) :: hm
       | _ => INR "assign_hashmap AppendOp type")
    | _ => INR "assign_hashmap AppendOp HashMap") ∧
-  assign_hashmap _ hm [k] PopOp =
+  assign_hashmap _ _ hm [k] PopOp =
   (case ALOOKUP hm k of SOME (Value v) =>
      (case pop_element v of INL w =>
         INL $ (k,Value w)::(ADELKEY k hm) | INR err => INR err)
    | _ => INR "assign_hashmap Pop not found") ∧
-  assign_hashmap _ hm (k::ks) ao =
-  (case ALOOKUP hm k of SOME (HashMap vt hm') =>
-    (case assign_hashmap vt hm' ks ao of
+  assign_hashmap ts vt hm (k::ks) ao =
+  (case ALOOKUP hm k
+   of SOME (HashMap vt hm') =>
+    (case assign_hashmap ts vt hm' ks ao of
      | INL hm' => INL $ (k, HashMap vt hm') :: (ADELKEY k hm)
      | INR err => INR err)
-    (* TODO: support assigning to hashmap of array *)
-    | _ => INR "assign_hashmap HashMap not found")
+   | SOME (Value v) =>
+    (case assign_subscripts v ks ao of
+     | INL v' => INL $ (k, Value v') :: (ADELKEY k hm)
+     | INR err => INR err)
+   | NONE =>
+     (case vt of HashMapT kt vt' =>
+        (case assign_hashmap ts vt' [] ks ao of
+         | INL hm' => INL $ (k, HashMap vt' hm') :: hm
+         | INR err => INR err)
+      | Type t =>
+        (case assign_subscripts (default_value (type_env ts) t) ks ao of
+         | INL v => INL $ (k, Value v) :: hm
+         | INR err => INR err)))
 End
 
 val assign_hashmap_pre_def = cv_auto_trans_pre assign_hashmap_def;
 
 Theorem assign_hashmap_pre[cv_pre]:
-  ∀v x y z. assign_hashmap_pre v x y z
+  ∀v w x y z. assign_hashmap_pre v w x y z
 Proof
   ho_match_mp_tac assign_hashmap_ind \\ rw[]
   \\ rw[Once assign_hashmap_pre_def]
@@ -1443,10 +1456,10 @@ Definition sum_map_left_def:
 End
 
 Definition assign_toplevel_def:
-  assign_toplevel (Value a) is ao =
+  assign_toplevel ts (Value a) is ao =
     sum_map_left Value $ assign_subscripts a is ao ∧
-  assign_toplevel (HashMap vt hm) is ao =
-    sum_map_left (HashMap vt) $ assign_hashmap vt hm is ao
+  assign_toplevel ts (HashMap vt hm) is ao =
+    sum_map_left (HashMap vt) $ assign_hashmap ts vt hm is ao
 End
 
 val () = assign_toplevel_def
@@ -1464,7 +1477,8 @@ Definition assign_target_def:
   assign_target cx (BaseTargetV (TopLevelVar id) is) ao = do
     ni <<- string_to_num id;
     tv <- lookup_global cx ni;
-    tv' <- lift_sum $ assign_toplevel tv (REVERSE is) ao;
+    ts <- lift_option (get_self_code cx) "assign_target get_self_code";
+    tv' <- lift_sum $ assign_toplevel ts tv (REVERSE is) ao;
     set_global cx ni tv';
     return tv
   od ∧

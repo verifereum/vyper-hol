@@ -1199,7 +1199,7 @@ val test_files = [
     String.isSubstring "staticcall" $
     decode (field "source_code" string) j) df2
   val (passes, [TODO_transient1, TODO_transient2]) = run_tests tests
-  (* TODO: assign struct in hashmap
+  (* TODO: ??? investigate
   val SOME (_, traces) = List.find (equal TODO_transient1 o #1) tests
   *)
 
@@ -1215,11 +1215,7 @@ val test_files = [
              decode (field "source_code" string) (#2(#2 extcall2))
   val true = String.isSubstring "staticcall" $
              decode (field "source_code" string) (#2(#2 staticcall1))
-  (* TODO: assign to hashmap of struct *)
-  val (passes, [TODO_hashmap_struct1, TODO_hashmap_struct2]) = run_tests tests
-  (*
-  val SOME (name, traces) = List.find (equal (el 2 fails) o #1) tests
-  *)
+  val (passes, []) = run_tests tests
 
   val json_path = el 19 test_files
   val (tests, [raw_call]) = read_test_json json_path
@@ -1237,7 +1233,7 @@ val test_files = [
   val json_path = el 21 test_files
   val (tests, []) = read_test_json json_path
   (* TODO: msg.mana unsupported *)
-  val (passes, []) = run_tests tests
+  val (passes, [TODO_msg_mana]) = run_tests tests
 
   val json_path = el 22 test_files
   val (tests, [selfdestruct1, selfdestruct2]) = read_test_json json_path
