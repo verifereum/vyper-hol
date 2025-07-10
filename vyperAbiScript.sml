@@ -3,18 +3,6 @@ open HolKernel boolLib bossLib Parse wordsLib cv_transLib
 
 val () = new_theory "vyperAbi";
 
-Definition within_int_bound_def:
-  within_int_bound (Unsigned b) i = (
-    0i ≤ i ∧ Num i < 2 ** b) ∧
-  within_int_bound (Signed b) i = (
-    0 < b ∧
-    let b = b - 1 in
-    let m = 2 ** b in
-    if i < 0 then Num (-i) ≤ m
-    else Num i < m
-  )
-End
-
 Definition vyper_base_to_abi_type_def[simp]:
   vyper_base_to_abi_type (UintT n) = Uint n ∧
   vyper_base_to_abi_type (IntT n) = Int n ∧

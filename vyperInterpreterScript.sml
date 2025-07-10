@@ -502,39 +502,50 @@ End
 
 val () = cv_auto_trans binop_negate_def;
 
+Definition within_int_bound_def:
+  within_int_bound (Unsigned b) i = (
+    0i ≤ i ∧ Num i < 2 ** b) ∧
+  within_int_bound (Signed b) i = (
+    0 < b ∧
+    let b = b - 1 in
+    let m = 2 ** b in
+    if i < 0 then Num (-i) ≤ m
+    else Num i < m
+  )
+End
+
+Definition bounded_int_op_def:
+  bounded_int_op u1 u2 r =
+  if u1 = u2 then
+    if within_int_bound u1 r
+    then INL (IntV u1 r)
+    else INR "bounded_int_op bound"
+  else INR "bounded_int_op type"
+End
+
 (* TODO: add unsafe ops and make these ones safe *)
 Definition evaluate_binop_def:
   evaluate_binop (Add:binop) (IntV u1 i1) (IntV u2 i2) =
-    (if u1 = u2 then INL (IntV u1 (i1 + i2)) else INR "Add type") ∧
+    bounded_int_op u1 u2 (i1 + i2) ∧
   evaluate_binop Sub (IntV u1 i1) (IntV u2 i2) =
-    (if u1 = u2 then INL (IntV u1 (i1 - i2)) else INR "Sub type") ∧
+    bounded_int_op u1 u2 (i1 - i2) ∧
   evaluate_binop Mul (IntV u1 i1) (IntV u2 i2) =
-    (if u1 = u2 then INL (IntV u1 (i1 * i2)) else INR "Mul type") ∧
+    bounded_int_op u1 u2 (i1 * i2) ∧
   evaluate_binop Div (IntV u1 i1) (IntV u2 i2) =
-    (if u1 = u2
-     then if i2 = 0 then INR "Div0" else INL (IntV u1 (i1 / i2))
-     else INR "Div type") ∧
+    (if i2 = 0 then INR "Div0" else
+     bounded_int_op u1 u2 (i1 / i2)) ∧
   evaluate_binop Mod (IntV u1 i1) (IntV u2 i2) =
-    (if u1 = u2
-     then if i2 = 0 then INR "Mod0" else INL (IntV u1 (i1 % i2))
-     else INR "Mod type") ∧
+    (if i2 = 0 then INR "Mod0" else
+     bounded_int_op u1 u2 (i1 % i2)) ∧
   evaluate_binop Exp (IntV u1 i1) (IntV u2 i2) =
-    (if u1 = u2
-     then if i2 < 0 then INR "Exp~"
-          else INL (IntV u1 (i1 ** (Num i2)))
-     else INR "Exp type") ∧
+    (if i2 < 0 then INR "Exp~"
+     else bounded_int_op u1 u2 (i1 ** (Num i2))) ∧
   evaluate_binop And (IntV u1 i1) (IntV u2 i2) =
-    (if u1 = u2
-     then INL (IntV u1 (int_and i1 i2))
-     else INR "And type") ∧
+    bounded_int_op u1 u2 (int_and i1 i2) ∧
   evaluate_binop  Or (IntV u1 i1) (IntV u2 i2) =
-    (if u1 = u2
-     then INL (IntV u1 (int_or i1 i2))
-     else INR "Or type") ∧
+    bounded_int_op u1 u2 (int_or i1 i2) ∧
   evaluate_binop XOr (IntV u1 i1) (IntV u2 i2) =
-    (if u1 = u2
-     then INL (IntV u1 (int_xor i1 i2))
-     else INR "XOr type") ∧
+    bounded_int_op u1 u2 (int_xor i1 i2) ∧
   evaluate_binop And (BoolV b1) (BoolV b2) = INL (BoolV (b1 ∧ b2)) ∧
   evaluate_binop  Or (BoolV b1) (BoolV b2) = INL (BoolV (b1 ∨ b2)) ∧
   evaluate_binop XOr (BoolV b1) (BoolV b2) = INL (BoolV (b1 ≠ b2)) ∧
@@ -1153,9 +1164,13 @@ Definition evaluate_convert_def:
      then INL $ BytesV bd bs
      else INR "convert BytesV bound") ∧
   evaluate_convert (IntV u i) (BaseT (IntT n)) =
-    (* TODO: check width *) INL $ IntV (Signed n) i ∧
+    (if within_int_bound (Signed n) i
+     then INL $ IntV (Signed n) i
+     else INR "convert int bound") ∧
   evaluate_convert (IntV u i) (BaseT (UintT n)) =
-    (if i < 0 then INR "convert neg" else INL $ IntV (Unsigned n) i) ∧
+    (if within_int_bound (Unsigned n) i
+     then INL $ IntV (Unsigned n) i
+     else INR "convert uint bound") ∧
   evaluate_convert (IntV u i) (BaseT (BytesT bd)) =
   (* TODO: check and use type for width etc. *)
     (if compatible_bound bd 32
