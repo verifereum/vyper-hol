@@ -3,6 +3,18 @@ open HolKernel boolLib bossLib Parse wordsLib cv_transLib
 
 val () = new_theory "vyperAbi";
 
+Definition within_int_bound_def:
+  within_int_bound (Unsigned b) i = (
+    0i ≤ i ∧ Num i < 2 ** b) ∧
+  within_int_bound (Signed b) i = (
+    0 < b ∧
+    let b = b - 1 in
+    let m = 2 ** b in
+    if i < 0 then Num (-i) ≤ m
+    else Num i < m
+  )
+End
+
 Definition vyper_base_to_abi_type_def[simp]:
   vyper_base_to_abi_type (UintT n) = Uint n ∧
   vyper_base_to_abi_type (IntT n) = Int n ∧
@@ -26,16 +38,21 @@ Termination
   WF_REL_TAC ‘measure type_size’
 End
 
+Definition check_IntV_def:
+  check_IntV b i =
+  if within_int_bound b i then SOME $ IntV b i else NONE
+End
+
 Definition abi_to_vyper_def[simp]:
-  abi_to_vyper env (BaseT $ UintT z) (NumV n) = SOME $ IntV (Unsigned z) (&n) ∧
-  abi_to_vyper env (BaseT $ IntT z) (IntV i) = SOME $ IntV (Signed z) i ∧
+  abi_to_vyper env (BaseT $ UintT z) (NumV n) = check_IntV (Unsigned z) (&n) ∧
+  abi_to_vyper env (BaseT $ IntT z) (IntV i) = check_IntV (Signed z) i ∧
   abi_to_vyper env (BaseT $ AddressT) (NumV n) = SOME $ AddressV (n2w n) ∧
   abi_to_vyper env (BaseT $ BoolT) (NumV n) = SOME $ BoolV (0 < n) ∧
   abi_to_vyper env (BaseT $ BytesT b) (BytesV bs) =
     (if compatible_bound b (LENGTH bs) then SOME $ BytesV b bs else NONE) ∧
   abi_to_vyper env (BaseT $ StringT z) (BytesV bs) =
     (if LENGTH bs ≤ z then SOME $ StringV z (MAP (CHR o w2n) bs) else NONE) ∧
-  abi_to_vyper env (BaseT $ DecimalT) (IntV i) = SOME $ IntV (Signed 168) i ∧
+  abi_to_vyper env (BaseT $ DecimalT) (IntV i) = check_IntV (Signed 168) i ∧
   abi_to_vyper env (TupleT ts) (ListV vs) =
     (case abi_to_vyper_list env ts vs of NONE => NONE
         | SOME vs => SOME $ ArrayV (Fixed (LENGTH ts)) vs) ∧
