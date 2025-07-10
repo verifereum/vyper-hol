@@ -33,11 +33,17 @@ Datatype:
 End
 
 Datatype:
+  int_bound
+  = Signed num
+  | Unsigned num
+End
+
+Datatype:
   literal
   = BoolL bool
   | StringL num string
   | BytesL bound (word8 list)
-  | IntL int
+  | IntL int_bound int
 End
 
 Datatype:
@@ -133,7 +139,7 @@ End
 Datatype:
   iterator
   = Array expr
-  | Range expr expr (* start end; use Literal (IntL 0) for start when missing *)
+  | Range expr expr (* start end; use Literal (IntL (Unsigned 256) 0) for start when missing *)
   (* the For syntax always includes a bound *)
   (* for Array, this should be derived from the type of the expression *)
   (* for Range, if the bound is not given explicitly, use end - start (which
@@ -201,7 +207,7 @@ End
 Overload uint256 = “BaseT (UintT 256)”
 Overload address = “BaseT AddressT”
 Overload bool = “BaseT BoolT”
-Overload li = “λi. Literal (IntL i)”
+Overload li = “λb i. Literal (IntL b i)”
 Overload lb = “λb. Literal (BoolL b)”
 Overload "==" = “λe1 e2. Builtin (Bop Eq) [e1; e2]”
 Overload "not" = “λe. Builtin Not [e]”

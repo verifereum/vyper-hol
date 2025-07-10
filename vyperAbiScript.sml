@@ -27,15 +27,15 @@ Termination
 End
 
 Definition abi_to_vyper_def[simp]:
-  abi_to_vyper env (BaseT $ UintT z) (NumV n) = SOME $ IntV (&n) ∧
-  abi_to_vyper env (BaseT $ IntT z) (IntV i) = SOME $ IntV i ∧
+  abi_to_vyper env (BaseT $ UintT z) (NumV n) = SOME $ IntV (Unsigned z) (&n) ∧
+  abi_to_vyper env (BaseT $ IntT z) (IntV i) = SOME $ IntV (Signed z) i ∧
   abi_to_vyper env (BaseT $ AddressT) (NumV n) = SOME $ AddressV (n2w n) ∧
   abi_to_vyper env (BaseT $ BoolT) (NumV n) = SOME $ BoolV (0 < n) ∧
   abi_to_vyper env (BaseT $ BytesT b) (BytesV bs) =
     (if compatible_bound b (LENGTH bs) then SOME $ BytesV b bs else NONE) ∧
   abi_to_vyper env (BaseT $ StringT z) (BytesV bs) =
     (if LENGTH bs ≤ z then SOME $ StringV z (MAP (CHR o w2n) bs) else NONE) ∧
-  abi_to_vyper env (BaseT $ DecimalT) (IntV i) = SOME $ IntV i ∧
+  abi_to_vyper env (BaseT $ DecimalT) (IntV i) = SOME $ IntV (Signed 168) i ∧
   abi_to_vyper env (TupleT ts) (ListV vs) =
     (case abi_to_vyper_list env ts vs of NONE => NONE
         | SOME vs => SOME $ ArrayV (Fixed (LENGTH ts)) vs) ∧

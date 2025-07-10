@@ -20,6 +20,8 @@ val TupleT_tm       = astk"TupleT"
 val ArrayT_tm       = astk"ArrayT"
 val StructT_tm      = astk"StructT"
 val NoneT_tm        = astk"NoneT"
+val Signed_tm       = astk"Signed"
+val Unsigned_tm     = astk"Unsigned"
 val BoolL_tm        = astk"BoolL"
 val StringL_tm      = astk"StringL"
 val BytesL_tm       = astk"BytesL"
@@ -137,6 +139,8 @@ val address_tm = mk_comb(BaseT_tm, AddressT_tm)
 val decimal_tm = mk_comb(BaseT_tm, DecimalT_tm)
 fun mk_Fixed n = mk_comb(Fixed_tm, n)
 fun mk_Dynamic n = mk_comb(Dynamic_tm, n)
+fun mk_Signed n = mk_comb(Signed_tm, n)
+fun mk_Unsigned n = mk_comb(Unsigned_tm, n)
 fun mk_uint n = mk_comb(BaseT_tm, mk_comb(UintT_tm, n))
 fun mk_int n = mk_comb(BaseT_tm, mk_comb(IntT_tm, n))
 fun mk_bytes n = mk_comb(BaseT_tm, mk_comb(BytesT_tm, mk_Fixed n))
@@ -160,7 +164,7 @@ fun mk_Assert (e,s) = list_mk_comb(Assert_tm, [e, s])
 fun mk_Log (id,es) = list_mk_comb(Log_tm, [id, es])
 fun mk_Subscript e1 e2 = list_mk_comb(Subscript_tm, [e1, e2])
 fun mk_If e s1 s2 = list_mk_comb(If_tm, [e,s1,s2])
-fun mk_li i = mk_comb(Literal_tm, mk_comb(IntL_tm, i))
+fun mk_li (b,i) = mk_comb(Literal_tm, list_mk_comb(IntL_tm, [b,i]))
 fun mk_lb b = mk_comb(Literal_tm, mk_comb(BoolL_tm, b))
 fun mk_ls (n,s) = mk_comb(Literal_tm,
   list_mk_comb(StringL_tm, [n, stringSyntax.fromMLstring s]))
@@ -488,6 +492,10 @@ in
   t
 end
 
+fun mk_int_bound (s,b) =
+  (if s then mk_Signed else mk_Unsigned) b
+val Unsigned256 = mk_Unsigned (numOfLargeInt 256)
+
 fun d_expression () : term decoder = achoose "expr" [
     check_ast_type "Str" $
     JSONDecode.map mk_ls $
@@ -496,10 +504,18 @@ fun d_expression () : term decoder = achoose "expr" [
         field "value" string
       ),
     check_ast_type "Int" $
-    field "value" (JSONDecode.map (mk_li o intSyntax.term_of_int o
-                                   Arbint.fromLargeInt) intInf),
+    JSONDecode.map mk_li $
+      tuple2 (
+        JSONDecode.map mk_int_bound $
+        field "type" $
+          tuple2 (field "is_signed" bool, field "bits" numtm),
+        JSONDecode.map
+          (intSyntax.term_of_int o Arbint.fromLargeInt) $
+          field "value" intInf),
     check_ast_type "Decimal" $
-    field "value" (JSONDecode.map (mk_li o parseDecimal) string),
+    field "value" (JSONDecode.map (
+      curry mk_li (mk_Signed (numOfLargeInt 168))
+      o parseDecimal) string),
     check_ast_type "Hex" $
     field "value" (JSONDecode.map mk_Hex string),
     check_ast_type "Bytes" $
@@ -698,7 +714,7 @@ fun rangeArgs ls = let
   val (s, e) = case ls of [x,y] => (x,y) | [x] => (0,x) | _ => (0,0)
   val b = e - s
   val [s,e] = List.map (intSyntax.term_of_int o Arbint.fromLargeInt) [s,e]
-  val t = list_mk_comb(Range_tm, [mk_li s, mk_li e])
+  val t = list_mk_comb(Range_tm, [mk_li (Unsigned256, s), mk_li (Unsigned256, e)])
 in (t, numOfLargeInt b) end
 
 val iterator : (term * term) decoder = achoose "iterator" [
@@ -1232,7 +1248,7 @@ val test_files = [
 
   val json_path = el 21 test_files
   val (tests, []) = read_test_json json_path
-  (* TODO: msg.mana unsupported *)
+  (* msg.mana unsupported *)
   val (passes, [TODO_msg_mana]) = run_tests tests
 
   val json_path = el 22 test_files
@@ -1276,7 +1292,7 @@ val test_files = [
   val tr = decode trace tr
 
   val tls = decode (field "annotated_ast" (field "ast" (field "body" (array raw)))) tr
-  val tl = el 1 tls
+  val tl = el 2 tls
   decode toplevel tl
   decode (field "target" (field "type" (field "key_type" astHmType))) tl
   decode (field "ast_type" string) tl
@@ -1311,11 +1327,11 @@ val test_files = [
   val expr = decode (field "left" raw) expr
   val kwds = decode (field "keywords" (array raw)) expr
   decode (field "arg" string) $ el 1 kwds
+  decode (field "value" raw) $ el 1 kwds
 
 
-  decode (field "op" raw) expr
+  decode (field "slice" raw) expr
   val expr = decode (field "body" raw) expr
-
 
   decode (field "func" raw) expr
   val ags = decode (field "args" (array raw)) expr

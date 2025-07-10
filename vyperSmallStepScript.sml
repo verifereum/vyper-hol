@@ -502,7 +502,7 @@ Definition apply_val_def:
   apply_val cx v st (RangeK2 n1 k) =
     (case do n2 <- lift_option (dest_NumV v) "end not NumV";
              check (n1 < n2) "no range";
-             return $ GENLIST (λn. IntV &(n1 + n)) (n2 - n1)
+             return $ GENLIST (λn. IntV (Unsigned 256) &(n1 + n)) (n2 - n1)
      od st
        of (INR ex, st) => apply_exc cx ex st k
         | (INL vs, st) => AK cx (ApplyVals vs) st k) ∧

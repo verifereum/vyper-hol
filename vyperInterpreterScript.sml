@@ -307,7 +307,7 @@ Datatype:
   = NoneV
   | BoolV bool
   | ArrayV bound (value list)
-  | IntV int
+  | IntV int_bound int
   | StringV num string
   | BytesV bound (word8 list)
   | StructV ((identifier, value) alist)
@@ -334,9 +334,9 @@ End
 Type hmap = “:(subscript, toplevel_value) alist”
 
 Definition default_value_def:
-  default_value env (BaseT (UintT _)) = IntV 0 ∧
-  default_value env (BaseT (IntT _)) = IntV 0 ∧
-  default_value env (BaseT DecimalT) = IntV 0 ∧
+  default_value env (BaseT (UintT n)) = IntV (Unsigned n) 0 ∧
+  default_value env (BaseT (IntT n)) = IntV (Signed n) 0 ∧
+  default_value env (BaseT DecimalT) = IntV (Signed 168) 0 ∧
   default_value env (TupleT ts) = default_value_tuple env [] ts ∧
   default_value env (ArrayT _ (Dynamic n)) = ArrayV (Dynamic n) [] ∧
   default_value env (ArrayT t (Fixed n)) =
@@ -346,7 +346,7 @@ Definition default_value_def:
      case FLOOKUP env nid
        of NONE => StructV []
         | SOME args => default_value_struct (env \\ nid) [] args) ∧
-  default_value env (FlagT id) = IntV 0 ∧
+  default_value env (FlagT id) = IntV (Unsigned 256) 0 ∧
   default_value env NoneT = NoneV ∧
   default_value env (BaseT BoolT) = BoolV F ∧
   default_value env (BaseT AddressT) = AddressV 0w ∧
@@ -480,16 +480,13 @@ Datatype:
 End
 
 Definition evaluate_literal_def:
-  evaluate_literal (BoolL b)   = BoolV b ∧
+  evaluate_literal (BoolL b) = BoolV b ∧
   evaluate_literal (StringL n s) = StringV n s ∧
   evaluate_literal (BytesL b bs) = BytesV b bs ∧
-  evaluate_literal (IntL i)    = IntV i
+  evaluate_literal (IntL ib i) = IntV ib i
 End
 
 val () = cv_auto_trans evaluate_literal_def;
-
-(* TODO: IntV should carry bounds info for overflow checking *)
-(* TODO: add unsafe ops and make these ones safe *)
 
 Definition evaluate_in_array_def:
   evaluate_in_array v ls =
@@ -505,38 +502,66 @@ End
 
 val () = cv_auto_trans binop_negate_def;
 
+(* TODO: add unsafe ops and make these ones safe *)
 Definition evaluate_binop_def:
-  evaluate_binop (Add:binop) (IntV i1) (IntV i2) = INL (IntV (i1 + i2)) ∧
-  evaluate_binop Sub (IntV i1) (IntV i2) = INL (IntV (i1 - i2)) ∧
-  evaluate_binop Mul (IntV i1) (IntV i2) = INL (IntV (i1 * i2)) ∧
-  evaluate_binop Div (IntV i1) (IntV i2) = (if i2 = 0 then INR "Div0" else INL (IntV (i1 / i2))) ∧
-  evaluate_binop Mod (IntV i1) (IntV i2) = (if i2 = 0 then INR "Mod0" else INL (IntV (i1 % i2))) ∧
-  evaluate_binop Exp (IntV i1) (IntV i2) = (if i2 < 0 then INR "Exp~"
-                                            else INL (IntV (i1 ** (Num i2)))) ∧
-  evaluate_binop And (IntV i1) (IntV i2) = INL (IntV (int_and i1 i2)) ∧
-  evaluate_binop  Or (IntV i1) (IntV i2) = INL (IntV (int_or i1 i2)) ∧
-  evaluate_binop XOr (IntV i1) (IntV i2) = INL (IntV (int_xor i1 i2)) ∧
+  evaluate_binop (Add:binop) (IntV u1 i1) (IntV u2 i2) =
+    (if u1 = u2 then INL (IntV u1 (i1 + i2)) else INR "Add type") ∧
+  evaluate_binop Sub (IntV u1 i1) (IntV u2 i2) =
+    (if u1 = u2 then INL (IntV u1 (i1 - i2)) else INR "Sub type") ∧
+  evaluate_binop Mul (IntV u1 i1) (IntV u2 i2) =
+    (if u1 = u2 then INL (IntV u1 (i1 * i2)) else INR "Mul type") ∧
+  evaluate_binop Div (IntV u1 i1) (IntV u2 i2) =
+    (if u1 = u2
+     then if i2 = 0 then INR "Div0" else INL (IntV u1 (i1 / i2))
+     else INR "Div type") ∧
+  evaluate_binop Mod (IntV u1 i1) (IntV u2 i2) =
+    (if u1 = u2
+     then if i2 = 0 then INR "Mod0" else INL (IntV u1 (i1 % i2))
+     else INR "Mod type") ∧
+  evaluate_binop Exp (IntV u1 i1) (IntV u2 i2) =
+    (if u1 = u2
+     then if i2 < 0 then INR "Exp~"
+          else INL (IntV u1 (i1 ** (Num i2)))
+     else INR "Exp type") ∧
+  evaluate_binop And (IntV u1 i1) (IntV u2 i2) =
+    (if u1 = u2
+     then INL (IntV u1 (int_and i1 i2))
+     else INR "And type") ∧
+  evaluate_binop  Or (IntV u1 i1) (IntV u2 i2) =
+    (if u1 = u2
+     then INL (IntV u1 (int_or i1 i2))
+     else INR "Or type") ∧
+  evaluate_binop XOr (IntV u1 i1) (IntV u2 i2) =
+    (if u1 = u2
+     then INL (IntV u1 (int_xor i1 i2))
+     else INR "XOr type") ∧
   evaluate_binop And (BoolV b1) (BoolV b2) = INL (BoolV (b1 ∧ b2)) ∧
   evaluate_binop  Or (BoolV b1) (BoolV b2) = INL (BoolV (b1 ∨ b2)) ∧
   evaluate_binop XOr (BoolV b1) (BoolV b2) = INL (BoolV (b1 ≠ b2)) ∧
-  evaluate_binop ShL (IntV i1) (IntV i2) = (if i2 < 0 then INR "ShL0"
-                                            else INL $ IntV $
-                                                 int_shift_left (Num i2) i1) ∧
-  evaluate_binop ShR (IntV i1) (IntV i2) = (if i2 < 0 then INR "ShR0"
-                                            else INL $ IntV $
-                                                 int_shift_right (Num i2) i1) ∧
-  evaluate_binop In (IntV i1) (IntV i2) = (if i1 < 0 ∨ i2 < 0 then INR "In~"
-                                           else INL $ BoolV
-                                                (int_and i1 i2 ≠ 0)) ∧
+  evaluate_binop ShL (IntV u1 i1) (IntV u2 i2) =
+    (* TODO: check type constraints on shifts *)
+    (if i2 < 0 then INR "ShL0"
+     else INL $ IntV u1 $ int_shift_left (Num i2) i1) ∧
+  evaluate_binop ShR (IntV u1 i1) (IntV u2 i2) =
+    (if i2 < 0 then INR "ShR0"
+     else INL $ IntV u1 $ int_shift_right (Num i2) i1) ∧
+  evaluate_binop In (IntV u1 i1) (IntV u2 i2) =
+    (if u1 = u2 ∧ u2 = Unsigned 256
+     then if i1 < 0 ∨ i2 < 0 then INR "In~"
+          else INL $ BoolV (int_and i1 i2 ≠ 0)
+     else INR "In type") ∧
   evaluate_binop In v (ArrayV _ ls) = evaluate_in_array v ls ∧
   evaluate_binop NotIn v1 v2 = binop_negate $ evaluate_binop In v1 v2 ∧
   evaluate_binop Eq (StringV _ s1) (StringV _ s2) = INL (BoolV (s1 = s2)) ∧
   evaluate_binop Eq (BytesV _ s1) (BytesV _ s2) = INL (BoolV (s1 = s2)) ∧
   evaluate_binop Eq (BoolV b1) (BoolV b2) = INL (BoolV (b1 = b2)) ∧
-  evaluate_binop Eq (IntV i1) (IntV i2) = INL (BoolV (i1 = i2)) ∧
+  evaluate_binop Eq (IntV u1 i1) (IntV u2 i2) =
+    (if u1 = u2 then INL (BoolV (i1 = i2)) else INR "Eq type") ∧
   evaluate_binop NotEq v1 v2 = binop_negate $ evaluate_binop Eq v1 v2 ∧
-  evaluate_binop Lt (IntV i1) (IntV i2) = INL (BoolV (i1 < i2)) ∧
-  evaluate_binop Gt (IntV i1) (IntV i2) = INL (BoolV (i1 > i2)) ∧
+  evaluate_binop Lt (IntV u1 i1) (IntV u2 i2) =
+    (if u1 = u2 then INL (BoolV (i1 < i2)) else INR "Lt type") ∧
+  evaluate_binop Gt (IntV u1 i1) (IntV u2 i2) =
+    (if u1 = u2 then INL (BoolV (i1 > i2)) else INR "Gt type") ∧
   evaluate_binop _ _ _ = INR "binop"
 Termination
   WF_REL_TAC ‘inv_image $< (λ(b,x,y). if b = NotIn ∨ b = NotEq then 2n else 0n)’
@@ -592,9 +617,9 @@ End
 val () = cv_auto_trans empty_evaluation_context_def;
 
 Definition evaluate_account_op_def:
-  evaluate_account_op Balance a = IntV &a.balance ∧
+  evaluate_account_op Balance a = IntV (Unsigned 256) &a.balance ∧
   evaluate_account_op Codehash a = BytesV (Fixed 32) (Keccak_256_w64 a.code) ∧
-  evaluate_account_op Codesize a = IntV $ &LENGTH a.code ∧
+  evaluate_account_op Codesize a = IntV (Unsigned 256) $ &LENGTH a.code ∧
   evaluate_account_op IsContract a = BoolV (a.code ≠ []) ∧
   evaluate_account_op Code a = BytesV (Dynamic (LENGTH a.code)) a.code
 End
@@ -602,7 +627,7 @@ End
 val () = cv_auto_trans evaluate_account_op_def;
 
 Definition dest_NumV_def:
-  dest_NumV (IntV i) =
+  dest_NumV (IntV _ i) =
     (if i < 0 then NONE else SOME (Num i)) ∧
   dest_NumV _ = NONE
 End
@@ -704,14 +729,19 @@ End
 
 val () = cv_auto_trans evaluate_slice_def;
 
+Definition is_Unsigned_def[simp]:
+  (is_Unsigned (Unsigned _ ) = T) ∧
+  (is_Unsigned _ = F)
+End
+
 Definition evaluate_builtin_def:
-  evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV &(LENGTH ls)) ∧
-  evaluate_builtin cx _ Len [StringV _ ls] = INL (IntV &(LENGTH ls)) ∧
-  evaluate_builtin cx _ Len [ArrayV _ ls] = INL (IntV &(LENGTH ls)) ∧
+  evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
+  evaluate_builtin cx _ Len [StringV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
+  evaluate_builtin cx _ Len [ArrayV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
   evaluate_builtin cx _ Not [BoolV b] = INL (BoolV (¬b)) ∧
-  evaluate_builtin cx _ Not [IntV i] =
-    (if 0 ≤ i then INL (IntV (int_not i)) else INR "signed Not") ∧
-  evaluate_builtin cx _ Neg [IntV i] = INL (IntV (-i)) ∧
+  evaluate_builtin cx _ Not [IntV u i] =
+    (if is_Unsigned u ∧ 0 ≤ i then INL (IntV u (int_not i)) else INR "signed Not") ∧
+  evaluate_builtin cx _ Neg [IntV u i] = INL (IntV u (-i)) ∧
   evaluate_builtin cx _ Keccak256 [BytesV _ ls] = INL $ BytesV (Fixed 32) $
     Keccak_256_w64 ls ∧
   (* TODO: reject BytesV with invalid bounds for Keccak256 *)
@@ -719,7 +749,7 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ (Bop bop) [v1; v2] = evaluate_binop bop v1 v2 ∧
   evaluate_builtin cx _ (Msg Sender) [] = INL $ AddressV cx.txn.sender ∧
   evaluate_builtin cx _ (Msg SelfAddr) [] = INL $ AddressV cx.txn.target ∧
-  evaluate_builtin cx _ (Msg ValueSent) [] = INL $ IntV &cx.txn.value ∧
+  evaluate_builtin cx _ (Msg ValueSent) [] = INL $ IntV (Unsigned 256) &cx.txn.value ∧
   evaluate_builtin cx _ (Concat n) vs = evaluate_concat n vs ∧
   evaluate_builtin cx _ (Slice n) [v1; v2; v3] = evaluate_slice v1 v2 v3 n ∧
   evaluate_builtin cx _ (MakeArray bd) vs = INL $ ArrayV bd vs ∧
@@ -742,10 +772,10 @@ End
 val () = cv_auto_trans type_builtin_args_length_ok_def;
 
 Definition evaluate_max_value_def:
-  evaluate_max_value (BaseT (UintT n)) = INL $ IntV (&(2 ** n) - 1) ∧
+  evaluate_max_value (BaseT (UintT n)) = INL $ IntV (Unsigned n) (&(2 ** n) - 1) ∧
   evaluate_max_value (BaseT (IntT n)) = (if n = 0
                                          then INR "max_value IntT"
-                                         else INL $ IntV (&(2 ** (n-1)) - 1)) ∧
+                                         else INL $ IntV (Signed n) (&(2 ** (n-1)) - 1)) ∧
   evaluate_max_value _ = INR "evaluate_max_value"
 End
 
@@ -775,7 +805,7 @@ End
 val () = cv_auto_trans integer_index_def;
 
 Definition value_to_key_def:
-  value_to_key (IntV i) = SOME $ IntSubscript i ∧
+  value_to_key (IntV _ i) = SOME $ IntSubscript i ∧
   value_to_key (StringV _ s) = SOME $ StrSubscript s ∧
   value_to_key (BytesV _ bs) = SOME $ BytesSubscript bs ∧
   value_to_key _ = NONE
@@ -793,7 +823,7 @@ End
 val () = cv_auto_trans type_env_def;
 
 Definition evaluate_subscript_def:
-  evaluate_subscript ts (Value av) (IntV i) =
+  evaluate_subscript ts (Value av) (IntV _ i) =
   (case extract_elements av of SOME vs =>
     (case integer_index vs i of SOME j => INL $ Value (EL j vs)
      | _ => INR "integer_index")
@@ -1113,21 +1143,21 @@ End
 val () = cv_auto_trans get_self_code_def;
 
 Definition evaluate_convert_def:
-  evaluate_convert (IntV i) (BaseT BoolT) = INL $ BoolV (i ≠ 0) ∧
+  evaluate_convert (IntV _ i) (BaseT BoolT) = INL $ BoolV (i ≠ 0) ∧
   evaluate_convert (BoolV b) (BaseT (IntT n)) =
-    INL $ IntV (if b then 1 else 0) ∧
+    INL $ IntV (Signed n) (if b then 1 else 0) ∧
   evaluate_convert (BoolV b) (BaseT (UintT n)) =
-    INL $ IntV (if b then 1 else 0) ∧
+    INL $ IntV (Unsigned n) (if b then 1 else 0) ∧
   evaluate_convert (BytesV _ bs) (BaseT (BytesT bd)) =
     (if compatible_bound bd (LENGTH bs)
      then INL $ BytesV bd bs
      else INR "convert BytesV bound") ∧
-  evaluate_convert (IntV i) (BaseT (IntT n)) =
-    (* TODO: check width *) INL $ IntV i ∧
-  evaluate_convert (IntV i) (BaseT (UintT n)) =
-    (if i < 0 then INR "convert neg" else INL $ IntV i) ∧
-  evaluate_convert (IntV i) (BaseT (BytesT bd)) =
-  (* TODO: IntV needs to know its width and signedness *)
+  evaluate_convert (IntV u i) (BaseT (IntT n)) =
+    (* TODO: check width *) INL $ IntV (Signed n) i ∧
+  evaluate_convert (IntV u i) (BaseT (UintT n)) =
+    (if i < 0 then INR "convert neg" else INL $ IntV (Unsigned n) i) ∧
+  evaluate_convert (IntV u i) (BaseT (BytesT bd)) =
+  (* TODO: check and use type for width etc. *)
     (if compatible_bound bd 32
      then INL $ BytesV bd (word_to_bytes ((i2w i):bytes32) T)
      else INR "convert int to bytes") ∧
@@ -1172,7 +1202,7 @@ Definition lookup_flag_mem_def:
      | SOME ls =>
   case INDEX_OF mid ls
     of NONE => raise $ Error "lookup_flag_mem index"
-     | SOME i => return $ Value $ IntV $ &(2 ** i)
+     | SOME i => return $ Value $ IntV (Unsigned 256) $ &(2 ** i)
 End
 
 val () = lookup_flag_mem_def
@@ -1859,7 +1889,7 @@ Definition evaluate_def:
     n2 <- lift_option (dest_NumV v2) "end not NumV";
     (* TODO: check e1 and e2 are same type? *)
     check (n1 < n2) "no range";
-    return $ GENLIST (λn. IntV &(n1 + n)) (n2 - n1)
+    return $ GENLIST (λn. IntV (Unsigned 256) &(n1 + n)) (n2 - n1)
   od ∧
   eval_target cx (BaseTarget t) = do
     (loc, sbs) <- eval_base_target cx t;
