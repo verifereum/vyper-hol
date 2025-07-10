@@ -202,10 +202,13 @@ Definition run_trace_def:
   case tr
   of Deployment dt => let
       result = run_deployment am dt;
-      sns = FST result;
+      sns = FST result; res = SND result;
+      res = if dt.deploymentSuccess then res
+            else if ISR res then INL am
+            else INR (Error "deployment success");
       snss = (dt.deployedAddress,sns)::snss;
     in
-      (snss, SND result)
+      (snss, res)
    | ClearTransientStorage => (snss,
        INL (am with globals updated_by reset_all_transient_globals))
    | SetBalance addr bal => (snss,
