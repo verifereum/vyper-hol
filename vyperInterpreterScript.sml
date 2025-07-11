@@ -1276,22 +1276,24 @@ Definition getter_def:
   let (args, ret, exp) =
     build_getter (TopLevelName id) kt vt 0
   in
-    (args, ret, [Return $ SOME exp])
+    (View, args, ret, [Return $ SOME exp])
 End
 
 val () = cv_auto_trans getter_def;
 
 Definition lookup_function_def:
-  lookup_function name Deploy [] = SOME ([], NoneT, [Pass]) ∧
+  lookup_function name Deploy [] = SOME (Nonpayable, [], NoneT, [Pass]) ∧
   lookup_function name vis [] = NONE ∧
   lookup_function name vis (FunctionDecl fv fm id args ret body :: ts) =
-  (if id = name ∧ vis = fv then SOME (args, ret, body)
+  (if id = name ∧ vis = fv then SOME (fm, args, ret, body)
    else lookup_function name vis ts) ∧
   lookup_function name External (VariableDecl Public mut id typ :: ts) =
   (if id = name then
     if ¬is_ArrayT typ
-    then SOME ([], typ, [Return (SOME (if mut = Immutable then Name id
-                                       else TopLevelName id))])
+    then SOME (View, [], typ, [
+                 Return (SOME (if mut = Immutable then Name id
+                               else TopLevelName id))
+               ])
     else SOME $ getter id uint256 (Type (ArrayT_type typ))
    else lookup_function name External ts) ∧
   lookup_function name External (HashMapDecl Public _ id kt vt :: ts) =
@@ -1771,8 +1773,8 @@ Proof
 QED
 
 Theorem lookup_function_Internal_imp_ALOOKUP_FLAT:
-  ∀fn vis ts x y z. vis = Internal ∧
-  lookup_function fn vis ts = SOME (x,y,z) ⇒
+  ∀fn vis ts v x y z. vis = Internal ∧
+  lookup_function fn vis ts = SOME (v,x,y,z) ⇒
   ALOOKUP (FLAT (MAP dest_Internal_FunctionDef ts)) fn = SOME z
 Proof
   ho_match_mp_tac lookup_function_ind
@@ -2023,7 +2025,7 @@ Definition evaluate_def:
     check (¬MEM fn cx.stk) "recursion";
     ts <- lift_option (get_self_code cx) "IntCall get_self_code";
     tup <- lift_option (lookup_function fn Internal ts) "IntCall lookup_function";
-    args <<- FST tup; body <<- SND $ SND tup;
+    args <<- FST $ SND tup; body <<- SND $ SND $ SND tup;
     check (LENGTH args = LENGTH es) "IntCall args length"; (* TODO: needed? *)
     vs <- eval_exprs cx es;
     env <- lift_option (bind_arguments args vs) "IntCall bind_arguments";
@@ -2216,8 +2218,22 @@ Definition constants_env_def:
   constants_env (t::ts) = constants_env ts
 End
 
+Definition send_call_value_def:
+  send_call_value mut cx =
+  let n = cx.txn.value in
+  if n = 0 then return () else do
+    check (mut = Payable) "not Payable";
+    transfer_value cx.txn.sender cx.txn.target n
+  od
+End
+
+val () = send_call_value_def
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def,
+            LET_RATOR, COND_RATOR]
+  |> cv_auto_trans;
+
 Definition call_external_function_def:
-  call_external_function am cx ts args vals body =
+  call_external_function am cx mut ts args vals body =
   case bind_arguments args vals
   of NONE => (INR $ Error "call bind_arguments", am)
    | SOME env =>
@@ -2227,7 +2243,7 @@ Definition call_external_function_def:
    let st = initial_state am [env; cenv] in
    let srcs = am.sources in
    let (res, st) =
-     (case eval_stmts cx body st
+     (case do send_call_value mut cx; eval_stmts cx body od st
       of
        | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs st)
        | (INR (ReturnException v), st) => (INL v, abstract_machine_from_state srcs st)
@@ -2243,8 +2259,8 @@ Definition call_external_def:
    | SOME ts =>
   case lookup_function tx.function_name External ts
   of NONE => (INR $ Error "call lookup_function", am)
-   | SOME (args, ret, body) =>
-       call_external_function am cx ts args tx.args body
+   | SOME (mut, args, ret, body) =>
+       call_external_function am cx mut ts args tx.args body
 End
 
 Definition load_contract_def:
@@ -2255,11 +2271,11 @@ Definition load_contract_def:
   let am = am with globals updated_by CONS (addr, gbs) in
   case lookup_function tx.function_name Deploy ts of
      | NONE => INR $ Error "no constructor"
-     | SOME (args, ret, body) =>
-       (* TODO: update balances on return *)
+     | SOME (mut, args, ret, body) =>
        let cx = initial_evaluation_context ((addr,ts)::am.sources) tx in
-       case call_external_function am cx ts args tx.args body
+       case call_external_function am cx mut ts args tx.args body
          of (INR e, _) => INR e
+       (* TODO: update balances on return *)
           | (_, am) => INL (am with sources updated_by CONS (addr, ts))
 End
 

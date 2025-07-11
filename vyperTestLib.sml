@@ -1261,9 +1261,7 @@ val test_files = [
 
   val json_path = el 24 test_files
   val (tests, []) = read_test_json json_path
-  (* TODO: check mutability of constructor *)
-  val (passes, [TODO_constructor_not_payable]) = run_tests tests
-  val SOME (name, traces) = List.find (equal TODO_constructor_not_payable o #1) tests
+  val (passes, []) = run_tests tests
 
   val json_path = el 25 test_files
   val (tests, []) = read_test_json json_path

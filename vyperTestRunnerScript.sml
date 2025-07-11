@@ -114,7 +114,7 @@ Definition compute_vyper_args_def:
   compute_vyper_args ts vis name argTys cd = let
     abiArgsTup = dec (Tuple argTys) cd;
     vyTysRet = case lookup_function name vis ts
-                of SOME (args,ret,_) => (MAP SND args, ret)
+                of SOME (_,args,ret,_) => (MAP SND args, ret)
                   | NONE => ([], NoneT);
     vyTys = FST vyTysRet;
     tenv = type_env ts;

@@ -184,7 +184,7 @@ Definition eval_expr_cps_def:
       check (no_recursion fn cx10.stk) "recursion";
       ts <- lift_option (get_self_code cx10) "IntCall get_self_code";
       tup <- lift_option (lookup_function fn Internal ts) "IntCall lookup_function";
-      args <<- FST tup; body <<- SND $ SND tup;
+      args <<- FST $ SND tup; body <<- SND $ SND $ SND tup;
       check (LENGTH args = LENGTH es) "IntCall args length";
       return (args, body) od st
      of (INR ex, st) => AK cx10 (ApplyExc ex) st k
@@ -1304,11 +1304,11 @@ Proof
 QED
 
 val call_external_function_pre_def = call_external_function_def
-     |> SRULE [eval_stmts_eq_cont_cps]
+     |> SRULE [eval_stmts_eq_cont_cps, ignore_bind_def, bind_def]
      |> cv_auto_trans_pre;
 
 Theorem call_external_function_pre[cv_pre]:
-  call_external_function_pre am cx ts args vals body
+  call_external_function_pre am cx mut ts args vals body
 Proof
   rw[call_external_function_pre_def]
   \\ rw[cont_pre_IS_SOME_cont]
