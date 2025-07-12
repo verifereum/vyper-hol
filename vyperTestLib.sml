@@ -63,6 +63,7 @@ val Subscript_tm    = astk"Subscript"
 val Attribute_tm    = astk"Attribute"
 val Builtin_tm      = astk"Builtin"
 val TypeBuiltin_tm  = astk"TypeBuiltin"
+val Pop_tm          = astk"Pop"
 val AstCall_tm      = astk"Call"
 val NameTarget_tm         = astk"NameTarget"
 val TopLevelNameTarget_tm = astk"TopLevelNameTarget"
@@ -617,6 +618,15 @@ fun d_expression () : term decoder = achoose "expr" [
       field "attr" stringtm
     ),
     check_ast_type "Call" $
+      field "func" $
+      check (tuple2 (field "ast_type" string,
+                     field "type" (tuple2 (field "name" string,
+                                           field "typeclass" string))))
+            (equal ("Attribute", ("pop", "member_function")))
+            "not pop" $
+      JSONDecode.map (curry mk_comb Pop_tm) $
+      field "value" $ delay d_baseAssignmentTarget,
+    check_ast_type "Call" $
       check (field "func" $ tuple2 (field "ast_type" string,
                                     field "id" string))
             (equal ("Name", "len"))
@@ -708,25 +718,7 @@ and d_keyword () : term decoder =
     field "arg" stringtm,
     field "value" $ delay d_expression
   )
-val expression = delay d_expression
-
-(* TODO: support variable (expr) args with explicit bounds *)
-fun rangeArgs ls = let
-  val (s, e) = case ls of [x,y] => (x,y) | [x] => (0,x) | _ => (0,0)
-  val b = e - s
-  val [s,e] = List.map (intSyntax.term_of_int o Arbint.fromLargeInt) [s,e]
-  val t = list_mk_comb(Range_tm, [mk_li (Unsigned256, s), mk_li (Unsigned256, e)])
-in (t, numOfLargeInt b) end
-
-val iterator : (term * term) decoder = achoose "iterator" [
-  check_ast_type "Call" $
-  check (field "func" (field "id" string))
-        (equal "range") "not range" $
-  andThen (succeed o rangeArgs) $
-  field "args" (array (check_ast_type "Int" (field "value" intInf)))
-]
-
-fun d_baseAssignmentTarget () : term decoder = achoose "bt" [
+and d_baseAssignmentTarget () : term decoder = achoose "bt" [
   check_ast_type "Attribute" $
   check (field "value" (tuple2 (field "ast_type" string, field "id" string)))
         (equal ("Name", "self"))
@@ -748,10 +740,27 @@ fun d_baseAssignmentTarget () : term decoder = achoose "bt" [
     (fn (t,e) => list_mk_comb(SubscriptTarget_tm, [t,e])) $
     tuple2 (
       field "value" $ delay d_baseAssignmentTarget,
-      field "slice" expression
+      field "slice" $ delay d_expression
     )
 ]
+val expression = delay d_expression
 val baseAssignmentTarget = delay d_baseAssignmentTarget
+
+(* TODO: support variable (expr) args with explicit bounds *)
+fun rangeArgs ls = let
+  val (s, e) = case ls of [x,y] => (x,y) | [x] => (0,x) | _ => (0,0)
+  val b = e - s
+  val [s,e] = List.map (intSyntax.term_of_int o Arbint.fromLargeInt) [s,e]
+  val t = list_mk_comb(Range_tm, [mk_li (Unsigned256, s), mk_li (Unsigned256, e)])
+in (t, numOfLargeInt b) end
+
+val iterator : (term * term) decoder = achoose "iterator" [
+  check_ast_type "Call" $
+  check (field "func" (field "id" string))
+        (equal "range") "not range" $
+  andThen (succeed o rangeArgs) $
+  field "args" (array (check_ast_type "Int" (field "value" intInf)))
+]
 
 fun d_assignmentTarget () : term decoder = achoose "tgt" [
   JSONDecode.map (curry mk_comb BaseTarget_tm) baseAssignmentTarget
