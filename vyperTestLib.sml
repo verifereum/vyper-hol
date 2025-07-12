@@ -102,6 +102,7 @@ val VariableDecl_tm = astk"VariableDecl"
 val HashMapDecl_tm  = astk"HashMapDecl"
 val StructDecl_tm   = astk"StructDecl"
 val EventDecl_tm    = astk"EventDecl"
+val FlagDecl_tm     = astk"FlagDecl"
 
 fun from_term_option ty = lift_option (mk_option ty) I
 
@@ -932,12 +933,26 @@ val structDef : term decoder =
     field "body" (array eventArg)
   )
 
+val flagDef : term decoder =
+  check_ast_type "FlagDef" $
+  JSONDecode.map (fn (n,a) =>
+    list_mk_comb(FlagDecl_tm, [n, mk_list(a, string_ty)])) $
+  tuple2 (
+    field "name" stringtm,
+    field "body" $ array $
+      check_ast_type "Expr" $
+      field "value" $
+      check_ast_type "Name" $
+      field "id" stringtm
+  )
+
 val toplevel : term decoder = achoose "tl" [
     functionDef,
     hashMapDecl,
     variableDecl,
     eventDef,
     structDef,
+    flagDef,
     check_ast_type "InterfaceDef" (succeed F)
   ]
 
