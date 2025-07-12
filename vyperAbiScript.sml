@@ -56,11 +56,17 @@ Definition abi_to_vyper_def[simp]:
       else NONE ) ∧
   abi_to_vyper env NoneT (ListV ls) = (if NULL ls then SOME NoneV else NONE) ∧
   abi_to_vyper env (StructT id) (ListV vs) =
-    (case FLOOKUP env (string_to_num id) of NONE => NONE
-       | SOME args => case abi_to_vyper_list env (MAP SND args) vs of NONE => NONE
-       | SOME vs => SOME $ StructV $ ZIP (MAP FST args, vs)) ∧
+    (case FLOOKUP env (string_to_num id) of
+       | SOME (StructArgs args) =>
+         (case abi_to_vyper_list env (MAP SND args) vs of NONE => NONE
+          | SOME vs => SOME $ StructV $ ZIP (MAP FST args, vs))
+       | _ => NONE) ∧
+  abi_to_vyper env (FlagT id) (NumV n) =
+    (case FLOOKUP env (string_to_num id) of
+      | SOME (FlagArgs m) =>
+        if m ≤ 256 ∧ n < 2 ** m then SOME $ IntV (Unsigned 256) (&n) else NONE
+      | _ => NONE) ∧
   abi_to_vyper _ _ _ = NONE ∧
-  (* TODO: flags *)
   abi_to_vyper_list env [] [] = SOME [] ∧
   abi_to_vyper_list env (t::ts) (v::vs) =
     (case abi_to_vyper env t v of NONE => NONE | SOME v =>

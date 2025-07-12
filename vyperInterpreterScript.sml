@@ -333,6 +333,10 @@ End
 
 Type hmap = “:(subscript, toplevel_value) alist”
 
+Datatype:
+  type_args = StructArgs (argument list) | FlagArgs num
+End
+
 Definition default_value_def:
   default_value env (BaseT (UintT n)) = IntV (Unsigned n) 0 ∧
   default_value env (BaseT (IntT n)) = IntV (Signed n) 0 ∧
@@ -344,8 +348,8 @@ Definition default_value_def:
   default_value env (StructT id) =
     (let nid = string_to_num id in
      case FLOOKUP env nid
-       of NONE => StructV []
-        | SOME args => default_value_struct (env \\ nid) [] args) ∧
+       of SOME (StructArgs args) => default_value_struct (env \\ nid) [] args
+        | _ => StructV []) ∧
   default_value env (FlagT id) = IntV (Unsigned 256) 0 ∧
   default_value env NoneT = NoneV ∧
   default_value env (BaseT BoolT) = BoolV F ∧
@@ -827,7 +831,9 @@ val () = cv_auto_trans value_to_key_def;
 Definition type_env_def:
   type_env [] = FEMPTY ∧
   type_env (StructDecl id args :: ts) =
-    type_env ts |+ (string_to_num id, args) ∧
+    type_env ts |+ (string_to_num id, StructArgs args) ∧
+  type_env (FlagDecl id ls :: ts) =
+    type_env ts |+ (string_to_num id, FlagArgs (LENGTH ls)) ∧
   type_env (_ :: ts) = type_env ts
 End
 
