@@ -34,8 +34,12 @@ End
 Definition abi_to_vyper_def[simp]:
   abi_to_vyper env (BaseT $ UintT z) (NumV n) = check_IntV (Unsigned z) (&n) ∧
   abi_to_vyper env (BaseT $ IntT z) (IntV i) = check_IntV (Signed z) i ∧
-  abi_to_vyper env (BaseT $ AddressT) (NumV n) = SOME $ AddressV (n2w n) ∧
-  abi_to_vyper env (BaseT $ BoolT) (NumV n) = SOME $ BoolV (0 < n) ∧
+  abi_to_vyper env (BaseT $ AddressT) (NumV n) =
+    (if within_int_bound (Unsigned 160) (&n)
+     then SOME $ AddressV (n2w n)
+     else NONE) ∧
+  abi_to_vyper env (BaseT $ BoolT) (NumV n) =
+    (if n ≤ 1 then SOME $ BoolV (n = 1) else NONE) ∧
   abi_to_vyper env (BaseT $ BytesT b) (BytesV bs) =
     (if compatible_bound b (LENGTH bs) then SOME $ BytesV b bs else NONE) ∧
   abi_to_vyper env (BaseT $ StringT z) (BytesV bs) =
@@ -56,7 +60,6 @@ Definition abi_to_vyper_def[simp]:
        | SOME args => case abi_to_vyper_list env (MAP SND args) vs of NONE => NONE
        | SOME vs => SOME $ StructV $ ZIP (MAP FST args, vs)) ∧
   abi_to_vyper _ _ _ = NONE ∧
-  (* TODO: structs *)
   (* TODO: flags *)
   abi_to_vyper_list env [] [] = SOME [] ∧
   abi_to_vyper_list env (t::ts) (v::vs) =
