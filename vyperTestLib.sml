@@ -1133,11 +1133,13 @@ val test_files = [
   val (tests, []) = read_test_json json_path
   val (passes, []) = run_tests tests
 
-  (* TODO: many decode fails, and tests too slow to run
   val json_path = el 2 test_files
-  val (tests, decode_fails) = read_test_json json_path
-  val (passes, fails) = run_tests tests
-  *)
+  val (tests, []) = read_test_json json_path
+  val (tests1, tests2) = List.partition (String.isPrefix "test_multidimension" o #1) tests
+  val (passes, fails) = run_tests tests2
+  (* TODO: treat flags as structs better *)
+  val SOME (name, traces) = List.find (equal (el 1 fails) o #1) tests
+  (* TODO: test_multidimension tests too slow... *)
 
   val json_path = el 3 test_files
   val (tests, []) = read_test_json json_path

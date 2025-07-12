@@ -112,17 +112,21 @@ End
 
 Definition compute_vyper_args_def:
   compute_vyper_args ts vis name argTys cd = let
-    abiArgsTup = dec (Tuple argTys) cd;
+    abiTupTy = Tuple argTys;
+    abiArgsTup = dec abiTupTy cd;
+    rcd = enc abiTupTy abiArgsTup;
     vyTysRet = case lookup_function name vis ts
                 of SOME (_,args,ret,_) => (MAP SND args, ret)
                   | NONE => ([], NoneT);
-    vyTys = FST vyTysRet;
-    tenv = type_env ts;
-    vyArgsTup = abi_to_vyper tenv (TupleT vyTys) abiArgsTup;
-    vyArgs = (case OPTION_BIND vyArgsTup extract_elements
-                of NONE => [] | SOME ls => ls)
+    vyArgsTenvOpt = if cd = rcd then let
+      vyTys = FST vyTysRet;
+      tenv = type_env ts;
+      vyArgsTup = abi_to_vyper tenv (TupleT vyTys) abiArgsTup;
+      vyArgs = (case OPTION_BIND vyArgsTup extract_elements
+                  of NONE => [] | SOME ls => ls)
+      in SOME (vyArgs, tenv) else NONE;
   in
-    (vyArgs, SND vyTysRet, tenv)
+    (vyArgsTenvOpt, SND vyTysRet)
 End
 
 Definition run_deployment_def:
@@ -130,14 +134,18 @@ Definition run_deployment_def:
     sns = compute_selector_names dt.contractAbi;
     name = find_deploy_function_name dt.sourceAst;
     argTys = find_args_by_name name dt.contractAbi;
+    ar = compute_vyper_args dt.sourceAst
+         Deploy name argTys dt.callData;
+    res = case FST ar of NONE => INR (Error "run_deployment args")
+          | SOME (args, _) => let
     tx = <| sender := dt.deployer
           ; target := dt.deployedAddress
           ; function_name := name
-          ; args := FST $ compute_vyper_args dt.sourceAst
-                          Deploy name argTys dt.callData
+          ; args := args
           ; value := dt.value
           ; is_creation := T |>;
-  in (sns, load_contract am tx dt.sourceAst)
+    in load_contract am tx dt.sourceAst
+  in (sns, res)
 End
 
 val () = cv_auto_trans run_deployment_def;
@@ -150,15 +158,20 @@ Definition run_call_def:
     name = FST fna; argTys = FST (SND fna);
     ts = case ALOOKUP am.sources ct.target of SOME ts => ts | _ => [];
     ar = compute_vyper_args ts External name argTys (DROP 4 ct.callData);
+    retTys = SND (SND fna);
+  in
+    case FST ar of NONE => ((INR (Error "run_call args"), am),
+                            (retTys, (SND ar, FEMPTY)))
+  | SOME (args, tenv) => let
     tx = <| sender := ct.sender
           ; target := ct.target
           ; function_name := name
-          ; args := FST ar
+          ; args := args
           ; value := ct.value
           ; is_creation := F |>;
-  (* TODO: set static based on ct.static *)
-  (* TODO: set env data somewhere? *)
-  in (call_external am tx, (SND (SND fna), SND ar))
+    (* TODO: set static based on ct.static *)
+    (* TODO: set env data somewhere? *)
+  in (call_external am tx, (retTys, (SND ar, tenv)))
 End
 
 val () = cv_auto_trans run_call_def;
