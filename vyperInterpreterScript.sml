@@ -6,7 +6,13 @@ open vfmTypesTheory vfmStateTheory vyperAstTheory
 
 val () = new_theory "vyperInterpreter";
 
-(* TODO: move *)
+(* TODO: delete once merged upstream *)
+
+Theorem cv_ispair_cv_add[simp]:
+  cv_ispair (cv_add x y) = Num 0
+Proof
+  Cases_on`x` \\ Cases_on`y` \\ rw[]
+QED
 
 val FUPDATE_LIST_pre_def = FUPDATE_LIST_THM
  |> SRULE [FORALL_PROD]
@@ -19,6 +25,54 @@ Proof
   Induct_on`ls`
   \\ rw[Once FUPDATE_LIST_pre_def]
 QED
+
+Theorem cv_rep_DOMSUB[cv_rep]:
+  from_fmap f (m \\ k) = cv_delete (Num k) (from_fmap f m)
+Proof
+  rw[from_fmap_def, GSYM cv_delete_thm]
+  \\ AP_TERM_TAC
+  \\ DEP_REWRITE_TAC[sptreeTheory.spt_eq_thm]
+  \\ rw[sptreeTheory.wf_fromAList, sptreeTheory.wf_delete]
+  \\ rw[sptreeTheory.lookup_delete, sptreeTheory.lookup_fromAList]
+  \\ rw[DOMSUB_FLOOKUP_THM]
+QED
+
+Theorem cv_size'_Num[simp]:
+  cv_size' (Num m) = Num 0
+Proof
+  rw[Once cv_size'_def]
+QED
+
+Theorem cv_size'_cv_mk_BN[simp]:
+  cv_size' (cv_mk_BN x y) =
+  cv_add (cv_size' x) (cv_size' y)
+Proof
+  rw[cv_mk_BN_def]
+  \\ TRY (
+    rw[Once cv_size'_def]
+    \\ rw[Once cv_size'_def]
+    \\ Cases_on`x` \\ gs[]
+    \\ rw[Once cv_size'_def, SimpRHS]
+    \\ NO_TAC)
+  \\ rw[Once cv_size'_def]
+  \\ rw[Once cv_size'_def]
+  \\ Cases_on`y` \\ gs[]
+  \\ rw[Once cv_size'_def]
+  \\ rw[Once cv_size'_def]
+  \\ rw[Once cv_size'_def]
+QED
+
+Theorem cv_size'_cv_mk_BS[simp]:
+  cv_size' (cv_mk_BS x y z) =
+  cv_add (cv_add (cv_size' x) (cv_size' z)) (Num 1)
+Proof
+  rw[cv_mk_BS_def]
+  \\ rw[Q.SPEC`Pair x y`cv_size'_def]
+  \\ Cases_on`x` \\ Cases_on`z` \\ gvs[]
+  \\ gvs[Q.SPEC`Pair x y`cv_size'_def]
+QED
+
+(* TODO: move *)
 
 Definition MAP_HEX_def:
   MAP_HEX [] = [] ∧
@@ -170,64 +224,6 @@ val () = int_xor_def
 
 val () = cv_auto_trans int_shift_left_def;
 val () = cv_auto_trans int_shift_right_def;
-
-Theorem cv_rep_DOMSUB[cv_rep]:
-  from_fmap f (m \\ k) = cv_delete (Num k) (from_fmap f m)
-Proof
-  rw[from_fmap_def, GSYM cv_delete_thm]
-  \\ AP_TERM_TAC
-  \\ DEP_REWRITE_TAC[sptreeTheory.spt_eq_thm]
-  \\ rw[sptreeTheory.wf_fromAList, sptreeTheory.wf_delete]
-  \\ rw[sptreeTheory.lookup_delete, sptreeTheory.lookup_fromAList]
-  \\ rw[DOMSUB_FLOOKUP_THM]
-QED
-
-Theorem cv_ispair_cv_add[simp]:
-  cv_ispair (cv_add x y) = Num 0
-Proof
-  Cases_on`x` \\ Cases_on`y` \\ rw[]
-QED
-
-Theorem c2n_cv_add[simp]:
-  cv$c2n (cv_add v1 v2) = cv$c2n v1 + cv$c2n v2
-Proof
-  Cases_on`v1` \\ Cases_on`v2` \\ rw[]
-QED
-
-Theorem cv_size'_cv_mk_BN[simp]:
-  cv_size' (cv_mk_BN x y) =
-  cv_add (cv_size' x) (cv_size' y)
-Proof
-  rw[cv_mk_BN_def]
-  \\ TRY (
-    rw[Once cv_size'_def]
-    \\ rw[Once cv_size'_def]
-    \\ Cases_on`x` \\ gs[]
-    \\ rw[Once cv_size'_def, SimpRHS]
-    \\ NO_TAC)
-  \\ rw[Once cv_size'_def]
-  \\ rw[Once cv_size'_def]
-  \\ Cases_on`y` \\ gs[]
-  \\ rw[Once cv_size'_def, SimpRHS]
-  \\ rw[Once cv_size'_def, SimpRHS]
-  \\ rw[Once cv_size'_def]
-QED
-
-Theorem cv_size'_Num[simp]:
-  cv_size' (Num m) = Num 0
-Proof
-  rw[Once cv_size'_def]
-QED
-
-Theorem cv_size'_cv_mk_BS[simp]:
-  cv_size' (cv_mk_BS x y z) =
-  cv_add (cv_add (cv_size' x) (cv_size' z)) (Num 1)
-Proof
-  rw[cv_mk_BS_def]
-  \\ rw[Q.SPEC`Pair x y`cv_size'_def]
-  \\ Cases_on`x` \\ Cases_on`z` \\ gvs[]
-  \\ gvs[Q.SPEC`Pair x y`cv_size'_def]
-QED
 
 Theorem set_byte_160:
   set_byte a b (w: 160 word) be =
