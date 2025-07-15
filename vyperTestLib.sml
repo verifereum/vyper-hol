@@ -19,6 +19,7 @@ val BaseT_tm        = astk"BaseT"
 val TupleT_tm       = astk"TupleT"
 val ArrayT_tm       = astk"ArrayT"
 val StructT_tm      = astk"StructT"
+val FlagT_tm        = astk"FlagT"
 val NoneT_tm        = astk"NoneT"
 val Signed_tm       = astk"Signed"
 val Unsigned_tm     = astk"Unsigned"
@@ -442,16 +443,6 @@ fun d_astType () : term decoder =
 
 val astType = delay d_astType
 
-val arg : term decoder =
-  check_ast_type "arg" $
-  andThen (fn (n,ty) => succeed $ mk_pair(n,ty))
-    (tuple2 (field "arg" stringtm,
-             field "annotation" astType))
-
-val args : term decoder =
-  andThen (fn ls => succeed $ mk_list(ls, argument_ty))
-    (array arg)
-
 fun theoptstring NONE = "" | theoptstring (SOME s) = s
 
 val binop : term decoder = achoose "binop" [
@@ -834,28 +825,83 @@ val statement = delay d_statement
 
 val statements : term decoder = d_statements statement
 
+fun mk_FunctionDecl_from_args ((decs, id, argnms),((argtys,ret),body)) =
+let
+  val vis =
+    if List.exists (equal "external") decs then External_tm else
+    if List.exists (equal "deploy") decs then Deploy_tm else
+    Internal_tm
+  val mut =
+    if List.exists (equal "pure") decs then Pure_tm else
+    if List.exists (equal "view") decs then View_tm else
+    if List.exists (equal "payable") decs then Payable_tm else
+    Nonpayable_tm
+  val args = mk_list(
+               List.map mk_pair $
+               ListPair.zip (argnms, argtys),
+               argument_ty)
+in
+    mk_FunctionDecl vis mut id args ret body
+end
+
+fun d_astHmType() : term decoder = achoose "astHmType" [
+  check_field "name" "String" $
+    JSONDecode.map mk_String (field "length" numtm),
+  check_field "name" "Bytes" $
+    JSONDecode.map mk_Bytes (field "length" numtm),
+  check_field "typeclass" "bytes_m" $
+    JSONDecode.map mk_BytesM $ field "m" numtm,
+  check_field "name" "bool" $ succeed bool_tm,
+  check_field "name" "address" $ succeed address_tm,
+  check_field "name" "decimal" $ succeed decimal_tm,
+  check_field "typeclass" "integer" $
+    JSONDecode.map (fn (b,n) =>
+      (if b then mk_int else mk_uint) n) $
+    tuple2 (
+      field "is_signed" bool,
+      field "bits" numtm),
+  check_field "typeclass" "dynamic_array" $
+    JSONDecode.map(fn (t,b) => list_mk_comb(ArrayT_tm, [t,b])) $
+    tuple2 (
+      field "value_type" $ delay d_astHmType,
+      JSONDecode.map mk_Dynamic (field "length" numtm)
+    ),
+  check_field "typeclass" "static_array" $
+    JSONDecode.map(fn (t,b) => list_mk_comb(ArrayT_tm, [t,b])) $
+    tuple2 (
+      field "value_type" $ delay d_astHmType,
+      JSONDecode.map mk_Fixed (field "length" numtm)
+    ),
+  check_field "typeclass" "struct" $
+    JSONDecode.map (curry mk_comb StructT_tm) $
+      field "name" stringtm,
+  check_field "typeclass" "flag" $
+    JSONDecode.map (curry mk_comb FlagT_tm) $
+      field "name" stringtm,
+  check_field "typeclass" "tuple" $
+    JSONDecode.map (curry mk_comb TupleT_tm) $
+    succeed (mk_list([], type_ty))
+    (* TODO
+      field "members" $
+      JSONDecode.map (fn ls => mk_list(ls, type_ty)) $
+        array (delay d_astHmType) *),
+  null NoneT_tm
+]
+val astHmType = delay d_astHmType
+
 val functionDef : term decoder =
   check_ast_type "FunctionDef" $
-  andThen (fn ((decs, id, args),(ret,body)) => let
-             val vis =
-               if List.exists (equal "external") decs then External_tm else
-               if List.exists (equal "deploy") decs then Deploy_tm else
-               Internal_tm
-             val mut =
-               if List.exists (equal "pure") decs then Pure_tm else
-               if List.exists (equal "view") decs then View_tm else
-               if List.exists (equal "payable") decs then Payable_tm else
-               Nonpayable_tm
-             in
-               succeed $ mk_FunctionDecl vis mut id args ret body
-             end)
-    (tuple2 (tuple3 (field "decorator_list" (array (field "id" string)),
-                     field "name" stringtm,
-                     field "args" (
-                       check_ast_type "arguments" $
-                       field "args" args)),
-             tuple2 (field "returns" astType,
-                     field "body" statements)))
+  JSONDecode.map mk_FunctionDecl_from_args $
+  tuple2 (tuple3 (field "decorator_list" (array (field "id" string)),
+                  field "name" stringtm,
+                  field "args" $
+                    check_ast_type "arguments" $
+                    field "args" (array (field "arg" stringtm))),
+             tuple2 (field "func_type" $
+                       tuple2 (
+                         field "argument_types" (array astHmType),
+                         field "return_type" astHmType),
+                     field "body" statements))
 
 val variableVisibility : term decoder =
   field "is_public" (JSONDecode.map
@@ -878,21 +924,6 @@ val variableDecl : term decoder =
                         else succeed NONE)) (field "is_constant" bool)),
     field "target" (check_ast_type "Name" (field "id" stringtm)),
     field "annotation" astType)
-
-val astHmType : term decoder = achoose "astHmType" [
-  check_field "name" "String" $
-    JSONDecode.map mk_String (field "length" numtm),
-  check_field "name" "Bytes" $
-    JSONDecode.map mk_Bytes (field "length" numtm),
-  check_field "typeclass" "bytes_m" $
-    JSONDecode.map mk_BytesM $ field "m" numtm,
-  check_field "name" "bool" $ succeed bool_tm,
-  check_field "name" "uint256" $ succeed $ mk_uint $ stringToNumTm "256",
-  check_field "name" "int128" $ succeed $ mk_int $ stringToNumTm "128",
-  check_field "typeclass" "struct" $
-    JSONDecode.map (curry mk_comb StructT_tm) $
-      field "name" stringtm
-]
 
 val astValueType : term decoder = achoose "astValueType" [
   JSONDecode.map (fn t => mk_comb(Type_tm, t)) $
@@ -964,16 +995,6 @@ val toplevel : term decoder = achoose "tl" [
     flagDef,
     check_ast_type "InterfaceDef" (succeed F)
   ]
-
-(*
-decode (field "decorator_list" (array (field "id" string))) obj
-decode (field "name" stringtm) obj
-decode (field "args" (
-                     check_ast_type "arguments" $
-                     field "args" args)) obj
-decode (field "returns" astType) obj
-decode (field "body" statements) obj
-*)
 
 val toplevels : term decoder =
   JSONDecode.map (fn ls =>
@@ -1145,9 +1166,7 @@ val test_files = [
   val json_path = el 2 test_files
   val (tests, []) = read_test_json json_path
   val (tests1, tests2) = List.partition (String.isPrefix "test_multidimension" o #1) tests
-  val (passes, fails) = run_tests tests2
-  (* TODO: treat flags as structs better *)
-  val SOME (name, traces) = List.find (equal (el 1 fails) o #1) tests
+  val (passes, []) = run_tests tests2
   (* TODO: test_multidimension tests too slow... *)
 
   val json_path = el 3 test_files
@@ -1308,7 +1327,7 @@ val test_files = [
   trydecode $ (el 133 test_jsons, ([],[]))
 
   val test_jsons = decodeFile rawObject json_path
-  val (name, json) = el 3 test_jsons
+  val (name, json) = el 1 test_jsons
   val traces = decode (field "traces" (array trace)) json
   val traces = decode (field "traces" (array raw)) json
   val tr = el 1 traces
@@ -1322,6 +1341,7 @@ val test_files = [
   decode toplevel tl
   decode (field "target" (field "type" (field "key_type" astHmType))) tl
   decode (field "ast_type" string) tl
+  decode functionDef tl
   decode (field "annotation" astType) tl
 
   val ags = decode (field "body" (array raw)) tl
