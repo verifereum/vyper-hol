@@ -2132,6 +2132,14 @@ Definition empty_globals_def:
   |>
 End
 
+Definition flag_value_def:
+  flag_value n acc [] = StructV $ REVERSE acc ∧
+  flag_value n acc (id::ids) =
+  flag_value (2n*n) ((id,IntV (Unsigned 256) &n)::acc) ids
+End
+
+val () = cv_auto_trans flag_value_def;
+
 (* TODO: assumes unique identifiers, but should check? *)
 Definition initial_globals_def:
   initial_globals env [] = empty_globals ∧
@@ -2153,6 +2161,12 @@ Definition initial_globals_def:
    let key = string_to_num id in
      gbs with immutables updated_by
        (λim. im |+ (key, default_value env typ))) ∧
+  (* TODO: prevent flag value being updated even in constructor *)
+  initial_globals env (FlagDecl id ls :: ts) =
+  (let gbs = initial_globals env ts in
+   let key = string_to_num id in
+     gbs with immutables updated_by
+       (λim. im |+ (key, flag_value 1 [] ls))) ∧
   (* TODO: handle Constants? or ignore since assuming folded into AST *)
   initial_globals env (HashMapDecl _ is_transient id kt vt :: ts) =
   (let gbs = initial_globals env ts in
