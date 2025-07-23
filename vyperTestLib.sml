@@ -1125,6 +1125,8 @@ end
 
 val run_tests = List.foldl run_test ([],[])
 
+val test_path_prefix = "../vyper/tests/export/functional/codegen/features"
+
 val test_files = [
   "test_address_balance.json",
   "test_clampers.json",
@@ -1133,7 +1135,6 @@ val test_files = [
   "test_string_map_keys.json",
   "test_assert.json",
   "test_comments.json",
-  "test_exports.json",
   "test_logging_from_call.json",
   "test_packing.json",
   "test_ternary.json",
@@ -1155,34 +1156,37 @@ val test_files = [
   "test_short_circuiting.json"
 ]
 
+fun get_test_file n =
+  OS.Path.concat(test_path_prefix, el n test_files)
+
 (*
 
-  val json_path = el 1 test_files
+  val json_path = get_test_file 1
   val (tests, []) = read_test_json json_path
   val (passes, []) = run_tests tests
 
-  val json_path = el 2 test_files
+  val json_path = get_test_file 2
   val (tests, []) = read_test_json json_path
   val (tests1, tests2) = List.partition (String.isPrefix "test_multidimension" o #1) tests
   val (passes, []) = run_tests tests2
   (* TODO: test_multidimension tests too slow... *)
 
-  val json_path = el 3 test_files
+  val json_path = get_test_file 3
   val (tests, []) = read_test_json json_path
   val (passes, []) = run_tests tests
 
-  val json_path = el 4 test_files
+  val json_path = get_test_file 4
   val (tests, [extcall]) = read_test_json json_path
   (* unsupported: external call *)
   val true = String.isSubstring "extcall" $
              decode (field "source_code" string) (#2(#2 extcall))
   val (passes, []) = run_tests tests
 
-  val json_path = el 5 test_files
+  val json_path = get_test_file 5
   val (tests, []) = read_test_json json_path
   val (passes, []) = run_tests tests
 
-  val json_path = el 6 test_files
+  val json_path = get_test_file 6
   val (tests, [raw_call, proxy, static_call]) = read_test_json json_path
   (* unsupported: raw_call *)
   val true = String.isSubstring "raw_call" $
@@ -1195,42 +1199,44 @@ val test_files = [
              decode (field "source_code" string) (#2(#2 static_call))
   val (passes, []) = run_tests tests
 
-  val json_path = el 7 test_files
+  val json_path = get_test_file 7
   val (tests, []) = read_test_json json_path
   val (passes, []) = run_tests tests
 
-  val json_path = el 8 test_files
+  (*
+  val json_path = get_test_file 8
   val (tests, [exports]) = read_test_json json_path
   (* unsupported: exports *)
   val true = String.isSubstring "exports" $
              decode (field "source_code" string) (#2(#2 exports))
   val (passes, []) = run_tests tests
+  *)
 
-  val json_path = el 9 test_files
+  val json_path = get_test_file 8
   val (tests, []) = read_test_json json_path
   val (passes, []) = run_tests tests
 
-  val json_path = el 10 test_files
+  val json_path = get_test_file 9
   val (tests, []) = read_test_json json_path
   val (passes, []) = run_tests tests
 
-  val json_path = el 11 test_files
+  val json_path = get_test_file 10
   val (tests, []) = read_test_json json_path
   val (passes, []) = run_tests tests
 
-  val json_path = el 12 test_files
+  val json_path = get_test_file 11
   val (tests, []) = read_test_json json_path
   val (passes, []) = run_tests tests
 
-  val json_path = el 13 test_files
+  val json_path = get_test_file 12
   val (tests, []) = read_test_json json_path
   val (passes, []) = run_tests tests
 
-  val json_path = el 14 test_files
+  val json_path = get_test_file 13
   val (tests, []) = read_test_json json_path
   val (passes, [msg_gas]) = run_tests tests
 
-  val json_path = el 15 test_files
+  val json_path = get_test_file 14
   val (tests, raw_logs) = read_test_json json_path
   val true = List.all (fn (_,(_,j)) =>
     String.isSubstring "raw_log" $
@@ -1240,7 +1246,7 @@ val test_files = [
   val SOME (_, traces) = List.find (equal block_timestamp1 o #1) tests
   *)
 
-  val json_path = el 16 test_files
+  val json_path = get_test_file 15
   val (tests, [raw_revert1, raw_revert2, raw_revert3]) = read_test_json json_path
   val true = String.isSubstring "raw_revert" $
              decode (field "source_code" string) (#2(#2 raw_revert1))
@@ -1250,7 +1256,7 @@ val test_files = [
              decode (field "source_code" string) (#2(#2 raw_revert3))
   val (passes, []) = run_tests tests
 
-  val json_path = el 17 test_files
+  val json_path = get_test_file 16
   val (tests, df) = read_test_json json_path
   (* unsupported: import *)
   val df2 = List.filter (fn (_,(_,j)) => not $
@@ -1262,61 +1268,55 @@ val test_files = [
     decode (field "source_code" string) j) df2
   val (passes, []) = run_tests tests
 
-  val json_path = el 18 test_files
-  (* TODO: decode pop *)
-  val (tests, [TODO_pop, extcall1, extcall2, staticcall1]) = read_test_json json_path
-  val true = String.isSubstring "pop" $
-             decode (field "source_code" string) (#2(#2 TODO_pop))
+  val json_path = get_test_file 17
+  val (tests, [extcall1, extcall2, staticcall1]) = read_test_json json_path
   val true = String.isSubstring "extcall" $
              decode (field "source_code" string) (#2(#2 extcall1))
   val true = String.isSubstring "extcall" $
              decode (field "source_code" string) (#2(#2 extcall2))
   val true = String.isSubstring "staticcall" $
              decode (field "source_code" string) (#2(#2 staticcall1))
-  val (passes, [TODO_fail]) = run_tests tests
-  (* TODO
-  val SOME (name, traces) = List.find (equal TODO_fail o #1) tests
-  *)
+  val (passes, []) = run_tests tests
 
-  val json_path = el 19 test_files
+  val json_path = get_test_file 18
   val (tests, [raw_call]) = read_test_json json_path
   val true = String.isSubstring "raw_call" $
              decode (field "source_code" string) (#2(#2 raw_call))
   val (passes, []) = run_tests tests
 
-  val json_path = el 20 test_files
+  val json_path = get_test_file 19
   val (tests, [TODO_raw_init_code, create_copy_of]) = read_test_json json_path
   val true = decode (field "source_code" (null true)) (#2(#2 TODO_raw_init_code))
   val true = String.isSubstring "create_copy_of" $
              decode (field "source_code" string) (#2(#2 create_copy_of))
   val (passes, []) = run_tests tests
 
-  val json_path = el 21 test_files
+  val json_path = get_test_file 20
   val (tests, []) = read_test_json json_path
   (* msg.mana unsupported *)
   val (passes, [TODO_msg_mana]) = run_tests tests
 
-  val json_path = el 22 test_files
+  val json_path = get_test_file 21
   val (tests, [selfdestruct1, selfdestruct2]) = read_test_json json_path
   val (passes, []) = run_tests tests
 
-  val json_path = el 23 test_files
+  val json_path = get_test_file 22
   val (tests, []) = read_test_json json_path
   val (passes, []) = run_tests tests
 
-  val json_path = el 24 test_files
+  val json_path = get_test_file 23
   val (tests, []) = read_test_json json_path
   val (passes, []) = run_tests tests
 
-  val json_path = el 25 test_files
+  val json_path = get_test_file 24
   val (tests, []) = read_test_json json_path
   val (passes, []) = run_tests tests
 
-  val json_path = el 26 test_files
+  val json_path = get_test_file 25
   val (tests, []) = read_test_json json_path
   val (passes, []) = run_tests tests
 
-  val json_path = el 27 test_files
+  val json_path = get_test_file 26
   val (tests, []) = read_test_json json_path
   val (passes, []) = run_tests tests
 
@@ -1325,6 +1325,8 @@ val test_files = [
   trydecode $ (el 133 test_jsons, ([],[]))
 
   val test_jsons = decodeFile rawObject json_path
+  val SOME (_, json) = List.find (equal name o #1) test_jsons
+  decode (field "source_code" string) tl
   val (name, json) = el 1 test_jsons
   val traces = decode (field "traces" (array trace)) json
   val traces = decode (field "traces" (array raw)) json
@@ -1335,7 +1337,7 @@ val test_files = [
   val tr = decode trace tr
 
   val tls = decode (field "annotated_ast" (field "ast" (field "body" (array raw)))) tr
-  val tl = el 2 tls
+  val tl = el 1 tls
   decode toplevel tl
   decode (field "target" (field "type" (field "key_type" astHmType))) tl
   decode (field "ast_type" string) tl
