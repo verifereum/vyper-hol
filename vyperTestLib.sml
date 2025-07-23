@@ -880,11 +880,9 @@ fun d_astHmType() : term decoder = achoose "astHmType" [
       field "name" stringtm,
   check_field "typeclass" "tuple" $
     JSONDecode.map (curry mk_comb TupleT_tm) $
-    succeed (mk_list([], type_ty))
-    (* TODO
-      field "members" $
+      field "member_types" $
       JSONDecode.map (fn ls => mk_list(ls, type_ty)) $
-        array (delay d_astHmType) *),
+        array (delay d_astHmType),
   null NoneT_tm
 ]
 val astHmType = delay d_astHmType
@@ -897,11 +895,11 @@ val functionDef : term decoder =
                   field "args" $
                     check_ast_type "arguments" $
                     field "args" (array (field "arg" stringtm))),
-             tuple2 (field "func_type" $
-                       tuple2 (
-                         field "argument_types" (array astHmType),
-                         field "return_type" astHmType),
-                     field "body" statements))
+          tuple2 (field "func_type" $
+                    tuple2 (
+                      field "argument_types" (array astHmType),
+                      field "return_type" astHmType),
+                  field "body" statements))
 
 val variableVisibility : term decoder =
   field "is_public" (JSONDecode.map
@@ -947,11 +945,11 @@ val hashMapDecl : term decoder =
 val eventArg : term decoder =
   check_ast_type "AnnAssign" $
   JSONDecode.map mk_pair $
+  field "target" $
   tuple2 (
-    field "target" $
     check_ast_type "Name" $
-    field "id" stringtm,
-    field "annotation" astType)
+      field "id" stringtm,
+    field "type" astHmType)
 
 val eventDef : term decoder =
   check_ast_type "EventDef" $
