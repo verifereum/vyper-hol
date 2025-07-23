@@ -1444,6 +1444,36 @@ Proof
   \\ Cases_on`w` \\ gs[]
 QED
 
+Definition evaluate_subscripts_def:
+  evaluate_subscripts a [] = INL a ∧
+  evaluate_subscripts a ((IntSubscript i)::is) =
+  (case extract_elements a of SOME vs =>
+   (case integer_index vs i of SOME j =>
+    (case evaluate_subscripts (EL j vs) is of INL vj => INL vj
+     | INR err => INR err)
+    | _ => INR "evaluate_subscripts integer_index")
+   | _ => INR "evaluate_subscripts extract_elements") ∧
+  evaluate_subscripts (StructV al) ((AttrSubscript id)::is) =
+  (case ALOOKUP al id of SOME v =>
+    (case evaluate_subscripts v is of INL v' => INL v'
+     | INR err => INR err)
+   | _ => INR "evaluate_subscripts AttrSubscript") ∧
+  evaluate_subscripts _ _ = INR "evaluate_subscripts"
+End
+
+val evaluate_subscripts_pre_def = cv_auto_trans_pre evaluate_subscripts_def;
+
+Theorem evaluate_subscripts_pre[cv_pre]:
+  !a b. evaluate_subscripts_pre a b
+Proof
+  ho_match_mp_tac evaluate_subscripts_ind
+  \\ rw[Once evaluate_subscripts_pre_def]
+  \\ rw[Once evaluate_subscripts_pre_def]
+  \\ gvs[integer_index_def] \\ rw[]
+  \\ qmatch_asmsub_rename_tac`0i ≤ w`
+  \\ Cases_on`w` \\ gs[]
+QED
+
 Definition assign_hashmap_def:
   assign_hashmap _ _ hm [] _ = INR "assign_hashmap null" ∧
   assign_hashmap ts vt hm (k::ks) ao =
@@ -2005,7 +2035,8 @@ Definition evaluate_def:
     (loc, sbs) <- eval_base_target cx bt;
     tv <- assign_target cx (BaseTargetV loc sbs) PopOp;
     v <- get_Value tv;
-    vs <- lift_option (extract_elements v) "pop not ArrayV";
+    av <- lift_sum $ evaluate_subscripts v (REVERSE sbs);
+    vs <- lift_option (extract_elements av) "pop not ArrayV";
     return $ Value $ LAST vs
   od ∧
   eval_expr cx (TypeBuiltin tb typ es) = do

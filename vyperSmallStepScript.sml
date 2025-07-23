@@ -398,9 +398,11 @@ Definition apply_base_target_def:
     eval_expr_cps cx e st (AppendK1 btv k) ∧
   apply_base_target cx btv st (PopK k) =
     liftk cx ApplyTv (do
-      tv <- assign_target cx (BaseTargetV (FST btv) (SND btv)) PopOp;
+      sbs <<- SND btv;
+      tv <- assign_target cx (BaseTargetV (FST btv) sbs) PopOp;
       v <- get_Value tv;
-      vs <- lift_option (extract_elements v) "pop not ArrayV";
+      av <- lift_sum $ evaluate_subscripts v (REVERSE sbs);
+      vs <- lift_option (extract_elements av) "pop not ArrayV";
       return $ Value $ LAST vs od st) k ∧
   apply_base_target cx btv st DoneK = AK cx (ApplyBaseTarget btv) st DoneK ∧
   apply_base_target cx _ st _ =
@@ -409,21 +411,22 @@ End
 
 val apply_base_target_pre_def = apply_base_target_def
   |> SRULE [liftk1, prod_CASE_rator, sum_CASE_rator,
-            bind_def, ignore_bind_def]
+            LET_RATOR, bind_def, ignore_bind_def]
   |> cv_auto_trans_pre;
 
 Theorem assign_subscripts_PopOp_not_empty:
-  ∀v is ao b. ao = PopOp ∧ v = ArrayV b [] ⇒
-              ISR $ assign_subscripts v is ao
+  ∀v is ao b.
+    ao = PopOp ∧
+    evaluate_subscripts v is = INL (ArrayV b []) ⇒
+    ISR $ assign_subscripts v is ao
 Proof
   ho_match_mp_tac assign_subscripts_ind
   \\ rw[]
   \\ rw[assign_subscripts_def, oneline pop_element_def]
-  \\ CASE_TAC \\ rw[]
-  \\ CASE_TAC \\ rw[]
-  \\ CASE_TAC \\ rw[]
-  \\ gvs[replace_elements_def, extract_elements_def]
-  \\ gvs[integer_index_def]
+  \\ gvs[evaluate_subscripts_def]
+  \\ CASE_TAC \\ gvs[]
+  \\ CASE_TAC \\ gvs[CaseEq"sum"]
+  \\ CASE_TAC \\ gvs[]
 QED
 
 Theorem apply_base_target_pre[cv_pre]:
@@ -435,18 +438,18 @@ Proof
   \\ qmatch_goalsub_rename_tac`extract_elements a`
   \\ Cases_on`a` \\ gvs[extract_elements_def, raise_def, return_def]
   \\ rpt strip_tac \\ gvs[]
+  \\ gvs[lift_sum_def, CaseEq"sum", CaseEq"prod", sum_CASE_rator,
+         raise_def, return_def]
   \\ qmatch_asmsub_rename_tac`get_Value tv`
   \\ Cases_on`tv` \\ gvs[raise_def, return_def]
   \\ qmatch_asmsub_rename_tac`BaseTargetV loc sbs`
+  \\ drule_at Any assign_subscripts_PopOp_not_empty
   \\ Cases_on`loc` \\ TRY (PairCases_on`p`)
   \\ gvs[assign_target_def, bind_def, ignore_bind_def,
          CaseEq"prod", CaseEq"sum", return_def, lift_sum_def,
          lift_option_def, sum_CASE_rator, option_CASE_rator,
          CaseEq"option", raise_def, assign_toplevel_def,
          oneline sum_map_left_def]
-  \\ qspecl_then[`ArrayV b []`,`REVERSE sbs`,`PopOp`]mp_tac
-       assign_subscripts_PopOp_not_empty
-  \\ simp[]
 QED
 
 Definition apply_target_def:
