@@ -1425,7 +1425,7 @@ Definition assign_subscripts_def:
   assign_subscripts (StructV al) ((AttrSubscript id)::is) ao =
   (case ALOOKUP al id of SOME v =>
     (case assign_subscripts v is ao of INL v' =>
-      INL $ StructV ((id,v')::(ADELKEY id al))
+      INL $ StructV $ AFUPDKEY id (K v') al
      | INR err => INR err)
    | _ => INR "assign_subscripts AttrSubscript") ∧
   assign_subscripts _ _ _ = INR "assign_subscripts"
