@@ -3,6 +3,7 @@ structure vyperTestLib :> vyperTestLib = struct
 open HolKernel JSONDecode JSONUtil cv_transLib wordsLib
      pairSyntax listSyntax stringSyntax optionSyntax
      intSyntax wordsSyntax fcpSyntax
+     vfmTypesSyntax byteStringCacheLib
      vyperAbiTheory vyperAstTheory vyperTestRunnerTheory
 
 fun astk s = prim_mk_const{Thy="vyperAst",Name=s}
@@ -108,29 +109,6 @@ val FlagDecl_tm     = astk"FlagDecl"
 
 fun from_term_option ty = lift_option (mk_option ty) I
 
-val address_bits_ty = mk_int_numeric_type 160
-val address_ty = mk_word_type address_bits_ty
-val mk_num_tm = numSyntax.mk_numeral o Arbnum.fromHexString
-fun mk_address_tm hex = mk_n2w(mk_num_tm hex, address_bits_ty)
-
-val byte_bits_ty = mk_int_numeric_type 8
-val byte_ty = mk_word_type byte_bits_ty
-val bytes_ty = mk_list_type byte_ty
-fun mk_bytes_tms hex = let
-  val hex = if String.isPrefix "0x" hex then String.extract(hex,2,NONE) else hex
-  fun loop i a = if i = 0 then a else let
-    val i = i - 1
-    val y = String.sub(hex, i)
-    val i = i - 1
-    val x = String.sub(hex, i)
-    val b = Arbnum.fromHexString (String.implode [x, y])
-    val t = mk_n2w(numSyntax.mk_numeral b, byte_bits_ty)
-  in loop i (t::a) end
-in
-  loop (String.size hex) []
-end
-fun mk_bytes_tm hex = mk_list(mk_bytes_tms hex, byte_ty)
-
 val toplevel_ty = mk_thy_type{Thy="vyperAst",Tyop="toplevel",Args=[]}
 val type_ty = mk_thy_type{Thy="vyperAst",Tyop="type",Args=[]}
 val stmt_ty = mk_thy_type{Thy="vyperAst",Tyop="stmt",Args=[]}
@@ -180,7 +158,7 @@ fun mk_Hex_dyn (n, s) = let
   val b = mk_comb(Dynamic_tm, n)
 in
   mk_comb(Literal_tm,
-    list_mk_comb(BytesL_tm, [b, mk_bytes_tm s]))
+    list_mk_comb(BytesL_tm, [b, cached_bytes_from_hex s]))
 end
 fun mk_Hex s = let
   val s = if String.isPrefix "0x" s then String.extract(s,2,NONE) else s
@@ -188,7 +166,7 @@ fun mk_Hex s = let
   val b = mk_comb(Fixed_tm, n)
 in
   mk_comb(Literal_tm,
-    list_mk_comb(BytesL_tm, [b, mk_bytes_tm s]))
+    list_mk_comb(BytesL_tm, [b, cached_bytes_from_hex s]))
 end
 fun mk_Builtin b es = list_mk_comb(Builtin_tm, [b, es])
 fun mk_Concat n = mk_comb(Concat_tm, n)
@@ -328,8 +306,8 @@ val stringtm = JSONDecode.map fromMLstring string
 val booltm = JSONDecode.map mk_bool bool
 val negbooltm = JSONDecode.map (mk_bool o not) bool
 
-val address : term decoder = JSONDecode.map mk_address_tm string
-val bytes : term decoder = JSONDecode.map mk_bytes_tm string
+val address : term decoder = JSONDecode.map address_from_hex string
+val bytes : term decoder = JSONDecode.map cached_bytes_from_hex string
 
 val Call_tm = prim_mk_const{Thy="vyperTestRunner",Name="Call"}
 val call_trace_ty = #1 $ dom_rng $ type_of Call_tm
@@ -1078,7 +1056,7 @@ val deployment : term decoder =
                            tuple2 (field "deployer" address,
                                    field "deployed_address" address),
                            tuple2 (field "calldata" $
-                                   JSONDecode.map (mk_bytes_tm o theoptstring)
+                                   JSONDecode.map (cached_bytes_from_hex o theoptstring)
                                      (nullable string),
                                    field "value" numtm)),
                    field "deployment_succeeded" booltm))
@@ -1166,10 +1144,9 @@ fun get_test_file n =
   val (passes, []) = run_tests tests
 
   val json_path = get_test_file 2
+  (* TODO: avoid EVAL_CONV in byteStringCacheLib for speed? *)
   val (tests, []) = read_test_json json_path
-  val (tests1, tests2) = List.partition (String.isPrefix "test_multidimension" o #1) tests
-  val (passes, []) = run_tests tests2
-  (* TODO: test_multidimension tests too slow... *)
+  val (passes, []) = run_tests tests
 
   val json_path = get_test_file 3
   val (tests, []) = read_test_json json_path
