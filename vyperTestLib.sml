@@ -1167,13 +1167,24 @@ fun make_definitions_for_file n = let
   val traces_prefix = String.concat ["traces_", nstr, "_"]
   fun define_traces i (name, traces) = let
     val trs = mk_list(traces, trace_ty)
-    val name = traces_prefix ^ Int.toString i
-    val var = mk_var(name, traces_ty)
+    val vn = traces_prefix ^ Int.toString i
+    val var = mk_var(vn, traces_ty)
     val def = new_definition(name ^ "_def", mk_eq(var, trs))
-    val () = cv_trans_deep_embedding ALL_CONV def
+    val () = cv_trans def
   in () end
 in
   Lib.appi define_traces tests
+end
+
+fun run_test_on_traces traces_const = let
+  val (traces_name, _) = dest_const traces_const
+  val suffix = String.extract(traces_name, String.size"traces", NONE)
+  val result_name = String.concat ["result", suffix]
+  val ttm = sumSyntax.mk_isl $ mk_comb(run_test_tm, traces_const)
+  val eth = cv_eval ttm
+  val rth = save_thm (result_name, EQT_ELIM eth)
+in
+  ()
 end
 
 (*
