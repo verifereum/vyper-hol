@@ -587,7 +587,11 @@ fun d_expression () : term decoder = achoose "expr" [
     check_ast_type "Attribute" $
     JSONDecode.map (fn (e,s) => list_mk_comb(Attribute_tm, [e,s])) $
     tuple2 (
-      field "value" (delay d_expression),
+      field "value" $
+        check (tuple2 (field "ast_type" string, try (field "id" string)))
+        (not o equal ("Name", SOME "msg"))
+        "unhandled msg attribute" $
+        delay d_expression,
       field "attr" stringtm
     ),
     check_ast_type "Call" $
@@ -1155,6 +1159,7 @@ in
     "raw_log",
     "raw_revert",
     "selfdestruct",
+    "msg.mana", "msg.gas",
     "exports",
     "import",
     "create_minimal_proxy_to",
