@@ -1,10 +1,6 @@
 signature vyperTestLib = sig
 
-  type term = Term.term
-
-  val read_test_json : string -> (string * term list) list *
-                                 (string * (exn * JSON.value)) list
-
-  val run_test : string * term list -> unit
+  val make_definitions_for_file : int -> unit
+  val export_theory_no_docs : unit -> unit
 
 end

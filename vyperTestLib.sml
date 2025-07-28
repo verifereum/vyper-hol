@@ -1,10 +1,14 @@
 structure vyperTestLib :> vyperTestLib = struct
 
-open HolKernel JSONDecode JSONUtil cv_transLib wordsLib
+open HolKernel boolLib JSONDecode JSONUtil cv_transLib wordsLib
      pairSyntax listSyntax stringSyntax optionSyntax
      intSyntax wordsSyntax fcpSyntax
      vfmTypesSyntax byteStringCacheLib
      vyperAbiTheory vyperAstTheory vyperTestRunnerTheory
+
+val export_theory_no_docs = fn () =>
+  Feedback.set_trace "TheoryPP.include_docs" 0
+  before export_theory ()
 
 fun astk s = prim_mk_const{Thy="vyperAst",Name=s}
 val Fixed_tm        = astk"Fixed"
@@ -1088,6 +1092,7 @@ in
 end
 
 val trace_ty = mk_thy_type{Thy="vyperTestRunner",Tyop="trace",Args=[]}
+val traces_ty = mk_list_type trace_ty
 val run_test_tm = prim_mk_const{Thy="vyperTestRunner",Name="run_test"}
 
 fun run_test ((name, traces),(s,f)) = let
@@ -1136,6 +1141,40 @@ val test_files = [
 
 fun get_test_file n =
   OS.Path.concat(test_path_prefix, el n test_files)
+
+fun has_unsupported_source_code (name, (err, j)) = let
+  val src = decode (field "source_code" string) j
+  fun p x = String.isSubstring x src
+in
+  List.exists p [
+    "extcall",
+    "staticcall",
+    "raw_call",
+    "raw_log",
+    "raw_revert",
+    "exports",
+    "import",
+    "create_minimal_proxy_to",
+    "create_copy_of"
+  ]
+end
+
+fun make_definitions_for_file n = let
+  val nstr = Int.toString n
+  val json_path = get_test_file n
+  val (tests, decode_fails) = read_test_json json_path
+  val true = List.all has_unsupported_source_code decode_fails
+  val traces_prefix = String.concat ["traces_", nstr, "_"]
+  fun define_traces i (name, traces) = let
+    val trs = mk_list(traces, trace_ty)
+    val name = traces_prefix ^ Int.toString i
+    val var = mk_var(name, traces_ty)
+    val def = new_definition(name ^ "_def", mk_eq(var, trs))
+    val () = cv_trans_deep_embedding ALL_CONV def
+  in () end
+in
+  Lib.appi define_traces tests
+end
 
 (*
 
