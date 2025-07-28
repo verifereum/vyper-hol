@@ -1139,12 +1139,14 @@ val test_files = [
   "test_short_circuiting.json"
 ]
 
+val num_test_files = List.length test_files
+
 fun get_test_file n =
   OS.Path.concat(test_path_prefix, el n test_files)
 
 fun has_unsupported_source_code (name, (err, j)) = let
-  val src = decode (field "source_code" string) j
-  fun p x = String.isSubstring x src
+  val srcopt = decode (field "source_code" (nullable string)) j
+  val p = case srcopt of NONE => K true | SOME src => C String.isSubstring src
 in
   List.exists p [
     "extcall",
@@ -1152,6 +1154,7 @@ in
     "raw_call",
     "raw_log",
     "raw_revert",
+    "selfdestruct",
     "exports",
     "import",
     "create_minimal_proxy_to",
@@ -1163,13 +1166,15 @@ fun make_definitions_for_file n = let
   val nstr = Int.toString n
   val json_path = get_test_file n
   val (tests, decode_fails) = read_test_json json_path
-  val true = List.all has_unsupported_source_code decode_fails
+  val () = if List.all has_unsupported_source_code decode_fails
+           then () else raise Fail (
+             String.concat ["decode failure in ", json_path])
   val traces_prefix = String.concat ["traces_", nstr, "_"]
   fun define_traces i (name, traces) = let
     val trs = mk_list(traces, trace_ty)
     val vn = traces_prefix ^ Int.toString i
     val var = mk_var(vn, traces_ty)
-    val def = new_definition(name ^ "_def", mk_eq(var, trs))
+    val def = new_definition(vn ^ "_def", mk_eq(var, trs))
     val () = cv_trans def
   in () end
 in
@@ -1182,7 +1187,9 @@ fun run_test_on_traces traces_const = let
   val result_name = String.concat ["result", suffix]
   val ttm = sumSyntax.mk_isl $ mk_comb(run_test_tm, traces_const)
   val eth = cv_eval ttm
-  val rth = save_thm (result_name, EQT_ELIM eth)
+  val rth = EQT_ELIM eth handle HOL_ERR _ =>
+            raise Fail ("Failure in test " ^ result_name)
+  val rth = save_thm (result_name, rth)
 in
   ()
 end
