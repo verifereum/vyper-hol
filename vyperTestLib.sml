@@ -62,6 +62,7 @@ val Bop_tm          = astk"Bop"
 val Env_tm          = astk"Env"
 val Acc_tm          = astk"Acc"
 val IntCall_tm      = astk"IntCall"
+val Empty_tm        = astk"Empty"
 val Convert_tm      = astk"Convert"
 val Name_tm         = astk"Name"
 val TopLevelName_tm = astk"TopLevelName"
@@ -147,6 +148,8 @@ fun mk_StructLit (s,ls) = list_mk_comb(StructLit_tm, [
   s, mk_list(ls, mk_prod(string_ty, expr_ty))])
 fun mk_IfExp (e1,e2,e3) = list_mk_comb(IfExp_tm, [e1,e2,e3])
 fun mk_IntCall s = mk_comb(IntCall_tm, s)
+fun mk_Empty t = list_mk_comb(TypeBuiltin_tm, [
+  Empty_tm, t, mk_list([], expr_ty)])
 fun mk_Convert (t,v) = list_mk_comb(TypeBuiltin_tm, [
   Convert_tm, t, mk_list([v], expr_ty)])
 fun mk_Call ct args = list_mk_comb(AstCall_tm, [ct, mk_list (args, expr_ty)])
@@ -670,6 +673,15 @@ fun d_expression () : term decoder = achoose "expr" [
         (fn ls => mk_list(ls, expr_ty)) $
         array (delay d_expression)
     ),
+    check_ast_type "Call" $
+    check (field "func" $ tuple2 (
+             field "ast_type" string,
+             field "id" string))
+          (equal ("Name", "empty"))
+          "not empty" $
+      field "args" $
+      JSONDecode.sub 0 $
+      JSONDecode.map mk_Empty astType,
     check_ast_type "Call" $
     JSONDecode.map mk_Convert $
     check (field "func" $ tuple2 (
