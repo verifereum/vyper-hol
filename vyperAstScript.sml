@@ -211,10 +211,6 @@ Overload bool = “BaseT BoolT”
 Overload li = “λb i. Literal (IntL b i)”
 Overload lb = “λb. Literal (BoolL b)”
 Overload "==" = “λe1 e2. Builtin (Bop Eq) [e1; e2]”
-Overload "not" = “λe. Builtin Not [e]”
-Overload "or" = “λe1 e2. IfExp e1 (lb T) e2”
-Overload "and" = “λe1 e2. IfExp e1 e2 (lb F)”
-(* TODO: make "or" and "and" infix *)
 Overload "+" = “λe1 e2. Builtin (Bop Add) [e1; e2]”
 Overload "<" = “λe1 e2. Builtin (Bop Lt) [e1; e2]”
 Overload ">" = “λe1 e2. Builtin (Bop Gt) [e1; e2]”
