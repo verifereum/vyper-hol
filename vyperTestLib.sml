@@ -95,6 +95,7 @@ val Raise_tm        = astk"Raise"
 val Return_tm       = astk"Return"
 val Assign_tm       = astk"Assign"
 val AugAssign_tm    = astk"AugAssign"
+val Append_tm       = astk"Append"
 val AnnAssign_tm    = astk"AnnAssign"
 val External_tm     = astk"External"
 val Internal_tm     = astk"Internal"
@@ -801,6 +802,20 @@ fun d_statement () : term decoder = achoose "stmt" [
     check_ast_type "Pass" $ succeed Pass_tm,
     check_ast_type "Break" $ succeed Break_tm,
     check_ast_type "Continue" $ succeed Continue_tm,
+    check_ast_type "Expr" $
+      field "value" $
+      check_ast_type "Call" $
+      check (field "func" $
+             tuple2 (field "ast_type" string,
+                     field "type" (tuple2 (field "name" string,
+                                           field "typeclass" string))))
+            (equal ("Attribute", ("append", "member_function")))
+            "not append" $
+      JSONDecode.map
+        (fn (t,e) => list_mk_comb(Append_tm, [t,e])) $
+      tuple2 (
+        field "func" $ field "value" baseAssignmentTarget,
+        field "args" $ JSONDecode.sub 0 $ expression),
     check_ast_type "Expr" $
     field "value" (JSONDecode.map mk_Expr expression),
     check_ast_type "For" $
