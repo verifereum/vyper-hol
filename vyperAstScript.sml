@@ -1,4 +1,4 @@
-open HolKernel boolLib bossLib Parse wordsLib;
+open HolKernel boolLib bossLib Parse wordsLib cv_transLib;
 open wordsTheory integerTheory stringTheory listTheory optionTheory;
 
 val () = new_theory "vyperAst";
@@ -204,6 +204,35 @@ Datatype:
   | FlagDecl identifier (identifier list)
   (* TODO: interfaces -- would these be a no-op except for type-checking? *)
 End
+
+
+Definition is_Unsigned_def[simp]:
+  (is_Unsigned (Unsigned _ ) = T) ∧
+  (is_Unsigned _ = F)
+End
+
+val () = cv_auto_trans is_Unsigned_def;
+
+Definition is_TupleT_def[simp]:
+  is_TupleT (TupleT _) = T ∧
+  is_TupleT _ = F
+End
+
+val () = cv_auto_trans is_TupleT_def;
+
+Definition is_ArrayT_def[simp]:
+  is_ArrayT (ArrayT _ _) = T ∧
+  is_ArrayT _ = F
+End
+
+val () = cv_auto_trans is_ArrayT_def;
+
+Definition ArrayT_type_def[simp]:
+  ArrayT_type (ArrayT t _) = t ∧
+  ArrayT_type _ = NoneT
+End
+
+val () = cv_auto_trans ArrayT_type_def;
 
 Overload uint256 = “BaseT (UintT 256)”
 Overload address = “BaseT AddressT”

@@ -22,29 +22,6 @@ Datatype:
   | Event string (* TODO need any info on event args? *)
 End
 
-(* TODO: move? *)
-Definition is_TupleT_def[simp]:
-  is_TupleT (TupleT _) = T ∧
-  is_TupleT _ = F
-End
-
-val () = cv_auto_trans is_TupleT_def;
-
-(*
-Datatype:
-  vyper_abi_function = <|
-    name: identifier
-  ; inputs: argument list
-  ; outputs: argument list
-  ; mutability: function_mutability |>
-End
-
-Datatype:
-  vyper_contract_abi_entry
-  = Function vyper_abi_function
-End
-*)
-
 Datatype:
   deployment_trace = <|
     sourceAst: toplevel list

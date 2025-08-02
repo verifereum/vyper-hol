@@ -309,11 +309,36 @@ Datatype:
   | StructV ((identifier, value) alist)
 End
 
-Overload AddressV = “λw: address. BytesV (Fixed 20) (word_to_bytes w T)”
-
 val from_to_value_thm = cv_typeLib.from_to_thm_for “:value”;
 val from_value = from_to_value_thm |> concl |> rator |> rand
 val to_value = from_to_value_thm |> concl |> rand
+
+Overload AddressV = “λw: address. BytesV (Fixed 20) (word_to_bytes w T)”
+
+Definition dest_NumV_def:
+  dest_NumV (IntV _ i) =
+    (if i < 0 then NONE else SOME (Num i)) ∧
+  dest_NumV _ = NONE
+End
+
+val () = cv_auto_trans dest_NumV_def;
+
+Definition dest_AddressV_def:
+  dest_AddressV (BytesV (Fixed b) bs) =
+    (if b = 20 ∧ LENGTH bs = 20 then
+      SOME (word_of_bytes T (0w:address) bs)
+     else NONE) ∧
+  dest_AddressV _ = NONE
+End
+
+val () = cv_auto_trans dest_AddressV_def;
+
+Definition dest_StringV_def:
+  dest_StringV (StringV _ s) = SOME s ∧
+  dest_StringV _ = NONE
+End
+
+val () = cv_auto_trans dest_StringV_def;
 
 Datatype:
   subscript
@@ -326,6 +351,13 @@ End
 Datatype:
   toplevel_value = Value value | HashMap value_type ((subscript, toplevel_value) alist)
 End
+
+Definition is_Value_def[simp]:
+  (is_Value (Value _) ⇔ T) ∧
+  (is_Value _ ⇔ F)
+End
+
+val () = cv_auto_trans is_Value_def;
 
 Type hmap = “:(subscript, toplevel_value) alist”
 
@@ -523,7 +555,7 @@ Definition bounded_int_op_def:
   else INR "bounded_int_op type"
 End
 
-(* TODO: add unsafe ops and make these ones safe *)
+(* TODO: add unsafe ops *)
 Definition evaluate_binop_def:
   evaluate_binop (Add:binop) (IntV u1 i1) (IntV u2 i2) =
     bounded_int_op u1 u2 (i1 + i2) ∧
@@ -639,31 +671,6 @@ End
 
 val () = cv_auto_trans evaluate_account_op_def;
 
-Definition dest_NumV_def:
-  dest_NumV (IntV _ i) =
-    (if i < 0 then NONE else SOME (Num i)) ∧
-  dest_NumV _ = NONE
-End
-
-val () = cv_auto_trans dest_NumV_def;
-
-Definition dest_AddressV_def:
-  dest_AddressV (BytesV (Fixed b) bs) =
-    (if b = 20 ∧ LENGTH bs = 20 then
-      SOME (word_of_bytes T (0w:address) bs)
-     else NONE) ∧
-  dest_AddressV _ = NONE
-End
-
-val () = cv_auto_trans dest_AddressV_def;
-
-Definition dest_StringV_def:
-  dest_StringV (StringV _ s) = SOME s ∧
-  dest_StringV _ = NONE
-End
-
-val () = cv_auto_trans dest_StringV_def;
-
 Definition compatible_bound_def:
   compatible_bound (Fixed n) m = (n = m) ∧
   compatible_bound (Dynamic n) m = (m ≤ n)
@@ -741,11 +748,6 @@ Definition evaluate_slice_def:
 End
 
 val () = cv_auto_trans evaluate_slice_def;
-
-Definition is_Unsigned_def[simp]:
-  (is_Unsigned (Unsigned _ ) = T) ∧
-  (is_Unsigned _ = F)
-End
 
 Definition evaluate_builtin_def:
   evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
@@ -1090,11 +1092,6 @@ End
 
 val () = cv_auto_trans check_def;
 
-Definition is_Value_def[simp]:
-  (is_Value (Value _) ⇔ T) ∧
-  (is_Value _ ⇔ F)
-End
-
 Definition switch_BoolV_def:
   switch_BoolV v f g =
   if v = Value $ BoolV T then f
@@ -1229,20 +1226,6 @@ val () = lookup_flag_mem_def
   |> SRULE [FUN_EQ_THM, option_CASE_rator]
   |> cv_auto_trans;
 
-Definition is_ArrayT_def[simp]:
-  is_ArrayT (ArrayT _ _) = T ∧
-  is_ArrayT _ = F
-End
-
-val () = cv_auto_trans is_ArrayT_def;
-
-Definition ArrayT_type_def[simp]:
-  ArrayT_type (ArrayT t _) = t ∧
-  ArrayT_type _ = NoneT
-End
-
-val () = cv_auto_trans ArrayT_type_def;
-
 Definition build_getter_def:
   build_getter e kt (Type vt) n =
     (let vn = num_to_dec_string n in
@@ -1269,8 +1252,7 @@ val () = cv_auto_trans_rec build_getter_def (
     qmatch_goalsub_rename_tac`cv_snd p`
     \\ Cases_on`p` \\ rw[] )
   \\ qmatch_asmsub_rename_tac`cv_is_ArrayT a`
-  \\ Cases_on `a` \\ gvs[definition"cv_is_ArrayT_def",
-                         definition"cv_ArrayT_type_def"]
+  \\ Cases_on `a` \\ gvs[cv_is_ArrayT_def, cv_ArrayT_type_def]
   \\ rw[] \\ gvs[]
   \\ qmatch_goalsub_rename_tac`cv_fst p`
   \\ Cases_on `p` \\ gvs[]
