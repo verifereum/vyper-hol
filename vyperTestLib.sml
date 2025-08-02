@@ -748,14 +748,18 @@ fun rangeArgs ls = let
   val (s, e) = case ls of [x,y] => (x,y) | [x] => (0,x) | _ => (0,0)
   val b = e - s
   val [s,e] = List.map (intSyntax.term_of_int o Arbint.fromLargeInt) [s,e]
-  val t = list_mk_comb(Range_tm, [mk_li (Unsigned256, s), mk_li (Unsigned256, e)])
-in (t, numOfLargeInt b) end
+  fun f y = let
+    val bt = rand y (* y should be BaseT (U)IntT n, TODO check *)
+    val (uori, n) = dest_comb bt
+    val a = (if aconv uori UintT_tm then mk_Unsigned else mk_Signed) n
+  in list_mk_comb(Range_tm, [mk_li (a, s), mk_li (a, e)]) end
+in (f, numOfLargeInt b) end
 
-val iterator : (term * term) decoder = achoose "iterator" [
+val iterator : ((term -> term) * term) decoder = achoose "iterator" [
   check_ast_type "Call" $
   check (field "func" (field "id" string))
         (equal "range") "not range" $
-  andThen (succeed o rangeArgs) $
+  JSONDecode.map rangeArgs $
   field "args" (array (check_ast_type "Int" (field "value" intInf)))
 ]
 
@@ -774,7 +778,7 @@ fun d_statement () : term decoder = achoose "stmt" [
     check_ast_type "Expr" $
     field "value" (JSONDecode.map mk_Expr expression),
     check_ast_type "For" $
-    andThen (fn ((s,t),(i,n),b) => succeed $ mk_For s t i n b) $
+    JSONDecode.map (fn ((s,t),(i,n),b) => mk_For s t (i t) n b) $
     tuple3 (field "target" $
             check_ast_type "AnnAssign" $
             tuple2 (field "target" $

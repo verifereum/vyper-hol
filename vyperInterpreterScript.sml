@@ -1824,6 +1824,18 @@ End
 
 val () = cv_auto_trans scoped_var_target_def;
 
+Definition get_range_limits_def:
+  get_range_limits (IntV u1 n1) (IntV u2 n2) =
+  (if u1 = u2 then
+     if 0 ≤ n1 ∧ n1 < n2
+     then INL (u1, (Num n1, Num n2))
+     else INR "no range"
+   else INR "range type") ∧
+  get_range_limits _ _ = INR "range not IntV"
+End
+
+val () = cv_auto_trans get_range_limits_def;
+
 Definition evaluate_def:
   eval_stmt cx Pass = return () ∧
   eval_stmt cx Continue = raise ContinueException ∧
@@ -1917,13 +1929,11 @@ Definition evaluate_def:
   eval_iterator cx (Range e1 e2) = do
     tv1 <- eval_expr cx e1;
     v1 <- get_Value tv1;
-    n1 <- lift_option (dest_NumV v1) "start not NumV";
     tv2 <- eval_expr cx e2;
     v2 <- get_Value tv2;
-    n2 <- lift_option (dest_NumV v2) "end not NumV";
-    (* TODO: check e1 and e2 are same type? *)
-    check (n1 < n2) "no range";
-    return $ GENLIST (λn. IntV (Unsigned 256) &(n1 + n)) (n2 - n1)
+    rl <- lift_sum $ get_range_limits v1 v2;
+    u <<- FST rl; ns <<- SND rl; n1 <<- FST ns; n2 <<- SND ns;
+    return $ GENLIST (λn. IntV u &(n1 + n)) (n2 - n1)
   od ∧
   eval_target cx (BaseTarget t) = do
     (loc, sbs) <- eval_base_target cx t;

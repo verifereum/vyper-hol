@@ -40,7 +40,7 @@ Datatype:
   | StmtsK (stmt list) eval_continuation
   | ArrayK eval_continuation
   | RangeK1 expr eval_continuation
-  | RangeK2 num eval_continuation
+  | RangeK2 value eval_continuation
   | BaseTargetK eval_continuation
   | TupleTargetK eval_continuation
   | TargetsK (assignment_target list) eval_continuation
@@ -498,14 +498,11 @@ Definition apply_val_def:
   apply_val cx v st (ArrayK k) =
     liftk cx ApplyVals
       (lift_option (extract_elements v) "For not ArrayV" st) k ∧
-  apply_val cx v st (RangeK1 e k) =
-    (case lift_option (dest_NumV v) "start not NumV" st
-       of (INR ex, st) => apply_exc cx ex st k
-        | (INL n1, st) => eval_expr_cps cx e st (RangeK2 n1 k)) ∧
-  apply_val cx v st (RangeK2 n1 k) =
-    (case do n2 <- lift_option (dest_NumV v) "end not NumV";
-             check (n1 < n2) "no range";
-             return $ GENLIST (λn. IntV (Unsigned 256) &(n1 + n)) (n2 - n1)
+  apply_val cx v st (RangeK1 e k) = eval_expr_cps cx e st (RangeK2 v k) ∧
+  apply_val cx v2 st (RangeK2 v1 k) =
+    (case do rl <- lift_sum $ get_range_limits v1 v2;
+             u <<- FST rl; ns <<- SND rl; n1 <<- FST ns; n2 <<- SND ns;
+             return $ GENLIST (λn. IntV u &(n1 + n)) (n2 - n1)
      od st
        of (INR ex, st) => apply_exc cx ex st k
         | (INL vs, st) => AK cx (ApplyVals vs) st k) ∧
@@ -932,30 +929,25 @@ Proof
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     \\ rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1]
-    \\ CASE_TAC \\ reverse CASE_TAC
-    >- (
-      rw[Once OWHILE_THM, stepk_def, apply_exc_def, SimpRHS]
-      \\ gvs[apply_exc_def]
-      \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def] )
     \\ gvs[]
-    \\ first_x_assum $ funpow 2 drule_then drule
-    \\ rw[]
+    \\ first_x_assum $ drule_then drule \\ rw[]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     \\ rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    \\ rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1, bind_def]
+    \\ rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1]
+    \\ rw[bind_def]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- (
       rw[Once OWHILE_THM, stepk_def, apply_exc_def, SimpRHS]
       \\ gvs[apply_exc_def]
       \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def] )
-    \\ gvs[return_def, bind_def, ignore_bind_def]
     \\ CASE_TAC \\ reverse CASE_TAC
-    \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def, SimpRHS]
-    \\ gvs[apply_exc_def]
-    \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def] )
+    >- (
+      rw[Once OWHILE_THM, stepk_def, apply_exc_def, SimpRHS]
+      \\ gvs[apply_exc_def]
+      \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def] ))
   \\ conj_tac >- (
     rw[eval_target_cps_def, evaluate_def, bind_def, return_def, UNCURRY]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
