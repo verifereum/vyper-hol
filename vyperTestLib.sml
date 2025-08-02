@@ -1196,9 +1196,9 @@ fun make_definitions_for_file n = let
   val nstr = Int.toString n
   val json_path = get_test_file n
   val (tests, decode_fails) = read_test_json json_path
-  val () = if List.all has_unsupported_source_code decode_fails
-           then () else raise Fail (
-             String.concat ["decode failure in ", json_path])
+  val firstDf = List.find (not o has_unsupported_source_code) decode_fails
+  val () = case firstDf of NONE => () | SOME (name, _) => raise Fail
+             (String.concat ["decode failure in ", json_path, ": ", name])
   val traces_prefix = String.concat ["traces_", nstr, "_"]
   fun define_traces i (name, traces) = let
     val trs = mk_list(traces, trace_ty)
@@ -1215,11 +1215,15 @@ fun run_test_on_traces traces_const = let
   val (traces_name, _) = dest_const traces_const
   val suffix = String.extract(traces_name, String.size"traces", NONE)
   val result_name = String.concat ["result", suffix]
-  val ttm = sumSyntax.mk_isl $ mk_comb(run_test_tm, traces_const)
-  val eth = cv_eval ttm
-  val rth = EQT_ELIM eth handle HOL_ERR _ =>
-            raise Fail ("Failure in test " ^ result_name)
-  val rth = save_thm (result_name, rth)
+  val rtm = mk_comb(run_test_tm, traces_const)
+  val rth = cv_eval rtm
+  val ttm = sumSyntax.mk_isl $ rtm
+  val eth = (RAND_CONV (REWR_CONV rth) THENC cv_eval) ttm
+  val tth = EQT_ELIM eth handle HOL_ERR _ =>
+            raise Fail (String.concat [
+              "Failure in test ", result_name, ": ",
+              term_to_string $ rand $ rhs $ concl rth ])
+  val tth = save_thm (result_name, tth)
 in
   ()
 end
