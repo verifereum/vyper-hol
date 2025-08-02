@@ -444,6 +444,7 @@ val binop : term decoder = achoose "binop" [
   check_ast_type "Mod" $ succeed Mod_tm,
   check_ast_type "And" $ succeed And_tm,
   check_ast_type "Or" $ succeed Or_tm,
+  check_ast_type "BitOr" $ succeed Or_tm,
   check_ast_type "In" $ succeed In_tm,
   check_ast_type "NotIn" $ succeed NotIn_tm,
   check_ast_type "Eq" $ succeed Eq_tm,
@@ -1023,6 +1024,7 @@ val abiMutability : term decoder =
     if s = "nonpayable" then succeed Nonpayable_tm else
     if s = "view" then succeed View_tm else
     if s = "payable" then succeed Payable_tm else
+    if s = "pure" then succeed Pure_tm else
     fail ("abiMutability: " ^ s)) string
 
 val Function_tm = prim_mk_const{Thy="vyperTestRunner",Name="Function"}
