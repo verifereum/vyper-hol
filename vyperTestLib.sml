@@ -318,7 +318,7 @@ val call_trace_ty = #1 $ dom_rng $ type_of Call_tm
 
 val call : term decoder =
   check_trace_type "call" $
-  andThen (fn (((s,c,v,g),(p,t,a)),e) => succeed $
+  JSONDecode.map (fn ((a,c,v,t),(p,g,s),e) =>
               TypeBase.mk_record (call_trace_ty, [
                 ("sender", s),
                 ("target", t),
@@ -328,15 +328,16 @@ val call : term decoder =
                 ("gasPrice", p),
                 ("static", a),
                 ("expectedOutput", e)]))
-          (tuple2 (
-            field "call_args" (tuple2 (
-              tuple4 (field "sender" address,
+          (tuple3 (
+            field "call_args" $
+              tuple4 (field "is_modifying" negbooltm,
                       field "calldata" bytes,
                       field "value" numtm,
-                      field "gas" numtm),
+                      field "to" address),
+            field "call_args" $ field "env" $ field "tx" $
               tuple3 (field "gas_price" numtm,
-                      field "to" address,
-                      field "is_modifying" negbooltm))),
+                      field "gas" numtm,
+                      field "origin" address),
             field "output" (JSONDecode.map (from_term_option bytes_ty) $
                             nullable bytes)))
 
@@ -1061,7 +1062,7 @@ val deployment : term decoder =
           (tuple2 (tuple4 (field "annotated_ast"
                              (field "ast" (field "body" toplevels)),
                            field "contract_abi" (array abiEntry),
-                           tuple2 (field "deployer" address,
+                           tuple2 (field "env" $ field "tx" $ field "origin" address,
                                    field "deployed_address" address),
                            tuple2 (field "calldata" $
                                    JSONDecode.map (cached_bytes_from_hex o theoptstring)
