@@ -760,7 +760,9 @@ val iterator : ((term -> term) * term) decoder = achoose "iterator" [
   check (field "func" (field "id" string))
         (equal "range") "not range" $
   JSONDecode.map rangeArgs $
-  field "args" (array (check_ast_type "Int" (field "value" intInf)))
+  field "args" $ array $
+    field "folded_value" $
+    check_ast_type "Int" (field "value" intInf)
 ]
 
 fun d_assignmentTarget () : term decoder = achoose "tgt" [
