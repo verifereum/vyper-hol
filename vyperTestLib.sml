@@ -778,7 +778,15 @@ val iterator : ((term -> term) * term) decoder = achoose "iterator" [
   JSONDecode.map rangeArgs $
   field "args" $ array $
     field "folded_value" $
-    check_ast_type "Int" (field "value" intInf)
+    check_ast_type "Int" (field "value" intInf),
+  JSONDecode.map (fn (e,t) =>
+    (K $ mk_comb(Array_tm, e), t)) $
+  tuple2 (expression,
+          field "type" $
+          check (field "name" string)
+                (Lib.C Lib.mem ["DynArray", "$SArray"])
+                "not an array" $
+          field "length" numtm)
 ]
 
 fun d_assignmentTarget () : term decoder = achoose "tgt" [
