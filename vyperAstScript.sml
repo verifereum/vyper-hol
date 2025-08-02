@@ -64,7 +64,9 @@ Datatype:
   | Eq
   | NotEq
   | Lt
+  | LtE
   | Gt
+  | GtE
 End
 
 Datatype:

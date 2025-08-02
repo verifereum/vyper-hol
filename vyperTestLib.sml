@@ -45,7 +45,9 @@ val NotIn_tm        = astk"NotIn"
 val Eq_tm           = astk"Eq"
 val NotEq_tm        = astk"NotEq"
 val Lt_tm           = astk"Lt"
+val LtE_tm          = astk"LtE"
 val Gt_tm           = astk"Gt"
+val GtE_tm          = astk"GtE"
 val Sender_tm       = astk"Sender"
 val SelfAddr_tm     = astk"SelfAddr"
 val TimeStamp_tm    = astk"TimeStamp"
@@ -452,7 +454,9 @@ val binop : term decoder = achoose "binop" [
   check_ast_type "Eq" $ succeed Eq_tm,
   check_ast_type "NotEq" $ succeed NotEq_tm,
   check_ast_type "Lt" $ succeed Lt_tm,
-  check_ast_type "Gt" $ succeed Gt_tm
+  check_ast_type "LtE" $ succeed LtE_tm,
+  check_ast_type "Gt" $ succeed Gt_tm,
+  check_ast_type "GtE" $ succeed GtE_tm
 ]
 
 fun mk_BoolOp ("And", []) = mk_lb T

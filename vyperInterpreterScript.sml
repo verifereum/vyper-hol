@@ -605,6 +605,10 @@ Definition evaluate_binop_def:
     (if u1 = u2 then INL (BoolV (i1 < i2)) else INR "Lt type") ∧
   evaluate_binop Gt (IntV u1 i1) (IntV u2 i2) =
     (if u1 = u2 then INL (BoolV (i1 > i2)) else INR "Gt type") ∧
+  evaluate_binop LtE (IntV u1 i1) (IntV u2 i2) =
+    (if u1 = u2 then INL (BoolV (i1 ≤ i2)) else INR "LtE type") ∧
+  evaluate_binop GtE (IntV u1 i1) (IntV u2 i2) =
+    (if u1 = u2 then INL (BoolV (i1 ≥ i2)) else INR "GtE type") ∧
   evaluate_binop _ _ _ = INR "binop"
 Termination
   WF_REL_TAC ‘inv_image $< (λ(b,x,y). if b = NotIn ∨ b = NotEq then 2n else 0n)’
