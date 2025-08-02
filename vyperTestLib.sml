@@ -48,6 +48,7 @@ val Lt_tm           = astk"Lt"
 val Gt_tm           = astk"Gt"
 val Sender_tm       = astk"Sender"
 val SelfAddr_tm     = astk"SelfAddr"
+val TimeStamp_tm    = astk"TimeStamp"
 val Balance_tm      = astk"Balance"
 val Len_tm          = astk"Len"
 val Not_tm          = astk"Not"
@@ -56,7 +57,7 @@ val Concat_tm       = astk"Concat"
 val Slice_tm        = astk"Slice"
 val MakeArray_tm = astk"MakeArray"
 val Bop_tm          = astk"Bop"
-val Msg_tm          = astk"Msg"
+val Env_tm          = astk"Env"
 val Acc_tm          = astk"Acc"
 val IntCall_tm      = astk"IntCall"
 val Convert_tm      = astk"Convert"
@@ -194,12 +195,14 @@ in
   mk_MakeArray (b, ls)
 end
 val msg_sender_tm = list_mk_comb(Builtin_tm, [
-  mk_comb(Msg_tm, Sender_tm), mk_list([], expr_ty)])
+  mk_comb(Env_tm, Sender_tm), mk_list([], expr_ty)])
 val self_addr_tm = list_mk_comb(Builtin_tm, [
-  mk_comb(Msg_tm, SelfAddr_tm), mk_list([], expr_ty)])
+  mk_comb(Env_tm, SelfAddr_tm), mk_list([], expr_ty)])
+val timestamp_tm = list_mk_comb(Builtin_tm, [
+  mk_comb(Env_tm, TimeStamp_tm), mk_list([], expr_ty)])
 (*
 val msg_gas_tm = list_mk_comb(Builtin_tm, [
-  mk_comb(Msg_tm, Gas_tm), mk_list([], expr_ty)])
+  mk_comb(Env_tm, Gas_tm), mk_list([], expr_ty)])
 *)
 
 val abi_type_ty = mk_thy_type{Args=[],Thy="contractABI",Tyop="abi_type"}
@@ -318,12 +321,13 @@ val call_trace_ty = #1 $ dom_rng $ type_of Call_tm
 
 val call : term decoder =
   check_trace_type "call" $
-  JSONDecode.map (fn ((a,c,v,t),(p,g,s),e) =>
+  JSONDecode.map (fn ((a,c,v,t),(p,g,s),(m,e)) =>
               TypeBase.mk_record (call_trace_ty, [
                 ("sender", s),
                 ("target", t),
                 ("callData", c),
                 ("value", v),
+                ("timeStamp", m),
                 ("gasLimit", g),
                 ("gasPrice", p),
                 ("static", a),
@@ -338,8 +342,11 @@ val call : term decoder =
               tuple3 (field "gas_price" numtm,
                       field "gas" numtm,
                       field "origin" address),
-            field "output" (JSONDecode.map (from_term_option bytes_ty) $
-                            nullable bytes)))
+            tuple2 (
+              field "call_args" $ field "env" $ field "block" $
+                field "timestamp" numtm,
+              field "output" (JSONDecode.map (from_term_option bytes_ty) $
+                              nullable bytes))))
 
 fun achoose err ls = orElse(choose ls, fail err)
 
@@ -559,6 +566,15 @@ fun d_expression () : term decoder = achoose "expr" [
                  (equal "sender")
                  "not msg.sender"
                  (succeed msg_sender_tm)),
+    check_ast_type "Attribute" $
+    check (field "value" (tuple2 (field "ast_type" string,
+                                  field "id" string)))
+          (equal ("Name", "block"))
+          "Attribute not block"
+          (check (field "attr" string)
+                 (equal "timestamp")
+                 "not block.timestamp"
+                 (succeed timestamp_tm)),
     (*
     check_ast_type "Attribute" $
     check (field "value" (tuple2 (field "ast_type" string,
@@ -1049,7 +1065,7 @@ val ClearTransientStorage_tm =
 
 val deployment : term decoder =
   check_trace_type "deployment" $
-  andThen (fn ((c,i,(s,a),(d,v)),e) => succeed $
+  andThen (fn ((c,i,(s,m,a),(d,v)),e) => succeed $
              TypeBase.mk_record (deployment_trace_ty, [
                ("sourceAst", c),
                ("contractAbi", mk_list(i, abi_entry_ty)),
@@ -1057,12 +1073,14 @@ val deployment : term decoder =
                ("deployer", s),
                ("deploymentSuccess", e),
                ("value", v),
+               ("timeStamp", m),
                ("callData", d)
              ]))
           (tuple2 (tuple4 (field "annotated_ast"
                              (field "ast" (field "body" toplevels)),
                            field "contract_abi" (array abiEntry),
-                           tuple2 (field "env" $ field "tx" $ field "origin" address,
+                           tuple3 (field "env" $ field "tx" $ field "origin" address,
+                                   field "env" $ field "block" $ field "timestamp" numtm,
                                    field "deployed_address" address),
                            tuple2 (field "calldata" $
                                    JSONDecode.map (cached_bytes_from_hex o theoptstring)

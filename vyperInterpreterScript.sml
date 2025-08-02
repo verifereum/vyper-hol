@@ -588,6 +588,7 @@ Datatype:
   ; function_name: identifier
   ; args: value list
   ; value: num
+  ; time_stamp: num
   ; is_creation: bool
   |>
 End
@@ -613,6 +614,7 @@ Definition empty_call_txn_def:
     function_name := "";
     args := [];
     value := 0;
+    time_stamp := 0;
     is_creation := F
   |>
 End
@@ -758,9 +760,10 @@ Definition evaluate_builtin_def:
   (* TODO: reject BytesV with invalid bounds for Keccak256 *)
   (* TODO: support Keccak256 on strings *)
   evaluate_builtin cx _ (Bop bop) [v1; v2] = evaluate_binop bop v1 v2 ∧
-  evaluate_builtin cx _ (Msg Sender) [] = INL $ AddressV cx.txn.sender ∧
-  evaluate_builtin cx _ (Msg SelfAddr) [] = INL $ AddressV cx.txn.target ∧
-  evaluate_builtin cx _ (Msg ValueSent) [] = INL $ IntV (Unsigned 256) &cx.txn.value ∧
+  evaluate_builtin cx _ (Env Sender) [] = INL $ AddressV cx.txn.sender ∧
+  evaluate_builtin cx _ (Env SelfAddr) [] = INL $ AddressV cx.txn.target ∧
+  evaluate_builtin cx _ (Env ValueSent) [] = INL $ IntV (Unsigned 256) &cx.txn.value ∧
+  evaluate_builtin cx _ (Env TimeStamp) [] = INL $ IntV (Unsigned 256) &cx.txn.time_stamp ∧
   evaluate_builtin cx _ (Concat n) vs = evaluate_concat n vs ∧
   evaluate_builtin cx _ (Slice n) [v1; v2; v3] = evaluate_slice v1 v2 v3 n ∧
   evaluate_builtin cx _ (MakeArray bd) vs = INL $ ArrayV bd vs ∧
@@ -880,7 +883,7 @@ Definition builtin_args_length_ok_def:
   builtin_args_length_ok (Slice _) n = (n = 3) ∧
   builtin_args_length_ok (MakeArray b) n = compatible_bound b n ∧
   builtin_args_length_ok (Bop _) n = (n = 2) ∧
-  builtin_args_length_ok (Msg _) n = (n = 0) ∧
+  builtin_args_length_ok (Env _) n = (n = 0) ∧
   builtin_args_length_ok (Acc _) n = (n = 1)
 End
 

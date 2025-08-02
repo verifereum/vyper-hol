@@ -68,10 +68,11 @@ Datatype:
 End
 
 Datatype:
-  message_item
+  env_item
   = Sender
   | SelfAddr
   | ValueSent
+  | TimeStamp
 End
 
 Datatype:
@@ -93,7 +94,7 @@ Datatype:
   | Slice num (* ditto *)
   | MakeArray bound
   | Bop binop
-  | Msg message_item
+  | Env env_item
   | Acc account_item
 End
 
@@ -227,14 +228,14 @@ Overload pubmap = “λid kt vt. HashMapDecl Public id kt vt”
 Overload privar = “λid typ. VariableDecl Private Storage id typ”
 Overload DynArray = “λt n. ArrayT t (Dynamic n)”
 Overload DynArlit = “λn ls. Builtin (MakeArray (Dynamic n)) ls”
-Overload msg_sender = “Builtin (Msg Sender) []”
-Overload msg_value = “Builtin (Msg ValueSent) []”
+Overload msg_sender = “Builtin (Env Sender) []”
+Overload msg_value = “Builtin (Env ValueSent) []”
 Overload AssignSelf = “λid e. Assign (BaseTarget (TopLevelNameTarget id)) e”
 Overload assign = “λt e. Assign (BaseTarget t) e”
 Overload return = “λe. Return $ SOME e”
 Overload sub = “λt e. SubscriptTarget t e”
 Overload self_ = “λid. TopLevelName id”
-Overload self = “Builtin (Msg SelfAddr) []”
+Overload self = “Builtin (Env SelfAddr) []”
 Overload self_balance = “Builtin (Acc Balance) [self]”
 Overload call = “λid args. Call (IntCall id) args”
 

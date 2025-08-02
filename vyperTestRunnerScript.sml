@@ -53,6 +53,7 @@ Datatype:
   ; deployer: address
   ; deploymentSuccess: bool
   ; value: num
+  ; timeStamp: num
   ; callData: byte list
   |>
 End
@@ -95,6 +96,7 @@ Datatype:
   ; target: address
   ; callData: byte list
   ; value: num
+  ; timeStamp: num
   ; gasLimit: num
   ; gasPrice: num
   ; static: bool
@@ -143,6 +145,7 @@ Definition run_deployment_def:
           ; function_name := name
           ; args := args
           ; value := dt.value
+          ; time_stamp := dt.timeStamp
           ; is_creation := T |>;
     in load_contract am tx dt.sourceAst
   in (sns, res)
@@ -168,6 +171,7 @@ Definition run_call_def:
           ; function_name := name
           ; args := args
           ; value := ct.value
+          ; time_stamp := ct.timeStamp
           ; is_creation := F |>;
     (* TODO: set static based on ct.static *)
     (* TODO: set env data somewhere? *)
