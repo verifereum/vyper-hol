@@ -81,6 +81,8 @@ val TupleTarget_tm  = astk"TupleTarget"
 val Array_tm        = astk"Array"
 val Range_tm        = astk"Range"
 val Pass_tm         = astk"Pass"
+val Continue_tm     = astk"Continue"
+val Break_tm        = astk"Break"
 val Expr_tm         = astk"Expr"
 val For_tm          = astk"For"
 val If_tm           = astk"If"
@@ -767,6 +769,8 @@ val d_statements = andThen (succeed o mk_statements) o array
 
 fun d_statement () : term decoder = achoose "stmt" [
     check_ast_type "Pass" $ succeed Pass_tm,
+    check_ast_type "Break" $ succeed Break_tm,
+    check_ast_type "Continue" $ succeed Continue_tm,
     check_ast_type "Expr" $
     field "value" (JSONDecode.map mk_Expr expression),
     check_ast_type "For" $
