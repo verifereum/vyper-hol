@@ -760,16 +760,20 @@ and d_baseAssignmentTarget () : term decoder = achoose "bt" [
 val expression = delay d_expression
 val baseAssignmentTarget = delay d_baseAssignmentTarget
 
+fun bound_from_type y = let
+  val bt = rand y (* y should be BaseT (U)IntT n, TODO check it *)
+  val (uori, n) = dest_comb bt
+in
+  (if aconv uori UintT_tm then mk_Unsigned else mk_Signed) n
+end
+
 (* TODO: support variable (expr) args with explicit bounds *)
 fun rangeArgs ls = let
   val (s, e) = case ls of [x,y] => (x,y) | [x] => (0,x) | _ => (0,0)
   val b = e - s
   val [s,e] = List.map (intSyntax.term_of_int o Arbint.fromLargeInt) [s,e]
-  fun f y = let
-    val bt = rand y (* y should be BaseT (U)IntT n, TODO check *)
-    val (uori, n) = dest_comb bt
-    val a = (if aconv uori UintT_tm then mk_Unsigned else mk_Signed) n
-  in list_mk_comb(Range_tm, [mk_li (a, s), mk_li (a, e)]) end
+  fun f y = let val a = bound_from_type y in
+    list_mk_comb(Range_tm, [mk_li (a, s), mk_li (a, e)]) end
 in (f, numOfLargeInt b) end
 
 val iterator : ((term -> term) * term) decoder = achoose "iterator" [
@@ -780,6 +784,24 @@ val iterator : ((term -> term) * term) decoder = achoose "iterator" [
   field "args" $ array $
     field "folded_value" $
     check_ast_type "Int" (field "value" intInf),
+  check_ast_type "Call" $
+  check (tuple2 (field "func" (field "id" string),
+                 field "keywords" $ JSONDecode.sub 0 $ field "arg" string))
+        (equal ("range", "bound")) "not bounded range" $
+  JSONDecode.map
+    (fn (ls, n) =>
+     let val z = List.length ls
+         fun args y =
+           if z = 2 then ls
+           else if z = 1 then
+             mk_li (bound_from_type y, intSyntax.zero_tm) :: ls
+           else raise Fail "bounded range wrong args"
+         fun f y = list_mk_comb(Range_tm, args y)
+     in (f, n) end) $
+    tuple2 (
+      field "args" (array expression),
+      field "keywords" $ JSONDecode.sub 0 $ field "value" $
+      field "folded_value" $ field "value" numtm),
   JSONDecode.map (fn (e,t) =>
     (K $ mk_comb(Array_tm, e), t)) $
   tuple2 (expression,
