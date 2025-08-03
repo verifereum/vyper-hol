@@ -1163,7 +1163,6 @@ val ClearTransientStorage_tm =
 
 val unsupported_code = [
   "def boo(a: DynArray[uint256, 12] =", (* TODO: default argument values *)
-  "in range(-", "in range(0, -", (* TODO: negative integer ranges *)
   "c = c / 1.2589", (* TODO: investigate why this test fails *)
   "convert(n, decimal)" (* TODO: conversion to decimal *)
 ]

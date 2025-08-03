@@ -1831,8 +1831,8 @@ val () = cv_auto_trans scoped_var_target_def;
 Definition get_range_limits_def:
   get_range_limits (IntV u1 n1) (IntV u2 n2) =
   (if u1 = u2 then
-     if 0 ≤ n1 ∧ n1 < n2
-     then INL (u1, (Num n1, Num n2))
+     if n1 ≤ n2
+     then INL (u1, n1, Num (n2 - n1))
      else INR "no range"
    else INR "range type") ∧
   get_range_limits _ _ = INR "range not IntV"
@@ -1937,7 +1937,7 @@ Definition evaluate_def:
     v2 <- get_Value tv2;
     rl <- lift_sum $ get_range_limits v1 v2;
     u <<- FST rl; ns <<- SND rl; n1 <<- FST ns; n2 <<- SND ns;
-    return $ GENLIST (λn. IntV u &(n1 + n)) (n2 - n1)
+    return $ GENLIST (λn. IntV u (n1 + &n)) n2
   od ∧
   eval_target cx (BaseTarget t) = do
     (loc, sbs) <- eval_base_target cx t;

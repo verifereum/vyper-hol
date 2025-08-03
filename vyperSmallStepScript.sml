@@ -502,7 +502,7 @@ Definition apply_val_def:
   apply_val cx v2 st (RangeK2 v1 k) =
     (case do rl <- lift_sum $ get_range_limits v1 v2;
              u <<- FST rl; ns <<- SND rl; n1 <<- FST ns; n2 <<- SND ns;
-             return $ GENLIST (λn. IntV u &(n1 + n)) (n2 - n1)
+             return $ GENLIST (λn. IntV u (n1 + &n)) n2
      od st
        of (INR ex, st) => apply_exc cx ex st k
         | (INL vs, st) => AK cx (ApplyVals vs) st k) ∧
