@@ -1255,6 +1255,7 @@ fun has_unsupported_source_code (name, (err, j)) = let
 in
   List.exists p (unsupported_code @ [
     "as_wei_value", (* TODO: add support *)
+    " send(", (* TODO: add support *)
     "extcall",
     "staticcall",
     "raw_call",
