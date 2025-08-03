@@ -837,8 +837,13 @@ val iterator : ((term -> term) * term) decoder = achoose "iterator" [
           field "length" numtm)
 ]
 
+val (_, assignment_target_ty) = dom_rng $ type_of TupleTarget_tm
+
 fun d_assignmentTarget () : term decoder = achoose "tgt" [
-  JSONDecode.map (curry mk_comb BaseTarget_tm) baseAssignmentTarget
+  JSONDecode.map (curry mk_comb BaseTarget_tm) baseAssignmentTarget,
+  JSONDecode.map (fn ls =>
+    mk_comb(TupleTarget_tm, mk_list(ls, assignment_target_ty))) $
+    field "elements" $ array (delay d_assignmentTarget)
 ]
 val assignmentTarget = delay d_assignmentTarget
 
