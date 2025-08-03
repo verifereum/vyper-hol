@@ -1149,6 +1149,12 @@ val abiEntry : term decoder = achoose "abiEntry" [
               field "inputs" (array abiArg),
               field "outputs" (array abiArg),
               field "stateMutability" abiMutability),
+    check_field "type" "fallback" $
+    JSONDecode.map mk_Function $
+      tuple4 (succeed $ fromMLstring "__default__",
+              succeed $ [],
+              succeed $ [],
+              field "stateMutability" abiMutability),
     check_field "type" "event" $
     JSONDecode.map (fn s => mk_comb(Event_tm, s)) $
     field "name" stringtm
