@@ -63,6 +63,9 @@ val Env_tm          = astk"Env"
 val Acc_tm          = astk"Acc"
 val IntCall_tm      = astk"IntCall"
 val Empty_tm        = astk"Empty"
+val MaxValue_tm     = astk"MaxValue"
+val MinValue_tm     = astk"MinValue"
+val Epsilon_tm      = astk"Epsilon"
 val Convert_tm      = astk"Convert"
 val Name_tm         = astk"Name"
 val TopLevelName_tm = astk"TopLevelName"
@@ -151,6 +154,10 @@ fun mk_IfExp (e1,e2,e3) = list_mk_comb(IfExp_tm, [e1,e2,e3])
 fun mk_IntCall s = mk_comb(IntCall_tm, s)
 fun mk_Empty t = list_mk_comb(TypeBuiltin_tm, [
   Empty_tm, t, mk_list([], expr_ty)])
+fun mk_MaxValue t = list_mk_comb(TypeBuiltin_tm, [
+  MaxValue_tm, t, mk_list([], expr_ty)])
+fun mk_MinValue t = list_mk_comb(TypeBuiltin_tm, [
+  MinValue_tm, t, mk_list([], expr_ty)])
 fun mk_Convert (t,v) = list_mk_comb(TypeBuiltin_tm, [
   Convert_tm, t, mk_list([v], expr_ty)])
 fun mk_Call ct args = list_mk_comb(AstCall_tm, [ct, mk_list (args, expr_ty)])
@@ -683,6 +690,24 @@ fun d_expression () : term decoder = achoose "expr" [
       field "args" $
       JSONDecode.sub 0 $
       JSONDecode.map mk_Empty astType,
+    check_ast_type "Call" $
+    check (field "func" $ tuple2 (
+             field "ast_type" string,
+             field "id" string))
+          (equal ("Name", "max_value"))
+          "not max_value" $
+      field "args" $
+      JSONDecode.sub 0 $
+      JSONDecode.map mk_MaxValue astType,
+    check_ast_type "Call" $
+    check (field "func" $ tuple2 (
+             field "ast_type" string,
+             field "id" string))
+          (equal ("Name", "min_value"))
+          "not min_value" $
+      field "args" $
+      JSONDecode.sub 0 $
+      JSONDecode.map mk_MinValue astType,
     check_ast_type "Call" $
     JSONDecode.map mk_Convert $
     check (field "func" $ tuple2 (
