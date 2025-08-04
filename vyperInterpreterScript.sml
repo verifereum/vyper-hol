@@ -1534,13 +1534,34 @@ Definition assign_target_def:
     set_immutable cx ni a';
     return $ Value a
   od ∧
-  assign_target _ _ _ = raise (Error "TODO: TupleTargetV")
+  assign_target cx (TupleTargetV gvs) (Replace (ArrayV (Fixed n) vs)) = do
+    check (LENGTH gvs = n ∧ LENGTH vs = n) "TupleTargetV length";
+    ws <- assign_targets cx gvs vs;
+    return $ Value $ ArrayV (Fixed n) ws
+  od ∧
+  assign_target _ _ _ = raise (Error "assign_target") ∧
+  assign_targets cx [] _ = return [] ∧
+  assign_targets cx (gv::gvs) (v::vs) = do
+    tw <- assign_target cx gv (Replace v);
+    w <- get_Value tw;
+    ws <- assign_targets cx gvs vs;
+    return $ w::ws
+  od ∧
+  assign_targets _ _ _ = raise (Error "assign_targets")
 End
 
-val () = assign_target_def
+val assign_target_pre_def = assign_target_def
   |> SRULE [FUN_EQ_THM, bind_def, LET_RATOR, ignore_bind_def,
             option_CASE_rator, lift_option_def]
-  |> cv_auto_trans;
+  |> cv_auto_trans_pre;
+
+Theorem assign_target_pre[cv_pre]:
+  (∀w x y z. assign_target_pre w x y z) ∧
+  (∀w x y z. assign_targets_pre w x y z)
+Proof
+  ho_match_mp_tac assign_target_ind \\ rw[]
+  \\ rw[Once assign_target_pre_def]
+QED
 
 Theorem expr1_size_map:
   expr1_size ls = LENGTH ls + SUM (MAP expr2_size ls)
