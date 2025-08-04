@@ -1173,7 +1173,16 @@ val ClearTransientStorage_tm =
 
 val unsupported_code = [
   "def boo(a: DynArray[uint256, 12] =", (* TODO: default argument values *)
+  "def addition(a: uint256, b: uint256 = 1)", (* TODO: ditto *)
+  "def outer(xs: Bytes[256] = ", (* TODO: default arguments on external fns *)
   "c = c / 1.2589", (* TODO: investigate why this test fails *)
+  "concat(self.greeting, greet)", (* TODO: investigate why this test fails *)
+  "return concat(b, a)", (* TODO: investigate why this test fails *)
+  "self.a_message = a", (* TODO: investigate why this test fails *)
+  "def _test(a: bytes32) -> (bytes32, uint256, int128)", (* TODO: investigate why this test fails *)
+  "def _test_combined(a: Bytes[50], x: int128, c:Bytes[50]) -> (int128, Bytes[100], Bytes[100])", (* TODO: investigate why this test fails *)
+  "@raw_return\n", (* TODO: add *)
+  "_convert(x: bytes32) -> uint256", (* TODO: conversion *)
   "convert(n, decimal)" (* TODO: conversion to decimal *)
 ]
 
@@ -1315,13 +1324,20 @@ val test_files_with_prefixes = [
     "test_string_map_keys.json",
     "test_ternary.json",
     "test_transient.json"]),
+  ("../vyper/tests/export/functional/codegen/features/decorators",
+   ["test_nonreentrant.json",
+    "test_payable.json",
+    "test_private.json",
+    "test_public.json",
+    "test_pure.json",
+    "test_raw_return.json",
+    "test_view.json"]),
   ("../vyper/tests/export/functional/codegen/features/iteration",
    ["test_break.json",
     "test_continue.json",
-    "test_for_in_list.json"(*,
-    TODO: add
+    "test_for_in_list.json",
     "test_for_range.json",
-    "test_range_in.json" *)])
+    "test_range_in.json"])
 ]
 
 fun make_test_files [] acc = List.rev acc
@@ -1353,27 +1369,22 @@ end
 
 (*
 
-  val json_path = "../vyper/tests/export/functional/codegen/features/iteration/test_for_in_list.json"
+  val json_path = "../vyper/tests/export/functional/codegen/features/decorators/test_private.json"
   val test_jsons = decodeFile rawObject json_path
-  val SOME (name, json) = List.find (String.isPrefix "test_basic_for_in_lists" o #1) test_jsons
+  val SOME (name, json) = List.find (String.isPrefix "test_private_payable" o #1) test_jsons
   val traces = decode (field "traces" $ array raw) json
   val tr = el 1 traces
   decode trace tr
   decode (field "source_code" string) tr
   val tls = decode (field "annotated_ast" $ field "ast" $ field "body" $ array raw) tr
-  val tl = el 1 tls
+  val tl = el 3 tls
   decode toplevel tl
   val body = decode (field "body" (array raw)) tl
-  val stmt = el 3 body
+  val stmt = el 4 body
   decode statement stmt
   decode (field "ast_type" string) stmt
-  val stmts = decode (field "body" (array raw)) stmt
-  val stmt = el 2 stmts
-  decode statement stmt
-  decode (field "ast_type" string) stmt
-  val expr = decode (field "value" raw) stmt
-  decode (field "ast_type" string) expr
-  decode expression expr
+  val tgt = decode (field "target" raw) stmt
+  decode (field "target" assignmentTarget) stmt
 
 *)
 
