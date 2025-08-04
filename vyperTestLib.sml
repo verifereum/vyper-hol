@@ -353,13 +353,12 @@ val call : term decoder =
                       field "calldata" bytes,
                       field "value" numtm,
                       field "to" address),
-            field "call_args" $ field "env" $ field "tx" $
+            field "env" $ field "tx" $
               tuple3 (field "gas_price" numtm,
                       field "gas" numtm,
                       field "origin" address),
             tuple2 (
-              field "call_args" $ field "env" $ field "block" $
-                field "timestamp" numtm,
+              field "env" $ field "block" $ field "timestamp" numtm,
               field "output" (JSONDecode.map (from_term_option bytes_ty) $
                               nullable bytes))))
 
