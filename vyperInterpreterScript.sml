@@ -1103,6 +1103,16 @@ Definition evaluate_convert_def:
     (if compatible_bound bd (LENGTH bs)
      then INL $ BytesV bd bs
      else INR "convert BytesV bound") ∧
+  evaluate_convert (BytesV _ bs) (BaseT (UintT n)) =
+    (let i = w2i $ word_of_bytes T (0w:bytes32) bs in
+     if within_int_bound (Unsigned n) i
+     then INL $ IntV (Unsigned n) i
+     else INR "convert BytesV uint bound") ∧
+  evaluate_convert (BytesV _ bs) (BaseT (IntT n)) =
+    (let i = w2i $ word_of_bytes T (0w:bytes32) bs in
+     if within_int_bound (Signed n) i
+     then INL $ IntV (Signed n) i
+     else INR "convert BytesV int bound") ∧
   evaluate_convert (IntV u i) (BaseT (IntT n)) =
     (if within_int_bound (Signed n) i
      then INL $ IntV (Signed n) i
