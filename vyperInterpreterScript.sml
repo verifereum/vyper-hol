@@ -1,76 +1,10 @@
-open HolKernel boolLib bossLib Parse wordsLib blastLib dep_rewrite monadsyntax
-     alistTheory rich_listTheory byteTheory finite_mapTheory keccakTheory
-     int_bitwiseTheory arithmeticTheory combinTheory pairTheory whileTheory
-     cv_typeTheory cv_stdTheory cv_transLib
-open vfmTypesTheory vfmStateTheory vyperAstTheory
-
-val () = new_theory "vyperInterpreter";
-
-(* TODO: delete once merged upstream *)
-
-Theorem cv_ispair_cv_add[simp]:
-  cv_ispair (cv_add x y) = Num 0
-Proof
-  Cases_on`x` \\ Cases_on`y` \\ rw[]
-QED
-
-val FUPDATE_LIST_pre_def = FUPDATE_LIST_THM
- |> SRULE [FORALL_PROD]
- |> INST_TYPE [alpha |-> “:num”]
- |> cv_auto_trans_pre;
-
-Theorem FUPDATE_LIST_pre[cv_pre]:
-  ∀f ls. FUPDATE_LIST_pre f ls
-Proof
-  Induct_on`ls`
-  \\ rw[Once FUPDATE_LIST_pre_def]
-QED
-
-Theorem cv_rep_DOMSUB[cv_rep]:
-  from_fmap f (m \\ k) = cv_delete (Num k) (from_fmap f m)
-Proof
-  rw[from_fmap_def, GSYM cv_delete_thm]
-  \\ AP_TERM_TAC
-  \\ DEP_REWRITE_TAC[sptreeTheory.spt_eq_thm]
-  \\ rw[sptreeTheory.wf_fromAList, sptreeTheory.wf_delete]
-  \\ rw[sptreeTheory.lookup_delete, sptreeTheory.lookup_fromAList]
-  \\ rw[DOMSUB_FLOOKUP_THM]
-QED
-
-Theorem cv_size'_Num[simp]:
-  cv_size' (Num m) = Num 0
-Proof
-  rw[Once cv_size'_def]
-QED
-
-Theorem cv_size'_cv_mk_BN[simp]:
-  cv_size' (cv_mk_BN x y) =
-  cv_add (cv_size' x) (cv_size' y)
-Proof
-  rw[cv_mk_BN_def]
-  \\ TRY (
-    rw[Once cv_size'_def]
-    \\ rw[Once cv_size'_def]
-    \\ Cases_on`x` \\ gs[]
-    \\ rw[Once cv_size'_def, SimpRHS]
-    \\ NO_TAC)
-  \\ rw[Once cv_size'_def]
-  \\ rw[Once cv_size'_def]
-  \\ Cases_on`y` \\ gs[]
-  \\ rw[Once cv_size'_def]
-  \\ rw[Once cv_size'_def]
-  \\ rw[Once cv_size'_def]
-QED
-
-Theorem cv_size'_cv_mk_BS[simp]:
-  cv_size' (cv_mk_BS x y z) =
-  cv_add (cv_add (cv_size' x) (cv_size' z)) (Num 1)
-Proof
-  rw[cv_mk_BS_def]
-  \\ rw[Q.SPEC`Pair x y`cv_size'_def]
-  \\ Cases_on`x` \\ Cases_on`z` \\ gvs[]
-  \\ gvs[Q.SPEC`Pair x y`cv_size'_def]
-QED
+Theory vyperInterpreter
+Ancestors
+  arithmetic combin pair rich_list
+  alist finite_map byte int_bitwise
+  cv cv_std vfmTypes vfmState vyperAst
+Libs
+  cv_transLib blastLib monadsyntax
 
 (* TODO: move *)
 
@@ -79,7 +13,7 @@ Definition MAP_HEX_def:
   MAP_HEX (x::xs) = HEX x :: MAP_HEX xs
 End
 
-val MAP_HEX_pre_def = cv_auto_trans_pre MAP_HEX_def;
+val MAP_HEX_pre_def = cv_auto_trans_pre "MAP_HEX_pre" MAP_HEX_def;
 
 Theorem MAP_HEX_pre_EVERY:
   MAP_HEX_pre ls = EVERY (λx. x < 16) ls
@@ -97,7 +31,7 @@ QED
 val num_to_dec_string_pre_def =
   ASCIInumbersTheory.num_to_dec_string_def
   |> SRULE [ASCIInumbersTheory.n2s_def, FUN_EQ_THM, GSYM MAP_HEX_MAP]
-  |> cv_trans_pre;
+  |> cv_trans_pre "num_to_dec_string_pre";
 
 Theorem num_to_dec_string_pre[cv_pre]:
   num_to_dec_string_pre x
@@ -108,7 +42,7 @@ Proof
   \\ first_x_assum drule \\ rw[]
 QED
 
-val int_exp_pre_def = cv_auto_trans_pre integerTheory.int_exp;
+val int_exp_pre_def = cv_auto_trans_pre "int_exp_pre" integerTheory.int_exp;
 
 Theorem int_exp_pre[cv_pre]:
   int_exp_pre p v
@@ -127,12 +61,12 @@ Definition bits_bitwise_and_def:
   bits_bitwise_and = bits_bitwise $/\
 End
 
-val bits_bitwise_and_pre_def = bits_bitwise_def
+val bits_bitwise_and_pre_def = (bits_bitwise_def
  |> oneline
  |> Q.GEN`f`
  |> Q.ISPEC`$/\`
  |> SRULE [GSYM bits_bitwise_and_def]
- |> (curry $ flip $ uncurry cv_trans_pre_rec)
+ |> cv_trans_pre_rec "bits_bitwise_and_pre")
     (WF_REL_TAC `inv_image ($< LEX $<) (λ(x,y). (cv_size x, cv_size y))`
      \\ rw[]
      \\ Cases_on`cv_v` \\ gvs[]
@@ -160,12 +94,12 @@ Definition bits_bitwise_or_def:
   bits_bitwise_or = bits_bitwise $\/
 End
 
-val bits_bitwise_or_pre_def = bits_bitwise_def
+val bits_bitwise_or_pre_def = (bits_bitwise_def
  |> oneline
  |> Q.GEN`f`
  |> Q.ISPEC`$\/`
  |> SRULE [GSYM bits_bitwise_or_def]
- |> (curry $ flip $ uncurry cv_trans_pre_rec)
+ |> cv_trans_pre_rec "bits_bitwise_or_pre")
     (WF_REL_TAC `inv_image ($< LEX $<) (λ(x,y). (cv_size x, cv_size y))`
      \\ rw[]
      \\ Cases_on`cv_v` \\ gvs[]
@@ -193,12 +127,12 @@ Definition bits_bitwise_xor_def:
   bits_bitwise_xor = bits_bitwise ((≠) : bool -> bool -> bool)
 End
 
-val bits_bitwise_xor_pre_def = bits_bitwise_def
+val bits_bitwise_xor_pre_def = (bits_bitwise_def
  |> oneline
  |> Q.GEN`f`
  |> Q.ISPEC`λx:bool y. x ≠ y`
  |> SRULE [GSYM bits_bitwise_xor_def]
- |> (curry $ flip $ uncurry cv_trans_pre_rec)
+ |> cv_trans_pre_rec "bits_bitwise_xor_pre")
     (WF_REL_TAC `inv_image ($< LEX $<) (λ(x,y). (cv_size x, cv_size y))`
      \\ rw[]
      \\ Cases_on`cv_v` \\ gvs[]
@@ -420,7 +354,7 @@ val () = cv_auto_trans_rec default_value_def (
   \\ disj1_tac
   \\ pop_assum mp_tac
   \\ qmatch_goalsub_abbrev_tac`cv_lookup ck`
-  \\ `cv_ispair ck = Num 0`
+  \\ `cv_ispair ck = cv$Num 0`
   by (
     rw[Abbr`ck`, definition"cv_string_to_num_def"]
     \\ rw[Once keccakTheory.cv_l2n_def]
@@ -719,7 +653,7 @@ Definition evaluate_concat_def:
        | NONE => INR "concat type or bound"
 End
 
-val evaluate_concat_pre_def = cv_auto_trans_pre evaluate_concat_def;
+val evaluate_concat_pre_def = cv_auto_trans_pre "evaluate_concat_pre" evaluate_concat_def;
 
 Theorem evaluate_concat_pre[cv_pre]:
   evaluate_concat_pre b vs
@@ -860,7 +794,7 @@ Definition evaluate_subscript_def:
   evaluate_subscript _ _ _ = INR "evaluate_subscript"
 End
 
-val evaluate_subscript_pre_def = cv_auto_trans_pre evaluate_subscript_def;
+val evaluate_subscript_pre_def = cv_auto_trans_pre "evaluate_subscript_pre" evaluate_subscript_def;
 
 Theorem evaluate_subscript_pre[cv_pre]:
   evaluate_subscript_pre ts av v
@@ -1420,7 +1354,7 @@ Definition assign_subscripts_def:
   assign_subscripts _ _ _ = INR "assign_subscripts"
 End
 
-val assign_subscripts_pre_def = cv_auto_trans_pre assign_subscripts_def;
+val assign_subscripts_pre_def = cv_auto_trans_pre "assign_subscripts_pre" assign_subscripts_def;
 
 Theorem assign_subscripts_pre[cv_pre]:
   !a b c. assign_subscripts_pre a b c
@@ -1450,7 +1384,7 @@ Definition evaluate_subscripts_def:
   evaluate_subscripts _ _ = INR "evaluate_subscripts"
 End
 
-val evaluate_subscripts_pre_def = cv_auto_trans_pre evaluate_subscripts_def;
+val evaluate_subscripts_pre_def = cv_auto_trans_pre "evaluate_subscripts_pre" evaluate_subscripts_def;
 
 Theorem evaluate_subscripts_pre[cv_pre]:
   !a b. evaluate_subscripts_pre a b
@@ -1486,7 +1420,7 @@ Definition assign_hashmap_def:
          | INR err => INR err)))
 End
 
-val assign_hashmap_pre_def = cv_auto_trans_pre assign_hashmap_def;
+val assign_hashmap_pre_def = cv_auto_trans_pre "assign_hashmap_pre" assign_hashmap_def;
 
 Theorem assign_hashmap_pre[cv_pre]:
   ∀v w x y z. assign_hashmap_pre v w x y z
@@ -1553,7 +1487,7 @@ End
 val assign_target_pre_def = assign_target_def
   |> SRULE [FUN_EQ_THM, bind_def, LET_RATOR, ignore_bind_def,
             option_CASE_rator, lift_option_def]
-  |> cv_auto_trans_pre;
+  |> cv_auto_trans_pre "assign_target_pre assign_targets_pre";
 
 Theorem assign_target_pre[cv_pre]:
   (∀w x y z. assign_target_pre w x y z) ∧
@@ -2345,5 +2279,3 @@ Definition load_contract_def:
        (* TODO: update balances on return *)
           | (_, am) => INL (am with sources updated_by CONS (addr, ts))
 End
-
-val () = export_theory();

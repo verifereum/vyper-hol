@@ -1,9 +1,8 @@
-open HolKernel boolLib bossLib Parse cv_transLib
-     vfmTypesTheory vyperAstTheory
-     vyperAbiTheory contractABITheory
-     vyperInterpreterTheory vyperSmallStepTheory
-
-val () = new_theory "vyperTestRunner";
+Theory vyperTestRunner
+Ancestors
+  contractABI vyperAbi vyperSmallStep
+Libs
+  cv_transLib
 
 (* TODO: move to contractABITheory? *)
 
@@ -263,5 +262,3 @@ Definition run_test_def:
 End
 
 val () = cv_auto_trans run_test_def;
-
-val () = export_theory();

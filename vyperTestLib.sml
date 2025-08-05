@@ -309,7 +309,7 @@ fun parse_abi_type s =
   else raise Fail ("parse_abi_type: " ^ s)
 
 fun check cd pred err d =
-  andThen (fn x => if pred x then d else fail err) cd
+  andThen cd (fn x => if pred x then d else fail err)
 
 fun check_field lab req =
   check (field lab string) (equal req) (lab ^ " not " ^ req)
@@ -571,7 +571,7 @@ fun d_expression () : term decoder = achoose "expr" [
         field "elements" (array (delay d_expression))
       ),
     check_ast_type "Subscript" $
-    andThen (fn (e1,e2) => succeed $ mk_Subscript e1 e2) $
+    JSONDecode.map (uncurry mk_Subscript) $
     tuple2 (field "value" (delay d_expression),
             field "slice" (delay d_expression)),
     check_ast_type "Attribute" $
@@ -738,7 +738,7 @@ fun d_expression () : term decoder = achoose "expr" [
     check_ast_type "NameConstant" $
     field "value" (JSONDecode.map mk_lb booltm),
     check_ast_type "Call" $
-    andThen (fn (i,a) => succeed $ mk_Call (mk_IntCall i) a) $
+    JSONDecode.map (fn (i,a) => mk_Call (mk_IntCall i) a) $
     tuple2 (
       field "func" (
         check_ast_type "Attribute" $
@@ -847,7 +847,7 @@ fun d_assignmentTarget () : term decoder = achoose "tgt" [
 val assignmentTarget = delay d_assignmentTarget
 
 fun mk_statements ls = mk_list(ls, stmt_ty)
-val d_statements = andThen (succeed o mk_statements) o array
+val d_statements = JSONDecode.map mk_statements o array
 
 fun d_statement () : term decoder = achoose "stmt" [
     check_ast_type "Pass" $ succeed Pass_tm,
@@ -880,7 +880,7 @@ fun d_statement () : term decoder = achoose "stmt" [
             field "iter" iterator,
             field "body" (d_statements (delay d_statement))),
     check_ast_type "If" $
-    andThen (fn (e,s1,s2) => succeed $ mk_If e s1 s2) $
+    JSONDecode.map (fn (e,s1,s2) => mk_If e s1 s2) $
     tuple3 (field "test" expression,
             field "body" (d_statements (delay d_statement)),
             field "orelse" (d_statements (delay d_statement))),
@@ -918,7 +918,7 @@ fun d_statement () : term decoder = achoose "stmt" [
       field "value" expression
     ),
     check_ast_type "Assign" $
-    andThen (fn (t,e) => succeed $ list_mk_comb(Assign_tm, [t,e])) $
+    JSONDecode.map (fn (t,e) => list_mk_comb(Assign_tm, [t,e])) $
     tuple2 (
       field "target" assignmentTarget,
       field "value" expression
@@ -1014,16 +1014,17 @@ val variableDecl : term decoder =
   JSONDecode.map mk_VariableDecl $
   tuple4 (
     variableVisibility,
-    andThen (fn (im,tr,con) => succeed (
+    JSONDecode.map (fn (im,tr,con) =>
       if im then Immutable_tm else
       if tr then Transient_tm else
       case con of SOME e => mk_comb(Constant_tm, e)
-                | NONE => Storage_tm)) $
+                | NONE => Storage_tm) $
     tuple3 (
       field "is_immutable" bool,
       field "is_transient" bool,
-      andThen (fn b => (if b then field "value" (JSONDecode.map SOME expression)
-                        else succeed NONE)) (field "is_constant" bool)),
+      andThen (field "is_constant" bool)
+              (fn b => if b then field "value" (JSONDecode.map SOME expression)
+                       else succeed NONE)),
     field "target" (check_ast_type "Name" (field "id" stringtm)),
     field "annotation" astType)
 
@@ -1120,12 +1121,12 @@ val abiArg : term decoder =
   tuple2 (field "name" stringtm, abiType)
 
 val abiMutability : term decoder =
-  andThen (fn s =>
+  andThen string (fn s =>
     if s = "nonpayable" then succeed Nonpayable_tm else
     if s = "view" then succeed View_tm else
     if s = "payable" then succeed Payable_tm else
     if s = "pure" then succeed Pure_tm else
-    fail ("abiMutability: " ^ s)) string
+    fail ("abiMutability: " ^ s))
 
 val Function_tm = prim_mk_const{Thy="vyperTestRunner",Name="Function"}
 val Event_tm = prim_mk_const{Thy="vyperTestRunner",Name="Event"}
@@ -1191,7 +1192,7 @@ val deployment : term decoder =
   check (field "source_code" string)
         (fn src => List.all (fn x => not $ String.isSubstring x src) unsupported_code)
         "has unsupported_code" $
-  andThen (fn ((c,i,(s,m,a),(d,v)),e) => succeed $
+  JSONDecode.map (fn ((c,i,(s,m,a),(d,v)),e) =>
              TypeBase.mk_record (deployment_trace_ty, [
                ("sourceAst", c),
                ("contractAbi", mk_list(i, abi_entry_ty)),

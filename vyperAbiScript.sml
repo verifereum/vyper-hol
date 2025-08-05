@@ -1,7 +1,9 @@
-open HolKernel boolLib bossLib Parse wordsLib cv_transLib
-     contractABITheory vyperAstTheory vyperInterpreterTheory
-
-val () = new_theory "vyperAbi";
+Theory vyperAbi
+Ancestors
+  contractABI vyperAst vyperInterpreter
+Libs
+  cv_transLib
+  wordsLib
 
 Definition vyper_base_to_abi_type_def[simp]:
   vyper_base_to_abi_type (UintT n) = Uint n ∧
@@ -82,7 +84,7 @@ Definition CHR_o_w2n_def:
   CHR_o_w2n (b: byte) = CHR (w2n b)
 End
 
-val CHR_o_w2n_pre_def = cv_auto_trans_pre CHR_o_w2n_def;
+val CHR_o_w2n_pre_def = cv_auto_trans_pre "CHR_o_w2n_pre" CHR_o_w2n_def;
 
 Theorem CHR_o_w2n_pre[cv_pre]:
   CHR_o_w2n_pre x
@@ -101,7 +103,7 @@ QED
 val abi_to_vyper_pre_def =
   abi_to_vyper_def
   |> REWRITE_RULE[GSYM CHR_o_w2n_eq]
-  |> cv_auto_trans_pre;
+  |> cv_auto_trans_pre "abi_to_vyper_pre abi_to_vyper_list_pre";
 
 Theorem abi_to_vyper_pre[cv_pre]:
   (!v1 v0 v. abi_to_vyper_pre v1 v0 v) ∧
@@ -111,5 +113,3 @@ Proof
   \\ rw[]
   \\ rw[Once abi_to_vyper_pre_def]
 QED
-
-val () = export_theory();

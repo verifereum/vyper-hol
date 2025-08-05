@@ -1,8 +1,9 @@
-open HolKernel boolLib bossLib Parse
-     cv_transLib whileTheory pairTheory combinTheory
-     listTheory arithmeticTheory vyperInterpreterTheory
-
-val () = new_theory "vyperSmallStep";
+Theory vyperSmallStep
+Ancestors
+  arithmetic combin pair list while
+  vyperInterpreter
+Libs
+  cv_transLib
 
 (*
   plan for cps version:
@@ -206,7 +207,7 @@ val eval_expr_cps_pre_def = eval_expr_cps_def
         [liftk1, bind_def, ignore_bind_def,
          LET_RATOR, option_CASE_rator,
          sum_CASE_rator, prod_CASE_rator, lift_option_def]
-   |> cv_auto_trans_pre;
+   |> cv_auto_trans_pre "eval_expr_cps_pre eval_exprs_cps_pre";
 
 Theorem eval_expr_cps_pre[cv_pre]:
   (∀a b c d. eval_expr_cps_pre a b c d) ∧
@@ -412,7 +413,7 @@ End
 val apply_base_target_pre_def = apply_base_target_def
   |> SRULE [liftk1, prod_CASE_rator, sum_CASE_rator,
             LET_RATOR, bind_def, ignore_bind_def]
-  |> cv_auto_trans_pre;
+  |> cv_auto_trans_pre "apply_base_target_pre";
 
 Theorem assign_subscripts_PopOp_not_empty:
   ∀v is ao b.
@@ -585,7 +586,7 @@ val apply_vals_pre_def = apply_vals_def
   |> SRULE [liftk1, bind_def, ignore_bind_def, lift_option_def,
             lift_sum_def, prod_CASE_rator,
             sum_CASE_rator, option_CASE_rator]
-  |> cv_auto_trans_pre;
+  |> cv_auto_trans_pre "apply_vals_pre";
 
 Theorem apply_vals_pre[cv_pre]:
   ∀a b c d. apply_vals_pre a b c d
@@ -1212,7 +1213,7 @@ Proof
   \\ simp[Once cont_def]
 QED
 
-val cont_tr_pre_def = cv_trans_pre cont_tr;
+val cont_tr_pre_def = cv_trans_pre "cont_pre" cont_tr;
 
 Theorem IS_SOME_cont:
   IS_SOME (cont ak) ⇔
@@ -1280,7 +1281,7 @@ QED
 
 val constants_env_pre_def = constants_env_def
   |> SRULE [eval_expr_eq_cont_cps]
-  |> cv_auto_trans_pre;
+  |> cv_auto_trans_pre "constants_env_pre";
 
 Theorem constants_env_pre[cv_pre]:
   ∀x. constants_env_pre x
@@ -1300,7 +1301,7 @@ QED
 
 val call_external_function_pre_def = call_external_function_def
      |> SRULE [eval_stmts_eq_cont_cps, ignore_bind_def, bind_def]
-     |> cv_auto_trans_pre;
+     |> cv_auto_trans_pre "call_external_function_pre";
 
 Theorem call_external_function_pre[cv_pre]:
   call_external_function_pre am cx mut ts args vals body
@@ -1319,5 +1320,3 @@ QED
 val () = cv_auto_trans call_external_def;
 
 val () = cv_auto_trans load_contract_def;
-
-val () = export_theory();

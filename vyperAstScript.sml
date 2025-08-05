@@ -1,7 +1,8 @@
-open HolKernel boolLib bossLib Parse wordsLib cv_transLib;
-open wordsTheory integerTheory stringTheory listTheory optionTheory;
-
-val () = new_theory "vyperAst";
+Theory vyperAst
+Ancestors
+  string words
+Libs
+  cv_transLib
 
 Type identifier = “:string”;
 
@@ -265,5 +266,3 @@ Overload self_ = “λid. TopLevelName id”
 Overload self = “Builtin (Env SelfAddr) []”
 Overload self_balance = “Builtin (Acc Balance) [self]”
 Overload call = “λid args. Call (IntCall id) args”
-
-val () = export_theory();
