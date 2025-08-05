@@ -4,7 +4,7 @@ open HolKernel boolLib JSONDecode JSONUtil cv_transLib wordsLib
      pairSyntax listSyntax stringSyntax optionSyntax
      intSyntax wordsSyntax fcpSyntax
      vfmTypesSyntax byteStringCacheLib
-     vyperAbiTheory vyperAstTheory vyperTestRunnerTheory
+     vyperABITheory vyperAstTheory vyperTestRunnerTheory
 
 val export_theory_no_docs = fn () =>
   Feedback.set_trace "TheoryPP.include_docs" 0

@@ -1,4 +1,4 @@
-Theory vyperAbi
+Theory vyperABI
 Ancestors
   contractABI vyperAst vyperInterpreter
 Libs

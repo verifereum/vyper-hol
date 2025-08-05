@@ -1,6 +1,6 @@
 Theory vyperTestRunner
 Ancestors
-  contractABI vyperAbi vyperSmallStep
+  contractABI vyperABI vyperSmallStep
 Libs
   cv_transLib
 
