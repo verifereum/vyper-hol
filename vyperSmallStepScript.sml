@@ -116,7 +116,9 @@ Definition eval_base_target_cps_def:
     (let r = do
         sc <- get_scopes;
         n <<- string_to_num id;
-        svo <<- scoped_var_target sc id n;
+        svo <<- if IS_SOME (lookup_scopes n sc)
+                then SOME $ ScopedVar id
+                else NONE;
         ivo <- if cx.txn.is_creation
                then do imms <- get_immutables cx;
                        return $ immutable_target imms id n
@@ -446,7 +448,7 @@ Proof
   \\ qmatch_asmsub_rename_tac`BaseTargetV loc sbs`
   \\ drule_at Any assign_subscripts_PopOp_not_empty
   \\ Cases_on`loc` \\ TRY (PairCases_on`p`)
-  \\ gvs[assign_target_def, bind_def, ignore_bind_def,
+  \\ gvs[assign_target_def, bind_def, ignore_bind_def, UNCURRY,
          CaseEq"prod", CaseEq"sum", return_def, lift_sum_def,
          lift_option_def, sum_CASE_rator, option_CASE_rator,
          CaseEq"option", raise_def, assign_toplevel_def,

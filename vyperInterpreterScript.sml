@@ -411,20 +411,19 @@ Definition lookup_scopes_def:
   | SOME v => SOME v
 End
 
-Type containing_scope = “:scope list # scope # scope list”;
-
 Definition find_containing_scope_def:
-  find_containing_scope id [] = NONE : containing_scope option ∧
+  find_containing_scope id ([]:scope list) = NONE ∧
   find_containing_scope id (env::rest) =
-  if id ∈ FDOM env then SOME ([], env, rest)
-  else OPTION_MAP (λ(p,q). (env::p, q)) (find_containing_scope id rest)
+  case FLOOKUP env id of NONE =>
+    OPTION_MAP (λ(p,q). (env::p, q)) (find_containing_scope id rest)
+  | SOME v => SOME ([], env, v, rest)
 End
 
-val () = cv_auto_trans (REWRITE_RULE[TO_FLOOKUP]find_containing_scope_def);
+val () = cv_auto_trans find_containing_scope_def;
 
 Datatype:
   location
-  = ScopedVar containing_scope identifier
+  = ScopedVar identifier
   | ImmutableVar identifier
   | TopLevelVar identifier
 End
@@ -1301,7 +1300,7 @@ Definition set_variable_def:
   set_variable id v = do
     n <<- string_to_num id;
     sc <- get_scopes;
-    (pre, env, rest) <-
+    (pre, env, _, rest) <-
       lift_option (find_containing_scope n sc) "set_variable not found";
     set_scopes (pre ++ (env |+ (n, v))::rest)
   od
@@ -1455,9 +1454,10 @@ val () = assign_toplevel_def
   |> cv_auto_trans;
 
 Definition assign_target_def:
-  assign_target cx (BaseTargetV (ScopedVar (pre,env,rest) id) is) ao = do
+  assign_target cx (BaseTargetV (ScopedVar id) is) ao = do
     ni <<- string_to_num id;
-    a <- lift_option (FLOOKUP env ni) "assign_target lookup";
+    sc <- get_scopes;
+    (pre, env, a, rest) <- lift_option (find_containing_scope ni sc) "assign_target lookup";
     a' <- lift_sum $ assign_subscripts a (REVERSE is) ao;
     set_scopes $ pre ++ env |+ (ni, a') :: rest;
     return $ Value a
@@ -1484,7 +1484,7 @@ Definition assign_target_def:
     return $ Value $ ArrayV (Fixed n) ws
   od ∧
   assign_target _ _ _ = raise (Error "assign_target") ∧
-  assign_targets cx [] _ = return [] ∧
+  assign_targets cx [] [] = return [] ∧
   assign_targets cx (gv::gvs) (v::vs) = do
     tw <- assign_target cx gv (Replace v);
     w <- get_Value tw;
@@ -1496,7 +1496,7 @@ End
 
 val assign_target_pre_def = assign_target_def
   |> SRULE [FUN_EQ_THM, bind_def, LET_RATOR, ignore_bind_def,
-            option_CASE_rator, lift_option_def]
+            UNCURRY, option_CASE_rator, lift_option_def]
   |> cv_auto_trans_pre "assign_target_pre assign_targets_pre";
 
 Theorem assign_target_pre[cv_pre]:
@@ -1785,14 +1785,6 @@ End
 
 val () = cv_auto_trans immutable_target_def;
 
-Definition scoped_var_target_def:
-  scoped_var_target sc id n =
-  case find_containing_scope n sc of NONE => NONE |
-    SOME cs => SOME $ ScopedVar cs id
-End
-
-val () = cv_auto_trans scoped_var_target_def;
-
 Definition get_range_limits_def:
   get_range_limits (IntV u1 n1) (IntV u2 n2) =
   (if u1 = u2 then
@@ -1921,7 +1913,9 @@ Definition evaluate_def:
   eval_base_target cx (NameTarget id) = do
     sc <- get_scopes;
     n <<- string_to_num id;
-    svo <<- scoped_var_target sc id n;
+    svo <<- if IS_SOME (lookup_scopes n sc)
+            then SOME $ ScopedVar id
+	    else NONE;
     ivo <- if cx.txn.is_creation
            then do imms <- get_immutables cx;
                    return $ immutable_target imms id n
