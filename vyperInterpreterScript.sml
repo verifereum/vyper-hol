@@ -224,6 +224,21 @@ Proof
   \\ first_x_assum drule \\ rw[]
 QED
 
+Theorem list_size_SUM_MAP:
+  list_size f ls = LENGTH ls + SUM (MAP f ls)
+Proof
+  Induct_on `ls` \\ rw[listTheory.list_size_def]
+QED
+
+Theorem list_size_pair_size_map:
+  list_size (pair_size f1 f2) ls =
+  list_size f1 (MAP FST ls) +
+  list_size f2 (MAP SND ls)
+Proof
+  Induct_on`ls` \\ rw[]
+  \\ Cases_on`h` \\ gvs[]
+QED
+
 (* -- *)
 
 Definition string_to_num_def:
@@ -233,10 +248,119 @@ End
 val () = cv_auto_trans string_to_num_def;
 
 Datatype:
+  type_value
+  = BaseTV base_type
+  | TupleTV (type_value list)
+  | ArrayTV type_value bound
+  | StructTV ((identifier # type_value) list)
+  | NoneTV
+End
+
+Datatype:
+  type_args = StructArgs (argument list) | FlagArgs num
+End
+
+Definition evaluate_type_def:
+  evaluate_type tenv (BaseT bt) = SOME $ BaseTV bt ∧
+  evaluate_type tenv (TupleT ts) =
+    (case evaluate_types tenv ts [] of
+     | NONE => NONE
+     | SOME tvs => SOME $ TupleTV tvs) ∧
+  evaluate_type tenv (ArrayT t bd) =
+    (case evaluate_type tenv t of
+     | SOME tv => SOME $ ArrayTV tv bd
+     | _ => NONE) ∧
+  evaluate_type tenv (StructT id) =
+  (let nid = string_to_num id in
+   case FLOOKUP tenv nid of
+   | SOME $ StructArgs args =>
+     (let names = MAP FST args in
+      case evaluate_types (tenv \\ nid) (MAP SND args) []
+      of SOME tvs => SOME $ StructTV (ZIP (names, tvs))
+       | _ => NONE)
+   | _ => NONE) ∧
+  evaluate_type tenv (FlagT _) = SOME $ BaseTV (UintT 256) ∧
+  evaluate_type tenv (NoneT) = SOME NoneTV ∧
+  evaluate_types tenv [] acc = SOME $ REVERSE acc ∧
+  evaluate_types tenv (t::ts) acc =
+  (case evaluate_type tenv t of
+   | SOME tv => evaluate_types tenv ts (tv::acc)
+   | _ => NONE)
+Termination
+  WF_REL_TAC ‘inv_image ($< LEX $<) (λx.
+    case x
+      of INL (env, t) => (CARD (FDOM env), type_size t)
+       | INR (env, ts, _) => (CARD (FDOM env), list_size type_size ts))’
+  \\ rw[FLOOKUP_DEF]
+  \\ disj1_tac
+  \\ CCONTR_TAC
+  \\ fs[]
+End
+
+val () = cv_auto_trans_rec evaluate_type_def (
+  WF_REL_TAC ‘inv_image ($< LEX $<) (λx.
+    case x
+      of INL (env, t) => (cv$c2n $ cv_size' env, cv_size t)
+       | INR (env, ts, _) => (cv$c2n (cv_size' env), cv_size ts))’
+  \\ rw[]
+  \\ TRY(Cases_on`cv_v` \\ gs[] \\ NO_TAC)
+  \\ TRY(Cases_on`cv_v` \\ gs[]
+         \\ qmatch_asmsub_rename_tac`cv_ispair cv_v`
+         \\ Cases_on`cv_v` \\ gs[] \\ NO_TAC)
+  \\ TRY(Cases_on`cv_v` \\ gs[]
+         \\ qmatch_goalsub_rename_tac`cv_fst cv_v`
+         \\ Cases_on`cv_v` \\ gs[] \\ NO_TAC)
+  \\ disj1_tac
+  \\ pop_assum mp_tac
+  \\ qmatch_goalsub_abbrev_tac`cv_lookup ck`
+  \\ `cv_ispair ck = cv$Num 0`
+  by (
+    rw[Abbr`ck`, definition"cv_string_to_num_def"]
+    \\ rw[Once keccakTheory.cv_l2n_def]
+    \\ rw[cv_ispair_cv_add] )
+  \\ pop_assum mp_tac
+  \\ qid_spec_tac`cv_tenv`
+  \\ qid_spec_tac`ck`
+  \\ rpt (pop_assum kall_tac)
+  \\ ho_match_mp_tac cv_stdTheory.cv_delete_ind
+  \\ rpt gen_tac \\ strip_tac
+  \\ simp[Once cv_lookup_def]
+  \\ IF_CASES_TAC \\ gs[]
+  \\ strip_tac \\ gs[]
+  \\ reverse(IF_CASES_TAC \\ gs[])
+  >- (
+    Cases_on`ck` \\ gs[]
+    \\ IF_CASES_TAC \\ gs[]
+    \\ Cases_on`cv_tenv` \\ gs[]
+    \\ Cases_on`0 < m` \\ gs[]
+    \\ simp[Once cv_delete_def]
+    \\ rw[Once cv_stdTheory.cv_size'_def]
+    \\ rw[Once cv_stdTheory.cv_size'_def] )
+  \\ Cases_on`cv_tenv` \\ gs[]
+  \\ Cases_on`ck` \\ gs[]
+  \\ strip_tac
+  \\ simp[Once cv_delete_def]
+  \\ Cases_on`g` \\ gs[]
+  \\ Cases_on`m=0` \\ gs[]
+  >- (
+    rw[] \\ gs[]
+    \\ rw[Once cv_stdTheory.cv_size'_def]
+    \\ rw[Once cv_stdTheory.cv_size'_def, SimpR``prim_rec$<``]
+    \\ rw[] )
+  \\ simp[Once cv_stdTheory.cv_size'_def, SimpR``prim_rec$<``]
+  \\ qmatch_goalsub_rename_tac`2 < p`
+  \\ Cases_on`p=0` \\ gs[]
+  \\ Cases_on`p=1` \\ gs[]
+  \\ Cases_on`p=2` \\ gvs[]
+  >- (IF_CASES_TAC \\ gs[cv_size'_cv_mk_BN])
+  \\ IF_CASES_TAC \\ gs[]
+);
+
+Datatype:
   value
   = NoneV
   | BoolV bool
-  | ArrayV (type option) bound (value list)
+  | ArrayV (type_value option) bound (value list)
   | IntV int_bound int
   | StringV num string
   | BytesV bound (word8 list)
@@ -295,18 +419,15 @@ val () = cv_auto_trans is_Value_def;
 
 Type hmap = “:(subscript, toplevel_value) alist”
 
-Datatype:
-  type_args = StructArgs (argument list) | FlagArgs num
-End
-
 Definition default_value_def:
   default_value env (BaseT (UintT n)) = IntV (Unsigned n) 0 ∧
   default_value env (BaseT (IntT n)) = IntV (Signed n) 0 ∧
   default_value env (BaseT DecimalT) = IntV (Signed 168) 0 ∧
   default_value env (TupleT ts) = default_value_tuple env [] ts ∧
-  default_value env (ArrayT t (Dynamic n)) = ArrayV (SOME t) (Dynamic n) [] ∧
+  default_value env (ArrayT t (Dynamic n)) =
+    ArrayV (evaluate_type env t) (Dynamic n) [] ∧
   default_value env (ArrayT t (Fixed n)) =
-    ArrayV (SOME t) (Fixed n) (REPLICATE n (default_value env t)) ∧
+    ArrayV (evaluate_type env t) (Fixed n) (REPLICATE n (default_value env t)) ∧
   default_value env (StructT id) =
     (let nid = string_to_num id in
      case FLOOKUP env nid
@@ -686,6 +807,23 @@ End
 
 val () = cv_auto_trans evaluate_slice_def;
 
+Definition get_self_code_def:
+  get_self_code cx = ALOOKUP cx.sources cx.txn.target
+End
+
+val () = cv_auto_trans get_self_code_def;
+
+Definition type_env_def:
+  type_env [] = FEMPTY ∧
+  type_env (StructDecl id args :: ts) =
+    type_env ts |+ (string_to_num id, StructArgs args) ∧
+  type_env (FlagDecl id ls :: ts) =
+    type_env ts |+ (string_to_num id, FlagArgs (LENGTH ls)) ∧
+  type_env (_ :: ts) = type_env ts
+End
+
+val () = cv_auto_trans type_env_def;
+
 Definition evaluate_builtin_def:
   evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
   evaluate_builtin cx _ Len [StringV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
@@ -705,7 +843,15 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ (Env TimeStamp) [] = INL $ IntV (Unsigned 256) &cx.txn.time_stamp ∧
   evaluate_builtin cx _ (Concat n) vs = evaluate_concat n vs ∧
   evaluate_builtin cx _ (Slice n) [v1; v2; v3] = evaluate_slice v1 v2 v3 n ∧
-  evaluate_builtin cx _ (MakeArray to bd) vs = INL $ ArrayV to bd vs ∧
+  evaluate_builtin cx _ (MakeArray to bd) vs =
+    (case get_self_code cx of SOME ts =>
+     (case to
+      of NONE => INL $ ArrayV NONE bd vs
+       | SOME t =>
+         (case evaluate_type (type_env ts) t
+	  of NONE => INR "MakeArray type"
+	   | SOME tv => INL $ ArrayV (SOME tv) bd vs))
+     | _ => INR "MakeArray code") ∧
   evaluate_builtin cx acc (Acc aop) [BytesV _ bs] =
     (let a = lookup_account (word_of_bytes T (0w:address) bs) acc in
       INL $ evaluate_account_op aop a) ∧
@@ -765,17 +911,6 @@ Definition value_to_key_def:
 End
 
 val () = cv_auto_trans value_to_key_def;
-
-Definition type_env_def:
-  type_env [] = FEMPTY ∧
-  type_env (StructDecl id args :: ts) =
-    type_env ts |+ (string_to_num id, StructArgs args) ∧
-  type_env (FlagDecl id ls :: ts) =
-    type_env ts |+ (string_to_num id, FlagArgs (LENGTH ls)) ∧
-  type_env (_ :: ts) = type_env ts
-End
-
-val () = cv_auto_trans type_env_def;
 
 Definition evaluate_subscript_def:
   evaluate_subscript ts (Value av) (IntV _ i) =
@@ -1086,12 +1221,6 @@ val () = transfer_value_def
             LET_RATOR, update_accounts_def, o_DEF, C_DEF]
   |> cv_auto_trans;
 
-Definition get_self_code_def:
-  get_self_code cx = ALOOKUP cx.sources cx.txn.target
-End
-
-val () = cv_auto_trans get_self_code_def;
-
 Definition evaluate_convert_def:
   evaluate_convert (IntV _ i) (BaseT BoolT) = INL $ BoolV (i ≠ 0) ∧
   evaluate_convert (BoolV b) (BaseT (IntT n)) =
@@ -1239,15 +1368,143 @@ End
 
 val () = cv_auto_trans lookup_function_def;
 
-(* TODO: cast types *)
-Definition bind_arguments_def:
-  bind_arguments ([]: argument list) [] = SOME (FEMPTY: scope) ∧
-  bind_arguments ((id, typ)::params) (v::vs) =
-    OPTION_MAP (λm. m |+ (string_to_num id, v)) (bind_arguments params vs) ∧
-  bind_arguments _ _ = NONE
+Definition safe_cast_def:
+  safe_cast t v = (
+  case t of
+  | BaseTV (UintT n) =>
+    (case v of
+     | IntV (Unsigned m) _
+       => if n = m then SOME v else NONE
+     | _ => NONE)
+  | BaseTV (IntT n) =>
+    (case v of
+     | IntV (Signed m) _
+       => if n = m then SOME v else NONE
+     | _ => NONE)
+  | BaseTV BoolT =>
+    (case v of
+     | BoolV _ => SOME v
+     | _ => NONE)
+  | BaseTV DecimalT =>
+    (case v of
+     | IntV (Signed m) _
+       => if 168 = m then SOME v else NONE
+     | _ => NONE)
+  | BaseTV (StringT n) =>
+    (case v of
+     | StringV m str
+       => if m ≤ n then SOME $ StringV n str else NONE
+     | _ => NONE)
+  | BaseTV (BytesT (Fixed n)) =>
+    (case v of
+     | BytesV (Fixed m) _ => if n = m then SOME v else NONE
+     | _ => NONE)
+  | BaseTV (BytesT (Dynamic n)) =>
+    (case v of
+     | BytesV (Dynamic m) bs =>
+       if m ≤ n then SOME $ BytesV (Dynamic n) bs else NONE
+     | _ => NONE)
+  | BaseTV AddressT =>
+    (case v of
+     | BytesV (Fixed m) _ => if 20 = m then SOME v else NONE
+     | _ => NONE)
+  | TupleTV ts =>
+    (case v of
+     | ArrayV NONE bd vs =>
+       (case safe_cast_list ts vs []
+        of SOME vs => SOME $ ArrayV NONE bd vs
+        | _ => NONE)
+     | _ => NONE)
+  | ArrayTV t bd =>
+    (case v of
+     | ArrayV (SOME _) bd vs =>
+       (case safe_cast_list (REPLICATE (LENGTH vs) t) vs []
+        of SOME vs => SOME $ ArrayV (SOME t) bd vs
+	 | _ => NONE)
+     | _ => NONE)
+  | StructTV args =>
+    (case v of StructV al =>
+      (let names = MAP FST al in
+       if names = MAP FST args then
+       (case safe_cast_list (MAP SND args) (MAP SND al) []
+        of SOME vs => SOME $ StructV (ZIP (names, vs))
+        | _ => NONE)
+       else NONE)
+     | _ => NONE)
+  | NoneTV =>
+    (case v of NoneV => SOME v
+     | _ => NONE)) ∧
+  safe_cast_list [] [] acc = SOME $ REVERSE acc ∧
+  safe_cast_list (t::ts) (v::vs) acc = (
+    case safe_cast t v of
+    | SOME v => safe_cast_list ts vs (v::acc)
+    | _ => NONE) ∧
+  safe_cast_list _ _ _ = NONE
+Termination
+  WF_REL_TAC `measure (λx. case x of
+    INR (_,vs,_) => list_size value_size vs
+  | INL (_,v) => value_size v)`
+  \\ rw[list_size_SUM_MAP, list_size_pair_size_map]
 End
 
-val () = cv_auto_trans bind_arguments_def;
+val safe_cast_pre_def = cv_auto_trans_pre_rec
+  "safe_cast_pre safe_cast_list_pre" safe_cast_def (
+  WF_REL_TAC `measure (λx. case x of
+    INR (_,vs,_) => cv_size vs
+  | INL (_,v) => cv_size v)`
+  \\ rw[]
+  \\ Cases_on`cv_v` \\ gvs[]
+  >- (
+    qmatch_goalsub_rename_tac`cv_map_snd p`
+    \\ Cases_on`g` \\ gvs[]
+    \\ qid_spec_tac`m`
+    \\ qid_spec_tac`p`
+    \\ rpt (pop_assum kall_tac)
+    \\ ho_match_mp_tac cv_map_snd_ind
+    \\ rw[]
+    \\ rw[Once cv_map_snd_def]
+    \\ gvs[]
+    \\ Cases_on`p` \\ gvs[]
+    \\ qmatch_goalsub_rename_tac`cv_snd p`
+    \\ Cases_on`p` \\ gvs[]
+    >- (
+      first_x_assum(qspec_then`m + m'`mp_tac)
+      \\ rw[] )
+    \\ first_x_assum(qspec_then`m + cv_size g`mp_tac)
+    \\ rw[] )
+  \\ qmatch_goalsub_rename_tac`cv_snd (cv_snd p)`
+  \\ Cases_on`p` \\ gvs[]
+  \\ qmatch_goalsub_rename_tac`cv_snd p`
+  \\ Cases_on`p` \\ gvs[]
+);
+
+Theorem safe_cast_pre[cv_pre]:
+  (∀t v. safe_cast_pre t v) ∧
+  (∀x y z. safe_cast_list_pre x y z)
+Proof
+  ho_match_mp_tac safe_cast_ind \\ rw[]
+  \\ rw[Once safe_cast_pre_def]
+QED
+
+(* TODO: cast types *)
+Definition bind_arguments_def:
+  bind_arguments tenv ([]: argument list) [] = SOME (FEMPTY: scope) ∧
+  bind_arguments tenv ((id, typ)::params) (v::vs) =
+    (case evaluate_type tenv typ of NONE => NONE | SOME tv =>
+     case safe_cast tv v of NONE => NONE | SOME v =>
+      OPTION_MAP (λm. m |+ (string_to_num id, v))
+        (bind_arguments tenv params vs)) ∧
+  bind_arguments _ _ _ = NONE
+End
+
+val bind_arguments_pre_def = cv_auto_trans_pre "bind_arguments_pre" bind_arguments_def;
+
+Theorem bind_arguments_pre[cv_pre]:
+  ∀x y z. bind_arguments_pre x y z
+Proof
+  ho_match_mp_tac bind_arguments_ind \\ rw[]
+  \\ rw[Once bind_arguments_pre_def]
+QED
 
 Definition get_scopes_def:
   get_scopes st = return st.scopes st
@@ -1527,21 +1784,6 @@ Theorem SUM_MAP_expr2_size:
   SUM (MAP (expr_size o SND) ls)
 Proof
   Induct_on`ls` \\ rw[expr2_size_map]
-QED
-
-Theorem list_size_SUM_MAP:
-  list_size f ls = LENGTH ls + SUM (MAP f ls)
-Proof
-  Induct_on `ls` \\ rw[listTheory.list_size_def]
-QED
-
-Theorem list_size_pair_size_map:
-  list_size (pair_size f1 f2) ls =
-  list_size f1 (MAP FST ls) +
-  list_size f2 (MAP SND ls)
-Proof
-  Induct_on`ls` \\ rw[]
-  \\ Cases_on`h` \\ gvs[]
 QED
 
 Definition bound_def:
@@ -2020,7 +2262,8 @@ Definition evaluate_def:
     args <<- FST $ SND tup; body <<- SND $ SND $ SND tup;
     check (LENGTH args = LENGTH es) "IntCall args length"; (* TODO: needed? *)
     vs <- eval_exprs cx es;
-    env <- lift_option (bind_arguments args vs) "IntCall bind_arguments";
+    tenv <<- type_env ts;
+    env <- lift_option (bind_arguments tenv args vs) "IntCall bind_arguments";
     prev <- get_scopes;
     cxf <- push_function fn env cx;
     rv <- finally
@@ -2216,12 +2459,12 @@ val () = cv_trans empty_state_def;
 
 (* TODO: state should have other constants in scope? *)
 Definition constants_env_def:
-  constants_env [] = SOME FEMPTY ∧
-  constants_env ((VariableDecl vis (Constant e) id typ)::ts) =
-    (case FST $ eval_expr empty_evaluation_context e empty_state of
-     | INL (Value v) => OPTION_MAP (λm. m |+ (string_to_num id, v)) (constants_env ts)
+  constants_env _ [] = SOME FEMPTY ∧
+  constants_env cx ((VariableDecl vis (Constant e) id typ)::ts) =
+    (case FST $ eval_expr cx e empty_state of
+     | INL (Value v) => OPTION_MAP (λm. m |+ (string_to_num id, v)) (constants_env cx ts)
      | _ => NONE) ∧
-  constants_env (t::ts) = constants_env ts
+  constants_env cx (t::ts) = constants_env cx ts
 End
 
 Definition send_call_value_def:
@@ -2240,10 +2483,10 @@ val () = send_call_value_def
 
 Definition call_external_function_def:
   call_external_function am cx mut ts args vals body =
-  case bind_arguments args vals
+  case bind_arguments (type_env ts) args vals
   of NONE => (INR $ Error "call bind_arguments", am)
    | SOME env =>
-  (case constants_env ts
+  (case constants_env cx ts
    of NONE => (INR $ Error "call constants_env", am)
     | SOME cenv => (* TODO: how do we stop constants being assigned to? *)
    let st = initial_state am [env; cenv] in

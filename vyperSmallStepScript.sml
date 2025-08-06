@@ -57,7 +57,7 @@ Datatype:
   | BuiltinK builtin eval_continuation
   | TypeBuiltinK type_builtin type eval_continuation
   | CallSendK eval_continuation
-  | IntCallK identifier ((identifier # type) list) (stmt list) eval_continuation
+  | IntCallK (num |-> type_args) identifier ((identifier # type) list) (stmt list) eval_continuation
   | IntCallK1 (scope list) eval_continuation
   | ExprsK (expr list) eval_continuation
   | ExprsK1 value eval_continuation
@@ -189,10 +189,10 @@ Definition eval_expr_cps_def:
       tup <- lift_option (lookup_function fn Internal ts) "IntCall lookup_function";
       args <<- FST $ SND tup; body <<- SND $ SND $ SND tup;
       check (LENGTH args = LENGTH es) "IntCall args length";
-      return (args, body) od st
+      return (type_env ts, args, body) od st
      of (INR ex, st) => AK cx10 (ApplyExc ex) st k
-      | (INL (args, body), st) =>
-          eval_exprs_cps cx10 es st (IntCallK fn args body k)) ∧
+      | (INL (tenv, args, body), st) =>
+          eval_exprs_cps cx10 es st (IntCallK tenv fn args body k)) ∧
   eval_exprs_cps cx11 [] st k = AK cx11 (ApplyVals []) st k ∧
   eval_exprs_cps cx12 (e::es) st k =
     eval_expr_cps cx12 e st (ExprsK es k)
@@ -362,7 +362,7 @@ Definition apply_exc_def:
   apply_exc cx ex st (BuiltinK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (TypeBuiltinK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CallSendK k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (IntCallK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (IntCallK _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IntCallK1 prev k) =
     liftk (cx with stk updated_by TL) (ApplyTv o Value)
       (finally (handle_function ex) (pop_function prev) st)
@@ -570,9 +570,9 @@ Definition apply_vals_def:
       transfer_value cx.txn.sender toAddr amount;
       return $ Value NoneV
     od st) k ∧
-  apply_vals cx vs st (IntCallK fn args body k) =
+  apply_vals cx vs st (IntCallK tenv fn args body k) =
     (case do
-      env <- lift_option (bind_arguments args vs) "IntCall bind_arguments";
+      env <- lift_option (bind_arguments tenv args vs) "IntCall bind_arguments";
       prev <- get_scopes;
       cxf <- push_function fn env cx;
       return (prev, cxf, body) od st
@@ -1286,7 +1286,7 @@ val constants_env_pre_def = constants_env_def
   |> cv_auto_trans_pre "constants_env_pre";
 
 Theorem constants_env_pre[cv_pre]:
-  ∀x. constants_env_pre x
+  ∀x y. constants_env_pre x y
 Proof
   ho_match_mp_tac constants_env_ind
   \\ rw[]

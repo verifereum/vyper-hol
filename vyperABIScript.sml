@@ -54,7 +54,8 @@ Definition abi_to_vyper_def[simp]:
     let n = LENGTH vs in
       if compatible_bound b n then
         case abi_to_vyper_list env (REPLICATE n t) vs of NONE => NONE
-           | SOME vs => SOME $ ArrayV (SOME t) b vs
+           | SOME vs => case evaluate_type env t of NONE => NONE
+	     | SOME tv => SOME $ ArrayV (SOME tv) b vs
       else NONE ) ∧
   abi_to_vyper env NoneT (ListV ls) = (if NULL ls then SOME NoneV else NONE) ∧
   abi_to_vyper env (StructT id) (ListV vs) =
