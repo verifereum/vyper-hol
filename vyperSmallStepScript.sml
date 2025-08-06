@@ -418,9 +418,9 @@ val apply_base_target_pre_def = apply_base_target_def
   |> cv_auto_trans_pre "apply_base_target_pre";
 
 Theorem assign_subscripts_PopOp_not_empty:
-  ∀v is ao b.
+  ∀v is ao to b.
     ao = PopOp ∧
-    evaluate_subscripts v is = INL (ArrayV b []) ⇒
+    evaluate_subscripts v is = INL (ArrayV to b []) ⇒
     ISR $ assign_subscripts v is ao
 Proof
   ho_match_mp_tac assign_subscripts_ind

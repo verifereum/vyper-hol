@@ -236,7 +236,7 @@ Datatype:
   value
   = NoneV
   | BoolV bool
-  | ArrayV bound (value list)
+  | ArrayV (type option) bound (value list)
   | IntV int_bound int
   | StringV num string
   | BytesV bound (word8 list)
@@ -304,9 +304,9 @@ Definition default_value_def:
   default_value env (BaseT (IntT n)) = IntV (Signed n) 0 ∧
   default_value env (BaseT DecimalT) = IntV (Signed 168) 0 ∧
   default_value env (TupleT ts) = default_value_tuple env [] ts ∧
-  default_value env (ArrayT _ (Dynamic n)) = ArrayV (Dynamic n) [] ∧
+  default_value env (ArrayT t (Dynamic n)) = ArrayV (SOME t) (Dynamic n) [] ∧
   default_value env (ArrayT t (Fixed n)) =
-    ArrayV (Fixed n) (REPLICATE n (default_value env t)) ∧
+    ArrayV (SOME t) (Fixed n) (REPLICATE n (default_value env t)) ∧
   default_value env (StructT id) =
     (let nid = string_to_num id in
      case FLOOKUP env nid
@@ -319,7 +319,7 @@ Definition default_value_def:
   default_value env (BaseT (StringT n)) = StringV n "" ∧
   default_value env (BaseT (BytesT (Fixed n))) = BytesV (Fixed n) (REPLICATE n 0w) ∧
   default_value env (BaseT (BytesT (Dynamic n))) = BytesV (Dynamic n) [] ∧
-  default_value_tuple env acc [] = ArrayV (Fixed (LENGTH acc)) (REVERSE acc) ∧
+  default_value_tuple env acc [] = ArrayV NONE (Fixed (LENGTH acc)) (REVERSE acc) ∧
   default_value_tuple env acc (t::ts) =
     default_value_tuple env (default_value env t :: acc) ts ∧
   default_value_struct env acc [] = StructV (REVERSE acc) ∧
@@ -526,7 +526,7 @@ Definition evaluate_binop_def:
      then if i1 < 0 ∨ i2 < 0 then INR "In~"
           else INL $ BoolV (int_and i1 i2 ≠ 0)
      else INR "In type") ∧
-  evaluate_binop In v (ArrayV _ ls) = evaluate_in_array v ls ∧
+  evaluate_binop In v (ArrayV _ _ ls) = evaluate_in_array v ls ∧
   evaluate_binop NotIn v1 v2 = binop_negate $ evaluate_binop In v1 v2 ∧
   evaluate_binop Eq (StringV _ s1) (StringV _ s2) = INL (BoolV (s1 = s2)) ∧
   evaluate_binop Eq (BytesV _ s1) (BytesV _ s2) = INL (BoolV (s1 = s2)) ∧
@@ -689,7 +689,7 @@ val () = cv_auto_trans evaluate_slice_def;
 Definition evaluate_builtin_def:
   evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
   evaluate_builtin cx _ Len [StringV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
-  evaluate_builtin cx _ Len [ArrayV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
+  evaluate_builtin cx _ Len [ArrayV _ _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
   evaluate_builtin cx _ Not [BoolV b] = INL (BoolV (¬b)) ∧
   evaluate_builtin cx _ Not [IntV u i] =
     (if is_Unsigned u ∧ 0 ≤ i then INL (IntV u (int_not i)) else INR "signed Not") ∧
@@ -705,7 +705,7 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ (Env TimeStamp) [] = INL $ IntV (Unsigned 256) &cx.txn.time_stamp ∧
   evaluate_builtin cx _ (Concat n) vs = evaluate_concat n vs ∧
   evaluate_builtin cx _ (Slice n) [v1; v2; v3] = evaluate_slice v1 v2 v3 n ∧
-  evaluate_builtin cx _ (MakeArray bd) vs = INL $ ArrayV bd vs ∧
+  evaluate_builtin cx _ (MakeArray to bd) vs = INL $ ArrayV to bd vs ∧
   evaluate_builtin cx acc (Acc aop) [BytesV _ bs] =
     (let a = lookup_account (word_of_bytes T (0w:address) bs) acc in
       INL $ evaluate_account_op aop a) ∧
@@ -735,14 +735,14 @@ End
 val () = cv_auto_trans evaluate_max_value_def;
 
 Definition extract_elements_def:
-  extract_elements (ArrayV _ vs) = SOME vs ∧
+  extract_elements (ArrayV _ _ vs) = SOME vs ∧
   extract_elements _ = NONE
 End
 
 val () = cv_auto_trans extract_elements_def;
 
 Definition replace_elements_def:
-  replace_elements (ArrayV b _) vs = INL (ArrayV b vs) ∧
+  replace_elements (ArrayV to b _) vs = INL (ArrayV to b vs) ∧
   replace_elements _ _ = INR "replace_elements"
 End
 
@@ -820,7 +820,7 @@ Definition builtin_args_length_ok_def:
   builtin_args_length_ok Keccak256 n = (n = 1) ∧
   builtin_args_length_ok (Concat _) n = (2 ≤ n) ∧
   builtin_args_length_ok (Slice _) n = (n = 3) ∧
-  builtin_args_length_ok (MakeArray b) n = compatible_bound b n ∧
+  builtin_args_length_ok (MakeArray _ b) n = compatible_bound b n ∧
   builtin_args_length_ok (Bop _) n = (n = 2) ∧
   builtin_args_length_ok (Env _) n = (n = 0) ∧
   builtin_args_length_ok (Acc _) n = (n = 1)
@@ -1239,7 +1239,7 @@ End
 
 val () = cv_auto_trans lookup_function_def;
 
-(* TODO: check types? *)
+(* TODO: cast types *)
 Definition bind_arguments_def:
   bind_arguments ([]: argument list) [] = SOME (FEMPTY: scope) ∧
   bind_arguments ((id, typ)::params) (v::vs) =
@@ -1323,9 +1323,10 @@ val () = handle_function_def
   |> cv_auto_trans;
 
 Definition append_element_def:
-  append_element (ArrayV bd vs) v =
+  append_element (ArrayV to bd vs) v =
     (if compatible_bound bd (SUC (LENGTH vs))
-     then INL $ ArrayV bd (SNOC v vs)
+     (* TODO: check and cast v to to *)
+     then INL $ ArrayV to bd (SNOC v vs)
      else INR "Append Overflow") ∧
   append_element _ _ = INR "append_element"
 End
@@ -1333,18 +1334,18 @@ End
 val () = cv_auto_trans append_element_def;
 
 Definition pop_element_def:
-  pop_element (ArrayV (Dynamic n) vs) =
+  pop_element (ArrayV to (Dynamic n) vs) =
     (if vs = [] then INR "Pop empty"
-     else INL $ ArrayV (Dynamic n) (FRONT vs)) ∧
+     else INL $ ArrayV to (Dynamic n) (FRONT vs)) ∧
   pop_element _ = INR "pop_element"
 End
 
 val () = cv_auto_trans pop_element_def;
 
 Definition assign_subscripts_def:
-  assign_subscripts a [] (Replace v) = INL v ∧
+  assign_subscripts a [] (Replace v) = INL v (* TODO: cast to type of a *) ∧
   assign_subscripts a [] (Update bop v) = evaluate_binop bop a v ∧
-  assign_subscripts a [] (AppendOp v) = append_element a v ∧
+  assign_subscripts a [] (AppendOp v) = append_element a v (* TODO: cast to type of a's elements *) ∧
   assign_subscripts a [] PopOp = pop_element a ∧
   assign_subscripts a ((IntSubscript i)::is) ao =
   (case extract_elements a of SOME vs =>
@@ -1478,10 +1479,10 @@ Definition assign_target_def:
     set_immutable cx ni a';
     return $ Value a
   od ∧
-  assign_target cx (TupleTargetV gvs) (Replace (ArrayV (Fixed n) vs)) = do
+  assign_target cx (TupleTargetV gvs) (Replace (ArrayV NONE (Fixed n) vs)) = do
     check (LENGTH gvs = n ∧ LENGTH vs = n) "TupleTargetV length";
     ws <- assign_targets cx gvs vs;
-    return $ Value $ ArrayV (Fixed n) ws
+    return $ Value $ ArrayV NONE (Fixed n) ws
   od ∧
   assign_target _ _ _ = raise (Error "assign_target") ∧
   assign_targets cx [] [] = return [] ∧
@@ -1866,9 +1867,9 @@ Definition evaluate_def:
     ) pop_scope
   od ∧
   eval_stmt cx (For id typ it n body) = do
+    (* TODO: check and cast to the type *)
     vs <- eval_iterator cx it;
     check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long";
-    (* TODO: check the type? *)
     (* TODO: check id is not in scope already? *)
     eval_for cx (string_to_num id) body vs
   od ∧
@@ -2025,7 +2026,7 @@ Definition evaluate_def:
     rv <- finally
       (try (do eval_stmts cxf body; return NoneV od) handle_function)
       (pop_function prev);
-    (* TODO: check return type? *)
+    (* TODO: cast to return type *)
     return $ Value rv
   od ∧
   eval_exprs cx [] = return [] ∧

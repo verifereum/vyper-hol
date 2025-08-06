@@ -49,12 +49,12 @@ Definition abi_to_vyper_def[simp]:
   abi_to_vyper env (BaseT $ DecimalT) (IntV i) = check_IntV (Signed 168) i ∧
   abi_to_vyper env (TupleT ts) (ListV vs) =
     (case abi_to_vyper_list env ts vs of NONE => NONE
-        | SOME vs => SOME $ ArrayV (Fixed (LENGTH ts)) vs) ∧
+        | SOME vs => SOME $ ArrayV NONE (Fixed (LENGTH ts)) vs) ∧
   abi_to_vyper env (ArrayT t b) (ListV vs) = (
     let n = LENGTH vs in
       if compatible_bound b n then
         case abi_to_vyper_list env (REPLICATE n t) vs of NONE => NONE
-           | SOME vs => SOME $ ArrayV b vs
+           | SOME vs => SOME $ ArrayV (SOME t) b vs
       else NONE ) ∧
   abi_to_vyper env NoneT (ListV ls) = (if NULL ls then SOME NoneV else NONE) ∧
   abi_to_vyper env (StructT id) (ListV vs) =

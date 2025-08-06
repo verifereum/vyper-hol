@@ -57,7 +57,7 @@ val Not_tm          = astk"Not"
 val Neg_tm          = astk"Neg"
 val Concat_tm       = astk"Concat"
 val Slice_tm        = astk"Slice"
-val MakeArray_tm = astk"MakeArray"
+val MakeArray_tm    = astk"MakeArray"
 val Bop_tm          = astk"Bop"
 val Env_tm          = astk"Env"
 val Acc_tm          = astk"Acc"
@@ -194,20 +194,20 @@ fun mk_Slice n = mk_comb(Slice_tm, n)
 fun mk_Neg t = mk_Builtin Neg_tm (mk_list([t], expr_ty))
 fun mk_Bop b = mk_comb(Bop_tm, b)
 fun mk_Len e = mk_Builtin Len_tm (mk_list([e], expr_ty))
-fun mk_MakeArray (b,ls) =
-  mk_Builtin (mk_comb(MakeArray_tm, b))
+fun mk_MakeArray (to,b,ls) =
+  mk_Builtin (list_mk_comb(MakeArray_tm, [to,b]))
     (mk_list (ls, expr_ty))
 fun mk_Tuple ls = let
   val n = numSyntax.term_of_int $ List.length ls
   val b = mk_comb(Fixed_tm, n)
 in
-  mk_MakeArray (b, ls)
+  mk_MakeArray (optionSyntax.mk_none type_ty, b, ls)
 end
-fun mk_DynArray ls = let
+fun mk_SArray (t,ls) = let
   val n = numSyntax.term_of_int $ List.length ls
-  val b = mk_comb(Dynamic_tm, n)
+  val b = mk_comb(Fixed_tm, n)
 in
-  mk_MakeArray (b, ls)
+  mk_MakeArray (optionSyntax.mk_some t, b, ls)
 end
 val msg_sender_tm = list_mk_comb(Builtin_tm, [
   mk_comb(Env_tm, Sender_tm), mk_list([], expr_ty)])
@@ -496,6 +496,49 @@ fun mk_int_bound (s,b) =
   (if s then mk_Signed else mk_Unsigned) b
 val Unsigned256 = mk_Unsigned (numOfLargeInt 256)
 
+fun d_astHmType() : term decoder = achoose "astHmType" [
+  check_field "name" "String" $
+    JSONDecode.map mk_String (field "length" numtm),
+  check_field "name" "Bytes" $
+    JSONDecode.map mk_Bytes (field "length" numtm),
+  check_field "typeclass" "bytes_m" $
+    JSONDecode.map mk_BytesM $ field "m" numtm,
+  check_field "name" "bool" $ succeed bool_tm,
+  check_field "name" "address" $ succeed address_tm,
+  check_field "name" "decimal" $ succeed decimal_tm,
+  check_field "typeclass" "integer" $
+    JSONDecode.map (fn (b,n) =>
+      (if b then mk_int else mk_uint) n) $
+    tuple2 (
+      field "is_signed" bool,
+      field "bits" numtm),
+  check_field "typeclass" "dynamic_array" $
+    JSONDecode.map(fn (t,b) => list_mk_comb(ArrayT_tm, [t,b])) $
+    tuple2 (
+      field "value_type" $ delay d_astHmType,
+      JSONDecode.map mk_Dynamic (field "length" numtm)
+    ),
+  check_field "typeclass" "static_array" $
+    JSONDecode.map(fn (t,b) => list_mk_comb(ArrayT_tm, [t,b])) $
+    tuple2 (
+      field "value_type" $ delay d_astHmType,
+      JSONDecode.map mk_Fixed (field "length" numtm)
+    ),
+  check_field "typeclass" "struct" $
+    JSONDecode.map (curry mk_comb StructT_tm) $
+      field "name" stringtm,
+  check_field "typeclass" "flag" $
+    JSONDecode.map (curry mk_comb FlagT_tm) $
+      field "name" stringtm,
+  check_field "typeclass" "tuple" $
+    JSONDecode.map (curry mk_comb TupleT_tm) $
+      field "member_types" $
+      JSONDecode.map (fn ls => mk_list(ls, type_ty)) $
+        array (delay d_astHmType),
+  null NoneT_tm
+]
+val astHmType = delay d_astHmType
+
 fun d_expression () : term decoder = achoose "expr" [
     check_ast_type "Str" $
     JSONDecode.map mk_ls $
@@ -559,13 +602,18 @@ fun d_expression () : term decoder = achoose "expr" [
     check_ast_type "List" $
       check (field "type" (field "name" string))
             (equal "$SArray") "not a $SArray" $
-      JSONDecode.map mk_Tuple $
-      field "elements" (array (delay d_expression)),
+      JSONDecode.map mk_SArray $
+      tuple2 (
+        field "type" $ field "value_type" $ astHmType,
+        field "elements" (array (delay d_expression))
+      ),
     check_ast_type "List" $
       check (field "type" (field "name" string))
             (equal "DynArray") "not a DynArray" $
       JSONDecode.map mk_MakeArray $
-      tuple2 (
+      tuple3 (
+        JSONDecode.map optionSyntax.mk_some $
+          field "type" $ field "value_type" $ astHmType,
         JSONDecode.map mk_Dynamic $
           field "type" (field "length" numtm),
         field "elements" (array (delay d_expression))
@@ -947,49 +995,6 @@ let
 in
     mk_FunctionDecl vis mut id args ret body
 end
-
-fun d_astHmType() : term decoder = achoose "astHmType" [
-  check_field "name" "String" $
-    JSONDecode.map mk_String (field "length" numtm),
-  check_field "name" "Bytes" $
-    JSONDecode.map mk_Bytes (field "length" numtm),
-  check_field "typeclass" "bytes_m" $
-    JSONDecode.map mk_BytesM $ field "m" numtm,
-  check_field "name" "bool" $ succeed bool_tm,
-  check_field "name" "address" $ succeed address_tm,
-  check_field "name" "decimal" $ succeed decimal_tm,
-  check_field "typeclass" "integer" $
-    JSONDecode.map (fn (b,n) =>
-      (if b then mk_int else mk_uint) n) $
-    tuple2 (
-      field "is_signed" bool,
-      field "bits" numtm),
-  check_field "typeclass" "dynamic_array" $
-    JSONDecode.map(fn (t,b) => list_mk_comb(ArrayT_tm, [t,b])) $
-    tuple2 (
-      field "value_type" $ delay d_astHmType,
-      JSONDecode.map mk_Dynamic (field "length" numtm)
-    ),
-  check_field "typeclass" "static_array" $
-    JSONDecode.map(fn (t,b) => list_mk_comb(ArrayT_tm, [t,b])) $
-    tuple2 (
-      field "value_type" $ delay d_astHmType,
-      JSONDecode.map mk_Fixed (field "length" numtm)
-    ),
-  check_field "typeclass" "struct" $
-    JSONDecode.map (curry mk_comb StructT_tm) $
-      field "name" stringtm,
-  check_field "typeclass" "flag" $
-    JSONDecode.map (curry mk_comb FlagT_tm) $
-      field "name" stringtm,
-  check_field "typeclass" "tuple" $
-    JSONDecode.map (curry mk_comb TupleT_tm) $
-      field "member_types" $
-      JSONDecode.map (fn ls => mk_list(ls, type_ty)) $
-        array (delay d_astHmType),
-  null NoneT_tm
-]
-val astHmType = delay d_astHmType
 
 val functionDef : term decoder =
   check_ast_type "FunctionDef" $

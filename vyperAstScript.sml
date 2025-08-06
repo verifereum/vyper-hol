@@ -95,7 +95,7 @@ Datatype:
   | Keccak256
   | Concat num (* return type dynamic bound *)
   | Slice num (* ditto *)
-  | MakeArray bound
+  | MakeArray (type option) bound
   | Bop binop
   | Env env_item
   | Acc account_item
@@ -255,7 +255,6 @@ Overload pubvar = “λid typ. VariableDecl Public Storage id typ”
 Overload pubmap = “λid kt vt. HashMapDecl Public id kt vt”
 Overload privar = “λid typ. VariableDecl Private Storage id typ”
 Overload DynArray = “λt n. ArrayT t (Dynamic n)”
-Overload DynArlit = “λn ls. Builtin (MakeArray (Dynamic n)) ls”
 Overload msg_sender = “Builtin (Env Sender) []”
 Overload msg_value = “Builtin (Env ValueSent) []”
 Overload AssignSelf = “λid e. Assign (BaseTarget (TopLevelNameTarget id)) e”
