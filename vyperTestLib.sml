@@ -1182,8 +1182,6 @@ val unsupported_code = [
   "def addition(a: uint256, b: uint256 = 1)", (* TODO: ditto *)
   "def outer(xs: Bytes[256] = ", (* TODO: default arguments on external fns *)
   "c = c / 1.2589", (* TODO: investigate why this test fails *)
-  "concat(self.greeting, greet)", (* TODO: investigate why this test fails *)
-  "return concat(b, a)", (* TODO: investigate why this test fails *)
   "self.a_message = a", (* TODO: investigate why this test fails *)
   "@raw_return\n", (* TODO: add *)
   "convert(n, decimal)" (* TODO: conversion to decimal *)
