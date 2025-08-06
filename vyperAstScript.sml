@@ -93,9 +93,10 @@ Datatype:
   | Not
   | Neg
   | Keccak256
-  | Concat num (* return type dynamic bound *)
+  | Concat num (* dynamic bound for return type *)
   | Slice num (* ditto *)
-  | MakeArray (type option) bound
+  | MakeArray (type option (* NONE for tuples *)) bound
+  | Floor
   | Bop binop
   | Env env_item
   | Acc account_item

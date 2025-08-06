@@ -836,6 +836,10 @@ Definition evaluate_builtin_def:
     Keccak_256_w64 ls ∧
   (* TODO: reject BytesV with invalid bounds for Keccak256 *)
   (* TODO: support Keccak256 on strings *)
+  evaluate_builtin cx _ Floor [IntV u i] =
+    (if u = Signed 168
+     then INL $ IntV (Signed 256) (i / 10000000000)
+     else INR "Floor type") ∧
   evaluate_builtin cx _ (Bop bop) [v1; v2] = evaluate_binop bop v1 v2 ∧
   evaluate_builtin cx _ (Env Sender) [] = INL $ AddressV cx.txn.sender ∧
   evaluate_builtin cx _ (Env SelfAddr) [] = INL $ AddressV cx.txn.target ∧
@@ -858,7 +862,13 @@ Definition evaluate_builtin_def:
   evaluate_builtin _ _ _ _ = INR "builtin"
 End
 
-val () = cv_auto_trans evaluate_builtin_def;
+val evaluate_builtin_pre_def = cv_auto_trans_pre "evaluate_builtin_pre" evaluate_builtin_def;
+
+Theorem evaluate_builtin_pre[cv_pre]:
+  evaluate_builtin_pre a b c d
+Proof
+  rw[evaluate_builtin_pre_def]
+QED
 
 Definition type_builtin_args_length_ok_def:
   type_builtin_args_length_ok Empty n = (n = 0n) ∧
@@ -952,6 +962,7 @@ Definition builtin_args_length_ok_def:
   builtin_args_length_ok Len n = (n = 1n) ∧
   builtin_args_length_ok Not n = (n = 1) ∧
   builtin_args_length_ok Neg n = (n = 1) ∧
+  builtin_args_length_ok Floor n = (n = 1) ∧
   builtin_args_length_ok Keccak256 n = (n = 1) ∧
   builtin_args_length_ok (Concat _) n = (2 ≤ n) ∧
   builtin_args_length_ok (Slice _) n = (n = 3) ∧

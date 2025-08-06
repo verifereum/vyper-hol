@@ -58,6 +58,7 @@ val Neg_tm          = astk"Neg"
 val Concat_tm       = astk"Concat"
 val Slice_tm        = astk"Slice"
 val MakeArray_tm    = astk"MakeArray"
+val Floor_tm        = astk"Floor"
 val Bop_tm          = astk"Bop"
 val Env_tm          = astk"Env"
 val Acc_tm          = astk"Acc"
@@ -192,6 +193,7 @@ fun mk_Builtin b es = list_mk_comb(Builtin_tm, [b, es])
 fun mk_Concat n = mk_comb(Concat_tm, n)
 fun mk_Slice n = mk_comb(Slice_tm, n)
 fun mk_Neg t = mk_Builtin Neg_tm (mk_list([t], expr_ty))
+fun mk_Floor e = mk_Builtin Floor_tm (mk_list([e], expr_ty))
 fun mk_Bop b = mk_comb(Bop_tm, b)
 fun mk_Len e = mk_Builtin Len_tm (mk_list([e], expr_ty))
 fun mk_MakeArray (to,b,ls) =
@@ -737,6 +739,15 @@ fun d_expression () : term decoder = achoose "expr" [
       field "args" $
       JSONDecode.sub 0 $
       JSONDecode.map mk_Empty astType,
+    check_ast_type "Call" $
+    check (field "func" $ tuple2 (
+             field "ast_type" string,
+             field "id" string))
+          (equal ("Name", "floor"))
+          "not floor" $
+      field "args" $
+      JSONDecode.sub 0 $
+      JSONDecode.map mk_Floor (delay d_expression),
     check_ast_type "Call" $
     check (field "func" $ tuple2 (
              field "ast_type" string,
