@@ -1486,7 +1486,6 @@ Proof
   \\ rw[Once safe_cast_pre_def]
 QED
 
-(* TODO: cast types *)
 Definition bind_arguments_def:
   bind_arguments tenv ([]: argument list) [] = SOME (FEMPTY: scope) ∧
   bind_arguments tenv ((id, typ)::params) (v::vs) =
@@ -1582,8 +1581,10 @@ val () = handle_function_def
 Definition append_element_def:
   append_element (ArrayV to bd vs) v =
     (if compatible_bound bd (SUC (LENGTH vs))
-     (* TODO: check and cast v to to *)
-     then INL $ ArrayV to bd (SNOC v vs)
+     then case to of NONE => INL $ ArrayV to bd (SNOC v vs)
+          | SOME tv => (case safe_cast tv v
+	      of NONE => INR "Append cast"
+	    | SOME v => INL $ ArrayV to bd (SNOC v vs))
      else INR "Append Overflow") ∧
   append_element _ _ = INR "append_element"
 End
@@ -1602,7 +1603,7 @@ val () = cv_auto_trans pop_element_def;
 Definition assign_subscripts_def:
   assign_subscripts a [] (Replace v) = INL v (* TODO: cast to type of a *) ∧
   assign_subscripts a [] (Update bop v) = evaluate_binop bop a v ∧
-  assign_subscripts a [] (AppendOp v) = append_element a v (* TODO: cast to type of a's elements *) ∧
+  assign_subscripts a [] (AppendOp v) = append_element a v ∧
   assign_subscripts a [] PopOp = pop_element a ∧
   assign_subscripts a ((IntSubscript i)::is) ao =
   (case extract_elements a of SOME vs =>
@@ -2259,18 +2260,20 @@ Definition evaluate_def:
     check (¬MEM fn cx.stk) "recursion";
     ts <- lift_option (get_self_code cx) "IntCall get_self_code";
     tup <- lift_option (lookup_function fn Internal ts) "IntCall lookup_function";
-    args <<- FST $ SND tup; body <<- SND $ SND $ SND tup;
+    stup <<- SND tup; args <<- FST stup; sstup <<- SND stup;
+    ret <<- FST $ sstup; body <<- SND $ sstup;
     check (LENGTH args = LENGTH es) "IntCall args length"; (* TODO: needed? *)
     vs <- eval_exprs cx es;
     tenv <<- type_env ts;
     env <- lift_option (bind_arguments tenv args vs) "IntCall bind_arguments";
     prev <- get_scopes;
+    rtv <- lift_option (evaluate_type tenv ret) "IntCall eval ret";
     cxf <- push_function fn env cx;
     rv <- finally
       (try (do eval_stmts cxf body; return NoneV od) handle_function)
       (pop_function prev);
-    (* TODO: cast to return type *)
-    return $ Value rv
+    crv <- lift_option (safe_cast rtv rv) "IntCall cast ret";
+    return $ Value crv
   od ∧
   eval_exprs cx [] = return [] ∧
   eval_exprs cx (e::es) = do

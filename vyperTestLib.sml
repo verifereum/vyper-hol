@@ -1185,8 +1185,6 @@ val unsupported_code = [
   "concat(self.greeting, greet)", (* TODO: investigate why this test fails *)
   "return concat(b, a)", (* TODO: investigate why this test fails *)
   "self.a_message = a", (* TODO: investigate why this test fails *)
-  "def _test(a: bytes32) -> (bytes32, uint256, int128)", (* TODO: investigate why this test fails *)
-  "def _test_combined(a: Bytes[50], x: int128, c:Bytes[50]) -> (int128, Bytes[100], Bytes[100])", (* TODO: investigate why this test fails *)
   "@raw_return\n", (* TODO: add *)
   "convert(n, decimal)" (* TODO: conversion to decimal *)
 ]
