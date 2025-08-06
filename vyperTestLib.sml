@@ -458,6 +458,7 @@ val binop : term decoder = achoose "binop" [
   check_ast_type "FloorDiv" $ succeed Div_tm,
   check_ast_type "Div" $ succeed Div_tm,
   check_ast_type "Mod" $ succeed Mod_tm,
+  check_ast_type "Pow" $ succeed Exp_tm,
   check_ast_type "And" $ succeed And_tm,
   check_ast_type "Or" $ succeed Or_tm,
   check_ast_type "BitOr" $ succeed Or_tm,
