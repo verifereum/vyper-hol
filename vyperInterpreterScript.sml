@@ -625,12 +625,12 @@ val () = cv_auto_trans init_concat_output_def;
 
 Definition evaluate_concat_loop_def:
   evaluate_concat_loop (StringV n s1) sa ba [] =
-  (let s = FLAT $ REV sa [s1] in
+  (let s = FLAT $ s1::REVERSE sa in
    (if compatible_bound (Dynamic n) (LENGTH s)
     then INL (StringV n s)
     else INR "concat bound")) ∧
   evaluate_concat_loop (BytesV b b1) sa ba [] =
-  (let bs = FLAT $ REV ba [b1] in
+  (let bs = FLAT $ b1::REVERSE ba in
    (if compatible_bound b (LENGTH bs)
     then INL (BytesV b bs)
     else INR "concat bound")) ∧
