@@ -40,6 +40,9 @@ val Mod_tm          = astk"Mod"
 val Exp_tm          = astk"Exp"
 val And_tm          = astk"And"
 val Or_tm           = astk"Or"
+val XOr_tm          = astk"XOr"
+val ShL_tm          = astk"ShL"
+val ShR_tm          = astk"ShR"
 val In_tm           = astk"In"
 val NotIn_tm        = astk"NotIn"
 val Eq_tm           = astk"Eq"
@@ -460,8 +463,11 @@ val binop : term decoder = achoose "binop" [
   check_ast_type "Mod" $ succeed Mod_tm,
   check_ast_type "Pow" $ succeed Exp_tm,
   check_ast_type "And" $ succeed And_tm,
+  check_ast_type "BitAnd" $ succeed And_tm,
   check_ast_type "Or" $ succeed Or_tm,
   check_ast_type "BitOr" $ succeed Or_tm,
+  check_ast_type "LShift" $ succeed ShL_tm,
+  check_ast_type "RShift" $ succeed ShR_tm,
   check_ast_type "In" $ succeed In_tm,
   check_ast_type "NotIn" $ succeed NotIn_tm,
   check_ast_type "Eq" $ succeed Eq_tm,
@@ -564,7 +570,9 @@ fun d_expression () : term decoder = achoose "expr" [
       o parseDecimal) string),
     check_ast_type "Hex" $
     field "value" (JSONDecode.map mk_Hex string),
-    check_ast_type "Bytes" $
+    check (field "ast_type" string)
+          (Lib.C Lib.mem ["Bytes", "HexBytes"])
+          "not bytes/hexbytes" $
     JSONDecode.map mk_Hex_dyn $
     tuple2 (
       field "type" $ check_field "name" "Bytes" $
