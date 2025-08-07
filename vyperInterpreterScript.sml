@@ -5,6 +5,7 @@ Ancestors
   cv cv_std vfmTypes vfmState vyperAst
 Libs
   cv_transLib blastLib monadsyntax
+  integerTheory[qualified] intSimps[qualified]
 
 (* TODO: move *)
 
@@ -42,14 +43,21 @@ Proof
   \\ first_x_assum drule \\ rw[]
 QED
 
-val int_exp_pre_def = cv_auto_trans_pre "int_exp_pre" integerTheory.int_exp;
-
-Theorem int_exp_pre[cv_pre]:
-  int_exp_pre p v
+Theorem int_exp_num:
+  (i:int) ** n =
+  if 0 ≤ i then &(Num i ** n)
+  else if EVEN n then &(Num (-i) ** n)
+  else -&(Num (-i) ** n)
 Proof
-  qid_spec_tac`p`
-  \\ Induct_on `v`
-  \\ rw[Once int_exp_pre_def]
+  Cases_on`i` \\ simp[integerTheory.INT_POW_NEG]
+QED
+
+val () = cv_trans int_exp_num;
+
+Theorem Num_int_exp:
+  0 ≤ i ⇒ Num (i ** n) = Num i ** n
+Proof
+  Cases_on`i` \\ rw[]
 QED
 
 (* TODO: I don't know if this is the best way to translate this... *)
@@ -609,6 +617,64 @@ Definition bounded_int_op_def:
   else INR "bounded_int_op type"
 End
 
+Definition int_bound_bits_def[simp]:
+  int_bound_bits (Unsigned b) = b ∧
+  int_bound_bits (Signed b) = b
+End
+
+val () = cv_trans int_bound_bits_def;
+
+Theorem bounded_exp:
+  bounded_int_op u1 u2 (i1 ** n2) =
+  if u1 = u2 then
+    if 2 ≤ ABS i1 ∧ int_bound_bits u1 < n2
+    then INR "bounded_int_op bound"
+    else let r = i1 ** n2 in
+      if within_int_bound u1 r then INL (IntV u1 r)
+    else INR "bounded_int_op bound"
+  else INR "bounded_int_op type"
+Proof
+  rw[bounded_int_op_def]
+  \\ gvs[int_exp_num]
+  \\ `Num (ABS i1 ** n2) < 2 ** int_bound_bits u1`
+  by (
+    reverse $ Cases_on`u1`
+    >- (
+      gvs[within_int_bound_def]
+      \\ gvs[integerTheory.INT_ABS]
+      \\ IF_CASES_TAC
+      \\ fsrw_tac[intSimps.INT_ARITH_ss][Num_int_exp]
+      \\ Cases_on`EVEN n2`
+      \\ fsrw_tac[intSimps.INT_ARITH_ss][] )
+    \\ gvs[within_int_bound_def]
+    \\ gvs[integerTheory.INT_ABS]
+    \\ IF_CASES_TAC
+    \\ fsrw_tac[intSimps.INT_ARITH_ss][Num_int_exp]
+    >- (
+      Cases_on`EVEN n2`
+      \\ fsrw_tac[intSimps.INT_ARITH_ss][]
+      >- (
+        irule LESS_LESS_EQ_TRANS
+        \\ goal_assum drule \\ simp[] )
+      \\ irule LESS_EQ_LESS_TRANS
+      \\ goal_assum $ drule_at Any \\ simp[] )
+    \\ irule LESS_LESS_EQ_TRANS
+    \\ goal_assum drule \\ simp[] )
+  \\ gvs[Num_int_exp]
+  \\ qmatch_asmsub_abbrev_tac`b < n2`
+  \\ `2 ** b < 2 ** n2` by simp[]
+  \\ qmatch_asmsub_abbrev_tac`n1 ** n2 < _`
+  \\ `2 ≤ n1` by (
+    simp[Abbr`n1`]
+    \\ irule integerTheory.LE_NUM_OF_INT
+    \\ simp[] )
+  \\ `2 ** n2 ≤ n1 ** n2` by simp[]
+  \\ `2n ** n2 < 2 ** b` by (
+    irule LESS_EQ_LESS_TRANS
+    \\ goal_assum drule \\ simp[] )
+  \\ fs[]
+QED
+
 (* TODO: add unsafe ops *)
 Definition evaluate_binop_def:
   evaluate_binop (Add:binop) (IntV u1 i1) (IntV u2 i2) =
@@ -669,7 +735,7 @@ Termination
   \\ rw[]
 End
 
-val () = cv_auto_trans evaluate_binop_def;
+val () = cv_auto_trans $ REWRITE_RULE [bounded_exp] evaluate_binop_def;
 
 Datatype:
   call_txn = <|
