@@ -1140,23 +1140,25 @@ val toplevels : term decoder =
 val abiBaseType : term decoder =
   JSONDecode.map parse_abi_type string
 
-val abiArray_NONE = mk_comb
-  (abiArray_tm, optionSyntax.mk_none numSyntax.num)
-
-fun num_brackets s =
-  if Substring.isPrefix "[]" s
-  then 1 + num_brackets (Substring.triml 2 s)
-  else if Substring.isEmpty s then 0 else raise Fail "not brackets"
+fun tuple_brackets s =
+  if Substring.isSuffix "]" s then let
+    val (ps, ns) = Substring.splitr (not o equal #"[") s
+    val bt = parse_optnum ns
+    val s = Substring.trimr 1 ps
+    val a = mk_comb(abiArray_tm, bt)
+  in
+    curry mk_comb a o tuple_brackets s
+  end else if Substring.isEmpty s
+  then I else raise Fail "not brackets"
 
 fun d_abiType () : term decoder = achoose "abiType" [
   check (field "type" string)
         (String.isPrefix "tuple")
         "not tuple" $
     JSONDecode.map (fn (t, ls) =>
-      Lib.funpow (num_brackets $
-                  Substring.extract
-                  (t, String.size "tuple", NONE))
-        (curry mk_comb abiArray_NONE) $
+      (tuple_brackets $
+       Substring.extract
+         (t, String.size "tuple", NONE)) $
       mk_comb(abiTuple_tm, mk_list (ls, abi_type_ty))) $
     tuple2 (field "type" string,
             field "components" $ array $ delay d_abiType),
