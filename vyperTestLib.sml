@@ -5,6 +5,7 @@ open HolKernel boolLib JSONDecode JSONUtil cv_transLib wordsLib
      intSyntax wordsSyntax fcpSyntax
      vfmTypesSyntax byteStringCacheLib
      vyperABITheory vyperAstTheory vyperTestRunnerTheory
+     local open Timeout in end
 
 val export_theory_no_docs = fn () =>
   Feedback.set_trace "TheoryPP.include_docs" 0
