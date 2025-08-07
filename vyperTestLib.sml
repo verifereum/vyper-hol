@@ -196,6 +196,7 @@ fun mk_Builtin b es = list_mk_comb(Builtin_tm, [b, es])
 fun mk_Concat n = mk_comb(Concat_tm, n)
 fun mk_Slice n = mk_comb(Slice_tm, n)
 fun mk_Neg t = mk_Builtin Neg_tm (mk_list([t], expr_ty))
+fun mk_Not t = mk_Builtin Not_tm (mk_list([t], expr_ty))
 fun mk_Floor e = mk_Builtin Floor_tm (mk_list([e], expr_ty))
 fun mk_Bop b = mk_comb(Bop_tm, b)
 fun mk_Len e = mk_Builtin Len_tm (mk_list([e], expr_ty))
@@ -466,6 +467,7 @@ val binop : term decoder = achoose "binop" [
   check_ast_type "BitAnd" $ succeed And_tm,
   check_ast_type "Or" $ succeed Or_tm,
   check_ast_type "BitOr" $ succeed Or_tm,
+  check_ast_type "BitXor" $ succeed XOr_tm,
   check_ast_type "LShift" $ succeed ShL_tm,
   check_ast_type "RShift" $ succeed ShR_tm,
   check_ast_type "In" $ succeed In_tm,
@@ -591,6 +593,12 @@ fun d_expression () : term decoder = achoose "expr" [
           (equal "USub")
           "not USub" $
     JSONDecode.map mk_Neg $
+    field "operand" $ delay d_expression,
+    check_ast_type "UnaryOp" $
+    check (field "op" (field "ast_type" string))
+          (equal "Invert")
+          "not Invert" $
+    JSONDecode.map mk_Not $
     field "operand" $ delay d_expression,
     check (field "ast_type" string)
           (Lib.C Lib.mem ["BinOp", "Compare"])
