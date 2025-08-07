@@ -192,6 +192,13 @@ Datatype:
   variable_mutability = Constant expr | Immutable | Transient | Storage
 End
 
+Definition is_Constant_def[simp]:
+  is_Constant (Constant _) = T ∧
+  is_Constant _ = F
+End
+
+val () = cv_auto_trans is_Constant_def;
+
 Type argument = “:identifier # type”;
 
 Datatype:

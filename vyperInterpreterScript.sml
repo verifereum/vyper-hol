@@ -1431,7 +1431,8 @@ Definition lookup_function_def:
   (if id = name then
     if ¬is_ArrayT typ
     then SOME (View, [], typ, [
-                 Return (SOME (if mut = Immutable then Name id
+                 Return (SOME (if mut = Immutable ∨ is_Constant mut
+                               then Name id
                                else TopLevelName id))
                ])
     else SOME $ getter id uint256 (Type (ArrayT_type typ))
@@ -2537,14 +2538,14 @@ End
 
 val () = cv_trans empty_state_def;
 
-(* TODO: state should have other constants in scope? *)
 Definition constants_env_def:
-  constants_env _ [] = SOME FEMPTY ∧
-  constants_env cx ((VariableDecl vis (Constant e) id typ)::ts) =
-    (case FST $ eval_expr cx e empty_state of
-     | INL (Value v) => OPTION_MAP (λm. m |+ (string_to_num id, v)) (constants_env cx ts)
+  constants_env _ _ [] acc = SOME acc ∧
+  constants_env cx am ((VariableDecl vis (Constant e) id typ)::ts) acc =
+    (case FST $ eval_expr cx e (initial_state am [acc]) of
+     | INL (Value v) => constants_env cx am ts $
+                        acc |+ (string_to_num id, v)
      | _ => NONE) ∧
-  constants_env cx (t::ts) = constants_env cx ts
+  constants_env cx am (t::ts) acc = constants_env cx am ts acc
 End
 
 Definition send_call_value_def:
@@ -2566,7 +2567,7 @@ Definition call_external_function_def:
   case bind_arguments (type_env ts) args vals
   of NONE => (INR $ Error "call bind_arguments", am)
    | SOME env =>
-  (case constants_env cx ts
+  (case constants_env cx am ts FEMPTY
    of NONE => (INR $ Error "call constants_env", am)
     | SOME cenv => (* TODO: how do we stop constants being assigned to? *)
    let st = initial_state am [env; cenv] in
