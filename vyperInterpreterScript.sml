@@ -685,10 +685,14 @@ Definition evaluate_binop_def:
     bounded_int_op u1 u2 (i1 * i2) ∧
   evaluate_binop Div (IntV u1 i1) (IntV u2 i2) =
     (if i2 = 0 then INR "Div0" else
-     bounded_int_op u1 u2 (i1 / i2)) ∧
+     bounded_int_op u1 u2 $
+       w2i $ (if is_Unsigned u1 then word_div else word_quot)
+               ((i2w i1):bytes32) (i2w i2)) ∧
   evaluate_binop Mod (IntV u1 i1) (IntV u2 i2) =
     (if i2 = 0 then INR "Mod0" else
-     bounded_int_op u1 u2 (i1 % i2)) ∧
+     bounded_int_op u1 u2 $
+       w2i $ (if is_Unsigned u1 then word_mod else word_rem)
+               ((i2w i1):bytes32) (i2w i2)) ∧
   evaluate_binop Exp (IntV u1 i1) (IntV u2 i2) =
     (if i2 < 0 then INR "Exp~"
      else bounded_int_op u1 u2 (i1 ** (Num i2))) ∧
@@ -735,7 +739,8 @@ Termination
   \\ rw[]
 End
 
-val () = cv_auto_trans $ REWRITE_RULE [bounded_exp] evaluate_binop_def;
+val () = cv_auto_trans $
+  REWRITE_RULE [bounded_exp, COND_RATOR] evaluate_binop_def;
 
 Datatype:
   call_txn = <|
