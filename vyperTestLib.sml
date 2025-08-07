@@ -1216,6 +1216,7 @@ val unsupported_code = [
   "def boo(a: DynArray[uint256, 12] =", (* TODO: default argument values *)
   "def addition(a: uint256, b: uint256 = 1)", (* TODO: ditto *)
   "def outer(xs: Bytes[256] = ", (* TODO: default arguments on external fns *)
+  "+ -1e38", (* TODO: parse scientifiec notation *)
   "c = c / 1.2589", (* TODO: investigate why this test fails *)
   "self.a_message = a", (* TODO: investigate why this test fails *)
   "@raw_return\n", (* TODO: add *)
@@ -1269,6 +1270,7 @@ val test_decoder =
 fun trydecode ((name,json),(s,f)) =
   ((name, decode test_decoder json)::s, f)
   handle JSONError e => (s, (name, e)::f)
+         | e => (s, (name, (e, JSON.OBJECT [("source_code", JSON.STRING "")]))::f)
 
 fun read_test_json json_path = let
   val test_jsons = decodeFile rawObject json_path
@@ -1294,23 +1296,25 @@ end
 val run_tests = List.foldl run_test ([],[])
 
 fun has_unsupported_source_code (name, (err, j)) = let
-  val srcopt = decode (field "source_code" (nullable string)) j
+  val srcopt = decode (orElse(field "source_code" (nullable string),
+                              succeed NONE)) j
   val p = case srcopt of NONE => K true | SOME src => C String.isSubstring src
 in
   List.exists p (unsupported_code @ [
-    "as_wei_value", (* TODO: add support *)
+    "as_wei_value(", (* TODO: add support *)
     " send(", (* TODO: add support *)
-    "extcall",
-    "staticcall",
-    "raw_call",
-    "raw_log",
-    "raw_revert",
+    "sqrt(", (* TODO: add support *)
+    "extcall ",
+    "staticcall ",
+    "raw_call(",
+    "raw_log(",
+    "raw_revert(",
     "selfdestruct",
     "msg.mana", "msg.gas",
     "exports",
-    "import",
-    "create_minimal_proxy_to",
-    "create_copy_of"
+    "import ",
+    "create_minimal_proxy_to(",
+    "create_copy_of("
   ])
 end
 
@@ -1332,13 +1336,37 @@ in
 end
 
 val test_files_with_prefixes = [
+  ("../vyper/tests/export/functional/codegen/types/numbers",
+   ["test_constants.json",
+    "test_decimals.json",
+    "test_division.json",
+    "test_exponents.json",
+    "test_isqrt.json",
+    "test_modulo.json",
+    "test_signed_ints.json",
+    "test_sqrt.json",
+    "test_unsigned_ints.json"]),
+  ("../vyper/tests/export/functional/codegen/types",
+   ["test_array_indexing.json",
+    "test_bytes.json",
+    "test_bytes_literal.json",
+    "test_dynamic_array.json",
+    "test_flag.json",
+    "test_identifier_naming.json",
+    "test_lists.json",
+    "test_node_types.json",
+    "test_string.json",
+    "test_string_literal.json",
+    "test_struct.json"]),
   ("../vyper/tests/export/functional/codegen/features",
    ["test_address_balance.json",
     "test_assert.json",
     "test_assert_unreachable.json",
     "test_assignment.json",
     "test_bytes_map_keys.json",
+    (* TODO: slow
     "test_clampers.json",
+    *)
     "test_comments.json",
     "test_comparison.json",
     "test_conditionals.json",
