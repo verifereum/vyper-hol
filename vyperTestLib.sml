@@ -1290,19 +1290,6 @@ val trace_ty = mk_thy_type{Thy="vyperTestRunner",Tyop="trace",Args=[]}
 val traces_ty = mk_list_type trace_ty
 val run_test_tm = prim_mk_const{Thy="vyperTestRunner",Name="run_test"}
 
-fun run_test ((name, traces),(s,f)) = let
-  val trs = mk_list(traces, trace_ty)
-  val ttm = mk_comb(run_test_tm, trs)
-  val () = Feedback.HOL_MESG ("Testing " ^ name)
-  val eth = cv_eval ttm
-  val pass = sumSyntax.is_inl $ rhs $ concl eth
-  val () = Feedback.HOL_MESG (if pass then "Passed" else "Failed")
-in
-  if pass then (name::s,f) else (s,name::f)
-end
-
-val run_tests = List.foldl run_test ([],[])
-
 fun has_unsupported_source_code (name, (err, j)) = let
   val srcopt = decode (orElse(field "source_code" (nullable string),
                               succeed NONE)) j
@@ -1326,12 +1313,16 @@ in
   ])
 end
 
+val time_limit = Time.fromSeconds 120
+
 fun run_test_on_traces traces_const = let
   val (traces_name, _) = dest_const traces_const
   val suffix = String.extract(traces_name, String.size"traces", NONE)
   val result_name = String.concat ["result", suffix]
   val rtm = mk_comb(run_test_tm, traces_const)
-  val rth = cv_eval rtm
+  val rth = Timeout.apply time_limit cv_eval rtm
+            handle Timeout.TIMEOUT _ => raise Fail (
+              String.concat ["Timeout in test ", result_name])
   val ttm = sumSyntax.mk_isl $ rtm
   val eth = (RAND_CONV (REWR_CONV rth) THENC cv_eval) ttm
   val tth = EQT_ELIM eth handle HOL_ERR _ =>
