@@ -1226,8 +1226,9 @@ val ClearTransientStorage_tm =
 val unsupported_code = [
   "def boo(a: DynArray[uint256, 12] =", (* TODO: default argument values *)
   "def addition(a: uint256, b: uint256 = 1)", (* TODO: ditto *)
+  "def test(a: uint256, b: String[50] =", (* TODO: ditto *)
   "def outer(xs: Bytes[256] = ", (* TODO: default arguments on external fns *)
-  "+ -1e38", (* TODO: parse scientifiec notation *)
+  "+ -1e38", (* TODO: parse scientific notation *)
   "c = c / 1.2589", (* TODO: investigate why this test fails *)
   "self.a_message = a", (* TODO: investigate why this test fails *)
   "@raw_return\n", (* TODO: add *)
