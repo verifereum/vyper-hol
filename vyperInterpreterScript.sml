@@ -831,7 +831,7 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ Not [BoolV b] = INL (BoolV (¬b)) ∧
   evaluate_builtin cx _ Not [IntV u i] =
     (if is_Unsigned u ∧ 0 ≤ i then INL (IntV u (int_not i)) else INR "signed Not") ∧
-  evaluate_builtin cx _ Neg [IntV u i] = INL (IntV u (-i)) ∧
+  evaluate_builtin cx _ Neg [IntV u i] = bounded_int_op u u (-i) ∧
   evaluate_builtin cx _ Keccak256 [BytesV _ ls] = INL $ BytesV (Fixed 32) $
     Keccak_256_w64 ls ∧
   (* TODO: reject BytesV with invalid bounds for Keccak256 *)
