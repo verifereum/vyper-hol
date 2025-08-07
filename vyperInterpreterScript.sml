@@ -867,8 +867,8 @@ Definition evaluate_slice_def:
        else INR "evaluate_slice bound"
        else INR "evaluate_slice range"
        else INR "evaluate_slice BytesV bound")
-   | StringV n s => (
-       if start + length < LENGTH s then
+   | StringV _ s => (
+       if start + length ≤ LENGTH s then
        if compatible_bound b length then
          INL $ StringV n (TAKE length (DROP start s))
        else INR "evaluate_slice bound"
