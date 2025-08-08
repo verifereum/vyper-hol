@@ -765,23 +765,35 @@ Definition evaluate_binop_def:
            bounded_int_op u1 u2 (int_and i1 i2) | _ => INR "binop")
        | BoolV b1 => (case v2 of BoolV b2 =>
            INL $ BoolV (b1 ∧ b2) | _ => INR "binop")
+       | FlagV m1 n1 => (case v2 of FlagV m2 n2 =>
+           (if m1 = m2
+            then INL $ FlagV m1 (Num(int_and (&n1) (&n2))) (* TODO: bitwise nums *)
+            else INR "binop flag type") | _ => INR "binop")
        | _ => INR "binop")
      | Or => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
            bounded_int_op u1 u2 (int_or i1 i2) | _ => INR "binop")
        | BoolV b1 => (case v2 of BoolV b2 =>
            INL $ BoolV (b1 ∨ b2) | _ => INR "binop")
+       | FlagV m1 n1 => (case v2 of FlagV m2 n2 =>
+           (if m1 = m2
+            then INL $ FlagV m1 (Num(int_or (&n1) (&n2))) (* TODO: bitwise nums *)
+            else INR "binop flag type") | _ => INR "binop")
        | _ => INR "binop")
      | XOr => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
            bounded_int_op u1 u2 (int_xor i1 i2) | _ => INR "binop")
        | BoolV b1 => (case v2 of BoolV b2 =>
            INL $ BoolV (b1 ≠ b2) | _ => INR "binop")
+       | FlagV m1 n1 => (case v2 of FlagV m2 n2 =>
+           (if m1 = m2
+            then INL $ FlagV m1 (Num(int_xor (&n1) (&n2))) (* TODO: bitwise nums *)
+            else INR "binop flag type") | _ => INR "binop")
        | _ => INR "binop")
      | In => (case v2 of
          FlagV m2 n2 => (case v1 of FlagV m1 n1 =>
            (if m1 = m2
-            then INL $ BoolV (int_and (&n1) (&n2) ≠ 0) (* TODO: use bitwise and on nums *)
+            then INL $ BoolV (int_and (&n1) (&n2) ≠ 0) (* TODO: use bitwise ∧ on nums *)
             else INR "In type") | _ => INR "binop")
        | ArrayV _ _ ls => evaluate_in_array v1 ls
        | _ => INR "binop")
@@ -1447,6 +1459,16 @@ Definition evaluate_convert_def:
     (if within_int_bound (Unsigned n) i
      then INL $ IntV (Unsigned n) i
      else INR "convert uint bound") ∧
+  evaluate_convert (FlagV _ m) (BaseT (IntT n)) =
+    (let i = &m in
+     if within_int_bound (Signed n) i
+     then INL $ IntV (Signed n) i
+     else INR "convert flag int bound") ∧
+  evaluate_convert (FlagV _ m) (BaseT (UintT n)) =
+    (let i = &m in
+     if within_int_bound (Unsigned n) i
+     then INL $ IntV (Unsigned n) i
+     else INR "convert flag uint bound") ∧
   evaluate_convert (IntV u i) (BaseT (BytesT bd)) =
   (* TODO: check and use type for width etc. *)
     (if compatible_bound bd 32
