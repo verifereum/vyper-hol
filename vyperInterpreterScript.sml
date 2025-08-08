@@ -261,6 +261,7 @@ Datatype:
   | TupleTV (type_value list)
   | ArrayTV type_value bound
   | StructTV ((identifier # type_value) list)
+  | FlagTV num
   | NoneTV
 End
 
@@ -287,7 +288,11 @@ Definition evaluate_type_def:
       of SOME tvs => SOME $ StructTV (ZIP (names, tvs))
        | _ => NONE)
    | _ => NONE) ∧
-  evaluate_type tenv (FlagT _) = SOME $ BaseTV (UintT 256) ∧
+  evaluate_type tenv (FlagT id) =
+  (let nid = string_to_num id in
+   case FLOOKUP tenv nid of
+   | SOME $ FlagArgs m => SOME $ FlagTV m
+   | _ => NONE) ∧
   evaluate_type tenv (NoneT) = SOME NoneTV ∧
   evaluate_types tenv [] acc = SOME $ REVERSE acc ∧
   evaluate_types tenv (t::ts) acc =
@@ -1602,6 +1607,10 @@ Definition safe_cast_def:
   | BaseTV AddressT =>
     (case v of
      | BytesV (Fixed m) _ => if 20 = m then SOME v else NONE
+     | _ => NONE)
+  | FlagTV n =>
+    (case v of
+     | FlagV m _ => if n = m then SOME v else NONE
      | _ => NONE)
   | TupleTV ts =>
     (case v of
