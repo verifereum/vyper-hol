@@ -56,6 +56,7 @@ val GtE_tm          = astk"GtE"
 val Sender_tm       = astk"Sender"
 val SelfAddr_tm     = astk"SelfAddr"
 val TimeStamp_tm    = astk"TimeStamp"
+val Address_tm      = astk"Address"
 val Balance_tm      = astk"Balance"
 val Len_tm          = astk"Len"
 val Not_tm          = astk"Not"
@@ -687,6 +688,14 @@ fun d_expression () : term decoder = achoose "expr" [
                                        (mk_list([e], expr_ty))) $
     field "value" (delay d_expression),
     check_ast_type "Attribute" $
+    check (tuple2 (field "value" $ field "type" $ field "typeclass" string,
+                   field "attr" string))
+          (equal ("interface", "address"))
+          "not interface.address" $
+    JSONDecode.map (fn e => mk_Builtin (mk_comb(Acc_tm, Address_tm))
+                                       (mk_list([e], expr_ty))) $
+    field "value" (delay d_expression),
+    check_ast_type "Attribute" $
     JSONDecode.map (fn (e,s) => list_mk_comb(Attribute_tm, [e,s])) $
     tuple2 (
       field "value" $
@@ -808,7 +817,7 @@ fun d_expression () : term decoder = achoose "expr" [
     check_ast_type "Name" $
     check (tuple2 (field "id" string, field "type" (field "name" string)))
           (equal ("self", "address"))
-          "not self:address" $
+          "not self.address" $
           succeed $ self_addr_tm,
     check_ast_type "Name" $
     field "id" (JSONDecode.map mk_Name string),

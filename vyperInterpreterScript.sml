@@ -904,11 +904,12 @@ End
 val () = cv_auto_trans empty_evaluation_context_def;
 
 Definition evaluate_account_op_def:
-  evaluate_account_op Balance a = IntV (Unsigned 256) &a.balance ∧
-  evaluate_account_op Codehash a = BytesV (Fixed 32) (Keccak_256_w64 a.code) ∧
-  evaluate_account_op Codesize a = IntV (Unsigned 256) $ &LENGTH a.code ∧
-  evaluate_account_op IsContract a = BoolV (a.code ≠ []) ∧
-  evaluate_account_op Code a = BytesV (Dynamic (LENGTH a.code)) a.code
+  evaluate_account_op Address bs _ = BytesV (Fixed 20) bs ∧
+  evaluate_account_op Balance _ a = IntV (Unsigned 256) &a.balance ∧
+  evaluate_account_op Codehash _ a = BytesV (Fixed 32) (Keccak_256_w64 a.code) ∧
+  evaluate_account_op Codesize _ a = IntV (Unsigned 256) $ &LENGTH a.code ∧
+  evaluate_account_op IsContract _ a = BoolV (a.code ≠ []) ∧
+  evaluate_account_op Code _ a = BytesV (Dynamic (LENGTH a.code)) a.code
 End
 
 val () = cv_auto_trans evaluate_account_op_def;
@@ -1043,7 +1044,7 @@ Definition evaluate_builtin_def:
      | _ => INR "MakeArray code") ∧
   evaluate_builtin cx acc (Acc aop) [BytesV _ bs] =
     (let a = lookup_account (word_of_bytes T (0w:address) bs) acc in
-      INL $ evaluate_account_op aop a) ∧
+      INL $ evaluate_account_op aop bs a) ∧
   evaluate_builtin _ _ _ _ = INR "builtin"
 End
 

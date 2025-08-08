@@ -81,7 +81,8 @@ End
 
 Datatype:
   account_item
-  = Balance
+  = Address
+  | Balance
   | Codehash
   | Codesize
   | IsContract
