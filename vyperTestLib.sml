@@ -122,6 +122,7 @@ val Immutable_tm    = astk"Immutable"
 val Transient_tm    = astk"Transient"
 val Storage_tm      = astk"Storage"
 val Type_tm         = astk"Type"
+val HashMapT_tm     = astk"HashMapT"
 val FunctionDecl_tm = astk"FunctionDecl"
 val VariableDecl_tm = astk"VariableDecl"
 val HashMapDecl_tm  = astk"HashMapDecl"
@@ -1087,11 +1088,17 @@ val variableDecl : term decoder =
     field "target" (check_ast_type "Name" (field "id" stringtm)),
     field "annotation" astType)
 
-val astValueType : term decoder = achoose "astValueType" [
+fun d_astValueType () : term decoder = achoose "astValueType" [
+  check_field "typeclass" "hashmap" $
+    JSONDecode.map (fn (k,v) =>
+      list_mk_comb(HashMapT_tm, [k,v])) $
+    tuple2 (
+      field "key_type" astHmType,
+      field "value_type" $ delay d_astValueType),
   JSONDecode.map (fn t => mk_comb(Type_tm, t)) $
     astHmType
-  (* TODO: add HashMapT *)
 ]
+val astValueType = delay d_astValueType
 
 val hashMapDecl : term decoder =
   check_ast_type "VariableDecl" $
