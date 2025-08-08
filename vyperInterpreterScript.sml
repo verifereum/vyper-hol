@@ -1086,8 +1086,10 @@ val () = cv_auto_trans replace_elements_def;
 
 Definition integer_index_def:
   integer_index vs i =
-   if Num i < LENGTH vs then
+   if 0 ≤ i ∧ Num i < LENGTH vs then SOME $ Num i
+   (* negative indices not supported in Vyper
      SOME $ if 0 ≤ i then Num i else LENGTH vs - Num i
+    *)
    else NONE
 End
 
