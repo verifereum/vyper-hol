@@ -1053,10 +1053,22 @@ Definition evaluate_max_value_def:
   evaluate_max_value (BaseT (IntT n)) = (if n = 0
                                          then INR "max_value IntT"
                                          else INL $ IntV (Signed n) (&(2 ** (n-1)) - 1)) ∧
+  evaluate_max_value (BaseT DecimalT) = INL $ DecimalV (&(2 ** 167) - 1) ∧
   evaluate_max_value _ = INR "evaluate_max_value"
 End
 
 val () = cv_auto_trans evaluate_max_value_def;
+
+Definition evaluate_min_value_def:
+  evaluate_min_value (BaseT (UintT n)) = INL $ IntV (Unsigned n) 0 ∧
+  evaluate_min_value (BaseT (IntT n)) = (if n = 0
+                                         then INR "min_value IntT"
+                                         else INL $ IntV (Signed n) (-&(2 ** (n-1)))) ∧
+  evaluate_min_value (BaseT DecimalT) = INL $ DecimalV (-&(2 ** 167)) ∧
+  evaluate_min_value _ = INR "evaluate_min_value"
+End
+
+val () = cv_auto_trans evaluate_min_value_def;
 
 Definition extract_elements_def:
   extract_elements (ArrayV _ _ vs) = SOME vs ∧
@@ -1447,6 +1459,8 @@ Definition evaluate_type_builtin_def:
       | _ => INR "Empty get_self_code") ∧
   evaluate_type_builtin cx MaxValue typ vs =
     evaluate_max_value typ ∧
+  evaluate_type_builtin cx MinValue typ vs =
+    evaluate_min_value typ ∧
   evaluate_type_builtin cx Convert typ [v] =
     evaluate_convert v typ ∧
   evaluate_type_builtin _ _ _ _ =
