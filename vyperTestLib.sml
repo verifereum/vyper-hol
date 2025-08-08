@@ -817,6 +817,11 @@ fun d_expression () : term decoder = achoose "expr" [
       JSONDecode.sub 0 (delay d_expression)
     ),
     check_ast_type "Call" $
+      check (field "type" $ field "typeclass" string)
+            (equal "interface")
+            "not an interface" $
+      field "args" $ JSONDecode.sub 0 $ delay d_expression,
+    check_ast_type "Call" $
       check (field "type" (field "typeclass" string))
             (equal "struct") "not a struct" $
       JSONDecode.map mk_StructLit $
