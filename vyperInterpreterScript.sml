@@ -9,6 +9,26 @@ Libs
 
 (* TODO: move *)
 
+Definition CHR_o_w2n_def:
+  CHR_o_w2n (b: byte) = CHR (w2n b)
+End
+
+val CHR_o_w2n_pre_def = cv_auto_trans_pre "CHR_o_w2n_pre" CHR_o_w2n_def;
+
+Theorem CHR_o_w2n_pre[cv_pre]:
+  CHR_o_w2n_pre x
+Proof
+  rw[CHR_o_w2n_pre_def]
+  \\ qspec_then`x`mp_tac wordsTheory.w2n_lt
+  \\ rw[]
+QED
+
+Theorem CHR_o_w2n_eq:
+  CHR_o_w2n = CHR o w2n
+Proof
+  rw[FUN_EQ_THM, CHR_o_w2n_def]
+QED
+
 Definition MAP_HEX_def:
   MAP_HEX [] = [] ∧
   MAP_HEX (x::xs) = HEX x :: MAP_HEX xs
@@ -1475,11 +1495,20 @@ Definition evaluate_convert_def:
     (if compatible_bound bd 32
      then INL $ BytesV bd (word_to_bytes ((i2w i):bytes32) T)
      else INR "convert int to bytes") ∧
-  (* TODO: more conversions *)
+  evaluate_convert (BytesV _ bs) (BaseT (StringT n)) =
+    (if LENGTH bs ≤ n
+     then INL $ StringV n (MAP (CHR o w2n) bs)
+     else INR "convert bytes string") ∧
+  evaluate_convert (StringV _ s) (BaseT (BytesT bd)) =
+    (if compatible_bound bd (LENGTH s)
+     then INL $ BytesV bd (MAP (n2w o ORD) s)
+     else INR "convert string bytes") ∧
   evaluate_convert _ _ = INR "convert"
 End
 
-val () = cv_auto_trans evaluate_convert_def;
+val () = cv_auto_trans $
+  REWRITE_RULE [GSYM CHR_o_w2n_eq]
+  evaluate_convert_def;
 
 Definition evaluate_type_builtin_def:
   evaluate_type_builtin cx Empty typ vs =

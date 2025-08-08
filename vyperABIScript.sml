@@ -82,26 +82,6 @@ Termination
                                    | INR (_, _, vs) => list_size abi_value_size vs)’
 End
 
-Definition CHR_o_w2n_def:
-  CHR_o_w2n (b: byte) = CHR (w2n b)
-End
-
-val CHR_o_w2n_pre_def = cv_auto_trans_pre "CHR_o_w2n_pre" CHR_o_w2n_def;
-
-Theorem CHR_o_w2n_pre[cv_pre]:
-  CHR_o_w2n_pre x
-Proof
-  rw[CHR_o_w2n_pre_def]
-  \\ qspec_then`x`mp_tac wordsTheory.w2n_lt
-  \\ rw[]
-QED
-
-Theorem CHR_o_w2n_eq:
-  CHR_o_w2n = CHR o w2n
-Proof
-  rw[FUN_EQ_THM, CHR_o_w2n_def]
-QED
-
 val abi_to_vyper_pre_def =
   abi_to_vyper_def
   |> REWRITE_RULE[GSYM CHR_o_w2n_eq]
