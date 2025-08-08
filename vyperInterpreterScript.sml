@@ -1017,7 +1017,7 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ Not [IntV u i] =
     (if is_Unsigned u ∧ 0 ≤ i then INL (IntV u (int_not i)) else INR "signed Not") ∧
   evaluate_builtin cx _ Not [FlagV m n] = INL $ FlagV m $
-    w2n $ (~((n2w n):bytes32)) && (~(0w:bytes32) << m) ∧
+    w2n $ (~((n2w n):bytes32)) && ~(~(0w:bytes32) << m) ∧
   evaluate_builtin cx _ Neg [IntV u i] = bounded_int_op u u (-i) ∧
   evaluate_builtin cx _ Neg [DecimalV i] = bounded_decimal_op (-i) ∧
   evaluate_builtin cx _ Keccak256 [BytesV _ ls] = INL $ BytesV (Fixed 32) $
