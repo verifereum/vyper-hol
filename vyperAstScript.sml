@@ -45,6 +45,7 @@ Datatype:
   | StringL num string
   | BytesL bound (word8 list)
   | IntL int_bound int
+  | DecimalL int
 End
 
 Datatype:

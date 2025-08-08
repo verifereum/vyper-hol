@@ -46,7 +46,8 @@ Definition abi_to_vyper_def[simp]:
     (if compatible_bound b (LENGTH bs) then SOME $ BytesV b bs else NONE) ∧
   abi_to_vyper env (BaseT $ StringT z) (BytesV bs) =
     (if LENGTH bs ≤ z then SOME $ StringV z (MAP (CHR o w2n) bs) else NONE) ∧
-  abi_to_vyper env (BaseT $ DecimalT) (IntV i) = check_IntV (Signed 168) i ∧
+  abi_to_vyper env (BaseT $ DecimalT) (IntV i) =
+    (if within_int_bound (Signed 168) i then SOME $ DecimalV i else NONE) ∧
   abi_to_vyper env (TupleT ts) (ListV vs) =
     (case abi_to_vyper_list env ts vs of NONE => NONE
         | SOME vs => SOME $ ArrayV NONE (Fixed (LENGTH ts)) vs) ∧
@@ -67,7 +68,7 @@ Definition abi_to_vyper_def[simp]:
   abi_to_vyper env (FlagT id) (NumV n) =
     (case FLOOKUP env (string_to_num id) of
       | SOME (FlagArgs m) =>
-        if m ≤ 256 ∧ n < 2 ** m then SOME $ IntV (Unsigned 256) (&n) else NONE
+        if m ≤ 256 ∧ n < 2 ** m then SOME $ FlagV m (&n) else NONE
       | _ => NONE) ∧
   abi_to_vyper _ _ _ = NONE ∧
   abi_to_vyper_list env [] [] = SOME [] ∧

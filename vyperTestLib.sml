@@ -33,6 +33,7 @@ val BoolL_tm        = astk"BoolL"
 val StringL_tm      = astk"StringL"
 val BytesL_tm       = astk"BytesL"
 val IntL_tm         = astk"IntL"
+val DecimalL_tm     = astk"DecimalL"
 val Add_tm          = astk"Add"
 val Sub_tm          = astk"Sub"
 val Mul_tm          = astk"Mul"
@@ -171,6 +172,7 @@ fun mk_Log (id,es) = list_mk_comb(Log_tm, [id, es])
 fun mk_Subscript e1 e2 = list_mk_comb(Subscript_tm, [e1, e2])
 fun mk_If e s1 s2 = list_mk_comb(If_tm, [e,s1,s2])
 fun mk_li (b,i) = mk_comb(Literal_tm, list_mk_comb(IntL_tm, [b,i]))
+fun mk_ld i = mk_comb(Literal_tm, mk_comb(DecimalL_tm, i))
 fun mk_lb b = mk_comb(Literal_tm, mk_comb(BoolL_tm, b))
 fun mk_ls (n,s) = mk_comb(Literal_tm,
   list_mk_comb(StringL_tm, [n, stringSyntax.fromMLstring s]))
@@ -568,9 +570,7 @@ fun d_expression () : term decoder = achoose "expr" [
           (intSyntax.term_of_int o Arbint.fromLargeInt) $
           field "value" intInf),
     check_ast_type "Decimal" $
-    field "value" (JSONDecode.map (
-      curry mk_li (mk_Signed (numOfLargeInt 168))
-      o parseDecimal) string),
+    field "value" (JSONDecode.map (mk_ld o parseDecimal) string),
     check_ast_type "Hex" $
     field "value" (JSONDecode.map mk_Hex string),
     check (field "ast_type" string)
