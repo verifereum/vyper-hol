@@ -709,7 +709,10 @@ Definition evaluate_binop_def:
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
            bounded_int_op u1 u2 (i1 * i2) | _ => INR "binop")
        | DecimalV i1 => (case v2 of DecimalV i2 =>
-           bounded_decimal_op ((i1 * i2) / 10000000000) | _ => INR "binop")
+           (let p = i1 * i2 in
+            if within_int_bound (Signed 168) ((ABS p) / 10000000000)
+            then INL $ DecimalV $ w2i $ word_quot (i2w p) (10000000000w: bytes32)
+            else INR "Decimal Mul bound") | _ => INR "binop")
        | _ => INR "binop")
      | Div => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
@@ -732,7 +735,7 @@ Definition evaluate_binop_def:
        | DecimalV i1 => (case v2 of DecimalV i2 =>
            (if i2 = 0 then INR "Mod0" else
             bounded_decimal_op $
-              w2i $ word_rem ((i2w (i1 * 10000000000)):bytes32) (i2w i2))
+              (w2i $ word_rem ((i2w i1):bytes32) (i2w i2)))
                          | _ => INR "binop")
        | _ => INR "binop")
      | Exp => (case v1 of
