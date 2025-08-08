@@ -1257,6 +1257,9 @@ val unsupported_code = [
   "c = c / 1.2589", (* TODO: investigate why this test fails *)
   "self.a_message = a", (* TODO: investigate why this test fails *)
   "@raw_return\n", (* TODO: add *)
+  "tx.gasprice", (* TODO: add *)
+  "block.number", (* TODO: add *)
+  "block.blobbasefee", (* TODO: add *)
   "convert(n, decimal)" (* TODO: conversion to decimal *)
 ]
 
@@ -1326,6 +1329,8 @@ fun has_unsupported_source_code (name, (err, j)) = let
 in
   List.exists p (unsupported_code @ [
     "as_wei_value(", (* TODO: add support *)
+    "unsafe_mul(", (* TODO: add support *)
+    " blockhash(", (* TODO: add support *)
     " send(", (* TODO: add support *)
     "sqrt(", (* TODO: add support *)
     "extcall ",
