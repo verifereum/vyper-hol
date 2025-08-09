@@ -4,7 +4,7 @@ open HolKernel boolLib cv_transLib wordsLib
      pairSyntax listSyntax stringSyntax optionSyntax
      intSyntax wordsSyntax fcpSyntax
      vfmTypesSyntax byteStringCacheLib
-     vyperABITheory vyperASTTheory vyperASTSyntax vyperTestRunnerTheory
+     vyperABITheory vyperASTSyntax vyperTestRunnerTheory
      local open Timeout in end
 open JSONDecode
 
@@ -13,103 +13,6 @@ val export_theory_no_docs = fn () =>
   before export_theory ()
 
 fun from_term_option ty = lift_option (mk_option ty) I
-
-val identifier_ty = string_ty
-val argument_ty = pairSyntax.mk_prod(identifier_ty, type_ty)
-val bool_tm = mk_comb(BaseT_tm, BoolT_tm)
-val address_tm = mk_comb(BaseT_tm, AddressT_tm)
-val decimal_tm = mk_comb(BaseT_tm, DecimalT_tm)
-fun mk_Fixed n = mk_comb(Fixed_tm, n)
-fun mk_Dynamic n = mk_comb(Dynamic_tm, n)
-fun mk_Signed n = mk_comb(Signed_tm, n)
-fun mk_Unsigned n = mk_comb(Unsigned_tm, n)
-fun mk_uint n = mk_comb(BaseT_tm, mk_comb(UintT_tm, n))
-fun mk_int n = mk_comb(BaseT_tm, mk_comb(IntT_tm, n))
-fun mk_bytes n = mk_comb(BaseT_tm, mk_comb(BytesT_tm, mk_Fixed n))
-fun mk_FunctionDecl v m n a t b = list_mk_comb(FunctionDecl_tm, [v,m,n,a,t,b])
-fun mk_VariableDecl (v,m,n,t) = list_mk_comb(VariableDecl_tm, [v,m,n,t])
-fun mk_HashMapDecl (v,bt,n,t,vt) = list_mk_comb(HashMapDecl_tm, [v,bt,n,t,vt])
-fun mk_String n = mk_comb(BaseT_tm, mk_comb(StringT_tm, n))
-fun mk_Bytes n = mk_comb(BaseT_tm, mk_comb(BytesT_tm, mk_Dynamic n))
-fun mk_BytesM n = mk_comb(BaseT_tm, mk_comb(BytesT_tm, mk_Fixed n))
-fun mk_Expr e = mk_comb(Expr_tm, e)
-fun mk_For s t i n b = list_mk_comb(For_tm, [s,t,i,n,b])
-fun mk_Name s = mk_comb(Name_tm, fromMLstring s)
-fun mk_StructLit (s,ls) = list_mk_comb(StructLit_tm, [
-  s, mk_list(ls, mk_prod(string_ty, expr_ty))])
-fun mk_IfExp (e1,e2,e3) = list_mk_comb(IfExp_tm, [e1,e2,e3])
-fun mk_IntCall s = mk_comb(IntCall_tm, s)
-fun mk_Empty t = list_mk_comb(TypeBuiltin_tm, [
-  Empty_tm, t, mk_list([], expr_ty)])
-fun mk_MaxValue t = list_mk_comb(TypeBuiltin_tm, [
-  MaxValue_tm, t, mk_list([], expr_ty)])
-fun mk_MinValue t = list_mk_comb(TypeBuiltin_tm, [
-  MinValue_tm, t, mk_list([], expr_ty)])
-fun mk_Convert (t,v) = list_mk_comb(TypeBuiltin_tm, [
-  Convert_tm, t, mk_list([v], expr_ty)])
-fun mk_Call ct args = list_mk_comb(AstCall_tm, [ct, mk_list (args, expr_ty)])
-fun mk_Assert (e,s) = list_mk_comb(Assert_tm, [e, s])
-fun mk_Log (id,es) = list_mk_comb(Log_tm, [id, es])
-fun mk_Subscript e1 e2 = list_mk_comb(Subscript_tm, [e1, e2])
-fun mk_If e s1 s2 = list_mk_comb(If_tm, [e,s1,s2])
-fun mk_li (b,i) = mk_comb(Literal_tm, list_mk_comb(IntL_tm, [b,i]))
-fun mk_ld i = mk_comb(Literal_tm, mk_comb(DecimalL_tm, i))
-fun mk_lb b = mk_comb(Literal_tm, mk_comb(BoolL_tm, b))
-fun mk_ls (n,s) = mk_comb(Literal_tm,
-  list_mk_comb(StringL_tm, [n, stringSyntax.fromMLstring s]))
-val empty_lstr = mk_ls(numSyntax.zero_tm, "")
-fun mk_Return tmo = mk_comb(Return_tm, lift_option (mk_option expr_ty) I tmo)
-fun mk_AnnAssign (s,t,e) = list_mk_comb(AnnAssign_tm, [s, t, e])
-fun mk_AugAssign t b e = list_mk_comb(AugAssign_tm, [t, b, e])
-fun mk_Hex_dyn (n, s) = let
-  val s = if String.isPrefix "0x" s then String.extract(s,2,NONE) else s
-  val b = mk_comb(Dynamic_tm, n)
-in
-  mk_comb(Literal_tm,
-    list_mk_comb(BytesL_tm, [b, cached_bytes_from_hex s]))
-end
-fun mk_Hex s = let
-  val s = if String.isPrefix "0x" s then String.extract(s,2,NONE) else s
-  val n = numSyntax.term_of_int $ String.size s div 2
-  val b = mk_comb(Fixed_tm, n)
-in
-  mk_comb(Literal_tm,
-    list_mk_comb(BytesL_tm, [b, cached_bytes_from_hex s]))
-end
-fun mk_Builtin b es = list_mk_comb(Builtin_tm, [b, es])
-fun mk_Concat n = mk_comb(Concat_tm, n)
-fun mk_Slice n = mk_comb(Slice_tm, n)
-fun mk_Not t = mk_Builtin Not_tm (mk_list([t], expr_ty))
-fun mk_Neg t = mk_Builtin Neg_tm (mk_list([t], expr_ty))
-fun mk_Keccak256 t = mk_Builtin Keccak256_tm (mk_list([t], expr_ty))
-fun mk_Floor e = mk_Builtin Floor_tm (mk_list([e], expr_ty))
-fun mk_Bop b = mk_comb(Bop_tm, b)
-fun mk_Len e = mk_Builtin Len_tm (mk_list([e], expr_ty))
-fun mk_MakeArray (to,b,ls) =
-  mk_Builtin (list_mk_comb(MakeArray_tm, [to,b]))
-    (mk_list (ls, expr_ty))
-fun mk_Tuple ls = let
-  val n = numSyntax.term_of_int $ List.length ls
-  val b = mk_comb(Fixed_tm, n)
-in
-  mk_MakeArray (optionSyntax.mk_none type_ty, b, ls)
-end
-fun mk_SArray (t,ls) = let
-  val n = numSyntax.term_of_int $ List.length ls
-  val b = mk_comb(Fixed_tm, n)
-in
-  mk_MakeArray (optionSyntax.mk_some t, b, ls)
-end
-val msg_sender_tm = list_mk_comb(Builtin_tm, [
-  mk_comb(Env_tm, Sender_tm), mk_list([], expr_ty)])
-val self_addr_tm = list_mk_comb(Builtin_tm, [
-  mk_comb(Env_tm, SelfAddr_tm), mk_list([], expr_ty)])
-val timestamp_tm = list_mk_comb(Builtin_tm, [
-  mk_comb(Env_tm, TimeStamp_tm), mk_list([], expr_ty)])
-(*
-val msg_gas_tm = list_mk_comb(Builtin_tm, [
-  mk_comb(Env_tm, Gas_tm), mk_list([], expr_ty)])
-*)
 
 val abi_type_ty = mk_thy_type{Args=[],Thy="contractABI",Tyop="abi_type"}
 val abiBool_tm = prim_mk_const{Name="Bool",Thy="contractABI"}
