@@ -979,7 +979,8 @@ fun d_statement () : term decoder = achoose "stmt" [
             tuple2 (field "target" $
                     check_ast_type "Name" $
                     field "id" stringtm,
-                    field "annotation" astType),
+                    field "target" $
+                    field "type" $ astHmType),
             field "iter" iterator,
             field "body" (d_statements (delay d_statement))),
     check_ast_type "If" $
@@ -1017,7 +1018,7 @@ fun d_statement () : term decoder = achoose "stmt" [
     JSONDecode.map mk_AnnAssign $
     tuple3 (
       field "target" (check_ast_type "Name" (field "id" stringtm)),
-      field "annotation" astType,
+      field "target" $ field "type" astHmType,
       field "value" expression
     ),
     check_ast_type "Assign" $
@@ -1086,7 +1087,7 @@ val variableDecl : term decoder =
               (fn b => if b then field "value" (JSONDecode.map SOME expression)
                        else succeed NONE)),
     field "target" (check_ast_type "Name" (field "id" stringtm)),
-    field "annotation" astType)
+    field "target" $ field "type" astHmType)
 
 fun d_astValueType () : term decoder = achoose "astValueType" [
   check_field "typeclass" "hashmap" $
