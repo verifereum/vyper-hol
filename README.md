@@ -5,7 +5,7 @@ Formal semantics for the [Vyper](https://vyperlang.org) programming language in 
 
 Currently, this repository includes a _formal_ and _executable_ definition of a subset of the semantics of Vyper, expressed as a _definitional interpreter_ in higher-order logic. The main function for executing Vyper statements is `eval_stmts` defined in `vyperInterpreterTheory` (`evaluate_def`). Top-level entry points are `load_contract` and `call_external`, defined in the same theory. Examples of calling these functions and executing the interpreter can be found in `vyperTestScript.sml`.
 
-The interpreter operates on abstract syntax (defined in `vyperAstTheory`) and produces effects on an abstract machine state (`abstract_machine`, defined in `vyperInterpreterTheory`) that represents the Ethereum virtual machine.
+The interpreter operates on abstract syntax (defined in `vyperASTTheory`) and produces effects on an abstract machine state (`abstract_machine`, defined in `vyperInterpreterTheory`) that represents the Ethereum virtual machine.
 
 The following aspects of Vyper are currently not part of the formal model:
 - concrete syntax, i.e. parsing
@@ -21,9 +21,9 @@ The following aspects of Vyper are currently not part of the formal model:
 
 The HOL4 script files that produce the formal theories are all in the root of the repository. We describe the main idea and contents of each theory as follows:
 
-### vyperAst
+### vyperAST
 
-The abstract syntax tree (AST) for Vyper is defined in `vyperAstScript.sml`. The main datatypes are `expr` for expressions, `stmt` for statements, and `toplevel` for top-level declarations.
+The abstract syntax tree (AST) for Vyper is defined in `vyperASTScript.sml`. The main datatypes are `expr` for expressions, `stmt` for statements, and `toplevel` for top-level declarations.
 
 We syntactically restrict the targets for assignment statements/expressions, using the `assignment_target` type which can be seen as a restriction of the expression syntax to only variables (`x`), subscripting (`x[3]`), and attribute selection (`x.y`) with arbitrary nesting. This in particular also applies to the `append` and `pop` builtin functions on arrays, which are stateful (mutating) operations that we treat as assignments.
 

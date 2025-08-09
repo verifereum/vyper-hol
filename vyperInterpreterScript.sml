@@ -2,7 +2,7 @@ Theory vyperInterpreter
 Ancestors
   arithmetic combin pair rich_list
   alist finite_map byte int_bitwise
-  cv cv_std vfmTypes vfmState vyperAst
+  cv cv_std vfmTypes vfmState vyperAST
 Libs
   cv_transLib blastLib monadsyntax
   integerTheory[qualified] intSimps[qualified]

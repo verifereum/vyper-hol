@@ -4,14 +4,14 @@ open HolKernel boolLib JSONDecode JSONUtil cv_transLib wordsLib
      pairSyntax listSyntax stringSyntax optionSyntax
      intSyntax wordsSyntax fcpSyntax
      vfmTypesSyntax byteStringCacheLib
-     vyperABITheory vyperAstTheory vyperTestRunnerTheory
+     vyperABITheory vyperASTTheory vyperTestRunnerTheory
      local open Timeout in end
 
 val export_theory_no_docs = fn () =>
   Feedback.set_trace "TheoryPP.include_docs" 0
   before export_theory ()
 
-fun astk s = prim_mk_const{Thy="vyperAst",Name=s}
+fun astk s = prim_mk_const{Thy="vyperAST",Name=s}
 val Fixed_tm        = astk"Fixed"
 val Dynamic_tm      = astk"Dynamic"
 val UintT_tm        = astk"UintT"
@@ -132,10 +132,10 @@ val FlagDecl_tm     = astk"FlagDecl"
 
 fun from_term_option ty = lift_option (mk_option ty) I
 
-val toplevel_ty = mk_thy_type{Thy="vyperAst",Tyop="toplevel",Args=[]}
-val type_ty = mk_thy_type{Thy="vyperAst",Tyop="type",Args=[]}
-val stmt_ty = mk_thy_type{Thy="vyperAst",Tyop="stmt",Args=[]}
-val expr_ty = mk_thy_type{Thy="vyperAst",Tyop="expr",Args=[]}
+val toplevel_ty = mk_thy_type{Thy="vyperAST",Tyop="toplevel",Args=[]}
+val type_ty = mk_thy_type{Thy="vyperAST",Tyop="type",Args=[]}
+val stmt_ty = mk_thy_type{Thy="vyperAST",Tyop="stmt",Args=[]}
+val expr_ty = mk_thy_type{Thy="vyperAST",Tyop="expr",Args=[]}
 val identifier_ty = string_ty
 val argument_ty = pairSyntax.mk_prod(identifier_ty, type_ty)
 val bool_tm = mk_comb(BaseT_tm, BoolT_tm)

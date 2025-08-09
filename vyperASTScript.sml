@@ -1,4 +1,4 @@
-Theory vyperAst
+Theory vyperAST
 Ancestors
   string words
 Libs
