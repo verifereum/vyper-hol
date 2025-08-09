@@ -1332,7 +1332,7 @@ val call_external_function_pre_def = call_external_function_def
      |> cv_auto_trans_pre "call_external_function_pre";
 
 Theorem call_external_function_pre[cv_pre]:
-  call_external_function_pre am cx mut ts args vals body
+  call_external_function_pre am cx mut ts args vals body ret
 Proof
   rw[call_external_function_pre_def]
   \\ rw[cont_pre_IS_SOME_cont]

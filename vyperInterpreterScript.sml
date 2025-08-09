@@ -2746,8 +2746,9 @@ val () = send_call_value_def
   |> cv_auto_trans;
 
 Definition call_external_function_def:
-  call_external_function am cx mut ts args vals body =
-  case bind_arguments (type_env ts) args vals
+  call_external_function am cx mut ts args vals body ret =
+  let tenv = type_env ts in
+  case bind_arguments tenv args vals
   of NONE => (INR $ Error "call bind_arguments", am)
    | SOME env =>
   (case constants_env cx am ts FEMPTY
@@ -2759,7 +2760,14 @@ Definition call_external_function_def:
      (case do send_call_value mut cx; eval_stmts cx body od st
       of
        | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs st)
-       | (INR (ReturnException v), st) => (INL v, abstract_machine_from_state srcs st)
+       | (INR (ReturnException v), st) =>
+           (let am = abstract_machine_from_state srcs st in
+            case evaluate_type tenv ret
+            of NONE => (INR (Error "eval ret"), am)
+             | SOME tv =>
+            case safe_cast tv v
+            of NONE => (INR (Error "ext cast ret"), am)
+             | SOME v => (INL v, am))
        | (INR e, st) => (INR e, abstract_machine_from_state srcs st)) in
     (res, st (* with globals updated_by reset_all_transient_globals -- done separately *)))
 End
@@ -2773,7 +2781,7 @@ Definition call_external_def:
   case lookup_function tx.function_name External ts
   of NONE => (INR $ Error "call lookup_function", am)
    | SOME (mut, args, ret, body) =>
-       call_external_function am cx mut ts args tx.args body
+       call_external_function am cx mut ts args tx.args body ret
 End
 
 Definition load_contract_def:
@@ -2786,7 +2794,7 @@ Definition load_contract_def:
      | NONE => INR $ Error "no constructor"
      | SOME (mut, args, ret, body) =>
        let cx = initial_evaluation_context ((addr,ts)::am.sources) tx in
-       case call_external_function am cx mut ts args tx.args body
+       case call_external_function am cx mut ts args tx.args body ret
          of (INR e, _) => INR e
        (* TODO: update balances on return *)
           | (_, am) => INL (am with sources updated_by CONS (addr, ts))
