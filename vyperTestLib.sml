@@ -1,11 +1,12 @@
 structure vyperTestLib :> vyperTestLib = struct
 
-open HolKernel boolLib JSONDecode JSONUtil cv_transLib wordsLib
+open HolKernel boolLib cv_transLib wordsLib
      pairSyntax listSyntax stringSyntax optionSyntax
      intSyntax wordsSyntax fcpSyntax
      vfmTypesSyntax byteStringCacheLib
      vyperABITheory vyperASTTheory vyperASTSyntax vyperTestRunnerTheory
      local open Timeout in end
+open JSONDecode
 
 val export_theory_no_docs = fn () =>
   Feedback.set_trace "TheoryPP.include_docs" 0
