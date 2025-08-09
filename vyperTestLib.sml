@@ -3,7 +3,7 @@ structure vyperTestLib :> vyperTestLib = struct
 open HolKernel boolLib cv_transLib wordsLib
      pairSyntax listSyntax stringSyntax optionSyntax
      intSyntax wordsSyntax fcpSyntax
-     vfmTypesSyntax byteStringCacheLib
+     vfmTypesSyntax contractABISyntax byteStringCacheLib
      vyperABITheory vyperASTSyntax vyperTestRunnerTheory
      local open Timeout in end
 open JSONDecode
@@ -13,94 +13,6 @@ val export_theory_no_docs = fn () =>
   before export_theory ()
 
 fun from_term_option ty = lift_option (mk_option ty) I
-
-val abi_type_ty = mk_thy_type{Args=[],Thy="contractABI",Tyop="abi_type"}
-val abiBool_tm = prim_mk_const{Name="Bool",Thy="contractABI"}
-val abiString_tm = prim_mk_const{Name="String",Thy="contractABI"}
-val abiBytes_tm = prim_mk_const{Name="Bytes",Thy="contractABI"}
-val abiUint_tm = prim_mk_const{Name="Uint",Thy="contractABI"}
-val abiInt_tm = prim_mk_const{Name="Int",Thy="contractABI"}
-val abiArray_tm = prim_mk_const{Name="Array",Thy="contractABI"}
-val abiTuple_tm = prim_mk_const{Name="Tuple",Thy="contractABI"}
-val abiAddress_tm = prim_mk_const{Name="Address",Thy="contractABI"}
-
-fun skip_to_matching_paren ss = let
-  fun skip_to_close i = let
-    val c = Substring.sub(ss, i)
-    val i = i+1
-  in
-    if c = #"]" then i else skip_to_close i
-  end
-  fun loop n i = let
-    val c = Substring.sub(ss, i)
-    val i = i+1
-  in
-    if c = #"(" then loop (n+1) i else
-    if c = #")" then
-      if n = 1
-      then if i < Substring.size ss andalso
-              Substring.sub(ss, i) = #"["
-           then skip_to_close (i+1)
-           else i
-      else loop (n-1) i
-    else loop n i
-  end
-in
-  Substring.splitAt(ss, loop 0 0)
-end
-
-fun split_on_outer_commas ss = let
-  val (x,ss) =
-    (if Substring.sub(ss, 0) = #"("
-     then skip_to_matching_paren
-     else Substring.splitl (not o equal #",")) ss
-in
-  if Substring.size ss = 0 then [x]
-  else x :: split_on_outer_commas (Substring.triml 1 ss)
-end
-
-fun parse_optnum ns =
-  case Int.fromString (Substring.string ns)
-    of SOME n => optionSyntax.mk_some (numSyntax.term_of_int n)
-     | NONE => optionSyntax.mk_none numSyntax.num
-
-fun parse_abi_type s =
-  if String.isSuffix "]" s then let
-    val ss = Substring.full s
-    val (ps, ns) = Substring.splitr (not o equal #"[") ss
-    val bt = parse_optnum ns
-    val s = Substring.string (Substring.trimr 1 ps)
-    val t = parse_abi_type s
-  in list_mk_comb(abiArray_tm, [bt, t]) end
-  else if String.isPrefix "(" s then let
-    val ss = Substring.trimr 1 $ Substring.triml 1 $ Substring.full s
-    val tss = split_on_outer_commas ss
-    val s = Substring.string(el 2 tss)
-    val ts = List.map (parse_abi_type o Substring.string) tss
-    val ls = listSyntax.mk_list(ts, abi_type_ty)
-  in mk_comb(abiTuple_tm, ls) end
-  else if String.isPrefix "uint" s then let
-    val ss = Substring.full s
-    val ns = Substring.triml 4 ss
-    val SOME n = Int.fromString (Substring.string ns)
-    val nt = numSyntax.term_of_int n
-  in mk_comb(abiUint_tm, nt) end
-  else if String.isPrefix "int" s then let
-    val ss = Substring.full s
-    val ns = Substring.triml 3 ss
-    val SOME n = Int.fromString (Substring.string ns)
-    val nt = numSyntax.term_of_int n
-  in mk_comb(abiInt_tm, nt) end
-  else if String.isPrefix "bytes" s then let
-    val ss = Substring.full s
-    val ns = Substring.triml 5 ss
-    val bt = parse_optnum ns
-  in mk_comb(abiBytes_tm, bt) end
-  (* TODO: Fixed, Ufixed *)
-  else if s = "bool" then abiBool_tm
-  else if s = "address" then abiAddress_tm
-  else if s = "string" then abiString_tm
-  else raise Fail ("parse_abi_type: " ^ s)
 
 fun check cd pred err d =
   andThen cd (fn x => if pred x then d else fail err)
@@ -116,6 +28,13 @@ val numOfLargeInt =
   intSyntax.dest_injected o
   intSyntax.term_of_int o
   Arbint.fromLargeInt
+
+fun achoose err ls = orElse(choose ls, fail err)
+
+fun triml n s = String.extract(s,n,NONE)
+val stringToNumTm =
+  numSyntax.term_of_int o
+  Option.valOf o Int.fromString
 
 val numtm = JSONDecode.map numOfLargeInt intInf
 val stringtm = JSONDecode.map fromMLstring string
@@ -155,13 +74,6 @@ val call : term decoder =
               field "env" $ field "block" $ field "timestamp" numtm,
               field "output" (JSONDecode.map (from_term_option bytes_ty) $
                               nullable bytes))))
-
-fun achoose err ls = orElse(choose ls, fail err)
-
-fun triml n s = String.extract(s,n,NONE)
-val stringToNumTm =
-  numSyntax.term_of_int o
-  Option.valOf o Int.fromString
 
 fun d_astType () : term decoder =
   achoose "astType" [
@@ -958,9 +870,9 @@ val abiBaseType : term decoder =
 fun tuple_brackets s =
   if Substring.isSuffix "]" s then let
     val (ps, ns) = Substring.splitr (not o equal #"[") s
-    val bt = parse_optnum ns
+    val bt = parse_optnum_ss ns
     val s = Substring.trimr 1 ps
-    val a = mk_comb(abiArray_tm, bt)
+    val a = mk_comb(contractABISyntax.Array_tm, bt)
   in
     curry mk_comb a o tuple_brackets s
   end else if Substring.isEmpty s
@@ -974,7 +886,7 @@ fun d_abiType () : term decoder = achoose "abiType" [
       (tuple_brackets $
        Substring.extract
          (t, String.size "tuple", NONE)) $
-      mk_comb(abiTuple_tm, mk_list (ls, abi_type_ty))) $
+      mk_comb(contractABISyntax.Tuple_tm, mk_list (ls, abi_type_ty))) $
     tuple2 (field "type" string,
             field "components" $ array $ delay d_abiType),
   field "type" abiBaseType
