@@ -462,6 +462,7 @@ Definition default_value_def:
   default_value env (ArrayT t (Dynamic n)) =
     ArrayV (evaluate_type env t) (Dynamic n) [] ∧
   default_value env (ArrayT t (Fixed n)) =
+    (* TODO: evaluate lazily (like HashMaps?) for speed of execution *)
     ArrayV (evaluate_type env t) (Fixed n) (REPLICATE n (default_value env t)) ∧
   default_value env (StructT id) =
     (let nid = string_to_num id in
