@@ -1481,6 +1481,10 @@ Definition evaluate_convert_def:
     (if within_int_bound (Unsigned n) i
      then INL $ IntV (Unsigned n) i
      else INR "convert uint bound") ∧
+  evaluate_convert (IntV u i) (BaseT AddressT) =
+    (if within_int_bound (Unsigned 160) i
+     then INL $ AddressV (i2w i)
+     else INR $ "convert int address") ∧
   evaluate_convert (FlagV _ m) (BaseT (IntT n)) =
     (let i = &m in
      if within_int_bound (Signed n) i
