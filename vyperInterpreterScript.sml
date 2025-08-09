@@ -1678,7 +1678,7 @@ Definition safe_cast_def:
      | _ => NONE)
   | ArrayTV t bd =>
     (case v of
-     | ArrayV (SOME _) bd vs =>
+     | ArrayV (SOME _) _ vs =>
        (case safe_cast_list (REPLICATE (LENGTH vs) t) vs []
         of SOME vs => SOME $ ArrayV (SOME t) bd vs
 	 | _ => NONE)
