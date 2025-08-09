@@ -1,4 +1,4 @@
-structure vyperASTSyntax = struct
+structure vyperASTSyntax :> vyperASTSyntax = struct
 
   open HolKernel vyperASTTheory byteStringCacheLib
   open stringSyntax pairSyntax optionSyntax listSyntax numSyntax
