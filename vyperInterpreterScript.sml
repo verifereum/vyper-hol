@@ -1137,6 +1137,7 @@ Definition value_to_key_def:
   value_to_key (IntV _ i) = SOME $ IntSubscript i ∧
   value_to_key (StringV _ s) = SOME $ StrSubscript s ∧
   value_to_key (BytesV _ bs) = SOME $ BytesSubscript bs ∧
+  value_to_key (FlagV _ n) = SOME $ IntSubscript $ &n ∧
   value_to_key _ = NONE
 End
 
