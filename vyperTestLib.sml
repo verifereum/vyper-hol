@@ -5,7 +5,6 @@ open HolKernel boolLib cv_transLib wordsLib
      intSyntax wordsSyntax fcpSyntax
      vfmTypesSyntax contractABISyntax byteStringCacheLib
      vyperABITheory vyperASTSyntax vyperTestRunnerTheory
-     local open Timeout in end
 open JSONDecode
 
 val export_theory_no_docs = fn () =>
@@ -1034,7 +1033,6 @@ end
 
 val trace_ty = mk_thy_type{Thy="vyperTestRunner",Tyop="trace",Args=[]}
 val traces_ty = mk_list_type trace_ty
-val run_test_tm = prim_mk_const{Thy="vyperTestRunner",Name="run_test"}
 
 fun has_unsupported_source_code (name, (err, j)) = let
   val srcopt = decode (orElse(field "source_code" (nullable string),
@@ -1059,27 +1057,6 @@ in
     "create_minimal_proxy_to(",
     "create_copy_of("
   ])
-end
-
-val time_limit = Time.fromSeconds 120
-
-fun run_test_on_traces traces_const = let
-  val (traces_name, _) = dest_const traces_const
-  val suffix = String.extract(traces_name, String.size"traces", NONE)
-  val result_name = String.concat ["result", suffix]
-  val rtm = mk_comb(run_test_tm, traces_const)
-  val rth = Timeout.apply time_limit cv_eval rtm
-            handle Timeout.TIMEOUT _ => raise Fail (
-              String.concat ["Timeout in test ", result_name])
-  val ttm = sumSyntax.mk_isl $ rtm
-  val eth = (RAND_CONV (REWR_CONV rth) THENC cv_eval) ttm
-  val tth = EQT_ELIM eth handle HOL_ERR _ =>
-            raise Fail (String.concat [
-              "Failure in test ", result_name, ": ",
-              term_to_string $ rand $ rhs $ concl rth ])
-  val tth = save_thm (result_name, tth)
-in
-  ()
 end
 
 val test_files_with_prefixes = [
@@ -1233,7 +1210,7 @@ fun generate_defn_scripts () = let
   fun f i [] = ()
     | f i (t::ts) = let
       val istr = Int.toString i
-      val padi = StringCvt.padLeft #"0" 2 $ istr
+      val padi = StringCvt.padLeft #"0" 2 istr
       val thyname = String.concat["vyperTestDefs", padi]
       val fname = OS.Path.concat("tests", String.concat[thyname, "Script.sml"])
       val jsonp = OS.Path.concat(OS.Path.parentArc, t)
@@ -1241,6 +1218,28 @@ fun generate_defn_scripts () = let
         "open HolKernel vyperTestLib;\nval () = new_theory \"",
         thyname, "\";\nval () = make_definitions_for_file (",
         istr, ", \"", jsonp, "\");\n",
+        "val () = export_theory_no_docs();\n"]
+      val out = TextIO.openOut(fname)
+      val () = TextIO.output(out, contents)
+      val () = TextIO.closeOut out
+    in f (i+1) ts end
+in
+  f 0 test_files
+end
+
+fun generate_test_scripts () = let
+  fun f i [] = ()
+    | f i (_::ts) = let
+      val istr = Int.toString i
+      val padi = StringCvt.padLeft #"0" 2 istr
+      val thyname = String.concat["vyperTest", padi]
+      val defsname = String.concat["vyperTestDefs", padi]
+      val fname = OS.Path.concat("tests", String.concat[thyname, "Script.sml"])
+      val contents = String.concat [
+        "open HolKernel vyperTestRunnerLib ", defsname, "Theory;\n",
+        "val () = new_theory \"", thyname,
+        "\";\nval () = List.app run_test_on_traces $ ",
+        "all_traces \"", defsname, "\";\n",
         "val () = export_theory_no_docs();\n"]
       val out = TextIO.openOut(fname)
       val () = TextIO.output(out, contents)
