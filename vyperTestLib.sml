@@ -214,6 +214,7 @@ fun d_astHmType() : term decoder = achoose "astHmType" [
   check_field "typeclass" "bytes_m" $
     JSONDecode.map mk_BytesM $ field "m" numtm,
   check_field "name" "bool" $ succeed bool_tm,
+  check_field "typeclass" "interface" $ succeed address_tm,
   check_field "name" "address" $ succeed address_tm,
   check_field "name" "decimal" $ succeed decimal_tm,
   check_field "typeclass" "integer" $
