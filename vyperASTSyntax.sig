@@ -180,8 +180,11 @@ signature vyperASTSyntax = sig
   val mk_MakeArray : term * term * term list -> term
   val mk_Tuple     : term list -> term
   val mk_SArray    : term * term list -> term
-  val msg_sender_tm : term
-  val self_addr_tm  : term
-  val timestamp_tm  : term
+  val msg_sender_tm    : term
+  val self_addr_tm     : term
+  val time_stamp_tm    : term
+  val block_number_tm  : term
+  val blob_base_fee_tm : term
+  val gas_price_tm     : term
 
 end

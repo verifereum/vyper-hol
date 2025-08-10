@@ -30,6 +30,9 @@ Datatype:
   ; deploymentSuccess: bool
   ; value: num
   ; timeStamp: num
+  ; blockNumber: num
+  ; blobBaseFee: num
+  ; gasPrice: num
   ; callData: byte list
   |>
 End
@@ -73,6 +76,8 @@ Datatype:
   ; callData: byte list
   ; value: num
   ; timeStamp: num
+  ; blockNumber: num
+  ; blobBaseFee: num
   ; gasLimit: num
   ; gasPrice: num
   ; static: bool
@@ -122,6 +127,9 @@ Definition run_deployment_def:
           ; args := args
           ; value := dt.value
           ; time_stamp := dt.timeStamp
+          ; block_number := dt.blockNumber
+          ; blob_base_fee := dt.blobBaseFee
+          ; gas_price := dt.gasPrice
           ; is_creation := T |>;
     in load_contract am tx dt.sourceAst
   in (sns, res)
@@ -148,6 +156,9 @@ Definition run_call_def:
           ; args := args
           ; value := ct.value
           ; time_stamp := ct.timeStamp
+          ; block_number := ct.blockNumber
+          ; blob_base_fee := ct.blobBaseFee
+          ; gas_price := ct.gasPrice
           ; is_creation := F |>;
     (* TODO: set static based on ct.static *)
     (* TODO: set env data somewhere? *)

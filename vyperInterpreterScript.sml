@@ -884,6 +884,9 @@ Datatype:
   ; args: value list
   ; value: num
   ; time_stamp: num
+  ; block_number: num
+  ; blob_base_fee: num
+  ; gas_price: num
   ; is_creation: bool
   |>
 End
@@ -910,6 +913,9 @@ Definition empty_call_txn_def:
     args := [];
     value := 0;
     time_stamp := 0;
+    block_number := 0;
+    blob_base_fee := 0;
+    gas_price := 0;
     is_creation := F
   |>
 End
@@ -1052,6 +1058,9 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ (Env SelfAddr) [] = INL $ AddressV cx.txn.target ∧
   evaluate_builtin cx _ (Env ValueSent) [] = INL $ IntV (Unsigned 256) &cx.txn.value ∧
   evaluate_builtin cx _ (Env TimeStamp) [] = INL $ IntV (Unsigned 256) &cx.txn.time_stamp ∧
+  evaluate_builtin cx _ (Env BlockNumber) [] = INL $ IntV (Unsigned 256) &cx.txn.block_number ∧
+  evaluate_builtin cx _ (Env BlobBaseFee) [] = INL $ IntV (Unsigned 256) &cx.txn.blob_base_fee ∧
+  evaluate_builtin cx _ (Env GasPrice) [] = INL $ IntV (Unsigned 256) &cx.txn.gas_price ∧
   evaluate_builtin cx _ (Concat n) vs = evaluate_concat n vs ∧
   evaluate_builtin cx _ (Slice n) [v1; v2; v3] = evaluate_slice v1 v2 v3 n ∧
   evaluate_builtin cx _ (MakeArray to bd) vs =

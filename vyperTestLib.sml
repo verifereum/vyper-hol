@@ -48,13 +48,15 @@ val call_trace_ty = #1 $ dom_rng $ type_of Call_tm
 
 val call : term decoder =
   check_trace_type "call" $
-  JSONDecode.map (fn ((a,c,v,t),(p,g,s),(m,e)) =>
+  JSONDecode.map (fn ((a,c,v,t),(p,g,s),(m,bn,bf,e)) =>
               TypeBase.mk_record (call_trace_ty, [
                 ("sender", s),
                 ("target", t),
                 ("callData", c),
                 ("value", v),
                 ("timeStamp", m),
+                ("blockNumber", bn),
+                ("blobBaseFee", bf),
                 ("gasLimit", g),
                 ("gasPrice", p),
                 ("static", a),
@@ -69,8 +71,10 @@ val call : term decoder =
               tuple3 (field "gas_price" numtm,
                       field "gas" numtm,
                       field "origin" address),
-            tuple2 (
+            tuple4 (
               field "env" $ field "block" $ field "timestamp" numtm,
+              field "env" $ field "block" $ field "number" numtm,
+              field "env" $ field "block" $ field "excess_blob_gas" (* TODO *) numtm,
               field "output" (JSONDecode.map (from_term_option bytes_ty) $
                               nullable bytes))))
 
@@ -356,7 +360,34 @@ fun d_expression () : term decoder = achoose "expr" [
           (check (field "attr" string)
                  (equal "timestamp")
                  "not block.timestamp"
-                 (succeed timestamp_tm)),
+                 (succeed time_stamp_tm)),
+    check_ast_type "Attribute" $
+    check (field "value" (tuple2 (field "ast_type" string,
+                                  field "id" string)))
+          (equal ("Name", "block"))
+          "Attribute not block"
+          (check (field "attr" string)
+                 (equal "number")
+                 "not block.number"
+                 (succeed block_number_tm)),
+    check_ast_type "Attribute" $
+    check (field "value" (tuple2 (field "ast_type" string,
+                                  field "id" string)))
+          (equal ("Name", "block"))
+          "Attribute not block"
+          (check (field "attr" string)
+                 (equal "blobbasefee")
+                 "not block.blobbasefee"
+                 (succeed blob_base_fee_tm)),
+    check_ast_type "Attribute" $
+    check (field "value" (tuple2 (field "ast_type" string,
+                                  field "id" string)))
+          (equal ("Name", "tx"))
+          "Attribute not tx"
+          (check (field "attr" string)
+                 (equal "gasprice")
+                 "not tx.gasprice"
+                 (succeed gas_price_tm)),
     (*
     check_ast_type "Attribute" $
     check (field "value" (tuple2 (field "ast_type" string,
@@ -971,9 +1002,6 @@ val unsupported_code = [
   "+ -1e38", (* TODO: parse scientific notation *)
   "uint256[max_value(uint256)-1]", (* TODO: optimise *)
   "@raw_return\n", (* TODO: add *)
-  "tx.gasprice", (* TODO: add *)
-  "block.number", (* TODO: add *)
-  "block.blobbasefee", (* TODO: add *)
   "convert(n, decimal)" (* TODO: conversion to decimal *)
 ]
 
@@ -982,7 +1010,7 @@ val deployment : term decoder =
   check (field "source_code" string)
         (fn src => List.all (fn x => not $ String.isSubstring x src) unsupported_code)
         "has unsupported_code" $
-  JSONDecode.map (fn ((c,i,(s,m,a),(d,v)),e) =>
+  JSONDecode.map (fn ((c,i,(s,m,a,g),(d,bn,bf,v)),e) =>
              TypeBase.mk_record (deployment_trace_ty, [
                ("sourceAst", c),
                ("contractAbi", mk_list(i, abi_entry_ty)),
@@ -991,17 +1019,23 @@ val deployment : term decoder =
                ("deploymentSuccess", e),
                ("value", v),
                ("timeStamp", m),
+               ("blockNumber", bn),
+               ("blobBaseFee", bf),
+               ("gasPrice", g),
                ("callData", d)
              ]))
           (tuple2 (tuple4 (field "annotated_ast"
                              (field "ast" (field "body" toplevels)),
                            field "contract_abi" (array abiEntry),
-                           tuple3 (field "env" $ field "tx" $ field "origin" address,
+                           tuple4 (field "env" $ field "tx" $ field "origin" address,
                                    field "env" $ field "block" $ field "timestamp" numtm,
-                                   field "deployed_address" address),
-                           tuple2 (field "calldata" $
+                                   field "deployed_address" address,
+                                   field "env" $ field "tx" $ field "gas_price" numtm),
+                           tuple4 (field "calldata" $
                                    JSONDecode.map (cached_bytes_from_hex o theoptstring)
                                      (nullable string),
+                                   field "env" $ field "block" $ field "number" numtm,
+                                   field "env" $ field "block" $ field "excess_blob_gas" (* TODO *)numtm,
                                    field "value" numtm)),
                    field "deployment_succeeded" booltm))
 

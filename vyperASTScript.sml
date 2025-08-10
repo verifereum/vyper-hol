@@ -77,6 +77,9 @@ Datatype:
   | SelfAddr
   | ValueSent
   | TimeStamp
+  | BlockNumber
+  | BlobBaseFee
+  | GasPrice
 End
 
 Datatype:

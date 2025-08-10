@@ -50,6 +50,9 @@ structure vyperASTSyntax :> vyperASTSyntax = struct
   val Sender_tm       = astk"Sender"
   val SelfAddr_tm     = astk"SelfAddr"
   val TimeStamp_tm    = astk"TimeStamp"
+  val BlockNumber_tm  = astk"BlockNumber"
+  val BlobBaseFee_tm  = astk"BlobBaseFee"
+  val GasPrice_tm     = astk"GasPrice"
   val Address_tm      = astk"Address"
   val Balance_tm      = astk"Balance"
   val Len_tm          = astk"Len"
@@ -219,7 +222,13 @@ structure vyperASTSyntax :> vyperASTSyntax = struct
     mk_comb(Env_tm, Sender_tm), mk_list([], expr_ty)])
   val self_addr_tm = list_mk_comb(Builtin_tm, [
     mk_comb(Env_tm, SelfAddr_tm), mk_list([], expr_ty)])
-  val timestamp_tm = list_mk_comb(Builtin_tm, [
+  val time_stamp_tm = list_mk_comb(Builtin_tm, [
     mk_comb(Env_tm, TimeStamp_tm), mk_list([], expr_ty)])
+  val block_number_tm = list_mk_comb(Builtin_tm, [
+    mk_comb(Env_tm, BlockNumber_tm), mk_list([], expr_ty)])
+  val blob_base_fee_tm = list_mk_comb(Builtin_tm, [
+    mk_comb(Env_tm, BlobBaseFee_tm), mk_list([], expr_ty)])
+  val gas_price_tm = list_mk_comb(Builtin_tm, [
+    mk_comb(Env_tm, GasPrice_tm), mk_list([], expr_ty)])
 
 end
