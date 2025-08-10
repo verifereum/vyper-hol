@@ -1083,18 +1083,66 @@ in
 end
 
 val test_files_with_prefixes = [
+  ("../vyper/tests/export/functional/codegen",
+   ["test_interfaces.json",
+    "test_selector_table.json",
+    "test_selector_table_stability.json"]),
+  ("../vyper/tests/export/functional/codegen/calling_convention",
+   [
+    "test_default_function.json",
+    (* TODO: unsupported
+    "test_default_parameters.json",
+    *)
+    (* TODO: uses test deps
+    "test_erc20_abi.json",
+    *)
+    (* TODO: temp exclude
+    "test_external_contract_calls.json",
+    *)
+    "test_inlineable_functions.json",
+    "test_internal_call.json",
+    "test_modifiable_external_contract_calls.json",
+    "test_new_call_convention.json",
+    "test_return.json",
+    "test_self_call_struct.json"]),
+  ("../vyper/tests/export/functional/codegen/environment_variables",
+   ["test_blobbasefee.json",
+    "test_block_number.json",
+    "test_blockhash.json",
+    "test_tx.json"]),
+  ("../vyper/tests/export/functional/codegen/modules",
+   ["test_events.json",
+    "test_exports.json",
+    "test_flag_imports.json",
+    "test_interface_imports.json",
+    "test_module_constants.json",
+    "test_module_variables.json",
+    "test_nonreentrant.json",
+    "test_stateless_functions.json"]),
+  ("../vyper/tests/export/functional/codegen/integration",
+   ["test_basics.json",
+    "test_crowdfund.json",
+    "test_escrow.json"]),
+  ("../vyper/tests/export/functional/codegen/storage_variables",
+   ["test_getters.json",
+    "test_setters.json",
+    "test_storage_variable.json"]),
   ("../vyper/tests/export/functional/codegen/types/numbers",
-   ["test_constants.json",
+   [
+    "test_constants.json",
     "test_decimals.json",
     "test_division.json",
     "test_exponents.json",
     "test_isqrt.json",
     "test_modulo.json",
     "test_signed_ints.json",
-    "test_sqrt.json",
-    "test_unsigned_ints.json"]),
+    (* TODO: sqrt not yet supported, nor fixtures / imports
+    "test_sqrt.json",*)
+    "test_unsigned_ints.json"
+   ]),
   ("../vyper/tests/export/functional/codegen/types",
-   ["test_array_indexing.json",
+   [
+    "test_array_indexing.json",
     "test_bytes.json",
     "test_bytes_literal.json",
     "test_dynamic_array.json",
@@ -1104,9 +1152,11 @@ val test_files_with_prefixes = [
     "test_node_types.json",
     "test_string.json",
     "test_string_literal.json",
-    "test_struct.json"]),
+    "test_struct.json"
+   ]),
   ("../vyper/tests/export/functional/codegen/features",
-   ["test_address_balance.json",
+   [
+    "test_address_balance.json",
     "test_assert.json",
     "test_assert_unreachable.json",
     "test_assignment.json",
@@ -1157,15 +1207,16 @@ fun make_test_files [] acc = List.rev acc
       (List.map (curry OS.Path.concat pfx) ls, acc)
 val test_files = make_test_files test_files_with_prefixes []
 
-val num_test_files = List.length test_files
-
-fun make_definitions_for_file n = let
+fun make_definitions_for_file (n, json_path) = let
   val nstr = Int.toString n
-  val json_path = el n test_files
   val (tests, decode_fails) = read_test_json json_path
   val firstDf = List.find (not o has_unsupported_source_code) decode_fails
   val () = case firstDf of NONE => () | SOME (name, _) => raise Fail
              (String.concat ["decode failure in ", json_path, ": ", name])
+  val path_vn = String.concat["json_path_", nstr]
+  val path_def = new_definition(path_vn ^ "_def",
+                   mk_eq(mk_var(path_vn, string_ty),
+                         fromMLstring json_path))
   val traces_prefix = String.concat ["traces_", nstr, "_"]
   fun define_traces i (name, traces) = let
     val trs = mk_list(traces, trace_ty)
@@ -1176,6 +1227,27 @@ fun make_definitions_for_file n = let
   in () end
 in
   Lib.appi define_traces tests
+end
+
+fun generate_defn_scripts () = let
+  fun f i [] = ()
+    | f i (t::ts) = let
+      val istr = Int.toString i
+      val padi = StringCvt.padLeft #"0" 2 $ istr
+      val thyname = String.concat["vyperTestDefs", padi]
+      val fname = OS.Path.concat("tests", String.concat[thyname, "Script.sml"])
+      val jsonp = OS.Path.concat(OS.Path.parentArc, t)
+      val contents = String.concat [
+        "open HolKernel vyperTestLib;\nval () = new_theory \"",
+        thyname, "\";\nval () = make_definitions_for_file (",
+        istr, ", \"", jsonp, "\");\n",
+        "val () = export_theory_no_docs();\n"]
+      val out = TextIO.openOut(fname)
+      val () = TextIO.output(out, contents)
+      val () = TextIO.closeOut out
+    in f (i+1) ts end
+in
+  f 0 test_files
 end
 
 (*
