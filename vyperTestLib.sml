@@ -1139,9 +1139,7 @@ val test_files_with_prefixes = [
     "test_assert_unreachable.json",
     "test_assignment.json",
     "test_bytes_map_keys.json",
-    (* TODO: slow
     "test_clampers.json",
-    *)
     "test_comments.json",
     "test_comparison.json",
     "test_conditionals.json",
