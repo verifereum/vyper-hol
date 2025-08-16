@@ -650,13 +650,6 @@ Definition bounded_int_op_def:
   else INR "bounded_int_op type"
 End
 
-Definition int_bound_bits_def[simp]:
-  int_bound_bits (Unsigned b) = b ∧
-  int_bound_bits (Signed b) = b
-End
-
-val () = cv_trans int_bound_bits_def;
-
 Theorem bounded_exp:
   bounded_int_op u1 u2 (i1 ** n2) =
   if u1 = u2 then
@@ -715,6 +708,22 @@ Definition bounded_decimal_op_def:
   else INR "bounded_decimal_op"
 End
 
+Definition wrapped_int_op_def:
+  wrapped_int_op u1 u2 i =
+  if u1 = u2 then
+    let b = int_bound_bits u1 in
+      INL $ IntV u1 (int_mod i &(2 ** b))
+  else INR "wrapped_int_op"
+End
+
+val wrapped_int_op_pre_def = cv_trans_pre "wrapped_int_op_pre" wrapped_int_op_def;
+
+Theorem wrapped_int_op_pre[cv_pre]:
+  wrapped_int_op_pre x y z
+Proof
+  rw[wrapped_int_op_pre_def]
+QED
+
 (* TODO: add unsafe ops *)
 Definition evaluate_binop_def:
   evaluate_binop bop v1 v2 =
@@ -752,6 +761,23 @@ Definition evaluate_binop_def:
               w2i $ word_quot ((i2w (i1 * 10000000000)):bytes32) (i2w i2))
                          | _ => INR "binop")
        | _ => INR "binop")
+     | UAdd => (case v1 of
+         IntV u1 i1 => (case v2 of IntV u2 i2 =>
+           wrapped_int_op u1 u2 (i1 + i2) | _ => INR "binop")
+       | _ => INR "binop")
+     | USub => (case v1 of
+         IntV u1 i1 => (case v2 of IntV u2 i2 =>
+           wrapped_int_op u1 u2 (i1 - i2) | _ => INR "binop")
+       | _ => INR "binop")
+     | UMul => (case v1 of
+         IntV u1 i1 => (case v2 of IntV u2 i2 =>
+           wrapped_int_op u1 u2 (i1 * i2) | _ => INR "binop")
+       | _ => INR "binop")
+     | UDiv => (case v1 of
+         IntV u1 i1 => (case v2 of IntV u2 i2 =>
+           if i2 = 0 then INR "UDiv0" else
+           wrapped_int_op u1 u2 (i1 / i2) | _ => INR "binop")
+       | _ => INR "binop")
      | Mod => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
            (if i2 = 0 then INR "Mod0" else
@@ -768,6 +794,12 @@ Definition evaluate_binop_def:
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
            (if i2 < 0 then INR "Exp~" else
             bounded_int_op u1 u2 $ (i1 ** (Num i2))) | _ => INR "binop")
+       | _ => INR "binop")
+     | ExpMod => (case v1 of
+         IntV u1 i1 => (case v2 of IntV u2 i2 =>
+           (if u1 = Unsigned 256 ∧ u2 = u1
+            then INL $ IntV u1 (w2i (word_exp (i2w i1 : bytes32) (i2w i2)))
+            else INR "ExpMod") | _ => INR "binop")
        | _ => INR "binop")
      | ShL => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
@@ -866,11 +898,14 @@ Termination
   \\ rw[]
 End
 
+val cv_NotIn_tm = rand $ rhs $ concl $ cv_eval_raw “NotIn”;
+val cv_NotEq_tm = rand $ rhs $ concl $ cv_eval_raw “NotEq”;
+
 val () = cv_auto_trans_rec
   (REWRITE_RULE [bounded_exp, COND_RATOR] evaluate_binop_def)
   (WF_REL_TAC
     ‘inv_image $< (λ(b,x,y).
-       if b = cv$Num 12 ∨ b = cv$Num 14
+       if b = ^cv_NotIn_tm ∨ b = ^cv_NotEq_tm
        then 2n else 0n)’
    \\ rw[] \\ rw[] \\ gvs[]
    \\ Cases_on`cv_bop` \\ gvs[]
@@ -1036,6 +1071,48 @@ End
 
 val () = cv_auto_trans type_env_def;
 
+Definition evaluate_addmod_def:
+  evaluate_addmod i1 i2 i3 = INR "TODO: unimplemented"
+End
+
+Definition evaluate_mulmod_def:
+  evaluate_mulmod i1 i2 i3 = INR "TODO: unimplemented"
+End
+
+Definition evaluate_as_wei_value_def:
+  evaluate_as_wei_value dn v =
+  let m = case dn of
+          | Wei => 1
+          | Kwei => 1000
+          | Mwei => 1000000
+          | Gwei => 1000000000
+          | Szabo => 1000000000000
+          | Finney => 1000000000000000
+          | Ether => 1000000000000000000
+          | KEther => 1000000000000000000000
+          | MEther => 1000000000000000000000000
+          | GEther => 1000000000000000000000000000
+          | TEther => 1000000000000000000000000000000 in
+  let r = case v of IntV u i => i * m
+                  | DecimalV i => (i * m) / 1000000000
+                  | _ => -1 in
+  if 0 ≤ r then
+    let u = Unsigned 256 in
+    if within_int_bound u r then
+      INL $ IntV u r
+    else INR "ewv bound"
+  else INR "ewv neg"
+End
+
+val evaluate_as_wei_value_pre_def =
+  cv_auto_trans_pre "evaluate_as_wei_value_pre" evaluate_as_wei_value_def;
+
+Theorem evaluate_as_wei_value_pre[cv_pre]:
+  evaluate_as_wei_value_pre x y
+Proof
+  rw[evaluate_as_wei_value_pre_def]
+QED
+
 Definition evaluate_builtin_def:
   evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
   evaluate_builtin cx _ Len [StringV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
@@ -1051,6 +1128,13 @@ Definition evaluate_builtin_def:
     Keccak_256_w64 ls ∧
   (* TODO: reject BytesV with invalid bounds for Keccak256 *)
   (* TODO: support Keccak256 on strings *)
+  evaluate_builtin cx _ (AsWeiValue dn) [v] = evaluate_as_wei_value dn v ∧
+  evaluate_builtin cx _ AddMod [IntV u1 i1; IntV u2 i2; IntV u3 i3] =
+    (if u1 = Unsigned 256 ∧ u2 = u1 ∧ u3 = u1 then evaluate_addmod i1 i2 i3
+     else INR "AddMod type") ∧
+  evaluate_builtin cx _ MulMod [IntV u1 i1; IntV u2 i2; IntV u3 i3] =
+    (if u1 = Unsigned 256 ∧ u2 = u1 ∧ u3 = u1 then evaluate_mulmod i1 i2 i3
+     else INR "MulMod type") ∧
   evaluate_builtin cx _ Floor [DecimalV i] =
     INL $ IntV (Signed 256) (i / 10000000000) ∧
   evaluate_builtin cx _ (Bop bop) [v1; v2] = evaluate_binop bop v1 v2 ∧
@@ -1195,9 +1279,13 @@ Definition builtin_args_length_ok_def:
   builtin_args_length_ok Neg n = (n = 1) ∧
   builtin_args_length_ok Floor n = (n = 1) ∧
   builtin_args_length_ok Keccak256 n = (n = 1) ∧
+  builtin_args_length_ok (AsWeiValue _) n = (n = 1) ∧
   builtin_args_length_ok (Concat _) n = (2 ≤ n) ∧
   builtin_args_length_ok (Slice _) n = (n = 3) ∧
   builtin_args_length_ok (MakeArray _ b) n = compatible_bound b n ∧
+  builtin_args_length_ok Floor n = (n = 1) ∧
+  builtin_args_length_ok AddMod n = (n = 3) ∧
+  builtin_args_length_ok MulMod n = (n = 3) ∧
   builtin_args_length_ok (Bop _) n = (n = 2) ∧
   builtin_args_length_ok (Env _) n = (n = 0) ∧
   builtin_args_length_ok (Acc _) n = (n = 1)

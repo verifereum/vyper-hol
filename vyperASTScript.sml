@@ -54,6 +54,11 @@ Datatype:
   | Sub
   | Mul
   | Div
+  | UAdd
+  | USub
+  | UMul
+  | UDiv
+  | ExpMod
   | Mod
   | Exp
   | And
@@ -93,15 +98,33 @@ Datatype:
 End
 
 Datatype:
+  denomination
+  = Wei
+  | Kwei
+  | Mwei
+  | Gwei
+  | Szabo
+  | Finney
+  | Ether
+  | KEther
+  | MEther
+  | GEther
+  | TEther
+End
+
+Datatype:
   builtin
   = Len
   | Not
   | Neg
   | Keccak256
+  | AsWeiValue denomination
   | Concat num (* dynamic bound for return type *)
   | Slice num (* ditto *)
   | MakeArray (type option (* NONE for tuples *)) bound
   | Floor
+  | AddMod
+  | MulMod
   | Bop binop
   | Env env_item
   | Acc account_item
@@ -228,6 +251,13 @@ Definition is_Unsigned_def[simp]:
 End
 
 val () = cv_auto_trans is_Unsigned_def;
+
+Definition int_bound_bits_def[simp]:
+  int_bound_bits (Unsigned b) = b ∧
+  int_bound_bits (Signed b) = b
+End
+
+val () = cv_trans int_bound_bits_def;
 
 Definition is_TupleT_def[simp]:
   is_TupleT (TupleT _) = T ∧
