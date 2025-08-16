@@ -74,7 +74,7 @@ val call : term decoder =
             tuple4 (
               field "env" $ field "block" $ field "timestamp" numtm,
               field "env" $ field "block" $ field "number" numtm,
-              field "env" $ field "block" $ field "excess_blob_gas" (* TODO *) numtm,
+              field "env" $ field "block" $ field "blob_basefee" numtm,
               field "output" (JSONDecode.map (from_term_option bytes_ty) $
                               nullable bytes))))
 
@@ -1035,7 +1035,7 @@ val deployment : term decoder =
                                    JSONDecode.map (cached_bytes_from_hex o theoptstring)
                                      (nullable string),
                                    field "env" $ field "block" $ field "number" numtm,
-                                   field "env" $ field "block" $ field "excess_blob_gas" (* TODO *)numtm,
+                                   field "env" $ field "block" $ field "blob_basefee" numtm,
                                    field "value" numtm)),
                    field "deployment_succeeded" booltm))
 
