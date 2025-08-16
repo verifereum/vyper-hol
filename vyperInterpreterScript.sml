@@ -1606,12 +1606,30 @@ Definition evaluate_convert_def:
     (if compatible_bound bd (LENGTH s)
      then INL $ BytesV bd (MAP (n2w o ORD) s)
      else INR "convert string bytes") ∧
+  evaluate_convert (IntV _ i) (BaseT DecimalT) =
+    bounded_decimal_op (i * 10000000000) ∧
+  evaluate_convert (DecimalV i) (BaseT (IntT n)) =
+    (if within_int_bound (Signed 168) ((ABS i) / 10000000000)
+     then INL $ IntV (Signed n) (i / 10000000000)
+     else INR "convert decimal int") ∧
+  evaluate_convert (DecimalV i) (BaseT (UintT n)) =
+    (let r = i / 10000000000 in
+     if 0 ≤ i ∧ within_int_bound (Signed 168) r
+     then INL $ IntV (Unsigned n) r
+     else INR "convert decimal uint") ∧
   evaluate_convert _ _ = INR "convert"
 End
 
-val () = cv_auto_trans $
+val evaluate_convert_pre_def =
+  cv_auto_trans_pre "evaluate_convert_pre" $
   REWRITE_RULE [GSYM CHR_o_w2n_eq]
   evaluate_convert_def;
+
+Theorem evaluate_convert_pre[cv_pre]:
+  evaluate_convert_pre x y
+Proof
+  rw[evaluate_convert_pre_def]
+QED
 
 Definition evaluate_type_builtin_def:
   evaluate_type_builtin cx Empty typ vs =

@@ -1052,8 +1052,7 @@ val unsupported_code = [
   "def blockHashAskewLimitary(", (* TODO: investigate, something about call selector *)
   "+ -1e38", (* TODO: parse scientific notation *)
   "uint256[max_value(uint256)-1]", (* TODO: optimise *)
-  "@raw_return\n", (* TODO: add *)
-  "convert(n, decimal)" (* TODO: conversion to decimal *)
+  "@raw_return\n" (* TODO: add *)
 ]
 
 val deployment : term decoder =
