@@ -1690,14 +1690,23 @@ val () = cv_auto_trans_rec build_getter_def (
 );
 
 Definition getter_def:
-  getter id kt vt =
+  getter ne kt vt =
   let (args, ret, exp) =
-    build_getter (TopLevelName id) kt vt 0
+    build_getter ne kt vt 0
   in
     (View, args, ret, [Return $ SOME exp])
 End
 
 val () = cv_auto_trans getter_def;
+
+Definition name_expression_def:
+  name_expression mut id =
+  if mut = Immutable ∨ is_Constant mut
+  then Name id
+  else TopLevelName id
+End
+
+val () = cv_auto_trans name_expression_def;
 
 Definition lookup_function_def:
   lookup_function name Deploy [] = SOME (Nonpayable, [], NoneT, [Pass]) ∧
@@ -1708,15 +1717,11 @@ Definition lookup_function_def:
   lookup_function name External (VariableDecl Public mut id typ :: ts) =
   (if id = name then
     if ¬is_ArrayT typ
-    then SOME (View, [], typ, [
-                 Return (SOME (if mut = Immutable ∨ is_Constant mut
-                               then Name id
-                               else TopLevelName id))
-               ])
-    else SOME $ getter id uint256 (Type (ArrayT_type typ))
+    then SOME (View, [], typ, [Return (SOME (name_expression mut id))])
+    else SOME $ getter (name_expression mut id) uint256 (Type (ArrayT_type typ))
    else lookup_function name External ts) ∧
   lookup_function name External (HashMapDecl Public _ id kt vt :: ts) =
-  (if id = name then SOME $ getter id kt vt
+  (if id = name then SOME $ getter (TopLevelName id) kt vt
    else lookup_function name External ts) ∧
   lookup_function name vis (_ :: ts) =
     lookup_function name vis ts
