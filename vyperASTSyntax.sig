@@ -27,6 +27,10 @@ signature vyperASTSyntax = sig
   val Sub_tm          : term
   val Mul_tm          : term
   val Div_tm          : term
+  val UAdd_tm         : term
+  val USub_tm         : term
+  val UMul_tm         : term
+  val UDiv_tm         : term
   val Mod_tm          : term
   val Exp_tm          : term
   val And_tm          : term
@@ -47,6 +51,17 @@ signature vyperASTSyntax = sig
   val TimeStamp_tm    : term
   val Address_tm      : term
   val Balance_tm      : term
+  val Wei_tm          : term
+  val Kwei_tm         : term
+  val Mwei_tm         : term
+  val Gwei_tm         : term
+  val Szabo_tm        : term
+  val Finney_tm       : term
+  val Ether_tm        : term
+  val KEther_tm       : term
+  val MEther_tm       : term
+  val GEther_tm       : term
+  val TEther_tm       : term
   val Len_tm          : term
   val Not_tm          : term
   val Neg_tm          : term
@@ -174,6 +189,7 @@ signature vyperASTSyntax = sig
   val mk_Not       : term -> term
   val mk_Neg       : term -> term
   val mk_Keccak256 : term -> term
+  val mk_AsWeiValue : (term * term) -> term
   val mk_Floor     : term -> term
   val mk_Bop       : term -> term
   val mk_Len       : term -> term

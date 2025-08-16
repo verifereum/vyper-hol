@@ -254,6 +254,22 @@ fun d_astHmType() : term decoder = achoose "astHmType" [
 ]
 val astHmType = delay d_astHmType
 
+val denomination : term decoder =
+  check_ast_type "Str" $
+  andThen (field "value" string) (fn s =>
+  if s = "wei" then succeed Wei_tm else
+  if s = "kwei" then succeed Kwei_tm else
+  if s = "mwei" then succeed Mwei_tm else
+  if s = "gwei" then succeed Gwei_tm else
+  if s = "szabo" then succeed Szabo_tm else
+  if s = "finney" then succeed Finney_tm else
+  if s = "ether" then succeed Ether_tm else
+  if s = "kether" then succeed KEther_tm else
+  if s = "mether" then succeed MEther_tm else
+  if s = "gether" then succeed GEther_tm else
+  if s = "tether" then succeed TEther_tm else
+    fail "denomination")
+
 fun d_expression () : term decoder = achoose "expr" [
     check_ast_type "Str" $
     JSONDecode.map mk_ls $
@@ -506,6 +522,17 @@ fun d_expression () : term decoder = achoose "expr" [
     check (field "func" $ tuple2 (
              field "ast_type" string,
              field "id" string))
+          (equal ("Name", "as_wei_value"))
+          "not as_wei_value" $
+      field "args" $
+      JSONDecode.map mk_AsWeiValue $
+      tuple2 (
+       JSONDecode.sub 1 $ denomination,
+       JSONDecode.sub 0 $ (delay d_expression)),
+    check_ast_type "Call" $
+    check (field "func" $ tuple2 (
+             field "ast_type" string,
+             field "id" string))
           (equal ("Name", "floor"))
           "not floor" $
       field "args" $
@@ -540,6 +567,30 @@ fun d_expression () : term decoder = achoose "expr" [
     tuple2 (
       JSONDecode.sub 1 astType,
       JSONDecode.sub 0 (delay d_expression)
+    ),
+    check_ast_type "Call" $
+    check (field "func" $ tuple2 (
+             field "ast_type" string,
+             field "id" string))
+          (equal ("Name", "unsafe_add"))
+          "not unsafe_add" $
+    JSONDecode.map (fn (l,r) => mk_BinOp(l,UAdd_tm,r)) $
+    field "args" $
+    tuple2 (
+      JSONDecode.sub 0 (delay d_expression),
+      JSONDecode.sub 1 (delay d_expression)
+    ),
+    check_ast_type "Call" $
+    check (field "func" $ tuple2 (
+             field "ast_type" string,
+             field "id" string))
+          (equal ("Name", "unsafe_mul"))
+          "not unsafe_mul" $
+    JSONDecode.map (fn (l,r) => mk_BinOp(l,UMul_tm,r)) $
+    field "args" $
+    tuple2 (
+      JSONDecode.sub 0 (delay d_expression),
+      JSONDecode.sub 1 (delay d_expression)
     ),
     check_ast_type "Call" $
       check (field "type" $ field "typeclass" string)
@@ -1075,8 +1126,6 @@ fun has_unsupported_source_code (name, (err, j)) = let
   val p = case srcopt of NONE => K true | SOME src => C String.isSubstring src
 in
   List.exists p (unsupported_code @ [
-    "as_wei_value(", (* TODO: add support *)
-    "unsafe_mul(", (* TODO: add support *)
     " blockhash(", (* TODO: add support *)
     " send(", (* TODO: add support *)
     "sqrt(", (* TODO: add support *)
