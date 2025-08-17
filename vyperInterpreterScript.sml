@@ -1727,7 +1727,7 @@ End
 val () = cv_auto_trans name_expression_def;
 
 Definition lookup_function_def:
-  lookup_function name Deploy [] = SOME (Nonpayable, [], NoneT, [Pass]) ∧
+  lookup_function name Deploy [] = SOME (Payable, [], NoneT, [Pass]) ∧
   lookup_function name vis [] = NONE ∧
   lookup_function name vis (FunctionDecl fv fm id args ret body :: ts) =
   (if id = name ∧ vis = fv then SOME (fm, args, ret, body)
