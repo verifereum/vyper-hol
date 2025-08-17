@@ -74,6 +74,7 @@ signature vyperASTSyntax = sig
   val Env_tm          : term
   val Acc_tm          : term
   val IntCall_tm      : term
+  val Send_tm         : term
   val Empty_tm        : term
   val MaxValue_tm     : term
   val MinValue_tm     : term

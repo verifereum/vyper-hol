@@ -86,6 +86,7 @@ structure vyperASTSyntax :> vyperASTSyntax = struct
   val Env_tm          = astk"Env"
   val Acc_tm          = astk"Acc"
   val IntCall_tm      = astk"IntCall"
+  val Send_tm         = astk"Send"
   val Empty_tm        = astk"Empty"
   val MaxValue_tm     = astk"MaxValue"
   val MinValue_tm     = astk"MinValue"

@@ -593,6 +593,14 @@ fun d_expression () : term decoder = achoose "expr" [
       JSONDecode.sub 1 (delay d_expression)
     ),
     check_ast_type "Call" $
+    check (field "func" $ tuple2 (
+             field "ast_type" string,
+             field "id" string))
+          (equal ("Name", "send"))
+          "not send" $
+    JSONDecode.map (mk_Call Send_tm) $
+      field "args" $ array $ delay d_expression,
+    check_ast_type "Call" $
       check (field "type" $ field "typeclass" string)
             (equal "interface")
             "not an interface" $
@@ -1126,7 +1134,6 @@ fun has_unsupported_source_code (name, (err, j)) = let
 in
   List.exists p (unsupported_code @ [
     " blockhash(", (* TODO: add support *)
-    " send(", (* TODO: add support *)
     "sqrt(", (* TODO: add support *)
     "extcall ",
     "staticcall ",
