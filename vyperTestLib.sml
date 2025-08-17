@@ -396,6 +396,14 @@ fun d_expression () : term decoder = achoose "expr" [
                  "not block.blobbasefee"
                  (succeed blob_base_fee_tm)),
     check_ast_type "Attribute" $
+    check (tuple2 (field "value" (field "type" (field "name" string)),
+                   field "attr" string))
+          (equal ("self", "balance"))
+          "Attribute self.balance" $
+    succeed $
+      mk_Builtin (mk_comb(Acc_tm, Balance_tm))
+                  (mk_list([self_addr_tm], expr_ty)),
+    check_ast_type "Attribute" $
     check (field "value" (tuple2 (field "ast_type" string,
                                   field "id" string)))
           (equal ("Name", "tx"))
