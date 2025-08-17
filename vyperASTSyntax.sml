@@ -58,6 +58,7 @@ structure vyperASTSyntax :> vyperASTSyntax = struct
   val BlockNumber_tm  = astk"BlockNumber"
   val BlobBaseFee_tm  = astk"BlobBaseFee"
   val GasPrice_tm     = astk"GasPrice"
+  val PrevHash_tm     = astk"PrevHash"
   val Address_tm      = astk"Address"
   val Balance_tm      = astk"Balance"
   val Wei_tm          = astk"Wei"
@@ -84,6 +85,7 @@ structure vyperASTSyntax :> vyperASTSyntax = struct
   val AddMod_tm       = astk"AddMod"
   val MulMod_tm       = astk"MulMod"
   val Env_tm          = astk"Env"
+  val BlockHash_tm    = astk"BlockHash"
   val Acc_tm          = astk"Acc"
   val IntCall_tm      = astk"IntCall"
   val Send_tm         = astk"Send"
@@ -251,5 +253,9 @@ structure vyperASTSyntax :> vyperASTSyntax = struct
     mk_comb(Env_tm, BlobBaseFee_tm), mk_list([], expr_ty)])
   val gas_price_tm = list_mk_comb(Builtin_tm, [
     mk_comb(Env_tm, GasPrice_tm), mk_list([], expr_ty)])
+  val prev_hash_tm = list_mk_comb(Builtin_tm, [
+    mk_comb(Env_tm, PrevHash_tm), mk_list([], expr_ty)])
+  fun mk_BlockHash e = list_mk_comb(Builtin_tm, [
+    BlockHash_tm, mk_list([e], expr_ty)])
 
 end

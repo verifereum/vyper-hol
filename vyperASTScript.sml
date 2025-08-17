@@ -85,6 +85,7 @@ Datatype:
   | BlockNumber
   | BlobBaseFee
   | GasPrice
+  | PrevHash
 End
 
 Datatype:
@@ -126,6 +127,7 @@ Datatype:
   | AddMod
   | MulMod
   | Bop binop
+  | BlockHash
   | Env env_item
   | Acc account_item
 End

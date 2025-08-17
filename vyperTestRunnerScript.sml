@@ -31,6 +31,7 @@ Datatype:
   ; value: num
   ; timeStamp: num
   ; blockNumber: num
+  ; blockHashes: bytes32 list
   ; blobBaseFee: num
   ; gasPrice: num
   ; callData: byte list
@@ -77,6 +78,7 @@ Datatype:
   ; value: num
   ; timeStamp: num
   ; blockNumber: num
+  ; blockHashes: bytes32 list
   ; blobBaseFee: num
   ; gasLimit: num
   ; gasPrice: num
@@ -128,6 +130,7 @@ Definition run_deployment_def:
           ; value := dt.value
           ; time_stamp := dt.timeStamp
           ; block_number := dt.blockNumber
+          ; block_hashes := dt.blockHashes
           ; blob_base_fee := dt.blobBaseFee
           ; gas_price := dt.gasPrice
           ; is_creation := T |>;
@@ -157,6 +160,7 @@ Definition run_call_def:
           ; value := ct.value
           ; time_stamp := ct.timeStamp
           ; block_number := ct.blockNumber
+          ; block_hashes := ct.blockHashes
           ; blob_base_fee := ct.blobBaseFee
           ; gas_price := ct.gasPrice
           ; is_creation := F |>;

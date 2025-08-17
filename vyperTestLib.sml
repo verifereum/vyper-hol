@@ -46,9 +46,28 @@ val bytes : term decoder = JSONDecode.map cached_bytes_from_hex string
 val Call_tm = prim_mk_const{Thy="vyperTestRunner",Name="Call"}
 val call_trace_ty = #1 $ dom_rng $ type_of Call_tm
 
+local
+  fun descending [] = true
+    | descending [x] = true
+    | descending (x::y::ls) = (x-1 = y) andalso descending (y::ls)
+
+  fun ensure_not_empty s = if String.size s = 0 then "0" else s
+
+  fun descending_key (k1, _) (k2, _) = k2 < k1
+in
+val blockHashes : term decoder =
+  JSONDecode.map (fn ls => let
+    fun f (k,v) = (Option.valOf (Int.fromString k),
+                   decode (JSONDecode.map (bytes32_from_hex o ensure_not_empty) string) v)
+    val ls = List.map f ls
+    val ls = Lib.sort descending_key ls
+    val true = descending (List.map #1 ls)
+  in mk_list(List.map #2 ls, bytes32_ty) end) $ rawObject
+end
+
 val call : term decoder =
   check_trace_type "call" $
-  JSONDecode.map (fn ((a,c,v,t),(p,g,s),(m,bn,bf,e)) =>
+  JSONDecode.map (fn ((a,c,v,t),(p,g,s,h),(m,bn,bf,e)) =>
               TypeBase.mk_record (call_trace_ty, [
                 ("sender", s),
                 ("target", t),
@@ -56,6 +75,7 @@ val call : term decoder =
                 ("value", v),
                 ("timeStamp", m),
                 ("blockNumber", bn),
+                ("blockHashes", h),
                 ("blobBaseFee", bf),
                 ("gasLimit", g),
                 ("gasPrice", p),
@@ -67,10 +87,11 @@ val call : term decoder =
                       field "calldata" bytes,
                       field "value" numtm,
                       field "to" address),
-            field "env" $ field "tx" $
-              tuple3 (field "gas_price" numtm,
-                      field "gas" numtm,
-                      field "origin" address),
+            field "env" $
+              tuple4 (field "tx" $ field "gas_price" numtm,
+                      field "tx" $ field "gas" numtm,
+                      field "tx" $ field "origin" address,
+                      field "block" $ field "block_hashes" blockHashes),
             tuple4 (
               field "env" $ field "block" $ field "timestamp" numtm,
               field "env" $ field "block" $ field "number" numtm,
@@ -383,6 +404,15 @@ fun d_expression () : term decoder = achoose "expr" [
           (equal ("Name", "block"))
           "Attribute not block"
           (check (field "attr" string)
+                 (equal "prevhash")
+                 "not block.prevhash"
+                 (succeed prev_hash_tm)),
+    check_ast_type "Attribute" $
+    check (field "value" (tuple2 (field "ast_type" string,
+                                  field "id" string)))
+          (equal ("Name", "block"))
+          "Attribute not block"
+          (check (field "attr" string)
                  (equal "number")
                  "not block.number"
                  (succeed block_number_tm)),
@@ -546,6 +576,15 @@ fun d_expression () : term decoder = achoose "expr" [
       field "args" $
       JSONDecode.sub 0 $
       JSONDecode.map mk_Floor (delay d_expression),
+    check_ast_type "Call" $
+    check (field "func" $ tuple2 (
+             field "ast_type" string,
+             field "id" string))
+          (equal ("Name", "blockhash"))
+          "not blockhash" $
+      field "args" $
+      JSONDecode.sub 0 $
+      JSONDecode.map mk_BlockHash (delay d_expression),
     check_ast_type "Call" $
     check (field "func" $ tuple2 (
              field "ast_type" string,
@@ -1078,7 +1117,7 @@ val deployment : term decoder =
   check (field "source_code" string)
         (fn src => List.all (fn x => not $ String.isSubstring x src) unsupported_code)
         "has unsupported_code" $
-  JSONDecode.map (fn ((c,i,(s,m,a,g),(d,bn,bf,v)),e) =>
+  JSONDecode.map (fn ((c,(i,h),(s,m,a,g),(d,bn,bf,v)),e) =>
              TypeBase.mk_record (deployment_trace_ty, [
                ("sourceAst", c),
                ("contractAbi", mk_list(i, abi_entry_ty)),
@@ -1088,13 +1127,17 @@ val deployment : term decoder =
                ("value", v),
                ("timeStamp", m),
                ("blockNumber", bn),
+               ("blockHashes", h),
                ("blobBaseFee", bf),
                ("gasPrice", g),
                ("callData", d)
              ]))
           (tuple2 (tuple4 (field "annotated_ast"
                              (field "ast" (field "body" toplevels)),
-                           field "contract_abi" (array abiEntry),
+                           tuple2 (
+                             field "contract_abi" (array abiEntry),
+                             field "env" $ field "block" $
+                               field "block_hashes" blockHashes),
                            tuple4 (field "env" $ field "tx" $ field "origin" address,
                                    field "env" $ field "block" $ field "timestamp" numtm,
                                    field "deployed_address" address,
@@ -1143,7 +1186,6 @@ fun has_unsupported_source_code (name, (err, j)) = let
   val p = case srcopt of NONE => K true | SOME src => C String.isSubstring src
 in
   List.exists p (unsupported_code @ [
-    " blockhash(", (* TODO: add support *)
     "sqrt(", (* TODO: add support *)
     "extcall ",
     "staticcall ",

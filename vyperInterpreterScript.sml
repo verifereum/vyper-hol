@@ -920,6 +920,7 @@ Datatype:
   ; value: num
   ; time_stamp: num
   ; block_number: num
+  ; block_hashes: bytes32 list
   ; blob_base_fee: num
   ; gas_price: num
   ; is_creation: bool
@@ -949,6 +950,7 @@ Definition empty_call_txn_def:
     value := 0;
     time_stamp := 0;
     block_number := 0;
+    block_hashes := [];
     blob_base_fee := 0;
     gas_price := 0;
     is_creation := F
@@ -1113,6 +1115,24 @@ Proof
   rw[evaluate_as_wei_value_pre_def]
 QED
 
+Definition evaluate_block_hash_def:
+  evaluate_block_hash t n =
+  let pbn = t.block_number - 1 in
+  if t.block_number ≤ n ∨
+     LENGTH t.block_hashes ≤ pbn - n
+  then INR "evaluate_block_hash"
+  else INL $ BytesV (Fixed 32)
+    (word_to_bytes (EL (pbn - n) t.block_hashes) T)
+End
+
+val evaluate_block_hash_pre_def = cv_auto_trans_pre "evaluate_block_hash_pre" evaluate_block_hash_def;
+
+Theorem evaluate_block_hash_pre[cv_pre]:
+  evaluate_block_hash_pre t n
+Proof
+  rw[evaluate_block_hash_pre_def]
+QED
+
 Definition evaluate_builtin_def:
   evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
   evaluate_builtin cx _ Len [StringV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
@@ -1145,6 +1165,10 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ (Env BlockNumber) [] = INL $ IntV (Unsigned 256) &cx.txn.block_number ∧
   evaluate_builtin cx _ (Env BlobBaseFee) [] = INL $ IntV (Unsigned 256) &cx.txn.blob_base_fee ∧
   evaluate_builtin cx _ (Env GasPrice) [] = INL $ IntV (Unsigned 256) &cx.txn.gas_price ∧
+  evaluate_builtin cx _ (Env PrevHash) [] = evaluate_block_hash cx.txn (cx.txn.block_number - 1) ∧
+  evaluate_builtin cx _ BlockHash [IntV u i] =
+    (if u = Unsigned 256 then evaluate_block_hash cx.txn (Num i)
+     else INR "BlockHash type") ∧
   evaluate_builtin cx _ (Concat n) vs = evaluate_concat n vs ∧
   evaluate_builtin cx _ (Slice n) [v1; v2; v3] = evaluate_slice v1 v2 v3 n ∧
   evaluate_builtin cx _ (MakeArray to bd) vs =
@@ -1288,6 +1312,7 @@ Definition builtin_args_length_ok_def:
   builtin_args_length_ok MulMod n = (n = 3) ∧
   builtin_args_length_ok (Bop _) n = (n = 2) ∧
   builtin_args_length_ok (Env _) n = (n = 0) ∧
+  builtin_args_length_ok BlockHash n = (n = 1) ∧
   builtin_args_length_ok (Acc _) n = (n = 1)
 End
 
