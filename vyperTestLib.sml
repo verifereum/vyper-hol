@@ -1066,6 +1066,8 @@ val unsupported_code = [
   "def outer(xs: Bytes[256] = ", (* TODO: default arguments on external fns *)
   "def wycpnbqcyf(", (* TODO: investigate, something about call selector *)
   "def blockHashAskewLimitary(", (* TODO: investigate, something about call selector *)
+  "def foo(a: DynArray[address, 3], b: String[5]):", (* TODO: nonstandard calldata *)
+  "def foo(a: address):\n    pass", (* TODO: ditto *)
   "+ -1e38", (* TODO: parse scientific notation *)
   "uint256[max_value(uint256)-1]", (* TODO: optimise *)
   "@raw_return\n" (* TODO: add *)
@@ -1171,9 +1173,7 @@ val test_files_with_prefixes = [
     (* TODO: uses test deps
     "test_erc20_abi.json",
     *)
-    (* TODO: temp exclude
     "test_external_contract_calls.json",
-    *)
     "test_inlineable_functions.json",
     "test_internal_call.json",
     "test_modifiable_external_contract_calls.json",

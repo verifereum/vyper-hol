@@ -1,4 +1,4 @@
 open HolKernel vyperTestLib;
 val () = new_theory "vyperTestDefs57";
-val () = make_definitions_for_file (57, "../../vyper/tests/export/functional/codegen/features/test_flag_pure_functions.json");
+val () = make_definitions_for_file (57, "../../vyper/tests/export/functional/codegen/features/test_constructor.json");
 val () = export_theory_no_docs();
