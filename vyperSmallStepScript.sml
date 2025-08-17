@@ -572,7 +572,7 @@ Definition apply_vals_def:
       check (LENGTH vs = 2) "CallSendK nargs";
       toAddr <- lift_option (dest_AddressV $ EL 0 vs) "Send not AddressV";
       amount <- lift_option (dest_NumV $ EL 1 vs) "Send not NumV";
-      transfer_value cx.txn.sender toAddr amount;
+      transfer_value cx.txn.target toAddr amount;
       return $ Value NoneV
     od st) k ∧
   apply_vals cx vs st (IntCallK tenv fn args ret body k) =
