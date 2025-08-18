@@ -98,12 +98,11 @@ End
 Definition compute_vyper_args_def:
   compute_vyper_args ts vis name argTys cd = let
     abiTupTy = Tuple argTys;
-    abiArgsTup = dec abiTupTy cd;
-    rcd = enc abiTupTy abiArgsTup;
     vyTysRet = case lookup_function name vis ts
                 of SOME (_,args,ret,_) => (MAP SND args, ret)
                   | NONE => ([], NoneT);
-    vyArgsTenvOpt = if cd = rcd then let
+    vyArgsTenvOpt = if valid_enc abiTupTy cd then let
+      abiArgsTup = dec abiTupTy cd;
       vyTys = FST vyTysRet;
       tenv = type_env ts;
       vyArgsTup = abi_to_vyper tenv (TupleT vyTys) abiArgsTup;
