@@ -101,7 +101,10 @@ Definition compute_vyper_args_def:
     vyTysRet = case lookup_function name vis ts
                 of SOME (_,args,ret,_) => (MAP SND args, ret)
                   | NONE => ([], NoneT);
-    vyArgsTenvOpt = if valid_enc abiTupTy cd then let
+    vyArgsTenvOpt = if
+      static_length abiTupTy ≤ LENGTH cd ∧
+      valid_enc abiTupTy cd
+    then let
       abiArgsTup = dec abiTupTy cd;
       vyTys = FST vyTysRet;
       tenv = type_env ts;
