@@ -1104,7 +1104,6 @@ val unsupported_code = [
   "def fooBar(a: int128 =", (* TODO: ditto *)
   "def outer(xs: Bytes[256] = ", (* TODO: default arguments on external fns *)
   "+ -1e38", (* TODO: parse scientific notation *)
-  "uint256[max_value(uint256)-1]", (* TODO: optimise *)
   "@raw_return\n" (* TODO: add *)
 ]
 

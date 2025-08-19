@@ -425,7 +425,8 @@ val apply_base_target_pre_def = apply_base_target_def
 Theorem assign_subscripts_PopOp_not_empty:
   ∀v is ao to b.
     ao = PopOp ∧
-    evaluate_subscripts v is = INL (ArrayV to b []) ⇒
+    evaluate_subscripts v is = INL av ∧
+    extract_elements av = SOME [] ⇒
     ISR $ assign_subscripts v is ao
 Proof
   ho_match_mp_tac assign_subscripts_ind
@@ -433,7 +434,7 @@ Proof
   \\ rw[assign_subscripts_def, oneline pop_element_def]
   \\ gvs[evaluate_subscripts_def]
   \\ CASE_TAC \\ gvs[]
-  \\ CASE_TAC \\ gvs[CaseEq"sum"]
+  \\ CASE_TAC \\ gvs[CaseEq"sum", extract_elements_def]
   \\ CASE_TAC \\ gvs[]
 QED
 
@@ -444,7 +445,7 @@ Proof
   \\ Cases_on`btv` \\ gvs[]
   \\ simp[lift_option_def]
   \\ qmatch_goalsub_rename_tac`extract_elements a`
-  \\ Cases_on`a` \\ gvs[extract_elements_def, raise_def, return_def]
+  \\ CASE_TAC \\ rw[raise_def, return_def]
   \\ rpt strip_tac \\ gvs[]
   \\ gvs[lift_sum_def, CaseEq"sum", CaseEq"prod", sum_CASE_rator,
          raise_def, return_def]
@@ -452,6 +453,7 @@ Proof
   \\ Cases_on`tv` \\ gvs[raise_def, return_def]
   \\ qmatch_asmsub_rename_tac`BaseTargetV loc sbs`
   \\ drule_at Any assign_subscripts_PopOp_not_empty
+  \\ disch_then(drule_at Any)
   \\ Cases_on`loc` \\ TRY (PairCases_on`p`)
   \\ gvs[assign_target_def, bind_def, ignore_bind_def, UNCURRY,
          CaseEq"prod", CaseEq"sum", return_def, lift_sum_def,

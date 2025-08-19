@@ -254,7 +254,7 @@ Definition run_trace_def:
               abiret = dec abiRetTy out;
               vyret = abi_to_vyper tenv vyRetTy abiret;
               expect = if alreadyTuple then v
-                       else ArrayV NONE (Fixed 1) [v];
+                       else ArrayV $ TupleV [v];
             in
               if vyret = SOME expect
               then INL am

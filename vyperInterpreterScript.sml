@@ -267,6 +267,30 @@ Proof
   \\ Cases_on`h` \\ gvs[]
 QED
 
+Definition member_def:
+  member x [] = F ∧
+  member x (y::ys) = ((x = y) ∨ member x ys)
+End
+
+val () = cv_trans member_def;
+
+Theorem member_intro:
+  ∀x ys. MEM x ys = member x ys
+Proof
+  Induct_on `ys` \\ rw[member_def]
+QED
+
+Theorem cv_size_cv_map_snd_le:
+  ∀l. cv_size (cv_map_snd l) ≤ cv_size l
+Proof
+  ho_match_mp_tac cv_map_snd_ind
+  \\ rw[]
+  \\ rw[Once cv_map_snd_def] \\ gvs[]
+  \\ Cases_on`l` \\ gvs[]
+  \\ qmatch_goalsub_rename_tac`cv_snd p`
+  \\ Cases_on`p` \\ gvs[]
+QED
+
 (* -- *)
 
 Definition string_to_num_def:
@@ -393,13 +417,17 @@ Datatype:
   value
   = NoneV
   | BoolV bool
-  | ArrayV (type_value option) bound (value list)
+  | ArrayV array_value
   | IntV int_bound int
   | FlagV num num
   | DecimalV int
   | StringV num string
   | BytesV bound (word8 list)
-  | StructV ((identifier, value) alist)
+  | StructV ((identifier, value) alist) ;
+  array_value
+  = DynArrayV type_value num (value list)
+  | SArrayV type_value num ((num, value) alist)
+  | TupleV (value list)
 End
 
 val from_to_value_thm = cv_typeLib.from_to_thm_for “:value”;
@@ -455,108 +483,36 @@ val () = cv_auto_trans is_Value_def;
 Type hmap = “:(subscript, toplevel_value) alist”
 
 Definition default_value_def:
-  default_value env (BaseT (UintT n)) = IntV (Unsigned n) 0 ∧
-  default_value env (BaseT (IntT n)) = IntV (Signed n) 0 ∧
-  default_value env (BaseT DecimalT) = DecimalV 0 ∧
-  default_value env (TupleT ts) = default_value_tuple env [] ts ∧
-  default_value env (ArrayT t (Dynamic n)) =
-    ArrayV (evaluate_type env t) (Dynamic n) [] ∧
-  default_value env (ArrayT t (Fixed n)) =
-    (* TODO: evaluate lazily (like HashMaps?) for speed of execution *)
-    ArrayV (evaluate_type env t) (Fixed n) (REPLICATE n (default_value env t)) ∧
-  default_value env (StructT id) =
-    (let nid = string_to_num id in
-     case FLOOKUP env nid
-       of SOME (StructArgs args) => default_value_struct (env \\ nid) [] args
-        | _ => StructV []) ∧
-  default_value env (FlagT id) =
-    (let nid = string_to_num id in
-     case FLOOKUP env nid
-       of SOME (FlagArgs m) => FlagV m 0
-        | _ => FlagV 0 0) ∧
-  default_value env NoneT = NoneV ∧
-  default_value env (BaseT BoolT) = BoolV F ∧
-  default_value env (BaseT AddressT) = AddressV 0w ∧
-  default_value env (BaseT (StringT n)) = StringV n "" ∧
-  default_value env (BaseT (BytesT (Fixed n))) = BytesV (Fixed n) (REPLICATE n 0w) ∧
-  default_value env (BaseT (BytesT (Dynamic n))) = BytesV (Dynamic n) [] ∧
-  default_value_tuple env acc [] = ArrayV NONE (Fixed (LENGTH acc)) (REVERSE acc) ∧
-  default_value_tuple env acc (t::ts) =
-    default_value_tuple env (default_value env t :: acc) ts ∧
-  default_value_struct env acc [] = StructV (REVERSE acc) ∧
-  default_value_struct env acc ((id,t)::ps) =
-    default_value_struct env ((id,default_value env t)::acc) ps
+  default_value (BaseTV (UintT n)) = IntV (Unsigned n) 0 ∧
+  default_value (BaseTV (IntT n)) = IntV (Signed n) 0 ∧
+  default_value (BaseTV DecimalT) = DecimalV 0 ∧
+  default_value (TupleTV ts) = default_value_tuple [] ts ∧
+  default_value (ArrayTV t (Dynamic n)) = ArrayV (DynArrayV t n []) ∧
+  default_value (ArrayTV t (Fixed n)) = ArrayV (SArrayV t n []) ∧
+  default_value (StructTV args) = default_value_struct [] args ∧
+  default_value (FlagTV m) = FlagV m 0 ∧
+  default_value NoneTV = NoneV ∧
+  default_value (BaseTV BoolT) = BoolV F ∧
+  default_value (BaseTV AddressT) = AddressV 0w ∧
+  default_value (BaseTV (StringT n)) = StringV n "" ∧
+  default_value (BaseTV (BytesT (Fixed n))) = BytesV (Fixed n) (REPLICATE n 0w) ∧
+  default_value (BaseTV (BytesT (Dynamic n))) = BytesV (Dynamic n) [] ∧
+  default_value_tuple acc [] = ArrayV $ TupleV $ REVERSE acc ∧
+  default_value_tuple acc (t::ts) =
+    default_value_tuple (default_value t :: acc) ts ∧
+  default_value_struct acc [] = StructV (REVERSE acc) ∧
+  default_value_struct acc ((id,t)::ps) =
+    default_value_struct ((id,default_value t)::acc) ps
 Termination
-  WF_REL_TAC ‘inv_image ($< LEX $<) (λx.
+  WF_REL_TAC ‘measure (λx.
     case x
-      of INL (env, t) => (CARD (FDOM env), type_size t)
-       | INR (INL (env, _, ts)) => (CARD (FDOM env), list_size type_size ts)
-       | INR (INR (env, _, ps)) => (CARD (FDOM env), list_size type_size (MAP SND ps)))’
-  \\ rw[type_size_def, FLOOKUP_DEF]
-  \\ disj1_tac
-  \\ CCONTR_TAC
-  \\ fs[]
+      of INL t => (type_value_size t)
+       | INR (INL (_, ts)) => (list_size type_value_size ts)
+       | INR (INR (_, ps)) => (list_size type_value_size (MAP SND ps)))’
+  \\ rw[list_size_pair_size_map]
 End
 
-val () = cv_auto_trans_rec default_value_def (
-  WF_REL_TAC ‘inv_image ($< LEX $<) (λx.
-    case x
-      of INL (env, t) => (cv$c2n $ cv_size' env, cv_size t)
-       | INR (INL (env, _, ts)) => (cv$c2n (cv_size' env), cv_size ts)
-       | INR (INR (env, _, ps)) => (cv$c2n (cv_size' env), cv_size ps))’
-  \\ rw[]
-  \\ TRY(Cases_on`cv_v` \\ gs[] \\ NO_TAC)
-  \\ TRY(Cases_on`cv_v` \\ gs[]
-         \\ qmatch_asmsub_rename_tac`cv_ispair cv_v`
-         \\ Cases_on`cv_v` \\ gs[] \\ NO_TAC)
-  \\ TRY(Cases_on`cv_v` \\ gs[]
-         \\ qmatch_goalsub_rename_tac`cv_fst cv_v`
-         \\ Cases_on`cv_v` \\ gs[] \\ NO_TAC)
-  \\ disj1_tac
-  \\ pop_assum mp_tac
-  \\ qmatch_goalsub_abbrev_tac`cv_lookup ck`
-  \\ `cv_ispair ck = cv$Num 0`
-  by (
-    rw[Abbr`ck`, definition"cv_string_to_num_def"]
-    \\ rw[Once keccakTheory.cv_l2n_def]
-    \\ rw[cv_ispair_cv_add] )
-  \\ pop_assum mp_tac
-  \\ qid_spec_tac`cv_env`
-  \\ qid_spec_tac`ck`
-  \\ rpt (pop_assum kall_tac)
-  \\ ho_match_mp_tac cv_stdTheory.cv_delete_ind
-  \\ rpt gen_tac \\ strip_tac
-  \\ simp[Once cv_lookup_def]
-  \\ IF_CASES_TAC \\ gs[]
-  \\ strip_tac \\ gs[]
-  \\ reverse(IF_CASES_TAC \\ gs[])
-  >- (
-    Cases_on`ck` \\ gs[]
-    \\ IF_CASES_TAC \\ gs[]
-    \\ Cases_on`cv_env` \\ gs[]
-    \\ Cases_on`0 < m` \\ gs[]
-    \\ simp[Once cv_delete_def]
-    \\ rw[Once cv_stdTheory.cv_size'_def]
-    \\ rw[Once cv_stdTheory.cv_size'_def] )
-  \\ Cases_on`cv_env` \\ gs[]
-  \\ Cases_on`ck` \\ gs[]
-  \\ strip_tac
-  \\ simp[Once cv_delete_def]
-  \\ Cases_on`g` \\ gs[]
-  \\ Cases_on`m=0` \\ gs[]
-  >- (
-    rw[] \\ gs[]
-    \\ rw[Once cv_stdTheory.cv_size'_def]
-    \\ rw[Once cv_stdTheory.cv_size'_def, SimpR``prim_rec$<``]
-    \\ rw[] )
-  \\ simp[Once cv_stdTheory.cv_size'_def, SimpR``prim_rec$<``]
-  \\ qmatch_goalsub_rename_tac`2 < p`
-  \\ Cases_on`p=0` \\ gs[]
-  \\ Cases_on`p=1` \\ gs[]
-  \\ Cases_on`p=2` \\ gvs[]
-  >- (IF_CASES_TAC \\ gs[cv_size'_cv_mk_BN])
-  \\ IF_CASES_TAC \\ gs[]
-);
+val () = cv_auto_trans default_value_def;
 
 (*
 We don't use this directly to support cv which prefers num keys
@@ -616,11 +572,16 @@ End
 val () = cv_auto_trans evaluate_literal_def;
 
 Definition evaluate_in_array_def:
-  evaluate_in_array v ls =
-  INL $ BoolV $ MEM v ls
+  evaluate_in_array v av =
+  case av of
+  | DynArrayV _ _ ls => MEM v ls
+  | SArrayV t n al => (MEM v (MAP SND al) ∨
+                       (LENGTH al < n ∧ v = default_value t))
+  | TupleV ls => MEM v ls
 End
 
-val () = cv_auto_trans evaluate_in_array_def;
+val () = cv_auto_trans $
+  REWRITE_RULE[member_intro]evaluate_in_array_def;
 
 Definition binop_negate_def:
   binop_negate (INL (BoolV b)) = INL (BoolV (¬b)) ∧
@@ -848,7 +809,7 @@ Definition evaluate_binop_def:
            (if m1 = m2
             then INL $ BoolV (int_and (&n1) (&n2) ≠ 0) (* TODO: use bitwise ∧ on nums *)
             else INR "In type") | _ => INR "binop")
-       | ArrayV _ _ ls => evaluate_in_array v1 ls
+       | ArrayV av => INL $ BoolV $ evaluate_in_array v1 av
        | _ => INR "binop")
      | Eq => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
@@ -1133,10 +1094,38 @@ Proof
   rw[evaluate_block_hash_pre_def]
 QED
 
+Definition array_length_def:
+  array_length av =
+  case av of
+  | DynArrayV _ _ ls => LENGTH ls
+  | SArrayV _ n _ => n
+  | TupleV ls => LENGTH ls
+End
+
+val () = cv_trans array_length_def;
+
+Definition enumerate_static_array_def:
+  enumerate_static_array _ _ [] = [] ∧
+  enumerate_static_array d n (v::vs) =
+    let r = enumerate_static_array d (SUC n) vs in
+    if v = d then r else (n,v)::r
+End
+
+val () = cv_trans enumerate_static_array_def;
+
+Definition make_array_value_def:
+  make_array_value tv (Fixed n) vs =
+    SArrayV tv n (enumerate_static_array (default_value tv) 0 vs) ∧
+  make_array_value tv (Dynamic n) vs =
+    DynArrayV tv n vs
+End
+
+val () = cv_trans make_array_value_def;
+
 Definition evaluate_builtin_def:
   evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
   evaluate_builtin cx _ Len [StringV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
-  evaluate_builtin cx _ Len [ArrayV _ _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
+  evaluate_builtin cx _ Len [ArrayV av] = INL (IntV (Unsigned 256) &(array_length av)) ∧
   evaluate_builtin cx _ Not [BoolV b] = INL (BoolV (¬b)) ∧
   evaluate_builtin cx _ Not [IntV u i] =
     (if is_Unsigned u ∧ 0 ≤ i then INL (IntV u (int_not i)) else INR "signed Not") ∧
@@ -1174,11 +1163,11 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ (MakeArray to bd) vs =
     (case get_self_code cx of SOME ts =>
      (case to
-      of NONE => INL $ ArrayV NONE bd vs
+      of NONE => INL $ ArrayV $ TupleV vs
        | SOME t =>
          (case evaluate_type (type_env ts) t
-	  of NONE => INR "MakeArray type"
-	   | SOME tv => INL $ ArrayV (SOME tv) bd vs))
+          of NONE => INR "MakeArray type"
+           | SOME tv => INL $ ArrayV $ make_array_value tv bd vs))
      | _ => INR "MakeArray code") ∧
   evaluate_builtin cx acc (Acc aop) [BytesV _ bs] =
     (let a = lookup_account (word_of_bytes T (0w:address) bs) acc in
@@ -1226,31 +1215,6 @@ End
 
 val () = cv_auto_trans evaluate_min_value_def;
 
-Definition extract_elements_def:
-  extract_elements (ArrayV _ _ vs) = SOME vs ∧
-  extract_elements _ = NONE
-End
-
-val () = cv_auto_trans extract_elements_def;
-
-Definition replace_elements_def:
-  replace_elements (ArrayV to b _) vs = INL (ArrayV to b vs) ∧
-  replace_elements _ _ = INR "replace_elements"
-End
-
-val () = cv_auto_trans replace_elements_def;
-
-Definition integer_index_def:
-  integer_index vs i =
-   if 0 ≤ i ∧ Num i < LENGTH vs then SOME $ Num i
-   (* negative indices not supported in Vyper
-     SOME $ if 0 ≤ i then Num i else LENGTH vs - Num i
-    *)
-   else NONE
-End
-
-val () = cv_auto_trans integer_index_def;
-
 Definition value_to_key_def:
   value_to_key (IntV _ i) = SOME $ IntSubscript i ∧
   value_to_key (StringV _ s) = SOME $ StrSubscript s ∧
@@ -1261,32 +1225,40 @@ End
 
 val () = cv_auto_trans value_to_key_def;
 
+Definition array_index_def:
+  array_index av i =
+  if 0 ≤ i then let j = Num i in
+  case av
+    of DynArrayV _ _ ls => oEL j ls
+     | SArrayV t n al =>
+         if j < n then case ALOOKUP al j
+         of SOME v => SOME v
+          | NONE => SOME $ default_value t
+         else NONE
+     | TupleV ls => oEL j ls
+  else NONE
+End
+
+val () = cv_trans array_index_def;
+
 Definition evaluate_subscript_def:
-  evaluate_subscript ts (Value av) (IntV _ i) =
-  (case extract_elements av of SOME vs =>
-    (case integer_index vs i of SOME j => INL $ Value (EL j vs)
-     | _ => INR "integer_index")
-   | _ => INR "extract_elements") ∧
+  evaluate_subscript ts (Value (ArrayV av)) (IntV _ i) =
+  (case array_index av i
+   of SOME v => INL $ Value v
+   | _ => INR "subscript array_index") ∧
   evaluate_subscript ts (HashMap vt hm) kv =
   (case value_to_key kv of SOME k =>
     (case ALOOKUP hm k of SOME tv => INL tv
         | _ => (case vt of Type typ =>
-                  INL $ Value $ default_value (type_env ts) typ
+                  (case evaluate_type (type_env ts) typ of
+                   | SOME tv => INL $ Value $ default_value tv
+                   | NONE => INR "HashMap evaluate type")
                 | _ => INR "HashMap final value type" ))
    | _ => INR "evaluate_subscript value_to_key") ∧
   evaluate_subscript _ _ _ = INR "evaluate_subscript"
 End
 
-val evaluate_subscript_pre_def = cv_auto_trans_pre "evaluate_subscript_pre" evaluate_subscript_def;
-
-Theorem evaluate_subscript_pre[cv_pre]:
-  evaluate_subscript_pre ts av v
-Proof
-  rw[evaluate_subscript_pre_def, integer_index_def]
-  \\ rw[]
-  \\ qmatch_asmsub_rename_tac`0i ≤ w`
-  \\ Cases_on`w` \\ gs[]
-QED
+val () = cv_auto_trans evaluate_subscript_def;
 
 Definition evaluate_attribute_def:
   evaluate_attribute (StructV kvs) id =
@@ -1660,7 +1632,9 @@ Definition evaluate_type_builtin_def:
   evaluate_type_builtin cx Empty typ vs =
   (case get_self_code cx
      of SOME ts =>
-        INL $ default_value (type_env ts) typ
+        (case evaluate_type (type_env ts) typ
+         of SOME tv => INL $ default_value tv
+          | NONE => INR "Empty evaluate_type")
       | _ => INR "Empty get_self_code") ∧
   evaluate_type_builtin cx MaxValue typ vs =
     evaluate_max_value typ ∧
@@ -1817,17 +1791,24 @@ Definition safe_cast_def:
      | _ => NONE)
   | TupleTV ts =>
     (case v of
-     | ArrayV NONE bd vs =>
+     | ArrayV (TupleV vs) =>
        (case safe_cast_list ts vs []
-        of SOME vs => SOME $ ArrayV NONE bd vs
+        of SOME vs => SOME $ ArrayV (TupleV vs)
         | _ => NONE)
      | _ => NONE)
   | ArrayTV t bd =>
-    (case v of
-     | ArrayV (SOME _) _ vs =>
-       (case safe_cast_list (REPLICATE (LENGTH vs) t) vs []
-        of SOME vs => SOME $ ArrayV (SOME t) bd vs
-	 | _ => NONE)
+    (case (bd, v) of
+     | (Dynamic n, ArrayV (DynArrayV _ _ vs)) =>
+       (let lvs = LENGTH vs in
+        if n < lvs then NONE else
+        case safe_cast_list (REPLICATE lvs t) vs []
+        of SOME vs => SOME $ ArrayV (DynArrayV t n vs)
+         | _ => NONE)
+     | (Fixed n, ArrayV (SArrayV _ m al)) =>
+       (if n ≠ m then NONE else
+        case safe_cast_list (REPLICATE (LENGTH al) t) (MAP SND al) []
+        of SOME vs => SOME $ ArrayV (SArrayV t n (ZIP (MAP FST al, vs)))
+         | _ => NONE)
      | _ => NONE)
   | StructTV args =>
     (case v of StructV al =>
@@ -1862,6 +1843,13 @@ val safe_cast_pre_def = cv_auto_trans_pre_rec
   \\ rw[]
   \\ Cases_on`cv_v` \\ gvs[]
   >- (
+    qmatch_goalsub_rename_tac`cv_snd (cv_snd (cv_snd p))`
+    \\ Cases_on`p` \\ gvs[]
+    \\ qmatch_goalsub_rename_tac`cv_snd (cv_snd p)`
+    \\ Cases_on`p` \\ gvs[]
+    \\ qmatch_goalsub_rename_tac`cv_snd p`
+    \\ Cases_on`p` \\ gvs[] )
+  >- (
     qmatch_goalsub_rename_tac`cv_map_snd p`
     \\ Cases_on`g` \\ gvs[]
     \\ qid_spec_tac`m`
@@ -1879,10 +1867,21 @@ val safe_cast_pre_def = cv_auto_trans_pre_rec
       \\ rw[] )
     \\ first_x_assum(qspec_then`m + cv_size g`mp_tac)
     \\ rw[] )
-  \\ qmatch_goalsub_rename_tac`cv_snd (cv_snd p)`
-  \\ Cases_on`p` \\ gvs[]
-  \\ qmatch_goalsub_rename_tac`cv_snd p`
-  \\ Cases_on`p` \\ gvs[]
+  >- (
+    qmatch_goalsub_rename_tac`cv_snd (cv_snd (cv_snd p))`
+    \\ Cases_on`p` \\ gvs[]
+    \\ qmatch_goalsub_rename_tac`cv_snd (cv_snd p)`
+    \\ Cases_on`p` \\ gvs[]
+    >- rw[Once cv_map_snd_def]
+    \\ qmatch_goalsub_rename_tac`cv_snd p`
+    \\ Cases_on`p` \\ gvs[]
+    >- rw[Once cv_map_snd_def]
+    \\ qmatch_goalsub_rename_tac`cv_map_snd l`
+    \\ qspec_then`l`mp_tac cv_size_cv_map_snd_le
+    \\ simp[])
+  >- (
+    qmatch_goalsub_rename_tac`cv_snd p`
+    \\ Cases_on`p` \\ gvs[] )
 );
 
 Theorem safe_cast_pre[cv_pre]:
@@ -1986,26 +1985,55 @@ val () = handle_function_def
   |> cv_auto_trans;
 
 Definition append_element_def:
-  append_element (ArrayV to bd vs) v =
-    (if compatible_bound bd (SUC (LENGTH vs))
-     then case to of NONE => INL $ ArrayV to bd (SNOC v vs)
-          | SOME tv => (case safe_cast tv v
-	      of NONE => INR "Append cast"
-	    | SOME v => INL $ ArrayV to bd (SNOC v vs))
-     else INR "Append Overflow") ∧
+  append_element (ArrayV (DynArrayV tv n vs)) v =
+    (if compatible_bound (Dynamic n) (SUC (LENGTH vs))
+     then case safe_cast tv v of NONE => INR "append cast"
+          | SOME v => INL $ ArrayV $ DynArrayV tv n (SNOC v vs)
+     else INR "append overflow") ∧
   append_element _ _ = INR "append_element"
 End
 
 val () = cv_auto_trans append_element_def;
 
 Definition pop_element_def:
-  pop_element (ArrayV to (Dynamic n) vs) =
-    (if vs = [] then INR "Pop empty"
-     else INL $ ArrayV to (Dynamic n) (FRONT vs)) ∧
+  pop_element (ArrayV (DynArrayV tv n vs)) =
+    (if vs = [] then INR "pop empty"
+     else INL $ ArrayV $ DynArrayV tv n (FRONT vs)) ∧
   pop_element _ = INR "pop_element"
 End
 
 val () = cv_auto_trans pop_element_def;
+
+Definition insert_sarray_def:
+  insert_sarray k v [] = [(k:num,v:value)] ∧
+  insert_sarray k v ((k1,v1)::al) =
+  if k = k1 then ((k,v)::al)
+  else if k < k1 then (k,v)::(k1,v1)::al
+  else (k1,v1)::(insert_sarray k v al)
+End
+
+val () = cv_trans insert_sarray_def;
+
+Definition array_set_index_def:
+  array_set_index av i v =
+  if 0 ≤ i then let j = Num i in
+    case av of DynArrayV tv n vs =>
+      if j < LENGTH vs then
+        INL $ ArrayV $ DynArrayV tv n (TAKE j vs ++ [v] ++ DROP (SUC j) vs)
+      else INR "array_set_index index"
+    | SArrayV tv n al =>
+      if j < n then
+        INL $ ArrayV $ SArrayV tv n $
+        if v = default_value tv then
+          ADELKEY j al
+        else
+          insert_sarray j v al
+      else INR "array_set_index size"
+    | TupleV vs => INR "array_set_index tuple"
+  else INR "array_set_index negative"
+End
+
+val () = cv_auto_trans array_set_index_def;
 
 Definition assign_subscripts_def:
   assign_subscripts a [] (Replace v) = INL v (* TODO: cast to type of a *) ∧
@@ -2013,13 +2041,13 @@ Definition assign_subscripts_def:
   assign_subscripts a [] (AppendOp v) = append_element a v ∧
   assign_subscripts a [] PopOp = pop_element a ∧
   assign_subscripts a ((IntSubscript i)::is) ao =
-  (case extract_elements a of SOME vs =>
-   (case integer_index vs i of SOME j =>
-    (case assign_subscripts (EL j vs) is ao of INL vj =>
-       replace_elements a (TAKE j vs ++ [vj] ++ DROP (SUC j) vs)
+  (case a of ArrayV av =>
+   (case array_index av i of SOME v =>
+    (case assign_subscripts v is ao of INL vj =>
+       array_set_index av i vj
      | INR err => INR err)
-    | _ => INR "assign_subscripts integer_index")
-   | _ => INR "assign_subscripts extract_elements") ∧
+    | _ => INR "assign_subscripts array_index")
+   | _ => INR "assign_subscripts type") ∧
   assign_subscripts (StructV al) ((AttrSubscript id)::is) ao =
   (case ALOOKUP al id of SOME v =>
     (case assign_subscripts v is ao of INL v' =>
@@ -2029,7 +2057,8 @@ Definition assign_subscripts_def:
   assign_subscripts _ _ _ = INR "assign_subscripts"
 End
 
-val assign_subscripts_pre_def = cv_auto_trans_pre "assign_subscripts_pre" assign_subscripts_def;
+val assign_subscripts_pre_def =
+  cv_auto_trans_pre "assign_subscripts_pre" assign_subscripts_def;
 
 Theorem assign_subscripts_pre[cv_pre]:
   !a b c. assign_subscripts_pre a b c
@@ -2037,7 +2066,7 @@ Proof
   ho_match_mp_tac assign_subscripts_ind
   \\ rw[Once assign_subscripts_pre_def]
   \\ rw[Once assign_subscripts_pre_def]
-  \\ gvs[integer_index_def] \\ rw[]
+  \\ gvs[] \\ rw[]
   \\ qmatch_asmsub_rename_tac`0i ≤ w`
   \\ Cases_on`w` \\ gs[]
 QED
@@ -2045,12 +2074,12 @@ QED
 Definition evaluate_subscripts_def:
   evaluate_subscripts a [] = INL a ∧
   evaluate_subscripts a ((IntSubscript i)::is) =
-  (case extract_elements a of SOME vs =>
-   (case integer_index vs i of SOME j =>
-    (case evaluate_subscripts (EL j vs) is of INL vj => INL vj
+  (case a of ArrayV av =>
+   (case array_index av i of SOME v =>
+    (case evaluate_subscripts v is of INL vj => INL vj
      | INR err => INR err)
-    | _ => INR "evaluate_subscripts integer_index")
-   | _ => INR "evaluate_subscripts extract_elements") ∧
+    | _ => INR "evaluate_subscripts array_index")
+   | _ => INR "evaluate_subscripts type") ∧
   evaluate_subscripts (StructV al) ((AttrSubscript id)::is) =
   (case ALOOKUP al id of SOME v =>
     (case evaluate_subscripts v is of INL v' => INL v'
@@ -2059,7 +2088,8 @@ Definition evaluate_subscripts_def:
   evaluate_subscripts _ _ = INR "evaluate_subscripts"
 End
 
-val evaluate_subscripts_pre_def = cv_auto_trans_pre "evaluate_subscripts_pre" evaluate_subscripts_def;
+val evaluate_subscripts_pre_def =
+  cv_auto_trans_pre "evaluate_subscripts_pre" evaluate_subscripts_def;
 
 Theorem evaluate_subscripts_pre[cv_pre]:
   !a b. evaluate_subscripts_pre a b
@@ -2067,7 +2097,7 @@ Proof
   ho_match_mp_tac evaluate_subscripts_ind
   \\ rw[Once evaluate_subscripts_pre_def]
   \\ rw[Once evaluate_subscripts_pre_def]
-  \\ gvs[integer_index_def] \\ rw[]
+  \\ gvs[] \\ rw[]
   \\ qmatch_asmsub_rename_tac`0i ≤ w`
   \\ Cases_on`w` \\ gs[]
 QED
@@ -2090,9 +2120,12 @@ Definition assign_hashmap_def:
          | INL hm' => INL $ (k, HashMap vt' hm') :: hm
          | INR err => INR err)
       | Type t =>
-        (case assign_subscripts (default_value (type_env ts) t) ks ao of
-         | INL v => INL $ (k, Value v) :: hm
-         | INR err => INR err)))
+        (case evaluate_type (type_env ts) t
+           of NONE => INR "assign_hashmap evaluate_type"
+            | SOME tv =>
+         (case assign_subscripts (default_value tv) ks ao of
+          | INL v => INL $ (k, Value v) :: hm
+          | INR err => INR err))))
 End
 
 val assign_hashmap_pre_def = cv_auto_trans_pre "assign_hashmap_pre" assign_hashmap_def;
@@ -2144,10 +2177,10 @@ Definition assign_target_def:
     set_immutable cx ni a';
     return $ Value a
   od ∧
-  assign_target cx (TupleTargetV gvs) (Replace (ArrayV NONE (Fixed n) vs)) = do
-    check (LENGTH gvs = n ∧ LENGTH vs = n) "TupleTargetV length";
+  assign_target cx (TupleTargetV gvs) (Replace (ArrayV (TupleV vs))) = do
+    check (LENGTH gvs = LENGTH vs) "TupleTargetV length";
     ws <- assign_targets cx gvs vs;
-    return $ Value $ ArrayV NONE (Fixed n) ws
+    return $ Value $ ArrayV (TupleV ws)
   od ∧
   assign_target _ _ _ = raise (Error "assign_target") ∧
   assign_targets cx [] [] = return [] ∧
@@ -2447,6 +2480,19 @@ Definition get_range_limits_def:
 End
 
 val () = cv_auto_trans get_range_limits_def;
+
+Definition extract_elements_def:
+  extract_elements (ArrayV av) =
+  (SOME $ case av
+     of TupleV vs => vs
+      | DynArrayV _ _ vs => vs
+      | SArrayV t n al =>
+          let d = default_value t in
+          GENLIST (λi. case ALOOKUP al i of SOME v => v | NONE => d) n) ∧
+  extract_elements _ = NONE
+End
+
+val () = cv_auto_trans extract_elements_def;
 
 Definition evaluate_def:
   eval_stmt cx Pass = return () ∧
@@ -2752,6 +2798,13 @@ End
 
 val () = cv_auto_trans flag_value_def;
 
+(* TODO: propagate errors? *)
+Definition force_default_value_def:
+  force_default_value env typ =
+  case evaluate_type env typ of SOME tv => default_value tv
+     | NONE => NoneV
+End
+
 (* TODO: assumes unique identifiers, but should check? *)
 Definition initial_globals_def:
   initial_globals env [] = empty_globals ∧
@@ -2759,11 +2812,11 @@ Definition initial_globals_def:
   (let gbs = initial_globals env ts in
    let key = string_to_num id in
      gbs with mutables updated_by
-       (λm. m |+ (key, Value $ default_value env typ))) ∧
+       (λm. m |+ (key, Value $ force_default_value env typ))) ∧
   initial_globals env (VariableDecl _ Transient id typ :: ts) =
   (let gbs = initial_globals env ts in
    let key = string_to_num id in
-   let iv = Value $ default_value env typ in
+   let iv = Value $ force_default_value env typ in
      gbs with <|
        mutables updated_by (λm. m |+ (key, iv))
      ; transients updated_by (λtrs. (key,iv)::trs)
@@ -2772,7 +2825,7 @@ Definition initial_globals_def:
   (let gbs = initial_globals env ts in
    let key = string_to_num id in
      gbs with immutables updated_by
-       (λim. im |+ (key, default_value env typ))) ∧
+       (λim. im |+ (key, force_default_value env typ))) ∧
   (* TODO: prevent flag value being updated even in constructor *)
   initial_globals env (FlagDecl id ls :: ts) =
   (let gbs = initial_globals env ts in
