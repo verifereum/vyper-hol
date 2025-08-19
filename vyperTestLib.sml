@@ -217,9 +217,16 @@ fun mk_BinOp (l,b,r) =
 
 fun parseDecimal s = let
   val ss = Substring.full s
+  val (ss,ae) = Substring.splitl(not o equal #"e" o Char.toLower) ss
+  val m = if Substring.isEmpty ae then 0 else let
+            val ae = Substring.triml 1 ae
+            val sg = if Substring.isPrefix "-" ae then ~1 else 1
+            val ms = Substring.dropl (not o Char.isDigit) ae
+            val SOME m = Int.fromString (Substring.string ms)
+          in sg * m end
   val (bd,dd) = Substring.splitl(not o equal #".") ss
   val ad = Substring.triml 1 dd
-  val ad = StringCvt.padRight #"0" 10 (Substring.string ad)
+  val ad = StringCvt.padRight #"0" (10 + m) (Substring.string ad)
   val ds = String.^(Substring.string bd,ad)
   val n = Arbint.fromString ds
   val t = intSyntax.term_of_int n
@@ -1103,7 +1110,6 @@ val unsupported_code = [
   "def foo(a: DynArray[uint256, 3] =", (* TODO: ditto *)
   "def fooBar(a: int128 =", (* TODO: ditto *)
   "def outer(xs: Bytes[256] = ", (* TODO: default arguments on external fns *)
-  "+ -1e38", (* TODO: parse scientific notation *)
   "@raw_return\n" (* TODO: add *)
 ]
 
