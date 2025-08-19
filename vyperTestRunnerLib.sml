@@ -16,7 +16,7 @@ val traces_ty = mk_list_type trace_ty
 val all_traces = List.filter (equal traces_ty o type_of) o constants
 
 fun run_test_on_traces traces_const = let
-  val (traces_name, _) = dest_const traces_const
+  val {Thy, Name=traces_name, ...} = dest_thy_const traces_const
   val suffix = String.extract(traces_name, String.size"traces", NONE)
   val result_name = String.concat ["result", suffix]
   val rtm = mk_comb(run_test_tm, traces_const)
@@ -28,7 +28,10 @@ fun run_test_on_traces traces_const = let
   val tth = EQT_ELIM eth handle HOL_ERR _ =>
             raise Fail (String.concat [
               "Failure in test ", result_name, ": ",
-              term_to_string $ rand $ rhs $ concl rth ])
+              term_to_string $ rand $ rhs $ concl rth,
+              " from test ",
+              DB.fetch Thy ("name" ^ suffix ^ "_def")
+              |> concl |> rhs |> stringSyntax.fromHOLstring])
   val tth = save_thm (result_name, tth)
 in
   ()

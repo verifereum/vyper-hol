@@ -1329,12 +1329,17 @@ fun make_definitions_for_file (n, json_path) = let
                    mk_eq(mk_var(path_vn, string_ty),
                          fromMLstring json_path))
   val traces_prefix = String.concat ["traces_", nstr, "_"]
+  val test_name_prefix = String.concat ["name_", nstr, "_"]
   fun define_traces i (name, traces) = let
     val trs = mk_list(traces, trace_ty)
-    val vn = traces_prefix ^ Int.toString i
+    val tn = Int.toString i
+    val vn = traces_prefix ^ tn
     val var = mk_var(vn, traces_ty)
     val def = new_definition(vn ^ "_def", mk_eq(var, trs))
     val () = cv_trans def
+    val vn = test_name_prefix ^ tn
+    val def = new_definition(vn ^ "_def",
+      mk_eq(mk_var(vn, string_ty), fromMLstring name))
   in () end
 in
   Lib.appi define_traces tests
