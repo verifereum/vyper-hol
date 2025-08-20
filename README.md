@@ -7,7 +7,9 @@ Formal semantics for the subset of Vyper covered here was developed under Grant 
 
 ## Contents
 
-This repository contains a _formal_ and _executable_ definition of a subset of the semantics of Vyper, expressed as a _definitional interpreter_ in higher-order logic. The work is presented as HOL4 theories: each theory, e.g. `vyperAST`, is implemented in a script file, e.g. `vyperASTScript.sml`.
+This repository contains a _formal_ and _executable_ definition of a subset of the semantics of Vyper, expressed as a _definitional interpreter_ in higher-order logic. This means we have defined an interpreter for Vyper programs as a mathematical function in logic, which can be executed and about which we can also prove theorems.
+
+The work is presented as HOL4 theories: each theory, e.g. `vyperAST`, is implemented in a script file, e.g. `vyperASTScript.sml`.
 These script files are intended to be read as a formal specification of Vyper (or at least the subset we have formalised so far), in addition to being executable by the HOL4 theorem prover to build the logical definitions and theories described.
 
 The main function for executing Vyper statements is `eval_stmts` defined in `vyperInterpreter` (specifically `evaluate_def`). Top-level entry points are `load_contract` and `call_external`, defined in the same theory. Examples of calling these functions and executing the interpreter can be found in `vyperTestRunner`, which defines functions such as `run_call` used in evaluating the formal semantics on the Vyper language test suite.
@@ -26,7 +28,7 @@ Interface declarations are not present in this AST because they are only needed 
 
 ### vyperInterpreter
 
-The formal semantics for Vyper is defined in `vyperInterpreter`. The top-level entry-points are `load_contract` (for running a contract-deployment transaction given the Vyper source code of the contract), and `call_external` (for calling an external function of an already-deployed contract). These entry-points use the `eval_stmts` function defined in `evaluate_def` for interpreting Vyper code.
+The formal semantics for Vyper is defined in `vyperInterpreter`. The top-level entry-points are `load_contract` (for running a contract-deployment transaction given the Vyper source code of the contract), and `call_external` (for calling an external function of an already-deployed contract). These entry-points use the `eval_stmts` function defined in `evaluate_def` for interpreting Vyper code. These functions operate on Vyper values; see `vyperTestRunner` below for how to wrap these calls with encoding/decoding to ABI-encoded bytes.
 
 The interpreter  in `evaluate_def` is written in a state-exception monad; the state contains the EVM machine state, Vyper-level globals in contracts, logs generated so far during execution, and the environment with variable bindings (since variables can be assigned to statefully). The non-stateful environment for the interpreter contains the stack of names of (internal) functions that have been called, information about the transaction that initiated the call, and the source code of existing contracts (including the current one). Exceptions are used for semantic errors (e.g., looking up a variable that was not bound, or in general attempting to interpret a badly-typed program), for legitimate runtime exceptions (e.g., failed assertions in user code, attempting to call a non-existent external function, etc.), and to manage control flow for internal function calls and loops (`return`, `break`, `continue`).
 
@@ -52,14 +54,27 @@ The decoding of JSON into our AST type is somewhat ad-hoc, in part because the J
 
 ## What is Missing
 
-TODO: update this section
+The focus of this work so far has been the core execution semantics of Vyper contract code, as abstract syntax, for external calls into a single contract. Therefore, the main limitations are _calls to other contracts_ (and other chain interaction like deploying contracts during execution), and _elaboration into abstract syntax_ done by the Vyper compiler front-end. Our intention is to remove all these limitations in future work to build a comprehensive and definitive formal semantics for the entire Vyper language.
 
-The following aspects of Vyper are currently not part of the formal model:
-- concrete syntax, i.e. parsing
-- type checking: the interpreter can fail during execution on badly-typed input, but we have not proved well-typed inputs don't fail
-- external contract calls
-- modules
-- interfaces
+Here are the specific aspects of Vyper that are currently not part of the formal model:
+
+- Chain interaction
+    - external contract calls (both `staticcall` and `extcall`)
+    - [chain interaction bulitins](https://docs.vyperlang.org/en/latest/built-in-functions.html#chain-interaction) (`create_minimal_proxy_to`, etc.), except for `send`
+    - non-reentrancy checking
+- Compiler front-end
+    - concrete syntax, i.e., parsing
+    - type-checking (the interpreter can fail during execution on badly-typed input)
+    - interfaces, which are only relevant for type-checking
+    - some cases of constant inlining (where, e.g., a literal value, not constant expression, is needed for the abstract syntax)
+    - modules (`exports` and `import`)
+    - internal and external functions with default arguments
+- Miscellaneous builtins
+    - some of the [cryptography builtins](https://docs.vyperlang.org/en/latest/built-in-functions.html#cryptography), especially involving elliptic curves
+    - some [math builtins](https://docs.vyperlang.org/en/latest/built-in-functions.html#math): `isqrt`, `sqrt`, `uint256_addmod`, `uint256_mulmod`
+    - ABI builtins (`abi_encode`, `abi_decode`)
+    - `blobhash`
+    - `print`, `uint2str`, `extract32`
 
 ## Challenges, Outcomes, and Next Steps
 
