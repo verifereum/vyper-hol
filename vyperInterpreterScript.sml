@@ -251,6 +251,18 @@ End
 
 val () = cv_auto_trans evaluate_literal_def;
 
+(* reading arrays *)
+
+Definition array_length_def:
+  array_length av =
+  case av of
+  | DynArrayV _ _ ls => LENGTH ls
+  | SArrayV _ n _ => n
+  | TupleV ls => LENGTH ls
+End
+
+val () = cv_trans array_length_def;
+
 Definition evaluate_in_array_def:
   evaluate_in_array v av =
   case av of
@@ -262,6 +274,57 @@ End
 
 val () = cv_auto_trans $
   REWRITE_RULE[member_intro]evaluate_in_array_def;
+
+Definition array_index_def:
+  array_index av i =
+  if 0 ≤ i then let j = Num i in
+  case av
+    of DynArrayV _ _ ls => oEL j ls
+     | SArrayV t n al =>
+         if j < n then case ALOOKUP al j
+         of SOME v => SOME v
+          | NONE => SOME $ default_value t
+         else NONE
+     | TupleV ls => oEL j ls
+  else NONE
+End
+
+val () = cv_trans array_index_def;
+
+Definition extract_elements_def:
+  extract_elements (ArrayV av) =
+  (SOME $ case av
+     of TupleV vs => vs
+      | DynArrayV _ _ vs => vs
+      | SArrayV t n al =>
+          let d = default_value t in
+          GENLIST (λi. case ALOOKUP al i of SOME v => v | NONE => d) n) ∧
+  extract_elements _ = NONE
+End
+
+val () = cv_auto_trans extract_elements_def;
+
+(* creating arrays *)
+
+Definition enumerate_static_array_def:
+  enumerate_static_array _ _ [] = [] ∧
+  enumerate_static_array d n (v::vs) =
+    let r = enumerate_static_array d (SUC n) vs in
+    if v = d then r else (n,v)::r
+End
+
+val () = cv_trans enumerate_static_array_def;
+
+Definition make_array_value_def:
+  make_array_value tv (Fixed n) vs =
+    SArrayV tv n (enumerate_static_array (default_value tv) 0 vs) ∧
+  make_array_value tv (Dynamic n) vs =
+    DynArrayV tv n vs
+End
+
+val () = cv_trans make_array_value_def;
+
+(* binary operators and bounds checking *)
 
 Definition binop_negate_def:
   binop_negate (INL (BoolV b)) = INL (BoolV (¬b)) ∧
@@ -559,6 +622,8 @@ End
 
 val () = cv_auto_trans compatible_bound_def;
 
+(* concat *)
+
 Definition init_concat_output_def:
   init_concat_output n (BytesV _ bs) = SOME $ BytesV (Dynamic n) bs ∧
   init_concat_output n (StringV _ s) = SOME $ StringV n s ∧
@@ -605,6 +670,8 @@ Proof
   \\ strip_tac \\ gvs[]
 QED
 
+(* slice *)
+
 Definition evaluate_slice_def:
   evaluate_slice v sv lv n =
   let b = Dynamic n in
@@ -629,6 +696,8 @@ Definition evaluate_slice_def:
 End
 
 val () = cv_auto_trans evaluate_slice_def;
+
+(* some more builtins *)
 
 Definition evaluate_addmod_def:
   evaluate_addmod i1 i2 i3 = INR "TODO: unimplemented"
@@ -672,88 +741,6 @@ Proof
   rw[evaluate_as_wei_value_pre_def]
 QED
 
-Definition array_length_def:
-  array_length av =
-  case av of
-  | DynArrayV _ _ ls => LENGTH ls
-  | SArrayV _ n _ => n
-  | TupleV ls => LENGTH ls
-End
-
-val () = cv_trans array_length_def;
-
-Definition enumerate_static_array_def:
-  enumerate_static_array _ _ [] = [] ∧
-  enumerate_static_array d n (v::vs) =
-    let r = enumerate_static_array d (SUC n) vs in
-    if v = d then r else (n,v)::r
-End
-
-val () = cv_trans enumerate_static_array_def;
-
-Definition make_array_value_def:
-  make_array_value tv (Fixed n) vs =
-    SArrayV tv n (enumerate_static_array (default_value tv) 0 vs) ∧
-  make_array_value tv (Dynamic n) vs =
-    DynArrayV tv n vs
-End
-
-val () = cv_trans make_array_value_def;
-
-Definition value_to_key_def:
-  value_to_key (IntV _ i) = SOME $ IntSubscript i ∧
-  value_to_key (StringV _ s) = SOME $ StrSubscript s ∧
-  value_to_key (BytesV _ bs) = SOME $ BytesSubscript bs ∧
-  value_to_key (FlagV _ n) = SOME $ IntSubscript $ &n ∧
-  value_to_key _ = NONE
-End
-
-val () = cv_auto_trans value_to_key_def;
-
-Definition array_index_def:
-  array_index av i =
-  if 0 ≤ i then let j = Num i in
-  case av
-    of DynArrayV _ _ ls => oEL j ls
-     | SArrayV t n al =>
-         if j < n then case ALOOKUP al j
-         of SOME v => SOME v
-          | NONE => SOME $ default_value t
-         else NONE
-     | TupleV ls => oEL j ls
-  else NONE
-End
-
-val () = cv_trans array_index_def;
-
-Definition evaluate_subscript_def:
-  evaluate_subscript tenv (Value (ArrayV av)) (IntV _ i) =
-  (case array_index av i
-   of SOME v => INL $ Value v
-   | _ => INR "subscript array_index") ∧
-  evaluate_subscript tenv (HashMap vt hm) kv =
-  (case value_to_key kv of SOME k =>
-    (case ALOOKUP hm k of SOME tv => INL tv
-        | _ => (case vt of Type typ =>
-                  (case evaluate_type tenv typ of
-                   | SOME tv => INL $ Value $ default_value tv
-                   | NONE => INR "HashMap evaluate type")
-                | _ => INR "HashMap final value type" ))
-   | _ => INR "evaluate_subscript value_to_key") ∧
-  evaluate_subscript _ _ _ = INR "evaluate_subscript"
-End
-
-val () = cv_auto_trans evaluate_subscript_def;
-
-Definition evaluate_attribute_def:
-  evaluate_attribute (StructV kvs) id =
-  (case ALOOKUP kvs id of SOME v => INL v
-   | _ => INR "attribute") ∧
-  evaluate_attribute _ _ = INR "evaluate_attribute"
-End
-
-val () = cv_auto_trans evaluate_attribute_def;
-
 Definition evaluate_max_value_def:
   evaluate_max_value (BaseT (UintT n)) = INL $ IntV (Unsigned n) (&(2 ** n) - 1) ∧
   evaluate_max_value (BaseT (IntT n)) = (if n = 0
@@ -776,509 +763,78 @@ End
 
 val () = cv_auto_trans evaluate_min_value_def;
 
-(* Machinery for managing variables (local, top-level, mutable, immutable) *)
+(* subscripting into arrays, structs, hashmaps *)
 
-(*
-We don't use identifiers directly because cv compute prefers num keys
-Type scope = “:identifier |-> value”;
-*)
-Type scope = “:num |-> value”;
-
-(* find a variable in a list of nested scopes *)
-Definition lookup_scopes_def:
-  lookup_scopes id [] = NONE ∧
-  lookup_scopes id ((env: scope)::rest) =
-  case FLOOKUP env id of NONE =>
-    lookup_scopes id rest
-  | SOME v => SOME v
+Definition evaluate_attribute_def:
+  evaluate_attribute (StructV kvs) id =
+  (case ALOOKUP kvs id of SOME v => INL v
+   | _ => INR "attribute") ∧
+  evaluate_attribute _ _ = INR "evaluate_attribute"
 End
 
-(* find the location of a variable in a list of nested scopes (as well as its
-* value): this is used when assigning to that variable *)
-Definition find_containing_scope_def:
-  find_containing_scope id ([]:scope list) = NONE ∧
-  find_containing_scope id (env::rest) =
-  case FLOOKUP env id of NONE =>
-    OPTION_MAP (λ(p,q). (env::p, q)) (find_containing_scope id rest)
-  | SOME v => SOME ([], env, v, rest)
+val () = cv_auto_trans evaluate_attribute_def;
+
+Definition value_to_key_def:
+  value_to_key (IntV _ i) = SOME $ IntSubscript i ∧
+  value_to_key (StringV _ s) = SOME $ StrSubscript s ∧
+  value_to_key (BytesV _ bs) = SOME $ BytesSubscript bs ∧
+  value_to_key (FlagV _ n) = SOME $ IntSubscript $ &n ∧
+  value_to_key _ = NONE
 End
 
-val () = cv_auto_trans find_containing_scope_def;
+val () = cv_auto_trans value_to_key_def;
 
-Datatype:
-  location
-  = ScopedVar identifier
-  | ImmutableVar identifier
-  | TopLevelVar identifier
+Definition evaluate_subscript_def:
+  evaluate_subscript tenv (Value (ArrayV av)) (IntV _ i) =
+  (case array_index av i
+   of SOME v => INL $ Value v
+   | _ => INR "subscript array_index") ∧
+  evaluate_subscript tenv (HashMap vt hm) kv =
+  (case value_to_key kv of SOME k =>
+    (case ALOOKUP hm k of SOME tv => INL tv
+        | _ => (case vt of Type typ =>
+                  (case evaluate_type tenv typ of
+                   | SOME tv => INL $ Value $ default_value tv
+                   | NONE => INR "HashMap evaluate type")
+                | _ => INR "HashMap final value type" ))
+   | _ => INR "evaluate_subscript value_to_key") ∧
+  evaluate_subscript _ _ _ = INR "evaluate_subscript"
 End
 
-Datatype:
-  assignment_value
-  = BaseTargetV location (subscript list)
-  | TupleTargetV (assignment_value list)
+val () = cv_auto_trans evaluate_subscript_def;
+
+Definition evaluate_subscripts_def:
+  evaluate_subscripts a [] = INL a ∧
+  evaluate_subscripts a ((IntSubscript i)::is) =
+  (case a of ArrayV av =>
+   (case array_index av i of SOME v =>
+    (case evaluate_subscripts v is of INL vj => INL vj
+     | INR err => INR err)
+    | _ => INR "evaluate_subscripts array_index")
+   | _ => INR "evaluate_subscripts type") ∧
+  evaluate_subscripts (StructV al) ((AttrSubscript id)::is) =
+  (case ALOOKUP al id of SOME v =>
+    (case evaluate_subscripts v is of INL v' => INL v'
+     | INR err => INR err)
+   | _ => INR "evaluate_subscripts AttrSubscript") ∧
+  evaluate_subscripts _ _ = INR "evaluate_subscripts"
 End
 
-Type base_target_value = “:location # subscript list”;
+val evaluate_subscripts_pre_def =
+  cv_auto_trans_pre "evaluate_subscripts_pre" evaluate_subscripts_def;
 
-Datatype:
-  assign_operation
-  = Replace value
-  | Update binop value
-  | AppendOp value
-  | PopOp
-End
-
-Datatype:
-  call_txn = <|
-    sender: address
-  ; target: address
-  ; function_name: identifier
-  ; args: value list
-  ; value: num
-  ; time_stamp: num
-  ; block_number: num
-  ; block_hashes: bytes32 list
-  ; blob_base_fee: num
-  ; gas_price: num
-  ; is_creation: bool
-  |>
-End
-
-Datatype:
-  evaluation_context = <|
-    stk: identifier list
-  ; txn: call_txn
-  ; sources: (address, toplevel list) alist
-  |>
-End
-
-Theorem with_stk_updated_by_id[simp]:
-  (cx with stk updated_by (λx. x)) = cx
+Theorem evaluate_subscripts_pre[cv_pre]:
+  !a b. evaluate_subscripts_pre a b
 Proof
-  rw[theorem"evaluation_context_component_equality"]
+  ho_match_mp_tac evaluate_subscripts_ind
+  \\ rw[Once evaluate_subscripts_pre_def]
+  \\ rw[Once evaluate_subscripts_pre_def]
+  \\ gvs[] \\ rw[]
+  \\ qmatch_asmsub_rename_tac`0i ≤ w`
+  \\ Cases_on`w` \\ gs[]
 QED
 
-Definition empty_call_txn_def:
-  empty_call_txn = <|
-    sender := 0w;
-    target := 0w;
-    function_name := "";
-    args := [];
-    value := 0;
-    time_stamp := 0;
-    block_number := 0;
-    block_hashes := [];
-    blob_base_fee := 0;
-    gas_price := 0;
-    is_creation := F
-  |>
-End
-
-Definition empty_evaluation_context_def:
-  empty_evaluation_context = <|
-    stk := []
-  ; txn := empty_call_txn
-  ; sources := []
-  |>
-End
-
-val () = cv_auto_trans empty_evaluation_context_def;
-
-Definition evaluate_account_op_def:
-  evaluate_account_op Address bs _ = BytesV (Fixed 20) bs ∧
-  evaluate_account_op Balance _ a = IntV (Unsigned 256) &a.balance ∧
-  evaluate_account_op Codehash _ a = BytesV (Fixed 32) (Keccak_256_w64 a.code) ∧
-  evaluate_account_op Codesize _ a = IntV (Unsigned 256) $ &LENGTH a.code ∧
-  evaluate_account_op IsContract _ a = BoolV (a.code ≠ []) ∧
-  evaluate_account_op Code _ a = BytesV (Dynamic (LENGTH a.code)) a.code
-End
-
-val () = cv_auto_trans evaluate_account_op_def;
-
-Definition get_self_code_def:
-  get_self_code cx = ALOOKUP cx.sources cx.txn.target
-End
-
-val () = cv_auto_trans get_self_code_def;
-
-Definition type_env_def:
-  type_env [] = FEMPTY ∧
-  type_env (StructDecl id args :: ts) =
-    type_env ts |+ (string_to_num id, StructArgs args) ∧
-  type_env (FlagDecl id ls :: ts) =
-    type_env ts |+ (string_to_num id, FlagArgs (LENGTH ls)) ∧
-  type_env (_ :: ts) = type_env ts
-End
-
-val () = cv_auto_trans type_env_def;
-
-Definition evaluate_block_hash_def:
-  evaluate_block_hash t n =
-  let pbn = t.block_number - 1 in
-  if t.block_number ≤ n ∨
-     LENGTH t.block_hashes ≤ pbn - n
-  then INR "evaluate_block_hash"
-  else INL $ BytesV (Fixed 32)
-    (word_to_bytes (EL (pbn - n) t.block_hashes) T)
-End
-
-val evaluate_block_hash_pre_def = cv_auto_trans_pre "evaluate_block_hash_pre" evaluate_block_hash_def;
-
-Theorem evaluate_block_hash_pre[cv_pre]:
-  evaluate_block_hash_pre t n
-Proof
-  rw[evaluate_block_hash_pre_def]
-QED
-
-Definition evaluate_builtin_def:
-  evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
-  evaluate_builtin cx _ Len [StringV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
-  evaluate_builtin cx _ Len [ArrayV av] = INL (IntV (Unsigned 256) &(array_length av)) ∧
-  evaluate_builtin cx _ Not [BoolV b] = INL (BoolV (¬b)) ∧
-  evaluate_builtin cx _ Not [IntV u i] =
-    (if is_Unsigned u ∧ 0 ≤ i then INL (IntV u (int_not i)) else INR "signed Not") ∧
-  evaluate_builtin cx _ Not [FlagV m n] = INL $ FlagV m $
-    w2n $ (~((n2w n):bytes32)) && ~(~(0w:bytes32) << m) ∧
-  evaluate_builtin cx _ Neg [IntV u i] = bounded_int_op u u (-i) ∧
-  evaluate_builtin cx _ Neg [DecimalV i] = bounded_decimal_op (-i) ∧
-  evaluate_builtin cx _ Keccak256 [BytesV _ ls] = INL $ BytesV (Fixed 32) $
-    Keccak_256_w64 ls ∧
-  (* TODO: reject BytesV with invalid bounds for Keccak256 *)
-  (* TODO: support Keccak256 on strings *)
-  evaluate_builtin cx _ (AsWeiValue dn) [v] = evaluate_as_wei_value dn v ∧
-  evaluate_builtin cx _ AddMod [IntV u1 i1; IntV u2 i2; IntV u3 i3] =
-    (if u1 = Unsigned 256 ∧ u2 = u1 ∧ u3 = u1 then evaluate_addmod i1 i2 i3
-     else INR "AddMod type") ∧
-  evaluate_builtin cx _ MulMod [IntV u1 i1; IntV u2 i2; IntV u3 i3] =
-    (if u1 = Unsigned 256 ∧ u2 = u1 ∧ u3 = u1 then evaluate_mulmod i1 i2 i3
-     else INR "MulMod type") ∧
-  evaluate_builtin cx _ Floor [DecimalV i] =
-    INL $ IntV (Signed 256) (i / 10000000000) ∧
-  evaluate_builtin cx _ (Bop bop) [v1; v2] = evaluate_binop bop v1 v2 ∧
-  evaluate_builtin cx _ (Env Sender) [] = INL $ AddressV cx.txn.sender ∧
-  evaluate_builtin cx _ (Env SelfAddr) [] = INL $ AddressV cx.txn.target ∧
-  evaluate_builtin cx _ (Env ValueSent) [] = INL $ IntV (Unsigned 256) &cx.txn.value ∧
-  evaluate_builtin cx _ (Env TimeStamp) [] = INL $ IntV (Unsigned 256) &cx.txn.time_stamp ∧
-  evaluate_builtin cx _ (Env BlockNumber) [] = INL $ IntV (Unsigned 256) &cx.txn.block_number ∧
-  evaluate_builtin cx _ (Env BlobBaseFee) [] = INL $ IntV (Unsigned 256) &cx.txn.blob_base_fee ∧
-  evaluate_builtin cx _ (Env GasPrice) [] = INL $ IntV (Unsigned 256) &cx.txn.gas_price ∧
-  evaluate_builtin cx _ (Env PrevHash) [] = evaluate_block_hash cx.txn (cx.txn.block_number - 1) ∧
-  evaluate_builtin cx _ BlockHash [IntV u i] =
-    (if u = Unsigned 256 then evaluate_block_hash cx.txn (Num i)
-     else INR "BlockHash type") ∧
-  evaluate_builtin cx _ (Concat n) vs = evaluate_concat n vs ∧
-  evaluate_builtin cx _ (Slice n) [v1; v2; v3] = evaluate_slice v1 v2 v3 n ∧
-  evaluate_builtin cx _ (MakeArray to bd) vs =
-    (case get_self_code cx of SOME ts =>
-     (case to
-      of NONE => INL $ ArrayV $ TupleV vs
-       | SOME t =>
-         (case evaluate_type (type_env ts) t
-          of NONE => INR "MakeArray type"
-           | SOME tv => INL $ ArrayV $ make_array_value tv bd vs))
-     | _ => INR "MakeArray code") ∧
-  evaluate_builtin cx acc (Acc aop) [BytesV _ bs] =
-    (let a = lookup_account (word_of_bytes T (0w:address) bs) acc in
-      INL $ evaluate_account_op aop bs a) ∧
-  evaluate_builtin _ _ _ _ = INR "builtin"
-End
-
-val evaluate_builtin_pre_def = cv_auto_trans_pre "evaluate_builtin_pre" evaluate_builtin_def;
-
-Theorem evaluate_builtin_pre[cv_pre]:
-  evaluate_builtin_pre a b c d
-Proof
-  rw[evaluate_builtin_pre_def]
-QED
-
-Definition type_builtin_args_length_ok_def:
-  type_builtin_args_length_ok Empty n = (n = 0n) ∧
-  type_builtin_args_length_ok MaxValue n = (n = 0) ∧
-  type_builtin_args_length_ok MinValue n = (n = 0) ∧
-  type_builtin_args_length_ok Epsilon n = (n = 0) ∧
-  type_builtin_args_length_ok Convert n = (n = 1)
-End
-
-val () = cv_auto_trans type_builtin_args_length_ok_def;
-
-Definition builtin_args_length_ok_def:
-  builtin_args_length_ok Len n = (n = 1n) ∧
-  builtin_args_length_ok Not n = (n = 1) ∧
-  builtin_args_length_ok Neg n = (n = 1) ∧
-  builtin_args_length_ok Floor n = (n = 1) ∧
-  builtin_args_length_ok Keccak256 n = (n = 1) ∧
-  builtin_args_length_ok (AsWeiValue _) n = (n = 1) ∧
-  builtin_args_length_ok (Concat _) n = (2 ≤ n) ∧
-  builtin_args_length_ok (Slice _) n = (n = 3) ∧
-  builtin_args_length_ok (MakeArray _ b) n = compatible_bound b n ∧
-  builtin_args_length_ok Floor n = (n = 1) ∧
-  builtin_args_length_ok AddMod n = (n = 3) ∧
-  builtin_args_length_ok MulMod n = (n = 3) ∧
-  builtin_args_length_ok (Bop _) n = (n = 2) ∧
-  builtin_args_length_ok (Env _) n = (n = 0) ∧
-  builtin_args_length_ok BlockHash n = (n = 1) ∧
-  builtin_args_length_ok (Acc _) n = (n = 1)
-End
-
-val () = cv_auto_trans builtin_args_length_ok_def;
-
-Type log = “:identifier # (value list)”;
-
-Datatype:
-  globals_state = <|
-    mutables: num |-> toplevel_value
-  ; transients: (num # toplevel_value) list
-  ; immutables: num |-> value
-  |>
-End
-
-Datatype:
-  evaluation_state = <|
-    globals: (address, globals_state) alist
-  ; logs: log list
-  ; scopes: scope list
-  ; accounts: evm_accounts
-  |>
-End
-
-Datatype:
-  exception
-  = AssertException string
-  | Error string
-  | BreakException
-  | ContinueException
-  | ReturnException value
-End
-
-Type evaluation_result = “:(α + exception) # evaluation_state”
-
-Definition return_def:
-  return x s = (INL x, s) : α evaluation_result
-End
-
-val () = cv_auto_trans return_def;
-
-Definition raise_def:
-  raise e s = (INR e, s) : α evaluation_result
-End
-
-val () = cv_auto_trans raise_def;
-
-Definition bind_def:
-  bind f g (s: evaluation_state) : α evaluation_result =
-  case f s of (INL x, s) => g x s | (INR e, s) => (INR e, s)
-End
-
-Definition ignore_bind_def:
-  ignore_bind f g = bind f (λx. g)
-End
-
-Definition assert_def:
-  assert b e s = ((if b then INL () else INR e), s) : unit evaluation_result
-End
-
-val () = cv_auto_trans assert_def;
-
-val () = declare_monad ("vyper_evaluation",
-  { bind = “bind”, unit = “return”,
-    ignorebind = SOME “ignore_bind”, choice = NONE,
-    fail = SOME “raise”, guard = SOME “assert”
-  });
-val () = enable_monad "vyper_evaluation";
-val () = enable_monadsyntax();
-
-Definition try_def:
-  try f h s : α evaluation_result =
-  case f s of (INR e, s) => h e s | x => x
-End
-
-Definition finally_def:
-  finally f g s : α evaluation_result =
-  case f s of (INL x, s) => ignore_bind g (return x) s
-     | (INR e, s) => ignore_bind g (raise e) s
-End
-
-val option_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
-
-val sum_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="sum",Tyop="sum"}));
-
-val list_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="list",Tyop="list"}));
-
-val prod_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
-
-Definition lift_option_def:
-  lift_option x str =
-    case x of SOME v => return v | NONE => raise $ Error str
-End
-
-val () = lift_option_def
-  |> SRULE [FUN_EQ_THM, option_CASE_rator]
-  |> cv_auto_trans;
-
-Definition lift_sum_def:
-  lift_sum x =
-    case x of INL v => return v | INR str => raise $ Error str
-End
-
-val () = lift_sum_def
-  |> SRULE [FUN_EQ_THM, sum_CASE_rator]
-  |> cv_auto_trans;
-
-Definition get_current_globals_def:
-  get_current_globals cx st =
-    lift_option (ALOOKUP st.globals cx.txn.target) "get_current_globals" st
-End
-
-val () = get_current_globals_def
-  |> SRULE [lift_option_def, option_CASE_rator]
-  |> cv_auto_trans;
-
-Definition set_current_globals_def:
-  set_current_globals cx gbs st =
-  let addr = cx.txn.target in
-    return () $ st with globals updated_by
-      (λal. (addr, gbs) :: (ADELKEY addr al))
-End
-
-val () = cv_auto_trans set_current_globals_def;
-
-Definition lookup_global_def:
-  lookup_global cx n = do
-    gbs <- get_current_globals cx;
-    case FLOOKUP gbs.mutables n
-      of NONE => raise $ Error "lookup_global"
-       | SOME v => return v
-  od
-End
-
-val () = lookup_global_def
-  |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator, UNCURRY]
-  |> cv_auto_trans;
-
-Definition set_global_def:
-  set_global cx n v = do
-    gbs <- get_current_globals cx;
-    set_current_globals cx $
-      gbs with mutables updated_by (λm. m |+ (n,v))
-  od
-End
-
-val () = set_global_def
-  |> SRULE [bind_def, FUN_EQ_THM, UNCURRY]
-  |> cv_auto_trans;
-
-Definition get_immutables_def:
-  get_immutables cx = do
-    gbs <- get_current_globals cx;
-    return gbs.immutables
-  od
-End
-
-val () = get_immutables_def
-  |> SRULE [bind_def]
-  |> cv_auto_trans;
-
-Definition set_immutable_def:
-  set_immutable cx n v = do
-    gbs <- get_current_globals cx;
-    set_current_globals cx $
-      gbs with immutables updated_by (λim. im |+ (n, v))
-  od
-End
-
-val () = set_immutable_def
-  |> SRULE [bind_def]
-  |> cv_auto_trans;
-
-Definition get_accounts_def:
-  get_accounts st = return st.accounts st
-End
-
-val () = cv_auto_trans get_accounts_def;
-
-Definition update_accounts_def:
-  update_accounts f st = return () (st with accounts updated_by f)
-End
-
-Definition get_Value_def[simp]:
-  get_Value (Value v) = return v ∧
-  get_Value _ = raise $ Error "not Value"
-End
-
-val () = get_Value_def
-  |> SIMP_RULE std_ss [FUN_EQ_THM]
-  |> cv_auto_trans;
-
-Definition check_def:
-  check b str = assert b (Error str)
-End
-
-val () = cv_auto_trans check_def;
-
-Definition switch_BoolV_def:
-  switch_BoolV v f g =
-  if v = Value $ BoolV T then f
-  else if v = Value $ BoolV F then g
-  else raise $ Error (if is_Value v then "not BoolV" else "not Value")
-End
-
-Definition push_scope_def:
-  push_scope st = return () $ st with scopes updated_by CONS FEMPTY
-End
-
-val () = cv_auto_trans push_scope_def;
-
-Definition push_scope_with_var_def:
-  push_scope_with_var nm v st =
-    return () $  st with scopes updated_by CONS (FEMPTY |+ (nm, v))
-End
-
-val () = cv_auto_trans push_scope_with_var_def;
-
-Definition pop_scope_def:
-  pop_scope st =
-    case st.scopes
-    of [] => raise (Error "pop_scope") st
-       | _::tl => return () (st with scopes := tl)
-End
-
-val () = cv_auto_trans pop_scope_def;
-
-Definition handle_loop_exception_def:
-  handle_loop_exception e =
-  if e = ContinueException then return F
-  else if e = BreakException then return T
-  else raise e
-End
-
-val () = handle_loop_exception_def
-  |> SRULE [FUN_EQ_THM, COND_RATOR]
-  |> cv_auto_trans;
-
-Definition transfer_value_def:
-  transfer_value fromAddr toAddr amount = do
-    acc <- get_accounts;
-    sender <<- lookup_account fromAddr acc;
-    check (amount <= sender.balance) "transfer_value amount";
-    recipient <<- lookup_account toAddr acc;
-    update_accounts (
-      update_account fromAddr (sender with balance updated_by (flip $- amount)) o
-      update_account toAddr (recipient with balance updated_by ($+ amount)));
-  od
-End
-
-val () = transfer_value_def
-  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def,
-            LET_RATOR, update_accounts_def, o_DEF, C_DEF]
-  |> cv_auto_trans;
+(* convert *)
 
 Definition evaluate_convert_def:
   evaluate_convert (IntV _ i) (BaseT BoolT) = INL $ BoolV (i ≠ 0) ∧
@@ -1360,123 +916,9 @@ Proof
   rw[evaluate_convert_pre_def]
 QED
 
-Definition evaluate_type_builtin_def:
-  evaluate_type_builtin cx Empty typ vs =
-  (case get_self_code cx
-     of SOME ts =>
-        (case evaluate_type (type_env ts) typ
-         of SOME tv => INL $ default_value tv
-          | NONE => INR "Empty evaluate_type")
-      | _ => INR "Empty get_self_code") ∧
-  evaluate_type_builtin cx MaxValue typ vs =
-    evaluate_max_value typ ∧
-  evaluate_type_builtin cx MinValue typ vs =
-    evaluate_min_value typ ∧
-  evaluate_type_builtin cx Convert typ [v] =
-    evaluate_convert v typ ∧
-  evaluate_type_builtin _ _ _ _ =
-    INR "TODO: TypeBuiltin"
-End
-
-val () = cv_auto_trans evaluate_type_builtin_def;
-
-Definition lookup_flag_def:
-  lookup_flag fid [] = NONE ∧
-  lookup_flag fid (FlagDecl id ls :: ts) =
-    (if fid = id then SOME ls else lookup_flag fid ts) ∧
-  lookup_flag fid (t :: ts) = lookup_flag fid ts
-End
-
-val () = cv_auto_trans lookup_flag_def;
-
-Definition lookup_flag_mem_def:
-  lookup_flag_mem cx fid mid =
-  case get_self_code cx
-    of NONE => raise $ Error "lookup_flag_mem code"
-     | SOME ts =>
-  case lookup_flag fid ts
-    of NONE => raise $ Error "lookup_flag"
-     | SOME ls =>
-  case INDEX_OF mid ls
-    of NONE => raise $ Error "lookup_flag_mem index"
-     | SOME i => return $ Value $ FlagV (LENGTH ls) (2 ** i)
-End
-
-val () = lookup_flag_mem_def
-  |> SRULE [FUN_EQ_THM, option_CASE_rator]
-  |> cv_auto_trans;
-
-Definition build_getter_def:
-  build_getter e kt (Type vt) n =
-    (let vn = num_to_dec_string n in
-      if is_ArrayT vt then
-        (let (args, ret, exp) =
-           build_getter (Subscript e (Name vn))
-             (BaseT (UintT 256)) (Type (ArrayT_type vt)) (SUC n) in
-           ((vn, kt)::args, ret, exp))
-      else ([(vn, kt)], vt, Subscript e (Name vn))) ∧
-  build_getter e kt (HashMapT typ vtyp) n =
-    (let vn = num_to_dec_string n in
-     let (args, ret, exp) =
-       build_getter (Subscript e (Name vn)) typ vtyp (SUC n) in
-     ((vn, kt)::args, ret, exp))
-Termination
-  WF_REL_TAC ‘measure (value_type_size o FST o SND o SND)’
-  \\ Cases \\ rw[type_size_def]
-End
-
-val () = cv_auto_trans_rec build_getter_def (
-  WF_REL_TAC ‘measure (cv_size o FST o SND o SND)’
-  \\ conj_tac \\ Cases \\ rw[]
-  >- (
-    qmatch_goalsub_rename_tac`cv_snd p`
-    \\ Cases_on`p` \\ rw[] )
-  \\ qmatch_asmsub_rename_tac`cv_is_ArrayT a`
-  \\ Cases_on `a` \\ gvs[cv_is_ArrayT_def, cv_ArrayT_type_def]
-  \\ rw[] \\ gvs[]
-  \\ qmatch_goalsub_rename_tac`cv_fst p`
-  \\ Cases_on `p` \\ gvs[]
-);
-
-Definition getter_def:
-  getter ne kt vt =
-  let (args, ret, exp) =
-    build_getter ne kt vt 0
-  in
-    (View, args, ret, [Return $ SOME exp])
-End
-
-val () = cv_auto_trans getter_def;
-
-Definition name_expression_def:
-  name_expression mut id =
-  if mut = Immutable ∨ is_Constant mut
-  then Name id
-  else TopLevelName id
-End
-
-val () = cv_auto_trans name_expression_def;
-
-Definition lookup_function_def:
-  lookup_function name Deploy [] = SOME (Payable, [], NoneT, [Pass]) ∧
-  lookup_function name vis [] = NONE ∧
-  lookup_function name vis (FunctionDecl fv fm id args ret body :: ts) =
-  (if id = name ∧ vis = fv then SOME (fm, args, ret, body)
-   else lookup_function name vis ts) ∧
-  lookup_function name External (VariableDecl Public mut id typ :: ts) =
-  (if id = name then
-    if ¬is_ArrayT typ
-    then SOME (View, [], typ, [Return (SOME (name_expression mut id))])
-    else SOME $ getter (name_expression mut id) (BaseT (UintT 256)) (Type (ArrayT_type typ))
-   else lookup_function name External ts) ∧
-  lookup_function name External (HashMapDecl Public _ id kt vt :: ts) =
-  (if id = name then SOME $ getter (TopLevelName id) kt vt
-   else lookup_function name External ts) ∧
-  lookup_function name vis (_ :: ts) =
-    lookup_function name vis ts
-End
-
-val () = cv_auto_trans lookup_function_def;
+(* implicit conversion from one type to another, used e.g. for function
+* calls/returns. only "safe" conversions are allowed, e.g., extending the
+* maximum length of a dynamic array*)
 
 Definition safe_cast_def:
   safe_cast t v = (
@@ -1624,97 +1066,7 @@ Proof
   \\ rw[Once safe_cast_pre_def]
 QED
 
-Definition bind_arguments_def:
-  bind_arguments tenv ([]: argument list) [] = SOME (FEMPTY: scope) ∧
-  bind_arguments tenv ((id, typ)::params) (v::vs) =
-    (case evaluate_type tenv typ of NONE => NONE | SOME tv =>
-     case safe_cast tv v of NONE => NONE | SOME v =>
-      OPTION_MAP (λm. m |+ (string_to_num id, v))
-        (bind_arguments tenv params vs)) ∧
-  bind_arguments _ _ _ = NONE
-End
-
-val bind_arguments_pre_def = cv_auto_trans_pre "bind_arguments_pre" bind_arguments_def;
-
-Theorem bind_arguments_pre[cv_pre]:
-  ∀x y z. bind_arguments_pre x y z
-Proof
-  ho_match_mp_tac bind_arguments_ind \\ rw[]
-  \\ rw[Once bind_arguments_pre_def]
-QED
-
-Definition get_scopes_def:
-  get_scopes st = return st.scopes st
-End
-
-val () = cv_auto_trans get_scopes_def;
-
-Definition set_scopes_def:
-  set_scopes env st = return () $ st with scopes := env
-End
-
-val () = cv_auto_trans set_scopes_def;
-
-Definition push_log_def:
-  push_log log st = return () $ st with logs updated_by CONS log
-End
-
-val () = cv_auto_trans push_log_def;
-
-Definition push_function_def:
-  push_function fn sc cx st =
-  return (cx with stk updated_by CONS fn)
-    $ st with scopes := [sc]
-End
-
-val () = cv_auto_trans push_function_def;
-
-Definition pop_function_def:
-  pop_function prev = set_scopes prev
-End
-
-val () = cv_auto_trans pop_function_def;
-
-Definition new_variable_def:
-  new_variable id v = do
-    n <<- string_to_num id;
-    env <- get_scopes;
-    check (IS_NONE (lookup_scopes n env)) "new_variable bound";
-    case env of [] => raise $ Error "new_variable null"
-    | e::es => set_scopes ((e |+ (n, v))::es)
-  od
-End
-
-val () = new_variable_def
-  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def,
-            LET_RATOR, list_CASE_rator]
-  |> cv_auto_trans;
-
-Definition set_variable_def:
-  set_variable id v = do
-    n <<- string_to_num id;
-    sc <- get_scopes;
-    (pre, env, _, rest) <-
-      lift_option (find_containing_scope n sc) "set_variable not found";
-    set_scopes (pre ++ (env |+ (n, v))::rest)
-  od
-End
-
-val () = set_variable_def
-  |> SRULE [FUN_EQ_THM, bind_def, lift_option_def,
-            LET_RATOR, UNCURRY, option_CASE_rator]
-  |> cv_auto_trans;
-
-Definition handle_function_def:
-  handle_function (ReturnException v) = return v ∧
-  handle_function (Error str) = raise $ Error str ∧
-  handle_function (AssertException str) = raise $ AssertException str ∧
-  handle_function _ = raise $ Error "handle_function"
-End
-
-val () = handle_function_def
-  |> SRULE [FUN_EQ_THM]
-  |> cv_auto_trans;
+(* mutating arrays *)
 
 Definition append_element_def:
   append_element (ArrayV (DynArrayV tv n vs)) v =
@@ -1767,6 +1119,16 @@ End
 
 val () = cv_auto_trans array_set_index_def;
 
+(* mutating inside arrays, structs, hashmaps *)
+
+Datatype:
+  assign_operation
+  = Replace value
+  | Update binop value
+  | AppendOp value
+  | PopOp
+End
+
 Definition assign_subscripts_def:
   assign_subscripts a [] (Replace v) = INL v (* TODO: cast to type of a *) ∧
   assign_subscripts a [] (Update bop v) = evaluate_binop bop a v ∧
@@ -1803,43 +1165,12 @@ Proof
   \\ Cases_on`w` \\ gs[]
 QED
 
-Definition evaluate_subscripts_def:
-  evaluate_subscripts a [] = INL a ∧
-  evaluate_subscripts a ((IntSubscript i)::is) =
-  (case a of ArrayV av =>
-   (case array_index av i of SOME v =>
-    (case evaluate_subscripts v is of INL vj => INL vj
-     | INR err => INR err)
-    | _ => INR "evaluate_subscripts array_index")
-   | _ => INR "evaluate_subscripts type") ∧
-  evaluate_subscripts (StructV al) ((AttrSubscript id)::is) =
-  (case ALOOKUP al id of SOME v =>
-    (case evaluate_subscripts v is of INL v' => INL v'
-     | INR err => INR err)
-   | _ => INR "evaluate_subscripts AttrSubscript") ∧
-  evaluate_subscripts _ _ = INR "evaluate_subscripts"
-End
-
-val evaluate_subscripts_pre_def =
-  cv_auto_trans_pre "evaluate_subscripts_pre" evaluate_subscripts_def;
-
-Theorem evaluate_subscripts_pre[cv_pre]:
-  !a b. evaluate_subscripts_pre a b
-Proof
-  ho_match_mp_tac evaluate_subscripts_ind
-  \\ rw[Once evaluate_subscripts_pre_def]
-  \\ rw[Once evaluate_subscripts_pre_def]
-  \\ gvs[] \\ rw[]
-  \\ qmatch_asmsub_rename_tac`0i ≤ w`
-  \\ Cases_on`w` \\ gs[]
-QED
-
 Definition assign_hashmap_def:
   assign_hashmap _ _ hm [] _ = INR "assign_hashmap null" ∧
-  assign_hashmap ts vt hm (k::ks) ao =
+  assign_hashmap tenv vt hm (k::ks) ao =
   (case ALOOKUP hm k
    of SOME (HashMap vt hm') =>
-    (case assign_hashmap ts vt hm' ks ao of
+    (case assign_hashmap tenv vt hm' ks ao of
      | INL hm' => INL $ (k, HashMap vt hm') :: (ADELKEY k hm)
      | INR err => INR err)
    | SOME (Value v) =>
@@ -1848,11 +1179,11 @@ Definition assign_hashmap_def:
      | INR err => INR err)
    | NONE =>
      (case vt of HashMapT kt vt' =>
-        (case assign_hashmap ts vt' [] ks ao of
+        (case assign_hashmap tenv vt' [] ks ao of
          | INL hm' => INL $ (k, HashMap vt' hm') :: hm
          | INR err => INR err)
       | Type t =>
-        (case evaluate_type (type_env ts) t
+        (case evaluate_type tenv t
            of NONE => INR "assign_hashmap evaluate_type"
             | SOME tv =>
          (case assign_subscripts (default_value tv) ks ao of
@@ -1874,15 +1205,753 @@ Definition sum_map_left_def:
 End
 
 Definition assign_toplevel_def:
-  assign_toplevel ts (Value a) is ao =
+  assign_toplevel tenv (Value a) is ao =
     sum_map_left Value $ assign_subscripts a is ao ∧
-  assign_toplevel ts (HashMap vt hm) is ao =
-    sum_map_left (HashMap vt) $ assign_hashmap ts vt hm is ao
+  assign_toplevel tenv (HashMap vt hm) is ao =
+    sum_map_left (HashMap vt) $ assign_hashmap tenv vt hm is ao
 End
 
 val () = assign_toplevel_def
   |> SRULE [oneline sum_map_left_def]
   |> cv_auto_trans;
+
+(* Environment and context for a contract call *)
+
+(* external environment (tx, msg, block) *)
+Datatype:
+  call_txn = <|
+    sender: address
+  ; target: address
+  ; function_name: identifier
+  ; args: value list
+  ; value: num
+  ; time_stamp: num
+  ; block_number: num
+  ; block_hashes: bytes32 list
+  ; blob_base_fee: num
+  ; gas_price: num
+  ; is_creation: bool
+  |>
+End
+
+Definition empty_call_txn_def:
+  empty_call_txn = <|
+    sender := 0w;
+    target := 0w;
+    function_name := "";
+    args := [];
+    value := 0;
+    time_stamp := 0;
+    block_number := 0;
+    block_hashes := [];
+    blob_base_fee := 0;
+    gas_price := 0;
+    is_creation := F
+  |>
+End
+
+(* Vyper-internal environment *)
+Datatype:
+  evaluation_context = <|
+    stk: identifier list
+  ; txn: call_txn
+  ; sources: (address, toplevel list) alist
+  |>
+End
+
+Theorem with_stk_updated_by_id[simp]:
+  (cx with stk updated_by (λx. x)) = cx
+Proof
+  rw[theorem"evaluation_context_component_equality"]
+QED
+
+Definition empty_evaluation_context_def:
+  empty_evaluation_context = <|
+    stk := []
+  ; txn := empty_call_txn
+  ; sources := []
+  |>
+End
+
+val () = cv_auto_trans empty_evaluation_context_def;
+
+(* Now we can define semantics for builtins that depend on the environment *)
+
+Definition evaluate_account_op_def:
+  evaluate_account_op Address bs _ = BytesV (Fixed 20) bs ∧
+  evaluate_account_op Balance _ a = IntV (Unsigned 256) &a.balance ∧
+  evaluate_account_op Codehash _ a = BytesV (Fixed 32) (Keccak_256_w64 a.code) ∧
+  evaluate_account_op Codesize _ a = IntV (Unsigned 256) $ &LENGTH a.code ∧
+  evaluate_account_op IsContract _ a = BoolV (a.code ≠ []) ∧
+  evaluate_account_op Code _ a = BytesV (Dynamic (LENGTH a.code)) a.code
+End
+
+val () = cv_auto_trans evaluate_account_op_def;
+
+Definition evaluate_block_hash_def:
+  evaluate_block_hash t n =
+  let pbn = t.block_number - 1 in
+  if t.block_number ≤ n ∨
+     LENGTH t.block_hashes ≤ pbn - n
+  then INR "evaluate_block_hash"
+  else INL $ BytesV (Fixed 32)
+    (word_to_bytes (EL (pbn - n) t.block_hashes) T)
+End
+
+val evaluate_block_hash_pre_def = cv_auto_trans_pre "evaluate_block_hash_pre" evaluate_block_hash_def;
+
+Theorem evaluate_block_hash_pre[cv_pre]:
+  evaluate_block_hash_pre t n
+Proof
+  rw[evaluate_block_hash_pre_def]
+QED
+
+Definition get_self_code_def:
+  get_self_code cx = ALOOKUP cx.sources cx.txn.target
+End
+
+val () = cv_auto_trans get_self_code_def;
+
+Definition type_env_def:
+  type_env [] = FEMPTY ∧
+  type_env (StructDecl id args :: ts) =
+    type_env ts |+ (string_to_num id, StructArgs args) ∧
+  type_env (FlagDecl id ls :: ts) =
+    type_env ts |+ (string_to_num id, FlagArgs (LENGTH ls)) ∧
+  type_env (_ :: ts) = type_env ts
+End
+
+val () = cv_auto_trans type_env_def;
+
+Definition evaluate_type_builtin_def:
+  evaluate_type_builtin cx Empty typ vs =
+  (case get_self_code cx
+     of SOME ts =>
+        (case evaluate_type (type_env ts) typ
+         of SOME tv => INL $ default_value tv
+          | NONE => INR "Empty evaluate_type")
+      | _ => INR "Empty get_self_code") ∧
+  evaluate_type_builtin cx MaxValue typ vs =
+    evaluate_max_value typ ∧
+  evaluate_type_builtin cx MinValue typ vs =
+    evaluate_min_value typ ∧
+  evaluate_type_builtin cx Convert typ [v] =
+    evaluate_convert v typ ∧
+  evaluate_type_builtin _ _ _ _ =
+    INR "TODO: TypeBuiltin"
+End
+
+val () = cv_auto_trans evaluate_type_builtin_def;
+
+Definition evaluate_builtin_def:
+  evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
+  evaluate_builtin cx _ Len [StringV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
+  evaluate_builtin cx _ Len [ArrayV av] = INL (IntV (Unsigned 256) &(array_length av)) ∧
+  evaluate_builtin cx _ Not [BoolV b] = INL (BoolV (¬b)) ∧
+  evaluate_builtin cx _ Not [IntV u i] =
+    (if is_Unsigned u ∧ 0 ≤ i then INL (IntV u (int_not i)) else INR "signed Not") ∧
+  evaluate_builtin cx _ Not [FlagV m n] = INL $ FlagV m $
+    w2n $ (~((n2w n):bytes32)) && ~(~(0w:bytes32) << m) ∧
+  evaluate_builtin cx _ Neg [IntV u i] = bounded_int_op u u (-i) ∧
+  evaluate_builtin cx _ Neg [DecimalV i] = bounded_decimal_op (-i) ∧
+  evaluate_builtin cx _ Keccak256 [BytesV _ ls] = INL $ BytesV (Fixed 32) $
+    Keccak_256_w64 ls ∧
+  (* TODO: reject BytesV with invalid bounds for Keccak256 *)
+  (* TODO: support Keccak256 on strings *)
+  evaluate_builtin cx _ (AsWeiValue dn) [v] = evaluate_as_wei_value dn v ∧
+  evaluate_builtin cx _ AddMod [IntV u1 i1; IntV u2 i2; IntV u3 i3] =
+    (if u1 = Unsigned 256 ∧ u2 = u1 ∧ u3 = u1 then evaluate_addmod i1 i2 i3
+     else INR "AddMod type") ∧
+  evaluate_builtin cx _ MulMod [IntV u1 i1; IntV u2 i2; IntV u3 i3] =
+    (if u1 = Unsigned 256 ∧ u2 = u1 ∧ u3 = u1 then evaluate_mulmod i1 i2 i3
+     else INR "MulMod type") ∧
+  evaluate_builtin cx _ Floor [DecimalV i] =
+    INL $ IntV (Signed 256) (i / 10000000000) ∧
+  evaluate_builtin cx _ (Bop bop) [v1; v2] = evaluate_binop bop v1 v2 ∧
+  evaluate_builtin cx _ (Env Sender) [] = INL $ AddressV cx.txn.sender ∧
+  evaluate_builtin cx _ (Env SelfAddr) [] = INL $ AddressV cx.txn.target ∧
+  evaluate_builtin cx _ (Env ValueSent) [] = INL $ IntV (Unsigned 256) &cx.txn.value ∧
+  evaluate_builtin cx _ (Env TimeStamp) [] = INL $ IntV (Unsigned 256) &cx.txn.time_stamp ∧
+  evaluate_builtin cx _ (Env BlockNumber) [] = INL $ IntV (Unsigned 256) &cx.txn.block_number ∧
+  evaluate_builtin cx _ (Env BlobBaseFee) [] = INL $ IntV (Unsigned 256) &cx.txn.blob_base_fee ∧
+  evaluate_builtin cx _ (Env GasPrice) [] = INL $ IntV (Unsigned 256) &cx.txn.gas_price ∧
+  evaluate_builtin cx _ (Env PrevHash) [] = evaluate_block_hash cx.txn (cx.txn.block_number - 1) ∧
+  evaluate_builtin cx _ BlockHash [IntV u i] =
+    (if u = Unsigned 256 then evaluate_block_hash cx.txn (Num i)
+     else INR "BlockHash type") ∧
+  evaluate_builtin cx _ (Concat n) vs = evaluate_concat n vs ∧
+  evaluate_builtin cx _ (Slice n) [v1; v2; v3] = evaluate_slice v1 v2 v3 n ∧
+  evaluate_builtin cx _ (MakeArray to bd) vs =
+    (case get_self_code cx of SOME ts =>
+     (case to
+      of NONE => INL $ ArrayV $ TupleV vs
+       | SOME t =>
+         (case evaluate_type (type_env ts) t
+          of NONE => INR "MakeArray type"
+           | SOME tv => INL $ ArrayV $ make_array_value tv bd vs))
+     | _ => INR "MakeArray code") ∧
+  evaluate_builtin cx acc (Acc aop) [BytesV _ bs] =
+    (let a = lookup_account (word_of_bytes T (0w:address) bs) acc in
+      INL $ evaluate_account_op aop bs a) ∧
+  evaluate_builtin _ _ _ _ = INR "builtin"
+End
+
+val evaluate_builtin_pre_def = cv_auto_trans_pre "evaluate_builtin_pre" evaluate_builtin_def;
+
+Theorem evaluate_builtin_pre[cv_pre]:
+  evaluate_builtin_pre a b c d
+Proof
+  rw[evaluate_builtin_pre_def]
+QED
+
+Definition type_builtin_args_length_ok_def:
+  type_builtin_args_length_ok Empty n = (n = 0n) ∧
+  type_builtin_args_length_ok MaxValue n = (n = 0) ∧
+  type_builtin_args_length_ok MinValue n = (n = 0) ∧
+  type_builtin_args_length_ok Epsilon n = (n = 0) ∧
+  type_builtin_args_length_ok Convert n = (n = 1)
+End
+
+val () = cv_auto_trans type_builtin_args_length_ok_def;
+
+Definition builtin_args_length_ok_def:
+  builtin_args_length_ok Len n = (n = 1n) ∧
+  builtin_args_length_ok Not n = (n = 1) ∧
+  builtin_args_length_ok Neg n = (n = 1) ∧
+  builtin_args_length_ok Floor n = (n = 1) ∧
+  builtin_args_length_ok Keccak256 n = (n = 1) ∧
+  builtin_args_length_ok (AsWeiValue _) n = (n = 1) ∧
+  builtin_args_length_ok (Concat _) n = (2 ≤ n) ∧
+  builtin_args_length_ok (Slice _) n = (n = 3) ∧
+  builtin_args_length_ok (MakeArray _ b) n = compatible_bound b n ∧
+  builtin_args_length_ok Floor n = (n = 1) ∧
+  builtin_args_length_ok AddMod n = (n = 3) ∧
+  builtin_args_length_ok MulMod n = (n = 3) ∧
+  builtin_args_length_ok (Bop _) n = (n = 2) ∧
+  builtin_args_length_ok (Env _) n = (n = 0) ∧
+  builtin_args_length_ok BlockHash n = (n = 1) ∧
+  builtin_args_length_ok (Acc _) n = (n = 1)
+End
+
+val () = cv_auto_trans builtin_args_length_ok_def;
+
+(* Machinery for managing variables (local, top-level, mutable, immutable), and
+* other stateful data during execution (e.g., EVM account states, logs)*)
+
+(*
+We don't use identifiers directly because cv compute prefers num keys
+Type scope = “:identifier |-> value”;
+*)
+Type scope = “:num |-> value”;
+
+(* find a variable in a list of nested scopes *)
+Definition lookup_scopes_def:
+  lookup_scopes id [] = NONE ∧
+  lookup_scopes id ((env: scope)::rest) =
+  case FLOOKUP env id of NONE =>
+    lookup_scopes id rest
+  | SOME v => SOME v
+End
+
+(* find the location of a variable in a list of nested scopes (as well as its
+* value): this is used when assigning to that variable *)
+Definition find_containing_scope_def:
+  find_containing_scope id ([]:scope list) = NONE ∧
+  find_containing_scope id (env::rest) =
+  case FLOOKUP env id of NONE =>
+    OPTION_MAP (λ(p,q). (env::p, q)) (find_containing_scope id rest)
+  | SOME v => SOME ([], env, v, rest)
+End
+
+val () = cv_auto_trans find_containing_scope_def;
+
+Type log = “:identifier # (value list)”;
+
+Datatype:
+  globals_state = <|
+    mutables: num |-> toplevel_value
+  ; transients: (num # toplevel_value) list
+  ; immutables: num |-> value
+  |>
+End
+
+Definition empty_globals_def:
+  empty_globals = <|
+    mutables := FEMPTY
+  ; transients := []
+  ; immutables := FEMPTY
+  |>
+End
+
+Datatype:
+  evaluation_state = <|
+    globals: (address, globals_state) alist
+  ; logs: log list
+  ; scopes: scope list
+  ; accounts: evm_accounts
+  |>
+End
+
+Definition empty_state_def:
+  empty_state : evaluation_state = <|
+    accounts := empty_accounts;
+    globals := [];
+    logs := [];
+    scopes := []
+  |>
+End
+
+val () = cv_trans empty_state_def;
+
+(* state-exception monad used for the main interpreter *)
+
+Datatype:
+  exception
+  = AssertException string
+  | Error string
+  | BreakException
+  | ContinueException
+  | ReturnException value
+End
+
+Type evaluation_result = “:(α + exception) # evaluation_state”
+
+Definition return_def:
+  return x s = (INL x, s) : α evaluation_result
+End
+
+val () = cv_auto_trans return_def;
+
+Definition raise_def:
+  raise e s = (INR e, s) : α evaluation_result
+End
+
+val () = cv_auto_trans raise_def;
+
+Definition bind_def:
+  bind f g (s: evaluation_state) : α evaluation_result =
+  case f s of (INL x, s) => g x s | (INR e, s) => (INR e, s)
+End
+
+Definition ignore_bind_def:
+  ignore_bind f g = bind f (λx. g)
+End
+
+Definition assert_def:
+  assert b e s = ((if b then INL () else INR e), s) : unit evaluation_result
+End
+
+val () = cv_auto_trans assert_def;
+
+Definition check_def:
+  check b str = assert b (Error str)
+End
+
+val () = cv_auto_trans check_def;
+
+val () = declare_monad ("vyper_evaluation",
+  { bind = “bind”, unit = “return”,
+    ignorebind = SOME “ignore_bind”, choice = NONE,
+    fail = SOME “raise”, guard = SOME “assert”
+  });
+val () = enable_monad "vyper_evaluation";
+val () = enable_monadsyntax();
+
+Definition try_def:
+  try f h s : α evaluation_result =
+  case f s of (INR e, s) => h e s | x => x
+End
+
+Definition finally_def:
+  finally f g s : α evaluation_result =
+  case f s of (INL x, s) => ignore_bind g (return x) s
+     | (INR e, s) => ignore_bind g (raise e) s
+End
+
+val option_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
+
+val sum_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="sum",Tyop="sum"}));
+
+val list_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="list",Tyop="list"}));
+
+val prod_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
+
+Definition lift_option_def:
+  lift_option x str =
+    case x of SOME v => return v | NONE => raise $ Error str
+End
+
+val () = lift_option_def
+  |> SRULE [FUN_EQ_THM, option_CASE_rator]
+  |> cv_auto_trans;
+
+Definition lift_sum_def:
+  lift_sum x =
+    case x of INL v => return v | INR str => raise $ Error str
+End
+
+val () = lift_sum_def
+  |> SRULE [FUN_EQ_THM, sum_CASE_rator]
+  |> cv_auto_trans;
+
+(* reading from the state *)
+
+Definition get_current_globals_def:
+  get_current_globals cx st =
+    lift_option (ALOOKUP st.globals cx.txn.target) "get_current_globals" st
+End
+
+val () = get_current_globals_def
+  |> SRULE [lift_option_def, option_CASE_rator]
+  |> cv_auto_trans;
+
+Definition lookup_global_def:
+  lookup_global cx n = do
+    gbs <- get_current_globals cx;
+    case FLOOKUP gbs.mutables n
+      of NONE => raise $ Error "lookup_global"
+       | SOME v => return v
+  od
+End
+
+val () = lookup_global_def
+  |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator, UNCURRY]
+  |> cv_auto_trans;
+
+Definition get_immutables_def:
+  get_immutables cx = do
+    gbs <- get_current_globals cx;
+    return gbs.immutables
+  od
+End
+
+val () = get_immutables_def
+  |> SRULE [bind_def]
+  |> cv_auto_trans;
+
+Definition get_accounts_def:
+  get_accounts st = return st.accounts st
+End
+
+val () = cv_auto_trans get_accounts_def;
+
+Definition get_scopes_def:
+  get_scopes st = return st.scopes st
+End
+
+val () = cv_auto_trans get_scopes_def;
+
+(* writing to the state *)
+
+Definition set_current_globals_def:
+  set_current_globals cx gbs st =
+  let addr = cx.txn.target in
+    return () $ st with globals updated_by
+      (λal. (addr, gbs) :: (ADELKEY addr al))
+End
+
+val () = cv_auto_trans set_current_globals_def;
+
+Definition set_global_def:
+  set_global cx n v = do
+    gbs <- get_current_globals cx;
+    set_current_globals cx $
+      gbs with mutables updated_by (λm. m |+ (n,v))
+  od
+End
+
+val () = set_global_def
+  |> SRULE [bind_def, FUN_EQ_THM, UNCURRY]
+  |> cv_auto_trans;
+
+Definition set_immutable_def:
+  set_immutable cx n v = do
+    gbs <- get_current_globals cx;
+    set_current_globals cx $
+      gbs with immutables updated_by (λim. im |+ (n, v))
+  od
+End
+
+val () = set_immutable_def
+  |> SRULE [bind_def]
+  |> cv_auto_trans;
+
+Definition update_accounts_def:
+  update_accounts f st = return () (st with accounts updated_by f)
+End
+
+Definition set_scopes_def:
+  set_scopes env st = return () $ st with scopes := env
+End
+
+val () = cv_auto_trans set_scopes_def;
+
+Definition push_scope_def:
+  push_scope st = return () $ st with scopes updated_by CONS FEMPTY
+End
+
+val () = cv_auto_trans push_scope_def;
+
+Definition push_scope_with_var_def:
+  push_scope_with_var nm v st =
+    return () $  st with scopes updated_by CONS (FEMPTY |+ (nm, v))
+End
+
+val () = cv_auto_trans push_scope_with_var_def;
+
+Definition pop_scope_def:
+  pop_scope st =
+    case st.scopes
+    of [] => raise (Error "pop_scope") st
+       | _::tl => return () (st with scopes := tl)
+End
+
+val () = cv_auto_trans pop_scope_def;
+
+Definition new_variable_def:
+  new_variable id v = do
+    n <<- string_to_num id;
+    env <- get_scopes;
+    check (IS_NONE (lookup_scopes n env)) "new_variable bound";
+    case env of [] => raise $ Error "new_variable null"
+    | e::es => set_scopes ((e |+ (n, v))::es)
+  od
+End
+
+val () = new_variable_def
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def,
+            LET_RATOR, list_CASE_rator]
+  |> cv_auto_trans;
+
+Definition set_variable_def:
+  set_variable id v = do
+    n <<- string_to_num id;
+    sc <- get_scopes;
+    (pre, env, _, rest) <-
+      lift_option (find_containing_scope n sc) "set_variable not found";
+    set_scopes (pre ++ (env |+ (n, v))::rest)
+  od
+End
+
+val () = set_variable_def
+  |> SRULE [FUN_EQ_THM, bind_def, lift_option_def,
+            LET_RATOR, UNCURRY, option_CASE_rator]
+  |> cv_auto_trans;
+
+Definition get_Value_def[simp]:
+  get_Value (Value v) = return v ∧
+  get_Value _ = raise $ Error "not Value"
+End
+
+val () = get_Value_def
+  |> SIMP_RULE std_ss [FUN_EQ_THM]
+  |> cv_auto_trans;
+
+Definition switch_BoolV_def:
+  switch_BoolV v f g =
+  if v = Value $ BoolV T then f
+  else if v = Value $ BoolV F then g
+  else raise $ Error (if is_Value v then "not BoolV" else "not Value")
+End
+
+Definition handle_loop_exception_def:
+  handle_loop_exception e =
+  if e = ContinueException then return F
+  else if e = BreakException then return T
+  else raise e
+End
+
+val () = handle_loop_exception_def
+  |> SRULE [FUN_EQ_THM, COND_RATOR]
+  |> cv_auto_trans;
+
+Definition transfer_value_def:
+  transfer_value fromAddr toAddr amount = do
+    acc <- get_accounts;
+    sender <<- lookup_account fromAddr acc;
+    check (amount <= sender.balance) "transfer_value amount";
+    recipient <<- lookup_account toAddr acc;
+    update_accounts (
+      update_account fromAddr (sender with balance updated_by (flip $- amount)) o
+      update_account toAddr (recipient with balance updated_by ($+ amount)));
+  od
+End
+
+val () = transfer_value_def
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def,
+            LET_RATOR, update_accounts_def, o_DEF, C_DEF]
+  |> cv_auto_trans;
+
+Definition lookup_flag_def:
+  lookup_flag fid [] = NONE ∧
+  lookup_flag fid (FlagDecl id ls :: ts) =
+    (if fid = id then SOME ls else lookup_flag fid ts) ∧
+  lookup_flag fid (t :: ts) = lookup_flag fid ts
+End
+
+val () = cv_auto_trans lookup_flag_def;
+
+Definition lookup_flag_mem_def:
+  lookup_flag_mem cx fid mid =
+  case get_self_code cx
+    of NONE => raise $ Error "lookup_flag_mem code"
+     | SOME ts =>
+  case lookup_flag fid ts
+    of NONE => raise $ Error "lookup_flag"
+     | SOME ls =>
+  case INDEX_OF mid ls
+    of NONE => raise $ Error "lookup_flag_mem index"
+     | SOME i => return $ Value $ FlagV (LENGTH ls) (2 ** i)
+End
+
+val () = lookup_flag_mem_def
+  |> SRULE [FUN_EQ_THM, option_CASE_rator]
+  |> cv_auto_trans;
+
+Definition build_getter_def:
+  build_getter e kt (Type vt) n =
+    (let vn = num_to_dec_string n in
+      if is_ArrayT vt then
+        (let (args, ret, exp) =
+           build_getter (Subscript e (Name vn))
+             (BaseT (UintT 256)) (Type (ArrayT_type vt)) (SUC n) in
+           ((vn, kt)::args, ret, exp))
+      else ([(vn, kt)], vt, Subscript e (Name vn))) ∧
+  build_getter e kt (HashMapT typ vtyp) n =
+    (let vn = num_to_dec_string n in
+     let (args, ret, exp) =
+       build_getter (Subscript e (Name vn)) typ vtyp (SUC n) in
+     ((vn, kt)::args, ret, exp))
+Termination
+  WF_REL_TAC ‘measure (value_type_size o FST o SND o SND)’
+  \\ Cases \\ rw[type_size_def]
+End
+
+val () = cv_auto_trans_rec build_getter_def (
+  WF_REL_TAC ‘measure (cv_size o FST o SND o SND)’
+  \\ conj_tac \\ Cases \\ rw[]
+  >- (
+    qmatch_goalsub_rename_tac`cv_snd p`
+    \\ Cases_on`p` \\ rw[] )
+  \\ qmatch_asmsub_rename_tac`cv_is_ArrayT a`
+  \\ Cases_on `a` \\ gvs[cv_is_ArrayT_def, cv_ArrayT_type_def]
+  \\ rw[] \\ gvs[]
+  \\ qmatch_goalsub_rename_tac`cv_fst p`
+  \\ Cases_on `p` \\ gvs[]
+);
+
+Definition getter_def:
+  getter ne kt vt =
+  let (args, ret, exp) =
+    build_getter ne kt vt 0
+  in
+    (View, args, ret, [Return $ SOME exp])
+End
+
+val () = cv_auto_trans getter_def;
+
+Definition name_expression_def:
+  name_expression mut id =
+  if mut = Immutable ∨ is_Constant mut
+  then Name id
+  else TopLevelName id
+End
+
+val () = cv_auto_trans name_expression_def;
+
+Definition lookup_function_def:
+  lookup_function name Deploy [] = SOME (Payable, [], NoneT, [Pass]) ∧
+  lookup_function name vis [] = NONE ∧
+  lookup_function name vis (FunctionDecl fv fm id args ret body :: ts) =
+  (if id = name ∧ vis = fv then SOME (fm, args, ret, body)
+   else lookup_function name vis ts) ∧
+  lookup_function name External (VariableDecl Public mut id typ :: ts) =
+  (if id = name then
+    if ¬is_ArrayT typ
+    then SOME (View, [], typ, [Return (SOME (name_expression mut id))])
+    else SOME $ getter (name_expression mut id) (BaseT (UintT 256)) (Type (ArrayT_type typ))
+   else lookup_function name External ts) ∧
+  lookup_function name External (HashMapDecl Public _ id kt vt :: ts) =
+  (if id = name then SOME $ getter (TopLevelName id) kt vt
+   else lookup_function name External ts) ∧
+  lookup_function name vis (_ :: ts) =
+    lookup_function name vis ts
+End
+
+val () = cv_auto_trans lookup_function_def;
+
+Definition bind_arguments_def:
+  bind_arguments tenv ([]: argument list) [] = SOME (FEMPTY: scope) ∧
+  bind_arguments tenv ((id, typ)::params) (v::vs) =
+    (case evaluate_type tenv typ of NONE => NONE | SOME tv =>
+     case safe_cast tv v of NONE => NONE | SOME v =>
+      OPTION_MAP (λm. m |+ (string_to_num id, v))
+        (bind_arguments tenv params vs)) ∧
+  bind_arguments _ _ _ = NONE
+End
+
+val bind_arguments_pre_def = cv_auto_trans_pre "bind_arguments_pre" bind_arguments_def;
+
+Theorem bind_arguments_pre[cv_pre]:
+  ∀x y z. bind_arguments_pre x y z
+Proof
+  ho_match_mp_tac bind_arguments_ind \\ rw[]
+  \\ rw[Once bind_arguments_pre_def]
+QED
+
+Definition push_log_def:
+  push_log log st = return () $ st with logs updated_by CONS log
+End
+
+val () = cv_auto_trans push_log_def;
+
+Definition push_function_def:
+  push_function fn sc cx st =
+  return (cx with stk updated_by CONS fn)
+    $ st with scopes := [sc]
+End
+
+val () = cv_auto_trans push_function_def;
+
+Definition pop_function_def:
+  pop_function prev = set_scopes prev
+End
+
+val () = cv_auto_trans pop_function_def;
+
+Definition handle_function_def:
+  handle_function (ReturnException v) = return v ∧
+  handle_function (Error str) = raise $ Error str ∧
+  handle_function (AssertException str) = raise $ AssertException str ∧
+  handle_function _ = raise $ Error "handle_function"
+End
+
+val () = handle_function_def
+  |> SRULE [FUN_EQ_THM]
+  |> cv_auto_trans;
+
+Datatype:
+  location
+  = ScopedVar identifier
+  | ImmutableVar identifier
+  | TopLevelVar identifier
+End
+
+Datatype:
+  assignment_value
+  = BaseTargetV location (subscript list)
+  | TupleTargetV (assignment_value list)
+End
+
+Type base_target_value = “:location # subscript list”;
 
 Definition assign_target_def:
   assign_target cx (BaseTargetV (ScopedVar id) is) ao = do
@@ -1897,7 +1966,7 @@ Definition assign_target_def:
     ni <<- string_to_num id;
     tv <- lookup_global cx ni;
     ts <- lift_option (get_self_code cx) "assign_target get_self_code";
-    tv' <- lift_sum $ assign_toplevel ts tv (REVERSE is) ao;
+    tv' <- lift_sum $ assign_toplevel (type_env ts) tv (REVERSE is) ao;
     set_global cx ni tv';
     return tv
   od ∧
@@ -2213,19 +2282,6 @@ End
 
 val () = cv_auto_trans get_range_limits_def;
 
-Definition extract_elements_def:
-  extract_elements (ArrayV av) =
-  (SOME $ case av
-     of TupleV vs => vs
-      | DynArrayV _ _ vs => vs
-      | SArrayV t n al =>
-          let d = default_value t in
-          GENLIST (λi. case ALOOKUP al i of SOME v => v | NONE => d) n) ∧
-  extract_elements _ = NONE
-End
-
-val () = cv_auto_trans extract_elements_def;
-
 Definition evaluate_def:
   eval_stmt cx Pass = return () ∧
   eval_stmt cx Continue = raise ContinueException ∧
@@ -2514,14 +2570,6 @@ Proof
   \\ goal_assum drule
 QED
 
-Definition empty_globals_def:
-  empty_globals = <|
-    mutables := FEMPTY
-  ; transients := []
-  ; immutables := FEMPTY
-  |>
-End
-
 Definition flag_value_def:
   flag_value m n acc [] = StructV $ REVERSE acc ∧
   flag_value m n acc (id::ids) =
@@ -2640,17 +2688,6 @@ Definition reset_all_transient_globals_def:
 End
 
 val () = cv_auto_trans reset_all_transient_globals_def;
-
-Definition empty_state_def:
-  empty_state : evaluation_state = <|
-    accounts := empty_accounts;
-    globals := [];
-    logs := [];
-    scopes := []
-  |>
-End
-
-val () = cv_trans empty_state_def;
 
 Definition constants_env_def:
   constants_env _ _ [] acc = SOME acc ∧
