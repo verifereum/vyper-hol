@@ -1,303 +1,14 @@
 Theory vyperInterpreter
 Ancestors
-  arithmetic combin pair rich_list
-  alist finite_map byte int_bitwise
-  cv cv_std vfmTypes vfmState vyperAST
+  arithmetic alist combin list finite_map pair rich_list
+  cv cv_std vfmState vyperAST
+  vyperMisc
 Libs
-  cv_transLib blastLib monadsyntax
+  cv_transLib wordsLib monadsyntax
   integerTheory[qualified] intSimps[qualified]
 
-(* TODO: move *)
-
-Definition CHR_o_w2n_def:
-  CHR_o_w2n (b: byte) = CHR (w2n b)
-End
-
-val CHR_o_w2n_pre_def = cv_auto_trans_pre "CHR_o_w2n_pre" CHR_o_w2n_def;
-
-Theorem CHR_o_w2n_pre[cv_pre]:
-  CHR_o_w2n_pre x
-Proof
-  rw[CHR_o_w2n_pre_def]
-  \\ qspec_then`x`mp_tac wordsTheory.w2n_lt
-  \\ rw[]
-QED
-
-Theorem CHR_o_w2n_eq:
-  CHR_o_w2n = CHR o w2n
-Proof
-  rw[FUN_EQ_THM, CHR_o_w2n_def]
-QED
-
-Definition MAP_HEX_def:
-  MAP_HEX [] = [] ∧
-  MAP_HEX (x::xs) = HEX x :: MAP_HEX xs
-End
-
-val MAP_HEX_pre_def = cv_auto_trans_pre "MAP_HEX_pre" MAP_HEX_def;
-
-Theorem MAP_HEX_pre_EVERY:
-  MAP_HEX_pre ls = EVERY (λx. x < 16) ls
-Proof
-  Induct_on`ls` \\ rw[Once MAP_HEX_pre_def]
-QED
-
-Theorem MAP_HEX_MAP:
-  MAP_HEX = MAP HEX
-Proof
-  simp[FUN_EQ_THM]
-  \\ Induct \\ rw[MAP_HEX_def]
-QED
-
-val num_to_dec_string_pre_def =
-  ASCIInumbersTheory.num_to_dec_string_def
-  |> SRULE [ASCIInumbersTheory.n2s_def, FUN_EQ_THM, GSYM MAP_HEX_MAP]
-  |> cv_trans_pre "num_to_dec_string_pre";
-
-Theorem num_to_dec_string_pre[cv_pre]:
-  num_to_dec_string_pre x
-Proof
-  rw[num_to_dec_string_pre_def, MAP_HEX_pre_EVERY]
-  \\ qspecl_then[`10`,`x`]mp_tac numposrepTheory.n2l_BOUND
-  \\ rw[listTheory.EVERY_MEM]
-  \\ first_x_assum drule \\ rw[]
-QED
-
-Theorem int_exp_num:
-  (i:int) ** n =
-  if 0 ≤ i then &(Num i ** n)
-  else if EVEN n then &(Num (-i) ** n)
-  else -&(Num (-i) ** n)
-Proof
-  Cases_on`i` \\ simp[integerTheory.INT_POW_NEG]
-QED
-
-val () = cv_trans int_exp_num;
-
-Theorem Num_int_exp:
-  0 ≤ i ⇒ Num (i ** n) = Num i ** n
-Proof
-  Cases_on`i` \\ rw[]
-QED
-
-(* TODO: I don't know if this is the best way to translate this... *)
-val () = cv_auto_trans num_of_bits_def;
-val () = cv_auto_trans int_of_bits_def;
-val () = cv_auto_trans bits_of_int_def;
-
-Definition bits_bitwise_and_def:
-  bits_bitwise_and = bits_bitwise $/\
-End
-
-val bits_bitwise_and_pre_def = (bits_bitwise_def
- |> oneline
- |> Q.GEN`f`
- |> Q.ISPEC`$/\`
- |> SRULE [GSYM bits_bitwise_and_def]
- |> cv_trans_pre_rec "bits_bitwise_and_pre")
-    (WF_REL_TAC `inv_image ($< LEX $<) (λ(x,y). (cv_size x, cv_size y))`
-     \\ rw[]
-     \\ Cases_on`cv_v` \\ gvs[]
-     \\ Cases_on`cv_v0` \\ gvs[]
-     \\ qmatch_assum_rename_tac`_ (cv_ispair p)`
-     \\ Cases_on`p` \\ gvs[]
-     \\ qmatch_assum_rename_tac`_ (cv_ispair p)`
-     \\ Cases_on`p` \\ gvs[]);
-
-Theorem bits_bitwise_and_pre[cv_pre]:
-  ∀x y. bits_bitwise_and_pre x y
-Proof
-  simp[FORALL_PROD]
-  \\ qid_spec_tac`f:bool -> bool -> bool`
-  \\ ho_match_mp_tac bits_bitwise_ind
-  \\ rw[]
-  \\ rw[Once bits_bitwise_and_pre_def]
-QED
-
-val () = int_and_def
-  |> SRULE [FUN_EQ_THM, int_bitwise_def, GSYM bits_bitwise_and_def]
-  |> cv_trans;
-
-Definition bits_bitwise_or_def:
-  bits_bitwise_or = bits_bitwise $\/
-End
-
-val bits_bitwise_or_pre_def = (bits_bitwise_def
- |> oneline
- |> Q.GEN`f`
- |> Q.ISPEC`$\/`
- |> SRULE [GSYM bits_bitwise_or_def]
- |> cv_trans_pre_rec "bits_bitwise_or_pre")
-    (WF_REL_TAC `inv_image ($< LEX $<) (λ(x,y). (cv_size x, cv_size y))`
-     \\ rw[]
-     \\ Cases_on`cv_v` \\ gvs[]
-     \\ Cases_on`cv_v0` \\ gvs[]
-     \\ qmatch_assum_rename_tac`_ (cv_ispair p)`
-     \\ Cases_on`p` \\ gvs[]
-     \\ qmatch_assum_rename_tac`_ (cv_ispair p)`
-     \\ Cases_on`p` \\ gvs[]);
-
-Theorem bits_bitwise_or_pre[cv_pre]:
-  ∀x y. bits_bitwise_or_pre x y
-Proof
-  simp[FORALL_PROD]
-  \\ qid_spec_tac`f:bool -> bool -> bool`
-  \\ ho_match_mp_tac bits_bitwise_ind
-  \\ rw[]
-  \\ rw[Once bits_bitwise_or_pre_def]
-QED
-
-val () = int_or_def
-  |> SRULE [FUN_EQ_THM, int_bitwise_def, GSYM bits_bitwise_or_def]
-  |> cv_trans;
-
-Definition bits_bitwise_xor_def:
-  bits_bitwise_xor = bits_bitwise ((≠) : bool -> bool -> bool)
-End
-
-val bits_bitwise_xor_pre_def = (bits_bitwise_def
- |> oneline
- |> Q.GEN`f`
- |> Q.ISPEC`λx:bool y. x ≠ y`
- |> SRULE [GSYM bits_bitwise_xor_def]
- |> cv_trans_pre_rec "bits_bitwise_xor_pre")
-    (WF_REL_TAC `inv_image ($< LEX $<) (λ(x,y). (cv_size x, cv_size y))`
-     \\ rw[]
-     \\ Cases_on`cv_v` \\ gvs[]
-     \\ Cases_on`cv_v0` \\ gvs[]
-     \\ qmatch_assum_rename_tac`_ (cv_ispair p)`
-     \\ Cases_on`p` \\ gvs[]
-     \\ qmatch_assum_rename_tac`_ (cv_ispair p)`
-     \\ Cases_on`p` \\ gvs[]);
-
-Theorem bits_bitwise_xor_pre[cv_pre]:
-  ∀x y. bits_bitwise_xor_pre x y
-Proof
-  simp[FORALL_PROD]
-  \\ qid_spec_tac`f:bool -> bool -> bool`
-  \\ ho_match_mp_tac bits_bitwise_ind
-  \\ rw[]
-  \\ rw[Once bits_bitwise_xor_pre_def]
-QED
-
-val () = int_xor_def
-  |> SRULE [FUN_EQ_THM, int_bitwise_def, GSYM bits_bitwise_xor_def]
-  |> cv_trans;
-
-val () = cv_auto_trans int_shift_left_def;
-val () = cv_auto_trans int_shift_right_def;
-
-Theorem set_byte_160:
-  set_byte a b (w: 160 word) be =
-  let i = byte_index a be in
-       if i =   0 then w2w b        || w && 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00w
-  else if i =   8 then w2w b <<   8 || w && 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00FFw
-  else if i =  16 then w2w b <<  16 || w && 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00FFFFw
-  else if i =  24 then w2w b <<  24 || w && 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00FFFFFFw
-  else if i =  32 then w2w b <<  32 || w && 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00FFFFFFFFw
-  else if i =  40 then w2w b <<  40 || w && 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFF00FFFFFFFFFFw
-  else if i =  48 then w2w b <<  48 || w && 0xFFFFFFFFFFFFFFFFFFFFFFFFFF00FFFFFFFFFFFFw
-  else if i =  56 then w2w b <<  56 || w && 0xFFFFFFFFFFFFFFFFFFFFFFFF00FFFFFFFFFFFFFFw
-  else if i =  64 then w2w b <<  64 || w && 0xFFFFFFFFFFFFFFFFFFFFFF00FFFFFFFFFFFFFFFFw
-  else if i =  72 then w2w b <<  72 || w && 0xFFFFFFFFFFFFFFFFFFFF00FFFFFFFFFFFFFFFFFFw
-  else if i =  80 then w2w b <<  80 || w && 0xFFFFFFFFFFFFFFFFFF00FFFFFFFFFFFFFFFFFFFFw
-  else if i =  88 then w2w b <<  88 || w && 0xFFFFFFFFFFFFFFFF00FFFFFFFFFFFFFFFFFFFFFFw
-  else if i =  96 then w2w b <<  96 || w && 0xFFFFFFFFFFFFFF00FFFFFFFFFFFFFFFFFFFFFFFFw
-  else if i = 104 then w2w b << 104 || w && 0xFFFFFFFFFFFF00FFFFFFFFFFFFFFFFFFFFFFFFFFw
-  else if i = 112 then w2w b << 112 || w && 0xFFFFFFFFFF00FFFFFFFFFFFFFFFFFFFFFFFFFFFFw
-  else if i = 120 then w2w b << 120 || w && 0xFFFFFFFF00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFw
-  else if i = 128 then w2w b << 128 || w && 0xFFFFFF00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFw
-  else if i = 136 then w2w b << 136 || w && 0xFFFF00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFw
-  else if i = 144 then w2w b << 144 || w && 0xFF00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFw
-  else if i = 152 then w2w b << 152 || w && 0x00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFw
-  else                 w2w b << 160 || w && 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFw
-Proof
-  rw_tac std_ss [set_byte_def, word_slice_alt_def]
-  \\ reverse(rpt IF_CASES_TAC)
-  >- (
-    `i = 160`
-    by (
-      qunabbrev_tac`i`
-      \\ full_simp_tac (std_ss ++ boolSimps.LET_ss ++ ARITH_ss) [
-            byte_index_def, EVAL``dimindex(:160)``]
-      \\ `w2n a MOD 20 < 20` by rw[]
-      \\ pop_assum mp_tac
-      \\ qmatch_goalsub_abbrev_tac`z < 20 ⇒ f`
-      \\ simp_tac std_ss [wordsTheory.NUMERAL_LESS_THM]
-      \\ strip_tac \\ gs[Abbr`f`]
-      \\ rw[] \\ gs[] )
-    \\ asm_simp_tac std_ss []
-    \\ simp_tac (srw_ss()) []
-    \\ BBLAST_TAC)
-  \\ asm_simp_tac std_ss []
-  \\ simp_tac (srw_ss()) []
-  \\ BBLAST_TAC
-QED
-
-val () = cv_auto_trans set_byte_160;
-
-val () = cv_auto_trans (INST_TYPE [alpha |-> “:160”] word_of_bytes_def);
-
-Theorem SUM_MAP_FILTER_MEM_LE:
-  MEM x ls /\ ~P x ==>
-  SUM (MAP f (FILTER P ls)) + f x <= SUM (MAP f ls)
-Proof
-  qid_spec_tac`x`
-  \\ Induct_on`ls`
-  \\ rw[] \\ gs[]
-  >- (
-    irule SUM_SUBLIST \\ simp[]
-    \\ irule MAP_SUBLIST \\ simp[]
-    \\ irule FILTER_sublist )
-  \\ first_x_assum drule \\ rw[]
-QED
-
-Theorem list_size_SUM_MAP:
-  list_size f ls = LENGTH ls + SUM (MAP f ls)
-Proof
-  Induct_on `ls` \\ rw[listTheory.list_size_def]
-QED
-
-Theorem list_size_pair_size_map:
-  list_size (pair_size f1 f2) ls =
-  list_size f1 (MAP FST ls) +
-  list_size f2 (MAP SND ls)
-Proof
-  Induct_on`ls` \\ rw[]
-  \\ Cases_on`h` \\ gvs[]
-QED
-
-Definition member_def:
-  member x [] = F ∧
-  member x (y::ys) = ((x = y) ∨ member x ys)
-End
-
-val () = cv_trans member_def;
-
-Theorem member_intro:
-  ∀x ys. MEM x ys = member x ys
-Proof
-  Induct_on `ys` \\ rw[member_def]
-QED
-
-Theorem cv_size_cv_map_snd_le:
-  ∀l. cv_size (cv_map_snd l) ≤ cv_size l
-Proof
-  ho_match_mp_tac cv_map_snd_ind
-  \\ rw[]
-  \\ rw[Once cv_map_snd_def] \\ gvs[]
-  \\ Cases_on`l` \\ gvs[]
-  \\ qmatch_goalsub_rename_tac`cv_snd p`
-  \\ Cases_on`p` \\ gvs[]
-QED
-
-(* -- *)
-
-Definition string_to_num_def:
-  string_to_num s = l2n 257 (MAP (SUC o ORD) s)
-End
-
-val () = cv_auto_trans string_to_num_def;
+(* `evaluate_type` is used to convert a Vyper `type` to a `type_value` with
+* structure and flag declaration information inlined *)
 
 Datatype:
   type_value
@@ -354,6 +65,11 @@ Termination
   \\ fs[]
 End
 
+(* the long termination argument below can be ignored: it is an artefact of the
+* cv_compute machinery's need for a termination proof over _all_ cv values, and
+* the fact that evaluate_type's termination argument is a little complex
+* (uses the fact that we disallow cycles of struct dependency) *)
+
 val () = cv_auto_trans_rec evaluate_type_def (
   WF_REL_TAC ‘inv_image ($< LEX $<) (λx.
     case x
@@ -372,7 +88,7 @@ val () = cv_auto_trans_rec evaluate_type_def (
   \\ qmatch_goalsub_abbrev_tac`cv_lookup ck`
   \\ `cv_ispair ck = cv$Num 0`
   by (
-    rw[Abbr`ck`, definition"cv_string_to_num_def"]
+    rw[Abbr`ck`, cv_string_to_num_def]
     \\ rw[Once keccakTheory.cv_l2n_def]
     \\ rw[cv_ispair_cv_add] )
   \\ pop_assum mp_tac
@@ -412,6 +128,8 @@ val () = cv_auto_trans_rec evaluate_type_def (
   >- (IF_CASES_TAC \\ gs[cv_size'_cv_mk_BN])
   \\ IF_CASES_TAC \\ gs[]
 );
+
+(* Vyper (runtime) values *)
 
 Datatype:
   value
@@ -461,6 +179,8 @@ End
 
 val () = cv_auto_trans dest_StringV_def;
 
+(* `subscript`s are the possible kinds of keys into HashMaps *)
+
 Datatype:
   subscript
   = IntSubscript int
@@ -468,6 +188,9 @@ Datatype:
   | BytesSubscript (word8 list)
   | AttrSubscript identifier
 End
+
+(* since HashMaps can only appear at the top level, they are not mutually
+* recursive with other `value`s, and we have `toplevel_value` as follows: *)
 
 Datatype:
   toplevel_value = Value value | HashMap value_type ((subscript, toplevel_value) alist)
@@ -481,6 +204,8 @@ End
 val () = cv_auto_trans is_Value_def;
 
 Type hmap = “:(subscript, toplevel_value) alist”
+
+(* default value at each type *)
 
 Definition default_value_def:
   default_value (BaseTV (UintT n)) = IntV (Unsigned n) 0 ∧
@@ -514,52 +239,7 @@ End
 
 val () = cv_auto_trans default_value_def;
 
-(*
-We don't use this directly to support cv which prefers num keys
-Type scope = “:identifier |-> value”;
-*)
-Type scope = “:num |-> value”;
-
-Definition lookup_scopes_def:
-  lookup_scopes id [] = NONE ∧
-  lookup_scopes id ((env: scope)::rest) =
-  case FLOOKUP env id of NONE =>
-    lookup_scopes id rest
-  | SOME v => SOME v
-End
-
-Definition find_containing_scope_def:
-  find_containing_scope id ([]:scope list) = NONE ∧
-  find_containing_scope id (env::rest) =
-  case FLOOKUP env id of NONE =>
-    OPTION_MAP (λ(p,q). (env::p, q)) (find_containing_scope id rest)
-  | SOME v => SOME ([], env, v, rest)
-End
-
-val () = cv_auto_trans find_containing_scope_def;
-
-Datatype:
-  location
-  = ScopedVar identifier
-  | ImmutableVar identifier
-  | TopLevelVar identifier
-End
-
-Datatype:
-  assignment_value
-  = BaseTargetV location (subscript list)
-  | TupleTargetV (assignment_value list)
-End
-
-Type base_target_value = “:location # subscript list”;
-
-Datatype:
-  assign_operation
-  = Replace value
-  | Update binop value
-  | AppendOp value
-  | PopOp
-End
+(* Evaluation of some of the simpler language constructs *)
 
 Definition evaluate_literal_def:
   evaluate_literal (BoolL b) = BoolV b ∧
@@ -611,6 +291,7 @@ Definition bounded_int_op_def:
   else INR "bounded_int_op type"
 End
 
+(* optimisation on exponentiation: overflow immediately if power is too big *)
 Theorem bounded_exp:
   bounded_int_op u1 u2 (i1 ** n2) =
   if u1 = u2 then
@@ -685,7 +366,6 @@ Proof
   rw[wrapped_int_op_pre_def]
 QED
 
-(* TODO: add unsafe ops *)
 Definition evaluate_binop_def:
   evaluate_binop bop v1 v2 =
   case bop
@@ -872,73 +552,6 @@ val () = cv_auto_trans_rec
    \\ Cases_on`cv_bop` \\ gvs[]
    \\ rw[]);
 
-Datatype:
-  call_txn = <|
-    sender: address
-  ; target: address
-  ; function_name: identifier
-  ; args: value list
-  ; value: num
-  ; time_stamp: num
-  ; block_number: num
-  ; block_hashes: bytes32 list
-  ; blob_base_fee: num
-  ; gas_price: num
-  ; is_creation: bool
-  |>
-End
-
-Datatype:
-  evaluation_context = <|
-    stk: identifier list
-  ; txn: call_txn
-  ; sources: (address, toplevel list) alist
-  |>
-End
-
-Theorem with_stk_updated_by_id[simp]:
-  (cx with stk updated_by (λx. x)) = cx
-Proof
-  rw[theorem"evaluation_context_component_equality"]
-QED
-
-Definition empty_call_txn_def:
-  empty_call_txn = <|
-    sender := 0w;
-    target := 0w;
-    function_name := "";
-    args := [];
-    value := 0;
-    time_stamp := 0;
-    block_number := 0;
-    block_hashes := [];
-    blob_base_fee := 0;
-    gas_price := 0;
-    is_creation := F
-  |>
-End
-
-Definition empty_evaluation_context_def:
-  empty_evaluation_context = <|
-    stk := []
-  ; txn := empty_call_txn
-  ; sources := []
-  |>
-End
-
-val () = cv_auto_trans empty_evaluation_context_def;
-
-Definition evaluate_account_op_def:
-  evaluate_account_op Address bs _ = BytesV (Fixed 20) bs ∧
-  evaluate_account_op Balance _ a = IntV (Unsigned 256) &a.balance ∧
-  evaluate_account_op Codehash _ a = BytesV (Fixed 32) (Keccak_256_w64 a.code) ∧
-  evaluate_account_op Codesize _ a = IntV (Unsigned 256) $ &LENGTH a.code ∧
-  evaluate_account_op IsContract _ a = BoolV (a.code ≠ []) ∧
-  evaluate_account_op Code _ a = BytesV (Dynamic (LENGTH a.code)) a.code
-End
-
-val () = cv_auto_trans evaluate_account_op_def;
-
 Definition compatible_bound_def:
   compatible_bound (Fixed n) m = (n = m) ∧
   compatible_bound (Dynamic n) m = (m ≤ n)
@@ -1017,23 +630,6 @@ End
 
 val () = cv_auto_trans evaluate_slice_def;
 
-Definition get_self_code_def:
-  get_self_code cx = ALOOKUP cx.sources cx.txn.target
-End
-
-val () = cv_auto_trans get_self_code_def;
-
-Definition type_env_def:
-  type_env [] = FEMPTY ∧
-  type_env (StructDecl id args :: ts) =
-    type_env ts |+ (string_to_num id, StructArgs args) ∧
-  type_env (FlagDecl id ls :: ts) =
-    type_env ts |+ (string_to_num id, FlagArgs (LENGTH ls)) ∧
-  type_env (_ :: ts) = type_env ts
-End
-
-val () = cv_auto_trans type_env_def;
-
 Definition evaluate_addmod_def:
   evaluate_addmod i1 i2 i3 = INR "TODO: unimplemented"
 End
@@ -1076,24 +672,6 @@ Proof
   rw[evaluate_as_wei_value_pre_def]
 QED
 
-Definition evaluate_block_hash_def:
-  evaluate_block_hash t n =
-  let pbn = t.block_number - 1 in
-  if t.block_number ≤ n ∨
-     LENGTH t.block_hashes ≤ pbn - n
-  then INR "evaluate_block_hash"
-  else INL $ BytesV (Fixed 32)
-    (word_to_bytes (EL (pbn - n) t.block_hashes) T)
-End
-
-val evaluate_block_hash_pre_def = cv_auto_trans_pre "evaluate_block_hash_pre" evaluate_block_hash_def;
-
-Theorem evaluate_block_hash_pre[cv_pre]:
-  evaluate_block_hash_pre t n
-Proof
-  rw[evaluate_block_hash_pre_def]
-QED
-
 Definition array_length_def:
   array_length av =
   case av of
@@ -1121,6 +699,236 @@ Definition make_array_value_def:
 End
 
 val () = cv_trans make_array_value_def;
+
+Definition value_to_key_def:
+  value_to_key (IntV _ i) = SOME $ IntSubscript i ∧
+  value_to_key (StringV _ s) = SOME $ StrSubscript s ∧
+  value_to_key (BytesV _ bs) = SOME $ BytesSubscript bs ∧
+  value_to_key (FlagV _ n) = SOME $ IntSubscript $ &n ∧
+  value_to_key _ = NONE
+End
+
+val () = cv_auto_trans value_to_key_def;
+
+Definition array_index_def:
+  array_index av i =
+  if 0 ≤ i then let j = Num i in
+  case av
+    of DynArrayV _ _ ls => oEL j ls
+     | SArrayV t n al =>
+         if j < n then case ALOOKUP al j
+         of SOME v => SOME v
+          | NONE => SOME $ default_value t
+         else NONE
+     | TupleV ls => oEL j ls
+  else NONE
+End
+
+val () = cv_trans array_index_def;
+
+Definition evaluate_subscript_def:
+  evaluate_subscript tenv (Value (ArrayV av)) (IntV _ i) =
+  (case array_index av i
+   of SOME v => INL $ Value v
+   | _ => INR "subscript array_index") ∧
+  evaluate_subscript tenv (HashMap vt hm) kv =
+  (case value_to_key kv of SOME k =>
+    (case ALOOKUP hm k of SOME tv => INL tv
+        | _ => (case vt of Type typ =>
+                  (case evaluate_type tenv typ of
+                   | SOME tv => INL $ Value $ default_value tv
+                   | NONE => INR "HashMap evaluate type")
+                | _ => INR "HashMap final value type" ))
+   | _ => INR "evaluate_subscript value_to_key") ∧
+  evaluate_subscript _ _ _ = INR "evaluate_subscript"
+End
+
+val () = cv_auto_trans evaluate_subscript_def;
+
+Definition evaluate_attribute_def:
+  evaluate_attribute (StructV kvs) id =
+  (case ALOOKUP kvs id of SOME v => INL v
+   | _ => INR "attribute") ∧
+  evaluate_attribute _ _ = INR "evaluate_attribute"
+End
+
+val () = cv_auto_trans evaluate_attribute_def;
+
+Definition evaluate_max_value_def:
+  evaluate_max_value (BaseT (UintT n)) = INL $ IntV (Unsigned n) (&(2 ** n) - 1) ∧
+  evaluate_max_value (BaseT (IntT n)) = (if n = 0
+                                         then INR "max_value IntT"
+                                         else INL $ IntV (Signed n) (&(2 ** (n-1)) - 1)) ∧
+  evaluate_max_value (BaseT DecimalT) = INL $ DecimalV (&(2 ** 167) - 1) ∧
+  evaluate_max_value _ = INR "evaluate_max_value"
+End
+
+val () = cv_auto_trans evaluate_max_value_def;
+
+Definition evaluate_min_value_def:
+  evaluate_min_value (BaseT (UintT n)) = INL $ IntV (Unsigned n) 0 ∧
+  evaluate_min_value (BaseT (IntT n)) = (if n = 0
+                                         then INR "min_value IntT"
+                                         else INL $ IntV (Signed n) (-&(2 ** (n-1)))) ∧
+  evaluate_min_value (BaseT DecimalT) = INL $ DecimalV (-&(2 ** 167)) ∧
+  evaluate_min_value _ = INR "evaluate_min_value"
+End
+
+val () = cv_auto_trans evaluate_min_value_def;
+
+(* Machinery for managing variables (local, top-level, mutable, immutable) *)
+
+(*
+We don't use identifiers directly because cv compute prefers num keys
+Type scope = “:identifier |-> value”;
+*)
+Type scope = “:num |-> value”;
+
+(* find a variable in a list of nested scopes *)
+Definition lookup_scopes_def:
+  lookup_scopes id [] = NONE ∧
+  lookup_scopes id ((env: scope)::rest) =
+  case FLOOKUP env id of NONE =>
+    lookup_scopes id rest
+  | SOME v => SOME v
+End
+
+(* find the location of a variable in a list of nested scopes (as well as its
+* value): this is used when assigning to that variable *)
+Definition find_containing_scope_def:
+  find_containing_scope id ([]:scope list) = NONE ∧
+  find_containing_scope id (env::rest) =
+  case FLOOKUP env id of NONE =>
+    OPTION_MAP (λ(p,q). (env::p, q)) (find_containing_scope id rest)
+  | SOME v => SOME ([], env, v, rest)
+End
+
+val () = cv_auto_trans find_containing_scope_def;
+
+Datatype:
+  location
+  = ScopedVar identifier
+  | ImmutableVar identifier
+  | TopLevelVar identifier
+End
+
+Datatype:
+  assignment_value
+  = BaseTargetV location (subscript list)
+  | TupleTargetV (assignment_value list)
+End
+
+Type base_target_value = “:location # subscript list”;
+
+Datatype:
+  assign_operation
+  = Replace value
+  | Update binop value
+  | AppendOp value
+  | PopOp
+End
+
+Datatype:
+  call_txn = <|
+    sender: address
+  ; target: address
+  ; function_name: identifier
+  ; args: value list
+  ; value: num
+  ; time_stamp: num
+  ; block_number: num
+  ; block_hashes: bytes32 list
+  ; blob_base_fee: num
+  ; gas_price: num
+  ; is_creation: bool
+  |>
+End
+
+Datatype:
+  evaluation_context = <|
+    stk: identifier list
+  ; txn: call_txn
+  ; sources: (address, toplevel list) alist
+  |>
+End
+
+Theorem with_stk_updated_by_id[simp]:
+  (cx with stk updated_by (λx. x)) = cx
+Proof
+  rw[theorem"evaluation_context_component_equality"]
+QED
+
+Definition empty_call_txn_def:
+  empty_call_txn = <|
+    sender := 0w;
+    target := 0w;
+    function_name := "";
+    args := [];
+    value := 0;
+    time_stamp := 0;
+    block_number := 0;
+    block_hashes := [];
+    blob_base_fee := 0;
+    gas_price := 0;
+    is_creation := F
+  |>
+End
+
+Definition empty_evaluation_context_def:
+  empty_evaluation_context = <|
+    stk := []
+  ; txn := empty_call_txn
+  ; sources := []
+  |>
+End
+
+val () = cv_auto_trans empty_evaluation_context_def;
+
+Definition evaluate_account_op_def:
+  evaluate_account_op Address bs _ = BytesV (Fixed 20) bs ∧
+  evaluate_account_op Balance _ a = IntV (Unsigned 256) &a.balance ∧
+  evaluate_account_op Codehash _ a = BytesV (Fixed 32) (Keccak_256_w64 a.code) ∧
+  evaluate_account_op Codesize _ a = IntV (Unsigned 256) $ &LENGTH a.code ∧
+  evaluate_account_op IsContract _ a = BoolV (a.code ≠ []) ∧
+  evaluate_account_op Code _ a = BytesV (Dynamic (LENGTH a.code)) a.code
+End
+
+val () = cv_auto_trans evaluate_account_op_def;
+
+Definition get_self_code_def:
+  get_self_code cx = ALOOKUP cx.sources cx.txn.target
+End
+
+val () = cv_auto_trans get_self_code_def;
+
+Definition type_env_def:
+  type_env [] = FEMPTY ∧
+  type_env (StructDecl id args :: ts) =
+    type_env ts |+ (string_to_num id, StructArgs args) ∧
+  type_env (FlagDecl id ls :: ts) =
+    type_env ts |+ (string_to_num id, FlagArgs (LENGTH ls)) ∧
+  type_env (_ :: ts) = type_env ts
+End
+
+val () = cv_auto_trans type_env_def;
+
+Definition evaluate_block_hash_def:
+  evaluate_block_hash t n =
+  let pbn = t.block_number - 1 in
+  if t.block_number ≤ n ∨
+     LENGTH t.block_hashes ≤ pbn - n
+  then INR "evaluate_block_hash"
+  else INL $ BytesV (Fixed 32)
+    (word_to_bytes (EL (pbn - n) t.block_hashes) T)
+End
+
+val evaluate_block_hash_pre_def = cv_auto_trans_pre "evaluate_block_hash_pre" evaluate_block_hash_def;
+
+Theorem evaluate_block_hash_pre[cv_pre]:
+  evaluate_block_hash_pre t n
+Proof
+  rw[evaluate_block_hash_pre_def]
+QED
 
 Definition evaluate_builtin_def:
   evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
@@ -1192,82 +1000,6 @@ Definition type_builtin_args_length_ok_def:
 End
 
 val () = cv_auto_trans type_builtin_args_length_ok_def;
-
-Definition evaluate_max_value_def:
-  evaluate_max_value (BaseT (UintT n)) = INL $ IntV (Unsigned n) (&(2 ** n) - 1) ∧
-  evaluate_max_value (BaseT (IntT n)) = (if n = 0
-                                         then INR "max_value IntT"
-                                         else INL $ IntV (Signed n) (&(2 ** (n-1)) - 1)) ∧
-  evaluate_max_value (BaseT DecimalT) = INL $ DecimalV (&(2 ** 167) - 1) ∧
-  evaluate_max_value _ = INR "evaluate_max_value"
-End
-
-val () = cv_auto_trans evaluate_max_value_def;
-
-Definition evaluate_min_value_def:
-  evaluate_min_value (BaseT (UintT n)) = INL $ IntV (Unsigned n) 0 ∧
-  evaluate_min_value (BaseT (IntT n)) = (if n = 0
-                                         then INR "min_value IntT"
-                                         else INL $ IntV (Signed n) (-&(2 ** (n-1)))) ∧
-  evaluate_min_value (BaseT DecimalT) = INL $ DecimalV (-&(2 ** 167)) ∧
-  evaluate_min_value _ = INR "evaluate_min_value"
-End
-
-val () = cv_auto_trans evaluate_min_value_def;
-
-Definition value_to_key_def:
-  value_to_key (IntV _ i) = SOME $ IntSubscript i ∧
-  value_to_key (StringV _ s) = SOME $ StrSubscript s ∧
-  value_to_key (BytesV _ bs) = SOME $ BytesSubscript bs ∧
-  value_to_key (FlagV _ n) = SOME $ IntSubscript $ &n ∧
-  value_to_key _ = NONE
-End
-
-val () = cv_auto_trans value_to_key_def;
-
-Definition array_index_def:
-  array_index av i =
-  if 0 ≤ i then let j = Num i in
-  case av
-    of DynArrayV _ _ ls => oEL j ls
-     | SArrayV t n al =>
-         if j < n then case ALOOKUP al j
-         of SOME v => SOME v
-          | NONE => SOME $ default_value t
-         else NONE
-     | TupleV ls => oEL j ls
-  else NONE
-End
-
-val () = cv_trans array_index_def;
-
-Definition evaluate_subscript_def:
-  evaluate_subscript ts (Value (ArrayV av)) (IntV _ i) =
-  (case array_index av i
-   of SOME v => INL $ Value v
-   | _ => INR "subscript array_index") ∧
-  evaluate_subscript ts (HashMap vt hm) kv =
-  (case value_to_key kv of SOME k =>
-    (case ALOOKUP hm k of SOME tv => INL tv
-        | _ => (case vt of Type typ =>
-                  (case evaluate_type (type_env ts) typ of
-                   | SOME tv => INL $ Value $ default_value tv
-                   | NONE => INR "HashMap evaluate type")
-                | _ => INR "HashMap final value type" ))
-   | _ => INR "evaluate_subscript value_to_key") ∧
-  evaluate_subscript _ _ _ = INR "evaluate_subscript"
-End
-
-val () = cv_auto_trans evaluate_subscript_def;
-
-Definition evaluate_attribute_def:
-  evaluate_attribute (StructV kvs) id =
-  (case ALOOKUP kvs id of SOME v => INL v
-   | _ => INR "attribute") ∧
-  evaluate_attribute _ _ = INR "evaluate_attribute"
-End
-
-val () = cv_auto_trans evaluate_attribute_def;
 
 Definition builtin_args_length_ok_def:
   builtin_args_length_ok Len n = (n = 1n) ∧
@@ -1680,7 +1412,7 @@ Definition build_getter_def:
       if is_ArrayT vt then
         (let (args, ret, exp) =
            build_getter (Subscript e (Name vn))
-             uint256 (Type (ArrayT_type vt)) (SUC n) in
+             (BaseT (UintT 256)) (Type (ArrayT_type vt)) (SUC n) in
            ((vn, kt)::args, ret, exp))
       else ([(vn, kt)], vt, Subscript e (Name vn))) ∧
   build_getter e kt (HashMapT typ vtyp) n =
@@ -1735,7 +1467,7 @@ Definition lookup_function_def:
   (if id = name then
     if ¬is_ArrayT typ
     then SOME (View, [], typ, [Return (SOME (name_expression mut id))])
-    else SOME $ getter (name_expression mut id) uint256 (Type (ArrayT_type typ))
+    else SOME $ getter (name_expression mut id) (BaseT (UintT 256)) (Type (ArrayT_type typ))
    else lookup_function name External ts) ∧
   lookup_function name External (HashMapDecl Public _ id kt vt :: ts) =
   (if id = name then SOME $ getter (TopLevelName id) kt vt
@@ -2670,7 +2402,7 @@ Definition evaluate_def:
     tv2 <- eval_expr cx e2;
     v2 <- get_Value tv2;
     ts <- lift_option (get_self_code cx) "Subscript get_self_code";
-    tv <- lift_sum $ evaluate_subscript ts tv1 v2;
+    tv <- lift_sum $ evaluate_subscript (type_env ts) tv1 v2;
     return tv
   od ∧
   eval_expr cx (Attribute e id) = do

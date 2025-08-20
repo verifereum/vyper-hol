@@ -222,13 +222,6 @@ Datatype:
   variable_mutability = Constant expr | Immutable | Transient | Storage
 End
 
-Definition is_Constant_def[simp]:
-  is_Constant (Constant _) = T ∧
-  is_Constant _ = F
-End
-
-val () = cv_auto_trans is_Constant_def;
-
 Type argument = “:identifier # type”;
 
 Datatype:
@@ -243,9 +236,17 @@ Datatype:
   | StructDecl identifier (argument list)
   | EventDecl identifier (argument list)
   | FlagDecl identifier (identifier list)
-  (* TODO: interfaces -- would these be a no-op except for type-checking? *)
+  (* interfaces not included, since this AST is for typechecked code *)
 End
 
+(* some helper functions over the AST datatypes *)
+
+Definition is_Constant_def[simp]:
+  is_Constant (Constant _) = T ∧
+  is_Constant _ = F
+End
+
+val () = cv_auto_trans is_Constant_def;
 
 Definition is_Unsigned_def[simp]:
   (is_Unsigned (Unsigned _ ) = T) ∧
@@ -281,32 +282,3 @@ Definition ArrayT_type_def[simp]:
 End
 
 val () = cv_auto_trans ArrayT_type_def;
-
-Overload uint256 = “BaseT (UintT 256)”
-Overload address = “BaseT AddressT”
-Overload bool = “BaseT BoolT”
-Overload li = “λb i. Literal (IntL b i)”
-Overload lb = “λb. Literal (BoolL b)”
-Overload "==" = “λe1 e2. Builtin (Bop Eq) [e1; e2]”
-Overload "+" = “λe1 e2. Builtin (Bop Add) [e1; e2]”
-Overload "<" = “λe1 e2. Builtin (Bop Lt) [e1; e2]”
-Overload ">" = “λe1 e2. Builtin (Bop Gt) [e1; e2]”
-Overload len = “λe. Builtin Len [e]”
-Overload def = “λid args ret body. FunctionDecl External Nonpayable id args ret body”
-Overload itl_def = “λid args ret body. FunctionDecl Internal Nonpayable id args ret body”
-Overload pay_def = “λid args ret body. FunctionDecl External Payable id args ret body”
-Overload deploy_def = “λid args ret body. FunctionDecl Deploy Nonpayable id args ret body”
-Overload pubvar = “λid typ. VariableDecl Public Storage id typ”
-Overload pubmap = “λid kt vt. HashMapDecl Public id kt vt”
-Overload privar = “λid typ. VariableDecl Private Storage id typ”
-Overload DynArray = “λt n. ArrayT t (Dynamic n)”
-Overload msg_sender = “Builtin (Env Sender) []”
-Overload msg_value = “Builtin (Env ValueSent) []”
-Overload AssignSelf = “λid e. Assign (BaseTarget (TopLevelNameTarget id)) e”
-Overload assign = “λt e. Assign (BaseTarget t) e”
-Overload return = “λe. Return $ SOME e”
-Overload sub = “λt e. SubscriptTarget t e”
-Overload self_ = “λid. TopLevelName id”
-Overload self = “Builtin (Env SelfAddr) []”
-Overload self_balance = “Builtin (Acc Balance) [self]”
-Overload call = “λid args. Call (IntCall id) args”

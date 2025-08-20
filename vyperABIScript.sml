@@ -1,6 +1,7 @@
 Theory vyperABI
 Ancestors
   contractABI vyperAST vyperInterpreter
+  vyperMisc
 Libs
   cv_transLib
   wordsLib
