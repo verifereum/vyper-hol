@@ -86,10 +86,16 @@ TODO: fill out this section
 
 main outcome: we pass the `function/codegen` subset of the Vyper test suite with our executable definitional interpreter, modulo the deliberate exclusions mentioned above. Other outcomes: we have a formal (which means rigorous and precise) and readable specification of Vyper in higher-order logic that serves as a basis for future work, and we have proved some initial basic properties (apart from the test executions) most notably termination for the interpreter.
 
-## Dependencies and Installation
+## Dependencies and How to Run
 
-TODO: update this section
+This work is developed in the [HOL4 theorem prover](https://hol-theorem-prover.org), and makes use of the Ethereum Virtual Machine (EVM) formalisation in the [Verifereum](https://verifereum.org) project, and the test suite for the [Vyper language](https://vyperlang.org) from [its repository](https://github.com/vyperlang/vyper). The following commits are known to work for building the theories in this project:
+  - HOL4: [466a40abe43a384327cf9fd1ada840fa176b961d](https://github.com/HOL-Theorem-Prover/HOL/tree/466a40abe43a384327cf9fd1ada840fa176b961d)
+  - Verifereum: [42d41580abd025033cdd9b463ffb9c22b994d46e](https://github.com/verifereum/verifereum/tree/42d41580abd025033cdd9b463ffb9c22b994d46e)
+  - Vyper: [26f75a0f839e5cddac7a0ac1552e095fc7eab144](https://github.com/vyperlang/vyper/tree/26f75a0f839e5cddac7a0ac1552e095fc7eab144)
 
-This work is developed in the [HOL4 theorem prover](https://hol-theorem-prover.org), and makes use of the Ethereum Virtual Machine (EVM) formalisation in the [Verifereum](https://verifereum.org) project. The [Verifereum repository](https://github.com/verifereum/verifereum) includes instructions on how to build HOL4. The following commits are known to work for building the theories in this project:
-  - HOL4: [e64fb78f42098918d99c7831ec2609e5ce47f77c](https://github.com/HOL-Theorem-Prover/HOL/tree/e64fb78f42098918d99c7831ec2609e5ce47f77c)
-  - Verifereum: [4648cc50227c619eeffcdaa7393186549e11fa72](https://github.com/verifereum/verifereum/tree/4648cc50227c619eeffcdaa7393186549e11fa72)
+The [Verifereum repository](https://github.com/verifereum/verifereum) includes instructions on how to build HOL4, and the Vyper repository includes its own installation instructions. To run the Vyper test suite on our definitional interpreter, follow this approach:
+
+1. Generate the Vyper tests using `pytest -s -n 1 --export tests/export -m "not fuzzing" tests/functional/codegen`.
+2. Switch to your clone of this (Vyper-HOL) repository; we assume the Vyper tests were exported to `../vyper/tests/export`.
+3. Set the `VFMDIR` environment variable to a path of a clone of the Verifereum repository (at the commit above)
+4. `cd tests` and then run `Holmake`
