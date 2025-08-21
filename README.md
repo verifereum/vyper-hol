@@ -86,19 +86,19 @@ The main outcome of this work is:
 - We have defined a formal executable specification of a subset of Vyper in higher-order logic,
 - which passes the `functional/codegen` section of the Vyper language test suite, modulo the exclusions listed above.
 
-TODO: edit this section
+Passing a substantial portion of the official test suite means our formal semantics is a solid foundation for future work on formal verification for Vyper including both proving properties about the language and producing a verified compiler and other verified tools. In addition, we have proved some initial basic properties (in addition to the test executions), most notably, that the language is total (i.e., the interpreter always terminates).
 
-Passing a substantial portion of the official test suite means our formal semantics is a solid foundation for future work on formal verification for Vyper including both proving properties about the language and producing a verified compiler and other verified tools.
+It should also be noted that the export of the test suite in a format consumable by others was motivated in part by this project.
 
-Other outcomes: we have a formal (which means rigorous and precise) and readable specification of Vyper in higher-order logic that serves as a basis for future work, and we have proved some initial basic properties (apart from the test executions) most notably termination for the interpreter.
-
-Challenges: some technical details that were more complex than expected include (a) the treatment of assignment operations (b) the termination argument and making the semantics executable via cv compute (c)
+In achieving these outcomes, some of the technical details were more complex than expected. These include
+- Assignment targets: in the official documentation for Vyper, as well as in the [Ivy interpreter](https://github.com/cyberthirst/ivy/) for Vyper, it can appear that the left-hand-sides of assignment operations (e.g., the `x[3].n` in `x[3].n = 9`) are arbitrary expressions. However, they are in fact a restricted subset (consider that `foo(x)[9] = 1` is invalid). This is made more explicit in our syntax, which has a separate syntactic category for assignment targets.
+- The need for a small-step semantics for `cv_compute`, and the somewhat non-trivial termination argument for the semantics. The difficulty here was mostly due to pushing some of the edges of HOL4's libraries for defining functions and for providing fast execution for logical definitions.
 
 Next steps (all can be done in parallel):
-- add the missing features, primarily chain interaction
-- possibly rework some of the design, e.g., values carry typing information, but we could try with putting this more on the syntax instead
-- formalise more of the front-end aspects noted as missing above
-- prototype a verified compiler
+- Add the missing features listed above, primarily chain interaction. As mentioned earlier, we plan to add external calls by deferring to the underlying EVM semantics.
+- Possibly revisit some of the design decisions in the semantics. For example, currently, runtime values carry some typing information (e.g., bit size for integers), but we could try leaving this information entirely in the syntax and not in the runtime values, which could simplify some operations like implicit casting.
+- Formalise more of the front-end aspects of the language -- type-checking, modules, etc. -- noted as missing above.
+- Start building a prototype for a verified compiler.
 
 ## Dependencies and How to Run
 
