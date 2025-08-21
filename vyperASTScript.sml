@@ -74,6 +74,8 @@ Datatype:
   | LtE
   | Gt
   | GtE
+  | Min
+  | Max
 End
 
 Datatype:
@@ -122,7 +124,9 @@ Datatype:
   | AsWeiValue denomination
   | Concat num (* dynamic bound for return type *)
   | Slice num (* ditto *)
+  | Uint2Str num (* ditto *)
   | MakeArray (type option (* NONE for tuples *)) bound
+  | Ceil
   | Floor
   | AddMod
   | MulMod
@@ -141,7 +145,7 @@ Datatype:
 End
 
 Datatype:
-  type_builtin = Empty | MaxValue | MinValue | Epsilon | Convert
+  type_builtin = Empty | MaxValue | MinValue | Epsilon | Convert | Extract32
 End
 
 Datatype:

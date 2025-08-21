@@ -63,8 +63,9 @@ The focus of this work so far has been the core execution semantics of Vyper con
 Here are the specific aspects of Vyper that are currently not part of the formal model:
 
 - Chain interaction
-    - external contract calls (both `staticcall` and `extcall`)
-    - [chain interaction bulitins](https://docs.vyperlang.org/en/latest/built-in-functions.html#chain-interaction) (`create_minimal_proxy_to`, etc.), except for `send`
+    - external contract calls (both `staticcall` and `extcall`) including `print`
+    - [chain interaction bulitins](https://docs.vyperlang.org/en/latest/built-in-functions.html#chain-interaction) (`create_minimal_proxy_to`, etc.),
+      except for `send` but including `@raw_return`
     - non-reentrancy checking
 - Compiler front-end
     - concrete syntax, i.e., parsing
@@ -78,7 +79,6 @@ Here are the specific aspects of Vyper that are currently not part of the formal
     - some [math builtins](https://docs.vyperlang.org/en/latest/built-in-functions.html#math): `isqrt`, `sqrt`, `uint256_addmod`, `uint256_mulmod`
     - ABI builtins (`abi_encode`, `abi_decode`)
     - `blobhash`
-    - `print`, `uint2str`, `extract32`
 
 ## Challenges, Outcomes, and Next Steps
 

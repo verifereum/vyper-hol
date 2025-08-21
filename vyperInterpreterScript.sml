@@ -594,6 +594,20 @@ Definition evaluate_binop_def:
        | DecimalV i1 => (case v2 of DecimalV i2 =>
            INL (BoolV (i1 ≥ i2)) | _ => INR "binop")
        | _ => INR "binop")
+     | Min => (case v1 of
+         IntV u1 i1 => (case v2 of IntV u2 i2 =>
+           (if u1 = u2 then INL (IntV u1 (if i1 < i2 then i1 else i2))
+            else INR "Min type") | _ => INR "binop")
+       | DecimalV i1 => (case v2 of DecimalV i2 =>
+           INL (DecimalV (if i1 < i2 then i1 else i2)) | _ => INR "binop")
+       | _ => INR "binop")
+     | Max => (case v1 of
+         IntV u1 i1 => (case v2 of IntV u2 i2 =>
+           (if u1 = u2 then INL (IntV u1 (if i1 < i2 then i2 else i1))
+            else INR "Min type") | _ => INR "binop")
+       | DecimalV i1 => (case v2 of DecimalV i2 =>
+           INL (DecimalV (if i1 < i2 then i2 else i1)) | _ => INR "binop")
+       | _ => INR "binop")
      | NotIn => binop_negate $ evaluate_binop In v1 v2
      | NotEq => binop_negate $ evaluate_binop Eq v1 v2
      | _ => INR "binop"
@@ -1323,6 +1337,29 @@ End
 
 val () = cv_auto_trans type_env_def;
 
+Definition evaluate_extract32_def:
+  evaluate_extract32 bs n bt =
+  if n < LENGTH bs then let
+    bs = DROP n bs
+  in case bt
+     of BytesT (Fixed m) =>
+          if m ≤ LENGTH bs then
+            INL $ BytesV (Fixed m) (TAKE m bs)
+          else INR "evaluate_extract32 bytesM"
+      | UintT m =>
+          evaluate_convert (BytesV (Dynamic 32) (TAKE 32 bs)) (BaseT (UintT m))
+      | IntT m =>
+          evaluate_convert (BytesV (Dynamic 32) (TAKE 32 bs)) (BaseT (IntT m))
+      | AddressT =>
+          if 20 ≤ LENGTH bs then
+            INL $ BytesV (Fixed 20) (TAKE 20 bs)
+          else INR "evaluate_extract32 address"
+      | _ => INR "evaluate_extract32 type"
+  else INR "evaluate_extract32 start"
+End
+
+val () = cv_trans evaluate_extract32_def;
+
 Definition evaluate_type_builtin_def:
   evaluate_type_builtin cx Empty typ vs =
   (case get_self_code cx
@@ -1337,8 +1374,14 @@ Definition evaluate_type_builtin_def:
     evaluate_min_value typ ∧
   evaluate_type_builtin cx Convert typ [v] =
     evaluate_convert v typ ∧
+  evaluate_type_builtin cx Epsilon typ [] =
+    (if typ = BaseT DecimalT then INL $ DecimalV 1
+     else INR "Epsilon: not decimal") ∧
+  evaluate_type_builtin cx Extract32 (BaseT bt) [BytesV _ bs; IntV u i] =
+    (if u = Unsigned 256 then evaluate_extract32 bs (Num i) bt
+     else INR "Extract32 type") ∧
   evaluate_type_builtin _ _ _ _ =
-    INR "TODO: TypeBuiltin"
+    INR "evaluate_type_builtin"
 End
 
 val () = cv_auto_trans evaluate_type_builtin_def;
@@ -1358,6 +1401,9 @@ Definition evaluate_builtin_def:
     Keccak_256_w64 ls ∧
   (* TODO: reject BytesV with invalid bounds for Keccak256 *)
   (* TODO: support Keccak256 on strings *)
+  evaluate_builtin cx _ (Uint2Str n) [IntV u i] =
+    (if is_Unsigned u then INL $ StringV n (num_to_dec_string (Num i))
+     else INR "Uint2Str") ∧
   evaluate_builtin cx _ (AsWeiValue dn) [v] = evaluate_as_wei_value dn v ∧
   evaluate_builtin cx _ AddMod [IntV u1 i1; IntV u2 i2; IntV u3 i3] =
     (if u1 = Unsigned 256 ∧ u2 = u1 ∧ u3 = u1 then evaluate_addmod i1 i2 i3
@@ -1367,6 +1413,8 @@ Definition evaluate_builtin_def:
      else INR "MulMod type") ∧
   evaluate_builtin cx _ Floor [DecimalV i] =
     INL $ IntV (Signed 256) (i / 10000000000) ∧
+  evaluate_builtin cx _ Ceil [DecimalV i] =
+    INL $ IntV (Signed 256) ((i + 9999999999) / 10000000000) ∧
   evaluate_builtin cx _ (Bop bop) [v1; v2] = evaluate_binop bop v1 v2 ∧
   evaluate_builtin cx _ (Env Sender) [] = INL $ AddressV cx.txn.sender ∧
   evaluate_builtin cx _ (Env SelfAddr) [] = INL $ AddressV cx.txn.target ∧
@@ -1409,6 +1457,7 @@ Definition type_builtin_args_length_ok_def:
   type_builtin_args_length_ok MaxValue n = (n = 0) ∧
   type_builtin_args_length_ok MinValue n = (n = 0) ∧
   type_builtin_args_length_ok Epsilon n = (n = 0) ∧
+  type_builtin_args_length_ok Extract32 n = (n = 2) ∧
   type_builtin_args_length_ok Convert n = (n = 1)
 End
 
@@ -1418,13 +1467,14 @@ Definition builtin_args_length_ok_def:
   builtin_args_length_ok Len n = (n = 1n) ∧
   builtin_args_length_ok Not n = (n = 1) ∧
   builtin_args_length_ok Neg n = (n = 1) ∧
-  builtin_args_length_ok Floor n = (n = 1) ∧
   builtin_args_length_ok Keccak256 n = (n = 1) ∧
+  builtin_args_length_ok (Uint2Str _) n = (n = 1) ∧
   builtin_args_length_ok (AsWeiValue _) n = (n = 1) ∧
   builtin_args_length_ok (Concat _) n = (2 ≤ n) ∧
   builtin_args_length_ok (Slice _) n = (n = 3) ∧
   builtin_args_length_ok (MakeArray _ b) n = compatible_bound b n ∧
   builtin_args_length_ok Floor n = (n = 1) ∧
+  builtin_args_length_ok Ceil n = (n = 1) ∧
   builtin_args_length_ok AddMod n = (n = 3) ∧
   builtin_args_length_ok MulMod n = (n = 3) ∧
   builtin_args_length_ok (Bop _) n = (n = 2) ∧
