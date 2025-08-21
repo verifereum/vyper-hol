@@ -80,11 +80,25 @@ Here are the specific aspects of Vyper that are currently not part of the formal
     - ABI builtins (`abi_encode`, `abi_decode`)
     - `blobhash`
 
-## Challenges, Outcomes, and Next Steps
+## Outcomes, Challenges, and Next Steps
 
-TODO: fill out this section
+The main outcome of this work is:
+- We have defined a formal executable specification of a subset of Vyper in higher-order logic,
+- which passes the `functional/codegen` section of the Vyper language test suite, modulo the exclusions listed above.
 
-main outcome: we pass the `function/codegen` subset of the Vyper test suite with our executable definitional interpreter, modulo the deliberate exclusions mentioned above. Other outcomes: we have a formal (which means rigorous and precise) and readable specification of Vyper in higher-order logic that serves as a basis for future work, and we have proved some initial basic properties (apart from the test executions) most notably termination for the interpreter.
+TODO: edit this section
+
+Passing a substantial portion of the official test suite means our formal semantics is a solid foundation for future work on formal verification for Vyper including both proving properties about the language and producing a verified compiler and other verified tools.
+
+Other outcomes: we have a formal (which means rigorous and precise) and readable specification of Vyper in higher-order logic that serves as a basis for future work, and we have proved some initial basic properties (apart from the test executions) most notably termination for the interpreter.
+
+Challenges: some technical details that were more complex than expected include (a) the treatment of assignment operations (b) the termination argument and making the semantics executable via cv compute (c)
+
+Next steps (all can be done in parallel):
+- add the missing features, primarily chain interaction
+- possibly rework some of the design, e.g., values carry typing information, but we could try with putting this more on the syntax instead
+- formalise more of the front-end aspects noted as missing above
+- prototype a verified compiler
 
 ## Dependencies and How to Run
 
