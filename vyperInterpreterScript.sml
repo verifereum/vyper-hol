@@ -1693,6 +1693,32 @@ End
 
 val () = cv_auto_trans get_scopes_def;
 
+Definition lookup_flag_def:
+  lookup_flag fid [] = NONE ∧
+  lookup_flag fid (FlagDecl id ls :: ts) =
+    (if fid = id then SOME ls else lookup_flag fid ts) ∧
+  lookup_flag fid (t :: ts) = lookup_flag fid ts
+End
+
+val () = cv_auto_trans lookup_flag_def;
+
+Definition lookup_flag_mem_def:
+  lookup_flag_mem cx fid mid =
+  case get_self_code cx
+    of NONE => raise $ Error "lookup_flag_mem code"
+     | SOME ts =>
+  case lookup_flag fid ts
+    of NONE => raise $ Error "lookup_flag"
+     | SOME ls =>
+  case INDEX_OF mid ls
+    of NONE => raise $ Error "lookup_flag_mem index"
+     | SOME i => return $ Value $ FlagV (LENGTH ls) (2 ** i)
+End
+
+val () = lookup_flag_mem_def
+  |> SRULE [FUN_EQ_THM, option_CASE_rator]
+  |> cv_auto_trans;
+
 (* writing to the state *)
 
 Definition set_current_globals_def:
@@ -1760,6 +1786,8 @@ End
 
 val () = cv_auto_trans pop_scope_def;
 
+(* writing variables *)
+
 Definition new_variable_def:
   new_variable id v = do
     n <<- string_to_num id;
@@ -1790,6 +1818,8 @@ val () = set_variable_def
             LET_RATOR, UNCURRY, option_CASE_rator]
   |> cv_auto_trans;
 
+(* assignment to existing locations *)
+
 Definition get_Value_def[simp]:
   get_Value (Value v) = return v ∧
   get_Value _ = raise $ Error "not Value"
@@ -1799,23 +1829,100 @@ val () = get_Value_def
   |> SIMP_RULE std_ss [FUN_EQ_THM]
   |> cv_auto_trans;
 
-Definition switch_BoolV_def:
-  switch_BoolV v f g =
-  if v = Value $ BoolV T then f
-  else if v = Value $ BoolV F then g
-  else raise $ Error (if is_Value v then "not BoolV" else "not Value")
+Datatype:
+  location
+  = ScopedVar identifier
+  | ImmutableVar identifier
+  | TopLevelVar identifier
 End
 
-Definition handle_loop_exception_def:
-  handle_loop_exception e =
-  if e = ContinueException then return F
-  else if e = BreakException then return T
-  else raise e
+Datatype:
+  assignment_value
+  = BaseTargetV location (subscript list)
+  | TupleTargetV (assignment_value list)
 End
 
-val () = handle_loop_exception_def
-  |> SRULE [FUN_EQ_THM, COND_RATOR]
-  |> cv_auto_trans;
+Type base_target_value = “:location # subscript list”;
+
+Definition assign_target_def:
+  assign_target cx (BaseTargetV (ScopedVar id) is) ao = do
+    ni <<- string_to_num id;
+    sc <- get_scopes;
+    (pre, env, a, rest) <- lift_option (find_containing_scope ni sc) "assign_target lookup";
+    a' <- lift_sum $ assign_subscripts a (REVERSE is) ao;
+    set_scopes $ pre ++ env |+ (ni, a') :: rest;
+    return $ Value a
+  od ∧
+  assign_target cx (BaseTargetV (TopLevelVar id) is) ao = do
+    ni <<- string_to_num id;
+    tv <- lookup_global cx ni;
+    ts <- lift_option (get_self_code cx) "assign_target get_self_code";
+    tv' <- lift_sum $ assign_toplevel (type_env ts) tv (REVERSE is) ao;
+    set_global cx ni tv';
+    return tv
+  od ∧
+  assign_target cx (BaseTargetV (ImmutableVar id) is) ao = do
+    ni <<- string_to_num id;
+    imms <- get_immutables cx;
+    a <- lift_option (FLOOKUP imms ni) "assign_target ImmutableVar";
+    a' <- lift_sum $ assign_subscripts a (REVERSE is) ao;
+    set_immutable cx ni a';
+    return $ Value a
+  od ∧
+  assign_target cx (TupleTargetV gvs) (Replace (ArrayV (TupleV vs))) = do
+    check (LENGTH gvs = LENGTH vs) "TupleTargetV length";
+    ws <- assign_targets cx gvs vs;
+    return $ Value $ ArrayV (TupleV ws)
+  od ∧
+  assign_target _ _ _ = raise (Error "assign_target") ∧
+  assign_targets cx [] [] = return [] ∧
+  assign_targets cx (gv::gvs) (v::vs) = do
+    tw <- assign_target cx gv (Replace v);
+    w <- get_Value tw;
+    ws <- assign_targets cx gvs vs;
+    return $ w::ws
+  od ∧
+  assign_targets _ _ _ = raise (Error "assign_targets")
+End
+
+val assign_target_pre_def = assign_target_def
+  |> SRULE [FUN_EQ_THM, bind_def, LET_RATOR, ignore_bind_def,
+            UNCURRY, option_CASE_rator, lift_option_def]
+  |> cv_auto_trans_pre "assign_target_pre assign_targets_pre";
+
+Theorem assign_target_pre[cv_pre]:
+  (∀w x y z. assign_target_pre w x y z) ∧
+  (∀w x y z. assign_targets_pre w x y z)
+Proof
+  ho_match_mp_tac assign_target_ind \\ rw[]
+  \\ rw[Once assign_target_pre_def]
+QED
+
+(* writing logs *)
+
+Definition push_log_def:
+  push_log log st = return () $ st with logs updated_by CONS log
+End
+
+val () = cv_auto_trans push_log_def;
+
+(* manipulating (internal call) function stack *)
+
+Definition push_function_def:
+  push_function fn sc cx st =
+  return (cx with stk updated_by CONS fn)
+    $ st with scopes := [sc]
+End
+
+val () = cv_auto_trans push_function_def;
+
+Definition pop_function_def:
+  pop_function prev = set_scopes prev
+End
+
+val () = cv_auto_trans pop_function_def;
+
+(* helper for sending ether between accounts *)
 
 Definition transfer_value_def:
   transfer_value fromAddr toAddr amount = do
@@ -1834,31 +1941,9 @@ val () = transfer_value_def
             LET_RATOR, update_accounts_def, o_DEF, C_DEF]
   |> cv_auto_trans;
 
-Definition lookup_flag_def:
-  lookup_flag fid [] = NONE ∧
-  lookup_flag fid (FlagDecl id ls :: ts) =
-    (if fid = id then SOME ls else lookup_flag fid ts) ∧
-  lookup_flag fid (t :: ts) = lookup_flag fid ts
-End
-
-val () = cv_auto_trans lookup_flag_def;
-
-Definition lookup_flag_mem_def:
-  lookup_flag_mem cx fid mid =
-  case get_self_code cx
-    of NONE => raise $ Error "lookup_flag_mem code"
-     | SOME ts =>
-  case lookup_flag fid ts
-    of NONE => raise $ Error "lookup_flag"
-     | SOME ls =>
-  case INDEX_OF mid ls
-    of NONE => raise $ Error "lookup_flag_mem index"
-     | SOME i => return $ Value $ FlagV (LENGTH ls) (2 ** i)
-End
-
-val () = lookup_flag_mem_def
-  |> SRULE [FUN_EQ_THM, option_CASE_rator]
-  |> cv_auto_trans;
+(* machinery for calls to functions in a Vyper contract, and for internal calls
+* within a contract, including implicit functions associated with public
+* variables *)
 
 Definition build_getter_def:
   build_getter e kt (Type vt) n =
@@ -1951,26 +2036,6 @@ Proof
   \\ rw[Once bind_arguments_pre_def]
 QED
 
-Definition push_log_def:
-  push_log log st = return () $ st with logs updated_by CONS log
-End
-
-val () = cv_auto_trans push_log_def;
-
-Definition push_function_def:
-  push_function fn sc cx st =
-  return (cx with stk updated_by CONS fn)
-    $ st with scopes := [sc]
-End
-
-val () = cv_auto_trans push_function_def;
-
-Definition pop_function_def:
-  pop_function prev = set_scopes prev
-End
-
-val () = cv_auto_trans pop_function_def;
-
 Definition handle_function_def:
   handle_function (ReturnException v) = return v ∧
   handle_function (Error str) = raise $ Error str ∧
@@ -1982,74 +2047,8 @@ val () = handle_function_def
   |> SRULE [FUN_EQ_THM]
   |> cv_auto_trans;
 
-Datatype:
-  location
-  = ScopedVar identifier
-  | ImmutableVar identifier
-  | TopLevelVar identifier
-End
-
-Datatype:
-  assignment_value
-  = BaseTargetV location (subscript list)
-  | TupleTargetV (assignment_value list)
-End
-
-Type base_target_value = “:location # subscript list”;
-
-Definition assign_target_def:
-  assign_target cx (BaseTargetV (ScopedVar id) is) ao = do
-    ni <<- string_to_num id;
-    sc <- get_scopes;
-    (pre, env, a, rest) <- lift_option (find_containing_scope ni sc) "assign_target lookup";
-    a' <- lift_sum $ assign_subscripts a (REVERSE is) ao;
-    set_scopes $ pre ++ env |+ (ni, a') :: rest;
-    return $ Value a
-  od ∧
-  assign_target cx (BaseTargetV (TopLevelVar id) is) ao = do
-    ni <<- string_to_num id;
-    tv <- lookup_global cx ni;
-    ts <- lift_option (get_self_code cx) "assign_target get_self_code";
-    tv' <- lift_sum $ assign_toplevel (type_env ts) tv (REVERSE is) ao;
-    set_global cx ni tv';
-    return tv
-  od ∧
-  assign_target cx (BaseTargetV (ImmutableVar id) is) ao = do
-    ni <<- string_to_num id;
-    imms <- get_immutables cx;
-    a <- lift_option (FLOOKUP imms ni) "assign_target ImmutableVar";
-    a' <- lift_sum $ assign_subscripts a (REVERSE is) ao;
-    set_immutable cx ni a';
-    return $ Value a
-  od ∧
-  assign_target cx (TupleTargetV gvs) (Replace (ArrayV (TupleV vs))) = do
-    check (LENGTH gvs = LENGTH vs) "TupleTargetV length";
-    ws <- assign_targets cx gvs vs;
-    return $ Value $ ArrayV (TupleV ws)
-  od ∧
-  assign_target _ _ _ = raise (Error "assign_target") ∧
-  assign_targets cx [] [] = return [] ∧
-  assign_targets cx (gv::gvs) (v::vs) = do
-    tw <- assign_target cx gv (Replace v);
-    w <- get_Value tw;
-    ws <- assign_targets cx gvs vs;
-    return $ w::ws
-  od ∧
-  assign_targets _ _ _ = raise (Error "assign_targets")
-End
-
-val assign_target_pre_def = assign_target_def
-  |> SRULE [FUN_EQ_THM, bind_def, LET_RATOR, ignore_bind_def,
-            UNCURRY, option_CASE_rator, lift_option_def]
-  |> cv_auto_trans_pre "assign_target_pre assign_targets_pre";
-
-Theorem assign_target_pre[cv_pre]:
-  (∀w x y z. assign_target_pre w x y z) ∧
-  (∀w x y z. assign_targets_pre w x y z)
-Proof
-  ho_match_mp_tac assign_target_ind \\ rw[]
-  \\ rw[Once assign_target_pre_def]
-QED
+(* helpers for the termination argument for the main interpreter definition
+* (evaulate_def below) *)
 
 Theorem expr1_size_map:
   expr1_size ls = LENGTH ls + SUM (MAP expr2_size ls)
@@ -2072,6 +2071,7 @@ Proof
   Induct_on`ls` \\ rw[expr2_size_map]
 QED
 
+(* recursion bound for the termination measure *)
 Definition bound_def:
   stmt_bound ts Pass = 0n ∧
   stmt_bound ts Continue = 0 ∧
@@ -2208,6 +2208,10 @@ Definition remcode_def:
           (FLAT (MAP dest_Internal_FunctionDef ts))
 End
 
+(* these helpers are also for termination, to enable HOL4's definition machinery
+* to "see through" the state-exception monad when constructing the termination
+* conditions *)
+
 Theorem bind_cong_implicit[defncong]:
   (f = f') ∧
   (∀s x t. f' s = (INL x, t) ==> g x t = g' x t)
@@ -2297,6 +2301,26 @@ Proof
   \\ Cases_on`fv` \\ gvs[dest_Internal_FunctionDef_def]
 QED
 
+(* a few more helper functions used in the main interpreter *)
+
+Definition handle_loop_exception_def:
+  handle_loop_exception e =
+  if e = ContinueException then return F
+  else if e = BreakException then return T
+  else raise e
+End
+
+val () = handle_loop_exception_def
+  |> SRULE [FUN_EQ_THM, COND_RATOR]
+  |> cv_auto_trans;
+
+Definition switch_BoolV_def:
+  switch_BoolV v f g =
+  if v = Value $ BoolV T then f
+  else if v = Value $ BoolV F then g
+  else raise $ Error (if is_Value v then "not BoolV" else "not Value")
+End
+
 Definition exactly_one_option_def:
   exactly_one_option NONE NONE = INR "no option" ∧
   exactly_one_option (SOME _) (SOME _) = INR "two options" ∧
@@ -2325,6 +2349,8 @@ Definition get_range_limits_def:
 End
 
 val () = cv_auto_trans get_range_limits_def;
+
+(* top-level definition of the Vyper interpreter *)
 
 Definition evaluate_def:
   eval_stmt cx Pass = return () ∧
@@ -2614,6 +2640,8 @@ Proof
   \\ goal_assum drule
 QED
 
+(* Semantics of initial state of a contract after deployment *)
+
 Definition flag_value_def:
   flag_value m n acc [] = StructV $ REVERSE acc ∧
   flag_value m n acc (id::ids) =
@@ -2732,6 +2760,9 @@ Definition reset_all_transient_globals_def:
 End
 
 val () = cv_auto_trans reset_all_transient_globals_def;
+
+(* Top-level entry-points into the semantics: loading (deploying) a contract,
+* and calling its external functions *)
 
 Definition constants_env_def:
   constants_env _ _ [] acc = SOME acc ∧
