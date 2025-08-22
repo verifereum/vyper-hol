@@ -77,7 +77,7 @@ Here are the specific aspects of Vyper that are currently not part of the formal
 - Miscellaneous builtins
     - some of the [cryptography builtins](https://docs.vyperlang.org/en/latest/built-in-functions.html#cryptography), especially involving elliptic curves
     - square root builtin: `isqrt`, `sqrt`
-    - ABI builtins (`abi_encode`, `abi_decode`)
+    - builtins for raw calls: `abi_encode`, `abi_decode`, `method_id`
     - `blobhash`
 
 ## Outcomes, Challenges, and Next Steps
