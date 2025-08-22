@@ -713,14 +713,6 @@ val () = cv_auto_trans evaluate_slice_def;
 
 (* some more builtins *)
 
-Definition evaluate_addmod_def:
-  evaluate_addmod i1 i2 i3 = INR "TODO: unimplemented"
-End
-
-Definition evaluate_mulmod_def:
-  evaluate_mulmod i1 i2 i3 = INR "TODO: unimplemented"
-End
-
 Definition evaluate_as_wei_value_def:
   evaluate_as_wei_value dn v =
   let m = case dn of
@@ -1406,10 +1398,12 @@ Definition evaluate_builtin_def:
      else INR "Uint2Str") ∧
   evaluate_builtin cx _ (AsWeiValue dn) [v] = evaluate_as_wei_value dn v ∧
   evaluate_builtin cx _ AddMod [IntV u1 i1; IntV u2 i2; IntV u3 i3] =
-    (if u1 = Unsigned 256 ∧ u2 = u1 ∧ u3 = u1 then evaluate_addmod i1 i2 i3
+    (if u1 = Unsigned 256 ∧ u2 = u1 ∧ u3 = u1
+     then INL $ IntV u1 $ &((Num i1 + Num i2) MOD Num i3)
      else INR "AddMod type") ∧
   evaluate_builtin cx _ MulMod [IntV u1 i1; IntV u2 i2; IntV u3 i3] =
-    (if u1 = Unsigned 256 ∧ u2 = u1 ∧ u3 = u1 then evaluate_mulmod i1 i2 i3
+    (if u1 = Unsigned 256 ∧ u2 = u1 ∧ u3 = u1
+     then INL $ IntV u1 $ &((Num i1 * Num i2) MOD Num i3)
      else INR "MulMod type") ∧
   evaluate_builtin cx _ Floor [DecimalV i] =
     INL $ IntV (Signed 256) (i / 10000000000) ∧

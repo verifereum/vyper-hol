@@ -76,7 +76,7 @@ Here are the specific aspects of Vyper that are currently not part of the formal
     - internal and external functions with default arguments
 - Miscellaneous builtins
     - some of the [cryptography builtins](https://docs.vyperlang.org/en/latest/built-in-functions.html#cryptography), especially involving elliptic curves
-    - some [math builtins](https://docs.vyperlang.org/en/latest/built-in-functions.html#math): `isqrt`, `sqrt`, `uint256_addmod`, `uint256_mulmod`
+    - square root builtin: `isqrt`, `sqrt`
     - ABI builtins (`abi_encode`, `abi_decode`)
     - `blobhash`
 
