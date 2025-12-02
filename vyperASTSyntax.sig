@@ -75,6 +75,7 @@ signature vyperASTSyntax = sig
   val Acc_tm          : term
   val BlockHash_tm    : term
   val IntCall_tm      : term
+  val ExtCall_tm      : term
   val Send_tm         : term
   val Empty_tm        : term
   val MaxValue_tm     : term
@@ -166,6 +167,7 @@ signature vyperASTSyntax = sig
   val mk_StructLit : term * term list -> term
   val mk_IfExp     : term * term * term -> term
   val mk_IntCall   : term -> term
+  val mk_ExtCall   : term * term -> term
   val mk_Empty     : term -> term
   val mk_MaxValue  : term -> term
   val mk_MinValue  : term -> term

@@ -139,7 +139,7 @@ End
 Datatype:
   call_target
   = IntCall identifier
-  | ExtCall identifier (* external call passing Vyper values *)
+  | ExtCall bool identifier (* is_static, method name; target address is first arg *)
   | Send
   (* TODO: external raw call *)
 End
