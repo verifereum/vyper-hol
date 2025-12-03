@@ -34,7 +34,7 @@ Datatype:
 End
 
 (* Effects as a set *)
-Type effects = ":effect set"
+Type effects = ``:effect set``
 
 Definition empty_effects_def:
   empty_effects : effects = {}
@@ -101,7 +101,7 @@ End
 
 (* Check if two instructions can be reordered *)
 Definition effects_independent_def:
-  effects_independent op1 op2 =
+  effects_independent op1 op2 <=>
     DISJOINT (write_effects op1) (read_effects op2 UNION write_effects op2) /\
     DISJOINT (write_effects op2) (read_effects op1 UNION write_effects op1)
 End
@@ -171,10 +171,9 @@ End
 (* Find the value for a PHI based on predecessor block *)
 Definition resolve_phi_def:
   resolve_phi prev_bb [] = NONE /\
-  resolve_phi prev_bb [_] = NONE /\  (* Malformed: odd number of operands *)
+  resolve_phi prev_bb [_] = NONE /\
   resolve_phi prev_bb (Label lbl :: val_op :: rest) =
-    if lbl = prev_bb then SOME val_op
-    else resolve_phi prev_bb rest /\
+    (if lbl = prev_bb then SOME val_op else resolve_phi prev_bb rest) /\
   resolve_phi prev_bb (_ :: _ :: rest) = resolve_phi prev_bb rest
 End
 
@@ -232,8 +231,8 @@ Definition step_inst_def:
     | ADD => exec_binop word_add inst s
     | SUB => exec_binop word_sub inst s
     | MUL => exec_binop word_mul inst s
-    | DIV => exec_binop safe_div inst s
-    | MOD => exec_binop safe_mod inst s
+    | Div => exec_binop safe_div inst s
+    | Mod => exec_binop safe_mod inst s
     | SDIV => exec_binop safe_sdiv inst s
     | SMOD => exec_binop safe_smod inst s
     | ADDMOD => exec_modop addmod inst s

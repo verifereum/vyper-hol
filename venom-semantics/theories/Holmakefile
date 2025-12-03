@@ -1,7 +1,4 @@
-VFMDIR ?= $(HOME)/src-references/verifereum
-
-INCLUDES = $(VFMDIR)/util \
-           $(VFMDIR)/spec
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec
 
 all: $(DEFAULT_TARGETS)
 .PHONY: all
