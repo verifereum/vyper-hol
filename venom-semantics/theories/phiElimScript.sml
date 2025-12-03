@@ -22,6 +22,13 @@ val _ = new_theory "phiElim";
 
 Type dfg = ``:string -> instruction option``
 
+(* DFG well-formedness: if a variable maps to an instruction, that
+   instruction must produce the variable. *)
+Definition well_formed_dfg_def:
+  well_formed_dfg dfg <=>
+    !v inst. dfg v = SOME inst ==> inst.inst_output = SOME v
+End
+
 (* Build DFG for a function: map output vars to their defining instructions *)
 Definition build_dfg_def:
   build_dfg_block dfg [] = dfg /\
@@ -41,6 +48,47 @@ End
 Definition build_dfg_fn_def:
   build_dfg_fn fn = build_dfg_blocks (\x. NONE) fn.fn_blocks
 End
+
+(* Well-formedness is preserved as we build the DFG *)
+Theorem well_formed_dfg_update:
+  !dfg inst v.
+    well_formed_dfg dfg /\ inst.inst_output = SOME v
+    ==> well_formed_dfg (\x. if x = v then SOME inst else dfg x)
+Proof
+  rw[well_formed_dfg_def] >>
+  Cases_on `x = v` >> fs[]
+QED
+
+Theorem build_dfg_block_well_formed:
+  !dfg insts.
+    well_formed_dfg dfg ==> well_formed_dfg (build_dfg_block dfg insts)
+Proof
+  Induct_on `insts` >>
+  simp[build_dfg_def] >>
+  rpt strip_tac >>
+  Cases_on `h.inst_output` >>
+  simp[build_dfg_def] >>
+  metis_tac[well_formed_dfg_update]
+QED
+
+Theorem build_dfg_blocks_well_formed:
+  !dfg bbs.
+    well_formed_dfg dfg ==> well_formed_dfg (build_dfg_blocks dfg bbs)
+Proof
+  Induct_on `bbs` >> rw[build_dfg_blocks_def] >>
+  rpt strip_tac >>
+  first_x_assum (qspec_then `build_dfg_block dfg h.bb_instructions` mp_tac) >>
+  impl_tac >- (match_mp_tac build_dfg_block_well_formed >> simp[]) >>
+  simp[]
+QED
+
+Theorem build_dfg_fn_well_formed:
+  !fn. well_formed_dfg (build_dfg_fn fn)
+Proof
+  simp[build_dfg_fn_def] >>
+  match_mp_tac build_dfg_blocks_well_formed >>
+  simp[well_formed_dfg_def]
+QED
 
 (* --------------------------------------------------------------------------
    PHI Origins Computation
@@ -388,10 +436,10 @@ Proof
       metis_tac[IN_SING, IN_DIFF])
 QED
 
-(* For phi_all_same_var_correct, we need the resolved variable to be src_var,
-   not a self-reference. This holds when the PHI resolves to a non-self edge.
-   Alternative: prove that if var = out, then lookup_var out s = lookup_var src_var s
-   by the nature of PHI semantics (self-reference preserves the previous value). *)
+(* For phi_all_same_var_correct, we rule out the self-reference edge
+   (where resolve_phi returns the PHI's output). On those edges the
+   transformation is not obviously sound, so we assume the predecessor
+   chosen at runtime is not the self edge. *)
 Theorem phi_all_same_var_correct:
   !inst s s' src_var out prev_bb var.
     is_phi_inst inst /\
@@ -401,21 +449,20 @@ Theorem phi_all_same_var_correct:
     src_var <> out /\
     s.vs_prev_bb = SOME prev_bb /\
     resolve_phi prev_bb inst.inst_operands = SOME (Var var) /\
-    var = src_var /\  (* The resolved var must be src_var, not a self-ref *)
+    var <> out /\  (* Exclude the self-reference case *)
     step_inst inst s = OK s'
   ==>
     step_inst (transform_inst_simple inst) s = OK s'
 Proof
   rpt strip_tac >>
-  (* Simplify goal using transform_inst_simple rewriting *)
-  fs[transform_inst_simple_def] >>
-  (* Now we need to show that ASSIGN with [Var src_var] gives same result as PHI *)
-  (* The assumption tells us that the PHI executed with var = src_var gives OK s' *)
-  (* This means eval_operand (Var src_var) s = SOME value and s' = update_var out value s *)
-  (* Simplify step_inst for ASSIGN in goal *)
-  simp[step_inst_def] >>
-  (* Simplify step_inst for PHI in assumption *)
-  fs[step_inst_def, is_phi_inst_def]
+  (* From phi_all_same_var_resolve we know the resolved var is src_var *)
+  imp_res_tac phi_all_same_var_resolve >>
+  fs[] >>
+  fs[transform_inst_simple_def, is_phi_inst_def] >>
+  qpat_x_assum `step_inst inst s = OK s'` mp_tac >>
+  simp[step_inst_def, eval_operand_def,
+       exec_result_distinct, exec_result_11] >>
+  simp[step_inst_def, eval_operand_def]
 QED
 
 (* --------------------------------------------------------------------------
@@ -427,9 +474,10 @@ QED
 
 (* Helper: PHI resolution yields the value of the origin *)
 Theorem phi_resolve_single_origin:
-  !dfg inst origin prev_bb s.
+  !dfg inst origin prev_bb s v.
     is_phi_inst inst /\
     phi_single_origin dfg inst = SOME origin /\
+    well_formed_dfg dfg /\
     s.vs_prev_bb = SOME prev_bb /\
     resolve_phi prev_bb inst.inst_operands = SOME (Var v) /\
     dfg v = SOME origin
@@ -439,10 +487,8 @@ Theorem phi_resolve_single_origin:
         SOME src => lookup_var src s
       | NONE => NONE
 Proof
-  rw[eval_operand_def, lookup_var_def] >>
-  (* This needs more careful proof about the relationship between
-     the resolved variable and the origin instruction *)
-  cheat
+  rw[eval_operand_def, well_formed_dfg_def] >>
+  res_tac >> fs[]
 QED
 
 (* Main theorem: transformed instruction preserves semantics *)
