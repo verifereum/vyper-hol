@@ -1,6 +1,6 @@
 Theory vyperSmallStep
 Ancestors
-  arithmetic combin pair list while
+  arithmetic combin pair list While
   vyperMisc vyperInterpreter
 Libs
   cv_transLib
@@ -57,6 +57,7 @@ Datatype:
   | BuiltinK builtin eval_continuation
   | TypeBuiltinK type_builtin type eval_continuation
   | CallSendK eval_continuation
+  | ExtCallK eval_continuation
   | IntCallK (num |-> type_args) identifier ((identifier # type) list) type (stmt list) eval_continuation
   | IntCallK1 (scope list) type_value eval_continuation
   | ExprsK (expr list) eval_continuation
@@ -180,8 +181,10 @@ Definition eval_expr_cps_def:
     (case check (LENGTH es = 2) "Send args" st of
        (INR ex, st) => AK cx9 (ApplyExc ex) st k
      | (INL (), st) => eval_exprs_cps cx9 es st (CallSendK k)) ∧
-  eval_expr_cps cx10 (Call (ExtCall _ _) _) st k =
-    AK cx10 (ApplyExc (Error "TODO: ExtCall")) st k ∧
+  eval_expr_cps cx10 (Call (ExtCall _ _) es) st k =
+    (case check (LENGTH es ≥ 1) "ExtCall needs target" st of
+       (INR ex, st) => AK cx10 (ApplyExc ex) st k
+     | (INL (), st) => eval_exprs_cps cx10 es st (ExtCallK k)) ∧
   eval_expr_cps cx10 (Call (IntCall fn) es) st k =
     (case do
       check (no_recursion fn cx10.stk) "recursion";
@@ -365,6 +368,7 @@ Definition apply_exc_def:
   apply_exc cx ex st (BuiltinK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (TypeBuiltinK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CallSendK k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (ExtCallK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IntCallK _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IntCallK1 prev rtv k) =
     liftk (cx with stk updated_by TL) (ApplyTv o Value)
@@ -576,6 +580,12 @@ Definition apply_vals_def:
       amount <- lift_option (dest_NumV $ EL 1 vs) "Send not NumV";
       transfer_value cx.txn.target toAddr amount;
       return $ Value NoneV
+    od st) k ∧
+  apply_vals cx vs st (ExtCallK k) =
+    liftk cx ApplyTv (do
+      check (LENGTH vs ≥ 1) "ExtCallK nargs";
+      toAddr <- lift_option (dest_AddressV $ HD vs) "ExtCall target not AddressV";
+      raise $ Error "ExtCall: cross-contract calls not yet implemented"
     od st) k ∧
   apply_vals cx vs st (IntCallK tenv fn args ret body k) =
     (case do
@@ -1135,7 +1145,15 @@ Proof
       \\ drule eval_exprs_length
       \\ gvs[check_def, assert_def] )
     \\ rw[] )
-  \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, raise_def]
+  (* ExtCall case *)
+  \\ conj_tac >- (
+    rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
+    \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
+    \\ gvs[] \\ first_x_assum drule \\ rw[]
+    \\ CASE_TAC \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    >> rw[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def, liftk1]
+    \\ CASE_TAC \\ gvs[lift_option_def, raise_def] )
   \\ conj_tac >- (
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def,
        no_recursion_def]

@@ -2573,45 +2573,15 @@ Definition evaluate_def:
     transfer_value cx.txn.target toAddr amount;
     return $ Value $ NoneV
   od ∧
+  (* ExtCall: external contract call
+   * TODO: Implement cross-contract interpretation once termination measure
+   * is extended to track (address, function) pairs across all sources.
+   * Currently stubbed to allow build to succeed. *)
   eval_expr cx (Call (ExtCall is_static method_name) es) = do
     check (LENGTH es ≥ 1) "ExtCall needs target";
     vs <- eval_exprs cx es;
     toAddr <- lift_option (dest_AddressV $ HD vs) "ExtCall target not AddressV";
-    args <<- TL vs;
-    (* Hybrid approach: try Vyper source first, fall back to EVM *)
-    case ALOOKUP cx.sources toAddr of
-    | SOME target_ts => do
-        (* Vyper source available - interpret directly *)
-        tup <- lift_option (lookup_function method_name External target_ts)
-                           "ExtCall method not found";
-        mut <<- FST tup; fargs <<- FST (SND tup);
-        ret <<- FST (SND (SND tup)); body <<- SND (SND (SND tup));
-        check (LENGTH fargs = LENGTH args) "ExtCall args length";
-        tenv <<- type_env target_ts;
-        env <- lift_option (bind_arguments tenv fargs args) "ExtCall bind_arguments";
-        prev <- get_scopes;
-        rtv <- lift_option (evaluate_type tenv ret) "ExtCall eval ret";
-        ext_tx <<- cx.txn with <| target := toAddr;
-                                  sender := cx.txn.target;
-                                  function_name := method_name;
-                                  args := args;
-                                  value := 0 (* TODO: handle value for payable *) |>;
-        ext_cx <<- <| sources := cx.sources; txn := ext_tx; stk := [method_name] |>;
-        (* For static calls, roll back state changes *)
-        call_action <<- do
-          set_scopes [env];
-          rv <- finally
-            (try (do eval_stmts ext_cx body; return NoneV od) handle_function)
-            (set_scopes prev);
-          crv <- lift_option (safe_cast rtv rv) "ExtCall cast ret";
-          return $ Value crv
-        od;
-        if is_static then with_rollback call_action else call_action
-      od
-    | NONE =>
-        (* No Vyper source - would need EVM execution *)
-        (* TODO: ABI-encode call, execute via EVM, ABI-decode result *)
-        raise $ Error "ExtCall: no source for target (EVM fallback not yet implemented)"
+    raise $ Error "ExtCall: cross-contract calls not yet implemented"
   od ∧
   eval_expr cx (Call (IntCall fn) es) = do
     check (¬MEM fn cx.stk) "recursion";
