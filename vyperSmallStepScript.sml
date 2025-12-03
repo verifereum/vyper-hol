@@ -1152,7 +1152,15 @@ Proof
     \\ gvs[] \\ first_x_assum drule \\ rw[]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    >> rw[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def, liftk1]
+    >> rw[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def,
+          ignore_bind_def, liftk1]
+    \\ qmatch_goalsub_abbrev_tac`check b c d`
+    \\ `check b c d = (INL (), d)`
+    by (
+      rw[check_def, assert_def, Abbr`b`]
+      \\ drule eval_exprs_length
+      \\ gvs[check_def, assert_def] )
+    \\ rw[]
     \\ CASE_TAC \\ gvs[lift_option_def, raise_def] )
   \\ conj_tac >- (
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def,
