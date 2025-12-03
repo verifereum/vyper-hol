@@ -22,7 +22,7 @@ val _ = new_theory "venomState";
    -------------------------------------------------------------------------- *)
 
 (* Variable environment maps variable names to 256-bit values *)
-Type var_env = ":string |-> bytes32"
+Type var_env = ``:string |-> bytes32``
 
 (* --------------------------------------------------------------------------
    Operands - values that can be used as instruction arguments

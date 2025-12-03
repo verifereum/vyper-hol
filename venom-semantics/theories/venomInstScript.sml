@@ -20,8 +20,8 @@ val _ = new_theory "venomInst";
 
 Datatype:
   opcode =
-    (* Arithmetic *)
-    | ADD | SUB | MUL | DIV | SDIV | MOD | SMOD | EXP
+    (* Arithmetic - note: Div/Mod to avoid HOL4 name clash *)
+    | ADD | SUB | MUL | Div | SDIV | Mod | SMOD | EXP
     | ADDMOD | MULMOD
     (* Comparison *)
     | EQ | LT | GT | SLT | SGT | ISZERO
@@ -285,7 +285,7 @@ End
 Definition get_successors_def:
   get_successors inst =
     if ~is_terminator inst.inst_opcode then [] else
-    FILTER_MAP get_label inst.inst_operands
+    MAP THE (FILTER IS_SOME (MAP get_label inst.inst_operands))
 End
 
 val _ = export_theory();
