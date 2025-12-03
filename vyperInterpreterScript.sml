@@ -2576,6 +2576,9 @@ Definition evaluate_def:
   (* ExtCall: external contract call
    * TODO: Implement cross-contract interpretation once termination measure
    * is extended to track (address, function) pairs across all sources.
+   * When implemented:
+   * - If is_static=T, wrap the call in with_rollback to discard state changes
+   * - If is_static=F, state changes persist (normal extcall)
    * Currently stubbed to allow build to succeed. *)
   eval_expr cx (Call (ExtCall is_static method_name) es) = do
     check (LENGTH es ≥ 1) "ExtCall needs target";
