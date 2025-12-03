@@ -436,33 +436,97 @@ Proof
       metis_tac[IN_SING, IN_DIFF])
 QED
 
+(* Evaluate a PHI step given the predecessor and output *)
+Theorem step_inst_phi_eval:
+  !inst out prev s.
+    inst.inst_opcode = PHI /\
+    inst.inst_output = SOME out /\
+    s.vs_prev_bb = SOME prev
+  ==>
+    step_inst inst s =
+      case resolve_phi prev inst.inst_operands of
+        NONE => Error "phi: no matching predecessor"
+      | SOME val_op =>
+          case eval_operand val_op s of
+            SOME v => OK (update_var out v s)
+          | NONE => Error "phi: undefined operand"
+Proof
+  rw[step_inst_def]
+QED
+
+(* Evaluate an ASSIGN with a single operand *)
+Theorem step_inst_assign_eval:
+  !inst out op s.
+    inst.inst_opcode = ASSIGN /\
+    inst.inst_operands = [op] /\
+    inst.inst_output = SOME out
+  ==>
+    step_inst inst s =
+      case eval_operand op s of
+        SOME v => OK (update_var out v s)
+      | NONE => Error "undefined operand"
+Proof
+  rw[step_inst_def]
+QED
+
+(* Evaluate the transformed PHI (simple assignment case) *)
+Theorem step_inst_transform_simple_eval:
+  !inst src_var out s.
+    phi_all_same_var inst = SOME src_var /\
+    inst.inst_output = SOME out
+  ==>
+    step_inst (transform_inst_simple inst) s =
+      case eval_operand (Var src_var) s of
+        SOME v => OK (update_var out v s)
+      | NONE => Error "undefined operand"
+Proof
+  simp[transform_inst_simple_def, step_inst_assign_eval, eval_operand_def]
+QED
+
+(* Evaluate a PHI that resolves to Var src_var and succeeds *)
+Theorem step_inst_phi_resolves_var_ok:
+  !inst s s' src_var out prev.
+    is_phi_inst inst /\
+    inst.inst_output = SOME out /\
+    s.vs_prev_bb = SOME prev /\
+    resolve_phi prev inst.inst_operands = SOME (Var src_var) /\
+    step_inst inst s = OK s'
+  ==>
+    ?v. lookup_var src_var s = SOME v /\ s' = update_var out v s
+Proof
+  rpt strip_tac >>
+  fs[is_phi_inst_def, step_inst_phi_eval] >>
+  fs[] >>
+  Cases_on `eval_operand (Var src_var) s`
+  >- (fs[exec_result_distinct, exec_result_11] >> metis_tac[])
+  >>
+  rename1 `eval_operand (Var src_var) s = SOME v` >>
+  fs[eval_operand_def, exec_result_distinct, exec_result_11] >>
+  qexists_tac `v` >> fs[]
+QED
+
 (* For phi_all_same_var_correct, we rule out the self-reference edge
    (where resolve_phi returns the PHI's output). On those edges the
    transformation is not obviously sound, so we assume the predecessor
    chosen at runtime is not the self edge. *)
 Theorem phi_all_same_var_correct:
-  !inst s s' src_var out prev_bb var.
+  !inst s s' src_var out prev_bb.
     is_phi_inst inst /\
     phi_well_formed inst.inst_operands /\
     phi_all_same_var inst = SOME src_var /\
     inst.inst_output = SOME out /\
     src_var <> out /\
     s.vs_prev_bb = SOME prev_bb /\
-    resolve_phi prev_bb inst.inst_operands = SOME (Var var) /\
-    var <> out /\  (* Exclude the self-reference case *)
+    resolve_phi prev_bb inst.inst_operands = SOME (Var src_var) /\
+    (* Exclude the self-reference case *)
     step_inst inst s = OK s'
   ==>
     step_inst (transform_inst_simple inst) s = OK s'
 Proof
   rpt strip_tac >>
-  (* From phi_all_same_var_resolve we know the resolved var is src_var *)
-  imp_res_tac phi_all_same_var_resolve >>
-  fs[] >>
-  fs[transform_inst_simple_def, is_phi_inst_def] >>
-  qpat_x_assum `step_inst inst s = OK s'` mp_tac >>
-  simp[step_inst_def, eval_operand_def,
-       exec_result_distinct, exec_result_11] >>
-  simp[step_inst_def, eval_operand_def]
+  imp_res_tac step_inst_phi_resolves_var_ok >>
+  fs[step_inst_transform_simple_eval, eval_operand_def,
+     exec_result_distinct, exec_result_11]
 QED
 
 (* --------------------------------------------------------------------------
