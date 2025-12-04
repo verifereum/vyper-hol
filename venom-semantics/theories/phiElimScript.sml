@@ -238,6 +238,13 @@ Proof
   simp[IMAGE_FINITE, FINITE_FRANGE]
 QED
 
+(* Key lemma: if FLOOKUP succeeds, the result's inst_id is in dfg_ids *)
+Theorem FLOOKUP_implies_dfg_ids:
+  !dfg v inst. FLOOKUP dfg v = SOME inst ==> inst.inst_id IN dfg_ids dfg
+Proof
+  rw[dfg_ids_def, GSPECIFICATION] >> metis_tac[]
+QED
+
 (* Recursive origin computation with visited set.
    The visited set contains instruction IDs (not full instructions) to handle
    the fact that two instructions may be structurally equal but different objects.
@@ -298,15 +305,35 @@ Definition get_origins_def:
     else
       {inst}
 Termination
-  cheat (* TODO: Fix termination proof
-   * Measure: For get_origins_list (INL), we use 2*(unvisited IDs) + 1 + list length.
-   *          For get_origins (INR), we use 2*(unvisited IDs).
-   *
-   * The +1 ensures get_origins_list > get_origins when called on same dfg/visited.
-   * Both PHI and ASSIGN now add to visited, so the primary measure decreases.
-   *
-   * Finiteness: dfg_ids is always finite since dfg is a finite map (dfg_ids_finite).
-   *)
+  (* Measure: add 1 if inst NOT in dfg_ids, so going from inst to list decreases.
+     For instructions from FLOOKUP, they ARE in dfg_ids, so the bonus is 0. *)
+  WF_REL_TAC `inv_image ($< LEX $<)
+    (\x. case x of
+           INL (dfg, visited, vars) =>
+             (CARD (dfg_ids dfg DIFF visited), LENGTH vars)
+         | INR (dfg, visited, inst) =>
+             (CARD (dfg_ids dfg DIFF visited) +
+                (if inst.inst_id IN dfg_ids dfg then 0 else 1), 0))` >>
+  rw[] >>
+  (* Handle contradictions where FLOOKUP = SOME but inst_id NOT IN dfg_ids *)
+  TRY (imp_res_tac FLOOKUP_implies_dfg_ids >> fs[] >> NO_TAC) >>
+  (* Handle case where inst.inst_id IN dfg_ids: CARD strictly decreases *)
+  TRY (
+    `dfg_ids dfg DIFF (inst.inst_id INSERT visited) PSUBSET dfg_ids dfg DIFF visited` by (
+      simp[PSUBSET_DEF, SUBSET_DEF, EXTENSION] >>
+      rw[] >- metis_tac[] >>
+      qexists_tac `inst.inst_id` >> simp[]
+    ) >>
+    irule CARD_PSUBSET >> simp[FINITE_DIFF, dfg_ids_finite] >> NO_TAC
+  ) >>
+  (* Handle case where inst.inst_id NOT IN dfg_ids: CARD same but bonus provides slack *)
+  TRY (
+    irule LESS_EQ_LESS_TRANS >> qexists_tac `CARD (dfg_ids dfg DIFF visited)` >> simp[] >>
+    irule CARD_SUBSET >> rw[FINITE_DIFF, dfg_ids_finite] >>
+    simp[SUBSET_DEF] >> metis_tac[]
+  ) >>
+  (* Prove contrapositive for FLOOKUP case *)
+  CCONTR_TAC >> fs[] >> imp_res_tac FLOOKUP_implies_dfg_ids >> fs[]
 End
 
 (* Wrapper for computing origins starting with empty visited set *)
@@ -367,7 +394,30 @@ Definition get_origins_checked_def:
     else
       SOME {inst}
 Termination
-  cheat (* TODO: Same termination as get_origins *)
+  (* Same measure as get_origins *)
+  WF_REL_TAC `inv_image ($< LEX $<)
+    (\x. case x of
+           INL (dfg, visited, vars) =>
+             (CARD (dfg_ids dfg DIFF visited), LENGTH vars)
+         | INR (dfg, visited, inst) =>
+             (CARD (dfg_ids dfg DIFF visited) +
+                (if inst.inst_id IN dfg_ids dfg then 0 else 1), 0))` >>
+  rw[] >>
+  TRY (imp_res_tac FLOOKUP_implies_dfg_ids >> fs[] >> NO_TAC) >>
+  TRY (
+    `dfg_ids dfg DIFF (inst.inst_id INSERT visited) PSUBSET dfg_ids dfg DIFF visited` by (
+      simp[PSUBSET_DEF, SUBSET_DEF, EXTENSION] >>
+      rw[] >- metis_tac[] >>
+      qexists_tac `inst.inst_id` >> simp[]
+    ) >>
+    irule CARD_PSUBSET >> simp[FINITE_DIFF, dfg_ids_finite] >> NO_TAC
+  ) >>
+  TRY (
+    irule LESS_EQ_LESS_TRANS >> qexists_tac `CARD (dfg_ids dfg DIFF visited)` >> simp[] >>
+    irule CARD_SUBSET >> rw[FINITE_DIFF, dfg_ids_finite] >>
+    simp[SUBSET_DEF] >> metis_tac[]
+  ) >>
+  CCONTR_TAC >> fs[] >> imp_res_tac FLOOKUP_implies_dfg_ids >> fs[]
 End
 
 (* --------------------------------------------------------------------------
