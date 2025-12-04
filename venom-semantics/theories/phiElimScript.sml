@@ -1142,8 +1142,15 @@ Theorem step_inst_state_equiv:
   ==>
     ?r2. step_inst inst s2 = OK r2 /\ state_equiv r1 r2
 Proof
-  (* Case split on opcode, use helper lemmas for each case *)
-  cheat
+  rpt strip_tac >>
+  fs[step_inst_def] >>
+  Cases_on `inst.inst_opcode` >> gvs[AllCaseEqs()] >>
+  metis_tac[exec_binop_state_equiv, exec_modop_state_equiv, exec_unop_state_equiv,
+            eval_operand_state_equiv, update_var_state_equiv,
+            mload_state_equiv, mstore_state_equiv,
+            sload_state_equiv, sstore_state_equiv,
+            tload_state_equiv, tstore_state_equiv,
+            jump_to_state_equiv, state_equiv_refl, state_equiv_def]
 QED
 
 (* Block-level correctness - simplified version with DFG invariant
