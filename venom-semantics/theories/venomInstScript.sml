@@ -69,22 +69,29 @@ End
    Instructions
 
    Each instruction has:
+   - id: unique identifier (models object identity from Python)
    - opcode: the operation to perform
    - operands: list of input operands (rightmost = top of conceptual stack)
    - output: optional output variable name (SSA)
+
+   The inst_id is used to distinguish instructions that may have identical
+   fields but are different objects. This is important for passes that
+   track visited instructions or build instruction maps.
    -------------------------------------------------------------------------- *)
 
 Datatype:
   instruction = <|
+    inst_id : num;
     inst_opcode : opcode;
     inst_operands : operand list;
     inst_output : string option
   |>
 End
 
-(* Construct an instruction *)
+(* Construct an instruction with a given ID *)
 Definition mk_inst_def:
-  mk_inst op ops out = <|
+  mk_inst id op ops out = <|
+    inst_id := id;
     inst_opcode := op;
     inst_operands := ops;
     inst_output := out
