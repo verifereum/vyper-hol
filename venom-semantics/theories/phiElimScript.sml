@@ -515,7 +515,26 @@ Theorem get_origins_list_checked_succeeds:
     ==>
     ?result. get_origins_list_checked dfg visited vars = SOME result
 Proof
-  cheat
+  Induct_on `vars` >>
+  simp[Once get_origins_checked_def] >>
+  rpt strip_tac >>
+  Cases_on `FLOOKUP dfg h` >> simp[] >- (
+    (* FLOOKUP dfg h = NONE: apply IH directly *)
+    first_x_assum (qspecl_then [`dfg`, `visited`] mp_tac) >> impl_tac >- (
+      rpt strip_tac >> first_x_assum irule >> simp[] >>
+      qexists_tac `v` >> simp[]
+    ) >> simp[]
+  ) >>
+  (* FLOOKUP dfg h = SOME x: need both get_origins_checked and IH *)
+  `?r. get_origins_checked dfg visited x = SOME r` by (
+    first_x_assum (qspecl_then [`h`, `x`] mp_tac) >> simp[]
+  ) >>
+  simp[] >>
+  first_x_assum (qspecl_then [`dfg`, `visited`] mp_tac) >> impl_tac >- (
+    rpt strip_tac >> first_x_assum irule >> simp[] >>
+    qexists_tac `v` >> simp[]
+  ) >>
+  strip_tac >> simp[]
 QED
 
 (* Key theorem: defs_dominate_uses implies get_origins_checked succeeds *)
