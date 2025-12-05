@@ -89,6 +89,16 @@ Proof
   res_tac >> simp[]
 QED
 
+Theorem lookup_block_at_hd:
+  !lbl blocks bb.
+    blocks <> [] /\
+    lbl = (HD blocks).bb_label /\
+    lookup_block lbl blocks = SOME bb ==>
+    bb = HD blocks
+Proof
+  Cases_on `blocks` >> simp[lookup_block_def]
+QED
+
 Theorem result_equiv_trans:
   !r1 r2 r3. result_equiv r1 r2 /\ result_equiv r2 r3 ==> result_equiv r1 r3
 Proof
@@ -556,10 +566,21 @@ Theorem step_in_block_error_transform:
 Proof
   rpt strip_tac >>
   fs[step_in_block_def] >>
-  Cases_on `get_instruction bb s.vs_inst_idx` >> fs[] >>
-  imp_res_tac get_instruction_transform >> fs[] >>
-  gvs[AllCaseEqs()] >>
-  drule_all step_inst_error_transform >> strip_tac >> simp[]
+  Cases_on `get_instruction bb s.vs_inst_idx` >> gvs[AllCaseEqs()]
+  >- (
+    (* NONE case: transform_block preserves instruction count *)
+    `get_instruction (transform_block graph bb) s.vs_inst_idx = NONE` by
+      fs[get_instruction_def, transform_block_def] >>
+    simp[]
+  ) >>
+  (* SOME case: use step_inst_error_transform *)
+  `get_instruction (transform_block graph bb) s.vs_inst_idx = SOME (transform_inst graph x)` by (
+    irule get_instruction_transform >> simp[]
+  ) >>
+  `?e'. step_inst (transform_inst graph x) s = Error e'` by (
+    irule step_inst_error_transform >> simp[]
+  ) >>
+  qexists_tac `e'` >> disj2_tac >> qexists_tac `transform_inst graph x` >> simp[]
 QED
 
 (* Helper: step_inst preserves vs_prev_bb for non-terminator instructions *)
@@ -592,6 +613,50 @@ Proof
   gvs[AllCaseEqs()] >>
   drule_all step_inst_preserves_prev_bb >>
   simp[next_inst_def]
+QED
+
+(* Helper: terminator instructions that give OK set vs_prev_bb (via jump_to) *)
+Theorem step_inst_terminator_sets_prev_bb:
+  !inst s s'.
+    is_terminator inst.inst_opcode /\
+    step_inst inst s = OK s' /\
+    ~s'.vs_halted ==>
+    s'.vs_prev_bb <> NONE
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `step_inst _ _ = _` mp_tac >>
+  qpat_x_assum `is_terminator _` mp_tac >>
+  simp[step_inst_def] >>
+  Cases_on `inst.inst_opcode` >> simp[is_terminator_def, jump_to_def] >>
+  rpt (CASE_TAC >> gvs[]) >>
+  spose_not_then strip_assume_tac >> gvs[]
+QED
+
+(* run_block returning OK with ~halted means vs_prev_bb is set *)
+Theorem run_block_ok_not_halted_sets_prev_bb:
+  !fn bb s s'.
+    run_block fn bb s = OK s' /\ ~s'.vs_halted ==>
+    s'.vs_prev_bb <> NONE
+Proof
+  ho_match_mp_tac run_block_ind >> rpt strip_tac >>
+  qpat_x_assum `run_block _ _ _ = _` mp_tac >>
+  simp[Once run_block_def] >>
+  Cases_on `step_in_block fn bb s` >> Cases_on `q` >> simp[] >>
+  Cases_on `v.vs_halted` >> simp[] >>
+  Cases_on `r` >> simp[] >- (
+    (* Terminal case *)
+    spose_not_then strip_assume_tac >> gvs[] >>
+    qpat_x_assum `step_in_block _ _ _ = _` mp_tac >> simp[step_in_block_def] >>
+    Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
+    Cases_on `step_inst x s` >> simp[] >>
+    Cases_on `is_terminator x.inst_opcode` >> simp[] >>
+    spose_not_then strip_assume_tac >> gvs[] >>
+    drule_at (Pos last) step_inst_terminator_sets_prev_bb >> simp[] >>
+    qexists_tac `x` >> qexists_tac `s` >> simp[]
+  ) >>
+  (* Non-terminal case: use IH *)
+  spose_not_then strip_assume_tac >> gvs[] >>
+  first_x_assum (qspecl_then [`OK v`, `F`, `v`] mp_tac) >> simp[]
 QED
 
 (* --------------------------------------------------------------------------
@@ -733,14 +798,52 @@ Proof
     disch_then (qspec_then `graph` mp_tac) >>
     simp[Once run_block_def, result_equiv_def, state_equiv_refl]
   ) >>
-  (* Error case *)
+  (* Error case - prove directly by case analysis *)
   simp[Once run_block_def] >>
-  (* Use step_in_block_error_transform to show transformed also errors *)
-  `?e'. step_in_block fn (transform_block graph bb) s = (Error e', T)` by (
-    irule step_in_block_error_transform >> simp[] >>
-    rpt strip_tac >> first_x_assum drule_all >> simp[]
+  fs[step_in_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> gvs[AllCaseEqs()]
+  >- (
+    (* NONE case: transform_block preserves instruction count *)
+    `get_instruction (transform_block graph bb) s.vs_inst_idx = NONE` by
+      fs[get_instruction_def, transform_block_def] >>
+    simp[result_equiv_def]
   ) >>
-  simp[result_equiv_def]
+  (* SOME x case: need to show transform_inst graph x also errors *)
+  `get_instruction (transform_block graph bb) s.vs_inst_idx = SOME (transform_inst graph x)` by (
+    fs[get_instruction_def, transform_block_def] >>
+    Cases_on `s.vs_inst_idx < LENGTH bb.bb_instructions` >> gvs[] >>
+    simp[EL_MAP]
+  ) >>
+  simp[] >>
+  (* Case split on result of step_inst on transformed instruction *)
+  Cases_on `step_inst (transform_inst graph x) s` >> gvs[result_equiv_def, AllCaseEqs()]
+  (* Error case is done by result_equiv (Error _) (Error _) = T *)
+  (* For OK/Halt/Revert, derive contradiction: *)
+  >- (
+    (* OK case *)
+    Cases_on `is_phi_inst x` >> gvs[transform_inst_def, phi_single_origin_def] >>
+    Cases_on `CARD (compute_origins graph x DELETE x) = 1` >> gvs[] >>
+    Cases_on `(CHOICE (compute_origins graph x DELETE x)).inst_output` >> gvs[] >>
+    Cases_on `s.vs_prev_bb` >> gvs[] >>
+    first_x_assum (qspecl_then [`x`, `x'`, `x''`, `s'`, `s`] mp_tac) >> simp[] >> strip_tac >>
+    fs[step_inst_def, AllCaseEqs(), eval_operand_def]
+  )
+  >- (
+    (* Halt case *)
+    Cases_on `is_phi_inst x` >> gvs[transform_inst_def, phi_single_origin_def] >>
+    Cases_on `CARD (compute_origins graph x DELETE x) = 1` >> gvs[] >>
+    Cases_on `(CHOICE (compute_origins graph x DELETE x)).inst_output` >> gvs[] >>
+    Cases_on `s.vs_prev_bb` >> gvs[] >>
+    first_x_assum (qspecl_then [`x`, `x'`, `x''`, `s'`, `s`] mp_tac) >> simp[] >> strip_tac >>
+    fs[step_inst_def, AllCaseEqs(), eval_operand_def]
+  ) >>
+  (* Revert case *)
+  Cases_on `is_phi_inst x` >> gvs[transform_inst_def, phi_single_origin_def] >>
+  Cases_on `CARD (compute_origins graph x DELETE x) = 1` >> gvs[] >>
+  Cases_on `(CHOICE (compute_origins graph x DELETE x)).inst_output` >> gvs[] >>
+  Cases_on `s.vs_prev_bb` >> gvs[] >>
+  first_x_assum (qspecl_then [`x`, `x'`, `x''`, `s'`, `s`] mp_tac) >> simp[] >> strip_tac >>
+  fs[step_inst_def, AllCaseEqs(), eval_operand_def]
 QED
 
 (* --------------------------------------------------------------------------
@@ -827,51 +930,42 @@ Proof
     simp[Once run_function_def, transform_function_def, lookup_block_transform] >>
     Cases_on `lookup_block s.vs_current_bb func.fn_blocks` >> gvs[result_equiv_def] >>
     rename1 `lookup_block _ _ = SOME bb` >>
-    (* Normalize fn parameter using run_block_fn_irrelevant *)
     `run_block (func with fn_blocks := MAP (transform_block (build_dfg_fn func)) func.fn_blocks)
                (transform_block (build_dfg_fn func) bb) s =
      run_block func (transform_block (build_dfg_fn func) bb) s`
     by metis_tac[run_block_fn_irrelevant] >>
-    (* Rewrite goal to use transform_function *)
     `(func with fn_blocks := MAP (transform_block (build_dfg_fn func)) func.fn_blocks) =
      transform_function func` by simp[transform_function_def, LET_DEF] >>
     pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> REWRITE_TAC [th]) >>
-    (* Get MEM bb *)
     `MEM bb func.fn_blocks` by metis_tac[lookup_block_MEM] >>
-    (* Establish result_equiv for run_blocks using transform_block_result_equiv *)
-    (* Note: transform_block_result_equiv has the Error case cheated *)
     `result_equiv (run_block func bb s) (run_block func (transform_block (build_dfg_fn func) bb) s)` by (
-      irule transform_block_result_equiv >>
-      simp[build_dfg_fn_well_formed] >>
-      fs[phi_wf_fn_def] >>
-      (* Deriving the conditions from phi_wf_fn requires showing the inst is in bb *)
-      (* and bb is in func.fn_blocks - which we have via MEM bb. Cheat the details. *)
-      cheat
+      irule transform_block_result_equiv >> simp[] >>
+      fs[phi_wf_fn_def, LET_DEF] >> rpt conj_tac >>
+      rpt strip_tac >> TRY (first_x_assum drule_all >> simp[]) >>
+      simp[build_dfg_fn_well_formed]
     ) >>
-    (* Case split on run_block results *)
     Cases_on `run_block func bb s` >> Cases_on `run_block func (transform_block (build_dfg_fn func) bb) s` >>
     gvs[result_equiv_def] >>
-    (* OK case: need to chain via transitivity *)
-    `v.vs_halted <=> v'.vs_halted` by fs[state_equiv_def] >>
+    TRY (`v.vs_halted <=> v'.vs_halted` by fs[state_equiv_def]) >>
     Cases_on `v.vs_halted` >> gvs[result_equiv_def] >>
     (* Not halted - use run_function_state_equiv to bridge state_equiv *)
     `?r2. run_function fuel func v' = r2 /\ result_equiv (run_function fuel func v) r2` by (
       qspecl_then [`fuel`, `func`, `v`, `v'`, `run_function fuel func v`]
         mp_tac run_function_state_equiv >> simp[]
     ) >>
-    (* Now chain: result_equiv (...func v) r2 and result_equiv r2 (... transform_function func v') *)
-    irule result_equiv_trans >>
-    qexists_tac `r2` >> simp[] >>
-    (* Need: result_equiv r2 (run_function fuel (transform_function func) v') *)
-    (* Since r2 = run_function fuel func v', use IH *)
-    first_x_assum (qspecl_then [`func`, `v'`] mp_tac) >>
-    impl_tac >- (
-      simp[] >>
-      (* The remaining precondition: vs_prev_bb <> NONE or at entry *)
-      (* This requires a semantic property - cheat for now *)
-      cheat
+    irule result_equiv_trans >> qexists_tac `r2` >> simp[] >>
+    (* Use IH - first prove v'.vs_prev_bb <> NONE *)
+    `v'.vs_prev_bb <> NONE` by (
+      drule run_block_ok_not_halted_sets_prev_bb >> simp[]
     ) >>
-    strip_tac >> fs[]
+    first_x_assum (qspecl_then [`func`, `v'`] mp_tac) >>
+    impl_tac >- simp[] >>
+    strip_tac >>
+    (* Prove result_equiv symmetry via case analysis *)
+    Cases_on `run_function fuel func v'` >>
+    Cases_on `run_function fuel (transform_function func) v'` >>
+    gvs[result_equiv_def] >>
+    metis_tac[state_equiv_sym]
   ) >>
   (* SUC fuel case: at entry block *)
   qpat_x_assum `run_function (SUC _) _ _ = _` mp_tac >>
@@ -893,19 +987,25 @@ Proof
   `run_block func (transform_block (build_dfg_fn func) bb) s = run_block func bb s` by (
     irule run_block_transform_identity >>
     rpt strip_tac >>
-    fs[phi_wf_fn_def] >>
-    (* Need to show bb = HD func.fn_blocks *)
-    (* This follows from: lookup_block (HD func.fn_blocks).bb_label func.fn_blocks = SOME bb *)
-    (* And the fact that lookup_block returns the first matching block *)
-    cheat
+    (* First prove bb = HD func.fn_blocks *)
+    `bb = HD func.fn_blocks` by (
+      qpat_x_assum `lookup_block _ _ = _` mp_tac >>
+      qpat_x_assum `_ = (HD _).bb_label` mp_tac >>
+      Cases_on `func.fn_blocks` >> simp[lookup_block_def]
+    ) >>
+    fs[phi_wf_fn_def, LET_DEF] >>
+    first_x_assum irule >> simp[] >>
+    qexists_tac `idx` >> simp[]
   ) >>
   simp[] >>
   Cases_on `run_block func bb s` >> gvs[result_equiv_def] >>
   Cases_on `v.vs_halted` >> gvs[result_equiv_def] >>
   (* Not halted - use IH *)
-  first_x_assum irule >> simp[] >>
-  (* Precondition for IH - cheat *)
-  cheat
+  (* v.vs_prev_bb <> NONE follows from run_block_ok_not_halted_sets_prev_bb *)
+  qspecl_then [`func`, `bb`, `s`, `v`] assume_tac run_block_ok_not_halted_sets_prev_bb >>
+  gvs[] >>
+  first_x_assum (qspecl_then [`func`, `v`] mp_tac) >>
+  simp[state_equiv_refl]
 QED
 
 (* --------------------------------------------------------------------------
@@ -934,8 +1034,8 @@ Proof
   ) >- (
     rw[transform_function_def]
   ) >>
-  (* Follows from phi_elimination_correct *)
-  cheat
+  qspecl_then [`fuel`, `func`, `s`, `run_function fuel func s`] mp_tac phi_elimination_correct >>
+  simp[]
 QED
 
 val _ = export_theory();
