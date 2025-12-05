@@ -66,6 +66,27 @@ Proof
   rw[transform_block_def]
 QED
 
+(* --------------------------------------------------------------------------
+   Lookup Helpers
+   -------------------------------------------------------------------------- *)
+
+Theorem lookup_block_transform:
+  !lbl blocks dfg.
+    lookup_block lbl (MAP (transform_block dfg) blocks) =
+    OPTION_MAP (transform_block dfg) (lookup_block lbl blocks)
+Proof
+  Induct_on `blocks` >> simp[lookup_block_def] >>
+  rpt strip_tac >>
+  Cases_on `h.bb_label = lbl` >> simp[lookup_block_def, transform_block_label]
+QED
+
+Theorem result_equiv_trans:
+  !r1 r2 r3. result_equiv r1 r2 /\ result_equiv r2 r3 ==> result_equiv r1 r3
+Proof
+  Cases >> Cases >> Cases >>
+  simp[result_equiv_def] >> metis_tac[state_equiv_trans]
+QED
+
 Theorem transform_block_length:
   !dfg bb.
     LENGTH (transform_block dfg bb).bb_instructions = LENGTH bb.bb_instructions
