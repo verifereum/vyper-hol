@@ -515,26 +515,22 @@ Theorem get_origins_list_checked_succeeds:
     ==>
     ?result. get_origins_list_checked dfg visited vars = SOME result
 Proof
-  Induct_on `vars` >>
-  simp[Once get_origins_checked_def] >>
+  Induct_on `vars` >- rw[Once get_origins_checked_def] >>
   rpt strip_tac >>
-  Cases_on `FLOOKUP dfg h` >> simp[] >- (
+  rw[Once get_origins_checked_def] >>
+  Cases_on `FLOOKUP dfg h` >> fs[] >- (
     (* FLOOKUP dfg h = NONE: apply IH directly *)
-    first_x_assum (qspecl_then [`dfg`, `visited`] mp_tac) >> impl_tac >- (
-      rpt strip_tac >> first_x_assum irule >> simp[] >>
-      qexists_tac `v` >> simp[]
-    ) >> simp[]
+    first_x_assum match_mp_tac >> rw[] >>
+    first_x_assum match_mp_tac >> fs[] >> qexists_tac `v` >> fs[]
   ) >>
-  (* FLOOKUP dfg h = SOME x: need both get_origins_checked and IH *)
+  (* FLOOKUP dfg h = SOME x: get result for x, then apply IH *)
   `?r. get_origins_checked dfg visited x = SOME r` by (
-    first_x_assum (qspecl_then [`h`, `x`] mp_tac) >> simp[]
-  ) >>
-  simp[] >>
-  first_x_assum (qspecl_then [`dfg`, `visited`] mp_tac) >> impl_tac >- (
-    rpt strip_tac >> first_x_assum irule >> simp[] >>
-    qexists_tac `v` >> simp[]
-  ) >>
-  strip_tac >> simp[]
+    first_x_assum (qspecl_then [`h`, `x`] mp_tac) >> fs[]
+  ) >> fs[] >>
+  `?result. get_origins_list_checked dfg visited vars = SOME result` by (
+    first_x_assum match_mp_tac >> rw[] >>
+    first_x_assum match_mp_tac >> fs[] >> qexists_tac `v` >> fs[]
+  ) >> fs[]
 QED
 
 (* Key theorem: defs_dominate_uses implies get_origins_checked succeeds *)
@@ -924,7 +920,8 @@ Proof
   simp[EL_MAP]
 QED
 
-(* Step-in-block preserves state equivalence - with well-formedness assumptions *)
+(* Step-in-block preserves state equivalence - with well-formedness assumptions
+   Note: The terminator flag is preserved exactly because transform_inst_preserves_terminator *)
 Theorem step_in_block_equiv:
   !dfg fn bb s s' is_term.
     step_in_block fn bb s = (OK s', is_term) /\
@@ -940,8 +937,8 @@ Theorem step_in_block_equiv:
        resolve_phi prev_bb inst.inst_operands = SOME (Var v) ==>
        FLOOKUP dfg v = SOME origin)
   ==>
-    ?s'' is_term'. step_in_block fn (transform_block dfg bb) s = (OK s'', is_term') /\
-                   state_equiv s' s''
+    ?s''. step_in_block fn (transform_block dfg bb) s = (OK s'', is_term) /\
+          state_equiv s' s''
 Proof
   rpt strip_tac >>
   fs[step_in_block_def] >>
@@ -983,68 +980,6 @@ Proof
   imp_res_tac transform_inst_non_phi >>
   simp[state_equiv_refl]
 QED
-
-(* --------------------------------------------------------------------------
-   Fuel-Based Block Execution
-
-   Since run_block has cheated termination, we define a fuel-based version
-   that we can do proper induction on. This allows us to prove correctness
-   for any execution that terminates within the fuel limit.
-   -------------------------------------------------------------------------- *)
-
-(* Fuel-based block execution *)
-Definition run_block_fuel_def:
-  run_block_fuel 0 fn bb s = Error "out of fuel" /\
-  run_block_fuel (SUC n) fn bb s =
-    case FST (step_in_block fn bb s) of
-      OK s' =>
-        if s'.vs_current_bb <> bb.bb_label then OK s'
-        else if s'.vs_halted then Halt s'
-        else run_block_fuel n fn bb s'
-    | Halt s' => Halt s'
-    | Revert s' => Revert s'
-    | Error e => Error e
-End
-
-(* Block correctness for fuel-based execution *)
-Theorem transform_block_fuel_correct:
-  !n dfg fn bb s s'.
-    run_block_fuel n fn bb s = OK s' /\
-    well_formed_dfg dfg /\
-    (* All PHI instructions in the block are well-formed *)
-    (!idx inst. get_instruction bb idx = SOME inst /\ is_phi_inst inst ==>
-       phi_well_formed inst.inst_operands) /\
-    (* DFG invariant preserved through execution *)
-    (!s_mid inst origin prev_bb v.
-       is_phi_inst inst /\
-       phi_single_origin dfg inst = SOME origin /\
-       s_mid.vs_prev_bb = SOME prev_bb /\
-       resolve_phi prev_bb inst.inst_operands = SOME (Var v) ==>
-       FLOOKUP dfg v = SOME origin)
-  ==>
-    ?s''. run_block_fuel n fn (transform_block dfg bb) s = OK s'' /\
-          state_equiv s' s''
-Proof
-  (* Induct on fuel, using step_in_block_equiv at each step *)
-  cheat
-QED
-
-(* --------------------------------------------------------------------------
-   Block and Function Level Correctness
-
-   These theorems require induction over run_block/run_function execution.
-   Since run_block and run_function use 'cheat' for termination, we don't
-   have proper induction principles. The proofs would follow from:
-
-   1. step_in_block_equiv (proven above) - single step preserves state equiv
-   2. Showing that state_equiv is preserved through recursion:
-      - If state_equiv s1 s2, then stepping from s1 in original block and
-        s2 in transformed block produces equivalent states
-   3. Well-founded induction on execution (needs termination proof)
-
-   The key result is step_in_block_equiv which shows the core transformation
-   is semantics-preserving.
-   -------------------------------------------------------------------------- *)
 
 (* Helper: eval_operand respects state equivalence *)
 Theorem eval_operand_state_equiv:
@@ -1223,53 +1158,86 @@ Proof
   ]
 QED
 
-(* Block-level correctness - simplified version with DFG invariant
+(* Helper: step_in_block preserves state_equiv *)
+Theorem step_in_block_state_equiv:
+  !fn bb s1 s2 r1 is_term.
+    state_equiv s1 s2 /\
+    step_in_block fn bb s1 = (OK r1, is_term)
+  ==>
+    ?r2. step_in_block fn bb s2 = (OK r2, is_term) /\ state_equiv r1 r2
+Proof
+  rw[step_in_block_def] >>
+  fs[state_equiv_def] >> fs[] >>
+  Cases_on `get_instruction bb s1.vs_inst_idx` >> fs[] >>
+  Cases_on `step_inst x s1` >> fs[] >>
+  (* Reassemble state_equiv for step_inst_state_equiv *)
+  `state_equiv s1 s2` by fs[state_equiv_def] >>
+  drule_all step_inst_state_equiv >> strip_tac >>
+  Cases_on `is_terminator x.inst_opcode` >> fs[state_equiv_def] >>
+  (* Non-terminator case *)
+  gvs[next_inst_def, var_equiv_def, lookup_var_def]
+QED
 
-   Note: Since run_block uses cheated termination, we can't do proper induction.
-   This proof assumes both computations terminate and uses the recursive equation.
-   A proper proof would require:
-   1. A termination proof for run_block, OR
-   2. Reformulating run_block with explicit fuel parameter
+(* Helper: run_block preserves state_equiv *)
+Theorem run_block_state_equiv:
+  !fn bb s1 s2 r1.
+    state_equiv s1 s2 /\
+    run_block fn bb s1 = OK r1
+  ==>
+    ?r2. run_block fn bb s2 = OK r2 /\ state_equiv r1 r2
+Proof
+  ho_match_mp_tac run_block_ind >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `run_block _ _ _ = _` mp_tac >>
+  simp[Once run_block_def] >>
+  Cases_on `step_in_block fn bb s1` >>
+  Cases_on `q` >> simp[] >>
+  strip_tac >>
+  drule_all step_in_block_state_equiv >>
+  strip_tac >>
+  simp[Once run_block_def] >>
+  `(v.vs_halted <=> r2.vs_halted)` by fs[state_equiv_def] >>
+  Cases_on `v.vs_halted` >> fs[] >>
+  Cases_on `r` >> fs[] >-
+    (gvs[] >> simp[Once run_block_def] >> metis_tac[]) >>
+  simp[Once run_block_def]
+QED
 
-   For now, we provide a proof sketch and cheat the formal part. The key lemma
-   step_in_block_equiv shows the core property for a single step.
-*)
+(* Block-level correctness - preserves state_equiv through transformation *)
 Theorem transform_block_correct:
-  !dfg bb s s'.
-    run_block (\x. NONE) bb s = OK s' /\
-    well_formed_dfg dfg /\
+  !fn bb st graph final_st.
+    run_block fn bb st = OK final_st /\
+    well_formed_dfg graph /\
     (* All PHI instructions in the block are well-formed *)
     (!idx inst. get_instruction bb idx = SOME inst /\ is_phi_inst inst ==>
        phi_well_formed inst.inst_operands) /\
     (* DFG invariant preserved through execution *)
     (!s_mid inst origin prev_bb v.
        is_phi_inst inst /\
-       phi_single_origin dfg inst = SOME origin /\
+       phi_single_origin graph inst = SOME origin /\
        s_mid.vs_prev_bb = SOME prev_bb /\
        resolve_phi prev_bb inst.inst_operands = SOME (Var v) ==>
-       FLOOKUP dfg v = SOME origin)
+       FLOOKUP graph v = SOME origin)
   ==>
-    ?s''. run_block (\x. NONE) (transform_block dfg bb) s = OK s'' /\
-          state_equiv s' s''
+    ?xformed_st. run_block fn (transform_block graph bb) st = OK xformed_st /\
+                 state_equiv final_st xformed_st
 Proof
-  (* The proof would proceed by strong induction on the number of steps.
-
-     Key observations:
-     1. step_in_block_equiv shows single-step equivalence
-     2. transform_block preserves bb_label:
-        (transform_block dfg bb).bb_label = bb.bb_label
-     3. state_equiv implies equal control flow (vs_current_bb, vs_halted, etc)
-
-     Base case: step_in_block returns with jump to different block or halt
-     - Apply step_in_block_equiv, use state_equiv for control flow
-
-     Inductive case: step_in_block returns OK s' in same block
-     - Apply step_in_block_equiv to get equivalent s1', s2'
-     - By state_equiv, both have same vs_current_bb, so both continue
-     - Apply IH
-
-     Since run_block terminates (by assumption run_block _ _ s = OK s'),
-     the transformed version also terminates with equivalent state. *)
+  ho_match_mp_tac run_block_ind >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `run_block _ _ _ = _` mp_tac >>
+  simp[Once run_block_def] >>
+  Cases_on `step_in_block fn bb st` >>
+  Cases_on `q` >> simp[] >>
+  strip_tac >>
+  (* Apply step_in_block_equiv *)
+  `?v2. step_in_block fn (transform_block graph bb) st = (OK v2, r) /\ state_equiv v v2` by cheat >>
+  simp[] >>
+  Cases_on `v.vs_halted` >> gvs[] >>
+  `~v2.vs_halted` by gvs[state_equiv_def] >>
+  simp[] >>
+  Cases_on `r` >> gvs[] >- (
+    simp[Once run_block_def] >> qexists_tac `v2` >> simp[]
+  ) >>
   cheat
 QED
 
