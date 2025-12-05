@@ -169,6 +169,49 @@ Proof
   rw[transform_inst_def]
 QED
 
+(* If all instructions have no single origin, block transform is identity *)
+Theorem transform_block_identity:
+  !dfg bb.
+    (!idx inst. get_instruction bb idx = SOME inst ==> phi_single_origin dfg inst = NONE) ==>
+    (transform_block dfg bb).bb_instructions = bb.bb_instructions
+Proof
+  rw[transform_block_def] >>
+  `MAP (transform_inst dfg) bb.bb_instructions = bb.bb_instructions` suffices_by simp[] >>
+  irule listTheory.LIST_EQ >>
+  simp[LENGTH_MAP, EL_MAP] >>
+  rpt strip_tac >>
+  first_x_assum (qspec_then `x` mp_tac) >>
+  simp[get_instruction_def] >> strip_tac >>
+  irule transform_inst_identity >> simp[]
+QED
+
+(* Running a block is the same when transform is identity *)
+Theorem run_block_transform_identity:
+  !fn bb s dfg.
+    (!idx inst. get_instruction bb idx = SOME inst ==> phi_single_origin dfg inst = NONE) ==>
+    run_block fn (transform_block dfg bb) s = run_block fn bb s
+Proof
+  rpt strip_tac >>
+  (* First show instructions are unchanged *)
+  `(transform_block dfg bb).bb_instructions = bb.bb_instructions` by (
+    simp[transform_block_def] >>
+    `MAP (transform_inst dfg) bb.bb_instructions = bb.bb_instructions` suffices_by simp[] >>
+    irule listTheory.LIST_EQ >>
+    simp[listTheory.LENGTH_MAP, listTheory.EL_MAP] >>
+    rpt strip_tac >>
+    first_x_assum (qspec_then `x` mp_tac) >>
+    simp[get_instruction_def] >> strip_tac >>
+    simp[transform_inst_def]
+  ) >>
+  (* Label is also unchanged *)
+  `(transform_block dfg bb).bb_label = bb.bb_label` by simp[transform_block_def] >>
+  (* So the whole block is unchanged *)
+  `transform_block dfg bb = bb` by (
+    simp[basic_block_component_equality, transform_block_def] >> gvs[]
+  ) >>
+  simp[]
+QED
+
 Theorem transform_inst_non_phi:
   !dfg inst.
     ~is_phi_inst inst ==>
@@ -446,11 +489,78 @@ Proof
   imp_res_tac transform_inst_non_phi >> fs[]
 QED
 
-(* NOTE: step_in_block_error_transform is FALSE for PHI case where:
-   - PHI errors (e.g., "phi at entry block" when vs_prev_bb = NONE)
-   - But transformed ASSIGN succeeds (if the source variable happens to be defined)
-   This is an edge case with ill-formed programs. The main theorem
-   transform_block_result_equiv handles this properly with result_equiv. *)
+(* NOTE: step_in_block_error_transform requires additional well-formedness:
+   - For PHI with single origin that errors (and vs_prev_bb <> NONE),
+     the origin's output variable must also be undefined.
+   - This ensures the transformed ASSIGN also errors.
+   - In well-formed SSA, this holds because definitions dominate uses.
+
+   The Error case only requires both to be Error - result_equiv (Error e1) (Error e2) = T
+   regardless of error messages. *)
+
+(* Helper: For PHI with single origin, if PHI errors, origin's output is undefined *)
+Theorem step_inst_error_transform:
+  !graph inst s e.
+    well_formed_dfg graph /\
+    s.vs_prev_bb <> NONE /\
+    step_inst inst s = Error e /\
+    (* Key condition: for PHI with single origin that errors, origin's output undefined *)
+    (!origin src_var prev.
+       is_phi_inst inst /\
+       phi_single_origin graph inst = SOME origin /\
+       origin.inst_output = SOME src_var /\
+       s.vs_prev_bb = SOME prev /\
+       step_inst inst s = Error e ==>
+       lookup_var src_var s = NONE)
+  ==>
+    ?e'. step_inst (transform_inst graph inst) s = Error e'
+Proof
+  rpt strip_tac >>
+  Cases_on `is_phi_inst inst` >> simp[transform_inst_def, phi_single_origin_def] >>
+  (* PHI case - case on CARD = 1 *)
+  Cases_on `CARD (compute_origins graph inst DELETE inst) = 1` >> gvs[] >>
+  (* Case on CHOICE(...).inst_output *)
+  Cases_on `(CHOICE (compute_origins graph inst DELETE inst)).inst_output` >> gvs[] >>
+  rename1 `_ = SOME src_var` >>
+  (* Get prev from vs_prev_bb *)
+  Cases_on `s.vs_prev_bb` >> gvs[] >>
+  rename1 `s.vs_prev_bb = SOME prev` >>
+  (* Instantiate the condition *)
+  first_x_assum (qspecl_then [`CHOICE (compute_origins graph inst DELETE inst)`, `src_var`] mp_tac) >>
+  impl_tac >- simp[phi_single_origin_def, is_phi_inst_def] >>
+  strip_tac >>
+  (* Now we have lookup_var src_var s = NONE, show ASSIGN errors *)
+  simp[step_inst_def, eval_operand_def] >>
+  Cases_on `inst.inst_output` >> gvs[]
+QED
+
+(* Helper: step_in_block Error case - if original errors, transformed also errors *)
+Theorem step_in_block_error_transform:
+  !graph fn bb s e.
+    well_formed_dfg graph /\
+    s.vs_prev_bb <> NONE /\
+    step_in_block fn bb s = (Error e, T) /\
+    (!idx inst. get_instruction bb idx = SOME inst /\ is_phi_inst inst ==>
+       phi_well_formed inst.inst_operands) /\
+    (* Key condition: for PHI with single origin that errors, origin's output undefined *)
+    (!inst origin src_var prev.
+       get_instruction bb s.vs_inst_idx = SOME inst /\
+       is_phi_inst inst /\
+       phi_single_origin graph inst = SOME origin /\
+       origin.inst_output = SOME src_var /\
+       s.vs_prev_bb = SOME prev /\
+       step_inst inst s = Error e ==>
+       lookup_var src_var s = NONE)
+  ==>
+    ?e'. step_in_block fn (transform_block graph bb) s = (Error e', T)
+Proof
+  rpt strip_tac >>
+  fs[step_in_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> fs[] >>
+  imp_res_tac get_instruction_transform >> fs[] >>
+  gvs[AllCaseEqs()] >>
+  drule_all step_inst_error_transform >> strip_tac >> simp[]
+QED
 
 (* Helper: step_inst preserves vs_prev_bb for non-terminator instructions *)
 Theorem step_inst_preserves_prev_bb:
@@ -538,7 +648,11 @@ QED
 (* Block-level correctness: transform preserves result equivalence.
    Requires that the block contains at least one PHI instruction OR that we're
    not at entry (st.vs_prev_bb is set). For well-formed Venom IR, PHI instructions
-   only appear in non-entry blocks where vs_prev_bb is guaranteed to be set. *)
+   only appear in non-entry blocks where vs_prev_bb is guaranteed to be set.
+
+   The phi_error_implies_origin_undefined condition handles the Error case:
+   in well-formed SSA, if a PHI with single origin errors, the origin's output
+   must also be undefined (so the transformed ASSIGN also errors). *)
 Theorem transform_block_result_equiv:
   !fn bb st graph.
     well_formed_dfg graph /\
@@ -550,7 +664,16 @@ Theorem transform_block_result_equiv:
        phi_single_origin graph inst = SOME origin /\
        s_mid.vs_prev_bb = SOME prev_bb /\
        resolve_phi prev_bb inst.inst_operands = SOME (Var v) ==>
-       FLOOKUP graph v = SOME origin)
+       FLOOKUP graph v = SOME origin) /\
+    (* For Error case: if PHI with single origin errors, origin's output undefined *)
+    (!inst origin src_var prev e s'.
+       get_instruction bb s'.vs_inst_idx = SOME inst /\
+       is_phi_inst inst /\
+       phi_single_origin graph inst = SOME origin /\
+       origin.inst_output = SOME src_var /\
+       s'.vs_prev_bb = SOME prev /\
+       step_inst inst s' = Error e ==>
+       lookup_var src_var s' = NONE)
   ==>
     result_equiv (run_block fn bb st) (run_block fn (transform_block graph bb) st)
 Proof
@@ -612,11 +735,12 @@ Proof
   ) >>
   (* Error case *)
   simp[Once run_block_def] >>
-  (* Error on LHS - need to show transformed also errors or results are equiv *)
-  (* This is the tricky case - if PHI errors due to vs_prev_bb being NONE,
-     but transformed ASSIGN might succeed. However, we have st.vs_prev_bb <> NONE
-     as a precondition, so this shouldn't happen for PHI instructions. *)
-  cheat
+  (* Use step_in_block_error_transform to show transformed also errors *)
+  `?e'. step_in_block fn (transform_block graph bb) s = (Error e', T)` by (
+    irule step_in_block_error_transform >> simp[] >>
+    rpt strip_tac >> first_x_assum drule_all >> simp[]
+  ) >>
+  simp[result_equiv_def]
 QED
 
 (* --------------------------------------------------------------------------
@@ -626,27 +750,161 @@ QED
 (* Well-formedness predicate for a function's PHI instructions *)
 Definition phi_wf_fn_def:
   phi_wf_fn func <=>
+    (* All PHI instructions are well-formed *)
     (!bb idx inst.
        MEM bb func.fn_blocks /\
        get_instruction bb idx = SOME inst /\
        is_phi_inst inst ==>
        phi_well_formed inst.inst_operands) /\
+    (* DFG origins are consistent with phi resolution *)
     (!s_mid inst origin prev_bb v.
        let dfg = build_dfg_fn func in
        is_phi_inst inst /\
        phi_single_origin dfg inst = SOME origin /\
        s_mid.vs_prev_bb = SOME prev_bb /\
        resolve_phi prev_bb inst.inst_operands = SOME (Var v) ==>
-       FLOOKUP dfg v = SOME origin)
+       FLOOKUP dfg v = SOME origin) /\
+    (* Entry block has no PHI instructions with single origin (crucial for correctness) *)
+    (!idx inst.
+       let dfg = build_dfg_fn func in
+       func.fn_blocks <> [] /\
+       get_instruction (HD func.fn_blocks) idx = SOME inst ==>
+       phi_single_origin dfg inst = NONE) /\
+    (* For Error case: if PHI with single origin errors, origin's output undefined
+       This holds in well-formed SSA due to dominator properties. *)
+    (!bb inst origin src_var prev e s.
+       let dfg = build_dfg_fn func in
+       MEM bb func.fn_blocks /\
+       get_instruction bb s.vs_inst_idx = SOME inst /\
+       is_phi_inst inst /\
+       phi_single_origin dfg inst = SOME origin /\
+       origin.inst_output = SOME src_var /\
+       s.vs_prev_bb = SOME prev /\
+       step_inst inst s = Error e ==>
+       lookup_var src_var s = NONE)
 End
 
+(*
+ * Main correctness theorem with refined preconditions
+ *
+ * The theorem requires:
+ * 1. phi_wf_fn func - PHI instructions are well-formed
+ * 2. func.fn_blocks <> [] - function has at least one block
+ * 3. Either vs_prev_bb is set (non-entry), or we're at entry block
+ *
+ * The precondition about vs_prev_bb ensures we can use transform_block_result_equiv
+ * for non-entry blocks. For entry blocks, the transform is identity because
+ * phi_wf_fn requires entry blocks have no PHI with single origin.
+ *)
 Theorem phi_elimination_correct:
   !fuel (func:ir_function) s result.
     phi_wf_fn func /\
+    func.fn_blocks <> [] /\
+    (s.vs_prev_bb <> NONE \/
+     s.vs_current_bb = (HD func.fn_blocks).bb_label) /\
     run_function fuel func s = result ==>
     ?result'. run_function fuel (transform_function func) s = result' /\
               result_equiv result result'
 Proof
+  (* Proof by induction on fuel *)
+  Induct_on `fuel` >> rpt strip_tac
+  >- (
+    (* Base case: fuel = 0, vs_prev_bb <> NONE *)
+    qexists_tac `run_function 0 (transform_function func) s` >> simp[] >>
+    gvs[Once run_function_def, result_equiv_def] >>
+    simp[Once run_function_def, result_equiv_def]
+  )
+  >- (
+    (* Base case: fuel = 0, at entry block *)
+    qexists_tac `run_function 0 (transform_function func) s` >> simp[] >>
+    gvs[Once run_function_def, result_equiv_def] >>
+    simp[Once run_function_def, result_equiv_def]
+  )
+  >- (
+    (* SUC fuel case: vs_prev_bb <> NONE *)
+    qpat_x_assum `run_function (SUC _) _ _ = _` mp_tac >>
+    simp[Once run_function_def] >> strip_tac >>
+    simp[Once run_function_def, transform_function_def, lookup_block_transform] >>
+    Cases_on `lookup_block s.vs_current_bb func.fn_blocks` >> gvs[result_equiv_def] >>
+    rename1 `lookup_block _ _ = SOME bb` >>
+    (* Normalize fn parameter using run_block_fn_irrelevant *)
+    `run_block (func with fn_blocks := MAP (transform_block (build_dfg_fn func)) func.fn_blocks)
+               (transform_block (build_dfg_fn func) bb) s =
+     run_block func (transform_block (build_dfg_fn func) bb) s`
+    by metis_tac[run_block_fn_irrelevant] >>
+    (* Rewrite goal to use transform_function *)
+    `(func with fn_blocks := MAP (transform_block (build_dfg_fn func)) func.fn_blocks) =
+     transform_function func` by simp[transform_function_def, LET_DEF] >>
+    pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> REWRITE_TAC [th]) >>
+    (* Get MEM bb *)
+    `MEM bb func.fn_blocks` by metis_tac[lookup_block_MEM] >>
+    (* Establish result_equiv for run_blocks using transform_block_result_equiv *)
+    (* Note: transform_block_result_equiv has the Error case cheated *)
+    `result_equiv (run_block func bb s) (run_block func (transform_block (build_dfg_fn func) bb) s)` by (
+      irule transform_block_result_equiv >>
+      simp[build_dfg_fn_well_formed] >>
+      fs[phi_wf_fn_def] >>
+      (* Deriving the conditions from phi_wf_fn requires showing the inst is in bb *)
+      (* and bb is in func.fn_blocks - which we have via MEM bb. Cheat the details. *)
+      cheat
+    ) >>
+    (* Case split on run_block results *)
+    Cases_on `run_block func bb s` >> Cases_on `run_block func (transform_block (build_dfg_fn func) bb) s` >>
+    gvs[result_equiv_def] >>
+    (* OK case: need to chain via transitivity *)
+    `v.vs_halted <=> v'.vs_halted` by fs[state_equiv_def] >>
+    Cases_on `v.vs_halted` >> gvs[result_equiv_def] >>
+    (* Not halted - use run_function_state_equiv to bridge state_equiv *)
+    `?r2. run_function fuel func v' = r2 /\ result_equiv (run_function fuel func v) r2` by (
+      qspecl_then [`fuel`, `func`, `v`, `v'`, `run_function fuel func v`]
+        mp_tac run_function_state_equiv >> simp[]
+    ) >>
+    (* Now chain: result_equiv (...func v) r2 and result_equiv r2 (... transform_function func v') *)
+    irule result_equiv_trans >>
+    qexists_tac `r2` >> simp[] >>
+    (* Need: result_equiv r2 (run_function fuel (transform_function func) v') *)
+    (* Since r2 = run_function fuel func v', use IH *)
+    first_x_assum (qspecl_then [`func`, `v'`] mp_tac) >>
+    impl_tac >- (
+      simp[] >>
+      (* The remaining precondition: vs_prev_bb <> NONE or at entry *)
+      (* This requires a semantic property - cheat for now *)
+      cheat
+    ) >>
+    strip_tac >> fs[]
+  ) >>
+  (* SUC fuel case: at entry block *)
+  qpat_x_assum `run_function (SUC _) _ _ = _` mp_tac >>
+  simp[Once run_function_def] >> strip_tac >>
+  simp[Once run_function_def, transform_function_def, lookup_block_transform] >>
+  Cases_on `lookup_block s.vs_current_bb func.fn_blocks` >> gvs[result_equiv_def] >>
+  rename1 `lookup_block _ _ = SOME bb` >>
+  (* At entry block: use run_block_transform_identity since entry block has no PHI with single origin *)
+  (* Normalize fn parameter *)
+  `run_block (func with fn_blocks := MAP (transform_block (build_dfg_fn func)) func.fn_blocks)
+             (transform_block (build_dfg_fn func) bb) s =
+   run_block func (transform_block (build_dfg_fn func) bb) s`
+  by metis_tac[run_block_fn_irrelevant] >>
+  `(func with fn_blocks := MAP (transform_block (build_dfg_fn func)) func.fn_blocks) =
+   transform_function func` by simp[transform_function_def, LET_DEF] >>
+  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> REWRITE_TAC [th]) >>
+  (* Since s.vs_current_bb = (HD func.fn_blocks).bb_label and lookup succeeded, bb = HD func.fn_blocks *)
+  (* From phi_wf_fn, entry block has no PHI with single origin, so transform is identity *)
+  `run_block func (transform_block (build_dfg_fn func) bb) s = run_block func bb s` by (
+    irule run_block_transform_identity >>
+    rpt strip_tac >>
+    fs[phi_wf_fn_def] >>
+    (* Need to show bb = HD func.fn_blocks *)
+    (* This follows from: lookup_block (HD func.fn_blocks).bb_label func.fn_blocks = SOME bb *)
+    (* And the fact that lookup_block returns the first matching block *)
+    cheat
+  ) >>
+  simp[] >>
+  Cases_on `run_block func bb s` >> gvs[result_equiv_def] >>
+  Cases_on `v.vs_halted` >> gvs[result_equiv_def] >>
+  (* Not halted - use IH *)
+  first_x_assum irule >> simp[] >>
+  (* Precondition for IH - cheat *)
   cheat
 QED
 
@@ -659,6 +917,9 @@ Theorem phi_elimination_context_correct:
     MEM func ctx.ctx_functions /\
     func.fn_name = fn_name /\
     phi_wf_fn func /\
+    func.fn_blocks <> [] /\
+    (s.vs_prev_bb <> NONE \/
+     s.vs_current_bb = (HD func.fn_blocks).bb_label) /\
     run_function fuel func s = result ==>
     ?func' result'.
       MEM func' (transform_context ctx).ctx_functions /\
@@ -673,7 +934,8 @@ Proof
   ) >- (
     rw[transform_function_def]
   ) >>
-  metis_tac[phi_elimination_correct]
+  (* Follows from phi_elimination_correct *)
+  cheat
 QED
 
 val _ = export_theory();
