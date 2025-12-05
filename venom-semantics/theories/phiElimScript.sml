@@ -335,15 +335,27 @@ Proof
   Cases_on `q` >> simp[] >>
   strip_tac >>
   (* Apply step_in_block_equiv *)
-  `?v2. step_in_block fn (transform_block graph bb) st = (OK v2, r) /\ state_equiv v v2` by cheat >>
-  simp[] >>
-  Cases_on `v.vs_halted` >> gvs[] >>
-  `~v2.vs_halted` by gvs[state_equiv_def] >>
-  simp[] >>
-  Cases_on `r` >> gvs[] >- (
-    simp[Once run_block_def] >> qexists_tac `v2` >> simp[]
+  drule step_in_block_equiv >> simp[] >>
+  disch_then (qspec_then `graph` mp_tac) >> simp[] >>
+  impl_tac >- (
+    conj_tac >- (rpt strip_tac >> first_x_assum drule_all >> simp[]) >>
+    rpt strip_tac >> first_x_assum (qspecl_then [`st`, `inst`, `origin`, `prev_bb`, `v'`] mp_tac) >> simp[]
   ) >>
-  cheat
+  strip_tac >> simp[Once run_block_def] >>
+  Cases_on `v.vs_halted` >> gvs[] >>
+  `~s''.vs_halted` by gvs[state_equiv_def] >> simp[] >>
+  Cases_on `r` >> gvs[] >- (
+    qexists_tac `s''` >> simp[Once run_block_def]
+  ) >>
+  (* Non-terminator case: apply IH then run_block_state_equiv *)
+  simp[Once run_block_def] >>
+  first_x_assum (qspec_then `graph` mp_tac) >> simp[] >> impl_tac >- (
+    conj_tac >- (rpt strip_tac >> first_x_assum drule_all >> simp[]) >>
+    rpt strip_tac >> first_x_assum drule_all >> simp[]
+  ) >>
+  strip_tac >> drule_all run_block_state_equiv >> strip_tac >>
+  qexists_tac `r2` >> simp[] >>
+  irule state_equiv_trans >> qexists_tac `xformed_st` >> simp[]
 QED
 
 (* --------------------------------------------------------------------------
