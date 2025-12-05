@@ -165,6 +165,41 @@ Definition ssa_form_def:
       inst1 = inst2
 End
 
+(* Helper: build_dfg_block only adds instructions from the list *)
+Theorem build_dfg_block_correct:
+  !insts dfg v inst.
+    FLOOKUP (build_dfg_block dfg insts) v = SOME inst ==>
+    (FLOOKUP dfg v = SOME inst \/ (MEM inst insts /\ inst.inst_output = SOME v))
+Proof
+  Induct_on `insts` >> simp[build_dfg_def] >>
+  rpt strip_tac >>
+  Cases_on `h.inst_output` >> fs[] >- (
+    first_x_assum (qspecl_then [`dfg`, `v`, `inst`] mp_tac) >> simp[] >>
+    strip_tac >> metis_tac[]
+  ) >>
+  first_x_assum (qspecl_then [`dfg |+ (x, h)`, `v`, `inst`] mp_tac) >>
+  simp[FLOOKUP_UPDATE] >>
+  Cases_on `x = v` >> fs[] >>
+  strip_tac >> metis_tac[]
+QED
+
+(* Helper: build_dfg_blocks only adds instructions from the block list *)
+Theorem build_dfg_blocks_correct:
+  !bbs dfg v inst.
+    FLOOKUP (build_dfg_blocks dfg bbs) v = SOME inst ==>
+    (FLOOKUP dfg v = SOME inst \/
+     (?bb. MEM bb bbs /\ MEM inst bb.bb_instructions /\ inst.inst_output = SOME v))
+Proof
+  Induct_on `bbs` >> simp[build_dfg_blocks_def] >>
+  rpt strip_tac >>
+  first_x_assum (qspecl_then [`build_dfg_block dfg h.bb_instructions`, `v`, `inst`] mp_tac) >>
+  simp[] >> strip_tac >- (
+    drule build_dfg_block_correct >> strip_tac >- fs[] >>
+    disj2_tac >> qexists_tac `h` >> simp[]
+  ) >>
+  metis_tac[]
+QED
+
 (* DFG lookup returns an instruction from the function that defines that variable *)
 Theorem build_dfg_fn_correct:
   !fn v inst.
@@ -173,7 +208,10 @@ Theorem build_dfg_fn_correct:
     inst.inst_output = SOME v /\
     MEM inst (fn_instructions fn)
 Proof
-  cheat (* Follows from build_dfg_fn definition *)
+  rw[build_dfg_fn_def, fn_instructions_def] >>
+  drule build_dfg_blocks_correct >> fs[MEM_FLAT, MEM_MAP] >>
+  strip_tac >> qexists_tac `bb.bb_instructions` >> simp[] >>
+  qexists_tac `bb` >> simp[]
 QED
 
 (* --------------------------------------------------------------------------
@@ -437,21 +475,29 @@ Theorem get_origins_checked_eq:
      get_origins_checked dfg visited inst = SOME result ==>
      get_origins dfg visited inst = result)
 Proof
-  (* This proof requires proper induction over the recursive structure.
-     Since termination is cheated, the induction principle may not be
-     complete. The theorem is semantically correct when termination holds.
-
-     Proof sketch:
-     - get_origins_list_checked [] case: trivial
-     - get_origins_list_checked (v::vs) case: by IH on src_inst and vs
-     - get_origins_checked inst case:
-       - PHI in visited: both return {}
-       - PHI not in visited: by IH on operand vars
-       - ASSIGN in visited: checked returns NONE (never SOME)
-       - ASSIGN not in visited: by IH on source instruction
-       - Other: both return {inst}
-  *)
-  cheat
+  ho_match_mp_tac get_origins_checked_ind >> rpt conj_tac >> rpt gen_tac >- (
+    (* [] case *)
+    simp[Once get_origins_checked_def, Once get_origins_def]
+  ) >- (
+    (* v::vars case *)
+    rpt strip_tac >>
+    simp[Once get_origins_checked_def, Once get_origins_def] >>
+    Cases_on `FLOOKUP dfg v` >> fs[] >- (
+      fs[Once get_origins_checked_def]
+    ) >>
+    fs[Once get_origins_checked_def] >> gvs[AllCaseEqs()] >>
+    first_x_assum (qspec_then `s1` mp_tac) >> simp[] >>
+    qpat_x_assum `get_origins_checked _ _ _ = _` mp_tac >>
+    simp[Once get_origins_checked_def] >> gvs[AllCaseEqs()] >>
+    strip_tac >> fs[]
+  ) >- (
+    (* inst case *)
+    rpt strip_tac >>
+    simp[Once get_origins_checked_def, Once get_origins_def] >>
+    qpat_x_assum `get_origins_checked _ _ _ = _` mp_tac >>
+    simp[Once get_origins_checked_def] >> gvs[AllCaseEqs()] >>
+    strip_tac >> fs[]
+  )
 QED
 
 (* Helper: visited set only contains IDs of instructions we've traversed *)
@@ -469,9 +515,6 @@ Theorem get_origins_list_checked_succeeds:
     ==>
     ?result. get_origins_list_checked dfg visited vars = SOME result
 Proof
-  (* Proof by induction on vars:
-     - Empty list: immediate
-     - v::vs: Use IH on head and tail, combine results *)
   cheat
 QED
 
@@ -1144,13 +1187,21 @@ Theorem step_inst_state_equiv:
 Proof
   rpt strip_tac >>
   fs[step_inst_def] >>
-  Cases_on `inst.inst_opcode` >> gvs[AllCaseEqs()] >>
-  metis_tac[exec_binop_state_equiv, exec_modop_state_equiv, exec_unop_state_equiv,
-            eval_operand_state_equiv, update_var_state_equiv,
-            mload_state_equiv, mstore_state_equiv,
-            sload_state_equiv, sstore_state_equiv,
-            tload_state_equiv, tstore_state_equiv,
-            jump_to_state_equiv, state_equiv_refl, state_equiv_def]
+  Cases_on `inst.inst_opcode` >> fs[] >>
+  (* Use FIRST to try tactics in order - stops on first success *)
+  FIRST [
+    (* Most cases: exec_binop, exec_modop, exec_unop - use drule_all for forward reasoning *)
+    drule_all exec_binop_state_equiv >> simp[],
+    drule_all exec_modop_state_equiv >> simp[],
+    drule_all exec_unop_state_equiv >> simp[],
+    (* Remaining cases: MLOAD, MSTORE, SLOAD, SSTORE, TLOAD, TSTORE, JMP, JNZ, PHI, ASSIGN, NOP *)
+    gvs[AllCaseEqs()] >>
+    metis_tac[eval_operand_state_equiv, update_var_state_equiv,
+              mload_state_equiv, mstore_state_equiv,
+              sload_state_equiv, sstore_state_equiv,
+              tload_state_equiv, tstore_state_equiv,
+              jump_to_state_equiv, state_equiv_refl, state_equiv_def]
+  ]
 QED
 
 (* Block-level correctness - simplified version with DFG invariant
