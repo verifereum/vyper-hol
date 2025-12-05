@@ -6,13 +6,10 @@
  * optimization passes that transform instructions but preserve behavior.
  *)
 
-open HolKernel boolLib bossLib Parse;
-open arithmeticTheory listTheory stringTheory optionTheory pairTheory;
-open pred_setTheory finite_mapTheory;
-open vfmTypesTheory;
-open venomStateTheory venomInstTheory venomSemTheory;
-
-val _ = new_theory "venomEquiv";
+Theory venomEquiv
+Ancestors
+  finite_map
+  venomState venomInst venomSem
 
 (* --------------------------------------------------------------------------
    State Equivalence Definition
@@ -730,4 +727,3 @@ Proof
   )
 QED
 
-val _ = export_theory();

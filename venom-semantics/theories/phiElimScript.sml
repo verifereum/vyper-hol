@@ -9,14 +9,10 @@
  * - venomEquivTheory: State equivalence infrastructure
  *)
 
-open HolKernel boolLib bossLib Parse;
-open arithmeticTheory listTheory stringTheory optionTheory pairTheory;
-open pred_setTheory finite_mapTheory;
-open vfmTypesTheory;
-open venomStateTheory venomInstTheory venomSemTheory;
-open venomDfgTheory venomEquivTheory;
-
-val _ = new_theory "phiElim";
+Theory phiElim
+Ancestors
+  list finite_map pred_set
+  venomState venomInst venomSem venomDfg venomEquiv
 
 (* --------------------------------------------------------------------------
    PHI Elimination Transformation
@@ -290,12 +286,6 @@ QED
 (* --------------------------------------------------------------------------
    Instruction Step Lemmas
    -------------------------------------------------------------------------- *)
-
-Theorem MEM_set:
-  !x l. MEM x l ==> x IN set l
-Proof
-  Induct_on `l` >> rw[LIST_TO_SET_DEF, IN_INSERT]
-QED
 
 Theorem step_inst_phi_eval:
   !inst out prev s.
@@ -1038,4 +1028,3 @@ Proof
   simp[]
 QED
 
-val _ = export_theory();

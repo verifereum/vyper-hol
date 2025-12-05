@@ -5,13 +5,9 @@
  * It includes the effects system and instruction stepping.
  *)
 
-open HolKernel boolLib bossLib Parse;
-open arithmeticTheory listTheory stringTheory optionTheory pairTheory;
-open wordsTheory wordsLib;
-open vfmTypesTheory vfmStateTheory;
-open venomStateTheory venomInstTheory;
-
-val _ = new_theory "venomSem";
+Theory venomSem
+Ancestors
+  venomState venomInst
 
 (* --------------------------------------------------------------------------
    Effects System
@@ -444,4 +440,3 @@ Definition run_function_def:
             | other => other
 End
 
-val _ = export_theory();

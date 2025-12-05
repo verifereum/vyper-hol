@@ -4,12 +4,9 @@
  * This theory defines the instruction set for Venom IR.
  *)
 
-open HolKernel boolLib bossLib Parse;
-open arithmeticTheory listTheory stringTheory optionTheory;
-open vfmTypesTheory;
-open venomStateTheory;
-
-val _ = new_theory "venomInst";
+Theory venomInst
+Ancestors
+  venomState
 
 (* --------------------------------------------------------------------------
    Instruction Opcodes
@@ -295,4 +292,3 @@ Definition get_successors_def:
     MAP THE (FILTER IS_SOME (MAP get_label inst.inst_operands))
 End
 
-val _ = export_theory();

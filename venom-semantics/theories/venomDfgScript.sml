@@ -8,13 +8,10 @@
  * This is reusable infrastructure for multiple optimization passes.
  *)
 
-open HolKernel boolLib bossLib Parse;
-open arithmeticTheory listTheory stringTheory optionTheory pairTheory;
-open pred_setTheory finite_mapTheory;
-open vfmTypesTheory;
-open venomStateTheory venomInstTheory venomSemTheory;
-
-val _ = new_theory "venomDfg";
+Theory venomDfg
+Ancestors
+  list finite_map pred_set
+  venomState venomInst venomSem
 
 (* --------------------------------------------------------------------------
    Data-Flow Graph Type and Basic Operations
@@ -484,4 +481,3 @@ Definition phi_single_origin_def:
     else NONE
 End
 
-val _ = export_theory();
