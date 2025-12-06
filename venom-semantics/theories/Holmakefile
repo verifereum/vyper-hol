@@ -1,4 +1,2 @@
+# Include paths to verifereum theories (vfmTypes, vfmState, etc.)
 INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec
-
-all: $(DEFAULT_TARGETS)
-.PHONY: all

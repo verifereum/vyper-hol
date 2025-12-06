@@ -1,1 +1,4 @@
-.hol
+# Interactive HOL4 session files (hol-agent-helper.sh)
+.hol/             # Build artifacts directory (Holmake output)
+.hol_init.sml     # Auto-loaded on session start
+.hol_cmd.sml      # Temp file for sending commands with backquotes
