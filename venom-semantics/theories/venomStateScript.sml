@@ -6,12 +6,9 @@
  * Uses types from verifereum.
  *)
 
-open HolKernel boolLib bossLib Parse;
-open arithmeticTheory listTheory stringTheory optionTheory;
-open finite_mapTheory;
-open vfmTypesTheory vfmStateTheory;
-
-val _ = new_theory "venomState";
+Theory venomState
+Ancestors
+  vfmTypes vfmState
 
 (* --------------------------------------------------------------------------
    Venom uses the same basic types as EVM (from verifereum):
@@ -198,4 +195,3 @@ Definition eval_operands_def:
         | SOME vs => SOME (v::vs)
 End
 
-val _ = export_theory();

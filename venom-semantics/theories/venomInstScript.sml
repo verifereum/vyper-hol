@@ -4,12 +4,9 @@
  * This theory defines the instruction set for Venom IR.
  *)
 
-open HolKernel boolLib bossLib Parse;
-open arithmeticTheory listTheory stringTheory optionTheory;
-open vfmTypesTheory;
-open venomStateTheory;
-
-val _ = new_theory "venomInst";
+Theory venomInst
+Ancestors
+  venomState
 
 (* --------------------------------------------------------------------------
    Instruction Opcodes
@@ -69,22 +66,29 @@ End
    Instructions
 
    Each instruction has:
+   - id: unique identifier (models object identity from Python)
    - opcode: the operation to perform
    - operands: list of input operands (rightmost = top of conceptual stack)
    - output: optional output variable name (SSA)
+
+   The inst_id is used to distinguish instructions that may have identical
+   fields but are different objects. This is important for passes that
+   track visited instructions or build instruction maps.
    -------------------------------------------------------------------------- *)
 
 Datatype:
   instruction = <|
+    inst_id : num;
     inst_opcode : opcode;
     inst_operands : operand list;
     inst_output : string option
   |>
 End
 
-(* Construct an instruction *)
+(* Construct an instruction with a given ID *)
 Definition mk_inst_def:
-  mk_inst op ops out = <|
+  mk_inst id op ops out = <|
+    inst_id := id;
     inst_opcode := op;
     inst_operands := ops;
     inst_output := out
@@ -288,4 +292,3 @@ Definition get_successors_def:
     MAP THE (FILTER IS_SOME (MAP get_label inst.inst_operands))
 End
 
-val _ = export_theory();

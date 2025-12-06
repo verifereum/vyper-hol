@@ -5,13 +5,9 @@
  * It includes the effects system and instruction stepping.
  *)
 
-open HolKernel boolLib bossLib Parse;
-open arithmeticTheory listTheory stringTheory optionTheory pairTheory;
-open wordsTheory wordsLib;
-open vfmTypesTheory vfmStateTheory;
-open venomStateTheory venomInstTheory;
-
-val _ = new_theory "venomSem";
+Theory venomSem
+Ancestors
+  venomState venomInst
 
 (* --------------------------------------------------------------------------
    Effects System
@@ -373,51 +369,74 @@ End
    Block and Function Execution
    -------------------------------------------------------------------------- *)
 
-(* Step within a basic block *)
+(* Non-terminator instructions preserve inst_idx *)
+Theorem step_inst_preserves_inst_idx:
+  !inst s s'.
+    step_inst inst s = OK s' /\ ~is_terminator inst.inst_opcode ==>
+    s'.vs_inst_idx = s.vs_inst_idx
+Proof
+  rw[step_inst_def] >>
+  gvs[AllCaseEqs(), is_terminator_def] >>
+  fs[exec_binop_def, exec_unop_def, exec_modop_def] >>
+  gvs[AllCaseEqs()] >>
+  fs[update_var_def, mstore_def, sstore_def, tstore_def]
+QED
+
+(* Step within a basic block - returns (result, is_terminator) *)
 Definition step_in_block_def:
   step_in_block fn bb s =
     case get_instruction bb s.vs_inst_idx of
-      NONE => Error "block not terminated"
+      NONE => (Error "block not terminated", T)
     | SOME inst =>
         case step_inst inst s of
           OK s' =>
-            if is_terminator inst.inst_opcode then OK s'
-            else OK (next_inst s')
-        | other => other
+            if is_terminator inst.inst_opcode then (OK s', T)
+            else (OK (next_inst s'), F)
+        | Halt s' => (Halt s', T)
+        | Revert s' => (Revert s', T)
+        | Error e => (Error e, T)
 End
 
-(* Run a basic block to completion *)
+(* Run a basic block until we hit a terminator *)
 Definition run_block_def:
   run_block fn bb s =
     case step_in_block fn bb s of
-      OK s' =>
-        if s'.vs_current_bb <> bb.bb_label then
-          (* Jumped to another block *)
-          OK s'
-        else if s'.vs_halted then
-          Halt s'
-        else
-          run_block fn bb s'
-    | Halt s' => Halt s'
-    | Revert s' => Revert s'
-    | Error e => Error e
+      (OK s', is_term) =>
+        if s'.vs_halted then Halt s'
+        else if is_term then OK s'
+        else run_block fn bb s'
+    | (Halt s', _) => Halt s'
+    | (Revert s', _) => Revert s'
+    | (Error e, _) => Error e
 Termination
-  cheat (* Need proper termination proof *)
+  (* Termination measure: remaining instructions in block.
+     Each non-terminator step increments inst_idx via next_inst, so measure decreases.
+     Terminators exit the loop immediately (is_term = T). *)
+  WF_REL_TAC `measure (\(fn, bb, s). LENGTH bb.bb_instructions - s.vs_inst_idx)` >>
+  rw[step_in_block_def] >>
+  gvs[AllCaseEqs()] >>
+  (* Now we have:
+     - get_instruction bb s.vs_inst_idx = SOME inst
+     - step_inst inst s = OK s''
+     - ~is_terminator inst.inst_opcode (since is_term = F)
+     - s' = next_inst s'' *)
+  imp_res_tac step_inst_preserves_inst_idx >>
+  fs[next_inst_def, get_instruction_def]
 End
 
-(* Run a function from current state *)
+(* Run a function from current state - uses fuel for termination *)
 Definition run_function_def:
-  run_function fn s =
-    case lookup_block s.vs_current_bb fn.fn_blocks of
-      NONE => Error "block not found"
-    | SOME bb =>
-        case run_block fn bb s of
-          OK s' =>
-            if s'.vs_halted then Halt s'
-            else run_function fn s'
-        | other => other
-Termination
-  cheat (* Need proper termination proof *)
+  run_function fuel fn s =
+    case fuel of
+      0 => Error "out of fuel"
+    | SUC fuel' =>
+        case lookup_block s.vs_current_bb fn.fn_blocks of
+          NONE => Error "block not found"
+        | SOME bb =>
+            case run_block fn bb s of
+              OK s' =>
+                if s'.vs_halted then Halt s'
+                else run_function fuel' fn s'
+            | other => other
 End
 
-val _ = export_theory();
