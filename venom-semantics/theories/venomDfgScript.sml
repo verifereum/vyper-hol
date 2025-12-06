@@ -248,6 +248,23 @@ Definition phi_operand_vars_def:
   phi_operand_vars ops = set (phi_var_operands ops)
 End
 
+(* resolve_phi returns one of the phi_var_operands *)
+Theorem resolve_phi_in_operands:
+  !prev_bb ops v.
+    resolve_phi prev_bb ops = SOME (Var v) ==>
+    MEM v (phi_var_operands ops)
+Proof
+  measureInduct_on `LENGTH ops` >>
+  Cases_on `ops` >- rw[resolve_phi_def] >>
+  Cases_on `t` >- rw[resolve_phi_def] >>
+  Cases_on `h` >> Cases_on `h'` >>
+  rpt strip_tac >> fs[resolve_phi_def, phi_var_operands_def] >>
+  TRY (Cases_on `s = prev_bb` >> fs[]) >>
+  TRY (disj2_tac) >>
+  first_x_assum (qspec_then `t'` mp_tac) >> simp[] >>
+  rpt strip_tac >> res_tac
+QED
+
 (* --------------------------------------------------------------------------
    Origin Computation
 
@@ -480,4 +497,89 @@ Definition phi_single_origin_def:
     if CARD non_self = 1 then SOME (CHOICE non_self)
     else NONE
 End
+
+(* All PHI operand variables are the same *)
+Definition phi_uniform_operands_def:
+  phi_uniform_operands ops <=>
+    case phi_var_operands ops of
+      [] => T
+    | (v::vs) => EVERY (\x. x = v) vs
+End
+
+(* For single-origin PHIs, the operand variable equals the origin's output *)
+Definition phi_operands_direct_def:
+  phi_operands_direct dfg inst <=>
+    case phi_single_origin dfg inst of
+      NONE => T
+    | SOME origin =>
+        case origin.inst_output of
+          NONE => T
+        | SOME src_var =>
+            EVERY (\v. v = src_var) (phi_var_operands inst.inst_operands)
+End
+
+(* Origins come from DFG lookups (or are the instruction itself) *)
+Theorem get_origins_in_dfg_or_self:
+  (!dfg visited vars origin.
+     origin IN get_origins_list dfg visited vars ==>
+     (?v. FLOOKUP dfg v = SOME origin)) /\
+  (!dfg visited inst origin.
+     origin IN get_origins dfg visited inst ==>
+     origin = inst \/ (?v. FLOOKUP dfg v = SOME origin))
+Proof
+  ho_match_mp_tac get_origins_ind >> rpt conj_tac >> rpt gen_tac >- (
+    (* Base case: empty list *)
+    simp[Once get_origins_def]
+  ) >- (
+    (* v::vars case *)
+    strip_tac >> simp[Once get_origins_def] >>
+    Cases_on `FLOOKUP dfg v` >> gvs[] >>
+    rpt strip_tac >> fs[IN_UNION] >> metis_tac[]
+  ) >- (
+    (* get_origins case *)
+    strip_tac >> rpt strip_tac >>
+    qpat_x_assum `origin IN get_origins _ _ _` mp_tac >>
+    simp[Once get_origins_def] >>
+    rpt (COND_CASES_TAC >> gvs[]) >>
+    rpt CASE_TAC >> gvs[] >>
+    metis_tac[]
+  )
+QED
+
+Theorem compute_origins_non_self_in_dfg:
+  !dfg inst origin.
+    origin IN compute_origins dfg inst /\ origin <> inst ==>
+    ?v. FLOOKUP dfg v = SOME origin
+Proof
+  rw[compute_origins_def] >>
+  drule (cj 2 get_origins_in_dfg_or_self) >> simp[]
+QED
+
+(* Key lemma: if operands are direct, FLOOKUP gives the origin *)
+Theorem phi_operands_direct_flookup:
+  !dfg inst origin prev_bb v.
+    well_formed_dfg dfg /\
+    phi_single_origin dfg inst = SOME origin /\
+    phi_operands_direct dfg inst /\
+    resolve_phi prev_bb inst.inst_operands = SOME (Var v)
+  ==>
+    FLOOKUP dfg v = SOME origin
+Proof
+  rpt strip_tac >>
+  fs[phi_single_origin_def, AllCaseEqs(), is_phi_inst_def] >>
+  (* Get origin IN compute_origins and origin <> inst *)
+  `compute_origins dfg inst DELETE inst <> {}` by (
+    strip_tac >> fs[CARD_EQ_0, FINITE_DELETE]
+  ) >>
+  drule CHOICE_DEF >> strip_tac >> fs[IN_DELETE] >>
+  (* Get FLOOKUP dfg v' = SOME origin *)
+  drule_all compute_origins_non_self_in_dfg >> strip_tac >>
+  (* Get origin.inst_output = SOME v' *)
+  `origin.inst_output = SOME v'` by fs[well_formed_dfg_def] >>
+  (* Get MEM v (phi_var_operands) *)
+  drule_all resolve_phi_in_operands >> strip_tac >>
+  (* Unfold phi_operands_direct and use EVERY_MEM to get v = v' *)
+  fs[phi_operands_direct_def, phi_single_origin_def, is_phi_inst_def, EVERY_MEM] >>
+  gvs[AllCaseEqs()]
+QED
 
