@@ -4,6 +4,29 @@
  * This theory defines state equivalence and proves that semantic operations
  * preserve it. This is reusable infrastructure for proving correctness of
  * optimization passes that transform instructions but preserve behavior.
+ *
+ * ============================================================================
+ * STRUCTURE OVERVIEW
+ * ============================================================================
+ *
+ * TOP-LEVEL DEFINITIONS (used by clients):
+ *   - state_equiv           : Main state equivalence predicate
+ *   - result_equiv          : Equivalence for exec_result (OK/Halt/Revert/Error)
+ *   - var_equiv             : Variable-only equivalence (component of state_equiv)
+ *
+ * TOP-LEVEL THEOREMS (used by clients):
+ *   - state_equiv_refl/sym/trans : Equivalence relation properties
+ *   - step_inst_result_equiv     : Instruction stepping preserves equiv
+ *   - run_block_result_equiv     : Block execution preserves equiv
+ *   - step_in_block_result_equiv : Single block step preserves equiv
+ *
+ * HELPER THEOREMS (internal):
+ *   - eval_operand_state_equiv   : Operand evaluation under equiv
+ *   - update_var_state_equiv     : Variable update preserves equiv
+ *   - Various *_state_equiv for memory/storage/transient operations
+ *   - exec_binop/unop/modop_*    : Binary/unary/mod operation helpers
+ *
+ * ============================================================================
  *)
 
 Theory venomEquiv
@@ -11,17 +34,21 @@ Ancestors
   finite_map
   venomState venomInst venomSem
 
-(* --------------------------------------------------------------------------
+(* ==========================================================================
    State Equivalence Definition
-   -------------------------------------------------------------------------- *)
+   ==========================================================================
 
-(* Variable equivalence: same values for all variables *)
+   TOP-LEVEL: These are the core equivalence predicates.
+   state_equiv is the main one; var_equiv is a component.
+   ========================================================================== *)
+
+(* Helper: Variable equivalence - same values for all variables *)
 Definition var_equiv_def:
   var_equiv s1 s2 <=>
     !v. lookup_var v s1 = lookup_var v s2
 End
 
-(* Full state equivalence *)
+(* TOP-LEVEL: Full state equivalence - all state components match *)
 Definition state_equiv_def:
   state_equiv s1 s2 <=>
     var_equiv s1 s2 /\
@@ -35,22 +62,28 @@ Definition state_equiv_def:
     s1.vs_reverted = s2.vs_reverted
 End
 
-(* --------------------------------------------------------------------------
+(* ==========================================================================
    Equivalence Relation Properties
-   -------------------------------------------------------------------------- *)
+   ==========================================================================
 
+   TOP-LEVEL: These establish that state_equiv is an equivalence relation.
+   ========================================================================== *)
+
+(* TOP-LEVEL: Reflexivity *)
 Theorem state_equiv_refl:
   !s. state_equiv s s
 Proof
   rw[state_equiv_def, var_equiv_def]
 QED
 
+(* TOP-LEVEL: Symmetry *)
 Theorem state_equiv_sym:
   !s1 s2. state_equiv s1 s2 ==> state_equiv s2 s1
 Proof
   rw[state_equiv_def, var_equiv_def]
 QED
 
+(* TOP-LEVEL: Transitivity *)
 Theorem state_equiv_trans:
   !s1 s2 s3. state_equiv s1 s2 /\ state_equiv s2 s3 ==> state_equiv s1 s3
 Proof
@@ -59,8 +92,13 @@ QED
 
 (* --------------------------------------------------------------------------
    Result Equivalence
+   --------------------------------------------------------------------------
+
+   TOP-LEVEL: result_equiv handles all exec_result cases (OK, Halt, Revert, Error).
+   The simp theorems below are for convenience in proofs.
    -------------------------------------------------------------------------- *)
 
+(* TOP-LEVEL: Equivalence for exec_result values *)
 Definition result_equiv_def:
   result_equiv (OK s1) (OK s2) = state_equiv s1 s2 /\
   result_equiv (Halt s1) (Halt s2) = state_equiv s1 s2 /\
@@ -69,13 +107,14 @@ Definition result_equiv_def:
   result_equiv _ _ = F
 End
 
+(* TOP-LEVEL: Reflexivity for result_equiv *)
 Theorem result_equiv_refl:
   !r. result_equiv r r
 Proof
   Cases >> rw[result_equiv_def, state_equiv_refl]
 QED
 
-(* Specific rewrites for result_equiv *)
+(* Helper simp theorems: These are [simp] rules for automatic rewriting *)
 Theorem result_equiv_error[simp]:
   result_equiv (Error e) (Error e) = T
 Proof
@@ -181,8 +220,12 @@ QED
 
 (* --------------------------------------------------------------------------
    Operand Evaluation Preserves Equivalence
+   --------------------------------------------------------------------------
+
+   Helper: These are building blocks for the main instruction stepping theorem.
    -------------------------------------------------------------------------- *)
 
+(* Helper: Evaluating an operand gives same result under state_equiv *)
 Theorem eval_operand_state_equiv:
   !op s1 s2.
     state_equiv s1 s2 ==>
@@ -194,8 +237,13 @@ QED
 
 (* --------------------------------------------------------------------------
    State Mutation Operations Preserve Equivalence
+   --------------------------------------------------------------------------
+
+   Helper: Each state operation (update_var, mload, mstore, etc.) preserves
+   state_equiv. These are used by the instruction stepping proof.
    -------------------------------------------------------------------------- *)
 
+(* Helper: Variable update preserves state_equiv *)
 Theorem update_var_state_equiv:
   !x v s1 s2.
     state_equiv s1 s2 ==>
@@ -278,8 +326,13 @@ QED
 
 (* --------------------------------------------------------------------------
    Binary/Unary/Mod Operations Preserve Equivalence
+   --------------------------------------------------------------------------
+
+   Helper: These handle the exec_binop, exec_unop, exec_modop cases for
+   instructions that use those helpers in step_inst.
    -------------------------------------------------------------------------- *)
 
+(* Helper: Binary operation preserves state_equiv when it succeeds *)
 Theorem exec_binop_state_equiv:
   !f inst s1 s2 r1.
     state_equiv s1 s2 /\
@@ -329,8 +382,13 @@ QED
 
 (* --------------------------------------------------------------------------
    Instruction Stepping Preserves Equivalence
+   --------------------------------------------------------------------------
+
+   KEY LEMMA: step_inst_state_equiv shows that executing a single instruction
+   preserves state_equiv (when the first execution succeeds).
    -------------------------------------------------------------------------- *)
 
+(* KEY LEMMA: Single instruction step preserves state_equiv (success case) *)
 Theorem step_inst_state_equiv:
   !inst s1 s2 r1.
     state_equiv s1 s2 /\
@@ -356,8 +414,13 @@ QED
 
 (* --------------------------------------------------------------------------
    Block Stepping Preserves Equivalence
+   --------------------------------------------------------------------------
+
+   KEY LEMMA: step_in_block_state_equiv shows that stepping within a basic block
+   preserves state_equiv.
    -------------------------------------------------------------------------- *)
 
+(* KEY LEMMA: Single step in block preserves state_equiv (success case) *)
 Theorem step_in_block_state_equiv:
   !fn bb s1 s2 r1 is_term.
     state_equiv s1 s2 /\
@@ -377,8 +440,13 @@ QED
 
 (* --------------------------------------------------------------------------
    Block Execution Preserves Equivalence
+   --------------------------------------------------------------------------
+
+   KEY LEMMA: run_block_state_equiv shows that running an entire block
+   preserves state_equiv (when the first execution succeeds).
    -------------------------------------------------------------------------- *)
 
+(* KEY LEMMA: Block execution preserves state_equiv (success case) *)
 Theorem run_block_state_equiv:
   !fn bb s1 s2 r1.
     state_equiv s1 s2 /\
@@ -405,8 +473,14 @@ QED
 
 (* --------------------------------------------------------------------------
    Result Equivalence for Operations (handles all result types)
+   --------------------------------------------------------------------------
+
+   These are the full result_equiv versions that handle all cases (OK, Halt,
+   Revert, Error), not just the success case. These are the main theorems
+   clients should use.
    -------------------------------------------------------------------------- *)
 
+(* Helper: Binary operation result_equiv *)
 Theorem exec_binop_result_equiv:
   !f inst s1 s2.
     state_equiv s1 s2 ==>
@@ -545,7 +619,7 @@ Proof
   metis_tac[]
 QED
 
-(* Helper for JNZ case - use CASE_TAC to break down all operand patterns *)
+(* Helper: JNZ case handled separately due to complex control flow *)
 Theorem jnz_result_equiv:
   !inst s1 s2.
     state_equiv s1 s2 /\ inst.inst_opcode = JNZ ==>
@@ -565,6 +639,7 @@ Proof
   )
 QED
 
+(* TOP-LEVEL: Instruction stepping preserves result_equiv (all cases) *)
 Theorem step_inst_result_equiv:
   !inst s1 s2.
     state_equiv s1 s2 ==>
@@ -680,6 +755,7 @@ Proof
   simp[result_equiv_def, state_equiv_refl]
 QED
 
+(* TOP-LEVEL: Block stepping preserves result_equiv and termination flag *)
 Theorem step_in_block_result_equiv:
   !fn bb s1 s2.
     state_equiv s1 s2 ==>
@@ -696,6 +772,7 @@ Proof
   gvs[next_inst_def, state_equiv_def, var_equiv_def, lookup_var_def]
 QED
 
+(* TOP-LEVEL: Block execution preserves result_equiv (all cases) *)
 Theorem run_block_result_equiv:
   !fn bb s1 s2.
     state_equiv s1 s2 ==>

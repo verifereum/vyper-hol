@@ -7,6 +7,33 @@
  * Depends on:
  * - venomDfgTheory: DFG analysis and origin computation
  * - venomEquivTheory: State equivalence infrastructure
+ *
+ * ============================================================================
+ * STRUCTURE OVERVIEW
+ * ============================================================================
+ *
+ * TOP-LEVEL DEFINITIONS (transformation):
+ *   - transform_inst       : Transform a single instruction
+ *   - transform_block      : Transform a basic block
+ *   - transform_function   : Transform an entire function
+ *   - transform_context    : Transform a context (all functions)
+ *
+ * TOP-LEVEL DEFINITIONS (well-formedness):
+ *   - wf_ir_fn             : Syntactic well-formedness for Venom IR
+ *   - phi_wf_fn            : PHI-specific well-formedness conditions
+ *
+ * TOP-LEVEL THEOREMS (correctness):
+ *   - phi_elimination_correct         : Function-level correctness
+ *   - phi_elimination_context_correct : Context-level correctness
+ *   - wf_ir_implies_phi_wf            : Syntactic WF implies PHI WF
+ *
+ * HELPER THEOREMS (internal):
+ *   - transform_block_correct         : Block OK case
+ *   - transform_block_result_equiv    : Block result equivalence
+ *   - step_in_block_equiv             : Step equivalence
+ *   - Various lemmas for PHI resolution, instruction stepping, etc.
+ *
+ * ============================================================================
  *)
 
 Theory phiElim
@@ -14,11 +41,16 @@ Ancestors
   list finite_map pred_set
   venomState venomInst venomSem venomDfg venomEquiv
 
-(* --------------------------------------------------------------------------
+(* ==========================================================================
    PHI Elimination Transformation
-   -------------------------------------------------------------------------- *)
+   ==========================================================================
 
-(* Transform instruction using DFG-based origin analysis *)
+   TOP-LEVEL: These are the main transformation functions that clients use.
+   transform_context is the entry point; others are applied internally.
+   ========================================================================== *)
+
+(* TOP-LEVEL: Transform a single instruction.
+   If it's a PHI with single origin, replace with ASSIGN from origin's output. *)
 Definition transform_inst_def:
   transform_inst dfg inst =
     case phi_single_origin dfg inst of
@@ -33,39 +65,48 @@ Definition transform_inst_def:
     | NONE => inst
 End
 
-(* Transform a basic block *)
+(* TOP-LEVEL: Transform a basic block by transforming all instructions *)
 Definition transform_block_def:
   transform_block dfg bb =
     bb with bb_instructions := MAP (transform_inst dfg) bb.bb_instructions
 End
 
-(* Transform a function *)
+(* TOP-LEVEL: Transform a function - builds DFG and transforms all blocks *)
 Definition transform_function_def:
   transform_function fn =
     let dfg = build_dfg_fn fn in
     fn with fn_blocks := MAP (transform_block dfg) fn.fn_blocks
 End
 
-(* Transform a context (all functions) *)
+(* TOP-LEVEL: Transform a context (all functions) - main entry point *)
 Definition transform_context_def:
   transform_context ctx =
     ctx with ctx_functions := MAP transform_function ctx.ctx_functions
 End
 
-(* --------------------------------------------------------------------------
-   Transformation Properties
-   -------------------------------------------------------------------------- *)
+(* ==========================================================================
+   Transformation Properties - Helper Lemmas
+   ==========================================================================
 
+   These are internal helper lemmas about the transformation functions.
+   They establish properties like label preservation, length preservation, etc.
+   ========================================================================== *)
+
+(* Helper: Transform preserves block label *)
 Theorem transform_block_label:
   !dfg bb. (transform_block dfg bb).bb_label = bb.bb_label
 Proof
   rw[transform_block_def]
 QED
 
-(* --------------------------------------------------------------------------
+(* ==========================================================================
    Lookup Helpers
-   -------------------------------------------------------------------------- *)
+   ==========================================================================
 
+   Helper lemmas for block lookup operations.
+   ========================================================================== *)
+
+(* Helper: Lookup commutes with transform *)
 Theorem lookup_block_transform:
   !lbl blocks dfg.
     lookup_block lbl (MAP (transform_block dfg) blocks) =
@@ -247,10 +288,14 @@ Proof
   simp[EL_MAP]
 QED
 
-(* --------------------------------------------------------------------------
+(* ==========================================================================
    PHI Resolution Lemmas
-   -------------------------------------------------------------------------- *)
+   ==========================================================================
 
+   Helper lemmas for PHI resolution - connecting resolve_phi to phi_var_operands.
+   ========================================================================== *)
+
+(* Helper: resolve_phi returns one of the phi_var_operands *)
 Theorem resolve_phi_in_operands:
   !prev_bb ops v.
     resolve_phi prev_bb ops = SOME (Var v) ==>
@@ -283,10 +328,15 @@ Proof
   strip_tac >> res_tac >> metis_tac[]
 QED
 
-(* --------------------------------------------------------------------------
+(* ==========================================================================
    Instruction Step Lemmas
-   -------------------------------------------------------------------------- *)
+   ==========================================================================
 
+   Helper lemmas about instruction stepping - PHI evaluation, ASSIGN evaluation,
+   and how they relate to transformed instructions.
+   ========================================================================== *)
+
+(* Helper: PHI instruction stepping in terms of resolve_phi and eval_operand *)
 Theorem step_inst_phi_eval:
   !inst out prev s.
     inst.inst_opcode = PHI /\
@@ -353,10 +403,15 @@ Proof
   res_tac >> fs[]
 QED
 
-(* --------------------------------------------------------------------------
+(* ==========================================================================
    Transform Instruction Correctness
-   -------------------------------------------------------------------------- *)
+   ==========================================================================
 
+   KEY LEMMA: Shows that for a PHI with single origin, the transformed
+   instruction (ASSIGN) produces an equivalent state.
+   ========================================================================== *)
+
+(* KEY LEMMA: Transform instruction correctness *)
 Theorem transform_inst_correct:
   !dfg inst s s' origin prev_bb v.
     step_inst inst s = OK s' /\
@@ -385,10 +440,15 @@ Proof
   simp[state_equiv_refl]
 QED
 
-(* --------------------------------------------------------------------------
+(* ==========================================================================
    Block Step Equivalence
-   -------------------------------------------------------------------------- *)
+   ==========================================================================
 
+   KEY LEMMA: Shows that stepping in a transformed block produces equivalent
+   results. This is the core lemma used by block-level and function-level proofs.
+   ========================================================================== *)
+
+(* KEY LEMMA: Single step in block produces equivalent states *)
 Theorem step_in_block_equiv:
   !dfg fn bb s s' is_term.
     step_in_block fn bb s = (OK s', is_term) /\
@@ -652,10 +712,16 @@ Proof
   first_x_assum (qspecl_then [`OK v`, `F`, `v`] mp_tac) >> simp[]
 QED
 
-(* --------------------------------------------------------------------------
+(* ==========================================================================
    Block-level Correctness
-   -------------------------------------------------------------------------- *)
+   ==========================================================================
 
+   These theorems establish correctness at the block level.
+   transform_block_correct handles the OK case.
+   transform_block_result_equiv handles all result types.
+   ========================================================================== *)
+
+(* Helper: Block-level correctness for OK result *)
 Theorem transform_block_correct:
   !fn bb st graph final_st.
     run_block fn bb st = OK final_st /\
@@ -838,11 +904,18 @@ Proof
   fs[step_inst_def, AllCaseEqs(), eval_operand_def]
 QED
 
-(* --------------------------------------------------------------------------
-   Function-level Correctness
-   -------------------------------------------------------------------------- *)
+(* ==========================================================================
+   Well-Formedness Definitions
+   ==========================================================================
 
-(* Simple syntactic well-formedness for Venom IR functions *)
+   These definitions specify what it means for Venom IR to be well-formed
+   for the PHI elimination pass. wf_ir_fn is the syntactic definition that
+   users check. phi_wf_fn is the semantic condition used in proofs.
+   wf_ir_implies_phi_wf shows that syntactic implies semantic.
+   ========================================================================== *)
+
+(* TOP-LEVEL: Simple syntactic well-formedness for Venom IR functions.
+   Users should check this to ensure PHI elimination is correct. *)
 Definition wf_ir_fn_def:
   wf_ir_fn func <=>
     (* SSA form: each variable defined at most once *)
@@ -881,7 +954,8 @@ Definition wf_ir_fn_def:
        ?val_op. resolve_phi prev inst.inst_operands = SOME val_op)
 End
 
-(* Well-formedness predicate for a function's PHI instructions *)
+(* Helper: Well-formedness predicate for a function's PHI instructions.
+   This is the semantic condition used in the main correctness proofs. *)
 Definition phi_wf_fn_def:
   phi_wf_fn func <=>
     (* All PHI instructions are well-formed *)
@@ -919,7 +993,9 @@ Definition phi_wf_fn_def:
        lookup_var src_var s = NONE)
 End
 
-(* wf_ir_fn implies phi_wf_fn - allows using simpler syntactic conditions *)
+(* TOP-LEVEL: wf_ir_fn implies phi_wf_fn.
+   This is the key theorem that allows users to check the simpler syntactic
+   conditions (wf_ir_fn) and get the semantic guarantees (phi_wf_fn). *)
 Theorem wf_ir_implies_phi_wf:
   !func. wf_ir_fn func ==> phi_wf_fn func
 Proof
@@ -994,8 +1070,11 @@ Proof
   )
 QED
 
-(*
- * Main correctness theorem with refined preconditions
+(* ==========================================================================
+   Function-level Correctness - Main Theorems
+   ========================================================================== *)
+
+(* TOP-LEVEL: Main correctness theorem for PHI elimination.
  *
  * The theorem requires:
  * 1. phi_wf_fn func - PHI instructions are well-formed
@@ -1005,6 +1084,9 @@ QED
  * The precondition about vs_prev_bb ensures we can use transform_block_result_equiv
  * for non-entry blocks. For entry blocks, the transform is identity because
  * phi_wf_fn requires entry blocks have no PHI with single origin.
+ *
+ * This theorem says: running the original and transformed function produces
+ * equivalent results (same final state up to state_equiv).
  *)
 Theorem phi_elimination_correct:
   !fuel (func:ir_function) s result.
@@ -1115,10 +1197,12 @@ Proof
   simp[state_equiv_refl]
 QED
 
-(* --------------------------------------------------------------------------
+(* ==========================================================================
    Context-level Correctness
-   -------------------------------------------------------------------------- *)
+   ========================================================================== *)
 
+(* TOP-LEVEL: Context-level correctness - transformation preserves semantics
+   for all functions in a context. *)
 Theorem phi_elimination_context_correct:
   !ctx fn_name fuel (func:ir_function) s result.
     MEM func ctx.ctx_functions /\
