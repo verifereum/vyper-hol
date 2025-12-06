@@ -39,11 +39,6 @@ Ancestors
 (* TOP-LEVEL: The DFG type - maps variable names to defining instructions *)
 Type dfg = ``:(string, instruction) fmap``
 
-(* Helper: DFG lookup - thin wrapper around FLOOKUP *)
-Definition dfg_lookup_def:
-  dfg_lookup dfg v = FLOOKUP dfg v
-End
-
 (* TOP-LEVEL: DFG well-formedness - if a variable maps to an instruction,
    that instruction must produce the variable. This is a key invariant. *)
 Definition well_formed_dfg_def:
@@ -259,29 +254,6 @@ End
 (* Helper: Check if instruction is a PHI *)
 Definition is_phi_inst_def:
   is_phi_inst inst <=> inst.inst_opcode = PHI
-End
-
-(* Helper: Check if instruction is an assign with variable operand *)
-Definition is_var_assign_def:
-  is_var_assign inst <=>
-    inst.inst_opcode = ASSIGN /\ IS_SOME (assign_var_operand inst)
-End
-
-(* Helper: Get source variables from an instruction for tracing *)
-Definition inst_source_vars_def:
-  inst_source_vars inst =
-    if inst.inst_opcode = PHI then
-      phi_var_operands inst.inst_operands
-    else if inst.inst_opcode = ASSIGN then
-      case assign_var_operand inst of
-        SOME v => [v]
-      | NONE => []
-    else []
-End
-
-(* Helper: Get the set of unique variable names from PHI operands *)
-Definition phi_operand_vars_def:
-  phi_operand_vars ops = set (phi_var_operands ops)
 End
 
 (* Helper: resolve_phi returns one of the phi_var_operands.

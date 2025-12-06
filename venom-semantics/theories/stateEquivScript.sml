@@ -131,74 +131,19 @@ Proof
   rw[result_equiv_def]
 QED
 
-(* Mismatch cases are false *)
-Theorem result_equiv_ok_halt[simp]:
-  result_equiv (OK s) (Halt s') = F
-Proof
-  rw[result_equiv_def]
-QED
-
-Theorem result_equiv_ok_revert[simp]:
-  result_equiv (OK s) (Revert s') = F
-Proof
-  rw[result_equiv_def]
-QED
-
-Theorem result_equiv_ok_error[simp]:
-  result_equiv (OK s) (Error e) = F
-Proof
-  rw[result_equiv_def]
-QED
-
-Theorem result_equiv_halt_ok[simp]:
-  result_equiv (Halt s) (OK s') = F
-Proof
-  rw[result_equiv_def]
-QED
-
-Theorem result_equiv_halt_revert[simp]:
-  result_equiv (Halt s) (Revert s') = F
-Proof
-  rw[result_equiv_def]
-QED
-
-Theorem result_equiv_halt_error[simp]:
-  result_equiv (Halt s) (Error e) = F
-Proof
-  rw[result_equiv_def]
-QED
-
-Theorem result_equiv_revert_ok[simp]:
-  result_equiv (Revert s) (OK s') = F
-Proof
-  rw[result_equiv_def]
-QED
-
-Theorem result_equiv_revert_halt[simp]:
-  result_equiv (Revert s) (Halt s') = F
-Proof
-  rw[result_equiv_def]
-QED
-
-Theorem result_equiv_revert_error[simp]:
-  result_equiv (Revert s) (Error e) = F
-Proof
-  rw[result_equiv_def]
-QED
-
-Theorem result_equiv_error_ok[simp]:
-  result_equiv (Error e) (OK s) = F
-Proof
-  rw[result_equiv_def]
-QED
-
-Theorem result_equiv_error_halt[simp]:
-  result_equiv (Error e) (Halt s) = F
-Proof
-  rw[result_equiv_def]
-QED
-
-Theorem result_equiv_error_revert[simp]:
+(* Mismatch cases are all false - consolidated theorem *)
+Theorem result_equiv_mismatch[simp]:
+  result_equiv (OK s) (Halt s') = F /\
+  result_equiv (OK s) (Revert s') = F /\
+  result_equiv (OK s) (Error e) = F /\
+  result_equiv (Halt s) (OK s') = F /\
+  result_equiv (Halt s) (Revert s') = F /\
+  result_equiv (Halt s) (Error e) = F /\
+  result_equiv (Revert s) (OK s') = F /\
+  result_equiv (Revert s) (Halt s') = F /\
+  result_equiv (Revert s) (Error e) = F /\
+  result_equiv (Error e) (OK s) = F /\
+  result_equiv (Error e) (Halt s) = F /\
   result_equiv (Error e) (Revert s) = F
 Proof
   rw[result_equiv_def]

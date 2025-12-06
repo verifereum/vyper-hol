@@ -77,12 +77,12 @@ Definition phi_wf_fn_def:
        get_instruction bb idx = SOME inst /\
        is_phi_inst inst ==>
        phi_well_formed inst.inst_operands) /\
-    (* DFG origins are consistent with phi resolution - scoped to blocks *)
+    (* DFG origins are consistent with phi resolution - scoped to blocks
+       Note: is_phi_inst is implied by phi_single_origin = SOME *)
     (!bb idx inst origin prev_bb v.
        let dfg = build_dfg_fn func in
        MEM bb func.fn_blocks /\
        get_instruction bb idx = SOME inst /\
-       is_phi_inst inst /\
        phi_single_origin dfg inst = SOME origin /\
        resolve_phi prev_bb inst.inst_operands = SOME (Var v) ==>
        FLOOKUP dfg v = SOME origin) /\
@@ -93,12 +93,12 @@ Definition phi_wf_fn_def:
        get_instruction (HD func.fn_blocks) idx = SOME inst ==>
        phi_single_origin dfg inst = NONE) /\
     (* For Error case: if PHI with single origin errors, origin's output undefined
-       This holds in well-formed SSA due to dominator properties. *)
+       This holds in well-formed SSA due to dominator properties.
+       Note: is_phi_inst is implied by phi_single_origin = SOME *)
     (!bb inst origin src_var prev e s.
        let dfg = build_dfg_fn func in
        MEM bb func.fn_blocks /\
        get_instruction bb s.vs_inst_idx = SOME inst /\
-       is_phi_inst inst /\
        phi_single_origin dfg inst = SOME origin /\
        origin.inst_output = SOME src_var /\
        s.vs_prev_bb = SOME prev /\
@@ -110,22 +110,7 @@ End
    PHI Resolution Lemmas
    ========================================================================== *)
 
-(* Helper: resolve_phi returns one of the phi_var_operands *)
-Theorem resolve_phi_in_operands:
-  !prev_bb ops v.
-    resolve_phi prev_bb ops = SOME (Var v) ==>
-    MEM v (phi_var_operands ops)
-Proof
-  measureInduct_on `LENGTH ops` >>
-  Cases_on `ops` >- rw[resolve_phi_def] >>
-  Cases_on `t` >- rw[resolve_phi_def] >>
-  Cases_on `h` >> Cases_on `h'` >>
-  rpt strip_tac >> fs[resolve_phi_def, phi_var_operands_def] >>
-  TRY (Cases_on `s = prev_bb` >> fs[]) >>
-  TRY (disj2_tac) >>
-  first_x_assum (qspec_then `t'` mp_tac) >> simp[] >>
-  rpt strip_tac >> res_tac
-QED
+(* Note: resolve_phi_in_operands is in dfgDefsTheory *)
 
 Theorem resolve_phi_well_formed:
   !prev_bb ops v.
@@ -179,7 +164,9 @@ Proof
   )
   >- (
     (* DFG origin lookup - use phi_operands_direct_flookup *)
-    (* First derive phi_operands_direct from wf_ir_fn assumption *)
+    (* First derive is_phi_inst from phi_single_origin = SOME *)
+    `is_phi_inst inst` by metis_tac[phi_single_origin_is_phi] >>
+    (* Then derive phi_operands_direct from wf_ir_fn assumption *)
     `phi_operands_direct (build_dfg_fn func) inst` by (
       qpat_x_assum `!bb idx inst. _ ==> phi_operands_direct _ _`
         (qspecl_then [`bb`, `idx`, `inst`] mp_tac) >> simp[]
@@ -195,6 +182,8 @@ Proof
   )
   >- (
     (* Error case: PHI with single origin errors implies origin undefined. *)
+    (* Derive is_phi_inst from phi_single_origin = SOME *)
+    `is_phi_inst inst` by metis_tac[phi_single_origin_is_phi] >>
     fs[is_phi_inst_def] >>
     (* Get phi_well_formed from wf_ir_fn assumption *)
     `phi_well_formed inst.inst_operands` by (

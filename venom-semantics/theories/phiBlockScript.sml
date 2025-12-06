@@ -61,24 +61,6 @@ Proof
   Cases_on `lookup_var src_var s` >> simp[]
 QED
 
-Theorem phi_resolve_single_origin:
-  !dfg inst origin prev_bb s v.
-    is_phi_inst inst /\
-    phi_single_origin dfg inst = SOME origin /\
-    well_formed_dfg dfg /\
-    s.vs_prev_bb = SOME prev_bb /\
-    resolve_phi prev_bb inst.inst_operands = SOME (Var v) /\
-    FLOOKUP dfg v = SOME origin
-  ==>
-    eval_operand (Var v) s =
-      case origin.inst_output of
-        SOME src => lookup_var src s
-      | NONE => NONE
-Proof
-  rw[eval_operand_def, well_formed_dfg_def] >>
-  res_tac >> fs[]
-QED
-
 (* ==========================================================================
    Transform Instruction Correctness
    ========================================================================== *)
@@ -87,7 +69,6 @@ QED
 Theorem transform_inst_correct:
   !dfg inst s s' origin prev_bb v.
     step_inst inst s = OK s' /\
-    is_phi_inst inst /\
     well_formed_dfg dfg /\
     phi_single_origin dfg inst = SOME origin /\
     s.vs_prev_bb = SOME prev_bb /\
@@ -98,11 +79,11 @@ Theorem transform_inst_correct:
           state_equiv s' s''
 Proof
   rpt strip_tac >>
+  `is_phi_inst inst` by metis_tac[phi_single_origin_is_phi] >>
   `origin.inst_output = SOME v` by fs[well_formed_dfg_def] >>
-  fs[transform_inst_def] >>
+  fs[transform_inst_def, is_phi_inst_def] >>
   qexists_tac `s'` >>
   conj_tac >- (
-    fs[is_phi_inst_def] >>
     qpat_x_assum `step_inst inst s = OK s'` mp_tac >>
     simp[step_inst_def, eval_operand_def] >>
     Cases_on `lookup_var v s` >> simp[] >>
@@ -125,7 +106,6 @@ Theorem step_in_block_equiv:
        phi_well_formed inst.inst_operands) /\
     (!idx inst origin prev_bb v.
        get_instruction bb idx = SOME inst /\
-       is_phi_inst inst /\
        phi_single_origin dfg inst = SOME origin /\
        s.vs_prev_bb = SOME prev_bb /\
        resolve_phi prev_bb inst.inst_operands = SOME (Var v) ==>
@@ -173,30 +153,22 @@ QED
    Halt/Revert/Error Cases
    ========================================================================== *)
 
-(* Halt result can only come from STOP opcode (not PHI) *)
-Theorem step_inst_halt_not_phi:
-  !inst s s'.
-    step_inst inst s = Halt s' ==> ~is_phi_inst inst
+(* Halt/Revert results only come from non-PHI instructions *)
+Theorem step_inst_halt_revert_not_phi:
+  !inst s r.
+    (step_inst inst s = Halt r \/ step_inst inst s = Revert r) ==>
+    ~is_phi_inst inst
 Proof
-  rpt strip_tac >> fs[is_phi_inst_def, step_inst_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-(* Revert result can only come from REVERT opcode (not PHI) *)
-Theorem step_inst_revert_not_phi:
-  !inst s s'.
-    step_inst inst s = Revert s' ==> ~is_phi_inst inst
-Proof
-  rpt strip_tac >> fs[is_phi_inst_def, step_inst_def] >>
-  gvs[AllCaseEqs()]
+  rpt strip_tac >> fs[is_phi_inst_def, step_inst_def] >> gvs[AllCaseEqs()]
 QED
 
 (* For Halt/Revert cases, step_in_block on transformed block gives same result *)
-Theorem step_in_block_halt_transform:
+Theorem step_in_block_halt_revert_transform:
   !dfg fn bb s s' is_term.
-    step_in_block fn bb s = (Halt s', is_term)
+    (step_in_block fn bb s = (Halt s', is_term) \/
+     step_in_block fn bb s = (Revert s', is_term))
   ==>
-    step_in_block fn (transform_block dfg bb) s = (Halt s', is_term)
+    step_in_block fn (transform_block dfg bb) s = step_in_block fn bb s
 Proof
   rw[step_in_block_def] >>
   Cases_on `get_instruction bb s.vs_inst_idx` >> fs[] >>
@@ -206,22 +178,23 @@ Proof
     CCONTR_TAC >> fs[is_phi_inst_def, step_inst_def] >> gvs[AllCaseEqs()]
   ) >>
   imp_res_tac transform_inst_non_phi >> fs[]
+QED
+
+(* Convenient corollaries for the specific cases *)
+Theorem step_in_block_halt_transform:
+  !dfg fn bb s s' is_term.
+    step_in_block fn bb s = (Halt s', is_term) ==>
+    step_in_block fn (transform_block dfg bb) s = (Halt s', is_term)
+Proof
+  metis_tac[step_in_block_halt_revert_transform]
 QED
 
 Theorem step_in_block_revert_transform:
   !dfg fn bb s s' is_term.
-    step_in_block fn bb s = (Revert s', is_term)
-  ==>
+    step_in_block fn bb s = (Revert s', is_term) ==>
     step_in_block fn (transform_block dfg bb) s = (Revert s', is_term)
 Proof
-  rw[step_in_block_def] >>
-  Cases_on `get_instruction bb s.vs_inst_idx` >> fs[] >>
-  imp_res_tac get_instruction_transform >> fs[] >>
-  gvs[AllCaseEqs()] >>
-  `~is_phi_inst x` by (
-    CCONTR_TAC >> fs[is_phi_inst_def, step_inst_def] >> gvs[AllCaseEqs()]
-  ) >>
-  imp_res_tac transform_inst_non_phi >> fs[]
+  metis_tac[step_in_block_halt_revert_transform]
 QED
 
 (* ==========================================================================
@@ -317,7 +290,6 @@ Theorem transform_block_correct:
        phi_well_formed inst.inst_operands) /\
     (!idx inst origin prev_bb v.
        get_instruction bb idx = SOME inst /\
-       is_phi_inst inst /\
        phi_single_origin graph inst = SOME origin /\
        resolve_phi prev_bb inst.inst_operands = SOME (Var v) ==>
        FLOOKUP graph v = SOME origin)
@@ -373,14 +345,12 @@ Theorem transform_block_result_equiv:
        phi_well_formed inst.inst_operands) /\
     (!idx inst origin prev_bb v.
        get_instruction bb idx = SOME inst /\
-       is_phi_inst inst /\
        phi_single_origin graph inst = SOME origin /\
        resolve_phi prev_bb inst.inst_operands = SOME (Var v) ==>
        FLOOKUP graph v = SOME origin) /\
     (* For Error case: if PHI with single origin errors, origin's output undefined *)
     (!inst origin src_var prev e s'.
        get_instruction bb s'.vs_inst_idx = SOME inst /\
-       is_phi_inst inst /\
        phi_single_origin graph inst = SOME origin /\
        origin.inst_output = SOME src_var /\
        s'.vs_prev_bb = SOME prev /\
@@ -455,23 +425,9 @@ Proof
     simp[EL_MAP]
   ) >>
   simp[] >>
-  Cases_on `step_inst (transform_inst graph x) s` >> gvs[result_equiv_def, AllCaseEqs()]
-  >- (
-    Cases_on `is_phi_inst x` >> gvs[transform_inst_def, phi_single_origin_def] >>
-    Cases_on `CARD (compute_origins graph x DELETE x) = 1` >> gvs[] >>
-    Cases_on `(CHOICE (compute_origins graph x DELETE x)).inst_output` >> gvs[] >>
-    Cases_on `s.vs_prev_bb` >> gvs[] >>
-    first_x_assum (qspecl_then [`x`, `x'`, `x''`, `s'`, `s`] mp_tac) >> simp[] >> strip_tac >>
-    fs[step_inst_def, AllCaseEqs(), eval_operand_def]
-  )
-  >- (
-    Cases_on `is_phi_inst x` >> gvs[transform_inst_def, phi_single_origin_def] >>
-    Cases_on `CARD (compute_origins graph x DELETE x) = 1` >> gvs[] >>
-    Cases_on `(CHOICE (compute_origins graph x DELETE x)).inst_output` >> gvs[] >>
-    Cases_on `s.vs_prev_bb` >> gvs[] >>
-    first_x_assum (qspecl_then [`x`, `x'`, `x''`, `s'`, `s`] mp_tac) >> simp[] >> strip_tac >>
-    fs[step_inst_def, AllCaseEqs(), eval_operand_def]
-  ) >>
+  (* All 3 cases (OK, Halt, Revert from transformed step) have the same proof *)
+  Cases_on `step_inst (transform_inst graph x) s` >> gvs[result_equiv_def, AllCaseEqs()] >>
+  (* Common tactic for all cases: show contradiction when original errors *)
   Cases_on `is_phi_inst x` >> gvs[transform_inst_def, phi_single_origin_def] >>
   Cases_on `CARD (compute_origins graph x DELETE x) = 1` >> gvs[] >>
   Cases_on `(CHOICE (compute_origins graph x DELETE x)).inst_output` >> gvs[] >>

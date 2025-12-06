@@ -8,12 +8,12 @@
  * ============================================================================
  *
  * TOP-LEVEL THEOREMS:
- *   - phi_elimination_correct         : Function-level correctness
- *   - phi_elimination_context_correct : Context-level correctness
+ *   - phi_elimination_correct         : Function-level correctness (uses wf_ir_fn)
+ *   - phi_elimination_context_correct : Context-level correctness (uses wf_ir_fn)
  *
  * HELPER THEOREMS:
+ *   - phi_elimination_correct_internal: Internal version using phi_wf_fn
  *   - run_function_state_equiv        : Function execution preserves equiv
- *   - run_block_result_equiv_exists   : Block result equivalence witness
  *
  * ============================================================================
  *)
@@ -25,19 +25,6 @@ Ancestors
 (* ==========================================================================
    Function Execution Helpers
    ========================================================================== *)
-
-(* run_block result equivalence - derived from execEquiv version *)
-Theorem run_block_result_equiv_exists:
-  !fn bb s1 s2 r1.
-    state_equiv s1 s2 /\
-    run_block fn bb s1 = r1
-  ==>
-    ?r2. run_block fn bb s2 = r2 /\ result_equiv r1 r2
-Proof
-  rpt strip_tac >>
-  qexists_tac `run_block fn bb s2` >> simp[] >>
-  metis_tac[run_block_result_equiv]
-QED
 
 (* Function execution preserves state equivalence - induction on fuel *)
 Theorem run_function_state_equiv:
@@ -75,21 +62,8 @@ QED
    Function-level Correctness
    ========================================================================== *)
 
-(* TOP-LEVEL: Main correctness theorem for PHI elimination.
- *
- * The theorem requires:
- * 1. phi_wf_fn func - PHI instructions are well-formed
- * 2. func.fn_blocks <> [] - function has at least one block
- * 3. Either vs_prev_bb is set (non-entry), or we're at entry block
- *
- * The precondition about vs_prev_bb ensures we can use transform_block_result_equiv
- * for non-entry blocks. For entry blocks, the transform is identity because
- * phi_wf_fn requires entry blocks have no PHI with single origin.
- *
- * This theorem says: running the original and transformed function produces
- * equivalent results (same final state up to state_equiv).
- *)
-Theorem phi_elimination_correct:
+(* Helper: Internal theorem using phi_wf_fn *)
+Theorem phi_elimination_correct_internal:
   !fuel (func:ir_function) s result.
     phi_wf_fn func /\
     func.fn_blocks <> [] /\
@@ -198,17 +172,43 @@ Proof
   simp[state_equiv_refl]
 QED
 
+(* TOP-LEVEL: Main correctness theorem for PHI elimination.
+ *
+ * Uses the simpler syntactic well-formedness condition wf_ir_fn that users
+ * can check directly. The theorem says: running the original and transformed
+ * function produces equivalent results (same final state up to state_equiv).
+ *
+ * Assumptions:
+ * 1. wf_ir_fn func - syntactic well-formedness (SSA, PHI operand format, etc.)
+ * 2. func.fn_blocks <> [] - function has at least one block
+ * 3. Either vs_prev_bb is set (non-entry), or we're at entry block
+ *)
+Theorem phi_elimination_correct:
+  !fuel (func:ir_function) s result.
+    wf_ir_fn func /\
+    func.fn_blocks <> [] /\
+    (s.vs_prev_bb <> NONE \/
+     s.vs_current_bb = (HD func.fn_blocks).bb_label) /\
+    run_function fuel func s = result ==>
+    ?result'. run_function fuel (transform_function func) s = result' /\
+              result_equiv result result'
+Proof
+  rpt strip_tac >>
+  irule phi_elimination_correct_internal >>
+  simp[] >> irule wf_ir_implies_phi_wf >> simp[]
+QED
+
 (* ==========================================================================
    Context-level Correctness
    ========================================================================== *)
 
 (* TOP-LEVEL: Context-level correctness - transformation preserves semantics
-   for all functions in a context. *)
+   for all functions in a context. Uses wf_ir_fn for user convenience. *)
 Theorem phi_elimination_context_correct:
   !ctx fn_name fuel (func:ir_function) s result.
     MEM func ctx.ctx_functions /\
     func.fn_name = fn_name /\
-    phi_wf_fn func /\
+    wf_ir_fn func /\
     func.fn_blocks <> [] /\
     (s.vs_prev_bb <> NONE \/
      s.vs_current_bb = (HD func.fn_blocks).bb_label) /\
@@ -219,14 +219,14 @@ Theorem phi_elimination_context_correct:
       run_function fuel func' s = result' /\
       result_equiv result result'
 Proof
-  rw[transform_context_def, MEM_MAP] >>
-  qexists_tac `transform_function func` >>
-  rw[] >- (
-    qexists_tac `func` >> rw[]
-  ) >- (
-    rw[transform_function_def]
+  rpt strip_tac >>
+  `?result'. run_function fuel (transform_function func) s = result' /\
+             result_equiv result result'` by (
+    qspecl_then [`fuel`, `func`, `s`, `run_function fuel func s`] mp_tac phi_elimination_correct >>
+    simp[]
   ) >>
-  qspecl_then [`fuel`, `func`, `s`, `run_function fuel func s`] mp_tac phi_elimination_correct >>
-  simp[]
+  qexistsl_tac [`transform_function func`, `result'`] >>
+  simp[transform_context_def, transform_function_def, MEM_MAP] >>
+  qexists_tac `func` >> simp[]
 QED
 

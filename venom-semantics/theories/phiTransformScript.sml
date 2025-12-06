@@ -184,22 +184,10 @@ Theorem run_block_transform_identity:
     run_block fn (transform_block dfg bb) s = run_block fn bb s
 Proof
   rpt strip_tac >>
-  (* First show instructions are unchanged *)
-  `(transform_block dfg bb).bb_instructions = bb.bb_instructions` by (
-    simp[transform_block_def] >>
-    `MAP (transform_inst dfg) bb.bb_instructions = bb.bb_instructions` suffices_by simp[] >>
-    irule listTheory.LIST_EQ >>
-    simp[listTheory.LENGTH_MAP, listTheory.EL_MAP] >>
-    rpt strip_tac >>
-    first_x_assum (qspec_then `x` mp_tac) >>
-    simp[get_instruction_def] >> strip_tac >>
-    simp[transform_inst_def]
-  ) >>
-  (* Label is also unchanged *)
-  `(transform_block dfg bb).bb_label = bb.bb_label` by simp[transform_block_def] >>
-  (* So the whole block is unchanged *)
+  (* Use transform_block_identity to show block is unchanged *)
   `transform_block dfg bb = bb` by (
-    simp[basic_block_component_equality, transform_block_def] >> gvs[]
+    drule_all transform_block_identity >>
+    simp[basic_block_component_equality, transform_block_def]
   ) >>
   simp[]
 QED

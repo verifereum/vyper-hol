@@ -208,37 +208,6 @@ Proof
   )
 QED
 
-(* Helper: Predicate for valid visited sets *)
-Definition visited_valid_def:
-  visited_valid dfg visited <=>
-    !id. id IN visited ==> id IN dfg_ids dfg
-End
-
-(* Helper: Inductive lemma for list_checked success *)
-Theorem get_origins_list_checked_succeeds:
-  !dfg visited vars.
-    defs_dominate_uses dfg /\
-    (!v src_inst. MEM v vars /\ FLOOKUP dfg v = SOME src_inst ==>
-       ?result. get_origins_checked dfg visited src_inst = SOME result)
-    ==>
-    ?result. get_origins_list_checked dfg visited vars = SOME result
-Proof
-  Induct_on `vars` >- rw[Once get_origins_checked_def] >>
-  rpt strip_tac >>
-  rw[Once get_origins_checked_def] >>
-  Cases_on `FLOOKUP dfg h` >> fs[] >- (
-    first_x_assum match_mp_tac >> rw[] >>
-    first_x_assum match_mp_tac >> fs[] >> qexists_tac `v` >> fs[]
-  ) >>
-  `?r. get_origins_checked dfg visited x = SOME r` by (
-    first_x_assum (qspecl_then [`h`, `x`] mp_tac) >> fs[]
-  ) >> fs[] >>
-  `?result. get_origins_list_checked dfg visited vars = SOME result` by (
-    first_x_assum match_mp_tac >> rw[] >>
-    first_x_assum match_mp_tac >> fs[] >> qexists_tac `v` >> fs[]
-  ) >> fs[]
-QED
-
 (* KEY LEMMA: get_origins_checked ALWAYS returns SOME when visited is finite.
    No special preconditions like defs_dominate_uses are needed. *)
 Theorem get_origins_checked_always_some:
@@ -291,30 +260,15 @@ Proof
   )
 QED
 
-(* Helper: Corollary with original statement *)
-Theorem defs_dominate_uses_checked_succeeds:
-  !dfg visited inst.
-    defs_dominate_uses dfg /\
-    FINITE visited /\
-    (!id. id IN visited ==> id IN dfg_ids dfg)
-    ==>
-    ?result. get_origins_checked dfg visited inst = SOME result
-Proof
-  rpt strip_tac >>
-  irule (cj 2 get_origins_checked_always_some) >> simp[]
-QED
-
-(* TOP-LEVEL: For valid IR, checked version equals unchecked. *)
+(* TOP-LEVEL: Checked version always succeeds and equals unchecked. *)
 Theorem compute_origins_valid:
   !dfg inst.
-    defs_dominate_uses dfg ==>
     ?result. get_origins_checked dfg {} inst = SOME result /\
              compute_origins dfg inst = result
 Proof
   rw[compute_origins_def] >>
   `?result. get_origins_checked dfg {} inst = SOME result` by (
-    irule defs_dominate_uses_checked_succeeds >>
-    rw[]
+    irule (cj 2 get_origins_checked_always_some) >> simp[]
   ) >>
   metis_tac[get_origins_checked_eq]
 QED
@@ -333,13 +287,13 @@ Definition phi_single_origin_def:
     else NONE
 End
 
-(* Helper: Check if all PHI operand variables are the same *)
-Definition phi_uniform_operands_def:
-  phi_uniform_operands ops <=>
-    case phi_var_operands ops of
-      [] => T
-    | (v::vs) => EVERY (\x. x = v) vs
-End
+(* Helper: phi_single_origin returning SOME implies is_phi_inst *)
+Theorem phi_single_origin_is_phi:
+  !dfg inst origin.
+    phi_single_origin dfg inst = SOME origin ==> is_phi_inst inst
+Proof
+  rw[phi_single_origin_def, is_phi_inst_def] >> gvs[AllCaseEqs()]
+QED
 
 (* TOP-LEVEL: For single-origin PHIs, operand variables equal origin's output. *)
 Definition phi_operands_direct_def:
