@@ -27,7 +27,7 @@
 
 Theory execEquiv
 Ancestors
-  stateEquiv
+  stateEquiv venomSem venomState
 
 (* ==========================================================================
    Binary/Unary/Mod Operations Preserve Equivalence

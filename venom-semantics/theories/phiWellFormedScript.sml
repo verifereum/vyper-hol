@@ -21,7 +21,7 @@
 
 Theory phiWellFormed
 Ancestors
-  phiTransform stateEquiv
+  phiTransform stateEquiv venomSem venomState dfgDefs dfgOrigins list
 
 (* ==========================================================================
    Well-Formedness Definitions
@@ -143,6 +143,24 @@ Proof
   strip_tac >> res_tac >> metis_tac[]
 QED
 
+(* Helper: PHI instruction stepping in terms of resolve_phi and eval_operand *)
+Theorem step_inst_phi_eval:
+  !inst out prev s.
+    inst.inst_opcode = PHI /\
+    inst.inst_output = SOME out /\
+    s.vs_prev_bb = SOME prev
+  ==>
+    step_inst inst s =
+      case resolve_phi prev inst.inst_operands of
+        NONE => Error "phi: no matching predecessor"
+      | SOME val_op =>
+          case eval_operand val_op s of
+            SOME v => OK (update_var out v s)
+          | NONE => Error "phi: undefined operand"
+Proof
+  rw[step_inst_def]
+QED
+
 (* ==========================================================================
    Main Theorem: Syntactic implies Semantic WF
    ========================================================================== *)
@@ -223,22 +241,3 @@ Proof
     gvs[]
   )
 QED
-
-(* Helper: PHI instruction stepping in terms of resolve_phi and eval_operand *)
-Theorem step_inst_phi_eval:
-  !inst out prev s.
-    inst.inst_opcode = PHI /\
-    inst.inst_output = SOME out /\
-    s.vs_prev_bb = SOME prev
-  ==>
-    step_inst inst s =
-      case resolve_phi prev inst.inst_operands of
-        NONE => Error "phi: no matching predecessor"
-      | SOME val_op =>
-          case eval_operand val_op s of
-            SOME v => OK (update_var out v s)
-          | NONE => Error "phi: undefined operand"
-Proof
-  rw[step_inst_def]
-QED
-

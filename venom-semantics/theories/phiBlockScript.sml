@@ -24,7 +24,7 @@
 
 Theory phiBlock
 Ancestors
-  phiWellFormed execEquiv
+  phiWellFormed execEquiv venomSem venomState venomInst dfgDefs dfgOrigins phiTransform stateEquiv list
 
 (* ==========================================================================
    Instruction Step Lemmas

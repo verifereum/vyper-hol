@@ -27,7 +27,7 @@
 
 Theory dfgOrigins
 Ancestors
-  dfgDefs
+  dfgDefs pred_set list
 
 (* ==========================================================================
    Origin Computation
