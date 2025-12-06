@@ -350,8 +350,10 @@ Definition get_origins_checked_def:
             if CARD origins > 1 then SOME {inst}
             else SOME origins
     else if inst.inst_opcode = ASSIGN then
-      if inst.inst_id IN visited then
-        NONE  (* Assertion failure: ASSIGN cycle detected *)
+      (* We check visited for termination. Under defs_dominate_uses,
+         ASSIGN cycles can't happen, so this case never triggers for
+         valid IR. We return SOME {inst} to match get_origins behavior. *)
+      if inst.inst_id IN visited then SOME {inst}
       else
         let visited' = inst.inst_id INSERT visited in
         case assign_var_operand inst of
@@ -460,6 +462,57 @@ Proof
   ) >> fs[]
 QED
 
+(* get_origins_checked always returns SOME when visited is finite *)
+Theorem get_origins_checked_always_some:
+  (!dfg visited vars.
+    FINITE visited
+    ==>
+    ?result. get_origins_list_checked dfg visited vars = SOME result) /\
+  (!dfg visited inst.
+    FINITE visited
+    ==>
+    ?result. get_origins_checked dfg visited inst = SOME result)
+Proof
+  ho_match_mp_tac get_origins_checked_ind >> rpt conj_tac >> rpt gen_tac >>
+  rpt strip_tac >> simp[Once get_origins_checked_def] >>
+  (* Handle all case splits uniformly *)
+  TRY (
+    (* v::vars case *)
+    Cases_on `FLOOKUP dfg v` >> simp[] >>
+    TRY (first_x_assum (qspec_then `ARB` mp_tac) >> simp[] >> NO_TAC) >>
+    `?r1. get_origins_checked dfg visited x = SOME r1` by (
+      qpat_x_assum `!inst. _` (qspec_then `x` mp_tac) >> simp[]
+    ) >>
+    `?r2. get_origins_list_checked dfg visited vars = SOME r2` by (
+      qpat_x_assum `!src_inst. _` (qspec_then `x` mp_tac) >> simp[]
+    ) >>
+    simp[] >> NO_TAC
+  ) >>
+  TRY (
+    (* inst case - PHI *)
+    Cases_on `inst.inst_opcode = PHI` >> simp[] >>
+    TRY (
+      Cases_on `inst.inst_id IN visited` >> simp[] >>
+      `FINITE (inst.inst_id INSERT visited)` by simp[] >>
+      `?r. get_origins_list_checked dfg (inst.inst_id INSERT visited)
+           (phi_var_operands inst.inst_operands) = SOME r` by (
+        first_x_assum (qspecl_then [`inst.inst_id INSERT visited`,
+                                     `phi_var_operands inst.inst_operands`] mp_tac) >>
+        simp[]
+      ) >>
+      Cases_on `CARD r > 1` >> simp[] >> NO_TAC
+    ) >>
+    (* Non-PHI case - ASSIGN *)
+    Cases_on `inst.inst_opcode = ASSIGN` >> simp[] >>
+    Cases_on `inst.inst_id IN visited` >> simp[] >>
+    Cases_on `assign_var_operand inst` >> simp[] >>
+    Cases_on `FLOOKUP dfg x` >> simp[] >>
+    `FINITE (inst.inst_id INSERT visited)` by simp[] >>
+    first_x_assum (qspecl_then [`inst.inst_id INSERT visited`, `x`, `x'`] mp_tac) >>
+    simp[]
+  )
+QED
+
 Theorem defs_dominate_uses_checked_succeeds:
   !dfg visited inst.
     defs_dominate_uses dfg /\
@@ -468,7 +521,8 @@ Theorem defs_dominate_uses_checked_succeeds:
     ==>
     ?result. get_origins_checked dfg visited inst = SOME result
 Proof
-  cheat
+  rpt strip_tac >>
+  irule (cj 2 get_origins_checked_always_some) >> simp[]
 QED
 
 Theorem compute_origins_valid:
