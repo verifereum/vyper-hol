@@ -677,6 +677,32 @@ fun d_expression () : term decoder = achoose "expr" [
     field "id" (JSONDecode.map mk_Name string),
     check_ast_type "NameConstant" $
     field "value" (JSONDecode.map mk_lb booltm),
+    (* ExtCall: extcall target.method(args) *)
+    check_ast_type "ExtCall" $
+    JSONDecode.map (fn (method_name, (target_expr, method_args)) =>
+      mk_Call (mk_ExtCall (boolSyntax.F, method_name))
+              (target_expr :: method_args)) $
+    tuple2 (
+      field "value" $ field "func" $ field "attr" stringtm,
+      tuple2 (
+        field "value" $ field "func" $ field "value" $
+          field "args" $ JSONDecode.sub 0 $ delay d_expression,
+        field "value" $ field "args" $ array $ delay d_expression
+      )
+    ),
+    (* StaticCall: staticcall target.method(args) *)
+    check_ast_type "StaticCall" $
+    JSONDecode.map (fn (method_name, (target_expr, method_args)) =>
+      mk_Call (mk_ExtCall (boolSyntax.T, method_name))
+              (target_expr :: method_args)) $
+    tuple2 (
+      field "value" $ field "func" $ field "attr" stringtm,
+      tuple2 (
+        field "value" $ field "func" $ field "value" $
+          field "args" $ JSONDecode.sub 0 $ delay d_expression,
+        field "value" $ field "args" $ array $ delay d_expression
+      )
+    ),
     check_ast_type "Call" $
     JSONDecode.map (fn (i,a) => mk_Call (mk_IntCall i) a) $
     tuple2 (
