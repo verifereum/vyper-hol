@@ -7,22 +7,7 @@ on:
     - '**'
 
 jobs:
-  vyper:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-hol
-      - run: Holmake
-
-  venom:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-hol
-      - run: cd venom && Holmake
-
-  tests:
-    needs: vyper
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
