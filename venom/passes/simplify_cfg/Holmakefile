@@ -1,0 +1,3 @@
+# SimplifyCFG pass for Venom IR
+# Includes venom semantics, verifereum theories, and phi_elimination (for stateEquiv, execEquiv)
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../phi_elimination
