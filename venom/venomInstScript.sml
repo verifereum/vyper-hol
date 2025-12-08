@@ -69,7 +69,10 @@ End
    - id: unique identifier (models object identity from Python)
    - opcode: the operation to perform
    - operands: list of input operands (rightmost = top of conceptual stack)
-   - output: optional output variable name (SSA)
+   - outputs: list of output variable names (SSA)
+
+   Most instructions have 0 or 1 output. The invoke opcode can have multiple
+   outputs for multi-return internal function calls.
 
    The inst_id is used to distinguish instructions that may have identical
    fields but are different objects. This is important for passes that
@@ -81,18 +84,31 @@ Datatype:
     inst_id : num;
     inst_opcode : opcode;
     inst_operands : operand list;
-    inst_output : string option
+    inst_outputs : string list
   |>
 End
 
 (* Construct an instruction with a given ID *)
 Definition mk_inst_def:
-  mk_inst id op ops out = <|
+  mk_inst id op ops outs = <|
     inst_id := id;
     inst_opcode := op;
     inst_operands := ops;
-    inst_output := out
+    inst_outputs := outs
   |>
+End
+
+(* Helper: get single output (for instructions with exactly one output) *)
+Definition inst_output_def:
+  inst_output inst =
+    case inst.inst_outputs of
+      [out] => SOME out
+    | _ => NONE
+End
+
+(* Helper: check if instruction has outputs *)
+Definition has_outputs_def:
+  has_outputs inst = ~NULL inst.inst_outputs
 End
 
 (* --------------------------------------------------------------------------

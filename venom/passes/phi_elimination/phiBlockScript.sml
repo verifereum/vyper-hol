@@ -34,7 +34,7 @@ Theorem step_inst_assign_eval:
   !inst out op s.
     inst.inst_opcode = ASSIGN /\
     inst.inst_operands = [op] /\
-    inst.inst_output = SOME out
+    inst.inst_outputs = [out]
   ==>
     step_inst inst s =
       case eval_operand op s of
@@ -47,7 +47,7 @@ QED
 Theorem step_inst_phi_resolves_var_ok:
   !inst s s' src_var out prev.
     is_phi_inst inst /\
-    inst.inst_output = SOME out /\
+    inst.inst_outputs = [out] /\
     s.vs_prev_bb = SOME prev /\
     resolve_phi prev inst.inst_operands = SOME (Var src_var) /\
     step_inst inst s = OK s'
@@ -80,7 +80,7 @@ Theorem transform_inst_correct:
 Proof
   rpt strip_tac >>
   `is_phi_inst inst` by metis_tac[phi_single_origin_is_phi] >>
-  `origin.inst_output = SOME v` by fs[well_formed_dfg_def] >>
+  `origin.inst_outputs = [v]` by fs[well_formed_dfg_def] >>
   fs[transform_inst_def, is_phi_inst_def] >>
   qexists_tac `s'` >>
   conj_tac >- (
@@ -88,7 +88,8 @@ Proof
     simp[step_inst_def, eval_operand_def] >>
     Cases_on `lookup_var v s` >> simp[] >>
     strip_tac >> fs[] >>
-    Cases_on `inst.inst_output` >> fs[]
+    Cases_on `inst.inst_outputs` >> fs[] >>
+    Cases_on `t` >> fs[]
   ) >>
   simp[state_equiv_refl]
 QED
@@ -129,8 +130,9 @@ Proof
     rename1 `phi_single_origin dfg curr_inst = SOME origin_inst` >>
     `phi_well_formed curr_inst.inst_operands` by metis_tac[] >>
     fs[is_phi_inst_def, step_inst_def] >>
-    Cases_on `curr_inst.inst_output` >> fs[] >>
-    rename1 `curr_inst.inst_output = SOME out_var` >>
+    Cases_on `curr_inst.inst_outputs` >> fs[] >>
+    Cases_on `t` >> fs[] >>
+    rename1 `curr_inst.inst_outputs = [out_var]` >>
     Cases_on `s.vs_prev_bb` >> fs[] >>
     rename1 `s.vs_prev_bb = SOME prev_label` >>
     Cases_on `resolve_phi prev_label curr_inst.inst_operands` >> fs[] >>
@@ -141,7 +143,7 @@ Proof
     (* Use the FLOOKUP assumption - prev_bb already substituted, 4 args *)
     first_x_assum (qspecl_then [`s.vs_inst_idx`, `curr_inst`, `origin_inst`, `var`] mp_tac) >>
     simp[] >> strip_tac >>
-    `origin_inst.inst_output = SOME var` by fs[well_formed_dfg_def] >>
+    `origin_inst.inst_outputs = [var]` by fs[well_formed_dfg_def] >>
     fs[transform_inst_def, eval_operand_def, step_inst_def] >>
     simp[state_equiv_refl]
   ) >>
@@ -213,10 +215,9 @@ Proof
   qpat_x_assum `~is_terminator _` mp_tac >>
   simp[step_inst_def] >>
   Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
-  simp[exec_binop_def, exec_unop_def, exec_modop_def,
-       mload_def, mstore_def, sload_def, sstore_def,
-       tload_def, tstore_def, update_var_def] >>
-  rpt (CASE_TAC >> gvs[]) >> rpt strip_tac >> gvs[]
+  simp[exec_binop_def, exec_unop_def, exec_modop_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[update_var_def, mstore_def, sstore_def, tstore_def]
 QED
 
 (* Helper: step_in_block preserves vs_prev_bb for non-terminator steps *)
@@ -245,9 +246,9 @@ Proof
   qpat_x_assum `step_inst _ _ = _` mp_tac >>
   qpat_x_assum `is_terminator _` mp_tac >>
   simp[step_inst_def] >>
-  Cases_on `inst.inst_opcode` >> simp[is_terminator_def, jump_to_def] >>
-  rpt (CASE_TAC >> gvs[]) >>
-  spose_not_then strip_assume_tac >> gvs[]
+  (* Only JMP/JNZ give OK without halting, both use jump_to *)
+  Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
+  strip_tac >> gvs[AllCaseEqs(), jump_to_def]
 QED
 
 (* run_block returning OK with ~halted means vs_prev_bb is set *)
@@ -352,7 +353,7 @@ Theorem transform_block_result_equiv:
     (!inst origin src_var prev e s'.
        get_instruction bb s'.vs_inst_idx = SOME inst /\
        phi_single_origin graph inst = SOME origin /\
-       origin.inst_output = SOME src_var /\
+       origin.inst_outputs = [src_var] /\
        s'.vs_prev_bb = SOME prev /\
        step_inst inst s' = Error e ==>
        lookup_var src_var s' = NONE)
@@ -425,14 +426,47 @@ Proof
     simp[EL_MAP]
   ) >>
   simp[] >>
-  (* All 3 cases (OK, Halt, Revert from transformed step) have the same proof *)
-  Cases_on `step_inst (transform_inst graph x) s` >> gvs[result_equiv_def, AllCaseEqs()] >>
-  (* Common tactic for all cases: show contradiction when original errors *)
-  Cases_on `is_phi_inst x` >> gvs[transform_inst_def, phi_single_origin_def] >>
-  Cases_on `CARD (compute_origins graph x DELETE x) = 1` >> gvs[] >>
-  Cases_on `(CHOICE (compute_origins graph x DELETE x)).inst_output` >> gvs[] >>
-  Cases_on `s.vs_prev_bb` >> gvs[] >>
-  first_x_assum (qspecl_then [`x`, `x'`, `x''`, `s'`, `s`] mp_tac) >> simp[] >> strip_tac >>
-  fs[step_inst_def, AllCaseEqs(), eval_operand_def]
+  (* First handle ~is_phi_inst: transform is identity, same error *)
+  reverse (Cases_on `is_phi_inst x`) >> gvs[]
+  >- (
+    `phi_single_origin graph x = NONE` by (
+      CCONTR_TAC >> fs[] >>
+      Cases_on `phi_single_origin graph x` >> gvs[] >>
+      imp_res_tac phi_single_origin_is_phi
+    ) >>
+    gvs[transform_inst_def, result_equiv_def]
+  ) >>
+  (* is_phi_inst x: need detailed case analysis *)
+  gvs[transform_inst_def] >>
+  Cases_on `phi_single_origin graph x` >> gvs[result_equiv_def] >>
+  (* SOME origin case *)
+  Cases_on `x'.inst_outputs` >> gvs[result_equiv_def] >>
+  Cases_on `t`
+  >| [
+    (* [h]: transform to ASSIGN [Var h] *)
+    gvs[] >>  (* First simplify with t = [] giving x'.inst_outputs = [h] *)
+    Cases_on `step_inst (x with <| inst_opcode := ASSIGN; inst_operands := [Var h] |>) s`
+    (* 4 subcases: OK, Halt, Revert, Error *)
+    >| [
+      (* OK case: derive contradiction - ASSIGN succeeds means lookup_var h is SOME,
+         but hypothesis says PHI erroring means lookup_var h is NONE *)
+      simp[is_terminator_def] >>
+      Cases_on `s.vs_prev_bb` >> gvs[result_equiv_def] >>
+      (* Get lookup_var h s = NONE from Error hypothesis using drule_all *)
+      first_x_assum drule_all >> strip_tac >>
+      (* Now we have lookup_var h s = NONE, unfold step_inst to show contradiction *)
+      qpat_x_assum `step_inst _ s = OK _` mp_tac >>
+      simp[step_inst_def, eval_operand_def] >>
+      gvs[AllCaseEqs()],
+      (* Halt case: impossible for ASSIGN *)
+      qpat_x_assum `step_inst _ _ = Halt _` mp_tac >> simp[step_inst_def] >> gvs[AllCaseEqs()],
+      (* Revert case: impossible for ASSIGN *)
+      qpat_x_assum `step_inst _ _ = Revert _` mp_tac >> simp[step_inst_def] >> gvs[AllCaseEqs()],
+      (* Error case *)
+      simp[result_equiv_def]
+    ],
+    (* h::h'::t': transform = identity *)
+    simp[result_equiv_def]
+  ]
 QED
 
