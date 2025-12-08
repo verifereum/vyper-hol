@@ -85,7 +85,10 @@ Theorem get_instruction_front:
     get_instruction (bb with bb_instructions := FRONT bb.bb_instructions) idx =
     get_instruction bb idx
 Proof
-  cheat
+  rw[get_instruction_def] >>
+  simp[rich_listTheory.LENGTH_FRONT] >>
+  Cases_on `bb.bb_instructions` >> gvs[listTheory.LENGTH_FRONT_CONS] >>
+  simp[GSYM rich_listTheory.FRONT_EL]
 QED
 
 (* Helper: Getting instruction from merged block (from a's FRONT) *)
@@ -95,7 +98,9 @@ Theorem get_instruction_merge_a:
     idx < LENGTH (FRONT a.bb_instructions) ==>
     get_instruction (merge_blocks a b) idx = get_instruction a idx
 Proof
-  cheat
+  rw[get_instruction_def, merge_blocks_def] >>
+  simp[GSYM rich_listTheory.FRONT_EL, rich_listTheory.EL_APPEND1] >>
+  Cases_on `a.bb_instructions` >> gvs[listTheory.LENGTH_FRONT_CONS]
 QED
 
 (* Helper: Getting instruction from merged block (from b) *)
@@ -107,7 +112,8 @@ Theorem get_instruction_merge_b:
     get_instruction (merge_blocks a b) idx =
     get_instruction b (idx - LENGTH (FRONT a.bb_instructions))
 Proof
-  cheat
+  rw[get_instruction_def, merge_blocks_def] >>
+  simp[rich_listTheory.EL_APPEND2]
 QED
 
 (* ==========================================================================
@@ -118,10 +124,20 @@ QED
 Theorem run_passthrough_block:
   !fn bb s target.
     is_passthrough_block bb /\
-    get_block_target bb = SOME target ==>
+    get_block_target bb = SOME target /\
+    s.vs_inst_idx = 0 /\
+    ~s.vs_halted ==>
     run_block fn bb s = OK (jump_to target s)
 Proof
-  cheat
+  rw[is_passthrough_block_def, get_block_target_def, get_terminator_def,
+     is_unconditional_jump_def, is_jmp_inst_def, get_jmp_target_def] >>
+  Cases_on `(LAST bb.bb_instructions).inst_operands` >> gvs[] >>
+  Cases_on `t` >> gvs[] >> Cases_on `h` >> gvs[] >>
+  Cases_on `bb.bb_instructions` >> gvs[] >>
+  simp[Once run_block_def, step_in_block_def,
+       get_instruction_def, is_terminator_def] >>
+  simp[Once step_inst_def] >>
+  simp[venomStateTheory.jump_to_def]
 QED
 
 (* ==========================================================================
@@ -141,13 +157,77 @@ Proof
   Cases_on `op` >> rw[replace_label_operand_def]
 QED
 
-(* Label replacement preserves non-JMP instruction semantics *)
+(* Helper: eval_operand ignores label replacement *)
+Theorem eval_operand_replace_label:
+  !old new op s. eval_operand (replace_label_operand old new op) s = eval_operand op s
+Proof
+  Cases_on `op` >> rw[replace_label_operand_def, venomStateTheory.eval_operand_def]
+QED
+
+(* Helper: replace_label_inst preserves opcode *)
+Theorem replace_label_inst_opcode:
+  !old new inst. (replace_label_inst old new inst).inst_opcode = inst.inst_opcode
+Proof
+  rw[replace_label_inst_def]
+QED
+
+(* Helper: replace_label_inst preserves output *)
+Theorem replace_label_inst_output:
+  !old new inst. (replace_label_inst old new inst).inst_output = inst.inst_output
+Proof
+  rw[replace_label_inst_def]
+QED
+
+(* Helper: exec_binop preserves under label replacement *)
+Theorem exec_binop_replace_label:
+  !f old new inst s.
+    exec_binop f (replace_label_inst old new inst) s = exec_binop f inst s
+Proof
+  rw[exec_binop_def, replace_label_inst_def] >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  simp[eval_operand_replace_label] >>
+  Cases_on `t'` >> simp[]
+QED
+
+(* Helper: exec_unop preserves under label replacement *)
+Theorem exec_unop_replace_label:
+  !f old new inst s.
+    exec_unop f (replace_label_inst old new inst) s = exec_unop f inst s
+Proof
+  rw[exec_unop_def, replace_label_inst_def] >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  simp[eval_operand_replace_label] >>
+  Cases_on `t` >> simp[]
+QED
+
+(* Helper: exec_modop preserves under label replacement *)
+Theorem exec_modop_replace_label:
+  !f old new inst s.
+    exec_modop f (replace_label_inst old new inst) s = exec_modop f inst s
+Proof
+  rw[exec_modop_def, replace_label_inst_def] >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  rename [`_ = h::t`] >> Cases_on `t` >> simp[] >>
+  rename [`_ = h::h'::t`] >> Cases_on `t` >> simp[eval_operand_replace_label] >>
+  rename [`_ = h::h'::h''::t`] >> Cases_on `t` >> simp[]
+QED
+
+(* Label replacement preserves non-JMP/JNZ/PHI instruction semantics *)
 Theorem replace_label_inst_preserves_step:
   !old new inst s.
-    ~is_jmp_inst inst /\ inst.inst_opcode <> JNZ ==>
+    ~is_jmp_inst inst /\ inst.inst_opcode <> JNZ /\ ~is_phi_inst inst ==>
     step_inst (replace_label_inst old new inst) s = step_inst inst s
 Proof
-  cheat
+  rw[is_jmp_inst_def, is_phi_inst_def] >>
+  simp[step_inst_def, replace_label_inst_opcode, replace_label_inst_output,
+       exec_binop_replace_label, exec_unop_replace_label, exec_modop_replace_label] >>
+  Cases_on `inst.inst_opcode` >> simp[] >>
+  (* Handle remaining cases with operand case analysis *)
+  rw[replace_label_inst_def, eval_operand_replace_label] >>
+  rpt (Cases_on `inst.inst_operands` >> simp[eval_operand_replace_label] >>
+       TRY (Cases_on `t` >> simp[eval_operand_replace_label]) >>
+       TRY (Cases_on `t'` >> simp[eval_operand_replace_label]))
 QED
 
 (* Threading a jump that doesn't match is identity *)
@@ -156,7 +236,13 @@ Theorem thread_jump_inst_no_match:
     ~MEM (Label pl) inst.inst_operands ==>
     thread_jump_inst pl tl inst = inst
 Proof
-  cheat
+  rw[thread_jump_inst_def, instruction_component_equality] >>
+  qspec_then `inst.inst_operands` mp_tac (
+    Q.prove(`!l pl tl. ~MEM (Label pl) l ==>
+      MAP (\op. case op of
+        Lit v3 => op | Var v4 => op | Label l => if l = pl then Label tl else Label l) l = l`,
+      Induct >> rw[] >> Cases_on `h` >> gvs[])) >>
+  simp[]
 QED
 
 (* ==========================================================================

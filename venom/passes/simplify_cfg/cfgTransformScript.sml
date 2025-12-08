@@ -314,7 +314,12 @@ Theorem lookup_block_remove:
     lbl <> lbl' ==>
     lookup_block lbl (remove_block lbl' blocks) = lookup_block lbl blocks
 Proof
-  cheat
+  Induct_on `blocks` >- simp[lookup_block_def, remove_block_def] >>
+  rw[remove_block_def] >-
+    (simp[lookup_block_def] >> Cases_on `h.bb_label = lbl` >> simp[] >>
+     first_x_assum (qspecl_then [`lbl`, `lbl'`] mp_tac) >> simp[remove_block_def]) >>
+  simp[lookup_block_def] >>
+  first_x_assum (qspecl_then [`lbl`, `h.bb_label`] mp_tac) >> simp[remove_block_def]
 QED
 
 Theorem lookup_block_map:

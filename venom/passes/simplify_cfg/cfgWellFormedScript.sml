@@ -137,21 +137,24 @@ Theorem merge_blocks_wf:
     wf_block a /\ wf_block b ==>
     wf_block (merge_blocks a b)
 Proof
-  cheat
+  rw[wf_block_def, merge_blocks_def, get_terminator_def] >>
+  simp[rich_listTheory.LAST_APPEND_NOT_NIL]
 QED
 
 (* Helper: replace_label preserves well-formedness *)
 Theorem replace_label_block_wf:
   !old new bb. wf_block bb ==> wf_block (replace_label_block old new bb)
 Proof
-  cheat
+  rw[wf_block_def, replace_label_block_def, get_terminator_def] >>
+  simp[replace_label_inst_def]
 QED
 
 (* Helper: thread_jump preserves well-formedness *)
 Theorem thread_jump_block_wf:
   !pl tl bb. wf_block bb ==> wf_block (thread_jump_block pl tl bb)
 Proof
-  cheat
+  rw[wf_block_def, thread_jump_block_def, get_terminator_def] >>
+  simp[thread_jump_inst_def]
 QED
 
 (* ==========================================================================
@@ -178,13 +181,24 @@ QED
    Transformation Preserves Well-Formedness
    ========================================================================== *)
 
+(* Helper: ALL_DISTINCT (MAP f l) is preserved by FILTER *)
+Theorem all_distinct_map_filter:
+  !P f l. ALL_DISTINCT (MAP f l) ==> ALL_DISTINCT (MAP f (FILTER P l))
+Proof
+  Induct_on `l` >>
+  simp[listTheory.FILTER, listTheory.MEM_FILTER, listTheory.MEM_MAP] >>
+  rw[] >> gvs[] >>
+  simp[listTheory.MEM_MAP, listTheory.MEM_FILTER] >> metis_tac[]
+QED
+
 (* Remove block preserves unique labels *)
 Theorem remove_block_unique_labels:
   !lbl blocks.
     unique_labels blocks ==>
     unique_labels (remove_block lbl blocks)
 Proof
-  cheat
+  rw[unique_labels_def, remove_block_def] >>
+  irule all_distinct_map_filter >> simp[]
 QED
 
 (* Map preserving labels preserves unique labels *)
@@ -194,6 +208,6 @@ Theorem map_preserves_unique_labels:
     unique_labels blocks ==>
     unique_labels (MAP f blocks)
 Proof
-  cheat
+  rw[unique_labels_def, listTheory.MAP_MAP_o, combinTheory.o_DEF]
 QED
 
