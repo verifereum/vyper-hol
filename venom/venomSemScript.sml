@@ -184,9 +184,9 @@ Definition exec_binop_def:
       [op1; op2] =>
         (case (eval_operand op1 s, eval_operand op2 s) of
           (SOME v1, SOME v2) =>
-            (case inst.inst_output of
-              SOME out => OK (update_var out (f v1 v2) s)
-            | NONE => Error "binop requires output")
+            (case inst.inst_outputs of
+              [out] => OK (update_var out (f v1 v2) s)
+            | _ => Error "binop requires single output")
         | _ => Error "undefined operand")
     | _ => Error "binop requires 2 operands"
 End
@@ -198,9 +198,9 @@ Definition exec_unop_def:
       [op1] =>
         (case eval_operand op1 s of
           SOME v =>
-            (case inst.inst_output of
-              SOME out => OK (update_var out (f v) s)
-            | NONE => Error "unop requires output")
+            (case inst.inst_outputs of
+              [out] => OK (update_var out (f v) s)
+            | _ => Error "unop requires single output")
         | NONE => Error "undefined operand")
     | _ => Error "unop requires 1 operand"
 End
@@ -212,9 +212,9 @@ Definition exec_modop_def:
       [op1; op2; op3] =>
         (case (eval_operand op1 s, eval_operand op2 s, eval_operand op3 s) of
           (SOME v1, SOME v2, SOME v3) =>
-            (case inst.inst_output of
-              SOME out => OK (update_var out (f v1 v2 v3) s)
-            | NONE => Error "modop requires output")
+            (case inst.inst_outputs of
+              [out] => OK (update_var out (f v1 v2 v3) s)
+            | _ => Error "modop requires single output")
         | _ => Error "undefined operand")
     | _ => Error "modop requires 3 operands"
 End
@@ -257,9 +257,9 @@ Definition step_inst_def:
           [op1] =>
             (case eval_operand op1 s of
               SOME addr =>
-                (case inst.inst_output of
-                  SOME out => OK (update_var out (mload (w2n addr) s) s)
-                | NONE => Error "mload requires output")
+                (case inst.inst_outputs of
+                  [out] => OK (update_var out (mload (w2n addr) s) s)
+                | _ => Error "mload requires single output")
             | NONE => Error "undefined operand")
         | _ => Error "mload requires 1 operand")
 
@@ -277,9 +277,9 @@ Definition step_inst_def:
           [op1] =>
             (case eval_operand op1 s of
               SOME key =>
-                (case inst.inst_output of
-                  SOME out => OK (update_var out (sload key s) s)
-                | NONE => Error "sload requires output")
+                (case inst.inst_outputs of
+                  [out] => OK (update_var out (sload key s) s)
+                | _ => Error "sload requires single output")
             | NONE => Error "undefined operand")
         | _ => Error "sload requires 1 operand")
 
@@ -297,9 +297,9 @@ Definition step_inst_def:
           [op1] =>
             (case eval_operand op1 s of
               SOME key =>
-                (case inst.inst_output of
-                  SOME out => OK (update_var out (tload key s) s)
-                | NONE => Error "tload requires output")
+                (case inst.inst_outputs of
+                  [out] => OK (update_var out (tload key s) s)
+                | _ => Error "tload requires single output")
             | NONE => Error "undefined operand")
         | _ => Error "tload requires 1 operand")
 
@@ -336,8 +336,8 @@ Definition step_inst_def:
 
     (* SSA - PHI node *)
     | PHI =>
-        (case inst.inst_output of
-          SOME out =>
+        (case inst.inst_outputs of
+          [out] =>
             (case s.vs_prev_bb of
               NONE => Error "phi at entry block"
             | SOME prev =>
@@ -347,16 +347,16 @@ Definition step_inst_def:
                     (case eval_operand val_op s of
                       SOME v => OK (update_var out v s)
                     | NONE => Error "phi: undefined operand")))
-        | NONE => Error "phi requires output")
+        | _ => Error "phi requires single output")
 
     (* SSA - ASSIGN *)
     | ASSIGN =>
-        (case (inst.inst_operands, inst.inst_output) of
-          ([op1], SOME out) =>
+        (case (inst.inst_operands, inst.inst_outputs) of
+          ([op1], [out]) =>
             (case eval_operand op1 s of
               SOME v => OK (update_var out v s)
             | NONE => Error "undefined operand")
-        | _ => Error "assign requires 1 operand and output")
+        | _ => Error "assign requires 1 operand and single output")
 
     (* NOP *)
     | NOP => OK s

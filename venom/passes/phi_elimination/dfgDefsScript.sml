@@ -40,23 +40,26 @@ Ancestors
 Type dfg = ``:(string, instruction) fmap``
 
 (* TOP-LEVEL: DFG well-formedness - if a variable maps to an instruction,
-   that instruction must produce the variable. This is a key invariant. *)
+   that instruction must produce the variable. This is a key invariant.
+   Note: for single-output instructions, inst_outputs = [v]. *)
 Definition well_formed_dfg_def:
   well_formed_dfg dfg <=>
-    !v inst. FLOOKUP dfg v = SOME inst ==> inst.inst_output = SOME v
+    !v inst. FLOOKUP dfg v = SOME inst ==> inst.inst_outputs = [v]
 End
 
 (* ==========================================================================
    Building the DFG from a Function
    ========================================================================== *)
 
-(* Helper: Build DFG from a single basic block's instructions *)
+(* Helper: Build DFG from a single basic block's instructions.
+   Only handles single-output instructions - multi-output (like invoke)
+   would need separate treatment for each output. *)
 Definition build_dfg_def:
   build_dfg_block dfg [] = dfg /\
   build_dfg_block dfg (inst::insts) =
-    let dfg' = case inst.inst_output of
-                 SOME v => dfg |+ (v, inst)
-               | NONE => dfg
+    let dfg' = case inst.inst_outputs of
+                 [v] => dfg |+ (v, inst)
+               | _ => dfg
     in build_dfg_block dfg' insts
 End
 
@@ -80,7 +83,7 @@ End
 (* Helper: Updating a well-formed DFG preserves well-formedness *)
 Theorem well_formed_dfg_update:
   !dfg inst v.
-    well_formed_dfg dfg /\ inst.inst_output = SOME v
+    well_formed_dfg dfg /\ inst.inst_outputs = [v]
     ==> well_formed_dfg (dfg |+ (v, inst))
 Proof
   rw[well_formed_dfg_def, FLOOKUP_UPDATE] >>
@@ -95,8 +98,8 @@ Proof
   Induct_on `insts` >>
   simp[build_dfg_def] >>
   rpt strip_tac >>
-  Cases_on `h.inst_output` >>
-  simp[build_dfg_def] >>
+  Cases_on `h.inst_outputs` >> simp[build_dfg_def] >>
+  Cases_on `t` >> simp[build_dfg_def] >>
   metis_tac[well_formed_dfg_update]
 QED
 
@@ -131,14 +134,15 @@ Definition fn_instructions_def:
   fn_instructions fn = FLAT (MAP (\bb. bb.bb_instructions) fn.fn_blocks)
 End
 
-(* Helper: SSA form predicate - each variable has at most one definition *)
+(* Helper: SSA form predicate - each variable has at most one definition.
+   For single-output instructions, inst_outputs = [v]. *)
 Definition ssa_form_def:
   ssa_form fn <=>
     !v inst1 inst2.
       MEM inst1 (fn_instructions fn) /\
       MEM inst2 (fn_instructions fn) /\
-      inst1.inst_output = SOME v /\
-      inst2.inst_output = SOME v
+      inst1.inst_outputs = [v] /\
+      inst2.inst_outputs = [v]
       ==>
       inst1 = inst2
 End
@@ -147,17 +151,21 @@ End
 Theorem build_dfg_block_correct:
   !insts dfg v inst.
     FLOOKUP (build_dfg_block dfg insts) v = SOME inst ==>
-    (FLOOKUP dfg v = SOME inst \/ (MEM inst insts /\ inst.inst_output = SOME v))
+    (FLOOKUP dfg v = SOME inst \/ (MEM inst insts /\ inst.inst_outputs = [v]))
 Proof
   Induct_on `insts` >> simp[build_dfg_def] >>
   rpt strip_tac >>
-  Cases_on `h.inst_output` >> fs[] >- (
+  Cases_on `h.inst_outputs` >> fs[build_dfg_def] >- (
     first_x_assum (qspecl_then [`dfg`, `v`, `inst`] mp_tac) >> simp[] >>
     strip_tac >> metis_tac[]
   ) >>
-  first_x_assum (qspecl_then [`dfg |+ (x, h)`, `v`, `inst`] mp_tac) >>
-  simp[FLOOKUP_UPDATE] >>
-  Cases_on `x = v` >> fs[] >>
+  Cases_on `t` >> fs[build_dfg_def] >- (
+    first_x_assum (qspecl_then [`dfg |+ (h', h)`, `v`, `inst`] mp_tac) >>
+    simp[FLOOKUP_UPDATE] >>
+    Cases_on `h' = v` >> fs[] >>
+    strip_tac >> metis_tac[]
+  ) >>
+  first_x_assum (qspecl_then [`dfg`, `v`, `inst`] mp_tac) >> simp[] >>
   strip_tac >> metis_tac[]
 QED
 
@@ -166,7 +174,7 @@ Theorem build_dfg_blocks_correct:
   !bbs dfg v inst.
     FLOOKUP (build_dfg_blocks dfg bbs) v = SOME inst ==>
     (FLOOKUP dfg v = SOME inst \/
-     (?bb. MEM bb bbs /\ MEM inst bb.bb_instructions /\ inst.inst_output = SOME v))
+     (?bb. MEM bb bbs /\ MEM inst bb.bb_instructions /\ inst.inst_outputs = [v]))
 Proof
   Induct_on `bbs` >> simp[build_dfg_blocks_def] >>
   rpt strip_tac >>
@@ -184,7 +192,7 @@ Theorem build_dfg_fn_correct:
   !fn v inst.
     FLOOKUP (build_dfg_fn fn) v = SOME inst
     ==>
-    inst.inst_output = SOME v /\
+    inst.inst_outputs = [v] /\
     MEM inst (fn_instructions fn)
 Proof
   rw[build_dfg_fn_def, fn_instructions_def] >>

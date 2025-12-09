@@ -39,12 +39,12 @@ Definition wf_ir_fn_def:
        get_instruction bb idx = SOME inst /\
        is_phi_inst inst ==>
        phi_well_formed inst.inst_operands) /\
-    (* All PHI instructions have output (required for well-formed PHI) *)
+    (* All PHI instructions have single output (required for well-formed PHI) *)
     (!bb idx inst.
        MEM bb func.fn_blocks /\
        get_instruction bb idx = SOME inst /\
        is_phi_inst inst ==>
-       inst.inst_output <> NONE) /\
+       ?out. inst.inst_outputs = [out]) /\
     (* Entry block has no PHI instructions *)
     (func.fn_blocks <> [] ==>
        !idx inst. get_instruction (HD func.fn_blocks) idx = SOME inst ==>
@@ -100,7 +100,7 @@ Definition phi_wf_fn_def:
        MEM bb func.fn_blocks /\
        get_instruction bb s.vs_inst_idx = SOME inst /\
        phi_single_origin dfg inst = SOME origin /\
-       origin.inst_output = SOME src_var /\
+       origin.inst_outputs = [src_var] /\
        s.vs_prev_bb = SOME prev /\
        step_inst inst s = Error e ==>
        lookup_var src_var s = NONE)
@@ -132,7 +132,7 @@ QED
 Theorem step_inst_phi_eval:
   !inst out prev s.
     inst.inst_opcode = PHI /\
-    inst.inst_output = SOME out /\
+    inst.inst_outputs = [out] /\
     s.vs_prev_bb = SOME prev
   ==>
     step_inst inst s =
@@ -190,9 +190,9 @@ Proof
       qpat_x_assum `!bb' idx inst'. _ ==> phi_well_formed _`
         (qspecl_then [`bb`, `s.vs_inst_idx`, `inst`] mp_tac) >> simp[]
     ) >>
-    (* Get inst.inst_output <> NONE from wf_ir_fn assumption *)
-    `inst.inst_output <> NONE` by (
-      qpat_x_assum `!bb' idx inst'. _ ==> inst'.inst_output <> NONE`
+    (* Get inst.inst_outputs = [out] from wf_ir_fn assumption *)
+    `?out. inst.inst_outputs = [out]` by (
+      qpat_x_assum `!bb' idx inst'. _ ==> ?out. inst'.inst_outputs = [out]`
         (qspecl_then [`bb`, `s.vs_inst_idx`, `inst`] mp_tac) >> simp[]
     ) >>
     (* Get resolve_phi success from wf_ir_fn's error condition *)
@@ -205,8 +205,7 @@ Proof
       qpat_x_assum `!bb' idx inst'. _ ==> phi_operands_direct _ _`
         (qspecl_then [`bb`, `s.vs_inst_idx`, `inst`] mp_tac) >> simp[]
     ) >>
-    Cases_on `inst.inst_output` >> gvs[] >>
-    rename1 `inst.inst_output = SOME out` >>
+    gvs[] >>
     (* Use step_inst_phi_eval with explicit arguments *)
     qspecl_then [`inst`, `out`, `prev`, `s`] mp_tac step_inst_phi_eval >> simp[] >>
     strip_tac >> gvs[] >>

@@ -39,13 +39,13 @@ Definition transform_inst_def:
   transform_inst dfg inst =
     case phi_single_origin dfg inst of
       SOME origin =>
-        (case origin.inst_output of
-           SOME src_var =>
+        (case origin.inst_outputs of
+           [src_var] =>
              inst with <|
                inst_opcode := ASSIGN;
                inst_operands := [Var src_var]
              |>
-         | NONE => inst)
+         | _ => inst)
     | NONE => inst
 End
 
@@ -147,7 +147,8 @@ Theorem transform_inst_preserves_terminator:
 Proof
   rw[transform_inst_def] >>
   Cases_on `phi_single_origin dfg inst` >> simp[] >>
-  Cases_on `x.inst_output` >> simp[is_terminator_def] >>
+  Cases_on `x.inst_outputs` >> simp[is_terminator_def] >>
+  Cases_on `t` >> simp[is_terminator_def] >>
   fs[phi_single_origin_def] >>
   Cases_on `is_phi_inst inst` >> fs[is_phi_inst_def, is_terminator_def]
 QED
