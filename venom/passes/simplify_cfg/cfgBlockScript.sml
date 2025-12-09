@@ -521,6 +521,32 @@ Proof
   TRY (irule update_var_data_equiv >> simp[])
 QED
 
+(* jump_to preserves data_equiv and sets same vs_current_bb *)
+Theorem jump_to_data_equiv:
+  !lbl s1 s2.
+    data_equiv s1 s2 ==>
+    data_equiv (jump_to lbl s1) (jump_to lbl s2) /\
+    (jump_to lbl s1).vs_current_bb = (jump_to lbl s2).vs_current_bb /\
+    (jump_to lbl s1).vs_inst_idx = (jump_to lbl s2).vs_inst_idx
+Proof
+  rw[venomStateTheory.jump_to_def, data_equiv_def, var_equiv_def,
+     venomStateTheory.lookup_var_def]
+QED
+
+(* next_inst preserves data_equiv and control flow fields *)
+Theorem next_inst_data_equiv_full:
+  !s1 s2.
+    data_equiv s1 s2 /\
+    s1.vs_current_bb = s2.vs_current_bb /\
+    s1.vs_inst_idx = s2.vs_inst_idx ==>
+    data_equiv (next_inst s1) (next_inst s2) /\
+    (next_inst s1).vs_current_bb = (next_inst s2).vs_current_bb /\
+    (next_inst s1).vs_inst_idx = (next_inst s2).vs_inst_idx
+Proof
+  rw[venomStateTheory.next_inst_def, data_equiv_def, var_equiv_def,
+     venomStateTheory.lookup_var_def]
+QED
+
 (* step_inst preserves data_equiv for non-PHI/non-branch instructions *)
 Theorem step_inst_data_equiv:
   !inst s1 s2.
@@ -552,6 +578,69 @@ Proof
   rpt (irule update_var_data_equiv >> simp[])
 QED
 
+(* Non-branch instructions preserve vs_current_bb and vs_inst_idx *)
+Theorem step_inst_preserves_ctrl:
+  !inst s s'.
+    ~is_jmp_inst inst /\ inst.inst_opcode <> JNZ /\
+    step_inst inst s = OK s' ==>
+    s'.vs_current_bb = s.vs_current_bb /\
+    s'.vs_inst_idx = s.vs_inst_idx
+Proof
+  rw[step_inst_def, is_jmp_inst_def] >>
+  gvs[AllCaseEqs()] >>
+  fs[exec_binop_def, exec_unop_def, exec_modop_def] >>
+  gvs[AllCaseEqs()] >>
+  fs[venomStateTheory.update_var_def, venomStateTheory.mstore_def,
+     venomStateTheory.sstore_def, venomStateTheory.tstore_def]
+QED
+
+(* JMP instruction preserves data_equiv *)
+Theorem step_inst_jmp_data_equiv:
+  !inst s1 s2.
+    data_equiv s1 s2 /\ is_jmp_inst inst ==>
+    case (step_inst inst s1, step_inst inst s2) of
+      (OK r1, OK r2) => data_equiv r1 r2 /\
+                        r1.vs_current_bb = r2.vs_current_bb /\
+                        r1.vs_inst_idx = r2.vs_inst_idx
+    | (Error e1, Error e2) => e1 = e2
+    | _ => F
+Proof
+  rpt strip_tac >> fs[is_jmp_inst_def] >>
+  simp[step_inst_def] >>
+  rpt CASE_TAC >> gvs[] >>
+  TRY (drule_all jump_to_data_equiv >> strip_tac >> gvs[])
+QED
+
+(* JNZ instruction preserves data_equiv and takes same branch *)
+Theorem step_inst_jnz_data_equiv:
+  !inst s1 s2.
+    data_equiv s1 s2 /\ inst.inst_opcode = JNZ ==>
+    case (step_inst inst s1, step_inst inst s2) of
+      (OK r1, OK r2) => data_equiv r1 r2 /\
+                        r1.vs_current_bb = r2.vs_current_bb /\
+                        r1.vs_inst_idx = r2.vs_inst_idx
+    | (Error e1, Error e2) => e1 = e2
+    | _ => F
+Proof
+  rpt strip_tac >> simp[step_inst_def] >>
+  rpt CASE_TAC >> gvs[] >>
+  TRY (drule eval_operand_data_equiv >> strip_tac >> gvs[]) >>
+  TRY (drule_all jump_to_data_equiv >> strip_tac >> gvs[])
+QED
+
+(* Non-JMP/JNZ terminators never return OK *)
+Theorem non_jmp_jnz_terminator_not_ok:
+  !inst s v.
+    is_terminator inst.inst_opcode /\
+    ~is_jmp_inst inst /\ inst.inst_opcode <> JNZ ==>
+    step_inst inst s <> OK v
+Proof
+  rw[is_jmp_inst_def] >>
+  qpat_x_assum `is_terminator _` mp_tac >>
+  Cases_on `inst.inst_opcode` >> simp[is_terminator_def, step_inst_def] >>
+  gvs[]
+QED
+
 (* step_in_block preserves data_equiv for no_phi blocks.
    Proof sketch verified through interactive debugging:
    1. Case split on get_instruction - NONE case gives Error=Error
@@ -576,7 +665,52 @@ Theorem step_in_block_data_equiv_no_phi:
     | ((Error e1, _), (Error e2, _)) => e1 = e2
     | _ => F
 Proof
-  cheat (* See proof sketch above - complex case analysis on instruction types *)
+  rpt strip_tac >>
+  simp[step_in_block_def] >>
+  Cases_on `get_instruction bb s2.vs_inst_idx` >> gvs[] >>
+  (* Derive ~is_phi_inst x from no_phi_block *)
+  `~is_phi_inst x` by (
+    fs[no_phi_block_def, get_instruction_def, listTheory.EVERY_EL] >>
+    metis_tac[]
+  ) >>
+  (* JMP case *)
+  Cases_on `is_jmp_inst x` >> gvs[] >- (
+    drule_all step_inst_jmp_data_equiv >>
+    Cases_on `step_inst x s1` >> Cases_on `step_inst x s2` >> gvs[] >>
+    strip_tac >> fs[is_terminator_def, is_jmp_inst_def]
+  ) >>
+  (* JNZ case *)
+  Cases_on `x.inst_opcode = JNZ` >> gvs[] >- (
+    drule_all step_inst_jnz_data_equiv >>
+    Cases_on `step_inst x s1` >> Cases_on `step_inst x s2` >> gvs[] >>
+    strip_tac >> fs[is_terminator_def]
+  ) >>
+  (* Other instructions *)
+  drule_all step_inst_data_equiv >>
+  Cases_on `step_inst x s1` >> Cases_on `step_inst x s2` >> gvs[] >>
+  strip_tac >> gvs[] >>
+  (* For OK case with non-terminator, apply next_inst *)
+  Cases_on `is_terminator x.inst_opcode` >> gvs[] >- (
+    (* Terminator case - contradiction: non-JMP/JNZ terminators don't return OK *)
+    `step_inst x s1 <> OK v` by (irule non_jmp_jnz_terminator_not_ok >> simp[]) >>
+    gvs[]
+  ) >>
+  (* Non-terminator: step_inst preserves vs_current_bb and vs_inst_idx *)
+  `v.vs_current_bb = s1.vs_current_bb /\ v.vs_inst_idx = s1.vs_inst_idx` by (
+    irule step_inst_preserves_ctrl >> qexists_tac `x` >> simp[]
+  ) >>
+  `v'.vs_current_bb = s2.vs_current_bb /\ v'.vs_inst_idx = s2.vs_inst_idx` by (
+    irule step_inst_preserves_ctrl >> qexists_tac `x` >> simp[]
+  ) >>
+  (* Now derive v.vs_current_bb = v'.vs_current_bb etc *)
+  `v.vs_current_bb = v'.vs_current_bb /\ v.vs_inst_idx = v'.vs_inst_idx` by gvs[] >>
+  (* Apply next_inst_data_equiv_full to v and v' *)
+  `data_equiv (next_inst v) (next_inst v') /\
+   (next_inst v).vs_current_bb = (next_inst v').vs_current_bb /\
+   (next_inst v).vs_inst_idx = (next_inst v').vs_inst_idx` by (
+    irule next_inst_data_equiv_full >> simp[]
+  ) >>
+  simp[]
 QED
 
 (* ==========================================================================
