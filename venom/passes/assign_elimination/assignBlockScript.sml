@@ -76,15 +76,20 @@ QED
 
 (* Helper: step_inst only depends on operand evaluation values.
    This is the key semantic property - replacing operands that evaluate to the same values
-   gives the same step_inst result. Full proof requires case analysis on all opcodes. *)
+   gives the same step_inst result. Requires same length to ensure pattern matching works. *)
 Theorem step_inst_operand_invariant:
   !inst ops' s r.
     step_inst inst s = r /\
+    LENGTH ops' = LENGTH inst.inst_operands /\
     eval_operands ops' s = eval_operands inst.inst_operands s ==>
     step_inst (inst with inst_operands := ops') s = r
 Proof
-  (* This requires case analysis on all opcodes. Each opcode calls eval_operand
-     on operands, so replacing with operands that evaluate to same values gives same result. *)
+  (* Proof structure:
+     1. Case split on inst.inst_opcode
+     2. For each opcode, unfold step_inst and the helper (exec_binop, etc.)
+     3. Pattern matching on operands works since LENGTH is same
+     4. eval_operand results are same by hypothesis
+     5. Therefore results are same *)
   cheat
 QED
 
@@ -103,8 +108,10 @@ Proof
   qexists_tac `s'` >> simp[state_equiv_refl] >>
   (* Use step_inst_operand_invariant and replace_operands_correct *)
   irule step_inst_operand_invariant >>
-  simp[] >>
-  drule_all replace_operands_correct >> simp[]
+  simp[replace_operands_def, LENGTH_MAP] >>
+  drule_all replace_operands_correct >>
+  disch_then (qspec_then `inst.inst_operands` mp_tac) >>
+  simp[replace_operands_def]
 QED
 
 (* ==========================================================================
