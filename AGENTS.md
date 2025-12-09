@@ -167,6 +167,27 @@ Try to keep files under 500 LOC for better context management (soft limit, not s
 - Unfold assumptions separately: `qpat_x_assum \`pat\` mp_tac >> simp[Once def] >> strip_tac`
 - RHS only: `CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [def]))`
 
+### Large Case Splits (e.g., 90+ opcode cases)
+When case-splitting on a datatype with many constructors:
+- **rw vs gvs/simp:** `rw[defs]` is slightly faster than `gvs[defs]` (~0.88s vs ~1.1s for 93 goals)
+- **Single-pass simplification:** After case split, `gvs[step_inst_def, transform_inst_def, AllCaseEqs()]`
+  processes ALL goals in one pass (~1s), solving most and leaving only the interesting cases
+- **FIRST for remaining cases:** Use `FIRST [irule thm1 >> simp[], irule thm2 >> simp[], fallback]`
+  to handle remaining goals efficiently
+- **Pattern for opcode proofs:**
+  ```sml
+  Cases_on `inst.inst_opcode` >>
+  gvs[step_inst_def, transform_inst_def, AllCaseEqs()] >>
+  FIRST [
+    irule exec_binop_transform >> simp[],
+    irule exec_unop_transform >> simp[],
+    irule exec_modop_transform >> simp[],
+    simp[transform_operands_def] >> rpt (drule_all transform_operand_sound >> strip_tac >> gvs[])
+  ]
+  ```
+- **Key insight:** gvs/simp/rw with `AllCaseEqs()` can handle most cases automatically;
+  only special cases (like exec_binop needing irule) require explicit tactics
+
 ### State Equivalence Patterns
 - Step equiv: `drule_all step_inst_state_equiv >> strip_tac >> simp[]`
 - Chaining: `irule state_equiv_trans >> qexists_tac \`s_mid\` >> gvs[]`
@@ -288,3 +309,14 @@ Libs
 - Test proofs interactively before committing to the file
 - Document any blocking issues and potential approaches
 - When interrupted, save detailed debugging state to PLAN.md for session recovery
+
+## Parallel Development Strategy
+
+When builds are slow (>30s), use this parallel workflow:
+1. **Start the build in background**: `VFMDIR=/home/ubuntu/verifereum Holmake --qof 2>&1 | tail -50 &`
+2. **Simultaneously debug interactively**: Start a HOL session and test proof tactics
+3. **Commit progress incrementally**: Don't wait for builds to complete before committing working changes
+4. **Benefits**:
+   - Build failures don't block interactive exploration
+   - Can identify performance issues interactively while build runs
+   - Faster iteration on proof tactics

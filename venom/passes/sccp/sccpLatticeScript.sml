@@ -44,47 +44,51 @@ Definition lattice_meet_def:
     if v1 = v2 then Const v1 else BOTTOM
 End
 
-(* Properties - structure only, proofs cheated for now *)
+(* ==========================================================================
+   Lattice Properties
+   ========================================================================== *)
+
 Theorem lattice_meet_comm:
   !x y. lattice_meet x y = lattice_meet y x
 Proof
-  cheat
+  Cases >> Cases >> simp[lattice_meet_def] >> rw[EQ_SYM_EQ]
 QED
 
 Theorem lattice_meet_assoc:
   !x y z. lattice_meet (lattice_meet x y) z = lattice_meet x (lattice_meet y z)
 Proof
-  cheat
+  Cases >> Cases >> Cases >> simp[lattice_meet_def] >>
+  rpt (COND_CASES_TAC >> simp[lattice_meet_def]) >> metis_tac[]
 QED
 
 Theorem lattice_meet_idemp:
   !x. lattice_meet x x = x
 Proof
-  cheat
+  Cases >> simp[lattice_meet_def]
 QED
 
 Theorem lattice_meet_top_left[simp]:
   !x. lattice_meet TOP x = x
 Proof
-  cheat
+  Cases >> simp[lattice_meet_def]
 QED
 
 Theorem lattice_meet_top_right[simp]:
   !x. lattice_meet x TOP = x
 Proof
-  cheat
+  Cases >> simp[lattice_meet_def]
 QED
 
 Theorem lattice_meet_bottom_left[simp]:
   !x. lattice_meet BOTTOM x = BOTTOM
 Proof
-  cheat
+  Cases >> simp[lattice_meet_def]
 QED
 
 Theorem lattice_meet_bottom_right[simp]:
   !x. lattice_meet x BOTTOM = BOTTOM
 Proof
-  cheat
+  Cases >> simp[lattice_meet_def]
 QED
 
 (* ==========================================================================
@@ -130,6 +134,15 @@ Definition lattice_sound_def:
   lattice_sound BOTTOM _ = T
 End
 
+(* Soundness of meet: if both inputs are sound for v, output is sound *)
+Theorem lattice_sound_meet:
+  !lv1 lv2 v.
+    lattice_sound lv1 v /\ lattice_sound lv2 v ==>
+    lattice_sound (lattice_meet lv1 lv2) v
+Proof
+  Cases >> Cases >> simp[lattice_meet_def, lattice_sound_def]
+QED
+
 (* Environment soundness: every variable in the lattice is sound *)
 Definition env_sound_def:
   env_sound (lenv: lattice_env) (s: venom_state) <=>
@@ -147,6 +160,36 @@ Theorem abs_operand_sound:
   ==>
     lattice_sound (abs_operand lenv op) v
 Proof
-  cheat
+  rpt strip_tac >> Cases_on `op` >> simp[abs_operand_def] >- (
+    (* Lit case *)
+    gvs[eval_operand_def, lattice_sound_def]
+  ) >- (
+    (* Var case *)
+    gvs[eval_operand_def] >> fs[env_sound_def] >>
+    simp[lattice_lookup_def] >>
+    Cases_on `FLOOKUP lenv s'` >> simp[lattice_sound_def] >>
+    first_x_assum (qspecl_then [`s'`, `x`] mp_tac) >> simp[]
+  ) >- (
+    (* Label case - contradiction *)
+    gvs[eval_operand_def]
+  )
+QED
+
+(* Updating both lattice and state preserves soundness *)
+Theorem env_sound_update:
+  !lenv s var lv v.
+    env_sound lenv s /\ lattice_sound lv v ==>
+    env_sound (lattice_update var lv lenv) (update_var var v s)
+Proof
+  rpt strip_tac >>
+  simp[env_sound_def, lattice_update_def, update_var_def] >>
+  rpt strip_tac >>
+  Cases_on `v' = var` >- (
+    gvs[FLOOKUP_UPDATE, lookup_var_def]
+  ) >- (
+    gvs[FLOOKUP_UPDATE, lookup_var_def] >>
+    fs[env_sound_def] >>
+    first_x_assum (qspecl_then [`v'`, `lv'`] mp_tac) >> simp[lookup_var_def]
+  )
 QED
 

@@ -127,7 +127,7 @@ Theorem abs_binop_sound:
   ==>
     lattice_sound (abs_binop f lv1 lv2) (f v1 v2)
 Proof
-  cheat
+  Cases_on `lv1` >> Cases_on `lv2` >> simp[abs_binop_def, lattice_sound_def]
 QED
 
 Theorem abs_unop_sound:
@@ -136,10 +136,24 @@ Theorem abs_unop_sound:
   ==>
     lattice_sound (abs_unop f lv) (f v)
 Proof
-  cheat
+  Cases_on `lv` >> simp[abs_unop_def, lattice_sound_def]
+QED
+
+(* Helper: BOTTOM is always sound *)
+Theorem lattice_sound_bottom[simp]:
+  !v. lattice_sound BOTTOM v
+Proof
+  simp[lattice_sound_def]
 QED
 
 (* Main soundness theorem for abstract step *)
+(*
+  Structure of the proof:
+  1. Case split on inst.inst_outputs
+  2. For [] outputs: step_inst either returns Error or doesn't modify vs_vars
+  3. For [out] outputs: use env_sound_update with abs_binop_sound/abs_operand_sound
+  4. For multiple outputs: similar to []
+*)
 Theorem abs_step_inst_sound:
   !lenv s inst s'.
     env_sound lenv s /\
@@ -147,6 +161,8 @@ Theorem abs_step_inst_sound:
   ==>
     env_sound (abs_step_inst lenv inst) s'
 Proof
+  (* Full proof requires extensive case analysis on opcodes *)
+  (* Key lemmas: env_sound_update, abs_binop_sound, abs_operand_sound, lattice_sound_bottom *)
   cheat
 QED
 
