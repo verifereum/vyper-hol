@@ -297,8 +297,7 @@ QED
 
    The proof requires:
    - Strong induction on |FRONT(a)| + |b| - s.vs_inst_idx
-   - Helper lemma showing run_block preserves data_equiv for no_phi blocks
-     even when vs_inst_idx values differ (due to different block structures)
+   - Use run_block_data_equiv_no_phi for the b portion
 *)
 Theorem merge_blocks_execution:
   !fn a b s.
@@ -711,6 +710,65 @@ Proof
     irule next_inst_data_equiv_full >> simp[]
   ) >>
   simp[]
+QED
+
+(* Helper: run_block preserves data_equiv for no_phi blocks.
+   This is used by merge_blocks_execution to relate the two executions. *)
+(* run_block_data_equiv_no_phi: Running same no_phi block from data-equiv states
+   gives result_equiv_merge results.
+   TODO: This proof requires careful handling of the IH application.
+   The key insight is that step_in_block_data_equiv_no_phi gives us the step
+   equivalence, and we use complete induction on the remaining instructions. *)
+Theorem run_block_data_equiv_no_phi:
+  !bb fn s1 s2.
+    no_phi_block bb /\
+    data_equiv s1 s2 /\
+    s1.vs_inst_idx = s2.vs_inst_idx /\
+    s1.vs_current_bb = s2.vs_current_bb /\
+    ~s1.vs_halted /\ ~s2.vs_halted ==>
+    result_equiv_merge (run_block fn bb s1) (run_block fn bb s2)
+Proof
+  gen_tac >> completeInduct_on `LENGTH bb.bb_instructions - s1.vs_inst_idx` >>
+  rpt strip_tac >>
+  simp[Once run_block_def] >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+  drule_all step_in_block_data_equiv_no_phi >> strip_tac >>
+  Cases_on `step_in_block fn bb s1` >> Cases_on `step_in_block fn bb s2` >>
+  rename1 `step_in_block fn bb s1 = (q, r)` >>
+  rename1 `step_in_block fn bb s2 = (q', r')` >>
+  Cases_on `q` >> Cases_on `q'` >> gvs[] >>
+  (* Use step_in_block_data_equiv_no_phi to eliminate impossible cases and
+     derive facts for valid cases *)
+  TRY (first_x_assum (qspec_then `fn` mp_tac) >> simp[] >>
+       strip_tac >> simp[result_equiv_merge_def, data_equiv_def] >> NO_TAC) >>
+  (* OK/OK case - requires case analysis on halted and terminator *)
+  first_x_assum (qspec_then `fn` mp_tac) >> simp[] >> strip_tac >>
+  (* Case on v'.vs_halted *)
+  Cases_on `v'.vs_halted` >> gvs[]
+  >- (* v'.vs_halted: derive v''.vs_halted from data_equiv *)
+     (`v''.vs_halted` by fs[data_equiv_def] >>
+      gvs[result_equiv_merge_def, data_equiv_def])
+  >- (* ~v'.vs_halted *)
+     (`~v''.vs_halted` by fs[data_equiv_def] >> gvs[] >>
+      (* Case on r (terminator flag) - r and r' unified by gvs *)
+      Cases_on `r` >> gvs[]
+      >- (* Terminator case *)
+         simp[result_equiv_merge_def, state_equiv_merge_def, data_equiv_def]
+      >- (* Non-terminator case - apply IH *)
+         (first_x_assum irule >> simp[] >>
+          (* Need to show measure decreases *)
+          qpat_x_assum `step_in_block _ _ s1 = _` mp_tac >>
+          simp[Once step_in_block_def] >>
+          Cases_on `get_instruction bb s2.vs_inst_idx` >> simp[] >>
+          strip_tac >> fs[get_instruction_def] >>
+          Cases_on `step_inst x s1` >> gvs[AllCaseEqs()] >>
+          `~is_jmp_inst (EL s2.vs_inst_idx bb.bb_instructions) /\
+           (EL s2.vs_inst_idx bb.bb_instructions).inst_opcode <> JNZ` by
+             (fs[is_jmp_inst_def] >>
+              Cases_on `(EL s2.vs_inst_idx bb.bb_instructions).inst_opcode` >>
+              fs[is_terminator_def]) >>
+          drule_all step_inst_preserves_ctrl >> strip_tac >>
+          fs[venomStateTheory.next_inst_def]))
 QED
 
 (* ==========================================================================
