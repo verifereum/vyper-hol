@@ -4,3 +4,6 @@
 # Interactive HOL4 session files
 .hol_init.sml
 .hol_cmd.sml
+
+.claude/
+CLAUDE.local.md
