@@ -171,9 +171,9 @@ Proof
   rw[replace_label_inst_def]
 QED
 
-(* Helper: replace_label_inst preserves output *)
-Theorem replace_label_inst_output:
-  !old new inst. (replace_label_inst old new inst).inst_output = inst.inst_output
+(* Helper: replace_label_inst preserves outputs *)
+Theorem replace_label_inst_outputs:
+  !old new inst. (replace_label_inst old new inst).inst_outputs = inst.inst_outputs
 Proof
   rw[replace_label_inst_def]
 QED
@@ -220,7 +220,7 @@ Theorem replace_label_inst_preserves_step:
     step_inst (replace_label_inst old new inst) s = step_inst inst s
 Proof
   rw[is_jmp_inst_def, is_phi_inst_def] >>
-  simp[step_inst_def, replace_label_inst_opcode, replace_label_inst_output,
+  simp[step_inst_def, replace_label_inst_opcode, replace_label_inst_outputs,
        exec_binop_replace_label, exec_unop_replace_label, exec_modop_replace_label] >>
   Cases_on `inst.inst_opcode` >> simp[] >>
   (* Handle remaining cases with operand case analysis *)
@@ -249,75 +249,433 @@ QED
    Merged Block Execution
    ========================================================================== *)
 
-(* Helper: Running a block and then jumping is the same as running both blocks *)
+(* When we merge blocks A and B (where A ends with JMP B):
+   - Merged block = FRONT(A.instructions) ++ B.instructions
+   - A's JMP is removed, B's terminator becomes the merged block's terminator
 
-(* State after running FRONT of instructions *)
-Definition run_front_def:
-  run_front fn bb s =
-    if bb.bb_instructions = [] then OK s
-    else run_block fn (bb with bb_instructions := FRONT bb.bb_instructions) s
-End
+   The key insight is that for well-formed blocks:
+   - A ends with a terminator (JMP B)
+   - B ends with a terminator
+   - After running A, we'd jump to B and continue
+   - The merged block runs A's non-terminator instructions, then all of B *)
 
-(* Key lemma: Running merged block A++B is equivalent to:
-   1. Running FRONT of A (all non-terminator instructions)
-   2. Then running B
-   Since A ends with JMP to B, and we're removing that JMP and appending B *)
+(* Main theorem: Merged block execution is equivalent to sequential execution.
 
-(* After running FRONT of block a, we get a state that can continue to block b *)
-Theorem run_front_then_b:
-  !fn a b s s'.
-    wf_block a /\
-    get_block_target a = SOME b.bb_label /\
-    run_block fn (a with bb_instructions := FRONT a.bb_instructions) s = OK s' ==>
-    s'.vs_inst_idx = LENGTH (FRONT a.bb_instructions)
+   Note: This requires showing that:
+   1. Running FRONT(A) gets us to the state just before A's JMP
+   2. A's JMP would set vs_current_bb to B and vs_inst_idx to 0
+   3. Running B from that state gives the same result as running merged block
+
+   The proof requires induction on run_block and careful state tracking. *)
+(* Helper: step_in_block on merged block equals step_in_block on a for idx < |FRONT(a)| *)
+Theorem step_in_block_merge_prefix:
+  !fn a b s.
+    a.bb_instructions <> [] /\
+    s.vs_inst_idx < LENGTH (FRONT a.bb_instructions) ==>
+    step_in_block fn (merge_blocks a b) s = step_in_block fn a s
 Proof
-  cheat
+  rpt strip_tac >>
+  simp[step_in_block_def] >>
+  `get_instruction (merge_blocks a b) s.vs_inst_idx = get_instruction a s.vs_inst_idx`
+    by (irule get_instruction_merge_a >> simp[]) >>
+  simp[]
 QED
 
-(* Main theorem: Merged block execution is equivalent to sequential execution *)
+(* Main theorem: Merged block execution is equivalent to sequential execution.
+   The equivalence ignores vs_prev_bb (a.bb_label vs b.bb_label) and vs_inst_idx
+   (which differs for Halt/Revert cases).
+   The function-level theorem handles vs_prev_bb via label replacement.
+
+   PROOF STRATEGY:
+   1. Use step_in_block_merge_prefix: while idx < |FRONT(a)|, step_in_block
+      gives identical results on merged and on a.
+   2. At idx = |FRONT(a)|: merged continues with b[0], a executes JMP (terminator)
+   3. JMP only changes control flow (vs_current_bb, vs_prev_bb, vs_inst_idx)
+   4. Since no_phi_block b, b's execution doesn't depend on control flow state
+   5. Both executions end with b's terminator, setting vs_current_bb identically
+   6. data_equiv is preserved through all non-PHI instructions (step_inst_data_equiv)
+
+   The proof requires:
+   - Strong induction on |FRONT(a)| + |b| - s.vs_inst_idx
+   - Helper lemma showing run_block preserves data_equiv for no_phi blocks
+     even when vs_inst_idx values differ (due to different block structures)
+*)
 Theorem merge_blocks_execution:
   !fn a b s.
     wf_block a /\ wf_block b /\
     get_block_target a = SOME b.bb_label /\
-    no_phi_block b ==>
-    result_equiv
+    no_phi_block b /\
+    s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
+    result_equiv_merge
       (run_block fn (merge_blocks a b) s)
       (case run_block fn a s of
          OK s' => run_block fn b (s' with vs_inst_idx := 0)
        | other => other)
 Proof
-  cheat
+  cheat (* Complex induction - see proof strategy above *)
 QED
 
 (* ==========================================================================
    Label Replacement Preserves Semantics
    ========================================================================== *)
 
-(* Replace label in PHI correctly updates predecessor reference *)
+(* State equivalence ignoring vs_prev_bb - needed for PHI transformation proofs *)
+Definition state_equiv_except_prev_def:
+  state_equiv_except_prev s1 s2 <=>
+    var_equiv s1 s2 /\
+    s1.vs_memory = s2.vs_memory /\
+    s1.vs_storage = s2.vs_storage /\
+    s1.vs_transient = s2.vs_transient /\
+    s1.vs_current_bb = s2.vs_current_bb /\
+    s1.vs_inst_idx = s2.vs_inst_idx /\
+    (s1.vs_halted <=> s2.vs_halted) /\
+    (s1.vs_reverted <=> s2.vs_reverted)
+End
+
+(* Result equivalence ignoring vs_prev_bb *)
+Definition result_equiv_except_prev_def:
+  result_equiv_except_prev (OK s1) (OK s2) = state_equiv_except_prev s1 s2 /\
+  result_equiv_except_prev (Halt s1) (Halt s2) = state_equiv_except_prev s1 s2 /\
+  result_equiv_except_prev (Revert s1) (Revert s2) = state_equiv_except_prev s1 s2 /\
+  result_equiv_except_prev (Error e1) (Error e2) = (e1 = e2) /\
+  result_equiv_except_prev _ _ = F
+End
+
+(* Data equivalence - ignores all control flow fields (vs_current_bb, vs_prev_bb, vs_inst_idx).
+   Only cares about observable state: variables, memory, storage, transient, halt/revert status. *)
+Definition data_equiv_def:
+  data_equiv s1 s2 <=>
+    var_equiv s1 s2 /\
+    s1.vs_memory = s2.vs_memory /\
+    s1.vs_storage = s2.vs_storage /\
+    s1.vs_transient = s2.vs_transient /\
+    (s1.vs_halted <=> s2.vs_halted) /\
+    (s1.vs_reverted <=> s2.vs_reverted)
+End
+
+(* State equivalence for block merging:
+   - For continuing execution (OK): requires vs_current_bb to match
+   - For termination (Halt/Revert): only data matters, control flow is irrelevant *)
+Definition state_equiv_merge_def:
+  state_equiv_merge s1 s2 <=>
+    data_equiv s1 s2 /\ s1.vs_current_bb = s2.vs_current_bb
+End
+
+Definition result_equiv_merge_def:
+  result_equiv_merge (OK s1) (OK s2) = state_equiv_merge s1 s2 /\
+  result_equiv_merge (Halt s1) (Halt s2) = data_equiv s1 s2 /\
+  result_equiv_merge (Revert s1) (Revert s2) = data_equiv s1 s2 /\
+  result_equiv_merge (Error e1) (Error e2) = (e1 = e2) /\
+  result_equiv_merge _ _ = F
+End
+
+(* ==========================================================================
+   data_equiv Helper Lemmas
+   ========================================================================== *)
+
+Theorem data_equiv_refl:
+  !s. data_equiv s s
+Proof
+  rw[data_equiv_def, var_equiv_def]
+QED
+
+Theorem data_equiv_sym:
+  !s1 s2. data_equiv s1 s2 ==> data_equiv s2 s1
+Proof
+  rw[data_equiv_def, var_equiv_def]
+QED
+
+Theorem data_equiv_trans:
+  !s1 s2 s3. data_equiv s1 s2 /\ data_equiv s2 s3 ==> data_equiv s1 s3
+Proof
+  rw[data_equiv_def, var_equiv_def]
+QED
+
+(* eval_operand depends only on variables *)
+Theorem eval_operand_data_equiv:
+  !op s1 s2. data_equiv s1 s2 ==> eval_operand op s1 = eval_operand op s2
+Proof
+  Cases_on `op` >> rw[venomStateTheory.eval_operand_def, data_equiv_def, var_equiv_def,
+                       venomStateTheory.lookup_var_def]
+QED
+
+(* update_var preserves data_equiv *)
+Theorem update_var_data_equiv:
+  !v val s1 s2. data_equiv s1 s2 ==> data_equiv (update_var v val s1) (update_var v val s2)
+Proof
+  rw[data_equiv_def, venomStateTheory.update_var_def, var_equiv_def,
+     venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+(* mload depends only on memory *)
+Theorem mload_data_equiv:
+  !addr s1 s2. data_equiv s1 s2 ==> mload addr s1 = mload addr s2
+Proof
+  rw[data_equiv_def, venomStateTheory.mload_def]
+QED
+
+(* mstore preserves data_equiv *)
+Theorem mstore_data_equiv:
+  !addr val s1 s2. data_equiv s1 s2 ==> data_equiv (mstore addr val s1) (mstore addr val s2)
+Proof
+  rw[data_equiv_def, venomStateTheory.mstore_def, var_equiv_def,
+     venomStateTheory.lookup_var_def]
+QED
+
+(* sload depends only on storage *)
+Theorem sload_data_equiv:
+  !key s1 s2. data_equiv s1 s2 ==> sload key s1 = sload key s2
+Proof
+  rw[data_equiv_def, venomStateTheory.sload_def]
+QED
+
+(* sstore preserves data_equiv *)
+Theorem sstore_data_equiv:
+  !key val s1 s2. data_equiv s1 s2 ==> data_equiv (sstore key val s1) (sstore key val s2)
+Proof
+  rw[data_equiv_def, venomStateTheory.sstore_def, var_equiv_def,
+     venomStateTheory.lookup_var_def]
+QED
+
+(* tload depends only on transient *)
+Theorem tload_data_equiv:
+  !key s1 s2. data_equiv s1 s2 ==> tload key s1 = tload key s2
+Proof
+  rw[data_equiv_def, venomStateTheory.tload_def]
+QED
+
+(* tstore preserves data_equiv *)
+Theorem tstore_data_equiv:
+  !key val s1 s2. data_equiv s1 s2 ==> data_equiv (tstore key val s1) (tstore key val s2)
+Proof
+  rw[data_equiv_def, venomStateTheory.tstore_def, var_equiv_def,
+     venomStateTheory.lookup_var_def]
+QED
+
+(* halt_state preserves data_equiv *)
+Theorem halt_state_data_equiv:
+  !s1 s2. data_equiv s1 s2 ==> data_equiv (halt_state s1) (halt_state s2)
+Proof
+  rw[data_equiv_def, venomStateTheory.halt_state_def, var_equiv_def,
+     venomStateTheory.lookup_var_def]
+QED
+
+(* revert_state preserves data_equiv *)
+Theorem revert_state_data_equiv:
+  !s1 s2. data_equiv s1 s2 ==> data_equiv (revert_state s1) (revert_state s2)
+Proof
+  rw[data_equiv_def, venomStateTheory.revert_state_def, var_equiv_def,
+     venomStateTheory.lookup_var_def]
+QED
+
+(* next_inst preserves data_equiv *)
+Theorem next_inst_data_equiv:
+  !s1 s2. data_equiv s1 s2 ==> data_equiv (next_inst s1) (next_inst s2)
+Proof
+  rw[data_equiv_def, venomStateTheory.next_inst_def, var_equiv_def,
+     venomStateTheory.lookup_var_def]
+QED
+
+(* exec_binop preserves data_equiv *)
+Theorem exec_binop_data_equiv:
+  !f inst s1 s2.
+    data_equiv s1 s2 ==>
+    case (exec_binop f inst s1, exec_binop f inst s2) of
+      (OK r1, OK r2) => data_equiv r1 r2
+    | (Error e1, Error e2) => e1 = e2
+    | _ => F
+Proof
+  rpt strip_tac >> simp[exec_binop_def] >>
+  rpt CASE_TAC >> gvs[] >>
+  drule eval_operand_data_equiv >> strip_tac >> gvs[] >>
+  TRY (irule update_var_data_equiv >> simp[])
+QED
+
+(* exec_unop preserves data_equiv *)
+Theorem exec_unop_data_equiv:
+  !f inst s1 s2.
+    data_equiv s1 s2 ==>
+    case (exec_unop f inst s1, exec_unop f inst s2) of
+      (OK r1, OK r2) => data_equiv r1 r2
+    | (Error e1, Error e2) => e1 = e2
+    | _ => F
+Proof
+  rpt strip_tac >> simp[exec_unop_def] >>
+  rpt CASE_TAC >> gvs[] >>
+  drule eval_operand_data_equiv >> strip_tac >> gvs[] >>
+  TRY (irule update_var_data_equiv >> simp[])
+QED
+
+(* exec_modop preserves data_equiv *)
+Theorem exec_modop_data_equiv:
+  !f inst s1 s2.
+    data_equiv s1 s2 ==>
+    case (exec_modop f inst s1, exec_modop f inst s2) of
+      (OK r1, OK r2) => data_equiv r1 r2
+    | (Error e1, Error e2) => e1 = e2
+    | _ => F
+Proof
+  rpt strip_tac >> simp[exec_modop_def] >>
+  rpt CASE_TAC >> gvs[] >>
+  drule eval_operand_data_equiv >> strip_tac >> gvs[] >>
+  TRY (irule update_var_data_equiv >> simp[])
+QED
+
+(* step_inst preserves data_equiv for non-PHI/non-branch instructions *)
+Theorem step_inst_data_equiv:
+  !inst s1 s2.
+    data_equiv s1 s2 /\
+    ~is_phi_inst inst /\ ~is_jmp_inst inst /\ inst.inst_opcode <> JNZ ==>
+    case (step_inst inst s1, step_inst inst s2) of
+      (OK r1, OK r2) => data_equiv r1 r2
+    | (Halt r1, Halt r2) => data_equiv r1 r2
+    | (Revert r1, Revert r2) => data_equiv r1 r2
+    | (Error e1, Error e2) => e1 = e2
+    | _ => F
+Proof
+  rpt strip_tac >>
+  fs[is_phi_inst_def, is_jmp_inst_def] >>
+  simp[step_inst_def, exec_binop_def, exec_unop_def, exec_modop_def] >>
+  Cases_on `inst.inst_opcode` >> gvs[] >>
+  rpt CASE_TAC >> gvs[] >>
+  TRY (drule eval_operand_data_equiv >> strip_tac >> gvs[]) >>
+  TRY (irule update_var_data_equiv >> simp[]) >>
+  TRY (irule mstore_data_equiv >> simp[]) >>
+  TRY (irule sstore_data_equiv >> simp[]) >>
+  TRY (irule tstore_data_equiv >> simp[]) >>
+  TRY (drule mload_data_equiv >> strip_tac >> gvs[]) >>
+  TRY (drule sload_data_equiv >> strip_tac >> gvs[]) >>
+  TRY (drule tload_data_equiv >> strip_tac >> gvs[]) >>
+  TRY (irule halt_state_data_equiv >> simp[]) >>
+  TRY (irule revert_state_data_equiv >> simp[]) >>
+  (* MLOAD/SLOAD/TLOAD cases need update_var_data_equiv again *)
+  rpt (irule update_var_data_equiv >> simp[])
+QED
+
+(* step_in_block preserves data_equiv for no_phi blocks.
+   Proof sketch verified through interactive debugging:
+   1. Case split on get_instruction - NONE case gives Error=Error
+   2. SOME case: derive ~is_phi_inst x from no_phi_block via EVERY_EL
+   3. Case split on JMP/JNZ/other instruction type
+   4. JMP: both give OK with jump_to preserving data_equiv
+   5. JNZ: both give OK or Error, eval_operand_data_equiv ensures same branch
+   6. Other: use step_inst_data_equiv, terminators vs non-terminators *)
+Theorem step_in_block_data_equiv_no_phi:
+  !fn bb s1 s2.
+    no_phi_block bb /\
+    data_equiv s1 s2 /\
+    s1.vs_inst_idx = s2.vs_inst_idx /\
+    s1.vs_current_bb = s2.vs_current_bb /\
+    ~s1.vs_halted /\ ~s2.vs_halted ==>
+    case (step_in_block fn bb s1, step_in_block fn bb s2) of
+      ((OK r1, t1), (OK r2, t2)) => data_equiv r1 r2 /\ (t1 <=> t2) /\
+                                     r1.vs_current_bb = r2.vs_current_bb /\
+                                     r1.vs_inst_idx = r2.vs_inst_idx
+    | ((Halt r1, _), (Halt r2, _)) => data_equiv r1 r2
+    | ((Revert r1, _), (Revert r2, _)) => data_equiv r1 r2
+    | ((Error e1, _), (Error e2, _)) => e1 = e2
+    | _ => F
+Proof
+  cheat (* See proof sketch above - complex case analysis on instruction types *)
+QED
+
+(* ==========================================================================
+   state_equiv_except_prev Helpers
+   ========================================================================== *)
+
+(* state_equiv_except_prev is reflexive *)
+Theorem state_equiv_except_prev_refl:
+  !s. state_equiv_except_prev s s
+Proof
+  rw[state_equiv_except_prev_def, var_equiv_def]
+QED
+
+(* Helper: eval_operand ignores vs_prev_bb *)
+Theorem eval_operand_prev_bb_irrelevant:
+  !op s new. eval_operand op (s with vs_prev_bb := SOME new) = eval_operand op s
+Proof
+  Cases_on `op` >>
+  simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def]
+QED
+
+(* Helper: resolve_phi with label replacement - SOME case *)
+Theorem resolve_phi_replace_label:
+  !ops old new val_op.
+    ~MEM (Label new) ops /\
+    resolve_phi old ops = SOME val_op ==>
+    resolve_phi new (MAP (replace_label_operand old new) ops) =
+    SOME (replace_label_operand old new val_op)
+Proof
+  gen_tac >> measureInduct_on `LENGTH ops` >> rw[] >> fs[] >>
+  Cases_on `ops` >> fs[resolve_phi_def] >>
+  Cases_on `h` >> simp[replace_label_operand_def] >| [
+    (* Lit case *)
+    Cases_on `t` >> simp[resolve_phi_def] >> fs[resolve_phi_def],
+    (* Var case *)
+    Cases_on `t` >> simp[resolve_phi_def] >> fs[resolve_phi_def],
+    (* Label case *)
+    Cases_on `t` >> simp[resolve_phi_def] >> fs[resolve_phi_def] >>
+    Cases_on `s = old` >> simp[resolve_phi_def] >> fs[]
+  ]
+QED
+
+(* Helper: resolve_phi with label replacement - NONE case *)
+Theorem resolve_phi_replace_label_none:
+  !ops old new.
+    ~MEM (Label new) ops /\
+    resolve_phi old ops = NONE ==>
+    resolve_phi new (MAP (replace_label_operand old new) ops) = NONE
+Proof
+  gen_tac >> measureInduct_on `LENGTH ops` >> rw[] >> fs[] >>
+  Cases_on `ops` >> fs[resolve_phi_def] >>
+  Cases_on `h` >> simp[replace_label_operand_def] >| [
+    (* Lit case *)
+    Cases_on `t` >> simp[resolve_phi_def] >> fs[resolve_phi_def],
+    (* Var case *)
+    Cases_on `t` >> simp[resolve_phi_def] >> fs[resolve_phi_def],
+    (* Label case *)
+    Cases_on `t` >> simp[resolve_phi_def] >> fs[resolve_phi_def] >>
+    Cases_on `s = old` >> fs[]
+  ]
+QED
+
+(* Replace label in PHI correctly updates predecessor reference.
+   The resulting states differ only in vs_prev_bb. *)
 Theorem replace_label_phi_correct:
   !old new inst s.
     is_phi_inst inst /\
+    ~MEM (Label new) inst.inst_operands /\
     s.vs_prev_bb = SOME old ==>
-    step_inst (replace_label_inst old new inst) (s with vs_prev_bb := SOME new) =
-    step_inst inst s
+    result_equiv_except_prev
+      (step_inst (replace_label_inst old new inst) (s with vs_prev_bb := SOME new))
+      (step_inst inst s)
 Proof
-  cheat
+  rw[is_phi_inst_def] >>
+  simp[step_inst_def, replace_label_inst_def] >>
+  Cases_on `inst.inst_outputs` >> simp[result_equiv_except_prev_def] >>
+  Cases_on `t` >> simp[result_equiv_except_prev_def] >>
+  (* Now have single output case: inst_outputs = [h] *)
+  Cases_on `resolve_phi old inst.inst_operands` >>
+  simp[result_equiv_except_prev_def] >| [
+    (* NONE case - show replacement also gives NONE *)
+    drule_all resolve_phi_replace_label_none >> simp[result_equiv_except_prev_def],
+    (* SOME val_op case *)
+    drule_all resolve_phi_replace_label >> simp[] >> strip_tac >>
+    simp[eval_operand_replace_label, eval_operand_prev_bb_irrelevant] >>
+    Cases_on `eval_operand x s` >> simp[result_equiv_except_prev_def] >>
+    simp[venomStateTheory.update_var_def, state_equiv_except_prev_def, var_equiv_def,
+         venomStateTheory.lookup_var_def]
+  ]
 QED
 
 (* ==========================================================================
    Result Equivalence for Transformations
    ========================================================================== *)
 
-(* Replacing labels doesn't change execution of non-PHI blocks *)
-Theorem replace_label_block_non_phi_equiv:
-  !old new bb fn s.
-    ~EXISTS is_phi_inst bb.bb_instructions ==>
-    result_equiv
-      (run_block fn (replace_label_block old new bb) s)
-      (run_block fn bb s)
-Proof
-  cheat
-QED
+(* Note: replace_label_block_non_phi_equiv was removed because its statement
+   is incorrect - replacing labels in JMP/JNZ changes vs_current_bb, which
+   violates state_equiv. A correct formulation would need to account for
+   the semantic equivalence of the label replacement at the function level. *)
 
 (* Threading preserves execution when going through passthrough *)
 Theorem thread_preserves_execution:
@@ -326,11 +684,14 @@ Theorem thread_preserves_execution:
     is_passthrough_block bb /\
     get_block_target bb = SOME target_lbl ==>
     (* Execution through passthrough is same as direct jump *)
-    !s'. s'.vs_current_bb = passthrough_lbl ==>
+    !s'. s'.vs_current_bb = passthrough_lbl /\
+         s'.vs_inst_idx = 0 /\ ~s'.vs_halted ==>
          result_equiv
            (run_block fn bb s')
            (OK (jump_to target_lbl s'))
 Proof
-  cheat
+  rw[] >>
+  drule_all run_passthrough_block >>
+  simp[result_equiv_def, state_equiv_refl]
 QED
 
