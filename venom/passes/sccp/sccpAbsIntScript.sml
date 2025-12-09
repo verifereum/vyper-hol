@@ -49,9 +49,9 @@ End
 (* Abstract step for a single instruction - updates lattice environment *)
 Definition abs_step_inst_def:
   abs_step_inst (lenv: lattice_env) (inst: instruction) =
-    case inst.inst_output of
-      NONE => lenv  (* No output, lattice unchanged *)
-    | SOME out_var =>
+    case inst.inst_outputs of
+      [] => lenv  (* No output, lattice unchanged *)
+    | [out_var] =>
         let new_val =
           case inst.inst_opcode of
             (* ASSIGN: propagate the operand's lattice value *)
@@ -82,6 +82,7 @@ Definition abs_step_inst_def:
           | _ => BOTTOM
         in
           lattice_update out_var new_val lenv
+    | _ => lenv  (* Multiple outputs not handled *)
 End
 
 (* ==========================================================================
