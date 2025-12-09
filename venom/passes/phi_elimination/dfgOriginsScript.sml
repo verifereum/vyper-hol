@@ -301,10 +301,10 @@ Definition phi_operands_direct_def:
     case phi_single_origin dfg inst of
       NONE => T
     | SOME origin =>
-        case origin.inst_output of
-          NONE => T
-        | SOME src_var =>
+        case origin.inst_outputs of
+          [src_var] =>
             EVERY (\v. v = src_var) (phi_var_operands inst.inst_operands)
+        | _ => T
 End
 
 (* Helper: Origins come from DFG lookups (or are the instruction itself) *)
@@ -366,8 +366,8 @@ Proof
   drule CHOICE_DEF >> strip_tac >> fs[IN_DELETE] >>
   (* Get FLOOKUP dfg v' = SOME origin *)
   drule_all compute_origins_non_self_in_dfg >> strip_tac >>
-  (* Get origin.inst_output = SOME v' *)
-  `origin.inst_output = SOME v'` by fs[well_formed_dfg_def] >>
+  (* Get origin.inst_outputs = [v'] *)
+  `origin.inst_outputs = [v']` by fs[well_formed_dfg_def] >>
   (* Get MEM v (phi_var_operands) *)
   drule_all resolve_phi_in_operands >> strip_tac >>
   (* Unfold phi_operands_direct and use EVERY_MEM to get v = v' *)
