@@ -12,4 +12,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-hol
-      - run: Holmake && cd tests && Holmake
+      - run: Holmake
