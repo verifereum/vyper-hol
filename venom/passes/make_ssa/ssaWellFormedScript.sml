@@ -79,9 +79,7 @@ End
 Definition insts_outputs_def:
   insts_outputs [] = [] /\
   insts_outputs (inst::insts) =
-    case inst.inst_output of
-      SOME v => v :: insts_outputs insts
-    | NONE => insts_outputs insts
+    inst.inst_outputs ++ insts_outputs insts
 End
 
 (* Helper: Get all outputs in a block *)
@@ -153,9 +151,55 @@ Definition valid_phi_placement_def:
       MEM bb fn.fn_blocks /\
       get_instruction bb idx = SOME inst /\
       inst.inst_opcode = PHI /\
-      inst.inst_output = SOME v ==>
+      MEM v inst.inst_outputs ==>
       (* PHI is at a dominance frontier *)
       ?def_block. bb.bb_label IN get_dom_frontier df def_block
+End
+
+(* ==========================================================================
+   Instruction-Level Compatibility (for transformation validity)
+   ========================================================================== *)
+
+(* Helper: Get SSA version of an operand via mapping *)
+Definition wf_ssa_operand_def:
+  wf_ssa_operand (vm:var_mapping) (Var v) =
+    (case FLOOKUP vm v of
+       SOME ssa_v => Var ssa_v
+     | NONE => Var v) /\
+  wf_ssa_operand vm (Lit l) = Lit l /\
+  wf_ssa_operand vm (Label l) = Label l
+End
+
+(* Helper: Instruction is SSA-compatible with original under mapping.
+   Includes freshness conditions to ensure SSA output doesn't collide. *)
+Definition wf_inst_ssa_compatible_def:
+  wf_inst_ssa_compatible vm inst inst_ssa <=>
+    inst_ssa.inst_opcode = inst.inst_opcode /\
+    inst_ssa.inst_operands = MAP (wf_ssa_operand vm) inst.inst_operands /\
+    (case inst.inst_outputs of
+       [] => inst_ssa.inst_outputs = []
+     | [out] =>
+         let ssa_out = case FLOOKUP vm out of SOME x => x | NONE => out in
+         inst_ssa.inst_outputs = [ssa_out] /\
+         (* Freshness: ssa_out not used by any other mapping *)
+         (!v. v <> out ==> FLOOKUP vm v <> SOME ssa_out) /\
+         (* ssa_out doesn't collide with other unmapped variables *)
+         (!v. v <> out /\ FLOOKUP vm v = NONE ==> v <> ssa_out)
+     | _ => T)  (* Multi-output not fully handled *)
+End
+
+(* Helper: Blocks are SSA compatible *)
+Definition wf_blocks_ssa_compatible_def:
+  wf_blocks_ssa_compatible vm [] [] = T /\
+  wf_blocks_ssa_compatible vm (bb::bbs) (bb_ssa::bbs_ssa) =
+    (bb.bb_label = bb_ssa.bb_label /\
+     LENGTH bb.bb_instructions = LENGTH bb_ssa.bb_instructions /\
+     (!idx. idx < LENGTH bb.bb_instructions ==>
+            wf_inst_ssa_compatible vm
+              (EL idx bb.bb_instructions)
+              (EL idx bb_ssa.bb_instructions)) /\
+     wf_blocks_ssa_compatible vm bbs bbs_ssa) /\
+  wf_blocks_ssa_compatible vm _ _ = F
 End
 
 (* ==========================================================================
@@ -177,7 +221,9 @@ Definition valid_ssa_transform_def:
     wf_var_mapping vm fn_ssa /\
     (* Structure is preserved *)
     LENGTH fn_orig.fn_blocks = LENGTH fn_ssa.fn_blocks /\
-    fn_orig.fn_name = fn_ssa.fn_name
+    fn_orig.fn_name = fn_ssa.fn_name /\
+    (* Instruction-level compatibility *)
+    wf_blocks_ssa_compatible vm fn_orig.fn_blocks fn_ssa.fn_blocks
 End
 
 (* ==========================================================================
@@ -185,10 +231,9 @@ End
    ========================================================================== *)
 
 Theorem insts_outputs_length:
-  !insts. LENGTH (insts_outputs insts) <= LENGTH insts
+  !insts. LENGTH (insts_outputs insts) <= LENGTH insts + SUM (MAP (\i. LENGTH i.inst_outputs) insts)
 Proof
-  Induct_on `insts` >> rw[insts_outputs_def] >>
-  Cases_on `h.inst_output` >> simp[insts_outputs_def]
+  Induct_on `insts` >> rw[insts_outputs_def]
 QED
 
 Theorem fn_outputs_nil:
