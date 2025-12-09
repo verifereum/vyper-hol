@@ -361,6 +361,19 @@ Definition step_inst_def:
     (* NOP *)
     | NOP => OK s
 
+    (* Assertions *)
+    | ASSERT =>
+        (case inst.inst_operands of
+          [op1] =>
+            (case eval_operand op1 s of
+              SOME v =>
+                if v = 0w then Revert (revert_state s)
+                else OK s
+            | NONE => Error "undefined operand")
+        | _ => Error "assert requires 1 operand")
+
+    | ASSERT_UNREACHABLE => Halt (halt_state s)
+
     (* Default - unimplemented *)
     | _ => Error "unimplemented opcode"
 End
