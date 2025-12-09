@@ -118,10 +118,10 @@ Theorem eval_operand_ssa_equiv:
     ssa_state_equiv vm s_orig s_ssa ==>
     eval_operand op s_orig = eval_operand (ssa_operand vm op) s_ssa
 Proof
-  rpt strip_tac >>
-  Cases_on `op` >> fs[ssa_operand_def, eval_operand_def] >>
+  rpt strip_tac >> Cases_on `op` >>
+  fs[ssa_operand_def, eval_operand_def] >>
   fs[ssa_state_equiv_def, var_map_equiv_def] >>
-  Cases_on `FLOOKUP vm s` >> fs[]
+  Cases_on `FLOOKUP vm s` >> fs[eval_operand_def]
 QED
 
 (* ==========================================================================
@@ -148,17 +148,23 @@ QED
    State Update Under Equivalence
    ========================================================================== *)
 
-(* TOP-LEVEL: Variable update preserves SSA equivalence with extended mapping *)
+(* TOP-LEVEL: Variable update preserves SSA equivalence with extended mapping.
+   Preconditions:
+   1. ssa_v is not in the range of vm (except possibly via v)
+   2. ssa_v doesn't collide with OTHER unmapped variable names
+   In SSA construction, both are true since we generate fresh names like "x:1". *)
 Theorem update_var_ssa_equiv:
   !vm s_orig s_ssa v ssa_v val.
-    ssa_state_equiv vm s_orig s_ssa ==>
+    ssa_state_equiv vm s_orig s_ssa /\
+    (!v'. v' <> v ==> FLOOKUP vm v' <> SOME ssa_v) /\
+    (!v'. v' <> v /\ FLOOKUP vm v' = NONE ==> v' <> ssa_v) ==>
     ssa_state_equiv (vm |+ (v, ssa_v))
                     (update_var v val s_orig)
                     (update_var ssa_v val s_ssa)
 Proof
-  rw[ssa_state_equiv_def, var_map_equiv_def, update_var_def, lookup_var_def] >>
-  fs[FLOOKUP_UPDATE] >>
-  rw[] >> fs[]
+  rpt strip_tac >>
+  fs[ssa_state_equiv_def, var_map_equiv_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> rw[] >> gvs[]
 QED
 
 (* TOP-LEVEL: Memory operations preserve SSA equivalence *)
@@ -237,5 +243,74 @@ Theorem tload_ssa_equiv:
     tload key s_orig = tload key s_ssa
 Proof
   rw[ssa_state_equiv_def, tload_def]
+QED
+
+(* ==========================================================================
+   Update Preserves Same-VM Equivalence
+   ==========================================================================
+   When the SSA output variable is determined by vm (like in inst_ssa_compatible),
+   updating the variable preserves ssa_state_equiv with the SAME vm.
+   This is crucial for proving step_in_block correctness. *)
+
+(* Helper: var_map_equiv preserved with same vm when output determined by vm *)
+Theorem var_map_equiv_update_same_vm:
+  !vm s_orig s_ssa out val.
+    var_map_equiv vm s_orig s_ssa /\
+    (!v. v <> out ==>
+         FLOOKUP vm v <> SOME (case FLOOKUP vm out of SOME x => x | NONE => out)) /\
+    (FLOOKUP vm (case FLOOKUP vm out of SOME x => x | NONE => out) = NONE ==>
+     FLOOKUP vm out = NONE \/ FLOOKUP vm out = SOME out) ==>
+    var_map_equiv vm
+      (update_var out val s_orig)
+      (update_var (case FLOOKUP vm out of SOME x => x | NONE => out) val s_ssa)
+Proof
+  rpt strip_tac >>
+  fs[var_map_equiv_def, update_var_def, lookup_var_def] >>
+  qabbrev_tac `ssa_out = case FLOOKUP vm out of NONE => out | SOME x => x` >>
+  rpt conj_tac >> rpt strip_tac >> simp[FLOOKUP_UPDATE] >>
+  (* First conjunct: mapped variables *)
+  TRY (
+    Cases_on `v = out` >> simp[]
+    >- (
+      `ssa_out = ssa_v` by (fs[markerTheory.Abbrev_def] >> Cases_on `FLOOKUP vm out` >> fs[]) >>
+      simp[]
+    )
+    >- (
+      `ssa_out <> ssa_v` by (first_x_assum (qspec_then `v` mp_tac) >> simp[]) >>
+      simp[] >>
+      first_x_assum (qspecl_then [`v`, `ssa_v`] mp_tac) >> simp[]
+    )
+  ) >>
+  (* Second conjunct: unmapped variables *)
+  TRY (
+    Cases_on `v = out` >> simp[]
+    >- (`ssa_out = out` by fs[markerTheory.Abbrev_def] >> simp[])
+    >- (
+      `ssa_out <> v` by (
+        fs[markerTheory.Abbrev_def] >>
+        CCONTR_TAC >> fs[] >>
+        Cases_on `FLOOKUP vm out` >> fs[]
+      ) >>
+      simp[]
+    )
+  )
+QED
+
+(* TOP-LEVEL: ssa_state_equiv preserved with same vm when output determined by vm *)
+Theorem ssa_state_equiv_update_same_vm:
+  !vm s_orig s_ssa out val.
+    ssa_state_equiv vm s_orig s_ssa /\
+    (!v. v <> out ==>
+         FLOOKUP vm v <> SOME (case FLOOKUP vm out of SOME x => x | NONE => out)) /\
+    (FLOOKUP vm (case FLOOKUP vm out of SOME x => x | NONE => out) = NONE ==>
+     FLOOKUP vm out = NONE \/ FLOOKUP vm out = SOME out) ==>
+    ssa_state_equiv vm
+      (update_var out val s_orig)
+      (update_var (case FLOOKUP vm out of SOME x => x | NONE => out) val s_ssa)
+Proof
+  rpt strip_tac >>
+  fs[ssa_state_equiv_def, update_var_def] >>
+  drule_all var_map_equiv_update_same_vm >>
+  simp[update_var_def]
 QED
 

@@ -71,18 +71,20 @@ Definition rename_inst_uses_def:
 End
 
 (* TOP-LEVEL: Rename definition in an instruction.
-   Returns (transformed instruction, updated name stack, updated counter). *)
+   Returns (transformed instruction, updated name stack, updated counter).
+   For simplicity, we handle only single-output instructions here. *)
 Definition rename_inst_def_def:
   rename_inst_def ns counter inst =
-    case inst.inst_output of
-      NONE => (inst, ns, counter)
-    | SOME out =>
+    case inst.inst_outputs of
+      [] => (inst, ns, counter)
+    | [out] =>
         let base = base_var_name out in
         let version = case FLOOKUP counter base of SOME n => n | NONE => 0 in
         let new_name = ssa_var_name base version in
         let ns' = stack_push ns base version in
         let counter' = counter |+ (base, version + 1) in
-        (inst with inst_output := SOME new_name, ns', counter')
+        (inst with inst_outputs := [new_name], ns', counter')
+    | _ => (inst, ns, counter)  (* Multi-output not yet supported *)
 End
 
 (* TOP-LEVEL: Transform an instruction - rename both uses and definition.
@@ -104,12 +106,12 @@ End
 (* Helper: Find and update the operand for a specific predecessor in PHI *)
 Definition update_phi_for_pred_def:
   update_phi_for_pred pred_label ns [] = [] /\
-  update_phi_for_pred pred_label ns [op] = [op] /\  (* Malformed - single operand *)
+  update_phi_for_pred pred_label ns [op] = [op] /\
   update_phi_for_pred pred_label ns (Label lbl :: Var v :: rest) =
-    if lbl = pred_label then
-      Label lbl :: rename_operand ns (Var v) :: rest
-    else
-      Label lbl :: Var v :: update_phi_for_pred pred_label ns rest /\
+    (if lbl = pred_label then
+       Label lbl :: rename_operand ns (Var v) :: rest
+     else
+       Label lbl :: Var v :: update_phi_for_pred pred_label ns rest) /\
   update_phi_for_pred pred_label ns (op1 :: op2 :: rest) =
     op1 :: op2 :: update_phi_for_pred pred_label ns rest
 End
@@ -166,9 +168,10 @@ End
 (* Helper: Collect definitions from an instruction *)
 Definition collect_inst_defs_def:
   collect_inst_defs bb_label idx inst dm =
-    case inst.inst_output of
-      NONE => dm
-    | SOME v => add_def dm v bb_label idx
+    case inst.inst_outputs of
+      [] => dm
+    | [v] => add_def dm v bb_label idx
+    | _ => dm  (* Multi-output not yet handled *)
 End
 
 (* Helper: Collect definitions from instructions *)
@@ -231,8 +234,8 @@ Definition phi_unique_values_def:
   phi_unique_values out [] acc = acc /\
   phi_unique_values out [_] acc = acc /\
   phi_unique_values out (Label lbl :: Var v :: rest) acc =
-    if v = out then phi_unique_values out rest acc
-    else phi_unique_values out rest (v INSERT acc) /\
+    (if v = out then phi_unique_values out rest acc
+     else phi_unique_values out rest (v INSERT acc)) /\
   phi_unique_values out (_ :: _ :: rest) acc = phi_unique_values out rest acc
 End
 
@@ -241,10 +244,11 @@ Definition is_degenerate_phi_def:
   is_degenerate_phi inst =
     if inst.inst_opcode <> PHI then F
     else
-      case inst.inst_output of
-        NONE => F
-      | SOME out =>
+      case inst.inst_outputs of
+        [] => F
+      | [out] =>
           CARD (phi_unique_values out inst.inst_operands {}) <= 1
+      | _ => F
 End
 
 (* TOP-LEVEL: Remove or simplify degenerate PHI *)
@@ -252,9 +256,9 @@ Definition simplify_phi_def:
   simplify_phi inst =
     if ~is_degenerate_phi inst then SOME inst
     else
-      case inst.inst_output of
-        NONE => NONE
-      | SOME out =>
+      case inst.inst_outputs of
+        [] => NONE
+      | [out] =>
           let vals = phi_unique_values out inst.inst_operands {} in
           if vals = {} then NONE  (* All self-references - remove *)
           else
@@ -262,13 +266,23 @@ Definition simplify_phi_def:
             let src = CHOICE vals in
             SOME (inst with <| inst_opcode := ASSIGN;
                               inst_operands := [Var src] |>)
+      | _ => SOME inst
+End
+
+(* Helper: filter_map - apply f to each element, keep SOME results *)
+Definition filter_map_def:
+  filter_map f [] = [] /\
+  filter_map f (x::xs) =
+    case f x of
+      SOME y => y :: filter_map f xs
+    | NONE => filter_map f xs
 End
 
 (* TOP-LEVEL: Remove degenerate PHIs from a block *)
 Definition remove_degenerate_phis_def:
   remove_degenerate_phis bb =
     bb with bb_instructions :=
-      FILTER_MAP simplify_phi bb.bb_instructions
+      filter_map simplify_phi bb.bb_instructions
 End
 
 (* ==========================================================================
