@@ -1,1 +1,1 @@
-INCLUDES=$(HOLDIR)/examples/Crypto/Keccak $(VFMDIR)/util $(VFMDIR)/spec
+INCLUDES=$(HOLDIR)/examples/Crypto/Keccak $(VFMDIR)/util $(VFMDIR)/spec venom

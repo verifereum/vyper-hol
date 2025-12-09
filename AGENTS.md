@@ -2,6 +2,8 @@
 
 **IMPORTANT: After conversation compaction, ALWAYS read this file (CLAUDE.md or AGENTS.md) and PLAN.md to restore context.**
 
+Always read .claude/settings.json to learn what tool uses are available to you and to give higher precedence to those tools.
+
 ## Project Structure
 
 ```
