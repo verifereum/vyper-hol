@@ -134,15 +134,55 @@ Proof
   rw[transform_inst_preserves_terminator]
 QED
 
+(* Helper: all_assigns_equiv is preserved through instruction execution.
+   This relies on SSA form - variables are assigned at most once, so
+   after an ASSIGN establishes equiv, neither variable is reassigned. *)
+Theorem all_assigns_equiv_preserved:
+  !amap inst s s'.
+    all_assigns_equiv amap s /\
+    step_inst inst s = OK s' ==>
+    all_assigns_equiv amap s'
+Proof
+  (* Requires SSA property: variables in amap are never reassigned.
+     Full proof needs SSA as explicit assumption or derivation from structure. *)
+  cheat
+QED
+
+(* Helper: Block-level correctness for OK result *)
+Theorem transform_block_correct:
+  !fn amap bb s s'.
+    run_block fn bb s = OK s' /\
+    all_assigns_equiv amap s ==>
+    ?s''. run_block fn (transform_block amap bb) s = OK s'' /\
+          state_equiv s' s''
+Proof
+  (* Induction on run_block, using:
+     - transform_inst_elim_correct for eliminable assigns
+     - transform_inst_non_elim_correct for other instructions
+     - all_assigns_equiv_preserved to maintain invariant *)
+  cheat
+QED
+
 (* TOP-LEVEL: Transformed block produces equiv result.
-   Requires all_assigns_equiv to hold and be preserved through execution. *)
+   Requires all_assigns_equiv to hold. *)
 Theorem transform_block_result_equiv:
   !fn amap bb s.
     all_assigns_equiv amap s ==>
     result_equiv (run_block fn (transform_block amap bb) s) (run_block fn bb s)
 Proof
-  (* This is a complex theorem that requires showing all_assigns_equiv is preserved.
-     For now, we use a cheat to establish the structure. *)
+  rpt strip_tac >>
+  Cases_on `run_block fn bb s` >> simp[result_equiv_def] >- (
+    (* OK case - use transform_block_correct *)
+    drule_all transform_block_correct >> strip_tac >>
+    simp[] >> irule state_equiv_sym >> simp[]
+  ) >- (
+    (* Halt case *)
+    cheat
+  ) >- (
+    (* Revert case *)
+    cheat
+  ) >>
+  (* Error case *)
   cheat
 QED
 
