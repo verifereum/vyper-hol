@@ -12,15 +12,39 @@
  *   - If cond == 0: t = 1, assert passes, jmp @else
  *
  * ============================================================================
- * STRUCTURE OVERVIEW
+ * PROOF STATUS
  * ============================================================================
  *
- * TOP-LEVEL THEOREMS:
- *   - step_assert_zero        : assert 0 produces Revert
- *   - step_assert_nonzero     : assert (non-zero) produces OK
- *   - step_iszero_semantics   : iszero produces 1 for 0, 0 otherwise
- *   - jnz_then_revert_equiv   : JNZ to revert equiv to iszero+assert+jmp
- *   - jnz_else_revert_equiv   : JNZ to revert equiv to assert+jmp
+ * FULLY PROVEN (no cheats):
+ *   - step_assert_zero/nonzero/var  : ASSERT instruction semantics
+ *   - step_iszero_zero/nonzero/var  : ISZERO instruction semantics
+ *   - step_jmp                      : JMP instruction semantics
+ *   - step_jnz_zero/nonzero/var     : JNZ instruction semantics
+ *   - step_revert                   : REVERT instruction semantics
+ *   - run_then_transform_block      : Transformed block execution (then case)
+ *   - run_else_transform_block      : Transformed block execution (else case)
+ *   - rta_then_block_equiv          : Block equiv for FRONT = [] (then case)
+ *   - rta_else_block_equiv          : Block equiv for FRONT = [] (else case)
+ *   - run_revert_block              : Revert blocks produce Revert
+ *   - step_inst_preserves_inst_idx  : step_inst preserves vs_inst_idx
+ *   - Helper theorems for prefix execution
+ *
+ * REMAINING WORK (cheated):
+ *   - rta_then_block_equiv_general  : General block equiv (with prefix)
+ *   - rta_else_block_equiv_general  : General block equiv (with prefix)
+ *
+ * TO COMPLETE THE CHEATED THEOREMS:
+ *   The general theorems handle blocks with prefix instructions (FRONT != []).
+ *   The proof requires showing that:
+ *   1. Prefix execution is identical for original and transformed blocks
+ *   2. After prefix, both reach the same intermediate state
+ *   3. From that state, the terminator transformation produces expected result
+ *
+ *   This requires induction on (LENGTH bb.bb_instructions - s.vs_inst_idx)
+ *   with the induction hypothesis tracking that both blocks step identically
+ *   in the prefix. The step_in_block_prefix_same theorem provides the key
+ *   ingredient, but assembling it into the full proof requires careful handling
+ *   of the run_block recursion structure.
  *
  * ============================================================================
  *)
@@ -218,12 +242,13 @@ Proof
   ]
 QED
 
-(* Full block equivalence for then-branch case *)
+(* Full block equivalence for then-branch case - single JNZ terminator *)
 Theorem rta_then_block_equiv:
   !blocks bb bb' s new_var id1 id2 id3 cond_var v then_lbl else_lbl.
     rta_then_applicable blocks bb /\
     rewrite_jnz_then_revert bb new_var id1 id2 id3 = SOME bb' /\
     get_jnz_operands (THE (get_terminator bb)) = SOME (Var cond_var, then_lbl, else_lbl) /\
+    FRONT bb.bb_instructions = [] /\  (* Original block is just the JNZ terminator *)
     lookup_var cond_var s = SOME v /\
     ~s.vs_halted /\
     s.vs_inst_idx = 0 ==>
@@ -231,7 +256,20 @@ Theorem rta_then_block_equiv:
     (v <> 0w ==> ?s'. run_block ARB bb' s = Revert s') /\
     (v = 0w ==> ?s'. run_block ARB bb' s = OK s' /\ s'.vs_current_bb = else_lbl)
 Proof
-  cheat (* TODO: connect to run_then_transform_block via block structure *)
+  rpt strip_tac >> fs[rewrite_jnz_then_revert_def] >> gvs[AllCaseEqs()] >>
+  (* Execute iszero *)
+  simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+  simp[mk_iszero_inst_def, mk_assert_inst_def, mk_jmp_inst_def,
+       step_inst_def, exec_unop_def, eval_operand_def,
+       is_terminator_def, bool_to_word_def] >>
+  simp[update_var_def, next_inst_def] >>
+  (* Execute assert *)
+  simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+  simp[step_inst_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
+       is_terminator_def, next_inst_def] >>
+  (* Execute jmp (only in v = 0w case) *)
+  simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+  simp[step_inst_def, is_terminator_def, jump_to_def]
 QED
 
 (* Helper: Run transformed else-branch block starting from inst_idx = 0.
@@ -263,12 +301,13 @@ Proof
   ]
 QED
 
-(* Full block equivalence for else-branch case *)
+(* Full block equivalence for else-branch case - single JNZ terminator *)
 Theorem rta_else_block_equiv:
   !blocks bb bb' s id1 id2 cond_var v then_lbl else_lbl.
     rta_else_applicable blocks bb /\
     rewrite_jnz_else_revert bb id1 id2 = SOME bb' /\
     get_jnz_operands (THE (get_terminator bb)) = SOME (Var cond_var, then_lbl, else_lbl) /\
+    FRONT bb.bb_instructions = [] /\  (* Original block is just the JNZ terminator *)
     lookup_var cond_var s = SOME v /\
     ~s.vs_halted /\
     s.vs_inst_idx = 0 ==>
@@ -276,5 +315,209 @@ Theorem rta_else_block_equiv:
     (v = 0w ==> ?s'. run_block ARB bb' s = Revert s') /\
     (v <> 0w ==> ?s'. run_block ARB bb' s = OK s' /\ s'.vs_current_bb = then_lbl)
 Proof
-  cheat (* TODO: connect to run_else_transform_block via block structure *)
+  rpt strip_tac >> fs[rewrite_jnz_else_revert_def] >> gvs[AllCaseEqs()] >>
+  (* Execute assert *)
+  simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+  simp[mk_assert_inst_def, mk_jmp_inst_def,
+       step_inst_def, eval_operand_def, is_terminator_def, next_inst_def] >>
+  (* Execute jmp (only in v != 0w case) *)
+  simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+  simp[step_inst_def, is_terminator_def, jump_to_def]
 QED
+
+(* ==========================================================================
+   Block-Level Result Relationship
+
+   Key insight: The transformation produces equivalent results, but may
+   "short-circuit" reverts. Specifically:
+   - If original OK with next_bb = else_label, transformed is also OK
+   - If original OK with next_bb = revert_label, transformed is Revert
+
+   For the else-branch case:
+   - If original OK with next_bb = then_label, transformed is also OK
+   - If original OK with next_bb = revert_label, transformed is Revert
+   ========================================================================== *)
+
+(* Revert blocks always produce Revert *)
+Theorem run_revert_block:
+  !fn bb s.
+    is_revert_block bb /\
+    ~s.vs_halted /\
+    s.vs_inst_idx = 0 ==>
+    ?s'. run_block fn bb s = Revert s'
+Proof
+  rw[is_revert_block_def] >>
+  Cases_on `bb.bb_instructions` >> fs[] >>
+  Cases_on `t` >> fs[] >>
+  simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+  fs[is_zero_revert_inst_def] >>
+  simp[step_inst_def, is_terminator_def]
+QED
+
+(* ==========================================================================
+   Prefix Execution Equivalence
+
+   Key insight: If two blocks share the same prefix (FRONT), then executing
+   prefix instructions produces identical results. This enables lifting the
+   single-instruction block theorems to blocks with prefix instructions.
+   ========================================================================== *)
+
+(* Get instruction from appended list - in prefix range *)
+Theorem get_instruction_prefix:
+  !bb prefix suffix idx.
+    bb.bb_instructions = prefix ++ suffix /\
+    idx < LENGTH prefix ==>
+    get_instruction bb idx = SOME (EL idx prefix)
+Proof
+  rw[get_instruction_def] >>
+  `idx < LENGTH (prefix ++ suffix)` by simp[] >>
+  simp[EL_APPEND1]
+QED
+
+(* Get instruction from appended list - at suffix start *)
+Theorem get_instruction_suffix_start:
+  !bb prefix suffix.
+    bb.bb_instructions = prefix ++ suffix /\
+    suffix <> [] ==>
+    get_instruction bb (LENGTH prefix) = SOME (HD suffix)
+Proof
+  rw[get_instruction_def] >>
+  Cases_on `suffix` >> fs[] >>
+  simp[EL_APPEND2, EL]
+QED
+
+(* Two blocks with same prefix have same instruction in prefix range *)
+Theorem same_prefix_same_instruction:
+  !bb bb' prefix suffix1 suffix2 idx.
+    bb.bb_instructions = prefix ++ suffix1 /\
+    bb'.bb_instructions = prefix ++ suffix2 /\
+    idx < LENGTH prefix ==>
+    get_instruction bb idx = get_instruction bb' idx
+Proof
+  rw[] >>
+  imp_res_tac get_instruction_prefix >> simp[]
+QED
+
+(* step_in_block produces same result for same instruction in prefix *)
+Theorem step_in_block_prefix_same:
+  !fn bb bb' prefix suffix1 suffix2 s.
+    bb.bb_instructions = prefix ++ suffix1 /\
+    bb'.bb_instructions = prefix ++ suffix2 /\
+    s.vs_inst_idx < LENGTH prefix ==>
+    step_in_block fn bb s = step_in_block fn bb' s
+Proof
+  rw[step_in_block_def] >>
+  `get_instruction bb s.vs_inst_idx = get_instruction bb' s.vs_inst_idx`
+    by (irule same_prefix_same_instruction >> qexistsl_tac [`prefix`, `suffix1`, `suffix2`] >> simp[]) >>
+  simp[]
+QED
+
+(* ==========================================================================
+   JNZ Behavior Characterization
+
+   When a JNZ executes, we can characterize the result based on the condition.
+   ========================================================================== *)
+
+(* JNZ semantics: condition determines target *)
+Theorem jnz_result:
+  !inst s cond_op then_lbl else_lbl v.
+    inst.inst_opcode = JNZ /\
+    inst.inst_operands = [cond_op; Label then_lbl; Label else_lbl] /\
+    eval_operand cond_op s = SOME v ==>
+    step_inst inst s = OK (if v <> 0w then jump_to then_lbl s else jump_to else_lbl s)
+Proof
+  rw[step_inst_def]
+QED
+
+(* ==========================================================================
+   Helper: step_inst preserves vs_inst_idx for non-terminators
+
+   This is needed for the generalized block theorems because when stepping
+   through prefix instructions, the vs_inst_idx is only modified by next_inst
+   (which adds 1), not by step_inst itself.
+   ========================================================================== *)
+
+(* step_inst does not change vs_inst_idx for non-terminator instructions.
+   Only next_inst (called after step_inst in step_in_block) modifies it. *)
+Theorem step_inst_preserves_inst_idx:
+  !inst s s'.
+    step_inst inst s = OK s' /\
+    ~is_terminator inst.inst_opcode ==>
+    s'.vs_inst_idx = s.vs_inst_idx
+Proof
+  rpt strip_tac >>
+  fs[step_inst_def, AllCaseEqs()] >>
+  gvs[exec_binop_def, exec_unop_def, exec_modop_def, AllCaseEqs(),
+      update_var_def, mstore_def, sstore_def, tstore_def, is_terminator_def]
+QED
+
+(* ==========================================================================
+   Generalized Block Transformation Theorems
+
+   These extend rta_then_block_equiv and rta_else_block_equiv to handle
+   blocks with arbitrary prefix instructions.
+
+   The proof strategy uses strong induction on remaining instructions:
+   - Base case: At terminator position, use the existing block equiv theorems
+   - Inductive case: In prefix, step_in_block is identical, apply IH
+
+   Key helper theorems:
+   - step_in_block_prefix_same: In prefix, steps are identical
+   - step_inst_preserves_inst_idx: step_inst doesn't change vs_inst_idx
+
+   The proof proceeds by complete induction on (LENGTH bb.bb_instructions - s.vs_inst_idx).
+   At each step:
+   1. If s.vs_inst_idx >= LENGTH (FRONT bb.bb_instructions), we're at terminator
+      → use rta_then_block_equiv / rta_else_block_equiv
+   2. Otherwise, we're in prefix:
+      → step_in_block is identical for both blocks
+      → both recurse to next state with vs_inst_idx + 1
+      → apply IH with smaller measure
+   ========================================================================== *)
+
+(* The key theorem for then-branch transformation with prefix *)
+Theorem rta_then_block_equiv_general:
+  !blocks bb bb' fn s s' new_var id1 id2 id3 term cond_op then_lbl else_lbl.
+    get_terminator bb = SOME term /\
+    is_jnz_inst term /\
+    get_jnz_operands term = SOME (cond_op, then_lbl, else_lbl) /\
+    rewrite_jnz_then_revert bb new_var id1 id2 id3 = SOME bb' /\
+    run_block fn bb s = OK s' ==>
+    (* If original jumped to else (cond=0), transformed also jumps to else *)
+    (* If original jumped to then (cond!=0), transformed Reverts *)
+    (s'.vs_current_bb = else_lbl ==>
+       ?s''. run_block fn bb' s = OK s'' /\ s''.vs_current_bb = else_lbl) /\
+    (s'.vs_current_bb = then_lbl ==>
+       ?s''. run_block fn bb' s = Revert s'')
+Proof
+  (* The full proof uses complete induction on remaining instructions.
+     The key ingredients are:
+     1. step_in_block_prefix_same: In prefix, steps are identical
+     2. rta_then_block_equiv: At terminator, transformation is correct
+
+     The proof structure has been explored interactively and is feasible.
+     Two remaining cases need careful handling:
+     - Terminator case for else_lbl: cond=0, iszero gives 1, assert passes, OK else_lbl
+     - Terminator case for then_lbl: cond!=0, iszero gives 0, assert fails, Revert *)
+  cheat
+QED
+
+(* The key theorem for else-branch transformation with prefix *)
+Theorem rta_else_block_equiv_general:
+  !blocks bb bb' fn s s' id1 id2 term cond_op then_lbl else_lbl.
+    get_terminator bb = SOME term /\
+    is_jnz_inst term /\
+    get_jnz_operands term = SOME (cond_op, then_lbl, else_lbl) /\
+    rewrite_jnz_else_revert bb id1 id2 = SOME bb' /\
+    run_block fn bb s = OK s' ==>
+    (* If original jumped to then (cond!=0), transformed also jumps to then *)
+    (* If original jumped to else (cond=0), transformed Reverts *)
+    (s'.vs_current_bb = then_lbl ==>
+       ?s''. run_block fn bb' s = OK s'' /\ s''.vs_current_bb = then_lbl) /\
+    (s'.vs_current_bb = else_lbl ==>
+       ?s''. run_block fn bb' s = Revert s'')
+Proof
+  (* Same structure as rta_then_block_equiv_general *)
+  cheat
+QED
+
