@@ -296,6 +296,13 @@ Definition amap_covers_block_def:
                    FLOOKUP amap out = SOME src
 End
 
+(* Property: All source variables in amap are defined in state.
+   This ensures eliminable assigns won't error due to undefined operands. *)
+Definition amap_operands_defined_def:
+  amap_operands_defined amap s <=>
+    !out src. FLOOKUP amap out = SOME src ==> IS_SOME (lookup_var src s)
+End
+
 (* Helper: step_in_block transform produces equivalent state with same terminator flag.
    VALIDATED INTERACTIVELY (Dec 2025). Key steps:
    1. Case split on get_instruction (NONE gives Error, contradicts OK assumption)
@@ -350,6 +357,90 @@ Proof
   qexists_tac `next_inst s''` >> conj_tac >- (qexists_tac `s''` >> simp[]) >>
   fs[state_equiv_def, next_inst_def, var_equiv_def] >>
   strip_tac >> first_x_assum (qspec_then `v'` mp_tac) >> simp[lookup_var_def]
+QED
+
+(* Helper: step_in_block transform preserves Halt results.
+   Key insight: Halt can only come from non-eliminable instructions (eliminable → NOP → OK),
+   so step_inst_replace_operands ensures the result is unchanged. *)
+Theorem step_in_block_transform_halt:
+  !fn amap bb s v is_term.
+    step_in_block fn bb s = (Halt v, is_term) /\
+    all_assigns_equiv amap s /\
+    amap_covers_block amap bb /\
+    (!inst. MEM inst bb.bb_instructions ==> inst_output_disjoint_amap inst amap) ==>
+    ?v'. step_in_block fn (transform_block amap bb) s = (Halt v', is_term) /\
+         state_equiv v v'
+Proof
+  rpt strip_tac >> fs[step_in_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> gvs[AllCaseEqs()] >>
+  Cases_on `step_inst x s` >> gvs[AllCaseEqs()] >>
+  drule_all get_instruction_transform >> strip_tac >>
+  qexists_tac `v` >> simp[transform_inst_def] >>
+  Cases_on `is_eliminable_assign x` >- (
+    (* Eliminable case - contradiction: ASSIGN returns OK, not Halt *)
+    gvs[step_inst_def, is_eliminable_assign_def, assign_var_source_def, AllCaseEqs()]
+  ) >>
+  (* Non-eliminable: use step_inst_replace_operands *)
+  simp[] >> drule_all step_inst_replace_operands >> simp[state_equiv_refl]
+QED
+
+(* Helper: step_in_block transform preserves Revert results. Same structure as Halt. *)
+Theorem step_in_block_transform_revert:
+  !fn amap bb s v is_term.
+    step_in_block fn bb s = (Revert v, is_term) /\
+    all_assigns_equiv amap s /\
+    amap_covers_block amap bb /\
+    (!inst. MEM inst bb.bb_instructions ==> inst_output_disjoint_amap inst amap) ==>
+    ?v'. step_in_block fn (transform_block amap bb) s = (Revert v', is_term) /\
+         state_equiv v v'
+Proof
+  rpt strip_tac >> fs[step_in_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> gvs[AllCaseEqs()] >>
+  Cases_on `step_inst x s` >> gvs[AllCaseEqs()] >>
+  drule_all get_instruction_transform >> strip_tac >>
+  qexists_tac `v` >> simp[transform_inst_def] >>
+  Cases_on `is_eliminable_assign x` >- (
+    gvs[step_inst_def, is_eliminable_assign_def, assign_var_source_def, AllCaseEqs()]
+  ) >>
+  simp[] >> drule_all step_inst_replace_operands >> simp[state_equiv_refl]
+QED
+
+(* Helper: step_in_block transform preserves Error results.
+   Requires amap_operands_defined to ensure eliminable assigns don't error.
+   Without this, an eliminable assign with undefined operand would error,
+   but the transformed NOP would succeed - changing behavior. *)
+Theorem step_in_block_transform_error:
+  !fn amap bb s e is_term.
+    step_in_block fn bb s = (Error e, is_term) /\
+    all_assigns_equiv amap s /\
+    amap_covers_block amap bb /\
+    amap_operands_defined amap s /\
+    (!inst. MEM inst bb.bb_instructions ==> inst_output_disjoint_amap inst amap) ==>
+    step_in_block fn (transform_block amap bb) s = (Error e, is_term)
+Proof
+  rpt strip_tac >> fs[step_in_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> gvs[AllCaseEqs()] >- (
+    (* NONE case - transform preserves NONE *)
+    disj1_tac >> simp[get_instruction_def, transform_block_def] >>
+    gvs[get_instruction_def, AllCaseEqs()]
+  ) >>
+  (* SOME case *)
+  disj2_tac >> drule_all get_instruction_transform >> strip_tac >>
+  qexists_tac `transform_inst amap x` >> simp[] >>
+  simp[transform_inst_def] >> Cases_on `is_eliminable_assign x` >- (
+    (* Eliminable case - contradiction: if eliminable and in amap, operand is defined,
+       so step_inst can't produce Error. *)
+    simp[] >> fs[is_eliminable_assign_def] >>
+    Cases_on `assign_var_source x` >> gvs[] >>
+    Cases_on `x'` >> gvs[] >>
+    `MEM x bb.bb_instructions` by (fs[get_instruction_def] >> metis_tac[listTheory.MEM_EL]) >>
+    `FLOOKUP amap q = SOME r` by (fs[amap_covers_block_def] >> metis_tac[]) >>
+    fs[amap_operands_defined_def] >>
+    first_x_assum (qspecl_then [`q`, `r`] mp_tac) >> simp[] >> strip_tac >>
+    (* IS_SOME (lookup_var r s) but step_inst would Error only if undefined *)
+    gvs[step_inst_def, assign_var_source_def, eval_operand_def, AllCaseEqs()]
+  ) >>
+  simp[] >> drule_all step_inst_replace_operands >> simp[]
 QED
 
 (* Helper: Block-level correctness for OK result.
@@ -407,11 +498,12 @@ Proof
 QED
 
 (* TOP-LEVEL: Transformed block produces equiv result.
-   Requires all_assigns_equiv, amap_covers_block, and SSA disjointness. *)
+   Requires all_assigns_equiv, amap_covers_block, amap_operands_defined, and SSA disjointness. *)
 Theorem transform_block_result_equiv:
   !fn amap bb s.
     all_assigns_equiv amap s /\
     amap_covers_block amap bb /\
+    amap_operands_defined amap s /\
     (!inst. MEM inst bb.bb_instructions ==> inst_output_disjoint_amap inst amap) ==>
     result_equiv (run_block fn (transform_block amap bb) s) (run_block fn bb s)
 Proof
