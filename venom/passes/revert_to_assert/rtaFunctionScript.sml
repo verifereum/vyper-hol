@@ -15,32 +15,32 @@
  *   - transform_context_functions   : Context transformation structure
  *   - transform_context_entry       : Context entry point preserved
  *
- * REMAINING WORK (cheated):
+ * STRUCTURED WITH CHEATS (depends on rtaBlockTheory cheats):
+ *   - transform_block_run_ok        : Block-level OK result equivalence
+ *   - transform_block_run_halt      : Block-level Halt preservation
+ *   - transform_block_run_revert    : Block-level Revert preservation
+ *   - transform_block_run_error     : Block-level Error preservation
  *   - transform_function_correct    : Function-level correctness
- *   - transform_preserves_halts     : Derived from above
- *   - transform_preserves_reverts   : Derived from above
+ *   - transform_preserves_halts     : Derived from transform_function_correct
+ *   - transform_preserves_reverts   : Derived from transform_function_correct
  *
- * The core semantic correctness is established in rtaBlockTheory by
- * rta_then_block_equiv and rta_else_block_equiv (fully proven for single-
- * instruction blocks, i.e., FRONT bb.bb_instructions = []).
+ * DEPENDENCY CHAIN:
+ *   rtaBlockTheory.rta_then_block_equiv_general (cheated)
+ *   rtaBlockTheory.rta_else_block_equiv_general (cheated)
+ *       |
+ *       v
+ *   transform_block_run_ok/halt/revert/error (structured, inner cheats)
+ *       |
+ *       v
+ *   transform_function_correct (cheated, needs block-level helpers)
+ *       |
+ *       v
+ *   transform_preserves_halts/reverts (derived)
  *
- * To complete transform_function_correct, we need a helper theorem:
- *   transform_block_run_equiv:
- *     !blocks fn bb bb' s next_id next_id'.
- *       transform_block blocks next_id bb = (bb', next_id') ==>
- *       (!s'. run_block fn bb s = OK s' ==>
- *             ?s''. (run_block fn bb' s = OK s'' /\
- *                    s''.vs_current_bb = s'.vs_current_bb) \/
- *                   (run_block fn bb' s = Revert s'')) /\
- *       (!s'. run_block fn bb s = Halt s' ==>
- *             ?s''. run_block fn bb' s = Halt s'') /\
- *       (!s'. run_block fn bb s = Revert s' ==>
- *             ?s''. run_block fn bb' s = Revert s'') /\
- *       (!e. run_block fn bb s = Error e ==>
- *            ?e'. run_block fn bb' s = Error e')
- *
- * This requires extending the block-level theorems to handle prefix
- * instructions (i.e., instructions before the JNZ terminator).
+ * REMAINING WORK:
+ *   1. Complete rta_*_block_equiv_general in rtaBlockTheory (prefix case)
+ *   2. Connect block-level theorems to transform_block_run_* proofs
+ *   3. Complete transform_function_correct using the block helpers
  *
  * ============================================================================
  *)
@@ -110,50 +110,107 @@ QED
    ========================================================================== *)
 
 (* Helper: When transform_block produces bb', run_block on bb and bb' are related.
-   Uses the generalized block equivalence theorems from rtaBlockTheory. *)
+   Uses the generalized block equivalence theorems from rtaBlockTheory.
+
+   PRECONDITIONS:
+     - s.vs_inst_idx = 0 : Required by block-level theorems (start at beginning of block)
+     - ~s.vs_halted      : Required for execution
+
+   PROOF STRUCTURE:
+     Case analysis on transform_block:
+     - No transformation (bb' = bb): trivial, result is identical
+     - Then-rewrite: By rta_then_block_equiv_general
+       - If original jumped to else_lbl (cond=0), transformed also jumps to else_lbl
+       - If original jumped to then_lbl (cond!=0), transformed Reverts
+     - Else-rewrite: By rta_else_block_equiv_general
+       - If original jumped to then_lbl (cond!=0), transformed also jumps to then_lbl
+       - If original jumped to else_lbl (cond=0), transformed Reverts
+
+   DEPENDENCIES: Requires rta_then_block_equiv_general and rta_else_block_equiv_general
+   from rtaBlockTheory (both currently cheated for the prefix instruction case). *)
 Theorem transform_block_run_ok:
   !blocks next_id bb bb' next_id' fn s s'.
     transform_block blocks next_id bb = (bb', next_id') /\
+    s.vs_inst_idx = 0 /\
+    ~s.vs_halted /\
     run_block fn bb s = OK s' ==>
     (?s''. run_block fn bb' s = OK s'' /\ s''.vs_current_bb = s'.vs_current_bb) \/
     (?s''. run_block fn bb' s = Revert s'')
 Proof
-  (* This follows from rta_then_block_equiv_general and rta_else_block_equiv_general.
-     Case analysis on transform_block:
-     - No transformation (bb' = bb): trivial
-     - Then-rewrite: use rta_then_block_equiv_general
-     - Else-rewrite: use rta_else_block_equiv_general *)
-  cheat
+  rpt strip_tac >>
+  fs[transform_block_def] >>
+  gvs[AllCaseEqs()] >| [
+    (* Then-rewrite case: use rta_then_block_equiv_general *)
+    cheat,
+    (* Else-rewrite case: use rta_else_block_equiv_general *)
+    cheat
+  ]
 QED
 
-(* Helper: run_block on transformed block for Halt case *)
+(* Helper: run_block on transformed block for Halt case
+   PROOF: The transformation only changes the terminator. If original Halts,
+   it must be from a STOP instruction in the prefix, which is preserved.
+   Since we don't transform STOP instructions, Halt is preserved. *)
 Theorem transform_block_run_halt:
   !blocks next_id bb bb' next_id' fn s s'.
     transform_block blocks next_id bb = (bb', next_id') /\
+    s.vs_inst_idx = 0 /\
+    ~s.vs_halted /\
     run_block fn bb s = Halt s' ==>
     ?s''. run_block fn bb' s = Halt s''
 Proof
-  cheat (* Requires similar reasoning - terminators preserve Halt *)
+  rpt strip_tac >>
+  fs[transform_block_def] >>
+  gvs[AllCaseEqs()] >| [
+    (* Then-rewrite case *)
+    cheat,
+    (* Else-rewrite case *)
+    cheat
+  ]
 QED
 
-(* Helper: run_block on transformed block for Revert case *)
+(* Helper: run_block on transformed block for Revert case
+   PROOF: If original Reverts, it either came from:
+   1. A REVERT instruction in the prefix - preserved identically
+   2. A failed ASSERT in the prefix - preserved identically
+   The transformation doesn't change prefix instructions, so Revert is preserved. *)
 Theorem transform_block_run_revert:
   !blocks next_id bb bb' next_id' fn s s'.
     transform_block blocks next_id bb = (bb', next_id') /\
+    s.vs_inst_idx = 0 /\
+    ~s.vs_halted /\
     run_block fn bb s = Revert s' ==>
     ?s''. run_block fn bb' s = Revert s''
 Proof
-  cheat (* Requires similar reasoning - prefix instructions preserve Revert *)
+  rpt strip_tac >>
+  fs[transform_block_def] >>
+  gvs[AllCaseEqs()] >| [
+    (* Then-rewrite case *)
+    cheat,
+    (* Else-rewrite case *)
+    cheat
+  ]
 QED
 
-(* Helper: run_block on transformed block for Error case *)
+(* Helper: run_block on transformed block for Error case
+   PROOF: Errors come from invalid operations in prefix instructions.
+   Since prefix is preserved, errors are preserved. *)
 Theorem transform_block_run_error:
   !blocks next_id bb bb' next_id' fn s e.
     transform_block blocks next_id bb = (bb', next_id') /\
+    s.vs_inst_idx = 0 /\
+    ~s.vs_halted /\
     run_block fn bb s = Error e ==>
     ?e'. run_block fn bb' s = Error e'
 Proof
-  cheat (* Errors from prefix preserved, terminator change may affect error *)
+  rpt strip_tac >>
+  fs[transform_block_def] >>
+  gvs[AllCaseEqs()] >| [
+    (* Then-rewrite case *)
+    cheat,
+    (* Else-rewrite case *)
+    cheat
+  ]
 QED
 
 (* ==========================================================================
