@@ -2,6 +2,22 @@
 
 **IMPORTANT: After conversation compaction, ALWAYS read this file (CLAUDE.md or AGENTS.md) and PLAN.md to restore context.**
 
+Always read .claude/settings.json to learn what tool uses are available to you and to give higher precedence to those tools.
+
+## CRITICAL: Tool Usage
+
+**NEVER use bash for file operations.** Use the dedicated tools instead:
+- **Read tool** for ALL file reading (not `cat`, `head`, `tail`, `less`)
+- **Grep tool** for searching file contents (not `grep`, `rg`)
+- **Write/Edit tools** for file modifications (not `echo`, `sed`, `awk`)
+
+Only use Bash for:
+- Running `Holmake` builds
+- Running `~/hol-agents/hol-agent-helper.sh` commands
+- Git operations (`git grep`, `git status`, etc.)
+
+**Why:** Bash file operations require permission prompts. The dedicated tools don't.
+
 ## Project Structure
 
 ```
