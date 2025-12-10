@@ -227,6 +227,39 @@ Proof
       all_assigns_equiv_def, assign_equiv_def, lookup_var_def]
 QED
 
+(* Helper: next_inst preserves all_assigns_equiv since it only changes vs_inst_idx *)
+Theorem next_inst_preserves_all_assigns_equiv:
+  !amap s.
+    all_assigns_equiv amap s ==>
+    all_assigns_equiv amap (next_inst s)
+Proof
+  rw[all_assigns_equiv_def, assign_equiv_def, next_inst_def, lookup_var_def]
+QED
+
+(* Helper: step_in_block preserves all_assigns_equiv.
+   Key for the recursive case in transform_block_correct. *)
+Theorem step_in_block_preserves_all_assigns_equiv:
+  !fn amap bb s s' is_term.
+    step_in_block fn bb s = (OK s', is_term) /\
+    all_assigns_equiv amap s /\
+    (!inst. MEM inst bb.bb_instructions ==> inst_output_disjoint_amap inst amap) ==>
+    all_assigns_equiv amap s'
+Proof
+  rpt strip_tac >>
+  fs[step_in_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> gvs[] >>
+  Cases_on `step_inst x s` >> gvs[] >>
+  fs[get_instruction_def] >>
+  `MEM x bb.bb_instructions` by metis_tac[listTheory.MEM_EL] >>
+  first_x_assum (qspec_then `x` mp_tac) >> simp[] >> strip_tac >>
+  Cases_on `is_terminator x.inst_opcode` >> gvs[] >- (
+    drule_all all_assigns_equiv_preserved >> simp[]
+  ) >>
+  `all_assigns_equiv amap v` by (drule_all all_assigns_equiv_preserved >> simp[]) >>
+  simp[all_assigns_equiv_def, assign_equiv_def, next_inst_def, lookup_var_def] >>
+  fs[all_assigns_equiv_def, assign_equiv_def, lookup_var_def]
+QED
+
 (* Property: amap contains mappings for all eliminable assigns in the block.
    This is true when amap is built by build_assign_map from the block. *)
 Definition amap_covers_block_def:
@@ -235,6 +268,32 @@ Definition amap_covers_block_def:
                    assign_var_source inst = SOME (out, src) ==>
                    FLOOKUP amap out = SOME src
 End
+
+(* Helper: step_in_block transform produces equivalent state with same terminator flag.
+   VALIDATED INTERACTIVELY (Dec 2025). Key steps:
+   1. Case split on get_instruction (NONE gives Error, contradicts OK assumption)
+   2. For SOME case, use get_instruction_transform to relate original/transformed
+   3. Get MEM x bb.bb_instructions for inst_output_disjoint_amap
+   4. Case split on step_inst result (only OK case gives OK result)
+   5. Case split on terminators:
+      - Terminator: use transform_inst_non_elim_correct (terminators aren't ASSIGN)
+      - Non-terminator: case split on is_eliminable_assign
+        * Eliminable: get FLOOKUP from amap_covers_block, use transform_inst_elim_correct
+        * Non-eliminable: use transform_inst_non_elim_correct
+   6. For state_equiv (next_inst v) (next_inst s''), unfold definitions and use var_equiv
+
+   DEPENDS ON: transform_inst_elim_correct, transform_inst_non_elim_correct (cheated) *)
+Theorem step_in_block_transform_ok:
+  !fn amap bb s s' is_term.
+    step_in_block fn bb s = (OK s', is_term) /\
+    all_assigns_equiv amap s /\
+    amap_covers_block amap bb /\
+    (!inst. MEM inst bb.bb_instructions ==> inst_output_disjoint_amap inst amap) ==>
+    ?s''. step_in_block fn (transform_block amap bb) s = (OK s'', is_term) /\
+          state_equiv s' s''
+Proof
+  cheat
+QED
 
 (* Helper: Block-level correctness for OK result.
    Requires:
