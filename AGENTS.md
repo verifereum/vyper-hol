@@ -18,6 +18,14 @@ Only use Bash for:
 
 **Why:** Bash file operations require permission prompts. The dedicated tools don't.
 
+## Completion Standard
+
+If you are working on a proof, your task is NOT complete until:
+- All cheats are removed from the proof
+- The build passes with no CHEAT warnings
+
+**Documenting "what's left to do" is NOT completion.** If you can describe what work remains, then do that work - don't just write it down and stop. Keep working until the proof is actually done or you hit a genuine blocker requiring human input.
+
 ## Project Structure
 
 ```
