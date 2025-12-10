@@ -157,7 +157,7 @@ Proof
   qexists_tac `s'` >> simp[state_equiv_refl] >>
   (* Use step_inst_operand_invariant and replace_operands_correct *)
   irule step_inst_operand_invariant >>
-  simp[replace_operands_def, LENGTH_MAP] >>
+  simp[replace_operands_def, listTheory.LENGTH_MAP] >>
   drule_all replace_operands_correct >>
   disch_then (qspec_then `inst.inst_operands` mp_tac) >>
   simp[replace_operands_def]
