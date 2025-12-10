@@ -421,14 +421,18 @@ Proof
     drule_all transform_block_correct >> strip_tac >>
     simp[] >> irule state_equiv_sym >> simp[]
   ) >- (
-    (* Halt case - similar reasoning but result is Halt not OK *)
+    (* Halt case - requires step_in_block_transform_result for non-OK cases.
+       Key insight: if run_block halts, some step_inst halted. Transform only
+       changes operands, so transformed version should also halt with equiv state.
+       NEEDS: step_in_block_transform_halt lemma showing transformation preserves
+       Halt results with state_equiv. *)
     cheat
   ) >- (
-    (* Revert case - similar reasoning but result is Revert not OK *)
+    (* Revert case - similar to Halt. Needs step_in_block_transform_revert. *)
     cheat
   ) >>
-  (* Error case - if original errors, need to show transformed also errors
-     or produces equivalent error behavior *)
+  (* Error case - if original errors, transformed should also error.
+     NEEDS: step_in_block_transform_error showing errors are preserved. *)
   cheat
 QED
 
