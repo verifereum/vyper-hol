@@ -174,7 +174,17 @@ Proof
 QED
 
 (* Helper: Block-level correctness for OK result.
-   Requires SSA property that all instruction outputs are disjoint from amap. *)
+   Requires SSA property that all instruction outputs are disjoint from amap.
+
+   PROOF STRATEGY (validated interactively):
+   1. Use ho_match_mp_tac run_block_ind with goal restructured as:
+      !fn bb s amap. ... ==> !s'. run_block fn bb s = OK s' ==> ...
+   2. Unfold run_block_def, Cases_on step_in_block, case split on vs_halted/is_term
+   3. Terminator case (r = T): Show step_in_block on transformed block gives equiv result
+   4. Non-terminator case (r = F): Use IH with:
+      - Need all_assigns_equiv amap v (preserved by all_assigns_equiv_preserved)
+      - Need SSA property for bb (carried through)
+   5. Key helper needed: step_in_block_transform_equiv relating original/transformed *)
 Theorem transform_block_correct:
   !fn amap bb s s'.
     run_block fn bb s = OK s' /\
@@ -183,10 +193,6 @@ Theorem transform_block_correct:
     ?s''. run_block fn (transform_block amap bb) s = OK s'' /\
           state_equiv s' s''
 Proof
-  (* Induction on run_block, using:
-     - transform_inst_elim_correct for eliminable assigns
-     - transform_inst_non_elim_correct for other instructions
-     - all_assigns_equiv_preserved to maintain invariant (uses SSA assumption) *)
   cheat
 QED
 
