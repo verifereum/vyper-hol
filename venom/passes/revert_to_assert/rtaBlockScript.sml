@@ -452,6 +452,114 @@ Proof
 QED
 
 (* ==========================================================================
+   Terminator Case Helper Theorems
+
+   These handle the base case when we're already at the terminator position
+   (s.vs_inst_idx = LENGTH (FRONT bb.bb_instructions)).
+   ========================================================================== *)
+
+(* When at terminator position, else branch case:
+   Original JNZ goes to else_lbl (cond=0), transformed block also gives OK else_lbl *)
+Theorem rta_then_terminator_else:
+  !bb fn s s' cond_op then_lbl else_lbl new_var id1 id2 id3.
+    bb.bb_instructions <> [] /\
+    is_jnz_inst (LAST bb.bb_instructions) /\
+    get_jnz_operands (LAST bb.bb_instructions) = SOME (cond_op, then_lbl, else_lbl) /\
+    then_lbl <> else_lbl /\
+    s.vs_inst_idx = LENGTH (FRONT bb.bb_instructions) /\
+    ~s.vs_halted /\
+    run_block fn bb s = OK s' /\
+    s'.vs_current_bb = else_lbl ==>
+    let bb' = bb with bb_instructions :=
+                FRONT bb.bb_instructions ++
+                [mk_iszero_inst id1 cond_op new_var;
+                 mk_assert_inst id2 (Var new_var);
+                 mk_jmp_inst id3 else_lbl] in
+    ?s''. run_block fn bb' s = OK s'' /\ s''.vs_current_bb = else_lbl
+Proof
+  rpt strip_tac >> simp[LET_THM] >>
+  (* Establish get_instruction at terminator *)
+  `s.vs_inst_idx < LENGTH bb.bb_instructions`
+    by (Cases_on `bb.bb_instructions` >> fs[LENGTH_FRONT]) >>
+  `s.vs_inst_idx = PRE (LENGTH bb.bb_instructions)`
+    by (Cases_on `bb.bb_instructions` >> fs[LENGTH_FRONT]) >>
+  `get_instruction bb s.vs_inst_idx = SOME (LAST bb.bb_instructions)`
+    by simp[get_instruction_def, listTheory.LAST_EL] >>
+  (* Unfold run_block on original to extract JNZ execution *)
+  qpat_x_assum `run_block fn bb s = OK s'` mp_tac >>
+  simp[Once run_block_def, step_in_block_def] >>
+  fs[is_jnz_inst_def, get_jnz_operands_def, AllCaseEqs()] >>
+  simp[is_terminator_def] >>
+  strip_tac >> gvs[jump_to_def] >>
+  (* Expand step_inst for JNZ *)
+  qpat_x_assum `step_inst _ s = OK s'` mp_tac >>
+  simp[step_inst_def, AllCaseEqs()] >>
+  strip_tac >> gvs[jump_to_def] >>
+  (* Now execute transformed block: iszero, assert, jmp *)
+  simp[Once run_block_def, step_in_block_def] >>
+  simp[get_instruction_def, EL_APPEND2] >>
+  simp[mk_iszero_inst_def, step_inst_def, exec_unop_def,
+       is_terminator_def, bool_to_word_def] >>
+  simp[update_var_def, next_inst_def] >>
+  simp[Once run_block_def, step_in_block_def] >>
+  simp[get_instruction_def, EL_APPEND2] >>
+  simp[mk_assert_inst_def, step_inst_def, eval_operand_def, lookup_var_def,
+       is_terminator_def, finite_mapTheory.FLOOKUP_UPDATE, next_inst_def] >>
+  simp[Once run_block_def, step_in_block_def] >>
+  simp[get_instruction_def, EL_APPEND2] >>
+  simp[mk_jmp_inst_def, step_inst_def, is_terminator_def, jump_to_def]
+QED
+
+(* When at terminator position, then branch case:
+   Original JNZ goes to then_lbl (cond!=0), transformed block gives Revert *)
+Theorem rta_then_terminator_then:
+  !bb fn s s' cond_op then_lbl else_lbl new_var id1 id2 id3.
+    bb.bb_instructions <> [] /\
+    is_jnz_inst (LAST bb.bb_instructions) /\
+    get_jnz_operands (LAST bb.bb_instructions) = SOME (cond_op, then_lbl, else_lbl) /\
+    then_lbl <> else_lbl /\
+    s.vs_inst_idx = LENGTH (FRONT bb.bb_instructions) /\
+    ~s.vs_halted /\
+    run_block fn bb s = OK s' /\
+    s'.vs_current_bb = then_lbl ==>
+    let bb' = bb with bb_instructions :=
+                FRONT bb.bb_instructions ++
+                [mk_iszero_inst id1 cond_op new_var;
+                 mk_assert_inst id2 (Var new_var);
+                 mk_jmp_inst id3 else_lbl] in
+    ?s''. run_block fn bb' s = Revert s''
+Proof
+  rpt strip_tac >> simp[LET_THM] >>
+  (* Establish get_instruction at terminator *)
+  `s.vs_inst_idx < LENGTH bb.bb_instructions`
+    by (Cases_on `bb.bb_instructions` >> fs[LENGTH_FRONT]) >>
+  `s.vs_inst_idx = PRE (LENGTH bb.bb_instructions)`
+    by (Cases_on `bb.bb_instructions` >> fs[LENGTH_FRONT]) >>
+  `get_instruction bb s.vs_inst_idx = SOME (LAST bb.bb_instructions)`
+    by simp[get_instruction_def, listTheory.LAST_EL] >>
+  (* Unfold run_block on original to extract JNZ execution *)
+  qpat_x_assum `run_block fn bb s = OK s'` mp_tac >>
+  simp[Once run_block_def, step_in_block_def] >>
+  fs[is_jnz_inst_def, get_jnz_operands_def, AllCaseEqs()] >>
+  simp[is_terminator_def] >>
+  strip_tac >> gvs[jump_to_def] >>
+  (* Expand step_inst for JNZ *)
+  qpat_x_assum `step_inst _ s = OK s'` mp_tac >>
+  simp[step_inst_def, AllCaseEqs()] >>
+  strip_tac >> gvs[jump_to_def] >>
+  (* Now execute transformed block: iszero gives 0 since cond <> 0, assert(0) reverts *)
+  simp[Once run_block_def, step_in_block_def] >>
+  simp[get_instruction_def, EL_APPEND2] >>
+  simp[mk_iszero_inst_def, step_inst_def, exec_unop_def,
+       is_terminator_def, bool_to_word_def] >>
+  simp[update_var_def, next_inst_def] >>
+  simp[Once run_block_def, step_in_block_def] >>
+  simp[get_instruction_def, EL_APPEND2] >>
+  simp[mk_assert_inst_def, step_inst_def, eval_operand_def, lookup_var_def,
+       is_terminator_def, finite_mapTheory.FLOOKUP_UPDATE, revert_state_def]
+QED
+
+(* ==========================================================================
    Generalized Block Transformation Theorems
 
    These extend rta_then_block_equiv and rta_else_block_equiv to handle
@@ -481,7 +589,10 @@ Theorem rta_then_block_equiv_general:
     get_terminator bb = SOME term /\
     is_jnz_inst term /\
     get_jnz_operands term = SOME (cond_op, then_lbl, else_lbl) /\
+    then_lbl <> else_lbl /\
     rewrite_jnz_then_revert bb new_var id1 id2 id3 = SOME bb' /\
+    s.vs_inst_idx = 0 /\
+    ~s.vs_halted /\
     run_block fn bb s = OK s' ==>
     (* If original jumped to else (cond=0), transformed also jumps to else *)
     (* If original jumped to then (cond!=0), transformed Reverts *)
@@ -508,7 +619,10 @@ Theorem rta_else_block_equiv_general:
     get_terminator bb = SOME term /\
     is_jnz_inst term /\
     get_jnz_operands term = SOME (cond_op, then_lbl, else_lbl) /\
+    then_lbl <> else_lbl /\
     rewrite_jnz_else_revert bb id1 id2 = SOME bb' /\
+    s.vs_inst_idx = 0 /\
+    ~s.vs_halted /\
     run_block fn bb s = OK s' ==>
     (* If original jumped to then (cond!=0), transformed also jumps to then *)
     (* If original jumped to else (cond=0), transformed Reverts *)
