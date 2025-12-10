@@ -105,7 +105,9 @@ Theorem rta_then_produces_assert:
                    mk_assert_inst id2 (Var new_var);
                    mk_jmp_inst id3 else_lbl]
 Proof
-  cheat
+  rw[rta_then_applicable_def, rewrite_jnz_then_revert_def] >>
+  gvs[AllCaseEqs()] >>
+  qexistsl_tac [`cond_op`, `else_lbl`] >> simp[]
 QED
 
 (* If rta_else_applicable, the transform produces a block with assert + jmp *)
@@ -118,5 +120,7 @@ Theorem rta_else_produces_assert:
         prefix ++ [mk_assert_inst id1 cond_op;
                    mk_jmp_inst id2 then_lbl]
 Proof
-  cheat
+  rw[rta_else_applicable_def, rewrite_jnz_else_revert_def] >>
+  gvs[AllCaseEqs()] >>
+  qexistsl_tac [`cond_op`, `then_lbl`] >> simp[]
 QED

@@ -27,7 +27,9 @@
 
 Theory rtaBlock
 Ancestors
-  rtaWellFormed venomSem venomState
+  rtaWellFormed venomSem venomState venomInst rtaTransform
+Libs
+  finite_mapTheory rich_listTheory
 
 (* ==========================================================================
    ASSERT Semantics
@@ -178,39 +180,87 @@ QED
    - cond == 0 -> t = 1 -> assert 1 -> OK -> jmp @else
 *)
 
-(* The key semantic equivalence for then-branch revert case *)
-Theorem jnz_then_revert_semantic_equiv:
-  !cond_var s v then_lbl else_lbl new_var.
+(* Helper: Run transformed then-branch block starting from inst_idx = 0.
+   The block has just the 3 transformed instructions: iszero, assert, jmp *)
+Theorem run_then_transform_block:
+  !bb cond_var v else_lbl new_var id1 id2 id3 s.
     lookup_var cond_var s = SOME v /\
-    ~MEM new_var (MAP FST (fmap_to_alist s.vs_vars)) ==>
-    (* Original: jnz to revert, then revert executes *)
-    (* Transformed: iszero; assert; jmp *)
-    (* Both produce same observable result *)
-    (v <> 0w ==>
-       (* Original path leads to Revert *)
-       (* Transformed: iszero gives 0, assert 0 gives Revert *)
-       T) /\
-    (v = 0w ==>
-       (* Original: jump to else *)
-       (* Transformed: iszero gives 1, assert 1 passes, jmp else *)
-       T)
+    ~s.vs_halted /\
+    s.vs_inst_idx = 0 ==>
+    let bb' = <| bb_label := bb.bb_label;
+                 bb_instructions :=
+                   [mk_iszero_inst id1 (Var cond_var) new_var;
+                    mk_assert_inst id2 (Var new_var);
+                    mk_jmp_inst id3 else_lbl] |> in
+    (v <> 0w ==> ?s'. run_block ARB bb' s = Revert s') /\
+    (v = 0w ==> ?s'. run_block ARB bb' s = OK s' /\ s'.vs_current_bb = else_lbl)
 Proof
-  rw[]
+  rw[LET_THM] >| [
+    (* Case v != 0: iszero produces 0, assert 0 reverts *)
+    simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+    simp[mk_iszero_inst_def, mk_assert_inst_def, mk_jmp_inst_def,
+         step_inst_def, exec_unop_def, eval_operand_def,
+         is_terminator_def, bool_to_word_def] >>
+    simp[update_var_def, next_inst_def] >>
+    simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+    simp[step_inst_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE],
+    (* Case v = 0: iszero produces 1, assert 1 passes, jmp else *)
+    simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+    simp[mk_iszero_inst_def, mk_assert_inst_def, mk_jmp_inst_def,
+         step_inst_def, exec_unop_def, eval_operand_def,
+         is_terminator_def, bool_to_word_def] >>
+    simp[update_var_def, next_inst_def] >>
+    simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+    simp[step_inst_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
+         is_terminator_def, update_var_def, next_inst_def] >>
+    simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+    simp[step_inst_def, is_terminator_def, jump_to_def]
+  ]
 QED
 
-(* Full block equivalence - CHEATED for now *)
+(* Full block equivalence for then-branch case *)
 Theorem rta_then_block_equiv:
   !blocks bb bb' s new_var id1 id2 id3 cond_var v then_lbl else_lbl.
     rta_then_applicable blocks bb /\
     rewrite_jnz_then_revert bb new_var id1 id2 id3 = SOME bb' /\
     get_jnz_operands (THE (get_terminator bb)) = SOME (Var cond_var, then_lbl, else_lbl) /\
-    lookup_var cond_var s = SOME v ==>
-    (* Running original block followed by revert block gives same result
-       as running transformed block *)
+    lookup_var cond_var s = SOME v /\
+    ~s.vs_halted /\
+    s.vs_inst_idx = 0 ==>
+    (* Running transformed block produces expected result *)
     (v <> 0w ==> ?s'. run_block ARB bb' s = Revert s') /\
     (v = 0w ==> ?s'. run_block ARB bb' s = OK s' /\ s'.vs_current_bb = else_lbl)
 Proof
-  cheat
+  cheat (* TODO: connect to run_then_transform_block via block structure *)
+QED
+
+(* Helper: Run transformed else-branch block starting from inst_idx = 0.
+   The block has just the 2 transformed instructions: assert, jmp *)
+Theorem run_else_transform_block:
+  !bb cond_var v then_lbl id1 id2 s.
+    lookup_var cond_var s = SOME v /\
+    ~s.vs_halted /\
+    s.vs_inst_idx = 0 ==>
+    let bb' = <| bb_label := bb.bb_label;
+                 bb_instructions :=
+                   [mk_assert_inst id1 (Var cond_var);
+                    mk_jmp_inst id2 then_lbl] |> in
+    (v = 0w ==> ?s'. run_block ARB bb' s = Revert s') /\
+    (v <> 0w ==> ?s'. run_block ARB bb' s = OK s' /\ s'.vs_current_bb = then_lbl)
+Proof
+  rw[LET_THM] >| [
+    (* Case v = 0: assert 0 reverts *)
+    simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+    simp[mk_assert_inst_def, mk_jmp_inst_def,
+         step_inst_def, eval_operand_def, is_terminator_def],
+    (* Case v != 0: assert passes, jmp then *)
+    simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+    simp[mk_assert_inst_def, mk_jmp_inst_def,
+         step_inst_def, eval_operand_def, is_terminator_def,
+         update_var_def, next_inst_def] >>
+    simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+    simp[step_inst_def, is_terminator_def, jump_to_def]
+  ]
 QED
 
 (* Full block equivalence for else-branch case *)
@@ -219,11 +269,12 @@ Theorem rta_else_block_equiv:
     rta_else_applicable blocks bb /\
     rewrite_jnz_else_revert bb id1 id2 = SOME bb' /\
     get_jnz_operands (THE (get_terminator bb)) = SOME (Var cond_var, then_lbl, else_lbl) /\
-    lookup_var cond_var s = SOME v ==>
-    (* Running original block with else going to revert gives same result
-       as running transformed block *)
+    lookup_var cond_var s = SOME v /\
+    ~s.vs_halted /\
+    s.vs_inst_idx = 0 ==>
+    (* Running transformed block produces expected result *)
     (v = 0w ==> ?s'. run_block ARB bb' s = Revert s') /\
     (v <> 0w ==> ?s'. run_block ARB bb' s = OK s' /\ s'.vs_current_bb = then_lbl)
 Proof
-  cheat
+  cheat (* TODO: connect to run_else_transform_block via block structure *)
 QED

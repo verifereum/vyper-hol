@@ -20,7 +20,7 @@
 
 Theory rtaFunction
 Ancestors
-  rtaBlock rtaTransform
+  rtaBlock rtaTransform venomInst
 
 (* ==========================================================================
    Helper Lemmas
@@ -32,7 +32,10 @@ Theorem transform_blocks_length:
     transform_blocks blocks next_id bbs = (bbs', next_id') ==>
     LENGTH bbs' = LENGTH bbs
 Proof
-  cheat
+  Induct_on `bbs` >> rw[transform_blocks_def] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  first_x_assum irule >> simp[] >>
+  qexistsl_tac [`blocks`, `next_id''`, `next_id'`] >> simp[]
 QED
 
 (* Transform preserves block labels *)
@@ -41,7 +44,11 @@ Theorem transform_blocks_labels:
     transform_blocks blocks next_id bbs = (bbs', next_id') ==>
     MAP (\bb. bb.bb_label) bbs' = MAP (\bb. bb.bb_label) bbs
 Proof
-  cheat
+  Induct_on `bbs` >> rw[transform_blocks_def] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  imp_res_tac transform_block_label >> simp[] >>
+  first_x_assum irule >> simp[] >>
+  qexistsl_tac [`blocks`, `next_id''`, `next_id'`] >> simp[]
 QED
 
 (* Lookup in transformed blocks *)
@@ -50,7 +57,12 @@ Theorem lookup_block_transform_blocks:
     transform_blocks blocks next_id bbs = (bbs', next_id') ==>
     (lookup_block lbl bbs' = NONE <=> lookup_block lbl bbs = NONE)
 Proof
-  cheat
+  Induct_on `bbs` >> rw[transform_blocks_def, lookup_block_def] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  simp[lookup_block_def] >>
+  imp_res_tac transform_block_label >> gvs[] >>
+  first_x_assum (qspecl_then [`blocks`, `next_id''`, `bbs''`, `next_id'`, `lbl`] mp_tac) >>
+  simp[]
 QED
 
 (* ==========================================================================
