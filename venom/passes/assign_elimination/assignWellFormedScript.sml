@@ -12,10 +12,11 @@
  * TOP-LEVEL DEFINITIONS:
  *   - assign_equiv            : Output and source variables have same value
  *   - all_assigns_equiv       : All eliminable ASSIGNs satisfy assign_equiv
- *   - ssa_form                : SSA form - each variable defined at most once
+ *   - inst_output_disjoint_amap: SSA property - outputs not in amap
  *
  * TOP-LEVEL THEOREMS:
  *   - replace_var_correct     : Replaced variable has same value as original
+ *   - update_var_preserves_all_assigns_equiv: Key lemma for preservation
  *
  * ============================================================================
  *)
@@ -110,6 +111,35 @@ Proof
   rw[step_inst_def, assign_equiv_def, update_var_def, lookup_var_def] >>
   gvs[AllCaseEqs(), eval_operand_def, lookup_var_def] >>
   simp[FLOOKUP_UPDATE]
+QED
+
+(* ==========================================================================
+   SSA Disjointness for Preservation
+   ========================================================================== *)
+
+(* SSA property: instruction outputs don't overlap with amap domain or range.
+   This is the key SSA property that ensures all_assigns_equiv is preserved. *)
+Definition inst_output_disjoint_amap_def:
+  inst_output_disjoint_amap inst amap <=>
+    !out. MEM out inst.inst_outputs ==>
+          out NOTIN FDOM amap /\
+          (!src. FLOOKUP amap src <> SOME out)
+End
+
+(* Helper: update_var preserves all_assigns_equiv if var not in amap *)
+Theorem update_var_preserves_all_assigns_equiv:
+  !amap v val s.
+    all_assigns_equiv amap s /\
+    v NOTIN FDOM amap /\
+    (!src. FLOOKUP amap src <> SOME v) ==>
+    all_assigns_equiv amap (update_var v val s)
+Proof
+  rw[all_assigns_equiv_def] >>
+  rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  fs[assign_equiv_def, update_var_def, lookup_var_def] >>
+  simp[FLOOKUP_UPDATE] >>
+  rpt CASE_TAC >> gvs[FLOOKUP_DEF]
 QED
 
 (* ==========================================================================
