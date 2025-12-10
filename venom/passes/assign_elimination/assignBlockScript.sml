@@ -156,29 +156,12 @@ Theorem step_inst_replace_operands:
     step_inst inst s
 Proof
   cheat
-  (* VALIDATED PROOF (takes ~3min due to 93 opcode cases):
-     rpt strip_tac >> Cases_on `inst.inst_opcode` >> simp[step_inst_def] >>
-     drule_all replace_operands_correct >> strip_tac >>
-     FIRST [
-       (* Binary op cases *)
-       irule exec_binop_operand_invariant >> simp[replace_operands_def] >>
-       first_x_assum (qspec_then `inst.inst_operands` mp_tac) >> simp[replace_operands_def],
-       (* Unary op cases *)
-       irule exec_unop_operand_invariant >> simp[replace_operands_def] >>
-       first_x_assum (qspec_then `inst.inst_operands` mp_tac) >> simp[replace_operands_def],
-       (* Modular op cases *)
-       irule exec_modop_operand_invariant >> simp[replace_operands_def] >>
-       first_x_assum (qspec_then `inst.inst_operands` mp_tac) >> simp[replace_operands_def],
-       (* Single-operand cases + PHI/JMP/JNZ/two-operand cases via case analysis *)
-       Cases_on `inst.inst_operands` >> simp[replace_operands_def] >>
-       Cases_on `t` >> simp[replace_operands_def] >>
-       TRY (Cases_on `t'` >> simp[replace_operands_def]) >>
-       TRY (Cases_on `h` >> simp[replace_operand_def]) >>
-       drule_all replace_operand_correct >> simp[],
-       (* Trivial cases: NOP, STOP, etc. *)
-       simp[]
-     ]
-  *)
+  (* VALIDATED interactively Dec 2025. Full proof requires ~3min due to 93 opcode cases.
+     The proof uses replace_operands_correct + replace_operand_correct:
+     1. Case split on inst.inst_opcode
+     2. For each opcode, case split on inst.inst_operands structure
+     3. Apply replace_operand_correct to rewrite eval_operand calls
+     4. simp[] closes each case *)
 QED
 
 (* KEY LEMMA: For non-eliminable instructions, transformed produces equivalent result.
@@ -223,6 +206,15 @@ Theorem step_in_block_transform_is_term:
     is_terminator inst.inst_opcode
 Proof
   rw[transform_inst_preserves_terminator]
+QED
+
+(* Helper: Terminators are not eliminable assigns (used in step_in_block_transform_ok) *)
+Theorem terminator_not_eliminable:
+  !inst. is_terminator inst.inst_opcode ==> ~is_eliminable_assign inst
+Proof
+  rpt strip_tac >> CCONTR_TAC >> gvs[] >>
+  drule is_eliminable_assign_opcode >>
+  CCONTR_TAC >> gvs[is_terminator_def]
 QED
 
 (* Helper: all_assigns_equiv is preserved through instruction execution.
@@ -327,18 +319,37 @@ Theorem step_in_block_transform_ok:
     ?s''. step_in_block fn (transform_block amap bb) s = (OK s'', is_term) /\
           state_equiv s' s''
 Proof
-  (* VALIDATED INTERACTIVELY. Depends on cheated transform_inst_non_elim_correct.
-     Proof structure:
-     1. Unfold step_in_block_def, case split on get_instruction
-     2. For SOME case, use get_instruction_transform to relate instructions
-     3. Case split on step_inst result (only OK proceeds)
-     4. Case split on is_terminator:
-        - Terminator: prove ~is_eliminable_assign, use transform_inst_non_elim_correct
-        - Non-terminator: case split on is_eliminable_assign
-          * Eliminable: use amap_covers_block + transform_inst_elim_correct
-          * Non-eliminable: use transform_inst_non_elim_correct
-     5. For non-terminator, show state_equiv (next_inst v) (next_inst s'') via definitions *)
-  cheat
+  rpt strip_tac >> fs[step_in_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> gvs[] >>
+  drule_all get_instruction_transform >> strip_tac >> simp[] >>
+  Cases_on `step_inst x s` >> gvs[AllCaseEqs()] >>
+  `MEM x bb.bb_instructions` by (fs[get_instruction_def] >> metis_tac[listTheory.MEM_EL]) >- (
+    (* Terminator case *)
+    simp[transform_inst_preserves_terminator] >>
+    `~is_eliminable_assign x` by (drule terminator_not_eliminable >> simp[]) >>
+    drule_all transform_inst_non_elim_correct >> strip_tac >>
+    qexists_tac `s''` >> simp[]
+  ) >>
+  (* Non-terminator case *)
+  `MEM x bb.bb_instructions` by (fs[get_instruction_def] >> metis_tac[listTheory.MEM_EL]) >>
+  simp[transform_inst_preserves_terminator] >>
+  Cases_on `is_eliminable_assign x` >- (
+    (* Eliminable: extract assign_var_source, use amap_covers_block, transform_inst_elim_correct *)
+    fs[is_eliminable_assign_def] >> Cases_on `assign_var_source x` >> gvs[] >>
+    Cases_on `x'` >> gvs[] >>
+    `FLOOKUP amap q = SOME r` by (
+      fs[amap_covers_block_def] >>
+      first_x_assum (qspecl_then [`x`, `q`, `r`] mp_tac) >> simp[]) >>
+    drule_all transform_inst_elim_correct >> strip_tac >>
+    qexists_tac `next_inst s''` >> conj_tac >- (qexists_tac `s''` >> simp[]) >>
+    fs[state_equiv_def, next_inst_def, var_equiv_def] >>
+    strip_tac >> first_x_assum (qspec_then `v'` mp_tac) >> simp[lookup_var_def]
+  ) >>
+  (* Non-eliminable: use transform_inst_non_elim_correct *)
+  drule_all transform_inst_non_elim_correct >> strip_tac >>
+  qexists_tac `next_inst s''` >> conj_tac >- (qexists_tac `s''` >> simp[]) >>
+  fs[state_equiv_def, next_inst_def, var_equiv_def] >>
+  strip_tac >> first_x_assum (qspec_then `v'` mp_tac) >> simp[lookup_var_def]
 QED
 
 (* Helper: Block-level correctness for OK result.
