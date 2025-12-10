@@ -1,14 +1,12 @@
 # Agent Guide for Venom HOL4 Verification
 
-**IMPORTANT: After conversation compaction, ALWAYS read this file (CLAUDE.md or AGENTS.md) and PLAN.md to restore context.**
-
-Always read .claude/settings.json to learn what tool uses are available to you and to give higher precedence to those tools.
+**IMPORTANT: After conversation compaction, ALWAYS read this file (CLAUDE.md or AGENTS.md) and PLAN.md to restore context, then IMMEDIATELY continue working. Do not summarize or wait for input.**
 
 ## CRITICAL: Tool Usage
 
 **NEVER use bash for file operations.** Use the dedicated tools instead:
 - **Read tool** for ALL file reading (not `cat`, `head`, `tail`, `less`)
-- **Grep tool** for searching file contents (not `grep`, `rg`)
+- **Grep tool** for searching file contents (not `grep`, `rg`, or `Search` with paths)
 - **Write/Edit tools** for file modifications (not `echo`, `sed`, `awk`)
 
 Only use Bash for:
@@ -17,6 +15,10 @@ Only use Bash for:
 - Git operations (`git grep`, `git status`, etc.)
 
 **Why:** Bash file operations require permission prompts. The dedicated tools don't.
+
+**IMPORTANT:** Check `.claude/settings.local.json` for allowed Bash patterns. Strongly prefer using those exact patterns - they won't require permission prompts. Only deviate if you absolutely cannot accomplish the task with the allowed patterns.
+
+**Don't prepend commands:** If you chain commands with `&&`, the permission is matched against the first command. Don't prepend `cd`, `touch`, `export`, etc. before allowed commands - it breaks permission matching.
 
 ## Completion Standard
 
