@@ -204,7 +204,11 @@ QED
    6. For control (JMP, JNZ): Only modify control state, not vs_vars
    7. For unimplemented: step_inst returns Error, so antecedent is false
 
-   The proof works but requires handling ~93 cases individually. *)
+   The proof works but requires handling ~93 cases individually.
+   Key tactics:
+   - arith_tac: For exec_binop/exec_unop/exec_modop ops that use update_var
+   - simp[sstore_def, tstore_def, mstore_def, jump_to_def]: For ops that don't modify vs_vars
+   - update_var_preserves_all_assigns_equiv: For load ops that use update_var *)
 Theorem all_assigns_equiv_preserved:
   !amap inst s s'.
     all_assigns_equiv amap s /\
@@ -212,21 +216,35 @@ Theorem all_assigns_equiv_preserved:
     inst_output_disjoint_amap inst amap ==>
     all_assigns_equiv amap s'
 Proof
-  cheat
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[step_inst_def] >>
+  (* Handle update_var cases first (before unfolding all_assigns_equiv) *)
+  TRY (gvs[AllCaseEqs(), exec_binop_def, exec_unop_def, exec_modop_def] >>
+       irule update_var_preserves_all_assigns_equiv >>
+       fs[inst_output_disjoint_amap_def]) >>
+  (* Handle cases that don't modify vs_vars *)
+  gvs[AllCaseEqs(), mstore_def, sstore_def, tstore_def, jump_to_def,
+      all_assigns_equiv_def, assign_equiv_def, lookup_var_def]
 QED
 
 (* Helper: Block-level correctness for OK result.
    Requires SSA property that all instruction outputs are disjoint from amap.
 
-   PROOF STRATEGY (validated interactively):
-   1. Use ho_match_mp_tac run_block_ind with goal restructured as:
-      !fn bb s amap. ... ==> !s'. run_block fn bb s = OK s' ==> ...
-   2. Unfold run_block_def, Cases_on step_in_block, case split on vs_halted/is_term
-   3. Terminator case (r = T): Show step_in_block on transformed block gives equiv result
-   4. Non-terminator case (r = F): Use IH with:
-      - Need all_assigns_equiv amap v (preserved by all_assigns_equiv_preserved)
-      - Need SSA property for bb (carried through)
-   5. Key helper needed: step_in_block_transform_equiv relating original/transformed *)
+   PROOF STRATEGY (validated interactively Dec 2025):
+   1. rpt gen_tac >> strip_tac (move assumptions to context)
+   2. qpat_x_assum 'run_block _ _ _ = OK _' mp_tac >> simp[Once run_block_def]
+   3. Cases_on 'step_in_block fn bb s' >> Cases_on 'q' >> strip_tac >> gvs[AllCaseEqs()]
+   4. This gives 2 subgoals:
+      - Terminator (is_term = T): step_in_block fn bb s = (OK s', T)
+      - Non-terminator (is_term = F): step_in_block fn bb s = (OK v, F) with
+        run_block fn bb v = OK s' (recursive)
+   5. Both cases need a helper: step_in_block_transform_equiv showing transformed
+      step_in_block gives equiv result
+   6. Non-terminator case also needs:
+      - all_assigns_equiv amap v (from all_assigns_equiv_preserved)
+      - IH application for recursive call
+
+   DEPENDS ON: transform_inst_non_elim_correct (currently cheated) *)
 Theorem transform_block_correct:
   !fn amap bb s s'.
     run_block fn bb s = OK s' /\
