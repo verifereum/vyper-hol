@@ -6,24 +6,19 @@
  *
  * Key insight: jnz (iszero x), A, B === jnz x, B, A
  *
- * This means:
- * - If x = 0, then iszero x = 1 (nonzero), so we go to A. With swapped targets, x = 0 so we go to A.
- * - If x <> 0, then iszero x = 0, so we go to B. With swapped targets, x <> 0 so we go to B.
+ * JNZ semantics: jnz cond, label_if_nonzero, label_if_zero
+ *   - If cond <> 0, go to label_if_nonzero
+ *   - If cond = 0, go to label_if_zero
  *
- * Wait, that's wrong. Let me reconsider:
- * - jnz cond, label_if_nonzero, label_if_zero
- * - If cond <> 0, go to label_if_nonzero
- * - If cond = 0, go to label_if_zero
+ * For jnz (iszero x), A, B:
+ *   - If iszero x <> 0 (i.e., x = 0), go to A
+ *   - If iszero x = 0 (i.e., x <> 0), go to B
  *
- * So jnz (iszero x), A, B:
- * - If iszero x <> 0 (i.e., x = 0), go to A
- * - If iszero x = 0 (i.e., x <> 0), go to B
+ * For jnz x, B, A:
+ *   - If x <> 0, go to B
+ *   - If x = 0, go to A
  *
- * And jnz x, B, A:
- * - If x <> 0, go to B
- * - If x = 0, go to A
- *
- * These are equivalent! QED.
+ * These are equivalent.
  *
  * ============================================================================
  * STRUCTURE OVERVIEW
@@ -224,16 +219,34 @@ Theorem transform_block_execution_equiv:
     | _ => T
 Proof
   rw[] >>
-  (* Unfold all step_inst and related definitions *)
-  simp[step_inst_def, exec_unop_def, eval_operand_def,
-       swap_jnz_operands_def, replace_jnz_cond_def,
-       bool_to_word_def, jump_to_def] >>
-  (* Simplify lookup_var with update_var and next_inst *)
-  simp[lookup_var_def, update_var_def, next_inst_def, FLOOKUP_UPDATE] >>
-  (* Use the hypothesis about lookup_var in_var s *)
-  full_simp_tac std_ss [lookup_var_def] >>
-  (* Case split on v = 0w to show both paths lead to same target *)
-  Cases_on `v = 0w` >> simp[bool_to_word_def]
+  (* Abbreviate the instruction expressions for clarity *)
+  qabbrev_tac `iz = EL (LENGTH bb.bb_instructions - 2) bb.bb_instructions` >>
+  qabbrev_tac `jz = EL (LENGTH bb.bb_instructions - 1) bb.bb_instructions` >>
+  (* Step ISZERO using Once to avoid unfolding the huge case *)
+  `step_inst iz s = OK (update_var out_var (bool_to_word (v = 0w)) s)` by
+    simp[Once step_inst_def, eval_operand_def, exec_unop_def, Abbr`iz`] >>
+  (* Step NOP *)
+  `step_inst (iz with inst_opcode := NOP) s = OK s` by
+    simp[Once step_inst_def, Abbr`iz`] >>
+  (* Step original JNZ *)
+  `step_inst jz (next_inst (update_var out_var (bool_to_word (v = 0w)) s)) =
+   if bool_to_word (v = 0w) <> 0w then
+     OK (jump_to lbl1 (next_inst (update_var out_var (bool_to_word (v = 0w)) s)))
+   else
+     OK (jump_to lbl2 (next_inst (update_var out_var (bool_to_word (v = 0w)) s)))` by
+    simp[Once step_inst_def, eval_operand_def, Abbr`jz`,
+         next_inst_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  (* Unfold swap/replace, then prove swapped JNZ step *)
+  simp[swap_jnz_operands_def, replace_jnz_cond_def] >>
+  sg `step_inst (jz with inst_operands := [Var in_var; Label lbl2; Label lbl1])
+             (next_inst s) =
+   if v <> 0w then OK (jump_to lbl2 (next_inst s))
+   else OK (jump_to lbl1 (next_inst s))` >-
+    (simp[Once step_inst_def, eval_operand_def, Abbr`jz`,
+          next_inst_def, lookup_var_def] >> fs[lookup_var_def]) >>
+  (* Simplify using bool_to_word_def and case split to finish *)
+  simp[bool_to_word_def] >>
+  Cases_on `v = 0w` >> simp[bool_to_word_def, jump_to_def]
 QED
 
 val _ = export_theory();
