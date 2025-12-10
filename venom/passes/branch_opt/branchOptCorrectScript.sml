@@ -34,7 +34,7 @@
 
 Theory branchOptCorrect
 Ancestors
-  branchOptTransform venomSem venomState venomInst list finite_map
+  branchOptTransform venomSem venomState venomInst list rich_list finite_map
 
 (* ==========================================================================
    Fundamental Semantic Equivalence
@@ -154,6 +154,19 @@ Proof
   rw[step_inst_def]
 QED
 
+(* Non-terminators preserve vs_current_bb *)
+Theorem step_inst_preserves_current_bb:
+  !inst s s'.
+    step_inst inst s = OK s' /\ ~is_terminator inst.inst_opcode ==>
+    s'.vs_current_bb = s.vs_current_bb
+Proof
+  rw[step_inst_def] >>
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  fs[exec_binop_def, exec_unop_def, exec_modop_def, mstore_def, sstore_def,
+     tstore_def, AllCaseEqs(), update_var_def] >>
+  gvs[]
+QED
+
 (* ==========================================================================
    Block Transformation Correctness
 
@@ -249,4 +262,79 @@ Proof
   Cases_on `v = 0w` >> simp[bool_to_word_def, jump_to_def]
 QED
 
-val _ = export_theory();
+(* ==========================================================================
+   Prefix Preservation Lemma
+
+   The transformation only changes the last two instructions.
+   ========================================================================== *)
+
+Theorem get_instruction_transform_prefix:
+  !bb idx.
+    idx < LENGTH bb.bb_instructions - 2 ==>
+    get_instruction (transform_block bb) idx = get_instruction bb idx
+Proof
+  rw[get_instruction_def, transform_block_def] >>
+  rpt CASE_TAC >> gvs[] >>
+  simp[EL_APPEND1, LENGTH_TAKE, EL_TAKE]
+QED
+
+(* ==========================================================================
+   Top-Level Correctness Theorem
+
+   Running a block and running the transformed block produce the same target.
+
+   Proof outline:
+   1. For instructions before the ISZERO (idx < n-2), both blocks execute
+      identically via get_instruction_transform_prefix
+   2. At the ISZERO position: original executes ISZERO, transformed executes NOP
+   3. At the JNZ position: transform_block_execution_equiv shows both produce
+      the same vs_current_bb via the semantic equivalence of iszero+jnz vs
+      direct jnz with swapped targets
+   ========================================================================== *)
+
+(* Trivial case: when transformation doesn't apply *)
+Theorem transform_block_correct_unchanged:
+  !fn bb s s1 s2.
+    transform_block bb = bb /\
+    run_block fn bb s = OK s1 /\
+    run_block fn (transform_block bb) s = OK s2
+  ==>
+    s1.vs_current_bb = s2.vs_current_bb
+Proof
+  rw[] >> gvs[]
+QED
+
+(* General correctness: the transformed block produces the same branch target.
+   When the pattern doesn't match, transform_block bb = bb and this is trivial.
+   When the pattern matches, the ISZERO+JNZ is replaced by NOP+swapped_JNZ,
+   which produces the same vs_current_bb by iszero_jnz_swap_equiv.
+
+   Full proof requires block simulation infrastructure to track execution
+   through the prefix and apply transform_block_execution_equiv at the end. *)
+Theorem transform_block_correct:
+  !fn bb s s1 s2.
+    run_block fn bb s = OK s1 /\
+    run_block fn (transform_block bb) s = OK s2
+  ==>
+    s1.vs_current_bb = s2.vs_current_bb
+Proof
+  rpt strip_tac >>
+  Cases_on `transform_block bb = bb` >- gvs[] >>
+  (* Non-trivial case: transformation applied.
+     By transform_block_def, we know:
+     - bb has >= 2 instructions
+     - Second-to-last is ISZERO with single operand and output
+     - Last is JNZ using that output
+
+     The proof requires showing that executing:
+       prefix ++ [ISZERO] ++ [JNZ var lbl1 lbl2]
+     produces the same vs_current_bb as:
+       prefix ++ [NOP] ++ [JNZ orig_cond lbl2 lbl1]
+
+     This follows from:
+     1. Prefix execution is identical (same instructions from same state)
+     2. iszero_jnz_swap_equiv shows the last two instructions produce same target
+
+     Full infrastructure for this simulation argument is TODO. *)
+  cheat
+QED

@@ -145,5 +145,3 @@ Proof
   rpt strip_tac >>
   Cases_on `h.bb_label = lbl` >> simp[lookup_block_def, transform_block_label]
 QED
-
-val _ = export_theory();
