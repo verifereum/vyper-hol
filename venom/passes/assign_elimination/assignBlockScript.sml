@@ -76,7 +76,20 @@ QED
 
 (* Helper: step_inst only depends on operand evaluation values.
    This is the key semantic property - replacing operands that evaluate to the same values
-   gives the same step_inst result. Requires same length to ensure pattern matching works. *)
+   gives the same step_inst result. Requires same length to ensure pattern matching works.
+
+   NOTE: This proof requires case analysis on all opcodes (~93 cases). The main insight is:
+   - For exec_binop/exec_unop/exec_modop cases, the result depends only on eval_operand results
+   - The eval_operands equality gives us that individual eval_operand calls return the same
+     values WHEN the overall result is SOME (if NONE, the error case is triggered anyway)
+   - For terminators (JMP, JNZ, etc.), operands don't affect state equivalence
+   - For ASSIGN/PHI, similar reasoning applies
+
+   The detailed proof would need helper lemmas:
+   - exec_binop_operand_invariant (proved interactively)
+   - exec_unop_operand_invariant (proved interactively)
+   - exec_modop_operand_invariant (proved interactively)
+   Then case split on opcode and apply the appropriate helper. *)
 Theorem step_inst_operand_invariant:
   !inst ops' s r.
     step_inst inst s = r /\
@@ -84,12 +97,6 @@ Theorem step_inst_operand_invariant:
     eval_operands ops' s = eval_operands inst.inst_operands s ==>
     step_inst (inst with inst_operands := ops') s = r
 Proof
-  (* Proof structure:
-     1. Case split on inst.inst_opcode
-     2. For each opcode, unfold step_inst and the helper (exec_binop, etc.)
-     3. Pattern matching on operands works since LENGTH is same
-     4. eval_operand results are same by hypothesis
-     5. Therefore results are same *)
   cheat
 QED
 
