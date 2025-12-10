@@ -20,6 +20,8 @@ Only use Bash for:
 
 **Don't prepend commands:** If you chain commands with `&&`, the permission is matched against the first command. Don't prepend `cd`, `touch`, `export`, etc. before allowed commands - it breaks permission matching.
 
+**No `time` or `timeout` wrappers:** The Bash tool already reports execution time in its output and has a `timeout` parameter. Don't use `time` or `timeout` commands - they break permission matching.
+
 ## Completion Standard
 
 If you are working on a proof, your task is NOT complete until:
