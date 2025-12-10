@@ -227,8 +227,19 @@ Proof
       all_assigns_equiv_def, assign_equiv_def, lookup_var_def]
 QED
 
+(* Property: amap contains mappings for all eliminable assigns in the block.
+   This is true when amap is built by build_assign_map from the block. *)
+Definition amap_covers_block_def:
+  amap_covers_block amap bb <=>
+    !inst out src. MEM inst bb.bb_instructions /\
+                   assign_var_source inst = SOME (out, src) ==>
+                   FLOOKUP amap out = SOME src
+End
+
 (* Helper: Block-level correctness for OK result.
-   Requires SSA property that all instruction outputs are disjoint from amap.
+   Requires:
+   1. SSA property - instruction outputs disjoint from amap
+   2. amap_covers_block - amap contains entries for eliminable assigns
 
    PROOF STRATEGY (validated interactively Dec 2025):
    1. rpt gen_tac >> strip_tac (move assumptions to context)
@@ -238,17 +249,16 @@ QED
       - Terminator (is_term = T): step_in_block fn bb s = (OK s', T)
       - Non-terminator (is_term = F): step_in_block fn bb s = (OK v, F) with
         run_block fn bb v = OK s' (recursive)
-   5. Both cases need a helper: step_in_block_transform_equiv showing transformed
-      step_in_block gives equiv result
-   6. Non-terminator case also needs:
-      - all_assigns_equiv amap v (from all_assigns_equiv_preserved)
-      - IH application for recursive call
+   5. Both cases use: transform_inst_elim_correct (eliminable) or
+      transform_inst_non_elim_correct (non-eliminable)
+   6. Non-terminator case needs IH with all_assigns_equiv amap v
 
-   DEPENDS ON: transform_inst_non_elim_correct (currently cheated) *)
+   DEPENDS ON: transform_inst_non_elim_correct (cheated due to step_inst_operand_invariant) *)
 Theorem transform_block_correct:
   !fn amap bb s s'.
     run_block fn bb s = OK s' /\
     all_assigns_equiv amap s /\
+    amap_covers_block amap bb /\
     (!inst. MEM inst bb.bb_instructions ==> inst_output_disjoint_amap inst amap) ==>
     ?s''. run_block fn (transform_block amap bb) s = OK s'' /\
           state_equiv s' s''
@@ -257,10 +267,11 @@ Proof
 QED
 
 (* TOP-LEVEL: Transformed block produces equiv result.
-   Requires all_assigns_equiv and SSA disjointness for all instructions. *)
+   Requires all_assigns_equiv, amap_covers_block, and SSA disjointness. *)
 Theorem transform_block_result_equiv:
   !fn amap bb s.
     all_assigns_equiv amap s /\
+    amap_covers_block amap bb /\
     (!inst. MEM inst bb.bb_instructions ==> inst_output_disjoint_amap inst amap) ==>
     result_equiv (run_block fn (transform_block amap bb) s) (run_block fn bb s)
 Proof
