@@ -244,3 +244,55 @@ Proof
   simp[exec_modop_def, AllCaseEqs()]
 QED
 
+(* ==========================================================================
+   step_inst result characterization lemmas
+   These lemmas characterize which opcodes can produce Halt/Revert results.
+   Used for efficient forward reasoning without case splitting all 93 opcodes.
+   ========================================================================== *)
+
+(* Only STOP, RETURN, SINK can produce Halt *)
+Theorem step_inst_halt_opcode:
+  !inst s v.
+    step_inst inst s = Halt v ==>
+    inst.inst_opcode = STOP \/ inst.inst_opcode = RETURN \/ inst.inst_opcode = SINK
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  fs[step_inst_def, AllCaseEqs()] >>
+  fs[exec_binop_not_halt, exec_unop_not_halt, exec_modop_not_halt]
+QED
+
+(* Only REVERT can produce Revert *)
+Theorem step_inst_revert_opcode:
+  !inst s v.
+    step_inst inst s = Revert v ==>
+    inst.inst_opcode = REVERT
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  fs[step_inst_def, AllCaseEqs()] >>
+  fs[exec_binop_not_revert, exec_unop_not_revert, exec_modop_not_revert]
+QED
+
+(* STOP/RETURN/SINK preserve transformation equivalence for Halt *)
+Theorem step_inst_halt_transform:
+  !inst s v lenv.
+    step_inst inst s = Halt v ==>
+    step_inst (transform_inst lenv inst) s = Halt v
+Proof
+  rpt strip_tac >>
+  drule step_inst_halt_opcode >> strip_tac >>
+  gvs[step_inst_def, transform_inst_def]
+QED
+
+(* REVERT preserves transformation equivalence for Revert *)
+Theorem step_inst_revert_transform:
+  !inst s v lenv.
+    step_inst inst s = Revert v ==>
+    step_inst (transform_inst lenv inst) s = Revert v
+Proof
+  rpt strip_tac >>
+  drule step_inst_revert_opcode >> strip_tac >>
+  gvs[step_inst_def, transform_inst_def]
+QED
+

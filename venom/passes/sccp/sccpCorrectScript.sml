@@ -9,7 +9,7 @@
 
 Theory sccpCorrect
 Ancestors
-  sccpTransform sccpAbsInt sccpLattice venomSem
+  sccpTransform sccpAbsInt sccpLattice venomSem venomInst list
 
 (* ==========================================================================
    State and Result Equivalence (simplified versions)
@@ -113,18 +113,25 @@ Theorem transform_inst_correct:
           state_equiv s' s''
 Proof
   rpt strip_tac >>
-  qexists_tac `s'` >>
-  simp[state_equiv_refl] >>
-  (* Case split on opcode *)
   Cases_on `inst.inst_opcode` >>
-  (* Each case: unfold defs, try arithmetic lemmas, fallback to operand soundness *)
-  gvs[step_inst_def, transform_inst_def, AllCaseEqs()] >>
-  FIRST [
-    irule exec_binop_transform >> simp[],
-    irule exec_unop_transform >> simp[],
-    irule exec_modop_transform >> simp[],
-    simp[transform_operands_def] >> rpt (drule_all transform_operand_sound >> strip_tac >> gvs[])
-  ]
+  fs[step_inst_def, transform_inst_def] >> gvs[AllCaseEqs()] >>
+  (* exec_binop/unop/modop cases produce identical states - reflexivity *)
+  TRY (drule_all exec_binop_transform >> strip_tac >> qexists_tac `s'` >> simp[state_equiv_def]) >>
+  TRY (drule_all exec_unop_transform >> strip_tac >> qexists_tac `s'` >> simp[state_equiv_def]) >>
+  TRY (drule_all exec_modop_transform >> strip_tac >> qexists_tac `s'` >> simp[state_equiv_def]) >>
+  (* PHI/ASSIGN: same state, use reflexivity *)
+  TRY (simp[state_equiv_def]) >>
+  (* Memory/storage ops: transform_operand_sound shows same operand value *)
+  TRY (
+    simp[transform_operands_def] >> qexists_tac `s'` >> simp[state_equiv_def] >>
+    drule_all transform_operand_sound >> simp[]
+  ) >>
+  TRY (
+    simp[transform_operands_def] >> qexists_tac `s'` >> simp[state_equiv_def] >>
+    ntac 2 (drule_all transform_operand_sound >> strip_tac) >> gvs[]
+  ) >>
+  (* JNZ: case analysis on abs_operand, simplified JMP works same *)
+  TRY (Cases_on `abs_operand lenv cond_op` >> gvs[] >> qexists_tac `s'` >> simp[state_equiv_def])
 QED
 
 (* Handle all non-error result types *)
@@ -151,18 +158,15 @@ Proof
     drule_all transform_inst_correct >> strip_tac >>
     gvs[state_equiv_def]
   )
-  (* Halt case: STOP/RETURN/SINK produce same Halt *)
+  (* Halt case: use step_inst_halt_transform *)
   >- (
-    Cases_on `inst.inst_opcode` >>
-    gvs[step_inst_def, transform_inst_def, AllCaseEqs(), state_equiv_def] >>
-    (* All non-terminator opcodes can't produce Halt *)
-    gvs[exec_binop_not_halt, exec_unop_not_halt, exec_modop_not_halt]
+    drule step_inst_halt_transform >> simp[] >>
+    simp[state_equiv_def]
   )
-  (* Revert case: REVERT produces same Revert *)
+  (* Revert case: use step_inst_revert_transform *)
   >- (
-    Cases_on `inst.inst_opcode` >>
-    gvs[step_inst_def, transform_inst_def, AllCaseEqs(), state_equiv_def] >>
-    gvs[exec_binop_not_revert, exec_unop_not_revert, exec_modop_not_revert]
+    drule step_inst_revert_transform >> simp[] >>
+    simp[state_equiv_def]
   )
   (* Error case: trivially true *)
   >- simp[]
@@ -171,6 +175,25 @@ QED
 (* ==========================================================================
    Block-Level Correctness
    ========================================================================== *)
+
+(* Block-level fixpoint: abstract stepping doesn't change lattice for any inst *)
+Definition block_fixpoint_def:
+  block_fixpoint (lenv: lattice_env) (bb: basic_block) <=>
+    !inst. MEM inst bb.bb_instructions ==> abs_step_inst lenv inst = lenv
+End
+
+(* env_sound preservation with fixpoint assumption *)
+Theorem env_sound_step_fixpoint:
+  !lenv inst s s'.
+    env_sound lenv s /\
+    step_inst inst s = OK s' /\
+    abs_step_inst lenv inst = lenv
+  ==>
+    env_sound lenv s'
+Proof
+  rpt strip_tac >>
+  drule_all abs_step_inst_sound >> simp[]
+QED
 
 (* Helper: get_instruction on transformed block *)
 Theorem get_instruction_transform:
@@ -191,12 +214,8 @@ Theorem transform_inst_preserves_terminator:
 Proof
   rpt strip_tac >> simp[transform_inst_def] >>
   Cases_on `inst.inst_opcode` >> simp[] >>
-  (* JNZ case: may become JMP, both are terminators *)
-  Cases_on `inst.inst_operands` >> simp[] >>
-  Cases_on `t` >> simp[] >>
-  Cases_on `t'` >> simp[] >>
-  Cases_on `abs_operand lenv h` >> simp[] >>
-  simp[is_terminator_def]
+  (* JNZ is the only interesting case - use full_case_tac to split all nested cases *)
+  rpt BasicProvers.full_case_tac >> simp[is_terminator_def]
 QED
 
 (* Helper: step_in_block preserves result equivalence *)
@@ -241,20 +260,16 @@ Proof
       )
     )
     >- (
-      (* Halt case *)
-      qpat_x_assum `env_sound _ _` mp_tac >>
-      simp[transform_inst_result_equiv] >> strip_tac >>
-      Cases_on `inst.inst_opcode` >>
-      gvs[step_inst_def, transform_inst_def, AllCaseEqs(), state_equiv_def] >>
-      gvs[exec_binop_not_halt, exec_unop_not_halt, exec_modop_not_halt]
+      (* Halt case: use step_inst_halt_transform *)
+      drule step_inst_halt_transform >> simp[] >>
+      drule step_inst_halt_opcode >> strip_tac >>
+      gvs[is_terminator_def, transform_inst_preserves_terminator, state_equiv_def]
     )
     >- (
-      (* Revert case *)
-      qpat_x_assum `env_sound _ _` mp_tac >>
-      simp[transform_inst_result_equiv] >> strip_tac >>
-      Cases_on `inst.inst_opcode` >>
-      gvs[step_inst_def, transform_inst_def, AllCaseEqs(), state_equiv_def] >>
-      gvs[exec_binop_not_revert, exec_unop_not_revert, exec_modop_not_revert]
+      (* Revert case: use step_inst_revert_transform *)
+      drule step_inst_revert_transform >> simp[] >>
+      drule step_inst_revert_opcode >> strip_tac >>
+      gvs[is_terminator_def, transform_inst_preserves_terminator, state_equiv_def]
     )
     >- simp[] (* Error case: trivially true *)
   )
@@ -272,22 +287,228 @@ Proof
   simp[result_equiv_def]
 QED
 
+(* Helper: get_instruction membership *)
+Theorem get_instruction_mem:
+  !bb idx inst.
+    get_instruction bb idx = SOME inst ==>
+    MEM inst bb.bb_instructions
+Proof
+  rw[get_instruction_def] >> simp[MEM_EL]
+QED
+
+(* Helper: step_in_block gets instruction at vs_inst_idx *)
+Theorem step_in_block_inst_mem:
+  !fn bb s s' is_term inst.
+    step_in_block fn bb s = (OK s', is_term) /\
+    get_instruction bb s.vs_inst_idx = SOME inst
+  ==>
+    MEM inst bb.bb_instructions
+Proof
+  rpt strip_tac >> drule get_instruction_mem >> simp[]
+QED
+
+(* Key insight: transform_inst_correct produces the SAME state (not just equivalent) *)
+(* This means both run_blocks continue from identical states *)
 Theorem transform_block_result_equiv:
   !lenv fn bb s.
-    env_sound lenv s
+    env_sound lenv s /\
+    block_fixpoint lenv bb
   ==>
     result_equiv (run_block fn bb s)
                  (run_block fn (transform_block lenv bb) s)
 Proof
-  (* Proof by induction on run_block using run_block_ind *)
-  (* Each step uses step_in_block_transform_equiv *)
-  (* Key: transform_inst produces same result, so env_sound is preserved *)
-  cheat
+  (* Use well-founded induction on the termination measure *)
+  gen_tac >> gen_tac >> gen_tac >>
+  completeInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  (* Unfold run_block once *)
+  simp[Once run_block_def] >>
+  (* Get step_in_block result for original *)
+  Cases_on `step_in_block fn bb s`
+  >- (
+    (* (res, is_term) case - need to case split on res *)
+    rename1 `step_in_block fn bb s = (res, is_term)` >>
+    Cases_on `res`
+    >- (
+      (* OK s' case *)
+      rename1 `step_in_block fn bb s = (OK s', is_term)` >>
+      (* Use step_in_block_transform_equiv to get transformed result *)
+      `env_sound lenv s` by simp[] >>
+      drule_all step_in_block_transform_equiv >>
+      simp[] >> strip_tac >>
+      (* s'' = s' by transform_inst_correct witnessing *)
+      `s'' = s'` by gvs[state_equiv_def, venom_state_component_equality] >>
+      gvs[] >>
+      (* Now unfold run_block for transformed *)
+      simp[Once run_block_def] >>
+      Cases_on `s'.vs_halted` >> simp[]
+      >- simp[result_equiv_def, state_equiv_def]
+      >- (
+        Cases_on `is_term` >> simp[]
+        >- simp[result_equiv_def, state_equiv_def]
+        >- (
+          (* Recursive case: both continue from s' *)
+          (* Need to show env_sound lenv s' *)
+          (* First, get the instruction that was executed *)
+          `?inst. get_instruction bb s.vs_inst_idx = SOME inst` by
+            (gvs[step_in_block_def, AllCaseEqs()]) >>
+          `MEM inst bb.bb_instructions` by
+            (irule get_instruction_mem >> simp[]) >>
+          `abs_step_inst lenv inst = lenv` by
+            (fs[block_fixpoint_def]) >>
+          `step_inst inst s = OK s'` by
+            (gvs[step_in_block_def, AllCaseEqs()]) >>
+          (* Now get env_sound lenv s' *)
+          `env_sound lenv s'` by
+            (irule env_sound_step_fixpoint >> qexists_tac `inst` >>
+             qexists_tac `s` >> simp[]) >>
+          (* Apply IH *)
+          first_x_assum (qspec_then `LENGTH bb.bb_instructions - s'.vs_inst_idx` mp_tac) >>
+          impl_tac
+          >- (
+            (* Show measure decreases *)
+            gvs[step_in_block_def, AllCaseEqs()] >>
+            simp[next_inst_def, get_instruction_def]
+          )
+          >- (
+            strip_tac >>
+            first_x_assum (qspecl_then [`s'`] mp_tac) >> simp[]
+          )
+        )
+      )
+    )
+    >- (
+      (* Halt case *)
+      drule_all step_in_block_transform_equiv >>
+      simp[] >> strip_tac >>
+      simp[Once run_block_def] >>
+      gvs[result_equiv_def, state_equiv_def]
+    )
+    >- (
+      (* Revert case *)
+      drule_all step_in_block_transform_equiv >>
+      simp[] >> strip_tac >>
+      simp[Once run_block_def] >>
+      gvs[result_equiv_def, state_equiv_def]
+    )
+    >- (
+      (* Error case *)
+      simp[Once run_block_def, result_equiv_def]
+    )
+  )
 QED
 
 (* ==========================================================================
    Function-Level Correctness
    ========================================================================== *)
+
+(* sccp_fixpoint implies block_fixpoint for all blocks in function *)
+Theorem sccp_fixpoint_block:
+  !lenv fn bb.
+    sccp_fixpoint lenv fn /\
+    MEM bb fn.fn_blocks
+  ==>
+    block_fixpoint lenv bb
+Proof
+  simp[sccp_fixpoint_def, block_fixpoint_def]
+QED
+
+(* lookup_block MEM implies block_fixpoint *)
+Theorem lookup_block_fixpoint:
+  !lenv fn lbl bb.
+    sccp_fixpoint lenv fn /\
+    lookup_block lbl fn.fn_blocks = SOME bb
+  ==>
+    block_fixpoint lenv bb
+Proof
+  rpt strip_tac >> irule sccp_fixpoint_block >> simp[] >>
+  gvs[lookup_block_def, AllCaseEqs()] >>
+  irule FIND_MEM >> qexists_tac `\bb. bb.bb_label = lbl` >> simp[]
+QED
+
+(* run_block preserves env_sound with block_fixpoint *)
+Theorem run_block_env_sound:
+  !fn bb lenv s s'.
+    env_sound lenv s /\
+    block_fixpoint lenv bb /\
+    run_block fn bb s = OK s'
+  ==>
+    env_sound lenv s'
+Proof
+  (* Use same induction as run_block termination *)
+  gen_tac >> gen_tac >> gen_tac >>
+  completeInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  qpat_x_assum `run_block _ _ _ = _` mp_tac >>
+  simp[Once run_block_def] >>
+  Cases_on `step_in_block fn bb s` >>
+  rename1 `step_in_block fn bb s = (res, is_term)` >>
+  Cases_on `res` >> simp[]
+  >- (
+    (* OK s'' case *)
+    rename1 `step_in_block _ _ _ = (OK s'', _)` >>
+    Cases_on `s''.vs_halted` >> simp[]
+    >- (
+      (* halted - s'' = s' *)
+      strip_tac >> gvs[]
+    )
+    >- (
+      Cases_on `is_term` >> simp[]
+      >- (
+        (* terminated - s'' = s' *)
+        strip_tac >> gvs[] >>
+        (* Need env_sound for s'' after one step *)
+        gvs[step_in_block_def, AllCaseEqs()] >>
+        irule env_sound_step_fixpoint >> qexists_tac `x` >> qexists_tac `s` >>
+        simp[] >> fs[block_fixpoint_def] >>
+        first_x_assum irule >> irule get_instruction_mem >> simp[]
+      )
+      >- (
+        (* continue - recursive case *)
+        strip_tac >>
+        (* Get env_sound s'' first *)
+        `?inst. get_instruction bb s.vs_inst_idx = SOME inst` by
+          (gvs[step_in_block_def, AllCaseEqs()]) >>
+        `MEM inst bb.bb_instructions` by
+          (irule get_instruction_mem >> simp[]) >>
+        `abs_step_inst lenv inst = lenv` by
+          (fs[block_fixpoint_def]) >>
+        `step_inst inst s = OK s''` by
+          (gvs[step_in_block_def, AllCaseEqs()]) >>
+        `env_sound lenv s''` by
+          (irule env_sound_step_fixpoint >> qexists_tac `inst` >>
+           qexists_tac `s` >> simp[]) >>
+        (* Apply IH *)
+        first_x_assum (qspec_then `LENGTH bb.bb_instructions - s''.vs_inst_idx` mp_tac) >>
+        impl_tac
+        >- (
+          gvs[step_in_block_def, AllCaseEqs()] >>
+          simp[next_inst_def, get_instruction_def]
+        )
+        >- (
+          strip_tac >>
+          first_x_assum irule >> simp[]
+        )
+      )
+    )
+  )
+  >- simp[] (* Halt case - no OK result *)
+  >- simp[] (* Revert case - no OK result *)
+  >- simp[] (* Error case - no OK result *)
+QED
+
+(* Helper: transform_function preserves block structure *)
+Theorem lookup_block_transform:
+  !lenv fn lbl.
+    lookup_block lbl (transform_function lenv fn).fn_blocks =
+    OPTION_MAP (transform_block lenv) (lookup_block lbl fn.fn_blocks)
+Proof
+  simp[transform_function_def, lookup_block_def] >>
+  rpt strip_tac >>
+  Induct_on `fn.fn_blocks` >> simp[] >>
+  rpt strip_tac >> simp[transform_block_def] >>
+  COND_CASES_TAC >> simp[]
+QED
 
 (* Main correctness theorem *)
 Theorem sccp_correct:
@@ -302,8 +523,70 @@ Theorem sccp_correct:
       result_equiv result result'
 Proof
   (* Proof by induction on fuel *)
-  (* Uses transform_block_result_equiv for each block *)
-  (* sccp_fixpoint ensures env_sound is preserved across blocks *)
-  cheat
+  gen_tac >> gen_tac >>
+  Induct_on `fuel` >> rpt strip_tac
+  >- (
+    (* Base case: fuel = 0 *)
+    gvs[run_function_def] >>
+    qexists_tac `Error "out of fuel"` >>
+    simp[result_equiv_def]
+  )
+  >- (
+    (* Inductive case: fuel = SUC fuel' *)
+    gvs[run_function_def] >>
+    Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> gvs[]
+    >- (
+      (* Block not found *)
+      qexists_tac `Error "block not found"` >>
+      simp[lookup_block_transform, result_equiv_def]
+    )
+    >- (
+      (* Block found *)
+      rename1 `lookup_block _ _ = SOME bb` >>
+      (* Get block_fixpoint for bb *)
+      `block_fixpoint lenv bb` by (irule lookup_block_fixpoint >> simp[]) >>
+      (* Use transform_block_result_equiv *)
+      `result_equiv (run_block fn bb s)
+                    (run_block fn (transform_block lenv bb) s)` by
+        (irule transform_block_result_equiv >> simp[]) >>
+      simp[lookup_block_transform] >>
+      Cases_on `run_block fn bb s`
+      >- (
+        (* OK s' case *)
+        rename1 `run_block _ _ _ = OK s'` >>
+        gvs[result_equiv_def] >>
+        Cases_on `s'.vs_halted` >> simp[]
+        >- (
+          (* halted *)
+          qexists_tac `Halt s'` >> simp[result_equiv_def, state_equiv_def]
+        )
+        >- (
+          (* continue - need IH *)
+          (* Get env_sound lenv s' using run_block_env_sound *)
+          `env_sound lenv s'` by
+            (irule run_block_env_sound >> qexists_tac `fn` >> qexists_tac `bb` >>
+             qexists_tac `s` >> simp[]) >>
+          (* Apply IH *)
+          first_x_assum (qspecl_then [`s'`, `fuel'`] mp_tac) >>
+          simp[]
+        )
+      )
+      >- (
+        (* Halt case *)
+        gvs[result_equiv_def] >>
+        qexists_tac `Halt v` >> simp[result_equiv_def, state_equiv_def]
+      )
+      >- (
+        (* Revert case *)
+        gvs[result_equiv_def] >>
+        qexists_tac `Revert v` >> simp[result_equiv_def, state_equiv_def]
+      )
+      >- (
+        (* Error case *)
+        gvs[result_equiv_def] >>
+        qexists_tac `Error s'` >> simp[result_equiv_def]
+      )
+    )
+  )
 QED
 
