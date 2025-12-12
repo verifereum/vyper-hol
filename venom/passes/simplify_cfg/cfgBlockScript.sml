@@ -62,6 +62,22 @@ QED
    Block Execution Decomposition
    ========================================================================== *)
 
+(* get_block_target = SOME implies is_jmp_inst and correct operands *)
+Theorem get_block_target_is_jmp:
+  !bb lbl.
+    get_block_target bb = SOME lbl ==>
+    ?inst. get_terminator bb = SOME inst /\ is_jmp_inst inst /\
+           inst.inst_operands = [Label lbl]
+Proof
+  rpt strip_tac >>
+  fs[get_block_target_def, get_jmp_target_def] >>
+  Cases_on `get_terminator bb` >> gvs[] >>
+  Cases_on `is_jmp_inst x` >> gvs[] >>
+  Cases_on `x.inst_operands` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  Cases_on `h` >> gvs[]
+QED
+
 (* Running instructions from a block is deterministic based on instruction sequence *)
 Theorem run_block_deterministic:
   !fn bb s.
@@ -281,38 +297,8 @@ Proof
   simp[]
 QED
 
-(* Main theorem: Merged block execution is equivalent to sequential execution.
-   The equivalence ignores vs_prev_bb (a.bb_label vs b.bb_label) and vs_inst_idx
-   (which differs for Halt/Revert cases).
-   The function-level theorem handles vs_prev_bb via label replacement.
-
-   PROOF STRATEGY:
-   1. Use step_in_block_merge_prefix: while idx < |FRONT(a)|, step_in_block
-      gives identical results on merged and on a.
-   2. At idx = |FRONT(a)|: merged continues with b[0], a executes JMP (terminator)
-   3. JMP only changes control flow (vs_current_bb, vs_prev_bb, vs_inst_idx)
-   4. Since no_phi_block b, b's execution doesn't depend on control flow state
-   5. Both executions end with b's terminator, setting vs_current_bb identically
-   6. data_equiv is preserved through all non-PHI instructions (step_inst_data_equiv)
-
-   The proof requires:
-   - Strong induction on |FRONT(a)| + |b| - s.vs_inst_idx
-   - Use run_block_data_equiv_no_phi for the b portion
-*)
-Theorem merge_blocks_execution:
-  !fn a b s.
-    wf_block a /\ wf_block b /\
-    get_block_target a = SOME b.bb_label /\
-    no_phi_block b /\
-    s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
-    result_equiv_merge
-      (run_block fn (merge_blocks a b) s)
-      (case run_block fn a s of
-         OK s' => run_block fn b (s' with vs_inst_idx := 0)
-       | other => other)
-Proof
-  cheat (* Complex induction - see proof strategy above *)
-QED
+(* NOTE: merge_blocks_execution theorem is defined at the end of this file,
+   after run_block_same_instructions which it depends on. *)
 
 (* ==========================================================================
    Label Replacement Preserves Semantics
@@ -640,6 +626,34 @@ Proof
   gvs[]
 QED
 
+(* Terminator returning OK preserves data_equiv and vs_current_bb.
+   Since non-JMP/JNZ terminators don't return OK, this combines JMP and JNZ cases. *)
+Theorem step_inst_terminator_ok_data_equiv:
+  !inst s1 s2 r1 r2.
+    data_equiv s1 s2 /\
+    is_terminator inst.inst_opcode /\
+    step_inst inst s1 = OK r1 /\
+    step_inst inst s2 = OK r2 ==>
+    data_equiv r1 r2 /\ r1.vs_current_bb = r2.vs_current_bb /\
+    r1.vs_inst_idx = r2.vs_inst_idx
+Proof
+  rpt strip_tac >> (
+    Cases_on `is_jmp_inst inst` >- (
+      drule step_inst_jmp_data_equiv >>
+      disch_then (qspec_then `inst` mp_tac) >>
+      impl_tac >- gvs[] >> gvs[]
+    ) >>
+    Cases_on `inst.inst_opcode = JNZ` >- (
+      drule step_inst_jnz_data_equiv >>
+      disch_then (qspec_then `inst` mp_tac) >>
+      impl_tac >- gvs[] >> gvs[]
+    ) >>
+    `step_inst inst s1 <> OK r1` by (
+      irule non_jmp_jnz_terminator_not_ok >> gvs[]
+    ) >> gvs[]
+  )
+QED
+
 (* step_in_block preserves data_equiv for no_phi blocks.
    Proof sketch verified through interactive debugging:
    1. Case split on get_instruction - NONE case gives Error=Error
@@ -771,6 +785,382 @@ Proof
           fs[venomStateTheory.next_inst_def]))
 QED
 
+(* step_in_block on blocks with same instructions gives equivalent results.
+   Note: This does NOT require vs_current_bb to match - useful for merge_blocks.
+   The key insight is that step_in_block only reads the instruction from the block,
+   not vs_current_bb. The terminator sets vs_current_bb based on instruction operands. *)
+Theorem step_in_block_same_instructions:
+  !fn bb1 bb2 s1 s2.
+    bb1.bb_instructions = bb2.bb_instructions /\ no_phi_block bb1 /\
+    data_equiv s1 s2 /\ s1.vs_inst_idx = s2.vs_inst_idx /\
+    ~s1.vs_halted /\ ~s2.vs_halted ==>
+    case (step_in_block fn bb1 s1, step_in_block fn bb2 s2) of
+      ((OK r1, t1), (OK r2, t2)) => data_equiv r1 r2 /\ (t1 <=> t2) /\
+                                     r1.vs_inst_idx = r2.vs_inst_idx
+    | ((Halt r1, _), (Halt r2, _)) => data_equiv r1 r2
+    | ((Revert r1, _), (Revert r2, _)) => data_equiv r1 r2
+    | ((Error e1, _), (Error e2, _)) => e1 = e2
+    | _ => F
+Proof
+  rpt strip_tac >>
+  simp[step_in_block_def] >>
+  `get_instruction bb1 s1.vs_inst_idx = get_instruction bb2 s2.vs_inst_idx` by
+    simp[get_instruction_def] >>
+  Cases_on `get_instruction bb2 s2.vs_inst_idx` >> gvs[] >>
+  (* Derive ~is_phi_inst x from no_phi_block *)
+  `~is_phi_inst x` by (
+    fs[no_phi_block_def, get_instruction_def, listTheory.EVERY_EL] >>
+    metis_tac[]
+  ) >>
+  (* Case analysis on instruction type *)
+  Cases_on `is_jmp_inst x` >> gvs[] >- (
+    (* JMP case *)
+    drule_all step_inst_jmp_data_equiv >>
+    Cases_on `step_inst x s1` >> Cases_on `step_inst x s2` >> gvs[] >>
+    strip_tac >> fs[is_terminator_def, is_jmp_inst_def]
+  ) >>
+  Cases_on `x.inst_opcode = JNZ` >> gvs[] >- (
+    (* JNZ case *)
+    drule_all step_inst_jnz_data_equiv >>
+    Cases_on `step_inst x s1` >> Cases_on `step_inst x s2` >> gvs[] >>
+    strip_tac >> fs[is_terminator_def]
+  ) >>
+  (* Other instructions *)
+  drule_all step_inst_data_equiv >>
+  Cases_on `step_inst x s1` >> Cases_on `step_inst x s2` >> gvs[] >>
+  strip_tac >> gvs[] >>
+  Cases_on `is_terminator x.inst_opcode` >> gvs[] >- (
+    (* Non-JMP/JNZ terminator returning OK - contradiction *)
+    `step_inst x s1 <> OK v` by (irule non_jmp_jnz_terminator_not_ok >> simp[]) >>
+    gvs[]
+  ) >>
+  (* Non-terminator: apply next_inst *)
+  (* Derive vs_inst_idx equality from step_inst_preserves_ctrl *)
+  `v.vs_inst_idx = s1.vs_inst_idx /\ v'.vs_inst_idx = s2.vs_inst_idx` by
+    metis_tac[step_inst_preserves_ctrl] >>
+  (* data_equiv only cares about data fields, updating vs_inst_idx preserves them *)
+  simp[venomStateTheory.next_inst_def, data_equiv_def, var_equiv_def,
+       venomStateTheory.lookup_var_def] >>
+  fs[data_equiv_def, var_equiv_def, venomStateTheory.lookup_var_def]
+QED
+
+(* run_block on blocks with same instructions gives result_equiv_merge results.
+   This extends step_in_block_same_instructions to the full run_block execution.
+   Key insight: for no_phi blocks, execution depends only on data fields, and
+   terminators set vs_current_bb identically when given data_equiv states. *)
+Theorem run_block_same_instructions:
+  !fn bb1 bb2 s1 s2.
+    bb1.bb_instructions = bb2.bb_instructions /\ no_phi_block bb1 /\
+    data_equiv s1 s2 /\ s1.vs_inst_idx = s2.vs_inst_idx /\
+    ~s1.vs_halted /\ ~s2.vs_halted ==>
+    result_equiv_merge (run_block fn bb1 s1) (run_block fn bb2 s2)
+Proof
+  gen_tac >> gen_tac >>
+  completeInduct_on `LENGTH bb2.bb_instructions - s2.vs_inst_idx` >>
+  rpt strip_tac >>
+  simp[Once run_block_def] >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+  (* Get step_in_block_same_instructions result *)
+  `!fn'.
+     case (step_in_block fn' bb1 s1, step_in_block fn' bb2 s2) of
+       ((OK r1, t1), (OK r2, t2)) => data_equiv r1 r2 /\ (t1 <=> t2) /\
+                                      r1.vs_inst_idx = r2.vs_inst_idx
+     | ((Halt r1, _), (Halt r2, _)) => data_equiv r1 r2
+     | ((Revert r1, _), (Revert r2, _)) => data_equiv r1 r2
+     | ((Error e1, _), (Error e2, _)) => e1 = e2
+     | _ => F` by
+    (strip_tac >> irule step_in_block_same_instructions >> simp[]) >>
+  (* Case analysis on step_in_block results *)
+  Cases_on `step_in_block fn bb1 s1` >> Cases_on `step_in_block fn bb2 s2` >>
+  Cases_on `q` >> Cases_on `q'` >> gvs[] >>
+  (* Use the step_in_block_same_instructions result to eliminate impossible cases *)
+  TRY (first_x_assum (qspec_then `fn` mp_tac) >> gvs[result_equiv_merge_def] >> NO_TAC) >>
+  TRY (first_x_assum (qspec_then `fn` mp_tac) >> gvs[] >> strip_tac >>
+       simp[result_equiv_merge_def] >> NO_TAC) >>
+  (* OK/OK case *)
+  first_x_assum (qspec_then `fn` mp_tac) >> gvs[] >> strip_tac >>
+  (* Case on vs_halted *)
+  Cases_on `v'.vs_halted` >> gvs[] >-
+    (* Halted: derive v''.vs_halted from data_equiv *)
+    (`v''.vs_halted` by fs[data_equiv_def] >>
+     gvs[result_equiv_merge_def, data_equiv_def])
+  >-
+    (* Not halted *)
+    (`~v''.vs_halted` by fs[data_equiv_def] >> gvs[] >>
+     (* Case on terminator flag *)
+     Cases_on `r` >> gvs[] >-
+       (* Terminator: need to show state_equiv_merge which requires vs_current_bb = *)
+       (simp[result_equiv_merge_def, state_equiv_merge_def, data_equiv_def] >>
+        (* Get vs_current_bb equality from step_inst_terminator_ok_data_equiv *)
+        qpat_x_assum `step_in_block _ bb1 s1 = _` mp_tac >>
+        qpat_x_assum `step_in_block _ bb2 s2 = _` mp_tac >>
+        simp[step_in_block_def] >>
+        `get_instruction bb1 s1.vs_inst_idx = get_instruction bb2 s2.vs_inst_idx` by
+          simp[get_instruction_def] >>
+        Cases_on `get_instruction bb2 s2.vs_inst_idx` >> gvs[] >>
+        strip_tac >> strip_tac >> gvs[AllCaseEqs()] >>
+        drule_all step_inst_terminator_ok_data_equiv >> strip_tac >> gvs[])
+     >-
+       (* Non-terminator: apply IH *)
+       (qpat_x_assum `step_in_block _ bb2 s2 = _` mp_tac >>
+        simp[step_in_block_def] >>
+        Cases_on `get_instruction bb2 s2.vs_inst_idx` >> simp[] >>
+        strip_tac >> gvs[AllCaseEqs()] >>
+        rename1 `step_inst inst s2 = OK s'` >>
+        (* Now v'' = next_inst s' *)
+        (* Get ~is_jmp_inst and inst.inst_opcode <> JNZ for step_inst_preserves_ctrl *)
+        `~is_jmp_inst inst /\ inst.inst_opcode <> JNZ` by
+          (fs[is_jmp_inst_def] >> Cases_on `inst.inst_opcode` >> fs[is_terminator_def]) >>
+        drule_all step_inst_preserves_ctrl >> strip_tac >>
+        (* Now apply IH *)
+        qpat_x_assum `!m. _` (qspec_then `LENGTH bb2.bb_instructions - (next_inst s').vs_inst_idx` mp_tac) >>
+        impl_tac >-
+          (simp[venomStateTheory.next_inst_def] >>
+           `s2.vs_inst_idx < LENGTH bb2.bb_instructions` by
+             (fs[get_instruction_def] >> gvs[AllCaseEqs()]) >> simp[]) >>
+        strip_tac >>
+        first_x_assum (qspecl_then [`bb2`, `next_inst s'`] mp_tac) >>
+        impl_tac >- simp[venomStateTheory.next_inst_def] >>
+        strip_tac >>
+        first_x_assum (qspec_then `v'` mp_tac) >>
+        impl_tac >- simp[] >> simp[]))
+QED
+
+(* Helper: get_instruction equality from DROP equality *)
+Theorem get_instruction_drop_equiv:
+  !bb1 bb2 s1 s2.
+    DROP s1.vs_inst_idx bb1.bb_instructions = DROP s2.vs_inst_idx bb2.bb_instructions /\
+    s1.vs_inst_idx < LENGTH bb1.bb_instructions /\
+    s2.vs_inst_idx < LENGTH bb2.bb_instructions ==>
+    get_instruction bb1 s1.vs_inst_idx = get_instruction bb2 s2.vs_inst_idx
+Proof
+  rpt strip_tac >> simp[get_instruction_def] >>
+  `EL s1.vs_inst_idx bb1.bb_instructions =
+   EL 0 (DROP s1.vs_inst_idx bb1.bb_instructions)` by
+    simp[rich_listTheory.EL_DROP] >>
+  `EL s2.vs_inst_idx bb2.bb_instructions =
+   EL 0 (DROP s2.vs_inst_idx bb2.bb_instructions)` by
+    simp[rich_listTheory.EL_DROP] >>
+  metis_tac[]
+QED
+
+(* Helper: DROP (n+1) l = TL (DROP n l) when n < LENGTH l *)
+Theorem drop_suc_eq_tl_drop:
+  !l:'a list n. n < LENGTH l ==> DROP (n + 1) l = TL (DROP n l)
+Proof
+  rpt strip_tac >>
+  `DROP n l <> []` by simp[listTheory.DROP_EQ_NIL] >>
+  Cases_on `DROP n l` >> gvs[] >>
+  `DROP n l = EL n l :: DROP (SUC n) l` by metis_tac[rich_listTheory.DROP_CONS_EL] >>
+  gvs[arithmeticTheory.ADD1]
+QED
+
+(* Helper: DROP equality is preserved through stepping *)
+Theorem drop_equality_preserved:
+  !bb1 bb2 s1 s2.
+    DROP s1.vs_inst_idx bb1.bb_instructions = DROP s2.vs_inst_idx bb2.bb_instructions /\
+    s1.vs_inst_idx < LENGTH bb1.bb_instructions /\
+    s2.vs_inst_idx < LENGTH bb2.bb_instructions ==>
+    DROP (s1.vs_inst_idx + 1) bb1.bb_instructions =
+    DROP (s2.vs_inst_idx + 1) bb2.bb_instructions
+Proof
+  rpt strip_tac >>
+  `DROP (s1.vs_inst_idx + 1) bb1.bb_instructions =
+   TL (DROP s1.vs_inst_idx bb1.bb_instructions)` by simp[drop_suc_eq_tl_drop] >>
+  `DROP (s2.vs_inst_idx + 1) bb2.bb_instructions =
+   TL (DROP s2.vs_inst_idx bb2.bb_instructions)` by simp[drop_suc_eq_tl_drop] >>
+  simp[]
+QED
+
+(* Helper: step_in_block on blocks with DROP-equal instructions.
+   This is the key lemma for run_block_drop_equiv.
+   Requires: DROP s1.vs_inst_idx bb1 = DROP s2.vs_inst_idx bb2 *)
+Theorem step_in_block_drop_equiv:
+  !fn bb1 bb2 s1 s2.
+    DROP s1.vs_inst_idx bb1.bb_instructions = DROP s2.vs_inst_idx bb2.bb_instructions /\
+    s1.vs_inst_idx <= LENGTH bb1.bb_instructions /\
+    s2.vs_inst_idx <= LENGTH bb2.bb_instructions /\
+    data_equiv s1 s2 /\
+    s1.vs_current_bb = s2.vs_current_bb /\
+    no_phi_block bb1 /\ no_phi_block bb2 /\
+    ~s1.vs_halted /\ ~s2.vs_halted ==>
+    case (step_in_block fn bb1 s1, step_in_block fn bb2 s2) of
+      ((OK r1, t1), (OK r2, t2)) => data_equiv r1 r2 /\ (t1 <=> t2) /\
+                                    r1.vs_current_bb = r2.vs_current_bb /\
+                                    (~t1 ==> DROP r1.vs_inst_idx bb1.bb_instructions =
+                                             DROP r2.vs_inst_idx bb2.bb_instructions)
+    | ((Halt r1, _), (Halt r2, _)) => data_equiv r1 r2
+    | ((Revert r1, _), (Revert r2, _)) => data_equiv r1 r2
+    | ((Error e1, _), (Error e2, _)) => e1 = e2
+    | _ => F
+Proof
+  rpt strip_tac >>
+  simp[step_in_block_def] >>
+  (* First derive that s1 < LENGTH bb1 iff s2 < LENGTH bb2 *)
+  `s1.vs_inst_idx < LENGTH bb1.bb_instructions <=>
+   s2.vs_inst_idx < LENGTH bb2.bb_instructions` by (
+    `LENGTH bb1.bb_instructions - s1.vs_inst_idx =
+     LENGTH bb2.bb_instructions - s2.vs_inst_idx` by (
+      qpat_x_assum `DROP _ _ = DROP _ _` (fn th =>
+        ASSUME_TAC (AP_TERM ``LENGTH : instruction list -> num`` th)) >>
+      fs[listTheory.LENGTH_DROP]) >>
+    simp[]) >>
+  (* Case on whether s1 is within bounds *)
+  Cases_on `s1.vs_inst_idx < LENGTH bb1.bb_instructions` >> gvs[] >- (
+    (* Within bounds - both get instruction *)
+    `get_instruction bb1 s1.vs_inst_idx = get_instruction bb2 s2.vs_inst_idx` by
+      (irule get_instruction_drop_equiv >> simp[]) >>
+    Cases_on `get_instruction bb2 s2.vs_inst_idx` >> gvs[] >>
+    (* Derive ~is_phi_inst x from no_phi_block *)
+    `~is_phi_inst x` by (
+      fs[no_phi_block_def, get_instruction_def, listTheory.EVERY_EL] >>
+      metis_tac[]) >>
+    (* Case analysis on instruction type *)
+    Cases_on `is_jmp_inst x` >> gvs[] >- (
+      (* JMP case *)
+      drule_all step_inst_jmp_data_equiv >>
+      Cases_on `step_inst x s1` >> Cases_on `step_inst x s2` >> gvs[] >>
+      strip_tac >> fs[is_terminator_def, is_jmp_inst_def]
+    ) >>
+    Cases_on `x.inst_opcode = JNZ` >> gvs[] >- (
+      (* JNZ case *)
+      drule_all step_inst_jnz_data_equiv >>
+      Cases_on `step_inst x s1` >> Cases_on `step_inst x s2` >> gvs[] >>
+      strip_tac >> fs[is_terminator_def]
+    ) >>
+    (* Other instructions *)
+    drule_all step_inst_data_equiv >>
+    Cases_on `step_inst x s1` >> Cases_on `step_inst x s2` >> gvs[] >>
+    strip_tac >> gvs[] >>
+    Cases_on `is_terminator x.inst_opcode` >> gvs[] >- (
+      (* Non-JMP/JNZ terminator returning OK - contradiction *)
+      `step_inst x s1 <> OK v` by (irule non_jmp_jnz_terminator_not_ok >> simp[]) >>
+      gvs[]
+    ) >>
+    (* Non-terminator: apply next_inst, show DROP preserved *)
+    `v.vs_inst_idx = s1.vs_inst_idx /\ v'.vs_inst_idx = s2.vs_inst_idx` by
+      metis_tac[step_inst_preserves_ctrl] >>
+    simp[venomStateTheory.next_inst_def, data_equiv_def, var_equiv_def,
+         venomStateTheory.lookup_var_def] >>
+    `v.vs_current_bb = s1.vs_current_bb /\ v'.vs_current_bb = s2.vs_current_bb` by
+      metis_tac[step_inst_preserves_ctrl] >>
+    fs[data_equiv_def, var_equiv_def, venomStateTheory.lookup_var_def] >>
+    (* Show DROP preserved through stepping *)
+    irule drop_equality_preserved >> simp[]
+  ) >>
+  (* At end of block - both return Error "block not terminated" *)
+  simp[get_instruction_def]
+QED
+
+(* Generalized version: DROP equality on both sides
+
+   Key insight: If the remaining instructions in both blocks are equal (via DROP),
+   then executing them with data_equiv states gives result_equiv_merge results.
+*)
+Theorem run_block_drop_equiv:
+  !n fn bb1 bb2 s1 s2.
+    n = LENGTH bb1.bb_instructions - s1.vs_inst_idx /\
+    DROP s1.vs_inst_idx bb1.bb_instructions = DROP s2.vs_inst_idx bb2.bb_instructions /\
+    s1.vs_inst_idx <= LENGTH bb1.bb_instructions /\
+    s2.vs_inst_idx <= LENGTH bb2.bb_instructions /\
+    data_equiv s1 s2 /\
+    s1.vs_current_bb = s2.vs_current_bb /\
+    no_phi_block bb1 /\ no_phi_block bb2 /\
+    ~s1.vs_halted /\ ~s2.vs_halted ==>
+    result_equiv_merge (run_block fn bb1 s1) (run_block fn bb2 s2)
+Proof
+  completeInduct_on `LENGTH bb1.bb_instructions - s1.vs_inst_idx` >>
+  rpt strip_tac >> fs[] >>
+  simp[Once run_block_def] >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+  drule_all step_in_block_drop_equiv >> strip_tac >>
+  first_x_assum (qspec_then `fn` assume_tac) >>
+  Cases_on `step_in_block fn bb1 s1` >>
+  Cases_on `step_in_block fn bb2 s2` >>
+  Cases_on `q` >> Cases_on `q'` >> fs[] >>
+  (* Terminal cases: use step_in_block_drop_equiv results *)
+  TRY (simp[result_equiv_merge_def] >> NO_TAC) >>
+  (* OK/OK case - v' and v'' are the result states *)
+  Cases_on `v'.vs_halted` >> fs[]
+  >- (`v''.vs_halted` by fs[data_equiv_def] >> fs[result_equiv_merge_def])
+  >> (
+    `~v''.vs_halted` by fs[data_equiv_def] >> fs[] >>
+    Cases_on `r` >> fs[]
+    >- simp[result_equiv_merge_def, state_equiv_merge_def]
+    (* Non-terminator: apply IH *)
+    >> (
+      first_x_assum (qspec_then `LENGTH bb1.bb_instructions - v'.vs_inst_idx` mp_tac) >>
+      impl_tac >- (
+        qpat_x_assum `step_in_block fn bb1 s1 = _` mp_tac >>
+        simp[step_in_block_def] >>
+        Cases_on `get_instruction bb1 s1.vs_inst_idx` >> simp[] >>
+        Cases_on `step_inst x s1` >> simp[AllCaseEqs()] >>
+        strip_tac >> fs[] >>
+        imp_res_tac step_inst_preserves_inst_idx >>
+        fs[venomStateTheory.next_inst_def, get_instruction_def, AllCaseEqs()] >>
+        `v'.vs_inst_idx = s1.vs_inst_idx + 1` by (
+          qpat_x_assum `_ with vs_inst_idx := _ = v'` (fn th =>
+            ASSUME_TAC (AP_TERM ``venom_state_vs_inst_idx`` th)) >>
+          fs[venomStateTheory.venom_state_component_equality]
+        ) >>
+        fs[]
+      ) >>
+      strip_tac >>
+      first_x_assum (qspecl_then [`bb1`, `v'`] mp_tac) >> simp[] >>
+      disch_then (qspecl_then [`fn`, `bb2`, `v''`] mp_tac) >>
+      impl_tac >- (
+        fs[] >>
+        qpat_x_assum `step_in_block fn bb1 s1 = _` mp_tac >>
+        qpat_x_assum `step_in_block fn bb2 s2 = _` mp_tac >>
+        simp[step_in_block_def] >>
+        Cases_on `get_instruction bb1 s1.vs_inst_idx` >> simp[] >>
+        Cases_on `get_instruction bb2 s2.vs_inst_idx` >> simp[] >>
+        Cases_on `step_inst x s1` >> gvs[AllCaseEqs()] >>
+        Cases_on `step_inst x' s2` >> gvs[AllCaseEqs()] >>
+        fs[venomStateTheory.next_inst_def] >>
+        imp_res_tac step_inst_preserves_inst_idx >> fs[] >>
+        fs[get_instruction_def, AllCaseEqs()] >>
+        rpt strip_tac >> gvs[] >>
+        `v'.vs_inst_idx = s1.vs_inst_idx + 1` by (
+          qpat_x_assum `_ with vs_inst_idx := _ = v'` (fn th =>
+            ASSUME_TAC (AP_TERM ``venom_state_vs_inst_idx`` th)) >>
+          fs[venomStateTheory.venom_state_component_equality]
+        ) >>
+        fs[]
+      ) >>
+      simp[]
+    )
+  )
+QED
+
+(* run_block on a suffix: if bb1's remaining instructions (from offset) equal bb2's full
+   instructions, then running bb1 from that offset is equivalent to running bb2 from 0.
+   This is crucial for merge_blocks where we run FRONT++b from position |FRONT| vs b from 0.
+
+   Follows from run_block_drop_equiv with:
+   - n = LENGTH bb1.bb_instructions - s1.vs_inst_idx
+   - DROP s1.vs_inst_idx bb1 = DROP 0 bb2 = bb2.bb_instructions
+   - no_phi_block bb2 derived from suffix of no_phi_block bb1
+*)
+Theorem run_block_suffix_equiv:
+  !fn bb1 bb2 s1 s2.
+    DROP s1.vs_inst_idx bb1.bb_instructions = bb2.bb_instructions /\
+    s1.vs_inst_idx <= LENGTH bb1.bb_instructions /\
+    s2.vs_inst_idx = 0 /\
+    data_equiv s1 s2 /\
+    s1.vs_current_bb = s2.vs_current_bb /\
+    no_phi_block bb1 /\
+    no_phi_block bb2 /\
+    ~s1.vs_halted /\ ~s2.vs_halted ==>
+    result_equiv_merge (run_block fn bb1 s1) (run_block fn bb2 s2)
+Proof
+  rpt strip_tac >>
+  (* run_block_drop_equiv: !n fn bb1 bb2 s1 s2. n = ... /\ ... ==> ... *)
+  (* Need to provide n explicitly, then use MATCH_MP_TAC *)
+  MATCH_MP_TAC (SPEC ``LENGTH (bb1 : basic_block).bb_instructions - (s1 : venom_state).vs_inst_idx`` run_block_drop_equiv) >>
+  simp[listTheory.DROP_LENGTH_NIL]
+QED
+
 (* ==========================================================================
    state_equiv_except_prev Helpers
    ========================================================================== *)
@@ -885,5 +1275,106 @@ Proof
   rw[] >>
   drule_all run_passthrough_block >>
   simp[result_equiv_def, state_equiv_refl]
+QED
+
+(* ==========================================================================
+   Block Merging Main Theorem
+   ========================================================================== *)
+
+(* Main theorem: Merged block execution is equivalent to sequential execution.
+   The equivalence ignores vs_prev_bb (a.bb_label vs b.bb_label) and vs_inst_idx
+   (which differs for Halt/Revert cases).
+   The function-level theorem handles vs_prev_bb via label replacement.
+
+   PROOF STRATEGY:
+   - Case split on passthrough (LENGTH a = 1) vs non-passthrough
+   - Passthrough case: merged = b, a = [JMP], use run_block_same_instructions
+   - Non-passthrough case: Use induction with run_block_suffix_equiv
+*)
+Theorem merge_blocks_execution:
+  !fn a b s.
+    wf_block a /\ wf_block b /\
+    get_block_target a = SOME b.bb_label /\
+    no_phi_block b /\
+    s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
+    result_equiv_merge
+      (run_block fn (merge_blocks a b) s)
+      (case run_block fn a s of
+         OK s' => run_block fn b (s' with vs_inst_idx := 0)
+       | other => other)
+Proof
+  rpt strip_tac >>
+  `a.bb_instructions <> []` by fs[wf_block_def] >>
+  (* Get terminator info *)
+  `?inst. get_terminator a = SOME inst /\ is_jmp_inst inst /\
+          inst.inst_operands = [Label b.bb_label]` by (
+     qpat_x_assum `get_block_target _ = _` mp_tac >>
+     simp[get_block_target_def, get_jmp_target_def] >>
+     Cases_on `get_terminator a` >> simp[] >>
+     Cases_on `is_jmp_inst x` >> simp[] >>
+     Cases_on `x.inst_operands` >> simp[] >>
+     Cases_on `t` >> simp[] >> Cases_on `h` >> simp[]) >>
+  `inst = LAST a.bb_instructions` by fs[get_terminator_def] >>
+  `is_terminator inst.inst_opcode` by fs[is_jmp_inst_def, is_terminator_def] >>
+  (* Case split on passthrough *)
+  Cases_on `LENGTH a.bb_instructions = 1`
+  >- (
+    (* === Passthrough case: a = [JMP b] === *)
+    `a.bb_instructions = [inst]` by (Cases_on `a.bb_instructions` >> gvs[] >> Cases_on `t` >> gvs[]) >>
+    `FRONT a.bb_instructions = []` by simp[] >>
+    `(merge_blocks a b).bb_instructions = b.bb_instructions` by simp[merge_blocks_def] >>
+    (* run_block fn a s = OK (jump_to b.bb_label s) *)
+    `run_block fn a s = OK (jump_to b.bb_label s)` by (
+       simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+       simp[Once step_inst_def] >> fs[is_jmp_inst_def]) >>
+    simp[] >>
+    (* data_equiv s (jump_to b.bb_label s) *)
+    `data_equiv s (jump_to b.bb_label s)` by
+       simp[data_equiv_def, var_equiv_def, lookup_var_def, jump_to_def] >>
+    (* Use run_block_same_instructions *)
+    irule run_block_same_instructions >> simp[jump_to_def] >>
+    fs[wf_block_def]
+  )
+  >- (
+    (* === Non-passthrough case: |a| > 1 === *)
+    (* merged = FRONT(a) ++ b, run merged from 0 vs run a then b from 0 *)
+    (* Strategy: show DROP equivalence connects merged from |FRONT(a)| to b from 0 *)
+    `LENGTH (FRONT a.bb_instructions) = LENGTH a.bb_instructions - 1` by
+       (Cases_on `a.bb_instructions` >> gvs[LENGTH_FRONT_CONS]) >>
+    `LENGTH (FRONT a.bb_instructions) >= 1` by simp[] >>
+    `(merge_blocks a b).bb_instructions = FRONT a.bb_instructions ++ b.bb_instructions`
+       by simp[merge_blocks_def] >>
+    (* For the passthrough case below, we derived:
+       run_block fn a s = OK (jump_to b.bb_label s) when a = [JMP]
+
+       For |a| > 1, we need to show:
+       1. Running merged from 0 executes FRONT(a) then b
+       2. Running a executes FRONT(a) then JMP (which gives OK (jump_to b.bb_label s'))
+       3. The state after FRONT(a) is the same in both cases
+       4. Then running b from that state gives same result as continuing merged *)
+
+    (* Use induction via run_block_drop_equiv *)
+    (* Key insight: we need to show that after |FRONT(a)| steps on merged,
+       the remaining instructions are b.bb_instructions, and we can use
+       run_block_suffix_equiv. But that requires matching drop positions. *)
+
+    (* Alternative: use run_block_same_instructions with merged block whose
+       instructions are FRONT(a) ++ b vs a block with same instructions *)
+
+    (* Actually, let's use a simpler approach:
+       The merged block has instructions = FRONT(a) ++ b.bb_instructions
+       We need to show result_equiv_merge between:
+       - run_block on merged from 0
+       - case run_block on a of OK s' => run_block on b from 0 | ...
+
+       Induction on |FRONT(a)|:
+       - For each step in FRONT(a), step_in_block_merge_prefix shows identical steps
+       - After |FRONT(a)| steps, merged continues with b[0], a executes JMP
+       - a's JMP gives OK (jump_to b.bb_label s'), which has data_equiv to merged's s'
+       - Then use run_block_suffix_equiv or run_block_same_instructions *)
+
+    (* This proof is complex - let's use a helper lemma approach *)
+    cheat
+  )
 QED
 

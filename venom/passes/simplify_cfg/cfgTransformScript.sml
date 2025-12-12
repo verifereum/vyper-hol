@@ -44,12 +44,15 @@ Definition is_jmp_inst_def:
   is_jmp_inst inst <=> inst.inst_opcode = JMP
 End
 
-(* Get the target label of a JMP instruction *)
+(* Get the target label of a JMP instruction.
+   Only returns SOME if both the opcode is JMP and the operands are [Label lbl]. *)
 Definition get_jmp_target_def:
   get_jmp_target inst =
-    case inst.inst_operands of
-      [Label lbl] => SOME lbl
-    | _ => NONE
+    if is_jmp_inst inst then
+      case inst.inst_operands of
+        [Label lbl] => SOME lbl
+      | _ => NONE
+    else NONE
 End
 
 (* Check if a block ends with an unconditional jump *)
