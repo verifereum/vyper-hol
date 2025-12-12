@@ -1,0 +1,3 @@
+# Revert-to-assert pass for Venom IR
+# Includes venom semantics and verifereum theories
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../..
