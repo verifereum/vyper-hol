@@ -1612,6 +1612,13 @@ Definition finally_def:
      | (INR e, s) => ignore_bind g (raise e) s
 End
 
+(* Run action but roll back state changes (for staticcall).
+   Only the return value/exception is kept. *)
+Definition with_rollback_def:
+  with_rollback f s : α evaluation_result =
+  case f s of (res, _) => (res, s)
+End
+
 val option_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
@@ -2566,7 +2573,19 @@ Definition evaluate_def:
     transfer_value cx.txn.target toAddr amount;
     return $ Value $ NoneV
   od ∧
-  eval_expr cx (Call (ExtCall _) _) = raise $ Error "TODO: ExtCall" ∧
+  (* ExtCall: external contract call
+   * TODO: Implement cross-contract interpretation once termination measure
+   * is extended to track (address, function) pairs across all sources.
+   * When implemented:
+   * - If is_static=T, wrap the call in with_rollback to discard state changes
+   * - If is_static=F, state changes persist (normal extcall)
+   * Currently stubbed to allow build to succeed. *)
+  eval_expr cx (Call (ExtCall is_static method_name) es) = do
+    check (LENGTH es ≥ 1) "ExtCall needs target";
+    vs <- eval_exprs cx es;
+    toAddr <- lift_option (dest_AddressV $ HD vs) "ExtCall target not AddressV";
+    raise $ Error "ExtCall: cross-contract calls not yet implemented"
+  od ∧
   eval_expr cx (Call (IntCall fn) es) = do
     check (¬MEM fn cx.stk) "recursion";
     ts <- lift_option (get_self_code cx) "IntCall get_self_code";
