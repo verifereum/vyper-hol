@@ -587,6 +587,15 @@ fun d_expression () : term decoder = achoose "expr" [
     check (field "func" $ tuple2 (
              field "ast_type" string,
              field "id" string))
+          (equal ("Name", "isqrt"))
+          "not isqrt" $
+      field "args" $
+      JSONDecode.sub 0 $
+      JSONDecode.map mk_Isqrt (delay d_expression),
+    check_ast_type "Call" $
+    check (field "func" $ tuple2 (
+             field "ast_type" string,
+             field "id" string))
           (equal ("Name", "blockhash"))
           "not blockhash" $
       field "args" $
