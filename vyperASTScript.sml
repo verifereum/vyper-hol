@@ -134,6 +134,7 @@ Datatype:
   | BlockHash
   | Env env_item
   | Acc account_item
+  | Isqrt
 End
 
 Datatype:
