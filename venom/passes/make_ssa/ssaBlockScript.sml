@@ -902,13 +902,18 @@ Theorem jnz_result_ssa_equiv:
             | NONE => Error "undefined condition")
        | _ => Error "jnz requires cond and 2 labels")
 Proof
-  (* INTERACTIVE PROOF VERIFIED (Dec 2025):
-   * Case splits on operand structure, CASE_TAC for Var cases,
-   * eval_operand_ssa_equiv for condition, IF_CASES_TAC for branch,
-   * jump_to_ssa_equiv for both branches.
-   * Batch mode fails due to TRY/NO_TAC interaction with rename1.
-   * See .hol_cmd.sml for the working interactive proof steps. *)
-  cheat
+  rpt strip_tac >>
+  (* Initial setup *)
+  simp[ssa_operand_def, ssa_result_equiv_def] >>
+  (* Split on inst.inst_operands: [] case closes, h::t case simplifies *)
+  CASE_TAC >> simp[ssa_result_equiv_def] >> simp[] >>
+  (* CASE_TAC picks eval_operand h s_orig and splits NONE/SOME *)
+  CASE_TAC >> simp[ssa_operand_def, ssa_result_equiv_def] >>
+  (* For both NONE and SOME cases, use eval_operand_ssa_equiv *)
+  drule_all eval_operand_ssa_equiv >> strip_tac >> gvs[] >>
+  (* Continue case splitting on t, then use jump_to_ssa_equiv for OK cases *)
+  rpt (CASE_TAC >> simp[ssa_operand_def, ssa_result_equiv_def]) >>
+  irule jump_to_ssa_equiv >> simp[]
 QED
 
 (* KEY LEMMA: Non-PHI instruction step gives ssa_result_equiv with SAME vm.
@@ -938,7 +943,88 @@ Theorem step_inst_result_ssa_equiv:
       (step_inst inst s_orig)
       (step_inst inst_ssa s_ssa)
 Proof
-  cheat
+  let
+    val output_case_tac = CASE_TAC >> gvs[] >> CASE_TAC >> gvs[] >> CASE_TAC >> gvs[]
+    val finish_tac = simp[] >> output_case_tac
+    val binop_tac = irule exec_binop_result_ssa_equiv >> finish_tac >> NO_TAC
+    val unop_tac = irule exec_unop_result_ssa_equiv >> finish_tac >> NO_TAC
+    val modop_tac = irule exec_modop_result_ssa_equiv >> finish_tac >> NO_TAC
+    val load_tac = FIRST [irule mload_result_ssa_equiv,
+                          irule sload_result_ssa_equiv,
+                          irule tload_result_ssa_equiv] >> finish_tac >> NO_TAC
+    val store_tac = FIRST [irule mstore_result_ssa_equiv,
+                           irule sstore_result_ssa_equiv,
+                           irule tstore_result_ssa_equiv] >> simp[] >> NO_TAC
+    (* JMP: Direct case splits instead of irule since step_inst_def
+     * expands to different case patterns than jmp_result_ssa_equiv.
+     * Use CASE_TAC to avoid dependency on variable names.
+     * gvs[AllCaseEqs()] handles impossible branches (Var -> Label).
+     * jump_to_ssa_equiv closes the Label singleton case. *)
+    val jmp_direct_tac =
+      rpt (CASE_TAC >> gvs[AllCaseEqs(), ssa_result_equiv_def, ssa_operand_def]) >>
+      TRY (irule jump_to_ssa_equiv >> simp[]) >> NO_TAC
+    (* JNZ: Use same structure as jnz_result_ssa_equiv proof.
+     * Key insight: simp[ssa_operand_def] first, then targeted CASE_TACs,
+     * then drule_all eval_operand_ssa_equiv to establish operand equality,
+     * finally irule jump_to_ssa_equiv for OK branches. *)
+    val jnz_direct_tac =
+      simp[ssa_operand_def, ssa_result_equiv_def] >>
+      CASE_TAC >> simp[ssa_result_equiv_def] >> simp[] >>
+      CASE_TAC >> simp[ssa_operand_def, ssa_result_equiv_def] >>
+      drule_all eval_operand_ssa_equiv >> strip_tac >> gvs[] >>
+      rpt (CASE_TAC >> simp[ssa_operand_def, ssa_result_equiv_def]) >>
+      irule jump_to_ssa_equiv >> simp[] >> NO_TAC
+    (* ASSIGN: Same pattern mismatch issue as JMP/JNZ.
+     * Use similar structure to jnz_direct_tac which works.
+     * Key: simp[ssa_operand_def] first, then targeted CASE_TACs,
+     * then drule_all eval_operand_ssa_equiv to establish eval equality,
+     * finally irule ssa_state_equiv_update_same_vm for OK case.
+     *
+     * After case splits, we get goals like:
+     * - F goals: eval_operand in orig = SOME x, in ssa = NONE (or vice versa)
+     *   These should be closed by contradiction from eval_operand_ssa_equiv
+     * - OK goals: need ssa_state_equiv after update_var with same value
+     *)
+    (* ASSIGN: Proven interactively Dec 2025. Key insight:
+     * After gvs[inst_ssa_compatible_def], need structured case splits on:
+     * 1. inst.inst_operands: [h] vs other (error cases)
+     * 2. inst.inst_outputs: [h'] vs other (LENGTH <= 1 constraint)
+     * 3. eval_operand h s_orig: NONE vs SOME
+     * Then drule_all eval_operand_ssa_equiv for operand equiv,
+     * irule ssa_state_equiv_update_same_vm for state update equiv,
+     * Cases_on FLOOKUP vm h' for final freshness discharge. *)
+    val assign_tac =
+      (* Case split on operands - [] and h::t cases *)
+      Cases_on `inst.inst_operands` >> simp[ssa_result_equiv_def] >>
+      (* Case split on outputs - [] and h'::t' cases *)
+      Cases_on `inst.inst_outputs` >> simp[ssa_result_equiv_def] >>
+      (* First: handle outputs = [] case *)
+      TRY (gvs[] >> simp[ssa_result_equiv_def] >> NO_TAC) >>
+      (* Now in outputs = h'::t' case, split output tail *)
+      Cases_on `t'` >> gvs[] >>
+      (* Now in outputs = [h'] case, split operand tail *)
+      Cases_on `t` >> gvs[ssa_result_equiv_def] >>
+      (* Now in [h] operand, [h'] output case - split on eval_operand *)
+      Cases_on `eval_operand h s_orig` >> gvs[ssa_result_equiv_def] >>
+      (* Both NONE and SOME cases use eval_operand_ssa_equiv *)
+      drule_all eval_operand_ssa_equiv >> strip_tac >> gvs[ssa_result_equiv_def] >>
+      (* SOME case needs ssa_state_equiv_update_same_vm *)
+      TRY (irule ssa_state_equiv_update_same_vm >> gvs[] >>
+           Cases_on `FLOOKUP vm h'` >> gvs[]) >> NO_TAC
+    (* Halt/Revert: Goal is ssa_result_equiv vm (Halt ...) (Halt ...).
+     * First expand ssa_result_equiv_def to get ssa_state_equiv goal,
+     * then apply halt/revert_state_ssa_equiv. *)
+    val halt_tac = simp[ssa_result_equiv_def] >> irule halt_state_ssa_equiv >> simp[] >> NO_TAC
+    val revert_tac = simp[ssa_result_equiv_def] >> irule revert_state_ssa_equiv >> simp[] >> NO_TAC
+    (* Error cases: ssa_result_equiv_def for Error-Error gives T *)
+    val error_tac = simp[ssa_result_equiv_def]
+  in
+    rpt strip_tac >>
+    simp[step_inst_def] >>
+    Cases_on `inst.inst_opcode` >> gvs[inst_ssa_compatible_def] >>
+    FIRST [binop_tac, unop_tac, modop_tac, load_tac, store_tac,
+           jmp_direct_tac, jnz_direct_tac, assign_tac, halt_tac, revert_tac, error_tac]
+  end
 QED
 
 (* ==========================================================================
@@ -1055,8 +1141,10 @@ QED
  * - is_terminator is equal (SND equality)
  * - For recursive case: apply IH with measure (LENGTH - inst_idx) decreasing
  *   because step_in_block increments inst_idx via next_inst for non-terminators *)
+(* Proof strategy: Use recInduct on run_block for the block we're proving
+ * ssa_result_equiv about. The IH gives us the result for recursive calls. *)
 Theorem run_block_ssa_equiv:
-  !fn bb bb_ssa s_orig s_ssa vm.
+  !fn bb s_orig bb_ssa s_ssa vm.
     ssa_state_equiv vm s_orig s_ssa /\
     LENGTH bb_ssa.bb_instructions = LENGTH bb.bb_instructions /\
     (!idx. idx < LENGTH bb.bb_instructions ==>
@@ -1064,9 +1152,57 @@ Theorem run_block_ssa_equiv:
              (EL idx bb.bb_instructions)
              (EL idx bb_ssa.bb_instructions)) /\
     (!idx. idx < LENGTH bb.bb_instructions ==>
-           (EL idx bb.bb_instructions).inst_opcode <> PHI) ==>
+           (EL idx bb.bb_instructions).inst_opcode <> PHI) /\
+    (!idx. idx < LENGTH bb.bb_instructions ==>
+           LENGTH (EL idx bb.bb_instructions).inst_outputs <= 1) ==>
     ssa_result_equiv vm (run_block fn bb s_orig) (run_block fn bb_ssa s_ssa)
 Proof
-  cheat
+  recInduct run_block_ind >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  simp[Once run_block_def] >>
+  Cases_on `step_in_block fn bb s` >>
+  Cases_on `q` >> gvs[] >| [
+    (* OK case *)
+    qspecl_then [`fn`, `bb`, `bb_ssa`, `s`, `s_ssa`, `vm`]
+      mp_tac step_in_block_ssa_result_equiv >> simp[] >> strip_tac >>
+    simp[Once run_block_def] >>
+    Cases_on `step_in_block fn bb_ssa s_ssa` >> gvs[ssa_result_equiv_def] >>
+    Cases_on `q` >> gvs[ssa_result_equiv_def] >>
+    `v.vs_halted = v'.vs_halted` by fs[ssa_state_equiv_def] >>
+    Cases_on `v.vs_halted` >> gvs[ssa_result_equiv_def] >-
+    (* vs_halted = T: halted case, close with run_block unfolding *)
+    simp[Once run_block_def, ssa_result_equiv_def] >>
+    (* vs_halted = F: continue with terminator check *)
+    Cases_on `r` >> gvs[ssa_result_equiv_def] >-
+    (* r = T: terminator, close with run_block unfolding *)
+    simp[Once run_block_def, ssa_result_equiv_def] >>
+    (* r = F: Non-terminator recursive case, apply IH *)
+    simp[] >>
+    CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+    simp[] >>
+    CONV_TAC (RATOR_CONV (RAND_CONV (ONCE_REWRITE_CONV [GSYM run_block_def]))) >>
+    first_assum irule >> simp[]
+    ,
+    (* Halt case *)
+    qspecl_then [`fn`, `bb`, `bb_ssa`, `s`, `s_ssa`, `vm`]
+      mp_tac step_in_block_ssa_result_equiv >> simp[] >> strip_tac >>
+    simp[Once run_block_def] >>
+    Cases_on `step_in_block fn bb_ssa s_ssa` >> gvs[ssa_result_equiv_def] >>
+    Cases_on `q` >> gvs[ssa_result_equiv_def]
+    ,
+    (* Revert case *)
+    qspecl_then [`fn`, `bb`, `bb_ssa`, `s`, `s_ssa`, `vm`]
+      mp_tac step_in_block_ssa_result_equiv >> simp[] >> strip_tac >>
+    simp[Once run_block_def] >>
+    Cases_on `step_in_block fn bb_ssa s_ssa` >> gvs[ssa_result_equiv_def] >>
+    Cases_on `q` >> gvs[ssa_result_equiv_def]
+    ,
+    (* Error case *)
+    qspecl_then [`fn`, `bb`, `bb_ssa`, `s`, `s_ssa`, `vm`]
+      mp_tac step_in_block_ssa_result_equiv >> simp[] >> strip_tac >>
+    simp[Once run_block_def] >>
+    Cases_on `step_in_block fn bb_ssa s_ssa` >> gvs[ssa_result_equiv_def] >>
+    Cases_on `q` >> gvs[ssa_result_equiv_def]
+  ]
 QED
 
