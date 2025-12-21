@@ -1,4 +1,4 @@
-open HolKernel vyperTestLib;
+open HolKernel jsonToVyperTheory vyperTestLib;
 val () = new_theory "vyperTestDefs83";
-val () = make_definitions_for_file (83, "../../vyper/tests/export/functional/codegen/features/iteration/test_continue.json");
+val () = make_definitions_for_file (83, "vyper-test-exports/functional/codegen/features/iteration/test_continue.json");
 val () = export_theory_no_docs();

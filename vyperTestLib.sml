@@ -1,6 +1,6 @@
 structure vyperTestLib :> vyperTestLib = struct
 
-open HolKernel boolLib cv_transLib wordsLib
+open HolKernel boolLib bossLib cv_transLib wordsLib
      pairSyntax listSyntax stringSyntax optionSyntax
      intSyntax wordsSyntax fcpSyntax
      vfmTypesSyntax contractABISyntax byteStringCacheLib
@@ -313,11 +313,11 @@ in
 end
 
 val test_files_with_prefixes = [
-  ("../vyper/tests/export/functional/codegen",
+  ("vyper-test-exports/functional/codegen",
    ["test_interfaces.json",
     "test_selector_table.json",
     "test_selector_table_stability.json"]),
-  ("../vyper/tests/export/functional/codegen/calling_convention",
+  ("vyper-test-exports/functional/codegen/calling_convention",
    [
     "test_default_function.json",
     (* TODO: unsupported
@@ -333,12 +333,12 @@ val test_files_with_prefixes = [
     "test_new_call_convention.json",
     "test_return.json",
     "test_self_call_struct.json"]),
-  ("../vyper/tests/export/functional/codegen/environment_variables",
+  ("vyper-test-exports/functional/codegen/environment_variables",
    ["test_blobbasefee.json",
     "test_block_number.json",
     "test_blockhash.json",
     "test_tx.json"]),
-  ("../vyper/tests/export/functional/codegen/modules",
+  ("vyper-test-exports/functional/codegen/modules",
    ["test_events.json",
     "test_exports.json",
     "test_flag_imports.json",
@@ -347,15 +347,15 @@ val test_files_with_prefixes = [
     "test_module_variables.json",
     "test_nonreentrant.json",
     "test_stateless_functions.json"]),
-  ("../vyper/tests/export/functional/codegen/integration",
+  ("vyper-test-exports/functional/codegen/integration",
    ["test_basics.json",
     "test_crowdfund.json",
     "test_escrow.json"]),
-  ("../vyper/tests/export/functional/codegen/storage_variables",
+  ("vyper-test-exports/functional/codegen/storage_variables",
    ["test_getters.json",
     "test_setters.json",
     "test_storage_variable.json"]),
-  ("../vyper/tests/export/functional/codegen/types/numbers",
+  ("vyper-test-exports/functional/codegen/types/numbers",
    [
     "test_constants.json",
     "test_decimals.json",
@@ -368,7 +368,7 @@ val test_files_with_prefixes = [
     "test_sqrt.json",*)
     "test_unsigned_ints.json"
    ]),
-  ("../vyper/tests/export/functional/codegen/types",
+  ("vyper-test-exports/functional/codegen/types",
    [
     "test_array_indexing.json",
     "test_bytes.json",
@@ -382,7 +382,7 @@ val test_files_with_prefixes = [
     "test_string_literal.json",
     "test_struct.json"
    ]),
-  ("../vyper/tests/export/functional/codegen/features",
+  ("vyper-test-exports/functional/codegen/features",
    [
     "test_address_balance.json",
     "test_assert.json",
@@ -411,7 +411,7 @@ val test_files_with_prefixes = [
     "test_string_map_keys.json",
     "test_ternary.json",
     "test_transient.json"]),
-  ("../vyper/tests/export/functional/codegen/features/decorators",
+  ("vyper-test-exports/functional/codegen/features/decorators",
    ["test_nonreentrant.json",
     "test_payable.json",
     "test_private.json",
@@ -419,7 +419,7 @@ val test_files_with_prefixes = [
     "test_pure.json",
     "test_raw_return.json",
     "test_view.json"]),
-  ("../vyper/tests/export/functional/codegen/features/iteration",
+  ("vyper-test-exports/functional/codegen/features/iteration",
    ["test_break.json",
     "test_continue.json",
     "test_for_in_list.json",
@@ -437,8 +437,9 @@ fun make_definitions_for_file (n, json_path) = let
   val nstr = Int.toString n
   val (tests, decode_fails) = read_test_json json_path
   val firstDf = List.find (not o has_unsupported_source_code) decode_fails
-  val () = case firstDf of NONE => () | SOME (name, _) => raise Fail
-             (String.concat ["decode failure in ", json_path, ": ", name])
+  val () = case firstDf of NONE => () | SOME (name, (err, _)) => raise Fail
+             (String.concat ["decode failure in ", json_path, ": ", name,
+                             " - ", exnMessage err])
   val path_vn = String.concat["json_path_", nstr]
   val path_def = new_definition(path_vn ^ "_def",
                    mk_eq(mk_var(path_vn, string_ty),
@@ -467,9 +468,9 @@ fun generate_defn_scripts () = let
       val padi = StringCvt.padLeft #"0" 2 istr
       val thyname = String.concat["vyperTestDefs", padi]
       val fname = OS.Path.concat("tests", String.concat[thyname, "Script.sml"])
-      val jsonp = OS.Path.concat(OS.Path.parentArc, t)
+      val jsonp = t
       val contents = String.concat [
-        "open HolKernel vyperTestLib;\nval () = new_theory \"",
+        "open HolKernel jsonToVyperTheory vyperTestLib;\nval () = new_theory \"",
         thyname, "\";\nval () = make_definitions_for_file (",
         istr, ", \"", jsonp, "\");\n",
         "val () = export_theory_no_docs();\n"]
