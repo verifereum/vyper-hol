@@ -492,10 +492,11 @@ val json_boolop : term decoder = achoose "boolop" [
 (* ===== Expression Decoder ===== *)
 
 fun d_json_expr () : term decoder = achoose "expr" [
-  (* Int literal *)
+  (* Int literal - type may be absent for array indices/sizes *)
   check_ast_type "Int" $
     JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
-    tuple2 (field "value" inttm, field "type" json_type),
+    tuple2 (field "value" inttm,
+            orElse(field "type" json_type, succeed JT_None_tm)),
 
   (* Decimal literal *)
   check_ast_type "Decimal" $
@@ -584,7 +585,7 @@ fun d_json_expr () : term decoder = achoose "expr" [
     JSONDecode.map (fn (func, args, kwargs, ty) => mk_JE_Call(func, args, kwargs, ty)) $
     tuple4 (field "func" (delay d_json_expr),
             field "args" (array (delay d_json_expr)),
-            fieldD "keywords" (array (delay d_json_keyword)) [],
+            orElse(field "keywords" (array (delay d_json_keyword)), succeed []),
             field "type" json_type)
 ]
 and d_json_keyword () : term decoder =
@@ -766,11 +767,17 @@ val json_value_type = delay d_json_value_type
 
 (* ===== Top-level Decoder ===== *)
 
-val json_arg : term decoder =
+val json_arg : term decoder = achoose "json_arg" [
+  (* New format: ast_type = "arg" with "arg" field for name and "annotation" for type *)
+  check_ast_type "arg" $
+    JSONDecode.map (fn (name, ty) => mk_JArg(name, ty)) $
+    tuple2 (field "arg" string, field "annotation" ast_type),
+  (* Old format: ast_type = "AnnAssign" with nested target *)
   check_ast_type "AnnAssign" $
-  JSONDecode.map (fn (name, ty) => mk_JArg(name, ty)) $
-  field "target" $
-    tuple2 (check_ast_type "Name" $ field "id" string, field "type" json_type)
+    JSONDecode.map (fn (name, ty) => mk_JArg(name, ty)) $
+    field "target" $
+      tuple2 (check_ast_type "Name" $ field "id" string, field "type" json_type)
+]
 
 val json_func_type : term decoder =
   JSONDecode.map (fn (argtys, retty) => mk_JFuncType(argtys, retty)) $
