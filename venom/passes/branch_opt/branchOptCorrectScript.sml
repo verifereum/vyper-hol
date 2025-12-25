@@ -167,6 +167,19 @@ Proof
   gvs[]
 QED
 
+(* Non-terminators preserve vs_inst_idx *)
+Theorem step_inst_preserves_inst_idx:
+  !inst s s'.
+    step_inst inst s = OK s' /\ ~is_terminator inst.inst_opcode ==>
+    s'.vs_inst_idx = s.vs_inst_idx
+Proof
+  rw[step_inst_def] >>
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  fs[exec_binop_def, exec_unop_def, exec_modop_def, mstore_def, sstore_def,
+     tstore_def, AllCaseEqs(), update_var_def] >>
+  gvs[]
+QED
+
 (* ==========================================================================
    Block Transformation Correctness
 
@@ -278,6 +291,66 @@ Proof
   simp[EL_APPEND1, LENGTH_TAKE, EL_TAKE]
 QED
 
+(* Helper: step_in_block is identical in the prefix *)
+Theorem step_in_block_transform_prefix:
+  !fn bb s.
+    transform_block bb <> bb /\
+    s.vs_inst_idx < LENGTH bb.bb_instructions - 2
+  ==>
+    step_in_block fn bb s = step_in_block fn (transform_block bb) s
+Proof
+  rpt strip_tac >>
+  simp[step_in_block_def] >>
+  `get_instruction (transform_block bb) s.vs_inst_idx = get_instruction bb s.vs_inst_idx` by
+    simp[get_instruction_transform_prefix] >>
+  simp[]
+QED
+
+(* When step_in_block returns (OK s', F), s'.vs_inst_idx = s.vs_inst_idx + 1 *)
+Theorem step_in_block_increments_idx:
+  !fn bb s s'.
+    step_in_block fn bb s = (OK s', F) ==>
+    s'.vs_inst_idx = s.vs_inst_idx + 1
+Proof
+  rw[step_in_block_def, AllCaseEqs()] >>
+  gvs[next_inst_def] >>
+  drule_all step_inst_preserves_inst_idx >> simp[]
+QED
+
+(* ==========================================================================
+   Transformation Applies Lemma
+
+   When transform_block bb ≠ bb, the pattern matched and we can extract structure.
+   ========================================================================== *)
+
+Theorem transform_applies_structure:
+  !bb.
+    transform_block bb <> bb ==>
+    ?iszero_inst jnz_inst out_var orig_cond.
+      LENGTH bb.bb_instructions >= 2 /\
+      EL (LENGTH bb.bb_instructions - 2) bb.bb_instructions = iszero_inst /\
+      EL (LENGTH bb.bb_instructions - 1) bb.bb_instructions = jnz_inst /\
+      is_iszero_inst iszero_inst /\
+      get_single_output iszero_inst = SOME out_var /\
+      iszero_inst.inst_operands = [orig_cond] /\
+      jnz_uses_var jnz_inst out_var
+Proof
+  rw[transform_block_def] >>
+  Cases_on `(EL (LENGTH bb.bb_instructions - 2) bb.bb_instructions).inst_operands` >> gvs[] >>
+  Cases_on `get_single_output (EL (LENGTH bb.bb_instructions - 2) bb.bb_instructions)` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  Cases_on `jnz_uses_var (EL (LENGTH bb.bb_instructions - 1) bb.bb_instructions) x` >> gvs[]
+QED
+
+(* Transform preserves instruction count *)
+Theorem transform_block_length:
+  !bb. LENGTH (transform_block bb).bb_instructions = LENGTH bb.bb_instructions
+Proof
+  rw[transform_block_def] >>
+  rpt (CASE_TAC >> gvs[]) >>
+  simp[LENGTH_TAKE, LENGTH_APPEND]
+QED
+
 (* ==========================================================================
    Top-Level Correctness Theorem
 
@@ -285,7 +358,7 @@ QED
 
    Proof outline:
    1. For instructions before the ISZERO (idx < n-2), both blocks execute
-      identically via get_instruction_transform_prefix
+      identically via step_in_block_transform_prefix
    2. At the ISZERO position: original executes ISZERO, transformed executes NOP
    3. At the JNZ position: transform_block_execution_equiv shows both produce
       the same vs_current_bb via the semantic equivalence of iszero+jnz vs
@@ -321,20 +394,14 @@ Proof
   rpt strip_tac >>
   Cases_on `transform_block bb = bb` >- gvs[] >>
   (* Non-trivial case: transformation applied.
-     By transform_block_def, we know:
-     - bb has >= 2 instructions
-     - Second-to-last is ISZERO with single operand and output
-     - Last is JNZ using that output
+     Use measure induction on remaining instructions.
 
-     The proof requires showing that executing:
-       prefix ++ [ISZERO] ++ [JNZ var lbl1 lbl2]
-     produces the same vs_current_bb as:
-       prefix ++ [NOP] ++ [JNZ orig_cond lbl2 lbl1]
+     Proof outline:
+     1. For idx < n-2 (prefix): Both blocks execute identically
+        via step_in_block_transform_prefix, then recurse with smaller measure
+     2. For idx >= n-2 (transformed part): Apply transform_block_execution_equiv
+        to show ISZERO+JNZ and NOP+swapped_JNZ produce same vs_current_bb
 
-     This follows from:
-     1. Prefix execution is identical (same instructions from same state)
-     2. iszero_jnz_swap_equiv shows the last two instructions produce same target
-
-     Full infrastructure for this simulation argument is TODO. *)
+     Full proof requires careful unfolding of run_block and tracking states. *)
   cheat
 QED

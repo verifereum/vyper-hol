@@ -141,11 +141,25 @@ For commands with HOL term quotations (backquotes), **always use a temp file**:
 
 ```sml
 (* .hol_cmd.sml *)
-g `!n. n + 0 = n`;
-e (Induct_on `n`);
+gt `!n. n + 0 = n`;
+etq "Induct_on `n`";
 ```
 
 Then: `~/hol-agents/hol-agent-helper.sh send:.hol_cmd.sml`
+
+### Use Goaltree Mode (gt/etq)
+
+**Always use goaltree mode** instead of goalstack for interactive proofs:
+
+| Command | Purpose |
+|---------|---------|
+| `gt \`tm\`` | Start proof (not `g`) |
+| `etq "tac"` | Apply tactic as string (not `e`) |
+| `p()` | Show proof tree with tactic names |
+| `backup()` | Undo last tactic |
+| `top_goals()` | List remaining goals |
+
+**Why?** `etq` records tactics as strings. When done, `p()` outputs the exact proof script ready to paste into your `Theorem ... Proof ... QED` block.
 
 ### File Naming Conventions
 
