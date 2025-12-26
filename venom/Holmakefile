@@ -1,2 +1,3 @@
 # Include paths to verifereum theories (vfmTypes, vfmState, etc.)
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec
+# Also include Keccak for SHA3 implementation
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec $(HOLDIR)/examples/Crypto/Keccak
