@@ -516,12 +516,7 @@ Definition step_inst_def:
                 let size = w2n size_val in
                 let src_offset = w2n offset in
                 let bytes = TAKE size (DROP src_offset data ++ REPLICATE size 0w) in
-                let dest = w2n destOffset in
-                let mem = s.vs_memory in
-                let needed = (dest + size) - LENGTH mem in
-                let expanded = if needed > 0 then mem ++ REPLICATE needed 0w else mem in
-                let newmem = TAKE dest expanded ++ bytes ++ DROP (dest + size) expanded in
-                OK (s with vs_memory := newmem)
+                OK (write_memory_with_expansion (w2n destOffset) bytes s)
             | _ => Error "undefined operand")
         | _ => Error "calldatacopy requires 3 operands")
 
@@ -543,12 +538,7 @@ Definition step_inst_def:
                   Revert (revert_state s)
                 else
                   let bytes = TAKE size (DROP src_offset s.vs_returndata) in
-                  let dest = w2n destOffset in
-                  let mem = s.vs_memory in
-                  let needed = (dest + size) - LENGTH mem in
-                  let expanded = if needed > 0 then mem ++ REPLICATE needed 0w else mem in
-                  let newmem = TAKE dest expanded ++ bytes ++ DROP (dest + size) expanded in
-                  OK (s with vs_memory := newmem)
+                  OK (write_memory_with_expansion (w2n destOffset) bytes s)
             | _ => Error "undefined operand")
         | _ => Error "returndatacopy requires 3 operands")
 
@@ -612,7 +602,8 @@ Proof
   gvs[AllCaseEqs(), is_terminator_def] >>
   fs[exec_binop_def, exec_unop_def, exec_modop_def] >>
   gvs[AllCaseEqs()] >>
-  fs[update_var_def, mstore_def, sstore_def, tstore_def]
+  fs[update_var_def, mstore_def, sstore_def, tstore_def,
+     write_memory_with_expansion_def]
 QED
 
 (* Step within a basic block - returns (result, is_terminator) *)
