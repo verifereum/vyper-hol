@@ -181,6 +181,17 @@ Definition expand_memory_def:
     s with vs_memory := s.vs_memory ++ REPLICATE n 0w
 End
 
+(* Expand memory if needed, then write bytes at offset *)
+Definition write_memory_with_expansion_def:
+  write_memory_with_expansion offset bytes s =
+    let mem = s.vs_memory in
+    let size = LENGTH bytes in
+    let needed = (offset + size) - LENGTH mem in
+    let expanded = if needed > 0 then mem ++ REPLICATE needed 0w else mem in
+    let newmem = TAKE offset expanded ++ bytes ++ DROP (offset + size) expanded in
+    s with vs_memory := newmem
+End
+
 (* Load a 32-byte word from memory (big-endian) *)
 Definition mload_def:
   mload offset s =
