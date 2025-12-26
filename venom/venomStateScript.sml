@@ -22,6 +22,44 @@ Ancestors
 Type var_env = ``:string |-> bytes32``
 
 (* --------------------------------------------------------------------------
+   Execution Context (from EVM environment)
+
+   This provides the environmental information needed for opcodes like
+   CALLER, CALLVALUE, ADDRESS, etc.
+   -------------------------------------------------------------------------- *)
+
+Datatype:
+  call_context = <|
+    cc_caller : address;           (* Caller address (CALLER) *)
+    cc_address : address;          (* Current contract address (ADDRESS) *)
+    cc_callvalue : bytes32;        (* Value sent with call (CALLVALUE) *)
+    cc_calldata : byte list;       (* Call data (CALLDATALOAD, etc.) *)
+    cc_gas : num                   (* Remaining gas (GAS) *)
+  |>
+End
+
+Datatype:
+  tx_context = <|
+    tc_origin : address;           (* Transaction origin (ORIGIN) *)
+    tc_gasprice : bytes32;         (* Gas price (GASPRICE) *)
+    tc_chainid : bytes32           (* Chain ID (CHAINID) *)
+  |>
+End
+
+Datatype:
+  block_context = <|
+    bc_coinbase : address;         (* Block coinbase (COINBASE) *)
+    bc_timestamp : bytes32;        (* Block timestamp (TIMESTAMP) *)
+    bc_number : bytes32;           (* Block number (NUMBER) *)
+    bc_prevrandao : bytes32;       (* Previous randao (PREVRANDAO) *)
+    bc_gaslimit : bytes32;         (* Block gas limit (GASLIMIT) *)
+    bc_basefee : bytes32;          (* Base fee (BASEFEE) *)
+    bc_blobbasefee : bytes32;      (* Blob base fee (BLOBBASEFEE) *)
+    bc_blockhash : num -> bytes32  (* Block hash lookup (BLOCKHASH) *)
+  |>
+End
+
+(* --------------------------------------------------------------------------
    Operands - values that can be used as instruction arguments
    -------------------------------------------------------------------------- *)
 
@@ -52,7 +90,43 @@ Datatype:
     vs_inst_idx : num;               (* Instruction index within block *)
     vs_returndata : byte list;       (* Return data buffer *)
     vs_halted : bool;                (* Execution halted? *)
-    vs_reverted : bool               (* Execution reverted? *)
+    vs_reverted : bool;              (* Execution reverted? *)
+    vs_accounts : evm_accounts;      (* Account states for BALANCE, etc. *)
+    vs_call_ctx : call_context;      (* Call context *)
+    vs_tx_ctx : tx_context;          (* Transaction context *)
+    vs_block_ctx : block_context     (* Block context *)
+  |>
+End
+
+(* Default context values *)
+Definition empty_call_context_def:
+  empty_call_context = <|
+    cc_caller := 0w;
+    cc_address := 0w;
+    cc_callvalue := 0w;
+    cc_calldata := [];
+    cc_gas := 0
+  |>
+End
+
+Definition empty_tx_context_def:
+  empty_tx_context = <|
+    tc_origin := 0w;
+    tc_gasprice := 0w;
+    tc_chainid := 0w
+  |>
+End
+
+Definition empty_block_context_def:
+  empty_block_context = <|
+    bc_coinbase := 0w;
+    bc_timestamp := 0w;
+    bc_number := 0w;
+    bc_prevrandao := 0w;
+    bc_gaslimit := 0w;
+    bc_basefee := 0w;
+    bc_blobbasefee := 0w;
+    bc_blockhash := K 0w
   |>
 End
 
@@ -68,7 +142,11 @@ Definition init_venom_state_def:
     vs_inst_idx := 0;
     vs_returndata := [];
     vs_halted := F;
-    vs_reverted := F
+    vs_reverted := F;
+    vs_accounts := empty_accounts;
+    vs_call_ctx := empty_call_context;
+    vs_tx_ctx := empty_tx_context;
+    vs_block_ctx := empty_block_context
   |>
 End
 

@@ -7,7 +7,7 @@
 
 Theory venomSem
 Ancestors
-  venomState venomInst
+  venomState venomInst keccak
 
 (* --------------------------------------------------------------------------
    Effects System
@@ -334,6 +334,27 @@ Definition step_inst_def:
     | REVERT => Revert (revert_state s)
     | SINK => Halt (halt_state s)
 
+    (* Assertions *)
+    | ASSERT =>
+        (case inst.inst_operands of
+          [cond_op] =>
+            (case eval_operand cond_op s of
+              SOME cond =>
+                if cond = 0w then Revert (revert_state s)
+                else OK s
+            | NONE => Error "undefined operand")
+        | _ => Error "assert requires 1 operand")
+
+    | ASSERT_UNREACHABLE =>
+        (case inst.inst_operands of
+          [cond_op] =>
+            (case eval_operand cond_op s of
+              SOME cond =>
+                if cond <> 0w then Halt (halt_state s)
+                else OK s
+            | NONE => Error "undefined operand")
+        | _ => Error "assert_unreachable requires 1 operand")
+
     (* SSA - PHI node *)
     | PHI =>
         (case inst.inst_outputs of
@@ -360,6 +381,218 @@ Definition step_inst_def:
 
     (* NOP *)
     | NOP => OK s
+
+    (* Environment - Call context *)
+    | CALLER =>
+        (case inst.inst_outputs of
+          [out] => OK (update_var out (w2w s.vs_call_ctx.cc_caller) s)
+        | _ => Error "caller requires single output")
+
+    | ADDRESS =>
+        (case inst.inst_outputs of
+          [out] => OK (update_var out (w2w s.vs_call_ctx.cc_address) s)
+        | _ => Error "address requires single output")
+
+    | CALLVALUE =>
+        (case inst.inst_outputs of
+          [out] => OK (update_var out s.vs_call_ctx.cc_callvalue s)
+        | _ => Error "callvalue requires single output")
+
+    | GAS =>
+        (case inst.inst_outputs of
+          [out] => OK (update_var out (n2w s.vs_call_ctx.cc_gas) s)
+        | _ => Error "gas requires single output")
+
+    (* Environment - Transaction context *)
+    | ORIGIN =>
+        (case inst.inst_outputs of
+          [out] => OK (update_var out (w2w s.vs_tx_ctx.tc_origin) s)
+        | _ => Error "origin requires single output")
+
+    | GASPRICE =>
+        (case inst.inst_outputs of
+          [out] => OK (update_var out s.vs_tx_ctx.tc_gasprice s)
+        | _ => Error "gasprice requires single output")
+
+    | CHAINID =>
+        (case inst.inst_outputs of
+          [out] => OK (update_var out s.vs_tx_ctx.tc_chainid s)
+        | _ => Error "chainid requires single output")
+
+    (* Environment - Block context *)
+    | COINBASE =>
+        (case inst.inst_outputs of
+          [out] => OK (update_var out (w2w s.vs_block_ctx.bc_coinbase) s)
+        | _ => Error "coinbase requires single output")
+
+    | TIMESTAMP =>
+        (case inst.inst_outputs of
+          [out] => OK (update_var out s.vs_block_ctx.bc_timestamp s)
+        | _ => Error "timestamp requires single output")
+
+    | NUMBER =>
+        (case inst.inst_outputs of
+          [out] => OK (update_var out s.vs_block_ctx.bc_number s)
+        | _ => Error "number requires single output")
+
+    | PREVRANDAO =>
+        (case inst.inst_outputs of
+          [out] => OK (update_var out s.vs_block_ctx.bc_prevrandao s)
+        | _ => Error "prevrandao requires single output")
+
+    | GASLIMIT =>
+        (case inst.inst_outputs of
+          [out] => OK (update_var out s.vs_block_ctx.bc_gaslimit s)
+        | _ => Error "gaslimit requires single output")
+
+    | BASEFEE =>
+        (case inst.inst_outputs of
+          [out] => OK (update_var out s.vs_block_ctx.bc_basefee s)
+        | _ => Error "basefee requires single output")
+
+    | BLOBBASEFEE =>
+        (case inst.inst_outputs of
+          [out] => OK (update_var out s.vs_block_ctx.bc_blobbasefee s)
+        | _ => Error "blobbasefee requires single output")
+
+    | BLOCKHASH =>
+        (case inst.inst_operands of
+          [op1] =>
+            (case eval_operand op1 s of
+              SOME blocknum =>
+                (case inst.inst_outputs of
+                  [out] => OK (update_var out (s.vs_block_ctx.bc_blockhash (w2n blocknum)) s)
+                | _ => Error "blockhash requires single output")
+            | NONE => Error "undefined operand")
+        | _ => Error "blockhash requires 1 operand")
+
+    (* Environment - Balance *)
+    | BALANCE =>
+        (case inst.inst_operands of
+          [op1] =>
+            (case eval_operand op1 s of
+              SOME addr =>
+                (case inst.inst_outputs of
+                  [out] =>
+                    let acct = lookup_account (w2w addr) s.vs_accounts in
+                    OK (update_var out (n2w acct.balance) s)
+                | _ => Error "balance requires single output")
+            | NONE => Error "undefined operand")
+        | _ => Error "balance requires 1 operand")
+
+    | SELFBALANCE =>
+        (case inst.inst_outputs of
+          [out] =>
+            let acct = lookup_account s.vs_call_ctx.cc_address s.vs_accounts in
+            OK (update_var out (n2w acct.balance) s)
+        | _ => Error "selfbalance requires single output")
+
+    (* Calldata *)
+    | CALLDATASIZE =>
+        (case inst.inst_outputs of
+          [out] => OK (update_var out (n2w (LENGTH s.vs_call_ctx.cc_calldata)) s)
+        | _ => Error "calldatasize requires single output")
+
+    | CALLDATALOAD =>
+        (case inst.inst_operands of
+          [op1] =>
+            (case eval_operand op1 s of
+              SOME offset =>
+                (case inst.inst_outputs of
+                  [out] =>
+                    let data = s.vs_call_ctx.cc_calldata in
+                    let bytes = TAKE 32 (DROP (w2n offset) data ++ REPLICATE 32 0w) in
+                    OK (update_var out (word_of_bytes T (0w:bytes32) bytes) s)
+                | _ => Error "calldataload requires single output")
+            | NONE => Error "undefined operand")
+        | _ => Error "calldataload requires 1 operand")
+
+    | CALLDATACOPY =>
+        (case inst.inst_operands of
+          [op_size; op_offset; op_destOffset] =>
+            (case (eval_operand op_size s, eval_operand op_offset s, eval_operand op_destOffset s) of
+              (SOME size_val, SOME offset, SOME destOffset) =>
+                let data = s.vs_call_ctx.cc_calldata in
+                let size = w2n size_val in
+                let src_offset = w2n offset in
+                let bytes = TAKE size (DROP src_offset data ++ REPLICATE size 0w) in
+                let dest = w2n destOffset in
+                let mem = s.vs_memory in
+                let needed = (dest + size) - LENGTH mem in
+                let expanded = if needed > 0 then mem ++ REPLICATE needed 0w else mem in
+                let newmem = TAKE dest expanded ++ bytes ++ DROP (dest + size) expanded in
+                OK (s with vs_memory := newmem)
+            | _ => Error "undefined operand")
+        | _ => Error "calldatacopy requires 3 operands")
+
+    (* Return data *)
+    | RETURNDATASIZE =>
+        (case inst.inst_outputs of
+          [out] => OK (update_var out (n2w (LENGTH s.vs_returndata)) s)
+        | _ => Error "returndatasize requires single output")
+
+    | RETURNDATACOPY =>
+        (case inst.inst_operands of
+          [op_size; op_offset; op_destOffset] =>
+            (case (eval_operand op_size s, eval_operand op_offset s, eval_operand op_destOffset s) of
+              (SOME size_val, SOME offset, SOME destOffset) =>
+                let size = w2n size_val in
+                let src_offset = w2n offset in
+                (* Check for out-of-bounds access *)
+                if src_offset + size > LENGTH s.vs_returndata then
+                  Revert (revert_state s)
+                else
+                  let bytes = TAKE size (DROP src_offset s.vs_returndata) in
+                  let dest = w2n destOffset in
+                  let mem = s.vs_memory in
+                  let needed = (dest + size) - LENGTH mem in
+                  let expanded = if needed > 0 then mem ++ REPLICATE needed 0w else mem in
+                  let newmem = TAKE dest expanded ++ bytes ++ DROP (dest + size) expanded in
+                  OK (s with vs_memory := newmem)
+            | _ => Error "undefined operand")
+        | _ => Error "returndatacopy requires 3 operands")
+
+    (* Memory size *)
+    | MSIZE =>
+        (case inst.inst_outputs of
+          [out] =>
+            (* MSIZE returns memory size rounded up to 32-byte words *)
+            let size = LENGTH s.vs_memory in
+            let words = (size + 31) DIV 32 in
+            OK (update_var out (n2w (words * 32)) s)
+        | _ => Error "msize requires single output")
+
+    (* Hashing - using Keccak256 like EVM *)
+    | SHA3 =>
+        (case inst.inst_operands of
+          [op_size; op_offset] =>
+            (case (eval_operand op_size s, eval_operand op_offset s) of
+              (SOME size_val, SOME offset) =>
+                (case inst.inst_outputs of
+                  [out] =>
+                    let size = w2n size_val in
+                    let off = w2n offset in
+                    let data = TAKE size (DROP off s.vs_memory ++ REPLICATE size 0w) in
+                    let hash = word_of_bytes T (0w:bytes32) (Keccak_256_w64 data) in
+                    OK (update_var out hash s)
+                | _ => Error "sha3 requires single output")
+            | _ => Error "undefined operand")
+        | _ => Error "sha3 requires 2 operands")
+
+    | SHA3_64 =>
+        (* SHA3_64 is a Vyper optimization: hash exactly 64 bytes (two words) *)
+        (case inst.inst_operands of
+          [op2; op1] =>
+            (case (eval_operand op1 s, eval_operand op2 s) of
+              (SOME v1, SOME v2) =>
+                (case inst.inst_outputs of
+                  [out] =>
+                    let data = word_to_bytes v1 T ++ word_to_bytes v2 T in
+                    let hash = word_of_bytes T (0w:bytes32) (Keccak_256_w64 data) in
+                    OK (update_var out hash s)
+                | _ => Error "sha3_64 requires single output")
+            | _ => Error "undefined operand")
+        | _ => Error "sha3_64 requires 2 operands")
 
     (* Default - unimplemented *)
     | _ => Error "unimplemented opcode"
