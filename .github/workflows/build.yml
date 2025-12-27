@@ -5,6 +5,7 @@ on:
   push:
     paths:
     - '**'
+  pull_request:
 
 jobs:
   build:
