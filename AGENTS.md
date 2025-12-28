@@ -12,7 +12,6 @@
 Only use Bash for:
 - Running `Holmake` builds
 - Git operations (`git grep`, `git status`, etc.)
-- HOL4 interactive sessions (use `/hol` skill for guidance)
 
 **Why:** Bash file operations require permission prompts. The dedicated tools don't.
 
@@ -103,16 +102,11 @@ VFMDIR=/home/ubuntu/verifereum Holmake --qof
 
 ## Interactive HOL Sessions
 
-Use the `/hol` skill for interactive proof development. It provides:
-- Helper script commands for session management
-- Goaltree mode (`gt`/`etq`) for tactic recording
-- File-based command sending (for backquotes)
-- Session isolation for parallel agents
+Use the `/hol4` skills for proof development.
 
 ### File Conventions (repo-specific)
 
 Local test/scratch files use **dot prefixes** (gitignored):
-- `.hol_cmd.sml` - commands to send
 - `.hol_init.sml` - auto-loaded on session start
 - `.hol_test.sml` - temporary test scripts
 
