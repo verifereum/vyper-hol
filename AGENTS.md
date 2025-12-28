@@ -11,8 +11,8 @@
 
 Only use Bash for:
 - Running `Holmake` builds
-- Running `~/hol-agents/hol-agent-helper.sh` commands
 - Git operations (`git grep`, `git status`, etc.)
+- HOL4 interactive sessions (use `/hol` skill for guidance)
 
 **Why:** Bash file operations require permission prompts. The dedicated tools don't.
 
@@ -103,62 +103,20 @@ VFMDIR=/home/ubuntu/verifereum Holmake --qof
 
 ## Interactive HOL Sessions
 
-Use the helper script for debugging proofs:
+Use the `/hol` skill for interactive proof development. It provides:
+- Helper script commands for session management
+- Goaltree mode (`gt`/`etq`) for tactic recording
+- File-based command sending (for backquotes)
+- Session isolation for parallel agents
 
-```bash
-# Start session (from theories directory)
-~/hol-agents/hol-agent-helper.sh start
+### File Conventions (repo-specific)
 
-# Check status
-~/hol-agents/hol-agent-helper.sh status
-
-# Send simple commands (no backquotes)
-~/hol-agents/hol-agent-helper.sh send 'open arithmeticTheory;'
-
-# Send commands with backquotes - use a file
-# Write to hol_cmd.sml, then:
-~/hol-agents/hol-agent-helper.sh send:hol_cmd.sml
-
-# IMPORTANT: ALWAYS check output using the helper script's log command
-# NEVER use raw file paths like ~/.hol/hol_output.log directly
-~/hol-agents/hol-agent-helper.sh log | tail -50
-
-# Stop
-~/hol-agents/hol-agent-helper.sh stop
-```
-
-**CRITICAL: Always use `~/hol-agents/hol-agent-helper.sh log` for checking HOL output. Do NOT access raw log files directly.**
-
-### Initialization
-
-For code that should always run at session start (loading theories, etc.), put it in `.hol_init.sml` in the working directory. This is auto-loaded by `start`.
-
-**IMPORTANT:** Before issuing any commands, check the contents of `.hol_init.sml` to see what's already loaded. Don't duplicate load commands.
-
-### Sending Commands
-
-For commands with HOL term quotations (backquotes), **always use a temp file**:
-
-```sml
-(* .hol_cmd.sml *)
-g `!n. n + 0 = n`;
-e (Induct_on `n`);
-```
-
-Then: `~/hol-agents/hol-agent-helper.sh send:.hol_cmd.sml`
-
-### File Naming Conventions
-
-Local test/scratch files should use **dot prefixes** to keep them gitignored:
-
-- `.hol_cmd.sml` - command file for sending to HOL session
+Local test/scratch files use **dot prefixes** (gitignored):
+- `.hol_cmd.sml` - commands to send
 - `.hol_init.sml` - auto-loaded on session start
 - `.hol_test.sml` - temporary test scripts
 
-These `.hol*` files are gitignored. Avoid unprefixed names like `test.sml` or `hol_cmd.sml` which will show up in git status.
-
-### File Size
-Try to keep files under 500 LOC for better context management (soft limit, not strict).
+Try to keep theory files under 500 LOC (soft limit).
 
 ## HOL4 Tactics Reference
 
