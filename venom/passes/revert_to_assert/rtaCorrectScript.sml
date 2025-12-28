@@ -38,9 +38,11 @@
  * ============================================================================
  *)
 
-Theory revertAssertCorrect
+Theory rtaCorrect
 Ancestors
-  revertAssertProps revertAssertDefs stateEquiv
+  rtaProps rtaDefs stateEquiv
+Libs
+  rtaPropsTheory rtaDefsTheory stateEquivTheory venomSemPropsTheory
 
 (* ==========================================================================
    Pattern 1 Correctness: jnz cond @revert @else => iszero; assert; jmp @else
@@ -100,19 +102,15 @@ Theorem revert_to_assert_pattern1_correct:
         (jump_to else_label s)
         (jump_to else_label (update_var iszero_out 1w s)))
 Proof
-  (* PROOF SKETCH:
-     For revert case (cond != 0w):
-       result_equiv_except {iszero_out} (Revert (revert_state s))
-                                        (Revert (revert_state (update_var iszero_out 0w s)))
-       = state_equiv_except {iszero_out} (revert_state s) (revert_state (update_var ...))
-         [by result_equiv_except_revert]
-       This follows from revert_state_except_preserves and update_var_state_equiv_except_insert.
-
-     For continue case (cond = 0w):
-       state_equiv_except {iszero_out} (jump_to else_label s)
-                                       (jump_to else_label (update_var iszero_out 1w s))
-       This follows from jump_to_except_preserves and update_var_state_equiv_except_insert. *)
-  cheat
+  rw[] >| [
+    (* Revert case *)
+    simp[result_equiv_except_def] >>
+    irule revert_state_except_preserves >>
+    irule update_var_state_equiv_except_insert,
+    (* Continue case *)
+    irule jump_to_except_preserves >>
+    irule update_var_state_equiv_except_insert
+  ]
 QED
 
 (* ==========================================================================
@@ -204,25 +202,7 @@ Theorem pattern1_block_correct:
     (* Equivalence: both cases give result_equiv_except {iszero_out} *)
     result_equiv_except {iszero_out} orig_result trans_result
 Proof
-  (* PROOF SKETCH:
-     Case split on cond = 0w.
-
-     Case cond = 0w:
-       iszero_val = bool_to_word T = 1w != 0w
-       orig_result = OK (jump_to else_label s)
-       trans_result = OK (jump_to else_label s1) where s1 = update_var iszero_out 1w s
-       Need: result_equiv_except {iszero_out} (OK ...) (OK ...)
-           = state_equiv_except {iszero_out} (jump_to else_label s) (jump_to else_label s1)
-       Use jump_to_except_preserves and update_var_state_equiv_except_insert.
-
-     Case cond != 0w:
-       iszero_val = bool_to_word F = 0w
-       orig_result = Revert (revert_state s)
-       trans_result = Revert (revert_state s1) where s1 = update_var iszero_out 0w s
-       Need: result_equiv_except {iszero_out} (Revert ...) (Revert ...)
-           = state_equiv_except {iszero_out} (revert_state s) (revert_state s1)
-       Use revert_state_except_preserves and update_var_state_equiv_except_insert. *)
-  cheat
+  cheat (* TODO: fix proof - irule match issue *)
 QED
 
 (*
@@ -314,22 +294,31 @@ Theorem pattern1_transform_correct:
         (jump_to else_label s)
         (jump_to else_label s1))
 Proof
-  (* PROOF SKETCH:
-     1. step_inst iszero_inst s = OK s1: Use step_iszero_value from Props.
-
-     For cond != 0w:
-       2. eval_operand (Var iszero_out) s1 = SOME (bool_to_word (cond = 0w))
-          = SOME (bool_to_word F) = SOME 0w  (by eval_operand_update_var_same)
-       3. step_inst assert_inst s1 = Revert (revert_state s1)
-          (by step_assert_behavior with condition = 0w)
-       4. result_equiv_except: Use revert_state_except_preserves.
-
-     For cond = 0w:
-       2. eval_operand (Var iszero_out) s1 = SOME (bool_to_word T) = SOME 1w
-       3. step_inst assert_inst s1 = OK s1 (by step_assert_behavior with cond != 0w)
-       4. step_inst jmp_inst s1 = OK (jump_to else_label s1) (by step_jmp_behavior)
-       5. state_equiv_except: Use jump_to_except_preserves. *)
-  cheat
+  rw[] >| [
+    (* ISZERO step *)
+    drule step_iszero_value >> simp[],
+    (* cond != 0w: assert reverts *)
+    `(cond = 0w) = F` by gvs[] >>
+    pop_assum (fn th => simp[th, bool_to_word_F, eval_operand_update_var_same]) >>
+    irule step_assert_zero_reverts >>
+    simp[eval_operand_update_var_same],
+    (* cond != 0w: result_equiv_except *)
+    `(cond = 0w) = F` by gvs[] >>
+    pop_assum (fn th => simp[th, bool_to_word_F]) >>
+    simp[result_equiv_except_def] >>
+    irule revert_state_except_preserves >>
+    irule update_var_state_equiv_except_insert,
+    (* cond = 0w: assert passes *)
+    simp[bool_to_word_T, eval_operand_update_var_same] >>
+    irule step_assert_nonzero_passes >>
+    simp[eval_operand_update_var_same],
+    (* cond = 0w: JMP *)
+    simp[step_jmp_behavior],
+    (* cond = 0w: state_equiv_except *)
+    simp[bool_to_word_T] >>
+    irule jump_to_except_preserves >>
+    irule update_var_state_equiv_except_insert
+  ]
 QED
 
 (*
@@ -355,14 +344,14 @@ Theorem pattern2_transform_correct:
     (cond = 0w ==>
       step_inst assert_inst s = Revert (revert_state s))
 Proof
-  (* PROOF SKETCH:
-     For cond != 0w:
-       step_assert_nonzero_passes gives OK s.
-       step_jmp_behavior gives OK (jump_to then_label s).
-
-     For cond = 0w:
-       step_assert_zero_reverts gives Revert (revert_state s). *)
-  cheat
+  rw[] >| [
+    (* cond != 0w: assert passes *)
+    irule step_assert_nonzero_passes >> simp[],
+    (* cond != 0w: jmp *)
+    simp[step_jmp_behavior],
+    (* cond = 0w: assert reverts *)
+    irule step_assert_zero_reverts >> simp[]
+  ]
 QED
 
 (* ==========================================================================
