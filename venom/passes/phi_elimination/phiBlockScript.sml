@@ -217,7 +217,7 @@ Proof
   Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
   simp[exec_binop_def, exec_unop_def, exec_modop_def] >>
   strip_tac >> gvs[AllCaseEqs()] >>
-  gvs[update_var_def, mstore_def, sstore_def, tstore_def]
+  gvs[update_var_def, mstore_def, sstore_def, tstore_def, write_memory_with_expansion_def]
 QED
 
 (* Helper: step_in_block preserves vs_prev_bb for non-terminator steps *)

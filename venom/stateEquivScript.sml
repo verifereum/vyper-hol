@@ -52,7 +52,12 @@ Definition state_equiv_def:
     s1.vs_inst_idx = s2.vs_inst_idx /\
     s1.vs_prev_bb = s2.vs_prev_bb /\
     s1.vs_halted = s2.vs_halted /\
-    s1.vs_reverted = s2.vs_reverted
+    s1.vs_reverted = s2.vs_reverted /\
+    s1.vs_returndata = s2.vs_returndata /\
+    s1.vs_accounts = s2.vs_accounts /\
+    s1.vs_call_ctx = s2.vs_call_ctx /\
+    s1.vs_tx_ctx = s2.vs_tx_ctx /\
+    s1.vs_block_ctx = s2.vs_block_ctx
 End
 
 (* ==========================================================================
@@ -192,6 +197,15 @@ Proof
   rw[state_equiv_def, var_equiv_def, mstore_def, lookup_var_def]
 QED
 
+Theorem write_memory_with_expansion_state_equiv:
+  !offset bytes s1 s2.
+    state_equiv s1 s2 ==>
+    state_equiv (write_memory_with_expansion offset bytes s1)
+                (write_memory_with_expansion offset bytes s2)
+Proof
+  rw[state_equiv_def, var_equiv_def, write_memory_with_expansion_def, lookup_var_def]
+QED
+
 Theorem sload_state_equiv:
   !key s1 s2.
     state_equiv s1 s2 ==>
@@ -247,4 +261,3 @@ Theorem revert_state_state_equiv:
 Proof
   rw[state_equiv_def, var_equiv_def, revert_state_def, lookup_var_def]
 QED
-
