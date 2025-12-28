@@ -113,6 +113,28 @@ Proof
     (* PHI case - prev_bb is same in both states *)
     TRY (`s1.vs_prev_bb = s2.vs_prev_bb` by fs[state_equiv_def] >> gvs[] >>
          irule update_var_state_equiv >> simp[] >> NO_TAC) >>
+    (* MSIZE case - memory is same in both states *)
+    TRY (`s1.vs_memory = s2.vs_memory` by fs[state_equiv_def] >> gvs[] >>
+         irule update_var_state_equiv >> simp[] >> NO_TAC) >>
+    (* Environment opcodes - contexts are same in both states *)
+    TRY (`s1.vs_call_ctx = s2.vs_call_ctx` by fs[state_equiv_def] >> gvs[] >>
+         irule update_var_state_equiv >> simp[] >> NO_TAC) >>
+    TRY (`s1.vs_tx_ctx = s2.vs_tx_ctx` by fs[state_equiv_def] >> gvs[] >>
+         irule update_var_state_equiv >> simp[] >> NO_TAC) >>
+    TRY (`s1.vs_block_ctx = s2.vs_block_ctx` by fs[state_equiv_def] >> gvs[] >>
+         irule update_var_state_equiv >> simp[] >> NO_TAC) >>
+    TRY (`s1.vs_accounts = s2.vs_accounts /\ s1.vs_call_ctx = s2.vs_call_ctx`
+         by fs[state_equiv_def] >> gvs[] >>
+         irule update_var_state_equiv >> simp[] >> NO_TAC) >>
+    TRY (`s1.vs_returndata = s2.vs_returndata` by fs[state_equiv_def] >> gvs[] >>
+         irule update_var_state_equiv >> simp[] >> NO_TAC) >>
+    (* Memory write operations with expansion *)
+    TRY (`s1.vs_call_ctx = s2.vs_call_ctx /\ s1.vs_memory = s2.vs_memory`
+         by fs[state_equiv_def] >> gvs[] >>
+         irule write_memory_with_expansion_state_equiv >> simp[] >> NO_TAC) >>
+    TRY (`s1.vs_returndata = s2.vs_returndata /\ s1.vs_memory = s2.vs_memory`
+         by fs[state_equiv_def] >> gvs[] >>
+         irule write_memory_with_expansion_state_equiv >> simp[] >> NO_TAC) >>
     simp[state_equiv_refl]
   ]
 QED
@@ -272,6 +294,14 @@ Proof
   TRY (
     simp[result_equiv_def] >> irule revert_state_state_equiv >> simp[] >> NO_TAC
   ) >>
+  (* ASSERT and ASSERT_UNREACHABLE *)
+  TRY (
+    drule eval_operand_state_equiv >> strip_tac >>
+    rpt CASE_TAC >> gvs[result_equiv_def] >>
+    TRY (irule halt_state_state_equiv >> simp[] >> NO_TAC) >>
+    TRY (irule revert_state_state_equiv >> simp[] >> NO_TAC) >>
+    simp[state_equiv_refl] >> NO_TAC
+  ) >>
   (* PHI *)
   TRY (
     `s1.vs_prev_bb = s2.vs_prev_bb` by fs[state_equiv_def] >>
@@ -289,6 +319,70 @@ Proof
     drule eval_operand_state_equiv >> strip_tac >> gvs[] >>
     Cases_on `eval_operand h s1` >> simp[result_equiv_def] >>
     irule update_var_state_equiv >> simp[] >> NO_TAC
+  ) >>
+  (* MSIZE - memory is same in both states *)
+  TRY (
+    `s1.vs_memory = s2.vs_memory` by fs[state_equiv_def] >>
+    rpt CASE_TAC >> gvs[result_equiv_def] >>
+    irule update_var_state_equiv >> simp[] >> NO_TAC
+  ) >>
+  (* Environment opcodes - contexts are same in both states *)
+  TRY (
+    `s1.vs_call_ctx = s2.vs_call_ctx` by fs[state_equiv_def] >>
+    rpt CASE_TAC >> gvs[result_equiv_def] >>
+    irule update_var_state_equiv >> simp[] >> NO_TAC
+  ) >>
+  TRY (
+    `s1.vs_tx_ctx = s2.vs_tx_ctx` by fs[state_equiv_def] >>
+    rpt CASE_TAC >> gvs[result_equiv_def] >>
+    irule update_var_state_equiv >> simp[] >> NO_TAC
+  ) >>
+  TRY (
+    `s1.vs_block_ctx = s2.vs_block_ctx` by fs[state_equiv_def] >>
+    rpt CASE_TAC >> gvs[result_equiv_def] >>
+    irule update_var_state_equiv >> simp[] >> NO_TAC
+  ) >>
+  (* BLOCKHASH - needs eval_operand *)
+  TRY (
+    `s1.vs_block_ctx = s2.vs_block_ctx` by fs[state_equiv_def] >>
+    drule eval_operand_state_equiv >> strip_tac >>
+    rpt CASE_TAC >> gvs[result_equiv_def] >>
+    irule update_var_state_equiv >> simp[] >> NO_TAC
+  ) >>
+  TRY (
+    `s1.vs_accounts = s2.vs_accounts /\ s1.vs_call_ctx = s2.vs_call_ctx`
+    by fs[state_equiv_def] >>
+    drule eval_operand_state_equiv >> strip_tac >>
+    rpt CASE_TAC >> gvs[result_equiv_def] >>
+    irule update_var_state_equiv >> simp[] >> NO_TAC
+  ) >>
+  TRY (
+    `s1.vs_returndata = s2.vs_returndata` by fs[state_equiv_def] >>
+    rpt CASE_TAC >> gvs[result_equiv_def] >>
+    irule update_var_state_equiv >> simp[] >> NO_TAC
+  ) >>
+  (* SHA3 - needs memory and eval_operand *)
+  TRY (
+    `s1.vs_memory = s2.vs_memory` by fs[state_equiv_def] >>
+    drule eval_operand_state_equiv >> strip_tac >>
+    rpt CASE_TAC >> gvs[result_equiv_def] >>
+    irule update_var_state_equiv >> simp[] >> NO_TAC
+  ) >>
+  (* Memory write operations with expansion *)
+  TRY (
+    `s1.vs_call_ctx = s2.vs_call_ctx /\ s1.vs_memory = s2.vs_memory`
+    by fs[state_equiv_def] >>
+    drule eval_operand_state_equiv >> strip_tac >>
+    rpt CASE_TAC >> gvs[result_equiv_def] >>
+    irule write_memory_with_expansion_state_equiv >> simp[] >> NO_TAC
+  ) >>
+  TRY (
+    `s1.vs_returndata = s2.vs_returndata /\ s1.vs_memory = s2.vs_memory`
+    by fs[state_equiv_def] >>
+    drule eval_operand_state_equiv >> strip_tac >>
+    rpt CASE_TAC >> gvs[result_equiv_def] >>
+    TRY (irule revert_state_state_equiv >> simp[] >> NO_TAC) >>
+    irule write_memory_with_expansion_state_equiv >> simp[] >> NO_TAC
   ) >>
   (* NOP *)
   simp[result_equiv_def, state_equiv_refl]

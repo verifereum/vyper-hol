@@ -33,39 +33,13 @@
 
 Theory revertAssertProps
 Ancestors
-  revertAssertDefs stateEquiv
+  revertAssertDefs stateEquiv venomSemProps
 
 (* ==========================================================================
-   bool_to_word Properties
+   NOTE: bool_to_word properties and basic instruction behavior lemmas
+   (step_iszero_value, step_assert_behavior, step_revert_always_reverts,
+   step_jnz_behavior, step_jmp_behavior) are now in venomSemPropsTheory.
    ========================================================================== *)
-
-(* WHY THIS IS TRUE: By definition, bool_to_word T = 1w, bool_to_word F = 0w.
-   So bool_to_word b = 0w iff b = F iff ~b. *)
-Theorem bool_to_word_eq_0w:
-  !b. (bool_to_word b = 0w) <=> ~b
-Proof
-  cheat
-QED
-
-(* WHY THIS IS TRUE: Contrapositive of above. bool_to_word b <> 0w iff b = T. *)
-Theorem bool_to_word_neq_0w:
-  !b. (bool_to_word b <> 0w) <=> b
-Proof
-  cheat
-QED
-
-(* WHY THIS IS TRUE: Direct evaluation of bool_to_word on T and F. *)
-Theorem bool_to_word_T[simp]:
-  bool_to_word T = 1w
-Proof
-  cheat
-QED
-
-Theorem bool_to_word_F[simp]:
-  bool_to_word F = 0w
-Proof
-  cheat
-QED
 
 (* ==========================================================================
    Operand Evaluation with Variable Updates
@@ -96,38 +70,9 @@ Proof
 QED
 
 (* ==========================================================================
-   ISZERO Instruction Behavior
+   ASSERT Instruction Behavior - Special Cases
+   (Base lemma step_assert_behavior is in venomSemPropsTheory)
    ========================================================================== *)
-
-(* WHY THIS IS TRUE: By step_inst_def, ISZERO uses exec_unop with
-   (\x. bool_to_word (x = 0w)). exec_unop evaluates the single operand,
-   applies the function, and updates the output variable. *)
-Theorem step_iszero_value:
-  !s cond cond_op out id.
-    eval_operand cond_op s = SOME cond ==>
-    step_inst <| inst_id := id; inst_opcode := ISZERO;
-                 inst_operands := [cond_op]; inst_outputs := [out] |> s =
-    OK (update_var out (bool_to_word (cond = 0w)) s)
-Proof
-  cheat
-QED
-
-(* ==========================================================================
-   ASSERT Instruction Behavior
-   ========================================================================== *)
-
-(* WHY THIS IS TRUE: By step_inst_def, ASSERT evaluates its operand.
-   If cond = 0w, it returns Revert (revert_state s).
-   If cond <> 0w, it returns OK s. *)
-Theorem step_assert_behavior:
-  !s cond cond_op id.
-    eval_operand cond_op s = SOME cond ==>
-    step_inst <| inst_id := id; inst_opcode := ASSERT;
-                 inst_operands := [cond_op]; inst_outputs := [] |> s =
-    if cond = 0w then Revert (revert_state s) else OK s
-Proof
-  cheat
-QED
 
 (* WHY THIS IS TRUE: Special case of step_assert_behavior with cond = 0w. *)
 Theorem step_assert_zero_reverts:
@@ -152,37 +97,9 @@ Proof
 QED
 
 (* ==========================================================================
-   REVERT Instruction Behavior
+   JNZ Instruction Behavior - Special Cases
+   (Base lemma step_jnz_behavior is in venomSemPropsTheory)
    ========================================================================== *)
-
-(* WHY THIS IS TRUE: By step_inst_def, REVERT unconditionally returns
-   Revert (revert_state s) regardless of operands. *)
-Theorem step_revert_always_reverts:
-  !s id ops.
-    step_inst <| inst_id := id; inst_opcode := REVERT;
-                 inst_operands := ops; inst_outputs := [] |> s =
-    Revert (revert_state s)
-Proof
-  cheat
-QED
-
-(* ==========================================================================
-   JNZ Instruction Behavior
-   ========================================================================== *)
-
-(* WHY THIS IS TRUE: By step_inst_def, JNZ evaluates the condition.
-   If cond <> 0w, it jumps to if_nonzero; else to if_zero. *)
-Theorem step_jnz_behavior:
-  !s cond cond_op if_nonzero if_zero id.
-    eval_operand cond_op s = SOME cond ==>
-    step_inst <| inst_id := id; inst_opcode := JNZ;
-                 inst_operands := [cond_op; Label if_nonzero; Label if_zero];
-                 inst_outputs := [] |> s =
-    if cond <> 0w then OK (jump_to if_nonzero s)
-    else OK (jump_to if_zero s)
-Proof
-  cheat
-QED
 
 (* WHY THIS IS TRUE: Special case when cond <> 0w. *)
 Theorem step_jnz_nonzero_jumps:
@@ -209,21 +126,8 @@ Proof
 QED
 
 (* ==========================================================================
-   JMP Instruction Behavior
-   ========================================================================== *)
-
-(* WHY THIS IS TRUE: By step_inst_def, JMP unconditionally jumps to the label. *)
-Theorem step_jmp_behavior:
-  !s lbl id.
-    step_inst <| inst_id := id; inst_opcode := JMP;
-                 inst_operands := [Label lbl]; inst_outputs := [] |> s =
-    OK (jump_to lbl s)
-Proof
-  cheat
-QED
-
-(* ==========================================================================
    Simple Revert Block Execution
+   (step_jmp_behavior is in venomSemPropsTheory)
    ========================================================================== *)
 
 (* WHY THIS IS TRUE: A block with only [revert 0 0] will:
