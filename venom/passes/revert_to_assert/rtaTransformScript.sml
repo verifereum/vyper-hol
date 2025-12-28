@@ -443,6 +443,15 @@ Proof
 QED
 
 (*
+ * Helper: lookup_function returning SOME implies MEM.
+ *)
+Theorem lookup_function_MEM:
+  !name fns fn. lookup_function name fns = SOME fn ==> MEM fn fns
+Proof
+  gen_tac >> Induct >> rw[lookup_function_def] >> gvs[AllCaseEqs()]
+QED
+
+(*
  * All fresh variables in a context.
  *)
 Definition fresh_vars_in_context_def:
@@ -472,7 +481,30 @@ Theorem transform_context_correct:
         (run_function fuel fn (s with vs_inst_idx := 0))
         (run_function fuel fn' (s with vs_inst_idx := 0))
 Proof
-  cheat (* TODO: fix proof *)
+  rw[] >> (* Expand let bindings *)
+  (* Show fn' = transform_function fn *)
+  sg `fn' = transform_function fn` >- (
+    irule EQ_SYM >>
+    qpat_x_assum `lookup_function _ ctx.ctx_functions = _`
+      (fn th => assume_tac (MATCH_MP lookup_function_transform_context th)) >>
+    gvs[]
+  ) >>
+  gvs[] >>
+  (* Get MEM fn ctx.ctx_functions from lookup *)
+  sg `MEM fn ctx.ctx_functions` >- (imp_res_tac lookup_function_MEM) >>
+  (* Get fresh_vars_unused fn s *)
+  `fresh_vars_unused fn s` by gvs[] >>
+  (* Apply transform_function_correct *)
+  drule_all transform_function_correct >> simp[] >> strip_tac >>
+  (* Widen from fresh_vars_in_function to fresh_vars_in_context *)
+  irule result_equiv_except_subset >>
+  qexists_tac `fresh_vars_in_function fn` >>
+  conj_tac >- (
+    simp[fresh_vars_in_context_def, pred_setTheory.SUBSET_DEF,
+         pred_setTheory.IN_BIGUNION, PULL_EXISTS] >>
+    metis_tac[]
+  ) >>
+  simp[]
 QED
 
 (* ==========================================================================
