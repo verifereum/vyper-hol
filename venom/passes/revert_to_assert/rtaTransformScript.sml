@@ -32,7 +32,7 @@
 
 Theory rtaTransform
 Ancestors
-  rtaCorrect rtaProps rtaDefs venomSem
+  rtaCorrect rtaProps rtaDefs venomSem venomInst list
 
 (* ==========================================================================
    Instruction Builders
@@ -236,24 +236,6 @@ Proof
   rw[transform_block_insts_def]
 QED
 
-(*
- * WHY THIS IS TRUE: transform_jnz returns NONE for non-pattern JNZ.
- * Pattern requires specific operand structure with revert labels.
- *)
-Theorem transform_jnz_none_cases:
-  !fn inst.
-    transform_jnz fn inst = NONE <=>
-    inst.inst_opcode <> JNZ \/
-    (?ops. inst.inst_operands = ops /\
-           !cond if_nz if_z.
-             ops = [cond; Label if_nz; Label if_z] ==>
-             ~is_revert_label fn if_nz /\ ~is_revert_label fn if_z) \/
-    (?cond v1 v2. inst.inst_operands = [cond; v1; v2] /\
-                  (!l. v1 <> Label l) \/ (!l. v2 <> Label l))
-Proof
-  cheat (* Straightforward case analysis on transform_jnz_def *)
-QED
-
 (* ==========================================================================
    Block-Level Correctness
    ========================================================================== *)
@@ -274,23 +256,28 @@ Proof
 QED
 
 (*
- * Helper: run_block on prefix of identical instructions gives same result.
+ * Helper: step_in_block is the same for two blocks with matching prefix.
  *
- * WHY THIS IS TRUE: run_block is deterministic. If we execute the same
- * instruction sequence starting from the same state, we get the same result.
- * The prefix portion before any transformation is identical.
+ * WHY THIS IS TRUE: step_in_block uses get_instruction to fetch current instruction.
+ * If TAKE (SUC n) matches and we're at index n, then EL n is the same.
+ * So step_in_block executes the same instruction on both.
  *)
-Theorem run_block_prefix_deterministic:
+Theorem step_in_block_prefix_same:
   !fn bb1 bb2 s n.
-    TAKE n bb1.bb_instructions = TAKE n bb2.bb_instructions /\
-    n <= LENGTH bb1.bb_instructions /\
-    n <= LENGTH bb2.bb_instructions /\
-    s.vs_inst_idx = 0
+    TAKE (SUC n) bb1.bb_instructions = TAKE (SUC n) bb2.bb_instructions /\
+    s.vs_inst_idx = n /\
+    n < LENGTH bb1.bb_instructions /\
+    n < LENGTH bb2.bb_instructions
   ==>
-    (* States after executing n instructions are equal *)
-    T  (* Placeholder - needs run_n_steps definition *)
+    step_in_block fn bb1 s = step_in_block fn bb2 s
 Proof
-  cheat (* Requires induction on n and step_inst determinism *)
+  rw[step_in_block_def, get_instruction_def] >>
+  `EL s.vs_inst_idx bb1.bb_instructions = EL s.vs_inst_idx bb2.bb_instructions` by (
+    `EL s.vs_inst_idx (TAKE (SUC s.vs_inst_idx) bb1.bb_instructions) =
+     EL s.vs_inst_idx (TAKE (SUC s.vs_inst_idx) bb2.bb_instructions)` by simp[] >>
+    metis_tac[EL_TAKE, DECIDE ``n < SUC n``]
+  ) >>
+  simp[]
 QED
 
 (*
@@ -332,6 +319,28 @@ QED
    ========================================================================== *)
 
 (*
+ * Helper: Block label is preserved by transform_block.
+ *)
+Theorem transform_block_preserves_label:
+  !fn bb. (transform_block fn bb).bb_label = bb.bb_label
+Proof
+  rw[transform_block_def]
+QED
+
+(*
+ * Helper: lookup_block distributes over MAP.
+ *)
+Theorem lookup_block_MAP:
+  !fn blocks lbl bb.
+    lookup_block lbl blocks = SOME bb ==>
+    lookup_block lbl (MAP (transform_block fn) blocks) =
+      SOME (transform_block fn bb)
+Proof
+  Induct_on `blocks` >- simp[lookup_block_def] >>
+  rw[lookup_block_def, transform_block_preserves_label]
+QED
+
+(*
  * Helper: Block lookup works in transformed function.
  *
  * WHY THIS IS TRUE: transform_function applies transform_block to each block
@@ -344,16 +353,7 @@ Theorem lookup_block_transform_function:
     lookup_block lbl (transform_function fn).fn_blocks =
       SOME (transform_block fn bb)
 Proof
-  cheat (* Induction on fn.fn_blocks, uses transform_block preserves label *)
-QED
-
-(*
- * Helper: Block label is preserved by transform_block.
- *)
-Theorem transform_block_preserves_label:
-  !fn bb. (transform_block fn bb).bb_label = bb.bb_label
-Proof
-  rw[transform_block_def]
+  rw[transform_function_def] >> irule lookup_block_MAP >> simp[]
 QED
 
 (*
@@ -409,6 +409,28 @@ QED
    ========================================================================== *)
 
 (*
+ * Helper: Function name is preserved by transform_function.
+ *)
+Theorem transform_function_preserves_name:
+  !fn. (transform_function fn).fn_name = fn.fn_name
+Proof
+  simp[transform_function_def]
+QED
+
+(*
+ * Helper: lookup_function distributes over MAP.
+ *)
+Theorem lookup_function_MAP:
+  !fns name fn.
+    lookup_function name fns = SOME fn ==>
+    lookup_function name (MAP transform_function fns) =
+      SOME (transform_function fn)
+Proof
+  Induct_on `fns` >- simp[lookup_function_def] >>
+  rw[lookup_function_def, transform_function_preserves_name]
+QED
+
+(*
  * Helper: Function lookup works in transformed context.
  *)
 Theorem lookup_function_transform_context:
@@ -417,7 +439,7 @@ Theorem lookup_function_transform_context:
     lookup_function name (transform_context ctx).ctx_functions =
       SOME (transform_function fn)
 Proof
-  cheat (* Induction on ctx.ctx_functions *)
+  rw[transform_context_def] >> irule lookup_function_MAP >> simp[]
 QED
 
 (*

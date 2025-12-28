@@ -40,7 +40,7 @@
 
 Theory rtaCorrect
 Ancestors
-  rtaProps rtaDefs stateEquiv
+  rtaProps rtaDefs stateEquiv venomSem
 Libs
   rtaPropsTheory rtaDefsTheory stateEquivTheory venomSemPropsTheory
 
@@ -202,7 +202,13 @@ Theorem pattern1_block_correct:
     (* Equivalence: both cases give result_equiv_except {iszero_out} *)
     result_equiv_except {iszero_out} orig_result trans_result
 Proof
-  cheat (* TODO: fix proof - irule match issue *)
+  rw[]
+  >- (irule revert_state_except_preserves >>
+      irule update_var_state_equiv_except_insert)
+  >- gvs[bool_to_word_def]
+  >- gvs[bool_to_word_def]
+  >- (irule jump_to_except_preserves >>
+      irule update_var_state_equiv_except_insert)
 QED
 
 (*
