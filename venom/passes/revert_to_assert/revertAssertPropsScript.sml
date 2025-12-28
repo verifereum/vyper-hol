@@ -53,7 +53,7 @@ Ancestors
 Theorem eval_operand_update_var_same:
   !x v s. eval_operand (Var x) (update_var x v s) = SOME v
 Proof
-  cheat
+  rw[eval_operand_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
 (* WHY THIS IS TRUE: update_var x doesn't affect lookup of other variables.
@@ -61,7 +61,7 @@ QED
 Theorem eval_operand_update_var_other:
   !x y v s. x <> y ==> eval_operand (Var y) (update_var x v s) = eval_operand (Var y) s
 Proof
-  cheat
+  rw[eval_operand_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
 (* WHY THIS IS TRUE: update_var only affects vs_vars, not memory, so
@@ -69,7 +69,7 @@ QED
 Theorem eval_operand_update_var_lit:
   !x v s w. eval_operand (Lit w) (update_var x v s) = SOME w
 Proof
-  cheat
+  rw[eval_operand_def]
 QED
 
 (* ==========================================================================
@@ -85,7 +85,7 @@ Theorem step_assert_zero_reverts:
                  inst_operands := [cond_op]; inst_outputs := [] |> s =
     Revert (revert_state s)
 Proof
-  cheat
+  rw[] >> drule step_assert_behavior >> simp[]
 QED
 
 (* WHY THIS IS TRUE: Special case of step_assert_behavior with cond <> 0w. *)
@@ -96,7 +96,7 @@ Theorem step_assert_nonzero_passes:
                  inst_operands := [cond_op]; inst_outputs := [] |> s =
     OK s
 Proof
-  cheat
+  rw[] >> drule step_assert_behavior >> simp[]
 QED
 
 (* ==========================================================================
@@ -113,7 +113,7 @@ Theorem step_jnz_nonzero_jumps:
                  inst_outputs := [] |> s =
     OK (jump_to if_nonzero s)
 Proof
-  cheat
+  rw[] >> drule step_jnz_behavior >> simp[]
 QED
 
 (* WHY THIS IS TRUE: Special case when cond = 0w. *)
@@ -125,7 +125,7 @@ Theorem step_jnz_zero_jumps:
                  inst_outputs := [] |> s =
     OK (jump_to if_zero s)
 Proof
-  cheat
+  rw[] >> drule step_jnz_behavior >> simp[]
 QED
 
 (* ==========================================================================
@@ -142,7 +142,15 @@ Theorem simple_revert_block_reverts:
     is_simple_revert_block bb ==>
     run_block fn bb (s with vs_inst_idx := 0) = Revert (revert_state s)
 Proof
-  cheat
+  rw[is_simple_revert_block_def] >>
+  `bb.bb_instructions = [HD bb.bb_instructions]` by (
+    Cases_on `bb.bb_instructions` >> fs[]
+  ) >>
+  irule run_block_single_terminator >>
+  qexists_tac `HD bb.bb_instructions` >>
+  simp[is_terminator_def] >>
+  irule step_revert_always_reverts >>
+  simp[]
 QED
 
 (* ==========================================================================
@@ -160,7 +168,7 @@ Theorem update_var_state_equiv_except_insert:
   !x v s.
     state_equiv_except {x} s (update_var x v s)
 Proof
-  cheat
+  rw[state_equiv_except_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
 (* ==========================================================================
@@ -175,17 +183,10 @@ Theorem revert_state_update_var:
   !x v s.
     revert_state (update_var x v s) = (revert_state s) with vs_vars := (s.vs_vars |+ (x, v))
 Proof
-  cheat
+  rw[revert_state_def, update_var_def]
 QED
 
-(* WHY THIS IS TRUE: revert_state preserves state_equiv for similar reasons. *)
-Theorem revert_state_state_equiv:
-  !s1 s2.
-    state_equiv s1 s2 ==>
-    state_equiv (revert_state s1) (revert_state s2)
-Proof
-  cheat
-QED
+(* NOTE: revert_state_state_equiv is available from stateEquivTheory *)
 
 (* ==========================================================================
    jump_to Properties
@@ -197,7 +198,7 @@ Theorem jump_to_update_var_comm:
   !x v lbl s.
     jump_to lbl (update_var x v s) = update_var x v (jump_to lbl s)
 Proof
-  cheat
+  rw[jump_to_def, update_var_def]
 QED
 
 (* ==========================================================================
@@ -216,7 +217,11 @@ Theorem iszero_then_assert_when_nonzero:
                  inst_operands := [Var out]; inst_outputs := [] |> s1 =
     Revert (revert_state s1)
 Proof
-  cheat
+  rw[] >>
+  `bool_to_word (cond = 0w) = 0w` by simp[bool_to_word_eq_0w] >>
+  simp[eval_operand_update_var_same] >>
+  irule step_assert_zero_reverts >>
+  simp[eval_operand_update_var_same]
 QED
 
 (* WHY THIS IS TRUE: After ISZERO on cond, output contains bool_to_word (cond = 0w).
@@ -231,7 +236,11 @@ Theorem iszero_then_assert_when_zero:
                  inst_operands := [Var out]; inst_outputs := [] |> s1 =
     OK s1
 Proof
-  cheat
+  rw[] >>
+  `bool_to_word (0w = 0w) = 1w` by simp[bool_to_word_T] >>
+  simp[] >>
+  irule step_assert_nonzero_passes >>
+  simp[eval_operand_update_var_same]
 QED
 
 (* WHY THIS IS TRUE: For pattern 2, when cond <> 0w, ASSERT passes and
@@ -244,7 +253,7 @@ Theorem assert_when_nonzero_then_jmp:
     step_inst <| inst_id := id1; inst_opcode := ASSERT;
                  inst_operands := [cond_op]; inst_outputs := [] |> s = OK s
 Proof
-  cheat
+  rw[] >> drule step_assert_behavior >> simp[]
 QED
 
 (* WHY THIS IS TRUE: For pattern 2, when cond = 0w, ASSERT reverts.
@@ -256,7 +265,7 @@ Theorem assert_when_zero_reverts:
                  inst_operands := [cond_op]; inst_outputs := [] |> s =
     Revert (revert_state s)
 Proof
-  cheat
+  rw[] >> drule step_assert_behavior >> simp[]
 QED
 
 (* ==========================================================================
@@ -272,7 +281,8 @@ Theorem step_in_block_at_zero:
     step_in_block fn bb (s with vs_inst_idx := 0) =
     (step_inst inst s, is_terminator inst.inst_opcode)
 Proof
-  cheat
+  rw[step_in_block_def, get_instruction_def] >>
+  Cases_on `step_inst inst s` >> simp[]
 QED
 
 (* WHY THIS IS TRUE: run_block on a single-instruction block that's a
@@ -284,22 +294,14 @@ Theorem run_block_single_terminator:
     step_inst inst s = res ==>
     run_block fn bb (s with vs_inst_idx := 0) = res
 Proof
-  cheat
+  rw[] >>
+  simp[Once run_block_def] >>
+  drule step_in_block_at_zero >> simp[] >> strip_tac >>
+  Cases_on `res` >> simp[]
 QED
 
-(* ==========================================================================
-   result_equiv with state_equiv_except
-   ========================================================================== *)
-
-(* WHY THIS IS TRUE: Revert results are equiv if their states are equiv.
-   state_equiv_except implies state_equiv on the reverted fields
-   (halted, reverted) and memory/storage, which is what matters for Revert. *)
-Theorem result_equiv_revert_except:
-  !vars s1 s2.
-    state_equiv_except vars s1 s2 ==>
-    result_equiv (Revert (revert_state s1)) (Revert (revert_state s2))
-Proof
-  cheat
-QED
+(* NOTE: result_equiv_except for Revert results is handled by
+   result_equiv_except_def in revertAssertDefsTheory:
+     result_equiv_except vars (Revert s1) (Revert s2) = state_equiv_except vars s1 s2 *)
 
 val _ = export_theory();

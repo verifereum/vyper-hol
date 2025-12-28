@@ -375,34 +375,228 @@ All semantic claims verified against definitions. The proof is straightforward c
 
 ---
 
-## 10. Estimated Effort
+## 10. Pass Transformation Definitions
 
-| File | Effort | Notes |
-|------|--------|-------|
-| revertAssertDefsScript.sml | 1-2 hours | Straightforward definitions |
-| revertAssertPropsScript.sml | 3-4 hours | Lemmas about instructions |
-| revertAssertCorrectScript.sml | 4-6 hours | Main correctness theorems |
+The correctness theorems prove that the patterns are semantically equivalent.
+Now we need to define the actual transformation functions.
 
-**Total: ~8-12 hours**
+### 10.1 Transformation Functions
+
+```sml
+(* Generate fresh variable name for iszero output *)
+Definition fresh_iszero_var_def:
+  fresh_iszero_var inst_id = STRCAT "rta_tmp_" inst_id
+End
+
+(* Create the ISZERO instruction for pattern 1 *)
+Definition mk_iszero_inst_def:
+  mk_iszero_inst id cond_op out_var =
+    <| inst_id := STRCAT id "_iszero";
+       inst_opcode := ISZERO;
+       inst_operands := [cond_op];
+       inst_outputs := [out_var] |>
+End
+
+(* Create the ASSERT instruction *)
+Definition mk_assert_inst_def:
+  mk_assert_inst id cond_op =
+    <| inst_id := STRCAT id "_assert";
+       inst_opcode := ASSERT;
+       inst_operands := [cond_op];
+       inst_outputs := [] |>
+End
+
+(* Create the JMP instruction *)
+Definition mk_jmp_inst_def:
+  mk_jmp_inst id target =
+    <| inst_id := STRCAT id "_jmp";
+       inst_opcode := JMP;
+       inst_operands := [Label target];
+       inst_outputs := [] |>
+End
+
+(* Transform a JNZ instruction using Pattern 1:
+   jnz %cond @revert @else  →  [iszero %cond → tmp; assert tmp; jmp @else]
+
+   WHY THIS IS CORRECT:
+   - When cond ≠ 0: iszero produces 0, assert 0 reverts (same as jnz → @revert)
+   - When cond = 0: iszero produces 1, assert 1 passes, jmp @else (same as jnz → @else)
+*)
+Definition transform_jnz_pattern1_def:
+  transform_jnz_pattern1 inst else_label =
+    let id = inst.inst_id in
+    let cond_op = HD inst.inst_operands in
+    let tmp = fresh_iszero_var id in
+    [mk_iszero_inst id cond_op tmp;
+     mk_assert_inst id (Var tmp);
+     mk_jmp_inst id else_label]
+End
+
+(* Transform a JNZ instruction using Pattern 2:
+   jnz %cond @then @revert  →  [assert %cond; jmp @then]
+
+   WHY THIS IS CORRECT:
+   - When cond ≠ 0: assert passes, jmp @then (same as jnz → @then)
+   - When cond = 0: assert 0 reverts (same as jnz → @revert → revert)
+*)
+Definition transform_jnz_pattern2_def:
+  transform_jnz_pattern2 inst then_label =
+    let id = inst.inst_id in
+    let cond_op = HD inst.inst_operands in
+    [mk_assert_inst id cond_op;
+     mk_jmp_inst id then_label]
+End
+
+(* Check if a block's label is a simple revert block in the function *)
+Definition is_revert_label_def:
+  is_revert_label fn lbl =
+    case FIND (\bb. bb.bb_label = lbl) fn.fn_blocks of
+      SOME bb => is_simple_revert_block bb
+    | NONE => F
+End
+
+(* Transform a single instruction if it matches a pattern *)
+Definition transform_inst_rta_def:
+  transform_inst_rta fn inst =
+    case inst.inst_opcode of
+      JNZ =>
+        (case inst.inst_operands of
+          [cond; Label revert_lbl; Label else_lbl] =>
+            if is_revert_label fn revert_lbl then
+              SOME (transform_jnz_pattern1 inst else_lbl)
+            else NONE
+        | [cond; Label then_lbl; Label revert_lbl] =>
+            if is_revert_label fn revert_lbl then
+              SOME (transform_jnz_pattern2 inst then_lbl)
+            else NONE
+        | _ => NONE)
+    | _ => NONE
+End
+
+(* Transform a block by replacing JNZ patterns *)
+Definition transform_block_rta_def:
+  transform_block_rta fn bb =
+    let new_insts = FLAT (MAP (\inst.
+      case transform_inst_rta fn inst of
+        SOME insts => insts
+      | NONE => [inst]
+    ) bb.bb_instructions) in
+    bb with bb_instructions := new_insts
+End
+
+(* Remove simple revert blocks that are no longer referenced *)
+Definition remove_dead_revert_blocks_def:
+  remove_dead_revert_blocks fn =
+    (* A revert block is dead if no instruction references it after transformation *)
+    fn with fn_blocks := FILTER (\bb.
+      ~is_simple_revert_block bb \/
+      EXISTS (\bb2. EXISTS (\inst.
+        MEM (Label bb.bb_label) inst.inst_operands
+      ) bb2.bb_instructions) fn.fn_blocks
+    ) fn.fn_blocks
+End
+
+(* Full pass: transform all blocks, then remove dead revert blocks *)
+Definition revert_to_assert_pass_def:
+  revert_to_assert_pass fn =
+    let fn1 = fn with fn_blocks := MAP (transform_block_rta fn) fn.fn_blocks in
+    remove_dead_revert_blocks fn1
+End
+```
+
+### 10.2 Correctness Theorem for Full Pass
+
+```sml
+(* Main pass correctness:
+   For any state s and function fn, if we run the original and transformed
+   functions, we get equivalent results (modulo fresh variables).
+
+   WHY THIS IS TRUE:
+   1. Each transform_jnz_pattern1/2 preserves semantics (by pattern1/2_transform_correct)
+   2. Unchanged instructions are identity
+   3. Removing unreachable blocks doesn't affect semantics
+   4. Fresh variables are in the exception set
+*)
+Theorem revert_to_assert_pass_correct:
+  !fn s.
+    let fn' = revert_to_assert_pass fn in
+    let fresh_vars = { fresh_iszero_var id |
+                       ?inst. MEM inst (FLAT (MAP (\bb. bb.bb_instructions) fn.fn_blocks)) /\
+                              inst.inst_opcode = JNZ /\
+                              is_jnz_to_revert_pattern1 inst ... } in
+    result_equiv_except fresh_vars
+      (run_function fn s)
+      (run_function fn' s)
+Proof
+  (* Use block-level correctness for each transformed block *)
+  ...
+QED
+```
 
 ---
 
-## 11. Implementation Checklist
+## 11. Implementation Subtasks for Pass Definition
 
-- [ ] Create directory structure `venom/passes/revert_to_assert/`
-- [ ] Write Holmakefile with dependencies
-- [ ] Implement `revertAssertDefsScript.sml`
-  - [ ] `is_simple_revert_block`
-  - [ ] `is_jnz_to_revert_pattern1/2`
-  - [ ] `state_equiv_except`
-- [ ] Implement `revertAssertPropsScript.sml`
-  - [ ] `step_iszero_value`
-  - [ ] `step_assert_zero_reverts`
-  - [ ] `step_assert_nonzero_passes`
-  - [ ] `simple_revert_block_reverts`
-  - [ ] `state_equiv_except` properties
-- [ ] Implement `revertAssertCorrectScript.sml`
-  - [ ] Pattern 1 instruction-level correctness
-  - [ ] Pattern 2 instruction-level correctness
-  - [ ] Block-level equivalence theorems
-- [ ] Build and verify no CHEAT warnings
+### SUBTASK 1: Instruction Builders (2 points)
+- Define `mk_iszero_inst`, `mk_assert_inst`, `mk_jmp_inst`
+- Define `fresh_iszero_var`
+- Simple definitions, no proofs needed
+
+### SUBTASK 2: Pattern Transformers (3 points)
+- Define `transform_jnz_pattern1`
+- Define `transform_jnz_pattern2`
+- Prove they produce well-formed instructions
+
+### SUBTASK 3: Block Transformation (3 points)
+- Define `is_revert_label`
+- Define `transform_inst_rta`
+- Define `transform_block_rta`
+
+### SUBTASK 4: Block Transformation Correctness (5 points)
+- Prove `transform_block_rta_correct`:
+  If original block produces result R, transformed block produces result R'
+  where `result_equiv_except fresh_vars R R'`
+
+### SUBTASK 5: Dead Block Removal (2 points)
+- Define `remove_dead_revert_blocks`
+- Prove unreachable blocks don't affect execution
+
+### SUBTASK 6: Full Pass Definition (2 points)
+- Define `revert_to_assert_pass`
+- Compose block transformation and dead block removal
+
+### SUBTASK 7: Full Pass Correctness (5 points)
+- Prove `revert_to_assert_pass_correct`
+- Use block-level correctness + dead block removal
+
+---
+
+## 12. Current Status
+
+### Completed ✓
+- [x] Pattern predicates: `is_simple_revert_block`, `is_jnz_to_revert_pattern1/2`
+- [x] State equivalence: `state_equiv_except` and properties
+- [x] Instruction lemmas: `step_iszero_value`, `step_assert_behavior`, etc.
+- [x] Pattern correctness: `pattern1_transform_correct`, `pattern2_transform_correct`
+- [x] Block correctness: `pattern1_block_correct`, `pattern2_block_correct`
+
+### Remaining
+- [ ] SUBTASK 1: Instruction builders
+- [ ] SUBTASK 2: Pattern transformers
+- [ ] SUBTASK 3: Block transformation definition
+- [ ] SUBTASK 4: Block transformation correctness
+- [ ] SUBTASK 5: Dead block removal
+- [ ] SUBTASK 6: Full pass definition
+- [ ] SUBTASK 7: Full pass correctness
+
+---
+
+## 13. Estimated Effort
+
+| Component | Effort | Notes |
+|-----------|--------|-------|
+| Correctness proofs (DONE) | 8 hours | All cheats filled |
+| Pass definitions | 3-4 hours | Subtasks 1-3, 5-6 |
+| Pass correctness proofs | 6-8 hours | Subtasks 4, 7 |
+
+**Remaining: ~10-12 hours**
