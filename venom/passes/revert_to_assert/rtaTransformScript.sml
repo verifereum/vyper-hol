@@ -533,7 +533,18 @@ Theorem revert_to_assert_pass_correct:
         (run_function fuel fn (s with vs_inst_idx := 0))
         (run_function fuel fn' (s with vs_inst_idx := 0))
 Proof
-  cheat (* TODO: fix proof *)
+  rw[] >>
+  Cases_on `lookup_function entry ctx.ctx_functions` >> gvs[] >>
+  qexists_tac `transform_function x` >>
+  simp[lookup_function_transform_context] >>
+  imp_res_tac lookup_function_MEM >>
+  `fresh_vars_unused x s` by gvs[] >>
+  drule_all transform_function_correct >> simp[] >> strip_tac >>
+  irule rtaDefsTheory.result_equiv_except_subset >>
+  qexists_tac `fresh_vars_in_function x` >>
+  simp[fresh_vars_in_context_def, pred_setTheory.SUBSET_DEF,
+       pred_setTheory.IN_BIGUNION, PULL_EXISTS] >>
+  metis_tac[]
 QED
 
 val _ = export_theory();
