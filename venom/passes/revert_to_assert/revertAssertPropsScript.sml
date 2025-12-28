@@ -15,12 +15,15 @@
  *   - step_assert_nonzero_passes    : ASSERT nonzero continues
  *   - simple_revert_block_reverts   : Simple revert block always reverts
  *
- * STATE_EQUIV_EXCEPT PROPERTIES:
- *   - state_equiv_except_refl       : Reflexivity
- *   - state_equiv_implies_except    : state_equiv implies state_equiv_except
- *   - update_var_state_equiv_except : update_var preserves equiv for updated var
+ * STATE_EQUIV_EXCEPT PROPERTIES (in revertAssertDefsTheory):
+ *   - state_equiv_except_refl/sym/trans, state_equiv_implies_except
+ *   - update_var_same_preserves, jump_to_except_preserves, revert_state_except_preserves
+ *
+ * ADDITIONAL PROPERTIES (this file):
+ *   - update_var_state_equiv_except_insert : update_var x creates {x}-equiv
  *   - revert_state_update_var       : revert_state insensitive to variables
- *   - revert_state_state_equiv_except : revert_state preserves equiv
+ *   - revert_state_state_equiv      : revert_state preserves state_equiv
+ *   - jump_to_update_var_comm       : jump_to and update_var commute
  *
  * HELPER THEOREMS:
  *   - bool_to_word_eq_0w            : bool_to_word b = 0w iff ~b
@@ -144,53 +147,11 @@ QED
 
 (* ==========================================================================
    state_equiv_except Properties
+
+   NOTE: Basic properties (refl, sym, trans, state_equiv_implies_except,
+   update_var_same_preserves, jump_to_except_preserves, revert_state_except_preserves,
+   state_equiv_except_subset) are proven in revertAssertDefsTheory.
    ========================================================================== *)
-
-(* WHY THIS IS TRUE: Every variable lookup equals itself, and all other
-   state components are identical. *)
-Theorem state_equiv_except_refl:
-  !vars s. state_equiv_except vars s s
-Proof
-  cheat
-QED
-
-(* WHY THIS IS TRUE: state_equiv requires all variables equal.
-   state_equiv_except only requires variables outside vars to be equal.
-   So state_equiv is strictly stronger. *)
-Theorem state_equiv_implies_except:
-  !vars s1 s2. state_equiv s1 s2 ==> state_equiv_except vars s1 s2
-Proof
-  cheat
-QED
-
-(* WHY THIS IS TRUE: state_equiv_except is symmetric - if all non-vars
-   variables are equal in s1 vs s2, they're equal in s2 vs s1. *)
-Theorem state_equiv_except_sym:
-  !vars s1 s2. state_equiv_except vars s1 s2 ==> state_equiv_except vars s2 s1
-Proof
-  cheat
-QED
-
-(* WHY THIS IS TRUE: state_equiv_except is transitive - chain equalities
-   for variables not in vars. *)
-Theorem state_equiv_except_trans:
-  !vars s1 s2 s3.
-    state_equiv_except vars s1 s2 /\ state_equiv_except vars s2 s3 ==>
-    state_equiv_except vars s1 s3
-Proof
-  cheat
-QED
-
-(* WHY THIS IS TRUE: Updating variable x in both states preserves
-   equivalence. For v not in vars: if v <> x, lookup unchanged;
-   if v = x, both get the same new value. *)
-Theorem update_var_state_equiv_except:
-  !vars x v s1 s2.
-    state_equiv_except vars s1 s2 ==>
-    state_equiv_except vars (update_var x v s1) (update_var x v s2)
-Proof
-  cheat
-QED
 
 (* WHY THIS IS TRUE: update_var x v s adds (x, v) to vs_vars.
    For any y not in {x}, lookup_var y is unchanged.
@@ -198,16 +159,6 @@ QED
 Theorem update_var_state_equiv_except_insert:
   !x v s.
     state_equiv_except {x} s (update_var x v s)
-Proof
-  cheat
-QED
-
-(* WHY THIS IS TRUE: Adding more variables to the "except" set only
-   weakens the requirement, so equivalence is preserved. *)
-Theorem state_equiv_except_weaken:
-  !vars1 vars2 s1 s2.
-    vars1 SUBSET vars2 /\ state_equiv_except vars1 s1 s2 ==>
-    state_equiv_except vars2 s1 s2
 Proof
   cheat
 QED
@@ -227,17 +178,6 @@ Proof
   cheat
 QED
 
-(* WHY THIS IS TRUE: revert_state preserves state_equiv_except because
-   it only modifies vs_halted and vs_reverted, not the variables
-   or other state components that state_equiv_except checks. *)
-Theorem revert_state_state_equiv_except:
-  !vars s1 s2.
-    state_equiv_except vars s1 s2 ==>
-    state_equiv_except vars (revert_state s1) (revert_state s2)
-Proof
-  cheat
-QED
-
 (* WHY THIS IS TRUE: revert_state preserves state_equiv for similar reasons. *)
 Theorem revert_state_state_equiv:
   !s1 s2.
@@ -250,17 +190,6 @@ QED
 (* ==========================================================================
    jump_to Properties
    ========================================================================== *)
-
-(* WHY THIS IS TRUE: jump_to only modifies vs_prev_bb, vs_current_bb,
-   vs_inst_idx. Variables and other state unchanged. So if s1 and s2
-   are state_equiv_except vars, so are jump_to lbl s1 and jump_to lbl s2. *)
-Theorem jump_to_state_equiv_except:
-  !vars lbl s1 s2.
-    state_equiv_except vars s1 s2 ==>
-    state_equiv_except vars (jump_to lbl s1) (jump_to lbl s2)
-Proof
-  cheat
-QED
 
 (* WHY THIS IS TRUE: jump_to only changes control flow fields, not variables.
    So update_var commutes with jump_to (they modify disjoint state components). *)
