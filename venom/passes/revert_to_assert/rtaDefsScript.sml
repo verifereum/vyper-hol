@@ -402,3 +402,17 @@ Proof
   metis_tac[]
 QED
 
+(*
+ * PURPOSE: Monotonicity for result_equiv_except - widening the exception set.
+ *)
+Theorem result_equiv_except_subset:
+  !vars1 vars2 r1 r2.
+    result_equiv_except vars1 r1 r2 /\
+    vars1 SUBSET vars2 ==>
+    result_equiv_except vars2 r1 r2
+Proof
+  rpt gen_tac >> Cases_on `r1` >> Cases_on `r2` >>
+  rw[result_equiv_except_def] >> irule state_equiv_except_subset >>
+  metis_tac[]
+QED
+
