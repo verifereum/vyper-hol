@@ -52,9 +52,11 @@
  * ============================================================================
  *)
 
-Theory revertAssertDefs
+Theory rtaDefs
 Ancestors
   stateEquiv venomSem venomInst venomState finite_map pred_set
+Libs
+  finite_mapTheory venomStateTheory
 
 (* ==========================================================================
    Simple Revert Block Detection

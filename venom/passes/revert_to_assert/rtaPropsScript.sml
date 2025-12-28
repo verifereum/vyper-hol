@@ -15,7 +15,7 @@
  *   - step_assert_nonzero_passes    : ASSERT nonzero continues
  *   - simple_revert_block_reverts   : Simple revert block always reverts
  *
- * STATE_EQUIV_EXCEPT PROPERTIES (in revertAssertDefsTheory):
+ * STATE_EQUIV_EXCEPT PROPERTIES (in rtaDefsTheory):
  *   - state_equiv_except_refl/sym/trans, state_equiv_implies_except
  *   - update_var_same_preserves, jump_to_except_preserves, revert_state_except_preserves
  *
@@ -34,9 +34,11 @@
  * ============================================================================
  *)
 
-Theory revertAssertProps
+Theory rtaProps
 Ancestors
-  revertAssertDefs stateEquiv venomSemProps
+  rtaDefs stateEquiv venomSemProps
+Libs
+  finite_mapTheory venomStateTheory venomSemTheory venomInstTheory venomSemPropsTheory
 
 (* ==========================================================================
    NOTE: bool_to_word properties and basic instruction behavior lemmas
@@ -129,6 +131,36 @@ Proof
 QED
 
 (* ==========================================================================
+   run_block Helper Lemmas
+   ========================================================================== *)
+
+(* WHY THIS IS TRUE: step_in_block on a single-instruction terminator block
+   returns the result of step_inst with is_term = T. *)
+Theorem step_in_block_single_terminator:
+  !fn bb s inst.
+    bb.bb_instructions = [inst] /\
+    is_terminator inst.inst_opcode ==>
+    step_in_block fn bb (s with vs_inst_idx := 0) =
+    (step_inst inst (s with vs_inst_idx := 0), T)
+Proof
+  rw[step_in_block_def, get_instruction_def] >>
+  Cases_on `step_inst inst (s with vs_inst_idx := 0)` >> simp[]
+QED
+
+(* WHY THIS IS TRUE: run_block on a single-instruction REVERT block returns Revert. *)
+Theorem run_block_single_revert:
+  !fn bb s inst.
+    bb.bb_instructions = [inst] /\
+    inst.inst_opcode = REVERT ==>
+    run_block fn bb (s with vs_inst_idx := 0) =
+    Revert (revert_state (s with vs_inst_idx := 0))
+Proof
+  rpt strip_tac >>
+  simp[Once run_block_def, step_in_block_def, get_instruction_def,
+       step_inst_def, is_terminator_def]
+QED
+
+(* ==========================================================================
    Simple Revert Block Execution
    (step_jmp_behavior is in venomSemPropsTheory)
    ========================================================================== *)
@@ -140,16 +172,15 @@ QED
 Theorem simple_revert_block_reverts:
   !fn bb s.
     is_simple_revert_block bb ==>
-    run_block fn bb (s with vs_inst_idx := 0) = Revert (revert_state s)
+    run_block fn bb (s with vs_inst_idx := 0) =
+    Revert (revert_state (s with vs_inst_idx := 0))
 Proof
   rw[is_simple_revert_block_def] >>
   `bb.bb_instructions = [HD bb.bb_instructions]` by (
     Cases_on `bb.bb_instructions` >> fs[]
   ) >>
-  irule run_block_single_terminator >>
+  irule run_block_single_revert >>
   qexists_tac `HD bb.bb_instructions` >>
-  simp[is_terminator_def] >>
-  irule step_revert_always_reverts >>
   simp[]
 QED
 
@@ -158,7 +189,7 @@ QED
 
    NOTE: Basic properties (refl, sym, trans, state_equiv_implies_except,
    update_var_same_preserves, jump_to_except_preserves, revert_state_except_preserves,
-   state_equiv_except_subset) are proven in revertAssertDefsTheory.
+   state_equiv_except_subset) are proven in rtaDefsTheory.
    ========================================================================== *)
 
 (* WHY THIS IS TRUE: update_var x v s adds (x, v) to vs_vars.
@@ -218,7 +249,8 @@ Theorem iszero_then_assert_when_nonzero:
     Revert (revert_state s1)
 Proof
   rw[] >>
-  `bool_to_word (cond = 0w) = 0w` by simp[bool_to_word_eq_0w] >>
+  `(cond = 0w) = F` by gvs[] >>
+  pop_assum (fn th => simp[th, bool_to_word_F]) >>
   simp[eval_operand_update_var_same] >>
   irule step_assert_zero_reverts >>
   simp[eval_operand_update_var_same]
@@ -237,8 +269,7 @@ Theorem iszero_then_assert_when_zero:
     OK s1
 Proof
   rw[] >>
-  `bool_to_word (0w = 0w) = 1w` by simp[bool_to_word_T] >>
-  simp[] >>
+  simp[bool_to_word_T] >>
   irule step_assert_nonzero_passes >>
   simp[eval_operand_update_var_same]
 QED
@@ -267,41 +298,5 @@ Theorem assert_when_zero_reverts:
 Proof
   rw[] >> drule step_assert_behavior >> simp[]
 QED
-
-(* ==========================================================================
-   run_block Helper Lemmas
-   ========================================================================== *)
-
-(* WHY THIS IS TRUE: step_in_block uses get_instruction to fetch current
-   instruction based on vs_inst_idx. If we start at index 0 and the block
-   has instructions, we get the first instruction. *)
-Theorem step_in_block_at_zero:
-  !fn bb s inst.
-    bb.bb_instructions = [inst] ==>
-    step_in_block fn bb (s with vs_inst_idx := 0) =
-    (step_inst inst s, is_terminator inst.inst_opcode)
-Proof
-  rw[step_in_block_def, get_instruction_def] >>
-  Cases_on `step_inst inst s` >> simp[]
-QED
-
-(* WHY THIS IS TRUE: run_block on a single-instruction block that's a
-   terminator just executes that instruction and returns the result. *)
-Theorem run_block_single_terminator:
-  !fn bb s inst res.
-    bb.bb_instructions = [inst] /\
-    is_terminator inst.inst_opcode /\
-    step_inst inst s = res ==>
-    run_block fn bb (s with vs_inst_idx := 0) = res
-Proof
-  rw[] >>
-  simp[Once run_block_def] >>
-  drule step_in_block_at_zero >> simp[] >> strip_tac >>
-  Cases_on `res` >> simp[]
-QED
-
-(* NOTE: result_equiv_except for Revert results is handled by
-   result_equiv_except_def in revertAssertDefsTheory:
-     result_equiv_except vars (Revert s1) (Revert s2) = state_equiv_except vars s1 s2 *)
 
 val _ = export_theory();
