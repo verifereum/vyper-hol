@@ -295,3 +295,22 @@ Definition string_to_num_def:
 End
 
 val () = cv_auto_trans string_to_num_def;
+
+(* Integer square root using Newton's method iteration *)
+Definition num_sqrt_aux_def:
+  num_sqrt_aux n r =
+    if r = 0 then 0
+    else let r' = (r + n DIV r) DIV 2 in
+      if r' < r then num_sqrt_aux n r'
+      else r
+Termination
+  WF_REL_TAC `measure SND`
+End
+
+val () = cv_auto_trans num_sqrt_aux_def;
+
+Definition num_sqrt_def:
+  num_sqrt n = if n = 0 then 0 else num_sqrt_aux n n
+End
+
+val () = cv_auto_trans num_sqrt_def;

@@ -1435,6 +1435,9 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx acc (Acc aop) [BytesV _ bs] =
     (let a = lookup_account (word_of_bytes T (0w:address) bs) acc in
       INL $ evaluate_account_op aop bs a) ∧
+  evaluate_builtin cx _ Isqrt [IntV u i] =
+    (if is_Unsigned u ∧ 0 ≤ i then INL $ IntV u &(num_sqrt (Num i))
+     else INR "Isqrt type") ∧
   evaluate_builtin _ _ _ _ = INR "builtin"
 End
 
@@ -1474,7 +1477,8 @@ Definition builtin_args_length_ok_def:
   builtin_args_length_ok (Bop _) n = (n = 2) ∧
   builtin_args_length_ok (Env _) n = (n = 0) ∧
   builtin_args_length_ok BlockHash n = (n = 1) ∧
-  builtin_args_length_ok (Acc _) n = (n = 1)
+  builtin_args_length_ok (Acc _) n = (n = 1) ∧
+  builtin_args_length_ok Isqrt n = (n = 1)
 End
 
 val () = cv_auto_trans builtin_args_length_ok_def;
