@@ -32,7 +32,7 @@
 
 Theory rtaTransform
 Ancestors
-  rtaCorrect rtaProps rtaDefs venomSem venomInst list
+  rtaCorrect rtaProps rtaDefs stateEquiv venomSem venomInst list
 
 (* ==========================================================================
    Instruction Builders
@@ -574,7 +574,7 @@ Proof
   imp_res_tac lookup_function_MEM >>
   `fresh_vars_unused x s` by gvs[] >>
   drule_all transform_function_correct >> simp[] >> strip_tac >>
-  irule rtaDefsTheory.result_equiv_except_subset >>
+  irule stateEquivTheory.result_equiv_except_subset >>
   qexists_tac `fresh_vars_in_function x` >>
   simp[fresh_vars_in_context_def, pred_setTheory.SUBSET_DEF,
        pred_setTheory.IN_BIGUNION, PULL_EXISTS] >>
