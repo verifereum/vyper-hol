@@ -88,6 +88,7 @@ structure vyperASTSyntax :> vyperASTSyntax = struct
   val BlockHash_tm    = astk"BlockHash"
   val Acc_tm          = astk"Acc"
   val IntCall_tm      = astk"IntCall"
+  val ExtCall_tm      = astk"ExtCall"
   val Send_tm         = astk"Send"
   val Empty_tm        = astk"Empty"
   val MaxValue_tm     = astk"MaxValue"
@@ -179,6 +180,8 @@ structure vyperASTSyntax :> vyperASTSyntax = struct
     s, mk_list(ls, mk_prod(string_ty, expr_ty))])
   fun mk_IfExp (e1,e2,e3) = list_mk_comb(IfExp_tm, [e1,e2,e3])
   fun mk_IntCall s = mk_comb(IntCall_tm, s)
+  fun mk_ExtCall (is_static, method_name) =
+    list_mk_comb(ExtCall_tm, [is_static, method_name])
   fun mk_Empty t = list_mk_comb(TypeBuiltin_tm, [
     Empty_tm, t, mk_list([], expr_ty)])
   fun mk_MaxValue t = list_mk_comb(TypeBuiltin_tm, [
