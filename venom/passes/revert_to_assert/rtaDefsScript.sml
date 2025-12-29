@@ -169,7 +169,12 @@ Definition state_equiv_except_def:
     s1.vs_inst_idx = s2.vs_inst_idx /\
     s1.vs_prev_bb = s2.vs_prev_bb /\
     s1.vs_halted = s2.vs_halted /\
-    s1.vs_reverted = s2.vs_reverted
+    s1.vs_reverted = s2.vs_reverted /\
+    s1.vs_returndata = s2.vs_returndata /\
+    s1.vs_accounts = s2.vs_accounts /\
+    s1.vs_call_ctx = s2.vs_call_ctx /\
+    s1.vs_tx_ctx = s2.vs_tx_ctx /\
+    s1.vs_block_ctx = s2.vs_block_ctx
 End
 
 (* ==========================================================================
@@ -223,7 +228,12 @@ Theorem state_equiv_except_empty:
     s1.vs_inst_idx = s2.vs_inst_idx /\
     s1.vs_prev_bb = s2.vs_prev_bb /\
     s1.vs_halted = s2.vs_halted /\
-    s1.vs_reverted = s2.vs_reverted
+    s1.vs_reverted = s2.vs_reverted /\
+    s1.vs_returndata = s2.vs_returndata /\
+    s1.vs_accounts = s2.vs_accounts /\
+    s1.vs_call_ctx = s2.vs_call_ctx /\
+    s1.vs_tx_ctx = s2.vs_tx_ctx /\
+    s1.vs_block_ctx = s2.vs_block_ctx
 Proof
   rw[state_equiv_except_def]
 QED
@@ -415,4 +425,90 @@ Proof
   rw[result_equiv_except_def] >> irule state_equiv_except_subset >>
   metis_tac[]
 QED
+
+(* ==========================================================================
+   Memory/Storage Operations Preserve state_equiv_except
+   ========================================================================== *)
+
+(*
+ * PURPOSE: mstore preserves state_equiv_except because it only modifies
+ * memory, and memory is already equal in equiv_except states.
+ *)
+Theorem mstore_except_preserves:
+  !vars addr val s1 s2.
+    state_equiv_except vars s1 s2 ==>
+    state_equiv_except vars (mstore addr val s1) (mstore addr val s2)
+Proof
+  rw[state_equiv_except_def, mstore_def, lookup_var_def]
+QED
+
+(*
+ * PURPOSE: mload returns the same value from equiv_except states.
+ *)
+Theorem mload_except_same:
+  !vars addr s1 s2.
+    state_equiv_except vars s1 s2 ==>
+    mload addr s1 = mload addr s2
+Proof
+  rw[state_equiv_except_def, mload_def]
+QED
+
+(*
+ * PURPOSE: sstore preserves state_equiv_except.
+ *)
+Theorem sstore_except_preserves:
+  !vars key val s1 s2.
+    state_equiv_except vars s1 s2 ==>
+    state_equiv_except vars (sstore key val s1) (sstore key val s2)
+Proof
+  rw[state_equiv_except_def, sstore_def, lookup_var_def]
+QED
+
+(*
+ * PURPOSE: sload returns the same value from equiv_except states.
+ *)
+Theorem sload_except_same:
+  !vars key s1 s2.
+    state_equiv_except vars s1 s2 ==>
+    sload key s1 = sload key s2
+Proof
+  rw[state_equiv_except_def, sload_def]
+QED
+
+(*
+ * PURPOSE: tstore preserves state_equiv_except.
+ *)
+Theorem tstore_except_preserves:
+  !vars key val s1 s2.
+    state_equiv_except vars s1 s2 ==>
+    state_equiv_except vars (tstore key val s1) (tstore key val s2)
+Proof
+  rw[state_equiv_except_def, tstore_def, lookup_var_def]
+QED
+
+(*
+ * PURPOSE: tload returns the same value from equiv_except states.
+ *)
+Theorem tload_except_same:
+  !vars key s1 s2.
+    state_equiv_except vars s1 s2 ==>
+    tload key s1 = tload key s2
+Proof
+  rw[state_equiv_except_def, tload_def]
+QED
+
+(*
+ * PURPOSE: write_memory_with_expansion preserves state_equiv_except.
+ *)
+Theorem write_memory_with_expansion_except_preserves:
+  !vars offset bytes s1 s2.
+    state_equiv_except vars s1 s2 ==>
+    state_equiv_except vars
+      (write_memory_with_expansion offset bytes s1)
+      (write_memory_with_expansion offset bytes s2)
+Proof
+  rw[state_equiv_except_def, write_memory_with_expansion_def, lookup_var_def]
+QED
+
+val _ = export_theory();
 

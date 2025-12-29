@@ -306,6 +306,237 @@ QED
    state_equiv_except is preserved through step_inst, run_block, run_function.
    ========================================================================== *)
 
+(* --------------------------------------------------------------------------
+   Helper: resolve_phi returns a MEM element
+   -------------------------------------------------------------------------- *)
+
+Theorem resolve_phi_MEM:
+  !prev ops val_op. resolve_phi prev ops = SOME val_op ==> MEM val_op ops
+Proof
+  ho_match_mp_tac resolve_phi_ind >> rw[resolve_phi_def] >> gvs[AllCaseEqs()]
+QED
+
+(* --------------------------------------------------------------------------
+   Category helpers for step_inst_result_equiv_except
+
+   We split the 93 opcode cases into manageable categories:
+   1. Context reads (18): CALLER, ADDRESS, CALLVALUE, GAS, ORIGIN, GASPRICE,
+      CHAINID, COINBASE, TIMESTAMP, NUMBER, PREVRANDAO, GASLIMIT, BASEFEE,
+      BLOBBASEFEE, SELFBALANCE, CALLDATASIZE, RETURNDATASIZE, MSIZE
+   2. 1-op loads (6): MLOAD, SLOAD, TLOAD, CALLDATALOAD, BLOCKHASH, BALANCE
+   3. 2-op stores (3): MSTORE, SSTORE, TSTORE
+   4. Control flow (2): JMP, JNZ
+   5. SSA (3): PHI, ASSIGN, NOP
+   6. Assertions (2): ASSERT, ASSERT_UNREACHABLE
+   7. Termination (4): STOP, RETURN, REVERT, SINK
+   8. 3-op copy (2): CALLDATACOPY, RETURNDATACOPY
+   9. Hash (2): SHA3, SHA3_64
+   10. Binop/Unop/Modop (22): handled by existing helpers
+   11. Unimplemented: trivial (Error)
+   -------------------------------------------------------------------------- *)
+
+(*
+ * Helper 1: Context read opcodes (no operands, read context field)
+ * These all have shape: case outputs of [out] => OK (update_var out (context_val s) s)
+ *)
+Theorem step_inst_context_read_except:
+  !fresh s1 s2 inst op.
+    state_equiv_except fresh s1 s2 /\
+    op IN {CALLER; ADDRESS; CALLVALUE; GAS; ORIGIN; GASPRICE; CHAINID;
+           COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE;
+           BLOBBASEFEE; SELFBALANCE; CALLDATASIZE; RETURNDATASIZE; MSIZE} /\
+    inst.inst_opcode = op ==>
+    result_equiv_except fresh (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> simp[step_inst_def] >> rpt CASE_TAC >> gvs[] >>
+  `s1.vs_call_ctx = s2.vs_call_ctx /\ s1.vs_tx_ctx = s2.vs_tx_ctx /\
+   s1.vs_block_ctx = s2.vs_block_ctx /\ s1.vs_accounts = s2.vs_accounts /\
+   s1.vs_returndata = s2.vs_returndata /\ s1.vs_memory = s2.vs_memory`
+     by fs[state_equiv_except_def] >>
+  gvs[] >> irule update_var_same_preserves >> simp[]
+QED
+
+(*
+ * Helper 2: 1-operand load opcodes
+ * These have shape: case [op1] => eval op1 => case [out] => OK (update_var out (load_fn arg s) s)
+ *)
+Theorem step_inst_load1_except:
+  !fresh s1 s2 inst op.
+    state_equiv_except fresh s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) /\
+    op IN {MLOAD; SLOAD; TLOAD; CALLDATALOAD; BLOCKHASH; BALANCE} /\
+    inst.inst_opcode = op ==>
+    result_equiv_except fresh (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> simp[step_inst_def] >> rpt CASE_TAC >> gvs[] >>
+  `eval_operand h' s1 = eval_operand h' s2` by
+    (irule eval_operand_except >> qexists_tac `fresh` >> simp[]) >> gvs[] >>
+  TRY (drule_all mload_except_same >> strip_tac >> gvs[]) >>
+  TRY (drule_all sload_except_same >> strip_tac >> gvs[]) >>
+  TRY (drule_all tload_except_same >> strip_tac >> gvs[]) >>
+  TRY (`s1.vs_call_ctx = s2.vs_call_ctx` by fs[state_equiv_except_def] >> gvs[]) >>
+  TRY (`s1.vs_block_ctx = s2.vs_block_ctx` by fs[state_equiv_except_def] >> gvs[]) >>
+  TRY (`s1.vs_accounts = s2.vs_accounts` by fs[state_equiv_except_def] >> gvs[]) >>
+  irule update_var_same_preserves >> simp[]
+QED
+
+(*
+ * Helper 3: 2-operand store opcodes
+ * These have shape: case [op1; op2] => eval both => OK (store_fn args s)
+ *)
+Theorem step_inst_store2_except:
+  !fresh s1 s2 inst op.
+    state_equiv_except fresh s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) /\
+    op IN {MSTORE; SSTORE; TSTORE} /\
+    inst.inst_opcode = op ==>
+    result_equiv_except fresh (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> simp[step_inst_def] >> rpt CASE_TAC >> gvs[] >>
+  `eval_operand h s1 = eval_operand h s2` by
+    (irule eval_operand_except >> qexists_tac `fresh` >> simp[]) >>
+  `eval_operand h' s1 = eval_operand h' s2` by
+    (irule eval_operand_except >> qexists_tac `fresh` >> simp[]) >> gvs[] >>
+  TRY (irule mstore_except_preserves >> simp[]) >>
+  TRY (irule sstore_except_preserves >> simp[]) >>
+  TRY (irule tstore_except_preserves >> simp[])
+QED
+
+(*
+ * Helper 4: Control flow opcodes
+ *)
+Theorem step_inst_control_except:
+  !fresh s1 s2 inst op.
+    state_equiv_except fresh s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) /\
+    op IN {JMP; JNZ} /\
+    inst.inst_opcode = op ==>
+    result_equiv_except fresh (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> simp[step_inst_def] >> rpt CASE_TAC >> gvs[] >>
+  TRY (`eval_operand h s1 = eval_operand h s2` by
+    (irule eval_operand_except >> qexists_tac `fresh` >> simp[]) >> gvs[]) >>
+  irule jump_to_except_preserves >> simp[]
+QED
+
+(*
+ * Helper 5: SSA opcodes (PHI, ASSIGN, NOP)
+ *)
+Theorem step_inst_ssa_except:
+  !fresh s1 s2 inst op.
+    state_equiv_except fresh s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) /\
+    op IN {PHI; ASSIGN; NOP} /\
+    inst.inst_opcode = op ==>
+    result_equiv_except fresh (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> `s1.vs_prev_bb = s2.vs_prev_bb` by fs[state_equiv_except_def]
+  >- ((* PHI *)
+    simp[step_inst_def] >>
+    `!op. MEM op inst.inst_operands ==> eval_operand op s1 = eval_operand op s2`
+      by (rw[] >> irule eval_operand_except >> qexists_tac `fresh` >>
+          simp[] >> metis_tac[]) >>
+    rpt CASE_TAC >> gvs[] >>
+    TRY (imp_res_tac resolve_phi_MEM >> first_x_assum drule >> simp[]) >>
+    TRY (irule update_var_same_preserves >> simp[]) >>
+    `eval_operand x' s1 = eval_operand x' s2`
+      by (irule eval_operand_except >> qexists_tac `fresh` >>
+          simp[] >> metis_tac[]) >>
+    gvs[] >> irule update_var_same_preserves >> simp[])
+  >- ((* ASSIGN *)
+    simp[step_inst_def] >>
+    `!op. MEM op inst.inst_operands ==> eval_operand op s1 = eval_operand op s2`
+      by (rw[] >> irule eval_operand_except >> qexists_tac `fresh` >>
+          simp[] >> metis_tac[]) >>
+    rpt CASE_TAC >> gvs[] >>
+    TRY (irule update_var_same_preserves >> simp[]))
+  >- ((* NOP *)
+    simp[step_inst_def, result_equiv_except_def, state_equiv_except_refl])
+QED
+
+(*
+ * Helper 6: Assertion opcodes
+ *)
+Theorem step_inst_assert_except:
+  !fresh s1 s2 inst op.
+    state_equiv_except fresh s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) /\
+    op IN {ASSERT; ASSERT_UNREACHABLE} /\
+    inst.inst_opcode = op ==>
+    result_equiv_except fresh (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> simp[step_inst_def] >> rpt CASE_TAC >> gvs[] >>
+  TRY (`eval_operand h s1 = eval_operand h s2` by
+    (irule eval_operand_except >> qexists_tac `fresh` >> simp[]) >> gvs[]) >>
+  TRY (irule revert_state_except_preserves >> simp[]) >>
+  TRY (irule halt_state_except_preserves >> simp[]) >>
+  simp[state_equiv_except_refl]
+QED
+
+(*
+ * Helper 7: Termination opcodes (no operands)
+ *)
+Theorem step_inst_termination_except:
+  !fresh s1 s2 inst op.
+    state_equiv_except fresh s1 s2 /\
+    op IN {STOP; RETURN; REVERT; SINK} /\
+    inst.inst_opcode = op ==>
+    result_equiv_except fresh (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >>
+  simp[step_inst_def] >>
+  TRY (irule halt_state_except_preserves >> simp[]) >>
+  TRY (irule revert_state_except_preserves >> simp[])
+QED
+
+(*
+ * Helper 8: 3-operand copy opcodes
+ *)
+Theorem step_inst_copy3_except:
+  !fresh s1 s2 inst op.
+    state_equiv_except fresh s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) /\
+    op IN {CALLDATACOPY; RETURNDATACOPY} /\
+    inst.inst_opcode = op ==>
+    result_equiv_except fresh (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> simp[step_inst_def] >> rpt CASE_TAC >> gvs[] >>
+  `eval_operand h s1 = eval_operand h s2` by
+    (irule eval_operand_except >> qexists_tac `fresh` >> simp[]) >>
+  `eval_operand h' s1 = eval_operand h' s2` by
+    (irule eval_operand_except >> qexists_tac `fresh` >> simp[]) >>
+  `eval_operand h'' s1 = eval_operand h'' s2` by
+    (irule eval_operand_except >> qexists_tac `fresh` >> simp[]) >> gvs[] >>
+  TRY (`s1.vs_call_ctx = s2.vs_call_ctx` by fs[state_equiv_except_def] >> gvs[]) >>
+  TRY (`s1.vs_returndata = s2.vs_returndata` by fs[state_equiv_except_def] >> gvs[]) >>
+  TRY (irule write_memory_with_expansion_except_preserves >> simp[]) >>
+  TRY (irule revert_state_except_preserves >> simp[])
+QED
+
+(*
+ * Helper 9: Hash opcodes
+ *)
+Theorem step_inst_hash_except:
+  !fresh s1 s2 inst op.
+    state_equiv_except fresh s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) /\
+    op IN {SHA3; SHA3_64} /\
+    inst.inst_opcode = op ==>
+    result_equiv_except fresh (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> simp[step_inst_def] >>
+  `!op. MEM op inst.inst_operands ==> eval_operand op s1 = eval_operand op s2`
+    by (rw[] >> irule eval_operand_except >> qexists_tac `fresh` >>
+        simp[] >> metis_tac[])
+  >- ((* SHA3 *)
+    rpt CASE_TAC >> gvs[] >>
+    `s1.vs_memory = s2.vs_memory` by fs[state_equiv_except_def] >> gvs[] >>
+    irule update_var_same_preserves >> simp[])
+  >- ((* SHA3_64 *)
+    rpt CASE_TAC >> gvs[] >>
+    irule update_var_same_preserves >> simp[])
+QED
+
 (*
  * Helper: If all operands in a list don't reference fresh vars, and states
  * are equiv_except, then all operands evaluate the same.
@@ -416,13 +647,159 @@ Theorem step_inst_result_equiv_except:
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) ==>
     result_equiv_except fresh (step_inst inst s1) (step_inst inst s2)
 Proof
-  cheat
+  rw[] >> Cases_on `inst.inst_opcode` >> simp[step_inst_def] >>
+  TRY (irule exec_binop_result_equiv_except >> simp[]) >>
+  TRY (irule exec_unop_result_equiv_except >> simp[]) >>
+  TRY (irule exec_modop_result_equiv_except >> simp[]) >>
+  `!op. MEM op inst.inst_operands ==> eval_operand op s1 = eval_operand op s2`
+    by (rw[] >> irule eval_operand_except >> qexists_tac `fresh` >> simp[] >>
+        metis_tac[]) >>
+  `s1.vs_memory = s2.vs_memory /\ s1.vs_storage = s2.vs_storage /\
+   s1.vs_transient = s2.vs_transient /\ s1.vs_call_ctx = s2.vs_call_ctx /\
+   s1.vs_tx_ctx = s2.vs_tx_ctx /\ s1.vs_block_ctx = s2.vs_block_ctx /\
+   s1.vs_accounts = s2.vs_accounts /\ s1.vs_returndata = s2.vs_returndata /\
+   s1.vs_prev_bb = s2.vs_prev_bb` by fs[state_equiv_except_def] >> gvs[]
+  (* MLOAD *)
+  >- (Cases_on `inst.inst_operands` >> gvs[] >>
+      Cases_on `t` >> gvs[] >> Cases_on `eval_operand h s2` >> gvs[] >>
+      Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >> gvs[] >>
+      `mload (w2n x) s1 = mload (w2n x) s2`
+        by (irule mload_except_same >> qexists_tac `fresh` >> simp[]) >>
+      simp[update_var_same_preserves])
+  (* MSTORE *)
+  >- (Cases_on `inst.inst_operands` >> gvs[] >> Cases_on `t` >> gvs[] >>
+      Cases_on `t'` >> gvs[] >> Cases_on `eval_operand h s2` >> gvs[] >>
+      Cases_on `eval_operand h' s2` >> gvs[] >>
+      irule mstore_except_preserves >> simp[])
+  (* MSIZE *)
+  >- (Cases_on `inst.inst_outputs` >> gvs[update_var_same_preserves] >>
+      Cases_on `t` >> gvs[update_var_same_preserves])
+  (* SLOAD *)
+  >- (TRY (irule halt_state_except_preserves >> simp[]) >>
+      TRY (irule revert_state_except_preserves >> simp[]) >>
+      Cases_on `inst.inst_operands` >> gvs[] >> Cases_on `t` >> gvs[] >>
+      Cases_on `eval_operand h s2` >> gvs[] >> Cases_on `inst.inst_outputs` >>
+      gvs[] >> Cases_on `t` >> gvs[] >>
+      `sload x s1 = sload x s2`
+        by (irule sload_except_same >> qexists_tac `fresh` >> simp[]) >>
+      simp[update_var_same_preserves])
+  (* SSTORE *)
+  >- (Cases_on `inst.inst_operands` >> gvs[] >> Cases_on `t` >> gvs[] >>
+      Cases_on `t'` >> gvs[] >> Cases_on `eval_operand h s2` >> gvs[] >>
+      Cases_on `eval_operand h' s2` >> gvs[] >>
+      irule sstore_except_preserves >> simp[])
+  (* TLOAD *)
+  >- (Cases_on `inst.inst_operands` >> gvs[] >> Cases_on `t` >> gvs[] >>
+      Cases_on `eval_operand h s2` >> gvs[] >> Cases_on `inst.inst_outputs` >>
+      gvs[] >> Cases_on `t` >> gvs[] >>
+      `tload x s1 = tload x s2`
+        by (irule tload_except_same >> qexists_tac `fresh` >> simp[]) >>
+      simp[update_var_same_preserves])
+  (* TSTORE *)
+  >- (Cases_on `inst.inst_operands` >> gvs[] >> Cases_on `t` >> gvs[] >>
+      Cases_on `t'` >> gvs[] >> Cases_on `eval_operand h s2` >> gvs[] >>
+      Cases_on `eval_operand h' s2` >> gvs[] >>
+      irule tstore_except_preserves >> simp[])
+  (* JMP *)
+  >- (Cases_on `inst.inst_operands` >> gvs[] >> Cases_on `h` >> gvs[] >>
+      Cases_on `t` >> gvs[] >> irule jump_to_except_preserves >> simp[])
+  (* JNZ *)
+  >- (rpt (CHANGED_TAC (Cases_on `inst.inst_operands` >> gvs[])) >>
+      rpt CASE_TAC >> gvs[result_equiv_except_def] >>
+      irule jump_to_except_preserves >> simp[])
+  (* RETURN *)
+  >- (irule halt_state_except_preserves >> simp[])
+  (* REVERT *)
+  >- (irule revert_state_except_preserves >> simp[])
+  (* STOP *)
+  >- (TRY (irule halt_state_except_preserves >> simp[]) >>
+      TRY (irule revert_state_except_preserves >> simp[]) >>
+      TRY (irule jump_to_except_preserves >> simp[]))
+  (* SINK *)
+  >- (irule halt_state_except_preserves >> simp[])
+  (* PHI *)
+  >- (Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >> gvs[] >>
+      Cases_on `s2.vs_prev_bb` >> gvs[] >>
+      Cases_on `resolve_phi x inst.inst_operands` >> gvs[] >>
+      Cases_on `eval_operand x' s1` >> gvs[]
+      >- (`MEM x' inst.inst_operands` by (imp_res_tac resolve_phi_MEM) >>
+          `eval_operand x' s1 = eval_operand x' s2` by gvs[] >> gvs[])
+      >- (`MEM x' inst.inst_operands` by (imp_res_tac resolve_phi_MEM) >>
+          `eval_operand x' s1 = eval_operand x' s2` by gvs[] >>
+          gvs[update_var_same_preserves]))
+  (* ASSIGN *)
+  >- (Cases_on `inst.inst_operands` >> gvs[] >> Cases_on `t` >> gvs[] >>
+      Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >> gvs[] >>
+      Cases_on `eval_operand h s2` >> gvs[update_var_same_preserves])
+  (* CALLER through BLOBBASEFEE - context reads *)
+  >- (Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >>
+      gvs[update_var_same_preserves])
+  >- (Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >>
+      gvs[update_var_same_preserves])
+  >- (Cases_on `inst.inst_operands` >> gvs[] >> Cases_on `t` >> gvs[] >>
+      Cases_on `eval_operand h s2` >> gvs[] >> Cases_on `inst.inst_outputs` >>
+      gvs[] >> Cases_on `t` >> gvs[update_var_same_preserves])
+  >- (Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >>
+      gvs[update_var_same_preserves])
+  (* CALLDATACOPY *)
+  >- (rpt CASE_TAC >> gvs[result_equiv_except_def] >>
+      irule write_memory_with_expansion_except_preserves >> simp[])
+  (* More context reads *)
+  >- (Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >>
+      gvs[update_var_same_preserves])
+  >- (Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >>
+      gvs[update_var_same_preserves])
+  >- (Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >>
+      gvs[update_var_same_preserves])
+  >- (Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >>
+      gvs[update_var_same_preserves])
+  >- (Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >>
+      gvs[update_var_same_preserves])
+  >- (Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >>
+      gvs[update_var_same_preserves])
+  >- (Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >>
+      gvs[update_var_same_preserves])
+  >- (Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >>
+      gvs[update_var_same_preserves])
+  >- (Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >>
+      gvs[update_var_same_preserves])
+  >- (Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >>
+      gvs[update_var_same_preserves])
+  >- (Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >>
+      gvs[update_var_same_preserves])
+  (* BALANCE *)
+  >- (Cases_on `inst.inst_operands` >> gvs[] >> Cases_on `t` >> gvs[] >>
+      Cases_on `eval_operand h s2` >> gvs[] >> Cases_on `inst.inst_outputs` >>
+      gvs[] >> Cases_on `t` >> gvs[update_var_same_preserves])
+  (* BLOCKHASH *)
+  >- (Cases_on `inst.inst_operands` >> gvs[] >> Cases_on `t` >> gvs[] >>
+      Cases_on `eval_operand h s2` >> gvs[] >> Cases_on `inst.inst_outputs` >>
+      gvs[] >> Cases_on `t` >> gvs[update_var_same_preserves])
+  >- (Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >>
+      gvs[update_var_same_preserves])
+  >- (Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >>
+      gvs[update_var_same_preserves])
+  (* RETURNDATACOPY *)
+  >- (rpt CASE_TAC >> gvs[result_equiv_except_def] >>
+      TRY (irule write_memory_with_expansion_except_preserves >> simp[]) >>
+      TRY (irule revert_state_except_preserves >> simp[]))
+  >- (Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >>
+      gvs[update_var_same_preserves])
+  (* SHA3 *)
+  >- (rpt CASE_TAC >> gvs[result_equiv_except_def, update_var_same_preserves])
+  (* SHA3_64 *)
+  >- (rpt CASE_TAC >> gvs[result_equiv_except_def, update_var_same_preserves])
+  (* ASSERT *)
+  >- (rpt CASE_TAC >> gvs[result_equiv_except_def] >>
+      TRY (irule revert_state_except_preserves >> simp[]) >>
+      TRY (simp[state_equiv_except_refl]))
+  (* ASSERT_UNREACHABLE *)
+  >- (rpt CASE_TAC >> gvs[result_equiv_except_def] >>
+      TRY (irule halt_state_except_preserves >> simp[]) >>
+      TRY (simp[state_equiv_except_refl]))
 QED
 
-(*
- * step_in_block preserves result_equiv_except.
- * TODO: Complete proof - currently cheated.
- *)
+(* step_in_block preserves result_equiv_except *)
 Theorem step_in_block_result_equiv_except:
   !fresh fn bb s1 s2.
     state_equiv_except fresh s1 s2 /\
@@ -432,13 +809,25 @@ Theorem step_in_block_result_equiv_except:
     let (r2, t2) = step_in_block fn bb s2 in
     t1 = t2 /\ result_equiv_except fresh r1 r2
 Proof
-  cheat (* Uses step_inst_result_equiv_except *)
+  rw[step_in_block_def, LET_THM] >>
+  `s1.vs_inst_idx = s2.vs_inst_idx` by fs[state_equiv_except_def] >> simp[] >>
+  Cases_on `get_instruction bb s2.vs_inst_idx` >>
+  simp[result_equiv_except_def] >>
+  `MEM x bb.bb_instructions` by (
+    fs[get_instruction_def] >> rw[] >>
+    Cases_on `s2.vs_inst_idx < LENGTH bb.bb_instructions` >> fs[] >>
+    metis_tac[listTheory.EL_MEM]) >>
+  `result_equiv_except fresh (step_inst x s1) (step_inst x s2)` by (
+    irule step_inst_result_equiv_except >> simp[] >> metis_tac[]) >>
+  Cases_on `step_inst x s1` >> Cases_on `step_inst x s2` >>
+  gvs[result_equiv_except_def] >>
+  Cases_on `is_terminator x.inst_opcode` >>
+  simp[result_equiv_except_def] >>
+  fs[next_inst_def, state_equiv_except_def] >>
+  rw[] >> simp[lookup_var_def] >> metis_tac[lookup_var_def]
 QED
 
-(*
- * run_block preserves result_equiv_except.
- * TODO: Complete proof - currently cheated.
- *)
+(* run_block preserves result_equiv_except *)
 Theorem run_block_result_equiv_except:
   !fresh fn bb s1 s2.
     state_equiv_except fresh s1 s2 /\
@@ -446,7 +835,29 @@ Theorem run_block_result_equiv_except:
             !x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) ==>
     result_equiv_except fresh (run_block fn bb s1) (run_block fn bb s2)
 Proof
-  cheat (* Induction using step_in_block_result_equiv_except *)
+  CONV_TAC (RESORT_FORALL_CONV (fn [fresh, fn_, bb, s1, s2] =>
+    [fn_, bb, s1, fresh, s2])) >>
+  ho_match_mp_tac run_block_ind >> rw[] >>
+  drule_all step_in_block_result_equiv_except >> simp[LET_THM] >> strip_tac >>
+  Cases_on `step_in_block fn bb s1` >> Cases_on `step_in_block fn bb s2` >>
+  gvs[] >>
+  first_x_assum (qspec_then `fn` mp_tac) >> simp[] >> strip_tac >>
+  simp[Once run_block_def] >>
+  PURE_ONCE_REWRITE_TAC[run_block_def] >> simp[] >>
+  Cases_on `q` >> gvs[result_equiv_except_def]
+  >- (
+    Cases_on `q'` >> gvs[result_equiv_except_def] >>
+    `v.vs_halted = v'.vs_halted` by fs[state_equiv_except_def] >>
+    Cases_on `v.vs_halted` >> simp[result_equiv_except_def]
+    >- gvs[result_equiv_except_def]
+    >- (
+      gvs[] >>
+      Cases_on `r` >> simp[result_equiv_except_def] >>
+      PURE_ONCE_REWRITE_TAC[GSYM run_block_def] >>
+      first_x_assum irule >> simp[] >> metis_tac[]))
+  >- (Cases_on `q'` >> gvs[result_equiv_except_def])
+  >- (Cases_on `q'` >> gvs[result_equiv_except_def])
+  >- (Cases_on `q'` >> gvs[result_equiv_except_def])
 QED
 
 val _ = export_theory();
