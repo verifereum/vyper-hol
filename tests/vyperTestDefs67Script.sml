@@ -1,4 +1,4 @@
-open HolKernel vyperTestLib;
+open HolKernel jsonToVyperTheory vyperTestLib;
 val () = new_theory "vyperTestDefs67";
-val () = make_definitions_for_file (67, "../../vyper/tests/export/functional/codegen/features/test_memory_dealloc.json");
+val () = make_definitions_for_file (67, "vyper-test-exports/functional/codegen/features/test_memory_dealloc.json");
 val () = export_theory_no_docs();
