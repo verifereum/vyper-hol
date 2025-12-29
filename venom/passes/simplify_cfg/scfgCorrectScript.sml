@@ -122,14 +122,26 @@ QED
 (* ===== resolve_phi under Label Rewriting ===== *)
 
 Theorem resolve_phi_replace_label:
-  !old new ops val.
+  !old new ops v.
     old <> new /\
     ~MEM (Label new) ops /\
-    resolve_phi old ops = SOME val ==>
+    resolve_phi old ops = SOME (Var v) ==>
     resolve_phi new (MAP (replace_label_operand old new) ops) =
-    SOME (replace_label_operand old new val)
+    SOME (Var v)
 Proof
-  cheat
+  measureInduct_on `LENGTH ops` >>
+  Cases_on `ops` >- simp[resolve_phi_def] >>
+  Cases_on `t` >- simp[resolve_phi_def] >>
+  rename1 `h::h2::t2` >>
+  Cases_on `h` >> Cases_on `h2` >>
+  rpt strip_tac >>
+  fs[resolve_phi_def, replace_label_operand_def] >>
+  TRY (Cases_on `s = old` >> fs[]) >>
+  TRY (Cases_on `s = new` >> fs[]) >>
+  simp[resolve_phi_def] >>
+  `LENGTH t2 < LENGTH (h::h2::t2)` by simp[] >>
+  `~MEM (Label new) t2` by simp[] >>
+  res_tac >> simp[]
 QED
 
 (* TODO: proof attempt
@@ -156,7 +168,32 @@ Theorem resolve_phi_remove_non_preds:
     resolve_phi prev ops = SOME val ==>
     resolve_phi prev (phi_remove_non_preds preds ops) = SOME val
 Proof
-  cheat
+  measureInduct_on `LENGTH ops` >>
+  Cases_on `ops` >- simp[resolve_phi_def, phi_remove_non_preds_def] >>
+  Cases_on `t` >- simp[resolve_phi_def, phi_remove_non_preds_def] >>
+  rename1 `h::h2::t2` >>
+  Cases_on `h`
+  >- fs[resolve_phi_def, phi_remove_non_preds_def]
+  >- fs[resolve_phi_def, phi_remove_non_preds_def]
+  >- (
+    rpt strip_tac >>
+    Cases_on `s = prev`
+    >- fs[resolve_phi_def, phi_remove_non_preds_def]
+    >- (
+      qpat_x_assum `resolve_phi prev (Label s::h2::t2) = SOME val` mp_tac >>
+      simp[resolve_phi_def] >>
+      strip_tac >>
+      qpat_x_assum
+        `!ops'. LENGTH ops' < LENGTH (Label s::h2::t2) ==> _` mp_tac >>
+      disch_then (qspec_then `t2` mp_tac) >>
+      simp[] >>
+      disch_then (qspecl_then [`preds`, `prev`, `val`] mp_tac) >>
+      strip_tac >>
+      Cases_on `MEM s preds`
+      >- simp[resolve_phi_def, phi_remove_non_preds_def]
+      >- fs[resolve_phi_def, phi_remove_non_preds_def]
+    )
+  )
 QED
 
 (* TODO: proof attempt
@@ -187,9 +224,48 @@ Theorem step_inst_simplify_phi_inst:
     MEM prev preds /\
     resolve_phi prev inst.inst_operands = SOME val_op
   ==>
-    step_inst (simplify_phi_inst preds inst) s = step_inst inst s
+    result_equiv_cfg (step_inst (simplify_phi_inst preds inst) s)
+                     (step_inst inst s)
 Proof
-  cheat
+  rpt strip_tac >>
+  simp[simplify_phi_inst_def] >>
+  qabbrev_tac `ops = phi_remove_non_preds preds inst.inst_operands` >>
+  sg `resolve_phi prev ops = SOME val_op`
+  >- (
+    fs[Abbr`ops`] >>
+    irule resolve_phi_remove_non_preds >> simp[]
+  )
+  >- (
+    Cases_on `ops`
+    >- fs[resolve_phi_def]
+    >- (
+      Cases_on `t`
+      >- fs[resolve_phi_def]
+      >- (
+        rename1 `h::h2::t2` >>
+        Cases_on `t2`
+        >- (
+          Cases_on `h`
+          >- fs[resolve_phi_def]
+          >- fs[resolve_phi_def]
+          >- (
+            fs[step_inst_def, resolve_phi_def, result_equiv_cfg_def] >>
+            simp[result_equiv_cfg_def, state_equiv_cfg_def, var_equiv_def] >>
+            Cases_on `eval_operand val_op s`
+            >- simp[result_equiv_cfg_def, state_equiv_cfg_def, var_equiv_def]
+            >- simp[result_equiv_cfg_def, state_equiv_cfg_def, var_equiv_def]
+          )
+        )
+        >- (
+          fs[step_inst_def, result_equiv_cfg_def, state_equiv_cfg_def,
+             var_equiv_def] >>
+          Cases_on `eval_operand val_op s`
+          >- simp[result_equiv_cfg_def, state_equiv_cfg_def, var_equiv_def]
+          >- simp[result_equiv_cfg_def, state_equiv_cfg_def, var_equiv_def]
+        )
+      )
+    )
+  )
 QED
 
 (* TODO: proof attempt
@@ -236,9 +312,11 @@ Theorem step_in_block_simplify_phi:
        s.vs_prev_bb = SOME prev /\
        MEM prev preds /\
        resolve_phi prev inst.inst_operands = SOME val_op ==>
-       step_inst (simplify_phi_inst preds inst) s = step_inst inst s)
+       result_equiv_cfg (step_inst (simplify_phi_inst preds inst) s)
+                        (step_inst inst s))
   ==>
-    step_in_block fn (simplify_phi_block preds bb) s = (res, is_term)
+    ?res'. step_in_block fn (simplify_phi_block preds bb) s = (res', is_term) /\
+           result_equiv_cfg res' res
 Proof
   cheat
 QED
@@ -276,9 +354,11 @@ Theorem run_block_simplify_phi:
        s.vs_prev_bb = SOME prev /\
        MEM prev preds /\
        resolve_phi prev inst.inst_operands = SOME val_op ==>
-       step_inst (simplify_phi_inst preds inst) s = step_inst inst s)
+       result_equiv_cfg (step_inst (simplify_phi_inst preds inst) s)
+                        (step_inst inst s))
   ==>
-    run_block fn (simplify_phi_block preds bb) s = run_block fn bb s
+    result_equiv_cfg (run_block fn (simplify_phi_block preds bb) s)
+                     (run_block fn bb s)
 Proof
   cheat
 QED
