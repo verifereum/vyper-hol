@@ -185,6 +185,30 @@ Proof
 QED
 
 (* ==========================================================================
+   run_function at Simple Revert Block
+   ========================================================================== *)
+
+(* WHY THIS IS TRUE: A simple revert block executes its single REVERT instruction
+   and produces Revert result. run_function at fuel > 0 unfolds to run_block. *)
+Theorem run_function_at_simple_revert:
+  !fn s fuel bb.
+    is_simple_revert_block bb /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    fuel > 0 ==>
+    run_function fuel fn (s with vs_inst_idx := 0) =
+      Revert (revert_state (s with vs_inst_idx := 0))
+Proof
+  rw[] >>
+  `fuel > 0` by simp[] >>
+  Cases_on `fuel` >- fs[] >>
+  simp[Once run_function_def] >>
+  `run_block fn bb (s with vs_inst_idx := 0) =
+   Revert (revert_state (s with vs_inst_idx := 0))`
+    by (irule simple_revert_block_reverts >> simp[]) >>
+  simp[]
+QED
+
+(* ==========================================================================
    state_equiv_except Properties
 
    NOTE: Basic properties (refl, sym, trans, state_equiv_implies_except,

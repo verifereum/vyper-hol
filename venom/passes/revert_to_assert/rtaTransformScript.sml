@@ -281,37 +281,53 @@ Proof
 QED
 
 (*
- * Main block correctness theorem.
+ * NOTE: transform_block_correct is UNPROVABLE at block level.
+ *
+ * For pattern 1 JNZ when cond != 0:
+ *   - Original run_block: returns OK (jump_to revert_block s)
+ *   - Transformed run_block: returns Revert (revert_state s')
+ *   - result_equiv_except (OK _) (Revert _) = F by definition
+ *
+ * The equivalence must be proven at function level, where both paths
+ * ultimately reach a Revert result. See transform_function_correct.
+ *)
+
+(* ==========================================================================
+   Block-Level Transformation Relation
+   ========================================================================== *)
+
+(*
+ * Key helper: Relates run_block results for original vs transformed block.
  *
  * WHY THIS IS TRUE:
- * 1. Non-JNZ prefix: Identical instructions, deterministic execution, same intermediate state
- * 2. JNZ terminator case:
- *    - If not transformed: bb' = bb, reflexively equivalent
- *    - If pattern 1: Apply pattern1_block_correct
- *    - If pattern 2: Apply pattern2_block_correct
- * 3. Fresh variable only matters for pattern 1
+ * - For blocks without pattern-matched JNZ: instructions unchanged, results identical
+ * - For pattern 1 (cond=0): original OK(jump else), transformed OK(jump else) with fresh var
+ * - For pattern 1 (cond≠0): original OK(jump revert), transformed Revert
+ * - For pattern 2 (cond≠0): original OK(jump then), transformed OK(jump then)
+ * - For pattern 2 (cond=0): original OK(jump revert), transformed Revert
+ *
+ * The (OK, Revert) case captures the key optimization: original jumps to revert
+ * block, transformed reverts directly.
  *)
-Theorem transform_block_correct:
+Theorem run_block_transform_relation:
   !fn bb s.
-    fresh_vars_unused fn s
-  ==>
+    MEM bb fn.fn_blocks /\ fresh_vars_unused fn s ==>
     let bb' = transform_block fn bb in
+    let fn' = transform_function fn in
     let fresh = fresh_vars_in_block fn bb in
-    result_equiv_except fresh
-      (run_block fn bb (s with vs_inst_idx := 0))
-      (run_block fn bb' (s with vs_inst_idx := 0))
+    let r = run_block fn bb (s with vs_inst_idx := 0) in
+    let r' = run_block fn' bb' (s with vs_inst_idx := 0) in
+    case (r, r') of
+    | (OK v, OK v') => state_equiv_except fresh v v'
+    | (OK v, Revert v') =>
+        is_revert_label fn v.vs_current_bb /\
+        execution_equiv_except fresh (revert_state v) v'
+    | (Halt v, Halt v') => execution_equiv_except fresh v v'
+    | (Revert v, Revert v') => execution_equiv_except fresh v v'
+    | (Error _, Error _) => T
+    | _ => F
 Proof
-  cheat (* Complex - see detailed reasoning below *)
-  (*
-   * PROOF STRATEGY:
-   * 1. Induction on bb.bb_instructions structure
-   * 2. Case split: Is terminator a transformable JNZ?
-   *    - No: bb' = bb (up to recursion on rest), use reflexivity
-   *    - Yes pattern 1: Apply pattern1_block_correct + equiv_except properties
-   *    - Yes pattern 2: Apply pattern2_block_correct (no fresh vars)
-   * 3. For prefix: Show step_in_block produces same result
-   * 4. Combine with run_block semantics
-   *)
+  cheat (* Requires tracing through transformed instruction execution *)
 QED
 
 (* ==========================================================================
@@ -338,6 +354,18 @@ Theorem lookup_block_MAP:
 Proof
   Induct_on `blocks` >- simp[lookup_block_def] >>
   rw[lookup_block_def, transform_block_preserves_label]
+QED
+
+(*
+ * Helper: lookup_block NONE preserved through transform_block MAP.
+ *)
+Theorem lookup_block_MAP_NONE:
+  !lbl bbs fn.
+    lookup_block lbl bbs = NONE ==>
+    lookup_block lbl (MAP (transform_block fn) bbs) = NONE
+Proof
+  Induct_on `bbs` >- simp[lookup_block_def] >>
+  simp[lookup_block_def, transform_block_def]
 QED
 
 (*
