@@ -104,6 +104,12 @@ VFMDIR=/home/ubuntu/verifereum Holmake --qof
 
 Use the `/hol4` skills for proof development.
 
+**CRITICAL: Use gt/etq, NEVER g/e()**
+- Use `gt \`goal\`` to set goal (not `g`)
+- Use `etq "tactic"` to apply tactics (not `e()`)
+- `etq` records tactics for `p()` extraction; `e()` does not
+- After tactics, use `p()` to see recorded proof script
+
 ### File Conventions (repo-specific)
 
 Local test/scratch files use **dot prefixes** (gitignored):
