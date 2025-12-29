@@ -357,6 +357,17 @@ Proof
 QED
 
 (*
+ * Helper: If lookup_block succeeds, the block is in the list.
+ *)
+Theorem lookup_block_MEM:
+  !lbl bbs bb.
+    lookup_block lbl bbs = SOME bb ==> MEM bb bbs
+Proof
+  Induct_on `bbs` >- simp[lookup_block_def] >>
+  simp[lookup_block_def] >> rw[] >> metis_tac[]
+QED
+
+(*
  * Helper: state_equiv_except propagates through run_function.
  *
  * WHY THIS IS TRUE: run_function depends on control flow (vs_current_bb)
@@ -375,7 +386,26 @@ Theorem state_equiv_except_run_function:
       (run_function fuel fn s1)
       (run_function fuel fn s2)
 Proof
-  cheat (* Induction on fuel, uses eval_operand_except *)
+  Induct_on `fuel` >- simp[run_function_def] >>
+  rw[] >> ONCE_REWRITE_TAC[run_function_def] >> simp[] >>
+  `s1.vs_current_bb = s2.vs_current_bb` by gvs[state_equiv_except_def] >>
+  Cases_on `lookup_block s1.vs_current_bb fn.fn_blocks` >- gvs[] >>
+  `lookup_block s2.vs_current_bb fn.fn_blocks = SOME x` by gvs[] >> gvs[] >>
+  `MEM x fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `!inst. MEM inst x.bb_instructions ==> !v. v IN fresh ==>
+      ~MEM (Var v) inst.inst_operands` by (
+    rw[] >> first_x_assum irule >> simp[MEM_FLAT, MEM_MAP] >>
+    qexists_tac `x.bb_instructions` >> simp[] >>
+    qexists_tac `x` >> simp[]) >>
+  `result_equiv_except fresh (run_block fn x s1) (run_block fn x s2)` by (
+    irule run_block_result_equiv_except >> simp[] >> metis_tac[]) >>
+  Cases_on `run_block fn x s1` >> gvs[result_equiv_except_def, AllCaseEqs()]
+  >- (Cases_on `run_block fn x s2` >> gvs[result_equiv_except_def] >>
+      `v.vs_halted <=> v'.vs_halted` by gvs[state_equiv_except_def] >>
+      Cases_on `v.vs_halted` >> gvs[] >> first_x_assum irule >> simp[])
+  >- (Cases_on `run_block fn x s2` >> gvs[result_equiv_except_def])
+  >- (Cases_on `run_block fn x s2` >> gvs[result_equiv_except_def])
+  >- (Cases_on `run_block fn x s2` >> gvs[result_equiv_except_def])
 QED
 
 (*
