@@ -199,7 +199,8 @@ Theorem update_var_state_equiv_except_insert:
   !x v s.
     state_equiv_except {x} s (update_var x v s)
 Proof
-  rw[state_equiv_except_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]
+  rw[state_equiv_except_def, execution_equiv_except_def,
+     update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
 (* ==========================================================================
@@ -352,7 +353,7 @@ Proof
   `s1.vs_call_ctx = s2.vs_call_ctx /\ s1.vs_tx_ctx = s2.vs_tx_ctx /\
    s1.vs_block_ctx = s2.vs_block_ctx /\ s1.vs_accounts = s2.vs_accounts /\
    s1.vs_returndata = s2.vs_returndata /\ s1.vs_memory = s2.vs_memory`
-     by fs[state_equiv_except_def] >>
+     by fs[state_equiv_except_def, execution_equiv_except_def] >>
   gvs[] >> irule update_var_same_preserves >> simp[]
 QED
 
@@ -374,9 +375,9 @@ Proof
   TRY (drule_all mload_except_same >> strip_tac >> gvs[]) >>
   TRY (drule_all sload_except_same >> strip_tac >> gvs[]) >>
   TRY (drule_all tload_except_same >> strip_tac >> gvs[]) >>
-  TRY (`s1.vs_call_ctx = s2.vs_call_ctx` by fs[state_equiv_except_def] >> gvs[]) >>
-  TRY (`s1.vs_block_ctx = s2.vs_block_ctx` by fs[state_equiv_except_def] >> gvs[]) >>
-  TRY (`s1.vs_accounts = s2.vs_accounts` by fs[state_equiv_except_def] >> gvs[]) >>
+  TRY (`s1.vs_call_ctx = s2.vs_call_ctx` by fs[state_equiv_except_def, execution_equiv_except_def] >> gvs[]) >>
+  TRY (`s1.vs_block_ctx = s2.vs_block_ctx` by fs[state_equiv_except_def, execution_equiv_except_def] >> gvs[]) >>
+  TRY (`s1.vs_accounts = s2.vs_accounts` by fs[state_equiv_except_def, execution_equiv_except_def] >> gvs[]) >>
   irule update_var_same_preserves >> simp[]
 QED
 
@@ -468,8 +469,8 @@ Proof
   rw[] >> simp[step_inst_def] >> rpt CASE_TAC >> gvs[] >>
   TRY (`eval_operand h s1 = eval_operand h s2` by
     (irule eval_operand_except >> qexists_tac `fresh` >> simp[]) >> gvs[]) >>
-  TRY (irule revert_state_except_preserves >> simp[]) >>
-  TRY (irule halt_state_except_preserves >> simp[]) >>
+  TRY (irule revert_state_from_state_except >> simp[]) >>
+  TRY (irule halt_state_from_state_except >> simp[]) >>
   simp[state_equiv_except_refl]
 QED
 
@@ -485,8 +486,8 @@ Theorem step_inst_termination_except:
 Proof
   rw[] >>
   simp[step_inst_def] >>
-  TRY (irule halt_state_except_preserves >> simp[]) >>
-  TRY (irule revert_state_except_preserves >> simp[])
+  TRY (irule halt_state_from_state_except >> simp[]) >>
+  TRY (irule revert_state_from_state_except >> simp[])
 QED
 
 (*
@@ -507,10 +508,10 @@ Proof
     (irule eval_operand_except >> qexists_tac `fresh` >> simp[]) >>
   `eval_operand h'' s1 = eval_operand h'' s2` by
     (irule eval_operand_except >> qexists_tac `fresh` >> simp[]) >> gvs[] >>
-  TRY (`s1.vs_call_ctx = s2.vs_call_ctx` by fs[state_equiv_except_def] >> gvs[]) >>
-  TRY (`s1.vs_returndata = s2.vs_returndata` by fs[state_equiv_except_def] >> gvs[]) >>
+  TRY (`s1.vs_call_ctx = s2.vs_call_ctx` by fs[state_equiv_except_def, execution_equiv_except_def] >> gvs[]) >>
+  TRY (`s1.vs_returndata = s2.vs_returndata` by fs[state_equiv_except_def, execution_equiv_except_def] >> gvs[]) >>
   TRY (irule write_memory_with_expansion_except_preserves >> simp[]) >>
-  TRY (irule revert_state_except_preserves >> simp[])
+  TRY (irule revert_state_from_state_except >> simp[])
 QED
 
 (*
@@ -530,7 +531,7 @@ Proof
         simp[] >> metis_tac[])
   >- ((* SHA3 *)
     rpt CASE_TAC >> gvs[] >>
-    `s1.vs_memory = s2.vs_memory` by fs[state_equiv_except_def] >> gvs[] >>
+    `s1.vs_memory = s2.vs_memory` by fs[state_equiv_except_def, execution_equiv_except_def] >> gvs[] >>
     irule update_var_same_preserves >> simp[])
   >- ((* SHA3_64 *)
     rpt CASE_TAC >> gvs[] >>
@@ -658,7 +659,7 @@ Proof
    s1.vs_transient = s2.vs_transient /\ s1.vs_call_ctx = s2.vs_call_ctx /\
    s1.vs_tx_ctx = s2.vs_tx_ctx /\ s1.vs_block_ctx = s2.vs_block_ctx /\
    s1.vs_accounts = s2.vs_accounts /\ s1.vs_returndata = s2.vs_returndata /\
-   s1.vs_prev_bb = s2.vs_prev_bb` by fs[state_equiv_except_def] >> gvs[]
+   s1.vs_prev_bb = s2.vs_prev_bb` by fs[state_equiv_except_def, execution_equiv_except_def] >> gvs[]
   (* MLOAD *)
   >- (Cases_on `inst.inst_operands` >> gvs[] >>
       Cases_on `t` >> gvs[] >> Cases_on `eval_operand h s2` >> gvs[] >>
@@ -675,8 +676,8 @@ Proof
   >- (Cases_on `inst.inst_outputs` >> gvs[update_var_same_preserves] >>
       Cases_on `t` >> gvs[update_var_same_preserves])
   (* SLOAD *)
-  >- (TRY (irule halt_state_except_preserves >> simp[]) >>
-      TRY (irule revert_state_except_preserves >> simp[]) >>
+  >- (TRY (irule halt_state_from_state_except >> simp[]) >>
+      TRY (irule revert_state_from_state_except >> simp[]) >>
       Cases_on `inst.inst_operands` >> gvs[] >> Cases_on `t` >> gvs[] >>
       Cases_on `eval_operand h s2` >> gvs[] >> Cases_on `inst.inst_outputs` >>
       gvs[] >> Cases_on `t` >> gvs[] >>
@@ -708,15 +709,15 @@ Proof
       rpt CASE_TAC >> gvs[result_equiv_except_def] >>
       irule jump_to_except_preserves >> simp[])
   (* RETURN *)
-  >- (irule halt_state_except_preserves >> simp[])
+  >- (irule halt_state_from_state_except >> simp[])
   (* REVERT *)
-  >- (irule revert_state_except_preserves >> simp[])
+  >- (irule revert_state_from_state_except >> simp[])
   (* STOP *)
-  >- (TRY (irule halt_state_except_preserves >> simp[]) >>
-      TRY (irule revert_state_except_preserves >> simp[]) >>
+  >- (TRY (irule halt_state_from_state_except >> simp[]) >>
+      TRY (irule revert_state_from_state_except >> simp[]) >>
       TRY (irule jump_to_except_preserves >> simp[]))
   (* SINK *)
-  >- (irule halt_state_except_preserves >> simp[])
+  >- (irule halt_state_from_state_except >> simp[])
   (* PHI *)
   >- (Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >> gvs[] >>
       Cases_on `s2.vs_prev_bb` >> gvs[] >>
@@ -782,7 +783,7 @@ Proof
   (* RETURNDATACOPY *)
   >- (rpt CASE_TAC >> gvs[result_equiv_except_def] >>
       TRY (irule write_memory_with_expansion_except_preserves >> simp[]) >>
-      TRY (irule revert_state_except_preserves >> simp[]))
+      TRY (irule revert_state_from_state_except >> simp[]))
   >- (Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >>
       gvs[update_var_same_preserves])
   (* SHA3 *)
@@ -791,11 +792,11 @@ Proof
   >- (rpt CASE_TAC >> gvs[result_equiv_except_def, update_var_same_preserves])
   (* ASSERT *)
   >- (rpt CASE_TAC >> gvs[result_equiv_except_def] >>
-      TRY (irule revert_state_except_preserves >> simp[]) >>
+      TRY (irule revert_state_from_state_except >> simp[]) >>
       TRY (simp[state_equiv_except_refl]))
   (* ASSERT_UNREACHABLE *)
   >- (rpt CASE_TAC >> gvs[result_equiv_except_def] >>
-      TRY (irule halt_state_except_preserves >> simp[]) >>
+      TRY (irule halt_state_from_state_except >> simp[]) >>
       TRY (simp[state_equiv_except_refl]))
 QED
 
@@ -823,7 +824,7 @@ Proof
   gvs[result_equiv_except_def] >>
   Cases_on `is_terminator x.inst_opcode` >>
   simp[result_equiv_except_def] >>
-  fs[next_inst_def, state_equiv_except_def] >>
+  fs[next_inst_def, state_equiv_except_def, execution_equiv_except_def] >>
   rw[] >> simp[lookup_var_def] >> metis_tac[lookup_var_def]
 QED
 
@@ -847,9 +848,11 @@ Proof
   Cases_on `q` >> gvs[result_equiv_except_def]
   >- (
     Cases_on `q'` >> gvs[result_equiv_except_def] >>
-    `v.vs_halted = v'.vs_halted` by fs[state_equiv_except_def] >>
+    `v.vs_halted = v'.vs_halted` by fs[state_equiv_except_def, execution_equiv_except_def] >>
     Cases_on `v.vs_halted` >> simp[result_equiv_except_def]
-    >- gvs[result_equiv_except_def]
+    >- (
+      (* v.vs_halted = T: run_block returns Halt, need execution_equiv_except *)
+      fs[state_equiv_except_def])
     >- (
       gvs[] >>
       Cases_on `r` >> simp[result_equiv_except_def] >>

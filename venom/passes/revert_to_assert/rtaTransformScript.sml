@@ -401,8 +401,12 @@ Proof
     irule run_block_result_equiv_except >> simp[] >> metis_tac[]) >>
   Cases_on `run_block fn x s1` >> gvs[result_equiv_except_def, AllCaseEqs()]
   >- (Cases_on `run_block fn x s2` >> gvs[result_equiv_except_def] >>
-      `v.vs_halted <=> v'.vs_halted` by gvs[state_equiv_except_def] >>
-      Cases_on `v.vs_halted` >> gvs[] >> first_x_assum irule >> simp[])
+      `v.vs_halted <=> v'.vs_halted` by gvs[state_equiv_except_def, execution_equiv_except_def] >>
+      Cases_on `v.vs_halted` >> gvs[] >>
+      (* halted = T: Halt case needs execution_equiv_except - solved by fs *)
+      TRY (fs[state_equiv_except_def]) >>
+      (* halted = F: recurse with IH *)
+      first_x_assum irule >> simp[])
   >- (Cases_on `run_block fn x s2` >> gvs[result_equiv_except_def])
   >- (Cases_on `run_block fn x s2` >> gvs[result_equiv_except_def])
   >- (Cases_on `run_block fn x s2` >> gvs[result_equiv_except_def])

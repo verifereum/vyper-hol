@@ -82,7 +82,7 @@ Libs
  *
  * PROOF STRATEGY:
  *   1. Case split on cond = 0w
- *   2. For revert case: Use revert_state_except_preserves + update_var_state_equiv_except_insert
+ *   2. For revert case: Use revert_state_from_state_except + update_var_state_equiv_except_insert
  *   3. For continue case: Use jump_to_except_preserves + update_var_state_equiv_except_insert
  *)
 Theorem revert_to_assert_pattern1_correct:
@@ -103,9 +103,9 @@ Theorem revert_to_assert_pattern1_correct:
         (jump_to else_label (update_var iszero_out 1w s)))
 Proof
   rw[] >| [
-    (* Revert case *)
+    (* Revert case - result_equiv_except for Revert needs execution_equiv_except *)
     simp[result_equiv_except_def] >>
-    irule revert_state_except_preserves >>
+    irule revert_state_from_state_except >>
     irule update_var_state_equiv_except_insert,
     (* Continue case *)
     irule jump_to_except_preserves >>
@@ -203,7 +203,7 @@ Theorem pattern1_block_correct:
     result_equiv_except {iszero_out} orig_result trans_result
 Proof
   rw[]
-  >- (irule revert_state_except_preserves >>
+  >- (irule revert_state_from_state_except >>
       irule update_var_state_equiv_except_insert)
   >- gvs[bool_to_word_def]
   >- gvs[bool_to_word_def]
@@ -312,7 +312,7 @@ Proof
     `(cond = 0w) = F` by gvs[] >>
     pop_assum (fn th => simp[th, bool_to_word_F]) >>
     simp[result_equiv_except_def] >>
-    irule revert_state_except_preserves >>
+    irule revert_state_from_state_except >>
     irule update_var_state_equiv_except_insert,
     (* cond = 0w: assert passes *)
     simp[bool_to_word_T, eval_operand_update_var_same] >>
