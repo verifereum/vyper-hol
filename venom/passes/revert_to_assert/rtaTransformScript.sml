@@ -454,6 +454,34 @@ Proof
 QED
 
 (*
+ * Helper: When transform_jnz returns SOME with 2 instructions at index n,
+ * the transformed block has at least n+2 elements
+ *)
+Theorem transform_block_insts_length_pattern2:
+  !fn insts n cond_op label.
+    n < LENGTH insts /\
+    EVERY (λi. transform_jnz fn i = NONE) (TAKE n insts) /\
+    transform_jnz fn (EL n insts) = SOME (transform_pattern2 (EL n insts) cond_op label)
+    ==>
+    LENGTH (transform_block_insts fn insts) >= n + 2
+Proof
+  rw[] >>
+  `LENGTH (transform_pattern2 (EL n insts) cond_op label) = 2` by simp[transform_pattern2_def, LET_THM] >>
+  `transform_block_insts fn insts = TAKE n insts ++ transform_block_insts fn (DROP n insts)`
+    by metis_tac[transform_block_insts_TAKE_DROP] >>
+  `LENGTH (TAKE n insts) = n` by simp[LENGTH_TAKE] >>
+  `DROP n insts = EL n insts :: DROP (n + 1) insts` by (
+    `n < LENGTH insts` by simp[] >>
+    metis_tac[rich_listTheory.DROP_EL_CONS]
+  ) >>
+  `transform_block_insts fn (DROP n insts) =
+   transform_pattern2 (EL n insts) cond_op label ++ transform_block_insts fn (DROP (n + 1) insts)` by (
+    simp[transform_block_insts_def]
+  ) >>
+  simp[LENGTH_APPEND]
+QED
+
+(*
  * NOTE: transform_block_correct is UNPROVABLE at block level.
  *
  * For pattern 1 JNZ when cond != 0:
