@@ -181,8 +181,8 @@ End
    ========================================================================== *)
 
 (*
- * Predicate: fresh variables are not used in the initial state.
- * This ensures ISZERO outputs don't collide with existing variables.
+ * DEPRECATED: Delete after transform_function_correct_v2 is proven.
+ * Not needed because ISZERO deterministically overwrites fresh vars.
  *)
 Definition fresh_vars_unused_def:
   fresh_vars_unused fn s <=>
@@ -241,6 +241,73 @@ QED
    ========================================================================== *)
 
 (*
+ * WHY THIS IS TRUE: eval_operand only accesses vs_vars (via lookup_var),
+ * not vs_inst_idx. So changing vs_inst_idx doesn't affect eval_operand.
+ *)
+Theorem eval_operand_vs_inst_idx:
+  !op s n. eval_operand op (s with vs_inst_idx := n) = eval_operand op s
+Proof
+  Cases >> simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def]
+QED
+
+(*
+ * WHY THIS IS TRUE: step_in_block doesn't use fn in its computation.
+ * It only uses bb and s to get/execute the current instruction.
+ *)
+Theorem step_in_block_fn_irrelevant:
+  !fn1 fn2 bb s. step_in_block fn1 bb s = step_in_block fn2 bb s
+Proof
+  simp[venomSemTheory.step_in_block_def]
+QED
+
+(*
+ * WHY THIS IS TRUE: run_block is defined recursively using step_in_block.
+ * Since step_in_block doesn't depend on fn, run_block doesn't either.
+ * The fn parameter is just passed through to recursive calls.
+ *)
+Theorem run_block_fn_irrelevant:
+  !fn bb s. run_block fn bb s = run_block ARB bb s
+Proof
+  ho_match_mp_tac venomSemTheory.run_block_ind >> rw[] >>
+  simp[Once venomSemTheory.run_block_def, step_in_block_fn_irrelevant, SimpLHS] >>
+  simp[Once venomSemTheory.run_block_def, step_in_block_fn_irrelevant, SimpRHS] >>
+  Cases_on `step_in_block fn bb s` >>
+  `step_in_block ARB bb s = step_in_block fn bb s` by simp[step_in_block_fn_irrelevant] >>
+  gvs[] >> Cases_on `q` >> simp[]
+QED
+
+(*
+ * WHY THIS IS TRUE: Non-terminator instructions have is_terminator = F.
+ * transform_jnz only returns SOME for JNZ opcode.
+ * JNZ is a terminator (is_terminator JNZ = T).
+ * So for non-terminators, transform_jnz returns NONE, leaving them unchanged.
+ *)
+Theorem transform_block_insts_non_terminators:
+  !fn insts.
+    EVERY (\inst. ~is_terminator inst.inst_opcode) insts ==>
+    transform_block_insts fn insts = insts
+Proof
+  Induct_on `insts` >> simp[transform_block_insts_def] >> rw[] >>
+  Cases_on `h.inst_opcode = JNZ` >> gvs[venomInstTheory.is_terminator_def, transform_jnz_def]
+QED
+
+(*
+ * Helper: TAKE k preserves prefix when no instruction in prefix is transformed.
+ *
+ * WHY THIS IS TRUE: transform_block_insts only modifies instructions where
+ * transform_jnz returns SOME. If all instructions in TAKE k have transform_jnz = NONE,
+ * they are preserved in order.
+ *)
+Theorem transform_block_insts_TAKE:
+  !insts fn k.
+    EVERY (\i. transform_jnz fn i = NONE) (TAKE k insts) ==>
+    TAKE k (transform_block_insts fn insts) = TAKE k insts
+Proof
+  Induct_on `insts` >> simp[transform_block_insts_def] >> rw[] >>
+  Cases_on `k` >> gvs[]
+QED
+
+(*
  * KEY LEMMA: Prefix of non-transformed instructions execute identically.
  *
  * WHY THIS IS TRUE: For instructions where transform_jnz returns NONE,
@@ -297,17 +364,8 @@ QED
    ========================================================================== *)
 
 (*
- * Key helper: Relates run_block results for original vs transformed block.
- *
- * WHY THIS IS TRUE:
- * - For blocks without pattern-matched JNZ: instructions unchanged, results identical
- * - For pattern 1 (cond=0): original OK(jump else), transformed OK(jump else) with fresh var
- * - For pattern 1 (cond≠0): original OK(jump revert), transformed Revert
- * - For pattern 2 (cond≠0): original OK(jump then), transformed OK(jump then)
- * - For pattern 2 (cond=0): original OK(jump revert), transformed Revert
- *
- * The (OK, Revert) case captures the key optimization: original jumps to revert
- * block, transformed reverts directly.
+ * DEPRECATED: Delete after transform_function_correct_v2 is proven.
+ * Replaced by run_block_transform_relation_v2 which has no fresh_vars_unused precondition.
  *)
 Theorem run_block_transform_relation:
   !fn bb s.
@@ -327,7 +385,21 @@ Theorem run_block_transform_relation:
     | (Error _, Error _) => T
     | _ => F
 Proof
-  cheat (* Requires tracing through transformed instruction execution *)
+  simp[] >> rw[] >>
+  Cases_on `transform_block fn bb = bb`
+  (* Case 1: Block unchanged - results identical *)
+  >- (
+    gvs[] >>
+    `run_block (transform_function fn) bb (s with vs_inst_idx := 0) =
+     run_block fn bb (s with vs_inst_idx := 0)` by simp[run_block_fn_irrelevant] >>
+    pop_assum SUBST1_TAC >>
+    Cases_on `run_block fn bb (s with vs_inst_idx := 0)` >> gvs[]
+    >- simp[stateEquivTheory.state_equiv_except_refl]
+    >- simp[stateEquivTheory.execution_equiv_except_refl]
+    >- simp[stateEquivTheory.execution_equiv_except_refl]
+  )
+  (* Case 2: Block transformed - requires tracing through pattern execution *)
+  >- cheat
 QED
 
 (* ==========================================================================
@@ -396,12 +468,11 @@ Proof
 QED
 
 (*
- * Helper: state_equiv_except propagates through run_function.
- *
- * WHY THIS IS TRUE: run_function depends on control flow (vs_current_bb)
- * and variable values (for condition evaluation). If states are equiv_except
- * for vars not used in control decisions, execution paths are identical.
- * Fresh iszero variables are never used for control flow.
+ * DEPRECATED: Delete after transform_function_correct_v2 is proven.
+ * Condition "fresh vars not used in any instruction" is too strong for
+ * transformed function (which uses fresh vars in ASSERT).
+ * Replaced by state_equiv_except_run_function_orig which applies only to
+ * the original function.
  *)
 Theorem state_equiv_except_run_function:
   !fresh fn s1 s2 fuel.
@@ -441,17 +512,58 @@ Proof
 QED
 
 (*
- * Main function correctness theorem.
+ * Helper: run_block returning OK implies state is not halted.
  *
- * WHY THIS IS TRUE:
- * 1. Induction on fuel
- * 2. Base case (fuel=0): Both return Error "out of fuel", trivially equiv
- * 3. Inductive case:
- *    a. lookup_block succeeds in both (by lookup_block_transform_function)
- *    b. Apply transform_block_correct to get block-level equivalence
- *    c. Case on result:
- *       - Halt/Revert/Error: Propagate equivalence
- *       - OK s1' / OK s2': States are equiv_except fresh, apply IH
+ * WHY THIS IS TRUE: If vs_halted becomes true during execution,
+ * run_block returns Halt, not OK. The OK result only occurs when
+ * a jump instruction executes (JMP or JNZ branch taken).
+ *)
+Theorem run_block_OK_not_halted:
+  !fn bb s v. run_block fn bb s = OK v ==> ~v.vs_halted
+Proof
+  ho_match_mp_tac venomSemTheory.run_block_ind >> rw[] >>
+  qpat_x_assum `run_block _ _ _ = _` mp_tac >>
+  simp[Once venomSemTheory.run_block_def] >>
+  Cases_on `step_in_block fn bb s` >> gvs[] >>
+  Cases_on `q` >> gvs[] >>
+  Cases_on `v'.vs_halted` >> gvs[] >>
+  Cases_on `r` >> gvs[] >> rw[] >> gvs[]
+QED
+
+(*
+ * Helper: run_block returning OK implies vs_inst_idx = 0.
+ *
+ * WHY THIS IS TRUE: When run_block returns OK, it means a jump instruction
+ * executed (JMP, JNZ, or DJMP). All jumps use jump_to which sets vs_inst_idx := 0.
+ *)
+Theorem run_block_OK_inst_idx_0:
+  !fn bb s v. run_block fn bb s = OK v ==> v.vs_inst_idx = 0
+Proof
+  ho_match_mp_tac venomSemTheory.run_block_ind >> rw[] >>
+  qpat_x_assum `run_block _ _ _ = _` mp_tac >>
+  simp[Once venomSemTheory.run_block_def] >>
+  Cases_on `step_in_block fn bb s` >> gvs[] >>
+  Cases_on `q` >> gvs[] >>
+  Cases_on `v'.vs_halted` >> gvs[] >>
+  Cases_on `r` >> gvs[] >> rw[] >> gvs[] >>
+  qpat_x_assum `step_in_block _ _ _ = _` mp_tac >>
+  simp[venomSemTheory.step_in_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> gvs[] >>
+  Cases_on `step_inst x s` >> gvs[] >>
+  Cases_on `is_terminator x.inst_opcode` >> gvs[] >> rw[] >> gvs[] >>
+  qpat_x_assum `is_terminator _` mp_tac >> simp[venomInstTheory.is_terminator_def] >>
+  Cases_on `x.inst_opcode` >> gvs[venomInstTheory.is_terminator_def] >>
+  qpat_x_assum `step_inst _ _ = _` mp_tac >>
+  simp[venomSemTheory.step_inst_def, venomStateTheory.jump_to_def] >>
+  gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[]
+QED
+
+(*
+ * DEPRECATED: Delete after transform_function_correct_v2 is proven.
+ * Issues:
+ * 1. Same-fuel requirement too strong (optimized can complete faster)
+ * 2. fresh_vars_unused precondition prevents IH application on intermediate states
+ * Replaced by transform_function_correct_v2 with bidirectional termination.
  *)
 Theorem transform_function_correct:
   !fn s fuel.
@@ -463,7 +575,261 @@ Theorem transform_function_correct:
       (run_function fuel fn (s with vs_inst_idx := 0))
       (run_function fuel fn' (s with vs_inst_idx := 0))
 Proof
-  cheat (* Induction on fuel, uses transform_block_correct + helper lemmas *)
+  simp[] >> rw[] >> Induct_on `fuel`
+  (* Base: fuel=0, both Error *)
+  >- simp[run_function_def, result_equiv_except_def]
+  (* Inductive: SUC fuel *)
+  >- (
+    ONCE_REWRITE_TAC[run_function_def] >> simp[] >>
+    Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
+    (* lookup NONE *)
+    >- (
+      `lookup_block s.vs_current_bb (transform_function fn).fn_blocks = NONE`
+        by simp[transform_function_def, lookup_block_MAP_NONE] >>
+      gvs[result_equiv_except_def]
+    )
+    (* lookup SOME x *)
+    >- (
+      `lookup_block s.vs_current_bb (transform_function fn).fn_blocks =
+        SOME (transform_block fn x)` by (
+        irule lookup_block_transform_function >> simp[]
+      ) >>
+      gvs[] >>
+      `MEM x fn.fn_blocks` by imp_res_tac lookup_block_MEM >>
+      drule_all run_block_transform_relation >> simp[] >> strip_tac >>
+      Cases_on `run_block fn x (s with vs_inst_idx := 0)` >> gvs[]
+      (* run_block = OK v: most complex case *)
+      >- (
+        Cases_on `run_block (transform_function fn) (transform_block fn x)
+                    (s with vs_inst_idx := 0)` >> gvs[]
+        (* OK/OK: both blocks return OK *)
+        >- (
+          `v'.vs_halted = v.vs_halted`
+            by gvs[state_equiv_except_def, execution_equiv_except_def] >>
+          Cases_on `v.vs_halted` >> gvs[]
+          (* halted=T: both return Halt *)
+          >- (
+            irule execution_equiv_except_subset >>
+            qexists_tac `fresh_vars_in_block fn x` >>
+            simp[state_equiv_except_implies_execution,
+                 fresh_vars_in_function_def, pred_setTheory.SUBSET_DEF,
+                 pred_setTheory.IN_BIGUNION, PULL_EXISTS] >> metis_tac[]
+          )
+          (* halted=F: continuation case - needs IH via state_equiv *)
+          >- cheat
+        )
+        (* OK/Revert: pattern matched, transformed reverts immediately *)
+        >- (
+          Cases_on `v.vs_halted` >> gvs[]
+          (* halted=T: contradiction - run_block OK implies ~halted *)
+          >- (imp_res_tac run_block_OK_not_halted >> gvs[])
+          (* halted=F: use run_function_at_simple_revert *)
+          >- (
+            qpat_x_assum `is_revert_label _ _` mp_tac >>
+            simp[is_revert_label_def] >>
+            Cases_on `lookup_block v.vs_current_bb fn.fn_blocks` >> gvs[] >>
+            strip_tac >>
+            Cases_on `fuel` >> gvs[]
+            (* fuel=0: Error vs Revert - genuine limitation *)
+            >- (simp[Once run_function_def] >> gvs[result_equiv_except_def] >>
+                cheat)
+            (* SUC n: can apply run_function_at_simple_revert *)
+            >- (
+              `v.vs_inst_idx = 0` by (imp_res_tac run_block_OK_inst_idx_0) >>
+              `v = v with vs_inst_idx := 0` by gvs[venomStateTheory.venom_state_component_equality] >>
+              pop_assum SUBST1_TAC >>
+              `run_function (SUC n) fn (v with vs_inst_idx := 0) =
+                Revert (revert_state (v with vs_inst_idx := 0))`
+                by (irule run_function_at_simple_revert >> simp[]) >>
+              pop_assum SUBST1_TAC >> simp[result_equiv_except_def] >>
+              simp[venomStateTheory.revert_state_def] >>
+              irule execution_equiv_except_subset >>
+              qexists_tac `fresh_vars_in_block fn x` >> conj_tac
+              >- (simp[fresh_vars_in_function_def, pred_setTheory.SUBSET_DEF,
+                       pred_setTheory.IN_BIGUNION, PULL_EXISTS] >> metis_tac[])
+              >- gvs[stateEquivTheory.execution_equiv_except_def,
+                     venomStateTheory.revert_state_def,
+                     venomStateTheory.lookup_var_def]
+            )
+          )
+        )
+      )
+      (* run_block = Halt v *)
+      >- (
+        Cases_on `run_block (transform_function fn) (transform_block fn x)
+                    (s with vs_inst_idx := 0)` >> gvs[result_equiv_except_def] >>
+        irule execution_equiv_except_subset >>
+        qexists_tac `fresh_vars_in_block fn x` >>
+        simp[fresh_vars_in_function_def, pred_setTheory.SUBSET_DEF,
+             pred_setTheory.IN_BIGUNION, PULL_EXISTS] >> metis_tac[]
+      )
+      (* run_block = Revert v *)
+      >- (
+        Cases_on `run_block (transform_function fn) (transform_block fn x)
+                    (s with vs_inst_idx := 0)` >> gvs[result_equiv_except_def] >>
+        irule execution_equiv_except_subset >>
+        qexists_tac `fresh_vars_in_block fn x` >>
+        simp[fresh_vars_in_function_def, pred_setTheory.SUBSET_DEF,
+             pred_setTheory.IN_BIGUNION, PULL_EXISTS] >> metis_tac[]
+      )
+      (* run_block = Error *)
+      >- (
+        Cases_on `run_block (transform_function fn) (transform_block fn x)
+                    (s with vs_inst_idx := 0)` >>
+        gvs[result_equiv_except_def]
+      )
+    )
+  )
+QED
+
+(* ==========================================================================
+   NEW FORMULATION: Bidirectional Termination
+
+   The above theorem (transform_function_correct) has fundamental issues:
+
+   Issue 1: Same-fuel requirement too strong
+   - Optimized code can complete FASTER (direct revert vs jump-to-revert-block)
+   - With fuel=1: original returns Error, optimized returns Revert
+   - These aren't equivalent under current definition
+
+   Issue 2: fresh_vars_unused precondition prevents IH application
+   - IH: ∀s. fresh_vars_unused fn s ⇒ run_function fuel fn s ≈ run_function fuel fn' s
+   - After one block: intermediate state has fresh vars SET (by ISZERO)
+   - So fresh_vars_unused fails on intermediate states
+   - IH cannot be applied!
+
+   Solution:
+
+   1. Bidirectional termination (not same-fuel):
+      (∃fuel. terminates (run_function fuel fn s)) ⇔
+      (∃fuel'. terminates (run_function fuel' fn' s))
+
+   2. Remove fresh_vars_unused precondition:
+      - ISZERO deterministically OVERWRITES fresh vars
+      - Whether fresh var was NONE or SOME, ISZERO sets it correctly
+      - So transformation is correct regardless of initial fresh var values
+
+   3. Chain through original function for OK/OK continuation:
+      - Have: state_equiv_except fresh v v'
+      - Use: run_function fuel fn v ≈ run_function fuel fn v' (fn doesn't use fresh vars)
+      - Use: IH on v' (no precondition needed!)
+      - Get: run_function fuel fn v ≈ run_function fuel fn' v'
+   ========================================================================== *)
+
+(*
+ * Predicate: execution terminates (not Error).
+ *)
+Definition terminates_def:
+  terminates r <=> case r of Error _ => F | _ => T
+End
+
+(*
+ * NEW: Bidirectional termination preservation.
+ *
+ * Part 1: Termination equivalence
+ *   - If original terminates with some fuel, optimized terminates with some fuel
+ *   - If optimized terminates with some fuel, original terminates with some fuel
+ *
+ * Part 2: Result equivalence
+ *   - When both terminate (with any fuels), results are equivalent
+ *
+ * WHY THIS FORMULATION:
+ * - Optimized code can complete FASTER (direct revert vs jump-to-revert-block)
+ * - So same-fuel equivalence is too strong
+ * - Bidirectional termination captures the semantic preservation correctly
+ *)
+Theorem transform_function_correct_v2:
+  !fn s.
+    let fn' = transform_function fn in
+    let fresh = fresh_vars_in_function fn in
+    (* Part 1: Termination equivalence *)
+    ((?fuel. terminates (run_function fuel fn s)) <=>
+     (?fuel'. terminates (run_function fuel' fn' s))) /\
+    (* Part 2: Result equivalence when both terminate *)
+    (!fuel fuel'.
+      terminates (run_function fuel fn s) /\
+      terminates (run_function fuel' fn' s) ==>
+      result_equiv_except fresh
+        (run_function fuel fn s)
+        (run_function fuel' fn' s))
+Proof
+  (* TODO: Implement using new approach *)
+  cheat
+QED
+
+(*
+ * NEW: Block-level relation without fresh_vars_unused.
+ *
+ * Key insight: ISZERO deterministically overwrites fresh vars,
+ * so the relation holds regardless of initial fresh var values.
+ *)
+Theorem run_block_transform_relation_v2:
+  !fn bb s.
+    MEM bb fn.fn_blocks ==>
+    let bb' = transform_block fn bb in
+    let fn' = transform_function fn in
+    let fresh = fresh_vars_in_block fn bb in
+    let r = run_block fn bb (s with vs_inst_idx := 0) in
+    let r' = run_block fn' bb' (s with vs_inst_idx := 0) in
+    case (r, r') of
+    | (OK v, OK v') => state_equiv_except fresh v v'
+    | (OK v, Revert v') =>
+        is_revert_label fn v.vs_current_bb /\
+        execution_equiv_except fresh (revert_state v) v'
+    | (Halt v, Halt v') => execution_equiv_except fresh v v'
+    | (Revert v, Revert v') => execution_equiv_except fresh v v'
+    | (Error _, Error _) => T
+    | _ => F
+Proof
+  (* TODO: Prove using pattern correctness theorems *)
+  cheat
+QED
+
+(*
+ * Helper for Part 1 forward direction:
+ * If original terminates with fuel f, optimized terminates with fuel <= f.
+ *
+ * WHY: Optimization can only reduce steps (direct revert vs jump-to-revert).
+ *)
+Theorem transform_terminates_forward:
+  !fn s fuel.
+    terminates (run_function fuel fn s) ==>
+    ?fuel'. fuel' <= fuel /\
+      terminates (run_function fuel' (transform_function fn) s)
+Proof
+  cheat
+QED
+
+(*
+ * Helper for Part 1 backward direction:
+ * If optimized terminates with fuel f', original terminates with some fuel.
+ *
+ * WHY: Original may need more fuel (to execute revert blocks), but bounded.
+ *)
+Theorem transform_terminates_backward:
+  !fn s fuel'.
+    terminates (run_function fuel' (transform_function fn) s) ==>
+    ?fuel. terminates (run_function fuel fn s)
+Proof
+  cheat
+QED
+
+(*
+ * Helper: state_equiv_except propagates through original function.
+ *
+ * WHY: Original function doesn't use fresh vars, so differing only
+ * on fresh vars gives equivalent execution.
+ *)
+Theorem state_equiv_except_run_function_orig:
+  !fresh fn s1 s2 fuel.
+    state_equiv_except fresh s1 s2 /\
+    fresh = fresh_vars_in_function fn ==>
+    result_equiv_except fresh
+      (run_function fuel fn s1)
+      (run_function fuel fn s2)
+Proof
+  (* Uses state_equiv_except_run_function with condition that fn doesn't use fresh vars *)
+  cheat
 QED
 
 (* ==========================================================================
