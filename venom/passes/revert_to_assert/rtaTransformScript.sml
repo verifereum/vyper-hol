@@ -329,6 +329,76 @@ Proof
 QED
 
 (*
+ * Helper: transform_block_insts preserves prefix and transforms suffix.
+ *
+ * When the first n instructions are not transformed, the result is
+ * those n instructions followed by the transform of the remaining instructions.
+ *)
+Theorem transform_block_insts_TAKE_DROP:
+  !n fn insts.
+    EVERY (\i. transform_jnz fn i = NONE) (TAKE n insts)
+    ==>
+    transform_block_insts fn insts =
+      TAKE n insts ++ transform_block_insts fn (DROP n insts)
+Proof
+  Induct_on `n` >- simp[] >>
+  rw[] >> Cases_on `insts`
+  >- (EVAL_TAC >> REWRITE_TAC[TAKE_nil, DROP_nil] >>
+      REWRITE_TAC[transform_block_insts_nil, APPEND])
+  >- (
+    REWRITE_TAC[TAKE_def, DROP_def] >>
+    REWRITE_TAC[numTheory.NOT_SUC, arithmeticTheory.SUC_SUB1] >>
+    `transform_jnz fn h = NONE` by gvs[EVERY_DEF, TAKE_def] >>
+    ONCE_REWRITE_TAC[transform_block_insts_def] >>
+    ASM_REWRITE_TAC[] >> EVAL_TAC >>
+    `EVERY (\i. transform_jnz fn i = NONE) (TAKE n t)` by gvs[EVERY_DEF, TAKE_def] >>
+    first_x_assum irule >> first_x_assum ACCEPT_TAC
+  )
+QED
+
+(* Helper: What instruction appears at index n in transformed block when
+ * all prior instructions don't transform but instruction n does *)
+Theorem transform_block_insts_EL_transformed:
+  !fn insts n new_insts.
+    n < LENGTH insts /\
+    EVERY (\i. transform_jnz fn i = NONE) (TAKE n insts) /\
+    transform_jnz fn (EL n insts) = SOME new_insts
+    ==>
+    EL n (transform_block_insts fn insts) = HD new_insts
+Proof
+  rw[] >>
+  `transform_block_insts fn insts =
+   TAKE n insts ++ transform_block_insts fn (DROP n insts)` by
+     (irule transform_block_insts_TAKE_DROP >> gvs[]) >>
+  pop_assum SUBST1_TAC >>
+  `DROP n insts = EL n insts :: DROP (SUC n) insts` by
+    simp[rich_listTheory.DROP_CONS_EL] >>
+  pop_assum SUBST1_TAC >>
+  simp[transform_block_insts_def] >>
+  Cases_on `new_insts` >> gvs[]
+  >- gvs[transform_jnz_def, AllCaseEqs(), transform_pattern1_def,
+         transform_pattern2_def]
+  >- simp[listTheory.EL_APPEND_EQN, listTheory.LENGTH_TAKE]
+QED
+
+(* Helper: transform_block_insts never shortens the instruction list *)
+Theorem transform_block_insts_length_ge:
+  !fn insts. LENGTH (transform_block_insts fn insts) >= LENGTH insts
+Proof
+  Induct_on `insts` >> simp[transform_block_insts_def] >>
+  rw[] >> Cases_on `transform_jnz fn h` >> simp[]
+  >- (`LENGTH (transform_block_insts fn insts) >= LENGTH insts` by simp[] >>
+      decide_tac)
+  >- (gvs[transform_jnz_def, AllCaseEqs()]
+      >- (simp[transform_pattern1_def] >>
+          `LENGTH (transform_block_insts fn insts) >= LENGTH insts` by simp[] >>
+          decide_tac)
+      >- (simp[transform_pattern2_def] >>
+          `LENGTH (transform_block_insts fn insts) >= LENGTH insts` by simp[] >>
+          decide_tac))
+QED
+
+(*
  * KEY LEMMA: Prefix of non-transformed instructions execute identically.
  *
  * WHY THIS IS TRUE: For instructions where transform_jnz returns NONE,
@@ -365,6 +435,21 @@ Proof
      EL s.vs_inst_idx (TAKE (SUC s.vs_inst_idx) bb2.bb_instructions)` by simp[] >>
     metis_tac[EL_TAKE, DECIDE ``n < SUC n``]
   ) >>
+  simp[]
+QED
+
+(* Helper: step_in_block with is_term=F increments vs_inst_idx *)
+Theorem step_in_block_increments_idx:
+  !fn bb s v.
+    step_in_block fn bb s = (OK v, F)
+    ==>
+    v.vs_inst_idx = SUC s.vs_inst_idx
+Proof
+  rw[step_in_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> gvs[] >>
+  Cases_on `step_inst x s` >> gvs[] >>
+  Cases_on `is_terminator x.inst_opcode` >> gvs[venomStateTheory.next_inst_def] >>
+  `v'.vs_inst_idx = s.vs_inst_idx` by (drule_all step_inst_preserves_inst_idx >> simp[]) >>
   simp[]
 QED
 
@@ -779,14 +864,206 @@ Proof
 QED
 
 (*
+ * Generalized block relation for any starting index.
+ *
+ * The precondition EVERY ensures all instructions before vs_inst_idx
+ * are non-transformed, so both blocks have identical prefix.
+ *)
+Theorem run_block_transform_general:
+  !fn bb s.
+    MEM bb fn.fn_blocks /\ ~s.vs_halted /\
+    s.vs_inst_idx <= LENGTH bb.bb_instructions /\
+    EVERY (\i. transform_jnz fn i = NONE) (TAKE s.vs_inst_idx bb.bb_instructions)
+    ==>
+    let bb' = transform_block fn bb in
+    let fn' = transform_function fn in
+    let fresh = fresh_vars_in_block fn bb in
+    case (run_block fn bb s, run_block fn' bb' s) of
+    | (OK v, OK v') => state_equiv_except fresh v v'
+    | (OK v, Revert v') =>
+        is_revert_label fn v.vs_current_bb /\
+        execution_equiv_except fresh (revert_state v) v'
+    | (Halt v, Halt v') => execution_equiv_except fresh v v'
+    | (Revert v, Revert v') => execution_equiv_except fresh v v'
+    | (Error _, Error _) => T
+    | _ => F
+Proof
+  completeInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rw[LET_THM] >>
+  Cases_on `s.vs_inst_idx >= LENGTH bb.bb_instructions`
+  (* Base case: at end of block *)
+  >- (
+    `s.vs_inst_idx = LENGTH bb.bb_instructions` by decide_tac >>
+    simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+    simp[Once run_block_def] >>
+    simp[step_in_block_def, get_instruction_def] >>
+    Cases_on `LENGTH bb.bb_instructions < LENGTH (transform_block fn bb).bb_instructions`
+    >- (
+      gvs[] >>
+      sg `transform_block_insts fn bb.bb_instructions = bb.bb_instructions`
+      >- (
+        `!insts fn. EVERY (\i. transform_jnz fn i = NONE) insts ==>
+         transform_block_insts fn insts = insts` suffices_by metis_tac[] >>
+        Induct >> simp[transform_block_insts_def])
+      >- gvs[transform_block_def])
+    >- gvs[])
+  (* Inductive case: instruction exists at current index *)
+  >- (
+    simp[Once run_block_def] >>
+    Cases_on `transform_jnz fn (EL s.vs_inst_idx bb.bb_instructions)`
+    (* NONE case: instruction not transformed - step_in_block same for both blocks *)
+    >- (
+      `s.vs_inst_idx < LENGTH bb.bb_instructions` by decide_tac >>
+      sg `EVERY (\i. transform_jnz fn i = NONE)
+                (TAKE (SUC s.vs_inst_idx) bb.bb_instructions)`
+      >- (
+        simp[rich_listTheory.TAKE_EL_SNOC, listTheory.EVERY_SNOC] >>
+        `SUC s.vs_inst_idx = s.vs_inst_idx + 1` by decide_tac >>
+        gvs[GSYM arithmeticTheory.ADD1, rich_listTheory.TAKE_EL_SNOC,
+            listTheory.EVERY_SNOC] >>
+        simp[GSYM rich_listTheory.SNOC_EL_TAKE, listTheory.EVERY_SNOC])
+      >- (
+        `TAKE (SUC s.vs_inst_idx) (transform_block fn bb).bb_instructions =
+         TAKE (SUC s.vs_inst_idx) bb.bb_instructions` by
+          (simp[transform_block_def] >> irule transform_block_insts_TAKE >> gvs[]) >>
+        sg `step_in_block fn bb s = step_in_block fn (transform_block fn bb) s`
+        >- (
+          `s.vs_inst_idx < LENGTH (transform_block fn bb).bb_instructions` by
+            (gvs[transform_block_def] >>
+             `LENGTH (transform_block_insts fn bb.bb_instructions) >= LENGTH bb.bb_instructions`
+                suffices_by decide_tac >>
+             simp[transform_block_insts_length_ge]) >>
+          irule step_in_block_prefix_same >> qexists_tac `s.vs_inst_idx` >> gvs[])
+        >- (
+          `run_block (transform_function fn) (transform_block fn bb) s =
+           run_block fn (transform_block fn bb) s` by simp[run_block_fn_irrelevant] >>
+          simp[] >>
+          Cases_on `step_in_block fn (transform_block fn bb) s` >>
+          Cases_on `q:exec_result` >> simp[]
+          (* OK: recurse or terminate *)
+          >- (
+            `run_block fn (transform_block fn bb) s =
+              if v.vs_halted then Halt v
+              else if r then OK v
+              else run_block fn (transform_block fn bb) v` by
+                (simp[Once run_block_def] >> gvs[]) >>
+            simp[] >>
+            Cases_on `v.vs_halted`
+            >- (gvs[] >> simp[execution_equiv_except_refl])
+            >- (
+              Cases_on `r:bool` >> gvs[]
+              >- simp[state_equiv_except_refl]
+              >- (
+                (* Apply IH *)
+                qpat_x_assum `!m. _`
+                  (mp_tac o CONV_RULE (ONCE_DEPTH_CONV BETA_CONV)) >>
+                DISCH_TAC >>
+                `v.vs_inst_idx = SUC s.vs_inst_idx` by
+                  (drule_all step_in_block_increments_idx >> simp[]) >>
+                `run_block fn (transform_block fn bb) v =
+                 run_block (transform_function fn) (transform_block fn bb) v` by
+                  simp[run_block_fn_irrelevant] >>
+                simp[])))
+          (* Halt *)
+          >- (
+            `run_block fn (transform_block fn bb) s = Halt v` by
+              (simp[Once run_block_def] >> gvs[]) >>
+            simp[execution_equiv_except_refl])
+          (* Revert *)
+          >- (
+            `run_block fn (transform_block fn bb) s = Revert v` by
+              (simp[Once run_block_def] >> gvs[]) >>
+            simp[execution_equiv_except_refl])
+          (* Error *)
+          >- (
+            `run_block fn (transform_block fn bb) s = Error s'` by
+              (simp[Once run_block_def] >> gvs[]) >>
+            simp[]))))
+    (* SOME case: instruction transformed (Pattern 1 or 2) *)
+    >- (
+      Cases_on `step_in_block fn bb s` >> Cases_on `q:exec_result` >> simp[]
+      (* OK case: expand step_in_block and case on patterns *)
+      >- (
+        fs[step_in_block_def, get_instruction_def] >>
+        `s.vs_inst_idx < LENGTH bb.bb_instructions` by decide_tac >> gvs[] >>
+        (* Preserve EVERY while extracting transform_jnz info *)
+        qpat_x_assum `transform_jnz _ _ = SOME _` mp_tac >>
+        simp[transform_jnz_def] >> strip_tac >> gvs[AllCaseEqs()]
+        (* Pattern 1 with is_terminator = T: main case *)
+        >- cheat
+        (* Pattern 2 with is_terminator = T: main case *)
+        >- cheat
+        (* Pattern 1 with ~is_terminator: contradiction - JNZ IS a terminator *)
+        >- gvs[is_terminator_def]
+        (* Pattern 2 with ~is_terminator: contradiction *)
+        >- fs[is_terminator_def])
+      (* Halt case: contradiction - JNZ doesn't produce Halt *)
+      >- (
+        fs[step_in_block_def, get_instruction_def] >>
+        `s.vs_inst_idx < LENGTH bb.bb_instructions` by decide_tac >> gvs[] >>
+        gvs[transform_jnz_def, AllCaseEqs()] >>
+        qpat_x_assum `step_inst _ _ = Halt _` mp_tac >>
+        simp[step_inst_def, AllCaseEqs()])
+      (* Revert case: contradiction - JNZ doesn't produce Revert directly *)
+      >- (
+        fs[step_in_block_def, get_instruction_def] >>
+        `s.vs_inst_idx < LENGTH bb.bb_instructions` by decide_tac >>
+        gvs[transform_jnz_def, AllCaseEqs()] >>
+        qpat_x_assum `step_inst _ _ = Revert _` mp_tac >>
+        simp[step_inst_def, AllCaseEqs()])
+      (* Error case: transformed block also errors on same cond_op *)
+      >- (
+        fs[step_in_block_def, get_instruction_def] >>
+        `s.vs_inst_idx < LENGTH bb.bb_instructions` by decide_tac >> gvs[] >>
+        qpat_x_assum `transform_jnz _ _ = SOME _` mp_tac >>
+        simp[transform_jnz_def] >> strip_tac >> gvs[AllCaseEqs()]
+        (* Pattern 1 error: ISZERO uses same cond_op, also errors *)
+        >- (
+          `EL s.vs_inst_idx (transform_block fn bb).bb_instructions =
+           HD (transform_pattern1 (EL s.vs_inst_idx bb.bb_instructions) cond_op if_zero)` by
+            (simp[transform_block_def] >> irule transform_block_insts_EL_transformed >>
+             simp[transform_jnz_def]) >>
+          simp[transform_pattern1_def, LET_THM] >>
+          simp[Once run_block_def, run_block_fn_irrelevant] >>
+          simp[step_in_block_def, get_instruction_def] >>
+          `s.vs_inst_idx < LENGTH (transform_block fn bb).bb_instructions` by
+            (simp[transform_block_def] >>
+             `LENGTH (transform_block_insts fn bb.bb_instructions) >= LENGTH bb.bb_instructions`
+               suffices_by decide_tac >> simp[transform_block_insts_length_ge]) >> gvs[] >>
+          simp[transform_pattern1_def, LET_THM] >>
+          qpat_x_assum `step_inst _ s = Error _` mp_tac >>
+          simp[step_inst_def, AllCaseEqs()] >>
+          simp[mk_iszero_inst_def] >> gvs[exec_unop_def, AllCaseEqs()])
+        (* Pattern 2 error: ASSERT uses same cond_op, also errors *)
+        >- (
+          `EL s.vs_inst_idx (transform_block fn bb).bb_instructions =
+           HD (transform_pattern2 (EL s.vs_inst_idx bb.bb_instructions) cond_op if_nonzero)` by
+            (simp[transform_block_def] >> irule transform_block_insts_EL_transformed >>
+             simp[transform_jnz_def]) >>
+          simp[transform_pattern2_def, LET_THM] >>
+          simp[Once run_block_def, run_block_fn_irrelevant] >>
+          simp[step_in_block_def, get_instruction_def] >>
+          `s.vs_inst_idx < LENGTH (transform_block fn bb).bb_instructions` by
+            (simp[transform_block_def] >>
+             `LENGTH (transform_block_insts fn bb.bb_instructions) >= LENGTH bb.bb_instructions`
+               suffices_by decide_tac >> simp[transform_block_insts_length_ge]) >> gvs[] >>
+          simp[transform_pattern2_def, LET_THM] >>
+          qpat_x_assum `step_inst _ s = Error _` mp_tac >>
+          simp[step_inst_def, AllCaseEqs()] >> strip_tac >>
+          simp[mk_assert_inst_def, step_inst_def, AllCaseEqs()]))))
+QED
+
+(*
  * NEW: Block-level relation without fresh_vars_unused.
  *
  * Key insight: ISZERO deterministically overwrites fresh vars,
  * so the relation holds regardless of initial fresh var values.
+ *
+ * This is a corollary of run_block_transform_general with vs_inst_idx = 0.
  *)
 Theorem run_block_transform_relation_v2:
   !fn bb s.
-    MEM bb fn.fn_blocks ==>
+    MEM bb fn.fn_blocks /\ ~s.vs_halted ==>
     let bb' = transform_block fn bb in
     let fn' = transform_function fn in
     let fresh = fresh_vars_in_block fn bb in
@@ -815,7 +1092,211 @@ Proof
         stateEquivTheory.execution_equiv_except_refl]
   )
   (* Case 2: Block transformed - requires tracing through pattern execution *)
-  >- cheat
+  >- (
+    Cases_on `bb.bb_instructions`
+    (* Empty block: contradiction since transform_block would be identity *)
+    >- gvs[transform_block_def, transform_block_insts_nil,
+           venomInstTheory.basic_block_component_equality]
+    (* Non-empty: h::t *)
+    >- (
+      Cases_on `transform_jnz fn h`
+      (* First instruction NOT transformed - some later instruction is *)
+      >- (
+        (* Both blocks have same first instruction h at index 0.
+         * If h is terminator: both execute same instruction, same result.
+         * If h not terminator: both execute h, advance to index 1.
+         * Need helper lemma to handle recursive case.
+         *)
+        Cases_on `is_terminator h.inst_opcode`
+        (* Terminator case: both execute h and return same result *)
+        >- (
+          simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+          simp[transform_block_def, transform_block_insts_def] >>
+          Cases_on `step_inst h (s with vs_inst_idx := 0)` >> gvs[]
+          (* OK v *)
+          >- (
+            Cases_on `v.vs_halted` >> gvs[]
+            (* halted *)
+            >- (
+              simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+              simp[execution_equiv_except_refl]
+            )
+            (* not halted *)
+            >- (
+              simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+              simp[state_equiv_except_refl]
+            )
+          )
+          (* Halt *)
+          >- (
+            simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+            simp[execution_equiv_except_refl]
+          )
+          (* Revert *)
+          >- (
+            simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+            simp[execution_equiv_except_refl]
+          )
+          (* Error *)
+          >- (
+            simp[Once run_block_def, step_in_block_def, get_instruction_def]
+          )
+        )
+        (* Non-terminator case: requires recursion helper *)
+        >- (
+          simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+          simp[transform_block_def, transform_block_insts_def] >>
+          simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+          cheat
+        )
+      )
+      (* First instruction IS transformed - it's a JNZ matching pattern *)
+      >- (
+        `h.inst_opcode = JNZ` by (gvs[transform_jnz_def] >>
+          Cases_on `h.inst_opcode = JNZ` >> gvs[]) >>
+        qpat_x_assum `transform_jnz _ _ = _` mp_tac >>
+        simp[transform_jnz_def] >>
+        Cases_on `h.inst_operands` >> gvs[] >>
+        Cases_on `t'` >> gvs[] >>
+        Cases_on `t''` >> gvs[] >>
+        Cases_on `h''` >> gvs[] >>
+        Cases_on `h'³'` >> gvs[] >>
+        Cases_on `t'` >> gvs[] >>
+        strip_tac >>
+        (* h = jnz h' (Label s') (Label s'') *)
+        Cases_on `is_revert_label fn s'` >> gvs[]
+        (* Pattern 1: revert on nonzero (is_revert_label fn s') *)
+        >- (
+          (* Original: jnz cond s' s'' where s' is revert label
+           * Transformed: [ISZERO, ASSERT, JMP s''] ++ rest
+           * Case cond != 0w: Original -> OK (jump to s'), Transformed -> Revert
+           * Case cond = 0w: Original -> OK (jump to s''), Transformed -> OK (jump to s'')
+           *)
+          Cases_on `eval_operand h' (s with vs_inst_idx := 0)`
+          (* NONE: both return Error *)
+          >- (
+            simp[Once run_block_def, step_in_block_def, get_instruction_def,
+                 step_inst_def] >>
+            simp[transform_block_def, transform_block_insts_def, transform_jnz_def,
+                 transform_pattern1_def] >>
+            simp[Once run_block_def, step_in_block_def, get_instruction_def,
+                 mk_iszero_inst_def, step_inst_def, is_terminator_def] >>
+            simp[exec_unop_def]
+          )
+          (* SOME x: case split on x = 0w *)
+          >- (
+            simp[Once run_block_def, step_in_block_def, get_instruction_def,
+                 step_inst_def, is_terminator_def] >>
+            Cases_on `x = 0w`
+            (* x = 0w: both jump to s'' *)
+            >- (
+              gvs[] >> simp[venomStateTheory.jump_to_def] >>
+              simp[transform_block_def, transform_block_insts_def,
+                   transform_jnz_def, transform_pattern1_def] >>
+              simp[Once run_block_def, step_in_block_def, get_instruction_def,
+                   mk_iszero_inst_def, step_inst_def, is_terminator_def,
+                   exec_unop_def, bool_to_word_def] >>
+              simp[venomStateTheory.next_inst_def, venomStateTheory.update_var_def] >>
+              simp[Once run_block_def, step_in_block_def, get_instruction_def,
+                   mk_assert_inst_def, step_inst_def, is_terminator_def,
+                   venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+              simp[venomStateTheory.next_inst_def] >>
+              simp[Once run_block_def, step_in_block_def, get_instruction_def,
+                   mk_jmp_inst_def, step_inst_def, is_terminator_def] >>
+              simp[venomStateTheory.jump_to_def] >>
+              irule state_equiv_except_subset >>
+              qexists_tac `{fresh_iszero_var h.inst_id}` >>
+              conj_tac
+              >- (
+                simp[fresh_vars_in_block_def, pred_setTheory.SUBSET_DEF,
+                     pred_setTheory.IN_SING, pred_setTheory.GSPECIFICATION] >>
+                qexists_tac `h` >> simp[transform_jnz_def]
+              )
+              >- (
+                simp[state_equiv_except_def, execution_equiv_except_def,
+                     venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+                     pred_setTheory.IN_SING]
+              )
+            )
+            (* x != 0w: original jumps to s' (revert), transformed reverts *)
+            >- (
+              gvs[] >> simp[venomStateTheory.jump_to_def] >>
+              simp[transform_block_def, transform_block_insts_def,
+                   transform_jnz_def, transform_pattern1_def] >>
+              simp[Once run_block_def, step_in_block_def, get_instruction_def,
+                   mk_iszero_inst_def, step_inst_def, is_terminator_def,
+                   exec_unop_def, bool_to_word_def] >>
+              simp[venomStateTheory.next_inst_def, venomStateTheory.update_var_def] >>
+              simp[Once run_block_def, step_in_block_def, get_instruction_def,
+                   mk_assert_inst_def, step_inst_def, is_terminator_def,
+                   venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+              irule revert_state_execution_equiv_preserves >>
+              irule execution_equiv_except_subset >>
+              qexists_tac `{fresh_iszero_var h.inst_id}` >>
+              conj_tac
+              >- (
+                simp[fresh_vars_in_block_def, pred_setTheory.SUBSET_DEF,
+                     pred_setTheory.IN_SING, pred_setTheory.GSPECIFICATION] >>
+                qexists_tac `h` >> simp[transform_jnz_def]
+              )
+              >- (
+                simp[execution_equiv_except_def, venomStateTheory.lookup_var_def,
+                     finite_mapTheory.FLOOKUP_UPDATE, pred_setTheory.IN_SING]
+              )
+            )
+          )
+        )
+        (* Pattern 2: revert on zero (is_revert_label fn s'') *)
+        >- (
+          (* Original: jnz cond s' s'' where s'' is revert label
+           * Transformed: [ASSERT, JMP s'] ++ rest
+           * Case cond != 0w: Original -> OK (jump to s'), Transformed -> OK (jump to s')
+           * Case cond = 0w: Original -> OK (jump to s''), Transformed -> Revert
+           *)
+          Cases_on `eval_operand h' (s with vs_inst_idx := 0)`
+          (* NONE: both return Error *)
+          >- (
+            simp[Once run_block_def, step_in_block_def, get_instruction_def,
+                 step_inst_def] >>
+            simp[transform_block_def, transform_block_insts_def, transform_jnz_def] >>
+            simp[transform_pattern2_def, Once run_block_def, step_in_block_def,
+                 get_instruction_def, step_inst_def, mk_assert_inst_def,
+                 is_terminator_def]
+          )
+          (* SOME x: case split on x = 0w *)
+          >- (
+            simp[Once run_block_def, step_in_block_def, get_instruction_def,
+                 step_inst_def, is_terminator_def] >>
+            simp[] >>
+            Cases_on `x = 0w`
+            (* x = 0w: original jumps to s'' (revert), transformed reverts *)
+            >- (
+              gvs[] >> simp[venomStateTheory.jump_to_def] >>
+              simp[transform_block_def, transform_block_insts_def, transform_jnz_def] >>
+              simp[transform_pattern2_def] >>
+              simp[Once run_block_def, step_in_block_def, get_instruction_def,
+                   mk_assert_inst_def, step_inst_def, is_terminator_def] >>
+              irule revert_state_execution_equiv_preserves >>
+              simp[execution_equiv_except_def, venomStateTheory.lookup_var_def, venomStateTheory.update_var_def]
+            )
+            (* x != 0w: both jump to s' *)
+            >- (
+              gvs[] >> simp[venomStateTheory.jump_to_def] >>
+              simp[transform_block_def, transform_block_insts_def, transform_jnz_def,
+                   transform_pattern2_def] >>
+              simp[Once run_block_def, step_in_block_def, get_instruction_def,
+                   mk_assert_inst_def, step_inst_def, is_terminator_def] >>
+              simp[venomStateTheory.next_inst_def] >>
+              simp[Once run_block_def, step_in_block_def, get_instruction_def,
+                   mk_jmp_inst_def, step_inst_def, is_terminator_def] >>
+              simp[venomStateTheory.jump_to_def] >>
+              simp[state_equiv_except_refl]
+            )
+          )
+        )
+      )
+    )
+  )
 QED
 
 (*
