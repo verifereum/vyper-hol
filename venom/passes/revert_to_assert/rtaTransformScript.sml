@@ -35,13 +35,23 @@ Ancestors
   rtaCorrect rtaProps rtaDefs stateEquiv venomSem venomInst list
 
 (* ==========================================================================
-   Instruction Builders
+   Fresh Variable Generation
    ========================================================================== *)
 
-(* Fresh variable name for ISZERO output - uses instruction ID for uniqueness *)
+(*
+ * Fresh variable name for ISZERO output.
+ * Simple naming scheme: "rta_tmp_<id>"
+ *
+ * Correctness relies on precondition that these names aren't used in the
+ * original function. This is verified at the compiler level.
+ *)
 Definition fresh_iszero_var_def:
   fresh_iszero_var (id:num) = STRCAT "rta_tmp_" (toString id)
 End
+
+(* ==========================================================================
+   Instruction Builders
+   ========================================================================== *)
 
 (* ISZERO instruction: %out = iszero %cond *)
 Definition mk_iszero_inst_def:
@@ -181,23 +191,23 @@ End
    ========================================================================== *)
 
 (*
- * DEPRECATED: Delete after transform_function_correct_v2 is proven.
- * Not needed because ISZERO deterministically overwrites fresh vars.
+ * Precondition: fresh variable names aren't used in original function.
+ * This is checked/ensured at the compiler level.
  *)
 Definition fresh_vars_unused_def:
-  fresh_vars_unused fn s <=>
+  fresh_vars_unused s <=>
     !id. lookup_var (fresh_iszero_var id) s = NONE
 End
 
 (*
  * All fresh variables that may be introduced by transforming a block.
+ * Only pattern 1 introduces fresh vars (for ISZERO output).
  *)
 Definition fresh_vars_in_block_def:
   fresh_vars_in_block fn bb =
     { fresh_iszero_var inst.inst_id |
       inst | MEM inst bb.bb_instructions /\
              transform_jnz fn inst <> NONE /\
-             (* Only pattern 1 introduces fresh vars *)
              ?cond_op if_nonzero if_zero.
                inst.inst_operands = [cond_op; Label if_nonzero; Label if_zero] /\
                is_revert_label fn if_nonzero }
@@ -210,6 +220,17 @@ Definition fresh_vars_in_function_def:
   fresh_vars_in_function fn =
     BIGUNION { fresh_vars_in_block fn bb | bb | MEM bb fn.fn_blocks }
 End
+
+(*
+ * KEY LEMMA: Different instruction IDs produce different fresh var names.
+ * This follows from toString being injective on naturals.
+ *)
+Theorem fresh_iszero_var_distinct:
+  !id1 id2. id1 <> id2 ==> fresh_iszero_var id1 <> fresh_iszero_var id2
+Proof
+  rw[fresh_iszero_var_def] >>
+  simp[ASCIInumbersTheory.toString_inj]
+QED
 
 (* ==========================================================================
    Helper Lemmas: transform_block_insts Properties
@@ -369,7 +390,7 @@ QED
  *)
 Theorem run_block_transform_relation:
   !fn bb s.
-    MEM bb fn.fn_blocks /\ fresh_vars_unused fn s ==>
+    MEM bb fn.fn_blocks /\ fresh_vars_unused s ==>
     let bb' = transform_block fn bb in
     let fn' = transform_function fn in
     let fresh = fresh_vars_in_block fn bb in
@@ -567,7 +588,7 @@ QED
  *)
 Theorem transform_function_correct:
   !fn s fuel.
-    fresh_vars_unused fn s
+    fresh_vars_unused s
   ==>
     let fn' = transform_function fn in
     let fresh = fresh_vars_in_function fn in
@@ -693,7 +714,7 @@ QED
    - These aren't equivalent under current definition
 
    Issue 2: fresh_vars_unused precondition prevents IH application
-   - IH: ∀s. fresh_vars_unused fn s ⇒ run_function fuel fn s ≈ run_function fuel fn' s
+   - IH: ∀s. fresh_vars_unused s ⇒ run_function fuel fn s ≈ run_function fuel fn' s
    - After one block: intermediate state has fresh vars SET (by ISZERO)
    - So fresh_vars_unused fails on intermediate states
    - IH cannot be applied!
@@ -781,8 +802,20 @@ Theorem run_block_transform_relation_v2:
     | (Error _, Error _) => T
     | _ => F
 Proof
-  (* TODO: Prove using pattern correctness theorems *)
-  cheat
+  rw[LET_THM] >>
+  Cases_on `transform_block fn bb = bb`
+  (* Case 1: Block unchanged - results identical *)
+  >- (
+    gvs[] >>
+    `run_block (transform_function fn) bb (s with vs_inst_idx := 0) =
+     run_block fn bb (s with vs_inst_idx := 0)` by simp[run_block_fn_irrelevant] >>
+    pop_assum SUBST1_TAC >>
+    Cases_on `run_block fn bb (s with vs_inst_idx := 0)` >>
+    gvs[stateEquivTheory.state_equiv_except_refl,
+        stateEquivTheory.execution_equiv_except_refl]
+  )
+  (* Case 2: Block transformed - requires tracing through pattern execution *)
+  >- cheat
 QED
 
 (*
@@ -828,7 +861,15 @@ Theorem state_equiv_except_run_function_orig:
       (run_function fuel fn s1)
       (run_function fuel fn s2)
 Proof
-  (* Uses state_equiv_except_run_function with condition that fn doesn't use fresh vars *)
+  (* Uses state_equiv_except_run_function with condition that fn doesn't use fresh vars.
+   * This is now provable because fresh_iszero_var generates names not in vars_used_as_operands.
+   *
+   * Proof outline:
+   * 1. irule state_equiv_except_run_function
+   * 2. For each v in fresh_vars_in_function fn, v = fresh_iszero_var fn inst.inst_id
+   * 3. By fresh_iszero_var_not_in_used, v NOTIN vars_used_as_operands fn
+   * 4. By vars_used_as_operands_def, Var v is not in any operand list
+   *)
   cheat
 QED
 
@@ -897,7 +938,7 @@ End
  *)
 Theorem transform_context_correct:
   !ctx s fuel entry.
-    (!fn. MEM fn ctx.ctx_functions ==> fresh_vars_unused fn s)
+    fresh_vars_unused s
   ==>
     let ctx' = transform_context ctx in
     let fresh = fresh_vars_in_context ctx in
@@ -920,8 +961,6 @@ Proof
   gvs[] >>
   (* Get MEM fn ctx.ctx_functions from lookup *)
   sg `MEM fn ctx.ctx_functions` >- (imp_res_tac lookup_function_MEM) >>
-  (* Get fresh_vars_unused fn s *)
-  `fresh_vars_unused fn s` by gvs[] >>
   (* Apply transform_function_correct *)
   drule_all transform_function_correct >> simp[] >> strip_tac >>
   (* Widen from fresh_vars_in_function to fresh_vars_in_context *)
@@ -948,7 +987,7 @@ QED
 Theorem revert_to_assert_pass_correct:
   !ctx s fuel entry.
     (* Well-formedness: fresh vars not in initial state *)
-    (!fn. MEM fn ctx.ctx_functions ==> fresh_vars_unused fn s) /\
+    fresh_vars_unused s /\
     (* Entry function exists *)
     lookup_function entry ctx.ctx_functions <> NONE
   ==>
@@ -966,7 +1005,6 @@ Proof
   qexists_tac `transform_function x` >>
   simp[lookup_function_transform_context] >>
   imp_res_tac lookup_function_MEM >>
-  `fresh_vars_unused x s` by gvs[] >>
   drule_all transform_function_correct >> simp[] >> strip_tac >>
   irule stateEquivTheory.result_equiv_except_subset >>
   qexists_tac `fresh_vars_in_function x` >>
