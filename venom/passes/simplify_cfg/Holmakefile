@@ -1,0 +1,2 @@
+# Simplify-CFG pass correctness proof
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../..
