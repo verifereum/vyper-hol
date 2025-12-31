@@ -32,7 +32,7 @@
 
 Theory rtaTransform
 Ancestors
-  rtaCorrect rtaProps rtaDefs stateEquiv venomSem venomInst venomState list
+  rtaCorrect rtaProps rtaDefs stateEquiv venomSem venomInst venomState list rich_list
 
 (* ==========================================================================
    Fresh Variable Generation
@@ -386,18 +386,20 @@ Theorem transform_block_insts_TAKE_DROP:
     transform_block_insts fn insts =
       TAKE n insts ++ transform_block_insts fn (DROP n insts)
 Proof
-  Induct_on `n` >- simp[] >>
-  rw[] >> Cases_on `insts`
-  >- (EVAL_TAC >> REWRITE_TAC[TAKE_nil, DROP_nil] >>
-      REWRITE_TAC[transform_block_insts_nil, APPEND])
+  Induct_on `n` >- simp[rich_listTheory.TAKE, rich_listTheory.DROP] >>
+  rpt strip_tac >>
+  Cases_on `insts`
+  >- REWRITE_TAC[transform_block_insts_def, TAKE_nil, DROP_nil, APPEND]
   >- (
-    REWRITE_TAC[TAKE_def, DROP_def] >>
-    REWRITE_TAC[numTheory.NOT_SUC, arithmeticTheory.SUC_SUB1] >>
-    `transform_jnz fn h = NONE` by gvs[EVERY_DEF, TAKE_def] >>
+    `transform_jnz fn h = NONE` by (
+      pop_assum mp_tac >> REWRITE_TAC[rich_listTheory.TAKE, EVERY_DEF] >> simp[]) >>
     ONCE_REWRITE_TAC[transform_block_insts_def] >>
-    ASM_REWRITE_TAC[] >> EVAL_TAC >>
-    `EVERY (\i. transform_jnz fn i = NONE) (TAKE n t)` by gvs[EVERY_DEF, TAKE_def] >>
-    first_x_assum irule >> first_x_assum ACCEPT_TAC
+    ASM_REWRITE_TAC[optionTheory.option_case_def] >>
+    REWRITE_TAC[rich_listTheory.TAKE, rich_listTheory.DROP, APPEND] >>
+    AP_TERM_TAC >>
+    first_x_assum irule >>
+    pop_assum mp_tac >> REWRITE_TAC[rich_listTheory.TAKE, EVERY_DEF] >> simp[] >>
+    pop_assum mp_tac >> REWRITE_TAC[rich_listTheory.TAKE, EVERY_DEF] >> simp[]
   )
 QED
 
@@ -430,17 +432,27 @@ QED
 Theorem transform_block_insts_length_ge:
   !fn insts. LENGTH (transform_block_insts fn insts) >= LENGTH insts
 Proof
-  Induct_on `insts` >> simp[transform_block_insts_def] >>
-  rw[] >> Cases_on `transform_jnz fn h` >> simp[]
-  >- (`LENGTH (transform_block_insts fn insts) >= LENGTH insts` by simp[] >>
-      decide_tac)
-  >- (gvs[transform_jnz_def, AllCaseEqs()]
-      >- (simp[transform_pattern1_def] >>
-          `LENGTH (transform_block_insts fn insts) >= LENGTH insts` by simp[] >>
-          decide_tac)
-      >- (simp[transform_pattern2_def] >>
-          `LENGTH (transform_block_insts fn insts) >= LENGTH insts` by simp[] >>
-          decide_tac))
+  Induct_on `insts` >- simp[transform_block_insts_def] >>
+  rw[] >> Cases_on `transform_jnz fn h`
+  >- (
+    ONCE_REWRITE_TAC[transform_block_insts_def] >>
+    ASM_REWRITE_TAC[optionTheory.option_case_def] >>
+    simp[LENGTH] >> first_x_assum (qspec_then `fn` mp_tac) >> decide_tac
+  )
+  >- (
+    ONCE_REWRITE_TAC[transform_block_insts_def] >>
+    ASM_REWRITE_TAC[optionTheory.option_case_def] >>
+    simp[] >>
+    gvs[transform_jnz_def, AllCaseEqs()]
+    >- (
+      simp[transform_pattern1_def, mk_iszero_inst_def, mk_assert_inst_def, mk_jmp_inst_def] >>
+      first_x_assum (qspec_then `fn` mp_tac) >> decide_tac
+    )
+    >- (
+      simp[transform_pattern2_def, mk_assert_inst_def, mk_jmp_inst_def] >>
+      first_x_assum (qspec_then `fn` mp_tac) >> decide_tac
+    )
+  )
 QED
 
 (*
@@ -494,7 +506,9 @@ Proof
   Cases_on `get_instruction bb s.vs_inst_idx` >> gvs[] >>
   Cases_on `step_inst x s` >> gvs[] >>
   Cases_on `is_terminator x.inst_opcode` >> gvs[venomStateTheory.next_inst_def] >>
-  `v'.vs_inst_idx = s.vs_inst_idx` by (drule_all step_inst_preserves_inst_idx >> simp[]) >>
+  `v'.vs_inst_idx = s.vs_inst_idx` by (
+    drule_all step_inst_preserves_inst_idx >> simp[]
+  ) >>
   simp[]
 QED
 
@@ -1184,8 +1198,9 @@ Theorem state_equiv_except_run_function_orig:
       (run_function fuel fn s1)
       (run_function fuel fn s2)
 Proof
-  Induct_on `fuel` >> rw[run_function_def] >-
-    simp[result_equiv_except_def] >>
+  Induct_on `fuel` >- rw[run_function_def, result_equiv_except_def] >>
+  rw[] >>
+  ONCE_REWRITE_TAC[run_function_def] >> simp[] >>
   (* Lookup block - use current_bb from state *)
   `s1.vs_current_bb = s2.vs_current_bb` by fs[state_equiv_except_def] >>
   Cases_on `lookup_block s1.vs_current_bb fn.fn_blocks` >> fs[]
