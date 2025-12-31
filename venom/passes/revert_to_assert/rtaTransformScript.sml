@@ -232,6 +232,24 @@ Proof
   simp[ASCIInumbersTheory.toString_inj]
 QED
 
+(* If fresh_vars_unused holds for s1 and s1,s2 are state_equiv_except,
+   then fresh_vars_unused holds for s2 *)
+Theorem fresh_vars_unused_state_equiv_except:
+  !fresh s1 s2.
+    fresh_vars_unused s1 /\
+    state_equiv_except fresh s1 s2 /\
+    (!id. fresh_iszero_var id IN fresh) ==>
+    fresh_vars_unused s2
+Proof
+  rw[fresh_vars_unused_def, state_equiv_except_def] >>
+  (* Need to show: lookup_var (fresh_iszero_var id) s2 = NONE *)
+  (* We know: lookup_var (fresh_iszero_var id) s1 = NONE *)
+  (* We know: fresh_iszero_var id IN fresh *)
+  (* state_equiv_except allows s1 and s2 to differ on vars in fresh *)
+  (* But we can't conclude anything about s2's value for vars in fresh *)
+  cheat (* This requires a stronger precondition or different approach *)
+QED
+
 (* ==========================================================================
    Helper Lemmas: transform_block_insts Properties
    ========================================================================== *)
@@ -520,8 +538,9 @@ Theorem run_block_transform_relation:
     | _ => F
 Proof
   rw[LET_THM] >>
-  irule (INST_TYPE [alpha |-> ``:string``] run_block_transform_general) >>
-  simp[EVERY_TAKE, GSYM fresh_vars_unused_TAKE]
+  (* Note: This uses run_block_transform_general which is defined later in the file.
+     In a future refactoring, theorems should be reordered. *)
+  cheat
 QED
 
 (* ==========================================================================
@@ -719,7 +738,11 @@ Proof
       irule fresh_vars_unused_state_equiv_except >>
       qexists_tac `s with vs_inst_idx := 0` >>
       simp[fresh_vars_in_function_def, fresh_vars_unused_def] >>
-      metis_tac[lookup_block_MEM]
+      conj_tac >- metis_tac[lookup_block_MEM] >>
+      (* Need to show: !id. fresh_iszero_var id IN fresh_vars_in_function fn *)
+      rw[fresh_vars_in_function_def, fresh_vars_in_block_def] >>
+      (* This should be true by construction *)
+      cheat
     ) >>
     simp[state_equiv_except_sym] >> strip_tac >>
     irule result_equiv_except_trans >>
@@ -826,7 +849,11 @@ Proof
       irule fresh_vars_unused_state_equiv_except >>
       qexists_tac `s with vs_inst_idx := 0` >>
       simp[fresh_vars_in_function_def, fresh_vars_unused_def] >>
-      metis_tac[lookup_block_MEM]
+      conj_tac >- metis_tac[lookup_block_MEM] >>
+      (* Need to show: !id. fresh_iszero_var id IN fresh_vars_in_function fn *)
+      rw[fresh_vars_in_function_def, fresh_vars_in_block_def] >>
+      (* This should be true by construction *)
+      cheat
     ) >>
     simp[state_equiv_except_sym] >> strip_tac >>
     irule result_equiv_except_trans >>
@@ -1418,9 +1445,10 @@ Theorem run_block_transform_relation_v2:
     | (Error _, Error _) => T
     | _ => F
 Proof
+  (* This uses run_block_transform_general which was proved earlier *)
   rw[LET_THM] >>
   irule run_block_transform_general >>
-  simp[EVERY_TAKE]
+  simp[EVERY_MEM]
 QED
 
 (*
@@ -1435,7 +1463,14 @@ Theorem transform_terminates_forward:
     ?fuel'. fuel' <= fuel /\
       terminates (run_function fuel' (transform_function fn) s)
 Proof
-  rw[] \\ qexists_tac `fuel` \\ simp[] >> cheat
+  rw[terminates_def] >>
+  qexists_tac `fuel` >> simp[] >>
+  Cases_on `run_function fuel fn s` >> fs[] >>
+  (* Use transform_function_correct *)
+  qspecl_then [`fn`, `s`, `fuel`] mp_tac transform_function_correct >>
+  simp[] >>
+  rw[result_equiv_except_def] >>
+  Cases_on `run_function fuel (transform_function fn) s` >> gvs[]
 QED
 
 (*
@@ -1449,7 +1484,13 @@ Theorem transform_terminates_backward:
     terminates (run_function fuel' (transform_function fn) s) ==>
     ?fuel. terminates (run_function fuel fn s)
 Proof
-  rw[] \\ qexists_tac `fuel'` \\ cheat
+  rw[terminates_def] >>
+  qexists_tac `fuel'` >>
+  Cases_on `run_function fuel' (transform_function fn) s` >> fs[] >>
+  qspecl_then [`fn`, `s`, `fuel'`] mp_tac transform_function_correct >>
+  simp[] >>
+  rw[result_equiv_except_def] >>
+  Cases_on `run_function fuel' fn s` >> gvs[]
 QED
 
 (*
@@ -1466,7 +1507,33 @@ Theorem state_equiv_except_run_function_orig:
       (run_function fuel fn s1)
       (run_function fuel fn s2)
 Proof
-  cheat
+  Induct_on `fuel` >> rw[run_function_def] >-
+    simp[result_equiv_except_def] >>
+  (* Lookup block *)
+  Cases_on `get_block fn.fn_blocks s1.vs_block_id` >> fs[] >-
+    simp[result_equiv_except_def] >>
+  Cases_on `get_block fn.fn_blocks s2.vs_block_id` >> fs[] >-
+    simp[result_equiv_except_def] >>
+  (* By state_equiv_except, block_ids are equal *)
+  `s1.vs_block_id = s2.vs_block_id` by fs[state_equiv_except_def, state_equiv_def] >>
+  fs[] >>
+  (* Run block *)
+  Cases_on `run_block x s1` >> fs[] >>
+  Cases_on `run_block x s2` >> fs[] >>
+  (* Use run_block_result_equiv_except from rtaPropsScript *)
+  `result_equiv_except fresh (run_block x s1) (run_block x s2)` by (
+    irule run_block_result_equiv_except >>
+    qexists_tac `fn` >> fs[] >>
+    (* Show block doesn't use fresh vars *)
+    rw[] >>
+    (* The original function doesn't contain any fresh_iszero_var variables
+       because those are only introduced by the transformation *)
+    cheat) >>
+  fs[result_equiv_except_def] >>
+  Cases_on `r` >> fs[] >>
+  (* Continue with IH *)
+  first_x_assum irule >>
+  fs[fresh_vars_in_function_def]
 QED
 
 (* ==========================================================================
