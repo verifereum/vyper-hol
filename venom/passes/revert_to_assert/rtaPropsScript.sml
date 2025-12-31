@@ -887,4 +887,24 @@ Proof
   >- (Cases_on `q'` >> gvs[result_equiv_except_def])
 QED
 
+(* ==========================================================================
+   result_equiv_except Transitivity
+   ========================================================================== *)
+
+(* WHY THIS IS TRUE: result_equiv_except compares results by type:
+   - OK/OK uses state_equiv_except which is transitive
+   - Halt/Halt, Revert/Revert use execution_equiv_except which is transitive
+   - Error/Error is always T
+   Mismatched types are always F, so transitivity holds vacuously. *)
+Theorem result_equiv_except_trans:
+  !fresh r1 r2 r3.
+    result_equiv_except fresh r1 r2 /\
+    result_equiv_except fresh r2 r3 ==>
+    result_equiv_except fresh r1 r3
+Proof
+  rw[result_equiv_except_def] >>
+  Cases_on `r1` >> Cases_on `r2` >> Cases_on `r3` >> fs[] >>
+  metis_tac[state_equiv_except_trans, execution_equiv_except_trans]
+QED
+
 val _ = export_theory();
