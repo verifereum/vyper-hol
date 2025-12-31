@@ -187,17 +187,8 @@ Definition transform_context_def:
 End
 
 (* ==========================================================================
-   Well-Formedness for Transformation
+   Fresh Variables Introduced by Transformation
    ========================================================================== *)
-
-(*
- * Precondition: fresh variable names aren't used in original function.
- * This is checked/ensured at the compiler level.
- *)
-Definition fresh_vars_unused_def:
-  fresh_vars_unused s <=>
-    !id. lookup_var (fresh_iszero_var id) s = NONE
-End
 
 (*
  * All fresh variables that may be introduced by transforming a block.
@@ -232,22 +223,58 @@ Proof
   simp[ASCIInumbersTheory.toString_inj]
 QED
 
-(* If fresh_vars_unused holds for s1 and s1,s2 are state_equiv_except,
-   then fresh_vars_unused holds for s2 *)
-Theorem fresh_vars_unused_state_equiv_except:
-  !fresh s1 s2.
-    fresh_vars_unused s1 /\
-    state_equiv_except fresh s1 s2 /\
-    (!id. fresh_iszero_var id IN fresh) ==>
-    fresh_vars_unused s2
+(* ==========================================================================
+   Static Analysis: Fresh Vars Not In Original Code
+
+   The key insight: fresh_vars_unused (runtime) is the WRONG approach.
+   After ISZERO executes, fresh vars ARE set in the state.
+
+   Instead, use fresh_vars_not_in_function (static): fresh vars don't appear
+   as operands in the original code. This is provable because fresh vars are
+   ONLY introduced by the transformation.
+   ========================================================================== *)
+
+(*
+ * Static property: No instruction in the block uses fresh vars as operands.
+ * This is true for original code because fresh vars are only introduced by transform.
+ *)
+Definition fresh_vars_not_in_block_def:
+  fresh_vars_not_in_block fn bb <=>
+    !inst x. MEM inst bb.bb_instructions /\ MEM (Var x) inst.inst_operands ==>
+      !id. x <> fresh_iszero_var id
+End
+
+(*
+ * Static property for entire function.
+ *)
+Definition fresh_vars_not_in_function_def:
+  fresh_vars_not_in_function fn <=>
+    !bb. MEM bb fn.fn_blocks ==> fresh_vars_not_in_block fn bb
+End
+
+(*
+ * Static property for entire context.
+ *)
+Definition fresh_vars_not_in_context_def:
+  fresh_vars_not_in_context ctx <=>
+    !fn. MEM fn ctx.ctx_functions ==> fresh_vars_not_in_function fn
+End
+
+(*
+ * Fresh vars not in block implies operands don't reference fresh vars.
+ *)
+Theorem fresh_vars_not_in_block_operands:
+  !fn bb inst v.
+    fresh_vars_not_in_block fn bb /\
+    MEM inst bb.bb_instructions /\
+    v IN fresh_vars_in_block fn bb ==>
+    ~MEM (Var v) inst.inst_operands
 Proof
-  rw[fresh_vars_unused_def, state_equiv_except_def] >>
-  (* Need to show: lookup_var (fresh_iszero_var id) s2 = NONE *)
-  (* We know: lookup_var (fresh_iszero_var id) s1 = NONE *)
-  (* We know: fresh_iszero_var id IN fresh *)
-  (* state_equiv_except allows s1 and s2 to differ on vars in fresh *)
-  (* But we can't conclude anything about s2's value for vars in fresh *)
-  cheat (* This requires a stronger precondition or different approach *)
+  rw[fresh_vars_not_in_block_def, fresh_vars_in_block_def] >>
+  gvs[GSPEC_ETA] >>
+  CCONTR_TAC >> gvs[] >>
+  first_x_assum (qspecl_then [`inst`, `fresh_iszero_var inst'.inst_id`] mp_tac) >>
+  simp[]
 QED
 
 (* ==========================================================================
@@ -512,38 +539,6 @@ QED
  *)
 
 (* ==========================================================================
-   Block-Level Transformation Relation
-   ========================================================================== *)
-
-(*
- * DEPRECATED: Delete after transform_function_correct_v2 is proven.
- * Replaced by run_block_transform_relation_v2 which has no fresh_vars_unused precondition.
- *)
-Theorem run_block_transform_relation:
-  !fn bb s.
-    MEM bb fn.fn_blocks /\ fresh_vars_unused s ==>
-    let bb' = transform_block fn bb in
-    let fn' = transform_function fn in
-    let fresh = fresh_vars_in_block fn bb in
-    let r = run_block fn bb (s with vs_inst_idx := 0) in
-    let r' = run_block fn' bb' (s with vs_inst_idx := 0) in
-    case (r, r') of
-    | (OK v, OK v') => state_equiv_except fresh v v'
-    | (OK v, Revert v') =>
-        is_revert_label fn v.vs_current_bb /\
-        execution_equiv_except fresh (revert_state v) v'
-    | (Halt v, Halt v') => execution_equiv_except fresh v v'
-    | (Revert v, Revert v') => execution_equiv_except fresh v v'
-    | (Error _, Error _) => T
-    | _ => F
-Proof
-  rw[LET_THM] >>
-  (* Note: This uses run_block_transform_general which is defined later in the file.
-     In a future refactoring, theorems should be reordered. *)
-  cheat
-QED
-
-(* ==========================================================================
    Function-Level Correctness
    ========================================================================== *)
 
@@ -609,50 +604,6 @@ Proof
 QED
 
 (*
- * DEPRECATED: Delete after transform_function_correct_v2 is proven.
- * Condition "fresh vars not used in any instruction" is too strong for
- * transformed function (which uses fresh vars in ASSERT).
- * Replaced by state_equiv_except_run_function_orig which applies only to
- * the original function.
- *)
-Theorem state_equiv_except_run_function:
-  !fresh fn s1 s2 fuel.
-    state_equiv_except fresh s1 s2 /\
-    (* Fresh vars not used in control flow *)
-    (!v. v IN fresh ==> !inst. MEM inst (FLAT (MAP (\bb. bb.bb_instructions) fn.fn_blocks)) ==>
-         !op. MEM op inst.inst_operands ==> op <> Var v)
-  ==>
-    result_equiv_except fresh
-      (run_function fuel fn s1)
-      (run_function fuel fn s2)
-Proof
-  Induct_on `fuel` >- simp[run_function_def] >>
-  rw[] >> ONCE_REWRITE_TAC[run_function_def] >> simp[] >>
-  `s1.vs_current_bb = s2.vs_current_bb` by gvs[state_equiv_except_def] >>
-  Cases_on `lookup_block s1.vs_current_bb fn.fn_blocks` >- gvs[] >>
-  `lookup_block s2.vs_current_bb fn.fn_blocks = SOME x` by gvs[] >> gvs[] >>
-  `MEM x fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
-  `!inst. MEM inst x.bb_instructions ==> !v. v IN fresh ==>
-      ~MEM (Var v) inst.inst_operands` by (
-    rw[] >> first_x_assum irule >> simp[MEM_FLAT, MEM_MAP] >>
-    qexists_tac `x.bb_instructions` >> simp[] >>
-    qexists_tac `x` >> simp[]) >>
-  `result_equiv_except fresh (run_block fn x s1) (run_block fn x s2)` by (
-    irule run_block_result_equiv_except >> simp[] >> metis_tac[]) >>
-  Cases_on `run_block fn x s1` >> gvs[result_equiv_except_def, AllCaseEqs()]
-  >- (Cases_on `run_block fn x s2` >> gvs[result_equiv_except_def] >>
-      `v.vs_halted <=> v'.vs_halted` by gvs[state_equiv_except_def, execution_equiv_except_def] >>
-      Cases_on `v.vs_halted` >> gvs[] >>
-      (* halted = T: Halt case needs execution_equiv_except - solved by fs *)
-      TRY (fs[state_equiv_except_def]) >>
-      (* halted = F: recurse with IH *)
-      first_x_assum irule >> simp[])
-  >- (Cases_on `run_block fn x s2` >> gvs[result_equiv_except_def])
-  >- (Cases_on `run_block fn x s2` >> gvs[result_equiv_except_def])
-  >- (Cases_on `run_block fn x s2` >> gvs[result_equiv_except_def])
-QED
-
-(*
  * Helper: run_block returning OK implies state is not halted.
  *
  * WHY THIS IS TRUE: If vs_halted becomes true during execution,
@@ -699,95 +650,25 @@ Proof
   gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[]
 QED
 
-(*
- * DEPRECATED: Delete after transform_function_correct_v2 is proven.
- * Issues:
- * 1. Same-fuel requirement too strong (optimized can complete faster)
- * 2. fresh_vars_unused precondition prevents IH application on intermediate states
- * Replaced by transform_function_correct_v2 with bidirectional termination.
- *)
-Theorem transform_function_correct:
-  !fn s fuel.
-    fresh_vars_unused s
-  ==>
-    let fn' = transform_function fn in
-    let fresh = fresh_vars_in_function fn in
-    result_equiv_except fresh
-      (run_function fuel fn (s with vs_inst_idx := 0))
-      (run_function fuel fn' (s with vs_inst_idx := 0))
-Proof
-  Induct_on `fuel` >> rw[run_function_def, result_equiv_except_refl] >>
-  (* fuel > 0 case *)
-  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> fs[]
-  >- (
-    simp[lookup_block_transform_function] >>
-    simp[result_equiv_except_refl]
-  ) >>
-  (* Found block x *)
-  drule_all run_block_transform_relation >> simp[] >>
-  DISCH_TAC >>
-  simp[lookup_block_transform_function] >>
-  Cases_on `run_block fn x (s with vs_inst_idx := 0)` >>
-  Cases_on `run_block (transform_function fn) (transform_block fn x)
-              (s with vs_inst_idx := 0)` >>
-  gvs[]
-  >- (
-    (* Both OK *)
-    first_x_assum (qspecl_then [`fn`, `q`] mp_tac) >>
-    impl_tac >- (
-      irule fresh_vars_unused_state_equiv_except >>
-      qexists_tac `s with vs_inst_idx := 0` >>
-      simp[fresh_vars_in_function_def, fresh_vars_unused_def] >>
-      conj_tac >- metis_tac[lookup_block_MEM] >>
-      (* Need to show: !id. fresh_iszero_var id IN fresh_vars_in_function fn *)
-      rw[fresh_vars_in_function_def, fresh_vars_in_block_def] >>
-      (* This should be true by construction *)
-      cheat
-    ) >>
-    simp[state_equiv_except_sym] >> strip_tac >>
-    irule result_equiv_except_trans >>
-    qexists_tac `run_function fuel (transform_function fn) (q with vs_inst_idx := 0)` >>
-    simp[] >>
-    irule state_equiv_except_run_function >>
-    simp[fresh_vars_in_function_def] >>
-    metis_tac[lookup_block_MEM, state_equiv_except_sym]
-  ) >>
-  simp[result_equiv_except_def, execution_equiv_except_def, exec_result_distinct,
-       exec_result_11]
-QED
-
 (* ==========================================================================
-   NEW FORMULATION: Bidirectional Termination
+   Function-Level Correctness: Bidirectional Formulation
 
-   The above theorem (transform_function_correct) has fundamental issues:
-
-   Issue 1: Same-fuel requirement too strong
+   WHY BIDIRECTIONAL:
    - Optimized code can complete FASTER (direct revert vs jump-to-revert-block)
-   - With fuel=1: original returns Error, optimized returns Revert
-   - These aren't equivalent under current definition
+   - With same fuel: original might Error (out of fuel), optimized might Revert
+   - So same-fuel equivalence is too strong
+   - Bidirectional termination captures the semantic preservation correctly
 
-   Issue 2: fresh_vars_unused precondition prevents IH application
-   - IH: ∀s. fresh_vars_unused s ⇒ run_function fuel fn s ≈ run_function fuel fn' s
-   - After one block: intermediate state has fresh vars SET (by ISZERO)
-   - So fresh_vars_unused fails on intermediate states
-   - IH cannot be applied!
+   KEY INSIGHT: No fresh_vars_unused precondition needed!
+   - ISZERO deterministically OVERWRITES fresh vars
+   - Whether fresh var was NONE or SOME before, ISZERO sets it correctly
+   - So transformation is correct regardless of initial fresh var values
 
-   Solution:
-
-   1. Bidirectional termination (not same-fuel):
-      (∃fuel. terminates (run_function fuel fn s)) ⇔
-      (∃fuel'. terminates (run_function fuel' fn' s))
-
-   2. Remove fresh_vars_unused precondition:
-      - ISZERO deterministically OVERWRITES fresh vars
-      - Whether fresh var was NONE or SOME, ISZERO sets it correctly
-      - So transformation is correct regardless of initial fresh var values
-
-   3. Chain through original function for OK/OK continuation:
-      - Have: state_equiv_except fresh v v'
-      - Use: run_function fuel fn v ≈ run_function fuel fn v' (fn doesn't use fresh vars)
-      - Use: IH on v' (no precondition needed!)
-      - Get: run_function fuel fn v ≈ run_function fuel fn' v'
+   PROOF STRATEGY for OK/OK continuation:
+   - Have: state_equiv_except fresh v v' (from block-level)
+   - Use: state_equiv_except_run_function_orig on ORIGINAL fn
+   - Chain: run_function fn v ≈ run_function fn v'
+   - Then: apply IH on v' for transformed function
    ========================================================================== *)
 
 (*
@@ -798,22 +679,22 @@ Definition terminates_def:
 End
 
 (*
- * NEW: Bidirectional termination preservation.
+ * Main function-level correctness theorem.
+ *
+ * PRECONDITION: fresh_vars_not_in_function fn
+ * This STATIC property says the original function doesn't mention fresh vars.
+ * Must be verified before transformation (checked at compiler level).
  *
  * Part 1: Termination equivalence
- *   - If original terminates with some fuel, optimized terminates with some fuel
- *   - If optimized terminates with some fuel, original terminates with some fuel
+ *   - If original terminates with some fuel, transformed terminates with some fuel
+ *   - If transformed terminates with some fuel, original terminates with some fuel
  *
  * Part 2: Result equivalence
  *   - When both terminate (with any fuels), results are equivalent
- *
- * WHY THIS FORMULATION:
- * - Optimized code can complete FASTER (direct revert vs jump-to-revert-block)
- * - So same-fuel equivalence is too strong
- * - Bidirectional termination captures the semantic preservation correctly
  *)
-Theorem transform_function_correct_v2:
+Theorem transform_function_correct:
   !fn s.
+    fresh_vars_not_in_function fn ==>
     let fn' = transform_function fn in
     let fresh = fresh_vars_in_function fn in
     (* Part 1: Termination equivalence *)
@@ -827,44 +708,20 @@ Theorem transform_function_correct_v2:
         (run_function fuel fn s)
         (run_function fuel' fn' s))
 Proof
-  Induct_on `fuel` >> rw[run_function_def, result_equiv_except_refl] >>
-  (* fuel > 0 case *)
-  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> fs[]
-  >- (
-    simp[lookup_block_transform_function] >>
-    simp[result_equiv_except_refl]
-  ) >>
-  (* Found block x *)
-  drule_all run_block_transform_relation >> simp[] >>
-  DISCH_TAC >>
-  simp[lookup_block_transform_function] >>
-  Cases_on `run_block fn x (s with vs_inst_idx := 0)` >>
-  Cases_on `run_block (transform_function fn) (transform_block fn x)
-              (s with vs_inst_idx := 0)` >>
-  gvs[]
-  >- (
-    (* Both OK *)
-    first_x_assum (qspecl_then [`fn`, `q`] mp_tac) >>
-    impl_tac >- (
-      irule fresh_vars_unused_state_equiv_except >>
-      qexists_tac `s with vs_inst_idx := 0` >>
-      simp[fresh_vars_in_function_def, fresh_vars_unused_def] >>
-      conj_tac >- metis_tac[lookup_block_MEM] >>
-      (* Need to show: !id. fresh_iszero_var id IN fresh_vars_in_function fn *)
-      rw[fresh_vars_in_function_def, fresh_vars_in_block_def] >>
-      (* This should be true by construction *)
-      cheat
-    ) >>
-    simp[state_equiv_except_sym] >> strip_tac >>
-    irule result_equiv_except_trans >>
-    qexists_tac `run_function fuel (transform_function fn) (q with vs_inst_idx := 0)` >>
-    simp[] >>
-    irule state_equiv_except_run_function >>
-    simp[fresh_vars_in_function_def] >>
-    metis_tac[lookup_block_MEM, state_equiv_except_sym]
-  ) >>
-  simp[result_equiv_except_def, execution_equiv_except_def, exec_result_distinct,
-       exec_result_11]
+  rw[LET_THM] >>
+  (* This proof requires block-level correctness (run_block_transform_general)
+     and careful handling of the OK/OK continuation case using
+     state_equiv_except_run_function_orig.
+
+     Proof structure:
+     - Part 1 forward: induction on fuel, use block-level to show transformed
+       makes progress whenever original does
+     - Part 1 backward: similar but may need to track that original needs
+       at most same fuel (or slightly more for revert block execution)
+     - Part 2: when both terminate, results match by block-level equiv
+       and chaining through original function for continuation
+  *)
+  cheat
 QED
 
 (*
@@ -1420,14 +1277,14 @@ Proof
 QED
 
 (*
- * NEW: Block-level relation without fresh_vars_unused.
+ * Block-level relation: starting from instruction index 0.
  *
  * Key insight: ISZERO deterministically overwrites fresh vars,
  * so the relation holds regardless of initial fresh var values.
  *
  * This is a corollary of run_block_transform_general with vs_inst_idx = 0.
  *)
-Theorem run_block_transform_relation_v2:
+Theorem run_block_transform_relation:
   !fn bb s.
     MEM bb fn.fn_blocks /\ ~s.vs_halted ==>
     let bb' = transform_block fn bb in
@@ -1452,45 +1309,37 @@ Proof
 QED
 
 (*
- * Helper for Part 1 forward direction:
- * If original terminates with fuel f, optimized terminates with fuel <= f.
- *
- * WHY: Optimization can only reduce steps (direct revert vs jump-to-revert).
+ * Corollary: Forward direction of termination equivalence.
+ * If original terminates, transformed terminates.
  *)
 Theorem transform_terminates_forward:
   !fn s fuel.
+    fresh_vars_not_in_function fn /\
     terminates (run_function fuel fn s) ==>
-    ?fuel'. fuel' <= fuel /\
-      terminates (run_function fuel' (transform_function fn) s)
+    ?fuel'. terminates (run_function fuel' (transform_function fn) s)
 Proof
-  rw[terminates_def] >>
-  qexists_tac `fuel` >> simp[] >>
-  Cases_on `run_function fuel fn s` >> fs[] >>
-  (* Use transform_function_correct *)
-  qspecl_then [`fn`, `s`, `fuel`] mp_tac transform_function_correct >>
-  simp[] >>
-  rw[result_equiv_except_def] >>
-  Cases_on `run_function fuel (transform_function fn) s` >> gvs[]
+  rw[] >>
+  (* Direct corollary of transform_function_correct Part 1 *)
+  qspecl_then [`fn`, `s`] mp_tac transform_function_correct >>
+  simp[LET_THM] >> strip_tac >>
+  metis_tac[]
 QED
 
 (*
- * Helper for Part 1 backward direction:
- * If optimized terminates with fuel f', original terminates with some fuel.
- *
- * WHY: Original may need more fuel (to execute revert blocks), but bounded.
+ * Corollary: Backward direction of termination equivalence.
+ * If transformed terminates, original terminates.
  *)
 Theorem transform_terminates_backward:
   !fn s fuel'.
+    fresh_vars_not_in_function fn /\
     terminates (run_function fuel' (transform_function fn) s) ==>
     ?fuel. terminates (run_function fuel fn s)
 Proof
-  rw[terminates_def] >>
-  qexists_tac `fuel'` >>
-  Cases_on `run_function fuel' (transform_function fn) s` >> fs[] >>
-  qspecl_then [`fn`, `s`, `fuel'`] mp_tac transform_function_correct >>
-  simp[] >>
-  rw[result_equiv_except_def] >>
-  Cases_on `run_function fuel' fn s` >> gvs[]
+  rw[] >>
+  (* Direct corollary of transform_function_correct Part 1 *)
+  qspecl_then [`fn`, `s`] mp_tac transform_function_correct >>
+  simp[LET_THM] >> strip_tac >>
+  metis_tac[]
 QED
 
 (*
@@ -1498,42 +1347,58 @@ QED
  *
  * WHY: Original function doesn't use fresh vars, so differing only
  * on fresh vars gives equivalent execution.
+ *
+ * KEY PRECONDITION: fresh_vars_not_in_function fn
+ * This is the STATIC property that the original function doesn't mention
+ * fresh vars in any instruction operands.
  *)
 Theorem state_equiv_except_run_function_orig:
   !fresh fn s1 s2 fuel.
     state_equiv_except fresh s1 s2 /\
-    fresh = fresh_vars_in_function fn ==>
+    fresh = fresh_vars_in_function fn /\
+    fresh_vars_not_in_function fn ==>
     result_equiv_except fresh
       (run_function fuel fn s1)
       (run_function fuel fn s2)
 Proof
   Induct_on `fuel` >> rw[run_function_def] >-
     simp[result_equiv_except_def] >>
-  (* Lookup block *)
-  Cases_on `get_block fn.fn_blocks s1.vs_block_id` >> fs[] >-
-    simp[result_equiv_except_def] >>
-  Cases_on `get_block fn.fn_blocks s2.vs_block_id` >> fs[] >-
-    simp[result_equiv_except_def] >>
-  (* By state_equiv_except, block_ids are equal *)
-  `s1.vs_block_id = s2.vs_block_id` by fs[state_equiv_except_def, state_equiv_def] >>
-  fs[] >>
-  (* Run block *)
-  Cases_on `run_block x s1` >> fs[] >>
-  Cases_on `run_block x s2` >> fs[] >>
-  (* Use run_block_result_equiv_except from rtaPropsScript *)
-  `result_equiv_except fresh (run_block x s1) (run_block x s2)` by (
-    irule run_block_result_equiv_except >>
-    qexists_tac `fn` >> fs[] >>
-    (* Show block doesn't use fresh vars *)
-    rw[] >>
-    (* The original function doesn't contain any fresh_iszero_var variables
-       because those are only introduced by the transformation *)
-    cheat) >>
-  fs[result_equiv_except_def] >>
-  Cases_on `r` >> fs[] >>
-  (* Continue with IH *)
-  first_x_assum irule >>
-  fs[fresh_vars_in_function_def]
+  (* Lookup block - use current_bb from state *)
+  `s1.vs_current_bb = s2.vs_current_bb` by fs[state_equiv_except_def] >>
+  Cases_on `lookup_block s1.vs_current_bb fn.fn_blocks` >> fs[]
+  >- simp[result_equiv_except_def] >>
+  (* Found block x *)
+  `MEM x fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  (* Original function doesn't use fresh vars in block x *)
+  `fresh_vars_not_in_block fn x` by fs[fresh_vars_not_in_function_def] >>
+  (* Show block operands don't reference fresh vars *)
+  `!inst. MEM inst x.bb_instructions ==>
+      !v. MEM (Var v) inst.inst_operands ==> v NOTIN fresh` by (
+    rw[] >> CCONTR_TAC >> gvs[] >>
+    `v IN fresh_vars_in_function fn` by simp[] >>
+    gvs[fresh_vars_in_function_def] >>
+    (* v IN BIGUNION {...} means v IN some fresh_vars_in_block fn bb' *)
+    `?bb'. MEM bb' fn.fn_blocks /\ v IN fresh_vars_in_block fn bb'` by
+      (gvs[BIGUNION, GSPEC_ETA] >> metis_tac[]) >>
+    (* fresh_vars_not_in_block says operands don't contain fresh vars *)
+    gvs[fresh_vars_not_in_block_def, fresh_vars_in_block_def, GSPEC_ETA] >>
+    first_x_assum (qspecl_then [`inst`, `v`] mp_tac) >> simp[]
+  ) >>
+  (* Use run_block_result_equiv_except *)
+  `result_equiv_except fresh (run_block fn x s1) (run_block fn x s2)` by (
+    irule run_block_result_equiv_except >> simp[] >> metis_tac[]
+  ) >>
+  Cases_on `run_block fn x s1` >> Cases_on `run_block fn x s2` >>
+  gvs[result_equiv_except_def]
+  >- (
+    (* Both OK *)
+    `v.vs_halted <=> v'.vs_halted` by fs[state_equiv_except_def, execution_equiv_except_def] >>
+    Cases_on `v.vs_halted` >> gvs[] >>
+    (* halted = T: result is Halt, need execution_equiv_except from state_equiv_except *)
+    TRY (fs[state_equiv_except_def] >> NO_TAC) >>
+    (* halted = F: recurse with IH *)
+    first_x_assum irule >> simp[]
+  )
 QED
 
 (* ==========================================================================
@@ -1592,40 +1457,54 @@ Definition fresh_vars_in_context_def:
 End
 
 (*
- * Main context correctness theorem.
+ * Main context correctness theorem (bidirectional formulation).
+ *
+ * PRECONDITION: fresh_vars_not_in_context ctx
+ * This STATIC property says no function in the context mentions fresh vars.
+ * Must be verified before the transformation (checked at compiler level).
  *
  * WHY THIS IS TRUE:
  * - transform_context applies transform_function to all functions
  * - Function lookup returns transformed function
- * - Apply transform_function_correct
+ * - Apply transform_function_correct for each function
+ * - Widen equivalence from function-level to context-level fresh vars
  *)
 Theorem transform_context_correct:
-  !ctx s fuel entry.
-    fresh_vars_unused s
-  ==>
+  !ctx entry.
+    fresh_vars_not_in_context ctx ==>
     let ctx' = transform_context ctx in
     let fresh = fresh_vars_in_context ctx in
-    (* Execution equivalence for any entry function *)
-    !fn fn'.
+    !fn fn' s.
       lookup_function entry ctx.ctx_functions = SOME fn /\
       lookup_function entry ctx'.ctx_functions = SOME fn' ==>
-      result_equiv_except fresh
-        (run_function fuel fn (s with vs_inst_idx := 0))
-        (run_function fuel fn' (s with vs_inst_idx := 0))
+      (* Part 1: Termination equivalence *)
+      ((?fuel. terminates (run_function fuel fn s)) <=>
+       (?fuel'. terminates (run_function fuel' fn' s))) /\
+      (* Part 2: Result equivalence when both terminate *)
+      (!fuel fuel'.
+        terminates (run_function fuel fn s) /\
+        terminates (run_function fuel' fn' s) ==>
+        result_equiv_except fresh
+          (run_function fuel fn s)
+          (run_function fuel' fn' s))
 Proof
-  rw[] >> (* Expand let bindings *)
+  rw[LET_THM] >>
   (* Show fn' = transform_function fn *)
-  sg `fn' = transform_function fn` >- (
-    irule EQ_SYM >>
+  `fn' = transform_function fn` by (
     qpat_x_assum `lookup_function _ ctx.ctx_functions = _`
       (fn th => assume_tac (MATCH_MP lookup_function_transform_context th)) >>
     gvs[]
   ) >>
   gvs[] >>
   (* Get MEM fn ctx.ctx_functions from lookup *)
-  sg `MEM fn ctx.ctx_functions` >- (imp_res_tac lookup_function_MEM) >>
+  `MEM fn ctx.ctx_functions` by (imp_res_tac lookup_function_MEM) >>
+  (* Get fresh_vars_not_in_function fn from context precondition *)
+  `fresh_vars_not_in_function fn` by fs[fresh_vars_not_in_context_def] >>
   (* Apply transform_function_correct *)
-  drule_all transform_function_correct >> simp[] >> strip_tac >>
+  qspecl_then [`fn`, `s`] mp_tac transform_function_correct >>
+  simp[LET_THM] >> strip_tac >>
+  conj_tac >- simp[] >>
+  rw[] >>
   (* Widen from fresh_vars_in_function to fresh_vars_in_context *)
   irule result_equiv_except_subset >>
   qexists_tac `fresh_vars_in_function fn` >>
@@ -1634,7 +1513,7 @@ Proof
          pred_setTheory.IN_BIGUNION, PULL_EXISTS] >>
     metis_tac[]
   ) >>
-  simp[]
+  first_x_assum irule >> simp[]
 QED
 
 (* ==========================================================================
@@ -1644,13 +1523,21 @@ QED
 (*
  * Full correctness theorem: The revert-to-assert pass preserves semantics.
  *
- * For any well-formed context where fresh variable names are unused,
- * the transformed context produces equivalent results (modulo fresh vars).
+ * PRECONDITION: fresh_vars_not_in_context ctx
+ * This is a STATIC well-formedness condition that must be verified before
+ * applying the transformation. It requires that the original code doesn't
+ * use variable names matching the fresh variable pattern (rta_tmp_*).
+ * This is checked at the compiler level before the pass runs.
+ *
+ * The theorem establishes:
+ * 1. Termination equivalence: original terminates iff transformed terminates
+ * 2. Result equivalence: when both terminate, results are equivalent
+ *    (modulo fresh variables introduced by the transformation)
  *)
 Theorem revert_to_assert_pass_correct:
-  !ctx s fuel entry.
-    (* Well-formedness: fresh vars not in initial state *)
-    fresh_vars_unused s /\
+  !ctx entry.
+    (* Well-formedness: original code doesn't use fresh var names *)
+    fresh_vars_not_in_context ctx /\
     (* Entry function exists *)
     lookup_function entry ctx.ctx_functions <> NONE
   ==>
@@ -1659,21 +1546,26 @@ Theorem revert_to_assert_pass_correct:
     ?fn fn'.
       lookup_function entry ctx.ctx_functions = SOME fn /\
       lookup_function entry ctx'.ctx_functions = SOME fn' /\
-      result_equiv_except fresh
-        (run_function fuel fn (s with vs_inst_idx := 0))
-        (run_function fuel fn' (s with vs_inst_idx := 0))
+      (* Termination equivalence *)
+      ((!s. (?fuel. terminates (run_function fuel fn s)) <=>
+            (?fuel'. terminates (run_function fuel' fn' s)))) /\
+      (* Result equivalence when both terminate *)
+      (!s fuel fuel'.
+        terminates (run_function fuel fn s) /\
+        terminates (run_function fuel' fn' s) ==>
+        result_equiv_except fresh
+          (run_function fuel fn s)
+          (run_function fuel' fn' s))
 Proof
-  rw[] >>
+  rw[LET_THM] >>
   Cases_on `lookup_function entry ctx.ctx_functions` >> gvs[] >>
-  qexists_tac `transform_function x` >>
+  qexistsl_tac [`x`, `transform_function x`] >>
   simp[lookup_function_transform_context] >>
-  imp_res_tac lookup_function_MEM >>
-  drule_all transform_function_correct >> simp[] >> strip_tac >>
-  irule stateEquivTheory.result_equiv_except_subset >>
-  qexists_tac `fresh_vars_in_function x` >>
-  simp[fresh_vars_in_context_def, pred_setTheory.SUBSET_DEF,
-       pred_setTheory.IN_BIGUNION, PULL_EXISTS] >>
-  metis_tac[]
+  (* Apply transform_context_correct *)
+  qspecl_then [`ctx`, `entry`] mp_tac transform_context_correct >>
+  simp[LET_THM] >> strip_tac >>
+  first_x_assum (qspecl_then [`x`, `transform_function x`] mp_tac) >>
+  simp[lookup_function_transform_context]
 QED
 
 val _ = export_theory();
