@@ -60,7 +60,7 @@ Proof
   rw[transform_pattern1_def, mk_iszero_inst_def, mk_assert_inst_def, mk_jmp_inst_def,
      LET_THM, transform_block_def] >>
   (* We have bb' = transform_block fn bb *)
-  `bb'.bb_instructions = transform_instructions fn bb.bb_instructions` by fs[transform_block_def] >>
+  `bb'.bb_instructions = transform_block_insts fn bb.bb_instructions` by fs[transform_block_def] >>
   (* Split into two main cases: cond ≠ 0w and cond = 0w *)
   reverse (Cases_on `cond = 0w`) >> fs[] >- (
     (* Case: cond = 0w - execution continues to else_label *)
@@ -125,3 +125,5 @@ Proof
     cheat) >>
   simp[]
 QED
+
+val _ = export_theory();
