@@ -1198,45 +1198,39 @@ Theorem state_equiv_except_run_function_orig:
       (run_function fuel fn s1)
       (run_function fuel fn s2)
 Proof
-  Induct_on `fuel` >- rw[run_function_def, result_equiv_except_def] >>
-  rw[] >>
+  Induct_on `fuel` >|
+  [rw[run_function_def, result_equiv_except_def],
+   rw[] >>
   ONCE_REWRITE_TAC[run_function_def] >> simp[] >>
   (* Lookup block - use current_bb from state *)
   `s1.vs_current_bb = s2.vs_current_bb` by fs[state_equiv_except_def] >>
-  Cases_on `lookup_block s1.vs_current_bb fn.fn_blocks` >> fs[]
-  >- simp[result_equiv_except_def] >>
+  Cases_on `lookup_block s1.vs_current_bb fn.fn_blocks` >> gvs[] >>
+  (* gvs closes NONE case automatically *)
   (* Found block x *)
   `MEM x fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
   (* Original function doesn't use fresh vars in block x *)
   `fresh_vars_not_in_block fn x` by fs[fresh_vars_not_in_function_def] >>
   (* Show block operands don't reference fresh vars *)
   `!inst. MEM inst x.bb_instructions ==>
-      !v. MEM (Var v) inst.inst_operands ==> v NOTIN fresh` by (
+      !v. MEM (Var v) inst.inst_operands ==> v NOTIN fresh_vars_in_function fn` by (
     rw[] >> CCONTR_TAC >> gvs[] >>
     `v IN fresh_vars_in_function fn` by simp[] >>
-    gvs[fresh_vars_in_function_def] >>
-    (* v IN BIGUNION {...} means v IN some fresh_vars_in_block fn bb' *)
-    `?bb'. MEM bb' fn.fn_blocks /\ v IN fresh_vars_in_block fn bb'` by
-      (fs[pred_setTheory.IN_BIGUNION] >> metis_tac[]) >>
-    (* fresh_vars_not_in_block says operands don't contain fresh vars *)
-    gvs[fresh_vars_not_in_block_def, fresh_vars_in_block_def] >>
-    first_x_assum (qspecl_then [`inst`, `v`] mp_tac) >> simp[]
+    gvs[fresh_vars_in_function_def, fresh_vars_not_in_block_def,
+        fresh_vars_in_block_def] >>
+    first_x_assum (qspecl_then [`inst`, `fresh_iszero_var inst'.inst_id`] mp_tac) >>
+    simp[] >> qexists_tac `inst'.inst_id` >> simp[]
   ) >>
   (* Use run_block_result_equiv_except *)
-  `result_equiv_except fresh (run_block fn x s1) (run_block fn x s2)` by (
+  `result_equiv_except (fresh_vars_in_function fn) (run_block fn x s1) (run_block fn x s2)` by (
     irule run_block_result_equiv_except >> simp[] >> metis_tac[]
   ) >>
   Cases_on `run_block fn x s1` >> Cases_on `run_block fn x s2` >>
-  gvs[result_equiv_except_def]
-  >- (
-    (* Both OK *)
-    `v.vs_halted <=> v'.vs_halted` by fs[state_equiv_except_def, execution_equiv_except_def] >>
-    Cases_on `v.vs_halted` >> gvs[] >>
-    (* halted = T: result is Halt, need execution_equiv_except from state_equiv_except *)
-    TRY (fs[state_equiv_except_def] >> NO_TAC) >>
-    (* halted = F: recurse with IH *)
-    first_x_assum irule >> simp[]
-  )
+  gvs[result_equiv_except_def] >>
+  (* gvs closes mismatched cases; OK/OK case remains *)
+  `v.vs_halted <=> v'.vs_halted` by fs[state_equiv_except_def, execution_equiv_except_def] >>
+  Cases_on `v.vs_halted` >> gvs[] >>
+  (* gvs uses IH for halted=F; halted=T case needs execution_equiv_except *)
+  fs[state_equiv_except_def]]
 QED
 
 (* ==========================================================================
@@ -1326,7 +1320,7 @@ Theorem transform_context_correct:
           (run_function fuel fn s)
           (run_function fuel' fn' s))
 Proof
-  rw[LET_THM] >>
+  simp[LET_THM] >> rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   (* Show fn' = transform_function fn *)
   `fn' = transform_function fn` by (
     qpat_x_assum `lookup_function _ ctx.ctx_functions = _`
@@ -1338,20 +1332,30 @@ Proof
   `MEM fn ctx.ctx_functions` by (imp_res_tac lookup_function_MEM) >>
   (* Get fresh_vars_not_in_function fn from context precondition *)
   `fresh_vars_not_in_function fn` by fs[fresh_vars_not_in_context_def] >>
-  (* Apply transform_function_correct *)
-  qspecl_then [`fn`, `s`] mp_tac transform_function_correct >>
-  simp[LET_THM] >> strip_tac >>
-  conj_tac >- simp[] >>
-  rw[] >>
-  (* Widen from fresh_vars_in_function to fresh_vars_in_context *)
-  irule result_equiv_except_subset >>
-  qexists_tac `fresh_vars_in_function fn` >>
-  conj_tac >- (
-    simp[fresh_vars_in_context_def, pred_setTheory.SUBSET_DEF,
-         pred_setTheory.IN_BIGUNION, PULL_EXISTS] >>
-    metis_tac[]
-  ) >>
-  first_x_assum irule >> simp[]
+  (* Goal is now a conjunction about termination + result equiv *)
+  (* Part 1: Termination equivalence - from transform_function_correct *)
+  (* Part 2: Result equivalence - from transform_function_correct + subset widening *)
+  conj_tac
+  >- (
+    (* Termination equivalence *)
+    qspecl_then [`fn`, `s`] mp_tac transform_function_correct >>
+    simp[LET_THM]
+  )
+  >- (
+    rw[] >>
+    (* Get result from transform_function_correct *)
+    qspecl_then [`fn`, `s`] mp_tac transform_function_correct >>
+    simp[LET_THM] >> strip_tac >>
+    (* Widen from fresh_vars_in_function to fresh_vars_in_context *)
+    irule result_equiv_except_subset >>
+    qexists_tac `fresh_vars_in_function fn` >>
+    conj_tac >- (
+      simp[fresh_vars_in_context_def, pred_setTheory.SUBSET_DEF,
+           pred_setTheory.IN_BIGUNION, PULL_EXISTS] >>
+      metis_tac[]
+    ) >>
+    first_x_assum irule >> simp[]
+  )
 QED
 
 (* ==========================================================================
@@ -1395,15 +1399,21 @@ Theorem revert_to_assert_pass_correct:
           (run_function fuel fn s)
           (run_function fuel' fn' s))
 Proof
-  rw[LET_THM] >>
+  simp[LET_THM] >> rpt gen_tac >> strip_tac >>
   Cases_on `lookup_function entry ctx.ctx_functions` >> gvs[] >>
-  qexistsl_tac [`x`, `transform_function x`] >>
-  simp[lookup_function_transform_context] >>
-  (* Apply transform_context_correct *)
+  qexists_tac `transform_function x` >>
+  simp[transform_context_def] >>
+  `lookup_function entry (MAP transform_function ctx.ctx_functions) =
+    SOME (transform_function x)` by (
+    pop_assum mp_tac >> qspec_tac (`ctx.ctx_functions`, `fns`) >>
+    Induct >> simp[lookup_function_def, transform_function_def] >>
+    rw[lookup_function_def] >> simp[transform_function_def]
+  ) >>
+  simp[] >>
   qspecl_then [`ctx`, `entry`] mp_tac transform_context_correct >>
-  simp[LET_THM] >> strip_tac >>
+  simp[LET_THM, transform_context_def] >> strip_tac >>
   first_x_assum (qspecl_then [`x`, `transform_function x`] mp_tac) >>
-  simp[lookup_function_transform_context]
+  simp[]
 QED
 
 val _ = export_theory();
