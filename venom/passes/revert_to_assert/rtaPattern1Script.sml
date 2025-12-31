@@ -6,7 +6,7 @@
 
 Theory rtaPattern1
 Ancestors
-  rtaTransform rtaCorrect rtaProps rtaDefs stateEquiv venomSem venomInst venomState list
+  rtaCorrect rtaProps rtaDefs stateEquiv venomSem venomInst venomState list
 
 (* Main lemma: Pattern 1 execution trace correctness *)
 Theorem pattern1_execution_trace:
@@ -26,7 +26,6 @@ Theorem pattern1_execution_trace:
     let fresh_vars = fresh_vars_in_block fn bb in
     (* Key properties *)
     fresh_var IN fresh_vars /\
-    lookup_var fresh_var s = NONE /\
     s.vs_inst_idx + 2 < LENGTH bb'.bb_instructions /\
     (* Execution analysis *)
     (cond <> 0w ==>
