@@ -29,6 +29,29 @@ If you are working on a proof, your task is NOT complete until:
 
 **Documenting "what's left to do" is NOT completion.** If you can describe what work remains, then do that work - don't just write it down and stop. Keep working until the proof is actually done or you hit a genuine blocker requiring human input.
 
+## CRITICAL: Never Delete Proof Code
+
+**NEVER replace a proof with `cheat` without preserving the original.**
+
+If you need to temporarily cheat a proof for debugging:
+1. Comment out the original proof code (don't delete it)
+2. Add `cheat` below the commented code
+3. Add a comment explaining why it's cheated
+
+```sml
+(* TEMPORARILY CHEATED - investigating batch/interactive discrepancy
+Proof
+  Induct_on `fuel` >- rw[...] >>
+  ...original proof...
+QED
+*)
+Proof
+  cheat
+QED
+```
+
+Deleting proof code to replace with cheat is NEVER acceptable.
+
 ## Project Structure
 
 ```

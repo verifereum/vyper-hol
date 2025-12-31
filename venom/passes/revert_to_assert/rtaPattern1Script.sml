@@ -71,7 +71,7 @@ Proof
       (* Need to show EL s.vs_inst_idx bb'.bb_instructions is the ISZERO instruction *)
       `EL s.vs_inst_idx bb'.bb_instructions =
        mk_iszero_inst (EL s.vs_inst_idx bb.bb_instructions).inst_id cond_op fresh_var` by cheat >>
-      simp[mk_iszero_inst_def, step_inst_def, eval_inst_def] >>
+      simp[mk_iszero_inst_def, step_inst_def] >>
       (* eval_operand cond_op s = SOME 0w *)
       simp[] >>
       (* ISZERO 0w = 1w *)
@@ -100,7 +100,7 @@ Proof
   rw[] >>
   (* Step 1: Original JNZ jumps to revert label *)
   `step_inst (EL s.vs_inst_idx bb.bb_instructions) s = OK (jump_to if_nonzero s)` by (
-    fs[step_inst_def, eval_inst_def] >>
+    fs[step_inst_def] >>
     (* JNZ with non-zero condition *)
     cheat) >>
   (* Original runs the revert block *)
