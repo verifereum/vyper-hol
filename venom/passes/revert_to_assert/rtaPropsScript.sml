@@ -907,4 +907,143 @@ Proof
   metis_tac[state_equiv_except_trans, execution_equiv_except_trans]
 QED
 
+(* ==========================================================================
+   transform_block_insts Properties
+   ========================================================================== *)
+
+(* WHY THIS IS TRUE: When EVERY instruction in the prefix has transform_jnz = NONE,
+   each is passed through unchanged by transform_block_insts. After n such
+   instructions, we have the original TAKE n plus the transformation of DROP n. *)
+Theorem transform_block_insts_TAKE_DROP:
+  !n fn insts.
+    EVERY (\i. transform_jnz fn i = NONE) (TAKE n insts)
+    ==>
+    transform_block_insts fn insts =
+      TAKE n insts ++ transform_block_insts fn (DROP n insts)
+Proof
+  Induct_on `n` >- simp[rich_listTheory.TAKE, rich_listTheory.DROP] >>
+  rpt strip_tac >>
+  Cases_on `insts`
+  >- REWRITE_TAC[transform_block_insts_def, listTheory.TAKE_nil, listTheory.DROP_nil, listTheory.APPEND]
+  >- (
+    `transform_jnz fn h = NONE` by (
+      pop_assum mp_tac >> REWRITE_TAC[rich_listTheory.TAKE, listTheory.EVERY_DEF] >> simp[]) >>
+    ONCE_REWRITE_TAC[transform_block_insts_def] >>
+    ASM_REWRITE_TAC[optionTheory.option_case_def] >>
+    REWRITE_TAC[rich_listTheory.TAKE, rich_listTheory.DROP, listTheory.APPEND] >>
+    AP_TERM_TAC >>
+    first_x_assum irule >>
+    pop_assum mp_tac >> REWRITE_TAC[rich_listTheory.TAKE, listTheory.EVERY_DEF] >> simp[] >>
+    pop_assum mp_tac >> REWRITE_TAC[rich_listTheory.TAKE, listTheory.EVERY_DEF] >> simp[]
+  )
+QED
+
+(* WHY THIS IS TRUE: transform_block_insts either keeps instructions (NONE case)
+   or replaces them with multiple instructions (SOME case). Never fewer. *)
+Theorem transform_block_insts_length_ge:
+  !fn insts. LENGTH (transform_block_insts fn insts) >= LENGTH insts
+Proof
+  Induct_on `insts` >- simp[transform_block_insts_def] >>
+  rw[] >> Cases_on `transform_jnz fn h`
+  >- (
+    ONCE_REWRITE_TAC[transform_block_insts_def] >>
+    ASM_REWRITE_TAC[optionTheory.option_case_def] >>
+    simp[listTheory.LENGTH] >> first_x_assum (qspec_then `fn` mp_tac) >> decide_tac
+  )
+  >- (
+    ONCE_REWRITE_TAC[transform_block_insts_def] >>
+    ASM_REWRITE_TAC[optionTheory.option_case_def] >>
+    simp[] >>
+    gvs[transform_jnz_def, AllCaseEqs()]
+    >- (
+      simp[transform_pattern1_def, mk_iszero_inst_def, mk_assert_inst_def, mk_jmp_inst_def] >>
+      first_x_assum (qspec_then `fn` mp_tac) >> decide_tac
+    )
+    >- (
+      simp[transform_pattern2_def, mk_assert_inst_def, mk_jmp_inst_def] >>
+      first_x_assum (qspec_then `fn` mp_tac) >> decide_tac
+    )
+  )
+QED
+
+(* WHY THIS IS TRUE: With prefix of NONEs, first n instructions are unchanged.
+   At index n, transform_jnz returns SOME new_insts, so HD new_insts is at index n. *)
+Theorem transform_block_insts_EL_transformed:
+  !fn insts n new_insts.
+    n < LENGTH insts /\
+    EVERY (\i. transform_jnz fn i = NONE) (TAKE n insts) /\
+    transform_jnz fn (EL n insts) = SOME new_insts
+    ==>
+    EL n (transform_block_insts fn insts) = HD new_insts
+Proof
+  rw[] >>
+  `transform_block_insts fn insts =
+   TAKE n insts ++ transform_block_insts fn (DROP n insts)` by
+     (irule transform_block_insts_TAKE_DROP >> gvs[]) >>
+  pop_assum SUBST1_TAC >>
+  `DROP n insts = EL n insts :: DROP (SUC n) insts` by
+    simp[rich_listTheory.DROP_CONS_EL] >>
+  pop_assum SUBST1_TAC >>
+  simp[transform_block_insts_def] >>
+  Cases_on `new_insts` >> gvs[]
+  >- gvs[transform_jnz_def, AllCaseEqs(), transform_pattern1_def,
+         transform_pattern2_def]
+  >- simp[listTheory.EL_APPEND_EQN, listTheory.LENGTH_TAKE]
+QED
+
+(* WHY THIS IS TRUE: With n NONE transforms followed by pattern1 (which adds 3 insts),
+   the result has at least n + 3 elements. *)
+Theorem transform_block_insts_length_pattern1:
+  !fn insts n cond_op label.
+    n < LENGTH insts /\
+    EVERY (λi. transform_jnz fn i = NONE) (TAKE n insts) /\
+    transform_jnz fn (EL n insts) = SOME (transform_pattern1 (EL n insts) cond_op label)
+    ==>
+    LENGTH (transform_block_insts fn insts) >= n + 3
+Proof
+  rw[] >>
+  `LENGTH (transform_pattern1 (EL n insts) cond_op label) = 3` by
+    simp[transform_pattern1_def, LET_THM, mk_iszero_inst_def,
+         mk_assert_inst_def, mk_jmp_inst_def] >>
+  `transform_block_insts fn insts = TAKE n insts ++ transform_block_insts fn (DROP n insts)`
+    by metis_tac[transform_block_insts_TAKE_DROP] >>
+  `LENGTH (TAKE n insts) = n` by simp[listTheory.LENGTH_TAKE] >>
+  `DROP n insts = EL n insts :: DROP (n + 1) insts` by (
+    `n < LENGTH insts` by simp[] >>
+    metis_tac[rich_listTheory.DROP_EL_CONS]
+  ) >>
+  `transform_block_insts fn (DROP n insts) =
+   transform_pattern1 (EL n insts) cond_op label ++ transform_block_insts fn (DROP (n + 1) insts)` by (
+    simp[transform_block_insts_def]
+  ) >>
+  simp[listTheory.LENGTH_APPEND]
+QED
+
+(* WHY THIS IS TRUE: With n NONE transforms followed by pattern2 (which adds 2 insts),
+   the result has at least n + 2 elements. *)
+Theorem transform_block_insts_length_pattern2:
+  !fn insts n cond_op label.
+    n < LENGTH insts /\
+    EVERY (λi. transform_jnz fn i = NONE) (TAKE n insts) /\
+    transform_jnz fn (EL n insts) = SOME (transform_pattern2 (EL n insts) cond_op label)
+    ==>
+    LENGTH (transform_block_insts fn insts) >= n + 2
+Proof
+  rw[] >>
+  `LENGTH (transform_pattern2 (EL n insts) cond_op label) = 2` by
+    simp[transform_pattern2_def, LET_THM, mk_assert_inst_def, mk_jmp_inst_def] >>
+  `transform_block_insts fn insts = TAKE n insts ++ transform_block_insts fn (DROP n insts)`
+    by metis_tac[transform_block_insts_TAKE_DROP] >>
+  `LENGTH (TAKE n insts) = n` by simp[listTheory.LENGTH_TAKE] >>
+  `DROP n insts = EL n insts :: DROP (n + 1) insts` by (
+    `n < LENGTH insts` by simp[] >>
+    metis_tac[rich_listTheory.DROP_EL_CONS]
+  ) >>
+  `transform_block_insts fn (DROP n insts) =
+   transform_pattern2 (EL n insts) cond_op label ++ transform_block_insts fn (DROP (n + 1) insts)` by (
+    simp[transform_block_insts_def]
+  ) >>
+  simp[listTheory.LENGTH_APPEND]
+QED
+
 val _ = export_theory();
