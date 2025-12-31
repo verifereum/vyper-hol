@@ -158,87 +158,13 @@ Proof
   Cases_on `k` >> gvs[]
 QED
 
-(*
- * Helper: transform_block_insts preserves prefix and transforms suffix.
- *
- * When the first n instructions are not transformed, the result is
- * those n instructions followed by the transform of the remaining instructions.
+(* NOTE: transform_block_insts helper theorems are now in rtaPropsTheory:
+ * - transform_block_insts_TAKE_DROP
+ * - transform_block_insts_EL_transformed
+ * - transform_block_insts_length_ge
+ * - transform_block_insts_length_pattern1
+ * - transform_block_insts_length_pattern2
  *)
-Theorem transform_block_insts_TAKE_DROP:
-  !n fn insts.
-    EVERY (\i. transform_jnz fn i = NONE) (TAKE n insts)
-    ==>
-    transform_block_insts fn insts =
-      TAKE n insts ++ transform_block_insts fn (DROP n insts)
-Proof
-  Induct_on `n` >- simp[rich_listTheory.TAKE, rich_listTheory.DROP] >>
-  rpt strip_tac >>
-  Cases_on `insts`
-  >- REWRITE_TAC[transform_block_insts_def, TAKE_nil, DROP_nil, APPEND]
-  >- (
-    `transform_jnz fn h = NONE` by (
-      pop_assum mp_tac >> REWRITE_TAC[rich_listTheory.TAKE, EVERY_DEF] >> simp[]) >>
-    ONCE_REWRITE_TAC[transform_block_insts_def] >>
-    ASM_REWRITE_TAC[optionTheory.option_case_def] >>
-    REWRITE_TAC[rich_listTheory.TAKE, rich_listTheory.DROP, APPEND] >>
-    AP_TERM_TAC >>
-    first_x_assum irule >>
-    pop_assum mp_tac >> REWRITE_TAC[rich_listTheory.TAKE, EVERY_DEF] >> simp[] >>
-    pop_assum mp_tac >> REWRITE_TAC[rich_listTheory.TAKE, EVERY_DEF] >> simp[]
-  )
-QED
-
-(* Helper: What instruction appears at index n in transformed block when
- * all prior instructions don't transform but instruction n does *)
-Theorem transform_block_insts_EL_transformed:
-  !fn insts n new_insts.
-    n < LENGTH insts /\
-    EVERY (\i. transform_jnz fn i = NONE) (TAKE n insts) /\
-    transform_jnz fn (EL n insts) = SOME new_insts
-    ==>
-    EL n (transform_block_insts fn insts) = HD new_insts
-Proof
-  rw[] >>
-  `transform_block_insts fn insts =
-   TAKE n insts ++ transform_block_insts fn (DROP n insts)` by
-     (irule transform_block_insts_TAKE_DROP >> gvs[]) >>
-  pop_assum SUBST1_TAC >>
-  `DROP n insts = EL n insts :: DROP (SUC n) insts` by
-    simp[rich_listTheory.DROP_CONS_EL] >>
-  pop_assum SUBST1_TAC >>
-  simp[transform_block_insts_def] >>
-  Cases_on `new_insts` >> gvs[]
-  >- gvs[transform_jnz_def, AllCaseEqs(), transform_pattern1_def,
-         transform_pattern2_def]
-  >- simp[listTheory.EL_APPEND_EQN, listTheory.LENGTH_TAKE]
-QED
-
-(* Helper: transform_block_insts never shortens the instruction list *)
-Theorem transform_block_insts_length_ge:
-  !fn insts. LENGTH (transform_block_insts fn insts) >= LENGTH insts
-Proof
-  Induct_on `insts` >- simp[transform_block_insts_def] >>
-  rw[] >> Cases_on `transform_jnz fn h`
-  >- (
-    ONCE_REWRITE_TAC[transform_block_insts_def] >>
-    ASM_REWRITE_TAC[optionTheory.option_case_def] >>
-    simp[LENGTH] >> first_x_assum (qspec_then `fn` mp_tac) >> decide_tac
-  )
-  >- (
-    ONCE_REWRITE_TAC[transform_block_insts_def] >>
-    ASM_REWRITE_TAC[optionTheory.option_case_def] >>
-    simp[] >>
-    gvs[transform_jnz_def, AllCaseEqs()]
-    >- (
-      simp[transform_pattern1_def, mk_iszero_inst_def, mk_assert_inst_def, mk_jmp_inst_def] >>
-      first_x_assum (qspec_then `fn` mp_tac) >> decide_tac
-    )
-    >- (
-      simp[transform_pattern2_def, mk_assert_inst_def, mk_jmp_inst_def] >>
-      first_x_assum (qspec_then `fn` mp_tac) >> decide_tac
-    )
-  )
-QED
 
 (*
  * KEY LEMMA: Prefix of non-transformed instructions execute identically.
@@ -295,34 +221,6 @@ Proof
     drule_all step_inst_preserves_inst_idx >> simp[]
   ) >>
   simp[]
-QED
-
-(*
- * Helper: When transform_jnz returns SOME with 2 instructions at index n,
- * the transformed block has at least n+2 elements
- *)
-Theorem transform_block_insts_length_pattern2:
-  !fn insts n cond_op label.
-    n < LENGTH insts /\
-    EVERY (λi. transform_jnz fn i = NONE) (TAKE n insts) /\
-    transform_jnz fn (EL n insts) = SOME (transform_pattern2 (EL n insts) cond_op label)
-    ==>
-    LENGTH (transform_block_insts fn insts) >= n + 2
-Proof
-  rw[] >>
-  `LENGTH (transform_pattern2 (EL n insts) cond_op label) = 2` by simp[transform_pattern2_def, LET_THM] >>
-  `transform_block_insts fn insts = TAKE n insts ++ transform_block_insts fn (DROP n insts)`
-    by metis_tac[transform_block_insts_TAKE_DROP] >>
-  `LENGTH (TAKE n insts) = n` by simp[LENGTH_TAKE] >>
-  `DROP n insts = EL n insts :: DROP (n + 1) insts` by (
-    `n < LENGTH insts` by simp[] >>
-    metis_tac[rich_listTheory.DROP_EL_CONS]
-  ) >>
-  `transform_block_insts fn (DROP n insts) =
-   transform_pattern2 (EL n insts) cond_op label ++ transform_block_insts fn (DROP (n + 1) insts)` by (
-    simp[transform_block_insts_def]
-  ) >>
-  simp[LENGTH_APPEND]
 QED
 
 (*
