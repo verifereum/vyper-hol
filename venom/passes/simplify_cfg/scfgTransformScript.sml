@@ -54,6 +54,7 @@ Definition merge_jump_cond_def:
       lookup_block a_lbl fn.fn_blocks = SOME a /\
       lookup_block b_lbl fn.fn_blocks = SOME b /\
       MEM b_lbl (block_successors a) /\
+      ~MEM c_lbl (block_successors a) /\
       pred_labels fn b_lbl = [a_lbl] /\
       jump_only_target b = SOME c_lbl
 End

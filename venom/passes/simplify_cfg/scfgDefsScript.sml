@@ -46,6 +46,23 @@ Definition pred_labels_def:
       (FILTER (\bb. MEM lbl (block_successors bb)) fn.fn_blocks)
 End
 
+(* ===== CFG Well-Formedness ===== *)
+
+Definition block_terminator_last_def:
+  block_terminator_last bb <=>
+    !idx inst.
+      get_instruction bb idx = SOME inst /\
+      is_terminator inst.inst_opcode ==>
+      idx = LENGTH bb.bb_instructions - 1
+End
+
+Definition cfg_wf_def:
+  cfg_wf fn <=>
+    fn.fn_blocks <> [] /\
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+    !bb. MEM bb fn.fn_blocks ==> block_terminator_last bb
+End
+
 (* ===== Block Predicates ===== *)
 
 Definition block_has_phi_def:
@@ -135,6 +152,50 @@ End
 
 (* ===== PHI Cleanup ===== *)
 
+(* ===== PHI Well-Formedness ===== *)
+
+Definition phi_vals_not_label_def:
+  phi_vals_not_label [] = T /\
+  phi_vals_not_label [_] = T /\
+  phi_vals_not_label (Label lbl :: op :: rest) =
+    (case op of
+       Label _ => F
+     | _ => phi_vals_not_label rest) /\
+  phi_vals_not_label (_ :: _ :: rest) = phi_vals_not_label rest
+End
+
+Definition phi_ops_all_preds_def:
+  phi_ops_all_preds preds ops <=>
+    !lbl. MEM (Label lbl) ops ==> MEM lbl preds
+End
+
+Definition phi_ops_complete_def:
+  phi_ops_complete preds ops <=>
+    !lbl. MEM lbl preds ==> ?val_op. resolve_phi lbl ops = SOME val_op
+End
+
+Definition phi_inst_wf_def:
+  phi_inst_wf preds inst <=>
+    inst.inst_opcode <> PHI \/
+    (?out.
+       inst.inst_outputs = [out] /\
+       phi_ops_all_preds preds inst.inst_operands /\
+       phi_ops_complete preds inst.inst_operands /\
+       phi_vals_not_label inst.inst_operands)
+End
+
+Definition phi_block_wf_def:
+  phi_block_wf preds bb <=>
+    !inst. MEM inst bb.bb_instructions ==> phi_inst_wf preds inst
+End
+
+Definition phi_fn_wf_def:
+  phi_fn_wf fn <=>
+    fn.fn_blocks <> [] /\
+    (!bb. MEM bb fn.fn_blocks ==> phi_block_wf (pred_labels fn bb.bb_label) bb) /\
+    block_has_no_phi (HD fn.fn_blocks)
+End
+
 Definition phi_remove_non_preds_def:
   phi_remove_non_preds preds [] = [] /\
   phi_remove_non_preds preds [_] = [] /\
@@ -206,6 +267,29 @@ Definition result_equiv_cfg_def:
   result_equiv_cfg (Revert s1) (Revert s2) = state_equiv_cfg s1 s2 /\
   result_equiv_cfg (Error e1) (Error e2) = T /\
   result_equiv_cfg _ _ = F
+End
+
+Definition terminates_def:
+  terminates (OK s) = T /\
+  terminates (Halt s) = T /\
+  terminates (Revert s) = T /\
+  terminates (Error e) = F
+End
+
+Definition run_function_equiv_cfg_def:
+  run_function_equiv_cfg fn fn' s <=>
+    (!fuel.
+       terminates (run_function fuel fn s) ==>
+       ?fuel'.
+         terminates (run_function fuel' fn' s) /\
+         result_equiv_cfg (run_function fuel fn s)
+                          (run_function fuel' fn' s)) /\
+    (!fuel'.
+       terminates (run_function fuel' fn' s) ==>
+       ?fuel.
+         terminates (run_function fuel fn s) /\
+         result_equiv_cfg (run_function fuel fn s)
+                          (run_function fuel' fn' s))
 End
 
 val _ = export_theory();
