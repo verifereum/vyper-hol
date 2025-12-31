@@ -274,7 +274,7 @@ Proof
   CCONTR_TAC >> gvs[] >>
   (* v = fresh_iszero_var inst'.inst_id for some inst' *)
   first_x_assum (qspecl_then [`inst`, `fresh_iszero_var inst'.inst_id`] mp_tac) >>
-  simp[]
+  simp[] >> qexists_tac `inst'.inst_id` >> simp[]
 QED
 
 (* ==========================================================================
@@ -838,8 +838,10 @@ Proof
         qpat_x_assum `transform_jnz _ _ = SOME _` mp_tac >>
         simp[transform_jnz_def] >> strip_tac >> gvs[AllCaseEqs()]
         (* Pattern 1 with is_terminator = T: main case *)
-        >- cheat (* TODO: Pattern 1 transformation correctness *)
+        (* TODO: Use pattern1_execution_trace from rtaPattern1Theory *)
+        >- cheat
         (* Pattern 2 with is_terminator = T: main case *)
+        (* TODO: Add pattern2_execution_trace helper in rtaPattern1Script *)
         >- cheat
         (* Pattern 1 with ~is_terminator: contradiction - JNZ IS a terminator *)
         >- gvs[is_terminator_def]
@@ -870,15 +872,17 @@ Proof
         qpat_x_assum `transform_jnz _ _ = SOME _` mp_tac >>
         simp[transform_jnz_def] >> strip_tac >> gvs[AllCaseEqs()]
         (* Pattern 1 error: ISZERO uses same cond_op, also errors *)
+        (* TODO: Add pattern1_error helper in rtaPattern1Script *)
         >- (
           qpat_x_assum `step_inst _ _ = Error _` mp_tac >>
           simp[step_inst_def, AllCaseEqs()] >> strip_tac >>
-          cheat (* Pattern 1 error case - ISZERO uses same cond_op that failed *))
+          cheat)
         (* Pattern 2 error: ASSERT uses same cond_op, also errors *)
+        (* TODO: Add pattern2_error helper in rtaPattern1Script *)
         >- (
           qpat_x_assum `step_inst _ _ = Error _` mp_tac >>
           simp[step_inst_def, AllCaseEqs()] >> strip_tac >>
-          cheat (* Pattern 2 error case - ASSERT uses same cond_op that failed *)))))
+          cheat))))
 QED
 
 (*
@@ -1198,9 +1202,9 @@ Proof
     gvs[fresh_vars_in_function_def] >>
     (* v IN BIGUNION {...} means v IN some fresh_vars_in_block fn bb' *)
     `?bb'. MEM bb' fn.fn_blocks /\ v IN fresh_vars_in_block fn bb'` by
-      (gvs[BIGUNION, GSPEC_ETA] >> metis_tac[]) >>
+      (fs[pred_setTheory.IN_BIGUNION] >> metis_tac[]) >>
     (* fresh_vars_not_in_block says operands don't contain fresh vars *)
-    gvs[fresh_vars_not_in_block_def, fresh_vars_in_block_def, GSPEC_ETA] >>
+    gvs[fresh_vars_not_in_block_def, fresh_vars_in_block_def] >>
     first_x_assum (qspecl_then [`inst`, `v`] mp_tac) >> simp[]
   ) >>
   (* Use run_block_result_equiv_except *)
