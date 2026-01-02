@@ -493,13 +493,9 @@ Theorem revert_states_equiv_except:
       (revert_state (next_inst (update_var fresh_var 0w s)))
 Proof
   rw[LET_THM] >>
+  drule_all rtaPropsTheory.fresh_var_in_fresh_vars >> strip_tac >>
   simp[execution_equiv_except_def, revert_state_def, jump_to_def,
        next_inst_def, update_var_def, lookup_var_def] >>
-  `fresh_iszero_var (EL n bb.bb_instructions).inst_id IN fresh_vars_in_block fn bb` by (
-    simp[fresh_vars_in_block_def, pred_setTheory.GSPECIFICATION] >>
-    qexists_tac `EL n bb.bb_instructions` >>
-    simp[rich_listTheory.EL_MEM] >> metis_tac[]
-  ) >>
   rw[] >> simp[finite_mapTheory.FLOOKUP_UPDATE] >> rw[] >> metis_tac[]
 QED
 
@@ -520,13 +516,9 @@ Theorem jumped_states_equiv_except:
       (jump_to if_zero (update_var fresh_var 1w s))
 Proof
   rw[LET_THM] >>
+  drule_all rtaPropsTheory.fresh_var_in_fresh_vars >> strip_tac >>
   simp[state_equiv_except_def, execution_equiv_except_def, jump_to_def,
        update_var_def, lookup_var_def] >>
-  `fresh_iszero_var (EL n bb.bb_instructions).inst_id IN fresh_vars_in_block fn bb` by (
-    simp[fresh_vars_in_block_def, pred_setTheory.GSPECIFICATION] >>
-    qexists_tac `EL n bb.bb_instructions` >>
-    simp[rich_listTheory.EL_MEM] >> metis_tac[]
-  ) >>
   rw[] >> simp[finite_mapTheory.FLOOKUP_UPDATE] >> rw[] >> metis_tac[]
 QED
 

@@ -1065,6 +1065,27 @@ Proof
 QED
 
 (* ==========================================================================
+   Fresh Variable Membership
+   ========================================================================== *)
+
+(* WHY THIS IS TRUE: The fresh variable for a pattern1 JNZ transformation
+   is derived from the instruction ID. If the instruction is in the block
+   and matches the pattern, the fresh var is in fresh_vars_in_block. *)
+Theorem fresh_var_in_fresh_vars:
+  !fn bb n cond_op if_nonzero if_zero.
+    n < LENGTH bb.bb_instructions /\
+    (EL n bb.bb_instructions).inst_operands = [cond_op; Label if_nonzero; Label if_zero] /\
+    is_revert_label fn if_nonzero /\
+    transform_jnz fn (EL n bb.bb_instructions) <> NONE
+    ==>
+    fresh_iszero_var (EL n bb.bb_instructions).inst_id IN fresh_vars_in_block fn bb
+Proof
+  rw[fresh_vars_in_block_def, pred_setTheory.GSPECIFICATION] >>
+  qexists_tac `EL n bb.bb_instructions` >>
+  simp[rich_listTheory.EL_MEM] >> metis_tac[]
+QED
+
+(* ==========================================================================
    Pattern1: Indices n, n+1, n+2 contain ISZERO, ASSERT, JMP
    ========================================================================== *)
 
