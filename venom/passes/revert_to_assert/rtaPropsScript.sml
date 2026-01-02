@@ -1046,4 +1046,36 @@ Proof
   simp[listTheory.LENGTH_APPEND]
 QED
 
+(* ==========================================================================
+   Pattern1: Indices n, n+1, n+2 contain ISZERO, ASSERT, JMP
+   ========================================================================== *)
+
+Theorem pattern1_transformed_instructions:
+  !fn bb n cond_op if_zero.
+    n < LENGTH bb.bb_instructions /\
+    EVERY (\i. transform_jnz fn i = NONE) (TAKE n bb.bb_instructions) /\
+    transform_jnz fn (EL n bb.bb_instructions) =
+      SOME (transform_pattern1 (EL n bb.bb_instructions) cond_op if_zero)
+    ==>
+    let insts' = transform_block_insts fn bb.bb_instructions in
+    let id = (EL n bb.bb_instructions).inst_id in
+    let fresh_var = fresh_iszero_var id in
+    EL n insts' = mk_iszero_inst id cond_op fresh_var /\
+    EL (n + 1) insts' = mk_assert_inst (id + 1) (Var fresh_var) /\
+    EL (n + 2) insts' = mk_jmp_inst (id + 2) if_zero
+Proof
+  rw[LET_THM] >>
+  `EL n (transform_block_insts fn bb.bb_instructions) =
+   HD (transform_pattern1 (EL n bb.bb_instructions) cond_op if_zero)` by
+    (irule transform_block_insts_EL_transformed >> simp[]) >>
+  fs[transform_pattern1_def, LET_THM] >>
+  `transform_block_insts fn bb.bb_instructions =
+   TAKE n bb.bb_instructions ++ transform_block_insts fn (DROP n bb.bb_instructions)`
+    by metis_tac[transform_block_insts_TAKE_DROP] >>
+  `DROP n bb.bb_instructions = EL n bb.bb_instructions :: DROP (n + 1) bb.bb_instructions`
+    by (irule rich_listTheory.DROP_EL_CONS >> simp[]) >>
+  gvs[transform_block_insts_def] >>
+  simp[listTheory.EL_APPEND_EQN, listTheory.LENGTH_TAKE]
+QED
+
 val _ = export_theory();
