@@ -113,6 +113,28 @@ Proof
   first_x_assum drule_all >> simp[]
 QED
 
+(* Helper: lookup_block success implies membership *)
+Theorem lookup_block_MEM:
+  !lbl blocks bb.
+    lookup_block lbl blocks = SOME bb ==> MEM bb blocks
+Proof
+  Induct_on `blocks` >> simp[lookup_block_def] >>
+  rpt strip_tac >> Cases_on `h.bb_label = lbl` >> fs[] >>
+  res_tac >> simp[]
+QED
+
+(* run_block ignores the fn parameter *)
+Theorem run_block_fn_irrelevant:
+  !fn1 bb s fn2. run_block fn1 bb s = run_block fn2 bb s
+Proof
+  ho_match_mp_tac run_block_ind >> rpt strip_tac >>
+  simp[Once run_block_def, step_in_block_def] >>
+  CONV_TAC (RHS_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+  simp[step_in_block_def] >>
+  rpt (CASE_TAC >> simp[]) >>
+  rpt strip_tac >> first_x_assum irule >> simp[step_in_block_def]
+QED
+
 (* ==========================================================================
    Main Correctness Theorem
    ========================================================================== *)
@@ -145,9 +167,17 @@ Theorem run_block_ssa_equiv:
     (* No PHIs in this block - they're handled specially *)
     (!idx. idx < LENGTH bb.bb_instructions ==>
            (EL idx bb.bb_instructions).inst_opcode <> PHI) ==>
+    (* Single-output instructions only *)
+    (!idx. idx < LENGTH bb.bb_instructions ==>
+           LENGTH (EL idx bb.bb_instructions).inst_outputs <= 1) ==>
     ssa_result_equiv vm (run_block fn bb s_orig) (run_block fn_ssa bb_ssa s_ssa)
 Proof
-  cheat
+  rpt strip_tac >>
+  `run_block fn_ssa bb_ssa s_ssa = run_block fn bb_ssa s_ssa` by
+    (irule run_block_fn_irrelevant >> simp[]) >>
+  rw[] >>
+  irule ssaBlockTheory.run_block_ssa_equiv >>
+  simp[]
 QED
 
 (* TOP-LEVEL: Function execution preserves SSA equivalence.
@@ -178,7 +208,50 @@ Theorem run_function_ssa_equiv:
       (run_function fuel fn s_orig)
       (run_function fuel fn_ssa s_ssa)
 Proof
-  cheat
+  Induct_on `fuel` >> rpt strip_tac
+  >- simp[run_function_def, ssa_result_equiv_def] >>
+  `s_orig.vs_current_bb = s_ssa.vs_current_bb` by fs[ssa_state_equiv_def] >>
+  CONV_TAC (RATOR_CONV (RAND_CONV (ONCE_REWRITE_CONV [run_function_def]))) >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_function_def])) >>
+  simp[] >>
+  Cases_on `lookup_block s_orig.vs_current_bb fn.fn_blocks` >> gvs[]
+  >- (
+    `blocks_ssa_compatible vm fn.fn_blocks fn_ssa.fn_blocks` by
+      fs[fn_ssa_compatible_def] >>
+    `lookup_block s_orig.vs_current_bb fn_ssa.fn_blocks = NONE` by (
+      irule lookup_block_ssa_compatible_none >> simp[]
+    ) >>
+    simp[ssa_result_equiv_def]
+  ) >>
+  rename1 `lookup_block _ _ = SOME bb` >>
+  `blocks_ssa_compatible vm fn.fn_blocks fn_ssa.fn_blocks` by
+    fs[fn_ssa_compatible_def] >>
+  drule_all lookup_block_ssa_compatible >> strip_tac >>
+  gvs[] >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `!idx. idx < LENGTH bb.bb_instructions ==>
+         (EL idx bb.bb_instructions).inst_opcode <> PHI` by (
+    rpt strip_tac >>
+    `get_instruction bb idx = SOME (EL idx bb.bb_instructions)` by
+      simp[get_instruction_def] >>
+    fs[wf_input_fn_def, no_phi_fn_def]
+  ) >>
+  `!idx. idx < LENGTH bb.bb_instructions ==>
+         LENGTH (EL idx bb.bb_instructions).inst_outputs <= 1` by (
+    rpt strip_tac >>
+    `get_instruction bb idx = SOME (EL idx bb.bb_instructions)` by
+      simp[get_instruction_def] >>
+    fs[wf_input_fn_def, single_output_fn_def]
+  ) >>
+  `ssa_result_equiv vm (run_block fn bb s_orig) (run_block fn_ssa bb_ssa s_ssa)` by (
+    irule run_block_ssa_equiv >> simp[]
+  ) >>
+  Cases_on `run_block fn bb s_orig` >>
+  Cases_on `run_block fn_ssa bb_ssa s_ssa` >>
+  gvs[ssa_result_equiv_def] >>
+  `v.vs_halted = v'.vs_halted` by fs[ssa_state_equiv_def] >>
+  Cases_on `v.vs_halted` >> gvs[ssa_result_equiv_def] >>
+  first_x_assum irule >> simp[]
 QED
 
 (* ==========================================================================
@@ -257,4 +330,3 @@ Proof
   irule ssa_construction_correct >>
   qexistsl_tac [`fn`, `s_orig`] >> simp[]
 QED
-
