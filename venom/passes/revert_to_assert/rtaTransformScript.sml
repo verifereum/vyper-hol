@@ -152,21 +152,6 @@ QED
  *)
 
 (*
- * KEY LEMMA: Prefix of non-transformed instructions execute identically.
- *
- * WHY THIS IS TRUE: For instructions where transform_jnz returns NONE,
- * the instruction is unchanged. Thus step_inst produces identical results.
- * State evolution is deterministic.
- *)
-Theorem step_inst_same_for_unchanged:
-  !fn inst s.
-    transform_jnz fn inst = NONE ==>
-    step_inst inst s = step_inst inst s
-Proof
-  rw[] (* Trivially reflexive *)
-QED
-
-(*
  * Helper: step_in_block is the same for two blocks with matching prefix.
  *
  * WHY THIS IS TRUE: step_in_block uses get_instruction to fetch current instruction.

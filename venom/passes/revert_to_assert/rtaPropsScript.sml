@@ -108,35 +108,6 @@ Proof
 QED
 
 (* ==========================================================================
-   JNZ Instruction Behavior - Special Cases
-   (Base lemma step_jnz_behavior is in venomSemPropsTheory)
-   ========================================================================== *)
-
-(* WHY THIS IS TRUE: Special case when cond <> 0w. *)
-Theorem step_jnz_nonzero_jumps:
-  !s cond cond_op if_nonzero if_zero id.
-    eval_operand cond_op s = SOME cond /\ cond <> 0w ==>
-    step_inst <| inst_id := id; inst_opcode := JNZ;
-                 inst_operands := [cond_op; Label if_nonzero; Label if_zero];
-                 inst_outputs := [] |> s =
-    OK (jump_to if_nonzero s)
-Proof
-  rw[] >> drule step_jnz_behavior >> simp[]
-QED
-
-(* WHY THIS IS TRUE: Special case when cond = 0w. *)
-Theorem step_jnz_zero_jumps:
-  !s cond_op if_nonzero if_zero id.
-    eval_operand cond_op s = SOME 0w ==>
-    step_inst <| inst_id := id; inst_opcode := JNZ;
-                 inst_operands := [cond_op; Label if_nonzero; Label if_zero];
-                 inst_outputs := [] |> s =
-    OK (jump_to if_zero s)
-Proof
-  rw[] >> drule step_jnz_behavior >> simp[]
-QED
-
-(* ==========================================================================
    run_block Helper Lemmas
    ========================================================================== *)
 
@@ -261,73 +232,6 @@ Theorem jump_to_update_var_comm:
     jump_to lbl (update_var x v s) = update_var x v (jump_to lbl s)
 Proof
   rw[jump_to_def, update_var_def]
-QED
-
-(* ==========================================================================
-   Combined Lemmas for Transformation Patterns
-   ========================================================================== *)
-
-(* WHY THIS IS TRUE: After ISZERO on cond, output contains bool_to_word (cond = 0w).
-   If cond <> 0w, then cond = 0w is false, so output = 0w.
-   ASSERT on 0w reverts. This matches JNZ taking the revert branch. *)
-Theorem iszero_then_assert_when_nonzero:
-  !s cond cond_op out id1 id2.
-    eval_operand cond_op s = SOME cond /\
-    cond <> 0w ==>
-    let s1 = update_var out (bool_to_word (cond = 0w)) s in
-    step_inst <| inst_id := id2; inst_opcode := ASSERT;
-                 inst_operands := [Var out]; inst_outputs := [] |> s1 =
-    Revert (revert_state s1)
-Proof
-  rw[] >>
-  `(cond = 0w) = F` by gvs[] >>
-  pop_assum (fn th => simp[th, bool_to_word_F]) >>
-  simp[eval_operand_update_var_same] >>
-  irule step_assert_zero_reverts >>
-  simp[eval_operand_update_var_same]
-QED
-
-(* WHY THIS IS TRUE: After ISZERO on cond, output contains bool_to_word (cond = 0w).
-   If cond = 0w, then cond = 0w is true, so output = 1w <> 0w.
-   ASSERT on nonzero succeeds. This matches JNZ taking the else branch. *)
-Theorem iszero_then_assert_when_zero:
-  !s cond cond_op out id1 id2.
-    eval_operand cond_op s = SOME cond /\
-    cond = 0w ==>
-    let s1 = update_var out (bool_to_word (cond = 0w)) s in
-    step_inst <| inst_id := id2; inst_opcode := ASSERT;
-                 inst_operands := [Var out]; inst_outputs := [] |> s1 =
-    OK s1
-Proof
-  rw[] >>
-  simp[bool_to_word_T] >>
-  irule step_assert_nonzero_passes >>
-  simp[eval_operand_update_var_same]
-QED
-
-(* WHY THIS IS TRUE: For pattern 2, when cond <> 0w, ASSERT passes and
-   we jump to then_label. JNZ would also jump to then_label (if_nonzero).
-   The states are identical. *)
-Theorem assert_when_nonzero_then_jmp:
-  !s cond cond_op then_label id1 id2.
-    eval_operand cond_op s = SOME cond /\
-    cond <> 0w ==>
-    step_inst <| inst_id := id1; inst_opcode := ASSERT;
-                 inst_operands := [cond_op]; inst_outputs := [] |> s = OK s
-Proof
-  rw[] >> drule step_assert_behavior >> simp[]
-QED
-
-(* WHY THIS IS TRUE: For pattern 2, when cond = 0w, ASSERT reverts.
-   JNZ would jump to revert_label and execute revert. Both revert. *)
-Theorem assert_when_zero_reverts:
-  !s cond_op id.
-    eval_operand cond_op s = SOME 0w ==>
-    step_inst <| inst_id := id; inst_opcode := ASSERT;
-                 inst_operands := [cond_op]; inst_outputs := [] |> s =
-    Revert (revert_state s)
-Proof
-  rw[] >> drule step_assert_behavior >> simp[]
 QED
 
 (* ==========================================================================

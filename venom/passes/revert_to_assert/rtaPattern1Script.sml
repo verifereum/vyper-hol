@@ -11,25 +11,6 @@ Libs
   rtaCorrectTheory venomSemPropsTheory
 
 (* ==========================================================================
-   Helper Lemma 1: Length after pattern1 transformation
-   (pattern1_transformed_instructions is now in rtaPropsTheory)
-   ========================================================================== *)
-
-Theorem pattern1_length:
-  !fn bb n cond_op if_zero.
-    n < LENGTH bb.bb_instructions /\
-    EVERY (\i. transform_jnz fn i = NONE) (TAKE n bb.bb_instructions) /\
-    transform_jnz fn (EL n bb.bb_instructions) =
-      SOME (transform_pattern1 (EL n bb.bb_instructions) cond_op if_zero)
-    ==>
-    LENGTH (transform_block_insts fn bb.bb_instructions) >= n + 3
-Proof
-  metis_tac[transform_block_insts_length_pattern1]
-QED
-
-(* NOTE: fresh_var_in_fresh_vars is now in rtaPropsTheory *)
-
-(* ==========================================================================
    Main Theorem: Pattern 1 cond != 0w case
    ========================================================================== *)
 
