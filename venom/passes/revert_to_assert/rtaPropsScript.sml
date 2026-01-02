@@ -8,28 +8,25 @@
  * STRUCTURE OVERVIEW
  * ============================================================================
  *
- * TOP-LEVEL THEOREMS:
- *   - step_iszero_value             : ISZERO produces bool_to_word (x = 0w)
- *   - step_assert_behavior          : ASSERT reverts on 0w, continues otherwise
+ * INSTRUCTION BEHAVIOR (base lemmas in venomSemPropsTheory):
  *   - step_assert_zero_reverts      : ASSERT 0w reverts
  *   - step_assert_nonzero_passes    : ASSERT nonzero continues
- *   - simple_revert_block_reverts   : Simple revert block always reverts
  *
- * STATE_EQUIV_EXCEPT PROPERTIES (in rtaDefsTheory):
- *   - state_equiv_except_refl/sym/trans, state_equiv_implies_except
- *   - update_var_same_preserves, jump_to_except_preserves, revert_state_except_preserves
+ * BLOCK/FUNCTION EXECUTION:
+ *   - step_in_block_single_terminator : General single-terminator block lemma
+ *   - simple_revert_block_reverts     : Simple revert block always reverts
+ *   - run_function_at_simple_revert   : run_function at simple revert returns Revert
  *
- * ADDITIONAL PROPERTIES (this file):
+ * STATE_EQUIV_EXCEPT PROPERTIES:
  *   - update_var_state_equiv_except_insert : update_var x creates {x}-equiv
- *   - revert_state_update_var       : revert_state insensitive to variables
- *   - revert_state_state_equiv      : revert_state preserves state_equiv
- *   - jump_to_update_var_comm       : jump_to and update_var commute
+ *   - step_inst_result_equiv_except : step_inst preserves result_equiv_except
+ *   - run_block_result_equiv_except : run_block preserves result_equiv_except
  *
- * HELPER THEOREMS:
- *   - bool_to_word_eq_0w            : bool_to_word b = 0w iff ~b
- *   - bool_to_word_neq_0w           : bool_to_word b <> 0w iff b
- *   - eval_operand_update_var_same  : eval (Var x) after update_var x
- *   - eval_operand_update_var_other : eval (Var y) after update_var x, x <> y
+ * TRANSFORM_BLOCK_INSTS PROPERTIES:
+ *   - transform_block_insts_TAKE_DROP      : Prefix decomposition
+ *   - transform_block_insts_EL_transformed : Element at transformed index
+ *   - transform_block_insts_length_*       : Length bounds for patterns
+ *   - pattern1/2_transformed_instructions  : Instruction facts for patterns
  *
  * ============================================================================
  *)
@@ -51,34 +48,6 @@ fun SOLVE tac (g as (asl, w)) =
    (step_iszero_value, step_assert_behavior, step_revert_always_reverts,
    step_jnz_behavior, step_jmp_behavior) are now in venomSemPropsTheory.
    ========================================================================== *)
-
-(* ==========================================================================
-   Operand Evaluation with Variable Updates
-   ========================================================================== *)
-
-(* WHY THIS IS TRUE: update_var x v s sets vs_vars |+ (x, v), so
-   lookup_var x returns SOME v. eval_operand (Var x) uses lookup_var. *)
-Theorem eval_operand_update_var_same:
-  !x v s. eval_operand (Var x) (update_var x v s) = SOME v
-Proof
-  rw[eval_operand_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]
-QED
-
-(* WHY THIS IS TRUE: update_var x doesn't affect lookup of other variables.
-   FLOOKUP (fm |+ (x,v)) y = FLOOKUP fm y when x <> y. *)
-Theorem eval_operand_update_var_other:
-  !x y v s. x <> y ==> eval_operand (Var y) (update_var x v s) = eval_operand (Var y) s
-Proof
-  rw[eval_operand_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]
-QED
-
-(* WHY THIS IS TRUE: update_var only affects vs_vars, not memory, so
-   evaluating a literal is unchanged. *)
-Theorem eval_operand_update_var_lit:
-  !x v s w. eval_operand (Lit w) (update_var x v s) = SOME w
-Proof
-  rw[eval_operand_def]
-QED
 
 (* ==========================================================================
    ASSERT Instruction Behavior - Special Cases
@@ -124,19 +93,6 @@ Proof
   Cases_on `step_inst inst (s with vs_inst_idx := 0)` >> simp[]
 QED
 
-(* WHY THIS IS TRUE: run_block on a single-instruction REVERT block returns Revert. *)
-Theorem run_block_single_revert:
-  !fn bb s inst.
-    bb.bb_instructions = [inst] /\
-    inst.inst_opcode = REVERT ==>
-    run_block fn bb (s with vs_inst_idx := 0) =
-    Revert (revert_state (s with vs_inst_idx := 0))
-Proof
-  rpt strip_tac >>
-  simp[Once run_block_def, step_in_block_def, get_instruction_def,
-       step_inst_def, is_terminator_def]
-QED
-
 (* ==========================================================================
    Simple Revert Block Execution
    (step_jmp_behavior is in venomSemPropsTheory)
@@ -156,9 +112,12 @@ Proof
   `bb.bb_instructions = [HD bb.bb_instructions]` by (
     Cases_on `bb.bb_instructions` >> fs[]
   ) >>
-  irule run_block_single_revert >>
-  qexists_tac `HD bb.bb_instructions` >>
-  simp[]
+  simp[Once run_block_def] >>
+  `step_in_block fn bb (s with vs_inst_idx := 0) =
+   (step_inst (HD bb.bb_instructions) (s with vs_inst_idx := 0), T)` by (
+    irule step_in_block_single_terminator >> simp[is_terminator_def]
+  ) >>
+  simp[step_inst_def, is_terminator_def]
 QED
 
 (* ==========================================================================
@@ -202,36 +161,6 @@ Theorem update_var_state_equiv_except_insert:
 Proof
   rw[state_equiv_except_def, execution_equiv_except_def,
      update_var_def, lookup_var_def, FLOOKUP_UPDATE]
-QED
-
-(* ==========================================================================
-   revert_state Properties
-   ========================================================================== *)
-
-(* WHY THIS IS TRUE: revert_state only sets vs_halted := T and
-   vs_reverted := T. It doesn't depend on vs_vars at all.
-   So revert_state (update_var x v s) and revert_state s differ only
-   in vs_vars, which is unchanged by revert_state. *)
-Theorem revert_state_update_var:
-  !x v s.
-    revert_state (update_var x v s) = (revert_state s) with vs_vars := (s.vs_vars |+ (x, v))
-Proof
-  rw[revert_state_def, update_var_def]
-QED
-
-(* NOTE: revert_state_state_equiv is available from stateEquivTheory *)
-
-(* ==========================================================================
-   jump_to Properties
-   ========================================================================== *)
-
-(* WHY THIS IS TRUE: jump_to only changes control flow fields, not variables.
-   So update_var commutes with jump_to (they modify disjoint state components). *)
-Theorem jump_to_update_var_comm:
-  !x v lbl s.
-    jump_to lbl (update_var x v s) = update_var x v (jump_to lbl s)
-Proof
-  rw[jump_to_def, update_var_def]
 QED
 
 (* ==========================================================================

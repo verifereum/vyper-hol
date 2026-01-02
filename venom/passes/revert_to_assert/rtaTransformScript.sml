@@ -34,72 +34,9 @@ Theory rtaTransform
 Ancestors
   rtaCorrect rtaProps rtaDefs stateEquiv venomSem venomInst venomState list rich_list
 
-(*
- * KEY LEMMA: Different instruction IDs produce different fresh var names.
- * This follows from toString being injective on naturals.
- *)
-Theorem fresh_iszero_var_distinct:
-  !id1 id2. id1 <> id2 ==> fresh_iszero_var id1 <> fresh_iszero_var id2
-Proof
-  rw[fresh_iszero_var_def] >>
-  simp[ASCIInumbersTheory.toString_inj]
-QED
-
-(*
- * Fresh vars not in block implies operands don't reference fresh vars.
- *)
-Theorem fresh_vars_not_in_block_operands:
-  !fn bb inst v.
-    fresh_vars_not_in_block fn bb /\
-    MEM inst bb.bb_instructions /\
-    v IN fresh_vars_in_block fn bb ==>
-    ~MEM (Var v) inst.inst_operands
-Proof
-  rw[fresh_vars_not_in_block_def, fresh_vars_in_block_def] >>
-  CCONTR_TAC >> gvs[] >>
-  (* v = fresh_iszero_var inst'.inst_id for some inst' *)
-  first_x_assum (qspecl_then [`inst`, `fresh_iszero_var inst'.inst_id`] mp_tac) >>
-  simp[] >> qexists_tac `inst'.inst_id` >> simp[]
-QED
-
-(* ==========================================================================
-   Helper Lemmas: transform_block_insts Properties
-   ========================================================================== *)
-
-(*
- * WHY THIS IS TRUE: When transform_jnz returns NONE, the instruction is
- * kept unchanged. Only JNZ instructions matching patterns are modified.
- *)
-Theorem transform_block_insts_non_jnz:
-  !fn inst rest.
-    inst.inst_opcode <> JNZ ==>
-    transform_block_insts fn (inst::rest) = inst :: transform_block_insts fn rest
-Proof
-  rw[transform_block_insts_def, transform_jnz_def]
-QED
-
-(*
- * WHY THIS IS TRUE: Empty list transforms to empty list.
- *)
-Theorem transform_block_insts_nil:
-  !fn. transform_block_insts fn [] = []
-Proof
-  rw[transform_block_insts_def]
-QED
-
 (* ==========================================================================
    Block-Level Correctness
    ========================================================================== *)
-
-(*
- * WHY THIS IS TRUE: eval_operand only accesses vs_vars (via lookup_var),
- * not vs_inst_idx. So changing vs_inst_idx doesn't affect eval_operand.
- *)
-Theorem eval_operand_vs_inst_idx:
-  !op s n. eval_operand op (s with vs_inst_idx := n) = eval_operand op s
-Proof
-  Cases >> simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def]
-QED
 
 (*
  * WHY THIS IS TRUE: step_in_block doesn't use fn in its computation.
@@ -125,21 +62,6 @@ Proof
   Cases_on `step_in_block fn bb s` >>
   `step_in_block ARB bb s = step_in_block fn bb s` by simp[step_in_block_fn_irrelevant] >>
   gvs[] >> Cases_on `q` >> simp[]
-QED
-
-(*
- * WHY THIS IS TRUE: Non-terminator instructions have is_terminator = F.
- * transform_jnz only returns SOME for JNZ opcode.
- * JNZ is a terminator (is_terminator JNZ = T).
- * So for non-terminators, transform_jnz returns NONE, leaving them unchanged.
- *)
-Theorem transform_block_insts_non_terminators:
-  !fn insts.
-    EVERY (\inst. ~is_terminator inst.inst_opcode) insts ==>
-    transform_block_insts fn insts = insts
-Proof
-  Induct_on `insts` >> simp[transform_block_insts_def] >> rw[] >>
-  Cases_on `h.inst_opcode = JNZ` >> gvs[venomInstTheory.is_terminator_def, transform_jnz_def]
 QED
 
 (* NOTE: transform_block_insts helper theorems are now in rtaPropsTheory:
