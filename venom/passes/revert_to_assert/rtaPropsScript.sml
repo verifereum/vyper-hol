@@ -966,6 +966,24 @@ Proof
   )
 QED
 
+(* WHY THIS IS TRUE: When EVERY instruction in the prefix has transform_jnz = NONE,
+   the transformation preserves the prefix. From TAKE_DROP we have:
+   transform_block_insts fn insts = TAKE k insts ++ transform_block_insts fn (DROP k insts)
+   So TAKE k (transform_block_insts fn insts) = TAKE k (TAKE k insts ++ ...) = TAKE k insts. *)
+Theorem transform_block_insts_TAKE:
+  !insts fn k.
+    EVERY (\i. transform_jnz fn i = NONE) (TAKE k insts) ==>
+    TAKE k (transform_block_insts fn insts) = TAKE k insts
+Proof
+  rw[] >>
+  `transform_block_insts fn insts = TAKE k insts ++ transform_block_insts fn (DROP k insts)`
+    by metis_tac[transform_block_insts_TAKE_DROP] >>
+  pop_assum SUBST1_TAC >>
+  Cases_on `k <= LENGTH insts`
+  >- simp[rich_listTheory.TAKE_APPEND1]
+  >- simp[listTheory.TAKE_LENGTH_TOO_LONG, listTheory.DROP_LENGTH_TOO_LONG, transform_block_insts_def]
+QED
+
 (* WHY THIS IS TRUE: With prefix of NONEs, first n instructions are unchanged.
    At index n, transform_jnz returns SOME new_insts, so HD new_insts is at index n. *)
 Theorem transform_block_insts_EL_transformed:
@@ -1069,6 +1087,33 @@ Proof
    HD (transform_pattern1 (EL n bb.bb_instructions) cond_op if_zero)` by
     (irule transform_block_insts_EL_transformed >> simp[]) >>
   fs[transform_pattern1_def, LET_THM] >>
+  `transform_block_insts fn bb.bb_instructions =
+   TAKE n bb.bb_instructions ++ transform_block_insts fn (DROP n bb.bb_instructions)`
+    by metis_tac[transform_block_insts_TAKE_DROP] >>
+  `DROP n bb.bb_instructions = EL n bb.bb_instructions :: DROP (n + 1) bb.bb_instructions`
+    by (irule rich_listTheory.DROP_EL_CONS >> simp[]) >>
+  gvs[transform_block_insts_def] >>
+  simp[listTheory.EL_APPEND_EQN, listTheory.LENGTH_TAKE]
+QED
+
+(* Pattern 2: JNZ -> [ASSERT, JMP] *)
+Theorem pattern2_transformed_instructions:
+  !fn bb n cond_op if_nonzero.
+    n < LENGTH bb.bb_instructions /\
+    EVERY (\i. transform_jnz fn i = NONE) (TAKE n bb.bb_instructions) /\
+    transform_jnz fn (EL n bb.bb_instructions) =
+      SOME (transform_pattern2 (EL n bb.bb_instructions) cond_op if_nonzero)
+    ==>
+    let insts' = transform_block_insts fn bb.bb_instructions in
+    let id = (EL n bb.bb_instructions).inst_id in
+    EL n insts' = mk_assert_inst id cond_op /\
+    EL (n + 1) insts' = mk_jmp_inst (id + 1) if_nonzero
+Proof
+  rw[LET_THM] >>
+  `EL n (transform_block_insts fn bb.bb_instructions) =
+   HD (transform_pattern2 (EL n bb.bb_instructions) cond_op if_nonzero)` by
+    (irule transform_block_insts_EL_transformed >> simp[]) >>
+  fs[transform_pattern2_def, LET_THM] >>
   `transform_block_insts fn bb.bb_instructions =
    TAKE n bb.bb_instructions ++ transform_block_insts fn (DROP n bb.bb_instructions)`
     by metis_tac[transform_block_insts_TAKE_DROP] >>
