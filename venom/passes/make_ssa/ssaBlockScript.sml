@@ -203,6 +203,25 @@ Proof
   metis_tac[]
 QED
 
+(* Helper: ASSERT_UNREACHABLE halting conditions *)
+Theorem step_inst_assert_unreachable_halt:
+  !inst s r.
+    inst.inst_opcode = ASSERT_UNREACHABLE /\
+    step_inst inst s = Halt r ==>
+    ?cond_op cond.
+      inst.inst_operands = [cond_op] /\
+      eval_operand cond_op s = SOME cond /\
+      cond <> 0w /\
+      r = halt_state s
+Proof
+  rpt strip_tac >>
+  fs[step_inst_def] >>
+  Cases_on `inst.inst_operands` >> gvs[AllCaseEqs()] >>
+  Cases_on `t` >> gvs[AllCaseEqs()] >>
+  Cases_on `eval_operand h s` >> gvs[AllCaseEqs()] >>
+  qexistsl_tac [`h`, `a`] >> gvs[]
+QED
+
 (* KEY LEMMA: Non-PHI instruction step that returns Halt.
    When the original instruction halts, the SSA version also halts
    with an equivalent state. *)
@@ -216,15 +235,23 @@ Theorem step_inst_halt_ssa_equiv:
       ssa_state_equiv vm r_orig r_ssa
 Proof
   rpt strip_tac >>
-  fs[inst_ssa_compatible_def, step_inst_def] >>
-  Cases_on `inst.inst_opcode` >> gvs[] >>
-  (* Most opcodes use exec_binop/unop/modop which can't produce Halt *)
-  TRY (gvs[exec_binop_not_halt] >> NO_TAC) >>
-  TRY (gvs[exec_unop_not_halt] >> NO_TAC) >>
-  TRY (gvs[exec_modop_not_halt] >> NO_TAC) >>
-  (* STOP, RETURN, SINK produce Halt - prove state equiv *)
-  TRY (irule halt_state_ssa_equiv >> simp[] >> NO_TAC) >>
-  (* Memory/storage/control ops - case split to show they don't halt *)
+  fs[inst_ssa_compatible_def] >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[step_inst_def, exec_binop_not_halt, exec_unop_not_halt,
+      exec_modop_not_halt, AllCaseEqs()] >>
+  TRY (irule halt_state_ssa_equiv >> simp[]) >>
+  TRY (
+    rename1 `eval_operand cond_op s_orig = SOME cond` >>
+    qexists_tac `halt_state s_ssa` >>
+    conj_tac >- (
+      qexists_tac `cond` >>
+      `eval_operand cond_op s_orig =
+       eval_operand (ssa_operand vm cond_op) s_ssa` by
+        (irule eval_operand_ssa_equiv >> simp[]) >>
+      gvs[]
+    ) >>
+    irule halt_state_ssa_equiv >> simp[]
+  ) >>
   rpt (CASE_TAC >> gvs[AllCaseEqs()])
 QED
 
@@ -249,6 +276,29 @@ Proof
   rw[exec_modop_def] >> rpt (CASE_TAC >> gvs[])
 QED
 
+(* Helper: RETURNDATACOPY revert conditions *)
+Theorem step_inst_returndatacopy_revert:
+  !inst s r.
+    inst.inst_opcode = RETURNDATACOPY /\
+    step_inst inst s = Revert r ==>
+    ?op_size op_offset op_destOffset size_val offset destOffset.
+      inst.inst_operands = [op_size; op_offset; op_destOffset] /\
+      eval_operand op_size s = SOME size_val /\
+      eval_operand op_offset s = SOME offset /\
+      eval_operand op_destOffset s = SOME destOffset /\
+      w2n offset + w2n size_val > LENGTH s.vs_returndata /\
+      r = revert_state s
+Proof
+  rpt strip_tac >>
+  fs[step_inst_def] >>
+  Cases_on `inst.inst_operands` >> gvs[AllCaseEqs()] >>
+  Cases_on `t` >> gvs[AllCaseEqs()] >>
+  Cases_on `t'` >> gvs[AllCaseEqs()] >>
+  Cases_on `t''` >> gvs[AllCaseEqs()] >>
+  qexistsl_tac [`h`, `h'`, `h''`, `size_val`, `offset`, `destOffset`] >>
+  gvs[]
+QED
+
 (* KEY LEMMA: Non-PHI instruction step that returns Revert.
    Similar to step_inst_halt_ssa_equiv but for Revert results. *)
 Theorem step_inst_revert_ssa_equiv:
@@ -261,121 +311,51 @@ Theorem step_inst_revert_ssa_equiv:
       ssa_state_equiv vm r_orig r_ssa
 Proof
   rpt strip_tac >>
-  fs[inst_ssa_compatible_def, step_inst_def] >>
-  Cases_on `inst.inst_opcode` >> gvs[] >>
-  (* Most opcodes use exec_binop/unop/modop which can't produce Revert *)
-  TRY (gvs[exec_binop_not_revert] >> NO_TAC) >>
-  TRY (gvs[exec_unop_not_revert] >> NO_TAC) >>
-  TRY (gvs[exec_modop_not_revert] >> NO_TAC) >>
-  (* REVERT produces Revert - prove state equiv *)
-  TRY (irule revert_state_ssa_equiv >> simp[] >> NO_TAC) >>
-  (* Memory/storage/control ops - case split to show they don't revert *)
-  rpt (CASE_TAC >> gvs[AllCaseEqs()])
-QED
-
-(* KEY LEMMA: Non-PHI instruction step preserves SSA equivalence.
- *
- * PROOF STRATEGY:
- * 1. Split on opcode (32 cases)
- * 2. For binop cases: expand exec_binop, use eval_operand_ssa_equiv,
- *    witness vm' = vm |+ (out, ssa_out), use update_var_ssa_equiv
- * 3. For unop/modop: similar pattern
- * 4. For memory/storage/control: use gvs[AllCaseEqs(), ssa_operand_def]
- *    with the corresponding _ssa_equiv helpers
- *)
-Theorem step_inst_non_phi_ssa_equiv:
-  !inst inst_ssa s_orig s_ssa vm r_orig.
-    ssa_state_equiv vm s_orig s_ssa /\
-    inst_ssa_compatible vm inst inst_ssa /\
-    inst.inst_opcode <> PHI /\
-    step_inst inst s_orig = OK r_orig ==>
-    ?r_ssa vm'.
-      step_inst inst_ssa s_ssa = OK r_ssa /\
-      ssa_state_equiv vm' r_orig r_ssa
-Proof
-  rpt strip_tac >>
-  fs[inst_ssa_compatible_def, step_inst_def] >>
+  fs[inst_ssa_compatible_def] >>
   Cases_on `inst.inst_opcode` >>
-  (* First simplify to expand each opcode case *)
-  simp[] >>
-  (* Now expand all case expressions - but NOT exec_* defs yet for non-arith cases *)
-  gvs[AllCaseEqs()] >>
-  (* Handle each opcode case with specific tactics *)
-  let
-    (* Get eval_operand equality for transformed operands *)
-    val get_eval_eq = drule_all eval_operand_ssa_equiv >> strip_tac
-    (* State equiv finish: use rename to avoid variable name clashes *)
-    val state_equiv_finish =
-      Cases_on `FLOOKUP vm out` >> gvs[] >| [
-        (* NONE case: ssa_out = out *)
-        qexists_tac `vm |+ (out, out)` >> irule update_var_ssa_equiv >> gvs[],
-        (* SOME case: rename to avoid clash with operand vars *)
-        rename1 `FLOOKUP vm out = SOME ssa_out` >>
-        qexists_tac `vm |+ (out, ssa_out)` >> irule update_var_ssa_equiv >> gvs[]
-      ]
-    (* Binop/unop/modop: expand def and solve *)
-    val op_tac =
-      gvs[exec_binop_def, exec_unop_def, exec_modop_def, AllCaseEqs()] >>
-      get_eval_eq >> gvs[] >> state_equiv_finish
-    (* Load tactic: MLOAD/SLOAD/TLOAD - use load equivalence theorems *)
-    val load_tac =
-      get_eval_eq >> gvs[] >>
-      TRY (drule mload_ssa_equiv >> strip_tac >> gvs[]) >>
-      TRY (drule sload_ssa_equiv >> strip_tac >> gvs[]) >>
-      TRY (drule tload_ssa_equiv >> strip_tac >> gvs[]) >>
-      state_equiv_finish
-    (* Store tactic: MSTORE/SSTORE/TSTORE - no output var, vm unchanged *)
-    val store_tac =
-      get_eval_eq >> gvs[] >>
-      qexists_tac `vm` >>
-      TRY (irule mstore_ssa_equiv >> simp[]) >>
-      TRY (irule sstore_ssa_equiv >> simp[]) >>
-      TRY (irule tstore_ssa_equiv >> simp[])
-    (* Jump tactic: JMP - labels aren't renamed, vm unchanged *)
-    val jmp_tac =
-      gvs[ssa_operand_def] >>
-      qexists_tac `vm` >>
-      irule jump_to_ssa_equiv >> simp[]
-    (* JNZ nonzero case tactic *)
-    val jnz_nonzero_tac =
-      get_eval_eq >> gvs[] >>
-      qexists_tac `jump_to if_nonzero s_ssa` >>
-      qexists_tac `vm` >>
-      conj_tac >- (
-        qexists_tac `if_nonzero` >> simp[ssa_operand_def] >>
-        qexists_tac `if_zero` >> simp[ssa_operand_def] >>
-        qexists_tac `cond` >> gvs[]
-      ) >>
-      irule jump_to_ssa_equiv >> simp[]
-    (* JNZ zero case tactic *)
-    val jnz_zero_tac =
-      get_eval_eq >> gvs[] >>
-      qexists_tac `jump_to if_zero s_ssa` >>
-      qexists_tac `vm` >>
-      conj_tac >- (
-        qexists_tac `if_nonzero` >> simp[ssa_operand_def] >>
-        qexists_tac `if_zero` >> simp[ssa_operand_def] >>
-        qexists_tac `0w` >> gvs[]
-      ) >>
-      irule jump_to_ssa_equiv >> simp[]
-    (* NOP tactic: no operands, no output, vm unchanged
-       After gvs[AllCaseEqs()], NOP case has ssa_state_equiv vm r_orig s_ssa
-       in assumptions and goal is ∃vm'. ssa_state_equiv vm' r_orig s_ssa *)
-    val nop_tac =
-      qexists_tac `vm` >> gvs[]
-    (* Debug fallback - just leave the goal for debugging *)
-    val fallback_tac = all_tac
-    (* Wrap tactics so they only succeed if they close the goal *)
-    fun close_or_fail tac (goal as (asl, w)) =
-      let val (subgoals, prf) = tac goal
-      in if null subgoals then (subgoals, prf)
-         else raise mk_HOL_ERR "ssaBlock" "close_or_fail" "tactic didn't close goal"
-      end
-  in
-    FIRST [close_or_fail op_tac, close_or_fail load_tac, close_or_fail store_tac,
-           close_or_fail jmp_tac, close_or_fail jnz_nonzero_tac, close_or_fail jnz_zero_tac,
-           close_or_fail nop_tac, fallback_tac]
-  end
+  (* RETURNDATACOPY out-of-bounds case *)
+  TRY (
+    `inst.inst_opcode = RETURNDATACOPY` by simp[] >>
+    drule_all step_inst_returndatacopy_revert >> strip_tac >>
+    qexists_tac `revert_state s_ssa` >>
+    conj_tac >- (
+      simp[step_inst_def] >>
+      rpt (CASE_TAC >> gvs[AllCaseEqs()]) >>
+      qexists_tac `size_val` >>
+      qexists_tac `offset` >>
+      qexists_tac `destOffset` >>
+      `eval_operand op_size s_orig =
+       eval_operand (ssa_operand vm op_size) s_ssa` by
+        (irule eval_operand_ssa_equiv >> simp[]) >>
+      `eval_operand op_offset s_orig =
+       eval_operand (ssa_operand vm op_offset) s_ssa` by
+        (irule eval_operand_ssa_equiv >> simp[]) >>
+      `eval_operand op_destOffset s_orig =
+       eval_operand (ssa_operand vm op_destOffset) s_ssa` by
+        (irule eval_operand_ssa_equiv >> simp[]) >>
+      gvs[ssa_state_equiv_def]
+    ) >>
+    irule revert_state_ssa_equiv >> simp[]
+  ) >>
+  gvs[step_inst_def, exec_binop_not_revert, exec_unop_not_revert,
+      exec_modop_not_revert, AllCaseEqs()] >>
+  (* REVERT / ASSERT (cond=0) cases *)
+  TRY (irule revert_state_ssa_equiv >> simp[]) >>
+  TRY (
+    rename1 `eval_operand cond_op s_orig = SOME cond` >>
+    qexists_tac `revert_state s_ssa` >>
+    conj_tac >- (
+      qexists_tac `cond` >>
+      `eval_operand cond_op s_orig =
+       eval_operand (ssa_operand vm cond_op) s_ssa` by
+        (irule eval_operand_ssa_equiv >> simp[]) >>
+      gvs[]
+    ) >>
+    irule revert_state_ssa_equiv >> simp[]
+  ) >>
+  rpt (CASE_TAC >> gvs[AllCaseEqs()]) >>
+  TRY (metis_tac[step_inst_returndatacopy_revert, eval_operand_ssa_equiv,
+                 revert_state_ssa_equiv, ssa_state_equiv_def])
 QED
 
 (* ==========================================================================
@@ -1027,6 +1007,25 @@ Proof
   end
 QED
 
+(* KEY LEMMA: Non-PHI instruction step preserves SSA equivalence (single-output). *)
+Theorem step_inst_non_phi_ssa_equiv:
+  !inst inst_ssa s_orig s_ssa vm r_orig.
+    ssa_state_equiv vm s_orig s_ssa /\
+    inst_ssa_compatible vm inst inst_ssa /\
+    inst.inst_opcode <> PHI /\
+    LENGTH inst.inst_outputs <= 1 /\
+    step_inst inst s_orig = OK r_orig ==>
+    ?r_ssa vm'.
+      step_inst inst_ssa s_ssa = OK r_ssa /\
+      ssa_state_equiv vm' r_orig r_ssa
+Proof
+  rpt strip_tac >>
+  `ssa_result_equiv vm (step_inst inst s_orig) (step_inst inst_ssa s_ssa)` by
+    (irule step_inst_result_ssa_equiv >> simp[]) >>
+  Cases_on `step_inst inst_ssa s_ssa` >> gvs[ssa_result_equiv_def] >>
+  qexists_tac `r` >> qexists_tac `vm` >> simp[]
+QED
+
 (* ==========================================================================
    Block Execution Equivalence
    ========================================================================== *)
@@ -1205,4 +1204,3 @@ Proof
     Cases_on `q` >> gvs[ssa_result_equiv_def]
   ]
 QED
-
