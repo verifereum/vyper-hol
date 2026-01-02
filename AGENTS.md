@@ -2,24 +2,14 @@
 
 **IMPORTANT: After conversation compaction, ALWAYS read this file (CLAUDE.md or AGENTS.md) and PLAN.md to restore context, then IMMEDIATELY continue working. Do not summarize or wait for input.**
 
-## CRITICAL: Tool Usage
+## Tool Usage (Prefer, Not Mandate)
 
-**NEVER use bash for file operations.** Use the dedicated tools instead:
-- **Read tool** for ALL file reading (not `cat`, `head`, `tail`, `less`)
-- **Grep tool** for searching file contents (not `grep`, `rg`, or `Search` with paths)
-- **Write/Edit tools** for file modifications (not `echo`, `sed`, `awk`)
-- **mcp tools** for hol operations - `hol_send`, `holmake` etc.
+Prefer dedicated Read/Grep/Edit tools for file operations when available.
+If they are not available in the current environment, it is acceptable to use:
+- read-only shell commands (rg/grep/cat/head/tail) for inspection
+- apply_patch or editor tools for modifications (avoid shell writes)
 
-Only use Bash for:
-- Git operations (`git grep`, `git status`, etc.)
-
-**Why:** Bash file operations require permission prompts. The dedicated tools don't.
-
-**IMPORTANT:** Check `.claude/settings.local.json` for allowed Bash patterns. Strongly prefer using those exact patterns - they won't require permission prompts. Only deviate if you absolutely cannot accomplish the task with the allowed patterns.
-
-**Don't prepend commands:** If you chain commands with `&&`, the permission is matched against the first command. Don't prepend `cd`, `touch`, `export`, etc. before allowed commands - it breaks permission matching.
-
-**No `time` or `timeout` wrappers:** The Bash tool already reports execution time in its output and has a `timeout` parameter. Don't use `time` or `timeout` commands - they break permission matching.
+Avoid destructive commands unless explicitly requested.
 
 ## Completion Standard
 
