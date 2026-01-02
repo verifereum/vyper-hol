@@ -68,6 +68,7 @@ Definition ssa_state_equiv_def:
     s_orig.vs_memory = s_ssa.vs_memory /\
     s_orig.vs_storage = s_ssa.vs_storage /\
     s_orig.vs_transient = s_ssa.vs_transient /\
+    s_orig.vs_returndata = s_ssa.vs_returndata /\
     s_orig.vs_current_bb = s_ssa.vs_current_bb /\
     s_orig.vs_inst_idx = s_ssa.vs_inst_idx /\
     s_orig.vs_prev_bb = s_ssa.vs_prev_bb /\
@@ -313,4 +314,3 @@ Proof
   drule_all var_map_equiv_update_same_vm >>
   simp[update_var_def]
 QED
-

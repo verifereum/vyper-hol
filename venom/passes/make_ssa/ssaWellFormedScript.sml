@@ -52,18 +52,39 @@ Definition no_entry_phi_def:
       inst.inst_opcode <> PHI
 End
 
+(* TOP-LEVEL: No PHI instructions in any block *)
+Definition no_phi_fn_def:
+  no_phi_fn fn <=>
+    !bb idx inst.
+      MEM bb fn.fn_blocks /\
+      get_instruction bb idx = SOME inst ==>
+      inst.inst_opcode <> PHI
+End
+
+(* TOP-LEVEL: Each instruction has at most one output *)
+Definition single_output_fn_def:
+  single_output_fn fn <=>
+    !bb idx inst.
+      MEM bb fn.fn_blocks /\
+      get_instruction bb idx = SOME inst ==>
+      LENGTH inst.inst_outputs <= 1
+End
+
 (* TOP-LEVEL: All blocks are reachable (have valid labels) *)
 Definition blocks_reachable_def:
   blocks_reachable fn <=>
     !bb. MEM bb fn.fn_blocks ==> bb.bb_label <> ""
 End
 
-(* TOP-LEVEL: Well-formed input function *)
+(* TOP-LEVEL: Well-formed input function
+   (no PHIs, single-output instructions, reachable blocks) *)
 Definition wf_input_fn_def:
   wf_input_fn fn <=>
     fn.fn_blocks <> [] /\
     wf_phi_operands fn /\
     no_entry_phi fn /\
+    no_phi_fn fn /\
+    single_output_fn fn /\
     blocks_reachable fn
 End
 
@@ -265,4 +286,3 @@ Theorem ssa_unique_defs_empty:
 Proof
   rw[ssa_unique_defs_def, fn_outputs_def, ALL_DISTINCT]
 QED
-
