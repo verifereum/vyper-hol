@@ -944,7 +944,9 @@ QED
  *)
 Theorem transform_function_correct:
   !fn s.
-    fresh_vars_not_in_function fn ==>
+    fresh_vars_not_in_function fn /\
+    s.vs_inst_idx = 0 /\
+    ~s.vs_halted ==>
     let fn' = transform_function fn in
     let fresh = fresh_vars_in_function fn in
     (* Part 1: Termination equivalence *)
@@ -958,7 +960,25 @@ Theorem transform_function_correct:
         (run_function fuel fn s)
         (run_function fuel' fn' s))
 Proof
-  rw[LET_THM] >> cheat
+  rw[LET_THM]
+  >- (
+    EQ_TAC
+    >- (strip_tac >> drule_all run_function_forward_simulation >>
+        simp[LET_THM] >> metis_tac[])
+    >- (strip_tac >> drule_all run_function_backward_terminates >>
+        simp[LET_THM] >> metis_tac[])
+  )
+  >- (
+    `run_function (fuel + fuel') fn s = run_function fuel fn s` by
+      (irule run_function_fuel_mono >> simp[]) >>
+    `run_function (fuel' + fuel) (transform_function fn) s =
+     run_function fuel' (transform_function fn) s` by
+      (irule run_function_fuel_mono >> simp[]) >>
+    `fuel + fuel' = fuel' + fuel` by decide_tac >>
+    `terminates (run_function (fuel + fuel') fn s)` by metis_tac[] >>
+    qspecl_then [`fuel + fuel'`, `fn`, `s`] mp_tac run_function_forward_simulation >>
+    simp[LET_THM] >> strip_tac >> gvs[]
+  )
 QED
 
 (*
@@ -968,6 +988,8 @@ QED
 Theorem transform_terminates_forward:
   !fn s fuel.
     fresh_vars_not_in_function fn /\
+    s.vs_inst_idx = 0 /\
+    ~s.vs_halted /\
     terminates (run_function fuel fn s) ==>
     ?fuel'. terminates (run_function fuel' (transform_function fn) s)
 Proof
@@ -985,6 +1007,8 @@ QED
 Theorem transform_terminates_backward:
   !fn s fuel'.
     fresh_vars_not_in_function fn /\
+    s.vs_inst_idx = 0 /\
+    ~s.vs_halted /\
     terminates (run_function fuel' (transform_function fn) s) ==>
     ?fuel. terminates (run_function fuel fn s)
 Proof
@@ -1062,7 +1086,9 @@ Theorem transform_context_correct:
     let fresh = fresh_vars_in_context ctx in
     !fn fn' s.
       lookup_function entry ctx.ctx_functions = SOME fn /\
-      lookup_function entry ctx'.ctx_functions = SOME fn' ==>
+      lookup_function entry ctx'.ctx_functions = SOME fn' /\
+      s.vs_inst_idx = 0 /\
+      ~s.vs_halted ==>
       (* Part 1: Termination equivalence *)
       ((?fuel. terminates (run_function fuel fn s)) <=>
        (?fuel'. terminates (run_function fuel' fn' s))) /\
@@ -1142,11 +1168,13 @@ Theorem revert_to_assert_pass_correct:
     ?fn fn'.
       lookup_function entry ctx.ctx_functions = SOME fn /\
       lookup_function entry ctx'.ctx_functions = SOME fn' /\
-      (* Termination equivalence *)
-      ((!s. (?fuel. terminates (run_function fuel fn s)) <=>
-            (?fuel'. terminates (run_function fuel' fn' s)))) /\
+      (* Termination equivalence (for states starting at block beginning) *)
+      ((!s. s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
+            ((?fuel. terminates (run_function fuel fn s)) <=>
+             (?fuel'. terminates (run_function fuel' fn' s))))) /\
       (* Result equivalence when both terminate *)
       (!s fuel fuel'.
+        s.vs_inst_idx = 0 /\ ~s.vs_halted /\
         terminates (run_function fuel fn s) /\
         terminates (run_function fuel' fn' s) ==>
         result_equiv_except fresh
