@@ -8,9 +8,9 @@
 - **Read tool** for ALL file reading (not `cat`, `head`, `tail`, `less`)
 - **Grep tool** for searching file contents (not `grep`, `rg`, or `Search` with paths)
 - **Write/Edit tools** for file modifications (not `echo`, `sed`, `awk`)
+- **mcp tools** for hol operations - `hol_send`, `holmake` etc.
 
 Only use Bash for:
-- Running `Holmake` builds
 - Git operations (`git grep`, `git status`, etc.)
 
 **Why:** Bash file operations require permission prompts. The dedicated tools don't.
@@ -55,46 +55,8 @@ Deleting proof code to replace with cheat is NEVER acceptable.
 ## Project Structure
 
 ```
-venom-semantics/theories/     # HOL4 theory files
-├── venomStateScript.sml      # State definitions (~200 LOC)
-├── venomInstScript.sml       # Instruction definitions (~300 LOC)
-├── venomSemScript.sml        # Operational semantics (~450 LOC)
-│
-├── dfgDefsScript.sml         # DFG types, build, well-formedness (~300 LOC)
-├── dfgOriginsScript.sml      # Origin computation, phi_single_origin (~400 LOC)
-│
-├── stateEquivScript.sml      # State equivalence definitions (~300 LOC)
-├── execEquivScript.sml       # Execution equivalence theorems (~400 LOC)
-│
-├── phiTransformScript.sml    # PHI elimination transformations (~220 LOC)
-├── phiWellFormedScript.sml   # Well-formedness definitions (~250 LOC)
-├── phiBlockScript.sml        # Block-level correctness (~480 LOC)
-└── phiFunctionScript.sml     # Function-level correctness (~230 LOC)
-```
-
-### File Dependencies
-```
-venomStateScript.sml
-    ↓
-venomInstScript.sml
-    ↓
-venomSemScript.sml
-    ↓
-dfgDefsScript.sml
-    ↓
-dfgOriginsScript.sml ←──────────────┐
-    ↓                               │
-stateEquivScript.sml                │
-    ↓                               │
-execEquivScript.sml                 │
-    ↓                               │
-phiTransformScript.sml ─────────────┤
-    ↓                               │
-phiWellFormedScript.sml             │
-    ↓                               │
-phiBlockScript.sml                  │
-    ↓                               │
-phiFunctionScript.sml ──────────────┘
+venom/  # venom base definitions
+venom/passes/  # directory for each pass
 ```
 
 ### Design Principles
@@ -104,6 +66,7 @@ phiFunctionScript.sml ──────────────┘
 - **Modular file sizes**: Aim for 100-500 LOC per file (soft limit)
 
 ### File Organization Guidelines (soft limits)
+- **50 LINES PER PROOF MAX** otherwise you have trouble keeping track.
 - **~10-15 files max per directory** - use subdirectories if significantly more
 - **~100-500 LOC per file** - split larger files by logical section when practical
 - **Clear dependency chains** - avoid circular dependencies between files
@@ -115,9 +78,6 @@ phiFunctionScript.sml ──────────────┘
 
 ## Building
 
-```bash
-VFMDIR=/home/ubuntu/verifereum Holmake --qof
-```
 
 **Build time:** Keep under 30s. If longer, refactor the proof.
 
