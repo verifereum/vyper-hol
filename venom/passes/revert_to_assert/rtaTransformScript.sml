@@ -408,39 +408,6 @@ Definition terminates_def:
 End
 
 (*
- * Main function-level correctness theorem.
- *
- * PRECONDITION: fresh_vars_not_in_function fn
- * This STATIC property says the original function doesn't mention fresh vars.
- * Must be verified before transformation (checked at compiler level).
- *
- * Part 1: Termination equivalence
- *   - If original terminates with some fuel, transformed terminates with some fuel
- *   - If transformed terminates with some fuel, original terminates with some fuel
- *
- * Part 2: Result equivalence
- *   - When both terminate (with any fuels), results are equivalent
- *)
-Theorem transform_function_correct:
-  !fn s.
-    fresh_vars_not_in_function fn ==>
-    let fn' = transform_function fn in
-    let fresh = fresh_vars_in_function fn in
-    (* Part 1: Termination equivalence *)
-    ((?fuel. terminates (run_function fuel fn s)) <=>
-     (?fuel'. terminates (run_function fuel' fn' s))) /\
-    (* Part 2: Result equivalence when both terminate *)
-    (!fuel fuel'.
-      terminates (run_function fuel fn s) /\
-      terminates (run_function fuel' fn' s) ==>
-      result_equiv_except fresh
-        (run_function fuel fn s)
-        (run_function fuel' fn' s))
-Proof
-  rw[LET_THM] >> cheat
-QED
-
-(*
  * Generalized block relation for any starting index.
  *
  * The precondition EVERY ensures all instructions before vs_inst_idx
@@ -609,40 +576,6 @@ Proof
 QED
 
 (*
- * Corollary: Forward direction of termination equivalence.
- * If original terminates, transformed terminates.
- *)
-Theorem transform_terminates_forward:
-  !fn s fuel.
-    fresh_vars_not_in_function fn /\
-    terminates (run_function fuel fn s) ==>
-    ?fuel'. terminates (run_function fuel' (transform_function fn) s)
-Proof
-  rw[] >>
-  (* Direct corollary of transform_function_correct Part 1 *)
-  qspecl_then [`fn`, `s`] mp_tac transform_function_correct >>
-  simp[LET_THM] >> strip_tac >>
-  metis_tac[]
-QED
-
-(*
- * Corollary: Backward direction of termination equivalence.
- * If transformed terminates, original terminates.
- *)
-Theorem transform_terminates_backward:
-  !fn s fuel'.
-    fresh_vars_not_in_function fn /\
-    terminates (run_function fuel' (transform_function fn) s) ==>
-    ?fuel. terminates (run_function fuel fn s)
-Proof
-  rw[] >>
-  (* Direct corollary of transform_function_correct Part 1 *)
-  qspecl_then [`fn`, `s`] mp_tac transform_function_correct >>
-  simp[LET_THM] >> strip_tac >>
-  metis_tac[]
-QED
-
-(*
  * Helper: state_equiv_except propagates through original function.
  *
  * WHY: Original function doesn't use fresh vars, so differing only
@@ -694,6 +627,73 @@ Proof
   Cases_on `v.vs_halted` >> gvs[] >>
   (* gvs uses IH for halted=F; halted=T case needs execution_equiv_except *)
   fs[state_equiv_except_def]]
+QED
+
+(*
+ * Main function-level correctness theorem.
+ *
+ * PRECONDITION: fresh_vars_not_in_function fn
+ * This STATIC property says the original function doesn't mention fresh vars.
+ * Must be verified before transformation (checked at compiler level).
+ *
+ * Part 1: Termination equivalence
+ *   - If original terminates with some fuel, transformed terminates with some fuel
+ *   - If transformed terminates with some fuel, original terminates with some fuel
+ *
+ * Part 2: Result equivalence
+ *   - When both terminate (with any fuels), results are equivalent
+ *)
+Theorem transform_function_correct:
+  !fn s.
+    fresh_vars_not_in_function fn ==>
+    let fn' = transform_function fn in
+    let fresh = fresh_vars_in_function fn in
+    (* Part 1: Termination equivalence *)
+    ((?fuel. terminates (run_function fuel fn s)) <=>
+     (?fuel'. terminates (run_function fuel' fn' s))) /\
+    (* Part 2: Result equivalence when both terminate *)
+    (!fuel fuel'.
+      terminates (run_function fuel fn s) /\
+      terminates (run_function fuel' fn' s) ==>
+      result_equiv_except fresh
+        (run_function fuel fn s)
+        (run_function fuel' fn' s))
+Proof
+  rw[LET_THM] >> cheat
+QED
+
+(*
+ * Corollary: Forward direction of termination equivalence.
+ * If original terminates, transformed terminates.
+ *)
+Theorem transform_terminates_forward:
+  !fn s fuel.
+    fresh_vars_not_in_function fn /\
+    terminates (run_function fuel fn s) ==>
+    ?fuel'. terminates (run_function fuel' (transform_function fn) s)
+Proof
+  rw[] >>
+  (* Direct corollary of transform_function_correct Part 1 *)
+  qspecl_then [`fn`, `s`] mp_tac transform_function_correct >>
+  simp[LET_THM] >> strip_tac >>
+  metis_tac[]
+QED
+
+(*
+ * Corollary: Backward direction of termination equivalence.
+ * If transformed terminates, original terminates.
+ *)
+Theorem transform_terminates_backward:
+  !fn s fuel'.
+    fresh_vars_not_in_function fn /\
+    terminates (run_function fuel' (transform_function fn) s) ==>
+    ?fuel. terminates (run_function fuel fn s)
+Proof
+  rw[] >>
+  (* Direct corollary of transform_function_correct Part 1 *)
+  qspecl_then [`fn`, `s`] mp_tac transform_function_correct >>
+  simp[LET_THM] >> strip_tac >>
+  metis_tac[]
 QED
 
 (* ==========================================================================
