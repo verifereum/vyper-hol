@@ -32,30 +32,7 @@
 
 Theory rtaTransform
 Ancestors
-  rtaCorrect rtaProps rtaDefs stateEquiv venomSemProps venomSem venomInst venomState list rich_list
-
-(* ==========================================================================
-   Block-Level Correctness
-   ========================================================================== *)
-
-(* NOTE: General step_in_block/run_block helpers are in venomSemPropsTheory:
- * - step_in_block_fn_irrelevant
- * - run_block_fn_irrelevant
- * - step_in_block_increments_idx
- * - run_block_OK_not_halted
- * - run_block_OK_inst_idx_0
- * - step_in_block_prefix_same
- * - lookup_block_MEM
- * - lookup_function_MEM
- *
- * NOTE: transform_block_insts helper theorems are now in rtaPropsTheory:
- * - transform_block_insts_TAKE_DROP
- * - transform_block_insts_TAKE
- * - transform_block_insts_EL_transformed
- * - transform_block_insts_length_ge
- * - transform_block_insts_length_pattern1
- * - transform_block_insts_length_pattern2
- *)
+  rtaPattern1 rtaProps rtaDefs stateEquiv venomSemProps venomSem venomInst venomState list rich_list
 
 (* ==========================================================================
    JNZ Transformation Step Lemmas
@@ -263,8 +240,6 @@ Proof
   rw[transform_function_def] >> irule lookup_block_MAP >> simp[]
 QED
 
-(* NOTE: lookup_block_MEM is now in venomSemPropsTheory *)
-
 (* ==========================================================================
    Function-Level Correctness: Bidirectional Formulation
 
@@ -285,8 +260,6 @@ QED
    - Chain: run_function fn v ≈ run_function fn v'
    - Then: apply IH on v' for transformed function
    ========================================================================== *)
-
-(* NOTE: terminates_def is now in rtaDefsTheory *)
 
 (*
  * Generalized block relation for any starting index.
@@ -937,8 +910,6 @@ Theorem lookup_function_transform_context:
 Proof
   rw[transform_context_def] >> irule lookup_function_MAP >> simp[]
 QED
-
-(* NOTE: lookup_function_MEM is now in venomSemPropsTheory *)
 
 (*
  * Main context correctness theorem (bidirectional formulation).
