@@ -112,7 +112,7 @@ Proof
     (* Not halted - use run_function_state_equiv to bridge state_equiv *)
     `?r2. run_function fuel func v' = r2 /\ result_equiv (run_function fuel func v) r2` by (
       qspecl_then [`fuel`, `func`, `v`, `v'`, `run_function fuel func v`]
-        mp_tac (DB.fetch "-" "run_function_state_equiv") >> simp[]
+        mp_tac run_function_state_equiv >> simp[]
     ) >>
     irule result_equiv_trans >> qexists_tac `r2` >> simp[] >>
     (* Use IH - first prove v'.vs_prev_bb <> NONE *)
