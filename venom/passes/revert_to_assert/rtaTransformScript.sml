@@ -44,6 +44,9 @@ Ancestors
  * - step_in_block_increments_idx
  * - run_block_OK_not_halted
  * - run_block_OK_inst_idx_0
+ * - step_in_block_prefix_same
+ * - lookup_block_MEM
+ * - lookup_function_MEM
  *
  * NOTE: transform_block_insts helper theorems are now in rtaPropsTheory:
  * - transform_block_insts_TAKE_DROP
@@ -53,31 +56,6 @@ Ancestors
  * - transform_block_insts_length_pattern1
  * - transform_block_insts_length_pattern2
  *)
-
-(*
- * Helper: step_in_block is the same for two blocks with matching prefix.
- *
- * WHY THIS IS TRUE: step_in_block uses get_instruction to fetch current instruction.
- * If TAKE (SUC n) matches and we're at index n, then EL n is the same.
- * So step_in_block executes the same instruction on both.
- *)
-Theorem step_in_block_prefix_same:
-  !fn bb1 bb2 s n.
-    TAKE (SUC n) bb1.bb_instructions = TAKE (SUC n) bb2.bb_instructions /\
-    s.vs_inst_idx = n /\
-    n < LENGTH bb1.bb_instructions /\
-    n < LENGTH bb2.bb_instructions
-  ==>
-    step_in_block fn bb1 s = step_in_block fn bb2 s
-Proof
-  rw[step_in_block_def, get_instruction_def] >>
-  `EL s.vs_inst_idx bb1.bb_instructions = EL s.vs_inst_idx bb2.bb_instructions` by (
-    `EL s.vs_inst_idx (TAKE (SUC s.vs_inst_idx) bb1.bb_instructions) =
-     EL s.vs_inst_idx (TAKE (SUC s.vs_inst_idx) bb2.bb_instructions)` by simp[] >>
-    metis_tac[EL_TAKE, DECIDE ``n < SUC n``]
-  ) >>
-  simp[]
-QED
 
 (* ==========================================================================
    JNZ Transformation Step Lemmas
@@ -285,16 +263,7 @@ Proof
   rw[transform_function_def] >> irule lookup_block_MAP >> simp[]
 QED
 
-(*
- * Helper: If lookup_block succeeds, the block is in the list.
- *)
-Theorem lookup_block_MEM:
-  !lbl bbs bb.
-    lookup_block lbl bbs = SOME bb ==> MEM bb bbs
-Proof
-  Induct_on `bbs` >- simp[lookup_block_def] >>
-  simp[lookup_block_def] >> rw[] >> metis_tac[]
-QED
+(* NOTE: lookup_block_MEM is now in venomSemPropsTheory *)
 
 (* ==========================================================================
    Function-Level Correctness: Bidirectional Formulation
@@ -317,12 +286,7 @@ QED
    - Then: apply IH on v' for transformed function
    ========================================================================== *)
 
-(*
- * Predicate: execution terminates (not Error).
- *)
-Definition terminates_def:
-  terminates r <=> case r of Error _ => F | _ => T
-End
+(* NOTE: terminates_def is now in rtaDefsTheory *)
 
 (*
  * Generalized block relation for any starting index.
@@ -974,14 +938,7 @@ Proof
   rw[transform_context_def] >> irule lookup_function_MAP >> simp[]
 QED
 
-(*
- * Helper: lookup_function returning SOME implies MEM.
- *)
-Theorem lookup_function_MEM:
-  !name fns fn. lookup_function name fns = SOME fn ==> MEM fn fns
-Proof
-  gen_tac >> Induct >> rw[lookup_function_def] >> gvs[AllCaseEqs()]
-QED
+(* NOTE: lookup_function_MEM is now in venomSemPropsTheory *)
 
 (*
  * Main context correctness theorem (bidirectional formulation).
