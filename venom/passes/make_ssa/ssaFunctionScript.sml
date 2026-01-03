@@ -214,35 +214,36 @@ Proof
   CONV_TAC (RATOR_CONV (RAND_CONV (ONCE_REWRITE_CONV [run_function_def]))) >>
   CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_function_def])) >>
   simp[] >>
-  Cases_on `lookup_block s_orig.vs_current_bb fn.fn_blocks` >> gvs[]
-  >- (
-    `blocks_ssa_compatible vm fn.fn_blocks fn_ssa.fn_blocks` by
-      fs[fn_ssa_compatible_def] >>
-    `lookup_block s_orig.vs_current_bb fn_ssa.fn_blocks = NONE` by (
-      irule lookup_block_ssa_compatible_none >> simp[]
-    ) >>
-    simp[ssa_result_equiv_def]
-  ) >>
-  rename1 `lookup_block _ _ = SOME bb` >>
+  Cases_on `lookup_block s_ssa.vs_current_bb fn.fn_blocks` >| [
+    (simp[] >>
+     `blocks_ssa_compatible vm fn.fn_blocks fn_ssa.fn_blocks` by
+       fs[fn_ssa_compatible_def] >>
+     drule_all lookup_block_ssa_compatible_none >>
+     simp[ssa_result_equiv_def]),
+    (rename1 `lookup_block s_ssa.vs_current_bb fn.fn_blocks = SOME bb` >>
+     all_tac)
+  ] >>
   `blocks_ssa_compatible vm fn.fn_blocks fn_ssa.fn_blocks` by
     fs[fn_ssa_compatible_def] >>
   drule_all lookup_block_ssa_compatible >> strip_tac >>
-  gvs[] >>
   `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `no_phi_fn fn` by fs[wf_input_fn_def] >>
   `!idx. idx < LENGTH bb.bb_instructions ==>
          (EL idx bb.bb_instructions).inst_opcode <> PHI` by (
     rpt strip_tac >>
     `get_instruction bb idx = SOME (EL idx bb.bb_instructions)` by
       simp[get_instruction_def] >>
-    fs[wf_input_fn_def, no_phi_fn_def]
+    metis_tac[no_phi_fn_def]
   ) >>
+  `single_output_fn fn` by fs[wf_input_fn_def] >>
   `!idx. idx < LENGTH bb.bb_instructions ==>
          LENGTH (EL idx bb.bb_instructions).inst_outputs <= 1` by (
     rpt strip_tac >>
     `get_instruction bb idx = SOME (EL idx bb.bb_instructions)` by
       simp[get_instruction_def] >>
-    fs[wf_input_fn_def, single_output_fn_def]
+    metis_tac[single_output_fn_def]
   ) >>
+  gvs[] >>
   `ssa_result_equiv vm (run_block fn bb s_orig) (run_block fn_ssa bb_ssa s_ssa)` by (
     irule run_block_ssa_equiv >> simp[]
   ) >>

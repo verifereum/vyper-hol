@@ -69,6 +69,10 @@ Definition ssa_state_equiv_def:
     s_orig.vs_storage = s_ssa.vs_storage /\
     s_orig.vs_transient = s_ssa.vs_transient /\
     s_orig.vs_returndata = s_ssa.vs_returndata /\
+    s_orig.vs_accounts = s_ssa.vs_accounts /\
+    s_orig.vs_call_ctx = s_ssa.vs_call_ctx /\
+    s_orig.vs_tx_ctx = s_ssa.vs_tx_ctx /\
+    s_orig.vs_block_ctx = s_ssa.vs_block_ctx /\
     s_orig.vs_current_bb = s_ssa.vs_current_bb /\
     s_orig.vs_inst_idx = s_ssa.vs_inst_idx /\
     s_orig.vs_prev_bb = s_ssa.vs_prev_bb /\
@@ -175,6 +179,17 @@ Theorem mstore_ssa_equiv:
     ssa_state_equiv vm (mstore offset value s_orig) (mstore offset value s_ssa)
 Proof
   rw[ssa_state_equiv_def, var_map_equiv_def, mstore_def, lookup_var_def]
+QED
+
+Theorem write_memory_with_expansion_ssa_equiv:
+  !vm s_orig s_ssa offset bytes.
+    ssa_state_equiv vm s_orig s_ssa ==>
+    ssa_state_equiv vm
+      (write_memory_with_expansion offset bytes s_orig)
+      (write_memory_with_expansion offset bytes s_ssa)
+Proof
+  rw[ssa_state_equiv_def, var_map_equiv_def,
+     write_memory_with_expansion_def, lookup_var_def]
 QED
 
 Theorem sstore_ssa_equiv:

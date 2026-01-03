@@ -479,6 +479,47 @@ Proof
   rw[ssa_result_equiv_def]
 QED
 
+(* Helper: expand option-pair case to nested cases. *)
+Theorem option_pair_case:
+  !x y e f.
+    (case (x,y) of (SOME a, SOME b) => f a b | _ => e) =
+    (case x of NONE => e | SOME a => case y of NONE => e | SOME b => f a b)
+Proof
+  Cases_on `x` >> Cases_on `y` >> simp[]
+QED
+
+(* Helper: expand option-triple case to nested cases. *)
+Theorem option_triple_case:
+  !x y z e f.
+    (case (x,y,z) of
+       (NONE,v3) => e
+     | (SOME a,NONE,v9) => e
+     | (SOME a,SOME b,NONE) => e
+     | (SOME a,SOME b,SOME c) => f a b c) =
+    (case x of
+       NONE => e
+     | SOME a =>
+         case y of
+           NONE => e
+         | SOME b =>
+             case z of
+               NONE => e
+             | SOME c => f a b c)
+Proof
+  Cases_on `x` >> Cases_on `y` >> Cases_on `z` >> simp[]
+QED
+
+(* Helper: collapse []/singleton/longer list cases into singleton/default. *)
+Theorem case_list_singleton:
+  !xs e f.
+    (case xs of [] => e | [x] => f x | x::y::zs => e) =
+    (case xs of [x] => f x | _ => e)
+Proof
+  Cases_on `xs` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `t'` >> simp[]
+QED
+
 (* Helper: finishing tactic for output preconditions.
    When goal has form:
    case inst.inst_outputs of [] => ... | [out] => ... /\ cond | ... => T
@@ -493,6 +534,35 @@ Theorem inst_ssa_compatible_outputs_equiv:
 Proof
   rw[inst_ssa_compatible_def] >>
   Cases_on `FLOOKUP vm out` >> gvs[]
+QED
+
+(* Helper: Single-output update with a known value preserves ssa_result_equiv. *)
+Theorem single_output_result_ssa_equiv:
+  !inst inst_ssa s_orig s_ssa vm val_orig val_ssa err.
+    ssa_state_equiv vm s_orig s_ssa /\
+    inst_ssa_compatible vm inst inst_ssa /\
+    LENGTH inst.inst_outputs <= 1 /\
+    val_orig = val_ssa ==>
+    ssa_result_equiv vm
+      (case inst.inst_outputs of
+         [out] => OK (update_var out val_orig s_orig)
+       | _ => Error err)
+      (case inst_ssa.inst_outputs of
+         [out] => OK (update_var out val_ssa s_ssa)
+       | _ => Error err)
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_outputs` >| [
+    (Cases_on `inst_ssa.inst_outputs` >>
+     fs[inst_ssa_compatible_def] >>
+     gvs[ssa_result_equiv_def]),
+    (Cases_on `t` >| [
+       (drule_all inst_ssa_compatible_outputs_equiv >> strip_tac >>
+        gvs[ssa_result_equiv_def] >>
+        irule ssa_state_equiv_update_same_vm >> gvs[]),
+       gvs[ssa_result_equiv_def]
+     ])
+  ]
 QED
 
 (* Helper: MLOAD gives ssa_result_equiv with SAME vm.
@@ -523,7 +593,7 @@ Theorem mload_result_ssa_equiv:
             | [out] => OK (update_var out (mload (w2n addr) s_orig) s_orig)
             | out::v6::v7 => Error "mload requires single output")
        | op1::v9::v10 => Error "mload requires 1 operand")
-      (case MAP (ssa_operand vm) inst.inst_operands of
+      (case inst_ssa.inst_operands of
          [] => Error "mload requires 1 operand"
        | [op1] =>
          (case eval_operand op1 s_ssa of
@@ -536,6 +606,8 @@ Theorem mload_result_ssa_equiv:
        | op1::v9::v10 => Error "mload requires 1 operand")
 Proof
   rw[] >>
+  qpat_x_assum `inst_ssa.inst_operands = _` (fn th => ONCE_REWRITE_TAC [th]) >>
+
   (* Case split on operands - use fs to preserve subgoals *)
   Cases_on `inst.inst_operands` >> fs[ssa_result_equiv_def] >>
   Cases_on `t` >> fs[ssa_result_equiv_def] >>
@@ -581,7 +653,7 @@ Theorem sload_result_ssa_equiv:
             | [out] => OK (update_var out (sload key s_orig) s_orig)
             | out::v6::v7 => Error "sload requires single output")
        | op1::v9::v10 => Error "sload requires 1 operand")
-      (case MAP (ssa_operand vm) inst.inst_operands of
+      (case inst_ssa.inst_operands of
          [] => Error "sload requires 1 operand"
        | [op1] =>
          (case eval_operand op1 s_ssa of
@@ -594,6 +666,8 @@ Theorem sload_result_ssa_equiv:
        | op1::v9::v10 => Error "sload requires 1 operand")
 Proof
   rw[] >>
+  qpat_x_assum `inst_ssa.inst_operands = _` (fn th => ONCE_REWRITE_TAC [th]) >>
+
   Cases_on `inst.inst_operands` >> fs[ssa_result_equiv_def] >>
   Cases_on `t` >> fs[ssa_result_equiv_def] >>
   `eval_operand h s_orig = eval_operand (ssa_operand vm h) s_ssa` by
@@ -634,7 +708,7 @@ Theorem tload_result_ssa_equiv:
             | [out] => OK (update_var out (tload key s_orig) s_orig)
             | out::v6::v7 => Error "tload requires single output")
        | op1::v9::v10 => Error "tload requires 1 operand")
-      (case MAP (ssa_operand vm) inst.inst_operands of
+      (case inst_ssa.inst_operands of
          [] => Error "tload requires 1 operand"
        | [op1] =>
          (case eval_operand op1 s_ssa of
@@ -647,6 +721,8 @@ Theorem tload_result_ssa_equiv:
        | op1::v9::v10 => Error "tload requires 1 operand")
 Proof
   rw[] >>
+  qpat_x_assum `inst_ssa.inst_operands = _` (fn th => ONCE_REWRITE_TAC [th]) >>
+
   Cases_on `inst.inst_operands` >> fs[ssa_result_equiv_def] >>
   Cases_on `t` >> fs[ssa_result_equiv_def] >>
   `eval_operand h s_orig = eval_operand (ssa_operand vm h) s_ssa` by
@@ -664,8 +740,9 @@ QED
  * Store operations have no output variable, so vm is unchanged.
  * Note: case structure matches expanded form from gvs[AllCaseEqs()] *)
 Theorem mstore_result_ssa_equiv:
-  !inst s_orig s_ssa vm.
-    ssa_state_equiv vm s_orig s_ssa ==>
+  !inst inst_ssa s_orig s_ssa vm.
+    ssa_state_equiv vm s_orig s_ssa /\
+    inst_ssa.inst_operands = MAP (ssa_operand vm) inst.inst_operands ==>
     ssa_result_equiv vm
       (case inst.inst_operands of
          [] => Error "mstore requires 2 operands"
@@ -678,7 +755,7 @@ Theorem mstore_result_ssa_equiv:
                   NONE => Error "undefined operand"
                 | SOME addr => OK (mstore (w2n addr) value s_orig))
        | op_val::op_addr::v12::v13 => Error "mstore requires 2 operands")
-      (case MAP (ssa_operand vm) inst.inst_operands of
+      (case inst_ssa.inst_operands of
          [] => Error "mstore requires 2 operands"
        | [op_val] => Error "mstore requires 2 operands"
        | [op_val; op_addr] =>
@@ -691,6 +768,8 @@ Theorem mstore_result_ssa_equiv:
        | op_val::op_addr::v12::v13 => Error "mstore requires 2 operands")
 Proof
   rw[] >>
+  qpat_x_assum `inst_ssa.inst_operands = _` (fn th => ONCE_REWRITE_TAC [th]) >>
+
   Cases_on `inst.inst_operands` >> fs[ssa_result_equiv_def] >>
   Cases_on `t` >> fs[ssa_result_equiv_def] >>
   Cases_on `t'` >> fs[ssa_result_equiv_def] >>
@@ -706,8 +785,9 @@ QED
 
 (* Helper: SSTORE gives ssa_result_equiv with SAME vm. *)
 Theorem sstore_result_ssa_equiv:
-  !inst s_orig s_ssa vm.
-    ssa_state_equiv vm s_orig s_ssa ==>
+  !inst inst_ssa s_orig s_ssa vm.
+    ssa_state_equiv vm s_orig s_ssa /\
+    inst_ssa.inst_operands = MAP (ssa_operand vm) inst.inst_operands ==>
     ssa_result_equiv vm
       (case inst.inst_operands of
          [] => Error "sstore requires 2 operands"
@@ -720,7 +800,7 @@ Theorem sstore_result_ssa_equiv:
                   NONE => Error "undefined operand"
                 | SOME key => OK (sstore key value s_orig))
        | op_val::op_key::v12::v13 => Error "sstore requires 2 operands")
-      (case MAP (ssa_operand vm) inst.inst_operands of
+      (case inst_ssa.inst_operands of
          [] => Error "sstore requires 2 operands"
        | [op_val] => Error "sstore requires 2 operands"
        | [op_val; op_key] =>
@@ -733,6 +813,8 @@ Theorem sstore_result_ssa_equiv:
        | op_val::op_key::v12::v13 => Error "sstore requires 2 operands")
 Proof
   rw[] >>
+  qpat_x_assum `inst_ssa.inst_operands = _` (fn th => ONCE_REWRITE_TAC [th]) >>
+
   Cases_on `inst.inst_operands` >> fs[ssa_result_equiv_def] >>
   Cases_on `t` >> fs[ssa_result_equiv_def] >>
   Cases_on `t'` >> fs[ssa_result_equiv_def] >>
@@ -748,8 +830,9 @@ QED
 
 (* Helper: TSTORE gives ssa_result_equiv with SAME vm. *)
 Theorem tstore_result_ssa_equiv:
-  !inst s_orig s_ssa vm.
-    ssa_state_equiv vm s_orig s_ssa ==>
+  !inst inst_ssa s_orig s_ssa vm.
+    ssa_state_equiv vm s_orig s_ssa /\
+    inst_ssa.inst_operands = MAP (ssa_operand vm) inst.inst_operands ==>
     ssa_result_equiv vm
       (case inst.inst_operands of
          [] => Error "tstore requires 2 operands"
@@ -762,7 +845,7 @@ Theorem tstore_result_ssa_equiv:
                   NONE => Error "undefined operand"
                 | SOME key => OK (tstore key value s_orig))
        | op_val::op_key::v12::v13 => Error "tstore requires 2 operands")
-      (case MAP (ssa_operand vm) inst.inst_operands of
+      (case inst_ssa.inst_operands of
          [] => Error "tstore requires 2 operands"
        | [op_val] => Error "tstore requires 2 operands"
        | [op_val; op_key] =>
@@ -775,6 +858,8 @@ Theorem tstore_result_ssa_equiv:
        | op_val::op_key::v12::v13 => Error "tstore requires 2 operands")
 Proof
   rw[] >>
+  qpat_x_assum `inst_ssa.inst_operands = _` (fn th => ONCE_REWRITE_TAC [th]) >>
+
   Cases_on `inst.inst_operands` >> fs[ssa_result_equiv_def] >>
   Cases_on `t` >> fs[ssa_result_equiv_def] >>
   Cases_on `t'` >> fs[ssa_result_equiv_def] >>
@@ -786,6 +871,621 @@ Proof
   Cases_on `eval_operand (ssa_operand vm h) s_ssa` >> gvs[ssa_result_equiv_def] >>
   Cases_on `eval_operand (ssa_operand vm h') s_ssa` >> gvs[ssa_result_equiv_def] >>
   irule tstore_ssa_equiv >> simp[]
+QED
+
+(* Helper: ASSERT gives ssa_result_equiv with SAME vm. *)
+Theorem assert_result_ssa_equiv:
+  !inst inst_ssa s_orig s_ssa vm.
+    ssa_state_equiv vm s_orig s_ssa /\
+    inst_ssa.inst_operands = MAP (ssa_operand vm) inst.inst_operands ==>
+    ssa_result_equiv vm
+      (case inst.inst_operands of
+         [cond_op] =>
+           (case eval_operand cond_op s_orig of
+              SOME cond =>
+                if cond = 0w then Revert (revert_state s_orig)
+                else OK s_orig
+            | NONE => Error "undefined operand")
+       | _ => Error "assert requires 1 operand")
+      (case inst_ssa.inst_operands of
+         [cond_op] =>
+           (case eval_operand cond_op s_ssa of
+              SOME cond =>
+                if cond = 0w then Revert (revert_state s_ssa)
+                else OK s_ssa
+            | NONE => Error "undefined operand")
+       | _ => Error "assert requires 1 operand")
+Proof
+  rw[] >>
+  qpat_x_assum `inst_ssa.inst_operands = _` (fn th => ONCE_REWRITE_TAC [th]) >>
+  Cases_on `inst.inst_operands` >> fs[ssa_result_equiv_def] >>
+  Cases_on `t` >> fs[ssa_result_equiv_def] >>
+  `eval_operand h s_orig = eval_operand (ssa_operand vm h) s_ssa` by
+    (irule eval_operand_ssa_equiv >> simp[]) >>
+  Cases_on `eval_operand (ssa_operand vm h) s_ssa` >> fs[ssa_result_equiv_def] >> gvs[] >>
+  Cases_on `x = 0w` >> gvs[ssa_result_equiv_def] >>
+  irule revert_state_ssa_equiv >> simp[]
+QED
+
+(* Helper: ASSERT_UNREACHABLE gives ssa_result_equiv with SAME vm. *)
+Theorem assert_unreachable_result_ssa_equiv:
+  !inst inst_ssa s_orig s_ssa vm.
+    ssa_state_equiv vm s_orig s_ssa /\
+    inst_ssa.inst_operands = MAP (ssa_operand vm) inst.inst_operands ==>
+    ssa_result_equiv vm
+      (case inst.inst_operands of
+         [cond_op] =>
+           (case eval_operand cond_op s_orig of
+              SOME cond =>
+                if cond <> 0w then Halt (halt_state s_orig)
+                else OK s_orig
+            | NONE => Error "undefined operand")
+       | _ => Error "assert_unreachable requires 1 operand")
+      (case inst_ssa.inst_operands of
+         [cond_op] =>
+           (case eval_operand cond_op s_ssa of
+              SOME cond =>
+                if cond <> 0w then Halt (halt_state s_ssa)
+                else OK s_ssa
+            | NONE => Error "undefined operand")
+       | _ => Error "assert_unreachable requires 1 operand")
+Proof
+  rw[] >>
+  qpat_x_assum `inst_ssa.inst_operands = _` (fn th => ONCE_REWRITE_TAC [th]) >>
+  Cases_on `inst.inst_operands` >> fs[ssa_result_equiv_def] >>
+  Cases_on `t` >> fs[ssa_result_equiv_def] >>
+  `eval_operand h s_orig = eval_operand (ssa_operand vm h) s_ssa` by
+    (irule eval_operand_ssa_equiv >> simp[]) >>
+  Cases_on `eval_operand (ssa_operand vm h) s_ssa` >> fs[ssa_result_equiv_def] >> gvs[] >>
+  Cases_on `x <> 0w` >> gvs[ssa_result_equiv_def] >>
+  irule halt_state_ssa_equiv >> simp[]
+QED
+
+(* Helper: BLOCKHASH gives ssa_result_equiv with SAME vm. *)
+Theorem blockhash_result_ssa_equiv:
+  !inst inst_ssa s_orig s_ssa vm.
+    ssa_state_equiv vm s_orig s_ssa /\
+    inst_ssa.inst_operands = MAP (ssa_operand vm) inst.inst_operands /\
+    LENGTH inst.inst_outputs <= 1 /\
+    (case inst.inst_outputs of
+       [] => inst_ssa.inst_outputs = []
+     | [out] =>
+         let ssa_out = case FLOOKUP vm out of SOME x => x | NONE => out in
+         inst_ssa.inst_outputs = [ssa_out] /\
+         (!v. v <> out ==> FLOOKUP vm v <> SOME ssa_out) /\
+         (FLOOKUP vm ssa_out = NONE ==>
+          FLOOKUP vm out = NONE \/ FLOOKUP vm out = SOME out)
+     | _ => T) ==>
+    ssa_result_equiv vm
+      (case inst.inst_operands of
+         [] => Error "blockhash requires 1 operand"
+       | [op1] =>
+         (case eval_operand op1 s_orig of
+            NONE => Error "undefined operand"
+          | SOME blocknum =>
+              case inst.inst_outputs of
+                [] => Error "blockhash requires single output"
+              | [out] => OK (update_var out (s_orig.vs_block_ctx.bc_blockhash (w2n blocknum)) s_orig)
+              | out::v6::v7 => Error "blockhash requires single output")
+       | op1::v9::v10 => Error "blockhash requires 1 operand")
+      (case inst_ssa.inst_operands of
+         [] => Error "blockhash requires 1 operand"
+       | [op1] =>
+         (case eval_operand op1 s_ssa of
+            NONE => Error "undefined operand"
+          | SOME blocknum =>
+              case inst_ssa.inst_outputs of
+                [] => Error "blockhash requires single output"
+              | [out] => OK (update_var out (s_ssa.vs_block_ctx.bc_blockhash (w2n blocknum)) s_ssa)
+              | out::v6::v7 => Error "blockhash requires single output")
+       | op1::v9::v10 => Error "blockhash requires 1 operand")
+Proof
+  rw[] >>
+  qpat_x_assum `inst_ssa.inst_operands = _` (fn th => ONCE_REWRITE_TAC [th]) >>
+
+  Cases_on `inst.inst_operands` >| [
+    gvs[ssa_result_equiv_def],
+    (Cases_on `t` >| [
+        (`eval_operand h s_orig = eval_operand (ssa_operand vm h) s_ssa` by
+           (irule eval_operand_ssa_equiv >> simp[]) >>
+        Cases_on `eval_operand (ssa_operand vm h) s_ssa` >>
+        fs[ssa_result_equiv_def] >> gvs[] >>
+        Cases_on `inst.inst_outputs` >> fs[ssa_result_equiv_def] >> gvs[] >>
+        Cases_on `t` >> fs[ssa_result_equiv_def] >> gvs[] >>
+        `s_orig.vs_block_ctx = s_ssa.vs_block_ctx` by fs[ssa_state_equiv_def] >>
+        pop_assum (fn eq => simp_tac std_ss [eq]) >>
+        irule ssa_state_equiv_update_same_vm >>
+        Cases_on `FLOOKUP vm h'` >> gvs[]),
+       gvs[ssa_result_equiv_def]
+     ])
+  ]
+QED
+
+(* Helper: BALANCE gives ssa_result_equiv with SAME vm. *)
+Theorem balance_result_ssa_equiv:
+  !inst inst_ssa s_orig s_ssa vm.
+    ssa_state_equiv vm s_orig s_ssa /\
+    inst_ssa.inst_operands = MAP (ssa_operand vm) inst.inst_operands /\
+    LENGTH inst.inst_outputs <= 1 /\
+    (case inst.inst_outputs of
+       [] => inst_ssa.inst_outputs = []
+     | [out] =>
+         let ssa_out = case FLOOKUP vm out of SOME x => x | NONE => out in
+         inst_ssa.inst_outputs = [ssa_out] /\
+         (!v. v <> out ==> FLOOKUP vm v <> SOME ssa_out) /\
+         (FLOOKUP vm ssa_out = NONE ==>
+          FLOOKUP vm out = NONE \/ FLOOKUP vm out = SOME out)
+     | _ => T) ==>
+    ssa_result_equiv vm
+      (case inst.inst_operands of
+         [] => Error "balance requires 1 operand"
+       | [op1] =>
+         (case eval_operand op1 s_orig of
+            NONE => Error "undefined operand"
+          | SOME addr =>
+              case inst.inst_outputs of
+                [] => Error "balance requires single output"
+              | [out] =>
+                  OK
+                    (update_var out
+                       (n2w (lookup_account (w2w addr) s_orig.vs_accounts).balance)
+                       s_orig)
+              | out::v6::v7 => Error "balance requires single output")
+       | op1::v9::v10 => Error "balance requires 1 operand")
+      (case inst_ssa.inst_operands of
+         [] => Error "balance requires 1 operand"
+       | [op1] =>
+         (case eval_operand op1 s_ssa of
+            NONE => Error "undefined operand"
+          | SOME addr =>
+              case inst_ssa.inst_outputs of
+                [] => Error "balance requires single output"
+              | [out] =>
+                  OK
+                    (update_var out
+                       (n2w (lookup_account (w2w addr) s_ssa.vs_accounts).balance)
+                       s_ssa)
+              | out::v6::v7 => Error "balance requires single output")
+       | op1::v9::v10 => Error "balance requires 1 operand")
+Proof
+  rw[] >>
+  qpat_x_assum `inst_ssa.inst_operands = _` (fn th => ONCE_REWRITE_TAC [th]) >>
+
+  Cases_on `inst.inst_operands` >| [
+    gvs[ssa_result_equiv_def],
+    (Cases_on `t` >| [
+        (`eval_operand h s_orig = eval_operand (ssa_operand vm h) s_ssa` by
+           (irule eval_operand_ssa_equiv >> simp[]) >>
+        Cases_on `eval_operand (ssa_operand vm h) s_ssa` >>
+        fs[ssa_result_equiv_def] >> gvs[] >>
+        Cases_on `inst.inst_outputs` >> fs[ssa_result_equiv_def] >> gvs[] >>
+        Cases_on `t` >> fs[ssa_result_equiv_def] >> gvs[] >>
+        `s_orig.vs_accounts = s_ssa.vs_accounts` by fs[ssa_state_equiv_def] >>
+        pop_assum (fn eq => simp_tac std_ss [eq]) >>
+        irule ssa_state_equiv_update_same_vm >>
+        Cases_on `FLOOKUP vm h'` >> gvs[]),
+       gvs[ssa_result_equiv_def]
+     ])
+  ]
+QED
+
+(* Helper: CALLDATALOAD gives ssa_result_equiv with SAME vm. *)
+Theorem calldataload_result_ssa_equiv:
+  !inst inst_ssa s_orig s_ssa vm.
+    ssa_state_equiv vm s_orig s_ssa /\
+    inst_ssa.inst_operands = MAP (ssa_operand vm) inst.inst_operands /\
+    LENGTH inst.inst_outputs <= 1 /\
+    (case inst.inst_outputs of
+       [] => inst_ssa.inst_outputs = []
+     | [out] =>
+         let ssa_out = case FLOOKUP vm out of SOME x => x | NONE => out in
+         inst_ssa.inst_outputs = [ssa_out] /\
+         (!v. v <> out ==> FLOOKUP vm v <> SOME ssa_out) /\
+         (FLOOKUP vm ssa_out = NONE ==>
+          FLOOKUP vm out = NONE \/ FLOOKUP vm out = SOME out)
+     | _ => T) ==>
+    ssa_result_equiv vm
+      (case inst.inst_operands of
+         [] => Error "calldataload requires 1 operand"
+       | [op1] =>
+         (case eval_operand op1 s_orig of
+            NONE => Error "undefined operand"
+          | SOME offset =>
+              case inst.inst_outputs of
+                [] => Error "calldataload requires single output"
+              | [out] =>
+                  OK
+                    (update_var out
+                       (word_of_bytes T (0w:bytes32)
+                          (TAKE 32
+                             (DROP (w2n offset) s_orig.vs_call_ctx.cc_calldata ++
+                              REPLICATE 32 0w))) s_orig)
+              | out::v6::v7 => Error "calldataload requires single output")
+       | op1::v9::v10 => Error "calldataload requires 1 operand")
+      (case inst_ssa.inst_operands of
+         [] => Error "calldataload requires 1 operand"
+       | [op1] =>
+         (case eval_operand op1 s_ssa of
+            NONE => Error "undefined operand"
+          | SOME offset =>
+              case inst_ssa.inst_outputs of
+                [] => Error "calldataload requires single output"
+              | [out] =>
+                  OK
+                    (update_var out
+                       (word_of_bytes T (0w:bytes32)
+                          (TAKE 32
+                             (DROP (w2n offset) s_ssa.vs_call_ctx.cc_calldata ++
+                              REPLICATE 32 0w))) s_ssa)
+              | out::v6::v7 => Error "calldataload requires single output")
+       | op1::v9::v10 => Error "calldataload requires 1 operand")
+Proof
+  rw[] >>
+  qpat_x_assum `inst_ssa.inst_operands = _` (fn th => ONCE_REWRITE_TAC [th]) >>
+
+  Cases_on `inst.inst_operands` >| [
+    gvs[ssa_result_equiv_def],
+    (Cases_on `t` >| [
+        (`eval_operand h s_orig = eval_operand (ssa_operand vm h) s_ssa` by
+           (irule eval_operand_ssa_equiv >> simp[]) >>
+        Cases_on `eval_operand (ssa_operand vm h) s_ssa` >>
+        fs[ssa_result_equiv_def] >> gvs[] >>
+        Cases_on `inst.inst_outputs` >> fs[ssa_result_equiv_def] >> gvs[] >>
+        Cases_on `t` >> fs[ssa_result_equiv_def] >> gvs[] >>
+        `s_orig.vs_call_ctx = s_ssa.vs_call_ctx` by fs[ssa_state_equiv_def] >>
+        pop_assum (fn eq => simp_tac std_ss [eq]) >>
+        irule ssa_state_equiv_update_same_vm >>
+        Cases_on `FLOOKUP vm h'` >> gvs[]),
+       gvs[ssa_result_equiv_def]
+     ])
+  ]
+QED
+
+(* Helper: SHA3 gives ssa_result_equiv with SAME vm. *)
+Theorem sha3_result_ssa_equiv:
+  !inst inst_ssa s_orig s_ssa vm.
+    ssa_state_equiv vm s_orig s_ssa /\
+    inst_ssa_compatible vm inst inst_ssa /\
+    LENGTH inst.inst_outputs <= 1 ==>
+    ssa_result_equiv vm
+      (case inst.inst_operands of
+         [] => Error "sha3 requires 2 operands"
+       | [op_size] => Error "sha3 requires 2 operands"
+       | [op_size; op_offset] =>
+         (case eval_operand op_size s_orig of
+            NONE => Error "undefined operand"
+          | SOME size_val =>
+              case eval_operand op_offset s_orig of
+                NONE => Error "undefined operand"
+              | SOME offset =>
+                  case inst.inst_outputs of
+                    [] => Error "sha3 requires single output"
+                  | [out] =>
+                      OK
+                        (update_var out
+                           (word_of_bytes T 0w
+                              (Keccak_256_w64
+                                 (TAKE (w2n size_val)
+                                    (DROP (w2n offset) s_orig.vs_memory ++
+                                     REPLICATE (w2n size_val) 0w)))) s_orig)
+                  | out::v6::v7 => Error "sha3 requires single output")
+       | op_size::op_offset::v10::v11 => Error "sha3 requires 2 operands")
+      (case inst_ssa.inst_operands of
+         [] => Error "sha3 requires 2 operands"
+       | [op_size] => Error "sha3 requires 2 operands"
+       | [op_size; op_offset] =>
+         (case eval_operand op_size s_ssa of
+            NONE => Error "undefined operand"
+          | SOME size_val =>
+              case eval_operand op_offset s_ssa of
+                NONE => Error "undefined operand"
+              | SOME offset =>
+                  case inst_ssa.inst_outputs of
+                    [] => Error "sha3 requires single output"
+                  | [out] =>
+                      OK
+                        (update_var out
+                           (word_of_bytes T 0w
+                              (Keccak_256_w64
+                                 (TAKE (w2n size_val)
+                                    (DROP (w2n offset) s_ssa.vs_memory ++
+                                     REPLICATE (w2n size_val) 0w)))) s_ssa)
+                  | out::v6::v7 => Error "sha3 requires single output")
+       | op_size::op_offset::v10::v11 => Error "sha3 requires 2 operands")
+Proof
+  rpt strip_tac >>
+  `inst_ssa.inst_operands = MAP (ssa_operand vm) inst.inst_operands` by
+    fs[inst_ssa_compatible_def] >>
+  Cases_on `inst.inst_operands` >| [
+    gvs[inst_ssa_compatible_def, ssa_result_equiv_def],
+    (Cases_on `t` >| [
+       gvs[inst_ssa_compatible_def, ssa_result_equiv_def],
+       (Cases_on `t'` >| [
+          (simp[] >>
+           `eval_operand h s_orig = eval_operand (ssa_operand vm h) s_ssa` by
+             (irule eval_operand_ssa_equiv >> simp[]) >>
+           `eval_operand h' s_orig = eval_operand (ssa_operand vm h') s_ssa` by
+             (irule eval_operand_ssa_equiv >> simp[]) >>
+           Cases_on `eval_operand (ssa_operand vm h) s_ssa` >>
+           gvs[ssa_result_equiv_def] >>
+           Cases_on `eval_operand (ssa_operand vm h') s_ssa` >>
+           gvs[ssa_result_equiv_def] >>
+           Cases_on `inst.inst_outputs` >| [
+             gvs[inst_ssa_compatible_def, ssa_result_equiv_def],
+             (Cases_on `t` >| [
+                (drule_all inst_ssa_compatible_outputs_equiv >> strip_tac >>
+                 gvs[ssa_result_equiv_def] >>
+                 `s_orig.vs_memory = s_ssa.vs_memory` by fs[ssa_state_equiv_def] >>
+                 pop_assum (fn eq => simp_tac std_ss [eq]) >>
+                 irule ssa_state_equiv_update_same_vm >>
+                 gvs[]),
+                gvs[ssa_result_equiv_def]
+              ])
+           ]),
+          gvs[inst_ssa_compatible_def, ssa_result_equiv_def]
+        ])
+     ])
+  ]
+QED
+
+(* Helper: SHA3_64 gives ssa_result_equiv with SAME vm. *)
+Theorem sha3_64_result_ssa_equiv:
+  !inst inst_ssa s_orig s_ssa vm.
+    ssa_state_equiv vm s_orig s_ssa /\
+    inst_ssa_compatible vm inst inst_ssa /\
+    LENGTH inst.inst_outputs <= 1 ==>
+    ssa_result_equiv vm
+      (case inst.inst_operands of
+         [] => Error "sha3_64 requires 2 operands"
+       | [op2] => Error "sha3_64 requires 2 operands"
+       | [op2; op1] =>
+         (case eval_operand op1 s_orig of
+            NONE => Error "undefined operand"
+          | SOME v1 =>
+              case eval_operand op2 s_orig of
+                NONE => Error "undefined operand"
+              | SOME v2 =>
+                  case inst.inst_outputs of
+                    [] => Error "sha3_64 requires single output"
+                  | [out] =>
+                      OK
+                        (update_var out
+                           (word_of_bytes T 0w
+                              (Keccak_256_w64
+                                 (word_to_bytes v1 T ++ word_to_bytes v2 T)))
+                           s_orig)
+                  | out::v6::v7 => Error "sha3_64 requires single output")
+       | op2::op1::v10::v11 => Error "sha3_64 requires 2 operands")
+      (case inst_ssa.inst_operands of
+         [] => Error "sha3_64 requires 2 operands"
+       | [op2] => Error "sha3_64 requires 2 operands"
+       | [op2; op1] =>
+         (case eval_operand op1 s_ssa of
+            NONE => Error "undefined operand"
+          | SOME v1 =>
+              case eval_operand op2 s_ssa of
+                NONE => Error "undefined operand"
+              | SOME v2 =>
+                  case inst_ssa.inst_outputs of
+                    [] => Error "sha3_64 requires single output"
+                  | [out] =>
+                      OK
+                        (update_var out
+                           (word_of_bytes T 0w
+                              (Keccak_256_w64
+                                 (word_to_bytes v1 T ++ word_to_bytes v2 T)))
+                           s_ssa)
+                  | out::v6::v7 => Error "sha3_64 requires single output")
+       | op2::op1::v10::v11 => Error "sha3_64 requires 2 operands")
+Proof
+  rpt strip_tac >>
+  `inst_ssa.inst_operands = MAP (ssa_operand vm) inst.inst_operands` by
+    fs[inst_ssa_compatible_def] >>
+  Cases_on `inst.inst_operands` >| [
+    gvs[inst_ssa_compatible_def, ssa_result_equiv_def],
+    (Cases_on `t` >| [
+       gvs[inst_ssa_compatible_def, ssa_result_equiv_def],
+       (Cases_on `t'` >| [
+          (simp[] >>
+           `eval_operand h s_orig = eval_operand (ssa_operand vm h) s_ssa` by
+             (irule eval_operand_ssa_equiv >> simp[]) >>
+           `eval_operand h' s_orig = eval_operand (ssa_operand vm h') s_ssa` by
+             (irule eval_operand_ssa_equiv >> simp[]) >>
+           Cases_on `eval_operand (ssa_operand vm h') s_ssa` >>
+           gvs[ssa_result_equiv_def] >>
+           Cases_on `eval_operand (ssa_operand vm h) s_ssa` >>
+           gvs[ssa_result_equiv_def] >>
+           Cases_on `inst.inst_outputs` >| [
+             gvs[inst_ssa_compatible_def, ssa_result_equiv_def],
+             (Cases_on `t` >| [
+                (drule_all inst_ssa_compatible_outputs_equiv >> strip_tac >>
+                 gvs[ssa_result_equiv_def] >>
+                 `s_orig.vs_memory = s_ssa.vs_memory` by fs[ssa_state_equiv_def] >>
+                 pop_assum (fn eq => simp_tac std_ss [eq]) >>
+                 irule ssa_state_equiv_update_same_vm >>
+                 gvs[]),
+                gvs[ssa_result_equiv_def]
+              ])
+           ]),
+          gvs[inst_ssa_compatible_def, ssa_result_equiv_def]
+        ])
+     ])
+  ]
+QED
+
+(* Helper: CALLDATACOPY gives ssa_result_equiv with SAME vm. *)
+Theorem calldatacopy_result_ssa_equiv:
+  !inst inst_ssa s_orig s_ssa vm.
+    ssa_state_equiv vm s_orig s_ssa /\
+    inst_ssa.inst_operands = MAP (ssa_operand vm) inst.inst_operands ==>
+    ssa_result_equiv vm
+      (case inst.inst_operands of
+         [] => Error "calldatacopy requires 3 operands"
+       | [op_size] => Error "calldatacopy requires 3 operands"
+       | [op_size; op_offset] => Error "calldatacopy requires 3 operands"
+       | [op_size; op_offset; op_destOffset] =>
+         (case eval_operand op_size s_orig of
+            NONE => Error "undefined operand"
+          | SOME size_val =>
+              case eval_operand op_offset s_orig of
+                NONE => Error "undefined operand"
+              | SOME offset =>
+                  case eval_operand op_destOffset s_orig of
+                    NONE => Error "undefined operand"
+                  | SOME destOffset =>
+                      OK
+                        (write_memory_with_expansion (w2n destOffset)
+                           (TAKE (w2n size_val)
+                              (DROP (w2n offset) s_orig.vs_call_ctx.cc_calldata ++
+                               REPLICATE (w2n size_val) 0w)) s_orig))
+       | op_size::op_offset::op_destOffset::v10 => Error "calldatacopy requires 3 operands")
+      (case inst_ssa.inst_operands of
+         [] => Error "calldatacopy requires 3 operands"
+       | [op_size] => Error "calldatacopy requires 3 operands"
+       | [op_size; op_offset] => Error "calldatacopy requires 3 operands"
+       | [op_size; op_offset; op_destOffset] =>
+         (case eval_operand op_size s_ssa of
+            NONE => Error "undefined operand"
+          | SOME size_val =>
+              case eval_operand op_offset s_ssa of
+                NONE => Error "undefined operand"
+              | SOME offset =>
+                  case eval_operand op_destOffset s_ssa of
+                    NONE => Error "undefined operand"
+                  | SOME destOffset =>
+                      OK
+                        (write_memory_with_expansion (w2n destOffset)
+                           (TAKE (w2n size_val)
+                              (DROP (w2n offset) s_ssa.vs_call_ctx.cc_calldata ++
+                               REPLICATE (w2n size_val) 0w)) s_ssa))
+       | op_size::op_offset::op_destOffset::v10 => Error "calldatacopy requires 3 operands")
+Proof
+  rw[] >>
+  qpat_x_assum `inst_ssa.inst_operands = _` (fn th => ONCE_REWRITE_TAC [th]) >>
+
+  simp[option_triple_case] >>
+  Cases_on `inst.inst_operands` >| [
+    gvs[ssa_result_equiv_def],
+    (Cases_on `t` >| [
+       gvs[ssa_result_equiv_def],
+       (Cases_on `t'` >| [
+          gvs[ssa_result_equiv_def],
+          (rename1 `h''::t_tail` >>
+           Cases_on `t_tail` >| [
+             (`eval_operand h s_orig = eval_operand (ssa_operand vm h) s_ssa` by
+                (irule eval_operand_ssa_equiv >> simp[]) >>
+              `eval_operand h' s_orig = eval_operand (ssa_operand vm h') s_ssa` by
+                (irule eval_operand_ssa_equiv >> simp[]) >>
+              `eval_operand h'' s_orig = eval_operand (ssa_operand vm h'') s_ssa` by
+                (irule eval_operand_ssa_equiv >> simp[]) >>
+              gvs[] >>
+              Cases_on `eval_operand (ssa_operand vm h) s_ssa` >>
+              gvs[ssa_result_equiv_def] >>
+              Cases_on `eval_operand (ssa_operand vm h') s_ssa` >>
+              gvs[ssa_result_equiv_def] >>
+              Cases_on `eval_operand (ssa_operand vm h'') s_ssa` >>
+              gvs[ssa_result_equiv_def, AllCaseEqs()] >>
+              `s_orig.vs_call_ctx = s_ssa.vs_call_ctx` by fs[ssa_state_equiv_def] >>
+              pop_assum (fn eq => simp_tac std_ss [eq]) >>
+              irule write_memory_with_expansion_ssa_equiv >>
+              simp[]),
+             gvs[ssa_result_equiv_def]
+           ])
+        ])
+     ])
+  ]
+QED
+
+(* Helper: RETURNDATACOPY gives ssa_result_equiv with SAME vm. *)
+Theorem returndatacopy_result_ssa_equiv:
+  !inst inst_ssa s_orig s_ssa vm.
+    ssa_state_equiv vm s_orig s_ssa /\
+    inst_ssa.inst_operands = MAP (ssa_operand vm) inst.inst_operands ==>
+    ssa_result_equiv vm
+      (case inst.inst_operands of
+         [] => Error "returndatacopy requires 3 operands"
+       | [op_size] => Error "returndatacopy requires 3 operands"
+       | [op_size; op_offset] => Error "returndatacopy requires 3 operands"
+       | [op_size; op_offset; op_destOffset] =>
+         (case eval_operand op_size s_orig of
+            NONE => Error "undefined operand"
+          | SOME size_val =>
+              case eval_operand op_offset s_orig of
+                NONE => Error "undefined operand"
+              | SOME offset =>
+                  case eval_operand op_destOffset s_orig of
+                    NONE => Error "undefined operand"
+                  | SOME destOffset =>
+                      if w2n offset + w2n size_val > LENGTH s_orig.vs_returndata then
+                        Revert (revert_state s_orig)
+                      else
+                        OK
+                          (write_memory_with_expansion (w2n destOffset)
+                             (TAKE (w2n size_val)
+                                (DROP (w2n offset) s_orig.vs_returndata)) s_orig))
+       | op_size::op_offset::op_destOffset::v10 => Error "returndatacopy requires 3 operands")
+      (case inst_ssa.inst_operands of
+         [] => Error "returndatacopy requires 3 operands"
+       | [op_size] => Error "returndatacopy requires 3 operands"
+       | [op_size; op_offset] => Error "returndatacopy requires 3 operands"
+       | [op_size; op_offset; op_destOffset] =>
+         (case eval_operand op_size s_ssa of
+            NONE => Error "undefined operand"
+          | SOME size_val =>
+              case eval_operand op_offset s_ssa of
+                NONE => Error "undefined operand"
+              | SOME offset =>
+                  case eval_operand op_destOffset s_ssa of
+                    NONE => Error "undefined operand"
+                  | SOME destOffset =>
+                      if w2n offset + w2n size_val > LENGTH s_ssa.vs_returndata then
+                        Revert (revert_state s_ssa)
+                      else
+                        OK
+                          (write_memory_with_expansion (w2n destOffset)
+                             (TAKE (w2n size_val)
+                                (DROP (w2n offset) s_ssa.vs_returndata)) s_ssa))
+       | op_size::op_offset::op_destOffset::v10 => Error "returndatacopy requires 3 operands")
+Proof
+  rw[] >>
+  qpat_x_assum `inst_ssa.inst_operands = _` (fn th => ONCE_REWRITE_TAC [th]) >>
+
+  simp[option_triple_case] >>
+  Cases_on `inst.inst_operands` >| [
+    gvs[ssa_result_equiv_def],
+    (Cases_on `t` >| [
+       gvs[ssa_result_equiv_def],
+       (Cases_on `t'` >| [
+          gvs[ssa_result_equiv_def],
+          (rename1 `h''::t_tail` >>
+           Cases_on `t_tail` >| [
+             (`eval_operand h s_orig = eval_operand (ssa_operand vm h) s_ssa` by
+                (irule eval_operand_ssa_equiv >> simp[]) >>
+              `eval_operand h' s_orig = eval_operand (ssa_operand vm h') s_ssa` by
+                (irule eval_operand_ssa_equiv >> simp[]) >>
+              `eval_operand h'' s_orig = eval_operand (ssa_operand vm h'') s_ssa` by
+                (irule eval_operand_ssa_equiv >> simp[]) >>
+              gvs[] >>
+              Cases_on `eval_operand (ssa_operand vm h) s_ssa` >>
+              gvs[ssa_result_equiv_def] >>
+              Cases_on `eval_operand (ssa_operand vm h') s_ssa` >>
+              gvs[ssa_result_equiv_def] >>
+              Cases_on `eval_operand (ssa_operand vm h'') s_ssa` >>
+              gvs[ssa_result_equiv_def, AllCaseEqs()] >>
+              `s_orig.vs_returndata = s_ssa.vs_returndata` by fs[ssa_state_equiv_def] >>
+              pop_assum (fn eq => simp_tac std_ss [eq]) >>
+              simp[LET_DEF] >>
+              CASE_TAC >| [
+                (gvs[ssa_result_equiv_def] >>
+                 irule revert_state_ssa_equiv >> simp[]),
+                (gvs[ssa_result_equiv_def] >>
+                 irule write_memory_with_expansion_ssa_equiv >> simp[])
+              ]),
+             gvs[ssa_result_equiv_def]
+           ])
+        ])
+     ])
+  ]
 QED
 
 (* Helper: ASSIGN gives ssa_result_equiv with SAME vm.
@@ -805,20 +1505,35 @@ Theorem assign_result_ssa_equiv:
           FLOOKUP vm out = NONE \/ FLOOKUP vm out = SOME out)
      | _ => T) ==>
     ssa_result_equiv vm
-      (case (inst.inst_operands, inst.inst_outputs) of
-         ([op1], [out]) =>
-           (case eval_operand op1 s_orig of
-              SOME v => OK (update_var out v s_orig)
-            | NONE => Error "undefined operand")
-       | _ => Error "assign requires 1 operand and single output")
-      (case (MAP (ssa_operand vm) inst.inst_operands, inst_ssa.inst_outputs) of
-         ([op1], [out]) =>
-           (case eval_operand op1 s_ssa of
-              SOME v => OK (update_var out v s_ssa)
-            | NONE => Error "undefined operand")
-       | _ => Error "assign requires 1 operand and single output")
+      (case inst.inst_operands of
+         [] => Error "assign requires 1 operand and single output"
+       | op1::ops =>
+           case inst.inst_outputs of
+             [] => Error "assign requires 1 operand and single output"
+           | [out] =>
+               (case ops of
+                  [] =>
+                    (case eval_operand op1 s_orig of
+                       SOME v => OK (update_var out v s_orig)
+                     | NONE => Error "undefined operand")
+                | _ => Error "assign requires 1 operand and single output")
+           | _ => Error "assign requires 1 operand and single output")
+      (case inst_ssa.inst_operands of
+         [] => Error "assign requires 1 operand and single output"
+       | op1::ops =>
+           case inst_ssa.inst_outputs of
+             [] => Error "assign requires 1 operand and single output"
+           | [out] =>
+               (case ops of
+                  [] =>
+                    (case eval_operand op1 s_ssa of
+                       SOME v => OK (update_var out v s_ssa)
+                     | NONE => Error "undefined operand")
+                | _ => Error "assign requires 1 operand and single output")
+           | _ => Error "assign requires 1 operand and single output")
 Proof
   rw[] >>
+  qpat_x_assum `inst_ssa.inst_operands = _` (fn th => ONCE_REWRITE_TAC [th]) >>
   Cases_on `inst.inst_operands` >> fs[ssa_result_equiv_def] >>
   Cases_on `t` >> fs[ssa_result_equiv_def] >>
   Cases_on `inst.inst_outputs` >> fs[ssa_result_equiv_def] >>
@@ -841,12 +1556,13 @@ Theorem jmp_result_ssa_equiv:
     ssa_result_equiv vm
       (case inst.inst_operands of
          [Label target] => OK (jump_to target s_orig)
-       | _ => Error "jmp requires single label operand")
-      (case MAP (ssa_operand vm) inst.inst_operands of
+       | _ => Error "jmp requires label operand")
+      (case inst_ssa.inst_operands of
          [Label target] => OK (jump_to target s_ssa)
-       | _ => Error "jmp requires single label operand")
+       | _ => Error "jmp requires label operand")
 Proof
   rw[] >>
+  qpat_x_assum `inst_ssa.inst_operands = _` (fn th => ONCE_REWRITE_TAC [th]) >>
   (* Case split on operand count: [] vs [h] vs h::h'::t' *)
   Cases_on `inst.inst_operands` >> simp[ssa_result_equiv_def] >>
   Cases_on `t` >> simp[ssa_result_equiv_def] >>
@@ -873,7 +1589,7 @@ Theorem jnz_result_ssa_equiv:
                 else OK (jump_to if_zero s_orig)
             | NONE => Error "undefined condition")
        | _ => Error "jnz requires cond and 2 labels")
-      (case MAP (ssa_operand vm) inst.inst_operands of
+      (case inst_ssa.inst_operands of
          [cond_op; Label if_nonzero; Label if_zero] =>
            (case eval_operand cond_op s_ssa of
               SOME cond =>
@@ -883,6 +1599,7 @@ Theorem jnz_result_ssa_equiv:
        | _ => Error "jnz requires cond and 2 labels")
 Proof
   rpt strip_tac >>
+  qpat_x_assum `inst_ssa.inst_operands = _` (fn th => ONCE_REWRITE_TAC [th]) >>
   (* Initial setup *)
   simp[ssa_operand_def, ssa_result_equiv_def] >>
   (* Split on inst.inst_operands: [] case closes, h::t case simplifies *)
@@ -907,12 +1624,10 @@ QED
  * - Binop/unop/modop: irule exec_*_result_ssa_equiv + output/FLOOKUP case splits
  * - Load: irule mload/sload/tload_result_ssa_equiv + output/FLOOKUP case splits
  * - Store: irule mstore/sstore/tstore_result_ssa_equiv (no outputs)
- * - JMP/JNZ/ASSIGN: Case splits + eval_operand_ssa_equiv + jump_to_ssa_equiv/update
+ * - JMP/JNZ/ASSIGN: Use dedicated result-equivalence lemmas
  * - Halt/Revert: simp[ssa_result_equiv_def] + irule halt/revert_state_ssa_equiv
  * - Error/NOP/PHI: simp[ssa_result_equiv_def]
- *
- * BATCH MODE ISSUE: simp[] in tactic sequence expands tuple case expressions
- * to nested cases, breaking irule matching. Using cheat pending tactic refinement. *)
+ *)
 Theorem step_inst_result_ssa_equiv:
   !inst inst_ssa s_orig s_ssa vm.
     ssa_state_equiv vm s_orig s_ssa /\
@@ -924,73 +1639,112 @@ Theorem step_inst_result_ssa_equiv:
       (step_inst inst_ssa s_ssa)
 Proof
   let
-    val output_case_tac = CASE_TAC >> gvs[] >> CASE_TAC >> gvs[] >> CASE_TAC >> gvs[]
-    val finish_tac = simp[] >> output_case_tac
-    val binop_tac = irule exec_binop_result_ssa_equiv >> finish_tac >> NO_TAC
-    val unop_tac = irule exec_unop_result_ssa_equiv >> finish_tac >> NO_TAC
-    val modop_tac = irule exec_modop_result_ssa_equiv >> finish_tac >> NO_TAC
-    val load_tac = FIRST [irule mload_result_ssa_equiv,
-                          irule sload_result_ssa_equiv,
-                          irule tload_result_ssa_equiv] >> finish_tac >> NO_TAC
-    val store_tac = FIRST [irule mstore_result_ssa_equiv,
-                           irule sstore_result_ssa_equiv,
-                           irule tstore_result_ssa_equiv] >> simp[] >> NO_TAC
-    (* JMP: Direct case splits instead of irule since step_inst_def
-     * expands to different case patterns than jmp_result_ssa_equiv.
-     * Use CASE_TAC to avoid dependency on variable names.
-     * gvs[AllCaseEqs()] handles impossible branches (Var -> Label).
-     * jump_to_ssa_equiv closes the Label singleton case. *)
-    val jmp_direct_tac =
-      rpt (CASE_TAC >> gvs[AllCaseEqs(), ssa_result_equiv_def, ssa_operand_def]) >>
-      TRY (irule jump_to_ssa_equiv >> simp[]) >> NO_TAC
-    (* JNZ: Use same structure as jnz_result_ssa_equiv proof.
-     * Key insight: simp[ssa_operand_def] first, then targeted CASE_TACs,
-     * then drule_all eval_operand_ssa_equiv to establish operand equality,
-     * finally irule jump_to_ssa_equiv for OK branches. *)
-    val jnz_direct_tac =
+    val output_case_tac =
+      Cases_on `inst.inst_outputs` >| [
+        fs[inst_ssa_compatible_def],
+        (Cases_on `t` >| [
+           (drule_all inst_ssa_compatible_outputs_equiv >> strip_tac >> gvs[]),
+           gvs[]
+         ])
+      ]
+    val outputs_ok_tac =
+      `case inst.inst_outputs of
+         [] => inst_ssa.inst_outputs = []
+       | [out] =>
+           let ssa_out = case FLOOKUP vm out of SOME x => x | NONE => out in
+           inst_ssa.inst_outputs = [ssa_out] /\
+           (!v. v <> out ==> FLOOKUP vm v <> SOME ssa_out) /\
+           (FLOOKUP vm ssa_out = NONE ==>
+            FLOOKUP vm out = NONE \/ FLOOKUP vm out = SOME out)
+       | _ => T` by output_case_tac
+    fun result4_forward lemma =
+      `inst_ssa.inst_operands = MAP (ssa_operand vm) inst.inst_operands` by
+        fs[inst_ssa_compatible_def] >>
+      outputs_ok_tac >>
+      irule lemma >>
+      conj_tac >- fs[] >>
+      conj_tac >- fs[] >>
+      conj_tac >- fs[] >>
+      fs[] >> NO_TAC
+    fun result2_forward lemma =
+      irule lemma >>
+      conj_tac >- fs[] >>
+      fs[inst_ssa_compatible_def] >> NO_TAC
+    fun result3_forward lemma =
+      irule lemma >>
+      conj_tac >- fs[] >>
+      conj_tac >- fs[] >>
+      fs[] >> NO_TAC
+    val binop_tac = result4_forward exec_binop_result_ssa_equiv
+    val unop_tac = result4_forward exec_unop_result_ssa_equiv
+    val modop_tac = result4_forward exec_modop_result_ssa_equiv
+    val mload_tac = result4_forward mload_result_ssa_equiv
+    val sload_tac = result4_forward sload_result_ssa_equiv
+    val tload_tac = result4_forward tload_result_ssa_equiv
+    val load_tac = FIRST [mload_tac, sload_tac, tload_tac]
+    val store_tac =
+      `inst_ssa.inst_operands = MAP (ssa_operand vm) inst.inst_operands` by
+        fs[inst_ssa_compatible_def] >>
+      simp[mstore_result_ssa_equiv, sstore_result_ssa_equiv,
+           tstore_result_ssa_equiv] >> NO_TAC
+    val assert_tac =
+      `inst_ssa.inst_operands = MAP (ssa_operand vm) inst.inst_operands` by
+        fs[inst_ssa_compatible_def] >>
+      qpat_x_assum `inst_ssa.inst_operands = _` (fn th => ONCE_REWRITE_TAC [th]) >>
+      Cases_on `inst.inst_operands` >> fs[ssa_result_equiv_def] >>
+      Cases_on `t` >> fs[ssa_result_equiv_def] >>
+      `eval_operand h s_orig = eval_operand (ssa_operand vm h) s_ssa` by
+        (irule eval_operand_ssa_equiv >> simp[]) >>
+      Cases_on `eval_operand (ssa_operand vm h) s_ssa` >> fs[ssa_result_equiv_def] >> gvs[] >>
+      Cases_on `x = 0w` >> gvs[ssa_result_equiv_def] >>
+      irule revert_state_ssa_equiv >> simp[] >> NO_TAC
+    val assert_unreachable_tac =
+      `inst_ssa.inst_operands = MAP (ssa_operand vm) inst.inst_operands` by
+        fs[inst_ssa_compatible_def] >>
+      qpat_x_assum `inst_ssa.inst_operands = _` (fn th => ONCE_REWRITE_TAC [th]) >>
+      Cases_on `inst.inst_operands` >> fs[ssa_result_equiv_def] >>
+      Cases_on `t` >> fs[ssa_result_equiv_def] >>
+      `eval_operand h s_orig = eval_operand (ssa_operand vm h) s_ssa` by
+        (irule eval_operand_ssa_equiv >> simp[]) >>
+      Cases_on `eval_operand (ssa_operand vm h) s_ssa` >> fs[ssa_result_equiv_def] >> gvs[] >>
+      Cases_on `x <> 0w` >> gvs[ssa_result_equiv_def] >>
+      irule halt_state_ssa_equiv >> simp[] >> NO_TAC
+    val blockhash_tac = result4_forward blockhash_result_ssa_equiv
+    val balance_tac = result4_forward balance_result_ssa_equiv
+    val calldataload_tac = result4_forward calldataload_result_ssa_equiv
+    val sha3_tac = result3_forward sha3_result_ssa_equiv
+    val sha3_64_tac = result3_forward sha3_64_result_ssa_equiv
+    val calldatacopy_tac =
+      `inst_ssa.inst_operands = MAP (ssa_operand vm) inst.inst_operands` by
+        fs[inst_ssa_compatible_def] >>
+      simp[calldatacopy_result_ssa_equiv] >> NO_TAC
+    val returndatacopy_tac =
+      `inst_ssa.inst_operands = MAP (ssa_operand vm) inst.inst_operands` by
+        fs[inst_ssa_compatible_def] >>
+      simp[returndatacopy_result_ssa_equiv] >> NO_TAC
+    (* JMP/JNZ: unfold operand mapping and re-run the lemma proof directly. *)
+    val jmp_tac =
+      fs[inst_ssa_compatible_def] >>
+      Cases_on `inst.inst_operands` >> simp[ssa_result_equiv_def] >>
+      Cases_on `t` >> simp[ssa_result_equiv_def] >>
+      Cases_on `h` >> simp[ssa_operand_def, ssa_result_equiv_def] >>
+      rpt (CASE_TAC >> simp[ssa_result_equiv_def]) >>
+      irule jump_to_ssa_equiv >> simp[] >> NO_TAC
+    val jnz_tac =
+      fs[inst_ssa_compatible_def] >>
       simp[ssa_operand_def, ssa_result_equiv_def] >>
       CASE_TAC >> simp[ssa_result_equiv_def] >> simp[] >>
       CASE_TAC >> simp[ssa_operand_def, ssa_result_equiv_def] >>
       drule_all eval_operand_ssa_equiv >> strip_tac >> gvs[] >>
       rpt (CASE_TAC >> simp[ssa_operand_def, ssa_result_equiv_def]) >>
       irule jump_to_ssa_equiv >> simp[] >> NO_TAC
-    (* ASSIGN: Same pattern mismatch issue as JMP/JNZ.
-     * Use similar structure to jnz_direct_tac which works.
-     * Key: simp[ssa_operand_def] first, then targeted CASE_TACs,
-     * then drule_all eval_operand_ssa_equiv to establish eval equality,
-     * finally irule ssa_state_equiv_update_same_vm for OK case.
-     *
-     * After case splits, we get goals like:
-     * - F goals: eval_operand in orig = SOME x, in ssa = NONE (or vice versa)
-     *   These should be closed by contradiction from eval_operand_ssa_equiv
-     * - OK goals: need ssa_state_equiv after update_var with same value
-     *)
-    (* ASSIGN: Proven interactively Dec 2025. Key insight:
-     * After gvs[inst_ssa_compatible_def], need structured case splits on:
-     * 1. inst.inst_operands: [h] vs other (error cases)
-     * 2. inst.inst_outputs: [h'] vs other (LENGTH <= 1 constraint)
-     * 3. eval_operand h s_orig: NONE vs SOME
-     * Then drule_all eval_operand_ssa_equiv for operand equiv,
-     * irule ssa_state_equiv_update_same_vm for state update equiv,
-     * Cases_on FLOOKUP vm h' for final freshness discharge. *)
-    val assign_tac =
-      (* Case split on operands - [] and h::t cases *)
-      Cases_on `inst.inst_operands` >> simp[ssa_result_equiv_def] >>
-      (* Case split on outputs - [] and h'::t' cases *)
-      Cases_on `inst.inst_outputs` >> simp[ssa_result_equiv_def] >>
-      (* First: handle outputs = [] case *)
-      TRY (gvs[] >> simp[ssa_result_equiv_def] >> NO_TAC) >>
-      (* Now in outputs = h'::t' case, split output tail *)
-      Cases_on `t'` >> gvs[] >>
-      (* Now in outputs = [h'] case, split operand tail *)
-      Cases_on `t` >> gvs[ssa_result_equiv_def] >>
-      (* Now in [h] operand, [h'] output case - split on eval_operand *)
-      Cases_on `eval_operand h s_orig` >> gvs[ssa_result_equiv_def] >>
-      (* Both NONE and SOME cases use eval_operand_ssa_equiv *)
-      drule_all eval_operand_ssa_equiv >> strip_tac >> gvs[ssa_result_equiv_def] >>
-      (* SOME case needs ssa_state_equiv_update_same_vm *)
-      TRY (irule ssa_state_equiv_update_same_vm >> gvs[] >>
-           Cases_on `FLOOKUP vm h'` >> gvs[]) >> NO_TAC
+    val assign_tac = result4_forward assign_result_ssa_equiv
+    (* Output-only ops: use value equality under ssa_state_equiv. *)
+    val state_out_tac =
+      irule single_output_result_ssa_equiv >>
+      fs[inst_ssa_compatible_def, ssa_state_equiv_def] >> NO_TAC
+    (* NOP: OK states are equivalent under the same vm. *)
+    val nop_tac = simp[ssa_result_equiv_def] >> NO_TAC
     (* Halt/Revert: Goal is ssa_result_equiv vm (Halt ...) (Halt ...).
      * First expand ssa_result_equiv_def to get ssa_state_equiv goal,
      * then apply halt/revert_state_ssa_equiv. *)
@@ -1000,10 +1754,23 @@ Proof
     val error_tac = simp[ssa_result_equiv_def]
   in
     rpt strip_tac >>
+    `inst_ssa.inst_opcode = inst.inst_opcode` by fs[inst_ssa_compatible_def] >>
+    Cases_on `inst.inst_opcode` >>
     simp[step_inst_def] >>
-    Cases_on `inst.inst_opcode` >> gvs[inst_ssa_compatible_def] >>
-    FIRST [binop_tac, unop_tac, modop_tac, load_tac, store_tac,
-           jmp_direct_tac, jnz_direct_tac, assign_tac, halt_tac, revert_tac, error_tac]
+    pop_assum (fn eq => simp_tac std_ss [eq]) >>
+    FIRST [
+      state_out_tac,
+      sha3_tac,
+      sha3_64_tac,
+      nop_tac,
+      jmp_tac,
+      jnz_tac,
+      FIRST [binop_tac, unop_tac, modop_tac, load_tac, store_tac,
+             assert_tac, assert_unreachable_tac, blockhash_tac, balance_tac,
+             calldataload_tac, calldatacopy_tac, returndatacopy_tac,
+             assign_tac,
+             halt_tac, revert_tac, error_tac, all_tac]
+    ]
   end
 QED
 
@@ -1022,8 +1789,13 @@ Proof
   rpt strip_tac >>
   `ssa_result_equiv vm (step_inst inst s_orig) (step_inst inst_ssa s_ssa)` by
     (irule step_inst_result_ssa_equiv >> simp[]) >>
-  Cases_on `step_inst inst_ssa s_ssa` >> gvs[ssa_result_equiv_def] >>
-  qexists_tac `r` >> qexists_tac `vm` >> simp[]
+  Cases_on `step_inst inst_ssa s_ssa` >| [
+    (rename1 `OK r_ssa` >>
+     qexists_tac `r_ssa` >> qexists_tac `vm` >> gvs[ssa_result_equiv_def]),
+    gvs[ssa_result_equiv_def],
+    gvs[ssa_result_equiv_def],
+    gvs[ssa_result_equiv_def]
+  ]
 QED
 
 (* ==========================================================================
