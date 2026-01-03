@@ -32,39 +32,20 @@
 
 Theory rtaTransform
 Ancestors
-  rtaCorrect rtaProps rtaDefs stateEquiv venomSem venomInst venomState list rich_list
+  rtaCorrect rtaProps rtaDefs stateEquiv venomSemProps venomSem venomInst venomState list rich_list
 
 (* ==========================================================================
    Block-Level Correctness
    ========================================================================== *)
 
-(*
- * WHY THIS IS TRUE: step_in_block doesn't use fn in its computation.
- * It only uses bb and s to get/execute the current instruction.
- *)
-Theorem step_in_block_fn_irrelevant:
-  !fn1 fn2 bb s. step_in_block fn1 bb s = step_in_block fn2 bb s
-Proof
-  simp[venomSemTheory.step_in_block_def]
-QED
-
-(*
- * WHY THIS IS TRUE: run_block is defined recursively using step_in_block.
- * Since step_in_block doesn't depend on fn, run_block doesn't either.
- * The fn parameter is just passed through to recursive calls.
- *)
-Theorem run_block_fn_irrelevant:
-  !fn bb s. run_block fn bb s = run_block ARB bb s
-Proof
-  ho_match_mp_tac venomSemTheory.run_block_ind >> rw[] >>
-  simp[Once venomSemTheory.run_block_def, step_in_block_fn_irrelevant, SimpLHS] >>
-  simp[Once venomSemTheory.run_block_def, step_in_block_fn_irrelevant, SimpRHS] >>
-  Cases_on `step_in_block fn bb s` >>
-  `step_in_block ARB bb s = step_in_block fn bb s` by simp[step_in_block_fn_irrelevant] >>
-  gvs[] >> Cases_on `q` >> simp[]
-QED
-
-(* NOTE: transform_block_insts helper theorems are now in rtaPropsTheory:
+(* NOTE: General step_in_block/run_block helpers are in venomSemPropsTheory:
+ * - step_in_block_fn_irrelevant
+ * - run_block_fn_irrelevant
+ * - step_in_block_increments_idx
+ * - run_block_OK_not_halted
+ * - run_block_OK_inst_idx_0
+ *
+ * NOTE: transform_block_insts helper theorems are now in rtaPropsTheory:
  * - transform_block_insts_TAKE_DROP
  * - transform_block_insts_TAKE
  * - transform_block_insts_EL_transformed
@@ -94,23 +75,6 @@ Proof
     `EL s.vs_inst_idx (TAKE (SUC s.vs_inst_idx) bb1.bb_instructions) =
      EL s.vs_inst_idx (TAKE (SUC s.vs_inst_idx) bb2.bb_instructions)` by simp[] >>
     metis_tac[EL_TAKE, DECIDE ``n < SUC n``]
-  ) >>
-  simp[]
-QED
-
-(* Helper: step_in_block with is_term=F increments vs_inst_idx *)
-Theorem step_in_block_increments_idx:
-  !fn bb s v.
-    step_in_block fn bb s = (OK v, F)
-    ==>
-    v.vs_inst_idx = SUC s.vs_inst_idx
-Proof
-  rw[step_in_block_def] >>
-  Cases_on `get_instruction bb s.vs_inst_idx` >> gvs[] >>
-  Cases_on `step_inst x s` >> gvs[] >>
-  Cases_on `is_terminator x.inst_opcode` >> gvs[venomStateTheory.next_inst_def] >>
-  `v'.vs_inst_idx = s.vs_inst_idx` by (
-    drule_all step_inst_preserves_inst_idx >> simp[]
   ) >>
   simp[]
 QED
@@ -330,53 +294,6 @@ Theorem lookup_block_MEM:
 Proof
   Induct_on `bbs` >- simp[lookup_block_def] >>
   simp[lookup_block_def] >> rw[] >> metis_tac[]
-QED
-
-(*
- * Helper: run_block returning OK implies state is not halted.
- *
- * WHY THIS IS TRUE: If vs_halted becomes true during execution,
- * run_block returns Halt, not OK. The OK result only occurs when
- * a jump instruction executes (JMP or JNZ branch taken).
- *)
-Theorem run_block_OK_not_halted:
-  !fn bb s v. run_block fn bb s = OK v ==> ~v.vs_halted
-Proof
-  ho_match_mp_tac venomSemTheory.run_block_ind >> rw[] >>
-  qpat_x_assum `run_block _ _ _ = _` mp_tac >>
-  simp[Once venomSemTheory.run_block_def] >>
-  Cases_on `step_in_block fn bb s` >> gvs[] >>
-  Cases_on `q` >> gvs[] >>
-  Cases_on `v'.vs_halted` >> gvs[] >>
-  Cases_on `r` >> gvs[] >> rw[] >> gvs[]
-QED
-
-(*
- * Helper: run_block returning OK implies vs_inst_idx = 0.
- *
- * WHY THIS IS TRUE: When run_block returns OK, it means a jump instruction
- * executed (JMP, JNZ, or DJMP). All jumps use jump_to which sets vs_inst_idx := 0.
- *)
-Theorem run_block_OK_inst_idx_0:
-  !fn bb s v. run_block fn bb s = OK v ==> v.vs_inst_idx = 0
-Proof
-  ho_match_mp_tac venomSemTheory.run_block_ind >> rw[] >>
-  qpat_x_assum `run_block _ _ _ = _` mp_tac >>
-  simp[Once venomSemTheory.run_block_def] >>
-  Cases_on `step_in_block fn bb s` >> gvs[] >>
-  Cases_on `q` >> gvs[] >>
-  Cases_on `v'.vs_halted` >> gvs[] >>
-  Cases_on `r` >> gvs[] >> rw[] >> gvs[] >>
-  qpat_x_assum `step_in_block _ _ _ = _` mp_tac >>
-  simp[venomSemTheory.step_in_block_def] >>
-  Cases_on `get_instruction bb s.vs_inst_idx` >> gvs[] >>
-  Cases_on `step_inst x s` >> gvs[] >>
-  Cases_on `is_terminator x.inst_opcode` >> gvs[] >> rw[] >> gvs[] >>
-  qpat_x_assum `is_terminator _` mp_tac >> simp[venomInstTheory.is_terminator_def] >>
-  Cases_on `x.inst_opcode` >> gvs[venomInstTheory.is_terminator_def] >>
-  qpat_x_assum `step_inst _ _ = _` mp_tac >>
-  simp[venomSemTheory.step_inst_def, venomStateTheory.jump_to_def] >>
-  gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[]
 QED
 
 (* ==========================================================================
