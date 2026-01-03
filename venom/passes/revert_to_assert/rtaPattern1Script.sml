@@ -6,7 +6,7 @@
 
 Theory rtaPattern1
 Ancestors
-  rtaProps rtaDefs stateEquiv venomSemProps venomSem venomInst venomState list
+  rtaProofHelpers rtaPassDefs stateEquiv venomSemProps venomSem venomInst venomState list
 
 (* ==========================================================================
    Block Execution Helpers
@@ -37,9 +37,9 @@ Proof
   `s.vs_inst_idx + 1 < LENGTH (transform_block_insts fn bb.bb_instructions)` by
     (drule_all transform_block_insts_length_pattern1 >> simp[]) >>
   (* Get instruction facts from pattern1_transformed_instructions *)
-  drule_all rtaPropsTheory.transform_block_insts_EL_transformed >>
+  drule_all rtaProofHelpersTheory.transform_block_insts_EL_transformed >>
   simp[LET_THM, transform_pattern1_def] >> strip_tac >>
-  drule_all rtaPropsTheory.pattern1_transformed_instructions >>
+  drule_all rtaProofHelpersTheory.pattern1_transformed_instructions >>
   simp[LET_THM] >> strip_tac >>
   (* Step 1: Execute ISZERO *)
   simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
@@ -78,9 +78,9 @@ Proof
   `s.vs_inst_idx + 2 < LENGTH (transform_block_insts fn bb.bb_instructions)` by
     (drule_all transform_block_insts_length_pattern1 >> simp[]) >>
   (* Get instruction facts from pattern1_transformed_instructions *)
-  drule_all rtaPropsTheory.transform_block_insts_EL_transformed >>
+  drule_all rtaProofHelpersTheory.transform_block_insts_EL_transformed >>
   simp[LET_THM, transform_pattern1_def] >> strip_tac >>
-  drule_all rtaPropsTheory.pattern1_transformed_instructions >>
+  drule_all rtaProofHelpersTheory.pattern1_transformed_instructions >>
   simp[LET_THM] >> strip_tac >>
   (* Step 1: Execute ISZERO - produces bool_to_word T = 1w *)
   simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
@@ -120,7 +120,7 @@ Theorem revert_states_equiv_except:
       (revert_state (next_inst (update_var fresh_var 0w s)))
 Proof
   rw[LET_THM] >>
-  drule_all rtaPropsTheory.fresh_var_in_fresh_vars >> strip_tac >>
+  drule_all rtaProofHelpersTheory.fresh_var_in_fresh_vars >> strip_tac >>
   simp[execution_equiv_except_def, revert_state_def, jump_to_def,
        next_inst_def, update_var_def, lookup_var_def] >>
   rw[] >> simp[finite_mapTheory.FLOOKUP_UPDATE] >> rw[] >> metis_tac[]
@@ -143,7 +143,7 @@ Theorem jumped_states_equiv_except:
       (jump_to if_zero (update_var fresh_var 1w s))
 Proof
   rw[LET_THM] >>
-  drule_all rtaPropsTheory.fresh_var_in_fresh_vars >> strip_tac >>
+  drule_all rtaProofHelpersTheory.fresh_var_in_fresh_vars >> strip_tac >>
   simp[state_equiv_except_def, execution_equiv_except_def, jump_to_def,
        update_var_def, lookup_var_def] >>
   rw[] >> simp[finite_mapTheory.FLOOKUP_UPDATE] >> rw[] >> metis_tac[]
