@@ -927,18 +927,12 @@ Theorem transform_context_correct:
       lookup_function entry ctx'.ctx_functions = SOME fn' /\
       s.vs_inst_idx = 0 /\
       ~s.vs_halted ==>
-      (* Part 1: Termination equivalence *)
-      ((?fuel. terminates (run_function fuel fn s)) <=>
-       (?fuel'. terminates (run_function fuel' fn' s))) /\
-      (* Part 2: Result equivalence when both terminate *)
-      (!fuel fuel'.
-        terminates (run_function fuel fn s) /\
-        terminates (run_function fuel' fn' s) ==>
-        result_equiv_except fresh
-          (run_function fuel fn s)
-          (run_function fuel' fn' s))
+      pass_correct fresh
+        (\fuel. run_function fuel fn s)
+        (\fuel. run_function fuel fn' s)
 Proof
-  simp[LET_THM] >> rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  simp[LET_THM, pass_correct_def] >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
   (* Show fn' = transform_function fn *)
   `fn' = transform_function fn` by (
     qpat_x_assum `lookup_function _ ctx.ctx_functions = _`
@@ -989,7 +983,7 @@ QED
  * use variable names matching the fresh variable pattern (rta_tmp_N).
  * This is checked at the compiler level before the pass runs.
  *
- * The theorem establishes:
+ * The theorem uses pass_correct which establishes:
  * 1. Termination equivalence: original terminates iff transformed terminates
  * 2. Result equivalence: when both terminate, results are equivalent
  *    (modulo fresh variables introduced by the transformation)
@@ -1006,18 +1000,10 @@ Theorem revert_to_assert_pass_correct:
     ?fn fn'.
       lookup_function entry ctx.ctx_functions = SOME fn /\
       lookup_function entry ctx'.ctx_functions = SOME fn' /\
-      (* Termination equivalence (for states starting at block beginning) *)
-      ((!s. s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
-            ((?fuel. terminates (run_function fuel fn s)) <=>
-             (?fuel'. terminates (run_function fuel' fn' s))))) /\
-      (* Result equivalence when both terminate *)
-      (!s fuel fuel'.
-        s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-        terminates (run_function fuel fn s) /\
-        terminates (run_function fuel' fn' s) ==>
-        result_equiv_except fresh
-          (run_function fuel fn s)
-          (run_function fuel' fn' s))
+      !s. s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
+          pass_correct fresh
+            (\fuel. run_function fuel fn s)
+            (\fuel. run_function fuel fn' s)
 Proof
   simp[LET_THM] >> rpt gen_tac >> strip_tac >>
   Cases_on `lookup_function entry ctx.ctx_functions` >> gvs[] >>
@@ -1031,9 +1017,7 @@ Proof
   ) >>
   simp[] >>
   qspecl_then [`ctx`, `entry`] mp_tac transform_context_correct >>
-  simp[LET_THM, transform_context_def] >> strip_tac >>
-  first_x_assum (qspecl_then [`x`, `transform_function x`] mp_tac) >>
-  simp[]
+  simp[LET_THM, transform_context_def]
 QED
 
 val _ = export_theory();

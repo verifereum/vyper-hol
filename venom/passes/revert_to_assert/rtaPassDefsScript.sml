@@ -19,6 +19,7 @@
  *   - execution_equiv_except    : State equivalence ignoring control flow
  *   - observable_equiv          : External effect equivalence
  *   - result_equiv_except       : Result equivalence for exec_result
+ *   - terminates                : Predicate for successful termination (not Error)
  *
  * ============================================================================
  * TRANSFORMATION PATTERNS
@@ -290,18 +291,6 @@ End
 Definition fresh_vars_not_in_context_def:
   fresh_vars_not_in_context ctx <=>
     !fn. MEM fn ctx.ctx_functions ==> fresh_vars_not_in_function fn
-End
-
-(* ==========================================================================
-   Termination Predicate
-   ========================================================================== *)
-
-(*
- * Predicate: execution terminates (not Error).
- * Used for bidirectional correctness proofs.
- *)
-Definition terminates_def:
-  terminates r <=> case r of Error _ => F | _ => T
 End
 
 val _ = export_theory();

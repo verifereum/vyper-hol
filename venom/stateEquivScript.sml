@@ -12,6 +12,8 @@
  *   - state_equiv           : Main state equivalence predicate
  *   - result_equiv          : Equivalence for exec_result
  *   - var_equiv             : Variable-only equivalence
+ *   - terminates            : Predicate for successful termination (not Error)
+ *   - pass_correct          : Combined termination + result equivalence predicate
  *
  * TOP-LEVEL THEOREMS:
  *   - state_equiv_refl/sym/trans : Equivalence relation properties
@@ -153,6 +155,19 @@ Theorem result_equiv_mismatch[simp]:
 Proof
   rw[result_equiv_def]
 QED
+
+(* ==========================================================================
+   Termination Predicate
+   ========================================================================== *)
+
+(*
+ * Predicate: execution terminates (not Error).
+ * Used for bidirectional correctness proofs where we need to express
+ * "termination equivalence and result equivalence assuming termination".
+ *)
+Definition terminates_def:
+  terminates r <=> case r of Error _ => F | _ => T
+End
 
 (* ==========================================================================
    Operand Evaluation Preserves Equivalence
@@ -534,6 +549,30 @@ Definition result_equiv_except_def:
   result_equiv_except vars (Revert s1) (Revert s2) = execution_equiv_except vars s1 s2 /\
   result_equiv_except vars (Error e1) (Error e2) = T /\
   result_equiv_except vars _ _ = F
+End
+
+(* ==========================================================================
+   Pass Correctness Predicate
+   ========================================================================== *)
+
+(*
+ * Predicate: Two executions (parameterized by fuel) are pass-correct.
+ * This captures the pattern used in compiler pass correctness proofs:
+ *   1. Termination equivalence: original terminates iff transformed terminates
+ *   2. Result equivalence: when both terminate, results are equivalent
+ *      (modulo fresh variables introduced by the transformation)
+ *
+ * Usage: pass_correct fresh (\fuel. run_function fuel fn s)
+ *                           (\fuel. run_function fuel fn' s)
+ *)
+Definition pass_correct_def:
+  pass_correct fresh exec1 exec2 <=>
+    (* Termination equivalence *)
+    ((?fuel. terminates (exec1 fuel)) <=> (?fuel'. terminates (exec2 fuel'))) /\
+    (* Result equivalence when both terminate *)
+    (!fuel fuel'.
+       terminates (exec1 fuel) /\ terminates (exec2 fuel') ==>
+       result_equiv_except fresh (exec1 fuel) (exec2 fuel'))
 End
 
 Theorem result_equiv_except_refl:
