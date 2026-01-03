@@ -53,7 +53,7 @@
  * ============================================================================
  *)
 
-Theory rtaDefs
+Theory rtaPassDefs
 Ancestors
   stateEquiv venomSem venomInst venomState finite_map pred_set
 Libs

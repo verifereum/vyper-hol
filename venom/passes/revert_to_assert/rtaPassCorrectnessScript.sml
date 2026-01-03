@@ -30,9 +30,9 @@
  * ============================================================================
  *)
 
-Theory rtaTransform
+Theory rtaPassCorrectness
 Ancestors
-  rtaPattern1 rtaProps rtaDefs stateEquiv venomSemProps venomSem venomInst venomState list rich_list
+  rtaPattern1 rtaProofHelpers rtaPassDefs stateEquiv venomSemProps venomSem venomInst venomState list rich_list
 
 (* ==========================================================================
    JNZ Transformation Step Lemmas
@@ -61,7 +61,7 @@ Theorem jnz_pattern1_step:
     ==>
     let bb' = transform_block fn bb in
     let fresh = fresh_vars_in_block fn bb in
-    case (run_block fn bb s, run_block (transform_function fn) bb' s) of
+    case (run_block bb s, run_block bb' s) of
     | (OK v, OK v') => state_equiv_except fresh v v'
     | (OK v, Revert v') =>
         is_revert_label fn v.vs_current_bb /\
@@ -76,7 +76,7 @@ Proof
   Cases_on `eval_operand cond_op s`
   >- ((* NONE: both error *)
     simp[Once run_block_def, step_in_block_def, get_instruction_def, step_inst_def] >>
-    simp[Once run_block_def, run_block_fn_irrelevant, step_in_block_def,
+    simp[Once run_block_def, step_in_block_def,
          get_instruction_def, transform_block_def] >>
     `s.vs_inst_idx < LENGTH (transform_block_insts fn bb.bb_instructions)` by
       (drule_all transform_block_insts_length_pattern1 >> simp[]) >>
@@ -113,7 +113,7 @@ Theorem jnz_pattern2_step:
     ==>
     let bb' = transform_block fn bb in
     let fresh = fresh_vars_in_block fn bb in
-    case (run_block fn bb s, run_block (transform_function fn) bb' s) of
+    case (run_block bb s, run_block bb' s) of
     | (OK v, OK v') => state_equiv_except fresh v v'
     | (OK v, Revert v') =>
         is_revert_label fn v.vs_current_bb /\
@@ -132,7 +132,7 @@ Proof
   Cases_on `eval_operand cond_op s`
   >- ((* NONE: both error *)
     simp[Once run_block_def, step_in_block_def, get_instruction_def, step_inst_def] >>
-    simp[Once run_block_def, run_block_fn_irrelevant, step_in_block_def,
+    simp[Once run_block_def, step_in_block_def,
          get_instruction_def, transform_block_def] >>
     `s.vs_inst_idx < LENGTH (transform_block_insts fn bb.bb_instructions)` by
       (drule_all transform_block_insts_length_pattern2 >> simp[]) >>
@@ -149,7 +149,7 @@ Proof
        `LENGTH (transform_block_insts fn bb.bb_instructions) >= LENGTH bb.bb_instructions`
          suffices_by decide_tac >> simp[transform_block_insts_length_ge]) >>
     drule_all transform_block_insts_EL_transformed >> simp[LET_THM] >> strip_tac >>
-    simp[Once run_block_def, run_block_fn_irrelevant, step_in_block_def,
+    simp[Once run_block_def, step_in_block_def,
          get_instruction_def, transform_block_def] >>
     gvs[transform_pattern2_def, mk_assert_inst_def, step_inst_def] >>
     simp[EVAL ``is_terminator ASSERT``, execution_equiv_except_refl, revert_state_def,
@@ -163,12 +163,12 @@ Proof
      `LENGTH (transform_block_insts fn bb.bb_instructions) >= LENGTH bb.bb_instructions`
        suffices_by decide_tac >> simp[transform_block_insts_length_ge]) >>
   drule_all transform_block_insts_EL_transformed >> simp[LET_THM] >> strip_tac >>
-  simp[Once run_block_def, run_block_fn_irrelevant, step_in_block_def,
+  simp[Once run_block_def, step_in_block_def,
        get_instruction_def, transform_block_def] >>
   simp[transform_pattern2_def, mk_assert_inst_def, step_inst_def,
        EVAL ``is_terminator ASSERT``, next_inst_def] >>
   drule_all transform_block_insts_length_pattern2 >> strip_tac >>
-  drule_all rtaPropsTheory.pattern2_transformed_instructions >> simp[LET_THM] >> strip_tac >>
+  drule_all rtaProofHelpersTheory.pattern2_transformed_instructions >> simp[LET_THM] >> strip_tac >>
   simp[Once run_block_def, step_in_block_def, get_instruction_def,
        mk_jmp_inst_def, step_inst_def, EVAL ``is_terminator JMP``,
        venomStateTheory.jump_to_def, state_equiv_except_refl]
@@ -276,7 +276,7 @@ Theorem run_block_transform_general:
     let bb' = transform_block fn bb in
     let fn' = transform_function fn in
     let fresh = fresh_vars_in_block fn bb in
-    case (run_block fn bb s, run_block fn' bb' s) of
+    case (run_block bb s, run_block bb' s) of
     | (OK v, OK v') => state_equiv_except fresh v v'
     | (OK v, Revert v') =>
         is_revert_label fn v.vs_current_bb /\
@@ -321,25 +321,22 @@ Proof
       `TAKE (SUC s.vs_inst_idx) (transform_block fn bb).bb_instructions =
        TAKE (SUC s.vs_inst_idx) bb.bb_instructions` by
         (simp[transform_block_def] >> irule transform_block_insts_TAKE >> gvs[]) >>
-      `step_in_block fn bb s = step_in_block fn (transform_block fn bb) s` by (
+      `step_in_block bb s = step_in_block (transform_block fn bb) s` by (
         `s.vs_inst_idx < LENGTH (transform_block fn bb).bb_instructions` by
           (gvs[transform_block_def] >>
            `LENGTH (transform_block_insts fn bb.bb_instructions) >= LENGTH bb.bb_instructions`
               suffices_by decide_tac >>
            simp[transform_block_insts_length_ge]) >>
         irule step_in_block_prefix_same >> qexists_tac `s.vs_inst_idx` >> gvs[]) >>
-          `run_block (transform_function fn) (transform_block fn bb) s =
-           run_block fn (transform_block fn bb) s` by simp[run_block_fn_irrelevant] >>
-          simp[] >>
-          Cases_on `step_in_block fn (transform_block fn bb) s` >>
+          Cases_on `step_in_block (transform_block fn bb) s` >>
           Cases_on `q:exec_result`
           (* OK: recurse or terminate *)
           >- (
             simp[] >>
-            `run_block fn (transform_block fn bb) s =
+            `run_block (transform_block fn bb) s =
               if v.vs_halted then Halt v
               else if r then OK v
-              else run_block fn (transform_block fn bb) v` by
+              else run_block (transform_block fn bb) v` by
                 (simp[Once run_block_def] >> gvs[]) >>
             simp[] >>
             Cases_on `v.vs_halted`
@@ -351,10 +348,6 @@ Proof
                 (* Apply IH for recursive case *)
                 `v.vs_inst_idx = SUC s.vs_inst_idx` by
                   (drule_all step_in_block_increments_idx >> simp[]) >>
-                `run_block fn (transform_block fn bb) v =
-                 run_block (transform_function fn) (transform_block fn bb) v` by
-                  simp[run_block_fn_irrelevant] >>
-                pop_assum SUBST1_TAC >>
                 first_x_assum (qspec_then `LENGTH bb.bb_instructions - v.vs_inst_idx` mp_tac) >>
                 impl_tac >- decide_tac >>
                 disch_tac >>
@@ -363,19 +356,19 @@ Proof
           (* Halt *)
           >- (
             simp[] >>
-            `run_block fn (transform_block fn bb) s = Halt v` by
+            `run_block (transform_block fn bb) s = Halt v` by
               (simp[Once run_block_def] >> gvs[]) >>
             simp[execution_equiv_except_refl])
           (* Revert *)
           >- (
             simp[] >>
-            `run_block fn (transform_block fn bb) s = Revert v` by
+            `run_block (transform_block fn bb) s = Revert v` by
               (simp[Once run_block_def] >> gvs[]) >>
             simp[execution_equiv_except_refl])
           (* Error *)
           >- (
             simp[] >>
-            `run_block fn (transform_block fn bb) s = Error s'` by
+            `run_block (transform_block fn bb) s = Error s'` by
               (simp[Once run_block_def] >> gvs[]) >>
             simp[]))
     (* SOME case: instruction transformed - use helper lemmas *)
@@ -385,14 +378,14 @@ Proof
       (* Pattern 1: is_revert_label fn if_nonzero *)
       >- (
         drule_all jnz_pattern1_step >> simp[LET_THM] >> strip_tac >>
-        Cases_on `run_block fn bb s` >>
-        Cases_on `run_block (transform_function fn) (transform_block fn bb) s` >>
+        Cases_on `run_block bb s` >>
+        Cases_on `run_block (transform_block fn bb) s` >>
         gvs[])
       (* Pattern 2: is_revert_label fn if_zero *)
       >- (
         drule_all jnz_pattern2_step >> simp[LET_THM] >> strip_tac >>
-        Cases_on `run_block fn bb s` >>
-        Cases_on `run_block (transform_function fn) (transform_block fn bb) s` >>
+        Cases_on `run_block bb s` >>
+        Cases_on `run_block (transform_block fn bb) s` >>
         gvs[])))
 QED
 
@@ -410,8 +403,8 @@ Theorem run_block_transform_relation:
     let bb' = transform_block fn bb in
     let fn' = transform_function fn in
     let fresh = fresh_vars_in_block fn bb in
-    let r = run_block fn bb (s with vs_inst_idx := 0) in
-    let r' = run_block fn' bb' (s with vs_inst_idx := 0) in
+    let r = run_block bb (s with vs_inst_idx := 0) in
+    let r' = run_block bb' (s with vs_inst_idx := 0) in
     case (r, r') of
     | (OK v, OK v') => state_equiv_except fresh v v'
     | (OK v, Revert v') =>
@@ -471,10 +464,10 @@ Proof
     simp[] >> qexists_tac `inst'.inst_id` >> simp[]
   ) >>
   (* Use run_block_result_equiv_except *)
-  `result_equiv_except (fresh_vars_in_function fn) (run_block fn x s1) (run_block fn x s2)` by (
+  `result_equiv_except (fresh_vars_in_function fn) (run_block x s1) (run_block x s2)` by (
     irule run_block_result_equiv_except >> simp[] >> metis_tac[]
   ) >>
-  Cases_on `run_block fn x s1` >> Cases_on `run_block fn x s2` >>
+  Cases_on `run_block x s1` >> Cases_on `run_block x s2` >>
   gvs[result_equiv_except_def] >>
   (* gvs closes mismatched cases; OK/OK case remains *)
   `v.vs_halted <=> v'.vs_halted` by fs[state_equiv_except_def, execution_equiv_except_def] >>
@@ -514,7 +507,7 @@ Proof
     strip_tac >> qpat_x_assum `terminates (run_function (SUC _) fn _)` mp_tac >>
     simp[Once run_function_def] >>
     Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >- simp[terminates_def] >>
-    simp[] >> Cases_on `run_block fn x s` >> simp[]
+    simp[] >> Cases_on `run_block x s` >> simp[]
     (* OK case *)
     >- (
       strip_tac >> `MEM x fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
@@ -523,7 +516,7 @@ Proof
        SOME (transform_block fn x)` by (irule lookup_block_transform_function >> simp[]) >>
       qspecl_then [`fn`, `x`, `s`] mp_tac run_block_transform_general >>
       impl_tac >- simp[] >>
-      simp[LET_THM] >> Cases_on `run_block (transform_function fn) (transform_block fn x) s` >> simp[]
+      simp[LET_THM] >> Cases_on `run_block (transform_block fn x) s` >> simp[]
       (* OK/OK: chain through original, apply IH *)
       >- (
         strip_tac >>
@@ -589,7 +582,7 @@ Proof
       `lookup_block s.vs_current_bb (transform_function fn).fn_blocks =
        SOME (transform_block fn x)` by (irule lookup_block_transform_function >> simp[]) >>
       qspecl_then [`fn`, `x`, `s`] mp_tac run_block_transform_general >> simp[LET_THM] >>
-      Cases_on `run_block (transform_function fn) (transform_block fn x) s` >> simp[] >>
+      Cases_on `run_block (transform_block fn x) s` >> simp[] >>
       strip_tac >> simp[Once run_function_def, terminates_def] >>
       simp[Once run_function_def, result_equiv_except_def] >>
       simp[Once run_function_def, result_equiv_except_def] >>
@@ -606,7 +599,7 @@ Proof
       `lookup_block s.vs_current_bb (transform_function fn).fn_blocks =
        SOME (transform_block fn x)` by (irule lookup_block_transform_function >> simp[]) >>
       qspecl_then [`fn`, `x`, `s`] mp_tac run_block_transform_general >> simp[LET_THM] >>
-      Cases_on `run_block (transform_function fn) (transform_block fn x) s` >> simp[] >>
+      Cases_on `run_block (transform_block fn x) s` >> simp[] >>
       strip_tac >> simp[Once run_function_def, terminates_def] >>
       simp[Once run_function_def, result_equiv_except_def] >>
       simp[Once run_function_def, result_equiv_except_def] >>
@@ -674,7 +667,7 @@ Proof
     simp[Once run_function_def, SimpLHS] >>
     simp[Once run_function_def, SimpRHS] >>
     Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> simp[] >>
-    Cases_on `run_block fn x s` >> simp[] >>
+    Cases_on `run_block x s` >> simp[] >>
     Cases_on `v.vs_halted` >> simp[] >>
     first_x_assum irule >>
     qpat_x_assum `terminates _` mp_tac >> simp[Once run_function_def]
@@ -719,10 +712,10 @@ Proof
       `MEM x fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
       qspecl_then [`fn`, `x`, `s`] mp_tac run_block_transform_general >>
       simp[LET_THM] >> strip_tac >>
-      Cases_on `run_block (transform_function fn) (transform_block fn x) s` >>
+      Cases_on `run_block (transform_block fn x) s` >>
       simp[terminates_def]
       >- ( (* OK case *)
-        Cases_on `run_block fn x s` >> gvs[] >>
+        Cases_on `run_block x s` >> gvs[] >>
         strip_tac >> Cases_on `v.vs_halted`
         >- ( (* halted - contradiction *)
           `v'.vs_halted = v.vs_halted` by
@@ -754,11 +747,11 @@ Proof
         )
       )
       >- ( (* Halt case *)
-        Cases_on `run_block fn x s` >> gvs[] >>
+        Cases_on `run_block x s` >> gvs[] >>
         qexists_tac `SUC 0` >> simp[run_function_def, terminates_def]
       )
       >- ( (* Revert case *)
-        Cases_on `run_block fn x s` >> gvs[]
+        Cases_on `run_block x s` >> gvs[]
         >- ( (* OK/Revert - original jumps to revert block *)
           `v'.vs_inst_idx = 0` by (imp_res_tac run_block_OK_inst_idx_0) >>
           `?revert_bb. lookup_block v'.vs_current_bb fn.fn_blocks = SOME revert_bb /\

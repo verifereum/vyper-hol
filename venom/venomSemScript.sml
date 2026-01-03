@@ -608,7 +608,7 @@ QED
 
 (* Step within a basic block - returns (result, is_terminator) *)
 Definition step_in_block_def:
-  step_in_block fn bb s =
+  step_in_block bb s =
     case get_instruction bb s.vs_inst_idx of
       NONE => (Error "block not terminated", T)
     | SOME inst =>
@@ -623,12 +623,12 @@ End
 
 (* Run a basic block until we hit a terminator *)
 Definition run_block_def:
-  run_block fn bb s =
-    case step_in_block fn bb s of
+  run_block bb s =
+    case step_in_block bb s of
       (OK s', is_term) =>
         if s'.vs_halted then Halt s'
         else if is_term then OK s'
-        else run_block fn bb s'
+        else run_block bb s'
     | (Halt s', _) => Halt s'
     | (Revert s', _) => Revert s'
     | (Error e, _) => Error e
@@ -636,7 +636,7 @@ Termination
   (* Termination measure: remaining instructions in block.
      Each non-terminator step increments inst_idx via next_inst, so measure decreases.
      Terminators exit the loop immediately (is_term = T). *)
-  WF_REL_TAC `measure (\(fn, bb, s). LENGTH bb.bb_instructions - s.vs_inst_idx)` >>
+  WF_REL_TAC `measure (\(bb, s). LENGTH bb.bb_instructions - s.vs_inst_idx)` >>
   rw[step_in_block_def] >>
   gvs[AllCaseEqs()] >>
   (* Now we have:
@@ -657,7 +657,7 @@ Definition run_function_def:
         case lookup_block s.vs_current_bb fn.fn_blocks of
           NONE => Error "block not found"
         | SOME bb =>
-            case run_block fn bb s of
+            case run_block bb s of
               OK s' =>
                 if s'.vs_halted then Halt s'
                 else run_function fuel' fn s'
