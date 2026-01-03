@@ -31,9 +31,9 @@
  * ============================================================================
  *)
 
-Theory rtaProps
+Theory rtaProofHelpers
 Ancestors
-  rtaDefs stateEquiv venomSemProps
+  rtaPassDefs stateEquiv venomSemProps
 Libs
   finite_mapTheory venomStateTheory venomSemTheory venomInstTheory venomSemPropsTheory
 
@@ -83,10 +83,10 @@ QED
 (* WHY THIS IS TRUE: step_in_block on a single-instruction terminator block
    returns the result of step_inst with is_term = T. *)
 Theorem step_in_block_single_terminator:
-  !fn bb s inst.
+  !bb s inst.
     bb.bb_instructions = [inst] /\
     is_terminator inst.inst_opcode ==>
-    step_in_block fn bb (s with vs_inst_idx := 0) =
+    step_in_block bb (s with vs_inst_idx := 0) =
     (step_inst inst (s with vs_inst_idx := 0), T)
 Proof
   rw[step_in_block_def, get_instruction_def] >>
@@ -103,9 +103,9 @@ QED
    2. step_inst returns Revert (revert_state s)
    3. run_block propagates this Revert result *)
 Theorem simple_revert_block_reverts:
-  !fn bb s.
+  !bb s.
     is_simple_revert_block bb ==>
-    run_block fn bb (s with vs_inst_idx := 0) =
+    run_block bb (s with vs_inst_idx := 0) =
     Revert (revert_state (s with vs_inst_idx := 0))
 Proof
   rw[is_simple_revert_block_def] >>
@@ -113,7 +113,7 @@ Proof
     Cases_on `bb.bb_instructions` >> fs[]
   ) >>
   simp[Once run_block_def] >>
-  `step_in_block fn bb (s with vs_inst_idx := 0) =
+  `step_in_block bb (s with vs_inst_idx := 0) =
    (step_inst (HD bb.bb_instructions) (s with vs_inst_idx := 0), T)` by (
     irule step_in_block_single_terminator >> simp[is_terminator_def]
   ) >>
@@ -138,7 +138,7 @@ Proof
   `fuel > 0` by simp[] >>
   Cases_on `fuel` >- fs[] >>
   simp[Once run_function_def] >>
-  `run_block fn bb (s with vs_inst_idx := 0) =
+  `run_block bb (s with vs_inst_idx := 0) =
    Revert (revert_state (s with vs_inst_idx := 0))`
     by (irule simple_revert_block_reverts >> simp[]) >>
   simp[]
@@ -149,7 +149,7 @@ QED
 
    NOTE: Basic properties (refl, sym, trans, state_equiv_implies_except,
    update_var_same_preserves, jump_to_except_preserves, revert_state_except_preserves,
-   state_equiv_except_subset) are proven in rtaDefsTheory.
+   state_equiv_except_subset) are proven in rtaPassDefsTheory.
    ========================================================================== *)
 
 (* WHY THIS IS TRUE: update_var x v s adds (x, v) to vs_vars.
@@ -519,12 +519,12 @@ QED
 
 (* step_in_block preserves result_equiv_except *)
 Theorem step_in_block_result_equiv_except:
-  !fresh fn bb s1 s2.
+  !fresh bb s1 s2.
     state_equiv_except fresh s1 s2 /\
     (!inst. MEM inst bb.bb_instructions ==>
             !x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) ==>
-    let (r1, t1) = step_in_block fn bb s1 in
-    let (r2, t2) = step_in_block fn bb s2 in
+    let (r1, t1) = step_in_block bb s1 in
+    let (r2, t2) = step_in_block bb s2 in
     t1 = t2 /\ result_equiv_except fresh r1 r2
 Proof
   rw[step_in_block_def, LET_THM] >>
@@ -547,19 +547,18 @@ QED
 
 (* run_block preserves result_equiv_except *)
 Theorem run_block_result_equiv_except:
-  !fresh fn bb s1 s2.
+  !fresh bb s1 s2.
     state_equiv_except fresh s1 s2 /\
     (!inst. MEM inst bb.bb_instructions ==>
             !x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) ==>
-    result_equiv_except fresh (run_block fn bb s1) (run_block fn bb s2)
+    result_equiv_except fresh (run_block bb s1) (run_block bb s2)
 Proof
-  CONV_TAC (RESORT_FORALL_CONV (fn [fresh, fn_, bb, s1, s2] =>
-    [fn_, bb, s1, fresh, s2])) >>
+  CONV_TAC (RESORT_FORALL_CONV (fn [fresh, bb, s1, s2] =>
+    [bb, s1, fresh, s2])) >>
   ho_match_mp_tac run_block_ind >> rw[] >>
   drule_all step_in_block_result_equiv_except >> simp[LET_THM] >> strip_tac >>
-  Cases_on `step_in_block fn bb s1` >> Cases_on `step_in_block fn bb s2` >>
+  Cases_on `step_in_block bb s1` >> Cases_on `step_in_block bb s2` >>
   gvs[] >>
-  first_x_assum (qspec_then `fn` mp_tac) >> simp[] >> strip_tac >>
   simp[Once run_block_def] >>
   PURE_ONCE_REWRITE_TAC[run_block_def] >> simp[] >>
   Cases_on `q` >> gvs[result_equiv_except_def]

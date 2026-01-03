@@ -110,36 +110,10 @@ QED
    step_in_block / run_block Properties
    ========================================================================== *)
 
-(*
- * WHY THIS IS TRUE: step_in_block doesn't use fn in its computation.
- * It only uses bb and s to get/execute the current instruction.
- *)
-Theorem step_in_block_fn_irrelevant:
-  !fn1 fn2 bb s. step_in_block fn1 bb s = step_in_block fn2 bb s
-Proof
-  simp[step_in_block_def]
-QED
-
-(*
- * WHY THIS IS TRUE: run_block is defined recursively using step_in_block.
- * Since step_in_block doesn't depend on fn, run_block doesn't either.
- * The fn parameter is just passed through to recursive calls.
- *)
-Theorem run_block_fn_irrelevant:
-  !fn bb s. run_block fn bb s = run_block ARB bb s
-Proof
-  ho_match_mp_tac run_block_ind >> rw[] >>
-  simp[Once run_block_def, step_in_block_fn_irrelevant, SimpLHS] >>
-  simp[Once run_block_def, step_in_block_fn_irrelevant, SimpRHS] >>
-  Cases_on `step_in_block fn bb s` >>
-  `step_in_block ARB bb s = step_in_block fn bb s` by simp[step_in_block_fn_irrelevant] >>
-  gvs[] >> Cases_on `q` >> simp[]
-QED
-
 (* Helper: step_in_block with is_term=F increments vs_inst_idx *)
 Theorem step_in_block_increments_idx:
-  !fn bb s v.
-    step_in_block fn bb s = (OK v, F)
+  !bb s v.
+    step_in_block bb s = (OK v, F)
     ==>
     v.vs_inst_idx = SUC s.vs_inst_idx
 Proof
@@ -161,12 +135,12 @@ QED
  * a jump instruction executes (JMP or JNZ branch taken).
  *)
 Theorem run_block_OK_not_halted:
-  !fn bb s v. run_block fn bb s = OK v ==> ~v.vs_halted
+  !bb s v. run_block bb s = OK v ==> ~v.vs_halted
 Proof
   ho_match_mp_tac run_block_ind >> rw[] >>
-  qpat_x_assum `run_block _ _ _ = _` mp_tac >>
+  qpat_x_assum `run_block _ _ = _` mp_tac >>
   simp[Once run_block_def] >>
-  Cases_on `step_in_block fn bb s` >> gvs[] >>
+  Cases_on `step_in_block bb s` >> gvs[] >>
   Cases_on `q` >> gvs[] >>
   Cases_on `v'.vs_halted` >> gvs[] >>
   Cases_on `r` >> gvs[] >> rw[] >> gvs[]
@@ -179,16 +153,16 @@ QED
  * executed (JMP, JNZ, or DJMP). All jumps use jump_to which sets vs_inst_idx := 0.
  *)
 Theorem run_block_OK_inst_idx_0:
-  !fn bb s v. run_block fn bb s = OK v ==> v.vs_inst_idx = 0
+  !bb s v. run_block bb s = OK v ==> v.vs_inst_idx = 0
 Proof
   ho_match_mp_tac run_block_ind >> rw[] >>
-  qpat_x_assum `run_block _ _ _ = _` mp_tac >>
+  qpat_x_assum `run_block _ _ = _` mp_tac >>
   simp[Once run_block_def] >>
-  Cases_on `step_in_block fn bb s` >> gvs[] >>
+  Cases_on `step_in_block bb s` >> gvs[] >>
   Cases_on `q` >> gvs[] >>
   Cases_on `v'.vs_halted` >> gvs[] >>
   Cases_on `r` >> gvs[] >> rw[] >> gvs[] >>
-  qpat_x_assum `step_in_block _ _ _ = _` mp_tac >>
+  qpat_x_assum `step_in_block _ _ = _` mp_tac >>
   simp[step_in_block_def] >>
   Cases_on `get_instruction bb s.vs_inst_idx` >> gvs[] >>
   Cases_on `step_inst x s` >> gvs[] >>
@@ -232,13 +206,13 @@ QED
  * So step_in_block executes the same instruction on both.
  *)
 Theorem step_in_block_prefix_same:
-  !fn bb1 bb2 s n.
+  !bb1 bb2 s n.
     TAKE (SUC n) bb1.bb_instructions = TAKE (SUC n) bb2.bb_instructions /\
     s.vs_inst_idx = n /\
     n < LENGTH bb1.bb_instructions /\
     n < LENGTH bb2.bb_instructions
   ==>
-    step_in_block fn bb1 s = step_in_block fn bb2 s
+    step_in_block bb1 s = step_in_block bb2 s
 Proof
   rw[step_in_block_def, get_instruction_def] >>
   `EL s.vs_inst_idx bb1.bb_instructions = EL s.vs_inst_idx bb2.bb_instructions` by (

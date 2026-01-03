@@ -145,11 +145,11 @@ QED
 
 (* KEY LEMMA: Single step in block preserves state_equiv (success case) *)
 Theorem step_in_block_state_equiv:
-  !fn bb s1 s2 r1 is_term.
+  !bb s1 s2 r1 is_term.
     state_equiv s1 s2 /\
-    step_in_block fn bb s1 = (OK r1, is_term)
+    step_in_block bb s1 = (OK r1, is_term)
   ==>
-    ?r2. step_in_block fn bb s2 = (OK r2, is_term) /\ state_equiv r1 r2
+    ?r2. step_in_block bb s2 = (OK r2, is_term) /\ state_equiv r1 r2
 Proof
   rw[step_in_block_def] >>
   fs[state_equiv_def] >> fs[] >>
@@ -167,26 +167,26 @@ QED
 
 (* KEY LEMMA: Block execution preserves state_equiv (success case) *)
 Theorem run_block_state_equiv:
-  !fn bb s1 s2 r1.
+  !bb s1 s2 r1.
     state_equiv s1 s2 /\
-    run_block fn bb s1 = OK r1
+    run_block bb s1 = OK r1
   ==>
-    ?r2. run_block fn bb s2 = OK r2 /\ state_equiv r1 r2
+    ?r2. run_block bb s2 = OK r2 /\ state_equiv r1 r2
 Proof
   ho_match_mp_tac run_block_ind >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `run_block _ _ _ = _` mp_tac >>
+  qpat_x_assum `run_block _ _ = _` mp_tac >>
   simp[Once run_block_def] >>
-  Cases_on `step_in_block fn bb s1` >>
+  Cases_on `step_in_block bb s1` >>
   Cases_on `q` >> simp[] >>
   strip_tac >>
   drule_all step_in_block_state_equiv >>
   strip_tac >>
   simp[Once run_block_def] >>
-  `(v.vs_halted <=> r2.vs_halted)` by fs[state_equiv_def] >>
+  gvs[state_equiv_def] >>
   Cases_on `v.vs_halted` >> fs[] >>
   Cases_on `r` >> fs[] >-
-    (gvs[] >> simp[Once run_block_def] >> first_x_assum irule >> simp[]) >>
+    (gvs[] >> simp[Once run_block_def] >> first_x_assum irule >> gvs[state_equiv_def]) >>
   simp[Once run_block_def]
 QED
 
@@ -390,10 +390,10 @@ QED
 
 (* TOP-LEVEL: Block stepping preserves result_equiv and termination flag *)
 Theorem step_in_block_result_equiv:
-  !fn bb s1 s2.
+  !bb s1 s2.
     state_equiv s1 s2 ==>
-      result_equiv (FST (step_in_block fn bb s1)) (FST (step_in_block fn bb s2)) /\
-      SND (step_in_block fn bb s1) = SND (step_in_block fn bb s2)
+      result_equiv (FST (step_in_block bb s1)) (FST (step_in_block bb s2)) /\
+      SND (step_in_block bb s1) = SND (step_in_block bb s2)
 Proof
   rpt strip_tac >>
   `s1.vs_inst_idx = s2.vs_inst_idx` by fs[state_equiv_def] >>
@@ -408,9 +408,9 @@ QED
 
 (* TOP-LEVEL: Block execution preserves result_equiv (all cases) *)
 Theorem run_block_result_equiv:
-  !fn bb s1 s2.
+  !bb s1 s2.
     state_equiv s1 s2 ==>
-    result_equiv (run_block fn bb s1) (run_block fn bb s2)
+    result_equiv (run_block bb s1) (run_block bb s2)
 Proof
   ho_match_mp_tac run_block_ind >>
   rpt gen_tac >> strip_tac >>
@@ -421,9 +421,9 @@ Proof
   CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
   (* Get step_in_block result_equiv and SND equality *)
   drule step_in_block_result_equiv >>
-  disch_then (qspecl_then [`fn`, `bb`] strip_assume_tac) >>
-  Cases_on `step_in_block fn bb s1` >>
-  Cases_on `step_in_block fn bb s2` >>
+  disch_then (qspec_then `bb` strip_assume_tac) >>
+  Cases_on `step_in_block bb s1` >>
+  Cases_on `step_in_block bb s2` >>
   gvs[] >>
   (* Now case split on the result type *)
   Cases_on `q` >> Cases_on `q'` >> gvs[] >>

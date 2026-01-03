@@ -180,9 +180,9 @@ QED
 
 (* Running a block is the same when transform is identity *)
 Theorem run_block_transform_identity:
-  !fn bb s dfg.
+  !bb s dfg.
     (!idx inst. get_instruction bb idx = SOME inst ==> phi_single_origin dfg inst = NONE) ==>
-    run_block fn (transform_block dfg bb) s = run_block fn bb s
+    run_block (transform_block dfg bb) s = run_block bb s
 Proof
   rpt strip_tac >>
   (* Use transform_block_identity to show block is unchanged *)
@@ -191,17 +191,5 @@ Proof
     simp[basic_block_component_equality, transform_block_def]
   ) >>
   simp[]
-QED
-
-(* run_block doesn't use the fn parameter *)
-Theorem run_block_fn_irrelevant:
-  !fn1 bb s fn2. run_block fn1 bb s = run_block fn2 bb s
-Proof
-  ho_match_mp_tac run_block_ind >> rpt strip_tac >>
-  simp[Once run_block_def, step_in_block_def] >>
-  CONV_TAC (RHS_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
-  simp[step_in_block_def] >>
-  rpt (CASE_TAC >> simp[]) >>
-  rpt strip_tac >> first_x_assum irule >> simp[step_in_block_def]
 QED
 

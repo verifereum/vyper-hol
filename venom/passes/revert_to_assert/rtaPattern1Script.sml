@@ -28,7 +28,7 @@ Theorem run_block_iszero_assert_reverts:
     let id = (EL s.vs_inst_idx bb.bb_instructions).inst_id in
     let fresh_var = fresh_iszero_var id in
     let s1 = next_inst (update_var fresh_var 0w s) in
-    run_block (transform_function fn) bb' s = Revert (revert_state s1)
+    run_block bb' s = Revert (revert_state s1)
 Proof
   rw[LET_THM, transform_block_def] >>
   (* Establish length bounds *)
@@ -67,7 +67,7 @@ Theorem run_block_iszero_assert_jumps:
     let id = (EL s.vs_inst_idx bb.bb_instructions).inst_id in
     let fresh_var = fresh_iszero_var id in
     let s1 = update_var fresh_var 1w s in
-    run_block (transform_function fn) bb' s = OK (jump_to if_zero s1)
+    run_block bb' s = OK (jump_to if_zero s1)
 Proof
   rw[LET_THM, transform_block_def] >>
   (* Establish length bounds *)
@@ -175,8 +175,8 @@ Theorem pattern1_nonzero_execution:
     (* Properties *)
     fresh_var IN fresh_vars /\
     step_inst (EL s.vs_inst_idx bb.bb_instructions) s = OK (jump_to if_nonzero s) /\
-    run_block fn bb s = OK (jump_to if_nonzero s) /\
-    run_block (transform_function fn) bb' s = Revert (revert_state s1) /\
+    run_block bb s = OK (jump_to if_nonzero s) /\
+    run_block bb' s = Revert (revert_state s1) /\
     (jump_to if_nonzero s).vs_current_bb = if_nonzero /\
     execution_equiv_except fresh_vars (revert_state (jump_to if_nonzero s)) (revert_state s1)
 Proof
@@ -220,8 +220,8 @@ Theorem pattern1_zero_execution:
     (* Properties *)
     fresh_var IN fresh_vars /\
     step_inst (EL s.vs_inst_idx bb.bb_instructions) s = OK (jump_to if_zero s) /\
-    run_block fn bb s = OK (jump_to if_zero s) /\
-    run_block (transform_function fn) bb' s = OK s2 /\
+    run_block bb s = OK (jump_to if_zero s) /\
+    run_block bb' s = OK s2 /\
     state_equiv_except fresh_vars (jump_to if_zero s) s2
 Proof
   rw[LET_THM] >| [
