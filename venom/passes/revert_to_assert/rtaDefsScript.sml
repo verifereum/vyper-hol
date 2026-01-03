@@ -292,4 +292,16 @@ Definition fresh_vars_not_in_context_def:
     !fn. MEM fn ctx.ctx_functions ==> fresh_vars_not_in_function fn
 End
 
+(* ==========================================================================
+   Termination Predicate
+   ========================================================================== *)
+
+(*
+ * Predicate: execution terminates (not Error).
+ * Used for bidirectional correctness proofs.
+ *)
+Definition terminates_def:
+  terminates r <=> case r of Error _ => F | _ => T
+End
+
 val _ = export_theory();

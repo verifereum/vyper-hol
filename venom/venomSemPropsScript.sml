@@ -7,7 +7,7 @@
 
 Theory venomSemProps
 Ancestors
-  venomSem venomInst venomState
+  venomSem venomInst venomState rich_list
 
 (* ==========================================================================
    bool_to_word Properties
@@ -198,4 +198,53 @@ Proof
   qpat_x_assum `step_inst _ _ = _` mp_tac >>
   simp[step_inst_def, jump_to_def] >>
   gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[]
+QED
+
+(* ==========================================================================
+   Lookup Helpers
+   ========================================================================== *)
+
+(*
+ * Helper: If lookup_block succeeds, the block is in the list.
+ *)
+Theorem lookup_block_MEM:
+  !lbl bbs bb.
+    lookup_block lbl bbs = SOME bb ==> MEM bb bbs
+Proof
+  Induct_on `bbs` >- simp[lookup_block_def] >>
+  simp[lookup_block_def] >> rw[] >> metis_tac[]
+QED
+
+(*
+ * Helper: If lookup_function succeeds, the function is in the list.
+ *)
+Theorem lookup_function_MEM:
+  !name fns fn. lookup_function name fns = SOME fn ==> MEM fn fns
+Proof
+  gen_tac >> Induct >> rw[lookup_function_def] >> gvs[AllCaseEqs()]
+QED
+
+(*
+ * Helper: step_in_block is the same for two blocks with matching prefix.
+ *
+ * WHY THIS IS TRUE: step_in_block uses get_instruction to fetch current instruction.
+ * If TAKE (SUC n) matches and we're at index n, then EL n is the same.
+ * So step_in_block executes the same instruction on both.
+ *)
+Theorem step_in_block_prefix_same:
+  !fn bb1 bb2 s n.
+    TAKE (SUC n) bb1.bb_instructions = TAKE (SUC n) bb2.bb_instructions /\
+    s.vs_inst_idx = n /\
+    n < LENGTH bb1.bb_instructions /\
+    n < LENGTH bb2.bb_instructions
+  ==>
+    step_in_block fn bb1 s = step_in_block fn bb2 s
+Proof
+  rw[step_in_block_def, get_instruction_def] >>
+  `EL s.vs_inst_idx bb1.bb_instructions = EL s.vs_inst_idx bb2.bb_instructions` by (
+    `EL s.vs_inst_idx (TAKE (SUC s.vs_inst_idx) bb1.bb_instructions) =
+     EL s.vs_inst_idx (TAKE (SUC s.vs_inst_idx) bb2.bb_instructions)` by simp[] >>
+    metis_tac[EL_TAKE, DECIDE ``n < SUC n``]
+  ) >>
+  simp[]
 QED
