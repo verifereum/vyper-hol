@@ -22,7 +22,7 @@
 
 Theory ssaFunction
 Ancestors
-  ssaDefs ssaTransform ssaStateEquiv ssaWellFormed ssaBlock
+  ssaDefs ssaTransform ssaStateEquiv ssaWellFormed ssaBlock ssaBlockCompat
   venomState venomInst venomSem list finite_map
 
 (* ==========================================================================
