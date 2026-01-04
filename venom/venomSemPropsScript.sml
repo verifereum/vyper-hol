@@ -107,6 +107,31 @@ Proof
 QED
 
 (* ==========================================================================
+   exec_binop/unop/modop Properties
+   ========================================================================== *)
+
+(* Helper: exec_binop never returns Halt *)
+Theorem exec_binop_not_halt:
+  !f inst s r. exec_binop f inst s <> Halt r
+Proof
+  rw[exec_binop_def] >> rpt (CASE_TAC >> gvs[])
+QED
+
+(* Helper: exec_unop never returns Halt *)
+Theorem exec_unop_not_halt:
+  !f inst s r. exec_unop f inst s <> Halt r
+Proof
+  rw[exec_unop_def] >> rpt (CASE_TAC >> gvs[])
+QED
+
+(* Helper: exec_modop never returns Halt *)
+Theorem exec_modop_not_halt:
+  !f inst s r. exec_modop f inst s <> Halt r
+Proof
+  rw[exec_modop_def] >> rpt (CASE_TAC >> gvs[])
+QED
+
+(* ==========================================================================
    step_in_block / run_block Properties
    ========================================================================== *)
 

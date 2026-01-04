@@ -195,11 +195,6 @@ End
    SSA Well-Formedness
    ========================================================================== *)
 
-(* TOP-LEVEL: Check if instruction is in SSA form (output name is versioned) *)
-Definition inst_ssa_form_def:
-  inst_ssa_form inst <=> T  (* In SSA, each definition is unique *)
-End
-
 (* TOP-LEVEL: Check if function is in SSA form - each variable defined once *)
 Definition fn_ssa_form_def:
   fn_ssa_form fn <=>
@@ -220,10 +215,9 @@ End
 (* Helper: Check if PHI operands are well-formed (Label, Var pairs) *)
 Definition phi_well_formed_def:
   phi_well_formed [] = T /\
-  phi_well_formed [_] = T /\
+  phi_well_formed [_] = F /\
   phi_well_formed (Label lbl :: Var v :: rest) = phi_well_formed rest /\
-  phi_well_formed (Label lbl :: _ :: rest) = F /\
-  phi_well_formed (_ :: _ :: rest) = phi_well_formed rest
+  phi_well_formed (_ :: _ :: rest) = F
 End
 
 (* TOP-LEVEL: Construct PHI operands from predecessor blocks and variable *)

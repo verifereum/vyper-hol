@@ -6,13 +6,13 @@
  *
  * Helpers:
  *   - eval_renamed_operand
- *   - exec_*_ssa_equiv, exec_*_not_halt
+ *   - exec_*_ssa_equiv
  *)
 
 Theory mkSsaBlockCompat
 Ancestors
   mkSsaDefs mkSsaTransform mkSsaStateEquiv mkSsaWellFormed
-  venomState venomInst venomSem list finite_map
+  venomState venomInst venomSem venomSemProps list finite_map
 
 (* ==========================================================================
    Binary/Unary/Mod Operations Preserve SSA Equivalence
@@ -31,27 +31,6 @@ Proof
   fs[ssa_state_equiv_def, var_map_equiv_def] >>
   first_x_assum (qspec_then `s` mp_tac) >>
   strip_tac >> fs[ssa_var_name_def]
-QED
-
-(* Helper: exec_binop never returns Halt *)
-Theorem exec_binop_not_halt:
-  !f inst s r. exec_binop f inst s <> Halt r
-Proof
-  rw[exec_binop_def] >> rpt (CASE_TAC >> gvs[])
-QED
-
-(* Helper: exec_unop never returns Halt *)
-Theorem exec_unop_not_halt:
-  !f inst s r. exec_unop f inst s <> Halt r
-Proof
-  rw[exec_unop_def] >> rpt (CASE_TAC >> gvs[])
-QED
-
-(* Helper: exec_modop never returns Halt *)
-Theorem exec_modop_not_halt:
-  !f inst s r. exec_modop f inst s <> Halt r
-Proof
-  rw[exec_modop_def] >> rpt (CASE_TAC >> gvs[])
 QED
 
 (* Helper: Binary operation preserves SSA equivalence.
