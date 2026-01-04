@@ -35,6 +35,21 @@ Proof
   qexistsl_tac [`h`, `a`] >> gvs[]
 QED
 
+(* Helper: Halt only arises from STOP/RETURN/SINK/ASSERT_UNREACHABLE *)
+Theorem step_inst_halt_cases:
+  !inst s r.
+    step_inst inst s = Halt r ==>
+    inst.inst_opcode = STOP \/
+    inst.inst_opcode = RETURN \/
+    inst.inst_opcode = SINK \/
+    inst.inst_opcode = ASSERT_UNREACHABLE
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[step_inst_def, exec_binop_not_halt, exec_unop_not_halt,
+      exec_modop_not_halt, AllCaseEqs()]
+QED
+
 (* KEY LEMMA: Non-PHI instruction step that returns Halt.
    When the original instruction halts, the SSA version also halts
    with an equivalent state. *)
@@ -48,28 +63,26 @@ Theorem step_inst_halt_ssa_equiv:
       ssa_state_equiv vm r_orig r_ssa
 Proof
   let
-    val halt_tac =
+    val stop_like_tac =
       qexists_tac `halt_state s_ssa` >>
       gvs[step_inst_def] >>
-      irule halt_state_ssa_equiv >> simp[] >> NO_TAC
-    val assert_tac =
-      `inst.inst_opcode = ASSERT_UNREACHABLE` by simp[] >>
-      drule_all step_inst_assert_unreachable_halt >> strip_tac >>
-      qexists_tac `halt_state s_ssa` >>
-      simp[step_inst_def] >>
-      `eval_operand cond_op s_orig =
-       eval_operand (ssa_operand vm cond_op) s_ssa` by
-        (irule eval_operand_ssa_equiv >> simp[]) >>
-      gvs[] >>
-      irule halt_state_ssa_equiv >> simp[] >> NO_TAC
-    val no_halt_tac =
-      gvs[step_inst_def, exec_binop_not_halt, exec_unop_not_halt,
-          exec_modop_not_halt, AllCaseEqs()] >> NO_TAC
+      irule halt_state_ssa_equiv >> simp[]
   in
     rpt strip_tac >>
     fs[inst_ssa_compatible_def] >>
-    Cases_on `inst.inst_opcode` >>
-    FIRST [halt_tac, assert_tac, no_halt_tac]
+    drule_all step_inst_halt_cases >> strip_tac >| [
+      stop_like_tac,
+      stop_like_tac,
+      stop_like_tac,
+      (drule_all step_inst_assert_unreachable_halt >> strip_tac >>
+       qexists_tac `halt_state s_ssa` >>
+       simp[step_inst_def] >>
+       `eval_operand cond_op s_orig =
+        eval_operand (ssa_operand vm cond_op) s_ssa` by
+         (irule eval_operand_ssa_equiv >> simp[]) >>
+       gvs[] >>
+       irule halt_state_ssa_equiv >> simp[])
+    ]
   end
 QED
 
