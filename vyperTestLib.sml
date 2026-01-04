@@ -224,11 +224,42 @@ val unsupported_code = [
   "@raw_return\n" (* TODO: add *)
 ]
 
+val unsupported_patterns = unsupported_code @ [
+  "sqrt(", (* TODO: add support *)
+  "extcall ",
+  "staticcall ",
+  "raw_call(",
+  "raw_log(",
+  "raw_revert(",
+  "selfdestruct",
+  "msg.mana", "msg.gas",
+  "exports",
+  "import ",
+  "create_minimal_proxy_to(",
+  "create_copy_of("
+]
+
+fun source_code_opt j =
+  (decode (orElse(field "source_code" (nullable string),
+                  succeed NONE)) j)
+  handle JSONError _ => NONE
+       | _ => NONE
+
+fun has_unsupported_source_json j =
+  case source_code_opt j of
+    NONE => false
+  | SOME src => List.exists (fn x => String.isSubstring x src) unsupported_patterns
+
+fun has_unsupported_source_code (name, (err, j)) =
+  case source_code_opt j of
+    NONE => true
+  | SOME src => List.exists (fn x => String.isSubstring x src) unsupported_patterns
+
 val deployment : term decoder =
   check_trace_type "deployment" $
   check (field "source_code" string)
-        (fn src => List.all (fn x => not $ String.isSubstring x src) unsupported_code)
-        "has unsupported_code" $
+        (fn src => List.all (fn x => not $ String.isSubstring x src) unsupported_patterns)
+        "has unsupported_pattern" $
   JSONDecode.map (fn ((c,(i,h),(s,m,a,g),(d,bn,bf,v)),e) =>
              TypeBase.mk_record (deployment_trace_ty, [
                ("sourceAst", c),
@@ -278,9 +309,10 @@ val test_decoder =
    field "traces" (array trace))
 
 fun trydecode ((name,json),(s,f)) =
-  ((name, decode test_decoder json)::s, f)
-  handle JSONError e => (s, (name, e)::f)
-         | e => (s, (name, (e, JSON.OBJECT [("source_code", JSON.STRING "")]))::f)
+  if has_unsupported_source_json json then (s,f)
+  else ((name, decode test_decoder json)::s, f)
+       handle JSONError e => (s, (name, e)::f)
+              | e => (s, (name, (e, JSON.OBJECT [("source_code", JSON.STRING "")]))::f)
 
 fun read_test_json json_path = let
   val test_jsons = decodeFile rawObject json_path
@@ -290,27 +322,6 @@ end
 
 val trace_ty = mk_thy_type{Thy="vyperTestRunner",Tyop="trace",Args=[]}
 val traces_ty = mk_list_type trace_ty
-
-fun has_unsupported_source_code (name, (err, j)) = let
-  val srcopt = decode (orElse(field "source_code" (nullable string),
-                              succeed NONE)) j
-  val p = case srcopt of NONE => K true | SOME src => C String.isSubstring src
-in
-  List.exists p (unsupported_code @ [
-    "sqrt(", (* TODO: add support *)
-    "extcall ",
-    "staticcall ",
-    "raw_call(",
-    "raw_log(",
-    "raw_revert(",
-    "selfdestruct",
-    "msg.mana", "msg.gas",
-    "exports",
-    "import ",
-    "create_minimal_proxy_to(",
-    "create_copy_of("
-  ])
-end
 
 val test_files_with_prefixes = [
   ("vyper-test-exports/functional/codegen",
