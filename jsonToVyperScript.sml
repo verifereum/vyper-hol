@@ -1,8 +1,9 @@
 Theory jsonToVyper
 Ancestors
-  jsonAST vyperAST
+  integer jsonAST vyperAST
 Libs
   cv_transLib intLib
+  integerTheory[qualified]
 
 (* ===== Type Translation ===== *)
 
@@ -125,6 +126,110 @@ End
 
 val () = cv_auto_trans strip_0x_def;
 
+(* ===== Decimal String Parsing ===== *)
+
+Definition is_digit_def:
+  is_digit c =
+    (c = #"0" \/ c = #"1" \/ c = #"2" \/ c = #"3" \/ c = #"4" \/
+     c = #"5" \/ c = #"6" \/ c = #"7" \/ c = #"8" \/ c = #"9")
+End
+
+val () = cv_auto_trans is_digit_def;
+
+Definition digit_to_num_def:
+  digit_to_num c =
+    if c = #"0" then 0n else
+    if c = #"1" then 1 else
+    if c = #"2" then 2 else
+    if c = #"3" then 3 else
+    if c = #"4" then 4 else
+    if c = #"5" then 5 else
+    if c = #"6" then 6 else
+    if c = #"7" then 7 else
+    if c = #"8" then 8 else
+    if c = #"9" then 9 else 0
+End
+
+val () = cv_auto_trans digit_to_num_def;
+
+Definition num_of_digits_acc_def:
+  (num_of_digits_acc acc [] = acc) /\
+  (num_of_digits_acc acc (c::cs) =
+     num_of_digits_acc (acc * 10 + digit_to_num c) cs)
+End
+
+val () = cv_auto_trans num_of_digits_acc_def;
+
+Definition num_of_digits_def:
+  num_of_digits cs = num_of_digits_acc 0 cs
+End
+
+val () = cv_auto_trans num_of_digits_def;
+
+Definition strip_sign_def:
+  (strip_sign [] = (F, [])) /\
+  (strip_sign (c::cs) =
+     if c = #"-" then (T, cs)
+     else if c = #"+" then (F, cs)
+     else (F, c::cs))
+End
+
+val () = cv_auto_trans strip_sign_def;
+
+Definition drop_nondigit_def:
+  (drop_nondigit [] = []) /\
+  (drop_nondigit (c::cs) =
+     if is_digit c then (c::cs) else drop_nondigit cs)
+End
+
+val () = cv_auto_trans drop_nondigit_def;
+
+Definition split_at_e_def:
+  (split_at_e [] = ([], [])) /\
+  (split_at_e (c::cs) =
+     if c = #"e" \/ c = #"E" then ([], cs)
+     else let (l, r) = split_at_e cs in (c::l, r))
+End
+
+val () = cv_auto_trans split_at_e_def;
+
+Definition split_at_dot_def:
+  (split_at_dot [] = ([], [])) /\
+  (split_at_dot (c::cs) =
+     if c = #"." then ([], cs)
+     else let (l, r) = split_at_dot cs in (c::l, r))
+End
+
+val () = cv_auto_trans split_at_dot_def;
+
+Definition pad_right_zeros_def:
+  pad_right_zeros n xs =
+    if LENGTH xs < n then xs ++ REPLICATE (n - LENGTH xs) #"0" else xs
+End
+
+val () = cv_auto_trans pad_right_zeros_def;
+
+Definition decimal_string_to_int_def:
+  decimal_string_to_int s =
+    let (base, exp) = split_at_e s in
+    let (neg_exp, exp_rest) = strip_sign exp in
+    let exp_digits = FILTER is_digit exp_rest in
+    let exp_num = num_of_digits exp_digits in
+    let exp_int = if neg_exp then &0 - &exp_num else &exp_num in
+    let (bd, ad) = split_at_dot base in
+    let target = &10 + exp_int in
+    let pad_len =
+      if target <= & (LENGTH ad) then LENGTH ad else Num target in
+    let ad' = pad_right_zeros pad_len ad in
+    let ds = bd ++ ad' in
+    let (neg, ds_rest) = strip_sign ds in
+    let digits = FILTER is_digit ds_rest in
+    let n = num_of_digits digits in
+      if neg then &0 - &n else &n
+End
+
+val () = cv_auto_trans decimal_string_to_int_def;
+
 (* ===== BoolOp Helpers ===== *)
 (* These work on vyper expr lists (post-translation) *)
 
@@ -150,6 +255,70 @@ val () = cv_auto_trans boolop_or_def;
 
 (* ===== Builtin Call Helper (non-recursive, defined before translate_expr) ===== *)
 (* This takes already-translated args and kwargs *)
+
+Definition is_prefix_def:
+  (is_prefix [] _ = T) /\
+  (is_prefix _ [] = F) /\
+  (is_prefix (p::ps) (s::ss) = ((p = s) /\ is_prefix ps ss))
+End
+
+val () = cv_auto_trans is_prefix_def;
+
+Definition is_capitalized_def:
+  (is_capitalized [] = F) /\
+  (is_capitalized (c::cs) = (#"A" <= c /\ c <= #"Z"))
+End
+
+val () = cv_auto_trans is_capitalized_def;
+
+Definition is_cast_name_def:
+  is_cast_name name =
+    (is_capitalized name \/
+     is_prefix "uint" name \/
+     is_prefix "int" name \/
+     is_prefix "bytes" name \/
+     name = "decimal" \/
+     name = "bool" \/
+     name = "address")
+End
+
+val () = cv_auto_trans is_cast_name_def;
+
+Definition is_builtin_cast_name_def:
+  is_builtin_cast_name name =
+    (is_prefix "uint" name \/ is_prefix "Uint" name \/
+     is_prefix "int" name \/ is_prefix "Int" name \/
+     is_prefix "bytes" name \/ is_prefix "Bytes" name \/
+     name = "decimal" \/ name = "Decimal" \/
+     name = "bool" \/ name = "Bool" \/
+     name = "address" \/ name = "Address")
+End
+
+val () = cv_auto_trans is_builtin_cast_name_def;
+
+Definition denomination_of_string_def:
+  denomination_of_string s =
+    if s = "wei" then SOME Wei else
+    if s = "kwei" then SOME Kwei else
+    if s = "mwei" then SOME Mwei else
+    if s = "gwei" then SOME Gwei else
+    if s = "szabo" then SOME Szabo else
+    if s = "finney" then SOME Finney else
+    if s = "ether" then SOME Ether else
+    if s = "kether" then SOME KEther else
+    if s = "mether" then SOME MEther else
+    if s = "gether" then SOME GEther else
+    if s = "tether" then SOME TEther else NONE
+End
+
+val () = cv_auto_trans denomination_of_string_def;
+
+Definition denomination_of_expr_def:
+  denomination_of_expr (Literal (StringL _ s)) = denomination_of_string s /\
+  denomination_of_expr _ = NONE
+End
+
+val () = cv_auto_trans denomination_of_expr_def;
 
 Definition make_builtin_call_def:
   make_builtin_call name args kwargs ret_ty =
@@ -181,13 +350,59 @@ Definition make_builtin_call_def:
     else if name = "min" then Builtin (Bop Min) args
     else if name = "max" then Builtin (Bop Max) args
     else if name = "send" then Call Send args
+    else if name = "as_wei_value" then
+      (case args of
+         (v::d::_) =>
+           (case denomination_of_expr d of
+              SOME dn => Builtin (AsWeiValue dn) [v]
+            | NONE => Builtin (AsWeiValue Wei) [v])
+       | (v::_) => Builtin (AsWeiValue Wei) [v]
+       | _ => Builtin (AsWeiValue Wei) [])
     else if name = "uint2str" then
       (case ret_ty of JT_String n => Builtin (Uint2Str n) args
                     | _ => Builtin (Uint2Str 0) args)
-    (* Struct constructor or regular call *)
+    (* Struct constructor, cast, or regular call *)
     else (case ret_ty of
           | JT_Struct _ => StructLit name kwargs
-          | _ => Call (IntCall name) args)
+          | JT_Named _ =>
+              if kwargs <> [] /\ ~is_builtin_cast_name name then
+                StructLit name kwargs
+              else
+                if is_cast_name name then
+                  let ty' = translate_type ret_ty in
+                    if is_builtin_cast_name name then
+                      (case ty' of
+                         BaseT _ =>
+                           (case args of
+                              (arg::_) => TypeBuiltin Convert ty' [arg]
+                            | _ => TypeBuiltin Convert ty' [])
+                       | _ =>
+                           (case args of
+                              (arg::_) => arg
+                            | _ => Call (IntCall name) args))
+                    else
+                      (case args of
+                         (arg::_) => arg
+                       | _ => Call (IntCall name) args)
+                else Call (IntCall name) args
+          | _ =>
+              if is_cast_name name then
+                let ty' = translate_type ret_ty in
+                  if is_builtin_cast_name name then
+                    (case ty' of
+                       BaseT _ =>
+                         (case args of
+                            (arg::_) => TypeBuiltin Convert ty' [arg]
+                          | _ => TypeBuiltin Convert ty' [])
+                     | _ =>
+                         (case args of
+                            (arg::_) => arg
+                          | _ => Call (IntCall name) args))
+                  else
+                    (case args of
+                       (arg::_) => arg
+                     | _ => Call (IntCall name) args)
+              else Call (IntCall name) args)
 End
 
 val () = cv_auto_trans make_builtin_call_def;
@@ -199,7 +414,7 @@ Definition translate_expr_def:
     Literal (IntL (int_bound_of_type ty) v)) /\
 
   (translate_expr (JE_Decimal s) =
-    Literal (DecimalL (integer$int_of_num 0))) /\
+    Literal (DecimalL (decimal_string_to_int s))) /\
 
   (translate_expr (JE_Str len s) =
     Literal (StringL len s)) /\
@@ -225,12 +440,18 @@ Definition translate_expr_def:
     else if obj = "block" /\ attr = "prevhash" then Builtin (Env PrevHash) []
     else if obj = "block" /\ attr = "blobbasefee" then Builtin (Env BlobBaseFee) []
     else if obj = "tx" /\ attr = "gasprice" then Builtin (Env GasPrice) []
+    else if obj = "self" /\ attr = "balance" then
+      Builtin (Acc Balance) [Builtin (Env SelfAddr) []]
     else if obj = "self" then TopLevelName attr
+    else if attr = "balance" then Builtin (Acc Balance) [Name obj]
+    else if attr = "address" then Builtin (Acc Address) [Name obj]
     else Attribute (Name obj) attr) /\
 
   (* General attribute *)
   (translate_expr (JE_Attribute e attr) =
-    Attribute (translate_expr e) attr) /\
+    if attr = "balance" then Builtin (Acc Balance) [translate_expr e]
+    else if attr = "address" then Builtin (Acc Address) [translate_expr e]
+    else Attribute (translate_expr e) attr) /\
 
   (* Subscript *)
   (translate_expr (JE_Subscript arr idx) =
@@ -278,6 +499,15 @@ Definition translate_expr_def:
     let kwargs' = translate_kwargs kwargs in
     case func of
     | JE_Name name => make_builtin_call name args' kwargs' ret_ty
+    | JE_Attribute base "pop" =>
+        (case base of
+         | JE_Name id => Pop (NameTarget id)
+         | JE_Attribute (JE_Name "self") attr => Pop (TopLevelNameTarget attr)
+         | JE_Attribute (JE_Name id) attr =>
+             Pop (AttributeTarget (NameTarget id) attr)
+         | JE_Subscript (JE_Name id) idx =>
+             Pop (SubscriptTarget (NameTarget id) (translate_expr idx))
+         | _ => Call (IntCall "pop") args')
     | JE_Attribute (JE_Name "self") fname => Call (IntCall fname) args'
     | _ => Call (IntCall "") args') /\
 
@@ -321,9 +551,44 @@ End
 
 (* ===== Iterator Translation ===== *)
 
+Definition json_expr_int_opt_def:
+  (json_expr_int_opt (JE_Int v _) = SOME v) /\
+  (json_expr_int_opt (JE_UnaryOp JUop_USub e) =
+     case json_expr_int_opt e of
+       SOME n => SOME (0 - n)
+     | NONE => NONE) /\
+  (json_expr_int_opt (JE_BinOp l JBop_Add r) =
+     case (json_expr_int_opt l, json_expr_int_opt r) of
+       (SOME n1, SOME n2) => SOME (n1 + n2)
+     | _ => NONE) /\
+  (json_expr_int_opt (JE_BinOp l JBop_Sub r) =
+     case (json_expr_int_opt l, json_expr_int_opt r) of
+       (SOME n1, SOME n2) => SOME (n1 - n2)
+     | _ => NONE) /\
+  (json_expr_int_opt _ = NONE)
+End
+
+val () = cv_auto_trans json_expr_int_opt_def;
+
+Definition range_bound_of_args_def:
+  (range_bound_of_args [] = NONE) /\
+  (range_bound_of_args [e] =
+     case json_expr_int_opt e of
+       SOME n => if 0 <= n then SOME (Num n) else SOME 0
+     | NONE => NONE) /\
+  (range_bound_of_args (s::e::_) =
+     case (json_expr_int_opt s, json_expr_int_opt e) of
+       (SOME s', SOME e') =>
+         if s' <= e' then SOME (Num (e' - s')) else SOME 0
+     | _ => NONE)
+End
+
+val () = cv_auto_trans range_bound_of_args_def;
+
 Definition get_iter_bound_def:
   (get_iter_bound (JIter_Range args (SOME n)) = n) /\
-  (get_iter_bound (JIter_Range _ NONE) = 0n) /\
+  (get_iter_bound (JIter_Range args NONE) =
+     case range_bound_of_args args of SOME n => n | NONE => 0) /\
   (get_iter_bound (JIter_Array _ (JT_StaticArray _ len)) = len) /\
   (get_iter_bound (JIter_Array _ (JT_DynArray _ len)) = len) /\
   (get_iter_bound (JIter_Array _ _) = 0)
@@ -491,4 +756,3 @@ Definition translate_module_def:
 End
 
 (* val () = cv_auto_trans translate_module_def; *)
-

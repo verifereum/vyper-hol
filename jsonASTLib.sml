@@ -523,6 +523,13 @@ fun d_json_expr () : term decoder = achoose "expr" [
   check_ast_type "NameConstant" $
     JSONDecode.map mk_JE_Bool (field "value" bool),
 
+  (* Name with folded_value (constant) *)
+  check_ast_type "Name" $
+    JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
+    tuple2 (field "folded_value" $
+              check_ast_type "Int" $ field "value" inttm,
+            orElse(field "type" json_type, succeed JT_None_tm)),
+
   (* Name *)
   check_ast_type "Name" $
     JSONDecode.map mk_JE_Name (field "id" string),
@@ -539,12 +546,24 @@ fun d_json_expr () : term decoder = achoose "expr" [
 
   (* BinOp *)
   check_ast_type "BinOp" $
+    JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
+    tuple2 (field "folded_value" $
+              check_ast_type "Int" $ field "value" inttm,
+            orElse(field "type" json_type, succeed JT_None_tm)),
+
+  check_ast_type "BinOp" $
     JSONDecode.map (fn (l, op_tm, r) => mk_JE_BinOp(l, op_tm, r)) $
     tuple3 (field "left" (delay d_json_expr),
             field "op" json_binop,
             field "right" (delay d_json_expr)),
 
   (* Compare (treated like BinOp) *)
+  check_ast_type "Compare" $
+    JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
+    tuple2 (field "folded_value" $
+              check_ast_type "Int" $ field "value" inttm,
+            orElse(field "type" json_type, succeed JT_None_tm)),
+
   check_ast_type "Compare" $
     JSONDecode.map (fn (l, op_tm, r) => mk_JE_BinOp(l, op_tm, r)) $
     tuple3 (field "left" (delay d_json_expr),
