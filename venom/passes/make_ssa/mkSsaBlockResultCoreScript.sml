@@ -13,9 +13,9 @@
  *   - inst_ssa_compatible_outputs_equiv
  *)
 
-Theory ssaBlockResultCore
+Theory mkSsaBlockResultCore
 Ancestors
-  ssaBlockCompat ssaStateEquiv venomSem
+  mkSsaBlockCompat mkSsaStateEquiv venomSem
 
 (* ==========================================================================
    Instruction Result Equivalence with Same VM

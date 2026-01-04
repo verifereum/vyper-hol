@@ -3,8 +3,8 @@
 This document presents the mathematical proof plan for the SSA construction correctness proof. It describes the main goals and the argument structure that a proof script must formalize.
 
 The key ingredients are:
-- **SSA state equivalence** (`ssa_state_equiv`) and **result equivalence** (`ssa_result_equiv`), defined in `ssaStateEquiv`.
-- **Instruction compatibility** (`inst_ssa_compatible`) and **valid transform** (`valid_ssa_transform`), defined in `ssaBlockCompat` and `ssaWellFormed`.
+- **SSA state equivalence** (`ssa_state_equiv`) and **result equivalence** (`ssa_result_equiv`), defined in `mkSsaStateEquiv`.
+- **Instruction compatibility** (`inst_ssa_compatible`) and **valid transform** (`valid_ssa_transform`), defined in `mkSsaBlockCompat` and `mkSsaWellFormed`.
 - **Operational semantics** (`step_inst`, `step_in_block`, `run_block`, `run_function`) from `venomSem`.
 
 Below, each theorem is presented in the planner format. All claims are explicitly tied to definitions or already-proved lemmas.
@@ -26,8 +26,8 @@ then
 `ssa_result_equiv vm (step_inst inst s_orig) (step_inst inst_ssa s_ssa)`.
 
 ## Key Insights
-1. The semantics `step_inst` is a case split over opcodes; each opcode is handled by a dedicated result-equivalence lemma in the `ssaBlockResult*` theories or by a shared helper.
-2. Operand evaluation is preserved by `eval_operand_ssa_equiv` (from `ssaStateEquiv`), which follows from `ssa_state_equiv` and `ssa_operand_def`.
+1. The semantics `step_inst` is a case split over opcodes; each opcode is handled by a dedicated result-equivalence lemma in the `mkSsaBlockResult*` theories or by a shared helper.
+2. Operand evaluation is preserved by `eval_operand_ssa_equiv` (from `mkSsaStateEquiv`), which follows from `ssa_state_equiv` and `ssa_operand_def`.
 3. Output freshness and operand mapping are guaranteed by `inst_ssa_compatible_def`, enabling `update_var_ssa_equiv` and related state-equivalence lemmas.
 
 ## Validated Assumptions (ALL must be VERIFIED)
@@ -58,16 +58,16 @@ By `step_inst_def`, each opcode yields one of:
 For each opcode class:
 1. **Arithmetic/bitwise/mod**: apply `exec_*_result_ssa_equiv`; its premises are satisfied by operand mapping from `inst_ssa_compatible_def` and `eval_operand_ssa_equiv`, and output freshness (single-output hypothesis plus `inst_ssa_compatible_def`).
 2. **Loads/stores**: apply the corresponding `*_result_ssa_equiv` lemma. These lemmas rely only on operand evaluation equivalence and equality of memory/storage components in `ssa_state_equiv_def`.
-3. **Context/hash**: apply the `ssaBlockResultContext` lemmas; equality of contexts is guaranteed by `ssa_state_equiv_def`.
-4. **Copy/assign/jump**: apply the `ssaBlockResultCopy` lemmas; their premises use operand mapping and, where needed, output compatibility from `inst_ssa_compatible_def`.
+3. **Context/hash**: apply the `mkSsaBlockResultContext` lemmas; equality of contexts is guaranteed by `ssa_state_equiv_def`.
+4. **Copy/assign/jump**: apply the `mkSsaBlockResultCopy` lemmas; their premises use operand mapping and, where needed, output compatibility from `inst_ssa_compatible_def`.
 5. **Halt/Revert/Error**: these are handled by the above lemmas for assert/returndatacopy and by `ssa_result_equiv_def` for error cases.
 
 Each case discharges to a direct application of the relevant lemma; no additional invariants are required beyond the stated hypotheses.
 
 ## Required Lemmas
-- `eval_operand_ssa_equiv` (available in `ssaStateEquiv`).
-- `update_var_ssa_equiv`, `write_memory_with_expansion_ssa_equiv`, `jump_to_ssa_equiv`, `halt_state_ssa_equiv`, `revert_state_ssa_equiv` (available in `ssaStateEquiv`).
-- The opcode-specific `*_result_ssa_equiv` lemmas listed above (available in `ssaBlockResultCore`, `ssaBlockResultMem`, `ssaBlockResultContext`, `ssaBlockResultCopy`).
+- `eval_operand_ssa_equiv` (available in `mkSsaStateEquiv`).
+- `update_var_ssa_equiv`, `write_memory_with_expansion_ssa_equiv`, `jump_to_ssa_equiv`, `halt_state_ssa_equiv`, `revert_state_ssa_equiv` (available in `mkSsaStateEquiv`).
+- The opcode-specific `*_result_ssa_equiv` lemmas listed above (available in `mkSsaBlockResultCore`, `mkSsaBlockResultMem`, `mkSsaBlockResultContext`, `mkSsaBlockResultCopy`).
 
 ## Potential Difficulties
 - Ensuring the correct opcode class is used; this is resolved by `step_inst_def` which explicitly enumerates opcode behavior.
@@ -175,8 +175,8 @@ For fuel `fuel`, functions `fn` and `fn_ssa`, and SSA-equivalent states `s_orig`
 3. `run_block_ssa_equiv` establishes result equivalence for each block execution; the `OK` case recurses on the next block and uses the induction hypothesis on fuel.
 
 ## Validated Assumptions (ALL must be VERIFIED)
-- `fn_ssa_compatible_def`: **VERIFIED** in `ssaFunction` (same name, same number of blocks, blockwise `inst_ssa_compatible`).
-- `wf_input_fn_def`: **VERIFIED** in `ssaWellFormed` (includes `no_phi_fn` and `single_output_fn`).
+- `fn_ssa_compatible_def`: **VERIFIED** in `mkSsaFunction` (same name, same number of blocks, blockwise `inst_ssa_compatible`).
+- `wf_input_fn_def`: **VERIFIED** in `mkSsaWellFormed` (includes `no_phi_fn` and `single_output_fn`).
 - `run_function_def`: **VERIFIED** in `venomSem`.
 
 ## Preliminary Facts to Establish
@@ -222,8 +222,8 @@ If `valid_ssa_transform fn fn_ssa vm`, `ssa_state_equiv vm s_orig s_ssa`, and `r
 3. `run_function_ssa_equiv` gives SSA equivalence for the full function execution.
 
 ## Validated Assumptions (ALL must be VERIFIED)
-- `valid_ssa_transform_def`: **VERIFIED** in `ssaWellFormed`.
-- `valid_ssa_transform_compatible`: **VERIFIED** in `ssaFunction` (derives `fn_ssa_compatible`).
+- `valid_ssa_transform_def`: **VERIFIED** in `mkSsaWellFormed`.
+- `valid_ssa_transform_compatible`: **VERIFIED** in `mkSsaFunction` (derives `fn_ssa_compatible`).
 - `run_function_ssa_equiv`: **VERIFIED** (previous theorem).
 
 ## Preliminary Facts to Establish

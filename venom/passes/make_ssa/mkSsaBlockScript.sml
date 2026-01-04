@@ -9,10 +9,10 @@
  *   - next_inst_ssa_equiv
  *)
 
-Theory ssaBlock
+Theory mkSsaBlock
 Ancestors
-  ssaBlockStep ssaBlockCompat
-  ssaStateEquiv venomSem venomState venomInst
+  mkSsaBlockStep mkSsaBlockCompat
+  mkSsaStateEquiv venomSem venomState venomInst
 
 (* ==========================================================================
    Block Execution Equivalence
@@ -39,7 +39,7 @@ QED
  * 7. For non-terminator case, next_inst preserves ssa_state_equiv
  *)
 Theorem step_in_block_ssa_result_equiv:
-  !fn bb bb_ssa s_orig s_ssa vm.
+  !bb bb_ssa s_orig s_ssa vm.
     ssa_state_equiv vm s_orig s_ssa /\
     LENGTH bb_ssa.bb_instructions = LENGTH bb.bb_instructions /\
     (!idx. idx < LENGTH bb.bb_instructions ==>
@@ -51,9 +51,9 @@ Theorem step_in_block_ssa_result_equiv:
     (!idx. idx < LENGTH bb.bb_instructions ==>
            LENGTH (EL idx bb.bb_instructions).inst_outputs <= 1) ==>
     ssa_result_equiv vm
-      (FST (step_in_block fn bb s_orig))
-      (FST (step_in_block fn bb_ssa s_ssa)) /\
-    SND (step_in_block fn bb s_orig) = SND (step_in_block fn bb_ssa s_ssa)
+      (FST (step_in_block bb s_orig))
+      (FST (step_in_block bb_ssa s_ssa)) /\
+    SND (step_in_block bb s_orig) = SND (step_in_block bb_ssa s_ssa)
 Proof
   rpt strip_tac >>
   simp[step_in_block_def] >>
@@ -130,7 +130,7 @@ QED
 (* Proof strategy: Use recInduct on run_block for the block we're proving
  * ssa_result_equiv about. The IH gives us the result for recursive calls. *)
 Theorem run_block_ssa_equiv:
-  !fn bb s_orig bb_ssa s_ssa vm.
+  !bb s_orig bb_ssa s_ssa vm.
     ssa_state_equiv vm s_orig s_ssa /\
     LENGTH bb_ssa.bb_instructions = LENGTH bb.bb_instructions /\
     (!idx. idx < LENGTH bb.bb_instructions ==>
@@ -141,18 +141,18 @@ Theorem run_block_ssa_equiv:
            (EL idx bb.bb_instructions).inst_opcode <> PHI) /\
     (!idx. idx < LENGTH bb.bb_instructions ==>
            LENGTH (EL idx bb.bb_instructions).inst_outputs <= 1) ==>
-    ssa_result_equiv vm (run_block fn bb s_orig) (run_block fn bb_ssa s_ssa)
+    ssa_result_equiv vm (run_block bb s_orig) (run_block bb_ssa s_ssa)
 Proof
   recInduct run_block_ind >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   simp[Once run_block_def] >>
-  Cases_on `step_in_block fn bb s` >>
+  Cases_on `step_in_block bb s` >>
   Cases_on `q` >> gvs[] >| [
     (* OK case *)
-    qspecl_then [`fn`, `bb`, `bb_ssa`, `s`, `s_ssa`, `vm`]
+    qspecl_then [`bb`, `bb_ssa`, `s`, `s_ssa`, `vm`]
       mp_tac step_in_block_ssa_result_equiv >> simp[] >> strip_tac >>
     simp[Once run_block_def] >>
-    Cases_on `step_in_block fn bb_ssa s_ssa` >> gvs[ssa_result_equiv_def] >>
+    Cases_on `step_in_block bb_ssa s_ssa` >> gvs[ssa_result_equiv_def] >>
     Cases_on `q` >> gvs[ssa_result_equiv_def] >>
     `v.vs_halted = v'.vs_halted` by fs[ssa_state_equiv_def] >>
     Cases_on `v.vs_halted` >> gvs[ssa_result_equiv_def] >-
@@ -170,24 +170,24 @@ Proof
     first_assum irule >> simp[]
     ,
     (* Halt case *)
-    qspecl_then [`fn`, `bb`, `bb_ssa`, `s`, `s_ssa`, `vm`]
+    qspecl_then [`bb`, `bb_ssa`, `s`, `s_ssa`, `vm`]
       mp_tac step_in_block_ssa_result_equiv >> simp[] >> strip_tac >>
     simp[Once run_block_def] >>
-    Cases_on `step_in_block fn bb_ssa s_ssa` >> gvs[ssa_result_equiv_def] >>
+    Cases_on `step_in_block bb_ssa s_ssa` >> gvs[ssa_result_equiv_def] >>
     Cases_on `q` >> gvs[ssa_result_equiv_def]
     ,
     (* Revert case *)
-    qspecl_then [`fn`, `bb`, `bb_ssa`, `s`, `s_ssa`, `vm`]
+    qspecl_then [`bb`, `bb_ssa`, `s`, `s_ssa`, `vm`]
       mp_tac step_in_block_ssa_result_equiv >> simp[] >> strip_tac >>
     simp[Once run_block_def] >>
-    Cases_on `step_in_block fn bb_ssa s_ssa` >> gvs[ssa_result_equiv_def] >>
+    Cases_on `step_in_block bb_ssa s_ssa` >> gvs[ssa_result_equiv_def] >>
     Cases_on `q` >> gvs[ssa_result_equiv_def]
     ,
     (* Error case *)
-    qspecl_then [`fn`, `bb`, `bb_ssa`, `s`, `s_ssa`, `vm`]
+    qspecl_then [`bb`, `bb_ssa`, `s`, `s_ssa`, `vm`]
       mp_tac step_in_block_ssa_result_equiv >> simp[] >> strip_tac >>
     simp[Once run_block_def] >>
-    Cases_on `step_in_block fn bb_ssa s_ssa` >> gvs[ssa_result_equiv_def] >>
+    Cases_on `step_in_block bb_ssa s_ssa` >> gvs[ssa_result_equiv_def] >>
     Cases_on `q` >> gvs[ssa_result_equiv_def]
   ]
 QED

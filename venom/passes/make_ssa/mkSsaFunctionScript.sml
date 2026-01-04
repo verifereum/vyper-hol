@@ -20,9 +20,9 @@
  * ============================================================================
  *)
 
-Theory ssaFunction
+Theory mkSsaFunction
 Ancestors
-  ssaDefs ssaTransform ssaStateEquiv ssaWellFormed ssaBlock ssaBlockCompat
+  mkSsaDefs mkSsaTransform mkSsaStateEquiv mkSsaWellFormed mkSsaBlock mkSsaBlockCompat
   venomState venomInst venomSem list finite_map
 
 (* ==========================================================================
@@ -123,18 +123,6 @@ Proof
   res_tac >> simp[]
 QED
 
-(* run_block ignores the fn parameter *)
-Theorem run_block_fn_irrelevant:
-  !fn1 bb s fn2. run_block fn1 bb s = run_block fn2 bb s
-Proof
-  ho_match_mp_tac run_block_ind >> rpt strip_tac >>
-  simp[Once run_block_def, step_in_block_def] >>
-  CONV_TAC (RHS_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
-  simp[step_in_block_def] >>
-  rpt (CASE_TAC >> simp[]) >>
-  rpt strip_tac >> first_x_assum irule >> simp[step_in_block_def]
-QED
-
 (* ==========================================================================
    Main Correctness Theorem
    ========================================================================== *)
@@ -156,7 +144,7 @@ QED
  * may need adjustment to allow vm to evolve through the block.
  *)
 Theorem run_block_ssa_equiv:
-  !fn fn_ssa bb bb_ssa s_orig s_ssa vm.
+  !bb bb_ssa s_orig s_ssa vm.
     ssa_state_equiv vm s_orig s_ssa /\
     bb.bb_label = bb_ssa.bb_label /\
     LENGTH bb.bb_instructions = LENGTH bb_ssa.bb_instructions /\
@@ -170,13 +158,10 @@ Theorem run_block_ssa_equiv:
     (* Single-output instructions only *)
     (!idx. idx < LENGTH bb.bb_instructions ==>
            LENGTH (EL idx bb.bb_instructions).inst_outputs <= 1) ==>
-    ssa_result_equiv vm (run_block fn bb s_orig) (run_block fn_ssa bb_ssa s_ssa)
+    ssa_result_equiv vm (run_block bb s_orig) (run_block bb_ssa s_ssa)
 Proof
   rpt strip_tac >>
-  `run_block fn_ssa bb_ssa s_ssa = run_block fn bb_ssa s_ssa` by
-    (irule run_block_fn_irrelevant >> simp[]) >>
-  rw[] >>
-  irule ssaBlockTheory.run_block_ssa_equiv >>
+  irule mkSsaBlockTheory.run_block_ssa_equiv >>
   simp[]
 QED
 
@@ -244,11 +229,11 @@ Proof
     metis_tac[single_output_fn_def]
   ) >>
   gvs[] >>
-  `ssa_result_equiv vm (run_block fn bb s_orig) (run_block fn_ssa bb_ssa s_ssa)` by (
+  `ssa_result_equiv vm (run_block bb s_orig) (run_block bb_ssa s_ssa)` by (
     irule run_block_ssa_equiv >> simp[]
   ) >>
-  Cases_on `run_block fn bb s_orig` >>
-  Cases_on `run_block fn_ssa bb_ssa s_ssa` >>
+  Cases_on `run_block bb s_orig` >>
+  Cases_on `run_block bb_ssa s_ssa` >>
   gvs[ssa_result_equiv_def] >>
   `v.vs_halted = v'.vs_halted` by fs[ssa_state_equiv_def] >>
   Cases_on `v.vs_halted` >> gvs[ssa_result_equiv_def] >>

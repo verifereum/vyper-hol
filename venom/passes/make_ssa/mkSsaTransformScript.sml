@@ -27,9 +27,9 @@
  * ============================================================================
  *)
 
-Theory ssaTransform
+Theory mkSsaTransform
 Ancestors
-  ssaDefs list finite_map pred_set
+  mkSsaDefs list finite_map pred_set
   venomState venomInst venomSem
 
 (* ==========================================================================

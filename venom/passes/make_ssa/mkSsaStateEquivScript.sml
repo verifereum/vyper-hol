@@ -22,9 +22,9 @@
  * ============================================================================
  *)
 
-Theory ssaStateEquiv
+Theory mkSsaStateEquiv
 Ancestors
-  ssaDefs ssaTransform finite_map
+  mkSsaDefs mkSsaTransform finite_map
   venomState venomInst venomSem
 
 (* ==========================================================================

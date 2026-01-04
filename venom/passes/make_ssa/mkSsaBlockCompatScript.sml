@@ -9,9 +9,9 @@
  *   - exec_*_ssa_equiv, exec_*_not_halt
  *)
 
-Theory ssaBlockCompat
+Theory mkSsaBlockCompat
 Ancestors
-  ssaDefs ssaTransform ssaStateEquiv ssaWellFormed
+  mkSsaDefs mkSsaTransform mkSsaStateEquiv mkSsaWellFormed
   venomState venomInst venomSem list finite_map
 
 (* ==========================================================================

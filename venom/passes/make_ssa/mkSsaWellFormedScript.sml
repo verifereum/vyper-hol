@@ -20,9 +20,9 @@
  * ============================================================================
  *)
 
-Theory ssaWellFormed
+Theory mkSsaWellFormed
 Ancestors
-  ssaDefs ssaTransform ssaStateEquiv finite_map pred_set list
+  mkSsaDefs mkSsaTransform mkSsaStateEquiv finite_map pred_set list
   venomState venomInst venomSem
 
 (* ==========================================================================

@@ -6,11 +6,11 @@
  *   - step_inst_non_phi_ssa_equiv
  *)
 
-Theory ssaBlockStep
+Theory mkSsaBlockStep
 Ancestors
-  ssaBlockResultCopy ssaBlockResultContext ssaBlockResultMem
-  ssaBlockResultCore ssaBlockCompat
-  ssaStateEquiv venomSem
+  mkSsaBlockResultCopy mkSsaBlockResultContext mkSsaBlockResultMem
+  mkSsaBlockResultCore mkSsaBlockCompat
+  mkSsaStateEquiv venomSem
 
 (* KEY LEMMA: Non-PHI instruction step gives ssa_result_equiv with SAME vm.
  * This is stronger than step_inst_non_phi_ssa_equiv which uses ?vm'.

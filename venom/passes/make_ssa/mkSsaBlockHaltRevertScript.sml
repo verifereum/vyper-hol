@@ -9,9 +9,9 @@
  * single-output instructions.
  *)
 
-Theory ssaBlockHaltRevert
+Theory mkSsaBlockHaltRevert
 Ancestors
-  ssaBlockStep ssaStateEquiv
+  mkSsaBlockStep mkSsaStateEquiv
 
 (* KEY LEMMA: Non-PHI instruction step that returns Halt. *)
 Theorem step_inst_halt_ssa_equiv:

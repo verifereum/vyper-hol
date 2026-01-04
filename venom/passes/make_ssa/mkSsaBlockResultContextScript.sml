@@ -11,10 +11,10 @@
  *   - sha3_64_result_ssa_equiv
  *)
 
-Theory ssaBlockResultContext
+Theory mkSsaBlockResultContext
 Ancestors
-  ssaBlockResultMem ssaBlockResultCore ssaBlockCompat
-  ssaStateEquiv venomSem
+  mkSsaBlockResultMem mkSsaBlockResultCore mkSsaBlockCompat
+  mkSsaStateEquiv venomSem
 
 (* Helper: ASSERT gives ssa_result_equiv with SAME vm. *)
 Theorem assert_result_ssa_equiv:

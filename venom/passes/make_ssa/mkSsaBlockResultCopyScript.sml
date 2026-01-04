@@ -9,10 +9,10 @@
  *   - jnz_result_ssa_equiv
  *)
 
-Theory ssaBlockResultCopy
+Theory mkSsaBlockResultCopy
 Ancestors
-  ssaBlockResultContext ssaBlockResultCore ssaBlockCompat
-  ssaStateEquiv venomSem
+  mkSsaBlockResultContext mkSsaBlockResultCore mkSsaBlockCompat
+  mkSsaStateEquiv venomSem
 
 (* Helper: CALLDATACOPY gives ssa_result_equiv with SAME vm. *)
 Theorem calldatacopy_result_ssa_equiv:

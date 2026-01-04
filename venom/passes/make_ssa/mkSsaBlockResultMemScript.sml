@@ -10,9 +10,9 @@
  *   - tstore_result_ssa_equiv
  *)
 
-Theory ssaBlockResultMem
+Theory mkSsaBlockResultMem
 Ancestors
-  ssaBlockResultCore ssaStateEquiv venomSem venomState
+  mkSsaBlockResultCore mkSsaStateEquiv venomSem venomState
 
 (* Helper: MLOAD gives ssa_result_equiv with SAME vm.
  * Follows the same pattern as exec_binop_result_ssa_equiv. *)
