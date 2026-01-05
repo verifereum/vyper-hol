@@ -77,13 +77,12 @@ Definition blocks_reachable_def:
 End
 
 (* TOP-LEVEL: Well-formed input function
-   (no PHIs, single-output instructions, reachable blocks) *)
+   (well-formed PHIs, no entry PHIs, single-output instructions, reachable blocks) *)
 Definition wf_input_fn_def:
   wf_input_fn fn <=>
     fn.fn_blocks <> [] /\
     wf_phi_operands fn /\
     no_entry_phi fn /\
-    no_phi_fn fn /\
     single_output_fn fn /\
     blocks_reachable fn
 End

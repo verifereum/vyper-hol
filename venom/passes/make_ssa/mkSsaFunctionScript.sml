@@ -152,9 +152,6 @@ Theorem run_block_ssa_equiv:
            inst_ssa_compatible vm
              (EL idx bb.bb_instructions)
              (EL idx bb_ssa.bb_instructions)) /\
-    (* No PHIs in this block - they're handled specially *)
-    (!idx. idx < LENGTH bb.bb_instructions ==>
-           (EL idx bb.bb_instructions).inst_opcode <> PHI) ==>
     (* Single-output instructions only *)
     (!idx. idx < LENGTH bb.bb_instructions ==>
            LENGTH (EL idx bb.bb_instructions).inst_outputs <= 1) ==>
@@ -212,14 +209,6 @@ Proof
     fs[fn_ssa_compatible_def] >>
   drule_all lookup_block_ssa_compatible >> strip_tac >>
   `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
-  `no_phi_fn fn` by fs[wf_input_fn_def] >>
-  `!idx. idx < LENGTH bb.bb_instructions ==>
-         (EL idx bb.bb_instructions).inst_opcode <> PHI` by (
-    rpt strip_tac >>
-    `get_instruction bb idx = SOME (EL idx bb.bb_instructions)` by
-      simp[get_instruction_def] >>
-    metis_tac[no_phi_fn_def]
-  ) >>
   `single_output_fn fn` by fs[wf_input_fn_def] >>
   `!idx. idx < LENGTH bb.bb_instructions ==>
          LENGTH (EL idx bb.bb_instructions).inst_outputs <= 1` by (

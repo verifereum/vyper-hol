@@ -80,6 +80,15 @@ Definition ssa_state_equiv_def:
     s_orig.vs_reverted = s_ssa.vs_reverted
 End
 
+(* Helper: prev_bb equality from SSA state equivalence. *)
+Theorem ssa_state_equiv_prev_bb:
+  !vm s_orig s_ssa.
+    ssa_state_equiv vm s_orig s_ssa ==>
+    s_orig.vs_prev_bb = s_ssa.vs_prev_bb
+Proof
+  simp[ssa_state_equiv_def]
+QED
+
 (* ==========================================================================
    Equivalence Relation Properties
    ========================================================================== *)

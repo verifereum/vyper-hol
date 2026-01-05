@@ -47,8 +47,6 @@ Theorem step_in_block_ssa_result_equiv:
              (EL idx bb.bb_instructions)
              (EL idx bb_ssa.bb_instructions)) /\
     (!idx. idx < LENGTH bb.bb_instructions ==>
-           (EL idx bb.bb_instructions).inst_opcode <> PHI) /\
-    (!idx. idx < LENGTH bb.bb_instructions ==>
            LENGTH (EL idx bb.bb_instructions).inst_outputs <= 1) ==>
     ssa_result_equiv vm
       (FST (step_in_block bb s_orig))
@@ -75,8 +73,6 @@ Proof
   (* Get inst_ssa_compatible, non-PHI, and LENGTH <= 1 *)
   `inst_ssa_compatible vm (EL s_ssa.vs_inst_idx bb.bb_instructions)
                           (EL s_ssa.vs_inst_idx bb_ssa.bb_instructions)`
-    by (first_x_assum (qspec_then `s_ssa.vs_inst_idx` mp_tac) >> simp[]) >>
-  `(EL s_ssa.vs_inst_idx bb.bb_instructions).inst_opcode <> PHI`
     by (first_x_assum (qspec_then `s_ssa.vs_inst_idx` mp_tac) >> simp[]) >>
   `LENGTH (EL s_ssa.vs_inst_idx bb.bb_instructions).inst_outputs <= 1`
     by (first_x_assum (qspec_then `s_ssa.vs_inst_idx` mp_tac) >> simp[]) >>
@@ -137,8 +133,6 @@ Theorem run_block_ssa_equiv:
            inst_ssa_compatible vm
              (EL idx bb.bb_instructions)
              (EL idx bb_ssa.bb_instructions)) /\
-    (!idx. idx < LENGTH bb.bb_instructions ==>
-           (EL idx bb.bb_instructions).inst_opcode <> PHI) /\
     (!idx. idx < LENGTH bb.bb_instructions ==>
            LENGTH (EL idx bb.bb_instructions).inst_outputs <= 1) ==>
     ssa_result_equiv vm (run_block bb s_orig) (run_block bb_ssa s_ssa)
