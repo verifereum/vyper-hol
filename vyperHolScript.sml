@@ -4,3 +4,4 @@ Ancestors
   vyperTestRunner
   phiFunction
   rtaPassCorrectness
+  mkSsaFunction
