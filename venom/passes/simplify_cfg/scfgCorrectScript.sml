@@ -168,8 +168,8 @@ Theorem run_function_remove_unreachable_equiv:
     phi_fn_wf fn /\
     reachable_label fn (entry_label fn) s.vs_current_bb /\
     (s.vs_prev_bb = NONE ==> s.vs_current_bb = entry_label fn) /\
-    (s.vs_prev_bb = SOME prev ==> MEM prev (pred_labels fn s.vs_current_bb)) /\
-    (s.vs_prev_bb = SOME prev ==> reachable_label fn (entry_label fn) prev)
+    (!prev. s.vs_prev_bb = SOME prev ==> MEM prev (pred_labels fn s.vs_current_bb)) /\
+    (!prev. s.vs_prev_bb = SOME prev ==> reachable_label fn (entry_label fn) prev)
   ==>
     result_equiv_cfg (run_function fuel fn s)
                      (run_function fuel (remove_unreachable_blocks fn) s)
