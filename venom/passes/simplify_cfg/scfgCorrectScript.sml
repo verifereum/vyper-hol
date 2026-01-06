@@ -174,7 +174,114 @@ Theorem run_function_remove_unreachable_equiv:
     result_equiv_cfg (run_function fuel fn s)
                      (run_function fuel (remove_unreachable_blocks fn) s)
 Proof
-  cheat
+  Induct_on `fuel`
+  >- (simp[Once run_function_def, result_equiv_cfg_def] >>
+      simp[Once run_function_def] >> simp[result_equiv_cfg_def])
+  >- (
+    rpt gen_tac >> strip_tac >> simp[Once run_function_def] >>
+    Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
+    >- (
+      simp[] >> simp[Once run_function_def] >>
+      Cases_on `fn.fn_blocks = []`
+      >- gvs[cfg_wf_def]
+      >- (
+        sg `lookup_block s.vs_current_bb (remove_unreachable_blocks fn).fn_blocks = NONE`
+        >- (simp[remove_unreachable_blocks_def] >>
+            drule lookup_block_filter_none >> strip_tac >>
+            first_x_assum (qspec_then `\bb. reachable_label fn (HD fn.fn_blocks).bb_label bb.bb_label` assume_tac) >>
+            drule lookup_block_simplify_phi_block_none >> simp[])
+        >- gvs[result_equiv_cfg_def]))
+    >- (
+      simp[] >>
+      `x.bb_label = s.vs_current_bb` by metis_tac[lookup_block_label] >>
+      `fn.fn_blocks <> []` by gvs[cfg_wf_def] >>
+      sg `lookup_block s.vs_current_bb (FILTER (\bb. reachable_label fn (entry_label fn) bb.bb_label) fn.fn_blocks) = SOME x`
+      >- (irule lookup_block_filter >> simp[])
+      >- (
+        drule lookup_block_simplify_phi_block >> strip_tac >>
+        first_x_assum (qspec_then `fn with fn_blocks := FILTER (\bb. reachable_label fn (entry_label fn) bb.bb_label) fn.fn_blocks` assume_tac) >>
+        sg `(remove_unreachable_blocks fn).fn_blocks = MAP (\bb. simplify_phi_block (pred_labels (fn with fn_blocks := FILTER (\bb. reachable_label fn (entry_label fn) bb.bb_label) fn.fn_blocks) bb.bb_label) bb) (FILTER (\bb. reachable_label fn (entry_label fn) bb.bb_label) fn.fn_blocks)`
+        >- gvs[remove_unreachable_blocks_def, entry_label_def]
+        >- (
+          CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_function_def])) >> simp[] >>
+          Cases_on `s.vs_prev_bb`
+          >- ( (* Entry block case *)
+            gvs[] >>
+            sg `x = HD fn.fn_blocks`
+            >- (irule lookup_block_at_hd >> simp[entry_label_def] >> gvs[entry_label_def])
+            >- (
+              `block_has_no_phi x` by gvs[phi_fn_wf_def] >>
+              `simplify_phi_block (pred_labels (fn with fn_blocks := FILTER (\bb. reachable_label fn (entry_label fn) bb.bb_label) fn.fn_blocks) (entry_label fn)) x = x` by (irule simplify_phi_block_no_phi >> simp[]) >>
+              gvs[] >>
+              Cases_on `run_block (HD fn.fn_blocks) s` >> gvs[result_equiv_cfg_def]
+              >- (
+                Cases_on `v.vs_halted` >> gvs[result_equiv_cfg_def, state_equiv_cfg_refl] >>
+                `v.vs_prev_bb = SOME (entry_label fn)` by (drule_all run_block_ok_prev_bb >> gvs[]) >>
+                sg `MEM v.vs_current_bb (block_successors (HD fn.fn_blocks))`
+                >- (`MEM (HD fn.fn_blocks) fn.fn_blocks` by simp[rich_listTheory.HEAD_MEM] >> drule_all run_block_ok_successor >> simp[])
+                >- (
+                  sg `reachable_label fn (entry_label fn) v.vs_current_bb`
+                  >- (irule reachable_label_step >> qexists_tac `entry_label fn` >> simp[cfg_edge_def] >>
+                      qexists_tac `HD fn.fn_blocks` >> simp[rich_listTheory.HEAD_MEM] >> gvs[entry_label_def])
+                  >- (
+                    sg `MEM (entry_label fn) (pred_labels fn v.vs_current_bb)`
+                    >- (`MEM (HD fn.fn_blocks) fn.fn_blocks` by simp[rich_listTheory.HEAD_MEM] >>
+                        drule pred_labels_mem_from_edge >> disch_then (qspec_then `v.vs_current_bb` mp_tac) >> simp[])
+                    >- (first_x_assum irule >> simp[]))))
+              >- simp[state_equiv_cfg_refl]
+              >- simp[state_equiv_cfg_refl]))
+          >- ( (* Non-entry block case *)
+            `MEM x' (pred_labels fn s.vs_current_bb)` by (first_x_assum (qspec_then `x'` mp_tac) >> simp[]) >>
+            `reachable_label fn (entry_label fn) x'` by (first_x_assum (qspec_then `x'` mp_tac) >> simp[]) >>
+            sg `result_equiv_cfg (run_block (simplify_phi_block (pred_labels (fn with fn_blocks := FILTER (\bb. reachable_label fn (entry_label fn) bb.bb_label) fn.fn_blocks) s.vs_current_bb) x) s) (run_block x s)`
+            >- (
+              irule scfgPhiRunBlockTheory.run_block_simplify_phi >> rpt conj_tac
+              >- (qexists_tac `fn with fn_blocks := FILTER (\bb. reachable_label fn (entry_label fn) bb.bb_label) fn.fn_blocks` >> gvs[])
+              >- (qexists_tac `x'` >> simp[] >> irule pred_labels_keep_reachable >> simp[] >> qexists_tac `entry_label fn` >> simp[])
+              >- (qexists_tac `pred_labels fn s.vs_current_bb` >> conj_tac
+                  >- (rpt strip_tac >> irule pred_labels_subset >>
+                      qexists_tac `fn with fn_blocks := FILTER (\bb. reachable_label fn (entry_label fn) bb.bb_label) fn.fn_blocks` >> simp[listTheory.MEM_FILTER])
+                  >- (`MEM x fn.fn_blocks` by metis_tac[lookup_block_MEM] >> drule_all scfgPhiLemmasTheory.phi_fn_wf_block >> gvs[])))
+            >- (
+              Cases_on `run_block x s`
+              >- ( (* OK case *)
+                gvs[result_equiv_cfg_def] >> simp[] >>
+                Cases_on `run_block (simplify_phi_block (pred_labels (fn with fn_blocks := FILTER (λbb. reachable_label fn (entry_label fn) bb.bb_label) fn.fn_blocks) s.vs_current_bb) x) s`
+                >- (
+                  gvs[result_equiv_cfg_def] >>
+                  Cases_on `v.vs_halted` >> gvs[result_equiv_cfg_def]
+                  >- (gvs[state_equiv_cfg_def] >> simp[result_equiv_cfg_def] >> irule state_equiv_cfg_sym >> simp[] >> simp[state_equiv_cfg_def])
+                  >- (
+                    Cases_on `v'.vs_halted` >> gvs[state_equiv_cfg_def] >>
+                    sg `MEM x' (pred_labels (fn with fn_blocks := FILTER (\bb. reachable_label fn (entry_label fn) bb.bb_label) fn.fn_blocks) s.vs_current_bb)`
+                    >- (irule pred_labels_keep_reachable >> simp[] >> qexists_tac `entry_label fn` >> simp[])
+                    >- (
+                      sg `run_block (simplify_phi_block (pred_labels (fn with fn_blocks := FILTER (\bb. reachable_label fn (entry_label fn) bb.bb_label) fn.fn_blocks) s.vs_current_bb) x) s = OK v`
+                      >- (
+                        irule scfgPhiRunBlockTheory.run_block_simplify_phi_ok >> simp[] >> rpt conj_tac
+                        >- (qexists_tac `fn with fn_blocks := FILTER (\bb. reachable_label fn (entry_label fn) bb.bb_label) fn.fn_blocks` >> simp[])
+                        >- (qexists_tac `pred_labels fn s.vs_current_bb` >> conj_tac
+                            >- (rpt strip_tac >> qspecl_then [`fn`, `fn with fn_blocks := FILTER (\bb. reachable_label fn (entry_label fn) bb.bb_label) fn.fn_blocks`, `s.vs_current_bb`, `lbl`] mp_tac pred_labels_subset >> simp[listTheory.MEM_FILTER])
+                            >- (`MEM x fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+                                `phi_block_wf (pred_labels fn x.bb_label) x` by (drule_all scfgPhiLemmasTheory.phi_fn_wf_block >> simp[]) >> gvs[])))
+                      >- (
+                        `v = v'` by gvs[] >> gvs[] >>
+                        first_x_assum irule >> simp[] >>
+                        `v.vs_prev_bb = SOME s.vs_current_bb` by (drule_all venomSemPropsTheory.run_block_ok_prev_bb >> simp[]) >>
+                        simp[] >> rpt conj_tac
+                        >- (`MEM x fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+                            `MEM v.vs_current_bb (block_successors x)` by (drule_all run_block_ok_successor >> simp[]) >>
+                            drule_all pred_labels_mem_from_edge >> gvs[])
+                        >- (irule reachable_label_step >> qexists_tac `s.vs_current_bb` >> simp[scfgDefsTheory.cfg_edge_def] >>
+                            qexists_tac `x` >> simp[] >> gvs[] >>
+                            `MEM x fn.fn_blocks` by metis_tac[lookup_block_MEM] >> conj_tac >- simp[] >>
+                            drule_all run_block_ok_successor >> simp[])))))
+                >- gvs[result_equiv_cfg_def]
+                >- gvs[result_equiv_cfg_def]
+                >- gvs[result_equiv_cfg_def])
+              >- (simp[] >> Cases_on `run_block (simplify_phi_block (pred_labels (fn with fn_blocks := FILTER (\bb. reachable_label fn (entry_label fn) bb.bb_label) fn.fn_blocks) s.vs_current_bb) x) s` >> gvs[result_equiv_cfg_def, state_equiv_cfg_refl] >> irule state_equiv_cfg_sym >> simp[])
+              >- (simp[] >> Cases_on `run_block (simplify_phi_block (pred_labels (fn with fn_blocks := FILTER (\bb. reachable_label fn (entry_label fn) bb.bb_label) fn.fn_blocks) s.vs_current_bb) x) s` >> gvs[result_equiv_cfg_def, state_equiv_cfg_refl] >> irule state_equiv_cfg_sym >> simp[])
+              >- (simp[] >> Cases_on `run_block (simplify_phi_block (pred_labels (fn with fn_blocks := FILTER (\bb. reachable_label fn (entry_label fn) bb.bb_label) fn.fn_blocks) s.vs_current_bb) x) s` >> gvs[result_equiv_cfg_def])))))))
 QED
 
 Theorem remove_unreachable_blocks_correct:
