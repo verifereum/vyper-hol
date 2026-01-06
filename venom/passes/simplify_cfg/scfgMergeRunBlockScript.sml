@@ -165,11 +165,84 @@ Proof
   cheat
 QED
 
-(* CHEATED - run_block API changed from 3 args to 2 args *)
+(* Helper: step_in_block preserves equivalence when prev <> old and prev <> new *)
+Theorem step_in_block_replace_label_prev_diff:
+  !bb s old new preds prev fn res is_term.
+    step_in_block bb s = (res, is_term) /\
+    s.vs_prev_bb = SOME prev /\ prev <> old /\ prev <> new /\
+    preds = pred_labels fn bb.bb_label /\
+    MEM prev preds /\
+    phi_block_wf preds bb ==>
+    ?res'. step_in_block (replace_label_block old new bb) s = (res', is_term) /\
+           result_equiv_cfg res' res
+Proof
+  rpt strip_tac >> simp[step_in_block_def, replace_label_block_def] >>
+  qpat_x_assum `step_in_block _ _ = _` mp_tac >> simp[step_in_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> gvs[get_instruction_def]
+  >- simp[result_equiv_cfg_def]
+  >- (
+    simp[EL_MAP] >> qabbrev_tac `inst = EL s.vs_inst_idx bb.bb_instructions` >>
+    simp[replace_label_inst_def] >> strip_tac >> Cases_on `inst.inst_opcode = PHI`
+    >- (
+      `MEM inst bb.bb_instructions` by (simp[Abbr `inst`, MEM_EL] >>
+        qexists_tac `s.vs_inst_idx` >> simp[]) >>
+      `phi_inst_wf (pred_labels fn bb.bb_label) inst` by
+        metis_tac[phi_block_wf_inst] >>
+      qspecl_then [`old`, `new`, `pred_labels fn bb.bb_label`, `inst`, `s`,
+        `prev`] mp_tac step_inst_replace_label_phi_prev_diff >>
+      simp[replace_label_inst_def] >> strip_tac >>
+      simp[is_terminator_def] >>
+      Cases_on `step_inst inst s` >> gvs[is_terminator_def, result_equiv_cfg_def]
+      >- (
+        Cases_on `step_inst (inst with inst_operands :=
+          MAP (replace_label_operand old new) inst.inst_operands) s` >>
+        gvs[result_equiv_cfg_def] >>
+        irule next_inst_state_equiv_cfg >> simp[state_equiv_cfg_sym])
+      >- (
+        qpat_x_assum `Halt _ = _` (SUBST_ALL_TAC o SYM) >>
+        Cases_on `step_inst (inst with inst_operands :=
+          MAP (replace_label_operand old new) inst.inst_operands) s` >>
+        gvs[result_equiv_cfg_def, state_equiv_cfg_sym])
+      >- (
+        qpat_x_assum `Revert _ = _` (SUBST_ALL_TAC o SYM) >>
+        Cases_on `step_inst (inst with inst_operands :=
+          MAP (replace_label_operand old new) inst.inst_operands) s` >>
+        gvs[result_equiv_cfg_def, state_equiv_cfg_sym])
+      >- (
+        qpat_x_assum `Error _ = _` (SUBST_ALL_TAC o SYM) >>
+        Cases_on `step_inst (inst with inst_operands :=
+          MAP (replace_label_operand old new) inst.inst_operands) s` >>
+        gvs[result_equiv_cfg_def]))
+    >- (
+      `state_equiv_cfg s s` by simp[state_equiv_cfg_refl] >>
+      drule_all step_inst_replace_label_non_phi >>
+      simp[replace_label_inst_def] >> strip_tac >>
+      first_x_assum (qspecl_then [`old`, `new`] mp_tac) >>
+      Cases_on `step_inst inst s` >>
+      Cases_on `step_inst (inst with inst_operands :=
+        MAP (replace_label_operand old new) inst.inst_operands) s` >>
+      gvs[result_equiv_cfg_def]
+      >- (
+        strip_tac >> IF_CASES_TAC >> gvs[result_equiv_cfg_def,
+          state_equiv_cfg_sym, next_inst_state_equiv_cfg] >>
+        gvs[result_equiv_cfg_def, state_equiv_cfg_sym] >>
+        qpat_x_assum `OK _ = _` (SUBST_ALL_TAC o SYM) >>
+        gvs[result_equiv_cfg_def, state_equiv_cfg_sym])
+      >- (
+        qpat_x_assum `Halt _ = _` (SUBST_ALL_TAC o SYM) >>
+        gvs[result_equiv_cfg_def, state_equiv_cfg_sym])
+      >- (
+        qpat_x_assum `Revert _ = _` (SUBST_ALL_TAC o SYM) >>
+        gvs[result_equiv_cfg_def, state_equiv_cfg_sym])
+      >- (
+        qpat_x_assum `Error _ = _` (SUBST_ALL_TAC o SYM) >>
+        gvs[result_equiv_cfg_def])))
+QED
+
 Theorem run_block_replace_label_prev_diff:
   !bb s old new preds prev fn.
     s.vs_prev_bb = SOME prev /\
-    prev <> old /\
+    prev <> old /\ prev <> new /\
     preds = pred_labels fn bb.bb_label /\
     MEM prev preds /\
     phi_block_wf preds bb
@@ -177,7 +250,19 @@ Theorem run_block_replace_label_prev_diff:
     result_equiv_cfg (run_block bb s)
                      (run_block (replace_label_block old new bb) s)
 Proof
-  cheat
+  recInduct run_block_ind >> rpt strip_tac >>
+  Cases_on `step_in_block bb s` >>
+  rename1 `step_in_block bb s = (res, is_term)` >>
+  drule_all step_in_block_replace_label_prev_diff >> strip_tac >>
+  once_rewrite_tac[run_block_def] >> gvs[] >>
+  Cases_on `res` >> gvs[result_equiv_cfg_def]
+  >- (
+    IF_CASES_TAC >> gvs[result_equiv_cfg_def, state_equiv_cfg_sym] >>
+    IF_CASES_TAC >> gvs[result_equiv_cfg_def] >>
+    drule step_in_block_preserves_prev_bb >> simp[] >> strip_tac >>
+    first_x_assum irule >> simp[])
+  >- simp[state_equiv_cfg_sym]
+  >- simp[state_equiv_cfg_sym]
 QED
 
 (* CHEATED - run_block API changed from 3 args to 2 args *)

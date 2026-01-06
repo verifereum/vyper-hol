@@ -165,7 +165,52 @@ Proof
   Cases_on `val_op` >> gvs[replace_label_operand_def]
 QED
 
-(* CHEATED - 92 opcode cases, needs systematic handling *)
+(* Helper tactics for step_inst_replace_label_non_phi *)
+val binop_tac = irule exec_binop_replace_label_equiv >> simp[];
+val unop_tac = irule exec_unop_replace_label_equiv >> simp[];
+val modop_tac = irule exec_modop_replace_label_equiv >> simp[];
+val error_tac = simp[result_equiv_cfg_def];
+val halt_tac = simp[result_equiv_cfg_def, halt_state_state_equiv_cfg];
+val revert_tac = simp[result_equiv_cfg_def, revert_state_state_equiv_cfg];
+val nop_tac = simp[result_equiv_cfg_def, state_equiv_cfg_refl];
+val jump_tac = simp[result_equiv_cfg_def, jump_to_state_equiv_cfg];
+
+val ctx_output_tac =
+  Cases_on `inst.inst_outputs` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+  Cases_on `t` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+  irule update_var_state_equiv_cfg_eq >> gvs[state_equiv_cfg_def];
+
+val read1_update_tac =
+  Cases_on `inst.inst_operands` >> gvs[result_equiv_cfg_def] >>
+  Cases_on `t` >> gvs[result_equiv_cfg_def, eval_operand_replace_label] >>
+  `eval_operand h s2 = eval_operand h s1` by simp[eval_operand_state_equiv_cfg] >> simp[] >>
+  CASE_TAC >> gvs[result_equiv_cfg_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+  Cases_on `t` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+  CASE_TAC >> gvs[result_equiv_cfg_def] >>
+  irule update_var_state_equiv_cfg_eq >>
+  simp[mload_state_equiv_cfg, sload_state_equiv_cfg, tload_state_equiv_cfg];
+
+val store2_tac =
+  Cases_on `inst.inst_operands` >> gvs[result_equiv_cfg_def] >>
+  Cases_on `t` >> gvs[result_equiv_cfg_def] >>
+  Cases_on `t'` >> gvs[result_equiv_cfg_def, eval_operand_replace_label] >>
+  `eval_operand h s2 = eval_operand h s1` by simp[eval_operand_state_equiv_cfg] >>
+  `eval_operand h' s2 = eval_operand h' s1` by simp[eval_operand_state_equiv_cfg] >> simp[] >>
+  rpt CASE_TAC >> gvs[result_equiv_cfg_def, mstore_state_equiv_cfg, sstore_state_equiv_cfg, tstore_state_equiv_cfg];
+
+val jnz_tac =
+  rpt (Cases_on `t'` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+       TRY (Cases_on `h'` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl, replace_label_operand_def]) >>
+       TRY (IF_CASES_TAC >> gvs[]) >>
+       TRY (Cases_on `t` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl, eval_operand_replace_label])) >>
+  TRY (`eval_operand h s2 = eval_operand h s1` by simp[eval_operand_state_equiv_cfg] >> simp[]) >>
+  rpt (CASE_TAC >> gvs[result_equiv_cfg_def]) >>
+  TRY (IF_CASES_TAC >> gvs[result_equiv_cfg_def, jump_to_state_equiv_cfg]);
+
+val state_equiv_tac = simp[halt_state_state_equiv_cfg, revert_state_state_equiv_cfg, jump_to_state_equiv_cfg, state_equiv_cfg_refl];
+
+(* 92 opcode cases - fully proven *)
 Theorem step_inst_replace_label_non_phi:
   !old new inst s1 s2.
     state_equiv_cfg s1 s2 /\
@@ -173,7 +218,172 @@ Theorem step_inst_replace_label_non_phi:
     result_equiv_cfg (step_inst inst s1)
                      (step_inst (replace_label_inst old new inst) s2)
 Proof
-  cheat
+  rpt strip_tac >> simp[step_inst_def, replace_label_inst_def] >>
+  Cases_on `inst.inst_opcode` >> gvs[] >>
+  FIRST [binop_tac, unop_tac, modop_tac, error_tac, halt_tac, revert_tac, nop_tac, jump_tac]
+  >- (
+    Cases_on `inst.inst_operands` >> gvs[result_equiv_cfg_def] >>
+    Cases_on `t` >> gvs[result_equiv_cfg_def, eval_operand_replace_label] >>
+    `eval_operand h s2 = eval_operand h s1` by simp[eval_operand_state_equiv_cfg] >> simp[] >>
+    CASE_TAC >> gvs[result_equiv_cfg_def]
+    >- simp[result_equiv_cfg_refl]
+    >- (
+      Cases_on `t` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+      CASE_TAC >> gvs[result_equiv_cfg_def] >>
+      irule update_var_state_equiv_cfg_eq >> simp[mload_state_equiv_cfg]))
+  >- (
+    Cases_on `inst.inst_operands` >> gvs[result_equiv_cfg_def] >>
+    Cases_on `t` >> gvs[result_equiv_cfg_def] >>
+    Cases_on `t'` >> gvs[result_equiv_cfg_def, eval_operand_replace_label] >>
+    `eval_operand h s2 = eval_operand h s1` by simp[eval_operand_state_equiv_cfg] >>
+    `eval_operand h' s2 = eval_operand h' s1` by simp[eval_operand_state_equiv_cfg] >> simp[] >>
+    rpt CASE_TAC >> gvs[result_equiv_cfg_def, mstore_state_equiv_cfg])
+  >- (
+    Cases_on `inst.inst_outputs` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+    Cases_on `t` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl, msize_update_var_state_equiv_cfg])
+  >- read1_update_tac
+  >- store2_tac
+  >- read1_update_tac
+  >- store2_tac
+  >- (
+    Cases_on `inst.inst_operands` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+    Cases_on `h` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl, replace_label_operand_def] >>
+    Cases_on `t` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl, jump_to_state_equiv_cfg]
+    >- (IF_CASES_TAC >> gvs[result_equiv_cfg_def, jump_to_state_equiv_cfg])
+    >- (IF_CASES_TAC >> gvs[result_equiv_cfg_def]))
+  >- (
+    Cases_on `inst.inst_operands` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+    Cases_on `t` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+    Cases_on `h'` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl, replace_label_operand_def] >>
+    IF_CASES_TAC >> gvs[]
+    >- (
+      Cases_on `t'` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+      Cases_on `h'` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl, replace_label_operand_def] >>
+      IF_CASES_TAC >> gvs[] >>
+      Cases_on `t` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl, eval_operand_replace_label]
+      >- (
+        `eval_operand h s2 = eval_operand h s1` by simp[eval_operand_state_equiv_cfg] >> simp[] >>
+        CASE_TAC >> gvs[result_equiv_cfg_def, jump_to_state_equiv_cfg])
+      >- (
+        `eval_operand h s2 = eval_operand h s1` by simp[eval_operand_state_equiv_cfg] >> simp[] >>
+        CASE_TAC >> gvs[result_equiv_cfg_def] >>
+        IF_CASES_TAC >> gvs[result_equiv_cfg_def, jump_to_state_equiv_cfg]))
+    >- (
+      jnz_tac
+      >- simp[jump_to_state_equiv_cfg]
+      >- simp[jump_to_state_equiv_cfg]
+      >- rpt (simp[jump_to_state_equiv_cfg])
+      >- simp[jump_to_state_equiv_cfg]))
+  >- simp[halt_state_state_equiv_cfg]
+  >- simp[revert_state_state_equiv_cfg]
+  >- simp[halt_state_state_equiv_cfg]
+  >- state_equiv_tac
+  >- (
+    Cases_on `inst.inst_operands` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+    Cases_on `inst.inst_outputs` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+    Cases_on `t'` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+    Cases_on `t` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl, eval_operand_replace_label] >>
+    `eval_operand h s2 = eval_operand h s1` by simp[eval_operand_state_equiv_cfg] >> simp[] >>
+    CASE_TAC >> gvs[result_equiv_cfg_def, update_var_state_equiv_cfg])
+  >- ctx_output_tac
+  >- ctx_output_tac
+  >- (
+    Cases_on `inst.inst_operands` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+    Cases_on `t` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl, eval_operand_replace_label] >>
+    `eval_operand h s2 = eval_operand h s1` by simp[eval_operand_state_equiv_cfg] >> simp[] >>
+    CASE_TAC >> gvs[result_equiv_cfg_def] >>
+    Cases_on `inst.inst_outputs` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+    Cases_on `t` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl, calldataload_update_var_state_equiv_cfg] >>
+    CASE_TAC >> gvs[result_equiv_cfg_def, calldataload_update_var_state_equiv_cfg])
+  >- ctx_output_tac
+  >- (
+    Cases_on `inst.inst_operands` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+    Cases_on `t` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+    Cases_on `t'` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+    Cases_on `t` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl, eval_operand_replace_label] >>
+    `eval_operand h s2 = eval_operand h s1` by simp[eval_operand_state_equiv_cfg] >>
+    `eval_operand h' s2 = eval_operand h' s1` by simp[eval_operand_state_equiv_cfg] >>
+    `eval_operand h'' s2 = eval_operand h'' s1` by simp[eval_operand_state_equiv_cfg] >> simp[] >>
+    rpt CASE_TAC >> gvs[result_equiv_cfg_def, calldatacopy_state_equiv_cfg])
+  >- ctx_output_tac
+  >- ctx_output_tac
+  >- ctx_output_tac
+  >- ctx_output_tac
+  >- ctx_output_tac
+  >- ctx_output_tac
+  >- ctx_output_tac
+  >- ctx_output_tac
+  >- ctx_output_tac
+  >- ctx_output_tac
+  >- ctx_output_tac
+  >- (
+    Cases_on `inst.inst_operands` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+    Cases_on `t` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl, eval_operand_replace_label] >>
+    `eval_operand h s2 = eval_operand h s1` by simp[eval_operand_state_equiv_cfg] >> simp[] >>
+    CASE_TAC >> gvs[result_equiv_cfg_def] >>
+    Cases_on `inst.inst_outputs` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+    Cases_on `t` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl, accounts_state_equiv_cfg] >>
+    CASE_TAC >> gvs[result_equiv_cfg_def] >>
+    irule balance_update_var_state_equiv_cfg >> simp[])
+  >- (
+    Cases_on `inst.inst_operands` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+    Cases_on `t` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl, eval_operand_replace_label] >>
+    `eval_operand h s2 = eval_operand h s1` by simp[eval_operand_state_equiv_cfg] >> simp[] >>
+    CASE_TAC >> gvs[result_equiv_cfg_def] >>
+    Cases_on `inst.inst_outputs` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+    Cases_on `t` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+    CASE_TAC >> gvs[result_equiv_cfg_def] >>
+    irule blockhash_update_var_state_equiv_cfg >> simp[])
+  >- ctx_output_tac
+  >- (
+    Cases_on `inst.inst_outputs` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+    Cases_on `t` >> gvs[result_equiv_cfg_def, result_equiv_cfg_refl] >>
+    irule returndatasize_update_var_state_equiv_cfg >> simp[])
+  >- (
+    Cases_on `inst.inst_operands` >> gvs[result_equiv_cfg_def] >>
+    Cases_on `t` >> gvs[result_equiv_cfg_def] >>
+    Cases_on `t'` >> gvs[result_equiv_cfg_def] >>
+    Cases_on `t` >> gvs[result_equiv_cfg_def, eval_operand_replace_label] >>
+    `eval_operand h s2 = eval_operand h s1` by simp[eval_operand_state_equiv_cfg] >>
+    `eval_operand h' s2 = eval_operand h' s1` by simp[eval_operand_state_equiv_cfg] >>
+    `eval_operand h'' s2 = eval_operand h'' s1` by simp[eval_operand_state_equiv_cfg] >> simp[] >>
+    rpt CASE_TAC >> gvs[result_equiv_cfg_def]
+    >- (irule revert_state_state_equiv_cfg >> simp[])
+    >- gvs[state_equiv_cfg_def]
+    >- gvs[state_equiv_cfg_def]
+    >- (
+      `s1.vs_returndata = s2.vs_returndata` by gvs[state_equiv_cfg_def] >> simp[] >>
+      irule write_memory_with_expansion_state_equiv_cfg >> simp[]))
+  >- ctx_output_tac
+  >- (
+    Cases_on `inst.inst_operands` >> gvs[result_equiv_cfg_def] >>
+    Cases_on `t` >> gvs[result_equiv_cfg_def] >>
+    Cases_on `t'` >> gvs[result_equiv_cfg_def, eval_operand_replace_label] >>
+    `eval_operand h s2 = eval_operand h s1` by simp[eval_operand_state_equiv_cfg] >>
+    `eval_operand h' s2 = eval_operand h' s1` by simp[eval_operand_state_equiv_cfg] >> simp[] >>
+    `s1.vs_memory = s2.vs_memory` by gvs[state_equiv_cfg_def] >> simp[] >>
+    rpt CASE_TAC >> gvs[result_equiv_cfg_def] >>
+    irule update_var_state_equiv_cfg_eq >> gvs[state_equiv_cfg_def])
+  >- (
+    Cases_on `inst.inst_operands` >> gvs[result_equiv_cfg_def] >>
+    Cases_on `t` >> gvs[result_equiv_cfg_def] >>
+    Cases_on `t'` >> gvs[result_equiv_cfg_def, eval_operand_replace_label] >>
+    `eval_operand h s2 = eval_operand h s1` by simp[eval_operand_state_equiv_cfg] >>
+    `eval_operand h' s2 = eval_operand h' s1` by simp[eval_operand_state_equiv_cfg] >> simp[] >>
+    rpt CASE_TAC >> gvs[result_equiv_cfg_def] >>
+    irule update_var_state_equiv_cfg_eq >> gvs[state_equiv_cfg_def])
+  >- (
+    Cases_on `inst.inst_operands` >> gvs[result_equiv_cfg_def] >>
+    Cases_on `t` >> gvs[result_equiv_cfg_def, eval_operand_replace_label] >>
+    `eval_operand h s2 = eval_operand h s1` by simp[eval_operand_state_equiv_cfg] >> simp[] >>
+    CASE_TAC >> gvs[result_equiv_cfg_def] >>
+    CASE_TAC >> gvs[result_equiv_cfg_def, revert_state_state_equiv_cfg, state_equiv_cfg_refl])
+  >- (
+    Cases_on `inst.inst_operands` >> gvs[result_equiv_cfg_def] >>
+    Cases_on `t` >> gvs[result_equiv_cfg_def, eval_operand_replace_label] >>
+    `eval_operand h s2 = eval_operand h s1` by simp[eval_operand_state_equiv_cfg] >> simp[] >>
+    CASE_TAC >> gvs[result_equiv_cfg_def] >>
+    IF_CASES_TAC >> gvs[result_equiv_cfg_def, halt_state_state_equiv_cfg, state_equiv_cfg_refl])
 QED
 
 Theorem step_inst_replace_label_phi:
@@ -236,6 +446,7 @@ Theorem step_inst_replace_label_phi_prev_diff:
     inst.inst_opcode = PHI /\
     s.vs_prev_bb = SOME prev /\
     prev <> old /\
+    prev <> new /\
     phi_inst_wf preds inst /\
     MEM prev preds
   ==>

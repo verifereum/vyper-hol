@@ -103,37 +103,41 @@ Proof
       first_x_assum (qspecl_then [`old`, `new`, `val_op`] mp_tac) >> simp[]))
 QED
 
+(* When prev differs from BOTH old and new, label replacement doesn't affect resolve_phi *)
 Theorem resolve_phi_replace_label_other:
   !old new prev ops.
     prev <> old /\
+    prev <> new /\
     phi_vals_not_label ops ==>
     resolve_phi prev (MAP (replace_label_operand old new) ops) = resolve_phi prev ops
 Proof
-  Induct_on `ops` >> simp[resolve_phi_def, phi_vals_not_label_def] >>
-  Cases_on `t` >> simp[resolve_phi_def, phi_vals_not_label_def] >>
+  measureInduct_on `LENGTH ops` >> rpt strip_tac >> Cases_on `ops` >>
+  simp[resolve_phi_def] >> Cases_on `t` >> simp[resolve_phi_def] >>
   Cases_on `h`
   >- (
-    rpt strip_tac >>
-    simp[resolve_phi_def, replace_label_operand_def] >>
-    first_x_assum (qspec_then `t'` mp_tac) >> simp[]
-  )
+    simp[resolve_phi_def, replace_label_operand_def, phi_vals_not_label_def] >>
+    first_x_assum (qspec_then `t'` mp_tac) >> simp[] >> strip_tac >>
+    first_x_assum irule >> gvs[phi_vals_not_label_def])
   >- (
-    rpt strip_tac >>
-    simp[resolve_phi_def, replace_label_operand_def] >>
-    first_x_assum (qspec_then `t'` mp_tac) >> simp[]
-  )
+    simp[resolve_phi_def, replace_label_operand_def, phi_vals_not_label_def] >>
+    first_x_assum (qspec_then `t'` mp_tac) >> simp[] >> strip_tac >>
+    first_x_assum irule >> gvs[phi_vals_not_label_def])
   >- (
-    rpt strip_tac >>
-    Cases_on `s = prev`
+    simp[replace_label_operand_def] >>
+    Cases_on `s = old` >> simp[resolve_phi_def]
     >- (
-      simp[resolve_phi_def, replace_label_operand_def] >>
-      Cases_on `h'` >> simp[phi_vals_not_label_def]
-    )
+      first_x_assum (qspec_then `t'` mp_tac) >> simp[] >> strip_tac >>
+      first_x_assum irule >> gvs[phi_vals_not_label_def] >>
+      Cases_on `h'` >> gvs[])
     >- (
-      simp[resolve_phi_def, replace_label_operand_def] >>
-      first_x_assum (qspec_then `t'` mp_tac) >> simp[]
-    )
-  )
+      Cases_on `s = prev`
+      >- (
+        gvs[phi_vals_not_label_def] >> Cases_on `h'` >>
+        gvs[replace_label_operand_def, phi_vals_not_label_def])
+      >- (
+        gvs[] >> first_x_assum (qspec_then `t'` mp_tac) >> simp[] >> strip_tac >>
+        first_x_assum irule >> gvs[phi_vals_not_label_def] >> Cases_on `h'` >>
+        gvs[phi_vals_not_label_def])))
 QED
 
 (* ===== PHI Well-Formedness Helpers ===== *)
