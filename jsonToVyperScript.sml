@@ -677,6 +677,18 @@ End
 
 val () = cv_auto_trans translate_arg_def;
 
+Definition translate_args_with_types_def:
+  translate_args_with_types args tys =
+    case (args, tys) of
+      ([], []) => []
+    | (JArg name _ :: args', ty :: tys') =>
+        (name, translate_type ty) ::
+        translate_args_with_types args' tys'
+    | _ => MAP translate_arg args
+End
+
+val () = cv_auto_trans translate_args_with_types_def;
+
 Definition translate_value_type_def:
   (translate_value_type (JVT_Type ty) = Type (translate_type ty)) /\
   (translate_value_type (JVT_HashMap key_ty val_ty) =
@@ -706,7 +718,7 @@ Definition translate_toplevel_def:
       (translate_visibility decs)
       (translate_mutability decs)
       name
-      (MAP translate_arg args)
+      (translate_args_with_types args arg_tys)
       (translate_type ret_ty)
       (MAP translate_stmt body))) /\
 
