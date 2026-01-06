@@ -7,6 +7,10 @@
 Theory scfgMergeHelpers
 Ancestors
   scfgPhiCorrect scfgTransform list relation
+Libs
+  scfgDefsTheory scfgEquivTheory scfgPhiCorrectTheory scfgTransformTheory
+  scfgPhiLemmasTheory
+  venomSemTheory venomInstTheory venomStateTheory listTheory
 
 (* ===== Lookup / Label Helpers ===== *)
 
@@ -18,26 +22,16 @@ Theorem lookup_block_unique:
     bb'.bb_label = lbl ==> bb' = bb
 Proof
   Induct_on `blocks` >> simp[lookup_block_def] >>
-  rpt strip_tac >>
-  Cases_on `h.bb_label = lbl` >> fs[]
-  >- (
-    fs[] >>
-    Cases_on `bb' = h` >> simp[] >>
-    fs[ALL_DISTINCT] >>
-    metis_tac[]
-  )
-  >- (
-    fs[ALL_DISTINCT] >>
-    first_x_assum irule >> simp[]
-  )
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  fs[listTheory.MEM_MAP] >> metis_tac[]
 QED
 
 Theorem block_last_jmp_to_successors:
   !bb lbl.
     block_last_jmp_to lbl bb ==> block_successors bb = [lbl]
 Proof
-  rw[block_last_jmp_to_def, block_successors_def, get_successors_def] >>
-  simp[block_last_inst_def]
+  rw[block_last_jmp_to_def, block_successors_def, get_successors_def,
+     block_last_inst_def, is_terminator_def, venomStateTheory.get_label_def]
 QED
 
 Theorem pred_labels_only_jmp_target:
@@ -48,17 +42,20 @@ Theorem pred_labels_only_jmp_target:
     MEM a_lbl (pred_labels fn lbl) ==> lbl = b_lbl
 Proof
   rpt strip_tac >>
-  fs[cfg_wf_def] >>
-  qpat_x_assum `MEM _ (pred_labels _ _)` mp_tac >>
-  simp[pred_labels_def, MEM_MAP, MEM_FILTER] >>
-  strip_tac >>
-  `bb.bb_label = a_lbl` by simp[] >>
-  `bb = a` by
-    (irule lookup_block_unique >> simp[]) >>
-  subst_all_tac >>
-  qpat_x_assum `MEM _ (block_successors a)` mp_tac >>
-  simp[block_last_jmp_to_successors] >>
-  strip_tac >> simp[]
+  gvs[cfg_wf_def, pred_labels_def, listTheory.MEM_MAP, listTheory.MEM_FILTER,
+      block_last_jmp_to_def, block_successors_def, get_successors_def,
+      block_last_inst_def, is_terminator_def, venomStateTheory.get_label_def] >>
+  sg `bb = a`
+  >- (
+    qpat_x_assum `lookup_block _ _ = SOME a` mp_tac >>
+    qpat_x_assum `MEM bb _` mp_tac >>
+    qpat_x_assum `ALL_DISTINCT _` mp_tac >>
+    qabbrev_tac `blocks = fn.fn_blocks` >> pop_assum kall_tac >>
+    MAP_EVERY qid_spec_tac [`a`, `bb`, `blocks`] >>
+    Induct >> simp[lookup_block_def] >>
+    rpt strip_tac >> gvs[AllCaseEqs(), listTheory.MEM_MAP] >> metis_tac[]
+  )
+  >- gvs[is_terminator_def, venomStateTheory.get_label_def]
 QED
 
 Theorem pred_labels_no_jmp_other:
@@ -80,10 +77,7 @@ Theorem lookup_block_replace_label_block:
     SOME (replace_label_block old new bb)
 Proof
   Induct_on `blocks` >> simp[lookup_block_def] >>
-  rpt strip_tac >>
-  Cases_on `h.bb_label = lbl` >> fs[]
-  >- simp[lookup_block_def]
-  >- (first_x_assum drule >> simp[])
+  rpt strip_tac >> gvs[AllCaseEqs(), replace_label_block_def]
 QED
 
 Theorem lookup_block_replace_label_block_none:
@@ -91,9 +85,8 @@ Theorem lookup_block_replace_label_block_none:
     lookup_block lbl blocks = NONE ==>
     lookup_block lbl (MAP (replace_label_block old new) blocks) = NONE
 Proof
-  Induct_on `blocks` >> simp[lookup_block_def] >>
-  rpt strip_tac >>
-  Cases_on `h.bb_label = lbl` >> fs[]
+  Induct_on `blocks` >> simp[lookup_block_def, replace_label_block_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()]
 QED
 
 (* ===== PHI Label Replacement ===== *)
