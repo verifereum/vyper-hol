@@ -151,18 +151,100 @@ Proof
   >- simp[state_equiv_cfg_sym]
 QED
 
-(* CHEATED - run_block API changed from 3 args to 2 args *)
-Theorem run_block_replace_label_no_phi_old:
+(* Helper: step_in_block with no PHI instructions *)
+Theorem step_in_block_replace_label_no_phi:
+  !bb s1 s2 old new res is_term.
+    step_in_block bb s1 = (res, is_term) /\
+    state_equiv_cfg s1 s2 /\
+    s1.vs_inst_idx = s2.vs_inst_idx /\
+    block_has_no_phi bb
+  ==>
+    ?res'. step_in_block (replace_label_block old new bb) s2 = (res', is_term) /\
+           result_equiv_cfg res res'
+Proof
+  rpt strip_tac >> simp[step_in_block_def, replace_label_block_def] >>
+  qpat_x_assum `step_in_block _ _ = _` mp_tac >> simp[step_in_block_def] >>
+  Cases_on `get_instruction bb s1.vs_inst_idx` >> gvs[get_instruction_def]
+  >- simp[result_equiv_cfg_def]
+  >- (
+    strip_tac >>
+    `s2.vs_inst_idx < LENGTH bb.bb_instructions` by gvs[get_instruction_def] >>
+    simp[get_instruction_def, EL_MAP] >>
+    qabbrev_tac `inst = EL s2.vs_inst_idx bb.bb_instructions` >>
+    `MEM inst bb.bb_instructions` by (simp[Abbr `inst`, MEM_EL] >>
+      qexists_tac `s2.vs_inst_idx` >> simp[]) >>
+    `inst.inst_opcode <> PHI` by metis_tac[block_has_no_phi_inst] >>
+    `get_instruction bb s2.vs_inst_idx = SOME inst` by
+      gvs[get_instruction_def, Abbr `inst`] >>
+    gvs[] >>
+    drule_all step_inst_replace_label_non_phi >> strip_tac >>
+    first_x_assum (qspecl_then [`old`, `new`] mp_tac) >>
+    simp[replace_label_inst_def] >>
+    Cases_on `step_inst inst s1` >> gvs[result_equiv_cfg_def]
+    >- (
+      Cases_on `step_inst (inst with inst_operands :=
+        MAP (replace_label_operand old new) inst.inst_operands) s2` >>
+      gvs[result_equiv_cfg_def] >>
+      strip_tac >> IF_CASES_TAC >> gvs[result_equiv_cfg_def]
+      >- (
+        qpat_x_assum `OK _ = _` (SUBST_ALL_TAC o SYM) >>
+        simp[result_equiv_cfg_def, state_equiv_cfg_sym])
+      >- (irule next_inst_state_equiv_cfg >> simp[]))
+    >- (
+      strip_tac >>
+      Cases_on `step_inst (inst with inst_operands :=
+        MAP (replace_label_operand old new) inst.inst_operands) s2` >>
+      gvs[result_equiv_cfg_def] >>
+      qpat_x_assum `Halt _ = _` (SUBST_ALL_TAC o SYM) >>
+      fs[result_equiv_cfg_def])
+    >- (
+      strip_tac >> qpat_x_assum `Revert _ = _` (SUBST_ALL_TAC o SYM) >>
+      Cases_on `step_inst (inst with inst_operands :=
+        MAP (replace_label_operand old new) inst.inst_operands) s2` >>
+      gvs[result_equiv_cfg_def])
+    >- (
+      strip_tac >> qpat_x_assum `Error _ = _` (SUBST_ALL_TAC o SYM) >>
+      Cases_on `step_inst (inst with inst_operands :=
+        MAP (replace_label_operand old new) inst.inst_operands) s2` >>
+      gvs[result_equiv_cfg_def]))
+QED
+
+(* run_block with no PHI - uses simpler block_has_no_phi precondition *)
+Theorem run_block_replace_label_no_phi:
   !bb s1 s2 old new.
     state_equiv_cfg s1 s2 /\
     s1.vs_inst_idx = s2.vs_inst_idx /\
-    (!inst. MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI ==>
-            ~MEM (Label old) inst.inst_operands)
+    block_has_no_phi bb
   ==>
     result_equiv_cfg (run_block bb s1)
                      (run_block (replace_label_block old new bb) s2)
 Proof
-  cheat
+  recInduct run_block_ind >> rpt strip_tac >>
+  Cases_on `step_in_block bb s` >>
+  rename1 `step_in_block bb s = (res1, is_term)` >>
+  drule_all step_in_block_replace_label_no_phi >> strip_tac >>
+  first_x_assum (qspecl_then [`old`, `new`] strip_assume_tac) >>
+  once_rewrite_tac[run_block_def] >> gvs[] >>
+  Cases_on `res1` >> Cases_on `res'` >> gvs[result_equiv_cfg_def] >>
+  IF_CASES_TAC >> gvs[result_equiv_cfg_def, state_equiv_cfg_def] >>
+  IF_CASES_TAC >> gvs[result_equiv_cfg_def, state_equiv_cfg_def,
+    stateEquivTheory.var_equiv_def] >>
+  `v.vs_inst_idx = v'.vs_inst_idx` by
+    (imp_res_tac step_in_block_inst_idx_succ >> simp[]) >>
+  first_x_assum (qspecl_then [`v'`, `old`, `new`] mp_tac) >> simp[]
+QED
+
+(* Keep old theorem name for backwards compatibility *)
+Theorem run_block_replace_label_no_phi_old:
+  !bb s1 s2 old new.
+    state_equiv_cfg s1 s2 /\
+    s1.vs_inst_idx = s2.vs_inst_idx /\
+    block_has_no_phi bb
+  ==>
+    result_equiv_cfg (run_block bb s1)
+                     (run_block (replace_label_block old new bb) s2)
+Proof
+  metis_tac[run_block_replace_label_no_phi]
 QED
 
 (* Helper: step_in_block preserves equivalence when prev <> old and prev <> new *)
