@@ -101,7 +101,7 @@ QED
 (* KEY LEMMA: Single step in block produces equivalent states *)
 Theorem step_in_block_equiv:
   !dfg fn bb s s' is_term.
-    step_in_block fn bb s = (OK s', is_term) /\
+    step_in_block bb s = (OK s', is_term) /\
     well_formed_dfg dfg /\
     (!idx inst. get_instruction bb idx = SOME inst /\ is_phi_inst inst ==>
        phi_well_formed inst.inst_operands) /\
@@ -112,7 +112,7 @@ Theorem step_in_block_equiv:
        resolve_phi prev_bb inst.inst_operands = SOME (Var v) ==>
        FLOOKUP dfg v = SOME origin)
   ==>
-    ?s''. step_in_block fn (transform_block dfg bb) s = (OK s'', is_term) /\
+    ?s''. step_in_block (transform_block dfg bb) s = (OK s'', is_term) /\
           state_equiv s' s''
 Proof
   rpt strip_tac >>
@@ -167,10 +167,10 @@ QED
 (* For Halt/Revert cases, step_in_block on transformed block gives same result *)
 Theorem step_in_block_halt_revert_transform:
   !dfg fn bb s s' is_term.
-    (step_in_block fn bb s = (Halt s', is_term) \/
-     step_in_block fn bb s = (Revert s', is_term))
+    (step_in_block bb s = (Halt s', is_term) \/
+     step_in_block bb s = (Revert s', is_term))
   ==>
-    step_in_block fn (transform_block dfg bb) s = step_in_block fn bb s
+    step_in_block (transform_block dfg bb) s = step_in_block bb s
 Proof
   rw[step_in_block_def] >>
   Cases_on `get_instruction bb s.vs_inst_idx` >> fs[] >>
@@ -185,16 +185,16 @@ QED
 (* Convenient corollaries for the specific cases *)
 Theorem step_in_block_halt_transform:
   !dfg fn bb s s' is_term.
-    step_in_block fn bb s = (Halt s', is_term) ==>
-    step_in_block fn (transform_block dfg bb) s = (Halt s', is_term)
+    step_in_block bb s = (Halt s', is_term) ==>
+    step_in_block (transform_block dfg bb) s = (Halt s', is_term)
 Proof
   metis_tac[step_in_block_halt_revert_transform]
 QED
 
 Theorem step_in_block_revert_transform:
   !dfg fn bb s s' is_term.
-    step_in_block fn bb s = (Revert s', is_term) ==>
-    step_in_block fn (transform_block dfg bb) s = (Revert s', is_term)
+    step_in_block bb s = (Revert s', is_term) ==>
+    step_in_block (transform_block dfg bb) s = (Revert s', is_term)
 Proof
   metis_tac[step_in_block_halt_revert_transform]
 QED
@@ -227,7 +227,7 @@ Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `run_block _ _ _ = _` mp_tac >>
   simp[Once run_block_def] >>
-  Cases_on `step_in_block fn bb st` >>
+  Cases_on `step_in_block bb st` >>
   Cases_on `q` >> simp[] >>
   strip_tac >>
   (* Apply step_in_block_equiv *)
@@ -289,8 +289,8 @@ Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   (* Unfold run_block on both sides *)
   simp[Once run_block_def] >>
-  Cases_on `step_in_block fn bb s` >>
-  rename1 `step_in_block fn bb s = (res, is_term)` >>
+  Cases_on `step_in_block bb s` >>
+  rename1 `step_in_block bb s = (res, is_term)` >>
   Cases_on `res` >> gvs[]
   (* 4 cases: OK, Halt, Revert, Error *)
   >- ((* OK case *)

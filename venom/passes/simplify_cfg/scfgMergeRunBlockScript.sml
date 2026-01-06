@@ -11,7 +11,7 @@ Ancestors
 (* ===== replace_label_block preserves execution ===== *)
 
 Theorem step_in_block_replace_label:
-  !fn bb s1 s2 old new preds res is_term.
+  !bb s1 s2 old new preds res is_term.
     step_in_block fn bb s1 = (res, is_term) /\
     state_equiv_cfg s1 s2 /\
     s1.vs_prev_bb = SOME old /\
@@ -76,7 +76,7 @@ Proof
 QED
 
 Theorem run_block_replace_label:
-  !fn bb s1 s2 old new preds.
+  !bb s1 s2 old new preds.
     state_equiv_cfg s1 s2 /\
     s1.vs_prev_bb = SOME old /\
     s2.vs_prev_bb = SOME new /\
@@ -195,7 +195,7 @@ Proof
 QED
 
 Theorem run_block_replace_label_no_phi_old:
-  !fn bb s1 s2 old new.
+  !bb s1 s2 old new.
     state_equiv_cfg s1 s2 /\
     s1.vs_inst_idx = s2.vs_inst_idx /\
     (!inst. MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI ==>
@@ -256,7 +256,7 @@ Proof
 QED
 
 Theorem run_block_replace_label_prev_diff:
-  !fn bb s old new preds prev.
+  !bb s old new preds prev.
     s.vs_prev_bb = SOME prev /\
     prev <> old /\
     preds = pred_labels fn bb.bb_label /\

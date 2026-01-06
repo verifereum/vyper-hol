@@ -181,14 +181,14 @@ QED
 
 Theorem step_in_block_simplify_phi:
   !fn bb s preds preds0 res is_term prev.
-    step_in_block fn bb s = (res, is_term) /\
+    step_in_block bb s = (res, is_term) /\
     s.vs_prev_bb = SOME prev /\
     preds = pred_labels fn bb.bb_label /\
     MEM prev preds /\
     (!lbl. MEM lbl preds ==> MEM lbl preds0) /\
     phi_block_wf preds0 bb
   ==>
-    ?res'. step_in_block fn (simplify_phi_block preds bb) s = (res', is_term) /\
+    ?res'. step_in_block (simplify_phi_block preds bb) s = (res', is_term) /\
            result_equiv_cfg res' res
 Proof
   rpt strip_tac >>
@@ -200,7 +200,7 @@ Proof
       (qpat_x_assum `get_instruction bb s.vs_inst_idx = NONE` mp_tac >>
        simp[get_instruction_def, LENGTH_MAP]) >>
     qexists_tac `Error "block not terminated"` >>
-    qpat_x_assum `step_in_block fn bb s = (res, is_term)` mp_tac >>
+    qpat_x_assum `step_in_block bb s = (res, is_term)` mp_tac >>
     simp[step_in_block_def, simplify_phi_block_def, result_equiv_cfg_def,
          get_instruction_def]
   )
@@ -268,14 +268,14 @@ QED
 
 Theorem step_in_block_simplify_phi_ok:
   !fn bb s preds preds0 s' is_term prev.
-    step_in_block fn bb s = (OK s', is_term) /\
+    step_in_block bb s = (OK s', is_term) /\
     s.vs_prev_bb = SOME prev /\
     preds = pred_labels fn bb.bb_label /\
     MEM prev preds /\
     (!lbl. MEM lbl preds ==> MEM lbl preds0) /\
     phi_block_wf preds0 bb
   ==>
-    step_in_block fn (simplify_phi_block preds bb) s = (OK s', is_term)
+    step_in_block (simplify_phi_block preds bb) s = (OK s', is_term)
 Proof
   rpt strip_tac >>
   fs[step_in_block_def, simplify_phi_block_def] >>

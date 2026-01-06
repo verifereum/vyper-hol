@@ -6,7 +6,8 @@
 
 Theory scfgEquiv
 Ancestors
-  scfgDefs scfgStateOps stateEquiv venomSem venomSemProps venomState venomInst finite_map
+  scfgDefs scfgStateOps stateEquiv venomSem venomSemProps venomState venomInst
+  finite_map pair list rich_list
 
 (* ===== Equivalence Basics ===== *)
 
@@ -40,6 +41,13 @@ Proof
   Cases_on `s1` >> Cases_on `s2` >>
   rw[state_equiv_cfg_def, var_equiv_def, lookup_var_def] >>
   simp[finite_mapTheory.fmap_eq_flookup, venomStateTheory.venom_state_11]
+QED
+
+Theorem state_equiv_cfg_inst_idx:
+  !s1 s2 idx.
+    state_equiv_cfg s1 s2 ==> state_equiv_cfg (s1 with vs_inst_idx := idx) s2
+Proof
+  rw[state_equiv_cfg_def, var_equiv_def, lookup_var_def]
 QED
 
 Theorem result_equiv_cfg_refl:
@@ -513,11 +521,11 @@ Proof
 QED
 
 Theorem step_in_block_inst_idx_succ:
-  !fn bb s v.
-    step_in_block fn bb s = (OK v, F) ==> v.vs_inst_idx = s.vs_inst_idx + 1
+  !bb s v.
+    step_in_block bb s = (OK v, F) ==> v.vs_inst_idx = s.vs_inst_idx + 1
 Proof
   rpt strip_tac >>
-  qpat_x_assum `step_in_block fn bb s = (OK v, F)` mp_tac >>
+  qpat_x_assum `step_in_block bb s = (OK v, F)` mp_tac >>
   simp[step_in_block_def] >>
   Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
   Cases_on `step_inst x s` >> simp[] >>
@@ -528,120 +536,292 @@ Proof
 QED
 
 Theorem step_in_block_state_equiv_cfg:
-  !fn bb s1 s2 res1 is_term.
-    step_in_block fn bb s1 = (res1, is_term) /\
+  !bb s1 s2 res1 is_term.
+    step_in_block bb s1 = (res1, is_term) /\
     state_equiv_cfg s1 s2 /\
     s1.vs_prev_bb = s2.vs_prev_bb /\
     s1.vs_inst_idx = s2.vs_inst_idx
   ==>
-    ?res2. step_in_block fn bb s2 = (res2, is_term) /\
+    ?res2. step_in_block bb s2 = (res2, is_term) /\
            result_equiv_cfg res1 res2
 Proof
   rpt strip_tac >>
-  qpat_x_assum `step_in_block fn bb s1 = (res1, is_term)` mp_tac >>
+  qpat_x_assum `s1.vs_inst_idx = s2.vs_inst_idx` (assume_tac o SYM) >>
+  qpat_x_assum `step_in_block bb s1 = (res1, is_term)` mp_tac >>
   simp[step_in_block_def] >>
-  Cases_on `get_instruction bb s1.vs_inst_idx` >> gvs[]
+  Cases_on `get_instruction bb s1.vs_inst_idx`
   >- (
     strip_tac >>
     qexists_tac `Error "block not terminated"` >>
-    qpat_x_assum `s1.vs_inst_idx = s2.vs_inst_idx` (assume_tac o SYM) >>
-    simp[step_in_block_def, result_equiv_cfg_def]
+    qpat_x_assum `_ = (res1,is_term)` mp_tac >>
+    simp[] >> strip_tac >>
+    simp[result_equiv_cfg_def]
   )
   >- (
     rename1 `get_instruction bb _ = SOME inst` >>
     strip_tac >>
-    qpat_x_assum `s1.vs_inst_idx = s2.vs_inst_idx` (assume_tac o SYM) >>
-    simp[step_in_block_def] >>
-    `result_equiv_cfg (step_inst inst s1) (step_inst inst s2)` by
-      (irule step_inst_state_equiv_cfg >> simp[]) >>
-    Cases_on `step_inst inst s1` >>
-    Cases_on `step_inst inst s2` >>
-    gvs[result_equiv_cfg_def]
+    simp[] >>
+    sg `result_equiv_cfg (step_inst inst s1) (step_inst inst s2)`
+    >- (irule step_inst_state_equiv_cfg >> simp[]) >>
+    Cases_on `step_inst inst s1`
+    >- (
+      rename1 `step_inst inst s1 = OK s1'` >>
+      Cases_on `step_inst inst s2`
+      >| [
+        (rename1 `step_inst inst s2 = OK s2'` >>
+         simp[] >>
+         Cases_on `is_terminator inst.inst_opcode`
+         >- (
+           simp[] >>
+           qpat_x_assum `_ = (res1,is_term)` mp_tac >>
+           simp[pairTheory.PAIR_EQ] >> strip_tac >>
+           FIRST
+             [qpat_x_assum `OK _ = res1`
+                (fn th => simp[SYM th, result_equiv_cfg_def]),
+              qpat_x_assum `res1 = OK _`
+                (fn th => simp[th, result_equiv_cfg_def])]
+         )
+         >- (
+           simp[] >>
+           qpat_x_assum `_ = (res1,is_term)` mp_tac >>
+           simp[pairTheory.PAIR_EQ] >> strip_tac >>
+           FIRST
+             [qpat_x_assum `OK _ = res1`
+                (fn th =>
+                   simp[SYM th, result_equiv_cfg_def,
+                        next_inst_state_equiv_cfg]),
+              qpat_x_assum `res1 = OK _`
+                (fn th =>
+                   simp[th, result_equiv_cfg_def,
+                        next_inst_state_equiv_cfg])] >>
+           irule next_inst_state_equiv_cfg >> simp[] >>
+           gvs[result_equiv_cfg_def]
+         )),
+        gvs[result_equiv_cfg_def],
+        gvs[result_equiv_cfg_def],
+        gvs[result_equiv_cfg_def]
+      ]
+    )
+    >- (
+      rename1 `step_inst inst s1 = Halt s1'` >>
+      Cases_on `step_inst inst s2`
+      >| [
+        gvs[result_equiv_cfg_def],
+        (rename1 `step_inst inst s2 = Halt s2'` >>
+         simp[] >>
+         qpat_x_assum `_ = (res1,is_term)` mp_tac >>
+         simp[pairTheory.PAIR_EQ] >> strip_tac >>
+         FIRST
+           [qpat_x_assum `Halt _ = res1`
+              (fn th => simp[SYM th, result_equiv_cfg_def]),
+            qpat_x_assum `res1 = Halt _`
+              (fn th => simp[th, result_equiv_cfg_def])]),
+        gvs[result_equiv_cfg_def],
+        gvs[result_equiv_cfg_def]
+      ]
+    )
+    >- (
+      rename1 `step_inst inst s1 = Revert s1'` >>
+      Cases_on `step_inst inst s2`
+      >| [
+        gvs[result_equiv_cfg_def],
+        gvs[result_equiv_cfg_def],
+        (rename1 `step_inst inst s2 = Revert s2'` >>
+         simp[] >>
+         qpat_x_assum `_ = (res1,is_term)` mp_tac >>
+         simp[pairTheory.PAIR_EQ] >> strip_tac >>
+         FIRST
+           [qpat_x_assum `Revert _ = res1`
+              (fn th => simp[SYM th, result_equiv_cfg_def]),
+            qpat_x_assum `res1 = Revert _`
+              (fn th => simp[th, result_equiv_cfg_def])]),
+        gvs[result_equiv_cfg_def]
+      ]
+    )
+    >- (
+      rename1 `step_inst inst s1 = Error e1` >>
+      Cases_on `step_inst inst s2`
+      >| [
+        gvs[result_equiv_cfg_def],
+        gvs[result_equiv_cfg_def],
+        gvs[result_equiv_cfg_def],
+        (rename1 `step_inst inst s2 = Error e2` >>
+         simp[] >>
+         qpat_x_assum `_ = (res1,is_term)` mp_tac >>
+         simp[pairTheory.PAIR_EQ] >> strip_tac >>
+         FIRST
+           [qpat_x_assum `Error _ = res1`
+              (fn th => simp[SYM th, result_equiv_cfg_def]),
+            qpat_x_assum `res1 = Error _`
+              (fn th => simp[th, result_equiv_cfg_def])])
+      ]
+    )
   )
 QED
 
 Theorem step_in_block_no_phi_equiv_cfg:
-  !fn bb s1 s2 res1 is_term.
-    step_in_block fn bb s1 = (res1, is_term) /\
+  !bb s1 s2 res1 is_term.
+    step_in_block bb s1 = (res1, is_term) /\
     block_has_no_phi bb /\
     state_equiv_cfg s1 s2 /\
     s1.vs_inst_idx = s2.vs_inst_idx
   ==>
-    ?res2. step_in_block fn bb s2 = (res2, is_term) /\
+    ?res2. step_in_block bb s2 = (res2, is_term) /\
            result_equiv_cfg res1 res2
 Proof
   rpt strip_tac >>
-  qpat_x_assum `step_in_block fn bb s1 = (res1, is_term)` mp_tac >>
+  qpat_x_assum `s1.vs_inst_idx = s2.vs_inst_idx` (assume_tac o SYM) >>
+  qpat_x_assum `step_in_block bb s1 = (res1, is_term)` mp_tac >>
   simp[step_in_block_def] >>
-  Cases_on `get_instruction bb s1.vs_inst_idx` >> gvs[]
+  Cases_on `get_instruction bb s1.vs_inst_idx`
   >- (
     strip_tac >>
     qexists_tac `Error "block not terminated"` >>
-    qpat_x_assum `s1.vs_inst_idx = s2.vs_inst_idx` (assume_tac o SYM) >>
-    simp[step_in_block_def, result_equiv_cfg_def]
+    qpat_x_assum `_ = (res1,is_term)` mp_tac >>
+    simp[] >> strip_tac >>
+    simp[result_equiv_cfg_def]
   )
   >- (
     rename1 `get_instruction bb _ = SOME inst` >>
     strip_tac >>
-    qpat_x_assum `s1.vs_inst_idx = s2.vs_inst_idx` (assume_tac o SYM) >>
+    simp[] >>
     `MEM inst bb.bb_instructions` by (
       qpat_x_assum `get_instruction bb _ = SOME inst` mp_tac >>
       simp[get_instruction_def] >> strip_tac >>
       metis_tac[listTheory.MEM_EL]
     ) >>
-    `inst.inst_opcode <> PHI` by (irule block_has_no_phi_inst >> simp[]) >>
-    simp[step_in_block_def] >>
-    `result_equiv_cfg (step_inst inst s1) (step_inst inst s2)` by
-      (irule step_inst_state_equiv_cfg >> simp[]) >>
-    Cases_on `step_inst inst s1` >>
-    Cases_on `step_inst inst s2` >>
-    gvs[result_equiv_cfg_def]
+    `inst.inst_opcode <> PHI` by (metis_tac[block_has_no_phi_inst]) >>
+    sg `result_equiv_cfg (step_inst inst s1) (step_inst inst s2)`
+    >- (irule step_inst_state_equiv_cfg >> simp[]) >>
+    Cases_on `step_inst inst s1`
+    >- (
+      rename1 `step_inst inst s1 = OK s1'` >>
+      Cases_on `step_inst inst s2`
+      >| [
+        (rename1 `step_inst inst s2 = OK s2'` >>
+         simp[] >>
+         Cases_on `is_terminator inst.inst_opcode`
+         >- (
+           simp[] >>
+           qpat_x_assum `_ = (res1,is_term)` mp_tac >>
+           simp[pairTheory.PAIR_EQ] >> strip_tac >>
+           FIRST
+             [qpat_x_assum `OK _ = res1`
+                (fn th => simp[SYM th, result_equiv_cfg_def]),
+              qpat_x_assum `res1 = OK _`
+                (fn th => simp[th, result_equiv_cfg_def])]
+         )
+         >- (
+           simp[] >>
+           qpat_x_assum `_ = (res1,is_term)` mp_tac >>
+           simp[pairTheory.PAIR_EQ] >> strip_tac >>
+           FIRST
+             [qpat_x_assum `OK _ = res1`
+                (fn th =>
+                   simp[SYM th, result_equiv_cfg_def,
+                        next_inst_state_equiv_cfg]),
+              qpat_x_assum `res1 = OK _`
+                (fn th =>
+                   simp[th, result_equiv_cfg_def,
+                        next_inst_state_equiv_cfg])] >>
+           irule next_inst_state_equiv_cfg >> simp[] >>
+           gvs[result_equiv_cfg_def]
+         )),
+        gvs[result_equiv_cfg_def],
+        gvs[result_equiv_cfg_def],
+        gvs[result_equiv_cfg_def]
+      ]
+    )
+    >- (
+      rename1 `step_inst inst s1 = Halt s1'` >>
+      Cases_on `step_inst inst s2`
+      >| [
+        gvs[result_equiv_cfg_def],
+        (rename1 `step_inst inst s2 = Halt s2'` >>
+         simp[] >>
+         qpat_x_assum `_ = (res1,is_term)` mp_tac >>
+         simp[pairTheory.PAIR_EQ] >> strip_tac >>
+         FIRST
+           [qpat_x_assum `Halt _ = res1`
+              (fn th => simp[SYM th, result_equiv_cfg_def]),
+            qpat_x_assum `res1 = Halt _`
+              (fn th => simp[th, result_equiv_cfg_def])]),
+        gvs[result_equiv_cfg_def],
+        gvs[result_equiv_cfg_def]
+      ]
+    )
+    >- (
+      rename1 `step_inst inst s1 = Revert s1'` >>
+      Cases_on `step_inst inst s2`
+      >| [
+        gvs[result_equiv_cfg_def],
+        gvs[result_equiv_cfg_def],
+        (rename1 `step_inst inst s2 = Revert s2'` >>
+         simp[] >>
+         qpat_x_assum `_ = (res1,is_term)` mp_tac >>
+         simp[pairTheory.PAIR_EQ] >> strip_tac >>
+         FIRST
+           [qpat_x_assum `Revert _ = res1`
+              (fn th => simp[SYM th, result_equiv_cfg_def]),
+            qpat_x_assum `res1 = Revert _`
+              (fn th => simp[th, result_equiv_cfg_def])]),
+        gvs[result_equiv_cfg_def]
+      ]
+    )
+    >- (
+      rename1 `step_inst inst s1 = Error e1` >>
+      Cases_on `step_inst inst s2`
+      >| [
+        gvs[result_equiv_cfg_def],
+        gvs[result_equiv_cfg_def],
+        gvs[result_equiv_cfg_def],
+        (rename1 `step_inst inst s2 = Error e2` >>
+         simp[] >>
+         qpat_x_assum `_ = (res1,is_term)` mp_tac >>
+         simp[pairTheory.PAIR_EQ] >> strip_tac >>
+         FIRST
+           [qpat_x_assum `Error _ = res1`
+              (fn th => simp[SYM th, result_equiv_cfg_def]),
+            qpat_x_assum `res1 = Error _`
+              (fn th => simp[th, result_equiv_cfg_def])])
+      ]
+    )
   )
 QED
 
 Theorem run_block_no_phi_equiv_cfg:
-  !fn bb s1 s2.
+  !bb s1 s2.
     block_has_no_phi bb /\
     state_equiv_cfg s1 s2 /\
     s1.vs_inst_idx = s2.vs_inst_idx
   ==>
-    result_equiv_cfg (run_block fn bb s1) (run_block fn bb s2)
+    result_equiv_cfg (run_block bb s1) (run_block bb s2)
 Proof
   ho_match_mp_tac run_block_ind >>
   rpt gen_tac >> strip_tac >>
   rpt strip_tac >>
-  Cases_on `step_in_block fn bb s1` >>
-  rename1 `step_in_block fn bb s1 = (q,r)` >>
+  Cases_on `step_in_block bb s1` >>
+  rename1 `step_in_block bb s1 = (q,r)` >>
   drule_all step_in_block_no_phi_equiv_cfg >> strip_tac >>
-  rename1 `step_in_block fn bb s2 = (q',r)` >>
+  rename1 `step_in_block bb s2 = (q2,r)` >>
   simp[Once run_block_def] >>
-  Cases_on `q` >> Cases_on `q'` >> gvs[result_equiv_cfg_def]
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+  simp[] >>
+  Cases_on `q` >> Cases_on `q2` >> gvs[result_equiv_cfg_def]
   >- (
-    rename1 `q = OK v1` >>
-    rename1 `q' = OK v2` >>
-    `v1.vs_halted = v2.vs_halted` by fs[state_equiv_cfg_def] >>
-    Cases_on `v1.vs_halted` >> gvs[]
+    `v.vs_halted = v'.vs_halted` by fs[state_equiv_cfg_def] >>
+    Cases_on `v.vs_halted` >> gvs[]
     >- simp[result_equiv_cfg_def]
     >- (
       Cases_on `r` >> gvs[]
       >- simp[result_equiv_cfg_def]
       >- (
-        `v1.vs_inst_idx = s1.vs_inst_idx + 1` by (
-          qpat_x_assum `step_in_block fn bb s1 = (OK v1,F)` mp_tac >>
-          simp[step_in_block_inst_idx_succ]
-        ) >>
-        `v2.vs_inst_idx = s2.vs_inst_idx + 1` by (
-          qpat_x_assum `step_in_block fn bb s2 = (OK v2,F)` mp_tac >>
-          simp[step_in_block_inst_idx_succ]
-        ) >>
-        `v1.vs_inst_idx = v2.vs_inst_idx` by simp[] >>
-        qpat_x_assum
-          `!fn' is_term s1'.
-             step_in_block fn bb s1 = (fn',is_term) /\ fn' = OK s1' /\
-             ~s1'.vs_halted /\ ~is_term ==> _`
-          (qspecl_then [`OK v1`,`F`,`v1`] mp_tac) >>
-        simp[] >> strip_tac >>
-        first_x_assum (qspec_then `v2` mp_tac) >>
+        `v.vs_inst_idx = s1.vs_inst_idx + 1` by
+          metis_tac[step_in_block_inst_idx_succ] >>
+        `v'.vs_inst_idx = s2.vs_inst_idx + 1` by
+          metis_tac[step_in_block_inst_idx_succ] >>
+        `v.vs_inst_idx = v'.vs_inst_idx` by simp[] >>
+        first_x_assum irule >>
         simp[]
       )
     )
@@ -649,57 +829,43 @@ Proof
 QED
 
 Theorem run_block_state_equiv_cfg:
-  !fn bb s1 s2.
+  !bb s1 s2.
     state_equiv_cfg s1 s2 /\
     s1.vs_prev_bb = s2.vs_prev_bb /\
     s1.vs_inst_idx = s2.vs_inst_idx
   ==>
-    result_equiv_cfg (run_block fn bb s1) (run_block fn bb s2)
+    result_equiv_cfg (run_block bb s1) (run_block bb s2)
 Proof
   ho_match_mp_tac run_block_ind >>
   rpt gen_tac >> strip_tac >>
   rpt strip_tac >>
-  Cases_on `step_in_block fn bb s1` >>
-  rename1 `step_in_block fn bb s1 = (q,r)` >>
+  Cases_on `step_in_block bb s1` >>
+  rename1 `step_in_block bb s1 = (q,r)` >>
   drule_all step_in_block_state_equiv_cfg >> strip_tac >>
-  rename1 `step_in_block fn bb s2 = (q',r)` >>
+  rename1 `step_in_block bb s2 = (q2,r)` >>
   simp[Once run_block_def] >>
-  Cases_on `q` >> Cases_on `q'` >> gvs[result_equiv_cfg_def]
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+  simp[] >>
+  Cases_on `q` >> Cases_on `q2` >> gvs[result_equiv_cfg_def]
   >- (
-    rename1 `q = OK v1` >>
-    rename1 `q' = OK v2` >>
-    `v1.vs_halted = v2.vs_halted` by fs[state_equiv_cfg_def] >>
-    Cases_on `v1.vs_halted` >> gvs[]
+    `v.vs_halted = v'.vs_halted` by fs[state_equiv_cfg_def] >>
+    Cases_on `v.vs_halted` >> gvs[]
     >- simp[result_equiv_cfg_def]
     >- (
       Cases_on `r` >> gvs[]
       >- simp[result_equiv_cfg_def]
       >- (
-        `v1.vs_inst_idx = s1.vs_inst_idx + 1` by (
-          qpat_x_assum `step_in_block fn bb s1 = (OK v1,F)` mp_tac >>
-          simp[step_in_block_inst_idx_succ]
-        ) >>
-        `v2.vs_inst_idx = s2.vs_inst_idx + 1` by (
-          qpat_x_assum `step_in_block fn bb s2 = (OK v2,F)` mp_tac >>
-          simp[step_in_block_inst_idx_succ]
-        ) >>
-        `v1.vs_inst_idx = v2.vs_inst_idx` by simp[] >>
-        `v1.vs_prev_bb = s1.vs_prev_bb` by (
-          qpat_x_assum `step_in_block fn bb s1 = (OK v1,F)` mp_tac >>
-          simp[step_in_block_preserves_prev_bb]
-        ) >>
-        `v2.vs_prev_bb = s2.vs_prev_bb` by (
-          qpat_x_assum `step_in_block fn bb s2 = (OK v2,F)` mp_tac >>
-          simp[step_in_block_preserves_prev_bb]
-        ) >>
-        `v1.vs_prev_bb = v2.vs_prev_bb` by simp[] >>
-        qpat_x_assum
-          `!fn' is_term s1'.
-             step_in_block fn bb s1 = (fn',is_term) /\ fn' = OK s1' /\
-             ~s1'.vs_halted /\ ~is_term ==> _`
-          (qspecl_then [`OK v1`,`F`,`v1`] mp_tac) >>
-        simp[] >> strip_tac >>
-        first_x_assum (qspec_then `v2` mp_tac) >>
+        `v.vs_inst_idx = s1.vs_inst_idx + 1` by
+          metis_tac[step_in_block_inst_idx_succ] >>
+        `v'.vs_inst_idx = s2.vs_inst_idx + 1` by
+          metis_tac[step_in_block_inst_idx_succ] >>
+        `v.vs_inst_idx = v'.vs_inst_idx` by simp[] >>
+        `v.vs_prev_bb = s1.vs_prev_bb` by
+          metis_tac[step_in_block_preserves_prev_bb] >>
+        `v'.vs_prev_bb = s2.vs_prev_bb` by
+          metis_tac[step_in_block_preserves_prev_bb] >>
+        `v.vs_prev_bb = v'.vs_prev_bb` by simp[] >>
+        first_x_assum irule >>
         simp[]
       )
     )
@@ -707,31 +873,40 @@ Proof
 QED
 
 Theorem run_block_drop_equiv_cfg:
-  !fn bb pref suff s k.
+  !bb pref suff s k.
     bb.bb_instructions = pref ++ suff /\
     s.vs_inst_idx = LENGTH pref + k /\
     k <= LENGTH suff
   ==>
     result_equiv_cfg
-      (run_block fn bb s)
-      (run_block fn (bb with bb_instructions := suff) (s with vs_inst_idx := k))
+      (run_block bb s)
+      (run_block (bb with bb_instructions := suff) (s with vs_inst_idx := k))
 Proof
+  gen_tac >> gen_tac >> gen_tac >> gen_tac >>
   completeInduct_on `LENGTH suff - k` >>
   rpt strip_tac >>
+  rename1 `m = LENGTH suff - k` >>
   Cases_on `k = LENGTH suff`
   >- (
     simp[Once run_block_def, step_in_block_def, get_instruction_def,
-         result_equiv_cfg_def] >>
-    simp[LENGTH_APPEND] >>
-    fs[]
+         result_equiv_cfg_def, listTheory.LENGTH_APPEND] >>
+    CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+    simp[step_in_block_def, get_instruction_def, result_equiv_cfg_def]
   )
   >- (
     `k < LENGTH suff` by simp[] >>
+    `SUC k <= LENGTH suff` by decide_tac >>
     simp[Once run_block_def, step_in_block_def] >>
-    `get_instruction bb (LENGTH pref + k) = SOME (EL k suff)` by (
-      simp[get_instruction_def, LENGTH_APPEND] >>
-      `LENGTH pref + k < LENGTH pref + LENGTH suff` by simp[] >>
-      simp[EL_APPEND2]
+    CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+    simp[step_in_block_def] >>
+    `get_instruction bb (k + LENGTH pref) = SOME (EL k suff)` by (
+      simp[arithmeticTheory.ADD_COMM, get_instruction_def,
+           listTheory.LENGTH_APPEND] >>
+      `k + LENGTH pref < LENGTH pref + LENGTH suff` by
+        simp[arithmeticTheory.ADD_COMM] >>
+      `LENGTH pref <= k + LENGTH pref` by simp[] >>
+      simp[rich_listTheory.EL_APPEND2, arithmeticTheory.ADD_COMM,
+           arithmeticTheory.ADD_SUB2]
     ) >>
     `get_instruction (bb with bb_instructions := suff) k = SOME (EL k suff)` by
       (simp[get_instruction_def] >> simp[]) >>
@@ -741,79 +916,98 @@ Proof
     `result_equiv_cfg (step_inst (EL k suff) s)
                       (step_inst (EL k suff) (s with vs_inst_idx := k))` by
       (irule step_inst_state_equiv_cfg >> simp[]) >>
-    Cases_on `step_inst (EL k suff) s` >>
-    Cases_on `step_inst (EL k suff) (s with vs_inst_idx := k)` >>
-    gvs[result_equiv_cfg_def]
+    Cases_on `step_inst (EL k suff) s`
     >- (
-      rename1 `step_inst _ _ = OK v1` >>
-      rename1 `step_inst _ _ = OK v2` >>
-      Cases_on `is_terminator (EL k suff).inst_opcode`
-      >- (
-        qexists_tac `OK v2` >>
-        simp[result_equiv_cfg_def]
-      )
-      >- (
-        `state_equiv_cfg (next_inst v1) (next_inst v2)` by
-          (irule next_inst_state_equiv_cfg >> simp[result_equiv_cfg_def]) >>
-        `v1.vs_inst_idx = s.vs_inst_idx` by
-          (drule_all step_inst_preserves_inst_idx >> simp[]) >>
-        `v2.vs_inst_idx = (s with vs_inst_idx := k).vs_inst_idx` by
-          (drule_all step_inst_preserves_inst_idx >> simp[]) >>
-        `v1.vs_prev_bb = s.vs_prev_bb` by
-          (drule_all step_inst_preserves_prev_bb >> simp[]) >>
-        `v2.vs_prev_bb = (s with vs_inst_idx := k).vs_prev_bb` by
-          (drule_all step_inst_preserves_prev_bb >> simp[]) >>
-        `result_equiv_cfg
-           (run_block fn bb (next_inst v1))
-           (run_block fn (bb with bb_instructions := suff)
-                      ((next_inst v1) with vs_inst_idx := k + 1))` by (
-          first_x_assum (qspec_then `k + 1` mp_tac) >>
-          simp[arithmeticTheory.ADD1, LENGTH_APPEND] >>
-          disch_then irule >>
-          simp[next_inst_def, arithmeticTheory.ADD1]
-        ) >>
-        `result_equiv_cfg
-           (run_block fn (bb with bb_instructions := suff)
-                      ((next_inst v1) with vs_inst_idx := k + 1))
-           (run_block fn (bb with bb_instructions := suff) (next_inst v2))` by (
-          irule run_block_state_equiv_cfg >>
-          simp[next_inst_def, arithmeticTheory.ADD1]
-        ) >>
-        irule result_equiv_cfg_trans >>
-        qexists_tac `run_block fn (bb with bb_instructions := suff)
-                      ((next_inst v1) with vs_inst_idx := k + 1)` >>
-        simp[]
-      )
+      rename1 `step_inst (EL k suff) s = OK v` >>
+      Cases_on `step_inst (EL k suff) (s with vs_inst_idx := k)`
+      >| [
+        (rename1 `step_inst (EL k suff) (s with vs_inst_idx := k) = OK v'` >>
+         Cases_on `is_terminator (EL k suff).inst_opcode`
+         >- (
+           `state_equiv_cfg v v'` by gvs[result_equiv_cfg_def] >>
+           `v.vs_halted = v'.vs_halted` by fs[state_equiv_cfg_def] >>
+           `v'.vs_halted = v.vs_halted` by simp[] >>
+           Cases_on `v.vs_halted` >> simp[result_equiv_cfg_def]
+         )
+          >- (
+           `~is_terminator (EL k suff).inst_opcode` by gvs[] >>
+           `v.vs_inst_idx = s.vs_inst_idx` by
+             metis_tac[step_inst_preserves_inst_idx] >>
+           `v.vs_prev_bb = s.vs_prev_bb` by
+             metis_tac[step_inst_preserves_prev_bb] >>
+           `v'.vs_inst_idx = (s with vs_inst_idx := k).vs_inst_idx` by
+             metis_tac[step_inst_preserves_inst_idx] >>
+           `v'.vs_prev_bb = (s with vs_inst_idx := k).vs_prev_bb` by
+             metis_tac[step_inst_preserves_prev_bb] >>
+           `state_equiv_cfg v v'` by gvs[result_equiv_cfg_def] >>
+           `v.vs_halted = v'.vs_halted` by fs[state_equiv_cfg_def] >>
+           `v'.vs_halted = v.vs_halted` by simp[] >>
+           `state_equiv_cfg (next_inst v) (next_inst v')` by
+             (irule next_inst_state_equiv_cfg >> simp[result_equiv_cfg_def]) >>
+           `(next_inst v).vs_halted = v.vs_halted` by simp[next_inst_def] >>
+           `(next_inst v').vs_halted = v'.vs_halted` by simp[next_inst_def] >>
+           Cases_on `v.vs_halted`
+           >- simp[result_equiv_cfg_def]
+           >- (
+            `result_equiv_cfg
+               (run_block bb (next_inst v))
+               (run_block (bb with bb_instructions := suff)
+                          ((next_inst v) with vs_inst_idx := k + 1))` by (
+              qpat_x_assum `!m'. m' < m ==> _`
+                (qspec_then `LENGTH suff - (k + 1)` mp_tac) >>
+              impl_tac >- decide_tac >>
+              disch_then (qspecl_then [`suff`, `k + 1`] mp_tac) >>
+              simp[GSYM arithmeticTheory.ADD1] >>
+              disch_then (qspec_then `next_inst v` mp_tac) >>
+              disch_then irule >>
+              simp[next_inst_def, arithmeticTheory.ADD1]
+             ) >>
+             `state_equiv_cfg
+                ((next_inst v) with vs_inst_idx := k + 1) (next_inst v')` by
+               (irule state_equiv_cfg_inst_idx >> simp[]) >>
+             `((next_inst v) with vs_inst_idx := k + 1).vs_prev_bb =
+               (next_inst v').vs_prev_bb` by simp[next_inst_def] >>
+             `((next_inst v) with vs_inst_idx := k + 1).vs_inst_idx =
+               (next_inst v').vs_inst_idx` by
+               simp[next_inst_def, arithmeticTheory.ADD1] >>
+             `result_equiv_cfg
+                (run_block (bb with bb_instructions := suff)
+                           ((next_inst v) with vs_inst_idx := k + 1))
+                (run_block (bb with bb_instructions := suff) (next_inst v'))` by (
+               irule run_block_state_equiv_cfg >>
+               simp[]
+             ) >>
+             irule result_equiv_cfg_trans >>
+             qexists_tac `run_block (bb with bb_instructions := suff)
+                           ((next_inst v) with vs_inst_idx := k + 1)` >>
+             simp[]
+           )
+         )),
+        gvs[result_equiv_cfg_def],
+        gvs[result_equiv_cfg_def],
+        gvs[result_equiv_cfg_def]
+      ]
     )
-    >- (qexists_tac `Halt v2` >> gvs[result_equiv_cfg_def])
-    >- (qexists_tac `Revert v2` >> gvs[result_equiv_cfg_def])
-    >- (qexists_tac `Error e2` >> gvs[result_equiv_cfg_def])
+    >- gvs[result_equiv_cfg_def]
+    >- gvs[result_equiv_cfg_def]
+    >- gvs[result_equiv_cfg_def]
   )
 QED
 
-Theorem run_block_fn_irrelevant:
-  !fn1 bb s fn2. run_block fn1 bb s = run_block fn2 bb s
-Proof
-  ho_match_mp_tac run_block_ind >> rpt strip_tac >>
-  simp[Once run_block_def, step_in_block_def] >>
-  CONV_TAC (RHS_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
-  simp[step_in_block_def] >>
-  rpt (CASE_TAC >> simp[]) >>
-  rpt strip_tac >> first_x_assum irule >> simp[step_in_block_def]
-QED
+(* run_block_fn_irrelevant removed - run_block no longer takes fn parameter *)
 
 Theorem run_block_ok_inst_idx:
-  !fn bb s s'.
-    run_block fn bb s = OK s' /\ ~s'.vs_halted ==> s'.vs_inst_idx = 0
+  !bb s s'.
+    run_block bb s = OK s' /\ ~s'.vs_halted ==> s'.vs_inst_idx = 0
 Proof
   ho_match_mp_tac run_block_ind >> rpt strip_tac >>
   qpat_x_assum `run_block _ _ _ = OK _` mp_tac >>
   simp[Once run_block_def] >>
-  Cases_on `step_in_block fn bb s` >> Cases_on `q` >> simp[] >>
+  Cases_on `step_in_block bb s` >> Cases_on `q` >> simp[] >>
   Cases_on `v.vs_halted` >> simp[] >>
   Cases_on `r` >> simp[]
   >- (
-    qpat_x_assum `step_in_block fn bb s = (OK v,T)` mp_tac >>
+    qpat_x_assum `step_in_block bb s = (OK v,T)` mp_tac >>
     simp[step_in_block_def] >>
     Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
     gvs[AllCaseEqs()] >>

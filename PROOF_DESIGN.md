@@ -214,8 +214,8 @@ merge_blocks fn a_lbl b_lbl =
 | `pred_labels_only_jmp_target` | ✅ Proven |
 | `pred_labels_no_jmp_other` | ✅ Proven |
 | `resolve_phi_replace_label` | ✅ Proven |
-| `merge_blocks_execution` | ⚠️ Need proof |
-| `merge_blocks_correct` | ⚠️ Cheated |
+| `run_block_merge_blocks_equiv` | ✅ Proven (scfgMergeRunBlockScript.sml:350) |
+| `merge_blocks_correct` | ⚠️ Cheated (needs function-level proof) |
 
 ### 3.5 Detailed Proof Obligation: merge_blocks_execution
 
@@ -369,25 +369,26 @@ run_function_equiv_cfg fn fn' s
 
 ## 6. Proof Work Plan
 
-### Phase 1: Block-Level Merge Execution (HIGH PRIORITY)
-1. Prove `merge_blocks_execution`: Running merged block ≈ running `a` then `b`
-   - Use `run_block_drop_equiv_cfg` for prefix/suffix split
-   - Use `run_block_no_phi_equiv_cfg` for no-PHI block equivalence
+### Phase 1: Block-Level Merge Execution
+1. ✅ `run_block_merge_blocks_equiv`: PROVEN (scfgMergeRunBlockScript.sml:350)
+   - Uses `run_block_drop_equiv_cfg` for prefix/suffix split
+   - Uses `run_block_no_phi_equiv_cfg` for no-PHI block equivalence
 
-2. Prove `merge_jump_execution`: Bypassing jump-only block is equivalent
+2. ⚠️ `run_block_jump_only`: Need theorem for jump-only blocks
+   - Should show `run_block fn b s = OK (jump_to c_lbl s)` when `jump_only_target b = SOME c_lbl`
 
 ### Phase 2: Function-Level Correctness
-3. Prove `merge_blocks_correct` using `merge_blocks_execution` + induction on fuel
-4. Prove `merge_jump_correct` using `merge_jump_execution` + induction on fuel
+3. ⚠️ `merge_blocks_correct` using `run_block_merge_blocks_equiv` + fuel induction (CHEATED)
+4. ⚠️ `merge_jump_correct` using block-level theorem + fuel induction (CHEATED)
 
-### Phase 3: Well-Formedness Preservation
-5. Prove `cfg_wf_merge_blocks`, `phi_fn_wf_merge_blocks`
-6. Prove `cfg_wf_merge_jump`, `phi_fn_wf_merge_jump`
-7. Prove `cfg_wf_remove_unreachable`, `phi_fn_wf_remove_unreachable`
+### Phase 3: Well-Formedness Preservation (BLOCKING for RTC induction)
+5. ⚠️ `cfg_wf_remove_unreachable`, `phi_fn_wf_remove_unreachable` - easiest, start here
+6. ⚠️ `cfg_wf_merge_blocks`, `phi_fn_wf_merge_blocks`
+7. ⚠️ `cfg_wf_merge_jump`, `phi_fn_wf_merge_jump`
 
 ### Phase 4: Composition
-8. Prove `simplify_cfg_step_correct` by cases
-9. Prove `simplify_cfg_correct` by RTC induction
+8. ⚠️ `simplify_cfg_step_correct` by cases (uses individual correctness theorems)
+9. ⚠️ `simplify_cfg_correct` by RTC induction (requires well-formedness preservation)
 
 ---
 

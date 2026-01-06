@@ -147,7 +147,7 @@ Proof
   ho_match_mp_tac run_block_ind >> rpt strip_tac >>
   qpat_x_assum `run_block _ _ _ = _` mp_tac >>
   simp[Once run_block_def] >>
-  Cases_on `step_in_block fn bb s` >> Cases_on `q` >> simp[] >>
+  Cases_on `step_in_block bb s` >> Cases_on `q` >> simp[] >>
   Cases_on `v.vs_halted` >> simp[] >>
   Cases_on `r` >> simp[] >- (
     (* Terminator case *)

@@ -23,7 +23,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   rpt strip_tac >>
   simp[Once run_block_def] >>
-  Cases_on `step_in_block fn bb s` >> Cases_on `q` >> simp[] >>
+  Cases_on `step_in_block bb s` >> Cases_on `q` >> simp[] >>
   strip_tac >>
   drule_all step_in_block_simplify_phi >> strip_tac >>
   gvs[] >>
@@ -42,7 +42,7 @@ Proof
     )
     >- (
       `v.vs_prev_bb = s.vs_prev_bb` by (
-        qpat_x_assum `step_in_block fn bb s = (OK v,F)` mp_tac >>
+        qpat_x_assum `step_in_block bb s = (OK v,F)` mp_tac >>
         simp[step_in_block_def] >>
         Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
         Cases_on `step_inst x s` >> gvs[] >>
@@ -50,7 +50,7 @@ Proof
         drule_all step_inst_preserves_prev_bb >> simp[]
       ) >>
       `v.vs_current_bb = s.vs_current_bb` by (
-        qpat_x_assum `step_in_block fn bb s = (OK v,F)` mp_tac >>
+        qpat_x_assum `step_in_block bb s = (OK v,F)` mp_tac >>
         simp[step_in_block_def] >>
         Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
         Cases_on `step_inst x s` >> gvs[] >>
@@ -58,7 +58,7 @@ Proof
         drule_all step_inst_preserves_current_bb >> simp[]
       ) >>
       `v.vs_inst_idx = s.vs_inst_idx + 1` by (
-        qpat_x_assum `step_in_block fn bb s = (OK v,F)` mp_tac >>
+        qpat_x_assum `step_in_block bb s = (OK v,F)` mp_tac >>
         simp[step_in_block_def] >>
         Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
         Cases_on `step_inst x s` >> gvs[] >>
@@ -66,7 +66,7 @@ Proof
         drule_all step_inst_preserves_inst_idx >> simp[]
       ) >>
       `v'.vs_prev_bb = s.vs_prev_bb` by (
-        qpat_x_assum `step_in_block fn (simplify_phi_block preds bb) s = (OK v',F)` mp_tac >>
+        qpat_x_assum `step_in_block (simplify_phi_block preds bb) s = (OK v',F)` mp_tac >>
         simp[step_in_block_def, simplify_phi_block_def] >>
         Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
         rename1 `get_instruction bb _ = SOME inst` >>
@@ -81,7 +81,7 @@ Proof
         drule_all step_inst_preserves_prev_bb >> simp[]
       ) >>
       `v'.vs_current_bb = s.vs_current_bb` by (
-        qpat_x_assum `step_in_block fn (simplify_phi_block preds bb) s = (OK v',F)` mp_tac >>
+        qpat_x_assum `step_in_block (simplify_phi_block preds bb) s = (OK v',F)` mp_tac >>
         simp[step_in_block_def, simplify_phi_block_def] >>
         Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
         rename1 `get_instruction bb _ = SOME inst` >>
@@ -96,7 +96,7 @@ Proof
         drule_all step_inst_preserves_current_bb >> simp[]
       ) >>
       `v'.vs_inst_idx = s.vs_inst_idx + 1` by (
-        qpat_x_assum `step_in_block fn (simplify_phi_block preds bb) s = (OK v',F)` mp_tac >>
+        qpat_x_assum `step_in_block (simplify_phi_block preds bb) s = (OK v',F)` mp_tac >>
         simp[step_in_block_def, simplify_phi_block_def] >>
         Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
         rename1 `get_instruction bb _ = SOME inst` >>
@@ -129,16 +129,16 @@ Proof
   ho_match_mp_tac run_block_ind >> rpt strip_tac >>
   qpat_x_assum `run_block _ _ _ = _` mp_tac >>
   simp[Once run_block_def] >>
-  Cases_on `step_in_block fn bb s` >> Cases_on `q` >> simp[] >>
+  Cases_on `step_in_block bb s` >> Cases_on `q` >> simp[] >>
   Cases_on `v.vs_halted` >> simp[] >>
   Cases_on `r` >> simp[] >- (
     (* Terminator case *)
-    qpat_x_assum `step_in_block fn bb s = (OK v,T)` mp_tac >>
+    qpat_x_assum `step_in_block bb s = (OK v,T)` mp_tac >>
     drule_all step_in_block_simplify_phi_ok >>
     simp[step_in_block_def]
   ) >>
   (* Non-terminal case *)
-  qpat_x_assum `step_in_block fn bb s = (OK v,F)` mp_tac >>
+  qpat_x_assum `step_in_block bb s = (OK v,F)` mp_tac >>
   drule_all step_in_block_simplify_phi_ok >>
   simp[step_in_block_def] >> strip_tac >>
   `v.vs_prev_bb = s.vs_prev_bb` by

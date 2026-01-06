@@ -137,8 +137,8 @@ Proof
 QED
 
 Theorem step_in_block_preserves_prev_bb:
-  !fn bb s s' is_term.
-    step_in_block fn bb s = (OK s', is_term) /\
+  !bb s s' is_term.
+    step_in_block bb s = (OK s', is_term) /\
     ~is_term ==>
     s'.vs_prev_bb = s.vs_prev_bb
 Proof
@@ -150,8 +150,8 @@ Proof
 QED
 
 Theorem step_in_block_preserves_current_bb:
-  !fn bb s s' is_term.
-    step_in_block fn bb s = (OK s', is_term) /\
+  !bb s s' is_term.
+    step_in_block bb s = (OK s', is_term) /\
     ~is_term ==>
     s'.vs_current_bb = s.vs_current_bb
 Proof
@@ -212,19 +212,19 @@ Proof
 QED
 
 Theorem run_block_ok_not_halted_sets_prev_bb:
-  !fn bb s s'.
-    run_block fn bb s = OK s' /\ ~s'.vs_halted ==>
+  !bb s s'.
+    run_block bb s = OK s' /\ ~s'.vs_halted ==>
     s'.vs_prev_bb <> NONE
 Proof
   ho_match_mp_tac run_block_ind >> rpt strip_tac >>
-  qpat_x_assum `run_block _ _ _ = _` mp_tac >>
+  qpat_x_assum `run_block _ _ = _` mp_tac >>
   simp[Once run_block_def] >>
-  Cases_on `step_in_block fn bb s` >> Cases_on `q` >> simp[] >>
+  Cases_on `step_in_block bb s` >> Cases_on `q` >> simp[] >>
   Cases_on `v.vs_halted` >> simp[] >>
   Cases_on `r` >> simp[] >- (
     (* Terminal case *)
     spose_not_then strip_assume_tac >> gvs[] >>
-    qpat_x_assum `step_in_block _ _ _ = _` mp_tac >> simp[step_in_block_def] >>
+    qpat_x_assum `step_in_block _ _ = _` mp_tac >> simp[step_in_block_def] >>
     Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
     Cases_on `step_inst x s` >> simp[] >>
     Cases_on `is_terminator x.inst_opcode` >> simp[] >>
@@ -238,19 +238,19 @@ Proof
 QED
 
 Theorem run_block_ok_prev_bb:
-  !fn bb s s'.
-    run_block fn bb s = OK s' /\ ~s'.vs_halted ==>
+  !bb s s'.
+    run_block bb s = OK s' /\ ~s'.vs_halted ==>
     s'.vs_prev_bb = SOME s.vs_current_bb
 Proof
   ho_match_mp_tac run_block_ind >> rpt strip_tac >>
-  qpat_x_assum `run_block _ _ _ = _` mp_tac >>
+  qpat_x_assum `run_block _ _ = _` mp_tac >>
   simp[Once run_block_def] >>
-  Cases_on `step_in_block fn bb s` >> Cases_on `q` >> simp[] >>
+  Cases_on `step_in_block bb s` >> Cases_on `q` >> simp[] >>
   Cases_on `v.vs_halted` >> simp[] >>
   Cases_on `r` >> simp[]
   >- (
     (* Terminal case *)
-    qpat_x_assum `step_in_block _ _ _ = _` mp_tac >>
+    qpat_x_assum `step_in_block _ _ = _` mp_tac >>
     simp[step_in_block_def] >>
     Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
     gvs[AllCaseEqs()] >>
@@ -260,7 +260,7 @@ Proof
   >- (
     (* Non-terminal case: use IH *)
     `v.vs_current_bb = s.vs_current_bb` by (
-      qspecl_then [`fn`, `bb`, `s`, `v`, `F`] mp_tac
+      qspecl_then [`bb`, `s`, `v`, `F`] mp_tac
         step_in_block_preserves_current_bb >>
       simp[]
     ) >>
