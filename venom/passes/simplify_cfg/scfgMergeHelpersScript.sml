@@ -192,15 +192,19 @@ Theorem step_inst_replace_label_phi:
 Proof
   rpt strip_tac >>
   drule_all phi_inst_wf_props >> strip_tac >>
-  `resolve_phi old inst.inst_operands = SOME val_op` by
-    (irule phi_ops_complete_MEM >> simp[]) >>
+  drule_all phi_ops_complete_MEM >> strip_tac >>
   `~MEM (Label new) inst.inst_operands` by
-    (irule phi_ops_all_preds_no_label >> simp[]) >>
+    (drule_all phi_ops_all_preds_no_label >> simp[]) >>
   `resolve_phi new (MAP (replace_label_operand old new) inst.inst_operands) =
    SOME val_op` by
-    (irule resolve_phi_replace_label_id >> simp[]) >>
+    (drule_all resolve_phi_replace_label >>
+     drule_all resolve_phi_vals_not_label >> strip_tac >>
+     Cases_on `val_op` >> gvs[replace_label_operand_def]) >>
   simp[step_inst_def, replace_label_inst_def, result_equiv_cfg_def] >>
-  simp[eval_operand_state_equiv_cfg, update_var_state_equiv_cfg]
+  simp[eval_operand_state_equiv_cfg, update_var_state_equiv_cfg] >>
+  drule_all eval_operand_state_equiv_cfg >> strip_tac >> gvs[] >>
+  Cases_on `eval_operand val_op s2` >> simp[result_equiv_cfg_def] >>
+  irule update_var_state_equiv_cfg >> simp[]
 QED
 
 Theorem step_inst_replace_label_no_phi_old:
@@ -210,13 +214,14 @@ Theorem step_inst_replace_label_no_phi_old:
                      (step_inst (replace_label_inst old new inst) s)
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_opcode = PHI`
+  Cases_on `inst.inst_opcode = PHI` >> gvs[]
   >- (
     `replace_label_inst old new inst = inst` by (
-      Cases_on `inst` >>
-      simp[replace_label_inst_def] >>
-      qpat_x_assum `~MEM (Label old) _` mp_tac >>
-      Induct_on `inst_operands` >> simp[replace_label_operand_def]
+      Cases_on `inst` >> gvs[replace_label_inst_def] >>
+      `MAP (replace_label_operand old new) l = l` suffices_by
+        simp[instruction_component_equality] >>
+      Induct_on `l` >> simp[] >> rpt strip_tac >>
+      Cases_on `h` >> gvs[replace_label_operand_def]
     ) >>
     simp[result_equiv_cfg_refl]
   )
@@ -243,7 +248,7 @@ Proof
    resolve_phi prev inst.inst_operands` by
     (irule resolve_phi_replace_label_other >> simp[]) >>
   simp[step_inst_def, replace_label_inst_def, result_equiv_cfg_def] >>
-  simp[update_var_state_equiv_cfg, state_equiv_cfg_refl]
+  simp[result_equiv_cfg_refl]
 QED
 
 val _ = export_theory();
