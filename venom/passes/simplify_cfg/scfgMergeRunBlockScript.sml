@@ -253,16 +253,47 @@ Proof
   recInduct run_block_ind >> rpt strip_tac >>
   Cases_on `step_in_block bb s` >>
   rename1 `step_in_block bb s = (res, is_term)` >>
-  drule_all step_in_block_replace_label_prev_diff >> strip_tac >>
+  qspecl_then [`bb`, `s`, `old`, `new`, `preds`, `prev`, `fn`, `res`,
+    `is_term`] mp_tac step_in_block_replace_label_prev_diff >> simp[] >>
+  strip_tac >>
   once_rewrite_tac[run_block_def] >> gvs[] >>
   Cases_on `res` >> gvs[result_equiv_cfg_def]
   >- (
-    IF_CASES_TAC >> gvs[result_equiv_cfg_def, state_equiv_cfg_sym] >>
-    IF_CASES_TAC >> gvs[result_equiv_cfg_def] >>
-    drule step_in_block_preserves_prev_bb >> simp[] >> strip_tac >>
-    first_x_assum irule >> simp[])
-  >- simp[state_equiv_cfg_sym]
-  >- simp[state_equiv_cfg_sym]
+    Cases_on `res'` >> gvs[result_equiv_cfg_def] >>
+    IF_CASES_TAC >> gvs[result_equiv_cfg_def, state_equiv_cfg_sym]
+    >- (
+      `v'.vs_halted` by gvs[state_equiv_cfg_def] >>
+      simp[result_equiv_cfg_def, state_equiv_cfg_sym])
+    >- (
+      `~v'.vs_halted` by gvs[state_equiv_cfg_def] >>
+      simp[] >>
+      IF_CASES_TAC >> gvs[result_equiv_cfg_def, state_equiv_cfg_sym] >>
+      irule result_equiv_cfg_trans >>
+      qexists_tac `run_block (replace_label_block old new bb) v` >>
+      sg `v.vs_prev_bb = s.vs_prev_bb`
+      >- (
+        qspecl_then [`bb`, `s`, `v`] mp_tac
+          venomSemPropsTheory.step_in_block_preserves_prev_bb >> simp[])
+      >- (
+        conj_tac
+        >- (
+          first_x_assum (qspecl_then [`old`, `new`, `prev`, `fn`] mp_tac) >>
+          simp[])
+        >- (
+          irule run_block_state_equiv_cfg >>
+          rpt conj_tac
+          >- (
+            qspecl_then [`bb`, `s`, `v`] mp_tac step_in_block_inst_idx_succ >>
+            simp[] >>
+            qspecl_then [`replace_label_block old new bb`, `s`, `v'`] mp_tac
+              step_in_block_inst_idx_succ >> simp[])
+          >- (
+            qspecl_then [`replace_label_block old new bb`, `s`, `v'`] mp_tac
+              venomSemPropsTheory.step_in_block_preserves_prev_bb >> simp[])
+          >- simp[state_equiv_cfg_sym]))))
+  >- (Cases_on `res'` >> gvs[result_equiv_cfg_def, state_equiv_cfg_sym])
+  >- (Cases_on `res'` >> gvs[result_equiv_cfg_def, state_equiv_cfg_sym])
+  >- (Cases_on `res'` >> gvs[result_equiv_cfg_def, state_equiv_cfg_sym])
 QED
 
 (* CHEATED - run_block API changed from 3 args to 2 args *)
