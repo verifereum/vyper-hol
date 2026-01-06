@@ -48,14 +48,17 @@ Theorem lookup_block_filter:
     lookup_block lbl blocks = SOME bb /\ P bb ==>
     lookup_block lbl (FILTER P blocks) = SOME bb
 Proof
-  cheat
+  Induct_on `blocks`
+  >- simp[lookup_block_def]
+  >- (rw[lookup_block_def, FILTER] >> rpt strip_tac >> gvs[])
 QED
 
 Theorem lookup_block_filter_none:
   !P lbl blocks.
     lookup_block lbl blocks = NONE ==> lookup_block lbl (FILTER P blocks) = NONE
 Proof
-  cheat
+  Induct_on `blocks` >> simp[lookup_block_def, FILTER] >> rw[] >> gvs[] >>
+  simp[lookup_block_def]
 QED
 
 Theorem lookup_block_simplify_phi_block:
@@ -65,7 +68,9 @@ Theorem lookup_block_simplify_phi_block:
       (MAP (\bb. simplify_phi_block (pred_labels fn' bb.bb_label) bb) blocks) =
     SOME (simplify_phi_block (pred_labels fn' lbl) bb)
 Proof
-  cheat
+  Induct_on `blocks`
+  >- simp[lookup_block_def]
+  >- rw[lookup_block_def, MAP, scfgPhiStepTheory.simplify_phi_block_label]
 QED
 
 Theorem lookup_block_simplify_phi_block_none:
@@ -74,7 +79,8 @@ Theorem lookup_block_simplify_phi_block_none:
     lookup_block lbl
       (MAP (\bb. simplify_phi_block (pred_labels fn' bb.bb_label) bb) blocks) = NONE
 Proof
-  cheat
+  Induct_on `blocks` >> simp[lookup_block_def, MAP,
+    scfgPhiStepTheory.simplify_phi_block_label] >> rw[]
 QED
 
 Theorem pred_labels_mem_from_edge:
@@ -82,7 +88,7 @@ Theorem pred_labels_mem_from_edge:
     MEM bb fn.fn_blocks /\ MEM lbl (block_successors bb) ==>
     MEM bb.bb_label (pred_labels fn lbl)
 Proof
-  cheat
+  rw[pred_labels_def, MEM_MAP, MEM_FILTER] >> metis_tac[]
 QED
 
 Theorem pred_labels_subset:
@@ -91,7 +97,7 @@ Theorem pred_labels_subset:
     MEM pred (pred_labels fn' lbl) ==>
     MEM pred (pred_labels fn lbl)
 Proof
-  cheat
+  rw[pred_labels_def, MEM_MAP, MEM_FILTER] >> metis_tac[]
 QED
 
 Theorem pred_labels_keep_reachable:
@@ -101,7 +107,8 @@ Theorem pred_labels_keep_reachable:
     reachable_label fn entry prev ==>
     MEM prev (pred_labels (fn with fn_blocks := keep) lbl)
 Proof
-  cheat
+  rw[pred_labels_def, MEM_MAP, MEM_FILTER] >> rpt strip_tac >> gvs[] >>
+  qexists_tac `bb` >> simp[]
 QED
 
 Theorem block_last_inst_terminator:
@@ -111,7 +118,10 @@ Theorem block_last_inst_terminator:
     is_terminator inst.inst_opcode ==>
     block_last_inst bb = SOME inst
 Proof
-  cheat
+  rw[block_terminator_last_def, get_instruction_def, block_last_inst_def]
+  >- gvs[NULL_EQ, NOT_NIL_EQ_LENGTH_NOT_0]
+  >- (first_x_assum (qspec_then `idx` mp_tac) >> simp[] >>
+      strip_tac >> simp[LAST_EL, NOT_NIL_EQ_LENGTH_NOT_0, arithmeticTheory.PRE_SUB1])
 QED
 
 Theorem run_block_ok_successor:
@@ -130,7 +140,7 @@ Theorem reachable_label_step:
     reachable_label fn entry src /\ cfg_edge fn src dst ==>
     reachable_label fn entry dst
 Proof
-  cheat
+  rw[reachable_label_def] >> metis_tac[relationTheory.RTC_RULES_RIGHT1]
 QED
 
 Theorem run_function_remove_unreachable_equiv:
