@@ -292,7 +292,24 @@ Theorem remove_unreachable_blocks_correct:
     s.vs_prev_bb = NONE ==>
     run_function_equiv_cfg fn (remove_unreachable_blocks fn) s
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> simp[run_function_equiv_cfg_def] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> qexists_tac `fuel` >>
+      sg `result_equiv_cfg (run_function fuel fn s)
+            (run_function fuel (remove_unreachable_blocks fn) s)`
+      >- (irule run_function_remove_unreachable_equiv >>
+          simp[reachable_label_def])
+      >- (Cases_on `run_function fuel fn s` >>
+          Cases_on `run_function fuel (remove_unreachable_blocks fn) s` >>
+          gvs[result_equiv_cfg_def, terminates_def]))
+  >- (rpt gen_tac >> strip_tac >> qexists_tac `fuel'` >>
+      sg `result_equiv_cfg (run_function fuel' fn s)
+            (run_function fuel' (remove_unreachable_blocks fn) s)`
+      >- (irule run_function_remove_unreachable_equiv >>
+          simp[reachable_label_def])
+      >- (Cases_on `run_function fuel' fn s` >>
+          Cases_on `run_function fuel' (remove_unreachable_blocks fn) s` >>
+          gvs[result_equiv_cfg_def, terminates_def]))
 QED
 
 (* ===== Simplify-CFG Step Correctness (Skeletons) ===== *)
@@ -307,7 +324,10 @@ Theorem simplify_cfg_step_correct:
     s.vs_inst_idx = 0 ==>
     run_function_equiv_cfg fn fn' s
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> gvs[simplify_cfg_step_def]
+  >- (irule remove_unreachable_blocks_correct >> simp[])
+  >- (irule scfgMergeCorrectTheory.merge_blocks_correct >> simp[])
+  >- (irule scfgMergeCorrectTheory.merge_jump_correct >> simp[])
 QED
 
 Theorem simplify_cfg_correct:
