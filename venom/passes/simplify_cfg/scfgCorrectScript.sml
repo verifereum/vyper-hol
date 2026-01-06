@@ -330,6 +330,34 @@ Proof
   >- (irule scfgMergeCorrectTheory.merge_jump_correct >> simp[])
 QED
 
+(* Helper: entry_label preserved by simplify_cfg_step - CHEATED
+   Key issue: merge_blocks/merge_jump need b <> entry_label fn.
+   This should follow from pred_labels fn b = [a] (b has predecessor)
+   while entry has no predecessors. May need to add condition to
+   merge_blocks_cond or prove pred_labels fn (entry_label fn) = [] *)
+Theorem entry_label_simplify_cfg_step:
+  !fn fn'.
+    simplify_cfg_step fn fn' /\ cfg_wf fn /\ phi_fn_wf fn ==>
+    entry_label fn' = entry_label fn
+Proof
+  cheat
+QED
+
+(* Helper: cfg_wf and phi_fn_wf preserved by simplify_cfg_step - CHEATED *)
+Theorem wf_simplify_cfg_step:
+  !fn fn'.
+    simplify_cfg_step fn fn' /\ cfg_wf fn /\ phi_fn_wf fn ==>
+    cfg_wf fn' /\ phi_fn_wf fn'
+Proof
+  cheat
+QED
+
+(* Main theorem: RTC of simplify_cfg_step preserves equivalence - CHEATED
+   Proof structure verified interactively:
+   1. Unfold simplify_cfg to get RTC simplify_cfg_step
+   2. Induct_on RTC with strengthened property (cfg_wf, phi_fn_wf, entry_label)
+   3. Base case: run_function_equiv_cfg_refl
+   4. Step case: simplify_cfg_step_correct + wf/entry preservation + transitivity *)
 Theorem simplify_cfg_correct:
   !fn fn' s.
     simplify_cfg fn fn' /\
