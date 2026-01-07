@@ -823,7 +823,97 @@ Proof
         gvs[listTheory.MEM_MAP] >>
         first_x_assum (qspec_then `y` mp_tac) >>
         gvs[scfgDefsTheory.replace_label_inst_def])))
-  >- cheat (* phi_fn_wf merge_jump - needs helper lemma *)
+  >- ( (* phi_fn_wf merge_jump *)
+    rpt strip_tac >>
+    simp[scfgTransformTheory.merge_jump_def,
+         scfgTransformTheory.merge_jump_cond_def] >>
+    gvs[scfgTransformTheory.merge_jump_cond_def] \\
+    simp[scfgDefsTheory.phi_fn_wf_def, scfgDefsTheory.replace_label_fn_def,
+         listTheory.MAP_MAP_o, combinTheory.o_DEF] \\
+    qabbrev_tac `a_new = a' with bb_instructions :=
+      update_last_inst (replace_label_inst b c_lbl) a'.bb_instructions` >>
+    qabbrev_tac `blocks1 = replace_block a_new fn.fn_blocks` >>
+    qabbrev_tac `blocks2 = remove_block b blocks1` >>
+    qabbrev_tac `succs = block_successors a_new` >>
+    qabbrev_tac `blocks3 = MAP (\bb. if MEM bb.bb_label succs
+      then replace_phi_in_block b a bb else bb) blocks2` >>
+    qabbrev_tac `blocks4 = MAP (replace_label_block b c_lbl) blocks3` >>
+    qabbrev_tac `fn' = fn with fn_blocks := blocks4` \\
+    rpt conj_tac
+    >- ( (* blocks4 ≠ [] *)
+      gvs[Abbr`blocks2`, Abbr`blocks1`] >>
+      Cases_on `fn.fn_blocks` >>
+      gvs[scfgDefsTheory.phi_fn_wf_def, scfgDefsTheory.replace_block_def,
+          scfgDefsTheory.remove_block_def] >>
+      COND_CASES_TAC >>
+      gvs[scfgDefsTheory.entry_label_def, scfgDefsTheory.remove_block_def] >>
+      `a'.bb_label <> b` by gvs[] >> simp[])
+    >- cheat (* phi_block_wf for all blocks in merge_jump *)
+    >- ( (* block_has_no_phi (HD blocks4) *)
+      gvs[Abbr`blocks2`, Abbr`blocks1`] >>
+      Cases_on `fn.fn_blocks` >>
+      gvs[scfgDefsTheory.phi_fn_wf_def, scfgDefsTheory.replace_block_def,
+          scfgDefsTheory.remove_block_def] \\
+      COND_CASES_TAC >>
+      gvs[scfgDefsTheory.entry_label_def, scfgDefsTheory.remove_block_def]
+      >- ( (* h.bb_label = a_new.bb_label case *)
+        COND_CASES_TAC >>
+        gvs[scfgDefsTheory.replace_label_block_def,
+            scfgDefsTheory.replace_phi_in_block_def,
+            scfgDefsTheory.block_has_no_phi_def,
+            scfgDefsTheory.block_has_phi_def, listTheory.EXISTS_MAP]
+        >- ( (* MEM h.bb_label succs *)
+          rpt strip_tac >> gvs[listTheory.MEM_MAP] \\
+          sg `y'.inst_opcode = PHI`
+          >- (gvs[scfgDefsTheory.replace_label_inst_def,
+                  scfgDefsTheory.replace_label_in_phi_def] >>
+              Cases_on `y'.inst_opcode` >> gvs[])
+          >- (gvs[Abbr`a_new`] \\
+              `?inst'. MEM inst' a'.bb_instructions /\ inst'.inst_opcode = PHI`
+                by (irule update_last_inst_phi_mem >>
+                    qexists_tac `replace_label_inst b c_lbl` >>
+                    qexists_tac `y'` >>
+                    simp[replace_label_inst_opcode]) \\
+              sg `a' = h`
+              >- (gvs[venomInstTheory.lookup_block_def] \\
+                  Cases_on `a'.bb_label = a` >> gvs[] \\
+                  drule lookup_block_label >> gvs[] \\
+                  strip_tac >>
+                  qpat_x_assum `lookup_block a t = SOME a'`
+                    (mp_tac o MATCH_MP lookup_block_label) >> gvs[])
+              >- (first_x_assum (qspec_then `inst'` mp_tac) >> simp[] \\
+                  qpat_x_assum `a' = h` (fn th => SUBST_ALL_TAC th) >>
+                  first_x_assum ACCEPT_TAC)))
+        >- ( (* ~MEM h.bb_label succs *)
+          rpt strip_tac >> gvs[listTheory.MEM_MAP, Abbr`a_new`] >>
+          `y.inst_opcode = PHI` by gvs[scfgDefsTheory.replace_label_inst_def] \\
+          `?inst'. MEM inst' a'.bb_instructions /\ inst'.inst_opcode = PHI`
+            by (irule update_last_inst_phi_mem >>
+                qexists_tac `replace_label_inst b c_lbl` >>
+                qexists_tac `y` >>
+                simp[replace_label_inst_opcode]) \\
+          sg `a' = h`
+          >- (gvs[venomInstTheory.lookup_block_def] >>
+              Cases_on `h.bb_label = a` >> gvs[] >>
+              qpat_x_assum `lookup_block a t = SOME a'`
+                (mp_tac o MATCH_MP lookup_block_label) >> gvs[]) \\
+          first_x_assum (qspec_then `inst'` mp_tac) >> simp[] >>
+          qpat_x_assum `a' = h` (fn th => SUBST_ALL_TAC th) >>
+          first_x_assum ACCEPT_TAC))
+      >- ( (* h.bb_label ≠ a_new.bb_label case *)
+        COND_CASES_TAC >>
+        gvs[scfgDefsTheory.replace_label_block_def,
+            scfgDefsTheory.replace_phi_in_block_def,
+            scfgDefsTheory.block_has_no_phi_def,
+            scfgDefsTheory.block_has_phi_def, listTheory.EXISTS_MAP]
+        >- ( (* MEM h.bb_label succs *)
+          rpt strip_tac >> gvs[listTheory.MEM_MAP] \\
+          gvs[scfgDefsTheory.replace_label_inst_def] \\
+          gvs[scfgDefsTheory.replace_label_in_phi_def] \\
+          Cases_on `y'.inst_opcode = PHI` >> gvs[])
+        >- ( (* ~MEM h.bb_label succs *)
+          rpt strip_tac >> gvs[listTheory.MEM_MAP,
+                               scfgDefsTheory.replace_label_inst_def]))))
 QED
 
 (* Main theorem: RTC of simplify_cfg_step preserves equivalence *)
