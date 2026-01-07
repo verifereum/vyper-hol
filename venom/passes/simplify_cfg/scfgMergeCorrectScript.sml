@@ -86,6 +86,24 @@ Proof
         FRONT a.bb_instructions ++ b.bb_instructions` mp_tac) >> simp[])
 QED
 
+(* Key lemma: if pred_labels fn b_lbl = [a_lbl] and x.bb_label <> a_lbl,
+   then block x doesn't jump to b_lbl. This is used to show vs_current_bb <> b_lbl
+   after executing a block that's not a. *)
+Theorem pred_labels_single_no_jmp:
+  !fn b_lbl a_lbl x.
+    pred_labels fn b_lbl = [a_lbl] /\
+    MEM x fn.fn_blocks /\
+    x.bb_label <> a_lbl ==>
+    ~MEM b_lbl (block_successors x)
+Proof
+  rpt strip_tac >> fs[pred_labels_def] >>
+  sg `MEM x [bb]`
+  >- (gvs[listTheory.MEM_FILTER] >>
+      `MEM x (FILTER (\bb. MEM b_lbl (block_successors bb)) fn.fn_blocks)`
+        by gvs[listTheory.MEM_FILTER] >> gvs[])
+  >- gvs[]
+QED
+
 (* ===== Merging Blocks ===== *)
 
 (* Helper: run_function equivalence for merge_blocks when original terminates.
