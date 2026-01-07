@@ -443,6 +443,32 @@ Proof
   rw[phi_inst_wf_def, replace_label_inst_opcode]
 QED
 
+(* Helper: phi_inst_wf preserved when old label is not a predecessor *)
+Theorem phi_inst_wf_not_mem_pred:
+  !old new preds inst.
+    phi_inst_wf preds inst /\ ~MEM old preds ==>
+    phi_inst_wf preds (replace_label_inst old new inst)
+Proof
+  rpt strip_tac >> Cases_on `inst.inst_opcode = PHI`
+  >- (
+    simp[phi_inst_wf_def, replace_label_inst_def, replace_label_inst_opcode] >>
+    drule_all phi_inst_wf_props >> strip_tac >>
+    qexists_tac `out` >> simp[] >>
+    sg `MAP (replace_label_operand old new) inst.inst_operands =
+        inst.inst_operands`
+    >- (
+      `~MEM (Label old) inst.inst_operands` by
+        (drule_all phi_ops_all_preds_no_label >> simp[]) >>
+      irule listTheory.LIST_EQ >>
+      simp[listTheory.EL_MAP] >>
+      rpt strip_tac >> Cases_on `inst.inst_operands❲x❳` >>
+      simp[replace_label_operand_def] >>
+      `s <> old` by (CCONTR_TAC >> gvs[listTheory.MEM_EL] >> metis_tac[]) >>
+      simp[])
+    >- gvs[])
+  >- (irule phi_inst_wf_non_phi >> simp[])
+QED
+
 (* Helper: phi_inst_wf preserved under label replacement *)
 Theorem phi_inst_wf_replace_label:
   !old new preds (inst:instruction).
