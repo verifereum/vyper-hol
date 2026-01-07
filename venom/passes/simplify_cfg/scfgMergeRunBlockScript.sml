@@ -669,4 +669,51 @@ Proof
     >- simp[Abbr `s'`, state_equiv_cfg_def, stateEquivTheory.var_equiv_def, lookup_var_def])
 QED
 
+(* ===== Helper lemmas for merge correctness ===== *)
+
+(* If block_terminator_last and instruction at idx is a terminator, it's the last instruction *)
+Theorem block_last_inst_terminator:
+  !bb idx inst.
+    block_terminator_last bb /\
+    get_instruction bb idx = SOME inst /\
+    is_terminator inst.inst_opcode ==>
+    block_last_inst bb = SOME inst
+Proof
+  rw[block_terminator_last_def, get_instruction_def, block_last_inst_def]
+  >- gvs[NULL_EQ, NOT_NIL_EQ_LENGTH_NOT_0]
+  >- (first_x_assum (qspec_then `idx` mp_tac) >> simp[] >>
+      strip_tac >> simp[LAST_EL, NOT_NIL_EQ_LENGTH_NOT_0, arithmeticTheory.PRE_SUB1])
+QED
+
+(* After run_block succeeds without halting, current_bb is a successor of the block *)
+Theorem run_block_ok_successor:
+  !fn bb s s'.
+    cfg_wf fn /\
+    MEM bb fn.fn_blocks /\
+    run_block bb s = OK s' /\
+    ~s'.vs_halted ==>
+    MEM s'.vs_current_bb (block_successors bb)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `block_terminator_last bb` by gvs[cfg_wf_def] >>
+  pop_assum mp_tac >> pop_assum mp_tac >> pop_assum mp_tac >>
+  qid_spec_tac `s'` >> qid_spec_tac `s` >> qid_spec_tac `bb` >>
+  ho_match_mp_tac venomSemTheory.run_block_ind >> rpt strip_tac >>
+  rename [`run_block bb s = OK s'`, `block_terminator_last bb`] >>
+  qpat_x_assum `run_block _ _ = _` mp_tac >>
+  simp[Once venomSemTheory.run_block_def] >>
+  Cases_on `step_in_block bb s` >> Cases_on `q` >> simp[] >>
+  Cases_on `v.vs_halted` >> simp[] >> Cases_on `r` >> simp[] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `step_in_block _ _ = _` mp_tac >>
+  simp[venomSemTheory.step_in_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
+  Cases_on `step_inst x s` >> simp[] >>
+  Cases_on `is_terminator x.inst_opcode` >> simp[] >>
+  strip_tac >> gvs[] >>
+  drule_all block_last_inst_terminator >> strip_tac >>
+  drule_all venomSemPropsTheory.step_inst_terminator_successor >> strip_tac >>
+  gvs[block_successors_def]
+QED
+
 val _ = export_theory();
