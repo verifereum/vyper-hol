@@ -382,7 +382,8 @@ QED
    when merged.bb_instructions = prefix ++ b.bb_instructions and b has no PHI.
    The key invariant: s2.vs_inst_idx = s1.vs_inst_idx + LENGTH prefix *)
 Theorem run_block_suffix_no_phi:
-  !b prefix s1 s2 merged.
+  !n b prefix s1 s2 merged.
+    n = LENGTH b.bb_instructions - s1.vs_inst_idx /\
     merged.bb_instructions = prefix ++ b.bb_instructions /\
     state_equiv_cfg s1 s2 /\
     s2.vs_inst_idx = s1.vs_inst_idx + LENGTH prefix /\
@@ -390,7 +391,55 @@ Theorem run_block_suffix_no_phi:
   ==>
     result_equiv_cfg (run_block b s1) (run_block merged s2)
 Proof
-  cheat
+  completeInduct_on `n` >> rpt strip_tac >> gvs[] >>
+  simp[Once run_block_def] >> CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+  `get_instruction merged s2.vs_inst_idx = get_instruction b s1.vs_inst_idx` by (
+    simp[get_instruction_def] >>
+    Cases_on `s1.vs_inst_idx < LENGTH b.bb_instructions` >>
+    simp[rich_listTheory.EL_APPEND2]) >>
+  Cases_on `step_in_block b s1` >> qpat_x_assum `step_in_block b s1 = _` mp_tac >>
+  simp[step_in_block_def] >>
+  Cases_on `get_instruction b s1.vs_inst_idx` >> simp[result_equiv_cfg_def] >>
+  (* SOME x case *)
+  `x.inst_opcode <> PHI` by (
+    fs[block_has_no_phi_def, block_has_phi_def, get_instruction_def] >>
+    CCONTR_TAC >> fs[] >> first_x_assum (qspec_then `x` mp_tac) >>
+    simp[MEM_EL] >> qexists_tac `s1.vs_inst_idx` >> simp[]) >>
+  `result_equiv_cfg (step_inst x s1) (step_inst x s2)` by (
+    irule step_inst_state_equiv_cfg >> simp[]) >>
+  Cases_on `step_inst x s1` >> Cases_on `step_inst x s2` >> gvs[result_equiv_cfg_def]
+  >- (
+    (* OK case *)
+    IF_CASES_TAC >> gvs[] >> strip_tac >> gvs[]
+    >- (
+      (* terminator case *)
+      qpat_x_assum `OK v = _` (fn th => simp[GSYM th]) >>
+      IF_CASES_TAC >> gvs[result_equiv_cfg_def, state_equiv_cfg_def])
+    >- (
+      (* non-terminator case - IH *)
+      IF_CASES_TAC >> gvs[result_equiv_cfg_def, state_equiv_cfg_def, next_inst_def]
+      >- fs[stateEquivTheory.var_equiv_def, lookup_var_def]
+      >- (
+        first_x_assum irule >> simp[] >>
+        `v.vs_inst_idx = s1.vs_inst_idx` by (imp_res_tac step_inst_preserves_inst_idx >> gvs[]) >>
+        `v'.vs_inst_idx = s2.vs_inst_idx` by (imp_res_tac step_inst_preserves_inst_idx >> gvs[]) >>
+        `s1.vs_inst_idx < LENGTH b.bb_instructions` by (
+          fs[get_instruction_def] >> Cases_on `s1.vs_inst_idx < LENGTH b.bb_instructions` >> fs[]) >>
+        gvs[stateEquivTheory.var_equiv_def, lookup_var_def])))
+  >- (
+    (* Halt case *)
+    strip_tac >> gvs[result_equiv_cfg_def, state_equiv_cfg_def] >>
+    gvs[result_equiv_cfg_def, state_equiv_cfg_def] >>
+    qpat_x_assum `Halt _ = step_inst _ _` (SUBST1_TAC o GSYM) >>
+    simp[result_equiv_cfg_def, state_equiv_cfg_def])
+  >- (
+    (* Revert case *)
+    strip_tac >> gvs[] >> qpat_x_assum `Revert _ = step_inst _ _` (SUBST1_TAC o GSYM) >>
+    simp[result_equiv_cfg_def, state_equiv_cfg_def])
+  >- (
+    (* Error case *)
+    strip_tac >> gvs[] >> qpat_x_assum `Error _ = step_inst _ _` (SUBST1_TAC o GSYM) >>
+    simp[result_equiv_cfg_def])
 QED
 
 Theorem run_block_merge_blocks_equiv:
@@ -466,6 +515,7 @@ Proof
                                vs_current_bb := b_lbl; vs_inst_idx := 0|>` >>
     irule run_block_suffix_no_phi >>
     rpt conj_tac
+    >- simp[]
     >- simp[]
     >- (qexists_tac `FRONT a.bb_instructions` >> simp[Abbr `merged`, Abbr `s'`])
     >- simp[Abbr `s'`, state_equiv_cfg_def, stateEquivTheory.var_equiv_def, lookup_var_def])
