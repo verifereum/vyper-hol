@@ -420,7 +420,8 @@ Proof
   >- gvs[step_inst_def, replace_label_inst_def]
 QED
 
-(* Key lemma: when old is not in block_successors, run_block preserves vs_current_bb.
+(* Key lemma: when old is not in block_successors and PHIs don't reference old,
+   run_block preserves vs_current_bb.
    This is needed for the IH in run_function_merge_blocks_equiv_fwd. *)
 Theorem run_block_replace_label_current_bb:
   !bb s1 s2 old new v v'.
@@ -429,12 +430,100 @@ Theorem run_block_replace_label_current_bb:
     s1.vs_prev_bb = s2.vs_prev_bb /\
     block_terminator_last bb /\
     ~MEM old (block_successors bb) /\
+    (* PHIs in block don't reference old label *)
+    (!inst. MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI ==>
+            ~MEM (Label old) inst.inst_operands) /\
     run_block bb s1 = OK v /\
     run_block (replace_label_block old new bb) s2 = OK v' /\
     ~v.vs_halted ==>
     v.vs_current_bb = v'.vs_current_bb
 Proof
-  cheat
+  completeInduct_on `LENGTH bb.bb_instructions - s1.vs_inst_idx` >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `run_block bb s1 = _` mp_tac >> simp[Once run_block_def] >>
+  qpat_x_assum `run_block (replace_label_block _ _ _) _ = _` mp_tac >>
+  simp[Once run_block_def] >>
+  Cases_on `step_in_block bb s1` >> Cases_on `q` >> gvs[] >>
+  Cases_on `step_in_block (replace_label_block old new bb) s2` >> Cases_on `q` >>
+  gvs[] >> rpt strip_tac >> rpt (IF_CASES_TAC >> gvs[]) >>
+  Cases_on `v.vs_halted` >> gvs[] >> Cases_on `r` >> gvs[]
+  >- (
+    Cases_on `v'³'.vs_halted` >> Cases_on `r'` >> gvs[]
+    >- (
+      gvs[step_in_block_def, replace_label_block_def] >>
+      Cases_on `get_instruction bb s2.vs_inst_idx` >> gvs[get_instruction_def] >>
+      gvs[EL_MAP, replace_label_inst_def] >>
+      Cases_on `step_inst bb.bb_instructions❲s2.vs_inst_idx❳ s1` >> gvs[] >>
+      Cases_on `is_terminator bb.bb_instructions❲s2.vs_inst_idx❳.inst_opcode` >> gvs[] >>
+      Cases_on `step_inst (bb.bb_instructions❲s2.vs_inst_idx❳ with
+        inst_operands := MAP (replace_label_operand old new)
+        bb.bb_instructions❲s2.vs_inst_idx❳.inst_operands) s2` >> gvs[] >>
+      `s2.vs_inst_idx = LENGTH bb.bb_instructions - 1` by
+        (fs[block_terminator_last_def, get_instruction_def] >>
+         first_x_assum irule >> simp[]) >>
+      sg `~MEM old (get_successors bb.bb_instructions❲s2.vs_inst_idx❳)`
+      >- (gvs[block_successors_def, block_last_inst_def] >> gvs[GSYM LAST_EL] >>
+          gvs[NULL_EQ, LAST_EL] >> gvs[arithmeticTheory.PRE_SUB1] >>
+          `bb.bb_instructions <> []` by (Cases_on `bb.bb_instructions` >> gvs[]) >> fs[]) >>
+      irule step_inst_terminator_same_current_bb >> simp[replace_label_inst_def] >>
+      qexists_tac `bb.bb_instructions❲s2.vs_inst_idx❳` >> simp[] >>
+      qexistsl_tac [`new`, `old`, `s1`, `s2`] >> simp[] >> gvs[])
+    >- (
+      gvs[step_in_block_def, replace_label_block_def] >>
+      Cases_on `get_instruction bb s2.vs_inst_idx` >> gvs[get_instruction_def] >>
+      gvs[EL_MAP, replace_label_inst_def] >>
+      Cases_on `step_inst bb.bb_instructions❲s2.vs_inst_idx❳ s1` >> gvs[] >>
+      Cases_on `is_terminator bb.bb_instructions❲s2.vs_inst_idx❳.inst_opcode` >> gvs[] >>
+      Cases_on `step_inst (bb.bb_instructions❲s2.vs_inst_idx❳ with
+        inst_operands := MAP (replace_label_operand old new)
+        bb.bb_instructions❲s2.vs_inst_idx❳.inst_operands) s2` >> gvs[]))
+  >- (
+    gvs[step_in_block_def, replace_label_block_def] >>
+    Cases_on `get_instruction bb s2.vs_inst_idx` >> gvs[get_instruction_def] >>
+    gvs[EL_MAP, replace_label_inst_def] >>
+    Cases_on `step_inst bb.bb_instructions❲s2.vs_inst_idx❳ s1` >> gvs[] >>
+    Cases_on `is_terminator bb.bb_instructions❲s2.vs_inst_idx❳.inst_opcode` >> gvs[] >>
+    Cases_on `step_inst (bb.bb_instructions❲s2.vs_inst_idx❳ with
+      inst_operands := MAP (replace_label_operand old new)
+      bb.bb_instructions❲s2.vs_inst_idx❳.inst_operands) s2` >> gvs[] >>
+    Cases_on `(next_inst v).vs_halted` >> gvs[] >>
+    first_x_assum irule >> simp[] >>
+    qexistsl_tac [`bb`, `new`, `old`, `next_inst v'⁴'`, `next_inst v`] >> simp[] >>
+    `v'⁴'.vs_inst_idx = s1.vs_inst_idx` by (imp_res_tac step_inst_preserves_inst_idx >> gvs[]) >>
+    `v.vs_inst_idx = s2.vs_inst_idx` by (imp_res_tac step_inst_preserves_inst_idx >>
+      gvs[replace_label_inst_def]) >>
+    `v'⁴'.vs_prev_bb = s1.vs_prev_bb` by (imp_res_tac step_inst_preserves_prev_bb >> gvs[]) >>
+    `v.vs_prev_bb = s2.vs_prev_bb` by (imp_res_tac step_inst_preserves_prev_bb >>
+      gvs[replace_label_inst_def]) >>
+    simp[next_inst_def] >>
+    sg `state_equiv_cfg v'⁴' v`
+    >- (
+      `result_equiv_cfg (step_inst bb.bb_instructions❲s2.vs_inst_idx❳ s1)
+        (step_inst bb.bb_instructions❲s2.vs_inst_idx❳ s2)` by
+        (irule step_inst_state_equiv_cfg >> simp[]) >>
+      Cases_on `step_inst bb.bb_instructions❲s2.vs_inst_idx❳ s2`
+      >- (
+        gvs[result_equiv_cfg_def] >> gvs[] >>
+        TRY (fs[result_equiv_cfg_def] >> NO_TAC) >>
+        `result_equiv_cfg (step_inst bb.bb_instructions❲s2.vs_inst_idx❳ s2)
+          (step_inst (replace_label_inst old new bb.bb_instructions❲s2.vs_inst_idx❳) s2)` by
+          (irule step_inst_replace_label_no_phi_old >> rw[] >>
+           first_x_assum irule >> simp[EL_MEM]) >>
+        gvs[replace_label_inst_def, result_equiv_cfg_def] >>
+        irule state_equiv_cfg_trans >> qexists_tac `v'³'` >> simp[])
+      >- gvs[result_equiv_cfg_def]
+      >- gvs[result_equiv_cfg_def]
+      >- gvs[result_equiv_cfg_def])
+    >- (
+      drule state_equiv_cfg_inst_idx >>
+      disch_then (qspec_then `s2.vs_inst_idx + 1` assume_tac) >>
+      qpat_x_assum `state_equiv_cfg (_ with vs_inst_idx := _) v` mp_tac >>
+      simp[Once state_equiv_cfg_sym] >>
+      disch_then (fn th => assume_tac (MATCH_MP state_equiv_cfg_inst_idx th)) >>
+      pop_assum (qspec_then `s2.vs_inst_idx + 1` assume_tac) >>
+      gvs[state_equiv_cfg_sym] >>
+      gvs[state_equiv_cfg_def] >>
+      gvs[stateEquivTheory.var_equiv_def, lookup_var_def]))
 QED
 
 (* Helper: Running block b from any index is equivalent to running merged from corresponding index
