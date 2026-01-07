@@ -389,4 +389,22 @@ Proof
   gvs[]
 QED
 
+(* Simplifying a block preserves block_successors *)
+Theorem simplify_phi_block_successors:
+  !preds bb. block_successors (simplify_phi_block preds bb) = block_successors bb
+Proof
+  rpt gen_tac >>
+  simp[block_successors_def, block_last_inst_def, simplify_phi_block_def] >>
+  Cases_on `NULL bb.bb_instructions` >> simp[] >>
+  `bb.bb_instructions <> []` by gvs[NULL_EQ] >>
+  simp[LAST_MAP] >>
+  Cases_on `is_terminator (LAST bb.bb_instructions).inst_opcode`
+  >- (
+    sg `(LAST bb.bb_instructions).inst_opcode <> PHI`
+    >- (spose_not_then strip_assume_tac >> gvs[is_terminator_def])
+    >- simp[simplify_phi_inst_no_phi]
+  )
+  >- simp[get_successors_def, simplify_phi_inst_is_terminator]
+QED
+
 val _ = export_theory();
