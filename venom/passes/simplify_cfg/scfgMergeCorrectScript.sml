@@ -126,6 +126,7 @@ Theorem run_function_merge_blocks_equiv_fwd:
     s1.vs_inst_idx = 0 /\ s2.vs_inst_idx = 0 /\
     (s1.vs_prev_bb = SOME b_lbl ==> s2.vs_prev_bb = SOME a_lbl) /\
     (s1.vs_prev_bb <> SOME b_lbl ==> s1.vs_prev_bb = s2.vs_prev_bb) /\
+    (!lbl. s1.vs_prev_bb = SOME lbl ==> MEM lbl (pred_labels fn s1.vs_current_bb)) /\
     terminates (run_function fuel fn s1)  (* KEY: termination hypothesis *)
   ==>
     result_equiv_cfg (run_function fuel fn s1)
@@ -172,7 +173,7 @@ Proof
               `x.bb_label = s2.vs_current_bb` by metis_tac[lookup_block_label] \\
               irule pred_labels_no_jmp_other >> gvs[] \\
               qexists_tac `b_lbl` >> gvs[])
-            >- cheat (* TODO: MEM b_lbl (pred_labels fn x.bb_label) *)
+            >- (`x.bb_label = s2.vs_current_bb` by metis_tac[lookup_block_label] >> gvs[])
             >- (
               irule scfgPhiLemmasTheory.phi_fn_wf_block >> gvs[] \\
               metis_tac[lookup_block_MEM])))
@@ -250,6 +251,7 @@ Theorem run_function_merge_blocks_equiv_bwd:
     s1.vs_inst_idx = 0 /\ s2.vs_inst_idx = 0 /\
     (s1.vs_prev_bb = SOME b_lbl ==> s2.vs_prev_bb = SOME a_lbl) /\
     (s1.vs_prev_bb <> SOME b_lbl ==> s1.vs_prev_bb = s2.vs_prev_bb) /\
+    (!lbl. s1.vs_prev_bb = SOME lbl ==> MEM lbl (pred_labels fn s1.vs_current_bb)) /\
     terminates (run_function fuel (merge_blocks fn a_lbl b_lbl) s2)
   ==>
     ?fuel'. terminates (run_function fuel' fn s1) /\
