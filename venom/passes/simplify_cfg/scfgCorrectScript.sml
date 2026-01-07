@@ -534,6 +534,20 @@ Proof
       gvs[block_terminator_last_def, get_instruction_def])
 QED
 
+(* Helper: PHI instructions in update_last_inst come from original list
+   when f preserves opcodes *)
+Theorem update_last_inst_phi_mem:
+  !f l inst.
+    (!x. (f x).inst_opcode = x.inst_opcode) /\
+    MEM inst (update_last_inst f l) /\ inst.inst_opcode = PHI ==>
+    ?inst'. MEM inst' l /\ inst'.inst_opcode = PHI
+Proof
+  ho_match_mp_tac update_last_inst_ind >> rpt strip_tac >>
+  gvs[update_last_inst_def]
+  >- (qexists_tac `inst` >> simp[])
+  >- (first_x_assum drule_all >> strip_tac >> qexists_tac `inst''` >> gvs[])
+QED
+
 (* Helper: cfg_wf and phi_fn_wf preserved by simplify_cfg_step *)
 Theorem wf_simplify_cfg_step:
   !fn fn'.
