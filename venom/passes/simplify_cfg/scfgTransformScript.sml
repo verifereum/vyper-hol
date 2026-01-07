@@ -29,6 +29,7 @@ Definition merge_blocks_cond_def:
     ?a b.
       lookup_block a_lbl fn.fn_blocks = SOME a /\
       lookup_block b_lbl fn.fn_blocks = SOME b /\
+      b_lbl <> entry_label fn /\
       pred_labels fn b_lbl = [a_lbl] /\
       block_has_no_phi b /\
       block_last_jmp_to b_lbl a
@@ -53,6 +54,7 @@ Definition merge_jump_cond_def:
     ?a b c_lbl.
       lookup_block a_lbl fn.fn_blocks = SOME a /\
       lookup_block b_lbl fn.fn_blocks = SOME b /\
+      b_lbl <> entry_label fn /\
       MEM b_lbl (block_successors a) /\
       ~MEM c_lbl (block_successors a) /\
       pred_labels fn b_lbl = [a_lbl] /\
