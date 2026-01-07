@@ -378,6 +378,21 @@ Proof
   >- (Cases_on `res'` >> gvs[result_equiv_cfg_def, state_equiv_cfg_sym])
 QED
 
+(* Key lemma: when old is not in block_successors, run_block preserves vs_current_bb.
+   This is needed for the IH in run_function_merge_blocks_equiv_fwd. *)
+Theorem run_block_replace_label_current_bb:
+  !bb s1 s2 old new v v'.
+    state_equiv_cfg s1 s2 /\
+    s1.vs_inst_idx = s2.vs_inst_idx /\
+    ~MEM old (block_successors bb) /\
+    run_block bb s1 = OK v /\
+    run_block (replace_label_block old new bb) s2 = OK v' /\
+    ~v.vs_halted ==>
+    v.vs_current_bb = v'.vs_current_bb
+Proof
+  cheat
+QED
+
 (* Helper: Running block b from any index is equivalent to running merged from corresponding index
    when merged.bb_instructions = prefix ++ b.bb_instructions and b has no PHI.
    The key invariant: s2.vs_inst_idx = s1.vs_inst_idx + LENGTH prefix *)
