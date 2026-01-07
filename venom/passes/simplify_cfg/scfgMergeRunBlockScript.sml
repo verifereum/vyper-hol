@@ -384,6 +384,7 @@ Theorem run_block_replace_label_current_bb:
   !bb s1 s2 old new v v'.
     state_equiv_cfg s1 s2 /\
     s1.vs_inst_idx = s2.vs_inst_idx /\
+    block_terminator_last bb /\
     ~MEM old (block_successors bb) /\
     run_block bb s1 = OK v /\
     run_block (replace_label_block old new bb) s2 = OK v' /\
