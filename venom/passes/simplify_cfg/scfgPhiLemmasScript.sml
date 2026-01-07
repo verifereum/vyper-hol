@@ -328,4 +328,65 @@ Proof
     rpt strip_tac >> first_x_assum drule >> simp[phi_ops_all_preds_def])
 QED
 
+(* Simplifying a PHI instruction preserves well-formedness when new_preds ⊆ old_preds *)
+Theorem simplify_phi_inst_wf:
+  !old_preds new_preds inst.
+    phi_inst_wf old_preds inst /\
+    (!lbl. MEM lbl new_preds ==> MEM lbl old_preds) ==>
+    phi_inst_wf new_preds (simplify_phi_inst new_preds inst)
+Proof
+  rpt strip_tac >>
+  simp[simplify_phi_inst_def, phi_inst_wf_def] >>
+  Cases_on `inst.inst_opcode = PHI` >> gvs[] >>
+  Cases_on `NULL (phi_remove_non_preds new_preds inst.inst_operands)` >> gvs[] >>
+  Cases_on `LENGTH (phi_remove_non_preds new_preds inst.inst_operands) = 2` >>
+  gvs[phi_inst_wf_def] >>
+  rpt conj_tac
+  >- (irule phi_ops_all_preds_remove_non_preds >> simp[])
+  >- (
+    simp[phi_ops_complete_def] >> rpt strip_tac >>
+    `MEM lbl old_preds` by metis_tac[] >>
+    `?val. resolve_phi lbl inst.inst_operands = SOME val`
+      by fs[phi_ops_complete_def] >>
+    fs[] >> irule_at Any resolve_phi_remove_non_preds >> simp[]
+  )
+  >- (irule phi_vals_not_label_remove_non_preds >> simp[])
+QED
+
+(* Simplifying a block preserves phi_block_wf when new_preds ⊆ old_preds *)
+Theorem simplify_phi_block_wf:
+  !old_preds new_preds bb.
+    phi_block_wf old_preds bb /\
+    (!lbl. MEM lbl new_preds ==> MEM lbl old_preds) ==>
+    phi_block_wf new_preds (simplify_phi_block new_preds bb)
+Proof
+  rpt strip_tac >>
+  simp[phi_block_wf_def, simplify_phi_block_def, MEM_MAP] >>
+  rpt strip_tac >>
+  `phi_inst_wf old_preds y` by fs[phi_block_wf_def] >>
+  drule_all simplify_phi_inst_wf >> simp[]
+QED
+
+(* pred_labels is a subset when filtering blocks *)
+Theorem pred_labels_filter_subset:
+  !fn P lbl x.
+    MEM x (pred_labels (fn with fn_blocks := FILTER P fn.fn_blocks) lbl) ==>
+    MEM x (pred_labels fn lbl)
+Proof
+  simp[pred_labels_def, MEM_MAP, MEM_FILTER] >> metis_tac[]
+QED
+
+(* Simplifying a block preserves block_has_no_phi *)
+Theorem simplify_phi_block_no_phi:
+  !preds bb. block_has_no_phi bb ==> block_has_no_phi (simplify_phi_block preds bb)
+Proof
+  rpt strip_tac >>
+  simp[block_has_no_phi_def, block_has_phi_def, simplify_phi_block_def,
+       EXISTS_MEM, MEM_MAP] >>
+  rpt strip_tac >> CCONTR_TAC >> gvs[] >>
+  `y.inst_opcode <> PHI` by metis_tac[scfgEquivTheory.block_has_no_phi_inst] >>
+  `simplify_phi_inst preds y = y` by metis_tac[simplify_phi_inst_no_phi] >>
+  gvs[]
+QED
+
 val _ = export_theory();
