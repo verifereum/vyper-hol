@@ -29,6 +29,7 @@ Definition merge_blocks_cond_def:
     ?a b.
       lookup_block a_lbl fn.fn_blocks = SOME a /\
       lookup_block b_lbl fn.fn_blocks = SOME b /\
+      a_lbl <> b_lbl /\
       b_lbl <> entry_label fn /\
       pred_labels fn b_lbl = [a_lbl] /\
       block_has_no_phi b /\

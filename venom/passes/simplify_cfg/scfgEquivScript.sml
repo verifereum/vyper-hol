@@ -919,6 +919,22 @@ QED
 
 (* run_block_fn_irrelevant removed - run_block no longer takes fn parameter *)
 
+(* If run_block returns OK, the state is not halted *)
+Theorem run_block_ok_not_halted:
+  !bb s s'. run_block bb s = OK s' ==> ~s'.vs_halted
+Proof
+  ho_match_mp_tac run_block_ind >> rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once run_block_def] >> Cases_on `step_in_block bb s` >> simp[] >>
+  Cases_on `q` >> simp[] >> rpt strip_tac >> gvs[]
+  >- (
+    qpat_x_assum `run_block _ _ = _` mp_tac >> simp[Once run_block_def] >>
+    rpt strip_tac >> gvs[] >>
+    Cases_on `v.vs_halted` >> gvs[] >> Cases_on `r` >> gvs[])
+  >- (qpat_x_assum `run_block _ _ = _` mp_tac >> simp[Once run_block_def])
+  >- (qpat_x_assum `run_block _ _ = _` mp_tac >> simp[Once run_block_def])
+  >- (qpat_x_assum `run_block _ _ = _` mp_tac >> simp[Once run_block_def])
+QED
+
 (* Terminators that return OK with ~halted set inst_idx = 0 via jump_to *)
 Theorem run_block_ok_inst_idx:
   !bb s s'.
