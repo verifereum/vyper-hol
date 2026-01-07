@@ -872,7 +872,6 @@ Proof
   )
 QED
 
-(* CHEATED - hanging metis_tac on step_inst_preserves_inst_idx *)
 Theorem run_block_drop_equiv_cfg:
   !bb pref suff s k.
     bb.bb_instructions = pref ++ suff /\
@@ -883,7 +882,39 @@ Theorem run_block_drop_equiv_cfg:
       (run_block bb s)
       (run_block (bb with bb_instructions := suff) (s with vs_inst_idx := k))
 Proof
-  cheat
+  qx_gen_tac `bb` >> qx_gen_tac `pref` >> qx_gen_tac `suff` >>
+  measureInduct_on `LENGTH suff - k` >>
+  rpt strip_tac >> simp[Once run_block_def] >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+  simp[step_in_block_def, get_instruction_def] >> simp[EL_APPEND2] >>
+  Cases_on `k < LENGTH suff` >> gvs[result_equiv_cfg_def] >>
+  qabbrev_tac `inst = EL k suff` >>
+  `result_equiv_cfg (step_inst inst s) (step_inst inst (s with vs_inst_idx := k))` by
+    (irule step_inst_state_equiv_cfg >> simp[state_equiv_cfg_def, var_equiv_def, lookup_var_def]) >>
+  Cases_on `step_inst inst s` >> Cases_on `step_inst inst (s with vs_inst_idx := k)` >>
+  gvs[result_equiv_cfg_def] >>
+  Cases_on `is_terminator inst.inst_opcode` >> gvs[]
+  >- (`v.vs_halted = v'.vs_halted` by gvs[state_equiv_cfg_def] >>
+      Cases_on `v.vs_halted` >> gvs[result_equiv_cfg_def])
+  >- (
+    `state_equiv_cfg (next_inst v) (next_inst v')` by (irule next_inst_state_equiv_cfg >> simp[]) >>
+    `(next_inst v).vs_halted = (next_inst v').vs_halted` by gvs[state_equiv_cfg_def] >>
+    Cases_on `(next_inst v).vs_halted` >> gvs[result_equiv_cfg_def] >>
+    `v.vs_inst_idx = s.vs_inst_idx` by metis_tac[step_inst_preserves_inst_idx] >>
+    `(next_inst v).vs_inst_idx = (k + 1) + LENGTH pref` by simp[venomStateTheory.next_inst_def] >>
+    `v'.vs_inst_idx = k` by (drule_all step_inst_preserves_inst_idx >> simp[]) >>
+    `(next_inst v').vs_inst_idx = k + 1` by simp[venomStateTheory.next_inst_def] >>
+    irule result_equiv_cfg_trans >>
+    qexists_tac `run_block (bb with bb_instructions := suff)
+                           ((next_inst v) with vs_inst_idx := k + 1)` >>
+    conj_tac
+    >- (first_x_assum irule >> simp[])
+    >- (irule run_block_state_equiv_cfg >>
+        simp[venomStateTheory.next_inst_def] >>
+        conj_tac
+        >- (imp_res_tac step_inst_preserves_prev_bb >> gvs[])
+        >- gvs[state_equiv_cfg_def, var_equiv_def, lookup_var_def])
+  )
 QED
 
 (* run_block_fn_irrelevant removed - run_block no longer takes fn parameter *)
