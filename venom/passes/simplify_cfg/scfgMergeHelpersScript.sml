@@ -512,4 +512,30 @@ Proof
   simp[result_equiv_cfg_refl]
 QED
 
+(* Key lemma: replacing labels doesn't change successors when old is not a successor *)
+Theorem block_successors_replace_label_block:
+  !bb old new. ~MEM old (block_successors bb) ==>
+    block_successors (replace_label_block old new bb) = block_successors bb
+Proof
+  rpt strip_tac >> simp[block_successors_def, replace_label_block_def] >>
+  Cases_on `block_last_inst bb` >> simp[block_last_inst_def]
+  >- (gvs[] >> fs[block_last_inst_def, AllCaseEqs()])
+  >- (
+    fs[block_last_inst_def, AllCaseEqs()] >> gvs[] >>
+    `bb.bb_instructions <> []` by gvs[NULL_EQ] >>
+    simp[LAST_MAP] >>
+    qabbrev_tac `last_inst = LAST bb.bb_instructions` >>
+    simp[get_successors_def, replace_label_inst_def] >>
+    IF_CASES_TAC >> simp[] >>
+    `~MEM old (get_successors last_inst)` by
+      fs[block_successors_def, block_last_inst_def, Abbr `last_inst`] >>
+    fs[get_successors_def] >> gvs[] >>
+    sg `!ops. ~MEM old (MAP THE (FILTER IS_SOME (MAP get_label ops))) ==>
+              MAP get_label (MAP (replace_label_operand old new) ops) =
+              MAP get_label ops`
+    >- (Induct >> simp[] >> rpt strip_tac >>
+        Cases_on `h` >> gvs[replace_label_operand_def, get_label_def])
+    >- (first_x_assum (qspec_then `last_inst.inst_operands` mp_tac) >> simp[]))
+QED
+
 val _ = export_theory();
