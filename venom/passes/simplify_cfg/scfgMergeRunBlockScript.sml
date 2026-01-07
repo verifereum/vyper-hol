@@ -378,6 +378,48 @@ Proof
   >- (Cases_on `res'` >> gvs[result_equiv_cfg_def, state_equiv_cfg_sym])
 QED
 
+(* Helper: terminators (except halting ones) preserve vs_current_bb through replace_label *)
+Theorem step_inst_terminator_same_current_bb:
+  !inst old new s1 s2 v1 v2.
+    state_equiv_cfg s1 s2 /\
+    is_terminator inst.inst_opcode /\
+    ~MEM old (get_successors inst) /\
+    step_inst inst s1 = OK v1 /\
+    step_inst (replace_label_inst old new inst) s2 = OK v2 /\
+    ~v1.vs_halted /\ ~v2.vs_halted
+  ==>
+    v1.vs_current_bb = v2.vs_current_bb
+Proof
+  rpt strip_tac >> Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
+  >- (
+    gvs[step_inst_def, replace_label_inst_def, get_successors_def,
+        is_terminator_def] >>
+    Cases_on `inst.inst_operands` >> gvs[] >>
+    Cases_on `h` >> gvs[] >> Cases_on `t` >>
+    gvs[replace_label_operand_def, get_label_def, jump_to_def])
+  >- (
+    gvs[step_inst_def, replace_label_inst_def, get_successors_def,
+        is_terminator_def] >>
+    rpt (BasicProvers.FULL_CASE_TAC >>
+         gvs[replace_label_operand_def, get_label_def, jump_to_def])
+    >- (imp_res_tac eval_operand_state_equiv_cfg >>
+        Cases_on `h'` >> gvs[replace_label_operand_def, get_label_def])
+    >- (Cases_on `h'` >>
+        gvs[replace_label_operand_def, get_label_def, eval_operand_def] >>
+        gvs[state_equiv_cfg_def, stateEquivTheory.var_equiv_def])
+    >- (Cases_on `h'` >> gvs[get_label_def, eval_operand_def])
+    >- (Cases_on `h'` >>
+        gvs[get_label_def, replace_label_operand_def, eval_operand_state_equiv_cfg]
+        >- gvs[eval_operand_def]
+        >- (imp_res_tac eval_operand_state_equiv_cfg >> gvs[])))
+  >- gvs[step_inst_def, replace_label_inst_def]
+  >- gvs[step_inst_def, replace_label_inst_def]
+  >- gvs[step_inst_def, replace_label_inst_def]
+  >- gvs[step_inst_def, replace_label_inst_def]
+  >- gvs[step_inst_def, replace_label_inst_def]
+  >- gvs[step_inst_def, replace_label_inst_def]
+QED
+
 (* Key lemma: when old is not in block_successors, run_block preserves vs_current_bb.
    This is needed for the IH in run_function_merge_blocks_equiv_fwd. *)
 Theorem run_block_replace_label_current_bb:
