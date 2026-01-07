@@ -6,7 +6,10 @@
 
 Theory scfgPhiStep
 Ancestors
-  scfgPhiLemmas
+  scfgPhiLemmas scfgEquiv venomSem venomSemProps
+Libs
+  scfgDefsTheory scfgEquivTheory scfgStateOpsTheory venomSemTheory
+  venomInstTheory venomStateTheory listTheory
 
 Theorem simplify_phi_inst_preserves_outputs:
   !preds inst.
@@ -38,16 +41,16 @@ Proof
   rpt strip_tac >>
   `MEM prev preds0` by metis_tac[] >>
   qpat_x_assum `phi_inst_wf preds0 inst` mp_tac >>
-  simp[phi_inst_wf_def] >> strip_tac >>
+  simp[scfgDefsTheory.phi_inst_wf_def] >> strip_tac >>
   pop_assum strip_assume_tac >>
   qpat_x_assum `phi_ops_complete preds0 inst.inst_operands` mp_tac >>
-  simp[phi_ops_complete_def] >> strip_tac >>
+  simp[scfgDefsTheory.phi_ops_complete_def] >> strip_tac >>
   first_x_assum (qspec_then `prev` mp_tac) >> simp[] >> strip_tac >>
   pop_assum strip_assume_tac >>
   `resolve_phi prev (phi_remove_non_preds preds inst.inst_operands) = SOME val_op` by
     (match_mp_tac resolve_phi_remove_non_preds_ok >> simp[phi_resolve_ok_def]) >>
   Cases_on `NULL (phi_remove_non_preds preds inst.inst_operands)`
-  >- (Cases_on `phi_remove_non_preds preds inst.inst_operands` >> fs[resolve_phi_def])
+  >- (Cases_on `phi_remove_non_preds preds inst.inst_operands` >> fs[venomSemTheory.resolve_phi_def])
   >- (
     Cases_on `LENGTH (phi_remove_non_preds preds inst.inst_operands) = 2`
     >- (
@@ -192,78 +195,48 @@ Theorem step_in_block_simplify_phi:
            result_equiv_cfg res' res
 Proof
   rpt strip_tac >>
+  qpat_x_assum `step_in_block _ _ = _` mp_tac >>
   simp[step_in_block_def, simplify_phi_block_def] >>
-  Cases_on `get_instruction bb s.vs_inst_idx` >> simp[]
+  simp[get_instruction_def] >>
+  IF_CASES_TAC >> gvs[]
   >- (
-    `get_instruction (bb with bb_instructions := MAP (simplify_phi_inst preds) bb.bb_instructions)
-                     s.vs_inst_idx = NONE` by
-      (qpat_x_assum `get_instruction bb s.vs_inst_idx = NONE` mp_tac >>
-       simp[get_instruction_def, LENGTH_MAP]) >>
-    qexists_tac `Error "block not terminated"` >>
-    qpat_x_assum `step_in_block bb s = (res, is_term)` mp_tac >>
-    simp[step_in_block_def, simplify_phi_block_def, result_equiv_cfg_def,
-         get_instruction_def]
-  )
-  >- (
-    rename1 `get_instruction bb _ = SOME inst` >>
-    qpat_x_assum `get_instruction bb _ = SOME inst` mp_tac >>
-    simp[get_instruction_def] >> strip_tac >>
-    `MEM inst bb.bb_instructions` by metis_tac[MEM_EL] >>
-    `get_instruction (bb with bb_instructions := MAP (simplify_phi_inst preds) bb.bb_instructions)
-                     s.vs_inst_idx = SOME (simplify_phi_inst preds inst)` by
-      (rw[get_instruction_def] >> simp[EL_MAP]) >>
-    simp[] >>
-    qpat_x_assum `preds = pred_labels fn bb.bb_label` (fn th => simp[GSYM th]) >>
-    Cases_on `step_inst inst s` >> simp[]
+    qabbrev_tac `inst = EL s.vs_inst_idx bb.bb_instructions` >>
+    simp[EL_MAP] >>
+    simp[simplify_phi_inst_is_terminator] >>
+    strip_tac >> Cases_on `step_inst inst s` >> gvs[]
     >- (
-      `result_equiv_cfg (step_inst (simplify_phi_inst preds inst) s)
-                        (step_inst inst s)` by
-        (irule step_inst_simplify_phi >> simp[]) >>
-      Cases_on `step_inst (simplify_phi_inst preds inst) s` >>
-      simp[result_equiv_cfg_def] >>
-      rename1 `step_inst (simplify_phi_inst preds inst) s = OK v'` >>
-      Cases_on `is_terminator inst.inst_opcode`
-      >- (
-        qexists_tac `OK v'` >>
-        simp[simplify_phi_inst_is_terminator, result_equiv_cfg_def]
-      )
-      >- (
-        qexists_tac `OK (next_inst v')` >>
-        simp[simplify_phi_inst_is_terminator, result_equiv_cfg_def] >>
-        irule next_inst_state_equiv_cfg >> simp[]
-      )
-    )
+      `MEM inst bb.bb_instructions` by
+        (simp[MEM_EL] >> qexists_tac `s.vs_inst_idx` >> gvs[Abbr`inst`]) >>
+      drule_all step_inst_simplify_phi >> strip_tac >>
+      Cases_on `step_inst (simplify_phi_inst (pred_labels fn bb.bb_label) inst) s` >>
+      gvs[result_equiv_cfg_def] >>
+      IF_CASES_TAC >> gvs[]
+      >- (simp[result_equiv_cfg_def] >> gvs[result_equiv_cfg_def] >>
+          qpat_x_assum `OK v = _` (SUBST1_TAC o GSYM) >>
+          simp[result_equiv_cfg_def])
+      >- (simp[result_equiv_cfg_def] >> irule next_inst_state_equiv_cfg >> simp[]))
     >- (
-      `result_equiv_cfg (step_inst (simplify_phi_inst preds inst) s)
-                        (step_inst inst s)` by
-        (irule step_inst_simplify_phi >> simp[]) >>
-      Cases_on `step_inst (simplify_phi_inst preds inst) s` >>
-      simp[result_equiv_cfg_def] >>
-      rename1 `step_inst (simplify_phi_inst preds inst) s = Halt v'` >>
-      qexists_tac `Halt v'` >>
-      simp[result_equiv_cfg_def]
-    )
+      `MEM inst bb.bb_instructions` by
+        (simp[MEM_EL] >> qexists_tac `s.vs_inst_idx` >> gvs[Abbr`inst`]) >>
+      drule_all step_inst_simplify_phi >> strip_tac >>
+      Cases_on `step_inst (simplify_phi_inst (pred_labels fn bb.bb_label) inst) s` >>
+      gvs[result_equiv_cfg_def] >> gvs[result_equiv_cfg_def] >>
+      qpat_x_assum `Halt _ = _` (SUBST_ALL_TAC o GSYM) >> fs[result_equiv_cfg_def])
     >- (
-      `result_equiv_cfg (step_inst (simplify_phi_inst preds inst) s)
-                        (step_inst inst s)` by
-        (irule step_inst_simplify_phi >> simp[]) >>
-      Cases_on `step_inst (simplify_phi_inst preds inst) s` >>
-      simp[result_equiv_cfg_def] >>
-      rename1 `step_inst (simplify_phi_inst preds inst) s = Revert v'` >>
-      qexists_tac `Revert v'` >>
-      simp[result_equiv_cfg_def]
-    )
+      `MEM inst bb.bb_instructions` by
+        (simp[MEM_EL] >> qexists_tac `s.vs_inst_idx` >> gvs[Abbr`inst`]) >>
+      drule_all step_inst_simplify_phi >> strip_tac >>
+      Cases_on `step_inst (simplify_phi_inst (pred_labels fn bb.bb_label) inst) s` >>
+      gvs[result_equiv_cfg_def] >> fs[result_equiv_cfg_def] >>
+      qpat_x_assum `Revert _ = _` (SUBST_ALL_TAC o GSYM) >> fs[result_equiv_cfg_def])
     >- (
-      `result_equiv_cfg (step_inst (simplify_phi_inst preds inst) s)
-                        (step_inst inst s)` by
-        (irule step_inst_simplify_phi >> simp[]) >>
-      Cases_on `step_inst (simplify_phi_inst preds inst) s` >>
-      simp[result_equiv_cfg_def] >>
-      rename1 `step_inst (simplify_phi_inst preds inst) s = Error e'` >>
-      qexists_tac `Error e'` >>
-      simp[result_equiv_cfg_def]
-    )
-  )
+      `MEM inst bb.bb_instructions` by
+        (simp[MEM_EL] >> qexists_tac `s.vs_inst_idx` >> gvs[Abbr`inst`]) >>
+      drule_all step_inst_simplify_phi >> strip_tac >>
+      Cases_on `step_inst (simplify_phi_inst (pred_labels fn bb.bb_label) inst) s` >>
+      gvs[result_equiv_cfg_def] >>
+      qpat_x_assum `Error _ = _` (SUBST_ALL_TAC o GSYM) >> fs[result_equiv_cfg_def]))
+  >- simp[result_equiv_cfg_def]
 QED
 
 Theorem step_in_block_simplify_phi_ok:
@@ -278,28 +251,18 @@ Theorem step_in_block_simplify_phi_ok:
     step_in_block (simplify_phi_block preds bb) s = (OK s', is_term)
 Proof
   rpt strip_tac >>
-  fs[step_in_block_def, simplify_phi_block_def] >>
-  Cases_on `get_instruction bb s.vs_inst_idx` >> fs[]
-  >- gvs[]
-  >- (
-    rename1 `get_instruction bb _ = SOME inst` >>
-    qpat_x_assum `get_instruction bb _ = SOME inst` mp_tac >>
-    simp[get_instruction_def] >> strip_tac >>
-    `MEM inst bb.bb_instructions` by metis_tac[MEM_EL] >>
-    `get_instruction (bb with bb_instructions := MAP (simplify_phi_inst preds) bb.bb_instructions)
-                     s.vs_inst_idx = SOME (simplify_phi_inst preds inst)` by
-      (rw[get_instruction_def] >> simp[EL_MAP]) >>
-    simp[] >>
-    Cases_on `step_inst inst s` >> fs[]
-    >- (
-      drule_all step_inst_simplify_phi_ok >> simp[] >>
-      Cases_on `is_terminator inst.inst_opcode` >>
-      gvs[simplify_phi_inst_is_terminator, next_inst_def]
-    )
-    >- gvs[]
-    >- gvs[]
-    >- gvs[]
-  )
+  qpat_x_assum `step_in_block bb s = _` mp_tac >>
+  simp[step_in_block_def, simplify_phi_block_def] >>
+  simp[get_instruction_def] >>
+  IF_CASES_TAC >> gvs[] >>
+  qabbrev_tac `inst = EL s.vs_inst_idx bb.bb_instructions` >>
+  simp[EL_MAP] >>
+  simp[simplify_phi_inst_is_terminator] >>
+  strip_tac >>
+  Cases_on `step_inst inst s` >> gvs[] >>
+  `MEM inst bb.bb_instructions` by
+    (simp[MEM_EL] >> qexists_tac `s.vs_inst_idx` >> gvs[Abbr`inst`]) >>
+  drule_all step_inst_simplify_phi_ok >> strip_tac >> gvs[]
 QED
 
 val _ = export_theory();
