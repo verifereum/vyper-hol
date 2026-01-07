@@ -297,4 +297,35 @@ Proof
   )
 QED
 
+(* phi_remove_non_preds preserves phi_vals_not_label *)
+Theorem phi_vals_not_label_remove_non_preds:
+  !preds ops.
+    phi_vals_not_label ops ==>
+    phi_vals_not_label (phi_remove_non_preds preds ops)
+Proof
+  gen_tac >> Induct_on `ops` using phi_vals_not_label_ind >>
+  simp[phi_vals_not_label_def, phi_remove_non_preds_def] >>
+  Cases_on `op` >> gvs[] >> Cases_on `MEM lbl preds` >>
+  gvs[phi_vals_not_label_def]
+QED
+
+(* phi_remove_non_preds produces output where all labels are in preds *)
+Theorem phi_ops_all_preds_remove_non_preds:
+  !preds ops.
+    phi_vals_not_label ops ==>
+    phi_ops_all_preds preds (phi_remove_non_preds preds ops)
+Proof
+  gen_tac >> Induct_on `ops` using phi_vals_not_label_ind >>
+  simp[phi_vals_not_label_def, phi_remove_non_preds_def, phi_ops_all_preds_def]
+  >- (
+    rpt strip_tac >> Cases_on `op` >> gvs[]
+    >- (Cases_on `MEM lbl preds` >> gvs[phi_ops_all_preds_def])
+    >- (Cases_on `MEM lbl preds` >> gvs[phi_ops_all_preds_def]))
+  >- (
+    simp[phi_ops_all_preds_def] >>
+    rpt strip_tac >> first_x_assum drule >> simp[phi_ops_all_preds_def])
+  >- (
+    rpt strip_tac >> first_x_assum drule >> simp[phi_ops_all_preds_def])
+QED
+
 val _ = export_theory();
