@@ -79,8 +79,13 @@ QED
 
 (* ===== Merging Blocks ===== *)
 
-(* Helper: run_function equivalence for merge_blocks with generalized state *)
-Theorem run_function_merge_blocks_equiv:
+(* Helper: run_function equivalence for merge_blocks when original terminates.
+   The termination hypothesis is key - it allows using fuel monotonicity when
+   the original path goes through a->b (using 2 fuel) vs merged path (using 1 fuel).
+   The proof works because: if original terminates with fuel, then at the merge point
+   the continuation also terminates with fuel-1, and by monotonicity we can use the
+   IH which expects fuel. *)
+Theorem run_function_merge_blocks_equiv_fwd:
   !fuel fn a_lbl b_lbl a b s1 s2.
     cfg_wf fn /\ phi_fn_wf fn /\
     lookup_block a_lbl fn.fn_blocks = SOME a /\
@@ -93,12 +98,38 @@ Theorem run_function_merge_blocks_equiv:
     s1.vs_current_bb <> b_lbl /\
     s1.vs_inst_idx = 0 /\ s2.vs_inst_idx = 0 /\
     (s1.vs_prev_bb = SOME b_lbl ==> s2.vs_prev_bb = SOME a_lbl) /\
-    (s1.vs_prev_bb <> SOME b_lbl ==> s1.vs_prev_bb = s2.vs_prev_bb)
+    (s1.vs_prev_bb <> SOME b_lbl ==> s1.vs_prev_bb = s2.vs_prev_bb) /\
+    terminates (run_function fuel fn s1)  (* KEY: termination hypothesis *)
   ==>
     result_equiv_cfg (run_function fuel fn s1)
                      (run_function fuel (merge_blocks fn a_lbl b_lbl) s2)
 Proof
-  cheat (* TODO: prove by induction on fuel *)
+  cheat (* TODO: prove by induction on fuel with termination hypothesis *)
+QED
+
+(* Backward direction: if merged terminates, original also terminates with enough fuel.
+   We use 2*fuel as a bound since each merge point traversal adds at most 1 extra block. *)
+Theorem run_function_merge_blocks_equiv_bwd:
+  !fuel fn a_lbl b_lbl a b s1 s2.
+    cfg_wf fn /\ phi_fn_wf fn /\
+    lookup_block a_lbl fn.fn_blocks = SOME a /\
+    lookup_block b_lbl fn.fn_blocks = SOME b /\
+    a_lbl <> b_lbl /\ b_lbl <> entry_label fn /\
+    pred_labels fn b_lbl = [a_lbl] /\
+    block_has_no_phi b /\ block_last_jmp_to b_lbl a /\
+    state_equiv_cfg s1 s2 /\
+    s1.vs_current_bb = s2.vs_current_bb /\
+    s1.vs_current_bb <> b_lbl /\
+    s1.vs_inst_idx = 0 /\ s2.vs_inst_idx = 0 /\
+    (s1.vs_prev_bb = SOME b_lbl ==> s2.vs_prev_bb = SOME a_lbl) /\
+    (s1.vs_prev_bb <> SOME b_lbl ==> s1.vs_prev_bb = s2.vs_prev_bb) /\
+    terminates (run_function fuel (merge_blocks fn a_lbl b_lbl) s2)
+  ==>
+    ?fuel'. terminates (run_function fuel' fn s1) /\
+            result_equiv_cfg (run_function fuel' fn s1)
+                             (run_function fuel (merge_blocks fn a_lbl b_lbl) s2)
+Proof
+  cheat (* TODO: prove using 2*fuel bound *)
 QED
 
 Theorem merge_blocks_correct:
@@ -115,22 +146,19 @@ Proof
   simp[run_function_equiv_cfg_def] >> conj_tac
   >- ( (* Forward direction: original terminates => merged terminates *)
     rpt strip_tac >> qexists_tac `fuel` >>
-    sg `result_equiv_cfg (run_function fuel fn s)
-          (run_function fuel (merge_blocks fn a_lbl b_lbl) s)`
-    >- (irule run_function_merge_blocks_equiv >>
-        simp[state_equiv_cfg_refl])
-    >- (Cases_on `run_function fuel fn s` >>
-        Cases_on `run_function fuel (merge_blocks fn a_lbl b_lbl) s` >>
-        gvs[result_equiv_cfg_def, scfgDefsTheory.terminates_def]))
+    `result_equiv_cfg (run_function fuel fn s)
+          (run_function fuel (merge_blocks fn a_lbl b_lbl) s)` by
+      (irule run_function_merge_blocks_equiv_fwd >>
+       simp[state_equiv_cfg_refl]) >>
+    Cases_on `run_function fuel fn s` >>
+    Cases_on `run_function fuel (merge_blocks fn a_lbl b_lbl) s` >>
+    gvs[result_equiv_cfg_def, scfgDefsTheory.terminates_def])
   >- ( (* Backward direction: merged terminates => original terminates *)
-    rpt strip_tac >> qexists_tac `fuel'` >>
-    sg `result_equiv_cfg (run_function fuel' fn s)
-          (run_function fuel' (merge_blocks fn a_lbl b_lbl) s)`
-    >- (irule run_function_merge_blocks_equiv >>
-        simp[state_equiv_cfg_refl])
-    >- (Cases_on `run_function fuel' fn s` >>
-        Cases_on `run_function fuel' (merge_blocks fn a_lbl b_lbl) s` >>
-        gvs[result_equiv_cfg_def, scfgDefsTheory.terminates_def]))
+    rpt strip_tac >>
+    qspecl_then [`fuel'`, `fn`, `a_lbl`, `b_lbl`, `a`, `b`, `s`, `s`]
+      mp_tac run_function_merge_blocks_equiv_bwd >>
+    simp[state_equiv_cfg_refl] >> strip_tac >>
+    qexists_tac `fuel''` >> simp[])
 QED
 
 (* ===== Jump Threading ===== *)
