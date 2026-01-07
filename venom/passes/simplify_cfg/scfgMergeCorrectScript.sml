@@ -22,6 +22,15 @@ Proof
   rpt strip_tac >> gvs[AllCaseEqs()]
 QED
 
+(* Helper: lookup_block returns an element of the list *)
+Theorem lookup_block_MEM:
+  !lbl blocks bb. lookup_block lbl blocks = SOME bb ==> MEM bb blocks
+Proof
+  Induct_on `blocks`
+  >- simp[lookup_block_def]
+  >- (rw[lookup_block_def] >> rpt strip_tac >> metis_tac[])
+QED
+
 (* b_lbl is removed from merged function *)
 Theorem lookup_block_merge_blocks_b:
   !fn a_lbl b_lbl a b.
@@ -104,7 +113,107 @@ Theorem run_function_merge_blocks_equiv_fwd:
     result_equiv_cfg (run_function fuel fn s1)
                      (run_function fuel (merge_blocks fn a_lbl b_lbl) s2)
 Proof
-  cheat (* TODO: prove by induction on fuel with termination hypothesis *)
+  Induct_on `fuel` >- simp[run_function_def, terminates_def] >>
+  rpt strip_tac >>
+  Cases_on `s1.vs_current_bb = a_lbl`
+  >- (
+    (* Case: at block a_lbl - need special handling for merge point *)
+    REVERSE (rpt strip_tac) \\ cheat)
+  >- (
+    (* Case: not at a_lbl *)
+    simp[Once run_function_def] \\
+    CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_function_def])) >> simp[] \\
+    Cases_on `lookup_block s2.vs_current_bb fn.fn_blocks`
+    >- (
+      (* lookup NONE - should be impossible from termination *)
+      simp[] \\
+      fs[terminates_def, Once run_function_def] \\
+      gvs[terminates_def, AllCaseEqs()])
+    >- (
+      (* lookup SOME x *)
+      simp[] \\
+      `s2.vs_current_bb <> a_lbl /\ s2.vs_current_bb <> b_lbl` by gvs[] \\
+      `lookup_block s2.vs_current_bb (merge_blocks fn a_lbl b_lbl).fn_blocks =
+       SOME (replace_label_block b_lbl a_lbl x)` by
+        (irule lookup_block_merge_blocks_other >> gvs[]) \\
+      simp[] \\
+      Cases_on `s1.vs_prev_bb = SOME b_lbl`
+      >- (
+        (* prev_bb = SOME b_lbl - came from b_lbl *)
+        gvs[] \\
+        sg `result_equiv_cfg (run_block x s1)
+              (run_block (replace_label_block b_lbl a_lbl x) s2)`
+        >- (
+          Cases_on `block_has_no_phi x`
+          >- (irule run_block_replace_label_no_phi >> gvs[])
+          >- (
+            irule run_block_replace_label >> simp[] \\
+            qexists_tac `fn` \\
+            rpt conj_tac
+            >- (
+              `x.bb_label = s2.vs_current_bb` by metis_tac[lookup_block_label] \\
+              irule pred_labels_no_jmp_other >> gvs[] \\
+              qexists_tac `b_lbl` >> gvs[])
+            >- cheat (* TODO: MEM b_lbl (pred_labels fn x.bb_label) *)
+            >- (
+              irule scfgPhiLemmasTheory.phi_fn_wf_block >> gvs[] \\
+              metis_tac[lookup_block_MEM])))
+        >- (
+          Cases_on `run_block x s1`
+          >- (
+            simp[] \\
+            fs[result_equiv_cfg_def] >>
+            Cases_on `run_block (replace_label_block b_lbl a_lbl x) s2` >>
+            gvs[result_equiv_cfg_def] \\
+            Cases_on `v.vs_halted` >> gvs[result_equiv_cfg_def]
+            >- gvs[state_equiv_cfg_def, result_equiv_cfg_def]
+            >- (
+              gvs[state_equiv_cfg_def] \\
+              first_x_assum irule \\
+              gvs[] \\ cheat (* TODO: IH conditions *)))
+          >- (simp[] >> fs[result_equiv_cfg_def] >>
+              Cases_on `run_block (replace_label_block b_lbl a_lbl x) s2` >>
+              gvs[result_equiv_cfg_def])
+          >- (simp[] >> fs[result_equiv_cfg_def] >>
+              Cases_on `run_block (replace_label_block b_lbl a_lbl x) s2` >>
+              gvs[result_equiv_cfg_def])
+          >- (simp[] >> fs[result_equiv_cfg_def] >>
+              Cases_on `run_block (replace_label_block b_lbl a_lbl x) s2` >>
+              gvs[result_equiv_cfg_def])))
+      >- (
+        (* prev_bb <> SOME b_lbl *)
+        Cases_on `block_has_no_phi x`
+        >- (
+          `result_equiv_cfg (run_block x s1)
+             (run_block (replace_label_block b_lbl a_lbl x) s2)` by
+            (irule run_block_replace_label_no_phi >> gvs[]) \\
+          Cases_on `run_block x s1`
+          >- (
+            gvs[result_equiv_cfg_def, AllCaseEqs()] \\
+            Cases_on `run_block (replace_label_block b_lbl a_lbl x) s2`
+            >- (
+              gvs[result_equiv_cfg_def, AllCaseEqs(), state_equiv_cfg_def] \\
+              Cases_on `v'.vs_halted` >> gvs[result_equiv_cfg_def]
+              >- simp[state_equiv_cfg_def]
+              >- (first_x_assum irule \\ cheat (* TODO: IH conditions *)))
+            >- gvs[result_equiv_cfg_def, AllCaseEqs()]
+            >- gvs[result_equiv_cfg_def, AllCaseEqs()]
+            >- gvs[result_equiv_cfg_def, AllCaseEqs()])
+          >- (
+            gvs[result_equiv_cfg_def, AllCaseEqs()] \\
+            Cases_on `run_block (replace_label_block b_lbl a_lbl x) s2` >>
+            gvs[result_equiv_cfg_def, AllCaseEqs()])
+          >- (
+            Cases_on `run_block (replace_label_block b_lbl a_lbl x) s2` >>
+            gvs[result_equiv_cfg_def, AllCaseEqs()])
+          >- (
+            Cases_on `run_block (replace_label_block b_lbl a_lbl x) s2` >>
+            gvs[result_equiv_cfg_def, AllCaseEqs()]))
+        >- (
+          (* block has PHIs and prev_bb <> b_lbl *)
+          Cases_on `s1.vs_prev_bb`
+          >- (gvs[] \\ cheat (* TODO: NONE with PHIs *))
+          >- cheat (* TODO: SOME prev with PHIs *)))))
 QED
 
 (* Backward direction: if merged terminates, original also terminates with enough fuel.
