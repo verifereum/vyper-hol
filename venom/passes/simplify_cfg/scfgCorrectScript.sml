@@ -548,6 +548,21 @@ Proof
   >- (first_x_assum drule_all >> strip_tac >> qexists_tac `inst''` >> gvs[])
 QED
 
+(* Helper: phi_block_wf preserved by replace_label_block when pred list transforms *)
+Theorem phi_block_wf_replace_label_block:
+  !old new preds bb.
+    phi_block_wf preds bb /\ MEM old preds /\ ~MEM new preds ==>
+    phi_block_wf (MAP (\lbl. if lbl = old then new else lbl) preds)
+                 (replace_label_block old new bb)
+Proof
+  rpt strip_tac >>
+  simp[scfgDefsTheory.phi_block_wf_def, scfgDefsTheory.replace_label_block_def,
+       MEM_MAP] >>
+  rpt strip_tac >> gvs[] >>
+  irule phi_inst_wf_replace_label >> simp[] >>
+  gvs[scfgDefsTheory.phi_block_wf_def]
+QED
+
 (* Helper: cfg_wf and phi_fn_wf preserved by simplify_cfg_step *)
 Theorem wf_simplify_cfg_step:
   !fn fn'.
