@@ -407,7 +407,61 @@ Proof
           rw[]))
 QED
 
-(* Helper: cfg_wf and phi_fn_wf preserved by simplify_cfg_step - CHEATED *)
+(* Helper: update_last_inst preserves length *)
+Theorem update_last_inst_length:
+  !f l. LENGTH (update_last_inst f l) = LENGTH l
+Proof
+  gen_tac >> Induct >> rw[scfgDefsTheory.update_last_inst_def] >>
+  Cases_on `l` >> gvs[scfgDefsTheory.update_last_inst_def]
+QED
+
+(* Helper: update_last_inst preserves elements before last *)
+Theorem update_last_inst_el_unchanged:
+  !f l idx.
+    l <> [] /\ idx < LENGTH l - 1 ==>
+    EL idx (update_last_inst f l) = EL idx l
+Proof
+  gen_tac >> Induct >> rw[scfgDefsTheory.update_last_inst_def] >>
+  Cases_on `l` >> gvs[scfgDefsTheory.update_last_inst_def] >>
+  Cases_on `idx` >> gvs[]
+QED
+
+(* Helper: replace_label_inst preserves opcode *)
+Theorem replace_label_inst_opcode:
+  !old new inst.
+    (replace_label_inst old new inst).inst_opcode = inst.inst_opcode
+Proof
+  simp[scfgDefsTheory.replace_label_inst_def]
+QED
+
+(* Helper: block_terminator_last for update_last_inst *)
+Theorem block_terminator_last_update_last_inst:
+  !f bb.
+    block_terminator_last bb /\
+    (!inst. is_terminator inst.inst_opcode ==> is_terminator (f inst).inst_opcode) ==>
+    block_terminator_last (bb with bb_instructions := update_last_inst f bb.bb_instructions)
+Proof
+  rw[block_terminator_last_def, get_instruction_def, update_last_inst_length] >>
+  Cases_on `idx = LENGTH bb.bb_instructions - 1`
+  >- (gvs[] >>
+      Cases_on `bb.bb_instructions = []` >> gvs[] >>
+      `EL (LENGTH bb.bb_instructions - 1) (update_last_inst f bb.bb_instructions) =
+       f (LAST bb.bb_instructions)` by (
+        qspec_tac (`bb.bb_instructions`, `l`) >> Induct >>
+        rw[scfgDefsTheory.update_last_inst_def] >>
+        Cases_on `l` >> gvs[scfgDefsTheory.update_last_inst_def]) >>
+      gvs[] >> first_x_assum irule >>
+      gvs[block_terminator_last_def, get_instruction_def] >>
+      first_x_assum (qspec_then `LENGTH bb.bb_instructions - 1` mp_tac) >>
+      simp[LAST_EL])
+  >- (`idx < LENGTH bb.bb_instructions - 1` by gvs[] >>
+      `bb.bb_instructions <> []` by (Cases_on `bb.bb_instructions` >> gvs[]) >>
+      `EL idx (update_last_inst f bb.bb_instructions) = EL idx bb.bb_instructions`
+        by (irule update_last_inst_el_unchanged >> simp[]) >>
+      gvs[block_terminator_last_def, get_instruction_def])
+QED
+
+(* Helper: cfg_wf and phi_fn_wf preserved by simplify_cfg_step *)
 Theorem wf_simplify_cfg_step:
   !fn fn'.
     simplify_cfg_step fn fn' /\ cfg_wf fn /\ phi_fn_wf fn ==>
