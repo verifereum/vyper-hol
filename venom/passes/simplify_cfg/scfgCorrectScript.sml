@@ -83,6 +83,30 @@ Proof
     scfgPhiStepTheory.simplify_phi_block_label] >> rw[]
 QED
 
+(* Helper: ALL_DISTINCT (MAP f l) implies ALL_DISTINCT (MAP f (FILTER P l)) *)
+Theorem all_distinct_map_filter:
+  !f P l. ALL_DISTINCT (MAP f l) ==> ALL_DISTINCT (MAP f (FILTER P l))
+Proof
+  gen_tac >> gen_tac >> Induct >> simp[] >> rw[] >> gvs[MEM_MAP, MEM_FILTER] >>
+  metis_tac[]
+QED
+
+(* Helper: simplify_phi_block preserves block_terminator_last *)
+Theorem simplify_phi_block_terminator_last:
+  !preds bb.
+    block_terminator_last bb ==>
+    block_terminator_last (simplify_phi_block preds bb)
+Proof
+  rw[block_terminator_last_def, scfgDefsTheory.simplify_phi_block_def,
+     get_instruction_def, LENGTH_MAP] >>
+  first_x_assum irule >> simp[EL_MAP] >> gvs[EL_MAP] >>
+  qabbrev_tac `inst = bb.bb_instructions❲idx❳` >>
+  Cases_on `inst.inst_opcode = PHI` >>
+  gvs[scfgDefsTheory.simplify_phi_inst_def, is_terminator_def] >>
+  qpat_x_assum `is_terminator _` mp_tac >> simp[is_terminator_def] >>
+  rpt COND_CASES_TAC >> simp[is_terminator_def]
+QED
+
 Theorem pred_labels_mem_from_edge:
   !fn bb lbl.
     MEM bb fn.fn_blocks /\ MEM lbl (block_successors bb) ==>
@@ -330,17 +354,57 @@ Proof
   >- (irule scfgMergeCorrectTheory.merge_jump_correct >> simp[])
 QED
 
-(* Helper: entry_label preserved by simplify_cfg_step - CHEATED
-   Key issue: merge_blocks/merge_jump need b <> entry_label fn.
-   This should follow from pred_labels fn b = [a] (b has predecessor)
-   while entry has no predecessors. May need to add condition to
-   merge_blocks_cond or prove pred_labels fn (entry_label fn) = [] *)
+(* Helper: entry_label preserved by simplify_cfg_step *)
 Theorem entry_label_simplify_cfg_step:
   !fn fn'.
     simplify_cfg_step fn fn' /\ cfg_wf fn /\ phi_fn_wf fn ==>
     entry_label fn' = entry_label fn
 Proof
-  cheat
+  rpt strip_tac >> gvs[simplify_cfg_step_def]
+  (* Case 1: remove_unreachable_blocks *)
+  >- (simp[entry_label_def, scfgTransformTheory.remove_unreachable_blocks_def] >>
+      Cases_on `fn.fn_blocks = []` >> gvs[cfg_wf_def] >>
+      sg `FILTER (\bb. reachable_label fn (HD fn.fn_blocks).bb_label bb.bb_label)
+                 fn.fn_blocks =
+          HD fn.fn_blocks ::
+          FILTER (\bb. reachable_label fn (HD fn.fn_blocks).bb_label bb.bb_label)
+                 (TL fn.fn_blocks)`
+      >- (Cases_on `fn.fn_blocks` >> gvs[] >> simp[reachable_label_def]) >>
+      gvs[scfgPhiStepTheory.simplify_phi_block_label])
+  (* Case 2: merge_blocks *)
+  >- (gvs[scfgTransformTheory.merge_blocks_cond_def,
+          scfgTransformTheory.merge_blocks_def] >>
+      simp[entry_label_def, scfgDefsTheory.replace_label_fn_def] >>
+      Cases_on `fn.fn_blocks` >> gvs[cfg_wf_def] >>
+      `b <> h.bb_label` by gvs[entry_label_def] >>
+      simp[scfgDefsTheory.remove_block_def] >>
+      Cases_on `a = h.bb_label` >> gvs[scfgDefsTheory.replace_block_def]
+      >- (`a' = h` by gvs[lookup_block_def] >> gvs[] >>
+          simp[scfgDefsTheory.replace_label_block_def])
+      >- (sg `a'.bb_label = a`
+          >- (irule lookup_block_label >> simp[] >> qexists_tac `h::t` >> simp[])
+          >- (gvs[] >> simp[scfgDefsTheory.replace_label_block_def])))
+  (* Case 3: merge_jump *)
+  >- (gvs[scfgTransformTheory.merge_jump_cond_def,
+          scfgTransformTheory.merge_jump_def] >>
+      simp[entry_label_def, scfgDefsTheory.replace_label_fn_def] >>
+      Cases_on `fn.fn_blocks` >> gvs[cfg_wf_def] >>
+      `b <> h.bb_label` by gvs[entry_label_def] >>
+      Cases_on `a = h.bb_label`
+      >- (`a' = h` by gvs[venomInstTheory.lookup_block_def] >> gvs[] >>
+          simp[scfgDefsTheory.replace_block_def] >>
+          simp[scfgDefsTheory.remove_block_def] >>
+          simp[scfgDefsTheory.replace_label_block_def,
+               scfgDefsTheory.replace_phi_in_block_def] >>
+          simp[] >> rw[])
+      >- (simp[scfgDefsTheory.replace_block_def] >>
+          `a'.bb_label = a` by
+            (irule lookup_block_label >> qexists_tac `h::t` >> simp[]) >>
+          gvs[] >>
+          simp[scfgDefsTheory.remove_block_def] >>
+          simp[scfgDefsTheory.replace_label_block_def,
+               scfgDefsTheory.replace_phi_in_block_def] >>
+          rw[]))
 QED
 
 (* Helper: cfg_wf and phi_fn_wf preserved by simplify_cfg_step - CHEATED *)
