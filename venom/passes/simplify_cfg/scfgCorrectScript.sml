@@ -434,6 +434,44 @@ Proof
   simp[scfgDefsTheory.replace_label_inst_def]
 QED
 
+(* Helper: phi_inst_wf preserved under label replacement *)
+Theorem phi_inst_wf_replace_label:
+  !old new preds (inst:instruction).
+    phi_inst_wf preds inst /\
+    MEM old preds /\ ~MEM new preds ==>
+    phi_inst_wf (MAP (\lbl. if lbl = old then new else lbl) preds)
+                (replace_label_inst old new inst)
+Proof
+  rpt strip_tac >>
+  gvs[phi_inst_wf_def] >>
+  simp[replace_label_inst_opcode, replace_label_inst_def,
+       venomInstTheory.instruction_accfupds] >>
+  strip_tac >> gvs[] >>
+  rpt conj_tac
+  >- (
+    simp[phi_ops_all_preds_def, listTheory.MEM_MAP] >>
+    rpt strip_tac >> Cases_on `y` >> gvs[replace_label_operand_def] >>
+    Cases_on `s = old` >> gvs[]
+    >- (qexists_tac `old` >> simp[])
+    >- (qexists_tac `lbl` >> simp[] >> gvs[phi_ops_all_preds_def]))
+  >- (
+    simp[phi_ops_complete_def, listTheory.MEM_MAP] >>
+    rpt strip_tac >> Cases_on `lbl = new`
+    >- (
+      gvs[] >> Cases_on `lbl' = old` >> gvs[] >>
+      drule_all scfgPhiLemmasTheory.phi_ops_complete_MEM >> strip_tac >>
+      irule_at Any scfgMergeHelpersTheory.resolve_phi_replace_label_id >> simp[] >>
+      drule_all scfgPhiLemmasTheory.phi_ops_all_preds_no_label >> simp[] >> metis_tac[])
+    >- (
+      Cases_on `lbl' = old` >> gvs[] >>
+      `lbl <> old /\ lbl <> new` by simp[] >>
+      drule scfgPhiLemmasTheory.resolve_phi_replace_label_other >>
+      disch_then (qspecl_then [`new`, `inst.inst_operands`] mp_tac) >>
+      simp[] >> strip_tac >>
+      drule_all scfgPhiLemmasTheory.phi_ops_complete_MEM >> simp[]))
+  >- (irule scfgPhiLemmasTheory.phi_vals_not_label_replace_label >> simp[])
+QED
+
 (* Helper: block_terminator_last for update_last_inst *)
 Theorem block_terminator_last_update_last_inst:
   !f bb.
