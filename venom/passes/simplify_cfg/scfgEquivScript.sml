@@ -91,6 +91,22 @@ Proof
   rw[run_function_equiv_cfg_def] >> metis_tac[result_equiv_cfg_trans]
 QED
 
+(* Extra fuel doesn't change result once terminated *)
+Theorem run_function_fuel_monotonicity:
+  !fuel fn s.
+    terminates (run_function fuel fn s) ==>
+    run_function (SUC fuel) fn s = run_function fuel fn s
+Proof
+  Induct_on `fuel` >| [
+    rw[Once run_function_def, scfgDefsTheory.terminates_def],
+    rpt gen_tac >> ONCE_REWRITE_TAC[run_function_def] >>
+    rw[scfgDefsTheory.terminates_def] >>
+    Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >>
+    rw[scfgDefsTheory.terminates_def] >>
+    Cases_on `run_block x s` >> rw[scfgDefsTheory.terminates_def] >> fs[]
+  ]
+QED
+
 (* ===== Operand Evaluation under state_equiv_cfg ===== *)
 
 Theorem eval_operand_state_equiv_cfg:
