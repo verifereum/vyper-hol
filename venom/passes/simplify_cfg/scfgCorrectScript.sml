@@ -434,6 +434,15 @@ Proof
   simp[scfgDefsTheory.replace_label_inst_def]
 QED
 
+(* Helper: non-PHI instructions trivially satisfy phi_inst_wf *)
+Theorem phi_inst_wf_non_phi:
+  !preds old new inst.
+    inst.inst_opcode <> PHI ==>
+    phi_inst_wf preds (replace_label_inst old new inst)
+Proof
+  rw[phi_inst_wf_def, replace_label_inst_opcode]
+QED
+
 (* Helper: phi_inst_wf preserved under label replacement *)
 Theorem phi_inst_wf_replace_label:
   !old new preds (inst:instruction).
