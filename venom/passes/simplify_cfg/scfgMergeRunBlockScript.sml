@@ -378,12 +378,28 @@ Proof
   >- (Cases_on `res'` >> gvs[result_equiv_cfg_def, state_equiv_cfg_sym])
 QED
 
-(* CHEATED - run_block API changed from 3 args to 2 args *)
+(* Helper: Running block b from idx=0 is equivalent to running merged from idx=offset
+   when merged.bb_instructions = prefix ++ b.bb_instructions and b has no PHI.
+   CHEATED - needs careful induction on execution steps *)
+Theorem run_block_suffix_no_phi:
+  !b prefix s1 s2 merged.
+    merged.bb_instructions = prefix ++ b.bb_instructions /\
+    state_equiv_cfg s1 s2 /\
+    s1.vs_inst_idx = 0 /\
+    s2.vs_inst_idx = LENGTH prefix /\
+    block_has_no_phi b
+  ==>
+    result_equiv_cfg (run_block b s1) (run_block merged s2)
+Proof
+  cheat
+QED
+
 Theorem run_block_merge_blocks_equiv:
   !fn a b s b_lbl.
     block_last_jmp_to b_lbl a /\
     block_terminator_last a /\
     block_has_no_phi b /\
+    ~s.vs_halted /\
     s.vs_inst_idx <= LENGTH (BUTLAST a.bb_instructions)
   ==>
     result_equiv_cfg
@@ -392,7 +408,69 @@ Theorem run_block_merge_blocks_equiv:
        | other => other)
       (run_block (a with bb_instructions := BUTLAST a.bb_instructions ++ b.bb_instructions) s)
 Proof
-  cheat
+  rpt strip_tac >>
+  completeInduct_on `LENGTH a.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `s.vs_inst_idx < LENGTH (FRONT a.bb_instructions)`
+  (* Case 1: Not at the JMP yet - execute same instruction on both sides *)
+  >- (
+    simp[Once run_block_def] >> CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+    `a.bb_instructions <> []` by
+      (fs[block_last_jmp_to_def, block_last_inst_def] >> Cases_on `a.bb_instructions` >> fs[]) >>
+    qabbrev_tac `merged = a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions` >>
+    `get_instruction merged s.vs_inst_idx = get_instruction a s.vs_inst_idx` by (
+      simp[get_instruction_def, Abbr `merged`] >>
+      conj_tac >- (fs[rich_listTheory.LENGTH_FRONT] >> decide_tac) >>
+      simp[rich_listTheory.EL_APPEND1, rich_listTheory.FRONT_EL]) >>
+    `step_in_block merged s = step_in_block a s` by simp[step_in_block_def] >>
+    gvs[] >> Cases_on `step_in_block a s` >> Cases_on `q` >> gvs[result_equiv_cfg_def]
+    >- (
+      IF_CASES_TAC >> gvs[result_equiv_cfg_def, state_equiv_cfg_refl] >>
+      IF_CASES_TAC >> gvs[result_equiv_cfg_def]
+      >- (
+        (* is_term = T but not at last instruction - contradiction *)
+        qpat_x_assum `step_in_block a s = _` mp_tac >> simp[step_in_block_def] >>
+        `s.vs_inst_idx < LENGTH a.bb_instructions` by (fs[rich_listTheory.LENGTH_FRONT] >> decide_tac) >>
+        simp[get_instruction_def] >>
+        qabbrev_tac `inst = a.bb_instructions❲s.vs_inst_idx❳` >>
+        `~is_terminator inst.inst_opcode` by (
+          CCONTR_TAC >> fs[block_terminator_last_def] >>
+          first_x_assum (qspecl_then [`s.vs_inst_idx`, `inst`] mp_tac) >>
+          simp[get_instruction_def, Abbr `inst`] >> fs[rich_listTheory.LENGTH_FRONT]) >>
+        Cases_on `step_inst inst s` >> gvs[])
+      >- (
+        (* Non-terminator - use IH *)
+        `v.vs_inst_idx = s.vs_inst_idx + 1` by (imp_res_tac step_in_block_inst_idx_succ >> fs[]) >>
+        first_x_assum (qspec_then `LENGTH a.bb_instructions - v.vs_inst_idx` mp_tac) >>
+        impl_tac >- (fs[rich_listTheory.LENGTH_FRONT] >> decide_tac) >> strip_tac >>
+        first_x_assum (qspecl_then [`a`, `v`] mp_tac) >> simp[]))
+    >- simp[state_equiv_cfg_refl]
+    >- simp[state_equiv_cfg_refl])
+  (* Case 2: At the JMP instruction - boundary case *)
+  >- (
+    `s.vs_inst_idx = LENGTH (FRONT a.bb_instructions)` by decide_tac >>
+    `a.bb_instructions <> []` by
+      (fs[block_last_jmp_to_def, block_last_inst_def] >> Cases_on `a.bb_instructions` >> fs[]) >>
+    qabbrev_tac `merged = a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions` >>
+    simp[Once run_block_def] >>
+    `get_instruction a s.vs_inst_idx = SOME (LAST a.bb_instructions)` by (
+      simp[get_instruction_def, rich_listTheory.LENGTH_FRONT, LAST_EL] >>
+      Cases_on `a.bb_instructions` >> fs[]) >>
+    fs[block_last_jmp_to_def, block_last_inst_def] >>
+    qabbrev_tac `jmp_inst = LAST a.bb_instructions` >>
+    `step_in_block a s = (OK (jump_to b_lbl s), T)` by (
+      simp[step_in_block_def, is_terminator_def] >>
+      `step_inst jmp_inst s = OK (jump_to b_lbl s)` by (simp[step_inst_def] >> CASE_TAC >> fs[Abbr `jmp_inst`]) >>
+      simp[]) >>
+    gvs[jump_to_def] >>
+    qabbrev_tac `s' = s with <|vs_prev_bb := SOME s.vs_current_bb;
+                               vs_current_bb := b_lbl; vs_inst_idx := 0|>` >>
+    irule run_block_suffix_no_phi >>
+    rpt conj_tac
+    >- simp[]
+    >- fs[Abbr `s'`]
+    >- (qexists_tac `FRONT a.bb_instructions` >> simp[Abbr `merged`])
+    >- simp[Abbr `s'`, state_equiv_cfg_def, stateEquivTheory.var_equiv_def, lookup_var_def])
 QED
 
 val _ = export_theory();
