@@ -378,15 +378,14 @@ Proof
   >- (Cases_on `res'` >> gvs[result_equiv_cfg_def, state_equiv_cfg_sym])
 QED
 
-(* Helper: Running block b from idx=0 is equivalent to running merged from idx=offset
+(* Helper: Running block b from any index is equivalent to running merged from corresponding index
    when merged.bb_instructions = prefix ++ b.bb_instructions and b has no PHI.
-   CHEATED - needs careful induction on execution steps *)
+   The key invariant: s2.vs_inst_idx = s1.vs_inst_idx + LENGTH prefix *)
 Theorem run_block_suffix_no_phi:
   !b prefix s1 s2 merged.
     merged.bb_instructions = prefix ++ b.bb_instructions /\
     state_equiv_cfg s1 s2 /\
-    s1.vs_inst_idx = 0 /\
-    s2.vs_inst_idx = LENGTH prefix /\
+    s2.vs_inst_idx = s1.vs_inst_idx + LENGTH prefix /\
     block_has_no_phi b
   ==>
     result_equiv_cfg (run_block b s1) (run_block merged s2)
@@ -468,8 +467,7 @@ Proof
     irule run_block_suffix_no_phi >>
     rpt conj_tac
     >- simp[]
-    >- fs[Abbr `s'`]
-    >- (qexists_tac `FRONT a.bb_instructions` >> simp[Abbr `merged`])
+    >- (qexists_tac `FRONT a.bb_instructions` >> simp[Abbr `merged`, Abbr `s'`])
     >- simp[Abbr `s'`, state_equiv_cfg_def, stateEquivTheory.var_equiv_def, lookup_var_def])
 QED
 
