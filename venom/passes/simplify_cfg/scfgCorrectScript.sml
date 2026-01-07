@@ -467,15 +467,150 @@ Theorem wf_simplify_cfg_step:
     simplify_cfg_step fn fn' /\ cfg_wf fn /\ phi_fn_wf fn ==>
     cfg_wf fn' /\ phi_fn_wf fn'
 Proof
-  cheat
+  rpt strip_tac >> gvs[simplify_cfg_step_def]
+  >- ( (* cfg_wf remove_unreachable_blocks *)
+    simp[scfgTransformTheory.remove_unreachable_blocks_def, cfg_wf_def] >>
+    gvs[cfg_wf_def] >> Cases_on `fn.fn_blocks` >> gvs[] >>
+    simp[scfgDefsTheory.reachable_label_def] >> simp[MAP_MAP_o,
+    combinTheory.o_DEF, scfgPhiStepTheory.simplify_phi_block_label] >> rpt conj_tac
+    >- (strip_tac >> gvs[MEM_MAP, MEM_FILTER])
+    >- (irule all_distinct_map_filter >> simp[])
+    >- (rw[MEM_MAP, MEM_FILTER] >> rpt strip_tac >> gvs[] >> irule
+        simplify_phi_block_terminator_last >> first_x_assum irule >> simp[]))
+  >- ( (* cfg_wf merge_blocks *)
+    simp[scfgTransformTheory.merge_blocks_def,
+         scfgTransformTheory.merge_blocks_cond_def] >> rpt strip_tac >>
+    gvs[scfgTransformTheory.merge_blocks_cond_def] \\
+    simp[cfg_wf_def, scfgDefsTheory.replace_label_fn_def, MAP_MAP_o,
+         combinTheory.o_DEF] \\
+    `!old new bb. (replace_label_block old new bb).bb_label = bb.bb_label`
+      by simp[scfgDefsTheory.replace_label_block_def] \\ simp[] \\
+    `!a' blocks. MAP (\bb. bb.bb_label) (replace_block a' blocks) = MAP
+     (\bb. bb.bb_label) blocks` by (gen_tac >> Induct >>
+     simp[scfgDefsTheory.replace_block_def] >> rw[]) \\
+    `!lbl blocks. MAP (\bb. bb.bb_label) (remove_block lbl blocks) =
+     FILTER (\l. l <> lbl) (MAP (\bb. bb.bb_label) blocks)` by (gen_tac
+     >> Induct >> simp[scfgDefsTheory.remove_block_def] >> rw[]) \\
+    simp[] >> rpt conj_tac
+    >- (gvs[cfg_wf_def] >> Cases_on `fn.fn_blocks` >>
+        gvs[scfgDefsTheory.entry_label_def] >>
+        simp[scfgDefsTheory.remove_block_def,
+             scfgDefsTheory.replace_block_def] >> COND_CASES_TAC >> simp[])
+    >- (irule FILTER_ALL_DISTINCT >> gvs[cfg_wf_def])
+    >- (rw[MEM_MAP] >> rpt strip_tac >> gvs[] \\
+        sg `block_terminator_last y`
+        >- (`!bb' blocks y. MEM y (replace_block bb' blocks) ==> (y = bb' /\
+             MEM bb'.bb_label (MAP (\b. b.bb_label) blocks)) \/ MEM y
+             blocks` by (gen_tac >> Induct >>
+             simp[scfgDefsTheory.replace_block_def] >> rw[] >> gvs[] >>
+             metis_tac[]) \\
+            `!lbl blocks y. MEM y (remove_block lbl blocks) ==> MEM y
+             blocks` by (gen_tac >> Induct >>
+             simp[scfgDefsTheory.remove_block_def] >> rw[] >> gvs[]) \\
+            first_x_assum drule >> strip_tac >> gvs[]
+            >- (simp[block_terminator_last_def, get_instruction_def] >> rpt
+                strip_tac >> Cases_on `idx < LENGTH (FRONT a'.bb_instructions)`
+                >- (gvs[EL_APPEND_EQN] >> `block_terminator_last a'` by
+                    (gvs[cfg_wf_def] >> first_x_assum irule >> irule
+                     lookup_block_MEM >> metis_tac[]) \\
+                    `a'.bb_instructions <> []` by (fs[block_last_jmp_to_def,
+                     block_last_inst_def] >> Cases_on `a'.bb_instructions` >>
+                     fs[]) \\
+                    `EL idx (FRONT a'.bb_instructions) = EL idx
+                     a'.bb_instructions` by simp[rich_listTheory.FRONT_EL] \\
+                    gvs[block_terminator_last_def, get_instruction_def] >>
+                    `idx = LENGTH a'.bb_instructions - 1` by (first_x_assum
+                     irule >> gvs[rich_listTheory.LENGTH_FRONT]) \\
+                    gvs[rich_listTheory.LENGTH_FRONT])
+                >- (gvs[EL_APPEND_EQN] >> `block_terminator_last b'` by
+                    (gvs[cfg_wf_def] >> first_x_assum irule >> irule
+                     lookup_block_MEM >> metis_tac[]) \\
+                    gvs[block_terminator_last_def, get_instruction_def] >> `idx
+                     - LENGTH (FRONT a'.bb_instructions) = LENGTH
+                     b'.bb_instructions - 1` by (first_x_assum irule >> gvs[]) \\
+                    gvs[]))
+            >- (`MEM y fn.fn_blocks` by metis_tac[] >> gvs[cfg_wf_def]))
+        >- (simp[block_terminator_last_def, get_instruction_def,
+                 scfgDefsTheory.replace_label_block_def, LENGTH_MAP, EL_MAP] >>
+            rpt strip_tac >> `(replace_label_inst b a (EL idx
+            y.bb_instructions)).inst_opcode = (EL idx
+            y.bb_instructions).inst_opcode` by
+            simp[scfgDefsTheory.replace_label_inst_def] >>
+            gvs[block_terminator_last_def, get_instruction_def])))
+  >- ( (* cfg_wf merge_jump *)
+    simp[scfgTransformTheory.merge_jump_def,
+         scfgTransformTheory.merge_jump_cond_def] >> rpt strip_tac >>
+    gvs[scfgTransformTheory.merge_jump_cond_def] \\
+    simp[cfg_wf_def, scfgDefsTheory.replace_label_fn_def, MAP_MAP_o,
+         combinTheory.o_DEF] \\
+    `!old new bb. (replace_label_block old new bb).bb_label = bb.bb_label`
+      by simp[scfgDefsTheory.replace_label_block_def] \\
+    `!old new bb. (replace_phi_in_block old new bb).bb_label =
+     bb.bb_label` by simp[scfgDefsTheory.replace_phi_in_block_def] \\
+    `!P x. (if P then replace_phi_in_block b a x else x).bb_label =
+     x.bb_label` by (rw[] >> simp[scfgDefsTheory.replace_phi_in_block_def]) \\
+    simp[] \\
+    `!a' blocks. MAP (\bb. bb.bb_label) (replace_block a' blocks) = MAP
+     (\bb. bb.bb_label) blocks` by (gen_tac >> Induct >>
+     simp[scfgDefsTheory.replace_block_def] >> rw[]) \\
+    `!lbl blocks. MAP (\bb. bb.bb_label) (remove_block lbl blocks) =
+     FILTER (\l. l <> lbl) (MAP (\bb. bb.bb_label) blocks)` by
+     (gen_tac >> Induct >> simp[scfgDefsTheory.remove_block_def] >> rw[]) \\
+    simp[] >> rpt conj_tac
+    >- (gvs[cfg_wf_def] >> Cases_on `fn.fn_blocks` >>
+        gvs[scfgDefsTheory.entry_label_def] >>
+        simp[scfgDefsTheory.remove_block_def,
+             scfgDefsTheory.replace_block_def] \\
+        COND_CASES_TAC >> simp[scfgDefsTheory.remove_block_def] \\
+        `a'.bb_label <> b` by gvs[] >> simp[])
+    >- (irule FILTER_ALL_DISTINCT >> gvs[cfg_wf_def])
+    >- (rw[MEM_MAP] >> rpt strip_tac >> gvs[] \\
+        sg `block_terminator_last bb'`
+        >- (`!bb' blocks y. MEM y (replace_block bb' blocks) ==> (y = bb'
+             /\ MEM bb'.bb_label (MAP (\b. b.bb_label) blocks)) \/ MEM y
+             blocks` by (gen_tac >> Induct >>
+             simp[scfgDefsTheory.replace_block_def] >> rw[] >> gvs[] >>
+             metis_tac[]) \\
+            `!lbl blocks y. MEM y (remove_block lbl blocks) ==> MEM y
+             blocks` by (gen_tac >> Induct >>
+             simp[scfgDefsTheory.remove_block_def] >> rw[] >> gvs[]) \\
+            `MEM bb' (replace_block (a' with bb_instructions :=
+             update_last_inst (replace_label_inst b c_lbl)
+             a'.bb_instructions) fn.fn_blocks)` by (first_x_assum drule
+             >> simp[]) \\
+            first_x_assum drule >> strip_tac >> gvs[] \\
+            first_assum (qspec_then `(a' with bb_instructions :=
+             update_last_inst (replace_label_inst b c_lbl)
+             a'.bb_instructions)` mp_tac) \\
+            strip_tac >> first_x_assum drule >> strip_tac >> gvs[]
+            >- (irule block_terminator_last_update_last_inst >> conj_tac
+                >- simp[replace_label_inst_opcode]
+                >- (gvs[cfg_wf_def] >> first_x_assum irule >> irule
+                    lookup_block_MEM >> metis_tac[]))
+            >- gvs[cfg_wf_def])
+        >- (simp[block_terminator_last_def,
+                 venomInstTheory.get_instruction_def,
+                 scfgDefsTheory.replace_label_block_def,
+                 scfgDefsTheory.replace_phi_in_block_def, LENGTH_MAP, EL_MAP] \\
+            rpt strip_tac >> COND_CASES_TAC >> gvs[LENGTH_MAP, EL_MAP]
+            >- (sg `!old new inst. (replace_label_in_phi old new
+                 inst).inst_opcode = inst.inst_opcode`
+                >- (simp[scfgDefsTheory.replace_label_in_phi_def] \\ rw[])
+                >- gvs[replace_label_inst_opcode, block_terminator_last_def,
+                       venomInstTheory.get_instruction_def])
+            >- gvs[replace_label_inst_opcode, block_terminator_last_def,
+                   venomInstTheory.get_instruction_def])))
+  >- ( (* phi_fn_wf remove_unreachable_blocks - CHEATED *)
+    simp[scfgTransformTheory.remove_unreachable_blocks_def,
+         scfgDefsTheory.phi_fn_wf_def] \\
+    Cases_on `fn.fn_blocks` >> gvs[scfgDefsTheory.phi_fn_wf_def] \\
+    simp[scfgDefsTheory.reachable_label_def, relationTheory.RTC_REFL] \\
+    cheat)
+  >- cheat (* phi_fn_wf merge_blocks - needs helper lemma *)
+  >- cheat (* phi_fn_wf merge_jump - needs helper lemma *)
 QED
 
-(* Main theorem: RTC of simplify_cfg_step preserves equivalence - CHEATED
-   Proof structure verified interactively:
-   1. Unfold simplify_cfg to get RTC simplify_cfg_step
-   2. Induct_on RTC with strengthened property (cfg_wf, phi_fn_wf, entry_label)
-   3. Base case: run_function_equiv_cfg_refl
-   4. Step case: simplify_cfg_step_correct + wf/entry preservation + transitivity *)
+(* Main theorem: RTC of simplify_cfg_step preserves equivalence *)
 Theorem simplify_cfg_correct:
   !fn fn' s.
     simplify_cfg fn fn' /\
@@ -486,7 +621,22 @@ Theorem simplify_cfg_correct:
     s.vs_inst_idx = 0 ==>
     run_function_equiv_cfg fn fn' s
 Proof
-  cheat
+  rpt strip_tac >> gvs[scfgTransformTheory.simplify_cfg_def] >>
+  `!fn fn'. simplify_cfg_step^* fn fn' ==>
+   !s. cfg_wf fn /\ phi_fn_wf fn /\ s.vs_current_bb = entry_label fn /\
+       s.vs_prev_bb = NONE /\ s.vs_inst_idx = 0 ==>
+       run_function_equiv_cfg fn fn' s` suffices_by metis_tac[] >>
+  ho_match_mp_tac relationTheory.RTC_INDUCT >> rpt strip_tac
+  >- simp[scfgEquivTheory.run_function_equiv_cfg_refl]
+  >- (irule scfgEquivTheory.run_function_equiv_cfg_trans >>
+      qexists_tac `fn'³'` >> conj_tac
+      >- (irule simplify_cfg_step_correct >> simp[])
+      >- (first_x_assum irule >> rpt conj_tac
+          >- (drule_all wf_simplify_cfg_step >> simp[])
+          >- (drule_all wf_simplify_cfg_step >> simp[])
+          >- (drule_all entry_label_simplify_cfg_step >> simp[])
+          >- simp[]
+          >- simp[]))
 QED
 
 val _ = export_theory();
