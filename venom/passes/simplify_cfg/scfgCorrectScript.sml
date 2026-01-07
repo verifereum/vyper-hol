@@ -600,12 +600,72 @@ Proof
                        venomInstTheory.get_instruction_def])
             >- gvs[replace_label_inst_opcode, block_terminator_last_def,
                    venomInstTheory.get_instruction_def])))
-  >- ( (* phi_fn_wf remove_unreachable_blocks - CHEATED *)
+  >- ( (* phi_fn_wf remove_unreachable_blocks *)
+    rpt strip_tac >>
     simp[scfgTransformTheory.remove_unreachable_blocks_def,
-         scfgDefsTheory.phi_fn_wf_def] \\
-    Cases_on `fn.fn_blocks` >> gvs[scfgDefsTheory.phi_fn_wf_def] \\
+         scfgDefsTheory.phi_fn_wf_def] >>
+    Cases_on `fn.fn_blocks` >> gvs[scfgDefsTheory.phi_fn_wf_def] >>
     simp[scfgDefsTheory.reachable_label_def, relationTheory.RTC_REFL] \\
-    cheat)
+    qabbrev_tac `keep = h::FILTER (\bb. (cfg_edge fn)^* h.bb_label bb.bb_label) t` >>
+    qabbrev_tac `fn' = fn with fn_blocks := keep` \\
+    qabbrev_tac `fix = simplify_phi_block (pred_labels fn' h.bb_label) h ::
+      MAP (\bb'. simplify_phi_block (pred_labels fn' bb'.bb_label) bb')
+      (FILTER (\bb'. (cfg_edge fn)^* h.bb_label bb'.bb_label) t)` >>
+    qabbrev_tac `fn'' = fn with fn_blocks := fix` \\
+    rpt conj_tac
+    >- (
+      rpt strip_tac
+      >- (
+        `block_has_no_phi bb` by (gvs[] >>
+          irule scfgPhiLemmasTheory.simplify_phi_block_no_phi >> simp[]) \\
+        simp[scfgDefsTheory.phi_block_wf_def, scfgDefsTheory.phi_inst_wf_def] >>
+        rpt strip_tac >>
+        gvs[scfgDefsTheory.block_has_no_phi_def, scfgDefsTheory.block_has_phi_def] >>
+        metis_tac[])
+      >- (
+        gvs[listTheory.MEM_MAP, listTheory.MEM_FILTER] \\
+        simp[scfgDefsTheory.simplify_phi_block_def] \\
+        sg `pred_labels fn'' bb'.bb_label = pred_labels fn' bb'.bb_label`
+        >- (
+          simp[scfgDefsTheory.pred_labels_def] \\
+          simp[Abbr`fn''`, Abbr`fn'`, Abbr`fix`, Abbr`keep`] \\
+          simp[scfgPhiLemmasTheory.simplify_phi_block_successors] \\
+          simp[scfgDefsTheory.simplify_phi_block_def] \\
+          simp[venomInstTheory.basic_block_accfupds] \\
+          COND_CASES_TAC
+          >- (
+            simp[] \\
+            simp[rich_listTheory.FILTER_MAP] \\
+            simp[combinTheory.o_DEF, scfgDefsTheory.simplify_phi_block_def,
+                 scfgPhiLemmasTheory.simplify_phi_block_successors,
+                 venomInstTheory.basic_block_accfupds] \\
+            CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM scfgDefsTheory.simplify_phi_block_def))) \\
+            simp[scfgPhiLemmasTheory.simplify_phi_block_successors] \\
+            simp[listTheory.MAP_MAP_o, combinTheory.o_DEF,
+                 scfgDefsTheory.simplify_phi_block_def,
+                 venomInstTheory.basic_block_accfupds])
+          >- (
+            simp[] \\
+            simp[rich_listTheory.FILTER_MAP] >>
+            CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM scfgDefsTheory.simplify_phi_block_def))) >>
+            simp[scfgPhiLemmasTheory.simplify_phi_block_successors,
+                 listTheory.MAP_MAP_o, combinTheory.o_DEF,
+                 scfgDefsTheory.simplify_phi_block_def,
+                 venomInstTheory.basic_block_accfupds]))
+        >- (
+          gvs[] \\
+          simp[GSYM scfgDefsTheory.simplify_phi_block_def] >>
+          irule scfgPhiLemmasTheory.simplify_phi_block_wf \\
+          qexists_tac `pred_labels fn bb'.bb_label` \\
+          conj_tac
+          >- (
+            rpt strip_tac >>
+            irule pred_labels_subset >>
+            qexists_tac `fn'` >>
+            simp[Abbr`fn'`, Abbr`keep`, listTheory.MEM_FILTER] \\
+            metis_tac[])
+          >- (first_x_assum (qspec_then `bb'` mp_tac) >> simp[]))))
+    >- (irule scfgPhiLemmasTheory.simplify_phi_block_no_phi >> simp[]))
   >- cheat (* phi_fn_wf merge_blocks - needs helper lemma *)
   >- cheat (* phi_fn_wf merge_jump - needs helper lemma *)
 QED
