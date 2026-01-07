@@ -140,6 +140,21 @@ Proof
         gvs[phi_vals_not_label_def])))
 QED
 
+(* phi_vals_not_label is preserved by replace_label_operand *)
+Theorem phi_vals_not_label_replace_label:
+  !ops old new.
+    phi_vals_not_label ops ==>
+    phi_vals_not_label (MAP (replace_label_operand old new) ops)
+Proof
+  ho_match_mp_tac phi_vals_not_label_ind >>
+  rpt conj_tac >> rpt gen_tac >>
+  simp[phi_vals_not_label_def, replace_label_operand_def] >>
+  strip_tac >> Cases_on `op` >>
+  gvs[replace_label_operand_def, phi_vals_not_label_def] >>
+  rpt strip_tac >> Cases_on `lbl = old` >>
+  gvs[phi_vals_not_label_def]
+QED
+
 (* ===== PHI Well-Formedness Helpers ===== *)
 
 Theorem phi_ops_all_preds_MEM_label:
