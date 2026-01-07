@@ -71,6 +71,56 @@ Proof
   drule_all pred_labels_only_jmp_target >> simp[]
 QED
 
+(* Lookup in remove_block *)
+Theorem lookup_block_remove_block:
+  !lbl b_lbl blocks bb.
+    lookup_block lbl blocks = SOME bb /\ lbl <> b_lbl ==>
+    lookup_block lbl (remove_block b_lbl blocks) = SOME bb
+Proof
+  Induct_on `blocks`
+  >- simp[lookup_block_def, remove_block_def]
+  >- (rpt strip_tac >> simp[lookup_block_def, remove_block_def] >>
+      IF_CASES_TAC >> gvs[lookup_block_def] >> IF_CASES_TAC >> gvs[])
+QED
+
+Theorem lookup_block_remove_block_same:
+  !b_lbl blocks.
+    lookup_block b_lbl (remove_block b_lbl blocks) = NONE
+Proof
+  Induct_on `blocks` >> simp[lookup_block_def, remove_block_def] >>
+  rpt strip_tac >> IF_CASES_TAC >> gvs[lookup_block_def]
+QED
+
+Theorem lookup_block_remove_block_none:
+  !lbl b_lbl blocks.
+    lookup_block lbl blocks = NONE ==>
+    lookup_block lbl (remove_block b_lbl blocks) = NONE
+Proof
+  Induct_on `blocks` >> simp[lookup_block_def, remove_block_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >> IF_CASES_TAC >> gvs[lookup_block_def]
+QED
+
+(* Lookup in replace_block *)
+Theorem lookup_block_replace_block:
+  !lbl blocks bb' bb.
+    lookup_block lbl blocks = SOME bb ==>
+    lookup_block lbl (replace_block bb' blocks) =
+      if lbl = bb'.bb_label then SOME bb' else SOME bb
+Proof
+  Induct_on `blocks` >> simp[lookup_block_def, replace_block_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  IF_CASES_TAC >> gvs[lookup_block_def] >> rw[]
+QED
+
+Theorem lookup_block_replace_block_none:
+  !lbl blocks bb'.
+    lookup_block lbl blocks = NONE ==>
+    lookup_block lbl (replace_block bb' blocks) = NONE
+Proof
+  Induct_on `blocks` >> simp[lookup_block_def, replace_block_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >> IF_CASES_TAC >> gvs[lookup_block_def]
+QED
+
 Theorem lookup_block_replace_label_block:
   !lbl blocks bb old new.
     lookup_block lbl blocks = SOME bb ==>
