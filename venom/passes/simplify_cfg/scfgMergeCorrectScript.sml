@@ -117,6 +117,18 @@ QED
 
 (* ===== Merging Blocks ===== *)
 
+(* Termination propagates through block execution *)
+Theorem run_function_terminates_step:
+  !fuel fn s bb v.
+    terminates (run_function (SUC fuel) fn s) /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    run_block bb s = OK v /\
+    ~v.vs_halted ==>
+    terminates (run_function fuel fn v)
+Proof
+  rpt strip_tac >> fs[Once venomSemTheory.run_function_def]
+QED
+
 (* Helper: run_function equivalence for merge_blocks when original terminates.
    The termination hypothesis is key - it allows using fuel monotonicity when
    the original path goes through a->b (using 2 fuel) vs merged path (using 1 fuel).
