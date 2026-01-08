@@ -185,6 +185,74 @@ Proof
   metis_tac[]
 QED
 
+(* Helper lemma: IH conditions hold after running a no-phi block with prev_bb <> b_lbl *)
+Theorem ih_conditions_no_phi_prev_neq:
+  !fuel fn a_lbl b_lbl a b s1 s2 x v v'.
+    cfg_wf fn /\ phi_fn_wf fn /\
+    lookup_block a_lbl fn.fn_blocks = SOME a /\
+    lookup_block b_lbl fn.fn_blocks = SOME b /\
+    a_lbl <> b_lbl /\ b_lbl <> entry_label fn /\
+    pred_labels fn b_lbl = [a_lbl] /\
+    block_has_no_phi b /\ block_last_jmp_to b_lbl a /\
+    state_equiv_cfg s1 s2 /\
+    s1.vs_current_bb = s2.vs_current_bb /\
+    s1.vs_current_bb <> b_lbl /\ s1.vs_current_bb <> a_lbl /\
+    s1.vs_inst_idx = 0 /\ s2.vs_inst_idx = 0 /\
+    s1.vs_prev_bb <> SOME b_lbl /\ s1.vs_prev_bb = s2.vs_prev_bb /\
+    (!lbl. s1.vs_prev_bb = SOME lbl ==> MEM lbl (pred_labels fn s1.vs_current_bb)) /\
+    ~s1.vs_halted /\
+    terminates (run_function (SUC fuel) fn s1) /\
+    lookup_block s1.vs_current_bb fn.fn_blocks = SOME x /\
+    block_has_no_phi x /\ block_terminator_last x /\
+    run_block x s1 = OK v /\
+    run_block (replace_label_block b_lbl a_lbl x) s2 = OK v' /\
+    state_equiv_cfg v v' /\ ~v.vs_halted /\ ~v'.vs_halted
+  ==>
+    v.vs_current_bb = v'.vs_current_bb /\
+    v.vs_current_bb <> b_lbl /\
+    v.vs_inst_idx = 0 /\ v'.vs_inst_idx = 0 /\
+    (v.vs_prev_bb = SOME b_lbl ==> v'.vs_prev_bb = SOME a_lbl) /\
+    (v.vs_prev_bb <> SOME b_lbl ==> v.vs_prev_bb = v'.vs_prev_bb) /\
+    (!lbl. v.vs_prev_bb = SOME lbl ==> MEM lbl (pred_labels fn v.vs_current_bb)) /\
+    terminates (run_function fuel fn v)
+Proof
+  rpt strip_tac >> rpt conj_tac
+  (* v.vs_current_bb = v'.vs_current_bb *)
+  >- (
+    `x.bb_label = s1.vs_current_bb` by metis_tac[lookup_block_label] >>
+    `MEM x fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+    `~MEM b_lbl (block_successors x)` by metis_tac[pred_labels_single_no_jmp] >>
+    irule run_block_replace_label_no_phi_current_bb >> simp[] >>
+    qexistsl_tac [`x`, `a_lbl`, `b_lbl`, `s1`, `s2`] >> simp[])
+  (* v.vs_current_bb <> b_lbl *)
+  >- (
+    sg `MEM v.vs_current_bb (block_successors x)`
+    >- (`MEM x fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+        metis_tac[run_block_ok_successor]) >>
+    `x.bb_label = s1.vs_current_bb` by metis_tac[lookup_block_label] >>
+    `MEM x fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+    `~MEM b_lbl (block_successors x)` by metis_tac[pred_labels_single_no_jmp] >>
+    metis_tac[])
+  (* v.vs_inst_idx = 0 *)
+  >- metis_tac[run_block_ok_inst_idx]
+  (* v'.vs_inst_idx = 0 *)
+  >- metis_tac[run_block_ok_inst_idx]
+  (* v.vs_prev_bb = SOME b_lbl ==> v'.vs_prev_bb = SOME a_lbl - contradiction *)
+  >- (`v.vs_prev_bb = SOME s1.vs_current_bb` by metis_tac[run_block_ok_prev_bb] >> gvs[])
+  (* v.vs_prev_bb <> SOME b_lbl ==> v.vs_prev_bb = v'.vs_prev_bb *)
+  >- (
+    `v.vs_prev_bb = SOME s1.vs_current_bb` by metis_tac[run_block_ok_prev_bb] >>
+    `v'.vs_prev_bb = SOME s2.vs_current_bb` by metis_tac[run_block_ok_prev_bb] >> gvs[])
+  (* MEM lbl (pred_labels fn v.vs_current_bb) *)
+  >- (
+    `v.vs_prev_bb = SOME s1.vs_current_bb` by metis_tac[run_block_ok_prev_bb] >> gvs[] >>
+    `MEM x fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+    `x.bb_label = s1.vs_current_bb` by metis_tac[lookup_block_label] >>
+    metis_tac[run_block_ok_pred_labels])
+  (* terminates (run_function fuel fn v) *)
+  >- metis_tac[run_function_terminates_step]
+QED
+
 (* Helper: run_function equivalence for merge_blocks when original terminates.
    The termination hypothesis is key - it allows using fuel monotonicity when
    the original path goes through a->b (using 2 fuel) vs merged path (using 1 fuel).
@@ -413,7 +481,7 @@ Proof
             >- (
               gvs[state_equiv_cfg_def] \\
               first_x_assum irule \\
-              gvs[] \\ cheat (* TODO: IH conditions *)))
+              gvs[] \\ cheat (* TODO: IH conditions for prev_bb = SOME b_lbl case *)))
           >- (simp[] >> fs[result_equiv_cfg_def] >>
               Cases_on `run_block (replace_label_block b_lbl a_lbl x) s2` >>
               gvs[result_equiv_cfg_def])
@@ -438,7 +506,28 @@ Proof
               gvs[result_equiv_cfg_def, AllCaseEqs(), state_equiv_cfg_def] \\
               Cases_on `v'.vs_halted` >> gvs[result_equiv_cfg_def]
               >- simp[state_equiv_cfg_def]
-              >- (first_x_assum irule \\ cheat (* TODO: IH conditions *)))
+              >- (first_x_assum irule >> gvs[] >>
+                  rpt conj_tac
+                  >- (rpt strip_tac >> imp_res_tac run_block_ok_prev_bb >>
+                      imp_res_tac run_block_ok_not_halted >> gvs[] >>
+                      imp_res_tac lookup_block_MEM >> imp_res_tac lookup_block_label >>
+                      drule_all run_block_ok_pred_labels >> gvs[])
+                  >- (irule run_function_terminates_step >> gvs[] >>
+                      qexistsl_tac [`x`, `s1`] >> gvs[])
+                  >- (imp_res_tac lookup_block_MEM >> imp_res_tac lookup_block_label >>
+                      CCONTR_TAC >> fs[] >> drule_all run_block_ok_successor >> strip_tac >>
+                      `~MEM b_lbl (block_successors x)` by
+                        (irule pred_labels_single_no_jmp >> qexistsl_tac [`a_lbl`, `fn`] >> gvs[]) >>
+                      gvs[])
+                  >- (irule run_block_replace_label_no_phi_current_bb >> gvs[state_equiv_cfg_def] >>
+                      qexistsl_tac [`x`, `a_lbl`, `b_lbl`, `s1`, `s2`] >> gvs[] >>
+                      imp_res_tac lookup_block_MEM >> conj_tac >- gvs[cfg_wf_def] >>
+                      irule pred_labels_single_no_jmp >> qexistsl_tac [`a_lbl`, `fn`] >>
+                      imp_res_tac lookup_block_label >> gvs[])
+                  >- (imp_res_tac run_block_ok_inst_idx >> gvs[])
+                  >- (imp_res_tac run_block_ok_inst_idx >> gvs[])
+                  >- (rpt strip_tac >> imp_res_tac run_block_ok_prev_bb >> gvs[])
+                  >- (rpt strip_tac >> imp_res_tac run_block_ok_prev_bb >> gvs[])))
             >- gvs[result_equiv_cfg_def, AllCaseEqs()]
             >- gvs[result_equiv_cfg_def, AllCaseEqs()]
             >- gvs[result_equiv_cfg_def, AllCaseEqs()])
