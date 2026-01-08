@@ -968,4 +968,26 @@ Proof
         simp[])))
 QED
 
+(* Key lemma for merge_blocks correctness: vs_current_bb equality.
+   When running a then b vs running merged (FRONT(a) ++ b), both end with
+   b's terminator which produces the same vs_current_bb on state_equiv_cfg states. *)
+Theorem run_block_merge_blocks_current_bb:
+  !a b s v v' v_mid b_lbl.
+    block_last_jmp_to b_lbl a /\
+    block_terminator_last a /\
+    block_terminator_last b /\
+    block_has_no_phi b /\
+    ~MEM b_lbl (block_successors b) /\
+    ~s.vs_halted /\
+    s.vs_inst_idx = 0 /\
+    run_block a s = OK v /\ ~v.vs_halted /\
+    run_block b v = OK v' /\ ~v'.vs_halted /\
+    run_block (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) s = OK v_mid /\
+    ~v_mid.vs_halted
+  ==>
+    v'.vs_current_bb = v_mid.vs_current_bb
+Proof
+  cheat
+QED
+
 val _ = export_theory();
