@@ -104,6 +104,17 @@ Proof
   >- gvs[]
 QED
 
+(* Helper: no PHI in merged block when neither a nor b have PHIs *)
+Theorem block_has_no_phi_merged:
+  !a b. a.bb_instructions <> [] /\ block_has_no_phi a /\ block_has_no_phi b ==>
+        block_has_no_phi (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)
+Proof
+  rw[block_has_no_phi_def, block_has_phi_def] >>
+  SPOSE_NOT_THEN ASSUME_TAC >> gvs[] >>
+  `MEM inst a.bb_instructions` by (irule rich_listTheory.MEM_FRONT_NOT_NIL >> simp[]) >>
+  metis_tac[]
+QED
+
 (* ===== Merging Blocks ===== *)
 
 (* Helper: run_function equivalence for merge_blocks when original terminates.
@@ -172,8 +183,11 @@ Proof
             Cases_on `block_has_no_phi a`
             >- (
               (* No PHIs in block a - use run_block_replace_label_no_phi *)
+              `a.bb_instructions <> []` by (
+                fs[block_last_jmp_to_def, block_last_inst_def] >>
+                Cases_on `a.bb_instructions` >> gvs[]) \\
               `block_has_no_phi (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)`
-                by cheat (* TODO: helper lemma for block_has_no_phi on merged block *) \\
+                by (irule block_has_no_phi_merged >> simp[]) \\
               `result_equiv_cfg
                  (run_block (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) s1)
                  (run_block (replace_label_block b_lbl s2.vs_current_bb
