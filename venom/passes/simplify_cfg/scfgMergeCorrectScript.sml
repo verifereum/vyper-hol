@@ -273,7 +273,11 @@ Proof
               gvs[result_equiv_cfg_def, AllCaseEqs()] \\
               Cases_on `v'.vs_halted` >> Cases_on `v''.vs_halted` >>
               gvs[result_equiv_cfg_def, state_equiv_cfg_def] \\
-              `terminates (run_function n fn v')` by cheat (* TODO: derive from outer termination *) \\
+              `terminates (run_function n fn v')` by (
+                irule run_function_terminates_step >> simp[] >>
+                qexistsl_tac [`b`, `v`] >> simp[] >>
+                irule run_function_terminates_step >> simp[] >>
+                qexistsl_tac [`a`, `s1`] >> simp[]) \\
               `run_function n fn v' = run_function (SUC n) fn v'`
                 by (ONCE_REWRITE_TAC [EQ_SYM_EQ] >> irule run_function_fuel_monotonicity >> simp[]) \\
               pop_assum (fn th => REWRITE_TAC [th]) \\
