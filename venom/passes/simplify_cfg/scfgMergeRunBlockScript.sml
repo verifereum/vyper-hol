@@ -1022,6 +1022,46 @@ Proof
   >- gvs[step_inst_def, exec_result_distinct]
 QED
 
+(* Helper: run_block OK ~halted implies the last instruction is a terminator *)
+Theorem run_block_ok_last_terminator:
+  !bb s s'.
+    run_block bb s = OK s' /\ ~s'.vs_halted /\ ~s.vs_halted /\
+    block_terminator_last bb /\ bb.bb_instructions <> [] ==>
+    is_terminator (LAST bb.bb_instructions).inst_opcode
+Proof
+  ho_match_mp_tac venomSemTheory.run_block_ind >> rpt strip_tac >>
+  qpat_x_assum `run_block _ _ = _` mp_tac >>
+  simp[Once venomSemTheory.run_block_def] >>
+  Cases_on `step_in_block bb s` >> Cases_on `q` >> simp[] >>
+  Cases_on `v.vs_halted` >> simp[] >>
+  Cases_on `r` >> simp[] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `step_in_block _ _ = _` mp_tac >>
+  simp[venomSemTheory.step_in_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
+  Cases_on `step_inst x s` >> simp[] >>
+  Cases_on `is_terminator x.inst_opcode` >> simp[] >>
+  strip_tac >> gvs[] >>
+  drule_all block_last_inst_terminator >>
+  simp[scfgDefsTheory.block_last_inst_def]
+QED
+
+(* Helper: When running suffix from state_equiv_cfg states with offset, vs_current_bb matches *)
+Theorem run_block_suffix_no_phi_current_bb:
+  !b prefix s1 s2 merged v1 v2.
+    merged.bb_instructions = prefix ++ b.bb_instructions /\
+    state_equiv_cfg s1 s2 /\
+    s2.vs_inst_idx = s1.vs_inst_idx + LENGTH prefix /\
+    block_has_no_phi b /\
+    block_terminator_last b /\
+    b.bb_instructions <> [] /\
+    run_block b s1 = OK v1 /\ ~v1.vs_halted /\
+    run_block merged s2 = OK v2 /\ ~v2.vs_halted ==>
+    v1.vs_current_bb = v2.vs_current_bb
+Proof
+  cheat
+QED
+
 (* Key lemma for merge_blocks correctness: vs_current_bb equality.
    When running a then b vs running merged (FRONT(a) ++ b), both end with
    b's terminator which produces the same vs_current_bb on state_equiv_cfg states. *)
