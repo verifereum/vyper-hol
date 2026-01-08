@@ -155,6 +155,17 @@ Proof
     simp[] >> gvs[])
 QED
 
+(* Helper: phi_block_wf for merged block when a may have PHIs but b has none *)
+Theorem phi_block_wf_merged:
+  !a b preds.
+    phi_block_wf preds a /\ block_has_no_phi b /\ a.bb_instructions <> [] ==>
+    phi_block_wf preds (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)
+Proof
+  rw[phi_block_wf_def, block_has_no_phi_def, block_has_phi_def]
+  >- (first_x_assum irule >> irule rich_listTheory.MEM_FRONT_NOT_NIL >> simp[])
+  >- (simp[phi_inst_wf_def] >> rpt strip_tac >> first_x_assum drule >> simp[])
+QED
+
 (* ===== Merging Blocks ===== *)
 
 (* Termination propagates through block execution *)
