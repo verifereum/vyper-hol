@@ -436,6 +436,29 @@ Proof
     IF_CASES_TAC >> gvs[result_equiv_cfg_def, halt_state_state_equiv_cfg, state_equiv_cfg_refl])
 QED
 
+(* Helper: MAP replace_label_operand preserves list structure *)
+Theorem map_replace_label_operand_length:
+  !ops old new. LENGTH (MAP (replace_label_operand old new) ops) = LENGTH ops
+Proof
+  Induct >> simp[]
+QED
+
+(* For non-PHI non-terminator instructions, replacing labels has no effect
+   since labels are only used by PHI and terminator instructions *)
+Theorem step_inst_replace_label_non_phi_eq:
+  !inst s old new.
+    inst.inst_opcode <> PHI /\ ~is_terminator inst.inst_opcode ==>
+    step_inst inst s = step_inst (replace_label_inst old new inst) s
+Proof
+  rpt strip_tac >>
+  simp[step_inst_def, replace_label_inst_def] >>
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  (* For all non-PHI non-terminator opcodes, the operands are evaluated,
+     and eval_operand_replace_label shows replacing labels has no effect *)
+  simp[exec_binop_def, exec_unop_def, exec_modop_def] >>
+  rpt (CASE_TAC >> gvs[eval_operand_replace_label])
+QED
+
 Theorem step_inst_replace_label_phi:
   !old new preds inst s1 s2.
     state_equiv_cfg s1 s2 /\
