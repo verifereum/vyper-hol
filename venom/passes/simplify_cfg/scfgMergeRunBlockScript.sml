@@ -857,6 +857,21 @@ Proof
   qexists_tac `bb` >> simp[]
 QED
 
+(* If a label is not in its own pred_labels, it's not in any of its successors *)
+Theorem pred_labels_not_self_loop:
+  !fn bb lbl preds.
+    MEM bb fn.fn_blocks /\ bb.bb_label = lbl /\
+    pred_labels fn lbl = preds /\ ~MEM lbl preds ==>
+    ~MEM lbl (block_successors bb)
+Proof
+  rpt strip_tac >> spose_not_then assume_tac >> gvs[] >>
+  sg `MEM bb.bb_label (pred_labels fn bb.bb_label)` >- (
+    qpat_x_assum `~MEM _ _` mp_tac >>
+    simp[pred_labels_def, listTheory.MEM_MAP, listTheory.MEM_FILTER] >>
+    strip_tac >> qexists_tac `bb` >> simp[]) >>
+  gvs[]
+QED
+
 (* When prev_bb ≠ old and terminator unchanged, current_bb is preserved.
    This is a weaker version of run_block_replace_label_current_bb that doesn't
    require PHIs to not reference old - instead it relies on prev_bb ≠ old
