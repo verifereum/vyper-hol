@@ -1059,7 +1059,46 @@ Theorem run_block_suffix_no_phi_current_bb:
     run_block merged s2 = OK v2 /\ ~v2.vs_halted ==>
     v1.vs_current_bb = v2.vs_current_bb
 Proof
-  cheat
+  completeInduct_on `LENGTH b.bb_instructions - s1.vs_inst_idx` >> rpt strip_tac >> gvs[] >>
+  qpat_x_assum `run_block b _ = _` mp_tac >> simp[Once run_block_def] >>
+  qpat_x_assum `run_block merged _ = _` mp_tac >> simp[Once run_block_def] >>
+  `get_instruction merged s2.vs_inst_idx = get_instruction b s1.vs_inst_idx` by
+    (simp[get_instruction_def] >> gvs[rich_listTheory.EL_APPEND2]) >>
+  Cases_on `step_in_block b s1` >> Cases_on `q` >> gvs[] >>
+  gvs[step_in_block_def] >>
+  Cases_on `get_instruction b s1.vs_inst_idx` >> gvs[] >>
+  `x.inst_opcode <> PHI` by (irule block_has_no_phi_inst >> qexists_tac `b` >>
+    gvs[get_instruction_def, MEM_EL] >> qexists_tac `s1.vs_inst_idx` >> gvs[]) >>
+  `result_equiv_cfg (step_inst x s1) (step_inst x s2)` by
+    (irule step_inst_state_equiv_cfg >> gvs[]) >>
+  Cases_on `step_inst x s1` >> gvs[result_equiv_cfg_def] >>
+  Cases_on `step_inst x s2` >> gvs[result_equiv_cfg_def] >>
+  Cases_on `is_terminator x.inst_opcode` >> gvs[]
+  >- (
+    rpt strip_tac >> gvs[] >> fs[] >>
+    `v1 = v` by (Cases_on `v.vs_halted` >> gvs[]) >>
+    `v2 = v''` by (Cases_on `v''.vs_halted` >> gvs[]) >> gvs[] >>
+    irule step_inst_terminator_same_current_bb_simple >> gvs[] >>
+    qexistsl_tac [`x`, `s1`, `s2`] >> gvs[])
+  >- (
+    rpt strip_tac >> gvs[next_inst_def] >>
+    `~v'.vs_halted` by (Cases_on `v'.vs_halted` >> gvs[]) >>
+    gvs[state_equiv_cfg_def] >>
+    `v'.vs_inst_idx = s1.vs_inst_idx` by
+      (irule step_inst_preserves_inst_idx >> qexists_tac `x` >> gvs[]) >>
+    `v''.vs_inst_idx = s2.vs_inst_idx` by
+      (irule step_inst_preserves_inst_idx >> qexists_tac `x` >> gvs[]) >>
+    first_x_assum (qspec_then `LENGTH b.bb_instructions - (s1.vs_inst_idx + 1)` mp_tac) >>
+    impl_tac >- (gvs[get_instruction_def] >> simp[]) >> strip_tac >>
+    first_x_assum (qspecl_then [`b`, `v' with vs_inst_idx := v'.vs_inst_idx + 1`] mp_tac) >>
+    impl_tac >- gvs[] >>
+    disch_then (qspecl_then [`prefix`, `v'' with vs_inst_idx := v''.vs_inst_idx + 1`,
+                             `merged`, `v1`, `v2`] mp_tac) >>
+    simp[] >> impl_tac
+    >- (gvs[stateEquivTheory.var_equiv_def] >>
+        simp[venomStateTheory.lookup_var_def] >>
+        fs[stateEquivTheory.var_equiv_def, venomStateTheory.lookup_var_def])
+    >- simp[])
 QED
 
 (* Key lemma for merge_blocks correctness: vs_current_bb equality.
