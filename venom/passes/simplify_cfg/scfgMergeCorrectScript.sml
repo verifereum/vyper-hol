@@ -607,6 +607,18 @@ QED
 
 (* ===== Jump Threading ===== *)
 
+(* Helper: running a jump-only block just performs the jump *)
+Theorem run_block_jump_only:
+  !bb s c_lbl.
+    jump_only_target bb = SOME c_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
+    run_block bb s = OK (jump_to c_lbl s)
+Proof
+  rpt strip_tac >> gvs[jump_only_target_def, AllCaseEqs()] >>
+  simp[Once run_block_def] >>
+  simp[step_in_block_def, get_instruction_def] >>
+  simp[is_terminator_def] >> simp[step_inst_def] >> simp[jump_to_def]
+QED
+
 Theorem merge_jump_correct:
   !fn a_lbl b_lbl s.
     cfg_wf fn /\
@@ -618,7 +630,20 @@ Theorem merge_jump_correct:
     ~s.vs_halted ==>
     run_function_equiv_cfg fn (merge_jump fn a_lbl b_lbl) s
 Proof
-  cheat
+  rpt gen_tac >> simp[merge_jump_cond_def] >> strip_tac >>
+  simp[run_function_equiv_cfg_def] >> conj_tac
+  >- ( (* Forward direction: original terminates => merged terminates *)
+    rpt strip_tac >> qexists_tac `fuel` >>
+    `result_equiv_cfg (run_function fuel fn s)
+                      (run_function fuel (merge_jump fn a_lbl b_lbl) s)`
+      suffices_by (strip_tac >>
+        Cases_on `run_function fuel fn s` >>
+        Cases_on `run_function fuel (merge_jump fn a_lbl b_lbl) s` >>
+        gvs[result_equiv_cfg_def, terminates_def]) >>
+    cheat (* TODO: run_function_merge_jump_equiv_fwd *))
+  >- ( (* Backward direction: merged terminates => original terminates *)
+    rpt strip_tac >> qexists_tac `2 * fuel'` >>
+    cheat (* TODO: run_function_merge_jump_equiv_bwd *))
 QED
 
 val _ = export_theory();
