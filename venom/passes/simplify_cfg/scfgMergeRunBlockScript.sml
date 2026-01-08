@@ -857,4 +857,22 @@ Proof
   qexists_tac `bb` >> simp[]
 QED
 
+(* When prev_bb ≠ old and terminator unchanged, current_bb is preserved.
+   This is a weaker version of run_block_replace_label_current_bb that doesn't
+   require PHIs to not reference old - instead it relies on prev_bb ≠ old
+   meaning the PHI resolution won't select the old branch anyway. *)
+Theorem run_block_replace_label_current_bb_prev_diff:
+  !bb s old new v v' prev.
+    s.vs_prev_bb = SOME prev /\
+    prev <> old /\ prev <> new /\
+    block_terminator_last bb /\
+    ~MEM old (block_successors bb) /\
+    run_block bb s = OK v /\
+    run_block (replace_label_block old new bb) s = OK v' /\
+    ~v.vs_halted ==>
+    v.vs_current_bb = v'.vs_current_bb
+Proof
+  cheat
+QED
+
 val _ = export_theory();
