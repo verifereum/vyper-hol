@@ -115,6 +115,46 @@ Proof
   metis_tac[]
 QED
 
+(* Helper: block_successors of merged block equals block_successors of b *)
+Theorem block_successors_merged:
+  !a b. b.bb_instructions <> [] ==>
+        block_successors (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) =
+        block_successors b
+Proof
+  rw[block_successors_def, block_last_inst_def] >>
+  simp[rich_listTheory.LAST_APPEND_NOT_NIL] >>
+  gvs[] >> fs[listTheory.NULL_EQ]
+QED
+
+(* Helper: block_terminator_last of merged block when both a and b have terminators last *)
+Theorem block_terminator_last_merged:
+  !a b. block_terminator_last a /\ block_terminator_last b /\
+        a.bb_instructions <> [] /\ b.bb_instructions <> [] ==>
+        block_terminator_last (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)
+Proof
+  rw[block_terminator_last_def, get_instruction_def] >>
+  Cases_on `idx < LENGTH (FRONT a.bb_instructions)`
+  >- (
+    (* idx in FRONT a - contradiction since FRONT removes the terminator *)
+    `(FRONT a.bb_instructions ++ b.bb_instructions)❲idx❳ = (FRONT a.bb_instructions)❲idx❳`
+      by simp[rich_listTheory.EL_APPEND1] >>
+    `(FRONT a.bb_instructions)❲idx❳ = a.bb_instructions❲idx❳`
+      by (irule rich_listTheory.FRONT_EL >> simp[]) >>
+    `LENGTH (FRONT a.bb_instructions) = PRE (LENGTH a.bb_instructions)`
+      by simp[rich_listTheory.LENGTH_FRONT] >>
+    `idx < LENGTH a.bb_instructions` by (Cases_on `a.bb_instructions` >> gvs[]) >>
+    `is_terminator a.bb_instructions❲idx❳.inst_opcode` by gvs[] >>
+    `idx = LENGTH a.bb_instructions - 1` by (first_x_assum drule >> simp[]) >>
+    gvs[])
+  >- (
+    (* idx in b part - use b's terminator property *)
+    `(FRONT a.bb_instructions ++ b.bb_instructions)❲idx❳ =
+     b.bb_instructions❲idx - LENGTH (FRONT a.bb_instructions)❳`
+      by simp[rich_listTheory.EL_APPEND2] >>
+    first_x_assum (qspec_then `idx - LENGTH (FRONT a.bb_instructions)` mp_tac) >>
+    simp[] >> gvs[])
+QED
+
 (* ===== Merging Blocks ===== *)
 
 (* Termination propagates through block execution *)

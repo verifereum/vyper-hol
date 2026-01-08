@@ -345,7 +345,8 @@ Theorem simplify_cfg_step_correct:
     phi_fn_wf fn /\
     s.vs_current_bb = entry_label fn /\
     s.vs_prev_bb = NONE /\
-    s.vs_inst_idx = 0 ==>
+    s.vs_inst_idx = 0 /\
+    ~s.vs_halted ==>
     run_function_equiv_cfg fn fn' s
 Proof
   rpt gen_tac >> strip_tac >> gvs[simplify_cfg_step_def]
@@ -939,25 +940,24 @@ Theorem simplify_cfg_correct:
     phi_fn_wf fn /\
     s.vs_current_bb = entry_label fn /\
     s.vs_prev_bb = NONE /\
-    s.vs_inst_idx = 0 ==>
+    s.vs_inst_idx = 0 /\
+    ~s.vs_halted ==>
     run_function_equiv_cfg fn fn' s
 Proof
   rpt strip_tac >> gvs[scfgTransformTheory.simplify_cfg_def] >>
   `!fn fn'. simplify_cfg_step^* fn fn' ==>
    !s. cfg_wf fn /\ phi_fn_wf fn /\ s.vs_current_bb = entry_label fn /\
-       s.vs_prev_bb = NONE /\ s.vs_inst_idx = 0 ==>
+       s.vs_prev_bb = NONE /\ s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
        run_function_equiv_cfg fn fn' s` suffices_by metis_tac[] >>
   ho_match_mp_tac relationTheory.RTC_INDUCT >> rpt strip_tac
   >- simp[scfgEquivTheory.run_function_equiv_cfg_refl]
   >- (irule scfgEquivTheory.run_function_equiv_cfg_trans >>
       qexists_tac `fn'³'` >> conj_tac
-      >- (irule simplify_cfg_step_correct >> simp[])
-      >- (first_x_assum irule >> rpt conj_tac
-          >- (drule_all wf_simplify_cfg_step >> simp[])
-          >- (drule_all wf_simplify_cfg_step >> simp[])
-          >- (drule_all entry_label_simplify_cfg_step >> simp[])
-          >- simp[]
-          >- simp[]))
+      >- (irule simplify_cfg_step_correct >> gvs[])
+      >- (first_x_assum irule >>
+          drule_all wf_simplify_cfg_step >> strip_tac >>
+          drule_all entry_label_simplify_cfg_step >> strip_tac >>
+          gvs[]))
 QED
 
 val _ = export_theory();
