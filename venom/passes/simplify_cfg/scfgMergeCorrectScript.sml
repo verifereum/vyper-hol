@@ -285,6 +285,7 @@ Theorem run_function_merge_blocks_equiv_fwd:
     (s1.vs_prev_bb = SOME b_lbl ==> s2.vs_prev_bb = SOME a_lbl) /\
     (s1.vs_prev_bb <> SOME b_lbl ==> s1.vs_prev_bb = s2.vs_prev_bb) /\
     (!lbl. s1.vs_prev_bb = SOME lbl ==> MEM lbl (pred_labels fn s1.vs_current_bb)) /\
+    (s1.vs_prev_bb = NONE ==> s1.vs_current_bb = entry_label fn) /\  (* Invariant: NONE only at entry *)
     ~s1.vs_halted /\  (* Required for run_block_merge_blocks_equiv *)
     terminates (run_function fuel fn s1)  (* KEY: termination hypothesis *)
   ==>
@@ -583,8 +584,33 @@ Proof
         >- (
           (* block has PHIs and prev_bb <> b_lbl *)
           Cases_on `s1.vs_prev_bb`
-          >- (gvs[] \\ cheat (* TODO: NONE with PHIs *))
-          >- cheat (* TODO: SOME prev with PHIs *)))))
+          >- (
+            (* NONE case: prev_bb = NONE means at entry, which has no PHIs - contradiction *)
+            gvs[] >>
+            `x = HD fn.fn_blocks` by (Cases_on `fn.fn_blocks` >> gvs[entry_label_def, lookup_block_def]) >>
+            metis_tac[scfgPhiLemmasTheory.phi_fn_wf_entry_no_phi])
+          >- (
+            (* SOME prev with PHIs - prev ≠ b_lbl and prev ≠ a_lbl *)
+            gvs[] >>
+            `~MEM a_lbl (pred_labels fn s2.vs_current_bb)` by
+              (irule scfgMergeHelpersTheory.pred_labels_no_jmp_other >> simp[] >>
+               qexists_tac `b_lbl` >> simp[]) >>
+            `x' <> a_lbl` by metis_tac[] >>
+            `result_equiv_cfg (run_block x s1) (run_block x s2)` by
+              (irule scfgEquivTheory.run_block_state_equiv_cfg >> simp[]) >>
+            `x.bb_label = s2.vs_current_bb` by metis_tac[lookup_block_label] >>
+            `phi_block_wf (pred_labels fn x.bb_label) x` by
+              (irule scfgPhiLemmasTheory.phi_fn_wf_block >> simp[] >>
+               metis_tac[lookup_block_MEM]) >>
+            sg `result_equiv_cfg (run_block x s2) (run_block (replace_label_block b_lbl a_lbl x) s2)`
+            >- (irule scfgMergeRunBlockTheory.run_block_replace_label_prev_diff >>
+                qexistsl_tac [`fn`, `pred_labels fn x.bb_label`, `x'`] >> simp[])
+            >- (
+              `result_equiv_cfg (run_block x s1) (run_block (replace_label_block b_lbl a_lbl x) s2)`
+                by (irule result_equiv_cfg_trans >> qexists_tac `run_block x s2` >> simp[]) >>
+              Cases_on `run_block x s1` >> Cases_on `run_block (replace_label_block b_lbl a_lbl x) s2` >>
+              gvs[result_equiv_cfg_def, AllCaseEqs(), state_equiv_cfg_def] >>
+              cheat (* TODO: IH application for SOME prev with PHIs *))))))
 QED
 
 (* Backward direction: if merged terminates, original also terminates with enough fuel.
