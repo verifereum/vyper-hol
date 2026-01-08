@@ -127,6 +127,7 @@ Theorem run_function_merge_blocks_equiv_fwd:
     (s1.vs_prev_bb = SOME b_lbl ==> s2.vs_prev_bb = SOME a_lbl) /\
     (s1.vs_prev_bb <> SOME b_lbl ==> s1.vs_prev_bb = s2.vs_prev_bb) /\
     (!lbl. s1.vs_prev_bb = SOME lbl ==> MEM lbl (pred_labels fn s1.vs_current_bb)) /\
+    ~s1.vs_halted /\  (* Required for run_block_merge_blocks_equiv *)
     terminates (run_function fuel fn s1)  (* KEY: termination hypothesis *)
   ==>
     result_equiv_cfg (run_function fuel fn s1)
@@ -136,8 +137,71 @@ Proof
   rpt strip_tac >>
   Cases_on `s1.vs_current_bb = a_lbl`
   >- (
-    (* Case: at block a_lbl - need special handling for merge point *)
-    REVERSE (rpt strip_tac) \\ cheat)
+    (* Case: at block a_lbl - merge point handling *)
+    simp[Once run_function_def] \\
+    CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_function_def])) >> simp[] \\
+    sg `lookup_block s2.vs_current_bb (merge_blocks fn a_lbl b_lbl).fn_blocks =
+        SOME (replace_label_block b_lbl a_lbl (a with bb_instructions :=
+              FRONT a.bb_instructions ++ b.bb_instructions))`
+    >- (gvs[] >> irule lookup_block_merge_blocks_a >> simp[]) \\
+    gvs[] \\
+    Cases_on `run_block a s1` >> gvs[AllCaseEqs()]
+    >- (
+      (* OK case *)
+      `~v.vs_halted` by (drule_all run_block_ok_not_halted >> simp[]) \\
+      gvs[] \\
+      sg `v.vs_current_bb = b_lbl`
+      >- (
+        `MEM a fn.fn_blocks` by (irule lookup_block_MEM >> qexists_tac `s2.vs_current_bb` >> simp[]) \\
+        drule_all run_block_ok_successor >> strip_tac \\
+        drule_all block_last_jmp_to_successors >> simp[] >> strip_tac >> gvs[])
+      >- (
+        simp[Once run_function_def] \\
+        Cases_on `fuel` >> simp[result_equiv_cfg_refl]
+        >- (fs[terminates_def, Once run_function_def] >> gvs[terminates_def, run_function_def])
+        >- (
+          `block_terminator_last a` by
+            (fs[cfg_wf_def] >> first_x_assum irule >>
+             irule lookup_block_MEM >> qexists_tac `s2.vs_current_bb` >> simp[]) \\
+          sg `result_equiv_cfg (run_block b v)
+                (run_block (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) s1)`
+          >- (
+            `s1.vs_inst_idx <= LENGTH (FRONT a.bb_instructions)` by simp[] \\
+            drule_all run_block_merge_blocks_equiv >> strip_tac >> pop_assum mp_tac >> simp[])
+          >- (
+            Cases_on `block_has_no_phi a`
+            >- (
+              (* No PHIs in block a - use run_block_replace_label_no_phi *)
+              `block_has_no_phi (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)`
+                by cheat (* TODO: helper lemma for block_has_no_phi on merged block *) \\
+              `result_equiv_cfg
+                 (run_block (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) s1)
+                 (run_block (replace_label_block b_lbl s2.vs_current_bb
+                    (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2)`
+                by (irule run_block_replace_label_no_phi >> gvs[]) \\
+              `result_equiv_cfg (run_block b v)
+                 (run_block (replace_label_block b_lbl s2.vs_current_bb
+                    (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2)`
+                by (irule result_equiv_cfg_trans >>
+                    qexists_tac `run_block (a with bb_instructions :=
+                                 FRONT a.bb_instructions ++ b.bb_instructions) s1` >> gvs[]) \\
+              Cases_on `run_block b v` >>
+              Cases_on `run_block (replace_label_block b_lbl s2.vs_current_bb
+                         (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2` >>
+              gvs[result_equiv_cfg_def, AllCaseEqs()] \\
+              Cases_on `v'.vs_halted` >> Cases_on `v''.vs_halted` >>
+              gvs[result_equiv_cfg_def, state_equiv_cfg_def] \\
+              `terminates (run_function n fn v')` by cheat (* TODO: derive from outer termination *) \\
+              `run_function n fn v' = run_function (SUC n) fn v'`
+                by (ONCE_REWRITE_TAC [EQ_SYM_EQ] >> irule run_function_fuel_monotonicity >> simp[]) \\
+              pop_assum (fn th => REWRITE_TAC [th]) \\
+              first_x_assum irule >> gvs[] >> cheat (* TODO: IH conditions *))
+            >- (
+              (* Block a has PHIs - needs different handling *)
+              cheat (* TODO: handle PHI case with run_block_replace_label *))))))
+    >- cheat (* Halt case - use run_block_merge_blocks_equiv *)
+    >- cheat (* Revert case *)
+    >- cheat (* Error case *))
   >- (
     (* Case: not at a_lbl *)
     simp[Once run_function_def] \\
@@ -252,6 +316,7 @@ Theorem run_function_merge_blocks_equiv_bwd:
     (s1.vs_prev_bb = SOME b_lbl ==> s2.vs_prev_bb = SOME a_lbl) /\
     (s1.vs_prev_bb <> SOME b_lbl ==> s1.vs_prev_bb = s2.vs_prev_bb) /\
     (!lbl. s1.vs_prev_bb = SOME lbl ==> MEM lbl (pred_labels fn s1.vs_current_bb)) /\
+    ~s1.vs_halted /\
     terminates (run_function fuel (merge_blocks fn a_lbl b_lbl) s2)
   ==>
     ?fuel'. terminates (run_function fuel' fn s1) /\
@@ -268,7 +333,8 @@ Theorem merge_blocks_correct:
     merge_blocks_cond fn a_lbl b_lbl /\
     s.vs_current_bb = entry_label fn /\
     s.vs_prev_bb = NONE /\
-    s.vs_inst_idx = 0 ==>
+    s.vs_inst_idx = 0 /\
+    ~s.vs_halted ==>
     run_function_equiv_cfg fn (merge_blocks fn a_lbl b_lbl) s
 Proof
   rpt gen_tac >> simp[merge_blocks_cond_def] >> strip_tac >>
@@ -299,7 +365,8 @@ Theorem merge_jump_correct:
     merge_jump_cond fn a_lbl b_lbl /\
     s.vs_current_bb = entry_label fn /\
     s.vs_prev_bb = NONE /\
-    s.vs_inst_idx = 0 ==>
+    s.vs_inst_idx = 0 /\
+    ~s.vs_halted ==>
     run_function_equiv_cfg fn (merge_jump fn a_lbl b_lbl) s
 Proof
   cheat
