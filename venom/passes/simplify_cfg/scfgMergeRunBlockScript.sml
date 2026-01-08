@@ -983,6 +983,45 @@ Proof
         simp[])))
 QED
 
+(* Helper: replace_label_operand is identity if old label not in operand list *)
+Theorem map_replace_label_operand_id:
+  !ops old new. ~MEM old (MAP THE (FILTER IS_SOME (MAP get_label ops))) ==>
+    MAP (replace_label_operand old new) ops = ops
+Proof
+  Induct_on `ops` >> simp[] >>
+  rpt strip_tac >> Cases_on `h` >> gvs[get_label_def, replace_label_operand_def]
+QED
+
+(* Helper: replace_label_inst is identity if old not in successors *)
+Theorem replace_label_inst_id_not_in_successors:
+  !inst old new. is_terminator inst.inst_opcode /\ ~MEM old (get_successors inst) ==>
+    replace_label_inst old new inst = inst
+Proof
+  rpt strip_tac >> simp[replace_label_inst_def, instruction_component_equality] >>
+  irule map_replace_label_operand_id >> gvs[get_successors_def]
+QED
+
+(* Helper: Same terminator from state_equiv_cfg states gives same vs_current_bb *)
+Theorem step_inst_terminator_same_current_bb_simple:
+  !inst s1 s2 v1 v2. state_equiv_cfg s1 s2 /\ is_terminator inst.inst_opcode /\
+    step_inst inst s1 = OK v1 /\ step_inst inst s2 = OK v2 /\
+    ~v1.vs_halted /\ ~v2.vs_halted ==>
+    v1.vs_current_bb = v2.vs_current_bb
+Proof
+  rpt strip_tac >> Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
+  >- (gvs[step_inst_def] >> rpt (BasicProvers.FULL_CASE_TAC >> gvs[jump_to_def]))
+  >- (gvs[step_inst_def] >> rpt (BasicProvers.FULL_CASE_TAC >> gvs[jump_to_def])
+      >- (imp_res_tac scfgEquivTheory.eval_operand_state_equiv_cfg >> gvs[])
+      >- (drule_all scfgEquivTheory.eval_operand_state_equiv_cfg >> simp[] >>
+          strip_tac >> first_x_assum (qspec_then `h` mp_tac) >> gvs[]))
+  >- gvs[step_inst_def]
+  >- (gvs[step_inst_def] >> rpt (BasicProvers.FULL_CASE_TAC >> gvs[]))
+  >- gvs[step_inst_def, exec_result_distinct]
+  >- gvs[step_inst_def, exec_result_distinct]
+  >- gvs[step_inst_def, exec_result_distinct]
+  >- gvs[step_inst_def, exec_result_distinct]
+QED
+
 (* Key lemma for merge_blocks correctness: vs_current_bb equality.
    When running a then b vs running merged (FRONT(a) ++ b), both end with
    b's terminator which produces the same vs_current_bb on state_equiv_cfg states. *)
