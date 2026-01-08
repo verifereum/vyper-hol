@@ -514,6 +514,21 @@ Proof
   )
 QED
 
+(* When prev_bb is NONE, PHI always errors, so replacing labels doesn't matter *)
+Theorem step_inst_replace_label_prev_bb_none:
+  !inst s1 s2 old new.
+    state_equiv_cfg s1 s2 /\ s1.vs_prev_bb = NONE /\ s2.vs_prev_bb = NONE ==>
+    result_equiv_cfg (step_inst inst s1)
+      (step_inst (replace_label_inst old new inst) s2)
+Proof
+  rpt strip_tac >> Cases_on `inst.inst_opcode = PHI`
+  >- (
+    simp[step_inst_def, replace_label_inst_def, result_equiv_cfg_def] >>
+    Cases_on `inst.inst_outputs` >> simp[result_equiv_cfg_def] >>
+    Cases_on `t` >> simp[result_equiv_cfg_def])
+  >- (irule step_inst_replace_label_non_phi >> simp[])
+QED
+
 Theorem step_inst_replace_label_phi_prev_diff:
   !old new preds inst s prev.
     inst.inst_opcode = PHI /\

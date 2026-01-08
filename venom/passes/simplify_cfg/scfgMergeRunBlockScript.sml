@@ -378,6 +378,88 @@ Proof
   >- (Cases_on `res'` >> gvs[result_equiv_cfg_def, state_equiv_cfg_sym])
 QED
 
+(* Helper: step_in_block with prev_bb = NONE - PHIs always error *)
+Theorem step_in_block_replace_label_prev_bb_none:
+  !bb s1 s2 old new res is_term.
+    step_in_block bb s1 = (res, is_term) /\
+    state_equiv_cfg s1 s2 /\
+    s1.vs_prev_bb = NONE /\ s2.vs_prev_bb = NONE /\
+    s1.vs_inst_idx = s2.vs_inst_idx ==>
+    ?res'. step_in_block (replace_label_block old new bb) s2 = (res', is_term) /\
+           result_equiv_cfg res res'
+Proof
+  rpt strip_tac >> simp[step_in_block_def, replace_label_block_def] >>
+  qpat_x_assum `step_in_block _ _ = _` mp_tac >> simp[step_in_block_def] >>
+  Cases_on `get_instruction bb s1.vs_inst_idx` >> gvs[get_instruction_def]
+  >- simp[result_equiv_cfg_def]
+  >- (
+    strip_tac >>
+    `s2.vs_inst_idx < LENGTH bb.bb_instructions` by gvs[get_instruction_def] >>
+    simp[get_instruction_def, EL_MAP] >>
+    qabbrev_tac `inst = EL s2.vs_inst_idx bb.bb_instructions` >>
+    `get_instruction bb s2.vs_inst_idx = SOME inst` by
+      gvs[get_instruction_def, Abbr `inst`] >>
+    gvs[] >>
+    drule_all step_inst_replace_label_prev_bb_none >> strip_tac >>
+    first_x_assum (qspecl_then [`inst`, `old`, `new`] mp_tac) >>
+    simp[replace_label_inst_def] >>
+    Cases_on `step_inst inst s1` >> gvs[result_equiv_cfg_def]
+    >- (
+      Cases_on `step_inst (inst with inst_operands :=
+        MAP (replace_label_operand old new) inst.inst_operands) s2` >>
+      gvs[result_equiv_cfg_def] >>
+      strip_tac >> IF_CASES_TAC >> gvs[result_equiv_cfg_def]
+      >- (
+        qpat_x_assum `OK _ = _` (SUBST_ALL_TAC o SYM) >>
+        simp[result_equiv_cfg_def])
+      >- (irule next_inst_state_equiv_cfg >> simp[]))
+    >- (
+      strip_tac >>
+      Cases_on `step_inst (inst with inst_operands :=
+        MAP (replace_label_operand old new) inst.inst_operands) s2` >>
+      gvs[result_equiv_cfg_def] >>
+      qpat_x_assum `Halt _ = _` (SUBST_ALL_TAC o SYM) >>
+      fs[result_equiv_cfg_def])
+    >- (
+      strip_tac >> qpat_x_assum `Revert _ = _` (SUBST_ALL_TAC o SYM) >>
+      Cases_on `step_inst (inst with inst_operands :=
+        MAP (replace_label_operand old new) inst.inst_operands) s2` >>
+      gvs[result_equiv_cfg_def])
+    >- (
+      strip_tac >> qpat_x_assum `Error _ = _` (SUBST_ALL_TAC o SYM) >>
+      Cases_on `step_inst (inst with inst_operands :=
+        MAP (replace_label_operand old new) inst.inst_operands) s2` >>
+      gvs[result_equiv_cfg_def]))
+QED
+
+(* run_block with prev_bb = NONE - uses simpler condition since PHIs always error *)
+Theorem run_block_replace_label_prev_bb_none:
+  !bb s1 s2 old new.
+    state_equiv_cfg s1 s2 /\
+    s1.vs_prev_bb = NONE /\ s2.vs_prev_bb = NONE /\
+    s1.vs_inst_idx = s2.vs_inst_idx ==>
+    result_equiv_cfg (run_block bb s1)
+                     (run_block (replace_label_block old new bb) s2)
+Proof
+  recInduct run_block_ind >> rpt strip_tac >>
+  Cases_on `step_in_block bb s` >>
+  rename1 `step_in_block bb s = (res1, is_term)` >>
+  drule_all step_in_block_replace_label_prev_bb_none >> strip_tac >>
+  first_x_assum (qspecl_then [`old`, `new`] strip_assume_tac) >>
+  once_rewrite_tac[run_block_def] >> gvs[] >>
+  Cases_on `res1` >> Cases_on `res'` >> gvs[result_equiv_cfg_def] >>
+  IF_CASES_TAC >> gvs[result_equiv_cfg_def, state_equiv_cfg_def] >>
+  IF_CASES_TAC >> gvs[result_equiv_cfg_def, state_equiv_cfg_def,
+    stateEquivTheory.var_equiv_def] >>
+  `v.vs_inst_idx = v'.vs_inst_idx` by
+    (imp_res_tac step_in_block_inst_idx_succ >> simp[]) >>
+  `v.vs_prev_bb = s.vs_prev_bb` by
+    metis_tac[venomSemPropsTheory.step_in_block_preserves_prev_bb] >>
+  `v'.vs_prev_bb = s.vs_prev_bb` by
+    metis_tac[venomSemPropsTheory.step_in_block_preserves_prev_bb] >>
+  first_x_assum (qspecl_then [`v'`, `old`, `new`] mp_tac) >> simp[]
+QED
+
 (* Helper: terminators (except halting ones) preserve vs_current_bb through replace_label *)
 Theorem step_inst_terminator_same_current_bb:
   !inst old new s1 s2 v1 v2.
