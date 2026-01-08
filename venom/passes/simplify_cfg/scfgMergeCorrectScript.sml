@@ -285,9 +285,83 @@ Proof
             >- (
               (* Block a has PHIs - needs different handling *)
               cheat (* TODO: handle PHI case with run_block_replace_label *))))))
-    >- cheat (* Halt case - use run_block_merge_blocks_equiv *)
-    >- cheat (* Revert case *)
-    >- cheat (* Error case *))
+    >- (
+      (* Halt case *)
+      `block_terminator_last a` by
+        (fs[cfg_wf_def] >> first_x_assum irule >>
+         irule lookup_block_MEM >> qexists_tac `s2.vs_current_bb` >> simp[]) \\
+      `result_equiv_cfg (Halt v)
+         (run_block (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) s1)`
+        by (qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac run_block_merge_blocks_equiv >> simp[]) \\
+      Cases_on `run_block (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) s1` >>
+      gvs[result_equiv_cfg_def] \\
+      Cases_on `block_has_no_phi a`
+      >- (
+        `a.bb_instructions <> []` by
+          (fs[block_last_jmp_to_def, block_last_inst_def] >> Cases_on `a.bb_instructions` >> gvs[]) \\
+        `block_has_no_phi (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)`
+          by (irule block_has_no_phi_merged >> simp[]) \\
+        `result_equiv_cfg
+           (run_block (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) s1)
+           (run_block (replace_label_block b_lbl s2.vs_current_bb
+              (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2)`
+          by (irule run_block_replace_label_no_phi >> gvs[]) \\
+        Cases_on `run_block (replace_label_block b_lbl s2.vs_current_bb
+                   (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2` >>
+        gvs[result_equiv_cfg_def] \\
+        irule state_equiv_cfg_trans >> qexists_tac `v'` >> simp[])
+      >- cheat (* TODO: handle PHI case *))
+    >- (
+      (* Revert case *)
+      `block_terminator_last a` by
+        (fs[cfg_wf_def] >> first_x_assum irule >>
+         irule lookup_block_MEM >> qexists_tac `s2.vs_current_bb` >> simp[]) \\
+      `result_equiv_cfg (Revert v)
+         (run_block (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) s1)`
+        by (qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac run_block_merge_blocks_equiv >> simp[]) \\
+      Cases_on `run_block (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) s1` >>
+      gvs[result_equiv_cfg_def] \\
+      Cases_on `block_has_no_phi a`
+      >- (
+        `a.bb_instructions <> []` by
+          (fs[block_last_jmp_to_def, block_last_inst_def] >> Cases_on `a.bb_instructions` >> gvs[]) \\
+        `block_has_no_phi (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)`
+          by (irule block_has_no_phi_merged >> simp[]) \\
+        `result_equiv_cfg
+           (run_block (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) s1)
+           (run_block (replace_label_block b_lbl s2.vs_current_bb
+              (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2)`
+          by (irule run_block_replace_label_no_phi >> gvs[]) \\
+        Cases_on `run_block (replace_label_block b_lbl s2.vs_current_bb
+                   (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2` >>
+        gvs[result_equiv_cfg_def] \\
+        irule state_equiv_cfg_trans >> qexists_tac `v'` >> simp[])
+      >- cheat (* TODO: handle PHI case *))
+    >- (
+      (* Error case *)
+      `block_terminator_last a` by
+        (fs[cfg_wf_def] >> first_x_assum irule >>
+         irule lookup_block_MEM >> qexists_tac `s2.vs_current_bb` >> simp[]) \\
+      `result_equiv_cfg (Error s)
+         (run_block (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) s1)`
+        by (qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac run_block_merge_blocks_equiv >> simp[]) \\
+      Cases_on `run_block (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) s1` >>
+      gvs[result_equiv_cfg_def] \\
+      Cases_on `block_has_no_phi a`
+      >- (
+        `a.bb_instructions <> []` by
+          (fs[block_last_jmp_to_def, block_last_inst_def] >> Cases_on `a.bb_instructions` >> gvs[]) \\
+        `block_has_no_phi (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)`
+          by (irule block_has_no_phi_merged >> simp[]) \\
+        `result_equiv_cfg
+           (run_block (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) s1)
+           (run_block (replace_label_block b_lbl s2.vs_current_bb
+              (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2)`
+          by (irule run_block_replace_label_no_phi >> gvs[]) \\
+        Cases_on `run_block (replace_label_block b_lbl s2.vs_current_bb
+                   (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2` >>
+        gvs[result_equiv_cfg_def])
+      >- cheat (* TODO: handle PHI case *)))
   >- (
     (* Case: not at a_lbl *)
     simp[Once run_function_def] \\
