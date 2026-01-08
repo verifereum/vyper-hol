@@ -844,4 +844,17 @@ Proof
   gvs[block_successors_def]
 QED
 
+(* After run_block succeeds without halting, the block's label is a predecessor of current_bb *)
+Theorem run_block_ok_pred_labels:
+  !fn bb s s'.
+    cfg_wf fn /\ MEM bb fn.fn_blocks /\
+    run_block bb s = OK s' /\ ~s'.vs_halted ==>
+    MEM bb.bb_label (pred_labels fn s'.vs_current_bb)
+Proof
+  rpt strip_tac >>
+  drule_all run_block_ok_successor >> strip_tac >>
+  simp[pred_labels_def, MEM_MAP, MEM_FILTER] >>
+  qexists_tac `bb` >> simp[]
+QED
+
 val _ = export_theory();
