@@ -129,6 +129,22 @@ Proof
   rpt strip_tac >> fs[Once venomSemTheory.run_function_def]
 QED
 
+(* Helper: block with single predecessor can't loop to itself *)
+Theorem run_block_no_self_loop_single_pred:
+  !fn bb s s' a_lbl.
+    cfg_wf fn /\ MEM bb fn.fn_blocks /\
+    pred_labels fn bb.bb_label = [a_lbl] /\
+    a_lbl <> bb.bb_label /\
+    run_block bb s = OK s' /\ ~s'.vs_halted ==>
+    s'.vs_current_bb <> bb.bb_label
+Proof
+  rpt strip_tac >>
+  drule_all run_block_ok_successor >> strip_tac >>
+  `~MEM bb.bb_label (block_successors bb)` by
+    (qspecl_then [`fn`, `bb.bb_label`, `a_lbl`, `bb`] mp_tac pred_labels_single_no_jmp >> simp[]) >>
+  metis_tac[]
+QED
+
 (* Helper: run_function equivalence for merge_blocks when original terminates.
    The termination hypothesis is key - it allows using fuel monotonicity when
    the original path goes through a->b (using 2 fuel) vs merged path (using 1 fuel).
