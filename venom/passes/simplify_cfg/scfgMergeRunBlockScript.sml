@@ -874,7 +874,98 @@ Theorem run_block_replace_label_current_bb_prev_diff:
     ~v.vs_halted ==>
     v.vs_current_bb = v'.vs_current_bb
 Proof
-  cheat
+  completeInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `run_block bb s = _` mp_tac >> simp[Once run_block_def] >>
+  qpat_x_assum `run_block (replace_label_block _ _ _) _ = _` mp_tac >>
+  simp[Once run_block_def] >>
+  Cases_on `step_in_block bb s` >> Cases_on `q` >> gvs[] >>
+  Cases_on `step_in_block (replace_label_block old new bb) s` >> Cases_on `q` >> gvs[] >>
+  rpt strip_tac >> rpt (IF_CASES_TAC >> gvs[]) >>
+  Cases_on `v.vs_halted` >> gvs[] >>
+  Cases_on `v'³'.vs_halted` >> gvs[] >>
+  Cases_on `r` >> gvs[]
+  >- ((* Terminator case *)
+    gvs[step_in_block_def, replace_label_block_def, get_instruction_def] >>
+    Cases_on `s.vs_inst_idx < LENGTH bb.bb_instructions` >> gvs[EL_MAP] >>
+    qabbrev_tac `inst = bb.bb_instructions❲s.vs_inst_idx❳` >>
+    Cases_on `step_inst inst s` >> gvs[] >>
+    Cases_on `is_terminator inst.inst_opcode` >> gvs[] >>
+    `(replace_label_inst old new inst).inst_opcode = inst.inst_opcode`
+      by simp[replace_label_inst_def] >>
+    Cases_on `step_inst (replace_label_inst old new inst) s` >> gvs[] >>
+    `state_equiv_cfg s s` by simp[state_equiv_cfg_refl] >>
+    `s.vs_inst_idx = LENGTH bb.bb_instructions - 1` by (
+      gvs[block_terminator_last_def] >>
+      first_x_assum (qspecl_then [`s.vs_inst_idx`, `inst`] mp_tac) >>
+      simp[get_instruction_def, markerTheory.Abbrev_def]) >>
+    `~MEM old (get_successors inst)` by (
+      gvs[block_successors_def, block_last_inst_def] >>
+      Cases_on `bb.bb_instructions` >> gvs[LAST_EL, markerTheory.Abbrev_def]) >>
+    Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
+    >- (gvs[step_inst_def, replace_label_inst_def, get_successors_def, is_terminator_def] >>
+        Cases_on `inst.inst_operands` >> gvs[] >> Cases_on `h` >> gvs[] >>
+        Cases_on `t` >> gvs[] >>
+        gvs[replace_label_operand_def, get_label_def, jump_to_def])
+    >- (gvs[step_inst_def, replace_label_inst_def] >>
+        rpt (BasicProvers.FULL_CASE_TAC >>
+             gvs[replace_label_operand_def, get_label_def, jump_to_def,
+                 get_successors_def, is_terminator_def]) >>
+        gvs[scfgMergeHelpersTheory.eval_operand_replace_label])
+    >- gvs[step_inst_def, replace_label_inst_def]
+    >- fs[step_inst_def, replace_label_inst_def]
+    >- fs[step_inst_def, replace_label_inst_def]
+    >- fs[step_inst_def, replace_label_inst_def]
+    >- fs[step_inst_def, replace_label_inst_def]
+    >- fs[step_inst_def, replace_label_inst_def])
+  >- ((* Non-terminator case *)
+    Cases_on `r':bool`
+    >- ((* r' = T contradiction *)
+      gvs[step_in_block_def, replace_label_block_def, get_instruction_def,
+          EL_MAP, LENGTH_MAP] >>
+      gvs[replace_label_inst_def] >>
+      Cases_on `s.vs_inst_idx < LENGTH bb.bb_instructions` >> gvs[] >>
+      Cases_on `step_inst bb.bb_instructions❲s.vs_inst_idx❳ s` >> gvs[AllCaseEqs()])
+    >- ((* r' = F, inductive case *)
+      gvs[] >>
+      gvs[step_in_block_def, replace_label_block_def, get_instruction_def] >>
+      Cases_on `s.vs_inst_idx < LENGTH bb.bb_instructions` >> gvs[EL_MAP, LENGTH_MAP] >>
+      qabbrev_tac `inst = bb.bb_instructions❲s.vs_inst_idx❳` >>
+      gvs[replace_label_inst_def] >>
+      Cases_on `step_inst inst s` >> gvs[AllCaseEqs()] >>
+      Cases_on `inst.inst_opcode = PHI`
+      >- ((* PHI case *)
+        gvs[step_inst_def] >> rpt (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
+        `MEM inst bb.bb_instructions` by (
+          gvs[MEM_EL, markerTheory.Abbrev_def] >>
+          qexists_tac `s.vs_inst_idx` >> simp[]) >>
+        drule_all phi_block_wf_inst >> strip_tac >>
+        drule_all scfgPhiLemmasTheory.phi_inst_wf_props >> strip_tac >>
+        drule_all scfgPhiLemmasTheory.resolve_phi_replace_label_other >> strip_tac >> gvs[] >>
+        fs[scfgPhiLemmasTheory.resolve_phi_replace_label_other] >>
+        `x'' = x` by (
+          qpat_x_assum `resolve_phi prev (MAP _ _) = SOME x''` mp_tac >>
+          simp[scfgPhiLemmasTheory.resolve_phi_replace_label_other]) >>
+        gvs[] >>
+        first_x_assum (qspecl_then
+          [`LENGTH bb.bb_instructions - (next_inst (update_var h x' s)).vs_inst_idx`] mp_tac) >>
+        impl_tac >- simp[next_inst_def, update_var_def] >>
+        disch_then (qspecl_then [`bb`, `next_inst (update_var h x' s)`] mp_tac) >> simp[] >>
+        disch_then (qspecl_then [`old`, `new`, `v''`, `prev`, `preds`] mp_tac) >>
+        simp[next_inst_def, update_var_def])
+      >- ((* Non-PHI case *)
+        drule_all scfgMergeHelpersTheory.step_inst_replace_label_non_phi_eq >> strip_tac >>
+        `v'⁴' = s'` by (
+          first_x_assum (qspecl_then [`s`, `old`, `new`] mp_tac) >>
+          gvs[replace_label_inst_def]) >>
+        gvs[] >>
+        first_x_assum (qspecl_then
+          [`LENGTH bb.bb_instructions - (next_inst s').vs_inst_idx`] mp_tac) >>
+        impl_tac >- (drule_all venomSemTheory.step_inst_preserves_inst_idx >> simp[next_inst_def]) >>
+        disch_then (qspecl_then [`bb`, `next_inst s'`] mp_tac) >> simp[] >>
+        disch_then (qspecl_then [`old`, `new`, `v''`, `prev`, `preds`] mp_tac) >>
+        impl_tac >- (drule_all venomSemPropsTheory.step_inst_preserves_prev_bb >> simp[next_inst_def]) >>
+        simp[])))
 QED
 
 val _ = export_theory();
