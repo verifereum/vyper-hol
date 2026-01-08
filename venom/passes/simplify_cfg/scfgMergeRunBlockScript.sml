@@ -862,9 +862,11 @@ QED
    require PHIs to not reference old - instead it relies on prev_bb ≠ old
    meaning the PHI resolution won't select the old branch anyway. *)
 Theorem run_block_replace_label_current_bb_prev_diff:
-  !bb s old new v v' prev.
+  !bb s old new v v' prev preds.
     s.vs_prev_bb = SOME prev /\
     prev <> old /\ prev <> new /\
+    MEM prev preds /\
+    phi_block_wf preds bb /\
     block_terminator_last bb /\
     ~MEM old (block_successors bb) /\
     run_block bb s = OK v /\
