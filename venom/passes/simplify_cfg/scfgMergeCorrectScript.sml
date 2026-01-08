@@ -492,7 +492,35 @@ Proof
             >- (
               gvs[state_equiv_cfg_def] \\
               first_x_assum irule \\
-              gvs[] \\ cheat (* TODO: IH conditions for prev_bb = SOME b_lbl case *)))
+              gvs[] >> rpt conj_tac
+              >- (rpt strip_tac >> imp_res_tac run_block_ok_prev_bb >>
+                  imp_res_tac run_block_ok_not_halted >> gvs[] >>
+                  imp_res_tac lookup_block_MEM >> imp_res_tac lookup_block_label >>
+                  drule_all run_block_ok_pred_labels >> gvs[])
+              >- (irule run_function_terminates_step >> gvs[] >>
+                  qexistsl_tac [`x`, `s1`] >> gvs[])
+              >- (imp_res_tac lookup_block_MEM >> imp_res_tac lookup_block_label >>
+                  CCONTR_TAC >> fs[] >> drule_all run_block_ok_successor >> strip_tac >>
+                  `~MEM b_lbl (block_successors x)` by
+                    (irule pred_labels_single_no_jmp >> qexistsl_tac [`a_lbl`, `fn`] >> gvs[]) >>
+                  gvs[])
+              >- (irule run_block_replace_label_current_bb_diff_states >> gvs[] >>
+                  qexistsl_tac [`x`, `fn`, `a_lbl`, `b_lbl`, `s1`, `s2`] >>
+                  rpt conj_tac >> gvs[]
+                  >- (fs[cfg_wf_def] >> first_x_assum irule >>
+                      irule lookup_block_MEM >> qexists_tac `s2.vs_current_bb` >> simp[])
+                  >- (`x.bb_label = s2.vs_current_bb` by metis_tac[lookup_block_label] >>
+                      irule pred_labels_no_jmp_other >> gvs[] >> qexists_tac `b_lbl` >> gvs[])
+                  >- (irule pred_labels_single_no_jmp >> qexistsl_tac [`a_lbl`, `fn`] >> gvs[] >>
+                      metis_tac[lookup_block_label, lookup_block_MEM])
+                  >- (`x.bb_label = s2.vs_current_bb` by metis_tac[lookup_block_label] >> gvs[])
+                  >- (irule scfgPhiLemmasTheory.phi_fn_wf_block >> gvs[] >>
+                      metis_tac[lookup_block_MEM])
+                  >- simp[state_equiv_cfg_def])
+              >- metis_tac[run_block_ok_inst_idx]
+              >- metis_tac[run_block_ok_inst_idx]
+              >- (rpt strip_tac >> imp_res_tac run_block_ok_prev_bb >> gvs[])
+              >- (rpt strip_tac >> imp_res_tac run_block_ok_prev_bb >> gvs[])))
           >- (simp[] >> fs[result_equiv_cfg_def] >>
               Cases_on `run_block (replace_label_block b_lbl a_lbl x) s2` >>
               gvs[result_equiv_cfg_def])
