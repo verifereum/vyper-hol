@@ -1188,4 +1188,77 @@ Proof
                 simp[]))))
 QED
 
+(* When s1.vs_prev_bb = SOME old and s2.vs_prev_bb = SOME new, and we have
+   the conditions for run_block_replace_label, the current_bb is preserved.
+   This handles the case where execution came from the merged predecessor. *)
+Theorem run_block_replace_label_current_bb_diff_states:
+  !bb s1 s2 old new v1 v2 preds fn.
+    state_equiv_cfg s1 s2 /\
+    s1.vs_inst_idx = s2.vs_inst_idx /\
+    s1.vs_prev_bb = SOME old /\
+    s2.vs_prev_bb = SOME new /\
+    old <> new /\
+    preds = pred_labels fn bb.bb_label /\
+    MEM old preds /\ ~MEM new preds /\
+    phi_block_wf preds bb /\
+    block_terminator_last bb /\
+    ~MEM old (block_successors bb) /\
+    run_block bb s1 = OK v1 /\
+    run_block (replace_label_block old new bb) s2 = OK v2 /\
+    ~v1.vs_halted ==>
+    v1.vs_current_bb = v2.vs_current_bb
+Proof
+  completeInduct_on `LENGTH bb.bb_instructions - s1.vs_inst_idx` >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `run_block bb s1 = _` mp_tac >> simp[Once run_block_def] >>
+  qpat_x_assum `run_block (replace_label_block _ _ _) _ = _` mp_tac >>
+  simp[Once run_block_def] >>
+  Cases_on `step_in_block bb s1` >> Cases_on `q` >> gvs[] >>
+  Cases_on `step_in_block (replace_label_block old new bb) s2` >>
+  Cases_on `q` >> gvs[] >>
+  rpt strip_tac >> rpt (IF_CASES_TAC >> gvs[]) >>
+  `r' = r /\ result_equiv_cfg (OK v') (OK v)` by (
+    qspecl_then [`bb`, `s1`, `s2`, `old`, `new`, `pred_labels fn bb.bb_label`,
+                 `OK v`, `r`, `fn`] mp_tac step_in_block_replace_label >>
+    simp[] >> strip_tac >> gvs[]) >>
+  Cases_on `v.vs_halted` >> gvs[] >>
+  Cases_on `r` >> gvs[]
+  >- ((* terminator case *)
+    Cases_on `v'.vs_halted` >> gvs[] >>
+    gvs[step_in_block_def, replace_label_block_def] >>
+    Cases_on `get_instruction bb s2.vs_inst_idx` >> gvs[] >>
+    gvs[get_instruction_def] >>
+    qabbrev_tac `inst = bb.bb_instructions❲s2.vs_inst_idx❳` >>
+    `(MAP (replace_label_inst old new) bb.bb_instructions)❲s2.vs_inst_idx❳ =
+     replace_label_inst old new inst` by simp[EL_MAP, Abbr `inst`] >>
+    gvs[] >>
+    Cases_on `step_inst inst s1` >> gvs[] >>
+    Cases_on `is_terminator inst.inst_opcode` >> gvs[] >>
+    Cases_on `step_inst (replace_label_inst old new inst) s2` >> gvs[] >>
+    gvs[replace_label_inst_def] >>
+    irule step_inst_terminator_same_current_bb >>
+    simp[replace_label_inst_def] >>
+    qexistsl_tac [`inst`, `new`, `old`, `s1`, `s2`] >> simp[] >>
+    gvs[block_successors_def, block_last_inst_def] >>
+    sg `inst = LAST bb.bb_instructions`
+    >- (
+      fs[block_terminator_last_def, get_instruction_def, Abbr `inst`] >>
+      simp[GSYM LAST_EL] >>
+      `bb.bb_instructions <> []` by (Cases_on `bb.bb_instructions` >> gvs[]) >>
+      simp[LAST_EL, arithmeticTheory.PRE_SUB1])
+    >- (`~NULL bb.bb_instructions` by (Cases_on `bb.bb_instructions` >> gvs[]) >>
+        gvs[]))
+  >- ((* non-terminator case - use IH *)
+    Cases_on `v'.vs_halted` >> gvs[] >>
+    first_x_assum irule >> gvs[] >>
+    qexistsl_tac [`bb`, `fn`, `new`, `old`, `v`, `v'`] >> simp[] >>
+    rpt conj_tac
+    >- (imp_res_tac step_in_block_inst_idx_succ >> simp[])
+    >- gvs[step_in_block_def, get_instruction_def, AllCaseEqs()]
+    >- (imp_res_tac step_in_block_inst_idx_succ >> simp[])
+    >- (imp_res_tac step_in_block_preserves_prev_bb >> gvs[])
+    >- (imp_res_tac step_in_block_preserves_prev_bb >> gvs[])
+    >- gvs[result_equiv_cfg_def, state_equiv_cfg_sym])
+QED
+
 val _ = export_theory();
