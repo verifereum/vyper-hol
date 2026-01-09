@@ -1560,4 +1560,30 @@ Proof
     >- gvs[result_equiv_cfg_def, state_equiv_cfg_sym])
 QED
 
+(* Helper: Chain run_block_ok_same_current_bb with run_block_replace_label_current_bb_prev_diff
+   for the case where we have state_equiv_cfg states with same prev_bb = SOME prev. *)
+Theorem run_block_replace_label_current_bb_same_prev:
+  !bb s1 s2 old new v v' prev preds.
+    state_equiv_cfg s1 s2 /\ s1.vs_prev_bb = s2.vs_prev_bb /\
+    s1.vs_prev_bb = SOME prev /\ s1.vs_inst_idx = s2.vs_inst_idx /\
+    prev <> old /\ prev <> new /\
+    MEM prev preds /\ phi_block_wf preds bb /\ block_terminator_last bb /\
+    ~MEM old (block_successors bb) /\
+    run_block bb s1 = OK v /\
+    run_block (replace_label_block old new bb) s2 = OK v' /\ ~v.vs_halted ==>
+    v.vs_current_bb = v'.vs_current_bb
+Proof
+  rpt strip_tac \\
+  `result_equiv_cfg (run_block bb s1) (run_block bb s2)` by
+    (irule run_block_state_equiv_cfg >> gvs[]) \\
+  Cases_on `run_block bb s2` >> gvs[result_equiv_cfg_def] \\
+  rename1 `run_block bb s2 = OK v_mid` \\
+  `~v_mid.vs_halted` by gvs[state_equiv_cfg_def] \\
+  `v.vs_current_bb = v_mid.vs_current_bb` by
+    metis_tac[run_block_ok_same_current_bb] \\
+  `v_mid.vs_current_bb = v'.vs_current_bb` by
+    metis_tac[run_block_replace_label_current_bb_prev_diff] \\
+  simp[]
+QED
+
 val _ = export_theory();
