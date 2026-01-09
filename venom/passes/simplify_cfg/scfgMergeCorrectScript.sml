@@ -680,8 +680,45 @@ Proof
            qexists_tac `v'` >> simp[])
          >- ( (* prev_bb = SOME x *)
            Cases_on `x = b_lbl` >> gvs[]
-           >- cheat (* prev_bb = SOME b_lbl *)
-           >- cheat)) (* prev_bb = SOME x, x ≠ b_lbl *)
+           >- ( (* prev_bb = SOME b_lbl *)
+             `~MEM s1.vs_current_bb (pred_labels fn s1.vs_current_bb)` by
+               (drule_all no_self_loop_from_jmp_to >> simp[]) \\
+             `MEM a fn.fn_blocks` by (irule lookup_block_MEM >>
+               qexists_tac `s1.vs_current_bb` >> simp[]) \\
+             `phi_block_wf (pred_labels fn a.bb_label) a` by
+               (irule scfgPhiLemmasTheory.phi_fn_wf_block >> simp[]) \\
+             `a.bb_label = s1.vs_current_bb` by
+               (imp_res_tac lookup_block_label >> simp[]) \\
+             sg `a.bb_instructions <> []`
+               >- (CCONTR_TAC >> gvs[block_last_jmp_to_def, block_last_inst_def]) \\
+             `phi_block_wf (pred_labels fn s1.vs_current_bb) merged_no_label` by
+               (simp[Abbr `merged_no_label`] >> irule phi_block_wf_merged >> gvs[]) \\
+             `MEM b_lbl (pred_labels fn s1.vs_current_bb)` by gvs[] \\
+             sg `result_equiv_cfg (run_block merged_no_label s1) (run_block merged_bb s2)`
+               >- (qunabbrev_tac `merged_bb` >>
+                   irule run_block_replace_label >>
+                   simp[Abbr `merged_no_label`] >>
+                   qexists_tac `fn` >> gvs[])
+               >- (
+                 Cases_on `run_block merged_no_label s1` >> gvs[result_equiv_cfg_def] \\
+                 Cases_on `run_block a s1` >> gvs[result_equiv_cfg_def] \\
+                 Cases_on `v''.vs_halted` >> gvs[result_equiv_cfg_def] \\
+                 Cases_on `run_block b v''` >> gvs[result_equiv_cfg_def] \\
+                 `v'''.vs_halted` by gvs[state_equiv_cfg_def] \\
+                 `v''.vs_current_bb = b_lbl` by
+                   (qspecl_then [`fn`, `a`, `s1`, `v''`] mp_tac run_block_ok_successor >>
+                    simp[cfg_wf_def] >>
+                    `MEM a fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
+                    simp[] >>
+                    `block_successors a = [b_lbl]` by metis_tac[block_last_jmp_to_successors] >>
+                    simp[]) \\
+                 qexists_tac `SUC (SUC 0)` >> simp[] \\
+                 simp[Once run_function_def, terminates_def] \\
+                 simp[Once run_function_def, Once run_function_def] \\
+                 simp[Once run_function_def, lookup_block_merge_blocks_a] \\
+                 simp[result_equiv_cfg_def] >> irule state_equiv_cfg_trans >>
+                 qexists_tac `v'` >> simp[]))
+           >- cheat)) (* prev_bb = SOME x, x <> b_lbl *)
        >- cheat) (* OK not halted - needs IH *)
      >- cheat (* Halt case *)
      >- cheat (* Revert case *)
