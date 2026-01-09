@@ -437,8 +437,281 @@ Proof
                   `v''.vs_prev_bb = SOME s2.vs_current_bb` by metis_tac[run_block_ok_prev_bb] >>
                   gvs[]))
             >- (
-              (* Block a has PHIs - needs different handling *)
-              cheat (* TODO: handle PHI case with run_block_replace_label *))))))
+              (* Block a has PHIs - use run_block_replace_label variants *)
+              `a.bb_instructions <> []` by (
+                fs[block_last_jmp_to_def, block_last_inst_def] >>
+                Cases_on `a.bb_instructions` >> gvs[]) \\
+              `MEM a fn.fn_blocks` by
+                (irule lookup_block_MEM >> qexists_tac `s2.vs_current_bb` >> simp[]) \\
+              `a.bb_label = s2.vs_current_bb` by metis_tac[lookup_block_label] \\
+              `phi_block_wf (pred_labels fn s2.vs_current_bb) a` by
+                (fs[phi_fn_wf_def] >> res_tac >> gvs[]) \\
+              `phi_block_wf (pred_labels fn s2.vs_current_bb)
+                 (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)`
+                by (irule phi_block_wf_merged >> simp[]) \\
+              `~MEM s2.vs_current_bb (pred_labels fn s2.vs_current_bb)` by
+                (irule no_self_loop_from_jmp_to >> qexistsl_tac [`a`, `v.vs_current_bb`] >>
+                 gvs[]) \\
+              Cases_on `s1.vs_prev_bb = SOME v.vs_current_bb`
+              >- (
+                (* prev_bb = SOME b_lbl - use run_block_replace_label *)
+                `s2.vs_prev_bb = SOME s2.vs_current_bb` by gvs[] \\
+                `MEM v.vs_current_bb (pred_labels fn s2.vs_current_bb)` by
+                  (first_x_assum irule >> simp[]) \\
+                sg `result_equiv_cfg
+                     (run_block (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) s1)
+                     (run_block (replace_label_block v.vs_current_bb s2.vs_current_bb
+                        (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2)`
+                >- (irule run_block_replace_label >> qexists_tac `fn` >>
+                    gvs[] >> `a.bb_label = s2.vs_current_bb` by metis_tac[lookup_block_label] >>
+                    gvs[])
+                >- (
+                  `result_equiv_cfg (run_block b v)
+                     (run_block (replace_label_block v.vs_current_bb s2.vs_current_bb
+                        (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2)`
+                    by (irule result_equiv_cfg_trans >>
+                        qexists_tac `run_block (a with bb_instructions :=
+                                     FRONT a.bb_instructions ++ b.bb_instructions) s1` >> gvs[]) \\
+                  Cases_on `run_block b v` >>
+                  Cases_on `run_block (replace_label_block v.vs_current_bb s2.vs_current_bb
+                             (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2` >>
+                  gvs[result_equiv_cfg_def, AllCaseEqs()] \\
+                  Cases_on `v'.vs_halted` >> Cases_on `v''.vs_halted` >>
+                  gvs[result_equiv_cfg_def, state_equiv_cfg_def] \\
+                  `terminates (run_function n fn v')` by (
+                    irule run_function_terminates_step >> simp[] >>
+                    qexistsl_tac [`b`, `v`] >> simp[] >>
+                    irule run_function_terminates_step >> simp[] >>
+                    qexistsl_tac [`a`, `s1`] >> simp[]) \\
+                  `run_function n fn v' = run_function (SUC n) fn v'`
+                    by (ONCE_REWRITE_TAC [EQ_SYM_EQ] >> irule run_function_fuel_monotonicity >> simp[]) \\
+                  pop_assum (fn th => REWRITE_TAC [th]) \\
+                  first_x_assum irule >> gvs[] >> rpt conj_tac
+                  >- (rpt strip_tac >>
+                      `v'.vs_prev_bb = SOME v.vs_current_bb` by metis_tac[run_block_ok_prev_bb] >>
+                      gvs[] >> `MEM b fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+                      `b.bb_label = v.vs_current_bb` by metis_tac[lookup_block_label] >>
+                      metis_tac[run_block_ok_pred_labels])
+                  >- (`run_function (SUC n) fn v' = run_function n fn v'`
+                        by (irule run_function_fuel_monotonicity >> simp[]) >> simp[])
+                  >- (`MEM b fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+                      `b.bb_label = v.vs_current_bb` by metis_tac[lookup_block_label] >>
+                      qspecl_then [`fn`, `b`, `v`, `v'`, `s2.vs_current_bb`]
+                        mp_tac run_block_no_self_loop_single_pred >> simp[])
+                  >- (
+                    qpat_x_assum `result_equiv_cfg (OK v') _` mp_tac >>
+                    Cases_on `run_block (a with bb_instructions :=
+                               FRONT a.bb_instructions ++ b.bb_instructions) s1` >>
+                    simp[result_equiv_cfg_def] >> strip_tac \\
+                    `block_terminator_last b` by
+                      (fs[cfg_wf_def] >> first_x_assum irule >> metis_tac[lookup_block_MEM]) \\
+                    `~MEM v.vs_current_bb (block_successors b)` by
+                      (`b.bb_label = v.vs_current_bb` by metis_tac[lookup_block_label] >>
+                       `MEM b fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+                       metis_tac[pred_labels_single_no_jmp]) \\
+                    `~v'³'.vs_halted` by gvs[state_equiv_cfg_def] \\
+                    sg `b.bb_instructions <> []`
+                    >- (CCONTR_TAC >> gvs[] >>
+                        qpat_x_assum `block_terminator_last b` mp_tac >>
+                        simp[block_terminator_last_def] >> simp[get_instruction_def] >>
+                        qpat_x_assum `run_block b v = OK v'` mp_tac >>
+                        simp[Once run_block_def, step_in_block_def, get_instruction_def])
+                    >- (
+                      sg `v'.vs_current_bb = v'³'.vs_current_bb`
+                      >- (irule run_block_merge_blocks_current_bb >>
+                          simp[] >> qexistsl_tac [`a`, `b`, `v.vs_current_bb`, `s1`, `v`] >> simp[])
+                      >- (
+                        sg `v'³'.vs_current_bb = v''.vs_current_bb`
+                        >- (irule run_block_replace_label_current_bb >> simp[] >>
+                            qexistsl_tac [`a with bb_instructions :=
+                                            FRONT a.bb_instructions ++ b.bb_instructions`,
+                                          `fn`, `s2.vs_current_bb`, `v.vs_current_bb`, `s1`, `s2`] >>
+                            simp[] >> rpt conj_tac
+                            >- (irule block_terminator_last_merged >> simp[])
+                            >- (`a.bb_label = s2.vs_current_bb` by metis_tac[lookup_block_label] >> simp[])
+                            >- simp[block_successors_merged])
+                        >- simp[])))
+                  >- metis_tac[run_block_ok_inst_idx]
+                  >- metis_tac[run_block_ok_inst_idx]
+                  >- (`v'.vs_prev_bb = SOME v.vs_current_bb` by metis_tac[run_block_ok_prev_bb] >> gvs[])
+                  >- (`v'.vs_prev_bb = SOME v.vs_current_bb` by metis_tac[run_block_ok_prev_bb] >>
+                      `v''.vs_prev_bb = SOME s2.vs_current_bb` by metis_tac[run_block_ok_prev_bb] >>
+                      gvs[])))
+              >- (
+                (* prev_bb <> SOME b_lbl - use run_block_replace_label_prev_diff or prev_bb_none *)
+                `s1.vs_prev_bb = s2.vs_prev_bb` by gvs[] \\
+                Cases_on `s1.vs_prev_bb`
+                >- (
+                  (* prev_bb = NONE *)
+                  sg `result_equiv_cfg
+                       (run_block (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) s1)
+                       (run_block (replace_label_block v.vs_current_bb s2.vs_current_bb
+                          (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2)`
+                  >- (irule run_block_replace_label_prev_bb_none >> gvs[])
+                  >- (
+                    `result_equiv_cfg (run_block b v)
+                       (run_block (replace_label_block v.vs_current_bb s2.vs_current_bb
+                          (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2)`
+                      by (irule result_equiv_cfg_trans >>
+                          qexists_tac `run_block (a with bb_instructions :=
+                                       FRONT a.bb_instructions ++ b.bb_instructions) s1` >> gvs[]) \\
+                    Cases_on `run_block b v` >>
+                    Cases_on `run_block (replace_label_block v.vs_current_bb s2.vs_current_bb
+                               (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2` >>
+                    gvs[result_equiv_cfg_def, AllCaseEqs()] \\
+                    Cases_on `v'.vs_halted` >> Cases_on `v''.vs_halted` >>
+                    gvs[result_equiv_cfg_def, state_equiv_cfg_def] \\
+                    `terminates (run_function n fn v')` by (
+                      irule run_function_terminates_step >> simp[] >>
+                      qexistsl_tac [`b`, `v`] >> simp[] >>
+                      irule run_function_terminates_step >> simp[] >>
+                      qexistsl_tac [`a`, `s1`] >> simp[]) \\
+                    `run_function n fn v' = run_function (SUC n) fn v'`
+                      by (ONCE_REWRITE_TAC [EQ_SYM_EQ] >> irule run_function_fuel_monotonicity >> simp[]) \\
+                    pop_assum (fn th => REWRITE_TAC [th]) \\
+                    first_x_assum irule >> gvs[] >> rpt conj_tac
+                    >- (rpt strip_tac >>
+                        `v'.vs_prev_bb = SOME v.vs_current_bb` by metis_tac[run_block_ok_prev_bb] >>
+                        gvs[] >> `MEM b fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+                        `b.bb_label = v.vs_current_bb` by metis_tac[lookup_block_label] >>
+                        metis_tac[run_block_ok_pred_labels])
+                    >- (`run_function (SUC n) fn v' = run_function n fn v'`
+                          by (irule run_function_fuel_monotonicity >> simp[]) >> simp[])
+                    >- (`MEM b fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+                        `b.bb_label = v.vs_current_bb` by metis_tac[lookup_block_label] >>
+                        qspecl_then [`fn`, `b`, `v`, `v'`, `s2.vs_current_bb`]
+                          mp_tac run_block_no_self_loop_single_pred >> simp[])
+                    >- (
+                      qpat_x_assum `result_equiv_cfg (OK v') _` mp_tac >>
+                      Cases_on `run_block (a with bb_instructions :=
+                                 FRONT a.bb_instructions ++ b.bb_instructions) s1` >>
+                      simp[result_equiv_cfg_def] >> strip_tac \\
+                      `block_terminator_last b` by
+                        (fs[cfg_wf_def] >> first_x_assum irule >> metis_tac[lookup_block_MEM]) \\
+                      `~MEM v.vs_current_bb (block_successors b)` by
+                        (`b.bb_label = v.vs_current_bb` by metis_tac[lookup_block_label] >>
+                         `MEM b fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+                         metis_tac[pred_labels_single_no_jmp]) \\
+                      `~v'³'.vs_halted` by gvs[state_equiv_cfg_def] \\
+                      sg `b.bb_instructions <> []`
+                      >- (CCONTR_TAC >> gvs[] >>
+                          qpat_x_assum `block_terminator_last b` mp_tac >>
+                          simp[block_terminator_last_def] >> simp[get_instruction_def] >>
+                          qpat_x_assum `run_block b v = OK v'` mp_tac >>
+                          simp[Once run_block_def, step_in_block_def, get_instruction_def])
+                      >- (
+                        sg `v'.vs_current_bb = v'³'.vs_current_bb`
+                        >- (irule run_block_merge_blocks_current_bb >>
+                            simp[] >> qexistsl_tac [`a`, `b`, `v.vs_current_bb`, `s1`, `v`] >> simp[])
+                        >- (
+                          sg `v'³'.vs_current_bb = v''.vs_current_bb`
+                          >- (irule run_block_replace_label_current_bb_prev_none >> simp[] >>
+                              qexistsl_tac [`a with bb_instructions :=
+                                              FRONT a.bb_instructions ++ b.bb_instructions`,
+                                            `s2.vs_current_bb`, `v.vs_current_bb`, `s1`, `s2`] >>
+                              simp[] >> rpt conj_tac
+                              >- (irule block_terminator_last_merged >> simp[])
+                              >- simp[block_successors_merged]
+                              >- gvs[state_equiv_cfg_def])
+                          >- simp[])))
+                    >- metis_tac[run_block_ok_inst_idx]
+                    >- metis_tac[run_block_ok_inst_idx]
+                    >- (`v'.vs_prev_bb = SOME v.vs_current_bb` by metis_tac[run_block_ok_prev_bb] >> gvs[])
+                    >- (`v'.vs_prev_bb = SOME v.vs_current_bb` by metis_tac[run_block_ok_prev_bb] >>
+                        `v''.vs_prev_bb = SOME s2.vs_current_bb` by metis_tac[run_block_ok_prev_bb] >>
+                        gvs[])))
+                >- (
+                  (* prev_bb = SOME x where x <> b_lbl *)
+                  rename1 `s1.vs_prev_bb = SOME prev_lbl` \\
+                  `prev_lbl <> v.vs_current_bb` by (CCONTR_TAC >> gvs[]) \\
+                  `MEM prev_lbl (pred_labels fn s2.vs_current_bb)` by (first_x_assum irule >> simp[]) \\
+                  sg `result_equiv_cfg
+                       (run_block (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) s1)
+                       (run_block (replace_label_block v.vs_current_bb s2.vs_current_bb
+                          (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2)`
+                  >- (
+                    irule result_equiv_cfg_trans >>
+                    qexists_tac `run_block (a with bb_instructions :=
+                                  FRONT a.bb_instructions ++ b.bb_instructions) s2` >>
+                    conj_tac
+                    >- (irule run_block_state_equiv_cfg >> gvs[])
+                    >- (irule run_block_replace_label_prev_diff >>
+                        qexistsl_tac [`pred_labels fn s2.vs_current_bb`, `prev_lbl`, `fn`] >>
+                        gvs[] >> `a.bb_label = s2.vs_current_bb` by metis_tac[lookup_block_label] >>
+                        gvs[]))
+                  >- (
+                    `result_equiv_cfg (run_block b v)
+                       (run_block (replace_label_block v.vs_current_bb s2.vs_current_bb
+                          (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2)`
+                      by (irule result_equiv_cfg_trans >>
+                          qexists_tac `run_block (a with bb_instructions :=
+                                       FRONT a.bb_instructions ++ b.bb_instructions) s1` >> gvs[]) \\
+                    Cases_on `run_block b v` >>
+                    Cases_on `run_block (replace_label_block v.vs_current_bb s2.vs_current_bb
+                               (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2` >>
+                    gvs[result_equiv_cfg_def, AllCaseEqs()] \\
+                    Cases_on `v'.vs_halted` >> Cases_on `v''.vs_halted` >>
+                    gvs[result_equiv_cfg_def, state_equiv_cfg_def] \\
+                    `terminates (run_function n fn v')` by (
+                      irule run_function_terminates_step >> simp[] >>
+                      qexistsl_tac [`b`, `v`] >> simp[] >>
+                      irule run_function_terminates_step >> simp[] >>
+                      qexistsl_tac [`a`, `s1`] >> simp[]) \\
+                    `run_function n fn v' = run_function (SUC n) fn v'`
+                      by (ONCE_REWRITE_TAC [EQ_SYM_EQ] >> irule run_function_fuel_monotonicity >> simp[]) \\
+                    pop_assum (fn th => REWRITE_TAC [th]) \\
+                    first_x_assum irule >> gvs[] >> rpt conj_tac
+                    >- (rpt strip_tac >>
+                        `v'.vs_prev_bb = SOME v.vs_current_bb` by metis_tac[run_block_ok_prev_bb] >>
+                        gvs[] >> `MEM b fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+                        `b.bb_label = v.vs_current_bb` by metis_tac[lookup_block_label] >>
+                        metis_tac[run_block_ok_pred_labels])
+                    >- (`run_function (SUC n) fn v' = run_function n fn v'`
+                          by (irule run_function_fuel_monotonicity >> simp[]) >> simp[])
+                    >- (`MEM b fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+                        `b.bb_label = v.vs_current_bb` by metis_tac[lookup_block_label] >>
+                        qspecl_then [`fn`, `b`, `v`, `v'`, `s2.vs_current_bb`]
+                          mp_tac run_block_no_self_loop_single_pred >> simp[])
+                    >- (
+                      qpat_x_assum `result_equiv_cfg (OK v') _` mp_tac >>
+                      Cases_on `run_block (a with bb_instructions :=
+                                 FRONT a.bb_instructions ++ b.bb_instructions) s1` >>
+                      simp[result_equiv_cfg_def] >> strip_tac \\
+                      `block_terminator_last b` by
+                        (fs[cfg_wf_def] >> first_x_assum irule >> metis_tac[lookup_block_MEM]) \\
+                      `~MEM v.vs_current_bb (block_successors b)` by
+                        (`b.bb_label = v.vs_current_bb` by metis_tac[lookup_block_label] >>
+                         `MEM b fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+                         metis_tac[pred_labels_single_no_jmp]) \\
+                      `~v'³'.vs_halted` by gvs[state_equiv_cfg_def] \\
+                      sg `b.bb_instructions <> []`
+                      >- (CCONTR_TAC >> gvs[] >>
+                          qpat_x_assum `block_terminator_last b` mp_tac >>
+                          simp[block_terminator_last_def] >> simp[get_instruction_def] >>
+                          qpat_x_assum `run_block b v = OK v'` mp_tac >>
+                          simp[Once run_block_def, step_in_block_def, get_instruction_def])
+                      >- (
+                        sg `v'.vs_current_bb = v'³'.vs_current_bb`
+                        >- (irule run_block_merge_blocks_current_bb >>
+                            simp[] >> qexistsl_tac [`a`, `b`, `v.vs_current_bb`, `s1`, `v`] >> simp[])
+                        >- (
+                          sg `v'³'.vs_current_bb = v''.vs_current_bb`
+                          >- (irule run_block_replace_label_current_bb_prev_diff >> simp[] >>
+                              qexistsl_tac [`a with bb_instructions :=
+                                              FRONT a.bb_instructions ++ b.bb_instructions`,
+                                            `fn`, `s2.vs_current_bb`, `v.vs_current_bb`,
+                                            `prev_lbl`, `s1`, `s2`] >>
+                              simp[] >> rpt conj_tac
+                              >- (irule block_terminator_last_merged >> simp[])
+                              >- (`a.bb_label = s2.vs_current_bb` by metis_tac[lookup_block_label] >> simp[])
+                              >- simp[block_successors_merged])
+                          >- simp[])))
+                    >- metis_tac[run_block_ok_inst_idx]
+                    >- metis_tac[run_block_ok_inst_idx]
+                    >- (`v'.vs_prev_bb = SOME v.vs_current_bb` by metis_tac[run_block_ok_prev_bb] >> gvs[])
+                    >- (`v'.vs_prev_bb = SOME v.vs_current_bb` by metis_tac[run_block_ok_prev_bb] >>
+                        `v''.vs_prev_bb = SOME s2.vs_current_bb` by metis_tac[run_block_ok_prev_bb] >>
+                        gvs[])))))))))
     >- (
       (* Halt case *)
       `block_terminator_last a` by

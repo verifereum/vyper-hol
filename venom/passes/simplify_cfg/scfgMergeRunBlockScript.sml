@@ -623,7 +623,113 @@ Theorem run_block_replace_label_current_bb_prev_none:
     ~v.vs_halted ==>
     v.vs_current_bb = v'.vs_current_bb
 Proof
-  cheat
+  completeInduct_on `LENGTH bb.bb_instructions - s1.vs_inst_idx` >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `run_block bb s1 = _` mp_tac >> simp[Once run_block_def] >>
+  qpat_x_assum `run_block (replace_label_block _ _ _) _ = _` mp_tac >>
+  simp[Once run_block_def] >>
+  Cases_on `step_in_block bb s1` >> Cases_on `q` >> gvs[] >>
+  Cases_on `step_in_block (replace_label_block old new bb) s2` >>
+  Cases_on `q` >> gvs[] >>
+  rpt strip_tac >> rpt (IF_CASES_TAC >> gvs[]) >>
+  Cases_on `v.vs_halted` >> Cases_on `r` >> gvs[]
+  >- (
+    Cases_on `v'³'.vs_halted` >> Cases_on `r'` >> gvs[]
+    >- (
+      (* Terminator case T,T - use step_inst_terminator_same_current_bb *)
+      gvs[step_in_block_def, replace_label_block_def] >>
+      Cases_on `get_instruction bb s2.vs_inst_idx` >> gvs[get_instruction_def] >>
+      gvs[listTheory.EL_MAP, replace_label_inst_def] >>
+      Cases_on `step_inst bb.bb_instructions❲s2.vs_inst_idx❳ s1` >> gvs[] >>
+      Cases_on `is_terminator bb.bb_instructions❲s2.vs_inst_idx❳.inst_opcode` >> gvs[] >>
+      Cases_on `step_inst (bb.bb_instructions❲s2.vs_inst_idx❳ with
+        inst_operands := MAP (replace_label_operand old new)
+          bb.bb_instructions❲s2.vs_inst_idx❳.inst_operands) s2` >> gvs[] >>
+      sg `~MEM old (get_successors bb.bb_instructions❲s2.vs_inst_idx❳)`
+      >- (
+        gvs[block_successors_def, block_last_inst_def] >>
+        fs[block_terminator_last_def] >>
+        `s2.vs_inst_idx = LENGTH bb.bb_instructions - 1` by
+          (first_x_assum (qspecl_then [`s2.vs_inst_idx`,
+            `bb.bb_instructions❲s2.vs_inst_idx❳`] mp_tac) >>
+           simp[get_instruction_def]) >>
+        sg `bb.bb_instructions❲s2.vs_inst_idx❳ = LAST bb.bb_instructions`
+        >- (
+          `bb.bb_instructions <> []` by (Cases_on `bb.bb_instructions` >> gvs[]) >>
+          gvs[listTheory.LAST_EL, arithmeticTheory.PRE_SUB1])
+        >- (
+          gvs[listTheory.NULL_EQ] >>
+          qpat_x_assum `~MEM old (case _ of NONE => _ | SOME _ => _)` mp_tac >>
+          `bb.bb_instructions <> []` by (Cases_on `bb.bb_instructions` >> gvs[]) >>
+          simp[]))
+      >- (
+        irule step_inst_terminator_same_current_bb >> simp[replace_label_inst_def] >>
+        qexists_tac `bb.bb_instructions❲s2.vs_inst_idx❳` >>
+        qexists_tac `new` >> qexists_tac `old` >>
+        qexists_tac `s1` >> qexists_tac `s2` >> simp[]))
+    >- (
+      (* T,F contradiction *)
+      gvs[step_in_block_def, replace_label_block_def] >>
+      Cases_on `get_instruction bb s2.vs_inst_idx` >> gvs[get_instruction_def] >>
+      gvs[listTheory.EL_MAP, replace_label_inst_def] >>
+      Cases_on `step_inst bb.bb_instructions❲s2.vs_inst_idx❳ s1` >> gvs[] >>
+      Cases_on `is_terminator bb.bb_instructions❲s2.vs_inst_idx❳.inst_opcode` >> gvs[] >>
+      Cases_on `step_inst (bb.bb_instructions❲s2.vs_inst_idx❳ with
+        inst_operands := MAP (replace_label_operand old new)
+          bb.bb_instructions❲s2.vs_inst_idx❳.inst_operands) s2` >> gvs[]))
+  >- (
+    Cases_on `v'³'.vs_halted` >> Cases_on `r'` >> gvs[]
+    >- (
+      (* F,T contradiction *)
+      gvs[step_in_block_def, replace_label_block_def] >>
+      Cases_on `get_instruction bb s2.vs_inst_idx` >>
+      gvs[get_instruction_def, listTheory.EL_MAP, replace_label_inst_def] >>
+      Cases_on `step_inst bb.bb_instructions❲s2.vs_inst_idx❳ s1` >> gvs[] >>
+      Cases_on `is_terminator bb.bb_instructions❲s2.vs_inst_idx❳.inst_opcode` >> gvs[] >>
+      Cases_on `step_inst (bb.bb_instructions❲s2.vs_inst_idx❳ with
+        inst_operands := MAP (replace_label_operand old new)
+          bb.bb_instructions❲s2.vs_inst_idx❳.inst_operands) s2` >> gvs[])
+    >- (
+      (* F,F recursive case *)
+      gvs[step_in_block_def, replace_label_block_def] >>
+      Cases_on `get_instruction bb s2.vs_inst_idx` >>
+      gvs[get_instruction_def, listTheory.EL_MAP, replace_label_inst_def] >>
+      Cases_on `step_inst bb.bb_instructions❲s2.vs_inst_idx❳ s1` >> gvs[] >>
+      Cases_on `is_terminator bb.bb_instructions❲s2.vs_inst_idx❳.inst_opcode` >> gvs[] >>
+      Cases_on `step_inst (bb.bb_instructions❲s2.vs_inst_idx❳ with
+        inst_operands := MAP (replace_label_operand old new)
+          bb.bb_instructions❲s2.vs_inst_idx❳.inst_operands) s2` >> gvs[] >>
+      sg `state_equiv_cfg v'⁴' v`
+      >- (
+        `result_equiv_cfg (step_inst bb.bb_instructions❲s2.vs_inst_idx❳ s1)
+          (step_inst (replace_label_inst old new bb.bb_instructions❲s2.vs_inst_idx❳) s2)`
+          by (irule step_inst_replace_label_prev_bb_none >> simp[]) >>
+        gvs[result_equiv_cfg_def, replace_label_inst_def])
+      >- (
+        first_x_assum irule >> simp[] >>
+        qexists_tac `bb` >> qexists_tac `new` >> qexists_tac `old` >>
+        qexistsl_tac [`next_inst v'⁴'`, `next_inst v`] >> simp[] >>
+        `v'⁴'.vs_inst_idx = s1.vs_inst_idx` by
+          (drule_all step_inst_preserves_inst_idx >> simp[]) >>
+        `v.vs_inst_idx = s2.vs_inst_idx` by
+          (irule step_inst_preserves_inst_idx >>
+           qexists_tac `bb.bb_instructions❲s2.vs_inst_idx❳ with
+             inst_operands := MAP (replace_label_operand old new)
+               bb.bb_instructions❲s2.vs_inst_idx❳.inst_operands` >> simp[]) >>
+        simp[next_inst_def] >>
+        `v'⁴'.vs_prev_bb = s1.vs_prev_bb` by
+          (imp_res_tac step_inst_preserves_prev_bb >> gvs[]) >> gvs[] >>
+        `v.vs_prev_bb = s2.vs_prev_bb` by
+          (irule step_inst_preserves_prev_bb >>
+           qexists_tac `bb.bb_instructions❲s2.vs_inst_idx❳ with
+             inst_operands := MAP (replace_label_operand old new)
+               bb.bb_instructions❲s2.vs_inst_idx❳.inst_operands` >> simp[]) >> gvs[] >>
+        drule state_equiv_cfg_inst_idx >>
+        disch_then (qspec_then `s2.vs_inst_idx + 1` assume_tac) >>
+        simp[state_equiv_cfg_def, stateEquivTheory.var_equiv_def,
+             venomStateTheory.lookup_var_def] >>
+        gvs[state_equiv_cfg_def, stateEquivTheory.var_equiv_def,
+            venomStateTheory.lookup_var_def])))
 QED
 
 (* Variant of run_block_replace_label_current_bb for no-PHI blocks.
