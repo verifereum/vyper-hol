@@ -1104,6 +1104,99 @@ Proof
   >- gvs[step_inst_def, exec_result_distinct]
 QED
 
+(* Running the same block on state_equiv_cfg states gives the same current_bb.
+   Key insight: current_bb is determined by the terminator instruction,
+   and with var_equiv the terminator condition evaluates the same way. *)
+Theorem run_block_ok_same_current_bb:
+  !bb s1 s2 v1 v2.
+    state_equiv_cfg s1 s2 /\
+    s1.vs_prev_bb = s2.vs_prev_bb /\
+    s1.vs_inst_idx = s2.vs_inst_idx /\
+    block_terminator_last bb /\
+    run_block bb s1 = OK v1 /\ ~v1.vs_halted /\
+    run_block bb s2 = OK v2 /\ ~v2.vs_halted ==>
+    v1.vs_current_bb = v2.vs_current_bb
+Proof
+  completeInduct_on `LENGTH bb.bb_instructions - s1.vs_inst_idx` >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `run_block _ s1 = _` mp_tac >> simp[Once run_block_def] >>
+  qpat_x_assum `run_block _ s2 = _` mp_tac >> simp[Once run_block_def] >>
+  Cases_on `step_in_block bb s1` >> Cases_on `step_in_block bb s2` >>
+  Cases_on `q` >> Cases_on `q'` >> gvs[] >>
+  (* Both must be OK since run_block returned OK *)
+  IF_CASES_TAC >> gvs[] >> IF_CASES_TAC >> gvs[] >>
+  IF_CASES_TAC >> gvs[] >> IF_CASES_TAC >> gvs[]
+  >- (
+    (* Both terminate - use step_inst_terminator_same_current_bb_simple *)
+    rpt strip_tac >> gvs[] >>
+    qpat_x_assum `step_in_block bb s1 = _` mp_tac >>
+    qpat_x_assum `step_in_block bb s2 = _` mp_tac >>
+    simp[step_in_block_def] >>
+    `get_instruction bb s1.vs_inst_idx = get_instruction bb s2.vs_inst_idx` by gvs[] >>
+    Cases_on `get_instruction bb s2.vs_inst_idx` >> gvs[] >>
+    Cases_on `step_inst x s1` >> Cases_on `step_inst x s2` >> gvs[] >>
+    IF_CASES_TAC >> gvs[] >>
+    rpt strip_tac >> gvs[] >>
+    irule step_inst_terminator_same_current_bb_simple >>
+    simp[] >> qexistsl_tac [`x`, `s1`, `s2`] >> simp[])
+  >- (
+    (* s1 terminates but s2 doesn't - contradiction from same inst *)
+    rpt strip_tac >>
+    qpat_x_assum `step_in_block bb s1 = _` mp_tac >>
+    qpat_x_assum `step_in_block bb s2 = _` mp_tac >>
+    simp[step_in_block_def] >>
+    `get_instruction bb s1.vs_inst_idx = get_instruction bb s2.vs_inst_idx` by gvs[] >>
+    Cases_on `get_instruction bb s2.vs_inst_idx` >> gvs[] >>
+    Cases_on `step_inst x s1` >> Cases_on `step_inst x s2` >> gvs[] >>
+    IF_CASES_TAC >> gvs[])
+  >- (
+    (* s1 doesn't terminate but s2 does - contradiction *)
+    rpt strip_tac >>
+    qpat_x_assum `step_in_block bb s1 = _` mp_tac >>
+    qpat_x_assum `step_in_block bb s2 = _` mp_tac >>
+    simp[step_in_block_def] >>
+    `get_instruction bb s1.vs_inst_idx = get_instruction bb s2.vs_inst_idx` by gvs[] >>
+    Cases_on `get_instruction bb s2.vs_inst_idx` >> gvs[] >>
+    Cases_on `step_inst x s1` >> Cases_on `step_inst x s2` >> gvs[] >>
+    IF_CASES_TAC >> gvs[])
+  >- (
+    (* Neither terminates - use IH *)
+    rpt strip_tac >>
+    first_x_assum (qspec_then `LENGTH bb.bb_instructions - v.vs_inst_idx` mp_tac) >>
+    impl_tac
+    >- (
+      `v.vs_inst_idx = s1.vs_inst_idx + 1` by
+        (imp_res_tac scfgEquivTheory.step_in_block_inst_idx_succ >> simp[]) >>
+      `s1.vs_inst_idx < LENGTH bb.bb_instructions` by (
+        qpat_x_assum `step_in_block bb s1 = _` mp_tac >>
+        simp[venomSemTheory.step_in_block_def, AllCaseEqs(),
+             venomInstTheory.get_instruction_def]) >>
+      simp[])
+    >- (
+      strip_tac >> first_x_assum irule >> simp[] >>
+      qexistsl_tac [`bb`, `v`, `v'`] >> simp[] >>
+      `v.vs_inst_idx = s1.vs_inst_idx + 1` by
+        (imp_res_tac scfgEquivTheory.step_in_block_inst_idx_succ >> simp[]) >>
+      `v'.vs_inst_idx = s2.vs_inst_idx + 1` by
+        (imp_res_tac scfgEquivTheory.step_in_block_inst_idx_succ >> simp[]) >>
+      `v.vs_prev_bb = s1.vs_prev_bb` by
+        (imp_res_tac venomSemPropsTheory.step_in_block_preserves_prev_bb >> simp[]) >>
+      `v'.vs_prev_bb = s2.vs_prev_bb` by
+        (imp_res_tac venomSemPropsTheory.step_in_block_preserves_prev_bb >> simp[]) >>
+      gvs[] >>
+      qpat_x_assum `step_in_block bb s1 = _` mp_tac >>
+      qpat_x_assum `step_in_block bb s2 = _` mp_tac >>
+      simp[venomSemTheory.step_in_block_def] >>
+      Cases_on `get_instruction bb s2.vs_inst_idx` >> gvs[] >>
+      Cases_on `step_inst x s1` >> Cases_on `step_inst x s2` >> gvs[] >>
+      rpt strip_tac >> gvs[] >>
+      BasicProvers.FULL_CASE_TAC >> gvs[] >>
+      irule scfgStateOpsTheory.next_inst_state_equiv_cfg >>
+      `result_equiv_cfg (step_inst x s1) (step_inst x s2)` by
+        (irule scfgEquivTheory.step_inst_state_equiv_cfg >> simp[]) >>
+      gvs[scfgDefsTheory.result_equiv_cfg_def]))
+QED
+
 (* Helper: run_block OK ~halted implies the last instruction is a terminator *)
 Theorem run_block_ok_last_terminator:
   !bb s s'.
