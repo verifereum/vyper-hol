@@ -628,7 +628,51 @@ Theorem run_function_merge_blocks_equiv_bwd:
             result_equiv_cfg (run_function fuel' fn s1)
                              (run_function fuel (merge_blocks fn a_lbl b_lbl) s2)
 Proof
-  cheat (* TODO: prove using 2*fuel bound *)
+  completeInduct_on `fuel` >> rpt strip_tac >> Cases_on `fuel` >-
+   gvs[run_function_def, terminates_def] \\
+   simp[Once run_function_def] >> Cases_on `s2.vs_current_bb = a_lbl` >> gvs[]
+   >- (
+     (* At merge point: a_lbl *)
+     qpat_x_assum `terminates _` mp_tac >>
+     simp[Once run_function_def, lookup_block_merge_blocks_a] \\
+     `lookup_block s1.vs_current_bb (merge_blocks fn s1.vs_current_bb b_lbl).fn_blocks =
+      SOME (replace_label_block b_lbl s1.vs_current_bb
+            (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions))`
+       by (irule lookup_block_merge_blocks_a >> simp[]) >> simp[] \\
+     qabbrev_tac `merged_bb = replace_label_block b_lbl s1.vs_current_bb
+       (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)` >>
+     Cases_on `run_block merged_bb s2` >> simp[]
+     >- ( (* OK case *)
+       Cases_on `v.vs_halted` >> simp[terminates_def]
+       >- ( (* OK with halted - contradiction by run_block_ok_not_halted *)
+         REVERSE (gvs[terminates_def]) \\
+         REVERSE (simp[terminates_def]) \\
+         `block_terminator_last a` by (imp_res_tac lookup_block_MEM >> gvs[cfg_wf_def]) \\
+         qexists_tac `SUC (SUC 0)` \\ simp[] \\
+         Cases_on `run_block a s1` >> simp[]
+         >- ( (* run_block a = OK *)
+           Cases_on `v'.vs_halted` >> simp[terminates_def]
+           >- ( (* OK with halted - also contradiction *)
+             simp[Once run_function_def] \\
+             simp[Once run_function_def, lookup_block_merge_blocks_a] \\
+             simp[result_equiv_cfg_def] \\
+             imp_res_tac run_block_ok_not_halted >> gvs[])
+           >- ( (* OK not halted *)
+             TRY (imp_res_tac run_block_ok_not_halted >> gvs[]) >>
+             TRY (simp[terminates_def])))
+         >- (`F` by (imp_res_tac run_block_ok_not_halted >> gvs[]))
+         >- (`F` by (imp_res_tac run_block_ok_not_halted >> gvs[]))
+         >- (simp[terminates_def] \\ imp_res_tac run_block_ok_not_halted >> gvs[]))
+       >- ( (* OK not halted - needs IH *)
+         cheat))
+     >- ( (* Halt case *)
+       strip_tac >> qexists_tac `SUC (SUC 0)` >> simp[] \\ cheat)
+     >- ( (* Revert case *)
+       cheat)
+     >- ( (* Error case - vacuously true since terminates (Error _) = F *)
+       simp[terminates_def]))
+   >- ( (* Not at merge point - blocks same in both CFGs, use IH *)
+     cheat)
 QED
 
 Theorem merge_blocks_correct:
