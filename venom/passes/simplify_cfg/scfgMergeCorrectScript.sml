@@ -180,6 +180,23 @@ Proof
   rpt strip_tac >> fs[Once venomSemTheory.run_function_def]
 QED
 
+(* Helper: a block that only jumps to b_lbl can't be its own predecessor *)
+Theorem no_self_loop_from_jmp_to:
+  !fn a a_lbl b_lbl.
+    cfg_wf fn /\ lookup_block a_lbl fn.fn_blocks = SOME a /\
+    block_last_jmp_to b_lbl a /\ a_lbl <> b_lbl ==>
+    ~MEM a_lbl (pred_labels fn a_lbl)
+Proof
+  rpt strip_tac >> simp[pred_labels_def, listTheory.MEM_MAP, listTheory.MEM_FILTER] >>
+  fs[pred_labels_def, listTheory.MEM_MAP, listTheory.MEM_FILTER] >>
+  `a.bb_label = a_lbl` by metis_tac[lookup_block_label] >>
+  `MEM a fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  sg `bb = a`
+  >- (gvs[cfg_wf_def] >> irule scfgMergeHelpersTheory.lookup_block_unique >> simp[] >>
+      qexists_tac `fn.fn_blocks` >> simp[])
+  >- (`block_successors a = [b_lbl]` by metis_tac[block_last_jmp_to_successors] >> fs[])
+QED
+
 (* Helper: block with single predecessor can't loop to itself *)
 Theorem run_block_no_self_loop_single_pred:
   !fn bb s s' a_lbl.
@@ -389,7 +406,7 @@ Proof
                    (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2` >>
         gvs[result_equiv_cfg_def] \\
         irule state_equiv_cfg_trans >> qexists_tac `v'` >> simp[])
-      >- cheat (* TODO: handle PHI case *))
+      >- cheat (* TODO: PHI case - need run_block_replace_label with no-self-loop *))
     >- (
       (* Revert case *)
       `block_terminator_last a` by
