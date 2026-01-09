@@ -377,7 +377,33 @@ Proof
               `run_function n fn v' = run_function (SUC n) fn v'`
                 by (ONCE_REWRITE_TAC [EQ_SYM_EQ] >> irule run_function_fuel_monotonicity >> simp[]) \\
               pop_assum (fn th => REWRITE_TAC [th]) \\
-              first_x_assum irule >> gvs[] >> cheat (* TODO: IH conditions *))
+              first_x_assum irule >> gvs[] >> rpt conj_tac
+              (* Cond 1: pred_labels *)
+              >- (rpt strip_tac >>
+                  `v'.vs_prev_bb = SOME v.vs_current_bb` by metis_tac[run_block_ok_prev_bb] >>
+                  gvs[] >> `MEM b fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+                  `b.bb_label = v.vs_current_bb` by metis_tac[lookup_block_label] >>
+                  metis_tac[run_block_ok_pred_labels])
+              (* Cond 2: terminates *)
+              >- (`run_function (SUC n) fn v' = run_function n fn v'`
+                    by (irule run_function_fuel_monotonicity >> simp[]) >> simp[])
+              (* Cond 3: current_bb <> b_lbl *)
+              >- (`MEM b fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+                  `b.bb_label = v.vs_current_bb` by metis_tac[lookup_block_label] >>
+                  qspecl_then [`fn`, `b`, `v`, `v'`, `s2.vs_current_bb`]
+                    mp_tac run_block_no_self_loop_single_pred >> simp[])
+              (* Cond 4: v'.vs_current_bb = v''.vs_current_bb - complex, needs helper *)
+              >- cheat
+              (* Cond 5: v'.vs_inst_idx = 0 *)
+              >- metis_tac[run_block_ok_inst_idx]
+              (* Cond 6: v''.vs_inst_idx = 0 *)
+              >- metis_tac[run_block_ok_inst_idx]
+              (* Cond 7: prev_bb <> b_lbl => equal *)
+              >- (`v'.vs_prev_bb = SOME v.vs_current_bb` by metis_tac[run_block_ok_prev_bb] >> gvs[])
+              (* Cond 8: prev_bb = b_lbl => v'' prev = a_lbl *)
+              >- (`v'.vs_prev_bb = SOME v.vs_current_bb` by metis_tac[run_block_ok_prev_bb] >>
+                  `v''.vs_prev_bb = SOME s2.vs_current_bb` by metis_tac[run_block_ok_prev_bb] >>
+                  gvs[]))
             >- (
               (* Block a has PHIs - needs different handling *)
               cheat (* TODO: handle PHI case with run_block_replace_label *))))))
