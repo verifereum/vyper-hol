@@ -412,11 +412,18 @@ Proof
                     qpat_x_assum `run_block b v = OK v'` mp_tac >>
                     simp[Once run_block_def, step_in_block_def, get_instruction_def])
                 >- (
+                  `block_terminator_last a` by
+                    (fs[cfg_wf_def] >> first_x_assum irule >>
+                     irule lookup_block_MEM >> qexists_tac `s2.vs_current_bb` >> simp[]) \\
                   `v'.vs_current_bb = v'³'.vs_current_bb` by
                     metis_tac[run_block_merge_blocks_current_bb] >>
                   `v'³'.vs_current_bb = v''.vs_current_bb` by
-                    (irule run_block_merged_no_phi_current_bb >> gvs[] >>
-                     metis_tac[block_has_no_phi_merged]) >>
+                    (irule run_block_merged_no_phi_current_bb >>
+                     gvs[] >>
+                     qexistsl_tac [`a`, `b`, `s2.vs_current_bb`, `b_lbl`, `s1`, `s2`] >>
+                     gvs[] >> rpt conj_tac >> gvs[]
+                     >- metis_tac[block_has_no_phi_merged]
+                     >- gvs[block_successors_merged]) >>
                   simp[]))
               (* Cond 5: v'.vs_inst_idx = 0 *)
               >- metis_tac[run_block_ok_inst_idx]
