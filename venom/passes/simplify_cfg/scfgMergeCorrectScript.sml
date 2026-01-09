@@ -644,35 +644,49 @@ Proof
      Cases_on `run_block merged_bb s2` >> simp[]
      >- ( (* OK case *)
        Cases_on `v.vs_halted` >> simp[terminates_def]
-       >- ( (* OK with halted - contradiction by run_block_ok_not_halted *)
-         REVERSE (gvs[terminates_def]) \\
-         REVERSE (simp[terminates_def]) \\
+       >- ( (* OK with halted *)
+         TRY (simp[terminates_def]) \\
          `block_terminator_last a` by (imp_res_tac lookup_block_MEM >> gvs[cfg_wf_def]) \\
-         qexists_tac `SUC (SUC 0)` \\ simp[] \\
-         Cases_on `run_block a s1` >> simp[]
-         >- ( (* run_block a = OK *)
-           Cases_on `v'.vs_halted` >> simp[terminates_def]
-           >- ( (* OK with halted - also contradiction *)
-             simp[Once run_function_def] \\
-             simp[Once run_function_def, lookup_block_merge_blocks_a] \\
-             simp[result_equiv_cfg_def] \\
-             imp_res_tac run_block_ok_not_halted >> gvs[])
-           >- ( (* OK not halted *)
-             TRY (imp_res_tac run_block_ok_not_halted >> gvs[]) >>
-             TRY (simp[terminates_def])))
-         >- (`F` by (imp_res_tac run_block_ok_not_halted >> gvs[]))
-         >- (`F` by (imp_res_tac run_block_ok_not_halted >> gvs[]))
-         >- (simp[terminates_def] \\ imp_res_tac run_block_ok_not_halted >> gvs[]))
-       >- ( (* OK not halted - needs IH *)
-         cheat))
-     >- ( (* Halt case *)
-       strip_tac >> qexists_tac `SUC (SUC 0)` >> simp[] \\ cheat)
-     >- ( (* Revert case *)
-       cheat)
-     >- ( (* Error case - vacuously true since terminates (Error _) = F *)
-       simp[terminates_def]))
-   >- ( (* Not at merge point - blocks same in both CFGs, use IH *)
-     cheat)
+         qabbrev_tac `merged_no_label = a with bb_instructions :=
+           FRONT a.bb_instructions ++ b.bb_instructions` \\
+         `result_equiv_cfg (case run_block a s1 of OK s' => if s'.vs_halted then
+           Halt s' else run_block b s' | Halt v => Halt v | Revert v => Revert v
+           | Error e => Error e) (run_block merged_no_label s1)`
+           by (qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac
+               run_block_merge_blocks_equiv >> simp[Abbr `merged_no_label`]) \\
+         Cases_on `s1.vs_prev_bb`
+         >- ( (* prev_bb = NONE - fully proved *)
+           gvs[] \\
+           `result_equiv_cfg (run_block merged_no_label s1) (run_block merged_bb s2)`
+             by (qunabbrev_tac `merged_bb` >>
+                 irule run_block_replace_label_prev_bb_none >> gvs[]) \\
+           Cases_on `run_block merged_no_label s1` >> gvs[result_equiv_cfg_def] \\
+           Cases_on `run_block a s1` >> gvs[result_equiv_cfg_def] \\
+           Cases_on `v''.vs_halted` >> gvs[result_equiv_cfg_def] \\
+           Cases_on `run_block b v''` >> gvs[result_equiv_cfg_def] \\
+           `v'³'.vs_halted` by gvs[state_equiv_cfg_def] \\
+           `MEM a fn.fn_blocks` by (irule lookup_block_MEM >>
+             qexists_tac `s1.vs_current_bb` >> simp[]) \\
+           `MEM v''.vs_current_bb (block_successors a)` by
+             (qspecl_then [`fn`, `a`, `s1`, `v''`] mp_tac run_block_ok_successor >>
+              simp[cfg_wf_def]) \\
+           `block_successors a = [b_lbl]` by metis_tac[block_last_jmp_to_successors] \\
+           `v''.vs_current_bb = b_lbl` by gvs[] \\
+           qexists_tac `SUC (SUC 0)` >> simp[] \\
+           simp[Once run_function_def] >> simp[terminates_def] \\
+           simp[Once run_function_def, Once run_function_def, Once run_function_def] \\
+           simp[Once run_function_def, Once run_function_def, lookup_block_merge_blocks_a] \\
+           simp[result_equiv_cfg_def] >> irule state_equiv_cfg_trans >>
+           qexists_tac `v'` >> simp[])
+         >- ( (* prev_bb = SOME x *)
+           Cases_on `x = b_lbl` >> gvs[]
+           >- cheat (* prev_bb = SOME b_lbl *)
+           >- cheat)) (* prev_bb = SOME x, x ≠ b_lbl *)
+       >- cheat) (* OK not halted - needs IH *)
+     >- cheat (* Halt case *)
+     >- cheat (* Revert case *)
+     >- simp[terminates_def]) (* Error case - vacuously true *)
+   >- cheat (* Not at merge point *)
 QED
 
 Theorem merge_blocks_correct:
