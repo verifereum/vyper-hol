@@ -608,6 +608,24 @@ Proof
       gvs[stateEquivTheory.var_equiv_def, lookup_var_def]))
 QED
 
+(* When prev_bb = NONE for both states, vs_current_bb is preserved through replace_label.
+   No PHI condition needed because when prev_bb = NONE, PHI would error if executed,
+   so if run_block succeeds, the PHI wasn't reached (and thus label operands don't matter). *)
+Theorem run_block_replace_label_current_bb_prev_none:
+  !bb s1 s2 old new v v'.
+    state_equiv_cfg s1 s2 /\
+    s1.vs_inst_idx = s2.vs_inst_idx /\
+    s1.vs_prev_bb = NONE /\ s2.vs_prev_bb = NONE /\
+    block_terminator_last bb /\
+    ~MEM old (block_successors bb) /\
+    run_block bb s1 = OK v /\
+    run_block (replace_label_block old new bb) s2 = OK v' /\
+    ~v.vs_halted ==>
+    v.vs_current_bb = v'.vs_current_bb
+Proof
+  cheat
+QED
+
 (* Variant of run_block_replace_label_current_bb for no-PHI blocks.
    This version doesn't require prev_bb equality since PHIs are the only
    instructions that use prev_bb, and no-PHI blocks have none. *)
