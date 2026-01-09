@@ -392,8 +392,40 @@ Proof
                   `b.bb_label = v.vs_current_bb` by metis_tac[lookup_block_label] >>
                   qspecl_then [`fn`, `b`, `v`, `v'`, `s2.vs_current_bb`]
                     mp_tac run_block_no_self_loop_single_pred >> simp[])
-              (* Cond 4: v'.vs_current_bb = v''.vs_current_bb - complex, needs helper *)
-              >- cheat
+              (* Cond 4: v'.vs_current_bb = v''.vs_current_bb *)
+              >- (
+                qpat_x_assum `result_equiv_cfg (OK v') _` mp_tac >>
+                Cases_on `run_block (a with bb_instructions :=
+                           FRONT a.bb_instructions ++ b.bb_instructions) s1` >>
+                simp[result_equiv_cfg_def] >> strip_tac \\
+                `block_terminator_last b` by
+                  (fs[cfg_wf_def] >> first_x_assum irule >> metis_tac[lookup_block_MEM]) \\
+                `~MEM v.vs_current_bb (block_successors b)` by
+                  (`b.bb_label = v.vs_current_bb` by metis_tac[lookup_block_label] >>
+                   `MEM b fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+                   metis_tac[pred_labels_single_no_jmp]) \\
+                `~v'³'.vs_halted` by gvs[state_equiv_cfg_def] \\
+                sg `b.bb_instructions <> []`
+                >- (CCONTR_TAC >> gvs[] >>
+                    qpat_x_assum `block_terminator_last b` mp_tac >>
+                    simp[block_terminator_last_def] >> simp[get_instruction_def] >>
+                    qpat_x_assum `run_block b v = OK v'` mp_tac >>
+                    simp[Once run_block_def, step_in_block_def, get_instruction_def])
+                >- (
+                  sg `v'.vs_current_bb = v'³'.vs_current_bb`
+                  >- (irule run_block_merge_blocks_current_bb >>
+                      simp[] >> qexistsl_tac [`a`, `b`, `v.vs_current_bb`, `s1`, `v`] >> simp[])
+                  >- (
+                    sg `v'³'.vs_current_bb = v''.vs_current_bb`
+                    >- (irule run_block_replace_label_no_phi_current_bb >> simp[] >>
+                        qexistsl_tac [`a with bb_instructions :=
+                                        FRONT a.bb_instructions ++ b.bb_instructions`,
+                                      `s2.vs_current_bb`, `v.vs_current_bb`, `s1`, `s2`] >>
+                        simp[] >> rpt conj_tac
+                        >- (irule block_terminator_last_merged >> simp[])
+                        >- simp[block_successors_merged]
+                        >- gvs[state_equiv_cfg_def])
+                    >- simp[])))
               (* Cond 5: v'.vs_inst_idx = 0 *)
               >- metis_tac[run_block_ok_inst_idx]
               (* Cond 6: v''.vs_inst_idx = 0 *)
@@ -624,10 +656,10 @@ Proof
             Cases_on `run_block (replace_label_block b_lbl a_lbl x) s2` >>
             gvs[result_equiv_cfg_def, AllCaseEqs()]))
         >- (
-          (* block has PHIs and prev_bb <> b_lbl *)
+          (* block has PHIs and prev_bb <> b_lbl - TODO: needs careful handling *)
           Cases_on `s1.vs_prev_bb`
-          >- (gvs[] \\ cheat (* TODO: NONE with PHIs *))
-          >- cheat (* TODO: SOME prev with PHIs *)))))
+          >- (gvs[] >> cheat)
+          >- cheat))))
 QED
 
 (* Backward direction: if merged terminates, original also terminates with enough fuel.
