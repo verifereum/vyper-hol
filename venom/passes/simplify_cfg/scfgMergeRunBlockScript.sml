@@ -1586,4 +1586,54 @@ Proof
   simp[]
 QED
 
+(* Helper: block_successors of merged block equals block_successors of b *)
+Theorem block_successors_merged:
+  !a b. b.bb_instructions <> [] ==>
+        block_successors (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) =
+        block_successors b
+Proof
+  rw[block_successors_def, block_last_inst_def] >>
+  simp[rich_listTheory.LAST_APPEND_NOT_NIL] >>
+  gvs[] >> fs[listTheory.NULL_EQ]
+QED
+
+(* Helper: current_bb preserved for merged block with replace_label and no_phi *)
+Theorem run_block_merged_no_phi_current_bb:
+  !a b s1 s2 old new v v'.
+    state_equiv_cfg s1 s2 /\ s1.vs_inst_idx = s2.vs_inst_idx /\
+    block_terminator_last a /\ block_terminator_last b /\
+    a.bb_instructions <> [] /\ b.bb_instructions <> [] /\
+    block_has_no_phi (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) /\
+    ~MEM old (block_successors b) /\
+    run_block (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) s1 = OK v /\
+    run_block (replace_label_block old new
+      (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2 = OK v' /\
+    ~v.vs_halted ==>
+    v.vs_current_bb = v'.vs_current_bb
+Proof
+  rpt strip_tac >>
+  irule run_block_replace_label_no_phi_current_bb >> simp[] >>
+  qexists_tac `a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions` >>
+  qexistsl_tac [`new`, `old`, `s1`, `s2`] >>
+  simp[block_successors_merged] >>
+  simp[block_terminator_last_def] >>
+  rpt strip_tac >> simp[get_instruction_def] >>
+  qpat_x_assum `get_instruction _ _ = _` mp_tac >> simp[get_instruction_def] >>
+  strip_tac >> Cases_on `idx < LENGTH (FRONT a.bb_instructions)`
+  >- (gvs[rich_listTheory.EL_APPEND1] >>
+      `(FRONT a.bb_instructions)❲idx❳ = a.bb_instructions❲idx❳` by
+        (irule rich_listTheory.EL_FRONT >> simp[NULL_EQ]) >>
+      qpat_x_assum `block_terminator_last a` mp_tac >>
+      simp[block_terminator_last_def, get_instruction_def] >>
+      strip_tac >> first_x_assum (qspec_then `idx` mp_tac) >> simp[rich_listTheory.LENGTH_FRONT] >>
+      gvs[] >> `idx < LENGTH a.bb_instructions` by
+        (fs[rich_listTheory.LENGTH_FRONT] >> Cases_on `a.bb_instructions` >> gvs[]) >>
+      strip_tac >> gvs[rich_listTheory.LENGTH_FRONT])
+  >- (gvs[rich_listTheory.EL_APPEND2] >>
+      qpat_x_assum `block_terminator_last b` mp_tac >>
+      simp[block_terminator_last_def, get_instruction_def] >>
+      strip_tac >> first_x_assum (qspec_then `idx - LENGTH (FRONT a.bb_instructions)` mp_tac) >>
+      gvs[])
+QED
+
 val _ = export_theory();
