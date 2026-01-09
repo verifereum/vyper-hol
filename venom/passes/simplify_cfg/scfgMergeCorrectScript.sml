@@ -412,20 +412,12 @@ Proof
                     qpat_x_assum `run_block b v = OK v'` mp_tac >>
                     simp[Once run_block_def, step_in_block_def, get_instruction_def])
                 >- (
-                  sg `v'.vs_current_bb = v'³'.vs_current_bb`
-                  >- (irule run_block_merge_blocks_current_bb >>
-                      simp[] >> qexistsl_tac [`a`, `b`, `v.vs_current_bb`, `s1`, `v`] >> simp[])
-                  >- (
-                    sg `v'³'.vs_current_bb = v''.vs_current_bb`
-                    >- (irule run_block_replace_label_no_phi_current_bb >> simp[] >>
-                        qexistsl_tac [`a with bb_instructions :=
-                                        FRONT a.bb_instructions ++ b.bb_instructions`,
-                                      `s2.vs_current_bb`, `v.vs_current_bb`, `s1`, `s2`] >>
-                        simp[] >> rpt conj_tac
-                        >- (irule block_terminator_last_merged >> simp[])
-                        >- simp[block_successors_merged]
-                        >- gvs[state_equiv_cfg_def])
-                    >- simp[])))
+                  `v'.vs_current_bb = v'³'.vs_current_bb` by
+                    metis_tac[run_block_merge_blocks_current_bb] >>
+                  `v'³'.vs_current_bb = v''.vs_current_bb` by
+                    metis_tac[run_block_replace_label_no_phi_current_bb, block_terminator_last_merged,
+                              block_successors_merged] >>
+                  simp[]))
               (* Cond 5: v'.vs_inst_idx = 0 *)
               >- metis_tac[run_block_ok_inst_idx]
               (* Cond 6: v''.vs_inst_idx = 0 *)
@@ -450,8 +442,7 @@ Proof
                  (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)`
                 by (irule phi_block_wf_merged >> simp[]) \\
               `~MEM s2.vs_current_bb (pred_labels fn s2.vs_current_bb)` by
-                (irule no_self_loop_from_jmp_to >> qexistsl_tac [`a`, `v.vs_current_bb`] >>
-                 gvs[]) \\
+                (drule_all no_self_loop_from_jmp_to >> simp[]) \\
               Cases_on `s1.vs_prev_bb = SOME v.vs_current_bb`
               >- (
                 (* prev_bb = SOME b_lbl - use run_block_replace_label *)
@@ -517,20 +508,12 @@ Proof
                         qpat_x_assum `run_block b v = OK v'` mp_tac >>
                         simp[Once run_block_def, step_in_block_def, get_instruction_def])
                     >- (
-                      sg `v'.vs_current_bb = v'³'.vs_current_bb`
-                      >- (irule run_block_merge_blocks_current_bb >>
-                          simp[] >> qexistsl_tac [`a`, `b`, `v.vs_current_bb`, `s1`, `v`] >> simp[])
-                      >- (
-                        sg `v'³'.vs_current_bb = v''.vs_current_bb`
-                        >- (irule run_block_replace_label_current_bb >> simp[] >>
-                            qexistsl_tac [`a with bb_instructions :=
-                                            FRONT a.bb_instructions ++ b.bb_instructions`,
-                                          `fn`, `s2.vs_current_bb`, `v.vs_current_bb`, `s1`, `s2`] >>
-                            simp[] >> rpt conj_tac
-                            >- (irule block_terminator_last_merged >> simp[])
-                            >- (`a.bb_label = s2.vs_current_bb` by metis_tac[lookup_block_label] >> simp[])
-                            >- simp[block_successors_merged])
-                        >- simp[])))
+                      `v'.vs_current_bb = v'³'.vs_current_bb` by
+                        metis_tac[run_block_merge_blocks_current_bb] >>
+                      `v'³'.vs_current_bb = v''.vs_current_bb` by
+                        metis_tac[run_block_replace_label_current_bb, block_terminator_last_merged,
+                                  block_successors_merged] >>
+                      simp[]))
                   >- metis_tac[run_block_ok_inst_idx]
                   >- metis_tac[run_block_ok_inst_idx]
                   >- (`v'.vs_prev_bb = SOME v.vs_current_bb` by metis_tac[run_block_ok_prev_bb] >> gvs[])
@@ -600,20 +583,12 @@ Proof
                           qpat_x_assum `run_block b v = OK v'` mp_tac >>
                           simp[Once run_block_def, step_in_block_def, get_instruction_def])
                       >- (
-                        sg `v'.vs_current_bb = v'³'.vs_current_bb`
-                        >- (irule run_block_merge_blocks_current_bb >>
-                            simp[] >> qexistsl_tac [`a`, `b`, `v.vs_current_bb`, `s1`, `v`] >> simp[])
-                        >- (
-                          sg `v'³'.vs_current_bb = v''.vs_current_bb`
-                          >- (irule run_block_replace_label_current_bb_prev_none >> simp[] >>
-                              qexistsl_tac [`a with bb_instructions :=
-                                              FRONT a.bb_instructions ++ b.bb_instructions`,
-                                            `s2.vs_current_bb`, `v.vs_current_bb`, `s1`, `s2`] >>
-                              simp[] >> rpt conj_tac
-                              >- (irule block_terminator_last_merged >> simp[])
-                              >- simp[block_successors_merged]
-                              >- gvs[state_equiv_cfg_def])
-                          >- simp[])))
+                        `v'.vs_current_bb = v'³'.vs_current_bb` by
+                          metis_tac[run_block_merge_blocks_current_bb] >>
+                        `v'³'.vs_current_bb = v''.vs_current_bb` by
+                          metis_tac[run_block_replace_label_current_bb_prev_none, block_terminator_last_merged,
+                                    block_successors_merged] >>
+                        simp[]))
                     >- metis_tac[run_block_ok_inst_idx]
                     >- metis_tac[run_block_ok_inst_idx]
                     >- (`v'.vs_prev_bb = SOME v.vs_current_bb` by metis_tac[run_block_ok_prev_bb] >> gvs[])
@@ -692,19 +667,10 @@ Proof
                           simp[Once run_block_def, step_in_block_def, get_instruction_def])
                       >- (
                         sg `v'.vs_current_bb = v'³'.vs_current_bb`
-                        >- (irule run_block_merge_blocks_current_bb >>
-                            simp[] >> qexistsl_tac [`a`, `b`, `v.vs_current_bb`, `s1`, `v`] >> simp[])
+                        >- (drule_all run_block_merge_blocks_current_bb >> simp[])
                         >- (
                           sg `v'³'.vs_current_bb = v''.vs_current_bb`
-                          >- (irule run_block_replace_label_current_bb_prev_diff >> simp[] >>
-                              qexistsl_tac [`a with bb_instructions :=
-                                              FRONT a.bb_instructions ++ b.bb_instructions`,
-                                            `fn`, `s2.vs_current_bb`, `v.vs_current_bb`,
-                                            `prev_lbl`, `s1`, `s2`] >>
-                              simp[] >> rpt conj_tac
-                              >- (irule block_terminator_last_merged >> simp[])
-                              >- (`a.bb_label = s2.vs_current_bb` by metis_tac[lookup_block_label] >> simp[])
-                              >- simp[block_successors_merged])
+                          >- (drule_all run_block_replace_label_current_bb_prev_diff >> simp[])
                           >- simp[])))
                     >- metis_tac[run_block_ok_inst_idx]
                     >- metis_tac[run_block_ok_inst_idx]
