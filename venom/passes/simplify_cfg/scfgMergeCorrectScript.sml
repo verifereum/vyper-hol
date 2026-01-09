@@ -445,7 +445,7 @@ Proof
                 (irule lookup_block_MEM >> qexists_tac `s2.vs_current_bb` >> simp[]) \\
               `a.bb_label = s2.vs_current_bb` by metis_tac[lookup_block_label] \\
               `phi_block_wf (pred_labels fn s2.vs_current_bb) a` by
-                (fs[phi_fn_wf_def] >> res_tac >> gvs[]) \\
+                (fs[phi_fn_wf_def] >> first_x_assum drule >> gvs[]) \\
               `phi_block_wf (pred_labels fn s2.vs_current_bb)
                  (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)`
                 by (irule phi_block_wf_merged >> simp[]) \\
