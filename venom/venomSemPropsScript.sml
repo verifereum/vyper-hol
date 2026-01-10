@@ -7,7 +7,7 @@
 
 Theory venomSemProps
 Ancestors
-  venomSem venomInst venomState rich_list
+  venomSem venomInst venomState
 
 (* ==========================================================================
    bool_to_word Properties
@@ -106,119 +106,164 @@ Proof
   rw[step_inst_def]
 QED
 
-(* ==========================================================================
-   step_in_block / run_block Properties
-   ========================================================================== *)
+(* ===== Non-terminator control fields ===== *)
 
-(* Helper: step_in_block with is_term=F increments vs_inst_idx *)
-Theorem step_in_block_increments_idx:
-  !bb s v.
-    step_in_block bb s = (OK v, F)
-    ==>
-    v.vs_inst_idx = SUC s.vs_inst_idx
+Theorem step_inst_preserves_prev_bb:
+  !inst s s'.
+    step_inst inst s = OK s' /\
+    ~is_terminator inst.inst_opcode ==>
+    s'.vs_prev_bb = s.vs_prev_bb
+Proof
+  rw[step_inst_def] >>
+  gvs[AllCaseEqs(), is_terminator_def] >>
+  fs[exec_binop_def, exec_unop_def, exec_modop_def] >>
+  gvs[AllCaseEqs()] >>
+  fs[update_var_def, mstore_def, sstore_def, tstore_def,
+     write_memory_with_expansion_def]
+QED
+
+Theorem step_inst_preserves_current_bb:
+  !inst s s'.
+    step_inst inst s = OK s' /\
+    ~is_terminator inst.inst_opcode ==>
+    s'.vs_current_bb = s.vs_current_bb
+Proof
+  rw[step_inst_def] >>
+  gvs[AllCaseEqs(), is_terminator_def] >>
+  fs[exec_binop_def, exec_unop_def, exec_modop_def] >>
+  gvs[AllCaseEqs()] >>
+  fs[update_var_def, mstore_def, sstore_def, tstore_def,
+     write_memory_with_expansion_def]
+QED
+
+Theorem step_in_block_preserves_prev_bb:
+  !fn bb s s' is_term.
+    step_in_block fn bb s = (OK s', is_term) /\
+    ~is_term ==>
+    s'.vs_prev_bb = s.vs_prev_bb
 Proof
   rw[step_in_block_def] >>
-  Cases_on `get_instruction bb s.vs_inst_idx` >> gvs[] >>
-  Cases_on `step_inst x s` >> gvs[] >>
-  Cases_on `is_terminator x.inst_opcode` >> gvs[next_inst_def] >>
-  `v'.vs_inst_idx = s.vs_inst_idx` by (
-    drule_all step_inst_preserves_inst_idx >> simp[]
-  ) >>
-  simp[]
+  Cases_on `get_instruction bb s.vs_inst_idx` >> fs[] >>
+  gvs[AllCaseEqs()] >>
+  drule_all step_inst_preserves_prev_bb >>
+  simp[next_inst_def]
 QED
 
-(*
- * Helper: run_block returning OK implies state is not halted.
- *
- * WHY THIS IS TRUE: If vs_halted becomes true during execution,
- * run_block returns Halt, not OK. The OK result only occurs when
- * a jump instruction executes (JMP or JNZ branch taken).
- *)
-Theorem run_block_OK_not_halted:
-  !bb s v. run_block bb s = OK v ==> ~v.vs_halted
+Theorem step_in_block_preserves_current_bb:
+  !fn bb s s' is_term.
+    step_in_block fn bb s = (OK s', is_term) /\
+    ~is_term ==>
+    s'.vs_current_bb = s.vs_current_bb
 Proof
-  ho_match_mp_tac run_block_ind >> rw[] >>
-  qpat_x_assum `run_block _ _ = _` mp_tac >>
-  simp[Once run_block_def] >>
-  Cases_on `step_in_block bb s` >> gvs[] >>
-  Cases_on `q` >> gvs[] >>
-  Cases_on `v'.vs_halted` >> gvs[] >>
-  Cases_on `r` >> gvs[] >> rw[] >> gvs[]
+  rw[step_in_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> fs[] >>
+  gvs[AllCaseEqs()] >>
+  drule_all step_inst_preserves_current_bb >>
+  simp[next_inst_def]
 QED
 
-(*
- * Helper: run_block returning OK implies vs_inst_idx = 0.
- *
- * WHY THIS IS TRUE: When run_block returns OK, it means a jump instruction
- * executed (JMP, JNZ, or DJMP). All jumps use jump_to which sets vs_inst_idx := 0.
- *)
-Theorem run_block_OK_inst_idx_0:
-  !bb s v. run_block bb s = OK v ==> v.vs_inst_idx = 0
+Theorem step_inst_terminator_sets_prev_bb:
+  !inst s s'.
+    is_terminator inst.inst_opcode /\
+    step_inst inst s = OK s' /\
+    ~s'.vs_halted ==>
+    s'.vs_prev_bb <> NONE
 Proof
-  ho_match_mp_tac run_block_ind >> rw[] >>
-  qpat_x_assum `run_block _ _ = _` mp_tac >>
-  simp[Once run_block_def] >>
-  Cases_on `step_in_block bb s` >> gvs[] >>
-  Cases_on `q` >> gvs[] >>
-  Cases_on `v'.vs_halted` >> gvs[] >>
-  Cases_on `r` >> gvs[] >> rw[] >> gvs[] >>
-  qpat_x_assum `step_in_block _ _ = _` mp_tac >>
-  simp[step_in_block_def] >>
-  Cases_on `get_instruction bb s.vs_inst_idx` >> gvs[] >>
-  Cases_on `step_inst x s` >> gvs[] >>
-  Cases_on `is_terminator x.inst_opcode` >> gvs[] >> rw[] >> gvs[] >>
-  qpat_x_assum `is_terminator _` mp_tac >> simp[is_terminator_def] >>
-  Cases_on `x.inst_opcode` >> gvs[is_terminator_def] >>
+  rpt strip_tac >>
   qpat_x_assum `step_inst _ _ = _` mp_tac >>
-  simp[step_inst_def, jump_to_def] >>
-  gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[]
+  qpat_x_assum `is_terminator _` mp_tac >>
+  simp[step_inst_def] >>
+  (* Only JMP/JNZ give OK without halting, both use jump_to *)
+  Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
+  strip_tac >> gvs[AllCaseEqs(), jump_to_def]
 QED
 
-(* ==========================================================================
-   Lookup Helpers
-   ========================================================================== *)
-
-(*
- * Helper: If lookup_block succeeds, the block is in the list.
- *)
-Theorem lookup_block_MEM:
-  !lbl bbs bb.
-    lookup_block lbl bbs = SOME bb ==> MEM bb bbs
+Theorem step_inst_terminator_prev_bb:
+  !inst s s'.
+    is_terminator inst.inst_opcode /\
+    step_inst inst s = OK s' /\
+    ~s'.vs_halted ==>
+    s'.vs_prev_bb = SOME s.vs_current_bb
 Proof
-  Induct_on `bbs` >- simp[lookup_block_def] >>
-  simp[lookup_block_def] >> rw[] >> metis_tac[]
+  rpt strip_tac >>
+  qpat_x_assum `step_inst _ _ = _` mp_tac >>
+  qpat_x_assum `is_terminator _` mp_tac >>
+  simp[step_inst_def] >>
+  (* Only JMP/JNZ give OK without halting, both use jump_to *)
+  Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
+  strip_tac >> gvs[AllCaseEqs(), jump_to_def]
 QED
 
-(*
- * Helper: If lookup_function succeeds, the function is in the list.
- *)
-Theorem lookup_function_MEM:
-  !name fns fn. lookup_function name fns = SOME fn ==> MEM fn fns
+Theorem step_inst_terminator_successor:
+  !inst s s'.
+    is_terminator inst.inst_opcode /\
+    step_inst inst s = OK s' /\
+    ~s'.vs_halted ==>
+    MEM s'.vs_current_bb (get_successors inst)
 Proof
-  gen_tac >> Induct >> rw[lookup_function_def] >> gvs[AllCaseEqs()]
+  rpt strip_tac >>
+  qpat_x_assum `step_inst _ _ = _` mp_tac >>
+  qpat_x_assum `is_terminator _` mp_tac >>
+  simp[step_inst_def, get_successors_def] >>
+  Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
+  strip_tac >>
+  gvs[AllCaseEqs(), jump_to_def, get_label_def] >>
+  Cases_on `get_label cond_op` >> simp[]
 QED
 
-(*
- * Helper: step_in_block is the same for two blocks with matching prefix.
- *
- * WHY THIS IS TRUE: step_in_block uses get_instruction to fetch current instruction.
- * If TAKE (SUC n) matches and we're at index n, then EL n is the same.
- * So step_in_block executes the same instruction on both.
- *)
-Theorem step_in_block_prefix_same:
-  !bb1 bb2 s n.
-    TAKE (SUC n) bb1.bb_instructions = TAKE (SUC n) bb2.bb_instructions /\
-    s.vs_inst_idx = n /\
-    n < LENGTH bb1.bb_instructions /\
-    n < LENGTH bb2.bb_instructions
-  ==>
-    step_in_block bb1 s = step_in_block bb2 s
+Theorem run_block_ok_not_halted_sets_prev_bb:
+  !fn bb s s'.
+    run_block fn bb s = OK s' /\ ~s'.vs_halted ==>
+    s'.vs_prev_bb <> NONE
 Proof
-  rw[step_in_block_def, get_instruction_def] >>
-  `EL s.vs_inst_idx bb1.bb_instructions = EL s.vs_inst_idx bb2.bb_instructions` by (
-    `EL s.vs_inst_idx (TAKE (SUC s.vs_inst_idx) bb1.bb_instructions) =
-     EL s.vs_inst_idx (TAKE (SUC s.vs_inst_idx) bb2.bb_instructions)` by simp[] >>
-    metis_tac[EL_TAKE, DECIDE ``n < SUC n``]
+  ho_match_mp_tac run_block_ind >> rpt strip_tac >>
+  qpat_x_assum `run_block _ _ _ = _` mp_tac >>
+  simp[Once run_block_def] >>
+  Cases_on `step_in_block fn bb s` >> Cases_on `q` >> simp[] >>
+  Cases_on `v.vs_halted` >> simp[] >>
+  Cases_on `r` >> simp[] >- (
+    (* Terminal case *)
+    spose_not_then strip_assume_tac >> gvs[] >>
+    qpat_x_assum `step_in_block _ _ _ = _` mp_tac >> simp[step_in_block_def] >>
+    Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
+    Cases_on `step_inst x s` >> simp[] >>
+    Cases_on `is_terminator x.inst_opcode` >> simp[] >>
+    spose_not_then strip_assume_tac >> gvs[] >>
+    drule_at (Pos last) step_inst_terminator_sets_prev_bb >> simp[] >>
+    qexists_tac `x` >> qexists_tac `s` >> simp[]
   ) >>
-  simp[]
+  (* Non-terminal case: use IH *)
+  spose_not_then strip_assume_tac >> gvs[] >>
+  first_x_assum (qspecl_then [`OK v`, `F`, `v`] mp_tac) >> simp[]
+QED
+
+Theorem run_block_ok_prev_bb:
+  !fn bb s s'.
+    run_block fn bb s = OK s' /\ ~s'.vs_halted ==>
+    s'.vs_prev_bb = SOME s.vs_current_bb
+Proof
+  ho_match_mp_tac run_block_ind >> rpt strip_tac >>
+  qpat_x_assum `run_block _ _ _ = _` mp_tac >>
+  simp[Once run_block_def] >>
+  Cases_on `step_in_block fn bb s` >> Cases_on `q` >> simp[] >>
+  Cases_on `v.vs_halted` >> simp[] >>
+  Cases_on `r` >> simp[]
+  >- (
+    (* Terminal case *)
+    qpat_x_assum `step_in_block _ _ _ = _` mp_tac >>
+    simp[step_in_block_def] >>
+    Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
+    gvs[AllCaseEqs()] >>
+    strip_tac >> gvs[] >>
+    metis_tac[step_inst_terminator_prev_bb]
+  )
+  >- (
+    (* Non-terminal case: use IH *)
+    `v.vs_current_bb = s.vs_current_bb` by (
+      qspecl_then [`fn`, `bb`, `s`, `v`, `F`] mp_tac
+        step_in_block_preserves_current_bb >>
+      simp[]
+    ) >>
+    first_x_assum (qspecl_then [`OK v`, `F`, `v`] mp_tac) >> simp[]
+  )
 QED

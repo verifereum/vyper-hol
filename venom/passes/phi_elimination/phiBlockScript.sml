@@ -24,7 +24,7 @@
 
 Theory phiBlock
 Ancestors
-  phiWellFormed execEquiv venomSem venomState venomInst dfgDefs dfgOrigins phiTransform stateEquiv list
+  phiWellFormed execEquiv venomSemProps venomSem venomState venomInst dfgDefs dfgOrigins phiTransform stateEquiv list
 
 (* ==========================================================================
    Instruction Step Lemmas
@@ -100,8 +100,8 @@ QED
 
 (* KEY LEMMA: Single step in block produces equivalent states *)
 Theorem step_in_block_equiv:
-  !dfg bb s s' is_term.
-    step_in_block bb s = (OK s', is_term) /\
+  !dfg fn bb s s' is_term.
+    step_in_block fn bb s = (OK s', is_term) /\
     well_formed_dfg dfg /\
     (!idx inst. get_instruction bb idx = SOME inst /\ is_phi_inst inst ==>
        phi_well_formed inst.inst_operands) /\
@@ -112,7 +112,7 @@ Theorem step_in_block_equiv:
        resolve_phi prev_bb inst.inst_operands = SOME (Var v) ==>
        FLOOKUP dfg v = SOME origin)
   ==>
-    ?s''. step_in_block (transform_block dfg bb) s = (OK s'', is_term) /\
+    ?s''. step_in_block fn (transform_block dfg bb) s = (OK s'', is_term) /\
           state_equiv s' s''
 Proof
   rpt strip_tac >>
@@ -166,11 +166,11 @@ QED
 
 (* For Halt/Revert cases, step_in_block on transformed block gives same result *)
 Theorem step_in_block_halt_revert_transform:
-  !dfg bb s s' is_term.
-    (step_in_block bb s = (Halt s', is_term) \/
-     step_in_block bb s = (Revert s', is_term))
+  !dfg fn bb s s' is_term.
+    (step_in_block fn bb s = (Halt s', is_term) \/
+     step_in_block fn bb s = (Revert s', is_term))
   ==>
-    step_in_block (transform_block dfg bb) s = step_in_block bb s
+    step_in_block fn (transform_block dfg bb) s = step_in_block fn bb s
 Proof
   rw[step_in_block_def] >>
   Cases_on `get_instruction bb s.vs_inst_idx` >> fs[] >>
@@ -184,17 +184,17 @@ QED
 
 (* Convenient corollaries for the specific cases *)
 Theorem step_in_block_halt_transform:
-  !dfg bb s s' is_term.
-    step_in_block bb s = (Halt s', is_term) ==>
-    step_in_block (transform_block dfg bb) s = (Halt s', is_term)
+  !dfg fn bb s s' is_term.
+    step_in_block fn bb s = (Halt s', is_term) ==>
+    step_in_block fn (transform_block dfg bb) s = (Halt s', is_term)
 Proof
   metis_tac[step_in_block_halt_revert_transform]
 QED
 
 Theorem step_in_block_revert_transform:
-  !dfg bb s s' is_term.
-    step_in_block bb s = (Revert s', is_term) ==>
-    step_in_block (transform_block dfg bb) s = (Revert s', is_term)
+  !dfg fn bb s s' is_term.
+    step_in_block fn bb s = (Revert s', is_term) ==>
+    step_in_block fn (transform_block dfg bb) s = (Revert s', is_term)
 Proof
   metis_tac[step_in_block_halt_revert_transform]
 QED
@@ -203,89 +203,14 @@ QED
    prev_bb Preservation
    ========================================================================== *)
 
-(* Helper: step_inst preserves vs_prev_bb for non-terminator instructions *)
-Theorem step_inst_preserves_prev_bb:
-  !inst s s'.
-    step_inst inst s = OK s' /\
-    ~is_terminator inst.inst_opcode ==>
-    s'.vs_prev_bb = s.vs_prev_bb
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `step_inst _ _ = _` mp_tac >>
-  qpat_x_assum `~is_terminator _` mp_tac >>
-  simp[step_inst_def] >>
-  Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
-  simp[exec_binop_def, exec_unop_def, exec_modop_def] >>
-  strip_tac >> gvs[AllCaseEqs()] >>
-  gvs[update_var_def, mstore_def, sstore_def, tstore_def, write_memory_with_expansion_def]
-QED
-
-(* Helper: step_in_block preserves vs_prev_bb for non-terminator steps *)
-Theorem step_in_block_preserves_prev_bb:
-  !bb s s' is_term.
-    step_in_block bb s = (OK s', is_term) /\
-    ~is_term ==>
-    s'.vs_prev_bb = s.vs_prev_bb
-Proof
-  rw[step_in_block_def] >>
-  Cases_on `get_instruction bb s.vs_inst_idx` >> fs[] >>
-  gvs[AllCaseEqs()] >>
-  drule_all step_inst_preserves_prev_bb >>
-  simp[next_inst_def]
-QED
-
-(* Helper: terminator instructions that give OK set vs_prev_bb (via jump_to) *)
-Theorem step_inst_terminator_sets_prev_bb:
-  !inst s s'.
-    is_terminator inst.inst_opcode /\
-    step_inst inst s = OK s' /\
-    ~s'.vs_halted ==>
-    s'.vs_prev_bb <> NONE
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `step_inst _ _ = _` mp_tac >>
-  qpat_x_assum `is_terminator _` mp_tac >>
-  simp[step_inst_def] >>
-  (* Only JMP/JNZ give OK without halting, both use jump_to *)
-  Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
-  strip_tac >> gvs[AllCaseEqs(), jump_to_def]
-QED
-
-(* run_block returning OK with ~halted means vs_prev_bb is set *)
-Theorem run_block_ok_not_halted_sets_prev_bb:
-  !bb s s'.
-    run_block bb s = OK s' /\ ~s'.vs_halted ==>
-    s'.vs_prev_bb <> NONE
-Proof
-  ho_match_mp_tac run_block_ind >> rpt strip_tac >>
-  qpat_x_assum `run_block _ _ = _` mp_tac >>
-  simp[Once run_block_def] >>
-  Cases_on `step_in_block bb s` >> Cases_on `q` >> simp[] >>
-  Cases_on `v.vs_halted` >> simp[] >>
-  Cases_on `r` >> simp[] >- (
-    (* Terminal case *)
-    spose_not_then strip_assume_tac >> gvs[] >>
-    qpat_x_assum `step_in_block _ _ = _` mp_tac >> simp[step_in_block_def] >>
-    Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
-    Cases_on `step_inst x s` >> simp[] >>
-    Cases_on `is_terminator x.inst_opcode` >> simp[] >>
-    spose_not_then strip_assume_tac >> gvs[] >>
-    drule_at (Pos last) step_inst_terminator_sets_prev_bb >> simp[] >>
-    qexists_tac `x` >> qexists_tac `s` >> simp[]
-  ) >>
-  (* Non-terminal case: use IH *)
-  spose_not_then strip_assume_tac >> gvs[] >>
-  first_x_assum (qspecl_then [`OK v`, `F`, `v`] mp_tac) >> simp[]
-QED
-
 (* ==========================================================================
    Block-level Correctness
    ========================================================================== *)
 
 (* Helper: Block-level correctness for OK result *)
 Theorem transform_block_correct:
-  !bb st graph final_st.
-    run_block bb st = OK final_st /\
+  !fn bb st graph final_st.
+    run_block fn bb st = OK final_st /\
     well_formed_dfg graph /\
     (!idx inst. get_instruction bb idx = SOME inst /\ is_phi_inst inst ==>
        phi_well_formed inst.inst_operands) /\
@@ -295,14 +220,14 @@ Theorem transform_block_correct:
        resolve_phi prev_bb inst.inst_operands = SOME (Var v) ==>
        FLOOKUP graph v = SOME origin)
   ==>
-    ?xformed_st. run_block (transform_block graph bb) st = OK xformed_st /\
+    ?xformed_st. run_block fn (transform_block graph bb) st = OK xformed_st /\
                  state_equiv final_st xformed_st
 Proof
   ho_match_mp_tac run_block_ind >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `run_block _ _ = _` mp_tac >>
+  qpat_x_assum `run_block _ _ _ = _` mp_tac >>
   simp[Once run_block_def] >>
-  Cases_on `step_in_block bb st` >>
+  Cases_on `step_in_block fn bb st` >>
   Cases_on `q` >> simp[] >>
   strip_tac >>
   (* Apply step_in_block_equiv *)
@@ -339,7 +264,7 @@ QED
 
 (* Block-level correctness: transform preserves result equivalence. *)
 Theorem transform_block_result_equiv:
-  !bb st graph.
+  !fn bb st graph.
     well_formed_dfg graph /\
     st.vs_prev_bb <> NONE /\  (* Not at entry - PHI semantics require prev_bb *)
     (!idx inst. get_instruction bb idx = SOME inst /\ is_phi_inst inst ==>
@@ -358,14 +283,14 @@ Theorem transform_block_result_equiv:
        step_inst inst s' = Error e ==>
        lookup_var src_var s' = NONE)
   ==>
-    result_equiv (run_block bb st) (run_block (transform_block graph bb) st)
+    result_equiv (run_block fn bb st) (run_block fn (transform_block graph bb) st)
 Proof
   recInduct run_block_ind >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   (* Unfold run_block on both sides *)
   simp[Once run_block_def] >>
-  Cases_on `step_in_block bb s` >>
-  rename1 `step_in_block bb s = (res, is_term)` >>
+  Cases_on `step_in_block fn bb s` >>
+  rename1 `step_in_block fn bb s = (res, is_term)` >>
   Cases_on `res` >> gvs[]
   (* 4 cases: OK, Halt, Revert, Error *)
   >- ((* OK case *)
@@ -386,7 +311,7 @@ Proof
     `~s''.vs_halted` by fs[state_equiv_def] >> simp[] >>
     Cases_on `is_term` >> gvs[result_equiv_def] >>
     `v.vs_prev_bb = s.vs_prev_bb` by (
-      qspecl_then [`bb`, `s`, `v`, `F`] mp_tac step_in_block_preserves_prev_bb >> simp[]
+      qspecl_then [`fn`, `bb`, `s`, `v`, `F`] mp_tac step_in_block_preserves_prev_bb >> simp[]
     ) >>
     `v.vs_prev_bb <> NONE` by simp[] >>
     first_x_assum (qspec_then `graph` mp_tac) >> simp[] >>
@@ -396,7 +321,7 @@ Proof
     ) >>
     strip_tac >>
     irule result_equiv_trans >>
-    qexists_tac `run_block (transform_block graph bb) v` >> simp[] >>
+    qexists_tac `run_block fn (transform_block graph bb) v` >> simp[] >>
     irule run_block_result_equiv >> simp[]
   )
   >- ((* Halt case *)
@@ -469,4 +394,3 @@ Proof
     simp[result_equiv_def]
   ]
 QED
-
