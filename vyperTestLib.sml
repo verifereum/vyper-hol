@@ -225,7 +225,6 @@ val unsupported_code = [
 ]
 
 val unsupported_patterns = unsupported_code @ [
-  "sqrt(", (* TODO: add support *)
   "extcall ",
   "staticcall ",
   "raw_call(",
@@ -239,6 +238,23 @@ val unsupported_patterns = unsupported_code @ [
   "create_copy_of("
 ]
 
+fun has_sqrt_call src =
+  let
+    val n = String.size src
+    fun loop i =
+      if i + 5 > n then false
+      else if String.substring (src, i, 5) = "sqrt(" andalso
+              (i = 0 orelse String.sub (src, i - 1) <> #"i")
+           then true
+           else loop (i + 1)
+  in
+    loop 0
+  end
+
+fun has_unsupported_patterns src =
+  has_sqrt_call src orelse
+  List.exists (fn x => String.isSubstring x src) unsupported_patterns
+
 fun source_code_opt j =
   (decode (orElse(field "source_code" (nullable string),
                   succeed NONE)) j)
@@ -248,17 +264,17 @@ fun source_code_opt j =
 fun has_unsupported_source_json j =
   case source_code_opt j of
     NONE => false
-  | SOME src => List.exists (fn x => String.isSubstring x src) unsupported_patterns
+  | SOME src => has_unsupported_patterns src
 
 fun has_unsupported_source_code (name, (err, j)) =
   case source_code_opt j of
     NONE => true
-  | SOME src => List.exists (fn x => String.isSubstring x src) unsupported_patterns
+  | SOME src => has_unsupported_patterns src
 
 val deployment : term decoder =
   check_trace_type "deployment" $
   check (field "source_code" string)
-        (fn src => List.all (fn x => not $ String.isSubstring x src) unsupported_patterns)
+        (fn src => not (has_unsupported_patterns src))
         "has unsupported_pattern" $
   JSONDecode.map (fn ((c,(i,h),(s,m,a,g),(d,bn,bf,v)),e) =>
              TypeBase.mk_record (deployment_trace_ty, [
