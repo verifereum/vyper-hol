@@ -517,12 +517,21 @@ Proof
                       `v'''.vs_current_bb = v''.vs_current_bb` by
                         (irule run_block_replace_label_current_bb_diff_states >>
                          gvs[] >>
-                         qexistsl_tac [`pred_labels fn s2.vs_current_bb`, `fn`] >>
-                         gvs[] >> rpt conj_tac >> gvs[] >>
-                         TRY (irule phi_block_wf_merged >> gvs[] >>
-                              fs[phi_fn_wf_def] >> first_x_assum drule >> gvs[] >>
-                              metis_tac[lookup_block_label]) >>
-                         TRY (irule block_terminator_last_merged >> gvs[])) >>
+                         qexists_tac `a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions` >>
+                         qexistsl_tac [`fn`, `s2.vs_current_bb`, `v.vs_current_bb`, `s1`, `s2`] >>
+                         rpt conj_tac
+                         >- (irule block_terminator_last_merged >> gvs[])
+                         >- gvs[]
+                         >- gvs[basic_block_component_equality]
+                         >- simp[block_successors_merged]
+                         >- gvs[]
+                         >- gvs[]
+                         >- gvs[]
+                         >- gvs[]
+                         >- gvs[]
+                         >- gvs[basic_block_component_equality]
+                         >- gvs[basic_block_component_equality]
+                         >- (gvs[] >> simp[state_equiv_cfg_def])) >>
                       simp[]))
                   >- metis_tac[run_block_ok_inst_idx]
                   >- metis_tac[run_block_ok_inst_idx]
@@ -597,8 +606,9 @@ Proof
                           metis_tac[run_block_merge_blocks_current_bb] >>
                         `v'''.vs_current_bb = v''.vs_current_bb` by
                           (irule run_block_replace_label_current_bb_prev_none >>
-                           gvs[] >> rpt conj_tac >> gvs[] >>
-                           TRY (irule block_terminator_last_merged >> gvs[])) >>
+                           gvs[block_successors_merged] >> rpt conj_tac >> gvs[] >>
+                           TRY (irule block_terminator_last_merged >> gvs[]) >>
+                           TRY (simp[state_equiv_cfg_def])) >>
                         simp[]))
                     >- metis_tac[run_block_ok_inst_idx]
                     >- metis_tac[run_block_ok_inst_idx]
