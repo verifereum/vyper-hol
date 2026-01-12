@@ -61,6 +61,40 @@ Proof
   simp[lookup_block_def]
 QED
 
+(* Helper: MEM in remove_block gives a block with different label from original list *)
+Theorem MEM_remove_block:
+  !lbl blocks bb.
+    MEM bb (remove_block lbl blocks) ==>
+    bb.bb_label <> lbl /\ MEM bb blocks
+Proof
+  Induct_on `blocks` >> simp[remove_block_def] >>
+  rpt strip_tac >> Cases_on `h.bb_label = lbl` >> gvs[] >> metis_tac[]
+QED
+
+(* Helper: ALL_DISTINCT preserved by remove_block *)
+Theorem ALL_DISTINCT_remove_block:
+  !lbl blocks.
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) blocks) ==>
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) (remove_block lbl blocks))
+Proof
+  Induct_on `blocks` >> simp[remove_block_def] >> rpt strip_tac >>
+  Cases_on `h.bb_label = lbl` >> gvs[MEM_MAP] >>
+  rpt strip_tac >> drule MEM_remove_block >> strip_tac >> metis_tac[]
+QED
+
+(* Helper: MEM in replace_block gives either the new block or an old block with different label *)
+Theorem MEM_replace_block:
+  !bb' blocks bb.
+    ALL_DISTINCT (MAP (\b. b.bb_label) blocks) /\
+    MEM bb (replace_block bb' blocks) ==>
+    bb = bb' \/ (bb.bb_label <> bb'.bb_label /\ MEM bb blocks)
+Proof
+  Induct_on `blocks` >> simp[replace_block_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `h.bb_label = bb'.bb_label` >> gvs[]
+  >- (strip_tac >> gvs[MEM_MAP] >> metis_tac[])
+  >- (first_x_assum (qspecl_then [`bb'`, `bb`] mp_tac) >> simp[] >> metis_tac[])
+QED
+
 Theorem lookup_block_simplify_phi_block:
   !lbl blocks fn' bb.
     lookup_block lbl blocks = SOME bb ==>
@@ -175,6 +209,44 @@ Proof
   >- (first_x_assum (qspec_then `bb with bb_instructions := [(LAST bb.bb_instructions) with inst_operands := v]` mp_tac) >> simp[])
   >- (simp[get_label_def] >> Cases_on `s = old` >> simp[get_label_def] >>
       first_x_assum (qspec_then `bb with bb_instructions := [(LAST bb.bb_instructions) with inst_operands := v]` mp_tac) >> simp[])
+QED
+
+(* How pred_labels changes after replace_label_fn (as set equality) *)
+Theorem pred_labels_replace_label_fn_set:
+  !fn old new lbl.
+    lbl <> old ==>
+    set (pred_labels (replace_label_fn old new fn) lbl) =
+    if lbl = new then
+      set (pred_labels fn lbl) UNION set (pred_labels fn old)
+    else set (pred_labels fn lbl)
+Proof
+  rpt strip_tac >> simp[pred_labels_def, replace_label_fn_def] >>
+  simp[pred_setTheory.EXTENSION, MEM_MAP, MEM_FILTER] >>
+  rpt strip_tac >> eq_tac
+  >- (
+    rpt strip_tac >> gvs[block_successors_replace_label_block,
+      replace_label_block_def, MEM_MAP] >>
+    CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM replace_label_block_def))) >>
+    qpat_x_assum `MEM lbl (block_successors _)` (mp_tac o REWRITE_RULE
+      [GSYM replace_label_block_def]) >>
+    simp[block_successors_replace_label_block, MEM_MAP] >>
+    rpt strip_tac >> Cases_on `lbl' = old` >> gvs[]
+    >- (DISJ2_TAC >> simp[MEM_MAP, MEM_FILTER] >> metis_tac[])
+    >- (COND_CASES_TAC >> simp[MEM_MAP, MEM_FILTER] >> metis_tac[]))
+  >- (
+    COND_CASES_TAC >> simp[MEM_MAP, MEM_FILTER] >> rpt strip_tac >> gvs[]
+    >- (
+      qexists_tac `replace_label_block old lbl bb` >>
+      simp[replace_label_block_def, block_successors_replace_label_block,
+        MEM_MAP] >> metis_tac[])
+    >- (
+      qexists_tac `replace_label_block old lbl bb` >>
+      simp[replace_label_block_def, block_successors_replace_label_block,
+        MEM_MAP] >> metis_tac[])
+    >- (
+      qexists_tac `replace_label_block old new bb` >>
+      simp[replace_label_block_def, block_successors_replace_label_block,
+        MEM_MAP] >> metis_tac[]))
 QED
 
 Theorem block_last_inst_terminator:
