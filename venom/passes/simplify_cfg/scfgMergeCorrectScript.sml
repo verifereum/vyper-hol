@@ -501,8 +501,26 @@ Proof
     impl_tac >- gvs[Abbr `merged`, state_equiv_cfg_def] >> strip_tac >>
     (* Case split on s1.vs_prev_bb to use appropriate lemma *)
     Cases_on `s1.vs_prev_bb`
-    >- cheat (* NONE case - needs run_block_replace_label_current_bb_prev_none *)
-    >- cheat) (* SOME case - needs different helper *)
+    >- ( (* NONE case *)
+      gvs[] >>
+      `a.bb_instructions <> []` by
+        (fs[block_last_jmp_to_def, block_last_inst_def] >>
+         Cases_on `a.bb_instructions` >> gvs[]) >>
+      `b.bb_instructions <> []` by
+        (CCONTR_TAC >> gvs[] >> qpat_x_assum `run_block b _ = _` mp_tac >>
+         simp[Once run_block_def, step_in_block_def, get_instruction_def]) >>
+      `block_terminator_last merged` by
+        (simp[Abbr `merged`] >> irule block_terminator_last_merged >> gvs[]) >>
+      `block_successors merged = block_successors b` by
+        (simp[Abbr `merged`] >> irule block_successors_merged >> gvs[]) >>
+      `~v_mid.vs_halted` by gvs[state_equiv_cfg_def] >>
+      irule run_block_replace_label_current_bb_prev_none >> gvs[] >>
+      qexistsl_tac [`merged`, `s1.vs_current_bb`, `v.vs_current_bb`, `s1`, `s2`] >>
+      gvs[])
+    >- ( (* SOME case - needs helper for different prev_bb *)
+      Cases_on `x = v.vs_current_bb`
+      >- (gvs[] >> cheat) (* SOME b_lbl case - TODO: use run_block_replace_label_current_bb_diff_states *)
+      >- (gvs[] >> cheat))) (* SOME other case - TODO: use run_block_replace_label_current_bb_same_prev *)
   >- ( (* v'.vs_current_bb <> b_lbl - after gvs[], uses v.vs_current_bb *)
     `MEM b fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
     `b.bb_label = v.vs_current_bb` by metis_tac[lookup_block_label] >>
@@ -518,9 +536,10 @@ Proof
         FRONT a.bb_instructions ++ b.bb_instructions)`, `s2`, `v''`] mp_tac
         run_block_ok_prev_bb >> gvs[])
   >- (qspecl_then [`b`, `v`, `v'`] mp_tac run_block_ok_prev_bb >> gvs[] >>
-      qspecl_then [`fn`, `b`, `v`, `v'`] mp_tac run_block_ok_pred_labels >>
-      impl_tac >- (gvs[] >> metis_tac[lookup_block_MEM]) >>
-      metis_tac[lookup_block_label])
+      strip_tac >> qspecl_then [`fn`, `b`, `v`, `v'`] mp_tac run_block_ok_pred_labels >>
+      impl_tac >- (gvs[] >> metis_tac[lookup_block_MEM]) >> gvs[] >>
+      strip_tac >> `b.bb_label = v.vs_current_bb` by metis_tac[lookup_block_label] >>
+      gvs[])
   >- (`terminates (run_function (SUC n) fn v)` by (irule
         run_function_terminates_step >> gvs[] >> metis_tac[]) >>
       irule run_function_terminates_step >> gvs[] >>
