@@ -1636,4 +1636,92 @@ Proof
       gvs[])
 QED
 
+(* Helper: block_terminator_last of merged block when both a and b have terminators last *)
+Theorem block_terminator_last_merged:
+  !a b. block_terminator_last a /\ block_terminator_last b /\
+        a.bb_instructions <> [] /\ b.bb_instructions <> [] ==>
+        block_terminator_last (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)
+Proof
+  rw[block_terminator_last_def, get_instruction_def] >>
+  Cases_on `idx < LENGTH (FRONT a.bb_instructions)`
+  >- (
+    (* idx in FRONT a - contradiction since FRONT removes the terminator *)
+    `(FRONT a.bb_instructions ++ b.bb_instructions)❲idx❳ = (FRONT a.bb_instructions)❲idx❳`
+      by simp[rich_listTheory.EL_APPEND1] >>
+    `(FRONT a.bb_instructions)❲idx❳ = a.bb_instructions❲idx❳`
+      by (irule rich_listTheory.FRONT_EL >> simp[]) >>
+    `LENGTH (FRONT a.bb_instructions) = PRE (LENGTH a.bb_instructions)`
+      by simp[rich_listTheory.LENGTH_FRONT] >>
+    `idx < LENGTH a.bb_instructions` by (Cases_on `a.bb_instructions` >> gvs[]) >>
+    `is_terminator a.bb_instructions❲idx❳.inst_opcode` by gvs[] >>
+    `idx = LENGTH a.bb_instructions - 1` by (first_x_assum drule >> simp[]) >>
+    gvs[])
+  >- (
+    (* idx in b part - use b's terminator property *)
+    `(FRONT a.bb_instructions ++ b.bb_instructions)❲idx❳ =
+     b.bb_instructions❲idx - LENGTH (FRONT a.bb_instructions)❳`
+      by simp[rich_listTheory.EL_APPEND2] >>
+    first_x_assum (qspec_then `idx - LENGTH (FRONT a.bb_instructions)` mp_tac) >>
+    simp[] >> gvs[])
+QED
+
+(* Helper: current_bb preserved for merged block with replace_label and PHI with prev_bb = NONE
+   This combines run_block_merge_blocks_current_bb with run_block_replace_label_current_bb_prev_none *)
+Theorem run_block_merged_phi_prev_none_current_bb:
+  !a b s v v' v_merged v'' s2 old new.
+    (* Block structure preconditions *)
+    block_last_jmp_to old a /\
+    block_terminator_last a /\ block_terminator_last b /\
+    block_has_no_phi b /\
+    ~MEM old (block_successors b) /\
+    a.bb_instructions <> [] /\ b.bb_instructions <> [] /\
+    (* State preconditions *)
+    ~s.vs_halted /\ s.vs_inst_idx = 0 /\
+    state_equiv_cfg s s2 /\
+    s.vs_prev_bb = NONE /\ s2.vs_prev_bb = NONE /\
+    s.vs_inst_idx = s2.vs_inst_idx /\
+    (* Execution results *)
+    run_block a s = OK v /\ ~v.vs_halted /\
+    run_block b v = OK v' /\ ~v'.vs_halted /\
+    run_block (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) s = OK v_merged /\
+    run_block (replace_label_block old new
+               (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2 = OK v'' /\
+    ~v_merged.vs_halted
+  ==>
+    v'.vs_current_bb = v''.vs_current_bb
+Proof
+  rpt strip_tac >>
+  (* Step 1: v'.vs_current_bb = v_merged.vs_current_bb *)
+  `v'.vs_current_bb = v_merged.vs_current_bb` by metis_tac[run_block_merge_blocks_current_bb] >>
+  (* Step 2: v_merged.vs_current_bb = v''.vs_current_bb *)
+  qspecl_then [`a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions`,
+               `s`, `s2`, `old`, `new`, `v_merged`, `v''`]
+    mp_tac run_block_replace_label_current_bb_prev_none >>
+  impl_tac
+  >- (simp[block_successors_merged] >> rpt conj_tac >> gvs[] >>
+      rw[block_terminator_last_def, get_instruction_def] >>
+      Cases_on `idx < LENGTH (FRONT a.bb_instructions)`
+      >- ((* idx in FRONT a case - contradiction *)
+          `(FRONT a.bb_instructions ++ b.bb_instructions)❲idx❳ =
+           (FRONT a.bb_instructions)❲idx❳` by simp[rich_listTheory.EL_APPEND1] >>
+          `(FRONT a.bb_instructions)❲idx❳ = a.bb_instructions❲idx❳`
+            by (irule rich_listTheory.FRONT_EL >> simp[]) >>
+          qpat_x_assum `block_terminator_last a` mp_tac >>
+          simp[block_terminator_last_def, get_instruction_def] >> strip_tac >>
+          `idx < LENGTH a.bb_instructions`
+            by (Cases_on `a.bb_instructions` >> gvs[rich_listTheory.LENGTH_FRONT]) >>
+          `idx = LENGTH a.bb_instructions - 1` by (first_x_assum irule >> gvs[]) >>
+          gvs[rich_listTheory.LENGTH_FRONT])
+      >- ((* idx in b part *)
+          `(FRONT a.bb_instructions ++ b.bb_instructions)❲idx❳ =
+           b.bb_instructions❲idx - LENGTH (FRONT a.bb_instructions)❳`
+            by simp[rich_listTheory.EL_APPEND2] >>
+          qpat_x_assum `block_terminator_last b` mp_tac >>
+          simp[block_terminator_last_def, get_instruction_def] >> strip_tac >>
+          `idx - LENGTH (FRONT a.bb_instructions) = LENGTH b.bb_instructions - 1`
+            by (first_x_assum irule >> gvs[]) >>
+          gvs[]))
+  >- simp[]
+QED
+
 val _ = export_theory();
