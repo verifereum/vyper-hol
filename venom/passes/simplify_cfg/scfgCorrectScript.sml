@@ -850,6 +850,30 @@ Proof
   gvs[scfgDefsTheory.phi_block_wf_def]
 QED
 
+(* Helper: pred_labels preserved for non-merged blocks when b not a predecessor *)
+Theorem pred_labels_merge_blocks_other:
+  !fn a b lbl.
+    merge_blocks_cond fn a b /\ cfg_wf fn /\
+    lbl <> a /\ lbl <> b /\ ~MEM b (pred_labels fn lbl) ==>
+    pred_labels (merge_blocks fn a b) lbl = pred_labels fn lbl
+Proof
+  cheat
+QED
+
+(* Helper: phi_block_wf preserved when old label is not a predecessor *)
+Theorem phi_block_wf_not_mem_pred:
+  !old new preds bb.
+    phi_block_wf preds bb /\ ~MEM old preds ==>
+    phi_block_wf preds (replace_label_block old new bb)
+Proof
+  rpt strip_tac >>
+  simp[scfgDefsTheory.phi_block_wf_def, scfgDefsTheory.replace_label_block_def,
+       MEM_MAP] >>
+  rpt strip_tac >> gvs[] >>
+  irule phi_inst_wf_not_mem_pred >> simp[] >>
+  gvs[scfgDefsTheory.phi_block_wf_def]
+QED
+
 (* Helper: cfg_wf and phi_fn_wf preserved by simplify_cfg_step *)
 Theorem wf_simplify_cfg_step:
   !fn fn'.
