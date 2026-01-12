@@ -597,4 +597,32 @@ Proof
   Cases_on `idx` >> gvs[]
 QED
 
+(* Helper: update_last_inst applies f to the LAST element *)
+Theorem update_last_inst_last:
+  !f l. l <> [] ==> LAST (update_last_inst f l) = f (LAST l)
+Proof
+  Induct_on `l` >- simp[] >>
+  rpt strip_tac >> Cases_on `l`
+  >- simp[scfgDefsTheory.update_last_inst_def]
+  >- (simp[scfgDefsTheory.update_last_inst_def] >>
+      first_x_assum (qspec_then `f` mp_tac) >> simp[] >>
+      strip_tac >> Cases_on `update_last_inst f (h'::t)`
+      >- (`LENGTH (update_last_inst f (h'::t)) = LENGTH (h'::t)` by
+            simp[update_last_inst_length] >> gvs[])
+      >- simp[listTheory.LAST_CONS])
+QED
+
+(* Helper: EL at last position gives f(LAST l) *)
+Theorem update_last_inst_el_last:
+  !f l. l <> [] ==> EL (PRE (LENGTH l)) (update_last_inst f l) = f (LAST l)
+Proof
+  rpt strip_tac >>
+  `LENGTH (update_last_inst f l) = LENGTH l` by simp[update_last_inst_length] >>
+  `update_last_inst f l <> []` by (CCONTR_TAC >> gvs[]) >>
+  `EL (PRE (LENGTH l)) (update_last_inst f l) = LAST (update_last_inst f l)` by
+    (`PRE (LENGTH l) = PRE (LENGTH (update_last_inst f l))` by simp[] >>
+     pop_assum SUBST1_TAC >> irule (GSYM listTheory.LAST_EL) >> simp[]) >>
+  simp[update_last_inst_last]
+QED
+
 val _ = export_theory();

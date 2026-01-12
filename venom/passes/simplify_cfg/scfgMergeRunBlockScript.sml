@@ -1884,7 +1884,44 @@ Proof
   >- (`s.vs_inst_idx = LENGTH (FRONT a.bb_instructions)` by decide_tac >>
       `a.bb_instructions <> []` by
         (fs[block_successors_def, block_last_inst_def] >> Cases_on `a.bb_instructions` >> gvs[]) >>
-      cheat (* terminator boundary - needs terminator execution equivalence *))
+      simp[Once run_block_def] >>
+      CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+      qabbrev_tac `a' = a with bb_instructions :=
+        update_last_inst (replace_label_inst b_lbl c_lbl) a.bb_instructions` >>
+      drule_all block_successors_mem_is_terminator >> strip_tac >>
+      sg `get_instruction a s.vs_inst_idx = SOME inst`
+      >- (simp[get_instruction_def, rich_listTheory.LENGTH_FRONT] >>
+          gvs[block_last_inst_def, AllCaseEqs()] >> simp[listTheory.LAST_EL] >>
+          Cases_on `a.bb_instructions` >> gvs[])
+      >- (sg `get_instruction a' s.vs_inst_idx = SOME (replace_label_inst b_lbl c_lbl inst)`
+          >- (simp[get_instruction_def, Abbr `a'`,
+                   scfgMergeHelpersTheory.update_last_inst_length,
+                   rich_listTheory.LENGTH_FRONT] >>
+              gvs[block_last_inst_def, AllCaseEqs()] >>
+              simp[scfgMergeHelpersTheory.update_last_inst_el_last] >>
+              Cases_on `a.bb_instructions` >> gvs[])
+          >- (simp[step_in_block_def] >>
+              `is_terminator (replace_label_inst b_lbl c_lbl inst).inst_opcode` by
+                simp[scfgDefsTheory.replace_label_inst_def] >>
+              simp[] >>
+              `result_equiv_cfg (step_inst inst s)
+                 (step_inst (replace_label_inst b_lbl c_lbl inst) s)` by
+                (qspecl_then [`inst`, `b_lbl`, `c_lbl`, `s`] mp_tac
+                   step_inst_terminator_replace_label_equiv >> simp[]) >>
+              Cases_on `step_inst inst s` >> gvs[result_equiv_cfg_def]
+              >- (Cases_on `step_inst (replace_label_inst b_lbl c_lbl inst) s` >>
+                  gvs[result_equiv_cfg_def] >>
+                  IF_CASES_TAC >> gvs[result_equiv_cfg_def]
+                  >- (`v'.vs_halted` by gvs[state_equiv_cfg_def] >>
+                      simp[result_equiv_cfg_def])
+                  >- (`~v'.vs_halted` by gvs[state_equiv_cfg_def] >> simp[] >>
+                      cheat (* run_block b v equiv OK v' - needs jump_only lemma *)))
+              >- (Cases_on `step_inst (replace_label_inst b_lbl c_lbl inst) s` >>
+                  gvs[result_equiv_cfg_def])
+              >- (Cases_on `step_inst (replace_label_inst b_lbl c_lbl inst) s` >>
+                  gvs[result_equiv_cfg_def])
+              >- (Cases_on `step_inst (replace_label_inst b_lbl c_lbl inst) s` >>
+                  gvs[result_equiv_cfg_def]))))
 QED
 
 val _ = export_theory();
