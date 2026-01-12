@@ -281,6 +281,73 @@ Proof
   >- metis_tac[run_function_terminates_step]
 QED
 
+(* ===== Helper: merged_no_label to merged_bb ===== *)
+
+(* This helper proves equivalence between running the merged block (before label
+   replacement) on s1 and the merged block (after label replacement) on s2.
+   The key case split is on s1.vs_prev_bb:
+   - NONE: use run_block_replace_label_prev_bb_none
+   - SOME b_lbl: use run_block_replace_label (prev_bb changes from b_lbl to a_lbl)
+   - SOME x (x <> b_lbl): use run_block_replace_label_prev_diff *)
+Theorem run_block_merged_to_merged_bb:
+  !fn a b a_lbl b_lbl s1 s2.
+    cfg_wf fn /\ phi_fn_wf fn /\
+    lookup_block a_lbl fn.fn_blocks = SOME a /\
+    lookup_block b_lbl fn.fn_blocks = SOME b /\
+    a_lbl <> b_lbl /\
+    pred_labels fn b_lbl = [a_lbl] /\
+    block_has_no_phi b /\ block_last_jmp_to b_lbl a /\
+    state_equiv_cfg s1 s2 /\
+    s1.vs_inst_idx = s2.vs_inst_idx /\
+    (s1.vs_prev_bb = SOME b_lbl ==> s2.vs_prev_bb = SOME a_lbl) /\
+    (s1.vs_prev_bb <> SOME b_lbl ==> s1.vs_prev_bb = s2.vs_prev_bb) /\
+    (!lbl. s1.vs_prev_bb = SOME lbl ==> MEM lbl (pred_labels fn a_lbl))
+  ==>
+    let merged_no_label = a with bb_instructions :=
+          FRONT a.bb_instructions ++ b.bb_instructions in
+    let merged_bb = replace_label_block b_lbl a_lbl merged_no_label in
+    result_equiv_cfg (run_block merged_no_label s1) (run_block merged_bb s2)
+Proof
+  rpt strip_tac >> simp[] >>
+  Cases_on `s1.vs_prev_bb`
+  (* NONE case: use run_block_replace_label_prev_bb_none *)
+  >- (irule run_block_replace_label_prev_bb_none >> gvs[])
+  (* SOME case: split on whether it's b_lbl or not *)
+  >- (
+    Cases_on `x = b_lbl`
+    (* prev_bb = SOME b_lbl: use run_block_replace_label *)
+    >- (
+      gvs[] >> irule run_block_replace_label >> simp[] >>
+      qexists_tac `fn` >> simp[] >>
+      `a.bb_label = a_lbl` by metis_tac[lookup_block_label] >> simp[] >>
+      conj_tac
+      >- (irule scfgMergeHelpersTheory.pred_labels_no_jmp_other >> simp[] >>
+          metis_tac[])
+      >- (irule phi_block_wf_merged >> simp[] >>
+          conj_tac >- (gvs[block_last_jmp_to_def, block_last_inst_def] >>
+            Cases_on `a.bb_instructions` >> gvs[]) >>
+          metis_tac[phi_fn_wf_def, lookup_block_MEM, lookup_block_label]))
+    (* prev_bb = SOME x, x <> b_lbl: use run_block_replace_label_prev_diff *)
+    >- (
+      `s1.vs_prev_bb = s2.vs_prev_bb` by gvs[] >>
+      irule result_equiv_cfg_trans >>
+      qexists_tac `run_block (a with bb_instructions :=
+        FRONT a.bb_instructions ++ b.bb_instructions) s2` >> conj_tac
+      >- (irule run_block_state_equiv_cfg >> gvs[])
+      >- (
+        `x <> a_lbl` by (CCONTR_TAC >> gvs[] >>
+          `~MEM a_lbl (pred_labels fn a_lbl)` by
+            (irule scfgMergeHelpersTheory.pred_labels_no_jmp_other >>
+             simp[] >> metis_tac[]) >> gvs[]) >>
+        irule run_block_replace_label_prev_diff >> simp[] >>
+        qexists_tac `fn` >> qexists_tac `x` >> gvs[] >>
+        `a.bb_label = a_lbl` by metis_tac[lookup_block_label] >> gvs[] >>
+        irule phi_block_wf_merged >> simp[] >>
+        conj_tac >- (gvs[block_last_jmp_to_def, block_last_inst_def] >>
+          Cases_on `a.bb_instructions` >> gvs[]) >>
+        metis_tac[phi_fn_wf_def, lookup_block_MEM])))
+QED
+
 (* ===== Merge Point Helper Lemma ===== *)
 
 (* Helper: handle the specific case when at merge point (vs_current_bb = a_lbl).
