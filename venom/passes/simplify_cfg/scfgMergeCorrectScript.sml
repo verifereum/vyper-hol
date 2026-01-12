@@ -320,14 +320,46 @@ Theorem merge_blocks_at_merge_point:
     result_equiv_cfg (run_function fuel fn s1)
                      (run_function fuel (merge_blocks fn a_lbl b_lbl) s2)
 Proof
-  (* Proof strategy:
-     1. Expand run_function once on both sides
-     2. Use lookup_block_merge_blocks_a to match merged block
-     3. Use run_block_merge_blocks_equiv to relate run_block a; run_block b to merged
-     4. Case split on result (OK, Halt, Revert, Error)
-     5. For OK non-halted: establish IH preconditions and apply IH
-  *)
-  cheat
+  rpt strip_tac >>
+  simp[Once run_function_def] >>
+  Cases_on `fuel`
+  >- gvs[run_function_def, terminates_def]
+  >- (
+    simp[] >>
+    CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_function_def])) >> simp[] >>
+    sg `lookup_block a_lbl (merge_blocks fn a_lbl b_lbl).fn_blocks =
+        SOME (replace_label_block b_lbl a_lbl (a with bb_instructions :=
+              FRONT a.bb_instructions ++ b.bb_instructions))`
+    >- (irule lookup_block_merge_blocks_a >> simp[])
+    >- (
+      simp[] >>
+      qabbrev_tac `merged_bb = replace_label_block b_lbl a_lbl (a with
+        bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)` >>
+      qabbrev_tac `merged_no_label = a with bb_instructions :=
+        FRONT a.bb_instructions ++ b.bb_instructions` >>
+      Cases_on `run_block a s1` >> simp[]
+      >- (Cases_on `v.vs_halted` >> gvs[] >> cheat) (* OK case - needs IH *)
+      >- ( (* Halt case - use transitivity *)
+        irule result_equiv_cfg_trans >> qexists_tac `run_block merged_no_label s1` >> conj_tac
+        >- (`block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
+              irule lookup_block_MEM >> metis_tac[]) >>
+            qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac run_block_merge_blocks_equiv >>
+            simp[Abbr`merged_no_label`])
+        >- cheat) (* merged_no_label to merged_bb *)
+      >- ( (* Revert case *)
+        irule result_equiv_cfg_trans >> qexists_tac `run_block merged_no_label s1` >> conj_tac
+        >- (`block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
+              irule lookup_block_MEM >> metis_tac[]) >>
+            qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac run_block_merge_blocks_equiv >>
+            simp[Abbr`merged_no_label`])
+        >- cheat) (* merged_no_label to merged_bb *)
+      >- ( (* Error case *)
+        irule result_equiv_cfg_trans >> qexists_tac `run_block merged_no_label s1` >> conj_tac
+        >- (`block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
+              irule lookup_block_MEM >> metis_tac[]) >>
+            qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac run_block_merge_blocks_equiv >>
+            simp[Abbr`merged_no_label`])
+        >- cheat))) (* merged_no_label to merged_bb *)
 QED
 
 (* Helper: run_function equivalence for merge_blocks when original terminates.
@@ -357,10 +389,11 @@ Theorem run_function_merge_blocks_equiv_fwd:
     result_equiv_cfg (run_function fuel fn s1)
                      (run_function fuel (merge_blocks fn a_lbl b_lbl) s2)
 Proof
-  (* Structure: induction on fuel, case split on whether at merge point
-     - At merge point: use merge_blocks_at_merge_point helper
-     - Not at merge point: simpler - block unchanged except label replacement *)
-  cheat
+  Induct_on `fuel` >- simp[run_function_def, terminates_def] >>
+  rpt strip_tac >> Cases_on `s1.vs_current_bb = a_lbl`
+  >- (irule merge_blocks_at_merge_point >> gvs[] >>
+      cheat) (* IH application - needs fuel monotonicity *)
+  >- cheat (* Not at merge point - block unchanged except label replacement *)
 QED
 
 (* Original proof preserved in comment for extraction:

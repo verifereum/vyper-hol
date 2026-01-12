@@ -850,6 +850,52 @@ Proof
   gvs[scfgDefsTheory.phi_block_wf_def]
 QED
 
+(* Helper: ALL_DISTINCT on mapped list implies injectivity *)
+Theorem ALL_DISTINCT_MAP_EQ:
+  !f x y ls. ALL_DISTINCT (MAP f ls) /\ MEM x ls /\ MEM y ls /\ f x = f y ==> x = y
+Proof
+  gen_tac >> gen_tac >> gen_tac >> Induct_on `ls` >-
+  simp[] >-
+  (rpt strip_tac >> gvs[] >-
+   (CCONTR_TAC >> gvs[listTheory.MEM_MAP]) >-
+   (CCONTR_TAC >> gvs[listTheory.MEM_MAP]))
+QED
+
+(* Specialized version for bb_label - avoids lambda witness in qexists_tac *)
+Theorem ALL_DISTINCT_bb_labels_EQ:
+  !x y blocks.
+    ALL_DISTINCT (MAP (\b. b.bb_label) blocks) /\
+    MEM x blocks /\ MEM y blocks /\ x.bb_label = y.bb_label ==> x = y
+Proof
+  rpt gen_tac >> Induct_on `blocks` >> simp[] >> rpt strip_tac >> gvs[] >>
+  CCONTR_TAC >> gvs[listTheory.MEM_MAP]
+QED
+
+(* Helper: FILTER unchanged when removed block doesn't pass predicate *)
+Theorem FILTER_remove_block_unchanged:
+  !P lbl blocks.
+    (!bb. MEM bb blocks /\ bb.bb_label = lbl ==> ~P bb) ==>
+    FILTER P (remove_block lbl blocks) = FILTER P blocks
+Proof
+  gen_tac >> gen_tac >> Induct_on `blocks` >-
+  simp[scfgDefsTheory.remove_block_def] >-
+  (rpt strip_tac >> simp[scfgDefsTheory.remove_block_def] >>
+   Cases_on `h.bb_label = lbl` >> gvs[])
+QED
+
+(* Helper: FILTER unchanged when replaced block doesn't pass predicate *)
+Theorem FILTER_replace_block_unchanged:
+  !P new_bb blocks.
+    ~P new_bb /\
+    (!bb. MEM bb blocks /\ bb.bb_label = new_bb.bb_label ==> ~P bb) ==>
+    FILTER P (replace_block new_bb blocks) = FILTER P blocks
+Proof
+  gen_tac >> gen_tac >> Induct_on `blocks` >-
+  simp[scfgDefsTheory.replace_block_def] >-
+  (rpt strip_tac >> simp[scfgDefsTheory.replace_block_def] >>
+   Cases_on `h.bb_label = new_bb.bb_label` >> gvs[])
+QED
+
 (* Helper: FILTER unchanged when replaced/removed blocks don't pass predicate *)
 Theorem FILTER_replace_block_remove_unchanged:
   !P new_bb removed_lbl blocks old_bb removed_bb.
@@ -861,6 +907,7 @@ Theorem FILTER_replace_block_remove_unchanged:
     FILTER P (replace_block new_bb (remove_block removed_lbl blocks)) =
     FILTER P blocks
 Proof
+  (* TODO: debug drule_all ALL_DISTINCT_bb_labels_EQ pattern *)
   cheat
 QED
 
