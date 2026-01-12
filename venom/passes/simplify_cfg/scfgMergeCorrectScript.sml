@@ -2124,7 +2124,22 @@ Theorem lookup_block_merge_jump_none:
     a_lbl <> b_lbl /\ d_lbl <> a_lbl /\ d_lbl <> b_lbl ==>
     lookup_block d_lbl (merge_jump fn a_lbl b_lbl).fn_blocks = NONE
 Proof
-  cheat (* TODO: needs lookup_block_replace_block_none helper *)
+  rpt strip_tac >>
+  simp[scfgTransformTheory.merge_jump_def, scfgDefsTheory.replace_label_fn_def] >>
+  irule scfgMergeHelpersTheory.lookup_block_replace_label_block_none >>
+  qabbrev_tac `blocks = remove_block b_lbl (replace_block
+    (a with bb_instructions := update_last_inst (replace_label_inst b_lbl c_lbl)
+       a.bb_instructions) fn.fn_blocks)` >>
+  `lookup_block d_lbl blocks = NONE` by (
+    simp[Abbr `blocks`] >>
+    irule scfgMergeHelpersTheory.lookup_block_remove_block_none >>
+    irule scfgMergeHelpersTheory.lookup_block_replace_block_none >> simp[]) >>
+  pop_assum mp_tac >> qspec_tac (`blocks`, `bs`) >> Induct_on `bs`
+  >- simp[venomInstTheory.lookup_block_def]
+  >- (rpt strip_tac >> simp[venomInstTheory.lookup_block_def] >>
+      gvs[venomInstTheory.lookup_block_def, AllCaseEqs(),
+          scfgDefsTheory.replace_phi_in_block_def] >>
+      IF_CASES_TAC >> gvs[])
 QED
 
 (* Helper: running a jump-only block just performs the jump *)
@@ -2156,17 +2171,27 @@ Theorem run_function_merge_jump_equiv_fwd:
                      (run_function fuel (merge_jump fn a_lbl b_lbl) s)
 Proof
   completeInduct_on `fuel` >> rpt strip_tac >>
+  (* Derive a_lbl <> b_lbl from jump_only_target and successors *)
+  `a_lbl <> b_lbl` by (
+    CCONTR_TAC >> gvs[] >>
+    gvs[jump_only_target_def, AllCaseEqs()] >>
+    gvs[block_successors_def, block_last_inst_def, get_successors_def] >>
+    gvs[is_terminator_def, get_label_def]) >>
   Cases_on `fuel`
   >- simp[run_function_def, result_equiv_cfg_def]
   >- (simp[Once run_function_def] >>
       Cases_on `s.vs_current_bb = a_lbl`
       >- (gvs[] >> cheat) (* at merge point - needs run_block equivalence *)
-      >- (Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
-          >- (simp[Once run_function_def] >>
+      >- (simp[Once run_function_def] >>
+          Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
+          >- (simp[] >> simp[Once run_function_def] >>
               Cases_on `lookup_block s.vs_current_bb (merge_jump fn a_lbl b_lbl).fn_blocks`
               >- simp[result_equiv_cfg_def]
-              >- cheat) (* contradiction: orig NONE but merged SOME *)
-          >- (simp[] >> cheat))) (* other block with SOME - main case *)
+              >- (gvs[] >>
+                  sg `lookup_block s.vs_current_bb (merge_jump fn a_lbl b_lbl).fn_blocks = NONE`
+                  >- (irule lookup_block_merge_jump_none >> simp[])
+                  >- gvs[]))
+          >- cheat)) (* other block with SOME - main case *)
 QED
 
 (* Backward direction helper: if merged terminates, original terminates with 2*fuel *)
