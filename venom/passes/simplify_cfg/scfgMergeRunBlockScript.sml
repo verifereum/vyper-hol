@@ -1744,6 +1744,17 @@ QED
 
 (* ===== Jump Threading Helpers ===== *)
 
+(* Key: MEM in block_successors implies last instruction is terminator *)
+Theorem block_successors_mem_is_terminator:
+  !bb lbl.
+    MEM lbl (block_successors bb) ==>
+    ?inst. block_last_inst bb = SOME inst /\ is_terminator inst.inst_opcode
+Proof
+  rpt strip_tac >> gvs[block_successors_def, AllCaseEqs()] >>
+  Cases_on `block_last_inst bb` >> gvs[] >>
+  CCONTR_TAC >> gvs[get_successors_def]
+QED
+
 (* For merge_jump: running a then b (jump-only) is equivalent to running a'
    where a' is a with the last instruction's target changed from b_lbl to c_lbl *)
 Theorem run_block_merge_jump_equiv:

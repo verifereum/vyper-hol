@@ -1522,9 +1522,10 @@ Proof
   >- simp[run_function_def, result_equiv_cfg_def]
   >- (simp[Once run_function_def] >>
       Cases_on `s.vs_current_bb = a_lbl`
-      >- (gvs[] >> simp[Once run_function_def, SimpRHS] >>
+      >- (gvs[] >>
           CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_function_def])) >>
           simp[] >>
+          drule_all lookup_block_merge_jump_a >> strip_tac >> gvs[] >>
           cheat) (* at merge point - needs run_block_merge_jump_equiv *)
       >- (Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
           >- (simp[] >> simp[Once run_function_def] >>
