@@ -25,10 +25,6 @@ end
 val toplevels_via_jsonast : term decoder =
   JSONDecode.map translate_jsonast_to_vyper annotated_ast
 
-val export_theory_no_docs = fn () =>
-  Feedback.set_trace "TheoryPP.include_docs" 0
-  before export_theory ()
-
 fun from_term_option ty = lift_option (mk_option ty) I
 
 fun check cd pred err d =
@@ -497,10 +493,8 @@ fun generate_defn_scripts () = let
       val fname = OS.Path.concat("tests", String.concat[thyname, "Script.sml"])
       val jsonp = t
       val contents = String.concat [
-        "open HolKernel jsonToVyperTheory vyperTestLib;\nval () = new_theory \"",
-        thyname, "\";\nval () = make_definitions_for_file (",
-        istr, ", \"", jsonp, "\");\n",
-        "val () = export_theory_no_docs();\n"]
+        "Theory ", thyname, "[no_sig_docs]\nAncestors jsonToVyper\nLibs vyperTestLib\n",
+        "val () = make_definitions_for_file (", istr, ", \"", jsonp, "\");\n"]
       val out = TextIO.openOut(fname)
       val () = TextIO.output(out, contents)
       val () = TextIO.closeOut out
@@ -518,11 +512,9 @@ fun generate_test_scripts () = let
       val defsname = String.concat["vyperTestDefs", padi]
       val fname = OS.Path.concat("tests", String.concat[thyname, "Script.sml"])
       val contents = String.concat [
-        "open HolKernel vyperTestRunnerLib ", defsname, "Theory;\n",
-        "val () = new_theory \"", thyname,
-        "\";\nval () = List.app run_test_on_traces $ ",
-        "all_traces \"", defsname, "\";\n",
-        "val () = export_theory_no_docs();\n"]
+        "Theory ", thyname, "[no_sig_docs]\nAncestors ", defsname,
+        "\nLibs vyperTestRunnerLib\nval () = List.app ",
+        "run_test_on_traces $ all_traces \"", defsname, "\";\n"]
       val out = TextIO.openOut(fname)
       val () = TextIO.output(out, contents)
       val () = TextIO.closeOut out

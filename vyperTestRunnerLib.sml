@@ -3,10 +3,6 @@ structure vyperTestRunnerLib :> vyperTestRunnerLib = struct
 open HolKernel boolLib listSyntax vyperTestRunnerTheory cv_transLib
 local open Timeout in end
 
-val export_theory_no_docs = fn () =>
-  Feedback.set_trace "TheoryPP.include_docs" 0
-  before export_theory ()
-
 val time_limit = Time.fromSeconds 120
 
 val run_test_tm = prim_mk_const{Thy="vyperTestRunner",Name="run_test"}

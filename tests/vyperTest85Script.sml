@@ -1,4 +1,4 @@
-open HolKernel vyperTestRunnerLib vyperTestDefs85Theory;
-val () = new_theory "vyperTest85";
+Theory vyperTest85[no_sig_docs]
+Ancestors vyperTestDefs85
+Libs vyperTestRunnerLib
 val () = List.app run_test_on_traces $ all_traces "vyperTestDefs85";
-val () = export_theory_no_docs();
