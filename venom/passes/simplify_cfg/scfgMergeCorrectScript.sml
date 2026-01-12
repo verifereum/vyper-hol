@@ -500,6 +500,42 @@ Proof
         gvs[result_equiv_cfg_def])))
 QED
 
+(* Helper: Establishes IH preconditions after run_block for "other block" case.
+   When we're not at the merge point (current_bb <> a_lbl, current_bb <> b_lbl),
+   and we run a block c and its label-replaced version, this lemma shows the
+   results satisfy all the conditions needed to apply the IH. *)
+Theorem ih_conditions_other_block:
+  !fn a_lbl b_lbl a b c n s1 s2 v v'.
+    cfg_wf fn /\ phi_fn_wf fn /\
+    lookup_block a_lbl fn.fn_blocks = SOME a /\
+    lookup_block b_lbl fn.fn_blocks = SOME b /\
+    lookup_block s1.vs_current_bb fn.fn_blocks = SOME c /\
+    a_lbl <> b_lbl /\ b_lbl <> entry_label fn /\
+    pred_labels fn b_lbl = [a_lbl] /\
+    block_has_no_phi b /\ block_last_jmp_to b_lbl a /\
+    s1.vs_current_bb <> b_lbl /\ s1.vs_current_bb <> a_lbl /\
+    state_equiv_cfg s1 s2 /\ s1.vs_current_bb = s2.vs_current_bb /\
+    s1.vs_inst_idx = 0 /\ s2.vs_inst_idx = 0 /\
+    (s1.vs_prev_bb = SOME b_lbl ==> s2.vs_prev_bb = SOME a_lbl) /\
+    (s1.vs_prev_bb <> SOME b_lbl ==> s1.vs_prev_bb = s2.vs_prev_bb) /\
+    (!lbl. s1.vs_prev_bb = SOME lbl ==> MEM lbl (pred_labels fn s1.vs_current_bb)) /\
+    ~s1.vs_halted /\
+    terminates (run_function (SUC n) fn s1) /\
+    run_block c s1 = OK v /\
+    run_block (replace_label_block b_lbl a_lbl c) s2 = OK v' /\
+    state_equiv_cfg v v' /\ ~v.vs_halted /\ ~v'.vs_halted
+  ==>
+    v.vs_current_bb = v'.vs_current_bb /\
+    v.vs_current_bb <> b_lbl /\
+    v.vs_inst_idx = 0 /\ v'.vs_inst_idx = 0 /\
+    (v.vs_prev_bb = SOME b_lbl ==> v'.vs_prev_bb = SOME a_lbl) /\
+    (v.vs_prev_bb <> SOME b_lbl ==> v.vs_prev_bb = v'.vs_prev_bb) /\
+    (!lbl. v.vs_prev_bb = SOME lbl ==> MEM lbl (pred_labels fn v.vs_current_bb)) /\
+    terminates (run_function n fn v)
+Proof
+  cheat
+QED
+
 (* Helper: run_function equivalence for merge_blocks when original terminates.
    The termination hypothesis is key - it allows using fuel monotonicity when
    the original path goes through a->b (using 2 fuel) vs merged path (using 1 fuel).
@@ -565,7 +601,8 @@ Proof
             first_x_assum (qspec_then `n` mp_tac) >> simp[] >>
             disch_then (qspecl_then [`fn`, `a_lbl`, `b_lbl`, `a`, `b`, `v`, `v'`] mp_tac) >>
             impl_tac
-            >- (gvs[] >> cheat) (* IH preconditions - need helper lemma *)
+            >- (gvs[] >>
+                drule_all ih_conditions_other_block >> simp[])
             >- simp[]))
         >- (Cases_on `run_block (replace_label_block b_lbl a_lbl c) s2` >>
             gvs[result_equiv_cfg_def])
