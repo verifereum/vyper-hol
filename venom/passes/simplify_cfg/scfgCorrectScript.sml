@@ -850,6 +850,20 @@ Proof
   gvs[scfgDefsTheory.phi_block_wf_def]
 QED
 
+(* Helper: FILTER unchanged when replaced/removed blocks don't pass predicate *)
+Theorem FILTER_replace_block_remove_unchanged:
+  !P new_bb removed_lbl blocks old_bb removed_bb.
+    ALL_DISTINCT (MAP (\b. b.bb_label) blocks) /\
+    ~P new_bb /\
+    MEM old_bb blocks /\ old_bb.bb_label = new_bb.bb_label /\ ~P old_bb /\
+    MEM removed_bb blocks /\ removed_bb.bb_label = removed_lbl /\ ~P removed_bb /\
+    new_bb.bb_label <> removed_lbl ==>
+    FILTER P (replace_block new_bb (remove_block removed_lbl blocks)) =
+    FILTER P blocks
+Proof
+  cheat
+QED
+
 (* Helper: pred_labels preserved for non-merged blocks when b not a predecessor *)
 Theorem pred_labels_merge_blocks_other:
   !fn a b lbl.
@@ -887,10 +901,11 @@ Proof
     >- (sg `pred_labels fn1 lbl = pred_labels fn lbl`
         >- (simp[Abbr`fn1`, scfgDefsTheory.pred_labels_def] >>
             `FILTER (\bb. MEM lbl (block_successors bb)) (replace_block merged (remove_block b fn.fn_blocks)) = FILTER (\bb. MEM lbl (block_successors bb)) fn.fn_blocks` suffices_by simp[] >>
-            cheat) (* FILTER equality *)
-        >- (`pred_labels (replace_label_fn b a fn1) lbl = pred_labels fn1 lbl` suffices_by gvs[] >>
-            simp[scfgDefsTheory.pred_labels_def, scfgDefsTheory.replace_label_fn_def, MAP_MAP_o, combinTheory.o_DEF] >>
-            cheat))) (* MAP/FILTER replace_label equality *)
+            `~MEM lbl (block_successors a')` by gvs[] >>
+            irule FILTER_replace_block_remove_unchanged >> simp[] >>
+            conj_tac >- (qexists_tac `a'` >> simp[]) >>
+            qexists_tac `b'` >> simp[])
+        >- (gvs[] >> cheat))) (* list vs set equality *)
 QED
 
 (* Helper: phi_block_wf preserved when old label is not a predecessor *)
