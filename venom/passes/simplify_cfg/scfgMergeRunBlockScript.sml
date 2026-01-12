@@ -1785,12 +1785,32 @@ Proof
         gvs[] >> Cases_on `step_in_block a s` >> Cases_on `q` >> gvs[result_equiv_cfg_def]
         >- (IF_CASES_TAC >> gvs[result_equiv_cfg_def, state_equiv_cfg_refl] >>
             IF_CASES_TAC >> gvs[result_equiv_cfg_def]
-            >- cheat (* is_term=T at non-last position - contradiction *)
-            >- cheat) (* use IH *)
+            >- ((* is_term=T at non-last position - contradiction *)
+                qpat_x_assum `step_in_block a s = _` mp_tac >> simp[step_in_block_def] >>
+                strip_tac >> gvs[AllCaseEqs()] >> fs[block_terminator_last_def] >>
+                `s.vs_inst_idx = LENGTH a.bb_instructions - 1` by (first_x_assum irule >> simp[]) >>
+                fs[rich_listTheory.LENGTH_FRONT] >>
+                `a.bb_instructions <> []` by
+                  (fs[block_successors_def, block_last_inst_def] >>
+                   Cases_on `a.bb_instructions` >> gvs[]) >>
+                gvs[rich_listTheory.LENGTH_FRONT])
+            >- ((* use IH *)
+                `v.vs_inst_idx = s.vs_inst_idx + 1` by (imp_res_tac step_in_block_inst_idx_succ >> fs[]) >>
+                first_x_assum (qspec_then `LENGTH a.bb_instructions - v.vs_inst_idx` mp_tac) >>
+                impl_tac
+                >- (`a.bb_instructions <> []` by
+                      (fs[block_successors_def, block_last_inst_def] >>
+                       Cases_on `a.bb_instructions` >> gvs[]) >>
+                    fs[rich_listTheory.LENGTH_FRONT] >> decide_tac)
+                >- (strip_tac >> first_x_assum (qspecl_then [`a`, `v`] mp_tac) >> simp[] >>
+                    strip_tac >> first_x_assum (qspecl_then [`b`, `b_lbl`, `c_lbl`] mp_tac) >> simp[])))
         >- simp[state_equiv_cfg_refl]
         >- simp[state_equiv_cfg_refl]))
   (* At terminator - boundary case *)
-  >- cheat
+  >- (`s.vs_inst_idx = LENGTH (FRONT a.bb_instructions)` by decide_tac >>
+      `a.bb_instructions <> []` by
+        (fs[block_successors_def, block_last_inst_def] >> Cases_on `a.bb_instructions` >> gvs[]) >>
+      cheat (* terminator boundary - needs terminator execution equivalence *))
 QED
 
 val _ = export_theory();
