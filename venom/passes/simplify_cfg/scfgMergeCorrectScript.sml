@@ -2034,6 +2034,54 @@ Proof
   simp[is_terminator_def] >> simp[step_inst_def] >> simp[jump_to_def]
 QED
 
+(* Forward direction helper: result_equiv_cfg for merge_jump *)
+Theorem run_function_merge_jump_equiv_fwd:
+  !fuel fn a_lbl b_lbl s a b c_lbl.
+    cfg_wf fn /\ phi_fn_wf fn /\
+    lookup_block a_lbl fn.fn_blocks = SOME a /\
+    lookup_block b_lbl fn.fn_blocks = SOME b /\
+    b_lbl <> entry_label fn /\
+    MEM b_lbl (block_successors a) /\
+    ~MEM c_lbl (block_successors a) /\
+    pred_labels fn b_lbl = [a_lbl] /\
+    jump_only_target b = SOME c_lbl /\
+    s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
+    result_equiv_cfg (run_function fuel fn s)
+                     (run_function fuel (merge_jump fn a_lbl b_lbl) s)
+Proof
+  completeInduct_on `fuel` >> rpt strip_tac >>
+  Cases_on `fuel`
+  >- simp[run_function_def, result_equiv_cfg_def]
+  >- (simp[Once run_function_def] >>
+      Cases_on `s.vs_current_bb = a_lbl`
+      >- (gvs[] >> cheat) (* at merge point *)
+      >- (Cases_on `s.vs_current_bb = b_lbl`
+          >- cheat (* at b - shouldn't happen from entry *)
+          >- cheat)) (* other block *)
+QED
+
+(* Backward direction helper: if merged terminates, original terminates with 2*fuel *)
+Theorem run_function_merge_jump_equiv_bwd:
+  !fuel fn a_lbl b_lbl s a b c_lbl.
+    cfg_wf fn /\ phi_fn_wf fn /\
+    lookup_block a_lbl fn.fn_blocks = SOME a /\
+    lookup_block b_lbl fn.fn_blocks = SOME b /\
+    b_lbl <> entry_label fn /\
+    MEM b_lbl (block_successors a) /\
+    ~MEM c_lbl (block_successors a) /\
+    pred_labels fn b_lbl = [a_lbl] /\
+    jump_only_target b = SOME c_lbl /\
+    s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+    terminates (run_function fuel (merge_jump fn a_lbl b_lbl) s) ==>
+    terminates (run_function (2 * fuel) fn s) /\
+    result_equiv_cfg (run_function (2 * fuel) fn s)
+                     (run_function fuel (merge_jump fn a_lbl b_lbl) s)
+Proof
+  completeInduct_on `fuel` >> rpt strip_tac
+  >- cheat (* terminates *)
+  >- cheat (* result_equiv_cfg *)
+QED
+
 Theorem merge_jump_correct:
   !fn a_lbl b_lbl s.
     cfg_wf fn /\
@@ -2055,10 +2103,10 @@ Proof
         Cases_on `run_function fuel fn s` >>
         Cases_on `run_function fuel (merge_jump fn a_lbl b_lbl) s` >>
         gvs[result_equiv_cfg_def, terminates_def]) >>
-    cheat (* TODO: run_function_merge_jump_equiv_fwd *))
+    irule run_function_merge_jump_equiv_fwd >> gvs[] >> metis_tac[])
   >- ( (* Backward direction: merged terminates => original terminates *)
     rpt strip_tac >> qexists_tac `2 * fuel'` >>
-    cheat (* TODO: run_function_merge_jump_equiv_bwd *))
+    drule_all run_function_merge_jump_equiv_bwd >> simp[])
 QED
 
 val _ = export_theory();
