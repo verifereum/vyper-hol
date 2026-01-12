@@ -1915,7 +1915,16 @@ Proof
                   >- (`v'.vs_halted` by gvs[state_equiv_cfg_def] >>
                       simp[result_equiv_cfg_def])
                   >- (`~v'.vs_halted` by gvs[state_equiv_cfg_def] >> simp[] >>
-                      cheat (* run_block b v equiv OK v' - needs jump_only lemma *)))
+                      (* v.vs_inst_idx = 0 from terminator OK result *)
+                      `v.vs_inst_idx = 0` by
+                        metis_tac[venomSemPropsTheory.step_inst_terminator_ok_inst_idx_zero] >>
+                      (* Expand jump_only_target to get b's structure *)
+                      gvs[jump_only_target_def, AllCaseEqs()] >>
+                      simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+                      simp[EVAL ``is_terminator JMP``, step_inst_def] >>
+                      `~(jump_to c_lbl v).vs_halted` by simp[jump_to_def] >>
+                      simp[result_equiv_cfg_def] >>
+                      irule scfgStateOpsTheory.state_equiv_cfg_jump_to_left >> simp[]))
               >- (Cases_on `step_inst (replace_label_inst b_lbl c_lbl inst) s` >>
                   gvs[result_equiv_cfg_def])
               >- (Cases_on `step_inst (replace_label_inst b_lbl c_lbl inst) s` >>

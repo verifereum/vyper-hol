@@ -211,6 +211,18 @@ Proof
   Cases_on `get_label cond_op` >> simp[]
 QED
 
+(* WHY THIS IS TRUE: OK terminators must be JMP/JNZ (STOP/REVERT give Halt/Revert).
+   Both JMP and JNZ use jump_to, which sets vs_inst_idx := 0. *)
+Theorem step_inst_terminator_ok_inst_idx_zero:
+  !inst s v.
+    step_inst inst s = OK v /\ is_terminator inst.inst_opcode /\ ~v.vs_halted ==>
+    v.vs_inst_idx = 0
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  gvs[step_inst_def, AllCaseEqs(), jump_to_def, halt_state_def, revert_state_def]
+QED
+
 Theorem run_block_ok_not_halted_sets_prev_bb:
   !bb s s'.
     run_block bb s = OK s' /\ ~s'.vs_halted ==>
