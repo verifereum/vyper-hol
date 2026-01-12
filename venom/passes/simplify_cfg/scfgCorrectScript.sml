@@ -264,6 +264,36 @@ Proof
   simp[pred_setTheory.EXTENSION] >> COND_CASES_TAC >> gvs[]
 QED
 
+(* End-to-end pred_labels characterization for merge_blocks result *)
+Theorem pred_labels_merge_blocks_result:
+  !fn a b lbl x.
+    merge_blocks_cond fn a b /\ cfg_wf fn /\ lbl <> b ==>
+    (MEM x (pred_labels (merge_blocks fn a b) lbl) <=>
+     if lbl = a then MEM x (pred_labels fn a) \/ MEM x (FILTER (\p. p <> b) (pred_labels fn b))
+     else MEM x (FILTER (\p. p <> b) (pred_labels fn lbl)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[scfgTransformTheory.merge_blocks_def] >>
+  gvs[scfgTransformTheory.merge_blocks_cond_def] >>
+  qabbrev_tac `fn1 = fn with fn_blocks :=
+    replace_block (a' with bb_instructions :=
+      FRONT a'.bb_instructions ++ b'.bb_instructions)
+    (remove_block b fn.fn_blocks)` >>
+  simp[MEM_pred_labels_replace_label_fn] >>
+  (* b was removed from fn1, so pred_labels fn1 b = [] *)
+  sg `pred_labels fn1 b = []`
+  >- (simp[scfgDefsTheory.pred_labels_def, Abbr`fn1`] >>
+      simp[FILTER_EQ_NIL, EVERY_MEM] >> rpt strip_tac >>
+      `ALL_DISTINCT (MAP (\b. b.bb_label) (remove_block b fn.fn_blocks))`
+        by (irule ALL_DISTINCT_remove_block >> gvs[cfg_wf_def]) >>
+      drule_all MEM_replace_block >> strip_tac >> gvs[]
+      >- cheat (* merged doesn't have b as successor *)
+      >- cheat) (* other blocks don't have b as successor - from pred_labels fn b = [a] *)
+  >- (simp[] >> Cases_on `lbl = a` >> simp[]
+      >- cheat (* lbl = a: pred_labels fn1 a ~ pred_labels fn a + {a} *)
+      >- cheat) (* lbl != a: pred_labels fn1 lbl ~ FILTER (neq b) (pred_labels fn lbl) *)
+QED
+
 Theorem block_last_inst_terminator:
   !bb idx inst.
     block_terminator_last bb /\
@@ -979,7 +1009,8 @@ Proof
                 gvs[] >> first_x_assum irule >> irule lookup_block_MEM >> metis_tac[]))
         >- ( (* Now transform pred_labels - case split on MEM b *)
           Cases_on `MEM b (pred_labels fn a)`
-          >- (Cases_on `MEM a (pred_labels fn a)` >- cheat >- cheat)
+          >- ( (* MEM b (pred_labels fn a) case *)
+            cheat)
           >- ( (* ~MEM b (pred_labels fn a) case *)
             `a'.bb_label = a` by (irule lookup_block_label >> metis_tac[]) >>
             simp[scfgDefsTheory.phi_block_wf_def, MEM_MAP, MEM_APPEND] >>
