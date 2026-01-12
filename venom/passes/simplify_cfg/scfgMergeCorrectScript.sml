@@ -2182,16 +2182,12 @@ Proof
   >- (simp[Once run_function_def] >>
       Cases_on `s.vs_current_bb = a_lbl`
       >- (gvs[] >> cheat) (* at merge point - needs run_block equivalence *)
-      >- (simp[Once run_function_def] >>
-          Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
+      >- (Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
           >- (simp[] >> simp[Once run_function_def] >>
-              Cases_on `lookup_block s.vs_current_bb (merge_jump fn a_lbl b_lbl).fn_blocks`
-              >- simp[result_equiv_cfg_def]
-              >- (gvs[] >>
-                  sg `lookup_block s.vs_current_bb (merge_jump fn a_lbl b_lbl).fn_blocks = NONE`
-                  >- (irule lookup_block_merge_jump_none >> simp[])
-                  >- gvs[]))
-          >- cheat)) (* other block with SOME - main case *)
+              sg `lookup_block s.vs_current_bb (merge_jump fn a_lbl b_lbl).fn_blocks = NONE`
+              >- (irule lookup_block_merge_jump_none >> simp[])
+              >- (gvs[] >> simp[result_equiv_cfg_def]))
+          >- (simp[] >> cheat))) (* other block with SOME - needs run_block equiv *)
 QED
 
 (* Backward direction helper: if merged terminates, original terminates with 2*fuel *)
@@ -2213,7 +2209,15 @@ Theorem run_function_merge_jump_equiv_bwd:
                      (run_function fuel (merge_jump fn a_lbl b_lbl) s)
 Proof
   completeInduct_on `fuel` >> rpt strip_tac
-  >- cheat (* terminates *)
+  >- ( (* terminates *)
+    `a_lbl <> b_lbl` by (
+      CCONTR_TAC >> gvs[] >>
+      gvs[jump_only_target_def, AllCaseEqs()] >>
+      gvs[block_successors_def, block_last_inst_def, get_successors_def] >>
+      gvs[is_terminator_def, get_label_def]) >>
+    Cases_on `fuel`
+    >- gvs[run_function_def, terminates_def]
+    >- cheat) (* SUC fuel case - needs IH *)
   >- cheat (* result_equiv_cfg *)
 QED
 
