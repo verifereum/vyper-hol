@@ -2114,6 +2114,19 @@ Proof
             h else h)).bb_label = d_lbl` >> gvs[])))
 QED
 
+(* If original lookup fails for non-a, non-b block, merged lookup also fails *)
+Theorem lookup_block_merge_jump_none:
+  !fn a_lbl b_lbl a b c_lbl d_lbl.
+    lookup_block a_lbl fn.fn_blocks = SOME a /\
+    lookup_block b_lbl fn.fn_blocks = SOME b /\
+    lookup_block d_lbl fn.fn_blocks = NONE /\
+    jump_only_target b = SOME c_lbl /\
+    a_lbl <> b_lbl /\ d_lbl <> a_lbl /\ d_lbl <> b_lbl ==>
+    lookup_block d_lbl (merge_jump fn a_lbl b_lbl).fn_blocks = NONE
+Proof
+  cheat (* TODO: needs lookup_block_replace_block_none helper *)
+QED
+
 (* Helper: running a jump-only block just performs the jump *)
 Theorem run_block_jump_only:
   !bb s c_lbl.
@@ -2137,7 +2150,8 @@ Theorem run_function_merge_jump_equiv_fwd:
     ~MEM c_lbl (block_successors a) /\
     pred_labels fn b_lbl = [a_lbl] /\
     jump_only_target b = SOME c_lbl /\
-    s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
+    s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+    s.vs_current_bb <> b_lbl ==>
     result_equiv_cfg (run_function fuel fn s)
                      (run_function fuel (merge_jump fn a_lbl b_lbl) s)
 Proof
@@ -2146,10 +2160,13 @@ Proof
   >- simp[run_function_def, result_equiv_cfg_def]
   >- (simp[Once run_function_def] >>
       Cases_on `s.vs_current_bb = a_lbl`
-      >- (gvs[] >> cheat) (* at merge point *)
-      >- (Cases_on `s.vs_current_bb = b_lbl`
-          >- cheat (* at b - shouldn't happen from entry *)
-          >- cheat)) (* other block *)
+      >- (gvs[] >> cheat) (* at merge point - needs run_block equivalence *)
+      >- (Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
+          >- (simp[Once run_function_def] >>
+              Cases_on `lookup_block s.vs_current_bb (merge_jump fn a_lbl b_lbl).fn_blocks`
+              >- simp[result_equiv_cfg_def]
+              >- cheat) (* contradiction: orig NONE but merged SOME *)
+          >- (simp[] >> cheat))) (* other block with SOME - main case *)
 QED
 
 (* Backward direction helper: if merged terminates, original terminates with 2*fuel *)
@@ -2164,6 +2181,7 @@ Theorem run_function_merge_jump_equiv_bwd:
     pred_labels fn b_lbl = [a_lbl] /\
     jump_only_target b = SOME c_lbl /\
     s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+    s.vs_current_bb <> b_lbl /\
     terminates (run_function fuel (merge_jump fn a_lbl b_lbl) s) ==>
     terminates (run_function (2 * fuel) fn s) /\
     result_equiv_cfg (run_function (2 * fuel) fn s)
@@ -2186,6 +2204,7 @@ Theorem merge_jump_correct:
     run_function_equiv_cfg fn (merge_jump fn a_lbl b_lbl) s
 Proof
   rpt gen_tac >> simp[merge_jump_cond_def] >> strip_tac >>
+  `s.vs_current_bb <> b_lbl` by gvs[] >>
   simp[run_function_equiv_cfg_def] >> conj_tac
   >- ( (* Forward direction: original terminates => merged terminates *)
     rpt strip_tac >> qexists_tac `fuel` >>
