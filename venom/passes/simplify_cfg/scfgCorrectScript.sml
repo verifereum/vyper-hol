@@ -556,7 +556,24 @@ Theorem phi_inst_wf_replace_label_both_mem:
     phi_inst_wf preds inst /\ MEM old preds /\ MEM new preds /\ old <> new ==>
     phi_inst_wf (FILTER (\l. l <> old) preds) (replace_label_inst old new inst)
 Proof
-  cheat (* Key helper for phi_fn_wf when a,b both predecessors *)
+  rpt strip_tac >> Cases_on `inst.inst_opcode = PHI`
+  >- (
+    simp[phi_inst_wf_def, replace_label_inst_def, replace_label_inst_opcode] >>
+    drule_all phi_inst_wf_props >> strip_tac >> qexists_tac `out` >> simp[] >>
+    rpt conj_tac
+    >- (
+      simp[phi_ops_all_preds_def, MEM_MAP, MEM_FILTER] >>
+      rpt strip_tac >> Cases_on `y` >> gvs[replace_label_operand_def]
+      >- (gvs[] >> Cases_on `s = lbl` >> gvs[])
+      >- (Cases_on `s = old` >> gvs[] >> gvs[phi_ops_all_preds_def]))
+    >- (
+      simp[phi_ops_complete_def, MEM_FILTER] >>
+      rpt strip_tac >> Cases_on `lbl = new`
+      >- (gvs[] >> irule resolve_phi_replace_label_exists >> simp[] >>
+          gvs[phi_ops_complete_def])
+      >- (simp[resolve_phi_replace_label_other] >> gvs[phi_ops_complete_def]))
+    >- (irule phi_vals_not_label_replace_label >> simp[]))
+  >- simp[phi_inst_wf_def, replace_label_inst_def]
 QED
 
 (* Helper: block_terminator_last for update_last_inst *)
@@ -612,6 +629,20 @@ Proof
        MEM_MAP] >>
   rpt strip_tac >> gvs[] >>
   irule phi_inst_wf_replace_label >> simp[] >>
+  gvs[scfgDefsTheory.phi_block_wf_def]
+QED
+
+(* Helper: phi_block_wf when both old and new are in preds - old gets filtered out *)
+Theorem phi_block_wf_replace_label_both_mem:
+  !old new preds bb.
+    phi_block_wf preds bb /\ MEM old preds /\ MEM new preds /\ old <> new ==>
+    phi_block_wf (FILTER (\l. l <> old) preds) (replace_label_block old new bb)
+Proof
+  rpt strip_tac >>
+  simp[scfgDefsTheory.phi_block_wf_def, scfgDefsTheory.replace_label_block_def,
+       MEM_MAP] >>
+  rpt strip_tac >> gvs[] >>
+  irule phi_inst_wf_replace_label_both_mem >> simp[] >>
   gvs[scfgDefsTheory.phi_block_wf_def]
 QED
 

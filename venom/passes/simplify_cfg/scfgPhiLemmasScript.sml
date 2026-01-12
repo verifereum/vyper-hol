@@ -103,6 +103,42 @@ Proof
       first_x_assum (qspecl_then [`old`, `new`, `val_op`] mp_tac) >> simp[]))
 QED
 
+(* Existential variant: resolve_phi new succeeds after old->new replacement if resolve_phi old succeeded *)
+Theorem resolve_phi_replace_label_exists:
+  !old new ops val_op.
+    old <> new /\
+    phi_vals_not_label ops /\
+    resolve_phi old ops = SOME val_op ==>
+    ?val_op'. resolve_phi new (MAP (replace_label_operand old new) ops) = SOME val_op'
+Proof
+  measureInduct_on `LENGTH ops` >>
+  Cases_on `ops` >> simp[resolve_phi_def, phi_vals_not_label_def] >>
+  Cases_on `t` >> simp[resolve_phi_def, phi_vals_not_label_def] >>
+  Cases_on `h`
+  >- ((* Lit case - recurse *)
+    rpt strip_tac >>
+    fs[resolve_phi_def, replace_label_operand_def, phi_vals_not_label_def] >>
+    first_x_assum (qspec_then `t'` mp_tac) >> simp[])
+  >- ((* Var case - recurse *)
+    rpt strip_tac >>
+    fs[resolve_phi_def, replace_label_operand_def, phi_vals_not_label_def] >>
+    first_x_assum (qspec_then `t'` mp_tac) >> simp[])
+  >- ((* Label case *)
+    rpt strip_tac >>
+    Cases_on `s = old`
+    >- ((* Found old's entry - after replacement this becomes new's entry *)
+      fs[resolve_phi_def, replace_label_operand_def] >>
+      Cases_on `h'` >> fs[phi_vals_not_label_def])
+    >- ((* Not old's entry - recurse *)
+      fs[resolve_phi_def, replace_label_operand_def, phi_vals_not_label_def] >>
+      Cases_on `s = new`
+      >- ((* Already new's entry - stays as new *)
+        Cases_on `h'` >> fs[phi_vals_not_label_def, replace_label_operand_def])
+      >- ((* Other label - recurse *)
+        first_x_assum (qspec_then `t'` mp_tac) >> simp[] >>
+        Cases_on `h'` >> fs[phi_vals_not_label_def])))
+QED
+
 (* When prev differs from BOTH old and new, label replacement doesn't affect resolve_phi *)
 Theorem resolve_phi_replace_label_other:
   !old new prev ops.
