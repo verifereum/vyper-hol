@@ -145,7 +145,16 @@ Theorem pred_labels_remove_block:
     pred_labels (fn with fn_blocks := remove_block b_lbl fn.fn_blocks) lbl =
     FILTER (\p. p <> b_lbl) (pred_labels fn lbl)
 Proof
-  cheat (* Needs list algebra lemmas - FILTER composition *)
+  simp[pred_labels_def] >>
+  rpt gen_tac >> Induct_on `fn.fn_blocks` >- simp[scfgDefsTheory.remove_block_def] >>
+  rpt strip_tac >> gvs[scfgDefsTheory.remove_block_def] >>
+  qpat_x_assum `h::v = _` (fn th => SUBST_ALL_TAC (SYM th)) >>
+  simp[scfgDefsTheory.remove_block_def] >>
+  Cases_on `h.bb_label = b_lbl` >> simp[]
+  >- (first_x_assum (qspec_then `fn with fn_blocks := v` mp_tac) >> simp[] >>
+      Cases_on `MEM lbl (block_successors h)` >> gvs[])
+  >- (Cases_on `MEM lbl (block_successors h)` >> gvs[] >>
+      first_x_assum (qspec_then `<| fn_blocks := v |>` mp_tac) >> simp[])
 QED
 
 (* Helper: block_successors transformation under replace_label_block *)
@@ -154,7 +163,18 @@ Theorem block_successors_replace_label_block:
     block_successors (replace_label_block old new bb) =
     MAP (\lbl. if lbl = old then new else lbl) (block_successors bb)
 Proof
-  cheat (* Needs expansion of block_successors and replace_label_block *)
+  rw[block_successors_def, replace_label_block_def, block_last_inst_def] >>
+  gvs[NULL_EQ, LAST_MAP] >>
+  simp[get_successors_def, replace_label_inst_def] >>
+  Cases_on `is_terminator (LAST bb.bb_instructions).inst_opcode` >> simp[] >>
+  Induct_on `(LAST bb.bb_instructions).inst_operands` >- simp[] >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `h::v = _` (SUBST_ALL_TAC o SYM) >> simp[] >>
+  Cases_on `h` >> simp[get_label_def, replace_label_operand_def]
+  >- (first_x_assum (qspec_then `bb with bb_instructions := [(LAST bb.bb_instructions) with inst_operands := v]` mp_tac) >> simp[])
+  >- (first_x_assum (qspec_then `bb with bb_instructions := [(LAST bb.bb_instructions) with inst_operands := v]` mp_tac) >> simp[])
+  >- (simp[get_label_def] >> Cases_on `s = old` >> simp[get_label_def] >>
+      first_x_assum (qspec_then `bb with bb_instructions := [(LAST bb.bb_instructions) with inst_operands := v]` mp_tac) >> simp[])
 QED
 
 Theorem block_last_inst_terminator:
@@ -528,6 +548,15 @@ Proof
       simp[] >> strip_tac >>
       drule_all scfgPhiLemmasTheory.phi_ops_complete_MEM >> simp[]))
   >- (irule scfgPhiLemmasTheory.phi_vals_not_label_replace_label >> simp[])
+QED
+
+(* Helper: phi_inst_wf when both old and new are in preds - old gets removed *)
+Theorem phi_inst_wf_replace_label_both_mem:
+  !old new preds inst.
+    phi_inst_wf preds inst /\ MEM old preds /\ MEM new preds /\ old <> new ==>
+    phi_inst_wf (FILTER (\l. l <> old) preds) (replace_label_inst old new inst)
+Proof
+  cheat (* Key helper for phi_fn_wf when a,b both predecessors *)
 QED
 
 (* Helper: block_terminator_last for update_last_inst *)
