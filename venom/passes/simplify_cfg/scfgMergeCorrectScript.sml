@@ -2022,6 +2022,98 @@ QED
 
 (* ===== Jump Threading ===== *)
 
+(* b_lbl is removed from merged function *)
+Theorem lookup_block_merge_jump_b:
+  !fn a_lbl b_lbl a b c_lbl.
+    lookup_block a_lbl fn.fn_blocks = SOME a /\
+    lookup_block b_lbl fn.fn_blocks = SOME b /\
+    jump_only_target b = SOME c_lbl /\
+    a_lbl <> b_lbl ==>
+    lookup_block b_lbl (merge_jump fn a_lbl b_lbl).fn_blocks = NONE
+Proof
+  rpt strip_tac >> simp[merge_jump_def] >>
+  simp[replace_label_fn_def] >>
+  qabbrev_tac `a' = a with bb_instructions := update_last_inst
+    (replace_label_inst b_lbl c_lbl) a.bb_instructions` >>
+  `lookup_block b_lbl (remove_block b_lbl (replace_block a'
+    fn.fn_blocks)) = NONE` by simp[lookup_block_remove_block_same] >>
+  qabbrev_tac `blocks = remove_block b_lbl (replace_block a' fn.fn_blocks)` >>
+  irule lookup_block_replace_label_block_none >>
+  qpat_x_assum `lookup_block b_lbl blocks = NONE` mp_tac >>
+  qunabbrev_tac `blocks` >>
+  qspec_tac (`remove_block b_lbl (replace_block a' fn.fn_blocks)`, `bs`) >>
+  Induct_on `bs` >> simp[lookup_block_def] >> rpt strip_tac >>
+  gvs[AllCaseEqs()] >>
+  Cases_on `MEM h.bb_label (block_successors a')` >> gvs[replace_phi_in_block_def]
+QED
+
+(* a_lbl maps to some block in merged function *)
+Theorem lookup_block_merge_jump_a:
+  !fn a_lbl b_lbl a b c_lbl.
+    lookup_block a_lbl fn.fn_blocks = SOME a /\
+    lookup_block b_lbl fn.fn_blocks = SOME b /\
+    jump_only_target b = SOME c_lbl /\
+    a_lbl <> b_lbl ==>
+    ?a'. lookup_block a_lbl (merge_jump fn a_lbl b_lbl).fn_blocks = SOME a'
+Proof
+  rpt strip_tac >> simp[merge_jump_def, replace_label_fn_def] >>
+  qabbrev_tac `a' = a with bb_instructions := update_last_inst
+    (replace_label_inst b_lbl c_lbl) a.bb_instructions` >>
+  `a'.bb_label = a_lbl` by (simp[Abbr `a'`] >> metis_tac[lookup_block_label]) >>
+  sg `lookup_block a_lbl (replace_block a' fn.fn_blocks) = SOME a'`
+  >- (qpat_x_assum `lookup_block a_lbl _ = _`
+        (mp_tac o MATCH_MP lookup_block_replace_block) >> simp[])
+  >- (
+    sg `lookup_block a_lbl (remove_block b_lbl (replace_block a' fn.fn_blocks)) = SOME a'`
+    >- (irule lookup_block_remove_block >> simp[])
+    >- (
+      qabbrev_tac `blocks = remove_block b_lbl (replace_block a' fn.fn_blocks)` >>
+      qpat_x_assum `lookup_block a_lbl blocks = SOME a'` mp_tac >>
+      qunabbrev_tac `blocks` >>
+      qspec_tac (`remove_block b_lbl (replace_block a' fn.fn_blocks)`, `bs`) >>
+      Induct_on `bs` >> simp[lookup_block_def] >>
+      rpt strip_tac >> Cases_on `h.bb_label = a_lbl` >> gvs[]
+      >- (simp[replace_label_block_def, replace_phi_in_block_def] >>
+          Cases_on `MEM a'.bb_label (block_successors a')` >> gvs[])
+      >- (Cases_on `(replace_label_block b_lbl c_lbl (if MEM h.bb_label
+            (block_successors a') then replace_phi_in_block b_lbl
+            a'.bb_label h else h)).bb_label = a'.bb_label` >> gvs[])))
+QED
+
+(* Other blocks map to some block in merged function *)
+Theorem lookup_block_merge_jump_other:
+  !fn a_lbl b_lbl a b c c_lbl d_lbl.
+    lookup_block a_lbl fn.fn_blocks = SOME a /\
+    lookup_block b_lbl fn.fn_blocks = SOME b /\
+    lookup_block d_lbl fn.fn_blocks = SOME c /\
+    jump_only_target b = SOME c_lbl /\
+    a_lbl <> b_lbl /\ d_lbl <> a_lbl /\ d_lbl <> b_lbl ==>
+    ?c'. lookup_block d_lbl (merge_jump fn a_lbl b_lbl).fn_blocks = SOME c'
+Proof
+  rpt strip_tac >> simp[merge_jump_def, replace_label_fn_def] >>
+  qabbrev_tac `a' = a with bb_instructions := update_last_inst
+    (replace_label_inst b_lbl c_lbl) a.bb_instructions` >>
+  `a'.bb_label = a_lbl` by (simp[Abbr `a'`] >> metis_tac[lookup_block_label]) >>
+  sg `lookup_block d_lbl (replace_block a' fn.fn_blocks) = SOME c`
+  >- (qpat_x_assum `lookup_block d_lbl _ = _`
+        (mp_tac o MATCH_MP lookup_block_replace_block) >> simp[])
+  >- (
+    sg `lookup_block d_lbl (remove_block b_lbl (replace_block a' fn.fn_blocks)) = SOME c`
+    >- (irule lookup_block_remove_block >> simp[])
+    >- (
+      qabbrev_tac `blocks = remove_block b_lbl (replace_block a' fn.fn_blocks)` >>
+      qpat_x_assum `lookup_block d_lbl blocks = SOME c` mp_tac >>
+      qunabbrev_tac `blocks` >>
+      qspec_tac (`remove_block b_lbl (replace_block a' fn.fn_blocks)`, `bs`) >>
+      Induct_on `bs` >> simp[lookup_block_def] >> rpt strip_tac >>
+      Cases_on `h.bb_label = d_lbl` >> gvs[]
+      >- (simp[replace_label_block_def, replace_phi_in_block_def] >>
+          Cases_on `MEM c.bb_label (block_successors a')` >> gvs[])
+      >- (Cases_on `(replace_label_block b_lbl c_lbl (if MEM h.bb_label
+            (block_successors a') then replace_phi_in_block b_lbl a'.bb_label
+            h else h)).bb_label = d_lbl` >> gvs[])))
+QED
+
 (* Helper: running a jump-only block just performs the jump *)
 Theorem run_block_jump_only:
   !bb s c_lbl.
