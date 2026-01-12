@@ -412,21 +412,33 @@ Proof
               irule lookup_block_MEM >> metis_tac[]) >>
             qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac run_block_merge_blocks_equiv >>
             simp[Abbr`merged_no_label`])
-        >- cheat) (* merged_no_label to merged_bb *)
+        >- ( (* merged_no_label to merged_bb - use run_block_merged_to_merged_bb *)
+          qspecl_then [`fn`, `a`, `b`, `a_lbl`, `b_lbl`, `s1`, `s2`] mp_tac run_block_merged_to_merged_bb >>
+          simp[Abbr`merged_no_label`, Abbr`merged_bb`] >> strip_tac >>
+          `(∀lbl. s1.vs_prev_bb = SOME lbl ⇒ MEM lbl (pred_labels fn a_lbl))` by gvs[] >> gvs[] >>
+          Cases_on `run_block merged_bb s2` >> simp[] >> gvs[result_equiv_cfg_def] >> cheat))
       >- ( (* Revert case *)
         irule result_equiv_cfg_trans >> qexists_tac `run_block merged_no_label s1` >> conj_tac
         >- (`block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
               irule lookup_block_MEM >> metis_tac[]) >>
             qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac run_block_merge_blocks_equiv >>
             simp[Abbr`merged_no_label`])
-        >- cheat) (* merged_no_label to merged_bb *)
+        >- ( (* merged_no_label to merged_bb *)
+          qspecl_then [`fn`, `a`, `b`, `a_lbl`, `b_lbl`, `s1`, `s2`] mp_tac run_block_merged_to_merged_bb >>
+          simp[Abbr`merged_no_label`, Abbr`merged_bb`] >> strip_tac >>
+          `(∀lbl. s1.vs_prev_bb = SOME lbl ⇒ MEM lbl (pred_labels fn a_lbl))` by gvs[] >> gvs[] >>
+          Cases_on `run_block merged_bb s2` >> simp[] >> gvs[result_equiv_cfg_def] >> cheat))
       >- ( (* Error case *)
         irule result_equiv_cfg_trans >> qexists_tac `run_block merged_no_label s1` >> conj_tac
         >- (`block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
               irule lookup_block_MEM >> metis_tac[]) >>
             qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac run_block_merge_blocks_equiv >>
             simp[Abbr`merged_no_label`])
-        >- cheat))) (* merged_no_label to merged_bb *)
+        >- ( (* merged_no_label to merged_bb *)
+          qspecl_then [`fn`, `a`, `b`, `a_lbl`, `b_lbl`, `s1`, `s2`] mp_tac run_block_merged_to_merged_bb >>
+          simp[Abbr`merged_no_label`, Abbr`merged_bb`] >> strip_tac >>
+          `(∀lbl. s1.vs_prev_bb = SOME lbl ⇒ MEM lbl (pred_labels fn a_lbl))` by gvs[] >> gvs[] >>
+          Cases_on `run_block merged_bb s2` >> simp[] >> gvs[result_equiv_cfg_def] >> cheat))))
 QED
 
 (* Helper: run_function equivalence for merge_blocks when original terminates.
