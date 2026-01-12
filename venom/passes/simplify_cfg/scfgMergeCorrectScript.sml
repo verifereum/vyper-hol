@@ -492,18 +492,38 @@ Proof
     qabbrev_tac `merged = a with bb_instructions := FRONT
       a.bb_instructions ++ b.bb_instructions` >>
     Cases_on `run_block merged s1` >> gvs[result_equiv_cfg_def] >>
-    cheat)
-  >- ( (* v'.vs_current_bb <> b_lbl *)
+    rename1 `run_block merged s1 = OK v_mid` >>
+    (* After gvs[], b_lbl -> v.vs_current_bb, a_lbl -> s1.vs_current_bb *)
+    `~MEM v.vs_current_bb (block_successors b)` by
+      (irule pred_labels_single_no_jmp >> qexistsl_tac [`s1.vs_current_bb`, `fn`] >> gvs[]) >>
+    qspecl_then [`a`, `b`, `s1`, `v`, `v'`, `v_mid`, `v.vs_current_bb`] mp_tac
+      run_block_merge_blocks_current_bb >>
+    impl_tac >- gvs[Abbr `merged`, state_equiv_cfg_def] >> strip_tac >>
+    qspecl_then [`a`, `b`, `s1`, `s2`, `v.vs_current_bb`, `s1.vs_current_bb`, `v_mid`, `v''`] mp_tac
+      run_block_merged_no_phi_current_bb >> impl_tac
+    >- (gvs[Abbr `merged`] >> rpt conj_tac
+        >- (fs[block_last_jmp_to_def, block_last_inst_def] >>
+            Cases_on `a.bb_instructions` >> gvs[])
+        >- (CCONTR_TAC >> gvs[] >> qpat_x_assum `run_block b _ = _` mp_tac >>
+            simp[Once run_block_def, step_in_block_def, get_instruction_def])
+        (* block_has_no_phi merged - needs helper lemma *)
+        >- cheat
+        >- gvs[state_equiv_cfg_def])
+    >- (strip_tac >> gvs[]))
+  >- ( (* v'.vs_current_bb <> b_lbl - after gvs[], uses v.vs_current_bb *)
     `MEM b fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
-    `b.bb_label = b_lbl` by metis_tac[lookup_block_label] >>
-    qspecl_then [`fn`, `b`, `v`, `v'`, `a_lbl`] mp_tac
+    `b.bb_label = v.vs_current_bb` by metis_tac[lookup_block_label] >>
+    qspecl_then [`fn`, `b`, `v`, `v'`, `s1.vs_current_bb`] mp_tac
       run_block_no_self_loop_single_pred >> gvs[])
   >- (irule run_block_ok_inst_idx >> metis_tac[])
   >- (irule run_block_ok_inst_idx >> metis_tac[])
   >- (qspecl_then [`replace_label_block b_lbl a_lbl (a with bb_instructions :=
         FRONT a.bb_instructions ++ b.bb_instructions)`, `s2`, `v''`] mp_tac
         run_block_ok_prev_bb >> gvs[])
-  >- (qspecl_then [`b`, `v`, `v'`] mp_tac run_block_ok_prev_bb >> gvs[])
+  >- (qspecl_then [`b`, `v`, `v'`] mp_tac run_block_ok_prev_bb >> gvs[] >>
+      qspecl_then [`replace_label_block b_lbl a_lbl (a with bb_instructions :=
+        FRONT a.bb_instructions ++ b.bb_instructions)`, `s2`, `v''`] mp_tac
+        run_block_ok_prev_bb >> gvs[])
   >- (qspecl_then [`b`, `v`, `v'`] mp_tac run_block_ok_prev_bb >> gvs[] >>
       qspecl_then [`fn`, `b`, `v`, `v'`] mp_tac run_block_ok_pred_labels >>
       impl_tac >- (gvs[] >> metis_tac[lookup_block_MEM]) >>
