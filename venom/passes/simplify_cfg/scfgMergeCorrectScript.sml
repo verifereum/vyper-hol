@@ -412,7 +412,64 @@ Proof
             qexists_tac `fn` >> qexists_tac `x` >> gvs[]))))
 QED
 
-(* ===== Merge Point Helper Lemma ===== *)
+(* ===== Merge Point Helper Lemmas ===== *)
+
+(* Helper for the OK+not halted case at merge point.
+   At the merge point, original runs 2 blocks (a then b), merged runs 1 block.
+   This handles the fuel asymmetry and IH application.
+
+   Key structure:
+   1. Original: run_function n fn v (continuing after run_block b)
+   2. Merged: run_function (SUC n) merged_fn s2 (needs to run merged_bb first)
+
+   The IH gives us equivalence for fuel < SUC n, so we use fuel n for the continuation.
+   Then run_function_fuel_monotonicity aligns the fuels. *)
+Theorem merge_blocks_at_merge_point_ok_continue:
+  !n fn a_lbl b_lbl a b s1 s2 v merged_bb.
+    cfg_wf fn /\ phi_fn_wf fn /\
+    lookup_block a_lbl fn.fn_blocks = SOME a /\
+    lookup_block b_lbl fn.fn_blocks = SOME b /\
+    a_lbl <> b_lbl /\ b_lbl <> entry_label fn /\
+    pred_labels fn b_lbl = [a_lbl] /\
+    block_has_no_phi b /\ block_last_jmp_to b_lbl a /\
+    (* State equiv and indices *)
+    state_equiv_cfg s1 s2 /\ s1.vs_current_bb = a_lbl /\ s2.vs_current_bb = a_lbl /\
+    s1.vs_inst_idx = 0 /\ s2.vs_inst_idx = 0 /\
+    (s1.vs_prev_bb = SOME b_lbl ==> s2.vs_prev_bb = SOME a_lbl) /\
+    (s1.vs_prev_bb <> SOME b_lbl ==> s1.vs_prev_bb = s2.vs_prev_bb) /\
+    (!lbl. s1.vs_prev_bb = SOME lbl ==> MEM lbl (pred_labels fn s1.vs_current_bb)) /\
+    ~s1.vs_halted /\
+    terminates (run_function (SUC n) fn s1) /\
+    (* Specific to OK+not halted case *)
+    run_block a s1 = OK v /\ ~v.vs_halted /\
+    (* merged_bb definition *)
+    merged_bb = replace_label_block b_lbl a_lbl (a with bb_instructions :=
+      FRONT a.bb_instructions ++ b.bb_instructions) /\
+    (* IH for recursive calls *)
+    (!fuel' s1' s2'.
+      fuel' < SUC n /\ state_equiv_cfg s1' s2' /\
+      s1'.vs_current_bb = s2'.vs_current_bb /\ s1'.vs_current_bb <> b_lbl /\
+      s1'.vs_inst_idx = 0 /\ s2'.vs_inst_idx = 0 /\
+      (s1'.vs_prev_bb = SOME b_lbl ==> s2'.vs_prev_bb = SOME a_lbl) /\
+      (s1'.vs_prev_bb <> SOME b_lbl ==> s1'.vs_prev_bb = s2'.vs_prev_bb) /\
+      (!lbl. s1'.vs_prev_bb = SOME lbl ==> MEM lbl (pred_labels fn s1'.vs_current_bb)) /\
+      ~s1'.vs_halted /\ terminates (run_function fuel' fn s1')
+      ==> result_equiv_cfg (run_function fuel' fn s1')
+            (run_function fuel' (merge_blocks fn a_lbl b_lbl) s2'))
+  ==>
+    result_equiv_cfg (run_function n fn v)
+      (case run_block merged_bb s2 of
+         OK s' => if s'.vs_halted then Halt s'
+                  else run_function n (merge_blocks fn a_lbl b_lbl) s'
+       | Halt v5 => Halt v5
+       | Revert v6 => Revert v6
+       | Error v7 => Error v7)
+Proof
+  cheat (* 4-step fuel asymmetry pattern from LEARNINGS:
+           1. Get state equiv from run_block_merge_blocks_equiv + run_block_merged_to_merged_bb
+           2. Apply IH with fuel n < SUC n
+           3. Use terminates_result_equiv_cfg + run_function_fuel_monotonicity *)
+QED
 
 (* Helper: handle the specific case when at merge point (vs_current_bb = a_lbl).
    Extracted from the large forward proof to enable incremental verification. *)
@@ -484,7 +541,8 @@ Proof
             FRONT a.bb_instructions ++ b.bb_instructions) s1` >> simp[]) >>
           Cases_on `run_block (replace_label_block b_lbl s1.vs_current_bb (a with bb_instructions :=
             FRONT a.bb_instructions ++ b.bb_instructions)) s2` >> gvs[result_equiv_cfg_def])
-        >- ( (* OK + not halted: needs IH application with fuel adjustment *)
+        >- ( (* OK + not halted: use extracted helper *)
+          (* Helper: merge_blocks_at_merge_point_ok_continue *)
           cheat))
       >- ( (* Halt case *)
         `block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
