@@ -465,10 +465,53 @@ Theorem merge_blocks_at_merge_point_ok_continue:
        | Revert v6 => Revert v6
        | Error v7 => Error v7)
 Proof
-  cheat (* 4-step fuel asymmetry pattern from LEARNINGS:
-           1. Get state equiv from run_block_merge_blocks_equiv + run_block_merged_to_merged_bb
-           2. Apply IH with fuel n < SUC n
-           3. Use terminates_result_equiv_cfg + run_function_fuel_monotonicity *)
+  rpt strip_tac >>
+  `block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
+    irule lookup_block_MEM >> metis_tac[]) >>
+  `block_successors a = [b_lbl]` by (irule block_last_jmp_to_successors >> simp[]) >>
+  `MEM a fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `MEM v.vs_current_bb (block_successors a)` by
+    (qspecl_then [`fn`, `a`, `s1`, `v`] mp_tac run_block_ok_successor >> simp[]) >>
+  `v.vs_current_bb = b_lbl` by gvs[] >>
+  qabbrev_tac `merged_no_label = a with bb_instructions :=
+    FRONT a.bb_instructions ++ b.bb_instructions` >>
+  qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac run_block_merge_blocks_equiv >>
+  impl_tac >- simp[] >>
+  simp[Abbr`merged_no_label`] >> strip_tac >>
+  qspecl_then [`fn`, `a`, `b`, `a_lbl`, `b_lbl`, `s1`, `s2`] mp_tac
+    run_block_merged_to_merged_bb >>
+  impl_tac >- gvs[] >>
+  simp[] >> strip_tac >>
+  `result_equiv_cfg (run_block b v) (run_block
+    (replace_label_block b_lbl a_lbl (a with bb_instructions :=
+    FRONT a.bb_instructions ++ b.bb_instructions)) s2)` by
+    (irule result_equiv_cfg_trans >> qexists_tac `run_block (a with bb_instructions :=
+      FRONT a.bb_instructions ++ b.bb_instructions) s1` >> simp[]) >>
+  Cases_on `run_block b v`
+  >- ((* OK case *)
+    Cases_on `run_block (replace_label_block b_lbl a_lbl
+      (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2` >>
+    gvs[result_equiv_cfg_def] >>
+    Cases_on `v''.vs_halted` >> gvs[]
+    >- (`~v'.vs_halted` by (drule_all run_block_ok_not_halted >> simp[]) >>
+        gvs[state_equiv_cfg_def])
+    >- cheat) (* IH application - fuel asymmetry *)
+  >- ((* Halt case *)
+    Cases_on `run_block (replace_label_block b_lbl a_lbl
+      (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2` >>
+    gvs[result_equiv_cfg_def] >>
+    Cases_on `n` >> simp[Once run_function_def] >>
+    gvs[result_equiv_cfg_def] >> gvs[] >> cheat)
+  >- ((* Revert case *)
+    Cases_on `run_block (replace_label_block b_lbl a_lbl
+      (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2` >>
+    gvs[result_equiv_cfg_def] >>
+    Cases_on `n` >> simp[Once run_function_def] >> gvs[result_equiv_cfg_def] >> cheat)
+  >- ((* Error case *)
+    Cases_on `run_block (replace_label_block b_lbl a_lbl
+      (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2` >>
+    gvs[result_equiv_cfg_def] >>
+    Cases_on `n` >> simp[Once run_function_def] >> gvs[result_equiv_cfg_def])
 QED
 
 (* Helper: handle the specific case when at merge point (vs_current_bb = a_lbl).
