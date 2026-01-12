@@ -9,7 +9,7 @@ structure jsonASTLib :> jsonASTLib = struct
 
 open HolKernel boolLib
 open pairSyntax listSyntax stringSyntax optionSyntax numSyntax intSyntax
-open JSONDecode
+open jsonASTTheory JSONDecode
 
 (* ===== HOL Term Helpers ===== *)
 
