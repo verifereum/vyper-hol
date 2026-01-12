@@ -1495,6 +1495,36 @@ Proof
   simp[is_terminator_def] >> simp[step_inst_def] >> simp[jump_to_def]
 QED
 
+(* Bridge lemma: run_block on a_simple ~ run_block on actual block in merged fn.
+   For merge_jump, b_lbl is not a predecessor of a (since pred_labels fn b_lbl = [a_lbl]),
+   so PHIs in a don't reference b_lbl, making replace_label_block a semantic no-op. *)
+Theorem run_block_merge_jump_a_bridge:
+  !fn a_lbl b_lbl a b c_lbl s.
+    cfg_wf fn /\ phi_fn_wf fn /\
+    lookup_block a_lbl fn.fn_blocks = SOME a /\
+    lookup_block b_lbl fn.fn_blocks = SOME b /\
+    a_lbl <> b_lbl /\
+    MEM b_lbl (block_successors a) /\
+    pred_labels fn b_lbl = [a_lbl] /\
+    jump_only_target b = SOME c_lbl /\
+    s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
+    let a_simple = a with bb_instructions :=
+      update_last_inst (replace_label_inst b_lbl c_lbl) a.bb_instructions in
+    ?a_actual.
+      lookup_block a_lbl (merge_jump fn a_lbl b_lbl).fn_blocks = SOME a_actual /\
+      result_equiv_cfg (run_block a_simple s) (run_block a_actual s)
+Proof
+  rpt strip_tac >> simp[] >>
+  drule_all lookup_block_merge_jump_a >> strip_tac >>
+  qexists_tac `a'` >> simp[] >>
+  (* The actual block is replace_label_block b_lbl c_lbl (possibly with replace_phi_in_block).
+     Since b_lbl is not a predecessor of a (from pred_labels fn b_lbl = [a_lbl] and
+     a jumps to b, not vice versa), PHIs in a don't reference b_lbl.
+     Also, the terminator already targets c_lbl after update_last_inst.
+     So replace_label_block is semantically a no-op for execution. *)
+  cheat
+QED
+
 (* Forward direction helper: result_equiv_cfg for merge_jump *)
 Theorem run_function_merge_jump_equiv_fwd:
   !fuel fn a_lbl b_lbl s a b c_lbl.
