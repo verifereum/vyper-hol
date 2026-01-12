@@ -527,13 +527,24 @@ Proof
     Cases_on `run_block (replace_label_block b_lbl a_lbl
       (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2` >>
     gvs[result_equiv_cfg_def] >>
-    Cases_on `n` >> simp[Once run_function_def] >>
-    gvs[result_equiv_cfg_def] >> gvs[] >> cheat)
+    Cases_on `n` >> simp[Once run_function_def] >> gvs[result_equiv_cfg_def] >>
+    (* n=0: termination contradiction; n>0: gvs closes *)
+    TRY (`run_function 1 fn s1 = run_function 0 fn v` by
+          (simp[Once run_function_def] >> gvs[]) >>
+        `run_function 0 fn v = Error "out of fuel"` by simp[Once run_function_def] >>
+        `~terminates (run_function 1 fn s1)` by gvs[terminates_def]) >>
+    gvs[])
   >- ((* Revert case *)
     Cases_on `run_block (replace_label_block b_lbl a_lbl
       (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2` >>
     gvs[result_equiv_cfg_def] >>
-    Cases_on `n` >> simp[Once run_function_def] >> gvs[result_equiv_cfg_def] >> cheat)
+    Cases_on `n` >> simp[Once run_function_def] >> gvs[result_equiv_cfg_def] >>
+    (* n=0: termination contradiction; n>0: gvs closes *)
+    TRY (`run_function 1 fn s1 = run_function 0 fn v` by
+          (simp[Once run_function_def] >> gvs[]) >>
+        `run_function 0 fn v = Error "out of fuel"` by simp[Once run_function_def] >>
+        `~terminates (run_function 1 fn s1)` by gvs[terminates_def]) >>
+    gvs[])
   >- ((* Error case *)
     Cases_on `run_block (replace_label_block b_lbl a_lbl
       (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2` >>
@@ -612,7 +623,7 @@ Proof
           Cases_on `run_block (replace_label_block b_lbl s1.vs_current_bb (a with bb_instructions :=
             FRONT a.bb_instructions ++ b.bb_instructions)) s2` >> gvs[result_equiv_cfg_def])
         >- ( (* OK + not halted: use extracted helper *)
-          (* Helper: merge_blocks_at_merge_point_ok_continue *)
+          (* TODO: apply merge_blocks_at_merge_point_ok_continue *)
           cheat))
       >- ( (* Halt case *)
         `block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
