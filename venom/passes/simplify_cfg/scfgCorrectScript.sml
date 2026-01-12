@@ -95,6 +95,36 @@ Proof
   >- (first_x_assum (qspecl_then [`bb'`, `bb`] mp_tac) >> simp[] >> metis_tac[])
 QED
 
+(* Converse: block stays in remove_block if label differs *)
+Theorem MEM_remove_block_intro:
+  !lbl blocks bb.
+    bb.bb_label <> lbl /\ MEM bb blocks ==>
+    MEM bb (remove_block lbl blocks)
+Proof
+  Induct_on `blocks` >> simp[remove_block_def] >>
+  rpt strip_tac >> Cases_on `h.bb_label = lbl` >> gvs[]
+QED
+
+(* If a block with new_bb's label exists, new_bb is in replace_block result *)
+Theorem MEM_replace_block_intro:
+  !bb' blocks.
+    (?old_bb. MEM old_bb blocks /\ old_bb.bb_label = bb'.bb_label) ==>
+    MEM bb' (replace_block bb' blocks)
+Proof
+  Induct_on `blocks` >> simp[replace_block_def] >>
+  rpt strip_tac >> Cases_on `h.bb_label = bb'.bb_label` >> gvs[] >> metis_tac[]
+QED
+
+(* Block with different label stays in replace_block result *)
+Theorem MEM_replace_block_other:
+  !bb' blocks bb.
+    MEM bb blocks /\ bb.bb_label <> bb'.bb_label ==>
+    MEM bb (replace_block bb' blocks)
+Proof
+  Induct_on `blocks` >> simp[replace_block_def] >>
+  rpt strip_tac >> Cases_on `h.bb_label = bb'.bb_label` >> gvs[] >> metis_tac[]
+QED
+
 Theorem lookup_block_simplify_phi_block:
   !lbl blocks fn' bb.
     lookup_block lbl blocks = SOME bb ==>
@@ -285,6 +315,30 @@ Proof
   rpt strip_tac >>
   simp[scfgDefsTheory.block_successors_def, scfgDefsTheory.block_last_inst_def] >>
   gvs[rich_listTheory.LAST_APPEND_NOT_NIL, NULL_EQ]
+QED
+
+(* Helper: characterize pred_labels after replace_block + remove_block *)
+Theorem MEM_pred_labels_replace_block_remove:
+  !fn new_bb removed_lbl lbl x.
+    ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+    new_bb.bb_label <> removed_lbl /\
+    (?old_bb. MEM old_bb fn.fn_blocks /\ old_bb.bb_label = new_bb.bb_label) ==>
+    (MEM x (pred_labels (fn with fn_blocks :=
+       replace_block new_bb (remove_block removed_lbl fn.fn_blocks)) lbl) <=>
+     (if x = new_bb.bb_label then MEM lbl (block_successors new_bb)
+      else x <> removed_lbl /\ MEM x (pred_labels fn lbl)))
+Proof
+  rpt strip_tac >> simp[scfgDefsTheory.pred_labels_def, MEM_MAP, MEM_FILTER] >>
+  EQ_TAC >> strip_tac
+  >- (`ALL_DISTINCT (MAP (\b. b.bb_label) (remove_block removed_lbl fn.fn_blocks))`
+        by (irule ALL_DISTINCT_remove_block >> simp[]) >>
+      drule_all MEM_replace_block >> strip_tac >> gvs[] >>
+      drule MEM_remove_block >> strip_tac >> simp[] >> qexists_tac `bb` >> simp[])
+  >- (Cases_on `x = new_bb.bb_label` >> gvs[]
+      >- (qexists_tac `new_bb` >> simp[] >> irule MEM_replace_block_intro >>
+          qexists_tac `old_bb` >> simp[] >> irule MEM_remove_block_intro >> gvs[])
+      >- (qexists_tac `bb` >> simp[] >> irule MEM_replace_block_other >> simp[] >>
+          irule MEM_remove_block_intro >> gvs[]))
 QED
 
 (* End-to-end pred_labels characterization for merge_blocks result *)
