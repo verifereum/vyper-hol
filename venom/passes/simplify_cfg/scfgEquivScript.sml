@@ -107,6 +107,24 @@ Proof
   ]
 QED
 
+(* Termination is preserved when adding more fuel *)
+Theorem terminates_fuel_le:
+  !fuel fuel' fn s.
+    terminates (run_function fuel fn s) /\ fuel <= fuel' ==>
+    terminates (run_function fuel' fn s)
+Proof
+  rpt gen_tac >> strip_tac >> Induct_on `fuel' - fuel`
+  >- (rpt strip_tac >> `fuel' = fuel` by simp[] >> gvs[])
+  >- (rpt strip_tac >>
+      `v = (fuel' - 1) - fuel` by simp[] >>
+      `terminates (run_function (fuel' - 1) fn s)` by
+        (first_x_assum (qspecl_then [`fuel' - 1`, `fuel`] mp_tac) >> simp[]) >>
+      `fuel' = SUC (fuel' - 1)` by simp[] >> pop_assum SUBST1_TAC >>
+      `run_function (SUC (fuel' - 1)) fn s = run_function (fuel' - 1) fn s` by
+        (irule run_function_fuel_monotonicity >> simp[]) >>
+      simp[])
+QED
+
 (* ===== Operand Evaluation under state_equiv_cfg ===== *)
 
 Theorem eval_operand_state_equiv_cfg:

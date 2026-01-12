@@ -427,14 +427,16 @@ Proof
   rpt gen_tac >> strip_tac >> Induct_on `fuel' - fuel`
   >- (rpt strip_tac >> `fuel' = fuel` by simp[] >> gvs[])
   >- (rpt strip_tac >>
+      `terminates (run_function (fuel' - 1) merged_fn s2)` by
+        (irule terminates_fuel_le >> qexists_tac `fuel` >> simp[]) >>
       `result_equiv_cfg (run_function fuel fn s1)
          (run_function (fuel' - 1) merged_fn s2)` by
-        (first_x_assum irule >> simp[]) >>
-      `fuel' = SUC (fuel' - 1)` by simp[] >>
-      (* Step case: have equiv at fuel'-1, need equiv at fuel'.
-         Missing: terminates (fuel'-1) to apply run_function_fuel_monotonicity.
-         Need to strengthen IH to include terminates preservation. *)
-      cheat)
+        (first_x_assum (qspecl_then [`fuel' - 1`, `fuel`] mp_tac) >> simp[]) >>
+      `fuel' = SUC (fuel' - 1)` by simp[] >> pop_assum SUBST1_TAC >>
+      `run_function (SUC (fuel' - 1)) merged_fn s2 =
+         run_function (fuel' - 1) merged_fn s2` by
+        (irule run_function_fuel_monotonicity >> simp[]) >>
+      simp[])
 QED
 
 (* ===== Merge Point Helper Lemmas ===== *)
