@@ -348,6 +348,63 @@ Proof
         metis_tac[phi_fn_wf_def, lookup_block_MEM])))
 QED
 
+(* ===== Helper: general block to replaced block ===== *)
+
+(* This helper proves equivalence between running a general block c (not a or b)
+   on s1 and the replaced block on s2. Same 3-case pattern as run_block_merged_to_merged_bb:
+   - NONE: use run_block_replace_label_prev_bb_none
+   - SOME b_lbl: use run_block_replace_label (prev_bb changes from b_lbl to a_lbl)
+   - SOME x (x <> b_lbl): use transitivity + run_block_replace_label_prev_diff *)
+Theorem run_block_other_to_other_replaced:
+  !fn a_lbl b_lbl a c s1 s2.
+    cfg_wf fn /\ phi_fn_wf fn /\
+    lookup_block a_lbl fn.fn_blocks = SOME a /\
+    lookup_block s1.vs_current_bb fn.fn_blocks = SOME c /\
+    s1.vs_current_bb <> a_lbl /\ s1.vs_current_bb <> b_lbl /\
+    a_lbl <> b_lbl /\
+    pred_labels fn b_lbl = [a_lbl] /\
+    block_last_jmp_to b_lbl a /\
+    state_equiv_cfg s1 s2 /\ s1.vs_inst_idx = s2.vs_inst_idx /\
+    (s1.vs_prev_bb = SOME b_lbl ==> s2.vs_prev_bb = SOME a_lbl) /\
+    (s1.vs_prev_bb <> SOME b_lbl ==> s1.vs_prev_bb = s2.vs_prev_bb) /\
+    (!lbl. s1.vs_prev_bb = SOME lbl ==> MEM lbl (pred_labels fn s1.vs_current_bb))
+  ==>
+    result_equiv_cfg (run_block c s1)
+                     (run_block (replace_label_block b_lbl a_lbl c) s2)
+Proof
+  rpt strip_tac >>
+  `c.bb_label = s1.vs_current_bb` by metis_tac[lookup_block_label] >>
+  `MEM c fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `phi_block_wf (pred_labels fn s1.vs_current_bb) c` by
+    (gvs[phi_fn_wf_def] >> first_x_assum drule >> gvs[]) >>
+  Cases_on `s1.vs_prev_bb`
+  (* NONE case: use run_block_replace_label_prev_bb_none *)
+  >- (irule run_block_replace_label_prev_bb_none >> gvs[])
+  (* SOME case: split on whether it's b_lbl or not *)
+  >- (
+    Cases_on `x = b_lbl`
+    (* prev_bb = SOME b_lbl: use run_block_replace_label *)
+    >- (
+      gvs[] >> irule run_block_replace_label >> simp[] >>
+      qexists_tac `fn` >> simp[] >>
+      irule scfgMergeHelpersTheory.pred_labels_no_jmp_other >> simp[] >>
+      metis_tac[])
+    (* prev_bb = SOME x, x <> b_lbl: use run_block_replace_label_prev_diff *)
+    >- (
+      `s1.vs_prev_bb = s2.vs_prev_bb` by gvs[] >>
+      irule result_equiv_cfg_trans >>
+      qexists_tac `run_block c s2` >> conj_tac
+      >- (irule run_block_state_equiv_cfg >> gvs[])
+      >- (
+        sg `x <> a_lbl`
+        >- (CCONTR_TAC >> gvs[] >>
+            `~MEM a_lbl (pred_labels fn s1.vs_current_bb)` by
+              (irule scfgMergeHelpersTheory.pred_labels_no_jmp_other >>
+               simp[] >> metis_tac[]))
+        >- (irule run_block_replace_label_prev_diff >> simp[] >>
+            qexists_tac `fn` >> qexists_tac `x` >> gvs[]))))
+QED
+
 (* ===== Merge Point Helper Lemma ===== *)
 
 (* Helper: handle the specific case when at merge point (vs_current_bb = a_lbl).
@@ -477,7 +534,47 @@ Proof
       rpt strip_tac >>
       first_x_assum irule >> simp[] >>
       qexistsl_tac [`a`, `b`] >> simp[])
-  >- cheat (* Not at merge point - block unchanged except label replacement *)
+  >- (
+    (* Not at merge point - block c is unchanged except label replacement *)
+    rename1 `fuel = SUC n` >>
+    simp[Once run_function_def] >>
+    CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_function_def])) >> simp[] >>
+    Cases_on `lookup_block s1.vs_current_bb fn.fn_blocks`
+    (* NONE case: contradiction with terminates *)
+    >- (
+      `run_function (SUC n) fn s1 = Error "block not found"` by
+        simp[Once run_function_def] >>
+      fs[terminates_def])
+    (* SOME c case *)
+    >- (
+      rename1 `lookup_block s1.vs_current_bb fn.fn_blocks = SOME c` >>
+      sg `lookup_block s1.vs_current_bb (merge_blocks fn a_lbl b_lbl).fn_blocks =
+          SOME (replace_label_block b_lbl a_lbl c)`
+      >- (irule lookup_block_merge_blocks_other >> gvs[])
+      >- (
+        simp[] >>
+        (* Use run_block_other_to_other_replaced *)
+        sg `result_equiv_cfg (run_block c s1)
+             (run_block (replace_label_block b_lbl a_lbl c) s2)`
+        >- (irule run_block_other_to_other_replaced >> simp[] >>
+            qexists_tac `a` >> gvs[])
+        >- (
+          Cases_on `run_block c s1` >> simp[]
+          >- ( (* OK case *)
+            Cases_on `run_block (replace_label_block b_lbl a_lbl c) s2` >>
+            gvs[result_equiv_cfg_def] >>
+            Cases_on `v.vs_halted` >> gvs[]
+            >- simp[result_equiv_cfg_def] (* halted - done *)
+            >- ( (* not halted - use IH *)
+              `~v'.vs_halted` by gvs[state_equiv_cfg_def] >> simp[] >>
+              (* Apply IH for continuation *)
+              cheat))
+          >- (Cases_on `run_block (replace_label_block b_lbl a_lbl c) s2` >>
+              gvs[result_equiv_cfg_def])
+          >- (Cases_on `run_block (replace_label_block b_lbl a_lbl c) s2` >>
+              gvs[result_equiv_cfg_def])
+          >- (Cases_on `run_block (replace_label_block b_lbl a_lbl c) s2` >>
+              gvs[result_equiv_cfg_def])))))
 QED
 
 (* Original proof preserved in comment for extraction:
