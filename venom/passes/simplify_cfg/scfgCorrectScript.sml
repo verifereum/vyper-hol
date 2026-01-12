@@ -135,6 +135,28 @@ Proof
   qexists_tac `bb` >> simp[]
 QED
 
+(* ===== Pred-Labels Algebra Lemmas ===== *)
+(* These lemmas describe how pred_labels changes under function transformations.
+   They are essential for proving phi_block_wf preservation in merge_blocks/merge_jump. *)
+
+(* How pred_labels changes after removing a block *)
+Theorem pred_labels_remove_block:
+  !fn b_lbl lbl.
+    pred_labels (fn with fn_blocks := remove_block b_lbl fn.fn_blocks) lbl =
+    FILTER (\p. p <> b_lbl) (pred_labels fn lbl)
+Proof
+  cheat (* Needs list algebra lemmas - FILTER composition *)
+QED
+
+(* Helper: block_successors transformation under replace_label_block *)
+Theorem block_successors_replace_label_block:
+  !old new bb.
+    block_successors (replace_label_block old new bb) =
+    MAP (\lbl. if lbl = old then new else lbl) (block_successors bb)
+Proof
+  cheat (* Needs expansion of block_successors and replace_label_block *)
+QED
+
 Theorem block_last_inst_terminator:
   !bb idx inst.
     block_terminator_last bb /\

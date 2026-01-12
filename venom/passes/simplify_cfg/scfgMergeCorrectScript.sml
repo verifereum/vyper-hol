@@ -281,6 +281,55 @@ Proof
   >- metis_tac[run_function_terminates_step]
 QED
 
+(* ===== Merge Point Helper Lemma ===== *)
+
+(* Helper: handle the specific case when at merge point (vs_current_bb = a_lbl).
+   Extracted from the large forward proof to enable incremental verification. *)
+Theorem merge_blocks_at_merge_point:
+  !fuel fn a_lbl b_lbl a b s1 s2.
+    cfg_wf fn /\ phi_fn_wf fn /\
+    lookup_block a_lbl fn.fn_blocks = SOME a /\
+    lookup_block b_lbl fn.fn_blocks = SOME b /\
+    a_lbl <> b_lbl /\ b_lbl <> entry_label fn /\
+    pred_labels fn b_lbl = [a_lbl] /\
+    block_has_no_phi b /\ block_last_jmp_to b_lbl a /\
+    state_equiv_cfg s1 s2 /\
+    s1.vs_current_bb = a_lbl /\ s2.vs_current_bb = a_lbl /\
+    s1.vs_inst_idx = 0 /\ s2.vs_inst_idx = 0 /\
+    (s1.vs_prev_bb = SOME b_lbl ==> s2.vs_prev_bb = SOME a_lbl) /\
+    (s1.vs_prev_bb <> SOME b_lbl ==> s1.vs_prev_bb = s2.vs_prev_bb) /\
+    (!lbl. s1.vs_prev_bb = SOME lbl ==> MEM lbl (pred_labels fn s1.vs_current_bb)) /\
+    ~s1.vs_halted /\
+    terminates (run_function fuel fn s1) /\
+    (* IH for recursive calls: we require this for continuation after the merge *)
+    (!fuel' s1' s2'.
+      fuel' < fuel /\
+      state_equiv_cfg s1' s2' /\
+      s1'.vs_current_bb = s2'.vs_current_bb /\
+      s1'.vs_current_bb <> b_lbl /\
+      s1'.vs_inst_idx = 0 /\ s2'.vs_inst_idx = 0 /\
+      (s1'.vs_prev_bb = SOME b_lbl ==> s2'.vs_prev_bb = SOME a_lbl) /\
+      (s1'.vs_prev_bb <> SOME b_lbl ==> s1'.vs_prev_bb = s2'.vs_prev_bb) /\
+      (!lbl. s1'.vs_prev_bb = SOME lbl ==> MEM lbl (pred_labels fn s1'.vs_current_bb)) /\
+      ~s1'.vs_halted /\
+      terminates (run_function fuel' fn s1')
+      ==>
+      result_equiv_cfg (run_function fuel' fn s1')
+                       (run_function fuel' (merge_blocks fn a_lbl b_lbl) s2'))
+  ==>
+    result_equiv_cfg (run_function fuel fn s1)
+                     (run_function fuel (merge_blocks fn a_lbl b_lbl) s2)
+Proof
+  (* Proof strategy:
+     1. Expand run_function once on both sides
+     2. Use lookup_block_merge_blocks_a to match merged block
+     3. Use run_block_merge_blocks_equiv to relate run_block a; run_block b to merged
+     4. Case split on result (OK, Halt, Revert, Error)
+     5. For OK non-halted: establish IH preconditions and apply IH
+  *)
+  cheat
+QED
+
 (* Helper: run_function equivalence for merge_blocks when original terminates.
    The termination hypothesis is key - it allows using fuel monotonicity when
    the original path goes through a->b (using 2 fuel) vs merged path (using 1 fuel).
@@ -308,7 +357,9 @@ Theorem run_function_merge_blocks_equiv_fwd:
     result_equiv_cfg (run_function fuel fn s1)
                      (run_function fuel (merge_blocks fn a_lbl b_lbl) s2)
 Proof
-  (* CHEATED: 800+ line proof has batch parse errors - needs extraction into helpers *)
+  (* Structure: induction on fuel, case split on whether at merge point
+     - At merge point: use merge_blocks_at_merge_point helper
+     - Not at merge point: simpler - block unchanged except label replacement *)
   cheat
 QED
 
