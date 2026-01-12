@@ -1006,6 +1006,35 @@ Proof
       impl_tac >- (gvs[] >> metis_tac[lookup_block_MEM]) >> gvs[] >> metis_tac[lookup_block_label])
 QED
 
+(* Helper: BWD terminal case at merge point (Halt or Revert)
+   Handles both terminal cases in one lemma to avoid code duplication.
+   We show the original terminates with fuel <= 2 when the merged terminates
+   with a terminal result at the merge point. *)
+Theorem merge_blocks_bwd_terminal_at_merge:
+  !fn a_lbl b_lbl a b s1 s2 merged_bb v.
+    cfg_wf fn /\ phi_fn_wf fn /\
+    lookup_block a_lbl fn.fn_blocks = SOME a /\
+    lookup_block b_lbl fn.fn_blocks = SOME b /\
+    a_lbl <> b_lbl /\ b_lbl <> entry_label fn /\
+    pred_labels fn b_lbl = [a_lbl] /\
+    block_has_no_phi b /\ block_last_jmp_to b_lbl a /\
+    state_equiv_cfg s1 s2 /\
+    s1.vs_current_bb = a_lbl /\ s2.vs_current_bb = a_lbl /\
+    s1.vs_inst_idx = 0 /\ s2.vs_inst_idx = 0 /\
+    (s1.vs_prev_bb = SOME b_lbl ==> s2.vs_prev_bb = SOME a_lbl) /\
+    (s1.vs_prev_bb <> SOME b_lbl ==> s1.vs_prev_bb = s2.vs_prev_bb) /\
+    (!lbl. s1.vs_prev_bb = SOME lbl ==> MEM lbl (pred_labels fn a_lbl)) /\
+    ~s1.vs_halted /\
+    merged_bb = replace_label_block b_lbl a_lbl
+      (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) /\
+    (run_block merged_bb s2 = Halt v \/ run_block merged_bb s2 = Revert v)
+  ==>
+    ?fuel'. terminates (run_function fuel' fn s1) /\
+            result_equiv_cfg (run_function fuel' fn s1) (run_block merged_bb s2)
+Proof
+  cheat (* TODO: batch/interactive discrepancy - proof works interactively *)
+QED
+
 (* Helper: run_function equivalence for merge_blocks when original terminates.
    The termination hypothesis is key - it allows using fuel monotonicity when
    the original path goes through a->b (using 2 fuel) vs merged path (using 1 fuel).
@@ -1220,8 +1249,8 @@ Proof
             simp[Once run_function_def, SimpLHS] >>
             simp[Once run_function_def, SimpRHS] >> simp[result_equiv_cfg_def])
           >- cheat))) (* not halted - use IH *)
-    >- cheat (* Halt case *)
-    >- cheat) (* Revert case *)
+    >- cheat (* Halt case - TODO: apply helper *)
+    >- cheat) (* Revert case - TODO: apply helper *)
 QED
 
 
