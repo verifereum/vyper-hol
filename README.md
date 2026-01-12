@@ -3,7 +3,7 @@ Formal semantics for the [Vyper](https://vyperlang.org) programming language for
 
 This work is part of the ongoing [Verifereum](https://verifereum.org) project building formal specifications and infrastructure for formal verification of Ethereum applications. Vyper is a compelling choice of programming language for secure smart contracts because of its clean design and focus on simplicity and readability. Formal semantics for Vyper, as pursued here, serves as a rigorous precise mathematical specification of the language and as an essential requirement for building a formally verified compiler from Vyper to EVM (Ethereum virtual machine) bytecode (and/or formally verifying the official Vyper compiler).
 
-Formal semantics for the subset of Vyper covered here was developed under Grant ID FY25-1892 from the Ethereum Foundation's [Ecosystem Support Program](https://esp.ethereum.foundation).
+Initial development for the subset of Vyper covered here was supported by Grant ID FY25-1892 from the Ethereum Foundation's [Ecosystem Support Program](https://esp.ethereum.foundation). The project is active and evolving, with ongoing work to expand coverage and improve the toolchain.
 
 ## Contents
 
@@ -76,13 +76,13 @@ Here are the specific aspects of Vyper that are currently not part of the formal
     - internal and external functions with default arguments
 - Miscellaneous builtins
     - some of the [cryptography builtins](https://docs.vyperlang.org/en/latest/built-in-functions.html#cryptography), especially involving elliptic curves
-    - square root builtin: `isqrt`, `sqrt`
+    - square root builtin: `sqrt`
     - builtins for raw calls: `abi_encode`, `abi_decode`, `method_id`
     - `blobhash`
 
 ## Outcomes, Challenges, and Next Steps
 
-The main outcome of this work is:
+The main outcomes of this work so far are:
 - We have defined a formal executable specification of a subset of Vyper in higher-order logic,
 - which passes the `functional/codegen` section of the Vyper language test suite, modulo the exclusions listed above.
 
@@ -100,16 +100,18 @@ Next steps (all can be done in parallel):
 - Formalise more of the front-end aspects of the language -- type-checking, modules, etc. -- noted as missing above.
 - Start building a prototype for a verified compiler.
 
+For a live roadmap and current tasks, see the [issue tracker](https://github.com/verifereum/vyper-hol/issues)
+
 ## Dependencies and How to Run
 
-This work is developed in the [HOL4 theorem prover](https://hol-theorem-prover.org), and makes use of the Ethereum Virtual Machine (EVM) formalisation in the [Verifereum](https://verifereum.org) project, and the test suite for the [Vyper language](https://vyperlang.org) from [its repository](https://github.com/vyperlang/vyper). The following commits are known to work for building the theories in this project:
-  - HOL4: [466a40abe43a384327cf9fd1ada840fa176b961d](https://github.com/HOL-Theorem-Prover/HOL/tree/466a40abe43a384327cf9fd1ada840fa176b961d)
-  - Verifereum: [42d41580abd025033cdd9b463ffb9c22b994d46e](https://github.com/verifereum/verifereum/tree/42d41580abd025033cdd9b463ffb9c22b994d46e)
-  - Vyper: [26f75a0f839e5cddac7a0ac1552e095fc7eab144](https://github.com/vyperlang/vyper/tree/26f75a0f839e5cddac7a0ac1552e095fc7eab144)
+This work is developed in the [HOL4 theorem prover](https://hol-theorem-prover.org), and makes use of the Ethereum Virtual Machine (EVM) formalisation in the [Verifereum](https://verifereum.org) project, and the test suite for the [Vyper language](https://vyperlang.org) from [its repository](https://github.com/vyperlang/vyper). The following branches are used for active development:
+  - HOL4: `master` (https://github.com/HOL-Theorem-Prover/HOL)
+  - Verifereum: `main` (https://github.com/verifereum/verifereum)
+  - Vyper: `main` (or the release branch matching the JSON test export you are using) (https://github.com/vyperlang/vyper)
 
 The [Verifereum repository](https://github.com/verifereum/verifereum) includes instructions on how to build HOL4, and the Vyper repository includes its own installation instructions. To run the Vyper test suite on our definitional interpreter, follow this approach:
 
 1. Generate the Vyper tests using `pytest -s -n 1 --export tests/export -m "not fuzzing" tests/functional/codegen`.
 2. Switch to your clone of this (Vyper-HOL) repository; we assume the Vyper tests were exported to `../vyper/tests/export`.
-3. Set the `VFMDIR` environment variable to a path of a clone of the Verifereum repository (at the commit above)
+3. Set the `VFMDIR` environment variable to a path of a clone of the Verifereum repository (tracking `main`)
 4. `cd tests` and then run `Holmake`
