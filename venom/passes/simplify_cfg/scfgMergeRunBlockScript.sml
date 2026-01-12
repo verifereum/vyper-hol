@@ -1724,4 +1724,22 @@ Proof
   >- simp[]
 QED
 
+(* Wrapper with variable names matching scfgMergeCorrectScript proof context *)
+Theorem run_block_merged_prev_none_current_bb_wrapper:
+  !bb s1 s2 old new v_merged v''.
+    state_equiv_cfg s1 s2 /\
+    s1.vs_inst_idx = s2.vs_inst_idx /\
+    s1.vs_prev_bb = NONE /\ s2.vs_prev_bb = NONE /\
+    block_terminator_last bb /\
+    ~MEM old (block_successors bb) /\
+    run_block bb s1 = OK v_merged /\
+    run_block (replace_label_block old new bb) s2 = OK v'' /\
+    ~v_merged.vs_halted
+  ==>
+    v_merged.vs_current_bb = v''.vs_current_bb
+Proof
+  rpt strip_tac >>
+  drule_all run_block_replace_label_current_bb_prev_none >> simp[]
+QED
+
 val _ = export_theory();
