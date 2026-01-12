@@ -1102,7 +1102,31 @@ Proof
           simp[result_equiv_cfg_def] >> irule state_equiv_cfg_trans >>
           qexists_tac `v'` >> simp[]))
     >- cheat) (* Revert case *)
-  >- cheat (* not at merge point *)
+  >- ( (* not at merge point *)
+    qpat_x_assum `terminates _` mp_tac >> simp[Once run_function_def] >>
+    Cases_on `lookup_block s1.vs_current_bb fn.fn_blocks`
+    >- cheat (* NONE - block not found edge case *)
+    >- (
+      `lookup_block s2.vs_current_bb (merge_blocks fn a_lbl b_lbl).fn_blocks =
+       SOME (replace_label_block b_lbl a_lbl x)` by
+        (irule lookup_block_merge_blocks_other >> gvs[]) >> simp[] >>
+      `result_equiv_cfg (run_block x s1)
+                        (run_block (replace_label_block b_lbl a_lbl x) s2)` by
+        (irule run_block_other_to_other_replaced >> gvs[] >> metis_tac[]) >>
+      strip_tac >>
+      Cases_on `run_block (replace_label_block b_lbl a_lbl x) s2` >>
+      gvs[terminates_def]
+      >- cheat (* OK case - needs IH *)
+      >- ( (* Halt case *)
+        Cases_on `run_block x s1` >> gvs[result_equiv_cfg_def] >>
+        qexists_tac `1` >> simp[Once run_function_def, terminates_def] >>
+        simp[Once run_function_def, SimpLHS] >>
+        simp[Once run_function_def, SimpRHS] >> simp[result_equiv_cfg_def])
+      >- ( (* Revert case *)
+        Cases_on `run_block x s1` >> gvs[result_equiv_cfg_def] >>
+        qexists_tac `1` >> simp[Once run_function_def, terminates_def] >>
+        simp[Once run_function_def, SimpLHS] >>
+        simp[Once run_function_def, SimpRHS] >> simp[result_equiv_cfg_def])))
 QED
 
 
