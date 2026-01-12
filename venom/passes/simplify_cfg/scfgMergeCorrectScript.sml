@@ -1125,7 +1125,20 @@ Proof
               simp[Once run_function_def] >> simp[Once run_function_def] >>
               simp[result_equiv_cfg_def] >> irule state_equiv_cfg_trans >>
               qexists_tac `v'` >> simp[])
-          >- cheat) (* run_block b v'' = Halt case *)
+          >- ( (* run_block b v'' = Halt case - fuel=2 *)
+            Cases_on `run_block b v''` >> gvs[result_equiv_cfg_def] >>
+            sg `v''.vs_current_bb = b_lbl` >- (
+              `MEM a fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
+              drule_all scfgMergeRunBlockTheory.run_block_ok_successor >> strip_tac >>
+              `block_successors a = [b_lbl]` by
+                metis_tac[scfgMergeHelpersTheory.block_last_jmp_to_successors] >> gvs[]) >>
+            `v''.vs_inst_idx = 0` by metis_tac[scfgEquivTheory.run_block_ok_inst_idx] >>
+            qexists_tac `2` >> simp[Once run_function_def, terminates_def] >>
+            simp[Once run_function_def, terminates_def] >>
+            simp[Once run_function_def, SimpLHS] >> simp[Once run_function_def, SimpLHS] >>
+            simp[Once run_function_def, SimpRHS] >>
+            simp[result_equiv_cfg_def] >> irule state_equiv_cfg_trans >>
+            qexists_tac `v'` >> simp[]))
       >- (qexists_tac `1` >> simp[Once run_function_def, terminates_def] >>
           simp[SimpLHS, Once run_function_def] >> simp[SimpRHS, Once run_function_def] >>
           simp[result_equiv_cfg_def] >> irule state_equiv_cfg_trans >>
