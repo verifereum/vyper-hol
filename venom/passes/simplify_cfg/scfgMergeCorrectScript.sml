@@ -533,7 +533,53 @@ Theorem ih_conditions_other_block:
     (!lbl. v.vs_prev_bb = SOME lbl ==> MEM lbl (pred_labels fn v.vs_current_bb)) /\
     terminates (run_function n fn v)
 Proof
-  cheat
+  rpt strip_tac >> rpt conj_tac
+  >- ( (* vs_current_bb equality - 3-case prev_bb pattern *)
+    Cases_on `s1.vs_prev_bb`
+    >- ( (* NONE case *)
+      irule run_block_replace_label_current_bb_prev_none >> gvs[] >>
+      qexistsl_tac [`c`, `a_lbl`, `b_lbl`, `s1`, `s2`] >> gvs[] >>
+      conj_tac >- (fs[cfg_wf_def] >> first_x_assum irule >> metis_tac[lookup_block_MEM]) >>
+      irule pred_labels_single_no_jmp >> gvs[] >> metis_tac[lookup_block_MEM, lookup_block_label])
+    >- ( (* SOME x case - split on x = b_lbl *)
+      Cases_on `x = b_lbl`
+      >- ( (* x = b_lbl *)
+        gvs[] >> irule run_block_replace_label_current_bb_diff_states >> simp[] >>
+        qexists_tac `c` >> qexists_tac `fn` >> qexists_tac `a_lbl` >>
+        qexists_tac `b_lbl` >> qexists_tac `s1` >> qexists_tac `s2` >> gvs[] >>
+        rpt conj_tac
+        >- (fs[cfg_wf_def] >> first_x_assum irule >> metis_tac[lookup_block_MEM])
+        >- (irule pred_labels_no_jmp_other >> gvs[] >> metis_tac[lookup_block_label])
+        >- (irule pred_labels_single_no_jmp >> gvs[] >> metis_tac[lookup_block_MEM, lookup_block_label])
+        >- metis_tac[lookup_block_label]
+        >- (fs[phi_fn_wf_def] >> first_x_assum irule >> metis_tac[lookup_block_MEM]))
+      >- ( (* x <> b_lbl *)
+        gvs[] >> irule run_block_replace_label_current_bb_same_prev >> simp[] >>
+        qexists_tac `c` >> qexists_tac `a_lbl` >> qexists_tac `b_lbl` >>
+        qexists_tac `pred_labels fn c.bb_label` >> qexists_tac `x` >>
+        qexists_tac `s1` >> qexists_tac `s2` >> gvs[] >>
+        rpt conj_tac
+        >- (fs[cfg_wf_def] >> first_x_assum irule >> metis_tac[lookup_block_MEM])
+        >- (CCONTR_TAC >> gvs[] >>
+            qspecl_then [`fn`, `a`, `a_lbl`, `b_lbl`, `s2.vs_current_bb`] mp_tac pred_labels_no_jmp_other >>
+            impl_tac >- (gvs[] >> metis_tac[lookup_block_label]) >> gvs[])
+        >- (irule pred_labels_single_no_jmp >> gvs[] >> metis_tac[lookup_block_MEM, lookup_block_label])
+        >- metis_tac[lookup_block_label]
+        >- (gvs[phi_fn_wf_def] >> first_x_assum irule >> metis_tac[lookup_block_MEM]))))
+  >- ( (* v.vs_current_bb <> b_lbl - contradiction *)
+    qspecl_then [`fn`, `c`, `s1`, `v`] mp_tac run_block_ok_successor >>
+    impl_tac >- (gvs[] >> metis_tac[lookup_block_MEM]) >> strip_tac >>
+    qspecl_then [`fn`, `b_lbl`, `a_lbl`, `c`] mp_tac pred_labels_single_no_jmp >>
+    impl_tac >- (gvs[] >> metis_tac[lookup_block_MEM, lookup_block_label]) >> gvs[])
+  >- metis_tac[run_block_ok_inst_idx]
+  >- metis_tac[run_block_ok_inst_idx]
+  >- (qspecl_then [`c`, `s1`, `v`] mp_tac run_block_ok_prev_bb >> gvs[])
+  >- (qspecl_then [`c`, `s1`, `v`] mp_tac run_block_ok_prev_bb >>
+      qspecl_then [`replace_label_block b_lbl a_lbl c`, `s2`, `v'`] mp_tac run_block_ok_prev_bb >> gvs[])
+  >- (qspecl_then [`c`, `s1`, `v`] mp_tac run_block_ok_prev_bb >> gvs[] >>
+      qspecl_then [`fn`, `c`, `s1`, `v`] mp_tac run_block_ok_pred_labels >>
+      impl_tac >- (gvs[] >> metis_tac[lookup_block_MEM]) >> gvs[] >> metis_tac[lookup_block_label])
+  >- (irule run_function_terminates_step >> gvs[] >> metis_tac[])
 QED
 
 (* Helper: run_function equivalence for merge_blocks when original terminates.
@@ -601,8 +647,8 @@ Proof
             first_x_assum (qspec_then `n` mp_tac) >> simp[] >>
             disch_then (qspecl_then [`fn`, `a_lbl`, `b_lbl`, `a`, `b`, `v`, `v'`] mp_tac) >>
             impl_tac
-            >- (gvs[] >>
-                drule_all ih_conditions_other_block >> simp[])
+            >- (qspecl_then [`fn`, `a_lbl`, `b_lbl`, `a`, `b`, `c`, `n`, `s1`, `s2`, `v`, `v'`]
+                  mp_tac ih_conditions_other_block >> impl_tac >- gvs[] >> simp[])
             >- simp[]))
         >- (Cases_on `run_block (replace_label_block b_lbl a_lbl c) s2` >>
             gvs[result_equiv_cfg_def])
