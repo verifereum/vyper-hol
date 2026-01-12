@@ -642,8 +642,23 @@ Proof
         >- (`v''.vs_halted` by gvs[state_equiv_cfg_def] >>
             simp[Once run_function_def] >> gvs[result_equiv_cfg_def, state_equiv_cfg_def])
         >- (irule fuel_align_equiv >> simp[] >>
-            conj_tac >- cheat >> (* terminates *)
-            first_x_assum irule >> gvs[] >> cheat))))
+            conj_tac
+            >- (`terminates (run_function (SUC n') fn v)` by (irule
+                  run_function_terminates_step >> gvs[] >> metis_tac[]) >>
+                `terminates (run_function n' fn v')` by (irule
+                  run_function_terminates_step >> gvs[] >> metis_tac[]) >>
+                irule terminates_result_equiv_cfg >>
+                qexists_tac `run_function n' fn v'` >>
+                conj_tac >- (first_x_assum irule >> gvs[]) >>
+                first_x_assum irule >> gvs[] >>
+                qspecl_then [`fn`, `s1.vs_current_bb`, `v.vs_current_bb`, `a`,
+                  `b`, `n'`, `s1`, `s2`, `v`, `v'`, `v''`] mp_tac
+                  ih_conditions_at_merge_point >>
+                impl_tac >- gvs[] >> strip_tac >> gvs[])
+            >- (qspecl_then [`fn`, `s1.vs_current_bb`, `v.vs_current_bb`, `a`,
+                  `b`, `n'`, `s1`, `s2`, `v`, `v'`, `v''`] mp_tac
+                  ih_conditions_at_merge_point >> impl_tac >- gvs[] >> strip_tac >>
+                first_x_assum irule >> gvs[])))))
   >- ((* Halt case *)
     Cases_on `run_block (replace_label_block b_lbl a_lbl
       (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2` >>
