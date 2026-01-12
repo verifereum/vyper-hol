@@ -530,51 +530,49 @@ Proof
   completeInduct_on `fuel` >> rpt strip_tac >>
   Cases_on `fuel` >- gvs[run_function_def, terminates_def] >>
   Cases_on `s1.vs_current_bb = a_lbl`
-  >- (irule merge_blocks_at_merge_point >> gvs[] >>
-      rpt strip_tac >>
-      first_x_assum irule >> simp[] >>
-      qexistsl_tac [`a`, `b`] >> simp[])
+  >- (
+    (* At merge point - use merge_blocks_at_merge_point *)
+    irule merge_blocks_at_merge_point >> gvs[] >>
+    rpt strip_tac >> first_x_assum irule >> simp[] >>
+    qexistsl_tac [`a`, `b`] >> simp[])
   >- (
     (* Not at merge point - block c is unchanged except label replacement *)
-    rename1 `fuel = SUC n` >>
     simp[Once run_function_def] >>
     CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_function_def])) >> simp[] >>
     Cases_on `lookup_block s1.vs_current_bb fn.fn_blocks`
-    (* NONE case: contradiction with terminates *)
-    >- (
+    >- ( (* NONE case: contradiction with terminates *)
       `run_function (SUC n) fn s1 = Error "block not found"` by
         simp[Once run_function_def] >>
       fs[terminates_def])
-    (* SOME c case *)
-    >- (
+    >- ( (* SOME c case *)
       rename1 `lookup_block s1.vs_current_bb fn.fn_blocks = SOME c` >>
       sg `lookup_block s1.vs_current_bb (merge_blocks fn a_lbl b_lbl).fn_blocks =
           SOME (replace_label_block b_lbl a_lbl c)`
       >- (irule lookup_block_merge_blocks_other >> gvs[])
       >- (
-        simp[] >>
-        (* Use run_block_other_to_other_replaced *)
-        sg `result_equiv_cfg (run_block c s1)
-             (run_block (replace_label_block b_lbl a_lbl c) s2)`
-        >- (irule run_block_other_to_other_replaced >> simp[] >>
-            qexists_tac `a` >> gvs[])
-        >- (
-          Cases_on `run_block c s1` >> simp[]
-          >- ( (* OK case *)
-            Cases_on `run_block (replace_label_block b_lbl a_lbl c) s2` >>
-            gvs[result_equiv_cfg_def] >>
-            Cases_on `v.vs_halted` >> gvs[]
-            >- simp[result_equiv_cfg_def] (* halted - done *)
-            >- ( (* not halted - use IH *)
-              `~v'.vs_halted` by gvs[state_equiv_cfg_def] >> simp[] >>
-              (* Apply IH for continuation *)
-              cheat))
-          >- (Cases_on `run_block (replace_label_block b_lbl a_lbl c) s2` >>
-              gvs[result_equiv_cfg_def])
-          >- (Cases_on `run_block (replace_label_block b_lbl a_lbl c) s2` >>
-              gvs[result_equiv_cfg_def])
-          >- (Cases_on `run_block (replace_label_block b_lbl a_lbl c) s2` >>
-              gvs[result_equiv_cfg_def])))))
+        gvs[] >>
+        qspecl_then [`fn`, `a_lbl`, `b_lbl`, `a`, `c`, `s1`, `s2`] mp_tac
+          run_block_other_to_other_replaced >>
+        impl_tac >- gvs[] >>
+        strip_tac >> Cases_on `run_block c s1`
+        >- ( (* OK case *)
+          simp[] >> Cases_on `run_block (replace_label_block b_lbl a_lbl c) s2` >>
+          gvs[result_equiv_cfg_def] >>
+          Cases_on `v.vs_halted` >> gvs[]
+          >- (`v'.vs_halted` by gvs[state_equiv_cfg_def] >> simp[result_equiv_cfg_def])
+          >- ( (* not halted - use IH *)
+            `~v'.vs_halted` by gvs[state_equiv_cfg_def] >> simp[] >>
+            first_x_assum (qspec_then `n` mp_tac) >> simp[] >>
+            disch_then (qspecl_then [`fn`, `a_lbl`, `b_lbl`, `a`, `b`, `v`, `v'`] mp_tac) >>
+            impl_tac
+            >- (gvs[] >> cheat) (* IH preconditions - need helper lemma *)
+            >- simp[]))
+        >- (Cases_on `run_block (replace_label_block b_lbl a_lbl c) s2` >>
+            gvs[result_equiv_cfg_def])
+        >- (Cases_on `run_block (replace_label_block b_lbl a_lbl c) s2` >>
+            gvs[result_equiv_cfg_def])
+        >- (Cases_on `run_block (replace_label_block b_lbl a_lbl c) s2` >>
+            gvs[result_equiv_cfg_def]))))
 QED
 
 (* Original proof preserved in comment for extraction:
