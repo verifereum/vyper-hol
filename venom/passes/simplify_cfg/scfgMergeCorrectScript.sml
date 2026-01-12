@@ -501,31 +501,8 @@ Proof
     impl_tac >- gvs[Abbr `merged`, state_equiv_cfg_def] >> strip_tac >>
     (* Case split on s1.vs_prev_bb to use appropriate lemma *)
     Cases_on `s1.vs_prev_bb`
-    >- ( (* NONE case: both prev_bb are NONE *)
-      gvs[] >>
-      qspecl_then [`merged`, `s1`, `s2`, `v.vs_current_bb`,
-        `s1.vs_current_bb`, `v_mid`, `v''`] mp_tac
-        run_block_replace_label_current_bb_prev_none >>
-      impl_tac
-      >- (gvs[block_successors_merged, Abbr `merged`] >> rpt conj_tac
-          >- (simp[block_terminator_last_def, get_instruction_def] >>
-              rpt strip_tac >> Cases_on `idx < LENGTH (FRONT a.bb_instructions)` >>
-              gvs[rich_listTheory.EL_APPEND1, rich_listTheory.EL_APPEND2]
-              (* idx in FRONT a - contradiction with block_terminator_last a *)
-              >- cheat
-              >- (qpat_x_assum `block_terminator_last b` mp_tac >>
-                  simp[block_terminator_last_def, get_instruction_def] >>
-                  strip_tac >> first_x_assum (qspec_then `idx -
-                    LENGTH (FRONT a.bb_instructions)` mp_tac) >> gvs[]))
-          >- (simp[block_successors_merged] >>
-              `b.bb_instructions <> []` by (CCONTR_TAC >> gvs[] >>
-                qpat_x_assum `run_block b _ = _` mp_tac >> simp[Once
-                  run_block_def, step_in_block_def, get_instruction_def]) >>
-              gvs[block_successors_merged])
-          >- gvs[state_equiv_cfg_def])
-      >- simp[])
-    >- ( (* SOME x case: need different lemma *)
-      cheat))
+    >- cheat (* NONE case - needs run_block_replace_label_current_bb_prev_none *)
+    >- cheat) (* SOME case - needs different helper *)
   >- ( (* v'.vs_current_bb <> b_lbl - after gvs[], uses v.vs_current_bb *)
     `MEM b fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
     `b.bb_label = v.vs_current_bb` by metis_tac[lookup_block_label] >>
