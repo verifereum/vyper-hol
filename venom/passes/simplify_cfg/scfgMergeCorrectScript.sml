@@ -1522,7 +1522,10 @@ Proof
   >- simp[run_function_def, result_equiv_cfg_def]
   >- (simp[Once run_function_def] >>
       Cases_on `s.vs_current_bb = a_lbl`
-      >- (gvs[] >> cheat) (* at merge point - needs run_block equivalence *)
+      >- (gvs[] >> simp[Once run_function_def, SimpRHS] >>
+          CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_function_def])) >>
+          simp[] >>
+          cheat) (* at merge point - needs run_block_merge_jump_equiv *)
       >- (Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
           >- (simp[] >> simp[Once run_function_def] >>
               sg `lookup_block s.vs_current_bb (merge_jump fn a_lbl b_lbl).fn_blocks = NONE`
@@ -1558,8 +1561,11 @@ Proof
       gvs[is_terminator_def, get_label_def]) >>
     Cases_on `fuel`
     >- gvs[run_function_def, terminates_def]
-    >- cheat) (* SUC fuel case - needs IH *)
-  >- cheat (* result_equiv_cfg *)
+    >- (simp[Once run_function_def] >>
+        Cases_on `s.vs_current_bb = a_lbl`
+        >- cheat (* at merge point - needs run_block_merge_jump_equiv *)
+        >- cheat)) (* other block - needs IH *)
+  >- cheat (* result_equiv_cfg - similar structure *)
 QED
 
 Theorem merge_jump_correct:

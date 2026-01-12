@@ -1742,4 +1742,36 @@ Proof
   drule_all run_block_replace_label_current_bb_prev_none >> simp[]
 QED
 
+(* ===== Jump Threading Helpers ===== *)
+
+(* For merge_jump: running a then b (jump-only) is equivalent to running a'
+   where a' is a with the last instruction's target changed from b_lbl to c_lbl *)
+Theorem run_block_merge_jump_equiv:
+  !a b b_lbl c_lbl s.
+    block_terminator_last a /\
+    jump_only_target b = SOME c_lbl /\
+    MEM b_lbl (block_successors a) /\
+    ~s.vs_halted /\
+    s.vs_inst_idx = 0
+  ==>
+    let a' = a with bb_instructions :=
+      update_last_inst (replace_label_inst b_lbl c_lbl) a.bb_instructions in
+    result_equiv_cfg
+      (case run_block a s of
+         OK v => if v.vs_halted then Halt v else run_block b v
+       | Halt v => Halt v
+       | Revert v => Revert v
+       | Error e => Error e)
+      (run_block a' s)
+Proof
+  rpt strip_tac >> simp[] >>
+  qabbrev_tac `a' = a with bb_instructions :=
+    update_last_inst (replace_label_inst b_lbl c_lbl) a.bb_instructions` >>
+  Cases_on `run_block a s` >> simp[]
+  >- cheat (* OK case - need step-by-step equivalence *)
+  >- cheat (* Halt case *)
+  >- cheat (* Revert case *)
+  >- cheat (* Error case *)
+QED
+
 val _ = export_theory();
