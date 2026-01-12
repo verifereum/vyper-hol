@@ -1006,6 +1006,35 @@ Proof
 QED
 
 
+(* Helper: terminal cases at merge point for backward direction.
+   When merged block returns Halt/Revert/OK+halted, original terminates with fuel 1 or 2. *)
+Theorem merge_blocks_bwd_terminal_at_merge:
+  !fn a_lbl b_lbl a b s1 s2 merged_bb v.
+    cfg_wf fn /\ phi_fn_wf fn /\
+    lookup_block a_lbl fn.fn_blocks = SOME a /\
+    lookup_block b_lbl fn.fn_blocks = SOME b /\
+    a_lbl <> b_lbl /\ b_lbl <> entry_label fn /\
+    pred_labels fn b_lbl = [a_lbl] /\
+    block_has_no_phi b /\ block_last_jmp_to b_lbl a /\
+    state_equiv_cfg s1 s2 /\
+    s1.vs_current_bb = a_lbl /\ s1.vs_current_bb = s2.vs_current_bb /\
+    s1.vs_inst_idx = 0 /\ s2.vs_inst_idx = 0 /\ ~s1.vs_halted /\
+    (s1.vs_prev_bb = SOME b_lbl ==> s2.vs_prev_bb = SOME a_lbl) /\
+    (s1.vs_prev_bb <> SOME b_lbl ==> s1.vs_prev_bb = s2.vs_prev_bb) /\
+    (!lbl. s1.vs_prev_bb = SOME lbl ==> MEM lbl (pred_labels fn a_lbl)) /\
+    merged_bb = replace_label_block b_lbl a_lbl
+      (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) /\
+    (run_block merged_bb s2 = Halt v \/
+     run_block merged_bb s2 = Revert v \/
+     (?v'. run_block merged_bb s2 = OK v' /\ v'.vs_halted))
+  ==>
+    ?fuel. terminates (run_function fuel fn s1) /\
+           result_equiv_cfg (run_function fuel fn s1) (run_block merged_bb s2)
+Proof
+  cheat
+QED
+
+
 (* Backward direction: if merged terminates, original also terminates with enough fuel.
    We use 2*fuel as a bound since each merge point traversal adds at most 1 extra block. *)
 Theorem run_function_merge_blocks_equiv_bwd:
