@@ -43,7 +43,7 @@ runs:
       if: steps.cache-hol4.outputs.cache-hit != 'true'
       shell: bash
       run: |
-        git clone https://github.com/HOL-Theorem-Prover/HOL.git ~/HOL
+        git clone -b master https://github.com/HOL-Theorem-Prover/HOL.git ~/HOL
         cd ~/HOL
         poly < tools/smart-configure.sml
         bin/build
