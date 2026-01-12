@@ -980,7 +980,27 @@ Proof
         >- ( (* Now transform pred_labels - case split on MEM b *)
           Cases_on `MEM b (pred_labels fn a)`
           >- (Cases_on `MEM a (pred_labels fn a)` >- cheat >- cheat)
-          >- cheat))
+          >- ( (* ~MEM b (pred_labels fn a) case *)
+            `a'.bb_label = a` by (irule lookup_block_label >> metis_tac[]) >>
+            simp[scfgDefsTheory.phi_block_wf_def, MEM_MAP, MEM_APPEND] >>
+            rpt strip_tac >> gvs[]
+            >- ( (* y from FRONT a'.bb_instructions *)
+              `phi_inst_wf (pred_labels fn a'.bb_label) y` by
+                (gvs[scfgDefsTheory.phi_block_wf_def] >> first_x_assum irule >>
+                 simp[listTheory.MEM_APPEND] >> DISJ1_TAC >>
+                 irule rich_listTheory.MEM_FRONT_NOT_NIL >>
+                 gvs[scfgDefsTheory.block_last_jmp_to_def,
+                     scfgDefsTheory.block_last_inst_def] >>
+                 Cases_on `a'.bb_instructions` >> gvs[]) >>
+              Cases_on `y.inst_opcode = PHI`
+              >- cheat (* PHI case needs pred_labels fn' ~ pred_labels fn *)
+              >- gvs[scfgDefsTheory.phi_inst_wf_def,
+                     scfgDefsTheory.replace_label_inst_def])
+            >- ( (* y from b'.bb_instructions - no PHIs *)
+              gvs[scfgDefsTheory.phi_inst_wf_def,
+                  scfgDefsTheory.replace_label_inst_def,
+                  scfgDefsTheory.block_has_no_phi_def,
+                  scfgDefsTheory.block_has_phi_def] >> metis_tac[]))))
       >- ( (* y from original blocks case *)
         simp[scfgDefsTheory.replace_label_block_def] >> cheat))
     >- ( (* block_has_no_phi (HD blocks3) *)
