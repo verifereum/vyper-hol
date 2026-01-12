@@ -468,4 +468,22 @@ Proof
   rw[state_equiv_cfg_def, var_equiv_def, next_inst_def, lookup_var_def]
 QED
 
+(* Asymmetric jump_to lemmas: state_equiv_cfg ignores prev_bb/current_bb/inst_idx
+   so jump_to on one side preserves equivalence *)
+Theorem state_equiv_cfg_jump_to_left:
+  !lbl s1 s2.
+    state_equiv_cfg s1 s2 ==>
+    state_equiv_cfg (jump_to lbl s1) s2
+Proof
+  rw[state_equiv_cfg_def, var_equiv_def, jump_to_def, lookup_var_def]
+QED
+
+Theorem state_equiv_cfg_jump_to_right:
+  !lbl s1 s2.
+    state_equiv_cfg s1 s2 ==>
+    state_equiv_cfg s1 (jump_to lbl s2)
+Proof
+  rw[state_equiv_cfg_def, var_equiv_def, jump_to_def, lookup_var_def]
+QED
+
 val _ = export_theory();
