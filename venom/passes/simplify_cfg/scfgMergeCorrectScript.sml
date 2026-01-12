@@ -441,6 +441,60 @@ QED
 
 (* ===== Merge Point Helper Lemmas ===== *)
 
+(* Helper: IH preconditions at merge point after running block b.
+   After running block a (to v), then block b (to v'), and merged_bb (to v''),
+   establishes all preconditions needed to apply the IH for continuation. *)
+Theorem ih_conditions_at_merge_point:
+  !fn a_lbl b_lbl a b n s1 s2 v v' v''.
+    cfg_wf fn /\ phi_fn_wf fn /\
+    lookup_block a_lbl fn.fn_blocks = SOME a /\
+    lookup_block b_lbl fn.fn_blocks = SOME b /\
+    a_lbl <> b_lbl /\ b_lbl <> entry_label fn /\
+    pred_labels fn b_lbl = [a_lbl] /\
+    block_has_no_phi b /\ block_last_jmp_to b_lbl a /\
+    state_equiv_cfg s1 s2 /\
+    s1.vs_current_bb = a_lbl /\ s2.vs_current_bb = a_lbl /\
+    s1.vs_inst_idx = 0 /\ s2.vs_inst_idx = 0 /\
+    (s1.vs_prev_bb = SOME b_lbl ==> s2.vs_prev_bb = SOME a_lbl) /\
+    (s1.vs_prev_bb <> SOME b_lbl ==> s1.vs_prev_bb = s2.vs_prev_bb) /\
+    (!lbl. s1.vs_prev_bb = SOME lbl ==> MEM lbl (pred_labels fn a_lbl)) /\
+    ~s1.vs_halted /\
+    terminates (run_function (SUC (SUC n)) fn s1) /\
+    run_block a s1 = OK v /\ ~v.vs_halted /\ v.vs_current_bb = b_lbl /\
+    run_block b v = OK v' /\ ~v'.vs_halted /\
+    run_block (replace_label_block b_lbl a_lbl
+      (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2 = OK v'' /\
+    ~v''.vs_halted /\ state_equiv_cfg v' v''
+  ==>
+    v'.vs_current_bb = v''.vs_current_bb /\
+    v'.vs_current_bb <> b_lbl /\
+    v'.vs_inst_idx = 0 /\ v''.vs_inst_idx = 0 /\
+    (v'.vs_prev_bb = SOME b_lbl ==> v''.vs_prev_bb = SOME a_lbl) /\
+    (v'.vs_prev_bb <> SOME b_lbl ==> v'.vs_prev_bb = v''.vs_prev_bb) /\
+    (!lbl. v'.vs_prev_bb = SOME lbl ==> MEM lbl (pred_labels fn v'.vs_current_bb)) /\
+    terminates (run_function n fn v')
+Proof
+  rpt strip_tac >> rpt conj_tac
+  >- ( (* v'.vs_current_bb = v''.vs_current_bb *)
+    (* v' from block b, v'' from merged block with same terminator *)
+    cheat)
+  >- ( (* v'.vs_current_bb <> b_lbl *)
+    `MEM b fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+    qspecl_then [`fn`, `b`, `v`, `v'`] mp_tac run_block_ok_successor >>
+    impl_tac >- (gvs[cfg_wf_def] >> first_x_assum irule >> simp[]) >>
+    strip_tac >>
+    `pred_labels fn b_lbl = [a_lbl]` by simp[] >>
+    `a_lbl <> b_lbl` by simp[] >>
+    (* b's successor is not b_lbl since b is not a self-loop *)
+    cheat)
+  >- (irule run_block_ok_inst_idx >> metis_tac[])
+  >- (irule run_block_ok_inst_idx >> metis_tac[])
+  >- cheat (* prev_bb SOME b_lbl case *)
+  >- cheat (* prev_bb <> SOME b_lbl case *)
+  >- cheat (* pred_labels condition *)
+  >- cheat (* terminates *)
+QED
+
 (* Helper for the OK+not halted case at merge point.
    At the merge point, original runs 2 blocks (a then b), merged runs 1 block.
    This handles the fuel asymmetry and IH application.
@@ -522,7 +576,19 @@ Proof
     Cases_on `v''.vs_halted` >> gvs[]
     >- (`~v'.vs_halted` by (drule_all run_block_ok_not_halted >> simp[]) >>
         gvs[state_equiv_cfg_def])
-    >- cheat) (* IH application - fuel asymmetry *)
+    >- ( (* IH application - fuel asymmetry *)
+      Cases_on `n`
+      >- simp[run_function_def, result_equiv_cfg_def]
+      >- (
+        simp[Once run_function_def] >>
+        CONV_TAC (RATOR_CONV (RAND_CONV (ONCE_REWRITE_CONV [run_function_def]))) >>
+        simp[] >>
+        Cases_on `v'.vs_halted` >> gvs[]
+        >- (`v''.vs_halted` by gvs[state_equiv_cfg_def] >>
+            simp[Once run_function_def] >> gvs[result_equiv_cfg_def, state_equiv_cfg_def])
+        >- (irule fuel_align_equiv >> simp[] >>
+            conj_tac >- cheat >> (* terminates *)
+            first_x_assum irule >> gvs[] >> cheat))))
   >- ((* Halt case *)
     Cases_on `run_block (replace_label_block b_lbl a_lbl
       (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2` >>
@@ -623,8 +689,8 @@ Proof
           Cases_on `run_block (replace_label_block b_lbl s1.vs_current_bb (a with bb_instructions :=
             FRONT a.bb_instructions ++ b.bb_instructions)) s2` >> gvs[result_equiv_cfg_def])
         >- ( (* OK + not halted: use extracted helper *)
-          (* TODO: apply merge_blocks_at_merge_point_ok_continue *)
-          cheat))
+          irule merge_blocks_at_merge_point_ok_continue >>
+          gvs[] >> qexists_tac `s1` >> gvs[]))
       >- ( (* Halt case *)
         `block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
           irule lookup_block_MEM >> metis_tac[]) >>
