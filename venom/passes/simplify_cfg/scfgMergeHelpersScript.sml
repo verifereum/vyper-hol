@@ -576,4 +576,25 @@ Proof
     >- (first_x_assum (qspec_then `last_inst.inst_operands` mp_tac) >> simp[]))
 QED
 
+(* ===== update_last_inst Helpers ===== *)
+
+(* Helper: update_last_inst preserves length *)
+Theorem update_last_inst_length:
+  !f l. LENGTH (update_last_inst f l) = LENGTH l
+Proof
+  gen_tac >> Induct >> rw[scfgDefsTheory.update_last_inst_def] >>
+  Cases_on `l` >> gvs[scfgDefsTheory.update_last_inst_def]
+QED
+
+(* Helper: update_last_inst preserves elements before last *)
+Theorem update_last_inst_el_unchanged:
+  !f l idx.
+    l <> [] /\ idx < LENGTH l - 1 ==>
+    EL idx (update_last_inst f l) = EL idx l
+Proof
+  gen_tac >> Induct >> rw[scfgDefsTheory.update_last_inst_def] >>
+  Cases_on `l` >> gvs[scfgDefsTheory.update_last_inst_def] >>
+  Cases_on `idx` >> gvs[]
+QED
+
 val _ = export_theory();

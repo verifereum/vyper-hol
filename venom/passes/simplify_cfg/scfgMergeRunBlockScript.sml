@@ -1752,7 +1752,7 @@ Theorem run_block_merge_jump_equiv:
     jump_only_target b = SOME c_lbl /\
     MEM b_lbl (block_successors a) /\
     ~s.vs_halted /\
-    s.vs_inst_idx = 0
+    s.vs_inst_idx <= LENGTH (BUTLAST a.bb_instructions)
   ==>
     let a' = a with bb_instructions :=
       update_last_inst (replace_label_inst b_lbl c_lbl) a.bb_instructions in
@@ -1764,14 +1764,33 @@ Theorem run_block_merge_jump_equiv:
        | Error e => Error e)
       (run_block a' s)
 Proof
-  rpt strip_tac >> simp[] >>
-  qabbrev_tac `a' = a with bb_instructions :=
-    update_last_inst (replace_label_inst b_lbl c_lbl) a.bb_instructions` >>
-  Cases_on `run_block a s` >> simp[]
-  >- cheat (* OK case - need step-by-step equivalence *)
-  >- cheat (* Halt case *)
-  >- cheat (* Revert case *)
-  >- cheat (* Error case *)
+  completeInduct_on `LENGTH a.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `s.vs_inst_idx < LENGTH (FRONT a.bb_instructions)`
+  (* Not at terminator - same instruction on both sides *)
+  >- (
+    simp[Once run_block_def] >>
+    CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+    qabbrev_tac `a' = a with bb_instructions :=
+      update_last_inst (replace_label_inst b_lbl c_lbl) a.bb_instructions` >>
+    sg `get_instruction a' s.vs_inst_idx = get_instruction a s.vs_inst_idx`
+    >- (simp[get_instruction_def, Abbr `a'`, scfgMergeHelpersTheory.update_last_inst_length] >>
+        `a.bb_instructions <> []` by
+          (fs[block_successors_def, block_last_inst_def] >>
+           Cases_on `a.bb_instructions` >> gvs[]) >>
+        IF_CASES_TAC >> simp[] >>
+        `s.vs_inst_idx < LENGTH a.bb_instructions - 1` by fs[rich_listTheory.LENGTH_FRONT] >>
+        drule_all scfgMergeHelpersTheory.update_last_inst_el_unchanged >> simp[])
+    >- (`step_in_block a' s = step_in_block a s` by simp[step_in_block_def] >>
+        gvs[] >> Cases_on `step_in_block a s` >> Cases_on `q` >> gvs[result_equiv_cfg_def]
+        >- (IF_CASES_TAC >> gvs[result_equiv_cfg_def, state_equiv_cfg_refl] >>
+            IF_CASES_TAC >> gvs[result_equiv_cfg_def]
+            >- cheat (* is_term=T at non-last position - contradiction *)
+            >- cheat) (* use IH *)
+        >- simp[state_equiv_cfg_refl]
+        >- simp[state_equiv_cfg_refl]))
+  (* At terminator - boundary case *)
+  >- cheat
 QED
 
 val _ = export_theory();
