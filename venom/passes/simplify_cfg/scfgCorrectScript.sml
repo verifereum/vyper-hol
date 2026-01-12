@@ -264,6 +264,29 @@ Proof
   simp[pred_setTheory.EXTENSION] >> COND_CASES_TAC >> gvs[]
 QED
 
+(* Helper: if bb has lbl as successor, then bb.bb_label is in pred_labels of lbl *)
+Theorem block_successors_pred_labels:
+  !fn bb lbl.
+    MEM bb fn.fn_blocks /\ MEM lbl (block_successors bb) ==>
+    MEM bb.bb_label (pred_labels fn lbl)
+Proof
+  rpt strip_tac >>
+  simp[scfgDefsTheory.pred_labels_def, MEM_MAP, MEM_FILTER] >>
+  qexists_tac `bb` >> simp[]
+QED
+
+(* Helper: block_successors depends only on LAST instruction *)
+Theorem block_successors_append_last:
+  !insts1 insts2 bb.
+    insts2 <> [] ==>
+    block_successors (bb with bb_instructions := insts1 ++ insts2) =
+    block_successors (bb with bb_instructions := insts2)
+Proof
+  rpt strip_tac >>
+  simp[scfgDefsTheory.block_successors_def, scfgDefsTheory.block_last_inst_def] >>
+  gvs[rich_listTheory.LAST_APPEND_NOT_NIL, NULL_EQ]
+QED
+
 (* End-to-end pred_labels characterization for merge_blocks result *)
 Theorem pred_labels_merge_blocks_result:
   !fn a b lbl x.
@@ -282,13 +305,23 @@ Proof
   simp[MEM_pred_labels_replace_label_fn] >>
   (* b was removed from fn1, so pred_labels fn1 b = [] *)
   sg `pred_labels fn1 b = []`
-  >- (simp[scfgDefsTheory.pred_labels_def, Abbr`fn1`] >>
-      simp[FILTER_EQ_NIL, EVERY_MEM] >> rpt strip_tac >>
+  >- (simp[scfgDefsTheory.pred_labels_def, Abbr`fn1`, FILTER_EQ_NIL, EVERY_MEM] >>
+      rpt strip_tac >>
       `ALL_DISTINCT (MAP (\b. b.bb_label) (remove_block b fn.fn_blocks))`
         by (irule ALL_DISTINCT_remove_block >> gvs[cfg_wf_def]) >>
       drule_all MEM_replace_block >> strip_tac >> gvs[]
-      >- cheat (* merged doesn't have b as successor *)
-      >- cheat) (* other blocks don't have b as successor - from pred_labels fn b = [a] *)
+      >- ((* merged block case: use block_successors_pred_labels for contradiction *)
+          `MEM b' fn.fn_blocks` by (irule lookup_block_MEM >> qexists_tac `b` >> simp[]) >>
+          `b'.bb_label = b` by (irule lookup_block_label >> qexists_tac `fn.fn_blocks` >> simp[]) >>
+          `b'.bb_instructions <> []` by cheat >>
+          `block_successors (a' with bb_instructions := FRONT a'.bb_instructions ++ b'.bb_instructions) =
+           block_successors b'` by (irule scfgMergeCorrectTheory.block_successors_merged >> simp[]) >>
+          gvs[] >>
+          drule_all block_successors_pred_labels >> gvs[])
+      >- ((* other block case: use block_successors_pred_labels for contradiction *)
+          drule MEM_remove_block >> strip_tac >>
+          `a'.bb_label = a` by (irule lookup_block_label >> qexists_tac `fn.fn_blocks` >> simp[]) >>
+          drule_all block_successors_pred_labels >> gvs[]))
   >- (simp[] >> Cases_on `lbl = a` >> simp[]
       >- cheat (* lbl = a: pred_labels fn1 a ~ pred_labels fn a + {a} *)
       >- cheat) (* lbl != a: pred_labels fn1 lbl ~ FILTER (neq b) (pred_labels fn lbl) *)
