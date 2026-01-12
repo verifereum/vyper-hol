@@ -476,23 +476,42 @@ Theorem ih_conditions_at_merge_point:
 Proof
   rpt strip_tac >> rpt conj_tac
   >- ( (* v'.vs_current_bb = v''.vs_current_bb *)
-    (* v' from block b, v'' from merged block with same terminator *)
+    `block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
+      irule lookup_block_MEM >> metis_tac[]) >>
+    `block_terminator_last b` by (gvs[cfg_wf_def] >> first_x_assum irule >>
+      irule lookup_block_MEM >> metis_tac[]) >>
+    `MEM b fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+    `b.bb_label = b_lbl` by metis_tac[lookup_block_label] >>
+    `v'.vs_current_bb <> b_lbl` by (qspecl_then [`fn`, `b`, `v`, `v'`,
+      `a_lbl`] mp_tac run_block_no_self_loop_single_pred >> gvs[]) >>
+    qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac
+      run_block_merge_blocks_equiv >> impl_tac >- gvs[] >> strip_tac >>
+    `result_equiv_cfg (run_block b v) (run_block (a with
+      bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)
+      s1)` by gvs[] >>
+    qabbrev_tac `merged = a with bb_instructions := FRONT
+      a.bb_instructions ++ b.bb_instructions` >>
+    Cases_on `run_block merged s1` >> gvs[result_equiv_cfg_def] >>
     cheat)
   >- ( (* v'.vs_current_bb <> b_lbl *)
     `MEM b fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
-    qspecl_then [`fn`, `b`, `v`, `v'`] mp_tac run_block_ok_successor >>
-    impl_tac >- (gvs[cfg_wf_def] >> first_x_assum irule >> simp[]) >>
-    strip_tac >>
-    `pred_labels fn b_lbl = [a_lbl]` by simp[] >>
-    `a_lbl <> b_lbl` by simp[] >>
-    (* b's successor is not b_lbl since b is not a self-loop *)
-    cheat)
+    `b.bb_label = b_lbl` by metis_tac[lookup_block_label] >>
+    qspecl_then [`fn`, `b`, `v`, `v'`, `a_lbl`] mp_tac
+      run_block_no_self_loop_single_pred >> gvs[])
   >- (irule run_block_ok_inst_idx >> metis_tac[])
   >- (irule run_block_ok_inst_idx >> metis_tac[])
-  >- cheat (* prev_bb SOME b_lbl case *)
-  >- cheat (* prev_bb <> SOME b_lbl case *)
-  >- cheat (* pred_labels condition *)
-  >- cheat (* terminates *)
+  >- (qspecl_then [`replace_label_block b_lbl a_lbl (a with bb_instructions :=
+        FRONT a.bb_instructions ++ b.bb_instructions)`, `s2`, `v''`] mp_tac
+        run_block_ok_prev_bb >> gvs[])
+  >- (qspecl_then [`b`, `v`, `v'`] mp_tac run_block_ok_prev_bb >> gvs[])
+  >- (qspecl_then [`b`, `v`, `v'`] mp_tac run_block_ok_prev_bb >> gvs[] >>
+      qspecl_then [`fn`, `b`, `v`, `v'`] mp_tac run_block_ok_pred_labels >>
+      impl_tac >- (gvs[] >> metis_tac[lookup_block_MEM]) >>
+      metis_tac[lookup_block_label])
+  >- (`terminates (run_function (SUC n) fn v)` by (irule
+        run_function_terminates_step >> gvs[] >> metis_tac[]) >>
+      irule run_function_terminates_step >> gvs[] >>
+      qexistsl_tac [`b`, `v`] >> gvs[])
 QED
 
 (* Helper for the OK+not halted case at merge point.
