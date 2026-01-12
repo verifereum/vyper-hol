@@ -109,9 +109,20 @@ This work is developed in the [HOL4 theorem prover](https://hol-theorem-prover.o
   - Verifereum: `main` (https://github.com/verifereum/verifereum)
   - Vyper: `main` (or the release branch matching the JSON test export you are using) (https://github.com/vyperlang/vyper)
 
-The [Verifereum repository](https://github.com/verifereum/verifereum) includes instructions on how to build HOL4, and the Vyper repository includes its own installation instructions. To run the Vyper test suite on our definitional interpreter, follow this approach:
+The [Verifereum repository](https://github.com/verifereum/verifereum) includes instructions on how to build HOL4, and the Vyper repository includes its own installation instructions.
+
+### Running the Vyper test suite
+
+The test runner expects exported JSON fixtures to be available at `tests/vyper-test-exports`. You have two options:
+
+1. **Use pre-exported fixtures** (preferred once available): clone https://github.com/vyperlang/vyperlang-tests and link it into `tests/vyper-test-exports`.
+2. **Export locally from Vyper**: generate the fixtures from a Vyper checkout and link the export directory into `tests/vyper-test-exports`.
+
+To run the Vyper test suite on our definitional interpreter, follow this approach:
 
 1. Generate the Vyper tests using `pytest -s -n 1 --export tests/export -m "not fuzzing" tests/functional/codegen`.
-2. Switch to your clone of this (Vyper-HOL) repository; we assume the Vyper tests were exported to `../vyper/tests/export`.
-3. Set the `VFMDIR` environment variable to a path of a clone of the Verifereum repository (tracking `main`)
-4. `cd tests` and then run `Holmake`
+2. Link the export directory into `tests/vyper-test-exports` (e.g., `ln -s ../vyper/tests/export tests/vyper-test-exports`).
+3. Set the `VFMDIR` environment variable to a path of a clone of the Verifereum repository (tracking `main`).
+4. `cd tests` and then run `Holmake`.
+
+CI uses the same layout and will pull fixtures from `vyperlang-tests` when they are available.
