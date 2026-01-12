@@ -104,6 +104,13 @@ Proof
   >- gvs[]
 QED
 
+(* Helper: terminates is preserved by result_equiv_cfg *)
+Theorem terminates_result_equiv_cfg:
+  !r1 r2. result_equiv_cfg r1 r2 /\ terminates r1 ==> terminates r2
+Proof
+  Cases >> Cases >> gvs[result_equiv_cfg_def, terminates_def]
+QED
+
 (* Helper: no PHI in merged block when neither a nor b have PHIs *)
 Theorem block_has_no_phi_merged:
   !a b. a.bb_instructions <> [] /\ block_has_no_phi a /\ block_has_no_phi b ==>
