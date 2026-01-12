@@ -1755,6 +1755,69 @@ Proof
   CCONTR_TAC >> gvs[get_successors_def]
 QED
 
+(* Helper: step_inst on terminator with label replacement gives state_equiv_cfg results.
+   Key insight: state_equiv_cfg ignores vs_current_bb, vs_prev_bb, vs_inst_idx *)
+Theorem step_inst_terminator_replace_label_equiv:
+  !inst old_lbl new_lbl s.
+    is_terminator inst.inst_opcode ==>
+    let inst' = replace_label_inst old_lbl new_lbl inst in
+    result_equiv_cfg (step_inst inst s) (step_inst inst' s)
+Proof
+  rpt strip_tac >> gvs[venomInstTheory.is_terminator_def] >>
+  Cases_on `inst.inst_opcode` >> gvs[venomInstTheory.is_terminator_def]
+  (* JMP *)
+  >- (simp[step_inst_def, replace_label_inst_def] >>
+      Cases_on `inst.inst_operands` >> simp[result_equiv_cfg_def, replace_label_operand_def] >>
+      Cases_on `h` >> simp[result_equiv_cfg_def, replace_label_operand_def] >>
+      Cases_on `t` >> simp[result_equiv_cfg_def]
+      >- (IF_CASES_TAC >> simp[result_equiv_cfg_def] >>
+          irule scfgStateOpsTheory.jump_to_state_equiv_cfg >> simp[state_equiv_cfg_refl])
+      >- (IF_CASES_TAC >> simp[result_equiv_cfg_def]))
+  (* JNZ - case analysis on 3 operands *)
+  >- (simp[step_inst_def, replace_label_inst_def] >>
+      Cases_on `inst.inst_operands` >> simp[result_equiv_cfg_def, replace_label_operand_def] >>
+      Cases_on `t` >> simp[result_equiv_cfg_def, replace_label_operand_def] >>
+      Cases_on `h'` >> simp[result_equiv_cfg_def, replace_label_operand_def] >>
+      Cases_on `t'` >> simp[result_equiv_cfg_def, replace_label_operand_def]
+      >- (IF_CASES_TAC >> simp[result_equiv_cfg_def])
+      >- (Cases_on `h'` >> simp[result_equiv_cfg_def, replace_label_operand_def]
+          >- (IF_CASES_TAC >> simp[result_equiv_cfg_def])
+          >- (IF_CASES_TAC >> simp[result_equiv_cfg_def])
+          >- (Cases_on `t` >> simp[result_equiv_cfg_def, replace_label_operand_def]
+              >- (IF_CASES_TAC >> simp[result_equiv_cfg_def]
+                  >- (IF_CASES_TAC >> simp[result_equiv_cfg_def]
+                      >- (simp[scfgMergeHelpersTheory.eval_operand_replace_label] >>
+                          Cases_on `eval_operand h s` >> simp[result_equiv_cfg_def] >>
+                          irule scfgStateOpsTheory.jump_to_state_equiv_cfg >> simp[state_equiv_cfg_refl])
+                      >- (simp[scfgMergeHelpersTheory.eval_operand_replace_label] >>
+                          Cases_on `eval_operand h s` >> simp[result_equiv_cfg_def] >>
+                          IF_CASES_TAC >> simp[result_equiv_cfg_def] >>
+                          TRY (irule scfgStateOpsTheory.jump_to_state_equiv_cfg >> simp[state_equiv_cfg_refl])))
+                  >- (IF_CASES_TAC >> simp[scfgMergeHelpersTheory.eval_operand_replace_label, result_equiv_cfg_def]
+                      >- (Cases_on `eval_operand h s` >> simp[result_equiv_cfg_def] >>
+                          IF_CASES_TAC >> simp[result_equiv_cfg_def, state_equiv_cfg_refl] >>
+                          irule scfgStateOpsTheory.jump_to_state_equiv_cfg >> simp[state_equiv_cfg_refl])
+                      >- simp[result_equiv_cfg_refl]))
+              >- (IF_CASES_TAC >> simp[result_equiv_cfg_def] >>
+                  IF_CASES_TAC >> simp[result_equiv_cfg_def]))))
+  (* DJMP - unimplemented *)
+  >- simp[step_inst_def, replace_label_inst_def, result_equiv_cfg_def]
+  (* RET - unimplemented *)
+  >- simp[step_inst_def, replace_label_inst_def, result_equiv_cfg_def]
+  (* RETURN *)
+  >- simp[step_inst_def, replace_label_inst_def, result_equiv_cfg_def,
+          state_equiv_cfg_def, stateEquivTheory.var_equiv_def, venomStateTheory.halt_state_def]
+  (* REVERT *)
+  >- simp[step_inst_def, replace_label_inst_def, result_equiv_cfg_def,
+          state_equiv_cfg_def, stateEquivTheory.var_equiv_def, venomStateTheory.revert_state_def]
+  (* STOP *)
+  >- simp[step_inst_def, replace_label_inst_def, result_equiv_cfg_def,
+          state_equiv_cfg_def, stateEquivTheory.var_equiv_def, venomStateTheory.halt_state_def]
+  (* SINK *)
+  >- simp[step_inst_def, replace_label_inst_def, result_equiv_cfg_def,
+          state_equiv_cfg_def, stateEquivTheory.var_equiv_def, venomStateTheory.halt_state_def]
+QED
+
 (* For merge_jump: running a then b (jump-only) is equivalent to running a'
    where a' is a with the last instruction's target changed from b_lbl to c_lbl *)
 Theorem run_block_merge_jump_equiv:
