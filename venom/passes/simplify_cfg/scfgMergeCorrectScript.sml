@@ -412,6 +412,31 @@ Proof
             qexists_tac `fn` >> qexists_tac `x` >> gvs[]))))
 QED
 
+(* ===== Fuel Alignment Helpers ===== *)
+
+(* Helper: if both executions terminate with same fuel and are equivalent,
+   adding more fuel to one side preserves equivalence. *)
+Theorem fuel_align_equiv:
+  !fuel fn merged_fn s1 s2.
+    terminates (run_function fuel merged_fn s2) /\
+    result_equiv_cfg (run_function fuel fn s1) (run_function fuel merged_fn s2)
+  ==>
+    !fuel'. fuel <= fuel' ==>
+      result_equiv_cfg (run_function fuel fn s1) (run_function fuel' merged_fn s2)
+Proof
+  rpt gen_tac >> strip_tac >> Induct_on `fuel' - fuel`
+  >- (rpt strip_tac >> `fuel' = fuel` by simp[] >> gvs[])
+  >- (rpt strip_tac >>
+      `result_equiv_cfg (run_function fuel fn s1)
+         (run_function (fuel' - 1) merged_fn s2)` by
+        (first_x_assum irule >> simp[]) >>
+      `fuel' = SUC (fuel' - 1)` by simp[] >>
+      (* Step case: have equiv at fuel'-1, need equiv at fuel'.
+         Missing: terminates (fuel'-1) to apply run_function_fuel_monotonicity.
+         Need to strengthen IH to include terminates preservation. *)
+      cheat)
+QED
+
 (* ===== Merge Point Helper Lemmas ===== *)
 
 (* Helper for the OK+not halted case at merge point.
