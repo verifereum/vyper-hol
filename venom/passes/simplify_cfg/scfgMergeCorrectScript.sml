@@ -470,10 +470,13 @@ Theorem run_function_merge_blocks_equiv_fwd:
     result_equiv_cfg (run_function fuel fn s1)
                      (run_function fuel (merge_blocks fn a_lbl b_lbl) s2)
 Proof
-  Induct_on `fuel` >- simp[run_function_def, terminates_def] >>
-  rpt strip_tac >> Cases_on `s1.vs_current_bb = a_lbl`
+  completeInduct_on `fuel` >> rpt strip_tac >>
+  Cases_on `fuel` >- gvs[run_function_def, terminates_def] >>
+  Cases_on `s1.vs_current_bb = a_lbl`
   >- (irule merge_blocks_at_merge_point >> gvs[] >>
-      cheat) (* IH application - needs fuel monotonicity *)
+      rpt strip_tac >>
+      first_x_assum irule >> simp[] >>
+      qexistsl_tac [`a`, `b`] >> simp[])
   >- cheat (* Not at merge point - block unchanged except label replacement *)
 QED
 
@@ -780,8 +783,13 @@ Proof_ORIGINAL
                       >- (
                         `v'.vs_current_bb = v_merged.vs_current_bb` by
                           metis_tac[run_block_merge_blocks_current_bb] >>
-                        (* CHEATED: vs_current_bb equality via replace_label - qspecl_then parse error in batch *)
-                        `v_merged.vs_current_bb = v''.vs_current_bb` by cheat >>
+                        `block_terminator_last (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)` by
+                          (irule block_terminator_last_merged >> gvs[] >>
+                           fs[block_last_jmp_to_def, block_last_inst_def] >> Cases_on `a.bb_instructions` >> gvs[]) >>
+                        `~MEM v.vs_current_bb (block_successors (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions))` by
+                          (simp[block_successors_merged]) >>
+                        `v_merged.vs_current_bb = v''.vs_current_bb` by
+                          (irule run_block_replace_label_current_bb_prev_none >> gvs[]) >>
                         simp[]))
                     >- metis_tac[run_block_ok_inst_idx]
                     >- metis_tac[run_block_ok_inst_idx]
