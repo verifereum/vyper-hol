@@ -249,6 +249,21 @@ Proof
         MEM_MAP] >> metis_tac[]))
 QED
 
+(* MEM-based corollary of pred_labels_replace_label_fn_set *)
+Theorem MEM_pred_labels_replace_label_fn:
+  !fn old new lbl x.
+    lbl <> old ==>
+    (MEM x (pred_labels (replace_label_fn old new fn) lbl) <=>
+     if lbl = new then MEM x (pred_labels fn lbl) \/ MEM x (pred_labels fn old)
+     else MEM x (pred_labels fn lbl))
+Proof
+  rpt strip_tac >>
+  `set (pred_labels (replace_label_fn old new fn) lbl) =
+   if lbl = new then set (pred_labels fn lbl) UNION set (pred_labels fn old)
+   else set (pred_labels fn lbl)` by (irule pred_labels_replace_label_fn_set >> simp[]) >>
+  simp[pred_setTheory.EXTENSION] >> COND_CASES_TAC >> gvs[]
+QED
+
 Theorem block_last_inst_terminator:
   !bb idx inst.
     block_terminator_last bb /\
@@ -943,7 +958,31 @@ Proof
       >- (gvs[scfgDefsTheory.phi_fn_wf_def] >> Cases_on `fn.fn_blocks` >>
           gvs[scfgDefsTheory.remove_block_def, scfgDefsTheory.entry_label_def])
       >- (COND_CASES_TAC >> simp[]))
-    >- cheat (* phi_block_wf for all blocks - complex, needs helper *)
+    >- ( (* phi_block_wf for all blocks *)
+      rpt strip_tac >> gvs[Abbr`blocks3`, MEM_MAP] >>
+      rpt strip_tac >> gvs[Abbr`blocks2`] >>
+      `ALL_DISTINCT (MAP (\bb. bb.bb_label) blocks1)` by
+        (gvs[cfg_wf_def, Abbr`blocks1`] >> irule ALL_DISTINCT_remove_block >> simp[]) >>
+      drule_all MEM_replace_block >> strip_tac >> gvs[]
+      >- ( (* y = merged case *)
+        simp[scfgDefsTheory.replace_label_block_def, Abbr`merged`] >>
+        (* First establish phi_block_wf for merged block *)
+        sg `phi_block_wf (pred_labels fn a)
+              (a' with bb_instructions := FRONT a'.bb_instructions ++ b'.bb_instructions)`
+        >- (irule scfgMergeCorrectTheory.phi_block_wf_merged >> simp[] >>
+            rpt conj_tac
+            >- (gvs[scfgDefsTheory.block_last_jmp_to_def,
+                    scfgDefsTheory.block_last_inst_def] >>
+                Cases_on `a'.bb_instructions` >> gvs[])
+            >- (gvs[scfgDefsTheory.phi_fn_wf_def] >>
+                `a'.bb_label = a` by (irule lookup_block_label >> metis_tac[]) >>
+                gvs[] >> first_x_assum irule >> irule lookup_block_MEM >> metis_tac[]))
+        >- ( (* Now transform pred_labels - case split on MEM b *)
+          Cases_on `MEM b (pred_labels fn a)`
+          >- (Cases_on `MEM a (pred_labels fn a)` >- cheat >- cheat)
+          >- cheat))
+      >- ( (* y from original blocks case *)
+        simp[scfgDefsTheory.replace_label_block_def] >> cheat))
     >- ( (* block_has_no_phi (HD blocks3) *)
       gvs[Abbr`blocks3`, Abbr`blocks2`, Abbr`blocks1`] >>
       Cases_on `fn.fn_blocks` >> gvs[scfgDefsTheory.phi_fn_wf_def,
@@ -1018,7 +1057,19 @@ Proof
       COND_CASES_TAC >>
       gvs[scfgDefsTheory.entry_label_def, scfgDefsTheory.remove_block_def] >>
       `a'.bb_label <> b` by gvs[] >> simp[])
-    >- cheat (* phi_block_wf for all blocks in merge_jump *)
+    >- ( (* phi_block_wf for all blocks in merge_jump *)
+      rpt strip_tac >> gvs[Abbr`blocks4`, MEM_MAP] >>
+      rpt strip_tac >> gvs[Abbr`blocks3`, MEM_MAP] >>
+      rpt strip_tac >> gvs[Abbr`blocks2`] >>
+      `ALL_DISTINCT (MAP (\bb. bb.bb_label) blocks1)` by
+        (gvs[cfg_wf_def, Abbr`blocks1`] >>
+         `!a' blocks. MAP (\bb. bb.bb_label) (replace_block a' blocks) =
+          MAP (\bb. bb.bb_label) blocks` by
+           (gen_tac >> Induct >> simp[scfgDefsTheory.replace_block_def] >> rw[]) >>
+         simp[]) >>
+      drule MEM_remove_block >> strip_tac >> gvs[] >>
+      (* Now y' is from blocks1, case split on whether it's a_new or original *)
+      cheat)
     >- ( (* block_has_no_phi (HD blocks4) *)
       gvs[Abbr`blocks2`, Abbr`blocks1`] >>
       Cases_on `fn.fn_blocks` >>
