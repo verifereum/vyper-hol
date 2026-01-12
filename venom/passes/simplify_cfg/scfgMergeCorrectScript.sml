@@ -1109,131 +1109,17 @@ Theorem run_function_merge_blocks_equiv_bwd:
 Proof
   completeInduct_on `fuel` >> rpt strip_tac >>
   Cases_on `fuel` >- gvs[run_function_def, terminates_def] >>
-  Cases_on `s1.vs_current_bb = a_lbl`
-  >- ( (* At merge point *)
-    gvs[] >>
-    qpat_x_assum `terminates _` mp_tac >> simp[Once run_function_def] >>
-    `lookup_block s2.vs_current_bb (merge_blocks fn s2.vs_current_bb b_lbl).fn_blocks =
-     SOME (replace_label_block b_lbl s2.vs_current_bb
-           (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions))`
-      by (irule lookup_block_merge_blocks_a >> simp[]) >>
-    simp[] >>
-    qabbrev_tac `merged_bb = replace_label_block b_lbl s2.vs_current_bb
-      (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)` >>
-    Cases_on `run_block merged_bb s2` >> simp[terminates_def]
-    >- ( (* OK case *)
-      Cases_on `v.vs_halted` >> simp[terminates_def]
-      >- ( (* OK + halted *)
-        `block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
-          irule lookup_block_MEM >> metis_tac[]) >>
-        qabbrev_tac `merged_no_label = a with bb_instructions :=
-          FRONT a.bb_instructions ++ b.bb_instructions` >>
-        `result_equiv_cfg (run_block merged_no_label s1) (run_block merged_bb s2)` by
-          (qspecl_then [`fn`, `a`, `b`, `s2.vs_current_bb`, `b_lbl`, `s1`, `s2`]
-           mp_tac run_block_merged_to_merged_bb >> simp[Abbr `merged_bb`, Abbr `merged_no_label`]) >>
-        `result_equiv_cfg (case run_block a s1 of OK s' => if s'.vs_halted then Halt s'
-           else run_block b s' | Halt v => Halt v | Revert v => Revert v | Error e => Error e)
-           (run_block merged_no_label s1)` by
-          (qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac
-           scfgMergeRunBlockTheory.run_block_merge_blocks_equiv >> simp[Abbr `merged_no_label`]) >>
-        Cases_on `run_block merged_no_label s1` >> gvs[result_equiv_cfg_def] >>
-        Cases_on `run_block a s1` >> gvs[result_equiv_cfg_def] >>
-        Cases_on `v''.vs_halted` >> gvs[result_equiv_cfg_def] >>
-        Cases_on `run_block b v''` >> gvs[result_equiv_cfg_def] >>
-        `v'³'.vs_halted` by gvs[state_equiv_cfg_def] >>
-        sg `v''.vs_current_bb = b_lbl`
-        >- (`MEM a fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
-            drule_all scfgMergeRunBlockTheory.run_block_ok_successor >> strip_tac >>
-            `block_successors a = [b_lbl]` by
-              metis_tac[scfgMergeHelpersTheory.block_last_jmp_to_successors] >> gvs[])
-        >- (`v''.vs_inst_idx = 0` by metis_tac[scfgEquivTheory.run_block_ok_inst_idx] >>
-            qexists_tac `2` >> simp[Once run_function_def] >>
-            simp[Once run_function_def, terminates_def] >>
-            simp[Once run_function_def] >> simp[Once run_function_def] >>
-            simp[Once run_function_def] >> simp[result_equiv_cfg_def] >>
-            irule state_equiv_cfg_trans >> qexists_tac `v'` >> simp[]))
-      >- cheat) (* OK + not halted, needs IH *)
-    >- ( (* Halt case *)
-      `block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
-        irule lookup_block_MEM >> metis_tac[]) >>
-      qabbrev_tac `merged_no_label = a with bb_instructions :=
-        FRONT a.bb_instructions ++ b.bb_instructions` >>
-      `result_equiv_cfg (run_block merged_no_label s1) (run_block merged_bb s2)` by
-        (qspecl_then [`fn`, `a`, `b`, `s2.vs_current_bb`, `b_lbl`, `s1`, `s2`]
-         mp_tac run_block_merged_to_merged_bb >> simp[Abbr `merged_bb`, Abbr `merged_no_label`]) >>
-      `result_equiv_cfg (case run_block a s1 of OK s' => if s'.vs_halted then Halt s'
-         else run_block b s' | Halt v => Halt v | Revert v => Revert v | Error e => Error e)
-         (run_block merged_no_label s1)` by
-        (qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac
-         scfgMergeRunBlockTheory.run_block_merge_blocks_equiv >> simp[Abbr `merged_no_label`]) >>
-      Cases_on `run_block merged_no_label s1` >> gvs[result_equiv_cfg_def] >>
-      Cases_on `run_block a s1` >> gvs[result_equiv_cfg_def]
-      >- (Cases_on `v''.vs_halted` >> gvs[result_equiv_cfg_def]
-          >- (qexists_tac `1` >> simp[Once run_function_def, terminates_def] >>
-              simp[Once run_function_def] >> simp[Once run_function_def] >>
-              simp[result_equiv_cfg_def] >> irule state_equiv_cfg_trans >>
-              qexists_tac `v'` >> simp[])
-          >- ( (* run_block b v'' = Halt case - fuel=2 *)
-            Cases_on `run_block b v''` >> gvs[result_equiv_cfg_def] >>
-            sg `v''.vs_current_bb = b_lbl` >- (
-              `MEM a fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
-              drule_all scfgMergeRunBlockTheory.run_block_ok_successor >> strip_tac >>
-              `block_successors a = [b_lbl]` by
-                metis_tac[scfgMergeHelpersTheory.block_last_jmp_to_successors] >> gvs[]) >>
-            `v''.vs_inst_idx = 0` by metis_tac[scfgEquivTheory.run_block_ok_inst_idx] >>
-            qexists_tac `2` >> simp[Once run_function_def, terminates_def] >>
-            simp[Once run_function_def, terminates_def] >>
-            simp[Once run_function_def, SimpLHS] >> simp[Once run_function_def, SimpLHS] >>
-            simp[Once run_function_def, SimpRHS] >>
-            simp[result_equiv_cfg_def] >> irule state_equiv_cfg_trans >>
-            qexists_tac `v'` >> simp[]))
-      >- (qexists_tac `1` >> simp[Once run_function_def, terminates_def] >>
-          simp[SimpLHS, Once run_function_def] >> simp[SimpRHS, Once run_function_def] >>
-          simp[result_equiv_cfg_def] >> irule state_equiv_cfg_trans >>
-          qexists_tac `v'` >> simp[]))
-    >- ( (* Revert case *)
-      `block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
-        irule lookup_block_MEM >> metis_tac[]) >>
-      qabbrev_tac `merged_no_label = a with bb_instructions :=
-        FRONT a.bb_instructions ++ b.bb_instructions` >>
-      `result_equiv_cfg (run_block merged_no_label s1) (run_block merged_bb s2)` by
-        (qspecl_then [`fn`, `a`, `b`, `s2.vs_current_bb`, `b_lbl`, `s1`, `s2`]
-         mp_tac run_block_merged_to_merged_bb >> simp[Abbr `merged_bb`, Abbr `merged_no_label`]) >>
-      `result_equiv_cfg (case run_block a s1 of OK s' => if s'.vs_halted then Halt s'
-         else run_block b s' | Halt v => Halt v | Revert v => Revert v | Error e => Error e)
-         (run_block merged_no_label s1)` by
-        (qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac
-         scfgMergeRunBlockTheory.run_block_merge_blocks_equiv >> simp[Abbr `merged_no_label`]) >>
-      Cases_on `run_block merged_no_label s1` >> gvs[result_equiv_cfg_def] >>
-      Cases_on `run_block a s1` >> gvs[result_equiv_cfg_def]
-      >- (Cases_on `v''.vs_halted` >> gvs[result_equiv_cfg_def] >>
-          Cases_on `run_block b v''` >> gvs[result_equiv_cfg_def] >>
-          sg `v''.vs_current_bb = b_lbl` >- (
-            `MEM a fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
-            drule_all scfgMergeRunBlockTheory.run_block_ok_successor >> strip_tac >>
-            `block_successors a = [b_lbl]` by
-              metis_tac[scfgMergeHelpersTheory.block_last_jmp_to_successors] >> gvs[]) >>
-          `v''.vs_inst_idx = 0` by metis_tac[scfgEquivTheory.run_block_ok_inst_idx] >>
-          qexists_tac `2` >> simp[Once run_function_def, terminates_def] >>
-          simp[Once run_function_def, terminates_def] >>
-          simp[Once run_function_def, SimpLHS] >> simp[Once run_function_def, SimpLHS] >>
-          simp[Once run_function_def, SimpRHS] >>
-          simp[result_equiv_cfg_def] >> irule state_equiv_cfg_trans >>
-          qexists_tac `v'` >> simp[])
-      >- (qexists_tac `1` >> simp[Once run_function_def, terminates_def] >>
-          simp[Once run_function_def, SimpLHS] >> simp[Once run_function_def, SimpRHS] >>
-          simp[result_equiv_cfg_def] >> irule state_equiv_cfg_trans >>
-          qexists_tac `v'` >> simp[])))
+  REVERSE (Cases_on `s1.vs_current_bb = a_lbl`)
   >- ( (* not at merge point *)
     qpat_x_assum `terminates _` mp_tac >> simp[Once run_function_def] >>
     Cases_on `lookup_block s1.vs_current_bb fn.fn_blocks`
-    >- ( (* NONE - block not found: merged also has NONE, so Error doesn't terminate *)
-      sg `lookup_block s2.vs_current_bb (merge_blocks fn a_lbl b_lbl).fn_blocks = NONE`
+    >- ( (* NONE - block not found *)
+      REVERSE (sg `lookup_block s2.vs_current_bb (merge_blocks fn a_lbl b_lbl).fn_blocks = NONE`
       >- (simp[merge_blocks_def, replace_label_fn_def] >>
           irule lookup_block_replace_label_block_none >>
           irule lookup_block_replace_block_none >>
           irule lookup_block_remove_block_none >> gvs[])
-      >- (simp[] >> simp[terminates_def]))
+      >- (simp[] >> simp[terminates_def])))
     >- (
       `lookup_block s2.vs_current_bb (merge_blocks fn a_lbl b_lbl).fn_blocks =
        SOME (replace_label_block b_lbl a_lbl x)` by
@@ -1252,7 +1138,29 @@ Proof
           qexists_tac `1` >> simp[Once run_function_def, terminates_def] >>
           simp[Once run_function_def, SimpLHS] >>
           simp[Once run_function_def, SimpRHS] >> simp[result_equiv_cfg_def])
-        >- cheat) (* not halted - IH + structural helper *)
+        >- ( (* not halted - use IH *)
+          qspecl_then [`fn`, `a_lbl`, `b_lbl`, `a`, `b`, `x`, `s1`, `s2`, `v'`, `v`]
+            mp_tac ih_conditions_other_block_structural >>
+          impl_tac >- gvs[state_equiv_cfg_def] >> strip_tac >> gvs[] >>
+          first_x_assum (qspec_then `n` mp_tac) >> simp[] >>
+          disch_then (qspecl_then [`fn`, `a_lbl`, `b_lbl`, `a`, `b`, `v'`, `v`] mp_tac) >>
+          impl_tac >- gvs[state_equiv_cfg_def] >>
+          strip_tac >> qexists_tac `SUC fuel'` >>
+          simp[Once run_function_def, terminates_def] >>
+          simp[Once run_function_def] >>
+          `~v'.vs_halted` by gvs[state_equiv_cfg_def] >> gvs[] >>
+          `run_function fuel' fn v' = (case fuel' of 0 => Error "out of fuel"
+            | SUC fuel'' => case lookup_block v.vs_current_bb fn.fn_blocks of
+                NONE => Error "block not found"
+              | SOME bb => case run_block bb v' of
+                  OK s' => if s'.vs_halted then Halt s' else run_function fuel'' fn s'
+                | Halt v5 => Halt v5 | Revert v6 => Revert v6 | Error v7 => Error v7)`
+            by simp[Once run_function_def] >> gvs[] >>
+          `run_function (SUC n) (merge_blocks fn a_lbl b_lbl) s2 =
+           run_function n (merge_blocks fn a_lbl b_lbl) v` by
+            (simp[Once run_function_def]) >>
+          `run_function (SUC fuel') fn s1 = run_function fuel' fn v'` by
+            simp[Once run_function_def] >> gvs[]))
       >- ( (* Halt case *)
         Cases_on `run_block x s1` >> gvs[result_equiv_cfg_def] >>
         qexists_tac `1` >> simp[Once run_function_def, terminates_def] >>
@@ -1263,6 +1171,17 @@ Proof
         qexists_tac `1` >> simp[Once run_function_def, terminates_def] >>
         simp[Once run_function_def, SimpLHS] >>
         simp[Once run_function_def, SimpRHS] >> simp[result_equiv_cfg_def])))
+  >- ( (* At merge point *)
+    qpat_x_assum `terminates _` mp_tac >> simp[Once run_function_def] >>
+    `s2.vs_current_bb = a_lbl` by gvs[] >>
+    qabbrev_tac `merged_bb = replace_label_block b_lbl a_lbl (a with
+      bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)` >>
+    `lookup_block s2.vs_current_bb (merge_blocks fn a_lbl b_lbl).fn_blocks =
+      SOME merged_bb` by (simp[Abbr `merged_bb`] >>
+        irule lookup_block_merge_blocks_a >> gvs[]) >> simp[] >>
+    strip_tac >> Cases_on `run_block merged_bb s2` >> gvs[terminates_def]
+    (* OK, Halt, Revert cases - need to relate merged_bb execution to a;b *)
+    >- cheat >- cheat >- cheat)
 QED
 
 
