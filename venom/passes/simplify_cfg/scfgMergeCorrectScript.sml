@@ -1030,7 +1030,6 @@ Theorem run_function_merge_blocks_equiv_bwd:
             result_equiv_cfg (run_function fuel' fn s1)
                              (run_function fuel (merge_blocks fn a_lbl b_lbl) s2)
 Proof
-  (* Partial proof with cheats for complex subcases *)
   completeInduct_on `fuel` >> rpt strip_tac >>
   Cases_on `fuel` >- gvs[run_function_def, terminates_def] >>
   Cases_on `s1.vs_current_bb = a_lbl`
@@ -1058,17 +1057,52 @@ Proof
         `result_equiv_cfg (case run_block a s1 of OK s' => if s'.vs_halted then Halt s'
            else run_block b s' | Halt v => Halt v | Revert v => Revert v | Error e => Error e)
            (run_block merged_no_label s1)` by
-          (qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac run_block_merge_blocks_equiv >>
-           simp[Abbr `merged_no_label`]) >>
+          (qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac
+           scfgMergeRunBlockTheory.run_block_merge_blocks_equiv >> simp[Abbr `merged_no_label`]) >>
         Cases_on `run_block merged_no_label s1` >> gvs[result_equiv_cfg_def] >>
         Cases_on `run_block a s1` >> gvs[result_equiv_cfg_def] >>
         Cases_on `v''.vs_halted` >> gvs[result_equiv_cfg_def] >>
         Cases_on `run_block b v''` >> gvs[result_equiv_cfg_def] >>
-        cheat) (* TODO: construct fuel witness for original *)
-      >- cheat) (* TODO: OK + not halted, needs IH *)
-    >- cheat (* TODO: Halt case *)
-    >- cheat) (* TODO: Revert case *)
-  >- cheat (* TODO: not at merge point *)
+        `v'³'.vs_halted` by gvs[state_equiv_cfg_def] >>
+        sg `v''.vs_current_bb = b_lbl`
+        >- (`MEM a fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
+            drule_all scfgMergeRunBlockTheory.run_block_ok_successor >> strip_tac >>
+            `block_successors a = [b_lbl]` by
+              metis_tac[scfgMergeHelpersTheory.block_last_jmp_to_successors] >> gvs[])
+        >- (`v''.vs_inst_idx = 0` by metis_tac[scfgEquivTheory.run_block_ok_inst_idx] >>
+            qexists_tac `2` >> simp[Once run_function_def] >>
+            simp[Once run_function_def, terminates_def] >>
+            simp[Once run_function_def] >> simp[Once run_function_def] >>
+            simp[Once run_function_def] >> simp[result_equiv_cfg_def] >>
+            irule state_equiv_cfg_trans >> qexists_tac `v'` >> simp[]))
+      >- cheat) (* OK + not halted, needs IH *)
+    >- ( (* Halt case *)
+      `block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
+        irule lookup_block_MEM >> metis_tac[]) >>
+      qabbrev_tac `merged_no_label = a with bb_instructions :=
+        FRONT a.bb_instructions ++ b.bb_instructions` >>
+      `result_equiv_cfg (run_block merged_no_label s1) (run_block merged_bb s2)` by
+        (qspecl_then [`fn`, `a`, `b`, `s2.vs_current_bb`, `b_lbl`, `s1`, `s2`]
+         mp_tac run_block_merged_to_merged_bb >> simp[Abbr `merged_bb`, Abbr `merged_no_label`]) >>
+      `result_equiv_cfg (case run_block a s1 of OK s' => if s'.vs_halted then Halt s'
+         else run_block b s' | Halt v => Halt v | Revert v => Revert v | Error e => Error e)
+         (run_block merged_no_label s1)` by
+        (qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac
+         scfgMergeRunBlockTheory.run_block_merge_blocks_equiv >> simp[Abbr `merged_no_label`]) >>
+      Cases_on `run_block merged_no_label s1` >> gvs[result_equiv_cfg_def] >>
+      Cases_on `run_block a s1` >> gvs[result_equiv_cfg_def]
+      >- (Cases_on `v''.vs_halted` >> gvs[result_equiv_cfg_def]
+          >- (qexists_tac `1` >> simp[Once run_function_def, terminates_def] >>
+              simp[Once run_function_def] >> simp[Once run_function_def] >>
+              simp[result_equiv_cfg_def] >> irule state_equiv_cfg_trans >>
+              qexists_tac `v'` >> simp[])
+          >- cheat) (* run_block b v'' = Halt case *)
+      >- (qexists_tac `1` >> simp[Once run_function_def, terminates_def] >>
+          simp[SimpLHS, Once run_function_def] >> simp[SimpRHS, Once run_function_def] >>
+          simp[result_equiv_cfg_def] >> irule state_equiv_cfg_trans >>
+          qexists_tac `v'` >> simp[]))
+    >- cheat) (* Revert case *)
+  >- cheat (* not at merge point *)
 QED
 
 
