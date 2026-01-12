@@ -1526,13 +1526,29 @@ Proof
           CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_function_def])) >>
           simp[] >>
           drule_all lookup_block_merge_jump_a >> strip_tac >> gvs[] >>
-          cheat) (* at merge point - needs run_block_merge_jump_equiv *)
-      >- (Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
-          >- (simp[] >> simp[Once run_function_def] >>
+          `block_terminator_last a` by (
+            gvs[cfg_wf_def] >> first_x_assum (qspec_then `a` mp_tac) >>
+            impl_tac >- metis_tac[lookup_block_MEM] >> simp[]) >>
+          Cases_on `run_block a s`
+          >- (qspecl_then [`a`, `b`, `b_lbl`, `c_lbl`, `s`] mp_tac
+                scfgMergeRunBlockTheory.run_block_merge_jump_equiv >>
+              impl_tac >- simp[] >> simp[] >> strip_tac >> cheat)
+          >- (simp[] >>
+              qspecl_then [`a`, `b`, `b_lbl`, `c_lbl`, `s`] mp_tac
+                scfgMergeRunBlockTheory.run_block_merge_jump_equiv >>
+              impl_tac >- simp[] >> simp[] >> strip_tac >>
+              gvs[result_equiv_cfg_def, AllCaseEqs()] >> cheat)
+          >- (simp[] >> cheat)
+          >- (simp[] >> cheat))
+      >- (CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_function_def])) >> simp[] >>
+          Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
+          >- (simp[] >>
               sg `lookup_block s.vs_current_bb (merge_jump fn a_lbl b_lbl).fn_blocks = NONE`
               >- (irule lookup_block_merge_jump_none >> simp[])
-              >- (gvs[] >> simp[result_equiv_cfg_def]))
-          >- (simp[] >> cheat))) (* other block with SOME - needs run_block equiv *)
+              >- gvs[result_equiv_cfg_def])
+          >- (simp[] >>
+              drule_all lookup_block_merge_jump_other >> strip_tac >> gvs[] >>
+              cheat)))
 QED
 
 (* Backward direction helper: if merged terminates, original terminates with 2*fuel *)
