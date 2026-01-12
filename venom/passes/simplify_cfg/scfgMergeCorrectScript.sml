@@ -462,7 +462,23 @@ Proof
       qabbrev_tac `merged_no_label = a with bb_instructions :=
         FRONT a.bb_instructions ++ b.bb_instructions` >>
       Cases_on `run_block a s1` >> simp[]
-      >- (Cases_on `v.vs_halted` >> gvs[] >> cheat) (* OK case - needs IH *)
+      >- ( (* OK case *)
+        Cases_on `v.vs_halted` >> gvs[]
+        >- ( (* OK + halted: use merge block equivalences *)
+          `block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
+            irule lookup_block_MEM >> metis_tac[]) >>
+          qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac run_block_merge_blocks_equiv >>
+          simp[Abbr`merged_no_label`] >> strip_tac >>
+          qspecl_then [`fn`, `a`, `b`, `s1.vs_current_bb`, `b_lbl`, `s1`, `s2`]
+            mp_tac run_block_merged_to_merged_bb >> simp[Abbr`merged_bb`] >> strip_tac >>
+          `result_equiv_cfg (Halt v) (run_block (replace_label_block b_lbl s1.vs_current_bb
+            (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)) s2)` by
+            (irule result_equiv_cfg_trans >> qexists_tac `run_block (a with bb_instructions :=
+            FRONT a.bb_instructions ++ b.bb_instructions) s1` >> simp[]) >>
+          Cases_on `run_block (replace_label_block b_lbl s1.vs_current_bb (a with bb_instructions :=
+            FRONT a.bb_instructions ++ b.bb_instructions)) s2` >> gvs[result_equiv_cfg_def])
+        >- ( (* OK + not halted: needs IH application with fuel adjustment *)
+          cheat))
       >- ( (* Halt case *)
         `block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
           irule lookup_block_MEM >> metis_tac[]) >>
