@@ -3,6 +3,8 @@ name: Vyper-HOL Theories Build
 on:
   workflow_dispatch:
   push:
+    branches:
+    - main
     paths:
     - '**'
   pull_request:
@@ -14,3 +16,26 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-hol
       - run: Holmake
+  vyper-tests:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-hol
+      - name: Fetch Vyper test exports
+        id: exports
+        shell: bash
+        run: |
+          git clone --depth 1 https://github.com/vyperlang/vyperlang-tests tests/vyper-test-exports
+          if [ -f tests/vyper-test-exports/functional/codegen/test_interfaces.json ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Run exported Vyper tests
+        if: steps.exports.outputs.available == 'true'
+        working-directory: tests
+        run: Holmake --qof
+      - name: Skip message
+        if: steps.exports.outputs.available != 'true'
+        run: echo "vyperlang-tests is missing exported fixtures; skipping Vyper test suite."
