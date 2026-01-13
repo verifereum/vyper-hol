@@ -892,11 +892,7 @@ Theorem pred_labels_merge_blocks_other:
     lbl <> a /\ lbl <> b /\ ~MEM b (pred_labels fn lbl) ==>
     pred_labels (merge_blocks fn a b) lbl = pred_labels fn lbl
 Proof
-  rpt strip_tac >>
-  gvs[scfgTransformTheory.merge_blocks_cond_def] >>
-  simp[scfgTransformTheory.merge_blocks_def] >>
-  qabbrev_tac `merged = a' with bb_instructions := FRONT a'.bb_instructions ++ b'.bb_instructions` >>
-  simp[MEM_pred_labels_replace_label_fn] >>
+  (* TODO: Complete proof - see SCRATCH for working version *)
   cheat
 QED
 
