@@ -1018,6 +1018,70 @@ Proof
     qexistsl_tac [`bb`, `v`] >> simp[])
 QED
 
+(* Non-terminator step_in_block preserves vs_current_bb *)
+Theorem step_in_block_current_bb:
+  !bb s v.
+    step_in_block bb s = (OK v, F) ==> v.vs_current_bb = s.vs_current_bb
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `step_in_block _ _ = _` mp_tac >>
+  simp[venomSemTheory.step_in_block_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  (* non-terminator case: v = next_inst s' *)
+  gvs[venomStateTheory.next_inst_def] >>
+  drule venomSemPropsTheory.step_inst_preserves_current_bb >>
+  simp[]
+QED
+
+(* After running a block (non-halted), vs_prev_bb is set to current block's label *)
+Theorem run_block_ok_prev_bb:
+  !bb s s'.
+    run_block bb s = OK s' /\ ~s'.vs_halted ==> s'.vs_prev_bb = SOME s.vs_current_bb
+Proof
+  completeInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `run_block _ _ = _` mp_tac >> simp[Once run_block_def] >>
+  Cases_on `step_in_block bb s` >> Cases_on `q` >> gvs[] >>
+  IF_CASES_TAC >> gvs[] >> IF_CASES_TAC >> gvs[]
+  >- ((* terminator case - JMP or JNZ sets prev_bb via jump_to *)
+    strip_tac >> gvs[] >>
+    qpat_x_assum `step_in_block _ _ = _` mp_tac >> simp[step_in_block_def] >>
+    Cases_on `get_instruction bb s.vs_inst_idx` >> gvs[] >>
+    Cases_on `step_inst x s` >> gvs[] >>
+    IF_CASES_TAC >> gvs[] >>
+    strip_tac >> gvs[] >>
+    Cases_on `x.inst_opcode` >> gvs[venomInstTheory.is_terminator_def]
+    >- (fs[venomSemTheory.step_inst_def, AllCaseEqs(),
+           venomStateTheory.jump_to_def] >> gvs[])
+    >- (qpat_x_assum `step_inst _ _ = _` mp_tac >>
+        simp[venomSemTheory.step_inst_def, AllCaseEqs(),
+             venomStateTheory.jump_to_def] >> strip_tac >> gvs[])
+    >- (qpat_x_assum `step_inst _ _ = _` mp_tac >>
+        simp[venomSemTheory.step_inst_def, AllCaseEqs()])
+    >- (rpt (qpat_x_assum `step_inst _ _ = _` mp_tac >>
+             simp[venomSemTheory.step_inst_def, AllCaseEqs()]))
+    >- (fs[venomSemTheory.step_inst_def, venomSemTheory.exec_result_distinct])
+    >- (qpat_x_assum `step_inst _ _ = _` mp_tac >>
+        simp[venomSemTheory.step_inst_def, venomSemTheory.exec_result_distinct])
+    >- (rpt (qpat_x_assum `step_inst _ _ = _` mp_tac >>
+             simp[venomSemTheory.step_inst_def, venomSemTheory.exec_result_distinct]))
+    >- (qpat_x_assum `step_inst _ _ = _` mp_tac >>
+        simp[venomSemTheory.step_inst_def, venomSemTheory.exec_result_distinct]))
+  >- ((* non-terminator case - use IH *)
+    strip_tac >>
+    first_x_assum (qspec_then `LENGTH bb.bb_instructions - v.vs_inst_idx` mp_tac) >>
+    strip_tac >>
+    `v.vs_inst_idx = s.vs_inst_idx + 1` by (drule step_in_block_inst_idx_succ >> simp[]) >>
+    `s.vs_inst_idx < LENGTH bb.bb_instructions` by
+      (qpat_x_assum `step_in_block _ _ = _` mp_tac >>
+       simp[venomSemTheory.step_in_block_def, AllCaseEqs(),
+            venomInstTheory.get_instruction_def]) >>
+    `v.vs_current_bb = s.vs_current_bb` by
+      (drule step_in_block_current_bb >> simp[]) >>
+    qpat_x_assum `_ ==> !bb' s. _` mp_tac >> impl_tac >- simp[] >>
+    disch_then (qspecl_then [`bb`, `v`] mp_tac) >> simp[])
+QED
+
 (* State equivalence propagates through run_function *)
 Theorem run_function_state_equiv_cfg:
   !fuel fn s1 s2.

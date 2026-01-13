@@ -1725,11 +1725,14 @@ Theorem run_block_merge_jump_other_equiv:
     MEM b_lbl (block_successors a) /\
     pred_labels fn b_lbl = [a_lbl] /\
     jump_only_target b = SOME c_lbl /\
+    (* PHI semantics: we never arrive from b_lbl in merged function *)
+    s.vs_prev_bb <> SOME b_lbl /\
     (* IR invariant for block x *)
     (!inst. MEM inst x.bb_instructions /\ inst.inst_opcode <> PHI /\
             ~is_terminator inst.inst_opcode ==> !lbl. ~MEM (Label lbl) inst.inst_operands) ==>
     ?c'. lookup_block s.vs_current_bb (merge_jump fn a_lbl b_lbl).fn_blocks = SOME c' /\
-         result_equiv_cfg (run_block x s) (run_block c' s)
+         result_equiv_cfg (run_block x s) (run_block c' s) /\
+         (x.bb_label <> c_lbl ==> c' = x)
 Proof
   rpt strip_tac >> drule_all lookup_block_merge_jump_other >> strip_tac >>
   qexists_tac `c'` >> simp[] >>
@@ -1739,7 +1742,9 @@ Proof
     (irule scfgMergeHelpersTheory.block_no_successor_label_when_not_predecessor >>
      qexists_tac `fn` >> qexists_tac `a_lbl` >> simp[]) >>
   Cases_on `x.bb_label = c_lbl`
-  >- cheat (* x is successor of b - needs semantic equiv for replace_phi_in_block *)
+  >- ((* x.bb_label = c_lbl: PHI sem equiv with s.vs_prev_bb <> SOME b_lbl *)
+      (* Uses run_block_replace_phi_in_block_prev_not_old from scfgMergeRunBlockTheory *)
+      cheat)
   >- (`c' = x` suffices_by simp[result_equiv_cfg_refl] >>
       `block_successors b = [c_lbl]` by
         metis_tac[scfgMergeHelpersTheory.jump_only_target_block_successors] >>
@@ -1892,12 +1897,18 @@ Proof
                 `MEM x fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
                 strip_tac >> metis_tac[]) >>
               strip_tac >> gvs[] >>
-              Cases_on `run_block x s` >> Cases_on `run_block c' s` >>
-              gvs[result_equiv_cfg_def] >>
-              (* OK/OK case - need state equiv preservation for IH *)
-              `v.vs_halted = v'.vs_halted` by gvs[scfgDefsTheory.state_equiv_cfg_def] >>
-              Cases_on `v.vs_halted` >> gvs[result_equiv_cfg_def] >>
-              cheat (* needs state_equiv preservation through run_function *))))
+              `x.bb_label = s.vs_current_bb` by metis_tac[lookup_block_label] >>
+              Cases_on `x.bb_label = c_lbl`
+              >- cheat (* x.bb_label = c_lbl: PHI case *)
+              >- ( (* x.bb_label <> c_lbl: c' = x, IH applies *)
+                gvs[] >>
+                Cases_on `run_block c' s` >> gvs[result_equiv_cfg_def] >>
+                Cases_on `v.vs_halted` >> gvs[result_equiv_cfg_def] >>
+                first_x_assum irule >> simp[] >>
+                metis_tac[scfgEquivTheory.run_block_ok_inst_idx,
+                          lookup_block_MEM,
+                          scfgMergeHelpersTheory.block_no_successor_label_when_not_predecessor,
+                          scfgMergeRunBlockTheory.run_block_ok_successor]))))
 QED
 
 (* Backward direction helper: if merged terminates, original terminates with 2*fuel *)

@@ -1991,4 +1991,18 @@ Proof
   gvs[]
 QED
 
+(* ===== replace_phi_in_block when prev_bb <> SOME old ===== *)
+
+(* When we didn't arrive from old, replacing old with new in PHIs doesn't change semantics *)
+Theorem run_block_replace_phi_in_block_prev_not_old:
+  !bb s old new preds.
+    s.vs_prev_bb <> SOME old /\
+    phi_block_wf preds bb /\
+    ~MEM old (block_successors bb) ==>
+    result_equiv_cfg (run_block bb s)
+                     (run_block (replace_phi_in_block old new bb) s)
+Proof
+  cheat
+QED
+
 val _ = export_theory();
