@@ -1517,9 +1517,25 @@ Theorem run_block_merge_jump_a_bridge:
       result_equiv_cfg (run_block a_simple s) (run_block a_actual s)
 Proof
   rpt strip_tac >> simp[] >>
+  qabbrev_tac `a_simple = a with bb_instructions :=
+    update_last_inst (replace_label_inst b_lbl c_lbl) a.bb_instructions` >>
   drule_all lookup_block_merge_jump_a >> strip_tac >>
   qexists_tac `a'` >> simp[] >>
-  (* First establish b_lbl is not a predecessor of a *)
+  `a' = a_simple` suffices_by simp[result_equiv_cfg_refl] >>
+  (* Derive b_lbl <> c_lbl from CFG structure *)
+  sg `b_lbl <> c_lbl`
+  >- (CCONTR_TAC >> gvs[] >>
+      `MEM b_lbl (pred_labels fn b_lbl)` suffices_by gvs[] >>
+      `MEM b fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+      `b.bb_label = b_lbl` by metis_tac[lookup_block_label] >>
+      `MEM b_lbl (block_successors b)` by
+        gvs[jump_only_target_def, AllCaseEqs(), block_successors_def,
+            block_last_inst_def, get_successors_def, is_terminator_def,
+            get_label_def] >>
+      qpat_x_assum `pred_labels fn b_lbl = _` kall_tac >>
+      simp[pred_labels_def, listTheory.MEM_MAP, listTheory.MEM_FILTER] >>
+      qexists_tac `b` >> simp[]) >>
+  (* Establish b_lbl is not a predecessor of a *)
   sg `~MEM b_lbl (pred_labels fn a_lbl)`
   >- (simp[pred_labels_def, listTheory.MEM_FILTER, listTheory.MEM_MAP] >>
       rpt strip_tac >> gvs[] >>
@@ -1531,66 +1547,57 @@ Proof
             block_last_inst_def, get_successors_def, is_terminator_def,
             get_label_def] >>
       gvs[]) >>
-  qabbrev_tac `a_simple = a with bb_instructions := update_last_inst
-        (replace_label_inst b_lbl c_lbl) a.bb_instructions` >>
-  (* Key insight: a' = a_simple because transforms are identity *)
-  sg `a' = a_simple`
-  >- (`phi_block_wf (pred_labels fn a_lbl) a` by
-        (gvs[phi_fn_wf_def] >>
-         `MEM a fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
-         metis_tac[lookup_block_label]) >>
-      `replace_phi_in_block b_lbl a_lbl a = a` by
-        (irule replace_phi_in_block_not_pred >>
-         qexists_tac `pred_labels fn a_lbl` >> simp[]) >>
-      (* Derive b_lbl <> c_lbl from CFG structure *)
-      sg `b_lbl <> c_lbl`
-      >- (CCONTR_TAC >> gvs[] >>
-          `MEM b_lbl (pred_labels fn b_lbl)` suffices_by gvs[] >>
-          `MEM b fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
-          `b.bb_label = b_lbl` by metis_tac[lookup_block_label] >>
-          `MEM b_lbl (block_successors b)` by
-            gvs[jump_only_target_def, AllCaseEqs(), block_successors_def,
-                block_last_inst_def, get_successors_def, is_terminator_def,
-                get_label_def] >>
-          qpat_x_assum `pred_labels fn b_lbl = _` kall_tac >>
-          simp[pred_labels_def, listTheory.MEM_MAP, listTheory.MEM_FILTER] >>
-          qexists_tac `b` >> simp[]) >>
-      (* PHI replacement on a_simple is identity using helper lemma *)
-      sg `replace_phi_in_block b_lbl a_lbl a_simple = a_simple`
-      >- (simp[Abbr `a_simple`] >>
-          irule scfgMergeHelpersTheory.replace_phi_in_block_update_last_inst >>
-          simp[scfgDefsTheory.replace_label_inst_def] >>
-          conj_tac >- (drule scfgMergeRunBlockTheory.block_successors_mem_is_terminator >>
-                       strip_tac >> gvs[block_last_inst_def, AllCaseEqs()] >>
-                       simp[listTheory.LAST_EL]) >>
-          conj_tac >- metis_tac[scfgMergeRunBlockTheory.block_successors_implies_nonempty] >>
-          conj_tac >- (simp[listTheory.MEM_MAP] >> rpt strip_tac >>
-                       Cases_on `y` >> gvs[scfgDefsTheory.replace_label_operand_def] >>
-                       rename1 `Label lbl` >> Cases_on `lbl = b_lbl` >> gvs[]) >>
-          qexists_tac `pred_labels fn a_lbl` >> simp[]) >>
-      (* Label replacement is identity: use replace_label_block_update_last_inst_identity *)
-      `replace_label_block b_lbl c_lbl a_simple = a_simple` by
-        cheat (* TODO: use replace_label_block_update_last_inst_identity *) >>
-      qpat_x_assum `lookup_block a_lbl (merge_jump _ _ _).fn_blocks = SOME a'` mp_tac >>
-      simp[merge_jump_def, replace_label_fn_def] >> strip_tac >>
-      `a_simple.bb_label = a_lbl` by
-        (simp[Abbr `a_simple`] >> metis_tac[lookup_block_label]) >>
-      `lookup_block a_lbl (replace_block a_simple fn.fn_blocks) = SOME a_simple` by
-        (qpat_x_assum `lookup_block a_lbl fn.fn_blocks = _`
-          (mp_tac o MATCH_MP lookup_block_replace_block) >> simp[]) >>
-      `lookup_block a_lbl (remove_block b_lbl (replace_block a_simple fn.fn_blocks)) =
-       SOME a_simple` by (irule lookup_block_remove_block >> simp[]) >>
-      qabbrev_tac `blocks1 = remove_block b_lbl (replace_block a_simple fn.fn_blocks)` >>
-      `lookup_block a_lbl (MAP (\bb. if MEM bb.bb_label (block_successors a_simple)
-            then replace_phi_in_block b_lbl a_lbl bb else bb) blocks1) = SOME a_simple` by
-        cheat (* TODO: use lookup_block_MAP_conditional_identity *) >>
-      qabbrev_tac `blocks2 = MAP (\bb. if MEM bb.bb_label (block_successors a_simple)
-            then replace_phi_in_block b_lbl a_lbl bb else bb) blocks1` >>
-      `lookup_block a_lbl (MAP (replace_label_block b_lbl c_lbl) blocks2) =
-       SOME (replace_label_block b_lbl c_lbl a_simple)` by
-        (irule lookup_block_replace_label_block >> simp[]) >>
-      gvs[]) >>
-  gvs[result_equiv_cfg_refl]
+  `phi_block_wf (pred_labels fn a_lbl) a` by
+    (gvs[phi_fn_wf_def] >>
+     `MEM a fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+     metis_tac[lookup_block_label]) >>
+  `block_terminator_last a` by
+    (gvs[cfg_wf_def] >> first_x_assum irule >>
+     irule lookup_block_MEM >> metis_tac[]) >>
+  (* PHI replacement on a_simple is identity using helper lemma *)
+  sg `replace_phi_in_block b_lbl a_lbl a_simple = a_simple`
+  >- (simp[Abbr `a_simple`] >>
+      irule scfgMergeHelpersTheory.replace_phi_in_block_update_last_inst >>
+      simp[scfgDefsTheory.replace_label_inst_def] >>
+      conj_tac >- (drule scfgMergeRunBlockTheory.block_successors_mem_is_terminator >>
+                   strip_tac >> gvs[block_last_inst_def, AllCaseEqs()] >>
+                   simp[listTheory.LAST_EL]) >>
+      conj_tac >- metis_tac[scfgMergeRunBlockTheory.block_successors_implies_nonempty] >>
+      conj_tac >- (simp[listTheory.MEM_MAP] >> rpt strip_tac >>
+                   Cases_on `y` >> gvs[scfgDefsTheory.replace_label_operand_def] >>
+                   rename1 `Label lbl` >> Cases_on `lbl = b_lbl` >> gvs[]) >>
+      qexists_tac `pred_labels fn a_lbl` >> simp[]) >>
+  `a.bb_instructions <> []` by
+    metis_tac[scfgMergeRunBlockTheory.block_successors_implies_nonempty] >>
+  (* Label replacement is identity via replace_label_block_update_last_inst_identity *)
+  qspecl_then [`a`, `b_lbl`, `c_lbl`, `pred_labels fn a_lbl`] mp_tac
+    scfgMergeHelpersTheory.replace_label_block_update_last_inst_identity >>
+  impl_tac >- simp[] >> simp[Abbr `a_simple`] >> strip_tac >>
+  qabbrev_tac `a_simple = a with bb_instructions :=
+    update_last_inst (replace_label_inst b_lbl c_lbl) a.bb_instructions` >>
+  qpat_x_assum `lookup_block a_lbl (merge_jump _ _ _).fn_blocks = SOME a'` mp_tac >>
+  simp[merge_jump_def, replace_label_fn_def] >> strip_tac >>
+  `a_simple.bb_label = a_lbl` by
+    (simp[Abbr `a_simple`] >> metis_tac[lookup_block_label]) >>
+  `lookup_block a_lbl (replace_block a_simple fn.fn_blocks) = SOME a_simple` by
+    (qpat_x_assum `lookup_block a_lbl fn.fn_blocks = _`
+      (mp_tac o MATCH_MP lookup_block_replace_block) >> simp[]) >>
+  `lookup_block a_lbl (remove_block b_lbl (replace_block a_simple fn.fn_blocks)) =
+   SOME a_simple` by (irule lookup_block_remove_block >> simp[]) >>
+  qabbrev_tac `blocks1 = remove_block b_lbl (replace_block a_simple fn.fn_blocks)` >>
+  (* Use lookup_block_MAP_conditional_identity for the conditional PHI MAP *)
+  sg `lookup_block a_lbl (MAP (\bb. if MEM bb.bb_label (block_successors a_simple)
+        then replace_phi_in_block b_lbl a_lbl bb else bb) blocks1) = SOME a_simple`
+  >- (qspecl_then [`a_lbl`, `blocks1`, `a_simple`,
+        `replace_phi_in_block b_lbl a_lbl`, `\l. MEM l (block_successors a_simple)`]
+        mp_tac scfgMergeHelpersTheory.lookup_block_MAP_conditional_identity >>
+      simp[] >> impl_tac >- simp[scfgDefsTheory.replace_phi_in_block_def] >> simp[]) >>
+  qabbrev_tac `blocks2 = MAP (\bb. if MEM bb.bb_label (block_successors a_simple)
+        then replace_phi_in_block b_lbl a_lbl bb else bb) blocks1` >>
+  `lookup_block a_lbl (MAP (replace_label_block b_lbl c_lbl) blocks2) =
+   SOME (replace_label_block b_lbl c_lbl a_simple)` by
+    (irule lookup_block_replace_label_block >> simp[]) >>
+  gvs[]
 QED
 
 (* Forward direction helper: result_equiv_cfg for merge_jump *)
