@@ -1325,13 +1325,29 @@ Proof
               simp[result_equiv_cfg_def, state_equiv_cfg_def]) >>
             `block_terminator_last b` by (gvs[cfg_wf_def] >> first_x_assum irule >>
               irule lookup_block_MEM >> metis_tac[]) >>
-            `~MEM b_lbl (block_successors b)` by cheat >>
+            `~MEM b_lbl (block_successors b)` by (
+              irule block_no_self_successor >> conj_tac
+              >- (qpat_x_assum `lookup_block b_lbl _ = SOME b`
+                    (fn th => irule lookup_block_label >> assume_tac th) >>
+                  gvs[] >> qexists_tac `fn.fn_blocks` >> gvs[])
+              >- (qexistsl_tac [`fn`, `s1.vs_current_bb`] >> gvs[] >>
+                  irule lookup_block_MEM >> metis_tac[])) >>
             `v''.vs_current_bb = v'''.vs_current_bb` by
               (qspecl_then [`a`, `b`, `s1`, `v'`, `v''`, `v'''`, `b_lbl`] mp_tac
                 run_block_merge_blocks_current_bb >> simp[Abbr `merged_no_label`]) >>
-            `a.bb_instructions <> []` by cheat >>
-            `b.bb_instructions <> []` by cheat >>
-            `v'''.vs_current_bb = v.vs_current_bb` by cheat >>
+            `a.bb_instructions <> []` by (
+              spose_not_then assume_tac >> gvs[] >>
+              qpat_x_assum `run_block a s1 = OK v'` mp_tac >>
+              simp[Once run_block_def, step_in_block_def, get_instruction_def]) >>
+            `b.bb_instructions <> []` by (
+              spose_not_then assume_tac >> gvs[] >>
+              qpat_x_assum `run_block b v' = OK v''` mp_tac >>
+              simp[Once run_block_def, step_in_block_def, get_instruction_def]) >>
+            `v'''.vs_current_bb = v.vs_current_bb` by (
+              qspecl_then [`a`, `b`, `s1`, `s2`, `b_lbl`, `s1.vs_current_bb`, `v'''`, `v`]
+                mp_tac run_block_merged_no_phi_current_bb >>
+              simp[Abbr `merged_no_label`, Abbr `merged_bb`] >>
+              impl_tac >- cheat >> simp[]) >>
             `v''.vs_current_bb = v.vs_current_bb` by gvs[] >>
             `v''.vs_current_bb <> b_lbl` by cheat >>
             `v''.vs_prev_bb = SOME b_lbl` by cheat >>
@@ -1341,7 +1357,11 @@ Proof
             impl_tac >- (gvs[] >> rpt conj_tac >> TRY cheat) >>
             strip_tac >> qexists_tac `SUC (SUC fuel')` >>
             simp[Once run_function_def, terminates_def] >>
-            `v'.vs_current_bb = b_lbl` by cheat >>
+            `v'.vs_current_bb = b_lbl` by (
+              `MEM a fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
+              drule_all run_block_ok_successor >> strip_tac >>
+              `block_successors a = [b_lbl]` by metis_tac[block_last_jmp_to_successors] >>
+              gvs[]) >>
             `v'.vs_inst_idx = 0` by cheat >>
             simp[Once run_function_def, terminates_def] >>
             simp[Once run_function_def, SimpLHS] >> simp[Once run_function_def, SimpLHS] >>
