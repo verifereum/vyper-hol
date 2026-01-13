@@ -1497,13 +1497,15 @@ QED
 
 (* Bridge lemma: run_block on a_simple ~ run_block on actual block in merged fn.
    For merge_jump, b_lbl is not a predecessor of a (since pred_labels fn b_lbl = [a_lbl]),
-   so PHIs in a don't reference b_lbl, making replace_label_block a semantic no-op. *)
+   so PHIs in a don't reference b_lbl, making replace_label_block a semantic no-op.
+   Requires a_lbl <> c_lbl to ensure b doesn't create a back-edge to a. *)
 Theorem run_block_merge_jump_a_bridge:
   !fn a_lbl b_lbl a b c_lbl s.
     cfg_wf fn /\ phi_fn_wf fn /\
     lookup_block a_lbl fn.fn_blocks = SOME a /\
     lookup_block b_lbl fn.fn_blocks = SOME b /\
     a_lbl <> b_lbl /\
+    a_lbl <> c_lbl /\
     MEM b_lbl (block_successors a) /\
     pred_labels fn b_lbl = [a_lbl] /\
     jump_only_target b = SOME c_lbl /\
@@ -1517,18 +1519,26 @@ Proof
   rpt strip_tac >> simp[] >>
   drule_all lookup_block_merge_jump_a >> strip_tac >>
   qexists_tac `a'` >> simp[] >>
-  qabbrev_tac `a_simple = a with bb_instructions := update_last_inst
-    (replace_label_inst b_lbl c_lbl) a.bb_instructions` >>
-  (* Key insight: a' = a_simple because:
-     1. b_lbl is not a predecessor of a (pred_labels fn b_lbl = [a_lbl] means only a jumps to b)
-     2. So replace_phi_in_block b_lbl a_lbl is identity on a_simple
-     3. And replace_label_block b_lbl c_lbl is identity on a_simple (PHIs don't ref b_lbl,
-        terminator already changed from b_lbl to c_lbl) *)
-  `a' = a_simple` by (
-    qpat_x_assum `lookup_block a_lbl (merge_jump _ _ _).fn_blocks = SOME a'` mp_tac >>
-    simp[merge_jump_def, replace_label_fn_def, Abbr `a_simple`] >>
-    cheat (* TODO: show structural equality via transforms being identity *)) >>
-  gvs[result_equiv_cfg_refl]
+  (* First establish b_lbl is not a predecessor of a *)
+  sg `~MEM b_lbl (pred_labels fn a_lbl)`
+  >- (simp[pred_labels_def, listTheory.MEM_FILTER, listTheory.MEM_MAP] >>
+      rpt strip_tac >> gvs[] >>
+      Cases_on `MEM bb fn.fn_blocks` >> simp[] >>
+      `bb = b` by (irule lookup_block_unique >> gvs[cfg_wf_def] >> metis_tac[]) >>
+      gvs[] >>
+      `block_successors b = [c_lbl]` by
+        gvs[jump_only_target_def, AllCaseEqs(), block_successors_def,
+            block_last_inst_def, get_successors_def, is_terminator_def,
+            get_label_def] >>
+      gvs[])
+  >- (qabbrev_tac `a_simple = a with bb_instructions := update_last_inst
+        (replace_label_inst b_lbl c_lbl) a.bb_instructions` >>
+      (* Key insight: a' = a_simple because transforms are identity *)
+      sg `a' = a_simple`
+      >- (qpat_x_assum `lookup_block a_lbl (merge_jump _ _ _).fn_blocks = SOME a'` mp_tac >>
+          simp[merge_jump_def, replace_label_fn_def] >> strip_tac >>
+          cheat (* TODO: trace through transforms showing they are identity *))
+      >- gvs[result_equiv_cfg_refl])
 QED
 
 (* Forward direction helper: result_equiv_cfg for merge_jump *)
@@ -1538,6 +1548,7 @@ Theorem run_function_merge_jump_equiv_fwd:
     lookup_block a_lbl fn.fn_blocks = SOME a /\
     lookup_block b_lbl fn.fn_blocks = SOME b /\
     b_lbl <> entry_label fn /\
+    a_lbl <> c_lbl /\
     MEM b_lbl (block_successors a) /\
     ~MEM c_lbl (block_successors a) /\
     pred_labels fn b_lbl = [a_lbl] /\
@@ -1621,6 +1632,7 @@ Theorem run_function_merge_jump_equiv_bwd:
     lookup_block a_lbl fn.fn_blocks = SOME a /\
     lookup_block b_lbl fn.fn_blocks = SOME b /\
     b_lbl <> entry_label fn /\
+    a_lbl <> c_lbl /\
     MEM b_lbl (block_successors a) /\
     ~MEM c_lbl (block_successors a) /\
     pred_labels fn b_lbl = [a_lbl] /\

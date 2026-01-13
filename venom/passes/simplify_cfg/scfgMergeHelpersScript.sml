@@ -625,4 +625,43 @@ Proof
   simp[update_last_inst_last]
 QED
 
+(* ===== Identity Lemmas for Label Replacement ===== *)
+
+(* When old label is not a predecessor, replace_label_in_phi is identity on PHI instructions *)
+Theorem replace_label_in_phi_not_pred:
+  !inst old new preds.
+    phi_inst_wf preds inst /\ ~MEM old preds ==>
+    replace_label_in_phi old new inst = inst
+Proof
+  rpt strip_tac >> Cases_on `inst.inst_opcode = PHI`
+  >- (simp[scfgDefsTheory.replace_label_in_phi_def] >>
+      `~MEM (Label old) inst.inst_operands` by (
+        gvs[phi_inst_wf_def] >>
+        drule_all scfgPhiLemmasTheory.phi_ops_all_preds_no_label >> simp[]) >>
+      `MAP (replace_label_operand old new) inst.inst_operands = inst.inst_operands` by (
+        irule listTheory.LIST_EQ >>
+        simp[listTheory.EL_MAP, listTheory.LENGTH_MAP] >> rpt strip_tac >>
+        Cases_on `EL x inst.inst_operands` >> simp[replace_label_operand_def] >>
+        CCONTR_TAC >> gvs[] >> gvs[listTheory.MEM_EL] >> metis_tac[]) >>
+      simp[venomInstTheory.instruction_component_equality])
+  >- simp[scfgDefsTheory.replace_label_in_phi_def]
+QED
+
+(* When old label is not a predecessor, replace_phi_in_block is identity *)
+Theorem replace_phi_in_block_not_pred:
+  !bb old new preds.
+    phi_block_wf preds bb /\ ~MEM old preds ==>
+    replace_phi_in_block old new bb = bb
+Proof
+  rpt strip_tac >> simp[scfgDefsTheory.replace_phi_in_block_def] >>
+  `MAP (replace_label_in_phi old new) bb.bb_instructions = bb.bb_instructions` by (
+    irule listTheory.LIST_EQ >>
+    simp[listTheory.EL_MAP, listTheory.LENGTH_MAP] >> rpt strip_tac >>
+    irule replace_label_in_phi_not_pred >>
+    qexists_tac `preds` >> simp[] >>
+    gvs[phi_block_wf_def] >> first_x_assum irule >>
+    simp[listTheory.MEM_EL] >> metis_tac[]) >>
+  simp[venomInstTheory.basic_block_component_equality]
+QED
+
 val _ = export_theory();
