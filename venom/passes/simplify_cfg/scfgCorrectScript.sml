@@ -826,6 +826,27 @@ Proof
   gvs[scfgDefsTheory.update_last_inst_def]
 QED
 
+(* Helper: block with successor has terminator at LAST *)
+Theorem block_successors_LAST_terminator:
+  !bb lbl.
+    MEM lbl (block_successors bb) ==>
+    bb.bb_instructions <> [] /\ is_terminator (LAST bb.bb_instructions).inst_opcode
+Proof
+  rpt strip_tac >>
+  drule scfgMergeRunBlockTheory.block_successors_mem_is_terminator >> strip_tac >>
+  gvs[scfgDefsTheory.block_last_inst_def, listTheory.NULL_EQ]
+QED
+
+(* Helper: extract block_successors fact from merge_jump_cond *)
+Theorem merge_jump_cond_block_successors:
+  !fn a_lbl b_lbl a.
+    merge_jump_cond fn a_lbl b_lbl /\
+    lookup_block a_lbl fn.fn_blocks = SOME a ==>
+    MEM b_lbl (block_successors a)
+Proof
+  rw[scfgTransformTheory.merge_jump_cond_def] >> gvs[]
+QED
+
 (* Helper: phi_block_wf preserved by replace_label_block when pred list transforms *)
 Theorem phi_block_wf_replace_label_block:
   !old new preds bb.
@@ -1563,9 +1584,8 @@ Proof
           fn.fn_blocks)` by (drule MEM_remove_block >> simp[]) \\
         `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by gvs[cfg_wf_def] \\
         drule_all MEM_replace_block >> strip_tac >> gvs[]
-        >- ( (* bb' = x_modified *)
-          `MEM x fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) \\
-          cheat (* TODO: trace y through update_last_inst to x.bb_instructions *))
+        >- ( (* bb' = x_modified - trace y through update_last_inst *)
+          cheat)
         >- ( (* bb' in fn.fn_blocks *)
           first_x_assum drule_all >> simp[] >> qexists_tac `lbl'` >> simp[]))
       >- ( (* bb' not in block_successors *)
@@ -1576,8 +1596,8 @@ Proof
           fn.fn_blocks)` by (drule MEM_remove_block >> simp[]) \\
         `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by gvs[cfg_wf_def] \\
         drule_all MEM_replace_block >> strip_tac >> gvs[]
-        >- ( (* bb' = x_modified *)
-          cheat (* TODO: trace y through update_last_inst to x.bb_instructions *))
+        >- ( (* bb' = x_modified - trace y through update_last_inst *)
+          cheat)
         >- ( (* bb' in fn.fn_blocks *)
           first_x_assum drule_all >> simp[] >> qexists_tac `lbl'` >> simp[]))))
 QED
