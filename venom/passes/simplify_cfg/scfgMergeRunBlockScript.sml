@@ -1993,6 +1993,14 @@ QED
 
 (* ===== replace_phi_in_block when prev_bb <> SOME old ===== *)
 
+(* For non-PHI instructions, replace_label_in_phi is identity *)
+Theorem replace_label_in_phi_non_phi:
+  !inst old new. inst.inst_opcode <> PHI ==> replace_label_in_phi old new inst = inst
+Proof
+  rpt strip_tac >> simp[scfgDefsTheory.replace_label_in_phi_def]
+QED
+
+
 (* When we didn't arrive from old, replacing old with new in PHIs doesn't change semantics *)
 Theorem run_block_replace_phi_in_block_prev_not_old:
   !bb s old new preds.

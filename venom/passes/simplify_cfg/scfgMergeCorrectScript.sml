@@ -1844,7 +1844,7 @@ Proof
           (* IR invariant for block a - derivable from function-wide invariant *)
           `!inst. MEM inst a.bb_instructions /\ inst.inst_opcode <> PHI /\
                   ~is_terminator inst.inst_opcode ==> !lbl. ~MEM (Label lbl) inst.inst_operands`
-            by (strip_tac >> metis_tac[]) >>
+            by (rpt strip_tac >> first_x_assum (qspecl_then [`a`, `inst`] mp_tac) >> simp[] >> qexists_tac `lbl` >> simp[]) >>
           Cases_on `run_block a s`
           >- (qspecl_then [`a`, `b`, `b_lbl`, `c_lbl`, `s`] mp_tac
                 scfgMergeRunBlockTheory.run_block_merge_jump_equiv >>
@@ -1895,7 +1895,7 @@ Proof
                 mp_tac run_block_merge_jump_other_equiv >>
               impl_tac >- (simp[] >>
                 `MEM x fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
-                strip_tac >> metis_tac[]) >>
+                gvs[] >> cheat) >>
               strip_tac >> gvs[] >>
               `x.bb_label = s.vs_current_bb` by metis_tac[lookup_block_label] >>
               Cases_on `x.bb_label = c_lbl`
@@ -1961,7 +1961,7 @@ Proof
               mp_tac run_block_merge_jump_other_equiv >>
             impl_tac >- (simp[] >>
               `MEM x fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
-              strip_tac >> metis_tac[]) >>
+              gvs[] >> cheat) >>
             strip_tac >>
             Cases_on `run_block x s` >> Cases_on `run_block c' s` >>
             gvs[result_equiv_cfg_def, terminates_def] >>
