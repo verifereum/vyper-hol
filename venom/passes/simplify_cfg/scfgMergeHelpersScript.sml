@@ -774,7 +774,20 @@ Proof
   (* Strategy: case split on position in update_last_inst
      - FRONT: PHIs use phi_ops_all_preds_no_label; non-PHI non-term have no Labels
      - LAST: replace_label_inst_not_mem_old since old <> new *)
-  cheat
+  rpt strip_tac >> irule replace_label_block_identity_no_old_label >> simp[] >>
+  rpt strip_tac >>
+  Cases_on `MEM inst (FRONT bb.bb_instructions)`
+  >- (gvs[phi_block_wf_def] >>
+      `MEM inst bb.bb_instructions` by metis_tac[rich_listTheory.MEM_FRONT_NOT_NIL] >>
+      cheat)
+  >- (sg `inst = replace_label_inst old new (LAST bb.bb_instructions)`
+      >- (qpat_x_assum `MEM inst (update_last_inst _ _)` mp_tac >>
+          qpat_x_assum `~MEM inst (FRONT _)` mp_tac >>
+          qpat_x_assum `_ <> []` mp_tac >>
+          Q.SPEC_TAC (`bb.bb_instructions`, `l`) >> Induct >>
+          simp[update_last_inst_def] >>
+          Cases_on `l` >> simp[update_last_inst_def, listTheory.FRONT_DEF])
+      >- (gvs[] >> metis_tac[replace_label_inst_not_mem_old]))
 QED
 
 val _ = export_theory();
