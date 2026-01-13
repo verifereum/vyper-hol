@@ -1681,6 +1681,11 @@ Proof
               >- gvs[result_equiv_cfg_def])
           >- (simp[] >>
               drule_all lookup_block_merge_jump_other >> strip_tac >> gvs[] >>
+              (* For "other block" case: need to relate run_block x s to run_block c' s *)
+              (* Since both run on same state s, we need semantic equivalence of blocks *)
+              (* Case on s.vs_prev_bb to apply appropriate run_block_replace_label lemma *)
+              (* Other block case: need to show result_equiv_cfg (run_block x s) (run_block c' s)
+                 and then apply IH since both states should have same current_bb after *)
               cheat)))
 QED
 
