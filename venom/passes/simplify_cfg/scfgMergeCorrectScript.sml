@@ -1343,11 +1343,46 @@ Proof
               spose_not_then assume_tac >> gvs[] >>
               qpat_x_assum `run_block b v' = OK v''` mp_tac >>
               simp[Once run_block_def, step_in_block_def, get_instruction_def]) >>
+            `phi_block_wf (pred_labels fn s1.vs_current_bb) merged_no_label` by (
+              `MEM a fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+              `a.bb_label = s1.vs_current_bb` by metis_tac[lookup_block_label] >>
+              `phi_block_wf (pred_labels fn a.bb_label) a` by
+                (fs[phi_fn_wf_def] >> first_x_assum irule >> gvs[]) >>
+              simp[Abbr `merged_no_label`] >> irule phi_block_wf_merged >> gvs[]) >>
+            `block_terminator_last merged_no_label` by
+              (simp[Abbr `merged_no_label`] >> irule block_terminator_last_merged >> gvs[]) >>
+            `block_successors merged_no_label = block_successors b` by
+              (simp[Abbr `merged_no_label`] >> irule block_successors_merged >> gvs[]) >>
             `v'''.vs_current_bb = v.vs_current_bb` by (
-              qspecl_then [`a`, `b`, `s1`, `s2`, `b_lbl`, `s1.vs_current_bb`, `v'''`, `v`]
-                mp_tac run_block_merged_no_phi_current_bb >>
-              simp[Abbr `merged_no_label`, Abbr `merged_bb`] >>
-              impl_tac >- cheat >> simp[]) >>
+              Cases_on `s1.vs_prev_bb`
+              >- ( (* NONE case *)
+                `s2.vs_prev_bb = NONE` by gvs[] >>
+                qspecl_then [`merged_no_label`, `s1`, `s2`, `b_lbl`, `s1.vs_current_bb`, `v'''`, `v`]
+                  mp_tac run_block_replace_label_current_bb_prev_none >>
+                impl_tac >- (gvs[] >> simp[Abbr `merged_bb`]) >> simp[])
+              >- ( (* SOME x case *)
+                gvs[] >> Cases_on `x = b_lbl`
+                >- ( (* x = b_lbl *)
+                  gvs[] >>
+                  `~MEM s1.vs_current_bb (pred_labels fn s1.vs_current_bb)` by
+                    (qspecl_then [`fn`, `a`, `s1.vs_current_bb`, `b_lbl`, `s1.vs_current_bb`]
+                       mp_tac pred_labels_no_jmp_other >> impl_tac >- gvs[] >> simp[]) >>
+                  qspecl_then [`merged_no_label`, `s1`, `s2`, `b_lbl`, `s1.vs_current_bb`,
+                    `v'''`, `v`, `pred_labels fn s1.vs_current_bb`, `fn`]
+                    mp_tac run_block_replace_label_current_bb_diff_states >>
+                  impl_tac >- (gvs[Abbr `merged_bb`, Abbr `merged_no_label`] >>
+                    `a.bb_label = s1.vs_current_bb` by metis_tac[lookup_block_label] >> gvs[]) >>
+                  simp[])
+                >- ( (* x <> b_lbl *)
+                  `s1.vs_prev_bb = s2.vs_prev_bb` by gvs[] >>
+                  qspecl_then [`merged_no_label`, `s1`, `s2`, `b_lbl`, `s1.vs_current_bb`,
+                    `v'''`, `v`, `x`, `pred_labels fn s1.vs_current_bb`]
+                    mp_tac run_block_replace_label_current_bb_same_prev >>
+                  impl_tac >- (
+                    qspecl_then [`fn`, `a`, `s1.vs_current_bb`, `b_lbl`]
+                      mp_tac no_self_loop_from_jmp_to >> impl_tac >- gvs[] >> strip_tac >>
+                    `x <> s1.vs_current_bb` by metis_tac[] >> gvs[Abbr `merged_bb`]) >>
+                  simp[]))) >>
             `v''.vs_current_bb = v.vs_current_bb` by gvs[] >>
             `MEM b fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
             `MEM v''.vs_current_bb (block_successors b)` by
