@@ -1568,9 +1568,9 @@ Proof
                        Cases_on `y` >> gvs[scfgDefsTheory.replace_label_operand_def] >>
                        rename1 `Label lbl` >> Cases_on `lbl = b_lbl` >> gvs[]) >>
           qexists_tac `pred_labels fn a_lbl` >> simp[]) >>
-      (* Label replacement is identity: PHIs don't have b_lbl, terminator has c_lbl *)
+      (* Label replacement is identity: use replace_label_block_update_last_inst_identity *)
       `replace_label_block b_lbl c_lbl a_simple = a_simple` by
-        cheat (* TODO: b_lbl not in PHIs, terminator already has c_lbl *) >>
+        cheat (* TODO: use replace_label_block_update_last_inst_identity *) >>
       qpat_x_assum `lookup_block a_lbl (merge_jump _ _ _).fn_blocks = SOME a'` mp_tac >>
       simp[merge_jump_def, replace_label_fn_def] >> strip_tac >>
       `a_simple.bb_label = a_lbl` by
@@ -1583,7 +1583,7 @@ Proof
       qabbrev_tac `blocks1 = remove_block b_lbl (replace_block a_simple fn.fn_blocks)` >>
       `lookup_block a_lbl (MAP (\bb. if MEM bb.bb_label (block_successors a_simple)
             then replace_phi_in_block b_lbl a_lbl bb else bb) blocks1) = SOME a_simple` by
-        cheat (* TODO: PHI replacement identity regardless of conditional *) >>
+        cheat (* TODO: use lookup_block_MAP_conditional_identity *) >>
       qabbrev_tac `blocks2 = MAP (\bb. if MEM bb.bb_label (block_successors a_simple)
             then replace_phi_in_block b_lbl a_lbl bb else bb) blocks1` >>
       `lookup_block a_lbl (MAP (replace_label_block b_lbl c_lbl) blocks2) =

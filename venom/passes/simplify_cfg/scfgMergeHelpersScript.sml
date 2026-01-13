@@ -728,4 +728,53 @@ Proof
   Cases_on `P h.bb_label` >> gvs[]
 QED
 
+(* Helper: replace_label_inst is identity when old label not in operands *)
+Theorem replace_label_inst_id:
+  !old new inst.
+    ~MEM (Label old) inst.inst_operands ==>
+    replace_label_inst old new inst = inst
+Proof
+  rpt strip_tac >>
+  simp[scfgDefsTheory.replace_label_inst_def, instruction_component_equality] >>
+  irule listTheory.LIST_EQ >> simp[listTheory.LENGTH_MAP] >> rpt strip_tac >>
+  simp[listTheory.EL_MAP] >>
+  Cases_on `EL x inst.inst_operands` >> simp[scfgDefsTheory.replace_label_operand_def] >>
+  CCONTR_TAC >> gvs[] >> gvs[listTheory.MEM_EL] >> metis_tac[]
+QED
+
+(* Helper: replace_label_block is identity when no instruction has old label *)
+Theorem replace_label_block_identity_no_old_label:
+  !old new bb.
+    (!inst. MEM inst bb.bb_instructions ==> ~MEM (Label old) inst.inst_operands) ==>
+    replace_label_block old new bb = bb
+Proof
+  rpt strip_tac >>
+  simp[scfgDefsTheory.replace_label_block_def, basic_block_component_equality] >>
+  irule listTheory.LIST_EQ >> simp[listTheory.LENGTH_MAP] >> rpt strip_tac >>
+  simp[listTheory.EL_MAP] >>
+  irule replace_label_inst_id >>
+  first_x_assum irule >> simp[listTheory.MEM_EL] >> qexists_tac `x` >> simp[]
+QED
+
+(* Helper: replace_label_block is identity after update_last_inst when:
+   - PHIs don't have old label (phi_block_wf + ~MEM old preds)
+   - old <> new (so terminator doesn't have old after replacement)
+   - block has terminator at last position *)
+Theorem replace_label_block_update_last_inst_identity:
+  !bb old new preds.
+    phi_block_wf preds bb /\ ~MEM old preds /\ old <> new /\
+    bb.bb_instructions <> [] /\
+    is_terminator (LAST bb.bb_instructions).inst_opcode ==>
+    replace_label_block old new
+      (bb with bb_instructions :=
+        update_last_inst (replace_label_inst old new) bb.bb_instructions) =
+    (bb with bb_instructions :=
+        update_last_inst (replace_label_inst old new) bb.bb_instructions)
+Proof
+  (* Strategy: case split on position in update_last_inst
+     - FRONT: PHIs use phi_ops_all_preds_no_label; non-PHI non-term have no Labels
+     - LAST: replace_label_inst_not_mem_old since old <> new *)
+  cheat
+QED
+
 val _ = export_theory();
