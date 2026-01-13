@@ -1414,6 +1414,37 @@ Proof
                                scfgDefsTheory.replace_label_inst_def]))))
 QED
 
+(* Helper: IR invariant preserved by simplify_cfg_step *)
+Theorem ir_invariant_simplify_cfg_step:
+  !fn fn'.
+    simplify_cfg_step fn fn' /\
+    (!bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+               inst.inst_opcode <> PHI /\ ~is_terminator inst.inst_opcode ==>
+               !lbl. ~MEM (Label lbl) inst.inst_operands) ==>
+    (!bb inst. MEM bb fn'.fn_blocks /\ MEM inst bb.bb_instructions /\
+               inst.inst_opcode <> PHI /\ ~is_terminator inst.inst_opcode ==>
+               !lbl. ~MEM (Label lbl) inst.inst_operands)
+Proof
+  rpt gen_tac >> strip_tac >> gvs[simplify_cfg_step_def]
+  >- ( (* remove_unreachable_blocks *)
+    rpt strip_tac >> gvs[scfgTransformTheory.remove_unreachable_blocks_def] \\
+    REVERSE (Cases_on `fn.fn_blocks = []` >> gvs[]) \\
+    gvs[MEM_MAP, MEM_FILTER] \\
+    gvs[scfgDefsTheory.simplify_phi_block_def, MEM_MAP] \\
+    Cases_on `y.inst_opcode = PHI`
+    >- cheat (* PHI case: simplify_phi_inst changes operands but output has no Labels *)
+    >- (gvs[scfgPhiLemmasTheory.simplify_phi_inst_no_phi] \\
+        first_x_assum drule_all >> simp[] \\ metis_tac[]))
+  >- ( (* merge_blocks *)
+    rpt strip_tac >> gvs[scfgTransformTheory.merge_blocks_def,
+                         scfgTransformTheory.merge_blocks_cond_def] \\
+    gvs[scfgDefsTheory.replace_label_fn_def, MEM_MAP] \\
+    gvs[scfgDefsTheory.replace_label_block_def, MEM_MAP] \\
+    gvs[replace_label_inst_opcode] \\ cheat)
+  >- ( (* merge_jump *)
+    cheat)
+QED
+
 (* Main theorem: RTC of simplify_cfg_step preserves equivalence *)
 Theorem simplify_cfg_correct:
   !fn fn' s.
@@ -1436,8 +1467,20 @@ Proof
   >- (simp[scfgDefsTheory.run_function_equiv_cfg_def,
           scfgEquivTheory.result_equiv_cfg_refl] >>
       metis_tac[scfgEquivTheory.result_equiv_cfg_refl])
-  (* Step case: transitivity - needs IR invariant preservation *)
-  >- cheat
+  (* Step case: transitivity *)
+  >- (
+    sg `run_function_equiv_cfg fn fn' s`
+    >- (irule simplify_cfg_step_correct >> simp[] >> first_x_assum ACCEPT_TAC)
+    >- (
+      irule scfgEquivTheory.run_function_equiv_cfg_trans >>
+      qexists_tac `fn'` >> simp[] >>
+      first_x_assum irule >>
+      drule_all wf_simplify_cfg_step >> strip_tac >>
+      `entry_label fn' = entry_label fn` by
+        (irule entry_label_simplify_cfg_step >> simp[]) >>
+      simp[] >>
+      qspecl_then [`fn`, `fn'`] mp_tac ir_invariant_simplify_cfg_step >>
+      impl_tac >> simp[] >> first_x_assum ACCEPT_TAC))
 QED
 
 val _ = export_theory();
