@@ -1626,12 +1626,13 @@ Proof
   `~MEM b_lbl (block_successors x)` by
     (irule scfgMergeHelpersTheory.block_no_successor_label_when_not_predecessor >>
      qexists_tac `fn` >> qexists_tac `a_lbl` >> simp[]) >>
-  (* Key insight: c' = x because all transforms are identity for x.
-     Since pred_labels fn b_lbl = [a_lbl], b_lbl is not in any operand of x.
-     Need to show: replace_phi_in_block and replace_label_block are identity on x *)
-  sg `c' = x`
-  >- cheat (* Need: ~MEM b_lbl (pred_labels fn x.bb_label) and no Label b_lbl in x *)
-  >- gvs[result_equiv_cfg_refl]
+  Cases_on `x.bb_label = c_lbl`
+  >- cheat (* x is successor of b - needs semantic equiv lemma for replace_phi_in_block *)
+  >- (sg `c' = x`
+      >- (sg `~MEM b_lbl (pred_labels fn x.bb_label)`
+          >- cheat (* ~MEM b_lbl (pred_labels fn x.bb_label) because b only jumps to c_lbl *)
+          >- cheat) (* c' = x needs IR invariant: no Label b_lbl in non-PHI non-term *)
+      >- gvs[result_equiv_cfg_refl])
 QED
 
 (* Forward direction helper: result_equiv_cfg for merge_jump *)
