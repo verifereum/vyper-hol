@@ -824,7 +824,6 @@ Theorem MEM_update_last_inst_non_terminator:
 Proof
   ho_match_mp_tac scfgDefsTheory.update_last_inst_ind >> rpt strip_tac >>
   gvs[scfgDefsTheory.update_last_inst_def]
-  >- (first_x_assum drule_all >> strip_tac >> gvs[])
 QED
 
 (* Helper: phi_block_wf preserved by replace_label_block when pred list transforms *)
