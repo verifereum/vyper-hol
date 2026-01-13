@@ -25,7 +25,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+      - name: Get Vyper revision
+        id: vyper-rev
+        shell: bash
+        run: |
+          echo "sha=$(git ls-remote https://github.com/vyperlang/vyper.git HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
+      - name: Cache exported Vyper tests
+        id: cache-vyper-tests
+        uses: actions/cache@v3
+        with:
+          path: tests/vyper-test-exports
+          key: vyper-tests-${{ runner.os }}-${{ steps.vyper-rev.outputs.sha }}
       - name: Export Vyper tests
+        if: steps.cache-vyper-tests.outputs.cache-hit != 'true'
         shell: bash
         run: |
           git clone --depth 1 https://github.com/vyperlang/vyper.git vyper-src
