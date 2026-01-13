@@ -125,4 +125,4 @@ To run the Vyper test suite on our definitional interpreter, follow this approac
 3. Set the `VFMDIR` environment variable to a path of a clone of the Verifereum repository (tracking `main`).
 4. `cd tests` and then run `Holmake`.
 
-CI uses the same layout and will pull fixtures from `vyperlang-tests` when they are available.
+CI uses the same layout and currently exports fixtures from a Vyper checkout during the workflow run.
