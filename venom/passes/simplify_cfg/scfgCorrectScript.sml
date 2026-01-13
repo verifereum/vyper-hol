@@ -907,8 +907,18 @@ Theorem FILTER_replace_block_remove_unchanged:
     FILTER P (replace_block new_bb (remove_block removed_lbl blocks)) =
     FILTER P blocks
 Proof
-  (* TODO: debug drule_all ALL_DISTINCT_bb_labels_EQ pattern *)
-  cheat
+  rpt strip_tac >>
+  sg `FILTER P (remove_block removed_lbl blocks) = FILTER P blocks`
+  >- (irule FILTER_remove_block_unchanged >> rpt strip_tac >>
+      `bb.bb_label = removed_bb.bb_label` by simp[] >>
+      drule_all ALL_DISTINCT_bb_labels_EQ >> simp[] >> strip_tac >> gvs[])
+  >- (irule EQ_TRANS >> qexists_tac `FILTER P (remove_block removed_lbl blocks)` >>
+      conj_tac
+      >- (irule FILTER_replace_block_unchanged >> simp[] >> rpt strip_tac >>
+          drule MEM_remove_block >> strip_tac >>
+          `bb.bb_label = old_bb.bb_label` by simp[] >>
+          drule_all ALL_DISTINCT_bb_labels_EQ >> strip_tac >> gvs[])
+      >- simp[])
 QED
 
 (* Helper: pred_labels preserved for non-merged blocks when b not a predecessor *)
