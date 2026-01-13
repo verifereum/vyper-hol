@@ -1623,7 +1623,9 @@ Proof
   qexists_tac `c'` >> simp[] >>
   (* Key insight: c' = x because all transforms are identity for x.
      Since pred_labels fn b_lbl = [a_lbl], b_lbl is not in any operand of x. *)
-  cheat
+  sg `c' = x`
+  >- cheat (* Need: transforms are identity on x (no Label b_lbl in x) *)
+  >- gvs[result_equiv_cfg_refl]
 QED
 
 (* Forward direction helper: result_equiv_cfg for merge_jump *)

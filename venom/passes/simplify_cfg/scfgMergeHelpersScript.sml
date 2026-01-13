@@ -71,6 +71,21 @@ Proof
   drule_all pred_labels_only_jmp_target >> simp[]
 QED
 
+(* Key insight: pred_labels fn lbl = [unique_pred] means only one block jumps to lbl.
+   If bb.bb_label <> unique_pred, then bb is not that block, so lbl not in bb's successors. *)
+Theorem block_no_successor_label_when_not_predecessor:
+  !fn bb lbl unique_pred.
+    cfg_wf fn /\
+    MEM bb fn.fn_blocks /\
+    pred_labels fn lbl = [unique_pred] /\
+    bb.bb_label <> unique_pred ==>
+    ~MEM lbl (block_successors bb)
+Proof
+  rpt strip_tac >> CCONTR_TAC >> gvs[pred_labels_def] >>
+  `MEM bb [bb']` by (qpat_x_assum `FILTER _ _ = _` (SUBST1_TAC o SYM) >>
+    simp[listTheory.MEM_FILTER]) >> gvs[]
+QED
+
 (* Lookup in remove_block *)
 Theorem lookup_block_remove_block:
   !lbl b_lbl blocks bb.
