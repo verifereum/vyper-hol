@@ -562,7 +562,8 @@ Proof
   rpt gen_tac >> strip_tac >> gvs[simplify_cfg_step_def]
   >- (irule remove_unreachable_blocks_correct >> simp[])
   >- (irule scfgMergeCorrectTheory.merge_blocks_correct >> simp[])
-  >- (irule scfgMergeCorrectTheory.merge_jump_correct >> simp[] >> cheat)
+  >- (irule scfgMergeCorrectTheory.merge_jump_correct >> simp[] >>
+      first_x_assum ACCEPT_TAC)
 QED
 
 (* Helper: entry_label preserved by simplify_cfg_step *)
@@ -1429,9 +1430,14 @@ Theorem simplify_cfg_correct:
                !lbl. ~MEM (Label lbl) inst.inst_operands) ==>
     run_function_equiv_cfg fn fn' s
 Proof
-  rpt strip_tac >> gvs[scfgTransformTheory.simplify_cfg_def] >>
-  (* IR invariant needs to be preserved through RTC - cheat for now *)
-  cheat
+  simp[scfgTransformTheory.simplify_cfg_def] >> gen_tac >>
+  Induct_on `simplify_cfg_step^* fn fn'` >> rpt strip_tac
+  (* Base case: reflexivity *)
+  >- (simp[scfgDefsTheory.run_function_equiv_cfg_def,
+          scfgEquivTheory.result_equiv_cfg_refl] >>
+      metis_tac[scfgEquivTheory.result_equiv_cfg_refl])
+  (* Step case: transitivity - needs IR invariant preservation *)
+  >- cheat
 QED
 
 val _ = export_theory();
