@@ -1754,8 +1754,39 @@ Proof
                     impl_tac >- gvs[cfg_wf_def] >> simp[]) >>
                   gvs[])
               >- simp[])
-          >- cheat) (* c' = x needs IR invariant: no Label b_lbl in non-PHI non-term *)
-      >- gvs[result_equiv_cfg_refl])
+          >- (
+            `phi_block_wf (pred_labels fn x.bb_label) x` by
+              (gvs[scfgDefsTheory.phi_fn_wf_def]) >>
+            `replace_phi_in_block b_lbl a_lbl x = x` by
+              (qspecl_then [`x`, `b_lbl`, `a_lbl`, `pred_labels fn x.bb_label`]
+                mp_tac scfgMergeHelpersTheory.replace_phi_in_block_not_pred >> simp[]) >>
+            sg `!inst. MEM inst x.bb_instructions ==> ~MEM (Label b_lbl) inst.inst_operands`
+            >- (rpt strip_tac >> Cases_on `inst.inst_opcode = PHI`
+                >- (gvs[phi_block_wf_def] >>
+                    first_x_assum (qspec_then `inst` mp_tac) >> simp[] >> strip_tac >>
+                    gvs[phi_inst_wf_def] >>
+                    drule_all scfgPhiLemmasTheory.phi_ops_all_preds_no_label >> simp[])
+                >- (Cases_on `is_terminator inst.inst_opcode`
+                    >- cheat (* terminator: use terminator_inst_block_successors + terminator_no_label_when_not_successor *)
+                    >- (first_x_assum (qspec_then `inst` mp_tac) >> simp[] >>
+                        qexists_tac `b_lbl` >> simp[])))
+            >- (`replace_label_block b_lbl c_lbl x = x` by
+                  (irule scfgMergeHelpersTheory.replace_label_block_identity_no_old_label >> simp[]) >>
+                gvs[scfgTransformTheory.merge_jump_def, AllCaseEqs()] >>
+                qabbrev_tac `a' = a with bb_instructions :=
+                  update_last_inst (replace_label_inst b_lbl c_lbl) a.bb_instructions` >>
+                qabbrev_tac `blocks1 = replace_block a' fn.fn_blocks` >>
+                qabbrev_tac `blocks2 = remove_block b_lbl blocks1` >>
+                qabbrev_tac `blocks3 = MAP (\bb. if MEM bb.bb_label (block_successors a')
+                  then replace_phi_in_block b_lbl a_lbl bb else bb) blocks2` >>
+                cheat))) (* c' = x: need to trace through merge_jump structure *)
+      >- (gvs[] >>
+          simp[scfgDefsTheory.result_equiv_cfg_def, scfgDefsTheory.state_equiv_cfg_def] >>
+          Cases_on `run_block c' s` >>
+          simp[scfgDefsTheory.result_equiv_cfg_def, scfgDefsTheory.state_equiv_cfg_def]
+          >- simp[stateEquivTheory.var_equiv_def]
+          >- rw[stateEquivTheory.var_equiv_def]
+          >- rw[stateEquivTheory.var_equiv_def]))
 QED
 
 (* Forward direction helper: result_equiv_cfg for merge_jump *)

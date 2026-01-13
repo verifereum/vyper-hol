@@ -779,6 +779,19 @@ Proof
   first_x_assum irule >> simp[listTheory.MEM_EL] >> qexists_tac `x` >> simp[]
 QED
 
+(* Helper: terminator instructions don't have Label lbl if lbl not in successors *)
+Theorem terminator_no_label_when_not_successor:
+  !inst lbl.
+    is_terminator inst.inst_opcode /\ ~MEM lbl (get_successors inst) ==>
+    ~MEM (Label lbl) inst.inst_operands
+Proof
+  rpt strip_tac >> CCONTR_TAC >>
+  gvs[venomInstTheory.get_successors_def, listTheory.MEM_MAP, listTheory.MEM_FILTER] >>
+  first_x_assum (qspec_then `SOME lbl` mp_tac) >>
+  simp[venomStateTheory.get_label_def] >>
+  qexists_tac `Label lbl` >> simp[venomStateTheory.get_label_def]
+QED
+
 (* Helper: replace_label_block is identity after update_last_inst when:
    - PHIs don't have old label (phi_block_wf + ~MEM old preds)
    - old <> new (so terminator doesn't have old after replacement)
@@ -828,6 +841,30 @@ Proof
       `x = LENGTH bb.bb_instructions - 1` by gvs[] >>
       simp[GSYM arithmeticTheory.PRE_SUB1, update_last_inst_el_last] >>
       irule replace_label_inst_id >> irule replace_label_inst_not_mem_old >> simp[])
+QED
+
+(* Helper: terminator in block has same successors as block_successors *)
+Theorem terminator_inst_block_successors:
+  !bb inst.
+    block_terminator_last bb /\
+    MEM inst bb.bb_instructions /\
+    is_terminator inst.inst_opcode ==>
+    get_successors inst = block_successors bb
+Proof
+  rpt strip_tac >>
+  gvs[block_terminator_last_def, get_instruction_def] >>
+  `?n. n < LENGTH bb.bb_instructions /\ EL n bb.bb_instructions = inst` by
+    (gvs[listTheory.MEM_EL] >> metis_tac[]) >>
+  `n = LENGTH bb.bb_instructions - 1` by
+    (first_x_assum (qspec_then `n` mp_tac) >> simp[]) >>
+  gvs[scfgDefsTheory.block_successors_def, scfgDefsTheory.block_last_inst_def] >>
+  `bb.bb_instructions <> []` by (Cases_on `bb.bb_instructions` >> gvs[]) >>
+  simp[listTheory.NULL_EQ] >>
+  `LAST bb.bb_instructions = EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions` by
+    simp[listTheory.LAST_EL] >>
+  `PRE (LENGTH bb.bb_instructions) = LENGTH bb.bb_instructions - 1` by
+    (Cases_on `bb.bb_instructions` >> gvs[]) >>
+  gvs[]
 QED
 
 val _ = export_theory();
