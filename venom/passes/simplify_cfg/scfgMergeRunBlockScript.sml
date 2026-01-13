@@ -2000,16 +2000,60 @@ Proof
   rpt strip_tac >> simp[scfgDefsTheory.replace_label_in_phi_def]
 QED
 
+(* step_in_block helper for replace_phi_in_block when prev <> old and prev <> new *)
+Theorem step_in_block_replace_phi_in_block_prev_diff:
+  !bb s old new preds res is_term.
+    step_in_block bb s = (res, is_term) /\
+    s.vs_prev_bb <> SOME old /\
+    s.vs_prev_bb <> SOME new /\
+    phi_block_wf preds bb ==>
+    ?res'. step_in_block (replace_phi_in_block old new bb) s = (res', is_term) /\
+           result_equiv_cfg res res'
+Proof
+  rpt strip_tac >> simp[step_in_block_def, replace_phi_in_block_def] >>
+  qpat_x_assum `step_in_block _ _ = _` mp_tac >> simp[step_in_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> gvs[get_instruction_def]
+  >- simp[result_equiv_cfg_def]
+  >- (
+    qabbrev_tac `inst = EL s.vs_inst_idx bb.bb_instructions` >>
+    `(MAP (replace_label_in_phi old new) bb.bb_instructions)❲s.vs_inst_idx❳ =
+     replace_label_in_phi old new inst` by simp[Abbr `inst`, EL_MAP] >>
+    simp[] >>
+    Cases_on `inst.inst_opcode = PHI`
+    >- ((* PHI case: use resolve_phi_replace_label_other *)
+      REVERSE (simp[replace_label_in_phi_def] >> strip_tac >>
+        qexists_tac `res` >> simp[result_equiv_cfg_refl]) >>
+      simp[step_inst_def, is_terminator_def] >>
+      Cases_on `s.vs_prev_bb` >> gvs[]
+      >- gvs[step_inst_def, is_terminator_def]
+      >- (
+        `MEM inst bb.bb_instructions` by (simp[Abbr `inst`, MEM_EL] >>
+          qexists_tac `s.vs_inst_idx` >> simp[]) >>
+        `phi_inst_wf preds inst` by metis_tac[phi_block_wf_inst] >>
+        gvs[phi_inst_wf_def] >>
+        `resolve_phi x (MAP (replace_label_operand old new) inst.inst_operands) =
+         resolve_phi x inst.inst_operands` by
+          (irule scfgPhiLemmasTheory.resolve_phi_replace_label_other >> simp[]) >>
+        simp[] >> gvs[step_inst_def, is_terminator_def]))
+    >- ((* Non-PHI case: replace_label_in_phi is identity *)
+      simp[replace_label_in_phi_def] >> simp[result_equiv_cfg_refl]))
+QED
 
-(* When we didn't arrive from old, replacing old with new in PHIs doesn't change semantics *)
+(* When we didn't arrive from old OR new, replacing old->new in PHIs doesn't change semantics *)
 Theorem run_block_replace_phi_in_block_prev_not_old:
   !bb s old new preds.
     s.vs_prev_bb <> SOME old /\
+    s.vs_prev_bb <> SOME new /\
     phi_block_wf preds bb /\
     ~MEM old (block_successors bb) ==>
     result_equiv_cfg (run_block bb s)
                      (run_block (replace_phi_in_block old new bb) s)
 Proof
+  recInduct run_block_ind >> rpt strip_tac >>
+  Cases_on `step_in_block bb s` >>
+  rename1 `step_in_block bb s = (res, is_term)` >>
+  once_rewrite_tac[run_block_def] >> gvs[] >>
+  (* Need step_in_block helper for replace_phi_in_block *)
   cheat
 QED
 
