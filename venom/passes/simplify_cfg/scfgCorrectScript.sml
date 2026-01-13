@@ -657,6 +657,22 @@ Proof
   qexists_tac `s` >> simp[]
 QED
 
+(* Helper: non-PHI instructions pass through replace_phi_in_block unchanged *)
+Theorem MEM_replace_phi_in_block_non_phi:
+  !inst bb old new.
+    inst.inst_opcode <> PHI /\
+    MEM inst (replace_phi_in_block old new bb).bb_instructions ==>
+    MEM inst bb.bb_instructions
+Proof
+  rw[scfgDefsTheory.replace_phi_in_block_def, MEM_MAP] >>
+  (* y is original instruction, inst = replace_label_in_phi old new y *)
+  (* replace_label_in_phi preserves opcode, so y.inst_opcode <> PHI *)
+  `y.inst_opcode <> PHI` by
+    (CCONTR_TAC >> gvs[scfgDefsTheory.replace_label_in_phi_def]) >>
+  (* non-PHI instructions pass through unchanged *)
+  gvs[scfgMergeRunBlockTheory.replace_label_in_phi_non_phi]
+QED
+
 (* Helper: non-PHI instructions trivially satisfy phi_inst_wf *)
 Theorem phi_inst_wf_non_phi:
   !preds old new inst.
@@ -795,6 +811,20 @@ Proof
   gvs[update_last_inst_def]
   >- (qexists_tac `inst` >> simp[])
   >- (first_x_assum drule_all >> strip_tac >> qexists_tac `inst''` >> gvs[])
+QED
+
+(* Helper: non-terminator instructions in update_last_inst come from original list
+   when f preserves is_terminator and last instruction is terminator *)
+Theorem MEM_update_last_inst_non_terminator:
+  !f l inst.
+    (!x. is_terminator (f x).inst_opcode = is_terminator x.inst_opcode) /\
+    MEM inst (update_last_inst f l) /\ ~is_terminator inst.inst_opcode /\
+    (l <> [] ==> is_terminator (LAST l).inst_opcode) ==>
+    MEM inst l
+Proof
+  ho_match_mp_tac scfgDefsTheory.update_last_inst_ind >> rpt strip_tac >>
+  gvs[scfgDefsTheory.update_last_inst_def]
+  >- (first_x_assum drule_all >> strip_tac >> gvs[])
 QED
 
 (* Helper: phi_block_wf preserved by replace_label_block when pred list transforms *)
