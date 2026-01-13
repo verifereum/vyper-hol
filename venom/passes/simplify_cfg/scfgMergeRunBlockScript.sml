@@ -2052,9 +2052,25 @@ Proof
   recInduct run_block_ind >> rpt strip_tac >>
   Cases_on `step_in_block bb s` >>
   rename1 `step_in_block bb s = (res, is_term)` >>
+  (* Apply step_in_block helper - need to handle variable naming carefully *)
+  `?res'. step_in_block (replace_phi_in_block old new bb) s = (res', is_term) /\
+          result_equiv_cfg res res'` by (
+    irule step_in_block_replace_phi_in_block_prev_diff >> simp[] >>
+    qexists_tac `preds` >> simp[]) >>
   once_rewrite_tac[run_block_def] >> gvs[] >>
-  (* Need step_in_block helper for replace_phi_in_block *)
-  cheat
+  Cases_on `res` >> Cases_on `res'` >> gvs[result_equiv_cfg_def] >>
+  (* OK case: handle halted and terminator checks *)
+  IF_CASES_TAC >> gvs[result_equiv_cfg_def, state_equiv_cfg_def] >>
+  IF_CASES_TAC >> gvs[result_equiv_cfg_def, state_equiv_cfg_def] >>
+  (* Use transitivity *)
+  irule result_equiv_cfg_trans >>
+  qexists_tac `run_block (replace_phi_in_block old new bb) v` >> conj_tac
+  >- (first_x_assum irule >> simp[] >>
+      `v.vs_prev_bb = s.vs_prev_bb` by metis_tac[venomSemPropsTheory.step_in_block_preserves_prev_bb] >>
+      gvs[] >> qexists_tac `preds` >> simp[])
+  >- (irule scfgEquivTheory.run_block_state_equiv_cfg >> simp[state_equiv_cfg_def] >>
+      conj_tac >- metis_tac[scfgEquivTheory.step_in_block_inst_idx_succ] >>
+      metis_tac[venomSemPropsTheory.step_in_block_preserves_prev_bb])
 QED
 
 val _ = export_theory();

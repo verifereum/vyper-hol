@@ -1725,8 +1725,9 @@ Theorem run_block_merge_jump_other_equiv:
     MEM b_lbl (block_successors a) /\
     pred_labels fn b_lbl = [a_lbl] /\
     jump_only_target b = SOME c_lbl /\
-    (* PHI semantics: we never arrive from b_lbl in merged function *)
+    (* PHI semantics: we never arrive from b_lbl or a_lbl directly at c_lbl *)
     s.vs_prev_bb <> SOME b_lbl /\
+    (s.vs_current_bb = c_lbl ==> s.vs_prev_bb <> SOME a_lbl) /\
     (* IR invariant for block x *)
     (!inst. MEM inst x.bb_instructions /\ inst.inst_opcode <> PHI /\
             ~is_terminator inst.inst_opcode ==> !lbl. ~MEM (Label lbl) inst.inst_operands) ==>
@@ -1742,9 +1743,17 @@ Proof
     (irule scfgMergeHelpersTheory.block_no_successor_label_when_not_predecessor >>
      qexists_tac `fn` >> qexists_tac `a_lbl` >> simp[]) >>
   Cases_on `x.bb_label = c_lbl`
-  >- ((* x.bb_label = c_lbl: PHI sem equiv with s.vs_prev_bb <> SOME b_lbl *)
-      (* Uses run_block_replace_phi_in_block_prev_not_old from scfgMergeRunBlockTheory *)
-      cheat)
+  >- ((* x.bb_label = c_lbl: PHI sem equiv *)
+      `phi_block_wf (pred_labels fn x.bb_label) x` by gvs[scfgDefsTheory.phi_fn_wf_def] >>
+      `s.vs_prev_bb <> SOME a_lbl` by gvs[] >>
+      `result_equiv_cfg (run_block x s) (run_block (replace_phi_in_block b_lbl a_lbl x) s)` by
+        (irule scfgMergeRunBlockTheory.run_block_replace_phi_in_block_prev_not_old >>
+         simp[] >> qexists_tac `pred_labels fn x.bb_label` >> simp[]) >>
+      simp[] >>
+      (* Show c' = replace_phi_in_block b_lbl a_lbl x (replace_label_block is identity) *)
+      `c' = replace_phi_in_block b_lbl a_lbl x` suffices_by (strip_tac >> gvs[]) >>
+      cheat (* TODO: prove replace_label_block b_lbl c_lbl is identity after replace_phi_in_block *)
+      )
   >- (`c' = x` suffices_by simp[result_equiv_cfg_refl] >>
       `block_successors b = [c_lbl]` by
         metis_tac[scfgMergeHelpersTheory.jump_only_target_block_successors] >>
