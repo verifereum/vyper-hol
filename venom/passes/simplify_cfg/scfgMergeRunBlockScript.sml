@@ -1960,4 +1960,35 @@ Proof
                   gvs[result_equiv_cfg_def]))))
 QED
 
+(* Helper for IH applications in merge proofs: if block successors are disjoint from a list,
+   the resulting current_bb is not in that list *)
+Theorem run_block_ok_vs_current_bb_not_in_list:
+  !fn bb s s' lbls.
+    cfg_wf fn /\ MEM bb fn.fn_blocks /\
+    run_block bb s = OK s' /\ ~s'.vs_halted /\
+    DISJOINT (set (block_successors bb)) (set lbls) ==>
+    ~MEM s'.vs_current_bb lbls
+Proof
+  rpt strip_tac >>
+  drule_all run_block_ok_successor >> strip_tac >>
+  fs[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION, pred_setTheory.IN_INTER] >>
+  first_x_assum (qspec_then `s'.vs_current_bb` mp_tac) >> simp[]
+QED
+
+(* If a block has exactly one predecessor different from itself, it doesn't jump to itself *)
+Theorem block_no_self_successor:
+  !fn bb lbl p.
+    MEM bb fn.fn_blocks /\
+    bb.bb_label = lbl /\
+    pred_labels fn lbl = [p] /\
+    p <> lbl ==>
+    ~MEM lbl (block_successors bb)
+Proof
+  rpt strip_tac >>
+  gvs[scfgDefsTheory.pred_labels_def, listTheory.MEM_MAP, listTheory.MEM_FILTER] >>
+  `MEM bb (FILTER (\bb'. MEM bb.bb_label (block_successors bb')) fn.fn_blocks)` by
+    simp[listTheory.MEM_FILTER] >>
+  gvs[]
+QED
+
 val _ = export_theory();
