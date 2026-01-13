@@ -39,7 +39,7 @@ jobs:
         shell: bash
         run: |
           git clone --depth 1 https://github.com/vyperlang/vyper.git vyper-src
-          pip install ./vyper-src pytest pytest-xdist hypothesis
+          pip install ./vyper-src[test]
           pytest -s -n0 --export tests/vyper-test-exports -m "not fuzzing" vyper-src/tests/functional/codegen
       - name: Run exported Vyper tests
         working-directory: tests
