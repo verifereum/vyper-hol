@@ -41,7 +41,7 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/vyperlang/vyper.git vyper-src
           pip install ./vyper-src[test]
-          pytest -s -n0 --export tests/vyper-test-exports -m "not fuzzing" vyper-src/tests/functional/codegen
+          cd vyper-src && pytest -s -n0 --export ../tests/vyper-test-exports -m "not fuzzing" tests/functional/codegen
       - name: Run exported Vyper tests
         working-directory: tests
         run: Holmake --qof
