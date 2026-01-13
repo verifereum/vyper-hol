@@ -1418,6 +1418,7 @@ QED
 Theorem ir_invariant_simplify_cfg_step:
   !fn fn'.
     simplify_cfg_step fn fn' /\
+    phi_fn_wf fn /\
     (!bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
                inst.inst_opcode <> PHI /\ ~is_terminator inst.inst_opcode ==>
                !lbl. ~MEM (Label lbl) inst.inst_operands) ==>
@@ -1432,15 +1433,42 @@ Proof
     gvs[MEM_MAP, MEM_FILTER] \\
     gvs[scfgDefsTheory.simplify_phi_block_def, MEM_MAP] \\
     Cases_on `y.inst_opcode = PHI`
-    >- cheat (* PHI case: simplify_phi_inst changes operands but output has no Labels *)
-    >- (gvs[scfgPhiLemmasTheory.simplify_phi_inst_no_phi] \\
-        first_x_assum drule_all >> simp[] \\ metis_tac[]))
+    >- ( (* PHI case: simplify_phi_inst may produce ASSIGN with [EL 1 ops] *)
+      gvs[scfgDefsTheory.simplify_phi_inst_def] >>
+      qabbrev_tac `preds = pred_labels (fn with fn_blocks := FILTER
+        (\bb. reachable_label fn (HD fn.fn_blocks).bb_label bb.bb_label)
+        fn.fn_blocks) bb'.bb_label` >>
+      qabbrev_tac `ops = phi_remove_non_preds preds y.inst_operands` >>
+      Cases_on `NULL ops` >> gvs[] >>
+      Cases_on `LENGTH ops = 2` >> gvs[] >>
+      (* LENGTH ops = 2 case: output is ASSIGN with [EL 1 ops] *)
+      `phi_block_wf (pred_labels fn bb'.bb_label) bb'`
+        by (irule scfgPhiLemmasTheory.phi_fn_wf_block >> simp[]) >>
+      drule scfgPhiLemmasTheory.phi_block_wf_inst >> disch_then drule >>
+      strip_tac >> gvs[scfgDefsTheory.phi_inst_wf_def] >>
+      simp[Abbr `ops`] >>
+      drule scfgPhiLemmasTheory.phi_remove_non_preds_el1_not_label >>
+      strip_tac >> first_x_assum (qspecl_then [`preds`, `lbl`] mp_tac) >>
+      simp[])
+    >- (gvs[scfgPhiLemmasTheory.simplify_phi_inst_no_phi] >>
+        first_x_assum drule_all >> simp[] >> qexists_tac `lbl` >> simp[]))
   >- ( (* merge_blocks *)
-    rpt strip_tac >> gvs[scfgTransformTheory.merge_blocks_def,
-                         scfgTransformTheory.merge_blocks_cond_def] \\
-    gvs[scfgDefsTheory.replace_label_fn_def, MEM_MAP] \\
-    gvs[scfgDefsTheory.replace_label_block_def, MEM_MAP] \\
-    gvs[replace_label_inst_opcode] \\ cheat)
+    rpt strip_tac >>
+    gvs[scfgTransformTheory.merge_blocks_def, scfgDefsTheory.replace_label_fn_def] >>
+    Cases_on `lookup_block a fn.fn_blocks` >> gvs[]
+    >- (first_x_assum drule_all >> metis_tac[])
+    >- (Cases_on `lookup_block b fn.fn_blocks` >> gvs[]
+        >- (first_x_assum drule_all >> metis_tac[])
+        >- (gvs[MEM_MAP, scfgDefsTheory.replace_label_block_def, MEM_MAP,
+                replace_label_inst_opcode] >>
+            (* Key: if output has Label, input had Label *)
+            `?lbl'. MEM (Label lbl') y'.inst_operands` by
+              (gvs[scfgDefsTheory.replace_label_inst_def, MEM_MAP] >>
+               qexists_tac `if y'' = Label b then b else lbl` >>
+               Cases_on `y''` >> gvs[scfgDefsTheory.replace_label_operand_def] >>
+               metis_tac[]) >>
+            (* TODO: trace y' back to original block, apply IR invariant *)
+            cheat)))
   >- ( (* merge_jump *)
     cheat)
 QED
