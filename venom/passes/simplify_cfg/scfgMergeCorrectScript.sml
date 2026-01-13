@@ -1349,7 +1349,10 @@ Proof
               simp[Abbr `merged_no_label`, Abbr `merged_bb`] >>
               impl_tac >- cheat >> simp[]) >>
             `v''.vs_current_bb = v.vs_current_bb` by gvs[] >>
-            `v''.vs_current_bb <> b_lbl` by cheat >>
+            `MEM b fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
+            `MEM v''.vs_current_bb (block_successors b)` by
+              (drule_all run_block_ok_successor >> simp[]) >>
+            `v''.vs_current_bb <> b_lbl` by metis_tac[] >>
             `v''.vs_prev_bb = SOME b_lbl` by cheat >>
             `v.vs_prev_bb = SOME s1.vs_current_bb` by cheat >>
             first_x_assum (qspec_then `n` mp_tac) >> simp[] >>
