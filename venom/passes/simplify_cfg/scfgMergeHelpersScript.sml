@@ -576,14 +576,16 @@ Proof
     >- (first_x_assum (qspec_then `last_inst.inst_operands` mp_tac) >> simp[]))
 QED
 
-(* Helper: replace_label_inst removes old label from operands *)
+(* Helper: replace_label_inst removes old label from operands (when old <> new) *)
 Theorem replace_label_inst_not_mem_old:
   !old new inst.
+    old <> new ==>
     ~MEM (Label old) (replace_label_inst old new inst).inst_operands
 Proof
   rpt strip_tac >>
   gvs[scfgDefsTheory.replace_label_inst_def, listTheory.MEM_MAP] >>
-  Cases_on `y'` >> gvs[scfgDefsTheory.replace_label_operand_def]
+  Cases_on `y` >> gvs[scfgDefsTheory.replace_label_operand_def] >>
+  Cases_on `s = old` >> gvs[]
 QED
 
 (* ===== update_last_inst Helpers ===== *)

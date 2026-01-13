@@ -1542,11 +1542,32 @@ Proof
       `replace_phi_in_block b_lbl a_lbl a = a` by
         (irule replace_phi_in_block_not_pred >>
          qexists_tac `pred_labels fn a_lbl` >> simp[]) >>
-      (* PHI replacement on a_simple is identity since PHIs unchanged by update_last_inst *)
-      `replace_phi_in_block b_lbl a_lbl a_simple = a_simple` by
-        (simp[Abbr `a_simple`, scfgDefsTheory.replace_phi_in_block_def,
-              venomInstTheory.basic_block_component_equality] >>
-         cheat (* TODO: MAP replace_label_in_phi over update_last_inst *)) >>
+      (* Derive b_lbl <> c_lbl from CFG structure *)
+      sg `b_lbl <> c_lbl`
+      >- (CCONTR_TAC >> gvs[] >>
+          `MEM b_lbl (pred_labels fn b_lbl)` suffices_by gvs[] >>
+          `MEM b fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+          `b.bb_label = b_lbl` by metis_tac[lookup_block_label] >>
+          `MEM b_lbl (block_successors b)` by
+            gvs[jump_only_target_def, AllCaseEqs(), block_successors_def,
+                block_last_inst_def, get_successors_def, is_terminator_def,
+                get_label_def] >>
+          qpat_x_assum `pred_labels fn b_lbl = _` kall_tac >>
+          simp[pred_labels_def, listTheory.MEM_MAP, listTheory.MEM_FILTER] >>
+          qexists_tac `b` >> simp[]) >>
+      (* PHI replacement on a_simple is identity using helper lemma *)
+      sg `replace_phi_in_block b_lbl a_lbl a_simple = a_simple`
+      >- (simp[Abbr `a_simple`] >>
+          irule scfgMergeHelpersTheory.replace_phi_in_block_update_last_inst >>
+          simp[scfgDefsTheory.replace_label_inst_def] >>
+          conj_tac >- (drule scfgMergeRunBlockTheory.block_successors_mem_is_terminator >>
+                       strip_tac >> gvs[block_last_inst_def, AllCaseEqs()] >>
+                       simp[listTheory.LAST_EL]) >>
+          conj_tac >- metis_tac[scfgMergeRunBlockTheory.block_successors_implies_nonempty] >>
+          conj_tac >- (simp[listTheory.MEM_MAP] >> rpt strip_tac >>
+                       Cases_on `y` >> gvs[scfgDefsTheory.replace_label_operand_def] >>
+                       rename1 `Label lbl` >> Cases_on `lbl = b_lbl` >> gvs[]) >>
+          qexists_tac `pred_labels fn a_lbl` >> simp[]) >>
       (* Label replacement is identity: PHIs don't have b_lbl, terminator has c_lbl *)
       `replace_label_block b_lbl c_lbl a_simple = a_simple` by
         cheat (* TODO: b_lbl not in PHIs, terminator already has c_lbl *) >>
