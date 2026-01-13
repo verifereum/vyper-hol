@@ -664,4 +664,44 @@ Proof
   simp[venomInstTheory.basic_block_component_equality]
 QED
 
+(* replace_phi_in_block is identity on update_last_inst when original has phi_block_wf *)
+Theorem replace_phi_in_block_update_last_inst:
+  !bb old new preds f.
+    phi_block_wf preds bb /\ ~MEM old preds /\ bb.bb_instructions <> [] ==>
+    replace_phi_in_block old new
+      (bb with bb_instructions := update_last_inst f bb.bb_instructions) =
+    (bb with bb_instructions := update_last_inst f bb.bb_instructions)
+Proof
+  rpt strip_tac >>
+  simp[scfgDefsTheory.replace_phi_in_block_def,
+       venomInstTheory.basic_block_component_equality] >>
+  irule listTheory.LIST_EQ >>
+  simp[listTheory.LENGTH_MAP, update_last_inst_length] >> rpt strip_tac >>
+  simp[listTheory.EL_MAP, update_last_inst_length] >>
+  Cases_on `x < LENGTH bb.bb_instructions - 1`
+  >- (simp[update_last_inst_el_unchanged] >>
+      irule replace_label_in_phi_not_pred >> qexists_tac `preds` >> simp[] >>
+      gvs[phi_block_wf_def] >> first_x_assum irule >>
+      simp[listTheory.MEM_EL] >> qexists_tac `x` >>
+      simp[rich_listTheory.LENGTH_FRONT, rich_listTheory.FRONT_EL])
+  >- (`x = LENGTH bb.bb_instructions - 1` by simp[] >>
+      simp[update_last_inst_el_last, scfgDefsTheory.replace_label_in_phi_def] >>
+      COND_CASES_TAC >> simp[] >>
+      (* Last instruction with PHI opcode - should be impossible for terminator *)
+      cheat)
+QED
+
+(* Lookup through conditional MAP when f preserves labels and is identity on target *)
+Theorem lookup_block_MAP_conditional_identity:
+  !lbl blocks bb f P.
+    lookup_block lbl blocks = SOME bb /\
+    f bb = bb /\
+    (!b. (f b).bb_label = b.bb_label) ==>
+    lookup_block lbl (MAP (\b. if P b.bb_label then f b else b) blocks) = SOME bb
+Proof
+  Induct_on `blocks` >> simp[venomInstTheory.lookup_block_def] >> rpt strip_tac >>
+  Cases_on `h.bb_label = lbl` >> gvs[] >>
+  Cases_on `P h.bb_label` >> gvs[]
+QED
+
 val _ = export_theory();

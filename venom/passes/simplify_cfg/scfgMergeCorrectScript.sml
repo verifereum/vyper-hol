@@ -1530,15 +1530,46 @@ Proof
         gvs[jump_only_target_def, AllCaseEqs(), block_successors_def,
             block_last_inst_def, get_successors_def, is_terminator_def,
             get_label_def] >>
-      gvs[])
-  >- (qabbrev_tac `a_simple = a with bb_instructions := update_last_inst
+      gvs[]) >>
+  qabbrev_tac `a_simple = a with bb_instructions := update_last_inst
         (replace_label_inst b_lbl c_lbl) a.bb_instructions` >>
-      (* Key insight: a' = a_simple because transforms are identity *)
-      sg `a' = a_simple`
-      >- (qpat_x_assum `lookup_block a_lbl (merge_jump _ _ _).fn_blocks = SOME a'` mp_tac >>
-          simp[merge_jump_def, replace_label_fn_def] >> strip_tac >>
-          cheat (* TODO: trace through transforms showing they are identity *))
-      >- gvs[result_equiv_cfg_refl])
+  (* Key insight: a' = a_simple because transforms are identity *)
+  sg `a' = a_simple`
+  >- (`phi_block_wf (pred_labels fn a_lbl) a` by
+        (gvs[phi_fn_wf_def] >>
+         `MEM a fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+         metis_tac[lookup_block_label]) >>
+      `replace_phi_in_block b_lbl a_lbl a = a` by
+        (irule replace_phi_in_block_not_pred >>
+         qexists_tac `pred_labels fn a_lbl` >> simp[]) >>
+      (* PHI replacement on a_simple is identity since PHIs unchanged by update_last_inst *)
+      `replace_phi_in_block b_lbl a_lbl a_simple = a_simple` by
+        (simp[Abbr `a_simple`, scfgDefsTheory.replace_phi_in_block_def,
+              venomInstTheory.basic_block_component_equality] >>
+         cheat (* TODO: MAP replace_label_in_phi over update_last_inst *)) >>
+      (* Label replacement is identity: PHIs don't have b_lbl, terminator has c_lbl *)
+      `replace_label_block b_lbl c_lbl a_simple = a_simple` by
+        cheat (* TODO: b_lbl not in PHIs, terminator already has c_lbl *) >>
+      qpat_x_assum `lookup_block a_lbl (merge_jump _ _ _).fn_blocks = SOME a'` mp_tac >>
+      simp[merge_jump_def, replace_label_fn_def] >> strip_tac >>
+      `a_simple.bb_label = a_lbl` by
+        (simp[Abbr `a_simple`] >> metis_tac[lookup_block_label]) >>
+      `lookup_block a_lbl (replace_block a_simple fn.fn_blocks) = SOME a_simple` by
+        (qpat_x_assum `lookup_block a_lbl fn.fn_blocks = _`
+          (mp_tac o MATCH_MP lookup_block_replace_block) >> simp[]) >>
+      `lookup_block a_lbl (remove_block b_lbl (replace_block a_simple fn.fn_blocks)) =
+       SOME a_simple` by (irule lookup_block_remove_block >> simp[]) >>
+      qabbrev_tac `blocks1 = remove_block b_lbl (replace_block a_simple fn.fn_blocks)` >>
+      `lookup_block a_lbl (MAP (\bb. if MEM bb.bb_label (block_successors a_simple)
+            then replace_phi_in_block b_lbl a_lbl bb else bb) blocks1) = SOME a_simple` by
+        cheat (* TODO: PHI replacement identity regardless of conditional *) >>
+      qabbrev_tac `blocks2 = MAP (\bb. if MEM bb.bb_label (block_successors a_simple)
+            then replace_phi_in_block b_lbl a_lbl bb else bb) blocks1` >>
+      `lookup_block a_lbl (MAP (replace_label_block b_lbl c_lbl) blocks2) =
+       SOME (replace_label_block b_lbl c_lbl a_simple)` by
+        (irule lookup_block_replace_label_block >> simp[]) >>
+      gvs[]) >>
+  gvs[result_equiv_cfg_refl]
 QED
 
 (* Forward direction helper: result_equiv_cfg for merge_jump *)
