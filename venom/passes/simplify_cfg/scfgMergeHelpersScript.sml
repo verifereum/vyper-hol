@@ -576,6 +576,16 @@ Proof
     >- (first_x_assum (qspec_then `last_inst.inst_operands` mp_tac) >> simp[]))
 QED
 
+(* Helper: replace_label_inst removes old label from operands *)
+Theorem replace_label_inst_not_mem_old:
+  !old new inst.
+    ~MEM (Label old) (replace_label_inst old new inst).inst_operands
+Proof
+  rpt strip_tac >>
+  gvs[scfgDefsTheory.replace_label_inst_def, listTheory.MEM_MAP] >>
+  Cases_on `y'` >> gvs[scfgDefsTheory.replace_label_operand_def]
+QED
+
 (* ===== update_last_inst Helpers ===== *)
 
 (* Helper: update_last_inst preserves length *)
@@ -664,10 +674,15 @@ Proof
   simp[venomInstTheory.basic_block_component_equality]
 QED
 
-(* replace_phi_in_block is identity on update_last_inst when original has phi_block_wf *)
+(* replace_phi_in_block is identity on update_last_inst when original has phi_block_wf
+   and f preserves the opcode (so the last instruction stays a terminator, not PHI)
+   and old label is not in the operands of the transformed last instruction *)
 Theorem replace_phi_in_block_update_last_inst:
   !bb old new preds f.
-    phi_block_wf preds bb /\ ~MEM old preds /\ bb.bb_instructions <> [] ==>
+    phi_block_wf preds bb /\ ~MEM old preds /\ bb.bb_instructions <> [] /\
+    is_terminator (LAST bb.bb_instructions).inst_opcode /\
+    (!inst. (f inst).inst_opcode = inst.inst_opcode) /\
+    ~MEM (Label old) (f (LAST bb.bb_instructions)).inst_operands ==>
     replace_phi_in_block old new
       (bb with bb_instructions := update_last_inst f bb.bb_instructions) =
     (bb with bb_instructions := update_last_inst f bb.bb_instructions)
@@ -683,12 +698,19 @@ Proof
       irule replace_label_in_phi_not_pred >> qexists_tac `preds` >> simp[] >>
       gvs[phi_block_wf_def] >> first_x_assum irule >>
       simp[listTheory.MEM_EL] >> qexists_tac `x` >>
-      simp[rich_listTheory.LENGTH_FRONT, rich_listTheory.FRONT_EL])
+      gvs[rich_listTheory.LENGTH_FRONT, rich_listTheory.FRONT_EL])
   >- (`x = LENGTH bb.bb_instructions - 1` by simp[] >>
       simp[update_last_inst_el_last, scfgDefsTheory.replace_label_in_phi_def] >>
+      `PRE (LENGTH bb.bb_instructions) = LENGTH bb.bb_instructions - 1` by simp[] >>
+      gvs[GSYM update_last_inst_el_last] >>
       COND_CASES_TAC >> simp[] >>
-      (* Last instruction with PHI opcode - should be impossible for terminator *)
-      cheat)
+      `(update_last_inst f bb.bb_instructions)❲LENGTH bb.bb_instructions - 1❳ =
+       f (LAST bb.bb_instructions)` by
+        (simp[GSYM arithmeticTheory.PRE_SUB1] >>
+         irule update_last_inst_el_last >> simp[]) >>
+      `(f (LAST bb.bb_instructions)).inst_opcode =
+       (LAST bb.bb_instructions).inst_opcode` by simp[] >>
+      gvs[is_terminator_def])
 QED
 
 (* Lookup through conditional MAP when f preserves labels and is identity on target *)
