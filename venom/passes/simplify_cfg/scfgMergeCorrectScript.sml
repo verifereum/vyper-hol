@@ -1615,7 +1615,10 @@ Theorem run_block_merge_jump_a_bridge:
     MEM b_lbl (block_successors a) /\
     pred_labels fn b_lbl = [a_lbl] /\
     jump_only_target b = SOME c_lbl /\
-    s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
+    s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+    (* IR invariant: non-PHI, non-terminator instructions have no Label operands *)
+    (!inst. MEM inst a.bb_instructions /\ inst.inst_opcode <> PHI /\
+            ~is_terminator inst.inst_opcode ==> !lbl. ~MEM (Label lbl) inst.inst_operands) ==>
     let a_simple = a with bb_instructions :=
       update_last_inst (replace_label_inst b_lbl c_lbl) a.bb_instructions in
     ?a_actual.
@@ -1678,9 +1681,7 @@ Proof
   (* Label replacement is identity via replace_label_block_update_last_inst_identity *)
   qspecl_then [`a`, `b_lbl`, `c_lbl`, `pred_labels fn a_lbl`] mp_tac
     scfgMergeHelpersTheory.replace_label_block_update_last_inst_identity >>
-  impl_tac >- (simp[] >>
-    (* IR invariant: non-PHI, non-terminator instructions have no Label operands *)
-    rpt strip_tac >> cheat) >>
+  impl_tac >- (simp[] >> first_x_assum irule >> simp[]) >>
   simp[Abbr `a_simple`] >> strip_tac >>
   qabbrev_tac `a_simple = a with bb_instructions :=
     update_last_inst (replace_label_inst b_lbl c_lbl) a.bb_instructions` >>
@@ -1723,7 +1724,10 @@ Theorem run_block_merge_jump_other_equiv:
     a_lbl <> b_lbl /\ a_lbl <> c_lbl /\
     MEM b_lbl (block_successors a) /\
     pred_labels fn b_lbl = [a_lbl] /\
-    jump_only_target b = SOME c_lbl ==>
+    jump_only_target b = SOME c_lbl /\
+    (* IR invariant for block x *)
+    (!inst. MEM inst x.bb_instructions /\ inst.inst_opcode <> PHI /\
+            ~is_terminator inst.inst_opcode ==> !lbl. ~MEM (Label lbl) inst.inst_operands) ==>
     ?c'. lookup_block s.vs_current_bb (merge_jump fn a_lbl b_lbl).fn_blocks = SOME c' /\
          result_equiv_cfg (run_block x s) (run_block c' s)
 Proof
@@ -1767,7 +1771,11 @@ Theorem run_function_merge_jump_equiv_fwd:
     pred_labels fn b_lbl = [a_lbl] /\
     jump_only_target b = SOME c_lbl /\
     s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-    s.vs_current_bb <> b_lbl ==>
+    s.vs_current_bb <> b_lbl /\
+    (* Function-wide IR invariant *)
+    (!bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+               inst.inst_opcode <> PHI /\ ~is_terminator inst.inst_opcode ==>
+               !lbl. ~MEM (Label lbl) inst.inst_operands) ==>
     result_equiv_cfg (run_function fuel fn s)
                      (run_function fuel (merge_jump fn a_lbl b_lbl) s)
 Proof
@@ -1787,8 +1795,12 @@ Proof
           simp[] >>
           drule_all lookup_block_merge_jump_a >> strip_tac >> gvs[] >>
           `block_terminator_last a` by (
-            gvs[cfg_wf_def] >> first_x_assum (qspec_then `a` mp_tac) >>
-            impl_tac >- metis_tac[lookup_block_MEM] >> simp[]) >>
+            gvs[cfg_wf_def] >> first_x_assum irule >> metis_tac[lookup_block_MEM]) >>
+          `MEM a fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+          (* IR invariant for block a - derivable from function-wide invariant *)
+          `!inst. MEM inst a.bb_instructions /\ inst.inst_opcode <> PHI /\
+                  ~is_terminator inst.inst_opcode ==> !lbl. ~MEM (Label lbl) inst.inst_operands`
+            by (strip_tac >> metis_tac[]) >>
           Cases_on `run_block a s`
           >- (qspecl_then [`a`, `b`, `b_lbl`, `c_lbl`, `s`] mp_tac
                 scfgMergeRunBlockTheory.run_block_merge_jump_equiv >>
@@ -1837,7 +1849,10 @@ Proof
               (* Use helper for "other block" case *)
               qspecl_then [`fn`, `a_lbl`, `b_lbl`, `x`, `s`, `c_lbl`, `a`, `b`]
                 mp_tac run_block_merge_jump_other_equiv >>
-              impl_tac >- simp[] >> strip_tac >> gvs[] >>
+              impl_tac >- (simp[] >>
+                `MEM x fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+                strip_tac >> metis_tac[]) >>
+              strip_tac >> gvs[] >>
               (* Case on run_block results - gvs closes mismatched cases *)
               Cases_on `run_block x s` >> Cases_on `run_block c' s` >>
               gvs[result_equiv_cfg_def] >>
@@ -1859,6 +1874,10 @@ Theorem run_function_merge_jump_equiv_bwd:
     jump_only_target b = SOME c_lbl /\
     s.vs_inst_idx = 0 /\ ~s.vs_halted /\
     s.vs_current_bb <> b_lbl /\
+    (* Function-wide IR invariant *)
+    (!bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+               inst.inst_opcode <> PHI /\ ~is_terminator inst.inst_opcode ==>
+               !lbl. ~MEM (Label lbl) inst.inst_operands) /\
     terminates (run_function fuel (merge_jump fn a_lbl b_lbl) s) ==>
     terminates (run_function (2 * fuel) fn s) /\
     result_equiv_cfg (run_function (2 * fuel) fn s)
@@ -1889,7 +1908,10 @@ Proof
             simp[] >>
             qspecl_then [`fn`, `a_lbl`, `b_lbl`, `x`, `s`, `c_lbl`, `a`, `b`]
               mp_tac run_block_merge_jump_other_equiv >>
-            impl_tac >- simp[] >> strip_tac >>
+            impl_tac >- (simp[] >>
+              `MEM x fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+              strip_tac >> metis_tac[]) >>
+            strip_tac >>
             Cases_on `run_block x s` >> Cases_on `run_block c' s` >>
             gvs[result_equiv_cfg_def, terminates_def] >>
             (* OK/OK case - IH application needs state equivalence handling *)
@@ -1905,7 +1927,11 @@ Theorem merge_jump_correct:
     s.vs_current_bb = entry_label fn /\
     s.vs_prev_bb = NONE /\
     s.vs_inst_idx = 0 /\
-    ~s.vs_halted ==>
+    ~s.vs_halted /\
+    (* Function-wide IR invariant *)
+    (!bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+               inst.inst_opcode <> PHI /\ ~is_terminator inst.inst_opcode ==>
+               !lbl. ~MEM (Label lbl) inst.inst_operands) ==>
     run_function_equiv_cfg fn (merge_jump fn a_lbl b_lbl) s
 Proof
   rpt gen_tac >> simp[merge_jump_cond_def] >> strip_tac >>
