@@ -5,8 +5,6 @@ on:
   push:
     branches:
     - main
-    paths:
-    - '**'
   pull_request:
 
 jobs:
@@ -24,7 +22,7 @@ jobs:
       - uses: ./.github/actions/setup-hol
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
       - name: Get Vyper revision
         id: vyper-rev
         shell: bash
@@ -32,7 +30,7 @@ jobs:
           echo "sha=$(git ls-remote https://github.com/vyperlang/vyper.git HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
       - name: Cache exported Vyper tests
         id: cache-vyper-tests
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: tests/vyper-test-exports
           key: vyper-tests-${{ runner.os }}-${{ steps.vyper-rev.outputs.sha }}
@@ -41,13 +39,8 @@ jobs:
         shell: bash
         run: |
           git clone --depth 1 https://github.com/vyperlang/vyper.git vyper-src
-          python -m pip install -U pip
-          python -m pip install -e vyper-src
-          python -m pip install pytest pytest-xdist hypothesis
-          cd vyper-src
-          pytest -s -n 1 --export tests/export -m "not fuzzing" tests/functional/codegen
-          cd ..
-          cp -R vyper-src/tests/export tests/vyper-test-exports
+          pip install ./vyper-src pytest pytest-xdist hypothesis
+          pytest -s -n0 --export tests/vyper-test-exports -m "not fuzzing" vyper-src/tests/functional/codegen
       - name: Run exported Vyper tests
         working-directory: tests
         run: Holmake --qof

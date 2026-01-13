@@ -12,7 +12,7 @@ runs:
         echo "verifereum=$(git ls-remote https://github.com/verifereum/verifereum.git HEAD | cut -f1)" >> $GITHUB_OUTPUT
 
     - name: Cache PolyML
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       id: cache-polyml
       with:
         path: ~/polyml-install
@@ -33,7 +33,7 @@ runs:
       run: echo "$HOME/polyml-install/bin" >> "$GITHUB_PATH"
 
     - name: Cache HOL4
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       id: cache-hol4
       with:
         path: ~/HOL
@@ -55,7 +55,7 @@ runs:
         echo "HOLDIR=$HOME/HOL" >> "$GITHUB_ENV"
 
     - name: Cache Verifereum
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       id: cache-verifereum
       with:
         path: ~/verifereum
