@@ -646,6 +646,17 @@ Proof
   simp[scfgDefsTheory.replace_label_inst_def]
 QED
 
+(* Helper: if output has Label, input had some Label *)
+Theorem replace_label_inst_has_label:
+  !old new inst lbl.
+    MEM (Label lbl) (replace_label_inst old new inst).inst_operands ==>
+    ?lbl'. MEM (Label lbl') inst.inst_operands
+Proof
+  rpt gen_tac >> simp[scfgDefsTheory.replace_label_inst_def, MEM_MAP] >>
+  strip_tac >> Cases_on `y` >> gvs[scfgDefsTheory.replace_label_operand_def] >>
+  qexists_tac `s` >> simp[]
+QED
+
 (* Helper: non-PHI instructions trivially satisfy phi_inst_wf *)
 Theorem phi_inst_wf_non_phi:
   !preds old new inst.
@@ -1418,6 +1429,7 @@ QED
 Theorem ir_invariant_simplify_cfg_step:
   !fn fn'.
     simplify_cfg_step fn fn' /\
+    cfg_wf fn /\
     phi_fn_wf fn /\
     (!bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
                inst.inst_opcode <> PHI /\ ~is_terminator inst.inst_opcode ==>
@@ -1482,11 +1494,13 @@ Proof
             >- ( (* inst from block b *)
               `MEM x' fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
               first_x_assum drule_all >> simp[] >> qexists_tac `lbl'` >> simp[])
-            >- ( (* y is another block *)
-              gvs[scfgDefsTheory.replace_block_def, MEM_MAP] >>
-              Cases_on `y.bb_label = x.bb_label` >> gvs[]
-              >- cheat (* y.bb_label = x.bb_label but y <> merged - contradiction *)
-              >- cheat)))) (* y from remove_block - trace to original *)
+            >- ( (* y is another block - from remove_block *)
+              `ALL_DISTINCT (MAP (\bb. bb.bb_label) (remove_block b fn.fn_blocks))`
+                by (irule ALL_DISTINCT_remove_block >> gvs[cfg_wf_def]) >>
+              drule_all MEM_replace_block >> strip_tac >> gvs[] >>
+              (* gvs dismisses y=merged since y <> merged *)
+              drule MEM_remove_block >> strip_tac >>
+              first_x_assum drule_all >> simp[] >> qexists_tac `lbl'` >> simp[]))))
   >- ( (* merge_jump *)
     rpt strip_tac >>
     gvs[scfgTransformTheory.merge_jump_def, scfgDefsTheory.replace_label_fn_def] >>
@@ -1533,12 +1547,11 @@ Proof
       irule scfgEquivTheory.run_function_equiv_cfg_trans >>
       qexists_tac `fn'` >> simp[] >>
       first_x_assum irule >>
-      drule_all wf_simplify_cfg_step >> strip_tac >>
-      `entry_label fn' = entry_label fn` by
-        (irule entry_label_simplify_cfg_step >> simp[]) >>
-      simp[] >>
-      qspecl_then [`fn`, `fn'`] mp_tac ir_invariant_simplify_cfg_step >>
-      impl_tac >> simp[] >> first_x_assum ACCEPT_TAC))
+      drule_all wf_simplify_cfg_step >> strip_tac >> simp[] >>
+      conj_tac
+      >- metis_tac[ir_invariant_simplify_cfg_step]
+      >- (ONCE_REWRITE_TAC[EQ_SYM_EQ] >>
+          irule entry_label_simplify_cfg_step >> simp[])))
 QED
 
 val _ = export_theory();
