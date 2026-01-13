@@ -1519,9 +1519,16 @@ Proof
   qexists_tac `a'` >> simp[] >>
   qabbrev_tac `a_simple = a with bb_instructions := update_last_inst
     (replace_label_inst b_lbl c_lbl) a.bb_instructions` >>
-  qpat_x_assum `lookup_block a_lbl (merge_jump _ _ _).fn_blocks = SOME a'` mp_tac >>
-  simp[merge_jump_def, replace_label_fn_def] >> strip_tac >>
-  cheat (* TODO: show result_equiv_cfg via replace_label semantic no-op *)
+  (* Key insight: a' = a_simple because:
+     1. b_lbl is not a predecessor of a (pred_labels fn b_lbl = [a_lbl] means only a jumps to b)
+     2. So replace_phi_in_block b_lbl a_lbl is identity on a_simple
+     3. And replace_label_block b_lbl c_lbl is identity on a_simple (PHIs don't ref b_lbl,
+        terminator already changed from b_lbl to c_lbl) *)
+  `a' = a_simple` by (
+    qpat_x_assum `lookup_block a_lbl (merge_jump _ _ _).fn_blocks = SOME a'` mp_tac >>
+    simp[merge_jump_def, replace_label_fn_def, Abbr `a_simple`] >>
+    cheat (* TODO: show structural equality via transforms being identity *)) >>
+  gvs[result_equiv_cfg_refl]
 QED
 
 (* Forward direction helper: result_equiv_cfg for merge_jump *)
