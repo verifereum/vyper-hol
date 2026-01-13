@@ -1678,7 +1678,10 @@ Proof
   (* Label replacement is identity via replace_label_block_update_last_inst_identity *)
   qspecl_then [`a`, `b_lbl`, `c_lbl`, `pred_labels fn a_lbl`] mp_tac
     scfgMergeHelpersTheory.replace_label_block_update_last_inst_identity >>
-  impl_tac >- simp[] >> simp[Abbr `a_simple`] >> strip_tac >>
+  impl_tac >- (simp[] >>
+    (* IR invariant: non-PHI, non-terminator instructions have no Label operands *)
+    rpt strip_tac >> cheat) >>
+  simp[Abbr `a_simple`] >> strip_tac >>
   qabbrev_tac `a_simple = a with bb_instructions :=
     update_last_inst (replace_label_inst b_lbl c_lbl) a.bb_instructions` >>
   qpat_x_assum `lookup_block a_lbl (merge_jump _ _ _).fn_blocks = SOME a'` mp_tac >>

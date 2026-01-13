@@ -782,12 +782,15 @@ QED
 (* Helper: replace_label_block is identity after update_last_inst when:
    - PHIs don't have old label (phi_block_wf + ~MEM old preds)
    - old <> new (so terminator doesn't have old after replacement)
-   - block has terminator at last position *)
+   - block has terminator at last position
+   - IR invariant: non-PHI, non-terminator instructions have no Label operands *)
 Theorem replace_label_block_update_last_inst_identity:
   !bb old new preds.
     phi_block_wf preds bb /\ ~MEM old preds /\ old <> new /\
     bb.bb_instructions <> [] /\
-    block_terminator_last bb ==>
+    block_terminator_last bb /\
+    (!inst. MEM inst bb.bb_instructions /\ inst.inst_opcode <> PHI /\
+            ~is_terminator inst.inst_opcode ==> !lbl. ~MEM (Label lbl) inst.inst_operands) ==>
     replace_label_block old new
       (bb with bb_instructions :=
         update_last_inst (replace_label_inst old new) bb.bb_instructions) =
@@ -795,7 +798,7 @@ Theorem replace_label_block_update_last_inst_identity:
         update_last_inst (replace_label_inst old new) bb.bb_instructions)
 Proof
   (* Strategy: case split on index in update_last_inst
-     - x < LENGTH-1: PHIs use phi_ops_all_preds_no_label; non-PHI non-term have no Labels
+     - x < LENGTH-1: PHIs use phi_ops_all_preds_no_label; non-PHI non-term via assumption
      - x = LENGTH-1: replace_label_inst_not_mem_old since old <> new *)
   rpt strip_tac >>
   simp[scfgDefsTheory.replace_label_block_def, basic_block_component_equality] >>
@@ -813,13 +816,14 @@ Proof
              qexists_tac `x` >> simp[rich_listTheory.LENGTH_FRONT]) >>
           gvs[phi_inst_wf_def] >>
           metis_tac[scfgPhiLemmasTheory.phi_ops_all_preds_no_label])
-      >- ((* non-PHI case: show not terminator, then by IR design no Labels *)
+      >- ((* non-PHI case: use IR invariant assumption *)
           gvs[block_terminator_last_def, get_instruction_def] >>
           `~is_terminator bb.bb_instructions❲x❳.inst_opcode` by
             (CCONTR_TAC >> gvs[] >>
              first_x_assum (qspec_then `x` mp_tac) >> simp[]) >>
-          (* Now we have non-PHI non-terminator - by IR design, no Label operands *)
-          cheat))
+          `MEM bb.bb_instructions❲x❳ bb.bb_instructions` by
+            (simp[listTheory.MEM_EL] >> qexists_tac `x` >> simp[]) >>
+          first_x_assum drule >> simp[]))
   >- ((* LAST case *)
       `x = LENGTH bb.bb_instructions - 1` by gvs[] >>
       simp[GSYM arithmeticTheory.PRE_SUB1, update_last_inst_el_last] >>
