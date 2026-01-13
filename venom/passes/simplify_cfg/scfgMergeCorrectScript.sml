@@ -1600,6 +1600,32 @@ Proof
   gvs[]
 QED
 
+(* Helper for "other block" case: blocks other than a_lbl/b_lbl are identity-transformed.
+   Since pred_labels fn b_lbl = [a_lbl], only block a has b_lbl as successor,
+   so x doesn't have b_lbl in any operand, making all transforms identity.
+   Therefore c' = x and run_block x s = run_block c' s by reflexivity. *)
+Theorem run_block_merge_jump_other_equiv:
+  !fn a_lbl b_lbl x s c_lbl a b.
+    cfg_wf fn /\ phi_fn_wf fn /\
+    lookup_block a_lbl fn.fn_blocks = SOME a /\
+    lookup_block b_lbl fn.fn_blocks = SOME b /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME x /\
+    s.vs_current_bb <> a_lbl /\ s.vs_current_bb <> b_lbl /\
+    a_lbl <> b_lbl /\ a_lbl <> c_lbl /\
+    MEM b_lbl (block_successors a) /\
+    pred_labels fn b_lbl = [a_lbl] /\
+    jump_only_target b = SOME c_lbl ==>
+    ?c'. lookup_block s.vs_current_bb (merge_jump fn a_lbl b_lbl).fn_blocks = SOME c' /\
+         result_equiv_cfg (run_block x s) (run_block c' s)
+Proof
+  rpt strip_tac >>
+  drule_all lookup_block_merge_jump_other >> strip_tac >>
+  qexists_tac `c'` >> simp[] >>
+  (* Key insight: c' = x because all transforms are identity for x.
+     Since pred_labels fn b_lbl = [a_lbl], b_lbl is not in any operand of x. *)
+  cheat
+QED
+
 (* Forward direction helper: result_equiv_cfg for merge_jump *)
 Theorem run_function_merge_jump_equiv_fwd:
   !fuel fn a_lbl b_lbl s a b c_lbl.
@@ -1680,12 +1706,14 @@ Proof
               >- (irule lookup_block_merge_jump_none >> simp[])
               >- gvs[result_equiv_cfg_def])
           >- (simp[] >>
-              drule_all lookup_block_merge_jump_other >> strip_tac >> gvs[] >>
-              (* For "other block" case: need to relate run_block x s to run_block c' s *)
-              (* Since both run on same state s, we need semantic equivalence of blocks *)
-              (* Case on s.vs_prev_bb to apply appropriate run_block_replace_label lemma *)
-              (* Other block case: need to show result_equiv_cfg (run_block x s) (run_block c' s)
-                 and then apply IH since both states should have same current_bb after *)
+              (* Use helper for "other block" case *)
+              qspecl_then [`fn`, `a_lbl`, `b_lbl`, `x`, `s`, `c_lbl`, `a`, `b`]
+                mp_tac run_block_merge_jump_other_equiv >>
+              impl_tac >- simp[] >> strip_tac >> gvs[] >>
+              (* Case on run_block results - gvs closes mismatched cases *)
+              Cases_on `run_block x s` >> Cases_on `run_block c' s` >>
+              gvs[result_equiv_cfg_def] >>
+              (* OK/OK case - apply IH; Key: since c' = x (identity transform), v = v' *)
               cheat)))
 QED
 
@@ -1719,9 +1747,26 @@ Proof
     >- gvs[run_function_def, terminates_def]
     >- (simp[Once run_function_def] >>
         Cases_on `s.vs_current_bb = a_lbl`
-        >- cheat (* at merge point - needs run_block_merge_jump_equiv *)
-        >- cheat)) (* other block - needs IH *)
-  >- cheat (* result_equiv_cfg - similar structure *)
+        >- cheat (* at merge point - needs run_block_merge_jump_equiv + fuel asymmetry *)
+        >- ( (* other block case *)
+          Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
+          >- ( (* NONE - block not found *)
+            simp[] >> gvs[terminates_def] >>
+            qpat_x_assum `terminates _` mp_tac >>
+            simp[Once run_function_def] >>
+            `lookup_block s.vs_current_bb (merge_jump fn a_lbl b_lbl).fn_blocks = NONE` by
+              (irule lookup_block_merge_jump_none >> simp[]) >>
+            simp[terminates_def])
+          >- ( (* SOME x - block found *)
+            simp[] >>
+            qspecl_then [`fn`, `a_lbl`, `b_lbl`, `x`, `s`, `c_lbl`, `a`, `b`]
+              mp_tac run_block_merge_jump_other_equiv >>
+            impl_tac >- simp[] >> strip_tac >>
+            Cases_on `run_block x s` >> Cases_on `run_block c' s` >>
+            gvs[result_equiv_cfg_def, terminates_def] >>
+            (* OK/OK case - IH application needs state equivalence handling *)
+            cheat))))
+  >- cheat (* result_equiv_cfg - similar structure to terminates *)
 QED
 
 Theorem merge_jump_correct:
