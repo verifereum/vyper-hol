@@ -113,11 +113,8 @@ The [Verifereum repository](https://github.com/verifereum/verifereum) includes i
 
 ### Running the Vyper test suite
 
-The test runner expects exported JSON fixtures to be available at `tests/vyper-test-exports`. You have two options:
-
-1. **Use pre-exported fixtures** (preferred once available): clone https://github.com/vyperlang/vyperlang-tests and link it into `tests/vyper-test-exports`.
-2. **Export locally from Vyper**: generate the fixtures from a Vyper checkout and link the export directory into `tests/vyper-test-exports`.
-
+The test runner expects exported JSON fixtures to be available at `tests/vyper-test-exports`.
+The exported fixtures are obtained using the Vyper repository.
 To run the Vyper test suite on our definitional interpreter, follow this approach:
 
 1. Generate the Vyper tests using `pytest -s -n 1 --export tests/export -m "not fuzzing" tests/functional/codegen`.
