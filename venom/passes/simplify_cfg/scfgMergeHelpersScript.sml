@@ -764,30 +764,43 @@ Theorem replace_label_block_update_last_inst_identity:
   !bb old new preds.
     phi_block_wf preds bb /\ ~MEM old preds /\ old <> new /\
     bb.bb_instructions <> [] /\
-    is_terminator (LAST bb.bb_instructions).inst_opcode ==>
+    block_terminator_last bb ==>
     replace_label_block old new
       (bb with bb_instructions :=
         update_last_inst (replace_label_inst old new) bb.bb_instructions) =
     (bb with bb_instructions :=
         update_last_inst (replace_label_inst old new) bb.bb_instructions)
 Proof
-  (* Strategy: case split on position in update_last_inst
-     - FRONT: PHIs use phi_ops_all_preds_no_label; non-PHI non-term have no Labels
-     - LAST: replace_label_inst_not_mem_old since old <> new *)
-  rpt strip_tac >> irule replace_label_block_identity_no_old_label >> simp[] >>
+  (* Strategy: case split on index in update_last_inst
+     - x < LENGTH-1: PHIs use phi_ops_all_preds_no_label; non-PHI non-term have no Labels
+     - x = LENGTH-1: replace_label_inst_not_mem_old since old <> new *)
   rpt strip_tac >>
-  Cases_on `MEM inst (FRONT bb.bb_instructions)`
-  >- (gvs[phi_block_wf_def] >>
-      `MEM inst bb.bb_instructions` by metis_tac[rich_listTheory.MEM_FRONT_NOT_NIL] >>
-      cheat)
-  >- (sg `inst = replace_label_inst old new (LAST bb.bb_instructions)`
-      >- (qpat_x_assum `MEM inst (update_last_inst _ _)` mp_tac >>
-          qpat_x_assum `~MEM inst (FRONT _)` mp_tac >>
-          qpat_x_assum `_ <> []` mp_tac >>
-          Q.SPEC_TAC (`bb.bb_instructions`, `l`) >> Induct >>
-          simp[update_last_inst_def] >>
-          Cases_on `l` >> simp[update_last_inst_def, listTheory.FRONT_DEF])
-      >- (gvs[] >> metis_tac[replace_label_inst_not_mem_old]))
+  simp[scfgDefsTheory.replace_label_block_def, basic_block_component_equality] >>
+  irule listTheory.LIST_EQ >>
+  simp[listTheory.LENGTH_MAP, update_last_inst_length] >> rpt strip_tac >>
+  simp[listTheory.EL_MAP, update_last_inst_length] >>
+  Cases_on `x < LENGTH bb.bb_instructions - 1`
+  >- ((* FRONT case *)
+      simp[update_last_inst_el_unchanged] >> irule replace_label_inst_id >>
+      Cases_on `bb.bb_instructions❲x❳.inst_opcode = PHI`
+      >- ((* PHI case *)
+          gvs[phi_block_wf_def] >>
+          `phi_inst_wf preds bb.bb_instructions❲x❳` by
+            (first_x_assum irule >> simp[listTheory.MEM_EL] >>
+             qexists_tac `x` >> simp[rich_listTheory.LENGTH_FRONT]) >>
+          gvs[phi_inst_wf_def] >>
+          metis_tac[scfgPhiLemmasTheory.phi_ops_all_preds_no_label])
+      >- ((* non-PHI case: show not terminator, then by IR design no Labels *)
+          gvs[block_terminator_last_def, get_instruction_def] >>
+          `~is_terminator bb.bb_instructions❲x❳.inst_opcode` by
+            (CCONTR_TAC >> gvs[] >>
+             first_x_assum (qspec_then `x` mp_tac) >> simp[]) >>
+          (* Now we have non-PHI non-terminator - by IR design, no Label operands *)
+          cheat))
+  >- ((* LAST case *)
+      `x = LENGTH bb.bb_instructions - 1` by gvs[] >>
+      simp[GSYM arithmeticTheory.PRE_SUB1, update_last_inst_el_last] >>
+      irule replace_label_inst_id >> irule replace_label_inst_not_mem_old >> simp[])
 QED
 
 val _ = export_theory();
