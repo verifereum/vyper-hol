@@ -1517,12 +1517,24 @@ Proof
   rpt strip_tac >> simp[] >>
   drule_all lookup_block_merge_jump_a >> strip_tac >>
   qexists_tac `a'` >> simp[] >>
-  (* The actual block is replace_label_block b_lbl c_lbl (possibly with replace_phi_in_block).
-     Since b_lbl is not a predecessor of a (from pred_labels fn b_lbl = [a_lbl] and
-     a jumps to b, not vice versa), PHIs in a don't reference b_lbl.
-     Also, the terminator already targets c_lbl after update_last_inst.
-     So replace_label_block is semantically a no-op for execution. *)
-  cheat
+  qabbrev_tac `a_simple = a with bb_instructions := update_last_inst
+    (replace_label_inst b_lbl c_lbl) a.bb_instructions` >>
+  `a' = replace_label_block b_lbl c_lbl (if MEM a_lbl (block_successors a_simple)
+    then replace_phi_in_block b_lbl a_lbl a_simple else a_simple)` by (
+    qpat_x_assum `lookup_block a_lbl (merge_jump _ _ _).fn_blocks = SOME a'` mp_tac >>
+    simp[merge_jump_def, replace_label_fn_def] >> simp[Abbr `a_simple`] >> cheat) >>
+  gvs[] >>
+  Cases_on `MEM a_lbl (block_successors a_simple)`
+  >- (simp[] >> cheat)
+  >- (simp[] >>
+      Cases_on `s.vs_prev_bb`
+      >- (irule scfgMergeRunBlockTheory.run_block_replace_label_prev_bb_none >>
+          simp[state_equiv_cfg_refl])
+      >- (irule scfgMergeRunBlockTheory.run_block_replace_label_prev_diff >>
+          qexistsl_tac [`fn`, `pred_labels fn a_lbl`, `x`] >>
+          simp[Abbr `a_simple`] >>
+          `a.bb_label = a_lbl` by metis_tac[lookup_block_label] >>
+          simp[] >> cheat))
 QED
 
 (* Forward direction helper: result_equiv_cfg for merge_jump *)
@@ -1562,14 +1574,41 @@ Proof
           Cases_on `run_block a s`
           >- (qspecl_then [`a`, `b`, `b_lbl`, `c_lbl`, `s`] mp_tac
                 scfgMergeRunBlockTheory.run_block_merge_jump_equiv >>
-              impl_tac >- simp[] >> simp[] >> strip_tac >> cheat)
+              impl_tac >- simp[] >> simp[] >> strip_tac >>
+              drule_all run_block_merge_jump_a_bridge >> strip_tac >> cheat)
           >- (simp[] >>
               qspecl_then [`a`, `b`, `b_lbl`, `c_lbl`, `s`] mp_tac
                 scfgMergeRunBlockTheory.run_block_merge_jump_equiv >>
               impl_tac >- simp[] >> simp[] >> strip_tac >>
-              gvs[result_equiv_cfg_def, AllCaseEqs()] >> cheat)
-          >- (simp[] >> cheat)
-          >- (simp[] >> cheat))
+              drule_all run_block_merge_jump_a_bridge >> strip_tac >>
+              `result_equiv_cfg (Halt v) (run_block a' s)` by (
+                irule result_equiv_cfg_trans >>
+                qexists_tac `run_block (a with bb_instructions :=
+                  update_last_inst (replace_label_inst b_lbl c_lbl) a.bb_instructions) s` >>
+                gvs[]) >>
+              Cases_on `run_block a' s` >> gvs[result_equiv_cfg_def])
+          >- (simp[] >>
+              qspecl_then [`a`, `b`, `b_lbl`, `c_lbl`, `s`] mp_tac
+                scfgMergeRunBlockTheory.run_block_merge_jump_equiv >>
+              impl_tac >- simp[] >> simp[] >> strip_tac >>
+              drule_all run_block_merge_jump_a_bridge >> strip_tac >>
+              `result_equiv_cfg (Revert v) (run_block a' s)` by (
+                irule result_equiv_cfg_trans >>
+                qexists_tac `run_block (a with bb_instructions :=
+                  update_last_inst (replace_label_inst b_lbl c_lbl) a.bb_instructions) s` >>
+                gvs[]) >>
+              Cases_on `run_block a' s` >> gvs[result_equiv_cfg_def])
+          >- (simp[] >>
+              qspecl_then [`a`, `b`, `b_lbl`, `c_lbl`, `s`] mp_tac
+                scfgMergeRunBlockTheory.run_block_merge_jump_equiv >>
+              impl_tac >- simp[] >> simp[] >> strip_tac >>
+              drule_all run_block_merge_jump_a_bridge >> strip_tac >>
+              `result_equiv_cfg (Error s') (run_block a' s)` by (
+                irule result_equiv_cfg_trans >>
+                qexists_tac `run_block (a with bb_instructions :=
+                  update_last_inst (replace_label_inst b_lbl c_lbl) a.bb_instructions) s` >>
+                gvs[]) >>
+              Cases_on `run_block a' s` >> gvs[result_equiv_cfg_def]))
       >- (CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_function_def])) >> simp[] >>
           Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
           >- (simp[] >>
