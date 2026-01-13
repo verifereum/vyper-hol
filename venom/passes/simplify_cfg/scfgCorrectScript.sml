@@ -1456,9 +1456,9 @@ Proof
     rpt strip_tac >>
     gvs[scfgTransformTheory.merge_blocks_def, scfgDefsTheory.replace_label_fn_def] >>
     Cases_on `lookup_block a fn.fn_blocks` >> gvs[]
-    >- (first_x_assum drule_all >> metis_tac[])
+    >- (first_x_assum drule_all >> simp[] >> qexists_tac `lbl` >> simp[])
     >- (Cases_on `lookup_block b fn.fn_blocks` >> gvs[]
-        >- (first_x_assum drule_all >> metis_tac[])
+        >- (first_x_assum drule_all >> simp[] >> qexists_tac `lbl` >> simp[])
         >- (gvs[MEM_MAP, scfgDefsTheory.replace_label_block_def, MEM_MAP,
                 replace_label_inst_opcode] >>
             (* Key: if output has Label, input had Label *)
@@ -1467,10 +1467,40 @@ Proof
                qexists_tac `if y'' = Label b then b else lbl` >>
                Cases_on `y''` >> gvs[scfgDefsTheory.replace_label_operand_def] >>
                metis_tac[]) >>
-            (* TODO: trace y' back to original block, apply IR invariant *)
-            cheat)))
+            (* Case split on whether y is the merged block *)
+            Cases_on `y = (x with bb_instructions := FRONT x.bb_instructions ++ x'.bb_instructions)` >> gvs[]
+            >- ( (* y is merged block - inst from block a or b *)
+              `MEM x fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
+              Cases_on `x.bb_instructions` >> gvs[]
+              >- gvs[scfgTransformTheory.merge_blocks_cond_def,
+                      scfgDefsTheory.block_last_jmp_to_def,
+                      scfgDefsTheory.block_last_inst_def] (* FRONT [] impossible - block a has terminator *)
+              >- ( (* inst from FRONT (h::t) = block a's non-terminator instructions *)
+                drule rich_listTheory.MEM_FRONT >> strip_tac >>
+                `MEM y' x.bb_instructions` by gvs[] >>
+                first_x_assum drule_all >> simp[] >> qexists_tac `lbl'` >> simp[]))
+            >- ( (* inst from block b *)
+              `MEM x' fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
+              first_x_assum drule_all >> simp[] >> qexists_tac `lbl'` >> simp[])
+            >- ( (* y is another block *)
+              gvs[scfgDefsTheory.replace_block_def, MEM_MAP] >>
+              Cases_on `y.bb_label = x.bb_label` >> gvs[]
+              >- cheat (* y.bb_label = x.bb_label but y <> merged - contradiction *)
+              >- cheat)))) (* y from remove_block - trace to original *)
   >- ( (* merge_jump *)
-    cheat)
+    rpt strip_tac >>
+    gvs[scfgTransformTheory.merge_jump_def, scfgDefsTheory.replace_label_fn_def] >>
+    Cases_on `lookup_block a fn.fn_blocks` >> gvs[] >>
+    Cases_on `lookup_block b fn.fn_blocks` >> gvs[] >>
+    Cases_on `jump_only_target x'` >> gvs[]
+    >- (first_x_assum drule_all >> simp[] >> qexists_tac `lbl` >> simp[])
+    >- (first_x_assum drule_all >> simp[] >> qexists_tac `lbl` >> simp[])
+    >- (first_x_assum drule_all >> simp[] >> qexists_tac `lbl` >> simp[])
+    >- (first_x_assum drule_all >> simp[] >> qexists_tac `lbl` >> simp[])
+    >- (first_x_assum drule_all >> simp[] >> qexists_tac `lbl` >> simp[])
+    >- (first_x_assum drule_all >> simp[] >> qexists_tac `lbl` >> simp[])
+    >- (first_x_assum drule_all >> simp[] >> qexists_tac `lbl` >> simp[])
+    >- cheat)
 QED
 
 (* Main theorem: RTC of simplify_cfg_step preserves equivalence *)
