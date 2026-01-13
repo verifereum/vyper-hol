@@ -1630,7 +1630,17 @@ Proof
   >- cheat (* x is successor of b - needs semantic equiv lemma for replace_phi_in_block *)
   >- (sg `c' = x`
       >- (sg `~MEM b_lbl (pred_labels fn x.bb_label)`
-          >- cheat (* ~MEM b_lbl (pred_labels fn x.bb_label) because b only jumps to c_lbl *)
+          >- (`block_successors b = [c_lbl]` by
+                metis_tac[scfgMergeHelpersTheory.jump_only_target_block_successors] >>
+              simp[pred_labels_def, listTheory.MEM_MAP, listTheory.MEM_FILTER] >>
+              rpt strip_tac >>
+              Cases_on `MEM bb fn.fn_blocks`
+              >- (DISJ1_TAC >>
+                  `bb = b` by (qspecl_then [`b_lbl`, `fn.fn_blocks`, `b`, `bb`] mp_tac
+                    scfgMergeHelpersTheory.lookup_block_unique >>
+                    impl_tac >- gvs[cfg_wf_def] >> simp[]) >>
+                  gvs[])
+              >- simp[])
           >- cheat) (* c' = x needs IR invariant: no Label b_lbl in non-PHI non-term *)
       >- gvs[result_equiv_cfg_refl])
 QED

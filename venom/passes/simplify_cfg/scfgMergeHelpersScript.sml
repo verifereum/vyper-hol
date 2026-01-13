@@ -742,6 +742,14 @@ Proof
   Cases_on `h.bb_label = lbl` >> gvs[] >>
   Cases_on `P h.bb_label` >> gvs[]
 QED
+(* Helper: jump_only_target implies block_successors is singleton *)
+Theorem jump_only_target_block_successors:
+  !bb lbl. jump_only_target bb = SOME lbl ==> block_successors bb = [lbl]
+Proof
+  rpt strip_tac >>
+  gvs[jump_only_target_def, block_successors_def, block_last_inst_def,
+      get_successors_def, AllCaseEqs(), is_terminator_def, get_label_def]
+QED
 
 (* Helper: replace_label_inst is identity when old label not in operands *)
 Theorem replace_label_inst_id:
