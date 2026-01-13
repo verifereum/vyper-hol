@@ -22,20 +22,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-hol
-      - name: Fetch Vyper test exports
-        id: exports
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Export Vyper tests
         shell: bash
         run: |
-          git clone --depth 1 https://github.com/vyperlang/vyperlang-tests tests/vyper-test-exports
-          if [ -f tests/vyper-test-exports/functional/codegen/test_interfaces.json ]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-          fi
+          git clone --depth 1 https://github.com/vyperlang/vyper.git vyper-src
+          python -m pip install -U pip
+          python -m pip install -e vyper-src
+          python -m pip install pytest pytest-xdist hypothesis
+          cd vyper-src
+          pytest -s -n 1 --export tests/export -m "not fuzzing" tests/functional/codegen
+          cd ..
+          cp -R vyper-src/tests/export tests/vyper-test-exports
       - name: Run exported Vyper tests
-        if: steps.exports.outputs.available == 'true'
         working-directory: tests
         run: Holmake --qof
-      - name: Skip message
-        if: steps.exports.outputs.available != 'true'
-        run: echo "vyperlang-tests is missing exported fixtures; skipping Vyper test suite."
