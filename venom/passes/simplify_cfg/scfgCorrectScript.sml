@@ -892,8 +892,65 @@ Theorem pred_labels_merge_blocks_other:
     lbl <> a /\ lbl <> b /\ ~MEM b (pred_labels fn lbl) ==>
     pred_labels (merge_blocks fn a b) lbl = pred_labels fn lbl
 Proof
-  (* TODO: Complete proof - see SCRATCH for working version *)
-  cheat
+  rpt strip_tac >>
+  simp[scfgTransformTheory.merge_blocks_def] >>
+  gvs[scfgTransformTheory.merge_blocks_cond_def] >>
+  simp[scfgDefsTheory.pred_labels_def, scfgDefsTheory.replace_label_fn_def] >>
+  (* Key insight: MEM lbl (block_successors (replace_label_block b a bb)) <=> MEM lbl (block_successors bb)
+     because lbl <> a and lbl <> b *)
+  sg `!bb. MEM lbl (block_successors (replace_label_block b a bb)) <=>
+           MEM lbl (block_successors bb)`
+  >- (simp[block_successors_replace_label_block, listTheory.MEM_MAP] >> metis_tac[])
+  >- (
+    simp[Once rich_listTheory.FILTER_MAP] >>
+    simp[combinTheory.o_DEF] >>
+    simp[listTheory.MAP_MAP_o, combinTheory.o_DEF, scfgDefsTheory.replace_label_block_def] >>
+    (* Show FILTER unchanged by replace_block and remove_block *)
+    sg `FILTER (\x. MEM lbl (block_successors x))
+          (replace_block (a' with bb_instructions := FRONT a'.bb_instructions ++ b'.bb_instructions)
+             (remove_block b fn.fn_blocks)) =
+        FILTER (\x. MEM lbl (block_successors x)) fn.fn_blocks`
+    >- (
+      irule FILTER_replace_block_remove_unchanged >>
+      simp[] >> gvs[scfgDefsTheory.cfg_wf_def] >>
+      rpt conj_tac
+      (* 1. Merged block doesn't have lbl in successors *)
+      >- (
+        (* Need b'.bb_instructions <> [] - from block_terminator_last in well-formed CFG *)
+        `MEM b' fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
+        `block_terminator_last b'` by metis_tac[] >>
+        (* TODO: Need helper lemma that block_terminator_last + cfg_wf implies non-empty *)
+        sg `b'.bb_instructions <> []` >- cheat >>
+        drule_all block_successors_append_last >> simp[] >>
+        strip_tac >> simp[] >>
+        simp[scfgDefsTheory.block_successors_def, scfgDefsTheory.block_last_inst_def] >>
+        gvs[listTheory.NULL_EQ] >>
+        CCONTR_TAC >> gvs[] >>
+        `MEM lbl (block_successors b')` by
+          simp[scfgDefsTheory.block_successors_def, scfgDefsTheory.block_last_inst_def, listTheory.NULL_EQ] >>
+        `b'.bb_label = b` by (irule lookup_block_label >> metis_tac[]) >>
+        gvs[scfgDefsTheory.pred_labels_def, listTheory.MEM_MAP, listTheory.MEM_FILTER] >>
+        metis_tac[])
+      (* 2. merged.bb_label = a'.bb_label <> b *)
+      >- (`a'.bb_label = a` by (irule lookup_block_label >> metis_tac[]) >> simp[])
+      (* 3. old_bb (a') doesn't have lbl in successors *)
+      >- (
+        qexists_tac `a'` >> simp[] >>
+        conj_tac
+        >- (drule_all scfgMergeHelpersTheory.block_last_jmp_to_successors >> simp[])
+        >- (irule lookup_block_MEM >> metis_tac[]))
+      (* 4. removed_bb (b') doesn't have lbl in successors *)
+      >- (
+        qexists_tac `b'` >> simp[] >>
+        rpt conj_tac
+        >- (
+          CCONTR_TAC >> gvs[scfgDefsTheory.pred_labels_def, listTheory.MEM_MAP, listTheory.MEM_FILTER] >>
+          `MEM b' fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
+          `b'.bb_label = b` by (irule lookup_block_label >> metis_tac[]) >>
+          metis_tac[])
+        >- (irule lookup_block_label >> metis_tac[])
+        >- (irule lookup_block_MEM >> metis_tac[])))
+    >- simp[])
 QED
 
 (* Helper: phi_block_wf preserved when old label is not a predecessor *)
@@ -908,6 +965,23 @@ Proof
   rpt strip_tac >> gvs[] >>
   irule phi_inst_wf_not_mem_pred >> simp[] >>
   gvs[scfgDefsTheory.phi_block_wf_def]
+QED
+
+(* Helper: phi_block_wf for original blocks after merge_blocks, when b not predecessor *)
+Theorem phi_block_wf_merge_blocks_other_not_pred:
+  !fn a b y.
+    merge_blocks_cond fn a b /\ cfg_wf fn /\ phi_fn_wf fn /\
+    MEM y fn.fn_blocks /\ y.bb_label <> a /\ y.bb_label <> b /\
+    ~MEM b (pred_labels fn y.bb_label) ==>
+    phi_block_wf (pred_labels (merge_blocks fn a b) y.bb_label)
+                 (replace_label_block b a y)
+Proof
+  rpt strip_tac >>
+  `pred_labels (merge_blocks fn a b) y.bb_label = pred_labels fn y.bb_label`
+    by (irule pred_labels_merge_blocks_other >> simp[]) >>
+  simp[] >>
+  irule phi_block_wf_not_mem_pred >> simp[] >>
+  gvs[scfgDefsTheory.phi_fn_wf_def]
 QED
 
 (* Helper: cfg_wf and phi_fn_wf preserved by simplify_cfg_step *)
@@ -1180,6 +1254,10 @@ Proof
                   scfgDefsTheory.block_has_no_phi_def,
                   scfgDefsTheory.block_has_phi_def] >> metis_tac[]))))
       >- ( (* y from original blocks case *)
+        (* y is from blocks1 = remove_block b, y <> merged *)
+        (* Need: phi_block_wf (pred_labels fn' y.bb_label) (replace_label_block b a y) *)
+        (* Case: ~MEM b (pred_labels fn y.bb_label) can use phi_block_wf_not_mem_pred *)
+        (* Case: MEM b needs phi_block_wf_replace_label_block *)
         simp[scfgDefsTheory.replace_label_block_def] >> cheat))
     >- ( (* block_has_no_phi (HD blocks3) *)
       gvs[Abbr`blocks3`, Abbr`blocks2`, Abbr`blocks1`] >>
