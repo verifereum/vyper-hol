@@ -458,4 +458,44 @@ Proof
   >- simp[get_successors_def, simplify_phi_inst_is_terminator]
 QED
 
+(* phi_remove_non_preds output with LENGTH 2 has structure [Label lbl; op] *)
+Theorem phi_remove_non_preds_len2_structure:
+  !preds ops.
+    LENGTH (phi_remove_non_preds preds ops) = 2 ==>
+    ?lbl op. phi_remove_non_preds preds ops = [Label lbl; op]
+Proof
+  gen_tac >> measureInduct_on `LENGTH ops` >>
+  Cases_on `ops` >> simp[phi_remove_non_preds_def] >>
+  Cases_on `t` >> simp[phi_remove_non_preds_def] >>
+  Cases_on `h`
+  >- (simp[phi_remove_non_preds_def] >> strip_tac >>
+      first_x_assum (qspec_then `t'` mp_tac) >> simp[])
+  >- (simp[phi_remove_non_preds_def] >> strip_tac >>
+      first_x_assum (qspec_then `t'` mp_tac) >> simp[])
+  >- (simp[phi_remove_non_preds_def] >> Cases_on `MEM s preds` >> simp[])
+QED
+
+(* EL 1 of phi_remove_non_preds output is not a Label when LENGTH = 2 *)
+Theorem phi_remove_non_preds_el1_not_label:
+  !preds ops.
+    phi_vals_not_label ops /\
+    LENGTH (phi_remove_non_preds preds ops) = 2 ==>
+    !lbl. EL 1 (phi_remove_non_preds preds ops) <> Label lbl
+Proof
+  gen_tac >> measureInduct_on `LENGTH ops` >>
+  Cases_on `ops` >> simp[phi_remove_non_preds_def, phi_vals_not_label_def] >>
+  Cases_on `t` >> simp[phi_remove_non_preds_def, phi_vals_not_label_def] >>
+  Cases_on `h`
+  >- (simp[phi_remove_non_preds_def, phi_vals_not_label_def] >> strip_tac >>
+      first_x_assum (qspec_then `t'` mp_tac) >> simp[])
+  >- (simp[phi_remove_non_preds_def, phi_vals_not_label_def] >> strip_tac >>
+      first_x_assum (qspec_then `t'` mp_tac) >> simp[])
+  >- (simp[phi_remove_non_preds_def] >> Cases_on `MEM s preds` >> simp[]
+      >- (simp[phi_vals_not_label_def] >> Cases_on `h'` >>
+          simp[phi_vals_not_label_def])
+      >- (strip_tac >> first_x_assum (qspec_then `t'` mp_tac) >> simp[] >>
+          strip_tac >> first_x_assum irule >> gvs[phi_vals_not_label_def] >>
+          Cases_on `h'` >> gvs[phi_vals_not_label_def]))
+QED
+
 val _ = export_theory();
