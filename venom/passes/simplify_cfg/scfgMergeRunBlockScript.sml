@@ -1755,6 +1755,33 @@ Proof
   CCONTR_TAC >> gvs[get_successors_def]
 QED
 
+(* Corollary: block with successors must have non-empty instructions *)
+Theorem block_successors_implies_nonempty:
+  !bb lbl. MEM lbl (block_successors bb) ==> bb.bb_instructions <> []
+Proof
+  rpt strip_tac >>
+  drule block_successors_mem_is_terminator >> strip_tac >>
+  gvs[block_last_inst_def, AllCaseEqs()]
+QED
+
+(* LAST of FRONT is second-to-last element *)
+Theorem LAST_FRONT_EL:
+  !l. LENGTH l >= 2 ==> LAST (FRONT l) = EL (LENGTH l - 2) l
+Proof
+  rpt strip_tac >> simp[LAST_EL, rich_listTheory.LENGTH_FRONT] >>
+  `l <> []` by (Cases_on `l` >> gvs[]) >>
+  `~NULL (FRONT l)` by (Cases_on `l` >> gvs[] >> Cases_on `t` >> gvs[]) >>
+  simp[LAST_EL, rich_listTheory.LENGTH_FRONT, NULL_EQ] >>
+  `FRONT l <> []` by gvs[NULL_EQ] >>
+  `LAST (FRONT l) = (FRONT l)❲PRE (LENGTH (FRONT l))❳` by (irule LAST_EL >> gvs[]) >>
+  simp[rich_listTheory.LENGTH_FRONT] >>
+  `PRE (PRE (LENGTH l)) = LENGTH l - 2` by simp[] >>
+  simp[rich_listTheory.EL_FRONT] >>
+  `LENGTH l - 2 < LENGTH l - 1` by simp[] >>
+  irule rich_listTheory.EL_FRONT >> simp[rich_listTheory.LENGTH_FRONT] >>
+  gvs[NULL_EQ] >> Cases_on `LENGTH l` >> gvs[]
+QED
+
 (* Helper: step_inst on terminator with label replacement gives state_equiv_cfg results.
    Key insight: state_equiv_cfg ignores vs_current_bb, vs_prev_bb, vs_inst_idx *)
 Theorem step_inst_terminator_replace_label_equiv:

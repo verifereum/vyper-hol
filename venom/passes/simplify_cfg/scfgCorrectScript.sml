@@ -367,7 +367,25 @@ Proof
       >- ((* merged block case: use block_successors_pred_labels for contradiction *)
           `MEM b' fn.fn_blocks` by (irule lookup_block_MEM >> qexists_tac `b` >> simp[]) >>
           `b'.bb_label = b` by (irule lookup_block_label >> qexists_tac `fn.fn_blocks` >> simp[]) >>
-          `b'.bb_instructions <> []` by cheat >>
+          `b'.bb_instructions <> []` by (
+            CCONTR_TAC >> gvs[] >>
+            qpat_x_assum `MEM _ (block_successors _)` mp_tac >>
+            simp[block_successors_def, block_last_inst_def] >>
+            Cases_on `NULL (FRONT a'.bb_instructions)` >> simp[] >>
+            `MEM a' fn.fn_blocks` by (irule lookup_block_MEM >> qexists_tac `a` >> simp[]) >>
+            `block_terminator_last a'` by (gvs[cfg_wf_def] >> first_x_assum irule >> simp[]) >>
+            `a'.bb_instructions <> []` by (
+              gvs[block_last_jmp_to_def, block_last_inst_def] >>
+              Cases_on `a'.bb_instructions` >> gvs[]) >>
+            `LENGTH a'.bb_instructions >= 2` by (
+              Cases_on `a'.bb_instructions` >> gvs[] >> Cases_on `t` >> gvs[]) >>
+            simp[get_successors_def] >>
+            `~is_terminator (LAST (FRONT a'.bb_instructions)).inst_opcode` by (
+              gvs[block_terminator_last_def] >> CCONTR_TAC >> gvs[] >>
+              first_x_assum (qspecl_then [`LENGTH a'.bb_instructions - 2`,
+                `LAST (FRONT a'.bb_instructions)`] mp_tac) >>
+              simp[get_instruction_def, scfgMergeRunBlockTheory.LAST_FRONT_EL]) >>
+            simp[]) >>
           `block_successors (a' with bb_instructions := FRONT a'.bb_instructions ++ b'.bb_instructions) =
            block_successors b'` by (irule scfgMergeCorrectTheory.block_successors_merged >> simp[]) >>
           gvs[] >>
