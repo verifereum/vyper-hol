@@ -1313,7 +1313,41 @@ Proof
             simp[Once run_function_def, SimpLHS] >>
             simp[Once run_function_def, SimpLHS] >>
             simp[Once run_function_def, SimpRHS] >> simp[result_equiv_cfg_def])
-          >- cheat))) (* not halted - use IH *)
+          >- ( (* not halted - use IH *)
+            `~v''.vs_halted` by gvs[state_equiv_cfg_def] >>
+            `v''.vs_inst_idx = 0` by (drule_all run_block_ok_inst_idx >> simp[]) >>
+            `v.vs_inst_idx = 0` by (qpat_x_assum `run_block merged_bb s2 = OK v` mp_tac >>
+              simp[Abbr `merged_bb`, Abbr `merged_no_label`] >> strip_tac >>
+              drule_all run_block_ok_inst_idx >> simp[]) >>
+            qpat_x_assum `result_equiv_cfg (OK v'') (run_block merged_no_label s1)` mp_tac >>
+            Cases_on `run_block merged_no_label s1` >> simp[result_equiv_cfg_def] >> strip_tac >>
+            `~v'''.vs_halted` by (qpat_x_assum `result_equiv_cfg (OK v''') (OK v)` mp_tac >>
+              simp[result_equiv_cfg_def, state_equiv_cfg_def]) >>
+            `block_terminator_last b` by (gvs[cfg_wf_def] >> first_x_assum irule >>
+              irule lookup_block_MEM >> metis_tac[]) >>
+            `~MEM b_lbl (block_successors b)` by cheat >>
+            `v''.vs_current_bb = v'''.vs_current_bb` by
+              (qspecl_then [`a`, `b`, `s1`, `v'`, `v''`, `v'''`, `b_lbl`] mp_tac
+                run_block_merge_blocks_current_bb >> simp[Abbr `merged_no_label`]) >>
+            `a.bb_instructions <> []` by cheat >>
+            `b.bb_instructions <> []` by cheat >>
+            `v'''.vs_current_bb = v.vs_current_bb` by cheat >>
+            `v''.vs_current_bb = v.vs_current_bb` by gvs[] >>
+            `v''.vs_current_bb <> b_lbl` by cheat >>
+            `v''.vs_prev_bb = SOME b_lbl` by cheat >>
+            `v.vs_prev_bb = SOME s1.vs_current_bb` by cheat >>
+            first_x_assum (qspec_then `n` mp_tac) >> simp[] >>
+            disch_then (qspecl_then [`fn`, `s1.vs_current_bb`, `b_lbl`, `a`, `b`, `v''`, `v`] mp_tac) >>
+            impl_tac >- (gvs[] >> rpt conj_tac >> TRY cheat) >>
+            strip_tac >> qexists_tac `SUC (SUC fuel')` >>
+            simp[Once run_function_def, terminates_def] >>
+            `v'.vs_current_bb = b_lbl` by cheat >>
+            `v'.vs_inst_idx = 0` by cheat >>
+            simp[Once run_function_def, terminates_def] >>
+            simp[Once run_function_def, SimpLHS] >> simp[Once run_function_def, SimpLHS] >>
+            `run_function (SUC n) (merge_blocks fn s1.vs_current_bb b_lbl) s2 =
+              run_function n (merge_blocks fn s1.vs_current_bb b_lbl) v` by simp[Once run_function_def] >>
+            gvs[]))))
     >- ( (* Halt case - apply helper *)
       qspecl_then [`fn`, `s1.vs_current_bb`, `b_lbl`, `a`, `b`, `s1`, `s2`,
         `merged_bb`, `v`] mp_tac merge_blocks_bwd_terminal_at_merge >>
