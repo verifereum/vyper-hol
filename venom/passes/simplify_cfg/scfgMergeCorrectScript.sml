@@ -1353,11 +1353,24 @@ Proof
             `MEM v''.vs_current_bb (block_successors b)` by
               (drule_all run_block_ok_successor >> simp[]) >>
             `v''.vs_current_bb <> b_lbl` by metis_tac[] >>
-            `v''.vs_prev_bb = SOME b_lbl` by cheat >>
-            `v.vs_prev_bb = SOME s1.vs_current_bb` by cheat >>
+            `v'.vs_current_bb = b_lbl` by (
+              `MEM a fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
+              drule_all run_block_ok_successor >> strip_tac >>
+              `block_successors a = [b_lbl]` by metis_tac[block_last_jmp_to_successors] >>
+              gvs[]) >>
+            `v''.vs_prev_bb = SOME b_lbl` by (
+              qspecl_then [`b`, `v'`, `v''`] mp_tac run_block_ok_prev_bb >> gvs[]) >>
+            `v.vs_prev_bb = SOME s1.vs_current_bb` by (
+              qspecl_then [`replace_label_block b_lbl s1.vs_current_bb
+                (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions)`,
+                `s2`, `v`] mp_tac run_block_ok_prev_bb >> gvs[]) >>
             first_x_assum (qspec_then `n` mp_tac) >> simp[] >>
             disch_then (qspecl_then [`fn`, `s1.vs_current_bb`, `b_lbl`, `a`, `b`, `v''`, `v`] mp_tac) >>
-            impl_tac >- (gvs[] >> rpt conj_tac >> TRY cheat) >>
+            impl_tac >- (
+              gvs[] >> rpt conj_tac >>
+              qspecl_then [`fn`, `b`, `v'`, `v''`] mp_tac run_block_ok_pred_labels >> gvs[] >>
+              `b.bb_label = v'.vs_current_bb` by (irule lookup_block_label >>
+                qexists_tac `fn.fn_blocks` >> gvs[]) >> gvs[]) >>
             strip_tac >> qexists_tac `SUC (SUC fuel')` >>
             simp[Once run_function_def, terminates_def] >>
             `v'.vs_current_bb = b_lbl` by (
@@ -1365,7 +1378,8 @@ Proof
               drule_all run_block_ok_successor >> strip_tac >>
               `block_successors a = [b_lbl]` by metis_tac[block_last_jmp_to_successors] >>
               gvs[]) >>
-            `v'.vs_inst_idx = 0` by cheat >>
+            `v'.vs_inst_idx = 0` by (
+              qspecl_then [`a`, `s1`, `v'`] mp_tac run_block_ok_inst_idx >> gvs[]) >>
             simp[Once run_function_def, terminates_def] >>
             simp[Once run_function_def, SimpLHS] >> simp[Once run_function_def, SimpLHS] >>
             `run_function (SUC n) (merge_blocks fn s1.vs_current_bb b_lbl) s2 =
