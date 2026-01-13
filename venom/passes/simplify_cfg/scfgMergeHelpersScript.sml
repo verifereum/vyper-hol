@@ -867,4 +867,30 @@ Proof
   gvs[]
 QED
 
+(* Combined helper: terminator instruction has no Label lbl if lbl not in block_successors.
+   This packages terminator_inst_block_successors + terminator_no_label_when_not_successor
+   into one lemma to avoid multi-step irule chains that fail in batch builds. *)
+Theorem block_terminator_inst_no_label_not_successor:
+  !bb inst lbl.
+    block_terminator_last bb /\
+    MEM inst bb.bb_instructions /\
+    is_terminator inst.inst_opcode /\
+    ~MEM lbl (block_successors bb) ==>
+    ~MEM (Label lbl) inst.inst_operands
+Proof
+  rpt strip_tac >>
+  gvs[block_terminator_last_def, get_instruction_def] >>
+  `?n. n < LENGTH bb.bb_instructions /\ EL n bb.bb_instructions = inst` by
+    (gvs[MEM_EL] >> metis_tac[]) >>
+  `n = LENGTH bb.bb_instructions - 1` by
+    (first_x_assum (qspec_then `n` mp_tac) >> simp[]) >>
+  gvs[block_successors_def, block_last_inst_def] >>
+  `bb.bb_instructions <> []` by (Cases_on `bb.bb_instructions` >> gvs[]) >>
+  gvs[NULL_EQ] >>
+  `PRE (LENGTH bb.bb_instructions) = LENGTH bb.bb_instructions - 1` by simp[] >>
+  gvs[LAST_EL, get_successors_def, MEM_MAP, MEM_FILTER] >>
+  first_x_assum (qspec_then `SOME lbl` mp_tac) >> simp[get_label_def] >>
+  qexists_tac `Label lbl` >> simp[get_label_def]
+QED
+
 val _ = export_theory();

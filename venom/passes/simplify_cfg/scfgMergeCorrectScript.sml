@@ -1767,7 +1767,11 @@ Proof
                     gvs[phi_inst_wf_def] >>
                     drule_all scfgPhiLemmasTheory.phi_ops_all_preds_no_label >> simp[])
                 >- (Cases_on `is_terminator inst.inst_opcode`
-                    >- cheat (* terminator: use terminator_inst_block_successors + terminator_no_label_when_not_successor *)
+                    >- (`block_terminator_last x` by
+                          (gvs[cfg_wf_def] >> first_x_assum irule >>
+                           metis_tac[lookup_block_MEM]) >>
+                        drule_all scfgMergeHelpersTheory.block_terminator_inst_no_label_not_successor >>
+                        simp[])
                     >- (first_x_assum (qspec_then `inst` mp_tac) >> simp[] >>
                         qexists_tac `b_lbl` >> simp[])))
             >- (`replace_label_block b_lbl c_lbl x = x` by
