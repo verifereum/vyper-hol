@@ -1543,7 +1543,43 @@ Proof
     >- (first_x_assum drule_all >> simp[] >> qexists_tac `lbl` >> simp[])
     >- (first_x_assum drule_all >> simp[] >> qexists_tac `lbl` >> simp[])
     >- (first_x_assum drule_all >> simp[] >> qexists_tac `lbl` >> simp[])
-    >- cheat)
+    >- ( (* case 8: complex merge_jump transformation *)
+      gvs[MEM_MAP] \\
+      gvs[scfgDefsTheory.replace_label_block_def, MEM_MAP,
+          replace_label_inst_opcode] \\
+      `?lbl'. MEM (Label lbl') y.inst_operands` by
+        (gvs[scfgDefsTheory.replace_label_inst_def, MEM_MAP] >>
+         qexists_tac `if y' = Label b then b else lbl` >>
+         Cases_on `y'` >> gvs[scfgDefsTheory.replace_label_operand_def] >>
+         metis_tac[]) \\
+      Cases_on `MEM bb'.bb_label (block_successors (x with bb_instructions
+        := update_last_inst (replace_label_inst b x'') x.bb_instructions))` >> gvs[]
+      >- ( (* bb' in block_successors - replace_phi_in_block applied *)
+        drule_all MEM_replace_phi_in_block_non_phi >> strip_tac \\
+        `ALL_DISTINCT (MAP (\bb. bb.bb_label) (remove_block b fn.fn_blocks))`
+          by (irule ALL_DISTINCT_remove_block >> gvs[cfg_wf_def]) \\
+        `MEM bb' (replace_block (x with bb_instructions :=
+          update_last_inst (replace_label_inst b x'') x.bb_instructions)
+          fn.fn_blocks)` by (drule MEM_remove_block >> simp[]) \\
+        `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by gvs[cfg_wf_def] \\
+        drule_all MEM_replace_block >> strip_tac >> gvs[]
+        >- ( (* bb' = x_modified *)
+          `MEM x fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) \\
+          cheat (* TODO: trace y through update_last_inst to x.bb_instructions *))
+        >- ( (* bb' in fn.fn_blocks *)
+          first_x_assum drule_all >> simp[] >> qexists_tac `lbl'` >> simp[]))
+      >- ( (* bb' not in block_successors *)
+        `ALL_DISTINCT (MAP (\bb. bb.bb_label) (remove_block b fn.fn_blocks))`
+          by (irule ALL_DISTINCT_remove_block >> gvs[cfg_wf_def]) \\
+        `MEM bb' (replace_block (x with bb_instructions :=
+          update_last_inst (replace_label_inst b x'') x.bb_instructions)
+          fn.fn_blocks)` by (drule MEM_remove_block >> simp[]) \\
+        `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by gvs[cfg_wf_def] \\
+        drule_all MEM_replace_block >> strip_tac >> gvs[]
+        >- ( (* bb' = x_modified *)
+          cheat (* TODO: trace y through update_last_inst to x.bb_instructions *))
+        >- ( (* bb' in fn.fn_blocks *)
+          first_x_assum drule_all >> simp[] >> qexists_tac `lbl'` >> simp[]))))
 QED
 
 (* Main theorem: RTC of simplify_cfg_step preserves equivalence *)
