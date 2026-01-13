@@ -1621,10 +1621,16 @@ Proof
   rpt strip_tac >>
   drule_all lookup_block_merge_jump_other >> strip_tac >>
   qexists_tac `c'` >> simp[] >>
+  `MEM x fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `x.bb_label = s.vs_current_bb` by metis_tac[lookup_block_label] >>
+  `~MEM b_lbl (block_successors x)` by
+    (irule scfgMergeHelpersTheory.block_no_successor_label_when_not_predecessor >>
+     qexists_tac `fn` >> qexists_tac `a_lbl` >> simp[]) >>
   (* Key insight: c' = x because all transforms are identity for x.
-     Since pred_labels fn b_lbl = [a_lbl], b_lbl is not in any operand of x. *)
+     Since pred_labels fn b_lbl = [a_lbl], b_lbl is not in any operand of x.
+     Need to show: replace_phi_in_block and replace_label_block are identity on x *)
   sg `c' = x`
-  >- cheat (* Need: transforms are identity on x (no Label b_lbl in x) *)
+  >- cheat (* Need: ~MEM b_lbl (pred_labels fn x.bb_label) and no Label b_lbl in x *)
   >- gvs[result_equiv_cfg_refl]
 QED
 
