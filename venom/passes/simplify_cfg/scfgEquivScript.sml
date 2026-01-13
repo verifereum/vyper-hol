@@ -1018,4 +1018,18 @@ Proof
     qexistsl_tac [`bb`, `v`] >> simp[])
 QED
 
+(* State equivalence propagates through run_function *)
+Theorem run_function_state_equiv_cfg:
+  !fuel fn s1 s2.
+    state_equiv_cfg s1 s2 /\
+    s1.vs_inst_idx = s2.vs_inst_idx /\
+    s1.vs_current_bb = s2.vs_current_bb /\
+    s1.vs_prev_bb = s2.vs_prev_bb ==>
+    result_equiv_cfg (run_function fuel fn s1) (run_function fuel fn s2)
+Proof
+  rpt strip_tac >>
+  `s1 = s2` by (irule state_equiv_cfg_ctrl_eq >> simp[]) >>
+  gvs[result_equiv_cfg_refl]
+QED
+
 val _ = export_theory();
