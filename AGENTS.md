@@ -1,6 +1,6 @@
-# Agent Guide for Venom HOL4 Verification
+# (Codex) Agent Guide for Venom HOL4 Verification
 
-**IMPORTANT: After conversation compaction, ALWAYS read this file (CLAUDE.md or AGENTS.md) and PLAN.md to restore context, then IMMEDIATELY continue working. Do not summarize or wait for input.**
+**IMPORTANT: After conversation compaction, ALWAYS read this file (AGENTS.md) and PLAN.md to restore context, then IMMEDIATELY continue working. Do not summarize or wait for input.**
 
 ## CRITICAL: Tool Usage
 
