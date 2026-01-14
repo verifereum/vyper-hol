@@ -153,6 +153,11 @@ Datatype:
 End
 
 Datatype:
+  json_import_info
+  = JImportInfo string string string                   (* alias, path, qualified_module_name *)
+End
+
+Datatype:
   json_toplevel
   = JTL_FunctionDef string (string list) (json_arg list) json_func_type (json_stmt list)
       (* name, decorators, args, func_type, body *)
@@ -164,6 +169,12 @@ Datatype:
   | JTL_StructDef string (json_arg list)
   | JTL_FlagDef string (string list)                   (* name, member names *)
   | JTL_InterfaceDef string                            (* ignored but parsed *)
+  (* Module-related declarations *)
+  | JTL_Import (json_import_info list)                 (* import statement with import infos *)
+  | JTL_ExportsDecl json_expr                          (* exports: annotation *)
+  | JTL_InitializesDecl json_expr                      (* initializes: annotation *)
+  | JTL_UsesDecl json_expr                             (* uses: annotation *)
+  | JTL_ImplementsDecl json_expr                       (* implements: interface *)
 End
 
 (* ===== Module ===== *)
