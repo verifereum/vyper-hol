@@ -74,6 +74,7 @@ signature vyperASTSyntax = sig
   val Env_tm          : term
   val Acc_tm          : term
   val BlockHash_tm    : term
+  val BlobHash_tm     : term
   val Isqrt_tm        : term
   val ECRecover_tm    : term
   val ECAdd_tm        : term
@@ -214,5 +215,6 @@ signature vyperASTSyntax = sig
   val gas_price_tm     : term
   val prev_hash_tm     : term
   val mk_BlockHash : term -> term
+  val mk_BlobHash : term -> term
 
 end
