@@ -752,7 +752,14 @@ Definition translate_toplevel_def:
   (translate_toplevel (JTL_FlagDef name members) =
     SOME (FlagDecl name members)) /\
 
-  (translate_toplevel (JTL_InterfaceDef _) = NONE)
+  (translate_toplevel (JTL_InterfaceDef _) = NONE) /\
+
+  (* Module declarations are compiled away - the imported content is already inlined *)
+  (translate_toplevel (JTL_Import _) = NONE) /\
+  (translate_toplevel (JTL_ExportsDecl _) = NONE) /\
+  (translate_toplevel (JTL_InitializesDecl _) = NONE) /\
+  (translate_toplevel (JTL_UsesDecl _) = NONE) /\
+  (translate_toplevel (JTL_ImplementsDecl _) = NONE)
 End
 
 (* val () = cv_auto_trans translate_toplevel_def; *)

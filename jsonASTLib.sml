@@ -33,6 +33,7 @@ val json_decorator_ty = jasty "json_decorator"
 val json_arg_ty = jasty "json_arg"
 val json_func_type_ty = jasty "json_func_type"
 val json_value_type_ty = jasty "json_value_type"
+val json_import_info_ty = jasty "json_import_info"
 val json_toplevel_ty = jasty "json_toplevel"
 val json_module_ty = jasty "json_module"
 
@@ -230,6 +231,12 @@ val JTL_EventDef_tm = jastk "JTL_EventDef"
 val JTL_StructDef_tm = jastk "JTL_StructDef"
 val JTL_FlagDef_tm = jastk "JTL_FlagDef"
 val JTL_InterfaceDef_tm = jastk "JTL_InterfaceDef"
+val JTL_Import_tm = jastk "JTL_Import"
+val JTL_ExportsDecl_tm = jastk "JTL_ExportsDecl"
+val JTL_InitializesDecl_tm = jastk "JTL_InitializesDecl"
+val JTL_UsesDecl_tm = jastk "JTL_UsesDecl"
+val JTL_ImplementsDecl_tm = jastk "JTL_ImplementsDecl"
+val JImportInfo_tm = jastk "JImportInfo"
 val JModule_tm = jastk "JModule"
 
 fun mk_JDec s = mk_comb(JDec_tm, fromMLstring s)
@@ -260,6 +267,15 @@ fun mk_JTL_FlagDef (name, members) =
   list_mk_comb(JTL_FlagDef_tm,
     [fromMLstring name, mk_list(List.map fromMLstring members, string_ty)])
 fun mk_JTL_InterfaceDef name = mk_comb(JTL_InterfaceDef_tm, fromMLstring name)
+fun mk_JImportInfo (alias, path, qual_name) =
+  list_mk_comb(JImportInfo_tm,
+    [fromMLstring alias, fromMLstring path, fromMLstring qual_name])
+fun mk_JTL_Import infos =
+  mk_comb(JTL_Import_tm, mk_list(infos, json_import_info_ty))
+fun mk_JTL_ExportsDecl ann = mk_comb(JTL_ExportsDecl_tm, ann)
+fun mk_JTL_InitializesDecl ann = mk_comb(JTL_InitializesDecl_tm, ann)
+fun mk_JTL_UsesDecl ann = mk_comb(JTL_UsesDecl_tm, ann)
+fun mk_JTL_ImplementsDecl ann = mk_comb(JTL_ImplementsDecl_tm, ann)
 fun mk_JModule tls = mk_comb(JModule_tm, mk_list(tls, json_toplevel_ty))
 
 (* ===== Decoder Helpers ===== *)
@@ -877,7 +893,45 @@ val json_toplevel : term decoder = achoose "toplevel" [
 
   (* InterfaceDef - just record the name *)
   check_ast_type "InterfaceDef" $
-    JSONDecode.map mk_JTL_InterfaceDef (field "name" string)
+    JSONDecode.map mk_JTL_InterfaceDef (field "name" string),
+
+  (* Import - module import statement *)
+  check_ast_type "Import" $
+    JSONDecode.map mk_JTL_Import $
+    field "import_infos" $ array $
+      JSONDecode.map mk_JImportInfo $
+      tuple3 (field "alias" string,
+              field "path" string,
+              field "qualified_module_name" string),
+
+  (* ImportFrom - from X import Y statement *)
+  check_ast_type "ImportFrom" $
+    JSONDecode.map mk_JTL_Import $
+    field "import_infos" $ array $
+      JSONDecode.map mk_JImportInfo $
+      tuple3 (field "alias" string,
+              field "path" string,
+              field "qualified_module_name" string),
+
+  (* ExportsDecl - exports declaration *)
+  check_ast_type "ExportsDecl" $
+    JSONDecode.map mk_JTL_ExportsDecl $
+    field "annotation" json_expr,
+
+  (* InitializesDecl - initializes declaration *)
+  check_ast_type "InitializesDecl" $
+    JSONDecode.map mk_JTL_InitializesDecl $
+    field "annotation" json_expr,
+
+  (* UsesDecl - uses declaration *)
+  check_ast_type "UsesDecl" $
+    JSONDecode.map mk_JTL_UsesDecl $
+    field "annotation" json_expr,
+
+  (* ImplementsDecl - implements declaration *)
+  check_ast_type "ImplementsDecl" $
+    JSONDecode.map mk_JTL_ImplementsDecl $
+    field "children" $ sub 0 json_expr
 ]
 
 (* ===== Module Decoder ===== *)
