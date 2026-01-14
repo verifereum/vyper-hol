@@ -144,7 +144,7 @@ End
 
 Datatype:
   call_target
-  = IntCall identifier
+  = IntCall (identifier list) identifier (* namespace path, func_name *)
   | ExtCall identifier (* external call passing Vyper values *)
   | Send
   (* TODO: external raw call *)

@@ -384,12 +384,12 @@ Definition make_builtin_call_def:
                        | _ =>
                            (case args of
                               (arg::_) => arg
-                            | _ => Call (IntCall name) args))
+                            | _ => Call (IntCall [] name) args))
                     else
                       (case args of
                          (arg::_) => arg
-                       | _ => Call (IntCall name) args)
-                else Call (IntCall name) args
+                       | _ => Call (IntCall [] name) args)
+                else Call (IntCall [] name) args
           | _ =>
               if is_cast_name name then
                 let ty' = translate_type ret_ty in
@@ -402,12 +402,12 @@ Definition make_builtin_call_def:
                      | _ =>
                          (case args of
                             (arg::_) => arg
-                          | _ => Call (IntCall name) args))
+                          | _ => Call (IntCall [] name) args))
                   else
                     (case args of
                        (arg::_) => arg
-                     | _ => Call (IntCall name) args)
-              else Call (IntCall name) args)
+                     | _ => Call (IntCall [] name) args)
+              else Call (IntCall [] name) args)
 End
 
 val () = cv_auto_trans make_builtin_call_def;
@@ -512,9 +512,9 @@ Definition translate_expr_def:
              Pop (AttributeTarget (NameTarget id) attr)
          | JE_Subscript (JE_Name id) idx =>
              Pop (SubscriptTarget (NameTarget id) (translate_expr idx))
-         | _ => Call (IntCall "pop") args')
-    | JE_Attribute (JE_Name "self") fname => Call (IntCall fname) args'
-    | _ => Call (IntCall "") args') /\
+         | _ => Call (IntCall [] "pop") args')
+    | JE_Attribute (JE_Name "self") fname => Call (IntCall [] fname) args'
+    | _ => Call (IntCall [] "") args') /\
 
   (* Helper for translating expression lists *)
   (translate_expr_list [] = []) /\
