@@ -5,6 +5,9 @@
 .hol_init.sml
 .hol_cmd.sml
 
+# (symlink to) generated Vyper tests
+tests/vyper-test-exports
+
 .claude/
 CLAUDE.local.md
 
