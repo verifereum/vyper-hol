@@ -77,11 +77,14 @@ val blockHashes : term decoder =
     val ls = Lib.sort descending_key ls
     val true = descending (List.map #1 ls)
   in mk_list(List.map #2 ls, bytes32_ty) end) $ rawObject
+val blobHashes : term decoder =
+  JSONDecode.map (fn ls => mk_list(ls, bytes32_ty)) $
+    array (JSONDecode.map (bytes32_from_hex o ensure_not_empty) string)
 end
 
 val call : term decoder =
   check_trace_type "call" $
-  JSONDecode.map (fn ((a,c,v,t),(p,g,s,h),(m,bn,bf,e)) =>
+  JSONDecode.map (fn ((a,c,v,t),(p,g,s,(h,bh)),(m,bn,bf,e)) =>
               TypeBase.mk_record (call_trace_ty, [
                 ("sender", s),
                 ("target", t),
@@ -90,6 +93,7 @@ val call : term decoder =
                 ("timeStamp", m),
                 ("blockNumber", bn),
                 ("blockHashes", h),
+                ("blobHashes", bh),
                 ("blobBaseFee", bf),
                 ("gasLimit", g),
                 ("gasPrice", p),
@@ -105,7 +109,8 @@ val call : term decoder =
               tuple4 (field "tx" $ field "gas_price" numtm,
                       field "tx" $ field "gas" numtm,
                       field "tx" $ field "origin" address,
-                      field "block" $ field "block_hashes" blockHashes),
+                      tuple2 (field "block" $ field "block_hashes" blockHashes,
+                              field "tx" $ field "blob_hashes" blobHashes)),
             tuple4 (
               field "env" $ field "block" $ field "timestamp" numtm,
               field "env" $ field "block" $ field "number" numtm,
@@ -272,7 +277,7 @@ val deployment : term decoder =
   check (field "source_code" string)
         (fn src => not (has_unsupported_patterns src))
         "has unsupported_pattern" $
-  JSONDecode.map (fn ((c,(i,h),(s,m,a,g),(d,bn,bf,v)),e) =>
+  JSONDecode.map (fn ((c,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e) =>
              TypeBase.mk_record (deployment_trace_ty, [
                ("sourceAst", c),
                ("contractAbi", mk_list(i, abi_entry_ty)),
@@ -283,15 +288,18 @@ val deployment : term decoder =
                ("timeStamp", m),
                ("blockNumber", bn),
                ("blockHashes", h),
+               ("blobHashes", bh),
                ("blobBaseFee", bf),
                ("gasPrice", g),
                ("callData", d)
              ]))
           (tuple2 (tuple4 (toplevels_via_jsonast,
-                           tuple2 (
+                           tuple3 (
                              field "contract_abi" (array abiEntry),
                              field "env" $ field "block" $
-                               field "block_hashes" blockHashes),
+                               field "block_hashes" blockHashes,
+                             field "env" $ field "tx" $
+                               field "blob_hashes" blobHashes),
                            tuple4 (field "env" $ field "tx" $ field "origin" address,
                                    field "env" $ field "block" $ field "timestamp" numtm,
                                    field "deployed_address" address,
