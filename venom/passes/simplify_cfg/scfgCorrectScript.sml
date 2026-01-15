@@ -866,6 +866,19 @@ Proof
   >- (qexists_tac `replace_label_inst b_lbl c_lbl` >> simp[replace_label_inst_opcode])
 QED
 
+(* Helper: phi_block_wf is preserved when pred lists have same MEM behavior (set equality) *)
+Theorem phi_block_wf_MEM_equiv:
+  !preds1 preds2 bb.
+    phi_block_wf preds1 bb /\ (!x. MEM x preds1 <=> MEM x preds2) ==>
+    phi_block_wf preds2 bb
+Proof
+  rpt strip_tac >>
+  gvs[scfgDefsTheory.phi_block_wf_def, scfgDefsTheory.phi_inst_wf_def,
+      scfgDefsTheory.phi_ops_all_preds_def, scfgDefsTheory.phi_ops_complete_def] >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >> gvs[] >>
+  qexists_tac `out` >> simp[] >> metis_tac[]
+QED
+
 (* Helper: phi_block_wf preserved by replace_label_block when pred list transforms *)
 Theorem phi_block_wf_replace_label_block:
   !old new preds bb.
@@ -964,6 +977,27 @@ Proof
           `bb.bb_label = old_bb.bb_label` by simp[] >>
           drule_all ALL_DISTINCT_bb_labels_EQ >> strip_tac >> gvs[])
       >- simp[])
+QED
+
+(* Helper: A block that only jumps to b cannot be its own predecessor.
+   Used in merge_blocks phi_fn_wf to establish ~MEM a (pred_labels fn a) *)
+Theorem no_self_loop_from_jmp:
+  !fn a b a'.
+    block_last_jmp_to b a' /\ cfg_wf fn /\ a <> b /\
+    lookup_block a fn.fn_blocks = SOME a' ==>
+    ~MEM a (pred_labels fn a)
+Proof
+  rpt strip_tac >> simp[scfgDefsTheory.pred_labels_def, MEM_MAP, MEM_FILTER] >>
+  gvs[scfgDefsTheory.pred_labels_def, MEM_MAP, MEM_FILTER] >>
+  `a'.bb_label = bb.bb_label` by (irule lookup_block_label >> metis_tac[]) >>
+  `bb = a'` by (irule ALL_DISTINCT_bb_labels_EQ >> gvs[cfg_wf_def] >>
+   qexists_tac `fn.fn_blocks` >> simp[] >> irule lookup_block_MEM >> metis_tac[]) >>
+  fs[] >>
+  sg `block_successors a' = [b]`
+  >- (fs[scfgDefsTheory.block_last_jmp_to_def] >>
+      simp[scfgDefsTheory.block_successors_def, venomInstTheory.get_successors_def] >>
+      EVAL_TAC)
+  >- fs[]
 QED
 
 (* Helper: pred_labels preserved for non-merged blocks when b not a predecessor *)
@@ -1312,6 +1346,12 @@ Proof
         >- ( (* Now transform pred_labels - case split on MEM b *)
           Cases_on `MEM b (pred_labels fn a)`
           >- ( (* MEM b (pred_labels fn a) case *)
+            (* Establish ~MEM a (pred_labels fn a) using no_self_loop_from_jmp *)
+            sg `~MEM a (pred_labels fn a)` >- (irule no_self_loop_from_jmp >> metis_tac[]) >>
+            `a'.bb_label = a` by (irule lookup_block_label >> metis_tac[]) >>
+            gvs[] >>
+            (* Now we have MEM b preds, ~MEM a preds - can apply phi_block_wf_replace_label_block
+               Need: pred_labels fn' a = MAP (λl. if l=b then a else l) (pred_labels fn a) *)
             cheat)
           >- ( (* ~MEM b (pred_labels fn a) case *)
             `a'.bb_label = a` by (irule lookup_block_label >> metis_tac[]) >>
