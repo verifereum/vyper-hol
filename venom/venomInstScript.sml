@@ -18,7 +18,7 @@ Ancestors
 Datatype:
   opcode =
     (* Arithmetic - note: Div/Mod to avoid HOL4 name clash *)
-    | ADD | SUB | MUL | Div | SDIV | Mod | SMOD | EXP
+    | ADD | SUB | MUL | SMUL | Div | SDIV | Mod | SMOD | EXP
     | ADDMOD | MULMOD
     (* Comparison *)
     | EQ | LT | GT | SLT | SGT | ISZERO
@@ -35,7 +35,7 @@ Datatype:
     (* Control flow *)
     | JMP | JNZ | DJMP | RET | RETURN | REVERT | STOP | SINK
     (* SSA/IR-specific *)
-    | PHI | PARAM | ASSIGN | NOP
+    | PHI | PARAM | ASSIGN | GEP | NOP
     (* Allocation (Vyper-specific stack slots) *)
     | ALLOCA | PALLOCA | CALLOCA
     (* Internal function calls *)

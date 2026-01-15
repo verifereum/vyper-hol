@@ -30,7 +30,7 @@ End
 
 Definition inst_is_commutative_def:
   inst_is_commutative inst <=>
-    inst.inst_opcode IN {ADD; MUL; OR; XOR; AND; EQ}
+    inst.inst_opcode IN {ADD; MUL; SMUL; OR; XOR; AND; EQ}
 End
 
 Definition inst_is_comparator_def:

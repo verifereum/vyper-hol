@@ -227,12 +227,14 @@ Definition step_inst_def:
     | ADD => exec_binop word_add inst s
     | SUB => exec_binop word_sub inst s
     | MUL => exec_binop word_mul inst s
+    | SMUL => exec_binop word_mul inst s
     | Div => exec_binop safe_div inst s
     | Mod => exec_binop safe_mod inst s
     | SDIV => exec_binop safe_sdiv inst s
     | SMOD => exec_binop safe_smod inst s
     | ADDMOD => exec_modop addmod inst s
     | MULMOD => exec_modop mulmod inst s
+    | GEP => exec_binop word_add inst s
 
     (* Comparison *)
     | EQ => exec_binop (\x y. bool_to_word (x = y)) inst s
@@ -663,4 +665,3 @@ Definition run_function_def:
                 else run_function fuel' fn s'
             | other => other
 End
-

@@ -147,6 +147,11 @@ Definition sccp_eval_inst_def:
                 let v = lattice_eval_operand lat op1 in
                 sccp_update_var dfg lat work out v)
        | _ => (lat, work))
+    else if op = GEP then
+      (case inst_output inst of
+         NONE => (lat, work)
+       | SOME out =>
+           sccp_update_var dfg lat work out LBottom)
     else if op = JMP then
       (case inst.inst_operands of
          [Label l] => (lat, FlowItem bb_label l :: work)
