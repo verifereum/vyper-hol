@@ -1823,6 +1823,9 @@ Theorem run_function_merge_jump_equiv_fwd:
     jump_only_target b = SOME c_lbl /\
     s.vs_inst_idx = 0 /\ ~s.vs_halted /\
     s.vs_current_bb <> b_lbl /\
+    (* vs_prev_bb invariants for PHI correctness *)
+    s.vs_prev_bb <> SOME b_lbl /\
+    (s.vs_current_bb = c_lbl ==> s.vs_prev_bb <> SOME a_lbl) /\
     (* Function-wide IR invariant *)
     (!bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
                inst.inst_opcode <> PHI /\ ~is_terminator inst.inst_opcode ==>
@@ -1903,20 +1906,23 @@ Proof
                 mp_tac run_block_merge_jump_other_equiv >>
               impl_tac >- (simp[] >>
                 `MEM x fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
-                gvs[] >> cheat) >>
+                rpt strip_tac >> first_x_assum (qspecl_then [`x`, `inst`] mp_tac) >>
+                simp[] >> qexists_tac `lbl` >> simp[]) >>
               strip_tac >> gvs[] >>
               `x.bb_label = s.vs_current_bb` by metis_tac[lookup_block_label] >>
               Cases_on `x.bb_label = c_lbl`
-              >- cheat (* x.bb_label = c_lbl: PHI case *)
+              >- cheat (* x.bb_label = c_lbl: PHI case - needs separate handling *)
               >- ( (* x.bb_label <> c_lbl: c' = x, IH applies *)
                 gvs[] >>
                 Cases_on `run_block c' s` >> gvs[result_equiv_cfg_def] >>
                 Cases_on `v.vs_halted` >> gvs[result_equiv_cfg_def] >>
                 first_x_assum irule >> simp[] >>
-                metis_tac[scfgEquivTheory.run_block_ok_inst_idx,
-                          lookup_block_MEM,
-                          scfgMergeHelpersTheory.block_no_successor_label_when_not_predecessor,
-                          scfgMergeRunBlockTheory.run_block_ok_successor]))))
+                `v.vs_prev_bb = SOME s.vs_current_bb` by
+                  (drule_all venomSemPropsTheory.run_block_ok_prev_bb >> simp[]) >>
+                gvs[] >>
+                metis_tac[scfgMergeHelpersTheory.block_no_successor_label_when_not_predecessor,
+                          lookup_block_MEM, scfgMergeRunBlockTheory.run_block_ok_successor,
+                          scfgEquivTheory.run_block_ok_inst_idx]))))
 QED
 
 (* Backward direction helper: if merged terminates, original terminates with 2*fuel *)
@@ -1933,6 +1939,9 @@ Theorem run_function_merge_jump_equiv_bwd:
     jump_only_target b = SOME c_lbl /\
     s.vs_inst_idx = 0 /\ ~s.vs_halted /\
     s.vs_current_bb <> b_lbl /\
+    (* vs_prev_bb invariants for PHI correctness *)
+    s.vs_prev_bb <> SOME b_lbl /\
+    (s.vs_current_bb = c_lbl ==> s.vs_prev_bb <> SOME a_lbl) /\
     (* Function-wide IR invariant *)
     (!bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
                inst.inst_opcode <> PHI /\ ~is_terminator inst.inst_opcode ==>
