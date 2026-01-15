@@ -359,6 +359,37 @@ Proof
           irule MEM_remove_block_intro >> gvs[]))
 QED
 
+(* Helper: cfg_wf blocks are non-empty (have terminators) *)
+Theorem cfg_wf_block_nonempty:
+  !fn lbl bb.
+    cfg_wf fn /\ lookup_block lbl fn.fn_blocks = SOME bb ==>
+    bb.bb_instructions <> []
+Proof
+  cheat (* TODO: inline lookup_block_MEM proof - can't use theorem from same file during build *)
+QED
+
+(* Helper for phi_fn_wf preservation in merge_blocks: characterize pred_labels of merged block.
+   Key insight: when MEM b (pred_labels fn a), merged has self-loop (b jumped to a, merged inherits
+   b's successors which include a). This creates MEM a (pred_labels fn' a). *)
+Theorem pred_labels_merge_blocks_merged:
+  !fn a b a' b' merged_block.
+    cfg_wf fn /\
+    lookup_block a fn.fn_blocks = SOME a' /\
+    lookup_block b fn.fn_blocks = SOME b' /\
+    pred_labels fn b = [a] /\
+    block_last_jmp_to b a' /\
+    a <> b /\
+    merged_block.bb_label = a'.bb_label /\
+    block_successors merged_block = block_successors b' /\
+    MEM b (pred_labels fn a) ==>
+    !x. MEM x (pred_labels (fn with fn_blocks :=
+           MAP (replace_label_block b a)
+             (replace_block merged_block (remove_block b fn.fn_blocks))) a) <=>
+        MEM x (MAP (\l. if l = b then a else l) (pred_labels fn a))
+Proof
+  cheat
+QED
+
 Theorem block_last_inst_terminator:
   !bb idx inst.
     block_terminator_last bb /\
@@ -1383,8 +1414,10 @@ Proof
               (pred_labels fn a'.bb_label)` >> simp[] >>
             (* MEM equivalence: pred_labels fn' a ~ MAP (\l. if l=b then a else l) (pred_labels fn a)
                Key: merged has self-loop since b jumped to a, so MEM a (block_successors merged) *)
-            rpt strip_tac >> gvs[Abbr`fn'`] >>
-            cheat (* MEM equivalence - need DISJ1_TAC for self-loop *))
+            rpt strip_tac >> gvs[Abbr`fn'`, Abbr`blocks1`] >>
+            (* Approach verified: CONV_TAC (REWR_CONV EQ_SYM_EQ) >> irule pred_labels_merge_blocks_merged
+               Remaining: block_successors equality needs ~NULL b'.bb_instructions from cfg_wf *)
+            cheat)
           >- ( (* ~MEM b (pred_labels fn a) case *)
             `a'.bb_label = a` by (irule lookup_block_label >> metis_tac[]) >>
             simp[scfgDefsTheory.phi_block_wf_def, MEM_MAP, MEM_APPEND] >>
