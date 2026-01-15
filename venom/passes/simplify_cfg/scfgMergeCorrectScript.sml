@@ -1911,7 +1911,26 @@ Proof
               strip_tac >> gvs[] >>
               `x.bb_label = s.vs_current_bb` by metis_tac[lookup_block_label] >>
               Cases_on `x.bb_label = c_lbl`
-              >- cheat (* x.bb_label = c_lbl: PHI case - needs separate handling *)
+              >- ( (* x.bb_label = c_lbl: PHI case *)
+                Cases_on `run_block x s`
+                >- (simp[] >> Cases_on `run_block c' s`
+                    >- (simp[] >>
+                        `state_equiv_cfg v v'` by gvs[result_equiv_cfg_def] >>
+                        `v.vs_halted = v'.vs_halted` by gvs[scfgDefsTheory.state_equiv_cfg_def] >>
+                        Cases_on `v.vs_halted` >> gvs[result_equiv_cfg_def] >>
+                        (* Derive control-flow facts *)
+                        `v.vs_inst_idx = 0 /\ v'.vs_inst_idx = 0` by
+                          (conj_tac >> irule scfgEquivTheory.run_block_ok_inst_idx >> metis_tac[]) >>
+                        `v.vs_prev_bb = SOME s.vs_current_bb /\ v'.vs_prev_bb = SOME s.vs_current_bb` by
+                          (conj_tac >> irule venomSemPropsTheory.run_block_ok_prev_bb >> metis_tac[]) >>
+                        (* Need: v.vs_current_bb = v'.vs_current_bb for run_function_state_equiv_cfg *)
+                        cheat (* OK/OK non-halted: needs vs_current_bb equality helper *))
+                    >- gvs[result_equiv_cfg_def]
+                    >- gvs[result_equiv_cfg_def]
+                    >- gvs[result_equiv_cfg_def])
+                >- (simp[] >> Cases_on `run_block c' s` >> gvs[result_equiv_cfg_def])
+                >- (simp[] >> Cases_on `run_block c' s` >> gvs[result_equiv_cfg_def])
+                >- (simp[] >> Cases_on `run_block c' s` >> gvs[result_equiv_cfg_def]))
               >- ( (* x.bb_label <> c_lbl: c' = x, IH applies *)
                 gvs[] >>
                 Cases_on `run_block c' s` >> gvs[result_equiv_cfg_def] >>

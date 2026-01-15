@@ -2073,4 +2073,21 @@ Proof
       metis_tac[venomSemPropsTheory.step_in_block_preserves_prev_bb])
 QED
 
+(* Helper: replace_phi_in_block preserves vs_current_bb since terminator is unchanged *)
+Theorem run_block_replace_phi_vs_current_bb:
+  !bb s old new v v' preds.
+    run_block bb s = OK v /\
+    run_block (replace_phi_in_block old new bb) s = OK v' /\
+    s.vs_prev_bb <> SOME old /\
+    s.vs_prev_bb <> SOME new /\
+    phi_block_wf preds bb /\
+    ~MEM old (block_successors bb) /\
+    ~v.vs_halted /\ ~v'.vs_halted ==>
+    v.vs_current_bb = v'.vs_current_bb
+Proof
+  (* Key insight: replace_phi_in_block only changes PHI operands, not terminators.
+     The terminator determines vs_current_bb, so it must be unchanged. *)
+  cheat
+QED
+
 val _ = export_theory();
