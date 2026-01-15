@@ -17,7 +17,13 @@ jobs:
       - name: Save build cache
         uses: actions/cache/save@v4
         with:
-          path: '**/.hol'
+          path: |
+            **/*.uo
+            **/*.ui
+            **/*Theory.sml
+            **/*Theory.sig
+            !tests/vyperTest*
+            !tests/vyperTestDefs*
           key: build-${{ github.run_id }}-${{ github.run_attempt }}
 
   export-vyper-tests:
@@ -62,7 +68,13 @@ jobs:
       - name: Restore build cache
         uses: actions/cache/restore@v4
         with:
-          path: '**/.hol'
+          path: |
+            **/*.uo
+            **/*.ui
+            **/*Theory.sml
+            **/*Theory.sig
+            !tests/vyperTest*
+            !tests/vyperTestDefs*
           key: build-${{ github.run_id }}-${{ github.run_attempt }}
           fail-on-cache-miss: true
       - name: Restore Vyper test exports
