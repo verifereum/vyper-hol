@@ -365,7 +365,8 @@ Theorem cfg_wf_block_nonempty:
     cfg_wf fn /\ lookup_block lbl fn.fn_blocks = SOME bb ==>
     bb.bb_instructions <> []
 Proof
-  cheat (* TODO: inline lookup_block_MEM proof - can't use theorem from same file during build *)
+  rpt strip_tac >> `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  gvs[cfg_wf_def] >> res_tac >> gvs[]
 QED
 
 (* Helper for phi_fn_wf preservation in merge_blocks: characterize pred_labels of merged block.
@@ -1080,11 +1081,9 @@ Proof
       rpt conj_tac
       (* 1. Merged block doesn't have lbl in successors *)
       >- (
-        (* Need b'.bb_instructions <> [] - from block_terminator_last in well-formed CFG *)
+        (* Need b'.bb_instructions <> [] - from cfg_wf *)
         `MEM b' fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
-        `block_terminator_last b'` by metis_tac[] >>
-        (* TODO: Need helper lemma that block_terminator_last + cfg_wf implies non-empty *)
-        sg `b'.bb_instructions <> []` >- cheat >>
+        `b'.bb_instructions <> [] /\ block_terminator_last b'` by metis_tac[] >>
         drule_all block_successors_append_last >> simp[] >>
         strip_tac >> simp[] >>
         simp[scfgDefsTheory.block_successors_def, scfgDefsTheory.block_last_inst_def] >>
