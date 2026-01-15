@@ -1463,6 +1463,28 @@ Proof
   fs[replace_label_inst_opcode]
 QED
 
+(* Helper: block_has_no_phi preserved by update_last_inst *)
+Theorem block_has_no_phi_update_last_inst:
+  !f l. (!x. (f x).inst_opcode = x.inst_opcode) /\
+        (!inst. MEM inst l /\ inst.inst_opcode = PHI ==> F) ==>
+        (!inst. MEM inst (update_last_inst f l) /\ inst.inst_opcode = PHI ==> F)
+Proof
+  rpt strip_tac >>
+  drule_all update_last_inst_phi_mem >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+(* Helper: block_has_no_phi preserved by replace_phi_in_block *)
+Theorem block_has_no_phi_replace_phi_in_block:
+  !old new bb. block_has_no_phi bb ==> block_has_no_phi (replace_phi_in_block old new bb)
+Proof
+  rpt strip_tac >>
+  fs[scfgDefsTheory.block_has_no_phi_def, scfgDefsTheory.block_has_phi_def,
+     scfgDefsTheory.replace_phi_in_block_def, listTheory.EXISTS_MAP] >>
+  rpt strip_tac >> gvs[listTheory.MEM_MAP] >>
+  Cases_on `y.inst_opcode = PHI` >- metis_tac[] >- gvs[scfgDefsTheory.replace_label_in_phi_def]
+QED
+
 (* Helper: MEM in remove_block implies label inequality *)
 Theorem MEM_remove_block_label_neq:
   !lbl blocks y. MEM y (remove_block lbl blocks) ==> y.bb_label <> lbl
