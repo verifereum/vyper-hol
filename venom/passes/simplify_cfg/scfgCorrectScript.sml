@@ -447,7 +447,10 @@ Proof
       simp[get_successors_replace_label_inst, MEM_MAP] >> strip_tac >>
       Cases_on `l = b` >> gvs[] >>
       (* l = b case: contradiction from pred_labels fn b = [a] and y.bb_label <> a *)
-      cheat))
+      `MEM b (block_successors y)` by simp[block_successors_def, block_last_inst_def] >>
+      gvs[pred_labels_def, listTheory.MEM_MAP, listTheory.MEM_FILTER] >>
+      `MEM y (FILTER (\bb''. MEM bb'.bb_label (block_successors bb'')) fn.fn_blocks)` by simp[MEM_FILTER] >>
+      gvs[]))
   >- (
     rpt strip_tac >>
     Cases_on `l = b`
@@ -1569,7 +1572,7 @@ Proof_ORIGINAL
                  venomInstTheory.get_instruction_def,
                  scfgDefsTheory.replace_label_block_def,
                  scfgDefsTheory.replace_phi_in_block_def, LENGTH_MAP, EL_MAP] \\
-            rpt strip_tac >> COND_CASES_TAC >> gvs[LENGTH_MAP, EL_MAP]
+            rpt strip_tac >> TRY COND_CASES_TAC >> gvs[LENGTH_MAP, EL_MAP]
             >- (sg `!old new inst. (replace_label_in_phi old new
                  inst).inst_opcode = inst.inst_opcode`
                 >- (simp[scfgDefsTheory.replace_label_in_phi_def] \\ rw[])
