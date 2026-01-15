@@ -155,7 +155,7 @@ fun mk_JE_List (es, ty) = list_mk_comb(JE_List_tm, [mk_list(es, json_expr_ty), t
 fun mk_JE_Call (func, args, kwargs, ty, src_id_opt) =
   list_mk_comb(JE_Call_tm, [func, mk_list(args, json_expr_ty),
                             mk_list(kwargs, json_keyword_ty), ty,
-                            lift_option (mk_option numSyntax.num) numSyntax.mk_numeral src_id_opt])
+                            lift_option (mk_option numSyntax.num) numSyntax.term_of_int src_id_opt])
 fun mk_JKeyword (arg, v) = list_mk_comb(JKeyword_tm, [fromMLstring arg, v])
 
 (* ===== Statement Constructors ===== *)
@@ -632,12 +632,12 @@ fun d_json_expr () : term decoder = achoose "expr" [
 
   (* Call - also extract source_id from func.type.type_decl_node for module calls *)
   check_ast_type "Call" $
-    JSONDecode.map (fn (func, args, kwargs, ty, src_id) => mk_JE_Call(func, args, kwargs, ty, src_id)) $
-    tuple5 (field "func" (delay d_json_expr),
-            field "args" (array (delay d_json_expr)),
-            orElse(field "keywords" (array (delay d_json_keyword)), succeed []),
-            field "type" json_type,
-            try (field "func" $ field "type" $ field "type_decl_node" $ field "source_id" int))
+    JSONDecode.map (fn ((func, args, kwargs), (ty, src_id)) => mk_JE_Call(func, args, kwargs, ty, src_id)) $
+    tuple2 (tuple3 (field "func" (delay d_json_expr),
+                    field "args" (array (delay d_json_expr)),
+                    orElse(field "keywords" (array (delay d_json_keyword)), succeed [])),
+            tuple2 (field "type" json_type,
+                    try (field "func" $ field "type" $ field "type_decl_node" $ field "source_id" int)))
 ]
 and d_json_keyword () : term decoder =
   JSONDecode.map (fn (arg, v) => mk_JKeyword(arg, v)) $
