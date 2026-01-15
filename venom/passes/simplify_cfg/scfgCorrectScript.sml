@@ -2050,10 +2050,33 @@ Proof_ORIGINAL
                   scfgDefsTheory.block_has_phi_def] >> metis_tac[]))))
       >- ( (* y from original blocks case *)
         (* y is from blocks1 = remove_block b, y <> merged *)
-        (* Need: phi_block_wf (pred_labels fn' y.bb_label) (replace_label_block b a y) *)
-        (* Case: ~MEM b (pred_labels fn y.bb_label) can use phi_block_wf_not_mem_pred *)
-        (* Case: MEM b needs phi_block_wf_replace_label_block *)
-        simp[scfgDefsTheory.replace_label_block_def] >> cheat))
+        simp[scfgDefsTheory.replace_label_block_def] >>
+        `y.bb_label <> b` by (gvs[Abbr`blocks1`] >> drule MEM_remove_block >> simp[]) >>
+        `merged.bb_label = a` by (gvs[Abbr`merged`] >> irule lookup_block_label >> metis_tac[]) >>
+        Cases_on `MEM b (pred_labels fn y.bb_label)`
+        >- cheat (* MEM case - needs phi_block_wf_replace_label_block *)
+        >- ( (* ~MEM case - use pred_labels_merge_blocks_other *)
+          sg `fn' = merge_blocks fn a b`
+          >- (gvs[Abbr`fn'`, Abbr`blocks1`, Abbr`merged`,
+                  scfgTransformTheory.merge_blocks_def,
+                  scfgTransformTheory.merge_blocks_cond_def] >>
+              simp[scfgDefsTheory.replace_label_fn_def])
+          >- (
+            `pred_labels fn' y.bb_label = pred_labels fn y.bb_label`
+              by (gvs[] >> irule pred_labels_merge_blocks_other >>
+                  simp[scfgTransformTheory.merge_blocks_cond_def]) >>
+            gvs[] >>
+            `MEM y fn.fn_blocks` by (gvs[Abbr`blocks1`] >> drule MEM_remove_block >> simp[]) >>
+            `replace_label_block b merged.bb_label y = y with bb_instructions :=
+               MAP (replace_label_inst b merged.bb_label) y.bb_instructions`
+              by simp[scfgDefsTheory.replace_label_block_def] >>
+            once_rewrite_tac[GSYM (ASSUME ``pred_labels (merge_blocks fn merged.bb_label b)
+              y.bb_label = pred_labels fn y.bb_label``)] >>
+            once_rewrite_tac[GSYM (ASSUME ``replace_label_block b merged.bb_label y =
+              y with bb_instructions := MAP (replace_label_inst b merged.bb_label)
+              y.bb_instructions``)] >>
+            irule phi_block_wf_merge_blocks_other_not_pred >>
+            simp[scfgTransformTheory.merge_blocks_cond_def]))))
     >- ( (* block_has_no_phi (HD blocks3) *)
       gvs[Abbr`blocks3`, Abbr`blocks2`, Abbr`blocks1`] >>
       Cases_on `fn.fn_blocks` >> gvs[scfgDefsTheory.phi_fn_wf_def,
