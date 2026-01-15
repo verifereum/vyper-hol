@@ -893,4 +893,30 @@ Proof
   qexists_tac `Label lbl` >> simp[get_label_def]
 QED
 
+(* After replace_phi_in_block old new, no instruction has Label old if:
+   - old is not in block_successors (terminator doesn't have old)
+   - phi_block_wf holds (PHIs only have pred labels, which get replaced)
+   - Non-PHI non-terminator have no Label operands (IR invariant)
+   Therefore replace_label_block old new2 is identity. *)
+Theorem replace_label_block_after_replace_phi_in_block:
+  !bb old new1 new2 preds.
+    phi_block_wf preds bb /\
+    ~MEM old (block_successors bb) /\
+    block_terminator_last bb /\
+    bb.bb_instructions <> [] /\
+    old <> new1 /\
+    (!inst. MEM inst bb.bb_instructions /\ inst.inst_opcode <> PHI /\
+            ~is_terminator inst.inst_opcode ==> !lbl. ~MEM (Label lbl) inst.inst_operands) ==>
+    replace_label_block old new2 (replace_phi_in_block old new1 bb) =
+    replace_phi_in_block old new1 bb
+Proof
+  cheat
+  (* Proof sketch:
+     - irule replace_label_block_identity_no_old_label
+     - For PHI: after MAP replace_label_operand old new1, no Label old
+       (old <> new1 ensures replacement removes all old labels)
+     - For non-PHI non-terminator: IR invariant
+     - For terminator: ~MEM old (block_successors bb) *)
+QED
+
 val _ = export_theory();
