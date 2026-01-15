@@ -2039,7 +2039,7 @@ Proof
               mp_tac run_block_merge_jump_other_equiv >>
             impl_tac >- (simp[] >>
               `MEM x fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
-              gvs[] >> cheat) >>
+              gvs[] >> metis_tac[]) >>
             strip_tac >>
             Cases_on `run_block x s` >> Cases_on `run_block c' s` >>
             gvs[result_equiv_cfg_def, terminates_def] >>
