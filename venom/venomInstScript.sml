@@ -133,12 +133,27 @@ End
 
    An IR function contains:
    - A name (entry label)
+   - Parameter metadata (from IR construction)
    - A list of basic blocks (first is entry)
    -------------------------------------------------------------------------- *)
 
 Datatype:
+  ir_parameter = <|
+    param_name : string;
+    param_index : num;
+    param_offset : num;
+    param_size : num;
+    param_id : num;
+    param_call_site_var : string option;
+    param_func_var : string;
+    param_addr_var : string option
+  |>
+End
+
+Datatype:
   ir_function = <|
     fn_name : string;
+    fn_params : ir_parameter list;
     fn_blocks : basic_block list
   |>
 End
@@ -215,4 +230,3 @@ Definition get_successors_def:
     if ~is_terminator inst.inst_opcode then [] else
     MAP THE (FILTER IS_SOME (MAP get_label inst.inst_operands))
 End
-

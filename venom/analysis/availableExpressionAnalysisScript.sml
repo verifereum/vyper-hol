@@ -44,7 +44,7 @@ End
 
 Definition expr_is_commutative_def:
   expr_is_commutative op <=>
-    op IN {ADD; MUL; SMUL; OR; XOR; AND; EQ}
+    op IN {ADD; MUL; OR; XOR; AND; EQ}
 End
 
 Definition expr_same_def:

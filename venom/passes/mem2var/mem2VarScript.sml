@@ -62,7 +62,7 @@ Definition mem2var_fix_adds_aux_def:
                           op1::op2::_ =>
                             let other = if op1 = Var out then op2 else op1 in
                             let acc1 =
-                              inst_updater_update acc use_inst GEP [Var out; other] NONE in
+                              inst_updater_update acc use_inst ADD [Var out; other] NONE in
                             mem2var_fix_adds_aux fuel acc1 use_inst.inst_id
                         | _ => acc))
               updater uses

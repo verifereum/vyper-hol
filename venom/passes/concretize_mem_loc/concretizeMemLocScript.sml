@@ -286,8 +286,6 @@ Definition concretize_handle_inst_def:
                let concrete = mem_allocator_get_concrete allocator1 base_ptr in
                let updater1 = inst_updater_update updater inst ASSIGN [concrete] NONE in
                (updater1, allocator1))
-    else if inst.inst_opcode = GEP then
-      (inst_updater_update updater inst ADD inst.inst_operands NONE, allocator)
     else (updater, allocator)
 End
 

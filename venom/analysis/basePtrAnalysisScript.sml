@@ -170,16 +170,6 @@ Definition handle_inst_baseptr_def:
                               | SOME alloc => [ptr_from_alloca alloc])
                            else []))
              | _ => [])
-          else if inst.inst_opcode = GEP then
-            (case inst.inst_operands of
-               (Var v :: off :: _) =>
-                 let offset =
-                   case off of
-                     Lit w => SOME (w2n w)
-                   | _ => NONE in
-                 let srcs = ptrs_of_var bpa v in
-                 MAP (λp. ptr_offset_by p offset) srcs
-             | _ => [])
           else if inst.inst_opcode = PHI then
             FOLDL
               (λacc (_,v). ordset_union acc (ptrs_of_var bpa v))

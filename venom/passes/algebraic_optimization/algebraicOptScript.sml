@@ -98,15 +98,6 @@ Definition algebraic_opt_handle_exp_def:
     | _ => updater
 End
 
-Definition algebraic_opt_handle_gep_def:
-  algebraic_opt_handle_gep updater inst =
-    case inst.inst_operands of
-      op1::op2::_ =>
-        if lit_eq op2 0 then inst_updater_mk_assign updater inst op1 NONE
-        else updater
-    | _ => updater
-End
-
 Definition algebraic_opt_handle_add_sub_xor_def:
   algebraic_opt_handle_add_sub_xor updater inst =
     case inst.inst_operands of
@@ -292,8 +283,6 @@ Definition algebraic_opt_handle_inst_peephole_def:
         algebraic_opt_handle_shift updater1 inst1
       else if inst1.inst_opcode = venomInst$EXP then
         algebraic_opt_handle_exp updater1 inst1
-      else if inst1.inst_opcode = GEP then
-        algebraic_opt_handle_gep updater1 inst1
       else if inst1.inst_opcode IN {ADD; SUB; XOR} then
         algebraic_opt_handle_add_sub_xor updater1 inst1
       else if inst1.inst_opcode = AND then
