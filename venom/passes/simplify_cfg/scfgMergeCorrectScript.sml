@@ -2013,10 +2013,12 @@ Proof
         Cases_on `run_function fuel fn s` >>
         Cases_on `run_function fuel (merge_jump fn a_lbl b_lbl) s` >>
         gvs[result_equiv_cfg_def, terminates_def]) >>
-    irule run_function_merge_jump_equiv_fwd >> gvs[] >> metis_tac[])
+    irule run_function_merge_jump_equiv_fwd >> simp[] >>
+    first_x_assum ACCEPT_TAC)
   >- ( (* Backward direction: merged terminates => original terminates *)
     rpt strip_tac >> qexists_tac `2 * fuel'` >>
-    drule_all run_function_merge_jump_equiv_bwd >> simp[])
+    irule run_function_merge_jump_equiv_bwd >> simp[] >>
+    first_x_assum ACCEPT_TAC)
 QED
 
 val _ = export_theory();
