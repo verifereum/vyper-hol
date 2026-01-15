@@ -1,0 +1,2 @@
+# Venom analysis theories for compiler passes
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec .. ../compiler

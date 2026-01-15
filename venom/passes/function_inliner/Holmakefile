@@ -1,0 +1,2 @@
+# Function inliner pass for Venom IR
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../compiler ../../analysis ../float_allocas

@@ -1,0 +1,2 @@
+# Algebraic optimization pass for Venom IR
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../compiler ../../analysis

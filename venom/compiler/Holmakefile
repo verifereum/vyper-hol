@@ -1,0 +1,2 @@
+# Common compiler utilities for Venom IR passes and analyses
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ..
