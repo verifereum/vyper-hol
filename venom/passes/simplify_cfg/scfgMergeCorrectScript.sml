@@ -476,11 +476,10 @@ Theorem ih_conditions_at_merge_point:
 Proof
   rpt strip_tac >> rpt conj_tac
   >- ( (* v'.vs_current_bb = v''.vs_current_bb *)
-    `block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
-      irule lookup_block_MEM >> metis_tac[]) >>
-    `block_terminator_last b` by (gvs[cfg_wf_def] >> first_x_assum irule >>
-      irule lookup_block_MEM >> metis_tac[]) >>
+    `MEM a fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
     `MEM b fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+    `block_terminator_last a` by (gvs[cfg_wf_def] >> res_tac >> gvs[]) >>
+    `block_terminator_last b` by (gvs[cfg_wf_def] >> res_tac >> gvs[]) >>
     `b.bb_label = b_lbl` by metis_tac[lookup_block_label] >>
     `v'.vs_current_bb <> b_lbl` by (qspecl_then [`fn`, `b`, `v`, `v'`,
       `a_lbl`] mp_tac run_block_no_self_loop_single_pred >> gvs[]) >>
@@ -651,10 +650,9 @@ Theorem merge_blocks_at_merge_point_ok_continue:
        | Error v7 => Error v7)
 Proof
   rpt strip_tac >>
-  `block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
-    irule lookup_block_MEM >> metis_tac[]) >>
-  `block_successors a = [b_lbl]` by (irule block_last_jmp_to_successors >> simp[]) >>
   `MEM a fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `block_terminator_last a` by (gvs[cfg_wf_def] >> res_tac >> gvs[]) >>
+  `block_successors a = [b_lbl]` by (irule block_last_jmp_to_successors >> simp[]) >>
   `MEM v.vs_current_bb (block_successors a)` by
     (qspecl_then [`fn`, `a`, `s1`, `v`] mp_tac run_block_ok_successor >> simp[]) >>
   `v.vs_current_bb = b_lbl` by gvs[] >>
@@ -795,8 +793,8 @@ Proof
       >- ( (* OK case *)
         Cases_on `v.vs_halted` >> gvs[]
         >- ( (* OK + halted: use merge block equivalences *)
-          `block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
-            irule lookup_block_MEM >> metis_tac[]) >>
+          `block_terminator_last a` by (`MEM a fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+            gvs[cfg_wf_def] >> res_tac >> gvs[]) >>
           qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac run_block_merge_blocks_equiv >>
           simp[Abbr`merged_no_label`] >> strip_tac >>
           qspecl_then [`fn`, `a`, `b`, `s1.vs_current_bb`, `b_lbl`, `s1`, `s2`]
@@ -811,8 +809,8 @@ Proof
           irule merge_blocks_at_merge_point_ok_continue >>
           gvs[] >> qexists_tac `s1` >> gvs[]))
       >- ( (* Halt case *)
-        `block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
-          irule lookup_block_MEM >> metis_tac[]) >>
+        `block_terminator_last a` by (`MEM a fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+          gvs[cfg_wf_def] >> res_tac >> gvs[]) >>
         qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac run_block_merge_blocks_equiv >>
         simp[Abbr`merged_no_label`] >> strip_tac >>
         Cases_on `run_block (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) s1` >>
@@ -823,8 +821,8 @@ Proof
         gvs[result_equiv_cfg_def] >>
         irule state_equiv_cfg_trans >> qexists_tac `v'` >> simp[])
       >- ( (* Revert case *)
-        `block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
-          irule lookup_block_MEM >> metis_tac[]) >>
+        `block_terminator_last a` by (`MEM a fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+          gvs[cfg_wf_def] >> res_tac >> gvs[]) >>
         qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac run_block_merge_blocks_equiv >>
         simp[Abbr`merged_no_label`] >> strip_tac >>
         Cases_on `run_block (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) s1` >>
@@ -835,8 +833,8 @@ Proof
         gvs[result_equiv_cfg_def] >>
         irule state_equiv_cfg_trans >> qexists_tac `v'` >> simp[])
       >- ( (* Error case *)
-        `block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
-          irule lookup_block_MEM >> metis_tac[]) >>
+        `block_terminator_last a` by (`MEM a fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+          gvs[cfg_wf_def] >> res_tac >> gvs[]) >>
         qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac run_block_merge_blocks_equiv >>
         simp[Abbr`merged_no_label`] >> strip_tac >>
         Cases_on `run_block (a with bb_instructions := FRONT a.bb_instructions ++ b.bb_instructions) s1` >>
@@ -886,7 +884,7 @@ Proof
     >- ( (* NONE case *)
       irule run_block_replace_label_current_bb_prev_none >> gvs[] >>
       qexistsl_tac [`c`, `a_lbl`, `b_lbl`, `s1`, `s2`] >> gvs[] >>
-      conj_tac >- (fs[cfg_wf_def] >> first_x_assum irule >> metis_tac[lookup_block_MEM]) >>
+      conj_tac >- (`MEM c fn.fn_blocks` by metis_tac[lookup_block_MEM] >> fs[cfg_wf_def] >> res_tac >> gvs[]) >>
       irule pred_labels_single_no_jmp >> gvs[] >> metis_tac[lookup_block_MEM, lookup_block_label])
     >- ( (* SOME x case - split on x = b_lbl *)
       Cases_on `x = b_lbl`
@@ -895,7 +893,7 @@ Proof
         qexists_tac `c` >> qexists_tac `fn` >> qexists_tac `a_lbl` >>
         qexists_tac `b_lbl` >> qexists_tac `s1` >> qexists_tac `s2` >> gvs[] >>
         rpt conj_tac
-        >- (fs[cfg_wf_def] >> first_x_assum irule >> metis_tac[lookup_block_MEM])
+        >- (`MEM c fn.fn_blocks` by metis_tac[lookup_block_MEM] >> fs[cfg_wf_def] >> res_tac >> gvs[])
         >- (irule pred_labels_no_jmp_other >> gvs[] >> metis_tac[lookup_block_label])
         >- (irule pred_labels_single_no_jmp >> gvs[] >> metis_tac[lookup_block_MEM, lookup_block_label])
         >- metis_tac[lookup_block_label]
@@ -906,7 +904,7 @@ Proof
         qexists_tac `pred_labels fn c.bb_label` >> qexists_tac `x` >>
         qexists_tac `s1` >> qexists_tac `s2` >> gvs[] >>
         rpt conj_tac
-        >- (fs[cfg_wf_def] >> first_x_assum irule >> metis_tac[lookup_block_MEM])
+        >- (`MEM c fn.fn_blocks` by metis_tac[lookup_block_MEM] >> fs[cfg_wf_def] >> res_tac >> gvs[])
         >- (CCONTR_TAC >> gvs[] >>
             qspecl_then [`fn`, `a`, `a_lbl`, `b_lbl`, `s2.vs_current_bb`] mp_tac pred_labels_no_jmp_other >>
             impl_tac >- (gvs[] >> metis_tac[lookup_block_label]) >> gvs[])
@@ -964,7 +962,7 @@ Proof
     >- ( (* NONE case *)
       irule run_block_replace_label_current_bb_prev_none >> gvs[] >>
       qexistsl_tac [`c`, `a_lbl`, `b_lbl`, `s1`, `s2`] >> gvs[] >>
-      conj_tac >- (fs[cfg_wf_def] >> first_x_assum irule >> metis_tac[lookup_block_MEM]) >>
+      conj_tac >- (`MEM c fn.fn_blocks` by metis_tac[lookup_block_MEM] >> fs[cfg_wf_def] >> res_tac >> gvs[]) >>
       irule pred_labels_single_no_jmp >> gvs[] >> metis_tac[lookup_block_MEM, lookup_block_label])
     >- ( (* SOME x case - split on x = b_lbl *)
       Cases_on `x = b_lbl`
@@ -973,7 +971,7 @@ Proof
         qexists_tac `c` >> qexists_tac `fn` >> qexists_tac `a_lbl` >>
         qexists_tac `b_lbl` >> qexists_tac `s1` >> qexists_tac `s2` >> gvs[] >>
         rpt conj_tac
-        >- (fs[cfg_wf_def] >> first_x_assum irule >> metis_tac[lookup_block_MEM])
+        >- (`MEM c fn.fn_blocks` by metis_tac[lookup_block_MEM] >> fs[cfg_wf_def] >> res_tac >> gvs[])
         >- (irule pred_labels_no_jmp_other >> gvs[] >> metis_tac[lookup_block_label])
         >- (irule pred_labels_single_no_jmp >> gvs[] >> metis_tac[lookup_block_MEM, lookup_block_label])
         >- metis_tac[lookup_block_label]
@@ -984,7 +982,7 @@ Proof
         qexists_tac `pred_labels fn c.bb_label` >> qexists_tac `x` >>
         qexists_tac `s1` >> qexists_tac `s2` >> gvs[] >>
         rpt conj_tac
-        >- (fs[cfg_wf_def] >> first_x_assum irule >> metis_tac[lookup_block_MEM])
+        >- (`MEM c fn.fn_blocks` by metis_tac[lookup_block_MEM] >> fs[cfg_wf_def] >> res_tac >> gvs[])
         >- (CCONTR_TAC >> gvs[] >>
             qspecl_then [`fn`, `a`, `a_lbl`, `b_lbl`, `s2.vs_current_bb`] mp_tac pred_labels_no_jmp_other >>
             impl_tac >- (gvs[] >> metis_tac[lookup_block_label]) >> gvs[])
@@ -1034,8 +1032,8 @@ Theorem merge_blocks_bwd_terminal_at_merge:
 Proof
   rpt strip_tac
   >- ( (* Halt case *)
-    `block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
-      irule lookup_block_MEM >> metis_tac[]) >>
+    `block_terminator_last a` by (`MEM a fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+      gvs[cfg_wf_def] >> res_tac >> gvs[]) >>
     qabbrev_tac `merged_no_label = a with bb_instructions :=
       FRONT a.bb_instructions ++ b.bb_instructions` >>
     qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac run_block_merge_blocks_equiv >>
@@ -1068,8 +1066,8 @@ Proof
     >- (qexists_tac `1` >> simp[Once run_function_def, terminates_def] >>
         simp[Once run_function_def, SimpLHS] >> gvs[result_equiv_cfg_def]))
   >- ( (* Revert case *)
-    `block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
-      irule lookup_block_MEM >> metis_tac[]) >>
+    `block_terminator_last a` by (`MEM a fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+      gvs[cfg_wf_def] >> res_tac >> gvs[]) >>
     qabbrev_tac `merged_no_label = a with bb_instructions :=
       FRONT a.bb_instructions ++ b.bb_instructions` >>
     qspecl_then [`fn`, `a`, `b`, `s1`, `b_lbl`] mp_tac run_block_merge_blocks_equiv >>
@@ -1276,8 +1274,8 @@ Proof
         irule lookup_block_merge_blocks_a >> gvs[]) >> simp[] >>
     strip_tac >> Cases_on `run_block merged_bb s2` >> gvs[terminates_def]
     >- ( (* OK case *)
-      `block_terminator_last a` by (gvs[cfg_wf_def] >> first_x_assum irule >>
-        irule lookup_block_MEM >> metis_tac[]) >>
+      `block_terminator_last a` by (`MEM a fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+        gvs[cfg_wf_def] >> res_tac >> gvs[]) >>
       sg `result_equiv_cfg (case run_block a s1 of OK s' => if s'.vs_halted
         then Halt s' else run_block b s' | Halt v5 => Halt v5
         | Revert v6 => Revert v6 | Error v7 => Error v7)
@@ -1323,8 +1321,8 @@ Proof
             Cases_on `run_block merged_no_label s1` >> simp[result_equiv_cfg_def] >> strip_tac >>
             `~v'''.vs_halted` by (qpat_x_assum `result_equiv_cfg (OK v''') (OK v)` mp_tac >>
               simp[result_equiv_cfg_def, state_equiv_cfg_def]) >>
-            `block_terminator_last b` by (gvs[cfg_wf_def] >> first_x_assum irule >>
-              irule lookup_block_MEM >> metis_tac[]) >>
+            `block_terminator_last b` by (`MEM b fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+              gvs[cfg_wf_def] >> res_tac >> gvs[]) >>
             `~MEM b_lbl (block_successors b)` by (
               irule block_no_self_successor >> conj_tac
               >- (qpat_x_assum `lookup_block b_lbl _ = SOME b`
@@ -1661,8 +1659,8 @@ Proof
      `MEM a fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
      metis_tac[lookup_block_label]) >>
   `block_terminator_last a` by
-    (gvs[cfg_wf_def] >> first_x_assum irule >>
-     irule lookup_block_MEM >> metis_tac[]) >>
+    (`MEM a fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+     gvs[cfg_wf_def] >> res_tac >> gvs[]) >>
   (* PHI replacement on a_simple is identity using helper lemma *)
   sg `replace_phi_in_block b_lbl a_lbl a_simple = a_simple`
   >- (simp[Abbr `a_simple`] >>
@@ -1848,7 +1846,8 @@ Proof
           simp[] >>
           drule_all lookup_block_merge_jump_a >> strip_tac >> gvs[] >>
           `block_terminator_last a` by (
-            gvs[cfg_wf_def] >> first_x_assum irule >> metis_tac[lookup_block_MEM]) >>
+            `MEM a fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+            gvs[cfg_wf_def] >> res_tac >> gvs[]) >>
           `MEM a fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
           (* IR invariant for block a - derivable from function-wide invariant *)
           `!inst. MEM inst a.bb_instructions /\ inst.inst_opcode <> PHI /\

@@ -60,7 +60,8 @@ Definition cfg_wf_def:
   cfg_wf fn <=>
     fn.fn_blocks <> [] /\
     ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
-    !bb. MEM bb fn.fn_blocks ==> block_terminator_last bb
+    !bb. MEM bb fn.fn_blocks ==>
+      bb.bb_instructions <> [] /\ block_terminator_last bb
 End
 
 (* ===== Block Predicates ===== *)
