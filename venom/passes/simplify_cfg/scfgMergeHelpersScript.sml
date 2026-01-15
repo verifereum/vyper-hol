@@ -893,6 +893,38 @@ Proof
   qexists_tac `Label lbl` >> simp[get_label_def]
 QED
 
+(* Lookup through conditional MAP when P is TRUE and f is applied *)
+Theorem lookup_block_MAP_conditional_apply:
+  !lbl blocks bb f P.
+    lookup_block lbl blocks = SOME bb /\ P bb.bb_label /\
+    (!b. (f b).bb_label = b.bb_label) ==>
+    lookup_block lbl (MAP (\b. if P b.bb_label then f b else b) blocks) = SOME (f bb)
+Proof
+  Induct_on `blocks` >> simp[venomInstTheory.lookup_block_def] >> rpt strip_tac >>
+  Cases_on `h.bb_label = lbl` >> gvs[] >>
+  Cases_on `P h.bb_label` >> gvs[]
+QED
+
+(* When we replace a label that appears in successors, it appears in the new successors *)
+Theorem get_successors_replace_label_inst_MEM:
+  !inst old new.
+    is_terminator inst.inst_opcode /\ MEM old (get_successors inst) ==>
+    MEM new (get_successors (replace_label_inst old new inst))
+Proof
+  rpt strip_tac >>
+  fs[venomInstTheory.get_successors_def, listTheory.MEM_MAP, listTheory.MEM_FILTER] >>
+  `(replace_label_inst old new inst).inst_opcode = inst.inst_opcode` by
+    simp[scfgDefsTheory.replace_label_inst_def] >>
+  simp[scfgDefsTheory.replace_label_inst_def, listTheory.MEM_MAP, listTheory.MEM_FILTER] >>
+  qexists_tac `SOME new` >> simp[venomStateTheory.get_label_def] >>
+  qexists_tac `Label new` >>
+  simp[venomStateTheory.get_label_def, scfgDefsTheory.replace_label_operand_def] >>
+  qexists_tac `Label old` >> simp[scfgDefsTheory.replace_label_operand_def] >>
+  gvs[listTheory.MEM_MAP, listTheory.MEM_FILTER] >>
+  `y' = Label (THE (get_label y'))` by (Cases_on `y'` >> gvs[venomStateTheory.get_label_def]) >>
+  pop_assum (SUBST1_TAC o SYM) >> simp[]
+QED
+
 (* After replace_phi_in_block old new, no instruction has Label old if:
    - old is not in block_successors (terminator doesn't have old)
    - phi_block_wf holds (PHIs only have pred labels, which get replaced)
