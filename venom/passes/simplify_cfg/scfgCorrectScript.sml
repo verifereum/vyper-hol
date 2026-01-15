@@ -1604,7 +1604,9 @@ Proof
         `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by gvs[cfg_wf_def] \\
         drule_all MEM_replace_block >> strip_tac >> gvs[]
         >- ( (* bb' = x_modified - trace y through update_last_inst *)
-          cheat)
+          `MEM x fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
+          `MEM y x.bb_instructions` by (irule MEM_update_last_inst_merge_jump >> metis_tac[]) >>
+          first_x_assum drule_all >> simp[] >> qexists_tac `lbl'` >> simp[])
         >- ( (* bb' in fn.fn_blocks *)
           first_x_assum drule_all >> simp[] >> qexists_tac `lbl'` >> simp[]))
       >- ( (* bb' not in block_successors *)
@@ -1616,7 +1618,9 @@ Proof
         `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by gvs[cfg_wf_def] \\
         drule_all MEM_replace_block >> strip_tac >> gvs[]
         >- ( (* bb' = x_modified - trace y through update_last_inst *)
-          cheat)
+          `MEM x fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
+          `MEM y x.bb_instructions` by (irule MEM_update_last_inst_merge_jump >> metis_tac[]) >>
+          first_x_assum drule_all >> simp[] >> qexists_tac `lbl'` >> simp[])
         >- ( (* bb' in fn.fn_blocks *)
           first_x_assum drule_all >> simp[] >> qexists_tac `lbl'` >> simp[]))))
 QED
