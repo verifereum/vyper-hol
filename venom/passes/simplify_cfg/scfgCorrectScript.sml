@@ -305,6 +305,24 @@ Proof
   qexists_tac `bb` >> simp[]
 QED
 
+(* Helper: if x is in pred_labels of lbl and we have the block x, then lbl is in its successors *)
+Theorem pred_labels_lookup_block_successors:
+  !fn lbl x bb.
+    cfg_wf fn /\ MEM x (pred_labels fn lbl) /\
+    lookup_block x fn.fn_blocks = SOME bb ==>
+    MEM lbl (block_successors bb)
+Proof
+  rpt strip_tac >> gvs[scfgDefsTheory.pred_labels_def, MEM_MAP, MEM_FILTER] >>
+  `bb.bb_label = bb'.bb_label` by (irule lookup_block_label >> metis_tac[]) >>
+  `MEM bb fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
+  (* Use induction to show blocks with same label in ALL_DISTINCT list are equal *)
+  gvs[cfg_wf_def] >>
+  `!l b1 b2. ALL_DISTINCT (MAP (\b. b.bb_label) l) /\
+             MEM b1 l /\ MEM b2 l /\ b1.bb_label = b2.bb_label ==> b1 = b2` by (
+    Induct >> rw[] >> gvs[MEM_MAP] >> metis_tac[]) >>
+  first_x_assum drule_all >> simp[]
+QED
+
 (* Helper: block_successors depends only on LAST instruction *)
 Theorem block_successors_append_last:
   !insts1 insts2 bb.
