@@ -75,7 +75,7 @@ Datatype:
   | JE_Bool bool                                       (* True/False *)
 
   (* Variables and access *)
-  | JE_Name string                                     (* id *)
+  | JE_Name string (string option)                     (* id, optional typeclass (e.g. "module") *)
   | JE_Attribute json_expr string                      (* value, attr *)
   | JE_Subscript json_expr json_expr                   (* value, slice *)
 
@@ -90,7 +90,8 @@ Datatype:
   | JE_List (json_expr list) json_type                 (* elements, type needed for elem type *)
 
   (* Calls - need type for builtins like concat/slice that embed return length *)
-  | JE_Call json_expr (json_expr list) (json_keyword list) json_type
+  (* Last field is source_id for module calls, extracted from func.type.type_decl_node *)
+  | JE_Call json_expr (json_expr list) (json_keyword list) json_type (num option)
 ;
   json_keyword = JKeyword string json_expr             (* arg, value *)
 End
@@ -181,6 +182,22 @@ End
 
 Datatype:
   json_module = JModule (json_toplevel list)
+End
+
+(* ===== Imported Module ===== *)
+(* Represents an imported module from the imports array *)
+
+Datatype:
+  json_imported_module
+  = JImportedModule num string (json_toplevel list)  (* source_id, path, body *)
+End
+
+(* ===== Annotated AST ===== *)
+(* Full annotated AST with main module and imported modules *)
+
+Datatype:
+  json_annotated_ast
+  = JAnnotatedAST json_module (json_imported_module list)  (* main ast, imports *)
 End
 
 (* Datatypes are automatically translated by cv_transLib when defined *)

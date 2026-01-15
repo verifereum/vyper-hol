@@ -22,8 +22,10 @@ in
 end
 
 (* Decoder that uses the new jsonAST pipeline *)
+(* Uses annotated_ast_simple for now - returns json_module directly *)
+(* TODO: Update to use annotated_ast and handle imports for module support *)
 val toplevels_via_jsonast : term decoder =
-  JSONDecode.map translate_jsonast_to_vyper annotated_ast
+  JSONDecode.map translate_jsonast_to_vyper annotated_ast_simple
 
 fun from_term_option ty = lift_option (mk_option ty) I
 

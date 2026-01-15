@@ -151,7 +151,9 @@ Definition run_call_def:
     fna = case ALOOKUP sns sel of SOME fna => fna
              | NONE => ("__default__", [], []);
     name = FST fna; argTys = FST (SND fna);
-    ts = case ALOOKUP am.sources ct.target of SOME ts => ts | _ => [];
+    ts = case ALOOKUP am.sources ct.target of
+           SOME mods => (case ALOOKUP mods NONE of SOME ts => ts | _ => [])
+         | _ => [];
     ar = compute_vyper_args ts External name argTys (DROP 4 ct.callData);
     retTys = SND (SND fna);
   in
