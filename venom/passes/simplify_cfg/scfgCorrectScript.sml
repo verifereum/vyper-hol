@@ -2024,9 +2024,16 @@ Proof_ORIGINAL
             (* MEM equivalence: pred_labels fn' a ~ MAP (\l. if l=b then a else l) (pred_labels fn a)
                Key: merged has self-loop since b jumped to a, so MEM a (block_successors merged) *)
             rpt strip_tac >> gvs[Abbr`fn'`, Abbr`blocks1`] >>
-            (* Approach verified: CONV_TAC (REWR_CONV EQ_SYM_EQ) >> irule pred_labels_merge_blocks_merged
-               Remaining: block_successors equality needs ~NULL b'.bb_instructions from cfg_wf *)
-            cheat)
+            sg `block_successors merged_block = block_successors b'`
+            >- (simp[Abbr`merged_block`] >>
+                `b'.bb_instructions <> []` by
+                  (gvs[scfgDefsTheory.cfg_wf_def] >>
+                   `MEM b' fn.fn_blocks` by metis_tac[lookup_block_MEM] >> res_tac) >>
+                simp[scfgMergeCorrectTheory.block_successors_merged])
+            >- (sg `merged_block.bb_label = a'.bb_label`
+                >- simp[Abbr`merged_block`]
+                >- (CONV_TAC (REWR_CONV EQ_SYM_EQ) >>
+                    irule pred_labels_merge_blocks_merged >> simp[])))
           >- ( (* ~MEM b (pred_labels fn a) case *)
             `a'.bb_label = a` by (irule lookup_block_label >> metis_tac[]) >>
             simp[scfgDefsTheory.phi_block_wf_def, MEM_MAP, MEM_APPEND] >>
@@ -2040,7 +2047,15 @@ Proof_ORIGINAL
                      scfgDefsTheory.block_last_inst_def] >>
                  Cases_on `a'.bb_instructions` >> gvs[]) >>
               Cases_on `y.inst_opcode = PHI`
-              >- cheat (* PHI case needs pred_labels fn' ~ pred_labels fn *)
+              >- (sg `fn' = merge_blocks fn a'.bb_label b`
+                  >- (gvs[Abbr`fn'`, Abbr`blocks1`,
+                          scfgTransformTheory.merge_blocks_def,
+                          scfgTransformTheory.merge_blocks_cond_def] >>
+                      simp[scfgDefsTheory.replace_label_fn_def])
+                  >- (sg `pred_labels fn' a'.bb_label = pred_labels fn a'.bb_label`
+                      >- (gvs[] >> irule pred_labels_merge_blocks_merged_not_mem >>
+                          simp[scfgTransformTheory.merge_blocks_cond_def])
+                      >- (gvs[] >> irule phi_inst_wf_not_mem_pred >> simp[])))
               >- gvs[scfgDefsTheory.phi_inst_wf_def,
                      scfgDefsTheory.replace_label_inst_def])
             >- ( (* y from b'.bb_instructions - no PHIs *)
