@@ -1312,7 +1312,7 @@ Proof
           scfgDefsTheory.replace_label_fn_def] >>
       qabbrev_tac `merged = a' with bb_instructions :=
         FRONT a'.bb_instructions ++ b'.bb_instructions` >>
-      cheat) (* filter/map equality - needs pred_labels through transforms *)
+      cheat) (* pred_labels equality through FILTER/MAP transforms - complex list algebra *)
 QED
 
 (* Helper: phi_block_wf for merged block after merge_blocks *)
@@ -2054,7 +2054,65 @@ Proof_ORIGINAL
         `y.bb_label <> b` by (gvs[Abbr`blocks1`] >> drule MEM_remove_block >> simp[]) >>
         `merged.bb_label = a` by (gvs[Abbr`merged`] >> irule lookup_block_label >> metis_tac[]) >>
         Cases_on `MEM b (pred_labels fn y.bb_label)`
-        >- cheat (* MEM case - needs phi_block_wf_replace_label_block *)
+        >- ( (* MEM case - pred_labels changes, need to track *)
+          simp[scfgDefsTheory.phi_block_wf_def, MEM_MAP] >>
+          rpt strip_tac >> gvs[] >>
+          (* Use MEM_pred_labels_replace_block_remove for pred_labels characterization *)
+          sg `fn' = merge_blocks fn a b`
+          >- (gvs[Abbr`fn'`, Abbr`blocks1`, Abbr`merged`,
+                  scfgTransformTheory.merge_blocks_def,
+                  scfgTransformTheory.merge_blocks_cond_def] >>
+              simp[scfgDefsTheory.replace_label_fn_def])
+          >- (
+            (* Now show phi_inst_wf for instructions in replaced block *)
+            `y.bb_label <> a` by (
+              CCONTR_TAC >> gvs[] >>
+              `y = a'` by (irule scfgMergeHelpersTheory.lookup_block_unique >>
+                          gvs[scfgDefsTheory.cfg_wf_def] >>
+                          `MEM y fn.fn_blocks` by (gvs[Abbr`blocks1`] >>
+                            drule MEM_remove_block >> simp[]) >>
+                          metis_tac[]) >>
+              gvs[]) >>
+            `MEM y fn.fn_blocks` by (gvs[Abbr`blocks1`] >> drule MEM_remove_block >> simp[]) >>
+            `phi_block_wf (pred_labels fn y.bb_label) y` by gvs[scfgDefsTheory.phi_fn_wf_def] >>
+            (* Key: show MEM equivalence between pred_labels fn' and transformed pred_labels fn *)
+            `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by gvs[scfgDefsTheory.cfg_wf_def] >>
+            `a'.bb_label = a` by metis_tac[lookup_block_label] >>
+            qspecl_then [`fn`, `a' with bb_instructions := FRONT a'.bb_instructions ++
+              b'.bb_instructions`, `b`, `y.bb_label`, `x'`]
+              mp_tac MEM_pred_labels_replace_block_remove >>
+            impl_tac
+            >- (simp[] >> qexists_tac `a'` >> simp[] >> irule lookup_block_MEM >> metis_tac[])
+            >- (
+              strip_tac >>
+              (* Now use phi_inst_wf from original block *)
+              gvs[scfgDefsTheory.phi_block_wf_def] >>
+              Cases_on `y'.inst_opcode = PHI`
+              >- (
+                (* PHI case - need to handle pred_labels change *)
+                first_x_assum (qspec_then `y'` mp_tac) >> impl_tac >- simp[] >>
+                strip_tac >>
+                Cases_on `x' = a`
+                >- (
+                  (* x' = a: need MEM y.bb_label (block_successors merged) *)
+                  `MEM y.bb_label (block_successors b')` by (
+                    gvs[scfgDefsTheory.pred_labels_def, MEM_MAP, MEM_FILTER] >>
+                    `bb = b'` by (irule scfgMergeHelpersTheory.lookup_block_unique >>
+                                 gvs[scfgDefsTheory.cfg_wf_def] >> metis_tac[]) >>
+                    gvs[]) >>
+                  `b'.bb_instructions <> []` by (gvs[scfgDefsTheory.cfg_wf_def] >>
+                    `MEM b' fn.fn_blocks` by metis_tac[lookup_block_MEM] >> metis_tac[]) >>
+                  simp[block_successors_append_last, scfgDefsTheory.block_successors_def,
+                       scfgDefsTheory.block_last_inst_def] >>
+                  irule phi_inst_wf_replace_label >> simp[] >>
+                  gvs[scfgDefsTheory.phi_inst_wf_def, MEM_MAP])
+                >- (
+                  (* x' <> a: pred_labels preserved modulo b *)
+                  irule phi_inst_wf_replace_label >> simp[] >>
+                  gvs[scfgDefsTheory.phi_inst_wf_def, MEM_MAP]))
+              >- (
+                (* non-PHI case - trivial *)
+                gvs[scfgDefsTheory.phi_inst_wf_def, scfgDefsTheory.replace_label_inst_def]))))
         >- ( (* ~MEM case - use pred_labels_merge_blocks_other *)
           sg `fn' = merge_blocks fn a b`
           >- (gvs[Abbr`fn'`, Abbr`blocks1`, Abbr`merged`,
