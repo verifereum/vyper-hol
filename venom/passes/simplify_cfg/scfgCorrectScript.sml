@@ -1377,6 +1377,13 @@ Proof
               res_tac >> gvs[])))
 QED
 
+(* Helper: MEM in remove_block implies label inequality *)
+Theorem MEM_remove_block_label_neq:
+  !lbl blocks y. MEM y (remove_block lbl blocks) ==> y.bb_label <> lbl
+Proof
+  gen_tac >> Induct >> simp[scfgDefsTheory.remove_block_def] >> rw[] >> gvs[]
+QED
+
 (* Helper: cfg_wf and phi_fn_wf preserved by simplify_cfg_step *)
 Theorem wf_simplify_cfg_step:
   !fn fn'.
@@ -1640,7 +1647,41 @@ Proof
     >- (rpt strip_tac >>
         gvs[Abbr`blocks3`, listTheory.MEM_MAP] >>
         (* y in blocks2, bb = replace_label_block b a y *)
-        cheat) (* phi_block_wf - needs pred_labels algebra - partial structure above *) (* pred_labels equality for other block *)
+        `ALL_DISTINCT (MAP (\bb. bb.bb_label) blocks1)` by
+          (gvs[Abbr`blocks1`] >> irule ALL_DISTINCT_remove_block >> gvs[cfg_wf_def]) >>
+        `merged.bb_label = a` by (simp[Abbr`merged`] >> metis_tac[lookup_block_label]) >>
+        `MEM merged.bb_label (MAP (\bb. bb.bb_label) blocks1)` by cheat >>
+        qpat_x_assum `MEM y blocks2` mp_tac >> gvs[Abbr`blocks2`] >> strip_tac >>
+        drule_all MEM_replace_block >> strip_tac >> gvs[]
+        >- ((* y = merged case *)
+            sg `fn' = merge_blocks fn merged.bb_label b`
+            >- (gvs[Abbr`fn'`, Abbr`blocks1`, scfgTransformTheory.merge_blocks_def,
+                    scfgTransformTheory.merge_blocks_cond_def] >>
+                simp[scfgDefsTheory.replace_label_fn_def])
+            >- (`(replace_label_block b merged.bb_label merged).bb_label = merged.bb_label`
+                  by simp[scfgDefsTheory.replace_label_block_def] >>
+                gvs[] >> gvs[Abbr`merged`] >> irule phi_block_wf_merge_blocks_merged >>
+                simp[scfgTransformTheory.merge_blocks_cond_def] >> metis_tac[lookup_block_label]))
+        >- ((* y from blocks1 (other blocks) case *)
+            `y.bb_label <> b` by
+              (qpat_x_assum `MEM y blocks1` mp_tac >> gvs[Abbr`blocks1`] >> strip_tac >>
+               drule MEM_remove_block_label_neq >> simp[]) >>
+            `MEM y fn.fn_blocks` by (gvs[Abbr`blocks1`] >> drule MEM_remove_block >> simp[]) >>
+            `(replace_label_block b merged.bb_label y).bb_label = y.bb_label`
+              by simp[scfgDefsTheory.replace_label_block_def] >> gvs[] >>
+            Cases_on `MEM b (pred_labels fn y.bb_label)`
+            >- cheat (* MEM b case - needs phi_block_wf_replace_label_block *)
+            >- (sg `fn' = merge_blocks fn merged.bb_label b`
+                >- (gvs[Abbr`fn'`, Abbr`blocks1`, Abbr`merged`,
+                        scfgTransformTheory.merge_blocks_def,
+                        scfgTransformTheory.merge_blocks_cond_def] >>
+                    simp[scfgDefsTheory.replace_label_fn_def])
+                >- (`pred_labels fn' y.bb_label = pred_labels fn y.bb_label` by
+                      (gvs[] >> irule pred_labels_merge_blocks_other >>
+                       simp[scfgTransformTheory.merge_blocks_cond_def] >>
+                       gvs[Abbr`merged`] >> metis_tac[lookup_block_label]) >>
+                    gvs[] >> irule phi_block_wf_not_mem_pred >> simp[] >>
+                    gvs[scfgDefsTheory.phi_fn_wf_def]))))
     >- (gvs[Abbr`blocks3`, Abbr`blocks2`, Abbr`blocks1`] >>
         Cases_on `fn.fn_blocks` >>
         gvs[scfgDefsTheory.phi_fn_wf_def, scfgDefsTheory.remove_block_def] >>
