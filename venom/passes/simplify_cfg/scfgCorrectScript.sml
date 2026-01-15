@@ -1448,6 +1448,40 @@ Proof
   gen_tac >> Induct >> simp[scfgDefsTheory.remove_block_def] >> rw[] >> gvs[]
 QED
 
+(* Helper: pred_labels membership after merge_blocks when MEM b in original preds *)
+Theorem MEM_pred_labels_merge_blocks_other_mem_b:
+  !fn a b lbl x.
+    merge_blocks_cond fn a b /\ cfg_wf fn /\ phi_fn_wf fn /\
+    lbl <> a /\ lbl <> b /\ MEM b (pred_labels fn lbl) ==>
+    (MEM x (pred_labels (merge_blocks fn a b) lbl) <=>
+     (x = a) \/ (x <> b /\ MEM x (pred_labels fn lbl)))
+Proof
+  rpt strip_tac >> fs[scfgTransformTheory.merge_blocks_cond_def] >>
+  simp[scfgTransformTheory.merge_blocks_def, scfgDefsTheory.replace_label_fn_def] >>
+  qabbrev_tac `merged = a' with bb_instructions := FRONT a'.bb_instructions ++ b'.bb_instructions` >>
+  qabbrev_tac `fn1 = fn with fn_blocks := replace_block merged (remove_block b fn.fn_blocks)` >>
+  `merged.bb_label = a` by (simp[Abbr`merged`] >> metis_tac[lookup_block_label]) >>
+  `fn with fn_blocks := MAP (replace_label_block b a)
+     (replace_block merged (remove_block b fn.fn_blocks)) = replace_label_fn b a fn1`
+    by simp[scfgDefsTheory.replace_label_fn_def, Abbr`fn1`] >>
+  pop_assum (fn th => SUBST1_TAC th) >>
+  `MEM x (pred_labels (replace_label_fn b a fn1) lbl) <=> MEM x (pred_labels fn1 lbl)`
+    by (qspecl_then [`fn1`, `b`, `a`, `lbl`, `x`] mp_tac MEM_pred_labels_replace_label_fn >> simp[]) >>
+  pop_assum (fn th => SUBST1_TAC th) >>
+  simp[Abbr`fn1`] >>
+  qspecl_then [`fn`, `merged`, `b`, `lbl`, `x`] mp_tac MEM_pred_labels_replace_block_remove >>
+  impl_tac >- (fs[cfg_wf_def] >> qexists_tac `a'` >> simp[] >> metis_tac[lookup_block_MEM, lookup_block_label]) >>
+  strip_tac >> fs[] >>
+  Cases_on `x = a` >> simp[] >>
+  `block_successors merged = block_successors b'`
+    by (simp[Abbr`merged`] >> irule scfgMergeCorrectTheory.block_successors_merged >>
+        fs[cfg_wf_def] >> metis_tac[lookup_block_MEM]) >>
+  fs[] >>
+  fs[scfgDefsTheory.pred_labels_def, MEM_MAP, MEM_FILTER] >>
+  `bb' = b'` by (fs[cfg_wf_def] >> irule scfgMergeHelpersTheory.lookup_block_unique >> metis_tac[lookup_block_label]) >>
+  fs[]
+QED
+
 (* Helper: cfg_wf and phi_fn_wf preserved by simplify_cfg_step *)
 Theorem wf_simplify_cfg_step:
   !fn fn'.
@@ -1755,7 +1789,7 @@ Proof
                         scfgTransformTheory.merge_blocks_def,
                         scfgTransformTheory.merge_blocks_cond_def] >>
                     simp[scfgDefsTheory.replace_label_fn_def])
-                >- cheat)
+                >- cheat (* use MEM_pred_labels_merge_blocks_other_mem_b *))
             >- (sg `fn' = merge_blocks fn merged.bb_label b`
                 >- (gvs[Abbr`fn'`, Abbr`blocks1`, Abbr`merged`,
                         scfgTransformTheory.merge_blocks_def,
