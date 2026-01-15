@@ -142,7 +142,8 @@ fun mk_JE_Str (len, v) = list_mk_comb(JE_Str_tm, [len, fromMLstring v])
 fun mk_JE_Bytes (len, v) = list_mk_comb(JE_Bytes_tm, [len, fromMLstring v])
 fun mk_JE_Hex s = mk_comb(JE_Hex_tm, fromMLstring s)
 fun mk_JE_Bool b = mk_comb(JE_Bool_tm, mk_bool b)
-fun mk_JE_Name s = mk_comb(JE_Name_tm, fromMLstring s)
+fun mk_JE_Name (s, tc_opt) =
+  list_mk_comb(JE_Name_tm, [fromMLstring s, lift_option (mk_option string_ty) fromMLstring tc_opt])
 fun mk_JE_Attribute (e, attr) = list_mk_comb(JE_Attribute_tm, [e, fromMLstring attr])
 fun mk_JE_Subscript (e1, e2) = list_mk_comb(JE_Subscript_tm, [e1, e2])
 fun mk_JE_BinOp (l, op_tm, r) = list_mk_comb(JE_BinOp_tm, [l, op_tm, r])
@@ -151,9 +152,10 @@ fun mk_JE_UnaryOp (op_tm, e) = list_mk_comb(JE_UnaryOp_tm, [op_tm, e])
 fun mk_JE_IfExp (test, body, els) = list_mk_comb(JE_IfExp_tm, [test, body, els])
 fun mk_JE_Tuple es = mk_comb(JE_Tuple_tm, mk_list(es, json_expr_ty))
 fun mk_JE_List (es, ty) = list_mk_comb(JE_List_tm, [mk_list(es, json_expr_ty), ty])
-fun mk_JE_Call (func, args, kwargs, ty) =
+fun mk_JE_Call (func, args, kwargs, ty, src_id_opt) =
   list_mk_comb(JE_Call_tm, [func, mk_list(args, json_expr_ty),
-                            mk_list(kwargs, json_keyword_ty), ty])
+                            mk_list(kwargs, json_keyword_ty), ty,
+                            lift_option (mk_option numSyntax.num) numSyntax.mk_numeral src_id_opt])
 fun mk_JKeyword (arg, v) = list_mk_comb(JKeyword_tm, [fromMLstring arg, v])
 
 (* ===== Statement Constructors ===== *)
@@ -238,6 +240,8 @@ val JTL_UsesDecl_tm = jastk "JTL_UsesDecl"
 val JTL_ImplementsDecl_tm = jastk "JTL_ImplementsDecl"
 val JImportInfo_tm = jastk "JImportInfo"
 val JModule_tm = jastk "JModule"
+val JImportedModule_tm = jastk "JImportedModule"
+val JAnnotatedAST_tm = jastk "JAnnotatedAST"
 
 fun mk_JDec s = mk_comb(JDec_tm, fromMLstring s)
 fun mk_JArg (name, ty) = list_mk_comb(JArg_tm, [fromMLstring name, ty])
@@ -277,6 +281,15 @@ fun mk_JTL_InitializesDecl ann = mk_comb(JTL_InitializesDecl_tm, ann)
 fun mk_JTL_UsesDecl ann = mk_comb(JTL_UsesDecl_tm, ann)
 fun mk_JTL_ImplementsDecl ann = mk_comb(JTL_ImplementsDecl_tm, ann)
 fun mk_JModule tls = mk_comb(JModule_tm, mk_list(tls, json_toplevel_ty))
+fun mk_JImportedModule (src_id, path, body) =
+  list_mk_comb(JImportedModule_tm,
+    [numSyntax.mk_numeral (Arbnum.fromInt src_id),
+     fromMLstring path,
+     mk_list(body, json_toplevel_ty)])
+fun mk_JAnnotatedAST (main_ast, imports) =
+  list_mk_comb(JAnnotatedAST_tm,
+    [main_ast,
+     mk_list(imports, mk_type("json_imported_module", []))])
 
 (* ===== Decoder Helpers ===== *)
 
@@ -546,9 +559,11 @@ fun d_json_expr () : term decoder = achoose "expr" [
               check_ast_type "Int" $ field "value" inttm,
             orElse(field "type" json_type, succeed JT_None_tm)),
 
-  (* Name *)
+  (* Name - extract typeclass from type.typeclass to detect module references *)
   check_ast_type "Name" $
-    JSONDecode.map mk_JE_Name (field "id" string),
+    JSONDecode.map mk_JE_Name $
+    tuple2 (field "id" string,
+            try (field "type" $ field "typeclass" string)),
 
   (* Attribute *)
   check_ast_type "Attribute" $
@@ -615,13 +630,14 @@ fun d_json_expr () : term decoder = achoose "expr" [
     tuple2 (field "elements" (array (delay d_json_expr)),
             field "type" json_type),
 
-  (* Call *)
+  (* Call - also extract source_id from func.type.type_decl_node for module calls *)
   check_ast_type "Call" $
-    JSONDecode.map (fn (func, args, kwargs, ty) => mk_JE_Call(func, args, kwargs, ty)) $
-    tuple4 (field "func" (delay d_json_expr),
+    JSONDecode.map (fn (func, args, kwargs, ty, src_id) => mk_JE_Call(func, args, kwargs, ty, src_id)) $
+    tuple5 (field "func" (delay d_json_expr),
             field "args" (array (delay d_json_expr)),
             orElse(field "keywords" (array (delay d_json_keyword)), succeed []),
-            field "type" json_type)
+            field "type" json_type,
+            try (field "func" $ field "type" $ field "type_decl_node" $ field "source_id" int))
 ]
 and d_json_keyword () : term decoder =
   JSONDecode.map (fn (arg, v) => mk_JKeyword(arg, v)) $
@@ -939,8 +955,25 @@ val json_toplevel : term decoder = achoose "toplevel" [
 val json_module : term decoder =
   JSONDecode.map mk_JModule (field "body" (array json_toplevel))
 
-(* Parse complete annotated AST *)
+(* ===== Imported Module Decoder ===== *)
+(* Decoder for imported modules from the imports array *)
+
+val json_imported_module : term decoder =
+  JSONDecode.map mk_JImportedModule $
+  tuple3 (field "source_id" int,
+          field "path" string,
+          field "body" (array json_toplevel))
+
+(* Parse complete annotated AST with imports *)
+(* Returns JAnnotatedAST with main module and list of imported modules *)
 val annotated_ast : term decoder =
+  field "annotated_ast" $
+  JSONDecode.map mk_JAnnotatedAST $
+  tuple2 (field "ast" json_module,
+          orElse (field "imports" (array json_imported_module), succeed []))
+
+(* Legacy decoder - just returns the main module without imports *)
+val annotated_ast_simple : term decoder =
   field "annotated_ast" $ field "ast" json_module
 
 end

@@ -384,12 +384,12 @@ Definition make_builtin_call_def:
                        | _ =>
                            (case args of
                               (arg::_) => arg
-                            | _ => Call (IntCall [] name) args))
+                            | _ => Call (IntCall NONE name) args))
                     else
                       (case args of
                          (arg::_) => arg
-                       | _ => Call (IntCall [] name) args)
-                else Call (IntCall [] name) args
+                       | _ => Call (IntCall NONE name) args)
+                else Call (IntCall NONE name) args
           | _ =>
               if is_cast_name name then
                 let ty' = translate_type ret_ty in
@@ -402,15 +402,27 @@ Definition make_builtin_call_def:
                      | _ =>
                          (case args of
                             (arg::_) => arg
-                          | _ => Call (IntCall [] name) args))
+                          | _ => Call (IntCall NONE name) args))
                   else
                     (case args of
                        (arg::_) => arg
-                     | _ => Call (IntCall [] name) args)
-              else Call (IntCall [] name) args)
+                     | _ => Call (IntCall NONE name) args)
+              else Call (IntCall NONE name) args)
 End
 
 val () = cv_auto_trans make_builtin_call_def;
+
+(* ===== Module Call Helpers ===== *)
+
+(* Extract function name from a func expression *)
+(* For JE_Attribute base fname, returns fname *)
+Definition extract_func_name_def:
+  (extract_func_name (JE_Attribute _ fname) = fname) /\
+  (extract_func_name (JE_Name name _) = name) /\
+  (extract_func_name _ = "")
+End
+
+val () = cv_auto_trans extract_func_name_def;
 
 (* ===== Expression Translation ===== *)
 
@@ -433,11 +445,11 @@ Definition translate_expr_def:
 
   (translate_expr (JE_Bool b) = Literal (BoolL b)) /\
 
-  (translate_expr (JE_Name id) =
+  (translate_expr (JE_Name id tc) =
     if id = "self" then Builtin (Env SelfAddr) [] else Name id) /\
 
   (* Special attributes: msg.*, block.*, tx.*, self.* *)
-  (translate_expr (JE_Attribute (JE_Name obj) attr) =
+  (translate_expr (JE_Attribute (JE_Name obj _) attr) =
     if obj = "msg" /\ attr = "sender" then Builtin (Env Sender) []
     else if obj = "msg" /\ attr = "value" then Builtin (Env ValueSent) []
     else if obj = "block" /\ attr = "timestamp" then Builtin (Env TimeStamp) []
@@ -499,22 +511,27 @@ Definition translate_expr_def:
         Builtin (MakeArray NONE (Fixed (LENGTH es))) (translate_expr_list es)) /\
 
   (* Call - single case with internal dispatch to avoid pattern completion issues *)
-  (translate_expr (JE_Call func args kwargs ret_ty) =
+  (* JE_Call now includes source_id for module calls *)
+  (translate_expr (JE_Call func args kwargs ret_ty src_id_opt) =
     let args' = translate_expr_list args in
     let kwargs' = translate_kwargs kwargs in
     case func of
-    | JE_Name name => make_builtin_call name args' kwargs' ret_ty
+    | JE_Name name _ => make_builtin_call name args' kwargs' ret_ty
     | JE_Attribute base "pop" =>
         (case base of
-         | JE_Name id => Pop (NameTarget id)
-         | JE_Attribute (JE_Name "self") attr => Pop (TopLevelNameTarget attr)
-         | JE_Attribute (JE_Name id) attr =>
+         | JE_Name id _ => Pop (NameTarget id)
+         | JE_Attribute (JE_Name "self" _) attr => Pop (TopLevelNameTarget attr)
+         | JE_Attribute (JE_Name id _) attr =>
              Pop (AttributeTarget (NameTarget id) attr)
-         | JE_Subscript (JE_Name id) idx =>
+         | JE_Subscript (JE_Name id _) idx =>
              Pop (SubscriptTarget (NameTarget id) (translate_expr idx))
-         | _ => Call (IntCall [] "pop") args')
-    | JE_Attribute (JE_Name "self") fname => Call (IntCall [] fname) args'
-    | _ => Call (IntCall [] "") args') /\
+         | _ => Call (IntCall NONE "pop") args')
+    (* self.func(args) - internal call *)
+    | JE_Attribute (JE_Name "self" _) fname => Call (IntCall NONE fname) args'
+    (* Module call: use source_id from type_decl_node *)
+    | _ => (case src_id_opt of
+              SOME src_id => Call (IntCall (SOME src_id) (extract_func_name func)) args'
+            | NONE => Call (IntCall NONE "") args')) /\
 
   (* Helper for translating expression lists *)
   (translate_expr_list [] = []) /\

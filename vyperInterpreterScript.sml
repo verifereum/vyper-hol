@@ -1259,11 +1259,12 @@ Definition empty_call_txn_def:
 End
 
 (* Vyper-internal environment *)
+(* sources maps address to module map, where NONE is the main contract and SOME n is module with source_id=n *)
 Datatype:
   evaluation_context = <|
-    stk: identifier list
+    stk: (num option # identifier) list
   ; txn: call_txn
-  ; sources: (address, toplevel list) alist
+  ; sources: (address, (num option, toplevel list) alist) alist
   |>
 End
 
@@ -1324,8 +1325,19 @@ End
 
 val () = cv_auto_trans evaluate_blob_hash_def;
 
+(* Get code for a specific module by source_id (NONE = main contract) *)
+Definition get_module_code_def:
+  get_module_code cx src_id_opt =
+    case ALOOKUP cx.sources cx.txn.target of
+      NONE => NONE
+    | SOME mods => ALOOKUP mods src_id_opt
+End
+
+val () = cv_auto_trans get_module_code_def;
+
+(* Get main contract code (source_id = NONE) *)
 Definition get_self_code_def:
-  get_self_code cx = ALOOKUP cx.sources cx.txn.target
+  get_self_code cx = get_module_code cx NONE
 End
 
 val () = cv_auto_trans get_self_code_def;
@@ -1989,8 +2001,8 @@ val () = cv_auto_trans push_log_def;
 (* manipulating (internal call) function stack *)
 
 Definition push_function_def:
-  push_function fn sc cx st =
-  return (cx with stk updated_by CONS fn)
+  push_function src_fn sc cx st =
+  return (cx with stk updated_by CONS src_fn)
     $ st with scopes := [sc]
 End
 
@@ -2231,10 +2243,10 @@ Definition bound_def:
     1 + base_target_bound ts bt ∧
   expr_bound ts (TypeBuiltin _ _ es) =
     1 + exprs_bound ts es ∧
-  expr_bound ts (Call (IntCall ns fn) es) =
+  expr_bound ts (Call (IntCall src_id_opt fn) es) =
     1 + exprs_bound ts es
-      + (case ALOOKUP ts fn of NONE => 0 |
-         SOME ss => stmts_bound (ADELKEY fn ts) ss) ∧
+      + (case ALOOKUP ts (src_id_opt, fn) of NONE => 0 |
+         SOME ss => stmts_bound (ADELKEY (src_id_opt, fn) ts) ss) ∧
   expr_bound ts (Call t es) =
     1 + exprs_bound ts es ∧
   exprs_bound ts [] = 0 ∧
@@ -2281,11 +2293,20 @@ Definition dest_Internal_FunctionDef_def:
   dest_Internal_FunctionDef _ = []
 End
 
+(* For a single module, get its internal function definitions tagged with source_id *)
+Definition module_fns_def:
+  module_fns src_id ts =
+    MAP (λ(fn, ss). ((src_id, fn), ss)) (FLAT (MAP dest_Internal_FunctionDef ts))
+End
+
+(* Get all function definitions from all modules, keyed by (source_id, function_name) *)
 Definition remcode_def:
   remcode cx =
-  case get_self_code cx of NONE => []
-     | SOME ts => FILTER (λ(fn,ss). ¬MEM fn cx.stk)
-          (FLAT (MAP dest_Internal_FunctionDef ts))
+  case ALOOKUP cx.sources cx.txn.target of
+    NONE => []
+  | SOME mods =>
+      FILTER (λ((src_id, fn), ss). ¬MEM (src_id, fn) cx.stk)
+        (FLAT (MAP (λ(src_id, ts). module_fns src_id ts) mods))
 End
 
 (* these helpers are also for termination, to enable HOL4's definition machinery
@@ -2379,6 +2400,38 @@ Proof
   ho_match_mp_tac lookup_function_ind
   \\ rw[lookup_function_def, dest_Internal_FunctionDef_def]
   \\ Cases_on`fv` \\ gvs[dest_Internal_FunctionDef_def]
+QED
+
+(* New lemma for module support: connect lookup_function to module_fns *)
+Theorem lookup_function_Internal_imp_ALOOKUP_module_fns:
+  ∀fn vis ts (src_id : num option) v x y z. vis = Internal ∧
+  lookup_function fn vis ts = SOME (v,x,y,z) ⇒
+  ALOOKUP (module_fns src_id ts) (src_id, fn) = SOME z
+Proof
+  ho_match_mp_tac lookup_function_ind
+  \\ rw[lookup_function_def, dest_Internal_FunctionDef_def, module_fns_def]
+  \\ Cases_on`fv` \\ gvs[dest_Internal_FunctionDef_def, module_fns_def]
+QED
+
+(* Helper: ALOOKUP in module_fns is NONE when src_id doesn't match *)
+Theorem ALOOKUP_module_fns_diff_src:
+  ∀ts sid1 sid2 fn.
+    sid1 ≠ sid2 ⇒ ALOOKUP (module_fns sid1 ts) (sid2, fn) = NONE
+Proof
+  rw[module_fns_def, ALOOKUP_FAILS, MEM_MAP, PULL_EXISTS, FORALL_PROD]
+QED
+
+(* Helper for ALOOKUP in FLAT of MAPs *)
+Theorem ALOOKUP_FLAT_MAP_module_fns:
+  ∀mods src_id ts fn body.
+    ALOOKUP mods src_id = SOME ts ∧
+    ALOOKUP (module_fns src_id ts) (src_id, fn) = SOME body ⇒
+    ALOOKUP (FLAT (MAP (λ(sid, tl). module_fns sid tl) mods)) (src_id, fn) = SOME body
+Proof
+  Induct \\ rw[]
+  \\ simp[ALOOKUP_APPEND]
+  \\ PairCases_on`h`
+  \\ gvs[ALOOKUP_module_fns_diff_src, AllCaseEqs()]
 QED
 
 (* a few more helper functions used in the main interpreter *)
@@ -2647,9 +2700,10 @@ Definition evaluate_def:
     return $ Value $ NoneV
   od ∧
   eval_expr cx (Call (ExtCall _) _) = raise $ Error "TODO: ExtCall" ∧
-  eval_expr cx (Call (IntCall ns fn) es) = do
-    check (¬MEM fn cx.stk) "recursion";
-    ts <- lift_option (get_self_code cx) "IntCall get_self_code";
+  eval_expr cx (Call (IntCall src_id_opt fn) es) = do
+    check (¬MEM (src_id_opt, fn) cx.stk) "recursion";
+    (* src_id_opt is NONE for self calls, SOME src_id for module calls *)
+    ts <- lift_option (get_module_code cx src_id_opt) "IntCall get_module_code";
     tup <- lift_option (lookup_function fn Internal ts) "IntCall lookup_function";
     stup <<- SND tup; args <<- FST stup; sstup <<- SND stup;
     ret <<- FST $ sstup; body <<- SND $ sstup;
@@ -2659,7 +2713,7 @@ Definition evaluate_def:
     env <- lift_option (bind_arguments tenv args vs) "IntCall bind_arguments";
     prev <- get_scopes;
     rtv <- lift_option (evaluate_type tenv ret) "IntCall eval ret";
-    cxf <- push_function fn env cx;
+    cxf <- push_function (src_id_opt, fn) env cx;
     rv <- finally
       (try (do eval_stmts cxf body; return NoneV od) handle_function)
       (pop_function prev);
@@ -2702,11 +2756,22 @@ Termination
   \\ gvs[push_function_def, return_def]
   \\ gvs[lift_option_def, CaseEq"option", CaseEq"prod", option_CASE_rator,
          raise_def, return_def]
-  \\ gvs[remcode_def, get_self_code_def, ADELKEY_def]
+  \\ gvs[remcode_def, get_module_code_def, ADELKEY_def]
   \\ qpat_x_assum`OUTR _ _ = _`kall_tac
-  \\ gvs[ALOOKUP_FILTER]
-  \\ drule (SRULE [] lookup_function_Internal_imp_ALOOKUP_FLAT)
-  \\ rw[FILTER_FILTER, LAMBDA_PROD]
+  \\ gvs[CaseEq"option"]
+  \\ qmatch_goalsub_abbrev_tac`ALOOKUP (FILTER P1 _)`
+  \\ sg `P1 = λ(k,v). (λx. ¬MEM x cx.stk) k`
+  >- rw[Abbr`P1`, FUN_EQ_THM, FORALL_PROD]
+  \\ gvs[ALOOKUP_FILTER, Abbr`P1`]
+  \\ first_x_assum (mp_then Any mp_tac
+       lookup_function_Internal_imp_ALOOKUP_module_fns)
+  \\ rw[]
+  \\ drule ALOOKUP_FLAT_MAP_module_fns
+  \\ first_x_assum(qspec_then`src_id_opt`strip_assume_tac)
+  \\ disch_then drule \\ rw[]
+  \\ rw[FILTER_FILTER]
+  \\ rpt(pop_assum kall_tac)
+  \\ simp[LAMBDA_PROD]
 End
 
 Theorem eval_exprs_length:
@@ -2782,7 +2847,7 @@ Definition initial_evaluation_context_def:
   initial_evaluation_context srcs tx =
   <| sources := srcs
    ; txn := tx
-   ; stk := [tx.function_name]
+   ; stk := [(NONE, tx.function_name)]
    |>
 End
 
@@ -2790,7 +2855,7 @@ val () = cv_auto_trans initial_evaluation_context_def;
 
 Datatype:
   abstract_machine = <|
-    sources: (address, toplevel list) alist
+    sources: (address, (num option, toplevel list) alist) alist
   ; globals: (address, globals_state) alist
   ; accounts: evm_accounts
   |>
@@ -2913,12 +2978,14 @@ Definition load_contract_def:
   let tenv = type_env ts in
   let gbs = initial_globals tenv ts in
   let am = am with globals updated_by CONS (addr, gbs) in
+  (* Wrap toplevels in module map: NONE is the main contract *)
+  let mods = [(NONE, ts)] in
   case lookup_function tx.function_name Deploy ts of
      | NONE => INR $ Error "no constructor"
      | SOME (mut, args, ret, body) =>
-       let cx = initial_evaluation_context ((addr,ts)::am.sources) tx in
+       let cx = initial_evaluation_context ((addr,mods)::am.sources) tx in
        case call_external_function am cx mut ts args tx.args body ret
          of (INR e, _) => INR e
        (* TODO: update balances on return *)
-          | (_, am) => INL (am with sources updated_by CONS (addr, ts))
+          | (_, am) => INL (am with sources updated_by CONS (addr, mods))
 End
