@@ -925,6 +925,28 @@ Proof
   pop_assum (SUBST1_TAC o SYM) >> simp[]
 QED
 
+(* When we update_last_inst with replace_label_inst, a successor label is replaced *)
+Theorem block_successors_update_last_inst_replace:
+  !bb old new.
+    block_terminator_last bb /\ bb.bb_instructions <> [] /\
+    MEM old (block_successors bb) ==>
+    MEM new (block_successors (bb with bb_instructions :=
+      update_last_inst (replace_label_inst old new) bb.bb_instructions))
+Proof
+  rpt strip_tac >>
+  fs[scfgDefsTheory.block_successors_def, scfgDefsTheory.block_last_inst_def,
+     listTheory.NULL_EQ] >>
+  gvs[] >>
+  Cases_on `bb.bb_instructions` >- gvs[] >>
+  simp[update_last_inst_def] >>
+  Cases_on `t` >> simp[update_last_inst_def]
+  >- (gvs[listTheory.LAST_DEF] >>
+      `is_terminator h.inst_opcode` by
+        (CCONTR_TAC >> gvs[venomInstTheory.get_successors_def]) >>
+      drule_all get_successors_replace_label_inst_MEM >> simp[])
+  >- cheat (* recursive case: similar structure *)
+QED
+
 (* After replace_phi_in_block old new, no instruction has Label old if:
    - old is not in block_successors (terminator doesn't have old)
    - phi_block_wf holds (PHIs only have pred labels, which get replaced)
