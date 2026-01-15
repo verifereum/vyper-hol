@@ -976,6 +976,25 @@ Proof
   rpt strip_tac >> gvs[EL_MAP]
 QED
 
+(* Helper: block_terminator_last preserved through composed transforms *)
+Theorem block_terminator_last_transforms:
+  !old1 new1 old2 new2 bb.
+    block_terminator_last bb ==>
+    block_terminator_last
+      (bb with bb_instructions :=
+         MAP (replace_label_inst old1 new1)
+           (MAP (replace_label_in_phi old2 new2) bb.bb_instructions))
+Proof
+  rpt strip_tac >>
+  gvs[block_terminator_last_def, venomInstTheory.get_instruction_def,
+      venomInstTheory.basic_block_accfupds] >>
+  rpt strip_tac >>
+  gvs[listTheory.EL_MAP, scfgDefsTheory.replace_label_in_phi_def] >>
+  gvs[scfgDefsTheory.replace_label_inst_def, venomInstTheory.instruction_accfupds] >>
+  Cases_on `bb.bb_instructions❲idx❳.inst_opcode = PHI` >>
+  gvs[venomInstTheory.is_terminator_def, venomInstTheory.instruction_accfupds]
+QED
+
 (* Helper: PHI instructions in update_last_inst come from original list
    when f preserves opcodes *)
 Theorem update_last_inst_phi_mem:
@@ -1385,7 +1404,72 @@ Proof
         COND_CASES_TAC >> simp[scfgDefsTheory.remove_block_def] >>
         `a'.bb_label <> b` by gvs[] >> simp[])
     >- (irule FILTER_ALL_DISTINCT >> gvs[cfg_wf_def])
-    >- cheat)
+    >- (rw[MEM_MAP] >> rpt strip_tac
+        >- (drule MEM_remove_block >> strip_tac >>
+            `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by gvs[cfg_wf_def] >>
+            drule_all MEM_replace_block >> strip_tac >> gvs[]
+            >- (`MEM a' fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
+                `a'.bb_instructions <> []` by (gvs[cfg_wf_def] >> res_tac >> gvs[]) >>
+                `update_last_inst (replace_label_inst b c_lbl) a'.bb_instructions <> []`
+                  by simp[scfgMergeHelpersTheory.update_last_inst_nonempty] >>
+                fs[scfgDefsTheory.replace_label_block_def,
+                   scfgDefsTheory.replace_phi_in_block_def,
+                   venomInstTheory.basic_block_accfupds] >>
+                Cases_on `MEM a'.bb_label (block_successors (a' with bb_instructions :=
+                  update_last_inst (replace_label_inst b c_lbl) a'.bb_instructions))` >> gvs[])
+            >- (`bb'.bb_instructions <> []` by (gvs[cfg_wf_def] >> res_tac >> gvs[]) >>
+                fs[scfgDefsTheory.replace_label_block_def,
+                   scfgDefsTheory.replace_phi_in_block_def,
+                   venomInstTheory.basic_block_accfupds] >>
+                Cases_on `MEM bb'.bb_label (block_successors (a' with bb_instructions :=
+                  update_last_inst (replace_label_inst b c_lbl) a'.bb_instructions))` >> gvs[]))
+        >- (drule MEM_remove_block >> strip_tac >>
+            `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by gvs[cfg_wf_def] >>
+            drule_all MEM_replace_block >> strip_tac >> gvs[]
+            >- (`MEM a' fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
+                `a'.bb_instructions <> [] /\ block_terminator_last a'`
+                  by (gvs[cfg_wf_def] >> res_tac >> gvs[]) >>
+                sg `block_terminator_last (a' with bb_instructions :=
+                     update_last_inst (replace_label_inst b c_lbl) a'.bb_instructions)`
+                >- (irule block_terminator_last_update_last_inst >> simp[replace_label_inst_opcode])
+                >- (fs[scfgDefsTheory.replace_label_block_def,
+                       scfgDefsTheory.replace_phi_in_block_def,
+                       venomInstTheory.basic_block_accfupds] >>
+                    Cases_on `MEM a'.bb_label (block_successors (a' with bb_instructions :=
+                      update_last_inst (replace_label_inst b c_lbl) a'.bb_instructions))` >>
+                    gvs[venomInstTheory.basic_block_accfupds]
+                    >- (gvs[block_terminator_last_def, venomInstTheory.get_instruction_def,
+                            venomInstTheory.basic_block_accfupds] >>
+                        rpt strip_tac >>
+                        gvs[listTheory.EL_MAP, scfgDefsTheory.replace_label_in_phi_def] >>
+                        gvs[scfgDefsTheory.replace_label_inst_def, venomInstTheory.instruction_accfupds] >>
+                        Cases_on `(update_last_inst (replace_label_inst b c_lbl)
+                                    a'.bb_instructions)❲idx❳.inst_opcode = PHI` >>
+                        gvs[venomInstTheory.is_terminator_def, venomInstTheory.instruction_accfupds])
+                    >- (gvs[block_terminator_last_def, venomInstTheory.get_instruction_def,
+                            venomInstTheory.basic_block_accfupds] >>
+                        rpt strip_tac >>
+                        gvs[listTheory.EL_MAP, scfgDefsTheory.replace_label_inst_def,
+                            venomInstTheory.instruction_accfupds])))
+            >- (`block_terminator_last bb'` by (gvs[cfg_wf_def] >> res_tac >> gvs[]) >>
+                fs[scfgDefsTheory.replace_label_block_def,
+                   scfgDefsTheory.replace_phi_in_block_def,
+                   venomInstTheory.basic_block_accfupds] >>
+                Cases_on `MEM bb'.bb_label (block_successors (a' with bb_instructions :=
+                  update_last_inst (replace_label_inst b c_lbl) a'.bb_instructions))` >>
+                gvs[venomInstTheory.basic_block_accfupds]
+                >- (gvs[block_terminator_last_def, venomInstTheory.get_instruction_def,
+                        venomInstTheory.basic_block_accfupds] >>
+                    rpt strip_tac >>
+                    gvs[listTheory.EL_MAP, scfgDefsTheory.replace_label_in_phi_def] >>
+                    gvs[scfgDefsTheory.replace_label_inst_def, venomInstTheory.instruction_accfupds] >>
+                    Cases_on `bb'.bb_instructions❲idx❳.inst_opcode = PHI` >>
+                    gvs[venomInstTheory.is_terminator_def, venomInstTheory.instruction_accfupds])
+                >- (gvs[block_terminator_last_def, venomInstTheory.get_instruction_def,
+                        venomInstTheory.basic_block_accfupds] >>
+                    rpt strip_tac >>
+                    gvs[listTheory.EL_MAP, scfgDefsTheory.replace_label_inst_def,
+                        venomInstTheory.instruction_accfupds])))))
   >- ( (* phi_fn_wf remove_unreachable_blocks *)
     rpt strip_tac >>
     simp[scfgTransformTheory.remove_unreachable_blocks_def,
