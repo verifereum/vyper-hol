@@ -2087,7 +2087,59 @@ Theorem run_block_replace_phi_vs_current_bb:
 Proof
   (* Key insight: replace_phi_in_block only changes PHI operands, not terminators.
      The terminator determines vs_current_bb, so it must be unchanged. *)
-  cheat
+  recInduct run_block_ind >> rpt strip_tac >>
+  Cases_on `step_in_block bb s` >>
+  rename1 `step_in_block bb s = (res, is_term)` >>
+  Cases_on `step_in_block (replace_phi_in_block old new bb) s` >>
+  rename1 `step_in_block (replace_phi_in_block old new bb) s = (res', is_term')` >>
+  (* Establish key facts: same termination and result_equiv_cfg *)
+  sg `is_term' = is_term /\ result_equiv_cfg res res'`
+  >- (qspecl_then [`bb`, `s`, `old`, `new`, `preds`, `res`, `is_term`]
+        mp_tac step_in_block_replace_phi_in_block_prev_diff >>
+      simp[] >> strip_tac >> gvs[])
+  >- (Cases_on `is_term`
+      (* Terminating case: same terminator instruction gives same vs_current_bb *)
+      >- (gvs[Once run_block_def] >>
+          Cases_on `res` >> gvs[result_equiv_cfg_def] >>
+          gvs[AllCaseEqs()] >>
+          qpat_x_assum `run_block (replace_phi_in_block _ _ _) _ = _` mp_tac >>
+          simp[Once run_block_def] >> strip_tac >>
+          Cases_on `res'` >> gvs[result_equiv_cfg_def, AllCaseEqs()] >>
+          gvs[step_in_block_def] >>
+          Cases_on `get_instruction bb s.vs_inst_idx` >> gvs[] >>
+          `get_instruction (replace_phi_in_block old new bb) s.vs_inst_idx =
+           SOME (replace_label_in_phi old new x)` by
+            (gvs[get_instruction_def, replace_phi_in_block_def] >>
+             simp[listTheory.EL_MAP]) >>
+          Cases_on `step_inst x s` >> gvs[AllCaseEqs()] >>
+          `x.inst_opcode <> PHI` by (CCONTR_TAC >> gvs[is_terminator_def]) >>
+          `replace_label_in_phi old new x = x` by simp[replace_label_in_phi_def] >>
+          gvs[])
+      (* Non-terminating case: use IH *)
+      >- (gvs[step_in_block_def] >>
+          Cases_on `get_instruction bb s.vs_inst_idx` >> gvs[] >>
+          `get_instruction (replace_phi_in_block old new bb) s.vs_inst_idx =
+           SOME (replace_label_in_phi old new x)` by
+            (gvs[get_instruction_def, replace_phi_in_block_def] >>
+             simp[listTheory.EL_MAP]) >>
+          Cases_on `step_inst x s` >> gvs[AllCaseEqs()] >>
+          Cases_on `x.inst_opcode = PHI`
+          (* PHI case: need to show PHI evaluation same when prev_bb ≠ old/new *)
+          >- cheat
+          (* Non-PHI case: instruction unchanged, so intermediate states equal *)
+          >- (`replace_label_in_phi old new x = x` by simp[replace_label_in_phi_def] >>
+              gvs[] >>
+              qpat_x_assum `run_block bb s = OK v` mp_tac >>
+              simp[Once run_block_def] >> strip_tac >>
+              gvs[step_in_block_def, AllCaseEqs()] >>
+              qpat_x_assum `run_block (replace_phi_in_block _ _ _) s = OK v'` mp_tac >>
+              simp[Once run_block_def, step_in_block_def] >> strip_tac >>
+              gvs[AllCaseEqs()] >>
+              first_x_assum (qspecl_then [`old`, `new`, `v'`, `preds`] mp_tac) >>
+              simp[] >> impl_tac
+              >- (conj_tac >> simp[next_inst_def] >>
+                  metis_tac[venomSemPropsTheory.step_inst_preserves_prev_bb])
+              >- simp[])))
 QED
 
 val _ = export_theory();
