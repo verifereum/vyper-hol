@@ -910,13 +910,18 @@ Theorem replace_label_block_after_replace_phi_in_block:
     replace_label_block old new2 (replace_phi_in_block old new1 bb) =
     replace_phi_in_block old new1 bb
 Proof
-  cheat
-  (* Proof sketch:
-     - irule replace_label_block_identity_no_old_label
-     - For PHI: after MAP replace_label_operand old new1, no Label old
-       (old <> new1 ensures replacement removes all old labels)
-     - For non-PHI non-terminator: IR invariant
-     - For terminator: ~MEM old (block_successors bb) *)
+  rpt strip_tac >> irule replace_label_block_identity_no_old_label >>
+  simp[scfgDefsTheory.replace_phi_in_block_def, listTheory.MEM_MAP] >>
+  rpt strip_tac >> Cases_on `y.inst_opcode = PHI`
+  >- (gvs[scfgDefsTheory.replace_label_in_phi_def, listTheory.MEM_MAP] >>
+      Cases_on `y'` >> fs[scfgDefsTheory.replace_label_operand_def] >>
+      gvs[] >> Cases_on `s = old` >> gvs[])
+  >- (gvs[scfgDefsTheory.replace_label_in_phi_def] >>
+      Cases_on `is_terminator inst.inst_opcode`
+      >- (`~MEM (Label old) inst.inst_operands` by
+            (irule terminator_no_label_when_not_successor >>
+             drule_all terminator_inst_block_successors >> simp[]))
+      >- metis_tac[])
 QED
 
 val _ = export_theory();
