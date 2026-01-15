@@ -1750,7 +1750,47 @@ Proof
       simp[] >>
       (* Show c' = replace_phi_in_block b_lbl a_lbl x (replace_label_block is identity) *)
       `c' = replace_phi_in_block b_lbl a_lbl x` suffices_by (strip_tac >> gvs[]) >>
-      cheat (* TODO: prove replace_label_block b_lbl c_lbl is identity after replace_phi_in_block *)
+      gvs[scfgTransformTheory.merge_jump_def, AllCaseEqs()] >>
+      qabbrev_tac `a' = a with bb_instructions :=
+        update_last_inst (replace_label_inst b_lbl s.vs_current_bb) a.bb_instructions` >>
+      qabbrev_tac `blocks1 = replace_block a' fn.fn_blocks` >>
+      qabbrev_tac `blocks2 = remove_block b_lbl blocks1` >>
+      qabbrev_tac `blocks3 = MAP (\bb. if MEM bb.bb_label (block_successors a')
+        then replace_phi_in_block b_lbl a_lbl bb else bb) blocks2` >>
+      fs[scfgDefsTheory.replace_label_fn_def] >>
+      `a.bb_label = a_lbl` by metis_tac[lookup_block_label] >>
+      `a'.bb_label = a_lbl` by simp[Abbr `a'`] >>
+      sg `block_terminator_last a` >-
+        (gvs[cfg_wf_def] >> `MEM a fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+         first_x_assum drule >> simp[]) >>
+      `a.bb_instructions <> []` by
+        (CCONTR_TAC >> gvs[block_successors_def, block_last_inst_def]) >>
+      `MEM s.vs_current_bb (block_successors a')` by
+        (simp[Abbr `a'`] >> irule scfgMergeHelpersTheory.block_successors_update_last_inst_replace >>
+         simp[]) >>
+      `lookup_block s.vs_current_bb blocks1 = SOME x` by
+        (simp[Abbr `blocks1`] >> qpat_x_assum `lookup_block s.vs_current_bb fn.fn_blocks = SOME x`
+           (mp_tac o MATCH_MP lookup_block_replace_block) >> simp[]) >>
+      `lookup_block s.vs_current_bb blocks2 = SOME x` by
+        (simp[Abbr `blocks2`] >> irule lookup_block_remove_block >> simp[]) >>
+      sg `lookup_block s.vs_current_bb blocks3 = SOME (replace_phi_in_block b_lbl a_lbl x)` >-
+        (simp[Abbr `blocks3`] >>
+         qpat_x_assum `lookup_block s.vs_current_bb blocks2 = _` mp_tac >>
+         qspec_tac (`blocks2`, `bs`) >> Induct_on `bs` >> simp[lookup_block_def] >>
+         rpt strip_tac >> Cases_on `h.bb_label = s.vs_current_bb` >>
+         gvs[scfgDefsTheory.replace_phi_in_block_def] >> simp[] >>
+         Cases_on `MEM h.bb_label (block_successors a')` >> gvs[]) >>
+      `lookup_block s.vs_current_bb (MAP (replace_label_block b_lbl s.vs_current_bb) blocks3) =
+        SOME (replace_label_block b_lbl s.vs_current_bb (replace_phi_in_block b_lbl a_lbl x))` by
+        (irule scfgMergeHelpersTheory.lookup_block_replace_label_block >> simp[]) >>
+      `c' = replace_label_block b_lbl s.vs_current_bb (replace_phi_in_block b_lbl a_lbl x)` by gvs[] >>
+      `block_terminator_last x` by (gvs[cfg_wf_def] >> first_x_assum drule >> simp[]) >>
+      `x.bb_instructions <> []` by (gvs[cfg_wf_def] >> first_x_assum drule >> simp[]) >>
+      `replace_label_block b_lbl s.vs_current_bb (replace_phi_in_block b_lbl a_lbl x) =
+        replace_phi_in_block b_lbl a_lbl x` by
+        (irule scfgMergeHelpersTheory.replace_label_block_after_replace_phi_in_block >>
+         simp[] >> qexists_tac `pred_labels fn s.vs_current_bb` >> simp[]) >>
+      gvs[]
       )
   >- (`c' = x` suffices_by simp[result_equiv_cfg_refl] >>
       `block_successors b = [c_lbl]` by
