@@ -388,7 +388,81 @@ Theorem pred_labels_merge_blocks_merged:
              (replace_block merged_block (remove_block b fn.fn_blocks))) a) <=>
         MEM x (MAP (\l. if l = b then a else l) (pred_labels fn a))
 Proof
-  cheat
+  rpt strip_tac >>
+  simp[scfgDefsTheory.pred_labels_def, listTheory.MEM_MAP, listTheory.MEM_FILTER] >>
+  eq_tac
+  >- (
+    rpt strip_tac >> gvs[scfgDefsTheory.replace_label_block_def] >>
+    Cases_on `y = merged_block`
+    >- (
+      `a'.bb_label = a` by metis_tac[lookup_block_label] >>
+      qexists_tac `b` >> simp[] >>
+      qexists_tac `b'` >> simp[] >>
+      `b'.bb_label = b` by metis_tac[lookup_block_label] >>
+      gvs[] >>
+      `MEM b' fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+      simp[] >>
+      qpat_x_assum `MEM b (pred_labels fn a)` mp_tac >>
+      simp[scfgDefsTheory.pred_labels_def, listTheory.MEM_MAP, listTheory.MEM_FILTER] >>
+      rpt strip_tac >>
+      `bb = b'` by (irule scfgMergeHelpersTheory.lookup_block_unique >> gvs[cfg_wf_def] >> metis_tac[]) >>
+      fs[])
+    >- (
+      `ALL_DISTINCT (MAP (\b. b.bb_label) (remove_block b fn.fn_blocks))`
+        by (irule ALL_DISTINCT_remove_block >> gvs[cfg_wf_def]) >>
+      drule_all MEM_replace_block >> strip_tac >> gvs[] >>
+      `a'.bb_label = a` by metis_tac[lookup_block_label] >>
+      `y.bb_label <> b` by (drule MEM_remove_block >> simp[]) >>
+      qexists_tac `y.bb_label` >> simp[] >>
+      qexists_tac `y` >> simp[] >>
+      `MEM y fn.fn_blocks` by (drule MEM_remove_block >> simp[]) >>
+      simp[] >>
+      qpat_x_assum `MEM a (block_successors _)` mp_tac >>
+      simp[scfgDefsTheory.block_successors_def, scfgDefsTheory.block_last_inst_def] >>
+      Cases_on `y.bb_instructions` >> simp[] >>
+      strip_tac >> CCONTR_TAC >> gvs[] >> cheat))
+  >- (
+    rpt strip_tac >>
+    Cases_on `l = b`
+    >- (
+      gvs[] >>
+      `a'.bb_label = a` by metis_tac[lookup_block_label] >>
+      qexists_tac `replace_label_block bb.bb_label a merged_block` >>
+      simp[scfgDefsTheory.replace_label_block_def] >>
+      conj_tac
+      >- (
+        `bb = b'` by (irule scfgMergeHelpersTheory.lookup_block_unique >> gvs[cfg_wf_def] >> metis_tac[]) >>
+        simp[GSYM scfgDefsTheory.replace_label_block_def, block_successors_replace_label_block] >>
+        simp[listTheory.MEM_MAP] >> qexists_tac `a` >> gvs[])
+      >- (
+        qexists_tac `merged_block` >> simp[] >>
+        irule MEM_replace_block_intro >> qexists_tac `a'` >> simp[] >>
+        irule MEM_remove_block_intro >> simp[] >> metis_tac[lookup_block_MEM]))
+    >- (
+      gvs[] >>
+      Cases_on `bb.bb_label = a`
+      >- (
+        qexists_tac `replace_label_block b a merged_block` >>
+        simp[scfgDefsTheory.replace_label_block_def] >>
+        `a'.bb_label = a` by metis_tac[lookup_block_label] >>
+        simp[] >>
+        conj_tac
+        >- cheat
+        >- (
+          qexists_tac `merged_block` >> simp[] >>
+          irule MEM_replace_block_intro >> qexists_tac `a'` >> simp[] >>
+          irule MEM_remove_block_intro >> simp[] >> metis_tac[lookup_block_MEM, lookup_block_label]))
+      >- (
+        qexists_tac `replace_label_block b a bb` >>
+        simp[scfgDefsTheory.replace_label_block_def] >>
+        conj_tac
+        >- (simp[GSYM scfgDefsTheory.replace_label_block_def, block_successors_replace_label_block,
+                 listTheory.MEM_MAP] >> qexists_tac `a` >> simp[])
+        >- (
+          qexists_tac `bb` >> simp[] >>
+          `a'.bb_label = a` by metis_tac[lookup_block_label] >>
+          irule MEM_replace_block_other >> simp[] >>
+          irule MEM_remove_block_intro >> simp[]))))
 QED
 
 Theorem block_last_inst_terminator:
