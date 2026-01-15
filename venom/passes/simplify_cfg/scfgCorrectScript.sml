@@ -1451,6 +1451,18 @@ Proof
   rpt strip_tac >> gvs[venomInstTheory.lookup_block_def]
 QED
 
+(* Helper: replace_label_block preserves block_has_no_phi *)
+Theorem block_has_no_phi_replace_label_block:
+  !old new bb. block_has_no_phi bb ==> block_has_no_phi (replace_label_block old new bb)
+Proof
+  rpt strip_tac >>
+  fs[scfgDefsTheory.block_has_no_phi_def, scfgDefsTheory.block_has_phi_def,
+     scfgDefsTheory.replace_label_block_def, listTheory.EXISTS_MAP] >>
+  rpt strip_tac >> fs[listTheory.MEM_MAP] >>
+  first_x_assum (qspec_then `y` mp_tac) >> simp[replace_label_inst_opcode] >>
+  fs[replace_label_inst_opcode]
+QED
+
 (* Helper: MEM in remove_block implies label inequality *)
 Theorem MEM_remove_block_label_neq:
   !lbl blocks y. MEM y (remove_block lbl blocks) ==> y.bb_label <> lbl
@@ -1912,7 +1924,22 @@ Proof
                     >- (first_x_assum (qspec_then `inst'` mp_tac) >> simp[] >>
                         qpat_x_assum `a' = h` (fn th => SUBST_ALL_TAC th) >>
                         first_x_assum ACCEPT_TAC)))
-            >- cheat (* entry no-PHI - batch/interactive discrepancy *))
+            >- (rpt strip_tac >> gvs[listTheory.MEM_MAP] >>
+                `y.inst_opcode = PHI` by gvs[replace_label_inst_opcode] >>
+                gvs[Abbr`a_new`] >>
+                `?inst'. MEM inst' a'.bb_instructions /\ inst'.inst_opcode = PHI` by
+                  (irule update_last_inst_phi_mem >>
+                   qexists_tac `replace_label_inst b c_lbl` >>
+                   qexists_tac `y` >> simp[replace_label_inst_opcode]) >>
+                sg `a' = h`
+                >- (gvs[venomInstTheory.lookup_block_def] >>
+                    Cases_on `a'.bb_label = a` >> gvs[] >>
+                    drule lookup_block_label >> gvs[] >> strip_tac >>
+                    qpat_x_assum `lookup_block a t = SOME a'`
+                      (mp_tac o MATCH_MP lookup_block_label) >> gvs[])
+                >- (first_x_assum (qspec_then `inst'` mp_tac) >> simp[] >>
+                    qpat_x_assum `a' = h` (fn th => SUBST_ALL_TAC th) >>
+                    first_x_assum ACCEPT_TAC)))
         >- (COND_CASES_TAC >>
             gvs[scfgDefsTheory.replace_label_block_def,
                 scfgDefsTheory.replace_phi_in_block_def,
