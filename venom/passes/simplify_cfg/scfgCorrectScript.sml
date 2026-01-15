@@ -1303,16 +1303,22 @@ Theorem pred_labels_merge_blocks_merged_not_mem:
     pred_labels (merge_blocks fn a b) a = pred_labels fn a
 Proof
   rpt strip_tac >> gvs[scfgTransformTheory.merge_blocks_cond_def] >>
-  `b'.bb_label = b` by metis_tac[lookup_block_label] >>
-  sg `~MEM a (block_successors b')`
-  >- (CCONTR_TAC >> gvs[scfgDefsTheory.pred_labels_def, MEM_MAP, MEM_FILTER] >>
-      first_x_assum (qspec_then `b'` mp_tac) >> simp[] >>
-      metis_tac[lookup_block_label, lookup_block_MEM])
-  >- (simp[scfgTransformTheory.merge_blocks_def,
-          scfgDefsTheory.replace_label_fn_def] >>
-      qabbrev_tac `merged = a' with bb_instructions :=
-        FRONT a'.bb_instructions ++ b'.bb_instructions` >>
-      cheat) (* pred_labels equality through FILTER/MAP transforms - complex list algebra *)
+  simp[scfgTransformTheory.merge_blocks_def, scfgDefsTheory.replace_label_fn_def] >>
+  qabbrev_tac `merged = a' with bb_instructions := FRONT a'.bb_instructions ++ b'.bb_instructions` >>
+  `merged.bb_label = a` by (simp[Abbr`merged`] >> metis_tac[lookup_block_label]) >>
+  `b'.bb_instructions <> []` by (gvs[cfg_wf_def] >> metis_tac[lookup_block_MEM]) >>
+  `block_successors merged = block_successors b'` by simp[Abbr`merged`, scfgMergeCorrectTheory.block_successors_merged] >>
+  `~MEM a (block_successors b')` by
+    (CCONTR_TAC >> gvs[scfgDefsTheory.pred_labels_def, MEM_MAP, MEM_FILTER] >>
+     first_x_assum (qspec_then `b'` mp_tac) >> simp[] >>
+     metis_tac[lookup_block_label, lookup_block_MEM]) >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by gvs[cfg_wf_def] >>
+  simp[scfgDefsTheory.pred_labels_def] >>
+  `block_successors a' = [b]` by (irule scfgMergeHelpersTheory.block_last_jmp_to_successors >> simp[]) >>
+  `~MEM a (block_successors a')` by simp[] >>
+  `a'.bb_label = a` by metis_tac[lookup_block_label] >>
+  (* Remaining: show FILTER/MAP equality - complex list algebra *)
+  cheat
 QED
 
 (* Helper: phi_block_wf for merged block after merge_blocks *)
@@ -1650,7 +1656,11 @@ Proof
         `ALL_DISTINCT (MAP (\bb. bb.bb_label) blocks1)` by
           (gvs[Abbr`blocks1`] >> irule ALL_DISTINCT_remove_block >> gvs[cfg_wf_def]) >>
         `merged.bb_label = a` by (simp[Abbr`merged`] >> metis_tac[lookup_block_label]) >>
-        `MEM merged.bb_label (MAP (\bb. bb.bb_label) blocks1)` by cheat >>
+        `MEM merged.bb_label (MAP (\bb. bb.bb_label) blocks1)` by
+          (gvs[Abbr`blocks1`, Abbr`merged`, MEM_MAP] >>
+           qexists_tac `a'` >> simp[] >>
+           irule MEM_remove_block_intro >> simp[] >>
+           metis_tac[lookup_block_MEM, lookup_block_label]) >>
         qpat_x_assum `MEM y blocks2` mp_tac >> gvs[Abbr`blocks2`] >> strip_tac >>
         drule_all MEM_replace_block >> strip_tac >> gvs[]
         >- ((* y = merged case *)
@@ -1670,7 +1680,24 @@ Proof
             `(replace_label_block b merged.bb_label y).bb_label = y.bb_label`
               by simp[scfgDefsTheory.replace_label_block_def] >> gvs[] >>
             Cases_on `MEM b (pred_labels fn y.bb_label)`
-            >- cheat (* MEM b case - needs phi_block_wf_replace_label_block *)
+            >- ((* MEM b case - use phi_block_wf_replace_label_block *)
+                `~MEM merged.bb_label (pred_labels fn y.bb_label)` by
+                  (gvs[Abbr`merged`] >> CCONTR_TAC >> gvs[] >>
+                   drule_all scfgMergeHelpersTheory.pred_labels_only_jmp_target >> simp[]) >>
+                `phi_block_wf (pred_labels fn y.bb_label) y` by gvs[scfgDefsTheory.phi_fn_wf_def] >>
+                `phi_block_wf (MAP (\l. if l = b then merged.bb_label else l) (pred_labels fn y.bb_label))
+                              (replace_label_block b merged.bb_label y)` by
+                  (irule phi_block_wf_replace_label_block >> simp[]) >>
+                irule phi_block_wf_MEM_equiv >>
+                qexists_tac `MAP (\l. if l = b then merged.bb_label else l) (pred_labels fn y.bb_label)` >>
+                simp[] >> rpt strip_tac >> gvs[MEM_MAP] >>
+                (* pred_labels fn' y.bb_label MEM equiv to MAP version *)
+                sg `fn' = merge_blocks fn merged.bb_label b`
+                >- (gvs[Abbr`fn'`, Abbr`blocks1`, Abbr`merged`,
+                        scfgTransformTheory.merge_blocks_def,
+                        scfgTransformTheory.merge_blocks_cond_def] >>
+                    simp[scfgDefsTheory.replace_label_fn_def])
+                >- cheat)
             >- (sg `fn' = merge_blocks fn merged.bb_label b`
                 >- (gvs[Abbr`fn'`, Abbr`blocks1`, Abbr`merged`,
                         scfgTransformTheory.merge_blocks_def,
