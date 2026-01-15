@@ -369,6 +369,30 @@ Proof
   gvs[cfg_wf_def] >> res_tac >> gvs[]
 QED
 
+(* Helper: get_label after replace_label_operand for list *)
+Theorem get_label_replace_label_operand_list:
+  !old new ops.
+    MAP THE (FILTER IS_SOME (MAP get_label (MAP (replace_label_operand old new) ops))) =
+    MAP (\l. if l = old then new else l) (MAP THE (FILTER IS_SOME (MAP get_label ops)))
+Proof
+  Induct_on `ops` >> simp[] >>
+  rpt strip_tac >> Cases_on `h` >>
+  simp[scfgDefsTheory.replace_label_operand_def, venomStateTheory.get_label_def] >>
+  Cases_on `s = old` >> simp[venomStateTheory.get_label_def]
+QED
+
+(* Helper: get_successors after replace_label_inst *)
+Theorem get_successors_replace_label_inst:
+  !old new inst.
+    get_successors (replace_label_inst old new inst) =
+    MAP (\l. if l = old then new else l) (get_successors inst)
+Proof
+  rpt strip_tac >>
+  simp[venomInstTheory.get_successors_def, scfgDefsTheory.replace_label_inst_def,
+       get_label_replace_label_operand_list] >>
+  Cases_on `is_terminator inst.inst_opcode` >> simp[]
+QED
+
 (* Helper for phi_fn_wf preservation in merge_blocks: characterize pred_labels of merged block.
    Key insight: when MEM b (pred_labels fn a), merged has self-loop (b jumped to a, merged inherits
    b's successors which include a). This creates MEM a (pred_labels fn' a). *)
