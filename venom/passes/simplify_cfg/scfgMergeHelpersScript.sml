@@ -953,7 +953,17 @@ Proof
       `is_terminator h.inst_opcode` by
         (CCONTR_TAC >> gvs[venomInstTheory.get_successors_def]) >>
       drule_all get_successors_replace_label_inst_MEM >> simp[])
-  >- cheat (* recursive case: similar structure *)
+  >- (`h'::t' <> []` by simp[] >>
+      `update_last_inst (replace_label_inst old new) (h'::t') <> []`
+        by simp[update_last_inst_nonempty] >>
+      simp[listTheory.LAST_CONS_cond] >>
+      `LAST (update_last_inst (replace_label_inst old new) (h'::t')) =
+       replace_label_inst old new (LAST (h'::t'))` by simp[update_last_inst_last] >>
+      simp[] >>
+      `MEM old (get_successors (LAST (h'::t')))` by gvs[listTheory.LAST_CONS_cond] >>
+      `is_terminator (LAST (h'::t')).inst_opcode` by
+        (CCONTR_TAC >> gvs[venomInstTheory.get_successors_def]) >>
+      drule_all get_successors_replace_label_inst_MEM >> simp[])
 QED
 
 (* After replace_phi_in_block old new, no instruction has Label old if:

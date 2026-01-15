@@ -1303,17 +1303,16 @@ Theorem pred_labels_merge_blocks_merged_not_mem:
     pred_labels (merge_blocks fn a b) a = pred_labels fn a
 Proof
   rpt strip_tac >> gvs[scfgTransformTheory.merge_blocks_cond_def] >>
-  simp[scfgTransformTheory.merge_blocks_def,
-       scfgDefsTheory.pred_labels_def, scfgDefsTheory.replace_label_fn_def] >>
-  `block_successors a' = [b]` by
-    (gvs[scfgDefsTheory.block_last_jmp_to_def,
-         scfgDefsTheory.block_successors_def,
-         venomInstTheory.get_successors_def] >> EVAL_TAC) >>
+  `b'.bb_label = b` by metis_tac[lookup_block_label] >>
   sg `~MEM a (block_successors b')`
   >- (CCONTR_TAC >> gvs[scfgDefsTheory.pred_labels_def, MEM_MAP, MEM_FILTER] >>
       first_x_assum (qspec_then `b'` mp_tac) >> simp[] >>
       metis_tac[lookup_block_label, lookup_block_MEM])
-  >- cheat (* filter/map equality - needs detailed list reasoning *)
+  >- (simp[scfgTransformTheory.merge_blocks_def,
+          scfgDefsTheory.replace_label_fn_def] >>
+      qabbrev_tac `merged = a' with bb_instructions :=
+        FRONT a'.bb_instructions ++ b'.bb_instructions` >>
+      cheat) (* filter/map equality - needs pred_labels through transforms *)
 QED
 
 (* Helper: phi_block_wf for merged block after merge_blocks *)
@@ -1638,7 +1637,10 @@ Proof
         >- (gvs[scfgDefsTheory.phi_fn_wf_def] >> Cases_on `fn.fn_blocks` >>
             gvs[scfgDefsTheory.remove_block_def, scfgDefsTheory.entry_label_def])
         >- (COND_CASES_TAC >> simp[]))
-    >- cheat (* phi_block_wf - needs pred_labels algebra *)
+    >- (rpt strip_tac >>
+        gvs[Abbr`blocks3`, listTheory.MEM_MAP] >>
+        (* y in blocks2, bb = replace_label_block b a y *)
+        cheat) (* phi_block_wf - needs pred_labels algebra - partial structure above *) (* pred_labels equality for other block *)
     >- (gvs[Abbr`blocks3`, Abbr`blocks2`, Abbr`blocks1`] >>
         Cases_on `fn.fn_blocks` >>
         gvs[scfgDefsTheory.phi_fn_wf_def, scfgDefsTheory.remove_block_def] >>
