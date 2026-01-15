@@ -960,6 +960,19 @@ Proof
       gvs[block_terminator_last_def, get_instruction_def])
 QED
 
+(* Helper: block_terminator_last preserved by MAP when f preserves opcode *)
+Theorem block_terminator_last_map:
+  !f bb.
+    block_terminator_last bb /\
+    (!inst. (f inst).inst_opcode = inst.inst_opcode) ==>
+    block_terminator_last (bb with bb_instructions := MAP f bb.bb_instructions)
+Proof
+  rpt strip_tac >>
+  gvs[block_terminator_last_def, venomInstTheory.get_instruction_def,
+      venomInstTheory.basic_block_accfupds] >>
+  rpt strip_tac >> gvs[EL_MAP]
+QED
+
 (* Helper: PHI instructions in update_last_inst come from original list
    when f preserves opcodes *)
 Theorem update_last_inst_phi_mem:
