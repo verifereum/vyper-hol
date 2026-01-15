@@ -1979,13 +1979,15 @@ Proof
       gvs[is_terminator_def, get_label_def]) >>
     Cases_on `fuel`
     >- gvs[run_function_def, terminates_def]
-    >- (simp[Once run_function_def] >>
+    >- (`2 * SUC n = SUC (SUC (2 * n))` by simp[] >>
+        pop_assum (fn th => REWRITE_TAC [th]) >>
+        simp[Once run_function_def] >>
         Cases_on `s.vs_current_bb = a_lbl`
         >- cheat (* at merge point - needs run_block_merge_jump_equiv + fuel asymmetry *)
         >- ( (* other block case *)
           Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
           >- ( (* NONE - block not found *)
-            simp[] >> gvs[terminates_def] >>
+            simp[terminates_def] >> gvs[terminates_def] >>
             qpat_x_assum `terminates _` mp_tac >>
             simp[Once run_function_def] >>
             `lookup_block s.vs_current_bb (merge_jump fn a_lbl b_lbl).fn_blocks = NONE` by
@@ -2003,7 +2005,16 @@ Proof
             gvs[result_equiv_cfg_def, terminates_def] >>
             (* OK/OK case - IH application needs state equivalence handling *)
             cheat))))
-  >- cheat (* result_equiv_cfg - similar structure to terminates *)
+  >- ( (* result_equiv_cfg *)
+    `a_lbl <> b_lbl` by (
+      CCONTR_TAC >> gvs[] >>
+      gvs[jump_only_target_def, AllCaseEqs()] >>
+      gvs[block_successors_def, block_last_inst_def, get_successors_def] >>
+      gvs[is_terminator_def, get_label_def]) >>
+    Cases_on `fuel`
+    >- (simp[Once run_function_def] >>
+        simp[Once run_function_def, result_equiv_cfg_def])
+    >- cheat) (* SUC n case - similar structure to terminates *)
 QED
 
 Theorem merge_jump_correct:
