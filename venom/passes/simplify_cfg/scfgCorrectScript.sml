@@ -1217,7 +1217,11 @@ Proof
             simp[scfgDefsTheory.replace_label_block_def,
                  block_terminator_last_def, venomInstTheory.get_instruction_def] >>
             rpt strip_tac >> gvs[EL_MAP, replace_label_inst_opcode] >>
-            cheat) (* idx = last index - needs block_terminator_last uniqueness *)
+            `is_terminator (FRONT a'.bb_instructions ++ b'.bb_instructions)❲idx❳.inst_opcode` by
+              (gvs[EL_APPEND_EQN] >> rw[] >> gvs[EL_MAP, replace_label_inst_opcode]) >>
+            qpat_x_assum `block_terminator_last (a' with bb_instructions := _)` mp_tac >>
+            simp[block_terminator_last_def, venomInstTheory.get_instruction_def] >>
+            strip_tac >> first_x_assum (qspec_then `idx` mp_tac) >> simp[])
         >- (`MEM y fn.fn_blocks` by metis_tac[] >>
             `block_terminator_last y` by (gvs[cfg_wf_def] >> res_tac >> gvs[]) >>
             simp[scfgDefsTheory.replace_label_block_def,
