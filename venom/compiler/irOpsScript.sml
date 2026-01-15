@@ -21,7 +21,7 @@ End
 
 Definition inst_is_pseudo_def:
   inst_is_pseudo inst <=>
-    inst_is_phi inst \/ inst_is_param inst \/ inst.inst_opcode = SOURCE
+    inst_is_phi inst \/ inst_is_param inst
 End
 
 Definition inst_is_bb_terminator_def:
@@ -45,17 +45,17 @@ End
 Definition inst_is_volatile_def:
   inst_is_volatile inst <=>
     inst.inst_opcode IN
-    {PARAM; CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE;
-     SSTORE; ISTORE; TSTORE; MSTORE; CALLDATACOPY; MCOPY; EXTCODECOPY;
-     RETURNDATACOPY; CODECOPY; DLOADBYTES; RETURN; RET; SINK; JMP; JNZ; DJMP;
-     LOG; SELFDESTRUCT; INVALID; REVERT; ASSERT; ASSERT_UNREACHABLE; STOP}
+     {PARAM; CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE;
+      SSTORE; ISTORE; TSTORE; MSTORE; CALLDATACOPY; MCOPY; EXTCODECOPY;
+      RETURNDATACOPY; CODECOPY; DLOADBYTES; RETURN; RET; JMP; JNZ; DJMP;
+      LOG; SELFDESTRUCT; INVALID; REVERT; ASSERT; ASSERT_UNREACHABLE; STOP}
 End
 
 Definition inst_no_output_def:
   inst_no_output inst <=>
     inst.inst_opcode IN
     {MSTORE; SSTORE; ISTORE; TSTORE; DLOADBYTES; CALLDATACOPY; MCOPY;
-     RETURNDATACOPY; CODECOPY; EXTCODECOPY; RETURN; RET; SINK; REVERT;
+     RETURNDATACOPY; CODECOPY; EXTCODECOPY; RETURN; RET; REVERT;
      ASSERT; ASSERT_UNREACHABLE; SELFDESTRUCT; STOP; INVALID; JMP; DJMP; JNZ; LOG; NOP}
 End
 

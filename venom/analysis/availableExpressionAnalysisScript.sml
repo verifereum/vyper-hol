@@ -233,7 +233,7 @@ Definition get_operand_expr_def:
                   (case lookup_inst_in_function iid fn of
                      NONE => ExprOp op
                    | SOME inst =>
-                       if inst.inst_opcode IN {PHI; PARAM; SOURCE} then ExprOp op
+                       if inst.inst_opcode IN {PHI; PARAM} then ExprOp op
                        else if inst.inst_opcode = ASSIGN then
                          (case inst.inst_operands of
                             [op1] => get_operand_expr fn dfg op1 fuel'
