@@ -16,6 +16,16 @@ Holmake
 - `venomInstScript.sml` - Instructions, basic blocks, functions
 - `venomSemScript.sml` - Operational semantics
 
+## Structure
+
+- `analysis/` - analysis definitions (see `venom/analysis/README.md`)
+- `passes/` - pass definitions (see `venom/passes/README.md`)
+- `compiler/` - shared compiler infrastructure (see `venom/compiler/README.md`)
+- `optimization_levels/` - optimization pipeline definitions (see `venom/optimization_levels/README.md`)
+
+All compiler passes and analyses in this tree are definition-only ports of the
+Python compiler; proofs live elsewhere.
+
 ## Execution State (`venom_state`)
 
 | Field | Type | Description |
