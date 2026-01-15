@@ -613,6 +613,15 @@ Proof
   Cases_on `l` >> gvs[scfgDefsTheory.update_last_inst_def]
 QED
 
+(* Helper: update_last_inst preserves non-emptiness *)
+Theorem update_last_inst_nonempty:
+  !f l. l <> [] ==> update_last_inst f l <> []
+Proof
+  rpt strip_tac >>
+  `LENGTH (update_last_inst f l) = LENGTH l` by simp[update_last_inst_length] >>
+  Cases_on `l` >> gvs[]
+QED
+
 (* Helper: update_last_inst preserves elements before last *)
 Theorem update_last_inst_el_unchanged:
   !f l idx.

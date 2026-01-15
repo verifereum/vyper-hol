@@ -1360,7 +1360,32 @@ Proof
             `is_terminator y.bb_instructions❲idx❳.inst_opcode` by
               gvs[EL_MAP, replace_label_inst_opcode] >>
             first_x_assum (qspec_then `idx` mp_tac) >> simp[])))
-  >- ( (* cfg_wf merge_jump *) cheat)
+  >- ( (* cfg_wf merge_jump *)
+    simp[scfgTransformTheory.merge_jump_def,
+         scfgTransformTheory.merge_jump_cond_def] >> rpt strip_tac >>
+    gvs[scfgTransformTheory.merge_jump_cond_def] >>
+    simp[cfg_wf_def, scfgDefsTheory.replace_label_fn_def, MAP_MAP_o,
+         combinTheory.o_DEF] >>
+    `!old new bb. (replace_label_block old new bb).bb_label = bb.bb_label`
+      by simp[scfgDefsTheory.replace_label_block_def] >>
+    `!old new bb. (replace_phi_in_block old new bb).bb_label = bb.bb_label`
+      by simp[scfgDefsTheory.replace_phi_in_block_def] >>
+    `!P x. (if P then replace_phi_in_block b a x else x).bb_label = x.bb_label`
+      by (rw[] >> simp[scfgDefsTheory.replace_phi_in_block_def]) >> simp[] >>
+    `!a' blocks. MAP (\bb. bb.bb_label) (replace_block a' blocks) =
+      MAP (\bb. bb.bb_label) blocks` by (gen_tac >> Induct >>
+      simp[scfgDefsTheory.replace_block_def] >> rw[]) >>
+    `!lbl blocks. MAP (\bb. bb.bb_label) (remove_block lbl blocks) =
+      FILTER (\l. l <> lbl) (MAP (\bb. bb.bb_label) blocks)` by
+      (gen_tac >> Induct >> simp[scfgDefsTheory.remove_block_def] >> rw[]) >>
+    simp[] >> rpt conj_tac
+    >- (gvs[cfg_wf_def] >> Cases_on `fn.fn_blocks` >>
+        gvs[scfgDefsTheory.entry_label_def] >>
+        simp[scfgDefsTheory.remove_block_def, scfgDefsTheory.replace_block_def] >>
+        COND_CASES_TAC >> simp[scfgDefsTheory.remove_block_def] >>
+        `a'.bb_label <> b` by gvs[] >> simp[])
+    >- (irule FILTER_ALL_DISTINCT >> gvs[cfg_wf_def])
+    >- cheat)
   >- ( (* phi_fn_wf remove_unreachable_blocks *)
     rpt strip_tac >>
     simp[scfgTransformTheory.remove_unreachable_blocks_def,
