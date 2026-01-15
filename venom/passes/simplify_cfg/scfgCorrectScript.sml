@@ -1307,6 +1307,30 @@ Proof
   gvs[]
 QED
 
+(* Helper: all blocks in merge result don't have b in successors *)
+Theorem blocks_in_merge_no_b_successor:
+  !fn a b merged b'.
+    cfg_wf fn /\ pred_labels fn b = [a] /\ merged.bb_label = a /\
+    lookup_block b fn.fn_blocks = SOME b' /\
+    ~MEM b (block_successors merged) ==>
+    !bb. MEM bb (replace_block merged (remove_block b fn.fn_blocks)) ==>
+         ~MEM b (block_successors bb)
+Proof
+  rpt strip_tac >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by gvs[cfg_wf_def] >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) (remove_block b fn.fn_blocks))` by
+    (irule ALL_DISTINCT_remove_block >> simp[]) >>
+  gvs[MEM_replace_block, MEM_remove_block] >>
+  Cases_on `bb = merged` >> gvs[] >>
+  (* Get bb from original blocks *)
+  `MEM bb (remove_block b fn.fn_blocks) /\ bb.bb_label <> merged.bb_label` by
+    (qpat_x_assum `MEM bb (replace_block _ _)` mp_tac >>
+     simp[MEM_replace_block] >> strip_tac >> gvs[]) >>
+  `MEM bb fn.fn_blocks` by (drule MEM_remove_block >> simp[]) >>
+  qspecl_then [`fn`, `a`, `b`, `bb`] mp_tac no_b_successor_except_a >>
+  simp[]
+QED
+
 (* Helper: pred_labels unchanged when ~MEM b (pred_labels fn a) *)
 Theorem pred_labels_merge_blocks_merged_not_mem:
   !fn a b a' b'.
@@ -1331,16 +1355,32 @@ Proof
   `block_successors a' = [b]` by (irule scfgMergeHelpersTheory.block_last_jmp_to_successors >> simp[]) >>
   `~MEM a (block_successors a')` by simp[] >>
   `a'.bb_label = a` by metis_tac[lookup_block_label] >>
-  (* Use helper: blocks with label != a don't have b in successors *)
-  sg `!bb. MEM bb fn.fn_blocks /\ bb.bb_label <> a ==> ~MEM b (block_successors bb)`
-  >- (rpt strip_tac >> qspecl_then [`fn`, `a`, `b`, `bb`] mp_tac no_b_successor_except_a >> simp[])
-  >- (sg `!bb. MEM bb fn.fn_blocks /\ bb.bb_label <> a ==>
-            block_successors (replace_label_block b a bb) = block_successors bb`
-      >- (rpt strip_tac >> irule scfgMergeHelpersTheory.block_successors_replace_label_block >>
-          first_x_assum drule >> simp[])
-      >- (`~MEM a (block_successors merged)` by simp[] >>
-          (* Remaining: FILTER/MAP equality with all helper facts established *)
-          cheat))
+  `b'.bb_label = b` by metis_tac[lookup_block_label] >>
+  `~MEM a (block_successors merged)` by simp[] >>
+  sg `~MEM b (block_successors b')`
+  >- (qspecl_then [`fn`, `a`, `b`, `b'`] mp_tac no_b_successor_except_a >>
+      simp[] >> impl_tac >- metis_tac[lookup_block_MEM] >- simp[])
+  >- (
+  `~MEM b (block_successors merged)` by simp[] >>
+  `!bb. MEM bb (replace_block merged (remove_block b fn.fn_blocks)) ==> ~MEM b (block_successors bb)` by
+    (qspecl_then [`fn`, `a`, `b`, `merged`, `b'`] mp_tac blocks_in_merge_no_b_successor >>
+     simp[] >> impl_tac >- metis_tac[] >- simp[]) >>
+  simp[rich_listTheory.FILTER_MAP, MAP_MAP_o] >>
+  `(\bb. bb.bb_label) o replace_label_block b a = (\bb. bb.bb_label)` by
+    simp[FUN_EQ_THM, scfgDefsTheory.replace_label_block_def] >>
+  asm_simp_tac std_ss [] >>
+  `FILTER ((\bb. MEM a (block_successors bb)) o replace_label_block b a)
+          (replace_block merged (remove_block b fn.fn_blocks)) =
+   FILTER (\bb. MEM a (block_successors bb))
+          (replace_block merged (remove_block b fn.fn_blocks))` by
+    (simp[rich_listTheory.FILTER_EQ] >> rpt strip_tac >>
+     qpat_x_assum `!bb. MEM bb _ ==> _` drule >> strip_tac >>
+     simp[scfgMergeHelpersTheory.block_successors_replace_label_block]) >>
+  asm_simp_tac std_ss [] >>
+  AP_TERM_TAC >> irule FILTER_replace_block_remove_unchanged >> simp[] >>
+  conj_tac
+  >- (qexists_tac `a'` >> simp[] >> irule lookup_block_MEM >> metis_tac[])
+  >- (qexists_tac `b'` >> simp[] >> irule lookup_block_MEM >> metis_tac[])))
 QED
 
 (* Helper: phi_block_wf for merged block after merge_blocks *)
