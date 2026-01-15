@@ -2073,6 +2073,24 @@ Proof
       metis_tac[venomSemPropsTheory.step_in_block_preserves_prev_bb])
 QED
 
+(* PHI equality helper: step_inst on PHI gives equal result when prev_bb ≠ old/new *)
+Theorem step_inst_phi_replace_label_same:
+  !inst s old new preds lbl.
+    inst.inst_opcode = PHI /\
+    s.vs_prev_bb = SOME lbl /\
+    lbl <> old /\ lbl <> new /\
+    phi_inst_wf preds inst /\ MEM lbl preds ==>
+    step_inst (replace_label_in_phi old new inst) s = step_inst inst s
+Proof
+  rpt strip_tac >> simp[scfgDefsTheory.replace_label_in_phi_def] >>
+  simp[step_inst_def] >>
+  `resolve_phi lbl (MAP (replace_label_operand old new) inst.inst_operands) =
+   resolve_phi lbl inst.inst_operands` by
+    (irule scfgPhiLemmasTheory.resolve_phi_replace_label_other >> simp[] >>
+     gvs[phi_inst_wf_def]) >>
+  simp[]
+QED
+
 (* Helper: replace_phi_in_block preserves vs_current_bb since terminator is unchanged *)
 Theorem run_block_replace_phi_vs_current_bb:
   !bb s old new v v' preds.
@@ -2124,8 +2142,8 @@ Proof
              simp[listTheory.EL_MAP]) >>
           Cases_on `step_inst x s` >> gvs[AllCaseEqs()] >>
           Cases_on `x.inst_opcode = PHI`
-          (* PHI case: need to show PHI evaluation same when prev_bb ≠ old/new *)
-          >- cheat
+          (* PHI case: use step_inst_phi_replace_label_same to show states equal *)
+          >- cheat (* TODO: prove with step_inst_phi_replace_label_same *)
           (* Non-PHI case: instruction unchanged, so intermediate states equal *)
           >- (`replace_label_in_phi old new x = x` by simp[replace_label_in_phi_def] >>
               gvs[] >>
