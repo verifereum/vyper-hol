@@ -14,17 +14,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-hol
       - run: Holmake
-      - name: Save build cache
-        uses: actions/cache/save@v4
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
         with:
-          path: |
-            **/*.uo
-            **/*.ui
-            **/*Theory.sml
-            **/*Theory.sig
-            !tests/vyperTest*
-            !tests/vyperTestDefs*
-          key: build-${{ github.run_id }}-${{ github.run_attempt }}
+          name: hol-build
+          path: '**/.hol'
+          retention-days: 1
 
   export-vyper-tests:
     runs-on: ubuntu-latest
@@ -65,18 +60,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-hol
-      - name: Restore build cache
-        uses: actions/cache/restore@v4
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
         with:
-          path: |
-            **/*.uo
-            **/*.ui
-            **/*Theory.sml
-            **/*Theory.sig
-            !tests/vyperTest*
-            !tests/vyperTestDefs*
-          key: build-${{ github.run_id }}-${{ github.run_attempt }}
-          fail-on-cache-miss: true
+          name: hol-build
       - name: Restore Vyper test exports
         uses: actions/cache/restore@v4
         with:
