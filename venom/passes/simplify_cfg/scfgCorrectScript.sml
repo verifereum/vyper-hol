@@ -1293,6 +1293,20 @@ Proof
   gvs[scfgDefsTheory.phi_fn_wf_def]
 QED
 
+(* Helper: blocks with label != a cannot have b in successors when pred_labels fn b = [a] *)
+Theorem no_b_successor_except_a:
+  !fn a b bb.
+    pred_labels fn b = [a] /\ MEM bb fn.fn_blocks /\ bb.bb_label <> a ==>
+    ~MEM b (block_successors bb)
+Proof
+  rpt strip_tac >> CCONTR_TAC >> gvs[] >>
+  `MEM bb.bb_label [a]` by
+    (qpat_x_assum `pred_labels fn b = [a]` (SUBST1_TAC o GSYM) >>
+     simp[scfgDefsTheory.pred_labels_def, MEM_MAP, MEM_FILTER] >>
+     qexists_tac `bb` >> simp[]) >>
+  gvs[]
+QED
+
 (* Helper: pred_labels unchanged when ~MEM b (pred_labels fn a) *)
 Theorem pred_labels_merge_blocks_merged_not_mem:
   !fn a b a' b'.
@@ -1317,8 +1331,16 @@ Proof
   `block_successors a' = [b]` by (irule scfgMergeHelpersTheory.block_last_jmp_to_successors >> simp[]) >>
   `~MEM a (block_successors a')` by simp[] >>
   `a'.bb_label = a` by metis_tac[lookup_block_label] >>
-  (* Remaining: show FILTER/MAP equality - complex list algebra *)
-  cheat
+  (* Use helper: blocks with label != a don't have b in successors *)
+  sg `!bb. MEM bb fn.fn_blocks /\ bb.bb_label <> a ==> ~MEM b (block_successors bb)`
+  >- (rpt strip_tac >> qspecl_then [`fn`, `a`, `b`, `bb`] mp_tac no_b_successor_except_a >> simp[])
+  >- (sg `!bb. MEM bb fn.fn_blocks /\ bb.bb_label <> a ==>
+            block_successors (replace_label_block b a bb) = block_successors bb`
+      >- (rpt strip_tac >> irule scfgMergeHelpersTheory.block_successors_replace_label_block >>
+          first_x_assum drule >> simp[])
+      >- (`~MEM a (block_successors merged)` by simp[] >>
+          (* Remaining: FILTER/MAP equality with all helper facts established *)
+          cheat))
 QED
 
 (* Helper: phi_block_wf for merged block after merge_blocks *)
