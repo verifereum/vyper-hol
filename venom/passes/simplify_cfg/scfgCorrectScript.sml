@@ -847,6 +847,25 @@ Proof
   rw[scfgTransformTheory.merge_jump_cond_def] >> gvs[]
 QED
 
+(* Helper: trace non-terminator instruction through update_last_inst in merge_jump *)
+Theorem MEM_update_last_inst_merge_jump:
+  !fn a_lbl b_lbl x y c_lbl.
+    merge_jump_cond fn a_lbl b_lbl /\
+    cfg_wf fn /\
+    lookup_block a_lbl fn.fn_blocks = SOME x /\
+    MEM y (update_last_inst (replace_label_inst b_lbl c_lbl) x.bb_instructions) /\
+    ~is_terminator y.inst_opcode ==>
+    MEM y x.bb_instructions
+Proof
+  rpt strip_tac >> irule MEM_update_last_inst_non_terminator >>
+  simp[replace_label_inst_opcode] >>
+  conj_tac
+  >- (strip_tac >>
+      `MEM b_lbl (block_successors x)` by (irule merge_jump_cond_block_successors >> metis_tac[]) >>
+      drule block_successors_LAST_terminator >> simp[])
+  >- (qexists_tac `replace_label_inst b_lbl c_lbl` >> simp[replace_label_inst_opcode])
+QED
+
 (* Helper: phi_block_wf preserved by replace_label_block when pred list transforms *)
 Theorem phi_block_wf_replace_label_block:
   !old new preds bb.
