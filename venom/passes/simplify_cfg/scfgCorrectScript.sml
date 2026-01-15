@@ -1789,7 +1789,16 @@ Proof
                         scfgTransformTheory.merge_blocks_def,
                         scfgTransformTheory.merge_blocks_cond_def] >>
                     simp[scfgDefsTheory.replace_label_fn_def])
-                >- cheat (* use MEM_pred_labels_merge_blocks_other_mem_b *))
+                >- (gvs[] >>
+                    qspecl_then [`fn`, `merged.bb_label`, `b`, `y.bb_label`, `x`] mp_tac
+                      MEM_pred_labels_merge_blocks_other_mem_b >>
+                    impl_tac
+                    >- (simp[scfgTransformTheory.merge_blocks_cond_def] >>
+                        gvs[Abbr`merged`] >> metis_tac[lookup_block_label])
+                    >- (strip_tac >> gvs[] >> eq_tac >> strip_tac >> gvs[]
+                        >- metis_tac[]
+                        >- metis_tac[]
+                        >- (Cases_on `y' = b` >> gvs[] >> metis_tac[]))))
             >- (sg `fn' = merge_blocks fn merged.bb_label b`
                 >- (gvs[Abbr`fn'`, Abbr`blocks1`, Abbr`merged`,
                         scfgTransformTheory.merge_blocks_def,
@@ -1893,7 +1902,22 @@ Proof
                     >- (first_x_assum (qspec_then `inst'` mp_tac) >> simp[] >>
                         qpat_x_assum `a' = h` (fn th => SUBST_ALL_TAC th) >>
                         first_x_assum ACCEPT_TAC)))
-            >- (rpt strip_tac >> gvs[listTheory.MEM_MAP] >> cheat))
+            >- (rpt strip_tac >> gvs[listTheory.MEM_MAP] >>
+                (* h.bb_label = a_new.bb_label = a, so h = a' = entry block
+                   Entry has no PHI by phi_fn_wf, trace through update_last_inst *)
+                gvs[scfgDefsTheory.replace_label_inst_def,
+                    scfgDefsTheory.replace_label_in_phi_def] >>
+                Cases_on `y'.inst_opcode = PHI` >> gvs[] >>
+                gvs[Abbr`a_new`] >>
+                `?inst'. MEM inst' h.bb_instructions /\ inst'.inst_opcode = PHI` by
+                  (irule update_last_inst_phi_mem >>
+                   qexists_tac `replace_label_inst b c_lbl` >>
+                   qexists_tac `y'` >> simp[replace_label_inst_opcode] >>
+                   (* h = a' from lookup_block and h.bb_label = a *)
+                   `a' = h` by gvs[venomInstTheory.lookup_block_def] >>
+                   gvs[]) >>
+                (* h is entry, has no PHI *)
+                first_x_assum (qspec_then `inst'` mp_tac) >> simp[]))
         >- (COND_CASES_TAC >>
             gvs[scfgDefsTheory.replace_label_block_def,
                 scfgDefsTheory.replace_phi_in_block_def,
