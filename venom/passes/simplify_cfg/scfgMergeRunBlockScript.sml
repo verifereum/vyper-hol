@@ -2142,8 +2142,37 @@ Proof
              simp[listTheory.EL_MAP]) >>
           Cases_on `step_inst x s` >> gvs[AllCaseEqs()] >>
           Cases_on `x.inst_opcode = PHI`
-          (* PHI case: use step_inst_phi_replace_label_same to show states equal *)
-          >- cheat (* TODO: prove with step_inst_phi_replace_label_same *)
+          (* PHI case: use resolve_phi_replace_label_other to show states equal *)
+          >- (Cases_on `s.vs_prev_bb`
+              >- (gvs[step_inst_def] >> gvs[AllCaseEqs()])
+              >- (sg `phi_inst_wf preds x`
+                  >- (gvs[phi_block_wf_def, get_instruction_def] >>
+                      first_x_assum irule >> simp[listTheory.MEM_EL] >>
+                      qexists_tac `s.vs_inst_idx` >> simp[])
+                  >- (drule_all phi_inst_wf_props >> strip_tac >>
+                      qpat_x_assum `step_inst (replace_label_in_phi _ _ _) _ = _` mp_tac >>
+                      simp[step_inst_def, replace_label_in_phi_def] >> strip_tac >>
+                      gvs[AllCaseEqs()] >>
+                      qspecl_then [`old`, `new`, `x'`, `x.inst_operands`] mp_tac
+                        resolve_phi_replace_label_other >> simp[] >>
+                      strip_tac >>
+                      qpat_x_assum `step_inst x s = OK v''` mp_tac >>
+                      simp[step_inst_def] >> strip_tac >> gvs[AllCaseEqs()] >>
+                      qpat_x_assum `run_block bb s = OK v` mp_tac >>
+                      simp[Once run_block_def] >> strip_tac >>
+                      gvs[step_in_block_def, AllCaseEqs()] >>
+                      qpat_x_assum `run_block (replace_phi_in_block _ _ _) s = OK v'` mp_tac >>
+                      simp[Once run_block_def, step_in_block_def] >> strip_tac >>
+                      gvs[AllCaseEqs()] >>
+                      qpat_x_assum `step_inst x s = OK s'` mp_tac >>
+                      simp[step_inst_def] >> strip_tac >> gvs[AllCaseEqs()] >>
+                      qpat_x_assum `step_inst (replace_label_in_phi _ _ _) s = OK s''` mp_tac >>
+                      simp[step_inst_def, replace_label_in_phi_def] >> strip_tac >>
+                      gvs[AllCaseEqs()] >>
+                      first_x_assum (qspecl_then [`old`, `new`, `v'`, `preds`] mp_tac) >>
+                      simp[] >> impl_tac
+                      >- simp[next_inst_def, update_var_def]
+                      >- simp[])))
           (* Non-PHI case: instruction unchanged, so intermediate states equal *)
           >- (`replace_label_in_phi old new x = x` by simp[replace_label_in_phi_def] >>
               gvs[] >>
