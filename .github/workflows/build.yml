@@ -65,6 +65,8 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: hol-build
+      - name: Fix artifact timestamps
+        run: find . -path '*/.hol/*' -type f -exec touch {} +
       - name: Restore Vyper test exports
         uses: actions/cache/restore@v4
         with:
