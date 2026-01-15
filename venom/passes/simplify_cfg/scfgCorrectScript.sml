@@ -1368,9 +1368,23 @@ Proof
             sg `~MEM a (pred_labels fn a)` >- (irule no_self_loop_from_jmp >> metis_tac[]) >>
             `a'.bb_label = a` by (irule lookup_block_label >> metis_tac[]) >>
             gvs[] >>
-            (* Now we have MEM b preds, ~MEM a preds - can apply phi_block_wf_replace_label_block
-               Need: pred_labels fn' a = MAP (λl. if l=b then a else l) (pred_labels fn a) *)
-            cheat)
+            (* Now we have MEM b preds, ~MEM a preds - can apply phi_block_wf_replace_label_block *)
+            qabbrev_tac `merged_block = a' with bb_instructions :=
+              FRONT a'.bb_instructions ++ b'.bb_instructions` >>
+            `(a' with bb_instructions :=
+                MAP (replace_label_inst b a'.bb_label) (FRONT a'.bb_instructions) ++
+                MAP (replace_label_inst b a'.bb_label) b'.bb_instructions) =
+              replace_label_block b a'.bb_label merged_block` by
+              simp[scfgDefsTheory.replace_label_block_def, Abbr`merged_block`, MAP_APPEND] >>
+            gvs[] >>
+            drule_all phi_block_wf_replace_label_block >> strip_tac >>
+            irule phi_block_wf_MEM_equiv >>
+            qexists_tac `MAP (\lbl. if lbl = b then a'.bb_label else lbl)
+              (pred_labels fn a'.bb_label)` >> simp[] >>
+            (* MEM equivalence: pred_labels fn' a ~ MAP (\l. if l=b then a else l) (pred_labels fn a)
+               Key: merged has self-loop since b jumped to a, so MEM a (block_successors merged) *)
+            rpt strip_tac >> gvs[Abbr`fn'`] >>
+            cheat (* MEM equivalence - need DISJ1_TAC for self-loop *))
           >- ( (* ~MEM b (pred_labels fn a) case *)
             `a'.bb_label = a` by (irule lookup_block_label >> metis_tac[]) >>
             simp[scfgDefsTheory.phi_block_wf_def, MEM_MAP, MEM_APPEND] >>
