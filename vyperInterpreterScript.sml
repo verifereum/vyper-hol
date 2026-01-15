@@ -1381,9 +1381,14 @@ val () = cv_auto_trans evaluate_type_builtin_def;
 (* =========================================================================
    Elliptic Curve Cryptography Helpers
 
-   These are wrapper definitions for the BN254 and secp256k1 curve operations.
-   They mirror the EVM precompile interface (addresses 0x01, 0x06, 0x07).
-   ========================================================================= *)
+   These wrapper definitions for the BN254 and secp256k1 curve
+   operations mirror the EVM precompile interface (addresses 0x01,
+   0x06, 0x07).  They are identical to the definitions in
+   vfmExecutionTheory from verifereum, but defined locally to avoid
+   pulling in heavy vfmExecution dependencies (which currently don't
+   compile on 'main' branch of verifereum).
+   =========================================================================
+   *)
 
 (* ecadd: BN254 point addition (EVM precompile 0x06)
    Returns NONE if either input point is not on the curve *)
