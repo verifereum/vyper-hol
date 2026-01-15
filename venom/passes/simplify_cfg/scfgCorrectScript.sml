@@ -1169,7 +1169,66 @@ Proof
     gvs[]) >> gvs[scfgDefsTheory.simplify_phi_block_def]) >- (irule
     simplify_phi_block_terminator_last >> `bb'.bb_instructions <> [] /\
     block_terminator_last bb'` by (res_tac >> gvs[]) >> simp[])))
-  >- ( (* cfg_wf merge_blocks *) cheat)
+  >- ( (* cfg_wf merge_blocks *)
+    simp[scfgTransformTheory.merge_blocks_def,
+         scfgTransformTheory.merge_blocks_cond_def] >> rpt strip_tac >>
+    gvs[scfgTransformTheory.merge_blocks_cond_def] >> simp[cfg_wf_def,
+         scfgDefsTheory.replace_label_fn_def, MAP_MAP_o, combinTheory.o_DEF] >>
+    `!old new bb. (replace_label_block old new bb).bb_label = bb.bb_label`
+      by simp[scfgDefsTheory.replace_label_block_def] >>
+    `!a' blocks. MAP (\bb. bb.bb_label) (replace_block a' blocks) =
+      MAP (\bb. bb.bb_label) blocks` by (gen_tac >> Induct >>
+      simp[scfgDefsTheory.replace_block_def] >> rw[]) >>
+    `!lbl blocks. MAP (\bb. bb.bb_label) (remove_block lbl blocks) =
+      FILTER (\l. l <> lbl) (MAP (\bb. bb.bb_label) blocks)` by
+      (gen_tac >> Induct >> simp[scfgDefsTheory.remove_block_def] >> rw[]) >>
+    simp[] >> rpt conj_tac
+    >- (gvs[cfg_wf_def] >> Cases_on `fn.fn_blocks` >>
+        gvs[scfgDefsTheory.entry_label_def] >>
+        simp[scfgDefsTheory.remove_block_def, scfgDefsTheory.replace_block_def]
+        >> COND_CASES_TAC >> simp[])
+    >- (irule FILTER_ALL_DISTINCT >> gvs[cfg_wf_def])
+    >- (rw[MEM_MAP] >> rpt strip_tac >>
+        `!bb' blocks y. MEM y (replace_block bb' blocks) ==>
+          (y = bb' /\ MEM bb'.bb_label (MAP (\b. b.bb_label) blocks)) \/
+          MEM y blocks` by (gen_tac >> Induct >>
+          simp[scfgDefsTheory.replace_block_def] >> rw[] >> gvs[] >> metis_tac[]) >>
+        `!lbl blocks y. MEM y (remove_block lbl blocks) ==> MEM y blocks` by
+          (gen_tac >> Induct >> simp[scfgDefsTheory.remove_block_def] >>
+           rw[] >> gvs[]) >>
+        first_x_assum drule >> strip_tac >> gvs[]
+        >- (gvs[scfgDefsTheory.replace_label_block_def] >>
+            `MEM a' fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
+            `MEM b' fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
+            `a'.bb_instructions <> [] /\ b'.bb_instructions <> []` by
+              (gvs[cfg_wf_def] >> res_tac >> gvs[]) >> gvs[])
+        >- (`MEM y fn.fn_blocks` by metis_tac[] >>
+            `y.bb_instructions <> []` by (gvs[cfg_wf_def] >> res_tac >> gvs[]) >>
+            gvs[scfgDefsTheory.replace_label_block_def])
+        >- (`MEM a' fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
+            `MEM b' fn.fn_blocks` by (irule lookup_block_MEM >> metis_tac[]) >>
+            `a'.bb_instructions <> [] /\ block_terminator_last a'` by
+              (gvs[cfg_wf_def] >> res_tac >> gvs[]) >>
+            `b'.bb_instructions <> [] /\ block_terminator_last b'` by
+              (gvs[cfg_wf_def] >> res_tac >> gvs[]) >>
+            `block_terminator_last (a' with bb_instructions :=
+              FRONT a'.bb_instructions ++ b'.bb_instructions)` by
+              (irule scfgMergeCorrectTheory.block_terminator_last_merged >> simp[]) >>
+            simp[scfgDefsTheory.replace_label_block_def,
+                 block_terminator_last_def, venomInstTheory.get_instruction_def] >>
+            rpt strip_tac >> gvs[EL_MAP, replace_label_inst_opcode] >>
+            cheat) (* idx = last index - needs block_terminator_last uniqueness *)
+        >- (`MEM y fn.fn_blocks` by metis_tac[] >>
+            `block_terminator_last y` by (gvs[cfg_wf_def] >> res_tac >> gvs[]) >>
+            simp[scfgDefsTheory.replace_label_block_def,
+                 block_terminator_last_def, venomInstTheory.get_instruction_def] >>
+            rpt strip_tac >> gvs[EL_MAP, replace_label_inst_opcode] >>
+            qpat_x_assum `block_terminator_last y` mp_tac >>
+            simp[block_terminator_last_def, venomInstTheory.get_instruction_def] >>
+            strip_tac >>
+            `is_terminator y.bb_instructions❲idx❳.inst_opcode` by
+              gvs[EL_MAP, replace_label_inst_opcode] >>
+            first_x_assum (qspec_then `idx` mp_tac) >> simp[])))
   >- ( (* cfg_wf merge_jump *) cheat)
   >- ( (* phi_fn_wf remove_unreachable_blocks *) cheat)
   >- ( (* phi_fn_wf merge_blocks *) cheat)
