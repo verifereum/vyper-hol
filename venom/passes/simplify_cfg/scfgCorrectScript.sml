@@ -241,6 +241,66 @@ Proof
       first_x_assum (qspec_then `bb with bb_instructions := [(LAST bb.bb_instructions) with inst_operands := v]` mp_tac) >> simp[])
 QED
 
+(* Helper: block_successors is unchanged by replace_phi_in_block
+   (because replace_phi_in_block only modifies PHI instructions,
+    and terminators are not PHI) *)
+Theorem block_successors_replace_phi_in_block:
+  !bb old new.
+    block_successors (replace_phi_in_block old new bb) = block_successors bb
+Proof
+  rpt strip_tac >>
+  simp[scfgDefsTheory.block_successors_def, scfgDefsTheory.replace_phi_in_block_def,
+       scfgDefsTheory.block_last_inst_def] >>
+  Cases_on `NULL bb.bb_instructions` >> gvs[] >>
+  `bb.bb_instructions <> []` by gvs[listTheory.NULL_EQ] >>
+  simp[listTheory.LAST_MAP] >>
+  Cases_on `(LAST bb.bb_instructions).inst_opcode = PHI`
+  >- simp[scfgDefsTheory.replace_label_in_phi_def,
+          venomInstTheory.get_successors_def, venomInstTheory.is_terminator_def]
+  >- simp[scfgMergeRunBlockTheory.replace_label_in_phi_non_phi]
+QED
+
+(* Helper: block_successors preserved under expanded replace_phi_in_block form *)
+Theorem block_successors_replace_phi_expanded:
+  !bb old new.
+    block_successors (bb with bb_instructions :=
+      MAP (replace_label_in_phi old new) bb.bb_instructions) = block_successors bb
+Proof
+  rpt strip_tac >>
+  `bb with bb_instructions := MAP (replace_label_in_phi old new) bb.bb_instructions =
+   replace_phi_in_block old new bb` by simp[scfgDefsTheory.replace_phi_in_block_def] >>
+  simp[block_successors_replace_phi_in_block]
+QED
+
+(* Helper: pred_labels unchanged by MAP conditional replace_phi_in_block
+   This is step 3 of merge_jump transform - PHI updates don't affect successors *)
+Theorem pred_labels_MAP_replace_phi_in_block:
+  !blocks old new P lbl.
+    MAP (\bb. bb.bb_label)
+      (FILTER (\bb. MEM lbl (block_successors bb))
+         (MAP (\bb. if P bb.bb_label then replace_phi_in_block old new bb else bb) blocks)) =
+    MAP (\bb. bb.bb_label)
+      (FILTER (\bb. MEM lbl (block_successors bb)) blocks)
+Proof
+  Induct >> simp[scfgDefsTheory.replace_phi_in_block_def] >>
+  rpt strip_tac >> COND_CASES_TAC >> gvs[block_successors_replace_phi_in_block]
+  >- (simp[] >> Cases_on `P (h:basic_block).bb_label` >>
+      gvs[scfgDefsTheory.replace_phi_in_block_def, block_successors_replace_phi_expanded])
+  >- (Cases_on `P (h:basic_block).bb_label` >>
+      gvs[block_successors_replace_phi_expanded, scfgDefsTheory.replace_phi_in_block_def])
+QED
+
+(* Corollary: pred_labels unchanged when applying MAP replace_phi_in_block to fn_blocks *)
+Theorem pred_labels_fn_MAP_replace_phi_in_block:
+  !fn old new P lbl.
+    pred_labels (fn with fn_blocks :=
+      MAP (\bb. if P bb.bb_label then replace_phi_in_block old new bb else bb) fn.fn_blocks) lbl =
+    pred_labels fn lbl
+Proof
+  rpt strip_tac >> simp[scfgDefsTheory.pred_labels_def] >>
+  simp[pred_labels_MAP_replace_phi_in_block]
+QED
+
 (* How pred_labels changes after replace_label_fn (as set equality) *)
 Theorem pred_labels_replace_label_fn_set:
   !fn old new lbl.
