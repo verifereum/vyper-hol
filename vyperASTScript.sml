@@ -135,6 +135,10 @@ Datatype:
   | Env env_item
   | Acc account_item
   | Isqrt
+  (* Elliptic curve cryptography - precompile builtins *)
+  | ECRecover    (* ecrecover(hash, v, r, s) -> address *)
+  | ECAdd        (* ecadd((x1,y1), (x2,y2)) -> (x3,y3) on BN254 *)
+  | ECMul        (* ecmul((x,y), scalar) -> (x',y') on BN254 *)
 End
 
 Datatype:

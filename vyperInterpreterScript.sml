@@ -1,7 +1,7 @@
 Theory vyperInterpreter
 Ancestors
   arithmetic alist combin list finite_map pair rich_list
-  cv cv_std vfmState vyperAST
+  cv cv_std vfmState bn254 secp256k1 vyperAST
   vyperMisc
 Libs
   cv_transLib wordsLib monadsyntax
@@ -1378,6 +1378,48 @@ End
 
 val () = cv_auto_trans evaluate_type_builtin_def;
 
+(* =========================================================================
+   Elliptic Curve Cryptography Helpers
+
+   These are wrapper definitions for the BN254 and secp256k1 curve operations.
+   They mirror the EVM precompile interface (addresses 0x01, 0x06, 0x07).
+   ========================================================================= *)
+
+(* ecadd: BN254 point addition (EVM precompile 0x06)
+   Returns NONE if either input point is not on the curve *)
+Definition ecadd_def:
+  ecadd a b =
+    if ¬(bn254$validAffine a ∧ bn254$validAffine b) then NONE
+    else SOME $ bn254$addAffine a b
+End
+
+(* ecmul: BN254 scalar multiplication (EVM precompile 0x07)
+   Returns NONE if input point is not on the curve *)
+Definition ecmul_def:
+  ecmul p s =
+    if ¬(bn254$validAffine p) then NONE
+    else SOME $ bn254$mulAffine p s
+End
+
+(* ecrecover: Recover signer address from ECDSA signature (EVM precompile 0x01)
+   Uses secp256k1 curve as per Ethereum.
+   Returns NONE if signature is invalid. *)
+Definition ecrecover_def:
+  ecrecover (hash:bytes32) v r s : address option =
+    if ¬(v = 27 ∨ v = 28) then NONE else
+    if ¬(0 < r ∧ r < secp256k1$secp256k1N) then NONE else
+    if ¬(0 < s ∧ s < secp256k1$secp256k1N) then NONE else
+    if ¬(secp256k1$fleg (secp256k1$weierstrassEquation r) = 1) then NONE else
+    let
+      yParity = v - 27;
+      point = secp256k1$recoverPoint r s yParity hash
+    in if SND (SND point) = 0 then NONE else
+    let
+      keyBytes = secp256k1$pointToUncompressedBytes point;
+      addrBytes = DROP 12 $ Keccak_256_w64 keyBytes
+    in SOME $ word_of_bytes T 0w addrBytes
+End
+
 Definition evaluate_builtin_def:
   evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
   evaluate_builtin cx _ Len [StringV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
@@ -1438,6 +1480,45 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ Isqrt [IntV u i] =
     (if is_Unsigned u ∧ 0 ≤ i then INL $ IntV u &(num_sqrt (Num i))
      else INR "Isqrt type") ∧
+  evaluate_builtin cx _ ECRecover
+    [BytesV _ hash_bytes; IntV u1 v_int; IntV u2 r_int; IntV u3 s_int] =
+    (if u1 = Unsigned 256 ∧ u2 = Unsigned 256 ∧ u3 = Unsigned 256 ∧
+        LENGTH hash_bytes = 32
+     then let
+       hash = word_of_bytes T (0w:bytes32) hash_bytes;
+       v = Num v_int;
+       r = Num r_int;
+       s = Num s_int
+     in case ecrecover hash v r s of
+          NONE => INL $ AddressV 0w
+        | SOME addr => INL $ AddressV addr
+     else INR "ECRecover type") ∧
+  evaluate_builtin cx _ ECAdd
+    [ArrayV (TupleV [IntV u1 x1; IntV u2 y1]);
+     ArrayV (TupleV [IntV u3 x2; IntV u4 y2])] =
+    (if u1 = Unsigned 256 ∧ u2 = Unsigned 256 ∧
+        u3 = Unsigned 256 ∧ u4 = Unsigned 256
+     then let
+       p1 = (Num x1, Num y1);
+       p2 = (Num x2, Num y2)
+     in case ecadd p1 p2 of
+          NONE => INL $ ArrayV $ TupleV
+            [IntV (Unsigned 256) 0; IntV (Unsigned 256) 0]
+        | SOME (rx, ry) => INL $ ArrayV $ TupleV
+            [IntV (Unsigned 256) (&rx); IntV (Unsigned 256) (&ry)]
+     else INR "ECAdd type") ∧
+  evaluate_builtin cx _ ECMul
+    [ArrayV (TupleV [IntV u1 x; IntV u2 y]); IntV u3 scalar] =
+    (if u1 = Unsigned 256 ∧ u2 = Unsigned 256 ∧ u3 = Unsigned 256
+     then let
+       p = (Num x, Num y);
+       n = Num scalar
+     in case ecmul p n of
+          NONE => INL $ ArrayV $ TupleV
+            [IntV (Unsigned 256) 0; IntV (Unsigned 256) 0]
+        | SOME (rx, ry) => INL $ ArrayV $ TupleV
+            [IntV (Unsigned 256) (&rx); IntV (Unsigned 256) (&ry)]
+     else INR "ECMul type") ∧
   evaluate_builtin _ _ _ _ = INR "builtin"
 End
 
@@ -1478,7 +1559,10 @@ Definition builtin_args_length_ok_def:
   builtin_args_length_ok (Env _) n = (n = 0) ∧
   builtin_args_length_ok BlockHash n = (n = 1) ∧
   builtin_args_length_ok (Acc _) n = (n = 1) ∧
-  builtin_args_length_ok Isqrt n = (n = 1)
+  builtin_args_length_ok Isqrt n = (n = 1) ∧
+  builtin_args_length_ok ECRecover n = (n = 4) ∧
+  builtin_args_length_ok ECAdd n = (n = 2) ∧
+  builtin_args_length_ok ECMul n = (n = 2)
 End
 
 val () = cv_auto_trans builtin_args_length_ok_def;
