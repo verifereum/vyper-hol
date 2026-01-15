@@ -18,9 +18,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: hol-build
-          path: |
-            .hol
-            **/.hol
+          path: '**/.hol'
+          include-hidden-files: true
           retention-days: 1
 
   export-vyper-tests:
