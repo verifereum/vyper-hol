@@ -1917,7 +1917,31 @@ Proof
             scfgDefsTheory.remove_block_def] >> COND_CASES_TAC >>
         gvs[scfgDefsTheory.entry_label_def, scfgDefsTheory.remove_block_def] >>
         `a'.bb_label <> b` by gvs[] >> simp[])
-    >- cheat (* phi_block_wf - needs pred_labels algebra *)
+    >- ( (* phi_block_wf for all blocks *)
+      rpt strip_tac >> gvs[listTheory.MEM_MAP] >>
+      Cases_on `MEM bb'.bb_label succs`
+      >- (gvs[] >> cheat (* MEM succs case - needs pred_labels through replace_phi_in_block *))
+      >- (gvs[] >>
+          simp[scfgDefsTheory.replace_label_block_def] >>
+          gvs[Abbr`blocks2`, Abbr`blocks1`] >>
+          sg `MEM bb' fn.fn_blocks \/ bb' = a_new`
+          >- (qpat_x_assum `MEM bb' (remove_block _ _)` mp_tac >>
+              simp[Once MEM_remove_block] >> strip_tac >>
+              drule MEM_remove_block >> strip_tac >>
+              `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by gvs[cfg_wf_def] >>
+              drule_all MEM_replace_block >> strip_tac >> gvs[])
+          >- (`phi_block_wf (pred_labels fn bb'.bb_label) bb'` by
+                (gvs[scfgDefsTheory.phi_fn_wf_def] >> first_x_assum irule >> simp[]) >>
+              Cases_on `MEM b (pred_labels fn bb'.bb_label)`
+              >- cheat (* MEM b preds - needs pred_labels algebra for b removal *)
+              >- (`bb' with bb_instructions := MAP (replace_label_inst b c_lbl) bb'.bb_instructions =
+                   replace_label_block b c_lbl bb'` by simp[scfgDefsTheory.replace_label_block_def] >>
+                  simp[scfgDefsTheory.phi_block_wf_def, listTheory.MEM_MAP] >>
+                  rpt strip_tac >> gvs[] >>
+                  Cases_on `y.inst_opcode = PHI`
+                  >- cheat (* PHI case - needs pred_labels reasoning *)
+                  >- (irule phi_inst_wf_non_phi >> simp[replace_label_inst_opcode])))
+          >- cheat (* bb' = a_new case - needs phi_block_wf for modified block *)))
     >- (gvs[Abbr`blocks2`, Abbr`blocks1`] >> Cases_on `fn.fn_blocks` >>
         gvs[scfgDefsTheory.phi_fn_wf_def, scfgDefsTheory.replace_block_def,
             scfgDefsTheory.remove_block_def] >> COND_CASES_TAC >>
