@@ -1372,6 +1372,12 @@ Definition evaluate_type_builtin_def:
   evaluate_type_builtin cx Extract32 (BaseT bt) [BytesV _ bs; IntV u i] =
     (if u = Unsigned 256 then evaluate_extract32 bs (Num i) bt
      else INR "Extract32 type") ∧
+  (* AbiEncode and AbiDecode are handled specially in vyperSmallStep
+     which has access to the ABI encoding functions from vyperABI *)
+  evaluate_type_builtin _ AbiEncode _ _ =
+    INR "abi_encode: use vyperSmallStep" ∧
+  evaluate_type_builtin _ AbiDecode _ _ =
+    INR "abi_decode: use vyperSmallStep" ∧
   evaluate_type_builtin _ _ _ _ =
     INR "evaluate_type_builtin"
 End
@@ -1438,6 +1444,12 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ Isqrt [IntV u i] =
     (if is_Unsigned u ∧ 0 ≤ i then INL $ IntV u &(num_sqrt (Num i))
      else INR "Isqrt type") ∧
+  (* method_id: compute keccak256(signature)[:4] - returns 4-byte function selector *)
+  evaluate_builtin cx _ MethodId [StringV _ sig] =
+    INL $ BytesV (Fixed 4) (TAKE 4 (Keccak_256_w64 (MAP (n2w o ORD) sig))) ∧
+  (* Also support Bytes input for method_id *)
+  evaluate_builtin cx _ MethodId [BytesV _ bs] =
+    INL $ BytesV (Fixed 4) (TAKE 4 (Keccak_256_w64 bs)) ∧
   evaluate_builtin _ _ _ _ = INR "builtin"
 End
 
@@ -1455,7 +1467,9 @@ Definition type_builtin_args_length_ok_def:
   type_builtin_args_length_ok MinValue n = (n = 0) ∧
   type_builtin_args_length_ok Epsilon n = (n = 0) ∧
   type_builtin_args_length_ok Extract32 n = (n = 2) ∧
-  type_builtin_args_length_ok Convert n = (n = 1)
+  type_builtin_args_length_ok Convert n = (n = 1) ∧
+  type_builtin_args_length_ok AbiEncode n = (1 ≤ n) ∧
+  type_builtin_args_length_ok AbiDecode n = (n = 1)
 End
 
 val () = cv_auto_trans type_builtin_args_length_ok_def;
@@ -1478,7 +1492,8 @@ Definition builtin_args_length_ok_def:
   builtin_args_length_ok (Env _) n = (n = 0) ∧
   builtin_args_length_ok BlockHash n = (n = 1) ∧
   builtin_args_length_ok (Acc _) n = (n = 1) ∧
-  builtin_args_length_ok Isqrt n = (n = 1)
+  builtin_args_length_ok Isqrt n = (n = 1) ∧
+  builtin_args_length_ok MethodId n = (n = 1)
 End
 
 val () = cv_auto_trans builtin_args_length_ok_def;

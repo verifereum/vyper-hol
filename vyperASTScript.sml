@@ -135,6 +135,7 @@ Datatype:
   | Env env_item
   | Acc account_item
   | Isqrt
+  | MethodId (* compute 4-byte function selector from signature string *)
 End
 
 Datatype:
@@ -147,6 +148,7 @@ End
 
 Datatype:
   type_builtin = Empty | MaxValue | MinValue | Epsilon | Convert | Extract32
+               | AbiEncode | AbiDecode
 End
 
 Datatype:

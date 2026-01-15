@@ -6,6 +6,10 @@ Libs
   cv_transLib
   wordsLib
 
+(* Overloads to disambiguate ABI value constructors from Vyper value constructors *)
+Overload abi_IntV[local] = “IntV : int -> abi_value”
+Overload abi_BytesV[local] = “BytesV : word8 list -> abi_value”
+
 Definition vyper_base_to_abi_type_def[simp]:
   vyper_base_to_abi_type (UintT n) = Uint n ∧
   vyper_base_to_abi_type (IntT n) = Int n ∧
@@ -96,3 +100,131 @@ Proof
   \\ rw[]
   \\ rw[Once abi_to_vyper_pre_def]
 QED
+
+(* ===== Vyper to ABI Value Conversion ===== *)
+
+(* Helper lemmas for termination proof *)
+
+Theorem value5_size_eq_list_size:
+  ∀vs. value5_size vs = list_size value_size vs
+Proof
+  Induct \\ rw[value_size_def, listTheory.list_size_def]
+QED
+
+Theorem value1_size_ge_map_snd:
+  ∀fields. list_size value_size (MAP SND fields) ≤ value1_size fields
+Proof
+  Induct \\ rw[value_size_def, listTheory.list_size_def]
+  \\ Cases_on ‘h’ \\ rw[value_size_def]
+  \\ ‘list_size (λx. value_size (SND x)) fields = list_size value_size (MAP SND fields)’
+      by rw[listTheory.list_size_map]
+  \\ fs[]
+QED
+
+Theorem extract_elements_size:
+  ∀av vs. extract_elements (ArrayV av) = SOME vs ⇒
+          list_size value_size vs < 1 + array_value_size av
+Proof
+  Cases \\ rw[extract_elements_def, value_size_def, value5_size_eq_list_size]
+  (* CHEATED - need to prove for SArrayV case that GENLIST produces list
+     with size bounded by array_value_size. The TupleV and DynArrayV cases
+     follow directly from value5_size_eq_list_size. For SArrayV:
+     - Need lemma about GENLIST size with ALOOKUP/default_value
+     - Show list_size value_size (GENLIST f n) relates to value3_size al
+  >- (irule arithmeticTheory.LESS_EQ_LESS_TRANS
+      \\ qexists_tac 'value5_size l'
+      \\ rw[value5_size_eq_list_size, listTheory.list_size_map]
+      \\ (* need lemma about GENLIST with ALOOKUP *) ...)
+  *)
+  \\ cheat
+QED
+
+(* Convert Vyper values to ABI values for encoding.
+   This is the inverse of abi_to_vyper. *)
+
+Definition vyper_to_abi_value_def:
+  vyper_to_abi_value (IntV (Unsigned _) i) =
+    (if 0 ≤ i then SOME (NumV (Num i)) else NONE) ∧
+  vyper_to_abi_value (IntV (Signed _) i) =
+    SOME (abi_IntV i) ∧
+  vyper_to_abi_value (BoolV b) =
+    SOME (NumV (if b then 1 else 0)) ∧
+  vyper_to_abi_value (BytesV _ bs) =
+    SOME (abi_BytesV bs) ∧
+  vyper_to_abi_value (StringV _ s) =
+    SOME (abi_BytesV (MAP (n2w o ORD) s)) ∧
+  vyper_to_abi_value (DecimalV i) =
+    SOME (abi_IntV i) ∧
+  vyper_to_abi_value (FlagV _ n) =
+    SOME (NumV (Num (&n))) ∧
+  vyper_to_abi_value NoneV =
+    SOME (ListV []) ∧
+  vyper_to_abi_value (StructV fields) =
+    OPTION_MAP ListV (vyper_to_abi_value_list (MAP SND fields)) ∧
+  vyper_to_abi_value (ArrayV av) =
+    (case extract_elements (ArrayV av) of
+       SOME vs => OPTION_MAP ListV (vyper_to_abi_value_list vs)
+     | NONE => NONE) ∧
+  vyper_to_abi_value_list [] = SOME [] ∧
+  vyper_to_abi_value_list (v::vs) =
+    (case vyper_to_abi_value v of NONE => NONE | SOME av =>
+     case vyper_to_abi_value_list vs of NONE => NONE | SOME avs =>
+       SOME (av::avs))
+Termination
+  WF_REL_TAC ‘measure (λx. case x of INL v => value_size v
+                                   | INR vs => list_size value_size vs)’
+  \\ cheat
+  (* CHEATED - termination goals:
+     1. StructV fields case: show list_size value_size (MAP SND fields) < 1 + value1_size fields
+        - Use value1_size_ge_map_snd lemma
+     2. ArrayV av case: show list_size value_size vs < 1 + array_value_size av
+        when extract_elements (ArrayV av) = SOME vs
+        - Use extract_elements_size lemma (also cheated)
+     Original proof approach: use rw with value_size_def and list_size_def,
+     then for StructV case use LESS_EQ_LESS_TRANS with value1_size_ge_map_snd,
+     and for ArrayV case use drule with extract_elements_size.
+  *)
+End
+
+(* NOTE: cv_auto_trans for vyper_to_abi_value fails because the cv translator
+   needs to prove termination for its generated cv definition, and the recursion
+   through extract_elements makes this complex. The original definition‘s
+   termination is cheated, but that doesn‘t help the cv translation.
+val vyper_to_abi_value_pre_def =
+  vyper_to_abi_value_def
+  |> cv_auto_trans_pre "vyper_to_abi_value_pre vyper_to_abi_value_list_pre";
+*)
+
+(* ===== ABI Builtin Evaluation ===== *)
+
+(* Evaluation functions for AbiEncode and AbiDecode type builtins.
+   These are called from the small-step interpreter when evaluating
+   TypeBuiltin AbiEncode/AbiDecode. *)
+
+Definition evaluate_abi_encode_def:
+  evaluate_abi_encode typ vs =
+    case vyper_to_abi_value (ArrayV (TupleV vs)) of
+      SOME abiVal =>
+        let abiTy = vyper_to_abi_type typ in
+        let encoded = enc abiTy abiVal in
+        INL $ BytesV (Dynamic (LENGTH encoded)) encoded
+    | NONE => INR "abi_encode conversion"
+End
+
+(* TODO: cv_auto_trans for evaluate_abi_encode requires termination proof for vyper_to_abi_value
+val () = cv_auto_trans evaluate_abi_encode_def;
+*)
+
+Definition evaluate_abi_decode_def:
+  evaluate_abi_decode tenv typ bs =
+    let abiTy = vyper_to_abi_type typ in
+    if valid_enc abiTy bs then
+      case abi_to_vyper tenv typ (dec abiTy bs) of
+        SOME v => INL v
+      | NONE => INR "abi_decode conversion"
+    else INR "abi_decode invalid"
+End
+
+(* TODO: cv_auto_trans for evaluate_abi_decode - depends on enc/dec translations
+val () = cv_auto_trans evaluate_abi_decode_def
+*)
