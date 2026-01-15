@@ -444,7 +444,10 @@ Proof
       qpat_x_assum `MEM a (block_successors _)` mp_tac >>
       simp[scfgDefsTheory.block_successors_def, scfgDefsTheory.block_last_inst_def] >>
       Cases_on `y.bb_instructions` >> simp[] >>
-      strip_tac >> CCONTR_TAC >> gvs[] >> cheat))
+      simp[get_successors_replace_label_inst, MEM_MAP] >> strip_tac >>
+      Cases_on `l = b` >> gvs[] >>
+      (* l = b case: contradiction from pred_labels fn b = [a] and y.bb_label <> a *)
+      cheat))
   >- (
     rpt strip_tac >>
     Cases_on `l = b`
@@ -471,7 +474,17 @@ Proof
         `a'.bb_label = a` by metis_tac[lookup_block_label] >>
         simp[] >>
         conj_tac
-        >- cheat
+        >- (
+          simp[GSYM scfgDefsTheory.replace_label_block_def,
+               block_successors_replace_label_block, MEM_MAP] >>
+          qexists_tac `a` >> simp[] >>
+          qpat_x_assum `MEM b (pred_labels fn a)` mp_tac >>
+          simp[scfgDefsTheory.pred_labels_def, MEM_FILTER, MEM_MAP] >>
+          strip_tac >>
+          sg `bb' = b'`
+          >- (irule scfgMergeHelpersTheory.lookup_block_unique >>
+              qexists_tac `fn.fn_blocks` >> qexists_tac `b` >> gvs[cfg_wf_def])
+          >- gvs[])
         >- (
           qexists_tac `merged_block` >> simp[] >>
           irule MEM_replace_block_intro >> qexists_tac `a'` >> simp[] >>
