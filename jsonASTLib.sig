@@ -129,7 +129,7 @@ signature jsonASTLib = sig
   val mk_JE_IfExp : term * term * term -> term
   val mk_JE_Tuple : term list -> term
   val mk_JE_List : term list * term -> term
-  val mk_JE_Call : term * term list * term list * term * int option -> term
+  val mk_JE_Call : term * term list * term list * term * term -> term
   val mk_JKeyword : string * term -> term
 
   (* ===== Statement Constructors ===== *)
