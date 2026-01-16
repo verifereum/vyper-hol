@@ -637,8 +637,8 @@ fun d_json_expr () : term decoder = achoose "expr" [
                     orElse(field "keywords" (array (delay d_json_keyword)), succeed [])),
             tuple2 (field "type" json_type,
                     orElse (JSONDecode.map optionSyntax.mk_some
-                              (field "func" $ field "type" $ field "type_decl_node" $ field "source_id" numtm))
-                           (succeed (optionSyntax.mk_none numSyntax.num))))
+                              (field "func" $ field "type" $ field "type_decl_node" $ field "source_id" numtm),
+                            succeed (optionSyntax.mk_none numSyntax.num))))
 ]
 and d_json_keyword () : term decoder =
   JSONDecode.map (fn (arg, v) => mk_JKeyword(arg, v)) $
