@@ -1586,6 +1586,41 @@ Proof
   fs[]
 QED
 
+(* Helper: b cannot be a predecessor after merge_jump (b is removed) *)
+Theorem not_MEM_pred_labels_merge_jump:
+  !fn a b lbl.
+    merge_jump_cond fn a b /\ cfg_wf fn /\
+    ~MEM b (pred_labels fn lbl) ==>
+    ~MEM b (pred_labels (merge_jump fn a b) lbl)
+Proof
+  rpt strip_tac >>
+  fs[scfgTransformTheory.merge_jump_cond_def,
+     scfgTransformTheory.merge_jump_def] >>
+  gvs[] >>
+  qabbrev_tac `a_new = a' with bb_instructions :=
+    update_last_inst (replace_label_inst b c_lbl) a'.bb_instructions` >>
+  qabbrev_tac `succs = block_successors a_new` >>
+  qabbrev_tac `blocks1 = replace_block a_new fn.fn_blocks` >>
+  qabbrev_tac `blocks2 = remove_block b blocks1` >>
+  qabbrev_tac `blocks3 = MAP (\bb. if MEM bb.bb_label succs
+    then replace_phi_in_block b a bb else bb) blocks2` >>
+  qpat_x_assum `MEM b (pred_labels _ lbl)` mp_tac >>
+  simp[scfgDefsTheory.pred_labels_def, listTheory.MEM_MAP,
+       listTheory.MEM_FILTER] >>
+  rpt strip_tac >> gvs[] >>
+  DISJ2_TAC >>
+  simp[scfgDefsTheory.replace_label_fn_def, listTheory.MEM_MAP] >>
+  rpt strip_tac >>
+  sg `y.bb_label = bb.bb_label`
+  >- (gvs[scfgDefsTheory.replace_label_block_def] >>
+      qpat_x_assum `bb = _` (fn th => SUBST_ALL_TAC th) >> simp[])
+  >- (gvs[Abbr`blocks3`, listTheory.MEM_MAP] >>
+      Cases_on `MEM bb'.bb_label succs` >>
+      gvs[scfgDefsTheory.replace_phi_in_block_def]
+      >- (gvs[Abbr`blocks2`] >> drule MEM_remove_block >> simp[])
+      >- (gvs[Abbr`blocks2`] >> drule MEM_remove_block >> simp[]))
+QED
+
 (* Helper: cfg_wf and phi_fn_wf preserved by simplify_cfg_step *)
 Theorem wf_simplify_cfg_step:
   !fn fn'.
