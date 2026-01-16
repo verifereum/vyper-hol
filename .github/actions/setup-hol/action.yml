@@ -40,7 +40,7 @@ runs:
         key: hol-${{ runner.os }}-${{ steps.versions.outputs.polyml }}
 
     - name: Build HOL4
-      if: steps.cache-hol4.outputs.cache-hit != 'true'
+#      if: steps.cache-hol4.outputs.cache-hit != 'true'
       shell: bash
       run: |
         git clone -b master https://github.com/HOL-Theorem-Prover/HOL.git ~/HOL
