@@ -46,7 +46,6 @@ runs:
         git clone -b master https://github.com/HOL-Theorem-Prover/HOL.git ~/HOL
         cd ~/HOL
         poly < tools/smart-configure.sml
-        bin/build cleanAll
         bin/build
 
     - name: Add HOL to PATH and set HOLDIR
