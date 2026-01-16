@@ -697,15 +697,6 @@ Theorem eval_cps_eq:
           | (INR ex, st1) => (AK cx (ApplyExc ex) st1)
      ) k))
 Proof
-  (* TODO: This proof shows equivalence between CPS and direct evaluation.
-     AbiDecode is now handled identically by both:
-     - Direct eval calls evaluate_type_builtin which calls evaluate_abi_decode
-     - CPS eval (apply_vals) also calls evaluate_abi_decode
-
-     Original proof structure preserved below for reference.
-  *)
-  cheat
-  (*
   ho_match_mp_tac evaluate_ind
   \\ conj_tac >- rw[eval_stmt_cps_def, evaluate_def, return_def]
   \\ conj_tac >- rw[eval_stmt_cps_def, evaluate_def, raise_def]
@@ -1233,7 +1224,6 @@ Proof
   >> rw[Once OWHILE_THM, SimpRHS, stepk_def, apply_vals_def]
   \\ gvs[apply_vals_def]
   \\ rw[Once OWHILE_THM, stepk_def]
-  *)
 QED
 
 Definition fromk_def[simp]:
