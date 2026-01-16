@@ -1,6 +1,6 @@
 Theory vyperABI
 Ancestors
-  contractABI vyperAST vyperInterpreter
+  contractABI vyperAST vyperTypeValue
   vyperMisc
 Libs
   cv_transLib
@@ -152,7 +152,7 @@ QED
 *)
 
 (* Generate ABI default value from a type_value.
-   This terminates on type_value_size. *)
+   Uses explicit recursion for fixed-size arrays to enable cv translation. *)
 Definition abi_default_from_type_def:
   abi_default_from_type (BaseTV (UintT _)) = NumV 0 ∧
   abi_default_from_type (BaseTV (IntT _)) = abi_IntV 0 ∧
@@ -165,17 +165,21 @@ Definition abi_default_from_type_def:
   abi_default_from_type (TupleTV ts) = ListV (abi_default_from_type_list ts) ∧
   abi_default_from_type (ArrayTV t (Dynamic _)) = ListV [] ∧
   abi_default_from_type (ArrayTV t (Fixed n)) =
-    ListV (REPLICATE n (abi_default_from_type t)) ∧
+    ListV (abi_default_from_type_n t n) ∧
   abi_default_from_type (StructTV fields) =
     ListV (abi_default_from_type_list (MAP SND fields)) ∧
   abi_default_from_type (FlagTV _) = NumV 0 ∧
   abi_default_from_type NoneTV = ListV [] ∧
   abi_default_from_type_list [] = [] ∧
   abi_default_from_type_list (t::ts) =
-    abi_default_from_type t :: abi_default_from_type_list ts
+    abi_default_from_type t :: abi_default_from_type_list ts ∧
+  abi_default_from_type_n t 0 = [] ∧
+  abi_default_from_type_n t (SUC n) =
+    abi_default_from_type t :: abi_default_from_type_n t n
 Termination
   WF_REL_TAC `measure (λx. case x of INL t => type_value_size t
-                                   | INR ts => list_size type_value_size ts)`
+                                   | INR (INL ts) => list_size type_value_size ts
+                                   | INR (INR (t, n)) => type_value_size t + n)`
   \\ rw[type_value_size_def, listTheory.list_size_def, listTheory.list_size_map]
   \\ Induct_on `fields` \\ rw[type_value_size_def, listTheory.list_size_def]
   \\ Cases_on `h` \\ rw[type_value_size_def]
@@ -236,8 +240,15 @@ Termination
   \\ rw[value1_size_snd]
 End
 
-(* TODO: cv_auto_trans for abi_default_from_type fails due to REPLICATE recursion
-val () = cv_auto_trans abi_default_from_type_def;
+(* TODO: cv_auto_trans for abi_default_from_type_def needs termination proof
+   The issue is with the 3-way mutual recursion and cv measure proof.
+val () = cv_auto_trans_rec abi_default_from_type_def (
+  WF_REL_TAC `measure (λx. case x of INL t => cv_size t
+                                   | INR (INL ts) => cv_size ts
+                                   | INR (INR (t, n)) => cv_size t + c2n n)`
+  \\ rw[] \\ gvs[]
+);
+
 val () = cv_auto_trans vyper_to_abi_value_def;
 *)
 
@@ -257,7 +268,7 @@ Definition evaluate_abi_encode_def:
     | NONE => INR "abi_encode conversion"
 End
 
-(* TODO: cv_auto_trans for evaluate_abi_encode requires termination proof for vyper_to_abi_value
+(* TODO: cv_auto_trans for evaluate_abi_encode requires vyper_to_abi_value cv translation
 val () = cv_auto_trans evaluate_abi_encode_def;
 *)
 
@@ -271,6 +282,6 @@ Definition evaluate_abi_decode_def:
     else INR "abi_decode invalid"
 End
 
-(* TODO: cv_auto_trans for evaluate_abi_decode - depends on enc/dec translations
-val () = cv_auto_trans evaluate_abi_decode_def
+(* TODO: cv_auto_trans for evaluate_abi_decode requires enc/dec cv translations
+val () = cv_auto_trans evaluate_abi_decode_def;
 *)
