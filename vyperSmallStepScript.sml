@@ -566,8 +566,7 @@ Definition apply_vals_def:
     liftk cx ApplyTv (do
       v <- lift_sum $
         (case tb of
-           AbiEncode => evaluate_abi_encode typ vs
-         | AbiDecode =>
+           AbiDecode =>
              (case vs of
                 [BytesV _ bs] =>
                   (case get_self_code cx of
@@ -602,9 +601,6 @@ Definition apply_vals_def:
     AK cx (ApplyExc $ Error "apply_vals k") st DoneK
 End
 
-(* NOTE: cv_auto_trans for apply_vals fails because it uses evaluate_abi_encode
-   which uses vyper_to_abi_value, and the cv translator can't translate that
-   due to termination proof issues in the cv domain.
 val apply_vals_pre_def = apply_vals_def
   |> SRULE [liftk1, bind_def, ignore_bind_def, lift_option_def,
             lift_sum_def, prod_CASE_rator,
@@ -619,7 +615,6 @@ Proof
   \\ gvs[check_def, assert_def]
   \\ strip_tac \\ gvs[]
 QED
-*)
 
 Definition nextk_def[simp]:
   nextk (AK _ _ _ k) = k
@@ -640,9 +635,7 @@ Definition stepk_def:
      | ApplyVals vs => apply_vals cx vs st k
 End
 
-(* TODO: cv_auto_trans for stepk fails due to apply_vals cv translation issue
 val () = cv_auto_trans stepk_def;
-*)
 
 Definition cont_def:
   cont ak = OWHILE (λak. nextk ak ≠ DoneK) stepk ak
@@ -713,18 +706,10 @@ Theorem eval_cps_eq:
           | (INR ex, st1) => (AK cx (ApplyExc ex) st1)
      ) k))
 Proof
-  (* CHEATED: This proof shows equivalence between CPS and direct evaluation.
-     However, there's a semantic mismatch for AbiEncode/AbiDecode:
-     - Direct eval (evaluate_def) calls evaluate_type_builtin which returns
-       errors for AbiEncode/AbiDecode ("use vyperSmallStep")
-     - CPS eval (apply_vals) handles AbiEncode/AbiDecode directly with
-       evaluate_abi_encode/evaluate_abi_decode
-
-     For programs not using AbiEncode/AbiDecode, the original proof works.
-     To fix properly, either:
-     1. Add precondition excluding AbiEncode/AbiDecode from expressions, or
-     2. Update evaluate_def to handle these cases (requires vyperABI dependency
-        in vyperInterpreter which may cause circular deps)
+  (* TODO: This proof shows equivalence between CPS and direct evaluation.
+     AbiDecode is now handled identically by both:
+     - Direct eval calls evaluate_type_builtin which calls evaluate_abi_decode
+     - CPS eval (apply_vals) also calls evaluate_abi_decode
 
      Original proof structure preserved below for reference.
   *)

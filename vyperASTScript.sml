@@ -148,7 +148,7 @@ End
 
 Datatype:
   type_builtin = Empty | MaxValue | MinValue | Epsilon | Convert | Extract32
-               | AbiEncode | AbiDecode
+               | AbiDecode
 End
 
 Datatype:

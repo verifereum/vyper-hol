@@ -1160,8 +1160,6 @@ Definition evaluate_type_builtin_def:
   evaluate_type_builtin cx Extract32 (BaseT bt) [BytesV _ bs; IntV u i] =
     (if u = Unsigned 256 then evaluate_extract32 bs (Num i) bt
      else INR "Extract32 type") ∧
-  evaluate_type_builtin cx AbiEncode typ vs =
-    evaluate_abi_encode typ vs ∧
   evaluate_type_builtin cx AbiDecode typ [BytesV _ bs] =
     (case get_self_code cx of
        SOME ts => evaluate_abi_decode (type_env ts) typ bs
@@ -1172,10 +1170,7 @@ Definition evaluate_type_builtin_def:
     INR "evaluate_type_builtin"
 End
 
-(* TODO: cv_auto_trans for evaluate_type_builtin calls evaluate_abi_encode/decode
-   which don't have cv translations yet. Uncomment once those are fixed.
 val () = cv_auto_trans evaluate_type_builtin_def;
-*)
 
 Definition evaluate_builtin_def:
   evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
@@ -1261,7 +1256,6 @@ Definition type_builtin_args_length_ok_def:
   type_builtin_args_length_ok Epsilon n = (n = 0) ∧
   type_builtin_args_length_ok Extract32 n = (n = 2) ∧
   type_builtin_args_length_ok Convert n = (n = 1) ∧
-  type_builtin_args_length_ok AbiEncode n = (1 ≤ n) ∧
   type_builtin_args_length_ok AbiDecode n = (n = 1)
 End
 

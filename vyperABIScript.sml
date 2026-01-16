@@ -7,8 +7,8 @@ Libs
   wordsLib
 
 (* Overloads to disambiguate ABI value constructors from Vyper value constructors *)
-Overload abi_IntV[local] = “IntV : int -> abi_value”
-Overload abi_BytesV[local] = “BytesV : word8 list -> abi_value”
+Overload abi_IntV[local] = ``IntV : int -> abi_value``
+Overload abi_BytesV[local] = ``BytesV : word8 list -> abi_value``
 
 Definition vyper_base_to_abi_type_def[simp]:
   vyper_base_to_abi_type (UintT n) = Uint n ∧
@@ -23,15 +23,29 @@ End
 
 Definition vyper_to_abi_type_def[simp]:
   vyper_to_abi_type (BaseT bt) = vyper_base_to_abi_type bt ∧
-  vyper_to_abi_type (TupleT ts) = Tuple (MAP vyper_to_abi_type ts) ∧
+  vyper_to_abi_type (TupleT ts) = Tuple (vyper_to_abi_types ts) ∧
   vyper_to_abi_type (ArrayT t (Dynamic _)) = Array NONE (vyper_to_abi_type t) ∧
   vyper_to_abi_type (ArrayT t (Fixed n)) = Array (SOME n) (vyper_to_abi_type t) ∧
   vyper_to_abi_type (StructT id) = Tuple [] (* TODO *) ∧
   vyper_to_abi_type (FlagT _) = Uint 256 ∧
-  vyper_to_abi_type NoneT = Tuple []
+  vyper_to_abi_type NoneT = Tuple [] ∧
+  vyper_to_abi_types [] = [] ∧
+  vyper_to_abi_types (t::ts) = vyper_to_abi_type t :: vyper_to_abi_types ts
 Termination
-  WF_REL_TAC `measure type_size`
+  WF_REL_TAC `measure (λx. case x of INL t => type_size t
+                                   | INR ts => list_size type_size ts)`
 End
+
+val () = cv_auto_trans vyper_base_to_abi_type_def;
+val () = cv_auto_trans_rec vyper_to_abi_type_def (
+  WF_REL_TAC `measure (λx. case x of INL t => cv_size t
+                                   | INR ts => cv_size ts)`
+  \\ rw[]
+  \\ TRY (Cases_on `cv_v` \\ gvs[cvTheory.cv_size_def] \\ NO_TAC)
+  \\ Cases_on `cv_v` \\ gvs[cvTheory.cv_size_def]
+  \\ qmatch_goalsub_rename_tac `cv_fst p`
+  \\ Cases_on `p` \\ gvs[cvTheory.cv_size_def]
+);
 
 Definition check_IntV_def:
   check_IntV b i =
@@ -101,197 +115,10 @@ Proof
   \\ rw[Once abi_to_vyper_pre_def]
 QED
 
-(* ===== Vyper to ABI Value Conversion ===== *)
+(* ===== ABI Decode Evaluation ===== *)
 
-(* Helper lemmas for termination proof.
-   Using lambda forms since TFL expands MAP to lambda. *)
-
-Theorem value5_size_eq_list_size:
-  ∀vs. value5_size vs = list_size value_size vs
-Proof
-  Induct \\ rw[value_size_def, listTheory.list_size_def]
-QED
-
-Theorem value3_size_snd:
-  ∀al. list_size (λx. value_size (SND x)) al ≤ value3_size al
-Proof
-  Induct \\ rw[value_size_def, listTheory.list_size_def]
-  \\ Cases_on `h` \\ rw[value_size_def] \\ fs[]
-QED
-
-Theorem value1_size_snd:
-  ∀fields. list_size (λx. value_size (SND x)) fields ≤ value1_size fields
-Proof
-  Induct \\ rw[value_size_def, listTheory.list_size_def]
-  \\ Cases_on `h` \\ rw[value_size_def] \\ fs[]
-QED
-
-(* TFL expands pair types to pair_size, so we need lemmas relating them to valueN_size *)
-Theorem value1_pair_size:
-  ∀fields. list_size (pair_size (list_size char_size) value_size) fields = value1_size fields
-Proof
-  Induct \\ rw[listTheory.list_size_def, value_size_def, basicSizeTheory.pair_size_def]
-  \\ Cases_on `h` \\ rw[value_size_def, basicSizeTheory.pair_size_def]
-QED
-
-Theorem value3_pair_size:
-  ∀al. list_size (pair_size (λx. x) value_size) al = value3_size al
-Proof
-  Induct \\ rw[listTheory.list_size_def, value_size_def, basicSizeTheory.pair_size_def]
-  \\ Cases_on `h` \\ rw[value_size_def, basicSizeTheory.pair_size_def]
-QED
-
-(* Convert Vyper values to ABI values for encoding.
-   This is the inverse of abi_to_vyper.
-
-   IMPORTANT: This function handles array_value cases directly instead of
-   going through extract_elements, to ensure termination. For SArrayV, we
-   only recurse on values stored in the alist, not on generated defaults.
-   The type_value in SArrayV is used to generate ABI defaults directly
-   without creating intermediate Vyper values.
-*)
-
-(* Generate ABI default value from a type_value.
-   Uses explicit recursion for fixed-size arrays to enable cv translation. *)
-Definition abi_default_from_type_def[simp]:
-  abi_default_from_type (BaseTV (UintT _)) = NumV 0 ∧
-  abi_default_from_type (BaseTV (IntT _)) = abi_IntV 0 ∧
-  abi_default_from_type (BaseTV BoolT) = NumV 0 ∧
-  abi_default_from_type (BaseTV DecimalT) = abi_IntV 0 ∧
-  abi_default_from_type (BaseTV (StringT _)) = abi_BytesV [] ∧
-  abi_default_from_type (BaseTV (BytesT (Dynamic _))) = abi_BytesV [] ∧
-  abi_default_from_type (BaseTV (BytesT (Fixed n))) = abi_BytesV (REPLICATE n 0w) ∧
-  abi_default_from_type (BaseTV AddressT) = NumV 0 ∧
-  abi_default_from_type (TupleTV ts) = ListV (abi_default_from_type_list ts) ∧
-  abi_default_from_type (ArrayTV t (Dynamic _)) = ListV [] ∧
-  abi_default_from_type (ArrayTV t (Fixed n)) =
-    ListV (abi_default_from_type_n t n) ∧
-  abi_default_from_type (StructTV fields) =
-    ListV (abi_default_from_type_list (MAP SND fields)) ∧
-  abi_default_from_type (FlagTV _) = NumV 0 ∧
-  abi_default_from_type NoneTV = ListV [] ∧
-  abi_default_from_type_list [] = [] ∧
-  abi_default_from_type_list (t::ts) =
-    abi_default_from_type t :: abi_default_from_type_list ts ∧
-  abi_default_from_type_n t 0 = [] ∧
-  abi_default_from_type_n t (SUC n) =
-    abi_default_from_type t :: abi_default_from_type_n t n
-Termination
-  WF_REL_TAC `measure (λx. case x of INL t => type_value_size t
-                                   | INR (INL ts) => list_size type_value_size ts
-                                   | INR (INR (t, n)) => type_value_size t + n)`
-  \\ rw[type_value_size_def, listTheory.list_size_def, listTheory.list_size_map]
-  \\ Induct_on `fields` \\ rw[type_value_size_def, listTheory.list_size_def]
-  \\ Cases_on `h` \\ rw[type_value_size_def]
-End
-
-(* Convert Vyper value to ABI value, with separate handling for array_value.
-   - For TupleV and DynArrayV: recurse on stored value list
-   - For SArrayV: recurse on alist values, use abi_default_from_type for missing
-*)
-Definition vyper_to_abi_value_def[simp]:
-  vyper_to_abi_value (IntV (Unsigned _) i) =
-    (if 0 ≤ i then SOME (NumV (Num i)) else NONE) ∧
-  vyper_to_abi_value (IntV (Signed _) i) =
-    SOME (abi_IntV i) ∧
-  vyper_to_abi_value (BoolV b) =
-    SOME (NumV (if b then 1 else 0)) ∧
-  vyper_to_abi_value (BytesV _ bs) =
-    SOME (abi_BytesV bs) ∧
-  vyper_to_abi_value (StringV _ s) =
-    SOME (abi_BytesV (MAP (n2w o ORD) s)) ∧
-  vyper_to_abi_value (DecimalV i) =
-    SOME (abi_IntV i) ∧
-  vyper_to_abi_value (FlagV _ n) =
-    SOME (NumV (Num (&n))) ∧
-  vyper_to_abi_value NoneV =
-    SOME (ListV []) ∧
-  vyper_to_abi_value (StructV fields) =
-    OPTION_MAP ListV (vyper_to_abi_value_list (MAP SND fields)) ∧
-  vyper_to_abi_value (ArrayV (TupleV vs)) =
-    OPTION_MAP ListV (vyper_to_abi_value_list vs) ∧
-  vyper_to_abi_value (ArrayV (DynArrayV _ _ vs)) =
-    OPTION_MAP ListV (vyper_to_abi_value_list vs) ∧
-  vyper_to_abi_value (ArrayV (SArrayV t n al)) =
-    (* For sparse arrays: convert stored values, fill in defaults *)
-    (case vyper_to_abi_alist al of NONE => NONE | SOME abiAl =>
-       let def = abi_default_from_type t in
-       SOME (ListV (GENLIST (λi. case ALOOKUP abiAl i of
-                                   SOME v => v | NONE => def) n))) ∧
-  vyper_to_abi_value_list [] = SOME [] ∧
-  vyper_to_abi_value_list (v::vs) =
-    (case vyper_to_abi_value v of NONE => NONE | SOME av =>
-     case vyper_to_abi_value_list vs of NONE => NONE | SOME avs =>
-       SOME (av::avs)) ∧
-  (* Convert alist of (index, value) pairs *)
-  vyper_to_abi_alist [] = SOME [] ∧
-  vyper_to_abi_alist ((i,v)::rest) =
-    (case vyper_to_abi_value v of NONE => NONE | SOME av =>
-     case vyper_to_abi_alist rest of NONE => NONE | SOME avs =>
-       SOME ((i,av)::avs))
-Termination
-  WF_REL_TAC `measure (λx. case x of INL v => value_size v
-                                   | INR (INL vs) => list_size value_size vs
-                                   | INR (INR al) => value3_size al)`
-  \\ rw[value_size_def, value5_size_eq_list_size, value1_pair_size, value3_pair_size]
-  (* Remaining goal: list_size (λx. value_size (SND x)) fields < value1_size fields + 1 *)
-  \\ rw[GSYM arithmeticTheory.ADD1]
-  \\ irule arithmeticTheory.LESS_EQ_IMP_LESS_SUC
-  \\ rw[value1_size_snd]
-End
-
-(* cv translation for abi_default_from_type - uses precondition approach
-   due to complex 3-way mutual recursion termination *)
-val abi_default_from_type_pre_def = cv_auto_trans_pre_rec 
-  "abi_default_from_type_pre abi_default_from_type_list_pre abi_default_from_type_n_pre" 
-  abi_default_from_type_def 
-  (WF_REL_TAC `measure (λx. case x of 
-    INL t => cv_size t 
-  | INR (INL ts) => cv_size ts 
-  | INR (INR (t, n)) => cv_size t + cv_size n)`
-   \\ rw[]
-   \\ TRY (Cases_on `cv_v` \\ gvs[cvTheory.cv_size_def])
-   \\ TRY (qmatch_goalsub_rename_tac `cv_snd p` \\ Cases_on `p` \\ gvs[cvTheory.cv_size_def])
-   \\ TRY (qmatch_goalsub_rename_tac `cv_snd p` \\ Cases_on `p` \\ gvs[cvTheory.cv_size_def])
-   \\ TRY (qmatch_goalsub_rename_tac `cv_snd p` \\ Cases_on `p` \\ gvs[cvTheory.cv_size_def])
-   \\ TRY (qspec_then `g` mp_tac cv_size_cv_map_snd_le \\ simp[])
-   \\ TRY (Cases_on `0 < m` \\ gvs[cvTheory.cv_size_def])
-   \\ cheat (* Remaining goals involve unrelated cv variables - precondition handles correctness *)
-  );
-
-Theorem abi_default_from_type_pre[cv_pre]:
-  (∀v. abi_default_from_type_pre v) ∧
-  (∀v. abi_default_from_type_list_pre v) ∧
-  (∀t v. abi_default_from_type_n_pre t v)
-Proof
-  ho_match_mp_tac abi_default_from_type_ind 
-  >> rpt strip_tac 
-  >> simp[Once abi_default_from_type_pre_def]
-QED
-
-(* TODO: cv_auto_trans for vyper_to_abi_value_def - similar 3-way mutual recursion
-val () = cv_auto_trans vyper_to_abi_value_def;
-*)
-
-(* ===== ABI Builtin Evaluation ===== *)
-
-(* Evaluation functions for AbiEncode and AbiDecode type builtins.
-   These are called from the small-step interpreter when evaluating
-   TypeBuiltin AbiEncode/AbiDecode. *)
-
-Definition evaluate_abi_encode_def:
-  evaluate_abi_encode typ vs =
-    case vyper_to_abi_value (ArrayV (TupleV vs)) of
-      SOME abiVal =>
-        let abiTy = vyper_to_abi_type typ in
-        let encoded = enc abiTy abiVal in
-        INL $ BytesV (Dynamic (LENGTH encoded)) encoded
-    | NONE => INR "abi_encode conversion"
-End
-
-(* TODO: cv_auto_trans for evaluate_abi_encode requires vyper_to_abi_value cv translation
-val () = cv_auto_trans evaluate_abi_encode_def;
-*)
+(* Evaluation function for AbiDecode type builtin.
+   Called from the small-step interpreter when evaluating TypeBuiltin AbiDecode. *)
 
 Definition evaluate_abi_decode_def:
   evaluate_abi_decode tenv typ bs =
@@ -303,6 +130,4 @@ Definition evaluate_abi_decode_def:
     else INR "abi_decode invalid"
 End
 
-(* TODO: cv_auto_trans for evaluate_abi_decode requires enc/dec cv translations
 val () = cv_auto_trans evaluate_abi_decode_def;
-*)
