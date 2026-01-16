@@ -564,16 +564,7 @@ Definition apply_vals_def:
     od st) k ∧
   apply_vals cx vs st (TypeBuiltinK tb typ k) =
     liftk cx ApplyTv (do
-      v <- lift_sum $
-        (case tb of
-           AbiDecode =>
-             (case vs of
-                [BytesV _ bs] =>
-                  (case get_self_code cx of
-                     SOME ts => evaluate_abi_decode (type_env ts) typ bs
-                   | NONE => INR "abi_decode code")
-              | _ => INR "abi_decode args")
-         | _ => evaluate_type_builtin cx tb typ vs);
+      v <- lift_sum $ evaluate_type_builtin cx tb typ vs;
       return $ Value v
     od st) k ∧
   apply_vals cx vs st (LogK id k) =
