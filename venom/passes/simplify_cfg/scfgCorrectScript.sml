@@ -1621,10 +1621,13 @@ Proof
       >- (gvs[Abbr`blocks2`] >> drule MEM_remove_block >> simp[]))
 QED
 
-(* Helper: pred_labels preserved by merge_jump when b not in preds *)
+(* Helper: pred_labels preserved by merge_jump when b not in preds
+   NOTE: lbl ≠ b precondition needed because after transform, no block
+   has b in successors, so pred_labels of b itself changes. *)
 Theorem pred_labels_merge_jump_not_mem:
   !fn a b lbl.
     merge_jump_cond fn a b /\ cfg_wf fn /\
+    lbl <> b /\
     ~MEM b (pred_labels fn lbl) ==>
     pred_labels (merge_jump fn a b) lbl = pred_labels fn lbl
 Proof
@@ -1641,15 +1644,33 @@ Proof
     by simp[scfgDefsTheory.replace_label_block_def] >>
   `!bb. (replace_phi_in_block b a bb).bb_label = bb.bb_label`
     by simp[scfgDefsTheory.replace_phi_in_block_def] >>
-  `!bb. (if MEM bb.bb_label succs then replace_phi_in_block b a bb else bb).bb_label = bb.bb_label`
-    by (rw[] >> simp[scfgDefsTheory.replace_phi_in_block_def]) >>
-  simp[] >>
   `!bb. block_successors (replace_phi_in_block b a bb) = block_successors bb`
     by simp[block_successors_replace_phi_in_block] >>
   simp[block_successors_replace_label_block] >>
-  (* Key insight: after remove_block b and replace_block a_new, the only change
-     to pred_labels is that b is filtered out. Since ~MEM b, result unchanged. *)
-  cheat
+  Cases_on `lbl = c_lbl`
+  >- (gvs[] >>
+      (* lbl = c_lbl case: derive contradiction since b is predecessor of c_lbl *)
+      sg `MEM b (pred_labels fn c_lbl)` >>
+      `MEM b' fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+      sg `MEM c_lbl (block_successors b')`
+      >- (`block_successors b' = [c_lbl]` by
+            (irule scfgMergeHelpersTheory.jump_only_target_block_successors >> simp[]) >>
+          simp[])
+      >- (`b'.bb_label = b` by metis_tac[lookup_block_label] >>
+          drule_all block_successors_pred_labels >> simp[]))
+  >- ((* lbl ≠ c_lbl case: filter condition unchanged by replace_label_block *)
+      sg `!bb. MEM lbl (block_successors (replace_label_block b c_lbl bb)) =
+               MEM lbl (block_successors bb)`
+      >- (simp[block_successors_replace_label_block, listTheory.MEM_MAP] >>
+          rw[] >> eq_tac >> rpt strip_tac >> gvs[]
+          >- (Cases_on `lbl' = b` >> gvs[])
+          >- (qexists_tac `lbl` >> simp[]))
+      >- (simp[] >>
+          `!bb. MEM lbl (block_successors (replace_label_block b c_lbl
+                  (if MEM bb.bb_label succs then replace_phi_in_block b a bb else bb))) =
+                MEM lbl (block_successors bb)` by (rw[] >> simp[]) >>
+          (* Remaining: show MAP/FILTER equality through block list transforms *)
+          cheat))
 QED
 
 (* Helper: cfg_wf and phi_fn_wf preserved by simplify_cfg_step *)
