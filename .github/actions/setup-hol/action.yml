@@ -32,12 +32,12 @@ runs:
       shell: bash
       run: echo "$HOME/polyml-install/bin" >> "$GITHUB_PATH"
 
-    - name: Cache HOL4
-      uses: actions/cache@v4
-      id: cache-hol4
-      with:
-        path: ~/HOL
-        key: hol-${{ runner.os }}-${{ steps.versions.outputs.polyml }}
+#    - name: Cache HOL4
+#      uses: actions/cache@v4
+#      id: cache-hol4
+#      with:
+#        path: ~/HOL
+#        key: hol-${{ runner.os }}-${{ steps.versions.outputs.polyml }}
 
     - name: Build HOL4
 #      if: steps.cache-hol4.outputs.cache-hit != 'true'
