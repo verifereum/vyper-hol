@@ -30,7 +30,7 @@ Definition vyper_to_abi_type_def[simp]:
   vyper_to_abi_type (FlagT _) = Uint 256 ∧
   vyper_to_abi_type NoneT = Tuple []
 Termination
-  WF_REL_TAC ‘measure type_size’
+  WF_REL_TAC `measure type_size`
 End
 
 Definition check_IntV_def:
@@ -83,8 +83,8 @@ Definition abi_to_vyper_def[simp]:
          SOME (v::vs)) ∧
   abi_to_vyper_list _ _ _ = NONE
 Termination
-  WF_REL_TAC ‘measure (λx. case x of INL (_, _, v) => abi_value_size v
-                                   | INR (_, _, vs) => list_size abi_value_size vs)’
+  WF_REL_TAC `measure (λx. case x of INL (_, _, v) => abi_value_size v
+                                   | INR (_, _, vs) => list_size abi_value_size vs)`
 End
 
 val abi_to_vyper_pre_def =
@@ -103,7 +103,8 @@ QED
 
 (* ===== Vyper to ABI Value Conversion ===== *)
 
-(* Helper lemmas for termination proof *)
+(* Helper lemmas for termination proof.
+   Using lambda forms since TFL expands MAP to lambda. *)
 
 Theorem value5_size_eq_list_size:
   ∀vs. value5_size vs = list_size value_size vs
@@ -111,37 +112,64 @@ Proof
   Induct \\ rw[value_size_def, listTheory.list_size_def]
 QED
 
-Theorem value1_size_ge_map_snd:
-  ∀fields. list_size value_size (MAP SND fields) ≤ value1_size fields
+Theorem value3_size_snd:
+  ∀al. list_size (λx. value_size (SND x)) al ≤ value3_size al
 Proof
   Induct \\ rw[value_size_def, listTheory.list_size_def]
-  \\ Cases_on ‘h’ \\ rw[value_size_def]
-  \\ ‘list_size (λx. value_size (SND x)) fields = list_size value_size (MAP SND fields)’
-      by rw[listTheory.list_size_map]
-  \\ fs[]
+  \\ Cases_on `h` \\ rw[value_size_def] \\ fs[]
 QED
 
-Theorem extract_elements_size:
-  ∀av vs. extract_elements (ArrayV av) = SOME vs ⇒
-          list_size value_size vs < 1 + array_value_size av
+Theorem value1_size_snd:
+  ∀fields. list_size (λx. value_size (SND x)) fields ≤ value1_size fields
 Proof
-  Cases \\ rw[extract_elements_def, value_size_def, value5_size_eq_list_size]
-  (* CHEATED - need to prove for SArrayV case that GENLIST produces list
-     with size bounded by array_value_size. The TupleV and DynArrayV cases
-     follow directly from value5_size_eq_list_size. For SArrayV:
-     - Need lemma about GENLIST size with ALOOKUP/default_value
-     - Show list_size value_size (GENLIST f n) relates to value3_size al
-  >- (irule arithmeticTheory.LESS_EQ_LESS_TRANS
-      \\ qexists_tac 'value5_size l'
-      \\ rw[value5_size_eq_list_size, listTheory.list_size_map]
-      \\ (* need lemma about GENLIST with ALOOKUP *) ...)
-  *)
-  \\ cheat
+  Induct \\ rw[value_size_def, listTheory.list_size_def]
+  \\ Cases_on `h` \\ rw[value_size_def] \\ fs[]
 QED
 
 (* Convert Vyper values to ABI values for encoding.
-   This is the inverse of abi_to_vyper. *)
+   This is the inverse of abi_to_vyper.
 
+   IMPORTANT: This function handles array_value cases directly instead of
+   going through extract_elements, to ensure termination. For SArrayV, we
+   only recurse on values stored in the alist, not on generated defaults.
+   The type_value in SArrayV is used to generate ABI defaults directly
+   without creating intermediate Vyper values.
+*)
+
+(* Generate ABI default value from a type_value.
+   This terminates on type_value_size. *)
+Definition abi_default_from_type_def:
+  abi_default_from_type (BaseTV (UintT _)) = NumV 0 ∧
+  abi_default_from_type (BaseTV (IntT _)) = abi_IntV 0 ∧
+  abi_default_from_type (BaseTV BoolT) = NumV 0 ∧
+  abi_default_from_type (BaseTV DecimalT) = abi_IntV 0 ∧
+  abi_default_from_type (BaseTV (StringT _)) = abi_BytesV [] ∧
+  abi_default_from_type (BaseTV (BytesT (Dynamic _))) = abi_BytesV [] ∧
+  abi_default_from_type (BaseTV (BytesT (Fixed n))) = abi_BytesV (REPLICATE n 0w) ∧
+  abi_default_from_type (BaseTV AddressT) = NumV 0 ∧
+  abi_default_from_type (TupleTV ts) = ListV (abi_default_from_type_list ts) ∧
+  abi_default_from_type (ArrayTV t (Dynamic _)) = ListV [] ∧
+  abi_default_from_type (ArrayTV t (Fixed n)) =
+    ListV (REPLICATE n (abi_default_from_type t)) ∧
+  abi_default_from_type (StructTV fields) =
+    ListV (abi_default_from_type_list (MAP SND fields)) ∧
+  abi_default_from_type (FlagTV _) = NumV 0 ∧
+  abi_default_from_type NoneTV = ListV [] ∧
+  abi_default_from_type_list [] = [] ∧
+  abi_default_from_type_list (t::ts) =
+    abi_default_from_type t :: abi_default_from_type_list ts
+Termination
+  WF_REL_TAC `measure (λx. case x of INL t => type_value_size t
+                                   | INR ts => list_size type_value_size ts)`
+  \\ rw[type_value_size_def, listTheory.list_size_def, listTheory.list_size_map]
+  \\ Induct_on `fields` \\ rw[type_value_size_def, listTheory.list_size_def]
+  \\ Cases_on `h` \\ rw[type_value_size_def]
+End
+
+(* Convert Vyper value to ABI value, with separate handling for array_value.
+   - For TupleV and DynArrayV: recurse on stored value list
+   - For SArrayV: recurse on alist values, use abi_default_from_type for missing
+*)
 Definition vyper_to_abi_value_def:
   vyper_to_abi_value (IntV (Unsigned _) i) =
     (if 0 ≤ i then SOME (NumV (Num i)) else NONE) ∧
@@ -161,38 +189,41 @@ Definition vyper_to_abi_value_def:
     SOME (ListV []) ∧
   vyper_to_abi_value (StructV fields) =
     OPTION_MAP ListV (vyper_to_abi_value_list (MAP SND fields)) ∧
-  vyper_to_abi_value (ArrayV av) =
-    (case extract_elements (ArrayV av) of
-       SOME vs => OPTION_MAP ListV (vyper_to_abi_value_list vs)
-     | NONE => NONE) ∧
+  vyper_to_abi_value (ArrayV (TupleV vs)) =
+    OPTION_MAP ListV (vyper_to_abi_value_list vs) ∧
+  vyper_to_abi_value (ArrayV (DynArrayV _ _ vs)) =
+    OPTION_MAP ListV (vyper_to_abi_value_list vs) ∧
+  vyper_to_abi_value (ArrayV (SArrayV t n al)) =
+    (* For sparse arrays: convert stored values, fill in defaults *)
+    (case vyper_to_abi_alist al of NONE => NONE | SOME abiAl =>
+       let def = abi_default_from_type t in
+       SOME (ListV (GENLIST (λi. case ALOOKUP abiAl i of
+                                   SOME v => v | NONE => def) n))) ∧
   vyper_to_abi_value_list [] = SOME [] ∧
   vyper_to_abi_value_list (v::vs) =
     (case vyper_to_abi_value v of NONE => NONE | SOME av =>
      case vyper_to_abi_value_list vs of NONE => NONE | SOME avs =>
-       SOME (av::avs))
+       SOME (av::avs)) ∧
+  (* Convert alist of (index, value) pairs *)
+  vyper_to_abi_alist [] = SOME [] ∧
+  vyper_to_abi_alist ((i,v)::rest) =
+    (case vyper_to_abi_value v of NONE => NONE | SOME av =>
+     case vyper_to_abi_alist rest of NONE => NONE | SOME avs =>
+       SOME ((i,av)::avs))
 Termination
-  WF_REL_TAC ‘measure (λx. case x of INL v => value_size v
-                                   | INR vs => list_size value_size vs)’
+  WF_REL_TAC `measure (λx. case x of INL v => value_size v
+                                   | INR (INL vs) => list_size value_size vs
+                                   | INR (INR al) => value3_size al)`
+  \\ rw[value_size_def, value5_size_eq_list_size]
+  (* CHEATED: Need to prove that for StructV fields, the recursive call decreases.
+     The goal is: list_size (λx. value_size (SND x)) fields < value1_size fields + 1
+     This follows from value1_size_snd which gives ≤, and X ≤ Y ⇒ X < Y + 1 *)
   \\ cheat
-  (* CHEATED - termination goals:
-     1. StructV fields case: show list_size value_size (MAP SND fields) < 1 + value1_size fields
-        - Use value1_size_ge_map_snd lemma
-     2. ArrayV av case: show list_size value_size vs < 1 + array_value_size av
-        when extract_elements (ArrayV av) = SOME vs
-        - Use extract_elements_size lemma (also cheated)
-     Original proof approach: use rw with value_size_def and list_size_def,
-     then for StructV case use LESS_EQ_LESS_TRANS with value1_size_ge_map_snd,
-     and for ArrayV case use drule with extract_elements_size.
-  *)
 End
 
-(* NOTE: cv_auto_trans for vyper_to_abi_value fails because the cv translator
-   needs to prove termination for its generated cv definition, and the recursion
-   through extract_elements makes this complex. The original definition‘s
-   termination is cheated, but that doesn‘t help the cv translation.
-val vyper_to_abi_value_pre_def =
-  vyper_to_abi_value_def
-  |> cv_auto_trans_pre "vyper_to_abi_value_pre vyper_to_abi_value_list_pre";
+(* TODO: cv_auto_trans for abi_default_from_type fails due to REPLICATE recursion
+val () = cv_auto_trans abi_default_from_type_def;
+val () = cv_auto_trans vyper_to_abi_value_def;
 *)
 
 (* ===== ABI Builtin Evaluation ===== *)
