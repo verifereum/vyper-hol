@@ -1993,13 +1993,35 @@ Proof
           >- (`phi_block_wf (pred_labels fn bb'.bb_label) bb'` by
                 (gvs[scfgDefsTheory.phi_fn_wf_def] >> first_x_assum irule >> simp[]) >>
               Cases_on `MEM b (pred_labels fn bb'.bb_label)`
-              >- cheat (* MEM b preds - needs pred_labels algebra for b removal *)
+              >- ((* MEM b preds - vacuously true: b only jumps to c_lbl, so bb'.bb_label = c_lbl,
+                     but c_lbl in succs contradicts ~MEM bb'.bb_label succs *)
+                  sg `bb'.bb_label = c_lbl`
+                  >- (gvs[scfgDefsTheory.pred_labels_def, listTheory.MEM_MAP, listTheory.MEM_FILTER] >>
+                      sg `bb'' = b'`
+                      >- (irule scfgMergeHelpersTheory.lookup_block_unique >> gvs[cfg_wf_def] >>
+                          qexists_tac `fn.fn_blocks` >> gvs[])
+                      >- (`block_successors bb'' = [c_lbl]` by
+                            (gvs[] >> irule scfgMergeHelpersTheory.jump_only_target_block_successors >> simp[]) >>
+                          gvs[]))
+                  >- (sg `MEM c_lbl succs`
+                      >- (gvs[Abbr`succs`, Abbr`a_new`] >>
+                          `MEM bb'.bb_label (block_successors (a' with bb_instructions :=
+                             update_last_inst (replace_label_inst b bb'.bb_label) a'.bb_instructions))` by
+                            (irule scfgMergeHelpersTheory.block_successors_update_last_inst_replace >>
+                             gvs[cfg_wf_def] >> `MEM a' fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+                             res_tac >> gvs[]))
+                      >- gvs[]))
               >- (`bb' with bb_instructions := MAP (replace_label_inst b c_lbl) bb'.bb_instructions =
                    replace_label_block b c_lbl bb'` by simp[scfgDefsTheory.replace_label_block_def] >>
                   simp[scfgDefsTheory.phi_block_wf_def, listTheory.MEM_MAP] >>
                   rpt strip_tac >> gvs[] >>
                   Cases_on `y.inst_opcode = PHI`
-                  >- cheat (* PHI case - needs pred_labels reasoning *)
+                  >- ((* PHI case - derive phi_inst_wf then use not_mem_pred *)
+                      sg `phi_inst_wf (pred_labels fn bb'.bb_label) y`
+                      >- (gvs[scfgDefsTheory.phi_block_wf_def] >> first_x_assum irule >> simp[])
+                      >- (irule phi_inst_wf_not_mem_pred >>
+                          (* Need: ~MEM b (pred_labels fn' bb'.bb_label) /\ phi_inst_wf (pred_labels fn' bb'.bb_label) y *)
+                          cheat (* needs pred_labels fn' = pred_labels fn for this block *)))
                   >- (irule phi_inst_wf_non_phi >> simp[replace_label_inst_opcode])))
           >- cheat (* bb' = a_new case - needs phi_block_wf for modified block *)))
     >- (gvs[Abbr`blocks2`, Abbr`blocks1`] >> Cases_on `fn.fn_blocks` >>
