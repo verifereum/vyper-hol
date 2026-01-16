@@ -10,6 +10,7 @@ runs:
       run: |
         echo "polyml=$(git ls-remote https://github.com/polyml/polyml.git HEAD | cut -f1)" >> $GITHUB_OUTPUT
         echo "verifereum=$(git ls-remote https://github.com/verifereum/verifereum.git HEAD | cut -f1)" >> $GITHUB_OUTPUT
+        echo "hol4=$(git ls-remote https://github.com/HOL-Theorem-Prover/HOL.git HEAD | cut -f1)" >> $GITHUB_OUTPUT
 
     - name: Cache PolyML
       uses: actions/cache@v4
@@ -32,15 +33,15 @@ runs:
       shell: bash
       run: echo "$HOME/polyml-install/bin" >> "$GITHUB_PATH"
 
-#    - name: Cache HOL4
-#      uses: actions/cache@v4
-#      id: cache-hol4
-#      with:
-#        path: ~/HOL
-#        key: hol-${{ runner.os }}-${{ steps.versions.outputs.polyml }}
+    - name: Cache HOL4
+      uses: actions/cache@v4
+      id: cache-hol4
+      with:
+        path: ~/HOL
+        key: hol-${{ runner.os }}-${{ steps.versions.outputs.polyml }}-${{ steps.versions.outputs.hol4 }}
 
     - name: Build HOL4
-#      if: steps.cache-hol4.outputs.cache-hit != 'true'
+      if: steps.cache-hol4.outputs.cache-hit != 'true'
       shell: bash
       run: |
         git clone -b master https://github.com/HOL-Theorem-Prover/HOL.git ~/HOL
