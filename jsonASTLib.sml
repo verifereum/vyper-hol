@@ -280,9 +280,9 @@ fun mk_JTL_InitializesDecl ann = mk_comb(JTL_InitializesDecl_tm, ann)
 fun mk_JTL_UsesDecl ann = mk_comb(JTL_UsesDecl_tm, ann)
 fun mk_JTL_ImplementsDecl ann = mk_comb(JTL_ImplementsDecl_tm, ann)
 fun mk_JModule tls = mk_comb(JModule_tm, mk_list(tls, json_toplevel_ty))
-fun mk_JImportedModule (src_id, path, body) =
+fun mk_JImportedModule (src_id_tm, path, body) =
   list_mk_comb(JImportedModule_tm,
-    [numSyntax.mk_numeral (Arbnum.fromInt src_id),
+    [src_id_tm,
      fromMLstring path,
      mk_list(body, json_toplevel_ty)])
 fun mk_JAnnotatedAST (main_ast, imports) =
@@ -961,7 +961,7 @@ val json_module : term decoder =
 
 val json_imported_module : term decoder =
   JSONDecode.map mk_JImportedModule $
-  tuple3 (field "source_id" int,
+  tuple3 (field "source_id" numtm,
           field "path" string,
           field "body" (array json_toplevel))
 
