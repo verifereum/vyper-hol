@@ -1,7 +1,7 @@
 Theory vyperInterpreter
 Ancestors
   arithmetic alist combin list finite_map pair rich_list
-  cv cv_std vfmState bn254 secp256k1 vyperAST
+  cv cv_std vfmState vfmExecution bn254 secp256k1 vyperAST
   vyperMisc
 Libs
   cv_transLib wordsLib monadsyntax
@@ -1377,53 +1377,6 @@ Definition evaluate_type_builtin_def:
 End
 
 val () = cv_auto_trans evaluate_type_builtin_def;
-
-(* =========================================================================
-   Elliptic Curve Cryptography Helpers
-
-   These wrapper definitions for the BN254 and secp256k1 curve
-   operations mirror the EVM precompile interface (addresses 0x01,
-   0x06, 0x07).  They are identical to the definitions in
-   vfmExecutionTheory from verifereum, but defined locally to avoid
-   pulling in heavy vfmExecution dependencies (which currently don't
-   compile on 'main' branch of verifereum).
-   =========================================================================
-   *)
-
-(* ecadd: BN254 point addition (EVM precompile 0x06)
-   Returns NONE if either input point is not on the curve *)
-Definition ecadd_def:
-  ecadd a b =
-    if ¬(bn254$validAffine a ∧ bn254$validAffine b) then NONE
-    else SOME $ bn254$addAffine a b
-End
-
-(* ecmul: BN254 scalar multiplication (EVM precompile 0x07)
-   Returns NONE if input point is not on the curve *)
-Definition ecmul_def:
-  ecmul p s =
-    if ¬(bn254$validAffine p) then NONE
-    else SOME $ bn254$mulAffine p s
-End
-
-(* ecrecover: Recover signer address from ECDSA signature (EVM precompile 0x01)
-   Uses secp256k1 curve as per Ethereum.
-   Returns NONE if signature is invalid. *)
-Definition ecrecover_def:
-  ecrecover (hash:bytes32) v r s : address option =
-    if ¬(v = 27 ∨ v = 28) then NONE else
-    if ¬(0 < r ∧ r < secp256k1$secp256k1N) then NONE else
-    if ¬(0 < s ∧ s < secp256k1$secp256k1N) then NONE else
-    if ¬(secp256k1$fleg (secp256k1$weierstrassEquation r) = 1) then NONE else
-    let
-      yParity = v - 27;
-      point = secp256k1$recoverPoint r s yParity hash
-    in if SND (SND point) = 0 then NONE else
-    let
-      keyBytes = secp256k1$pointToUncompressedBytes point;
-      addrBytes = DROP 12 $ Keccak_256_w64 keyBytes
-    in SOME $ word_of_bytes T 0w addrBytes
-End
 
 Definition evaluate_builtin_def:
   evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
