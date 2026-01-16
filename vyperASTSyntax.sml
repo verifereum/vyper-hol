@@ -86,6 +86,7 @@ structure vyperASTSyntax :> vyperASTSyntax = struct
   val MulMod_tm       = astk"MulMod"
   val Env_tm          = astk"Env"
   val BlockHash_tm    = astk"BlockHash"
+  val BlobHash_tm     = astk"BlobHash"
   val Acc_tm          = astk"Acc"
   val Isqrt_tm        = astk"Isqrt"
   val ECRecover_tm    = astk"ECRecover"
@@ -265,5 +266,7 @@ structure vyperASTSyntax :> vyperASTSyntax = struct
     mk_comb(Env_tm, PrevHash_tm), mk_list([], expr_ty)])
   fun mk_BlockHash e = list_mk_comb(Builtin_tm, [
     BlockHash_tm, mk_list([e], expr_ty)])
+  fun mk_BlobHash e = list_mk_comb(Builtin_tm, [
+    BlobHash_tm, mk_list([e], expr_ty)])
 
 end

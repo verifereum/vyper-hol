@@ -132,6 +132,7 @@ Datatype:
   | MulMod
   | Bop binop
   | BlockHash
+  | BlobHash
   | Env env_item
   | Acc account_item
   | Isqrt

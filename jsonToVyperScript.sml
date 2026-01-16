@@ -335,6 +335,7 @@ Definition make_builtin_call_def:
     else if name = "floor" then Builtin Floor args
     else if name = "ceil" then Builtin Ceil args
     else if name = "blockhash" then Builtin BlockHash args
+    else if name = "blobhash" then Builtin BlobHash args
     else if name = "isqrt" then Builtin Isqrt args
     else if name = "ecrecover" then Builtin ECRecover args
     else if name = "ecadd" then Builtin ECAdd args

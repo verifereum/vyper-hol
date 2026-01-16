@@ -1017,6 +1017,7 @@ Datatype:
   ; time_stamp: num
   ; block_number: num
   ; block_hashes: bytes32 list
+  ; blob_hashes: bytes32 list
   ; blob_base_fee: num
   ; gas_price: num
   ; is_creation: bool
@@ -1033,6 +1034,7 @@ Definition empty_call_txn_def:
     time_stamp := 0;
     block_number := 0;
     block_hashes := [];
+    blob_hashes := [];
     blob_base_fee := 0;
     gas_price := 0;
     is_creation := F
@@ -1094,6 +1096,16 @@ Theorem evaluate_block_hash_pre[cv_pre]:
 Proof
   rw[evaluate_block_hash_pre_def]
 QED
+
+Definition evaluate_blob_hash_def:
+  evaluate_blob_hash t n =
+    BytesV (Fixed 32) $
+      word_to_bytes (if n < LENGTH t.blob_hashes
+                     then EL n t.blob_hashes
+                     else 0w) T
+End
+
+val () = cv_auto_trans evaluate_blob_hash_def;
 
 Definition get_self_code_def:
   get_self_code cx = ALOOKUP cx.sources cx.txn.target
@@ -1264,6 +1276,9 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ BlockHash [IntV u i] =
     (if u = Unsigned 256 then evaluate_block_hash cx.txn (Num i)
      else INR "BlockHash type") ∧
+  evaluate_builtin cx _ BlobHash [IntV u i] =
+    (if u = Unsigned 256 then INL $ evaluate_blob_hash cx.txn (Num i)
+     else INR "BlobHash type") ∧
   evaluate_builtin cx _ (Concat n) vs = evaluate_concat n vs ∧
   evaluate_builtin cx _ (Slice n) [v1; v2; v3] = evaluate_slice v1 v2 v3 n ∧
   evaluate_builtin cx _ (MakeArray to bd) vs =
@@ -1330,6 +1345,7 @@ Definition builtin_args_length_ok_def:
   builtin_args_length_ok (Bop _) n = (n = 2) ∧
   builtin_args_length_ok (Env _) n = (n = 0) ∧
   builtin_args_length_ok BlockHash n = (n = 1) ∧
+  builtin_args_length_ok BlobHash n = (n = 1) ∧
   builtin_args_length_ok (Acc _) n = (n = 1) ∧
   builtin_args_length_ok Isqrt n = (n = 1) ∧
   builtin_args_length_ok MethodId n = (n = 1) ∧
