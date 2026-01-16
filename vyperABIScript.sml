@@ -115,11 +115,6 @@ Proof
   \\ rw[Once abi_to_vyper_pre_def]
 QED
 
-(* ===== ABI Decode Evaluation ===== *)
-
-(* Evaluation function for AbiDecode type builtin.
-   Called from the small-step interpreter when evaluating TypeBuiltin AbiDecode. *)
-
 Definition evaluate_abi_decode_def:
   evaluate_abi_decode tenv typ bs =
     let abiTy = vyper_to_abi_type typ in

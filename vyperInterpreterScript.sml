@@ -8,9 +8,6 @@ Libs
   vyperTypeValueTheory vyperABITheory
   integerTheory[qualified] intSimps[qualified]
 
-(* value, array_value, default_value, make_array_value are imported from vyperTypeValue
-   (which vyperABI also depends on) *)
-
 Definition dest_NumV_def:
   dest_NumV (IntV _ i) =
     (if i < 0 then NONE else SOME (Num i)) ∧
@@ -135,8 +132,6 @@ Definition binop_negate_def:
 End
 
 val () = cv_auto_trans binop_negate_def;
-
-(* within_int_bound is now imported from vyperTypeValue *)
 
 Definition bounded_int_op_def:
   bounded_int_op u1 u2 r =
