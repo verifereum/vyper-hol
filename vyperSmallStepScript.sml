@@ -1243,7 +1243,6 @@ Proof
   \\ simp[Once cont_def]
 QED
 
-(* TODO: cv_trans for cont needs stepk cv translation
 val cont_tr_pre_def = cv_trans_pre "cont_pre" cont_tr;
 
 Theorem IS_SOME_cont:
@@ -1275,7 +1274,6 @@ Proof
   \\ first_x_assum irule
   \\ gs[FUNPOW]
 QED
-*)
 
 Theorem eval_stmts_eq_cont_cps:
   eval_stmts cx body st = fromk $ cont (eval_stmts_cps cx body st DoneK)
@@ -1311,7 +1309,6 @@ Proof
   \\ simp[fromtvk_def]
 QED
 
-(* TODO: cv_auto_trans for constants_env needs cont which needs stepk
 val constants_env_pre_def = constants_env_def
   |> SRULE [eval_expr_eq_cont_cps]
   |> cv_auto_trans_pre "constants_env_pre";
@@ -1349,10 +1346,7 @@ Proof
   \\ rw[Abbr`k`, cont_def]
   \\ rw[Once OWHILE_THM]
 QED
-*)
 
-(* TODO: cv_auto_trans for call_external/load_contract needs constants_env cv translation
 val () = cv_auto_trans call_external_def;
 
 val () = cv_auto_trans load_contract_def;
-*)

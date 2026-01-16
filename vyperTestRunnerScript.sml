@@ -140,9 +140,7 @@ Definition run_deployment_def:
   in (sns, res)
 End
 
-(* TODO: cv_auto_trans for run_deployment needs load_contract cv translation
 val () = cv_auto_trans run_deployment_def;
-*)
 
 Definition run_call_def:
   run_call sns am ct = let
@@ -173,9 +171,7 @@ Definition run_call_def:
   in (call_external am tx, (retTys, (SND ar, tenv)))
 End
 
-(* TODO: cv_auto_trans for run_call needs call_external cv translation
 val () = cv_auto_trans run_call_def;
-*)
 
 Definition is_transfer_def:
   is_transfer ct ⇔
@@ -265,9 +261,7 @@ Definition run_trace_def:
               else INR (Error "output mismatch"))
 End
 
-(* TODO: cv_auto_trans for run_trace needs run_deployment/run_call cv translation
 val () = cv_auto_trans run_trace_def;
-*)
 
 Definition run_test_loop_def:
   run_test_loop snss am [] = INL () ∧
@@ -277,15 +271,11 @@ Definition run_test_loop_def:
      | (_, INR ex) => INR ex
 End
 
-(* TODO: cv_auto_trans for run_test_loop needs run_trace cv translation
 val () = cv_auto_trans run_test_loop_def;
-*)
 
 Definition run_test_def:
   run_test trs = run_test_loop []
     initial_machine_state trs
 End
 
-(* TODO: cv_auto_trans for run_test needs run_test_loop cv translation
 val () = cv_auto_trans run_test_def;
-*)
