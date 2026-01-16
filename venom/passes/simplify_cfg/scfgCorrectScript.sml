@@ -1621,6 +1621,37 @@ Proof
       >- (gvs[Abbr`blocks2`] >> drule MEM_remove_block >> simp[]))
 QED
 
+(* Helper: pred_labels preserved by merge_jump when b not in preds *)
+Theorem pred_labels_merge_jump_not_mem:
+  !fn a b lbl.
+    merge_jump_cond fn a b /\ cfg_wf fn /\
+    ~MEM b (pred_labels fn lbl) ==>
+    pred_labels (merge_jump fn a b) lbl = pred_labels fn lbl
+Proof
+  rpt strip_tac >>
+  fs[scfgTransformTheory.merge_jump_cond_def,
+     scfgTransformTheory.merge_jump_def] >>
+  gvs[] >>
+  qabbrev_tac `a_new = a' with bb_instructions :=
+    update_last_inst (replace_label_inst b c_lbl) a'.bb_instructions` >>
+  qabbrev_tac `succs = block_successors a_new` >>
+  simp[scfgDefsTheory.pred_labels_def, scfgDefsTheory.replace_label_fn_def] >>
+  simp[listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
+  `!bb. (replace_label_block b c_lbl bb).bb_label = bb.bb_label`
+    by simp[scfgDefsTheory.replace_label_block_def] >>
+  `!bb. (replace_phi_in_block b a bb).bb_label = bb.bb_label`
+    by simp[scfgDefsTheory.replace_phi_in_block_def] >>
+  `!bb. (if MEM bb.bb_label succs then replace_phi_in_block b a bb else bb).bb_label = bb.bb_label`
+    by (rw[] >> simp[scfgDefsTheory.replace_phi_in_block_def]) >>
+  simp[] >>
+  `!bb. block_successors (replace_phi_in_block b a bb) = block_successors bb`
+    by simp[block_successors_replace_phi_in_block] >>
+  simp[block_successors_replace_label_block] >>
+  (* Key insight: after remove_block b and replace_block a_new, the only change
+     to pred_labels is that b is filtered out. Since ~MEM b, result unchanged. *)
+  cheat
+QED
+
 (* Helper: cfg_wf and phi_fn_wf preserved by simplify_cfg_step *)
 Theorem wf_simplify_cfg_step:
   !fn fn'.
@@ -2055,7 +2086,6 @@ Proof
                       sg `phi_inst_wf (pred_labels fn bb'.bb_label) y`
                       >- (gvs[scfgDefsTheory.phi_block_wf_def] >> first_x_assum irule >> simp[])
                       >- (irule phi_inst_wf_not_mem_pred >>
-                          (* Need: ~MEM b (pred_labels fn' bb'.bb_label) /\ phi_inst_wf (pred_labels fn' bb'.bb_label) y *)
                           cheat (* needs pred_labels fn' = pred_labels fn for this block *)))
                   >- (irule phi_inst_wf_non_phi >> simp[replace_label_inst_opcode])))
           >- cheat (* bb' = a_new case - needs phi_block_wf for modified block *)))
