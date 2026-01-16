@@ -10,7 +10,7 @@ runs:
       run: |
         echo "polyml=$(git ls-remote https://github.com/polyml/polyml.git HEAD | cut -f1)" >> $GITHUB_OUTPUT
         echo "verifereum=$(git ls-remote https://github.com/verifereum/verifereum.git HEAD | cut -f1)" >> $GITHUB_OUTPUT
-        echo "hol4=$(git ls-remote https://github.com/HOL-Theorem-Prover/HOL.git HEAD | cut -f1)" >> $GITHUB_OUTPUT
+        echo "hol4=$(git ls-remote https://github.com/HOL-Theorem-Prover/HOL.git master | cut -f1)" >> $GITHUB_OUTPUT
 
     - name: Cache PolyML
       uses: actions/cache@v4
