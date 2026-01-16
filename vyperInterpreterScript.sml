@@ -1378,8 +1378,6 @@ End
 
 val () = cv_auto_trans evaluate_type_builtin_def;
 
-(* EC builtin helpers - abstracted to reduce evaluate_builtin processing time *)
-
 Definition evaluate_ecrecover_def:
   evaluate_ecrecover [BytesV _ hash_bytes; IntV u1 v_int; IntV u2 r_int; IntV u3 s_int] =
     (if u1 = Unsigned 256 ∧ u2 = Unsigned 256 ∧ u3 = Unsigned 256 ∧
