@@ -126,6 +126,21 @@ Proof
   \\ Cases_on `h` \\ rw[value_size_def] \\ fs[]
 QED
 
+(* TFL expands pair types to pair_size, so we need lemmas relating them to valueN_size *)
+Theorem value1_pair_size:
+  ∀fields. list_size (pair_size (list_size char_size) value_size) fields = value1_size fields
+Proof
+  Induct \\ rw[listTheory.list_size_def, value_size_def, basicSizeTheory.pair_size_def]
+  \\ Cases_on `h` \\ rw[value_size_def, basicSizeTheory.pair_size_def]
+QED
+
+Theorem value3_pair_size:
+  ∀al. list_size (pair_size (λx. x) value_size) al = value3_size al
+Proof
+  Induct \\ rw[listTheory.list_size_def, value_size_def, basicSizeTheory.pair_size_def]
+  \\ Cases_on `h` \\ rw[value_size_def, basicSizeTheory.pair_size_def]
+QED
+
 (* Convert Vyper values to ABI values for encoding.
    This is the inverse of abi_to_vyper.
 
@@ -214,11 +229,11 @@ Termination
   WF_REL_TAC `measure (λx. case x of INL v => value_size v
                                    | INR (INL vs) => list_size value_size vs
                                    | INR (INR al) => value3_size al)`
-  \\ rw[value_size_def, value5_size_eq_list_size]
-  (* CHEATED: Need to prove that for StructV fields, the recursive call decreases.
-     The goal is: list_size (λx. value_size (SND x)) fields < value1_size fields + 1
-     This follows from value1_size_snd which gives ≤, and X ≤ Y ⇒ X < Y + 1 *)
-  \\ cheat
+  \\ rw[value_size_def, value5_size_eq_list_size, value1_pair_size, value3_pair_size]
+  (* Remaining goal: list_size (λx. value_size (SND x)) fields < value1_size fields + 1 *)
+  \\ rw[GSYM arithmeticTheory.ADD1]
+  \\ irule arithmeticTheory.LESS_EQ_IMP_LESS_SUC
+  \\ rw[value1_size_snd]
 End
 
 (* TODO: cv_auto_trans for abi_default_from_type fails due to REPLICATE recursion

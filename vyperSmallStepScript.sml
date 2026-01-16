@@ -713,7 +713,23 @@ Theorem eval_cps_eq:
           | (INR ex, st1) => (AK cx (ApplyExc ex) st1)
      ) k))
 Proof
-  (* CHEATED - original proof needs updating for new AbiEncode/AbiDecode cases in apply_vals
+  (* CHEATED: This proof shows equivalence between CPS and direct evaluation.
+     However, there's a semantic mismatch for AbiEncode/AbiDecode:
+     - Direct eval (evaluate_def) calls evaluate_type_builtin which returns
+       errors for AbiEncode/AbiDecode ("use vyperSmallStep")
+     - CPS eval (apply_vals) handles AbiEncode/AbiDecode directly with
+       evaluate_abi_encode/evaluate_abi_decode
+
+     For programs not using AbiEncode/AbiDecode, the original proof works.
+     To fix properly, either:
+     1. Add precondition excluding AbiEncode/AbiDecode from expressions, or
+     2. Update evaluate_def to handle these cases (requires vyperABI dependency
+        in vyperInterpreter which may cause circular deps)
+
+     Original proof structure preserved below for reference.
+  *)
+  cheat
+  (*
   ho_match_mp_tac evaluate_ind
   \\ conj_tac >- rw[eval_stmt_cps_def, evaluate_def, return_def]
   \\ conj_tac >- rw[eval_stmt_cps_def, evaluate_def, raise_def]
@@ -1242,7 +1258,6 @@ Proof
   \\ gvs[apply_vals_def]
   \\ rw[Once OWHILE_THM, stepk_def]
   *)
-  cheat
 QED
 
 Definition fromk_def[simp]:
