@@ -1,7 +1,7 @@
 Theory vyperInterpreter
 Ancestors
   arithmetic alist combin list finite_map pair rich_list
-  cv cv_std vfmState vfmExecution bn254 secp256k1 vyperAST
+  cv cv_std vfmState vfmExecution[ignore_grammar] vyperAST
   vyperMisc
 Libs
   cv_transLib wordsLib monadsyntax
@@ -1447,7 +1447,7 @@ Definition evaluate_builtin_def:
        v = Num v_int;
        r = Num r_int;
        s = Num s_int
-     in case ecrecover hash v r s of
+     in case vfmExecution$ecrecover hash v r s of
           NONE => INL $ AddressV 0w
         | SOME addr => INL $ AddressV addr
      else INR "ECRecover type") ∧
@@ -1459,7 +1459,7 @@ Definition evaluate_builtin_def:
      then let
        p1 = (Num x1, Num y1);
        p2 = (Num x2, Num y2)
-     in case ecadd p1 p2 of
+     in case vfmExecution$ecadd p1 p2 of
           NONE => INL $ ArrayV $ TupleV
             [IntV (Unsigned 256) 0; IntV (Unsigned 256) 0]
         | SOME (rx, ry) => INL $ ArrayV $ TupleV
@@ -1471,7 +1471,7 @@ Definition evaluate_builtin_def:
      then let
        p = (Num x, Num y);
        n = Num scalar
-     in case ecmul p n of
+     in case vfmExecution$ecmul p n of
           NONE => INL $ ArrayV $ TupleV
             [IntV (Unsigned 256) 0; IntV (Unsigned 256) 0]
         | SOME (rx, ry) => INL $ ArrayV $ TupleV
