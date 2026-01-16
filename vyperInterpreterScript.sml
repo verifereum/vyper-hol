@@ -1316,10 +1316,10 @@ QED
 
 Definition evaluate_blob_hash_def:
   evaluate_blob_hash t n =
-    if n < LENGTH t.blob_hashes then
-      INL $ BytesV (Fixed 32) (word_to_bytes (EL n t.blob_hashes) T)
-    else
-      INL $ BytesV (Fixed 32) (word_to_bytes (0w:bytes32) T)
+    BytesV (Fixed 32) $
+      word_to_bytes (if n < LENGTH t.blob_hashes
+                     then EL n t.blob_hashes
+                     else 0w) T
 End
 
 val () = cv_auto_trans evaluate_blob_hash_def;
@@ -1488,7 +1488,7 @@ Definition evaluate_builtin_def:
     (if u = Unsigned 256 then evaluate_block_hash cx.txn (Num i)
      else INR "BlockHash type") ∧
   evaluate_builtin cx _ BlobHash [IntV u i] =
-    (if u = Unsigned 256 then evaluate_blob_hash cx.txn (Num i)
+    (if u = Unsigned 256 then INL $ evaluate_blob_hash cx.txn (Num i)
      else INR "BlobHash type") ∧
   evaluate_builtin cx _ (Concat n) vs = evaluate_concat n vs ∧
   evaluate_builtin cx _ (Slice n) [v1; v2; v3] = evaluate_slice v1 v2 v3 n ∧
