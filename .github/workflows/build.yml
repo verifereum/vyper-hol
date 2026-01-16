@@ -14,36 +14,76 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-hol
       - run: Holmake
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hol-build
+          path: '**/.hol'
+          include-hidden-files: true
+          retention-days: 1
 
-  vyper-tests:
-    needs: build
+  export-vyper-tests:
     runs-on: ubuntu-latest
+    outputs:
+      export-cache-key: ${{ steps.vyper-rev.outputs.cache-key }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-hol
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - name: Get Vyper revision
         id: vyper-rev
-        shell: bash
         run: |
-          echo "sha=$(git ls-remote https://github.com/vyperlang/vyper.git HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
+          sha=$(git ls-remote https://github.com/vyperlang/vyper.git HEAD | cut -f1)
+          echo "cache-key=vyper-tests-${{ runner.os }}-$sha" >> "$GITHUB_OUTPUT"
       - name: Cache exported Vyper tests
         id: cache-vyper-tests
         uses: actions/cache@v4
         with:
           path: tests/vyper-test-exports
-          key: vyper-tests-${{ runner.os }}-${{ steps.vyper-rev.outputs.sha }}
+          key: ${{ steps.vyper-rev.outputs.cache-key }}
       - name: Export Vyper tests
         if: steps.cache-vyper-tests.outputs.cache-hit != 'true'
-        shell: bash
         run: |
           git clone --depth 1 https://github.com/vyperlang/vyper.git vyper-src
           cd vyper-src
           git fetch --unshallow --tags
           pip install .[test]
           pytest -s -n0 --export ../tests/vyper-test-exports -m "not fuzzing" tests/functional/codegen
-      - name: Run exported Vyper tests
+
+  vyper-tests:
+    needs: [build, export-vyper-tests]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-hol
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: hol-build
+      - name: Fix artifact timestamps
+        run: find . -path '*/.hol/*' -type f -exec touch {} +
+      - name: Restore Vyper test exports
+        uses: actions/cache/restore@v4
+        with:
+          path: tests/vyper-test-exports
+          key: ${{ needs.export-vyper-tests.outputs.export-cache-key }}
+          fail-on-cache-miss: true
+      - name: Run test group ${{ matrix.group }}
         working-directory: tests
-        run: Holmake --qof
+        run: |
+          tests=$(ls vyperTest[0-9]*Script.sml 2>/dev/null | sort -V)
+          total=$(echo "$tests" | wc -l)
+          splits=10
+          group=${{ matrix.group }}
+          per_group=$(( (total + splits - 1) / splits ))
+          start=$(( group * per_group ))
+
+          echo "Group $group: tests $start to $((start + per_group - 1)) of $total"
+          targets=$(echo "$tests" | tail -n +$((start + 1)) | head -n $per_group | sed 's/Script\.sml/Theory.uo/' | tr '\n' ' ')
+          echo "Building: $targets"
+          Holmake --qof $targets

@@ -336,6 +336,9 @@ Definition make_builtin_call_def:
     else if name = "ceil" then Builtin Ceil args
     else if name = "blockhash" then Builtin BlockHash args
     else if name = "isqrt" then Builtin Isqrt args
+    else if name = "ecrecover" then Builtin ECRecover args
+    else if name = "ecadd" then Builtin ECAdd args
+    else if name = "ecmul" then Builtin ECMul args
     else if name = "empty" then TypeBuiltin Empty (translate_type ret_ty) []
     else if name = "max_value" then TypeBuiltin MaxValue (translate_type ret_ty) []
     else if name = "min_value" then TypeBuiltin MinValue (translate_type ret_ty) []

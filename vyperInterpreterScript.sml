@@ -1,7 +1,7 @@
 Theory vyperInterpreter
 Ancestors
   arithmetic alist combin list finite_map pair rich_list
-  cv cv_std vfmState vyperAST vyperABI
+  cv cv_std vfmState vfmExecution[ignore_grammar] vyperAST vyperABI
   vyperMisc
 Libs
   cv_transLib wordsLib monadsyntax
@@ -1172,6 +1172,60 @@ End
 
 val () = cv_auto_trans evaluate_type_builtin_def;
 
+Definition evaluate_ecrecover_def:
+  evaluate_ecrecover [BytesV _ hash_bytes; IntV u1 v_int; IntV u2 r_int; IntV u3 s_int] =
+    (if u1 = Unsigned 256 ∧ u2 = Unsigned 256 ∧ u3 = Unsigned 256 ∧
+        LENGTH hash_bytes = 32
+     then let
+       hash = word_of_bytes T (0w:bytes32) hash_bytes;
+       v = Num v_int;
+       r = Num r_int;
+       s = Num s_int
+     in case vfmExecution$ecrecover hash v r s of
+          NONE => INL $ AddressV 0w
+        | SOME addr => INL $ AddressV addr
+     else INR "ECRecover type") ∧
+  evaluate_ecrecover _ = INR "ECRecover args"
+End
+
+val () = cv_auto_trans evaluate_ecrecover_def;
+
+Definition evaluate_ecadd_def:
+  evaluate_ecadd [ArrayV (TupleV [IntV u1 x1; IntV u2 y1]);
+                  ArrayV (TupleV [IntV u3 x2; IntV u4 y2])] =
+    (if u1 = Unsigned 256 ∧ u2 = Unsigned 256 ∧
+        u3 = Unsigned 256 ∧ u4 = Unsigned 256
+     then let
+       p1 = (Num x1, Num y1);
+       p2 = (Num x2, Num y2)
+     in case vfmExecution$ecadd p1 p2 of
+          NONE => INL $ ArrayV $ TupleV
+            [IntV (Unsigned 256) 0; IntV (Unsigned 256) 0]
+        | SOME (rx, ry) => INL $ ArrayV $ TupleV
+            [IntV (Unsigned 256) (&rx); IntV (Unsigned 256) (&ry)]
+     else INR "ECAdd type") ∧
+  evaluate_ecadd _ = INR "ECAdd args"
+End
+
+val () = cv_auto_trans evaluate_ecadd_def;
+
+Definition evaluate_ecmul_def:
+  evaluate_ecmul [ArrayV (TupleV [IntV u1 x; IntV u2 y]); IntV u3 scalar] =
+    (if u1 = Unsigned 256 ∧ u2 = Unsigned 256 ∧ u3 = Unsigned 256
+     then let
+       p = (Num x, Num y);
+       n = Num scalar
+     in case vfmExecution$ecmul p n of
+          NONE => INL $ ArrayV $ TupleV
+            [IntV (Unsigned 256) 0; IntV (Unsigned 256) 0]
+        | SOME (rx, ry) => INL $ ArrayV $ TupleV
+            [IntV (Unsigned 256) (&rx); IntV (Unsigned 256) (&ry)]
+     else INR "ECMul type") ∧
+  evaluate_ecmul _ = INR "ECMul args"
+End
+
+val () = cv_auto_trans evaluate_ecmul_def;
+
 Definition evaluate_builtin_def:
   evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
   evaluate_builtin cx _ Len [StringV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
@@ -1238,6 +1292,9 @@ Definition evaluate_builtin_def:
   (* Also support Bytes input for method_id *)
   evaluate_builtin cx _ MethodId [BytesV _ bs] =
     INL $ BytesV (Fixed 4) (TAKE 4 (Keccak_256_w64 bs)) ∧
+  evaluate_builtin cx _ ECRecover vs = evaluate_ecrecover vs ∧
+  evaluate_builtin cx _ ECAdd vs = evaluate_ecadd vs ∧
+  evaluate_builtin cx _ ECMul vs = evaluate_ecmul vs ∧
   evaluate_builtin _ _ _ _ = INR "builtin"
 End
 
@@ -1280,7 +1337,10 @@ Definition builtin_args_length_ok_def:
   builtin_args_length_ok BlockHash n = (n = 1) ∧
   builtin_args_length_ok (Acc _) n = (n = 1) ∧
   builtin_args_length_ok Isqrt n = (n = 1) ∧
-  builtin_args_length_ok MethodId n = (n = 1)
+  builtin_args_length_ok MethodId n = (n = 1) ∧
+  builtin_args_length_ok ECRecover n = (n = 4) ∧
+  builtin_args_length_ok ECAdd n = (n = 2) ∧
+  builtin_args_length_ok ECMul n = (n = 2)
 End
 
 val () = cv_auto_trans builtin_args_length_ok_def;

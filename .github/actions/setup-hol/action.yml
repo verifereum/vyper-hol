@@ -10,6 +10,7 @@ runs:
       run: |
         echo "polyml=$(git ls-remote https://github.com/polyml/polyml.git HEAD | cut -f1)" >> $GITHUB_OUTPUT
         echo "verifereum=$(git ls-remote https://github.com/verifereum/verifereum.git HEAD | cut -f1)" >> $GITHUB_OUTPUT
+        echo "hol4=$(git ls-remote https://github.com/HOL-Theorem-Prover/HOL.git master | cut -f1)" >> $GITHUB_OUTPUT
 
     - name: Cache PolyML
       uses: actions/cache@v4
@@ -37,7 +38,7 @@ runs:
       id: cache-hol4
       with:
         path: ~/HOL
-        key: hol-${{ runner.os }}-${{ steps.versions.outputs.polyml }}
+        key: hol-${{ runner.os }}-${{ steps.versions.outputs.polyml }}-${{ steps.versions.outputs.hol4 }}
 
     - name: Build HOL4
       if: steps.cache-hol4.outputs.cache-hit != 'true'
