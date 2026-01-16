@@ -1378,6 +1378,50 @@ End
 
 val () = cv_auto_trans evaluate_type_builtin_def;
 
+(* EC builtin helpers - abstracted to reduce evaluate_builtin processing time *)
+
+Definition evaluate_ecrecover_def:
+  evaluate_ecrecover hash_bytes v_int r_int s_int =
+    let
+      hash = word_of_bytes T (0w:bytes32) hash_bytes;
+      v = Num v_int;
+      r = Num r_int;
+      s = Num s_int
+    in case vfmExecution$ecrecover hash v r s of
+         NONE => INL $ AddressV 0w
+       | SOME addr => INL $ AddressV addr
+End
+
+val () = cv_auto_trans evaluate_ecrecover_def;
+
+Definition evaluate_ecadd_def:
+  evaluate_ecadd x1 y1 x2 y2 =
+    let
+      p1 = (Num x1, Num y1);
+      p2 = (Num x2, Num y2)
+    in case vfmExecution$ecadd p1 p2 of
+         NONE => INL $ ArrayV $ TupleV
+           [IntV (Unsigned 256) 0; IntV (Unsigned 256) 0]
+       | SOME (rx, ry) => INL $ ArrayV $ TupleV
+           [IntV (Unsigned 256) (&rx); IntV (Unsigned 256) (&ry)]
+End
+
+val () = cv_auto_trans evaluate_ecadd_def;
+
+Definition evaluate_ecmul_def:
+  evaluate_ecmul x y scalar =
+    let
+      p = (Num x, Num y);
+      n = Num scalar
+    in case vfmExecution$ecmul p n of
+         NONE => INL $ ArrayV $ TupleV
+           [IntV (Unsigned 256) 0; IntV (Unsigned 256) 0]
+       | SOME (rx, ry) => INL $ ArrayV $ TupleV
+           [IntV (Unsigned 256) (&rx); IntV (Unsigned 256) (&ry)]
+End
+
+val () = cv_auto_trans evaluate_ecmul_def;
+
 Definition evaluate_builtin_def:
   evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
   evaluate_builtin cx _ Len [StringV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
@@ -1442,40 +1486,19 @@ Definition evaluate_builtin_def:
     [BytesV _ hash_bytes; IntV u1 v_int; IntV u2 r_int; IntV u3 s_int] =
     (if u1 = Unsigned 256 ∧ u2 = Unsigned 256 ∧ u3 = Unsigned 256 ∧
         LENGTH hash_bytes = 32
-     then let
-       hash = word_of_bytes T (0w:bytes32) hash_bytes;
-       v = Num v_int;
-       r = Num r_int;
-       s = Num s_int
-     in case vfmExecution$ecrecover hash v r s of
-          NONE => INL $ AddressV 0w
-        | SOME addr => INL $ AddressV addr
+     then evaluate_ecrecover hash_bytes v_int r_int s_int
      else INR "ECRecover type") ∧
   evaluate_builtin cx _ ECAdd
     [ArrayV (TupleV [IntV u1 x1; IntV u2 y1]);
      ArrayV (TupleV [IntV u3 x2; IntV u4 y2])] =
     (if u1 = Unsigned 256 ∧ u2 = Unsigned 256 ∧
         u3 = Unsigned 256 ∧ u4 = Unsigned 256
-     then let
-       p1 = (Num x1, Num y1);
-       p2 = (Num x2, Num y2)
-     in case vfmExecution$ecadd p1 p2 of
-          NONE => INL $ ArrayV $ TupleV
-            [IntV (Unsigned 256) 0; IntV (Unsigned 256) 0]
-        | SOME (rx, ry) => INL $ ArrayV $ TupleV
-            [IntV (Unsigned 256) (&rx); IntV (Unsigned 256) (&ry)]
+     then evaluate_ecadd x1 y1 x2 y2
      else INR "ECAdd type") ∧
   evaluate_builtin cx _ ECMul
     [ArrayV (TupleV [IntV u1 x; IntV u2 y]); IntV u3 scalar] =
     (if u1 = Unsigned 256 ∧ u2 = Unsigned 256 ∧ u3 = Unsigned 256
-     then let
-       p = (Num x, Num y);
-       n = Num scalar
-     in case vfmExecution$ecmul p n of
-          NONE => INL $ ArrayV $ TupleV
-            [IntV (Unsigned 256) 0; IntV (Unsigned 256) 0]
-        | SOME (rx, ry) => INL $ ArrayV $ TupleV
-            [IntV (Unsigned 256) (&rx); IntV (Unsigned 256) (&ry)]
+     then evaluate_ecmul x y scalar
      else INR "ECMul type") ∧
   evaluate_builtin _ _ _ _ = INR "builtin"
 End
