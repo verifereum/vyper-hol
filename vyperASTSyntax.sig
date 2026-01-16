@@ -86,6 +86,9 @@ signature vyperASTSyntax = sig
   val MinValue_tm     : term
   val Epsilon_tm      : term
   val Convert_tm      : term
+  val Extract32_tm    : term
+  val AbiDecode_tm    : term
+  val MethodId_tm     : term
   val Name_tm         : term
   val TopLevelName_tm : term
   val IfExp_tm        : term
@@ -175,6 +178,9 @@ signature vyperASTSyntax = sig
   val mk_MaxValue  : term -> term
   val mk_MinValue  : term -> term
   val mk_Convert   : term * term -> term
+  val mk_Extract32 : term * term * term -> term
+  val mk_AbiDecode : term * term -> term
+  val mk_MethodId  : term -> term
   val mk_Call      : term -> term list -> term
   val mk_Assert    : term * term -> term
   val mk_Log       : term * term -> term
