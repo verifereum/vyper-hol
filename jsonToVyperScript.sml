@@ -366,8 +366,7 @@ Definition make_builtin_call_def:
     else if name = "uint2str" then
       (case ret_ty of JT_String n => Builtin (Uint2Str n) args
                     | _ => Builtin (Uint2Str 0) args)
-    (* ABI decoding builtin *)
-    else if name = "_abi_decode" then
+    else if name = "abi_decode" then
       TypeBuiltin AbiDecode (translate_type ret_ty) args
     else if name = "method_id" then
       Builtin MethodId args
