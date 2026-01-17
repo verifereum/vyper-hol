@@ -1,0 +1,23 @@
+# Optimization pipeline and pass lists
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec \
+  .. ../compiler ../analysis \
+  ../passes/algebraic_optimization \
+  ../passes/assign_elimination \
+  ../passes/branch_optimization \
+  ../passes/cfg_normalization \
+  ../passes/common_subexpression_elimination \
+  ../passes/concretize_mem_loc \
+  ../passes/dead_store_elimination \
+  ../passes/dft \
+  ../passes/float_allocas \
+  ../passes/function_inliner \
+  ../passes/literals_codesize \
+  ../passes/load_elimination \
+  ../passes/lower_dload \
+  ../passes/mem2var \
+  ../passes/memmerging \
+  ../passes/phi_elimination \
+  ../passes/remove_unused_variables \
+  ../passes/revert_to_assert \
+  ../passes/sccp \
+  ../passes/single_use_expansion
