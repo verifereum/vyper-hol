@@ -630,14 +630,18 @@ fun d_json_expr () : term decoder = achoose "expr" [
             field "type" json_type),
 
   (* Call - also extract source_id from func.type.type_decl_node for module calls *)
+  (* Vyper convention: -1 = main module, -2 = builtin, >= 0 = imported module *)
+  (* We map negative source_ids to NONE (main module) *)
   check_ast_type "Call" $
     JSONDecode.map (fn ((func, args, kwargs), (ty, src_id_opt)) => mk_JE_Call(func, args, kwargs, ty, src_id_opt)) $
     tuple2 (tuple3 (field "func" (delay d_json_expr),
                     field "args" (array (delay d_json_expr)),
                     orElse(field "keywords" (array (delay d_json_keyword)), succeed [])),
             tuple2 (field "type" json_type,
-                    orElse (JSONDecode.map optionSyntax.mk_some
-                              (field "func" $ field "type" $ field "type_decl_node" $ field "source_id" numtm),
+                    orElse (JSONDecode.map (fn n =>
+                              if n < 0 then optionSyntax.mk_none numSyntax.num
+                              else optionSyntax.mk_some (numSyntax.mk_numeral (Arbnum.fromLargeInt (IntInf.toLarge n))))
+                              (field "func" $ field "type" $ field "type_decl_node" $ field "source_id" intInf),
                             succeed (optionSyntax.mk_none numSyntax.num))))
 ]
 and d_json_keyword () : term decoder =
