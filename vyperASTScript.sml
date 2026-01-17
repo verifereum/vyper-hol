@@ -157,7 +157,7 @@ End
 Datatype:
   expr
   = Name identifier
-  | TopLevelName identifier
+  | TopLevelName (num option) identifier (* source_id (NONE=self), var_name *)
   | FlagMember identifier identifier
   | IfExp expr expr expr
   | Literal literal
@@ -170,7 +170,7 @@ Datatype:
   | Call call_target (expr list)
 ; base_assignment_target
   = NameTarget identifier
-  | TopLevelNameTarget identifier
+  | TopLevelNameTarget (num option) identifier (* source_id (NONE=self), var_name *)
   | SubscriptTarget base_assignment_target expr
   | AttributeTarget base_assignment_target identifier
 End

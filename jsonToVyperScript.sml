@@ -418,7 +418,7 @@ val () = cv_auto_trans make_builtin_call_def;
 (* For JE_Attribute base fname, returns fname *)
 Definition extract_func_name_def:
   (extract_func_name (JE_Attribute _ fname) = fname) /\
-  (extract_func_name (JE_Name name _) = name) /\
+  (extract_func_name (JE_Name name _ _) = name) /\
   (extract_func_name _ = "")
 End
 
@@ -445,11 +445,11 @@ Definition translate_expr_def:
 
   (translate_expr (JE_Bool b) = Literal (BoolL b)) /\
 
-  (translate_expr (JE_Name id tc) =
+  (translate_expr (JE_Name id tc src_id_opt) =
     if id = "self" then Builtin (Env SelfAddr) [] else Name id) /\
 
-  (* Special attributes: msg.*, block.*, tx.*, self.* *)
-  (translate_expr (JE_Attribute (JE_Name obj _) attr) =
+  (* Special attributes: msg.*, block.*, tx.*, self.*, module.* *)
+  (translate_expr (JE_Attribute (JE_Name obj tc src_id_opt) attr) =
     if obj = "msg" /\ attr = "sender" then Builtin (Env Sender) []
     else if obj = "msg" /\ attr = "value" then Builtin (Env ValueSent) []
     else if obj = "block" /\ attr = "timestamp" then Builtin (Env TimeStamp) []
@@ -459,7 +459,9 @@ Definition translate_expr_def:
     else if obj = "tx" /\ attr = "gasprice" then Builtin (Env GasPrice) []
     else if obj = "self" /\ attr = "balance" then
       Builtin (Acc Balance) [Builtin (Env SelfAddr) []]
-    else if obj = "self" then TopLevelName attr
+    else if obj = "self" then TopLevelName NONE attr
+    (* Module variable access: tc = SOME "module" *)
+    else if tc = SOME "module" then TopLevelName src_id_opt attr
     else if attr = "balance" then Builtin (Acc Balance) [Name obj]
     else if attr = "address" then Builtin (Acc Address) [Name obj]
     else Attribute (Name obj) attr) /\
@@ -516,18 +518,20 @@ Definition translate_expr_def:
     let args' = translate_expr_list args in
     let kwargs' = translate_kwargs kwargs in
     case func of
-    | JE_Name name _ => make_builtin_call name args' kwargs' ret_ty
+    | JE_Name name _ _ => make_builtin_call name args' kwargs' ret_ty
     | JE_Attribute base "pop" =>
         (case base of
-         | JE_Name id _ => Pop (NameTarget id)
-         | JE_Attribute (JE_Name "self" _) attr => Pop (TopLevelNameTarget attr)
-         | JE_Attribute (JE_Name id _) attr =>
+         | JE_Name id _ _ => Pop (NameTarget id)
+         | JE_Attribute (JE_Name "self" _ _) attr => Pop (TopLevelNameTarget NONE attr)
+         | JE_Attribute (JE_Name id (SOME "module") src_id_opt) attr =>
+             Pop (TopLevelNameTarget src_id_opt attr)
+         | JE_Attribute (JE_Name id _ _) attr =>
              Pop (AttributeTarget (NameTarget id) attr)
-         | JE_Subscript (JE_Name id _) idx =>
+         | JE_Subscript (JE_Name id _ _) idx =>
              Pop (SubscriptTarget (NameTarget id) (translate_expr idx))
          | _ => Call (IntCall NONE "pop") args')
     (* self.func(args) - internal call *)
-    | JE_Attribute (JE_Name "self" _) fname => Call (IntCall NONE fname) args'
+    | JE_Attribute (JE_Name "self" _ _) fname => Call (IntCall NONE fname) args'
     (* Module call: use source_id from type_decl_node *)
     | _ => (case src_id_opt of
               SOME src_id => Call (IntCall (SOME src_id) (extract_func_name func)) args'
@@ -550,7 +554,8 @@ End
 
 Definition translate_base_target_def:
   (translate_base_target (JBT_Name id) = NameTarget id) /\
-  (translate_base_target (JBT_TopLevelName id) = TopLevelNameTarget id) /\
+  (* JBT_TopLevelName is always self.var - module vars can't be directly assigned *)
+  (translate_base_target (JBT_TopLevelName id) = TopLevelNameTarget NONE id) /\
   (translate_base_target (JBT_Subscript tgt idx) =
     SubscriptTarget (translate_base_target tgt) (translate_expr idx)) /\
   (translate_base_target (JBT_Attribute tgt attr) =

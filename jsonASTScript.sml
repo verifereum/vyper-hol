@@ -75,7 +75,7 @@ Datatype:
   | JE_Bool bool                                       (* True/False *)
 
   (* Variables and access *)
-  | JE_Name string (string option)                     (* id, optional typeclass (e.g. "module") *)
+  | JE_Name string (string option) (num option)        (* id, typeclass, source_id for modules *)
   | JE_Attribute json_expr string                      (* value, attr *)
   | JE_Subscript json_expr json_expr                   (* value, slice *)
 

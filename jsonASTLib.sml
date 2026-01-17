@@ -142,8 +142,10 @@ fun mk_JE_Str (len, v) = list_mk_comb(JE_Str_tm, [len, fromMLstring v])
 fun mk_JE_Bytes (len, v) = list_mk_comb(JE_Bytes_tm, [len, fromMLstring v])
 fun mk_JE_Hex s = mk_comb(JE_Hex_tm, fromMLstring s)
 fun mk_JE_Bool b = mk_comb(JE_Bool_tm, mk_bool b)
-fun mk_JE_Name (s, tc_opt) =
-  list_mk_comb(JE_Name_tm, [fromMLstring s, lift_option (mk_option string_ty) fromMLstring tc_opt])
+fun mk_JE_Name (s, tc_opt, src_id_opt) =
+  list_mk_comb(JE_Name_tm, [fromMLstring s,
+                           lift_option (mk_option string_ty) fromMLstring tc_opt,
+                           src_id_opt])
 fun mk_JE_Attribute (e, attr) = list_mk_comb(JE_Attribute_tm, [e, fromMLstring attr])
 fun mk_JE_Subscript (e1, e2) = list_mk_comb(JE_Subscript_tm, [e1, e2])
 fun mk_JE_BinOp (l, op_tm, r) = list_mk_comb(JE_BinOp_tm, [l, op_tm, r])
@@ -558,11 +560,17 @@ fun d_json_expr () : term decoder = achoose "expr" [
               check_ast_type "Int" $ field "value" inttm,
             orElse(field "type" json_type, succeed JT_None_tm)),
 
-  (* Name - extract typeclass from type.typeclass to detect module references *)
+  (* Name - extract typeclass and source_id for module references *)
+  (* source_id < 0 means main module (NONE), >= 0 means imported module *)
   check_ast_type "Name" $
-    JSONDecode.map mk_JE_Name $
+    JSONDecode.map (fn (id, (tc, src_id_opt)) => mk_JE_Name(id, tc, src_id_opt)) $
     tuple2 (field "id" string,
-            try (field "type" $ field "typeclass" string)),
+            tuple2 (try (field "type" $ field "typeclass" string),
+                    orElse (JSONDecode.map (fn n =>
+                              if n < 0 then optionSyntax.mk_none numSyntax.num
+                              else optionSyntax.mk_some (numSyntax.mk_numeral (Arbnum.fromLargeInt (IntInf.toLarge n))))
+                              (field "type" $ field "type_decl_node" $ field "source_id" intInf),
+                            succeed (optionSyntax.mk_none numSyntax.num)))),
 
   (* Attribute *)
   check_ast_type "Attribute" $
