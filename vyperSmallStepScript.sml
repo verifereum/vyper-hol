@@ -127,8 +127,8 @@ Definition eval_base_target_cps_def:
         v <- lift_sum $ exactly_one_option svo ivo;
         return $ (v, []) od st in
      liftk cx ApplyBaseTarget r k) ∧
-  eval_base_target_cps cx (TopLevelNameTarget id) st k =
-    AK cx (ApplyBaseTarget (TopLevelVar id, [])) st k ∧
+  eval_base_target_cps cx (TopLevelNameTarget src_id_opt id) st k =
+    AK cx (ApplyBaseTarget (TopLevelVar src_id_opt id, [])) st k ∧
   eval_base_target_cps cx (AttributeTarget t id) st k =
     eval_base_target_cps cx t st (AttributeTargetK id k) ∧
   eval_base_target_cps cx (SubscriptTarget t e) st k =
@@ -151,8 +151,8 @@ Definition eval_expr_cps_def:
           v <- lift_sum $ exactly_one_option
                  (lookup_scopes n env) (FLOOKUP imms n);
           return $ Value v od st) k ∧
-  eval_expr_cps cx2 (TopLevelName id) st k =
-    liftk cx2 ApplyTv (lookup_global cx2 (string_to_num id) st) k ∧
+  eval_expr_cps cx2 (TopLevelName src_id_opt id) st k =
+    liftk cx2 ApplyTv (lookup_global_module cx2 src_id_opt (string_to_num id) st) k ∧
   eval_expr_cps cx2 (FlagMember fid mid) st k =
     liftk cx2 ApplyTv (lookup_flag_mem cx2 fid mid st) k ∧
   eval_expr_cps cx3 (IfExp e1 e2 e3) st k =

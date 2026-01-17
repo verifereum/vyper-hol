@@ -7,6 +7,18 @@ Libs
   cv_transLib wordsLib monadsyntax
   integerTheory[qualified] intSimps[qualified]
 
+(* cv_rep theorem for FUNION on num-keyed fmaps *)
+Theorem cv_rep_FUNION[cv_rep]:
+  from_fmap f (FUNION m1 m2) = cv_union (from_fmap f m1) (from_fmap f m2)
+Proof
+  rw[cv_stdTheory.from_fmap_def, GSYM cv_stdTheory.cv_union_thm]
+  \\ AP_TERM_TAC
+  \\ dep_rewrite.DEP_REWRITE_TAC[sptreeTheory.spt_eq_thm]
+  \\ simp[sptreeTheory.wf_union, sptreeTheory.wf_fromAList]
+  \\ simp[sptreeTheory.lookup_union, sptreeTheory.lookup_fromAList]
+  \\ simp[FLOOKUP_FUNION]
+QED
+
 (* `evaluate_type` is used to convert a Vyper `type` to a `type_value` with
 * structure and flag declaration information inlined *)
 
@@ -1603,21 +1615,33 @@ val () = cv_auto_trans find_containing_scope_def;
 
 Type log = “:identifier # (value list)”;
 
+(* Module-aware globals: keyed by source_id *)
+(* NONE = main contract, SOME n = module with source_id n *)
 Datatype:
-  globals_state = <|
+  module_globals = <|
     mutables: num |-> toplevel_value
-  ; transients: (num # toplevel_value) list
+  ; transients: num |-> toplevel_value
   ; immutables: num |-> value
   |>
 End
 
-Definition empty_globals_def:
-  empty_globals = <|
+Definition empty_module_globals_def:
+  empty_module_globals : module_globals = <|
     mutables := FEMPTY
-  ; transients := []
+  ; transients := FEMPTY
   ; immutables := FEMPTY
   |>
 End
+
+val () = cv_auto_trans empty_module_globals_def;
+
+Type globals_state = “:(num option, module_globals) alist”
+
+Definition empty_globals_def:
+  empty_globals : globals_state = []
+End
+
+val () = cv_auto_trans empty_globals_def;
 
 Datatype:
   evaluation_state = <|
@@ -1749,29 +1773,95 @@ val () = get_current_globals_def
   |> SRULE [lift_option_def, option_CASE_rator]
   |> cv_auto_trans;
 
-Definition lookup_global_def:
-  lookup_global cx n = do
+(* Helper: get module_globals for a source_id, or empty if not present *)
+Definition get_module_globals_def:
+  get_module_globals src_id_opt (gbs: globals_state) =
+    case ALOOKUP gbs src_id_opt of
+      NONE => empty_module_globals
+    | SOME mg => mg
+End
+
+val () = cv_auto_trans get_module_globals_def;
+
+(* Helper: update module_globals for a source_id in globals_state *)
+Definition set_module_globals_def:
+  set_module_globals src_id_opt (mg: module_globals) (gbs: globals_state) =
+    (src_id_opt, mg) :: ADELKEY src_id_opt gbs
+End
+
+val () = cv_auto_trans set_module_globals_def;
+
+(* Module-aware global lookup: look up variable n in module src_id_opt *)
+Definition lookup_global_module_def:
+  lookup_global_module cx src_id_opt n = do
     gbs <- get_current_globals cx;
-    case FLOOKUP gbs.mutables n
-      of NONE => raise $ Error "lookup_global"
-       | SOME v => return v
+    let mg = get_module_globals src_id_opt gbs in
+    case FLOOKUP mg.mutables n of
+      NONE => raise $ Error "lookup_global_module: no var"
+    | SOME v => return v
   od
 End
 
-val () = lookup_global_def
-  |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator, UNCURRY]
+val () = lookup_global_module_def
+  |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator, UNCURRY, LET_THM]
+  |> cv_auto_trans;
+
+(* Backwards compat: lookup_global for self (NONE) *)
+Definition lookup_global_def:
+  lookup_global cx n = lookup_global_module cx NONE n
+End
+
+val () = cv_auto_trans lookup_global_def;
+
+(* Module-aware immutables lookup *)
+Definition get_immutables_module_def:
+  get_immutables_module cx src_id_opt = do
+    gbs <- get_current_globals cx;
+    let mg = get_module_globals src_id_opt gbs in
+    return mg.immutables
+  od
+End
+
+val () = get_immutables_module_def
+  |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
   |> cv_auto_trans;
 
 Definition get_immutables_def:
-  get_immutables cx = do
-    gbs <- get_current_globals cx;
-    return gbs.immutables
-  od
+  get_immutables cx = get_immutables_module cx NONE
 End
 
-val () = get_immutables_def
-  |> SRULE [bind_def]
-  |> cv_auto_trans;
+val () = cv_auto_trans get_immutables_def;
+
+(* Pure helpers for updating module globals in a globals_state *)
+Definition update_module_mutable_def:
+  update_module_mutable src_id key v (gbs: globals_state) =
+    let mg = get_module_globals src_id gbs in
+    let mg' = mg with mutables updated_by (λm. m |+ (key, v)) in
+    set_module_globals src_id mg' gbs
+End
+
+val () = cv_auto_trans update_module_mutable_def;
+
+Definition update_module_transient_def:
+  update_module_transient src_id key v (gbs: globals_state) =
+    let mg = get_module_globals src_id gbs in
+    let mg' = mg with <|
+      mutables updated_by (λm. m |+ (key, v))
+    ; transients updated_by (λt. t |+ (key, v))
+    |> in
+    set_module_globals src_id mg' gbs
+End
+
+val () = cv_auto_trans update_module_transient_def;
+
+Definition update_module_immutable_def:
+  update_module_immutable src_id key v (gbs: globals_state) =
+    let mg = get_module_globals src_id gbs in
+    let mg' = mg with immutables updated_by (λm. m |+ (key, v)) in
+    set_module_globals src_id mg' gbs
+End
+
+val () = cv_auto_trans update_module_immutable_def;
 
 Definition get_accounts_def:
   get_accounts st = return st.accounts st
@@ -1822,29 +1912,45 @@ End
 
 val () = cv_auto_trans set_current_globals_def;
 
-Definition set_global_def:
-  set_global cx n v = do
+(* Module-aware global set *)
+Definition set_global_module_def:
+  set_global_module cx src_id_opt n v = do
     gbs <- get_current_globals cx;
-    set_current_globals cx $
-      gbs with mutables updated_by (λm. m |+ (n,v))
+    let mg = get_module_globals src_id_opt gbs in
+    let mg' = mg with mutables updated_by (λm. m |+ (n, v)) in
+    set_current_globals cx $ set_module_globals src_id_opt mg' gbs
   od
 End
 
-val () = set_global_def
-  |> SRULE [bind_def, FUN_EQ_THM, UNCURRY]
+val () = set_global_module_def
+  |> SRULE [bind_def, FUN_EQ_THM, UNCURRY, LET_THM]
+  |> cv_auto_trans;
+
+Definition set_global_def:
+  set_global cx n v = set_global_module cx NONE n v
+End
+
+val () = cv_auto_trans set_global_def;
+
+(* Module-aware immutable set *)
+Definition set_immutable_module_def:
+  set_immutable_module cx src_id_opt n v = do
+    gbs <- get_current_globals cx;
+    let mg = get_module_globals src_id_opt gbs in
+    let mg' = mg with immutables updated_by (λm. m |+ (n, v)) in
+    set_current_globals cx $ set_module_globals src_id_opt mg' gbs
+  od
+End
+
+val () = set_immutable_module_def
+  |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
   |> cv_auto_trans;
 
 Definition set_immutable_def:
-  set_immutable cx n v = do
-    gbs <- get_current_globals cx;
-    set_current_globals cx $
-      gbs with immutables updated_by (λim. im |+ (n, v))
-  od
+  set_immutable cx n v = set_immutable_module cx NONE n v
 End
 
-val () = set_immutable_def
-  |> SRULE [bind_def]
-  |> cv_auto_trans;
+val () = cv_auto_trans set_immutable_def;
 
 Definition update_accounts_def:
   update_accounts f st = return () (st with accounts updated_by f)
@@ -1925,7 +2031,7 @@ Datatype:
   location
   = ScopedVar identifier
   | ImmutableVar identifier
-  | TopLevelVar identifier
+  | TopLevelVar (num option) identifier  (* source_id (NONE=self), var_name *)
 End
 
 Datatype:
@@ -1945,12 +2051,12 @@ Definition assign_target_def:
     set_scopes $ pre ++ env |+ (ni, a') :: rest;
     return $ Value a
   od ∧
-  assign_target cx (BaseTargetV (TopLevelVar id) is) ao = do
+  assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) is) ao = do
     ni <<- string_to_num id;
-    tv <- lookup_global cx ni;
-    ts <- lift_option (get_self_code cx) "assign_target get_self_code";
+    tv <- lookup_global_module cx src_id_opt ni;
+    ts <- lift_option (get_module_code cx src_id_opt) "assign_target get_module_code";
     tv' <- lift_sum $ assign_toplevel (type_env ts) tv (REVERSE is) ao;
-    set_global cx ni tv';
+    set_global_module cx src_id_opt ni tv';
     return tv
   od ∧
   assign_target cx (BaseTargetV (ImmutableVar id) is) ao = do
@@ -2083,7 +2189,7 @@ Definition name_expression_def:
   name_expression mut id =
   if mut = Immutable ∨ is_Constant mut
   then Name id
-  else TopLevelName id
+  else TopLevelName NONE id
 End
 
 val () = cv_auto_trans name_expression_def;
@@ -2101,7 +2207,7 @@ Definition lookup_function_def:
     else SOME $ getter (name_expression mut id) (BaseT (UintT 256)) (Type (ArrayT_type typ))
    else lookup_function name External ts) ∧
   lookup_function name External (HashMapDecl Public _ id kt vt :: ts) =
-  (if id = name then SOME $ getter (TopLevelName id) kt vt
+  (if id = name then SOME $ getter (TopLevelName NONE id) kt vt
    else lookup_function name External ts) ∧
   lookup_function name vis (_ :: ts) =
     lookup_function name vis ts
@@ -2216,14 +2322,14 @@ Definition bound_def:
     1 + target_bound ts g
       + targets_bound ts gs ∧
   base_target_bound ts (NameTarget _) = 0 ∧
-  base_target_bound ts (TopLevelNameTarget _) = 0 ∧
+  base_target_bound ts (TopLevelNameTarget _ _) = 0 ∧
   base_target_bound ts (AttributeTarget bt _) =
     1 + base_target_bound ts bt ∧
   base_target_bound ts (SubscriptTarget bt e) =
     1 + base_target_bound ts bt
       + expr_bound ts e ∧
   expr_bound ts (Name _) = 0 ∧
-  expr_bound ts (TopLevelName _) = 0 ∧
+  expr_bound ts (TopLevelName _ _) = 0 ∧
   expr_bound ts (FlagMember _ _) = 0 ∧
   expr_bound ts (IfExp e1 e2 e3) =
     1 + expr_bound ts e1
@@ -2612,8 +2718,8 @@ Definition evaluate_def:
     v <- lift_sum $ exactly_one_option svo ivo;
     return $ (v, [])
   od ∧
-  eval_base_target cx (TopLevelNameTarget id) =
-    return $ (TopLevelVar id, []) ∧
+  eval_base_target cx (TopLevelNameTarget src_id_opt id) =
+    return $ (TopLevelVar src_id_opt id, []) ∧
   eval_base_target cx (AttributeTarget t id) = do
     (loc, sbs) <- eval_base_target cx t;
     return $ (loc, AttrSubscript id :: sbs)
@@ -2641,7 +2747,8 @@ Definition evaluate_def:
            (lookup_scopes n env) (FLOOKUP imms n);
     return $ Value v
   od ∧
-  eval_expr cx (TopLevelName id) = lookup_global cx (string_to_num id) ∧
+  eval_expr cx (TopLevelName src_id_opt id) =
+    lookup_global_module cx src_id_opt (string_to_num id) ∧
   eval_expr cx (FlagMember fid mid) = lookup_flag_mem cx fid mid ∧
   eval_expr cx (IfExp e1 e2 e3) = do
     tv <- eval_expr cx e1;
@@ -2803,41 +2910,38 @@ Definition force_default_value_def:
 End
 
 (* TODO: assumes unique identifiers, but should check? *)
+(* All initial_globals are for main contract (NONE source_id) *)
 Definition initial_globals_def:
   initial_globals env [] = empty_globals ∧
   initial_globals env (VariableDecl _ Storage id typ :: ts) =
   (let gbs = initial_globals env ts in
    let key = string_to_num id in
-     gbs with mutables updated_by
-       (λm. m |+ (key, Value $ force_default_value env typ))) ∧
+   let iv = Value $ force_default_value env typ in
+     update_module_mutable NONE key iv gbs) ∧
   initial_globals env (VariableDecl _ Transient id typ :: ts) =
   (let gbs = initial_globals env ts in
    let key = string_to_num id in
    let iv = Value $ force_default_value env typ in
-     gbs with <|
-       mutables updated_by (λm. m |+ (key, iv))
-     ; transients updated_by (λtrs. (key,iv)::trs)
-     |>) ∧
+     update_module_transient NONE key iv gbs) ∧
   initial_globals env (VariableDecl _ Immutable id typ :: ts) =
   (let gbs = initial_globals env ts in
    let key = string_to_num id in
-     gbs with immutables updated_by
-       (λim. im |+ (key, force_default_value env typ))) ∧
+   let iv = force_default_value env typ in
+     update_module_immutable NONE key iv gbs) ∧
   (* TODO: prevent flag value being updated even in constructor *)
   initial_globals env (FlagDecl id ls :: ts) =
   (let gbs = initial_globals env ts in
    let key = string_to_num id in
-     gbs with immutables updated_by
-       (λim. im |+ (key, flag_value (LENGTH ls) 1 [] ls))) ∧
+   let iv = flag_value (LENGTH ls) 1 [] ls in
+     update_module_immutable NONE key iv gbs) ∧
   (* TODO: handle Constants? or ignore since assuming folded into AST *)
   initial_globals env (HashMapDecl _ is_transient id kt vt :: ts) =
   (let gbs = initial_globals env ts in
    let key = string_to_num id in
    let iv = HashMap vt [] in
-   let gbs = gbs with mutables updated_by (λm. m |+ (key, iv)) in
      if is_transient
-     then gbs with transients updated_by (λtrs. (key,iv)::trs)
-     else gbs) ∧
+     then update_module_transient NONE key iv gbs
+     else update_module_mutable NONE key iv gbs) ∧
   initial_globals env (t :: ts) = initial_globals env ts
 End
 
@@ -2890,18 +2994,28 @@ End
 
 val () = cv_auto_trans abstract_machine_from_state_def;
 
+(* Reset transients in a single module_globals: merge transients back into mutables *)
+Definition reset_module_transients_def:
+  reset_module_transients (mg: module_globals) =
+  mg with mutables := FUNION mg.transients mg.mutables
+End
+
+val () = cv_auto_trans reset_module_transients_def;
+
+(* Reset transients for all modules in a globals_state *)
 Definition reset_transient_globals_def:
-  reset_transient_globals gbs =
-  gbs with mutables updated_by (λm. m |++ gbs.transients)
+  reset_transient_globals ([] : globals_state) = [] ∧
+  reset_transient_globals ((k, mg) :: rest) =
+    (k, reset_module_transients mg) :: reset_transient_globals rest
 End
 
 val () = cv_auto_trans reset_transient_globals_def;
 
+(* Reset transients for all addresses in the global state *)
 Definition reset_all_transient_globals_def:
   reset_all_transient_globals [] = [] ∧
-  reset_all_transient_globals ((k,v)::ls) =
-    (k, reset_transient_globals v) ::
-    reset_all_transient_globals ls
+  reset_all_transient_globals ((addr, gbs) :: rest) =
+    (addr, reset_transient_globals gbs) :: reset_all_transient_globals rest
 End
 
 val () = cv_auto_trans reset_all_transient_globals_def;
