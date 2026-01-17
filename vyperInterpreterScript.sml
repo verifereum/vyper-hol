@@ -1613,7 +1613,7 @@ End
 
 val () = cv_auto_trans find_containing_scope_def;
 
-Type log = “:identifier # (value list)”;
+Type log = “:nsid # (value list)”;
 
 (* Module-aware globals: keyed by source_id *)
 (* NONE = main contract, SOME n = module with source_id n *)
@@ -1885,7 +1885,8 @@ End
 val () = cv_auto_trans lookup_flag_def;
 
 Definition lookup_flag_mem_def:
-  lookup_flag_mem cx fid mid =
+  lookup_flag_mem cx (src_id_opt, fid) mid =
+  (* TODO: use src_id_opt to look up flag from correct module *)
   case get_self_code cx
     of NONE => raise $ Error "lookup_flag_mem code"
      | SOME ts =>
@@ -2189,7 +2190,7 @@ Definition name_expression_def:
   name_expression mut id =
   if mut = Immutable ∨ is_Constant mut
   then Name id
-  else TopLevelName NONE id
+  else TopLevelName (NONE, id)
 End
 
 val () = cv_auto_trans name_expression_def;
@@ -2207,7 +2208,7 @@ Definition lookup_function_def:
     else SOME $ getter (name_expression mut id) (BaseT (UintT 256)) (Type (ArrayT_type typ))
    else lookup_function name External ts) ∧
   lookup_function name External (HashMapDecl Public _ id kt vt :: ts) =
-  (if id = name then SOME $ getter (TopLevelName NONE id) kt vt
+  (if id = name then SOME $ getter (TopLevelName (NONE, id)) kt vt
    else lookup_function name External ts) ∧
   lookup_function name vis (_ :: ts) =
     lookup_function name vis ts
@@ -2322,14 +2323,14 @@ Definition bound_def:
     1 + target_bound ts g
       + targets_bound ts gs ∧
   base_target_bound ts (NameTarget _) = 0 ∧
-  base_target_bound ts (TopLevelNameTarget _ _) = 0 ∧
+  base_target_bound ts (TopLevelNameTarget _) = 0 ∧
   base_target_bound ts (AttributeTarget bt _) =
     1 + base_target_bound ts bt ∧
   base_target_bound ts (SubscriptTarget bt e) =
     1 + base_target_bound ts bt
       + expr_bound ts e ∧
   expr_bound ts (Name _) = 0 ∧
-  expr_bound ts (TopLevelName _ _) = 0 ∧
+  expr_bound ts (TopLevelName _) = 0 ∧
   expr_bound ts (FlagMember _ _) = 0 ∧
   expr_bound ts (IfExp e1 e2 e3) =
     1 + expr_bound ts e1
@@ -2718,7 +2719,7 @@ Definition evaluate_def:
     v <- lift_sum $ exactly_one_option svo ivo;
     return $ (v, [])
   od ∧
-  eval_base_target cx (TopLevelNameTarget src_id_opt id) =
+  eval_base_target cx (TopLevelNameTarget (src_id_opt, id)) =
     return $ (TopLevelVar src_id_opt id, []) ∧
   eval_base_target cx (AttributeTarget t id) = do
     (loc, sbs) <- eval_base_target cx t;
@@ -2747,9 +2748,9 @@ Definition evaluate_def:
            (lookup_scopes n env) (FLOOKUP imms n);
     return $ Value v
   od ∧
-  eval_expr cx (TopLevelName src_id_opt id) =
+  eval_expr cx (TopLevelName (src_id_opt, id)) =
     lookup_global_module cx src_id_opt (string_to_num id) ∧
-  eval_expr cx (FlagMember fid mid) = lookup_flag_mem cx fid mid ∧
+  eval_expr cx (FlagMember nsid mid) = lookup_flag_mem cx nsid mid ∧
   eval_expr cx (IfExp e1 e2 e3) = do
     tv <- eval_expr cx e1;
     switch_BoolV tv
@@ -2757,8 +2758,8 @@ Definition evaluate_def:
       (eval_expr cx e3)
   od ∧
   eval_expr cx (Literal l) = return $ Value $ evaluate_literal l ∧
-  eval_expr cx (StructLit id kes) = do
-    (* TODO: check argument lengths and types *)
+  eval_expr cx (StructLit (src_id_opt, id) kes) = do
+    (* TODO: check argument lengths and types; use src_id_opt for module structs *)
     ks <<- MAP FST kes;
     vs <- eval_exprs cx (MAP SND kes);
     return $ Value $ StructV $ ZIP (ks, vs)
