@@ -14,7 +14,13 @@ open jsonASTTheory JSONDecode
 (* ===== HOL Term Helpers ===== *)
 
 fun jastk s = prim_mk_const{Thy="jsonAST",Name=s}
-fun jasty s = mk_thy_type{Thy="jsonAST",Tyop=s,Args=[]}
+fun jasty s = mk_thy_type{Thy="jsonAST",Tyop=s,Args=[]};
+
+(* nsid: namespaced identifier (num option # string) *)
+fun mk_nsid (src_id_opt, name) =
+  mk_pair(src_id_opt, fromMLstring name);
+
+fun mk_nsid_none name = mk_nsid(mk_none num, name);
 
 (* ===== Types ===== *)
 
@@ -181,8 +187,8 @@ fun mk_JS_Return eopt = mk_comb(JS_Return_tm, lift_option (mk_option json_expr_t
 fun mk_JS_Raise eopt = mk_comb(JS_Raise_tm, lift_option (mk_option json_expr_ty) I eopt)
 fun mk_JS_Assert (test, msgopt) =
   list_mk_comb(JS_Assert_tm, [test, lift_option (mk_option json_expr_ty) I msgopt])
-fun mk_JS_Log (name, args) =
-  list_mk_comb(JS_Log_tm, [fromMLstring name, mk_list(args, json_expr_ty)])
+fun mk_JS_Log (nsid, args) =
+  list_mk_comb(JS_Log_tm, [nsid, mk_list(args, json_expr_ty)])
 fun mk_JS_If (test, body, els) =
   list_mk_comb(JS_If_tm, [test, mk_list(body, json_stmt_ty), mk_list(els, json_stmt_ty)])
 fun mk_JS_For (var, ty, iter, body) =
@@ -214,7 +220,7 @@ val JTgt_Base_tm = jastk "JTgt_Base"
 val JTgt_Tuple_tm = jastk "JTgt_Tuple"
 
 fun mk_JBT_Name s = mk_comb(JBT_Name_tm, fromMLstring s)
-fun mk_JBT_TopLevelName s = mk_comb(JBT_TopLevelName_tm, fromMLstring s)
+fun mk_JBT_TopLevelName nsid = mk_comb(JBT_TopLevelName_tm, nsid)
 fun mk_JBT_Subscript (bt, e) = list_mk_comb(JBT_Subscript_tm, [bt, e])
 fun mk_JBT_Attribute (bt, attr) = list_mk_comb(JBT_Attribute_tm, [bt, fromMLstring attr])
 fun mk_JTgt_Base bt = mk_comb(JTgt_Base_tm, bt)
@@ -662,11 +668,11 @@ val json_keyword = delay d_json_keyword
 (* ===== Target Decoders ===== *)
 
 fun d_json_base_target () : term decoder = achoose "base_target" [
-  (* self.x -> TopLevelName *)
+  (* self.x -> TopLevelName (NONE, x) *)
   check_ast_type "Attribute" $
     check (field "value" (tuple2 (field "ast_type" string, field "id" string)))
           (fn p => p = ("Name", "self")) "not self" $
-    JSONDecode.map mk_JBT_TopLevelName (field "attr" string),
+    JSONDecode.map (fn attr => mk_JBT_TopLevelName (mk_nsid_none attr)) (field "attr" string),
 
   (* Name *)
   check_ast_type "Name" $
@@ -765,12 +771,18 @@ fun d_json_stmt () : term decoder = achoose "stmt" [
     JSONDecode.map (fn (test, msg) => mk_JS_Assert(test, msg)) $
     tuple2 (field "test" json_expr, field "msg" (nullable json_expr)),
 
-  (* Log *)
+  (* Log - extract source_id from event type for module events *)
   check_ast_type "Log" $
     field "value" $
     check_ast_type "Call" $
-    JSONDecode.map (fn (name, args) => mk_JS_Log(name, args)) $
-    tuple2 (field "func" $ check_ast_type "Name" $ field "id" string,
+    JSONDecode.map (fn ((name, src_id_opt), args) => mk_JS_Log(mk_nsid(src_id_opt, name), args)) $
+    tuple2 (field "func" $ check_ast_type "Name" $
+              tuple2 (field "id" string,
+                      orElse (JSONDecode.map (fn n =>
+                                if n < 0 then optionSyntax.mk_none numSyntax.num
+                                else optionSyntax.mk_some (numSyntax.mk_numeral (Arbnum.fromLargeInt (IntInf.toLarge n))))
+                                (field "type" $ field "type_decl_node" $ field "source_id" intInf),
+                              succeed (optionSyntax.mk_none numSyntax.num))),
             achoose "log args" [
               field "keywords" (array (field "value" json_expr)),
               field "args" (array json_expr)

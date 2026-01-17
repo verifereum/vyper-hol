@@ -368,10 +368,10 @@ Definition make_builtin_call_def:
                     | _ => Builtin (Uint2Str 0) args)
     (* Struct constructor, cast, or regular call *)
     else (case ret_ty of
-          | JT_Struct _ => StructLit name kwargs
+          | JT_Struct _ => StructLit (NONE, name) kwargs
           | JT_Named _ =>
               if kwargs <> [] /\ ~is_builtin_cast_name name then
-                StructLit name kwargs
+                StructLit (NONE, name) kwargs
               else
                 if is_cast_name name then
                   let ty' = translate_type ret_ty in
@@ -459,9 +459,9 @@ Definition translate_expr_def:
     else if obj = "tx" /\ attr = "gasprice" then Builtin (Env GasPrice) []
     else if obj = "self" /\ attr = "balance" then
       Builtin (Acc Balance) [Builtin (Env SelfAddr) []]
-    else if obj = "self" then TopLevelName NONE attr
+    else if obj = "self" then TopLevelName (NONE, attr)
     (* Module variable access: tc = SOME "module" *)
-    else if tc = SOME "module" then TopLevelName src_id_opt attr
+    else if tc = SOME "module" then TopLevelName (src_id_opt, attr)
     else if attr = "balance" then Builtin (Acc Balance) [Name obj]
     else if attr = "address" then Builtin (Acc Address) [Name obj]
     else Attribute (Name obj) attr) /\
@@ -522,9 +522,9 @@ Definition translate_expr_def:
     | JE_Attribute base "pop" =>
         (case base of
          | JE_Name id _ _ => Pop (NameTarget id)
-         | JE_Attribute (JE_Name "self" _ _) attr => Pop (TopLevelNameTarget NONE attr)
+         | JE_Attribute (JE_Name "self" _ _) attr => Pop (TopLevelNameTarget (NONE, attr))
          | JE_Attribute (JE_Name id (SOME "module") src_id_opt) attr =>
-             Pop (TopLevelNameTarget src_id_opt attr)
+             Pop (TopLevelNameTarget (src_id_opt, attr))
          | JE_Attribute (JE_Name id _ _) attr =>
              Pop (AttributeTarget (NameTarget id) attr)
          | JE_Subscript (JE_Name id _ _) idx =>
@@ -554,8 +554,8 @@ End
 
 Definition translate_base_target_def:
   (translate_base_target (JBT_Name id) = NameTarget id) /\
-  (* JBT_TopLevelName is always self.var - module vars can't be directly assigned *)
-  (translate_base_target (JBT_TopLevelName id) = TopLevelNameTarget NONE id) /\
+  (* JBT_TopLevelName is (source_id, name) for self.x and module.x *)
+  (translate_base_target (JBT_TopLevelName nsid) = TopLevelNameTarget nsid) /\
   (translate_base_target (JBT_Subscript tgt idx) =
     SubscriptTarget (translate_base_target tgt) (translate_expr idx)) /\
   (translate_base_target (JBT_Attribute tgt attr) =

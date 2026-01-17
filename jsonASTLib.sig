@@ -152,7 +152,7 @@ signature jsonASTLib = sig
   val mk_JS_Return : term option -> term
   val mk_JS_Raise : term option -> term
   val mk_JS_Assert : term * term option -> term
-  val mk_JS_Log : string * term list -> term
+  val mk_JS_Log : term * term list -> term
   val mk_JS_If : term * term list * term list -> term
   val mk_JS_For : string * term * term * term list -> term
   val mk_JS_Assign : term * term -> term
@@ -176,7 +176,7 @@ signature jsonASTLib = sig
   val JTgt_Tuple_tm : term
 
   val mk_JBT_Name : string -> term
-  val mk_JBT_TopLevelName : string -> term
+  val mk_JBT_TopLevelName : term -> term
   val mk_JBT_Subscript : term * term -> term
   val mk_JBT_Attribute : term * string -> term
   val mk_JTgt_Base : term -> term

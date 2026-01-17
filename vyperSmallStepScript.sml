@@ -23,7 +23,7 @@ Datatype:
   = ReturnK eval_continuation
   | AssertK expr eval_continuation
   | RaiseK eval_continuation
-  | LogK identifier eval_continuation
+  | LogK nsid eval_continuation
   | PopK eval_continuation
   | AppendK expr eval_continuation
   | AppendK1 base_target_value eval_continuation
@@ -127,7 +127,7 @@ Definition eval_base_target_cps_def:
         v <- lift_sum $ exactly_one_option svo ivo;
         return $ (v, []) od st in
      liftk cx ApplyBaseTarget r k) ∧
-  eval_base_target_cps cx (TopLevelNameTarget src_id_opt id) st k =
+  eval_base_target_cps cx (TopLevelNameTarget (src_id_opt, id)) st k =
     AK cx (ApplyBaseTarget (TopLevelVar src_id_opt id, [])) st k ∧
   eval_base_target_cps cx (AttributeTarget t id) st k =
     eval_base_target_cps cx t st (AttributeTargetK id k) ∧
@@ -151,15 +151,16 @@ Definition eval_expr_cps_def:
           v <- lift_sum $ exactly_one_option
                  (lookup_scopes n env) (FLOOKUP imms n);
           return $ Value v od st) k ∧
-  eval_expr_cps cx2 (TopLevelName src_id_opt id) st k =
+  eval_expr_cps cx2 (TopLevelName (src_id_opt, id)) st k =
     liftk cx2 ApplyTv (lookup_global_module cx2 src_id_opt (string_to_num id) st) k ∧
-  eval_expr_cps cx2 (FlagMember fid mid) st k =
-    liftk cx2 ApplyTv (lookup_flag_mem cx2 fid mid st) k ∧
+  eval_expr_cps cx2 (FlagMember nsid mid) st k =
+    liftk cx2 ApplyTv (lookup_flag_mem cx2 nsid mid st) k ∧
   eval_expr_cps cx3 (IfExp e1 e2 e3) st k =
     eval_expr_cps cx3 e1 st (IfExpK e2 e3 k) ∧
   eval_expr_cps cx4 (Literal l) st k =
     AK cx4 (ApplyTv (Value $ evaluate_literal l)) st k ∧
-  eval_expr_cps cx5 (StructLit id kes) st k =
+  eval_expr_cps cx5 (StructLit (src_id_opt, id) kes) st k =
+    (* TODO: use src_id_opt for module structs *)
     eval_exprs_cps cx5 (MAP SND kes) st (StructLitK (MAP FST kes) k) ∧
   eval_expr_cps cx6 (Subscript e1 e2) st k =
     eval_expr_cps cx6 e1 st (SubscriptK e2 k) ∧
