@@ -170,7 +170,7 @@ signature vyperASTSyntax = sig
   val mk_Name      : string -> term
   val mk_StructLit : term * term list -> term
   val mk_IfExp     : term * term * term -> term
-  val mk_IntCall   : term * term -> term
+  val mk_IntCall   : term -> term
   val mk_Empty     : term -> term
   val mk_MaxValue  : term -> term
   val mk_MinValue  : term -> term

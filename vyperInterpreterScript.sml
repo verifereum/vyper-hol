@@ -2329,7 +2329,7 @@ Definition bound_def:
     1 + base_target_bound ts bt ∧
   expr_bound ts (TypeBuiltin _ _ es) =
     1 + exprs_bound ts es ∧
-  expr_bound ts (Call (IntCall src_id_opt fn) es) =
+  expr_bound ts (Call (IntCall (src_id_opt, fn)) es) =
     1 + exprs_bound ts es
       + (case ALOOKUP ts (src_id_opt, fn) of NONE => 0 |
          SOME ss => stmts_bound (ADELKEY (src_id_opt, fn) ts) ss) ∧
@@ -2787,9 +2787,8 @@ Definition evaluate_def:
     return $ Value $ NoneV
   od ∧
   eval_expr cx (Call (ExtCall _) _) = raise $ Error "TODO: ExtCall" ∧
-  eval_expr cx (Call (IntCall src_id_opt fn) es) = do
+  eval_expr cx (Call (IntCall (src_id_opt, fn)) es) = do
     check (¬MEM (src_id_opt, fn) cx.stk) "recursion";
-    (* src_id_opt is NONE for self calls, SOME src_id for module calls *)
     ts <- lift_option (get_module_code cx src_id_opt) "IntCall get_module_code";
     tup <- lift_option (lookup_function fn Internal ts) "IntCall lookup_function";
     stup <<- SND tup; args <<- FST stup; sstup <<- SND stup;
