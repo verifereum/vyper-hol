@@ -152,7 +152,7 @@ Definition eval_expr_cps_def:
                  (lookup_scopes n env) (FLOOKUP imms n);
           return $ Value v od st) k ∧
   eval_expr_cps cx2 (TopLevelName (src_id_opt, id)) st k =
-    liftk cx2 ApplyTv (lookup_global_module cx2 src_id_opt (string_to_num id) st) k ∧
+    liftk cx2 ApplyTv (lookup_global cx2 src_id_opt (string_to_num id) st) k ∧
   eval_expr_cps cx2 (FlagMember nsid mid) st k =
     liftk cx2 ApplyTv (lookup_flag_mem cx2 nsid mid st) k ∧
   eval_expr_cps cx3 (IfExp e1 e2 e3) st k =
@@ -160,7 +160,6 @@ Definition eval_expr_cps_def:
   eval_expr_cps cx4 (Literal l) st k =
     AK cx4 (ApplyTv (Value $ evaluate_literal l)) st k ∧
   eval_expr_cps cx5 (StructLit (src_id_opt, id) kes) st k =
-    (* TODO: use src_id_opt for module structs *)
     eval_exprs_cps cx5 (MAP SND kes) st (StructLitK (MAP FST kes) k) ∧
   eval_expr_cps cx6 (Subscript e1 e2) st k =
     eval_expr_cps cx6 e1 st (SubscriptK e2 k) ∧
