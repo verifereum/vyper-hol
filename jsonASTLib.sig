@@ -229,6 +229,5 @@ signature jsonASTLib = sig
   val json_module : term JSONDecode.decoder
   val json_imported_module : term JSONDecode.decoder
   val annotated_ast : term JSONDecode.decoder
-  val annotated_ast_simple : term JSONDecode.decoder
 
 end

@@ -801,4 +801,13 @@ Definition translate_module_def:
     filter_some (MAP translate_toplevel toplevels)
 End
 
-(* val () = cv_auto_trans translate_module_def; *)
+Definition translate_imported_module_def:
+  translate_imported_module (JImportedModule src_id path body) =
+    (SOME src_id, filter_some (MAP translate_toplevel body))
+End
+
+Definition translate_annotated_ast_def:
+  translate_annotated_ast (JAnnotatedAST main imports) =
+    (NONE, translate_module main) ::
+    MAP translate_imported_module imports
+End

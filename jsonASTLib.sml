@@ -997,8 +997,4 @@ val annotated_ast : term decoder =
   tuple2 (field "ast" json_module,
           orElse (field "imports" (array json_imported_module), succeed []))
 
-(* Legacy decoder - just returns the main module without imports *)
-val annotated_ast_simple : term decoder =
-  field "annotated_ast" $ field "ast" json_module
-
 end

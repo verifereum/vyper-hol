@@ -11,21 +11,20 @@ open JSONDecode
 (* ===== jsonAST Translation Pipeline ===== *)
 (* Parse JSON to jsonAST, then translate to vyperAST using EVAL *)
 
-val translate_module_tm = prim_mk_const{Thy="jsonToVyper",Name="translate_module"}
+val translate_annotated_ast_tm =
+  prim_mk_const{Thy="jsonToVyper",Name="translate_annotated_ast"}
 
 fun translate_jsonast_to_vyper jsonast_tm = let
-  val app = mk_comb(translate_module_tm, jsonast_tm)
+  val app = mk_comb(translate_annotated_ast_tm, jsonast_tm)
   val thm = EVAL app
   val rhs = rhs (concl thm)
 in
   rhs
 end
 
-(* Decoder that uses the new jsonAST pipeline *)
-(* Uses annotated_ast_simple for now - returns json_module directly *)
-(* TODO: Update to use annotated_ast and handle imports for module support *)
+(* Decoder that uses the jsonAST pipeline with full module support *)
 val toplevels_via_jsonast : term decoder =
-  JSONDecode.map translate_jsonast_to_vyper annotated_ast_simple
+  JSONDecode.map translate_jsonast_to_vyper annotated_ast
 
 fun from_term_option ty = lift_option (mk_option ty) I
 

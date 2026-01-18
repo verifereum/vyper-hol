@@ -3066,13 +3066,12 @@ Definition call_external_def:
 End
 
 Definition load_contract_def:
-  load_contract am tx ts =
+  load_contract am tx mods =
   let addr = tx.target in
+  let ts = case ALOOKUP mods NONE of SOME ts => ts | NONE => [] in
   let tenv = type_env ts in
   let gbs = initial_globals tenv ts in
   let am = am with globals updated_by CONS (addr, gbs) in
-  (* Wrap toplevels in module map: NONE is the main contract *)
-  let mods = [(NONE, ts)] in
   case lookup_function tx.function_name Deploy ts of
      | NONE => INR $ Error "no constructor"
      | SOME (mut, args, ret, body) =>
