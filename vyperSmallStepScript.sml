@@ -182,7 +182,7 @@ Definition eval_expr_cps_def:
      | (INL (), st) => eval_exprs_cps cx9 es st (CallSendK k)) ∧
   eval_expr_cps cx10 (Call (ExtCall _) _) st k =
     AK cx10 (ApplyExc (Error "TODO: ExtCall")) st k ∧
-  eval_expr_cps cx10 (Call (IntCall ns fn) es) st k =
+  eval_expr_cps cx10 (Call (IntCall (ns, fn)) es) st k =
     (case do
       check (no_recursion (ns, fn) cx10.stk) "recursion";
       ts <- lift_option (get_module_code cx10 ns) "IntCall get_module_code";

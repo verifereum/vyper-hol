@@ -147,7 +147,7 @@ End
 
 Datatype:
   call_target
-  = IntCall (num option) identifier (* source_id (NONE=self), func_name *)
+  = IntCall nsid
   | ExtCall identifier (* external call passing Vyper values *)
   | Send
   (* TODO: external raw call *)
