@@ -1792,26 +1792,19 @@ End
 val () = cv_auto_trans set_module_globals_def;
 
 (* Module-aware global lookup: look up variable n in module src_id_opt *)
-Definition lookup_global_module_def:
-  lookup_global_module cx src_id_opt n = do
+Definition lookup_global_def:
+  lookup_global cx src_id_opt n = do
     gbs <- get_current_globals cx;
     let mg = get_module_globals src_id_opt gbs in
     case FLOOKUP mg.mutables n of
-      NONE => raise $ Error "lookup_global_module: no var"
+      NONE => raise $ Error "lookup_global: no var"
     | SOME v => return v
   od
 End
 
-val () = lookup_global_module_def
+val () = lookup_global_def
   |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator, UNCURRY, LET_THM]
   |> cv_auto_trans;
-
-(* Backwards compat: lookup_global for self (NONE) *)
-Definition lookup_global_def:
-  lookup_global cx n = lookup_global_module cx NONE n
-End
-
-val () = cv_auto_trans lookup_global_def;
 
 (* Module-aware immutables lookup *)
 Definition get_immutables_module_def:
@@ -1886,8 +1879,7 @@ val () = cv_auto_trans lookup_flag_def;
 
 Definition lookup_flag_mem_def:
   lookup_flag_mem cx (src_id_opt, fid) mid =
-  (* TODO: use src_id_opt to look up flag from correct module *)
-  case get_self_code cx
+  case get_module_code cx src_id_opt
     of NONE => raise $ Error "lookup_flag_mem code"
      | SOME ts =>
   case lookup_flag fid ts
@@ -1914,8 +1906,8 @@ End
 val () = cv_auto_trans set_current_globals_def;
 
 (* Module-aware global set *)
-Definition set_global_module_def:
-  set_global_module cx src_id_opt n v = do
+Definition set_global_def:
+  set_global cx src_id_opt n v = do
     gbs <- get_current_globals cx;
     let mg = get_module_globals src_id_opt gbs in
     let mg' = mg with mutables updated_by (λm. m |+ (n, v)) in
@@ -1923,19 +1915,12 @@ Definition set_global_module_def:
   od
 End
 
-val () = set_global_module_def
+val () = set_global_def
   |> SRULE [bind_def, FUN_EQ_THM, UNCURRY, LET_THM]
   |> cv_auto_trans;
 
-Definition set_global_def:
-  set_global cx n v = set_global_module cx NONE n v
-End
-
-val () = cv_auto_trans set_global_def;
-
-(* Module-aware immutable set *)
-Definition set_immutable_module_def:
-  set_immutable_module cx src_id_opt n v = do
+Definition set_immutable_def:
+  set_immutable cx src_id_opt n v = do
     gbs <- get_current_globals cx;
     let mg = get_module_globals src_id_opt gbs in
     let mg' = mg with immutables updated_by (λm. m |+ (n, v)) in
@@ -1943,15 +1928,9 @@ Definition set_immutable_module_def:
   od
 End
 
-val () = set_immutable_module_def
+val () = set_immutable_def
   |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
   |> cv_auto_trans;
-
-Definition set_immutable_def:
-  set_immutable cx n v = set_immutable_module cx NONE n v
-End
-
-val () = cv_auto_trans set_immutable_def;
 
 Definition update_accounts_def:
   update_accounts f st = return () (st with accounts updated_by f)
@@ -2054,10 +2033,10 @@ Definition assign_target_def:
   od ∧
   assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) is) ao = do
     ni <<- string_to_num id;
-    tv <- lookup_global_module cx src_id_opt ni;
+    tv <- lookup_global cx src_id_opt ni;
     ts <- lift_option (get_module_code cx src_id_opt) "assign_target get_module_code";
     tv' <- lift_sum $ assign_toplevel (type_env ts) tv (REVERSE is) ao;
-    set_global_module cx src_id_opt ni tv';
+    set_global cx src_id_opt ni tv';
     return tv
   od ∧
   assign_target cx (BaseTargetV (ImmutableVar id) is) ao = do
@@ -2065,7 +2044,7 @@ Definition assign_target_def:
     imms <- get_immutables cx;
     a <- lift_option (FLOOKUP imms ni) "assign_target ImmutableVar";
     a' <- lift_sum $ assign_subscripts a (REVERSE is) ao;
-    set_immutable cx ni a';
+    set_immutable cx NONE ni a';
     return $ Value a
   od ∧
   assign_target cx (TupleTargetV gvs) (Replace (ArrayV (TupleV vs))) = do
@@ -2749,7 +2728,7 @@ Definition evaluate_def:
     return $ Value v
   od ∧
   eval_expr cx (TopLevelName (src_id_opt, id)) =
-    lookup_global_module cx src_id_opt (string_to_num id) ∧
+    lookup_global cx src_id_opt (string_to_num id) ∧
   eval_expr cx (FlagMember nsid mid) = lookup_flag_mem cx nsid mid ∧
   eval_expr cx (IfExp e1 e2 e3) = do
     tv <- eval_expr cx e1;
@@ -2759,7 +2738,7 @@ Definition evaluate_def:
   od ∧
   eval_expr cx (Literal l) = return $ Value $ evaluate_literal l ∧
   eval_expr cx (StructLit (src_id_opt, id) kes) = do
-    (* TODO: check argument lengths and types; use src_id_opt for module structs *)
+    (* TODO: type checking - validate fields against struct definition from src_id_opt *)
     ks <<- MAP FST kes;
     vs <- eval_exprs cx (MAP SND kes);
     return $ Value $ StructV $ ZIP (ks, vs)
