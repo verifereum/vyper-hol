@@ -23,7 +23,7 @@ End
 
 Datatype:
   deployment_trace = <|
-    sourceAst: toplevel list
+    sourceAst: (num option, toplevel list) alist
   ; contractAbi: abi_entry list
   ; deployedAddress: address
   ; deployer: address
@@ -121,10 +121,10 @@ End
 Definition run_deployment_def:
   run_deployment am dt = let
     sns = compute_selector_names dt.contractAbi;
-    name = find_deploy_function_name dt.sourceAst;
+    ts = case ALOOKUP dt.sourceAst NONE of SOME ts => ts | NONE => [];
+    name = find_deploy_function_name ts;
     argTys = find_args_by_name name dt.contractAbi;
-    ar = compute_vyper_args dt.sourceAst
-         Deploy name argTys dt.callData;
+    ar = compute_vyper_args ts Deploy name argTys dt.callData;
     res = case FST ar of NONE => INR (Error "run_deployment args")
           | SOME (args, _) => let
     tx = <| sender := dt.deployer
