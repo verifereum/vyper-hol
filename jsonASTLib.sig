@@ -19,6 +19,7 @@ signature jsonASTLib = sig
   val json_arg_ty : hol_type
   val json_func_type_ty : hol_type
   val json_value_type_ty : hol_type
+  val json_interface_func_ty : hol_type
   val json_toplevel_ty : hol_type
   val json_module_ty : hol_type
 
@@ -194,6 +195,7 @@ signature jsonASTLib = sig
   val JTL_EventDef_tm : term
   val JTL_StructDef_tm : term
   val JTL_FlagDef_tm : term
+  val JInterfaceFunc_tm : term
   val JTL_InterfaceDef_tm : term
   val JModule_tm : term
 
@@ -208,7 +210,8 @@ signature jsonASTLib = sig
   val mk_JTL_EventDef : string * term list -> term
   val mk_JTL_StructDef : string * term list -> term
   val mk_JTL_FlagDef : string * string list -> term
-  val mk_JTL_InterfaceDef : string -> term
+  val mk_JInterfaceFunc : string * term list * term * string list -> term
+  val mk_JTL_InterfaceDef : string * term list -> term
   val mk_JModule : term list -> term
 
   (* ===== Decoders ===== *)
@@ -224,6 +227,7 @@ signature jsonASTLib = sig
   val json_target : term JSONDecode.decoder
   val json_arg : term JSONDecode.decoder
   val json_func_type : term JSONDecode.decoder
+  val json_interface_func : term JSONDecode.decoder
   val json_value_type : term JSONDecode.decoder
   val json_toplevel : term JSONDecode.decoder
   val json_module : term JSONDecode.decoder
