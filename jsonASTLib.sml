@@ -883,16 +883,16 @@ val json_interface_func : term decoder =
     field "args" $ check_ast_type "arguments" $
       field "args" (array json_arg),
     (* returns can be null, default to JT_None *)
-    orelse (field "returns" ast_type) JT_None_tm,
+    orElse(field "returns" ast_type, succeed JT_None_tm),
     (* decorators from decorator_list and/or body *)
     tuple2 (
-      orelse (field "decorator_list" (array (field "id" string))) [],
+      orElse(field "decorator_list" (array (field "id" string)), succeed []),
       (* body may contain mutability as Expr > Name > id (e.g., "view", "payable") *)
-      orelse (field "body" (array (
+      orElse(field "body" (array (
         check_ast_type "Expr" $
         field "value" $
         check_ast_type "Name" $
-        field "id" string))) []
+        field "id" string)), succeed [])
     )
   )
 
