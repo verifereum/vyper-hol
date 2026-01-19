@@ -158,6 +158,15 @@ Datatype:
   = JImportInfo string string string                   (* alias, path, qualified_module_name *)
 End
 
+(* ===== Interface Function Signature ===== *)
+(* Represents a function signature within an interface definition *)
+
+Datatype:
+  json_interface_func
+  = JInterfaceFunc string (json_arg list) json_type (string list)
+    (* name, args, return_type, decorators (mutability) *)
+End
+
 Datatype:
   json_toplevel
   = JTL_FunctionDef string (string list) (json_arg list) json_func_type (json_stmt list)
@@ -169,7 +178,7 @@ Datatype:
   | JTL_EventDef string (json_arg list)
   | JTL_StructDef string (json_arg list)
   | JTL_FlagDef string (string list)                   (* name, member names *)
-  | JTL_InterfaceDef string                            (* ignored but parsed *)
+  | JTL_InterfaceDef string (json_interface_func list) (* name, function signatures *)
   (* Module-related declarations *)
   | JTL_Import (json_import_info list)                 (* import statement with import infos *)
   | JTL_ExportsDecl json_expr                          (* exports: annotation *)

@@ -39,6 +39,7 @@ val json_decorator_ty = jasty "json_decorator"
 val json_arg_ty = jasty "json_arg"
 val json_func_type_ty = jasty "json_func_type"
 val json_value_type_ty = jasty "json_value_type"
+val json_interface_func_ty = jasty "json_interface_func"
 val json_import_info_ty = jasty "json_import_info"
 val json_toplevel_ty = jasty "json_toplevel"
 val json_module_ty = jasty "json_module"
@@ -239,6 +240,7 @@ val JTL_HashMapDecl_tm = jastk "JTL_HashMapDecl"
 val JTL_EventDef_tm = jastk "JTL_EventDef"
 val JTL_StructDef_tm = jastk "JTL_StructDef"
 val JTL_FlagDef_tm = jastk "JTL_FlagDef"
+val JInterfaceFunc_tm = jastk "JInterfaceFunc"
 val JTL_InterfaceDef_tm = jastk "JTL_InterfaceDef"
 val JTL_Import_tm = jastk "JTL_Import"
 val JTL_ExportsDecl_tm = jastk "JTL_ExportsDecl"
@@ -277,7 +279,15 @@ fun mk_JTL_StructDef (name, args) =
 fun mk_JTL_FlagDef (name, members) =
   list_mk_comb(JTL_FlagDef_tm,
     [fromMLstring name, mk_list(List.map fromMLstring members, string_ty)])
-fun mk_JTL_InterfaceDef name = mk_comb(JTL_InterfaceDef_tm, fromMLstring name)
+fun mk_JInterfaceFunc (name, args, ret_ty, decorators) =
+  list_mk_comb(JInterfaceFunc_tm,
+    [fromMLstring name,
+     mk_list(args, json_arg_ty),
+     ret_ty,
+     mk_list(List.map fromMLstring decorators, string_ty)])
+fun mk_JTL_InterfaceDef (name, funcs) =
+  list_mk_comb(JTL_InterfaceDef_tm,
+    [fromMLstring name, mk_list(funcs, json_interface_func_ty)])
 fun mk_JImportInfo (alias, path, qual_name) =
   list_mk_comb(JImportInfo_tm,
     [fromMLstring alias, fromMLstring path, fromMLstring qual_name])
@@ -860,6 +870,32 @@ val json_func_type : term decoder =
   tuple2 (field "argument_types" (array json_type),
           field "return_type" json_type)
 
+(* Interface function signature parser
+ * Parses FunctionDef nodes within InterfaceDef body.
+ * Mutability comes from either decorator_list or body (as Expr > Name > id).
+ *)
+val json_interface_func : term decoder =
+  check_ast_type "FunctionDef" $
+  JSONDecode.map (fn (name, args, ret_ty, (decs, body_decs)) =>
+    mk_JInterfaceFunc(name, args, ret_ty, decs @ body_decs)) $
+  tuple4 (
+    field "name" string,
+    field "args" $ check_ast_type "arguments" $
+      field "args" (array json_arg),
+    (* returns can be null, default to JT_None *)
+    orelse (field "returns" ast_type) JT_None_tm,
+    (* decorators from decorator_list and/or body *)
+    tuple2 (
+      orelse (field "decorator_list" (array (field "id" string))) [],
+      (* body may contain mutability as Expr > Name > id (e.g., "view", "payable") *)
+      orelse (field "body" (array (
+        check_ast_type "Expr" $
+        field "value" $
+        check_ast_type "Name" $
+        field "id" string))) []
+    )
+  )
+
 val json_toplevel : term decoder = achoose "toplevel" [
   (* FunctionDef *)
   check_ast_type "FunctionDef" $
@@ -932,9 +968,11 @@ val json_toplevel : term decoder = achoose "toplevel" [
               check_ast_type "Name" $
               field "id" string),
 
-  (* InterfaceDef - just record the name *)
+  (* InterfaceDef - parse name and function signatures *)
   check_ast_type "InterfaceDef" $
-    JSONDecode.map mk_JTL_InterfaceDef (field "name" string),
+    JSONDecode.map (fn (name, funcs) => mk_JTL_InterfaceDef(name, funcs)) $
+    tuple2 (field "name" string,
+            field "body" (array json_interface_func)),
 
   (* Import - module import statement *)
   check_ast_type "Import" $
