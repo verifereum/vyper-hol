@@ -195,14 +195,10 @@ structure vyperASTSyntax :> vyperASTSyntax = struct
     MinValue_tm, t, mk_list([], expr_ty)])
   fun mk_Convert (t,v) = list_mk_comb(TypeBuiltin_tm, [
     Convert_tm, t, mk_list([v], expr_ty)])
-  (* Extract32(bytes, index) -> bytes32 *)
   fun mk_Extract32 (t,bytes,idx) = list_mk_comb(TypeBuiltin_tm, [
     Extract32_tm, t, mk_list([bytes,idx], expr_ty)])
-  (* AbiDecode(bytes) -> type *)
   fun mk_AbiDecode (t,bytes) = list_mk_comb(TypeBuiltin_tm, [
     AbiDecode_tm, t, mk_list([bytes], expr_ty)])
-  (* MethodId(signature_string) -> bytes4 *)
-  fun mk_MethodId e = mk_Builtin MethodId_tm (mk_list([e], expr_ty))
   fun mk_Call ct args = list_mk_comb(AstCall_tm, [ct, mk_list (args, expr_ty)])
   fun mk_Assert (e,s) = list_mk_comb(Assert_tm, [e, s])
   fun mk_Log (id,es) = list_mk_comb(Log_tm, [id, es])
@@ -244,6 +240,7 @@ structure vyperASTSyntax :> vyperASTSyntax = struct
   fun mk_ECRecover (h,v,r,s) = mk_Builtin ECRecover_tm (mk_list([h,v,r,s], expr_ty))
   fun mk_ECAdd (p1,p2) = mk_Builtin ECAdd_tm (mk_list([p1,p2], expr_ty))
   fun mk_ECMul (p,n) = mk_Builtin ECMul_tm (mk_list([p,n], expr_ty))
+  fun mk_MethodId e = mk_Builtin MethodId_tm (mk_list([e], expr_ty))
   fun mk_Bop b = mk_comb(Bop_tm, b)
   fun mk_Len e = mk_Builtin Len_tm (mk_list([e], expr_ty))
   fun mk_MakeArray (to,b,ls) =

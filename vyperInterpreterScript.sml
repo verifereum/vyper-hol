@@ -429,8 +429,6 @@ val () = cv_auto_trans_rec
    \\ Cases_on`cv_bop` \\ gvs[]
    \\ rw[]);
 
-(* compatible_bound is now imported from vyperTypeValue *)
-
 (* concat *)
 
 Definition init_concat_output_def:
