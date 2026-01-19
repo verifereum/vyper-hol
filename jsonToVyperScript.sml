@@ -704,6 +704,16 @@ End
 
 val () = cv_auto_trans translate_arg_def;
 
+Definition translate_interface_func_def:
+  translate_interface_func (JInterfaceFunc name args ret_ty decs) =
+    (name,
+     MAP translate_arg args,
+     translate_type ret_ty,
+     translate_mutability decs) : interface_func
+End
+
+(* val () = cv_auto_trans translate_interface_func_def; *)
+
 Definition translate_args_with_types_def:
   translate_args_with_types args tys =
     case (args, tys) of
@@ -774,7 +784,8 @@ Definition translate_toplevel_def:
   (translate_toplevel (JTL_FlagDef name members) =
     SOME (FlagDecl name members)) /\
 
-  (translate_toplevel (JTL_InterfaceDef _) = NONE) /\
+  (translate_toplevel (JTL_InterfaceDef name funcs) =
+    SOME (InterfaceDecl name (MAP translate_interface_func funcs))) /\
 
   (* Module declarations are compiled away - the imported content is already inlined *)
   (translate_toplevel (JTL_Import _) = NONE) /\

@@ -237,6 +237,9 @@ End
 
 Type argument = “:identifier # type”;
 
+(* Interface function signature: name, args, return type, mutability *)
+Type interface_func = “:identifier # (argument list) # type # function_mutability”;
+
 Datatype:
   value_type = Type type | HashMapT type value_type
 End
@@ -249,7 +252,7 @@ Datatype:
   | StructDecl identifier (argument list)
   | EventDecl identifier (argument list)
   | FlagDecl identifier (identifier list)
-  (* interfaces not included, since this AST is for typechecked code *)
+  | InterfaceDecl identifier (interface_func list)
 End
 
 (* some helper functions over the AST datatypes *)
