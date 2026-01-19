@@ -1370,12 +1370,15 @@ End
 
 val () = cv_auto_trans type_env_def;
 
-(* Look up an interface by name in the type environment *)
+(* Look up an interface by nsid (source_id, name) *)
 Definition lookup_interface_def:
-  lookup_interface tenv iface_name =
-    case FLOOKUP tenv (string_to_num iface_name) of
-    | SOME (InterfaceArgs funcs) => SOME funcs
-    | _ => NONE
+  lookup_interface cx (src_id_opt, iface_name) =
+    case get_module_code cx src_id_opt of
+    | NONE => NONE
+    | SOME ts =>
+        case FLOOKUP (type_env ts) (string_to_num iface_name) of
+        | SOME (InterfaceArgs funcs) => SOME funcs
+        | _ => NONE
 End
 
 val () = cv_auto_trans lookup_interface_def;
