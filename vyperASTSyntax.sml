@@ -186,7 +186,7 @@ structure vyperASTSyntax :> vyperASTSyntax = struct
   fun mk_StructLit (s,ls) = list_mk_comb(StructLit_tm, [
     s, mk_list(ls, mk_prod(string_ty, expr_ty))])
   fun mk_IfExp (e1,e2,e3) = list_mk_comb(IfExp_tm, [e1,e2,e3])
-  fun mk_IntCall s = mk_comb(IntCall_tm, s)
+  fun mk_IntCall nsid = mk_comb(IntCall_tm, nsid)
   fun mk_Empty t = list_mk_comb(TypeBuiltin_tm, [
     Empty_tm, t, mk_list([], expr_ty)])
   fun mk_MaxValue t = list_mk_comb(TypeBuiltin_tm, [

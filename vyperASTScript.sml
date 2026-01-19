@@ -6,6 +6,9 @@ Libs
 
 Type identifier = “:string”;
 
+(* Namespaced identifier: (source_id, name) where NONE = self, SOME n = module *)
+Type nsid = “:num option # identifier”;
+
 Datatype:
   bound
   = Fixed num
@@ -145,7 +148,7 @@ End
 
 Datatype:
   call_target
-  = IntCall identifier
+  = IntCall nsid
   | ExtCall identifier (* external call passing Vyper values *)
   | Send
   (* TODO: external raw call *)
@@ -159,11 +162,11 @@ End
 Datatype:
   expr
   = Name identifier
-  | TopLevelName identifier
-  | FlagMember identifier identifier
+  | TopLevelName nsid
+  | FlagMember nsid identifier
   | IfExp expr expr expr
   | Literal literal
-  | StructLit identifier ((identifier # expr) list)
+  | StructLit nsid ((identifier # expr) list)
   | Subscript expr expr
   | Attribute expr identifier
   | Builtin builtin (expr list)
@@ -172,7 +175,7 @@ Datatype:
   | Call call_target (expr list)
 ; base_assignment_target
   = NameTarget identifier
-  | TopLevelNameTarget identifier
+  | TopLevelNameTarget nsid
   | SubscriptTarget base_assignment_target expr
   | AttributeTarget base_assignment_target identifier
 End
@@ -202,7 +205,7 @@ Datatype:
   | For identifier type iterator num (stmt list)
   | If expr (stmt list) (stmt list)
   | Assert expr expr
-  | Log identifier (expr list)
+  | Log nsid (expr list)
   | Raise expr
   | Return (expr option)
   | Assign assignment_target expr

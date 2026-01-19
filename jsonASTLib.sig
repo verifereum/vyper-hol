@@ -120,7 +120,7 @@ signature jsonASTLib = sig
   val mk_JE_Bytes : term * string -> term
   val mk_JE_Hex : string -> term
   val mk_JE_Bool : bool -> term
-  val mk_JE_Name : string -> term
+  val mk_JE_Name : string * string option * term -> term
   val mk_JE_Attribute : term * string -> term
   val mk_JE_Subscript : term * term -> term
   val mk_JE_BinOp : term * term * term -> term
@@ -129,7 +129,7 @@ signature jsonASTLib = sig
   val mk_JE_IfExp : term * term * term -> term
   val mk_JE_Tuple : term list -> term
   val mk_JE_List : term list * term -> term
-  val mk_JE_Call : term * term list * term list * term -> term
+  val mk_JE_Call : term * term list * term list * term * term -> term
   val mk_JKeyword : string * term -> term
 
   (* ===== Statement Constructors ===== *)
@@ -152,7 +152,7 @@ signature jsonASTLib = sig
   val mk_JS_Return : term option -> term
   val mk_JS_Raise : term option -> term
   val mk_JS_Assert : term * term option -> term
-  val mk_JS_Log : string * term list -> term
+  val mk_JS_Log : term * term list -> term
   val mk_JS_If : term * term list * term list -> term
   val mk_JS_For : string * term * term * term list -> term
   val mk_JS_Assign : term * term -> term
@@ -176,7 +176,7 @@ signature jsonASTLib = sig
   val JTgt_Tuple_tm : term
 
   val mk_JBT_Name : string -> term
-  val mk_JBT_TopLevelName : string -> term
+  val mk_JBT_TopLevelName : term -> term
   val mk_JBT_Subscript : term * term -> term
   val mk_JBT_Attribute : term * string -> term
   val mk_JTgt_Base : term -> term
@@ -227,6 +227,7 @@ signature jsonASTLib = sig
   val json_value_type : term JSONDecode.decoder
   val json_toplevel : term JSONDecode.decoder
   val json_module : term JSONDecode.decoder
+  val json_imported_module : term JSONDecode.decoder
   val annotated_ast : term JSONDecode.decoder
 
 end

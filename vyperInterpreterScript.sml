@@ -8,6 +8,18 @@ Libs
   vyperTypeValueTheory vyperABITheory
   integerTheory[qualified] intSimps[qualified]
 
+(* cv_rep theorem for FUNION on num-keyed fmaps *)
+Theorem cv_rep_FUNION[cv_rep]:
+  from_fmap f (FUNION m1 m2) = cv_union (from_fmap f m1) (from_fmap f m2)
+Proof
+  rw[cv_stdTheory.from_fmap_def, GSYM cv_stdTheory.cv_union_thm]
+  \\ AP_TERM_TAC
+  \\ dep_rewrite.DEP_REWRITE_TAC[sptreeTheory.spt_eq_thm]
+  \\ simp[sptreeTheory.wf_union, sptreeTheory.wf_fromAList]
+  \\ simp[sptreeTheory.lookup_union, sptreeTheory.lookup_fromAList]
+  \\ simp[FLOOKUP_FUNION]
+QED
+
 Definition dest_NumV_def:
   dest_NumV (IntV _ i) =
     (if i < 0 then NONE else SOME (Num i)) ∧
@@ -1042,11 +1054,12 @@ Definition empty_call_txn_def:
 End
 
 (* Vyper-internal environment *)
+(* sources maps address to module map, where NONE is the main contract and SOME n is module with source_id=n *)
 Datatype:
   evaluation_context = <|
-    stk: identifier list
+    stk: (num option # identifier) list
   ; txn: call_txn
-  ; sources: (address, toplevel list) alist
+  ; sources: (address, (num option, toplevel list) alist) alist
   |>
 End
 
@@ -1107,8 +1120,19 @@ End
 
 val () = cv_auto_trans evaluate_blob_hash_def;
 
+(* Get code for a specific module by source_id (NONE = main contract) *)
+Definition get_module_code_def:
+  get_module_code cx src_id_opt =
+    case ALOOKUP cx.sources cx.txn.target of
+      NONE => NONE
+    | SOME mods => ALOOKUP mods src_id_opt
+End
+
+val () = cv_auto_trans get_module_code_def;
+
+(* Get main contract code (source_id = NONE) *)
 Definition get_self_code_def:
-  get_self_code cx = ALOOKUP cx.sources cx.txn.target
+  get_self_code cx = get_module_code cx NONE
 End
 
 val () = cv_auto_trans get_self_code_def;
@@ -1386,23 +1410,35 @@ End
 
 val () = cv_auto_trans find_containing_scope_def;
 
-Type log = “:identifier # (value list)”;
+Type log = “:nsid # (value list)”;
 
+(* Module-aware globals: keyed by source_id *)
+(* NONE = main contract, SOME n = module with source_id n *)
 Datatype:
-  globals_state = <|
+  module_globals = <|
     mutables: num |-> toplevel_value
-  ; transients: (num # toplevel_value) list
+  ; transients: num |-> toplevel_value
   ; immutables: num |-> value
   |>
 End
 
-Definition empty_globals_def:
-  empty_globals = <|
+Definition empty_module_globals_def:
+  empty_module_globals : module_globals = <|
     mutables := FEMPTY
-  ; transients := []
+  ; transients := FEMPTY
   ; immutables := FEMPTY
   |>
 End
+
+val () = cv_auto_trans empty_module_globals_def;
+
+Type globals_state = “:(num option, module_globals) alist”
+
+Definition empty_globals_def:
+  empty_globals : globals_state = []
+End
+
+val () = cv_auto_trans empty_globals_def;
 
 Datatype:
   evaluation_state = <|
@@ -1534,29 +1570,88 @@ val () = get_current_globals_def
   |> SRULE [lift_option_def, option_CASE_rator]
   |> cv_auto_trans;
 
+(* Helper: get module_globals for a source_id, or empty if not present *)
+Definition get_module_globals_def:
+  get_module_globals src_id_opt (gbs: globals_state) =
+    case ALOOKUP gbs src_id_opt of
+      NONE => empty_module_globals
+    | SOME mg => mg
+End
+
+val () = cv_auto_trans get_module_globals_def;
+
+(* Helper: update module_globals for a source_id in globals_state *)
+Definition set_module_globals_def:
+  set_module_globals src_id_opt (mg: module_globals) (gbs: globals_state) =
+    (src_id_opt, mg) :: ADELKEY src_id_opt gbs
+End
+
+val () = cv_auto_trans set_module_globals_def;
+
+(* Module-aware global lookup: look up variable n in module src_id_opt *)
 Definition lookup_global_def:
-  lookup_global cx n = do
+  lookup_global cx src_id_opt n = do
     gbs <- get_current_globals cx;
-    case FLOOKUP gbs.mutables n
-      of NONE => raise $ Error "lookup_global"
-       | SOME v => return v
+    let mg = get_module_globals src_id_opt gbs in
+    case FLOOKUP mg.mutables n of
+      NONE => raise $ Error "lookup_global: no var"
+    | SOME v => return v
   od
 End
 
 val () = lookup_global_def
-  |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator, UNCURRY]
+  |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator, UNCURRY, LET_THM]
   |> cv_auto_trans;
 
-Definition get_immutables_def:
-  get_immutables cx = do
+(* Module-aware immutables lookup *)
+Definition get_immutables_module_def:
+  get_immutables_module cx src_id_opt = do
     gbs <- get_current_globals cx;
-    return gbs.immutables
+    let mg = get_module_globals src_id_opt gbs in
+    return mg.immutables
   od
 End
 
-val () = get_immutables_def
-  |> SRULE [bind_def]
+val () = get_immutables_module_def
+  |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
   |> cv_auto_trans;
+
+Definition get_immutables_def:
+  get_immutables cx = get_immutables_module cx NONE
+End
+
+val () = cv_auto_trans get_immutables_def;
+
+(* Pure helpers for updating module globals in a globals_state *)
+Definition update_module_mutable_def:
+  update_module_mutable src_id key v (gbs: globals_state) =
+    let mg = get_module_globals src_id gbs in
+    let mg' = mg with mutables updated_by (λm. m |+ (key, v)) in
+    set_module_globals src_id mg' gbs
+End
+
+val () = cv_auto_trans update_module_mutable_def;
+
+Definition update_module_transient_def:
+  update_module_transient src_id key v (gbs: globals_state) =
+    let mg = get_module_globals src_id gbs in
+    let mg' = mg with <|
+      mutables updated_by (λm. m |+ (key, v))
+    ; transients updated_by (λt. t |+ (key, v))
+    |> in
+    set_module_globals src_id mg' gbs
+End
+
+val () = cv_auto_trans update_module_transient_def;
+
+Definition update_module_immutable_def:
+  update_module_immutable src_id key v (gbs: globals_state) =
+    let mg = get_module_globals src_id gbs in
+    let mg' = mg with immutables updated_by (λm. m |+ (key, v)) in
+    set_module_globals src_id mg' gbs
+End
+
+val () = cv_auto_trans update_module_immutable_def;
 
 Definition get_accounts_def:
   get_accounts st = return st.accounts st
@@ -1580,8 +1675,8 @@ End
 val () = cv_auto_trans lookup_flag_def;
 
 Definition lookup_flag_mem_def:
-  lookup_flag_mem cx fid mid =
-  case get_self_code cx
+  lookup_flag_mem cx (src_id_opt, fid) mid =
+  case get_module_code cx src_id_opt
     of NONE => raise $ Error "lookup_flag_mem code"
      | SOME ts =>
   case lookup_flag fid ts
@@ -1607,28 +1702,31 @@ End
 
 val () = cv_auto_trans set_current_globals_def;
 
+(* Module-aware global set *)
 Definition set_global_def:
-  set_global cx n v = do
+  set_global cx src_id_opt n v = do
     gbs <- get_current_globals cx;
-    set_current_globals cx $
-      gbs with mutables updated_by (λm. m |+ (n,v))
+    let mg = get_module_globals src_id_opt gbs in
+    let mg' = mg with mutables updated_by (λm. m |+ (n, v)) in
+    set_current_globals cx $ set_module_globals src_id_opt mg' gbs
   od
 End
 
 val () = set_global_def
-  |> SRULE [bind_def, FUN_EQ_THM, UNCURRY]
+  |> SRULE [bind_def, FUN_EQ_THM, UNCURRY, LET_THM]
   |> cv_auto_trans;
 
 Definition set_immutable_def:
-  set_immutable cx n v = do
+  set_immutable cx src_id_opt n v = do
     gbs <- get_current_globals cx;
-    set_current_globals cx $
-      gbs with immutables updated_by (λim. im |+ (n, v))
+    let mg = get_module_globals src_id_opt gbs in
+    let mg' = mg with immutables updated_by (λm. m |+ (n, v)) in
+    set_current_globals cx $ set_module_globals src_id_opt mg' gbs
   od
 End
 
 val () = set_immutable_def
-  |> SRULE [bind_def]
+  |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
   |> cv_auto_trans;
 
 Definition update_accounts_def:
@@ -1710,7 +1808,7 @@ Datatype:
   location
   = ScopedVar identifier
   | ImmutableVar identifier
-  | TopLevelVar identifier
+  | TopLevelVar (num option) identifier  (* source_id (NONE=self), var_name *)
 End
 
 Datatype:
@@ -1730,12 +1828,12 @@ Definition assign_target_def:
     set_scopes $ pre ++ env |+ (ni, a') :: rest;
     return $ Value a
   od ∧
-  assign_target cx (BaseTargetV (TopLevelVar id) is) ao = do
+  assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) is) ao = do
     ni <<- string_to_num id;
-    tv <- lookup_global cx ni;
-    ts <- lift_option (get_self_code cx) "assign_target get_self_code";
+    tv <- lookup_global cx src_id_opt ni;
+    ts <- lift_option (get_module_code cx src_id_opt) "assign_target get_module_code";
     tv' <- lift_sum $ assign_toplevel (type_env ts) tv (REVERSE is) ao;
-    set_global cx ni tv';
+    set_global cx src_id_opt ni tv';
     return tv
   od ∧
   assign_target cx (BaseTargetV (ImmutableVar id) is) ao = do
@@ -1743,7 +1841,7 @@ Definition assign_target_def:
     imms <- get_immutables cx;
     a <- lift_option (FLOOKUP imms ni) "assign_target ImmutableVar";
     a' <- lift_sum $ assign_subscripts a (REVERSE is) ao;
-    set_immutable cx ni a';
+    set_immutable cx NONE ni a';
     return $ Value a
   od ∧
   assign_target cx (TupleTargetV gvs) (Replace (ArrayV (TupleV vs))) = do
@@ -1786,8 +1884,8 @@ val () = cv_auto_trans push_log_def;
 (* manipulating (internal call) function stack *)
 
 Definition push_function_def:
-  push_function fn sc cx st =
-  return (cx with stk updated_by CONS fn)
+  push_function src_fn sc cx st =
+  return (cx with stk updated_by CONS src_fn)
     $ st with scopes := [sc]
 End
 
@@ -1868,7 +1966,7 @@ Definition name_expression_def:
   name_expression mut id =
   if mut = Immutable ∨ is_Constant mut
   then Name id
-  else TopLevelName id
+  else TopLevelName (NONE, id)
 End
 
 val () = cv_auto_trans name_expression_def;
@@ -1886,7 +1984,7 @@ Definition lookup_function_def:
     else SOME $ getter (name_expression mut id) (BaseT (UintT 256)) (Type (ArrayT_type typ))
    else lookup_function name External ts) ∧
   lookup_function name External (HashMapDecl Public _ id kt vt :: ts) =
-  (if id = name then SOME $ getter (TopLevelName id) kt vt
+  (if id = name then SOME $ getter (TopLevelName (NONE, id)) kt vt
    else lookup_function name External ts) ∧
   lookup_function name vis (_ :: ts) =
     lookup_function name vis ts
@@ -2028,10 +2126,10 @@ Definition bound_def:
     1 + base_target_bound ts bt ∧
   expr_bound ts (TypeBuiltin _ _ es) =
     1 + exprs_bound ts es ∧
-  expr_bound ts (Call (IntCall fn) es) =
+  expr_bound ts (Call (IntCall (src_id_opt, fn)) es) =
     1 + exprs_bound ts es
-      + (case ALOOKUP ts fn of NONE => 0 |
-         SOME ss => stmts_bound (ADELKEY fn ts) ss) ∧
+      + (case ALOOKUP ts (src_id_opt, fn) of NONE => 0 |
+         SOME ss => stmts_bound (ADELKEY (src_id_opt, fn) ts) ss) ∧
   expr_bound ts (Call t es) =
     1 + exprs_bound ts es ∧
   exprs_bound ts [] = 0 ∧
@@ -2078,11 +2176,20 @@ Definition dest_Internal_FunctionDef_def:
   dest_Internal_FunctionDef _ = []
 End
 
+(* For a single module, get its internal function definitions tagged with source_id *)
+Definition module_fns_def:
+  module_fns src_id ts =
+    MAP (λ(fn, ss). ((src_id, fn), ss)) (FLAT (MAP dest_Internal_FunctionDef ts))
+End
+
+(* Get all function definitions from all modules, keyed by (source_id, function_name) *)
 Definition remcode_def:
   remcode cx =
-  case get_self_code cx of NONE => []
-     | SOME ts => FILTER (λ(fn,ss). ¬MEM fn cx.stk)
-          (FLAT (MAP dest_Internal_FunctionDef ts))
+  case ALOOKUP cx.sources cx.txn.target of
+    NONE => []
+  | SOME mods =>
+      FILTER (λ((src_id, fn), ss). ¬MEM (src_id, fn) cx.stk)
+        (FLAT (MAP (λ(src_id, ts). module_fns src_id ts) mods))
 End
 
 (* these helpers are also for termination, to enable HOL4's definition machinery
@@ -2176,6 +2283,38 @@ Proof
   ho_match_mp_tac lookup_function_ind
   \\ rw[lookup_function_def, dest_Internal_FunctionDef_def]
   \\ Cases_on`fv` \\ gvs[dest_Internal_FunctionDef_def]
+QED
+
+(* New lemma for module support: connect lookup_function to module_fns *)
+Theorem lookup_function_Internal_imp_ALOOKUP_module_fns:
+  ∀fn vis ts (src_id : num option) v x y z. vis = Internal ∧
+  lookup_function fn vis ts = SOME (v,x,y,z) ⇒
+  ALOOKUP (module_fns src_id ts) (src_id, fn) = SOME z
+Proof
+  ho_match_mp_tac lookup_function_ind
+  \\ rw[lookup_function_def, dest_Internal_FunctionDef_def, module_fns_def]
+  \\ Cases_on`fv` \\ gvs[dest_Internal_FunctionDef_def, module_fns_def]
+QED
+
+(* Helper: ALOOKUP in module_fns is NONE when src_id doesn't match *)
+Theorem ALOOKUP_module_fns_diff_src:
+  ∀ts sid1 sid2 fn.
+    sid1 ≠ sid2 ⇒ ALOOKUP (module_fns sid1 ts) (sid2, fn) = NONE
+Proof
+  rw[module_fns_def, ALOOKUP_FAILS, MEM_MAP, PULL_EXISTS, FORALL_PROD]
+QED
+
+(* Helper for ALOOKUP in FLAT of MAPs *)
+Theorem ALOOKUP_FLAT_MAP_module_fns:
+  ∀mods src_id ts fn body.
+    ALOOKUP mods src_id = SOME ts ∧
+    ALOOKUP (module_fns src_id ts) (src_id, fn) = SOME body ⇒
+    ALOOKUP (FLAT (MAP (λ(sid, tl). module_fns sid tl) mods)) (src_id, fn) = SOME body
+Proof
+  Induct \\ rw[]
+  \\ simp[ALOOKUP_APPEND]
+  \\ PairCases_on`h`
+  \\ gvs[ALOOKUP_module_fns_diff_src, AllCaseEqs()]
 QED
 
 (* a few more helper functions used in the main interpreter *)
@@ -2356,8 +2495,8 @@ Definition evaluate_def:
     v <- lift_sum $ exactly_one_option svo ivo;
     return $ (v, [])
   od ∧
-  eval_base_target cx (TopLevelNameTarget id) =
-    return $ (TopLevelVar id, []) ∧
+  eval_base_target cx (TopLevelNameTarget (src_id_opt, id)) =
+    return $ (TopLevelVar src_id_opt id, []) ∧
   eval_base_target cx (AttributeTarget t id) = do
     (loc, sbs) <- eval_base_target cx t;
     return $ (loc, AttrSubscript id :: sbs)
@@ -2385,8 +2524,9 @@ Definition evaluate_def:
            (lookup_scopes n env) (FLOOKUP imms n);
     return $ Value v
   od ∧
-  eval_expr cx (TopLevelName id) = lookup_global cx (string_to_num id) ∧
-  eval_expr cx (FlagMember fid mid) = lookup_flag_mem cx fid mid ∧
+  eval_expr cx (TopLevelName (src_id_opt, id)) =
+    lookup_global cx src_id_opt (string_to_num id) ∧
+  eval_expr cx (FlagMember nsid mid) = lookup_flag_mem cx nsid mid ∧
   eval_expr cx (IfExp e1 e2 e3) = do
     tv <- eval_expr cx e1;
     switch_BoolV tv
@@ -2394,8 +2534,8 @@ Definition evaluate_def:
       (eval_expr cx e3)
   od ∧
   eval_expr cx (Literal l) = return $ Value $ evaluate_literal l ∧
-  eval_expr cx (StructLit id kes) = do
-    (* TODO: check argument lengths and types *)
+  eval_expr cx (StructLit (src_id_opt, id) kes) = do
+    (* TODO: type checking - validate fields against struct definition from src_id_opt *)
     ks <<- MAP FST kes;
     vs <- eval_exprs cx (MAP SND kes);
     return $ Value $ StructV $ ZIP (ks, vs)
@@ -2444,9 +2584,9 @@ Definition evaluate_def:
     return $ Value $ NoneV
   od ∧
   eval_expr cx (Call (ExtCall _) _) = raise $ Error "TODO: ExtCall" ∧
-  eval_expr cx (Call (IntCall fn) es) = do
-    check (¬MEM fn cx.stk) "recursion";
-    ts <- lift_option (get_self_code cx) "IntCall get_self_code";
+  eval_expr cx (Call (IntCall (src_id_opt, fn)) es) = do
+    check (¬MEM (src_id_opt, fn) cx.stk) "recursion";
+    ts <- lift_option (get_module_code cx src_id_opt) "IntCall get_module_code";
     tup <- lift_option (lookup_function fn Internal ts) "IntCall lookup_function";
     stup <<- SND tup; args <<- FST stup; sstup <<- SND stup;
     ret <<- FST $ sstup; body <<- SND $ sstup;
@@ -2456,7 +2596,7 @@ Definition evaluate_def:
     env <- lift_option (bind_arguments tenv args vs) "IntCall bind_arguments";
     prev <- get_scopes;
     rtv <- lift_option (evaluate_type tenv ret) "IntCall eval ret";
-    cxf <- push_function fn env cx;
+    cxf <- push_function (src_id_opt, fn) env cx;
     rv <- finally
       (try (do eval_stmts cxf body; return NoneV od) handle_function)
       (pop_function prev);
@@ -2499,11 +2639,22 @@ Termination
   \\ gvs[push_function_def, return_def]
   \\ gvs[lift_option_def, CaseEq"option", CaseEq"prod", option_CASE_rator,
          raise_def, return_def]
-  \\ gvs[remcode_def, get_self_code_def, ADELKEY_def]
+  \\ gvs[remcode_def, get_module_code_def, ADELKEY_def]
   \\ qpat_x_assum`OUTR _ _ = _`kall_tac
-  \\ gvs[ALOOKUP_FILTER]
-  \\ drule (SRULE [] lookup_function_Internal_imp_ALOOKUP_FLAT)
-  \\ rw[FILTER_FILTER, LAMBDA_PROD]
+  \\ gvs[CaseEq"option"]
+  \\ qmatch_goalsub_abbrev_tac`ALOOKUP (FILTER P1 _)`
+  \\ sg `P1 = λ(k,v). (λx. ¬MEM x cx.stk) k`
+  >- rw[Abbr`P1`, FUN_EQ_THM, FORALL_PROD]
+  \\ gvs[ALOOKUP_FILTER, Abbr`P1`]
+  \\ first_x_assum (mp_then Any mp_tac
+       lookup_function_Internal_imp_ALOOKUP_module_fns)
+  \\ rw[]
+  \\ drule ALOOKUP_FLAT_MAP_module_fns
+  \\ first_x_assum(qspec_then`src_id_opt`strip_assume_tac)
+  \\ disch_then drule \\ rw[]
+  \\ rw[FILTER_FILTER]
+  \\ rpt(pop_assum kall_tac)
+  \\ simp[LAMBDA_PROD]
 End
 
 Theorem eval_exprs_length:
@@ -2535,41 +2686,38 @@ Definition force_default_value_def:
 End
 
 (* TODO: assumes unique identifiers, but should check? *)
+(* All initial_globals are for main contract (NONE source_id) *)
 Definition initial_globals_def:
   initial_globals env [] = empty_globals ∧
   initial_globals env (VariableDecl _ Storage id typ :: ts) =
   (let gbs = initial_globals env ts in
    let key = string_to_num id in
-     gbs with mutables updated_by
-       (λm. m |+ (key, Value $ force_default_value env typ))) ∧
+   let iv = Value $ force_default_value env typ in
+     update_module_mutable NONE key iv gbs) ∧
   initial_globals env (VariableDecl _ Transient id typ :: ts) =
   (let gbs = initial_globals env ts in
    let key = string_to_num id in
    let iv = Value $ force_default_value env typ in
-     gbs with <|
-       mutables updated_by (λm. m |+ (key, iv))
-     ; transients updated_by (λtrs. (key,iv)::trs)
-     |>) ∧
+     update_module_transient NONE key iv gbs) ∧
   initial_globals env (VariableDecl _ Immutable id typ :: ts) =
   (let gbs = initial_globals env ts in
    let key = string_to_num id in
-     gbs with immutables updated_by
-       (λim. im |+ (key, force_default_value env typ))) ∧
+   let iv = force_default_value env typ in
+     update_module_immutable NONE key iv gbs) ∧
   (* TODO: prevent flag value being updated even in constructor *)
   initial_globals env (FlagDecl id ls :: ts) =
   (let gbs = initial_globals env ts in
    let key = string_to_num id in
-     gbs with immutables updated_by
-       (λim. im |+ (key, flag_value (LENGTH ls) 1 [] ls))) ∧
+   let iv = flag_value (LENGTH ls) 1 [] ls in
+     update_module_immutable NONE key iv gbs) ∧
   (* TODO: handle Constants? or ignore since assuming folded into AST *)
   initial_globals env (HashMapDecl _ is_transient id kt vt :: ts) =
   (let gbs = initial_globals env ts in
    let key = string_to_num id in
    let iv = HashMap vt [] in
-   let gbs = gbs with mutables updated_by (λm. m |+ (key, iv)) in
      if is_transient
-     then gbs with transients updated_by (λtrs. (key,iv)::trs)
-     else gbs) ∧
+     then update_module_transient NONE key iv gbs
+     else update_module_mutable NONE key iv gbs) ∧
   initial_globals env (t :: ts) = initial_globals env ts
 End
 
@@ -2579,7 +2727,7 @@ Definition initial_evaluation_context_def:
   initial_evaluation_context srcs tx =
   <| sources := srcs
    ; txn := tx
-   ; stk := [tx.function_name]
+   ; stk := [(NONE, tx.function_name)]
    |>
 End
 
@@ -2587,7 +2735,7 @@ val () = cv_auto_trans initial_evaluation_context_def;
 
 Datatype:
   abstract_machine = <|
-    sources: (address, toplevel list) alist
+    sources: (address, (num option, toplevel list) alist) alist
   ; globals: (address, globals_state) alist
   ; accounts: evm_accounts
   |>
@@ -2622,18 +2770,28 @@ End
 
 val () = cv_auto_trans abstract_machine_from_state_def;
 
+(* Reset transients in a single module_globals: merge transients back into mutables *)
+Definition reset_module_transients_def:
+  reset_module_transients (mg: module_globals) =
+  mg with mutables := FUNION mg.transients mg.mutables
+End
+
+val () = cv_auto_trans reset_module_transients_def;
+
+(* Reset transients for all modules in a globals_state *)
 Definition reset_transient_globals_def:
-  reset_transient_globals gbs =
-  gbs with mutables updated_by (λm. m |++ gbs.transients)
+  reset_transient_globals ([] : globals_state) = [] ∧
+  reset_transient_globals ((k, mg) :: rest) =
+    (k, reset_module_transients mg) :: reset_transient_globals rest
 End
 
 val () = cv_auto_trans reset_transient_globals_def;
 
+(* Reset transients for all addresses in the global state *)
 Definition reset_all_transient_globals_def:
   reset_all_transient_globals [] = [] ∧
-  reset_all_transient_globals ((k,v)::ls) =
-    (k, reset_transient_globals v) ::
-    reset_all_transient_globals ls
+  reset_all_transient_globals ((addr, gbs) :: rest) =
+    (addr, reset_transient_globals gbs) :: reset_all_transient_globals rest
 End
 
 val () = cv_auto_trans reset_all_transient_globals_def;
@@ -2705,17 +2863,18 @@ Definition call_external_def:
 End
 
 Definition load_contract_def:
-  load_contract am tx ts =
+  load_contract am tx mods =
   let addr = tx.target in
+  let ts = case ALOOKUP mods NONE of SOME ts => ts | NONE => [] in
   let tenv = type_env ts in
   let gbs = initial_globals tenv ts in
   let am = am with globals updated_by CONS (addr, gbs) in
   case lookup_function tx.function_name Deploy ts of
      | NONE => INR $ Error "no constructor"
      | SOME (mut, args, ret, body) =>
-       let cx = initial_evaluation_context ((addr,ts)::am.sources) tx in
+       let cx = initial_evaluation_context ((addr,mods)::am.sources) tx in
        case call_external_function am cx mut ts args tx.args body ret
          of (INR e, _) => INR e
        (* TODO: update balances on return *)
-          | (_, am) => INL (am with sources updated_by CONS (addr, ts))
+          | (_, am) => INL (am with sources updated_by CONS (addr, mods))
 End

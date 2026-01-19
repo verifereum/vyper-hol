@@ -75,7 +75,7 @@ Datatype:
   | JE_Bool bool                                       (* True/False *)
 
   (* Variables and access *)
-  | JE_Name string                                     (* id *)
+  | JE_Name string (string option) (num option)        (* id, typeclass, source_id for modules *)
   | JE_Attribute json_expr string                      (* value, attr *)
   | JE_Subscript json_expr json_expr                   (* value, slice *)
 
@@ -90,7 +90,8 @@ Datatype:
   | JE_List (json_expr list) json_type                 (* elements, type needed for elem type *)
 
   (* Calls - need type for builtins like concat/slice that embed return length *)
-  | JE_Call json_expr (json_expr list) (json_keyword list) json_type
+  (* Last field is source_id for module calls, extracted from func.type.type_decl_node *)
+  | JE_Call json_expr (json_expr list) (json_keyword list) json_type (num option)
 ;
   json_keyword = JKeyword string json_expr             (* arg, value *)
 End
@@ -106,7 +107,7 @@ Datatype:
   | JS_Return (json_expr option)
   | JS_Raise (json_expr option)
   | JS_Assert json_expr (json_expr option)             (* test, msg *)
-  | JS_Log string (json_expr list)                     (* event name, args *)
+  | JS_Log (num option # string) (json_expr list)      (* (source_id, event name), args *)
   | JS_If json_expr (json_stmt list) (json_stmt list)  (* test, body, orelse *)
   | JS_For string json_type json_iter (json_stmt list) (* var, var_type, iter, body *)
   | JS_Assign json_target json_expr                    (* target, value *)
@@ -122,7 +123,7 @@ Datatype:
   (* Assignment targets *)
   json_base_target
   = JBT_Name string
-  | JBT_TopLevelName string                            (* self.x targets *)
+  | JBT_TopLevelName (num option # string)             (* (source_id, name) - for self.x and module.x *)
   | JBT_Subscript json_base_target json_expr
   | JBT_Attribute json_base_target string
 ;
@@ -153,6 +154,11 @@ Datatype:
 End
 
 Datatype:
+  json_import_info
+  = JImportInfo string string string                   (* alias, path, qualified_module_name *)
+End
+
+Datatype:
   json_toplevel
   = JTL_FunctionDef string (string list) (json_arg list) json_func_type (json_stmt list)
       (* name, decorators, args, func_type, body *)
@@ -164,12 +170,34 @@ Datatype:
   | JTL_StructDef string (json_arg list)
   | JTL_FlagDef string (string list)                   (* name, member names *)
   | JTL_InterfaceDef string                            (* ignored but parsed *)
+  (* Module-related declarations *)
+  | JTL_Import (json_import_info list)                 (* import statement with import infos *)
+  | JTL_ExportsDecl json_expr                          (* exports: annotation *)
+  | JTL_InitializesDecl json_expr                      (* initializes: annotation *)
+  | JTL_UsesDecl json_expr                             (* uses: annotation *)
+  | JTL_ImplementsDecl json_expr                       (* implements: interface *)
 End
 
 (* ===== Module ===== *)
 
 Datatype:
   json_module = JModule (json_toplevel list)
+End
+
+(* ===== Imported Module ===== *)
+(* Represents an imported module from the imports array *)
+
+Datatype:
+  json_imported_module
+  = JImportedModule num string (json_toplevel list)  (* source_id, path, body *)
+End
+
+(* ===== Annotated AST ===== *)
+(* Full annotated AST with main module and imported modules *)
+
+Datatype:
+  json_annotated_ast
+  = JAnnotatedAST json_module (json_imported_module list)  (* main ast, imports *)
 End
 
 (* Datatypes are automatically translated by cv_transLib when defined *)

@@ -23,7 +23,7 @@ Datatype:
   = ReturnK eval_continuation
   | AssertK expr eval_continuation
   | RaiseK eval_continuation
-  | LogK identifier eval_continuation
+  | LogK nsid eval_continuation
   | PopK eval_continuation
   | AppendK expr eval_continuation
   | AppendK1 base_target_value eval_continuation
@@ -57,7 +57,7 @@ Datatype:
   | BuiltinK builtin eval_continuation
   | TypeBuiltinK type_builtin type eval_continuation
   | CallSendK eval_continuation
-  | IntCallK (num |-> type_args) identifier ((identifier # type) list) type (stmt list) eval_continuation
+  | IntCallK (num |-> type_args) (num option # identifier) ((identifier # type) list) type (stmt list) eval_continuation
   | IntCallK1 (scope list) type_value eval_continuation
   | ExprsK (expr list) eval_continuation
   | ExprsK1 value eval_continuation
@@ -90,7 +90,7 @@ End
 val liftk1 = oneline liftk_def;
 
 Definition no_recursion_def:
-  no_recursion (fn:identifier) stk ⇔ ¬MEM fn stk
+  no_recursion (src_fn : num option # identifier) stk ⇔ ¬MEM src_fn stk
 End
 
 val () = cv_auto_trans no_recursion_def;
@@ -127,8 +127,8 @@ Definition eval_base_target_cps_def:
         v <- lift_sum $ exactly_one_option svo ivo;
         return $ (v, []) od st in
      liftk cx ApplyBaseTarget r k) ∧
-  eval_base_target_cps cx (TopLevelNameTarget id) st k =
-    AK cx (ApplyBaseTarget (TopLevelVar id, [])) st k ∧
+  eval_base_target_cps cx (TopLevelNameTarget (src_id_opt, id)) st k =
+    AK cx (ApplyBaseTarget (TopLevelVar src_id_opt id, [])) st k ∧
   eval_base_target_cps cx (AttributeTarget t id) st k =
     eval_base_target_cps cx t st (AttributeTargetK id k) ∧
   eval_base_target_cps cx (SubscriptTarget t e) st k =
@@ -151,15 +151,15 @@ Definition eval_expr_cps_def:
           v <- lift_sum $ exactly_one_option
                  (lookup_scopes n env) (FLOOKUP imms n);
           return $ Value v od st) k ∧
-  eval_expr_cps cx2 (TopLevelName id) st k =
-    liftk cx2 ApplyTv (lookup_global cx2 (string_to_num id) st) k ∧
-  eval_expr_cps cx2 (FlagMember fid mid) st k =
-    liftk cx2 ApplyTv (lookup_flag_mem cx2 fid mid st) k ∧
+  eval_expr_cps cx2 (TopLevelName (src_id_opt, id)) st k =
+    liftk cx2 ApplyTv (lookup_global cx2 src_id_opt (string_to_num id) st) k ∧
+  eval_expr_cps cx2 (FlagMember nsid mid) st k =
+    liftk cx2 ApplyTv (lookup_flag_mem cx2 nsid mid st) k ∧
   eval_expr_cps cx3 (IfExp e1 e2 e3) st k =
     eval_expr_cps cx3 e1 st (IfExpK e2 e3 k) ∧
   eval_expr_cps cx4 (Literal l) st k =
     AK cx4 (ApplyTv (Value $ evaluate_literal l)) st k ∧
-  eval_expr_cps cx5 (StructLit id kes) st k =
+  eval_expr_cps cx5 (StructLit (src_id_opt, id) kes) st k =
     eval_exprs_cps cx5 (MAP SND kes) st (StructLitK (MAP FST kes) k) ∧
   eval_expr_cps cx6 (Subscript e1 e2) st k =
     eval_expr_cps cx6 e1 st (SubscriptK e2 k) ∧
@@ -182,10 +182,10 @@ Definition eval_expr_cps_def:
      | (INL (), st) => eval_exprs_cps cx9 es st (CallSendK k)) ∧
   eval_expr_cps cx10 (Call (ExtCall _) _) st k =
     AK cx10 (ApplyExc (Error "TODO: ExtCall")) st k ∧
-  eval_expr_cps cx10 (Call (IntCall fn) es) st k =
+  eval_expr_cps cx10 (Call (IntCall (ns, fn)) es) st k =
     (case do
-      check (no_recursion fn cx10.stk) "recursion";
-      ts <- lift_option (get_self_code cx10) "IntCall get_self_code";
+      check (no_recursion (ns, fn) cx10.stk) "recursion";
+      ts <- lift_option (get_module_code cx10 ns) "IntCall get_module_code";
       tup <- lift_option (lookup_function fn Internal ts) "IntCall lookup_function";
       stup <<- SND tup; args <<- FST stup; sstup <<- SND stup;
       ret <<- FST $ sstup; body <<- SND $ sstup;
@@ -193,7 +193,7 @@ Definition eval_expr_cps_def:
       return (type_env ts, args, ret, body) od st
      of (INR ex, st) => AK cx10 (ApplyExc ex) st k
       | (INL (tenv, args, ret, body), st) =>
-          eval_exprs_cps cx10 es st (IntCallK tenv fn args ret body k)) ∧
+          eval_exprs_cps cx10 es st (IntCallK tenv (ns, fn) args ret body k)) ∧
   eval_exprs_cps cx11 [] st k = AK cx11 (ApplyVals []) st k ∧
   eval_exprs_cps cx12 (e::es) st k =
     eval_expr_cps cx12 e st (ExprsK es k)
@@ -577,12 +577,12 @@ Definition apply_vals_def:
       transfer_value cx.txn.target toAddr amount;
       return $ Value NoneV
     od st) k ∧
-  apply_vals cx vs st (IntCallK tenv fn args ret body k) =
+  apply_vals cx vs st (IntCallK tenv src_fn args ret body k) =
     (case do
       env <- lift_option (bind_arguments tenv args vs) "IntCall bind_arguments";
       prev <- get_scopes;
       rtv <- lift_option (evaluate_type tenv ret) "IntCall eval ret";
-      cxf <- push_function fn env cx;
+      cxf <- push_function src_fn env cx;
       return (prev, cxf, body, rtv) od st
      of (INR ex, st) => apply_exc cx ex st k
       | (INL (prev, cxf, body, rtv), st) =>
