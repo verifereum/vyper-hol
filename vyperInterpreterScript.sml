@@ -33,7 +33,10 @@ Datatype:
 End
 
 Datatype:
-  type_args = StructArgs (argument list) | FlagArgs num
+  type_args
+  = StructArgs (argument list)
+  | FlagArgs num
+  | InterfaceArgs (interface_func list)
 End
 
 Definition evaluate_type_def:
@@ -1360,10 +1363,32 @@ Definition type_env_def:
     type_env ts |+ (string_to_num id, StructArgs args) ∧
   type_env (FlagDecl id ls :: ts) =
     type_env ts |+ (string_to_num id, FlagArgs (LENGTH ls)) ∧
+  type_env (InterfaceDecl id funcs :: ts) =
+    type_env ts |+ (string_to_num id, InterfaceArgs funcs) ∧
   type_env (_ :: ts) = type_env ts
 End
 
 val () = cv_auto_trans type_env_def;
+
+(* Look up an interface by name in the type environment *)
+Definition lookup_interface_def:
+  lookup_interface tenv iface_name =
+    case FLOOKUP tenv (string_to_num iface_name) of
+    | SOME (InterfaceArgs funcs) => SOME funcs
+    | _ => NONE
+End
+
+val () = cv_auto_trans lookup_interface_def;
+
+(* Look up a function signature within an interface *)
+Definition lookup_interface_func_def:
+  lookup_interface_func [] fn_name = NONE ∧
+  lookup_interface_func ((name, args, ret_ty, mutability) :: rest) fn_name =
+    if name = fn_name then SOME (args, ret_ty, mutability)
+    else lookup_interface_func rest fn_name
+End
+
+val () = cv_auto_trans lookup_interface_func_def;
 
 Definition evaluate_extract32_def:
   evaluate_extract32 bs n bt =
