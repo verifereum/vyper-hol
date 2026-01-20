@@ -367,6 +367,17 @@ val simple_tac = rpt strip_tac >>
   TRY (imp_res_tac transfer_value_scopes) >>
   gvs[];
 
+(* Helper for chain reasoning through multiple states *)
+val chain_tac = rpt (
+  TRY (first_x_assum drule >> simp[] >> strip_tac) >>
+  TRY res_tac >> gvs[] >>
+  TRY (imp_res_tac get_Value_scopes >> gvs[]) >>
+  TRY (imp_res_tac lift_option_scopes >> gvs[]) >>
+  TRY (imp_res_tac lift_sum_scopes >> gvs[]) >>
+  TRY (imp_res_tac check_scopes >> gvs[]) >>
+  TRY (imp_res_tac assign_target_scopes_len >> gvs[])
+) >> TRY (metis_tac[]);
+
 (* Main mutual scopes length preservation theorem *)
 Theorem scopes_len_mutual[local]:
   (!cx s st res st'. eval_stmt cx s st = (res, st') ==> LENGTH st.scopes = LENGTH st'.scopes) /\
@@ -393,34 +404,27 @@ Proof
   (* 6. Raise e *)
   >- simple_tac
   (* 7. Assert *)
-  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      res_tac >> gvs[switch_BoolV_def, return_def, raise_def, bind_def, AllCaseEqs()] >>
-      res_tac >> imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >> gvs[] >>
+  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def, switch_BoolV_def] >>
       Cases_on `tv = Value (BoolV T)` >> gvs[return_def] >>
       Cases_on `tv = Value (BoolV F)` >> gvs[raise_def, bind_def, AllCaseEqs()] >>
-      res_tac >> imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >> gvs[] >>
-      metis_tac[])
+      chain_tac)
   (* 8. Log *)
   >- simple_tac
   (* 9. AnnAssign *)
   >- simple_tac
   (* 10. Append *)
-  >- (simple_tac >>
+  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
       PairCases_on `x` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def] >>
       gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      imp_res_tac get_Value_scopes >> imp_res_tac assign_target_scopes_len >> gvs[] >>
-      TRY (first_x_assum drule >> simp[]) >>
-      TRY (first_x_assum (qspecl_then [`st`, `x0`, `x1`, `s''`] mp_tac) >> simp[]))
+      chain_tac)
   (* 11. Assign *)
-  >- (simple_tac >>
+  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
       gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      imp_res_tac assign_target_scopes_len >> gvs[] >> TRY (first_x_assum drule >> simp[]))
+      chain_tac)
   (* 12. AugAssign *)
   >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
       PairCases_on `x` >> gvs[bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def] >>
-      imp_res_tac get_Value_scopes >> imp_res_tac assign_target_scopes_len >> gvs[] >>
-      TRY (first_x_assum drule >> simp[]) >>
-      TRY (first_x_assum (qspecl_then [`st`, `x0`, `x1`, `s''`] mp_tac) >> simp[]))
+      chain_tac)
   (* 13. If - complex proof, see if_stmt_scopes_len *)
   >- cheat
   (* 14. For - complex proof, see for_stmt_scopes_len *)
@@ -438,11 +442,8 @@ Proof
   (* 18. Array iterator *)
   >- simple_tac
   (* 19. Range iterator *)
-  >- (simple_tac >>
-      imp_res_tac get_Value_scopes >> gvs[] >> res_tac >> gvs[] >>
-      imp_res_tac lift_sum_scopes >> gvs[] >>
-      TRY (first_x_assum drule >> simp[]) >>
-      TRY (first_x_assum (qspecl_then [`st`, `tv1`, `s''`, `s''`, `v`, `s''`] mp_tac) >> simp[]))
+  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      chain_tac)
   (* 20. BaseTarget *)
   >- simple_tac
   (* 21. TupleTarget *)
@@ -450,7 +451,8 @@ Proof
   (* 22. eval_targets [] *)
   >- simp[evaluate_def, return_def]
   (* 23. eval_targets (g::gs) *)
-  >- (simple_tac >> TRY (first_x_assum drule >> simp[]))
+  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      chain_tac)
   (* 24. NameTarget *)
   >- (rpt strip_tac >> gvs[evaluate_def, bind_def, get_scopes_def, return_def, AllCaseEqs()] >>
       Cases_on `cx.txn.is_creation` >> gvs[return_def, bind_def, AllCaseEqs()] >>
@@ -461,9 +463,9 @@ Proof
   (* 26. AttributeTarget *)
   >- simple_tac
   (* 27. SubscriptTarget *)
-  >- (simple_tac >> imp_res_tac get_Value_scopes >> gvs[] >>
-      TRY (first_x_assum drule >> simp[]) >>
-      TRY (first_x_assum (qspecl_then [`st`, `x0`, `x1`, `s''`] mp_tac) >> simp[]))
+  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      PairCases_on `x` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def] >>
+      chain_tac)
   (* 28. eval_for [] *)
   >- simp[evaluate_def, return_def]
   (* 29. eval_for (v::vs) - complex proof, see eval_for_cons_scopes_len *)
@@ -479,19 +481,16 @@ Proof
       simp[evaluate_def, lookup_flag_mem_def, raise_def, return_def] >>
       rpt CASE_TAC >> simp[raise_def, return_def])
   (* 33. IfExp *)
-  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      res_tac >> gvs[switch_BoolV_def, return_def, raise_def, AllCaseEqs()] >>
-      imp_res_tac get_Value_scopes >> gvs[] >> res_tac >> gvs[] >>
-      TRY (first_x_assum drule >> simp[]))
+  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def, switch_BoolV_def] >>
+      chain_tac)
   (* 34. Literal *)
   >- simp[evaluate_def, return_def]
   (* 35. StructLit *)
   >- (simple_tac >> gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
       imp_res_tac lift_option_scopes >> gvs[])
   (* 36. Subscript *)
-  >- (simple_tac >> imp_res_tac get_Value_scopes >> gvs[] >>
-      imp_res_tac lift_option_scopes >> imp_res_tac lift_sum_scopes >> gvs[] >>
-      TRY (first_x_assum drule >> simp[]))
+  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      chain_tac)
   (* 37. Attribute *)
   >- (simple_tac >> imp_res_tac get_Value_scopes >> gvs[] >>
       imp_res_tac lift_option_scopes >> gvs[])
@@ -514,9 +513,8 @@ Proof
   (* 44. eval_exprs [] *)
   >- simp[evaluate_def, return_def]
   (* 45. eval_exprs (e::es) *)
-  >- (simple_tac >> imp_res_tac get_Value_scopes >> gvs[] >>
-      TRY (first_x_assum drule >> simp[]) >>
-      TRY (first_x_assum (qspecl_then [`st`, `tv`, `s''`, `s''`, `v`, `s''`] mp_tac) >> simp[]))
+  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      chain_tac)
 QED
 
 (* Main theorem: evaluation preserves scopes length *)
