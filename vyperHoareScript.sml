@@ -1,7 +1,7 @@
 Theory vyperHoare
 
 Ancestors
-  vyperInterpreter
+  vyperInterpreter vyperScopes
 
 Definition stmts_spec_def:
   stmts_spec cx (P : evaluation_state -> bool) (ss : stmt list) (Q_ok : evaluation_state -> bool) (Q_ret : value -> evaluation_state -> bool) <=>
@@ -140,21 +140,6 @@ Proof
   simp[Once evaluate_def, return_def]
 QED
 
-
-(* Scope-preserving: execution doesn't pop more scopes than it pushed *)
-Definition scopes_ok_def:
-  scopes_ok cx ss <=>
-    !st res s st'.
-      eval_stmts cx ss (st with scopes := s :: st.scopes) = (res, st') ==>
-      st'.scopes <> []
-End
-
-Theorem scopes_ok_thm:
-  ∀cx ss. scopes_ok cx ss
-Proof
-  cheat
-QED
-
 Theorem with_scopes_id[local]:
   (r:evaluation_state) with scopes := r.scopes = r
 Proof
@@ -171,7 +156,6 @@ QED
 Theorem stmts_spec_if:
   ∀P P' Q R1 R2 cx e ss1 ss2 v1.
     (v1 = Value (BoolV T) ∨ v1 = Value (BoolV F)) ∧
-    scopes_ok cx ss1 ∧ scopes_ok cx ss2 ∧
     (⟦cx⟧ {{P}} e ⇓ v1 {{P'}}) ∧
     (⟦cx⟧ {{λst. P' (st with scopes := TL st.scopes) ∧ v1 = Value (BoolV T)}} ss1
           {{λst. Q (st with scopes := TL st.scopes) ∥
@@ -181,7 +165,7 @@ Theorem stmts_spec_if:
             λv st. R2 v (st with scopes := TL st.scopes)}}) ⇒
           ⟦cx⟧ {{P}} [If e ss1 ss2] {{Q ∥ λv st. R1 v st ∨ R2 v st}}
 Proof
-  rw[stmts_spec_def, expr_spec_def, scopes_ok_def] >>
+  rw[stmts_spec_def, expr_spec_def] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, finally_def,
        push_scope_def, return_def] >>
@@ -197,7 +181,9 @@ Proof
    ((* Normal completion *)
     rename [`eval_stmts _ _ _ = (INL _, r_after_ss)`] >>
     strip_tac >>
-    `r_after_ss.scopes <> []` by metis_tac[scopes_cons_lemma] >>
+    `r_after_ss.scopes <> []` by
+      (drule scopes_len_preserved >> REWRITE_TAC[evaluation_state_accfupds] >>
+       simp[] >> Cases_on `r_after_ss.scopes` >> fs[]) >>
     simp[pop_scope_def] >>
     Cases_on `r_after_ss.scopes` >> gvs[return_def] >>
     simp[Once evaluate_def, return_def]) >>
@@ -205,7 +191,9 @@ Proof
    rename [`eval_stmts _ _ _ = (INR _, r_after_ss)`] >>
    Cases_on `y` >> simp[] >>
    strip_tac >>
-   `r_after_ss.scopes <> []` by metis_tac[scopes_cons_lemma] >>
+   `r_after_ss.scopes <> []` by
+     (drule scopes_len_preserved >> REWRITE_TAC[evaluation_state_accfupds] >>
+      simp[] >> Cases_on `r_after_ss.scopes` >> fs[]) >>
    simp[pop_scope_def] >>
    Cases_on `r_after_ss.scopes` >> gvs[return_def, raise_def]) >>
   (* v1 = Value (BoolV F) case *)
@@ -217,7 +205,9 @@ Proof
   ((* Normal completion *)
    rename [`eval_stmts _ _ _ = (INL _, r_after_ss)`] >>
    strip_tac >>
-   `r_after_ss.scopes <> []` by metis_tac[scopes_cons_lemma] >>
+   `r_after_ss.scopes <> []` by
+     (drule scopes_len_preserved >> REWRITE_TAC[evaluation_state_accfupds] >>
+      simp[] >> Cases_on `r_after_ss.scopes` >> fs[]) >>
    simp[pop_scope_def] >>
    Cases_on `r_after_ss.scopes` >> gvs[return_def] >>
    simp[Once evaluate_def, return_def]) >>
@@ -225,7 +215,9 @@ Proof
   rename [`eval_stmts _ _ _ = (INR _, r_after_ss)`] >>
   Cases_on `y` >> simp[] >>
   strip_tac >>
-  `r_after_ss.scopes <> []` by metis_tac[scopes_cons_lemma] >>
+  `r_after_ss.scopes <> []` by
+    (drule scopes_len_preserved >> REWRITE_TAC[evaluation_state_accfupds] >>
+     simp[] >> Cases_on `r_after_ss.scopes` >> fs[]) >>
   simp[pop_scope_def] >>
   Cases_on `r_after_ss.scopes` >> gvs[return_def, raise_def]
 QED
