@@ -14,7 +14,7 @@
  *   - Various assertion combinators
  *)
 
-Theory vyperTriple
+Theory vyperTriples
 
 Ancestors
   vyperInterpreter
@@ -88,36 +88,44 @@ Overload "*" = ``state_star``
 
 (* ===== Storage Assertions ===== *)
 
-(* Points-to assertion for a mutable storage slot (num -> toplevel_value) *)
+(* Points-to assertion for a mutable storage slot (num -> toplevel_value)
+   addr: contract address
+   src_id: source module id (NONE = main contract)
+   slot: variable slot number
+   tv: toplevel_value at that slot *)
 Definition mutable_at_def:
-  mutable_at addr slot tv st <=>
-    ?gs.
-      ALOOKUP st.globals addr = SOME gs /\
-      FLOOKUP gs.mutables slot = SOME tv
+  mutable_at addr src_id slot tv st <=>
+    ?gbs mg.
+      ALOOKUP st.globals addr = SOME gbs /\
+      ALOOKUP gbs src_id = SOME mg /\
+      FLOOKUP mg.mutables slot = SOME tv
 End
 
 (* Points-to for a value (not HashMap) *)
 Definition storage_at_def:
-  storage_at addr slot v st <=>
-    ?gs.
-      ALOOKUP st.globals addr = SOME gs /\
-      FLOOKUP gs.mutables slot = SOME (Value v)
+  storage_at addr src_id slot v st <=>
+    ?gbs mg.
+      ALOOKUP st.globals addr = SOME gbs /\
+      ALOOKUP gbs src_id = SOME mg /\
+      FLOOKUP mg.mutables slot = SOME (Value v)
 End
 
 (* HashMap assertion *)
 Definition hashmap_at_def:
-  hashmap_at addr slot vt hm st <=>
-    ?gs.
-      ALOOKUP st.globals addr = SOME gs /\
-      FLOOKUP gs.mutables slot = SOME (HashMap vt hm)
+  hashmap_at addr src_id slot vt hm st <=>
+    ?gbs mg.
+      ALOOKUP st.globals addr = SOME gbs /\
+      ALOOKUP gbs src_id = SOME mg /\
+      FLOOKUP mg.mutables slot = SOME (HashMap vt hm)
 End
 
 (* Immutable assertion *)
 Definition immutable_at_def:
-  immutable_at addr slot v st <=>
-    ?gs.
-      ALOOKUP st.globals addr = SOME gs /\
-      FLOOKUP gs.immutables slot = SOME v
+  immutable_at addr src_id slot v st <=>
+    ?gbs mg.
+      ALOOKUP st.globals addr = SOME gbs /\
+      ALOOKUP gbs src_id = SOME mg /\
+      FLOOKUP mg.immutables slot = SOME v
 End
 
 (* ===== Pure Assertions ===== *)

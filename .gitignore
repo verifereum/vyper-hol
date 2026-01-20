@@ -12,4 +12,7 @@ tests/vyper-test-exports
 CLAUDE.local.md
 
 .agent-files/
+
 .hol-vscode/
+.DS_Store
+*~
