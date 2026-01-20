@@ -2818,7 +2818,8 @@ Definition evaluate_def:
     transfer_value cx.txn.target toAddr amount;
     return $ Value $ NoneV
   od ∧
-  eval_expr cx (Call (ExtCall _) _) = raise $ Error "TODO: ExtCall" ∧
+  eval_expr cx (Call (ExtCall sig) _) = raise $ Error "TODO: ExtCall" ∧
+  eval_expr cx (Call (StaticCall sig) _) = raise $ Error "TODO: StaticCall" ∧
   eval_expr cx (Call (IntCall (src_id_opt, fn)) es) = do
     check (¬MEM (src_id_opt, fn) cx.stk) "recursion";
     ts <- lift_option (get_module_code cx src_id_opt) "IntCall get_module_code";

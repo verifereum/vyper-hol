@@ -145,10 +145,16 @@ Datatype:
   | ECMul        (* ecmul((x,y), scalar) -> (x',y') on BN254 *)
 End
 
+(* Resolved external call signature: (func_name, arg_types, return_type) *)
+Type ext_call_sig = “:identifier # (type list) # type”;
+
 Datatype:
   call_target
   = IntCall nsid
-  | ExtCall identifier (* external call passing Vyper values *)
+  | ExtCall ext_call_sig    (* resolved signature - mutating external call *)
+                            (* Convention: first arg is target address *)
+  | StaticCall ext_call_sig (* resolved signature - read-only external call *)
+                            (* Convention: first arg is target address *)
   | Send
   (* TODO: external raw call *)
 End
