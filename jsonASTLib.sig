@@ -113,6 +113,8 @@ signature jsonASTLib = sig
   val JE_Tuple_tm : term
   val JE_List_tm : term
   val JE_Call_tm : term
+  val JE_ExtCall_tm : term
+  val JE_StaticCall_tm : term
   val JKeyword_tm : term
 
   val mk_JE_Int : term * term -> term
@@ -131,6 +133,8 @@ signature jsonASTLib = sig
   val mk_JE_Tuple : term list -> term
   val mk_JE_List : term list * term -> term
   val mk_JE_Call : term * term list * term list * term * term -> term
+  val mk_JE_ExtCall : string * term list * term * term list -> term
+  val mk_JE_StaticCall : string * term list * term * term list -> term
   val mk_JKeyword : string * term -> term
 
   (* ===== Statement Constructors ===== *)
