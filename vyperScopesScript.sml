@@ -303,6 +303,70 @@ Proof
   >- simp[assign_target_def, raise_def]
 QED
 
+(* ===== Helper lemmas for difficult cases in scopes_len_mutual ===== *)
+
+(* Goal 13: If statement - the body is wrapped in push_scope/pop_scope via finally *)
+Theorem if_stmt_scopes_len[local]:
+  !cx e ss ss' st res st'.
+    eval_stmt cx (If e ss ss') st = (res, st') /\
+    (!st1 res1 st1'. eval_expr cx e st1 = (res1, st1') ==> LENGTH st1.scopes = LENGTH st1'.scopes) /\
+    (!st1 res1 st1'. eval_stmts cx ss st1 = (res1, st1') ==> LENGTH st1.scopes = LENGTH st1'.scopes) /\
+    (!st1 res1 st1'. eval_stmts cx ss' st1 = (res1, st1') ==> LENGTH st1.scopes = LENGTH st1'.scopes) ==>
+    LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+(* Goal 14: For statement - delegates to eval_for after check *)
+Theorem for_stmt_scopes_len[local]:
+  !cx id typ it n body st res st'.
+    eval_stmt cx (For id typ it n body) st = (res, st') /\
+    (!st1 res1 st1'. eval_iterator cx it st1 = (res1, st1') ==> LENGTH st1.scopes = LENGTH st1'.scopes) /\
+    (!vs st1 res1 st1'. eval_for cx (string_to_num id) body vs st1 = (res1, st1') ==> LENGTH st1.scopes = LENGTH st1'.scopes) ==>
+    LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+(* Goal 28: eval_for (v::vs) - uses push_scope_with_var/pop_scope via finally *)
+Theorem eval_for_cons_scopes_len[local]:
+  !cx nm body v vs st res st'.
+    eval_for cx nm body (v::vs) st = (res, st') /\
+    (!st1 res1 st1'. eval_stmts cx body st1 = (res1, st1') ==> LENGTH st1.scopes = LENGTH st1'.scopes) /\
+    (!st1 res1 st1'. eval_for cx nm body vs st1 = (res1, st1') ==> LENGTH st1.scopes = LENGTH st1'.scopes) ==>
+    LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+(* Goal 43: IntCall - uses push_function/pop_function via finally *)
+Theorem intcall_scopes_len[local]:
+  !cx src_id_opt fn es st res st'.
+    eval_expr cx (Call (IntCall (src_id_opt, fn)) es) st = (res, st') /\
+    (!st1 res1 st1'. eval_exprs cx es st1 = (res1, st1') ==> LENGTH st1.scopes = LENGTH st1'.scopes) /\
+    (* IH for body - note: runs with different cx' but body preserves scopes *)
+    (!cx' body st1 res1 st1'. eval_stmts cx' body st1 = (res1, st1') ==> LENGTH st1.scopes = LENGTH st1'.scopes) ==>
+    LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+(* Tactic for simple cases that just expand defs and use helper lemmas *)
+val simple_tac = rpt strip_tac >>
+  gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  res_tac >>
+  TRY (imp_res_tac get_Value_scopes) >>
+  TRY (imp_res_tac lift_option_scopes) >>
+  TRY (imp_res_tac lift_sum_scopes) >>
+  TRY (imp_res_tac check_scopes) >>
+  TRY (imp_res_tac push_log_scopes) >>
+  TRY (imp_res_tac new_variable_scopes_len) >>
+  TRY (imp_res_tac set_variable_scopes_len) >>
+  TRY (imp_res_tac assign_target_scopes_len) >>
+  TRY (imp_res_tac lookup_global_scopes) >>
+  TRY (imp_res_tac transfer_value_scopes) >>
+  gvs[];
+
 (* Main mutual scopes length preservation theorem *)
 Theorem scopes_len_mutual[local]:
   (!cx s st res st'. eval_stmt cx s st = (res, st') ==> LENGTH st.scopes = LENGTH st'.scopes) /\
@@ -315,7 +379,144 @@ Theorem scopes_len_mutual[local]:
   (!cx e st res st'. eval_expr cx e st = (res, st') ==> LENGTH st.scopes = LENGTH st'.scopes) /\
   (!cx es st res st'. eval_exprs cx es st = (res, st') ==> LENGTH st.scopes = LENGTH st'.scopes)
 Proof
-  cheat (* Full mutual induction - complex but follows from the above lemmas *)
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt gen_tac
+  (* 1. Pass *)
+  >- simp[evaluate_def, return_def]
+  (* 2. Continue *)
+  >- simp[evaluate_def, raise_def]
+  (* 3. Break *)
+  >- simp[evaluate_def, raise_def]
+  (* 4. Return NONE *)
+  >- simp[evaluate_def, raise_def]
+  (* 5. Return (SOME e) *)
+  >- simple_tac
+  (* 6. Raise e *)
+  >- simple_tac
+  (* 7. Assert *)
+  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      res_tac >> gvs[switch_BoolV_def, return_def, raise_def, bind_def, AllCaseEqs()] >>
+      res_tac >> imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >> gvs[] >>
+      Cases_on `tv = Value (BoolV T)` >> gvs[return_def] >>
+      Cases_on `tv = Value (BoolV F)` >> gvs[raise_def, bind_def, AllCaseEqs()] >>
+      res_tac >> imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >> gvs[] >>
+      metis_tac[])
+  (* 8. Log *)
+  >- simple_tac
+  (* 9. AnnAssign *)
+  >- simple_tac
+  (* 10. Append *)
+  >- (simple_tac >>
+      PairCases_on `x` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def] >>
+      gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      imp_res_tac get_Value_scopes >> imp_res_tac assign_target_scopes_len >> gvs[] >>
+      TRY (first_x_assum drule >> simp[]) >>
+      TRY (first_x_assum (qspecl_then [`st`, `x0`, `x1`, `s''`] mp_tac) >> simp[]))
+  (* 11. Assign *)
+  >- (simple_tac >>
+      gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      imp_res_tac assign_target_scopes_len >> gvs[] >> TRY (first_x_assum drule >> simp[]))
+  (* 12. AugAssign *)
+  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      PairCases_on `x` >> gvs[bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def] >>
+      imp_res_tac get_Value_scopes >> imp_res_tac assign_target_scopes_len >> gvs[] >>
+      TRY (first_x_assum drule >> simp[]) >>
+      TRY (first_x_assum (qspecl_then [`st`, `x0`, `x1`, `s''`] mp_tac) >> simp[]))
+  (* 13. If - use helper lemma *)
+  >- (rpt strip_tac >> irule if_stmt_scopes_len >>
+      MAP_EVERY qexists_tac [`e`, `ss`, `ss'`] >> simp[] >> metis_tac[])
+  (* 14. For - use helper lemma *)
+  >- (rpt strip_tac >> irule for_stmt_scopes_len >>
+      MAP_EVERY qexists_tac [`body`, `id`, `it`, `n`, `typ`] >> simp[] >> metis_tac[])
+  (* 15. Expr *)
+  >- (simple_tac >>
+      gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def] >>
+      imp_res_tac get_Value_scopes >> gvs[] >> res_tac >> gvs[])
+  (* 16. eval_stmts [] *)
+  >- simp[evaluate_def, return_def]
+  (* 17. eval_stmts (s::ss) *)
+  >- (simple_tac >> TRY (first_x_assum drule >> simp[]) >>
+      gvs[ignore_bind_def, bind_def, AllCaseEqs()] >>
+      first_x_assum drule >> simp[] >> strip_tac >> res_tac >> gvs[])
+  (* 18. Array iterator *)
+  >- simple_tac
+  (* 19. Range iterator *)
+  >- (simple_tac >>
+      imp_res_tac get_Value_scopes >> gvs[] >> res_tac >> gvs[] >>
+      imp_res_tac lift_sum_scopes >> gvs[] >>
+      TRY (first_x_assum drule >> simp[]) >>
+      TRY (first_x_assum (qspecl_then [`st`, `tv1`, `s''`, `s''`, `v`, `s''`] mp_tac) >> simp[]))
+  (* 20. BaseTarget *)
+  >- simple_tac
+  (* 21. TupleTarget *)
+  >- simple_tac
+  (* 22. eval_targets [] *)
+  >- simp[evaluate_def, return_def]
+  (* 23. eval_targets (g::gs) *)
+  >- (simple_tac >> TRY (first_x_assum drule >> simp[]))
+  (* 24. NameTarget *)
+  >- simp[evaluate_def, return_def]
+  (* 25. TopLevelNameTarget *)
+  >- (simp[evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
+      imp_res_tac lookup_global_scopes >> gvs[return_def])
+  (* 26. AttributeTarget *)
+  >- simple_tac
+  (* 27. SubscriptTarget *)
+  >- (simple_tac >> imp_res_tac get_Value_scopes >> gvs[] >>
+      TRY (first_x_assum drule >> simp[]) >>
+      TRY (first_x_assum (qspecl_then [`st`, `x0`, `x1`, `s''`] mp_tac) >> simp[]))
+  (* 28. eval_for [] *)
+  >- simp[evaluate_def, return_def]
+  (* 29. eval_for (v::vs) - use helper lemma *)
+  >- (rpt strip_tac >> irule eval_for_cons_scopes_len >>
+      MAP_EVERY qexists_tac [`body`, `v`, `vs`] >> simp[] >> metis_tac[])
+  (* 30. Name *)
+  >- (simp[evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
+      gvs[lift_option_def, return_def, raise_def])
+  (* 31. TopLevelName *)
+  >- (simp[evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
+      imp_res_tac lookup_global_scopes >> gvs[return_def])
+  (* 32. FlagMember *)
+  >- simp[evaluate_def, return_def]
+  (* 33. IfExp *)
+  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      res_tac >> gvs[switch_BoolV_def, return_def, raise_def, AllCaseEqs()] >>
+      imp_res_tac get_Value_scopes >> gvs[] >> res_tac >> gvs[] >>
+      TRY (first_x_assum drule >> simp[]))
+  (* 34. Literal *)
+  >- simp[evaluate_def, return_def]
+  (* 35. StructLit *)
+  >- (simple_tac >> gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      imp_res_tac lift_option_scopes >> gvs[])
+  (* 36. Subscript *)
+  >- (simple_tac >> imp_res_tac get_Value_scopes >> gvs[] >>
+      imp_res_tac lift_option_scopes >> imp_res_tac lift_sum_scopes >> gvs[] >>
+      TRY (first_x_assum drule >> simp[]))
+  (* 37. Attribute *)
+  >- (simple_tac >> imp_res_tac get_Value_scopes >> gvs[] >>
+      imp_res_tac lift_option_scopes >> gvs[])
+  (* 38. Builtin *)
+  >- (simple_tac >> gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      imp_res_tac check_scopes >> gvs[] >> imp_res_tac lift_sum_scopes >> gvs[])
+  (* 39. Pop *)
+  >- (simple_tac >> PairCases_on `x` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def] >>
+      imp_res_tac assign_target_scopes_len >> gvs[])
+  (* 40. TypeBuiltin *)
+  >- (simple_tac >> gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      imp_res_tac check_scopes >> gvs[] >> imp_res_tac lift_sum_scopes >> gvs[])
+  (* 41. Send *)
+  >- (simple_tac >> gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      imp_res_tac check_scopes >> imp_res_tac get_Value_scopes >> imp_res_tac transfer_value_scopes >> gvs[])
+  (* 42. ExtCall *)
+  >- simp[evaluate_def, raise_def]
+  (* 43. IntCall - use helper lemma *)
+  >- (rpt strip_tac >> irule intcall_scopes_len >>
+      MAP_EVERY qexists_tac [`es`, `fn`, `src_id_opt`] >> simp[] >> metis_tac[])
+  (* 44. eval_exprs [] *)
+  >- simp[evaluate_def, return_def]
+  (* 45. eval_exprs (e::es) *)
+  >- (simple_tac >> imp_res_tac get_Value_scopes >> gvs[] >>
+      TRY (first_x_assum drule >> simp[]) >>
+      TRY (first_x_assum (qspecl_then [`st`, `tv`, `s''`, `s''`, `v`, `s''`] mp_tac) >> simp[]))
 QED
 
 (* Main theorem: evaluation preserves scopes length *)
