@@ -452,7 +452,9 @@ Proof
   (* 23. eval_targets (g::gs) *)
   >- (simple_tac >> TRY (first_x_assum drule >> simp[]))
   (* 24. NameTarget *)
-  >- simp[evaluate_def, return_def]
+  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, get_scopes_def, return_def, AllCaseEqs()] >>
+      Cases_on `cx.txn.is_creation` >> gvs[return_def, bind_def, AllCaseEqs()] >>
+      imp_res_tac get_immutables_scopes >> imp_res_tac lift_sum_scopes >> gvs[])
   (* 25. TopLevelNameTarget *)
   >- (simp[evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
       imp_res_tac lookup_global_scopes >> gvs[return_def])
@@ -467,13 +469,15 @@ Proof
   (* 29. eval_for (v::vs) - complex proof, see eval_for_cons_scopes_len *)
   >- cheat
   (* 30. Name *)
-  >- (simp[evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
-      gvs[lift_option_def, return_def, raise_def])
+  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, get_scopes_def, return_def, AllCaseEqs()] >>
+      imp_res_tac get_immutables_scopes >> imp_res_tac lift_sum_scopes >> gvs[])
   (* 31. TopLevelName *)
   >- (simp[evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
       imp_res_tac lookup_global_scopes >> gvs[return_def])
   (* 32. FlagMember *)
-  >- simp[evaluate_def, return_def]
+  >- (rpt gen_tac >> PairCases_on `nsid` >>
+      simp[evaluate_def, lookup_flag_mem_def, raise_def, return_def] >>
+      rpt CASE_TAC >> simp[raise_def, return_def])
   (* 33. IfExp *)
   >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
       res_tac >> gvs[switch_BoolV_def, return_def, raise_def, AllCaseEqs()] >>
