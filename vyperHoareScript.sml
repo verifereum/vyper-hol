@@ -1,8 +1,3 @@
-(*
- * Vyper Program Logic - Core Definitions
- *
- *)
-
 Theory vyperHoare
 
 Ancestors
@@ -143,14 +138,6 @@ Proof
   simp[Once evaluate_def, return_def] >>
   simp[Once evaluate_def, ignore_bind_def, bind_def, return_def] >>
   simp[Once evaluate_def, return_def]
-QED
-
-Theorem scopes_len_preserved:
-  !st res s st'.
-    eval_stmts cx ss st = (res, st') ==>
-    length st.scopes = length st'.scopes
-Proof
-  cheat
 QED
 
 
