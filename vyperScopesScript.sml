@@ -227,11 +227,80 @@ Proof
 QED
 
 (* assign_target preserves scopes length *)
+(* Proof strategy: mutual induction on assign_target_ind, then:
+   - ScopedVar: use find_containing_scope_len
+   - TopLevelVar/ImmutableVar: case split on ALOOKUP, return/raise preserve state
+   - TupleTargetV error cases: just simp with raise_def
+   - assign_targets recursive: use IH via res_tac *)
 Theorem assign_target_scopes_len[local]:
   (!cx gv ao st res st'. assign_target cx gv ao st = (res, st') ==> LENGTH st'.scopes = LENGTH st.scopes) /\
   (!cx gvs vs st res st'. assign_targets cx gvs vs st = (res, st') ==> LENGTH st'.scopes = LENGTH st.scopes)
 Proof
-  cheat (* TODO: Fix this proof - using mutual induction on assign_target_ind *)
+  ho_match_mp_tac assign_target_ind >> rpt conj_tac >> rpt gen_tac
+  (* ScopedVar case *)
+  >- (strip_tac >>
+      gvs[assign_target_def, bind_def, get_scopes_def, return_def, lift_option_def] >>
+      Cases_on `find_containing_scope (string_to_num id) st.scopes` >> gvs[return_def, raise_def] >>
+      PairCases_on `x` >> gvs[bind_def, lift_sum_def] >>
+      Cases_on `assign_subscripts x2 (REVERSE is) ao` >>
+      gvs[return_def, raise_def, bind_def, ignore_bind_def, set_scopes_def] >>
+      drule find_containing_scope_len >> simp[])
+  (* TopLevelVar case *)
+  >- (strip_tac >> gvs[assign_target_def, bind_def] >>
+      Cases_on `lookup_global cx src_id_opt (string_to_num id) st` >> gvs[] >>
+      drule lookup_global_scopes >> strip_tac >>
+      Cases_on `q` >> gvs[] >>
+      gvs[lift_option_def, AllCaseEqs(), return_def, raise_def]
+      >- (imp_res_tac lift_sum_scopes >> gvs[] >>
+          gvs[bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def]
+          >- (imp_res_tac set_global_scopes >> gvs[] >>
+              Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def])
+          >- (imp_res_tac set_global_scopes >> gvs[] >>
+              Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def]))
+      >- (imp_res_tac lift_sum_scopes >> Cases_on `get_module_code cx src_id_opt` >>
+          gvs[return_def, raise_def])
+      >- (Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def]))
+  (* ImmutableVar case *)
+  >- (strip_tac >> gvs[assign_target_def, bind_def] >>
+      Cases_on `get_immutables cx st` >> gvs[] >>
+      drule get_immutables_scopes >> strip_tac >>
+      Cases_on `q` >> gvs[] >>
+      gvs[lift_option_def, AllCaseEqs(), return_def, raise_def]
+      >- (imp_res_tac lift_sum_scopes >> gvs[bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def]
+          >- (imp_res_tac set_immutable_scopes >> gvs[] >>
+              Cases_on `FLOOKUP x (string_to_num id)` >> gvs[return_def, raise_def])
+          >- (imp_res_tac set_immutable_scopes >> gvs[] >>
+              Cases_on `FLOOKUP x (string_to_num id)` >> gvs[return_def, raise_def]))
+      >- (imp_res_tac lift_sum_scopes >> gvs[] >>
+          Cases_on `FLOOKUP x (string_to_num id)` >> gvs[return_def, raise_def])
+      >- (Cases_on `FLOOKUP x (string_to_num id)` >> gvs[return_def, raise_def]))
+  (* TupleTargetV with TupleV - uses IH *)
+  >- (rpt strip_tac >>
+      gvs[assign_target_def, bind_def, check_def, assert_def, return_def, raise_def,
+          ignore_bind_def, AllCaseEqs()])
+  (* TupleTargetV error cases - all just raise *)
+  >- simp[assign_target_def, raise_def]
+  >- simp[assign_target_def, raise_def]
+  >- simp[assign_target_def, raise_def]
+  >- simp[assign_target_def, raise_def]
+  >- simp[assign_target_def, raise_def]
+  >- simp[assign_target_def, raise_def]
+  >- simp[assign_target_def, raise_def]
+  >- simp[assign_target_def, raise_def]
+  >- simp[assign_target_def, raise_def]
+  >- simp[assign_target_def, raise_def]
+  >- simp[assign_target_def, raise_def]
+  >- simp[assign_target_def, raise_def]
+  >- simp[assign_target_def, raise_def]
+  (* assign_targets [] [] *)
+  >- simp[assign_target_def, return_def]
+  (* assign_targets cons case - uses IH *)
+  >- (rpt strip_tac >>
+      gvs[assign_target_def, bind_def, AllCaseEqs(), return_def, get_Value_def] >>
+      res_tac >> imp_res_tac get_Value_scopes >> gvs[] >> metis_tac[])
+  (* assign_targets length mismatch cases *)
+  >- simp[assign_target_def, raise_def]
+  >- simp[assign_target_def, raise_def]
 QED
 
 (* Main mutual scopes length preservation theorem *)
