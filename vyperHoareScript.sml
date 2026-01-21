@@ -416,3 +416,21 @@ Theorem stmts_spec_assign_name:
 Proof
   cheat
 QED
+
+Theorem stmts_spec_concat:
+  ∀P1 P2 P3 R1 R2 cx ss1 ss2.
+    (⟦cx⟧ ⦃P1⦄ ss1 ⦃P2 ∥ R1⦄) ∧
+    (⟦cx⟧ ⦃P2⦄ ss2 ⦃P3 ∥ R2⦄) ⇒
+    ⟦cx⟧ ⦃P1⦄ (ss1 ++ ss2) ⦃P3 ∥ λv st. R1 v st ∨ R2 v st⦄
+Proof
+  cheat
+QED
+
+Theorem stmts_spec_cons:
+  ∀P1 P2 P3 R1 R2 cx s ss.
+    (⟦cx⟧ ⦃P1⦄ [s] ⦃P2 ∥ R1⦄) ∧
+    (⟦cx⟧ ⦃P2⦄ ss ⦃P3 ∥ R2⦄) ⇒
+    ⟦cx⟧ ⦃P1⦄ (s :: ss) ⦃P3 ∥ λv st. R1 v st ∨ R2 v st⦄
+Proof
+  cheat
+QED
