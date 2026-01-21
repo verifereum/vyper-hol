@@ -822,7 +822,13 @@ Theorem case_TypeBuiltin[local]:
     ∀st res st'.
       eval_expr cx (TypeBuiltin tb typ es) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def] >>
+  rpt strip_tac >> gvs[return_def] >>
+  TRY (imp_res_tac check_scopes >> gvs[]) >>
+  TRY (imp_res_tac lift_sum_scopes >> gvs[]) >>
+  TRY (res_tac >> gvs[])
 QED
 
 Theorem case_Send[local]:
