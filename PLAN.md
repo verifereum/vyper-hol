@@ -1,26 +1,27 @@
 # Proof Plan: scopes_len_preserved
 
-## BUILD STATUS: ✓ PASSING (with 2 cheats)
+## BUILD STATUS: ✓ PASSING (with 1 cheat)
 
-The vyperScopesTheory now builds successfully. There are 2 remaining cheated theorems.
+The vyperScopesTheory now builds successfully. There is 1 remaining cheated theorem.
 
 ## Latest Update (Jan 21, 2026)
 
-**case_eval_for_cons proof COMPLETED!** ✓
+**case_eval_exprs_cons proof COMPLETED!** ✓
+- Expression list evaluation with get_Value
+- **Proof strategy:** Chain through state transformations:
+  1. Strip quantifiers, expand evaluate_def/bind_def/AllCaseEqs/return_def
+  2. Apply `imp_res_tac get_Value_scopes` to link intermediate states
+  3. Apply `res_tac` to use the IH for eval_exprs
+  4. Apply `first_x_assum (drule_then assume_tac)` to use the eval_expr IH
+  5. Close with `gvs[]`
+- Build now passes with **1 remaining cheat** (down from 2)
+
+**Previously: case_eval_for_cons proof COMPLETED!** ✓
 - Successfully proved case_eval_for_cons theorem for for loop iteration
-- **Proof strategy:** Expand the definition, case split on success/failure of each operation:
-  1. Use `push_scope_with_var_len` to establish scopes length after push (+1)
-  2. Expand `finally` and `try`/`handle_loop_exception` to track state through success/error paths
-  3. Apply `eval_stmts` IH to show body preserves scopes length
-  4. Expand `pop_scope` to show it subtracts 1 from scopes length
-  5. For `broke = F` (ContinueException), use IH for recursive `eval_for` call
-  6. For `broke = T` (BreakException), show `return ()` preserves scopes
-  7. Handle error propagation cases by showing state is preserved
-- Build now passes with **2 remaining cheats** (down from 3)
 
-## Current Status: 2 Remaining Cheats
+## Current Status: 1 Remaining Cheat
 
-The following theorems still have cheats:
+The following theorem still has a cheat:
 
 ### 1. case_IntCall (line 994)
 Internal function calls with push_function/finally/pop_function pattern.
@@ -53,40 +54,8 @@ Key helper lemmas available:
 - `pop_function_scopes`: `pop_function prev st = (res, st') ⇒ st'.scopes = prev`
 - `get_scopes_id`: `get_scopes st = (res, st') ⇒ st' = st`
 
-### 2. case_eval_exprs_cons (line 1015)
-Expression list evaluation with get_Value.
-
-```sml
-Theorem case_eval_exprs_cons[local]:
-  ∀cx e es.
-    (∀s'' tv t s'³' v t'.
-       eval_expr cx e s'' = (INL tv,t) ∧ get_Value tv s'³' = (INL v,t') ⇒
-       ∀st res st'. eval_exprs cx es st = (res,st') ⇒ 
-         LENGTH st.scopes = LENGTH st'.scopes) ∧
-    (∀st res st'. eval_expr cx e st = (res,st') ⇒ 
-       LENGTH st.scopes = LENGTH st'.scopes) ⇒
-    ∀st res st'.
-      eval_exprs cx (e::es) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
-```
-
-**Proof strategy:**
-- Definition: `do tv <- eval_expr cx e; v <- get_Value tv; vs <- eval_exprs cx es; return (v::vs) od`
-- State chain: `st → t (eval e) → t' (get_Value) → st' (eval es)`
-- Apply eval_expr IH to get `LENGTH st.scopes = LENGTH t.scopes`
-- Apply `get_Value_scopes` to get `LENGTH t.scopes = LENGTH t'.scopes`
-- Apply eval_exprs IH (conditional) to get `LENGTH t'.scopes = LENGTH st'.scopes`
-- Chain by transitivity
-
-**Suggested proof:**
-```sml
-Proof
-  rpt strip_tac >>
-  gvs[evaluate_def, bind_def, AllCaseEqs(), return_def] >>
-  imp_res_tac get_Value_scopes >> gvs[] >>
-  res_tac >> gvs[]
-QED
-```
-(May need careful IH instantiation if res_tac doesn't find it automatically)
+### ~~2. case_eval_exprs_cons~~ ✓ COMPLETED
+Expression list evaluation with get_Value - **DONE**
 
 ## Completed Theorems
 

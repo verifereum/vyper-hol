@@ -1012,7 +1012,11 @@ Theorem case_eval_exprs_cons[local]:
     ∀st res st'.
       eval_exprs cx (e::es) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  rpt strip_tac >>
+  gvs[evaluate_def, bind_def, AllCaseEqs(), return_def] >>
+  imp_res_tac get_Value_scopes >> gvs[] >>
+  res_tac >> gvs[] >>
+  first_x_assum (drule_then assume_tac) >> gvs[]
 QED
 
 (* Main mutual scopes length preservation theorem *)
