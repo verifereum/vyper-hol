@@ -392,16 +392,18 @@ QED
 
 Theorem assign_target_spec_consequence:
   ∀cx st av v Q Q'.
-    (∀st'. Q st' => Q' st') ∧
-    assign_target_spec cx st av (Replace v) Q =>
+    (∀st'. Q st' ⇒ Q' st') ∧
+    assign_target_spec cx st av (Replace v) Q ⇒
       assign_target_spec cx st av (Replace v) Q'                       
 Proof
-  cheat
+  rw[assign_target_spec_def] >> rpt strip_tac >>
+  Cases_on `assign_target cx av (Replace v) st` >> gvs[] >>
+  Cases_on `q` >> gvs[]
 QED
 
 Theorem assign_target_spec_lookup:
   ∀cx st n av v.
-    lookup_name_target cx st n = SOME av =>
+    lookup_name_target cx st n = SOME av ⇒
     assign_target_spec cx st av (Replace v) (λst. lookup_name cx st n = SOME v)
 Proof
   cheat
