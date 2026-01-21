@@ -389,3 +389,28 @@ Proof
     >> gvs[return_def] >>
    simp[Once evaluate_def, return_def]
 QED
+
+Theorem assign_target_spec_consequence:
+  ∀cx st av v Q Q'.
+    (∀st'. Q st' => Q' st') ∧
+    assign_target_spec cx st av (Replace v) Q =>
+      assign_target_spec cx st av (Replace v) Q'                       
+Proof
+  cheat
+QED
+
+Theorem assign_target_spec_lookup:
+  ∀cx st n av v.
+    lookup_name_target cx st n = SOME av =>
+    assign_target_spec cx st av (Replace v) (λst. lookup_name cx st n = SOME v)
+Proof
+  cheat
+QED
+
+Theorem stmts_spec_assign_name:
+  ∀P P' Q cx n av e v.
+     (⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ e ⇓ v ⦃λst. assign_target_spec cx st av (Replace v) Q⦄) ⇒
+     ⟦cx⟧ ⦃P⦄ [Assign (BaseTarget (NameTarget n)) e] ⦃Q ∥ λ_ _. F⦄
+Proof
+  cheat
+QED
