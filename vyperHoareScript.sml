@@ -129,6 +129,13 @@ End
 (**********************************************************************)
 (* Helper lemmas *)
 
+Theorem eval_expr_Name_preserves_state:
+  ∀cx n st v st'.
+    eval_expr cx (Name n) st = (INL (Value v), st') ==> st' = st
+Proof
+  cheat
+QED
+
 Theorem eval_base_target_NameTarget_preserves_state:
   ∀cx n st loc sbs st'.
     eval_base_target cx (NameTarget n) st = (INL (loc, sbs), st') ==> st' = st
@@ -194,7 +201,11 @@ QED
 Theorem expr_spec_name:
   ∀P cx n v. ⟦cx⟧ ⦃λst. P st ∧ lookup_name cx st n = SOME v⦄ (Name n) ⇓ v ⦃P⦄
 Proof
-  cheat
+  rw[expr_spec_def, lookup_name_def] >> rpt strip_tac >>
+  Cases_on `eval_expr cx (Name n) st` >>
+  Cases_on `q` >> gvs[] >>
+  Cases_on `x` >> gvs[] >>
+  drule eval_expr_Name_preserves_state >> simp[]
 QED
 
 Theorem expr_spec_if:
