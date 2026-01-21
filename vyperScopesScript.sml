@@ -215,6 +215,21 @@ Proof
   first_x_assum (qspecl_then [`st with scopes updated_by CONS (FEMPTY |+ (nm, v))`] mp_tac) >> simp[]
 QED
 
+(* Helper for the exact pattern in If statements: do push_scope; finally body pop_scope od *)
+Theorem push_scope_finally_pop_len[local]:
+  !body st res st'.
+    do push_scope; finally body pop_scope od st = (res, st') /\
+    (!st1 res1 st1'. body st1 = (res1, st1') ==> LENGTH st1'.scopes = LENGTH st1.scopes) ==>
+    LENGTH st'.scopes = LENGTH st.scopes
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `do _ ; _ od _ = _` mp_tac >>
+  simp[vyperInterpreterTheory.bind_def, finally_def, ignore_bind_def,
+       push_scope_def, pop_scope_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  TRY (first_x_assum (qspecl_then [`st with scopes updated_by CONS FEMPTY`] mp_tac) >> simp[])
+QED
+
 (* Switch_BoolV preserves length if both branches preserve length *)
 Theorem switch_BoolV_scopes_len[local]:
   !v f g st res st'.
@@ -481,7 +496,13 @@ Theorem case_If[local]:
     ∀st res st'.
       eval_stmt cx (If e ss ss') st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+  sg `∀st1 res1 st1'. switch_BoolV tv (eval_stmts cx ss) (eval_stmts cx ss') st1 = (res1,st1') ⇒ LENGTH st1'.scopes = LENGTH st1.scopes`
+  >- (rpt strip_tac >> imp_res_tac switch_BoolV_scopes_len >>
+      qpat_x_assum `(_ ==> _ ==> _)` irule >>
+      conj_tac >> rpt strip_tac >> ntac 2 (last_x_assum (qspecl_then [`st`, `tv`, `s''`] mp_tac)) >>
+      simp[push_scope_def, return_def] >> rpt strip_tac >> res_tac >> simp[]) >>
+  imp_res_tac push_scope_finally_pop_len >> gvs[]
 QED
 
 Theorem case_For[local]:

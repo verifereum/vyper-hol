@@ -6,12 +6,24 @@ The vyperScopesTheory now builds successfully. However, there are 5 cheated theo
 
 ## Latest Update (Jan 21, 2026)
 
-**case_IfExp proof completed!**
+**case_If proof COMPLETED!** ✓
+- Successfully proved case_If theorem for If statements with push_scope/finally/pop_scope
+- **Solution:** Created a new helper lemma `push_scope_finally_pop_len` that matches the exact evaluation structure
+- Evaluation structure: `do push_scope; finally (switch_BoolV...) pop_scope od`
+- New lemma pattern: `do push_scope; finally body pop_scope od` (matches exactly!)
+- **Proof strategy:**
+  1. Created `push_scope_finally_pop_len` helper lemma (initially cheated)
+  2. Proved case_If using the helper lemma and `switch_BoolV_scopes_len`
+  3. Then proved `push_scope_finally_pop_len` by expanding definitions and handling 4 case splits
+  4. Key insight: After push_scope, we have one more scope, so `s''.scopes = []` cases are contradictions
+  5. Used the body preservation property to show `LENGTH tl = LENGTH st.scopes` after popping
+- Build now passes with **4 remaining cheats** (down from 5)
+- Build time: ~5 seconds
+
+**Previous (case_IfExp proof completed):**
 - Successfully proved case_IfExp theorem for if-expressions (ternary operator)
 - Proof strategy: expand `switch_BoolV_def` and case split on `tv = Value (BoolV T)` and `tv = Value (BoolV F)`
 - Apply IHs for both branches (e' and e'') using `res_tac` and `metis_tac[]`
-- Build passes with 5 remaining cheats (down from 6)
-- Build time: ~5 seconds
 
 **Previous:** 
 - case_Send proof completed (uses check_scopes, lift_option_scopes, transfer_value_scopes)
@@ -29,13 +41,12 @@ The vyperScopesTheory now builds successfully. However, there are 5 cheated theo
 The main `scopes_len_mutual` theorem (line 892) is now structured with 45 subgoals that use individual case_* theorems.
 
 **Progress:**
-- 43/45 case_* theorems are complete (including case_IfExp)
-- 5 remaining cheated theorems:
-  1. **case_If** (line 484) - If statement with push_scope/finally/pop_scope
-  2. **case_For** (line 500) - For loop delegation to eval_for
-  3. **case_eval_for_cons** (line 682) - For loop iteration with push_scope_with_var/finally/pop_scope
-  4. **case_IntCall** (line 900) - Internal function calls with push_function/finally/pop_function
-  5. **case_eval_exprs_cons** (line 921) - Expression list evaluation
+- 44/45 case_* theorems are complete (including case_IfExp and case_If!)
+- 4 remaining cheated theorems:
+  1. **case_For** (line 521) - For loop delegation to eval_for
+  2. **case_eval_for_cons** (line 703) - For loop iteration with push_scope_with_var/finally/pop_scope
+  3. **case_IntCall** (line 921) - Internal function calls with push_function/finally/pop_function
+  4. **case_eval_exprs_cons** (line 942) - Expression list evaluation
 
 ## Current Session Update
 
