@@ -111,6 +111,21 @@ val _ =
       paren_style = OnlyIfNecessary,
       block_style = (AroundEachPhrase, (PP.INCONSISTENT, 0)) };
 
+Definition lookup_name_def:
+  lookup_name cx st n =
+    case eval_expr cx (Name n) st of
+    | (INL (Value v), _) => SOME v
+    | (_, _) => NONE
+End
+
+Definition lookup_name_target_def:
+  lookup_name_target cx st n =
+    case eval_base_target cx (NameTarget n) st of
+    | (INL (loc, sbs), _) => SOME (BaseTargetV loc sbs)
+    | (INR _, _) => NONE
+End
+
+                  
 (**********************************************************************)
 (* Helper lemmas *)
 
@@ -176,15 +191,8 @@ Proof
   rw[expr_spec_def, evaluate_def, return_def]
 QED
 
-Definition lookup_name_def:
-  lookup_name cx st n =
-    case eval_expr cx (Name n) st of
-    | (INL (Value v), _) => SOME v
-    | (_, _) => NONE
-End
-
 Theorem expr_spec_name:
-  ∀P cx n e v. ⟦cx⟧ ⦃λst. P st ∧ lookup_name cx st n = SOME v⦄ e ⇓ v ⦃P⦄
+  ∀P cx n v. ⟦cx⟧ ⦃λst. P st ∧ lookup_name cx st n = SOME v⦄ (Name n) ⇓ v ⦃P⦄
 Proof
   cheat
 QED
@@ -218,13 +226,6 @@ Proof
   Cases_on `eval_target cx tgt st` >>
   Cases_on `q` >> gvs[]
 QED
-
-Definition lookup_name_target_def:
-  lookup_name_target cx st n =
-    case eval_base_target cx (NameTarget n) st of
-    | (INL (loc, sbs), _) => SOME (BaseTargetV loc sbs)
-    | (INR _, _) => NONE
-End
 
 Theorem target_spec_name:
   ∀P cx n av.
