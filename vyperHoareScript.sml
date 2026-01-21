@@ -24,6 +24,15 @@ Definition expr_spec_def:
       | (INR _, st') => F (* ignore exceptions in expressions for now *)
 End
 
+Definition target_spec_def:
+  target_spec cx (P : evaluation_state -> bool) (tgt : assignment_target) (v : assignment_value) (Q : evaluation_state -> bool) <=>
+    !st. P st ==>
+      case eval_target cx tgt st of
+      | (INL val, st') =>
+             if val = v then Q st' else F
+      | (INR _, st') => F (* ignore exceptions in expressions for now *)
+End
+
 open Parse;
 
 val _ =
@@ -74,6 +83,31 @@ val _ =
       paren_style = OnlyIfNecessary,
       block_style = (AroundEachPhrase, (PP.INCONSISTENT, 0)) };
 
+val _ =
+  temp_add_rule
+    { term_name   = "target_spec",
+      fixity      = Closefix,
+      pp_elements =
+      [ TOK "⟦",
+        TM,
+        TOK "⟧",
+        BreakSpace(1,0),
+        TOK "⦃",
+        TM,
+        TOK "⦄",
+        BreakSpace(1,0),
+        TM,
+        BreakSpace(1,0),
+        TOK "⇓ᵗ",
+        BreakSpace(1,0),
+        TM,
+        BreakSpace(1,0),
+        TOK "⦃",
+        TM,
+        TOK "⦄" ],
+      paren_style = OnlyIfNecessary,
+      block_style = (AroundEachPhrase, (PP.INCONSISTENT, 0)) };
+
 Theorem expr_spec_consequence:
   ∀P P' Q Q' cx e v.
     (∀st. P' st ⇒ P st) ∧
@@ -108,6 +142,25 @@ Proof
   Cases_on `eval_expr cx e1 st` >>
   Cases_on `q` >>
   simp[switch_BoolV_def]
+QED
+
+Theorem target_spec_consequence:
+  ∀P P' Q Q' cx tgt va.
+    (∀st. P' st ⇒ P st) ∧
+    (∀st. Q st ⇒ Q' st) ∧
+    (⟦cx⟧ ⦃P⦄ tgt ⇓ᵗ va ⦃Q⦄) ⇒
+    ⟦cx⟧ ⦃P'⦄ tgt ⇓ᵗ va ⦃Q'⦄
+Proof
+  rw[target_spec_def] >>
+  first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
+  Cases_on `eval_target cx tgt st` >>
+  Cases_on `q` >> gvs[]
+QED
+
+Theorem target_spec_name:
+  ∀P cx idt va. ⟦cx⟧ ⦃P⦄ (BaseTarget (NameTarget idt)) ⇓ᵗ va ⦃P⦄
+Proof
+  cheat
 QED
 
 Theorem stmts_spec_consequence:
@@ -223,19 +276,17 @@ Proof
 QED
 
 Definition assign_target_spec_def:
-  assign_target_spec cx st (tgt : assignment_target) (ao : assign_operation) Q ⇔
-    case eval_target cx tgt st of
-    | (INL vtgt, st') =>
-        case assign_target cx vtgt ao st' of
-        | (INL _, st'') => Q st''
-        | (INR _, _) => F
+  assign_target_spec cx st (va : assignment_value) (ao : assign_operation) Q ⇔
+    case assign_target cx vtgt ao st of
+    | (INL _, st') => Q st'
     | (INR _, _) => F
 End
 
 Theorem stmts_spec_assign:
-  ∀P Q cx tgt e.
-     (⟦cx⟧ {{P}} e ⇓ v {{λst. assign_target_spec cx st tgt (Replace v) Q}}) ⇒
-     ⟦cx⟧ {{P}} [Assign tgt e] {{Q ∥ False}}
+  ∀P Q cx tgt e v.
+     (⟦cx⟧ ⦃P⦄ tgt ⇓ᵗ va ⦃P'⦄) ⇒
+     (⟦cx⟧ ⦃P'⦄ e ⇓ v ⦃λst. assign_target_spec cx st va (Replace v) Q⦄) ⇒
+     ⟦cx⟧ ⦃P⦄ [Assign tgt e] ⦃Q ∥ λ_ _. F⦄
 Proof
   cheat
 QED
