@@ -30,7 +30,7 @@ Definition target_spec_def:
       case eval_target cx tgt st of
       | (INL val, st') =>
              if val = v then Q st' else F
-      | (INR _, st') => F (* ignore exceptions in expressions for now *)
+      | (INR _, st') => F (* ignore exceptions in target expressions for now *)
 End
 
 open Parse;
@@ -145,11 +145,11 @@ Proof
 QED
 
 Theorem target_spec_consequence:
-  ∀P P' Q Q' cx tgt va.
+  ∀P P' Q Q' cx tgt av.
     (∀st. P' st ⇒ P st) ∧
     (∀st. Q st ⇒ Q' st) ∧
-    (⟦cx⟧ ⦃P⦄ tgt ⇓ᵗ va ⦃Q⦄) ⇒
-    ⟦cx⟧ ⦃P'⦄ tgt ⇓ᵗ va ⦃Q'⦄
+    (⟦cx⟧ ⦃P⦄ tgt ⇓ᵗ av ⦃Q⦄) ⇒
+    ⟦cx⟧ ⦃P'⦄ tgt ⇓ᵗ av ⦃Q'⦄
 Proof
   rw[target_spec_def] >>
   first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
@@ -157,8 +157,16 @@ Proof
   Cases_on `q` >> gvs[]
 QED
 
+Definition lookup_name_target_def:
+  lookup_name_target cx st n =
+    case eval_base_target cx (NameTarget n) st of
+    | (INL (loc, sbs), _) => SOME (BaseTargetV loc sbs)
+    | (INR _, _) => NONE
+End
+
 Theorem target_spec_name:
-  ∀P cx idt va. ⟦cx⟧ ⦃P⦄ (BaseTarget (NameTarget idt)) ⇓ᵗ va ⦃P⦄
+  ∀P cx n av.
+     ⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ (BaseTarget (NameTarget n)) ⇓ᵗ av ⦃P⦄
 Proof
   cheat
 QED
@@ -276,16 +284,16 @@ Proof
 QED
 
 Definition assign_target_spec_def:
-  assign_target_spec cx st (va : assignment_value) (ao : assign_operation) Q ⇔
-    case assign_target cx vtgt ao st of
+  assign_target_spec cx st (av : assignment_value) (ao : assign_operation) Q ⇔
+    case assign_target cx av ao st of
     | (INL _, st') => Q st'
     | (INR _, _) => F
 End
 
 Theorem stmts_spec_assign:
-  ∀P Q cx tgt e v.
-     (⟦cx⟧ ⦃P⦄ tgt ⇓ᵗ va ⦃P'⦄) ⇒
-     (⟦cx⟧ ⦃P'⦄ e ⇓ v ⦃λst. assign_target_spec cx st va (Replace v) Q⦄) ⇒
+  ∀P Q cx tgt av e v.
+     (⟦cx⟧ ⦃P⦄ tgt ⇓ᵗ av ⦃P'⦄) ⇒
+     (⟦cx⟧ ⦃P'⦄ e ⇓ v ⦃λst. assign_target_spec cx st av (Replace v) Q⦄) ⇒
      ⟦cx⟧ ⦃P⦄ [Assign tgt e] ⦃Q ∥ λ_ _. F⦄
 Proof
   cheat
