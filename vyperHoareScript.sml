@@ -133,7 +133,18 @@ Theorem eval_expr_Name_preserves_state:
   ∀cx n st v st'.
     eval_expr cx (Name n) st = (INL (Value v), st') ==> st' = st
 Proof
-  cheat
+  simp[Once evaluate_def] >> rpt strip_tac >>
+  qpat_x_assum `do _ od _ = _` mp_tac >>
+  simp[bind_def, get_scopes_def, return_def] >>
+  simp[get_immutables_def, get_immutables_module_def,
+       get_current_globals_def, lift_option_def] >>
+  simp[bind_def, get_current_globals_def, return_def] >>
+  simp[lift_option_def] >>
+  Cases_on `ALOOKUP st.globals cx.txn.target` >> gvs[raise_def, return_def] >>
+  simp[lift_sum_def] >>
+  Cases_on `exactly_one_option (lookup_scopes (string_to_num n) st.scopes)
+                                (FLOOKUP (get_module_globals NONE x).immutables (string_to_num n))` >>
+  gvs[return_def, raise_def]
 QED
 
 Theorem eval_base_target_NameTarget_preserves_state:
