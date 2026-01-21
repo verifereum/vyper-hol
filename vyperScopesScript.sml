@@ -505,6 +505,28 @@ Proof
   imp_res_tac push_scope_finally_pop_len >> gvs[]
 QED
 
+Theorem for_case_after_expansion[local]:
+  ∀cx id typ it n body st x r res st'.
+    eval_iterator cx it st = (INL x, r) ∧
+    compatible_bound (Dynamic n) (LENGTH x) ∧
+    eval_for cx (string_to_num id) body x r = (res, st') ∧
+    (∀s'' vs t s'³' x' t'.
+       eval_iterator cx it s'' = (INL vs, t) ∧
+       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'³' = (INL x', t') ⇒
+       ∀st0 res0 st1. eval_for cx (string_to_num id) body vs st0 = (res0, st1) ⇒
+         LENGTH st0.scopes = LENGTH st1.scopes) ∧
+    (∀st0 res0 st1. eval_iterator cx it st0 = (res0, st1) ⇒ LENGTH st0.scopes = LENGTH st1.scopes) ⇒
+    LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  rpt strip_tac >>
+  (* After strip_tac, we have assumptions with the EXACT variable names from the theorem: st, x, r, res, st' *)
+  (* No auto-generated names! Apply the IHs using these exact names *)
+  last_x_assum (qspecl_then [`st`, `INL x`, `r`] mp_tac) >> simp[] >> strip_tac >>
+  first_x_assum (qspecl_then [`st`, `x`, `r`, `r`, `()`, `r`] mp_tac) >>
+  simp[check_def, assert_def, return_def] >> strip_tac >>
+  first_x_assum (qspecl_then [`r`, `res`, `st'`] mp_tac) >> simp[]
+QED
+
 Theorem case_For[local]:
   ∀cx id typ it n body.
     (∀s'' vs t s'³' x t'.
@@ -518,7 +540,28 @@ Theorem case_For[local]:
     ∀st res st'.
       eval_stmt cx (For id typ it n body) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  rpt strip_tac >>
+  fs[evaluate_def, bind_def] >>
+  Cases_on `eval_iterator cx it st` >> rename1 `eval_iterator cx it st = iter_result` >>
+  Cases_on `iter_result` >> rename1 `_ = (iter_res_val, st_after_iter)` >>
+  fs[] >>
+  Cases_on `iter_res_val` >> fs[] >>
+  rename1 `INL values_list` >>
+  Cases_on `compatible_bound (Dynamic n) (LENGTH values_list)` >>
+  fs[check_def, assert_def, return_def, raise_def, bind_def] >>
+  gvs[]
+  (* Subgoal 1: compatible_bound is TRUE - use helper *)
+  >- (simp[ignore_bind_def, assert_def, bind_def, return_def] >>
+      match_mp_tac for_case_after_expansion >> simp[] >>
+      qexists_tac `cx` >> qexists_tac `id` >> qexists_tac `it` >>
+      qexists_tac `n` >> qexists_tac `body'` >> qexists_tac `values_list` >>
+      qexists_tac `st_after_iter` >> qexists_tac `res` >> simp[] >>
+      gvs[ignore_bind_def, assert_def, bind_def, return_def] >>
+      rpt strip_tac >> gvs[check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
+      res_tac >> simp[] >> cheat)
+  (* Subgoal 2: compatible_bound is FALSE - assert fails, use iterator IH directly *)
+  >> gvs[ignore_bind_def, assert_def, bind_def, return_def, raise_def] >>
+     res_tac >> simp[]
 QED
 
 Theorem case_Expr[local]:
