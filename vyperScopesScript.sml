@@ -303,53 +303,7 @@ Proof
   >- simp[assign_target_def, raise_def]
 QED
 
-(* ===== Helper lemmas for difficult cases in scopes_len_mutual ===== *)
-
-(* Goal 13: If statement - the body is wrapped in push_scope/pop_scope via finally *)
-Theorem if_stmt_scopes_len[local]:
-  !cx e ss ss' st res st'.
-    eval_stmt cx (If e ss ss') st = (res, st') /\
-    (!st1 res1 st1'. eval_expr cx e st1 = (res1, st1') ==> LENGTH st1.scopes = LENGTH st1'.scopes) /\
-    (!st1 res1 st1'. eval_stmts cx ss st1 = (res1, st1') ==> LENGTH st1.scopes = LENGTH st1'.scopes) /\
-    (!st1 res1 st1'. eval_stmts cx ss' st1 = (res1, st1') ==> LENGTH st1.scopes = LENGTH st1'.scopes) ==>
-    LENGTH st.scopes = LENGTH st'.scopes
-Proof
-  cheat
-QED
-
-(* Goal 14: For statement - delegates to eval_for after check *)
-Theorem for_stmt_scopes_len[local]:
-  !cx id typ it n body st res st'.
-    eval_stmt cx (For id typ it n body) st = (res, st') /\
-    (!st1 res1 st1'. eval_iterator cx it st1 = (res1, st1') ==> LENGTH st1.scopes = LENGTH st1'.scopes) /\
-    (!vs st1 res1 st1'. eval_for cx (string_to_num id) body vs st1 = (res1, st1') ==> LENGTH st1.scopes = LENGTH st1'.scopes) ==>
-    LENGTH st.scopes = LENGTH st'.scopes
-Proof
-  cheat
-QED
-
-(* Goal 28: eval_for (v::vs) - uses push_scope_with_var/pop_scope via finally *)
-Theorem eval_for_cons_scopes_len[local]:
-  !cx nm body v vs st res st'.
-    eval_for cx nm body (v::vs) st = (res, st') /\
-    (!st1 res1 st1'. eval_stmts cx body st1 = (res1, st1') ==> LENGTH st1.scopes = LENGTH st1'.scopes) /\
-    (!st1 res1 st1'. eval_for cx nm body vs st1 = (res1, st1') ==> LENGTH st1.scopes = LENGTH st1'.scopes) ==>
-    LENGTH st.scopes = LENGTH st'.scopes
-Proof
-  cheat
-QED
-
-(* Goal 43: IntCall - uses push_function/pop_function via finally *)
-Theorem intcall_scopes_len[local]:
-  !cx src_id_opt fn es st res st'.
-    eval_expr cx (Call (IntCall (src_id_opt, fn)) es) st = (res, st') /\
-    (!st1 res1 st1'. eval_exprs cx es st1 = (res1, st1') ==> LENGTH st1.scopes = LENGTH st1'.scopes) /\
-    (* IH for body - note: runs with different cx' but body preserves scopes *)
-    (!cx' body st1 res1 st1'. eval_stmts cx' body st1 = (res1, st1') ==> LENGTH st1.scopes = LENGTH st1'.scopes) ==>
-    LENGTH st.scopes = LENGTH st'.scopes
-Proof
-  cheat
-QED
+(* ===== Helper lemmas ===== *)
 
 (* Tactic for simple cases that just expand defs and use helper lemmas *)
 val simple_tac = rpt strip_tac >>
@@ -382,28 +336,28 @@ Theorem case_Pass[local]:
   ∀cx st res st'.
     eval_stmt cx Pass st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simp[evaluate_def, return_def]
 QED
 
 Theorem case_Continue[local]:
   ∀cx st res st'.
     eval_stmt cx Continue st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simp[evaluate_def, raise_def]
 QED
 
 Theorem case_Break[local]:
   ∀cx st res st'.
     eval_stmt cx Break st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simp[evaluate_def, raise_def]
 QED
 
 Theorem case_Return_NONE[local]:
   ∀cx st res st'.
     eval_stmt cx (Return NONE) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simp[evaluate_def, raise_def]
 QED
 
 Theorem case_Return_SOME[local]:
@@ -413,7 +367,7 @@ Theorem case_Return_SOME[local]:
     ∀st res st'.
       eval_stmt cx (Return (SOME e)) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simple_tac
 QED
 
 Theorem case_Raise[local]:
@@ -423,7 +377,7 @@ Theorem case_Raise[local]:
     ∀st res st'.
       eval_stmt cx (Raise e) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simple_tac
 QED
 
 Theorem case_Assert[local]:
@@ -437,7 +391,10 @@ Theorem case_Assert[local]:
     ∀st res st'.
       eval_stmt cx (Assert e e') st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def, switch_BoolV_def] >>
+  Cases_on `tv = Value (BoolV T)` >> gvs[return_def] >>
+  Cases_on `tv = Value (BoolV F)` >> gvs[raise_def, bind_def, AllCaseEqs()] >>
+  chain_tac
 QED
 
 Theorem case_Log[local]:
@@ -447,7 +404,7 @@ Theorem case_Log[local]:
     ∀st res st'.
       eval_stmt cx (Log id es) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simple_tac
 QED
 
 Theorem case_AnnAssign[local]:
@@ -457,7 +414,7 @@ Theorem case_AnnAssign[local]:
     ∀st res st'.
       eval_stmt cx (AnnAssign id typ e) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simple_tac
 QED
 
 Theorem case_Append[local]:
@@ -471,7 +428,10 @@ Theorem case_Append[local]:
     ∀st res st'.
       eval_stmt cx (Append bt e) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  PairCases_on `x` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def] >>
+  gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  chain_tac
 QED
 
 Theorem case_Assign[local]:
@@ -485,7 +445,9 @@ Theorem case_Assign[local]:
     ∀st res st'.
       eval_stmt cx (Assign g e) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  chain_tac
 QED
 
 Theorem case_AugAssign[local]:
@@ -499,7 +461,9 @@ Theorem case_AugAssign[local]:
     ∀st res st'.
       eval_stmt cx (AugAssign bt bop e) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  PairCases_on `x` >> gvs[bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def] >>
+  chain_tac
 QED
 
 Theorem case_If[local]:
@@ -543,14 +507,16 @@ Theorem case_Expr[local]:
     ∀st res st'.
       eval_stmt cx (Expr e) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simple_tac >>
+  gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def] >>
+  imp_res_tac get_Value_scopes >> gvs[] >> res_tac >> gvs[]
 QED
 
 Theorem case_eval_stmts_nil[local]:
   ∀cx st res st'.
     eval_stmts cx [] st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simp[evaluate_def, return_def]
 QED
 
 Theorem case_eval_stmts_cons[local]:
@@ -564,7 +530,9 @@ Theorem case_eval_stmts_cons[local]:
     ∀st res st'.
       eval_stmts cx (s::ss) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simple_tac >> TRY (first_x_assum drule >> simp[]) >>
+  gvs[ignore_bind_def, bind_def, AllCaseEqs()] >>
+  first_x_assum drule >> simp[] >> strip_tac >> res_tac >> gvs[]
 QED
 
 Theorem case_Array_iterator[local]:
@@ -574,7 +542,7 @@ Theorem case_Array_iterator[local]:
     ∀st res st'.
       eval_iterator cx (Array e) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simple_tac
 QED
 
 Theorem case_Range_iterator[local]:
@@ -588,7 +556,8 @@ Theorem case_Range_iterator[local]:
     ∀st res st'.
       eval_iterator cx (Range e e') st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  chain_tac
 QED
 
 Theorem case_BaseTarget[local]:
@@ -598,7 +567,7 @@ Theorem case_BaseTarget[local]:
     ∀st res st'.
       eval_target cx (BaseTarget bt) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simple_tac
 QED
 
 Theorem case_TupleTarget[local]:
@@ -608,14 +577,14 @@ Theorem case_TupleTarget[local]:
     ∀st res st'.
       eval_target cx (TupleTarget gs) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simple_tac
 QED
 
 Theorem case_eval_targets_nil[local]:
   ∀cx st res st'.
     eval_targets cx [] st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simp[evaluate_def, return_def]
 QED
 
 Theorem case_eval_targets_cons[local]:
@@ -629,7 +598,8 @@ Theorem case_eval_targets_cons[local]:
     ∀st res st'.
       eval_targets cx (g::gs) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  chain_tac
 QED
 
 Theorem case_NameTarget[local]:
@@ -637,7 +607,9 @@ Theorem case_NameTarget[local]:
     eval_base_target cx (NameTarget id) st = (res,st') ⇒
     LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  rpt strip_tac >> gvs[evaluate_def, bind_def, get_scopes_def, return_def, AllCaseEqs()] >>
+  Cases_on `cx.txn.is_creation` >> gvs[return_def, bind_def, AllCaseEqs()] >>
+  imp_res_tac get_immutables_scopes >> imp_res_tac lift_sum_scopes >> gvs[]
 QED
 
 Theorem case_TopLevelNameTarget[local]:
@@ -645,7 +617,8 @@ Theorem case_TopLevelNameTarget[local]:
     eval_base_target cx (TopLevelNameTarget (src_id_opt,id)) st = (res,st') ⇒
     LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simp[evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
+  imp_res_tac lookup_global_scopes >> gvs[return_def]
 QED
 
 Theorem case_AttributeTarget[local]:
@@ -656,7 +629,7 @@ Theorem case_AttributeTarget[local]:
       eval_base_target cx (AttributeTarget bt id) st = (res,st') ⇒
       LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simple_tac
 QED
 
 Theorem case_SubscriptTarget[local]:
@@ -671,14 +644,16 @@ Theorem case_SubscriptTarget[local]:
       eval_base_target cx (SubscriptTarget bt e) st = (res,st') ⇒
       LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  PairCases_on `x` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def] >>
+  chain_tac
 QED
 
 Theorem case_eval_for_nil[local]:
   ∀cx nm body st res st'.
     eval_for cx nm body [] st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simp[evaluate_def, return_def]
 QED
 
 Theorem case_eval_for_cons[local]:
@@ -704,7 +679,8 @@ Theorem case_Name[local]:
   ∀cx id st res st'.
     eval_expr cx (Name id) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  rpt strip_tac >> gvs[evaluate_def, bind_def, get_scopes_def, return_def, AllCaseEqs()] >>
+  imp_res_tac get_immutables_scopes >> imp_res_tac lift_sum_scopes >> gvs[]
 QED
 
 Theorem case_TopLevelName[local]:
@@ -712,7 +688,8 @@ Theorem case_TopLevelName[local]:
     eval_expr cx (TopLevelName (src_id_opt,id)) st = (res,st') ⇒
     LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simp[evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
+  imp_res_tac lookup_global_scopes >> gvs[return_def]
 QED
 
 Theorem case_FlagMember[local]:
@@ -720,7 +697,9 @@ Theorem case_FlagMember[local]:
     eval_expr cx (FlagMember nsid mid) st = (res,st') ⇒
     LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  rpt gen_tac >> PairCases_on `nsid` >>
+  simp[evaluate_def, lookup_flag_mem_def, raise_def, return_def] >>
+  rpt CASE_TAC >> simp[raise_def, return_def]
 QED
 
 Theorem case_IfExp[local]:
@@ -738,14 +717,15 @@ Theorem case_IfExp[local]:
     ∀st res st'.
       eval_expr cx (IfExp e e' e'') st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def, switch_BoolV_def] >>
+  chain_tac
 QED
 
 Theorem case_Literal[local]:
   ∀cx l st res st'.
     eval_expr cx (Literal l) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simp[evaluate_def, return_def]
 QED
 
 Theorem case_StructLit[local]:
@@ -759,7 +739,8 @@ Theorem case_StructLit[local]:
       eval_expr cx (StructLit (src_id_opt,id) kes) st = (res,st') ⇒
       LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simple_tac >> gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac lift_option_scopes >> gvs[]
 QED
 
 Theorem case_Subscript[local]:
@@ -773,7 +754,8 @@ Theorem case_Subscript[local]:
     ∀st res st'.
       eval_expr cx (Subscript e e') st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  chain_tac
 QED
 
 Theorem case_Attribute[local]:
@@ -783,7 +765,8 @@ Theorem case_Attribute[local]:
     ∀st res st'.
       eval_expr cx (Attribute e id) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simple_tac >> imp_res_tac get_Value_scopes >> gvs[] >>
+  imp_res_tac lift_option_scopes >> gvs[]
 QED
 
 Theorem case_Builtin[local]:
@@ -795,7 +778,8 @@ Theorem case_Builtin[local]:
     ∀st res st'.
       eval_expr cx (Builtin bt es) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simple_tac >> gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac check_scopes >> gvs[] >> imp_res_tac lift_sum_scopes >> gvs[]
 QED
 
 Theorem case_Pop[local]:
@@ -805,7 +789,8 @@ Theorem case_Pop[local]:
     ∀st res st'.
       eval_expr cx (Pop bt) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simple_tac >> PairCases_on `x` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac assign_target_scopes_len >> gvs[]
 QED
 
 Theorem case_TypeBuiltin[local]:
@@ -817,7 +802,8 @@ Theorem case_TypeBuiltin[local]:
     ∀st res st'.
       eval_expr cx (TypeBuiltin tb typ es) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simple_tac >> gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac check_scopes >> gvs[] >> imp_res_tac lift_sum_scopes >> gvs[]
 QED
 
 Theorem case_Send[local]:
@@ -829,7 +815,8 @@ Theorem case_Send[local]:
     ∀st res st'.
       eval_expr cx (Call Send es) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simple_tac >> gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac check_scopes >> imp_res_tac get_Value_scopes >> imp_res_tac transfer_value_scopes >> gvs[]
 QED
 
 Theorem case_ExtCall[local]:
@@ -837,7 +824,7 @@ Theorem case_ExtCall[local]:
     eval_expr cx (Call (ExtCall cx') vs) st = (res,st') ⇒
     LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simp[evaluate_def, raise_def]
 QED
 
 Theorem case_IntCall[local]:
@@ -883,7 +870,7 @@ Theorem case_eval_exprs_nil[local]:
   ∀cx st res st'.
     eval_exprs cx [] st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  simp[evaluate_def, return_def]
 QED
 
 Theorem case_eval_exprs_cons[local]:
@@ -897,7 +884,8 @@ Theorem case_eval_exprs_cons[local]:
     ∀st res st'.
       eval_exprs cx (e::es) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  chain_tac
 QED
 
 (* Main mutual scopes length preservation theorem *)
@@ -914,129 +902,95 @@ Theorem scopes_len_mutual[local]:
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt gen_tac
   (* 1. Pass *)
-  >- simp[evaluate_def, return_def]
+  >- metis_tac[case_Pass]
   (* 2. Continue *)
-  >- simp[evaluate_def, raise_def]
+  >- metis_tac[case_Continue]
   (* 3. Break *)
-  >- simp[evaluate_def, raise_def]
+  >- metis_tac[case_Break]
   (* 4. Return NONE *)
-  >- simp[evaluate_def, raise_def]
+  >- metis_tac[case_Return_NONE]
   (* 5. Return (SOME e) *)
-  >- simple_tac
+  >- metis_tac[case_Return_SOME]
   (* 6. Raise e *)
-  >- simple_tac
+  >- metis_tac[case_Raise]
   (* 7. Assert *)
-  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def, switch_BoolV_def] >>
-      Cases_on `tv = Value (BoolV T)` >> gvs[return_def] >>
-      Cases_on `tv = Value (BoolV F)` >> gvs[raise_def, bind_def, AllCaseEqs()] >>
-      chain_tac)
+  >- metis_tac[case_Assert]
   (* 8. Log *)
-  >- simple_tac
+  >- metis_tac[case_Log]
   (* 9. AnnAssign *)
-  >- simple_tac
+  >- metis_tac[case_AnnAssign]
   (* 10. Append *)
-  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      PairCases_on `x` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def] >>
-      gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      chain_tac)
+  >- metis_tac[case_Append]
   (* 11. Assign *)
-  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      chain_tac)
+  >- metis_tac[case_Assign]
   (* 12. AugAssign *)
-  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      PairCases_on `x` >> gvs[bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def] >>
-      chain_tac)
+  >- metis_tac[case_AugAssign]
   (* 13. If - complex proof, see if_stmt_scopes_len *)
-  >- cheat
+  >- metis_tac[case_If]
   (* 14. For - complex proof, see for_stmt_scopes_len *)
-  >- cheat
+  >- metis_tac[case_For]
   (* 15. Expr *)
-  >- (simple_tac >>
-      gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def] >>
-      imp_res_tac get_Value_scopes >> gvs[] >> res_tac >> gvs[])
+  >- metis_tac[case_Expr]
   (* 16. eval_stmts [] *)
-  >- simp[evaluate_def, return_def]
+  >- metis_tac[case_eval_stmts_nil]
   (* 17. eval_stmts (s::ss) *)
-  >- (simple_tac >> TRY (first_x_assum drule >> simp[]) >>
-      gvs[ignore_bind_def, bind_def, AllCaseEqs()] >>
-      first_x_assum drule >> simp[] >> strip_tac >> res_tac >> gvs[])
+  >- metis_tac[case_eval_stmts_cons]
   (* 18. Array iterator *)
-  >- simple_tac
+  >- metis_tac[case_Array_iterator]
   (* 19. Range iterator *)
-  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      chain_tac)
+  >- metis_tac[case_Range_iterator]
   (* 20. BaseTarget *)
-  >- simple_tac
+  >- metis_tac[case_BaseTarget]
   (* 21. TupleTarget *)
-  >- simple_tac
+  >- metis_tac[case_TupleTarget]
   (* 22. eval_targets [] *)
-  >- simp[evaluate_def, return_def]
+  >- metis_tac[case_eval_targets_nil]
   (* 23. eval_targets (g::gs) *)
-  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      chain_tac)
+  >- metis_tac[case_eval_targets_cons]
   (* 24. NameTarget *)
-  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, get_scopes_def, return_def, AllCaseEqs()] >>
-      Cases_on `cx.txn.is_creation` >> gvs[return_def, bind_def, AllCaseEqs()] >>
-      imp_res_tac get_immutables_scopes >> imp_res_tac lift_sum_scopes >> gvs[])
+  >- metis_tac[case_NameTarget]
   (* 25. TopLevelNameTarget *)
-  >- (simp[evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
-      imp_res_tac lookup_global_scopes >> gvs[return_def])
+  >- metis_tac[case_TopLevelNameTarget]
   (* 26. AttributeTarget *)
-  >- simple_tac
+  >- metis_tac[case_AttributeTarget]
   (* 27. SubscriptTarget *)
-  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      PairCases_on `x` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def] >>
-      chain_tac)
+  >- metis_tac[case_SubscriptTarget]
   (* 28. eval_for [] *)
-  >- simp[evaluate_def, return_def]
+  >- metis_tac[case_eval_for_nil]
   (* 29. eval_for (v::vs) - complex proof, see eval_for_cons_scopes_len *)
-  >- cheat
+  >- metis_tac[case_eval_for_cons]
   (* 30. Name *)
-  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, get_scopes_def, return_def, AllCaseEqs()] >>
-      imp_res_tac get_immutables_scopes >> imp_res_tac lift_sum_scopes >> gvs[])
+  >- metis_tac[case_Name]
   (* 31. TopLevelName *)
-  >- (simp[evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
-      imp_res_tac lookup_global_scopes >> gvs[return_def])
+  >- metis_tac[case_TopLevelName]
   (* 32. FlagMember *)
-  >- (rpt gen_tac >> PairCases_on `nsid` >>
-      simp[evaluate_def, lookup_flag_mem_def, raise_def, return_def] >>
-      rpt CASE_TAC >> simp[raise_def, return_def])
+  >- metis_tac[case_FlagMember]
   (* 33. IfExp *)
-  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def, switch_BoolV_def] >>
-      chain_tac)
+  >- metis_tac[case_IfExp]
   (* 34. Literal *)
-  >- simp[evaluate_def, return_def]
+  >- metis_tac[case_Literal]
   (* 35. StructLit *)
-  >- (simple_tac >> gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      imp_res_tac lift_option_scopes >> gvs[])
+  >- metis_tac[case_StructLit]
   (* 36. Subscript *)
-  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      chain_tac)
+  >- metis_tac[case_Subscript]
   (* 37. Attribute *)
-  >- (simple_tac >> imp_res_tac get_Value_scopes >> gvs[] >>
-      imp_res_tac lift_option_scopes >> gvs[])
+  >- metis_tac[case_Attribute]
   (* 38. Builtin *)
-  >- (simple_tac >> gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      imp_res_tac check_scopes >> gvs[] >> imp_res_tac lift_sum_scopes >> gvs[])
+  >- metis_tac[case_Builtin]
   (* 39. Pop *)
-  >- (simple_tac >> PairCases_on `x` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def] >>
-      imp_res_tac assign_target_scopes_len >> gvs[])
+  >- metis_tac[case_Pop]
   (* 40. TypeBuiltin *)
-  >- (simple_tac >> gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      imp_res_tac check_scopes >> gvs[] >> imp_res_tac lift_sum_scopes >> gvs[])
+  >- metis_tac[case_TypeBuiltin]
   (* 41. Send *)
-  >- (simple_tac >> gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      imp_res_tac check_scopes >> imp_res_tac get_Value_scopes >> imp_res_tac transfer_value_scopes >> gvs[])
+  >- metis_tac[case_Send]
   (* 42. ExtCall *)
-  >- simp[evaluate_def, raise_def]
+  >- metis_tac[case_ExtCall]
   (* 43. IntCall - complex proof, see intcall_scopes_len *)
-  >- cheat
+  >- metis_tac[case_IntCall]
   (* 44. eval_exprs [] *)
-  >- simp[evaluate_def, return_def]
+  >- metis_tac[case_eval_exprs_nil]
   (* 45. eval_exprs (e::es) *)
-  >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      chain_tac)
+  >- metis_tac[case_eval_exprs_cons]
 QED
 
 (* Main theorem: evaluation preserves scopes length *)
