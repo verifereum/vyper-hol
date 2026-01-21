@@ -168,6 +168,15 @@ Theorem target_spec_name:
   ∀P cx n av.
      ⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ (BaseTarget (NameTarget n)) ⇓ᵗ av ⦃P⦄
 Proof
+  rw[target_spec_def, lookup_name_target_def] >> rpt strip_tac >>
+  simp[Once evaluate_def, bind_def, return_def] >>
+  gvs[Once evaluate_def, bind_def, get_scopes_def, return_def, lift_sum_def,
+      get_immutables_def, get_immutables_module_def, get_current_globals_def,
+      lift_option_def, raise_def, AllCaseEqs()] >>
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def, lift_sum_def,
+       get_immutables_def, get_immutables_module_def, get_current_globals_def,
+       lift_option_def, raise_def] >>
+  (* TODO: Need lemma showing eval_base_target for NameTarget preserves state *)
   cheat
 QED
 
