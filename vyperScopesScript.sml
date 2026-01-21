@@ -991,7 +991,27 @@ Theorem case_IntCall[local]:
       eval_expr cx (Call (IntCall (src_id_opt,fn)) es) st = (res,st') ⇒
       LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
+       check_def, assert_def, lift_option_def, get_scopes_def, push_function_def,
+       pop_function_def, set_scopes_def] >>
+  strip_tac >> gvs[return_def, raise_def] >>
+  (* Case split on all OPTION operations *)
+  rpt (TRY (Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def]) >>
+       TRY (Cases_on `lookup_function fn Internal ts` >> gvs[return_def, raise_def]) >>
+       TRY (Cases_on `bind_arguments (type_env ts) (FST (SND tup)) vs` >> gvs[return_def, raise_def]) >>
+       TRY (Cases_on `evaluate_type (type_env ts) (FST (SND (SND tup)))` >> gvs[return_def, raise_def]) >>
+       TRY (Cases_on `safe_cast rtv rv` >> gvs[return_def, raise_def]) >>
+       (* Use IH for eval_exprs *)
+       TRY (qpat_x_assum `∀s'⁹' t s'¹⁰' ts' t' s'¹¹' tup' t'' s'¹²' t'³'. _ ==> _` mp_tac >>
+            simp[check_def, assert_def, return_def, lift_option_def] >> strip_tac >>
+            TRY (res_tac >> simp[])) >>
+       (* Analyze finally - set_scopes restores scopes *)
+       TRY (qpat_x_assum `finally _ _ _ = _` mp_tac >>
+            simp[finally_def, try_def, bind_def, ignore_bind_def, AllCaseEqs(),
+                 return_def, raise_def, handle_function_def, set_scopes_def] >>
+            strip_tac >> gvs[]))
 QED
 
 Theorem case_eval_exprs_nil[local]:
