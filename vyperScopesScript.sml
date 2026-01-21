@@ -718,7 +718,62 @@ Theorem case_eval_for_cons[local]:
     ∀st res st'.
       eval_for cx nm body (v::vs) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `eval_for _ _ _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+  strip_tac >> gvs[]
+  >- ((* push succeeded, finally succeeded with some broke *)
+    imp_res_tac push_scope_with_var_len >>
+    qpat_x_assum `finally _ _ _ = _` mp_tac >>
+    simp[finally_def, AllCaseEqs(), try_def] >>
+    strip_tac >> gvs[bind_def, AllCaseEqs(), ignore_bind_def, return_def, raise_def]
+    >- ((* body succeeded with INL () *)
+      first_x_assum (qspecl_then [`st`, `s''`] mp_tac) >> simp[] >> strip_tac >>
+      first_x_assum (qspecl_then [`s''`, `INL ()`, `s'⁴'`] mp_tac) >> simp[] >> strip_tac >>
+      qpat_x_assum `pop_scope _ = _` mp_tac >>
+      simp[pop_scope_def, AllCaseEqs(), return_def, raise_def] >>
+      strip_tac >> gvs[] >>
+      first_x_assum (qspecl_then [`st`, `s''`, `s''`, `s'⁴' with scopes := tl`] mp_tac) >>
+      simp[finally_def, try_def, bind_def, AllCaseEqs(), ignore_bind_def, return_def, pop_scope_def] >>
+      simp[] >> strip_tac >>
+      first_x_assum (qspecl_then [`s'⁴' with scopes := tl`, `res`, `st'`] mp_tac) >> simp[])
+    >- ((* body raised exception, handled by handle_loop_exception *)
+      first_x_assum (qspecl_then [`st`, `s''`] mp_tac) >> simp[] >> strip_tac >>
+      first_x_assum (qspecl_then [`s''`, `INR e`, `s'⁵'`] mp_tac) >> simp[] >> strip_tac >>
+      qpat_x_assum `handle_loop_exception _ _ = _` mp_tac >>
+      simp[handle_loop_exception_def, return_def, raise_def] >> strip_tac >> gvs[] >>
+      Cases_on `e = ContinueException` >> gvs[return_def, raise_def]
+      >- ((* ContinueException - broke=F, recursive call *)
+        qpat_x_assum `pop_scope _ = _` mp_tac >>
+        simp[pop_scope_def, AllCaseEqs(), return_def] >> strip_tac >> gvs[raise_def] >>
+        first_x_assum (qspecl_then [`st`, `s''`, `s''`, `s'⁴' with scopes := tl`] mp_tac) >>
+        simp[finally_def, try_def, bind_def, AllCaseEqs(), ignore_bind_def, return_def,
+             pop_scope_def, handle_loop_exception_def] >>
+        strip_tac >>
+        first_x_assum (qspecl_then [`s'⁴' with scopes := tl`, `res`, `st'`] mp_tac) >> simp[])
+      >- ((* BreakException - broke=T, return () *)
+        Cases_on `e = BreakException` >> gvs[return_def, raise_def] >>
+        qpat_x_assum `pop_scope _ = _` mp_tac >>
+        simp[pop_scope_def, AllCaseEqs(), return_def, raise_def] >> strip_tac >> gvs[])))
+  >- ((* push succeeded, finally returned error *)
+    imp_res_tac push_scope_with_var_len >>
+    qpat_x_assum `finally _ _ _ = _` mp_tac >>
+    simp[finally_def, try_def, bind_def, AllCaseEqs(), ignore_bind_def, return_def,
+         raise_def, handle_loop_exception_def, pop_scope_def] >>
+    strip_tac >> gvs[]
+    >- (first_x_assum (qspecl_then [`st`, `s''`] mp_tac) >> simp[] >> strip_tac >>
+        first_x_assum (qspecl_then [`s''`, `INL ()`, `s'³'`] mp_tac) >> gvs[])
+    >- (first_x_assum (qspecl_then [`st`, `s''`] mp_tac) >> simp[] >> strip_tac >>
+        first_x_assum (qspecl_then [`s''`, `INR e'`, `s'⁵'`] mp_tac) >> simp[] >> strip_tac >>
+        qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >> rw[return_def, raise_def] >> gvs[])
+    >- (first_x_assum (qspecl_then [`st`, `s''`] mp_tac) >> simp[] >> strip_tac >>
+        first_x_assum (qspecl_then [`s''`, `INR e'`, `s'⁵'`] mp_tac) >> simp[] >> strip_tac >>
+        qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >> rw[return_def, raise_def] >> gvs[])
+    >- (first_x_assum (qspecl_then [`st`, `s''`] mp_tac) >> simp[] >> strip_tac >>
+        first_x_assum (qspecl_then [`s''`, `INR e'`, `s'⁵'`] mp_tac) >> simp[] >> strip_tac >>
+        qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >> rw[return_def, raise_def] >> gvs[]))
+  >- ((* push_scope_with_var failed *)
+    gvs[push_scope_with_var_def, return_def])
 QED
 
 Theorem case_Name[local]:
