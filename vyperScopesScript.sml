@@ -784,7 +784,14 @@ Theorem case_Builtin[local]:
     ∀st res st'.
       eval_expr cx (Builtin bt es) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def] >>
+  rpt strip_tac >> gvs[return_def] >>
+  imp_res_tac check_scopes >> gvs[] >>
+  imp_res_tac get_accounts_scopes >> gvs[] >>
+  imp_res_tac lift_sum_scopes >> gvs[] >>
+  res_tac >> gvs[]
 QED
 
 Theorem case_Pop[local]:
