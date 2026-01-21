@@ -376,7 +376,529 @@ val chain_tac = rpt (
   TRY (imp_res_tac lift_sum_scopes >> gvs[]) >>
   TRY (imp_res_tac check_scopes >> gvs[]) >>
   TRY (imp_res_tac assign_target_scopes_len >> gvs[])
-) >> TRY (metis_tac[]);
+  ) >> TRY (metis_tac[]);
+
+Theorem case_Pass[local]:
+  ∀cx st res st'.
+    eval_stmt cx Pass st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_Continue[local]:
+  ∀cx st res st'.
+    eval_stmt cx Continue st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_Break[local]:
+  ∀cx st res st'.
+    eval_stmt cx Break st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_Return_NONE[local]:
+  ∀cx st res st'.
+    eval_stmt cx (Return NONE) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_Return_SOME[local]:
+  ∀cx e.
+    (∀st res st'.
+       eval_expr cx e st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_stmt cx (Return (SOME e)) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_Raise[local]:
+  ∀cx e.
+    (∀st res st'.
+       eval_expr cx e st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_stmt cx (Raise e) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_Assert[local]:
+  ∀cx e e'.
+    (∀s'' tv t.
+       eval_expr cx e s'' = (INL tv,t) ⇒
+       ∀st res st'.
+         eval_expr cx e' st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀st res st'.
+       eval_expr cx e st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_stmt cx (Assert e e') st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_Log[local]:
+  ∀cx id es.
+    (∀st res st'.
+       eval_exprs cx es st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_stmt cx (Log id es) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_AnnAssign[local]:
+  ∀cx id typ e.
+    (∀st res st'.
+       eval_expr cx e st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_stmt cx (AnnAssign id typ e) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_Append[local]:
+  ∀cx bt e.
+    (∀s'' loc sbs t'.
+       eval_base_target cx bt s'' = (INL (loc,sbs),t') ⇒
+       ∀st res st'.
+         eval_expr cx e st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀st res st'.
+       eval_base_target cx bt st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_stmt cx (Append bt e) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_Assign[local]:
+  ∀cx g e.
+    (∀s'' gv t.
+       eval_target cx g s'' = (INL gv,t) ⇒
+       ∀st res st'.
+         eval_expr cx e st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀st res st'.
+       eval_target cx g st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_stmt cx (Assign g e) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_AugAssign[local]:
+  ∀cx bt bop e.
+    (∀s'' loc sbs t'.
+       eval_base_target cx bt s'' = (INL (loc,sbs),t') ⇒
+       ∀st res st'.
+         eval_expr cx e st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀st res st'.
+       eval_base_target cx bt st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_stmt cx (AugAssign bt bop e) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_If[local]:
+  ∀cx e ss ss'.
+    (∀s'' tv t s'³' x t'.
+       eval_expr cx e s'' = (INL tv,t) ∧ push_scope s'³' = (INL x,t') ⇒
+       ∀st res st'.
+         eval_stmts cx ss st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀s'' tv t s'³' x t'.
+       eval_expr cx e s'' = (INL tv,t) ∧ push_scope s'³' = (INL x,t') ⇒
+       ∀st res st'.
+         eval_stmts cx ss' st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀st res st'.
+       eval_expr cx e st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_stmt cx (If e ss ss') st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_For[local]:
+  ∀cx id typ it n body.
+    (∀s'' vs t s'³' x t'.
+       eval_iterator cx it s'' = (INL vs,t) ∧
+       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'³' = (INL x,t') ⇒
+       ∀st res st'.
+         eval_for cx (string_to_num id) body vs st = (res,st') ⇒
+         LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀st res st'.
+       eval_iterator cx it st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_stmt cx (For id typ it n body) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_Expr[local]:
+  ∀cx e.
+    (∀st res st'.
+       eval_expr cx e st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_stmt cx (Expr e) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_eval_stmts_nil[local]:
+  ∀cx st res st'.
+    eval_stmts cx [] st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_eval_stmts_cons[local]:
+  ∀cx s ss.
+    (∀s'' x t.
+       eval_stmt cx s s'' = (INL x,t) ⇒
+       ∀st res st'.
+         eval_stmts cx ss st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀st res st'.
+       eval_stmt cx s st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_stmts cx (s::ss) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_Array_iterator[local]:
+  ∀cx e.
+    (∀st res st'.
+       eval_expr cx e st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_iterator cx (Array e) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_Range_iterator[local]:
+  ∀cx e e'.
+    (∀s'' tv1 t s'³' s t'.
+       eval_expr cx e s'' = (INL tv1,t) ∧ get_Value tv1 s'³' = (INL s,t') ⇒
+       ∀st res st'.
+         eval_expr cx e' st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀st res st'.
+       eval_expr cx e st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_iterator cx (Range e e') st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_BaseTarget[local]:
+  ∀cx bt.
+    (∀st res st'.
+       eval_base_target cx bt st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_target cx (BaseTarget bt) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_TupleTarget[local]:
+  ∀cx gs.
+    (∀st res st'.
+       eval_targets cx gs st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_target cx (TupleTarget gs) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_eval_targets_nil[local]:
+  ∀cx st res st'.
+    eval_targets cx [] st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_eval_targets_cons[local]:
+  ∀cx g gs.
+    (∀s'' gv t.
+       eval_target cx g s'' = (INL gv,t) ⇒
+       ∀st res st'.
+         eval_targets cx gs st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀st res st'.
+       eval_target cx g st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_targets cx (g::gs) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_NameTarget[local]:
+  ∀cx id st res st'.
+    eval_base_target cx (NameTarget id) st = (res,st') ⇒
+    LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_TopLevelNameTarget[local]:
+  ∀cx src_id_opt id st res st'.
+    eval_base_target cx (TopLevelNameTarget (src_id_opt,id)) st = (res,st') ⇒
+    LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_AttributeTarget[local]:
+  ∀cx bt id.
+    (∀st res st'.
+       eval_base_target cx bt st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_base_target cx (AttributeTarget bt id) st = (res,st') ⇒
+      LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_SubscriptTarget[local]:
+  ∀cx bt e.
+    (∀s'' loc sbs t'.
+       eval_base_target cx bt s'' = (INL (loc,sbs),t') ⇒
+       ∀st res st'.
+         eval_expr cx e st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀st res st'.
+       eval_base_target cx bt st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_base_target cx (SubscriptTarget bt e) st = (res,st') ⇒
+      LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_eval_for_nil[local]:
+  ∀cx nm body st res st'.
+    eval_for cx nm body [] st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_eval_for_cons[local]:
+  ∀cx nm body v vs.
+    (∀s'' x t s'³' broke t'.
+       push_scope_with_var nm v s'' = (INL x,t) ∧
+       finally
+         (try do eval_stmts cx body; return F od handle_loop_exception)
+         pop_scope s'³' = (INL broke,t') ∧ ¬broke ⇒
+       ∀st res st'.
+         eval_for cx nm body vs st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀s'' x t.
+       push_scope_with_var nm v s'' = (INL x,t) ⇒
+       ∀st res st'.
+         eval_stmts cx body st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_for cx nm body (v::vs) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_Name[local]:
+  ∀cx id st res st'.
+    eval_expr cx (Name id) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_TopLevelName[local]:
+  ∀cx src_id_opt id st res st'.
+    eval_expr cx (TopLevelName (src_id_opt,id)) st = (res,st') ⇒
+    LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_FlagMember[local]:
+  ∀cx nsid mid st res st'.
+    eval_expr cx (FlagMember nsid mid) st = (res,st') ⇒
+    LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_IfExp[local]:
+  ∀cx e e' e''.
+    (∀s'' tv t.
+       eval_expr cx e s'' = (INL tv,t) ⇒
+       ∀st res st'.
+         eval_expr cx e' st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀s'' tv t.
+       eval_expr cx e s'' = (INL tv,t) ⇒
+       ∀st res st'.
+         eval_expr cx e'' st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀st res st'.
+       eval_expr cx e st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_expr cx (IfExp e e' e'') st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_Literal[local]:
+  ∀cx l st res st'.
+    eval_expr cx (Literal l) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_StructLit[local]:
+  ∀cx src_id_opt id kes.
+    (∀ks.
+       ks = MAP FST kes ⇒
+       ∀st res st'.
+         eval_exprs cx (MAP SND kes) st = (res,st') ⇒
+         LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_expr cx (StructLit (src_id_opt,id) kes) st = (res,st') ⇒
+      LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_Subscript[local]:
+  ∀cx e e'.
+    (∀s'' tv1 t.
+       eval_expr cx e s'' = (INL tv1,t) ⇒
+       ∀st res st'.
+         eval_expr cx e' st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀st res st'.
+       eval_expr cx e st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_expr cx (Subscript e e') st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_Attribute[local]:
+  ∀cx e id.
+    (∀st res st'.
+       eval_expr cx e st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_expr cx (Attribute e id) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_Builtin[local]:
+  ∀cx bt es.
+    (∀s'' x t.
+       check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x,t) ⇒
+       ∀st res st'.
+         eval_exprs cx es st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_expr cx (Builtin bt es) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_Pop[local]:
+  ∀cx bt.
+    (∀st res st'.
+       eval_base_target cx bt st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_expr cx (Pop bt) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_TypeBuiltin[local]:
+  ∀cx tb typ es.
+    (∀s'' x t.
+       check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args" s'' = (INL x,t) ⇒
+       ∀st res st'.
+         eval_exprs cx es st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_expr cx (TypeBuiltin tb typ es) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_Send[local]:
+  ∀cx es.
+    (∀s'' x t.
+       check (LENGTH es = 2) "Send args" s'' = (INL x,t) ⇒
+       ∀st res st'.
+         eval_exprs cx es st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_expr cx (Call Send es) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_ExtCall[local]:
+  ∀cx cx' vs st res st'.
+    eval_expr cx (Call (ExtCall cx') vs) st = (res,st') ⇒
+    LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_IntCall[local]:
+  ∀cx src_id_opt fn es.
+    (∀s'' x t s'³' ts t' s'⁴' tup t'' stup args sstup ret ss s'⁵' x' t'³'
+         s'⁶' vs t'⁴' tenv s'⁷' env t'⁵' s'⁸' prev t'⁶' s'⁹' rtv t'⁷' s'¹⁰'
+         cx' t'⁸'.
+       check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
+       lift_option (get_module_code cx src_id_opt)
+         "IntCall get_module_code" s'³' = (INL ts,t') ∧
+       lift_option (lookup_function fn Internal ts)
+         "IntCall lookup_function" s'⁴' = (INL tup,t'') ∧ stup = SND tup ∧
+       args = FST stup ∧ sstup = SND stup ∧ ret = FST sstup ∧
+       ss = SND sstup ∧
+       check (LENGTH args = LENGTH es) "IntCall args length" s'⁵' = (INL x',t'³') ∧
+       eval_exprs cx es s'⁶' = (INL vs,t'⁴') ∧
+       tenv = type_env ts ∧
+       lift_option (bind_arguments tenv args vs) "IntCall bind_arguments"
+         s'⁷' = (INL env,t'⁵') ∧ get_scopes s'⁸' = (INL prev,t'⁶') ∧
+       lift_option (evaluate_type tenv ret) "IntCall eval ret" s'⁹' = (INL rtv,t'⁷') ∧
+       push_function (src_id_opt,fn) env cx s'¹⁰' = (INL cx',t'⁸') ⇒
+       ∀st res st'.
+         eval_stmts cx' ss st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀s'' x t s'³' ts t' s'⁴' tup t'' stup args sstup ret body' s'⁵' x' t'³'.
+       check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
+       lift_option (get_module_code cx src_id_opt)
+         "IntCall get_module_code" s'³' = (INL ts,t') ∧
+       lift_option (lookup_function fn Internal ts)
+         "IntCall lookup_function" s'⁴' = (INL tup,t'') ∧ stup = SND tup ∧
+       args = FST stup ∧ sstup = SND stup ∧ ret = FST sstup ∧
+       body' = SND sstup ∧
+       check (LENGTH args = LENGTH es) "IntCall args length" s'⁵' = (INL x',t'³') ⇒
+       ∀st res st'.
+         eval_exprs cx es st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_expr cx (Call (IntCall (src_id_opt,fn)) es) st = (res,st') ⇒
+      LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_eval_exprs_nil[local]:
+  ∀cx st res st'.
+    eval_exprs cx [] st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
+Theorem case_eval_exprs_cons[local]:
+  ∀cx e es.
+    (∀s'' tv t s'³' v t'.
+       eval_expr cx e s'' = (INL tv,t) ∧ get_Value tv s'³' = (INL v,t') ⇒
+       ∀st res st'.
+         eval_exprs cx es st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀st res st'.
+       eval_expr cx e st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_exprs cx (e::es) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
 
 (* Main mutual scopes length preservation theorem *)
 Theorem scopes_len_mutual[local]:
