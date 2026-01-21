@@ -16,11 +16,11 @@ Definition stmts_spec_def:
 End
 
 Definition expr_spec_def:
-  expr_spec cx (P : evaluation_state -> bool) (e : expr) (v : toplevel_value) (Q : evaluation_state -> bool) <=>
+  expr_spec cx (P : evaluation_state -> bool) (e : expr) (v : value) (Q : evaluation_state -> bool) <=>
     !st. P st ==>
       case eval_expr cx e st of
       | (INL val, st') =>
-             if val = v then Q st' else F
+             if val = Value v then Q st' else F
       | (INR _, st') => F (* ignore exceptions in expressions for now *)
 End
 
@@ -35,17 +35,17 @@ val _ =
         TM,
         TOK "⟧",
         BreakSpace(1,0),
-        TOK "{{",
+        TOK "⦃",
         TM,
-        TOK "}}",
+        TOK "⦄",
         BreakSpace(1,0),
         TM,
         BreakSpace(1,0),
-        TOK "{{",
+        TOK "⦃",
         TM,
         TOK "∥",
         TM,
-        TOK "}}" ],
+        TOK "⦄" ],
       paren_style = OnlyIfNecessary,
       block_style = (AroundEachPhrase, (PP.INCONSISTENT, 0)) };
 
@@ -58,9 +58,9 @@ val _ =
         TM,
         TOK "⟧",
         BreakSpace(1,0),
-        TOK "{{",
+        TOK "⦃",
         TM,
-        TOK "}}",
+        TOK "⦄",
         BreakSpace(1,0),
         TM,
         BreakSpace(1,0),
@@ -68,9 +68,9 @@ val _ =
         BreakSpace(1,0),
         TM,
         BreakSpace(1,0),
-        TOK "{{",
+        TOK "⦃",
         TM,
-        TOK "}}" ],
+        TOK "⦄" ],
       paren_style = OnlyIfNecessary,
       block_style = (AroundEachPhrase, (PP.INCONSISTENT, 0)) };
 
@@ -78,8 +78,8 @@ Theorem expr_spec_consequence:
   ∀P P' Q Q' cx e v.
     (∀st. P' st ⇒ P st) ∧
     (∀st. Q st ⇒ Q' st) ∧
-    (⟦cx⟧ {{P}} e ⇓ v {{Q}}) ⇒
-    ⟦cx⟧ {{P'}} e ⇓ v {{Q'}}
+    (⟦cx⟧ ⦃P⦄ e ⇓ v ⦃Q⦄) ⇒
+    ⟦cx⟧ ⦃P'⦄ e ⇓ v ⦃Q'⦄
 Proof
   rw[expr_spec_def] >>
   first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
@@ -88,18 +88,18 @@ Proof
 QED
 
 Theorem expr_spec_literal:
-  ∀P P' cx l. ⟦cx⟧ {{P}} (Literal l) ⇓ Value (evaluate_literal l) {{P}}
+  ∀P P' cx l. ⟦cx⟧ ⦃P⦄ (Literal l) ⇓ evaluate_literal l ⦃P⦄
 Proof
   rw[expr_spec_def, evaluate_def, return_def]
 QED
 
 Theorem expr_spec_if:
   ∀P P' Q cx e1 e2 e3 v1 v2 v3.
-    (v1 = Value (BoolV T) ∨ v1 = Value (BoolV F)) ∧
-    (⟦cx⟧ {{P}} e1 ⇓ v1 {{P'}}) ∧
-    (⟦cx⟧ {{λst. P' st ∧ v1 = Value (BoolV T)}} e2 ⇓ v2 {{Q}}) ∧
-    (⟦cx⟧ {{λst. P' st ∧ v1 = Value (BoolV F)}} e3 ⇓ v3 {{Q}}) ⇒
-          ⟦cx⟧ {{P}} (IfExp e1 e2 e3) ⇓ (if v1 = Value (BoolV T) then v2 else v3) {{Q}}
+    (v1 = BoolV T ∨ v1 = BoolV F) ∧
+    (⟦cx⟧ ⦃P⦄ e1 ⇓ v1 ⦃P'⦄) ∧
+    (⟦cx⟧ ⦃λst. P' st ∧ v1 = BoolV T⦄ e2 ⇓ v2 ⦃Q⦄) ∧
+    (⟦cx⟧ ⦃λst. P' st ∧ v1 = BoolV F⦄ e3 ⇓ v3 ⦃Q⦄) ⇒
+          ⟦cx⟧ ⦃P⦄ (IfExp e1 e2 e3) ⇓ (if v1 = BoolV T then v2 else v3) ⦃Q⦄
 Proof
   rw[expr_spec_def] >>
   simp[Once evaluate_def, bind_def] >>
@@ -115,8 +115,8 @@ Theorem stmts_spec_consequence:
     (!st. P' st ==> P st) /\
     (!st. Q st ==> Q' st) /\
     (!v st. R v st ==> R' v st) /\
-    (⟦cx⟧ {{P}} ss {{Q ∥ R}}) ==>
-    ⟦cx⟧ {{P'}} ss {{Q' ∥ R'}}
+    (⟦cx⟧ ⦃P⦄ ss ⦃Q ∥ R⦄) ==>
+    ⟦cx⟧ ⦃P'⦄ ss ⦃Q' ∥ R'⦄
 Proof
   rw[stmts_spec_def] >> rpt strip_tac >>
   first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
@@ -126,13 +126,13 @@ Proof
 QED
 
 Theorem stmts_spec_nil:
-  !P Q_ret cx. ⟦cx⟧ {{P}} [] {{P ∥ Q_ret}}
+  !P Q_ret cx. ⟦cx⟧ ⦃P⦄ [] ⦃P ∥ Q_ret⦄
 Proof
   rw[stmts_spec_def] >> simp[Once evaluate_def, return_def]
 QED
 
 Theorem stmts_spec_pass:
-  ∀P cx. ⟦cx⟧ {{P}} [Pass] {{P ∥ False}}
+  ∀P cx. ⟦cx⟧ ⦃P⦄ [Pass] ⦃P ∥ False⦄
 Proof
   rw[stmts_spec_def] >>
   simp[Once evaluate_def, return_def] >>
@@ -155,15 +155,15 @@ QED
 
 Theorem stmts_spec_if:
   ∀P P' Q R1 R2 cx e ss1 ss2 v1.
-    (v1 = Value (BoolV T) ∨ v1 = Value (BoolV F)) ∧
-    (⟦cx⟧ {{P}} e ⇓ v1 {{P'}}) ∧
-    (⟦cx⟧ {{λst. P' (st with scopes := TL st.scopes) ∧ v1 = Value (BoolV T)}} ss1
-          {{λst. Q (st with scopes := TL st.scopes) ∥
-            λv st. R1 v (st with scopes := TL st.scopes)}}) ∧
-    (⟦cx⟧ {{λst. P' (st with scopes := TL st.scopes) ∧ v1 = Value (BoolV F)}} ss2
-          {{λst. Q (st with scopes := TL st.scopes) ∥
-            λv st. R2 v (st with scopes := TL st.scopes)}}) ⇒
-          ⟦cx⟧ {{P}} [If e ss1 ss2] {{Q ∥ λv st. R1 v st ∨ R2 v st}}
+    (v1 = BoolV T ∨ v1 = BoolV F) ∧
+    (⟦cx⟧ ⦃P⦄ e ⇓ v1 ⦃P'⦄) ∧
+    (⟦cx⟧ ⦃λst. P' (st with scopes := TL st.scopes) ∧ v1 = BoolV T⦄ ss1
+          ⦃λst. Q (st with scopes := TL st.scopes) ∥
+            λv st. R1 v (st with scopes := TL st.scopes)⦄) ∧
+    (⟦cx⟧ ⦃λst. P' (st with scopes := TL st.scopes) ∧ v1 = BoolV F⦄ ss2
+          ⦃λst. Q (st with scopes := TL st.scopes) ∥
+            λv st. R2 v (st with scopes := TL st.scopes)⦄) ⇒
+          ⟦cx⟧ ⦃P⦄ [If e ss1 ss2] ⦃Q ∥ λv st. R1 v st ∨ R2 v st⦄
 Proof
   rw[stmts_spec_def, expr_spec_def] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def] >>
@@ -222,7 +222,20 @@ Proof
   Cases_on `r_after_ss.scopes` >> gvs[return_def, raise_def]
 QED
 
-(*
+Definition assign_target_spec_def:
+  assign_target_spec cx st (tgt : assignment_target) (ao : assign_operation) Q ⇔
+    case eval_target cx tgt st of
+    | (INL vtgt, st') =>
+        case assign_target cx vtgt ao st' of
+        | (INL _, st'') => Q st''
+        | (INR _, _) => F
+    | (INR _, _) => F
+End
+
 Theorem stmts_spec_assign:
-  ∀P Q_ret cx. ⟦cx⟧ {{λst . P()}}
-*)
+  ∀P Q cx tgt e.
+     (⟦cx⟧ {{P}} e ⇓ v {{λst. assign_target_spec cx st tgt (Replace v) Q}}) ⇒
+     ⟦cx⟧ {{P}} [Assign tgt e] {{Q ∥ False}}
+Proof
+  cheat
+QED
