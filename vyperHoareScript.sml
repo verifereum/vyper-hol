@@ -321,10 +321,25 @@ Definition assign_target_spec_def:
 End
 
 Theorem stmts_spec_assign:
-  ∀P Q cx tgt av e v.
+  ∀P P' Q cx tgt av e v.
      (⟦cx⟧ ⦃P⦄ tgt ⇓ᵗ av ⦃P'⦄) ⇒
      (⟦cx⟧ ⦃P'⦄ e ⇓ v ⦃λst. assign_target_spec cx st av (Replace v) Q⦄) ⇒
      ⟦cx⟧ ⦃P⦄ [Assign tgt e] ⦃Q ∥ λ_ _. F⦄
 Proof
-  cheat
+  rw[stmts_spec_def, target_spec_def, expr_spec_def, assign_target_spec_def]
+   >> rpt strip_tac >>
+   simp[Once evaluate_def, bind_def, ignore_bind_def] >> simp[Once
+    evaluate_def, bind_def] >>
+   qpat_x_assum `!st. P st ==> _` (qspec_then `st` mp_tac) >> simp[] >>
+   Cases_on `eval_target cx tgt st` >> Cases_on `q` >> simp[] >>
+   strip_tac >> gvs[] >>
+   rename [`eval_target _ _ _ = (INL _, st')`] >>
+   first_x_assum (qspec_then `st'` mp_tac) >> simp[] >>
+   Cases_on `eval_expr cx e st'` >> Cases_on `q` >> simp[] >>
+   strip_tac >> gvs[return_def, bind_def] >>
+   simp[bind_def, ignore_bind_def] >>
+   rename [`eval_expr _ _ _ = (INL _, st'')`] >>
+   Cases_on `assign_target cx av (Replace v) st''` >> Cases_on `q`
+    >> gvs[return_def] >>
+   simp[Once evaluate_def, return_def]
 QED
