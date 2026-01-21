@@ -724,7 +724,10 @@ Theorem case_IfExp[local]:
     ∀st res st'.
       eval_expr cx (IfExp e e' e'') st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def, switch_BoolV_def] >>
+  Cases_on `tv = Value (BoolV T)` >> gvs[] >>
+  Cases_on `tv = Value (BoolV F)` >> gvs[raise_def] >>
+  res_tac >> gvs[] >> metis_tac[]
 QED
 
 Theorem case_Literal[local]:

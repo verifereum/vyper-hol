@@ -1,21 +1,23 @@
 # Proof Plan: scopes_len_preserved
 
-## BUILD STATUS: ✓ PASSING (with 6 cheats)
+## BUILD STATUS: ✓ PASSING (with 5 cheats)
 
-The vyperScopesTheory now builds successfully. However, there are 6 cheated theorems that need proper proofs.
+The vyperScopesTheory now builds successfully. However, there are 5 cheated theorems that need proper proofs.
 
 ## Latest Update (Jan 21, 2026)
 
-**case_Send proof completed!**
-- Successfully proved case_Send theorem using state threading through monad operations
-- Proof expands the bind chain and applies helper lemmas in sequence:
-  - check_scopes (for argument length check)
-  - IH for eval_exprs (preserves scopes during expression evaluation)
-  - lift_option_scopes (twice, for extracting toAddr and amount from vs)
-  - transfer_value_scopes (for the actual transfer operation)
-- Uses TRY tactical to handle multiple subgoal branches efficiently
-- Build passes with 6 remaining cheats (down from 7)
-- Build time: 5 seconds
+**case_IfExp proof completed!**
+- Successfully proved case_IfExp theorem for if-expressions (ternary operator)
+- Proof strategy: expand `switch_BoolV_def` and case split on `tv = Value (BoolV T)` and `tv = Value (BoolV F)`
+- Apply IHs for both branches (e' and e'') using `res_tac` and `metis_tac[]`
+- Build passes with 5 remaining cheats (down from 6)
+- Build time: ~5 seconds
+
+**Previous:** 
+- case_Send proof completed (uses check_scopes, lift_option_scopes, transfer_value_scopes)
+- case_TypeBuiltin proof completed (uses check_scopes, lift_sum_scopes)
+- case_Builtin proof completed (uses check_scopes, get_accounts_scopes, lift_sum_scopes)
+- case_Pop proof completed (uses PairCases_on pattern)
 
 **Previous:** 
 - case_TypeBuiltin proof completed (uses check_scopes, lift_sum_scopes)
@@ -27,14 +29,13 @@ The vyperScopesTheory now builds successfully. However, there are 6 cheated theo
 The main `scopes_len_mutual` theorem (line 892) is now structured with 45 subgoals that use individual case_* theorems.
 
 **Progress:**
-- 42/45 case_* theorems are complete (including case_Send)
-- 6 remaining cheated theorems:
+- 43/45 case_* theorems are complete (including case_IfExp)
+- 5 remaining cheated theorems:
   1. **case_If** (line 484) - If statement with push_scope/finally/pop_scope
   2. **case_For** (line 500) - For loop delegation to eval_for
   3. **case_eval_for_cons** (line 682) - For loop iteration with push_scope_with_var/finally/pop_scope
-  4. **case_IfExp** (line 727) - IfExp expression with switch_BoolV
-  5. **case_IntCall** (line 897) - Internal function calls with push_function/finally/pop_function
-  6. **case_eval_exprs_cons** (line 918) - Expression list evaluation
+  4. **case_IntCall** (line 900) - Internal function calls with push_function/finally/pop_function
+  5. **case_eval_exprs_cons** (line 921) - Expression list evaluation
 
 ## Current Session Update
 
@@ -45,7 +46,7 @@ The main `scopes_len_mutual` theorem (line 892) is now structured with 45 subgoa
 2. `case_AttributeTarget` - Fixed, same pattern as case_BaseTarget
 
 **Temporarily cheated case_* theorems (need proper proofs):**
-1. `case_IfExp` - IfExp expression with switch_BoolV
+1. ~~`case_IfExp` - IfExp expression with switch_BoolV~~ ✓ FIXED
 2. ~~`case_Builtin` - Builtin calls~~ ✓ FIXED
 3. ~~`case_Pop` - Pop operation~~ ✓ FIXED
 4. ~~`case_TypeBuiltin` - TypeBuiltin calls~~ ✓ FIXED
@@ -83,10 +84,10 @@ Given the number of failing case_* theorems and the time required to fix each on
 3. Come back to fix the cheated case_* theorems systematically later
 
 **Status:** 
-- Fixed: 6 theorems (case_BaseTarget, case_AttributeTarget, case_Pop, case_Builtin, case_TypeBuiltin, case_Send)
-- Cheated: 2 case_* theorems (case_IfExp, case_eval_exprs_cons)
+- Fixed: 7 theorems (case_BaseTarget, case_AttributeTarget, case_Pop, case_Builtin, case_TypeBuiltin, case_Send, case_IfExp)
+- Cheated: 1 case_* theorem (case_eval_exprs_cons)
 - Plus the original 4 cheated: case_If, case_For, case_eval_for_cons, case_IntCall
-- Total cheats in file: 6 theorems
+- Total cheats in file: 5 theorems
 
 **Current Issue:**
 Build now hangs on `scopes_len_mutual` theorem itself (line 893), which uses `ho_match_mp_tac evaluate_ind` followed by 45 `metis_tac[case_*]` calls. With 11 cheated case_* theorems, the metis_tac calls may be failing or looping.
