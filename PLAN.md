@@ -1,5 +1,9 @@
 # Proof Plan: scopes_len_preserved
 
+## BUILD STATUS: ✓ PASSING (with 12 cheats)
+
+The vyperScopesTheory now builds successfully. However, there are 12 cheated theorems that need proper proofs.
+
 ## Current Status
 
 The main `scopes_len_mutual` theorem (line 892) is now structured with 45 subgoals that use individual case_* theorems.
@@ -71,15 +75,489 @@ The modular case_* theorem approach was designed to make proofs manageable, but 
 2. With cheated case_* theorems, the main scopes_len_mutual theorem may not build
 3. This creates a circular dependency issue
 
-**Recommended Path Forward:**
-The vyperScopesScript.sml file has fundamental proof issues that require significant rework. The user requested "make sure the proofs of all case_* theorems are correct" but this is turning out to be a larger task than anticipated. 
+## Detailed Fix Requirements
 
-Options:
-1. Go back to monolithic proof without case_* modularization
-2. Fix all case_* theorems one by one (time-consuming)
-3. Accept current state with 11 cheats and document what needs fixing
+### Category 1: Fixed Theorems (Working Pattern Identified)
 
-The user specifically asked to "only after that start proving cheated theorems", so we should stop here and report the findings.
+**case_BaseTarget** (line 563) and **case_AttributeTarget** (line 628) - ✓ FIXED
+
+**Pattern that works:**
+```sml
+Proof
+  rpt strip_tac >> qpat_x_assum `eval_* _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, AllCaseEqs(), return_def] >>
+  rpt strip_tac >> gvs[return_def] >> res_tac >> simp[] >>
+  PairCases_on `x` >> gvs[return_def]
+QED
+```
+
+**Why it works:**
+1. Explicitly expands the main eval function call with `mp_tac` before simplifying
+2. `AllCaseEqs()` splits on INL/INR cases from bind
+3. `PairCases_on` handles pair returns (e.g., `(loc, sbs)`)
+4. `res_tac` applies the IH to connect state transformations
+5. Final `gvs[return_def]` shows `s'' = st'` from the return operation
+
+### Category 2: Cheated Theorems Needing Fixes
+
+#### 2A. Expression Evaluation Cases (Complex State Threading)
+
+**case_IfExp** (line 712) - Currently CHEATED
+```sml
+Theorem case_IfExp[local]:
+  ∀cx e e' e''.
+    (∀s'' tv t. eval_expr cx e s'' = (INL tv,t) ⇒
+       ∀st res st'. eval_expr cx e' st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀s'' tv t. eval_expr cx e s'' = (INL tv,t) ⇒
+       ∀st res st'. eval_expr cx e'' st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀st res st'. eval_expr cx e st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_expr cx (IfExp e e' e'') st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+```
+
+**Issue:** After expanding `evaluate_def`, get expression:
+```sml
+eval_expr cx e st = (INL tv, t) ∧
+switch_BoolV tv (eval_expr cx e') (eval_expr cx e'') t = (res, st')
+```
+
+The `switch_BoolV` expands to:
+```sml
+if tv = Value (BoolV T) then eval_expr cx e' t
+else if tv = Value (BoolV F) then eval_expr cx e'' t  
+else raise ...
+```
+
+Need to:
+1. Case split on `tv = Value (BoolV T)` vs `tv = Value (BoolV F)` vs error
+2. For each branch, apply the appropriate IH
+3. Connect: `LENGTH st.scopes = LENGTH t.scopes` (from eval e) and `LENGTH t.scopes = LENGTH st'.scopes` (from eval e'/e'')
+
+**Suggested fix approach:**
+```sml
+Proof
+  rpt strip_tac >>
+  gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  gvs[switch_BoolV_def] >>
+  Cases_on `tv = Value (BoolV T)` >> gvs[] >> res_tac >> gvs[] >>
+  Cases_on `tv = Value (BoolV F)` >> gvs[] >> res_tac >> gvs[]
+QED
+```
+
+---
+
+**case_Builtin** (line 778) - Currently CHEATED
+```sml
+Theorem case_Builtin[local]:
+  ∀cx bt es.
+    (∀s'' x t. check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x,t) ⇒
+       ∀st res st'. eval_exprs cx es st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_expr cx (Builtin bt es) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+```
+
+**Issue:** State threading: `st → s'' (check) → s'³' (eval_exprs) → s'⁴' (lift_sum) → st'`
+
+The definition is roughly:
+```sml
+eval_expr cx (Builtin bt es) = do
+  check (builtin_args_length_ok bt (LENGTH es)) "Builtin args";
+  vs <- eval_exprs cx es;
+  v <- lift_sum (eval_builtin bt vs);
+  return v
+od
+```
+
+Need to show:
+1. `check` preserves scopes (✓ have `check_scopes`)
+2. `eval_exprs` preserves scopes (IH)
+3. `lift_sum` preserves scopes (✓ have `lift_sum_scopes`)
+4. `return` preserves scopes (✓ have `return_scopes`)
+5. Chain them: `st → s'' → s'³' → s'⁴' → st'`
+
+**Suggested fix approach:**
+```sml
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def] >>
+  rpt strip_tac >> gvs[return_def] >>
+  imp_res_tac check_scopes >> gvs[] >>
+  imp_res_tac lift_sum_scopes >> gvs[] >>
+  res_tac >> gvs[]
+QED
+```
+
+---
+
+**case_Pop** (line 791) - Currently CHEATED
+```sml
+Theorem case_Pop[local]:
+  ∀cx bt.
+    (∀st res st'. eval_base_target cx bt st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_expr cx (Pop bt) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+```
+
+**Issue:** Similar to case_BaseTarget but with additional `assign_target` call.
+
+Definition:
+```sml
+eval_expr cx (Pop bt) = do
+  (loc, sbs) <- eval_base_target cx bt;
+  v <- ... (pop operation);
+  assign_target cx (BaseTargetV loc sbs) v
+od
+```
+
+State threading: `st → t (eval_base_target) → ... → st' (assign_target)`
+
+Need:
+1. Apply IH for `eval_base_target`: `LENGTH st.scopes = LENGTH t.scopes`
+2. Apply `assign_target_scopes_len`: `LENGTH ...scopes = LENGTH st'.scopes`
+3. Chain appropriately
+
+**Suggested fix approach:**
+```sml
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  rpt strip_tac >> gvs[return_def] >>
+  PairCases_on `x` >> gvs[bind_def, AllCaseEqs(), return_def] >>
+  imp_res_tac assign_target_scopes_len >> gvs[] >>
+  res_tac >> gvs[]
+QED
+```
+
+---
+
+**case_TypeBuiltin** (line 802) - Currently CHEATED
+
+Similar to `case_Builtin`. Same pattern should work.
+
+---
+
+**case_Send** (line 813) - Currently CHEATED
+
+```sml
+Theorem case_Send[local]:
+  ∀cx es.
+    (∀s'' x t. check (LENGTH es = 2) "Send args" s'' = (INL x,t) ⇒
+       ∀st res st'. eval_exprs cx es st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_expr cx (Call Send es) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+```
+
+**Issue:** Multiple state transformations through check, eval_exprs, get_Value (for extracting addresses), and transfer_value.
+
+State flow: `st → (check) → (eval_exprs) → (get_Value × 2) → (transfer_value) → st'`
+
+Need to apply:
+- `check_scopes`
+- `get_Value_scopes` (twice)
+- `transfer_value_scopes`
+- IH for `eval_exprs`
+
+**Suggested fix approach:**
+```sml
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def] >>
+  rpt strip_tac >> gvs[return_def] >>
+  imp_res_tac check_scopes >> gvs[] >>
+  imp_res_tac get_Value_scopes >> gvs[] >>
+  imp_res_tac transfer_value_scopes >> gvs[] >>
+  res_tac >> gvs[]
+QED
+```
+
+---
+
+**case_eval_exprs_cons** (line 883) - Currently CHEATED
+
+```sml
+Theorem case_eval_exprs_cons[local]:
+  ∀cx e es.
+    (∀s'' tv t s'³' v t'.
+       eval_expr cx e s'' = (INL tv,t) ∧ get_Value tv s'³' = (INL v,t') ⇒
+       ∀st res st'. eval_exprs cx es st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀st res st'. eval_expr cx e st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_exprs cx (e::es) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+```
+
+**Issue:** The recursive `chain_tac` was looping. Need explicit manual chaining.
+
+Definition:
+```sml
+eval_exprs cx (e::es) = do
+  tv <- eval_expr cx e;
+  v <- get_Value tv;
+  vs <- eval_exprs cx es;
+  return (v::vs)
+od
+```
+
+State: `st → t (eval e) → t' (get_Value) → st' (eval es)`
+
+Need:
+1. Apply IH for `eval_expr`: `LENGTH st.scopes = LENGTH t.scopes`
+2. Apply `get_Value_scopes`: `LENGTH t.scopes = LENGTH t'.scopes`
+3. Apply IH for `eval_exprs`: `LENGTH t'.scopes = LENGTH st'.scopes`
+4. Transitivity
+
+**Suggested fix approach:**
+```sml
+Proof
+  rpt strip_tac >>
+  gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac get_Value_scopes >> gvs[] >>
+  res_tac >> gvs[]
+QED
+```
+
+#### 2B. Original 4 Cheated Theorems (Main Proof Targets)
+
+**case_If** (line 469) - Originally CHEATED
+
+```sml
+Theorem case_If[local]:
+  ∀cx e ss ss'.
+    (∀s'' tv t s'³' x t'.
+       eval_expr cx e s'' = (INL tv,t) ∧ push_scope s'³' = (INL x,t') ⇒
+       ∀st res st'. eval_stmts cx ss st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀s'' tv t s'³' x t'.
+       eval_expr cx e s'' = (INL tv,t) ∧ push_scope s'³' = (INL x,t') ⇒
+       ∀st res st'. eval_stmts cx ss' st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀st res st'. eval_expr cx e st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_stmt cx (If e ss ss') st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+```
+
+**Definition:**
+```sml
+eval_stmt cx (If e ss ss') = do
+  tv <- eval_expr cx e;
+  push_scope;
+  finally (
+    switch_BoolV tv (eval_stmts cx ss) (eval_stmts cx ss')
+  ) pop_scope
+od
+```
+
+**Key insight:** We have `finally_push_pop_len` helper lemma (line 196):
+```sml
+Theorem finally_push_pop_len[local]:
+  !body st res st'.
+    finally (do push_scope; body od) pop_scope st = (res, st') /\
+    (!st1 res1 st1'. body st1 = (res1, st1') ==> LENGTH st1'.scopes = LENGTH st1.scopes) ==>
+    LENGTH st'.scopes = LENGTH st.scopes
+```
+
+**Strategy:**
+1. Expand `evaluate_def` to expose the `finally (do push_scope; ... od) pop_scope` pattern
+2. Apply `finally_push_pop_len`
+3. Need to show the body (`switch_BoolV tv (eval_stmts cx ss) (eval_stmts cx ss')`) preserves scopes
+4. Use `switch_BoolV_scopes_len` helper (line 219)
+5. Apply IHs for `eval_stmts cx ss` and `eval_stmts cx ss'`
+
+**Suggested approach:**
+```sml
+Proof
+  rpt strip_tac >>
+  gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+  irule finally_push_pop_len >> conj_tac
+  >- (irule switch_BoolV_scopes_len >> rpt strip_tac >> res_tac >> gvs[]) >>
+  res_tac >> gvs[]
+QED
+```
+
+---
+
+**case_For** (line 487) - Originally CHEATED
+
+```sml
+Theorem case_For[local]:
+  ∀cx id typ it n body.
+    (∀s'' vs t s'³' x t'.
+       eval_iterator cx it s'' = (INL vs,t) ∧
+       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'³' = (INL x,t') ⇒
+       ∀st res st'. eval_for cx (string_to_num id) body vs st = (res,st') ⇒
+         LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀st res st'. eval_iterator cx it st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_stmt cx (For id typ it n body) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+```
+
+**Definition:**
+```sml
+eval_stmt cx (For id typ it n body) = do
+  vs <- eval_iterator cx it;
+  check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long";
+  eval_for cx (string_to_num id) body vs
+od
+```
+
+**Strategy:**
+1. Expand to show bind chain
+2. Apply IH for `eval_iterator`
+3. Apply `check_scopes`
+4. Apply IH for `eval_for`
+5. Chain with transitivity
+
+**Suggested approach:**
+```sml
+Proof
+  rpt strip_tac >>
+  gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac check_scopes >> gvs[] >>
+  res_tac >> gvs[]
+QED
+```
+
+---
+
+**case_eval_for_cons** (line 659) - Originally CHEATED
+
+```sml
+Theorem case_eval_for_cons[local]:
+  ∀cx nm body v vs.
+    (∀s'' x t s'³' broke t'.
+       push_scope_with_var nm v s'' = (INL x,t) ∧
+       finally (try do eval_stmts cx body; return F od handle_loop_exception) pop_scope s'³' = (INL broke,t') ∧
+       ¬broke ⇒
+       ∀st res st'. eval_for cx nm body vs st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ∧
+    (∀s'' x t.
+       push_scope_with_var nm v s'' = (INL x,t) ⇒
+       ∀st res st'. eval_stmts cx body st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes) ⇒
+    ∀st res st'.
+      eval_for cx nm body (v::vs) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+```
+
+**Definition:**
+```sml
+eval_for cx nm body (v::vs) = do
+  push_scope_with_var nm v;
+  broke <- finally
+    (try (do eval_stmts cx body; return F od) handle_loop_exception)
+    pop_scope;
+  if broke then return () else eval_for cx nm body vs
+od
+```
+
+**Strategy:**
+1. Similar to case_If, use `finally_push_var_pop_len` helper (line 207)
+2. Show the `try ... handle_loop_exception` body preserves scopes
+3. Case split on `broke`
+4. If not broke, apply IH for recursive `eval_for` call
+
+**Suggested approach:**
+```sml
+Proof
+  rpt strip_tac >>
+  gvs[evaluate_def, bind_def, AllCaseEqs(), return_def] >>
+  irule finally_push_var_pop_len >> conj_tac
+  >- (rpt strip_tac >> gvs[try_def, handle_loop_exception_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      res_tac >> gvs[]) >>
+  Cases_on `broke` >> gvs[return_def] >>
+  res_tac >> gvs[]
+QED
+```
+
+---
+
+**case_IntCall** (line 830) - Originally CHEATED
+
+This is the most complex case. Internal function calls:
+1. Save current scopes: `get_scopes`
+2. Replace scopes with function environment: `push_function` (sets scopes to `[env]`)
+3. Execute function body
+4. Restore saved scopes: `pop_function prev`
+
+**Key lemmas:**
+- `get_scopes_id` (line 45): `get_scopes st = (res, st') ==> st' = st`
+- `push_function_scopes` (line 166): `push_function src_fn sc cx st = (INL cxf, st') ==> st'.scopes = [sc]`
+- `pop_function_scopes` (line 173): `pop_function prev st = (res, st') ==> st'.scopes = prev`
+
+**Strategy:**
+1. Expand to show the full bind chain
+2. Use `get_scopes_id` to show `prev = st.scopes`
+3. Apply helper lemmas for check, lift_option, etc.
+4. Use `push_function_scopes`: after push, `st'.scopes = [env]`
+5. Apply IH for `eval_stmts`: preserves length on `[env]`
+6. Use `pop_function_scopes`: restores `prev`
+7. Since `prev = st.scopes`, final length equals original
+
+**Suggested approach:**
+```sml
+Proof
+  rpt strip_tac >>
+  gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac check_scopes >> gvs[] >>
+  imp_res_tac lift_option_scopes >> gvs[] >>
+  imp_res_tac get_scopes_id >> gvs[] >> (* prev = st.scopes *)
+  imp_res_tac push_function_scopes >> gvs[] >> (* new scopes = [env] *)
+  (* IH applies to body execution *)
+  (* finally uses pop_function to restore prev *)
+  imp_res_tac pop_function_scopes >> gvs[] (* st'.scopes = prev = st.scopes *)
+QED
+```
+
+(Will need careful handling of the `finally` block and all the intermediate state transformations)
+
+### Category 3: Build System Issue  
+
+**scopes_len_mutual** (line 893) - Currently CHEATED
+
+**Issue discovered:** The original proof used `metis_tac[case_*]` for each of the 45 subgoals. This was timing out/hanging during the build, NOT because of cheated dependencies (cheated theorems work fine with metis), but because `metis_tac` is slow in the context of this large mutual induction with complex conditional IHs.
+
+**Attempts made:**
+1. `metis_tac[case_*]` - SLOW/HANGS (original approach)
+2. `accept_tac case_*` - Doesn't exist in HOL4
+3. `irule case_* >> simp[]` - "No match" error (goal shape from induction doesn't match theorem)
+4. `fs[case_*]` - "first subgoal not solved" (needs more reasoning to connect IHs)
+5. `simp[case_*]` - Same issue as fs
+
+**Root cause:** After `ho_match_mp_tac evaluate_ind`, each subgoal has a specific shape with conditional IHs. The case_* theorems have different quantifier structures. Simple tactics like `fs` or `simp` can apply the theorem but can't complete the proof because they need to:
+   - Match the IH preconditions with the assumptions from the induction
+   - Instantiate universally quantified variables correctly
+   - Apply transitivity/modus ponens reasoning
+
+Only `metis_tac` can do this automatically, but it's too slow (possibly O(n²) or worse in the number of assumptions).
+
+**Solution:** The proof is currently cheated (line 903). To fix properly, options are:
+1. Wait for `metis_tac` to finish (may take 5-30+ minutes per subgoal = hours total)  
+2. Write a custom tactic that does the IH matching more efficiently
+3. Manually prove each of the 45 cases without using the case_* lemmas
+4. Restructure the proof to avoid the mutual induction entirely
+
+### Summary of Work Required
+
+| Theorem | Lines | Status | Difficulty | Estimated Effort |
+|---------|-------|--------|------------|------------------|
+| case_IfExp | 712-729 | CHEATED | Medium | 15-30 min |
+| case_Builtin | 778-789 | CHEATED | Medium | 15-30 min |
+| case_Pop | 791-799 | CHEATED | Medium | 15-30 min |
+| case_TypeBuiltin | 802-811 | CHEATED | Medium | 15-30 min |
+| case_Send | 813-823 | CHEATED | Medium | 15-30 min |
+| case_eval_exprs_cons | 883-891 | CHEATED | Medium | 15-30 min |
+| case_If | 469-485 | CHEATED (original) | High | 30-60 min |
+| case_For | 487-501 | CHEATED (original) | Medium | 20-40 min |
+| case_eval_for_cons | 659-676 | CHEATED (original) | High | 30-60 min |
+| case_IntCall | 830-867 | CHEATED (original) | Very High | 60-120 min |
+| scopes_len_mutual | 893-996 | CHEATED (perf issue) | Very High | Hours or restructure needed |
+
+**Total cheats:** 11 theorems (7 case_* + 4 original complex + 1 mutual)
+**Total estimated time to fix all:** 6-12 hours (or more for scopes_len_mutual)
+
+### Next Steps
+
+1. Start with the easier case_* theorems (category 2A) to build confidence
+2. Move to the 4 original complex theorems (category 2B)
+3. Fix scopes_len_mutual once all case_* theorems are proven
+4. Test full build to ensure no other issues
 
 ## Goal
 

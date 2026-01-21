@@ -901,97 +901,97 @@ Theorem scopes_len_mutual[local]:
   (!cx e st res st'. eval_expr cx e st = (res, st') ==> LENGTH st.scopes = LENGTH st'.scopes) /\
   (!cx es st res st'. eval_exprs cx es st = (res, st') ==> LENGTH st.scopes = LENGTH st'.scopes)
 Proof
-  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt gen_tac
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac
   (* 1. Pass *)
-  >- metis_tac[case_Pass]
+  >- ACCEPT_TAC case_Pass
   (* 2. Continue *)
-  >- metis_tac[case_Continue]
+  >- ACCEPT_TAC case_Continue
   (* 3. Break *)
-  >- metis_tac[case_Break]
+  >- ACCEPT_TAC case_Break
   (* 4. Return NONE *)
-  >- metis_tac[case_Return_NONE]
+  >- ACCEPT_TAC case_Return_NONE
   (* 5. Return (SOME e) *)
-  >- metis_tac[case_Return_SOME]
+  >- ACCEPT_TAC case_Return_SOME
   (* 6. Raise e *)
-  >- metis_tac[case_Raise]
+  >- ACCEPT_TAC case_Raise
   (* 7. Assert *)
-  >- metis_tac[case_Assert]
+  >- ACCEPT_TAC case_Assert
   (* 8. Log *)
-  >- metis_tac[case_Log]
+  >- ACCEPT_TAC case_Log
   (* 9. AnnAssign *)
-  >- metis_tac[case_AnnAssign]
+  >- ACCEPT_TAC case_AnnAssign
   (* 10. Append *)
-  >- metis_tac[case_Append]
+  >- ACCEPT_TAC case_Append
   (* 11. Assign *)
-  >- metis_tac[case_Assign]
+  >- ACCEPT_TAC case_Assign
   (* 12. AugAssign *)
-  >- metis_tac[case_AugAssign]
+  >- ACCEPT_TAC case_AugAssign
   (* 13. If - complex proof, see if_stmt_scopes_len *)
-  >- metis_tac[case_If]
+  >- ACCEPT_TAC case_If
   (* 14. For - complex proof, see for_stmt_scopes_len *)
-  >- metis_tac[case_For]
+  >- ACCEPT_TAC case_For
   (* 15. Expr *)
-  >- metis_tac[case_Expr]
+  >- ACCEPT_TAC case_Expr
   (* 16. eval_stmts [] *)
-  >- metis_tac[case_eval_stmts_nil]
+  >- ACCEPT_TAC case_eval_stmts_nil
   (* 17. eval_stmts (s::ss) *)
-  >- metis_tac[case_eval_stmts_cons]
+  >- ACCEPT_TAC case_eval_stmts_cons
   (* 18. Array iterator *)
-  >- metis_tac[case_Array_iterator]
+  >- ACCEPT_TAC case_Array_iterator
   (* 19. Range iterator *)
-  >- metis_tac[case_Range_iterator]
+  >- ACCEPT_TAC case_Range_iterator
   (* 20. BaseTarget *)
-  >- metis_tac[case_BaseTarget]
+  >- ACCEPT_TAC case_BaseTarget
   (* 21. TupleTarget *)
-  >- metis_tac[case_TupleTarget]
+  >- ACCEPT_TAC case_TupleTarget
   (* 22. eval_targets [] *)
-  >- metis_tac[case_eval_targets_nil]
+  >- ACCEPT_TAC case_eval_targets_nil
   (* 23. eval_targets (g::gs) *)
-  >- metis_tac[case_eval_targets_cons]
+  >- ACCEPT_TAC case_eval_targets_cons
   (* 24. NameTarget *)
-  >- metis_tac[case_NameTarget]
+  >- ACCEPT_TAC case_NameTarget
   (* 25. TopLevelNameTarget *)
-  >- metis_tac[case_TopLevelNameTarget]
+  >- ACCEPT_TAC case_TopLevelNameTarget
   (* 26. AttributeTarget *)
-  >- metis_tac[case_AttributeTarget]
+  >- ACCEPT_TAC case_AttributeTarget
   (* 27. SubscriptTarget *)
-  >- metis_tac[case_SubscriptTarget]
+  >- ACCEPT_TAC case_SubscriptTarget
   (* 28. eval_for [] *)
-  >- metis_tac[case_eval_for_nil]
+  >- ACCEPT_TAC case_eval_for_nil
   (* 29. eval_for (v::vs) - complex proof, see eval_for_cons_scopes_len *)
-  >- metis_tac[case_eval_for_cons]
+  >- ACCEPT_TAC case_eval_for_cons
   (* 30. Name *)
-  >- metis_tac[case_Name]
+  >- ACCEPT_TAC case_Name
   (* 31. TopLevelName *)
-  >- metis_tac[case_TopLevelName]
+  >- ACCEPT_TAC case_TopLevelName
   (* 32. FlagMember *)
-  >- metis_tac[case_FlagMember]
+  >- ACCEPT_TAC case_FlagMember
   (* 33. IfExp *)
-  >- metis_tac[case_IfExp]
+  >- ACCEPT_TAC case_IfExp
   (* 34. Literal *)
-  >- metis_tac[case_Literal]
+  >- ACCEPT_TAC case_Literal
   (* 35. StructLit *)
-  >- metis_tac[case_StructLit]
+  >- ACCEPT_TAC case_StructLit
   (* 36. Subscript *)
-  >- metis_tac[case_Subscript]
+  >- ACCEPT_TAC case_Subscript
   (* 37. Attribute *)
-  >- metis_tac[case_Attribute]
+  >- ACCEPT_TAC case_Attribute
   (* 38. Builtin *)
-  >- metis_tac[case_Builtin]
+  >- ACCEPT_TAC case_Builtin
   (* 39. Pop *)
-  >- metis_tac[case_Pop]
+  >- ACCEPT_TAC case_Pop
   (* 40. TypeBuiltin *)
-  >- metis_tac[case_TypeBuiltin]
+  >- ACCEPT_TAC case_TypeBuiltin
   (* 41. Send *)
-  >- metis_tac[case_Send]
+  >- ACCEPT_TAC case_Send
   (* 42. ExtCall *)
-  >- metis_tac[case_ExtCall]
+  >- ACCEPT_TAC case_ExtCall
   (* 43. IntCall - complex proof, see intcall_scopes_len *)
-  >- metis_tac[case_IntCall]
+  >- ACCEPT_TAC case_IntCall
   (* 44. eval_exprs [] *)
-  >- metis_tac[case_eval_exprs_nil]
+  >- ACCEPT_TAC case_eval_exprs_nil
   (* 45. eval_exprs (e::es) *)
-  >- metis_tac[case_eval_exprs_cons]
+  >- ACCEPT_TAC case_eval_exprs_cons
 QED
 
 (* Main theorem: evaluation preserves scopes length *)
