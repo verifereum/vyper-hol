@@ -794,7 +794,16 @@ Theorem case_Pop[local]:
     ∀st res st'.
       eval_expr cx (Pop bt) st = (res,st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  rpt strip_tac >> gvs[return_def] >>
+  PairCases_on `x` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac assign_target_scopes_len >> gvs[] >>
+  imp_res_tac get_Value_scopes >> gvs[] >>
+  imp_res_tac lift_sum_scopes >> gvs[] >>
+  imp_res_tac lift_option_scopes >> gvs[] >>
+  res_tac >> gvs[]
 QED
 
 Theorem case_TypeBuiltin[local]:
