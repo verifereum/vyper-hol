@@ -101,6 +101,12 @@ Local test/scratch files use **dot prefixes** (gitignored):
 
 Try to keep theory files under 500 LOC (soft limit).
 
+### Variable names
+
+Formulate proofs in such a way as not to depend on automatically generated variable names. Use `rename1` when needed.
+
+The only discrepancy between interactive and batch proof execution is in automatically generated variable names. Any proof you developed interactively will work in batch mode if you reformulate it so that it doesn’t depend on automatically generated variable names.
+
 ## HOL4 Tactics Reference
 
 ### Fast tactics (prefer these)

@@ -157,6 +157,32 @@ Proof
   Cases_on `q` >> gvs[]
 QED
 
+Theorem eval_base_target_NameTarget_preserves_state:
+  ∀cx n st loc sbs st'.
+    eval_base_target cx (NameTarget n) st = (INL (loc, sbs), st') ==> st' = st
+Proof
+  simp[Once evaluate_def] >> rpt strip_tac >>
+  gvs[bind_def, get_scopes_def, return_def] >>
+  Cases_on `cx.txn.is_creation` >> gvs[return_def] >-
+  (gvs[bind_def, get_immutables_def, get_immutables_module_def,
+       get_current_globals_def, lift_option_def] >>
+   Cases_on `ALOOKUP st.globals cx.txn.target` >> gvs[return_def, raise_def] >>
+   gvs[lift_sum_def, bind_def] >>
+   Cases_on `exactly_one_option
+              (if IS_SOME (lookup_scopes (string_to_num n) st.scopes) then
+                 SOME (ScopedVar n)
+               else NONE)
+              (immutable_target (get_module_globals NONE x).immutables n
+                 (string_to_num n))` >>
+   gvs[return_def, raise_def]) >>
+  gvs[lift_sum_def, bind_def] >>
+  Cases_on `exactly_one_option
+             (if IS_SOME (lookup_scopes (string_to_num n) st.scopes) then
+                SOME (ScopedVar n)
+              else NONE) NONE` >>
+  gvs[return_def, raise_def]
+QED
+
 Definition lookup_name_target_def:
   lookup_name_target cx st n =
     case eval_base_target cx (NameTarget n) st of
@@ -170,14 +196,9 @@ Theorem target_spec_name:
 Proof
   rw[target_spec_def, lookup_name_target_def] >> rpt strip_tac >>
   simp[Once evaluate_def, bind_def, return_def] >>
-  gvs[Once evaluate_def, bind_def, get_scopes_def, return_def, lift_sum_def,
-      get_immutables_def, get_immutables_module_def, get_current_globals_def,
-      lift_option_def, raise_def, AllCaseEqs()] >>
-  simp[Once evaluate_def, bind_def, get_scopes_def, return_def, lift_sum_def,
-       get_immutables_def, get_immutables_module_def, get_current_globals_def,
-       lift_option_def, raise_def] >>
-  (* TODO: Need lemma showing eval_base_target for NameTarget preserves state *)
-  cheat
+  Cases_on `eval_base_target cx (NameTarget n) st` >> gvs[return_def] >>
+  Cases_on `q` >> gvs[return_def] >> Cases_on `x` >> gvs[return_def] >>
+  drule eval_base_target_NameTarget_preserves_state >> simp[]
 QED
 
 Theorem stmts_spec_consequence:
