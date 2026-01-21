@@ -3,6 +3,9 @@ Theory vyperHoare
 Ancestors
   vyperInterpreter vyperScopes
 
+(**********************************************************************)
+(* Definitions *)
+
 Definition stmts_spec_def:
   stmts_spec cx (P : evaluation_state -> bool) (ss : stmt list) (Q_ok : evaluation_state -> bool) (Q_ret : value -> evaluation_state -> bool) <=>
     !st. P st ==>
@@ -108,6 +111,52 @@ val _ =
       paren_style = OnlyIfNecessary,
       block_style = (AroundEachPhrase, (PP.INCONSISTENT, 0)) };
 
+(**********************************************************************)
+(* Helper lemmas *)
+
+Theorem eval_base_target_NameTarget_preserves_state:
+  ∀cx n st loc sbs st'.
+    eval_base_target cx (NameTarget n) st = (INL (loc, sbs), st') ==> st' = st
+Proof
+  simp[Once evaluate_def] >> rpt strip_tac >>
+  gvs[bind_def, get_scopes_def, return_def] >>
+  Cases_on `cx.txn.is_creation` >> gvs[return_def] >-
+  (gvs[bind_def, get_immutables_def, get_immutables_module_def,
+       get_current_globals_def, lift_option_def] >>
+   Cases_on `ALOOKUP st.globals cx.txn.target` >> gvs[return_def, raise_def] >>
+   gvs[lift_sum_def, bind_def] >>
+   Cases_on `exactly_one_option
+              (if IS_SOME (lookup_scopes (string_to_num n) st.scopes) then
+                 SOME (ScopedVar n)
+               else NONE)
+              (immutable_target (get_module_globals NONE x).immutables n
+                 (string_to_num n))` >>
+   gvs[return_def, raise_def]) >>
+  gvs[lift_sum_def, bind_def] >>
+  Cases_on `exactly_one_option
+             (if IS_SOME (lookup_scopes (string_to_num n) st.scopes) then
+                SOME (ScopedVar n)
+              else NONE) NONE` >>
+  gvs[return_def, raise_def]
+QED
+
+Theorem with_scopes_id[local]:
+  (r:evaluation_state) with scopes := r.scopes = r
+Proof
+  Cases_on `r` >> simp[evaluation_state_fn_updates]
+QED
+
+Theorem scopes_cons_lemma[local]:
+  (r:evaluation_state) with scopes := FEMPTY::r.scopes =
+  r with scopes updated_by CONS FEMPTY
+Proof
+  Cases_on `r` >> simp[evaluation_state_fn_updates]
+QED
+
+
+(**********************************************************************)
+(* Rules *)
+        
 Theorem expr_spec_consequence:
   ∀P P' Q Q' cx e v.
     (∀st. P' st ⇒ P st) ∧
@@ -125,6 +174,19 @@ Theorem expr_spec_literal:
   ∀P P' cx l. ⟦cx⟧ ⦃P⦄ (Literal l) ⇓ evaluate_literal l ⦃P⦄
 Proof
   rw[expr_spec_def, evaluate_def, return_def]
+QED
+
+Definition lookup_name_def:
+  lookup_name cx st n =
+    case eval_expr cx (Name n) st of
+    | (INL (Value v), _) => SOME v
+    | (_, _) => NONE
+End
+
+Theorem expr_spec_name:
+  ∀P cx n e v. ⟦cx⟧ ⦃λst. P st ∧ lookup_name cx st n = SOME v⦄ e ⇓ v ⦃P⦄
+Proof
+  cheat
 QED
 
 Theorem expr_spec_if:
@@ -155,32 +217,6 @@ Proof
   first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
   Cases_on `eval_target cx tgt st` >>
   Cases_on `q` >> gvs[]
-QED
-
-Theorem eval_base_target_NameTarget_preserves_state:
-  ∀cx n st loc sbs st'.
-    eval_base_target cx (NameTarget n) st = (INL (loc, sbs), st') ==> st' = st
-Proof
-  simp[Once evaluate_def] >> rpt strip_tac >>
-  gvs[bind_def, get_scopes_def, return_def] >>
-  Cases_on `cx.txn.is_creation` >> gvs[return_def] >-
-  (gvs[bind_def, get_immutables_def, get_immutables_module_def,
-       get_current_globals_def, lift_option_def] >>
-   Cases_on `ALOOKUP st.globals cx.txn.target` >> gvs[return_def, raise_def] >>
-   gvs[lift_sum_def, bind_def] >>
-   Cases_on `exactly_one_option
-              (if IS_SOME (lookup_scopes (string_to_num n) st.scopes) then
-                 SOME (ScopedVar n)
-               else NONE)
-              (immutable_target (get_module_globals NONE x).immutables n
-                 (string_to_num n))` >>
-   gvs[return_def, raise_def]) >>
-  gvs[lift_sum_def, bind_def] >>
-  Cases_on `exactly_one_option
-             (if IS_SOME (lookup_scopes (string_to_num n) st.scopes) then
-                SOME (ScopedVar n)
-              else NONE) NONE` >>
-  gvs[return_def, raise_def]
 QED
 
 Definition lookup_name_target_def:
@@ -229,19 +265,6 @@ Proof
   simp[Once evaluate_def, return_def] >>
   simp[Once evaluate_def, ignore_bind_def, bind_def, return_def] >>
   simp[Once evaluate_def, return_def]
-QED
-
-Theorem with_scopes_id[local]:
-  (r:evaluation_state) with scopes := r.scopes = r
-Proof
-  Cases_on `r` >> simp[evaluation_state_fn_updates]
-QED
-
-Theorem scopes_cons_lemma[local]:
-  (r:evaluation_state) with scopes := FEMPTY::r.scopes =
-  r with scopes updated_by CONS FEMPTY
-Proof
-  Cases_on `r` >> simp[evaluation_state_fn_updates]
 QED
 
 Theorem stmts_spec_if:
