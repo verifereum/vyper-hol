@@ -49,7 +49,7 @@ jobs:
           cd vyper-src
           git fetch --unshallow --tags
           pip install .[test]
-          pytest -s -n0 --export ../tests/vyper-test-exports -m "not fuzzing" tests/functional/codegen
+          pytest -s -n0 --export ../tests/vyper-test-exports -m "not fuzzing" tests/functional
 
   vyper-tests:
     needs: [build, export-vyper-tests]

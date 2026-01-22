@@ -1,0 +1,4 @@
+Theory vyperTest_functional_codegen_features_decorators_test_nonreentrant[no_sig_docs]
+Ancestors vyperTestDefs_functional_codegen_features_decorators_test_nonreentrant
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperTestDefs_functional_codegen_features_decorators_test_nonreentrant";

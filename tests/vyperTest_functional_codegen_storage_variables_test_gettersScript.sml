@@ -1,0 +1,4 @@
+Theory vyperTest_functional_codegen_storage_variables_test_getters[no_sig_docs]
+Ancestors vyperTestDefs_functional_codegen_storage_variables_test_getters
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperTestDefs_functional_codegen_storage_variables_test_getters";
