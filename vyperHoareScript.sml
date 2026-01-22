@@ -39,7 +39,7 @@ End
 open Parse;
 
 val _ =
-  temp_add_rule
+  add_rule
     { term_name   = "stmts_spec",
       fixity      = Closefix,
       pp_elements =
@@ -62,7 +62,7 @@ val _ =
       block_style = (AroundEachPhrase, (PP.INCONSISTENT, 0)) };
 
 val _ =
-  temp_add_rule
+  add_rule
     { term_name   = "expr_spec",
       fixity      = Closefix,
       pp_elements =
@@ -87,7 +87,7 @@ val _ =
       block_style = (AroundEachPhrase, (PP.INCONSISTENT, 0)) };
 
 val _ =
-  temp_add_rule
+  add_rule
     { term_name   = "target_spec",
       fixity      = Closefix,
       pp_elements =
