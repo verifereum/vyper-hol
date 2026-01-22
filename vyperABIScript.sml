@@ -455,14 +455,128 @@ Proof
   \\ rw[MEM_enumerate_static_array_iff]
 QED
 
+(* Helper for list case of default value inverse *)
+Theorem abi_to_vyper_list_default_value_inv:
+  ∀ts tvs avs env.
+    (∀t tv av. MEM t ts ⇒ evaluate_type env t = SOME tv ⇒
+               abi_to_vyper env t av = SOME (default_value tv) ⇒
+               av = default_to_abi tv) ⇒
+    OPT_MMAP (evaluate_type env) ts = SOME tvs ⇒
+    abi_to_vyper_list env ts avs = SOME (MAP default_value tvs) ⇒
+    avs = MAP default_to_abi tvs
+Proof
+  Induct
+  >- (gvs[] \\ Cases \\ gvs[])
+  \\ rw[]
+  \\ Cases_on `avs` \\ gvs[CaseEq"option"]
+  \\ first_x_assum irule
+  \\ goal_assum $ drule_at Any
+  \\ rw[] \\ metis_tac[]
+QED
+
 (* Helper 4: Default value inverse - if decoding gives default, input was default encoding *)
+Theorem abi_to_vyper_default_value_inv_mutual:
+  (∀env t av v. abi_to_vyper env t av = SOME v ⇒
+                ∀tv. evaluate_type env t = SOME tv ⇒
+                     v = default_value tv ⇒ av = default_to_abi tv) ∧
+  (∀env ts avs vs. abi_to_vyper_list env ts avs = SOME vs ⇒
+                   ∀tvs. OPT_MMAP (evaluate_type env) ts = SOME tvs ⇒
+                         vs = MAP default_value tvs ⇒ avs = MAP default_to_abi tvs)
+Proof
+  ho_match_mp_tac abi_to_vyper_ind
+  \\ rw[]
+  \\ gvs[evaluate_type_def, abi_to_vyper_def, default_value_def, default_to_abi_def,
+         check_IntV_def, AllCaseEqs(), within_int_bound_def, compatible_bound_def,
+         make_array_value_def, default_value_tuple_MAP, ETA_AX, NULL_EQ,
+         default_value_struct_MAP, evaluate_types_OPT_MMAP]
+  >- (
+    first_x_assum(mp_tac o Q.AP_TERM`word_of_bytes T (0w:address)`)
+    \\ DEP_REWRITE_TAC[word_of_bytes_word_to_bytes]
+    \\ rw[divides_def] )
+  \\ TRY (
+    rename1`BytesT bd`
+    \\ Cases_on `bd` \\ gvs[default_value_def, default_to_abi_def] )
+  \\ TRY (
+    Cases_on `b`
+    \\ gvs[evaluate_type_def, abi_to_vyper_def, default_value_def,
+           default_to_abi_def, check_IntV_def, AllCaseEqs(),
+           within_int_bound_def, compatible_bound_def,
+           make_array_value_def, default_value_tuple_MAP, ETA_AX, NULL_EQ,
+           default_value_struct_MAP, evaluate_types_OPT_MMAP,
+           OPT_MMAP_SOME_IFF, abi_to_vyper_list_OPT_MMAP, ZIP_EQ_NIL]
+    \\ first_x_assum irule
+    \\ rw[LIST_EQ_REWRITE, EL_MAP, EL_REPLICATE, EL_ZIP]
+    \\ gvs[NIL_NO_MEM, FORALL_PROD, MEM_enumerate_static_array_iff]
+    \\ first_x_assum(qspec_then`x`mp_tac) \\ rw[EL_MAP, EL_ZIP, EL_REPLICATE])
+ \\ gvs[OPT_MMAP_SOME_IFF, ZIP_MAP, abi_to_vyper_list_OPT_MMAP]
+ \\ gvs[MAP_MAP_o, o_DEF]
+ \\ gvs[LIST_EQ_REWRITE, EL_MAP, EL_ZIP]
+QED
+
+(* Original single-type version with partial proof *)
 Theorem abi_to_vyper_default_value_inv:
   ∀env t tv av.
     evaluate_type env t = SOME tv ∧
     abi_to_vyper env t av = SOME (default_value tv) ⇒
     av = default_to_abi tv
 Proof
-  cheat
+  metis_tac[abi_to_vyper_default_value_inv_mutual]
+QED
+
+(* Helper: ALOOKUP enumerate_static_array agrees on indices < n for full list vs TAKE *)
+Theorem enumerate_ALOOKUP_TAKE:
+  ∀d n i vs'. i < n ∧ n ≤ LENGTH vs' ⇒
+    ALOOKUP (enumerate_static_array d 0 vs') i =
+    ALOOKUP (enumerate_static_array d 0 (TAKE n vs')) i
+Proof
+  rw[]
+  \\ `i < LENGTH vs'` by gvs[]
+  \\ `i < LENGTH (TAKE n vs')` by gvs[LENGTH_TAKE]
+  \\ `ALOOKUP (enumerate_static_array d 0 vs') (0 + i) =
+      if EL i vs' = d then NONE else SOME (EL i vs')`
+      by (irule enumerate_static_array_ALOOKUP \\ gvs[])
+  \\ `ALOOKUP (enumerate_static_array d 0 (TAKE n vs')) (0 + i) =
+      if EL i (TAKE n vs') = d then NONE else SOME (EL i (TAKE n vs'))`
+      by (irule enumerate_static_array_ALOOKUP \\ gvs[])
+  \\ gvs[EL_TAKE]
+QED
+
+(* Helper: vyper_to_abi_sparse only depends on ALOOKUP for indices < n *)
+Theorem vyper_to_abi_sparse_ALOOKUP_cong:
+  ∀n env t tv sparse1 sparse2.
+    (∀i. i < n ⇒ ALOOKUP sparse1 i = ALOOKUP sparse2 i) ⇒
+    vyper_to_abi_sparse env t tv n sparse1 = vyper_to_abi_sparse env t tv n sparse2
+Proof
+  Induct_on `n` \\ rw[vyper_to_abi_def]
+  \\ simp[Once vyper_to_abi_def]
+  \\ `vyper_to_abi_sparse env t tv n sparse1 = vyper_to_abi_sparse env t tv n sparse2`
+      by (first_x_assum irule \\ rw[])
+  \\ `ALOOKUP sparse1 n = ALOOKUP sparse2 n` by gvs[]
+  \\ pop_assum SUBST_ALL_TAC
+  \\ pop_assum SUBST_ALL_TAC
+  \\ rw[]
+QED
+
+(* Corollary: vyper_to_abi_sparse for full vs' = for TAKE n vs' *)
+Theorem vyper_to_abi_sparse_TAKE:
+  ∀n env t tv d vs'. n ≤ LENGTH vs' ⇒
+    vyper_to_abi_sparse env t tv n (enumerate_static_array d 0 vs') =
+    vyper_to_abi_sparse env t tv n (enumerate_static_array d 0 (TAKE n vs'))
+Proof
+  rw[]
+  \\ irule vyper_to_abi_sparse_ALOOKUP_cong
+  \\ rw[]
+  \\ irule enumerate_ALOOKUP_TAKE
+  \\ gvs[]
+QED
+
+(* Helper: TAKE n vs ++ [EL n vs] = vs when LENGTH vs = SUC n *)
+Theorem TAKE_SNOC_EL:
+  LENGTH vs = SUC n ⇒ TAKE n vs ++ [EL n vs] = vs
+Proof
+  rw[LIST_EQ_REWRITE, EL_APPEND_EQN, EL_TAKE, LENGTH_TAKE]
+  \\ Cases_on `x < n` \\ gvs[EL_TAKE]
+  \\ `x = n` by gvs[] \\ gvs[]
 QED
 
 (* Helper 5: vyper_to_abi_sparse reconstruction *)
@@ -475,7 +589,44 @@ Theorem vyper_to_abi_sparse_correct:
     (∀i. i < n ⇒ vyper_to_abi env t (EL i vs') = SOME (EL i vs)) ⇒
     vyper_to_abi_sparse env t tv n (enumerate_static_array (default_value tv) 0 vs') = SOME vs
 Proof
-  cheat
+  Induct_on `n`
+  (* Base case *)
+  >- (rw[vyper_to_abi_def] \\ gvs[LENGTH_EQ_NUM_compute])
+  (* Inductive case *)
+  \\ rw[]
+  \\ simp[Once vyper_to_abi_def, CaseEq"option"]
+  (* Rewrite recursive call using TAKE lemma *)
+  \\ `vyper_to_abi_sparse env t tv n (enumerate_static_array (default_value tv) 0 vs') =
+      vyper_to_abi_sparse env t tv n (enumerate_static_array (default_value tv) 0 (TAKE n vs'))`
+      by (irule vyper_to_abi_sparse_TAKE \\ gvs[])
+  \\ pop_assum SUBST_ALL_TAC
+  (* Apply IH *)
+  \\ `vyper_to_abi_sparse env t tv n (enumerate_static_array (default_value tv) 0 (TAKE n vs')) =
+      SOME (TAKE n vs)` by (first_x_assum irule \\ rw[LENGTH_TAKE, EL_TAKE])
+  (* Witness: TAKE n vs *)
+  \\ qexists_tac `TAKE n vs` \\ gvs[]
+  (* ALOOKUP at index n *)
+  \\ `ALOOKUP (enumerate_static_array (default_value tv) 0 vs') n =
+      if EL n vs' = default_value tv then NONE else SOME (EL n vs')` by (
+       `ALOOKUP (enumerate_static_array (default_value tv) 0 vs') (0 + n) =
+        if EL n vs' = default_value tv then NONE else SOME (EL n vs')` suffices_by gvs[]
+       \\ irule enumerate_static_array_ALOOKUP \\ gvs[])
+  (* Case split *)
+  \\ Cases_on `EL n vs' = default_value tv`
+  (* Case 1: EL n vs' = default_value tv - need abi_to_vyper_default_value_inv *)
+  >- (disj1_tac \\ gvs[]
+      \\ `abi_to_vyper env t (EL n vs) = SOME (default_value tv)` by gvs[]
+      \\ `EL n vs = default_to_abi tv` by (
+          irule abi_to_vyper_default_value_inv \\ qexists_tac `env` \\ qexists_tac `t` \\ gvs[])
+      \\ `TAKE n vs ++ [EL n vs] = vs` suffices_by gvs[]
+      \\ irule TAKE_SNOC_EL \\ gvs[])
+  (* Case 2: EL n vs' ≠ default_value tv - use vyper_to_abi directly *)
+  \\ disj2_tac
+  \\ qexists_tac `EL n vs'`
+  \\ conj_tac >- gvs[]
+  \\ qexists_tac `EL n vs`
+  \\ conj_tac >- gvs[]
+  \\ irule TAKE_SNOC_EL \\ gvs[]
 QED
 
 (* Helper 6: Element-wise correspondence from list operations *)
