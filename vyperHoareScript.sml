@@ -125,7 +125,7 @@ Definition lookup_name_target_def:
     | (INR _, _) => NONE
 End
 
-                  
+
 (**********************************************************************)
 (* Helper lemmas *)
 
@@ -189,7 +189,7 @@ QED
 
 (**********************************************************************)
 (* Rules *)
-        
+
 Theorem expr_spec_consequence:
   ∀P P' Q Q' cx e v.
     (∀st. P' st ⇒ P st) ∧
@@ -394,7 +394,7 @@ Theorem assign_target_spec_consequence:
   ∀cx st av v Q Q'.
     (∀st'. Q st' ⇒ Q' st') ∧
     assign_target_spec cx st av (Replace v) Q ⇒
-      assign_target_spec cx st av (Replace v) Q'                       
+      assign_target_spec cx st av (Replace v) Q'
 Proof
   rw[assign_target_spec_def] >> rpt strip_tac >>
   Cases_on `assign_target cx av (Replace v) st` >> gvs[] >>
@@ -453,7 +453,7 @@ QED
 Theorem stmts_spec_assert_true:
   ∀P Q cx e se v.
     (⟦cx⟧ ⦃P⦄ e ⇓ v ⦃Q⦄) ⇒
-    ⟦cx⟧ ⦃P⦄ [Assert e se] ⦃Q⦄
+    ⟦cx⟧ ⦃P⦄ [Assert e se] ⦃Q ∥ λ_ _. F⦄
 Proof
   cheat
 QED
