@@ -419,7 +419,7 @@ QED
 
 Theorem stmts_spec_aug_assign:
   ∀P P' Q cx (tgt:base_assignment_target) av bop e v.
-     (⟦cx⟧ ⦃P⦄ (BaseTarget tgt) ⇓ᵗ av ⦃P'⦄) ⇒
+     (⟦cx⟧ ⦃P⦄ (BaseTarget tgt) ⇓ᵗ av ⦃P'⦄) ∧
      (⟦cx⟧ ⦃P'⦄ e ⇓ v ⦃λst. assign_target_spec cx st av (Update bop v) Q⦄) ⇒
      ⟦cx⟧ ⦃P⦄ [AugAssign tgt bop e] ⦃Q ∥ λ_ _. F⦄
 Proof
