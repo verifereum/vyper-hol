@@ -434,3 +434,26 @@ Theorem stmts_spec_cons:
 Proof
   cheat
 QED
+
+Theorem stmts_spec_return_none:
+  ∀P cx.
+     ⟦cx⟧ ⦃P NoneV⦄ [Return NONE] ⦃λ_. F ∥ P⦄
+Proof
+  cheat
+QED
+
+Theorem stmts_spec_return_some:
+  ∀P Q cx e v.
+     (⟦cx⟧ ⦃P⦄ e ⇓ v ⦃Q v⦄) ⇒
+     ⟦cx⟧ ⦃P⦄ [Return (SOME e)] ⦃λ_. F ∥ Q⦄
+Proof
+  cheat
+QED
+
+Theorem stmts_spec_assert_true:
+  ∀P Q cx e se v.
+    (⟦cx⟧ ⦃P⦄ e ⇓ v ⦃Q⦄) ⇒
+    ⟦cx⟧ ⦃P⦄ [Assert e se] ⦃Q⦄
+Proof
+  cheat
+QED
