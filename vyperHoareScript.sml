@@ -399,11 +399,25 @@ QED
 
 Theorem stmts_spec_ann_assign:
   ∀P Q cx n ty e v.
-     (⟦cx⟧ ⦃P⦄ e ⇓ v ⦃λst. Q st ∧ IS_NONE (lookup_name ctx st n)⦄) ⇒
-     ⟦cx⟧ ⦃P⦄ [AnnAssign n ty e] ⦃λst. Q st ∧ lookup_name ctx st n = SOME v ∥ λ_ _. F⦄
+     (⟦cx⟧ ⦃P⦄ e ⇓ v ⦃λst. st.scopes ≠ [] ∧
+                          lookup_scopes (string_to_num n) st.scopes = NONE ∧
+                          Q (st with scopes := (HD st.scopes |+ (string_to_num n, v)) :: TL st.scopes)⦄) ⇒
+     ⟦cx⟧ ⦃P⦄ [AnnAssign n ty e] ⦃Q ∥ λ_ _. F⦄
 Proof
-  cheat
+  rw[stmts_spec_def, expr_spec_def] >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def] >>
+  simp[Once evaluate_def, bind_def] >>
+  first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
+  Cases_on `eval_expr cx e st` >> Cases_on `q` >> simp[] >>
+  strip_tac >> gvs[return_def] >>
+  simp[new_variable_def, bind_def, ignore_bind_def, get_scopes_def,
+       return_def, check_def, assert_def] >>
+  Cases_on `r.scopes` >> gvs[] >>
+  simp[set_scopes_def, return_def] >>
+  simp[Once evaluate_def, return_def]
 QED
+
+
 
 Theorem stmts_spec_concat:
   ∀P1 P2 P3 R1 R2 cx ss1 ss2.

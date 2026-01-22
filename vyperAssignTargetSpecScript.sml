@@ -42,7 +42,20 @@ Proof
 QED
 
 (**********************************************************************)
-(* Helper lemmas for assign_target_spec_lookup *)
+(* Helper lemmas *)
+
+Theorem lookup_scopes_to_lookup_name:
+  ∀cx st n v gbs.
+    lookup_scopes (string_to_num n) st.scopes = SOME v ∧
+    ALOOKUP st.globals cx.txn.target = SOME gbs ∧
+    FLOOKUP (get_module_globals NONE gbs).immutables (string_to_num n) = NONE ⇒
+    lookup_name cx st n = SOME v
+Proof
+  rpt strip_tac >>
+  simp[lookup_name_def, Once evaluate_def, bind_def, get_scopes_def, return_def,
+       get_immutables_def, get_immutables_module_def, get_current_globals_def,
+       lift_option_def, exactly_one_option_def, lift_sum_def]
+QED
 
 Theorem lookup_scopes_find_containing:
   ∀id sc. IS_SOME (lookup_scopes id sc) ⇒ IS_SOME (find_containing_scope id sc)
