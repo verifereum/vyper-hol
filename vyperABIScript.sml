@@ -1,10 +1,12 @@
 Theory vyperABI
 Ancestors
   contractABI vyperAST vyperInterpreter
-  vyperMisc string words list rich_list combin pair arithmetic
+  vyperMisc byte string words list rich_list
+  divides alist combin pair arithmetic option
 Libs
   cv_transLib
   wordsLib
+  dep_rewrite
 
 Definition vyper_base_to_abi_type_def[simp]:
   vyper_base_to_abi_type (UintT n) = Uint n ∧
@@ -278,6 +280,14 @@ Proof
   \\ gvs[dimword_8, ORD_CHR]
 QED
 
+Theorem bytes_encode_decode_roundtrip':
+  ∀bs:word8 list. MAP (n2w o ORD) (MAP (CHR o w2n) bs) = bs
+Proof
+  rw[MAP_MAP_o, o_DEF]
+  \\ CONV_TAC (DEPTH_CONV ETA_CONV)
+  \\ rw[GSYM o_DEF, bytes_encode_decode_roundtrip]
+QED
+
 (* Helper: evaluate_types in terms of OPT_MMAP *)
 Theorem evaluate_types_OPT_MMAP:
   ∀ts acc. evaluate_types env ts acc =
@@ -294,7 +304,7 @@ Theorem abi_to_vyper_default_to_abi:
               abi_to_vyper env t (default_to_abi tv) = SOME (default_value tv)) ∧
   (∀env ts acc tvs. evaluate_types env ts acc = SOME tvs ⇒
     LENGTH tvs = LENGTH ts + LENGTH acc ∧
-    abi_to_vyper_list env ts (MAP default_to_abi (DROP (LENGTH acc) tvs)) = 
+    abi_to_vyper_list env ts (MAP default_to_abi (DROP (LENGTH acc) tvs)) =
       SOME (MAP default_value (DROP (LENGTH acc) tvs)))
 Proof
   ho_match_mp_tac evaluate_type_ind
@@ -351,4 +361,183 @@ Proof
   \\ rw[evaluate_type_def, CaseEq"option"]
   \\ gvs[evaluate_types_OPT_MMAP]
   \\ gvs[DROP_APPEND, DROP_LENGTH_TOO_LONG, iffRL SUB_EQ_0]
+QED
+
+(* ===== Helper Lemmas for Roundtrip Theorems ===== *)
+
+(* Helper 1: Address word roundtrip *)
+Theorem address_word_roundtrip:
+  ∀n. n < dimword (:160) ⇒
+      w2n (word_of_bytes T (0w:address) (word_to_bytes (n2w n : address) T)) = n
+Proof
+  rpt strip_tac \\
+  DEP_REWRITE_TAC[word_of_bytes_word_to_bytes] \\
+  gvs[divides_def]
+QED
+
+Theorem within_int_bound_Unsigned_dimword:
+  within_int_bound (Unsigned n) (&m) ⇒ m < 2 ** n
+Proof
+  rw[within_int_bound_def]
+QED
+
+Theorem vyper_to_abi_list_OPT_MMAP:
+  !ts vs. vyper_to_abi_list env ts vs =
+  if LENGTH ts = LENGTH vs then
+    OPT_MMAP (UNCURRY (vyper_to_abi env)) (ZIP (ts,vs))
+  else NONE
+Proof
+  Induct \\ rw[vyper_to_abi_def]
+  \\ Cases_on `vs` \\ gvs[vyper_to_abi_def]
+  \\ CASE_TAC \\ gvs[]
+  \\ CASE_TAC \\ gvs[]
+QED
+
+Theorem vyper_to_abi_same_OPT_MMAP:
+  !vs. vyper_to_abi_same env t vs =
+    OPT_MMAP (vyper_to_abi env t) vs
+Proof
+  Induct \\ rw[vyper_to_abi_def]
+  \\ Cases_on `vs` \\ gvs[vyper_to_abi_def]
+  \\ CASE_TAC \\ gvs[]
+  \\ CASE_TAC \\ gvs[]
+QED
+
+(* Helper 2: vyper_to_abi_same equals vyper_to_abi_list with REPLICATE *)
+Theorem vyper_to_abi_same_REPLICATE:
+  ∀env t vs avs.
+    vyper_to_abi_list env (REPLICATE (LENGTH vs) t) vs = SOME avs ⇒
+    vyper_to_abi_same env t vs = SOME avs
+Proof
+  rw[vyper_to_abi_list_OPT_MMAP, vyper_to_abi_same_OPT_MMAP]
+  \\ pop_assum $ SUBST1_TAC o SYM
+  \\ Induct_on `vs` \\ rw[]
+QED
+
+Theorem enumerate_static_array_never_default:
+  !vs n. EVERY ((<>) d) (MAP SND (enumerate_static_array d n vs))
+Proof
+  Induct \\ rw[enumerate_static_array_def]
+QED
+
+Theorem MEM_enumerate_static_array_iff:
+  ∀vs n.
+  MEM (i,v) (enumerate_static_array d n vs) ⇔
+  n ≤ i ∧ i-n < LENGTH vs ∧ EL (i-n) vs = v ∧ v ≠ d
+Proof
+  Induct
+  \\ simp[enumerate_static_array_def]
+  \\ rpt gen_tac
+  \\ IF_CASES_TAC \\ gvs[]
+  \\ Cases_on `i < n` \\ gvs[]
+  \\ Cases_on `i = n` \\ gvs[]
+  \\ TRY(rw[EQ_IMP_THM] \\ NO_TAC)
+  \\ simp[EL_CONS, PRE_SUB1, ADD1]
+  \\ Cases_on `0 < LENGTH vs` \\ gvs[]
+QED
+
+Theorem ALL_DISTINCT_MAP_FST_enumerate_static_array[simp]:
+  ∀vs n. ALL_DISTINCT (MAP FST (enumerate_static_array d n vs))
+Proof
+  Induct \\ rw[enumerate_static_array_def, MEM_MAP, EXISTS_PROD]
+  \\ rw[MEM_enumerate_static_array_iff]
+QED
+
+(* Helper 3: enumerate_static_array lookup *)
+Theorem enumerate_static_array_ALOOKUP:
+  ∀d k vs i. i < LENGTH vs ⇒
+    ALOOKUP (enumerate_static_array d k vs) (k + i) =
+      if EL i vs = d then NONE else SOME (EL i vs)
+Proof
+  rw[]
+  >- rw[ALOOKUP_FAILS, MEM_enumerate_static_array_iff]
+  \\ irule ALOOKUP_ALL_DISTINCT_MEM
+  \\ rw[MEM_enumerate_static_array_iff]
+QED
+
+(* Helper 4: Default value inverse - if decoding gives default, input was default encoding *)
+Theorem abi_to_vyper_default_value_inv:
+  ∀env t tv av.
+    evaluate_type env t = SOME tv ∧
+    abi_to_vyper env t av = SOME (default_value tv) ⇒
+    av = default_to_abi tv
+Proof
+  cheat
+QED
+
+(* Helper 5: vyper_to_abi_sparse reconstruction *)
+Theorem vyper_to_abi_sparse_correct:
+  ∀env t tv n vs' vs.
+    LENGTH vs' = n ∧
+    LENGTH vs = n ∧
+    evaluate_type env t = SOME tv ∧
+    (∀i. i < n ⇒ abi_to_vyper env t (EL i vs) = SOME (EL i vs')) ∧
+    (∀i. i < n ⇒ vyper_to_abi env t (EL i vs') = SOME (EL i vs)) ⇒
+    vyper_to_abi_sparse env t tv n (enumerate_static_array (default_value tv) 0 vs') = SOME vs
+Proof
+  cheat
+QED
+
+(* Helper 6: Element-wise correspondence from list operations *)
+Theorem abi_to_vyper_list_EL:
+  ∀env ts avs vs.
+    abi_to_vyper_list env ts avs = SOME vs ⇒
+    LENGTH ts = LENGTH avs ∧
+    LENGTH vs = LENGTH avs ∧
+    (∀i. i < LENGTH avs ⇒ abi_to_vyper env (EL i ts) (EL i avs) = SOME (EL i vs))
+Proof
+  rw[abi_to_vyper_list_OPT_MMAP]
+  \\ gvs[OPT_MMAP_SOME_IFF]
+  \\ rw[EL_MAP, EL_ZIP]
+  \\ gvs[EVERY_MEM, MEM_ZIP, MEM_MAP, PULL_EXISTS, IS_SOME_EXISTS]
+  \\ res_tac \\ gvs[]
+QED
+
+Theorem vyper_to_abi_list_EL:
+  ∀env ts vs avs.
+    vyper_to_abi_list env ts vs = SOME avs ⇒
+    LENGTH ts = LENGTH vs ∧
+    LENGTH avs = LENGTH vs ∧
+    (∀i. i < LENGTH vs ⇒ vyper_to_abi env (EL i ts) (EL i vs) = SOME (EL i avs))
+Proof
+  rw[vyper_to_abi_list_OPT_MMAP]
+  \\ gvs[OPT_MMAP_SOME_IFF]
+  \\ rw[EL_MAP, EL_ZIP]
+  \\ gvs[EVERY_MEM, MEM_ZIP, MEM_MAP, PULL_EXISTS, IS_SOME_EXISTS]
+  \\ res_tac \\ gvs[]
+QED
+
+(* ===== Main Roundtrip Theorem: abi_to_vyper then vyper_to_abi ===== *)
+
+Theorem abi_to_vyper_vyper_to_abi:
+  (∀env ty av v. abi_to_vyper env ty av = SOME v ⇒ vyper_to_abi env ty v = SOME av) ∧
+  (∀env tys avs vs. abi_to_vyper_list env tys avs = SOME vs ⇒ vyper_to_abi_list env tys vs = SOME avs)
+Proof
+  ho_match_mp_tac abi_to_vyper_ind \\ rw[]
+  \\ gvs[abi_to_vyper_def, vyper_to_abi_def, check_IntV_def, AllCaseEqs(),
+         integerTheory.NUM_OF_INT, bytes_encode_decode_roundtrip', NULL_EQ]
+  (* AddressT: need word roundtrip *)
+  >- (drule within_int_bound_Unsigned_dimword
+      \\ gvs[address_word_roundtrip, dimword_def])
+  (* ArrayT: Fixed and Dynamic cases *)
+  >- (gvs[vyper_to_abi_def]
+      \\ Cases_on `b`
+      \\ gvs[make_array_value_def]
+      (* Fixed case: need vyper_to_abi_sparse reconstruction *)
+      >- (drule abi_to_vyper_list_EL \\ rw[]
+          \\ `vyper_to_abi_sparse env t tv n
+                (enumerate_static_array (default_value tv) 0 vs') = SOME avs`
+             suffices_by rw[]
+          \\ irule vyper_to_abi_sparse_correct
+          \\ gvs[compatible_bound_def]
+          \\ drule vyper_to_abi_list_EL \\ rw[]
+          \\ gvs[EL_REPLICATE])
+      (* Dynamic case: need vyper_to_abi_same from vyper_to_abi_list *)
+      >- (drule abi_to_vyper_list_EL \\ rw[]
+          \\ `vyper_to_abi_same env t vs' = SOME avs` suffices_by rw[]
+          \\ irule vyper_to_abi_same_REPLICATE
+          \\ gvs[]))
+  (* StructT: need MAP SND (ZIP ...) = vs' *)
+  >- (drule abi_to_vyper_list_EL \\ rw[]
+      \\ gvs[MAP_ZIP])
 QED
