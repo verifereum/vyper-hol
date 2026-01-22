@@ -61,9 +61,10 @@ Definition abi_to_vyper_def[simp]:
       else NONE ) ∧
   abi_to_vyper env NoneT (ListV ls) = (if NULL ls then SOME NoneV else NONE) ∧
   abi_to_vyper env (StructT id) (ListV vs) =
-    (case FLOOKUP env (string_to_num id) of
+    (let nid = string_to_num id in
+      case FLOOKUP env nid of
        | SOME (StructArgs args) =>
-         (case abi_to_vyper_list env (MAP SND args) vs of NONE => NONE
+         (case abi_to_vyper_list (env \\ nid) (MAP SND args) vs of NONE => NONE
           | SOME vs => SOME $ StructV $ ZIP (MAP FST args, vs))
        | _ => NONE) ∧
   abi_to_vyper env (FlagT id) (NumV n) =
@@ -106,7 +107,8 @@ Definition default_to_abi_def:
   default_to_abi (BaseTV DecimalT) = contractABI$IntV 0 ∧
   default_to_abi (BaseTV AddressT) = NumV 0 ∧
   default_to_abi (BaseTV (StringT _)) = BytesV [] ∧
-  default_to_abi (BaseTV (BytesT _)) = BytesV [] ∧
+  default_to_abi (BaseTV (BytesT (Fixed n))) = BytesV (REPLICATE n 0w) ∧
+  default_to_abi (BaseTV (BytesT (Dynamic _))) = BytesV [] ∧
   default_to_abi (TupleTV tvs) = ListV (MAP default_to_abi tvs) ∧
   default_to_abi (ArrayTV tv (Fixed n)) = ListV (REPLICATE n (default_to_abi tv)) ∧
   default_to_abi (ArrayTV _ (Dynamic _)) = ListV [] ∧
@@ -142,9 +144,10 @@ Definition vyper_to_abi_def[simp]:
   vyper_to_abi env (FlagT _) (FlagV _ n) = SOME (NumV n) ∧
   vyper_to_abi env NoneT NoneV = SOME (ListV []) ∧
   vyper_to_abi env (StructT id) (StructV fields) =
-    (case FLOOKUP env (string_to_num id) of
+    (let nid = string_to_num id in
+     case FLOOKUP env nid of
      | SOME (StructArgs args) =>
-         (case vyper_to_abi_list env (MAP SND args) (MAP SND fields) of
+         (case vyper_to_abi_list (env \\ nid) (MAP SND args) (MAP SND fields) of
           | SOME avs => SOME (ListV avs)
           | NONE => NONE)
      | _ => NONE) ∧
