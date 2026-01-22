@@ -397,6 +397,14 @@ Proof
   drule eval_base_target_NameTarget_preserves_state >> simp[]
 QED
 
+Theorem stmts_spec_ann_assign:
+  ∀P Q cx n ty e v.
+     (⟦cx⟧ ⦃P⦄ e ⇓ v ⦃λst. Q st ∧ IS_NONE (lookup_name ctx st n)⦄) ⇒
+     ⟦cx⟧ ⦃P⦄ [AnnAssign n ty e] ⦃λst. Q st ∧ lookup_name ctx st n = SOME v ∥ λ_ _. F⦄
+Proof
+  cheat
+QED
+
 Theorem stmts_spec_concat:
   ∀P1 P2 P3 R1 R2 cx ss1 ss2.
     (⟦cx⟧ ⦃P1⦄ ss1 ⦃P2 ∥ R1⦄) ∧
