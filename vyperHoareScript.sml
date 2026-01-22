@@ -508,3 +508,23 @@ Proof
   strip_tac >> gvs[switch_BoolV_def, return_def] >>
   simp[Once evaluate_def, return_def]
 QED
+
+Theorem expr_spec_builtin_bop:
+  ∀P P' Q cx e1 e2 v1 v2 bop v_result.
+    (⟦cx⟧ ⦃P⦄ e1 ⇓ v1 ⦃P'⦄) ∧
+    (⟦cx⟧ ⦃P'⦄ e2 ⇓ v2 ⦃λst. evaluate_binop bop v1 v2 = INL v_result ∧ Q st⦄) ⇒
+    ⟦cx⟧ ⦃P⦄ (Builtin (Bop bop) [e1; e2]) ⇓ v_result ⦃Q⦄
+Proof
+  rw[expr_spec_def] >>
+  simp[Once evaluate_def, bind_def, check_def, assert_def,
+       builtin_args_length_ok_def] >>
+  simp[assert_def, ignore_bind_def, bind_def, Once evaluate_def] >>
+  qpat_x_assum `!st. P st ==> _` (qspec_then `st` mp_tac) >> simp[] >>
+  Cases_on `eval_expr cx e1 st` >> Cases_on `q` >> simp[] >>
+  simp[return_def, bind_def, Once evaluate_def] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `!st. P' st ==> _` (qspec_then `r` mp_tac) >> simp[] >>
+  Cases_on `eval_expr cx e2 r` >> Cases_on `q` >> simp[] >>
+  simp[return_def, Once evaluate_def, get_accounts_def,
+       lift_sum_def, evaluate_builtin_def]
+QED
