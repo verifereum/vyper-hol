@@ -529,7 +529,10 @@ Proof
        lift_sum_def, evaluate_builtin_def]
 QED
 
-(* Toplevel value spec - more general than expr_spec which requires Value v *)
+(* TODO: This should be the main definition used in all rules for
+evaluating expressions. expr_spec is just a special case which I
+started with to keep things simpler, but later discovered I need the
+general definition for ERC20 transfer *)
 Definition expr_tv_spec_def:
   expr_tv_spec cx (P : evaluation_state -> bool) (e : expr) (tv : toplevel_value) (Q : evaluation_state -> bool) <=>
     !st. P st ==>

@@ -95,6 +95,10 @@ QED
 
 (**********************************************************************)
 
+(* TODO: this one lemma is not enough; we need to show that evaluation
+doesn't change targets (evaluation may change values of variables, but
+not what already existing variables are bound to) *)
+
 Theorem assign_target_spec_lookup:
   ∀cx st n av v.
     is_valid_lookup_name cx st n ∧
