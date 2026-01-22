@@ -114,6 +114,18 @@ val _ =
 (**********************************************************************)
 (* Helper lemmas *)
 
+Theorem eval_stmts_append:
+  ∀cx ss1 ss2. eval_stmts cx (ss1 ++ ss2) = do eval_stmts cx ss1; eval_stmts cx ss2 od
+Proof
+  Induct_on `ss1` >-
+  (simp[Once evaluate_def, return_def, ignore_bind_def] >>
+   simp[bind_def, return_def] >> simp[FUN_EQ_THM, bind_def, return_def]) >>
+  rpt strip_tac >>
+  simp[FUN_EQ_THM, Once evaluate_def] >>
+  simp[Once evaluate_def, ignore_bind_def, bind_def] >>
+  rpt strip_tac >> Cases_on `eval_stmt cx h x` >> Cases_on `q` >> simp[]
+QED
+
 Theorem eval_expr_Name_preserves_state:
   ∀cx n st v st'.
     eval_expr cx (Name n) st = (INL (Value v), st') ==> st' = st
@@ -369,11 +381,20 @@ Proof
 QED
 
 Theorem stmts_spec_assign_name:
-  ∀P P' Q cx n av e v.
-     (⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ e ⇓ v ⦃λst. assign_target_spec cx st av (Replace v) Q⦄) ⇒
-     ⟦cx⟧ ⦃P⦄ [Assign (BaseTarget (NameTarget n)) e] ⦃Q ∥ λ_ _. F⦄
+  ∀P Q cx n av e v.
+    (⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ e ⇓ v ⦃λst. assign_target_spec cx st av (Replace v) Q⦄) ⇒
+    ⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ [Assign (BaseTarget (NameTarget n)) e] ⦃Q ∥ λ_ _. F⦄
 Proof
-  cheat
+  rpt strip_tac >>
+  irule stmts_spec_assign >>
+  qexistsl_tac [`λst. P st ∧ lookup_name_target cx st n = SOME av`, `av`, `v`] >>
+  conj_tac >- simp[] >>
+  rw[target_spec_def, lookup_name_target_def] >>
+  simp[Once evaluate_def, bind_def, return_def] >>
+  Cases_on `eval_base_target cx (NameTarget n) st` >>
+  Cases_on `q` >> gvs[] >>
+  PairCases_on `x` >> gvs[return_def] >>
+  drule eval_base_target_NameTarget_preserves_state >> simp[]
 QED
 
 Theorem stmts_spec_concat:
@@ -382,7 +403,16 @@ Theorem stmts_spec_concat:
     (⟦cx⟧ ⦃P2⦄ ss2 ⦃P3 ∥ R2⦄) ⇒
     ⟦cx⟧ ⦃P1⦄ (ss1 ++ ss2) ⦃P3 ∥ λv st. R1 v st ∨ R2 v st⦄
 Proof
-  cheat
+  rw[stmts_spec_def, eval_stmts_append] >>
+  simp[ignore_bind_def, bind_def] >>
+  Cases_on `eval_stmts cx ss1 st` >>
+  Cases_on `q` >> gvs[] >-
+  (`P2 r` by (last_x_assum (qspec_then `st` mp_tac) >> simp[]) >>
+   first_x_assum (qspec_then `r` mp_tac) >> simp[] >>
+   Cases_on `eval_stmts cx ss2 r` >> Cases_on `q` >> gvs[] >>
+   Cases_on `y` >> simp[]) >>
+  last_x_assum (qspec_then `st` mp_tac) >> simp[] >>
+  Cases_on `y` >> simp[]
 QED
 
 Theorem stmts_spec_cons:
@@ -401,7 +431,9 @@ Theorem stmts_spec_return_none:
   ∀P cx.
      ⟦cx⟧ ⦃P NoneV⦄ [Return NONE] ⦃λ_. F ∥ P⦄
 Proof
-  cheat
+  rw[stmts_spec_def] >>
+  simp[Once evaluate_def, ignore_bind_def, bind_def] >>
+  simp[Once evaluate_def, raise_def]
 QED
 
 Theorem stmts_spec_return_some:
@@ -409,7 +441,12 @@ Theorem stmts_spec_return_some:
      (⟦cx⟧ ⦃P⦄ e ⇓ v ⦃Q v⦄) ⇒
      ⟦cx⟧ ⦃P⦄ [Return (SOME e)] ⦃λ_. F ∥ Q⦄
 Proof
-  cheat
+  rw[stmts_spec_def, expr_spec_def] >>
+  simp[Once evaluate_def, ignore_bind_def, bind_def] >>
+  simp[Once evaluate_def, bind_def] >>
+  first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
+  Cases_on `eval_expr cx e st` >>
+  Cases_on `q` >> simp[return_def, raise_def]
 QED
 
 Theorem stmts_spec_assert_true:
