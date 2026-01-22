@@ -391,7 +391,10 @@ Theorem stmts_spec_cons:
     (⟦cx⟧ ⦃P2⦄ ss ⦃P3 ∥ R2⦄) ⇒
     ⟦cx⟧ ⦃P1⦄ (s :: ss) ⦃P3 ∥ λv st. R1 v st ∨ R2 v st⦄
 Proof
-  cheat
+  rpt strip_tac >>
+  ONCE_REWRITE_TAC [GSYM (EVAL ``[h:'a] ++ t``)] >>
+  irule stmts_spec_concat >>
+  qexists_tac `P2` >> simp[]
 QED
 
 Theorem stmts_spec_return_none:
