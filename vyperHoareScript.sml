@@ -450,9 +450,16 @@ Proof
 QED
 
 Theorem stmts_spec_assert_true:
-  ∀P Q cx e se v.
-    (⟦cx⟧ ⦃P⦄ e ⇓ v ⦃Q⦄) ⇒
+  ∀P Q cx e se.
+    (⟦cx⟧ ⦃P⦄ e ⇓ BoolV T ⦃Q⦄) ⇒
     ⟦cx⟧ ⦃P⦄ [Assert e se] ⦃Q ∥ λ_ _. F⦄
 Proof
-  cheat
+  rw[stmts_spec_def, expr_spec_def] >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def] >>
+  simp[Once evaluate_def, bind_def] >>
+  Cases_on `eval_expr cx e st` >> gvs[] >>
+  first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
+  Cases_on `q` >> gvs[] >>
+  strip_tac >> gvs[switch_BoolV_def, return_def] >>
+  simp[Once evaluate_def, return_def]
 QED
