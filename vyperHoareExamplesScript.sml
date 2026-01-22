@@ -13,11 +13,19 @@ Definition valid_transfer_params_def:
 End
 
 Definition erc20_transfer_def:
-  erc20_transfer =
-  [Assert (Builtin (Bop GtE) [Subscript (TopLevelName (NONE, "balances")) (Builtin (Env Sender) []); Name "amount"]) (Literal (StringL 5 "error"));
-   AugAssign (SubscriptTarget (TopLevelNameTarget (NONE, "balances"))
+  erc20_transfer = [
+    Assert (Builtin (Bop GtE) [Subscript (TopLevelName (NONE, "balances")) (Builtin (Env Sender) []); Name "amount"]) (Literal (StringL 5 "error"));
+    AugAssign (SubscriptTarget (TopLevelNameTarget (NONE, "balances"))
                               (Builtin (Env Sender) [])) Sub (Name "amount");
-   AugAssign (SubscriptTarget (TopLevelNameTarget (NONE, "balances"))
+    AugAssign (SubscriptTarget (TopLevelNameTarget (NONE, "balances"))
                               (Name "to")) Add (Name "amount");
-   Return (SOME (Literal (BoolL T)))]
+    Return (SOME (Literal (BoolL T)))
+  ]
+End
+
+Definition example_1_def:
+  example_1 = [
+    AnnAssign "x" (BaseT (IntT 128)) (Literal (IntL (Signed 128) 10));
+    AnnAssign "y" (BaseT (IntT 128)) (Name "x");
+  ]
 End

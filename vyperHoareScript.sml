@@ -417,7 +417,30 @@ Proof
   simp[Once evaluate_def, return_def]
 QED
 
-
+Theorem stmts_spec_aug_assign:
+  ∀P P' Q cx (tgt:base_assignment_target) av bop e v.
+     (⟦cx⟧ ⦃P⦄ (BaseTarget tgt) ⇓ᵗ av ⦃P'⦄) ⇒
+     (⟦cx⟧ ⦃P'⦄ e ⇓ v ⦃λst. assign_target_spec cx st av (Update bop v) Q⦄) ⇒
+     ⟦cx⟧ ⦃P⦄ [AugAssign tgt bop e] ⦃Q ∥ λ_ _. F⦄
+Proof
+  rw[stmts_spec_def, target_spec_def, expr_spec_def, assign_target_spec_def] >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def] >>
+  simp[Once evaluate_def, bind_def] >>
+  last_x_assum (qspec_then `st` mp_tac) >>
+  simp[Once evaluate_def, bind_def, return_def] >>
+  Cases_on `eval_base_target cx tgt st` >> Cases_on `q` >> simp[] >-
+  (Cases_on `x` >> simp[return_def] >> strip_tac >>
+   first_x_assum (qspec_then `r` mp_tac) >>
+   simp[bind_def, return_def] >>
+   Cases_on `eval_expr cx e r` >> Cases_on `q'` >> simp[] >-
+   (simp[return_def, bind_def, ignore_bind_def] >>
+    strip_tac >>
+    Cases_on `assign_target cx av (Update bop v) r''` >>
+    Cases_on `q'` >> simp[] >-
+    (simp[Once evaluate_def, return_def] >> fs[]) >>
+    gvs[AllCaseEqs()]) >>
+   simp[])
+QED
 
 Theorem stmts_spec_concat:
   ∀P1 P2 P3 R1 R2 cx ss1 ss2.
