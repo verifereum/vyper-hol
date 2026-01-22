@@ -96,3 +96,113 @@ Proof
   \\ rw[]
   \\ rw[Once abi_to_vyper_pre_def]
 QED
+
+(* Convert default value for a type directly to ABI encoding.
+   This avoids creating an intermediate Vyper value. *)
+Definition default_to_abi_def:
+  default_to_abi (BaseTV (UintT _)) = NumV 0 ∧
+  default_to_abi (BaseTV (IntT _)) = contractABI$IntV 0 ∧
+  default_to_abi (BaseTV BoolT) = NumV 0 ∧
+  default_to_abi (BaseTV DecimalT) = contractABI$IntV 0 ∧
+  default_to_abi (BaseTV AddressT) = NumV 0 ∧
+  default_to_abi (BaseTV (StringT _)) = BytesV [] ∧
+  default_to_abi (BaseTV (BytesT _)) = BytesV [] ∧
+  default_to_abi (TupleTV tvs) = ListV (MAP default_to_abi tvs) ∧
+  default_to_abi (ArrayTV tv (Fixed n)) = ListV (REPLICATE n (default_to_abi tv)) ∧
+  default_to_abi (ArrayTV _ (Dynamic _)) = ListV [] ∧
+  default_to_abi (StructTV fields) = ListV (MAP (default_to_abi o SND) fields) ∧
+  default_to_abi (FlagTV _) = NumV 0 ∧
+  default_to_abi NoneTV = ListV []
+Termination
+  WF_REL_TAC `measure type_value_size`
+End
+
+(* Convert Vyper value to ABI value for encoding *)
+Definition vyper_to_abi_def[simp]:
+  vyper_to_abi env (BaseT (UintT _)) (IntV (Unsigned _) i) = SOME (NumV (Num i)) ∧
+  vyper_to_abi env (BaseT (IntT _)) (IntV (Signed _) i) = SOME (contractABI$IntV i) ∧
+  vyper_to_abi env (BaseT BoolT) (BoolV b) = SOME (NumV (if b then 1 else 0)) ∧
+  vyper_to_abi env (BaseT AddressT) (BytesV (Fixed 20) bs) =
+    SOME (NumV (w2n (word_of_bytes T (0w:address) bs))) ∧
+  vyper_to_abi env (BaseT (BytesT _)) (BytesV _ bs) = SOME (BytesV bs) ∧
+  vyper_to_abi env (BaseT (StringT _)) (StringV _ s) = SOME (BytesV (MAP (n2w o ORD) s)) ∧
+  vyper_to_abi env (BaseT DecimalT) (DecimalV i) = SOME (contractABI$IntV i) ∧
+  vyper_to_abi env (TupleT ts) (ArrayV (TupleV vs)) =
+    (case vyper_to_abi_list env ts vs of
+     | SOME avs => SOME (ListV avs)
+     | NONE => NONE) ∧
+  vyper_to_abi env (ArrayT t _) (ArrayV (DynArrayV _ _ vs)) =
+    (case vyper_to_abi_same env t vs of
+     | SOME avs => SOME (ListV avs)
+     | NONE => NONE) ∧
+  vyper_to_abi env (ArrayT t (Fixed _)) (ArrayV (SArrayV tv n sparse)) =
+    (case vyper_to_abi_sparse env t tv n sparse of
+     | SOME avs => SOME (ListV avs)
+     | NONE => NONE) ∧
+  vyper_to_abi env (FlagT _) (FlagV _ n) = SOME (NumV n) ∧
+  vyper_to_abi env NoneT NoneV = SOME (ListV []) ∧
+  vyper_to_abi env (StructT id) (StructV fields) =
+    (case FLOOKUP env (string_to_num id) of
+     | SOME (StructArgs args) =>
+         (case vyper_to_abi_list env (MAP SND args) (MAP SND fields) of
+          | SOME avs => SOME (ListV avs)
+          | NONE => NONE)
+     | _ => NONE) ∧
+  vyper_to_abi _ _ _ = NONE ∧
+  (* List: different type for each element *)
+  vyper_to_abi_list env [] [] = SOME [] ∧
+  vyper_to_abi_list env (t::ts) (v::vs) =
+    (case vyper_to_abi env t v of
+     | SOME av =>
+         (case vyper_to_abi_list env ts vs of
+          | SOME avs => SOME (av::avs)
+          | NONE => NONE)
+     | NONE => NONE) ∧
+  vyper_to_abi_list _ _ _ = NONE ∧
+  (* Same: same type for all elements *)
+  vyper_to_abi_same env t [] = SOME [] ∧
+  vyper_to_abi_same env t (v::vs) =
+    (case vyper_to_abi env t v of
+     | SOME av =>
+         (case vyper_to_abi_same env t vs of
+          | SOME avs => SOME (av::avs)
+          | NONE => NONE)
+     | NONE => NONE) ∧
+  (* Sparse: encode static array, filling in defaults for missing indices *)
+  vyper_to_abi_sparse env t tv 0 sparse = SOME [] ∧
+  vyper_to_abi_sparse env t tv (SUC n) sparse =
+    (case vyper_to_abi_sparse env t tv n sparse of
+     | NONE => NONE
+     | SOME avs =>
+         case ALOOKUP sparse n of
+         | SOME v =>
+             (case vyper_to_abi env t v of
+              | SOME av => SOME (avs ++ [av])
+              | NONE => NONE)
+         | NONE => SOME (avs ++ [default_to_abi tv]))
+Termination
+  WF_REL_TAC `measure (λx. case x of
+    | INL (_, _, v) => value_size v
+    | INR (INL (_, _, vs)) => list_size value_size vs
+    | INR (INR (INL (_, _, vs))) => list_size value_size vs
+    | INR (INR (INR (_, _, _, n, sparse))) =>
+        list_size (pair_size (λx. 0) value_size) sparse + n)`
+  \\ simp[] \\ rpt conj_tac
+  (* Goal 1: StructV *)
+  >- (rw[] \\ Induct_on `fields` \\ simp[] \\ rw[] \\ Cases_on `h` \\ simp[])
+  (* Goal 2: Sparse ALOOKUP case *)
+  >- (rpt strip_tac
+      \\ sg `∀sp n' v'. ALOOKUP sp n' = SOME v' ⇒
+             value_size v' < SUC n' + list_size (pair_size (λx. 0) value_size) sp`
+      >- (Induct \\ simp[] \\ rw[]
+          \\ PairCases_on `h` \\ fs[]
+          \\ Cases_on `h0 = n'` \\ fs[]
+          \\ first_x_assum drule \\ simp[])
+      \\ first_x_assum drule \\ simp[])
+  (* Goal 3: Main -> sparse *)
+  \\ rw[]
+  \\ `list_size (pair_size (λx. 0) value_size) sparse ≤
+      list_size (pair_size (λx. x) value_size) sparse`
+       by (Induct_on `sparse` \\ simp[] \\ rw[] \\ PairCases_on `h` \\ simp[])
+  \\ simp[]
+End
