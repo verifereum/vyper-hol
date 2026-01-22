@@ -40,7 +40,9 @@ Datatype:
 End
 
 Definition evaluate_type_def:
-  evaluate_type tenv (BaseT bt) = SOME $ BaseTV bt ∧
+  evaluate_type tenv (BaseT bt) =
+    (if bt = IntT 0 then NONE
+     else SOME $ BaseTV bt) ∧
   evaluate_type tenv (TupleT ts) =
     (case evaluate_types tenv ts [] of
      | NONE => NONE
@@ -61,7 +63,9 @@ Definition evaluate_type_def:
   evaluate_type tenv (FlagT id) =
   (let nid = string_to_num id in
    case FLOOKUP tenv nid of
-   | SOME $ FlagArgs m => SOME $ FlagTV m
+   | SOME $ FlagArgs m =>
+       (if m ≤ 256 then SOME $ FlagTV m
+        else NONE)
    | _ => NONE) ∧
   evaluate_type tenv (NoneT) = SOME NoneTV ∧
   evaluate_types tenv [] acc = SOME $ REVERSE acc ∧
