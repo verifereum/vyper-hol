@@ -528,3 +528,109 @@ Proof
   simp[return_def, Once evaluate_def, get_accounts_def,
        lift_sum_def, evaluate_builtin_def]
 QED
+
+(* Toplevel value spec - more general than expr_spec which requires Value v *)
+Definition expr_tv_spec_def:
+  expr_tv_spec cx (P : evaluation_state -> bool) (e : expr) (tv : toplevel_value) (Q : evaluation_state -> bool) <=>
+    !st. P st ==>
+      case eval_expr cx e st of
+      | (INL tv', st') => if tv' = tv then Q st' else F
+      | (INR _, st') => F
+End
+
+Theorem expr_spec_is_expr_tv_spec:
+  ∀cx P e v Q. (⟦cx⟧ ⦃P⦄ e ⇓ v ⦃Q⦄) = expr_tv_spec cx P e (Value v) Q
+Proof
+  rw[expr_spec_def, expr_tv_spec_def]
+QED
+
+Theorem expr_tv_spec_consequence:
+  ∀P P' Q Q' cx e tv.
+    (∀st. P' st ⇒ P st) ∧
+    (∀st. Q st ⇒ Q' st) ∧
+    expr_tv_spec cx P e tv Q ⇒
+    expr_tv_spec cx P' e tv Q'
+Proof
+  rw[expr_tv_spec_def] >>
+  first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
+  Cases_on `eval_expr cx e st` >>
+  Cases_on `q` >> gvs[]
+QED
+
+Theorem expr_spec_builtin_env_sender:
+  ∀P cx. ⟦cx⟧ ⦃P⦄ (Builtin (Env Sender) []) ⇓ AddressV cx.txn.sender ⦃P⦄
+Proof
+  rw[expr_spec_def, evaluate_def, return_def] >>
+  simp[check_def, assert_def, builtin_args_length_ok_def, bind_def,
+       return_def, get_accounts_def] >>
+  simp[assert_def, ignore_bind_def, bind_def, return_def,
+       get_accounts_def] >>
+  simp[lift_sum_def, evaluate_builtin_def, return_def]
+QED
+
+Theorem expr_tv_spec_toplevelname:
+  ∀P cx src_id_opt id gbs mg tv.
+    expr_tv_spec cx
+      (λst. P st ∧
+            ALOOKUP st.globals cx.txn.target = SOME gbs ∧
+            get_module_globals src_id_opt gbs = mg ∧
+            FLOOKUP mg.mutables (string_to_num id) = SOME tv)
+      (TopLevelName (src_id_opt, id))
+      tv
+      P
+Proof
+  rw[expr_tv_spec_def] >>
+  simp[Once evaluate_def] >>
+  simp[lookup_global_def, bind_def, get_current_globals_def, return_def, lift_option_def]
+QED
+
+Theorem expr_tv_spec_subscript:
+  ∀P P' Q cx e1 e2 tv1 v2 ts tv_result.
+    expr_tv_spec cx P e1 tv1 P' ∧
+    expr_tv_spec cx P' e2 (Value v2)
+      (λst. ALOOKUP cx.sources cx.txn.target = SOME [(NONE, ts)] ∧
+            evaluate_subscript (type_env ts) tv1 v2 = INL tv_result ∧ Q st) ⇒
+    expr_tv_spec cx P (Subscript e1 e2) tv_result Q
+Proof
+  rw[expr_tv_spec_def] >>
+  simp[Once evaluate_def, bind_def] >>
+  qpat_x_assum `!st. P st ==> _` (qspec_then `st` mp_tac) >> simp[] >>
+  Cases_on `eval_expr cx e1 st` >> Cases_on `q` >> simp[] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `!st. P' st ==> _` (qspec_then `r` mp_tac) >> simp[] >>
+  Cases_on `eval_expr cx e2 r` >> Cases_on `q` >> simp[] >>
+  simp[return_def, lift_option_def, get_self_code_def, lift_sum_def] >>
+  simp[get_module_code_def, return_def, raise_def]
+QED
+
+Theorem target_spec_toplevelname_target:
+  ∀P cx src_id_opt id.
+    ⟦cx⟧ ⦃P⦄ (BaseTarget (TopLevelNameTarget (src_id_opt, id))) ⇓ᵗ
+         (BaseTargetV (TopLevelVar src_id_opt id) []) ⦃P⦄
+Proof
+  rw[target_spec_def] >>
+  simp[Once evaluate_def, bind_def, return_def] >>
+  simp[Once evaluate_def, return_def]
+QED
+
+Theorem target_spec_subscript_target:
+  ∀P P' Q cx bt e loc sbs v k.
+    (⟦cx⟧ ⦃P⦄ (BaseTarget bt) ⇓ᵗ (BaseTargetV loc sbs) ⦃P'⦄) ∧
+    (⟦cx⟧ ⦃P'⦄ e ⇓ v ⦃λst. value_to_key v = SOME k ∧ Q st⦄) ⇒
+    ⟦cx⟧ ⦃P⦄ (BaseTarget (SubscriptTarget bt e)) ⇓ᵗ (BaseTargetV loc (k::sbs)) ⦃Q⦄
+Proof
+  rw[target_spec_def, expr_spec_def] >>
+  simp[Once evaluate_def, bind_def, return_def] >>
+  simp[Once evaluate_def, bind_def] >>
+  qpat_x_assum `!st. P st ==> _` (qspec_then `st` mp_tac) >>
+  simp[] >>
+  simp[Once evaluate_def, bind_def, return_def] >>
+  Cases_on `eval_base_target cx bt st` >>
+  Cases_on `q` >> simp[return_def] >>
+  Cases_on `x` >> simp[return_def] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `!st. P' st ==> _` (qspec_then `r` mp_tac) >>
+  simp[] >> simp[bind_def] >>
+  Cases_on `eval_expr cx e r` >> simp[] >>
+  Cases_on `q` >> simp[] >> simp[return_def, lift_option_def]
+QED
