@@ -275,6 +275,128 @@ From `vyperAssignTargetSpecScript.sml`:
 
 These are already proven and provide the core facts about scope manipulation.
 
+## Current Progress (Session 3) - Combined Theorem Proven
+
+### Key Achievement
+The circular dependency has been resolved by proving both `assign_target_preserves_globals` and `assign_target_preserves_immutables` simultaneously in a single mutual induction proof.
+
+The combined theorem `assign_target_preserves_globals_and_immutables` proves:
+1. For any `tgt`, `IS_SOME (ALOOKUP st.globals tgt) ⇒ IS_SOME (ALOOKUP st'.globals tgt)`
+2. Immutables preservation (as before)
+
+The proof was developed interactively and works. The full proof script is below.
+
+### Remaining Steps
+1. Convert the interactive proof to batch (the >~ syntax doesn't work, need positional tactics)
+2. Remove cheats from the derived theorems (they should follow from the combined theorem)
+3. Prove the main theorem
+
+## Full Proof Script for assign_target_preserves_globals_and_immutables
+
+```sml
+ho_match_mp_tac assign_target_ind >> rpt conj_tac >> rpt gen_tac >-
+(* ScopedVar case *)
+(simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
+      lift_option_def, lift_sum_def, AllCaseEqs(), raise_def, LET_THM,
+      ignore_bind_def, set_scopes_def] >>
+ strip_tac >> gvs[AllCaseEqs(), return_def, raise_def, bind_def, set_scopes_def] >>
+ `st.globals = st'.globals` by (
+   Cases_on `find_containing_scope (string_to_num id) st.scopes` >> gvs[return_def, raise_def] >>
+   PairCases_on `x` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def, set_scopes_def] >>
+   Cases_on `assign_subscripts x2 (REVERSE is) ao` >> gvs[return_def, raise_def]) >>
+ gvs[] >> rw[] >> gvs[]) >-
+(* TopLevelVar case *)
+(strip_tac >> gvs[Once assign_target_def, AllCaseEqs(), return_def, raise_def,
+                  lookup_global_def, bind_def, get_current_globals_def, lift_option_def,
+                  LET_THM, set_global_def, set_current_globals_def] >>
+ `st.globals = s'³'.globals ∧ ALOOKUP st.globals cx.txn.target = SOME gbs`
+   by (Cases_on `ALOOKUP st.globals cx.txn.target` >> gvs[return_def, raise_def]) >>
+ `s'³'.globals = s''.globals`
+   by (Cases_on `FLOOKUP (get_module_globals src_id_opt gbs).mutables (string_to_num id)` >>
+       gvs[return_def, raise_def]) >>
+ `s''.globals = s'⁴'.globals` by (Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def]) >>
+ Cases_on `assign_toplevel (type_env ts) tv (REVERSE is) ao` >-
+ (gvs[lift_sum_def, return_def] >>
+  qpat_x_assum `do _ od _ = _` mp_tac >>
+  simp[bind_def, get_current_globals_def, AllCaseEqs(), return_def, raise_def,
+       set_current_globals_def, ignore_bind_def, LET_THM] >>
+  strip_tac >> gvs[bind_def, ignore_bind_def, get_current_globals_def,
+                   set_current_globals_def, return_def, LET_THM, AllCaseEqs(),
+                   lift_option_def] >>
+  conj_tac >- (Cases_on `cx.txn.target = tgt` >> simp[alistTheory.ALOOKUP_ADELKEY]) >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `src_id_opt` >> simp[get_module_globals_def, set_module_globals_def,
+                                alistTheory.ALOOKUP_ADELKEY]) >-
+ gvs[lift_sum_def, raise_def]) >-
+(* ImmutableVar case *)
+(strip_tac >> gvs[Once assign_target_def, AllCaseEqs(), return_def, raise_def,
+                  bind_def, get_current_globals_def, lift_option_def, LET_THM,
+                  set_immutable_def, set_current_globals_def, get_immutables_def,
+                  get_immutables_module_def] >>
+ `st.globals = s''.globals ∧ ALOOKUP st.globals cx.txn.target = SOME gbs`
+   by (Cases_on `ALOOKUP st.globals cx.txn.target` >> gvs[return_def, raise_def]) >>
+ `s''.globals = s'⁴'.globals`
+   by (Cases_on `FLOOKUP (get_module_globals NONE gbs).immutables (string_to_num id)` >>
+       gvs[return_def, raise_def]) >>
+ Cases_on `assign_subscripts a (REVERSE is) ao` >> gvs[return_def, raise_def] >-
+ (gvs[lift_sum_def, return_def] >> conj_tac >-
+  (rpt strip_tac >> qpat_x_assum `do _ od _ = _` mp_tac >>
+   simp[bind_def, ignore_bind_def, get_current_globals_def, set_current_globals_def,
+        return_def, LET_THM, AllCaseEqs(), lift_option_def] >>
+   strip_tac >> gvs[] >>
+   Cases_on `cx.txn.target = tgt` >> simp[alistTheory.ALOOKUP_ADELKEY]) >>
+  rpt strip_tac >> qpat_x_assum `do _ od _ = _` mp_tac >>
+  simp[bind_def, ignore_bind_def, get_current_globals_def, set_current_globals_def,
+       return_def, LET_THM, AllCaseEqs(), lift_option_def] >>
+  strip_tac >> gvs[] >>
+  simp[get_module_globals_def, set_module_globals_def, alistTheory.ALOOKUP_ADELKEY,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `string_to_num id = n` >> simp[] >>
+  gvs[get_module_globals_def, return_def, raise_def, AllCaseEqs()] >>
+  Cases_on `FLOOKUP (case ALOOKUP gbs NONE of NONE => empty_module_globals
+                     | SOME mg => mg).immutables (string_to_num id)` >>
+  gvs[return_def, raise_def]) >-
+ gvs[lift_sum_def, raise_def]) >-
+(* TupleTargetV with TupleV *)
+(strip_tac >> rpt gen_tac >> strip_tac >>
+ gvs[Once assign_target_def, check_def, AllCaseEqs(), return_def, raise_def] >>
+ Cases_on `LENGTH gvs = LENGTH vs` >> gvs[] >-
+ (fs[bind_def, assert_def, return_def] >>
+  Cases_on `assign_targets cx gvs vs st` >> Cases_on `q` >-
+  (gvs[return_def] >> first_x_assum drule >> simp[]) >-
+  gvs[]) >-
+ fs[assert_def, raise_def]) >-
+(* Other TupleTargetV cases: all vacuously true *)
+simp[Once assign_target_def, raise_def] >-
+simp[Once assign_target_def, raise_def] >-
+simp[Once assign_target_def, raise_def] >-
+simp[Once assign_target_def, raise_def] >-
+simp[Once assign_target_def, raise_def] >-
+simp[Once assign_target_def, raise_def] >-
+simp[Once assign_target_def, raise_def] >-
+simp[Once assign_target_def, raise_def] >-
+simp[Once assign_target_def, raise_def] >-
+simp[Once assign_target_def, raise_def] >-
+simp[Once assign_target_def, raise_def] >-
+simp[Once assign_target_def, raise_def] >-
+(* assign_targets [] [] *)
+(simp[Once assign_target_def, return_def] >> strip_tac >> gvs[] >> rw[] >> gvs[]) >-
+(* assign_targets cons case - the key case that needs both IHs *)
+(strip_tac >> rpt gen_tac >> strip_tac >>
+ gvs[Once assign_target_def, bind_def, get_Value_def, AllCaseEqs(), return_def, raise_def] >>
+ `s'' = s'³'` by (Cases_on `tw` >> gvs[get_Value_def, return_def, raise_def]) >> gvs[] >>
+ last_x_assum (qspec_then `st` (drule_then assume_tac)) >>
+ first_x_assum (qspec_then `s''` (drule_then assume_tac)) >>
+ conj_tac >- metis_tac[] >>
+ rpt strip_tac >>
+ `IS_SOME (ALOOKUP s''.globals cx.txn.target)` by (gvs[] >> first_x_assum irule >> simp[]) >>
+ Cases_on `ALOOKUP s''.globals cx.txn.target` >> gvs[]) >-
+(* assign_targets [] (v::vs) - vacuous *)
+simp[Once assign_target_def, raise_def] >-
+(* assign_targets (v::vs) [] - vacuous *)
+simp[Once assign_target_def, raise_def]
+```
+
 ## Current Progress (Session 2)
 
 ### Completed
