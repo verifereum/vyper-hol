@@ -275,6 +275,44 @@ From `vyperAssignTargetSpecScript.sml`:
 
 These are already proven and provide the core facts about scope manipulation.
 
+## Current Progress (Session 4) - Batch/Interactive Discrepancy
+
+### Status
+The `assign_target_preserves_globals_and_immutables` theorem is currently **cheated** due to a discrepancy between interactive and batch mode proofs.
+
+### The Problem
+The ScopedVar case proof works interactively but fails in batch mode. The issue is with pattern matching on auto-generated state variable names:
+
+1. **Interactive mode:** After processing the ScopedVar case, we get an assumption like:
+   `s'³' with scopes := x0 ⧺ x1 |+ (string_to_num id,a')::x3 = st'`
+   
+   We can use `qpat_x_assum \`_ with scopes := _ = st'\` (SUBST1_TAC o SYM)` to substitute
+   and get `s'³'.globals = (s'³' with scopes := ...).globals` which simplifies to T.
+
+2. **Batch mode:** The pattern `_ with scopes := _ = st'` doesn't match because:
+   - The auto-generated name `s'³'` is different in batch mode
+   - Or the assumption structure is slightly different
+
+### Attempted Solutions
+1. Using `fs` instead of `gvs` to preserve the original variable name `st'` - didn't help
+2. Using `sg` with explicit `>-` subgoals - the subgoal tactic still fails to find the pattern
+3. Using Cases_on to trace through the state chain - works interactively but the final SUBST1_TAC fails in batch
+
+### Root Cause Analysis
+The fundamental issue is that HOL4's batch processing generates different temporary variable names than interactive mode. The proof relies on matching a specific pattern in the assumptions, but the pattern involves auto-generated names that differ between modes.
+
+### Potential Fixes to Try
+1. **Use `first_x_assum` with a predicate** instead of `qpat_x_assum` - more robust matching
+2. **Use `rename1` early** to give the state a stable name before processing
+3. **Restructure the proof** to not depend on the record update pattern at all
+4. **Use `CONV_TAC` or `ONCE_REWRITE_TAC`** to handle the record update differently
+
+### Files Changed
+- `vyperAssignTargetSpecScript.sml`: Lines 231-341 contain the cheated proof with the original commented out
+
+### Build Status
+The file builds with CHEATED warnings. The derived theorems (`assign_target_preserves_immutables` and `assign_target_preserves_globals`) use `metis_tac` on the cheated combined theorem, so they also require the cheat.
+
 ## Current Progress (Session 3) - Combined Theorem Proven
 
 ### Key Achievement
