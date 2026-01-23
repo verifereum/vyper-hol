@@ -101,6 +101,67 @@ Proof
   rpt strip_tac >> gvs[lookup_scopes_def, AllCaseEqs()]
 QED
 
+Theorem find_containing_scope_structure:
+  ∀id sc pre env v rest.
+    find_containing_scope id sc = SOME (pre, env, v, rest) ⇒
+    sc = pre ++ env :: rest ∧ FLOOKUP env id = SOME v
+Proof
+  Induct_on `sc` >- rw[find_containing_scope_def] >>
+  rpt gen_tac >> strip_tac >> qpat_x_assum `_ = SOME _` mp_tac >>
+  simp[find_containing_scope_def] >>
+  Cases_on `FLOOKUP h id` >> simp[] >-
+  (strip_tac >> PairCases_on `z` >> gvs[] >> first_x_assum drule >> simp[]) >>
+  strip_tac >> gvs[]
+QED
+
+Theorem lookup_scopes_update_preserves:
+  ∀n pre env id v rest.
+    FLOOKUP env id = SOME w ⇒
+    (IS_SOME (lookup_scopes n (pre ++ [env] ++ rest)) ⇔
+     IS_SOME (lookup_scopes n (pre ++ env |+ (id, v) :: rest)))
+Proof
+  Induct_on `pre` >-
+  (rw[lookup_scopes_def] >>
+   simp[finite_mapTheory.FLOOKUP_UPDATE] >>
+   Cases_on `id = n` >> gvs[] >>
+   Cases_on `FLOOKUP env n` >> gvs[]) >>
+  rw[lookup_scopes_def] >>
+  Cases_on `FLOOKUP h n` >> gvs[]
+QED
+
+Theorem assign_target_preserves_scopes:
+  (∀cx av ao st res st'.
+     assign_target cx av ao st = (INL res, st') ⇒
+     (∀n. IS_SOME (lookup_scopes n st.scopes) ⇔ IS_SOME (lookup_scopes n st'.scopes))) ∧
+  (∀cx gvs vs st res st'.
+     assign_targets cx gvs vs st = (INL res, st') ⇒
+     (∀n. IS_SOME (lookup_scopes n st.scopes) ⇔ IS_SOME (lookup_scopes n st'.scopes)))
+Proof
+  cheat
+QED
+
+(* The key insight: eval_base_target (NameTarget n) only depends on
+   whether variables exist in scopes (for ScopedVar) or in the immutables
+   map (for ImmutableVar). assign_target preserves variable existence. *)
+Theorem assign_target_preserves_immutables:
+  (∀cx av ao st res st'.
+     assign_target cx av ao st = (INL res, st') ⇒
+     ∀n gbs gbs'.
+       ALOOKUP st.globals cx.txn.target = SOME gbs ∧
+       ALOOKUP st'.globals cx.txn.target = SOME gbs' ⇒
+       IS_SOME (FLOOKUP (get_module_globals NONE gbs).immutables n) =
+       IS_SOME (FLOOKUP (get_module_globals NONE gbs').immutables n)) ∧
+  (∀cx gvs vs st res st'.
+     assign_targets cx gvs vs st = (INL res, st') ⇒
+     ∀n gbs gbs'.
+       ALOOKUP st.globals cx.txn.target = SOME gbs ∧
+       ALOOKUP st'.globals cx.txn.target = SOME gbs' ⇒
+       IS_SOME (FLOOKUP (get_module_globals NONE gbs).immutables n) =
+       IS_SOME (FLOOKUP (get_module_globals NONE gbs').immutables n))
+Proof
+  cheat
+QED
+
 (**********************************************************************)
 
 Theorem assign_target_spec_preserves_toplevel_name_targets:
@@ -109,7 +170,12 @@ Theorem assign_target_spec_preserves_toplevel_name_targets:
     assign_target_spec cx st av ao P ⇒
     assign_target_spec cx st av ao (λst'. P st' ∧ lookup_toplevel_name_target cx st' n = SOME av')
 Proof
-  cheat
+  simp[assign_target_spec_def, lookup_toplevel_name_target_def, lookup_base_target_def] >>
+  rpt strip_tac >>
+  Cases_on `assign_target cx av ao st` >> Cases_on `q` >> gvs[] >>
+  Cases_on `n` >>
+  simp[Once evaluate_def, return_def] >>
+  fs[Once evaluate_def, return_def]
 QED
 
 Theorem assign_target_spec_preserves_name_targets:
