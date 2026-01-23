@@ -238,7 +238,11 @@ Theorem assign_target_tuple_preserves_globals_and_immutables:
         (IS_SOME (FLOOKUP (get_module_globals NONE gbs).immutables n) ⇔
          IS_SOME (FLOOKUP (get_module_globals NONE gbs').immutables n))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[Once assign_target_def, check_def, AllCaseEqs(), return_def, raise_def] >>
+  simp[bind_def, ignore_bind_def, assert_def, return_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  first_x_assum drule >> simp[]
 QED
 
 (* Helper lemma for assign_targets cons case of the induction *)
@@ -269,7 +273,21 @@ Theorem assign_targets_cons_preserves_globals_and_immutables:
         (IS_SOME (FLOOKUP (get_module_globals NONE gbs).immutables n) ⇔
          IS_SOME (FLOOKUP (get_module_globals NONE gbs').immutables n))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[Once assign_target_def, bind_def, get_Value_def, AllCaseEqs(),
+       return_def, raise_def] >>
+  strip_tac >> gvs[] >>
+  rename1 `assign_target _ _ _ st = (INL tw, s_mid)` >>
+  rename1 `get_Value tw s_mid = (INL w, s_mid2)` >>
+  rename1 `assign_targets _ _ _ s_mid2 = (INL ws, st')` >>
+  `s_mid = s_mid2` by (Cases_on `tw` >> gvs[get_Value_def, return_def, raise_def]) >>
+  gvs[] >>
+  last_x_assum (qspec_then `st` mp_tac) >> disch_then drule >> strip_tac >>
+  first_x_assum (qspec_then `s_mid` mp_tac) >> disch_then drule >> strip_tac >>
+  conj_tac >- metis_tac[] >>
+  rpt strip_tac >>
+  `IS_SOME (ALOOKUP s_mid.globals cx.txn.target)` by (first_x_assum irule >> simp[]) >>
+  Cases_on `ALOOKUP s_mid.globals cx.txn.target` >> gvs[]
 QED
 
 (*
