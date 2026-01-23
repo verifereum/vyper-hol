@@ -1035,4 +1035,69 @@ val annotated_ast : term decoder =
   tuple2 (field "ast" json_module,
           orElse (field "imports" (array json_imported_module), succeed []))
 
+(* ===== Storage Layout ===== *)
+
+val storage_slot_info_ty = jasty "storage_slot_info"
+val code_slot_info_ty = jasty "code_slot_info"
+val json_storage_layout_ty = jasty "json_storage_layout"
+
+(* Record constructors - use TypeBase for record syntax *)
+fun mk_storage_slot_info (slot, n_slots, type_str) =
+  let
+    val reccon = TypeBase.mk_record (storage_slot_info_ty,
+      [("slot", slot), ("n_slots", n_slots), ("type_str", fromMLstring type_str)])
+  in reccon end
+
+fun mk_code_slot_info (offset, length, type_str) =
+  let
+    val reccon = TypeBase.mk_record (code_slot_info_ty,
+      [("offset", offset), ("length", length), ("type_str", fromMLstring type_str)])
+  in reccon end
+
+fun mk_json_storage_layout (storage_list, code_list) =
+  let
+    val storage_pair_ty = mk_prod(string_ty, storage_slot_info_ty)
+    val code_pair_ty = mk_prod(string_ty, code_slot_info_ty)
+    val storage_tm = mk_list(storage_list, storage_pair_ty)
+    val code_tm = mk_list(code_list, code_pair_ty)
+    val reccon = TypeBase.mk_record (json_storage_layout_ty,
+      [("storage", storage_tm), ("code", code_tm)])
+  in reccon end
+
+(* Decoder for a single storage slot entry *)
+val storage_slot_info : term decoder =
+  JSONDecode.map (fn (slot, n_slots, type_str) =>
+                    mk_storage_slot_info (mk_num_from_int slot, mk_num_from_int n_slots, type_str))
+  (tuple3 (field "slot" int,
+           field "n_slots" int,
+           field "type" string))
+
+(* Decoder for a single code (immutable) slot entry *)
+val code_slot_info : term decoder =
+  JSONDecode.map (fn (offset, length, type_str) =>
+                    mk_code_slot_info (mk_num_from_int offset, mk_num_from_int length, type_str))
+  (tuple3 (field "offset" int,
+           field "length" int,
+           field "type" string))
+
+(* Decode a JSON object as an association list, applying decoder to each value *)
+fun decode_object_alist (decoder : term decoder) : (string * term) list decoder =
+  andThen rawObject (fn pairs =>
+    let
+      fun decode_pair (name, value) = (name, decode decoder value)
+    in
+      succeed (List.map decode_pair pairs)
+    end)
+
+(* Parse the storage_layout object from a trace *)
+(* Structure: { "storage_layout": { "var": {...}, ... }, "code_layout": { ... } } *)
+val storage_layout : term decoder =
+  JSONDecode.map (fn (storage_pairs, code_pairs) =>
+                    mk_json_storage_layout (
+                      List.map (fn (n,t) => pairSyntax.mk_pair(fromMLstring n, t)) storage_pairs,
+                      List.map (fn (n,t) => pairSyntax.mk_pair(fromMLstring n, t)) code_pairs))
+  (tuple2 (
+     orElse (field "storage_layout" (decode_object_alist storage_slot_info), succeed []),
+     orElse (field "code_layout" (decode_object_alist code_slot_info), succeed [])))
+
 end
