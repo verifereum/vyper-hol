@@ -34,6 +34,10 @@ Definition is_valid_lookup_name_def:
     IS_SOME (lookup_name cx st n)
 End
 
+Definition lookup_toplevel_name_target_def:
+  lookup_toplevel_name_target cx st n = lookup_base_target cx st (TopLevelNameTarget n)
+End
+
 Theorem assign_target_spec_consequence:
   ∀cx st av v Q Q'.
     (∀st'. Q st' ⇒ Q' st') ∧
@@ -99,11 +103,20 @@ QED
 
 (**********************************************************************)
 
-Theorem assign_target_spec_preserves_base_targets:
-  ∀P cx st av ao tgt.
-    lookup_base_target cx st tgt = SOME av' ∧
+Theorem assign_target_spec_preserves_toplevel_name_targets:
+  ∀P cx st av ao n.
+    lookup_toplevel_name_target cx st n = SOME av' ∧
     assign_target_spec cx st av ao P ⇒
-    assign_target_spec cx st av ao (λst'. P st' ∧ lookup_base_target cx st' tgt = SOME av')
+    assign_target_spec cx st av ao (λst'. P st' ∧ lookup_toplevel_name_target cx st' n = SOME av')
+Proof
+  cheat
+QED
+
+Theorem assign_target_spec_preserves_name_targets:
+  ∀P cx st av ao n.
+    lookup_name_target cx st n = SOME av' ∧
+    assign_target_spec cx st av ao P ⇒
+    assign_target_spec cx st av ao (λst'. P st' ∧ lookup_name_target cx st' n = SOME av')
 Proof
   cheat
 QED

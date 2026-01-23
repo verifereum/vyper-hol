@@ -3,78 +3,78 @@ Theory vyperScopes
 Ancestors
   vyperInterpreter
 
-(* ===== Helper lemmas for scopes length preservation ===== *)
+(* ===== Lemmas about scopes preservation ===== *)
 
 (* Basic monad operations preserve scopes *)
-Theorem return_scopes[local]:
+Theorem return_scopes:
   !x st res st'. return x st = (res, st') ==> st'.scopes = st.scopes
 Proof
   rw[return_def]
 QED
 
-Theorem raise_scopes[local]:
+Theorem raise_scopes:
   !e st res st'. raise e st = (res, st') ==> st'.scopes = st.scopes
 Proof
   rw[raise_def]
 QED
 
-Theorem check_scopes[local]:
+Theorem check_scopes:
   !b s st res st'. check b s st = (res, st') ==> st'.scopes = st.scopes
 Proof
   rw[check_def, assert_def]
 QED
 
-Theorem lift_option_scopes[local]:
+Theorem lift_option_scopes:
   !x s st res st'. lift_option x s st = (res, st') ==> st'.scopes = st.scopes
 Proof
   rw[lift_option_def] >> Cases_on `x` >> fs[return_def, raise_def]
 QED
 
-Theorem lift_sum_scopes[local]:
+Theorem lift_sum_scopes:
   !x st res st'. lift_sum x st = (res, st') ==> st'.scopes = st.scopes
 Proof
   rw[lift_sum_def] >> Cases_on `x` >> fs[return_def, raise_def]
 QED
 
-Theorem get_Value_scopes[local]:
+Theorem get_Value_scopes:
   !tv st res st'. get_Value tv st = (res, st') ==> st'.scopes = st.scopes
 Proof
   Cases_on `tv` >> rw[get_Value_def, return_def, raise_def]
 QED
 
-Theorem get_scopes_id[local]:
+Theorem get_scopes_id:
   !st res st'. get_scopes st = (res, st') ==> st' = st
 Proof
   rw[get_scopes_def, return_def]
 QED
 
-Theorem get_accounts_scopes[local]:
+Theorem get_accounts_scopes:
   !st res st'. get_accounts st = (res, st') ==> st'.scopes = st.scopes
 Proof
   rw[get_accounts_def, return_def]
 QED
 
-Theorem get_current_globals_scopes[local]:
+Theorem get_current_globals_scopes:
   !cx st res st'. get_current_globals cx st = (res, st') ==> st'.scopes = st.scopes
 Proof
   rw[get_current_globals_def, lift_option_def] >>
   Cases_on `ALOOKUP st.globals cx.txn.target` >> fs[return_def, raise_def]
 QED
 
-Theorem set_current_globals_scopes[local]:
+Theorem set_current_globals_scopes:
   !cx gbs st res st'. set_current_globals cx gbs st = (res, st') ==> st'.scopes = st.scopes
 Proof
   rw[set_current_globals_def, return_def] >> simp[]
 QED
 
-Theorem get_immutables_scopes[local]:
+Theorem get_immutables_scopes:
   !cx st res st'. get_immutables cx st = (res, st') ==> st'.scopes = st.scopes
 Proof
   rw[get_immutables_def, get_immutables_module_def, bind_def, return_def, get_current_globals_def, lift_option_def] >>
   Cases_on `ALOOKUP st.globals cx.txn.target` >> fs[return_def, raise_def]
 QED
 
-Theorem lookup_global_scopes[local]:
+Theorem lookup_global_scopes:
   !cx src n st res st'. lookup_global cx src n st = (res, st') ==> st'.scopes = st.scopes
 Proof
   rw[lookup_global_def, bind_def, return_def, get_current_globals_def, lift_option_def] >>
@@ -82,27 +82,27 @@ Proof
   Cases_on `FLOOKUP (get_module_globals src x).mutables n` >> fs[return_def, raise_def]
 QED
 
-Theorem set_global_scopes[local]:
+Theorem set_global_scopes:
   !cx src n v st res st'. set_global cx src n v st = (res, st') ==> st'.scopes = st.scopes
 Proof
   rw[set_global_def, bind_def, return_def, get_current_globals_def, set_current_globals_def, lift_option_def] >>
   Cases_on `ALOOKUP st.globals cx.txn.target` >> gvs[raise_def, return_def]
 QED
 
-Theorem set_immutable_scopes[local]:
+Theorem set_immutable_scopes:
   !cx src n v st res st'. set_immutable cx src n v st = (res, st') ==> st'.scopes = st.scopes
 Proof
   rw[set_immutable_def, bind_def, return_def, get_current_globals_def, set_current_globals_def, lift_option_def] >>
   Cases_on `ALOOKUP st.globals cx.txn.target` >> gvs[raise_def, return_def]
 QED
 
-Theorem push_log_scopes[local]:
+Theorem push_log_scopes:
   !l st res st'. push_log l st = (res, st') ==> st'.scopes = st.scopes
 Proof
   rw[push_log_def, return_def] >> simp[]
 QED
 
-Theorem transfer_value_scopes[local]:
+Theorem transfer_value_scopes:
   !f t a st res st'. transfer_value f t a st = (res, st') ==> st'.scopes = st.scopes
 Proof
   rw[transfer_value_def, bind_def, ignore_bind_def, get_accounts_def, return_def, check_def, assert_def, update_accounts_def] >>
