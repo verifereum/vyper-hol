@@ -114,6 +114,17 @@ Proof
   strip_tac >> gvs[]
 QED
 
+Theorem find_containing_scope_lookup:
+  ∀id sc pre env v rest.
+    find_containing_scope id sc = SOME (pre, env, v, rest) ⇒
+    lookup_scopes id sc = SOME v
+Proof
+  Induct_on `sc` >- rw[find_containing_scope_def] >>
+  rw[find_containing_scope_def, lookup_scopes_def] >>
+  Cases_on `FLOOKUP h id` >> gvs[] >>
+  PairCases_on `z` >> gvs[]
+QED
+
 Theorem lookup_scopes_update_preserves:
   ∀n pre env id v rest.
     FLOOKUP env id = SOME w ⇒
@@ -306,5 +317,111 @@ Theorem assign_target_spec_update:
     assign_target_spec cx st av (Update bop v2) P ⇒
     assign_target_spec cx st av (Update bop v2) (λst'. P st' ∧ lookup_name cx st' n = SOME v)
 Proof
-  cheat
+  simp[assign_target_spec_def, lookup_name_target_def, lookup_base_target_def,
+       lookup_name_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  Cases_on `assign_target cx av (Update bop v2) st` >> Cases_on `q` >> gvs[] >>
+  (* Analyze eval_base_target *)
+  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def] >>
+  Cases_on `cx.txn.is_creation` >-
+  (* is_creation = T *)
+  (gvs[return_def, get_immutables_def, get_immutables_module_def, bind_def,
+       get_current_globals_def, lift_option_def, return_def, lift_sum_def,
+       immutable_target_def] >>
+   Cases_on `ALOOKUP st.globals cx.txn.target` >> gvs[raise_def, return_def] >>
+   Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
+   Cases_on `FLOOKUP (get_module_globals NONE x').immutables (string_to_num n)` >>
+   gvs[exactly_one_option_def, return_def, raise_def] >-
+   (* ScopedVar case *)
+   (strip_tac >> gvs[] >>
+    qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+    simp[Once assign_target_def, bind_def, get_scopes_def, return_def, lift_option_def] >>
+    `IS_SOME (find_containing_scope (string_to_num n) st.scopes)`
+      by metis_tac[lookup_scopes_find_containing] >>
+    Cases_on `find_containing_scope (string_to_num n) st.scopes` >>
+    gvs[return_def, raise_def] >> PairCases_on `x''` >>
+    simp[bind_def, lift_sum_def, assign_subscripts_def, set_scopes_def,
+         ignore_bind_def, return_def] >>
+    `lookup_scopes (string_to_num n) st.scopes = SOME x''2`
+      by metis_tac[find_containing_scope_lookup] >>
+    (* Show x''2 = v1 *)
+    `x''2 = v1` by (
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+           get_immutables_def, get_immutables_module_def, get_current_globals_def,
+           lift_option_def, lift_sum_def, exactly_one_option_def, return_def, raise_def]) >>
+    gvs[return_def, raise_def] >>
+    strip_tac >> gvs[] >>
+    `lookup_scopes (string_to_num n) x''0 = NONE`
+      by metis_tac[find_containing_scope_pre_none] >>
+    `lookup_scopes (string_to_num n) (x''0 ++ x''1 |+ (string_to_num n,v)::x''3) = SOME v`
+      by metis_tac[lookup_scopes_update] >>
+    simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+         get_immutables_def, get_immutables_module_def, get_current_globals_def,
+         lift_option_def, lift_sum_def, exactly_one_option_def, return_def]) >>
+   (* ImmutableVar case *)
+   strip_tac >> gvs[] >>
+   qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+   simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
+        lift_option_def, get_immutables_def, get_immutables_module_def,
+        get_current_globals_def, lift_sum_def, assign_subscripts_def,
+        return_def, ignore_bind_def, set_immutable_def, set_current_globals_def] >>
+   (* Show x'' = v1 *)
+   `x'' = v1` by (
+     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+     simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+          get_immutables_def, get_immutables_module_def, get_current_globals_def,
+          lift_option_def, lift_sum_def, exactly_one_option_def, return_def, raise_def]) >>
+   gvs[return_def, raise_def] >>
+   strip_tac >> gvs[] >>
+   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+        get_immutables_def, get_immutables_module_def, get_current_globals_def,
+        lift_option_def, get_module_globals_def, set_module_globals_def,
+        finite_mapTheory.FLOOKUP_UPDATE, lift_sum_def,
+        exactly_one_option_def, return_def]) >>
+  (* is_creation = F *)
+  gvs[return_def, lift_sum_def] >>
+  Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
+  gvs[exactly_one_option_def, return_def, raise_def] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+  simp[Once assign_target_def, bind_def, get_scopes_def, return_def, lift_option_def] >>
+  `IS_SOME (find_containing_scope (string_to_num n) st.scopes)`
+    by metis_tac[lookup_scopes_find_containing] >>
+  Cases_on `find_containing_scope (string_to_num n) st.scopes` >>
+  gvs[return_def, raise_def] >> PairCases_on `x'` >>
+  simp[bind_def, lift_sum_def, assign_subscripts_def, set_scopes_def,
+       ignore_bind_def, return_def] >>
+  `lookup_scopes (string_to_num n) st.scopes = SOME x'2`
+    by metis_tac[find_containing_scope_lookup] >>
+  (* Show x'2 = v1 *)
+  `x'2 = v1` by (
+    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+         get_immutables_def, get_immutables_module_def, get_current_globals_def,
+         lift_option_def, lift_sum_def, exactly_one_option_def, return_def, raise_def] >>
+    Cases_on `ALOOKUP st.globals cx.txn.target` >> gvs[return_def, raise_def] >>
+    Cases_on `FLOOKUP (get_module_globals NONE x).immutables (string_to_num n)` >>
+    gvs[exactly_one_option_def, return_def, raise_def]) >>
+  gvs[return_def, raise_def] >>
+  strip_tac >> gvs[] >>
+  `lookup_scopes (string_to_num n) x'0 = NONE`
+    by metis_tac[find_containing_scope_pre_none] >>
+  `lookup_scopes (string_to_num n) (x'0 ++ x'1 |+ (string_to_num n,v)::x'3) = SOME v`
+    by metis_tac[lookup_scopes_update] >>
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+       get_immutables_def, get_immutables_module_def, get_current_globals_def,
+       lift_option_def, lift_sum_def, exactly_one_option_def, return_def] >>
+  Cases_on `ALOOKUP st.globals cx.txn.target` >> gvs[raise_def, return_def] >-
+  (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+        get_immutables_def, get_immutables_module_def, get_current_globals_def,
+        lift_option_def, lift_sum_def, exactly_one_option_def, return_def, raise_def]) >>
+  Cases_on `FLOOKUP (get_module_globals NONE x).immutables (string_to_num n)` >-
+  simp[exactly_one_option_def, return_def] >>
+  (* Contradiction: both scopes and immutables have the var *)
+  fs[Once evaluate_def, bind_def, get_scopes_def, return_def,
+     get_immutables_def, get_immutables_module_def, get_current_globals_def,
+     lift_option_def, lift_sum_def, exactly_one_option_def, return_def, raise_def]
 QED
