@@ -139,11 +139,46 @@ Definition example_2_def:
     If (Builtin (Bop Gt) [Name "x"; Literal (IntL (Signed 128) 20)])
        [Return (SOME (Name "x"))]
        [Pass];
-    AnnAssign "y" (BaseT (IntT 128)) (Name "x");
+    AnnAssign "y" (BaseT (IntT 128)) (Builtin (Bop Add) [Name "x"; Literal (IntL (Signed 128) 20)]);
     Return (SOME (Name "y"))
   ]
 End
 
+(* Proof sketch:
+
+{ x > 0 }
+x := x + 10
+{ x > 10 }
+if x > 100 then
+  { x > 100 ∧ x > 10 }
+  { T }
+  x := 100
+  { x = 100 }
+  { x > 20 ∧ x ≤ 110 }
+else
+  { x ≤ 100 ∧ x > 10 }
+  x := x + 10
+  { x > 20 ∧ x ≤ 110 }
+{ x > 0 ∧ x ≤ 110 }
+if x > 20 then
+  { x > 20 ∧ x > 0 ∧ x ≤ 110 }
+  { x > 20 ∧ x ≤ 110 }
+  return x
+  { F | λv. v > 20 ∧ v ≤ 110 }
+  { x ≤ 20 ∧ x > 0 | λv. v > 20 ∧ v ≤ 110 }
+else
+  { x ≤ 20 ∧ x > 0 }
+  pass
+  { x ≤ 20 ∧ x > 0 | λ_. F }
+{ x ≤ 20 ∧ x > 0 | λv. (v > 20 ∧ v ≤ 110) ∨ F }
+{ x ≤ 20 ∧ x > 0 | λv. v > 20 ∧ v ≤ 110 }
+y := x + 20
+{ y > 20 ∧ y ≤ 40 | λv. v > 20 ∧ v ≤ 110 }
+return y
+{ F | λv. (v > 20 ∧ v ≤ 40) ∨ (v > 20 ∧ v ≤ 110) }
+{ F | λv. v > 20 ∧ v ≤ 110 }
+
+*)
 Theorem example_2_thm:
   ∀cx. ⟦cx⟧
     ⦃λst. ∃n. lookup_name cx st "x" = SOME (IntV (Signed 128) n) ∧ n > 0 ∧ n < 1000⦄

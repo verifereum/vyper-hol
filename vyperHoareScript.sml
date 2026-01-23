@@ -398,7 +398,7 @@ Theorem stmts_spec_if:
     (⟦cx⟧ ⦃λst. P' (st with scopes := TL st.scopes) ∧ v1 = BoolV F⦄ ss2
           ⦃λst. Q (st with scopes := TL st.scopes) ∥
             λv st. R2 v (st with scopes := TL st.scopes)⦄) ⇒
-          ⟦cx⟧ ⦃P⦄ [If e ss1 ss2] ⦃Q ∥ λv st. if v1 = BoolV T then R1 v st else R2 v st⦄
+          ⟦cx⟧ ⦃P⦄ [If e ss1 ss2] ⦃Q ∥ λv st. R1 v st ∨ R2 v st⦄
 Proof
   rw[stmts_spec_def, expr_spec_def] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def] >>
