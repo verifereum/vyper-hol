@@ -460,7 +460,62 @@ Theorem assign_target_spec_preserves_name_targets:
     assign_target_spec cx st av ao P ⇒
     assign_target_spec cx st av ao (λst'. P st' ∧ lookup_name_target cx st' n = SOME av')
 Proof
-  cheat
+  simp[assign_target_spec_def, lookup_name_target_def, lookup_base_target_def] >>
+  rpt strip_tac >>
+  Cases_on `assign_target cx av ao st` >> Cases_on `q` >> gvs[] >>
+  qpat_x_assum `(_ = SOME av')` mp_tac >>
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def] >>
+  Cases_on `cx.txn.is_creation` >> gvs[] >-
+  ((* is_creation case *)
+   simp[get_immutables_def, get_immutables_module_def, bind_def,
+        get_current_globals_def, lift_option_def, return_def, lift_sum_def,
+        immutable_target_def] >>
+   Cases_on `ALOOKUP st.globals cx.txn.target` >> gvs[return_def, raise_def] >>
+   Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
+   Cases_on `FLOOKUP (get_module_globals NONE x').immutables (string_to_num n)` >>
+   gvs[exactly_one_option_def, return_def, raise_def] >-
+   ((* ScopedVar case *)
+    strip_tac >> gvs[] >>
+    simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+         get_immutables_def, get_immutables_module_def,
+         get_current_globals_def, lift_option_def, lift_sum_def,
+         immutable_target_def] >>
+    `IS_SOME (lookup_scopes (string_to_num n) r.scopes)`
+      by metis_tac[assign_target_preserves_scopes] >>
+    `IS_SOME (ALOOKUP r.globals cx.txn.target)`
+      by (drule (CONJUNCT1 assign_target_preserves_globals) >> simp[]) >>
+    Cases_on `ALOOKUP r.globals cx.txn.target` >> gvs[return_def, raise_def] >>
+    `FLOOKUP (get_module_globals NONE x'').immutables (string_to_num n) = NONE`
+      by (drule (CONJUNCT1 assign_target_preserves_immutables) >>
+          disch_then (qspec_then `string_to_num n` mp_tac) >> simp[]) >>
+    gvs[exactly_one_option_def, return_def]) >-
+   ((* ImmutableVar case *)
+    strip_tac >> gvs[] >>
+    simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+         get_immutables_def, get_immutables_module_def,
+         get_current_globals_def, lift_option_def, lift_sum_def,
+         immutable_target_def] >>
+    `lookup_scopes (string_to_num n) r.scopes = NONE`
+      by metis_tac[assign_target_preserves_scopes,
+                   optionTheory.IS_SOME_DEF, optionTheory.option_CLAUSES] >>
+    `IS_SOME (ALOOKUP r.globals cx.txn.target)`
+      by (drule (CONJUNCT1 assign_target_preserves_globals) >> simp[]) >>
+    Cases_on `ALOOKUP r.globals cx.txn.target` >> gvs[return_def, raise_def] >>
+    rename1 `ALOOKUP r.globals cx.txn.target = SOME gbs'` >>
+    `IS_SOME (FLOOKUP (get_module_globals NONE gbs').immutables (string_to_num n))`
+      by (drule (CONJUNCT1 assign_target_preserves_immutables) >>
+          disch_then (qspec_then `string_to_num n` mp_tac) >> simp[]) >>
+    Cases_on `FLOOKUP (get_module_globals NONE gbs').immutables (string_to_num n)` >>
+    gvs[exactly_one_option_def, return_def])) >-
+  ((* non-creation case *)
+   simp[return_def, lift_sum_def] >>
+   Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
+   gvs[exactly_one_option_def, return_def, raise_def] >>
+   strip_tac >> gvs[] >>
+   simp[Once evaluate_def, bind_def, get_scopes_def, return_def] >>
+   `IS_SOME (lookup_scopes (string_to_num n) r.scopes)`
+     by metis_tac[assign_target_preserves_scopes] >>
+   gvs[lift_sum_def, exactly_one_option_def, return_def])
 QED
 
 Theorem assign_target_spec_lookup:
