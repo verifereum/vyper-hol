@@ -209,4 +209,32 @@ Datatype:
   = JAnnotatedAST json_module (json_imported_module list)  (* main ast, imports *)
 End
 
+(* ===== Storage Layout ===== *)
+(* Maps variable names to their storage slot information *)
+
+Datatype:
+  storage_slot_info = <|
+    slot : num;       (* starting slot number *)
+    n_slots : num;    (* number of slots used *)
+    type_str : string (* type as string, e.g. "uint256", "HashMap[int128, W]" *)
+  |>
+End
+
+(* For immutables stored in code *)
+Datatype:
+  code_slot_info = <|
+    offset : num;     (* byte offset in deployed code *)
+    length : num;     (* length in bytes *)
+    type_str : string (* type as string *)
+  |>
+End
+
+(* Complete storage layout for a contract *)
+Datatype:
+  json_storage_layout = <|
+    storage : (string # storage_slot_info) list;  (* variable name -> slot info *)
+    code : (string # code_slot_info) list         (* immutable name -> code info *)
+  |>
+End
+
 (* Datatypes are automatically translated by cv_transLib when defined *)
