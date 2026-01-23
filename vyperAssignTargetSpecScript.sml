@@ -17,11 +17,15 @@ Definition lookup_name_def:
     | (_, _) => NONE
 End
 
-Definition lookup_name_target_def:
-  lookup_name_target cx st n =
-    case eval_base_target cx (NameTarget n) st of
+Definition lookup_base_target_def:
+  lookup_base_target cx st tgt =
+    case eval_base_target cx tgt st of
     | (INL (loc, sbs), _) => SOME (BaseTargetV loc sbs)
     | (INR _, _) => NONE
+End
+
+Definition lookup_name_target_def:
+  lookup_name_target cx st n = lookup_base_target cx st (NameTarget n)
 End
 
 Definition is_valid_lookup_name_def:
@@ -95,6 +99,15 @@ QED
 
 (**********************************************************************)
 
+Theorem assign_target_spec_preserves_base_targets:
+  ∀P cx st av ao tgt.
+    lookup_base_target cx st tgt = SOME av' ∧
+    assign_target_spec cx st av ao P ⇒
+    assign_target_spec cx st av ao (λst'. P st' ∧ lookup_base_target cx st' tgt = SOME av')
+Proof
+  cheat
+QED
+
 (* TODO: this one lemma is not enough; we need to show that evaluation
 doesn't change targets (evaluation may change values of variables, but
 not what already existing variables are bound to) *)
@@ -103,9 +116,9 @@ Theorem assign_target_spec_lookup:
   ∀cx st n av v.
     is_valid_lookup_name cx st n ∧
     lookup_name_target cx st n = SOME av ⇒
-    assign_target_spec cx st av (Replace v) (λst. lookup_name cx st n = SOME v)
+    assign_target_spec cx st av (Replace v) (λst'. lookup_name cx st' n = SOME v)
 Proof
-  simp[is_valid_lookup_name_def, lookup_name_target_def, assign_target_spec_def, lookup_name_def, AllCaseEqs()] >>
+  simp[is_valid_lookup_name_def, lookup_name_target_def, lookup_base_target_def, assign_target_spec_def, lookup_name_def, AllCaseEqs()] >>
   rpt strip_tac >> Cases_on `ALOOKUP st.globals cx.txn.target` >- fs[] >>
   qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def] >>

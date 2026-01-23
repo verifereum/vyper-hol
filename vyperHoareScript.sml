@@ -253,8 +253,11 @@ Proof
   rw[target_spec_def, lookup_name_target_def] >> rpt strip_tac >>
   simp[Once evaluate_def, bind_def, return_def] >>
   Cases_on `eval_base_target cx (NameTarget n) st` >> gvs[return_def] >>
-  Cases_on `q` >> gvs[return_def] >> Cases_on `x` >> gvs[return_def] >>
-  drule eval_base_target_NameTarget_preserves_state >> simp[]
+  Cases_on `q` >> gvs[return_def] >-
+  (PairCases_on `x` >> gvs[return_def] >>
+   drule eval_base_target_NameTarget_preserves_state >> simp[] >>
+   strip_tac >> gvs[lookup_base_target_def]) >>
+  gvs[lookup_base_target_def]
 QED
 
 Theorem stmts_spec_consequence:
@@ -392,9 +395,11 @@ Proof
   rw[target_spec_def, lookup_name_target_def] >>
   simp[Once evaluate_def, bind_def, return_def] >>
   Cases_on `eval_base_target cx (NameTarget n) st` >>
-  Cases_on `q` >> gvs[] >>
-  PairCases_on `x` >> gvs[return_def] >>
-  drule eval_base_target_NameTarget_preserves_state >> simp[]
+  Cases_on `q` >> gvs[] >-
+  (PairCases_on `x` >> gvs[return_def] >>
+   drule eval_base_target_NameTarget_preserves_state >> strip_tac >>
+   gvs[lookup_base_target_def]) >>
+  gvs[lookup_base_target_def]
 QED
 
 Theorem stmts_spec_ann_assign:
