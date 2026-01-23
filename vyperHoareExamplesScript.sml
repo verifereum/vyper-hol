@@ -130,6 +130,29 @@ Proof
       gvs[AllCaseEqs()] >> EVAL_TAC)
 QED
 
+Definition example_2_def:
+  example_2 = [
+    AugAssign (NameTarget "x") Add (Literal (IntL (Signed 128) 10));
+    If (Builtin (Bop Gt) [Name "x"; Literal (IntL (Signed 128) 100)])
+       [Assign (BaseTarget (NameTarget "x")) (Literal (IntL (Signed 128) 100))]
+       [AugAssign (NameTarget "x") Add (Literal (IntL (Signed 128) 10))];
+    If (Builtin (Bop Gt) [Name "x"; Literal (IntL (Signed 128) 20)])
+       [Return (SOME (Name "x"))]
+       [Pass];
+    AnnAssign "y" (BaseT (IntT 128)) (Name "x");
+    Return (SOME (Name "y"))
+  ]
+End
+
+Theorem example_2_thm:
+  ∀cx. ⟦cx⟧
+    ⦃λst. ∃n. lookup_name cx st "x" = SOME (IntV (Signed 128) n) ∧ n > 0 ∧ n < 1000⦄
+    example_2
+    ⦃(λ_. F) ∥ λv _. ∃n. v = IntV (Signed 128) n ∧ n > 20 ∧ n ≤ 100⦄
+Proof
+  cheat
+QED
+
 (* ERC20 transfer *)
 
 (* No duplicate keys in an alist *)
@@ -220,29 +243,6 @@ End
 
 Theorem erc20_sum_balances:
   ∀cx addr b. ⟦cx⟧ ⦃λst . valid_erc20_state addr st ∧ valid_transfer_params cx st ∧ sum_balances addr st = b⦄ erc20_transfer ⦃(λ_. F) ∥ (λ_ st . sum_balances addr st = b)⦄
-Proof
-  cheat
-QED
-
-Definition example_2_def:
-  example_2 = [
-    AugAssign (NameTarget "x") Add (Literal (IntL (Signed 128) 10));
-    If (Builtin (Bop Gt) [Name "x"; Literal (IntL (Signed 128) 100)])
-       [Assign (BaseTarget (NameTarget "x")) (Literal (IntL (Signed 128) 100))]
-       [AugAssign (NameTarget "x") Add (Literal (IntL (Signed 128) 10))];
-    If (Builtin (Bop Gt) [Name "x"; Literal (IntL (Signed 128) 20)])
-       [Return (SOME (Name "x"))]
-       [Pass];
-    AnnAssign "y" (BaseT (IntT 128)) (Name "x");
-    Return (SOME (Name "y"))
-  ]
-End
-
-Theorem example_2_thm:
-  ∀cx. ⟦cx⟧
-    ⦃λst. ∃n. lookup_name cx st "x" = SOME (IntV (Signed 128) n) ∧ n > 0⦄
-    example_2
-    ⦃(λ_. F) ∥ λv _. ∃n. v = IntV (Signed 128) n ∧ n > 20⦄
 Proof
   cheat
 QED
