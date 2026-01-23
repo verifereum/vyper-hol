@@ -19,11 +19,11 @@ Definition stmts_spec_def:
 End
 
 Definition expr_spec_def:
-  expr_spec cx (P : evaluation_state -> bool) (e : expr) (v : value) (Q : evaluation_state -> bool) <=>
+  expr_spec cx (P : evaluation_state -> bool) (e : expr) (tv : toplevel_value) (Q : evaluation_state -> bool) <=>
     !st. P st ==>
       case eval_expr cx e st of
-      | (INL val, st') =>
-             if val = Value v then Q st' else F
+      | (INL tv', st') =>
+             if tv' = tv then Q st' else F
       | (INR _, st') => F (* ignore exceptions in expressions for now *)
 End
 
@@ -201,13 +201,13 @@ Proof
 QED
 
 Theorem expr_spec_literal:
-  ∀P P' cx l. ⟦cx⟧ ⦃P⦄ (Literal l) ⇓ evaluate_literal l ⦃P⦄
+  ∀P P' cx l. ⟦cx⟧ ⦃P⦄ (Literal l) ⇓ Value (evaluate_literal l) ⦃P⦄
 Proof
   rw[expr_spec_def, evaluate_def, return_def]
 QED
 
 Theorem expr_spec_name:
-  ∀P cx n v. ⟦cx⟧ ⦃λst. P st ∧ lookup_name cx st n = SOME v⦄ (Name n) ⇓ v ⦃P⦄
+  ∀P cx n v. ⟦cx⟧ ⦃λst. P st ∧ lookup_name cx st n = SOME v⦄ (Name n) ⇓ Value v ⦃P⦄
 Proof
   rw[expr_spec_def, lookup_name_def] >> rpt strip_tac >>
   Cases_on `eval_expr cx (Name n) st` >>
@@ -219,7 +219,7 @@ QED
 Theorem expr_spec_if:
   ∀P P' Q cx e1 e2 e3 v1 v2 v3.
     (v1 = BoolV T ∨ v1 = BoolV F) ∧
-    (⟦cx⟧ ⦃P⦄ e1 ⇓ v1 ⦃P'⦄) ∧
+    (⟦cx⟧ ⦃P⦄ e1 ⇓ Value v1 ⦃P'⦄) ∧
     (⟦cx⟧ ⦃λst. P' st ∧ v1 = BoolV T⦄ e2 ⇓ v2 ⦃Q⦄) ∧
     (⟦cx⟧ ⦃λst. P' st ∧ v1 = BoolV F⦄ e3 ⇓ v3 ⦃Q⦄) ⇒
           ⟦cx⟧ ⦃P⦄ (IfExp e1 e2 e3) ⇓ (if v1 = BoolV T then v2 else v3) ⦃Q⦄
@@ -231,6 +231,71 @@ Proof
   Cases_on `eval_expr cx e1 st` >>
   Cases_on `q` >>
   simp[switch_BoolV_def]
+QED
+
+Theorem expr_spec_builtin_bop:
+  ∀P P' Q cx e1 e2 v1 v2 bop v_result.
+    (⟦cx⟧ ⦃P⦄ e1 ⇓ Value v1 ⦃P'⦄) ∧
+    (⟦cx⟧ ⦃P'⦄ e2 ⇓ Value v2 ⦃λst. evaluate_binop bop v1 v2 = INL v_result ∧ Q st⦄) ⇒
+    ⟦cx⟧ ⦃P⦄ (Builtin (Bop bop) [e1; e2]) ⇓ Value v_result ⦃Q⦄
+Proof
+  rw[expr_spec_def] >>
+  simp[Once evaluate_def, bind_def, check_def, assert_def,
+       builtin_args_length_ok_def] >>
+  simp[assert_def, ignore_bind_def, bind_def, Once evaluate_def] >>
+  qpat_x_assum `!st. P st ==> _` (qspec_then `st` mp_tac) >> simp[] >>
+  Cases_on `eval_expr cx e1 st` >> Cases_on `q` >> simp[] >>
+  simp[return_def, bind_def, Once evaluate_def] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `!st. P' st ==> _` (qspec_then `r` mp_tac) >> simp[] >>
+  Cases_on `eval_expr cx e2 r` >> Cases_on `q` >> simp[] >>
+  simp[return_def, Once evaluate_def, get_accounts_def,
+       lift_sum_def, evaluate_builtin_def]
+QED
+
+Theorem expr_spec_builtin_env_sender:
+  ∀P cx. ⟦cx⟧ ⦃P⦄ (Builtin (Env Sender) []) ⇓ Value (AddressV cx.txn.sender) ⦃P⦄
+Proof
+  rw[expr_spec_def, evaluate_def, return_def] >>
+  simp[check_def, assert_def, builtin_args_length_ok_def, bind_def,
+       return_def, get_accounts_def] >>
+  simp[assert_def, ignore_bind_def, bind_def, return_def,
+       get_accounts_def] >>
+  simp[lift_sum_def, evaluate_builtin_def, return_def]
+QED
+
+Theorem expr_spec_toplevelname:
+  ∀P cx src_id_opt id gbs mg tv.
+    ⟦cx⟧
+      ⦃λst. P st ∧
+            ALOOKUP st.globals cx.txn.target = SOME gbs ∧
+            get_module_globals src_id_opt gbs = mg ∧
+            FLOOKUP mg.mutables (string_to_num id) = SOME tv⦄
+      (TopLevelName (src_id_opt, id)) ⇓ tv
+      ⦃P⦄
+Proof
+  rw[expr_spec_def] >>
+  simp[Once evaluate_def] >>
+  simp[lookup_global_def, bind_def, get_current_globals_def, return_def, lift_option_def]
+QED
+
+Theorem expr_spec_subscript:
+  ∀P P' Q cx e1 e2 tv1 v2 ts tv_result.
+    ALOOKUP cx.sources cx.txn.target = SOME [(NONE, ts)] ∧
+    evaluate_subscript (type_env ts) tv1 v2 = INL tv_result ∧
+    (⟦cx⟧ ⦃P⦄ e1 ⇓ tv1 ⦃P'⦄) ∧
+    (⟦cx⟧ ⦃P'⦄ e2 ⇓ (Value v2) ⦃Q⦄) ⇒
+    ⟦cx⟧ ⦃P⦄ (Subscript e1 e2) ⇓ tv_result ⦃Q⦄
+Proof
+  rw[expr_spec_def] >>
+  simp[Once evaluate_def, bind_def] >>
+  qpat_x_assum `!st. P st ==> _` (qspec_then `st` mp_tac) >> simp[] >>
+  Cases_on `eval_expr cx e1 st` >> Cases_on `q` >> simp[] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `!st. P' st ==> _` (qspec_then `r` mp_tac) >> simp[] >>
+  Cases_on `eval_expr cx e2 r` >> Cases_on `q` >> simp[] >>
+  simp[return_def, lift_option_def, get_self_code_def, lift_sum_def] >>
+  simp[get_module_code_def, return_def, raise_def]
 QED
 
 Theorem target_spec_consequence:
@@ -260,6 +325,39 @@ Proof
   gvs[lookup_base_target_def]
 QED
 
+Theorem target_spec_toplevelname_target:
+  ∀P cx src_id_opt id.
+    ⟦cx⟧ ⦃P⦄ (BaseTarget (TopLevelNameTarget (src_id_opt, id))) ⇓ᵗ
+         (BaseTargetV (TopLevelVar src_id_opt id) []) ⦃P⦄
+Proof
+  rw[target_spec_def] >>
+  simp[Once evaluate_def, bind_def, return_def] >>
+  simp[Once evaluate_def, return_def]
+QED
+
+Theorem target_spec_subscript_target:
+  ∀P P' Q cx bt e loc sbs v k.
+    value_to_key v = SOME k ∧
+    (⟦cx⟧ ⦃P⦄ (BaseTarget bt) ⇓ᵗ (BaseTargetV loc sbs) ⦃P'⦄) ∧
+    (⟦cx⟧ ⦃P'⦄ e ⇓ Value v ⦃Q⦄) ⇒
+    ⟦cx⟧ ⦃P⦄ (BaseTarget (SubscriptTarget bt e)) ⇓ᵗ (BaseTargetV loc (k::sbs)) ⦃Q⦄
+Proof
+  rw[target_spec_def, expr_spec_def] >>
+  simp[Once evaluate_def, bind_def, return_def] >>
+  simp[Once evaluate_def, bind_def] >>
+  qpat_x_assum `!st. P st ==> _` (qspec_then `st` mp_tac) >>
+  simp[] >>
+  simp[Once evaluate_def, bind_def, return_def] >>
+  Cases_on `eval_base_target cx bt st` >>
+  Cases_on `q` >> simp[return_def] >>
+  Cases_on `x` >> simp[return_def] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `!st. P' st ==> _` (qspec_then `r` mp_tac) >>
+  simp[] >> simp[bind_def] >>
+  Cases_on `eval_expr cx e r` >> simp[] >>
+  Cases_on `q` >> simp[] >> simp[return_def, lift_option_def]
+QED
+
 Theorem stmts_spec_consequence:
   !P P' Q Q' R R' cx ss.
     (!st. P' st ==> P st) /\
@@ -276,13 +374,13 @@ Proof
 QED
 
 Theorem stmts_spec_nil:
-  !P Q_ret cx. ⟦cx⟧ ⦃P⦄ [] ⦃P ∥ Q_ret⦄
+  ∀P Q_ret cx. ⟦cx⟧ ⦃P⦄ [] ⦃P ∥ Q_ret⦄
 Proof
   rw[stmts_spec_def] >> simp[Once evaluate_def, return_def]
 QED
 
 Theorem stmts_spec_pass:
-  ∀P cx. ⟦cx⟧ ⦃P⦄ [Pass] ⦃P ∥ False⦄
+  ∀P Q_ret cx. ⟦cx⟧ ⦃P⦄ [Pass] ⦃P ∥ Q_ret⦄
 Proof
   rw[stmts_spec_def] >>
   simp[Once evaluate_def, return_def] >>
@@ -293,7 +391,7 @@ QED
 Theorem stmts_spec_if:
   ∀P P' Q R1 R2 cx e ss1 ss2 v1.
     (v1 = BoolV T ∨ v1 = BoolV F) ∧
-    (⟦cx⟧ ⦃P⦄ e ⇓ v1 ⦃P'⦄) ∧
+    (⟦cx⟧ ⦃P⦄ e ⇓ Value v1 ⦃P'⦄) ∧
     (⟦cx⟧ ⦃λst. P' (st with scopes := TL st.scopes) ∧ v1 = BoolV T⦄ ss1
           ⦃λst. Q (st with scopes := TL st.scopes) ∥
             λv st. R1 v (st with scopes := TL st.scopes)⦄) ∧
@@ -362,7 +460,7 @@ QED
 Theorem stmts_spec_assign:
   ∀P P' Q cx tgt av e v.
      (⟦cx⟧ ⦃P⦄ tgt ⇓ᵗ av ⦃P'⦄) ⇒
-     (⟦cx⟧ ⦃P'⦄ e ⇓ v ⦃λst. assign_target_spec cx st av (Replace v) Q⦄) ⇒
+     (⟦cx⟧ ⦃P'⦄ e ⇓ Value v ⦃λst. assign_target_spec cx st av (Replace v) Q⦄) ⇒
      ⟦cx⟧ ⦃P⦄ [Assign tgt e] ⦃Q ∥ λ_ _. F⦄
 Proof
   rw[stmts_spec_def, target_spec_def, expr_spec_def, assign_target_spec_def]
@@ -385,7 +483,7 @@ QED
 
 Theorem stmts_spec_assign_name:
   ∀P Q cx n av e v.
-    (⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ e ⇓ v ⦃λst. assign_target_spec cx st av (Replace v) Q⦄) ⇒
+    (⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ e ⇓ Value v ⦃λst. assign_target_spec cx st av (Replace v) Q⦄) ⇒
     ⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ [Assign (BaseTarget (NameTarget n)) e] ⦃Q ∥ λ_ _. F⦄
 Proof
   rpt strip_tac >>
@@ -404,7 +502,7 @@ QED
 
 Theorem stmts_spec_ann_assign:
   ∀P Q cx n ty e v.
-     (⟦cx⟧ ⦃P⦄ e ⇓ v ⦃λst. st.scopes ≠ [] ∧
+     (⟦cx⟧ ⦃P⦄ e ⇓ Value v ⦃λst. st.scopes ≠ [] ∧
                           lookup_scopes (string_to_num n) st.scopes = NONE ∧
                           Q (st with scopes := (HD st.scopes |+ (string_to_num n, v)) :: TL st.scopes)⦄) ⇒
      ⟦cx⟧ ⦃P⦄ [AnnAssign n ty e] ⦃Q ∥ λ_ _. F⦄
@@ -425,7 +523,7 @@ QED
 Theorem stmts_spec_aug_assign:
   ∀P P' Q cx (tgt:base_assignment_target) av bop e v.
      (⟦cx⟧ ⦃P⦄ (BaseTarget tgt) ⇓ᵗ av ⦃P'⦄) ∧
-     (⟦cx⟧ ⦃P'⦄ e ⇓ v ⦃λst. assign_target_spec cx st av (Update bop v) Q⦄) ⇒
+     (⟦cx⟧ ⦃P'⦄ e ⇓ Value v ⦃λst. assign_target_spec cx st av (Update bop v) Q⦄) ⇒
      ⟦cx⟧ ⦃P⦄ [AugAssign tgt bop e] ⦃Q ∥ λ_ _. F⦄
 Proof
   rw[stmts_spec_def, target_spec_def, expr_spec_def, assign_target_spec_def] >>
@@ -488,7 +586,7 @@ QED
 
 Theorem stmts_spec_return_some:
   ∀P Q cx e v.
-     (⟦cx⟧ ⦃P⦄ e ⇓ v ⦃Q v⦄) ⇒
+     (⟦cx⟧ ⦃P⦄ e ⇓ Value v ⦃Q v⦄) ⇒
      ⟦cx⟧ ⦃P⦄ [Return (SOME e)] ⦃λ_. F ∥ Q⦄
 Proof
   rw[stmts_spec_def, expr_spec_def] >>
@@ -501,7 +599,7 @@ QED
 
 Theorem stmts_spec_assert_true:
   ∀P Q cx e se.
-    (⟦cx⟧ ⦃P⦄ e ⇓ BoolV T ⦃Q⦄) ⇒
+    (⟦cx⟧ ⦃P⦄ e ⇓ Value (BoolV T) ⦃Q⦄) ⇒
     ⟦cx⟧ ⦃P⦄ [Assert e se] ⦃Q ∥ λ_ _. F⦄
 Proof
   rw[stmts_spec_def, expr_spec_def] >>
@@ -512,133 +610,4 @@ Proof
   Cases_on `q` >> gvs[] >>
   strip_tac >> gvs[switch_BoolV_def, return_def] >>
   simp[Once evaluate_def, return_def]
-QED
-
-Theorem expr_spec_builtin_bop:
-  ∀P P' Q cx e1 e2 v1 v2 bop v_result.
-    (⟦cx⟧ ⦃P⦄ e1 ⇓ v1 ⦃P'⦄) ∧
-    (⟦cx⟧ ⦃P'⦄ e2 ⇓ v2 ⦃λst. evaluate_binop bop v1 v2 = INL v_result ∧ Q st⦄) ⇒
-    ⟦cx⟧ ⦃P⦄ (Builtin (Bop bop) [e1; e2]) ⇓ v_result ⦃Q⦄
-Proof
-  rw[expr_spec_def] >>
-  simp[Once evaluate_def, bind_def, check_def, assert_def,
-       builtin_args_length_ok_def] >>
-  simp[assert_def, ignore_bind_def, bind_def, Once evaluate_def] >>
-  qpat_x_assum `!st. P st ==> _` (qspec_then `st` mp_tac) >> simp[] >>
-  Cases_on `eval_expr cx e1 st` >> Cases_on `q` >> simp[] >>
-  simp[return_def, bind_def, Once evaluate_def] >>
-  strip_tac >> gvs[] >>
-  qpat_x_assum `!st. P' st ==> _` (qspec_then `r` mp_tac) >> simp[] >>
-  Cases_on `eval_expr cx e2 r` >> Cases_on `q` >> simp[] >>
-  simp[return_def, Once evaluate_def, get_accounts_def,
-       lift_sum_def, evaluate_builtin_def]
-QED
-
-(* TODO: This should be the main definition used in all rules for
-evaluating expressions. expr_spec is just a special case which I
-started with to keep things simpler, but later discovered I need the
-general definition for ERC20 transfer *)
-Definition expr_tv_spec_def:
-  expr_tv_spec cx (P : evaluation_state -> bool) (e : expr) (tv : toplevel_value) (Q : evaluation_state -> bool) <=>
-    !st. P st ==>
-      case eval_expr cx e st of
-      | (INL tv', st') => if tv' = tv then Q st' else F
-      | (INR _, st') => F
-End
-
-Theorem expr_spec_is_expr_tv_spec:
-  ∀cx P e v Q. (⟦cx⟧ ⦃P⦄ e ⇓ v ⦃Q⦄) = expr_tv_spec cx P e (Value v) Q
-Proof
-  rw[expr_spec_def, expr_tv_spec_def]
-QED
-
-Theorem expr_tv_spec_consequence:
-  ∀P P' Q Q' cx e tv.
-    (∀st. P' st ⇒ P st) ∧
-    (∀st. Q st ⇒ Q' st) ∧
-    expr_tv_spec cx P e tv Q ⇒
-    expr_tv_spec cx P' e tv Q'
-Proof
-  rw[expr_tv_spec_def] >>
-  first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
-  Cases_on `eval_expr cx e st` >>
-  Cases_on `q` >> gvs[]
-QED
-
-Theorem expr_spec_builtin_env_sender:
-  ∀P cx. ⟦cx⟧ ⦃P⦄ (Builtin (Env Sender) []) ⇓ AddressV cx.txn.sender ⦃P⦄
-Proof
-  rw[expr_spec_def, evaluate_def, return_def] >>
-  simp[check_def, assert_def, builtin_args_length_ok_def, bind_def,
-       return_def, get_accounts_def] >>
-  simp[assert_def, ignore_bind_def, bind_def, return_def,
-       get_accounts_def] >>
-  simp[lift_sum_def, evaluate_builtin_def, return_def]
-QED
-
-Theorem expr_tv_spec_toplevelname:
-  ∀P cx src_id_opt id gbs mg tv.
-    expr_tv_spec cx
-      (λst. P st ∧
-            ALOOKUP st.globals cx.txn.target = SOME gbs ∧
-            get_module_globals src_id_opt gbs = mg ∧
-            FLOOKUP mg.mutables (string_to_num id) = SOME tv)
-      (TopLevelName (src_id_opt, id))
-      tv
-      P
-Proof
-  rw[expr_tv_spec_def] >>
-  simp[Once evaluate_def] >>
-  simp[lookup_global_def, bind_def, get_current_globals_def, return_def, lift_option_def]
-QED
-
-Theorem expr_tv_spec_subscript:
-  ∀P P' Q cx e1 e2 tv1 v2 ts tv_result.
-    expr_tv_spec cx P e1 tv1 P' ∧
-    expr_tv_spec cx P' e2 (Value v2)
-      (λst. ALOOKUP cx.sources cx.txn.target = SOME [(NONE, ts)] ∧
-            evaluate_subscript (type_env ts) tv1 v2 = INL tv_result ∧ Q st) ⇒
-    expr_tv_spec cx P (Subscript e1 e2) tv_result Q
-Proof
-  rw[expr_tv_spec_def] >>
-  simp[Once evaluate_def, bind_def] >>
-  qpat_x_assum `!st. P st ==> _` (qspec_then `st` mp_tac) >> simp[] >>
-  Cases_on `eval_expr cx e1 st` >> Cases_on `q` >> simp[] >>
-  strip_tac >> gvs[] >>
-  qpat_x_assum `!st. P' st ==> _` (qspec_then `r` mp_tac) >> simp[] >>
-  Cases_on `eval_expr cx e2 r` >> Cases_on `q` >> simp[] >>
-  simp[return_def, lift_option_def, get_self_code_def, lift_sum_def] >>
-  simp[get_module_code_def, return_def, raise_def]
-QED
-
-Theorem target_spec_toplevelname_target:
-  ∀P cx src_id_opt id.
-    ⟦cx⟧ ⦃P⦄ (BaseTarget (TopLevelNameTarget (src_id_opt, id))) ⇓ᵗ
-         (BaseTargetV (TopLevelVar src_id_opt id) []) ⦃P⦄
-Proof
-  rw[target_spec_def] >>
-  simp[Once evaluate_def, bind_def, return_def] >>
-  simp[Once evaluate_def, return_def]
-QED
-
-Theorem target_spec_subscript_target:
-  ∀P P' Q cx bt e loc sbs v k.
-    (⟦cx⟧ ⦃P⦄ (BaseTarget bt) ⇓ᵗ (BaseTargetV loc sbs) ⦃P'⦄) ∧
-    (⟦cx⟧ ⦃P'⦄ e ⇓ v ⦃λst. value_to_key v = SOME k ∧ Q st⦄) ⇒
-    ⟦cx⟧ ⦃P⦄ (BaseTarget (SubscriptTarget bt e)) ⇓ᵗ (BaseTargetV loc (k::sbs)) ⦃Q⦄
-Proof
-  rw[target_spec_def, expr_spec_def] >>
-  simp[Once evaluate_def, bind_def, return_def] >>
-  simp[Once evaluate_def, bind_def] >>
-  qpat_x_assum `!st. P st ==> _` (qspec_then `st` mp_tac) >>
-  simp[] >>
-  simp[Once evaluate_def, bind_def, return_def] >>
-  Cases_on `eval_base_target cx bt st` >>
-  Cases_on `q` >> simp[return_def] >>
-  Cases_on `x` >> simp[return_def] >>
-  strip_tac >> gvs[] >>
-  qpat_x_assum `!st. P' st ==> _` (qspec_then `r` mp_tac) >>
-  simp[] >> simp[bind_def] >>
-  Cases_on `eval_expr cx e r` >> simp[] >>
-  Cases_on `q` >> simp[] >> simp[return_def, lift_option_def]
 QED
