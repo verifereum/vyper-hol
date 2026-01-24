@@ -32,8 +32,8 @@ Definition vyper_to_abi_type_def[simp]:
   vyper_to_abi_types [] = [] ∧
   vyper_to_abi_types (t::ts) = vyper_to_abi_type t :: vyper_to_abi_types ts
 Termination
-  WF_REL_TAC `measure (λx. case x of INL t => type_size t
-                                   | INR ts => list_size type_size ts)`
+  WF_REL_TAC ‘measure (λx. case x of INL t => type_size t
+                                   | INR ts => list_size type_size ts)’
 End
 
 val () = cv_auto_trans vyper_base_to_abi_type_def;
@@ -97,8 +97,8 @@ Definition abi_to_vyper_def[simp]:
          SOME (v::vs)) ∧
   abi_to_vyper_list _ _ _ = NONE
 Termination
-  WF_REL_TAC `measure (λx. case x of INL (_, _, v) => abi_value_size v
-                                   | INR (_, _, vs) => list_size abi_value_size vs)`
+  WF_REL_TAC ‘measure (λx. case x of INL (_, _, v) => abi_value_size v
+                                   | INR (_, _, vs) => list_size abi_value_size vs)’
 End
 
 val abi_to_vyper_pre_def =

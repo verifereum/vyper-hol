@@ -2,10 +2,9 @@ Theory vyperInterpreter
 Ancestors
   arithmetic alist combin list finite_map pair rich_list
   cv cv_std vfmState vfmExecution[ignore_grammar] vyperAST vyperABI
-  vyperMisc
+  vyperMisc vyperTypeValue
 Libs
   cv_transLib wordsLib monadsyntax
-  vyperTypeValueTheory vyperABITheory
   integerTheory[qualified] intSimps[qualified]
 
 (* cv_rep theorem for FUNION on num-keyed fmaps *)
