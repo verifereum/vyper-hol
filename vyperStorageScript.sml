@@ -161,21 +161,21 @@ End
 
 (* ===== Termination helper lemmas for encode_value ===== *)
 
-Theorem struct_fields_size_lt:
+Theorem struct_fields_size_lt[local]:
   ∀fields. list_size (pair_size (λx. 0) value_size) fields <
            list_size (pair_size (list_size char_size) value_size) fields + 1
 Proof
   Induct >> rw[] >> Cases_on ‘h’ >> rw[]
 QED
 
-Theorem list_size_pair_0_le:
+Theorem list_size_pair_0_le[local]:
   ∀sparse. list_size (pair_size (λx:num. 0) value_size) sparse ≤
            list_size (pair_size (λx. x) value_size) sparse
 Proof
   Induct >> rw[] >> Cases_on ‘h’ >> rw[]
 QED
 
-Theorem sparse_size_lt:
+Theorem sparse_size_lt[local]:
   ∀sparse n tv. list_size (pair_size (λx. 0) value_size) sparse <
     n + (type_value_size tv + (list_size (pair_size (λx. x) value_size) sparse + 2))
 Proof
@@ -273,7 +273,7 @@ End
 
 (* ===== Termination helper lemmas for decode_value ===== *)
 
-Theorem type_value1_size_le:
+Theorem type_value1_size_le[local]:
   ∀ftypes. type_value1_size ftypes ≤
     list_size (pair_size (list_size char_size) type_value_size) ftypes
 Proof
