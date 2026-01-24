@@ -100,8 +100,14 @@ Proof
   \\ rw[Once abi_to_vyper_pre_def]
 QED
 
-(* Convert default value for a type directly to ABI encoding.
-   This avoids creating an intermediate Vyper value. *)
+(* Helper for termination: convert default value directly to ABI encoding.
+   This exists only to simplify the termination argument for vyper_to_abi_sparse,
+   which needs to fill in defaults for missing indices in sparse static arrays.
+   Using default_value would create intermediate Vyper values that complicate
+   the termination measure.
+
+   The theorem vyper_to_abi_default_value proves this is equivalent to
+   vyper_to_abi on default_value, so this is not a separate concept. *)
 Definition default_to_abi_def:
   default_to_abi (BaseTV (UintT _)) = NumV 0 ∧
   default_to_abi (BaseTV (IntT _)) = contractABI$IntV 0 ∧
@@ -557,6 +563,70 @@ Proof
   \\ rw[EL_MAP, EL_ZIP]
   \\ gvs[EVERY_MEM, MEM_ZIP, MEM_MAP, PULL_EXISTS, IS_SOME_EXISTS]
   \\ res_tac \\ gvs[]
+QED
+
+(* ===== Encoding default values ===== *)
+
+(* Helper: sparse encoding with empty sparse list fills all slots with defaults.
+   Simple induction on n. *)
+Theorem vyper_to_abi_sparse_empty:
+  ∀n env t tv. vyper_to_abi_sparse env t tv n [] = SOME (REPLICATE n (default_to_abi tv))
+Proof
+  Induct \\ rw[vyper_to_abi_def]
+  \\ rw[LIST_EQ_REWRITE, EL_APPEND_EQN]
+  \\ rw[EL_REPLICATE]
+  \\ Cases_on `x` \\ gvs[EL_REPLICATE]
+  \\ rw[iffRL SUB_EQ_0]
+QED
+
+(* Main theorem: encoding default_value gives the same result as default_to_abi.
+   This justifies that default_to_abi is not a separate concept - it's just
+   a shortcut that avoids creating intermediate Vyper values. *)
+Theorem vyper_to_abi_default_value:
+  (∀env t tv. evaluate_type env t = SOME tv ⇒
+              vyper_to_abi env t (default_value tv) = SOME (default_to_abi tv)) ∧
+  (∀env ts acc tvs. evaluate_types env ts acc = SOME tvs ⇒
+    vyper_to_abi_list env ts (MAP default_value (DROP (LENGTH acc) tvs)) =
+      SOME (MAP default_to_abi (DROP (LENGTH acc) tvs)))
+Proof
+  ho_match_mp_tac evaluate_type_ind
+  (* BaseT bt: direct computation, AddressT needs word_of_bytes_word_to_bytes *)
+  \\ conj_tac >- (
+    Cases_on `bt` \\
+    rw[evaluate_type_def, vyper_to_abi_def,
+       default_value_def, default_to_abi_def] \\
+    TRY (rename1`BytesT bd` \\ Cases_on `bd`) \\
+    rw[evaluate_type_def, vyper_to_abi_def,
+       default_value_def, default_to_abi_def] \\
+    DEP_REWRITE_TAC[word_of_bytes_word_to_bytes] \\
+    rw[divides_def] )
+  (* TupleT ts: use IH on list, default_value_tuple_MAP *)
+  \\ conj_tac >- (
+    rw[evaluate_type_def, vyper_to_abi_def, CaseEq"option"] \\ gvs[]
+    \\ gvs[vyper_to_abi_def, default_value_def, default_to_abi_def]
+    \\ rw[default_value_tuple_MAP, vyper_to_abi_def, ETA_AX] )
+  (* ArrayT t bd: Dynamic is trivial, Fixed uses vyper_to_abi_sparse_empty *)
+  \\ conj_tac >- (
+    Cases_on `bd` \\ rw[evaluate_type_def, CaseEq"option"]
+    \\ gvs[default_to_abi_def, default_value_def]
+    \\ rw[vyper_to_abi_sparse_empty] )
+  (* StructT id: use IH on field types, default_value_struct_MAP *)
+  \\ conj_tac >- (
+    rw[evaluate_type_def, CaseEq"type_args", CaseEq"option"]
+    \\ gvs[default_value_def, default_to_abi_def, default_value_struct_MAP]
+    \\ gvs[evaluate_types_OPT_MMAP, OPT_MMAP_SOME_IFF]
+    \\ gvs[MAP_ZIP, ZIP_MAP, MAP_MAP_o, o_DEF] )
+  (* FlagT id: direct computation *)
+  \\ conj_tac >- (
+    rw[evaluate_type_def, CaseEq"option", CaseEq"type_args"]
+    \\ gvs[default_value_def, default_to_abi_def] )
+  (* NoneT: direct computation *)
+  (* evaluate_types [] acc: trivial *)
+  (* evaluate_types (t::ts) acc: list induction using single-type IH *)
+  \\ rw[evaluate_type_def, CaseEq"option"]
+  \\ gvs[default_value_def, default_to_abi_def, DROP_LENGTH_TOO_LONG]
+  \\ gvs[evaluate_types_OPT_MMAP, OPT_MMAP_SOME_IFF, DROP_APPEND, iffRL SUB_EQ_0]
+  \\ gvs[DROP_LENGTH_TOO_LONG]
 QED
 
 (* ===== Main Roundtrip Theorem: abi_to_vyper then vyper_to_abi ===== *)
