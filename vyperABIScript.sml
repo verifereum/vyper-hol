@@ -261,15 +261,6 @@ Proof
   \\ CASE_TAC \\ gvs[]
 QED
 
-(* String encoding roundtrip: CHR o w2n o n2w o ORD = id *)
-Theorem string_encode_decode_roundtrip:
-  ∀s. MAP (CHR o w2n) (MAP ((n2w:num->word8) o ORD) s) = s
-Proof
-  Induct \\ simp[]
-  \\ rw[] \\ `ORD h < 256` by simp[ORD_BOUND]
-  \\ simp[CHR_ORD]
-QED
-
 (* Bytes encoding roundtrip: n2w o ORD o CHR o w2n = id for word8 *)
 Theorem bytes_encode_decode_roundtrip:
   ∀bs:word8 list. MAP ((n2w:num->word8) o ORD o CHR o w2n) bs = bs
@@ -296,71 +287,6 @@ Proof
   Induct \\ rw[evaluate_type_def]
   \\ CASE_TAC \\ gvs[]
   \\ Cases_on `OPT_MMAP (evaluate_type env) ts` \\ gvs[]
-QED
-
-(* Decoding default_to_abi always succeeds and gives default_value. *)
-Theorem abi_to_vyper_default_to_abi:
-  (∀env t tv. evaluate_type env t = SOME tv ⇒
-              abi_to_vyper env t (default_to_abi tv) = SOME (default_value tv)) ∧
-  (∀env ts acc tvs. evaluate_types env ts acc = SOME tvs ⇒
-    LENGTH tvs = LENGTH ts + LENGTH acc ∧
-    abi_to_vyper_list env ts (MAP default_to_abi (DROP (LENGTH acc) tvs)) =
-      SOME (MAP default_value (DROP (LENGTH acc) tvs)))
-Proof
-  ho_match_mp_tac evaluate_type_ind
-  (* Case 1: BaseT bt *)
-  \\ conj_tac >- (
-    Cases_on `bt` \\
-    rw[evaluate_type_def, abi_to_vyper_def, default_value_def] \\
-    gvs[default_to_abi_def, default_value_def, check_IntV_def] \\
-    TRY(Cases_on `b`) \\ gvs[default_to_abi_def, default_value_def] \\
-    EVAL_TAC \\ rw[] )
-  (* Case 2: TupleT ts *)
-  \\ conj_tac >- (
-    rw[evaluate_type_def, CaseEq"option"]
-    \\ first_x_assum drule
-    \\ gvs[abi_to_vyper_def, default_to_abi_def, CaseEq"option", ETA_AX]
-    \\ rw[default_value_def, default_value_tuple_MAP] )
- (* Case 3: ArrayT t bd *)
-  \\ conj_tac >- (
-    Cases_on `bd` \\ rw[evaluate_type_def, CaseEq"option"]
-    \\ first_x_assum drule
-    \\ gvs[abi_to_vyper_def, default_to_abi_def, CaseEq"option",
-           default_value_def, make_array_value_def]
-    \\ rw[]
-    \\ TRY(rename1`compatible_bound` \\ EVAL_TAC)
-    \\ gvs[abi_to_vyper_list_OPT_MMAP]
-    \\ simp[OPT_MMAP_SOME_IFF]
-    \\ simp[EVERY_MAP, ZIP_REPLICATE]
-    \\ qspec_tac(`0`,`m`)
-    \\ Induct_on `n` \\ rw[enumerate_static_array_def]
-    \\ gvs[CaseEq"option"]
-    \\ rw[enumerate_static_array_def] )
-  (* Case 4: StructT id *)
-  \\ conj_tac >- (
-    rw[evaluate_type_def, CaseEq"option", CaseEq"type_args"]
-    \\ first_x_assum drule
-    \\ gvs[abi_to_vyper_def, default_to_abi_def, CaseEq"option", ETA_AX]
-    \\ rw[default_value_def, default_value_struct_MAP]
-    \\ rw[MAP_ZIP]
-    \\ gvs[ZIP_MAP]
-    \\ gvs[MAP_MAP_o,o_DEF] )
-  (* Case 5: FlagT id *)
-  \\ conj_tac >- (
-    rw[evaluate_type_def, CaseEq"option", CaseEq"type_args"]
-    \\ gvs[default_to_abi_def, default_value_def] )
-  (* Case 6: NoneT *)
-  \\ conj_tac >- (
-    rw[evaluate_type_def, default_value_def]
-    \\ gvs[default_to_abi_def] )
-  (* Case 7: evaluate_types [] acc *)
-  \\ conj_tac >- (
-    rw[evaluate_type_def]
-    \\ gvs[DROP_LENGTH_TOO_LONG] )
-  (* Case 8: evaluate_types (t::ts) acc *)
-  \\ rw[evaluate_type_def, CaseEq"option"]
-  \\ gvs[evaluate_types_OPT_MMAP]
-  \\ gvs[DROP_APPEND, DROP_LENGTH_TOO_LONG, iffRL SUB_EQ_0]
 QED
 
 (* ===== Helper Lemmas for Roundtrip Theorems ===== *)
@@ -414,12 +340,6 @@ Proof
   \\ Induct_on `vs` \\ rw[]
 QED
 
-Theorem enumerate_static_array_never_default:
-  !vs n. EVERY ((<>) d) (MAP SND (enumerate_static_array d n vs))
-Proof
-  Induct \\ rw[enumerate_static_array_def]
-QED
-
 Theorem MEM_enumerate_static_array_iff:
   ∀vs n.
   MEM (i,v) (enumerate_static_array d n vs) ⇔
@@ -453,25 +373,6 @@ Proof
   >- rw[ALOOKUP_FAILS, MEM_enumerate_static_array_iff]
   \\ irule ALOOKUP_ALL_DISTINCT_MEM
   \\ rw[MEM_enumerate_static_array_iff]
-QED
-
-(* Helper for list case of default value inverse *)
-Theorem abi_to_vyper_list_default_value_inv:
-  ∀ts tvs avs env.
-    (∀t tv av. MEM t ts ⇒ evaluate_type env t = SOME tv ⇒
-               abi_to_vyper env t av = SOME (default_value tv) ⇒
-               av = default_to_abi tv) ⇒
-    OPT_MMAP (evaluate_type env) ts = SOME tvs ⇒
-    abi_to_vyper_list env ts avs = SOME (MAP default_value tvs) ⇒
-    avs = MAP default_to_abi tvs
-Proof
-  Induct
-  >- (gvs[] \\ Cases \\ gvs[])
-  \\ rw[]
-  \\ Cases_on `avs` \\ gvs[CaseEq"option"]
-  \\ first_x_assum irule
-  \\ goal_assum $ drule_at Any
-  \\ rw[] \\ metis_tac[]
 QED
 
 (* Helper 4: Default value inverse - if decoding gives default, input was default encoding *)
