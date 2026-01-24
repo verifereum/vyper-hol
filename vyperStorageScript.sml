@@ -6,7 +6,7 @@
 
 Theory vyperStorage
 Ancestors
-  vyperInterpreter vfmState vfmTypes
+  vyperInterpreter vfmState vfmTypes vfmConstants
 Libs
   cv_transLib
 
@@ -67,12 +67,14 @@ Definition base_type_slot_size_def:
   base_type_slot_size BoolT = 1 /\
   base_type_slot_size AddressT = 1 /\
   base_type_slot_size (BytesT (Fixed _)) = 1 /\
-  base_type_slot_size (BytesT (Dynamic n)) = 1 + (n + 31) DIV 32 /\
-  base_type_slot_size (StringT n) = 1 + (n + 31) DIV 32
+  base_type_slot_size (BytesT (Dynamic n)) = 1 + word_size n /\
+  base_type_slot_size (StringT n) = 1 + word_size n
 End
 
 Definition type_slot_size_def:
-  type_slot_size (BaseTV bt) = base_type_slot_size bt /\
+  type_slot_size (BaseTV (BytesT (Dynamic n))) = 1 + word_size n /\
+  type_slot_size (BaseTV (StringT n)) = 1 + word_size n /\
+  type_slot_size (BaseTV _) = 1 /\
   type_slot_size (FlagTV _) = 1 /\
   type_slot_size NoneTV = 0 /\
   type_slot_size (TupleTV tvs) = SUM (MAP type_slot_size tvs) /\
@@ -120,20 +122,20 @@ Definition decode_base_from_slot_def:
   decode_base_from_slot slot _ = NoneV
 End
 
-(* ===== Dynamic Bytes/String ===== *)
+(* ===== Dynamic Bytes/String Encoding ===== *)
 
-Definition encode_dyn_bytes_def:
-  encode_dyn_bytes max bs =
+Definition encode_dyn_bytes_slots_def:
+  encode_dyn_bytes_slots max bs =
     if LENGTH bs ≤ max then
-      SOME ((0, n2w (LENGTH bs)) :: MAPi (λi s. (i + 1, s)) (bytes_to_slots bs))
+      SOME ((0:num, n2w (LENGTH bs)) :: MAPi (λi s. (i + 1, s)) (bytes_to_slots bs))
     else NONE
 End
 
-Definition decode_dyn_bytes_def:
-  decode_dyn_bytes max (reader : num -> bytes32) =
+Definition decode_dyn_bytes_slots_def:
+  decode_dyn_bytes_slots max (reader : num -> bytes32) =
     let len = w2n (reader 0) in
     if len ≤ max then
-      let n_slots = (len + 31) DIV 32 in
+      let n_slots = word_size len in
       let slots = GENLIST (λi. reader (i + 1)) n_slots in
       SOME (slots_to_bytes len slots)
     else NONE
@@ -186,6 +188,13 @@ QED
 (* ===== Full Value Encoding ===== *)
 
 Definition encode_value_def:
+  (* Dynamic bytes - special multi-slot encoding *)
+  encode_value (BaseTV (BytesT (Dynamic max))) (BytesV (Dynamic m) bs) =
+    (if max = m then encode_dyn_bytes_slots max bs else NONE) /\
+  (* String - encode as bytes *)
+  encode_value (BaseTV (StringT max)) (StringV m s) =
+    (if max = m then encode_dyn_bytes_slots max (MAP (n2w o ORD) s) else NONE) /\
+  (* Other base types - single slot *)
   encode_value (BaseTV bt) v =
     (case encode_base_to_slot v (BaseTV bt) of
      | SOME slot => SOME [(0:num, slot)]
@@ -274,6 +283,17 @@ QED
 (* ===== Full Value Decoding ===== *)
 
 Definition decode_value_def:
+  (* Dynamic bytes - special multi-slot decoding *)
+  decode_value (BaseTV (BytesT (Dynamic max))) reader =
+    (case decode_dyn_bytes_slots max reader of
+     | SOME bs => SOME (BytesV (Dynamic max) bs)
+     | NONE => NONE) /\
+  (* String - decode as bytes then convert to chars *)
+  decode_value (BaseTV (StringT max)) reader =
+    (case decode_dyn_bytes_slots max reader of
+     | SOME bs => SOME (StringV max (MAP (CHR o w2n) bs))
+     | NONE => NONE) /\
+  (* Other base types - single slot *)
   decode_value (BaseTV bt) reader =
     SOME (decode_base_from_slot (reader 0) (BaseTV bt)) /\
   decode_value (FlagTV m) reader =
