@@ -324,23 +324,14 @@ fun has_unsupported_source_code (name, (err, j)) =
 
 (* ===== Test Selection ===== *)
 
-fun is_dir path = (OS.FileSys.isDir path) handle _ => false
+val test_exports_root = "vyper-test-exports"
+val generated_dir = "generated"
 
-fun pick_exports_root () = let
-  val candidates = [
-    "vyper-test-exports",                        (* from tests/ *)
-    OS.Path.concat("..", "vyper-test-exports"),  (* from tests/generated/ *)
-    OS.Path.concat("tests", "vyper-test-exports") (* from root *)
-  ]
-  fun pick [] = raise Fail "vyper-test-exports directory not found"
-    | pick (p::ps) = if is_dir p then p else pick ps
-in
-  pick candidates
-end
+val () = if OS.FileSys.isDir test_exports_root then ()
+         else raise Fail "vyper-test-exports not found - run from tests/ directory"
 
-val test_exports_root = pick_exports_root ()
-val tests_root_dir = OS.Path.dir (OS.FileSys.fullPath test_exports_root)
-val generated_dir = OS.Path.concat(tests_root_dir, "generated")
+val () = if OS.FileSys.isDir generated_dir then ()
+         else raise Fail "generated/ not found - run from tests/ directory"
 
 (* Directory-level allowlist plus small explicit allowlist. *)
 val allowed_test_prefixes = [
@@ -512,29 +503,17 @@ val traces_ty = mk_list_type trace_ty
 
 fun lexless a b = String.compare (a, b) = LESS
 
-fun file_has_supported_tests path = let
-  val (tests, _) = read_test_json path
-in
-  if List.null tests then (
-    TextIO.output(TextIO.stdErr,
-      String.concat ["no supported tests in ", path, "\n"]);
-    false)
-  else true
-end
-
 fun test_files () =
   list_json_files test_exports_root
   |> List.map strip_tests_prefix
   |> List.filter is_supported_test_file
-  |> List.filter file_has_supported_tests
   |> Lib.sort lexless
   |> List.map (fn path => (json_path_to_id path, path))
 
 fun cleanup_generated_scripts files = let
   val keep =
     List.map (fn (id, _) => String.concat ["vyperTestDefs_", id, "Script.sml"]) files @
-    List.map (fn (id, _) => String.concat ["vyperTest_", id, "Script.sml"]) files @
-    ["vyperTestGenScript.sml"]
+    List.map (fn (id, _) => String.concat ["vyperTest_", id, "Script.sml"]) files
   fun is_keep name = List.exists (fn k => k = name) keep
   fun is_gen name =
     (String.isPrefix "vyperTestDefs_" name orelse
@@ -600,9 +579,11 @@ fun generate_defn_scripts () = let
   val () = List.app (fn (id, jsonp) => let
     val thyname = String.concat["vyperTestDefs_", id]
     val fname = OS.Path.concat(gen_dir, String.concat[thyname, "Script.sml"])
+    (* Path is relative to tests/generated/, so prepend ../ to reach tests/vyper-test-exports *)
+    val jsonp_from_generated = OS.Path.concat("..", jsonp)
     val contents = String.concat [
       "Theory ", thyname, "[no_sig_docs]\nAncestors jsonToVyper\nLibs vyperTestLib\n",
-      "val () = make_definitions_for_file (\"", id, "\", \"", jsonp, "\");\n"]
+      "val () = make_definitions_for_file (\"", id, "\", \"", jsonp_from_generated, "\");\n"]
     val out = TextIO.openOut(fname)
     val () = TextIO.output(out, contents)
     val () = TextIO.closeOut out
