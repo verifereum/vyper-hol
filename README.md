@@ -16,6 +16,18 @@ The main function for executing Vyper statements is `eval_stmts` defined in `vyp
 
 The interpreter operates on abstract syntax (defined in `vyperAST`) and produces effects on an abstract machine state (`abstract_machine`, defined in `vyperInterpreter`) that represents the Ethereum virtual machine.
 
+## Repository Structure
+
+The repository is organised into the following directories:
+
+- **`syntax/`** - Vyper abstract syntax tree definitions (`vyperAST`)
+- **`frontend/`** - JSON import/parsing layer (`jsonAST`, `jsonToVyper`)
+- **`semantics/`** - Core Vyper semantics (`vyperInterpreter`, `vyperSmallStep`, `vyperABI`, `vyperStorage`, `vyperMisc`)
+- **`tests/`** - Test infrastructure and runner (`vyperTestRunner`, `vyperTestLib`)
+  - **`tests/generated/`** - Auto-generated test scripts from the Vyper test suite
+- **`venom/`** - Venom IR semantics and compiler pass proofs
+  - **`venom/passes/`** - Individual compiler passes (e.g., `phi_elimination`, `revert_to_assert`)
+
 We describe the main contents and notable features of each theory in the repository below.
 
 ### vyperAST
@@ -48,7 +60,7 @@ This theory defines conversions between Vyper types and the standard [Contract A
 
 ### vyperTestRunner
 
-This theory defines functions for re-running execution traces, as used in the Vyper test suite, using the Vyper-HOL definitional interpreter. The main entry-point is the `run_test` function. Machinery for decoding exported JSON test files and running them using the functions defined in `vyperTestRunner` is defined in the `vyperTestLib` library (and `vyperTestRunnerLib`). The library also includes functions for generating script files for running the tests; the generated files are visible in the `tests` subdirectory.
+This theory defines functions for re-running execution traces, as used in the Vyper test suite, using the Vyper-HOL definitional interpreter. The main entry-point is the `run_test` function. Machinery for decoding exported JSON test files and running them using the functions defined in `vyperTestRunner` is defined in the `vyperTestLib` library (and `vyperTestRunnerLib`). The library also includes functions for generating script files for running the tests; the generated files are visible in the `tests/generated` subdirectory.
 
 The decoding of JSON into our AST type is somewhat ad-hoc, in part because the JSON format is not fully specified. In future work, we might formalise more of the front-end or elaboration process, including parsing and type-checking, so that we can run source code directly. For now, we rely on an external front-end (e.g., as used in Vyper's test export process) and decode its output to construct terms in our formal syntax.
 

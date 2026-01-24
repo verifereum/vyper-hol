@@ -1,0 +1,2 @@
+# Generated test files
+INCLUDES = .. ../.. ../../semantics ../../frontend ../../syntax $(VFMDIR)/util $(VFMDIR)/spec

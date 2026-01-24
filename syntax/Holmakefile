@@ -1,0 +1,2 @@
+# Vyper AST definitions
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec

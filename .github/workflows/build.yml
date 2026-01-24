@@ -74,12 +74,12 @@ jobs:
           key: ${{ needs.export-vyper-tests.outputs.export-cache-key }}
           fail-on-cache-miss: true
       - name: Run test group ${{ matrix.group }}
-        working-directory: tests
+        working-directory: tests/generated
         run: |
-          tests=$(find . -maxdepth 1 -type f -name 'vyperTest*Script.sml' -printf '%f\n' | sort -V)
+          tests=$(find . -maxdepth 1 -type f -name 'vyperTest_*Script.sml' -printf '%f\n' | sort -V)
           total=$(printf "%s\n" "$tests" | sed '/^$/d' | wc -l)
           if [ "$total" -eq 0 ]; then
-            echo "No vyperTest* scripts found in tests/."
+            echo "No vyperTest_* scripts found in tests/generated/."
             exit 1
           fi
           splits=10

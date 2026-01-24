@@ -2,5 +2,6 @@
 Theory vyperHol
 Ancestors
   vyperTestRunner
+  jsonToVyper
   phiFunction
   rtaPassCorrectness

@@ -328,8 +328,9 @@ fun is_dir path = (OS.FileSys.isDir path) handle _ => false
 
 fun pick_exports_root () = let
   val candidates = [
-    OS.Path.concat("tests", "vyper-test-exports"),
-    "vyper-test-exports"
+    "vyper-test-exports",                        (* from tests/ *)
+    OS.Path.concat("..", "vyper-test-exports"),  (* from tests/generated/ *)
+    OS.Path.concat("tests", "vyper-test-exports") (* from root *)
   ]
   fun pick [] = raise Fail "vyper-test-exports directory not found"
     | pick (p::ps) = if is_dir p then p else pick ps
@@ -339,6 +340,7 @@ end
 
 val test_exports_root = pick_exports_root ()
 val tests_root_dir = OS.Path.dir (OS.FileSys.fullPath test_exports_root)
+val generated_dir = OS.Path.concat(tests_root_dir, "generated")
 
 (* Directory-level allowlist plus small explicit allowlist. *)
 val allowed_test_prefixes = [
@@ -538,21 +540,21 @@ fun cleanup_generated_scripts files = let
     (String.isPrefix "vyperTestDefs_" name orelse
      String.isPrefix "vyperTest_" name) andalso
     String.isSuffix "Script.sml" name
-  val tests_dir = tests_root_dir
+  val gen_dir = generated_dir
   fun loop d =
     case OS.FileSys.readDir d of
       NONE => ()
     | SOME entry =>
         if entry = "." orelse entry = ".." then loop d
         else let
-          val path = OS.Path.concat(tests_dir, entry)
+          val path = OS.Path.concat(gen_dir, entry)
         in
           if is_gen entry andalso not (is_keep entry) then
             (OS.FileSys.remove path handle _ => ())
           else ();
           loop d
         end
-  val d = OS.FileSys.openDir tests_dir
+  val d = OS.FileSys.openDir gen_dir
   val () = loop d
   val () = OS.FileSys.closeDir d
 in
@@ -593,11 +595,11 @@ end
 
 fun generate_defn_scripts () = let
   val files = test_files ()
-  val tests_dir = tests_root_dir
+  val gen_dir = generated_dir
   val () = cleanup_generated_scripts files
   val () = List.app (fn (id, jsonp) => let
     val thyname = String.concat["vyperTestDefs_", id]
-    val fname = OS.Path.concat(tests_dir, String.concat[thyname, "Script.sml"])
+    val fname = OS.Path.concat(gen_dir, String.concat[thyname, "Script.sml"])
     val contents = String.concat [
       "Theory ", thyname, "[no_sig_docs]\nAncestors jsonToVyper\nLibs vyperTestLib\n",
       "val () = make_definitions_for_file (\"", id, "\", \"", jsonp, "\");\n"]
@@ -611,12 +613,12 @@ end
 
 fun generate_test_scripts () = let
   val files = test_files ()
-  val tests_dir = tests_root_dir
+  val gen_dir = generated_dir
   val () = cleanup_generated_scripts files
   val () = List.app (fn (id, _) => let
     val thyname = String.concat["vyperTest_", id]
     val defsname = String.concat["vyperTestDefs_", id]
-    val fname = OS.Path.concat(tests_dir, String.concat[thyname, "Script.sml"])
+    val fname = OS.Path.concat(gen_dir, String.concat[thyname, "Script.sml"])
     val contents = String.concat [
       "Theory ", thyname, "[no_sig_docs]\nAncestors ", defsname,
       "\nLibs vyperTestRunnerLib\nval () = List.app ",
