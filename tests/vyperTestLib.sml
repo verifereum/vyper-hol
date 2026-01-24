@@ -327,11 +327,12 @@ fun has_unsupported_source_code (name, (err, j)) =
 val test_exports_root = "vyper-test-exports"
 val generated_dir = "generated"
 
-val () = if OS.FileSys.isDir test_exports_root then ()
-         else raise Fail "vyper-test-exports not found - run from tests/ directory"
-
-val () = if OS.FileSys.isDir generated_dir then ()
-         else raise Fail "generated/ not found - run from tests/ directory"
+fun check_generate_dirs () = (
+  if OS.FileSys.isDir test_exports_root then ()
+  else raise Fail "vyper-test-exports not found - run from tests/ directory";
+  if OS.FileSys.isDir generated_dir then ()
+  else raise Fail "generated/ not found - run from tests/ directory"
+)
 
 (* Directory-level allowlist plus small explicit allowlist. *)
 val allowed_test_prefixes = [
@@ -573,6 +574,7 @@ in
 end
 
 fun generate_defn_scripts () = let
+  val () = check_generate_dirs ()
   val files = test_files ()
   val gen_dir = generated_dir
   val () = cleanup_generated_scripts files
@@ -593,6 +595,7 @@ in
 end
 
 fun generate_test_scripts () = let
+  val () = check_generate_dirs ()
   val files = test_files ()
   val gen_dir = generated_dir
   val () = cleanup_generated_scripts files
