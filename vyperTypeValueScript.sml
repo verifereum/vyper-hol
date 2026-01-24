@@ -21,11 +21,16 @@ Datatype:
 End
 
 Datatype:
-  type_args = StructArgs (argument list) | FlagArgs num
+  type_args
+  = StructArgs (argument list)
+  | FlagArgs num
+  | InterfaceArgs (interface_func list)
 End
 
 Definition evaluate_type_def:
-  evaluate_type tenv (BaseT bt) = SOME $ BaseTV bt ∧
+  evaluate_type tenv (BaseT bt) =
+    (if bt = IntT 0 then NONE
+     else SOME $ BaseTV bt) ∧
   evaluate_type tenv (TupleT ts) =
     (case evaluate_types tenv ts [] of
      | NONE => NONE
@@ -46,7 +51,9 @@ Definition evaluate_type_def:
   evaluate_type tenv (FlagT id) =
   (let nid = string_to_num id in
    case FLOOKUP tenv nid of
-   | SOME $ FlagArgs m => SOME $ FlagTV m
+   | SOME $ FlagArgs m =>
+       (if m ≤ 256 then SOME $ FlagTV m
+        else NONE)
    | _ => NONE) ∧
   evaluate_type tenv (NoneT) = SOME NoneTV ∧
   evaluate_types tenv [] acc = SOME $ REVERSE acc ∧
@@ -55,10 +62,10 @@ Definition evaluate_type_def:
    | SOME tv => evaluate_types tenv ts (tv::acc)
    | _ => NONE)
 Termination
-  WF_REL_TAC `inv_image ($< LEX $<) (λx.
+  WF_REL_TAC ‘inv_image ($< LEX $<) (λx.
     case x
       of INL (env, t) => (CARD (FDOM env), type_size t)
-       | INR (env, ts, _) => (CARD (FDOM env), list_size type_size ts))`
+       | INR (env, ts, _) => (CARD (FDOM env), list_size type_size ts))’
   \\ rw[FLOOKUP_DEF]
   \\ disj1_tac
   \\ CCONTR_TAC
@@ -71,10 +78,10 @@ End
 * (uses the fact that we disallow cycles of struct dependency) *)
 
 val () = cv_auto_trans_rec evaluate_type_def (
-  WF_REL_TAC `inv_image ($< LEX $<) (λx.
+  WF_REL_TAC ‘inv_image ($< LEX $<) (λx.
     case x
       of INL (env, t) => (cv$c2n $ cv_size' env, cv_size t)
-       | INR (env, ts, _) => (cv$c2n (cv_size' env), cv_size ts))`
+       | INR (env, ts, _) => (cv$c2n (cv_size' env), cv_size ts))’
   \\ rw[]
   \\ TRY(Cases_on`cv_v` \\ gs[] \\ NO_TAC)
   \\ TRY(Cases_on`cv_v` \\ gs[]
@@ -129,7 +136,7 @@ val () = cv_auto_trans_rec evaluate_type_def (
   \\ IF_CASES_TAC \\ gs[]
 );
 
-(* ===== Vyper (runtime) values ===== *)
+(* Vyper (runtime) values *)
 
 Datatype:
   value
@@ -148,11 +155,11 @@ Datatype:
   | TupleV (value list)
 End
 
-val from_to_value_thm = cv_typeLib.from_to_thm_for ``:value``;
+val from_to_value_thm = cv_typeLib.from_to_thm_for “:value”;
 val from_value = from_to_value_thm |> concl |> rator |> rand
 val to_value = from_to_value_thm |> concl |> rand
 
-Overload AddressV = ``λw: address. BytesV (Fixed 20) (word_to_bytes w T)``
+Overload AddressV = “λw: address. BytesV (Fixed 20) (word_to_bytes w T)”
 
 (* default value at each type *)
 
@@ -228,4 +235,3 @@ Definition within_int_bound_def:
     else Num i < m
   )
 End
-

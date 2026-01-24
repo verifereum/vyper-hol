@@ -92,6 +92,10 @@ Datatype:
   (* Calls - need type for builtins like concat/slice that embed return length *)
   (* Last field is source_id for module calls, extracted from func.type.type_decl_node *)
   | JE_Call json_expr (json_expr list) (json_keyword list) json_type (num option)
+
+  (* External calls - func_name, arg_types, return_type, args (first is target) *)
+  | JE_ExtCall string (json_type list) json_type (json_expr list)
+  | JE_StaticCall string (json_type list) json_type (json_expr list)
 ;
   json_keyword = JKeyword string json_expr             (* arg, value *)
 End
@@ -158,6 +162,15 @@ Datatype:
   = JImportInfo string string string                   (* alias, path, qualified_module_name *)
 End
 
+(* ===== Interface Function Signature ===== *)
+(* Represents a function signature within an interface definition *)
+
+Datatype:
+  json_interface_func
+  = JInterfaceFunc string (json_arg list) json_type (string list)
+    (* name, args, return_type, decorators (mutability) *)
+End
+
 Datatype:
   json_toplevel
   = JTL_FunctionDef string (string list) (json_arg list) json_func_type (json_stmt list)
@@ -169,7 +182,7 @@ Datatype:
   | JTL_EventDef string (json_arg list)
   | JTL_StructDef string (json_arg list)
   | JTL_FlagDef string (string list)                   (* name, member names *)
-  | JTL_InterfaceDef string                            (* ignored but parsed *)
+  | JTL_InterfaceDef string (json_interface_func list) (* name, function signatures *)
   (* Module-related declarations *)
   | JTL_Import (json_import_info list)                 (* import statement with import infos *)
   | JTL_ExportsDecl json_expr                          (* exports: annotation *)
@@ -198,6 +211,35 @@ End
 Datatype:
   json_annotated_ast
   = JAnnotatedAST json_module (json_imported_module list)  (* main ast, imports *)
+End
+
+(* ===== Storage Layout ===== *)
+(* Maps variable names to their storage slot information *)
+
+Datatype:
+  storage_slot_info = <|
+    slot : num;       (* starting slot number *)
+    n_slots : num;    (* number of slots used *)
+    type_str : string (* type as string, e.g. "uint256", "HashMap[int128, W]" *)
+  |>
+End
+
+(* For immutables stored in code *)
+Datatype:
+  code_slot_info = <|
+    offset : num;     (* byte offset in deployed code *)
+    length : num;     (* length in bytes *)
+    type_str : string (* type as string *)
+  |>
+End
+
+(* Complete storage layout for a contract *)
+Datatype:
+  json_storage_layout = <|
+    storage : (string # storage_slot_info) list;    (* variable name -> slot info *)
+    transient : (string # storage_slot_info) list;  (* transient variable -> slot info *)
+    code : (string # code_slot_info) list           (* immutable name -> code info *)
+  |>
 End
 
 (* Datatypes are automatically translated by cv_transLib when defined *)

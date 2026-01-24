@@ -19,6 +19,7 @@ signature jsonASTLib = sig
   val json_arg_ty : hol_type
   val json_func_type_ty : hol_type
   val json_value_type_ty : hol_type
+  val json_interface_func_ty : hol_type
   val json_toplevel_ty : hol_type
   val json_module_ty : hol_type
 
@@ -112,6 +113,8 @@ signature jsonASTLib = sig
   val JE_Tuple_tm : term
   val JE_List_tm : term
   val JE_Call_tm : term
+  val JE_ExtCall_tm : term
+  val JE_StaticCall_tm : term
   val JKeyword_tm : term
 
   val mk_JE_Int : term * term -> term
@@ -130,6 +133,8 @@ signature jsonASTLib = sig
   val mk_JE_Tuple : term list -> term
   val mk_JE_List : term list * term -> term
   val mk_JE_Call : term * term list * term list * term * term -> term
+  val mk_JE_ExtCall : string * term list * term * term list -> term
+  val mk_JE_StaticCall : string * term list * term * term list -> term
   val mk_JKeyword : string * term -> term
 
   (* ===== Statement Constructors ===== *)
@@ -194,6 +199,7 @@ signature jsonASTLib = sig
   val JTL_EventDef_tm : term
   val JTL_StructDef_tm : term
   val JTL_FlagDef_tm : term
+  val JInterfaceFunc_tm : term
   val JTL_InterfaceDef_tm : term
   val JModule_tm : term
 
@@ -208,7 +214,8 @@ signature jsonASTLib = sig
   val mk_JTL_EventDef : string * term list -> term
   val mk_JTL_StructDef : string * term list -> term
   val mk_JTL_FlagDef : string * string list -> term
-  val mk_JTL_InterfaceDef : string -> term
+  val mk_JInterfaceFunc : string * term list * term * string list -> term
+  val mk_JTL_InterfaceDef : string * term list -> term
   val mk_JModule : term list -> term
 
   (* ===== Decoders ===== *)
@@ -224,10 +231,24 @@ signature jsonASTLib = sig
   val json_target : term JSONDecode.decoder
   val json_arg : term JSONDecode.decoder
   val json_func_type : term JSONDecode.decoder
+  val json_interface_func : term JSONDecode.decoder
   val json_value_type : term JSONDecode.decoder
   val json_toplevel : term JSONDecode.decoder
   val json_module : term JSONDecode.decoder
   val json_imported_module : term JSONDecode.decoder
   val annotated_ast : term JSONDecode.decoder
+
+  (* ===== Storage Layout ===== *)
+  val storage_slot_info_ty : hol_type
+  val code_slot_info_ty : hol_type
+  val json_storage_layout_ty : hol_type
+
+  val mk_storage_slot_info : term * term * string -> term
+  val mk_code_slot_info : term * term * string -> term
+  val mk_json_storage_layout : term list * term list * term list -> term
+
+  val storage_slot_info : term JSONDecode.decoder
+  val code_slot_info : term JSONDecode.decoder
+  val storage_layout : term JSONDecode.decoder
 
 end

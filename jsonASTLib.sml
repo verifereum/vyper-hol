@@ -39,6 +39,7 @@ val json_decorator_ty = jasty "json_decorator"
 val json_arg_ty = jasty "json_arg"
 val json_func_type_ty = jasty "json_func_type"
 val json_value_type_ty = jasty "json_value_type"
+val json_interface_func_ty = jasty "json_interface_func"
 val json_import_info_ty = jasty "json_import_info"
 val json_toplevel_ty = jasty "json_toplevel"
 val json_module_ty = jasty "json_module"
@@ -139,6 +140,8 @@ val JE_IfExp_tm = jastk "JE_IfExp"
 val JE_Tuple_tm = jastk "JE_Tuple"
 val JE_List_tm = jastk "JE_List"
 val JE_Call_tm = jastk "JE_Call"
+val JE_ExtCall_tm = jastk "JE_ExtCall"
+val JE_StaticCall_tm = jastk "JE_StaticCall"
 
 val JKeyword_tm = jastk "JKeyword"
 
@@ -163,6 +166,14 @@ fun mk_JE_List (es, ty) = list_mk_comb(JE_List_tm, [mk_list(es, json_expr_ty), t
 fun mk_JE_Call (func, args, kwargs, ty, src_id_opt_tm) =
   list_mk_comb(JE_Call_tm, [func, mk_list(args, json_expr_ty),
                             mk_list(kwargs, json_keyword_ty), ty, src_id_opt_tm])
+fun mk_JE_ExtCall (func_name, arg_types, ret_ty, args) =
+  list_mk_comb(JE_ExtCall_tm, [fromMLstring func_name,
+                               mk_list(arg_types, json_type_ty),
+                               ret_ty, mk_list(args, json_expr_ty)])
+fun mk_JE_StaticCall (func_name, arg_types, ret_ty, args) =
+  list_mk_comb(JE_StaticCall_tm, [fromMLstring func_name,
+                                  mk_list(arg_types, json_type_ty),
+                                  ret_ty, mk_list(args, json_expr_ty)])
 fun mk_JKeyword (arg, v) = list_mk_comb(JKeyword_tm, [fromMLstring arg, v])
 
 (* ===== Statement Constructors ===== *)
@@ -239,6 +250,7 @@ val JTL_HashMapDecl_tm = jastk "JTL_HashMapDecl"
 val JTL_EventDef_tm = jastk "JTL_EventDef"
 val JTL_StructDef_tm = jastk "JTL_StructDef"
 val JTL_FlagDef_tm = jastk "JTL_FlagDef"
+val JInterfaceFunc_tm = jastk "JInterfaceFunc"
 val JTL_InterfaceDef_tm = jastk "JTL_InterfaceDef"
 val JTL_Import_tm = jastk "JTL_Import"
 val JTL_ExportsDecl_tm = jastk "JTL_ExportsDecl"
@@ -277,7 +289,15 @@ fun mk_JTL_StructDef (name, args) =
 fun mk_JTL_FlagDef (name, members) =
   list_mk_comb(JTL_FlagDef_tm,
     [fromMLstring name, mk_list(List.map fromMLstring members, string_ty)])
-fun mk_JTL_InterfaceDef name = mk_comb(JTL_InterfaceDef_tm, fromMLstring name)
+fun mk_JInterfaceFunc (name, args, ret_ty, decorators) =
+  list_mk_comb(JInterfaceFunc_tm,
+    [fromMLstring name,
+     mk_list(args, json_arg_ty),
+     ret_ty,
+     mk_list(List.map fromMLstring decorators, string_ty)])
+fun mk_JTL_InterfaceDef (name, funcs) =
+  list_mk_comb(JTL_InterfaceDef_tm,
+    [fromMLstring name, mk_list(funcs, json_interface_func_ty)])
 fun mk_JImportInfo (alias, path, qual_name) =
   list_mk_comb(JImportInfo_tm,
     [fromMLstring alias, fromMLstring path, fromMLstring qual_name])
@@ -656,7 +676,33 @@ fun d_json_expr () : term decoder = achoose "expr" [
                               if n < 0 then optionSyntax.mk_none numSyntax.num
                               else optionSyntax.mk_some (numSyntax.mk_numeral (Arbnum.fromLargeInt (IntInf.toLarge n))))
                               (field "func" $ field "type" $ field "type_decl_node" $ field "source_id" intInf),
-                            succeed (optionSyntax.mk_none numSyntax.num))))
+                            succeed (optionSyntax.mk_none numSyntax.num)))),
+
+  (* ExtCall - wraps a Call node; func is Attribute with target and method name *)
+  (* Convention: target is prepended to args *)
+  (* Signature extracted from func.type: argument_types, return_type *)
+  check_ast_type "ExtCall" $
+    JSONDecode.map (fn ((func_name, arg_types), (ret_ty, (target, args))) =>
+      mk_JE_ExtCall(func_name, arg_types, ret_ty, target :: args)) $
+    tuple2 (tuple2 (field "value" $ field "func" $ field "attr" string,
+                    field "value" $ field "func" $ field "type" $
+                      orElse (field "argument_types" (array json_type), succeed [])),
+            tuple2 (field "value" $ field "func" $ field "type" $
+                      orElse (field "return_type" json_type, succeed JT_None_tm),
+                    tuple2 (field "value" $ field "func" $ field "value" (delay d_json_expr),
+                            field "value" $ field "args" (array (delay d_json_expr))))),
+
+  (* StaticCall - same structure as ExtCall *)
+  check_ast_type "StaticCall" $
+    JSONDecode.map (fn ((func_name, arg_types), (ret_ty, (target, args))) =>
+      mk_JE_StaticCall(func_name, arg_types, ret_ty, target :: args)) $
+    tuple2 (tuple2 (field "value" $ field "func" $ field "attr" string,
+                    field "value" $ field "func" $ field "type" $
+                      orElse (field "argument_types" (array json_type), succeed [])),
+            tuple2 (field "value" $ field "func" $ field "type" $
+                      orElse (field "return_type" json_type, succeed JT_None_tm),
+                    tuple2 (field "value" $ field "func" $ field "value" (delay d_json_expr),
+                            field "value" $ field "args" (array (delay d_json_expr)))))
 ]
 and d_json_keyword () : term decoder =
   JSONDecode.map (fn (arg, v) => mk_JKeyword(arg, v)) $
@@ -860,6 +906,32 @@ val json_func_type : term decoder =
   tuple2 (field "argument_types" (array json_type),
           field "return_type" json_type)
 
+(* Interface function signature parser
+ * Parses FunctionDef nodes within InterfaceDef body.
+ * Mutability comes from either decorator_list or body (as Expr > Name > id).
+ *)
+val json_interface_func : term decoder =
+  check_ast_type "FunctionDef" $
+  JSONDecode.map (fn (name, args, ret_ty, (decs, body_decs)) =>
+    mk_JInterfaceFunc(name, args, ret_ty, decs @ body_decs)) $
+  tuple4 (
+    field "name" string,
+    field "args" $ check_ast_type "arguments" $
+      field "args" (array json_arg),
+    (* returns can be null, default to JT_None *)
+    orElse(field "returns" ast_type, succeed JT_None_tm),
+    (* decorators from decorator_list and/or body *)
+    tuple2 (
+      orElse(field "decorator_list" (array (field "id" string)), succeed []),
+      (* body may contain mutability as Expr > Name > id (e.g., "view", "payable") *)
+      orElse(field "body" (array (
+        check_ast_type "Expr" $
+        field "value" $
+        check_ast_type "Name" $
+        field "id" string)), succeed [])
+    )
+  )
+
 val json_toplevel : term decoder = achoose "toplevel" [
   (* FunctionDef *)
   check_ast_type "FunctionDef" $
@@ -932,9 +1004,11 @@ val json_toplevel : term decoder = achoose "toplevel" [
               check_ast_type "Name" $
               field "id" string),
 
-  (* InterfaceDef - just record the name *)
+  (* InterfaceDef - parse name and function signatures *)
   check_ast_type "InterfaceDef" $
-    JSONDecode.map mk_JTL_InterfaceDef (field "name" string),
+    JSONDecode.map (fn (name, funcs) => mk_JTL_InterfaceDef(name, funcs)) $
+    tuple2 (field "name" string,
+            field "body" (array json_interface_func)),
 
   (* Import - module import statement *)
   check_ast_type "Import" $
@@ -996,5 +1070,74 @@ val annotated_ast : term decoder =
   JSONDecode.map mk_JAnnotatedAST $
   tuple2 (field "ast" json_module,
           orElse (field "imports" (array json_imported_module), succeed []))
+
+(* ===== Storage Layout ===== *)
+
+val storage_slot_info_ty = jasty "storage_slot_info"
+val code_slot_info_ty = jasty "code_slot_info"
+val json_storage_layout_ty = jasty "json_storage_layout"
+
+(* Record constructors - use TypeBase for record syntax *)
+fun mk_storage_slot_info (slot, n_slots, type_str) =
+  let
+    val reccon = TypeBase.mk_record (storage_slot_info_ty,
+      [("slot", slot), ("n_slots", n_slots), ("type_str", fromMLstring type_str)])
+  in reccon end
+
+fun mk_code_slot_info (offset, length, type_str) =
+  let
+    val reccon = TypeBase.mk_record (code_slot_info_ty,
+      [("offset", offset), ("length", length), ("type_str", fromMLstring type_str)])
+  in reccon end
+
+fun mk_json_storage_layout (storage_list, transient_list, code_list) =
+  let
+    val storage_pair_ty = mk_prod(string_ty, storage_slot_info_ty)
+    val code_pair_ty = mk_prod(string_ty, code_slot_info_ty)
+    val storage_tm = mk_list(storage_list, storage_pair_ty)
+    val transient_tm = mk_list(transient_list, storage_pair_ty)
+    val code_tm = mk_list(code_list, code_pair_ty)
+    val reccon = TypeBase.mk_record (json_storage_layout_ty,
+      [("storage", storage_tm), ("transient", transient_tm), ("code", code_tm)])
+  in reccon end
+
+(* Decoder for a single storage slot entry *)
+val storage_slot_info : term decoder =
+  JSONDecode.map (fn (slot, n_slots, type_str) =>
+                    mk_storage_slot_info (mk_num_from_int slot, mk_num_from_int n_slots, type_str))
+  (tuple3 (field "slot" int,
+           field "n_slots" int,
+           field "type" string))
+
+(* Decoder for a single code (immutable) slot entry *)
+val code_slot_info : term decoder =
+  JSONDecode.map (fn (offset, length, type_str) =>
+                    mk_code_slot_info (mk_num_from_int offset, mk_num_from_int length, type_str))
+  (tuple3 (field "offset" int,
+           field "length" int,
+           field "type" string))
+
+(* Decode a JSON object as an association list, applying decoder to each value *)
+fun decode_object_alist (decoder : term decoder) : (string * term) list decoder =
+  andThen rawObject (fn pairs =>
+    let
+      fun decode_pair (name, value) = (name, decode decoder value)
+    in
+      succeed (List.map decode_pair pairs)
+    end)
+
+(* Parse the storage_layout object from a trace *)
+(* Structure: { "storage_layout": {...}, "transient_storage_layout": {...}, "code_layout": {...} } *)
+val storage_layout : term decoder =
+  JSONDecode.map (fn ((storage_pairs, transient_pairs), code_pairs) =>
+                    mk_json_storage_layout (
+                      List.map (fn (n,t) => pairSyntax.mk_pair(fromMLstring n, t)) storage_pairs,
+                      List.map (fn (n,t) => pairSyntax.mk_pair(fromMLstring n, t)) transient_pairs,
+                      List.map (fn (n,t) => pairSyntax.mk_pair(fromMLstring n, t)) code_pairs))
+  (tuple2 (
+     tuple2 (
+       orElse (field "storage_layout" (decode_object_alist storage_slot_info), succeed []),
+       orElse (field "transient_storage_layout" (decode_object_alist storage_slot_info), succeed [])),
+     orElse (field "code_layout" (decode_object_alist code_slot_info), succeed [])))
 
 end

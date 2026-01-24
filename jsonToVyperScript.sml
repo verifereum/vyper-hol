@@ -541,6 +541,18 @@ Definition translate_expr_def:
               SOME src_id => Call (IntCall (SOME src_id, extract_func_name func)) args'
             | NONE => Call (IntCall (NONE, "")) args')) /\
 
+  (* ExtCall - mutating external call *)
+  (* args includes target as first element (convention) *)
+  (translate_expr (JE_ExtCall func_name arg_types ret_ty args) =
+    Call (ExtCall (func_name, translate_type_list arg_types, translate_type ret_ty))
+         (translate_expr_list args)) /\
+
+  (* StaticCall - read-only external call *)
+  (* args includes target as first element (convention) *)
+  (translate_expr (JE_StaticCall func_name arg_types ret_ty args) =
+    Call (StaticCall (func_name, translate_type_list arg_types, translate_type ret_ty))
+         (translate_expr_list args)) /\
+
   (* Helper for translating expression lists *)
   (translate_expr_list [] = []) /\
   (translate_expr_list (e::es) = translate_expr e :: translate_expr_list es) /\
@@ -708,6 +720,16 @@ End
 
 val () = cv_auto_trans translate_arg_def;
 
+Definition translate_interface_func_def:
+  translate_interface_func (JInterfaceFunc name args ret_ty decs) =
+    (name,
+     MAP translate_arg args,
+     translate_type ret_ty,
+     translate_mutability decs) : interface_func
+End
+
+(* val () = cv_auto_trans translate_interface_func_def; *)
+
 Definition translate_args_with_types_def:
   translate_args_with_types args tys =
     case (args, tys) of
@@ -778,7 +800,8 @@ Definition translate_toplevel_def:
   (translate_toplevel (JTL_FlagDef name members) =
     SOME (FlagDecl name members)) /\
 
-  (translate_toplevel (JTL_InterfaceDef _) = NONE) /\
+  (translate_toplevel (JTL_InterfaceDef name funcs) =
+    SOME (InterfaceDecl name (MAP translate_interface_func funcs))) /\
 
   (* Module declarations are compiled away - the imported content is already inlined *)
   (translate_toplevel (JTL_Import _) = NONE) /\

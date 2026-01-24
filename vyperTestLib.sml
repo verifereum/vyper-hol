@@ -240,6 +240,38 @@ val unsupported_patterns = unsupported_code @ [
   "create_copy_of("
 ]
 
+fun has_default_arg src =
+  let
+    val n = String.size src
+    fun find_sub sub i =
+      let val m = String.size sub in
+        if i + m > n then NONE
+        else if String.substring (src, i, m) = sub then SOME i
+        else find_sub sub (i + 1)
+      end
+    fun find_char c i =
+      if i >= n then NONE
+      else if String.sub (src, i) = c then SOME i
+      else find_char c (i + 1)
+    fun has_default_from i =
+      case find_sub "def " i of
+        NONE => false
+      | SOME d =>
+          (case find_char #"(" (d + 4) of
+             NONE => false
+           | SOME l =>
+               (case find_char #")" (l + 1) of
+                  NONE => false
+                | SOME r =>
+                    let
+                      val args = String.substring (src, l + 1, r - l - 1)
+                    in
+                      String.isSubstring "=" args orelse has_default_from (r + 1)
+                    end))
+  in
+    has_default_from 0
+  end
+
 fun has_sqrt_call src =
   let
     val n = String.size src
@@ -254,24 +286,156 @@ fun has_sqrt_call src =
   end
 
 fun has_unsupported_patterns src =
+  has_default_arg src orelse
   has_sqrt_call src orelse
   List.exists (fn x => String.isSubstring x src) unsupported_patterns
 
-fun source_code_opt j =
-  (decode (orElse(field "source_code" (nullable string),
-                  succeed NONE)) j)
-  handle JSONError _ => NONE
-       | _ => NONE
+fun is_blank s =
+  List.all Char.isSpace (String.explode s)
+
+fun source_codes_json j =
+  let
+    fun gather (JSON.OBJECT kvs) =
+          let
+            val here =
+              case List.find (fn (k, _) => k = "source_code") kvs of
+                SOME (_, JSON.STRING s) => [s]
+              | _ => []
+            val nested = List.concat (List.map (fn (_, v) => gather v) kvs)
+          in
+            here @ nested
+          end
+      | gather (JSON.ARRAY xs) = List.concat (List.map gather xs)
+      | gather _ = []
+  in
+    gather j
+  end
 
 fun has_unsupported_source_json j =
-  case source_code_opt j of
-    NONE => false
-  | SOME src => has_unsupported_patterns src
+  case source_codes_json j of
+    [] => true
+  | srcs =>
+      List.exists (fn src =>
+        String.size src = 0 orelse is_blank src orelse
+        has_unsupported_patterns src) srcs
 
 fun has_unsupported_source_code (name, (err, j)) =
-  case source_code_opt j of
-    NONE => true
-  | SOME src => has_unsupported_patterns src
+  has_unsupported_source_json j
+
+(* ===== Test Selection ===== *)
+
+fun is_dir path = (OS.FileSys.isDir path) handle _ => false
+
+fun pick_exports_root () = let
+  val candidates = [
+    OS.Path.concat("tests", "vyper-test-exports"),
+    "vyper-test-exports"
+  ]
+  fun pick [] = raise Fail "vyper-test-exports directory not found"
+    | pick (p::ps) = if is_dir p then p else pick ps
+in
+  pick candidates
+end
+
+val test_exports_root = pick_exports_root ()
+val tests_root_dir = OS.Path.dir (OS.FileSys.fullPath test_exports_root)
+
+(* Directory-level allowlist plus small explicit allowlist. *)
+val allowed_test_prefixes = [
+  "vyper-test-exports/functional/codegen/"
+]
+
+val allowed_test_patterns = [
+  "vyper-test-exports/functional/builtins/codegen/test_blobhash.json"
+]
+
+val excluded_test_patterns = [
+]
+
+fun glob_match pat str =
+  let
+    fun step [] [] = true
+      | step (#"*"::ps) ss =
+          step ps ss orelse
+          (case ss of [] => false | _::ss' => step (#"*"::ps) ss')
+      | step (#"?"::ps) (_::ss) = step ps ss
+      | step (p::ps) (s::ss) = (p = s) andalso step ps ss
+      | step _ _ = false
+  in
+    step (String.explode pat) (String.explode str)
+  end
+
+fun is_supported_test_file path =
+  let
+    val allowed =
+      List.exists (fn prefix => String.isPrefix prefix path)
+        allowed_test_prefixes orelse
+      List.exists (fn pat => glob_match pat path) allowed_test_patterns
+    val excluded =
+      List.exists (fn pat => glob_match pat path) excluded_test_patterns
+  in
+    allowed andalso not excluded
+  end
+
+fun list_json_files dir = let
+  val d = OS.FileSys.openDir dir
+  fun loop acc =
+    case OS.FileSys.readDir d of
+      NONE => (OS.FileSys.closeDir d; acc)
+    | SOME entry =>
+        if entry = "." orelse entry = ".." then loop acc
+        else let
+          val path = OS.Path.concat(dir, entry)
+        in
+          if OS.FileSys.isDir path then loop (list_json_files path @ acc)
+          else if String.isSuffix ".json" entry then loop (path :: acc)
+          else loop acc
+        end
+in
+  loop []
+end
+
+fun detect_path_sep () =
+  case String.explode (OS.Path.concat ("a", "b")) of
+    [#"a", sep, #"b"] => String.str sep
+  | _ => "/"
+
+val path_sep = detect_path_sep ()
+val tests_prefix = String.concat ["tests", path_sep]
+val exports_prefix = String.concat ["vyper-test-exports", path_sep]
+
+fun strip_tests_prefix path =
+  if String.isPrefix tests_prefix path
+  then String.extract(path, String.size tests_prefix, NONE)
+  else path
+
+fun strip_exports_prefix path =
+  if String.isPrefix exports_prefix path
+  then String.extract(path, String.size exports_prefix, NONE)
+  else path
+
+fun collapse_underscores s =
+  let
+    fun step [] acc = String.implode (List.rev acc)
+      | step (#"_"::cs) (#"_"::acc) = step cs acc
+      | step (c::cs) acc = step cs (c::acc)
+  in
+    step (String.explode s) []
+  end
+
+fun json_path_to_id path = let
+  val path = strip_exports_prefix path
+  val base =
+    if String.isSuffix ".json" path
+    then String.extract(path, 0, SOME (String.size path - 5))
+    else path
+  val lower = String.map Char.toLower base
+  fun sanitize c = if Char.isAlphaNum c then c else #"_"
+  val cleaned = String.implode (List.map sanitize (String.explode lower))
+  val collapsed = collapse_underscores cleaned
+in
+  if String.size collapsed = 0 then "empty" else collapsed
+end
 
 val deployment : term decoder =
   check_trace_type "deployment" $
@@ -332,8 +496,8 @@ val test_decoder =
 fun trydecode ((name,json),(s,f)) =
   if has_unsupported_source_json json then (s,f)
   else ((name, decode test_decoder json)::s, f)
-       handle JSONError e => (s, (name, e)::f)
-              | e => (s, (name, (e, JSON.OBJECT [("source_code", JSON.STRING "")]))::f)
+  handle JSONError e => (s, (name, JSONError e)::f)
+       | e => (s, (name, JSONError (e, JSON.OBJECT [("source_code", JSON.STRING "")]))::f)
 
 fun read_test_json json_path = let
   val test_jsons = decodeFile rawObject json_path
@@ -344,140 +508,74 @@ end
 val trace_ty = mk_thy_type{Thy="vyperTestRunner",Tyop="trace",Args=[]}
 val traces_ty = mk_list_type trace_ty
 
-val test_files_with_prefixes = [
-  ("vyper-test-exports/functional/codegen",
-   ["test_interfaces.json",
-    "test_selector_table.json",
-    "test_selector_table_stability.json"]),
-  ("vyper-test-exports/functional/codegen/calling_convention",
-   [
-    "test_default_function.json",
-    (* TODO: unsupported
-    "test_default_parameters.json",
-    *)
-    (* TODO: uses test deps
-    "test_erc20_abi.json",
-    *)
-    "test_external_contract_calls.json",
-    "test_inlineable_functions.json",
-    "test_internal_call.json",
-    "test_modifiable_external_contract_calls.json",
-    "test_new_call_convention.json",
-    "test_return.json",
-    "test_self_call_struct.json"]),
-  ("vyper-test-exports/functional/codegen/environment_variables",
-   ["test_blobbasefee.json",
-    "test_block_number.json",
-    "test_blockhash.json",
-    "test_tx.json"]),
-  ("vyper-test-exports/functional/codegen/modules",
-   ["test_events.json",
-    "test_exports.json",
-    "test_flag_imports.json",
-    "test_interface_imports.json",
-    "test_module_constants.json",
-    "test_module_variables.json",
-    "test_nonreentrant.json",
-    "test_stateless_functions.json"]),
-  ("vyper-test-exports/functional/codegen/integration",
-   ["test_basics.json",
-    "test_crowdfund.json",
-    "test_escrow.json"]),
-  ("vyper-test-exports/functional/codegen/storage_variables",
-   ["test_getters.json",
-    "test_setters.json",
-    "test_storage_variable.json"]),
-  ("vyper-test-exports/functional/codegen/types/numbers",
-   [
-    "test_constants.json",
-    "test_decimals.json",
-    "test_division.json",
-    "test_exponents.json",
-    "test_isqrt.json",
-    "test_modulo.json",
-    "test_signed_ints.json",
-    (* TODO: sqrt not yet supported, nor fixtures / imports
-    "test_sqrt.json",*)
-    "test_unsigned_ints.json"
-   ]),
-  ("vyper-test-exports/functional/codegen/types",
-   [
-    "test_array_indexing.json",
-    "test_bytes.json",
-    "test_bytes_literal.json",
-    "test_dynamic_array.json",
-    "test_flag.json",
-    "test_identifier_naming.json",
-    "test_lists.json",
-    "test_node_types.json",
-    "test_string.json",
-    "test_string_literal.json",
-    "test_struct.json"
-   ]),
-  ("vyper-test-exports/functional/codegen/features",
-   [
-    "test_address_balance.json",
-    "test_assert.json",
-    "test_assert_unreachable.json",
-    "test_assignment.json",
-    "test_bytes_map_keys.json",
-    "test_clampers.json",
-    "test_comments.json",
-    "test_comparison.json",
-    "test_conditionals.json",
-    "test_constructor.json",
-    "test_flag_pure_functions.json",
-    "test_gas.json",
-    "test_immutable.json",
-    "test_init.json",
-    "test_logging.json",
-    "test_logging_bytes_extended.json",
-    "test_logging_from_call.json",
-    "test_mana.json",
-    "test_memory_alloc.json",
-    "test_memory_dealloc.json",
-    "test_packing.json",
-    "test_reverting.json",
-    "test_selfdestruct.json",
-    "test_short_circuiting.json",
-    "test_string_map_keys.json",
-    "test_ternary.json",
-    "test_transient.json"]),
-  ("vyper-test-exports/functional/codegen/features/decorators",
-   ["test_nonreentrant.json",
-    "test_payable.json",
-    "test_private.json",
-    "test_public.json",
-    "test_pure.json",
-    "test_raw_return.json",
-    "test_view.json"]),
-  ("vyper-test-exports/functional/codegen/features/iteration",
-   ["test_break.json",
-    "test_continue.json",
-    "test_for_in_list.json",
-    "test_for_range.json",
-    "test_range_in.json"])
-]
+fun lexless a b = String.compare (a, b) = LESS
 
-fun make_test_files [] acc = List.rev acc
-  | make_test_files ((pfx,ls)::r) acc =
-    make_test_files r $ List.revAppend
-      (List.map (curry OS.Path.concat pfx) ls, acc)
-val test_files = make_test_files test_files_with_prefixes []
+fun file_has_supported_tests path = let
+  val (tests, _) = read_test_json path
+in
+  if List.null tests then (
+    TextIO.output(TextIO.stdErr,
+      String.concat ["no supported tests in ", path, "\n"]);
+    false)
+  else true
+end
 
-fun make_definitions_for_file (n, json_path) = let
-  val nstr = Int.toString n
+fun test_files () =
+  list_json_files test_exports_root
+  |> List.map strip_tests_prefix
+  |> List.filter is_supported_test_file
+  |> List.filter file_has_supported_tests
+  |> Lib.sort lexless
+  |> List.map (fn path => (json_path_to_id path, path))
+
+fun cleanup_generated_scripts files = let
+  val keep =
+    List.map (fn (id, _) => String.concat ["vyperTestDefs_", id, "Script.sml"]) files @
+    List.map (fn (id, _) => String.concat ["vyperTest_", id, "Script.sml"]) files @
+    ["vyperTestGenScript.sml"]
+  fun is_keep name = List.exists (fn k => k = name) keep
+  fun is_gen name =
+    (String.isPrefix "vyperTestDefs_" name orelse
+     String.isPrefix "vyperTest_" name) andalso
+    String.isSuffix "Script.sml" name
+  val tests_dir = tests_root_dir
+  fun loop d =
+    case OS.FileSys.readDir d of
+      NONE => ()
+    | SOME entry =>
+        if entry = "." orelse entry = ".." then loop d
+        else let
+          val path = OS.Path.concat(tests_dir, entry)
+        in
+          if is_gen entry andalso not (is_keep entry) then
+            (OS.FileSys.remove path handle _ => ())
+          else ();
+          loop d
+        end
+  val d = OS.FileSys.openDir tests_dir
+  val () = loop d
+  val () = OS.FileSys.closeDir d
+in
+  ()
+end
+
+fun make_definitions_for_file (id, json_path) = let
   val (tests, decode_fails) = read_test_json json_path
-  val firstDf = List.find (not o has_unsupported_source_code) decode_fails
-  val () = case firstDf of NONE => () | SOME (name, (err, _)) => raise Fail
-             (String.concat ["decode failure in ", json_path, ": ", name,
-                             " - ", exnMessage err])
-  val path_vn = String.concat["json_path_", nstr]
+  val () =
+    case decode_fails of
+        [] => ()
+      | (name, err)::_ =>
+          TextIO.output(TextIO.stdErr,
+            String.concat ["decode failure in ", json_path, ": ", name,
+                           " - ", exnMessage err, " (skipping ",
+                           Int.toString (List.length decode_fails),
+                           " tests)\n"])
+  val path_vn = String.concat["json_path_", id]
   val path_def = new_definition(path_vn ^ "_def",
                    mk_eq(mk_var(path_vn, string_ty),
                          fromMLstring json_path))
-  val traces_prefix = String.concat ["traces_", nstr, "_"]
-  val test_name_prefix = String.concat ["name_", nstr, "_"]
+  val traces_prefix = String.concat ["traces_", id, "_"]
+  val test_name_prefix = String.concat ["name_", id, "_"]
   fun define_traces i (name, traces) = let
     val trs = mk_list(traces, trace_ty)
     val tn = Int.toString i
@@ -494,42 +592,41 @@ in
 end
 
 fun generate_defn_scripts () = let
-  fun f i [] = ()
-    | f i (t::ts) = let
-      val istr = Int.toString i
-      val padi = StringCvt.padLeft #"0" 2 istr
-      val thyname = String.concat["vyperTestDefs", padi]
-      val fname = OS.Path.concat("tests", String.concat[thyname, "Script.sml"])
-      val jsonp = t
-      val contents = String.concat [
-        "Theory ", thyname, "[no_sig_docs]\nAncestors jsonToVyper\nLibs vyperTestLib\n",
-        "val () = make_definitions_for_file (", istr, ", \"", jsonp, "\");\n"]
-      val out = TextIO.openOut(fname)
-      val () = TextIO.output(out, contents)
-      val () = TextIO.closeOut out
-    in f (i+1) ts end
+  val files = test_files ()
+  val tests_dir = tests_root_dir
+  val () = cleanup_generated_scripts files
+  val () = List.app (fn (id, jsonp) => let
+    val thyname = String.concat["vyperTestDefs_", id]
+    val fname = OS.Path.concat(tests_dir, String.concat[thyname, "Script.sml"])
+    val contents = String.concat [
+      "Theory ", thyname, "[no_sig_docs]\nAncestors jsonToVyper\nLibs vyperTestLib\n",
+      "val () = make_definitions_for_file (\"", id, "\", \"", jsonp, "\");\n"]
+    val out = TextIO.openOut(fname)
+    val () = TextIO.output(out, contents)
+    val () = TextIO.closeOut out
+  in () end) files
 in
-  f 0 test_files
+  ()
 end
 
 fun generate_test_scripts () = let
-  fun f i [] = ()
-    | f i (_::ts) = let
-      val istr = Int.toString i
-      val padi = StringCvt.padLeft #"0" 2 istr
-      val thyname = String.concat["vyperTest", padi]
-      val defsname = String.concat["vyperTestDefs", padi]
-      val fname = OS.Path.concat("tests", String.concat[thyname, "Script.sml"])
-      val contents = String.concat [
-        "Theory ", thyname, "[no_sig_docs]\nAncestors ", defsname,
-        "\nLibs vyperTestRunnerLib\nval () = List.app ",
-        "run_test_on_traces $ all_traces \"", defsname, "\";\n"]
-      val out = TextIO.openOut(fname)
-      val () = TextIO.output(out, contents)
-      val () = TextIO.closeOut out
-    in f (i+1) ts end
+  val files = test_files ()
+  val tests_dir = tests_root_dir
+  val () = cleanup_generated_scripts files
+  val () = List.app (fn (id, _) => let
+    val thyname = String.concat["vyperTest_", id]
+    val defsname = String.concat["vyperTestDefs_", id]
+    val fname = OS.Path.concat(tests_dir, String.concat[thyname, "Script.sml"])
+    val contents = String.concat [
+      "Theory ", thyname, "[no_sig_docs]\nAncestors ", defsname,
+      "\nLibs vyperTestRunnerLib\nval () = List.app ",
+      "run_test_on_traces $ all_traces \"", defsname, "\";\n"]
+    val out = TextIO.openOut(fname)
+    val () = TextIO.output(out, contents)
+    val () = TextIO.closeOut out
+  in () end) files
 in
-  f 0 test_files
+  ()
 end
 
 end

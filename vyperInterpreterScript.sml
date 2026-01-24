@@ -1140,10 +1140,35 @@ Definition type_env_def:
     type_env ts |+ (string_to_num id, StructArgs args) ∧
   type_env (FlagDecl id ls :: ts) =
     type_env ts |+ (string_to_num id, FlagArgs (LENGTH ls)) ∧
+  type_env (InterfaceDecl id funcs :: ts) =
+    type_env ts |+ (string_to_num id, InterfaceArgs funcs) ∧
   type_env (_ :: ts) = type_env ts
 End
 
 val () = cv_auto_trans type_env_def;
+
+(* Look up an interface by nsid (source_id, name) *)
+Definition lookup_interface_def:
+  lookup_interface cx (src_id_opt, iface_name) =
+    case get_module_code cx src_id_opt of
+    | NONE => NONE
+    | SOME ts =>
+        case FLOOKUP (type_env ts) (string_to_num iface_name) of
+        | SOME (InterfaceArgs funcs) => SOME funcs
+        | _ => NONE
+End
+
+val () = cv_auto_trans lookup_interface_def;
+
+(* Look up a function signature within an interface *)
+Definition lookup_interface_func_def:
+  lookup_interface_func [] fn_name = NONE ∧
+  lookup_interface_func ((name, args, ret_ty, mutability) :: rest) fn_name =
+    if name = fn_name then SOME (args, ret_ty, mutability)
+    else lookup_interface_func rest fn_name
+End
+
+val () = cv_auto_trans lookup_interface_func_def;
 
 Definition evaluate_extract32_def:
   evaluate_extract32 bs n bt =
@@ -2580,7 +2605,8 @@ Definition evaluate_def:
     transfer_value cx.txn.target toAddr amount;
     return $ Value $ NoneV
   od ∧
-  eval_expr cx (Call (ExtCall _) _) = raise $ Error "TODO: ExtCall" ∧
+  eval_expr cx (Call (ExtCall sig) _) = raise $ Error "TODO: ExtCall" ∧
+  eval_expr cx (Call (StaticCall sig) _) = raise $ Error "TODO: StaticCall" ∧
   eval_expr cx (Call (IntCall (src_id_opt, fn)) es) = do
     check (¬MEM (src_id_opt, fn) cx.stk) "recursion";
     ts <- lift_option (get_module_code cx src_id_opt) "IntCall get_module_code";
