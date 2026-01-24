@@ -1,2 +1,4 @@
-INCLUDES=$(HOLDIR)/examples/Crypto/Keccak $(VFMDIR)/util $(VFMDIR)/spec\
-         venom/passes/phi_elimination venom/passes/revert_to_assert
+# Root Holmakefile - builds all theories including test infrastructure
+INCLUDES = $(HOLDIR)/examples/Crypto/Keccak $(VFMDIR)/util $(VFMDIR)/spec \
+           syntax frontend semantics tests \
+           venom venom/passes/phi_elimination venom/passes/revert_to_assert
