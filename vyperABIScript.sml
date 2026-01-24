@@ -1,12 +1,16 @@
 Theory vyperABI
 Ancestors
-  contractABI vyperAST vyperInterpreter
+  contractABI vyperAST vyperTypeValue
   vyperMisc byte string words list rich_list
   divides alist combin pair arithmetic option
 Libs
   cv_transLib
   wordsLib
   dep_rewrite
+
+(* Overloads to disambiguate ABI value constructors from Vyper value constructors *)
+Overload abi_IntV[local] = ``IntV : int -> abi_value``
+Overload abi_BytesV[local] = ``BytesV : word8 list -> abi_value``
 
 Definition vyper_base_to_abi_type_def[simp]:
   vyper_base_to_abi_type (UintT n) = Uint n ∧
@@ -21,15 +25,29 @@ End
 
 Definition vyper_to_abi_type_def[simp]:
   vyper_to_abi_type (BaseT bt) = vyper_base_to_abi_type bt ∧
-  vyper_to_abi_type (TupleT ts) = Tuple (MAP vyper_to_abi_type ts) ∧
+  vyper_to_abi_type (TupleT ts) = Tuple (vyper_to_abi_types ts) ∧
   vyper_to_abi_type (ArrayT t (Dynamic _)) = Array NONE (vyper_to_abi_type t) ∧
   vyper_to_abi_type (ArrayT t (Fixed n)) = Array (SOME n) (vyper_to_abi_type t) ∧
   vyper_to_abi_type (StructT id) = Tuple [] (* TODO *) ∧
   vyper_to_abi_type (FlagT _) = Uint 256 ∧
-  vyper_to_abi_type NoneT = Tuple []
+  vyper_to_abi_type NoneT = Tuple [] ∧
+  vyper_to_abi_types [] = [] ∧
+  vyper_to_abi_types (t::ts) = vyper_to_abi_type t :: vyper_to_abi_types ts
 Termination
-  WF_REL_TAC ‘measure type_size’
+  WF_REL_TAC ‘measure (λx. case x of INL t => type_size t
+                                   | INR ts => list_size type_size ts)’
 End
+
+val () = cv_auto_trans vyper_base_to_abi_type_def;
+val () = cv_auto_trans_rec vyper_to_abi_type_def (
+  WF_REL_TAC `measure (λx. case x of INL t => cv_size t
+                                   | INR ts => cv_size ts)`
+  \\ rw[]
+  \\ TRY (Cases_on `cv_v` \\ gvs[cvTheory.cv_size_def] \\ NO_TAC)
+  \\ Cases_on `cv_v` \\ gvs[cvTheory.cv_size_def]
+  \\ qmatch_goalsub_rename_tac `cv_fst p`
+  \\ Cases_on `p` \\ gvs[cvTheory.cv_size_def]
+);
 
 Definition check_IntV_def:
   check_IntV b i =
@@ -99,6 +117,18 @@ Proof
   \\ rw[]
   \\ rw[Once abi_to_vyper_pre_def]
 QED
+
+Definition evaluate_abi_decode_def:
+  evaluate_abi_decode tenv typ bs =
+    let abiTy = vyper_to_abi_type typ in
+    if valid_enc abiTy bs then
+      case abi_to_vyper tenv typ (dec abiTy bs) of
+        SOME v => INL v
+      | NONE => INR "abi_decode conversion"
+    else INR "abi_decode invalid"
+End
+
+val () = cv_auto_trans evaluate_abi_decode_def;
 
 (* Helper for termination: convert default value directly to ABI encoding.
    This exists only to simplify the termination argument for vyper_to_abi_sparse,

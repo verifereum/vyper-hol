@@ -139,6 +139,7 @@ Datatype:
   | Env env_item
   | Acc account_item
   | Isqrt
+  | MethodId (* compute 4-byte function selector from signature string *)
   (* Elliptic curve cryptography - precompile builtins *)
   | ECRecover    (* ecrecover(hash, v, r, s) -> address *)
   | ECAdd        (* ecadd((x1,y1), (x2,y2)) -> (x3,y3) on BN254 *)
@@ -160,7 +161,7 @@ Datatype:
 End
 
 Datatype:
-  type_builtin = Empty | MaxValue | MinValue | Epsilon | Convert | Extract32
+  type_builtin = Empty | MaxValue | MinValue | Epsilon | Convert | Extract32 | AbiDecode
 End
 
 Datatype:

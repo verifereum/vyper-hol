@@ -1,7 +1,7 @@
 Theory vyperSmallStep
 Ancestors
   arithmetic combin pair list While
-  vyperMisc vyperInterpreter
+  vyperMisc vyperInterpreter vyperABI
 Libs
   cv_transLib
 

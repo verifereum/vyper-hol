@@ -6,7 +6,7 @@
 
 Theory vyperStorage
 Ancestors
-  vyperInterpreter vfmState vfmTypes vfmConstants
+  vyperInterpreter vyperTypeValue vfmState vfmTypes vfmConstants
 Libs
   cv_transLib
 
