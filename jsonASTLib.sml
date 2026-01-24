@@ -1054,14 +1054,15 @@ fun mk_code_slot_info (offset, length, type_str) =
       [("offset", offset), ("length", length), ("type_str", fromMLstring type_str)])
   in reccon end
 
-fun mk_json_storage_layout (storage_list, code_list) =
+fun mk_json_storage_layout (storage_list, transient_list, code_list) =
   let
     val storage_pair_ty = mk_prod(string_ty, storage_slot_info_ty)
     val code_pair_ty = mk_prod(string_ty, code_slot_info_ty)
     val storage_tm = mk_list(storage_list, storage_pair_ty)
+    val transient_tm = mk_list(transient_list, storage_pair_ty)
     val code_tm = mk_list(code_list, code_pair_ty)
     val reccon = TypeBase.mk_record (json_storage_layout_ty,
-      [("storage", storage_tm), ("code", code_tm)])
+      [("storage", storage_tm), ("transient", transient_tm), ("code", code_tm)])
   in reccon end
 
 (* Decoder for a single storage slot entry *)
@@ -1090,14 +1091,17 @@ fun decode_object_alist (decoder : term decoder) : (string * term) list decoder 
     end)
 
 (* Parse the storage_layout object from a trace *)
-(* Structure: { "storage_layout": { "var": {...}, ... }, "code_layout": { ... } } *)
+(* Structure: { "storage_layout": {...}, "transient_storage_layout": {...}, "code_layout": {...} } *)
 val storage_layout : term decoder =
-  JSONDecode.map (fn (storage_pairs, code_pairs) =>
+  JSONDecode.map (fn ((storage_pairs, transient_pairs), code_pairs) =>
                     mk_json_storage_layout (
                       List.map (fn (n,t) => pairSyntax.mk_pair(fromMLstring n, t)) storage_pairs,
+                      List.map (fn (n,t) => pairSyntax.mk_pair(fromMLstring n, t)) transient_pairs,
                       List.map (fn (n,t) => pairSyntax.mk_pair(fromMLstring n, t)) code_pairs))
   (tuple2 (
-     orElse (field "storage_layout" (decode_object_alist storage_slot_info), succeed []),
+     tuple2 (
+       orElse (field "storage_layout" (decode_object_alist storage_slot_info), succeed []),
+       orElse (field "transient_storage_layout" (decode_object_alist storage_slot_info), succeed [])),
      orElse (field "code_layout" (decode_object_alist code_slot_info), succeed [])))
 
 end

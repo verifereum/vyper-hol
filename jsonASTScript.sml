@@ -232,8 +232,9 @@ End
 (* Complete storage layout for a contract *)
 Datatype:
   json_storage_layout = <|
-    storage : (string # storage_slot_info) list;  (* variable name -> slot info *)
-    code : (string # code_slot_info) list         (* immutable name -> code info *)
+    storage : (string # storage_slot_info) list;    (* variable name -> slot info *)
+    transient : (string # storage_slot_info) list;  (* transient variable -> slot info *)
+    code : (string # code_slot_info) list           (* immutable name -> code info *)
   |>
 End
 
