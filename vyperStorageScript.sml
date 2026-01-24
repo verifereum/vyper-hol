@@ -408,3 +408,101 @@ Definition nested_hashmap_slot_def:
     | SOME key => nested_hashmap_slot (hashmap_slot base_slot key) ks
     | NONE => NONE
 End
+
+(* ===== Top-Level Variable Access ===== *)
+
+(* Storage layout: maps variable names to their base slot numbers.
+   This is a simplified representation - the full json_storage_layout
+   from jsonAST includes additional info like n_slots and type_str,
+   but for storage access we only need the base slot. *)
+Type storage_layout = “:(string # num) list”
+
+(* Look up base slot for a variable name *)
+Definition lookup_var_slot_def:
+  lookup_var_slot (layout : storage_layout) (var_name : string) : num option =
+    ALOOKUP layout var_name
+End
+
+(* Read a top-level variable from storage *)
+Definition read_storage_var_def:
+  read_storage_var layout (storage : storage) var_name tv =
+    case lookup_var_slot layout var_name of
+    | NONE => NONE
+    | SOME slot =>
+        let base_slot : bytes32 = n2w slot in
+        let reader = make_reader base_slot storage in
+        decode_value tv reader
+End
+
+(* Write a top-level variable to storage *)
+Definition write_storage_var_def:
+  write_storage_var layout (storage : storage) var_name tv v =
+    case lookup_var_slot layout var_name of
+    | NONE => NONE
+    | SOME slot =>
+        (case encode_value tv v of
+         | NONE => NONE
+         | SOME writes =>
+             let base_slot : bytes32 = n2w slot in
+             SOME (apply_writes base_slot writes storage))
+End
+
+(* ===== HashMap Variable Access ===== *)
+
+(* Read a HashMap entry: HashMap[K, V] at var_name with key *)
+Definition read_hashmap_var_def:
+  read_hashmap_var layout (storage : storage) var_name key_val value_tv =
+    case lookup_var_slot layout var_name of
+    | NONE => NONE
+    | SOME slot =>
+        let base_slot : bytes32 = n2w slot in
+        (case hashmap_value_slot base_slot key_val of
+         | NONE => NONE
+         | SOME entry_slot =>
+             let reader = make_reader entry_slot storage in
+             decode_value value_tv reader)
+End
+
+(* Write a HashMap entry *)
+Definition write_hashmap_var_def:
+  write_hashmap_var layout (storage : storage) var_name key_val value_tv v =
+    case lookup_var_slot layout var_name of
+    | NONE => NONE
+    | SOME slot =>
+        let base_slot : bytes32 = n2w slot in
+        (case hashmap_value_slot base_slot key_val of
+         | NONE => NONE
+         | SOME entry_slot =>
+             (case encode_value value_tv v of
+              | NONE => NONE
+              | SOME writes => SOME (apply_writes entry_slot writes storage)))
+End
+
+(* Read a nested HashMap entry: HashMap[K1, HashMap[K2, V]] *)
+Definition read_nested_hashmap_var_def:
+  read_nested_hashmap_var layout (storage : storage) var_name keys value_tv =
+    case lookup_var_slot layout var_name of
+    | NONE => NONE
+    | SOME slot =>
+        let base_slot : bytes32 = n2w slot in
+        (case nested_hashmap_slot base_slot keys of
+         | NONE => NONE
+         | SOME entry_slot =>
+             let reader = make_reader entry_slot storage in
+             decode_value value_tv reader)
+End
+
+(* Write a nested HashMap entry *)
+Definition write_nested_hashmap_var_def:
+  write_nested_hashmap_var layout (storage : storage) var_name keys value_tv v =
+    case lookup_var_slot layout var_name of
+    | NONE => NONE
+    | SOME slot =>
+        let base_slot : bytes32 = n2w slot in
+        (case nested_hashmap_slot base_slot keys of
+         | NONE => NONE
+         | SOME entry_slot =>
+             (case encode_value value_tv v of
+              | NONE => NONE
+              | SOME writes => SOME (apply_writes entry_slot writes storage)))
+End
