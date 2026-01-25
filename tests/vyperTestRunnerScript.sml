@@ -1,6 +1,6 @@
 Theory vyperTestRunner
 Ancestors
-  contractABI vyperABI vyperSmallStep
+  contractABI vyperABI vyperSmallStep jsonAST
 Libs
   cv_transLib
 
@@ -37,8 +37,17 @@ Datatype:
   ; gasPrice: num
   ; callData: byte list
   ; runtimeBytecode: byte list
+  ; storageLayout: json_storage_layout
   |>
 End
+
+(* Extract simple storage_layout from json_storage_layout *)
+Definition extract_storage_layout_def:
+  extract_storage_layout (jsl: json_storage_layout) : storage_layout =
+    MAP (λ(name, info). (name, info.slot)) jsl.storage
+End
+
+val () = cv_auto_trans extract_storage_layout_def;
 
 Definition compute_selector_names_def:
   compute_selector_names [] = [] ∧
@@ -220,13 +229,17 @@ Definition run_trace_def:
   of Deployment dt => let
       result = run_deployment am dt;
       sns = FST result; res = SND result;
+      layout = extract_storage_layout dt.storageLayout;
       res = if dt.deploymentSuccess then
-              (* Set the bytecode in accounts after successful deployment *)
+              (* Set the bytecode in accounts and add layout after successful deployment *)
               case res of
-                INL am' => INL (am' with accounts updated_by
-                  (update_account dt.deployedAddress
-                    ((lookup_account dt.deployedAddress am'.accounts)
-                      with code := dt.runtimeBytecode)))
+                INL am' => INL (am' with <|
+                  accounts updated_by
+                    (update_account dt.deployedAddress
+                      ((lookup_account dt.deployedAddress am'.accounts)
+                        with code := dt.runtimeBytecode));
+                  layouts updated_by CONS (dt.deployedAddress, layout)
+                |>)
               | err => err
             else if ISR res then INL am
             else INR (Error "deployment success");
