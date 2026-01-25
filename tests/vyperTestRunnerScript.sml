@@ -36,6 +36,7 @@ Datatype:
   ; blobBaseFee: num
   ; gasPrice: num
   ; callData: byte list
+  ; runtimeBytecode: byte list
   |>
 End
 
@@ -219,7 +220,14 @@ Definition run_trace_def:
   of Deployment dt => let
       result = run_deployment am dt;
       sns = FST result; res = SND result;
-      res = if dt.deploymentSuccess then res
+      res = if dt.deploymentSuccess then
+              (* Set the bytecode in accounts after successful deployment *)
+              case res of
+                INL am' => INL (am' with accounts updated_by
+                  (update_account dt.deployedAddress
+                    ((lookup_account dt.deployedAddress am'.accounts)
+                      with code := dt.runtimeBytecode)))
+              | err => err
             else if ISR res then INL am
             else INR (Error "deployment success");
       snss = (dt.deployedAddress,sns)::snss;
