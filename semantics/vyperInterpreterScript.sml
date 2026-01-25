@@ -2,7 +2,7 @@ Theory vyperInterpreter
 Ancestors
   arithmetic alist combin list finite_map pair rich_list
   cv cv_std vfmState vfmExecution[ignore_grammar] vyperAST vyperABI
-  vyperMisc vyperTypeValue
+  vyperMisc vyperTypeValue vyperStorage
 Libs
   cv_transLib wordsLib monadsyntax
   integerTheory[qualified] intSimps[qualified]
@@ -2768,6 +2768,7 @@ Datatype:
     sources: (address, (num option, toplevel list) alist) alist
   ; globals: (address, globals_state) alist
   ; accounts: evm_accounts
+  ; layouts: (address, storage_layout) alist
   |>
 End
 
@@ -2776,6 +2777,7 @@ Definition initial_machine_state_def:
     sources := []
   ; globals := []
   ; accounts := empty_accounts
+  ; layouts := []
   |>
 End
 
@@ -2791,10 +2793,11 @@ End
 val () = cv_auto_trans initial_state_def;
 
 Definition abstract_machine_from_state_def:
-  abstract_machine_from_state srcs (st: evaluation_state) =
+  abstract_machine_from_state srcs layouts (st: evaluation_state) =
   <| sources := srcs
    ; globals := st.globals
    ; accounts := st.accounts
+   ; layouts := layouts
    |> : abstract_machine
 End
 
@@ -2864,19 +2867,20 @@ Definition call_external_function_def:
     | SOME cenv => (* TODO: how do we stop constants being assigned to? *)
    let st = initial_state am [env; cenv] in
    let srcs = am.sources in
+   let layouts = am.layouts in
    let (res, st) =
      (case do send_call_value mut cx; eval_stmts cx body od st
       of
-       | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs st)
+       | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs layouts st)
        | (INR (ReturnException v), st) =>
-           (let am = abstract_machine_from_state srcs st in
+           (let am = abstract_machine_from_state srcs layouts st in
             case evaluate_type tenv ret
             of NONE => (INR (Error "eval ret"), am)
              | SOME tv =>
             case safe_cast tv v
             of NONE => (INR (Error "ext cast ret"), am)
              | SOME v => (INL v, am))
-       | (INR e, st) => (INR e, abstract_machine_from_state srcs st)) in
+       | (INR e, st) => (INR e, abstract_machine_from_state srcs layouts st)) in
     (res, st (* with globals updated_by reset_all_transient_globals -- done separately *)))
 End
 
