@@ -56,9 +56,13 @@ End
 
 (* since HashMaps can only appear at the top level, they are not mutually
 * recursive with other `value`s, and we have `toplevel_value` as follows: *)
+(* HashMapRef stores a base slot and value_type for lazy storage access.
+   When subscripted:
+   - If value_type is HashMapT kt vt, returns HashMapRef with new slot
+   - If value_type is Type t, reads from storage at the computed slot *)
 
 Datatype:
-  toplevel_value = Value value | HashMap value_type ((subscript, toplevel_value) alist)
+  toplevel_value = Value value | HashMapRef bytes32 value_type
 End
 
 Definition is_Value_def[simp]:
@@ -67,8 +71,6 @@ Definition is_Value_def[simp]:
 End
 
 val () = cv_auto_trans is_Value_def;
-
-Type hmap = “:(subscript, toplevel_value) alist”
 
 (* Evaluation of some of the simpler language constructs *)
 
@@ -587,15 +589,12 @@ Definition evaluate_subscript_def:
   (case array_index av i
    of SOME v => INL $ Value v
    | _ => INR "subscript array_index") ∧
-  evaluate_subscript tenv (HashMap vt hm) kv =
-  (case value_to_key kv of SOME k =>
-    (case ALOOKUP hm k of SOME tv => INL tv
-        | _ => (case vt of Type typ =>
-                  (case evaluate_type tenv typ of
-                   | SOME tv => INL $ Value $ default_value tv
-                   | NONE => INR "HashMap evaluate type")
-                | _ => INR "HashMap final value type" ))
-   | _ => INR "evaluate_subscript value_to_key") ∧
+  evaluate_subscript tenv (HashMapRef slot vt) kv =
+  (case encode_hashmap_key kv of
+     SOME key =>
+       let new_slot = hashmap_slot slot key in
+       INL $ HashMapRef new_slot vt
+   | NONE => INR "evaluate_subscript encode_hashmap_key") ∧
   evaluate_subscript _ _ _ = INR "evaluate_subscript"
 End
 
@@ -963,55 +962,7 @@ Proof
   \\ Cases_on`w` \\ gs[]
 QED
 
-Definition assign_hashmap_def:
-  assign_hashmap _ _ hm [] _ = INR "assign_hashmap null" ∧
-  assign_hashmap tenv vt hm (k::ks) ao =
-  (case ALOOKUP hm k
-   of SOME (HashMap vt hm') =>
-    (case assign_hashmap tenv vt hm' ks ao of
-     | INL hm' => INL $ (k, HashMap vt hm') :: (ADELKEY k hm)
-     | INR err => INR err)
-   | SOME (Value v) =>
-    (case assign_subscripts v ks ao of
-     | INL v' => INL $ (k, Value v') :: (ADELKEY k hm)
-     | INR err => INR err)
-   | NONE =>
-     (case vt of HashMapT kt vt' =>
-        (case assign_hashmap tenv vt' [] ks ao of
-         | INL hm' => INL $ (k, HashMap vt' hm') :: hm
-         | INR err => INR err)
-      | Type t =>
-        (case evaluate_type tenv t
-           of NONE => INR "assign_hashmap evaluate_type"
-            | SOME tv =>
-         (case assign_subscripts (default_value tv) ks ao of
-          | INL v => INL $ (k, Value v) :: hm
-          | INR err => INR err))))
-End
 
-val assign_hashmap_pre_def = cv_auto_trans_pre "assign_hashmap_pre" assign_hashmap_def;
-
-Theorem assign_hashmap_pre[cv_pre]:
-  ∀v w x y z. assign_hashmap_pre v w x y z
-Proof
-  Induct_on `y` \\ rw[Once assign_hashmap_pre_def]
-QED
-
-Definition sum_map_left_def:
-  sum_map_left f (INL x) = INL (f x) ∧
-  sum_map_left _ (INR y) = INR y
-End
-
-Definition assign_toplevel_def:
-  assign_toplevel tenv (Value a) is ao =
-    sum_map_left Value $ assign_subscripts a is ao ∧
-  assign_toplevel tenv (HashMap vt hm) is ao =
-    sum_map_left (HashMap vt) $ assign_hashmap tenv vt hm is ao
-End
-
-val () = assign_toplevel_def
-  |> SRULE [oneline sum_map_left_def]
-  |> cv_auto_trans;
 
 (* Environment and context for a contract call *)
 
@@ -1650,14 +1601,93 @@ End
 
 val () = cv_auto_trans set_module_globals_def;
 
+(* Find a storage variable or hashmap declaration in toplevels *)
+Datatype:
+  var_decl_info
+  = StorageVarDecl type           (* regular storage variable *)
+  | HashMapVarDecl type value_type (* hashmap: key type, value type *)
+End
+
+(* Look up variable slot from var_layout *)
+Definition lookup_var_slot_from_layout_def:
+  lookup_var_slot_from_layout cx n =
+    case ALOOKUP cx.layouts cx.txn.target of
+    | NONE => NONE
+    | SOME var_lay => lookup n var_lay
+End
+
+val () = cv_auto_trans lookup_var_slot_from_layout_def;
+
+(* Find var decl by num key (comparing string_to_num of each id) *)
+Definition find_var_decl_by_num_def:
+  find_var_decl_by_num n [] = NONE ∧
+  find_var_decl_by_num n (VariableDecl _ Storage vid typ :: ts) =
+    (if string_to_num vid = n then SOME (StorageVarDecl typ, vid)
+     else find_var_decl_by_num n ts) ∧
+  find_var_decl_by_num n (HashMapDecl _ F vid kt vt :: ts) =
+    (if string_to_num vid = n then SOME (HashMapVarDecl kt vt, vid)
+     else find_var_decl_by_num n ts) ∧
+  find_var_decl_by_num n (_ :: ts) = find_var_decl_by_num n ts
+End
+
+val () = cv_auto_trans find_var_decl_by_num_def;
+
+Definition get_accounts_def:
+  get_accounts st = return st.accounts st
+End
+
+val () = cv_auto_trans get_accounts_def;
+
+(* Read a value from storage at a slot *)
+Definition read_storage_slot_def:
+  read_storage_slot cx slot tv = do
+    accts <- get_accounts;
+    let storage = (lookup_account cx.txn.target accts).storage in
+    let reader = make_reader slot storage in
+    lift_option (decode_value tv reader) "read_storage_slot decode"
+  od
+End
+
+val () = read_storage_slot_def
+  |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
+  |> cv_auto_trans;
+
+(* Write a value to storage at a slot *)
+Definition write_storage_slot_def:
+  write_storage_slot cx slot tv v = do
+    accts <- get_accounts;
+    let acc = lookup_account cx.txn.target accts in
+    let storage = acc.storage in
+    writes <- lift_option (encode_value tv v) "write_storage_slot encode";
+    let storage' = apply_writes slot writes storage in
+    let acc' = acc with storage := storage' in
+    update_accounts (update_account cx.txn.target acc')
+  od
+End
+
+val () = write_storage_slot_def
+  |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
+  |> cv_auto_trans;
+
 (* Module-aware global lookup: look up variable n in module src_id_opt *)
 Definition lookup_global_def:
   lookup_global cx src_id_opt n = do
-    gbs <- get_current_globals cx;
-    let mg = get_module_globals src_id_opt gbs in
-    case FLOOKUP mg.mutables n of
-      NONE => raise $ Error "lookup_global: no var"
-    | SOME v => return v
+    ts <- lift_option (get_module_code cx src_id_opt) "lookup_global get_module_code";
+    tenv <<- type_env ts;
+    case find_var_decl_by_num n ts of
+    | NONE => raise $ Error "lookup_global: var not found"
+    | SOME (StorageVarDecl typ, id) => do
+        (* Regular storage variable: read from EVM storage *)
+        var_info <- lift_option (lookup_var_slot_from_layout cx n) "lookup_global var_info";
+        tv <- lift_option (evaluate_type tenv typ) "lookup_global evaluate_type";
+        v <- read_storage_slot cx (n2w var_info.var_slot) tv;
+        return (Value v)
+      od
+    | SOME (HashMapVarDecl kt vt, id) => do
+        (* HashMap: return a reference with base slot *)
+        var_info <- lift_option (lookup_var_slot_from_layout cx n) "lookup_global hashmap var_info";
+        return (HashMapRef (n2w var_info.var_slot) vt)
+      od
   od
 End
 
@@ -1715,11 +1745,56 @@ End
 
 val () = cv_auto_trans update_module_immutable_def;
 
-Definition get_accounts_def:
-  get_accounts st = return st.accounts st
+(* Finalize a toplevel_value: if it's a HashMapRef with a final Type,
+   read the value from storage. Otherwise return as-is. *)
+Definition finalize_hashmap_ref_def:
+  finalize_hashmap_ref cx tenv (Value v) = return (Value v) ∧
+  finalize_hashmap_ref cx tenv (HashMapRef slot (HashMapT kt vt)) =
+    return (HashMapRef slot (HashMapT kt vt)) ∧
+  finalize_hashmap_ref cx tenv (HashMapRef slot (Type t)) = do
+    tv <- lift_option (evaluate_type tenv t) "finalize_hashmap_ref evaluate_type";
+    v <- read_storage_slot cx slot tv;
+    return (Value v)
+  od
 End
 
-val () = cv_auto_trans get_accounts_def;
+val () = finalize_hashmap_ref_def
+  |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
+  |> cv_auto_trans;
+
+(* Convert subscript back to a value for hashmap key encoding *)
+Definition subscript_to_value_def:
+  subscript_to_value (IntSubscript i) = SOME (IntV (Signed 256) i) ∧
+  subscript_to_value (StrSubscript s) = SOME (StringV (LENGTH s) s) ∧
+  subscript_to_value (BytesSubscript bs) = SOME (BytesV (Fixed (LENGTH bs)) bs) ∧
+  subscript_to_value (AttrSubscript _) = NONE  (* Attributes are not valid hashmap keys *)
+End
+
+val () = cv_auto_trans subscript_to_value_def;
+
+(* Compute final slot from base slot and list of subscripts *)
+Definition compute_hashmap_slot_def:
+  compute_hashmap_slot slot [] = SOME slot ∧
+  compute_hashmap_slot slot (k::ks) =
+    case subscript_to_value k of
+    | NONE => NONE
+    | SOME v =>
+        case encode_hashmap_key v of
+        | NONE => NONE
+        | SOME key => compute_hashmap_slot (hashmap_slot slot key) ks
+End
+
+val () = cv_auto_trans compute_hashmap_slot_def;
+
+(* Get the final value type after traversing hashmap keys.
+   Returns the type and any remaining subscripts (for nested access within the value). *)
+Definition split_hashmap_subscripts_def:
+  split_hashmap_subscripts (Type t) subs = SOME (t, subs) ∧
+  split_hashmap_subscripts (HashMapT kt vt) [] = NONE ∧  (* Not enough subscripts *)
+  split_hashmap_subscripts (HashMapT kt vt) (_::ks) = split_hashmap_subscripts vt ks
+End
+
+val () = cv_auto_trans split_hashmap_subscripts_def;
 
 Definition get_scopes_def:
   get_scopes st = return st.scopes st
@@ -1764,13 +1839,11 @@ End
 
 val () = cv_auto_trans set_current_globals_def;
 
-(* Module-aware global set *)
+(* Module-aware global set: write a value to EVM storage *)
 Definition set_global_def:
   set_global cx src_id_opt n v = do
-    gbs <- get_current_globals cx;
-    let mg = get_module_globals src_id_opt gbs in
-    let mg' = mg with mutables updated_by (λm. m |+ (n, v)) in
-    set_current_globals cx $ set_module_globals src_id_opt mg' gbs
+    var_info <- lift_option (lookup_var_slot_from_layout cx n) "set_global var_info";
+    write_storage_slot cx (n2w var_info.var_slot) var_info.var_type v
   od
 End
 
@@ -1894,9 +1967,32 @@ Definition assign_target_def:
     ni <<- string_to_num id;
     tv <- lookup_global cx src_id_opt ni;
     ts <- lift_option (get_module_code cx src_id_opt) "assign_target get_module_code";
-    tv' <- lift_sum $ assign_toplevel (type_env ts) tv (REVERSE is) ao;
-    set_global cx src_id_opt ni tv';
-    return tv
+    tenv <<- type_env ts;
+    case tv of
+    | Value v => do
+        (* Regular variable: apply assignment and write back *)
+        v' <- lift_sum $ assign_subscripts v (REVERSE is) ao;
+        set_global cx src_id_opt ni v';
+        return tv
+      od
+    | HashMapRef base_slot vt => do
+        (* HashMap: compute slot, read/modify/write storage *)
+        reversed_is <<- REVERSE is;
+        (final_type, remaining_subs) <- lift_option
+          (split_hashmap_subscripts vt reversed_is)
+          "assign_target split_hashmap_subscripts";
+        (* Compute how many subscripts are for the hashmap *)
+        hashmap_subs <<- TAKE (LENGTH reversed_is - LENGTH remaining_subs) reversed_is;
+        final_slot <- lift_option
+          (compute_hashmap_slot base_slot hashmap_subs)
+          "assign_target compute_hashmap_slot";
+        final_tv <- lift_option (evaluate_type tenv final_type) "assign_target evaluate_type";
+        (* Read current value, apply assignment, write back *)
+        current_val <- read_storage_slot cx final_slot final_tv;
+        new_val <- lift_sum $ assign_subscripts current_val remaining_subs ao;
+        write_storage_slot cx final_slot final_tv new_val;
+        return tv
+      od
   od ∧
   assign_target cx (BaseTargetV (ImmutableVar id) is) ao = do
     ni <<- string_to_num id;
@@ -2608,7 +2704,7 @@ Definition evaluate_def:
     v2 <- get_Value tv2;
     ts <- lift_option (get_self_code cx) "Subscript get_self_code";
     tv <- lift_sum $ evaluate_subscript (type_env ts) tv1 v2;
-    return tv
+    finalize_hashmap_ref cx (type_env ts) tv
   od ∧
   eval_expr cx (Attribute e id) = do
     tv <- eval_expr cx e;
@@ -2752,11 +2848,8 @@ End
 (* All initial_globals are for main contract (NONE source_id) *)
 Definition initial_globals_def:
   initial_globals env [] = empty_globals ∧
-  initial_globals env (VariableDecl _ Storage id typ :: ts) =
-  (let gbs = initial_globals env ts in
-   let key = string_to_num id in
-   let iv = Value $ force_default_value env typ in
-     update_module_mutable NONE key iv gbs) ∧
+  (* Storage variables are not stored in globals - they're read from EVM storage
+     which is zero-initialized by default, matching Vyper's default values *)
   initial_globals env (VariableDecl _ Transient id typ :: ts) =
   (let gbs = initial_globals env ts in
    let key = string_to_num id in
@@ -2774,13 +2867,7 @@ Definition initial_globals_def:
    let iv = flag_value (LENGTH ls) 1 [] ls in
      update_module_immutable NONE key iv gbs) ∧
   (* TODO: handle Constants? or ignore since assuming folded into AST *)
-  initial_globals env (HashMapDecl _ is_transient id kt vt :: ts) =
-  (let gbs = initial_globals env ts in
-   let key = string_to_num id in
-   let iv = HashMap vt [] in
-     if is_transient
-     then update_module_transient NONE key iv gbs
-     else update_module_mutable NONE key iv gbs) ∧
+  (* HashMaps are not stored in globals - they're constructed on-the-fly in lookup_global *)
   initial_globals env (t :: ts) = initial_globals env ts
 End
 
