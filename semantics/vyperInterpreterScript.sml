@@ -1057,6 +1057,7 @@ Datatype:
     stk: (num option # identifier) list
   ; txn: call_txn
   ; sources: (address, (num option, toplevel list) alist) alist
+  ; layouts: (address, var_layout) alist
   |>
 End
 
@@ -1071,6 +1072,7 @@ Definition empty_evaluation_context_def:
     stk := []
   ; txn := empty_call_txn
   ; sources := []
+  ; layouts := []
   |>
 End
 
@@ -1146,6 +1148,37 @@ Definition type_env_def:
 End
 
 val () = cv_auto_trans type_env_def;
+
+(* Build var_layout from storage_layout and toplevels.
+   For each variable in storage_layout, look up its type from VariableDecl. *)
+Definition build_var_layout_entry_def:
+  build_var_layout_entry tenv layout [] = LN ∧
+  build_var_layout_entry tenv layout (VariableDecl _ Storage id typ :: ts) =
+    (let rest = build_var_layout_entry tenv layout ts in
+     case ALOOKUP layout id of
+     | NONE => rest
+     | SOME slot =>
+         case evaluate_type tenv typ of
+         | NONE => rest
+         | SOME tv => insert (string_to_num id) <| var_slot := slot; var_type := tv |> rest) ∧
+  build_var_layout_entry tenv layout (_ :: ts) = build_var_layout_entry tenv layout ts
+End
+
+Definition build_var_layout_def:
+  build_var_layout sources layouts addr =
+    case ALOOKUP layouts addr of
+    | NONE => LN
+    | SOME layout =>
+        case ALOOKUP sources addr of
+        | NONE => LN
+        | SOME mods =>
+            case ALOOKUP mods NONE of
+            | NONE => LN
+            | SOME ts => build_var_layout_entry (type_env ts) layout ts
+End
+
+val () = cv_auto_trans build_var_layout_entry_def;
+val () = cv_auto_trans build_var_layout_def;
 
 (* Look up an interface by nsid (source_id, name) *)
 Definition lookup_interface_def:
@@ -2753,9 +2786,20 @@ End
 
 val () = cv_auto_trans initial_globals_def;
 
+(* Convert all storage_layouts to var_layouts *)
+Definition convert_all_layouts_def:
+  convert_all_layouts srcs [] = [] ∧
+  convert_all_layouts srcs ((addr, layout) :: rest) =
+    let var_lay = build_var_layout srcs [(addr, layout)] addr in
+    (addr, var_lay) :: convert_all_layouts srcs rest
+End
+
+val () = cv_auto_trans convert_all_layouts_def;
+
 Definition initial_evaluation_context_def:
-  initial_evaluation_context srcs tx =
+  initial_evaluation_context srcs layouts tx =
   <| sources := srcs
+   ; layouts := convert_all_layouts srcs layouts
    ; txn := tx
    ; stk := [(NONE, tx.function_name)]
    |>
@@ -2886,7 +2930,7 @@ End
 
 Definition call_external_def:
   call_external am tx =
-  let cx = initial_evaluation_context am.sources tx in
+  let cx = initial_evaluation_context am.sources am.layouts tx in
   case get_self_code cx
   of NONE => (INR $ Error "call get_self_code", am)
    | SOME ts =>
@@ -2906,7 +2950,7 @@ Definition load_contract_def:
   case lookup_function tx.function_name Deploy ts of
      | NONE => INR $ Error "no constructor"
      | SOME (mut, args, ret, body) =>
-       let cx = initial_evaluation_context ((addr,mods)::am.sources) tx in
+       let cx = initial_evaluation_context ((addr,mods)::am.sources) am.layouts tx in
        case call_external_function am cx mut ts args tx.args body ret
          of (INR e, _) => INR e
        (* TODO: update balances on return *)
