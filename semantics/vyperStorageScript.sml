@@ -13,12 +13,14 @@ Libs
 (* ===== Basic Slot Encoding/Decoding ===== *)
 
 Definition int_to_slot_def:
-  int_to_slot (i : int) : bytes32 = n2w (Num (i % &(2 ** 256)))
+  int_to_slot (i : int) : bytes32 = i2w i
 End
+val () = cv_auto_trans int_to_slot_def;
 
 Definition slot_to_uint_def:
   slot_to_uint (w : bytes32) : int = &(w2n w)
 End
+val () = cv_auto_trans slot_to_uint_def;
 
 Definition slot_to_int_def:
   slot_to_int (bits : num) (w : bytes32) : int =
@@ -26,37 +28,47 @@ Definition slot_to_int_def:
     let bound = 2 ** (bits - 1) in
     if n < bound then &n else &n - &(2 ** bits)
 End
+val () = cv_auto_trans slot_to_int_def;
 
 Definition bool_to_slot_def:
   bool_to_slot (b : bool) : bytes32 = if b then 1w else 0w
 End
+val () = cv_auto_trans bool_to_slot_def;
 
 Definition slot_to_bool_def:
   slot_to_bool (w : bytes32) : bool = (w <> 0w)
 End
+val () = cv_auto_trans slot_to_bool_def;
 
 (* ===== Bytes/String Slot Helpers ===== *)
 
-Definition bytes_to_slots_def:
-  bytes_to_slots (bs : word8 list) : bytes32 list =
-    if NULL bs then []
-    else
-      let chunk = TAKE 32 bs in
-      let rest = DROP 32 bs in
-      let padded = chunk ++ REPLICATE (32 - LENGTH chunk) 0w in
-      word_of_bytes F 0w padded :: bytes_to_slots rest
+Definition bytes_to_slots_aux_def:
+  bytes_to_slots_aux acc ([]:byte list) = REVERSE acc /\
+  bytes_to_slots_aux acc bs =
+    let chunk = TAKE 32 bs in
+    let rest = DROP 32 bs in
+    let padded = chunk ++ REPLICATE (32 - LENGTH chunk) 0w in
+    bytes_to_slots_aux (word_of_bytes F (0w: bytes32) padded :: acc) rest
 Termination
-  WF_REL_TAC ‘measure LENGTH’ >> Cases_on ‘bs’ >> gvs[]
+  WF_REL_TAC ‘measure (LENGTH o SND)’ >> gvs[]
 End
 
+Definition bytes_to_slots_def:
+  bytes_to_slots bs = bytes_to_slots_aux [] bs
+End
+
+val () = cv_auto_trans bytes_to_slots_aux_def;
+val () = cv_auto_trans bytes_to_slots_def;
+
 Definition slots_to_bytes_def:
-  slots_to_bytes 0 _ = [] /\
+  slots_to_bytes 0 _ = ([]:byte list) /\
   slots_to_bytes _ [] = [] /\
-  slots_to_bytes len (slot::slots) =
+  slots_to_bytes len ((slot:bytes32)::slots) =
     let bs = word_to_bytes slot F in
     let take_n = MIN 32 len in
     TAKE take_n bs ++ slots_to_bytes (len - take_n) slots
 End
+val () = cv_auto_trans slots_to_bytes_def;
 
 (* ===== Slot Size Computation ===== *)
 
@@ -70,6 +82,7 @@ Definition base_type_slot_size_def:
   base_type_slot_size (BytesT (Dynamic n)) = 1 + word_size n /\
   base_type_slot_size (StringT n) = 1 + word_size n
 End
+val () = cv_auto_trans base_type_slot_size_def;
 
 Definition type_slot_size_def:
   type_slot_size (BaseTV (BytesT (Dynamic n))) = 1 + word_size n /\
@@ -77,13 +90,16 @@ Definition type_slot_size_def:
   type_slot_size (BaseTV _) = 1 /\
   type_slot_size (FlagTV _) = 1 /\
   type_slot_size NoneTV = 0 /\
-  type_slot_size (TupleTV tvs) = SUM (MAP type_slot_size tvs) /\
+  type_slot_size (TupleTV tvs) = type_slot_size_list tvs /\
   type_slot_size (ArrayTV tv (Fixed n)) = n * type_slot_size tv /\
   type_slot_size (ArrayTV tv (Dynamic n)) = 1 + n * type_slot_size tv /\
-  type_slot_size (StructTV fields) = SUM (MAP (type_slot_size o SND) fields)
-Termination
-  WF_REL_TAC ‘measure type_value_size’ >> rw[type_value_size_def]
+  type_slot_size (StructTV fields) = type_slot_size_fields fields /\
+  type_slot_size_list [] = 0 /\
+  type_slot_size_list (tv::tvs) = type_slot_size tv + type_slot_size_list tvs /\
+  type_slot_size_fields [] = 0 /\
+  type_slot_size_fields ((_, tv)::fields) = type_slot_size tv + type_slot_size_fields fields
 End
+val () = cv_auto_trans type_slot_size_def;
 
 (* ===== Base Type Encoding ===== *)
 
@@ -94,8 +110,8 @@ Definition encode_base_to_slot_def:
     (if n = m then SOME (int_to_slot i) else NONE) /\
   encode_base_to_slot (DecimalV i) (BaseTV DecimalT) = SOME (int_to_slot i) /\
   encode_base_to_slot (BoolV b) (BaseTV BoolT) = SOME (bool_to_slot b) /\
-  encode_base_to_slot (BytesV (Fixed 20) bs) (BaseTV AddressT) =
-    (if LENGTH bs = 20 then SOME (word_of_bytes T 0w bs) else NONE) /\
+  encode_base_to_slot (BytesV (Fixed m) bs) (BaseTV AddressT) =
+    (if LENGTH bs = m /\ m = 20 then SOME (word_of_bytes T 0w bs) else NONE) /\
   encode_base_to_slot (BytesV (Fixed m) bs) (BaseTV (BytesT (Fixed n))) =
     (if m = n /\ LENGTH bs = n /\ n ≤ 32 then
        SOME (word_of_bytes F 0w (bs ++ REPLICATE (32 - n) 0w))
@@ -105,6 +121,7 @@ Definition encode_base_to_slot_def:
   encode_base_to_slot NoneV NoneTV = SOME 0w /\
   encode_base_to_slot _ _ = NONE
 End
+val () = cv_auto_trans encode_base_to_slot_def;
 
 Definition decode_base_from_slot_def:
   decode_base_from_slot (slot : bytes32) (BaseTV (UintT n)) =
@@ -121,6 +138,7 @@ Definition decode_base_from_slot_def:
   decode_base_from_slot slot NoneTV = NoneV /\
   decode_base_from_slot slot _ = NoneV
 End
+val () = cv_auto_trans decode_base_from_slot_def;
 
 (* ===== Dynamic Bytes/String Encoding ===== *)
 
@@ -130,6 +148,7 @@ Definition encode_dyn_bytes_slots_def:
       SOME ((0:num, n2w (LENGTH bs)) :: MAPi (λi s. (i + 1, s)) (bytes_to_slots bs))
     else NONE
 End
+val () = cv_auto_trans encode_dyn_bytes_slots_def;
 
 Definition decode_dyn_bytes_slots_def:
   decode_dyn_bytes_slots max (reader : num -> bytes32) =
@@ -149,6 +168,7 @@ Definition apply_writes_def:
     let slot : bytes32 = n2w (w2n base_slot + offset) in
     apply_writes base_slot writes (update_storage slot val storage)
 End
+val () = cv_trans apply_writes_def;
 
 Definition make_reader_def:
   make_reader (base_slot : bytes32) storage offset =
@@ -383,13 +403,14 @@ End
    Booleans: 0 or 1 *)
 Definition encode_hashmap_key_def:
   encode_hashmap_key (IntV _ i) = SOME (int_to_slot i) ∧
-  encode_hashmap_key (BytesV (Fixed 20) bs) = 
-    (if LENGTH bs = 20 then SOME (word_of_bytes T 0w bs) else NONE) ∧
-  encode_hashmap_key (BytesV (Fixed 32) bs) =
-    (if LENGTH bs = 32 then SOME (word_of_bytes T 0w bs) else NONE) ∧
+  encode_hashmap_key (BytesV (Fixed n) bs) =
+    (if LENGTH bs = n ∧ (n = 32 ∨ n = 20)
+     then SOME (word_of_bytes T 0w bs) else NONE) ∧
   encode_hashmap_key (BoolV b) = SOME (if b then 1w else 0w) ∧
   encode_hashmap_key _ = NONE
 End
+
+val () = cv_trans encode_hashmap_key_def;
 
 (* Compute slot for a hashmap value given base slot and key value *)
 Definition hashmap_value_slot_def:
@@ -399,7 +420,7 @@ Definition hashmap_value_slot_def:
     | NONE => NONE
 End
 
-(* For nested hashmaps HashMap[K1, HashMap[K2, V]], 
+(* For nested hashmaps HashMap[K1, HashMap[K2, V]],
    compute: hashmap_slot (hashmap_slot base k1) k2 *)
 Definition nested_hashmap_slot_def:
   nested_hashmap_slot base_slot [] = SOME base_slot ∧
