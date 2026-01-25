@@ -527,6 +527,18 @@ End
    but for storage access we only need the base slot. *)
 Type storage_layout = “:(string # num) list”
 
+(* Enriched storage layout entry: slot number and type for a variable *)
+Datatype:
+  var_storage_info = <|
+    var_slot : num;
+    var_type : type_value
+  |>
+End
+
+(* Enriched storage layout: maps variable keys (num) to storage info.
+   Used at runtime for reading/writing variables to EVM storage. *)
+Type var_layout = “:var_storage_info spt”
+
 (* Look up base slot for a variable name *)
 Definition lookup_var_slot_def:
   lookup_var_slot (layout : storage_layout) (var_name : string) : num option =
