@@ -101,6 +101,7 @@ structure vyperASTSyntax :> vyperASTSyntax = struct
   val Convert_tm      = astk"Convert"
   val Extract32_tm    = astk"Extract32"
   val AbiDecode_tm    = astk"AbiDecode"
+  val AbiEncode_tm    = astk"AbiEncode"
   val MethodId_tm     = astk"MethodId"
   val Name_tm         = astk"Name"
   val TopLevelName_tm = astk"TopLevelName"
@@ -199,6 +200,8 @@ structure vyperASTSyntax :> vyperASTSyntax = struct
     Extract32_tm, t, mk_list([bytes,idx], expr_ty)])
   fun mk_AbiDecode (t,bytes) = list_mk_comb(TypeBuiltin_tm, [
     AbiDecode_tm, t, mk_list([bytes], expr_ty)])
+  fun mk_AbiEncode (t,v) = list_mk_comb(TypeBuiltin_tm, [
+    AbiEncode_tm, t, mk_list([v], expr_ty)])
   fun mk_Call ct args = list_mk_comb(AstCall_tm, [ct, mk_list (args, expr_ty)])
   fun mk_Assert (e,s) = list_mk_comb(Assert_tm, [e, s])
   fun mk_Log (id,es) = list_mk_comb(Log_tm, [id, es])

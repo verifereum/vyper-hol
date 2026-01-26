@@ -1219,6 +1219,12 @@ Definition evaluate_type_builtin_def:
      | NONE => INR "abi_decode code") ∧
   evaluate_type_builtin _ AbiDecode _ _ =
     INR "abi_decode args" ∧
+  evaluate_type_builtin cx AbiEncode typ [v] =
+    (case get_self_code cx of
+       SOME ts => evaluate_abi_encode (type_env ts) typ v
+     | NONE => INR "abi_encode code") ∧
+  evaluate_type_builtin _ AbiEncode _ _ =
+    INR "abi_encode args" ∧
   evaluate_type_builtin _ _ _ _ =
     INR "evaluate_type_builtin"
 End
@@ -1369,7 +1375,8 @@ Definition type_builtin_args_length_ok_def:
   type_builtin_args_length_ok Epsilon n = (n = 0) ∧
   type_builtin_args_length_ok Extract32 n = (n = 2) ∧
   type_builtin_args_length_ok Convert n = (n = 1) ∧
-  type_builtin_args_length_ok AbiDecode n = (n = 1)
+  type_builtin_args_length_ok AbiDecode n = (n = 1) ∧
+  type_builtin_args_length_ok AbiEncode n = (n = 1)
 End
 
 val () = cv_auto_trans type_builtin_args_length_ok_def;
