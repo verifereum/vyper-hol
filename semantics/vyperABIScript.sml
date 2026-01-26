@@ -330,14 +330,6 @@ Proof
   Cases >> rw[cvTheory.c2n_def, cvTheory.cv_size_def]
 QED
 
-(* Helper: cv_ispair guard implies the value is a Pair *)
-Theorem cv_ispair_is_pair:
-  !x. cv$c2b (cv_ispair x) ==> ?a b. x = cv$Pair a b
-Proof
-  Cases >> rw[cvTheory.cv_ispair_def, cvTheory.c2b_def]
-  >> qexists_tac `g` >> qexists_tac `g'` >> rw[]
-QED
-
 (* Helper tactic: find cv_fst/cv_snd subterms in the goal and add bounds as assumptions.
    Also adds c2n bounds for terms like c2n (cv_fst x). Returns ALL_TAC if no terms found. *)
 fun cv_bounds_tac (asl, concl) = let
