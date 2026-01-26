@@ -7,6 +7,7 @@ Libs
   cv_transLib
   wordsLib
   dep_rewrite
+  cv_stdTheory
 
 (* Overloads to disambiguate ABI value constructors from Vyper value constructors *)
 Overload abi_IntV[local] = ``IntV : int -> abi_value``
@@ -147,15 +148,51 @@ Definition default_to_abi_def:
   default_to_abi (BaseTV (StringT _)) = BytesV [] ∧
   default_to_abi (BaseTV (BytesT (Fixed n))) = BytesV (REPLICATE n 0w) ∧
   default_to_abi (BaseTV (BytesT (Dynamic _))) = BytesV [] ∧
-  default_to_abi (TupleTV tvs) = ListV (MAP default_to_abi tvs) ∧
+  default_to_abi (TupleTV tvs) = ListV (default_to_abi_list tvs) ∧
   default_to_abi (ArrayTV tv (Fixed n)) = ListV (REPLICATE n (default_to_abi tv)) ∧
   default_to_abi (ArrayTV _ (Dynamic _)) = ListV [] ∧
-  default_to_abi (StructTV fields) = ListV (MAP (default_to_abi o SND) fields) ∧
+  default_to_abi (StructTV fields) = ListV (default_to_abi_fields fields) ∧
   default_to_abi (FlagTV _) = NumV 0 ∧
-  default_to_abi NoneTV = ListV []
+  default_to_abi NoneTV = ListV [] ∧
+  default_to_abi_list [] = [] ∧
+  default_to_abi_list (tv::tvs) = default_to_abi tv :: default_to_abi_list tvs ∧
+  default_to_abi_fields [] = [] ∧
+  default_to_abi_fields ((id,tv)::rest) = default_to_abi tv :: default_to_abi_fields rest
 Termination
-  WF_REL_TAC `measure type_value_size`
+  WF_REL_TAC `measure (λx. case x of
+    | INL tv => type_value_size tv
+    | INR (INL tvs) => list_size type_value_size tvs
+    | INR (INR fields) => list_size (pair_size (λx. 0) type_value_size) fields)`
+  \\ rw[]
+  \\ Induct_on `fields` \\ rw[]
+  \\ Cases_on `h` \\ rw[]
 End
+
+(* Helper theorems to connect explicit recursion with MAP *)
+Theorem default_to_abi_list_MAP:
+  ∀tvs. default_to_abi_list tvs = MAP default_to_abi tvs
+Proof
+  Induct \\ rw[default_to_abi_def]
+QED
+
+Theorem default_to_abi_fields_MAP:
+  ∀fields. default_to_abi_fields fields = MAP (default_to_abi o SND) fields
+Proof
+  Induct \\ rw[default_to_abi_def]
+  \\ PairCases_on `h` \\ rw[default_to_abi_def]
+QED
+
+val () = cv_auto_trans_rec default_to_abi_def (
+  WF_REL_TAC `measure (λx. case x of
+    | INL tv => cv_size tv
+    | INR (INL tvs) => cv_size tvs
+    | INR (INR fields) => cv_size fields)`
+  \\ rw[]
+  \\ Cases_on `cv_v` \\ gvs[]
+  \\ rename [`cv_snd p`]
+  \\ Cases_on `p` \\ gvs[]
+  \\ rename [`cv_fst p`]
+  \\ Cases_on `p` \\ gvs[]);
 
 (* Convert Vyper value to ABI value for encoding *)
 Definition vyper_to_abi_def[simp]:
@@ -243,10 +280,38 @@ Termination
   (* Goal 3: Main -> sparse *)
   \\ rw[]
   \\ `list_size (pair_size (λx. 0) value_size) sparse ≤
-      list_size (pair_size (λx. x) value_size) sparse`
+       list_size (pair_size (λx. x) value_size) sparse`
        by (Induct_on `sparse` \\ simp[] \\ rw[] \\ PairCases_on `h` \\ simp[])
   \\ simp[]
 End
+
+(* TODO: cv_auto_trans for vyper_to_abi
+   
+   The cv-translation for vyper_to_abi is complex due to:
+   1. 4-way mutual recursion (vyper_to_abi, _list, _same, _sparse)
+   2. Pattern completion adds ~85 clauses
+   3. cv_trans_pre_rec fails with "DefnBase.GENASSUME: term <> T"
+   
+   This error occurs during the cv-translation process itself, not during
+   termination proving. The issue appears to be related to how cv_trans
+   handles the large pattern-completed definition.
+   
+   Workaround approaches that were attempted:
+   - Simplifying the definition (removing StructT, SArrayV cases)
+   - Various termination tactics
+   - Using cheat for termination
+   
+   None worked - the error occurs even with simple 3-way recursion
+   versions when they include enough pattern cases.
+   
+   For now, vyper_to_abi is not cv-translated. This means evaluate_abi_encode
+   cannot be cv-translated either. The definitions work correctly for
+   logical reasoning and proofs - only automated evaluation (cv_eval)
+   is affected.
+   
+   Future work: investigate cv_trans internals to understand why
+   pattern-completed mutual recursion fails.
+*)
 
 (* ===== Roundtrip Theorems ===== *)
 
@@ -425,7 +490,8 @@ Proof
   \\ gvs[evaluate_type_def, abi_to_vyper_def, default_value_def, default_to_abi_def,
          check_IntV_def, AllCaseEqs(), within_int_bound_def, compatible_bound_def,
          make_array_value_def, default_value_tuple_MAP, ETA_AX, NULL_EQ,
-         default_value_struct_MAP, evaluate_types_OPT_MMAP]
+         default_value_struct_MAP, evaluate_types_OPT_MMAP,
+         default_to_abi_list_MAP, default_to_abi_fields_MAP]
   >- (
     first_x_assum(mp_tac o Q.AP_TERM`word_of_bytes T (0w:address)`)
     \\ DEP_REWRITE_TAC[word_of_bytes_word_to_bytes]
@@ -633,7 +699,8 @@ Proof
   (* TupleT ts: use IH on list, default_value_tuple_MAP *)
   \\ conj_tac >- (
     rw[evaluate_type_def, vyper_to_abi_def, CaseEq"option"] \\ gvs[]
-    \\ gvs[vyper_to_abi_def, default_value_def, default_to_abi_def]
+    \\ gvs[vyper_to_abi_def, default_value_def, default_to_abi_def,
+          default_to_abi_list_MAP]
     \\ rw[default_value_tuple_MAP, vyper_to_abi_def, ETA_AX] )
   (* ArrayT t bd: Dynamic is trivial, Fixed uses vyper_to_abi_sparse_empty *)
   \\ conj_tac >- (
@@ -643,7 +710,8 @@ Proof
   (* StructT id: use IH on field types, default_value_struct_MAP *)
   \\ conj_tac >- (
     rw[evaluate_type_def, CaseEq"type_args", CaseEq"option"]
-    \\ gvs[default_value_def, default_to_abi_def, default_value_struct_MAP]
+    \\ gvs[default_value_def, default_to_abi_def, default_value_struct_MAP,
+          default_to_abi_fields_MAP]
     \\ gvs[evaluate_types_OPT_MMAP, OPT_MMAP_SOME_IFF]
     \\ gvs[MAP_ZIP, ZIP_MAP, MAP_MAP_o, o_DEF] )
   (* FlagT id: direct computation *)
@@ -704,5 +772,7 @@ Definition evaluate_abi_encode_def:
     | NONE => INR "abi_encode conversion"
 End
 
-(* Note: cv_auto_trans skipped for evaluate_abi_encode because it uses
-   vyper_to_abi which is not cv-translated. *)
+(* NOTE: cv_auto_trans for evaluate_abi_encode cannot be added because 
+   vyper_to_abi is not cv-translated (see TODO comment above).
+   Logical proofs still work; only cv_eval is unavailable for this function.
+*)
