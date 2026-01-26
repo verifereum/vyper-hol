@@ -693,3 +693,16 @@ Proof
   >- (drule abi_to_vyper_list_EL \\ rw[]
       \\ gvs[MAP_ZIP])
 QED
+
+(* ===== ABI Encoding ===== *)
+
+Definition evaluate_abi_encode_def:
+  evaluate_abi_encode tenv typ v =
+    let abiTy = vyper_to_abi_type typ in
+    case vyper_to_abi tenv typ v of
+      SOME av => INL $ BytesV (Dynamic (LENGTH (enc abiTy av))) (enc abiTy av)
+    | NONE => INR "abi_encode conversion"
+End
+
+(* Note: cv_auto_trans skipped for evaluate_abi_encode because it uses
+   vyper_to_abi which is not cv-translated. *)

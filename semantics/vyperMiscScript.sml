@@ -28,6 +28,19 @@ Proof
   rw[FUN_EQ_THM, CHR_o_w2n_def]
 QED
 
+(* Inverse: convert char to word8 *)
+Definition n2w_o_ORD_def:
+  n2w_o_ORD (c: char) = (n2w (ORD c) : word8)
+End
+
+val () = cv_auto_trans n2w_o_ORD_def;
+
+Theorem n2w_o_ORD_eq:
+  n2w_o_ORD = n2w o ORD
+Proof
+  rw[FUN_EQ_THM, n2w_o_ORD_def]
+QED
+
 Definition MAP_HEX_def:
   MAP_HEX [] = [] ∧
   MAP_HEX (x::xs) = HEX x :: MAP_HEX xs

@@ -161,7 +161,7 @@ Datatype:
 End
 
 Datatype:
-  type_builtin = Empty | MaxValue | MinValue | Epsilon | Convert | Extract32 | AbiDecode
+  type_builtin = Empty | MaxValue | MinValue | Epsilon | Convert | Extract32 | AbiDecode | AbiEncode
 End
 
 Datatype:

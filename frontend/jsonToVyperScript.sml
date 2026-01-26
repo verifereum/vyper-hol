@@ -368,6 +368,8 @@ Definition make_builtin_call_def:
                     | _ => Builtin (Uint2Str 0) args)
     else if name = "abi_decode" then
       TypeBuiltin AbiDecode (translate_type ret_ty) args
+    else if name = "abi_encode" then
+      TypeBuiltin AbiEncode (translate_type ret_ty) args
     else if name = "method_id" then
       Builtin MethodId args
     (* Struct constructor, cast, or regular call *)
