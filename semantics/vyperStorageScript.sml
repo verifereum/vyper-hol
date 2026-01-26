@@ -338,7 +338,7 @@ Definition decode_value_def:
   decode_value storage offset (ArrayTV tv (Dynamic max)) =
     (let len = w2n (read_slot storage offset) in
      if len ≤ max then
-       (case decode_dyn_array storage (offset + 1) tv len of
+       (case decode_dyn_array storage (offset + 1) tv (MIN len max) of
         | SOME (vs, slots) => SOME (ArrayV (DynArrayV tv max vs), 1 + slots)
         | NONE => NONE)
      else NONE) /\
@@ -392,14 +392,59 @@ Termination
   rw[type_value_size_def] >>
   ‘type_value1_size ftypes ≤
    list_size (pair_size (list_size char_size) type_value_size) ftypes’
-   by rw[type_value1_size_le] >> simp[]
+   by rw[type_value1_size_le] >> simp[arithmeticTheory.MIN_DEF]
 End
 
-(* TODO: needs termination proof or tail-recursion
-val () = decode_value_def
-|> REWRITE_RULE[GSYM CHR_o_w2n_eq]
-|> cv_auto_trans;
-*)
+(* TODO: refactor helper theorems into a shared library
+   (duplicated from vyperABIScript.sml) *)
+
+Theorem c2n_le_cv_size:
+  !x. cv$c2n x <= cv_size x
+Proof
+  Cases >> rw[cvTheory.c2n_def, cvTheory.cv_size_def]
+QED
+
+val decode_value_pre_def =
+  cv_auto_trans_pre_rec
+    "decode_value_pre decode_tuple_pre decode_static_array_pre decode_dyn_array_pre decode_struct_pre"
+    (decode_value_def |> REWRITE_RULE[GSYM CHR_o_w2n_eq])
+    (WF_REL_TAC `inv_image $<
+       (λx. case x of
+         | INL (storage, offset, tv) => cv_size tv
+         | INR (INL (storage, offset, tvs)) => cv_size tvs
+         | INR (INR (INL (storage, offset, tv, n))) => cv_size tv + cv$c2n n
+         | INR (INR (INR (INL (storage, offset, tv, n)))) => cv_size tv + cv$c2n n
+         | INR (INR (INR (INR (storage, offset, ftypes)))) => cv_size ftypes)`
+     \\ rw[]
+     \\ TRY (gvs[cv_repTheory.cv_termination_simp, cvTheory.cv_size_def,
+                 cvTheory.cv_snd_def, cvTheory.cv_fst_def]
+             \\ decide_tac \\ NO_TAC)
+     (* Handle ArrayTV Dynamic cases - need case splits to expose Pair overhead *)
+     \\ rpt strip_tac
+     \\ Cases_on `cv_v`
+     >> gvs[cvTheory.cv_ispair_def, cvTheory.c2b_def]
+     \\ rename1 `cv_size (cv_fst rest1)`
+     \\ Cases_on `rest1`
+     >> gvs[cvTheory.cv_ispair_def, cvTheory.c2b_def, cvTheory.cv_lt_def,
+            cvTheory.cv_fst_def, cvTheory.cv_snd_def, cvTheory.cv_size_def]
+     \\ (rename1 `cv_ispair rest2` ORELSE rename1 `cv_fst rest2`)
+     \\ Cases_on `rest2`
+     >> gvs[cvTheory.cv_ispair_def, cvTheory.c2b_def, cvTheory.cv_lt_def,
+            cvTheory.cv_fst_def, cvTheory.cv_snd_def, cvTheory.cv_size_def]
+     \\ rename1`cv_lt (cv$Num _) nn = cv$Num _`
+     \\ Cases_on`nn` \\ gvs[CaseEq"bool"]
+     \\ rename1`cv_lt (cv$Num _) nn = cv$Num _`
+     \\ Cases_on`nn` \\ gvs[CaseEq"bool"]
+     \\ qmatch_goalsub_abbrev_tac`cv$c2n nn`
+     \\ qspec_then`nn`assume_tac c2n_le_cv_size
+     \\ gvs[cv_primTheory.cv_min_def]
+     \\ rename1`cv_lt n1 n2`
+     \\ Cases_on`cv_lt n1 n2` \\ gvs[]
+     \\ TRY(Cases_on`n1` \\ Cases_on `n2` \\ gvs[cvTheory.cv_lt_def] \\ NO_TAC)
+     \\ rename1`cv$c2b (cv$Num bb)`
+     \\ Cases_on`bb` \\ gvs[]
+     \\ Cases_on`n1` \\ Cases_on `n2` \\ gvs[cvTheory.cv_lt_def]
+    );
 
 (* ===== HashMap Slot Computation ===== *)
 
