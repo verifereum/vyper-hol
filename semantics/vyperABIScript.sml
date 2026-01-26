@@ -297,18 +297,188 @@ Termination
   \\ simp[]
 End
 
-(* NOTE: The termination proof for cv-translation is cheated because:
-   1. The StructT case requires proving environment size decreases via cv_delete
-      when looking up a struct definition - this requires ~45 lines of careful
-      case analysis using cv_delete_ind (see evaluate_type_def in vyperTypeValueScript.sml)
-   2. The sparse array case requires proving cv_ALOOKUP result size < sparse size
-   3. These are guaranteed correct by the original HOL4 termination proof
-   
-   The precondition theorem below is proven properly via induction on the
-   original definition, so cv_eval will work correctly. *)
+(* Helper: cv_ALOOKUP result size is smaller than sparse list *)
+Theorem cv_ALOOKUP_snd_size:
+  !sparse k. cv$c2b (cv_ispair (cv_ALOOKUP sparse k)) ==>
+    cv_size (cv_snd (cv_ALOOKUP sparse k)) < cv_size sparse
+Proof
+  Induct_on `sparse`
+  >- rw[Once cv_stdTheory.cv_ALOOKUP_def]
+  >- (rw[Once cv_stdTheory.cv_ALOOKUP_def]
+      >- (simp[Once cv_stdTheory.cv_ALOOKUP_def, cvTheory.cv_if_def0]
+          \\ gvs[cv_repTheory.cv_termination_simp, cvTheory.cv_size_def])
+      >- (simp[Once cv_stdTheory.cv_ALOOKUP_def, cvTheory.cv_if_def0]
+          \\ first_x_assum drule \\ simp[]))
+QED
+
+(* Helper: projections don't increase size *)
+Theorem cv_size_cv_fst_le:
+  !x. cv_size (cv_fst x) <= cv_size x
+Proof
+  Cases >> rw[cvTheory.cv_size_def, cvTheory.cv_fst_def]
+QED
+
+Theorem cv_size_cv_snd_le:
+  !x. cv_size (cv_snd x) <= cv_size x
+Proof
+  Cases >> rw[cvTheory.cv_size_def, cvTheory.cv_snd_def]
+QED
+
+Theorem c2n_le_cv_size:
+  !x. cv$c2n x <= cv_size x
+Proof
+  Cases >> rw[cvTheory.c2n_def, cvTheory.cv_size_def]
+QED
+
+(* Helper tactic: find cv_fst/cv_snd subterms in the goal and add bounds as assumptions.
+   Also adds c2n bounds for terms like c2n (cv_fst x). Returns ALL_TAC if no terms found. *)
+fun cv_bounds_tac (asl, concl) = let
+  val cv_fst_tm = ``cv_fst``
+  val cv_snd_tm = ``cv_snd``
+  val c2n_tm = ``cv$c2n``
+  fun is_cv_proj tm =
+    is_comb tm andalso let val (f, _) = dest_comb tm in
+      f ~~ cv_fst_tm orelse f ~~ cv_snd_tm
+    end
+  fun is_c2n tm =
+    is_comb tm andalso (rator tm ~~ c2n_tm)
+  (* Find all cv_fst/cv_snd projections *)
+  fun find_cv_projs tm acc =
+    if is_cv_proj tm then
+      find_cv_projs (rand tm) (tm :: acc)
+    else if is_comb tm then
+      find_cv_projs (rator tm) (find_cv_projs (rand tm) acc)
+    else acc
+  (* Find all c2n applications of cv_fst/cv_snd projections *)
+  fun find_c2n_projs tm acc =
+    if is_c2n tm then
+      let val inner = rand tm in
+        if is_cv_proj inner then (tm :: acc)
+        else find_c2n_projs inner acc
+      end
+    else if is_comb tm then
+      find_c2n_projs (rator tm) (find_c2n_projs (rand tm) acc)
+    else acc
+  val projs = find_cv_projs concl []
+  val c2n_projs = find_c2n_projs concl []
+  fun mk_proj_bound_tac proj = let
+      val (f, a) = dest_comb proj
+    in
+      if f ~~ cv_fst_tm then
+        ASSUME_TAC (SPEC a cv_size_cv_fst_le)
+      else
+        ASSUME_TAC (SPEC a cv_size_cv_snd_le)
+    end
+  fun mk_c2n_bound_tac c2n_app = let
+      val inner = rand c2n_app
+    in
+      ASSUME_TAC (SPEC inner c2n_le_cv_size)
+    end
+  val proj_tacs = map mk_proj_bound_tac projs
+  val c2n_tacs = map mk_c2n_bound_tac c2n_projs
+  val all_tacs = proj_tacs @ c2n_tacs
+in
+  if null all_tacs then ALL_TAC (asl, concl)
+  else EVERY all_tacs (asl, concl)
+end;
+
 val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
   "vyper_to_abi_pre vyper_to_abi_list_pre vyper_to_abi_same_pre vyper_to_abi_sparse_pre"
-  vyper_to_abi_def cheat;
+  vyper_to_abi_def (
+  WF_REL_TAC `inv_image ($< LEX $< LEX $<)
+    (λx. case x of
+      | INL (env, t, v) => (cv$c2n (cv_size' env), cv_size t + cv_size v, 0)
+      | INR (INL (env, ts, vs)) => (cv$c2n (cv_size' env), cv_size ts + cv_size vs, 0)
+      | INR (INR (INL (env, t, vs))) => (cv$c2n (cv_size' env), cv_size t + cv_size vs, 0)
+      | INR (INR (INR (env, t, tv, n, sparse))) =>
+          (cv$c2n (cv_size' env), cv_size t + cv_size sparse + cv$c2n n, cv$c2n n))`
+  \\ rw[]
+  (* Handle simple cv_snd cases *)
+  \\ TRY (gvs[cv_repTheory.cv_termination_simp, cvTheory.cv_size_def, cvTheory.cv_snd_def]
+          \\ rw[cvTheory.cv_snd_def, cvTheory.cv_size_def] \\ NO_TAC)
+  (* Handle cv_sub for sparse n-1 *)
+  \\ TRY (gvs[cv_repTheory.cv_termination_simp, cvTheory.cv_sub_def, cvTheory.c2n_def] \\ NO_TAC)
+  (* Handle ALOOKUP result *)
+  \\ TRY (drule cv_ALOOKUP_snd_size
+          \\ gvs[cv_repTheory.cv_termination_simp, cvTheory.c2n_def] \\ NO_TAC)
+  (* Handle StructT list projection (second lex component) - these are direct inequalities
+     (not disjunctions), so we can't use disj1_tac. Use cv_size bounds and arithmetic. *)
+  \\ TRY (
+      gvs[cv_repTheory.cv_termination_simp]
+      \\ sg `!x. cv_size (cv_snd (cv_snd x)) <= cv_size x`
+      >- (gen_tac >> irule arithmeticTheory.LESS_EQ_TRANS >> qexists_tac `cv_size (cv_snd x)` >> rw[cv_size_cv_snd_le])
+      \\ sg `!x. cv_size (cv_snd (cv_snd (cv_snd x))) <= cv_size x`
+      >- (gen_tac >> irule arithmeticTheory.LESS_EQ_TRANS >> qexists_tac `cv_size (cv_snd (cv_snd x))` >> gvs[])
+      \\ sg `!x. cv$c2n (cv_fst (cv_snd x)) <= cv_size x`
+      >- (gen_tac >> irule arithmeticTheory.LESS_EQ_TRANS >> qexists_tac `cv_size (cv_fst (cv_snd x))` >> rw[c2n_le_cv_size]
+          >> irule arithmeticTheory.LESS_EQ_TRANS >> qexists_tac `cv_size (cv_snd x)` >> rw[cv_size_cv_fst_le, cv_size_cv_snd_le])
+      \\ gvs[]
+      \\ NO_TAC)
+  (* Handle StructT cv_delete - first try the disjunction case *)
+  \\ TRY (
+      disj1_tac
+      \\ pop_assum mp_tac
+      \\ qmatch_goalsub_abbrev_tac `cv_lookup ck`
+      \\ `cv_ispair ck = cv$Num 0`
+         by (rw[Abbr`ck`, cv_string_to_num_def]
+             \\ rw[Once keccakTheory.cv_l2n_def]
+             \\ rw[cvTheory.cv_ispair_cv_add])
+      \\ pop_assum mp_tac
+      \\ qid_spec_tac `cv_env`
+      \\ qid_spec_tac `ck`
+      \\ rpt (pop_assum kall_tac)
+      \\ ho_match_mp_tac cv_stdTheory.cv_delete_ind
+      \\ rpt gen_tac \\ strip_tac
+      \\ simp[Once cv_stdTheory.cv_lookup_def]
+      \\ IF_CASES_TAC \\ gs[]
+      \\ strip_tac \\ gs[]
+      \\ reverse(IF_CASES_TAC \\ gs[])
+      >- (Cases_on `ck` \\ gs[]
+          \\ IF_CASES_TAC \\ gs[]
+          \\ Cases_on `cv_env` \\ gs[]
+          \\ Cases_on `0 < m` \\ gs[]
+          \\ simp[Once cv_stdTheory.cv_delete_def]
+          \\ rw[Once cv_stdTheory.cv_size'_def]
+          \\ rw[Once cv_stdTheory.cv_size'_def])
+      \\ Cases_on `cv_env` \\ gs[]
+      \\ Cases_on `ck` \\ gs[]
+      \\ strip_tac
+      \\ simp[Once cv_stdTheory.cv_delete_def]
+      \\ Cases_on `g` \\ gs[]
+      \\ Cases_on `m=0` \\ gs[]
+      >- (rw[] \\ gs[]
+          \\ rw[Once cv_stdTheory.cv_size'_def]
+          \\ rw[Once cv_stdTheory.cv_size'_def, SimpR ``prim_rec$<``]
+          \\ rw[])
+      \\ simp[Once cv_stdTheory.cv_size'_def, SimpR ``prim_rec$<``]
+      \\ qmatch_goalsub_rename_tac `2 < p`
+      \\ Cases_on `p=0` \\ gs[]
+      \\ Cases_on `p=1` \\ gs[]
+      \\ Cases_on `p=2` \\ gvs[]
+      >- (IF_CASES_TAC \\ gs[cv_stdTheory.cv_size'_cv_mk_BN])
+      \\ IF_CASES_TAC \\ gs[]
+      \\ NO_TAC)
+  (* Remaining goals: arithmetic inequalities on cv_size of nested projections.
+     Note: rw[] above strips cv_ispair assumptions, leaving unconditional goals.
+     Some of these are not provable without knowing cv_v and cv_v0 have Pair structure.
+     
+     The cv_bounds_tac adds weak bounds (<=) for cv_fst/cv_snd projections.
+     This is sufficient when there's overhead from Pair constructors (e.g., +5 on RHS).
+     However, for goals where the cv structure assumptions are lost by rw[], we need
+     to either: (1) avoid running rw[] globally, or (2) prove structure-specific lemmas.
+     
+     TODO: The remaining cheated goal is from vyper_to_abi -> vyper_to_abi_sparse
+     transition (SArrayV case). It needs cv_v to be deeply nested Pairs to be provable.
+     Current workaround: cheat until we can refine the termination tactic. *)
+  \\ TRY (
+      gvs[cv_repTheory.cv_termination_simp]
+      \\ rw[]
+      \\ simp[cvTheory.cv_fst_def, cvTheory.cv_snd_def, cvTheory.cv_size_def]
+      \\ cv_bounds_tac
+      \\ decide_tac
+      \\ NO_TAC)
+  \\ cheat
+);
 
 Theorem vyper_to_abi_pre[cv_pre]:
   (∀env t v. vyper_to_abi_pre env t v) ∧
