@@ -1643,13 +1643,14 @@ Definition read_storage_slot_def:
   read_storage_slot cx slot tv = do
     accts <- get_accounts;
     let storage = (lookup_account cx.txn.target accts).storage in
-    let reader = make_reader slot storage in
-    lift_option (decode_value tv reader) "read_storage_slot decode"
+    case decode_value storage (w2n slot) tv of
+    | SOME (v, _) => return v
+    | NONE => raise $ Error "read_storage_slot decode"
   od
 End
 
 val () = read_storage_slot_def
-  |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
+  |> SRULE [bind_def, FUN_EQ_THM, LET_THM, raise_def, return_def]
   |> cv_auto_trans;
 
 (* Write a value to storage at a slot *)
