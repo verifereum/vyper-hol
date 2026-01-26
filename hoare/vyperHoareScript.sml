@@ -545,6 +545,25 @@ Proof
    simp[])
 QED
 
+Theorem stmts_spec_aug_assign_name:
+  ∀P Q cx n av bop e v.
+    (⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ e ⇓ Value v ⦃λst. assign_target_spec cx st av (Update bop v) Q⦄) ⇒
+    ⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ [AugAssign (NameTarget n) bop e] ⦃Q ∥ λ_ _. F⦄
+Proof
+  rpt strip_tac >>
+  irule stmts_spec_aug_assign >>
+  qexistsl_tac [`λst. P st ∧ lookup_name_target cx st n = SOME av`, `av`, `v`] >>
+  conj_tac >- simp[] >>
+  rw[target_spec_def, lookup_name_target_def] >>
+  simp[Once evaluate_def, bind_def, return_def] >>
+  Cases_on `eval_base_target cx (NameTarget n) st` >>
+  Cases_on `q` >> gvs[] >-
+  (PairCases_on `x` >> gvs[return_def] >>
+   drule eval_base_target_NameTarget_preserves_state >> strip_tac >>
+   gvs[lookup_base_target_def]) >>
+  gvs[lookup_base_target_def]
+QED
+
 Theorem stmts_spec_concat:
   ∀P1 P2 P3 R1 R2 cx ss1 ss2.
     (⟦cx⟧ ⦃P1⦄ ss1 ⦃P2 ∥ R1⦄) ∧

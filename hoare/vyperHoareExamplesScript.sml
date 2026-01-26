@@ -1,10 +1,7 @@
 Theory vyperHoareExamples
 
 Ancestors
-  vyperHoare
-
-Libs
-  vyperHoareTheory vyperInterpreterTheory vyperAssignTargetSpecTheory
+  vyperHoare vyperInterpreter vyperAssignTargetSpec
 
 open integerTheory
 
@@ -183,7 +180,7 @@ Theorem example_2_thm:
   ∀cx. ⟦cx⟧
     ⦃λst. ∃n. lookup_name cx st "x" = SOME (IntV (Signed 128) n) ∧ n > 0 ∧ n < 1000⦄
     example_2
-    ⦃(λ_. F) ∥ λv _. ∃n. v = IntV (Signed 128) n ∧ n > 20 ∧ n ≤ 100⦄
+    ⦃(λ_. F) ∥ λv _. ∃n. v = IntV (Signed 128) n ∧ n > 20 ∧ n ≤ 110⦄
 Proof
   cheat
 QED

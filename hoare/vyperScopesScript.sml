@@ -955,6 +955,14 @@ Proof
   simp[evaluate_def, raise_def]
 QED
 
+Theorem case_StaticCall[local]:
+  ∀cx sig vs st res st'.
+    eval_expr cx (Call (StaticCall sig) vs) st = (res,st') ⇒
+    LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  simp[evaluate_def, raise_def]
+QED
+
 (* Helper: finally with set_scopes restores scopes to the given value *)
 Theorem finally_set_scopes[local]:
   ∀f prev s res s'. finally f (set_scopes prev) s = (res, s') ⇒ s'.scopes = prev
@@ -1145,11 +1153,13 @@ Proof
   >- ACCEPT_TAC case_Send
   (* 42. ExtCall *)
   >- ACCEPT_TAC case_ExtCall
-  (* 43. IntCall - complex proof, see intcall_scopes_len *)
+  (* 43. StaticCall *)
+  >- ACCEPT_TAC case_StaticCall
+  (* 44. IntCall - complex proof, see intcall_scopes_len *)
   >- ACCEPT_TAC case_IntCall
-  (* 44. eval_exprs [] *)
+  (* 45. eval_exprs [] *)
   >- ACCEPT_TAC case_eval_exprs_nil
-  (* 45. eval_exprs (e::es) *)
+  (* 46. eval_exprs (e::es) *)
   >- ACCEPT_TAC case_eval_exprs_cons
 QED
 
