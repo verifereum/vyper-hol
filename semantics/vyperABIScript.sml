@@ -476,18 +476,26 @@ val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
       \\ cv_bounds_tac
       \\ decide_tac
       \\ NO_TAC)
-  (* SArrayV case: goal has both cv_v and cv_v0. The key is using the ispair guards
-     to case split and get strict inequalities from Pair constructor overhead.
-     
-     CHEATED: This goal requires using three ispair guards from assumptions:
-     1. cv$c2b (cv_ispair cv_v) - cv_v is a Pair
-     2. cv$c2b (cv_ispair cv_v0) - cv_v0 is a Pair  
-     3. cv$c2b (cv_ispair (cv_snd (cv_snd cv_v0))) - nested component is also Pair
-     
-     After case splitting cv_v, cv_v0, and the nested component, we get enough
-     Pair constructor overhead (+4) to make the arithmetic inequality hold.
-     The proof requires 4 case splits and explicit bound chaining. *)
-  \\ cheat
+  (* SArrayV case: goal has both cv_v and cv_v0 with ispair guards.
+     Direct case split proof - 7 splits to expose enough Pair constructor overhead. *)
+  \\ TRY (
+      rpt strip_tac
+      \\ Cases_on `cv_v` >> fs[cvTheory.cv_ispair_def, cvTheory.c2b_def]
+      \\ Cases_on `cv_v0` >> fs[cvTheory.cv_ispair_def, cvTheory.c2b_def,
+           cvTheory.cv_snd_def, cvTheory.cv_size_def]
+      \\ qmatch_asmsub_rename_tac `cv_ispair (cv_snd ggg)`
+      \\ Cases_on `ggg` >> fs[cvTheory.cv_ispair_def, cvTheory.cv_snd_def, cvTheory.c2b_def]
+      \\ Cases_on `g'` >> fs[cvTheory.cv_snd_def, cvTheory.cv_fst_def,
+           cvTheory.cv_size_def, cvTheory.c2n_def]
+      \\ qmatch_goalsub_rename_tac `cv_fst (cv_snd gSix)`
+      \\ Cases_on `gSix` >> fs[cvTheory.cv_snd_def, cvTheory.cv_fst_def,
+           cvTheory.cv_size_def, cvTheory.c2n_def]
+      \\ qmatch_goalsub_rename_tac `cv_fst gLast`
+      \\ Cases_on `gLast` >> simp[cvTheory.cv_snd_def, cvTheory.cv_fst_def,
+           cvTheory.cv_size_def, cvTheory.c2n_def]
+      \\ qmatch_goalsub_rename_tac `cv$c2n gNum`
+      \\ Cases_on `gNum` >> simp[cvTheory.cv_size_def, cvTheory.c2n_def]
+      \\ NO_TAC)
 );
 
 Theorem vyper_to_abi_pre[cv_pre]:
