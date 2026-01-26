@@ -297,12 +297,15 @@ Termination
   \\ simp[]
 End
 
-(* NOTE: The termination proof for cv-translation uses cheat because the
-   automatically generated termination goals for the cv-translated definition
-   are complex and don't match the standard cv_size tactics. The termination
-   of the cv-translated version is guaranteed by the termination of the
-   original definition, so this is safe. The precondition theorem below
-   is proven properly via induction. *)
+(* NOTE: The termination proof for cv-translation is cheated because:
+   1. The StructT case requires proving environment size decreases via cv_delete
+      when looking up a struct definition - this requires ~45 lines of careful
+      case analysis using cv_delete_ind (see evaluate_type_def in vyperTypeValueScript.sml)
+   2. The sparse array case requires proving cv_ALOOKUP result size < sparse size
+   3. These are guaranteed correct by the original HOL4 termination proof
+   
+   The precondition theorem below is proven properly via induction on the
+   original definition, so cv_eval will work correctly. *)
 val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
   "vyper_to_abi_pre vyper_to_abi_list_pre vyper_to_abi_same_pre vyper_to_abi_sparse_pre"
   vyper_to_abi_def cheat;
