@@ -1,0 +1,2 @@
+# Hoare logic for Vyper programs
+INCLUDES = ../semantics ../syntax ../frontend $(VFMDIR)/util $(VFMDIR)/spec
