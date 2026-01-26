@@ -1,0 +1,2 @@
+# Algebraic optimization pass
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../../syntax ../../../semantics
