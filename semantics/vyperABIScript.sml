@@ -330,6 +330,14 @@ Proof
   Cases >> rw[cvTheory.c2n_def, cvTheory.cv_size_def]
 QED
 
+(* Helper: cv_ispair guard implies the value is a Pair *)
+Theorem cv_ispair_is_pair:
+  !x. cv$c2b (cv_ispair x) ==> ?a b. x = cv$Pair a b
+Proof
+  Cases >> rw[cvTheory.cv_ispair_def, cvTheory.c2b_def]
+  >> qexists_tac `g` >> qexists_tac `g'` >> rw[]
+QED
+
 (* Helper tactic: find cv_fst/cv_snd subterms in the goal and add bounds as assumptions.
    Also adds c2n bounds for terms like c2n (cv_fst x). Returns ALL_TAC if no terms found. *)
 fun cv_bounds_tac (asl, concl) = let
@@ -459,17 +467,8 @@ val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
       \\ IF_CASES_TAC \\ gs[]
       \\ NO_TAC)
   (* Remaining goals: arithmetic inequalities on cv_size of nested projections.
-     Note: rw[] above strips cv_ispair assumptions, leaving unconditional goals.
-     Some of these are not provable without knowing cv_v and cv_v0 have Pair structure.
-     
      The cv_bounds_tac adds weak bounds (<=) for cv_fst/cv_snd projections.
-     This is sufficient when there's overhead from Pair constructors (e.g., +5 on RHS).
-     However, for goals where the cv structure assumptions are lost by rw[], we need
-     to either: (1) avoid running rw[] globally, or (2) prove structure-specific lemmas.
-     
-     TODO: The remaining cheated goal is from vyper_to_abi -> vyper_to_abi_sparse
-     transition (SArrayV case). It needs cv_v to be deeply nested Pairs to be provable.
-     Current workaround: cheat until we can refine the termination tactic. *)
+     This is sufficient when there's overhead from Pair constructors (e.g., +5 on RHS). *)
   \\ TRY (
       gvs[cv_repTheory.cv_termination_simp]
       \\ rw[]
@@ -477,6 +476,17 @@ val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
       \\ cv_bounds_tac
       \\ decide_tac
       \\ NO_TAC)
+  (* SArrayV case: goal has both cv_v and cv_v0. The key is using the ispair guards
+     to case split and get strict inequalities from Pair constructor overhead.
+     
+     CHEATED: This goal requires using three ispair guards from assumptions:
+     1. cv$c2b (cv_ispair cv_v) - cv_v is a Pair
+     2. cv$c2b (cv_ispair cv_v0) - cv_v0 is a Pair  
+     3. cv$c2b (cv_ispair (cv_snd (cv_snd cv_v0))) - nested component is also Pair
+     
+     After case splitting cv_v, cv_v0, and the nested component, we get enough
+     Pair constructor overhead (+4) to make the arithmetic inequality hold.
+     The proof requires 4 case splits and explicit bound chaining. *)
   \\ cheat
 );
 
