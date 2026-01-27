@@ -500,6 +500,14 @@ Proof
   gvs[lookup_base_target_def]
 QED
 
+Theorem stmts_spec_assign_scoped_var:
+  ∀P Q cx n e v.
+    (⟦cx⟧ ⦃λst. P st ∧ var_in_scope st n⦄ e ⇓ Value v ⦃λst. Q (update_scope_var st n v)⦄) ⇒
+    ⟦cx⟧ ⦃λst. P st ∧ var_in_scope st n⦄ [Assign (BaseTarget (NameTarget n)) e] ⦃Q ∥ λ_ _. F⦄
+Proof
+  cheat
+QED
+
 Theorem stmts_spec_ann_assign:
   ∀P Q cx n ty e v.
      (⟦cx⟧ ⦃P⦄ e ⇓ Value v ⦃λst. st.scopes ≠ [] ∧
