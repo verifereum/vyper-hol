@@ -623,19 +623,58 @@ Theorem pure_scopes_mutual[local]:
   (∀cx es st res st'.
      eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st.scopes = st'.scopes)
 Proof
-  (* Proof assembles all case lemmas (case_Name, case_TopLevelName, etc.)
-     via the specialized induction principle pure_scopes_ind_principle.
+  (* Proof assembles all case lemmas via the specialized induction principle.
      
-     All individual case lemmas are proven above without cheats.
-     The assembly just requires matching the goal shapes from the induction
-     principle to the case lemma statements.
-     
-     TODO: The proof can be completed by:
-     1. After impl_tac, split into 47 goals
-     2. First ~29 goals have conclusion T, solved by simp[]
-     3. Remaining 18 goals are expression cases, each solvable via the
-        corresponding case lemma (proved above) *)
-  cheat
+     The case lemmas have `x` in their IH hypotheses, but the induction
+     principle specializes to `()` (the unit value from check). We simplify
+     the lemmas to match by using SIMP_RULE. *)
+  let
+    (* Simplify case lemmas to specialize unit-typed variables *)
+    val case_Builtin' = SIMP_RULE (srw_ss()) [] case_Builtin
+    val case_TypeBuiltin' = SIMP_RULE (srw_ss()) [] case_TypeBuiltin
+    val case_Send' = SIMP_RULE (srw_ss()) [] case_Send
+    val case_IntCall' = SIMP_RULE (srw_ss()) [] case_IntCall
+    val case_eval_exprs_cons' = SIMP_RULE (srw_ss()) [] case_eval_exprs_cons
+  in
+    MP_TAC pure_scopes_ind_principle >> impl_tac >- (
+      rpt conj_tac >> TRY (simp[]) >-
+      (* Name *)
+      metis_tac[case_Name] >-
+      (* TopLevelName *)
+      metis_tac[case_TopLevelName] >-
+      (* FlagMember *)
+      metis_tac[case_FlagMember] >-
+      (* IfExp *)
+      ACCEPT_TAC case_IfExp >-
+      (* Literal *)
+      metis_tac[case_Literal] >-
+      (* StructLit *)
+      metis_tac[case_StructLit] >-
+      (* Subscript *)
+      ACCEPT_TAC case_Subscript >-
+      (* Attribute *)
+      ACCEPT_TAC case_Attribute >-
+      (* Builtin *)
+      ACCEPT_TAC case_Builtin' >-
+      (* Pop *)
+      ACCEPT_TAC case_Pop >-
+      (* TypeBuiltin *)
+      ACCEPT_TAC case_TypeBuiltin' >-
+      (* Send *)
+      ACCEPT_TAC case_Send' >-
+      (* ExtCall *)
+      metis_tac[case_ExtCall] >-
+      (* StaticCall *)
+      metis_tac[case_StaticCall] >-
+      (* IntCall *)
+      ACCEPT_TAC case_IntCall' >-
+      (* eval_exprs [] *)
+      ACCEPT_TAC case_eval_exprs_nil >-
+      (* eval_exprs cons *)
+      ACCEPT_TAC case_eval_exprs_cons'
+    ) >>
+    simp[]
+  end
 QED
 
 (* ------------------------------------------------------------------------
