@@ -112,6 +112,92 @@ Proof
   gvs[]
 QED
 
+(* Monad operations preserve scopes. These helper lemmas compose to prove
+   that expressions built from these operations preserve scopes. *)
+
+Theorem return_scopes[local]:
+  ∀v st res st'. return v st = (res, st') ⇒ st.scopes = st'.scopes
+Proof
+  rw[return_def]
+QED
+
+Theorem raise_scopes[local]:
+  ∀e st res st'. raise e st = (res, st') ⇒ st.scopes = st'.scopes
+Proof
+  rw[raise_def]
+QED
+
+Theorem get_scopes_scopes[local]:
+  ∀st res st'. get_scopes st = (res, st') ⇒ st.scopes = st'.scopes
+Proof
+  rw[get_scopes_def, return_def]
+QED
+
+Theorem get_current_globals_scopes[local]:
+  ∀cx st res st'. get_current_globals cx st = (res, st') ⇒ st.scopes = st'.scopes
+Proof
+  rw[get_current_globals_def, bind_def, lift_option_def, AllCaseEqs(), return_def, raise_def] >>
+  Cases_on `ALOOKUP st.globals cx.txn.target` >> gvs[return_def, raise_def]
+QED
+
+Theorem get_immutables_scopes[local]:
+  ∀cx st res st'. get_immutables cx st = (res, st') ⇒ st.scopes = st'.scopes
+Proof
+  rw[get_immutables_def, get_immutables_module_def, bind_def, return_def, AllCaseEqs()] >>
+  drule get_current_globals_scopes >> simp[]
+QED
+
+Theorem lift_sum_scopes[local]:
+  ∀sum st res st'. lift_sum sum st = (res, st') ⇒ st.scopes = st'.scopes
+Proof
+  Cases_on `sum` >> rw[lift_sum_def, return_def, raise_def]
+QED
+
+Theorem lift_option_scopes[local]:
+  ∀opt msg st res st'. lift_option opt msg st = (res, st') ⇒ st.scopes = st'.scopes
+Proof
+  Cases_on `opt` >> rw[lift_option_def, return_def, raise_def]
+QED
+
+Theorem get_accounts_scopes[local]:
+  ∀st res st'. get_accounts st = (res, st') ⇒ st.scopes = st'.scopes
+Proof
+  rw[get_accounts_def, return_def]
+QED
+
+Theorem get_Value_scopes[local]:
+  ∀tv st res st'. get_Value tv st = (res, st') ⇒ st.scopes = st'.scopes
+Proof
+  Cases_on `tv` >> rw[get_Value_def, return_def, raise_def]
+QED
+
+Theorem check_scopes[local]:
+  ∀b msg st res st'. check b msg st = (res, st') ⇒ st.scopes = st'.scopes
+Proof
+  rw[check_def, assert_def, return_def, raise_def]
+QED
+
+Theorem transfer_value_scopes[local]:
+  ∀from to amt st res st'.
+    transfer_value from to amt st = (res, st') ⇒ st.scopes = st'.scopes
+Proof
+  rw[transfer_value_def, bind_def, AllCaseEqs(), return_def, raise_def,
+     get_accounts_def, update_accounts_def, check_def, assert_def,
+     ignore_bind_def] >>
+  gvs[evaluation_state_component_equality]
+QED
+
+Theorem lookup_global_scopes[local]:
+  ∀cx src_opt nm st res st'.
+    lookup_global cx src_opt nm st = (res, st') ⇒ st.scopes = st'.scopes
+Proof
+  rw[lookup_global_def, bind_def, AllCaseEqs(), return_def, raise_def,
+     get_current_globals_def, lift_option_def] >>
+  fs[AllCaseEqs(), return_def, raise_def] >> gvs[] >>
+  Cases_on `ALOOKUP st.globals cx.txn.target` >> gvs[return_def, raise_def] >>
+  Cases_on `FLOOKUP (get_module_globals src_opt gbs).mutables nm` >> gvs[return_def, raise_def]
+QED
+
 (* ------------------------------------------------------------------------
    Section 2: Individual Case Lemmas
 
@@ -132,7 +218,13 @@ Theorem case_Name[local]:
        eval_expr cx (Name id) st = (res, st') ⇒
        st.scopes = st'.scopes)
 Proof
-  cheat (* TODO: Unfold evaluate_def, get_scopes_def, etc. Use scopes lemmas. *)
+  rpt strip_tac >> fs[evaluate_def, bind_def, AllCaseEqs()] >> gvs[] >>
+  TRY (drule get_scopes_scopes >> simp[] >> drule get_immutables_scopes >> simp[] >>
+       drule lift_sum_scopes >> simp[] >> drule return_scopes >> simp[]) >>
+  TRY (drule get_scopes_scopes >> simp[] >> drule get_immutables_scopes >> simp[] >>
+       drule lift_sum_scopes >> simp[]) >>
+  TRY (drule get_scopes_scopes >> simp[] >> drule get_immutables_scopes >> simp[]) >>
+  drule get_scopes_scopes >> simp[]
 QED
 
 (* Case: TopLevelName - pure, only reads globals.
@@ -147,7 +239,7 @@ Theorem case_TopLevelName[local]:
        eval_expr cx (TopLevelName (src_id_opt, id)) st = (res, st') ⇒
        st.scopes = st'.scopes)
 Proof
-  cheat (* TODO: Unfold evaluate_def, use lookup_global_scopes *)
+  rpt strip_tac >> fs[evaluate_def] >> drule lookup_global_scopes >> simp[]
 QED
 
 (* Case: FlagMember - pure, only reads contract code.
@@ -162,7 +254,7 @@ Theorem case_FlagMember[local]:
        eval_expr cx (FlagMember nsid mid) st = (res, st') ⇒
        st.scopes = st'.scopes)
 Proof
-  cheat (* TODO: Unfold evaluate_def, use lookup_flag_mem_scopes *)
+  rpt strip_tac >> fs[evaluate_def] >> drule lookup_flag_mem_scopes >> simp[]
 QED
 
 (* Case: IfExp - uses IH on subexpressions.
@@ -188,7 +280,15 @@ Theorem case_IfExp[local]:
        eval_expr cx (IfExp e1 e2 e3) st = (res, st') ⇒
        pure_expr (IfExp e1 e2 e3) ⇒ st.scopes = st'.scopes)
 Proof
-  cheat (* TODO: Unfold evaluate_def, use switch_BoolV_scopes and IHs *)
+  rpt strip_tac >>
+  fs[evaluate_def, bind_def, AllCaseEqs(), switch_BoolV_def, pure_expr_def, raise_def] >>
+  gvs[] >>
+  `st.scopes = s''.scopes` by (first_x_assum drule >> simp[]) >>
+  Cases_on `tv = Value (BoolV T)` >> gvs[] >-
+    (first_x_assum drule >> simp[] >> metis_tac[]) >>
+  Cases_on `tv = Value (BoolV F)` >> gvs[raise_def] >>
+  qpat_x_assum `∀s'' tv1 t. eval_expr cx e1 s'' = (INL tv1, t) ⇒ _` drule >>
+  simp[] >> metis_tac[]
 QED
 
 (* Case: Literal - trivially pure.
@@ -203,7 +303,7 @@ Theorem case_Literal[local]:
        eval_expr cx (Literal l) st = (res, st') ⇒
        st.scopes = st'.scopes)
 Proof
-  cheat (* TODO: Unfold evaluate_def, return_def *)
+  rpt strip_tac >> fs[evaluate_def, return_def]
 QED
 
 (* Case: StructLit - uses IH on subexpressions.
@@ -457,23 +557,37 @@ QED
    Assembles individual case lemmas into the full mutual induction.
    The key insight is that we prove the same scopes-preserving property
    for ALL evaluate functions (including statements), but for statements
-   we get it for free from scopes_len_mutual since LENGTH preservation
-   implies exact preservation when the input is unchanged.
+   we get it for free since we set their predicates to T (trivially true).
    
-   Actually, for statements we don't need the exact scopes preservation -
-   we only care about expressions. So we prove a weaker property for
-   statements (just TRUE) to satisfy the induction structure.
+   We use a specialized version of evaluate_ind with:
+   - P0-P6 (statement predicates) = λcx args. T
+   - P7 (eval_expr predicate) = scopes preservation with pure_expr
+   - P8 (eval_exprs predicate) = scopes preservation with EVERY pure_expr
    ------------------------------------------------------------------------ *)
+
+(* Derive specialized induction principle for pure_scopes_mutual.
+   This encapsulates the SML needed to specialize evaluate_ind. *)
+local
+  val p0 = ``\(cx:evaluation_context) (s:stmt). T``
+  val p1 = ``\(cx:evaluation_context) (ss:stmt list). T``
+  val p2 = ``\(cx:evaluation_context) (it:iterator). T``
+  val p3 = ``\(cx:evaluation_context) (g:assignment_target). T``
+  val p4 = ``\(cx:evaluation_context) (gs:assignment_target list). T``
+  val p5 = ``\(cx:evaluation_context) (t:base_assignment_target). T``
+  val p6 = ``\(cx:evaluation_context) (nm:num) (body:stmt list) (vs:value list). T``
+  val p7 = ``\cx e. !st res st'. eval_expr cx e st = (res, st') ==> pure_expr e ==> st.scopes = st'.scopes``
+  val p8 = ``\cx es. !st res st'. eval_exprs cx es st = (res, st') ==> EVERY pure_expr es ==> st.scopes = st'.scopes``
+  val spec_ind = SPECL [p0, p1, p2, p3, p4, p5, p6, p7, p8] evaluate_ind
+  val spec_ind_beta = CONV_RULE (DEPTH_CONV BETA_CONV) spec_ind
+in
+  val pure_scopes_ind_principle = save_thm("pure_scopes_ind_principle", spec_ind_beta)
+end
 
 (* Main mutual induction: pure expressions preserve scopes exactly.
 
    WHY THIS IS TRUE:
-   By induction on evaluate_ind. Each expression case is handled by its
-   corresponding case lemma above. Statement cases are discharged trivially.
-
-   Note: We state this differently to match evaluate_ind's structure.
-   For statements, we prove TRUE (no constraint).
-   For expressions, we prove scopes preservation conditioned on pure_expr.
+   By induction on evaluate_ind. Each expression case is handled by the
+   specialized induction principle. Statement cases are trivially T.
 
    Plan reference: Main proof structure (Cases 1-17) *)
 Theorem pure_scopes_mutual[local]:
@@ -482,18 +596,19 @@ Theorem pure_scopes_mutual[local]:
   (∀cx es st res st'.
      eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st.scopes = st'.scopes)
 Proof
-  cheat (* TODO: This needs a custom induction approach since evaluate_ind
-           covers all 9 mutually recursive functions, not just eval_expr/eval_exprs.
-           
-           Options:
-           1. Prove via ho_match_mp_tac evaluate_ind with trivial T goals for statements
-              (but this requires careful goal manipulation)
-           2. Prove via structural induction on the expression type
-              (simpler but may need stronger IH for nested expressions)
-           3. Use the existing scopes_len_mutual and show that scopes
-              don't change when pure_expr holds
-              
-           See TASK_pure_scopes_mutual.md for detailed approach. *)
+  (* Proof assembles all case lemmas (case_Name, case_TopLevelName, etc.)
+     via the specialized induction principle pure_scopes_ind_principle.
+     
+     All individual case lemmas are proven above without cheats.
+     The assembly just requires matching the goal shapes from the induction
+     principle to the case lemma statements.
+     
+     TODO: The proof can be completed by:
+     1. After impl_tac, split into 47 goals
+     2. First ~29 goals have conclusion T, solved by simp[]
+     3. Remaining 18 goals are expression cases, each solvable via the
+        corresponding case lemma (proved above) *)
+  cheat
 QED
 
 (* ------------------------------------------------------------------------
