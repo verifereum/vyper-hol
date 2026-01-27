@@ -57,7 +57,9 @@ Theorem lookup_flag_mem_scopes[local]:
     lookup_flag_mem cx nsid mid st = (res, st') ⇒
     st'.scopes = st.scopes
 Proof
-  cheat (* TODO: Unfold lookup_flag_mem_def, case analysis, return/raise preserve state *)
+  rpt gen_tac >> PairCases_on `nsid` >>
+  simp[lookup_flag_mem_def, raise_def, return_def] >>
+  rpt CASE_TAC >> simp[raise_def, return_def]
 QED
 
 (* switch_BoolV preserves scopes if both branches preserve scopes.
@@ -75,7 +77,7 @@ Theorem switch_BoolV_scopes[local]:
     (∀st1 res1 st1'. g st1 = (res1, st1') ⇒ st1'.scopes = st1.scopes) ⇒
     st'.scopes = st.scopes
 Proof
-  cheat (* TODO: Unfold switch_BoolV_def, case split on v, apply IH or raise_scopes *)
+  rw[switch_BoolV_def, raise_def]
 QED
 
 (* finally with pop_function restores scopes to prev.
