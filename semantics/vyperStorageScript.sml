@@ -446,6 +446,19 @@ val decode_value_pre_def =
      \\ Cases_on`n1` \\ Cases_on `n2` \\ gvs[cvTheory.cv_lt_def]
     );
 
+Theorem decode_value_pre[cv_pre]:
+  (∀storage offset tv. decode_value_pre storage offset tv) ∧
+  (∀storage offset tvs. decode_tuple_pre storage offset tvs) ∧
+  (∀storage offset tv n. decode_static_array_pre storage offset tv n) ∧
+  (∀storage offset tv n. decode_dyn_array_pre storage offset tv n) ∧
+  (∀storage offset ftypes. decode_struct_pre storage offset ftypes)
+Proof
+  ho_match_mp_tac decode_value_ind
+  \\ rw[]
+  \\ rw[Once decode_value_pre_def]
+  \\ gvs[]
+QED
+
 (* ===== HashMap Slot Computation ===== *)
 
 (* Basic hashmap slot: keccak256(key ++ base_slot)
