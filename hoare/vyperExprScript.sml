@@ -91,8 +91,23 @@ Theorem finally_pop_function_scopes[local]:
     finally f (pop_function prev) st = (res, st') ⇒
     st'.scopes = prev
 Proof
-  cheat (* TODO: Unfold finally_def, pop_function_def, set_scopes_def.
-           Case split on f st, both paths call set_scopes prev *)
+  rpt strip_tac >>
+  fs[pop_function_def, finally_def, set_scopes_def, AllCaseEqs(),
+     ignore_bind_def, return_def, raise_def, bind_def] >>
+  gvs[]
+QED
+
+(* Helper: finally with set_scopes restores scopes to the given value.
+   Same as finally_pop_function_scopes but uses set_scopes directly. *)
+Theorem finally_set_scopes[local]:
+  ∀f prev st res st'.
+    finally f (set_scopes prev) st = (res, st') ⇒
+    st'.scopes = prev
+Proof
+  rpt strip_tac >>
+  fs[finally_def, set_scopes_def, AllCaseEqs(),
+     ignore_bind_def, return_def, raise_def, bind_def] >>
+  gvs[]
 QED
 
 (* ------------------------------------------------------------------------
@@ -376,12 +391,26 @@ Theorem case_IntCall[local]:
        eval_expr cx (Call (IntCall (src_id_opt, fn)) es) st = (res, st') ⇒
        pure_expr (Call (IntCall (src_id_opt, fn)) es) ⇒ st.scopes = st'.scopes)
 Proof
-  cheat (* TODO: Complex case - key steps:
-           1. eval_exprs preserves scopes (by IH)
-           2. get_scopes saves prev = intermediate_state.scopes
-           3. After eval_exprs, we have st.scopes = intermediate_state.scopes (by step 1)
-           4. finally ... (pop_function prev) restores scopes to prev
-           5. Therefore st'.scopes = prev = st.scopes *)
+  let
+    val sub_tac =
+      TRY (drule_all finally_set_scopes >> strip_tac >> gvs[]) >>
+      TRY (Cases_on `safe_cast rtv rv` >> gvs[return_def, raise_def]) >>
+      TRY (Cases_on `evaluate_type (type_env ts) (FST (SND (SND tup)))` >> gvs[return_def, raise_def]) >>
+      TRY (Cases_on `bind_arguments (type_env ts) (FST (SND tup)) vs` >> gvs[return_def, raise_def]) >>
+      TRY (Cases_on `lookup_function fn Internal ts` >> gvs[return_def, raise_def]) >>
+      TRY (Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def]) >>
+      TRY (last_x_assum mp_tac >> simp[check_def, assert_def, return_def, lift_option_def] >>
+           strip_tac >> first_x_assum drule >> gvs[pure_expr_def] >> metis_tac[])
+  in
+    rpt strip_tac >>
+    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
+         check_def, assert_def, lift_option_def, get_scopes_def, push_function_def,
+         pop_function_def, set_scopes_def, pure_expr_def] >>
+    strip_tac >> gvs[return_def, raise_def] >>
+    sub_tac >> sub_tac >> sub_tac >> sub_tac >> sub_tac >>
+    sub_tac >> sub_tac >> sub_tac >> sub_tac
+  end
 QED
 
 (* Case: eval_exprs [] - trivially pure.
