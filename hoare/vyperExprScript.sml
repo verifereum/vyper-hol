@@ -322,7 +322,9 @@ Theorem case_StructLit[local]:
        eval_expr cx (StructLit src kes) st = (res, st') ⇒
        pure_expr (StructLit src kes) ⇒ st.scopes = st'.scopes)
 Proof
-  cheat (* TODO: Unfold evaluate_def, use IH and return_scopes *)
+  rpt strip_tac >> PairCases_on `src` >>
+  fs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def, return_def] >> gvs[] >>
+  first_x_assum drule >> gvs[listTheory.EVERY_MAP]
 QED
 
 (* Case: Subscript - uses IH on subexpressions.
@@ -345,7 +347,10 @@ Theorem case_Subscript[local]:
        eval_expr cx (Subscript e1 e2) st = (res, st') ⇒
        pure_expr (Subscript e1 e2) ⇒ st.scopes = st'.scopes)
 Proof
-  cheat (* TODO: Unfold evaluate_def, use IHs and monad lemmas *)
+  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def] >>
+  imp_res_tac return_scopes >> imp_res_tac lift_sum_scopes >>
+  imp_res_tac lift_option_scopes >> imp_res_tac get_Value_scopes >>
+  res_tac >> gvs[] >> metis_tac[]
 QED
 
 (* Case: Attribute - uses IH on subexpression.
@@ -363,7 +368,9 @@ Theorem case_Attribute[local]:
        eval_expr cx (Attribute e id) st = (res, st') ⇒
        pure_expr (Attribute e id) ⇒ st.scopes = st'.scopes)
 Proof
-  cheat (* TODO: Unfold evaluate_def, use IH and monad lemmas *)
+  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def] >>
+  imp_res_tac return_scopes >> imp_res_tac lift_sum_scopes >>
+  imp_res_tac get_Value_scopes >> res_tac >> gvs[] >> metis_tac[]
 QED
 
 (* Case: Builtin - uses IH on subexpressions.
@@ -382,7 +389,11 @@ Theorem case_Builtin[local]:
        eval_expr cx (Builtin bt es) st = (res, st') ⇒
        pure_expr (Builtin bt es) ⇒ st.scopes = st'.scopes)
 Proof
-  cheat (* TODO: Unfold evaluate_def, use IH and monad lemmas *)
+  rpt strip_tac >>
+  gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def, ignore_bind_def,
+      check_def, assert_def, return_def, raise_def, get_accounts_def, lift_sum_def] >>
+  TRY (Cases_on `evaluate_builtin cx s''.accounts bt vs` >> gvs[return_def, raise_def]) >>
+  first_x_assum drule >> gvs[ETA_THM]
 QED
 
 (* Case: Pop - vacuously true since pure_expr (Pop _) = F.
@@ -416,7 +427,11 @@ Theorem case_TypeBuiltin[local]:
        eval_expr cx (TypeBuiltin tb typ es) st = (res, st') ⇒
        pure_expr (TypeBuiltin tb typ es) ⇒ st.scopes = st'.scopes)
 Proof
-  cheat (* TODO: Unfold evaluate_def, use IH and monad lemmas *)
+  rpt strip_tac >>
+  gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def, ignore_bind_def,
+      check_def, assert_def, return_def, raise_def, lift_sum_def] >>
+  TRY (Cases_on `evaluate_type_builtin cx tb typ vs` >> gvs[return_def, raise_def]) >>
+  first_x_assum drule >> gvs[ETA_THM]
 QED
 
 (* Case: Call Send - uses IH on subexpressions.
@@ -435,7 +450,13 @@ Theorem case_Send[local]:
        eval_expr cx (Call Send es) st = (res, st') ⇒
        pure_expr (Call Send es) ⇒ st.scopes = st'.scopes)
 Proof
-  cheat (* TODO: Unfold evaluate_def, use IH and transfer_value_scopes *)
+  rpt strip_tac >>
+  gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def, ignore_bind_def,
+      check_def, assert_def, return_def, raise_def, lift_option_def] >>
+  TRY (drule transfer_value_scopes >> strip_tac) >>
+  TRY (Cases_on `dest_NumV (EL 1 vs)` >> gvs[return_def, raise_def]) >>
+  TRY (Cases_on `dest_AddressV (HD vs)` >> gvs[return_def, raise_def]) >>
+  first_x_assum drule >> gvs[ETA_THM]
 QED
 
 (* Case: ExtCall - raises error, state unchanged.
@@ -548,7 +569,13 @@ Theorem case_eval_exprs_cons[local]:
        eval_exprs cx (e::es) st = (res, st') ⇒
        EVERY pure_expr (e::es) ⇒ st.scopes = st'.scopes)
 Proof
-  cheat (* TODO: Unfold evaluate_def, use IHs and get_Value_scopes *)
+  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def] >>
+  imp_res_tac get_Value_scopes >> gvs[] >>
+  TRY (`st.scopes = s''.scopes` by (first_x_assum (qspec_then `st` mp_tac) >> simp[])) >>
+  TRY (`s'³'.scopes = s'⁴'.scopes` by (
+    last_x_assum (qspecl_then [`st`, `tv`, `s''`, `s''`, `v''`, `s'³'`] mp_tac) >>
+    simp[] >> strip_tac >> first_x_assum drule >> simp[])) >>
+  simp[]
 QED
 
 (* ------------------------------------------------------------------------
