@@ -130,4 +130,14 @@ To run the Vyper test suite on our definitional interpreter, follow this approac
 3. Set the `VFMDIR` environment variable to a path of a clone of the Verifereum repository (tracking `main`).
 4. `cd tests/generated` and then run `Holmake`.
 
+### Running Venom pass trace tests
+
+Venom pass trace tests compare the exported Venom IR before/after a pass with the HOL definition of that pass.
+
+1. Activate a Python environment with Vyper available (for example, activate `vyper/.venv` if you use the local checkout). If Vyper is not in `./vyper`, set `VYPER_ROOT` to your checkout.
+2. Export traces for the configured passes:
+   - `python scripts/venom_ir_export.py --config venom/tests/pass_trace_config.json`
+3. Run the checks:
+   - `cd venom/tests` and then run `Holmake --qof`
+
 CI uses the same layout and currently exports fixtures from a Vyper checkout during the workflow run.

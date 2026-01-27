@@ -7,7 +7,7 @@
 
 Theory algebraicOptTransform
 Ancestors
-  list string words finite_map
+  list string words finite_map alist
   venomState venomInst
 
 (* ==========================================================================
@@ -45,6 +45,33 @@ End
 
 Definition lit_is_ones_def:
   lit_is_ones op = lit_eq op (~(0w:bytes32))
+End
+
+(* ==========================================================================
+   Analysis Hints (per-instruction)
+   ========================================================================== *)
+
+Datatype:
+  opt_hint = <|
+    prefer_iszero: bool;
+    is_truthy: bool;
+    cmp_flip: bool
+  |>
+End
+
+Definition default_hint_def:
+  default_hint = <|
+    prefer_iszero := F;
+    is_truthy := F;
+    cmp_flip := F
+  |>
+End
+
+Definition hint_lookup_def:
+  hint_lookup hints id =
+    case ALOOKUP hints id of
+      SOME h => h
+    | NONE => default_hint
 End
 
 (* ==========================================================================
@@ -407,6 +434,26 @@ Definition transform_function_def:
       MAP (transform_block prefer_iszero is_truthy cmp_flip) fn.fn_blocks
 End
 
+(* Hint-guided transforms (per instruction id) *)
+
+Definition transform_inst_list_hints_def:
+  transform_inst_list_hints hints inst =
+    let h = hint_lookup hints inst.inst_id in
+      transform_inst_list h.prefer_iszero h.is_truthy h.cmp_flip inst
+End
+
+Definition transform_block_hints_def:
+  transform_block_hints hints bb =
+    bb with bb_instructions :=
+      FLAT (MAP (transform_inst_list_hints hints) bb.bb_instructions)
+End
+
+Definition transform_function_hints_def:
+  transform_function_hints hints fn =
+    fn with fn_blocks :=
+      MAP (transform_block_hints hints) fn.fn_blocks
+End
+
 (* ==========================================================================
    Iszero-chain Operand Rewriting (Abstract)
    ========================================================================== *)
@@ -440,6 +487,37 @@ Definition subst_function_def:
     fn with fn_blocks := MAP (subst_block sigma) fn.fn_blocks
 End
 
+(* Operand substitution (alist from var name to operand) *)
+
+Definition subst_operand_op_def:
+  subst_operand_op sigma op =
+    case op of
+      Var v =>
+        (case ALOOKUP sigma v of
+           SOME op' => op'
+         | NONE => op)
+    | _ => op
+End
+
+Definition subst_operands_op_def:
+  subst_operands_op sigma ops = MAP (subst_operand_op sigma) ops
+End
+
+Definition subst_inst_op_def:
+  subst_inst_op sigma inst =
+    inst with inst_operands := subst_operands_op sigma inst.inst_operands
+End
+
+Definition subst_block_op_def:
+  subst_block_op sigma bb =
+    bb with bb_instructions := MAP (subst_inst_op sigma) bb.bb_instructions
+End
+
+Definition subst_function_op_def:
+  subst_function_op sigma fn =
+    fn with fn_blocks := MAP (subst_block_op sigma) fn.fn_blocks
+End
+
 Definition iszero_var_def:
   iszero_var fn v <=>
     ?bb inst.
@@ -461,11 +539,31 @@ Definition rewrite_iszero_chains_def:
       fn' = subst_function sigma fn
 End
 
+Definition iszero_subst_op_def:
+  iszero_subst_op fn sigma <=>
+    !v op. ALOOKUP sigma v = SOME op ==> iszero_var fn v
+End
+
+Definition rewrite_iszero_chains_op_def:
+  rewrite_iszero_chains_op fn fn' <=>
+    ?sigma.
+      iszero_subst_op fn sigma /\
+      fn' = subst_function_op sigma fn
+End
+
 Definition algebraic_opt_transform_def:
   algebraic_opt_transform fn fn' <=>
     ?prefer_iszero is_truthy cmp_flip fn1.
       fn1 = transform_function prefer_iszero is_truthy cmp_flip fn /\
       rewrite_iszero_chains fn1 fn'
+End
+
+Definition algebraic_opt_transform_hints_def:
+  algebraic_opt_transform_hints hints sigma fn fn' <=>
+    ?fn1.
+      fn1 = transform_function_hints hints fn /\
+      iszero_subst_op fn1 sigma /\
+      fn' = subst_function_op sigma fn1
 End
 
 Definition algebraic_opt_context_def:
