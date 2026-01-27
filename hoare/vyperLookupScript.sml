@@ -1,0 +1,209 @@
+Theory vyperLookup
+
+Ancestors
+  vyperInterpreter vyperTypeValue
+
+Definition lookup_scoped_var_def:
+  lookup_scoped_var st n = lookup_scopes (string_to_num n) st.scopes
+End
+
+Definition var_in_scope_def:
+  var_in_scope st n ⇔ IS_SOME (lookup_scoped_var st n)
+End
+
+Definition lookup_immutable_def:
+  lookup_immutable cx (st:evaluation_state) n =
+  case ALOOKUP st.globals cx.txn.target of
+  | SOME gbs => FLOOKUP (get_module_globals NONE gbs).immutables (string_to_num n)
+  | NONE => NONE
+End
+
+Definition update_scoped_var_def:
+  update_scoped_var st id v =
+    let n = string_to_num id in
+    case find_containing_scope n st.scopes of
+    | SOME (pre, env, _, rest) =>
+        st with scopes := (pre ++ (env |+ (n, v))::rest)
+    | NONE =>
+        st with scopes := (HD st.scopes |+ (n, v)) :: TL st.scopes
+End
+
+Definition valid_lookups_def:
+  valid_lookups cx st ⇔
+    ∃gbs. ALOOKUP st.globals cx.txn.target = SOME gbs ∧
+          ∀n. var_in_scope st n ⇒ FLOOKUP (get_module_globals NONE gbs).immutables (string_to_num n) = NONE
+End
+
+Definition lookup_name_def:
+  lookup_name cx st n =
+    case eval_expr cx (Name n) st of
+    | (INL (Value v), _) => SOME v
+    | (_, _) => NONE
+End
+
+Definition lookup_base_target_def:
+  lookup_base_target cx st tgt =
+    case eval_base_target cx tgt st of
+    | (INL (loc, sbs), _) => SOME (BaseTargetV loc sbs)
+    | (INR _, _) => NONE
+End
+
+Definition lookup_name_target_def:
+  lookup_name_target cx st n = lookup_base_target cx st (NameTarget n)
+End
+
+Definition lookup_toplevel_name_target_def:
+  lookup_toplevel_name_target cx st n = lookup_base_target cx st (TopLevelNameTarget n)
+End
+
+(****************************************)
+(* Helpers *)
+
+Theorem lookup_scopes_to_lookup_name:
+  ∀cx st n v gbs.
+    lookup_scopes (string_to_num n) st.scopes = SOME v ∧
+    ALOOKUP st.globals cx.txn.target = SOME gbs ∧
+    FLOOKUP (get_module_globals NONE gbs).immutables (string_to_num n) = NONE ⇒
+    lookup_name cx st n = SOME v
+Proof
+  rpt strip_tac >>
+  simp[lookup_name_def, Once evaluate_def, bind_def, get_scopes_def, return_def,
+       get_immutables_def, get_immutables_module_def, get_current_globals_def,
+       lift_option_def, exactly_one_option_def, lift_sum_def]
+QED
+
+Theorem lookup_scopes_find_containing:
+  ∀id sc. IS_SOME (lookup_scopes id sc) ⇒ IS_SOME (find_containing_scope id sc)
+Proof
+  Induct_on `sc` >- rw[lookup_scopes_def] >>
+  rpt strip_tac >>
+  simp[lookup_scopes_def, find_containing_scope_def] >>
+  Cases_on `FLOOKUP h id` >-
+   (simp[] >>
+    first_x_assum (qspec_then `id` mp_tac) >>
+    impl_tac >- fs[lookup_scopes_def] >>
+    strip_tac >> Cases_on `find_containing_scope id sc` >> gvs[]) >>
+  simp[]
+QED
+
+Theorem find_containing_scope_pre_none:
+  ∀id sc pre env v rest.
+    find_containing_scope id sc = SOME (pre,env,v,rest) ⇒
+    lookup_scopes id pre = NONE
+Proof
+  Induct_on `sc` >- rw[find_containing_scope_def] >>
+  simp[find_containing_scope_def] >>
+  rpt gen_tac >> Cases_on `FLOOKUP h id` >> gvs[] >-
+   (strip_tac >> PairCases_on `z` >> gvs[] >> simp[lookup_scopes_def]) >>
+  simp[lookup_scopes_def]
+QED
+
+Theorem lookup_scopes_update:
+  ∀id pre env v rest.
+    lookup_scopes id pre = NONE ⇒
+    lookup_scopes id (pre ++ env |+ (id,v) :: rest) = SOME v
+Proof
+  Induct_on `pre` >-
+   simp[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[lookup_scopes_def, AllCaseEqs()]
+QED
+
+Theorem find_containing_scope_structure:
+  ∀id sc pre env v rest.
+    find_containing_scope id sc = SOME (pre, env, v, rest) ⇒
+    sc = pre ++ env :: rest ∧ FLOOKUP env id = SOME v
+Proof
+  Induct_on `sc` >- rw[find_containing_scope_def] >>
+  rpt gen_tac >> strip_tac >> qpat_x_assum `_ = SOME _` mp_tac >>
+  simp[find_containing_scope_def] >>
+  Cases_on `FLOOKUP h id` >> simp[] >-
+  (strip_tac >> PairCases_on `z` >> gvs[] >> first_x_assum drule >> simp[]) >>
+  strip_tac >> gvs[]
+QED
+
+Theorem find_containing_scope_lookup:
+  ∀id sc pre env v rest.
+    find_containing_scope id sc = SOME (pre, env, v, rest) ⇒
+    lookup_scopes id sc = SOME v
+Proof
+  Induct_on `sc` >- rw[find_containing_scope_def] >>
+  rw[find_containing_scope_def, lookup_scopes_def] >>
+  Cases_on `FLOOKUP h id` >> gvs[] >>
+  PairCases_on `z` >> gvs[]
+QED
+
+Theorem find_containing_scope_lookup_scopes:
+  ∀id sc. IS_SOME (find_containing_scope id sc) ⇒ IS_SOME (lookup_scopes id sc)
+Proof
+  rpt strip_tac >>
+  Cases_on `find_containing_scope id sc` >> gvs[] >>
+  PairCases_on `x` >> drule find_containing_scope_lookup >> simp[]
+QED
+
+Theorem lookup_scopes_update_preserves:
+  ∀n pre env id v rest.
+    FLOOKUP env id = SOME w ⇒
+    (IS_SOME (lookup_scopes n (pre ++ [env] ++ rest)) ⇔
+     IS_SOME (lookup_scopes n (pre ++ env |+ (id, v) :: rest)))
+Proof
+  Induct_on `pre` >-
+  (rw[lookup_scopes_def] >>
+   simp[finite_mapTheory.FLOOKUP_UPDATE] >>
+   Cases_on `id = n` >> gvs[] >>
+   Cases_on `FLOOKUP env n` >> gvs[]) >>
+  rw[lookup_scopes_def] >>
+  Cases_on `FLOOKUP h n` >> gvs[]
+QED
+
+(****************************************)
+(* Theorems *)
+
+Theorem var_in_scope_implies_name_target:
+  ∀cx (st:evaluation_state) n.
+    (cx.txn.is_creation ⇒ valid_lookups cx st) ∧
+    var_in_scope st n ⇒
+    lookup_name_target cx st n = SOME (BaseTargetV (ScopedVar n) [])
+Proof
+  rw[var_in_scope_def, valid_lookups_def, lookup_scoped_var_def, lookup_name_target_def, lookup_base_target_def] >>
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def] >>
+  `IS_SOME (lookup_scopes (string_to_num n) st.scopes)`
+    by metis_tac[find_containing_scope_lookup_scopes] >>
+  simp[] >>
+  Cases_on `cx.txn.is_creation` >-
+    gvs[get_immutables_def, get_immutables_module_def,
+        get_current_globals_def, bind_def, lift_option_def, return_def,
+        lift_sum_def, exactly_one_option_def, immutable_target_def, raise_def] >>
+  simp[return_def, lift_sum_def, exactly_one_option_def]
+QED
+
+Theorem lookup_name_target_implies_var_in_scope:
+  ∀cx st n.
+    lookup_name_target cx st n = SOME (BaseTargetV (ScopedVar n) []) ⇒
+    var_in_scope st n
+Proof
+  rw[var_in_scope_def, lookup_scoped_var_def, lookup_name_target_def, lookup_base_target_def] >>
+  pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def] >>
+  Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >- simp[] >>
+  fs[] >>
+  Cases_on `cx.txn.is_creation` >-
+   (simp[get_immutables_def, get_immutables_module_def,
+         get_current_globals_def, bind_def, lift_option_def,
+         return_def, raise_def] >>
+    Cases_on `ALOOKUP st.globals cx.txn.target` >>
+    simp[return_def, immutable_target_def] >>
+    Cases_on `FLOOKUP (get_module_globals NONE x).immutables (string_to_num n)` >>
+    simp[exactly_one_option_def, lift_sum_def, return_def, raise_def]) >>
+  simp[return_def, exactly_one_option_def, lift_sum_def, raise_def]
+QED
+
+Theorem lookup_scoped_var_implies_lookup_name:
+  ∀cx st n v.
+    valid_lookups cx st ∧
+    lookup_scoped_var st n = SOME v ⇒
+    lookup_name cx st n = SOME v
+Proof
+  simp[valid_lookups_def, lookup_scoped_var_def, var_in_scope_def] >>
+  rpt strip_tac >>
+  gvs[lookup_scopes_to_lookup_name, lookup_scopes_find_containing]
+QED

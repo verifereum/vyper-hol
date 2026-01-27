@@ -1,7 +1,7 @@
 Theory vyperHoareExamples
 
 Ancestors
-  vyperHoare vyperInterpreter vyperAssignTargetSpec
+  vyperHoare vyperInterpreter vyperAssignTargetSpec vyperLookup
 
 open integerTheory
 

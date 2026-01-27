@@ -1,7 +1,7 @@
 Theory vyperHoare
 
 Ancestors
-  vyperInterpreter vyperScopes vyperAssignTargetSpec
+  vyperInterpreter vyperScopes vyperAssignTargetSpec vyperLookup vyperExpr
 
 (**********************************************************************)
 (* Definitions *)
@@ -210,6 +210,18 @@ Theorem expr_spec_name:
   ∀P cx n v. ⟦cx⟧ ⦃λst. P st ∧ lookup_name cx st n = SOME v⦄ (Name n) ⇓ Value v ⦃P⦄
 Proof
   rw[expr_spec_def, lookup_name_def] >> rpt strip_tac >>
+  Cases_on `eval_expr cx (Name n) st` >>
+  Cases_on `q` >> gvs[] >>
+  Cases_on `x` >> gvs[] >>
+  drule eval_expr_Name_preserves_state >> simp[]
+QED
+
+Theorem expr_spec_scoped_var:
+  ∀P cx n v. ⟦cx⟧ ⦃λst. P st ∧ valid_lookups cx st ∧ lookup_scoped_var st n = SOME v⦄ (Name n) ⇓ Value v ⦃P⦄
+Proof
+  rw[expr_spec_def] >>
+  (subgoal ‘lookup_name cx st n = SOME v’ >- gvs[lookup_scoped_var_implies_lookup_name]) >>
+  fs[lookup_name_def] >> rpt strip_tac >>
   Cases_on `eval_expr cx (Name n) st` >>
   Cases_on `q` >> gvs[] >>
   Cases_on `x` >> gvs[] >>
@@ -502,9 +514,13 @@ QED
 
 Theorem stmts_spec_assign_scoped_var:
   ∀P Q cx n e v.
-    (⟦cx⟧ ⦃λst. P st ∧ var_in_scope st n⦄ e ⇓ Value v ⦃λst. Q (update_scope_var st n v)⦄) ⇒
+    (⟦cx⟧ ⦃λst. P st ∧ valid_lookups cx st ∧ var_in_scope st n⦄ e ⇓ Value v ⦃λst. Q (update_scoped_var st n v)⦄) ⇒
     ⟦cx⟧ ⦃λst. P st ∧ var_in_scope st n⦄ [Assign (BaseTarget (NameTarget n)) e] ⦃Q ∥ λ_ _. F⦄
 Proof
+  (* Proof sketch
+     1. Use var_in_scope_implies_name_target to obtain X: ⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME (BaseTargetV (ScopedVar n) [])⦄ e ⇓ Value v ⦃λst. Q (update_scoped_var st n v)⦄
+     2. ...
+   *)
   cheat
 QED
 
