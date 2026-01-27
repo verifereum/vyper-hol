@@ -4,7 +4,7 @@ Theory vyperExpr
  *)
 
 Ancestors
-  vyperInterpreter vyperScopes
+  vyperInterpreter
 
 (* Pure expressions: expressions that do not modify scopes.
    Pop is the only impure expression constructor - it modifies scoped variables.
@@ -31,27 +31,11 @@ Termination
   res_tac >> simp[]
 End
 
-(* ========================================================================
-   Proof Sketch: eval_expr_preserves_scopes
-
-   Shows that evaluating a pure expression preserves scopes exactly.
-   Generated from proof plan. Uses individual case lemmas approach.
-   ======================================================================== *)
-
 (* ------------------------------------------------------------------------
-   Section 1: Helper Lemmas for Scopes Preservation
-
-   These lemmas show that specific operations preserve scopes exactly.
+   Helper Lemmas for Scopes Preservation
    ------------------------------------------------------------------------ *)
 
-(* lookup_flag_mem is pure - only returns value without modifying state.
-
-   WHY THIS IS TRUE:
-   lookup_flag_mem only uses case analysis on get_module_code, lookup_flag,
-   and INDEX_OF, then returns via return or raise. Neither modifies state.
-
-   Plan reference: Case 3 (FlagMember)
-   Used in: case_FlagMember *)
+(* lookup_flag_mem is pure - only returns value without modifying state. *)
 Theorem lookup_flag_mem_scopes[local]:
   ∀cx nsid mid st res st'.
     lookup_flag_mem cx nsid mid st = (res, st') ⇒
@@ -62,14 +46,7 @@ Proof
   rpt CASE_TAC >> simp[raise_def, return_def]
 QED
 
-(* switch_BoolV preserves scopes if both branches preserve scopes.
-
-   WHY THIS IS TRUE:
-   switch_BoolV dispatches to f if v = Value (BoolV T), to g if v = Value (BoolV F),
-   else raises error. All three paths preserve scopes if f and g do.
-
-   Plan reference: Case 4 (IfExp)
-   Used in: case_IfExp *)
+(* switch_BoolV preserves scopes if both branches preserve scopes. *)
 Theorem switch_BoolV_scopes[local]:
   ∀v f g st res st'.
     switch_BoolV v f g st = (res, st') ∧
@@ -80,14 +57,7 @@ Proof
   rw[switch_BoolV_def, raise_def]
 QED
 
-(* finally with pop_function restores scopes to prev.
-
-   WHY THIS IS TRUE:
-   finally f g runs f, then always runs g. pop_function prev = set_scopes prev,
-   which sets st'.scopes := prev regardless of what f did.
-
-   Plan reference: Case 15 (IntCall) - critical for restoring scopes
-   Used in: case_IntCall *)
+(* finally with pop_function restores scopes to prev. *)
 Theorem finally_pop_function_scopes[local]:
   ∀f prev st res st'.
     finally f (pop_function prev) st = (res, st') ⇒
@@ -199,19 +169,9 @@ Proof
 QED
 
 (* ------------------------------------------------------------------------
-   Section 2: Individual Case Lemmas
-
-   Each case of the mutual induction is proved as a separate theorem.
-   Following the pattern used in vyperScopesScript.sml.
+   Individual Case Lemmas
    ------------------------------------------------------------------------ *)
 
-(* Case: Name - pure, only reads scopes and immutables.
-
-   WHY THIS IS TRUE:
-   get_scopes returns state unchanged. get_immutables reads globals.
-   lift_sum and return don't modify state.
-
-   Plan reference: Case 1 *)
 Theorem case_Name[local]:
   ∀cx id.
     (∀st res st'.
@@ -227,12 +187,6 @@ Proof
   drule get_scopes_scopes >> simp[]
 QED
 
-(* Case: TopLevelName - pure, only reads globals.
-
-   WHY THIS IS TRUE:
-   lookup_global only accesses st.globals, never modifies scopes.
-
-   Plan reference: Case 2 *)
 Theorem case_TopLevelName[local]:
   ∀cx src_id_opt id.
     (∀st res st'.
@@ -242,12 +196,6 @@ Proof
   rpt strip_tac >> fs[evaluate_def] >> drule lookup_global_scopes >> simp[]
 QED
 
-(* Case: FlagMember - pure, only reads contract code.
-
-   WHY THIS IS TRUE:
-   lookup_flag_mem only does case analysis on module code, never modifies state.
-
-   Plan reference: Case 3 *)
 Theorem case_FlagMember[local]:
   ∀cx nsid mid.
     (∀st res st'.
@@ -257,13 +205,6 @@ Proof
   rpt strip_tac >> fs[evaluate_def] >> drule lookup_flag_mem_scopes >> simp[]
 QED
 
-(* Case: IfExp - uses IH on subexpressions.
-
-   WHY THIS IS TRUE:
-   Evaluates e1, then dispatches to e2 or e3 based on boolean result.
-   If all three preserve scopes (IH), then so does the composition.
-
-   Plan reference: Case 4 *)
 Theorem case_IfExp[local]:
   ∀cx e1 e2 e3.
     (∀s'' tv1 t.
@@ -291,12 +232,6 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-(* Case: Literal - trivially pure.
-
-   WHY THIS IS TRUE:
-   return $ Value $ evaluate_literal l doesn't modify state.
-
-   Plan reference: Case 5 *)
 Theorem case_Literal[local]:
   ∀cx l.
     (∀st res st'.
@@ -327,14 +262,6 @@ Proof
   first_x_assum drule >> gvs[listTheory.EVERY_MAP]
 QED
 
-(* Case: Subscript - uses IH on subexpressions.
-
-   WHY THIS IS TRUE:
-   Evaluates e1 and e2, then performs subscript operation.
-   If both evals preserve scopes, and get_Value/lift_option/lift_sum/return do too,
-   the whole operation preserves scopes.
-
-   Plan reference: Case 7 *)
 Theorem case_Subscript[local]:
   ∀cx e1 e2.
     (∀s'' tv1 t.
@@ -353,13 +280,6 @@ Proof
   res_tac >> gvs[] >> metis_tac[]
 QED
 
-(* Case: Attribute - uses IH on subexpression.
-
-   WHY THIS IS TRUE:
-   Evaluates e, then extracts attribute. If eval preserves scopes (IH),
-   and get_Value/lift_sum/return preserve scopes, whole operation does.
-
-   Plan reference: Case 8 *)
 Theorem case_Attribute[local]:
   ∀cx e id.
     (∀st res st'.
@@ -373,12 +293,6 @@ Proof
   imp_res_tac get_Value_scopes >> res_tac >> gvs[] >> metis_tac[]
 QED
 
-(* Case: Builtin - uses IH on subexpressions.
-
-   WHY THIS IS TRUE:
-   Evaluates es, then calls builtin. check, get_accounts, lift_sum all preserve scopes.
-
-   Plan reference: Case 9 *)
 Theorem case_Builtin[local]:
   ∀cx bt es.
     (∀s'' x t.
@@ -396,12 +310,6 @@ Proof
   first_x_assum drule >> gvs[ETA_THM]
 QED
 
-(* Case: Pop - vacuously true since pure_expr (Pop _) = F.
-
-   WHY THIS IS TRUE:
-   The hypothesis pure_expr (Pop _) is false by definition.
-
-   Plan reference: Case 10 *)
 Theorem case_Pop[local]:
   ∀cx bt.
     (∀st res st'.
@@ -411,12 +319,6 @@ Proof
   rw[pure_expr_def]
 QED
 
-(* Case: TypeBuiltin - uses IH on subexpressions.
-
-   WHY THIS IS TRUE:
-   Evaluates es, then calls type builtin. All operations preserve scopes.
-
-   Plan reference: Case 11 *)
 Theorem case_TypeBuiltin[local]:
   ∀cx tb typ es.
     (∀s'' x t.
@@ -434,12 +336,6 @@ Proof
   first_x_assum drule >> gvs[ETA_THM]
 QED
 
-(* Case: Call Send - uses IH on subexpressions.
-
-   WHY THIS IS TRUE:
-   Evaluates es, then calls transfer_value (which only modifies accounts, not scopes).
-
-   Plan reference: Case 12 *)
 Theorem case_Send[local]:
   ∀cx es.
     (∀s'' x t.
@@ -459,12 +355,6 @@ Proof
   first_x_assum drule >> gvs[ETA_THM]
 QED
 
-(* Case: ExtCall - raises error, state unchanged.
-
-   WHY THIS IS TRUE:
-   raise $ Error "TODO" doesn't modify state.
-
-   Plan reference: Case 13 *)
 Theorem case_ExtCall[local]:
   ∀cx sig vs.
     (∀st res st'.
@@ -474,12 +364,6 @@ Proof
   simp[evaluate_def, raise_def]
 QED
 
-(* Case: StaticCall - raises error, state unchanged.
-
-   WHY THIS IS TRUE:
-   raise $ Error "TODO" doesn't modify state.
-
-   Plan reference: Case 14 *)
 Theorem case_StaticCall[local]:
   ∀cx sig vs.
     (∀st res st'.
@@ -491,12 +375,9 @@ QED
 
 (* Case: IntCall - the complex case with finally/pop_function.
 
-   WHY THIS IS TRUE:
    The key is that get_scopes saves prev = st.scopes before entering function,
    and finally ... (pop_function prev) restores scopes to prev at the end,
-   regardless of whether the function body succeeded or failed.
-
-   Plan reference: Case 15 *)
+   regardless of whether the function body succeeded or failed. *)
 Theorem case_IntCall[local]:
   ∀cx src_id_opt fn es.
     (* IH from evaluate_ind for eval_stmts in function body - not needed for scopes *)
@@ -536,12 +417,6 @@ Proof
   end
 QED
 
-(* Case: eval_exprs [] - trivially pure.
-
-   WHY THIS IS TRUE:
-   return [] doesn't modify state.
-
-   Plan reference: Case 16 *)
 Theorem case_eval_exprs_nil[local]:
   ∀cx.
     (∀st res st'.
@@ -551,12 +426,6 @@ Proof
   simp[evaluate_def, return_def]
 QED
 
-(* Case: eval_exprs cons - uses IH on subexpressions.
-
-   WHY THIS IS TRUE:
-   Evaluates e, then eval_exprs es. Both preserve scopes by IH.
-
-   Plan reference: Case 17 *)
 Theorem case_eval_exprs_cons[local]:
   ∀cx e es.
     (∀s'' tv t s'3' v t'.
@@ -579,7 +448,7 @@ Proof
 QED
 
 (* ------------------------------------------------------------------------
-   Section 3: Main Mutual Induction Theorem
+   Main Mutual Induction Theorem
 
    Assembles individual case lemmas into the full mutual induction.
    The key insight is that we prove the same scopes-preserving property
@@ -610,13 +479,7 @@ in
   val pure_scopes_ind_principle = save_thm("pure_scopes_ind_principle", spec_ind_beta)
 end
 
-(* Main mutual induction: pure expressions preserve scopes exactly.
-
-   WHY THIS IS TRUE:
-   By induction on evaluate_ind. Each expression case is handled by the
-   specialized induction principle. Statement cases are trivially T.
-
-   Plan reference: Main proof structure (Cases 1-17) *)
+(* Main mutual induction: pure expressions preserve scopes exactly. *)
 Theorem pure_scopes_mutual[local]:
   (∀cx e st res st'.
      eval_expr cx e st = (res, st') ⇒ pure_expr e ⇒ st.scopes = st'.scopes) ∧
@@ -678,17 +541,12 @@ Proof
 QED
 
 (* ------------------------------------------------------------------------
-   Section 4: Main Theorems
+   Main Theorems
 
    Extracts the eval_expr/eval_exprs cases from the mutual induction.
    ------------------------------------------------------------------------ *)
 
-(* Main theorem: pure expression evaluation preserves scopes exactly.
-
-   WHY THIS IS TRUE:
-   Direct consequence of pure_scopes_mutual (8th conjunct).
-
-   Plan reference: Main theorem statement *)
+(* Main theorem: pure expression evaluation preserves scopes exactly. *)
 Theorem eval_expr_preserves_scopes:
   ∀cx e st res st'.
     pure_expr e ∧ eval_expr cx e st = (res, st') ⇒
@@ -697,10 +555,6 @@ Proof
   metis_tac[pure_scopes_mutual]
 QED
 
-(* Bonus: eval_exprs also preserves scopes for pure expressions.
-
-   WHY THIS IS TRUE:
-   Direct consequence of pure_scopes_mutual (9th conjunct). *)
 Theorem eval_exprs_preserves_scopes:
   ∀cx es st res st'.
     EVERY pure_expr es ∧ eval_exprs cx es st = (res, st') ⇒
