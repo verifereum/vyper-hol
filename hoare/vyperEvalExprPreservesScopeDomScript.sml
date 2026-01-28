@@ -1,146 +1,17 @@
-Theory vyperExprDom
+Theory vyperEvalExprPreservesScopeDom
 
 (* Theorems about expression evaluation.
  *)
 
 Ancestors
-  vyperInterpreter vyperScopes vyperLookup vyperExpr
-
-(* ========================================================================
-   Helper: find_containing_scope preserves MAP FDOM
-   ======================================================================== *)
-
-Theorem find_containing_scope_map_fdom:
-  ∀id sc pre env v rest a'.
-    find_containing_scope id sc = SOME (pre, env, v, rest) ⇒
-    MAP FDOM (pre ++ env |+ (id, a') :: rest) = MAP FDOM sc
-Proof
-  rpt strip_tac >>
-  drule find_containing_scope_structure >> strip_tac >>
-  gvs[] >>
-  `id IN FDOM env` by gvs[finite_mapTheory.FLOOKUP_DEF] >>
-  gvs[pred_setTheory.ABSORPTION_RWT]
-QED
-
-(* ========================================================================
-   Helper: assign_target preserves MAP FDOM of scopes
-   ======================================================================== *)
-
-Theorem assign_target_preserves_scopes_dom:
-  (∀cx gv ao st res st'. assign_target cx gv ao st = (res, st') ⇒ MAP FDOM st'.scopes = MAP FDOM st.scopes) ∧
-  (∀cx gvs vs st res st'. assign_targets cx gvs vs st = (res, st') ⇒ MAP FDOM st'.scopes = MAP FDOM st.scopes)
-Proof
-  ho_match_mp_tac assign_target_ind >> rpt conj_tac >> rpt gen_tac
-  (* ScopedVar case *)
-  >- (strip_tac >> gvs[assign_target_def, bind_def, get_scopes_def, return_def, lift_option_def] >>
-      Cases_on `find_containing_scope (string_to_num id) st.scopes` >> gvs[return_def, raise_def] >>
-      PairCases_on `x` >> gvs[bind_def, lift_sum_def] >>
-      Cases_on `assign_subscripts x2 (REVERSE is) ao` >>
-      gvs[return_def, raise_def, bind_def, ignore_bind_def, set_scopes_def] >>
-      drule find_containing_scope_map_fdom >> simp[])
-  (* TopLevelVar case *)
-  >- (strip_tac >> gvs[assign_target_def, bind_def] >>
-      Cases_on `lookup_global cx src_id_opt (string_to_num id) st` >> gvs[] >>
-      drule lookup_global_scopes >> strip_tac >>
-      Cases_on `q` >> gvs[] >>
-      gvs[lift_option_def, AllCaseEqs(), return_def, raise_def]
-      >- (imp_res_tac lift_sum_scopes >> gvs[] >>
-          gvs[bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def]
-          >- (imp_res_tac set_global_scopes >> gvs[] >>
-              Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def])
-          >- (imp_res_tac set_global_scopes >> gvs[] >>
-              Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def]))
-      >- (imp_res_tac lift_sum_scopes >> Cases_on `get_module_code cx src_id_opt` >>
-          gvs[return_def, raise_def])
-      >- (Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def]))
-  (* ImmutableVar case *)
-  >- (strip_tac >> gvs[assign_target_def, bind_def] >>
-      Cases_on `get_immutables cx st` >> gvs[] >>
-      drule get_immutables_scopes >> strip_tac >>
-      Cases_on `q` >> gvs[] >>
-      gvs[lift_option_def, AllCaseEqs(), return_def, raise_def]
-      >- (imp_res_tac lift_sum_scopes >> gvs[bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def]
-          >- (imp_res_tac set_immutable_scopes >> gvs[] >>
-              Cases_on `FLOOKUP x (string_to_num id)` >> gvs[return_def, raise_def])
-          >- (imp_res_tac set_immutable_scopes >> gvs[] >>
-              Cases_on `FLOOKUP x (string_to_num id)` >> gvs[return_def, raise_def]))
-      >- (imp_res_tac lift_sum_scopes >> gvs[] >>
-          Cases_on `FLOOKUP x (string_to_num id)` >> gvs[return_def, raise_def])
-      >- (Cases_on `FLOOKUP x (string_to_num id)` >> gvs[return_def, raise_def]))
-  (* TupleTargetV with TupleV - uses IH *)
-  >- (rpt strip_tac >>
-      gvs[assign_target_def, bind_def, check_def, assert_def, return_def, raise_def,
-          ignore_bind_def, AllCaseEqs()])
-  (* TupleTargetV error cases - all just raise *)
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  (* assign_targets [] [] *)
-  >- simp[assign_target_def, return_def]
-  (* assign_targets cons case - uses IH *)
-  >- (rpt strip_tac >>
-      gvs[assign_target_def, bind_def, AllCaseEqs(), return_def, get_Value_def] >>
-      res_tac >> imp_res_tac get_Value_scopes >> gvs[] >> TRY (first_x_assum drule >> simp[]))
-  (* assign_targets length mismatch cases *)
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-QED
-
-(* ========================================================================
-   Helper: finally with set_scopes restores scopes to the given value
-   ======================================================================== *)
-
-Theorem finally_set_scopes_dom:
-  ∀f prev s res s'. finally f (set_scopes prev) s = (res, s') ⇒ MAP FDOM s'.scopes = MAP FDOM prev
-Proof
-  rpt strip_tac >>
-  fs[finally_def, set_scopes_def, AllCaseEqs(), ignore_bind_def, return_def, raise_def, bind_def] >>
-  gvs[]
-QED
-
-(* ========================================================================
-   Helper: eval_exprs preserves MAP FDOM of scopes
-   ======================================================================== *)
-
-Theorem eval_exprs_preserves_scopes_dom:
-  ∀es cx st res st'.
-    (∀e. MEM e es ⇒ ∀cx st res st'. eval_expr cx e st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
-    eval_exprs cx es st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  Induct >> simp[evaluate_def, return_def] >>
-  rpt strip_tac >> gvs[bind_def, AllCaseEqs(), return_def, get_Value_def] >>
-  imp_res_tac get_Value_scopes >> gvs[]
-  (* Subgoal 1: success for h, success for es *)
-  >- (`MAP FDOM st.scopes = MAP FDOM s''.scopes` by (first_assum (qspec_then `h` mp_tac) >> simp[] >> disch_then drule >> simp[]) >>
-      first_x_assum (qspecl_then [`cx`, `s'³'`, `INL vs`, `s'⁴'`] mp_tac) >> simp[] >>
-      disch_then irule >> rpt strip_tac >> first_assum irule >> simp[] >>
-      qexistsl_tac [`cx'`, `e`, `res`] >> simp[])
-  (* Subgoal 2: success for h, error for es *)
-  >- (`MAP FDOM st.scopes = MAP FDOM s''.scopes` by (first_assum (qspec_then `h` mp_tac) >> simp[] >> disch_then drule >> simp[]) >>
-      first_x_assum (qspecl_then [`cx`, `s'³'`, `INR e`, `s'⁴'`] mp_tac) >> simp[] >>
-      disch_then irule >> rpt strip_tac >> first_assum irule >> simp[] >>
-      qexistsl_tac [`cx'`, `e'`, `res`] >> simp[])
-  (* Subgoal 3 & 4: eval_expr or get_Value on h returns error *)
-  >- (first_assum (qspec_then `h` mp_tac) >> simp[] >> disch_then drule >> simp[])
-  >- (first_assum (qspec_then `h` mp_tac) >> simp[] >> disch_then drule >> simp[])
-QED
+  vyperInterpreter vyperLookup vyperScopePreservationLemmas vyperEvalExprPurePreservesScope
 
 (* ========================================================================
    Helper lemmas for individual eval_base_target cases (for mutual induction)
    ======================================================================== *)
 
 (* NameTarget case - does not call eval_expr *)
-Theorem case_NameTarget_dom:
+Theorem case_NameTarget_dom[local]:
   ∀cx nm st res st'.
     eval_base_target cx (NameTarget nm) st = (res, st') ⇒
     MAP FDOM st.scopes = MAP FDOM st'.scopes
@@ -158,7 +29,7 @@ Proof
 QED
 
 (* TopLevelNameTarget case - does not call eval_expr *)
-Theorem case_TopLevelNameTarget_dom:
+Theorem case_TopLevelNameTarget_dom[local]:
   ∀cx src_id_opt id st res st'.
     eval_base_target cx (TopLevelNameTarget (src_id_opt, id)) st = (res, st') ⇒
     MAP FDOM st.scopes = MAP FDOM st'.scopes
@@ -181,7 +52,7 @@ QED
 
 (* IfExp: P0 e ∧ P0 e0 ∧ P0 e1 ⇒ P0 (IfExp e e0 e1)
    After unfolding scopes_P0, the IHs have ∀cx INSIDE, not outside *)
-Theorem case_IfExp_ind:
+Theorem case_IfExp_ind[local]:
   ∀e e0 e1.
     (∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
     (∀cx st res st'. eval_expr cx e0 st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
@@ -199,7 +70,7 @@ Proof
 QED
 
 (* Subscript: P0 e ∧ P0 e0 ⇒ P0 (Subscript e e0) *)
-Theorem case_Subscript_ind:
+Theorem case_Subscript_ind[local]:
   ∀e e0.
     (∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
     (∀cx st res st'. eval_expr cx e0 st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
@@ -213,7 +84,7 @@ Proof
 QED
 
 (* Attribute: P0 e ⇒ ∀s. P0 (Attribute e s) *)
-Theorem case_Attribute_ind:
+Theorem case_Attribute_ind[local]:
   ∀e.
     (∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀s cx st res st'.
@@ -226,7 +97,7 @@ Proof
 QED
 
 (* SubscriptTarget: P1 b ∧ P0 e ⇒ P1 (SubscriptTarget b e) *)
-Theorem case_SubscriptTarget_ind:
+Theorem case_SubscriptTarget_ind[local]:
   ∀b e.
     (∀cx st res st'. eval_base_target cx b st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
     (∀cx st res st'. eval_expr cx e st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
@@ -242,7 +113,7 @@ Proof
 QED
 
 (* AttributeTarget: P1 b ⇒ ∀s. P1 (AttributeTarget b s) *)
-Theorem case_AttributeTarget_ind:
+Theorem case_AttributeTarget_ind[local]:
   ∀b.
     (∀cx st res st'. eval_base_target cx b st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀s cx st res st'.
@@ -255,7 +126,7 @@ Proof
 QED
 
 (* Pop: P1 b ⇒ P0 (Pop b) *)
-Theorem case_Pop_ind:
+Theorem case_Pop_ind[local]:
   ∀b.
     (∀cx st res st'. eval_base_target cx b st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀cx st res st'.
@@ -278,7 +149,7 @@ QED
    After unfolding: (∀e. MEM e (MAP SND kes) ⇒ scopes_P0 e) ⇒ scopes_P0 (StructLit p kes)
    Then scopes_P0 unfolds with ∀cx inside
    Note: p must be destructured to (src_id_opt, id) for evaluate_def to apply *)
-Theorem case_StructLit_ind:
+Theorem case_StructLit_ind[local]:
   ∀kes.
     (∀e. MEM e (MAP SND kes) ⇒
          ∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
@@ -290,7 +161,7 @@ Proof
 QED
 
 (* Builtin: P4 l ⇒ ∀b. P0 (Builtin b l) *)
-Theorem case_Builtin_ind:
+Theorem case_Builtin_ind[local]:
   ∀es.
     (∀e. MEM e es ⇒
          ∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
@@ -308,7 +179,7 @@ Proof
 QED
 
 (* TypeBuiltin: P4 l ⇒ ∀t t0. P0 (TypeBuiltin t0 t l) *)
-Theorem case_TypeBuiltin_ind:
+Theorem case_TypeBuiltin_ind[local]:
   ∀es.
     (∀e. MEM e es ⇒
          ∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
@@ -324,7 +195,7 @@ QED
 
 (* Call: P4 l ⇒ ∀c. P0 (Call c l)
    Need to case split on c (Send, ExtCall, StaticCall, IntCall) *)
-Theorem case_Call_Send_ind:
+Theorem case_Call_Send_ind[local]:
   ∀es.
     (∀e. MEM e es ⇒
          ∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
@@ -340,7 +211,7 @@ Proof
   drule_all eval_exprs_preserves_scopes_dom >> simp[]
 QED
 
-Theorem case_Call_IntCall_ind:
+Theorem case_Call_IntCall_ind[local]:
   ∀es.
     (∀e. MEM e es ⇒
          ∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
@@ -364,27 +235,27 @@ QED
    ======================================================================== *)
 
 (* Predicates for structural induction *)
-Definition scopes_P0_def:
+Definition scopes_P0_def[local]:
   scopes_P0 e = ∀cx st res st'. eval_expr cx e st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
 End
 
-Definition scopes_P1_def:
+Definition scopes_P1_def[local]:
   scopes_P1 bt = ∀cx st res st'. eval_base_target cx bt st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
 End
 
-Definition scopes_P2_def:
+Definition scopes_P2_def[local]:
   scopes_P2 kes = ∀e. MEM e (MAP SND kes) ⇒ scopes_P0 e
 End
 
-Definition scopes_P3_def:
+Definition scopes_P3_def[local]:
   scopes_P3 ke = scopes_P0 (SND ke)
 End
 
-Definition scopes_P4_def:
+Definition scopes_P4_def[local]:
   scopes_P4 es = ∀e. MEM e es ⇒ scopes_P0 e
 End
 
-Theorem eval_mutual_preserves_scopes_dom:
+Theorem eval_mutual_preserves_scopes_dom[local]:
   (∀cx bt st res st'. eval_base_target cx bt st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
   (∀cx e st res st'. eval_expr cx e st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes)
 Proof

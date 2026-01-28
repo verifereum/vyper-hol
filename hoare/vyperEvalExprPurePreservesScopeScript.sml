@@ -1,10 +1,7 @@
-Theory vyperExpr
-
-(* Theorems about expression evaluation.
- *)
+Theory vyperEvalExprPurePreservesScope
 
 Ancestors
-  vyperInterpreter vyperLookup
+  vyperInterpreter vyperLookup vyperScopePreservationLemmas
 
 (* Pure expressions: expressions that do not modify scopes.
    Pop is the only impure expression constructor - it modifies scoped variables.
@@ -30,143 +27,6 @@ Termination
   PairCases_on `h` >> rw[] >>
   res_tac >> simp[]
 End
-
-(* ------------------------------------------------------------------------
-   Helper Lemmas for Scopes Preservation
-   ------------------------------------------------------------------------ *)
-
-(* lookup_flag_mem is pure - only returns value without modifying state. *)
-Theorem lookup_flag_mem_scopes[local]:
-  ∀cx nsid mid st res st'.
-    lookup_flag_mem cx nsid mid st = (res, st') ⇒
-    st'.scopes = st.scopes
-Proof
-  rpt gen_tac >> PairCases_on `nsid` >>
-  simp[lookup_flag_mem_def, raise_def, return_def] >>
-  rpt CASE_TAC >> simp[raise_def, return_def]
-QED
-
-(* switch_BoolV preserves scopes if both branches preserve scopes. *)
-Theorem switch_BoolV_scopes[local]:
-  ∀v f g st res st'.
-    switch_BoolV v f g st = (res, st') ∧
-    (∀st1 res1 st1'. f st1 = (res1, st1') ⇒ st1'.scopes = st1.scopes) ∧
-    (∀st1 res1 st1'. g st1 = (res1, st1') ⇒ st1'.scopes = st1.scopes) ⇒
-    st'.scopes = st.scopes
-Proof
-  rw[switch_BoolV_def, raise_def]
-QED
-
-(* finally with pop_function restores scopes to prev. *)
-Theorem finally_pop_function_scopes[local]:
-  ∀f prev st res st'.
-    finally f (pop_function prev) st = (res, st') ⇒
-    st'.scopes = prev
-Proof
-  rpt strip_tac >>
-  fs[pop_function_def, finally_def, set_scopes_def, AllCaseEqs(),
-     ignore_bind_def, return_def, raise_def, bind_def] >>
-  gvs[]
-QED
-
-(* Helper: finally with set_scopes restores scopes to the given value.
-   Same as finally_pop_function_scopes but uses set_scopes directly. *)
-Theorem finally_set_scopes[local]:
-  ∀f prev st res st'.
-    finally f (set_scopes prev) st = (res, st') ⇒
-    st'.scopes = prev
-Proof
-  rpt strip_tac >>
-  fs[finally_def, set_scopes_def, AllCaseEqs(),
-     ignore_bind_def, return_def, raise_def, bind_def] >>
-  gvs[]
-QED
-
-(* Monad operations preserve scopes. These helper lemmas compose to prove
-   that expressions built from these operations preserve scopes. *)
-
-Theorem return_scopes[local]:
-  ∀v st res st'. return v st = (res, st') ⇒ st.scopes = st'.scopes
-Proof
-  rw[return_def]
-QED
-
-Theorem raise_scopes[local]:
-  ∀e st res st'. raise e st = (res, st') ⇒ st.scopes = st'.scopes
-Proof
-  rw[raise_def]
-QED
-
-Theorem get_scopes_scopes[local]:
-  ∀st res st'. get_scopes st = (res, st') ⇒ st.scopes = st'.scopes
-Proof
-  rw[get_scopes_def, return_def]
-QED
-
-Theorem get_current_globals_scopes[local]:
-  ∀cx st res st'. get_current_globals cx st = (res, st') ⇒ st.scopes = st'.scopes
-Proof
-  rw[get_current_globals_def, bind_def, lift_option_def, AllCaseEqs(), return_def, raise_def] >>
-  Cases_on `ALOOKUP st.globals cx.txn.target` >> gvs[return_def, raise_def]
-QED
-
-Theorem get_immutables_scopes[local]:
-  ∀cx st res st'. get_immutables cx st = (res, st') ⇒ st.scopes = st'.scopes
-Proof
-  rw[get_immutables_def, get_immutables_module_def, bind_def, return_def, AllCaseEqs()] >>
-  drule get_current_globals_scopes >> simp[]
-QED
-
-Theorem lift_sum_scopes[local]:
-  ∀sum st res st'. lift_sum sum st = (res, st') ⇒ st.scopes = st'.scopes
-Proof
-  Cases_on `sum` >> rw[lift_sum_def, return_def, raise_def]
-QED
-
-Theorem lift_option_scopes[local]:
-  ∀opt msg st res st'. lift_option opt msg st = (res, st') ⇒ st.scopes = st'.scopes
-Proof
-  Cases_on `opt` >> rw[lift_option_def, return_def, raise_def]
-QED
-
-Theorem get_accounts_scopes[local]:
-  ∀st res st'. get_accounts st = (res, st') ⇒ st.scopes = st'.scopes
-Proof
-  rw[get_accounts_def, return_def]
-QED
-
-Theorem get_Value_scopes[local]:
-  ∀tv st res st'. get_Value tv st = (res, st') ⇒ st.scopes = st'.scopes
-Proof
-  Cases_on `tv` >> rw[get_Value_def, return_def, raise_def]
-QED
-
-Theorem check_scopes[local]:
-  ∀b msg st res st'. check b msg st = (res, st') ⇒ st.scopes = st'.scopes
-Proof
-  rw[check_def, assert_def, return_def, raise_def]
-QED
-
-Theorem transfer_value_scopes[local]:
-  ∀from to amt st res st'.
-    transfer_value from to amt st = (res, st') ⇒ st.scopes = st'.scopes
-Proof
-  rw[transfer_value_def, bind_def, AllCaseEqs(), return_def, raise_def,
-     get_accounts_def, update_accounts_def, check_def, assert_def,
-     ignore_bind_def] >>
-  gvs[evaluation_state_component_equality]
-QED
-
-Theorem lookup_global_scopes[local]:
-  ∀cx src_opt nm st res st'.
-    lookup_global cx src_opt nm st = (res, st') ⇒ st.scopes = st'.scopes
-Proof
-  rw[lookup_global_def, bind_def, AllCaseEqs(), return_def, raise_def,
-     get_current_globals_def, lift_option_def] >>
-  fs[AllCaseEqs(), return_def, raise_def] >> gvs[] >>
-  Cases_on `ALOOKUP st.globals cx.txn.target` >> gvs[return_def, raise_def] >>
-  Cases_on `FLOOKUP (get_module_globals src_opt gbs).mutables nm` >> gvs[return_def, raise_def]
-QED
 
 (* ------------------------------------------------------------------------
    Individual Case Lemmas
@@ -440,11 +300,11 @@ Theorem case_eval_exprs_cons[local]:
 Proof
   rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def] >>
   imp_res_tac get_Value_scopes >> gvs[] >>
-  TRY (`st.scopes = s''.scopes` by (first_x_assum (qspec_then `st` mp_tac) >> simp[])) >>
-  TRY (`s'³'.scopes = s'⁴'.scopes` by (
+  `st.scopes = s''.scopes` by (first_x_assum drule >> simp[]) >>
+  `s'³'.scopes = s'⁴'.scopes` by (
     last_x_assum (qspecl_then [`st`, `tv`, `s''`, `s''`, `v''`, `s'³'`] mp_tac) >>
-    simp[] >> strip_tac >> first_x_assum drule >> simp[])) >>
-  simp[]
+    simp[]) >>
+  metis_tac[]
 QED
 
 (* ------------------------------------------------------------------------
