@@ -515,11 +515,17 @@ QED
 Theorem stmts_spec_assign_scoped_var:
   ∀P Q cx n e v.
     (⟦cx⟧ ⦃λst. P st ∧ valid_lookups cx st ∧ var_in_scope st n⦄ e ⇓ Value v ⦃λst. Q (update_scoped_var st n v)⦄) ⇒
-    ⟦cx⟧ ⦃λst. P st ∧ var_in_scope st n⦄ [Assign (BaseTarget (NameTarget n)) e] ⦃Q ∥ λ_ _. F⦄
+    ⟦cx⟧ ⦃λst. P st ∧ valid_lookups cx st ∧ var_in_scope st n⦄ [Assign (BaseTarget (NameTarget n)) e] ⦃Q ∥ λ_ _. F⦄
 Proof
   (* Proof sketch
-     1. Use var_in_scope_implies_name_target to obtain X: ⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME (BaseTargetV (ScopedVar n) [])⦄ e ⇓ Value v ⦃λst. Q (update_scoped_var st n v)⦄
-     2. ...
+     1. Use expr_spec_preserves_var_in_scope to obtain:
+        ⟦cx⟧ ⦃λst. P st ∧ valid_lookups cx st ∧ var_in_scope st n⦄ e ⇓ Value v ⦃λst. var_in_scope st n ∧ Q (update_scoped_var st n v)⦄
+     2. Use assign_target_spec_scoped_var_replace_intro and stmts_spec_consequence to obtain:
+        ⟦cx⟧ ⦃λst. P st ∧ valid_lookups cx st ∧ var_in_scope st n⦄ e ⇓ Value v ⦃λst. assign_target_spec cx st (BaseTargetV (ScopedVar n) []) (Replace v) Q⦄
+     3. Use stmts_spec_assign_name to obtain:
+        ⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME (BaseTargetV (ScopedVar n) [])⦄ [Assign (BaseTarget (NameTarget n)) e] ⦃Q ∥ λ_ _. F⦄
+     4. Use var_in_scope_implies_name_target and stmts_spec_consequence to obtain:
+        ⟦cx⟧ ⦃λst. P st ∧ valid_lookups cx st ∧ var_in_scope st n⦄ [Assign (BaseTarget (NameTarget n)) e] ⦃Q ∥ λ_ _. F⦄
    *)
   cheat
 QED
