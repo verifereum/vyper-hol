@@ -107,6 +107,10 @@ Local test/scratch files use **dot prefixes** (gitignored):
 
 Try to keep theory files under 500 LOC (soft limit).
 
+### Variable names
+
+The proofs should not depend on automatically generated variable names. Use `rename1` when needed.
+
 ## HOL4 Tactics Reference
 
 ### Fast tactics (prefer these)
