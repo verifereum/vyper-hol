@@ -74,23 +74,19 @@ The focus of this work so far has been the core execution semantics of Vyper con
 
 Here are the specific aspects of Vyper that are currently not part of the formal model:
 
-- Chain interaction
-    - external contract calls (both `staticcall` and `extcall`) including `print`
-    - [chain interaction bulitins](https://docs.vyperlang.org/en/latest/built-in-functions.html#chain-interaction) (`create_minimal_proxy_to`, etc.),
-      except for `send` but including `@raw_return`
-    - non-reentrancy checking
+- Chain interaction ([#37](https://github.com/verifereum/vyper-hol/issues/37))
+    - external contract calls (both `staticcall` and `extcall`) ([#38](https://github.com/verifereum/vyper-hol/issues/38))
+    - `print` (which uses external calls under the hood) ([#38](https://github.com/verifereum/vyper-hol/issues/38))
+    - [chain interaction builtins](https://docs.vyperlang.org/en/latest/built-in-functions.html#chain-interaction) (`create_minimal_proxy_to`, `create_copy_of`, `create_from_blueprint`, `raw_call`, etc.) and `@raw_return` ([#39](https://github.com/verifereum/vyper-hol/issues/39))
+    - non-reentrancy checking ([#40](https://github.com/verifereum/vyper-hol/issues/40))
 - Compiler front-end
-    - concrete syntax, i.e., parsing
-    - type-checking (the interpreter can fail during execution on badly-typed input)
-    - interfaces, which are only relevant for type-checking
-    - some cases of constant inlining (where, e.g., a literal value, not constant expression, is needed for the abstract syntax)
-    - modules (`exports` and `import`)
-    - internal and external functions with default arguments
+    - concrete syntax, i.e., parsing ([#46](https://github.com/verifereum/vyper-hol/issues/46))
+    - type-checking (the interpreter can fail during execution on badly-typed input) ([#47](https://github.com/verifereum/vyper-hol/issues/47))
+    - interfaces, which are only relevant for type-checking ([#47](https://github.com/verifereum/vyper-hol/issues/47))
+    - some cases of constant inlining (where, e.g., a literal value, not constant expression, is needed for the abstract syntax) ([#50](https://github.com/verifereum/vyper-hol/issues/50))
+    - internal and external functions with default arguments ([#49](https://github.com/verifereum/vyper-hol/issues/49))
 - Miscellaneous builtins
-    - some of the [cryptography builtins](https://docs.vyperlang.org/en/latest/built-in-functions.html#cryptography), especially involving elliptic curves
-    - square root builtin: `sqrt`
-    - builtins for raw calls: `abi_encode`, `abi_decode`, `method_id`
-    - `blobhash`
+    - square root builtin for decimals: `sqrt` (note: `isqrt` for integers is implemented; `sqrt` for decimals should be implemented as a Vyper module rather than a builtin) ([#41](https://github.com/verifereum/vyper-hol/issues/41))
 
 ## Outcomes, Challenges, and Next Steps
 
