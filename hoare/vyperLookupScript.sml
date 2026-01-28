@@ -155,6 +155,21 @@ Proof
   Cases_on `FLOOKUP h n` >> gvs[]
 QED
 
+Theorem lookup_scopes_dom_iff:
+  ∀id sc1 sc2.
+    MAP FDOM sc1 = MAP FDOM sc2 ⇒
+    (IS_SOME (lookup_scopes id sc1) ⇔ IS_SOME (lookup_scopes id sc2))
+Proof
+  Induct_on `sc1` >>
+  simp[lookup_scopes_def] >>
+  Cases_on `sc2` >>
+  simp[lookup_scopes_def] >>
+  rpt strip_tac >>
+  Cases_on `FLOOKUP h' id` >>
+  Cases_on `FLOOKUP h id` >>
+  gvs[finite_mapTheory.flookup_thm]
+QED
+
 (****************************************)
 (* Theorems *)
 
@@ -206,4 +221,13 @@ Proof
   simp[valid_lookups_def, lookup_scoped_var_def, var_in_scope_def] >>
   rpt strip_tac >>
   gvs[lookup_scopes_to_lookup_name, lookup_scopes_find_containing]
+QED
+
+Theorem var_in_scope_dom_iff:
+  ∀st1 st2 n.
+    MAP FDOM st1.scopes = MAP FDOM st2.scopes ⇒
+    (var_in_scope st1 n ⇔ var_in_scope st2 n)
+Proof
+  fs[var_in_scope_def, lookup_scoped_var_def] >>
+  gvs[lookup_scopes_dom_iff]
 QED
