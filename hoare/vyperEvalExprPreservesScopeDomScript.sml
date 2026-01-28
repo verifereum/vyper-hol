@@ -329,8 +329,8 @@ Proof
 QED
 
 Theorem eval_expr_preserves_var_in_scope:
-  ∀cx st st' n e v.
-    eval_expr cx e st = (INL v, st') ⇒
+  ∀cx st st' n e res.
+    eval_expr cx e st = (res, st') ⇒
     (var_in_scope st n ⇔ var_in_scope st' n)
 Proof
   metis_tac[var_in_scope_dom_iff, eval_expr_preserves_scopes_dom]
@@ -342,6 +342,30 @@ Theorem eval_expr_preserves_scopes_len:
 Proof
   rpt strip_tac >>
   drule eval_expr_preserves_scopes_dom >> strip_tac >>
+  `LENGTH (MAP FDOM st.scopes) = LENGTH (MAP FDOM st'.scopes)` by metis_tac[] >>
+  gvs[listTheory.LENGTH_MAP]
+QED
+
+Theorem eval_base_target_preserves_scopes_dom:
+  ∀cx bt st res st'. eval_base_target cx bt st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
+Proof
+  metis_tac[eval_mutual_preserves_scopes_dom]
+QED
+
+Theorem eval_base_target_preserves_var_in_scope:
+  ∀cx st st' n bt res.
+    eval_base_target cx bt st = (res, st') ⇒
+    (var_in_scope st n ⇔ var_in_scope st' n)
+Proof
+  metis_tac[var_in_scope_dom_iff, eval_base_target_preserves_scopes_dom]
+QED
+
+Theorem eval_base_target_preserves_scopes_len:
+  ∀bt cx st res st'.
+    eval_base_target cx bt st = (res, st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  rpt strip_tac >>
+  drule eval_base_target_preserves_scopes_dom >> strip_tac >>
   `LENGTH (MAP FDOM st.scopes) = LENGTH (MAP FDOM st'.scopes)` by metis_tac[] >>
   gvs[listTheory.LENGTH_MAP]
 QED
