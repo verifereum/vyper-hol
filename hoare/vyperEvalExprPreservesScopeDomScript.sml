@@ -1,8 +1,5 @@
 Theory vyperEvalExprPreservesScopeDom
 
-(* Theorems about expression evaluation.
- *)
-
 Ancestors
   vyperInterpreter vyperLookup vyperScopePreservationLemmas vyperEvalExprPurePreservesScope
 
@@ -231,7 +228,7 @@ Proof
 QED
 
 (* ========================================================================
-   Main Theorem - proved by structural induction on expr/base_target types
+   Preservation Theorem proved by structural induction on expr/base_target types
    ======================================================================== *)
 
 (* Predicates for structural induction *)
@@ -320,7 +317,10 @@ Proof
   >> gvs[scopes_P0_def, scopes_P1_def] >> metis_tac[]
 QED
 
-(* Extract the main theorem from the mutual induction *)
+(* ========================================================================
+   Main theorems
+   ======================================================================== *)
+
 Theorem eval_expr_preserves_scopes_dom:
   ∀e cx st res st'.
     eval_expr cx e st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
@@ -334,4 +334,14 @@ Theorem eval_expr_preserves_var_in_scope:
     (var_in_scope st n ⇔ var_in_scope st' n)
 Proof
   metis_tac[var_in_scope_dom_iff, eval_expr_preserves_scopes_dom]
+QED
+
+Theorem eval_expr_preserves_scopes_len:
+  ∀e cx st res st'.
+    eval_expr cx e st = (res, st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  rpt strip_tac >>
+  drule eval_expr_preserves_scopes_dom >> strip_tac >>
+  `LENGTH (MAP FDOM st.scopes) = LENGTH (MAP FDOM st'.scopes)` by metis_tac[] >>
+  gvs[listTheory.LENGTH_MAP]
 QED
