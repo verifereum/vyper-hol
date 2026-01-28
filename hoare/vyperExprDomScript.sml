@@ -4,7 +4,7 @@ Theory vyperExprDom
  *)
 
 Ancestors
-  vyperInterpreter vyperLookup vyperExpr
+  vyperInterpreter vyperScopes vyperLookup vyperExpr
 
 (* ========================================================================
    Helper: find_containing_scope preserves MAP FDOM
