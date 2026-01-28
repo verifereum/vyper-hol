@@ -1,7 +1,2 @@
 # Test infrastructure
 INCLUDES = ../semantics ../frontend ../syntax $(VFMDIR)/util $(VFMDIR)/spec
-
-# Build test infrastructure + all generated tests
-all: $(DEFAULT_TARGETS)
-	$(MAKE) -C generated
-.PHONY: all
