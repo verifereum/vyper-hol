@@ -26,7 +26,7 @@ QED
    Helper: assign_target preserves MAP FDOM of scopes
    ======================================================================== *)
 
-Theorem assign_target_preserves_scopes_dom[local]:
+Theorem assign_target_preserves_scopes_dom:
   (∀cx gv ao st res st'. assign_target cx gv ao st = (res, st') ⇒ MAP FDOM st'.scopes = MAP FDOM st.scopes) ∧
   (∀cx gvs vs st res st'. assign_targets cx gvs vs st = (res, st') ⇒ MAP FDOM st'.scopes = MAP FDOM st.scopes)
 Proof
@@ -100,7 +100,7 @@ QED
    Helper: finally with set_scopes restores scopes to the given value
    ======================================================================== *)
 
-Theorem finally_set_scopes_dom[local]:
+Theorem finally_set_scopes_dom:
   ∀f prev s res s'. finally f (set_scopes prev) s = (res, s') ⇒ MAP FDOM s'.scopes = MAP FDOM prev
 Proof
   rpt strip_tac >>
@@ -112,7 +112,7 @@ QED
    Helper: eval_exprs preserves MAP FDOM of scopes
    ======================================================================== *)
 
-Theorem eval_exprs_preserves_scopes_dom[local]:
+Theorem eval_exprs_preserves_scopes_dom:
   ∀es cx st res st'.
     (∀e. MEM e es ⇒ ∀cx st res st'. eval_expr cx e st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     eval_exprs cx es st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
@@ -141,7 +141,7 @@ QED
    ======================================================================== *)
 
 (* IfExp: IHs for e', e'' are conditional on e succeeding *)
-Theorem case_IfExp_dom[local]:
+Theorem case_IfExp_dom:
   ∀cx e e' e''.
     (∀st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
     (∀s'' tv t. eval_expr cx e s'' = (INL tv,t) ⇒
@@ -161,7 +161,7 @@ Proof
 QED
 
 (* StructLit: IH for es is conditional (ks = MAP FST kes) - but ks is always equal, so effectively unconditional *)
-Theorem case_StructLit_dom[local]:
+Theorem case_StructLit_dom:
   ∀cx src_id_opt id kes.
     (∀ks. ks = MAP FST kes ⇒
          ∀e. MEM e (MAP SND kes) ⇒
@@ -178,7 +178,7 @@ Proof
 QED
 
 (* Subscript (expr): IH for e' is conditional on e succeeding *)
-Theorem case_Subscript_dom[local]:
+Theorem case_Subscript_dom:
   ∀cx e e'.
     (∀st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
     (∀s'' tv1 t. eval_expr cx e s'' = (INL tv1,t) ⇒
@@ -194,7 +194,7 @@ Proof
 QED
 
 (* Attribute: IH for e is unconditional *)
-Theorem case_Attribute_dom[local]:
+Theorem case_Attribute_dom:
   ∀cx e id.
     (∀st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
@@ -207,7 +207,7 @@ Proof
 QED
 
 (* Builtin: IH for es is conditional on check succeeding *)
-Theorem case_Builtin_dom[local]:
+Theorem case_Builtin_dom:
   ∀cx bt es.
     (∀s'' x t. check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x, t) ⇒
          ∀e. MEM e es ⇒
@@ -224,7 +224,7 @@ Proof
 QED
 
 (* TypeBuiltin: IH for es is conditional on check succeeding *)
-Theorem case_TypeBuiltin_dom[local]:
+Theorem case_TypeBuiltin_dom:
   ∀cx tb typ es.
     (∀s'' x t. check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args" s'' = (INL x, t) ⇒
          ∀e. MEM e es ⇒
@@ -245,7 +245,7 @@ QED
    ======================================================================== *)
 
 (* NameTarget case - does not call eval_expr *)
-Theorem case_NameTarget_dom[local]:
+Theorem case_NameTarget_dom:
   ∀cx nm st res st'.
     eval_base_target cx (NameTarget nm) st = (res, st') ⇒
     MAP FDOM st.scopes = MAP FDOM st'.scopes
@@ -263,7 +263,7 @@ Proof
 QED
 
 (* TopLevelNameTarget case - does not call eval_expr *)
-Theorem case_TopLevelNameTarget_dom[local]:
+Theorem case_TopLevelNameTarget_dom:
   ∀cx src_id_opt id st res st'.
     eval_base_target cx (TopLevelNameTarget (src_id_opt, id)) st = (res, st') ⇒
     MAP FDOM st.scopes = MAP FDOM st'.scopes
@@ -272,7 +272,7 @@ Proof
 QED
 
 (* AttributeTarget case - only recurses on the sub-target, not on eval_expr *)
-Theorem case_AttributeTarget_dom[local]:
+Theorem case_AttributeTarget_dom:
   ∀cx t id.
     (∀st res st'. eval_base_target cx t st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
@@ -285,7 +285,7 @@ Proof
 QED
 
 (* SubscriptTarget case - IH for e is conditional on t succeeding *)
-Theorem case_SubscriptTarget_dom[local]:
+Theorem case_SubscriptTarget_dom:
   ∀cx t e.
     (∀st res st'. eval_base_target cx t st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
     (∀s'' loc sbs t'. eval_base_target cx t s'' = (INL (loc, sbs), t') ⇒
@@ -306,7 +306,7 @@ Proof
 QED
 
 (* Pop case - only requires IH for eval_base_target, not for all eval_expr *)
-Theorem case_Pop_dom[local]:
+Theorem case_Pop_dom:
   ∀cx bt.
     (∀st res st'. eval_base_target cx bt st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
@@ -325,7 +325,7 @@ Proof
 QED
 
 (* Send: IH for es is conditional on check succeeding *)
-Theorem case_Send_dom[local]:
+Theorem case_Send_dom:
   ∀cx es.
     (∀s'' x t. check (LENGTH es = 2) "Send args" s'' = (INL x, t) ⇒
          ∀e. MEM e es ⇒
@@ -346,7 +346,7 @@ Proof
 QED
 
 (* IntCall: IH for es is conditional on various checks succeeding *)
-Theorem case_IntCall_dom[local]:
+Theorem case_IntCall_dom:
   ∀cx src_id_opt fn es.
     (∀s'' x t s2 ts t2 s3 tup t3 s4 x2 t4.
        check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
@@ -383,30 +383,81 @@ QED
 
 (* The predicates for evaluate_ind instantiation *)
 Definition scopes_dom_P5_def:
-  scopes_dom_P5 cx bt = ∀st res st'. eval_base_target cx bt st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
+  scopes_dom_P5 _ bt = ∀cx st res st'. eval_base_target cx bt st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
 End
 
 Definition scopes_dom_P7_def:
-  scopes_dom_P7 cx e = ∀st res st'. eval_expr cx e st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
+  scopes_dom_P7 _ e = ∀cx st res st'. eval_expr cx e st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
 End
 
+(* P8: trivially true for induction; real property derived from P7 *)
 Definition scopes_dom_P8_def:
-  scopes_dom_P8 cx es = ∀e. MEM e es ⇒ ∀cx st res st'. eval_expr cx e st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
+  scopes_dom_P8 (cx:context) (es:expr list) = T
 End
 
-(* TODO: This proof requires careful instantiation of evaluate_ind with the
-   predicates scopes_dom_P5, scopes_dom_P7, scopes_dom_P8 for P5, P7, P8
-   respectively, and T for the other predicates. The case lemmas above
-   handle each individual case. The challenge is getting the proof
-   structure to correctly apply evaluate_ind.
-   
-   All the individual case lemmas (case_*_dom) have been verified to work.
-   The issue is connecting them through evaluate_ind's mutual induction. *)
 Theorem eval_mutual_preserves_scopes_dom:
   (∀cx bt st res st'. eval_base_target cx bt st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
   (∀cx e st res st'. eval_expr cx e st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes)
 Proof
-  cheat
+  sg `(∀cx bt. scopes_dom_P5 cx bt) ∧ (∀cx e. scopes_dom_P7 cx e) ∧ (∀cx es. scopes_dom_P8 cx es)`
+  >- (mp_tac (evaluate_ind |> Q.SPECL [
+        `λ_ _. T`, `λ_ _. T`, `λ_ _. T`, `λ_ _. T`, `λ_ _. T`,
+        `scopes_dom_P5`, `λ_ _ _ _. T`, `scopes_dom_P7`, `scopes_dom_P8`
+      ] |> SIMP_RULE (srw_ss()) []) >>
+      impl_tac >> rpt conj_tac
+      (* NameTarget *)
+      >- (simp[scopes_dom_P5_def] >> metis_tac[case_NameTarget_dom])
+      (* TopLevelNameTarget *)
+      >- (simp[scopes_dom_P5_def] >> metis_tac[case_TopLevelNameTarget_dom])
+      (* AttributeTarget *)
+      >- (simp[scopes_dom_P5_def] >> metis_tac[case_AttributeTarget_dom])
+      (* SubscriptTarget - use drule_all *)
+      >- (rpt strip_tac >> gvs[scopes_dom_P5_def, scopes_dom_P7_def] >> rpt strip_tac >>
+          drule_all case_SubscriptTarget_dom >> simp[])
+      (* Name - need to handle get_current_globals *)
+      >- (simp[scopes_dom_P7_def, evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
+               get_scopes_def, get_immutables_def, get_immutables_module_def, lift_sum_def] >>
+          rpt strip_tac >> gvs[return_def, raise_def] >>
+          imp_res_tac get_current_globals_scopes >> gvs[] >>
+          TRY (Cases_on `exactly_one_option (lookup_scopes (string_to_num id) st.scopes)
+                         (FLOOKUP (get_module_globals NONE gbs).immutables (string_to_num id))` >>
+               gvs[return_def, raise_def]))
+      (* TopLevelName *)
+      >- (simp[scopes_dom_P7_def, evaluate_def] >> rpt strip_tac >> imp_res_tac lookup_global_scopes >> gvs[])
+      (* FlagMember *)
+      >- (simp[scopes_dom_P7_def, evaluate_def] >> rpt gen_tac >> PairCases_on `nsid` >>
+          simp[lookup_flag_mem_def, raise_def, return_def] >> rpt CASE_TAC >> simp[raise_def, return_def])
+      (* IfExp - use drule_all *)
+      >- (rpt strip_tac >> gvs[scopes_dom_P7_def] >> rpt strip_tac >> drule_all case_IfExp_dom >> simp[])
+      (* Literal *)
+      >- simp[scopes_dom_P7_def, evaluate_def, return_def]
+      (* StructLit - prove directly since scopes_dom_P8=T doesn't give useful IH *)
+      >- (rpt strip_tac >> gvs[scopes_dom_P7_def, scopes_dom_P8_def, evaluate_def, bind_def, AllCaseEqs(), return_def] >>
+          cheat)
+      (* Subscript - use drule_all *)
+      >- (rpt strip_tac >> gvs[scopes_dom_P7_def] >> rpt strip_tac >> drule_all case_Subscript_dom >> simp[])
+      (* Attribute - use drule_all *)
+      >- (rpt strip_tac >> gvs[scopes_dom_P7_def] >> rpt strip_tac >> drule_all case_Attribute_dom >> simp[])
+      (* Builtin - prove directly since scopes_dom_P8=T doesn't give useful IH *)
+      >- (rpt strip_tac >> gvs[scopes_dom_P7_def, scopes_dom_P8_def, evaluate_def, bind_def, AllCaseEqs(), return_def, ignore_bind_def, check_def, assert_def, get_accounts_def, lift_sum_def] >> cheat)
+      (* Pop - use drule_all *)
+      >- (rpt strip_tac >> gvs[scopes_dom_P5_def, scopes_dom_P7_def] >> rpt strip_tac >>
+          drule_all case_Pop_dom >> simp[])
+      (* TypeBuiltin - prove directly *)
+      >- (rpt strip_tac >> gvs[scopes_dom_P7_def, scopes_dom_P8_def, evaluate_def, bind_def, AllCaseEqs(), return_def, ignore_bind_def, check_def, assert_def, lift_sum_def] >> cheat)
+      (* Send - prove directly *)
+      >- (rpt strip_tac >> gvs[scopes_dom_P7_def, scopes_dom_P8_def, evaluate_def, bind_def, AllCaseEqs(), return_def, ignore_bind_def, check_def, assert_def, lift_option_def] >> cheat)
+      (* ExtCall *)
+      >- simp[scopes_dom_P7_def, evaluate_def, raise_def]
+      (* StaticCall *)
+      >- simp[scopes_dom_P7_def, evaluate_def, raise_def]
+      (* IntCall - prove directly *)
+      >- (rpt strip_tac >> gvs[scopes_dom_P7_def, scopes_dom_P8_def, evaluate_def, bind_def, AllCaseEqs(), return_def, ignore_bind_def, check_def, assert_def, lift_option_def, get_scopes_def, push_function_def, pop_function_def, set_scopes_def] >> cheat)
+      (* [] *)
+      >- simp[scopes_dom_P8_def]
+      (* e::es *)
+      >- simp[scopes_dom_P8_def])
+  >> gvs[scopes_dom_P5_def, scopes_dom_P7_def]
 QED
 
 (* Extract the main theorem from the mutual induction *)
