@@ -136,111 +136,6 @@ Proof
 QED
 
 (* ========================================================================
-   Case lemmas for impure expressions - using CONDITIONAL IHs
-   These match the shape of evaluate_ind induction hypotheses
-   ======================================================================== *)
-
-(* IfExp: IHs for e', e'' are conditional on e succeeding *)
-Theorem case_IfExp_dom:
-  ∀cx e e' e''.
-    (∀st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
-    (∀s'' tv t. eval_expr cx e s'' = (INL tv,t) ⇒
-         ∀st res st'. eval_expr cx e' st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
-    (∀s'' tv t. eval_expr cx e s'' = (INL tv,t) ⇒
-         ∀st res st'. eval_expr cx e'' st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
-    ∀st res st'.
-      eval_expr cx (IfExp e e' e'') st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  rpt strip_tac >> qpat_x_assum `eval_expr cx (IfExp _ _ _) _ = _` mp_tac >>
-  simp[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def, switch_BoolV_def] >>
-  strip_tac >> gvs[] >>
-  `MAP FDOM st.scopes = MAP FDOM s''.scopes` by metis_tac[] >>
-  Cases_on `tv = Value (BoolV T)` >> gvs[]
-  >- (`MAP FDOM s''.scopes = MAP FDOM st'.scopes` by metis_tac[] >> metis_tac[])
-  >- (Cases_on `tv = Value (BoolV F)` >> gvs[raise_def] >> metis_tac[])
-QED
-
-(* StructLit: IH for es is conditional (ks = MAP FST kes) - but ks is always equal, so effectively unconditional *)
-Theorem case_StructLit_dom:
-  ∀cx src_id_opt id kes.
-    (∀ks. ks = MAP FST kes ⇒
-         ∀e. MEM e (MAP SND kes) ⇒
-             ∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
-    ∀st res st'.
-      eval_expr cx (StructLit (src_id_opt, id) kes) st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  rpt strip_tac >>
-  gvs[evaluate_def, bind_def, AllCaseEqs(), return_def] >>
-  (* gvs specializes the conditional IH: ∀ks. ks = MAP FST kes ⇒ ... becomes just ... *)
-  irule eval_exprs_preserves_scopes_dom >> simp[] >>
-  qexistsl_tac [`cx`, `MAP SND kes`] >> simp[] >>
-  first_x_assum ACCEPT_TAC
-QED
-
-(* Subscript (expr): IH for e' is conditional on e succeeding *)
-Theorem case_Subscript_dom:
-  ∀cx e e'.
-    (∀st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
-    (∀s'' tv1 t. eval_expr cx e s'' = (INL tv1,t) ⇒
-         ∀st res st'. eval_expr cx e' st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
-    ∀st res st'.
-      eval_expr cx (Subscript e e') st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  TRY (`MAP FDOM st.scopes = MAP FDOM s''.scopes` by (last_x_assum drule >> simp[])) >>
-  TRY (first_x_assum (qspecl_then [`st`, `tv1`, `s''`] mp_tac) >> simp[] >>
-       disch_then drule >> simp[] >> strip_tac) >>
-  imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >> imp_res_tac lift_sum_scopes >> gvs[]
-QED
-
-(* Attribute: IH for e is unconditional *)
-Theorem case_Attribute_dom:
-  ∀cx e id.
-    (∀st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
-    ∀st res st'.
-      eval_expr cx (Attribute e id) st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  rpt strip_tac >>
-  gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def, get_Value_def, lift_option_def] >>
-  TRY (`MAP FDOM st.scopes = MAP FDOM s''.scopes` by (first_x_assum drule >> simp[])) >>
-  imp_res_tac get_Value_scopes >> imp_res_tac lift_sum_scopes >> gvs[]
-QED
-
-(* Builtin: IH for es is conditional on check succeeding *)
-Theorem case_Builtin_dom:
-  ∀cx bt es.
-    (∀s'' x t. check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x, t) ⇒
-         ∀e. MEM e es ⇒
-             ∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
-    ∀st res st'.
-      eval_expr cx (Builtin bt es) st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  rpt strip_tac >>
-  gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def, ignore_bind_def,
-      check_def, assert_def, get_accounts_def, lift_sum_def] >>
-  TRY (Cases_on `evaluate_builtin cx s''.accounts bt vs` >> gvs[return_def, raise_def]) >>
-  irule eval_exprs_preserves_scopes_dom >> simp[] >>
-  qexistsl_tac [`cx`, `es`] >> simp[] >> first_x_assum ACCEPT_TAC
-QED
-
-(* TypeBuiltin: IH for es is conditional on check succeeding *)
-Theorem case_TypeBuiltin_dom:
-  ∀cx tb typ es.
-    (∀s'' x t. check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args" s'' = (INL x, t) ⇒
-         ∀e. MEM e es ⇒
-             ∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
-    ∀st res st'.
-      eval_expr cx (TypeBuiltin tb typ es) st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  rpt strip_tac >>
-  gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def, ignore_bind_def,
-      check_def, assert_def, lift_sum_def] >>
-  TRY (Cases_on `evaluate_type_builtin cx tb typ vs` >> gvs[return_def, raise_def]) >>
-  irule eval_exprs_preserves_scopes_dom >> simp[] >>
-  qexistsl_tac [`cx`, `es`] >> simp[] >> first_x_assum ACCEPT_TAC
-QED
-
-(* ========================================================================
    Helper lemmas for individual eval_base_target cases (for mutual induction)
    ======================================================================== *)
 
@@ -271,121 +166,16 @@ Proof
   rpt strip_tac >> gvs[Once evaluate_def, return_def]
 QED
 
-(* AttributeTarget case - only recurses on the sub-target, not on eval_expr *)
-Theorem case_AttributeTarget_dom:
-  ∀cx t id.
-    (∀st res st'. eval_base_target cx t st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
-    ∀st res st'.
-      eval_base_target cx (AttributeTarget t id) st = (res, st') ⇒
-      MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, pairTheory.UNCURRY] >>
-  first_x_assum drule >> simp[]
-QED
-
-(* SubscriptTarget case - IH for e is conditional on t succeeding *)
-Theorem case_SubscriptTarget_dom:
-  ∀cx t e.
-    (∀st res st'. eval_base_target cx t st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
-    (∀s'' loc sbs t'. eval_base_target cx t s'' = (INL (loc, sbs), t') ⇒
-         ∀st res st'. eval_expr cx e st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
-    ∀st res st'.
-      eval_base_target cx (SubscriptTarget t e) st = (res, st') ⇒
-      MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, pairTheory.UNCURRY] >>
-  imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >> gvs[] >>
-  (* t succeeded with INL (loc, sbs) - get scopes preservation from unconditional IH *)
-  `MAP FDOM st.scopes = MAP FDOM s''.scopes` by (last_x_assum drule >> simp[]) >>
-  (* Split x into (loc, sbs) to match conditional IH pattern *)
-  PairCases_on `x` >>
-  (* Use conditional IH for e *)
-  first_x_assum (qspecl_then [`st`, `x0`, `x1`, `s''`] mp_tac) >> simp[]
-QED
-
-(* Pop case - only requires IH for eval_base_target, not for all eval_expr *)
-Theorem case_Pop_dom:
-  ∀cx bt.
-    (∀st res st'. eval_base_target cx bt st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
-    ∀st res st'.
-      eval_expr cx (Pop bt) st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  rpt strip_tac >> gvs[return_def] >>
-  PairCases_on `x` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac (CONJUNCT1 assign_target_preserves_scopes_dom) >> gvs[] >>
-  imp_res_tac get_Value_scopes >> gvs[] >>
-  imp_res_tac lift_sum_scopes >> gvs[] >>
-  imp_res_tac lift_option_scopes >> gvs[] >>
-  first_x_assum drule >> gvs[]
-QED
-
-(* Send: IH for es is conditional on check succeeding *)
-Theorem case_Send_dom:
-  ∀cx es.
-    (∀s'' x t. check (LENGTH es = 2) "Send args" s'' = (INL x, t) ⇒
-         ∀e. MEM e es ⇒
-             ∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
-    ∀st res st'.
-      eval_expr cx (Call Send es) st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
-       check_def, assert_def, lift_option_def] >>
-  strip_tac >> gvs[return_def, raise_def, GSYM lift_option_def] >>
-  imp_res_tac transfer_value_scopes >> imp_res_tac lift_option_scopes >> gvs[] >>
-  irule eval_exprs_preserves_scopes_dom >> simp[] >>
-  qexistsl_tac [`cx`, `es`] >> simp[] >>
-  (* Instantiate conditional IH with `st` to satisfy check T ... st = (INL (), st) *)
-  first_x_assum (qspecl_then [`st`, `st`] mp_tac) >> simp[check_def, return_def, assert_def]
-QED
-
-(* IntCall: IH for es is conditional on various checks succeeding *)
-Theorem case_IntCall_dom:
-  ∀cx src_id_opt fn es.
-    (∀s'' x t s2 ts t2 s3 tup t3 s4 x2 t4.
-       check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
-       lift_option (get_module_code cx src_id_opt) "IntCall get_module_code" s2 = (INL ts,t2) ∧
-       lift_option (lookup_function fn Internal ts) "IntCall lookup_function" s3 = (INL tup,t3) ∧
-       check (LENGTH (FST (SND tup)) = LENGTH es) "IntCall args length" s4 = (INL x2,t4) ⇒
-       ∀e. MEM e es ⇒
-           ∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
-    ∀st res st'.
-      eval_expr cx (Call (IntCall (src_id_opt, fn)) es) st = (res,st') ⇒
-      MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
-       check_def, assert_def, lift_option_def, get_scopes_def, push_function_def,
-       pop_function_def, set_scopes_def] >>
-  strip_tac >> gvs[return_def, raise_def, GSYM lift_option_def] >>
-  imp_res_tac lift_option_scopes >> gvs[] >>
-  TRY (drule_all finally_set_scopes_dom >> strip_tac >> gvs[]) >>
-  (* All remaining cases reduce to proving st.scopes = s'⁴'.scopes via s'³'.scopes *)
-  `MAP FDOM s'³'.scopes = MAP FDOM s'⁴'.scopes` suffices_by gvs[] >>
-  irule eval_exprs_preserves_scopes_dom >> simp[] >>
-  qexistsl_tac [`cx`, `es`] >> simp[] >>
-  (* Instantiate the conditional IH with matching values *)
-  first_x_assum (qspecl_then [`st`, `st`, `st`, `ts`, `s''`, `s''`, `tup`, `s'³'`, `s'³'`, `s'³'`] mp_tac) >>
-  simp[check_def, return_def, assert_def]
-QED
-
 (* ========================================================================
-   Helper lemmas for structural induction - matching EXACT case shapes
-   
+   Helper lemmas for structural induction
+
    The structural induction gives us predicates P0, P1, P2, P3, P4 where:
    - scopes_P0 e = ∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
    - scopes_P1 bt = ∀cx st res st'. eval_base_target cx bt st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
    - scopes_P2 kes = ∀e. MEM e (MAP SND kes) ⇒ scopes_P0 e
    - scopes_P4 es = ∀e. MEM e es ⇒ scopes_P0 e
-   
-   The helper lemmas are formulated to match EXACTLY what we get after 
+
+   The helper lemmas are formulated to match what we get after
    unfolding the predicates in each induction case.
    ======================================================================== *)
 
@@ -570,7 +360,7 @@ Proof
 QED
 
 (* ========================================================================
-   Main Theorem - proved by STRUCTURAL induction on expr/base_target types
+   Main Theorem - proved by structural induction on expr/base_target types
    ======================================================================== *)
 
 (* Predicates for structural induction *)
@@ -615,13 +405,7 @@ Proof
           imp_res_tac lookup_global_scopes >> gvs[])
       (* Case 3: FlagMember *)
       >- (rpt gen_tac >> PairCases_on `ke` >> rpt strip_tac >>
-          gvs[evaluate_def, bind_def, AllCaseEqs()] >>
-          imp_res_tac get_current_globals_scopes >> imp_res_tac lift_option_scopes >>
-          imp_res_tac lift_sum_scopes >> imp_res_tac return_scopes >> gvs[] >>
-          gvs[lookup_flag_mem_def, AllCaseEqs(), return_def, raise_def] >>
-          Cases_on `get_module_code cx ke0` >> gvs[AllCaseEqs(), return_def, raise_def] >>
-          Cases_on `lookup_flag ke1 x` >> gvs[AllCaseEqs(), return_def, raise_def] >>
-          Cases_on `INDEX_OF s x'` >> gvs[AllCaseEqs(), return_def, raise_def])
+          gvs[evaluate_def] >> imp_res_tac lookup_flag_mem_scopes >> gvs[])
       (* Case 4: IfExp *)
       >- (rpt strip_tac >> irule case_IfExp_ind >> gvs[] >>
           qexistsl_tac [`cx`, `e`, `e0`, `e1`, `res`] >> gvs[] >>

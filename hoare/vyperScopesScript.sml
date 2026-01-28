@@ -109,6 +109,14 @@ Proof
   gvs[raise_def] >> simp[]
 QED
 
+Theorem lookup_flag_mem_scopes:
+  !cx nsid mid st res st'. lookup_flag_mem cx nsid mid st = (res, st') ==> st'.scopes = st.scopes
+Proof
+  rpt gen_tac >> PairCases_on `nsid` >>
+  simp[lookup_flag_mem_def, return_def, raise_def] >>
+  rpt CASE_TAC >> simp[return_def, raise_def]
+QED
+
 (* Scope-modifying operations *)
 Theorem push_scope_len[local]:
   !st res st'. push_scope st = (res, st') ==> LENGTH st'.scopes = LENGTH st.scopes + 1
