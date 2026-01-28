@@ -602,9 +602,66 @@ Proof
       (∀kes:(string#expr)list. scopes_P2 kes) ∧
       (∀ke:string#expr. scopes_P3 ke) ∧ (∀es:expr list. scopes_P4 es)`
   >- (ho_match_mp_tac (TypeBase.induction_of ``:expr``) >> rpt conj_tac >>
-      (* All 21 cases - cheated for now, to be filled in later *)
-      simp[scopes_P0_def, scopes_P1_def, scopes_P2_def, scopes_P3_def, scopes_P4_def] >>
-      rpt strip_tac >> gvs[] >> cheat)
+      simp[scopes_P0_def, scopes_P1_def, scopes_P2_def, scopes_P3_def, scopes_P4_def]
+      (* Case 1: Name *)
+      >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+          imp_res_tac get_scopes_id >> imp_res_tac get_immutables_scopes >>
+          imp_res_tac lift_sum_scopes >> imp_res_tac return_scopes >> gvs[])
+      (* Case 2: TopLevelName *)
+      >- (rpt gen_tac >> PairCases_on `ke` >> rpt strip_tac >>
+          gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+          imp_res_tac get_current_globals_scopes >> imp_res_tac lift_option_scopes >>
+          imp_res_tac lift_sum_scopes >> imp_res_tac return_scopes >> gvs[] >>
+          imp_res_tac lookup_global_scopes >> gvs[])
+      (* Case 3: FlagMember *)
+      >- (rpt gen_tac >> PairCases_on `ke` >> rpt strip_tac >>
+          gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+          imp_res_tac get_current_globals_scopes >> imp_res_tac lift_option_scopes >>
+          imp_res_tac lift_sum_scopes >> imp_res_tac return_scopes >> gvs[] >>
+          gvs[lookup_flag_mem_def, AllCaseEqs(), return_def, raise_def] >>
+          Cases_on `get_module_code cx ke0` >> gvs[AllCaseEqs(), return_def, raise_def] >>
+          Cases_on `lookup_flag ke1 x` >> gvs[AllCaseEqs(), return_def, raise_def] >>
+          Cases_on `INDEX_OF s x'` >> gvs[AllCaseEqs(), return_def, raise_def])
+      (* Case 4: IfExp *)
+      >- (rpt strip_tac >> irule case_IfExp_ind >> gvs[] >>
+          qexistsl_tac [`cx`, `e`, `e0`, `e1`, `res`] >> gvs[] >>
+          rpt conj_tac >> first_x_assum ACCEPT_TAC)
+      (* Case 5: Literal *)
+      >- (rpt strip_tac >> gvs[evaluate_def, return_def])
+      (* Case 6: StructLit *)
+      >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> PairCases_on `ke` >> strip_tac >>
+          irule case_StructLit_ind >>
+          qexistsl_tac [`cx`, `ke1`, `kes`, `res`, `ke0`] >> gvs[] >>
+          first_x_assum ACCEPT_TAC)
+      (* Case 7: Subscript *)
+      >- (rpt strip_tac >> drule_all case_Subscript_ind >> simp[])
+      (* Case 8: Attribute *)
+      >- (rpt strip_tac >> drule_all case_Attribute_ind >> simp[])
+      (* Case 9: Builtin *)
+      >- (rpt strip_tac >> drule_all case_Builtin_ind >> simp[])
+      (* Case 10: TypeBuiltin *)
+      >- (rpt strip_tac >> drule_all case_TypeBuiltin_ind >> simp[])
+      (* Case 11: Pop *)
+      >- (rpt strip_tac >> drule_all case_Pop_ind >> simp[])
+      (* Case 12: Call *)
+      >- (rpt strip_tac >> Cases_on `c`
+          >- (PairCases_on `p` >> drule_all case_Call_IntCall_ind >> simp[])
+          >- gvs[evaluate_def, raise_def]
+          >- gvs[evaluate_def, raise_def]
+          >- (drule_all case_Call_Send_ind >> simp[]))
+      (* Case 13: NameTarget *)
+      >- (rpt strip_tac >> drule case_NameTarget_dom >> simp[])
+      (* Case 14: TopLevelNameTarget *)
+      >- (rpt gen_tac >> PairCases_on `ke` >> rpt strip_tac >>
+          drule case_TopLevelNameTarget_dom >> simp[])
+      (* Case 15: SubscriptTarget *)
+      >- (rpt strip_tac >> drule_all case_SubscriptTarget_ind >> simp[])
+      (* Case 16: AttributeTarget *)
+      >- (rpt strip_tac >> drule_all case_AttributeTarget_ind >> simp[])
+      (* Case 17: P2 cons *)
+      >- (rpt strip_tac >> gvs[] >> metis_tac[])
+      (* Case 18: P4 cons *)
+      >- (rpt strip_tac >> gvs[] >> metis_tac[]))
   >> gvs[scopes_P0_def, scopes_P1_def] >> metis_tac[]
 QED
 
