@@ -298,6 +298,23 @@ Termination
   rw[struct_fields_size_lt, sparse_size_lt]
 End
 
+val encode_value_pre_def =
+  cv_auto_trans_pre
+    "encode_value_pre encode_tuple_pre encode_static_array_pre encode_dyn_array_pre encode_struct_pre"
+    encode_value_def;
+
+Theorem encode_value_pre[cv_pre]:
+  (∀tv v. encode_value_pre tv v) ∧
+  (∀offset tvs vs. encode_tuple_pre offset tvs vs) ∧
+  (∀tv offset sparse. encode_static_array_pre tv offset sparse) ∧
+  (∀tv offset vs. encode_dyn_array_pre tv offset vs) ∧
+  (∀offset ftypes fields. encode_struct_pre offset ftypes fields)
+Proof
+  ho_match_mp_tac encode_value_ind
+  \\ rw[]
+  \\ rw[Once encode_value_pre_def]
+QED
+
 (* ===== Termination helper lemmas for decode_value ===== *)
 
 Theorem type_value1_size_le[local]:
