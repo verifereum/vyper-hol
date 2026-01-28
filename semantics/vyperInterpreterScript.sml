@@ -65,6 +65,10 @@ Datatype:
   toplevel_value = Value value | HashMapRef bytes32 value_type
 End
 
+val toplevel_value_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vyperInterpreter",Tyop="toplevel_value"}));
+
 Definition is_Value_def[simp]:
   (is_Value (Value _) ⇔ T) ∧
   (is_Value _ ⇔ F)
@@ -1554,6 +1558,10 @@ val prod_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
 
+val prod_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
+
 Definition lift_option_def:
   lift_option x str =
     case x of SOME v => return v | NONE => raise $ Error str
@@ -1608,6 +1616,10 @@ Datatype:
   | HashMapVarDecl type value_type (* hashmap: key type, value type *)
 End
 
+val var_decl_info_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vyperInterpreter",Tyop="var_decl_info"}));
+
 (* Look up variable slot from var_layout *)
 Definition lookup_var_slot_from_layout_def:
   lookup_var_slot_from_layout cx n =
@@ -1640,11 +1652,11 @@ val () = cv_auto_trans get_accounts_def;
 
 (* Read a value from storage at a slot *)
 Definition read_storage_slot_def:
-  read_storage_slot cx slot tv = do
+  read_storage_slot cx (slot : bytes32) tv = do
     accts <- get_accounts;
     let storage = (lookup_account cx.txn.target accts).storage in
-    let reader = make_reader slot storage in
-    lift_option (decode_value tv reader) "read_storage_slot decode"
+    lift_option (OPTION_MAP FST (decode_value storage (w2n slot) tv))
+      "read_storage_slot decode"
   od
 End
 
@@ -1652,21 +1664,25 @@ val () = read_storage_slot_def
   |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
   |> cv_auto_trans;
 
+Definition update_accounts_def:
+  update_accounts f st = return () (st with accounts updated_by f)
+End
+
 (* Write a value to storage at a slot *)
 Definition write_storage_slot_def:
   write_storage_slot cx slot tv v = do
     accts <- get_accounts;
-    let acc = lookup_account cx.txn.target accts in
-    let storage = acc.storage in
+    acc <<- lookup_account cx.txn.target accts;
+    storage <<- acc.storage;
     writes <- lift_option (encode_value tv v) "write_storage_slot encode";
-    let storage' = apply_writes slot writes storage in
-    let acc' = acc with storage := storage' in
+    storage' <<- apply_writes slot writes storage;
+    acc' <<- acc with storage := storage';
     update_accounts (update_account cx.txn.target acc')
   od
 End
 
 val () = write_storage_slot_def
-  |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
+  |> SRULE [bind_def, FUN_EQ_THM, LET_THM, update_accounts_def]
   |> cv_auto_trans;
 
 (* Module-aware global lookup: look up variable n in module src_id_opt *)
@@ -1692,7 +1708,8 @@ Definition lookup_global_def:
 End
 
 val () = lookup_global_def
-  |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator, UNCURRY, LET_THM]
+  |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator,
+            prod_CASE_rator, var_decl_info_CASE_rator, UNCURRY, LET_THM]
   |> cv_auto_trans;
 
 (* Module-aware immutables lookup *)
@@ -1864,10 +1881,6 @@ val () = set_immutable_def
   |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
   |> cv_auto_trans;
 
-Definition update_accounts_def:
-  update_accounts f st = return () (st with accounts updated_by f)
-End
-
 Definition set_scopes_def:
   set_scopes env st = return () $ st with scopes := env
 End
@@ -2020,7 +2033,8 @@ End
 
 val assign_target_pre_def = assign_target_def
   |> SRULE [FUN_EQ_THM, bind_def, LET_RATOR, ignore_bind_def,
-            UNCURRY, option_CASE_rator, lift_option_def]
+            UNCURRY, prod_CASE_rator, option_CASE_rator,
+            toplevel_value_CASE_rator, lift_option_def]
   |> cv_auto_trans_pre "assign_target_pre assign_targets_pre";
 
 Theorem assign_target_pre[cv_pre]:
