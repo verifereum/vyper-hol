@@ -35,8 +35,10 @@ Theorem new_variable_scope_property:
     FDOM (HD st.scopes) ⊆ FDOM (HD st'.scopes) ∧
     TL st'.scopes = TL st.scopes
 Proof
-  cheat (* TODO: Unfold new_variable_def, case split on st.scopes = e::es,
-           show HD changes by |+, TL unchanged *)
+  rpt strip_tac >> Cases_on `st.scopes` >> gvs[] >>
+  gvs[new_variable_def, bind_def, get_scopes_def, return_def, check_def,
+      assert_def, set_scopes_def, AllCaseEqs(), raise_def, ignore_bind_def] >>
+  irule pred_setTheory.SUBSET_INSERT_RIGHT >> simp[]
 QED
 
 (* push_scope creates empty HD, preserves original as TL.
@@ -90,8 +92,10 @@ Theorem finally_pop_scope_preserves_tl_dom:
        MAP FDOM (TL st1.scopes) = MAP FDOM (TL st1'.scopes)) ⇒
     MAP FDOM st'.scopes = MAP FDOM (TL st.scopes)
 Proof
-  cheat (* TODO: Unfold finally_def, pop_scope_def. pop_scope sets scopes to TL.
-           Use body hypothesis to chain: MAP FDOM (TL body_st'.scopes) = MAP FDOM (TL st.scopes) *)
+  rpt strip_tac >>
+  gvs[finally_def, AllCaseEqs()] >>
+  gvs[pop_scope_def, AllCaseEqs(), bind_def, ignore_bind_def, return_def, raise_def] >>
+  first_x_assum drule >> simp[]
 QED
 
 (* Combined: push_scope then finally body pop_scope restores MAP FDOM.
@@ -112,9 +116,11 @@ Theorem push_scope_finally_pop_preserves_dom:
        MAP FDOM (TL st1.scopes) = MAP FDOM (TL st1'.scopes)) ⇒
     MAP FDOM st'.scopes = MAP FDOM st.scopes
 Proof
-  cheat (* TODO: Unfold do-notation, use push_scope_creates_empty_hd and
-           finally_pop_scope_preserves_tl_dom. Key: after push, TL = st.scopes.
-           Body preserves TL, pop_scope makes scopes = TL body_st'.scopes *)
+  rpt strip_tac >>
+  gvs[push_scope_def, bind_def, ignore_bind_def, return_def] >>
+  gvs[finally_def, AllCaseEqs()] >>
+  first_x_assum drule >> strip_tac >> gvs[] >>
+  gvs[pop_scope_def, AllCaseEqs(), bind_def, ignore_bind_def, return_def, raise_def]
 QED
 
 (* ------------------------------------------------------------------------
