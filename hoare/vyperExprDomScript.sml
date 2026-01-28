@@ -310,8 +310,10 @@ Theorem case_Send_dom[local]:
       eval_expr cx (Call Send es) st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >>
-  gvs[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
-      check_def, assert_def, lift_option_def, GSYM lift_option_def] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
+       check_def, assert_def, lift_option_def] >>
+  strip_tac >> gvs[return_def, raise_def, GSYM lift_option_def] >>
   imp_res_tac transfer_value_scopes >> imp_res_tac lift_option_scopes >> gvs[] >>
   irule eval_exprs_preserves_scopes_dom >> simp[] >> metis_tac[]
 QED
@@ -332,7 +334,7 @@ Proof
   strip_tac >> gvs[return_def, raise_def, GSYM lift_option_def] >>
   imp_res_tac lift_option_scopes >> gvs[] >>
   TRY (drule_all finally_set_scopes_dom >> strip_tac >> gvs[]) >>
-  irule eval_exprs_preserves_scopes_dom >> simp[] >> metis_tac[]
+  TRY (drule eval_exprs_preserves_scopes_dom >> simp[] >> metis_tac[])
 QED
 
 (* ========================================================================
