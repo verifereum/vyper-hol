@@ -563,13 +563,6 @@ Proof
   metis_tac[pure_scopes_mutual]
 QED
 
-Theorem eval_expr_preserves_scopes_dom:
-  ∀cx e st res st'.
-    eval_expr cx e st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  cheat
-QED
-
 Theorem eval_expr_preserves_var_in_scope:
   ∀cx st st' n e v.
     eval_expr cx e st = (INL v, st') ⇒
