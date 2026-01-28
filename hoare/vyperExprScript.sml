@@ -4,7 +4,7 @@ Theory vyperExpr
  *)
 
 Ancestors
-  vyperInterpreter
+  vyperInterpreter vyperLookup
 
 (* Pure expressions: expressions that do not modify scopes.
    Pop is the only impure expression constructor - it modifies scoped variables.
@@ -568,4 +568,12 @@ Theorem eval_expr_preserves_scopes_dom:
     eval_expr cx e st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   cheat
+QED
+
+Theorem eval_expr_preserves_var_in_scope:
+  ∀cx st st' n e v.
+    eval_expr cx e st = (INL v, st') ⇒
+    (var_in_scope st n ⇔ var_in_scope st' n)
+Proof
+  metis_tac[var_in_scope_dom_iff, eval_expr_preserves_scopes_dom]
 QED
