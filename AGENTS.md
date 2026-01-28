@@ -85,13 +85,19 @@ venom/passes/  # directory for each pass
 
 ## Interactive HOL Sessions
 
-Use the `/hol4` skills for proof development.
+Use the hol4 MCP tools for proof development.
 
-**CRITICAL: Use gt/etq, NEVER g/e()**
-- Use `gt \`goal\`` to set goal (not `g`)
-- Use `etq "tactic"` to apply tactics (not `e()`)
-- `etq` records tactics for `p()` extraction; `e()` does not
-- After tactics, use `p()` to see recorded proof script
+**Workflow: hol_state_at + Edit**
+1. `hol_file_init` - parse file, list theorems with line numbers and cheat status
+2. `hol_state_at(line, col)` - navigate to position, auto-replay tactics, show goals
+3. Edit file directly with Edit tool to add/modify tactics
+4. `hol_state_at` again to verify the change worked
+
+**CRITICAL**: The user requests not to use `g()`, `e()`, `p()` - the tool manages proof state
+
+**Key points:**
+- `hol_state_at` handles file changes, checkpoints, and tactic replay automatically
+- Use `hol_send` only for queries (DB.match, type_of) not proof navigation
 
 ### File Conventions (repo-specific)
 
@@ -203,7 +209,7 @@ If these symlinks are missing, ask the operator to provide access.
 
 ## Proof Strategy
 
-**When proofs get complex:** Step back, look for helper lemmas, consider refactoring definitions. Use `p()` to debug. Cheats are temporary scaffolding only.
+**When proofs get complex:** Step back, look for helper lemmas, consider refactoring definitions. Use `hol_state_at` at different positions to debug. Cheats are temporary scaffolding only.
 
 **Signs you're on wrong track:** Many nested TRY blocks, dozens of subgoals, slow tactics, unpredictable variable names (`h''` etc.) → stop and reconsider.
 
