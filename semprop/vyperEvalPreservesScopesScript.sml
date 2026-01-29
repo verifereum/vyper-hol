@@ -9,6 +9,12 @@ Definition preserves_scopes_dom_def:
     MAP FDOM (TL st.scopes) = MAP FDOM (TL st'.scopes)
 End
 
+Theorem preserves_scopes_dom_length:
+  ∀st st'. preserves_scopes_dom st st' ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  cheat
+QED
+
 (* ------------------------------------------------------------------------
    Helper Lemmas for Individual Statement Cases
    ------------------------------------------------------------------------ *)
@@ -590,10 +596,28 @@ QED
    Main theorems
    ------------------------------------------------------------------------ *)
 
-Theorem eval_stmts_preserves_scopes:
+Theorem eval_stmts_preserves_scopes_dom:
   ∀cx st st' ss res.
     eval_stmts cx ss st = (res, st') ⇒
     preserves_scopes_dom st st'
 Proof
   metis_tac[scopes_dom_mutual]
+QED
+
+Theorem eval_stmts_preserves_var_in_scope:
+  ∀cx st st' n ss res.
+    var_in_scope st n ∧
+    eval_stmts cx ss st = (res, st') ⇒
+    var_in_scope st' n
+Proof
+  rpt strip_tac >> drule eval_stmts_preserves_scopes_dom >> simp[preserves_scopes_dom_def]
+  >> cheat
+QED
+Theorem eval_stmts_preserves_scopes_len:
+  ∀cx st ss res st'.
+    eval_stmts cx ss st = (res, st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  rpt strip_tac >>
+  drule eval_stmts_preserves_scopes_dom >> simp[preserves_scopes_dom_def] >> strip_tac >>
+  cheat
 QED
