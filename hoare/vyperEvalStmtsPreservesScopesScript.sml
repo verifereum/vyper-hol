@@ -483,9 +483,15 @@ Theorem case_eval_stmts_cons_dom:
     ∀st res st'.
       eval_stmts cx (s::ss) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
-  cheat (* TODO: Unfold eval_stmts cons, use bind_def.
-           Apply IH on s to get st -> st1, then IH on ss to get st1 -> st'.
-           Use SUBSET_TRANS for HD, equality chain for TL. *)
+  rpt strip_tac >>
+  gvs[preserves_scopes_dom_def] >>
+  qpat_x_assum `eval_stmts _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `∀st'' res' st'''. eval_stmt _ _ _ = _ ⇒ _` (drule_then assume_tac) >>
+  first_x_assum (drule_then assume_tac) >> gvs[] >>
+  irule pred_setTheory.SUBSET_TRANS >>
+  qexists_tac `FDOM (HD s''.scopes)` >> simp[]
 QED
 
 (* === Category 6: eval_for (iteration) === *)
@@ -495,6 +501,28 @@ Theorem case_eval_for_nil_dom:
     eval_for cx nm body [] st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
   simp[evaluate_def, return_def, preserves_scopes_dom_def]
+QED
+
+(* Helper: the try body (eval_stmts + handle_loop_exception) preserves TL scopes.
+
+   WHY THIS IS TRUE:
+   - try runs body: if INL, preserves by IH on eval_stmts
+   - if INR: handle_loop_exception returns T/F (preserves) or re-raises (preserves)
+   - All branches preserve TL scopes. *)
+Theorem try_body_preserves_tl_dom:
+  ∀cx body.
+    (∀st res st'. eval_stmts cx body st = (res, st') ⇒ preserves_scopes_dom st st') ⇒
+    ∀st1 res1 st1'.
+      (try (do x <- eval_stmts cx body; return F od) handle_loop_exception) st1 = (res1, st1') ⇒
+      MAP FDOM (TL st1.scopes) = MAP FDOM (TL st1'.scopes)
+Proof
+  rpt strip_tac >>
+  gvs[try_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def] >>
+  TRY (first_x_assum drule >> simp[preserves_scopes_dom_def] >> NO_TAC) >>
+  gvs[handle_loop_exception_def, return_def, raise_def] >>
+  first_x_assum drule >> simp[preserves_scopes_dom_def] >> strip_tac >>
+  qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
+  rpt IF_CASES_TAC >> simp[return_def, raise_def]
 QED
 
 (* eval_for cons: push_scope_with_var, body under finally with pop_scope, then recursive.
@@ -518,11 +546,34 @@ Theorem case_eval_for_cons_dom:
     ∀st res st'.
       eval_for cx nm body (v::vs) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
-  cheat (* TODO: Unfold eval_for cons.
-           push_scope_with_var creates new scope.
-           finally with pop_scope pattern restores.
-           Recursive call uses IH.
-           Handle broke=T case (return ()) and broke=F case (recursive). *)
+  rpt strip_tac >>
+  qpat_x_assum `eval_for _ _ _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, ignore_bind_def, push_scope_with_var_def, return_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  (* Handle error case from finally: unfold and use try_body_preserves_tl_dom *)
+  TRY (
+    gvs[finally_def, AllCaseEqs(), bind_def, ignore_bind_def, pop_scope_def, return_def, raise_def] >>
+    drule try_body_preserves_tl_dom >> simp[] >> strip_tac >>
+    gvs[preserves_scopes_dom_def] >>
+    Cases_on `st.scopes` >> gvs[] >>
+    TRY (Cases_on `tl` >> gvs[]) >>
+    first_x_assum drule >> simp[] >> NO_TAC
+  ) >>
+  (* Success case: finally with pop_scope *)
+  qpat_x_assum `finally _ _ _ = _` mp_tac >>
+  simp[finally_def, AllCaseEqs()] >>
+  strip_tac >> gvs[bind_def, ignore_bind_def, pop_scope_def, return_def, raise_def, AllCaseEqs()] >>
+  (* Use try_body_preserves_tl_dom to establish MAP FDOM preservation *)
+  sg `MAP FDOM (TL (st with scopes updated_by CONS (FEMPTY |+ (nm,v))).scopes) = MAP FDOM (TL s'³'.scopes)` >-
+  (drule try_body_preserves_tl_dom >> simp[] >> strip_tac >> first_x_assum drule >> simp[]) >>
+  gvs[] >>
+  (* Case split on broke *)
+  Cases_on `broke` >> gvs[return_def, preserves_scopes_dom_def] >-
+  (* broke = T: return () *)
+  (Cases_on `st.scopes` >> Cases_on `tl` >> gvs[]) >>
+  (* broke = F: recursive call *)
+  qpat_x_assum `∀st'' res' st'''. eval_for _ _ _ _ _ = _ ⇒ _` drule >> simp[] >> strip_tac >>
+  Cases_on `st.scopes` >> Cases_on `tl` >> gvs[]
 QED
 
 (* ------------------------------------------------------------------------
