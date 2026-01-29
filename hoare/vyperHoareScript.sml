@@ -669,7 +669,7 @@ Proof
   simp[assign_target_spec_scoped_var_update_intro]
 QED
 
-Theorem stmts_spec_concat:
+Theorem stmts_spec_append:
   ∀P1 P2 P3 R1 R2 cx ss1 ss2.
     (⟦cx⟧ ⦃P1⦄ ss1 ⦃P2 ∥ R1⦄) ∧
     (⟦cx⟧ ⦃P2⦄ ss2 ⦃P3 ∥ R2⦄) ⇒
@@ -695,7 +695,7 @@ Theorem stmts_spec_cons:
 Proof
   rpt strip_tac >>
   ONCE_REWRITE_TAC [GSYM (EVAL ``[h:'a] ++ t``)] >>
-  irule stmts_spec_concat >>
+  irule stmts_spec_append >>
   qexists_tac `P2` >> simp[]
 QED
 
