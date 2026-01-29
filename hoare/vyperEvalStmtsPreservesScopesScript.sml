@@ -192,6 +192,13 @@ QED
 
    Plan reference: Category 1
    Used in: main induction *)
+Theorem map_fdom_eq_preserves_dom:
+  ∀st st'. MAP FDOM st.scopes = MAP FDOM st'.scopes ⇒ preserves_scopes_dom st st'
+Proof
+  simp[preserves_scopes_dom_def] >> rpt strip_tac >>
+  Cases_on `st.scopes` >> Cases_on `st'.scopes` >> gvs[]
+QED
+
 Theorem case_Return_SOME_dom:
   ∀cx e.
     (∀st res st'. eval_expr cx e st = (res, st') ⇒
@@ -199,8 +206,9 @@ Theorem case_Return_SOME_dom:
     ∀st res st'.
       eval_stmt cx (Return (SOME e)) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
-  cheat (* TODO: Unfold eval_stmt, use eval_expr_preserves_scopes_dom,
-           get_Value_scopes, raise_scopes. All preserve MAP FDOM exactly. *)
+  rpt strip_tac >> irule map_fdom_eq_preserves_dom >>
+  gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+  imp_res_tac get_Value_scopes >> imp_res_tac raise_scopes >> gvs[]
 QED
 
 (* Similar proofs for Raise, Assert, Log, Assign, AugAssign, Append, Expr *)
@@ -212,7 +220,10 @@ Theorem case_Raise_dom:
     ∀st res st'.
       eval_stmt cx (Raise e) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
-  cheat (* TODO: Similar to Return_SOME - chain eval_expr, get_Value, raise *)
+  rpt strip_tac >> irule map_fdom_eq_preserves_dom >>
+  gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+  imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >>
+  imp_res_tac raise_scopes >> gvs[]
 QED
 
 Theorem case_Assert_dom:
@@ -224,7 +235,15 @@ Theorem case_Assert_dom:
     ∀st res st'.
       eval_stmt cx (Assert e se) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
-  cheat (* TODO: eval_expr on e, switch_BoolV (preserves), eval_expr on se *)
+  rpt strip_tac >> irule map_fdom_eq_preserves_dom >>
+  gvs[evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >> gvs[] >>
+  qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
+  rpt IF_CASES_TAC >> simp[return_def, raise_def, bind_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  TRY (imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >> gvs[]) >>
+  rpt (qpat_x_assum `∀st res st'. eval_expr cx e st = _ ⇒ _` (drule_then assume_tac) >>
+       qpat_x_assum `∀st res st'. eval_expr cx se st = _ ⇒ _` (drule_then assume_tac) >> gvs[])
 QED
 
 Theorem case_Log_dom:
@@ -234,7 +253,9 @@ Theorem case_Log_dom:
     ∀st res st'.
       eval_stmt cx (Log id es) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
-  cheat (* TODO: eval_exprs preserves, push_log_scopes *)
+  rpt strip_tac >> irule map_fdom_eq_preserves_dom >>
+  gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+  imp_res_tac push_log_scopes >> gvs[]
 QED
 
 Theorem case_Append_dom:
@@ -246,7 +267,14 @@ Theorem case_Append_dom:
     ∀st res st'.
       eval_stmt cx (Append bt e) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
-  cheat (* TODO: eval_base_target, eval_expr, assign_target all preserve *)
+  rpt strip_tac >> irule map_fdom_eq_preserves_dom >>
+  gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+  imp_res_tac get_Value_scopes >> imp_res_tac return_scopes >>
+  imp_res_tac assign_target_preserves_scopes_dom >> gvs[] >>
+  Cases_on `x` >> gvs[bind_def, ignore_bind_def, AllCaseEqs()] >>
+  imp_res_tac get_Value_scopes >> imp_res_tac return_scopes >>
+  imp_res_tac assign_target_preserves_scopes_dom >> gvs[] >>
+  rpt (first_x_assum (drule_then assume_tac) >> gvs[])
 QED
 
 Theorem case_Assign_dom:
@@ -258,7 +286,11 @@ Theorem case_Assign_dom:
     ∀st res st'.
       eval_stmt cx (Assign g e) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
-  cheat (* TODO: eval_target, eval_expr, assign_target all preserve *)
+  rpt strip_tac >> irule map_fdom_eq_preserves_dom >>
+  gvs[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+  imp_res_tac get_Value_scopes >> imp_res_tac return_scopes >>
+  imp_res_tac assign_target_preserves_scopes_dom >> gvs[] >>
+  rpt (first_x_assum (drule_then assume_tac) >> gvs[])
 QED
 
 Theorem case_AugAssign_dom:
@@ -270,7 +302,14 @@ Theorem case_AugAssign_dom:
     ∀st res st'.
       eval_stmt cx (AugAssign bt bop e) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
-  cheat (* TODO: eval_base_target, eval_expr, assign_target all preserve *)
+  rpt strip_tac >> irule map_fdom_eq_preserves_dom >>
+  gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+  imp_res_tac get_Value_scopes >> imp_res_tac return_scopes >>
+  imp_res_tac assign_target_preserves_scopes_dom >> gvs[] >>
+  Cases_on `x` >> gvs[bind_def, ignore_bind_def, AllCaseEqs()] >>
+  imp_res_tac get_Value_scopes >> imp_res_tac return_scopes >>
+  imp_res_tac assign_target_preserves_scopes_dom >> gvs[] >>
+  rpt (first_x_assum (drule_then assume_tac) >> gvs[])
 QED
 
 Theorem case_Expr_dom:
@@ -280,7 +319,9 @@ Theorem case_Expr_dom:
     ∀st res st'.
       eval_stmt cx (Expr e) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
-  cheat (* TODO: eval_expr, get_Value both preserve *)
+  rpt strip_tac >> irule map_fdom_eq_preserves_dom >>
+  gvs[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+  imp_res_tac get_Value_scopes >> imp_res_tac return_scopes >> gvs[]
 QED
 
 (* === Category 2: AnnAssign adds to HD, preserves TL === *)
