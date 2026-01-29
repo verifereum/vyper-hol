@@ -199,14 +199,10 @@ Proof
     (* Empty scopes case - new_variable raises error *)
     gvs[new_variable_def, bind_def, get_scopes_def, return_def, check_def,
         assert_def, lookup_scopes_def, ignore_bind_def, raise_def] >>
-    (* Non-empty scopes case - unfold new_variable to show st'.scopes ≠ [] *)
-    qpat_x_assum `new_variable _ _ _ = _` mp_tac >>
-    simp[new_variable_def, bind_def, get_scopes_def, return_def, check_def,
-         assert_def, lookup_scopes_def, ignore_bind_def, raise_def,
-         AllCaseEqs(), set_scopes_def] >>
-    strip_tac >> gvs[] >>
-    Cases_on `st.scopes` >> gvs[] >>
-    simp[pred_setTheory.SUBSET_DEF]
+    (* Non-empty scopes case - apply new_variable_scope_property *)
+    `s'³'.scopes ≠ []` by simp[] >>
+    drule_all new_variable_scope_property >> strip_tac >> gvs[] >>
+    Cases_on `st.scopes` >> gvs[]
   ) >~
   (* get_Value error case *)
   [`get_Value _ _ = (INR _, _)`]

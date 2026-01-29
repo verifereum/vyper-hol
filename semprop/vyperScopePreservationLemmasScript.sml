@@ -244,13 +244,14 @@ QED
 Theorem new_variable_scope_property:
   ∀id v st res st'.
     new_variable id v st = (res, st') ∧ st.scopes ≠ [] ⇒
+    st'.scopes ≠ [] ∧
     FDOM (HD st.scopes) ⊆ FDOM (HD st'.scopes) ∧
     TL st'.scopes = TL st.scopes
 Proof
   rpt strip_tac >> Cases_on `st.scopes` >> gvs[] >>
   gvs[new_variable_def, bind_def, get_scopes_def, return_def, check_def,
       assert_def, set_scopes_def, AllCaseEqs(), raise_def, ignore_bind_def] >>
-  irule pred_setTheory.SUBSET_INSERT_RIGHT >> simp[]
+  simp[pred_setTheory.SUBSET_DEF]
 QED
 
 Theorem push_scope_creates_empty_hd:
