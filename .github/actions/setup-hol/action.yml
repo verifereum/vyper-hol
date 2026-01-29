@@ -12,15 +12,7 @@ runs:
         echo "verifereum=$(git ls-remote https://github.com/verifereum/verifereum.git HEAD | cut -f1)" >> $GITHUB_OUTPUT
         echo "hol4=$(git ls-remote https://github.com/HOL-Theorem-Prover/HOL.git master | cut -f1)" >> $GITHUB_OUTPUT
 
-    - name: Cache PolyML
-      uses: actions/cache@v4
-      id: cache-polyml
-      with:
-        path: ~/polyml-install
-        key: polyml-${{ runner.os }}-${{ steps.versions.outputs.polyml }}
-
     - name: Build PolyML
-      if: steps.cache-polyml.outputs.cache-hit != 'true'
       shell: bash
       run: |
         git clone https://github.com/polyml/polyml.git
@@ -33,15 +25,7 @@ runs:
       shell: bash
       run: echo "$HOME/polyml-install/bin" >> "$GITHUB_PATH"
 
-    - name: Cache HOL4
-      uses: actions/cache@v4
-      id: cache-hol4
-      with:
-        path: ~/HOL
-        key: hol-${{ runner.os }}-${{ steps.versions.outputs.polyml }}-${{ steps.versions.outputs.hol4 }}
-
     - name: Build HOL4
-      if: steps.cache-hol4.outputs.cache-hit != 'true'
       shell: bash
       run: |
         git clone -b master https://github.com/HOL-Theorem-Prover/HOL.git ~/HOL
@@ -55,15 +39,7 @@ runs:
         echo "$HOME/HOL/bin" >> "$GITHUB_PATH"
         echo "HOLDIR=$HOME/HOL" >> "$GITHUB_ENV"
 
-    - name: Cache Verifereum
-      uses: actions/cache@v4
-      id: cache-verifereum
-      with:
-        path: ~/verifereum
-        key: verifereum-${{ runner.os }}-${{ steps.versions.outputs.verifereum }}-${{ steps.versions.outputs.polyml }}
-
     - name: Build Verifereum
-      if: steps.cache-verifereum.outputs.cache-hit != 'true'
       shell: bash
       run: |
         git clone https://github.com/verifereum/verifereum.git ~/verifereum

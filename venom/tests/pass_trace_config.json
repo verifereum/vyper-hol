@@ -1,0 +1,8 @@
+{
+  "algebraic_optimization": {
+    "json": [
+      "tests/vyper-test-exports/unit/ast/nodes/test_fold_compare.json"
+    ],
+    "limit": 5
+  }
+}
