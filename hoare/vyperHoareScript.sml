@@ -642,6 +642,33 @@ Proof
   gvs[lookup_base_target_def]
 QED
 
+Theorem stmts_spec_aug_assign_scoped_var:
+  ∀P Q cx n bop e v1 v2 v.
+     evaluate_binop bop v1 v2 = INL v ∧
+    (⟦cx⟧ ⦃P⦄ e ⇓ Value v2 ⦃λst. lookup_scoped_var st n = SOME v1 ∧ Q (update_scoped_var st n v)⦄) ⇒
+    ⟦cx⟧ ⦃λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄ [AugAssign (NameTarget n) bop e] ⦃Q ∥ λ_ _. F⦄
+Proof
+  (* Proof sketch:
+     1. Use assign_target_spec_scoped_var_update_intro and stmts_spec_consequence to obtain:
+         ⟦cx⟧ ⦃P⦄ e ⇓ Value v2 ⦃λst. assign_target_spec cx st (BaseTargetV (ScopedVar n) []) (Update bop v) Q⦄
+     2. Use target_spec_scoped_var to obtain:
+        ⟦cx⟧ ⦃λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄ (BaseTarget (NameTarget n)) ⇓ᵗ (BaseTargetV (ScopedVar n) []) ⦃P⦄
+     3. Use stmts_spec_aug_assign to obtain:
+         ⟦cx⟧ ⦃λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄ [AugAssign (NameTarget n) bop e] ⦃Q ∥ λ_ _. F⦄
+   *)
+  rpt strip_tac >>
+  irule stmts_spec_aug_assign >>
+  qexistsl_tac [`(λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n)`, `BaseTargetV (ScopedVar n) []`, `v2`] >>
+  reverse conj_tac >-
+  (irule target_spec_consequence >>
+   qexistsl_tac [`(λst. (P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n) ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n)`,
+                 `(λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n)`] >>
+   simp[target_spec_scoped_var]) >>
+  irule expr_spec_consequence >>
+  qexistsl_tac [`P`, `(λst. lookup_scoped_var st n = SOME v1 ∧ Q (update_scoped_var st n v))`] >>
+  simp[assign_target_spec_scoped_var_update_intro]
+QED
+
 Theorem stmts_spec_concat:
   ∀P1 P2 P3 R1 R2 cx ss1 ss2.
     (⟦cx⟧ ⦃P1⦄ ss1 ⦃P2 ∥ R1⦄) ∧
