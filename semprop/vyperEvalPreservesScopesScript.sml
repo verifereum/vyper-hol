@@ -11,6 +11,15 @@ Definition preserves_scopes_dom_def:
      MAP FDOM (TL st.scopes) = MAP FDOM (TL st'.scopes))
 End
 
+Theorem preserves_scopes_dom_var_in_scope:
+  ∀st st' n.
+    var_in_scope st n ∧
+    preserves_scopes_dom st st' ⇒
+    var_in_scope st' n
+Proof
+  cheat
+QED
+
 Theorem preserves_scopes_dom_length:
   ∀st st'. preserves_scopes_dom st st' ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
@@ -602,6 +611,22 @@ Proof
   >- (drule eval_exprs_preserves_scopes_dom >> gvs[])
 QED
 
+Theorem lookup_scopes_subset_preserves[local]:
+  ∀hd hd' tl tl' id.
+    IS_SOME (lookup_scopes id (hd::tl)) ∧
+    FDOM hd ⊆ FDOM hd' ∧
+    MAP FDOM tl = MAP FDOM tl' ⇒
+    IS_SOME (lookup_scopes id (hd'::tl'))
+Proof
+  rpt strip_tac >> fs[lookup_scopes_def, AllCaseEqs()] >>
+  Cases_on `FLOOKUP hd id` >> gvs[] >-
+  (* FLOOKUP hd id = NONE: id is in tail, use lookup_scopes_dom_iff *)
+  (Cases_on `FLOOKUP hd' id` >> gvs[] >> metis_tac[lookup_scopes_dom_iff]) >>
+  (* FLOOKUP hd id = SOME x: id is in head, must also be in hd' by SUBSET *)
+  `FLOOKUP hd' id ≠ NONE` by fs[finite_mapTheory.flookup_thm, pred_setTheory.SUBSET_DEF] >>
+  Cases_on `FLOOKUP hd' id` >> gvs[]
+QED
+
 (* ------------------------------------------------------------------------
    Main theorems
    ------------------------------------------------------------------------ *)
@@ -620,8 +645,13 @@ Theorem eval_stmts_preserves_var_in_scope:
     eval_stmts cx ss st = (res, st') ⇒
     var_in_scope st' n
 Proof
-  rpt strip_tac >> drule eval_stmts_preserves_scopes_dom >> simp[preserves_scopes_dom_def] >> rpt strip_tac
-  >> cheat
+  rpt strip_tac >> drule eval_stmts_preserves_scopes_dom >> simp[preserves_scopes_dom_def] >> rpt strip_tac >-
+  (* Empty scopes case: contradicts var_in_scope *)
+  gvs[var_in_scope_def, lookup_scoped_var_def, lookup_scopes_def] >>
+  (* Non-empty scopes case: decompose scopes and use lookup_scopes_subset_preserves *)
+  gvs[var_in_scope_def, lookup_scoped_var_def] >>
+  Cases_on `st.scopes` >> Cases_on `st'.scopes` >> gvs[] >>
+  irule lookup_scopes_subset_preserves >> qexistsl_tac [`h`, `t`] >> simp[]
 QED
 
 Theorem eval_stmts_preserves_scopes_len:
@@ -629,6 +659,10 @@ Theorem eval_stmts_preserves_scopes_len:
     eval_stmts cx ss st = (res, st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
 Proof
   rpt strip_tac >>
-  drule eval_stmts_preserves_scopes_dom >> simp[preserves_scopes_dom_def] >> strip_tac >>
-  cheat
+  drule eval_stmts_preserves_scopes_dom >> simp[preserves_scopes_dom_def] >> strip_tac >-
+  (* Empty scopes case *)
+  gvs[] >>
+  (* Non-empty scopes case *)
+  Cases_on `st.scopes` >> Cases_on `st'.scopes` >> gvs[] >>
+  metis_tac[listTheory.LENGTH_MAP]
 QED
