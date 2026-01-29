@@ -1,25 +1,25 @@
-Theory vyperEvalExprPurePreservesScopes
+Theory vyperScopePreservingExpr
 
 Ancestors
   vyperInterpreter vyperLookup vyperScopePreservationLemmas
 
-(* Pure expressions: expressions that do not modify scopes.
-   Pop is the only impure expression constructor - it modifies scoped variables.
+(* Scope-preserving expressions: expressions that do not modify scopes.
+   Pop is the only expression constructor that modifies scoped variables.
 *)
 
-Definition pure_expr_def:
-  pure_expr (Name _) = T ∧
-  pure_expr (TopLevelName _) = T ∧
-  pure_expr (FlagMember _ _) = T ∧
-  pure_expr (Literal _) = T ∧
-  pure_expr (IfExp e1 e2 e3) = (pure_expr e1 ∧ pure_expr e2 ∧ pure_expr e3) ∧
-  pure_expr (StructLit _ kes) = EVERY pure_expr (MAP SND kes) ∧
-  pure_expr (Subscript e1 e2) = (pure_expr e1 ∧ pure_expr e2) ∧
-  pure_expr (Attribute e _) = pure_expr e ∧
-  pure_expr (Builtin _ es) = EVERY pure_expr es ∧
-  pure_expr (TypeBuiltin _ _ es) = EVERY pure_expr es ∧
-  pure_expr (Pop _) = F ∧
-  pure_expr (Call _ es) = EVERY pure_expr es
+Definition scope_preserving_expr_def:
+  scope_preserving_expr (Name _) = T ∧
+  scope_preserving_expr (TopLevelName _) = T ∧
+  scope_preserving_expr (FlagMember _ _) = T ∧
+  scope_preserving_expr (Literal _) = T ∧
+  scope_preserving_expr (IfExp e1 e2 e3) = (scope_preserving_expr e1 ∧ scope_preserving_expr e2 ∧ scope_preserving_expr e3) ∧
+  scope_preserving_expr (StructLit _ kes) = EVERY scope_preserving_expr (MAP SND kes) ∧
+  scope_preserving_expr (Subscript e1 e2) = (scope_preserving_expr e1 ∧ scope_preserving_expr e2) ∧
+  scope_preserving_expr (Attribute e _) = scope_preserving_expr e ∧
+  scope_preserving_expr (Builtin _ es) = EVERY scope_preserving_expr es ∧
+  scope_preserving_expr (TypeBuiltin _ _ es) = EVERY scope_preserving_expr es ∧
+  scope_preserving_expr (Pop _) = F ∧
+  scope_preserving_expr (Call _ es) = EVERY scope_preserving_expr es
 Termination
   WF_REL_TAC `measure expr_size` >>
   rw[] >>
@@ -70,19 +70,19 @@ Theorem case_IfExp[local]:
     (∀s'' tv1 t.
        eval_expr cx e1 s'' = (INL tv1, t) ⇒
        ∀st res st'.
-         eval_expr cx e2 st = (res, st') ⇒ pure_expr e2 ⇒ st.scopes = st'.scopes) ∧
+         eval_expr cx e2 st = (res, st') ⇒ scope_preserving_expr e2 ⇒ st.scopes = st'.scopes) ∧
     (∀s'' tv1 t.
        eval_expr cx e1 s'' = (INL tv1, t) ⇒
        ∀st res st'.
-         eval_expr cx e3 st = (res, st') ⇒ pure_expr e3 ⇒ st.scopes = st'.scopes) ∧
+         eval_expr cx e3 st = (res, st') ⇒ scope_preserving_expr e3 ⇒ st.scopes = st'.scopes) ∧
     (∀st res st'.
-       eval_expr cx e1 st = (res, st') ⇒ pure_expr e1 ⇒ st.scopes = st'.scopes) ⇒
+       eval_expr cx e1 st = (res, st') ⇒ scope_preserving_expr e1 ⇒ st.scopes = st'.scopes) ⇒
     (∀st res st'.
        eval_expr cx (IfExp e1 e2 e3) st = (res, st') ⇒
-       pure_expr (IfExp e1 e2 e3) ⇒ st.scopes = st'.scopes)
+       scope_preserving_expr (IfExp e1 e2 e3) ⇒ st.scopes = st'.scopes)
 Proof
   rpt strip_tac >>
-  fs[evaluate_def, bind_def, AllCaseEqs(), switch_BoolV_def, pure_expr_def, raise_def] >>
+  fs[evaluate_def, bind_def, AllCaseEqs(), switch_BoolV_def, scope_preserving_expr_def, raise_def] >>
   gvs[] >>
   `st.scopes = s''.scopes` by (first_x_assum drule >> simp[]) >>
   Cases_on `tv = Value (BoolV T)` >> gvs[] >-
@@ -112,13 +112,13 @@ Theorem case_StructLit[local]:
   ∀cx src kes.
     (∀st res st'.
        eval_exprs cx (MAP SND kes) st = (res, st') ⇒
-       EVERY pure_expr (MAP SND kes) ⇒ st.scopes = st'.scopes) ⇒
+       EVERY scope_preserving_expr (MAP SND kes) ⇒ st.scopes = st'.scopes) ⇒
     (∀st res st'.
        eval_expr cx (StructLit src kes) st = (res, st') ⇒
-       pure_expr (StructLit src kes) ⇒ st.scopes = st'.scopes)
+       scope_preserving_expr (StructLit src kes) ⇒ st.scopes = st'.scopes)
 Proof
   rpt strip_tac >> PairCases_on `src` >>
-  fs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def, return_def] >> gvs[] >>
+  fs[evaluate_def, bind_def, AllCaseEqs(), scope_preserving_expr_def, return_def] >> gvs[] >>
   first_x_assum drule >> gvs[listTheory.EVERY_MAP]
 QED
 
@@ -127,14 +127,14 @@ Theorem case_Subscript[local]:
     (∀s'' tv1 t.
        eval_expr cx e1 s'' = (INL tv1, t) ⇒
        ∀st res st'.
-         eval_expr cx e2 st = (res, st') ⇒ pure_expr e2 ⇒ st.scopes = st'.scopes) ∧
+         eval_expr cx e2 st = (res, st') ⇒ scope_preserving_expr e2 ⇒ st.scopes = st'.scopes) ∧
     (∀st res st'.
-       eval_expr cx e1 st = (res, st') ⇒ pure_expr e1 ⇒ st.scopes = st'.scopes) ⇒
+       eval_expr cx e1 st = (res, st') ⇒ scope_preserving_expr e1 ⇒ st.scopes = st'.scopes) ⇒
     (∀st res st'.
        eval_expr cx (Subscript e1 e2) st = (res, st') ⇒
-       pure_expr (Subscript e1 e2) ⇒ st.scopes = st'.scopes)
+       scope_preserving_expr (Subscript e1 e2) ⇒ st.scopes = st'.scopes)
 Proof
-  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def] >>
+  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), scope_preserving_expr_def] >>
   imp_res_tac return_scopes >> imp_res_tac lift_sum_scopes >>
   imp_res_tac lift_option_scopes >> imp_res_tac get_Value_scopes >>
   res_tac >> gvs[] >> metis_tac[]
@@ -143,12 +143,12 @@ QED
 Theorem case_Attribute[local]:
   ∀cx e id.
     (∀st res st'.
-       eval_expr cx e st = (res, st') ⇒ pure_expr e ⇒ st.scopes = st'.scopes) ⇒
+       eval_expr cx e st = (res, st') ⇒ scope_preserving_expr e ⇒ st.scopes = st'.scopes) ⇒
     (∀st res st'.
        eval_expr cx (Attribute e id) st = (res, st') ⇒
-       pure_expr (Attribute e id) ⇒ st.scopes = st'.scopes)
+       scope_preserving_expr (Attribute e id) ⇒ st.scopes = st'.scopes)
 Proof
-  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def] >>
+  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), scope_preserving_expr_def] >>
   imp_res_tac return_scopes >> imp_res_tac lift_sum_scopes >>
   imp_res_tac get_Value_scopes >> res_tac >> gvs[] >> metis_tac[]
 QED
@@ -158,13 +158,13 @@ Theorem case_Builtin[local]:
     (∀s'' x t.
        check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x, t) ⇒
        ∀st res st'.
-         eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st.scopes = st'.scopes) ⇒
+         eval_exprs cx es st = (res, st') ⇒ EVERY scope_preserving_expr es ⇒ st.scopes = st'.scopes) ⇒
     (∀st res st'.
        eval_expr cx (Builtin bt es) st = (res, st') ⇒
-       pure_expr (Builtin bt es) ⇒ st.scopes = st'.scopes)
+       scope_preserving_expr (Builtin bt es) ⇒ st.scopes = st'.scopes)
 Proof
   rpt strip_tac >>
-  gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def, ignore_bind_def,
+  gvs[evaluate_def, bind_def, AllCaseEqs(), scope_preserving_expr_def, ignore_bind_def,
       check_def, assert_def, return_def, raise_def, get_accounts_def, lift_sum_def] >>
   TRY (Cases_on `evaluate_builtin cx s''.accounts bt vs` >> gvs[return_def, raise_def]) >>
   first_x_assum drule >> gvs[ETA_THM]
@@ -174,9 +174,9 @@ Theorem case_Pop[local]:
   ∀cx bt.
     (∀st res st'.
        eval_expr cx (Pop bt) st = (res, st') ⇒
-       pure_expr (Pop bt) ⇒ st.scopes = st'.scopes)
+       scope_preserving_expr (Pop bt) ⇒ st.scopes = st'.scopes)
 Proof
-  rw[pure_expr_def]
+  rw[scope_preserving_expr_def]
 QED
 
 Theorem case_TypeBuiltin[local]:
@@ -184,13 +184,13 @@ Theorem case_TypeBuiltin[local]:
     (∀s'' x t.
        check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args" s'' = (INL x, t) ⇒
        ∀st res st'.
-         eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st.scopes = st'.scopes) ⇒
+         eval_exprs cx es st = (res, st') ⇒ EVERY scope_preserving_expr es ⇒ st.scopes = st'.scopes) ⇒
     (∀st res st'.
        eval_expr cx (TypeBuiltin tb typ es) st = (res, st') ⇒
-       pure_expr (TypeBuiltin tb typ es) ⇒ st.scopes = st'.scopes)
+       scope_preserving_expr (TypeBuiltin tb typ es) ⇒ st.scopes = st'.scopes)
 Proof
   rpt strip_tac >>
-  gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def, ignore_bind_def,
+  gvs[evaluate_def, bind_def, AllCaseEqs(), scope_preserving_expr_def, ignore_bind_def,
       check_def, assert_def, return_def, raise_def, lift_sum_def] >>
   TRY (Cases_on `evaluate_type_builtin cx tb typ vs` >> gvs[return_def, raise_def]) >>
   first_x_assum drule >> gvs[ETA_THM]
@@ -201,13 +201,13 @@ Theorem case_Send[local]:
     (∀s'' x t.
        check (LENGTH es = 2) "Send args" s'' = (INL x, t) ⇒
        ∀st res st'.
-         eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st.scopes = st'.scopes) ⇒
+         eval_exprs cx es st = (res, st') ⇒ EVERY scope_preserving_expr es ⇒ st.scopes = st'.scopes) ⇒
     (∀st res st'.
        eval_expr cx (Call Send es) st = (res, st') ⇒
-       pure_expr (Call Send es) ⇒ st.scopes = st'.scopes)
+       scope_preserving_expr (Call Send es) ⇒ st.scopes = st'.scopes)
 Proof
   rpt strip_tac >>
-  gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def, ignore_bind_def,
+  gvs[evaluate_def, bind_def, AllCaseEqs(), scope_preserving_expr_def, ignore_bind_def,
       check_def, assert_def, return_def, raise_def, lift_option_def] >>
   TRY (drule transfer_value_scopes >> strip_tac) >>
   TRY (Cases_on `dest_NumV (EL 1 vs)` >> gvs[return_def, raise_def]) >>
@@ -250,10 +250,10 @@ Theorem case_IntCall[local]:
        ret = FST sstup ∧ ss = SND sstup ∧
        check (LENGTH args = LENGTH es) "IntCall args length" s'5' = (INL x', t'3') ⇒
        ∀st res st'.
-         eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st.scopes = st'.scopes) ⇒
+         eval_exprs cx es st = (res, st') ⇒ EVERY scope_preserving_expr es ⇒ st.scopes = st'.scopes) ⇒
     (∀st res st'.
        eval_expr cx (Call (IntCall (src_id_opt, fn)) es) st = (res, st') ⇒
-       pure_expr (Call (IntCall (src_id_opt, fn)) es) ⇒ st.scopes = st'.scopes)
+       scope_preserving_expr (Call (IntCall (src_id_opt, fn)) es) ⇒ st.scopes = st'.scopes)
 Proof
   let
     val sub_tac =
@@ -264,13 +264,13 @@ Proof
       TRY (Cases_on `lookup_function fn Internal ts` >> gvs[return_def, raise_def]) >>
       TRY (Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def]) >>
       TRY (last_x_assum mp_tac >> simp[check_def, assert_def, return_def, lift_option_def] >>
-           strip_tac >> first_x_assum drule >> gvs[pure_expr_def] >> metis_tac[])
+           strip_tac >> first_x_assum drule >> gvs[scope_preserving_expr_def] >> metis_tac[])
   in
     rpt strip_tac >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
     simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
          check_def, assert_def, lift_option_def, get_scopes_def, push_function_def,
-         pop_function_def, set_scopes_def, pure_expr_def] >>
+         pop_function_def, set_scopes_def, scope_preserving_expr_def] >>
     strip_tac >> gvs[return_def, raise_def] >>
     sub_tac >> sub_tac >> sub_tac >> sub_tac >> sub_tac >>
     sub_tac >> sub_tac >> sub_tac >> sub_tac
@@ -291,12 +291,12 @@ Theorem case_eval_exprs_cons[local]:
     (∀s'' tv t s'3' v t'.
        eval_expr cx e s'' = (INL tv, t) ∧ get_Value tv s'3' = (INL v, t') ⇒
        ∀st res st'.
-         eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st.scopes = st'.scopes) ∧
+         eval_exprs cx es st = (res, st') ⇒ EVERY scope_preserving_expr es ⇒ st.scopes = st'.scopes) ∧
     (∀st res st'.
-       eval_expr cx e st = (res, st') ⇒ pure_expr e ⇒ st.scopes = st'.scopes) ⇒
+       eval_expr cx e st = (res, st') ⇒ scope_preserving_expr e ⇒ st.scopes = st'.scopes) ⇒
     (∀st res st'.
        eval_exprs cx (e::es) st = (res, st') ⇒
-       EVERY pure_expr (e::es) ⇒ st.scopes = st'.scopes)
+       EVERY scope_preserving_expr (e::es) ⇒ st.scopes = st'.scopes)
 Proof
   rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def] >>
   imp_res_tac get_Value_scopes >> gvs[] >>
@@ -317,11 +317,11 @@ QED
 
    We use a specialized version of evaluate_ind with:
    - P0-P6 (statement predicates) = λcx args. T
-   - P7 (eval_expr predicate) = scopes preservation with pure_expr
-   - P8 (eval_exprs predicate) = scopes preservation with EVERY pure_expr
+   - P7 (eval_expr predicate) = scopes preservation with scope_preserving_expr
+   - P8 (eval_exprs predicate) = scopes preservation with EVERY scope_preserving_expr
    ------------------------------------------------------------------------ *)
 
-(* Derive specialized induction principle for pure_scopes_mutual.
+(* Derive specialized induction principle for expr_scopes_mutual.
    This encapsulates the SML needed to specialize evaluate_ind. *)
 local
   val p0 = ``\(cx:evaluation_context) (s:stmt). T``
@@ -331,20 +331,20 @@ local
   val p4 = ``\(cx:evaluation_context) (gs:assignment_target list). T``
   val p5 = ``\(cx:evaluation_context) (t:base_assignment_target). T``
   val p6 = ``\(cx:evaluation_context) (nm:num) (body:stmt list) (vs:value list). T``
-  val p7 = ``\cx e. !st res st'. eval_expr cx e st = (res, st') ==> pure_expr e ==> st.scopes = st'.scopes``
-  val p8 = ``\cx es. !st res st'. eval_exprs cx es st = (res, st') ==> EVERY pure_expr es ==> st.scopes = st'.scopes``
+  val p7 = ``\cx e. !st res st'. eval_expr cx e st = (res, st') ==> scope_preserving_expr e ==> st.scopes = st'.scopes``
+  val p8 = ``\cx es. !st res st'. eval_exprs cx es st = (res, st') ==> EVERY scope_preserving_expr es ==> st.scopes = st'.scopes``
   val spec_ind = SPECL [p0, p1, p2, p3, p4, p5, p6, p7, p8] evaluate_ind
   val spec_ind_beta = CONV_RULE (DEPTH_CONV BETA_CONV) spec_ind
 in
-  val pure_scopes_ind_principle = save_thm("pure_scopes_ind_principle", spec_ind_beta)
+  val expr_scopes_ind_principle = save_thm("expr_scopes_ind_principle", spec_ind_beta)
 end
 
-(* Main mutual induction: pure expressions preserve scopes exactly. *)
-Theorem pure_scopes_mutual[local]:
+(* Main mutual induction. *)
+Theorem expr_scopes_mutual[local]:
   (∀cx e st res st'.
-     eval_expr cx e st = (res, st') ⇒ pure_expr e ⇒ st.scopes = st'.scopes) ∧
+     eval_expr cx e st = (res, st') ⇒ scope_preserving_expr e ⇒ st.scopes = st'.scopes) ∧
   (∀cx es st res st'.
-     eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st.scopes = st'.scopes)
+     eval_exprs cx es st = (res, st') ⇒ EVERY scope_preserving_expr es ⇒ st.scopes = st'.scopes)
 Proof
   (* Proof assembles all case lemmas via the specialized induction principle.
 
@@ -359,7 +359,7 @@ Proof
     val case_IntCall' = SIMP_RULE (srw_ss()) [] case_IntCall
     val case_eval_exprs_cons' = SIMP_RULE (srw_ss()) [] case_eval_exprs_cons
   in
-    MP_TAC pure_scopes_ind_principle >> impl_tac >- (
+    MP_TAC expr_scopes_ind_principle >> impl_tac >- (
       rpt conj_tac >> TRY (simp[]) >-
       (* Name *)
       metis_tac[case_Name] >-
@@ -406,19 +406,18 @@ QED
    Extracts the eval_expr/eval_exprs cases from the mutual induction.
    ------------------------------------------------------------------------ *)
 
-(* Main theorem: pure expression evaluation preserves scopes exactly. *)
 Theorem eval_expr_preserves_scopes:
   ∀cx e st res st'.
-    pure_expr e ∧ eval_expr cx e st = (res, st') ⇒
+    scope_preserving_expr e ∧ eval_expr cx e st = (res, st') ⇒
     st.scopes = st'.scopes
 Proof
-  metis_tac[pure_scopes_mutual]
+  metis_tac[expr_scopes_mutual]
 QED
 
 Theorem eval_exprs_preserves_scopes:
   ∀cx es st res st'.
-    EVERY pure_expr es ∧ eval_exprs cx es st = (res, st') ⇒
+    EVERY scope_preserving_expr es ∧ eval_exprs cx es st = (res, st') ⇒
     st.scopes = st'.scopes
 Proof
-  metis_tac[pure_scopes_mutual]
+  metis_tac[expr_scopes_mutual]
 QED
