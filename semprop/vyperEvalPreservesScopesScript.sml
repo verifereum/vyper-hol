@@ -260,9 +260,11 @@ Proof
   first_x_assum irule >> rpt strip_tac >>
   gvs[switch_BoolV_def, raise_def] >>
   Cases_on `tv = Value (BoolV T)` >> gvs[]
-  >- (first_x_assum drule >> simp[preserves_scopes_dom_def]) >>
+  >- (qpat_x_assum `∀st res st'. eval_stmts _ ss1 _ = _ ⇒ _` drule >>
+      gvs[preserves_scopes_dom_def] >> strip_tac >> gvs[]) >>
   Cases_on `tv = Value (BoolV F)` >> gvs[raise_def] >>
-  first_x_assum drule >> simp[preserves_scopes_dom_def]
+  qpat_x_assum `∀st res st'. eval_stmts _ ss2 _ = _ ⇒ _` drule >>
+  gvs[preserves_scopes_dom_def] >> strip_tac >> gvs[]
 QED
 
 Theorem case_For_dom[local]:
@@ -330,8 +332,11 @@ Proof
   qpat_x_assum `∀st'' res' st'''. eval_stmt _ _ _ = _ ⇒ _` (qspec_then `st` mp_tac) >> simp[] >>
   strip_tac >>
   (* IH for ss applies since eval_stmt succeeded (result is INL ()) *)
-  first_x_assum (qspecl_then [`st`, `s''`] mp_tac) >> simp[] >>
-  strip_tac >> first_x_assum drule >> simp[] >> strip_tac >>
+  first_x_assum (qspecl_then [`st`, `s''`] mp_tac) >> simp[] >-
+  (* First: case where st.scopes = [] *)
+  (strip_tac >> first_x_assum drule >> simp[]) >>
+  (* Second: case where st.scopes ≠ [] *)
+  strip_tac >> first_x_assum drule >> simp[] >> strip_tac >> gvs[] >>
   irule pred_setTheory.SUBSET_TRANS >>
   qexists_tac `FDOM (HD s''.scopes)` >> simp[]
 QED
@@ -363,8 +368,9 @@ Proof
   gvs[handle_loop_exception_def, return_def, raise_def] >>
   first_x_assum (qspecl_then [`st0`, `st1`] mp_tac) >> simp[] >> strip_tac >>
   first_x_assum drule >> simp[preserves_scopes_dom_def] >> strip_tac >>
+  TRY (simp[] >> NO_TAC) >>  (* handles empty scopes case *)
   qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
-  rpt IF_CASES_TAC >> simp[return_def, raise_def]
+  rpt IF_CASES_TAC >> simp[return_def, raise_def] >> rpt strip_tac >> gvs[]
 QED
 
 Theorem case_eval_for_cons_dom[local]:
