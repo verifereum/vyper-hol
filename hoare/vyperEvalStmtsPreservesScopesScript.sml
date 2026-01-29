@@ -389,13 +389,23 @@ QED
    5. Final: MAP FDOM st'.scopes = MAP FDOM (TL body_st'.scopes) = MAP FDOM st1.scopes = MAP FDOM st.scopes
 
    Plan reference: Category 3
-   Used in: main induction *)
+   Used in: main induction
+
+   NOTE: The IH from evaluate_ind is conditional on eval_expr succeeding and push_scope succeeding.
+   Since push_scope always succeeds (returns ()), we simplify to just the eval_expr condition. *)
 Theorem case_If_dom:
   ∀cx e ss1 ss2.
+    (* IH for ss1: conditional on eval_expr succeeding *)
+    (∀s'' tv t s3 x t'.
+       eval_expr cx e s'' = (INL tv, t) ∧ push_scope s3 = (INL x,t') ⇒
+       ∀st res st'. eval_stmts cx ss1 st = (res, st') ⇒ preserves_scopes_dom st st') ∧
+    (* IH for ss2: conditional on eval_expr succeeding *)
+    (∀s'' tv t s3 x t'.
+       eval_expr cx e s'' = (INL tv, t) ∧ push_scope s3 = (INL x,t') ⇒
+       ∀st res st'. eval_stmts cx ss2 st = (res, st') ⇒ preserves_scopes_dom st st') ∧
+    (* IH for expr *)
     (∀st res st'. eval_expr cx e st = (res, st') ⇒
-       MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
-    (∀st res st'. eval_stmts cx ss1 st = (res, st') ⇒ preserves_scopes_dom st st') ∧
-    (∀st res st'. eval_stmts cx ss2 st = (res, st') ⇒ preserves_scopes_dom st st') ⇒
+       MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
       eval_stmt cx (If e ss1 ss2) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
@@ -403,9 +413,23 @@ Proof
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), push_scope_def, return_def] >>
   strip_tac >> gvs[] >>
-  `MAP FDOM st.scopes = MAP FDOM s''.scopes` by (first_x_assum drule >> simp[]) >>
-  `MAP FDOM st'.scopes = MAP FDOM s''.scopes` suffices_by simp[] >>
-  `TL (s'' with scopes updated_by CONS FEMPTY).scopes = s''.scopes` by simp[] >>
+  (* Name the IH assumptions for clarity *)
+  rename1 `eval_expr cx e st = (INL tv, s_expr)` >>
+  (* eval_expr preserves scopes *)
+  `MAP FDOM st.scopes = MAP FDOM s_expr.scopes` by
+    (qpat_x_assum `∀st res st'. eval_expr _ _ _ = _ ⇒ _` drule >> simp[]) >>
+  `MAP FDOM st'.scopes = MAP FDOM s_expr.scopes` suffices_by simp[] >>
+  (* Get IH for ss1 and ss2 into usable form *)
+  `∀st res st'. eval_stmts cx ss1 st = (res, st') ⇒ preserves_scopes_dom st st'` by
+    (rpt strip_tac >>
+     qpat_x_assum `∀s'' tv t. eval_expr _ _ s'' = _ ⇒ ∀st res st'. eval_stmts _ ss1 _ = _ ⇒ _`
+       (qspecl_then [`st`, `tv`, `s_expr`] mp_tac) >> simp[]) >>
+  `∀st res st'. eval_stmts cx ss2 st = (res, st') ⇒ preserves_scopes_dom st st'` by
+    (rpt strip_tac >>
+     qpat_x_assum `∀s'' tv t. eval_expr _ _ s'' = _ ⇒ ∀st res st'. eval_stmts _ ss2 _ = _ ⇒ _`
+       (qspecl_then [`st`, `tv`, `s_expr`] mp_tac) >> simp[]) >>
+  (* The finally block restores scopes *)
+  `TL (s_expr with scopes updated_by CONS FEMPTY).scopes = s_expr.scopes` by simp[] >>
   drule finally_pop_scope_preserves_tl_dom >> simp[] >> strip_tac >>
   first_x_assum irule >> rpt strip_tac >>
   gvs[switch_BoolV_def, raise_def] >>
@@ -426,13 +450,20 @@ QED
    Combined: preserves_scopes_dom
 
    Plan reference: Category 4
-   Used in: main induction *)
+   Used in: main induction
+
+   NOTE: The IH from evaluate_ind is conditional on eval_iterator succeeding and check succeeding. *)
 Theorem case_For_dom:
   ∀cx id typ it n body.
+    (* IH for eval_for: conditional on eval_iterator and check succeeding *)
+    (∀s'' vs t s'³' x t'.
+       eval_iterator cx it s'' = (INL vs, t) ∧
+       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'³' = (INL x, t') ⇒
+       ∀st res st'. eval_for cx (string_to_num id) body vs st = (res, st') ⇒
+         preserves_scopes_dom st st') ∧
+    (* IH for iterator *)
     (∀st res st'. eval_iterator cx it st = (res, st') ⇒
-       MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
-    (∀vs st res st'. eval_for cx (string_to_num id) body vs st = (res, st') ⇒
-       preserves_scopes_dom st st') ⇒
+       MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
       eval_stmt cx (For id typ it n body) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
@@ -440,11 +471,16 @@ Proof
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
+  (* Case: eval_iterator failed *)
   TRY (irule map_fdom_eq_preserves_dom >> first_x_assum drule >> simp[] >> NO_TAC) >>
+  (* Case: check failed *)
   TRY (imp_res_tac check_scopes >> gvs[] >>
        irule map_fdom_eq_preserves_dom >> first_x_assum drule >> gvs[] >> NO_TAC) >>
+  (* Case: both succeeded, use IH *)
   imp_res_tac check_scopes >> gvs[] >>
-  `preserves_scopes_dom s'³' st'` by (first_x_assum drule >> simp[]) >>
+  `preserves_scopes_dom s'³' st'` by
+    (first_x_assum (qspecl_then [`st`, `vs`, `s''`, `s''`, `s'³'`] mp_tac) >>
+     simp[] >> strip_tac >> first_x_assum drule >> simp[]) >>
   gvs[preserves_scopes_dom_def] >>
   Cases_on `st.scopes` >> Cases_on `s''.scopes` >> gvs[] >>
   TRY (`MAP FDOM [] = MAP FDOM (h::t)` by
@@ -478,8 +514,12 @@ QED
    Used in: main induction *)
 Theorem case_eval_stmts_cons_dom:
   ∀cx s ss.
-    (∀st res st'. eval_stmt cx s st = (res, st') ⇒ preserves_scopes_dom st st') ∧
-    (∀st res st'. eval_stmts cx ss st = (res, st') ⇒ preserves_scopes_dom st st') ⇒
+    (* IH for ss: conditional on eval_stmt succeeding *)
+    (∀s'' x t.
+       eval_stmt cx s s'' = (INL x, t) ⇒
+       ∀st res st'. eval_stmts cx ss st = (res, st') ⇒ preserves_scopes_dom st st') ∧
+    (* IH for s: unconditional *)
+    (∀st res st'. eval_stmt cx s st = (res, st') ⇒ preserves_scopes_dom st st') ⇒
     ∀st res st'.
       eval_stmts cx (s::ss) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
@@ -488,8 +528,12 @@ Proof
   qpat_x_assum `eval_stmts _ _ _ = _` mp_tac >>
   simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
-  qpat_x_assum `∀st'' res' st'''. eval_stmt _ _ _ = _ ⇒ _` (drule_then assume_tac) >>
-  first_x_assum (drule_then assume_tac) >> gvs[] >>
+  (* eval_stmt s preserves *)
+  qpat_x_assum `∀st'' res' st'''. eval_stmt _ _ _ = _ ⇒ _` (qspec_then `st` mp_tac) >> simp[] >>
+  strip_tac >>
+  (* IH for ss applies since eval_stmt succeeded (result is INL ()) *)
+  first_x_assum (qspecl_then [`st`, `s''`] mp_tac) >> simp[] >>
+  strip_tac >> first_x_assum drule >> simp[] >> strip_tac >>
   irule pred_setTheory.SUBSET_TRANS >>
   qexists_tac `FDOM (HD s''.scopes)` >> simp[]
 QED
@@ -508,18 +552,26 @@ QED
    WHY THIS IS TRUE:
    - try runs body: if INL, preserves by IH on eval_stmts
    - if INR: handle_loop_exception returns T/F (preserves) or re-raises (preserves)
-   - All branches preserve TL scopes. *)
+   - All branches preserve TL scopes.
+
+   NOTE: Takes conditional IH that matches evaluate_ind structure. *)
 Theorem try_body_preserves_tl_dom:
-  ∀cx body.
-    (∀st res st'. eval_stmts cx body st = (res, st') ⇒ preserves_scopes_dom st st') ⇒
+  ∀cx body nm v st0.
+    (* IH for eval_stmts: conditional on push_scope_with_var succeeding *)
+    (∀s'' x t. push_scope_with_var nm v s'' = (INL x, t) ⇒
+       ∀st res st'. eval_stmts cx body st = (res, st') ⇒ preserves_scopes_dom st st') ⇒
     ∀st1 res1 st1'.
+      push_scope_with_var nm v st0 = (INL (), st1) ⇒
       (try (do x <- eval_stmts cx body; return F od) handle_loop_exception) st1 = (res1, st1') ⇒
       MAP FDOM (TL st1.scopes) = MAP FDOM (TL st1'.scopes)
 Proof
   rpt strip_tac >>
   gvs[try_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def] >>
-  TRY (first_x_assum drule >> simp[preserves_scopes_dom_def] >> NO_TAC) >>
+  (* Use IH - push_scope_with_var succeeded *)
+  TRY (first_x_assum (qspecl_then [`st0`, `st1`] mp_tac) >> simp[] >> strip_tac >>
+       first_x_assum drule >> simp[preserves_scopes_dom_def] >> NO_TAC) >>
   gvs[handle_loop_exception_def, return_def, raise_def] >>
+  first_x_assum (qspecl_then [`st0`, `st1`] mp_tac) >> simp[] >> strip_tac >>
   first_x_assum drule >> simp[preserves_scopes_dom_def] >> strip_tac >>
   qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
   rpt IF_CASES_TAC >> simp[return_def, raise_def]
@@ -538,11 +590,20 @@ QED
    4. Combined: st.scopes and st2.scopes have same MAP FDOM, so preserves_scopes_dom st st'
 
    Plan reference: Category 6
-   Used in: main induction *)
+   Used in: main induction
+
+   NOTE: Takes conditional IH that matches evaluate_ind structure. *)
 Theorem case_eval_for_cons_dom:
   ∀cx nm body v vs.
-    (∀st res st'. eval_stmts cx body st = (res, st') ⇒ preserves_scopes_dom st st') ∧
-    (∀st res st'. eval_for cx nm body vs st = (res, st') ⇒ preserves_scopes_dom st st') ⇒
+    (* IH for eval_for: conditional on push_scope_with_var succeeding and finally succeeding with broke=F *)
+    (∀s'' x t s'³' broke t'.
+       push_scope_with_var nm v s'' = (INL x, t) ∧
+       finally (try (do eval_stmts cx body; return F od) handle_loop_exception) pop_scope s'³' = (INL broke, t') ∧
+       ¬broke ⇒
+       ∀st res st'. eval_for cx nm body vs st = (res, st') ⇒ preserves_scopes_dom st st') ∧
+    (* IH for eval_stmts: conditional on push_scope_with_var succeeding *)
+    (∀s'' x t. push_scope_with_var nm v s'' = (INL x, t) ⇒
+       ∀st res st'. eval_stmts cx body st = (res, st') ⇒ preserves_scopes_dom st st') ⇒
     ∀st res st'.
       eval_for cx nm body (v::vs) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
@@ -553,11 +614,11 @@ Proof
   (* Handle error case from finally: unfold and use try_body_preserves_tl_dom *)
   TRY (
     gvs[finally_def, AllCaseEqs(), bind_def, ignore_bind_def, pop_scope_def, return_def, raise_def] >>
-    drule try_body_preserves_tl_dom >> simp[] >> strip_tac >>
+    qspecl_then [`cx`, `body`, `nm`, `v`, `st`] mp_tac try_body_preserves_tl_dom >>
+    impl_tac >- (rpt strip_tac >> gvs[push_scope_with_var_def, return_def] >> first_x_assum drule >> simp[]) >>
+    simp[push_scope_with_var_def, return_def] >> strip_tac >>
     gvs[preserves_scopes_dom_def] >>
-    Cases_on `st.scopes` >> gvs[] >>
-    TRY (Cases_on `tl` >> gvs[]) >>
-    first_x_assum drule >> simp[] >> NO_TAC
+    Cases_on `st.scopes` >> Cases_on `tl` >> gvs[] >> NO_TAC
   ) >>
   (* Success case: finally with pop_scope *)
   qpat_x_assum `finally _ _ _ = _` mp_tac >>
@@ -565,14 +626,21 @@ Proof
   strip_tac >> gvs[bind_def, ignore_bind_def, pop_scope_def, return_def, raise_def, AllCaseEqs()] >>
   (* Use try_body_preserves_tl_dom to establish MAP FDOM preservation *)
   sg `MAP FDOM (TL (st with scopes updated_by CONS (FEMPTY |+ (nm,v))).scopes) = MAP FDOM (TL s'³'.scopes)` >-
-  (drule try_body_preserves_tl_dom >> simp[] >> strip_tac >> first_x_assum drule >> simp[]) >>
-  gvs[] >>
+  (qspecl_then [`cx`, `body`, `nm`, `v`, `st`] mp_tac try_body_preserves_tl_dom >>
+   impl_tac >- (rpt strip_tac >> gvs[push_scope_with_var_def, return_def] >> first_x_assum drule >> simp[]) >>
+   simp[push_scope_with_var_def, return_def] >> strip_tac >>
+   first_x_assum drule >> simp[]) >> gvs[] >>
   (* Case split on broke *)
   Cases_on `broke` >> gvs[return_def, preserves_scopes_dom_def] >-
   (* broke = T: return () *)
   (Cases_on `st.scopes` >> Cases_on `tl` >> gvs[]) >>
-  (* broke = F: recursive call *)
-  qpat_x_assum `∀st'' res' st'''. eval_for _ _ _ _ _ = _ ⇒ _` drule >> simp[] >> strip_tac >>
+  (* broke = F: use recursive IH *)
+  qpat_x_assum `∀s'⁴' t s'⁵' t'. _ ⇒ _` (qspecl_then [`st`, `st with scopes updated_by CONS (FEMPTY |+ (nm,v))`,
+                                                       `st with scopes updated_by CONS (FEMPTY |+ (nm,v))`,
+                                                       `s'³' with scopes := tl`] mp_tac) >>
+  simp[push_scope_with_var_def, return_def] >>
+  simp[finally_def, AllCaseEqs(), bind_def, ignore_bind_def, pop_scope_def, return_def, raise_def] >>
+  strip_tac >> first_x_assum drule >> strip_tac >>
   Cases_on `st.scopes` >> Cases_on `tl` >> gvs[]
 QED
 
@@ -717,10 +785,63 @@ Theorem scopes_dom_mutual:
   (∀cx es st res st'. eval_exprs cx es st = (res, st') ⇒
      MAP FDOM st.scopes = MAP FDOM st'.scopes)
 Proof
-  cheat (* TODO: ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
-           Apply each case_*_dom helper lemma in order.
-           For expr/base_target/exprs cases, use existing theorems from
-           vyperEvalExprPreservesScopeDomTheory (eval_expr_preserves_scopes_dom etc.) *)
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt strip_tac
+  (* === Statement cases === *)
+  (* Pass *) >- gvs[evaluate_def, return_def, preserves_scopes_dom_def]
+  (* Continue *) >- gvs[evaluate_def, raise_def, preserves_scopes_dom_def]
+  (* Break *) >- gvs[evaluate_def, raise_def, preserves_scopes_dom_def]
+  (* Return NONE *) >- gvs[evaluate_def, raise_def, preserves_scopes_dom_def]
+  (* Return (SOME e) *) >- (drule_all case_Return_SOME_dom >> gvs[])
+  (* Raise *) >- (drule_all case_Raise_dom >> gvs[])
+  (* Assert *) >- (drule case_Assert_dom >> rpt strip_tac >> metis_tac[eval_expr_preserves_scopes_dom])
+  (* Log *) >- (drule_all case_Log_dom >> gvs[])
+  (* AnnAssign *) >- (drule case_AnnAssign_dom >> simp[])
+  (* Append *) >- (drule case_Append_dom >> rpt strip_tac >> metis_tac[eval_expr_preserves_scopes_dom])
+  (* Assign *) >- (drule case_Assign_dom >> rpt strip_tac >> metis_tac[eval_expr_preserves_scopes_dom])
+  (* AugAssign *) >- (drule case_AugAssign_dom >> rpt strip_tac >> metis_tac[eval_expr_preserves_scopes_dom])
+  (* If *) >- (drule case_If_dom >> gvs[push_scope_def, return_def])
+  (* For *) >- (irule case_For_dom >> gvs[])
+  (* Expr *) >- (drule_all case_Expr_dom >> gvs[])
+  (* === eval_stmts cases === *)
+  (* [] *) >- gvs[evaluate_def, return_def, preserves_scopes_dom_def]
+  (* s::ss *) >- (irule case_eval_stmts_cons_dom >> gvs[])
+  (* === Iterator cases === *)
+  (* Array *) >- (drule_all case_Array_iterator_dom >> gvs[])
+  (* Range *) >- (irule case_Range_iterator_dom >> gvs[] >> rpt strip_tac >>
+                  TRY (first_x_assum drule >> simp[] >> NO_TAC) >>
+                  drule eval_expr_preserves_scopes_dom >> simp[])
+  (* === Target cases === *)
+  (* BaseTarget *) >- (drule_all case_BaseTarget_dom >> gvs[])
+  (* TupleTarget *) >- (drule_all case_TupleTarget_dom >> gvs[])
+  (* === eval_targets cases === *)
+  (* [] *) >- gvs[evaluate_def, return_def]
+  (* g::gs *) >- (irule case_eval_targets_cons_dom >> gvs[] >> rpt strip_tac >>
+                  first_x_assum drule >> simp[])
+  (* === base_target cases === *)
+  (* NameTarget *) >- (gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+                       imp_res_tac return_scopes >> gvs[])
+  (* TopLevelNameTarget *) >- (gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+                               imp_res_tac return_scopes >> gvs[])
+  (* AttributeTarget *) >- (gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+                            imp_res_tac get_Value_scopes >> gvs[] >>
+                            first_x_assum drule >> simp[])
+  (* SubscriptTarget *) >- (gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+                            imp_res_tac eval_expr_preserves_scopes_dom >>
+                            imp_res_tac get_Value_scopes >> gvs[] >>
+                            TRY (first_x_assum drule >> simp[] >> NO_TAC) >>
+                            drule eval_expr_preserves_scopes_dom >> simp[])
+  (* === eval_for cases === *)
+  (* [] *) >- gvs[evaluate_def, return_def, preserves_scopes_dom_def]
+  (* v::vs *) >- (irule case_eval_for_cons_dom >> gvs[])
+  (* === Expression cases - use eval_expr_preserves_scopes_dom === *)
+  >> TRY (drule eval_expr_preserves_scopes_dom >> simp[] >> NO_TAC)
+  >> TRY (gvs[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def] >>
+          imp_res_tac eval_expr_preserves_scopes_dom >>
+          imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >>
+          imp_res_tac lift_sum_scopes >> imp_res_tac return_scopes >>
+          imp_res_tac raise_scopes >> gvs[] >>
+          rpt (first_x_assum drule >> strip_tac >> gvs[]) >>
+          TRY (drule eval_expr_preserves_scopes_dom >> simp[]))
 QED
 
 (* ------------------------------------------------------------------------
