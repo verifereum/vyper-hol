@@ -340,11 +340,8 @@ QED
    Plan reference: Category 2
    Used in: main induction *)
 Theorem case_AnnAssign_dom:
-  ∀cx id typ e.
-    (∀st res st'. eval_expr cx e st = (res, st') ⇒
-       MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
-    ∀st res st'.
-      eval_stmt cx (AnnAssign id typ e) st = (res, st') ⇒ preserves_scopes_dom st st'
+  ∀cx id typ e st res st'.
+    eval_stmt cx (AnnAssign id typ e) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
   rpt strip_tac >>
   gvs[preserves_scopes_dom_def] >>
@@ -354,28 +351,26 @@ Proof
   (* Main case with new_variable *)
   [`new_variable _ _ _ = _`]
   >- (
-    `MAP FDOM st.scopes = MAP FDOM s''.scopes` by (first_x_assum drule >> simp[]) >>
+    imp_res_tac eval_expr_preserves_scopes_dom >>
     imp_res_tac get_Value_scopes >> gvs[] >>
     Cases_on `s''.scopes` >> gvs[] >-
     (* Empty scopes case - new_variable raises error *)
-    (gvs[new_variable_def, bind_def, get_scopes_def, return_def, check_def,
-         assert_def, lookup_scopes_def, ignore_bind_def, raise_def] >>
-     first_x_assum drule >> simp[]) >>
+    gvs[new_variable_def, bind_def, get_scopes_def, return_def, check_def,
+        assert_def, lookup_scopes_def, ignore_bind_def, raise_def] >>
     (* Non-empty scopes case - apply new_variable_scope_property *)
     `s'³'.scopes ≠ []` by simp[] >>
     drule_all new_variable_scope_property >> strip_tac >> gvs[] >>
-    first_x_assum drule >> strip_tac >>
     Cases_on `st.scopes` >> gvs[]
   ) >~
   (* get_Value error case *)
   [`get_Value _ _ = (INR _, _)`]
   >- (
     imp_res_tac get_Value_scopes >> gvs[] >>
-    first_x_assum drule >> strip_tac >>
+    imp_res_tac eval_expr_preserves_scopes_dom >>
     Cases_on `st.scopes` >> Cases_on `s''.scopes` >> gvs[]
   ) >>
   (* eval_expr error case *)
-  first_x_assum drule >> strip_tac >>
+  imp_res_tac eval_expr_preserves_scopes_dom >>
   Cases_on `st.scopes` >> Cases_on `s''.scopes` >> gvs[]
 QED
 
