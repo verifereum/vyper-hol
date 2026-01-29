@@ -227,19 +227,18 @@ Definition run_trace_def:
   run_trace snss am tr =
   case tr
   of Deployment dt => let
-      result = run_deployment am dt;
-      sns = FST result; res = SND result;
       layout = extract_storage_layout dt.storageLayout;
+      am_with_layout = am with layouts updated_by CONS (dt.deployedAddress, layout);
+      result = run_deployment am_with_layout dt;
+      sns = FST result; res = SND result;
       res = if dt.deploymentSuccess then
-              (* Set the bytecode in accounts and add layout after successful deployment *)
+              (* Set the bytecode in accounts after successful deployment *)
               case res of
-                INL am' => INL (am' with <|
+                INL am' => INL (am' with
                   accounts updated_by
                     (update_account dt.deployedAddress
                       ((lookup_account dt.deployedAddress am'.accounts)
-                        with code := dt.runtimeBytecode));
-                  layouts updated_by CONS (dt.deployedAddress, layout)
-                |>)
+                        with code := dt.runtimeBytecode)))
               | err => err
             else if ISR res then INL am
             else INR (Error "deployment success");
