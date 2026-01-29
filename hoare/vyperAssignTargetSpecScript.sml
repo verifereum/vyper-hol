@@ -22,7 +22,7 @@ Proof
 QED
 
 Theorem assign_target_spec_scoped_var_replace_elim:
-  ∀cx st n Q. assign_target_spec cx st (BaseTargetV (ScopedVar n) []) (Replace v) Q ⇒
+  ∀cx st n v Q. assign_target_spec cx st (BaseTargetV (ScopedVar n) []) (Replace v) Q ⇒
                 Q (update_scoped_var st n v)
 Proof
   rw[assign_target_spec_def, update_scoped_var_def, Once assign_target_def,
@@ -48,6 +48,44 @@ Proof
   simp[assign_target_spec_def, Once assign_target_def, bind_def,
        get_scopes_def, return_def, lift_option_def, lift_sum_def,
        assign_subscripts_def, ignore_bind_def, set_scopes_def] >>
+  fs[update_scoped_var_def, LET_THM]
+QED
+
+Theorem assign_target_spec_scoped_var_update_elim:
+  ∀cx st n bop v0 v v' Q.
+    lookup_scoped_var st n = SOME v0 ∧
+    evaluate_binop bop v0 v = INL v' ∧
+    assign_target_spec cx st (BaseTargetV (ScopedVar n) []) (Update bop v) Q ⇒
+    Q (update_scoped_var st n v')
+Proof
+  rw[assign_target_spec_def, update_scoped_var_def, Once assign_target_def,
+     bind_def, get_scopes_def, return_def, lift_option_def, lift_sum_def,
+     set_scopes_def, assign_subscripts_def, ignore_bind_def,
+     lookup_scoped_var_def] >>
+  Cases_on `find_containing_scope (string_to_num n) st.scopes` >>
+  gvs[return_def, raise_def, set_scopes_def, ignore_bind_def, bind_def] >>
+  PairCases_on `x` >> gvs[return_def, set_scopes_def, bind_def, ignore_bind_def] >>
+  drule_all find_containing_scope_lookup >> strip_tac >> gvs[return_def, raise_def]
+QED
+
+Theorem assign_target_spec_scoped_var_update_intro:
+  ∀cx st n bop v0 v v' Q.
+    lookup_scoped_var st n = SOME v0 ∧
+    evaluate_binop bop v0 v = INL v' ∧
+    Q (update_scoped_var st n v') ⇒
+    assign_target_spec cx st (BaseTargetV (ScopedVar n) []) (Update bop v) Q
+Proof
+  rpt strip_tac >>
+  fs[lookup_scoped_var_def] >>
+  `IS_SOME (find_containing_scope (string_to_num n) st.scopes)`
+    by (irule lookup_scopes_find_containing >> simp[]) >>
+  Cases_on `find_containing_scope (string_to_num n) st.scopes` >- gvs[] >>
+  PairCases_on `x` >> gvs[] >>
+  simp[assign_target_spec_def, Once assign_target_def, bind_def,
+       get_scopes_def, return_def, lift_option_def, lift_sum_def,
+       assign_subscripts_def, ignore_bind_def, set_scopes_def] >>
+  `x2 = v0` by (drule_all find_containing_scope_lookup >> gvs[]) >>
+  gvs[return_def, raise_def] >>
   fs[update_scoped_var_def, LET_THM]
 QED
 
