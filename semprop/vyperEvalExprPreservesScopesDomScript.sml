@@ -1,9 +1,9 @@
-Theory vyperEvalExprPreservesScopeDom
+Theory vyperEvalExprPreservesScopesDom
 
 Ancestors
-  vyperInterpreter vyperLookup vyperScopePreservationLemmas vyperEvalExprPurePreservesScope
+  vyperInterpreter vyperLookup vyperScopePreservationLemmas vyperEvalExprPurePreservesScopes
 
-Theorem eval_exprs_preserves_scopes_dom_helper:
+Theorem eval_exprs_preserves_scopes_dom_helper[local]:
   ∀es cx st res st'.
     (∀e. MEM e es ⇒ ∀cx st res st'. eval_expr cx e st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     eval_exprs cx es st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes

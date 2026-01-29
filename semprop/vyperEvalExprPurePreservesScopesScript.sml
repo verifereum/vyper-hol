@@ -1,4 +1,4 @@
-Theory vyperEvalExprPurePreservesScope
+Theory vyperEvalExprPurePreservesScopes
 
 Ancestors
   vyperInterpreter vyperLookup vyperScopePreservationLemmas

@@ -1,7 +1,7 @@
 Theory vyperHoare
 
 Ancestors
-  vyperInterpreter vyperScopes vyperAssignTargetSpec vyperLookup vyperEvalExprPreservesScopeDom vyperEvalStmtsPreservesScopes
+  vyperInterpreter vyperScopes vyperAssignTargetSpec vyperLookup vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes
 
 (**********************************************************************)
 (* Definitions *)
