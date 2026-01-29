@@ -241,6 +241,21 @@ Proof
   >- simp[assign_target_def, raise_def]
 QED
 
+Theorem assign_target_preserves_scopes_dom_lookup:
+  (∀cx av ao st res st'.
+     assign_target cx av ao st = (INL res, st') ⇒
+     (∀n. IS_SOME (lookup_scopes n st.scopes) ⇔ IS_SOME (lookup_scopes n st'.scopes))) ∧
+  (∀cx gvs vs st res st'.
+     assign_targets cx gvs vs st = (INL res, st') ⇒
+     (∀n. IS_SOME (lookup_scopes n st.scopes) ⇔ IS_SOME (lookup_scopes n st'.scopes)))
+Proof
+  conj_tac >> rpt strip_tac >-
+  (drule (CONJUNCT1 assign_target_preserves_scopes_dom) >> strip_tac >>
+   metis_tac[lookup_scopes_dom_iff]) >>
+  drule (CONJUNCT2 assign_target_preserves_scopes_dom) >> strip_tac >>
+  metis_tac[lookup_scopes_dom_iff]
+QED
+
 Theorem new_variable_scope_property:
   ∀id v st res st'.
     new_variable id v st = (res, st') ∧ st.scopes ≠ [] ⇒

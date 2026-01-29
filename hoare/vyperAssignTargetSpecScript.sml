@@ -2,6 +2,7 @@ Theory vyperAssignTargetSpec
 
 Ancestors
   vyperInterpreter vyperTypeValue vyperLookup vyperAssignTargetLemmas
+  vyperScopePreservationLemmas
 
 Definition assign_target_spec_def:
   assign_target_spec cx st (av : assignment_value) (ao : assign_operation) Q ⇔
@@ -89,75 +90,6 @@ Proof
   fs[update_scoped_var_def, LET_THM]
 QED
 
-(**********************************************************************)
-(* Helper lemmas *)
-
-Theorem assign_target_preserves_scopes_helper[local]:
-  (∀cx av ao st res st'.
-     assign_target cx av ao st = (INL res, st') ⇒
-     (∀n. IS_SOME (lookup_scopes n st.scopes) ⇔ IS_SOME (lookup_scopes n st'.scopes))) ∧
-  (∀cx gvs vs st res st'.
-     assign_targets cx gvs vs st = (INL res, st') ⇒
-     (∀n. IS_SOME (lookup_scopes n st.scopes) ⇔ IS_SOME (lookup_scopes n st'.scopes)))
-Proof
-  ho_match_mp_tac assign_target_ind >> rpt conj_tac >> rpt gen_tac >>
-  simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
-       lift_option_def, lift_sum_def, AllCaseEqs(), raise_def, LET_THM,
-       ignore_bind_def, set_scopes_def] >-
-  ((* ScopedVar case *)
-   simp[AllCaseEqs(), return_def, raise_def, bind_def, set_scopes_def] >>
-   strip_tac >> gvs[] >>
-   rpt (qpat_x_assum `(case _ of NONE => _ | SOME v => _) _ = _` mp_tac) >>
-   simp[AllCaseEqs(), return_def, raise_def] >> rpt strip_tac >> gvs[] >>
-   qpat_x_assum `(case find_containing_scope _ _ of _ => _ | _ => _) _ = _` mp_tac >>
-   simp[AllCaseEqs(), return_def, raise_def] >> strip_tac >> gvs[] >>
-   Cases_on `find_containing_scope (string_to_num id) st.scopes` >> gvs[return_def, raise_def] >>
-   PairCases_on `x` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def, set_scopes_def] >>
-   `s''.scopes = x0 ++ [x1] ++ x3 ∧ FLOOKUP x1 (string_to_num id) = SOME x2`
-     by (drule find_containing_scope_structure >> simp[]) >>
-   metis_tac[lookup_scopes_update_preserves]) >-
-  ((* TopLevelVar case *)
-   strip_tac >> gvs[AllCaseEqs(), return_def, raise_def, lookup_global_def,
-                    bind_def, get_current_globals_def, lift_option_def, LET_THM,
-                    set_global_def, set_current_globals_def] >>
-   rpt (qpat_x_assum `(case _ of _ => _ | _ => _) _ = _` mp_tac) >>
-   simp[AllCaseEqs(), return_def, raise_def] >> rpt strip_tac >> gvs[] >>
-   qpat_x_assum `(case ALOOKUP _ _ of _ => _ | _ => _) _ = _` mp_tac >>
-   simp[AllCaseEqs(), return_def, raise_def] >> strip_tac >> gvs[] >>
-   rpt (FIRST [qpat_x_assum `(case ALOOKUP _ _ of _ => _ | _ => _) _ = _` mp_tac,
-               qpat_x_assum `(case assign_toplevel _ _ _ _ of _ => _ | _ => _) _ = _` mp_tac,
-               qpat_x_assum `(case get_module_code _ _ of _ => _ | _ => _) _ = _` mp_tac,
-               qpat_x_assum `(case FLOOKUP _ _ of _ => _ | _ => _) _ = _` mp_tac]) >>
-   simp[AllCaseEqs(), return_def, raise_def] >> rpt strip_tac >> gvs[] >>
-   gvs[AllCaseEqs(), return_def, raise_def] >>
-   `st.scopes = s'⁵'.scopes` by (Cases_on `ALOOKUP st.globals cx.txn.target` >> gvs[return_def, raise_def]) >>
-   `s'⁵'.scopes = s''.scopes` by (Cases_on `FLOOKUP (get_module_globals src_id_opt gbs).mutables (string_to_num id)` >> gvs[return_def, raise_def]) >>
-   `s''.scopes = s'³'.scopes` by (Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def]) >>
-   `s'³'.scopes = s'⁴'.scopes` by (Cases_on `assign_toplevel (type_env ts) res (REVERSE is) ao` >> gvs[return_def, raise_def]) >>
-   `s'⁴'.scopes = s'⁶'.scopes` by (Cases_on `ALOOKUP s'⁴'.globals cx.txn.target` >> gvs[return_def, raise_def]) >>
-   gvs[]) >-
-  ((* ImmutableVar case *)
-   strip_tac >> gvs[get_immutables_def, get_immutables_module_def, bind_def,
-                    get_current_globals_def, lift_option_def, AllCaseEqs(), return_def,
-                    raise_def, LET_THM, set_immutable_def, set_current_globals_def] >>
-   `st.scopes = s''.scopes` by (Cases_on `ALOOKUP st.globals cx.txn.target` >> gvs[return_def, raise_def]) >>
-   `s''.scopes = s'³'.scopes` by (Cases_on `FLOOKUP (get_module_globals NONE gbs).immutables (string_to_num id)` >> gvs[return_def, raise_def]) >>
-   `s'³'.scopes = s'⁴'.scopes` by (Cases_on `assign_subscripts a (REVERSE is) ao` >> gvs[return_def, raise_def]) >>
-   `s'⁴'.scopes = s'⁶'.scopes` by (Cases_on `ALOOKUP s'⁴'.globals cx.txn.target` >> gvs[return_def, raise_def]) >>
-   gvs[]) >-
-  ((* TupleTargetV case *)
-   rpt strip_tac >> gvs[check_def, AllCaseEqs(), return_def, raise_def] >>
-   first_x_assum drule >> simp[] >>
-   strip_tac >> gvs[assert_def, AllCaseEqs(), return_def, raise_def]) >-
-  ((* assign_targets cons case *)
-   rpt strip_tac >> gvs[get_Value_def, AllCaseEqs(), return_def, raise_def] >>
-   Cases_on `tw` >> gvs[get_Value_def, return_def, raise_def] >>
-   first_x_assum (qspec_then `s''` mp_tac) >> simp[] >>
-   first_x_assum drule >> simp[])
-QED
-
-(**********************************************************************)
-
 Theorem assign_target_spec_pure:
   ∀cx st av ao P Q.
     P ∧ assign_target_spec cx st av ao Q ⇒
@@ -221,7 +153,7 @@ Proof
          get_current_globals_def, lift_option_def, lift_sum_def,
          immutable_target_def] >>
     `IS_SOME (lookup_scopes (string_to_num n) r.scopes)`
-      by metis_tac[assign_target_preserves_scopes_helper] >>
+      by metis_tac[assign_target_preserves_scopes_dom_lookup] >>
     `IS_SOME (ALOOKUP r.globals cx.txn.target)`
       by (drule assign_target_preserves_globals_dom >> simp[]) >>
     Cases_on `ALOOKUP r.globals cx.txn.target` >> gvs[return_def, raise_def] >>
@@ -236,7 +168,7 @@ Proof
          get_current_globals_def, lift_option_def, lift_sum_def,
          immutable_target_def] >>
     `lookup_scopes (string_to_num n) r.scopes = NONE`
-      by metis_tac[assign_target_preserves_scopes_helper,
+      by metis_tac[assign_target_preserves_scopes_dom_lookup,
                    optionTheory.IS_SOME_DEF, optionTheory.option_CLAUSES] >>
     `IS_SOME (ALOOKUP r.globals cx.txn.target)`
       by (drule assign_target_preserves_globals_dom >> simp[]) >>
@@ -254,7 +186,7 @@ Proof
    strip_tac >> gvs[] >>
    simp[Once evaluate_def, bind_def, get_scopes_def, return_def] >>
    `IS_SOME (lookup_scopes (string_to_num n) r.scopes)`
-     by metis_tac[assign_target_preserves_scopes_helper] >>
+     by metis_tac[assign_target_preserves_scopes_dom_lookup] >>
    gvs[lift_sum_def, exactly_one_option_def, return_def])
 QED
 
@@ -477,7 +409,7 @@ Proof
   rpt strip_tac >>
   `var_in_scope st n`
     by (fs[var_in_scope_def, lookup_scoped_var_def] >>
-        metis_tac[CONJUNCT1 assign_target_preserves_scopes_helper]) >>
+        metis_tac[CONJUNCT1 assign_target_preserves_scopes_dom_lookup]) >>
   `FLOOKUP (get_module_globals NONE gbs).immutables (string_to_num n) = NONE`
     by metis_tac[] >>
   drule assign_target_preserves_immutables_dom >>
@@ -495,6 +427,6 @@ Proof
   Cases_on `assign_target cx av ao st` >> Cases_on `q` >> gvs[] >-
   (conj_tac >- fs[assign_target_spec_def] >>
    fs[var_in_scope_def, lookup_scoped_var_def] >>
-   metis_tac[CONJUNCT1 assign_target_preserves_scopes_helper]) >>
+   metis_tac[CONJUNCT1 assign_target_preserves_scopes_dom_lookup]) >>
   fs[assign_target_spec_def]
 QED
