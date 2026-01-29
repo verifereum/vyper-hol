@@ -493,7 +493,12 @@ Theorem case_Array_iterator_dom:
       eval_iterator cx (Array e) st = (res, st') ⇒
       MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
-  cheat (* TODO: Unfold eval_iterator Array, chain eval_expr, get_Value, lift_option *)
+  rpt strip_tac >>
+  qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >>
+  imp_res_tac return_scopes >> first_x_assum drule >> gvs[]
 QED
 
 Theorem case_Range_iterator_dom:
@@ -506,7 +511,13 @@ Theorem case_Range_iterator_dom:
       eval_iterator cx (Range e1 e2) st = (res, st') ⇒
       MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
-  cheat (* TODO: Unfold eval_iterator Range, chain two eval_exprs *)
+  rpt strip_tac >>
+  qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  imp_res_tac get_Value_scopes >> imp_res_tac lift_sum_scopes >>
+  imp_res_tac return_scopes >> gvs[] >>
+  rpt (first_x_assum drule >> strip_tac >> gvs[])
 QED
 
 (* Target cases - preserve MAP FDOM exactly *)
@@ -519,7 +530,12 @@ Theorem case_BaseTarget_dom:
       eval_target cx (BaseTarget bt) st = (res, st') ⇒
       MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
-  cheat (* TODO: eval_target just wraps eval_base_target *)
+  rpt strip_tac >>
+  qpat_x_assum `eval_target _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  Cases_on `x` >> gvs[return_def] >>
+  first_x_assum drule >> gvs[]
 QED
 
 Theorem case_TupleTarget_dom:
@@ -530,7 +546,12 @@ Theorem case_TupleTarget_dom:
       eval_target cx (TupleTarget gs) st = (res, st') ⇒
       MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
-  cheat (* TODO: eval_target just wraps eval_targets *)
+  rpt strip_tac >>
+  qpat_x_assum `eval_target _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  imp_res_tac return_scopes >> gvs[] >>
+  first_x_assum drule >> gvs[]
 QED
 
 Theorem case_eval_targets_nil_dom:
@@ -551,7 +572,12 @@ Theorem case_eval_targets_cons_dom:
       eval_targets cx (g::gs) st = (res, st') ⇒
       MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
-  cheat (* TODO: Chain eval_target and eval_targets *)
+  rpt strip_tac >>
+  qpat_x_assum `eval_targets _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  imp_res_tac return_scopes >> gvs[] >>
+  rpt (first_x_assum drule >> strip_tac >> gvs[])
 QED
 
 (* ------------------------------------------------------------------------
