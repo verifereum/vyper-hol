@@ -1136,7 +1136,7 @@ val storage_layout : term decoder =
                       List.map (fn (n,t) => pairSyntax.mk_pair(fromMLstring n, t)) code_pairs))
   (tuple2 (
      tuple2 (
-       orElse (field "storage_layout" (decode_object_alist storage_slot_info), succeed []),
+       field "storage_layout" (decode_object_alist storage_slot_info),
        orElse (field "transient_storage_layout" (decode_object_alist storage_slot_info), succeed [])),
      orElse (field "code_layout" (decode_object_alist code_slot_info), succeed [])))
 

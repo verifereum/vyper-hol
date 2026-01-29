@@ -473,7 +473,7 @@ val deployment : term decoder =
                                    field "value" numtm)),
                    field "deployment_succeeded" booltm),
                   field "runtime_bytecode" bytes),
-                 storage_layout))
+                 field "storage_layout" storage_layout))
 
 val trace : term decoder =
   achoose "trace" [
