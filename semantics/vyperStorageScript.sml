@@ -9,7 +9,7 @@ Ancestors
   vyperTypeValue vfmState vfmTypes vfmConstants
   vyperMisc
 Libs
-  cv_transLib
+  cv_transLib wordsLib
 
 (* ===== Basic Slot Encoding/Decoding ===== *)
 
