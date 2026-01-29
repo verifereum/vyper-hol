@@ -241,33 +241,67 @@ Proof
   >- simp[assign_target_def, raise_def]
 QED
 
+Theorem new_variable_scope_property:
+  ∀id v st res st'.
+    new_variable id v st = (res, st') ∧ st.scopes ≠ [] ⇒
+    FDOM (HD st.scopes) ⊆ FDOM (HD st'.scopes) ∧
+    TL st'.scopes = TL st.scopes
+Proof
+  rpt strip_tac >> Cases_on `st.scopes` >> gvs[] >>
+  gvs[new_variable_def, bind_def, get_scopes_def, return_def, check_def,
+      assert_def, set_scopes_def, AllCaseEqs(), raise_def, ignore_bind_def] >>
+  irule pred_setTheory.SUBSET_INSERT_RIGHT >> simp[]
+QED
+
+Theorem push_scope_creates_empty_hd:
+  ∀st res st'.
+    push_scope st = (INL (), st') ⇒
+    HD st'.scopes = FEMPTY ∧
+    TL st'.scopes = st.scopes
+Proof
+  rw[push_scope_def, return_def] >> simp[]
+QED
+
+Theorem push_scope_with_var_creates_singleton_hd:
+  ∀nm v st res st'.
+    push_scope_with_var nm v st = (INL (), st') ⇒
+    HD st'.scopes = FEMPTY |+ (nm, v) ∧
+    TL st'.scopes = st.scopes
+Proof
+  rw[push_scope_with_var_def, return_def] >> simp[]
+QED
+
+Theorem finally_pop_scope_preserves_tl_dom:
+  ∀body st res st'.
+    finally body pop_scope st = (res, st') ∧
+    (∀st1 res1 st1'. body st1 = (res1, st1') ⇒
+       MAP FDOM (TL st1.scopes) = MAP FDOM (TL st1'.scopes)) ⇒
+    MAP FDOM st'.scopes = MAP FDOM (TL st.scopes)
+Proof
+  rpt strip_tac >>
+  gvs[finally_def, AllCaseEqs()] >>
+  gvs[pop_scope_def, AllCaseEqs(), bind_def, ignore_bind_def, return_def, raise_def] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem push_scope_finally_pop_preserves_dom:
+  ∀body st res st'.
+    do push_scope; finally body pop_scope od st = (res, st') ∧
+    (∀st1 res1 st1'. body st1 = (res1, st1') ⇒
+       MAP FDOM (TL st1.scopes) = MAP FDOM (TL st1'.scopes)) ⇒
+    MAP FDOM st'.scopes = MAP FDOM st.scopes
+Proof
+  rpt strip_tac >>
+  gvs[push_scope_def, bind_def, ignore_bind_def, return_def] >>
+  gvs[finally_def, AllCaseEqs()] >>
+  first_x_assum drule >> strip_tac >> gvs[] >>
+  gvs[pop_scope_def, AllCaseEqs(), bind_def, ignore_bind_def, return_def, raise_def]
+QED
+
 Theorem finally_set_scopes_dom:
   ∀f prev s res s'. finally f (set_scopes prev) s = (res, s') ⇒ MAP FDOM s'.scopes = MAP FDOM prev
 Proof
   rpt strip_tac >>
   fs[finally_def, set_scopes_def, AllCaseEqs(), ignore_bind_def, return_def, raise_def, bind_def] >>
   gvs[]
-QED
-
-Theorem eval_exprs_preserves_scopes_dom:
-  ∀es cx st res st'.
-    (∀e. MEM e es ⇒ ∀cx st res st'. eval_expr cx e st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
-    eval_exprs cx es st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  Induct >> simp[evaluate_def, return_def] >>
-  rpt strip_tac >> gvs[bind_def, AllCaseEqs(), return_def, get_Value_def] >>
-  imp_res_tac get_Value_scopes >> gvs[]
-  (* Subgoal 1: success for h, success for es *)
-  >- (`MAP FDOM st.scopes = MAP FDOM s''.scopes` by (first_assum (qspec_then `h` mp_tac) >> simp[] >> disch_then drule >> simp[]) >>
-      first_x_assum (qspecl_then [`cx`, `s'³'`, `INL vs`, `s'⁴'`] mp_tac) >> simp[] >>
-      disch_then irule >> rpt strip_tac >> first_assum irule >> simp[] >>
-      qexistsl_tac [`cx'`, `e`, `res`] >> simp[])
-  (* Subgoal 2: success for h, error for es *)
-  >- (`MAP FDOM st.scopes = MAP FDOM s''.scopes` by (first_assum (qspec_then `h` mp_tac) >> simp[] >> disch_then drule >> simp[]) >>
-      first_x_assum (qspecl_then [`cx`, `s'³'`, `INR e`, `s'⁴'`] mp_tac) >> simp[] >>
-      disch_then irule >> rpt strip_tac >> first_assum irule >> simp[] >>
-      qexistsl_tac [`cx'`, `e'`, `res`] >> simp[])
-  (* Subgoal 3 & 4: eval_expr or get_Value on h returns error *)
-  >- (first_assum (qspec_then `h` mp_tac) >> simp[] >> disch_then drule >> simp[])
-  >- (first_assum (qspec_then `h` mp_tac) >> simp[] >> disch_then drule >> simp[])
 QED
