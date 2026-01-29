@@ -3,6 +3,29 @@ Theory vyperEvalExprPreservesScopeDom
 Ancestors
   vyperInterpreter vyperLookup vyperScopePreservationLemmas vyperEvalExprPurePreservesScope
 
+Theorem eval_exprs_preserves_scopes_dom_helper:
+  ∀es cx st res st'.
+    (∀e. MEM e es ⇒ ∀cx st res st'. eval_expr cx e st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
+    eval_exprs cx es st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
+Proof
+  Induct >> simp[evaluate_def, return_def] >>
+  rpt strip_tac >> gvs[bind_def, AllCaseEqs(), return_def, get_Value_def] >>
+  imp_res_tac get_Value_scopes >> gvs[]
+  (* Subgoal 1: success for h, success for es *)
+  >- (`MAP FDOM st.scopes = MAP FDOM s''.scopes` by (first_assum (qspec_then `h` mp_tac) >> simp[] >> disch_then drule >> simp[]) >>
+      first_x_assum (qspecl_then [`cx`, `s'³'`, `INL vs`, `s'⁴'`] mp_tac) >> simp[] >>
+      disch_then irule >> rpt strip_tac >> first_assum irule >> simp[] >>
+      qexistsl_tac [`cx'`, `e`, `res`] >> simp[])
+  (* Subgoal 2: success for h, error for es *)
+  >- (`MAP FDOM st.scopes = MAP FDOM s''.scopes` by (first_assum (qspec_then `h` mp_tac) >> simp[] >> disch_then drule >> simp[]) >>
+      first_x_assum (qspecl_then [`cx`, `s'³'`, `INR e`, `s'⁴'`] mp_tac) >> simp[] >>
+      disch_then irule >> rpt strip_tac >> first_assum irule >> simp[] >>
+      qexistsl_tac [`cx'`, `e'`, `res`] >> simp[])
+  (* Subgoal 3 & 4: eval_expr or get_Value on h returns error *)
+  >- (first_assum (qspec_then `h` mp_tac) >> simp[] >> disch_then drule >> simp[])
+  >- (first_assum (qspec_then `h` mp_tac) >> simp[] >> disch_then drule >> simp[])
+QED
+
 (* ========================================================================
    Helper lemmas for individual eval_base_target cases (for mutual induction)
    ======================================================================== *)
@@ -154,7 +177,7 @@ Theorem case_StructLit_ind[local]:
       eval_expr cx (StructLit (src_id_opt, id) kes) st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def] >>
-  drule_all eval_exprs_preserves_scopes_dom >> simp[]
+  drule_all eval_exprs_preserves_scopes_dom_helper >> simp[]
 QED
 
 (* Builtin: P4 l ⇒ ∀b. P0 (Builtin b l) *)
@@ -169,10 +192,10 @@ Proof
   gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def, ignore_bind_def,
       check_def, assert_def, get_accounts_def, lift_sum_def]
   >- (TRY (Cases_on `evaluate_builtin cx s''.accounts bt vs` >> gvs[return_def, raise_def]) >>
-      drule_all eval_exprs_preserves_scopes_dom >> simp[])
-  >- (drule_all eval_exprs_preserves_scopes_dom >> simp[] >>
+      drule_all eval_exprs_preserves_scopes_dom_helper >> simp[])
+  >- (drule_all eval_exprs_preserves_scopes_dom_helper >> simp[] >>
       Cases_on `evaluate_builtin cx s''.accounts bt vs` >> gvs[return_def, raise_def])
-  >- (drule_all eval_exprs_preserves_scopes_dom >> simp[])
+  >- (drule_all eval_exprs_preserves_scopes_dom_helper >> simp[])
 QED
 
 (* TypeBuiltin: P4 l ⇒ ∀t t0. P0 (TypeBuiltin t0 t l) *)
@@ -187,7 +210,7 @@ Proof
   gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def, ignore_bind_def,
       check_def, assert_def, lift_sum_def] >>
   TRY (Cases_on `evaluate_type_builtin cx tb typ vs` >> gvs[return_def, raise_def]) >>
-  drule_all eval_exprs_preserves_scopes_dom >> simp[]
+  drule_all eval_exprs_preserves_scopes_dom_helper >> simp[]
 QED
 
 (* Call: P4 l ⇒ ∀c. P0 (Call c l)
@@ -205,7 +228,7 @@ Proof
        check_def, assert_def, lift_option_def] >>
   strip_tac >> gvs[return_def, raise_def, GSYM lift_option_def] >>
   imp_res_tac transfer_value_scopes >> imp_res_tac lift_option_scopes >> gvs[] >>
-  drule_all eval_exprs_preserves_scopes_dom >> simp[]
+  drule_all eval_exprs_preserves_scopes_dom_helper >> simp[]
 QED
 
 Theorem case_Call_IntCall_ind[local]:
@@ -224,7 +247,7 @@ Proof
   strip_tac >> gvs[return_def, raise_def, GSYM lift_option_def] >>
   imp_res_tac lift_option_scopes >> gvs[] >>
   TRY (drule_all finally_set_scopes_dom >> strip_tac >> gvs[]) >>
-  TRY (drule_all eval_exprs_preserves_scopes_dom >> simp[])
+  TRY (drule_all eval_exprs_preserves_scopes_dom_helper >> simp[])
 QED
 
 (* ========================================================================
@@ -366,6 +389,31 @@ Theorem eval_base_target_preserves_scopes_len:
 Proof
   rpt strip_tac >>
   drule eval_base_target_preserves_scopes_dom >> strip_tac >>
+  `LENGTH (MAP FDOM st.scopes) = LENGTH (MAP FDOM st'.scopes)` by metis_tac[] >>
+  gvs[listTheory.LENGTH_MAP]
+QED
+
+Theorem eval_exprs_preserves_scopes_dom:
+  ∀es cx st res st'.
+    eval_exprs cx es st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
+Proof
+  metis_tac[eval_exprs_preserves_scopes_dom_helper, eval_expr_preserves_scopes_dom]
+QED
+
+Theorem eval_exprs_preserves_var_in_scope:
+  ∀cx st st' n es res.
+    eval_exprs cx es st = (res, st') ⇒
+    (var_in_scope st n ⇔ var_in_scope st' n)
+Proof
+  metis_tac[var_in_scope_dom_iff, eval_exprs_preserves_scopes_dom]
+QED
+
+Theorem eval_exprs_preserves_scopes_len:
+  ∀es cx st res st'.
+    eval_exprs cx es st = (res, st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
+Proof
+  rpt strip_tac >>
+  drule eval_exprs_preserves_scopes_dom >> strip_tac >>
   `LENGTH (MAP FDOM st.scopes) = LENGTH (MAP FDOM st'.scopes)` by metis_tac[] >>
   gvs[listTheory.LENGTH_MAP]
 QED

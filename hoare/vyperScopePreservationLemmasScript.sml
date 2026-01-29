@@ -248,26 +248,3 @@ Proof
   fs[finally_def, set_scopes_def, AllCaseEqs(), ignore_bind_def, return_def, raise_def, bind_def] >>
   gvs[]
 QED
-
-Theorem eval_exprs_preserves_scopes_dom:
-  ∀es cx st res st'.
-    (∀e. MEM e es ⇒ ∀cx st res st'. eval_expr cx e st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
-    eval_exprs cx es st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  Induct >> simp[evaluate_def, return_def] >>
-  rpt strip_tac >> gvs[bind_def, AllCaseEqs(), return_def, get_Value_def] >>
-  imp_res_tac get_Value_scopes >> gvs[]
-  (* Subgoal 1: success for h, success for es *)
-  >- (`MAP FDOM st.scopes = MAP FDOM s''.scopes` by (first_assum (qspec_then `h` mp_tac) >> simp[] >> disch_then drule >> simp[]) >>
-      first_x_assum (qspecl_then [`cx`, `s'³'`, `INL vs`, `s'⁴'`] mp_tac) >> simp[] >>
-      disch_then irule >> rpt strip_tac >> first_assum irule >> simp[] >>
-      qexistsl_tac [`cx'`, `e`, `res`] >> simp[])
-  (* Subgoal 2: success for h, error for es *)
-  >- (`MAP FDOM st.scopes = MAP FDOM s''.scopes` by (first_assum (qspec_then `h` mp_tac) >> simp[] >> disch_then drule >> simp[]) >>
-      first_x_assum (qspecl_then [`cx`, `s'³'`, `INR e`, `s'⁴'`] mp_tac) >> simp[] >>
-      disch_then irule >> rpt strip_tac >> first_assum irule >> simp[] >>
-      qexistsl_tac [`cx'`, `e'`, `res`] >> simp[])
-  (* Subgoal 3 & 4: eval_expr or get_Value on h returns error *)
-  >- (first_assum (qspec_then `h` mp_tac) >> simp[] >> disch_then drule >> simp[])
-  >- (first_assum (qspec_then `h` mp_tac) >> simp[] >> disch_then drule >> simp[])
-QED
