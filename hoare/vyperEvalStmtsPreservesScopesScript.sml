@@ -346,9 +346,37 @@ Theorem case_AnnAssign_dom:
     ∀st res st'.
       eval_stmt cx (AnnAssign id typ e) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
-  cheat (* TODO: Unfold eval_stmt, chain eval_expr (preserves exactly),
-           get_Value (preserves exactly), new_variable (adds to HD only).
-           Use new_variable_scope_property. *)
+  rpt strip_tac >>
+  gvs[preserves_scopes_dom_def] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >~
+  (* Main case with new_variable *)
+  [`new_variable _ _ _ = _`]
+  >- (
+    `MAP FDOM st.scopes = MAP FDOM s''.scopes` by (first_x_assum drule >> simp[]) >>
+    imp_res_tac get_Value_scopes >> gvs[] >>
+    Cases_on `s''.scopes` >> gvs[] >-
+    (* Empty scopes case - new_variable raises error *)
+    (gvs[new_variable_def, bind_def, get_scopes_def, return_def, check_def,
+         assert_def, lookup_scopes_def, ignore_bind_def, raise_def] >>
+     first_x_assum drule >> simp[]) >>
+    (* Non-empty scopes case - apply new_variable_scope_property *)
+    `s'³'.scopes ≠ []` by simp[] >>
+    drule_all new_variable_scope_property >> strip_tac >> gvs[] >>
+    first_x_assum drule >> strip_tac >>
+    Cases_on `st.scopes` >> gvs[]
+  ) >~
+  (* get_Value error case *)
+  [`get_Value _ _ = (INR _, _)`]
+  >- (
+    imp_res_tac get_Value_scopes >> gvs[] >>
+    first_x_assum drule >> strip_tac >>
+    Cases_on `st.scopes` >> Cases_on `s''.scopes` >> gvs[]
+  ) >>
+  (* eval_expr error case *)
+  first_x_assum drule >> strip_tac >>
+  Cases_on `st.scopes` >> Cases_on `s''.scopes` >> gvs[]
 QED
 
 (* === Category 3: If statement (push_scope, body, pop_scope via finally) === *)
