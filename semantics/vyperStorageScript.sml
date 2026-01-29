@@ -6,19 +6,22 @@
 
 Theory vyperStorage
 Ancestors
-  vyperInterpreter vyperTypeValue vfmState vfmTypes vfmConstants
+  vyperTypeValue vfmState vfmTypes vfmConstants
+  vyperMisc
 Libs
   cv_transLib
 
 (* ===== Basic Slot Encoding/Decoding ===== *)
 
 Definition int_to_slot_def:
-  int_to_slot (i : int) : bytes32 = n2w (Num (i % &(2 ** 256)))
+  int_to_slot (i : int) : bytes32 = i2w i
 End
+val () = cv_auto_trans int_to_slot_def;
 
 Definition slot_to_uint_def:
   slot_to_uint (w : bytes32) : int = &(w2n w)
 End
+val () = cv_auto_trans slot_to_uint_def;
 
 Definition slot_to_int_def:
   slot_to_int (bits : num) (w : bytes32) : int =
@@ -26,37 +29,47 @@ Definition slot_to_int_def:
     let bound = 2 ** (bits - 1) in
     if n < bound then &n else &n - &(2 ** bits)
 End
+val () = cv_auto_trans slot_to_int_def;
 
 Definition bool_to_slot_def:
   bool_to_slot (b : bool) : bytes32 = if b then 1w else 0w
 End
+val () = cv_auto_trans bool_to_slot_def;
 
 Definition slot_to_bool_def:
   slot_to_bool (w : bytes32) : bool = (w <> 0w)
 End
+val () = cv_auto_trans slot_to_bool_def;
 
 (* ===== Bytes/String Slot Helpers ===== *)
 
-Definition bytes_to_slots_def:
-  bytes_to_slots (bs : word8 list) : bytes32 list =
-    if NULL bs then []
-    else
-      let chunk = TAKE 32 bs in
-      let rest = DROP 32 bs in
-      let padded = chunk ++ REPLICATE (32 - LENGTH chunk) 0w in
-      word_of_bytes F 0w padded :: bytes_to_slots rest
+Definition bytes_to_slots_aux_def:
+  bytes_to_slots_aux acc ([]:byte list) = REVERSE acc /\
+  bytes_to_slots_aux acc bs =
+    let chunk = TAKE 32 bs in
+    let rest = DROP 32 bs in
+    let padded = chunk ++ REPLICATE (32 - LENGTH chunk) 0w in
+    bytes_to_slots_aux (word_of_bytes F (0w: bytes32) padded :: acc) rest
 Termination
-  WF_REL_TAC ‘measure LENGTH’ >> Cases_on ‘bs’ >> gvs[]
+  WF_REL_TAC ‘measure (LENGTH o SND)’ >> gvs[]
 End
 
+Definition bytes_to_slots_def:
+  bytes_to_slots bs = bytes_to_slots_aux [] bs
+End
+
+val () = cv_auto_trans bytes_to_slots_aux_def;
+val () = cv_auto_trans bytes_to_slots_def;
+
 Definition slots_to_bytes_def:
-  slots_to_bytes 0 _ = [] /\
+  slots_to_bytes 0 _ = ([]:byte list) /\
   slots_to_bytes _ [] = [] /\
-  slots_to_bytes len (slot::slots) =
+  slots_to_bytes len ((slot:bytes32)::slots) =
     let bs = word_to_bytes slot F in
     let take_n = MIN 32 len in
     TAKE take_n bs ++ slots_to_bytes (len - take_n) slots
 End
+val () = cv_auto_trans slots_to_bytes_def;
 
 (* ===== Slot Size Computation ===== *)
 
@@ -70,6 +83,7 @@ Definition base_type_slot_size_def:
   base_type_slot_size (BytesT (Dynamic n)) = 1 + word_size n /\
   base_type_slot_size (StringT n) = 1 + word_size n
 End
+val () = cv_auto_trans base_type_slot_size_def;
 
 Definition type_slot_size_def:
   type_slot_size (BaseTV (BytesT (Dynamic n))) = 1 + word_size n /\
@@ -77,13 +91,16 @@ Definition type_slot_size_def:
   type_slot_size (BaseTV _) = 1 /\
   type_slot_size (FlagTV _) = 1 /\
   type_slot_size NoneTV = 0 /\
-  type_slot_size (TupleTV tvs) = SUM (MAP type_slot_size tvs) /\
+  type_slot_size (TupleTV tvs) = type_slot_size_list tvs /\
   type_slot_size (ArrayTV tv (Fixed n)) = n * type_slot_size tv /\
   type_slot_size (ArrayTV tv (Dynamic n)) = 1 + n * type_slot_size tv /\
-  type_slot_size (StructTV fields) = SUM (MAP (type_slot_size o SND) fields)
-Termination
-  WF_REL_TAC ‘measure type_value_size’ >> rw[type_value_size_def]
+  type_slot_size (StructTV fields) = type_slot_size_fields fields /\
+  type_slot_size_list [] = 0 /\
+  type_slot_size_list (tv::tvs) = type_slot_size tv + type_slot_size_list tvs /\
+  type_slot_size_fields [] = 0 /\
+  type_slot_size_fields ((_, tv)::fields) = type_slot_size tv + type_slot_size_fields fields
 End
+val () = cv_auto_trans type_slot_size_def;
 
 (* ===== Base Type Encoding ===== *)
 
@@ -94,8 +111,8 @@ Definition encode_base_to_slot_def:
     (if n = m then SOME (int_to_slot i) else NONE) /\
   encode_base_to_slot (DecimalV i) (BaseTV DecimalT) = SOME (int_to_slot i) /\
   encode_base_to_slot (BoolV b) (BaseTV BoolT) = SOME (bool_to_slot b) /\
-  encode_base_to_slot (BytesV (Fixed 20) bs) (BaseTV AddressT) =
-    (if LENGTH bs = 20 then SOME (word_of_bytes T 0w bs) else NONE) /\
+  encode_base_to_slot (BytesV (Fixed m) bs) (BaseTV AddressT) =
+    (if LENGTH bs = m /\ m = 20 then SOME (word_of_bytes T 0w bs) else NONE) /\
   encode_base_to_slot (BytesV (Fixed m) bs) (BaseTV (BytesT (Fixed n))) =
     (if m = n /\ LENGTH bs = n /\ n ≤ 32 then
        SOME (word_of_bytes F 0w (bs ++ REPLICATE (32 - n) 0w))
@@ -105,6 +122,7 @@ Definition encode_base_to_slot_def:
   encode_base_to_slot NoneV NoneTV = SOME 0w /\
   encode_base_to_slot _ _ = NONE
 End
+val () = cv_auto_trans encode_base_to_slot_def;
 
 Definition decode_base_from_slot_def:
   decode_base_from_slot (slot : bytes32) (BaseTV (UintT n)) =
@@ -121,6 +139,7 @@ Definition decode_base_from_slot_def:
   decode_base_from_slot slot NoneTV = NoneV /\
   decode_base_from_slot slot _ = NoneV
 End
+val () = cv_auto_trans decode_base_from_slot_def;
 
 (* ===== Dynamic Bytes/String Encoding ===== *)
 
@@ -130,16 +149,26 @@ Definition encode_dyn_bytes_slots_def:
       SOME ((0:num, n2w (LENGTH bs)) :: MAPi (λi s. (i + 1, s)) (bytes_to_slots bs))
     else NONE
 End
+val () = cv_auto_trans encode_dyn_bytes_slots_def;
 
-Definition decode_dyn_bytes_slots_def:
-  decode_dyn_bytes_slots max (reader : num -> bytes32) =
-    let len = w2n (reader 0) in
+(* First-order helper: read n consecutive slots starting at offset *)
+Definition read_slots_def:
+  read_slots storage offset 0 = ([]:bytes32 list) /\
+  read_slots storage offset (SUC n) =
+    lookup_storage (n2w offset : bytes32) storage :: read_slots storage (offset + 1) n
+End
+val () = cv_auto_trans read_slots_def;
+
+Definition decode_dyn_bytes_def:
+  decode_dyn_bytes storage offset max =
+    let len = w2n (lookup_storage (n2w offset : bytes32) storage) in
     if len ≤ max then
       let n_slots = word_size len in
-      let slots = GENLIST (λi. reader (i + 1)) n_slots in
-      SOME (slots_to_bytes len slots)
+      let slots = read_slots storage (offset + 1) n_slots in
+      SOME (slots_to_bytes len slots, 1 + n_slots)
     else NONE
 End
+val () = cv_auto_trans decode_dyn_bytes_def;
 
 (* ===== Storage Helpers ===== *)
 
@@ -149,15 +178,13 @@ Definition apply_writes_def:
     let slot : bytes32 = n2w (w2n base_slot + offset) in
     apply_writes base_slot writes (update_storage slot val storage)
 End
+val () = cv_trans apply_writes_def;
 
-Definition make_reader_def:
-  make_reader (base_slot : bytes32) storage offset =
-    lookup_storage (n2w (w2n base_slot + offset) : bytes32) storage
+(* Helper to read a slot at a given offset from storage *)
+Definition read_slot_def:
+  read_slot storage offset = lookup_storage (n2w offset : bytes32) storage
 End
-
-Definition offset_reader_def:
-  offset_reader (reader : num -> bytes32) off = λn. reader (off + n)
-End
+val () = cv_auto_trans read_slot_def;
 
 (* ===== Termination helper lemmas for encode_value ===== *)
 
@@ -271,6 +298,23 @@ Termination
   rw[struct_fields_size_lt, sparse_size_lt]
 End
 
+val encode_value_pre_def =
+  cv_auto_trans_pre
+    "encode_value_pre encode_tuple_pre encode_static_array_pre encode_dyn_array_pre encode_struct_pre"
+    encode_value_def;
+
+Theorem encode_value_pre[cv_pre]:
+  (∀tv v. encode_value_pre tv v) ∧
+  (∀offset tvs vs. encode_tuple_pre offset tvs vs) ∧
+  (∀tv offset sparse. encode_static_array_pre tv offset sparse) ∧
+  (∀tv offset vs. encode_dyn_array_pre tv offset vs) ∧
+  (∀offset ftypes fields. encode_struct_pre offset ftypes fields)
+Proof
+  ho_match_mp_tac encode_value_ind
+  \\ rw[]
+  \\ rw[Once encode_value_pre_def]
+QED
+
 (* ===== Termination helper lemmas for decode_value ===== *)
 
 Theorem type_value1_size_le[local]:
@@ -280,92 +324,157 @@ Proof
   Induct >> rw[type_value_size_def] >> Cases_on ‘h’ >> rw[type_value_size_def]
 QED
 
-(* ===== Full Value Decoding ===== *)
+(* ===== Full Value Decoding (First-Order) ===== *)
 
+(* decode_value returns SOME (value, slots_consumed) or NONE *)
 Definition decode_value_def:
   (* Dynamic bytes - special multi-slot decoding *)
-  decode_value (BaseTV (BytesT (Dynamic max))) reader =
-    (case decode_dyn_bytes_slots max reader of
-     | SOME bs => SOME (BytesV (Dynamic max) bs)
+  decode_value storage offset (BaseTV (BytesT (Dynamic max))) =
+    (case decode_dyn_bytes storage offset max of
+     | SOME (bs, n) => SOME (BytesV (Dynamic max) bs, n)
      | NONE => NONE) /\
   (* String - decode as bytes then convert to chars *)
-  decode_value (BaseTV (StringT max)) reader =
-    (case decode_dyn_bytes_slots max reader of
-     | SOME bs => SOME (StringV max (MAP (CHR o w2n) bs))
+  decode_value storage offset (BaseTV (StringT max)) =
+    (case decode_dyn_bytes storage offset max of
+     | SOME (bs, n) => SOME (StringV max (MAP (CHR o w2n) bs), n)
      | NONE => NONE) /\
   (* Other base types - single slot *)
-  decode_value (BaseTV bt) reader =
-    SOME (decode_base_from_slot (reader 0) (BaseTV bt)) /\
-  decode_value (FlagTV m) reader =
-    SOME (decode_base_from_slot (reader 0) (FlagTV m)) /\
-  decode_value NoneTV reader = SOME NoneV /\
-  decode_value (TupleTV tvs) reader =
-    (case decode_tuple 0 tvs reader of
-     | SOME vs => SOME (ArrayV (TupleV vs))
+  decode_value storage offset (BaseTV bt) =
+    SOME (decode_base_from_slot (read_slot storage offset) (BaseTV bt), 1) /\
+  decode_value storage offset (FlagTV m) =
+    SOME (decode_base_from_slot (read_slot storage offset) (FlagTV m), 1) /\
+  decode_value storage offset NoneTV = SOME (NoneV, 0) /\
+  decode_value storage offset (TupleTV tvs) =
+    (case decode_tuple storage offset tvs of
+     | SOME (vs, n) => SOME (ArrayV (TupleV vs), n)
      | NONE => NONE) /\
-  decode_value (ArrayTV tv (Fixed n)) reader =
-    (case decode_static_array tv 0 n reader of
-     | SOME vs => SOME (ArrayV (SArrayV tv n (enumerate_static_array (default_value tv) 0 vs)))
+  decode_value storage offset (ArrayTV tv (Fixed n)) =
+    (case decode_static_array storage offset tv n of
+     | SOME (vs, slots) => SOME (ArrayV (SArrayV tv n (enumerate_static_array (default_value tv) 0 vs)), slots)
      | NONE => NONE) /\
-  decode_value (ArrayTV tv (Dynamic max)) reader =
-    (let len = w2n (reader 0) in
+  decode_value storage offset (ArrayTV tv (Dynamic max)) =
+    (let len = w2n (read_slot storage offset) in
      if len ≤ max then
-       (case decode_dyn_array tv 1 len reader of
-        | SOME vs => SOME (ArrayV (DynArrayV tv max vs))
+       (case decode_dyn_array storage (offset + 1) tv (MIN len max) of
+        | SOME (vs, slots) => SOME (ArrayV (DynArrayV tv max vs), 1 + slots)
         | NONE => NONE)
      else NONE) /\
-  decode_value (StructTV ftypes) reader =
-    (case decode_struct 0 ftypes reader of
-     | SOME fields => SOME (StructV fields)
+  decode_value storage offset (StructTV ftypes) =
+    (case decode_struct storage offset ftypes of
+     | SOME (fields, n) => SOME (StructV fields, n)
      | NONE => NONE) /\
 
-  decode_tuple offset [] reader = SOME [] /\
-  decode_tuple offset (tv::tvs) reader =
-    (case decode_value tv (offset_reader reader offset) of
-     | SOME v =>
-         (case decode_tuple (offset + type_slot_size tv) tvs reader of
-          | SOME vs => SOME (v :: vs)
+  decode_tuple storage offset [] = SOME ([], 0) /\
+  decode_tuple storage offset (tv::tvs) =
+    (case decode_value storage offset tv of
+     | SOME (v, n) =>
+         (case decode_tuple storage (offset + n) tvs of
+          | SOME (vs, m) => SOME (v :: vs, n + m)
           | NONE => NONE)
      | NONE => NONE) /\
 
-  decode_static_array tv offset 0 reader = SOME [] /\
-  decode_static_array tv offset (SUC n) reader =
-    (case decode_value tv (offset_reader reader offset) of
-     | SOME v =>
-         (case decode_static_array tv (offset + type_slot_size tv) n reader of
-          | SOME vs => SOME (v :: vs)
+  decode_static_array storage offset tv 0 = SOME ([], 0) /\
+  decode_static_array storage offset tv (SUC n) =
+    (case decode_value storage offset tv of
+     | SOME (v, slots) =>
+         (case decode_static_array storage (offset + slots) tv n of
+          | SOME (vs, rest) => SOME (v :: vs, slots + rest)
           | NONE => NONE)
      | NONE => NONE) /\
 
-  decode_dyn_array tv offset 0 reader = SOME [] /\
-  decode_dyn_array tv offset (SUC n) reader =
-    (case decode_value tv (offset_reader reader offset) of
-     | SOME v =>
-         (case decode_dyn_array tv (offset + type_slot_size tv) n reader of
-          | SOME vs => SOME (v :: vs)
+  decode_dyn_array storage offset tv 0 = SOME ([], 0) /\
+  decode_dyn_array storage offset tv (SUC n) =
+    (case decode_value storage offset tv of
+     | SOME (v, slots) =>
+         (case decode_dyn_array storage (offset + slots) tv n of
+          | SOME (vs, rest) => SOME (v :: vs, slots + rest)
           | NONE => NONE)
      | NONE => NONE) /\
 
-  decode_struct offset [] reader = SOME [] /\
-  decode_struct offset ((fname,tv)::ftypes) reader =
-    (case decode_value tv (offset_reader reader offset) of
-     | SOME v =>
-         (case decode_struct (offset + type_slot_size tv) ftypes reader of
-          | SOME fields => SOME ((fname, v) :: fields)
+  decode_struct storage offset [] = SOME ([], 0) /\
+  decode_struct storage offset ((fname,tv)::ftypes) =
+    (case decode_value storage offset tv of
+     | SOME (v, n) =>
+         (case decode_struct storage (offset + n) ftypes of
+          | SOME (fields, m) => SOME ((fname, v) :: fields, n + m)
           | NONE => NONE)
      | NONE => NONE)
 Termination
   WF_REL_TAC ‘measure (λx. case x of
-    | INL (tv, _) => type_value_size tv
-    | INR (INL (_, tvs, _)) => list_size type_value_size tvs
-    | INR (INR (INL (tv, _, n, _))) => type_value_size tv + n
-    | INR (INR (INR (INL (tv, _, n, _)))) => type_value_size tv + n
-    | INR (INR (INR (INR (_, ftypes, _)))) => type_value1_size ftypes)’ >>
+    | INL (_, _, tv) => type_value_size tv
+    | INR (INL (_, _, tvs)) => list_size type_value_size tvs
+    | INR (INR (INL (_, _, tv, n))) => type_value_size tv + n
+    | INR (INR (INR (INL (_, _, tv, n)))) => type_value_size tv + n
+    | INR (INR (INR (INR (_, _, ftypes)))) => type_value1_size ftypes)’ >>
   rw[type_value_size_def] >>
   ‘type_value1_size ftypes ≤
    list_size (pair_size (list_size char_size) type_value_size) ftypes’
-   by rw[type_value1_size_le] >> simp[]
+   by rw[type_value1_size_le] >> simp[arithmeticTheory.MIN_DEF]
 End
+
+(* TODO: refactor helper theorems into a shared library
+   (duplicated from vyperABIScript.sml) *)
+
+Theorem c2n_le_cv_size:
+  !x. cv$c2n x <= cv_size x
+Proof
+  Cases >> rw[cvTheory.c2n_def, cvTheory.cv_size_def]
+QED
+
+val decode_value_pre_def =
+  cv_auto_trans_pre_rec
+    "decode_value_pre decode_tuple_pre decode_static_array_pre decode_dyn_array_pre decode_struct_pre"
+    (decode_value_def |> REWRITE_RULE[GSYM CHR_o_w2n_eq])
+    (WF_REL_TAC `inv_image $<
+       (λx. case x of
+         | INL (storage, offset, tv) => cv_size tv
+         | INR (INL (storage, offset, tvs)) => cv_size tvs
+         | INR (INR (INL (storage, offset, tv, n))) => cv_size tv + cv$c2n n
+         | INR (INR (INR (INL (storage, offset, tv, n)))) => cv_size tv + cv$c2n n
+         | INR (INR (INR (INR (storage, offset, ftypes)))) => cv_size ftypes)`
+     \\ rw[]
+     \\ TRY (gvs[cv_repTheory.cv_termination_simp, cvTheory.cv_size_def,
+                 cvTheory.cv_snd_def, cvTheory.cv_fst_def]
+             \\ decide_tac \\ NO_TAC)
+     (* Handle ArrayTV Dynamic cases - need case splits to expose Pair overhead *)
+     \\ rpt strip_tac
+     \\ Cases_on `cv_v`
+     >> gvs[cvTheory.cv_ispair_def, cvTheory.c2b_def]
+     \\ rename1 `cv_size (cv_fst rest1)`
+     \\ Cases_on `rest1`
+     >> gvs[cvTheory.cv_ispair_def, cvTheory.c2b_def, cvTheory.cv_lt_def,
+            cvTheory.cv_fst_def, cvTheory.cv_snd_def, cvTheory.cv_size_def]
+     \\ (rename1 `cv_ispair rest2` ORELSE rename1 `cv_fst rest2`)
+     \\ Cases_on `rest2`
+     >> gvs[cvTheory.cv_ispair_def, cvTheory.c2b_def, cvTheory.cv_lt_def,
+            cvTheory.cv_fst_def, cvTheory.cv_snd_def, cvTheory.cv_size_def]
+     \\ rename1`cv_lt (cv$Num _) nn = cv$Num _`
+     \\ Cases_on`nn` \\ gvs[CaseEq"bool"]
+     \\ rename1`cv_lt (cv$Num _) nn = cv$Num _`
+     \\ Cases_on`nn` \\ gvs[CaseEq"bool"]
+     \\ qmatch_goalsub_abbrev_tac`cv$c2n nn`
+     \\ qspec_then`nn`assume_tac c2n_le_cv_size
+     \\ gvs[cv_primTheory.cv_min_def]
+     \\ rename1`cv_lt n1 n2`
+     \\ Cases_on`cv_lt n1 n2` \\ gvs[]
+     \\ TRY(Cases_on`n1` \\ Cases_on `n2` \\ gvs[cvTheory.cv_lt_def] \\ NO_TAC)
+     \\ rename1`cv$c2b (cv$Num bb)`
+     \\ Cases_on`bb` \\ gvs[]
+     \\ Cases_on`n1` \\ Cases_on `n2` \\ gvs[cvTheory.cv_lt_def]
+    );
+
+Theorem decode_value_pre[cv_pre]:
+  (∀storage offset tv. decode_value_pre storage offset tv) ∧
+  (∀storage offset tvs. decode_tuple_pre storage offset tvs) ∧
+  (∀storage offset tv n. decode_static_array_pre storage offset tv n) ∧
+  (∀storage offset tv n. decode_dyn_array_pre storage offset tv n) ∧
+  (∀storage offset ftypes. decode_struct_pre storage offset ftypes)
+Proof
+  ho_match_mp_tac decode_value_ind
+  \\ rw[]
+  \\ rw[Once decode_value_pre_def]
+  \\ gvs[]
+QED
 
 (* ===== HashMap Slot Computation ===== *)
 
@@ -383,13 +492,14 @@ End
    Booleans: 0 or 1 *)
 Definition encode_hashmap_key_def:
   encode_hashmap_key (IntV _ i) = SOME (int_to_slot i) ∧
-  encode_hashmap_key (BytesV (Fixed 20) bs) = 
-    (if LENGTH bs = 20 then SOME (word_of_bytes T 0w bs) else NONE) ∧
-  encode_hashmap_key (BytesV (Fixed 32) bs) =
-    (if LENGTH bs = 32 then SOME (word_of_bytes T 0w bs) else NONE) ∧
+  encode_hashmap_key (BytesV (Fixed n) bs) =
+    (if LENGTH bs = n ∧ (n = 32 ∨ n = 20)
+     then SOME (word_of_bytes T 0w bs) else NONE) ∧
   encode_hashmap_key (BoolV b) = SOME (if b then 1w else 0w) ∧
   encode_hashmap_key _ = NONE
 End
+
+val () = cv_trans encode_hashmap_key_def;
 
 (* Compute slot for a hashmap value given base slot and key value *)
 Definition hashmap_value_slot_def:
@@ -399,7 +509,7 @@ Definition hashmap_value_slot_def:
     | NONE => NONE
 End
 
-(* For nested hashmaps HashMap[K1, HashMap[K2, V]], 
+(* For nested hashmaps HashMap[K1, HashMap[K2, V]],
    compute: hashmap_slot (hashmap_slot base k1) k2 *)
 Definition nested_hashmap_slot_def:
   nested_hashmap_slot base_slot [] = SOME base_slot ∧
@@ -429,9 +539,9 @@ Definition read_storage_var_def:
     case lookup_var_slot layout var_name of
     | NONE => NONE
     | SOME slot =>
-        let base_slot : bytes32 = n2w slot in
-        let reader = make_reader base_slot storage in
-        decode_value tv reader
+        case decode_value storage slot tv of
+        | SOME (v, _) => SOME v
+        | NONE => NONE
 End
 
 (* Write a top-level variable to storage *)
@@ -456,11 +566,12 @@ Definition read_hashmap_var_def:
     | NONE => NONE
     | SOME slot =>
         let base_slot : bytes32 = n2w slot in
-        (case hashmap_value_slot base_slot key_val of
-         | NONE => NONE
-         | SOME entry_slot =>
-             let reader = make_reader entry_slot storage in
-             decode_value value_tv reader)
+        case hashmap_value_slot base_slot key_val of
+        | NONE => NONE
+        | SOME entry_slot =>
+            case decode_value storage (w2n entry_slot) value_tv of
+            | SOME (v, _) => SOME v
+            | NONE => NONE
 End
 
 (* Write a HashMap entry *)
@@ -485,11 +596,12 @@ Definition read_nested_hashmap_var_def:
     | NONE => NONE
     | SOME slot =>
         let base_slot : bytes32 = n2w slot in
-        (case nested_hashmap_slot base_slot keys of
-         | NONE => NONE
-         | SOME entry_slot =>
-             let reader = make_reader entry_slot storage in
-             decode_value value_tv reader)
+        case nested_hashmap_slot base_slot keys of
+        | NONE => NONE
+        | SOME entry_slot =>
+            case decode_value storage (w2n entry_slot) value_tv of
+            | SOME (v, _) => SOME v
+            | NONE => NONE
 End
 
 (* Write a nested HashMap entry *)
