@@ -5,8 +5,10 @@ Ancestors
 
 Definition preserves_scopes_dom_def:
   preserves_scopes_dom st st' ⇔
-    FDOM (HD st.scopes) ⊆ FDOM (HD st'.scopes) ∧
-    MAP FDOM (TL st.scopes) = MAP FDOM (TL st'.scopes)
+    (st.scopes = [] ∧ st'.scopes = []) ∨
+    (st.scopes ≠ [] ∧
+     FDOM (HD st.scopes) ⊆ FDOM (HD st'.scopes) ∧
+     MAP FDOM (TL st.scopes) = MAP FDOM (TL st'.scopes))
 End
 
 Theorem preserves_scopes_dom_length:
@@ -610,9 +612,10 @@ Theorem eval_stmts_preserves_var_in_scope:
     eval_stmts cx ss st = (res, st') ⇒
     var_in_scope st' n
 Proof
-  rpt strip_tac >> drule eval_stmts_preserves_scopes_dom >> simp[preserves_scopes_dom_def]
+  rpt strip_tac >> drule eval_stmts_preserves_scopes_dom >> simp[preserves_scopes_dom_def] >> rpt strip_tac
   >> cheat
 QED
+
 Theorem eval_stmts_preserves_scopes_len:
   ∀cx st ss res st'.
     eval_stmts cx ss st = (res, st') ⇒ LENGTH st.scopes = LENGTH st'.scopes
