@@ -1,7 +1,7 @@
 Theory vyperHoare
 
 Ancestors
-  vyperInterpreter vyperScopes vyperAssignTargetSpec vyperLookup vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes
+  vyperInterpreter vyperAssignTargetSpec vyperLookup vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes
 
 (**********************************************************************)
 (* Definitions *)
@@ -459,7 +459,7 @@ Proof
     rename [`eval_stmts _ _ _ = (INL _, r_after_ss)`] >>
     strip_tac >>
     `r_after_ss.scopes <> []` by
-      (drule scopes_len_preserved >> REWRITE_TAC[evaluation_state_accfupds] >>
+      (drule eval_stmts_preserves_scopes_len >> REWRITE_TAC[evaluation_state_accfupds] >>
        simp[] >> Cases_on `r_after_ss.scopes` >> fs[]) >>
     simp[pop_scope_def] >>
     Cases_on `r_after_ss.scopes` >> gvs[return_def] >>
@@ -469,7 +469,7 @@ Proof
    Cases_on `y` >> simp[] >>
    strip_tac >>
    `r_after_ss.scopes <> []` by
-     (drule scopes_len_preserved >> REWRITE_TAC[evaluation_state_accfupds] >>
+     (drule eval_stmts_preserves_scopes_len >> REWRITE_TAC[evaluation_state_accfupds] >>
       simp[] >> Cases_on `r_after_ss.scopes` >> fs[]) >>
    simp[pop_scope_def] >>
    Cases_on `r_after_ss.scopes` >> gvs[return_def, raise_def]) >>
@@ -483,7 +483,7 @@ Proof
    rename [`eval_stmts _ _ _ = (INL _, r_after_ss)`] >>
    strip_tac >>
    `r_after_ss.scopes <> []` by
-     (drule scopes_len_preserved >> REWRITE_TAC[evaluation_state_accfupds] >>
+     (drule eval_stmts_preserves_scopes_len >> REWRITE_TAC[evaluation_state_accfupds] >>
       simp[] >> Cases_on `r_after_ss.scopes` >> fs[]) >>
    simp[pop_scope_def] >>
    Cases_on `r_after_ss.scopes` >> gvs[return_def] >>
@@ -493,7 +493,7 @@ Proof
   Cases_on `y` >> simp[] >>
   strip_tac >>
   `r_after_ss.scopes <> []` by
-    (drule scopes_len_preserved >> REWRITE_TAC[evaluation_state_accfupds] >>
+    (drule eval_stmts_preserves_scopes_len >> REWRITE_TAC[evaluation_state_accfupds] >>
      simp[] >> Cases_on `r_after_ss.scopes` >> fs[]) >>
   simp[pop_scope_def] >>
   Cases_on `r_after_ss.scopes` >> gvs[return_def, raise_def]
