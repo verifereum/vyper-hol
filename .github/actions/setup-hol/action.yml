@@ -65,7 +65,7 @@ runs:
       id: cache-verifereum
       with:
         path: ~/verifereum
-        key: verifereum-${{ runner.os }}-${{ steps.versions.outputs.verifereum }}-${{ steps.versions.outputs.polyml }}
+        key: verifereum-${{ runner.os }}-${{ steps.versions.outputs.polyml }}-${{ steps.versions.outputs.hol4 }}-${{ steps.versions.outputs.verifereum }}
 
     - name: Build Verifereum
       if: steps.cache-verifereum.outputs.cache-hit != 'true'
