@@ -460,8 +460,8 @@ Proof
   \\ gvs[assign_target_def, bind_def, ignore_bind_def, UNCURRY,
          CaseEq"prod", CaseEq"sum", return_def, lift_sum_def,
          lift_option_def, sum_CASE_rator, option_CASE_rator,
-         CaseEq"option", raise_def, assign_toplevel_def,
-         oneline sum_map_left_def]
+         CaseEq"option", toplevel_value_CASE_rator,
+         CaseEq"toplevel_value", raise_def]
 QED
 
 Definition apply_target_def:
@@ -531,7 +531,8 @@ Definition apply_val_def:
   apply_val cx v2 st (SubscriptK1 tv1 k) =
     liftk cx ApplyTv (do
       ts <- lift_option (get_self_code cx) "Subscript get_self_code";
-      lift_sum (evaluate_subscript (type_env ts) tv1 v2)
+      tv <- lift_sum (evaluate_subscript (type_env ts) tv1 v2);
+      finalize_hashmap_ref cx (type_env ts) tv
     od st) k ∧
   apply_val cx v st (AttributeK id k) =
     liftk cx (ApplyTv o Value) (lift_sum (evaluate_attribute v id) st) k ∧
