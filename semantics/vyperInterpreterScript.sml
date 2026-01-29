@@ -1731,16 +1731,6 @@ End
 
 val () = cv_auto_trans get_immutables_def;
 
-(* Pure helpers for updating module globals in a globals_state *)
-Definition update_module_mutable_def:
-  update_module_mutable src_id key v (gbs: globals_state) =
-    let mg = get_module_globals src_id gbs in
-    let mg' = mg with mutables updated_by (λm. m |+ (key, v)) in
-    set_module_globals src_id mg' gbs
-End
-
-val () = cv_auto_trans update_module_mutable_def;
-
 Definition update_module_transient_def:
   update_module_transient src_id key v (gbs: globals_state) =
     let mg = get_module_globals src_id gbs in
