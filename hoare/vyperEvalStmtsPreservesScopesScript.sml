@@ -399,9 +399,20 @@ Theorem case_If_dom:
     ∀st res st'.
       eval_stmt cx (If e ss1 ss2) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
-  cheat (* TODO: Unfold eval_stmt for If.
-           Use eval_expr preserves (exactly), push_scope_finally_pop_preserves_dom,
-           IH on bodies via switch_BoolV_scopes. Key: push/pop pattern restores. *)
+  rpt strip_tac >> irule map_fdom_eq_preserves_dom >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), push_scope_def, return_def] >>
+  strip_tac >> gvs[] >>
+  `MAP FDOM st.scopes = MAP FDOM s''.scopes` by (first_x_assum drule >> simp[]) >>
+  `MAP FDOM st'.scopes = MAP FDOM s''.scopes` suffices_by simp[] >>
+  `TL (s'' with scopes updated_by CONS FEMPTY).scopes = s''.scopes` by simp[] >>
+  drule finally_pop_scope_preserves_tl_dom >> simp[] >> strip_tac >>
+  first_x_assum irule >> rpt strip_tac >>
+  gvs[switch_BoolV_def, raise_def] >>
+  Cases_on `tv = Value (BoolV T)` >> gvs[]
+  >- (first_x_assum drule >> simp[preserves_scopes_dom_def]) >>
+  Cases_on `tv = Value (BoolV F)` >> gvs[raise_def] >>
+  first_x_assum drule >> simp[preserves_scopes_dom_def]
 QED
 
 (* === Category 4: For statement === *)
@@ -425,8 +436,23 @@ Theorem case_For_dom:
     ∀st res st'.
       eval_stmt cx (For id typ it n body) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
-  cheat (* TODO: Unfold eval_stmt For, chain eval_iterator (preserves exactly),
-           check_scopes (preserves exactly), IH on eval_for *)
+  rpt strip_tac >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  TRY (irule map_fdom_eq_preserves_dom >> first_x_assum drule >> simp[] >> NO_TAC) >>
+  TRY (imp_res_tac check_scopes >> gvs[] >>
+       irule map_fdom_eq_preserves_dom >> first_x_assum drule >> gvs[] >> NO_TAC) >>
+  imp_res_tac check_scopes >> gvs[] >>
+  `preserves_scopes_dom s'³' st'` by (first_x_assum drule >> simp[]) >>
+  gvs[preserves_scopes_dom_def] >>
+  Cases_on `st.scopes` >> Cases_on `s''.scopes` >> gvs[] >>
+  TRY (`MAP FDOM [] = MAP FDOM (h::t)` by
+         (qpat_x_assum `∀st res st'. eval_iterator _ _ _ = _ ⇒ _` drule >> gvs[]) >> gvs[]) >>
+  TRY (`MAP FDOM (h::t) = MAP FDOM []` by
+         (qpat_x_assum `∀st res st'. eval_iterator _ _ _ = _ ⇒ _` drule >> gvs[]) >> gvs[]) >>
+  `FDOM h::MAP FDOM t = FDOM h'::MAP FDOM t'` by
+    (qpat_x_assum `∀st res st'. eval_iterator _ _ _ = _ ⇒ _` drule >> gvs[]) >> gvs[]
 QED
 
 (* === Category 5: eval_stmts (sequencing) === *)
