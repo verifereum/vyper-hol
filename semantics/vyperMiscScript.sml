@@ -309,10 +309,54 @@ End
 
 val () = cv_auto_trans string_to_num_def;
 
+Theorem l2n_257_inj:
+  ∀l1 l2. EVERY ($> 257) l1 ∧ EVERY ($> 257) l2 ∧
+          EVERY (λx. 0 < x) l1 ∧ EVERY (λx. 0 < x) l2 ∧
+          l2n 257 l1 = l2n 257 l2 ⇒ l1 = l2
+Proof
+  rpt strip_tac
+  \\ Cases_on `l1 = []`
+  >- (
+    gvs[numposrepTheory.l2n_def, numposrepTheory.l2n_eq_0]
+    \\ Cases_on `l2` \\ gvs[]
+  )
+  \\ Cases_on `l2 = []`
+  >- (
+    gvs[numposrepTheory.l2n_def, numposrepTheory.l2n_eq_0]
+    \\ Cases_on `l1` \\ gvs[]
+  )
+  \\ `0 < LAST l1 ∧ 0 < LAST l2`
+     by gvs[listTheory.EVERY_MEM, rich_listTheory.MEM_LAST_NOT_NIL]
+  \\ `LOG 257 (l2n 257 l1) = PRE (LENGTH l1)`
+     by (irule numposrepTheory.LOG_l2n >> simp[])
+  \\ `LOG 257 (l2n 257 l2) = PRE (LENGTH l2)`
+     by (irule numposrepTheory.LOG_l2n >> simp[])
+  \\ gvs[]
+  \\ `LENGTH l1 ≠ 0 ∧ LENGTH l2 ≠ 0` by gvs[listTheory.LENGTH_NIL_SYM]
+  \\ `LENGTH l1 = LENGTH l2` by decide_tac
+  \\ `l2n 257 (l1 ++ [1]) = l2n 257 (l2 ++ [1])`
+     by simp[numposrepTheory.l2n_APPEND]
+  \\ metis_tac[numposrepTheory.l2n_11, DECIDE ``1n < 257``,
+               GSYM rich_listTheory.SNOC_APPEND, rich_listTheory.SNOC_11]
+QED
+
 Theorem string_to_num_injection:
   ∀n1 n2. n1 ≠ n2 ⇒ string_to_num n1 ≠ string_to_num n2
 Proof
-  cheat
+  simp[string_to_num_def]
+  \\ rpt strip_tac
+  \\ `MAP (SUC ∘ ORD) n1 = MAP (SUC ∘ ORD) n2`
+     by (
+       irule l2n_257_inj \\ simp[]
+       \\ simp[listTheory.EVERY_MAP, listTheory.EVERY_MEM]
+       \\ rw[]
+       \\ qspec_then `x` mp_tac stringTheory.ORD_BOUND
+       \\ simp[]
+     )
+  \\ `n1 = n2` suffices_by gvs[]
+  \\ sg `INJ (SUC ∘ ORD) (set n1 ∪ set n2) UNIV`
+  >- (simp[pred_setTheory.INJ_DEF] \\ metis_tac[stringTheory.ORD_11])
+  \\ drule_all listTheory.INJ_MAP_EQ \\ simp[]
 QED
 
 (* Integer square root using Newton's method iteration *)
