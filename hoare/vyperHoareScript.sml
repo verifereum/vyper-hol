@@ -581,8 +581,8 @@ QED
 Theorem stmts_spec_ann_assign:
   ∀P Q cx n ty e v.
      (⟦cx⟧ ⦃P⦄ e ⇓ Value v ⦃λst. st.scopes ≠ [] ∧
-                          lookup_scopes (string_to_num n) st.scopes = NONE ∧
-                          Q (st with scopes := (HD st.scopes |+ (string_to_num n, v)) :: TL st.scopes)⦄) ⇒
+                          lookup_scoped_var st n = NONE ∧
+                          Q (update_scoped_var st n v)⦄) ⇒
      ⟦cx⟧ ⦃P⦄ [AnnAssign n ty e] ⦃Q ∥ λ_ _. F⦄
 Proof
   rw[stmts_spec_def, expr_spec_def] >>
@@ -593,9 +593,13 @@ Proof
   strip_tac >> gvs[return_def] >>
   simp[new_variable_def, bind_def, ignore_bind_def, get_scopes_def,
        return_def, check_def, assert_def] >>
-  Cases_on `r.scopes` >> gvs[] >>
+  Cases_on `r.scopes` >> gvs[lookup_scoped_var_def] >>
   simp[set_scopes_def, return_def] >>
-  simp[Once evaluate_def, return_def]
+  simp[Once evaluate_def, return_def] >>
+  gvs[update_scoped_var_def, LET_THM] >>
+  sg `~IS_SOME (find_containing_scope (string_to_num n) (h::t))` >-
+    (CCONTR_TAC >> gvs[] >> drule find_containing_scope_lookup_scopes >> gvs[]) >>
+  Cases_on `find_containing_scope (string_to_num n) (h::t)` >> gvs[]
 QED
 
 Theorem stmts_spec_aug_assign:

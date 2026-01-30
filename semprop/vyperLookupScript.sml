@@ -59,7 +59,7 @@ End
 (****************************************)
 (* Helpers *)
 
-Theorem lookup_scopes_to_lookup_name:
+Theorem lookup_scopes_to_lookup_name[local]:
   ∀cx st n v gbs.
     lookup_scopes (string_to_num n) st.scopes = SOME v ∧
     ALOOKUP st.globals cx.txn.target = SOME gbs ∧
@@ -140,7 +140,7 @@ Proof
   PairCases_on `x` >> drule find_containing_scope_lookup >> simp[]
 QED
 
-Theorem lookup_scopes_update_preserves:
+Theorem lookup_scopes_update_preserves[local]:
   ∀n pre env id v rest.
     FLOOKUP env id = SOME w ⇒
     (IS_SOME (lookup_scopes n (pre ++ [env] ++ rest)) ⇔
@@ -240,4 +240,39 @@ Proof
   rw[var_in_scope_def, lookup_scoped_var_def, update_scoped_var_def] >>
   Cases_on `find_containing_scope (string_to_num n) st.scopes` >- simp[] >>
   PairCases_on `x` >> drule find_containing_scope_lookup >> simp[]
+QED
+
+Theorem assign_target_scoped_var_replace:
+  ∀cx st n v.
+    var_in_scope st n ⇒
+    ∃old_v.
+      assign_target cx (BaseTargetV (ScopedVar n) []) (Replace v) st =
+      (INL (Value old_v), update_scoped_var st n v)
+Proof
+  rw[var_in_scope_def, lookup_scoped_var_def] >>
+  `IS_SOME (find_containing_scope (string_to_num n) st.scopes)`
+    by metis_tac[lookup_scopes_find_containing] >>
+  Cases_on `find_containing_scope (string_to_num n) st.scopes` >- gvs[] >>
+  PairCases_on `x` >> gvs[] >>
+  simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
+       lift_option_def, lift_sum_def, assign_subscripts_def,
+       ignore_bind_def, set_scopes_def, update_scoped_var_def, LET_THM]
+QED
+
+Theorem assign_target_scoped_var_update:
+  ∀cx st n bop v v'.
+    lookup_scoped_var st n = SOME v ∧
+    evaluate_binop bop v v' = INL new_v ⇒
+    assign_target cx (BaseTargetV (ScopedVar n) []) (Update bop v') st =
+    (INL (Value v), update_scoped_var st n new_v)
+Proof
+  rw[lookup_scoped_var_def] >>
+  `IS_SOME (find_containing_scope (string_to_num n) st.scopes)`
+    by (irule lookup_scopes_find_containing >> simp[]) >>
+  Cases_on `find_containing_scope (string_to_num n) st.scopes` >- gvs[] >>
+  PairCases_on `x` >> gvs[] >>
+  `x2 = v` by (drule find_containing_scope_lookup >> simp[]) >> gvs[] >>
+  simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
+       lift_option_def, lift_sum_def, assign_subscripts_def,
+       ignore_bind_def, set_scopes_def, update_scoped_var_def, LET_THM]
 QED

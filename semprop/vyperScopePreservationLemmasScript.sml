@@ -134,7 +134,6 @@ Proof
   rw[switch_BoolV_def, raise_def]
 QED
 
-(* finally with pop_function restores scopes to prev. *)
 Theorem finally_pop_function_scopes:
   ∀f prev st res st'.
     finally f (pop_function prev) st = (res, st') ⇒
@@ -146,8 +145,6 @@ Proof
   gvs[]
 QED
 
-(* Helper: finally with set_scopes restores scopes to the given value.
-   Same as finally_pop_function_scopes but uses set_scopes directly. *)
 Theorem finally_set_scopes:
   ∀f prev st res st'.
     finally f (set_scopes prev) st = (res, st') ⇒
