@@ -6,10 +6,8 @@ Ancestors
 Libs
   jsonASTLib intLib
 
-(* Load the JSON and parse to vyperAST *)
 val example_3_json_path = "example_3.json"
 
-(* The decoder for single contract ast output: {"contract_name": ..., "ast": ...} *)
 val example_3_jsonast_tm = JSONDecode.decodeFile (JSONDecode.field "ast" json_module) example_3_json_path
 
 val example_3_vyperast_tm = let
