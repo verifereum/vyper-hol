@@ -56,13 +56,13 @@ End
 
 (* since HashMaps can only appear at the top level, they are not mutually
 * recursive with other `value`s, and we have `toplevel_value` as follows: *)
-(* HashMapRef stores a base slot and value_type for lazy storage access.
+(* HashMapRef stores a base slot, key type, and value_type for lazy storage access.
    When subscripted:
-   - If value_type is HashMapT kt vt, returns HashMapRef with new slot
+   - If value_type is HashMapT kt vt, returns HashMapRef with new slot and kt
    - If value_type is Type t, reads from storage at the computed slot *)
 
 Datatype:
-  toplevel_value = Value value | HashMapRef bytes32 value_type
+  toplevel_value = Value value | HashMapRef bytes32 type value_type
 End
 
 val toplevel_value_CASE_rator =
@@ -593,12 +593,12 @@ Definition evaluate_subscript_def:
   (case array_index av i
    of SOME v => INL $ Value v
    | _ => INR "subscript array_index") ∧
-  evaluate_subscript tenv (HashMapRef slot vt) kv =
-  (case encode_hashmap_key kv of
-     SOME key =>
-       let new_slot = hashmap_slot slot key in
-       INL $ HashMapRef new_slot vt
-   | NONE => INR "evaluate_subscript encode_hashmap_key") ∧
+  evaluate_subscript tenv (HashMapRef slot kt vt) kv =
+  (let key = encode_hashmap_key kt kv in
+   let new_slot = hashmap_slot slot key in
+   (case vt of
+    | HashMapT kt' vt' => INL $ HashMapRef new_slot kt' vt'
+    | Type _ => INL $ HashMapRef new_slot kt vt)) ∧
   evaluate_subscript _ _ _ = INR "evaluate_subscript"
 End
 
@@ -1702,9 +1702,9 @@ Definition lookup_global_def:
         return (Value v)
       od
     | SOME (HashMapVarDecl kt vt, id) => do
-        (* HashMap: return a reference with base slot *)
+        (* HashMap: return a reference with base slot and key type *)
         var_slot <- lift_option (lookup_var_slot_from_layout cx n) "lookup_global hashmap var_slot";
-        return (HashMapRef (n2w var_slot) vt)
+        return (HashMapRef (n2w var_slot) kt vt)
       od
   od
 End
@@ -1758,9 +1758,9 @@ val () = cv_auto_trans update_module_immutable_def;
    read the value from storage. Otherwise return as-is. *)
 Definition finalize_hashmap_ref_def:
   finalize_hashmap_ref cx tenv (Value v) = return (Value v) ∧
-  finalize_hashmap_ref cx tenv (HashMapRef slot (HashMapT kt vt)) =
-    return (HashMapRef slot (HashMapT kt vt)) ∧
-  finalize_hashmap_ref cx tenv (HashMapRef slot (Type t)) = do
+  finalize_hashmap_ref cx tenv (HashMapRef slot kt (HashMapT kt' vt)) =
+    return (HashMapRef slot kt (HashMapT kt' vt)) ∧
+  finalize_hashmap_ref cx tenv (HashMapRef slot kt (Type t)) = do
     tv <- lift_option (evaluate_type tenv t) "finalize_hashmap_ref evaluate_type";
     v <- read_storage_slot cx slot tv;
     return (Value v)
@@ -1781,26 +1781,37 @@ End
 
 val () = cv_auto_trans subscript_to_value_def;
 
-(* Compute final slot from base slot and list of subscripts *)
+(* Compute final slot from base slot, key types, and list of subscripts *)
 Definition compute_hashmap_slot_def:
-  compute_hashmap_slot slot [] = SOME slot ∧
-  compute_hashmap_slot slot (k::ks) =
-    case subscript_to_value k of
-    | NONE => NONE
-    | SOME v =>
-        case encode_hashmap_key v of
-        | NONE => NONE
-        | SOME key => compute_hashmap_slot (hashmap_slot slot key) ks
+  compute_hashmap_slot slot [] [] = SOME slot ∧
+  compute_hashmap_slot slot (kt::kts) (k::ks) =
+    (case subscript_to_value k of
+     | NONE => NONE
+     | SOME v =>
+       let slot = hashmap_slot slot $ encode_hashmap_key kt v in
+         compute_hashmap_slot slot kts ks) ∧
+  compute_hashmap_slot _ _ _ = NONE
 End
 
-val () = cv_auto_trans compute_hashmap_slot_def;
+val compute_hashmap_slot_pre_def = cv_auto_trans_pre
+  "compute_hashmap_slot_pre" compute_hashmap_slot_def;
+
+Theorem compute_hashmap_slot_pre[cv_pre]:
+  ∀x y z. compute_hashmap_slot_pre x y z
+Proof
+  ho_match_mp_tac compute_hashmap_slot_ind
+  \\ rw[] \\ rw[Once compute_hashmap_slot_pre_def]
+QED
 
 (* Get the final value type after traversing hashmap keys.
-   Returns the type and any remaining subscripts (for nested access within the value). *)
+   Returns (final_type, key_types, remaining_subs) for nested access within the value. *)
 Definition split_hashmap_subscripts_def:
-  split_hashmap_subscripts (Type t) subs = SOME (t, subs) ∧
+  split_hashmap_subscripts (Type t) subs = SOME (t, [], subs) ∧
   split_hashmap_subscripts (HashMapT kt vt) [] = NONE ∧  (* Not enough subscripts *)
-  split_hashmap_subscripts (HashMapT kt vt) (_::ks) = split_hashmap_subscripts vt ks
+  split_hashmap_subscripts (HashMapT kt vt) (_::ks) =
+    (case split_hashmap_subscripts vt ks of
+     | SOME (t, kts, remaining) => SOME (t, kt::kts, remaining)
+     | NONE => NONE)
 End
 
 val () = cv_auto_trans split_hashmap_subscripts_def;
@@ -1990,19 +2001,20 @@ Definition assign_target_def:
         set_global cx src_id_opt ni v';
         return tv
       od
-    | HashMapRef base_slot vt => do
+    | HashMapRef base_slot kt vt => do
         (* HashMap: compute slot, read/modify/write storage *)
         (* First subscript is always for the outermost hashmap *)
         (first_sub, rest_subs) <- lift_option
           (case REVERSE is of x::xs => SOME (x, xs) | [] => NONE)
           "assign_target hashmap needs subscript";
-        (final_type, remaining_subs) <- lift_option
+        (final_type, key_types, remaining_subs) <- lift_option
           (split_hashmap_subscripts vt rest_subs)
           "assign_target split_hashmap_subscripts";
         (* Compute how many subscripts are for the hashmap (first + nested) *)
         hashmap_subs <<- first_sub :: TAKE (LENGTH rest_subs - LENGTH remaining_subs) rest_subs;
+        all_key_types <<- kt :: key_types;
         final_slot <- lift_option
-          (compute_hashmap_slot base_slot hashmap_subs)
+          (compute_hashmap_slot base_slot all_key_types hashmap_subs)
           "assign_target compute_hashmap_slot";
         final_tv <- lift_option (evaluate_type tenv final_type) "assign_target evaluate_type";
         (* Read current value, apply assignment, write back *)
