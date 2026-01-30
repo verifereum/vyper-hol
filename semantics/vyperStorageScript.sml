@@ -486,40 +486,24 @@ Definition hashmap_slot_def:
   hashmap_slot (base_slot : bytes32) (key : bytes32) : bytes32 =
     word_of_bytes T 0w (Keccak_256_w64 (word_to_bytes key T ++ word_to_bytes base_slot T))
 End
+val () = cv_trans hashmap_slot_def;
 
-(* Encode a Vyper value as a 32-byte hashmap key.
+(* Encode a Vyper value as a 32-byte hashmap key, given the key type.
    Integers: encoded as 256-bit big-endian
-   Addresses: left-padded to 32 bytes
-   Fixed bytes32: as-is
+   Addresses: 32 bytes (big-endian)
+   Bytes: padded to 32 bytes or hashed when >32 bytes
    Booleans: 0 or 1 *)
 Definition encode_hashmap_key_def:
-  encode_hashmap_key (IntV _ i) = SOME (int_to_slot i) ∧
-  encode_hashmap_key (BytesV (Fixed n) bs) =
-    (if LENGTH bs = n ∧ (n = 32 ∨ n = 20)
-     then SOME (word_of_bytes T 0w bs) else NONE) ∧
-  encode_hashmap_key (BoolV b) = SOME (if b then 1w else 0w) ∧
-  encode_hashmap_key _ = NONE
+  encode_hashmap_key _ (IntV _ i) = int_to_slot i ∧
+  encode_hashmap_key (BaseT AddressT) (BytesV _ bs) = word_of_bytes T 0w bs ∧
+  encode_hashmap_key (BaseT (BytesT _)) (BytesV _ bs) =
+    (if LENGTH bs ≤ 32
+     then word_of_bytes T 0w (PAD_RIGHT 0w 32 bs)
+     else word_of_bytes T 0w (Keccak_256_w64 bs)) ∧
+  encode_hashmap_key _ (BoolV b) = (if b then 1w else 0w) ∧
+  encode_hashmap_key _ _ = 0w
 End
-
 val () = cv_trans encode_hashmap_key_def;
-
-(* Compute slot for a hashmap value given base slot and key value *)
-Definition hashmap_value_slot_def:
-  hashmap_value_slot base_slot key_val =
-    case encode_hashmap_key key_val of
-    | SOME key => SOME (hashmap_slot base_slot key)
-    | NONE => NONE
-End
-
-(* For nested hashmaps HashMap[K1, HashMap[K2, V]],
-   compute: hashmap_slot (hashmap_slot base k1) k2 *)
-Definition nested_hashmap_slot_def:
-  nested_hashmap_slot base_slot [] = SOME base_slot ∧
-  nested_hashmap_slot base_slot (k::ks) =
-    case encode_hashmap_key k of
-    | SOME key => nested_hashmap_slot (hashmap_slot base_slot key) ks
-    | NONE => NONE
-End
 
 (* ===== Top-Level Variable Access ===== *)
 
@@ -563,64 +547,4 @@ Definition write_storage_var_def:
              SOME (apply_writes base_slot writes storage))
 End
 
-(* ===== HashMap Variable Access ===== *)
 
-(* Read a HashMap entry: HashMap[K, V] at var_name with key *)
-Definition read_hashmap_var_def:
-  read_hashmap_var layout (storage : storage) var_name key_val value_tv =
-    case lookup_var_slot layout var_name of
-    | NONE => NONE
-    | SOME slot =>
-        let base_slot : bytes32 = n2w slot in
-        case hashmap_value_slot base_slot key_val of
-        | NONE => NONE
-        | SOME entry_slot =>
-            case decode_value storage (w2n entry_slot) value_tv of
-            | SOME (v, _) => SOME v
-            | NONE => NONE
-End
-
-(* Write a HashMap entry *)
-Definition write_hashmap_var_def:
-  write_hashmap_var layout (storage : storage) var_name key_val value_tv v =
-    case lookup_var_slot layout var_name of
-    | NONE => NONE
-    | SOME slot =>
-        let base_slot : bytes32 = n2w slot in
-        (case hashmap_value_slot base_slot key_val of
-         | NONE => NONE
-         | SOME entry_slot =>
-             (case encode_value value_tv v of
-              | NONE => NONE
-              | SOME writes => SOME (apply_writes entry_slot writes storage)))
-End
-
-(* Read a nested HashMap entry: HashMap[K1, HashMap[K2, V]] *)
-Definition read_nested_hashmap_var_def:
-  read_nested_hashmap_var layout (storage : storage) var_name keys value_tv =
-    case lookup_var_slot layout var_name of
-    | NONE => NONE
-    | SOME slot =>
-        let base_slot : bytes32 = n2w slot in
-        case nested_hashmap_slot base_slot keys of
-        | NONE => NONE
-        | SOME entry_slot =>
-            case decode_value storage (w2n entry_slot) value_tv of
-            | SOME (v, _) => SOME v
-            | NONE => NONE
-End
-
-(* Write a nested HashMap entry *)
-Definition write_nested_hashmap_var_def:
-  write_nested_hashmap_var layout (storage : storage) var_name keys value_tv v =
-    case lookup_var_slot layout var_name of
-    | NONE => NONE
-    | SOME slot =>
-        let base_slot : bytes32 = n2w slot in
-        (case nested_hashmap_slot base_slot keys of
-         | NONE => NONE
-         | SOME entry_slot =>
-             (case encode_value value_tv v of
-              | NONE => NONE
-              | SOME writes => SOME (apply_writes entry_slot writes storage)))
-End
