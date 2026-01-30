@@ -28,7 +28,7 @@ Definition update_scoped_var_def:
         st with scopes := (pre ++ (env |+ (n, v))::rest)
     | NONE =>
         case st.scopes of
-        | [] => st with scopes := []
+        | [] => st with scopes := [FEMPTY |+ (n, v)]
         | h :: t => st with scopes := (h |+ (n, v)) :: t
 End
 
@@ -317,7 +317,7 @@ Proof
 QED
 
 Theorem lookup_after_update:
-  ∀st n v. st.scopes ≠ [] ⇒ lookup_scoped_var (update_scoped_var st n v) n = SOME v
+  ∀st n v. lookup_scoped_var (update_scoped_var st n v) n = SOME v
 Proof
   rw[lookup_scoped_var_def, update_scoped_var_def, LET_THM] >>
   Cases_on `find_containing_scope (string_to_num n) st.scopes` >-
@@ -357,20 +357,7 @@ Proof
   AP_TERM_TAC >> simp[]
 QED
 
-(* Helper: scopes nonempty preserved *)
-Theorem scopes_nonempty_update:
-  ∀st n v. st.scopes ≠ [] ⇒ (update_scoped_var st n v).scopes ≠ []
-Proof
-  rw[update_scoped_var_def, LET_THM] >>
-  Cases_on `find_containing_scope (string_to_num n) st.scopes` >-
-   (simp[evaluation_state_accfupds] >> Cases_on `st.scopes` >> fs[]) >>
-  PairCases_on `x` >> simp[evaluation_state_accfupds] >>
-  drule find_containing_scope_structure >> simp[] >>
-  strip_tac >> Cases_on `x0` >> fs[]
-QED
-
-(* Helper: globals unchanged by update_scoped_var *)
-Theorem globals_unchanged_update:
+Theorem globals_preserved_after_update:
   ∀st n v. (update_scoped_var st n v).globals = st.globals
 Proof
   rw[update_scoped_var_def, LET_THM] >>
@@ -379,15 +366,14 @@ Proof
   PairCases_on `x` >> simp[evaluation_state_accfupds]
 QED
 
-(* Helper: valid_lookups preserved when adding variable from NONE with no immutable conflict *)
-Theorem valid_lookups_preserved_update:
-  ∀cx st n v. st.scopes ≠ [] ∧ valid_lookups cx st ∧
-              lookup_name cx st n = NONE ⇒
+Theorem valid_lookups_preserved_after_update:
+  ∀cx st n v.
+    valid_lookups cx st ∧ lookup_name cx st n = NONE ⇒
     valid_lookups cx (update_scoped_var st n v)
 Proof
   rw[valid_lookups_def] >>
   qexists_tac `gbs` >>
-  simp[globals_unchanged_update] >>
+  simp[globals_preserved_after_update] >>
   rpt strip_tac >>
   Cases_on `string_to_num n' = string_to_num n` >-
    ((* n' = n: use lookup_name_none_to_lookup_immutable *)

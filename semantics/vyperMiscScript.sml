@@ -340,7 +340,7 @@ Proof
                GSYM rich_listTheory.SNOC_APPEND, rich_listTheory.SNOC_11]
 QED
 
-Theorem string_to_num_injection:
+Theorem string_to_num_inj:
   ∀n1 n2. n1 ≠ n2 ⇒ string_to_num n1 ≠ string_to_num n2
 Proof
   simp[string_to_num_def]
