@@ -342,10 +342,11 @@ QED
 
 Theorem lookup_preserved_after_update:
   ∀st n1 n2 v.
-    string_to_num n1 ≠ string_to_num n2 ⇒
+    n1 ≠ n2 ⇒
     lookup_scoped_var (update_scoped_var st n1 v) n2 = lookup_scoped_var st n2
 Proof
   rw[lookup_scoped_var_def, update_scoped_var_def, LET_THM] >>
+  `string_to_num n1 ≠ string_to_num n2` by metis_tac[vyperMiscTheory.string_to_num_inj] >>
   Cases_on `find_containing_scope (string_to_num n1) st.scopes` >-
    (* Case: n1 not in scope, adds to HD *)
    (simp[evaluation_state_accfupds, lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE] >>
@@ -385,6 +386,7 @@ Proof
   `lookup_scoped_var st n = NONE`
     by (irule lookup_name_none_to_lookup_scoped_var >>
         simp[valid_lookups_def] >> metis_tac[]) >>
+  `n ≠ n'` by metis_tac[vyperMiscTheory.string_to_num_inj] >>
   `lookup_scoped_var (update_scoped_var st n v) n' = lookup_scoped_var st n'`
     by (irule lookup_preserved_after_update >> simp[]) >>
   `var_in_scope st n'` by gvs[var_in_scope_def, lookup_scoped_var_def] >>
