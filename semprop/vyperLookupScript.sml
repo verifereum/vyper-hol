@@ -310,3 +310,70 @@ Proof
        lift_option_def, exactly_one_option_def, lift_sum_def, return_def] >>
   first_x_assum (qspec_then `n` mp_tac) >> simp[]
 QED
+
+Theorem lookup_after_update:
+  ∀st n v. lookup_scoped_var (update_scoped_var st n v) n = SOME v
+Proof
+  rw[lookup_scoped_var_def, update_scoped_var_def, LET_THM] >>
+  Cases_on `find_containing_scope (string_to_num n) st.scopes` >-
+   simp[evaluation_state_accfupds, lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  PairCases_on `x` >> simp[evaluation_state_accfupds] >>
+  drule find_containing_scope_pre_none >> strip_tac >>
+  drule lookup_scopes_update >> simp[]
+QED
+
+Theorem lookup_preserved_after_update:
+  ∀st n1 n2 v.
+    string_to_num n1 ≠ string_to_num n2 ⇒
+    lookup_scoped_var (update_scoped_var st n1 v) n2 = lookup_scoped_var st n2
+Proof
+  cheat
+QED
+
+(* Helper: scopes nonempty preserved *)
+Theorem scopes_nonempty_update:
+  ∀st n v. st.scopes ≠ [] ⇒ (update_scoped_var st n v).scopes ≠ []
+Proof
+  rw[update_scoped_var_def, LET_THM] >>
+  Cases_on `find_containing_scope (string_to_num n) st.scopes` >-
+   (simp[evaluation_state_accfupds] >> Cases_on `st.scopes` >> fs[]) >>
+  PairCases_on `x` >> simp[evaluation_state_accfupds] >>
+  drule find_containing_scope_structure >> simp[] >>
+  strip_tac >> Cases_on `x0` >> fs[]
+QED
+
+(* Helper: globals unchanged by update_scoped_var *)
+Theorem globals_unchanged_update:
+  ∀st n v. (update_scoped_var st n v).globals = st.globals
+Proof
+  rw[update_scoped_var_def, LET_THM] >>
+  Cases_on `find_containing_scope (string_to_num n) st.scopes` >-
+   simp[evaluation_state_accfupds] >>
+  PairCases_on `x` >> simp[evaluation_state_accfupds]
+QED
+
+(* Helper: valid_lookups preserved when adding variable from NONE with no immutable conflict *)
+Theorem valid_lookups_preserved_update:
+  ∀cx st n v. st.scopes ≠ [] ∧ valid_lookups cx st ∧
+              lookup_name cx st n = NONE ⇒
+    valid_lookups cx (update_scoped_var st n v)
+Proof
+  rw[valid_lookups_def] >>
+  qexists_tac `gbs` >>
+  simp[globals_unchanged_update] >>
+  rpt strip_tac >>
+  Cases_on `string_to_num n' = string_to_num n` >-
+   ((* n' = n: use lookup_name_none_to_lookup_immutable *)
+    `lookup_immutable cx st n = NONE`
+      by (irule lookup_name_none_to_lookup_immutable >>
+          simp[valid_lookups_def] >> metis_tac[]) >>
+    gvs[lookup_immutable_def]) >>
+  (* n' ≠ n: n' was already in scope before update, use valid_lookups *)
+  `lookup_scoped_var st n = NONE`
+    by (irule lookup_name_none_to_lookup_scoped_var >>
+        simp[valid_lookups_def] >> metis_tac[]) >>
+  `lookup_scoped_var (update_scoped_var st n v) n' = lookup_scoped_var st n'`
+    by (irule lookup_preserved_update_none >> simp[]) >>
+  `var_in_scope st n'` by gvs[var_in_scope_def, lookup_scoped_var_def] >>
+  first_x_assum irule >> simp[]
+QED
