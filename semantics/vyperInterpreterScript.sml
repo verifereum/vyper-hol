@@ -1105,18 +1105,20 @@ End
 val () = cv_auto_trans type_env_def;
 
 (* Build var_layout from storage_layout and toplevels.
-   For each variable in storage_layout, look up its type from VariableDecl. *)
+   For each storage variable or hashmap, record its slot number. *)
 Definition build_var_layout_entry_def:
-  build_var_layout_entry tenv layout [] = LN ∧
-  build_var_layout_entry tenv layout (VariableDecl _ Storage id typ :: ts) =
-    (let rest = build_var_layout_entry tenv layout ts in
+  build_var_layout_entry layout [] = LN ∧
+  build_var_layout_entry layout (VariableDecl _ Storage id typ :: ts) =
+    (let rest = build_var_layout_entry layout ts in
      case ALOOKUP layout id of
      | NONE => rest
-     | SOME slot =>
-         case evaluate_type tenv typ of
-         | NONE => rest
-         | SOME tv => insert (string_to_num id) <| var_slot := slot; var_type := tv |> rest) ∧
-  build_var_layout_entry tenv layout (_ :: ts) = build_var_layout_entry tenv layout ts
+     | SOME slot => insert (string_to_num id) slot rest) ∧
+  build_var_layout_entry layout (HashMapDecl _ F id kt vt :: ts) =
+    (let rest = build_var_layout_entry layout ts in
+     case ALOOKUP layout id of
+     | NONE => rest
+     | SOME slot => insert (string_to_num id) slot rest) ∧
+  build_var_layout_entry layout (_ :: ts) = build_var_layout_entry layout ts
 End
 
 Definition build_var_layout_def:
@@ -1129,7 +1131,7 @@ Definition build_var_layout_def:
         | SOME mods =>
             case ALOOKUP mods NONE of
             | NONE => LN
-            | SOME ts => build_var_layout_entry (type_env ts) layout ts
+            | SOME ts => build_var_layout_entry layout ts
 End
 
 val () = cv_auto_trans build_var_layout_entry_def;
@@ -1694,15 +1696,15 @@ Definition lookup_global_def:
     | NONE => raise $ Error "lookup_global: var not found"
     | SOME (StorageVarDecl typ, id) => do
         (* Regular storage variable: read from EVM storage *)
-        var_info <- lift_option (lookup_var_slot_from_layout cx n) "lookup_global var_info";
+        var_slot <- lift_option (lookup_var_slot_from_layout cx n) "lookup_global var_slot";
         tv <- lift_option (evaluate_type tenv typ) "lookup_global evaluate_type";
-        v <- read_storage_slot cx (n2w var_info.var_slot) tv;
+        v <- read_storage_slot cx (n2w var_slot) tv;
         return (Value v)
       od
     | SOME (HashMapVarDecl kt vt, id) => do
         (* HashMap: return a reference with base slot *)
-        var_info <- lift_option (lookup_var_slot_from_layout cx n) "lookup_global hashmap var_info";
-        return (HashMapRef (n2w var_info.var_slot) vt)
+        var_slot <- lift_option (lookup_var_slot_from_layout cx n) "lookup_global hashmap var_slot";
+        return (HashMapRef (n2w var_slot) vt)
       od
   od
 End
@@ -1849,13 +1851,23 @@ val () = cv_auto_trans set_current_globals_def;
 (* Module-aware global set: write a value to EVM storage *)
 Definition set_global_def:
   set_global cx src_id_opt n v = do
-    var_info <- lift_option (lookup_var_slot_from_layout cx n) "set_global var_info";
-    write_storage_slot cx (n2w var_info.var_slot) var_info.var_type v
+    ts <- lift_option (get_module_code cx src_id_opt) "set_global get_module_code";
+    tenv <<- type_env ts;
+    case find_var_decl_by_num n ts of
+    | NONE => raise $ Error "set_global: var not found"
+    | SOME (StorageVarDecl typ, id) => do
+        var_slot <- lift_option (lookup_var_slot_from_layout cx n) "set_global var_slot";
+        tv <- lift_option (evaluate_type tenv typ) "set_global evaluate_type";
+        write_storage_slot cx (n2w var_slot) tv v
+      od
+    | SOME (HashMapVarDecl kt vt, id) =>
+        raise $ Error "set_global: cannot set hashmap directly"
   od
 End
 
 val () = set_global_def
-  |> SRULE [bind_def, FUN_EQ_THM, UNCURRY, LET_THM]
+  |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator,
+            prod_CASE_rator, var_decl_info_CASE_rator, UNCURRY, LET_THM]
   |> cv_auto_trans;
 
 Definition set_immutable_def:
