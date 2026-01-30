@@ -1992,12 +1992,15 @@ Definition assign_target_def:
       od
     | HashMapRef base_slot vt => do
         (* HashMap: compute slot, read/modify/write storage *)
-        reversed_is <<- REVERSE is;
+        (* First subscript is always for the outermost hashmap *)
+        (first_sub, rest_subs) <- lift_option
+          (case REVERSE is of x::xs => SOME (x, xs) | [] => NONE)
+          "assign_target hashmap needs subscript";
         (final_type, remaining_subs) <- lift_option
-          (split_hashmap_subscripts vt reversed_is)
+          (split_hashmap_subscripts vt rest_subs)
           "assign_target split_hashmap_subscripts";
-        (* Compute how many subscripts are for the hashmap *)
-        hashmap_subs <<- TAKE (LENGTH reversed_is - LENGTH remaining_subs) reversed_is;
+        (* Compute how many subscripts are for the hashmap (first + nested) *)
+        hashmap_subs <<- first_sub :: TAKE (LENGTH rest_subs - LENGTH remaining_subs) rest_subs;
         final_slot <- lift_option
           (compute_hashmap_slot base_slot hashmap_subs)
           "assign_target compute_hashmap_slot";
