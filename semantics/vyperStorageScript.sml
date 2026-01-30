@@ -7,7 +7,7 @@
 Theory vyperStorage
 Ancestors
   vyperTypeValue vfmState vfmTypes vfmConstants
-  vyperABI vyperMisc
+  vyperMisc
 Libs
   cv_transLib wordsLib
 
@@ -491,18 +491,21 @@ val () = cv_trans hashmap_slot_def;
 
 (* Encode a Vyper value as a 32-byte hashmap key, given the key type. *)
 Definition encode_hashmap_key_def:
-  encode_hashmap_key (BaseT bt) v = (
-     case vyper_to_abi_base bt v of
-       SOME (NumV n) => n2w n
-     | SOME (IntV i) => i2w i
-     | SOME (BytesV bs) => word_of_bytes T 0w (
-         if LENGTH bs ≤ 32
-         then PAD_RIGHT 0w 32 bs
-         else Keccak_256_w64 bs )
-     | _ => 0w ) ∧
+   encode_hashmap_key _ (IntV _ i) = i2w i ∧
+   encode_hashmap_key (BaseT AddressT) (BytesV _ bs) = word_of_bytes T 0w bs ∧
+   encode_hashmap_key (BaseT (BytesT _)) (BytesV _ bs) =
+     (if LENGTH bs ≤ 32
+      then word_of_bytes T 0w (PAD_RIGHT 0w 32 bs)
+      else word_of_bytes T 0w (Keccak_256_w64 bs)) ∧
+   encode_hashmap_key (BaseT (StringT _)) (StringV _ s) =
+     (let bs = MAP n2w_o_ORD s in
+      if LENGTH bs ≤ 32
+      then word_of_bytes T 0w (PAD_RIGHT 0w 32 bs)
+      else word_of_bytes T 0w (Keccak_256_w64 bs)) ∧
+   encode_hashmap_key _ (BoolV b) = (if b then 1w else 0w) ∧
    encode_hashmap_key _ _ = (0w:bytes32)
 End
-val () = cv_trans encode_hashmap_key_def;
+val () = cv_auto_trans encode_hashmap_key_def;
 
 (* ===== Top-Level Variable Access ===== *)
 
