@@ -19,7 +19,7 @@ Definition lookup_immutable_def:
 End
 
 (* For convenience, we define the case st.scopes = [] in such a way
-that looking up after update returns the updated variable value. *)
+   that looking up after update returns the updated variable value. *)
 Definition update_scoped_var_def:
   update_scoped_var st id v =
     let n = string_to_num id in
@@ -328,7 +328,7 @@ Proof
   drule lookup_scopes_update >> simp[]
 QED
 
-Theorem lookup_scopes_update_other:
+Theorem lookup_scopes_update_other[local]:
   ∀pre n1 n2 env v rest.
     n1 ≠ n2 ⇒
     lookup_scopes n2 (pre ⧺ env |+ (n1, v) :: rest) =

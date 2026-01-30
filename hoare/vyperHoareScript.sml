@@ -207,7 +207,7 @@ Proof
 QED
 
 Theorem expr_spec_name:
-  ∀P cx n v. ⟦cx⟧ ⦃λst. P st ∧ lookup_name cx st n = SOME v⦄ (Name n) ⇓ Value v ⦃P⦄
+  ∀P cx n v. ⟦cx⟧ ⦃λst. P st ∧ lookup_name cx st n = SOME v⦄ (Name n) ⇓ Value v ⦃λst. P st ∧ lookup_name cx st n = SOME v⦄
 Proof
   rw[expr_spec_def, lookup_name_def] >> rpt strip_tac >>
   Cases_on `eval_expr cx (Name n) st` >>
@@ -217,7 +217,7 @@ Proof
 QED
 
 Theorem expr_spec_scoped_var:
-  ∀P cx n v. ⟦cx⟧ ⦃λst. P st ∧ valid_lookups cx st ∧ lookup_scoped_var st n = SOME v⦄ (Name n) ⇓ Value v ⦃P⦄
+  ∀P cx n v. ⟦cx⟧ ⦃λst. P st ∧ valid_lookups cx st ∧ lookup_scoped_var st n = SOME v⦄ (Name n) ⇓ Value v ⦃λst. P st ∧ valid_lookups cx st ∧ lookup_scoped_var st n = SOME v⦄
 Proof
   rw[expr_spec_def] >>
   (subgoal ‘lookup_name cx st n = SOME v’ >- gvs[lookup_scoped_var_implies_lookup_name]) >>
@@ -247,8 +247,9 @@ QED
 
 Theorem expr_spec_builtin_bop:
   ∀P P' Q cx e1 e2 v1 v2 bop v_result.
+    evaluate_binop bop v1 v2 = INL v_result ∧
     (⟦cx⟧ ⦃P⦄ e1 ⇓ Value v1 ⦃P'⦄) ∧
-    (⟦cx⟧ ⦃P'⦄ e2 ⇓ Value v2 ⦃λst. evaluate_binop bop v1 v2 = INL v_result ∧ Q st⦄) ⇒
+    (⟦cx⟧ ⦃P'⦄ e2 ⇓ Value v2 ⦃Q⦄) ⇒
     ⟦cx⟧ ⦃P⦄ (Builtin (Bop bop) [e1; e2]) ⇓ Value v_result ⦃Q⦄
 Proof
   rw[expr_spec_def] >>
@@ -337,7 +338,7 @@ QED
 
 Theorem target_spec_name:
   ∀P cx n av.
-     ⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ (BaseTarget (NameTarget n)) ⇓ᵗ av ⦃P⦄
+     ⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ (BaseTarget (NameTarget n)) ⇓ᵗ av ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄
 Proof
   rw[target_spec_def, lookup_name_target_def] >> rpt strip_tac >>
   simp[Once evaluate_def, bind_def, return_def] >>
@@ -351,7 +352,7 @@ QED
 
 Theorem target_spec_scoped_var:
   ∀P cx n.
-     ⟦cx⟧ ⦃λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄ (BaseTarget (NameTarget n)) ⇓ᵗ (BaseTargetV (ScopedVar n) []) ⦃P⦄
+     ⟦cx⟧ ⦃λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄ (BaseTarget (NameTarget n)) ⇓ᵗ (BaseTargetV (ScopedVar n) []) ⦃λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄
 Proof
   rw[target_spec_def] >> rpt strip_tac >>
   simp[Once evaluate_def, bind_def, return_def] >>
@@ -580,10 +581,10 @@ QED
 
 Theorem stmts_spec_ann_assign:
   ∀P Q cx n ty e v.
-     (⟦cx⟧ ⦃P⦄ e ⇓ Value v ⦃λst. st.scopes ≠ [] ∧
-                          lookup_scoped_var st n = NONE ∧
-                          Q (update_scoped_var st n v)⦄) ⇒
-     ⟦cx⟧ ⦃P⦄ [AnnAssign n ty e] ⦃Q ∥ λ_ _. F⦄
+    (⟦cx⟧ ⦃P⦄ e ⇓ Value v ⦃λst. st.scopes ≠ [] ∧
+                                lookup_scoped_var st n = NONE ∧
+                                Q (update_scoped_var st n v)⦄) ⇒
+    ⟦cx⟧ ⦃P⦄ [AnnAssign n ty e] ⦃Q ∥ λ_ _. F⦄
 Proof
   rw[stmts_spec_def, expr_spec_def] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def] >>
@@ -664,20 +665,17 @@ Proof
   irule stmts_spec_aug_assign >>
   qexistsl_tac [`(λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n)`, `BaseTargetV (ScopedVar n) []`, `v2`] >>
   reverse conj_tac >-
-  (irule target_spec_consequence >>
-   qexistsl_tac [`(λst. (P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n) ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n)`,
-                 `(λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n)`] >>
-   simp[target_spec_scoped_var]) >>
+  simp[target_spec_scoped_var] >>
   irule expr_spec_consequence >>
   qexistsl_tac [`P`, `(λst. lookup_scoped_var st n = SOME v1 ∧ Q (update_scoped_var st n v))`] >>
   simp[assign_target_spec_scoped_var_update_intro]
 QED
 
 Theorem stmts_spec_append:
-  ∀P1 P2 P3 R1 R2 cx ss1 ss2.
-    (⟦cx⟧ ⦃P1⦄ ss1 ⦃P2 ∥ R1⦄) ∧
-    (⟦cx⟧ ⦃P2⦄ ss2 ⦃P3 ∥ R2⦄) ⇒
-    ⟦cx⟧ ⦃P1⦄ (ss1 ++ ss2) ⦃P3 ∥ λv st. R1 v st ∨ R2 v st⦄
+  ∀P1 P2 P3 R cx ss1 ss2.
+    (⟦cx⟧ ⦃P1⦄ ss1 ⦃P2 ∥ R⦄) ∧
+    (⟦cx⟧ ⦃P2⦄ ss2 ⦃P3 ∥ R⦄) ⇒
+    ⟦cx⟧ ⦃P1⦄ (ss1 ++ ss2) ⦃P3 ∥ R⦄
 Proof
   rw[stmts_spec_def, eval_stmts_append] >>
   simp[ignore_bind_def, bind_def] >>
@@ -692,10 +690,10 @@ Proof
 QED
 
 Theorem stmts_spec_cons:
-  ∀P1 P2 P3 R1 R2 cx s ss.
-    (⟦cx⟧ ⦃P1⦄ [s] ⦃P2 ∥ R1⦄) ∧
-    (⟦cx⟧ ⦃P2⦄ ss ⦃P3 ∥ R2⦄) ⇒
-    ⟦cx⟧ ⦃P1⦄ (s :: ss) ⦃P3 ∥ λv st. R1 v st ∨ R2 v st⦄
+  ∀P1 P2 P3 R cx s ss.
+    (⟦cx⟧ ⦃P1⦄ [s] ⦃P2 ∥ R⦄) ∧
+    (⟦cx⟧ ⦃P2⦄ ss ⦃P3 ∥ R⦄) ⇒
+    ⟦cx⟧ ⦃P1⦄ (s :: ss) ⦃P3 ∥ R⦄
 Proof
   rpt strip_tac >>
   ONCE_REWRITE_TAC [GSYM (EVAL ``[h:'a] ++ t``)] >>
