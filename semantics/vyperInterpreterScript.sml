@@ -589,17 +589,17 @@ End
 val () = cv_auto_trans value_to_key_def;
 
 Definition evaluate_subscript_def:
-  evaluate_subscript tenv (Value (ArrayV av)) (IntV _ i) =
+  evaluate_subscript (Value (ArrayV av)) (IntV _ i) =
   (case array_index av i
    of SOME v => INL $ Value v
    | _ => INR "subscript array_index") ∧
-  evaluate_subscript tenv (HashMapRef slot kt vt) kv =
+  evaluate_subscript (HashMapRef slot kt vt) kv =
   (let key = encode_hashmap_key kt kv in
    let new_slot = hashmap_slot slot key in
    (case vt of
     | HashMapT kt' vt' => INL $ HashMapRef new_slot kt' vt'
     | Type _ => INL $ HashMapRef new_slot kt vt)) ∧
-  evaluate_subscript _ _ _ = INR "evaluate_subscript"
+  evaluate_subscript _ _ = INR "evaluate_subscript"
 End
 
 val () = cv_auto_trans evaluate_subscript_def;
@@ -2734,7 +2734,7 @@ Definition evaluate_def:
     tv2 <- eval_expr cx e2;
     v2 <- get_Value tv2;
     ts <- lift_option (get_self_code cx) "Subscript get_self_code";
-    tv <- lift_sum $ evaluate_subscript (type_env ts) tv1 v2;
+    tv <- lift_sum $ evaluate_subscript tv1 v2;
     finalize_hashmap_ref cx (type_env ts) tv
   od ∧
   eval_expr cx (Attribute e id) = do
