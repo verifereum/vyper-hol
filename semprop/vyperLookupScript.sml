@@ -18,6 +18,8 @@ Definition lookup_immutable_def:
   | NONE => NONE
 End
 
+(* For convenience, we define the case st.scopes = [] in such a way
+that looking up after update returns the updated variable value. *)
 Definition update_scoped_var_def:
   update_scoped_var st id v =
     let n = string_to_num id in
@@ -25,7 +27,9 @@ Definition update_scoped_var_def:
     | SOME (pre, env, _, rest) =>
         st with scopes := (pre ++ (env |+ (n, v))::rest)
     | NONE =>
-        st with scopes := (HD st.scopes |+ (n, v)) :: TL st.scopes
+        case st.scopes of
+        | [] => st with scopes := []
+        | h :: t => st with scopes := (h |+ (n, v)) :: t
 End
 
 Definition valid_lookups_def:
@@ -234,11 +238,12 @@ QED
 
 Theorem var_not_in_scope_update:
   ∀st n v.
-    ¬ var_in_scope st n ⇒
+    st.scopes ≠ [] ∧ ¬ var_in_scope st n ⇒
     update_scoped_var st n v = (st with scopes := (HD st.scopes |+ (string_to_num n, v)) :: TL st.scopes)
 Proof
   rw[var_in_scope_def, lookup_scoped_var_def, update_scoped_var_def] >>
-  Cases_on `find_containing_scope (string_to_num n) st.scopes` >- simp[] >>
+  Cases_on `find_containing_scope (string_to_num n) st.scopes` >-
+   (Cases_on `st.scopes` >> gvs[]) >>
   PairCases_on `x` >> drule find_containing_scope_lookup >> simp[]
 QED
 
@@ -312,14 +317,27 @@ Proof
 QED
 
 Theorem lookup_after_update:
-  ∀st n v. lookup_scoped_var (update_scoped_var st n v) n = SOME v
+  ∀st n v. st.scopes ≠ [] ⇒ lookup_scoped_var (update_scoped_var st n v) n = SOME v
 Proof
   rw[lookup_scoped_var_def, update_scoped_var_def, LET_THM] >>
   Cases_on `find_containing_scope (string_to_num n) st.scopes` >-
-   simp[evaluation_state_accfupds, lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+   (Cases_on `st.scopes` >> gvs[] >>
+    simp[evaluation_state_accfupds, lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
   PairCases_on `x` >> simp[evaluation_state_accfupds] >>
   drule find_containing_scope_pre_none >> strip_tac >>
   drule lookup_scopes_update >> simp[]
+QED
+
+Theorem lookup_scopes_update_other:
+  ∀pre n1 n2 env v rest.
+    n1 ≠ n2 ⇒
+    lookup_scopes n2 (pre ⧺ env |+ (n1, v) :: rest) =
+    lookup_scopes n2 (pre ⧺ env :: rest)
+Proof
+  Induct_on `pre` >-
+   simp[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[lookup_scopes_def] >> rpt strip_tac >>
+  Cases_on `FLOOKUP h n2` >> simp[]
 QED
 
 Theorem lookup_preserved_after_update:
@@ -327,7 +345,16 @@ Theorem lookup_preserved_after_update:
     string_to_num n1 ≠ string_to_num n2 ⇒
     lookup_scoped_var (update_scoped_var st n1 v) n2 = lookup_scoped_var st n2
 Proof
-  cheat
+  rw[lookup_scoped_var_def, update_scoped_var_def, LET_THM] >>
+  Cases_on `find_containing_scope (string_to_num n1) st.scopes` >-
+   (* Case: n1 not in scope, adds to HD *)
+   (simp[evaluation_state_accfupds, lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+    Cases_on `st.scopes` >> gvs[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  (* Case: n1 in scope, updates in place *)
+  PairCases_on `x` >> simp[evaluation_state_accfupds] >>
+  drule find_containing_scope_structure >> strip_tac >> gvs[] >>
+  simp[lookup_scopes_update_other] >>
+  AP_TERM_TAC >> simp[]
 QED
 
 (* Helper: scopes nonempty preserved *)
@@ -348,7 +375,7 @@ Theorem globals_unchanged_update:
 Proof
   rw[update_scoped_var_def, LET_THM] >>
   Cases_on `find_containing_scope (string_to_num n) st.scopes` >-
-   simp[evaluation_state_accfupds] >>
+   (Cases_on `st.scopes` >> simp[evaluation_state_accfupds]) >>
   PairCases_on `x` >> simp[evaluation_state_accfupds]
 QED
 
@@ -373,7 +400,7 @@ Proof
     by (irule lookup_name_none_to_lookup_scoped_var >>
         simp[valid_lookups_def] >> metis_tac[]) >>
   `lookup_scoped_var (update_scoped_var st n v) n' = lookup_scoped_var st n'`
-    by (irule lookup_preserved_update_none >> simp[]) >>
+    by (irule lookup_preserved_after_update >> simp[]) >>
   `var_in_scope st n'` by gvs[var_in_scope_def, lookup_scoped_var_def] >>
   first_x_assum irule >> simp[]
 QED
