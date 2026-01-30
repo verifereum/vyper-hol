@@ -484,7 +484,7 @@ QED
    Both key and base_slot are 32 bytes, big-endian encoded *)
 Definition hashmap_slot_def:
   hashmap_slot (base_slot : bytes32) (key : bytes32) : bytes32 =
-    word_of_bytes T 0w (Keccak_256_w64 (word_to_bytes key T ++ word_to_bytes base_slot T))
+    word_of_bytes T 0w (Keccak_256_w64 (word_to_bytes base_slot T ++ word_to_bytes key T))
 End
 val () = cv_trans hashmap_slot_def;
 
