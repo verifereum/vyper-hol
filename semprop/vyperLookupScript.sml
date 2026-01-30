@@ -414,3 +414,13 @@ Proof
   `var_in_scope st n'` by gvs[var_in_scope_def, lookup_scoped_var_def] >>
   first_x_assum irule >> simp[]
 QED
+
+Theorem scopes_nonempty_after_update:
+  ∀st n v. (update_scoped_var st n v).scopes ≠ []
+Proof
+  rw[update_scoped_var_def, LET_THM] >>
+  Cases_on `find_containing_scope (string_to_num n) st.scopes` >-
+   (Cases_on `st.scopes` >> gvs[evaluation_state_accfupds]) >>
+  PairCases_on `x` >> simp[evaluation_state_accfupds] >>
+  Cases_on `x0` >> simp[]
+QED
