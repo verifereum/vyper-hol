@@ -276,3 +276,37 @@ Proof
        lift_option_def, lift_sum_def, assign_subscripts_def,
        ignore_bind_def, set_scopes_def, update_scoped_var_def, LET_THM]
 QED
+
+Theorem lookup_name_none_to_lookup_scoped_var:
+  ∀cx st n.
+    valid_lookups cx st ∧ lookup_name cx st n = NONE ⇒
+    lookup_scoped_var st n = NONE
+Proof
+  rw[valid_lookups_def, lookup_name_def, lookup_scoped_var_def,
+     var_in_scope_def] >>
+  CCONTR_TAC >> gvs[] >>
+  first_x_assum (qspec_then `n` mp_tac) >>
+  Cases_on `lookup_scopes (string_to_num n) st.scopes` >> gvs[] >>
+  qpat_x_assum `_ = NONE` mp_tac >>
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+       get_immutables_def, get_immutables_module_def, get_current_globals_def,
+       lift_option_def] >>
+  Cases_on `FLOOKUP (get_module_globals NONE gbs).immutables (string_to_num n)` >>
+  simp[exactly_one_option_def, lift_sum_def, return_def, raise_def]
+QED
+
+Theorem lookup_name_none_to_lookup_immutable:
+  ∀cx st n.
+    valid_lookups cx st ∧ lookup_name cx st n = NONE ⇒
+    lookup_immutable cx st n = NONE
+Proof
+  rw[valid_lookups_def, lookup_name_def, lookup_immutable_def,
+     var_in_scope_def, lookup_scoped_var_def] >> gvs[] >>
+  Cases_on `FLOOKUP (get_module_globals NONE gbs).immutables (string_to_num n)` >>
+  simp[] >>
+  Cases_on `lookup_scopes (string_to_num n) st.scopes` >-
+   gvs[Once evaluate_def, bind_def, get_scopes_def, return_def,
+       get_immutables_def, get_immutables_module_def, get_current_globals_def,
+       lift_option_def, exactly_one_option_def, lift_sum_def, return_def] >>
+  first_x_assum (qspec_then `n` mp_tac) >> simp[]
+QED

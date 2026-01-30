@@ -25,11 +25,8 @@ Definition sum_scoped_vars_def:
 End
 
 Theorem example_1_sum_20:
-  ∀cx. ⟦cx⟧ ⦃valid_lookups cx st ∧ lookup_scoped_var st n = NONE⦄ example_1 ⦃(λst. sum_local_vars ["x"; "y"] st = 20) ∥ (λv st. F)⦄
+  ∀cx. ⟦cx⟧ ⦃λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧ lookup_scoped_var st "x" = NONE ∧ lookup_scoped_var st "y" = NONE⦄ example_1 ⦃(λst. sum_local_vars ["x"; "y"] st = 20) ∥ (λv st. F)⦄
 Proof
-  (* Proof sketch:
-
-   *)
   cheat
 QED
 
