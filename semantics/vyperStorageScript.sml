@@ -167,7 +167,7 @@ Definition decode_dyn_bytes_def:
     if len ≤ max then
       let n_slots = word_size len in
       let slots = read_slots storage (offset + 1) n_slots in
-      SOME (slots_to_bytes len slots, 1 + n_slots)
+      SOME (slots_to_bytes len slots)
     else NONE
 End
 val () = cv_auto_trans decode_dyn_bytes_def;
@@ -328,77 +328,78 @@ QED
 
 (* ===== Full Value Decoding (First-Order) ===== *)
 
-(* decode_value returns SOME (value, slots_consumed) or NONE *)
+(* decode_value returns SOME value or NONE
+   Offset advancement uses type_slot_size, not actual data size *)
 Definition decode_value_def:
   (* Dynamic bytes - special multi-slot decoding *)
   decode_value storage offset (BaseTV (BytesT (Dynamic max))) =
     (case decode_dyn_bytes storage offset max of
-     | SOME (bs, n) => SOME (BytesV (Dynamic max) bs, n)
+     | SOME bs => SOME (BytesV (Dynamic max) bs)
      | NONE => NONE) /\
   (* String - decode as bytes then convert to chars *)
   decode_value storage offset (BaseTV (StringT max)) =
     (case decode_dyn_bytes storage offset max of
-     | SOME (bs, n) => SOME (StringV max (MAP (CHR o w2n) bs), n)
+     | SOME bs => SOME (StringV max (MAP (CHR o w2n) bs))
      | NONE => NONE) /\
   (* Other base types - single slot *)
   decode_value storage offset (BaseTV bt) =
-    SOME (decode_base_from_slot (read_slot storage offset) (BaseTV bt), 1) /\
+    SOME (decode_base_from_slot (read_slot storage offset) (BaseTV bt)) /\
   decode_value storage offset (FlagTV m) =
-    SOME (decode_base_from_slot (read_slot storage offset) (FlagTV m), 1) /\
-  decode_value storage offset NoneTV = SOME (NoneV, 0) /\
+    SOME (decode_base_from_slot (read_slot storage offset) (FlagTV m)) /\
+  decode_value storage offset NoneTV = SOME NoneV /\
   decode_value storage offset (TupleTV tvs) =
     (case decode_tuple storage offset tvs of
-     | SOME (vs, n) => SOME (ArrayV (TupleV vs), n)
+     | SOME vs => SOME (ArrayV (TupleV vs))
      | NONE => NONE) /\
   decode_value storage offset (ArrayTV tv (Fixed n)) =
     (case decode_static_array storage offset tv n of
-     | SOME (vs, slots) => SOME (ArrayV (SArrayV tv n (enumerate_static_array (default_value tv) 0 vs)), slots)
+     | SOME vs => SOME (ArrayV (SArrayV tv n (enumerate_static_array (default_value tv) 0 vs)))
      | NONE => NONE) /\
   decode_value storage offset (ArrayTV tv (Dynamic max)) =
     (let len = w2n (read_slot storage offset) in
      if len ≤ max then
        (case decode_dyn_array storage (offset + 1) tv (MIN len max) of
-        | SOME (vs, slots) => SOME (ArrayV (DynArrayV tv max vs), 1 + slots)
+        | SOME vs => SOME (ArrayV (DynArrayV tv max vs))
         | NONE => NONE)
      else NONE) /\
   decode_value storage offset (StructTV ftypes) =
     (case decode_struct storage offset ftypes of
-     | SOME (fields, n) => SOME (StructV fields, n)
+     | SOME fields => SOME (StructV fields)
      | NONE => NONE) /\
 
-  decode_tuple storage offset [] = SOME ([], 0) /\
+  decode_tuple storage offset [] = SOME [] /\
   decode_tuple storage offset (tv::tvs) =
     (case decode_value storage offset tv of
-     | SOME (v, n) =>
-         (case decode_tuple storage (offset + n) tvs of
-          | SOME (vs, m) => SOME (v :: vs, n + m)
+     | SOME v =>
+         (case decode_tuple storage (offset + type_slot_size tv) tvs of
+          | SOME vs => SOME (v :: vs)
           | NONE => NONE)
      | NONE => NONE) /\
 
-  decode_static_array storage offset tv 0 = SOME ([], 0) /\
+  decode_static_array storage offset tv 0 = SOME [] /\
   decode_static_array storage offset tv (SUC n) =
     (case decode_value storage offset tv of
-     | SOME (v, slots) =>
-         (case decode_static_array storage (offset + slots) tv n of
-          | SOME (vs, rest) => SOME (v :: vs, slots + rest)
+     | SOME v =>
+         (case decode_static_array storage (offset + type_slot_size tv) tv n of
+          | SOME vs => SOME (v :: vs)
           | NONE => NONE)
      | NONE => NONE) /\
 
-  decode_dyn_array storage offset tv 0 = SOME ([], 0) /\
+  decode_dyn_array storage offset tv 0 = SOME [] /\
   decode_dyn_array storage offset tv (SUC n) =
     (case decode_value storage offset tv of
-     | SOME (v, slots) =>
-         (case decode_dyn_array storage (offset + slots) tv n of
-          | SOME (vs, rest) => SOME (v :: vs, slots + rest)
+     | SOME v =>
+         (case decode_dyn_array storage (offset + type_slot_size tv) tv n of
+          | SOME vs => SOME (v :: vs)
           | NONE => NONE)
      | NONE => NONE) /\
 
-  decode_struct storage offset [] = SOME ([], 0) /\
+  decode_struct storage offset [] = SOME [] /\
   decode_struct storage offset ((fname,tv)::ftypes) =
     (case decode_value storage offset tv of
-     | SOME (v, n) =>
-         (case decode_struct storage (offset + n) ftypes of
-          | SOME (fields, m) => SOME ((fname, v) :: fields, n + m)
+     | SOME v =>
+         (case decode_struct storage (offset + type_slot_size tv) ftypes of
+          | SOME fields => SOME ((fname, v) :: fields)
           | NONE => NONE)
      | NONE => NONE)
 Termination
@@ -528,7 +529,7 @@ Definition read_storage_var_def:
     | NONE => NONE
     | SOME slot =>
         case decode_value storage slot tv of
-        | SOME (v, _) => SOME v
+        | SOME v => SOME v
         | NONE => NONE
 End
 

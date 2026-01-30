@@ -1657,7 +1657,7 @@ Definition read_storage_slot_def:
   read_storage_slot cx (slot : bytes32) tv = do
     accts <- get_accounts;
     let storage = (lookup_account cx.txn.target accts).storage in
-    lift_option (OPTION_MAP FST (decode_value storage (w2n slot) tv))
+    lift_option (decode_value storage (w2n slot) tv)
       "read_storage_slot decode"
   od
 End
