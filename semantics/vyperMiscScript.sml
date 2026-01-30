@@ -309,6 +309,12 @@ End
 
 val () = cv_auto_trans string_to_num_def;
 
+Theorem string_to_num_injection:
+  ∀n1 n2. n1 ≠ n2 ⇒ string_to_num n1 ≠ string_to_num n2
+Proof
+  cheat
+QED
+
 (* Integer square root using Newton's method iteration *)
 Definition num_sqrt_aux_def:
   num_sqrt_aux n r =

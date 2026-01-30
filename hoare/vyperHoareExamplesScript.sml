@@ -24,10 +24,256 @@ Definition sum_scoped_vars_def:
         | SOME n => n + rest
 End
 
-Theorem example_1_sum_20:
-  ∀cx. ⟦cx⟧ ⦃λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧ lookup_scoped_var st "x" = NONE ∧ lookup_scoped_var st "y" = NONE⦄ example_1 ⦃(λst. sum_local_vars ["x"; "y"] st = 20) ∥ (λv st. F)⦄
+(* ===== Helper Lemmas for example_1 ===== *)
+
+(* Helper: lookup after update_scoped_var when var was NONE *)
+Theorem lookup_after_update_none:
+  ∀st n v. st.scopes ≠ [] ∧ lookup_scoped_var st n = NONE ⇒
+    lookup_scoped_var (update_scoped_var st n v) n = SOME v
 Proof
-  cheat
+  rw[lookup_scoped_var_def, update_scoped_var_def, LET_THM] >>
+  Cases_on `find_containing_scope (string_to_num n) st.scopes` >-
+   (simp[evaluation_state_accfupds] >>
+    Cases_on `st.scopes` >> fs[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  PairCases_on `x` >> simp[evaluation_state_accfupds] >>
+  drule find_containing_scope_lookup >> simp[]
+QED
+
+(* Helper: lookup preserved for different variables *)
+Theorem lookup_preserved_update_none:
+  ∀st n1 n2 v. string_to_num n1 ≠ string_to_num n2 ∧ st.scopes ≠ [] ∧ 
+               lookup_scoped_var st n1 = NONE ⇒
+    lookup_scoped_var (update_scoped_var st n1 v) n2 = lookup_scoped_var st n2
+Proof
+  rw[lookup_scoped_var_def, update_scoped_var_def, LET_THM] >>
+  Cases_on `find_containing_scope (string_to_num n1) st.scopes` >-
+   (simp[evaluation_state_accfupds] >>
+    Cases_on `st.scopes` >> fs[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  PairCases_on `x` >> simp[evaluation_state_accfupds] >>
+  drule find_containing_scope_lookup >> simp[]
+QED
+
+(* Helper: scopes nonempty preserved *)
+Theorem scopes_nonempty_update:
+  ∀st n v. st.scopes ≠ [] ⇒ (update_scoped_var st n v).scopes ≠ []
+Proof
+  rw[update_scoped_var_def, LET_THM] >>
+  Cases_on `find_containing_scope (string_to_num n) st.scopes` >-
+   (simp[evaluation_state_accfupds] >> Cases_on `st.scopes` >> fs[]) >>
+  PairCases_on `x` >> simp[evaluation_state_accfupds] >>
+  drule find_containing_scope_structure >> simp[] >>
+  strip_tac >> Cases_on `x0` >> fs[]
+QED
+
+(* Helper: globals unchanged by update_scoped_var *)
+Theorem globals_unchanged_update:
+  ∀st n v. (update_scoped_var st n v).globals = st.globals
+Proof
+  rw[update_scoped_var_def, LET_THM] >>
+  Cases_on `find_containing_scope (string_to_num n) st.scopes` >-
+   simp[evaluation_state_accfupds] >>
+  PairCases_on `x` >> simp[evaluation_state_accfupds]
+QED
+
+(* Helper: lookup_immutable definition accessor *)
+Definition no_immutable_def:
+  no_immutable (cx:evaluation_context) (st:evaluation_state) (n:string) ⇔
+    ∀gbs. ALOOKUP st.globals cx.txn.target = SOME gbs ⇒
+          FLOOKUP (get_module_globals NONE gbs).immutables (string_to_num n) = NONE
+End
+
+(* Helper: valid_lookups preserved when adding variable from NONE with no immutable conflict *)
+Theorem valid_lookups_preserved_update:
+  ∀cx st n v. st.scopes ≠ [] ∧ valid_lookups cx st ∧ 
+              lookup_scoped_var st n = NONE ∧ no_immutable cx st n ⇒
+    valid_lookups cx (update_scoped_var st n v)
+Proof
+  rw[valid_lookups_def, no_immutable_def] >>
+  qexists_tac `gbs` >>
+  simp[globals_unchanged_update] >>
+  rpt strip_tac >>
+  Cases_on `string_to_num n' = string_to_num n` >-
+   (* n' = n: use no_immutable assumption *)
+   metis_tac[] >>
+  (* n' ≠ n: n' was already in scope, use valid_lookups *)
+  fs[var_in_scope_def, lookup_scoped_var_def, update_scoped_var_def, LET_THM] >>
+  Cases_on `find_containing_scope (string_to_num n) st.scopes` >-
+   (fs[evaluation_state_accfupds] >>
+    Cases_on `st.scopes` >> fs[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+    Cases_on `lookup_scopes (string_to_num n') t` >> gvs[]) >>
+  PairCases_on `x` >> fs[evaluation_state_accfupds] >>
+  drule find_containing_scope_lookup >> fs[]
+QED
+
+(* Helper: sum lemma when both variables have value 10 *)
+Theorem sum_scoped_vars_xy_20:
+  ∀st. lookup_scoped_var st "x" = SOME (IntV (Signed 128) 10) ∧
+       lookup_scoped_var st "y" = SOME (IntV (Signed 128) 10) ⇒
+       sum_scoped_vars ["x"; "y"] st = 20
+Proof
+  rw[sum_scoped_vars_def, lookup_scoped_var_def, LET_THM] >>
+  simp[dest_NumV_def]
+QED
+
+(* ===== Main Theorem ===== *)
+
+(*
+  Proof Sketch using Hoare rules:
+
+  { P0: st.scopes ≠ [] ∧ valid_lookups cx st ∧ 
+        lookup_scoped_var st "x" = NONE ∧ lookup_scoped_var st "y" = NONE }
+  
+  AnnAssign "x" _ (Literal (IntL (Signed 128) 10))
+  -- Use stmts_spec_ann_assign with expr_spec_literal
+  -- expr_spec gives: Literal 10 evaluates to IntV (Signed 128) 10, state unchanged
+  -- stmts_spec_ann_assign postcondition: Q (update_scoped_var st "x" (IntV (Signed 128) 10))
+  
+  { P1: st.scopes ≠ [] ∧ valid_lookups cx st ∧ 
+        lookup_scoped_var st "x" = SOME (IntV (Signed 128) 10) ∧ 
+        lookup_scoped_var st "y" = NONE }
+  
+  AnnAssign "y" _ (Name "x")
+  -- Use stmts_spec_ann_assign with expr_spec_scoped_var
+  -- expr_spec_scoped_var needs: valid_lookups cx st ∧ lookup_scoped_var st "x" = SOME v
+  -- After evaluation, v = IntV (Signed 128) 10, state unchanged
+  -- stmts_spec_ann_assign postcondition: Q (update_scoped_var st "y" (IntV (Signed 128) 10))
+  
+  { P2: lookup_scoped_var st "x" = SOME (IntV (Signed 128) 10) ∧ 
+        lookup_scoped_var st "y" = SOME (IntV (Signed 128) 10) }
+  
+  By sum_scoped_vars_xy_20: sum_scoped_vars ["x"; "y"] st = 20
+*)
+
+(* Helper: stmts_spec_cons specialized for F return predicates *)
+Theorem stmts_spec_cons_F:
+  ∀P1 P2 P3 cx s ss.
+    (⟦cx⟧ ⦃P1⦄ [s] ⦃P2∥(λv st. F)⦄) ∧ (⟦cx⟧ ⦃P2⦄ ss ⦃P3∥(λv st. F)⦄) ⇒
+    ⟦cx⟧ ⦃P1⦄ s::ss ⦃P3∥(λv st. F)⦄
+Proof
+  rpt strip_tac >>
+  drule_all stmts_spec_cons >> strip_tac >>
+  CONV_TAC (DEPTH_CONV FUN_EQ_CONV) >> fs[]
+QED
+
+(*
+  Proof Sketch using Hoare rules:
+
+  { P0: st.scopes ≠ [] ∧ valid_lookups cx st ∧ 
+        lookup_scoped_var st "x" = NONE ∧ lookup_scoped_var st "y" = NONE ∧
+        no_immutable cx st "x" ∧ no_immutable cx st "y" }
+  
+  AnnAssign "x" _ (Literal (IntL (Signed 128) 10))
+  -- Use stmts_spec_ann_assign with expr_spec_literal
+  -- expr_spec gives: Literal 10 evaluates to IntV (Signed 128) 10, state unchanged
+  -- stmts_spec_ann_assign postcondition: Q (update_scoped_var st "x" (IntV (Signed 128) 10))
+  
+  { P1: st.scopes ≠ [] ∧ valid_lookups cx st ∧ 
+        lookup_scoped_var st "x" = SOME (IntV (Signed 128) 10) ∧ 
+        lookup_scoped_var st "y" = NONE ∧ no_immutable cx st "y" }
+  
+  AnnAssign "y" _ (Name "x")
+  -- Use stmts_spec_ann_assign with expr_spec_scoped_var
+  -- expr_spec_scoped_var needs: valid_lookups cx st ∧ lookup_scoped_var st "x" = SOME v
+  -- After evaluation, v = IntV (Signed 128) 10, state unchanged
+  -- stmts_spec_ann_assign postcondition: Q (update_scoped_var st "y" (IntV (Signed 128) 10))
+  
+  { P2: lookup_scoped_var st "x" = SOME (IntV (Signed 128) 10) ∧ 
+        lookup_scoped_var st "y" = SOME (IntV (Signed 128) 10) }
+  
+  By sum_scoped_vars_xy_20: sum_scoped_vars ["x"; "y"] st = 20
+*)
+
+Theorem example_1_sum_20:
+  ∀cx. ⟦cx⟧ ⦃λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧ 
+            lookup_scoped_var st "x" = NONE ∧ lookup_scoped_var st "y" = NONE ∧
+            no_immutable cx st "x" ∧ no_immutable cx st "y"⦄ 
+       example_1 
+       ⦃(λst. sum_scoped_vars ["x"; "y"] st = 20) ∥ (λv st. F)⦄
+Proof
+  rpt strip_tac >>
+  (* Unfold example_1 to the two AnnAssign statements *)
+  simp[example_1_def] >>
+  (* Define intermediate invariant P1 after first assignment *)
+  qabbrev_tac `P1 = λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
+                         lookup_scoped_var st "x" = SOME (IntV (Signed 128) 10) ∧
+                         lookup_scoped_var st "y" = NONE ∧
+                         no_immutable cx st "y"` >>
+  (* Use specialized cons rule for F return predicates *)
+  irule stmts_spec_cons_F >>
+  qexists_tac `P1` >>
+  conj_tac >-
+  (* ===== First statement: AnnAssign "x" _ (Literal 10) ===== *)
+  (irule stmts_spec_ann_assign >>
+   qexists_tac `IntV (Signed 128) 10` >>
+   (* Use expr_spec for Literal - state unchanged, evaluates to the literal value *)
+   irule expr_spec_consequence >>
+   qexistsl_tac [
+     `λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧ 
+           lookup_scoped_var st "x" = NONE ∧ lookup_scoped_var st "y" = NONE ∧
+           no_immutable cx st "x" ∧ no_immutable cx st "y"`,
+     `λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧ 
+           lookup_scoped_var st "x" = NONE ∧ lookup_scoped_var st "y" = NONE ∧
+           no_immutable cx st "x" ∧ no_immutable cx st "y"`
+   ] >>
+   rpt conj_tac >> simp[] >-
+    (* Prove: postcondition of expr_spec implies precondition of AnnAssign *)
+    (rpt strip_tac >> simp[Abbr `P1`] >>
+     conj_tac >- metis_tac[scopes_nonempty_update] >>
+     conj_tac >- (irule valid_lookups_preserved_update >> simp[]) >>
+     conj_tac >- metis_tac[lookup_after_update_none] >>
+     conj_tac >-
+        (`string_to_num "x" ≠ string_to_num "y"` by EVAL_TAC >>
+         metis_tac[lookup_preserved_update_none]) >>
+      simp[no_immutable_def, globals_unchanged_update] >>
+      fs[no_immutable_def]) >>
+   (* Rewrite value to match expr_spec_literal form *)
+    `IntV (Signed 128) 10 = evaluate_literal (IntL (Signed 128) 10)` by EVAL_TAC >>
+    pop_assum (fn th => ONCE_REWRITE_TAC [th]) >>
+    irule expr_spec_literal) >>
+  (* ===== Second statement: AnnAssign "y" _ (Name "x") ===== *)
+  irule stmts_spec_consequence >>
+  qexistsl_tac [
+    `P1`,
+    `λst. sum_scoped_vars ["x"; "y"] st = 20`,
+    `λv st. F`
+  ] >>
+  simp[] >>
+  irule stmts_spec_ann_assign >>
+  qexists_tac `IntV (Signed 128) 10` >>
+  (* Use expr_spec for Name "x" - requires lookup_scoped_var st "x" = SOME v *)
+  irule expr_spec_consequence >>
+  qexistsl_tac [
+    `λst. P1 st`,
+    `λst. P1 st`
+  ] >>
+  rpt conj_tac >> simp[] >-
+   (* Prove: postcondition implies postcondition for AnnAssign *)
+   (simp[Abbr `P1`] >> rpt strip_tac >>
+    (* Show sum is 20 after updating y *)
+    irule sum_scoped_vars_xy_20 >> conj_tac >-
+      (metis_tac[lookup_after_update_none]) >>
+    `string_to_num "y" ≠ string_to_num "x"` by EVAL_TAC >>
+    drule_all lookup_preserved_update_none >> simp[]) >>
+  (* Prove: expr_spec for Name "x" - use explicit instantiation *)
+  simp[Abbr `P1`] >>
+  irule expr_spec_consequence >>
+  qexistsl_tac [
+    `λst. (st.scopes ≠ [] ∧ valid_lookups cx st ∧
+           lookup_scoped_var st "x" = SOME (IntV (Signed 128) 10) ∧
+           lookup_scoped_var st "y" = NONE ∧ no_immutable cx st "y") ∧
+          valid_lookups cx st ∧
+          lookup_scoped_var st "x" = SOME (IntV (Signed 128) 10)`,
+    `λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
+          lookup_scoped_var st "x" = SOME (IntV (Signed 128) 10) ∧
+          lookup_scoped_var st "y" = NONE ∧ no_immutable cx st "y"`
+  ] >>
+  simp[] >>
+  ACCEPT_TAC (CONV_RULE (DEPTH_CONV BETA_CONV)
+    (SPECL [``λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
+                   lookup_scoped_var st "x" = SOME (IntV (Signed 128) 10) ∧
+                   lookup_scoped_var st "y" = NONE ∧ no_immutable cx st "y"``,
+            ``cx:evaluation_context``, ``"x"``, ``IntV (Signed 128) 10``]
+           expr_spec_scoped_var))
 QED
 
 Definition example_2_def:
