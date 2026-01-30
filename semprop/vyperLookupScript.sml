@@ -227,6 +227,25 @@ Proof
   gvs[lookup_scopes_to_lookup_name, lookup_scopes_find_containing]
 QED
 
+Theorem lookup_immutable_implies_lookup_name:
+  ∀cx st n v.
+    valid_lookups cx st ∧
+    lookup_immutable cx st n = SOME v ⇒
+    lookup_name cx st n = SOME v
+Proof
+  rpt strip_tac >>
+  fs[valid_lookups_def, lookup_immutable_def, lookup_name_def] >> gvs[] >>
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+       get_immutables_def, get_immutables_module_def, get_current_globals_def,
+       lift_option_def] >>
+  `lookup_scopes (string_to_num n) st.scopes = NONE` suffices_by
+    (strip_tac >> simp[exactly_one_option_def, lift_sum_def, return_def]) >>
+  CCONTR_TAC >> gvs[] >>
+  first_x_assum (qspec_then `n` mp_tac) >>
+  simp[var_in_scope_def, lookup_scoped_var_def] >>
+  Cases_on `lookup_scopes (string_to_num n) st.scopes` >> gvs[]
+QED
+
 Theorem var_in_scope_dom_iff:
   ∀st1 st2 n.
     MAP FDOM st1.scopes = MAP FDOM st2.scopes ⇒
