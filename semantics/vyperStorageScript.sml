@@ -112,7 +112,9 @@ Definition encode_base_to_slot_def:
   encode_base_to_slot (DecimalV i) (BaseTV DecimalT) = SOME (int_to_slot i) /\
   encode_base_to_slot (BoolV b) (BaseTV BoolT) = SOME (bool_to_slot b) /\
   encode_base_to_slot (BytesV (Fixed m) bs) (BaseTV AddressT) =
-    (if LENGTH bs = m /\ m = 20 then SOME (word_of_bytes T 0w bs) else NONE) /\
+    (if LENGTH bs = m /\ m = 20 then
+       SOME (word_of_bytes F 0w (bs ++ REPLICATE 12 0w))
+     else NONE) /\
   encode_base_to_slot (BytesV (Fixed m) bs) (BaseTV (BytesT (Fixed n))) =
     (if m = n /\ LENGTH bs = n /\ n ≤ 32 then
        SOME (word_of_bytes F 0w (bs ++ REPLICATE (32 - n) 0w))
@@ -132,7 +134,7 @@ Definition decode_base_from_slot_def:
   decode_base_from_slot slot (BaseTV DecimalT) = DecimalV (slot_to_int 168 slot) /\
   decode_base_from_slot slot (BaseTV BoolT) = BoolV (slot_to_bool slot) /\
   decode_base_from_slot slot (BaseTV AddressT) =
-    BytesV (Fixed 20) (DROP 12 (word_to_bytes slot T)) /\
+    BytesV (Fixed 20) (TAKE 20 (word_to_bytes slot F)) /\
   decode_base_from_slot slot (BaseTV (BytesT (Fixed n))) =
     BytesV (Fixed n) (TAKE n (word_to_bytes slot F)) /\
   decode_base_from_slot slot (FlagTV m) = FlagV m (w2n slot) /\
@@ -217,10 +219,10 @@ QED
 Definition encode_value_def:
   (* Dynamic bytes - special multi-slot encoding *)
   encode_value (BaseTV (BytesT (Dynamic max))) (BytesV (Dynamic m) bs) =
-    (if max = m then encode_dyn_bytes_slots max bs else NONE) /\
+    (if m ≤ max then encode_dyn_bytes_slots max bs else NONE) /\
   (* String - encode as bytes *)
   encode_value (BaseTV (StringT max)) (StringV m s) =
-    (if max = m then encode_dyn_bytes_slots max (MAP (n2w o ORD) s) else NONE) /\
+    (if m ≤ max then encode_dyn_bytes_slots max (MAP (n2w o ORD) s) else NONE) /\
   (* Other base types - single slot *)
   encode_value (BaseTV bt) v =
     (case encode_base_to_slot v (BaseTV bt) of
