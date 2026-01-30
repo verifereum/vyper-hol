@@ -90,37 +90,6 @@ QED
   By sum_scoped_vars_xy_20: sum_scoped_vars ["x"; "y"] st = 20
 *)
 
-(* Helper: scopes remain non-empty after update *)
-Theorem scopes_nonempty_preserved[local]:
-  ∀st n v. st.scopes ≠ [] ⇒ (update_scoped_var st n v).scopes ≠ []
-Proof
-  rw[update_scoped_var_def, LET_THM] >>
-  Cases_on `find_containing_scope (string_to_num n) st.scopes` >-
-   (Cases_on `st.scopes` >> gvs[evaluation_state_accfupds]) >>
-  PairCases_on `x` >> simp[evaluation_state_accfupds] >>
-  Cases_on `x0` >> simp[]
-QED
-
-(* Helper: lookup_name NONE is preserved for different variable *)
-Theorem lookup_name_none_preserved[local]:
-  ∀cx st n1 n2 v.
-    valid_lookups cx st ∧ n1 ≠ n2 ∧ lookup_name cx st n2 = NONE ⇒
-    lookup_name cx (update_scoped_var st n1 v) n2 = NONE
-Proof
-  rw[] >>
-  `(update_scoped_var st n1 v).globals = st.globals` by simp[globals_preserved_after_update] >>
-  `lookup_scoped_var (update_scoped_var st n1 v) n2 = lookup_scoped_var st n2` by
-    (irule lookup_preserved_after_update >> simp[]) >>
-  `lookup_scoped_var st n2 = NONE` by metis_tac[lookup_name_none_to_lookup_scoped_var] >>
-  `lookup_immutable cx st n2 = NONE` by metis_tac[lookup_name_none_to_lookup_immutable] >>
-  gvs[lookup_immutable_def, valid_lookups_def] >>
-  fs[lookup_name_def, lookup_scoped_var_def] >>
-  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
-       get_immutables_def, get_immutables_module_def, get_current_globals_def,
-       lift_option_def, lift_sum_def, exactly_one_option_def, return_def, raise_def,
-       evaluation_state_accfupds]
-QED
-
 Theorem example_1_sum_20:
   ∀cx. ⟦cx⟧ ⦃λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
             lookup_name cx st "x" = NONE ∧ lookup_name cx st "y" = NONE⦄
@@ -151,10 +120,10 @@ Proof
       (* Goal 1: postcondition implication *)
       >- (rpt strip_tac >> simp[Abbr `P1`] >> rpt conj_tac
           >- metis_tac[lookup_name_none_to_lookup_scoped_var]
-          >- simp[scopes_nonempty_preserved]
+          >- simp[scopes_nonempty_after_update]
           >- metis_tac[valid_lookups_preserved_after_update]
           >- simp[lookup_after_update]
-          >- (`"x" ≠ "y"` by EVAL_TAC >> metis_tac[lookup_name_none_preserved]))
+          >- (`"x" ≠ "y"` by EVAL_TAC >> metis_tac[lookup_name_preserved_after_update]))
       (* Goal 2: expr_spec for Literal *)
       >- (`IntV (Signed 128) 10 = evaluate_literal (IntL (Signed 128) 10)` by EVAL_TAC >>
           pop_assum (fn th => ONCE_REWRITE_TAC [th]) >>

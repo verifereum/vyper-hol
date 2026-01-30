@@ -340,7 +340,7 @@ Proof
   Cases_on `FLOOKUP h n2` >> simp[]
 QED
 
-Theorem lookup_preserved_after_update:
+Theorem lookup_scoped_var_preserved_after_update:
   ∀st n1 n2 v.
     n1 ≠ n2 ⇒
     lookup_scoped_var (update_scoped_var st n1 v) n2 = lookup_scoped_var st n2
@@ -367,6 +367,28 @@ Proof
   PairCases_on `x` >> simp[evaluation_state_accfupds]
 QED
 
+Theorem lookup_name_preserved_after_update:
+  ∀cx st n1 n2 v.
+    n1 ≠ n2 ⇒
+    lookup_name cx (update_scoped_var st n1 v) n2 = lookup_name cx st n2
+Proof
+  rpt strip_tac >>
+  simp[lookup_name_def] >>
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+       get_immutables_def, get_immutables_module_def, get_current_globals_def,
+       lift_option_def, lift_sum_def,
+       globals_preserved_after_update,
+       lookup_scoped_var_preserved_after_update, GSYM lookup_scoped_var_def] >>
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+       get_immutables_def, get_immutables_module_def, get_current_globals_def,
+       lift_option_def, lift_sum_def,
+       GSYM lookup_scoped_var_def] >>
+  Cases_on `ALOOKUP st.globals cx.txn.target` >> simp[raise_def, return_def] >>
+  Cases_on `exactly_one_option (lookup_scoped_var st n2)
+              (FLOOKUP (get_module_globals NONE x).immutables (string_to_num n2))` >>
+  simp[return_def, raise_def]
+QED
+
 Theorem valid_lookups_preserved_after_update:
   ∀cx st n v.
     valid_lookups cx st ∧ lookup_name cx st n = NONE ⇒
@@ -388,7 +410,7 @@ Proof
         simp[valid_lookups_def] >> metis_tac[]) >>
   `n ≠ n'` by metis_tac[vyperMiscTheory.string_to_num_inj] >>
   `lookup_scoped_var (update_scoped_var st n v) n' = lookup_scoped_var st n'`
-    by (irule lookup_preserved_after_update >> simp[]) >>
+    by (irule lookup_scoped_var_preserved_after_update >> simp[]) >>
   `var_in_scope st n'` by gvs[var_in_scope_def, lookup_scoped_var_def] >>
   first_x_assum irule >> simp[]
 QED
