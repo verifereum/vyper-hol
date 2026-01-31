@@ -969,3 +969,25 @@ Definition evaluate_abi_encode_def:
 End
 
 val () = cv_auto_trans evaluate_abi_encode_def;
+
+(* ===== External Call Calldata Building ===== *)
+
+(* Build calldata for external call:
+   4-byte function selector ++ ABI-encoded arguments
+
+   func_name: function name (string)
+   arg_types: list of Vyper types for the arguments
+   arg_vals: list of Vyper values for the arguments
+
+   Returns: byte list (selector ++ encoded args) or NONE on encoding failure *)
+Definition build_ext_calldata_def:
+  build_ext_calldata env func_name arg_types arg_vals =
+    let abi_types = vyper_to_abi_types arg_types in
+    let selector = function_selector func_name abi_types in
+    case vyper_to_abi_list env arg_types arg_vals of
+    | SOME abi_vals =>
+        SOME (selector ++ enc (Tuple abi_types) (ListV abi_vals))
+    | NONE => NONE
+End
+
+val () = cv_auto_trans build_ext_calldata_def;
