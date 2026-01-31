@@ -1012,7 +1012,7 @@ Datatype:
     stk: (num option # identifier) list
   ; txn: call_txn
   ; sources: (address, (num option, toplevel list) alist) alist
-  ; layouts: (address, var_layout) alist
+  ; layouts: (address, var_layout # var_layout) alist  (* (storage, transient) *)
   |>
 End
 
@@ -1106,32 +1106,38 @@ val () = cv_auto_trans type_env_def;
 
 (* Build var_layout from storage_layout and toplevels.
    For each storage variable or hashmap, record its slot number. *)
+Definition get_matching_var_id_def:
+  get_matching_var_id is_transient (VariableDecl _ mut id typ) =
+    (if (mut = Storage ∨ mut = Transient) ∧ (mut = Transient) = is_transient
+     then SOME id else NONE) ∧
+  get_matching_var_id is_transient (HashMapDecl _ flag id kt vt) =
+    (if flag = is_transient then SOME id else NONE) ∧
+  get_matching_var_id is_transient _ = NONE
+End
+
+val () = cv_auto_trans get_matching_var_id_def;
+
 Definition build_var_layout_entry_def:
-  build_var_layout_entry layout [] = LN ∧
-  build_var_layout_entry layout (VariableDecl _ Storage id typ :: ts) =
-    (let rest = build_var_layout_entry layout ts in
-     case ALOOKUP layout id of
-     | NONE => rest
-     | SOME slot => insert (string_to_num id) slot rest) ∧
-  build_var_layout_entry layout (HashMapDecl _ F id kt vt :: ts) =
-    (let rest = build_var_layout_entry layout ts in
-     case ALOOKUP layout id of
-     | NONE => rest
-     | SOME slot => insert (string_to_num id) slot rest) ∧
-  build_var_layout_entry layout (_ :: ts) = build_var_layout_entry layout ts
+  build_var_layout_entry is_transient layout [] = LN ∧
+  build_var_layout_entry is_transient layout (t :: ts) =
+    let rest = build_var_layout_entry is_transient layout ts in
+    case get_matching_var_id is_transient t of
+    | SOME id =>
+        (case ALOOKUP layout id of
+         | SOME slot => insert (string_to_num id) slot rest
+         | NONE => rest)
+    | NONE => rest
 End
 
 Definition build_var_layout_def:
-  build_var_layout sources layouts addr =
-    case ALOOKUP layouts addr of
-    | NONE => LN
-    | SOME layout =>
-        case ALOOKUP sources addr of
-        | NONE => LN
-        | SOME mods =>
-            case ALOOKUP mods NONE of
-            | NONE => LN
-            | SOME ts => build_var_layout_entry layout ts
+  build_var_layout sources storage_layout transient_layout addr =
+    case ALOOKUP sources addr of
+    | NONE => (LN, LN)
+    | SOME mods =>
+        case ALOOKUP mods NONE of
+        | NONE => (LN, LN)
+        | SOME ts => (build_var_layout_entry F storage_layout ts,
+                      build_var_layout_entry T transient_layout ts)
 End
 
 val () = cv_auto_trans build_var_layout_entry_def;
@@ -1435,17 +1441,13 @@ Type log = “:nsid # (value list)”;
 (* NONE = main contract, SOME n = module with source_id n *)
 Datatype:
   module_globals = <|
-    mutables: num |-> toplevel_value
-  ; transients: num |-> toplevel_value
-  ; immutables: num |-> value
+    immutables: num |-> value
   |>
 End
 
 Definition empty_module_globals_def:
   empty_module_globals : module_globals = <|
-    mutables := FEMPTY
-  ; transients := FEMPTY
-  ; immutables := FEMPTY
+    immutables := FEMPTY
   |>
 End
 
@@ -1616,8 +1618,8 @@ val () = cv_auto_trans set_module_globals_def;
 (* Find a storage variable or hashmap declaration in toplevels *)
 Datatype:
   var_decl_info
-  = StorageVarDecl type           (* regular storage variable *)
-  | HashMapVarDecl bool type value_type (* hashmap: is_transient, key type, value type *)
+  = StorageVarDecl bool type            (* is_transient, type *)
+  | HashMapVarDecl bool type value_type (* is_transient, key type, value type *)
 End
 
 val var_decl_info_CASE_rator =
@@ -1626,10 +1628,11 @@ val var_decl_info_CASE_rator =
 
 (* Look up variable slot from var_layout *)
 Definition lookup_var_slot_from_layout_def:
-  lookup_var_slot_from_layout cx n =
+  lookup_var_slot_from_layout cx is_transient n =
     case ALOOKUP cx.layouts cx.txn.target of
     | NONE => NONE
-    | SOME var_lay => lookup n var_lay
+    | SOME (storage_lay, transient_lay) =>
+        lookup n (if is_transient then transient_lay else storage_lay)
 End
 
 val () = cv_auto_trans lookup_var_slot_from_layout_def;
@@ -1637,8 +1640,9 @@ val () = cv_auto_trans lookup_var_slot_from_layout_def;
 (* Find var decl by num key (comparing string_to_num of each id) *)
 Definition find_var_decl_by_num_def:
   find_var_decl_by_num n [] = NONE ∧
-  find_var_decl_by_num n (VariableDecl _ Storage vid typ :: ts) =
-    (if string_to_num vid = n then SOME (StorageVarDecl typ, vid)
+  find_var_decl_by_num n (VariableDecl _ mut vid typ :: ts) =
+    (if (mut = Storage ∨ mut = Transient) ∧ string_to_num vid = n
+     then SOME (StorageVarDecl (mut = Transient) typ, vid)
      else find_var_decl_by_num n ts) ∧
   find_var_decl_by_num n (HashMapDecl _ is_transient vid kt vt :: ts) =
     (if string_to_num vid = n then SOME (HashMapVarDecl is_transient kt vt, vid)
@@ -1732,16 +1736,14 @@ Definition lookup_global_def:
     tenv <<- type_env ts;
     case find_var_decl_by_num n ts of
     | NONE => raise $ Error "lookup_global: var not found"
-    | SOME (StorageVarDecl typ, id) => do
-        (* Regular storage variable: read from EVM storage *)
-        var_slot <- lift_option (lookup_var_slot_from_layout cx n) "lookup_global var_slot";
+    | SOME (StorageVarDecl is_transient typ, id) => do
+        var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient n) "lookup_global var_slot";
         tv <- lift_option (evaluate_type tenv typ) "lookup_global evaluate_type";
-        v <- read_storage_slot cx F (n2w var_slot) tv;
+        v <- read_storage_slot cx is_transient (n2w var_slot) tv;
         return (Value v)
       od
     | SOME (HashMapVarDecl is_transient kt vt, id) => do
-        (* HashMap: return a reference with base slot and key type *)
-        var_slot <- lift_option (lookup_var_slot_from_layout cx n) "lookup_global hashmap var_slot";
+        var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient n) "lookup_global hashmap var_slot";
         return (HashMapRef is_transient (n2w var_slot) kt vt)
       od
   od
@@ -1771,17 +1773,7 @@ End
 
 val () = cv_auto_trans get_immutables_def;
 
-Definition update_module_transient_def:
-  update_module_transient src_id key v (gbs: globals_state) =
-    let mg = get_module_globals src_id gbs in
-    let mg' = mg with <|
-      mutables updated_by (λm. m |+ (key, v))
-    ; transients updated_by (λt. t |+ (key, v))
-    |> in
-    set_module_globals src_id mg' gbs
-End
 
-val () = cv_auto_trans update_module_transient_def;
 
 Definition update_module_immutable_def:
   update_module_immutable src_id key v (gbs: globals_state) =
@@ -1887,10 +1879,10 @@ Definition set_global_def:
     tenv <<- type_env ts;
     case find_var_decl_by_num n ts of
     | NONE => raise $ Error "set_global: var not found"
-    | SOME (StorageVarDecl typ, id) => do
-        var_slot <- lift_option (lookup_var_slot_from_layout cx n) "set_global var_slot";
+    | SOME (StorageVarDecl is_transient typ, id) => do
+        var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient n) "set_global var_slot";
         tv <- lift_option (evaluate_type tenv typ) "set_global evaluate_type";
-        write_storage_slot cx F (n2w var_slot) tv v
+        write_storage_slot cx is_transient (n2w var_slot) tv v
       od
     | SOME (HashMapVarDecl _ kt vt, id) =>
         raise $ Error "set_global: cannot set hashmap directly"
@@ -2904,13 +2896,7 @@ End
 (* All initial_globals are for main contract (NONE source_id) *)
 Definition initial_globals_def:
   initial_globals env [] = empty_globals ∧
-  (* Storage variables are not stored in globals - they're read from EVM storage
-     which is zero-initialized by default, matching Vyper's default values *)
-  initial_globals env (VariableDecl _ Transient id typ :: ts) =
-  (let gbs = initial_globals env ts in
-   let key = string_to_num id in
-   let iv = Value $ force_default_value env typ in
-     update_module_transient NONE key iv gbs) ∧
+  (* Storage and transient variables use EVM storage, which is zero-initialized *)
   initial_globals env (VariableDecl _ Immutable id typ :: ts) =
   (let gbs = initial_globals env ts in
    let key = string_to_num id in
@@ -2932,9 +2918,9 @@ val () = cv_auto_trans initial_globals_def;
 (* Convert all storage_layouts to var_layouts *)
 Definition convert_all_layouts_def:
   convert_all_layouts srcs [] = [] ∧
-  convert_all_layouts srcs ((addr, layout) :: rest) =
-    let var_lay = build_var_layout srcs [(addr, layout)] addr in
-    (addr, var_lay) :: convert_all_layouts srcs rest
+  convert_all_layouts srcs ((addr, (s_layout, t_layout)) :: rest) =
+    let var_lays = build_var_layout srcs s_layout t_layout addr in
+    (addr, var_lays) :: convert_all_layouts srcs rest
 End
 
 val () = cv_auto_trans convert_all_layouts_def;
@@ -2955,7 +2941,8 @@ Datatype:
     sources: (address, (num option, toplevel list) alist) alist
   ; globals: (address, globals_state) alist
   ; accounts: evm_accounts
-  ; layouts: (address, storage_layout) alist
+  ; layouts: (address, storage_layout # storage_layout) alist  (* (storage, transient) *)
+  ; tStorage: transient_storage
   |>
 End
 
@@ -2965,6 +2952,7 @@ Definition initial_machine_state_def:
   ; globals := []
   ; accounts := empty_accounts
   ; layouts := []
+  ; tStorage := empty_transient_storage
   |>
 End
 
@@ -2974,7 +2962,7 @@ Definition initial_state_def:
    ; globals := am.globals
    ; logs := []
    ; scopes := scs
-   ; tStorage := empty_transient_storage
+   ; tStorage := am.tStorage
    |>
 End
 
@@ -2986,36 +2974,13 @@ Definition abstract_machine_from_state_def:
    ; globals := st.globals
    ; accounts := st.accounts
    ; layouts := layouts
+   ; tStorage := st.tStorage
    |> : abstract_machine
 End
 
 val () = cv_auto_trans abstract_machine_from_state_def;
 
-(* Reset transients in a single module_globals: merge transients back into mutables *)
-Definition reset_module_transients_def:
-  reset_module_transients (mg: module_globals) =
-  mg with mutables := FUNION mg.transients mg.mutables
-End
 
-val () = cv_auto_trans reset_module_transients_def;
-
-(* Reset transients for all modules in a globals_state *)
-Definition reset_transient_globals_def:
-  reset_transient_globals ([] : globals_state) = [] ∧
-  reset_transient_globals ((k, mg) :: rest) =
-    (k, reset_module_transients mg) :: reset_transient_globals rest
-End
-
-val () = cv_auto_trans reset_transient_globals_def;
-
-(* Reset transients for all addresses in the global state *)
-Definition reset_all_transient_globals_def:
-  reset_all_transient_globals [] = [] ∧
-  reset_all_transient_globals ((addr, gbs) :: rest) =
-    (addr, reset_transient_globals gbs) :: reset_all_transient_globals rest
-End
-
-val () = cv_auto_trans reset_all_transient_globals_def;
 
 (* Top-level entry-points into the semantics: loading (deploying) a contract,
 * and calling its external functions *)
