@@ -474,6 +474,7 @@ val () = cv_trans hashmap_slot_def;
 (* Encode a Vyper value as a 32-byte hashmap key, given the key type. *)
 Definition encode_hashmap_key_def:
    encode_hashmap_key _ (IntV _ i) = i2w i ∧
+   encode_hashmap_key _ (FlagV _ n) = n2w n ∧
    encode_hashmap_key (BaseT AddressT) (BytesV _ bs) =
      word_of_bytes T 0w (PAD_LEFT 0w 32 bs) ∧
    encode_hashmap_key (BaseT (BytesT _)) (BytesV _ bs) =
