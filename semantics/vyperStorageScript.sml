@@ -49,7 +49,7 @@ Definition bytes_to_slots_aux_def:
     let chunk = TAKE 32 bs in
     let rest = DROP 32 bs in
     let padded = chunk ++ REPLICATE (32 - LENGTH chunk) 0w in
-    bytes_to_slots_aux (word_of_bytes F (0w: bytes32) padded :: acc) rest
+    bytes_to_slots_aux (word_of_bytes T (0w: bytes32) padded :: acc) rest
 Termination
   WF_REL_TAC ‘measure (LENGTH o SND)’ >> gvs[]
 End
@@ -65,7 +65,7 @@ Definition slots_to_bytes_def:
   slots_to_bytes 0 _ = ([]:byte list) /\
   slots_to_bytes _ [] = [] /\
   slots_to_bytes len ((slot:bytes32)::slots) =
-    let bs = word_to_bytes slot F in
+    let bs = word_to_bytes slot T in
     let take_n = MIN 32 len in
     TAKE take_n bs ++ slots_to_bytes (len - take_n) slots
 End
@@ -112,11 +112,12 @@ Definition encode_base_to_slot_def:
   encode_base_to_slot (DecimalV i) (BaseTV DecimalT) = SOME (int_to_slot i) /\
   encode_base_to_slot (BoolV b) (BaseTV BoolT) = SOME (bool_to_slot b) /\
   encode_base_to_slot (BytesV (Fixed m) bs) (BaseTV AddressT) =
-    (if LENGTH bs = m /\ m = 20 then SOME (word_of_bytes T 0w bs)
+    (if LENGTH bs = m /\ m = 20
+     then SOME (word_of_bytes T 0w (PAD_LEFT 0w 32 bs))
      else NONE) /\
   encode_base_to_slot (BytesV (Fixed m) bs) (BaseTV (BytesT (Fixed n))) =
     (if m = n /\ LENGTH bs = n /\ n ≤ 32 then
-       SOME (word_of_bytes F 0w (bs ++ REPLICATE (32 - n) 0w))
+       SOME (word_of_bytes T 0w bs)
      else NONE) /\
   encode_base_to_slot (FlagV m k) (FlagTV m') =
     (if m = m' then SOME (n2w k) else NONE) /\
@@ -135,7 +136,7 @@ Definition decode_base_from_slot_def:
   decode_base_from_slot slot (BaseTV AddressT) =
     BytesV (Fixed 20) (DROP 12 (word_to_bytes slot T)) /\
   decode_base_from_slot slot (BaseTV (BytesT (Fixed n))) =
-    BytesV (Fixed n) (TAKE n (word_to_bytes slot F)) /\
+    BytesV (Fixed n) (TAKE n (word_to_bytes slot T)) /\
   decode_base_from_slot slot (FlagTV m) = FlagV m (w2n slot) /\
   decode_base_from_slot slot NoneTV = NoneV /\
   decode_base_from_slot slot _ = NoneV
@@ -480,7 +481,7 @@ QED
 
 (* ===== HashMap Slot Computation ===== *)
 
-(* Basic hashmap slot: keccak256(key ++ base_slot)
+(* Basic hashmap slot: keccak256(base_slot ++ key)
    Both key and base_slot are 32 bytes, big-endian encoded *)
 Definition hashmap_slot_def:
   hashmap_slot (base_slot : bytes32) (key : bytes32) : bytes32 =
@@ -491,16 +492,13 @@ val () = cv_trans hashmap_slot_def;
 (* Encode a Vyper value as a 32-byte hashmap key, given the key type. *)
 Definition encode_hashmap_key_def:
    encode_hashmap_key _ (IntV _ i) = i2w i ∧
-   encode_hashmap_key (BaseT AddressT) (BytesV _ bs) = word_of_bytes T 0w bs ∧
+   encode_hashmap_key (BaseT AddressT) (BytesV _ bs) =
+     word_of_bytes T 0w (PAD_LEFT 0w 32 bs) ∧
    encode_hashmap_key (BaseT (BytesT _)) (BytesV _ bs) =
-     (if LENGTH bs ≤ 32
-      then word_of_bytes T 0w (PAD_RIGHT 0w 32 bs)
-      else word_of_bytes T 0w (Keccak_256_w64 bs)) ∧
+     word_of_bytes T 0w (Keccak_256_w64 bs) ∧
    encode_hashmap_key (BaseT (StringT _)) (StringV _ s) =
      (let bs = MAP n2w_o_ORD s in
-      if LENGTH bs ≤ 32
-      then word_of_bytes T 0w (PAD_RIGHT 0w 32 bs)
-      else word_of_bytes T 0w (Keccak_256_w64 bs)) ∧
+      word_of_bytes T 0w (Keccak_256_w64 bs)) ∧
    encode_hashmap_key _ (BoolV b) = (if b then 1w else 0w) ∧
    encode_hashmap_key _ _ = (0w:bytes32)
 End
