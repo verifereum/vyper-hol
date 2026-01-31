@@ -1,7 +1,8 @@
 Theory vyperInterpreter
 Ancestors
   arithmetic alist combin list finite_map pair rich_list
-  cv cv_std vfmState vfmExecution[ignore_grammar] vyperAST vyperABI
+  cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
+  vfmExecution[ignore_grammar] vyperAST vyperABI
   vyperMisc vyperTypeValue vyperStorage
 Libs
   cv_transLib wordsLib monadsyntax
@@ -62,7 +63,7 @@ End
    - If value_type is Type t, reads from storage at the computed slot *)
 
 Datatype:
-  toplevel_value = Value value | HashMapRef bytes32 type value_type
+  toplevel_value = Value value | HashMapRef bool bytes32 type value_type
 End
 
 val toplevel_value_CASE_rator =
@@ -593,11 +594,11 @@ Definition evaluate_subscript_def:
   (case array_index av i
    of SOME v => INL $ INL $ Value v
     | _ => INR "subscript array_index") ∧
-  evaluate_subscript (HashMapRef slot kt vt) kv =
+  evaluate_subscript (HashMapRef is_transient slot kt vt) kv =
   (let new_slot = hashmap_slot slot $ encode_hashmap_key kt kv in
    case vt
-   of HashMapT kt' vt' => INL $ INL $ HashMapRef new_slot kt' vt'
-    | Type t => INL $ INR (new_slot, t)) ∧
+   of HashMapT kt' vt' => INL $ INL $ HashMapRef is_transient new_slot kt' vt'
+    | Type t => INL $ INR (is_transient, new_slot, t)) ∧
   evaluate_subscript _ _ = INR "evaluate_subscript"
 End
 
@@ -1464,6 +1465,7 @@ Datatype:
   ; logs: log list
   ; scopes: scope list
   ; accounts: evm_accounts
+  ; tStorage: transient_storage
   |>
 End
 
@@ -1472,7 +1474,8 @@ Definition empty_state_def:
     accounts := empty_accounts;
     globals := [];
     logs := [];
-    scopes := []
+    scopes := [];
+    tStorage := empty_transient_storage
   |>
 End
 
@@ -1614,7 +1617,7 @@ val () = cv_auto_trans set_module_globals_def;
 Datatype:
   var_decl_info
   = StorageVarDecl type           (* regular storage variable *)
-  | HashMapVarDecl type value_type (* hashmap: key type, value type *)
+  | HashMapVarDecl bool type value_type (* hashmap: is_transient, key type, value type *)
 End
 
 val var_decl_info_CASE_rator =
@@ -1637,8 +1640,8 @@ Definition find_var_decl_by_num_def:
   find_var_decl_by_num n (VariableDecl _ Storage vid typ :: ts) =
     (if string_to_num vid = n then SOME (StorageVarDecl typ, vid)
      else find_var_decl_by_num n ts) ∧
-  find_var_decl_by_num n (HashMapDecl _ F vid kt vt :: ts) =
-    (if string_to_num vid = n then SOME (HashMapVarDecl kt vt, vid)
+  find_var_decl_by_num n (HashMapDecl _ is_transient vid kt vt :: ts) =
+    (if string_to_num vid = n then SOME (HashMapVarDecl is_transient kt vt, vid)
      else find_var_decl_by_num n ts) ∧
   find_var_decl_by_num n (_ :: ts) = find_var_decl_by_num n ts
 End
@@ -1651,11 +1654,53 @@ End
 
 val () = cv_auto_trans get_accounts_def;
 
+Definition update_accounts_def:
+  update_accounts f st = return () (st with accounts updated_by f)
+End
+
+Definition get_transient_storage_def:
+  get_transient_storage st = return st.tStorage st
+End
+
+val () = cv_auto_trans get_transient_storage_def;
+
+Definition update_transient_def:
+  update_transient f st = return () (st with tStorage updated_by f)
+End
+
+Definition get_storage_backend_def:
+  get_storage_backend cx T = do
+    tStore <- get_transient_storage;
+    return $ vfmExecution$lookup_transient_storage cx.txn.target tStore
+  od ∧
+  get_storage_backend cx F = do
+    accts <- get_accounts;
+    return $ (lookup_account cx.txn.target accts).storage
+  od
+End
+
+val () = get_storage_backend_def
+  |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
+  |> cv_auto_trans;
+
+Definition set_storage_backend_def:
+  set_storage_backend cx T storage' =
+    update_transient (vfmExecution$update_transient_storage cx.txn.target storage') ∧
+  set_storage_backend cx F storage' = do
+    accts <- get_accounts;
+    acc <<- lookup_account cx.txn.target accts;
+    update_accounts (update_account cx.txn.target (acc with storage := storage'))
+  od
+End
+
+val () = set_storage_backend_def
+  |> SRULE [bind_def, FUN_EQ_THM, LET_THM, update_transient_def, update_accounts_def]
+  |> cv_auto_trans;
+
 (* Read a value from storage at a slot *)
 Definition read_storage_slot_def:
-  read_storage_slot cx (slot : bytes32) tv = do
-    accts <- get_accounts;
-    let storage = (lookup_account cx.txn.target accts).storage in
+  read_storage_slot cx is_transient (slot : bytes32) tv = do
+    storage <- get_storage_backend cx is_transient;
     lift_option (decode_value storage (w2n slot) tv)
       "read_storage_slot decode"
   od
@@ -1665,25 +1710,19 @@ val () = read_storage_slot_def
   |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
   |> cv_auto_trans;
 
-Definition update_accounts_def:
-  update_accounts f st = return () (st with accounts updated_by f)
-End
-
 (* Write a value to storage at a slot *)
 Definition write_storage_slot_def:
-  write_storage_slot cx slot tv v = do
-    accts <- get_accounts;
-    acc <<- lookup_account cx.txn.target accts;
-    storage <<- acc.storage;
+  write_storage_slot cx is_transient slot tv v = do
+    storage <- get_storage_backend cx is_transient;
     writes <- lift_option (encode_value tv v) "write_storage_slot encode";
     storage' <<- apply_writes slot writes storage;
-    acc' <<- acc with storage := storage';
-    update_accounts (update_account cx.txn.target acc')
+    set_storage_backend cx is_transient storage'
   od
 End
 
 val () = write_storage_slot_def
-  |> SRULE [bind_def, FUN_EQ_THM, LET_THM, update_accounts_def]
+  |> SRULE [bind_def, FUN_EQ_THM, LET_THM, set_storage_backend_def,
+            update_transient_def, update_accounts_def]
   |> cv_auto_trans;
 
 (* Module-aware global lookup: look up variable n in module src_id_opt *)
@@ -1697,13 +1736,13 @@ Definition lookup_global_def:
         (* Regular storage variable: read from EVM storage *)
         var_slot <- lift_option (lookup_var_slot_from_layout cx n) "lookup_global var_slot";
         tv <- lift_option (evaluate_type tenv typ) "lookup_global evaluate_type";
-        v <- read_storage_slot cx (n2w var_slot) tv;
+        v <- read_storage_slot cx F (n2w var_slot) tv;
         return (Value v)
       od
-    | SOME (HashMapVarDecl kt vt, id) => do
+    | SOME (HashMapVarDecl is_transient kt vt, id) => do
         (* HashMap: return a reference with base slot and key type *)
         var_slot <- lift_option (lookup_var_slot_from_layout cx n) "lookup_global hashmap var_slot";
-        return (HashMapRef (n2w var_slot) kt vt)
+        return (HashMapRef is_transient (n2w var_slot) kt vt)
       od
   od
 End
@@ -1851,9 +1890,9 @@ Definition set_global_def:
     | SOME (StorageVarDecl typ, id) => do
         var_slot <- lift_option (lookup_var_slot_from_layout cx n) "set_global var_slot";
         tv <- lift_option (evaluate_type tenv typ) "set_global evaluate_type";
-        write_storage_slot cx (n2w var_slot) tv v
+        write_storage_slot cx F (n2w var_slot) tv v
       od
-    | SOME (HashMapVarDecl kt vt, id) =>
+    | SOME (HashMapVarDecl _ kt vt, id) =>
         raise $ Error "set_global: cannot set hashmap directly"
   od
 End
@@ -1983,7 +2022,7 @@ Definition assign_target_def:
         set_global cx src_id_opt ni v';
         return tv
       od
-    | HashMapRef base_slot kt vt => do
+    | HashMapRef is_transient base_slot kt vt => do
         (* HashMap: compute slot, read/modify/write storage *)
         (* First subscript is always for the outermost hashmap *)
         (first_sub, rest_subs) <- lift_option
@@ -2000,9 +2039,9 @@ Definition assign_target_def:
           "assign_target compute_hashmap_slot";
         final_tv <- lift_option (evaluate_type tenv final_type) "assign_target evaluate_type";
         (* Read current value, apply assignment, write back *)
-        current_val <- read_storage_slot cx final_slot final_tv;
+        current_val <- read_storage_slot cx is_transient final_slot final_tv;
         new_val <- lift_sum $ assign_subscripts current_val remaining_subs ao;
-        write_storage_slot cx final_slot final_tv new_val;
+        write_storage_slot cx is_transient final_slot final_tv new_val;
         return tv
       od
   od ∧
@@ -2717,9 +2756,9 @@ Definition evaluate_def:
     v2 <- get_Value tv2;
     ts <- lift_option (get_self_code cx) "Subscript get_self_code";
     res <- lift_sum $ evaluate_subscript tv1 v2;
-    case res of INL v => return v | INR (slot, t) => do
+    case res of INL v => return v | INR (is_transient, slot, t) => do
       tv <- lift_option (evaluate_type (type_env ts) t) "Subscript evaluate_type";
-      v <- read_storage_slot cx slot tv;
+      v <- read_storage_slot cx is_transient slot tv;
       return $ Value v
     od
   od ∧
@@ -2935,6 +2974,7 @@ Definition initial_state_def:
    ; globals := am.globals
    ; logs := []
    ; scopes := scs
+   ; tStorage := empty_transient_storage
    |>
 End
 

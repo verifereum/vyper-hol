@@ -532,9 +532,9 @@ Definition apply_val_def:
     liftk cx ApplyTv (do
       ts <- lift_option (get_self_code cx) "Subscript get_self_code";
       res <- lift_sum (evaluate_subscript tv1 v2);
-       case res of INL v => return v | INR (slot, t) => do
+       case res of INL v => return v | INR (is_transient, slot, t) => do
          tv <- lift_option (evaluate_type (type_env ts) t) "Subscript evaluate_type";
-         v <- read_storage_slot cx slot tv;
+         v <- read_storage_slot cx is_transient slot tv;
          return $ Value v
        od
     od st) k ∧
