@@ -13,24 +13,6 @@ Libs
 
 (* ===== Basic Slot Encoding/Decoding ===== *)
 
-Definition int_to_slot_def:
-  int_to_slot (i : int) : bytes32 = i2w i
-End
-val () = cv_auto_trans int_to_slot_def;
-
-Definition slot_to_uint_def:
-  slot_to_uint (w : bytes32) : int = &(w2n w)
-End
-val () = cv_auto_trans slot_to_uint_def;
-
-Definition slot_to_int_def:
-  slot_to_int (bits : num) (w : bytes32) : int =
-    let n = w2n w in
-    let bound = 2 ** (bits - 1) in
-    if n < bound then &n else &n - &(2 ** bits)
-End
-val () = cv_auto_trans slot_to_int_def;
-
 Definition bool_to_slot_def:
   bool_to_slot (b : bool) : bytes32 = if b then 1w else 0w
 End
@@ -106,10 +88,10 @@ val () = cv_auto_trans type_slot_size_def;
 
 Definition encode_base_to_slot_def:
   encode_base_to_slot (IntV (Unsigned n) i) (BaseTV (UintT m)) =
-    (if n = m then SOME (int_to_slot i) else NONE) /\
+    (if n = m then SOME (i2w i) else NONE) /\
   encode_base_to_slot (IntV (Signed n) i) (BaseTV (IntT m)) =
-    (if n = m then SOME (int_to_slot i) else NONE) /\
-  encode_base_to_slot (DecimalV i) (BaseTV DecimalT) = SOME (int_to_slot i) /\
+    (if n = m then SOME (i2w i) else NONE) /\
+  encode_base_to_slot (DecimalV i) (BaseTV DecimalT) = SOME (i2w i) /\
   encode_base_to_slot (BoolV b) (BaseTV BoolT) = SOME (bool_to_slot b) /\
   encode_base_to_slot (BytesV (Fixed m) bs) (BaseTV AddressT) =
     (if LENGTH bs = m /\ m = 20
@@ -128,10 +110,10 @@ val () = cv_auto_trans encode_base_to_slot_def;
 
 Definition decode_base_from_slot_def:
   decode_base_from_slot (slot : bytes32) (BaseTV (UintT n)) =
-    IntV (Unsigned n) (slot_to_uint slot) /\
+    IntV (Unsigned n) (&(w2n slot)) /\
   decode_base_from_slot slot (BaseTV (IntT n)) =
-    IntV (Signed n) (slot_to_int n slot) /\
-  decode_base_from_slot slot (BaseTV DecimalT) = DecimalV (slot_to_int 168 slot) /\
+    IntV (Signed n) (w2i slot) /\
+  decode_base_from_slot slot (BaseTV DecimalT) = DecimalV (w2i slot) /\
   decode_base_from_slot slot (BaseTV BoolT) = BoolV (slot_to_bool slot) /\
   decode_base_from_slot slot (BaseTV AddressT) =
     BytesV (Fixed 20) (DROP 12 (word_to_bytes slot T)) /\
