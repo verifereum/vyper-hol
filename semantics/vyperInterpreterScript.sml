@@ -591,14 +591,13 @@ val () = cv_auto_trans value_to_key_def;
 Definition evaluate_subscript_def:
   evaluate_subscript (Value (ArrayV av)) (IntV _ i) =
   (case array_index av i
-   of SOME v => INL $ Value v
-   | _ => INR "subscript array_index") ∧
+   of SOME v => INL $ INL $ Value v
+    | _ => INR "subscript array_index") ∧
   evaluate_subscript (HashMapRef slot kt vt) kv =
-  (let key = encode_hashmap_key kt kv in
-   let new_slot = hashmap_slot slot key in
-   (case vt of
-    | HashMapT kt' vt' => INL $ HashMapRef new_slot kt' vt'
-    | Type _ => INL $ HashMapRef new_slot kt vt)) ∧
+  (let new_slot = hashmap_slot slot $ encode_hashmap_key kt kv in
+   case vt
+   of HashMapT kt' vt' => INL $ INL $ HashMapRef new_slot kt' vt'
+    | Type t => INL $ INR (new_slot, t)) ∧
   evaluate_subscript _ _ = INR "evaluate_subscript"
 End
 
@@ -1754,23 +1753,6 @@ End
 
 val () = cv_auto_trans update_module_immutable_def;
 
-(* Finalize a toplevel_value: if it's a HashMapRef with a final Type,
-   read the value from storage. Otherwise return as-is. *)
-Definition finalize_hashmap_ref_def:
-  finalize_hashmap_ref cx tenv (Value v) = return (Value v) ∧
-  finalize_hashmap_ref cx tenv (HashMapRef slot kt (HashMapT kt' vt)) =
-    return (HashMapRef slot kt (HashMapT kt' vt)) ∧
-  finalize_hashmap_ref cx tenv (HashMapRef slot kt (Type t)) = do
-    tv <- lift_option (evaluate_type tenv t) "finalize_hashmap_ref evaluate_type";
-    v <- read_storage_slot cx slot tv;
-    return (Value v)
-  od
-End
-
-val () = finalize_hashmap_ref_def
-  |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
-  |> cv_auto_trans;
-
 (* Convert subscript back to a value for hashmap key encoding *)
 Definition subscript_to_value_def:
   subscript_to_value (IntSubscript i) = SOME (IntV (Signed 256) i) ∧
@@ -2734,8 +2716,12 @@ Definition evaluate_def:
     tv2 <- eval_expr cx e2;
     v2 <- get_Value tv2;
     ts <- lift_option (get_self_code cx) "Subscript get_self_code";
-    tv <- lift_sum $ evaluate_subscript tv1 v2;
-    finalize_hashmap_ref cx (type_env ts) tv
+    res <- lift_sum $ evaluate_subscript tv1 v2;
+    case res of INL v => return v | INR (slot, t) => do
+      tv <- lift_option (evaluate_type (type_env ts) t) "Subscript evaluate_type";
+      v <- read_storage_slot cx slot tv;
+      return $ Value v
+    od
   od ∧
   eval_expr cx (Attribute e id) = do
     tv <- eval_expr cx e;
