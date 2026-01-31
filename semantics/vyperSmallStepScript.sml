@@ -531,8 +531,12 @@ Definition apply_val_def:
   apply_val cx v2 st (SubscriptK1 tv1 k) =
     liftk cx ApplyTv (do
       ts <- lift_option (get_self_code cx) "Subscript get_self_code";
-      tv <- lift_sum (evaluate_subscript tv1 v2);
-      finalize_hashmap_ref cx (type_env ts) tv
+      res <- lift_sum (evaluate_subscript tv1 v2);
+       case res of INL v => return v | INR (slot, t) => do
+         tv <- lift_option (evaluate_type (type_env ts) t) "Subscript evaluate_type";
+         v <- read_storage_slot cx slot tv;
+         return $ Value v
+       od
     od st) k ∧
   apply_val cx v st (AttributeK id k) =
     liftk cx (ApplyTv o Value) (lift_sum (evaluate_attribute v id) st) k ∧
