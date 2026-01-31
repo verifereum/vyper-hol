@@ -1,0 +1,2 @@
+# General properties of Vyper semantics
+INCLUDES = ../semantics ../syntax ../frontend $(VFMDIR)/util $(VFMDIR)/spec
