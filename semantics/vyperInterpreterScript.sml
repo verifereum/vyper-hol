@@ -1437,33 +1437,19 @@ val () = cv_auto_trans find_containing_scope_def;
 
 Type log = “:nsid # (value list)”;
 
-(* Module-aware globals: keyed by source_id *)
+(* Module-aware immutables: keyed by source_id *)
 (* NONE = main contract, SOME n = module with source_id n *)
-Datatype:
-  module_globals = <|
-    immutables: num |-> value
-  |>
+Type module_immutables = “:(num option, num |-> value) alist”
+
+Definition empty_immutables_def:
+  empty_immutables : module_immutables = []
 End
 
-Definition empty_module_globals_def:
-  empty_module_globals : module_globals = <|
-    immutables := FEMPTY
-  |>
-End
-
-val () = cv_auto_trans empty_module_globals_def;
-
-Type globals_state = “:(num option, module_globals) alist”
-
-Definition empty_globals_def:
-  empty_globals : globals_state = []
-End
-
-val () = cv_auto_trans empty_globals_def;
+val () = cv_auto_trans empty_immutables_def;
 
 Datatype:
   evaluation_state = <|
-    globals: (address, globals_state) alist
+    immutables: (address, module_immutables) alist
   ; logs: log list
   ; scopes: scope list
   ; accounts: evm_accounts
@@ -1474,7 +1460,7 @@ End
 Definition empty_state_def:
   empty_state : evaluation_state = <|
     accounts := empty_accounts;
-    globals := [];
+    immutables := [];
     logs := [];
     scopes := [];
     tStorage := empty_transient_storage
@@ -1588,32 +1574,32 @@ val () = lift_sum_def
 
 (* reading from the state *)
 
-Definition get_current_globals_def:
-  get_current_globals cx st =
-    lift_option (ALOOKUP st.globals cx.txn.target) "get_current_globals" st
+Definition get_address_immutables_def:
+  get_address_immutables cx st =
+    lift_option (ALOOKUP st.immutables cx.txn.target) "get_address_immutables" st
 End
 
-val () = get_current_globals_def
+val () = get_address_immutables_def
   |> SRULE [lift_option_def, option_CASE_rator]
   |> cv_auto_trans;
 
-(* Helper: get module_globals for a source_id, or empty if not present *)
-Definition get_module_globals_def:
-  get_module_globals src_id_opt (gbs: globals_state) =
-    case ALOOKUP gbs src_id_opt of
-      NONE => empty_module_globals
-    | SOME mg => mg
+(* Helper: get immutables for a source_id, or empty if not present *)
+Definition get_source_immutables_def:
+  get_source_immutables src_id_opt (imms: module_immutables) =
+    case ALOOKUP imms src_id_opt of
+      NONE => FEMPTY
+    | SOME imm => imm
 End
 
-val () = cv_auto_trans get_module_globals_def;
+val () = cv_auto_trans get_source_immutables_def;
 
-(* Helper: update module_globals for a source_id in globals_state *)
-Definition set_module_globals_def:
-  set_module_globals src_id_opt (mg: module_globals) (gbs: globals_state) =
-    (src_id_opt, mg) :: ADELKEY src_id_opt gbs
+(* Helper: set immutables for a source_id *)
+Definition set_source_immutables_def:
+  set_source_immutables src_id_opt imm (imms: module_immutables) =
+    (src_id_opt, imm) :: ADELKEY src_id_opt imms
 End
 
-val () = cv_auto_trans set_module_globals_def;
+val () = cv_auto_trans set_source_immutables_def;
 
 (* Find a storage variable or hashmap declaration in toplevels *)
 Datatype:
@@ -1755,34 +1741,26 @@ val () = lookup_global_def
   |> cv_auto_trans;
 
 (* Module-aware immutables lookup *)
-Definition get_immutables_module_def:
-  get_immutables_module cx src_id_opt = do
-    gbs <- get_current_globals cx;
-    let mg = get_module_globals src_id_opt gbs in
-    return mg.immutables
+Definition get_immutables_def:
+  get_immutables cx src_id_opt = do
+    imms <- get_address_immutables cx;
+    return (get_source_immutables src_id_opt imms)
   od
 End
 
-val () = get_immutables_module_def
+val () = get_immutables_def
   |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
   |> cv_auto_trans;
 
-Definition get_immutables_def:
-  get_immutables cx = get_immutables_module cx NONE
+
+
+Definition update_immutable_def:
+  update_immutable src_id key v (imms: module_immutables) =
+    let imm = get_source_immutables src_id imms in
+    set_source_immutables src_id (imm |+ (key, v)) imms
 End
 
-val () = cv_auto_trans get_immutables_def;
-
-
-
-Definition update_module_immutable_def:
-  update_module_immutable src_id key v (gbs: globals_state) =
-    let mg = get_module_globals src_id gbs in
-    let mg' = mg with immutables updated_by (λm. m |+ (key, v)) in
-    set_module_globals src_id mg' gbs
-End
-
-val () = cv_auto_trans update_module_immutable_def;
+val () = cv_auto_trans update_immutable_def;
 
 (* Convert subscript back to a value for hashmap key encoding *)
 Definition subscript_to_value_def:
@@ -1863,14 +1841,14 @@ val () = lookup_flag_mem_def
 
 (* writing to the state *)
 
-Definition set_current_globals_def:
-  set_current_globals cx gbs st =
+Definition set_address_immutables_def:
+  set_address_immutables cx imms st =
   let addr = cx.txn.target in
-    return () $ st with globals updated_by
-      (λal. (addr, gbs) :: (ADELKEY addr al))
+    return () $ st with immutables updated_by
+      (λal. (addr, imms) :: (ADELKEY addr al))
 End
 
-val () = cv_auto_trans set_current_globals_def;
+val () = cv_auto_trans set_address_immutables_def;
 
 (* Module-aware global set: write a value to EVM storage *)
 Definition set_global_def:
@@ -1896,10 +1874,9 @@ val () = set_global_def
 
 Definition set_immutable_def:
   set_immutable cx src_id_opt n v = do
-    gbs <- get_current_globals cx;
-    let mg = get_module_globals src_id_opt gbs in
-    let mg' = mg with immutables updated_by (λm. m |+ (n, v)) in
-    set_current_globals cx $ set_module_globals src_id_opt mg' gbs
+    imms <- get_address_immutables cx;
+    let imm = get_source_immutables src_id_opt imms in
+    set_address_immutables cx $ set_source_immutables src_id_opt (imm |+ (n, v)) imms
   od
 End
 
@@ -2039,7 +2016,7 @@ Definition assign_target_def:
   od ∧
   assign_target cx (BaseTargetV (ImmutableVar id) is) ao = do
     ni <<- string_to_num id;
-    imms <- get_immutables cx;
+    imms <- get_immutables cx NONE;
     a <- lift_option (FLOOKUP imms ni) "assign_target ImmutableVar";
     a' <- lift_sum $ assign_subscripts a (REVERSE is) ao;
     set_immutable cx NONE ni a';
@@ -2690,7 +2667,7 @@ Definition evaluate_def:
             then SOME $ ScopedVar id
 	    else NONE;
     ivo <- if cx.txn.is_creation
-           then do imms <- get_immutables cx;
+           then do imms <- get_immutables cx NONE;
                    return $ immutable_target imms id n
                 od
            else return NONE;
@@ -2720,7 +2697,7 @@ Definition evaluate_def:
   od ∧
   eval_expr cx (Name id) = do
     env <- get_scopes;
-    imms <- get_immutables cx;
+    imms <- get_immutables cx NONE;
     n <<- string_to_num id;
     v <- lift_sum $ exactly_one_option
            (lookup_scopes n env) (FLOOKUP imms n);
@@ -2893,27 +2870,27 @@ Definition force_default_value_def:
 End
 
 (* TODO: assumes unique identifiers, but should check? *)
-(* All initial_globals are for main contract (NONE source_id) *)
-Definition initial_globals_def:
-  initial_globals env [] = empty_globals ∧
+(* All initial_immutables are for main contract (NONE source_id) *)
+Definition initial_immutables_def:
+  initial_immutables env [] = empty_immutables ∧
   (* Storage and transient variables use EVM storage, which is zero-initialized *)
-  initial_globals env (VariableDecl _ Immutable id typ :: ts) =
-  (let gbs = initial_globals env ts in
+  initial_immutables env (VariableDecl _ Immutable id typ :: ts) =
+  (let imms = initial_immutables env ts in
    let key = string_to_num id in
    let iv = force_default_value env typ in
-     update_module_immutable NONE key iv gbs) ∧
+     update_immutable NONE key iv imms) ∧
   (* TODO: prevent flag value being updated even in constructor *)
-  initial_globals env (FlagDecl id ls :: ts) =
-  (let gbs = initial_globals env ts in
+  initial_immutables env (FlagDecl id ls :: ts) =
+  (let imms = initial_immutables env ts in
    let key = string_to_num id in
    let iv = flag_value (LENGTH ls) 1 [] ls in
-     update_module_immutable NONE key iv gbs) ∧
+     update_immutable NONE key iv imms) ∧
   (* TODO: handle Constants? or ignore since assuming folded into AST *)
-  (* HashMaps are not stored in globals - they're constructed on-the-fly in lookup_global *)
-  initial_globals env (t :: ts) = initial_globals env ts
+  (* HashMaps are not stored in immutables - they're constructed on-the-fly in lookup_global *)
+  initial_immutables env (t :: ts) = initial_immutables env ts
 End
 
-val () = cv_auto_trans initial_globals_def;
+val () = cv_auto_trans initial_immutables_def;
 
 (* Convert all storage_layouts to var_layouts *)
 Definition convert_all_layouts_def:
@@ -2939,7 +2916,7 @@ val () = cv_auto_trans initial_evaluation_context_def;
 Datatype:
   abstract_machine = <|
     sources: (address, (num option, toplevel list) alist) alist
-  ; globals: (address, globals_state) alist
+  ; immutables: (address, module_immutables) alist
   ; accounts: evm_accounts
   ; layouts: (address, storage_layout # storage_layout) alist  (* (storage, transient) *)
   ; tStorage: transient_storage
@@ -2949,7 +2926,7 @@ End
 Definition initial_machine_state_def:
   initial_machine_state : abstract_machine = <|
     sources := []
-  ; globals := []
+  ; immutables := []
   ; accounts := empty_accounts
   ; layouts := []
   ; tStorage := empty_transient_storage
@@ -2959,7 +2936,7 @@ End
 Definition initial_state_def:
   initial_state (am: abstract_machine) scs : evaluation_state =
   <| accounts := am.accounts
-   ; globals := am.globals
+   ; immutables := am.immutables
    ; logs := []
    ; scopes := scs
    ; tStorage := am.tStorage
@@ -2971,7 +2948,7 @@ val () = cv_auto_trans initial_state_def;
 Definition abstract_machine_from_state_def:
   abstract_machine_from_state srcs layouts (st: evaluation_state) =
   <| sources := srcs
-   ; globals := st.globals
+   ; immutables := st.immutables
    ; accounts := st.accounts
    ; layouts := layouts
    ; tStorage := st.tStorage
@@ -3034,7 +3011,7 @@ Definition call_external_function_def:
             of NONE => (INR (Error "ext cast ret"), am)
              | SOME v => (INL v, am))
        | (INR e, st) => (INR e, abstract_machine_from_state srcs layouts st)) in
-    (res, st (* with globals updated_by reset_all_transient_globals -- done separately *)))
+    (res, st (* transient storage cleared separately via ClearTransientStorage action *)))
 End
 
 Definition call_external_def:
@@ -3054,8 +3031,8 @@ Definition load_contract_def:
   let addr = tx.target in
   let ts = case ALOOKUP mods NONE of SOME ts => ts | NONE => [] in
   let tenv = type_env ts in
-  let gbs = initial_globals tenv ts in
-  let am = am with globals updated_by CONS (addr, gbs) in
+  let imms = initial_immutables tenv ts in
+  let am = am with immutables updated_by CONS (addr, imms) in
   case lookup_function tx.function_name Deploy ts of
      | NONE => INR $ Error "no constructor"
      | SOME (mut, args, ret, body) =>
