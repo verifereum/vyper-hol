@@ -57,6 +57,7 @@ Datatype:
   | BuiltinK builtin eval_continuation
   | TypeBuiltinK type_builtin type eval_continuation
   | CallSendK eval_continuation
+  | ExtCallK bool identifier (type list) type eval_continuation
   | IntCallK (num |-> type_args) (num option # identifier) ((identifier # type) list) type (stmt list) eval_continuation
   | IntCallK1 (scope list) type_value eval_continuation
   | ExprsK (expr list) eval_continuation
@@ -180,8 +181,8 @@ Definition eval_expr_cps_def:
     (case check (LENGTH es = 2) "Send args" st of
        (INR ex, st) => AK cx9 (ApplyExc ex) st k
      | (INL (), st) => eval_exprs_cps cx9 es st (CallSendK k)) ∧
-  eval_expr_cps cx10 (Call (ExtCall is_static sig) _) st k =
-    AK cx10 (ApplyExc (Error "TODO: ExtCall")) st k ∧
+  eval_expr_cps cx10 (Call (ExtCall is_static (func_name, arg_types, ret_type)) es) st k =
+    eval_exprs_cps cx10 es st (ExtCallK is_static func_name arg_types ret_type k) ∧
   eval_expr_cps cx10 (Call (IntCall (ns, fn)) es) st k =
     (case do
       check (no_recursion (ns, fn) cx10.stk) "recursion";
@@ -365,6 +366,7 @@ Definition apply_exc_def:
   apply_exc cx ex st (BuiltinK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (TypeBuiltinK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CallSendK k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (ExtCallK _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IntCallK _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IntCallK1 prev rtv k) =
     liftk (cx with stk updated_by TL) (ApplyTv o Value)
@@ -582,6 +584,29 @@ Definition apply_vals_def:
       transfer_value cx.txn.target toAddr amount;
       return $ Value NoneV
     od st) k ∧
+  apply_vals cx vs st (ExtCallK is_static func_name arg_types ret_type k) =
+    liftk cx ApplyTv (do
+      check (vs ≠ []) "ExtCall no target";
+      target_addr <- lift_option (dest_AddressV (HD vs)) "ExtCall target not address";
+      arg_vals <<- TL vs;
+      ts <- lift_option (get_self_code cx) "ExtCall get_self_code";
+      tenv <<- type_env ts;
+      calldata <- lift_option (build_ext_calldata tenv func_name arg_types arg_vals)
+                              "ExtCall build_calldata";
+      accounts <- get_accounts;
+      tStorage <- get_transient_storage;
+      txParams <<- vyper_to_tx_params cx.txn;
+      caller <<- cx.txn.target;
+      result <- lift_option
+        (run_ext_call caller target_addr calldata 0 is_static accounts tStorage txParams)
+        "ExtCall run failed";
+      (success, returnData, accounts', tStorage') <<- result;
+      check success "ExtCall reverted";
+      update_accounts (K accounts');
+      update_transient (K tStorage');
+      ret_val <- lift_sum (evaluate_abi_decode tenv ret_type returnData);
+      return $ Value ret_val
+    od st) k ∧
   apply_vals cx vs st (IntCallK tenv src_fn args ret body k) =
     (case do
       env <- lift_option (bind_arguments tenv args vs) "IntCall bind_arguments";
@@ -597,9 +622,17 @@ Definition apply_vals_def:
     AK cx (ApplyExc $ Error "apply_vals k") st DoneK
 End
 
+Triviality LET4_UNCURRY:
+  (let (x,y,z,w) = M in N x y z w) =
+     let p = M; x = FST p; p = SND p; y = FST p; p = SND p;
+         z = FST p; w = SND p in N x y z w
+Proof
+  rw[UNCURRY]
+QED
+
 val apply_vals_pre_def = apply_vals_def
   |> SRULE [liftk1, bind_def, ignore_bind_def, lift_option_def,
-            lift_sum_def, prod_CASE_rator,
+            lift_sum_def, prod_CASE_rator, LET_RATOR, LET4_UNCURRY,
             sum_CASE_rator, option_CASE_rator]
   |> cv_auto_trans_pre "apply_vals_pre";
 
@@ -1140,7 +1173,11 @@ Proof
       \\ drule eval_exprs_length
       \\ gvs[check_def, assert_def] )
     \\ rw[] )
-  \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, raise_def] (* ExtCall *)
+  \\ conj_tac >- ( (* ExtCall *)
+    rw[eval_expr_cps_def, evaluate_def, bind_def]
+    \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    \\ rw[Once OWHILE_THM, stepk_def, apply_vals_def, liftk1])
   \\ conj_tac >- (
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def,
        no_recursion_def]
