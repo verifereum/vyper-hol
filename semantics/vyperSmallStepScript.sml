@@ -180,10 +180,8 @@ Definition eval_expr_cps_def:
     (case check (LENGTH es = 2) "Send args" st of
        (INR ex, st) => AK cx9 (ApplyExc ex) st k
      | (INL (), st) => eval_exprs_cps cx9 es st (CallSendK k)) ∧
-  eval_expr_cps cx10 (Call (ExtCall sig) _) st k =
+  eval_expr_cps cx10 (Call (ExtCall is_static sig) _) st k =
     AK cx10 (ApplyExc (Error "TODO: ExtCall")) st k ∧
-  eval_expr_cps cx10 (Call (StaticCall sig) _) st k =
-    AK cx10 (ApplyExc (Error "TODO: StaticCall")) st k ∧
   eval_expr_cps cx10 (Call (IntCall (ns, fn)) es) st k =
     (case do
       check (no_recursion (ns, fn) cx10.stk) "recursion";
@@ -1143,7 +1141,6 @@ Proof
       \\ gvs[check_def, assert_def] )
     \\ rw[] )
   \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, raise_def] (* ExtCall *)
-  \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, raise_def] (* StaticCall *)
   \\ conj_tac >- (
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def,
        no_recursion_def]

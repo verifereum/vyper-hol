@@ -2545,6 +2545,139 @@ End
 
 val () = cv_auto_trans get_range_limits_def;
 
+(* ===== External Call Execution via Verifereum ===== *)
+
+(* Build a transaction record for initial_context.
+   Only the fields used by initial_msg_params matter:
+   - from: becomes msg.sender (caller)
+   - to: target address
+   - value: becomes msg.value
+   - data: becomes msg.data (calldata)
+   - gasLimit: gas available for the call
+   Other fields are unused placeholders. *)
+Definition make_call_tx_def:
+  make_call_tx caller callee value calldata gas_limit : transaction =
+    <| from := caller
+     ; to := SOME callee
+     ; data := calldata
+     ; nonce := 0
+     ; value := value
+     ; gasLimit := gas_limit
+     ; gasPrice := 0
+     ; accessList := []
+     ; blobVersionedHashes := []
+     ; maxFeePerBlobGas := NONE
+     ; maxFeePerGas := NONE
+     ; authorizationList := []
+     |>
+End
+
+val () = cv_auto_trans make_call_tx_def;
+
+(* Build transaction_parameters from Vyper call_txn.
+   These are the transaction-level parameters that persist across calls.
+
+   TODO: Some fields are not yet in call_txn and use defaults:
+   - origin should be original tx.origin, currently using txn.sender
+   - blockCoinBase, blockGasLimit, prevRandao, chainId need to be added *)
+Definition vyper_to_tx_params_def:
+  vyper_to_tx_params (txn: call_txn) : transaction_parameters =
+    <| origin := txn.sender  (* TODO: track tx.origin separately *)
+     ; gasPrice := txn.gas_price
+     ; baseFeePerGas := 0
+     ; baseFeePerBlobGas := txn.blob_base_fee
+     ; blockNumber := txn.block_number
+     ; blockTimeStamp := txn.time_stamp
+     ; blockCoinBase := 0w   (* TODO: add to call_txn *)
+     ; blockGasLimit := 0    (* TODO: add to call_txn *)
+     ; prevRandao := 0w      (* TODO: add to call_txn *)
+     ; prevHashes := txn.block_hashes
+     ; blobHashes := txn.blob_hashes
+     ; chainId := 0          (* TODO: add to call_txn *)
+     ; authRefund := 0
+     |>
+End
+
+val () = cv_auto_trans vyper_to_tx_params_def;
+
+(* Default gas limit for external calls - effectively infinite.
+   TODO: May need to be configurable or come from an oracle. *)
+Definition default_call_gas_limit_def:
+  default_call_gas_limit : num = 2 ** 64
+End
+
+val () = cv_auto_trans default_call_gas_limit_def;
+
+(* Build execution_state for an external call *)
+Definition make_ext_call_state_def:
+  make_ext_call_state caller callee code calldata value is_static
+                      accounts tStorage txParams =
+    let gas_limit = default_call_gas_limit in
+    let tx = make_call_tx caller callee value calldata gas_limit in
+    let ctxt = initial_context callee code is_static empty_return_destination tx in
+    let accesses = <| addresses := fINSERT caller (fINSERT callee fEMPTY)
+                    ; storageKeys := fEMPTY |> in
+    let rollback = <| accounts := accounts
+                    ; tStorage := tStorage
+                    ; accesses := accesses
+                    ; toDelete := [] |> in
+    <| contexts := [(ctxt, rollback)]
+     ; txParams := txParams
+     ; rollback := rollback
+     ; msdomain := Collect empty_domain
+     |>
+End
+
+val () = cv_auto_trans make_ext_call_state_def;
+
+(* Extract results from verifereum execution.
+   On success: return updated accounts/tStorage.
+   On revert: return original accounts/tStorage (changes are discarded).
+   On other exception: return NONE. *)
+Definition extract_call_result_def:
+  extract_call_result orig_accounts orig_tStorage (result, final_state) =
+    case final_state.contexts of
+    | [(ctxt, _)] =>
+        (case result of
+         | INR NONE =>  (* success - no exception *)
+             SOME (T, ctxt.returnData,
+                   final_state.rollback.accounts,
+                   final_state.rollback.tStorage)
+         | INR (SOME Reverted) =>  (* revert - return original state *)
+             SOME (F, ctxt.returnData, orig_accounts, orig_tStorage)
+         | _ => NONE)  (* other exception or still running *)
+    | _ => NONE  (* shouldn't happen for single-context call *)
+End
+
+val () = cv_auto_trans extract_call_result_def;
+
+(* Run external call via verifereum.
+
+   Parameters:
+   - caller: address of the calling contract (becomes msg.sender)
+   - callee: address being called
+   - calldata: encoded function call (from build_ext_calldata)
+   - value: ETH to send (becomes msg.value)
+   - is_static: true for staticcall (read-only)
+   - accounts: current account states
+   - tStorage: current transient storage
+   - txParams: transaction parameters (preserves tx.origin, block info)
+
+   Returns SOME (success, returnData, accounts', tStorage') or NONE on error. *)
+Definition run_ext_call_def:
+  run_ext_call caller callee calldata value is_static
+               accounts tStorage txParams =
+    let code = (lookup_account callee accounts).code in
+    let s0 = make_ext_call_state caller callee code calldata value is_static
+                                 accounts tStorage txParams in
+    case vfmExecution$run s0 of
+    | SOME (result, final_state) =>
+        extract_call_result accounts tStorage (result, final_state)
+    | NONE => NONE
+End
+
+val () = cv_auto_trans run_ext_call_def;
+
 (* top-level definition of the Vyper interpreter *)
 
 Definition evaluate_def:
@@ -2766,8 +2899,8 @@ Definition evaluate_def:
     transfer_value cx.txn.target toAddr amount;
     return $ Value $ NoneV
   od ∧
-  eval_expr cx (Call (ExtCall sig) _) = raise $ Error "TODO: ExtCall" ∧
-  eval_expr cx (Call (StaticCall sig) _) = raise $ Error "TODO: StaticCall" ∧
+  eval_expr cx (Call (ExtCall is_static sig) es) =
+    raise $ Error "TODO: ExtCall" ∧
   eval_expr cx (Call (IntCall (src_id_opt, fn)) es) = do
     check (¬MEM (src_id_opt, fn) cx.stk) "recursion";
     ts <- lift_option (get_module_code cx src_id_opt) "IntCall get_module_code";
@@ -2956,141 +3089,6 @@ Definition abstract_machine_from_state_def:
 End
 
 val () = cv_auto_trans abstract_machine_from_state_def;
-
-
-
-(* ===== External Call Execution via Verifereum ===== *)
-
-(* Build a transaction record for initial_context.
-   Only the fields used by initial_msg_params matter:
-   - from: becomes msg.sender (caller)
-   - to: target address
-   - value: becomes msg.value
-   - data: becomes msg.data (calldata)
-   - gasLimit: gas available for the call
-   Other fields are unused placeholders. *)
-Definition make_call_tx_def:
-  make_call_tx caller callee value calldata gas_limit : transaction =
-    <| from := caller
-     ; to := SOME callee
-     ; data := calldata
-     ; nonce := 0
-     ; value := value
-     ; gasLimit := gas_limit
-     ; gasPrice := 0
-     ; accessList := []
-     ; blobVersionedHashes := []
-     ; maxFeePerBlobGas := NONE
-     ; maxFeePerGas := NONE
-     ; authorizationList := []
-     |>
-End
-
-val () = cv_auto_trans make_call_tx_def;
-
-(* Build transaction_parameters from Vyper call_txn.
-   These are the transaction-level parameters that persist across calls.
-
-   TODO: Some fields are not yet in call_txn and use defaults:
-   - origin should be original tx.origin, currently using txn.sender
-   - blockCoinBase, blockGasLimit, prevRandao, chainId need to be added *)
-Definition vyper_to_tx_params_def:
-  vyper_to_tx_params (txn: call_txn) : transaction_parameters =
-    <| origin := txn.sender  (* TODO: track tx.origin separately *)
-     ; gasPrice := txn.gas_price
-     ; baseFeePerGas := 0
-     ; baseFeePerBlobGas := txn.blob_base_fee
-     ; blockNumber := txn.block_number
-     ; blockTimeStamp := txn.time_stamp
-     ; blockCoinBase := 0w   (* TODO: add to call_txn *)
-     ; blockGasLimit := 0    (* TODO: add to call_txn *)
-     ; prevRandao := 0w      (* TODO: add to call_txn *)
-     ; prevHashes := txn.block_hashes
-     ; blobHashes := txn.blob_hashes
-     ; chainId := 0          (* TODO: add to call_txn *)
-     ; authRefund := 0
-     |>
-End
-
-val () = cv_auto_trans vyper_to_tx_params_def;
-
-(* Default gas limit for external calls - effectively infinite.
-   TODO: May need to be configurable or come from an oracle. *)
-Definition default_call_gas_limit_def:
-  default_call_gas_limit : num = 2 ** 64
-End
-
-val () = cv_auto_trans default_call_gas_limit_def;
-
-(* Build execution_state for an external call *)
-Definition make_ext_call_state_def:
-  make_ext_call_state caller callee code calldata value is_static
-                      accounts tStorage txParams =
-    let gas_limit = default_call_gas_limit in
-    let tx = make_call_tx caller callee value calldata gas_limit in
-    let ctxt = initial_context callee code is_static empty_return_destination tx in
-    let accesses = <| addresses := fINSERT caller (fINSERT callee fEMPTY)
-                    ; storageKeys := fEMPTY |> in
-    let rollback = <| accounts := accounts
-                    ; tStorage := tStorage
-                    ; accesses := accesses
-                    ; toDelete := [] |> in
-    <| contexts := [(ctxt, rollback)]
-     ; txParams := txParams
-     ; rollback := rollback
-     ; msdomain := Collect empty_domain
-     |>
-End
-
-val () = cv_auto_trans make_ext_call_state_def;
-
-(* Extract results from verifereum execution.
-   On success: return updated accounts/tStorage.
-   On revert: return original accounts/tStorage (changes are discarded).
-   On other exception: return NONE. *)
-Definition extract_call_result_def:
-  extract_call_result orig_accounts orig_tStorage (result, final_state) =
-    case final_state.contexts of
-    | [(ctxt, _)] =>
-        (case result of
-         | INR NONE =>  (* success - no exception *)
-             SOME (T, ctxt.returnData,
-                   final_state.rollback.accounts,
-                   final_state.rollback.tStorage)
-         | INR (SOME Reverted) =>  (* revert - return original state *)
-             SOME (F, ctxt.returnData, orig_accounts, orig_tStorage)
-         | _ => NONE)  (* other exception or still running *)
-    | _ => NONE  (* shouldn't happen for single-context call *)
-End
-
-val () = cv_auto_trans extract_call_result_def;
-
-(* Run external call via verifereum.
-
-   Parameters:
-   - caller: address of the calling contract (becomes msg.sender)
-   - callee: address being called
-   - calldata: encoded function call (from build_ext_calldata)
-   - value: ETH to send (becomes msg.value)
-   - is_static: true for staticcall (read-only)
-   - accounts: current account states
-   - tStorage: current transient storage
-   - txParams: transaction parameters (preserves tx.origin, block info)
-
-   Returns SOME (success, returnData, accounts', tStorage') or NONE on error. *)
-Definition run_ext_call_def:
-  run_ext_call caller callee calldata value is_static
-               accounts tStorage txParams =
-    let code = (lookup_account callee accounts).code in
-    let s0 = make_ext_call_state caller callee code calldata value is_static
-                                 accounts tStorage txParams in
-    case vfmExecution$run s0 of
-    | SOME (result, final_state) =>
-        extract_call_result accounts tStorage (result, final_state)
-    | NONE => NONE
-End
-
-val () = cv_auto_trans run_ext_call_def;
 
 (* Top-level entry-points into the semantics: loading (deploying) a contract,
 * and calling its external functions *)

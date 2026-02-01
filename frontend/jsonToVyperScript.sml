@@ -543,16 +543,16 @@ Definition translate_expr_def:
               SOME src_id => Call (IntCall (SOME src_id, extract_func_name func)) args'
             | NONE => Call (IntCall (NONE, "")) args')) /\
 
-  (* ExtCall - mutating external call *)
+  (* ExtCall - mutating external call (is_static = F) *)
   (* args includes target as first element (convention) *)
   (translate_expr (JE_ExtCall func_name arg_types ret_ty args) =
-    Call (ExtCall (func_name, translate_type_list arg_types, translate_type ret_ty))
+    Call (ExtCall F (func_name, translate_type_list arg_types, translate_type ret_ty))
          (translate_expr_list args)) /\
 
-  (* StaticCall - read-only external call *)
+  (* StaticCall - read-only external call (is_static = T) *)
   (* args includes target as first element (convention) *)
   (translate_expr (JE_StaticCall func_name arg_types ret_ty args) =
-    Call (StaticCall (func_name, translate_type_list arg_types, translate_type ret_ty))
+    Call (ExtCall T (func_name, translate_type_list arg_types, translate_type ret_ty))
          (translate_expr_list args)) /\
 
   (* Helper for translating expression lists *)
