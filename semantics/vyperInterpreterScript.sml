@@ -2899,8 +2899,29 @@ Definition evaluate_def:
     transfer_value cx.txn.target toAddr amount;
     return $ Value $ NoneV
   od ∧
-  eval_expr cx (Call (ExtCall is_static sig) es) =
-    raise $ Error "TODO: ExtCall" ∧
+  eval_expr cx (Call (ExtCall is_static (func_name, arg_types, ret_type)) es) = do
+    vs <- eval_exprs cx es;
+    check (vs ≠ []) "ExtCall no target";
+    target_addr <- lift_option (dest_AddressV (HD vs)) "ExtCall target not address";
+    arg_vals <<- TL vs;
+    ts <- lift_option (get_self_code cx) "ExtCall get_self_code";
+    tenv <<- type_env ts;
+    calldata <- lift_option (build_ext_calldata tenv func_name arg_types arg_vals)
+                            "ExtCall build_calldata";
+    accounts <- get_accounts;
+    tStorage <- get_transient_storage;
+    txParams <<- vyper_to_tx_params cx.txn;
+    caller <<- cx.txn.target;
+    result <- lift_option
+      (run_ext_call caller target_addr calldata 0 is_static accounts tStorage txParams)
+      "ExtCall run failed";
+    (success, returnData, accounts', tStorage') <<- result;
+    check success "ExtCall reverted";
+    update_accounts (K accounts');
+    update_transient (K tStorage');
+    ret_val <- lift_sum (evaluate_abi_decode tenv ret_type returnData);
+    return $ Value ret_val
+  od ∧
   eval_expr cx (Call (IntCall (src_id_opt, fn)) es) = do
     check (¬MEM (src_id_opt, fn) cx.stk) "recursion";
     ts <- lift_option (get_module_code cx src_id_opt) "IntCall get_module_code";
