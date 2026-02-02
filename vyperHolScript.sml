@@ -4,5 +4,6 @@ Ancestors
   vyperTestRunner
   jsonToVyper
   vyperHoare
+  vyperHoareExamples
   phiFunction
   rtaPassCorrectness
