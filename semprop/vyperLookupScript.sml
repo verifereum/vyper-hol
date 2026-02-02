@@ -246,6 +246,16 @@ Proof
   Cases_on `lookup_scopes (string_to_num n) st.scopes` >> gvs[]
 QED
 
+Theorem lookup_name_to_lookup_scoped_var:
+  ∀cx st n v.
+    valid_lookups cx st ∧
+    var_in_scope st n ∧
+    lookup_name cx st n = SOME v ⇒
+    lookup_scoped_var st n = SOME v
+Proof
+  cheat
+QED
+
 Theorem var_in_scope_dom_iff:
   ∀st1 st2 n.
     MAP FDOM st1.scopes = MAP FDOM st2.scopes ⇒
