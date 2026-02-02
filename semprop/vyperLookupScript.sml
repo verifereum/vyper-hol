@@ -253,7 +253,13 @@ Theorem lookup_name_to_lookup_scoped_var:
     lookup_name cx st n = SOME v ⇒
     lookup_scoped_var st n = SOME v
 Proof
-  cheat
+  rw[valid_lookups_def, var_in_scope_def, lookup_scoped_var_def, lookup_name_def] >>
+  qpat_x_assum `_ = SOME v` mp_tac >>
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+       get_immutables_def, get_address_immutables_def, lift_option_def] >>
+  `FLOOKUP (get_source_immutables NONE imms) (string_to_num n) = NONE` by simp[] >>
+  Cases_on `lookup_scopes (string_to_num n) st.scopes` >> gvs[] >>
+  simp[exactly_one_option_def, lift_sum_def, return_def]
 QED
 
 Theorem var_in_scope_dom_iff:
