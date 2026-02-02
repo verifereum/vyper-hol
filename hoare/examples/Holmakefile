@@ -1,0 +1,2 @@
+# Hoare logic examples
+INCLUDES = ../ ../../semantics ../../syntax ../../frontend ../../semantics/prop $(VFMDIR)/util $(VFMDIR)/spec
