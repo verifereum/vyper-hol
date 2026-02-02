@@ -1,2 +1,31 @@
 # Hoare logic examples
 INCLUDES = ../ ../../semantics ../../syntax ../../frontend ../../semantics/prop $(VFMDIR)/util $(VFMDIR)/spec
+
+# Vyper source files and their JSON outputs
+VYPER_SOURCES = $(wildcard example_*.vy)
+VYPER_JSONS = $(patsubst %.vy,%.json,$(VYPER_SOURCES))
+
+# Vyper compiler detection
+VYPER = $(which vyper)
+
+# Generate JSON ASTs from Vyper source files
+# If vyper is available, regenerate when .vy changes
+# If vyper is not available, use existing .json files (fail if missing)
+ifneq ($(VYPER),)
+# Unfortunately Holmake doesn't support pattern rules (%.json: %.vy)
+# so we generate explicit rules for each file
+example_1.json: example_1.vy
+example_2.json: example_2.vy
+example_3.json: example_3.vy
+$(VYPER_JSONS):
+	$(VYPER) $< -f annotated_ast > $@
+else
+$(VYPER_JSONS):
+	@if [ -f $@ ]; then echo "vyper not found, using existing $@"; \
+	else echo "ERROR: vyper not found and $@ does not exist" >&2; exit 1; fi
+endif
+
+# Make theory builds depend on JSON files
+vyperHoareExample1Theory.uo: example_1.json
+vyperHoareExample2Theory.uo: example_2.json
+vyperHoareExample3Theory.uo: example_3.json
