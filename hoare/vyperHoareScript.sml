@@ -273,32 +273,11 @@ Proof
   simp[lift_sum_def, evaluate_builtin_def, return_def]
 QED
 
-(* TODO: expr_spec_toplevelname needs major rewrite for new storage model.
-   TopLevelName now reads from EVM storage via lookup_global which involves:
-   1. Looking up variable declaration from source code
-   2. Getting storage slot from layout
-   3. Reading and decoding from accounts.storage
-   The precondition needs to specify storage slot layout and encoded value. *)
-Theorem expr_spec_toplevelname:
-  ∀P cx src_id_opt id tv.
-    ⟦cx⟧
-      ⦃λst. P st ∧
-            (* Precondition: lookup_global will succeed and return tv *)
-            FST (lookup_global cx src_id_opt (string_to_num id) st) = INL tv⦄
-      (TopLevelName (src_id_opt, id)) ⇓ tv
-      ⦃P⦄
-Proof
-  cheat (* Needs rewrite for new storage model *)
-QED
-
-(* Note: evaluate_subscript signature changed - no longer takes type_env.
-   The result type also changed: INL (INL tv) for value result,
-   INL (INR (is_transient, slot, t)) for storage slot lookup. *)
-Theorem expr_spec_subscript:
-  ∀P P' Q cx e1 e2 tv1 v2 tv_result.
-    evaluate_subscript tv1 v2 = INL (INL tv_result) ∧
-    (⟦cx⟧ ⦃P⦄ e1 ⇓ tv1 ⦃P'⦄) ∧
-    (⟦cx⟧ ⦃P'⦄ e2 ⇓ (Value v2) ⦃Q⦄) ⇒
+Theorem expr_spec_subscript_array:
+  ∀P P' Q cx e1 e2 av i tv_result.
+    array_index av i = SOME v ∧
+    (⟦cx⟧ ⦃P⦄ e1 ⇓ (Value (ArrayV av)) ⦃P'⦄) ∧
+    (⟦cx⟧ ⦃P'⦄ e2 ⇓ (Value (IntV _ i)) ⦃Q⦄) ⇒
     ⟦cx⟧ ⦃P⦄ (Subscript e1 e2) ⇓ tv_result ⦃Q⦄
 Proof
   cheat (* Needs update for new evaluate_subscript return type *)

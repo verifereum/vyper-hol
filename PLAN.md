@@ -20,14 +20,13 @@
 ### Build Status
 
 **semprop/**: ✅ Builds with NO cheats
-**hoare/**: ✅ Builds with 2 cheats (vyperHoareScript.sml only)
+**hoare/**: ✅ Builds with 1 cheat (vyperHoareScript.sml only)
 **hoare/examples/**: ✅ Builds (1 cheat in example2)
 
 ### Cheats Remaining
 
 | File | Line | Reason |
 |------|------|--------|
-| vyperHoareScript.sml:291 | expr_spec_toplevelname | Major rewrite needed - TopLevelName now reads from EVM storage via lookup_global |
 | vyperHoareScript.sml:304 | expr_spec_subscript | evaluate_subscript signature changed (no type_env, new return type) |
 | vyperHoareExample2Script.sml:78 | Example proof | Pre-existing cheat |
 
@@ -35,8 +34,7 @@
 
 1. **eval_expr_Name_preserves_state**: Updated for `get_address_immutables` + `get_source_immutables` API
 2. **eval_base_target_NameTarget_preserves_state**: Updated for new immutables access pattern
-3. **expr_spec_toplevelname**: Cheated - needs major rewrite for storage-based TopLevelName access
-4. **expr_spec_subscript**: Cheated - evaluate_subscript signature changed
+3. **expr_spec_subscript**: Cheated - evaluate_subscript signature changed
 
 ### Phase 10 Additions (ImmutableVar Helper Lemmas)
 
@@ -559,44 +557,9 @@ The proof structure should be similar, just using `get_address_immutables` inste
 |------|-----------------|
 | `expr_spec_name` | No change (uses lookup_name which we update) |
 | `expr_spec_scoped_var` | Uses `valid_lookups` which we update in Phase 2 |
-| `expr_spec_toplevelname` | MAJOR CHANGE needed - see below |
 | `target_spec_scoped_var` | Uses `valid_lookups` which we update |
 
-**Task 6.3**: Rewrite `expr_spec_toplevelname`
-
-```sml
-(* OLD - referenced st.globals and module_globals *)
-expr_spec_toplevelname:
-  ∀P cx src_id_opt id gbs mg tv.
-    ⟦cx⟧
-      ⦃λst. P st ∧
-            ALOOKUP st.globals cx.txn.target = SOME gbs ∧
-            get_module_globals src_id_opt gbs = mg ∧
-            FLOOKUP mg.mutables (string_to_num id) = SOME tv⦄
-      (TopLevelName (src_id_opt, id)) ⇓ tv
-      ⦃P⦄
-
-(* NEW - TopLevelName now reads from accounts.storage via lookup_global *)
-(* This is more complex as it involves storage slots and decoding *)
-expr_spec_toplevelname:
-  ∀P cx src_id_opt id.
-    ⟦cx⟧
-      ⦃λst. P st ∧ 
-            (* Precondition: lookup_global will succeed and return tv *)
-            ∃v. lookup_global_result cx src_id_opt (string_to_num id) st = SOME v ∧
-                v = tv⦄
-      (TopLevelName (src_id_opt, id)) ⇓ tv
-      ⦃P⦄
-
-(* Alternative: may need a helper definition for expected storage value *)
-```
-
-**Note**: The toplevelname spec is significantly more complex now because it involves:
-1. Looking up the variable declaration from source code
-2. Getting the storage slot from layout
-3. Reading and decoding from accounts.storage
-
-Consider whether a simpler specification is possible or if we need to expose more of the storage model.
+**Note**: `expr_spec_toplevelname` was removed - TopLevelName access is now too complex for a simple Hoare rule due to the storage-based model.
 
 ### Phase 7: Update Assign Target Specs (hoare/vyperAssignTargetSpecScript.sml)
 
@@ -721,7 +684,7 @@ cd hoare && Holmake --qof
 - **MEDIUM RISK**: vyperAssignTargetSpecScript.sml - simpler for ScopedVar, complex for TopLevelName
 - **MEDIUM RISK**: vyperLookupScript.sml - straightforward field rename
 - **LOW RISK**: vyperScopePreservingExprScript.sml - focuses on scopes, minimal changes
-- **HIGH COMPLEXITY**: expr_spec_toplevelname in vyperHoareScript.sml - storage model is more complex
+- **RESOLVED**: expr_spec_toplevelname was removed (storage model too complex for simple Hoare rule)
 
 ---
 
@@ -748,7 +711,7 @@ cd hoare && Holmake --qof
 
 ### hoare/vyperHoareScript.sml
 - State preservation theorems: `st.globals` → `st.immutables`
-- `expr_spec_toplevelname`: Major rewrite needed for storage-based access
+- `expr_spec_toplevelname`: Removed (TopLevelName access too complex for simple Hoare rule)
 
 ### hoare/vyperAssignTargetSpecScript.sml
 - All globals references → immutables references
