@@ -346,6 +346,11 @@ val allowed_test_patterns = [
 val excluded_test_patterns = [
 ]
 
+(* Individual test names that bypass unsupported pattern checks *)
+val allowed_test_names = [
+  "test_external_contract_calls_with_uint8[8]"
+]
+
 fun glob_match pat str =
   let
     fun step [] [] = true
@@ -492,10 +497,12 @@ val test_decoder =
    field "traces" (array trace))
 
 fun trydecode ((name,json),(s,f)) =
-  if has_unsupported_source_json json then (s,f)
-  else ((name, decode test_decoder json)::s, f)
-  handle JSONError e => (s, (name, JSONError e)::f)
-       | e => (s, (name, JSONError (e, JSON.OBJECT [("source_code", JSON.STRING "")]))::f)
+  if List.exists (fn n => n = name) allowed_test_names
+     orelse not (has_unsupported_source_json json)
+  then ((name, decode test_decoder json)::s, f)
+       handle JSONError e => (s, (name, JSONError e)::f)
+            | e => (s, (name, JSONError (e, JSON.OBJECT [("source_code", JSON.STRING "")]))::f)
+  else (s,f)
 
 fun read_test_json json_path = let
   val test_jsons = decodeFile rawObject json_path
