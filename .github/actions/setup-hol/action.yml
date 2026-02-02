@@ -39,6 +39,10 @@ runs:
       shell: bash
       run: echo "$HOME/vyper-install/bin" >> "$GITHUB_PATH"
 
+    - name: Activate Vyper environment
+      shell: bash
+      run: source ~/vyper-install/bin/activate
+
     - name: Cache PolyML
       uses: actions/cache@v4
       id: cache-polyml
