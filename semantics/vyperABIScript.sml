@@ -122,7 +122,10 @@ QED
 Definition evaluate_abi_decode_def:
   evaluate_abi_decode tenv typ bs =
     let abiTy = vyper_to_abi_type typ in
-    if valid_enc abiTy bs then
+    (* Check minimum length - basic types need at least 32 bytes *)
+    (* TODO: remove if this check is added to valid_enc instead *)
+    if static_length abiTy > LENGTH bs then INR "abi_decode too short"
+    else if valid_enc abiTy bs then
       case abi_to_vyper tenv typ (dec abiTy bs) of
         SOME v => INL v
       | NONE => INR "abi_decode conversion"
