@@ -23,7 +23,7 @@ runs:
       id: cache-vyper
       with:
         path: ~/vyper-install
-        key: vyper-${{ runner.os }}-${{ steps.versions.outputs.vyper }}-v2
+        key: vyper-${{ runner.os }}-${{ steps.versions.outputs.vyper }}
 
     - name: Build Vyper
       if: steps.cache-vyper.outputs.cache-hit != 'true'
