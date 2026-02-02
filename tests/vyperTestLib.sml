@@ -348,7 +348,14 @@ val excluded_test_patterns = [
 
 (* Individual test names that bypass unsupported pattern checks *)
 val allowed_test_names = [
-  "test_external_contract_calls_with_uint8[8]"
+  (* staticcall tests *)
+  "test_external_contract_calls_with_uint8[8]",
+  "test_external_contract_calls_with_bool[uint8]",
+  "test_external_contract_calls_with_int128[128]",
+  "test_invalid_nonexistent_contract_call",
+  (* extcall tests *)
+  "test_external_contract_call_state_change",
+  "test_complicated_external_contract_calls"
 ]
 
 fun glob_match pat str =
