@@ -33,15 +33,11 @@ runs:
         cd vyper
         python3 -m venv ~/vyper-install
         source ~/vyper-install/bin/activate
-        pip install -e .
+        pip install .
 
     - name: Add Vyper to PATH
       shell: bash
       run: echo "$HOME/vyper-install/bin" >> "$GITHUB_PATH"
-
-    - name: Activate Vyper environment
-      shell: bash
-      run: source ~/vyper-install/bin/activate
 
     - name: Cache PolyML
       uses: actions/cache@v4
