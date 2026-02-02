@@ -459,3 +459,18 @@ Proof
   PairCases_on `x` >> simp[evaluation_state_accfupds] >>
   Cases_on `x0` >> simp[]
 QED
+
+(* Lemma: after set_immutable, lookup_immutable returns the set value *)
+Theorem lookup_immutable_after_set_immutable:
+  ∀cx n v st st'.
+    set_immutable cx NONE (string_to_num n) v st = (INL (), st') ⇒
+    lookup_immutable cx st' n = SOME v
+Proof
+  rw[set_immutable_def, lookup_immutable_def,
+     bind_def, LET_THM, get_address_immutables_def,
+     set_address_immutables_def, lift_option_def] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[return_def, raise_def] >>
+  simp[get_source_immutables_def, set_source_immutables_def,
+       alistTheory.ALOOKUP_ADELKEY,
+       finite_mapTheory.FLOOKUP_UPDATE]
+QED

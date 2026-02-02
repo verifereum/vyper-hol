@@ -226,3 +226,47 @@ Theorem assign_targets_preserves_immutables_addr_dom:
 Proof
   metis_tac[assign_target_preserves_immutables_dom_main]
 QED
+
+(* Lemma: for ImmutableVar Replace, lookup_immutable returns the new value *)
+Theorem assign_target_immutable_replace_gives_lookup:
+  ∀cx st n v res st'.
+    IS_SOME (lookup_immutable cx st n) ∧
+    assign_target cx (BaseTargetV (ImmutableVar n) []) (Replace v) st = (INL res, st') ⇒
+    lookup_immutable cx st' n = SOME v
+Proof
+  rw[lookup_immutable_def] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[] >>
+  qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+  simp[Once assign_target_def, bind_def, get_immutables_def, get_address_immutables_def,
+       lift_option_def, LET_THM, return_def] >>
+  simp[lift_sum_def, assign_subscripts_def, return_def, ignore_bind_def, bind_def] >>
+  Cases_on `FLOOKUP (get_source_immutables NONE x) (string_to_num n)` >> gvs[return_def, raise_def] >>
+  simp[set_immutable_def, get_address_immutables_def, lift_option_def, bind_def,
+       set_address_immutables_def, return_def, LET_THM] >>
+  strip_tac >> gvs[] >>
+  simp[get_source_immutables_def, set_source_immutables_def,
+       alistTheory.ALOOKUP_ADELKEY,
+       finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+(* Lemma: for ImmutableVar Update, lookup_immutable returns the computed value *)
+Theorem assign_target_immutable_update_gives_lookup:
+  ∀cx st n bop v1 v2 v res st'.
+    lookup_immutable cx st n = SOME v1 ∧
+    evaluate_binop bop v1 v2 = INL v ∧
+    assign_target cx (BaseTargetV (ImmutableVar n) []) (Update bop v2) st = (INL res, st') ⇒
+    lookup_immutable cx st' n = SOME v
+Proof
+  rw[lookup_immutable_def] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[] >>
+  qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+  simp[Once assign_target_def, bind_def, get_immutables_def, get_address_immutables_def,
+       lift_option_def, LET_THM, return_def] >>
+  simp[lift_sum_def, assign_subscripts_def, return_def, ignore_bind_def, bind_def] >>
+  simp[set_immutable_def, get_address_immutables_def, lift_option_def, bind_def,
+       set_address_immutables_def, return_def, LET_THM] >>
+  strip_tac >> gvs[] >>
+  simp[get_source_immutables_def, set_source_immutables_def,
+       alistTheory.ALOOKUP_ADELKEY,
+       finite_mapTheory.FLOOKUP_UPDATE]
+QED

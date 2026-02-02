@@ -190,8 +190,7 @@ Proof
 QED
 
 (* Theorem showing that after assign_target, lookup_name returns the new value.
-   ScopedVar case is fully proven. ImmutableVar case is cheated (needs helper lemmas
-   for set_immutable/lookup_immutable interaction). *)
+   Handles both ScopedVar and ImmutableVar cases. *)
 Theorem assign_target_spec_lookup:
   ∀cx st n av v.
     valid_lookups cx st ∧
@@ -263,14 +262,32 @@ Proof
    Cases_on `immutable_target (get_source_immutables NONE imms) n (string_to_num n)` >>
    simp[exactly_one_option_def, return_def, raise_def] >>
    strip_tac >> gvs[] >>
-   (* av = BaseTargetV (ImmutableVar n) [] *)
-   cheat) >>
+   gvs[immutable_target_def, AllCaseEqs()] >>
+   `lookup_immutable cx st' n = SOME v` by
+     (irule assign_target_immutable_replace_gives_lookup >>
+      qexistsl_tac [`res`, `st`] >> simp[lookup_immutable_def]) >>
+   sg `valid_lookups cx st'` >-
+   (rw[valid_lookups_def] >>
+    sg `IS_SOME (ALOOKUP st'.immutables cx.txn.target)` >-
+    (irule assign_target_preserves_immutables_addr_dom >>
+     qexistsl_tac [`Replace v`, `BaseTargetV (ImmutableVar n) []`, `res`, `st`] >> simp[]) >>
+    Cases_on `ALOOKUP st'.immutables cx.txn.target` >> gvs[] >>
+    rpt strip_tac >> rename1 `var_in_scope st' varname` >>
+    `var_in_scope st varname` by
+      (fs[var_in_scope_def, lookup_scoped_var_def] >>
+       qpat_x_assum `assign_target _ _ _ _ = _`
+         (mp_tac o MATCH_MP (CONJUNCT1 assign_target_preserves_scopes_dom_lookup)) >>
+       simp[]) >>
+    `FLOOKUP (get_source_immutables NONE imms) (string_to_num varname) = NONE` by simp[] >>
+    drule assign_target_preserves_immutables_dom >>
+    disch_then (qspecl_then [`string_to_num varname`, `imms`, `x`] mp_tac) >> simp[]) >>
+   irule lookup_immutable_implies_lookup_name >> simp[]) >>
   (* non-creation: no immutable lookup, so lookup_name_target should have failed *)
   simp[lift_sum_def, exactly_one_option_def, raise_def]
 QED
 
 (* Similar to assign_target_spec_lookup but for aug-assignment.
-   ScopedVar case is fully proven. ImmutableVar case is cheated. *)
+   Handles both ScopedVar and ImmutableVar cases. *)
 Theorem assign_target_spec_update:
   ∀cx st n bop av v1 v2 v.
     valid_lookups cx st ∧
@@ -357,7 +374,37 @@ Proof
   (* ImmutableVar case: n is NOT in scopes, must be in immutables *)
   Cases_on `cx.txn.is_creation` >> simp[return_def] >-
   ((* is_creation: immutable aug-assignment *)
-   cheat) >>
+   simp[get_immutables_def, get_address_immutables_def, bind_def, lift_option_def] >>
+   fs[valid_lookups_def] >>
+   simp[return_def, lift_sum_def, exactly_one_option_def] >>
+   Cases_on `immutable_target (get_source_immutables NONE imms) n (string_to_num n)` >>
+   simp[exactly_one_option_def, return_def, raise_def] >>
+   strip_tac >> gvs[immutable_target_def, AllCaseEqs()] >>
+   sg `lookup_immutable cx st n = SOME v1` >-
+   (simp[lookup_immutable_def] >>
+    qpat_x_assum `lookup_name cx st n = SOME v1` mp_tac >>
+    simp[lookup_name_def, Once evaluate_def, bind_def, get_scopes_def, return_def,
+         get_immutables_def, get_address_immutables_def, lift_option_def] >>
+    simp[lift_sum_def, exactly_one_option_def, return_def]) >>
+   `lookup_immutable cx st' n = SOME v` by
+     (irule assign_target_immutable_update_gives_lookup >>
+      qexistsl_tac [`bop`, `res`, `st`, `v1`, `v2`] >> simp[]) >>
+   sg `valid_lookups cx st'` >-
+   (rw[valid_lookups_def] >>
+    sg `IS_SOME (ALOOKUP st'.immutables cx.txn.target)` >-
+    (irule assign_target_preserves_immutables_addr_dom >>
+     qexistsl_tac [`Update bop v2`, `BaseTargetV (ImmutableVar n) []`, `res`, `st`] >> simp[]) >>
+    Cases_on `ALOOKUP st'.immutables cx.txn.target` >> gvs[] >>
+    rpt strip_tac >> rename1 `var_in_scope st' varname` >>
+    `var_in_scope st varname` by
+      (fs[var_in_scope_def, lookup_scoped_var_def] >>
+       qpat_x_assum `assign_target _ _ _ _ = _`
+         (mp_tac o MATCH_MP (CONJUNCT1 assign_target_preserves_scopes_dom_lookup)) >>
+       simp[]) >>
+    `FLOOKUP (get_source_immutables NONE imms) (string_to_num varname) = NONE` by simp[] >>
+    drule assign_target_preserves_immutables_dom >>
+    disch_then (qspecl_then [`string_to_num varname`, `imms`, `x`] mp_tac) >> simp[]) >>
+   irule lookup_immutable_implies_lookup_name >> simp[]) >>
   (* non-creation: no immutable lookup, so lookup_name_target should have failed *)
   simp[lift_sum_def, exactly_one_option_def, raise_def]
 QED

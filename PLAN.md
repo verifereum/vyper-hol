@@ -11,16 +11,16 @@
 - **Phase 5**: vyperScopePreservingExprScript.sml ✓ (builds successfully)
 - **Phase 6**: vyperEvalExprPreservesScopesDomScript.sml ✓ (builds successfully)
 - **Phase 7**: hoare/vyperHoareScript.sml ✓ (builds with cheats)
-- **Phase 7**: hoare/vyperAssignTargetSpecScript.sml ✓ (builds with cheats)
+- **Phase 7**: hoare/vyperAssignTargetSpecScript.sml ✓ (builds, NO cheats)
 - **Phase 8**: hoare/examples/ ✓ (builds successfully)
-- **Phase 9**: Remove cheats in vyperAssignTargetSpecScript.sml (in progress)
-- **Phase 10**: Helper Lemmas for ImmutableVar Cases
+- **Phase 9**: Remove cheats in vyperAssignTargetSpecScript.sml ✓ (COMPLETED)
+- **Phase 10**: Helper Lemmas for ImmutableVar Cases ✓ (COMPLETED)
 - **Phase 11**: Remove cheats in vyperHoareScript.sml
 
 ### Build Status
 
 **semprop/**: ✅ Builds with NO cheats
-**hoare/**: ✅ Builds with 6 cheats (mostly around storage model changes)
+**hoare/**: ✅ Builds with 2 cheats (vyperHoareScript.sml only)
 **hoare/examples/**: ✅ Builds (1 cheat in example2)
 
 ### Cheats Remaining
@@ -29,10 +29,6 @@
 |------|------|--------|
 | vyperHoareScript.sml:291 | expr_spec_toplevelname | Major rewrite needed - TopLevelName now reads from EVM storage via lookup_global |
 | vyperHoareScript.sml:304 | expr_spec_subscript | evaluate_subscript signature changed (no type_env, new return type) |
-| vyperAssignTargetSpecScript.sml:115 | assign_target_spec_preserves_name_targets | Needs update for new immutables model |
-| vyperAssignTargetSpecScript.sml:126 | assign_target_spec_lookup | Needs update for new immutables model |
-| vyperAssignTargetSpecScript.sml:138 | assign_target_spec_update | Needs update for new immutables model |
-| vyperAssignTargetSpecScript.sml:148 | assign_target_spec_preserves_valid_lookups | Needs update for new immutables model |
 | vyperHoareExample2Script.sml:78 | Example proof | Pre-existing cheat |
 
 ### Key Changes Made
@@ -41,6 +37,19 @@
 2. **eval_base_target_NameTarget_preserves_state**: Updated for new immutables access pattern
 3. **expr_spec_toplevelname**: Cheated - needs major rewrite for storage-based TopLevelName access
 4. **expr_spec_subscript**: Cheated - evaluate_subscript signature changed
+
+### Phase 10 Additions (ImmutableVar Helper Lemmas)
+
+**Added to semprop/vyperLookupScript.sml:**
+- `lookup_immutable_after_set_immutable`: After `set_immutable`, `lookup_immutable` returns the new value
+
+**Added to semprop/vyperAssignTargetLemmasScript.sml:**
+- `assign_target_immutable_replace_gives_lookup`: For ImmutableVar Replace, `lookup_immutable` returns the new value
+- `assign_target_immutable_update_gives_lookup`: For ImmutableVar Update, `lookup_immutable` returns the computed value
+
+**Fixed in hoare/vyperAssignTargetSpecScript.sml:**
+- `assign_target_spec_lookup`: ImmutableVar case now proven (was cheated)
+- `assign_target_spec_update`: ImmutableVar case now proven (was cheated)
 
 ---
 
