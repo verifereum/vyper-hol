@@ -44,36 +44,3 @@ Theorem example_2_body_length:
 Proof
   EVAL_TAC
 QED
-
-Theorem example_2_thm:
-  ∀cx xarg.
-    within_int_bound (Unsigned 256) xarg ⇒
-    ⟦cx⟧
-    ⦃λst. st.scopes ≠ [] ∧
-          valid_lookups cx st ∧
-          lookup_immutable cx st "x_arg" = SOME (IntV (Unsigned 256) xarg) ∧
-          lookup_name cx st "x" = NONE⦄
-    example_2_body
-    ⦃λst. ∃x. lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) x) ∧ 20 ≤ x ∧ x ≤ 110 ∥ λ_ _. F⦄
-Proof
-(* Proof sketch:
-
-x := x_arg
-{ 0 ≤ x }
-x := x + 10
-{ 10 ≤ x }
-if x > 100 then
-  { x > 100 ∧ 10 ≤ x }
-  { T }
-  x := 100
-  { x = 100 }
-  { 20 ≤ x ∧ x ≤ 110 }
-else
-  { x ≤ 100 ∧ 10 ≤ x }
-  x := x + 10
-  { 20 ≤ x ∧ x ≤ 110 }
-{ 20 ≤ x ∧ x ≤ 110 }
-
-*)
-  cheat
-QED
