@@ -120,7 +120,7 @@ Definition eval_base_target_cps_def:
                 then SOME $ ScopedVar id
                 else NONE;
         ivo <- if cx.txn.is_creation
-               then do imms <- get_immutables cx;
+               then do imms <- get_immutables cx NONE;
                        return $ immutable_target imms id n
                     od
                else return NONE;
@@ -146,7 +146,7 @@ Definition eval_expr_cps_def:
   eval_expr_cps cx1 (Name id) st k =
     liftk cx1 ApplyTv
       (do env <- get_scopes;
-          imms <- get_immutables cx1;
+          imms <- get_immutables cx1 NONE;
           n <<- string_to_num id;
           v <- lift_sum $ exactly_one_option
                  (lookup_scopes n env) (FLOOKUP imms n);
@@ -460,8 +460,8 @@ Proof
   \\ gvs[assign_target_def, bind_def, ignore_bind_def, UNCURRY,
          CaseEq"prod", CaseEq"sum", return_def, lift_sum_def,
          lift_option_def, sum_CASE_rator, option_CASE_rator,
-         CaseEq"option", raise_def, assign_toplevel_def,
-         oneline sum_map_left_def]
+         CaseEq"option", toplevel_value_CASE_rator,
+         CaseEq"toplevel_value", raise_def]
 QED
 
 Definition apply_target_def:
@@ -531,7 +531,12 @@ Definition apply_val_def:
   apply_val cx v2 st (SubscriptK1 tv1 k) =
     liftk cx ApplyTv (do
       ts <- lift_option (get_self_code cx) "Subscript get_self_code";
-      lift_sum (evaluate_subscript (type_env ts) tv1 v2)
+      res <- lift_sum (evaluate_subscript tv1 v2);
+       case res of INL v => return v | INR (is_transient, slot, t) => do
+         tv <- lift_option (evaluate_type (type_env ts) t) "Subscript evaluate_type";
+         v <- read_storage_slot cx is_transient slot tv;
+         return $ Value v
+       od
     od st) k ∧
   apply_val cx v st (AttributeK id k) =
     liftk cx (ApplyTv o Value) (lift_sum (evaluate_attribute v id) st) k ∧

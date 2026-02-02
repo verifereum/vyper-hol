@@ -1,8 +1,9 @@
 Theory vyperInterpreter
 Ancestors
   arithmetic alist combin list finite_map pair rich_list
-  cv cv_std vfmState vfmExecution[ignore_grammar] vyperAST vyperABI
-  vyperMisc vyperTypeValue
+  cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
+  vfmExecution[ignore_grammar] vyperAST vyperABI
+  vyperMisc vyperTypeValue vyperStorage
 Libs
   cv_transLib wordsLib monadsyntax
   integerTheory[qualified] intSimps[qualified]
@@ -56,10 +57,18 @@ End
 
 (* since HashMaps can only appear at the top level, they are not mutually
 * recursive with other `value`s, and we have `toplevel_value` as follows: *)
+(* HashMapRef stores a base slot, key type, and value_type for lazy storage access.
+   When subscripted:
+   - If value_type is HashMapT kt vt, returns HashMapRef with new slot and kt
+   - If value_type is Type t, reads from storage at the computed slot *)
 
 Datatype:
-  toplevel_value = Value value | HashMap value_type ((subscript, toplevel_value) alist)
+  toplevel_value = Value value | HashMapRef bool bytes32 type value_type
 End
+
+val toplevel_value_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vyperInterpreter",Tyop="toplevel_value"}));
 
 Definition is_Value_def[simp]:
   (is_Value (Value _) ⇔ T) ∧
@@ -67,8 +76,6 @@ Definition is_Value_def[simp]:
 End
 
 val () = cv_auto_trans is_Value_def;
-
-Type hmap = “:(subscript, toplevel_value) alist”
 
 (* Evaluation of some of the simpler language constructs *)
 
@@ -583,20 +590,16 @@ End
 val () = cv_auto_trans value_to_key_def;
 
 Definition evaluate_subscript_def:
-  evaluate_subscript tenv (Value (ArrayV av)) (IntV _ i) =
+  evaluate_subscript (Value (ArrayV av)) (IntV _ i) =
   (case array_index av i
-   of SOME v => INL $ Value v
-   | _ => INR "subscript array_index") ∧
-  evaluate_subscript tenv (HashMap vt hm) kv =
-  (case value_to_key kv of SOME k =>
-    (case ALOOKUP hm k of SOME tv => INL tv
-        | _ => (case vt of Type typ =>
-                  (case evaluate_type tenv typ of
-                   | SOME tv => INL $ Value $ default_value tv
-                   | NONE => INR "HashMap evaluate type")
-                | _ => INR "HashMap final value type" ))
-   | _ => INR "evaluate_subscript value_to_key") ∧
-  evaluate_subscript _ _ _ = INR "evaluate_subscript"
+   of SOME v => INL $ INL $ Value v
+    | _ => INR "subscript array_index") ∧
+  evaluate_subscript (HashMapRef is_transient slot kt vt) kv =
+  (let new_slot = hashmap_slot slot $ encode_hashmap_key kt kv in
+   case vt
+   of HashMapT kt' vt' => INL $ INL $ HashMapRef is_transient new_slot kt' vt'
+    | Type t => INL $ INR (is_transient, new_slot, t)) ∧
+  evaluate_subscript _ _ = INR "evaluate_subscript"
 End
 
 val () = cv_auto_trans evaluate_subscript_def;
@@ -963,55 +966,7 @@ Proof
   \\ Cases_on`w` \\ gs[]
 QED
 
-Definition assign_hashmap_def:
-  assign_hashmap _ _ hm [] _ = INR "assign_hashmap null" ∧
-  assign_hashmap tenv vt hm (k::ks) ao =
-  (case ALOOKUP hm k
-   of SOME (HashMap vt hm') =>
-    (case assign_hashmap tenv vt hm' ks ao of
-     | INL hm' => INL $ (k, HashMap vt hm') :: (ADELKEY k hm)
-     | INR err => INR err)
-   | SOME (Value v) =>
-    (case assign_subscripts v ks ao of
-     | INL v' => INL $ (k, Value v') :: (ADELKEY k hm)
-     | INR err => INR err)
-   | NONE =>
-     (case vt of HashMapT kt vt' =>
-        (case assign_hashmap tenv vt' [] ks ao of
-         | INL hm' => INL $ (k, HashMap vt' hm') :: hm
-         | INR err => INR err)
-      | Type t =>
-        (case evaluate_type tenv t
-           of NONE => INR "assign_hashmap evaluate_type"
-            | SOME tv =>
-         (case assign_subscripts (default_value tv) ks ao of
-          | INL v => INL $ (k, Value v) :: hm
-          | INR err => INR err))))
-End
 
-val assign_hashmap_pre_def = cv_auto_trans_pre "assign_hashmap_pre" assign_hashmap_def;
-
-Theorem assign_hashmap_pre[cv_pre]:
-  ∀v w x y z. assign_hashmap_pre v w x y z
-Proof
-  Induct_on `y` \\ rw[Once assign_hashmap_pre_def]
-QED
-
-Definition sum_map_left_def:
-  sum_map_left f (INL x) = INL (f x) ∧
-  sum_map_left _ (INR y) = INR y
-End
-
-Definition assign_toplevel_def:
-  assign_toplevel tenv (Value a) is ao =
-    sum_map_left Value $ assign_subscripts a is ao ∧
-  assign_toplevel tenv (HashMap vt hm) is ao =
-    sum_map_left (HashMap vt) $ assign_hashmap tenv vt hm is ao
-End
-
-val () = assign_toplevel_def
-  |> SRULE [oneline sum_map_left_def]
-  |> cv_auto_trans;
 
 (* Environment and context for a contract call *)
 
@@ -1057,6 +1012,7 @@ Datatype:
     stk: (num option # identifier) list
   ; txn: call_txn
   ; sources: (address, (num option, toplevel list) alist) alist
+  ; layouts: (address, var_layout # var_layout) alist  (* (storage, transient) *)
   |>
 End
 
@@ -1071,6 +1027,7 @@ Definition empty_evaluation_context_def:
     stk := []
   ; txn := empty_call_txn
   ; sources := []
+  ; layouts := []
   |>
 End
 
@@ -1146,6 +1103,45 @@ Definition type_env_def:
 End
 
 val () = cv_auto_trans type_env_def;
+
+(* Build var_layout from storage_layout and toplevels.
+   For each storage variable or hashmap, record its slot number. *)
+Definition get_matching_var_id_def:
+  get_matching_var_id is_transient (VariableDecl _ mut id typ) =
+    (if (mut = Storage ∨ mut = Transient) ∧ (mut = Transient) = is_transient
+     then SOME id else NONE) ∧
+  get_matching_var_id is_transient (HashMapDecl _ flag id kt vt) =
+    (if flag = is_transient then SOME id else NONE) ∧
+  get_matching_var_id is_transient _ = NONE
+End
+
+val () = cv_auto_trans get_matching_var_id_def;
+
+Definition build_var_layout_entry_def:
+  build_var_layout_entry is_transient layout [] = LN ∧
+  build_var_layout_entry is_transient layout (t :: ts) =
+    let rest = build_var_layout_entry is_transient layout ts in
+    case get_matching_var_id is_transient t of
+    | SOME id =>
+        (case ALOOKUP layout id of
+         | SOME slot => insert (string_to_num id) slot rest
+         | NONE => rest)
+    | NONE => rest
+End
+
+Definition build_var_layout_def:
+  build_var_layout sources storage_layout transient_layout addr =
+    case ALOOKUP sources addr of
+    | NONE => (LN, LN)
+    | SOME mods =>
+        case ALOOKUP mods NONE of
+        | NONE => (LN, LN)
+        | SOME ts => (build_var_layout_entry F storage_layout ts,
+                      build_var_layout_entry T transient_layout ts)
+End
+
+val () = cv_auto_trans build_var_layout_entry_def;
+val () = cv_auto_trans build_var_layout_def;
 
 (* Look up an interface by nsid (source_id, name) *)
 Definition lookup_interface_def:
@@ -1441,49 +1437,33 @@ val () = cv_auto_trans find_containing_scope_def;
 
 Type log = “:nsid # (value list)”;
 
-(* Module-aware globals: keyed by source_id *)
+(* Module-aware immutables: keyed by source_id *)
 (* NONE = main contract, SOME n = module with source_id n *)
-Datatype:
-  module_globals = <|
-    mutables: num |-> toplevel_value
-  ; transients: num |-> toplevel_value
-  ; immutables: num |-> value
-  |>
+Type module_immutables = “:(num option, num |-> value) alist”
+
+Definition empty_immutables_def:
+  empty_immutables : module_immutables = []
 End
 
-Definition empty_module_globals_def:
-  empty_module_globals : module_globals = <|
-    mutables := FEMPTY
-  ; transients := FEMPTY
-  ; immutables := FEMPTY
-  |>
-End
-
-val () = cv_auto_trans empty_module_globals_def;
-
-Type globals_state = “:(num option, module_globals) alist”
-
-Definition empty_globals_def:
-  empty_globals : globals_state = []
-End
-
-val () = cv_auto_trans empty_globals_def;
+val () = cv_auto_trans empty_immutables_def;
 
 Datatype:
   evaluation_state = <|
-    globals: (address, globals_state) alist
+    immutables: (address, module_immutables) alist
   ; logs: log list
   ; scopes: scope list
   ; accounts: evm_accounts
+  ; tStorage: transient_storage
   |>
 End
 
 Definition empty_state_def:
   empty_state : evaluation_state = <|
     accounts := empty_accounts;
-    globals := [];
+    immutables := [];
     logs := [];
-    scopes := []
+    scopes := [];
+    tStorage := empty_transient_storage
   |>
 End
 
@@ -1570,6 +1550,10 @@ val prod_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
 
+val prod_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
+
 Definition lift_option_def:
   lift_option x str =
     case x of SOME v => return v | NONE => raise $ Error str
@@ -1590,103 +1574,238 @@ val () = lift_sum_def
 
 (* reading from the state *)
 
-Definition get_current_globals_def:
-  get_current_globals cx st =
-    lift_option (ALOOKUP st.globals cx.txn.target) "get_current_globals" st
+Definition get_address_immutables_def:
+  get_address_immutables cx st =
+    lift_option (ALOOKUP st.immutables cx.txn.target) "get_address_immutables" st
 End
 
-val () = get_current_globals_def
+val () = get_address_immutables_def
   |> SRULE [lift_option_def, option_CASE_rator]
   |> cv_auto_trans;
 
-(* Helper: get module_globals for a source_id, or empty if not present *)
-Definition get_module_globals_def:
-  get_module_globals src_id_opt (gbs: globals_state) =
-    case ALOOKUP gbs src_id_opt of
-      NONE => empty_module_globals
-    | SOME mg => mg
+(* Helper: get immutables for a source_id, or empty if not present *)
+Definition get_source_immutables_def:
+  get_source_immutables src_id_opt (imms: module_immutables) =
+    case ALOOKUP imms src_id_opt of
+      NONE => FEMPTY
+    | SOME imm => imm
 End
 
-val () = cv_auto_trans get_module_globals_def;
+val () = cv_auto_trans get_source_immutables_def;
 
-(* Helper: update module_globals for a source_id in globals_state *)
-Definition set_module_globals_def:
-  set_module_globals src_id_opt (mg: module_globals) (gbs: globals_state) =
-    (src_id_opt, mg) :: ADELKEY src_id_opt gbs
+(* Helper: set immutables for a source_id *)
+Definition set_source_immutables_def:
+  set_source_immutables src_id_opt imm (imms: module_immutables) =
+    (src_id_opt, imm) :: ADELKEY src_id_opt imms
 End
 
-val () = cv_auto_trans set_module_globals_def;
+val () = cv_auto_trans set_source_immutables_def;
 
-(* Module-aware global lookup: look up variable n in module src_id_opt *)
-Definition lookup_global_def:
-  lookup_global cx src_id_opt n = do
-    gbs <- get_current_globals cx;
-    let mg = get_module_globals src_id_opt gbs in
-    case FLOOKUP mg.mutables n of
-      NONE => raise $ Error "lookup_global: no var"
-    | SOME v => return v
-  od
+(* Find a storage variable or hashmap declaration in toplevels *)
+Datatype:
+  var_decl_info
+  = StorageVarDecl bool type            (* is_transient, type *)
+  | HashMapVarDecl bool type value_type (* is_transient, key type, value type *)
 End
 
-val () = lookup_global_def
-  |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator, UNCURRY, LET_THM]
-  |> cv_auto_trans;
+val var_decl_info_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vyperInterpreter",Tyop="var_decl_info"}));
 
-(* Module-aware immutables lookup *)
-Definition get_immutables_module_def:
-  get_immutables_module cx src_id_opt = do
-    gbs <- get_current_globals cx;
-    let mg = get_module_globals src_id_opt gbs in
-    return mg.immutables
-  od
+(* Look up variable slot from var_layout *)
+Definition lookup_var_slot_from_layout_def:
+  lookup_var_slot_from_layout cx is_transient n =
+    case ALOOKUP cx.layouts cx.txn.target of
+    | NONE => NONE
+    | SOME (storage_lay, transient_lay) =>
+        lookup n (if is_transient then transient_lay else storage_lay)
 End
 
-val () = get_immutables_module_def
-  |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
-  |> cv_auto_trans;
+val () = cv_auto_trans lookup_var_slot_from_layout_def;
 
-Definition get_immutables_def:
-  get_immutables cx = get_immutables_module cx NONE
+(* Find var decl by num key (comparing string_to_num of each id) *)
+Definition find_var_decl_by_num_def:
+  find_var_decl_by_num n [] = NONE ∧
+  find_var_decl_by_num n (VariableDecl _ mut vid typ :: ts) =
+    (if (mut = Storage ∨ mut = Transient) ∧ string_to_num vid = n
+     then SOME (StorageVarDecl (mut = Transient) typ, vid)
+     else find_var_decl_by_num n ts) ∧
+  find_var_decl_by_num n (HashMapDecl _ is_transient vid kt vt :: ts) =
+    (if string_to_num vid = n then SOME (HashMapVarDecl is_transient kt vt, vid)
+     else find_var_decl_by_num n ts) ∧
+  find_var_decl_by_num n (_ :: ts) = find_var_decl_by_num n ts
 End
 
-val () = cv_auto_trans get_immutables_def;
-
-(* Pure helpers for updating module globals in a globals_state *)
-Definition update_module_mutable_def:
-  update_module_mutable src_id key v (gbs: globals_state) =
-    let mg = get_module_globals src_id gbs in
-    let mg' = mg with mutables updated_by (λm. m |+ (key, v)) in
-    set_module_globals src_id mg' gbs
-End
-
-val () = cv_auto_trans update_module_mutable_def;
-
-Definition update_module_transient_def:
-  update_module_transient src_id key v (gbs: globals_state) =
-    let mg = get_module_globals src_id gbs in
-    let mg' = mg with <|
-      mutables updated_by (λm. m |+ (key, v))
-    ; transients updated_by (λt. t |+ (key, v))
-    |> in
-    set_module_globals src_id mg' gbs
-End
-
-val () = cv_auto_trans update_module_transient_def;
-
-Definition update_module_immutable_def:
-  update_module_immutable src_id key v (gbs: globals_state) =
-    let mg = get_module_globals src_id gbs in
-    let mg' = mg with immutables updated_by (λm. m |+ (key, v)) in
-    set_module_globals src_id mg' gbs
-End
-
-val () = cv_auto_trans update_module_immutable_def;
+val () = cv_auto_trans find_var_decl_by_num_def;
 
 Definition get_accounts_def:
   get_accounts st = return st.accounts st
 End
 
 val () = cv_auto_trans get_accounts_def;
+
+Definition update_accounts_def:
+  update_accounts f st = return () (st with accounts updated_by f)
+End
+
+Definition get_transient_storage_def:
+  get_transient_storage st = return st.tStorage st
+End
+
+val () = cv_auto_trans get_transient_storage_def;
+
+Definition update_transient_def:
+  update_transient f st = return () (st with tStorage updated_by f)
+End
+
+Definition get_storage_backend_def:
+  get_storage_backend cx T = do
+    tStore <- get_transient_storage;
+    return $ vfmExecution$lookup_transient_storage cx.txn.target tStore
+  od ∧
+  get_storage_backend cx F = do
+    accts <- get_accounts;
+    return $ (lookup_account cx.txn.target accts).storage
+  od
+End
+
+val () = get_storage_backend_def
+  |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
+  |> cv_auto_trans;
+
+Definition set_storage_backend_def:
+  set_storage_backend cx T storage' =
+    update_transient (vfmExecution$update_transient_storage cx.txn.target storage') ∧
+  set_storage_backend cx F storage' = do
+    accts <- get_accounts;
+    acc <<- lookup_account cx.txn.target accts;
+    update_accounts (update_account cx.txn.target (acc with storage := storage'))
+  od
+End
+
+val () = set_storage_backend_def
+  |> SRULE [bind_def, FUN_EQ_THM, LET_THM, update_transient_def, update_accounts_def]
+  |> cv_auto_trans;
+
+(* Read a value from storage at a slot *)
+Definition read_storage_slot_def:
+  read_storage_slot cx is_transient (slot : bytes32) tv = do
+    storage <- get_storage_backend cx is_transient;
+    lift_option (decode_value storage (w2n slot) tv)
+      "read_storage_slot decode"
+  od
+End
+
+val () = read_storage_slot_def
+  |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
+  |> cv_auto_trans;
+
+(* Write a value to storage at a slot *)
+Definition write_storage_slot_def:
+  write_storage_slot cx is_transient slot tv v = do
+    storage <- get_storage_backend cx is_transient;
+    writes <- lift_option (encode_value tv v) "write_storage_slot encode";
+    storage' <<- apply_writes slot writes storage;
+    set_storage_backend cx is_transient storage'
+  od
+End
+
+val () = write_storage_slot_def
+  |> SRULE [bind_def, FUN_EQ_THM, LET_THM, set_storage_backend_def,
+            update_transient_def, update_accounts_def]
+  |> cv_auto_trans;
+
+(* Module-aware global lookup: look up variable n in module src_id_opt *)
+Definition lookup_global_def:
+  lookup_global cx src_id_opt n = do
+    ts <- lift_option (get_module_code cx src_id_opt) "lookup_global get_module_code";
+    tenv <<- type_env ts;
+    case find_var_decl_by_num n ts of
+    | NONE => raise $ Error "lookup_global: var not found"
+    | SOME (StorageVarDecl is_transient typ, id) => do
+        var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient n) "lookup_global var_slot";
+        tv <- lift_option (evaluate_type tenv typ) "lookup_global evaluate_type";
+        v <- read_storage_slot cx is_transient (n2w var_slot) tv;
+        return (Value v)
+      od
+    | SOME (HashMapVarDecl is_transient kt vt, id) => do
+        var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient n) "lookup_global hashmap var_slot";
+        return (HashMapRef is_transient (n2w var_slot) kt vt)
+      od
+  od
+End
+
+val () = lookup_global_def
+  |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator,
+            prod_CASE_rator, var_decl_info_CASE_rator, UNCURRY, LET_THM]
+  |> cv_auto_trans;
+
+(* Module-aware immutables lookup *)
+Definition get_immutables_def:
+  get_immutables cx src_id_opt = do
+    imms <- get_address_immutables cx;
+    return (get_source_immutables src_id_opt imms)
+  od
+End
+
+val () = get_immutables_def
+  |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
+  |> cv_auto_trans;
+
+
+
+Definition update_immutable_def:
+  update_immutable src_id key v (imms: module_immutables) =
+    let imm = get_source_immutables src_id imms in
+    set_source_immutables src_id (imm |+ (key, v)) imms
+End
+
+val () = cv_auto_trans update_immutable_def;
+
+(* Convert subscript back to a value for hashmap key encoding *)
+Definition subscript_to_value_def:
+  subscript_to_value (IntSubscript i) = SOME (IntV (Signed 256) i) ∧
+  subscript_to_value (StrSubscript s) = SOME (StringV (LENGTH s) s) ∧
+  subscript_to_value (BytesSubscript bs) = SOME (BytesV (Fixed (LENGTH bs)) bs) ∧
+  subscript_to_value (AttrSubscript _) = NONE  (* Attributes are not valid hashmap keys *)
+End
+
+val () = cv_auto_trans subscript_to_value_def;
+
+(* Compute final slot from base slot, key types, and list of subscripts *)
+Definition compute_hashmap_slot_def:
+  compute_hashmap_slot slot [] [] = SOME slot ∧
+  compute_hashmap_slot slot (kt::kts) (k::ks) =
+    (case subscript_to_value k of
+     | NONE => NONE
+     | SOME v =>
+       let slot = hashmap_slot slot $ encode_hashmap_key kt v in
+         compute_hashmap_slot slot kts ks) ∧
+  compute_hashmap_slot _ _ _ = NONE
+End
+
+val compute_hashmap_slot_pre_def = cv_auto_trans_pre
+  "compute_hashmap_slot_pre" compute_hashmap_slot_def;
+
+Theorem compute_hashmap_slot_pre[cv_pre]:
+  ∀x y z. compute_hashmap_slot_pre x y z
+Proof
+  ho_match_mp_tac compute_hashmap_slot_ind
+  \\ rw[] \\ rw[Once compute_hashmap_slot_pre_def]
+QED
+
+(* Get the final value type after traversing hashmap keys.
+   Returns (final_type, key_types, remaining_subs) for nested access within the value. *)
+Definition split_hashmap_subscripts_def:
+  split_hashmap_subscripts (Type t) subs = SOME (t, [], subs) ∧
+  split_hashmap_subscripts (HashMapT kt vt) [] = NONE ∧  (* Not enough subscripts *)
+  split_hashmap_subscripts (HashMapT kt vt) (_::ks) =
+    (case split_hashmap_subscripts vt ks of
+     | SOME (t, kts, remaining) => SOME (t, kt::kts, remaining)
+     | NONE => NONE)
+End
+
+val () = cv_auto_trans split_hashmap_subscripts_def;
 
 Definition get_scopes_def:
   get_scopes st = return st.scopes st
@@ -1722,45 +1841,48 @@ val () = lookup_flag_mem_def
 
 (* writing to the state *)
 
-Definition set_current_globals_def:
-  set_current_globals cx gbs st =
+Definition set_address_immutables_def:
+  set_address_immutables cx imms st =
   let addr = cx.txn.target in
-    return () $ st with globals updated_by
-      (λal. (addr, gbs) :: (ADELKEY addr al))
+    return () $ st with immutables updated_by
+      (λal. (addr, imms) :: (ADELKEY addr al))
 End
 
-val () = cv_auto_trans set_current_globals_def;
+val () = cv_auto_trans set_address_immutables_def;
 
-(* Module-aware global set *)
+(* Module-aware global set: write a value to EVM storage *)
 Definition set_global_def:
   set_global cx src_id_opt n v = do
-    gbs <- get_current_globals cx;
-    let mg = get_module_globals src_id_opt gbs in
-    let mg' = mg with mutables updated_by (λm. m |+ (n, v)) in
-    set_current_globals cx $ set_module_globals src_id_opt mg' gbs
+    ts <- lift_option (get_module_code cx src_id_opt) "set_global get_module_code";
+    tenv <<- type_env ts;
+    case find_var_decl_by_num n ts of
+    | NONE => raise $ Error "set_global: var not found"
+    | SOME (StorageVarDecl is_transient typ, id) => do
+        var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient n) "set_global var_slot";
+        tv <- lift_option (evaluate_type tenv typ) "set_global evaluate_type";
+        write_storage_slot cx is_transient (n2w var_slot) tv v
+      od
+    | SOME (HashMapVarDecl _ kt vt, id) =>
+        raise $ Error "set_global: cannot set hashmap directly"
   od
 End
 
 val () = set_global_def
-  |> SRULE [bind_def, FUN_EQ_THM, UNCURRY, LET_THM]
+  |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator,
+            prod_CASE_rator, var_decl_info_CASE_rator, UNCURRY, LET_THM]
   |> cv_auto_trans;
 
 Definition set_immutable_def:
   set_immutable cx src_id_opt n v = do
-    gbs <- get_current_globals cx;
-    let mg = get_module_globals src_id_opt gbs in
-    let mg' = mg with immutables updated_by (λm. m |+ (n, v)) in
-    set_current_globals cx $ set_module_globals src_id_opt mg' gbs
+    imms <- get_address_immutables cx;
+    let imm = get_source_immutables src_id_opt imms in
+    set_address_immutables cx $ set_source_immutables src_id_opt (imm |+ (n, v)) imms
   od
 End
 
 val () = set_immutable_def
   |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
   |> cv_auto_trans;
-
-Definition update_accounts_def:
-  update_accounts f st = return () (st with accounts updated_by f)
-End
 
 Definition set_scopes_def:
   set_scopes env st = return () $ st with scopes := env
@@ -1861,13 +1983,40 @@ Definition assign_target_def:
     ni <<- string_to_num id;
     tv <- lookup_global cx src_id_opt ni;
     ts <- lift_option (get_module_code cx src_id_opt) "assign_target get_module_code";
-    tv' <- lift_sum $ assign_toplevel (type_env ts) tv (REVERSE is) ao;
-    set_global cx src_id_opt ni tv';
-    return tv
+    tenv <<- type_env ts;
+    case tv of
+    | Value v => do
+        (* Regular variable: apply assignment and write back *)
+        v' <- lift_sum $ assign_subscripts v (REVERSE is) ao;
+        set_global cx src_id_opt ni v';
+        return tv
+      od
+    | HashMapRef is_transient base_slot kt vt => do
+        (* HashMap: compute slot, read/modify/write storage *)
+        (* First subscript is always for the outermost hashmap *)
+        (first_sub, rest_subs) <- lift_option
+          (case REVERSE is of x::xs => SOME (x, xs) | [] => NONE)
+          "assign_target hashmap needs subscript";
+        (final_type, key_types, remaining_subs) <- lift_option
+          (split_hashmap_subscripts vt rest_subs)
+          "assign_target split_hashmap_subscripts";
+        (* Compute how many subscripts are for the hashmap (first + nested) *)
+        hashmap_subs <<- first_sub :: TAKE (LENGTH rest_subs - LENGTH remaining_subs) rest_subs;
+        all_key_types <<- kt :: key_types;
+        final_slot <- lift_option
+          (compute_hashmap_slot base_slot all_key_types hashmap_subs)
+          "assign_target compute_hashmap_slot";
+        final_tv <- lift_option (evaluate_type tenv final_type) "assign_target evaluate_type";
+        (* Read current value, apply assignment, write back *)
+        current_val <- read_storage_slot cx is_transient final_slot final_tv;
+        new_val <- lift_sum $ assign_subscripts current_val remaining_subs ao;
+        write_storage_slot cx is_transient final_slot final_tv new_val;
+        return tv
+      od
   od ∧
   assign_target cx (BaseTargetV (ImmutableVar id) is) ao = do
     ni <<- string_to_num id;
-    imms <- get_immutables cx;
+    imms <- get_immutables cx NONE;
     a <- lift_option (FLOOKUP imms ni) "assign_target ImmutableVar";
     a' <- lift_sum $ assign_subscripts a (REVERSE is) ao;
     set_immutable cx NONE ni a';
@@ -1891,7 +2040,8 @@ End
 
 val assign_target_pre_def = assign_target_def
   |> SRULE [FUN_EQ_THM, bind_def, LET_RATOR, ignore_bind_def,
-            UNCURRY, option_CASE_rator, lift_option_def]
+            UNCURRY, prod_CASE_rator, option_CASE_rator,
+            toplevel_value_CASE_rator, lift_option_def]
   |> cv_auto_trans_pre "assign_target_pre assign_targets_pre";
 
 Theorem assign_target_pre[cv_pre]:
@@ -2517,7 +2667,7 @@ Definition evaluate_def:
             then SOME $ ScopedVar id
 	    else NONE;
     ivo <- if cx.txn.is_creation
-           then do imms <- get_immutables cx;
+           then do imms <- get_immutables cx NONE;
                    return $ immutable_target imms id n
                 od
            else return NONE;
@@ -2547,7 +2697,7 @@ Definition evaluate_def:
   od ∧
   eval_expr cx (Name id) = do
     env <- get_scopes;
-    imms <- get_immutables cx;
+    imms <- get_immutables cx NONE;
     n <<- string_to_num id;
     v <- lift_sum $ exactly_one_option
            (lookup_scopes n env) (FLOOKUP imms n);
@@ -2574,8 +2724,12 @@ Definition evaluate_def:
     tv2 <- eval_expr cx e2;
     v2 <- get_Value tv2;
     ts <- lift_option (get_self_code cx) "Subscript get_self_code";
-    tv <- lift_sum $ evaluate_subscript (type_env ts) tv1 v2;
-    return tv
+    res <- lift_sum $ evaluate_subscript tv1 v2;
+    case res of INL v => return v | INR (is_transient, slot, t) => do
+      tv <- lift_option (evaluate_type (type_env ts) t) "Subscript evaluate_type";
+      v <- read_storage_slot cx is_transient slot tv;
+      return $ Value v
+    od
   od ∧
   eval_expr cx (Attribute e id) = do
     tv <- eval_expr cx e;
@@ -2716,46 +2870,42 @@ Definition force_default_value_def:
 End
 
 (* TODO: assumes unique identifiers, but should check? *)
-(* All initial_globals are for main contract (NONE source_id) *)
-Definition initial_globals_def:
-  initial_globals env [] = empty_globals ∧
-  initial_globals env (VariableDecl _ Storage id typ :: ts) =
-  (let gbs = initial_globals env ts in
-   let key = string_to_num id in
-   let iv = Value $ force_default_value env typ in
-     update_module_mutable NONE key iv gbs) ∧
-  initial_globals env (VariableDecl _ Transient id typ :: ts) =
-  (let gbs = initial_globals env ts in
-   let key = string_to_num id in
-   let iv = Value $ force_default_value env typ in
-     update_module_transient NONE key iv gbs) ∧
-  initial_globals env (VariableDecl _ Immutable id typ :: ts) =
-  (let gbs = initial_globals env ts in
+(* All initial_immutables are for main contract (NONE source_id) *)
+Definition initial_immutables_def:
+  initial_immutables env [] = empty_immutables ∧
+  (* Storage and transient variables use EVM storage, which is zero-initialized *)
+  initial_immutables env (VariableDecl _ Immutable id typ :: ts) =
+  (let imms = initial_immutables env ts in
    let key = string_to_num id in
    let iv = force_default_value env typ in
-     update_module_immutable NONE key iv gbs) ∧
+     update_immutable NONE key iv imms) ∧
   (* TODO: prevent flag value being updated even in constructor *)
-  initial_globals env (FlagDecl id ls :: ts) =
-  (let gbs = initial_globals env ts in
+  initial_immutables env (FlagDecl id ls :: ts) =
+  (let imms = initial_immutables env ts in
    let key = string_to_num id in
    let iv = flag_value (LENGTH ls) 1 [] ls in
-     update_module_immutable NONE key iv gbs) ∧
+     update_immutable NONE key iv imms) ∧
   (* TODO: handle Constants? or ignore since assuming folded into AST *)
-  initial_globals env (HashMapDecl _ is_transient id kt vt :: ts) =
-  (let gbs = initial_globals env ts in
-   let key = string_to_num id in
-   let iv = HashMap vt [] in
-     if is_transient
-     then update_module_transient NONE key iv gbs
-     else update_module_mutable NONE key iv gbs) ∧
-  initial_globals env (t :: ts) = initial_globals env ts
+  (* HashMaps are not stored in immutables - they're constructed on-the-fly in lookup_global *)
+  initial_immutables env (t :: ts) = initial_immutables env ts
 End
 
-val () = cv_auto_trans initial_globals_def;
+val () = cv_auto_trans initial_immutables_def;
+
+(* Convert all storage_layouts to var_layouts *)
+Definition convert_all_layouts_def:
+  convert_all_layouts srcs [] = [] ∧
+  convert_all_layouts srcs ((addr, (s_layout, t_layout)) :: rest) =
+    let var_lays = build_var_layout srcs s_layout t_layout addr in
+    (addr, var_lays) :: convert_all_layouts srcs rest
+End
+
+val () = cv_auto_trans convert_all_layouts_def;
 
 Definition initial_evaluation_context_def:
-  initial_evaluation_context srcs tx =
+  initial_evaluation_context srcs layouts tx =
   <| sources := srcs
+   ; layouts := convert_all_layouts srcs layouts
    ; txn := tx
    ; stk := [(NONE, tx.function_name)]
    |>
@@ -2766,65 +2916,48 @@ val () = cv_auto_trans initial_evaluation_context_def;
 Datatype:
   abstract_machine = <|
     sources: (address, (num option, toplevel list) alist) alist
-  ; globals: (address, globals_state) alist
+  ; immutables: (address, module_immutables) alist
   ; accounts: evm_accounts
+  ; layouts: (address, storage_layout # storage_layout) alist  (* (storage, transient) *)
+  ; tStorage: transient_storage
   |>
 End
 
 Definition initial_machine_state_def:
   initial_machine_state : abstract_machine = <|
     sources := []
-  ; globals := []
+  ; immutables := []
   ; accounts := empty_accounts
+  ; layouts := []
+  ; tStorage := empty_transient_storage
   |>
 End
 
 Definition initial_state_def:
   initial_state (am: abstract_machine) scs : evaluation_state =
   <| accounts := am.accounts
-   ; globals := am.globals
+   ; immutables := am.immutables
    ; logs := []
    ; scopes := scs
+   ; tStorage := am.tStorage
    |>
 End
 
 val () = cv_auto_trans initial_state_def;
 
 Definition abstract_machine_from_state_def:
-  abstract_machine_from_state srcs (st: evaluation_state) =
+  abstract_machine_from_state srcs layouts (st: evaluation_state) =
   <| sources := srcs
-   ; globals := st.globals
+   ; immutables := st.immutables
    ; accounts := st.accounts
+   ; layouts := layouts
+   ; tStorage := st.tStorage
    |> : abstract_machine
 End
 
 val () = cv_auto_trans abstract_machine_from_state_def;
 
-(* Reset transients in a single module_globals: merge transients back into mutables *)
-Definition reset_module_transients_def:
-  reset_module_transients (mg: module_globals) =
-  mg with mutables := FUNION mg.transients mg.mutables
-End
 
-val () = cv_auto_trans reset_module_transients_def;
-
-(* Reset transients for all modules in a globals_state *)
-Definition reset_transient_globals_def:
-  reset_transient_globals ([] : globals_state) = [] ∧
-  reset_transient_globals ((k, mg) :: rest) =
-    (k, reset_module_transients mg) :: reset_transient_globals rest
-End
-
-val () = cv_auto_trans reset_transient_globals_def;
-
-(* Reset transients for all addresses in the global state *)
-Definition reset_all_transient_globals_def:
-  reset_all_transient_globals [] = [] ∧
-  reset_all_transient_globals ((addr, gbs) :: rest) =
-    (addr, reset_transient_globals gbs) :: reset_all_transient_globals rest
-End
-
-val () = cv_auto_trans reset_all_transient_globals_def;
 
 (* Top-level entry-points into the semantics: loading (deploying) a contract,
 * and calling its external functions *)
@@ -2864,25 +2997,26 @@ Definition call_external_function_def:
     | SOME cenv => (* TODO: how do we stop constants being assigned to? *)
    let st = initial_state am [env; cenv] in
    let srcs = am.sources in
+   let layouts = am.layouts in
    let (res, st) =
      (case do send_call_value mut cx; eval_stmts cx body od st
       of
-       | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs st)
+       | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs layouts st)
        | (INR (ReturnException v), st) =>
-           (let am = abstract_machine_from_state srcs st in
+           (let am = abstract_machine_from_state srcs layouts st in
             case evaluate_type tenv ret
             of NONE => (INR (Error "eval ret"), am)
              | SOME tv =>
             case safe_cast tv v
             of NONE => (INR (Error "ext cast ret"), am)
              | SOME v => (INL v, am))
-       | (INR e, st) => (INR e, abstract_machine_from_state srcs st)) in
-    (res, st (* with globals updated_by reset_all_transient_globals -- done separately *)))
+       | (INR e, st) => (INR e, abstract_machine_from_state srcs layouts st)) in
+    (res, st (* transient storage cleared separately via ClearTransientStorage action *)))
 End
 
 Definition call_external_def:
   call_external am tx =
-  let cx = initial_evaluation_context am.sources tx in
+  let cx = initial_evaluation_context am.sources am.layouts tx in
   case get_self_code cx
   of NONE => (INR $ Error "call get_self_code", am)
    | SOME ts =>
@@ -2897,12 +3031,12 @@ Definition load_contract_def:
   let addr = tx.target in
   let ts = case ALOOKUP mods NONE of SOME ts => ts | NONE => [] in
   let tenv = type_env ts in
-  let gbs = initial_globals tenv ts in
-  let am = am with globals updated_by CONS (addr, gbs) in
+  let imms = initial_immutables tenv ts in
+  let am = am with immutables updated_by CONS (addr, imms) in
   case lookup_function tx.function_name Deploy ts of
      | NONE => INR $ Error "no constructor"
      | SOME (mut, args, ret, body) =>
-       let cx = initial_evaluation_context ((addr,mods)::am.sources) tx in
+       let cx = initial_evaluation_context ((addr,mods)::am.sources) am.layouts tx in
        case call_external_function am cx mut ts args tx.args body ret
          of (INR e, _) => INR e
        (* TODO: update balances on return *)

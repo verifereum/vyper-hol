@@ -436,7 +436,7 @@ val deployment : term decoder =
   check (field "source_code" string)
         (fn src => not (has_unsupported_patterns src))
         "has unsupported_pattern" $
-  JSONDecode.map (fn (((c,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e),bc) =>
+  JSONDecode.map (fn ((((c,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e),bc),sl) =>
              TypeBase.mk_record (deployment_trace_ty, [
                ("sourceAst", c),
                ("contractAbi", mk_list(i, abi_entry_ty)),
@@ -451,9 +451,10 @@ val deployment : term decoder =
                ("blobBaseFee", bf),
                ("gasPrice", g),
                ("callData", d),
-               ("runtimeBytecode", bc)
+               ("runtimeBytecode", bc),
+               ("storageLayout", sl)
              ]))
-          (tuple2 (tuple2 (tuple4 (toplevels_via_jsonast,
+          (tuple2 (tuple2 (tuple2 (tuple4 (toplevels_via_jsonast,
                            tuple3 (
                              field "contract_abi" (array abiEntry),
                              field "env" $ field "block" $
@@ -471,7 +472,8 @@ val deployment : term decoder =
                                    field "env" $ field "block" $ field "blob_basefee" numtm,
                                    field "value" numtm)),
                    field "deployment_succeeded" booltm),
-                  field "runtime_bytecode" bytes))
+                  field "runtime_bytecode" bytes),
+                 field "storage_layout" storage_layout))
 
 val trace : term decoder =
   achoose "trace" [

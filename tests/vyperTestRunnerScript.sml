@@ -1,6 +1,6 @@
 Theory vyperTestRunner
 Ancestors
-  contractABI vyperABI vyperSmallStep
+  contractABI vyperABI vyperSmallStep jsonAST
 Libs
   cv_transLib
 
@@ -37,8 +37,18 @@ Datatype:
   ; gasPrice: num
   ; callData: byte list
   ; runtimeBytecode: byte list
+  ; storageLayout: json_storage_layout
   |>
 End
+
+(* Extract simple storage_layout from json_storage_layout *)
+Definition extract_storage_layout_def:
+  extract_storage_layout (jsl: json_storage_layout) : storage_layout # storage_layout =
+    (MAP (λ(name, info). (name, info.slot)) jsl.storage,
+     MAP (λ(name, info). (name, info.slot)) jsl.transient)
+End
+
+val () = cv_auto_trans extract_storage_layout_def;
 
 Definition compute_selector_names_def:
   compute_selector_names [] = [] ∧
@@ -218,15 +228,18 @@ Definition run_trace_def:
   run_trace snss am tr =
   case tr
   of Deployment dt => let
-      result = run_deployment am dt;
+      (s_layout, t_layout) = extract_storage_layout dt.storageLayout;
+      am_with_layout = am with layouts updated_by CONS (dt.deployedAddress, (s_layout, t_layout));
+      result = run_deployment am_with_layout dt;
       sns = FST result; res = SND result;
       res = if dt.deploymentSuccess then
               (* Set the bytecode in accounts after successful deployment *)
               case res of
-                INL am' => INL (am' with accounts updated_by
-                  (update_account dt.deployedAddress
-                    ((lookup_account dt.deployedAddress am'.accounts)
-                      with code := dt.runtimeBytecode)))
+                INL am' => INL (am' with
+                  accounts updated_by
+                    (update_account dt.deployedAddress
+                      ((lookup_account dt.deployedAddress am'.accounts)
+                        with code := dt.runtimeBytecode)))
               | err => err
             else if ISR res then INL am
             else INR (Error "deployment success");
@@ -234,7 +247,7 @@ Definition run_trace_def:
     in
       (snss, res)
    | ClearTransientStorage => (snss,
-       INL (am with globals updated_by reset_all_transient_globals))
+       INL (am with tStorage := empty_transient_storage))
    | SetBalance addr bal => (snss,
        INL (am with accounts updated_by
             (update_account addr

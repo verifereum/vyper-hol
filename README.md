@@ -128,6 +128,6 @@ To run the Vyper test suite on our definitional interpreter, follow this approac
 1. Generate the Vyper tests using `pytest -s -n 1 --export tests/export -m "not fuzzing" tests/functional`.
 2. Link the export directory into `tests/vyper-test-exports` (e.g., `ln -s ../vyper/tests/export tests/vyper-test-exports`).
 3. Set the `VFMDIR` environment variable to a path of a clone of the Verifereum repository (tracking `main`).
-4. `cd tests` and then run `Holmake`.
+4. `cd tests/generated` and then run `Holmake`.
 
 CI uses the same layout and currently exports fixtures from a Vyper checkout during the workflow run.
