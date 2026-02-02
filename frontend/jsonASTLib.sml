@@ -1128,6 +1128,7 @@ fun decode_object_alist (decoder : term decoder) : (string * term) list decoder 
 
 (* Parse the storage_layout object from a trace *)
 (* Structure: { "storage_layout": {...}, "transient_storage_layout": {...}, "code_layout": {...} } *)
+(* Note: inner storage_layout field is optional - some contracts have empty {} *)
 val storage_layout : term decoder =
   JSONDecode.map (fn ((storage_pairs, transient_pairs), code_pairs) =>
                     mk_json_storage_layout (
@@ -1136,7 +1137,7 @@ val storage_layout : term decoder =
                       List.map (fn (n,t) => pairSyntax.mk_pair(fromMLstring n, t)) code_pairs))
   (tuple2 (
      tuple2 (
-       field "storage_layout" (decode_object_alist storage_slot_info),
+       orElse (field "storage_layout" (decode_object_alist storage_slot_info), succeed []),
        orElse (field "transient_storage_layout" (decode_object_alist storage_slot_info), succeed [])),
      orElse (field "code_layout" (decode_object_alist code_slot_info), succeed [])))
 
