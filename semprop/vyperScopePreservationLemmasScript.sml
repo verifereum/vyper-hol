@@ -60,46 +60,171 @@ Proof
   rw[get_accounts_def, return_def]
 QED
 
-Theorem get_current_globals_scopes:
-  !cx st res st'. get_current_globals cx st = (res, st') ==> st'.scopes = st.scopes
+Theorem get_address_immutables_scopes:
+  !cx st res st'. get_address_immutables cx st = (res, st') ==> st'.scopes = st.scopes
 Proof
-  rw[get_current_globals_def, lift_option_def] >>
-  Cases_on `ALOOKUP st.globals cx.txn.target` >> fs[return_def, raise_def]
+  rw[get_address_immutables_def, lift_option_def] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> fs[return_def, raise_def]
 QED
 
-Theorem set_current_globals_scopes:
-  !cx gbs st res st'. set_current_globals cx gbs st = (res, st') ==> st'.scopes = st.scopes
+Theorem set_address_immutables_scopes:
+  !cx imms st res st'. set_address_immutables cx imms st = (res, st') ==> st'.scopes = st.scopes
 Proof
-  rw[set_current_globals_def, return_def] >> simp[]
+  rw[set_address_immutables_def, return_def] >> simp[]
+QED
+
+Theorem get_transient_storage_scopes:
+  !st res st'. get_transient_storage st = (res, st') ==> st'.scopes = st.scopes
+Proof
+  rw[get_transient_storage_def, return_def]
+QED
+
+Theorem update_transient_scopes:
+  !f st res st'. update_transient f st = (res, st') ==> st'.scopes = st.scopes
+Proof
+  rw[update_transient_def, return_def] >> simp[]
+QED
+
+Theorem update_accounts_scopes:
+  !f st res st'. update_accounts f st = (res, st') ==> st'.scopes = st.scopes
+Proof
+  rw[update_accounts_def, return_def] >> simp[]
+QED
+
+Theorem get_storage_backend_scopes:
+  !cx is_trans st res st'. get_storage_backend cx is_trans st = (res, st') ==> st'.scopes = st.scopes
+Proof
+  Cases_on `is_trans` >>
+  rw[get_storage_backend_def, bind_def, get_transient_storage_def, get_accounts_def, return_def]
+QED
+
+Theorem set_storage_backend_scopes:
+  !cx is_trans storage' st res st'. set_storage_backend cx is_trans storage' st = (res, st') ==> st'.scopes = st.scopes
+Proof
+  Cases_on `is_trans` >>
+  rw[set_storage_backend_def, bind_def, update_transient_def, get_accounts_def,
+     update_accounts_def, return_def] >> simp[]
+QED
+
+Theorem read_storage_slot_scopes:
+  !cx is_trans slot tv st res st'. read_storage_slot cx is_trans slot tv st = (res, st') ==> st'.scopes = st.scopes
+Proof
+  Cases_on `is_trans` >>
+  rw[read_storage_slot_def, bind_def, get_storage_backend_def,
+     get_transient_storage_def, get_accounts_def, return_def, lift_option_def] >>
+  qpat_x_assum `_ = _` mp_tac >> CASE_TAC >> gvs[raise_def, return_def]
+QED
+
+Theorem write_storage_slot_scopes:
+  !cx is_trans slot tv v st res st'. write_storage_slot cx is_trans slot tv v st = (res, st') ==> st'.scopes = st.scopes
+Proof
+  Cases_on `is_trans` >>
+  rw[write_storage_slot_def, bind_def, ignore_bind_def, lift_option_def,
+     get_storage_backend_def, set_storage_backend_def,
+     get_transient_storage_def, update_transient_def,
+     get_accounts_def, update_accounts_def, return_def, raise_def] >>
+  gvs[AllCaseEqs()] >>
+  Cases_on `encode_value tv v` >> gvs[return_def, raise_def]
+QED
+
+(* ===== Lemmas about immutables preservation ===== *)
+
+(* Storage operations preserve immutables *)
+Theorem read_storage_slot_immutables:
+  !cx is_trans slot tv st res st'. 
+    read_storage_slot cx is_trans slot tv st = (res, st') ==> 
+    st'.immutables = st.immutables
+Proof
+  Cases_on `is_trans` >>
+  rw[read_storage_slot_def, bind_def, get_storage_backend_def,
+     get_transient_storage_def, get_accounts_def, return_def, lift_option_def] >>
+  qpat_x_assum `_ = _` mp_tac >> CASE_TAC >> gvs[raise_def, return_def]
+QED
+
+Theorem write_storage_slot_immutables:
+  !cx is_trans slot tv v st res st'. 
+    write_storage_slot cx is_trans slot tv v st = (res, st') ==> 
+    st'.immutables = st.immutables
+Proof
+  Cases_on `is_trans` >>
+  rw[write_storage_slot_def, bind_def, ignore_bind_def, lift_option_def,
+     get_storage_backend_def, set_storage_backend_def,
+     get_transient_storage_def, update_transient_def,
+     get_accounts_def, update_accounts_def, return_def, raise_def] >>
+  gvs[AllCaseEqs()] >>
+  Cases_on `encode_value tv v` >> gvs[return_def, raise_def]
+QED
+
+Theorem lookup_global_immutables:
+  !cx src n st res st'. 
+    lookup_global cx src n st = (res, st') ==> 
+    st'.immutables = st.immutables
+Proof
+  rw[lookup_global_def, bind_def, return_def, lift_option_def] >>
+  Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
+  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >>
+  PairCases_on `x'` >> gvs[] >>
+  Cases_on `x'0` >> gvs[bind_def, return_def, raise_def] >>
+  qpat_x_assum `_ = (res, st')` mp_tac >>
+  rpt CASE_TAC >> gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
+  imp_res_tac read_storage_slot_immutables >> simp[]
+QED
+
+Theorem set_global_immutables:
+  !cx src n v st res st'. 
+    set_global cx src n v st = (res, st') ==> 
+    st'.immutables = st.immutables
+Proof
+  rw[set_global_def, bind_def, return_def, lift_option_def] >>
+  Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
+  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >>
+  PairCases_on `x'` >> gvs[] >>
+  Cases_on `x'0` >> gvs[return_def, raise_def, bind_def] >>
+  Cases_on `lookup_var_slot_from_layout cx b n` >> gvs[return_def, raise_def] >>
+  Cases_on `evaluate_type (type_env x) t` >> gvs[return_def, raise_def] >>
+  imp_res_tac write_storage_slot_immutables >> gvs[]
 QED
 
 Theorem get_immutables_scopes:
-  !cx st res st'. get_immutables cx st = (res, st') ==> st'.scopes = st.scopes
+  !cx src st res st'. get_immutables cx src st = (res, st') ==> st'.scopes = st.scopes
 Proof
-  rw[get_immutables_def, get_immutables_module_def, bind_def, return_def, get_current_globals_def, lift_option_def] >>
-  Cases_on `ALOOKUP st.globals cx.txn.target` >> fs[return_def, raise_def]
+  rw[get_immutables_def, bind_def, return_def, get_address_immutables_def, lift_option_def] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> fs[return_def, raise_def]
 QED
 
 Theorem lookup_global_scopes:
   !cx src n st res st'. lookup_global cx src n st = (res, st') ==> st'.scopes = st.scopes
 Proof
-  rw[lookup_global_def, bind_def, return_def, get_current_globals_def, lift_option_def] >>
-  Cases_on `ALOOKUP st.globals cx.txn.target` >> fs[return_def, raise_def] >>
-  Cases_on `FLOOKUP (get_module_globals src x).mutables n` >> fs[return_def, raise_def]
+  rw[lookup_global_def, bind_def, return_def, lift_option_def] >>
+  Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
+  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >>
+  PairCases_on `x'` >> gvs[] >>
+  Cases_on `x'0` >> gvs[bind_def, return_def, raise_def] >>
+  qpat_x_assum `_ = (res, st')` mp_tac >>
+  rpt CASE_TAC >> gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
+  drule read_storage_slot_scopes >> simp[]
 QED
 
 Theorem set_global_scopes:
   !cx src n v st res st'. set_global cx src n v st = (res, st') ==> st'.scopes = st.scopes
 Proof
-  rw[set_global_def, bind_def, return_def, get_current_globals_def, set_current_globals_def, lift_option_def] >>
-  Cases_on `ALOOKUP st.globals cx.txn.target` >> gvs[raise_def, return_def]
+  rw[set_global_def, bind_def, return_def, lift_option_def] >>
+  Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
+  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >>
+  PairCases_on `x'` >> gvs[] >>
+  Cases_on `x'0` >> gvs[return_def, raise_def, bind_def] >>
+  imp_res_tac lift_option_scopes >> gvs[] >>
+  Cases_on `lookup_var_slot_from_layout cx b n` >> gvs[return_def, raise_def] >>
+  Cases_on `evaluate_type (type_env x) t` >> gvs[return_def, raise_def] >>
+  imp_res_tac write_storage_slot_scopes >> gvs[]
 QED
 
 Theorem set_immutable_scopes:
   !cx src n v st res st'. set_immutable cx src n v st = (res, st') ==> st'.scopes = st.scopes
 Proof
-  rw[set_immutable_def, bind_def, return_def, get_current_globals_def, set_current_globals_def, lift_option_def] >>
-  Cases_on `ALOOKUP st.globals cx.txn.target` >> gvs[raise_def, return_def]
+  rw[set_immutable_def, bind_def, return_def, get_address_immutables_def,
+     set_address_immutables_def, lift_option_def] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[raise_def, return_def]
 QED
 
 Theorem push_log_scopes:
@@ -180,24 +305,35 @@ Proof
       Cases_on `assign_subscripts x2 (REVERSE is) ao` >>
       gvs[return_def, raise_def, bind_def, ignore_bind_def, set_scopes_def] >>
       drule find_containing_scope_map_fdom >> simp[])
-  (* TopLevelVar case *)
-  >- (strip_tac >> gvs[assign_target_def, bind_def] >>
-      Cases_on `lookup_global cx src_id_opt (string_to_num id) st` >> gvs[] >>
-      drule lookup_global_scopes >> strip_tac >>
-      Cases_on `q` >> gvs[] >>
-      gvs[lift_option_def, AllCaseEqs(), return_def, raise_def]
-      >- (imp_res_tac lift_sum_scopes >> gvs[] >>
-          gvs[bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def]
-          >- (imp_res_tac set_global_scopes >> gvs[] >>
-              Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def])
-          >- (imp_res_tac set_global_scopes >> gvs[] >>
-              Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def]))
-      >- (imp_res_tac lift_sum_scopes >> Cases_on `get_module_code cx src_id_opt` >>
-          gvs[return_def, raise_def])
-      >- (Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def]))
+  (* TopLevelVar case - now uses storage operations *)
+  >- (strip_tac >> gvs[assign_target_def, bind_def, lift_option_def] >>
+      Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def]
+      (* NONE case: lookup_global still runs, then error *)
+      >- (qpat_x_assum `_ = (res, st')` mp_tac >>
+          rpt CASE_TAC >> gvs[return_def, raise_def] >>
+          rpt strip_tac >> gvs[] >>
+          imp_res_tac lookup_global_scopes >> gvs[])
+      (* SOME case: main execution path *)
+      >> (qpat_x_assum `_ = (res, st')` mp_tac >>
+          simp[return_def] >> rpt CASE_TAC >> 
+          gvs[return_def, raise_def, lift_sum_def, bind_def, ignore_bind_def] >>
+          rpt strip_tac >> gvs[] >>
+          imp_res_tac lookup_global_scopes >> gvs[] >>
+          (* Value case: use set_global_scopes *)
+          TRY (qpat_x_assum `_ = (res, st')` mp_tac >>
+               rpt CASE_TAC >> gvs[return_def, raise_def] >>
+               rpt strip_tac >> gvs[] >>
+               imp_res_tac set_global_scopes >> gvs[]) >>
+          (* HashMapRef case: decompose tuple, use read/write_storage_slot_scopes *)
+          TRY (PairCases_on `x'` >> gvs[bind_def] >>
+               qpat_x_assum `_ = (res, st')` mp_tac >>
+               rpt CASE_TAC >> gvs[return_def, raise_def] >>
+               rpt strip_tac >> gvs[] >>
+               imp_res_tac read_storage_slot_scopes >> 
+               imp_res_tac write_storage_slot_scopes >> gvs[])))
   (* ImmutableVar case *)
   >- (strip_tac >> gvs[assign_target_def, bind_def] >>
-      Cases_on `get_immutables cx st` >> gvs[] >>
+      Cases_on `get_immutables cx NONE st` >> gvs[] >>
       drule get_immutables_scopes >> strip_tac >>
       Cases_on `q` >> gvs[] >>
       gvs[lift_option_def, AllCaseEqs(), return_def, raise_def]

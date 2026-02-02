@@ -1,36 +1,30 @@
 Theory vyperAssignTargetLemmas
 
 Ancestors
-  vyperInterpreter
+  vyperInterpreter vyperScopePreservationLemmas
 
 (*********************************************************************************)
-(* Helper lemmas *)
-
-Theorem ALOOKUP_set_module_globals_preserves[local]:
-  ∀al k v tgt. IS_SOME (ALOOKUP al tgt) ⇒ IS_SOME (ALOOKUP ((k, v) :: ADELKEY k al) tgt)
-Proof
-  rpt strip_tac >> Cases_on `k = tgt` >> simp[alistTheory.ALOOKUP_ADELKEY]
-QED
+(* Helper lemmas for immutables preservation *)
 
 (* Helper lemma for TupleTargetV + TupleV case of the induction *)
-Theorem assign_target_tuple_preserves_globals_and_immutables_dom[local]:
+Theorem assign_target_tuple_preserves_immutables_dom[local]:
   ∀cx gvs vs.
     (∀st res st'.
        assign_targets cx gvs vs st = (INL res,st') ⇒
-       (∀tgt. IS_SOME (ALOOKUP st.globals tgt) ⇒ IS_SOME (ALOOKUP st'.globals tgt)) ∧
-       ∀n gbs gbs'.
-         ALOOKUP st.globals cx.txn.target = SOME gbs ∧
-         ALOOKUP st'.globals cx.txn.target = SOME gbs' ⇒
-         (IS_SOME (FLOOKUP (get_module_globals NONE gbs).immutables n) ⇔
-          IS_SOME (FLOOKUP (get_module_globals NONE gbs').immutables n))) ⇒
+       (∀tgt. IS_SOME (ALOOKUP st.immutables tgt) ⇒ IS_SOME (ALOOKUP st'.immutables tgt)) ∧
+       ∀n imms imms'.
+         ALOOKUP st.immutables cx.txn.target = SOME imms ∧
+         ALOOKUP st'.immutables cx.txn.target = SOME imms' ⇒
+         (IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) ⇔
+          IS_SOME (FLOOKUP (get_source_immutables NONE imms') n))) ⇒
     ∀st res st'.
       assign_target cx (TupleTargetV gvs) (Replace (ArrayV (TupleV vs))) st = (INL res,st') ⇒
-      (∀tgt. IS_SOME (ALOOKUP st.globals tgt) ⇒ IS_SOME (ALOOKUP st'.globals tgt)) ∧
-      ∀n gbs gbs'.
-        ALOOKUP st.globals cx.txn.target = SOME gbs ∧
-        ALOOKUP st'.globals cx.txn.target = SOME gbs' ⇒
-        (IS_SOME (FLOOKUP (get_module_globals NONE gbs).immutables n) ⇔
-         IS_SOME (FLOOKUP (get_module_globals NONE gbs').immutables n))
+      (∀tgt. IS_SOME (ALOOKUP st.immutables tgt) ⇒ IS_SOME (ALOOKUP st'.immutables tgt)) ∧
+      ∀n imms imms'.
+        ALOOKUP st.immutables cx.txn.target = SOME imms ∧
+        ALOOKUP st'.immutables cx.txn.target = SOME imms' ⇒
+        (IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) ⇔
+         IS_SOME (FLOOKUP (get_source_immutables NONE imms') n))
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >>
   simp[Once assign_target_def, check_def, AllCaseEqs(), return_def, raise_def] >>
@@ -40,32 +34,32 @@ Proof
 QED
 
 (* Helper lemma for assign_targets cons case of the induction *)
-Theorem assign_targets_cons_preserves_globals_and_immutables_dom[local]:
+Theorem assign_targets_cons_preserves_immutables_dom[local]:
   ∀cx av v gvs vs.
     (∀st res st'.
        assign_target cx av (Replace v) st = (INL res,st') ⇒
-       (∀tgt. IS_SOME (ALOOKUP st.globals tgt) ⇒ IS_SOME (ALOOKUP st'.globals tgt)) ∧
-       ∀n gbs gbs'.
-         ALOOKUP st.globals cx.txn.target = SOME gbs ∧
-         ALOOKUP st'.globals cx.txn.target = SOME gbs' ⇒
-         (IS_SOME (FLOOKUP (get_module_globals NONE gbs).immutables n) ⇔
-          IS_SOME (FLOOKUP (get_module_globals NONE gbs').immutables n))) ∧
+       (∀tgt. IS_SOME (ALOOKUP st.immutables tgt) ⇒ IS_SOME (ALOOKUP st'.immutables tgt)) ∧
+       ∀n imms imms'.
+         ALOOKUP st.immutables cx.txn.target = SOME imms ∧
+         ALOOKUP st'.immutables cx.txn.target = SOME imms' ⇒
+         (IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) ⇔
+          IS_SOME (FLOOKUP (get_source_immutables NONE imms') n))) ∧
     (∀st res st'.
        assign_targets cx gvs vs st = (INL res,st') ⇒
-       (∀tgt. IS_SOME (ALOOKUP st.globals tgt) ⇒ IS_SOME (ALOOKUP st'.globals tgt)) ∧
-       ∀n gbs gbs'.
-         ALOOKUP st.globals cx.txn.target = SOME gbs ∧
-         ALOOKUP st'.globals cx.txn.target = SOME gbs' ⇒
-         (IS_SOME (FLOOKUP (get_module_globals NONE gbs).immutables n) ⇔
-          IS_SOME (FLOOKUP (get_module_globals NONE gbs').immutables n))) ⇒
+       (∀tgt. IS_SOME (ALOOKUP st.immutables tgt) ⇒ IS_SOME (ALOOKUP st'.immutables tgt)) ∧
+       ∀n imms imms'.
+         ALOOKUP st.immutables cx.txn.target = SOME imms ∧
+         ALOOKUP st'.immutables cx.txn.target = SOME imms' ⇒
+         (IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) ⇔
+          IS_SOME (FLOOKUP (get_source_immutables NONE imms') n))) ⇒
     ∀st res st'.
       assign_targets cx (av::gvs) (v::vs) st = (INL res,st') ⇒
-      (∀tgt. IS_SOME (ALOOKUP st.globals tgt) ⇒ IS_SOME (ALOOKUP st'.globals tgt)) ∧
-      ∀n gbs gbs'.
-        ALOOKUP st.globals cx.txn.target = SOME gbs ∧
-        ALOOKUP st'.globals cx.txn.target = SOME gbs' ⇒
-        (IS_SOME (FLOOKUP (get_module_globals NONE gbs).immutables n) ⇔
-         IS_SOME (FLOOKUP (get_module_globals NONE gbs').immutables n))
+      (∀tgt. IS_SOME (ALOOKUP st.immutables tgt) ⇒ IS_SOME (ALOOKUP st'.immutables tgt)) ∧
+      ∀n imms imms'.
+        ALOOKUP st.immutables cx.txn.target = SOME imms ∧
+        ALOOKUP st'.immutables cx.txn.target = SOME imms' ⇒
+        (IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) ⇔
+         IS_SOME (FLOOKUP (get_source_immutables NONE imms') n))
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >>
   simp[Once assign_target_def, bind_def, get_Value_def, AllCaseEqs(),
@@ -80,30 +74,30 @@ Proof
   first_x_assum (qspec_then `s_mid` mp_tac) >> disch_then drule >> strip_tac >>
   conj_tac >- metis_tac[] >>
   rpt strip_tac >>
-  `IS_SOME (ALOOKUP s_mid.globals cx.txn.target)` by (first_x_assum irule >> simp[]) >>
-  Cases_on `ALOOKUP s_mid.globals cx.txn.target` >> gvs[]
+  `IS_SOME (ALOOKUP s_mid.immutables cx.txn.target)` by (first_x_assum irule >> simp[]) >>
+  Cases_on `ALOOKUP s_mid.immutables cx.txn.target` >> gvs[]
 QED
 
-Theorem assign_target_preserves_globals_and_immutables_dom[local]:
+Theorem assign_target_preserves_immutables_dom_main[local]:
   (∀cx av ao st res st'.
      assign_target cx av ao st = (INL res, st') ⇒
-     (∀tgt. IS_SOME (ALOOKUP st.globals tgt) ⇒ IS_SOME (ALOOKUP st'.globals tgt)) ∧
-     (∀n gbs gbs'.
-        ALOOKUP st.globals cx.txn.target = SOME gbs ∧
-        ALOOKUP st'.globals cx.txn.target = SOME gbs' ⇒
-        IS_SOME (FLOOKUP (get_module_globals NONE gbs).immutables n) =
-        IS_SOME (FLOOKUP (get_module_globals NONE gbs').immutables n))) ∧
+     (∀tgt. IS_SOME (ALOOKUP st.immutables tgt) ⇒ IS_SOME (ALOOKUP st'.immutables tgt)) ∧
+     (∀n imms imms'.
+        ALOOKUP st.immutables cx.txn.target = SOME imms ∧
+        ALOOKUP st'.immutables cx.txn.target = SOME imms' ⇒
+        IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) =
+        IS_SOME (FLOOKUP (get_source_immutables NONE imms') n))) ∧
   (∀cx gvs vs st res st'.
      assign_targets cx gvs vs st = (INL res, st') ⇒
-     (∀tgt. IS_SOME (ALOOKUP st.globals tgt) ⇒ IS_SOME (ALOOKUP st'.globals tgt)) ∧
-     (∀n gbs gbs'.
-        ALOOKUP st.globals cx.txn.target = SOME gbs ∧
-        ALOOKUP st'.globals cx.txn.target = SOME gbs' ⇒
-        IS_SOME (FLOOKUP (get_module_globals NONE gbs).immutables n) =
-        IS_SOME (FLOOKUP (get_module_globals NONE gbs').immutables n)))
+     (∀tgt. IS_SOME (ALOOKUP st.immutables tgt) ⇒ IS_SOME (ALOOKUP st'.immutables tgt)) ∧
+     (∀n imms imms'.
+        ALOOKUP st.immutables cx.txn.target = SOME imms ∧
+        ALOOKUP st'.immutables cx.txn.target = SOME imms' ⇒
+        IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) =
+        IS_SOME (FLOOKUP (get_source_immutables NONE imms') n)))
 Proof
   ho_match_mp_tac assign_target_ind >> rpt conj_tac >> rpt gen_tac >-
-  (* ScopedVar case: set_scopes doesn't touch globals *)
+  (* ScopedVar case: set_scopes doesn't touch immutables *)
   (simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
         lift_option_def, lift_sum_def, AllCaseEqs(), raise_def, LET_THM,
         ignore_bind_def, set_scopes_def] >> strip_tac >>
@@ -114,57 +108,56 @@ Proof
    gvs[bind_def, AllCaseEqs(), return_def, raise_def, set_scopes_def] >>
    Cases_on `assign_subscripts fcs_result2 (REVERSE is) ao` >>
    gvs[return_def, raise_def] >> rw[] >> gvs[]) >-
-  (* TopLevelVar case *)
-  (strip_tac >>
-   gvs[Once assign_target_def, AllCaseEqs(), return_def, raise_def,
-       lookup_global_def, bind_def, get_current_globals_def, lift_option_def,
-       LET_THM, set_global_def, set_current_globals_def] >>
-   `st.globals = s'³'.globals ∧ ALOOKUP st.globals cx.txn.target = SOME gbs`
-     by (Cases_on `ALOOKUP st.globals cx.txn.target` >> gvs[return_def, raise_def]) >>
-   `s'³'.globals = s''.globals`
-     by (Cases_on `FLOOKUP (get_module_globals src_id_opt gbs).mutables (string_to_num id)` >>
-         gvs[return_def, raise_def]) >>
-   `s''.globals = s'⁴'.globals`
-     by (Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def]) >>
-   Cases_on `assign_toplevel (type_env ts) tv (REVERSE is) ao` >-
-   (gvs[lift_sum_def, return_def] >>
-    qpat_x_assum `do _ od _ = _` mp_tac >>
-    simp[bind_def, ignore_bind_def, get_current_globals_def, set_current_globals_def,
-         return_def, LET_THM, AllCaseEqs(), lift_option_def] >> strip_tac >> gvs[] >>
-    fs[bind_def, ignore_bind_def, get_current_globals_def, set_current_globals_def,
-       return_def, LET_THM, lift_option_def] >> gvs[] >>
+  (* TopLevelVar case: storage operations don't touch immutables *)
+   (strip_tac >>
+    gvs[Once assign_target_def, AllCaseEqs(), return_def, raise_def,
+        bind_def, lift_option_def, lift_sum_def, ignore_bind_def] >>
+    drule lookup_global_immutables >> strip_tac >>
+    Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def] >>
+    Cases_on `tv` >> gvs[bind_def]
+    (* Value case *)
+    >- (Cases_on `assign_subscripts v (REVERSE is) ao` >> gvs[return_def, raise_def] >>
+        Cases_on `set_global cx src_id_opt (string_to_num id) x s''` >> gvs[] >>
+        drule set_global_immutables >> strip_tac >> gvs[return_def] >>
+        Cases_on `q` >> gvs[return_def, raise_def] >> rw[] >> gvs[])
+    (* HashMapRef case *)
+    >> (Cases_on `REVERSE is` >> gvs[return_def, raise_def] >>
+        Cases_on `split_hashmap_subscripts v t'` >> gvs[bind_def, return_def, raise_def] >>
+        PairCases_on `x` >> gvs[] >>
+        Cases_on `compute_hashmap_slot c (t::x1) (h::TAKE (LENGTH t' − LENGTH x2) t')` >> 
+        gvs[bind_def, return_def, raise_def] >>
+        Cases_on `evaluate_type (type_env ts) x0` >> gvs[return_def, raise_def] >>
+        Cases_on `read_storage_slot cx b x x' s''` >> gvs[] >>
+        imp_res_tac read_storage_slot_immutables >> gvs[] >>
+        Cases_on `q` >> gvs[] >>
+        Cases_on `assign_subscripts x'' x2 ao` >> gvs[return_def, raise_def] >>
+        Cases_on `write_storage_slot cx b x x' x'³' r` >> gvs[] >>
+        imp_res_tac write_storage_slot_immutables >> gvs[] >>
+        Cases_on `q` >> gvs[] >> rw[] >> gvs[])) >-
+  (* ImmutableVar case: updates st.immutables, but preserves domain *)
+   (strip_tac >>
+    simp[Once assign_target_def, bind_def, get_immutables_def, get_address_immutables_def,
+         lift_option_def, LET_THM, return_def, raise_def] >>
+    Cases_on `ALOOKUP st.immutables cx.txn.target` >> simp[return_def, raise_def] >-
+    gvs[Once assign_target_def, bind_def, get_immutables_def, get_address_immutables_def,
+        lift_option_def, LET_THM, return_def, raise_def] >>
+    qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+    simp[Once assign_target_def, bind_def, get_immutables_def, get_address_immutables_def,
+         lift_option_def, LET_THM, return_def, raise_def] >>
+    Cases_on `FLOOKUP (get_source_immutables NONE x) (string_to_num id)` >> 
+    simp[return_def, raise_def] >>
+    Cases_on `assign_subscripts x' (REVERSE is) ao` >> simp[lift_sum_def, return_def, raise_def] >>
+    simp[ignore_bind_def, bind_def, set_immutable_def, get_address_immutables_def,
+         set_address_immutables_def, lift_option_def, return_def, LET_THM] >>
+    strip_tac >> gvs[] >>
     conj_tac >-
     (rpt strip_tac >> Cases_on `cx.txn.target = tgt` >> simp[alistTheory.ALOOKUP_ADELKEY]) >>
-    rpt strip_tac >> Cases_on `src_id_opt` >>
-    simp[get_module_globals_def, set_module_globals_def, alistTheory.ALOOKUP_ADELKEY]) >>
-   gvs[lift_sum_def, raise_def]) >-
-  (* ImmutableVar case *)
-  (strip_tac >>
-   gvs[Once assign_target_def, AllCaseEqs(), return_def, raise_def,
-       bind_def, get_current_globals_def, lift_option_def, LET_THM,
-       set_immutable_def, set_current_globals_def, get_immutables_def,
-       get_immutables_module_def] >>
-   `st.globals = s''.globals ∧ ALOOKUP st.globals cx.txn.target = SOME gbs`
-     by (Cases_on `ALOOKUP st.globals cx.txn.target` >> gvs[return_def, raise_def]) >>
-   `s''.globals = s'⁴'.globals`
-     by (Cases_on `FLOOKUP (get_module_globals NONE gbs).immutables (string_to_num id)` >>
-         gvs[return_def, raise_def]) >>
-   Cases_on `assign_subscripts a (REVERSE is) ao` >> gvs[return_def, raise_def, lift_sum_def] >>
-   qpat_x_assum `do _ od _ = _` mp_tac >>
-   simp[bind_def, ignore_bind_def, get_current_globals_def, set_current_globals_def,
-        return_def, LET_THM, AllCaseEqs(), lift_option_def] >> strip_tac >> gvs[] >>
-   fs[bind_def, ignore_bind_def, get_current_globals_def, set_current_globals_def,
-      return_def, LET_THM, lift_option_def] >> gvs[] >>
-   conj_tac >-
-   (rpt strip_tac >> Cases_on `cx.txn.target = tgt` >> simp[alistTheory.ALOOKUP_ADELKEY]) >>
-   simp[get_module_globals_def, set_module_globals_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-   rpt strip_tac >> Cases_on `string_to_num id = n` >> simp[] >>
-   gvs[get_module_globals_def, return_def, raise_def, AllCaseEqs()] >>
-   Cases_on `FLOOKUP (case ALOOKUP gbs NONE of NONE => empty_module_globals
-                      | SOME mg => mg).immutables (string_to_num id)` >>
-   gvs[return_def, raise_def]) >-
+    simp[get_source_immutables_def, set_source_immutables_def, 
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+    rpt strip_tac >> Cases_on `string_to_num id = n` >> simp[] >>
+    gvs[get_source_immutables_def]) >-
   (* TupleTargetV with TupleV - use helper lemma *)
-  MATCH_ACCEPT_TAC assign_target_tuple_preserves_globals_and_immutables_dom >-
+  MATCH_ACCEPT_TAC assign_target_tuple_preserves_immutables_dom >-
   (* Other TupleTargetV cases - all vacuously true (raise) - 13 cases *)
   simp[Once assign_target_def, raise_def] >-
   simp[Once assign_target_def, raise_def] >-
@@ -182,7 +175,7 @@ Proof
   (* assign_targets [] [] - trivial *)
   (simp[Once assign_target_def, return_def] >> strip_tac >> gvs[] >> rw[] >> gvs[]) >-
   (* assign_targets cons case - use helper lemma *)
-  MATCH_ACCEPT_TAC assign_targets_cons_preserves_globals_and_immutables_dom >-
+  MATCH_ACCEPT_TAC assign_targets_cons_preserves_immutables_dom >-
   (* assign_targets [] (v::vs) - vacuous *)
   simp[Once assign_target_def, raise_def] >-
   (* assign_targets (v::vs) [] - vacuous *)
@@ -195,41 +188,41 @@ QED
 Theorem assign_target_preserves_immutables_dom:
   ∀cx av ao st res st'.
     assign_target cx av ao st = (INL res, st') ⇒
-    ∀n gbs gbs'.
-      ALOOKUP st.globals cx.txn.target = SOME gbs ∧
-      ALOOKUP st'.globals cx.txn.target = SOME gbs' ⇒
-      IS_SOME (FLOOKUP (get_module_globals NONE gbs).immutables n) =
-      IS_SOME (FLOOKUP (get_module_globals NONE gbs').immutables n)
+    ∀n imms imms'.
+      ALOOKUP st.immutables cx.txn.target = SOME imms ∧
+      ALOOKUP st'.immutables cx.txn.target = SOME imms' ⇒
+      IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) =
+      IS_SOME (FLOOKUP (get_source_immutables NONE imms') n)
 Proof
-  metis_tac[assign_target_preserves_globals_and_immutables_dom]
+  metis_tac[assign_target_preserves_immutables_dom_main]
 QED
 
 Theorem assign_targets_preserves_immutables_dom:
   ∀cx gvs vs st res st'.
     assign_targets cx gvs vs st = (INL res, st') ⇒
-    ∀n gbs gbs'.
-      ALOOKUP st.globals cx.txn.target = SOME gbs ∧
-      ALOOKUP st'.globals cx.txn.target = SOME gbs' ⇒
-      IS_SOME (FLOOKUP (get_module_globals NONE gbs).immutables n) =
-      IS_SOME (FLOOKUP (get_module_globals NONE gbs').immutables n)
+    ∀n imms imms'.
+      ALOOKUP st.immutables cx.txn.target = SOME imms ∧
+      ALOOKUP st'.immutables cx.txn.target = SOME imms' ⇒
+      IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) =
+      IS_SOME (FLOOKUP (get_source_immutables NONE imms') n)
 Proof
-  metis_tac[assign_target_preserves_globals_and_immutables_dom]
+  metis_tac[assign_target_preserves_immutables_dom_main]
 QED
 
-Theorem assign_target_preserves_globals_dom:
+Theorem assign_target_preserves_immutables_addr_dom:
   ∀cx av ao st res st'.
     assign_target cx av ao st = (INL res, st') ⇒
-    IS_SOME (ALOOKUP st.globals cx.txn.target) ⇒
-    IS_SOME (ALOOKUP st'.globals cx.txn.target)
+    IS_SOME (ALOOKUP st.immutables cx.txn.target) ⇒
+    IS_SOME (ALOOKUP st'.immutables cx.txn.target)
 Proof
-  metis_tac[assign_target_preserves_globals_and_immutables_dom]
+  metis_tac[assign_target_preserves_immutables_dom_main]
 QED
 
-Theorem assign_targets_preserves_globals_dom:
+Theorem assign_targets_preserves_immutables_addr_dom:
   ∀cx gvs vs st res st'.
     assign_targets cx gvs vs st = (INL res, st') ⇒
-    IS_SOME (ALOOKUP st.globals cx.txn.target) ⇒
-    IS_SOME (ALOOKUP st'.globals cx.txn.target)
+    IS_SOME (ALOOKUP st.immutables cx.txn.target) ⇒
+    IS_SOME (ALOOKUP st'.immutables cx.txn.target)
 Proof
-  metis_tac[assign_target_preserves_globals_and_immutables_dom]
+  metis_tac[assign_target_preserves_immutables_dom_main]
 QED

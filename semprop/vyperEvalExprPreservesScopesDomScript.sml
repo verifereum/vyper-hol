@@ -37,15 +37,31 @@ Theorem case_NameTarget_dom[local]:
     MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
-      get_scopes_def, get_immutables_def, get_immutables_module_def,
-      get_current_globals_def, lift_option_def, lift_sum_def] >>
-  TRY (rename1 `_ = (INL ivo, s_ivo)` >>
-       Cases_on `exactly_one_option
-                   (if IS_SOME (lookup_scopes (string_to_num nm) st.scopes) then
-                      SOME (ScopedVar nm) else NONE) ivo` >> gvs[return_def, raise_def]) >>
-  Cases_on `cx.txn.is_creation` >> gvs[return_def, bind_def, get_current_globals_def, lift_option_def] >>
-  Cases_on `ALOOKUP st.globals cx.txn.target` >> gvs[return_def, raise_def]
+  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
+       get_scopes_def, lift_sum_def] >>
+  IF_CASES_TAC >> gvs[return_def, bind_def] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac get_immutables_scopes >> gvs[]
+  (* is_creation = T: involves get_immutables call *)
+  >- (Cases_on `get_immutables cx NONE st` >> Cases_on `q` >> gvs[] >>
+      imp_res_tac get_immutables_scopes >> gvs[] >>
+      Cases_on `exactly_one_option
+                  (if IS_SOME (lookup_scopes (string_to_num nm) st.scopes) then
+                     SOME (ScopedVar nm) else NONE)
+                  (immutable_target x nm (string_to_num nm))` >> gvs[return_def, raise_def])
+  >- (Cases_on `get_immutables cx NONE st` >> Cases_on `q` >> gvs[] >>
+      imp_res_tac get_immutables_scopes >> gvs[] >>
+      Cases_on `exactly_one_option
+                  (if IS_SOME (lookup_scopes (string_to_num nm) st.scopes) then
+                     SOME (ScopedVar nm) else NONE)
+                  (immutable_target x nm (string_to_num nm))` >> gvs[return_def, raise_def])
+  >- (Cases_on `get_immutables cx NONE st` >> Cases_on `q` >> gvs[] >>
+      imp_res_tac get_immutables_scopes >> gvs[])
+  (* is_creation = F: trivial return NONE case *)
+  >> Cases_on `exactly_one_option
+                 (if IS_SOME (lookup_scopes (string_to_num nm) st.scopes) then
+                    SOME (ScopedVar nm) else NONE) NONE` >> gvs[return_def, raise_def]
 QED
 
 (* TopLevelNameTarget case - does not call eval_expr *)
@@ -100,7 +116,14 @@ Proof
   rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   TRY (`MAP FDOM st.scopes = MAP FDOM s''.scopes` by (last_x_assum (qspec_then `cx` drule) >> simp[])) >>
   TRY (first_x_assum (qspec_then `cx` drule) >> simp[] >> strip_tac) >>
-  imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >> imp_res_tac lift_sum_scopes >> gvs[]
+  imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >> imp_res_tac lift_sum_scopes >> gvs[] >>
+  (* Handle storage slot access case (evaluate_subscript returns INR) *)
+  TRY (
+    Cases_on `res'` >> gvs[return_def, bind_def, AllCaseEqs()] >>
+    PairCases_on `y` >> gvs[bind_def, AllCaseEqs(), lift_option_def, return_def, raise_def] >>
+    imp_res_tac read_storage_slot_scopes >> gvs[] >>
+    Cases_on `evaluate_type (type_env ts) y2` >> gvs[return_def, raise_def]
+  ) >> metis_tac[]
 QED
 
 (* Attribute: P0 e ⇒ ∀s. P0 (Attribute e s) *)
@@ -290,9 +313,7 @@ Proof
           imp_res_tac lift_sum_scopes >> imp_res_tac return_scopes >> gvs[])
       (* Case 2: TopLevelName *)
       >- (rpt gen_tac >> PairCases_on `ke` >> rpt strip_tac >>
-          gvs[evaluate_def, bind_def, AllCaseEqs()] >>
-          imp_res_tac get_current_globals_scopes >> imp_res_tac lift_option_scopes >>
-          imp_res_tac lift_sum_scopes >> imp_res_tac return_scopes >> gvs[] >>
+          gvs[evaluate_def] >>
           imp_res_tac lookup_global_scopes >> gvs[])
       (* Case 3: FlagMember *)
       >- (rpt gen_tac >> PairCases_on `ke` >> rpt strip_tac >>

@@ -136,8 +136,18 @@ Theorem case_Subscript[local]:
 Proof
   rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), scope_preserving_expr_def] >>
   imp_res_tac return_scopes >> imp_res_tac lift_sum_scopes >>
-  imp_res_tac lift_option_scopes >> imp_res_tac get_Value_scopes >>
-  res_tac >> gvs[] >> metis_tac[]
+  imp_res_tac lift_option_scopes >> imp_res_tac get_Value_scopes
+  (* First subgoal is the main success path with case on res' *)
+  >- (Cases_on `res'` >> gvs[return_def, bind_def, AllCaseEqs()]
+      (* INL case - direct return *)
+      >- metis_tac[]
+      (* INR case - storage slot access *)
+      >> PairCases_on `y` >> gvs[bind_def, AllCaseEqs(), lift_option_def, return_def, raise_def]
+      >> imp_res_tac read_storage_slot_scopes >> gvs[]
+      >> Cases_on `evaluate_type (type_env ts) y2` >> gvs[return_def, raise_def]
+      >> metis_tac[])
+  (* Remaining error cases *)
+  >> metis_tac[]
 QED
 
 Theorem case_Attribute[local]:

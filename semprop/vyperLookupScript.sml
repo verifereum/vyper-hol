@@ -13,8 +13,8 @@ End
 
 Definition lookup_immutable_def:
   lookup_immutable cx (st:evaluation_state) n =
-  case ALOOKUP st.globals cx.txn.target of
-  | SOME gbs => FLOOKUP (get_module_globals NONE gbs).immutables (string_to_num n)
+  case ALOOKUP st.immutables cx.txn.target of
+  | SOME imms => FLOOKUP (get_source_immutables NONE imms) (string_to_num n)
   | NONE => NONE
 End
 
@@ -34,8 +34,8 @@ End
 
 Definition valid_lookups_def:
   valid_lookups cx st ⇔
-    ∃gbs. ALOOKUP st.globals cx.txn.target = SOME gbs ∧
-          ∀n. var_in_scope st n ⇒ FLOOKUP (get_module_globals NONE gbs).immutables (string_to_num n) = NONE
+    ∃imms. ALOOKUP st.immutables cx.txn.target = SOME imms ∧
+           ∀n. var_in_scope st n ⇒ FLOOKUP (get_source_immutables NONE imms) (string_to_num n) = NONE
 End
 
 Definition lookup_name_def:
@@ -64,15 +64,15 @@ End
 (* Helpers *)
 
 Theorem lookup_scopes_to_lookup_name[local]:
-  ∀cx st n v gbs.
+  ∀cx st n v imms.
     lookup_scopes (string_to_num n) st.scopes = SOME v ∧
-    ALOOKUP st.globals cx.txn.target = SOME gbs ∧
-    FLOOKUP (get_module_globals NONE gbs).immutables (string_to_num n) = NONE ⇒
+    ALOOKUP st.immutables cx.txn.target = SOME imms ∧
+    FLOOKUP (get_source_immutables NONE imms) (string_to_num n) = NONE ⇒
     lookup_name cx st n = SOME v
 Proof
   rpt strip_tac >>
   simp[lookup_name_def, Once evaluate_def, bind_def, get_scopes_def, return_def,
-       get_immutables_def, get_immutables_module_def, get_current_globals_def,
+       get_immutables_def, get_address_immutables_def,
        lift_option_def, exactly_one_option_def, lift_sum_def]
 QED
 
@@ -189,8 +189,8 @@ Proof
     by metis_tac[find_containing_scope_lookup_scopes] >>
   simp[] >>
   Cases_on `cx.txn.is_creation` >-
-    gvs[get_immutables_def, get_immutables_module_def,
-        get_current_globals_def, bind_def, lift_option_def, return_def,
+    gvs[get_immutables_def, get_address_immutables_def,
+        bind_def, lift_option_def, return_def,
         lift_sum_def, exactly_one_option_def, immutable_target_def, raise_def] >>
   simp[return_def, lift_sum_def, exactly_one_option_def]
 QED
@@ -206,12 +206,12 @@ Proof
   Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >- simp[] >>
   fs[] >>
   Cases_on `cx.txn.is_creation` >-
-   (simp[get_immutables_def, get_immutables_module_def,
-         get_current_globals_def, bind_def, lift_option_def,
+   (simp[get_immutables_def, get_address_immutables_def,
+         bind_def, lift_option_def,
          return_def, raise_def] >>
-    Cases_on `ALOOKUP st.globals cx.txn.target` >>
+    Cases_on `ALOOKUP st.immutables cx.txn.target` >>
     simp[return_def, immutable_target_def] >>
-    Cases_on `FLOOKUP (get_module_globals NONE x).immutables (string_to_num n)` >>
+    Cases_on `FLOOKUP (get_source_immutables NONE x) (string_to_num n)` >>
     simp[exactly_one_option_def, lift_sum_def, return_def, raise_def]) >>
   simp[return_def, exactly_one_option_def, lift_sum_def, raise_def]
 QED
@@ -236,7 +236,7 @@ Proof
   rpt strip_tac >>
   fs[valid_lookups_def, lookup_immutable_def, lookup_name_def] >> gvs[] >>
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
-       get_immutables_def, get_immutables_module_def, get_current_globals_def,
+       get_immutables_def, get_address_immutables_def,
        lift_option_def] >>
   `lookup_scopes (string_to_num n) st.scopes = NONE` suffices_by
     (strip_tac >> simp[exactly_one_option_def, lift_sum_def, return_def]) >>
@@ -313,9 +313,9 @@ Proof
   Cases_on `lookup_scopes (string_to_num n) st.scopes` >> gvs[] >>
   qpat_x_assum `_ = NONE` mp_tac >>
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
-       get_immutables_def, get_immutables_module_def, get_current_globals_def,
+       get_immutables_def, get_address_immutables_def,
        lift_option_def] >>
-  Cases_on `FLOOKUP (get_module_globals NONE gbs).immutables (string_to_num n)` >>
+  Cases_on `FLOOKUP (get_source_immutables NONE imms) (string_to_num n)` >>
   simp[exactly_one_option_def, lift_sum_def, return_def, raise_def]
 QED
 
@@ -326,11 +326,11 @@ Theorem lookup_name_none_to_lookup_immutable:
 Proof
   rw[valid_lookups_def, lookup_name_def, lookup_immutable_def,
      var_in_scope_def, lookup_scoped_var_def] >> gvs[] >>
-  Cases_on `FLOOKUP (get_module_globals NONE gbs).immutables (string_to_num n)` >>
+  Cases_on `FLOOKUP (get_source_immutables NONE imms) (string_to_num n)` >>
   simp[] >>
   Cases_on `lookup_scopes (string_to_num n) st.scopes` >-
    gvs[Once evaluate_def, bind_def, get_scopes_def, return_def,
-       get_immutables_def, get_immutables_module_def, get_current_globals_def,
+       get_immutables_def, get_address_immutables_def,
        lift_option_def, exactly_one_option_def, lift_sum_def, return_def] >>
   first_x_assum (qspec_then `n` mp_tac) >> simp[]
 QED
@@ -377,8 +377,8 @@ Proof
   AP_TERM_TAC >> simp[]
 QED
 
-Theorem globals_preserved_after_update:
-  ∀st n v. (update_scoped_var st n v).globals = st.globals
+Theorem immutables_preserved_after_update:
+  ∀st n v. (update_scoped_var st n v).immutables = st.immutables
 Proof
   rw[update_scoped_var_def, LET_THM] >>
   Cases_on `find_containing_scope (string_to_num n) st.scopes` >-
@@ -394,17 +394,17 @@ Proof
   rpt strip_tac >>
   simp[lookup_name_def] >>
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
-       get_immutables_def, get_immutables_module_def, get_current_globals_def,
+       get_immutables_def, get_address_immutables_def,
        lift_option_def, lift_sum_def,
-       globals_preserved_after_update,
+       immutables_preserved_after_update,
        lookup_scoped_var_preserved_after_update, GSYM lookup_scoped_var_def] >>
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
-       get_immutables_def, get_immutables_module_def, get_current_globals_def,
+       get_immutables_def, get_address_immutables_def,
        lift_option_def, lift_sum_def,
        GSYM lookup_scoped_var_def] >>
-  Cases_on `ALOOKUP st.globals cx.txn.target` >> simp[raise_def, return_def] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> simp[raise_def, return_def] >>
   Cases_on `exactly_one_option (lookup_scoped_var st n2)
-              (FLOOKUP (get_module_globals NONE x).immutables (string_to_num n2))` >>
+              (FLOOKUP (get_source_immutables NONE x) (string_to_num n2))` >>
   simp[return_def, raise_def]
 QED
 
@@ -414,8 +414,8 @@ Theorem valid_lookups_preserved_after_update:
     valid_lookups cx (update_scoped_var st n v)
 Proof
   rw[valid_lookups_def] >>
-  qexists_tac `gbs` >>
-  simp[globals_preserved_after_update] >>
+  qexists_tac `imms` >>
+  simp[immutables_preserved_after_update] >>
   rpt strip_tac >>
   Cases_on `string_to_num n' = string_to_num n` >-
    ((* n' = n: use lookup_name_none_to_lookup_immutable *)
