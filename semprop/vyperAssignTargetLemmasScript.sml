@@ -1,7 +1,7 @@
 Theory vyperAssignTargetLemmas
 
 Ancestors
-  vyperInterpreter vyperScopePreservationLemmas
+  vyperInterpreter vyperScopePreservationLemmas vyperLookup
 
 (*********************************************************************************)
 (* Helper lemmas for immutables preservation *)
@@ -124,7 +124,7 @@ Proof
     >> (Cases_on `REVERSE is` >> gvs[return_def, raise_def] >>
         Cases_on `split_hashmap_subscripts v t'` >> gvs[bind_def, return_def, raise_def] >>
         PairCases_on `x` >> gvs[] >>
-        Cases_on `compute_hashmap_slot c (t::x1) (h::TAKE (LENGTH t' − LENGTH x2) t')` >> 
+        Cases_on `compute_hashmap_slot c (t::x1) (h::TAKE (LENGTH t' − LENGTH x2) t')` >>
         gvs[bind_def, return_def, raise_def] >>
         Cases_on `evaluate_type (type_env ts) x0` >> gvs[return_def, raise_def] >>
         Cases_on `read_storage_slot cx b x x' s''` >> gvs[] >>
@@ -144,7 +144,7 @@ Proof
     qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
     simp[Once assign_target_def, bind_def, get_immutables_def, get_address_immutables_def,
          lift_option_def, LET_THM, return_def, raise_def] >>
-    Cases_on `FLOOKUP (get_source_immutables NONE x) (string_to_num id)` >> 
+    Cases_on `FLOOKUP (get_source_immutables NONE x) (string_to_num id)` >>
     simp[return_def, raise_def] >>
     Cases_on `assign_subscripts x' (REVERSE is) ao` >> simp[lift_sum_def, return_def, raise_def] >>
     simp[ignore_bind_def, bind_def, set_immutable_def, get_address_immutables_def,
@@ -152,7 +152,7 @@ Proof
     strip_tac >> gvs[] >>
     conj_tac >-
     (rpt strip_tac >> Cases_on `cx.txn.target = tgt` >> simp[alistTheory.ALOOKUP_ADELKEY]) >>
-    simp[get_source_immutables_def, set_source_immutables_def, 
+    simp[get_source_immutables_def, set_source_immutables_def,
          finite_mapTheory.FLOOKUP_UPDATE] >>
     rpt strip_tac >> Cases_on `string_to_num id = n` >> simp[] >>
     gvs[get_source_immutables_def]) >-
