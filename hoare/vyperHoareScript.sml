@@ -274,13 +274,25 @@ Proof
 QED
 
 Theorem expr_spec_subscript_array:
-  ∀P P' Q cx e1 e2 av i tv_result.
+  ∀P P' Q cx e1 e2 av sign i v.
+    IS_SOME (get_self_code cx) ∧
     array_index av i = SOME v ∧
     (⟦cx⟧ ⦃P⦄ e1 ⇓ (Value (ArrayV av)) ⦃P'⦄) ∧
-    (⟦cx⟧ ⦃P'⦄ e2 ⇓ (Value (IntV _ i)) ⦃Q⦄) ⇒
-    ⟦cx⟧ ⦃P⦄ (Subscript e1 e2) ⇓ tv_result ⦃Q⦄
+    (⟦cx⟧ ⦃P'⦄ e2 ⇓ (Value (IntV sign i)) ⦃Q⦄) ⇒
+    ⟦cx⟧ ⦃P⦄ (Subscript e1 e2) ⇓ (Value v) ⦃Q⦄
 Proof
-  cheat (* Needs update for new evaluate_subscript return type *)
+  rw[expr_spec_def] >>
+  simp[Once evaluate_def, bind_def] >>
+  qpat_x_assum `!st. P st ==> _` (qspec_then `st` mp_tac) >> simp[] >>
+  Cases_on `eval_expr cx e1 st` >> Cases_on `q` >> simp[] >>
+  strip_tac >> gvs[] >>
+  simp[bind_def] >>
+  qpat_x_assum `!st. P' st ==> _` (qspec_then `r` mp_tac) >> simp[] >>
+  Cases_on `eval_expr cx e2 r` >> Cases_on `q` >> simp[] >>
+  strip_tac >> gvs[] >>
+  simp[get_Value_def, return_def, bind_def, lift_option_def] >>
+  Cases_on `get_self_code cx` >> gvs[return_def, raise_def] >>
+  simp[lift_sum_def, evaluate_subscript_def, return_def]
 QED
 
 Theorem expr_spec_preserves_var_in_scope:
@@ -404,16 +416,16 @@ Proof
 QED
 
 Theorem stmts_spec_if:
-  ∀P P' Q R1 R2 cx e ss1 ss2 v1.
+  ∀P P' Q R cx e ss1 ss2 v1.
     (v1 = BoolV T ∨ v1 = BoolV F) ∧
     (⟦cx⟧ ⦃P⦄ e ⇓ Value v1 ⦃P'⦄) ∧
     (⟦cx⟧ ⦃λst. P' (st with scopes := TL st.scopes) ∧ v1 = BoolV T⦄ ss1
           ⦃λst. Q (st with scopes := TL st.scopes) ∥
-            λv st. R1 v (st with scopes := TL st.scopes)⦄) ∧
+            λv st. R v (st with scopes := TL st.scopes)⦄) ∧
     (⟦cx⟧ ⦃λst. P' (st with scopes := TL st.scopes) ∧ v1 = BoolV F⦄ ss2
           ⦃λst. Q (st with scopes := TL st.scopes) ∥
-            λv st. R2 v (st with scopes := TL st.scopes)⦄) ⇒
-          ⟦cx⟧ ⦃P⦄ [If e ss1 ss2] ⦃Q ∥ λv st. R1 v st ∨ R2 v st⦄
+            λv st. R v (st with scopes := TL st.scopes)⦄) ⇒
+          ⟦cx⟧ ⦃P⦄ [If e ss1 ss2] ⦃Q ∥ R⦄
 Proof
   rw[stmts_spec_def, expr_spec_def] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def] >>
