@@ -438,9 +438,6 @@ end
 
 val deployment : term decoder =
   check_trace_type "deployment" $
-  check (field "source_code" string)
-        (fn src => not (has_unsupported_patterns src))
-        "has unsupported_pattern" $
   JSONDecode.map (fn ((((c,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e),bc),sl) =>
              TypeBase.mk_record (deployment_trace_ty, [
                ("sourceAst", c),
