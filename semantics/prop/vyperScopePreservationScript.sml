@@ -1,4 +1,4 @@
-Theory vyperScopePreservationLemmas
+Theory vyperScopePreservation
 
 Ancestors
   vyperInterpreter vyperLookup
@@ -131,8 +131,8 @@ QED
 
 (* Storage operations preserve immutables *)
 Theorem read_storage_slot_immutables:
-  !cx is_trans slot tv st res st'. 
-    read_storage_slot cx is_trans slot tv st = (res, st') ==> 
+  !cx is_trans slot tv st res st'.
+    read_storage_slot cx is_trans slot tv st = (res, st') ==>
     st'.immutables = st.immutables
 Proof
   Cases_on `is_trans` >>
@@ -142,8 +142,8 @@ Proof
 QED
 
 Theorem write_storage_slot_immutables:
-  !cx is_trans slot tv v st res st'. 
-    write_storage_slot cx is_trans slot tv v st = (res, st') ==> 
+  !cx is_trans slot tv v st res st'.
+    write_storage_slot cx is_trans slot tv v st = (res, st') ==>
     st'.immutables = st.immutables
 Proof
   Cases_on `is_trans` >>
@@ -156,8 +156,8 @@ Proof
 QED
 
 Theorem lookup_global_immutables:
-  !cx src n st res st'. 
-    lookup_global cx src n st = (res, st') ==> 
+  !cx src n st res st'.
+    lookup_global cx src n st = (res, st') ==>
     st'.immutables = st.immutables
 Proof
   rw[lookup_global_def, bind_def, return_def, lift_option_def] >>
@@ -171,8 +171,8 @@ Proof
 QED
 
 Theorem set_global_immutables:
-  !cx src n v st res st'. 
-    set_global cx src n v st = (res, st') ==> 
+  !cx src n v st res st'.
+    set_global cx src n v st = (res, st') ==>
     st'.immutables = st.immutables
 Proof
   rw[set_global_def, bind_def, return_def, lift_option_def] >>
@@ -315,7 +315,7 @@ Proof
           imp_res_tac lookup_global_scopes >> gvs[])
       (* SOME case: main execution path *)
       >> (qpat_x_assum `_ = (res, st')` mp_tac >>
-          simp[return_def] >> rpt CASE_TAC >> 
+          simp[return_def] >> rpt CASE_TAC >>
           gvs[return_def, raise_def, lift_sum_def, bind_def, ignore_bind_def] >>
           rpt strip_tac >> gvs[] >>
           imp_res_tac lookup_global_scopes >> gvs[] >>
@@ -329,7 +329,7 @@ Proof
                qpat_x_assum `_ = (res, st')` mp_tac >>
                rpt CASE_TAC >> gvs[return_def, raise_def] >>
                rpt strip_tac >> gvs[] >>
-               imp_res_tac read_storage_slot_scopes >> 
+               imp_res_tac read_storage_slot_scopes >>
                imp_res_tac write_storage_slot_scopes >> gvs[])))
   (* ImmutableVar case *)
   >- (strip_tac >> gvs[assign_target_def, bind_def] >>

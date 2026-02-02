@@ -1,7 +1,7 @@
 Theory vyperEvalExprPreservesScopesDom
 
 Ancestors
-  vyperInterpreter vyperLookup vyperScopePreservationLemmas vyperScopePreservingExpr
+  vyperInterpreter vyperLookup vyperScopePreservation vyperScopePreservingExpr
 
 Theorem eval_exprs_preserves_scopes_dom_helper[local]:
   ∀es cx st res st'.

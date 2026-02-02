@@ -1,7 +1,7 @@
 Theory vyperScopePreservingExpr
 
 Ancestors
-  vyperInterpreter vyperLookup vyperScopePreservationLemmas
+  vyperInterpreter vyperLookup vyperScopePreservation
 
 (* Scope-preserving expressions: expressions that do not modify scopes.
    Pop is the only expression constructor that modifies scoped variables.

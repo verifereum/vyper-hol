@@ -1,7 +1,7 @@
-Theory vyperAssignTargetLemmas
+Theory vyperAssignTarget
 
 Ancestors
-  vyperInterpreter vyperScopePreservationLemmas vyperLookup
+  vyperInterpreter vyperScopePreservation vyperLookup
 
 (*********************************************************************************)
 (* Helper lemmas for immutables preservation *)

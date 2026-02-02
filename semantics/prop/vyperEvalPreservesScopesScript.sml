@@ -1,7 +1,7 @@
 Theory vyperEvalPreservesScopes
 
 Ancestors
-  vyperInterpreter vyperLookup vyperEvalExprPreservesScopesDom vyperScopePreservationLemmas
+  vyperInterpreter vyperLookup vyperEvalExprPreservesScopesDom vyperScopePreservation
 
 Definition preserves_scopes_dom_def:
   preserves_scopes_dom st st' ⇔

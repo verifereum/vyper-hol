@@ -1,8 +1,8 @@
 Theory vyperAssignTargetSpec
 
 Ancestors
-  vyperInterpreter vyperTypeValue vyperLookup vyperAssignTargetLemmas
-  vyperScopePreservationLemmas
+  vyperInterpreter vyperTypeValue vyperLookup vyperAssignTarget
+  vyperScopePreservation
 
 Definition assign_target_spec_def:
   assign_target_spec cx st (av : assignment_value) (ao : assign_operation) Q ⇔
@@ -130,12 +130,12 @@ Proof
     simp[Once evaluate_def, bind_def, get_scopes_def, return_def] >>
     sg `IS_SOME (lookup_scopes (string_to_num n) st'.scopes)` >-
     (qpat_x_assum `assign_target _ _ _ _ = _`
-       (mp_tac o MATCH_MP (CONJUNCT1 vyperScopePreservationLemmasTheory.assign_target_preserves_scopes_dom_lookup)) >>
+       (mp_tac o MATCH_MP (CONJUNCT1 vyperScopePreservationTheory.assign_target_preserves_scopes_dom_lookup)) >>
      disch_then (qspec_then `string_to_num n` mp_tac) >> simp[]) >>
     simp[] >>
     simp[get_immutables_def, get_address_immutables_def, bind_def, lift_option_def] >>
     sg `IS_SOME (ALOOKUP st'.immutables cx.txn.target)` >-
-    (irule vyperAssignTargetLemmasTheory.assign_target_preserves_immutables_addr_dom >>
+    (irule vyperAssignTargetTheory.assign_target_preserves_immutables_addr_dom >>
      qexistsl_tac [`ao`, `av`, `res`, `st`] >> simp[]) >>
     Cases_on `ALOOKUP st'.immutables cx.txn.target` >> gvs[return_def, raise_def] >>
     rename1 `ALOOKUP st'.immutables cx.txn.target = SOME imms'` >>
@@ -145,7 +145,7 @@ Proof
     Cases_on `immutable_target (get_source_immutables NONE imms') n (string_to_num n)` >>
     simp[exactly_one_option_def, return_def, raise_def] >>
     gvs[immutable_target_def] >>
-    drule vyperAssignTargetLemmasTheory.assign_target_preserves_immutables_dom >>
+    drule vyperAssignTargetTheory.assign_target_preserves_immutables_dom >>
     disch_then (qspecl_then [`string_to_num n`, `imms`, `imms'`] mp_tac) >> simp[] >>
     Cases_on `FLOOKUP (get_source_immutables NONE imms) (string_to_num n)` >>
     Cases_on `FLOOKUP (get_source_immutables NONE imms') (string_to_num n)` >> gvs[]) >>
@@ -153,7 +153,7 @@ Proof
    simp[Once evaluate_def, bind_def, get_scopes_def, return_def] >>
    sg `IS_SOME (lookup_scopes (string_to_num n) st'.scopes)` >-
    (qpat_x_assum `assign_target _ _ _ _ = _`
-      (mp_tac o MATCH_MP (CONJUNCT1 vyperScopePreservationLemmasTheory.assign_target_preserves_scopes_dom_lookup)) >>
+      (mp_tac o MATCH_MP (CONJUNCT1 vyperScopePreservationTheory.assign_target_preserves_scopes_dom_lookup)) >>
     disch_then (qspec_then `string_to_num n` mp_tac) >> simp[]) >>
    simp[lift_sum_def, exactly_one_option_def, return_def]) >>
   (* Not in scopes - ImmutableVar case *)
@@ -168,12 +168,12 @@ Proof
    simp[Once evaluate_def, bind_def, get_scopes_def, return_def] >>
    `lookup_scopes (string_to_num n) st'.scopes = NONE` by
      (qpat_x_assum `assign_target _ _ _ _ = _`
-        (mp_tac o MATCH_MP (CONJUNCT1 vyperScopePreservationLemmasTheory.assign_target_preserves_scopes_dom_lookup)) >>
+        (mp_tac o MATCH_MP (CONJUNCT1 vyperScopePreservationTheory.assign_target_preserves_scopes_dom_lookup)) >>
       disch_then (qspec_then `string_to_num n` mp_tac) >> simp[]) >>
    simp[] >>
    simp[get_immutables_def, get_address_immutables_def, bind_def, lift_option_def] >>
    sg `IS_SOME (ALOOKUP st'.immutables cx.txn.target)` >-
-   (irule vyperAssignTargetLemmasTheory.assign_target_preserves_immutables_addr_dom >>
+   (irule vyperAssignTargetTheory.assign_target_preserves_immutables_addr_dom >>
     qexistsl_tac [`ao`, `av`, `res`, `st`] >> simp[]) >>
    Cases_on `ALOOKUP st'.immutables cx.txn.target` >> gvs[return_def, raise_def] >>
    rename1 `ALOOKUP st'.immutables cx.txn.target = SOME imms'` >>
@@ -181,7 +181,7 @@ Proof
    rename1 `immutable_target _ n _ = SOME tgt` >>
    sg `immutable_target (get_source_immutables NONE imms') n (string_to_num n) = SOME tgt` >-
    (gvs[immutable_target_def] >>
-    drule vyperAssignTargetLemmasTheory.assign_target_preserves_immutables_dom >>
+    drule vyperAssignTargetTheory.assign_target_preserves_immutables_dom >>
     disch_then (qspecl_then [`string_to_num n`, `imms`, `imms'`] mp_tac) >> simp[] >>
     Cases_on `FLOOKUP (get_source_immutables NONE imms) (string_to_num n)` >>
     Cases_on `FLOOKUP (get_source_immutables NONE imms') (string_to_num n)` >> gvs[]) >>
@@ -420,7 +420,7 @@ Proof
   rename1 `assign_target cx av ao st = (INL res, st')` >>
   (* Show immutables address is preserved *)
   sg `IS_SOME (ALOOKUP st'.immutables cx.txn.target)` >-
-  (irule vyperAssignTargetLemmasTheory.assign_target_preserves_immutables_addr_dom >>
+  (irule vyperAssignTargetTheory.assign_target_preserves_immutables_addr_dom >>
    qexistsl_tac [`ao`, `av`, `res`, `st`] >> simp[]) >>
   Cases_on `ALOOKUP st'.immutables cx.txn.target` >> gvs[] >>
   rename1 `ALOOKUP st'.immutables cx.txn.target = SOME imms'` >>
@@ -430,12 +430,12 @@ Proof
   `var_in_scope st varname` by
     (fs[var_in_scope_def, lookup_scoped_var_def] >>
      qpat_x_assum `assign_target _ _ _ _ = _`
-       (mp_tac o MATCH_MP (CONJUNCT1 vyperScopePreservationLemmasTheory.assign_target_preserves_scopes_dom_lookup)) >>
+       (mp_tac o MATCH_MP (CONJUNCT1 vyperScopePreservationTheory.assign_target_preserves_scopes_dom_lookup)) >>
      simp[]) >>
   (* Therefore FLOOKUP imms (string_to_num varname) = NONE *)
   first_x_assum drule >> strip_tac >>
   (* Show FLOOKUP imms' (string_to_num varname) = NONE by domain preservation *)
-  drule vyperAssignTargetLemmasTheory.assign_target_preserves_immutables_dom >>
+  drule vyperAssignTargetTheory.assign_target_preserves_immutables_dom >>
   disch_then (qspecl_then [`string_to_num varname`, `imms`, `imms'`] mp_tac) >> simp[]
 QED
 

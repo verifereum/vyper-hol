@@ -1,4 +1,4 @@
-# hoare/examples/.hol_preexec
+
 set -e
 
 for vy in example_*.vy; do
