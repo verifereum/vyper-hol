@@ -1105,9 +1105,9 @@ fun mk_json_storage_layout (storage_list, transient_list, code_list) =
 (* Decoder for a single storage slot entry *)
 val storage_slot_info : term decoder =
   JSONDecode.map (fn (slot, n_slots, type_str) =>
-                    mk_storage_slot_info (mk_num_from_int slot, mk_num_from_int n_slots, type_str))
-  (tuple3 (field "slot" int,
-           field "n_slots" int,
+                    mk_storage_slot_info (slot, n_slots, type_str))
+  (tuple3 (field "slot" numtm,
+           field "n_slots" numtm,
            field "type" string))
 
 (* Decoder for a single code (immutable) slot entry *)
