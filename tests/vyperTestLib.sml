@@ -237,7 +237,8 @@ val unsupported_patterns = unsupported_code @ [
   "import ",
   "create_minimal_proxy_to(",
   "create_copy_of(",
-  "gas="
+  "gas=",
+  "# pragma nonreentrancy"
 ]
 
 fun has_default_arg src =
