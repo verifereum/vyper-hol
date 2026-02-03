@@ -11,6 +11,14 @@ Definition var_in_scope_def:
   var_in_scope st n ⇔ IS_SOME (lookup_scoped_var st n)
 End
 
+Definition lookup_in_current_scope_def:
+  lookup_in_current_scope st n = FLOOKUP (HD st.scopes) (string_to_num n)
+End
+
+Definition tl_scopes_def:
+  tl_scopes st = st with scopes := TL st.scopes
+End
+
 Definition lookup_immutable_def:
   lookup_immutable cx (st:evaluation_state) n =
   case ALOOKUP st.immutables cx.txn.target of
@@ -86,6 +94,12 @@ Proof
    simp[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   simp[lookup_scopes_def] >> rpt strip_tac >>
   Cases_on `FLOOKUP h n2` >> simp[]
+QED
+
+Theorem lookup_scopes_FEMPTY_CONS[local]:
+  ∀n rest. lookup_scopes n (FEMPTY::rest) = lookup_scopes n rest
+Proof
+  simp[Once lookup_scopes_def, finite_mapTheory.FLOOKUP_EMPTY]
 QED
 
 Theorem find_containing_scope_none_lookup_scopes_none:
@@ -538,4 +552,100 @@ Proof
   simp[get_source_immutables_def, set_source_immutables_def,
        alistTheory.ALOOKUP_ADELKEY,
        finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem lookup_in_current_scope_to_lookup_scoped_var:
+  ∀st n v.
+    lookup_in_current_scope st n = SOME v ⇒
+    lookup_scoped_var st n = SOME v
+Proof
+  cheat
+QED
+
+Theorem lookup_in_current_scope_hd:
+  ∀st n. HD st.scopes = FEMPTY ⇒ lookup_in_current_scope st n = NONE
+Proof
+  cheat
+QED
+
+Theorem lookup_in_tl_scopes:
+  ∀st n.
+    lookup_in_current_scope st n = NONE ⇒
+    (lookup_scoped_var (tl_scopes st) n = lookup_scoped_var st n)
+Proof
+  cheat
+QED
+
+Theorem var_in_tl_scopes:
+  ∀st n.
+    lookup_in_current_scope st n = NONE ⇒
+    (var_in_scope (tl_scopes st) n ⇔ var_in_scope st n)
+Proof
+  cheat
+QED
+
+Theorem valid_lookups_tl_scopes:
+  ∀cx st. valid_lookups cx st ⇒ valid_lookups cx (tl_scopes st)
+Proof
+  cheat
+QED
+
+Theorem valid_lookups_tl_scopes_rev:
+  ∀cx st.
+    HD st.scopes = FEMPTY ∧
+    valid_lookups cx (tl_scopes st) ⇒
+    valid_lookups cx st
+Proof
+  cheat
+QED
+
+Theorem update_scoped_var_in_tl_scopes:
+  ∀st n v.
+    lookup_in_current_scope st n = NONE ∧
+    var_in_scope (tl_scopes st) n ⇒
+    (tl_scopes (update_scoped_var st n v)).scopes =
+    (update_scoped_var (tl_scopes st) n v).scopes
+Proof
+  cheat
+QED
+
+Theorem lookup_scoped_var_update_in_tl_scopes:
+  ∀st n v.
+    lookup_in_current_scope st n = NONE ∧
+    var_in_scope (tl_scopes st) n ⇒
+    lookup_scoped_var (tl_scopes (update_scoped_var st n v)) n = SOME v
+Proof
+  cheat
+QED
+
+Theorem lookup_scoped_var_preserved_after_update_in_tl_scopes:
+  ∀st n1 n2 v w.
+    n1 ≠ n2 ∧
+    lookup_in_current_scope st n1 = NONE ∧
+    lookup_in_current_scope st n2 = NONE ∧
+    var_in_scope (tl_scopes st) n1 ∧
+    lookup_scoped_var (tl_scopes st) n2 = SOME w ⇒
+    lookup_scoped_var (tl_scopes (update_scoped_var st n1 v)) n2 = SOME w
+Proof
+  cheat
+QED
+
+Theorem scopes_nonempty_preserved_after_update_in_tl_scopes:
+  ∀st n v.
+    st.scopes ≠ [] ∧
+    lookup_in_current_scope st n = NONE ∧
+    var_in_scope (tl_scopes st) n ⇒
+    (tl_scopes (update_scoped_var st n v)).scopes ≠ []
+Proof
+  cheat
+QED
+
+Theorem valid_lookups_preserved_after_update_in_tl_scopes:
+  ∀cx st n v.
+    lookup_in_current_scope st n = NONE ∧
+    var_in_scope (tl_scopes st) n ∧
+    valid_lookups cx (tl_scopes st) ⇒
+    valid_lookups cx (tl_scopes (update_scoped_var st n v))
+Proof
+  cheat
 QED
