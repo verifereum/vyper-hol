@@ -1534,23 +1534,20 @@ Definition finally_def:
      | (INR e, s) => ignore_bind g (raise e) s
 End
 
-val option_CASE_rator =
+(* TODO: move these? *)
+Theorem option_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
 
-val sum_CASE_rator =
+Theorem sum_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="sum",Tyop="sum"}));
 
-val list_CASE_rator =
+Theorem list_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="list",Tyop="list"}));
 
-val prod_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
-
-val prod_CASE_rator =
+Theorem prod_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
 
