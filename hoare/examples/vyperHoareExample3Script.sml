@@ -45,41 +45,6 @@ Proof
   EVAL_TAC
 QED
 
-(* Proof sketch:
-
-x := x_arg
-{ 0 ≤ x }
-x := x + 10
-{ 10 ≤ x }
-if x > 100 then
-  { x > 100 ∧ 10 ≤ x }
-  { T }
-  x := 100
-  { x = 100 }
-  { 20 ≤ x ∧ x ≤ 110 }
-else
-  { x ≤ 100 ∧ 10 ≤ x }
-  x := x + 10
-  { 20 ≤ x ∧ x ≤ 110 }
-{ 20 ≤ x ∧ x ≤ 110 }
-if x > 20 then
-  { x > 20 ∧ 20 ≤ x ∧ x ≤ 110 }
-  { x > 20 ∧ x ≤ 110 }
-  return x
-  { F | λv. v > 20 ∧ v ≤ 110 }
-  { x = 20 | λv. v > 20 ∧ v ≤ 110 }
-else
-  { x ≤ 20 ∧ 20 ≤ x }
-  pass
-  { x = 20 | λv. v > 20 ∧ v ≤ 110 }
-{ x = 20 | λv. v > 20 ∧ v ≤ 110 }
-y := x + 20
-{ y = 40 | λv. v > 20 ∧ v ≤ 110 }
-return y
-{ F | λv. v > 20 ∧ v ≤ 110 }
-
-*)
-
 (* The postcondition says:
    - Normal completion is impossible (always returns)
    - Return values v satisfy: 20 < v ∧ v ≤ 110
@@ -97,5 +62,353 @@ Theorem example_3_thm:
     example_3_body
     ⦃λst. F ∥ λv st. ∃n. v = IntV (Unsigned 256) n ∧ 20 < n ∧ n ≤ 110⦄
 Proof
+  rpt strip_tac >>
+  simp[example_3_body_def, example_3_decl_def, example_3_module_def] >>
+  (* Statement 1: x := x_arg (AnnAssign) *)
+  irule stmts_spec_cons >>
+  qexists_tac `λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
+                    lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) xarg) ∧
+                    lookup_name cx st "y" = NONE` >>
+  conj_tac >-
+  ((* AnnAssign proof *)
+   irule stmts_spec_consequence >>
+   qexistsl_tac [
+     `λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
+           lookup_immutable cx st "x_arg" = SOME (IntV (Unsigned 256) xarg) ∧
+           lookup_name cx st "x" = NONE ∧ lookup_name cx st "y" = NONE`,
+     `λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
+           lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) xarg) ∧
+           lookup_name cx st "y" = NONE`,
+     `λ_0 _1. F`] >>
+   simp[] >>
+   irule stmts_spec_ann_assign >> qexists_tac `IntV (Unsigned 256) xarg` >>
+   irule expr_spec_consequence >>
+   qexistsl_tac [`λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
+                        lookup_name cx st "x_arg" = SOME (IntV (Unsigned 256) xarg) ∧
+                        lookup_name cx st "x" = NONE ∧
+                        lookup_name cx st "y" = NONE`,
+                 `λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
+                        lookup_name cx st "x_arg" = SOME (IntV (Unsigned 256) xarg) ∧
+                        lookup_name cx st "x" = NONE ∧
+                        lookup_name cx st "y" = NONE`] >>
+   conj_tac >- (simp[] >> rpt strip_tac >> drule_all lookup_immutable_implies_lookup_name >> simp[]) >>
+   conj_tac >-
+     (simp[] >> rpt strip_tac >-
+        metis_tac[lookup_name_none_to_lookup_scoped_var] >-
+        metis_tac[scopes_nonempty_after_update] >-
+        metis_tac[valid_lookups_preserved_after_update_no_name] >-
+        simp[lookup_after_update] >>
+        simp[lookup_name_preserved_after_update]) >>
+   irule expr_spec_consequence >>
+   qexistsl_tac [`λst. (st.scopes ≠ [] ∧ valid_lookups cx st ∧ lookup_name cx st "x" = NONE ∧ lookup_name cx st "y" = NONE) ∧
+                        lookup_name cx st "x_arg" = SOME (IntV (Unsigned 256) xarg)`,
+                 `λst. (st.scopes ≠ [] ∧ valid_lookups cx st ∧ lookup_name cx st "x" = NONE ∧ lookup_name cx st "y" = NONE) ∧
+                        lookup_name cx st "x_arg" = SOME (IntV (Unsigned 256) xarg)`] >>
+   simp[] >>
+   ACCEPT_TAC (BETA_RULE (ISPECL [
+     ``λst:evaluation_state. st.scopes ≠ [] ∧ valid_lookups (cx:evaluation_context) st ∧
+                             lookup_name cx st "x" = NONE ∧ lookup_name cx st "y" = NONE``,
+     ``cx:evaluation_context``, ``"x_arg":string``, ``IntV (Unsigned 256) xarg``] expr_spec_name))) >>
+  (* Statement 2: x += 10 (AugAssign) *)
+  irule stmts_spec_cons >>
+  qexists_tac `λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
+                    lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
+                    lookup_name cx st "y" = NONE` >>
+  conj_tac >-
+  ((* AugAssign proof for x += 10 *)
+   irule stmts_spec_consequence >>
+   qexistsl_tac [`λst. (st.scopes ≠ [] ∧ valid_lookups cx st ∧
+                        lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) xarg) ∧
+                        lookup_name cx st "y" = NONE) ∧
+                       (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st "x"`,
+                 `λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
+                        lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
+                        lookup_name cx st "y" = NONE`,
+                 `λ_0 _1. F`] >>
+   conj_tac >- (simp[] >> metis_tac[lookup_scoped_var_implies_var_in_scope]) >>
+   conj_tac >- simp[] >>
+   conj_tac >- simp[] >>
+   MATCH_MP_TAC (BETA_RULE (ISPECL [
+     ``λst:evaluation_state. (st.scopes ≠ [] ∧ valid_lookups (cx:evaluation_context) st ∧
+                              lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) xarg) ∧
+                              lookup_name cx st "y" = NONE)``,
+     ``λst:evaluation_state. st.scopes ≠ [] ∧ valid_lookups cx st ∧
+                              lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
+                              lookup_name cx st "y" = NONE``,
+     ``cx:evaluation_context``, ``"x":string``, ``Add:binop``,
+     ``Literal (IntL (Unsigned 256) 10):expr``,
+     ``IntV (Unsigned 256) xarg``, ``IntV (Unsigned 256) 10``,
+     ``IntV (Unsigned 256) (xarg + 10)``] stmts_spec_aug_assign_scoped_var)) >>
+   conj_tac >-
+     (simp[evaluate_binop_def, bounded_int_op_def] >>
+      gvs[vyperTypeValueTheory.within_int_bound_def] >>
+      intLib.ARITH_TAC) >>
+   irule expr_spec_consequence >>
+   qexistsl_tac [`λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
+                        lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) xarg) ∧
+                        lookup_name cx st "y" = NONE`,
+                 `λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
+                        lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) xarg) ∧
+                        lookup_name cx st "y" = NONE`] >>
+   conj_tac >- simp[] >>
+   conj_tac >-
+      (simp[scopes_nonempty_after_update, lookup_after_update, lookup_name_preserved_after_update] >>
+       metis_tac[valid_lookups_preserved_after_update_var_in_scope, lookup_scoped_var_implies_var_in_scope]) >>
+   ACCEPT_TAC (SIMP_RULE std_ss [EVAL ``evaluate_literal (IntL (Unsigned 256) 10)``]
+     (ISPECL [``λst:evaluation_state. st.scopes ≠ [] ∧ valid_lookups (cx:evaluation_context) st ∧
+                                       lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) xarg) ∧
+                                       lookup_name cx st "y" = NONE``,
+              ``ARB:'a``, ``cx:evaluation_context``,
+              ``IntL (Unsigned 256) 10``] expr_spec_literal))) >>
+  (* Statement 3: if x > 100 then x := 100 else x += 10 *)
+  irule stmts_spec_cons >>
+  qexists_tac `λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
+                    (∃x. lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) x) ∧ 20 ≤ x ∧ x ≤ 110) ∧
+                    lookup_name cx st "y" = NONE` >>
+  conj_tac >-
+  ((* If statement *)
+   irule stmts_spec_if >>
+   qexists_tac `λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
+                     lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
+                     lookup_name cx st "y" = NONE` >>
+   qexists_tac `BoolV (xarg + 10 > 100)` >>
+   conj_tac >- (Cases_on `xarg + 10 > 100` >> simp[]) >>
+   (* Condition evaluation: x > 100 *)
+   conj_tac >- (
+     irule expr_spec_builtin_bop >>
+     qexistsl_tac [`λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
+                         lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
+                         lookup_name cx st "y" = NONE`,
+                   `IntV (Unsigned 256) (xarg + 10)`,
+                   `IntV (Unsigned 256) 100`] >>
+     simp[evaluate_binop_def] >>
+     conj_tac >- (
+       irule expr_spec_consequence >>
+       qexistsl_tac [`λst. (st.scopes ≠ [] ∧ valid_lookups cx st ∧ lookup_name cx st "y" = NONE) ∧ valid_lookups cx st ∧
+                           lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10))`,
+                     `λst. (st.scopes ≠ [] ∧ valid_lookups cx st ∧ lookup_name cx st "y" = NONE) ∧ valid_lookups cx st ∧
+                           lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10))`] >>
+       simp[] >>
+       ACCEPT_TAC (BETA_RULE (ISPECL [
+         ``λst:evaluation_state. st.scopes ≠ [] ∧ valid_lookups (cx:evaluation_context) st ∧ lookup_name cx st "y" = NONE``,
+         ``cx:evaluation_context``, ``"x":string``,
+         ``IntV (Unsigned 256) (xarg + 10)``] expr_spec_scoped_var))) >>
+     ACCEPT_TAC (SIMP_RULE std_ss [EVAL ``evaluate_literal (IntL (Unsigned 256) 100)``]
+       (ISPECL [``λst:evaluation_state. st.scopes ≠ [] ∧ valid_lookups (cx:evaluation_context) st ∧
+                 lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
+                 lookup_name cx st "y" = NONE``,
+                ``ARB:'a``, ``cx:evaluation_context``,
+                ``IntL (Unsigned 256) 100``] expr_spec_literal))) >>
+   simp[] >>
+   (* Else branch: x += 10 (when xarg + 10 ≤ 100) *)
+   conj_tac >- (
+     irule stmts_spec_consequence >>
+     qexistsl_tac [
+       `λst. st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧ (tl_scopes st).scopes ≠ [] ∧
+             valid_lookups cx (tl_scopes st) ∧
+             lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
+             lookup_name cx (tl_scopes st) "y" = NONE ∧
+             ¬(xarg + 10 > 100)`,
+       `λst. (tl_scopes st).scopes ≠ [] ∧ valid_lookups cx (tl_scopes st) ∧
+             HD st.scopes = FEMPTY ∧
+             lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 20)) ∧
+             lookup_name cx (tl_scopes st) "y" = NONE ∧
+             ¬(xarg + 10 > 100)`,
+       `λv st. F`] >>
+     simp[] >>
+     conj_tac >- (rpt strip_tac >> gvs[lookup_in_current_scope_hd, lookup_in_tl_scopes]) >>
+     conj_tac >- (
+       simp[] >> rpt strip_tac >>
+       qexists_tac `xarg + 20` >>
+       gvs[lookup_in_current_scope_hd, lookup_in_tl_scopes, vyperTypeValueTheory.within_int_bound_def] >>
+       intLib.ARITH_TAC) >>
+     irule stmts_spec_consequence >>
+     qexistsl_tac [
+       `λst. (st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧ (tl_scopes st).scopes ≠ [] ∧
+              valid_lookups cx (tl_scopes st) ∧
+              lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
+              lookup_name cx (tl_scopes st) "y" = NONE ∧
+              ¬(xarg + 10 > 100)) ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧
+             var_in_scope st "x"`,
+       `λst. (tl_scopes st).scopes ≠ [] ∧ valid_lookups cx (tl_scopes st) ∧
+              HD st.scopes = FEMPTY ∧
+              lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 20)) ∧
+              lookup_name cx (tl_scopes st) "y" = NONE ∧
+              ¬(xarg + 10 > 100)`,
+       `λv st. F`] >>
+     simp[] >>
+     conj_tac >- (
+       rpt strip_tac >-
+       (irule valid_lookups_tl_scopes_rev >> simp[]) >>
+       metis_tac[lookup_scoped_var_implies_var_in_scope]) >>
+     MATCH_MP_TAC (BETA_RULE (ISPECL [
+       ``λst:evaluation_state. st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧
+                               (tl_scopes st).scopes ≠ [] ∧
+                               valid_lookups (cx:evaluation_context) (tl_scopes st) ∧
+                               lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
+                               lookup_name cx (tl_scopes st) "y" = NONE ∧
+                               ¬(xarg + 10 > 100)``,
+       ``λst:evaluation_state. (tl_scopes st).scopes ≠ [] ∧ valid_lookups cx (tl_scopes st) ∧
+                               HD st.scopes = FEMPTY ∧
+                               lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 20)) ∧
+                               lookup_name cx (tl_scopes st) "y" = NONE ∧
+                               ¬(xarg + 10 > 100)``,
+       ``cx:evaluation_context``, ``"x":string``, ``Add:binop``,
+       ``Literal (IntL (Unsigned 256) 10):expr``,
+       ``IntV (Unsigned 256) (xarg + 10)``, ``IntV (Unsigned 256) 10``,
+       ``IntV (Unsigned 256) (xarg + 20)``] stmts_spec_aug_assign_scoped_var)) >>
+     conj_tac >- (
+       simp[evaluate_binop_def, bounded_int_op_def] >>
+       gvs[vyperTypeValueTheory.within_int_bound_def] >> intLib.ARITH_TAC) >>
+     irule expr_spec_consequence >>
+     qexistsl_tac [
+       `λst. st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧ (tl_scopes st).scopes ≠ [] ∧
+             valid_lookups cx (tl_scopes st) ∧
+             lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
+             lookup_name cx (tl_scopes st) "y" = NONE ∧
+             ¬(xarg + 10 > 100)`,
+       `λst. st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧ (tl_scopes st).scopes ≠ [] ∧
+             valid_lookups cx (tl_scopes st) ∧
+             lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
+             lookup_name cx (tl_scopes st) "y" = NONE ∧
+             ¬(xarg + 10 > 100)`] >>
+     simp[] >>
+     conj_tac >- (
+       rpt strip_tac >-
+       (irule scopes_nonempty_preserved_after_update_in_tl_scopes >>
+        gvs[lookup_in_current_scope_hd, var_in_tl_scopes] >>
+        irule lookup_scoped_var_implies_var_in_scope >>
+        gvs[lookup_in_tl_scopes, lookup_in_current_scope_hd]) >-
+       (irule valid_lookups_preserved_after_update_in_tl_scopes >>
+        gvs[lookup_in_current_scope_hd, var_in_tl_scopes] >>
+        irule lookup_scoped_var_implies_var_in_scope >>
+        gvs[lookup_in_tl_scopes, lookup_in_current_scope_hd]) >-
+       (`HD (update_scoped_var st "x" (IntV (Unsigned 256) (xarg + 20))).scopes = HD st.scopes` by
+          (irule hd_scopes_preserved_after_update_in_tl_scopes >>
+           gvs[lookup_in_current_scope_hd, var_in_tl_scopes] >>
+           irule lookup_scoped_var_implies_var_in_scope >>
+           gvs[lookup_in_tl_scopes, lookup_in_current_scope_hd]) >>
+        gvs[]) >-
+       simp[lookup_after_update] >>
+       irule lookup_name_preserved_after_update_in_tl_scopes >>
+       gvs[lookup_in_current_scope_hd, var_in_tl_scopes] >>
+       irule lookup_scoped_var_implies_var_in_scope >>
+       gvs[lookup_in_tl_scopes, lookup_in_current_scope_hd]) >>
+     ACCEPT_TAC (SIMP_RULE std_ss [EVAL ``evaluate_literal (IntL (Unsigned 256) 10)``]
+       (ISPECL [``λst:evaluation_state. st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧
+                   (tl_scopes st).scopes ≠ [] ∧
+                   valid_lookups (cx:evaluation_context) (tl_scopes st) ∧
+                   lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
+                   lookup_name cx (tl_scopes st) "y" = NONE ∧
+                   ¬(xarg + 10 > 100)``,
+                ``ARB:'a``, ``cx:evaluation_context``,
+                ``IntL (Unsigned 256) 10``] expr_spec_literal))) >>
+   (* Then branch: x := 100 (when xarg + 10 > 100) *)
+   irule stmts_spec_consequence >>
+   qexistsl_tac [
+     `λst. st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧ (tl_scopes st).scopes ≠ [] ∧
+           valid_lookups cx (tl_scopes st) ∧
+           lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
+           lookup_name cx (tl_scopes st) "y" = NONE ∧
+           xarg + 10 > 100`,
+     `λst. (tl_scopes st).scopes ≠ [] ∧ valid_lookups cx (tl_scopes st) ∧
+           HD st.scopes = FEMPTY ∧
+           lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) 100) ∧
+           lookup_name cx (tl_scopes st) "y" = NONE`,
+     `λv st. F`] >>
+   simp[] >>
+   conj_tac >- (rpt strip_tac >> gvs[lookup_in_current_scope_hd, lookup_in_tl_scopes]) >>
+   conj_tac >- (
+     simp[] >> rpt strip_tac >>
+     qexists_tac `100` >>
+     simp[lookup_in_current_scope_hd, lookup_in_tl_scopes]) >>
+   irule stmts_spec_consequence >>
+   qexistsl_tac [
+     `λst. (st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧ (tl_scopes st).scopes ≠ [] ∧
+            valid_lookups cx (tl_scopes st) ∧
+            lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
+            lookup_name cx (tl_scopes st) "y" = NONE ∧
+            xarg + 10 > 100) ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧
+           var_in_scope st "x"`,
+     `λst. (tl_scopes st).scopes ≠ [] ∧ valid_lookups cx (tl_scopes st) ∧
+            HD st.scopes = FEMPTY ∧
+            lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) 100) ∧
+            lookup_name cx (tl_scopes st) "y" = NONE`,
+     `λv st. F`] >>
+   simp[] >>
+   conj_tac >- (
+     rpt strip_tac >-
+     (irule valid_lookups_tl_scopes_rev >> simp[]) >>
+     metis_tac[lookup_scoped_var_implies_var_in_scope]) >>
+   MATCH_MP_TAC (BETA_RULE (ISPECL [
+     ``λst:evaluation_state. st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧
+                             (tl_scopes st).scopes ≠ [] ∧
+                             valid_lookups (cx:evaluation_context) (tl_scopes st) ∧
+                             lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
+                             lookup_name cx (tl_scopes st) "y" = NONE ∧
+                             xarg + 10 > 100``,
+     ``λst:evaluation_state. (tl_scopes st).scopes ≠ [] ∧ valid_lookups cx (tl_scopes st) ∧
+                             HD st.scopes = FEMPTY ∧
+                             lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) 100) ∧
+                             lookup_name cx (tl_scopes st) "y" = NONE``,
+     ``cx:evaluation_context``, ``"x":string``,
+     ``Literal (IntL (Unsigned 256) 100):expr``,
+     ``IntV (Unsigned 256) 100``] stmts_spec_assign_scoped_var)) >>
+   irule expr_spec_consequence >>
+   qexistsl_tac [
+     `λst. (st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧ (tl_scopes st).scopes ≠ [] ∧
+            valid_lookups cx (tl_scopes st) ∧
+            lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
+            lookup_name cx (tl_scopes st) "y" = NONE ∧
+            xarg + 10 > 100) ∧ var_in_scope st "x"`,
+     `λst. (st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧ (tl_scopes st).scopes ≠ [] ∧
+            valid_lookups cx (tl_scopes st) ∧
+            lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
+            lookup_name cx (tl_scopes st) "y" = NONE ∧
+            xarg + 10 > 100) ∧ var_in_scope st "x"`] >>
+   simp[] >>
+   conj_tac >- (
+     rpt strip_tac >-
+     (irule scopes_nonempty_preserved_after_update_in_tl_scopes >>
+      gvs[lookup_in_current_scope_hd, var_in_tl_scopes] >>
+      metis_tac[lookup_scoped_var_implies_var_in_scope]) >-
+     (irule valid_lookups_preserved_after_update_in_tl_scopes >>
+      gvs[lookup_in_current_scope_hd, var_in_tl_scopes] >>
+      metis_tac[lookup_scoped_var_implies_var_in_scope]) >-
+     (`HD (update_scoped_var st "x" (IntV (Unsigned 256) 100)).scopes = HD st.scopes` by
+        (irule hd_scopes_preserved_after_update_in_tl_scopes >>
+         gvs[lookup_in_current_scope_hd, var_in_tl_scopes] >>
+         metis_tac[lookup_scoped_var_implies_var_in_scope]) >>
+      gvs[]) >-
+     simp[lookup_after_update] >>
+     irule lookup_name_preserved_after_update_in_tl_scopes >>
+     gvs[lookup_in_current_scope_hd, var_in_tl_scopes] >>
+     metis_tac[lookup_scoped_var_implies_var_in_scope]) >>
+   ACCEPT_TAC (SIMP_RULE std_ss [EVAL ``evaluate_literal (IntL (Unsigned 256) 100)``]
+     (ISPECL [``λst:evaluation_state. (st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧
+                 (tl_scopes st).scopes ≠ [] ∧
+                 valid_lookups (cx:evaluation_context) (tl_scopes st) ∧
+                 lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
+                 lookup_name cx (tl_scopes st) "y" = NONE ∧
+                 xarg + 10 > 100) ∧ var_in_scope st "x"``,
+              ``ARB:'a``, ``cx:evaluation_context``,
+              ``IntL (Unsigned 256) 100``] expr_spec_literal))) >>
+  (* Statements 4-6: 
+     Statement 4: if x > 20 then return x else []
+     Statement 5: y := x + 20
+     Statement 6: return y
+     
+     CHALLENGE: The precondition after statement 3 has an existential:
+       ∃x. lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) x) ∧ 20 ≤ x ∧ x ≤ 110
+     
+     stmts_spec_if requires a fixed condition value v1, but x > 20 depends on the unknown x.
+     
+     Possible solutions:
+     1. Add a new Hoare rule for if-statements with existential preconditions
+     2. Use semantic reasoning (unfold stmts_spec_def) 
+     3. Refactor to avoid existential in intermediate postcondition
+     
+     For now, we use cheat to mark this as TODO.
+  *)
   cheat
 QED

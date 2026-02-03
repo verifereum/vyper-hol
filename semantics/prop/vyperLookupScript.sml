@@ -609,6 +609,37 @@ Proof
   Cases_on `st.scopes` >> gvs[lookup_scopes_def, finite_mapTheory.FLOOKUP_EMPTY]
 QED
 
+(* Helper for if-statement: lookup_name is preserved when entering a new scope *)
+Theorem lookup_name_tl_scopes:
+  ∀cx st n.
+    st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ⇒
+    lookup_name cx st n = lookup_name cx (tl_scopes st) n
+Proof
+  rpt strip_tac >>
+  simp[lookup_name_def, tl_scopes_def] >>
+  (* First, prove lookup_scoped_var equality *)
+  `lookup_scoped_var st n = lookup_scoped_var (st with scopes := TL st.scopes) n` by (
+    simp[lookup_scoped_var_def] >>
+    Cases_on `st.scopes` >> gvs[lookup_scopes_def, finite_mapTheory.FLOOKUP_EMPTY]) >>
+  (* Expand both eval_expr calls *)
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+       get_immutables_def, get_address_immutables_def,
+       lift_option_def, lift_sum_def, GSYM lookup_scoped_var_def,
+       exactly_one_option_def, raise_def] >>
+  CONV_TAC (RHS_CONV (SIMP_CONV (srw_ss()) [Once evaluate_def, bind_def, get_scopes_def, return_def,
+       get_immutables_def, get_address_immutables_def,
+       lift_option_def, lift_sum_def, GSYM lookup_scoped_var_def,
+       exactly_one_option_def, raise_def])) >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> simp[raise_def, return_def] >>
+  simp[GSYM lookup_scoped_var_def, exactly_one_option_def] >>
+  `lookup_scoped_var (st with scopes := TL st.scopes) n = lookup_scopes (string_to_num n) (TL st.scopes)`
+    by simp[lookup_scoped_var_def] >>
+  gvs[] >>
+  Cases_on `exactly_one_option (lookup_scopes (string_to_num n) (TL st.scopes))
+              (FLOOKUP (get_source_immutables NONE x) (string_to_num n))` >>
+  simp[return_def, raise_def, bind_def]
+QED
+
 Theorem update_scoped_var_in_tl_scopes:
   ∀st n v.
     lookup_in_current_scope st n = NONE ∧
@@ -711,4 +742,37 @@ Proof
     by metis_tac[lookup_scopes_find_containing] >>
   Cases_on `find_containing_scope (string_to_num n) t` >> gvs[] >>
   PairCases_on `x` >> gvs[]
+QED
+
+Theorem tl_scopes_update_eq_update_tl_scopes:
+  ∀st n v.
+    lookup_in_current_scope st n = NONE ∧
+    var_in_scope (tl_scopes st) n ⇒
+    tl_scopes (update_scoped_var st n v) = update_scoped_var (tl_scopes st) n v
+Proof
+  rpt strip_tac >> simp[tl_scopes_def, evaluation_state_component_equality] >>
+  gvs[lookup_in_current_scope_def, var_in_scope_def, lookup_scoped_var_def, tl_scopes_def,
+      update_scoped_var_def, LET_THM] >>
+  Cases_on `st.scopes` >> gvs[lookup_scopes_def] >>
+  simp[Once find_containing_scope_def] >> gvs[] >>
+  `IS_SOME (find_containing_scope (string_to_num n) t)` by metis_tac[lookup_scopes_find_containing] >>
+  Cases_on `find_containing_scope (string_to_num n) t` >> gvs[] >>
+  PairCases_on `x` >> gvs[] >>
+  rpt (simp[Once find_containing_scope_def] >>
+       Cases_on `find_containing_scope (string_to_num n) t` >> gvs[] >>
+       TRY (PairCases_on `x'` >> gvs[]))
+QED
+
+Theorem lookup_name_preserved_after_update_in_tl_scopes:
+  ∀cx st n1 n2 v.
+    n1 ≠ n2 ∧
+    lookup_in_current_scope st n1 = NONE ∧
+    var_in_scope (tl_scopes st) n1 ⇒
+    lookup_name cx (tl_scopes (update_scoped_var st n1 v)) n2 =
+    lookup_name cx (tl_scopes st) n2
+Proof
+  rpt strip_tac >>
+  `tl_scopes (update_scoped_var st n1 v) = update_scoped_var (tl_scopes st) n1 v`
+    by simp[tl_scopes_update_eq_update_tl_scopes] >>
+  simp[lookup_name_preserved_after_update]
 QED
