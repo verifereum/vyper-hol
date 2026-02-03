@@ -539,7 +539,6 @@ Proof
   Cases_on `x0` >> simp[]
 QED
 
-(* Lemma: after set_immutable, lookup_immutable returns the set value *)
 Theorem lookup_immutable_after_set_immutable:
   ∀cx n v st st'.
     set_immutable cx NONE (string_to_num n) v st = (INL (), st') ⇒
@@ -556,16 +555,18 @@ QED
 
 Theorem lookup_in_current_scope_to_lookup_scoped_var:
   ∀st n v.
+    st.scopes ≠ [] ∧
     lookup_in_current_scope st n = SOME v ⇒
     lookup_scoped_var st n = SOME v
 Proof
-  cheat
+  rw[lookup_in_current_scope_def, lookup_scoped_var_def] >>
+  Cases_on `st.scopes` >> gvs[lookup_scopes_def]
 QED
 
 Theorem lookup_in_current_scope_hd:
   ∀st n. HD st.scopes = FEMPTY ⇒ lookup_in_current_scope st n = NONE
 Proof
-  cheat
+  simp[lookup_in_current_scope_def, finite_mapTheory.FLOOKUP_EMPTY]
 QED
 
 Theorem lookup_in_tl_scopes:
@@ -573,7 +574,8 @@ Theorem lookup_in_tl_scopes:
     lookup_in_current_scope st n = NONE ⇒
     (lookup_scoped_var (tl_scopes st) n = lookup_scoped_var st n)
 Proof
-  cheat
+  rw[lookup_in_current_scope_def, lookup_scoped_var_def, tl_scopes_def] >>
+  Cases_on `st.scopes` >> gvs[lookup_scopes_def]
 QED
 
 Theorem var_in_tl_scopes:
@@ -581,13 +583,18 @@ Theorem var_in_tl_scopes:
     lookup_in_current_scope st n = NONE ⇒
     (var_in_scope (tl_scopes st) n ⇔ var_in_scope st n)
 Proof
-  cheat
+  simp[var_in_scope_def, lookup_in_tl_scopes]
 QED
 
 Theorem valid_lookups_tl_scopes:
   ∀cx st. valid_lookups cx st ⇒ valid_lookups cx (tl_scopes st)
 Proof
-  cheat
+  rw[valid_lookups_def, tl_scopes_def] >>
+  qexists_tac `imms` >> simp[] >>
+  rpt strip_tac >> first_x_assum irule >>
+  gvs[var_in_scope_def, lookup_scoped_var_def] >>
+  Cases_on `st.scopes` >> gvs[lookup_scopes_def] >>
+  Cases_on `FLOOKUP h (string_to_num n)` >> gvs[]
 QED
 
 Theorem valid_lookups_tl_scopes_rev:
@@ -596,7 +603,10 @@ Theorem valid_lookups_tl_scopes_rev:
     valid_lookups cx (tl_scopes st) ⇒
     valid_lookups cx st
 Proof
-  cheat
+  rw[valid_lookups_def, tl_scopes_def] >>
+  qexists_tac `imms` >> simp[] >> rpt strip_tac >> first_x_assum irule >>
+  gvs[var_in_scope_def, lookup_scoped_var_def] >>
+  Cases_on `st.scopes` >> gvs[lookup_scopes_def, finite_mapTheory.FLOOKUP_EMPTY]
 QED
 
 Theorem update_scoped_var_in_tl_scopes:
@@ -606,7 +616,14 @@ Theorem update_scoped_var_in_tl_scopes:
     (tl_scopes (update_scoped_var st n v)).scopes =
     (update_scoped_var (tl_scopes st) n v).scopes
 Proof
-  cheat
+  rw[lookup_in_current_scope_def, var_in_scope_def, lookup_scoped_var_def,
+     tl_scopes_def, update_scoped_var_def, LET_THM] >>
+  Cases_on `st.scopes` >> gvs[lookup_scopes_def] >>
+  simp[Once find_containing_scope_def] >> gvs[] >>
+  `IS_SOME (find_containing_scope (string_to_num n) t)`
+    by metis_tac[lookup_scopes_find_containing] >>
+  Cases_on `find_containing_scope (string_to_num n) t` >> gvs[] >>
+  PairCases_on `x` >> gvs[evaluation_state_accfupds]
 QED
 
 Theorem lookup_scoped_var_update_in_tl_scopes:
@@ -615,7 +632,13 @@ Theorem lookup_scoped_var_update_in_tl_scopes:
     var_in_scope (tl_scopes st) n ⇒
     lookup_scoped_var (tl_scopes (update_scoped_var st n v)) n = SOME v
 Proof
-  cheat
+  rpt strip_tac >>
+  simp[lookup_scoped_var_def, tl_scopes_def] >>
+  `(tl_scopes (update_scoped_var st n v)).scopes =
+   (update_scoped_var (tl_scopes st) n v).scopes`
+    by simp[update_scoped_var_in_tl_scopes] >>
+  gvs[tl_scopes_def] >>
+  simp[GSYM lookup_scoped_var_def, lookup_after_update]
 QED
 
 Theorem lookup_scoped_var_preserved_after_update_in_tl_scopes:
@@ -627,7 +650,13 @@ Theorem lookup_scoped_var_preserved_after_update_in_tl_scopes:
     lookup_scoped_var (tl_scopes st) n2 = SOME w ⇒
     lookup_scoped_var (tl_scopes (update_scoped_var st n1 v)) n2 = SOME w
 Proof
-  cheat
+  rpt strip_tac >>
+  `(tl_scopes (update_scoped_var st n1 v)).scopes =
+   (update_scoped_var (tl_scopes st) n1 v).scopes`
+    by simp[update_scoped_var_in_tl_scopes] >>
+  gvs[lookup_scoped_var_def, tl_scopes_def] >>
+  simp[GSYM lookup_scoped_var_def, lookup_scoped_var_preserved_after_update] >>
+  simp[lookup_scoped_var_def]
 QED
 
 Theorem scopes_nonempty_preserved_after_update_in_tl_scopes:
@@ -637,7 +666,11 @@ Theorem scopes_nonempty_preserved_after_update_in_tl_scopes:
     var_in_scope (tl_scopes st) n ⇒
     (tl_scopes (update_scoped_var st n v)).scopes ≠ []
 Proof
-  cheat
+  rpt strip_tac >>
+  `(tl_scopes (update_scoped_var st n v)).scopes =
+   (update_scoped_var (tl_scopes st) n v).scopes`
+    by metis_tac[update_scoped_var_in_tl_scopes] >>
+  gvs[tl_scopes_def, scopes_nonempty_after_update]
 QED
 
 Theorem valid_lookups_preserved_after_update_in_tl_scopes:
@@ -647,5 +680,18 @@ Theorem valid_lookups_preserved_after_update_in_tl_scopes:
     valid_lookups cx (tl_scopes st) ⇒
     valid_lookups cx (tl_scopes (update_scoped_var st n v))
 Proof
-  cheat
+  rpt strip_tac >> gvs[valid_lookups_def, tl_scopes_def] >>
+  qexists_tac `imms` >> simp[immutables_preserved_after_update] >>
+  rpt strip_tac >> first_x_assum irule >>
+  gvs[var_in_scope_def, lookup_scoped_var_def] >>
+  `(tl_scopes (update_scoped_var st n v)).scopes =
+   (update_scoped_var (tl_scopes st) n v).scopes`
+    by (irule update_scoped_var_in_tl_scopes >>
+        gvs[var_in_scope_def, lookup_scoped_var_def, tl_scopes_def]) >>
+  gvs[tl_scopes_def] >>
+  Cases_on `n' = n` >> gvs[] >>
+  `lookup_scoped_var (update_scoped_var (st with scopes := TL st.scopes) n v) n' =
+   lookup_scoped_var (st with scopes := TL st.scopes) n'`
+    by simp[lookup_scoped_var_preserved_after_update] >>
+  gvs[lookup_scoped_var_def]
 QED
