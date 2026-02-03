@@ -228,7 +228,6 @@ val unsupported_code = [
 
 val unsupported_patterns = unsupported_code @ [
   "extcall ",
-  "staticcall ",
   "raw_call(",
   "raw_log(",
   "raw_revert(",
@@ -237,7 +236,8 @@ val unsupported_patterns = unsupported_code @ [
   "exports",
   "import ",
   "create_minimal_proxy_to(",
-  "create_copy_of("
+  "create_copy_of(",
+  "gas="
 ]
 
 fun has_default_arg src =
@@ -348,12 +348,7 @@ val excluded_test_patterns = [
 
 (* Individual test names that bypass unsupported pattern checks *)
 val allowed_test_names = [
-  (* staticcall tests *)
-  "test_external_contract_calls_with_uint8[8]",
-  "test_external_contract_calls_with_bool[uint8]",
-  "test_external_contract_calls_with_int128[128]",
-  "test_invalid_nonexistent_contract_call",
-  (* extcall tests *)
+  (* extcall tests - staticcall now enabled globally *)
   "test_external_contract_call_state_change",
   "test_complicated_external_contract_calls"
 ]
