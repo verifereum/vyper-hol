@@ -289,10 +289,11 @@ Proof outline:
     simp[] >>
     conj_tac >- (
       rpt strip_tac >- (
-        irule hd_scopes_preserved_after_update_in_tl_scopes >> simp[] >>
-        simp[lookup_in_current_scope_hd] >>
-        simp[var_in_tl_scopes, lookup_in_current_scope_hd] >>
-        metis_tac[lookup_scoped_var_implies_var_in_scope]) >>
+        `HD (update_scoped_var st "x" (IntV (Unsigned 256) (xarg + 20))).scopes = HD st.scopes` by
+          (irule hd_scopes_preserved_after_update_in_tl_scopes >>
+           simp[lookup_in_current_scope_hd, var_in_tl_scopes] >>
+           metis_tac[lookup_scoped_var_implies_var_in_scope]) >>
+        gvs[]) >>
       simp[lookup_after_update]) >>
     ACCEPT_TAC (SIMP_RULE std_ss [EVAL ``evaluate_literal (IntL (Unsigned 256) 10)``]
       (ISPECL [``λst:evaluation_state. st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧
@@ -356,10 +357,11 @@ Proof outline:
   simp[] >>
   conj_tac >- (
     rpt strip_tac >- (
-      irule hd_scopes_preserved_after_update_in_tl_scopes >> simp[] >>
-      simp[lookup_in_current_scope_hd] >>
-      simp[var_in_tl_scopes, lookup_in_current_scope_hd] >>
-      metis_tac[lookup_scoped_var_implies_var_in_scope]) >>
+      `HD (update_scoped_var st "x" (IntV (Unsigned 256) 100)).scopes = HD st.scopes` by
+        (irule hd_scopes_preserved_after_update_in_tl_scopes >>
+         simp[lookup_in_current_scope_hd, var_in_tl_scopes] >>
+         metis_tac[lookup_scoped_var_implies_var_in_scope]) >>
+      gvs[]) >>
     simp[lookup_after_update]) >>
   ACCEPT_TAC (SIMP_RULE std_ss [EVAL ``evaluate_literal (IntL (Unsigned 256) 100)``]
     (ISPECL [``λst:evaluation_state. (st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧
