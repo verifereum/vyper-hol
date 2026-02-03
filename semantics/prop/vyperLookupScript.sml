@@ -695,3 +695,20 @@ Proof
     by simp[lookup_scoped_var_preserved_after_update] >>
   gvs[lookup_scoped_var_def]
 QED
+
+Theorem hd_scopes_preserved_after_update_in_tl_scopes:
+  ∀st n v.
+    st.scopes ≠ [] ∧
+    lookup_in_current_scope st n = NONE ∧
+    var_in_scope (tl_scopes st) n ⇒
+    HD (update_scoped_var st n v).scopes = HD st.scopes
+Proof
+  rw[lookup_in_current_scope_def, var_in_scope_def, lookup_scoped_var_def,
+     tl_scopes_def, update_scoped_var_def, LET_THM] >>
+  Cases_on `st.scopes` >> gvs[lookup_scopes_def] >>
+  simp[Once find_containing_scope_def] >> gvs[] >>
+  `IS_SOME (find_containing_scope (string_to_num n) t)`
+    by metis_tac[lookup_scopes_find_containing] >>
+  Cases_on `find_containing_scope (string_to_num n) t` >> gvs[] >>
+  PairCases_on `x` >> gvs[]
+QED
