@@ -45,29 +45,6 @@ Proof
   EVAL_TAC
 QED
 
-(* Helper lemmas for Hoare proofs - these abstract away semantic definitions *)
-
-(* lookup_scoped_var SOME implies var_in_scope *)
-Theorem lookup_scoped_var_implies_var_in_scope:
-  ∀st n v. lookup_scoped_var st n = SOME v ⇒ var_in_scope st n
-Proof
-  simp[var_in_scope_def]
-QED
-
-(* var_in_scope after update *)
-Theorem var_in_scope_after_update:
-  ∀st n v. var_in_scope (update_scoped_var st n v) n
-Proof
-  simp[var_in_scope_def, lookup_after_update]
-QED
-
-(* var_in_scope preserved for other variables after update *)
-Theorem var_in_scope_preserved_after_update:
-  ∀st n1 n2 v. n1 ≠ n2 ∧ var_in_scope st n2 ⇒ var_in_scope (update_scoped_var st n1 v) n2
-Proof
-  simp[var_in_scope_def, lookup_scoped_var_preserved_after_update]
-QED
-
 (* Helper lemmas for if-statement proof *)
 
 (* When HD st.scopes doesn't contain n, lookup in full scopes equals lookup in TL *)
@@ -107,7 +84,6 @@ Proof
   gvs[Once lookup_scopes_def]
 QED
 
-(* valid_lookups from TL when not in HD (requires immutables unchanged) *)
 Theorem valid_lookups_from_TL_when_FEMPTY_HD:
   ∀cx st. st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧
           valid_lookups cx (st with scopes := TL st.scopes) ⇒
@@ -120,38 +96,6 @@ Proof
   gvs[var_in_scope_def, lookup_scoped_var_def] >>
   Cases_on `st.scopes` >> gvs[finite_mapTheory.FLOOKUP_EMPTY] >>
   gvs[Once lookup_scopes_def]
-QED
-
-(* valid_lookups preserved when updating an EXISTING variable (not introducing new) *)
-Theorem valid_lookups_preserved_existing_update:
-  ∀cx st n v.
-    valid_lookups cx st ∧ var_in_scope st n ⇒
-    valid_lookups cx (update_scoped_var st n v)
-Proof
-  rw[valid_lookups_def] >>
-  qexists_tac `imms` >>
-  simp[immutables_preserved_after_update] >>
-  rpt strip_tac >>
-  (* The key: var_in_scope after update implies var_in_scope before *)
-  `var_in_scope st n'` by (
-    gvs[var_in_scope_def, lookup_scoped_var_def] >>
-    Cases_on `string_to_num n' = string_to_num n` >-
-     (gvs[lookup_after_update, lookup_scoped_var_def]) >>
-    `lookup_scoped_var (update_scoped_var st n v) n' = lookup_scoped_var st n'` 
-      by (irule lookup_scoped_var_preserved_after_update >> 
-          metis_tac[vyperMiscTheory.string_to_num_inj]) >>
-    gvs[lookup_scoped_var_def]) >>
-  first_x_assum irule >> simp[]
-QED
-
-(* Helper: find_containing_scope NONE implies lookup_scopes NONE *)
-Theorem find_containing_scope_none_lookup_scopes_none:
-  ∀id sc. find_containing_scope id sc = NONE ⇒ lookup_scopes id sc = NONE
-Proof
-  Induct_on `sc` >> simp[Once find_containing_scope_def, Once lookup_scopes_def] >>
-  rpt strip_tac >> Cases_on `FLOOKUP h id` >> gvs[] >>
-  first_x_assum irule >>
-  Cases_on `find_containing_scope id sc` >> gvs[]
 QED
 
 (* Key lemma: when HD = FEMPTY and var is in TL, update_scoped_var affects TL correctly.
@@ -205,7 +149,7 @@ Proof
 QED
 
 (* lookup_scopes ignores an empty scope at the head *)
-Theorem lookup_scopes_FEMPTY_CONS:
+Theorem lookup_scopes_FEMPTY_CONS[local]:
   ∀n rest. lookup_scopes n (FEMPTY::rest) = lookup_scopes n rest
 Proof
   simp[Once lookup_scopes_def, finite_mapTheory.FLOOKUP_EMPTY]
@@ -269,7 +213,7 @@ QED
 Theorem lookup_TL_after_update_FEMPTY:
   ∀st n v. HD st.scopes = FEMPTY ∧ st.scopes ≠ [] ∧
            var_in_scope (st with scopes := TL st.scopes) n ⇒
-           lookup_scoped_var ((update_scoped_var st n v) with 
+           lookup_scoped_var ((update_scoped_var st n v) with
                               scopes := TL (update_scoped_var st n v).scopes) n = SOME v
 Proof
   metis_tac[lookup_scoped_var_TL_after_update_when_FEMPTY_HD]
@@ -282,8 +226,8 @@ Theorem scopes_nonempty_TL_after_update_FEMPTY:
            TL (update_scoped_var st n v).scopes ≠ []
 Proof
   rpt strip_tac >>
-  `TL (update_scoped_var st n v).scopes = 
-   (update_scoped_var (st with scopes := TL st.scopes) n v).scopes` 
+  `TL (update_scoped_var st n v).scopes =
+   (update_scoped_var (st with scopes := TL st.scopes) n v).scopes`
     by metis_tac[update_scoped_var_TL_when_FEMPTY_HD] >>
   simp[] >> metis_tac[scopes_nonempty_after_update]
 QED
@@ -300,14 +244,14 @@ Proof
   rw[valid_lookups_def, evaluation_state_accfupds, immutables_preserved_after_update] >>
   gvs[valid_lookups_def, evaluation_state_accfupds] >>
   rpt strip_tac >> first_x_assum irule >>
-  `TL (update_scoped_var st n v).scopes = 
-   (update_scoped_var (st with scopes := TL st.scopes) n v).scopes` 
+  `TL (update_scoped_var st n v).scopes =
+   (update_scoped_var (st with scopes := TL st.scopes) n v).scopes`
     by metis_tac[update_scoped_var_TL_when_FEMPTY_HD] >>
   gvs[var_in_scope_def, lookup_scoped_var_def, evaluation_state_accfupds] >>
   Cases_on `string_to_num n' = string_to_num n` >> gvs[] >>
   `n' ≠ n` by metis_tac[vyperMiscTheory.string_to_num_inj] >>
-  `lookup_scoped_var (update_scoped_var (st with scopes := TL st.scopes) n v) n' = 
-   lookup_scoped_var (st with scopes := TL st.scopes) n'` 
+  `lookup_scoped_var (update_scoped_var (st with scopes := TL st.scopes) n v) n' =
+   lookup_scoped_var (st with scopes := TL st.scopes) n'`
     by (irule lookup_scoped_var_preserved_after_update >> simp[]) >>
   gvs[lookup_scoped_var_def, evaluation_state_accfupds]
 QED
@@ -322,12 +266,12 @@ Theorem lookup_other_TL_after_update_FEMPTY:
                                     scopes := TL (update_scoped_var st n1 v).scopes) n2 = SOME w
 Proof
   rpt strip_tac >>
-  `TL (update_scoped_var st n1 v).scopes = 
-   (update_scoped_var (st with scopes := TL st.scopes) n1 v).scopes` 
+  `TL (update_scoped_var st n1 v).scopes =
+   (update_scoped_var (st with scopes := TL st.scopes) n1 v).scopes`
     by metis_tac[update_scoped_var_TL_when_FEMPTY_HD] >>
   simp[lookup_scoped_var_def, evaluation_state_accfupds] >>
-  `lookup_scoped_var (update_scoped_var (st with scopes := TL st.scopes) n1 v) n2 = 
-   lookup_scoped_var (st with scopes := TL st.scopes) n2` 
+  `lookup_scoped_var (update_scoped_var (st with scopes := TL st.scopes) n1 v) n2 =
+   lookup_scoped_var (st with scopes := TL st.scopes) n2`
     by (irule lookup_scoped_var_preserved_after_update >> simp[]) >>
   gvs[lookup_scoped_var_def, evaluation_state_accfupds]
 QED
@@ -368,7 +312,7 @@ Proof outline:
    - Use stmts_spec_ann_assign
    - Evaluate "x_arg" using expr_spec_name with lookup_immutable_implies_lookup_name
    - Creates new variable x with value xarg
-   
+
 { lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) xarg) ∧
   valid_lookups cx st }
 
@@ -376,7 +320,7 @@ Proof outline:
    - Use stmts_spec_aug_assign_scoped_var
    - evaluate_binop Add (IntV (Unsigned 256) xarg) (IntV (Unsigned 256) 10)
      = INL (IntV (Unsigned 256) (xarg + 10))   [by within_int_bound assumption]
-   
+
 { lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
   valid_lookups cx st }
 
@@ -384,14 +328,14 @@ Proof outline:
    - Use stmts_spec_if
    - Evaluate condition using expr_spec_builtin_bop + expr_spec_scoped_var + expr_spec_literal
    - Result is BoolV (xarg + 10 > 100)
-   
+
    Then branch (xarg + 10 > 100, i.e., condition = BoolV T):
    { lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧ xarg + 10 > 100 }
      x := 100
    { lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) 100) }
    - Use stmts_spec_assign_scoped_var with expr_spec_literal
    - 20 ≤ 100 ∧ 100 ≤ 110 holds trivially
-   
+
    Else branch (xarg + 10 ≤ 100, i.e., condition = BoolV F):
    { lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧ xarg + 10 ≤ 100 }
      x += 10
@@ -426,7 +370,7 @@ Proof outline:
      (simp[] >> rpt strip_tac >-
         metis_tac[lookup_name_none_to_lookup_scoped_var] >-
         metis_tac[scopes_nonempty_after_update] >-
-        metis_tac[valid_lookups_preserved_after_update] >>
+        metis_tac[valid_lookups_preserved_after_update_no_name] >>
         simp[lookup_after_update]) >>
    irule expr_spec_consequence >>
    qexistsl_tac [`λst. (st.scopes ≠ [] ∧ valid_lookups cx st ∧ lookup_name cx st "x" = NONE) ∧
@@ -475,33 +419,33 @@ Proof outline:
    conj_tac >- simp[] >>
    conj_tac >-
       (simp[scopes_nonempty_after_update, lookup_after_update] >>
-       metis_tac[valid_lookups_preserved_existing_update, lookup_scoped_var_implies_var_in_scope]) >>
+       metis_tac[valid_lookups_preserved_after_update_var_in_scope, lookup_scoped_var_implies_var_in_scope]) >>
    ACCEPT_TAC (SIMP_RULE std_ss [EVAL ``evaluate_literal (IntL (Unsigned 256) 10)``]
      (ISPECL [``λst:evaluation_state. st.scopes ≠ [] ∧ valid_lookups (cx:evaluation_context) st ∧
                                        lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) xarg)``,
               ``ARB:'a``, ``cx:evaluation_context``,
               ``IntL (Unsigned 256) 10``] expr_spec_literal))) >>
   (* Statement 3: if x > 100 then x := 100 else x += 10 *)
-  (* 
+  (*
      The stmts_spec_if rule requires reasoning about `st with scopes := TL st.scopes`
      because the if-statement pushes a new scope for the branch body, then pops it.
-     
+
      To complete this proof cleanly, we would need helper lemmas such as:
-     
+
      Theorem lookup_scoped_var_TL_scopes:
        ∀st n v. lookup_scoped_var st n = SOME v ∧ FLOOKUP (HD st.scopes) (string_to_num n) = NONE ⇒
                 lookup_scoped_var (st with scopes := TL st.scopes) n = SOME v
-     
+
      Theorem valid_lookups_TL_scopes:
        ∀cx st. valid_lookups cx st ⇒ valid_lookups cx (st with scopes := TL st.scopes)
-     
+
      For now, we use cheat for the if-statement proof.
   *)
   irule stmts_spec_consequence >>
   qexistsl_tac [`λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
                       lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10))`,
                 `λst. ∃x. lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) x) ∧ 20 ≤ x ∧ x ≤ 110`,
-                `λv st. F ∨ F`] >>
+                `λv st. F`] >>
   simp[] >>
   cheat
 QED
