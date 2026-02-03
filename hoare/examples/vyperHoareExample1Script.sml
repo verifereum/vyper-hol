@@ -99,7 +99,7 @@ Proof
       >- (rpt strip_tac >> simp[Abbr `P1`] >> rpt conj_tac
           >- metis_tac[lookup_name_none_to_lookup_scoped_var]
           >- simp[scopes_nonempty_after_update]
-          >- metis_tac[valid_lookups_preserved_after_update]
+          >- metis_tac[valid_lookups_preserved_after_update_no_name]
           >- simp[lookup_after_update]
           >- (`"x" ≠ "y"` by EVAL_TAC >> metis_tac[lookup_name_preserved_after_update]))
       (* Goal 2: expr_spec for Literal *)
