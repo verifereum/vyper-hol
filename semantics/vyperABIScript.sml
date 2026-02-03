@@ -134,6 +134,30 @@ End
 
 val () = cv_auto_trans evaluate_abi_decode_def;
 
+(* Per Vyper ABI spec: wrap return type in tuple unless it's already
+   a multi-element tuple (length > 1). See vyper/codegen/core.py *)
+Definition needs_external_call_wrap_def:
+  needs_external_call_wrap (TupleT ts) = (LENGTH ts ≤ 1) ∧
+  needs_external_call_wrap _ = T
+End
+
+val () = cv_auto_trans needs_external_call_wrap_def;
+
+(* Decode ABI-encoded function return data.
+   Function returns are always encoded as tuples per ABI spec. *)
+Definition evaluate_abi_decode_return_def:
+  evaluate_abi_decode_return tenv ret_type bs =
+    if needs_external_call_wrap ret_type then
+      case evaluate_abi_decode tenv (TupleT [ret_type]) bs of
+      | INL (ArrayV (TupleV [v])) => INL v
+      | INL _ => INR "decode return unwrap"
+      | INR e => INR e
+    else
+      evaluate_abi_decode tenv ret_type bs
+End
+
+val () = cv_auto_trans evaluate_abi_decode_return_def;
+
 (* Helper for termination: convert default value directly to ABI encoding.
    This exists only to simplify the termination argument for vyper_to_abi_sparse,
    which needs to fill in defaults for missing indices in sparse static arrays.

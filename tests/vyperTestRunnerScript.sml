@@ -270,22 +270,15 @@ Definition run_trace_def:
        case ct.expectedOutput
          of NONE => INR (Error "error expected")
           | SOME out => let
-              rets = SND cr;
-              abiRetTys = FST rets;
-              abiRetTy = Tuple abiRetTys;
-              ar = SND rets;
+              ar = SND (SND cr);
               rawVyRetTy = FST ar; tenv = SND ar;
-              alreadyTuple = (rawVyRetTy = NoneT ∨ is_TupleT rawVyRetTy);
-              vyRetTy = if alreadyTuple then rawVyRetTy
-                        else TupleT [rawVyRetTy];
-              abiret = dec abiRetTy out;
-              vyret = abi_to_vyper tenv vyRetTy abiret;
-              expect = if alreadyTuple then v
-                       else ArrayV $ TupleV [v];
             in
-              if vyret = SOME expect
-              then INL am
-              else INR (Error "output mismatch"))
+              case evaluate_abi_decode_return tenv rawVyRetTy out of
+              | INR _ => INR (Error "output mismatch")
+              | INL decoded =>
+                  if decoded = v
+                  then INL am
+                  else INR (Error "output mismatch"))
 End
 
 val () = cv_auto_trans run_trace_def;
