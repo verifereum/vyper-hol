@@ -366,21 +366,21 @@ Theorem stmts_spec_if:
     (⟦cx⟧ ⦃P⦄ e ⇓ Value v1 ⦃P'⦄) ∧
     (⟦cx⟧ ⦃λst.
             st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧
-            P' (st with scopes := TL st.scopes) ∧
+            P' (tl_scopes st) ∧
             v1 = BoolV T⦄
           ss1
-          ⦃λst. Q (st with scopes := TL st.scopes) ∥
-            λv st. R v (st with scopes := TL st.scopes)⦄) ∧
+          ⦃λst. Q (tl_scopes st) ∥
+            λv st. R v (tl_scopes st)⦄) ∧
     (⟦cx⟧ ⦃λst.
             st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧
-            P' (st with scopes := TL st.scopes) ∧
+            P' (tl_scopes st) ∧
             v1 = BoolV F⦄
           ss2
-          ⦃λst. Q (st with scopes := TL st.scopes) ∥
-            λv st. R v (st with scopes := TL st.scopes)⦄) ⇒
+          ⦃λst. Q (tl_scopes st) ∥
+            λv st. R v (tl_scopes st)⦄) ⇒
           ⟦cx⟧ ⦃P⦄ [If e ss1 ss2] ⦃Q ∥ R⦄
 Proof
-  rw[stmts_spec_def, expr_spec_def] >>
+  rw[stmts_spec_def, expr_spec_def, tl_scopes_def] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, finally_def,
        push_scope_def, return_def] >>
