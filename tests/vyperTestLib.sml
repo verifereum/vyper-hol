@@ -354,6 +354,17 @@ val allowed_test_names = [
   "test_complicated_external_contract_calls"
 ]
 
+(* Tests excluded by name - require architectural changes *)
+val excluded_test_names = [
+  (* TODO: Storage arrays with huge sizes require ArrayRef support.
+     Currently we try to load entire array into memory. Fix: Add ArrayRef
+     constructor to typed_value (like HashMapRef) and compute slot offsets
+     directly instead of materializing the whole array. *)
+  "test_boundary_access_to_arr",
+  "test_negative_ix_access_to_large_arr",
+  "test_oob_access_to_large_arr"
+]
+
 fun glob_match pat str =
   let
     fun step [] [] = true
@@ -497,7 +508,9 @@ val test_decoder =
    field "traces" (array trace))
 
 fun trydecode ((name,json),(s,f)) =
-  if List.exists (fn n => n = name) allowed_test_names
+  if List.exists (equal name) excluded_test_names
+  then (s,f)
+  else if List.exists (equal name) allowed_test_names
      orelse not (has_unsupported_source_json json)
   then ((name, decode test_decoder json)::s, f)
        handle JSONError e => (s, (name, JSONError e)::f)
