@@ -289,15 +289,10 @@ Proof outline:
     simp[] >>
     conj_tac >- (
       rpt strip_tac >- (
-        gvs[update_scoped_var_def, LET_THM] >>
-        Cases_on `st.scopes` >> gvs[] >>
-        simp[Once find_containing_scope_def, finite_mapTheory.FLOOKUP_EMPTY] >>
-        `IS_SOME (lookup_scopes (string_to_num "x") t)` by
-          (gvs[lookup_scoped_var_def, lookup_scopes_def, finite_mapTheory.FLOOKUP_EMPTY]) >>
-        `IS_SOME (find_containing_scope (string_to_num "x") t)` by
-          metis_tac[lookup_scopes_find_containing] >>
-        Cases_on `find_containing_scope (string_to_num "x") t` >> gvs[] >>
-        PairCases_on `x` >> gvs[]) >>
+        irule hd_scopes_preserved_after_update_in_tl_scopes >> simp[] >>
+        simp[lookup_in_current_scope_hd] >>
+        simp[var_in_tl_scopes, lookup_in_current_scope_hd] >>
+        metis_tac[lookup_scoped_var_implies_var_in_scope]) >>
       simp[lookup_after_update]) >>
     ACCEPT_TAC (SIMP_RULE std_ss [EVAL ``evaluate_literal (IntL (Unsigned 256) 10)``]
       (ISPECL [``λst:evaluation_state. st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧
@@ -361,15 +356,10 @@ Proof outline:
   simp[] >>
   conj_tac >- (
     rpt strip_tac >- (
-      gvs[update_scoped_var_def, LET_THM] >>
-      Cases_on `st.scopes` >> gvs[] >>
-      simp[Once find_containing_scope_def, finite_mapTheory.FLOOKUP_EMPTY] >>
-      `IS_SOME (lookup_scopes (string_to_num "x") t)` by
-        (gvs[lookup_scoped_var_def, lookup_scopes_def, finite_mapTheory.FLOOKUP_EMPTY]) >>
-      `IS_SOME (find_containing_scope (string_to_num "x") t)` by
-        metis_tac[lookup_scopes_find_containing] >>
-      Cases_on `find_containing_scope (string_to_num "x") t` >> gvs[] >>
-      PairCases_on `x` >> gvs[]) >>
+      irule hd_scopes_preserved_after_update_in_tl_scopes >> simp[] >>
+      simp[lookup_in_current_scope_hd] >>
+      simp[var_in_tl_scopes, lookup_in_current_scope_hd] >>
+      metis_tac[lookup_scoped_var_implies_var_in_scope]) >>
     simp[lookup_after_update]) >>
   ACCEPT_TAC (SIMP_RULE std_ss [EVAL ``evaluate_literal (IntL (Unsigned 256) 100)``]
     (ISPECL [``λst:evaluation_state. (st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧
