@@ -524,6 +524,7 @@ Definition translate_expr_def:
     let args' = translate_expr_list args in
     let kwargs' = translate_kwargs kwargs in
     case func of
+    | JE_Name name (SOME "interface") _ => HD args'
     | JE_Name name _ _ => make_builtin_call name args' kwargs' ret_ty
     | JE_Attribute base "pop" =>
         (case base of

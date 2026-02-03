@@ -591,7 +591,8 @@ fun d_json_expr () : term decoder = achoose "expr" [
   check_ast_type "Name" $
     JSONDecode.map (fn (id, (tc, src_id_opt)) => mk_JE_Name(id, tc, src_id_opt)) $
     tuple2 (field "id" string,
-            tuple2 (try (field "type" $ field "typeclass" string),
+            tuple2 (try (orElse (field "type" $ field "typeclass" string,
+                                field "type" $ field "type_t" $ field "typeclass" string)),
                     orElse (JSONDecode.map (fn n =>
                               if n < 0 then optionSyntax.mk_none numSyntax.num
                               else optionSyntax.mk_some (numSyntax.mk_numeral (Arbnum.fromLargeInt (IntInf.toLarge n))))
