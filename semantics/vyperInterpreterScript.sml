@@ -2919,7 +2919,7 @@ Definition evaluate_def:
     check success "ExtCall reverted";
     update_accounts (K accounts');
     update_transient (K tStorage');
-    ret_val <- lift_sum (evaluate_abi_decode tenv ret_type returnData);
+    ret_val <- lift_sum (evaluate_abi_decode_return tenv ret_type returnData);
     return $ Value ret_val
   od ∧
   eval_expr cx (Call (IntCall (src_id_opt, fn)) es) = do
