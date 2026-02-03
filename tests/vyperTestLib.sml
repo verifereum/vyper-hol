@@ -227,7 +227,6 @@ val unsupported_code = [
 ]
 
 val unsupported_patterns = unsupported_code @ [
-  "extcall ",
   "raw_call(",
   "raw_log(",
   "raw_revert(",
