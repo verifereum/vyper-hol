@@ -604,7 +604,7 @@ Definition apply_vals_def:
       check success "ExtCall reverted";
       update_accounts (K accounts');
       update_transient (K tStorage');
-      ret_val <- lift_sum (evaluate_abi_decode tenv ret_type returnData);
+      ret_val <- lift_sum (evaluate_abi_decode_return tenv ret_type returnData);
       return $ Value ret_val
     od st) k ∧
   apply_vals cx vs st (IntCallK tenv src_fn args ret body k) =

@@ -1,13 +1,10 @@
 Theory vyperABI
 Ancestors
   contractABI vyperAST vyperTypeValue
-  vyperMisc byte string words list rich_list
-  divides alist combin pair arithmetic option
+  vyperMisc byte string words list rich_list cv cv_std
+  divides finite_map alist combin pair arithmetic option
 Libs
-  cv_transLib
-  wordsLib
-  dep_rewrite
-  cv_stdTheory
+  cv_transLib wordsLib dep_rewrite
 
 (* Overloads to disambiguate ABI value constructors from Vyper value constructors *)
 Overload abi_IntV[local] = ``IntV : int -> abi_value``
@@ -23,31 +20,80 @@ Definition vyper_base_to_abi_type_def[simp]:
   vyper_base_to_abi_type (BytesT (Fixed n)) = Bytes (SOME n) ∧
   vyper_base_to_abi_type AddressT = Address
 End
+val () = cv_auto_trans vyper_base_to_abi_type_def;
 
 Definition vyper_to_abi_type_def[simp]:
-  vyper_to_abi_type (BaseT bt) = vyper_base_to_abi_type bt ∧
-  vyper_to_abi_type (TupleT ts) = Tuple (vyper_to_abi_types ts) ∧
-  vyper_to_abi_type (ArrayT t (Dynamic _)) = Array NONE (vyper_to_abi_type t) ∧
-  vyper_to_abi_type (ArrayT t (Fixed n)) = Array (SOME n) (vyper_to_abi_type t) ∧
-  vyper_to_abi_type (StructT id) = Tuple [] (* TODO *) ∧
-  vyper_to_abi_type (FlagT _) = Uint 256 ∧
-  vyper_to_abi_type NoneT = Tuple [] ∧
-  vyper_to_abi_types [] = [] ∧
-  vyper_to_abi_types (t::ts) = vyper_to_abi_type t :: vyper_to_abi_types ts
+  vyper_to_abi_type env (BaseT bt) = vyper_base_to_abi_type bt ∧
+  vyper_to_abi_type env (TupleT ts) = Tuple (vyper_to_abi_types env ts) ∧
+  vyper_to_abi_type env (ArrayT t (Dynamic _)) = Array NONE (vyper_to_abi_type env t) ∧
+  vyper_to_abi_type env (ArrayT t (Fixed n)) = Array (SOME n) (vyper_to_abi_type env t) ∧
+  vyper_to_abi_type env (StructT id) =
+    (let nid = string_to_num id in
+     case FLOOKUP env nid of
+     | SOME (StructArgs args) => Tuple (vyper_to_abi_types (env \\ nid) (MAP SND args))
+     | _ => Tuple []) ∧
+  vyper_to_abi_type env (FlagT _) = Uint 256 ∧
+  vyper_to_abi_type env NoneT = Tuple [] ∧
+  vyper_to_abi_types env [] = [] ∧
+  vyper_to_abi_types env (t::ts) = vyper_to_abi_type env t :: vyper_to_abi_types env ts
 Termination
-  WF_REL_TAC ‘measure (λx. case x of INL t => type_size t
-                                   | INR ts => list_size type_size ts)’
+  WF_REL_TAC ‘inv_image ($< LEX $<) (λx. case x of
+      INL (env, t) => (CARD (FDOM env), type_size t)
+    | INR (env, ts) => (CARD (FDOM env), list_size type_size ts))’
+  \\ rw[FLOOKUP_DEF]
+  \\ disj1_tac
+  \\ CCONTR_TAC
+  \\ fs[]
 End
 
-val () = cv_auto_trans vyper_base_to_abi_type_def;
 val () = cv_auto_trans_rec vyper_to_abi_type_def (
-  WF_REL_TAC `measure (λx. case x of INL t => cv_size t
-                                   | INR ts => cv_size ts)`
+  WF_REL_TAC ‘inv_image ($< LEX $<) (λx. case x of
+      INL (env, t) => (cv$c2n $ cv_size' env, cv_size t)
+    | INR (env, ts) => (cv$c2n $ cv_size' env, cv_size ts))’
   \\ rw[]
   \\ TRY (Cases_on `cv_v` \\ gvs[cvTheory.cv_size_def] \\ NO_TAC)
-  \\ Cases_on `cv_v` \\ gvs[cvTheory.cv_size_def]
-  \\ qmatch_goalsub_rename_tac `cv_fst p`
-  \\ Cases_on `p` \\ gvs[cvTheory.cv_size_def]
+  \\ TRY (Cases_on `cv_v` \\ gvs[cvTheory.cv_size_def]
+          \\ qmatch_goalsub_rename_tac `cv_fst cv_v`
+          \\ Cases_on `cv_v` \\ gvs[cvTheory.cv_size_def] \\ NO_TAC)
+  \\ disj1_tac
+  \\ pop_assum mp_tac
+  \\ qmatch_goalsub_abbrev_tac `cv_lookup ck`
+  \\ `cv_ispair ck = cv$Num 0`
+  by (
+    rw[Abbr`ck`, cv_string_to_num_def]
+    \\ rw[Once keccakTheory.cv_l2n_def]
+    \\ rw[cv_ispair_cv_add] )
+  \\ pop_assum mp_tac
+  \\ qid_spec_tac `cv_env`
+  \\ qid_spec_tac `ck`
+  \\ rpt (pop_assum kall_tac)
+  \\ ho_match_mp_tac cv_stdTheory.cv_delete_ind
+  \\ rpt gen_tac \\ strip_tac
+  \\ simp[Once cv_lookup_def]
+  \\ IF_CASES_TAC \\ gs[]
+  \\ strip_tac \\ gs[]
+  \\ reverse (IF_CASES_TAC \\ gs[])
+  >- (
+    Cases_on `ck` \\ gs[]
+    \\ Cases_on `cv_env` \\ gs[Once cv_delete_def]
+    \\ rw[] \\  rw[Once cv_size'_def])
+  \\ Cases_on `cv_env` \\ gs[]
+  \\ Cases_on`ck` \\ gvs[]
+  \\ Cases_on`g` \\ gvs[cv_repTheory.cv_eval,CaseEq"bool"]
+  \\ Cases_on`m=0` \\ gvs[]
+  >- (
+    rw[]
+    \\ simp[Once cv_delete_def]
+    \\ simp[Once cv_size'_def]
+    \\ simp[Once(Q.SPEC`cv$Pair x y`cv_size'_def)])
+  \\ Cases_on`m` \\ gvs[]
+  \\ qmatch_goalsub_rename_tac`2 < p`
+  \\ Cases_on`p=2` \\ gvs[]
+  \\ rw[] \\ gvs[]
+  \\ rw[Once cv_delete_def]
+  \\ rw[Once cv_size'_def, SimpR``prim_rec$<``]
+  \\ gvs[iffRL SUB_EQ_0]
+  \\ Cases_on`1 - SUC n MOD 2` \\ gvs[]
 );
 
 Definition check_IntV_def:
@@ -121,7 +167,7 @@ QED
 
 Definition evaluate_abi_decode_def:
   evaluate_abi_decode tenv typ bs =
-    let abiTy = vyper_to_abi_type typ in
+    let abiTy = vyper_to_abi_type tenv typ in
     (* Check minimum length - basic types need at least 32 bytes *)
     (* TODO: remove if this check is added to valid_enc instead *)
     if static_length abiTy > LENGTH bs then INR "abi_decode too short"
@@ -989,7 +1035,7 @@ QED
 
 Definition evaluate_abi_encode_def:
   evaluate_abi_encode tenv typ v =
-    let abiTy = vyper_to_abi_type typ in
+    let abiTy = vyper_to_abi_type tenv typ in
     case vyper_to_abi tenv typ v of
       SOME av => INL $ BytesV (Dynamic (LENGTH (enc abiTy av))) (enc abiTy av)
     | NONE => INR "abi_encode conversion"
@@ -1009,7 +1055,7 @@ val () = cv_auto_trans evaluate_abi_encode_def;
    Returns: byte list (selector ++ encoded args) or NONE on encoding failure *)
 Definition build_ext_calldata_def:
   build_ext_calldata env func_name arg_types arg_vals =
-    let abi_types = vyper_to_abi_types arg_types in
+    let abi_types = vyper_to_abi_types env arg_types in
     let selector = function_selector func_name abi_types in
     case vyper_to_abi_list env arg_types arg_vals of
     | SOME abi_vals =>
