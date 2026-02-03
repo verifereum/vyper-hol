@@ -79,3 +79,23 @@ return y
 { F | λv. v > 20 ∧ v ≤ 110 }
 
 *)
+
+(* The postcondition says:
+   - Normal completion is impossible (always returns)
+   - Return values v satisfy: 20 < v ∧ v ≤ 110
+*)
+Theorem example_3_thm:
+  ∀cx xarg.
+    within_int_bound (Unsigned 256) xarg ∧
+    within_int_bound (Unsigned 256) (xarg + 20) ⇒
+    ⟦cx⟧
+    ⦃λst. st.scopes ≠ [] ∧
+          valid_lookups cx st ∧
+          lookup_immutable cx st "x_arg" = SOME (IntV (Unsigned 256) xarg) ∧
+          lookup_name cx st "x" = NONE ∧
+          lookup_name cx st "y" = NONE⦄
+    example_3_body
+    ⦃λst. F ∥ λv st. ∃n. v = IntV (Unsigned 256) n ∧ 20 < n ∧ n ≤ 110⦄
+Proof
+  cheat
+QED
