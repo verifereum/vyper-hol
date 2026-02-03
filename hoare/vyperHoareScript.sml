@@ -364,10 +364,18 @@ Theorem stmts_spec_if:
   ∀P P' Q R cx e ss1 ss2 v1.
     (v1 = BoolV T ∨ v1 = BoolV F) ∧
     (⟦cx⟧ ⦃P⦄ e ⇓ Value v1 ⦃P'⦄) ∧
-    (⟦cx⟧ ⦃λst. P' (st with scopes := TL st.scopes) ∧ v1 = BoolV T⦄ ss1
+    (⟦cx⟧ ⦃λst.
+            st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧
+            P' (st with scopes := TL st.scopes) ∧
+            v1 = BoolV T⦄
+          ss1
           ⦃λst. Q (st with scopes := TL st.scopes) ∥
             λv st. R v (st with scopes := TL st.scopes)⦄) ∧
-    (⟦cx⟧ ⦃λst. P' (st with scopes := TL st.scopes) ∧ v1 = BoolV F⦄ ss2
+    (⟦cx⟧ ⦃λst.
+            st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧
+            P' (st with scopes := TL st.scopes) ∧
+            v1 = BoolV F⦄
+          ss2
           ⦃λst. Q (st with scopes := TL st.scopes) ∥
             λv st. R v (st with scopes := TL st.scopes)⦄) ⇒
           ⟦cx⟧ ⦃P⦄ [If e ss1 ss2] ⦃Q ∥ R⦄
