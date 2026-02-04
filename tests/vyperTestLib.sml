@@ -232,8 +232,6 @@ val unsupported_patterns = unsupported_code @ [
   "raw_revert(",
   "selfdestruct",
   "msg.mana", "msg.gas",
-  "exports",
-  "import ",
   "create_minimal_proxy_to(",
   "create_copy_of(",
   "gas=",
