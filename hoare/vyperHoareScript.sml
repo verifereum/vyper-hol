@@ -23,7 +23,7 @@ Definition expr_spec_def:
     !st. P st ==>
       case eval_expr cx e st of
       | (INL tv', st') =>
-             if tv' = tv then Q st' else F
+             tv' = tv ∧ Q st'
       | (INR _, st') => F (* ignore exceptions in expressions for now *)
 End
 
@@ -161,11 +161,8 @@ Theorem expr_spec_scoped_var:
   ∀P cx n v. ⟦cx⟧ ⦃λst. P st ∧ valid_lookups cx st ∧ lookup_scoped_var st n = SOME v⦄ (Name n) ⇓ Value v ⦃λst. P st ∧ valid_lookups cx st ∧ lookup_scoped_var st n = SOME v⦄
 Proof
   rw[expr_spec_def] >>
-  (subgoal ‘lookup_name cx st n = SOME v’ >- gvs[lookup_scoped_var_implies_lookup_name]) >>
-  fs[lookup_name_def] >> rpt strip_tac >>
-  Cases_on `eval_expr cx (Name n) st` >>
-  Cases_on `q` >> gvs[] >>
-  Cases_on `x` >> gvs[] >>
+  `lookup_name cx st n = SOME v` by metis_tac[lookup_scoped_var_implies_lookup_name] >>
+  gvs[lookup_name_def, AllCaseEqs()] >>
   drule eval_expr_Name_preserves_state >> simp[]
 QED
 
