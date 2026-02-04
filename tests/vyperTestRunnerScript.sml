@@ -110,7 +110,7 @@ Datatype:
 End
 
 Definition compute_vyper_args_def:
-  compute_vyper_args ts vis name argTys cd = let
+  compute_vyper_args all_mods ts vis name argTys cd = let
     abiTupTy = Tuple argTys;
     vyTysRet = case lookup_function name vis ts
                 of SOME (_,args,ret,_) => (MAP SND args, ret)
@@ -121,7 +121,8 @@ Definition compute_vyper_args_def:
     then let
       abiArgsTup = dec abiTupTy cd;
       vyTys = FST vyTysRet;
-      tenv = type_env ts;
+      (* Use combined type env from all modules so cross-module types work *)
+      tenv = type_env_all_modules all_mods;
       vyArgsTup = abi_to_vyper tenv (TupleT vyTys) abiArgsTup;
       vyArgs = (case OPTION_BIND vyArgsTup extract_elements
                   of NONE => [] | SOME ls => ls)
@@ -133,10 +134,11 @@ End
 Definition run_deployment_def:
   run_deployment am dt = let
     sns = compute_selector_names dt.contractAbi;
-    ts = case ALOOKUP dt.sourceAst NONE of SOME ts => ts | NONE => [];
+    all_mods = dt.sourceAst;
+    ts = case ALOOKUP all_mods NONE of SOME ts => ts | NONE => [];
     name = find_deploy_function_name ts;
     argTys = find_args_by_name name dt.contractAbi;
-    ar = compute_vyper_args ts Deploy name argTys dt.callData;
+    ar = compute_vyper_args all_mods ts Deploy name argTys dt.callData;
     res = case FST ar of NONE => INR (Error "run_deployment args")
           | SOME (args, _) => let
     tx = <| sender := dt.deployer
@@ -163,10 +165,11 @@ Definition run_call_def:
     fna = case ALOOKUP sns sel of SOME fna => fna
              | NONE => ("__default__", [], []);
     name = FST fna; argTys = FST (SND fna);
-    ts = case ALOOKUP am.sources ct.target of
-           SOME mods => (case ALOOKUP mods NONE of SOME ts => ts | _ => [])
-         | _ => [];
-    ar = compute_vyper_args ts External name argTys (DROP 4 ct.callData);
+    all_mods = case ALOOKUP am.sources ct.target of
+                 SOME mods => mods
+               | _ => [];
+    ts = case ALOOKUP all_mods NONE of SOME ts => ts | _ => [];
+    ar = compute_vyper_args all_mods ts External name argTys (DROP 4 ct.callData);
     retTys = SND (SND fna);
   in
     case FST ar of NONE => ((INR (Error "run_call args"), am),

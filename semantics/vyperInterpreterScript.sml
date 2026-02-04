@@ -1104,6 +1104,16 @@ End
 
 val () = cv_auto_trans type_env_def;
 
+(* Build combined type_env from all modules for a contract.
+   This is needed because a function in one module can return a type from another. *)
+Definition type_env_all_modules_def:
+  type_env_all_modules [] = FEMPTY ∧
+  type_env_all_modules ((src_id, ts) :: rest) =
+    FUNION (type_env ts) (type_env_all_modules rest)
+End
+
+val () = cv_auto_trans type_env_all_modules_def;
+
 (* Build var_layout from storage_layout and toplevels.
    For each storage variable or hashmap, record its slot number. *)
 Definition get_matching_var_id_def:
@@ -2928,9 +2938,12 @@ Definition evaluate_def:
     check (LENGTH args = LENGTH es) "IntCall args length"; (* TODO: needed? *)
     vs <- eval_exprs cx es;
     tenv <<- type_env ts;
+    (* Use combined type env for return type (may reference types from other modules) *)
+    all_mods <<- (case ALOOKUP cx.sources cx.txn.target of SOME m => m | NONE => []);
+    all_tenv <<- type_env_all_modules all_mods;
     env <- lift_option (bind_arguments tenv args vs) "IntCall bind_arguments";
     prev <- get_scopes;
-    rtv <- lift_option (evaluate_type tenv ret) "IntCall eval ret";
+    rtv <- lift_option (evaluate_type all_tenv ret) "IntCall eval ret";
     cxf <- push_function (src_id_opt, fn) env cx;
     rv <- finally
       (try (do eval_stmts cxf body; return NoneV od) handle_function)
@@ -3133,8 +3146,11 @@ val () = send_call_value_def
   |> cv_auto_trans;
 
 Definition call_external_function_def:
-  call_external_function am cx mut ts args vals body ret =
+  call_external_function am cx mut ts all_mods args vals body ret =
   let tenv = type_env ts in
+  (* Use combined type_env from all modules for return type evaluation,
+     since return types can reference types from imported modules *)
+  let all_tenv = type_env_all_modules all_mods in
   case bind_arguments tenv args vals
   of NONE => (INR $ Error "call bind_arguments", am)
    | SOME env =>
@@ -3151,7 +3167,7 @@ Definition call_external_function_def:
        | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs exps layouts st)
        | (INR (ReturnException v), st) =>
            (let am = abstract_machine_from_state srcs exps layouts st in
-            case evaluate_type tenv ret
+            case evaluate_type all_tenv ret
             of NONE => (INR (Error "eval ret"), am)
              | SOME tv =>
             case safe_cast tv v
@@ -3182,16 +3198,33 @@ Definition lookup_exported_function_def:
               | NONE => NONE))
 End
 
+(* Find which module a function is in (for exported functions) *)
+Definition find_function_module_def:
+  find_function_module cx am func_name =
+    case ALOOKUP am.exports cx.txn.target of
+      NONE => NONE  (* Use main module *)
+    | SOME export_map =>
+        ALOOKUP export_map func_name  (* Returns SOME src_id if exported *)
+End
+
 Definition call_external_def:
   call_external am tx =
   let cx = initial_evaluation_context am.sources am.layouts tx in
-  case get_self_code cx
+  (* Get all modules for this contract (needed for combined type_env) *)
+  case ALOOKUP am.sources tx.target of
+    NONE => (INR $ Error "call get sources", am)
+  | SOME all_mods =>
+  (* Determine which module to use for type environment *)
+  let src_id_opt = find_function_module cx am tx.function_name in
+  case (case src_id_opt of
+          NONE => get_self_code cx
+        | SOME src_id => get_module_code cx (SOME src_id))
   of NONE => (INR $ Error "call get_self_code", am)
    | SOME ts =>
   case lookup_exported_function cx am tx.function_name
   of NONE => (INR $ Error "call lookup_function", am)
    | SOME (mut, args, ret, body) =>
-       call_external_function am cx mut ts args tx.args body ret
+       call_external_function am cx mut ts all_mods args tx.args body ret
 End
 
 Definition load_contract_def:
@@ -3206,7 +3239,7 @@ Definition load_contract_def:
      | NONE => INR $ Error "no constructor"
      | SOME (mut, args, ret, body) =>
        let cx = initial_evaluation_context ((addr,mods)::am.sources) am.layouts tx in
-       case call_external_function am cx mut ts args tx.args body ret
+       case call_external_function am cx mut ts mods args tx.args body ret
          of (INR e, _) => INR e
        (* TODO: update balances on return *)
           | (_, am) => INL (am with sources updated_by CONS (addr, mods))
