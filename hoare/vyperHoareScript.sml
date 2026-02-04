@@ -141,6 +141,17 @@ Proof
   Cases_on `q` >> gvs[]
 QED
 
+Theorem expr_spec_exists:
+  ∀P Q cx e v.
+    (∀x. ⟦cx⟧ ⦃P x⦄ e ⇓ v ⦃Q x⦄) ⇒
+    ⟦cx⟧ ⦃λst. ∃x. P x st⦄ e ⇓ v ⦃λst. ∃x. Q x st⦄
+Proof
+  rw[expr_spec_def] >>
+  first_x_assum (qspecl_then [`x`, `st`] mp_tac) >> simp[] >>
+  Cases_on `eval_expr cx e st` >> Cases_on `q` >> simp[] >>
+  metis_tac[]
+QED
+
 Theorem expr_spec_literal:
   ∀P P' cx l. ⟦cx⟧ ⦃P⦄ (Literal l) ⇓ Value (evaluate_literal l) ⦃P⦄
 Proof
@@ -262,6 +273,14 @@ Proof
   Cases_on `q` >> gvs[]
 QED
 
+Theorem target_spec_exists:
+  ∀P Q cx tgt av.
+    (∀x. ⟦cx⟧ ⦃P x⦄ tgt ⇓ᵗ av ⦃Q x⦄) ⇒
+    ⟦cx⟧ ⦃λst. ∃x. P x st⦄ tgt ⇓ᵗ av ⦃λst. ∃x. Q x st⦄
+Proof
+  cheat
+QED
+
 Theorem target_spec_name:
   ∀P cx n av.
      ⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ (BaseTarget (NameTarget n)) ⇓ᵗ av ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄
@@ -340,6 +359,14 @@ Proof
   Cases_on `eval_stmts cx ss st` >>
   Cases_on `q` >> gvs[] >>
   Cases_on `y` >> gvs[]
+QED
+
+Theorem stmts_spec_exists:
+  ∀P Q R cx ss.
+    (∀x . ⟦cx⟧ ⦃P x⦄ ss ⦃Q x ∥ R x⦄) ⇒
+    ⟦cx⟧ ⦃λst. ∃x. P x st⦄ ss ⦃λst. ∃x. Q x st ∥ λv st. ∃x. R x v st⦄
+Proof
+  cheat
 QED
 
 Theorem stmts_spec_nil:
