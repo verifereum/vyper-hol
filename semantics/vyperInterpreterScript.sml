@@ -3030,13 +3030,7 @@ Definition initial_immutables_def:
    let key = string_to_num id in
    let iv = force_default_value env typ in
      update_immutable NONE key iv imms) ∧
-  (* TODO: prevent flag value being updated even in constructor *)
-  initial_immutables env (FlagDecl id ls :: ts) =
-  (let imms = initial_immutables env ts in
-   let key = string_to_num id in
-   let iv = flag_value (LENGTH ls) 1 [] ls in
-     update_immutable NONE key iv imms) ∧
-  (* TODO: handle Constants? or ignore since assuming folded into AST *)
+  (* Flags are accessed via FlagMember and lookup_flag_mem, not immutables *)
   (* HashMaps are not stored in immutables - they're constructed on-the-fly in lookup_global *)
   initial_immutables env (t :: ts) = initial_immutables env ts
 End

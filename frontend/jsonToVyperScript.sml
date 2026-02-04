@@ -423,12 +423,44 @@ val () = cv_auto_trans make_builtin_call_def;
 (* Extract function name from a func expression *)
 (* For JE_Attribute base fname, returns fname *)
 Definition extract_func_name_def:
-  (extract_func_name (JE_Attribute _ fname) = fname) /\
+  (extract_func_name (JE_Attribute _ fname _ _) = fname) /\
   (extract_func_name (JE_Name name _ _) = name) /\
   (extract_func_name _ = "")
 End
 
 val () = cv_auto_trans extract_func_name_def;
+
+(* Extract the innermost module's source_id from a module chain *)
+(* For lib1: returns SOME 0 (from JE_Name) *)
+(* For lib1.lib2: returns SOME 1 (from the .lib2 Attribute) *)
+Definition extract_innermost_module_src_def:
+  (* Attribute with module typeclass has source_id directly *)
+  (extract_innermost_module_src (JE_Attribute _ _ (SOME tc) src_id_opt) =
+    if tc = "module" then src_id_opt else NONE) /\
+  (* JE_Name with module typeclass *)
+  (extract_innermost_module_src (JE_Name _ (SOME tc) src_id_opt) =
+    if tc = "module" then src_id_opt else NONE) /\
+  (* Other cases *)
+  (extract_innermost_module_src _ = NONE)
+End
+
+val () = cv_auto_trans extract_innermost_module_src_def;
+
+(* Detect cross-module flag member pattern: lib1.Action.BUY or lib1.lib2.Roles3.NOBODY *)
+(* Returns SOME (src_id_opt, flag_name) if it matches, NONE otherwise *)
+(* e is the expression immediately under the flag member attribute (i.e., the flag type expression) *)
+(* For lib1.Roles.ADMIN: e = JE_Attribute (JE_Name "lib1"...) "Roles" _ _ *)
+(* For lib1.lib2.Roles3.NOBODY: e = JE_Attribute (JE_Attribute ... "lib2" (SOME "module") (SOME 1)) "Roles3" _ _ *)
+Definition extract_module_flag_def:
+  (* Attribute expression for the flag type - look inside for the module *)
+  (extract_module_flag (JE_Attribute inner flag_name _ _) =
+    case extract_innermost_module_src inner of
+    | SOME src_id => SOME (SOME src_id, flag_name)
+    | NONE => NONE) /\
+  (extract_module_flag _ = NONE)
+End
+
+val () = cv_auto_trans extract_module_flag_def;
 
 (* ===== Expression Translation ===== *)
 
@@ -454,9 +486,11 @@ Definition translate_expr_def:
   (translate_expr (JE_Name id tc src_id_opt) =
     if id = "self" then Builtin (Env SelfAddr) [] else Name id) /\
 
-  (* Special attributes: msg.*, block.*, tx.*, self.*, module.* *)
-  (translate_expr (JE_Attribute (JE_Name obj tc src_id_opt) attr) =
-    if obj = "msg" /\ attr = "sender" then Builtin (Env Sender) []
+  (* Special attributes: msg.*, block.*, tx.*, self.*, module.*, flag members *)
+  (translate_expr (JE_Attribute (JE_Name obj tc src_id_opt) attr result_tc _) =
+    (* Same-module flag member: Action.BUY where tc = SOME "flag" *)
+    if tc = SOME "flag" /\ result_tc = SOME "flag" then FlagMember (src_id_opt, obj) attr
+    else if obj = "msg" /\ attr = "sender" then Builtin (Env Sender) []
     else if obj = "msg" /\ attr = "value" then Builtin (Env ValueSent) []
     else if obj = "block" /\ attr = "timestamp" then Builtin (Env TimeStamp) []
     else if obj = "block" /\ attr = "number" then Builtin (Env BlockNumber) []
@@ -472,9 +506,14 @@ Definition translate_expr_def:
     else if attr = "address" then Builtin (Acc Address) [Name obj]
     else Attribute (Name obj) attr) /\
 
-  (* General attribute *)
-  (translate_expr (JE_Attribute e attr) =
-    if attr = "balance" then Builtin (Acc Balance) [translate_expr e]
+  (* General attribute - handles nested and simple cases *)
+  (* Check for cross-module flag access: lib1.Action.BUY *)
+  (translate_expr (JE_Attribute e attr result_tc _) =
+    if result_tc = SOME "flag" then
+      case extract_module_flag e of
+      | SOME (src_id_opt, flag_name) => FlagMember (src_id_opt, flag_name) attr
+      | NONE => Attribute (translate_expr e) attr
+    else if attr = "balance" then Builtin (Acc Balance) [translate_expr e]
     else if attr = "address" then Builtin (Acc Address) [translate_expr e]
     else Attribute (translate_expr e) attr) /\
 
@@ -526,19 +565,19 @@ Definition translate_expr_def:
     case func of
     | JE_Name name (SOME "interface") _ => HD args'
     | JE_Name name _ _ => make_builtin_call name args' kwargs' ret_ty
-    | JE_Attribute base "pop" =>
+    | JE_Attribute base "pop" _ _ =>
         (case base of
          | JE_Name id _ _ => Pop (NameTarget id)
-         | JE_Attribute (JE_Name "self" _ _) attr => Pop (TopLevelNameTarget (NONE, attr))
-         | JE_Attribute (JE_Name id (SOME "module") src_id_opt) attr =>
+         | JE_Attribute (JE_Name "self" _ _) attr _ _ => Pop (TopLevelNameTarget (NONE, attr))
+         | JE_Attribute (JE_Name id (SOME "module") src_id_opt) attr _ _ =>
              Pop (TopLevelNameTarget (src_id_opt, attr))
-         | JE_Attribute (JE_Name id _ _) attr =>
+         | JE_Attribute (JE_Name id _ _) attr _ _ =>
              Pop (AttributeTarget (NameTarget id) attr)
          | JE_Subscript (JE_Name id _ _) idx =>
              Pop (SubscriptTarget (NameTarget id) (translate_expr idx))
          | _ => Call (IntCall (NONE, "pop")) args')
     (* self.func(args) - internal call *)
-    | JE_Attribute (JE_Name "self" _ _) fname => Call (IntCall (NONE, fname)) args'
+    | JE_Attribute (JE_Name "self" _ _) fname _ _ => Call (IntCall (NONE, fname)) args'
     (* Module call: use source_id from type_decl_node *)
     | _ => (case src_id_opt of
               SOME src_id => Call (IntCall (SOME src_id, extract_func_name func)) args'

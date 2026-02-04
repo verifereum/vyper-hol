@@ -76,7 +76,7 @@ Datatype:
 
   (* Variables and access *)
   | JE_Name string (string option) (num option)        (* id, typeclass, source_id for modules *)
-  | JE_Attribute json_expr string                      (* value, attr *)
+  | JE_Attribute json_expr string (string option) (num option)  (* value, attr, result_typeclass, source_id *)
   | JE_Subscript json_expr json_expr                   (* value, slice *)
 
   (* Operators *)

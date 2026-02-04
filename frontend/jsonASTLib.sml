@@ -155,7 +155,10 @@ fun mk_JE_Name (s, tc_opt, src_id_opt) =
   list_mk_comb(JE_Name_tm, [fromMLstring s,
                            lift_option (mk_option string_ty) fromMLstring tc_opt,
                            src_id_opt])
-fun mk_JE_Attribute (e, attr) = list_mk_comb(JE_Attribute_tm, [e, fromMLstring attr])
+fun mk_JE_Attribute (e, attr, tc_opt, src_id_opt) =
+  list_mk_comb(JE_Attribute_tm, [e, fromMLstring attr,
+                                 lift_option (mk_option string_ty) fromMLstring tc_opt,
+                                 src_id_opt])
 fun mk_JE_Subscript (e1, e2) = list_mk_comb(JE_Subscript_tm, [e1, e2])
 fun mk_JE_BinOp (l, op_tm, r) = list_mk_comb(JE_BinOp_tm, [l, op_tm, r])
 fun mk_JE_BoolOp (op_tm, es) = list_mk_comb(JE_BoolOp_tm, [op_tm, mk_list(es, json_expr_ty)])
@@ -333,13 +336,20 @@ fun achoose err ls = orElse(choose ls, fail err)
 
 (* Convert ML int to HOL num term *)
 fun mk_num_from_int n = numSyntax.mk_numeral (Arbnum.fromInt n)
+fun mk_num_from_largeint n = numSyntax.mk_numeral (Arbnum.fromLargeInt (IntInf.toLarge n))
 
-val numtm : term decoder =
-  JSONDecode.map (numSyntax.mk_numeral o Arbnum.fromLargeInt o IntInf.toLarge) intInf
+val numtm : term decoder = JSONDecode.map mk_num_from_largeint intInf
 
 (* Convert ML int to HOL int term *)
 val inttm : term decoder =
   JSONDecode.map (intSyntax.term_of_int o Arbint.fromLargeInt) intInf
+
+(* Decode source_id: negative means NONE, non-negative means SOME n *)
+val source_id_opt_tm : term decoder =
+  JSONDecode.map (fn n =>
+    if n < 0 then optionSyntax.mk_none numSyntax.num
+    else optionSyntax.mk_some (mk_num_from_largeint n))
+  intInf
 
 val stringtm : term decoder = JSONDecode.map fromMLstring string
 val booltm : bool decoder = bool
@@ -593,16 +603,16 @@ fun d_json_expr () : term decoder = achoose "expr" [
     tuple2 (field "id" string,
             tuple2 (try (orElse (field "type" $ field "typeclass" string,
                                 field "type" $ field "type_t" $ field "typeclass" string)),
-                    orElse (JSONDecode.map (fn n =>
-                              if n < 0 then optionSyntax.mk_none numSyntax.num
-                              else optionSyntax.mk_some (numSyntax.mk_numeral (Arbnum.fromLargeInt (IntInf.toLarge n))))
-                              (field "type" $ field "type_decl_node" $ field "source_id" intInf),
+                    orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_opt_tm,
                             succeed (optionSyntax.mk_none numSyntax.num)))),
 
-  (* Attribute *)
+  (* Attribute - extract result typeclass and source_id for flag/module member detection *)
   check_ast_type "Attribute" $
-    JSONDecode.map (fn (e, attr) => mk_JE_Attribute(e, attr)) $
-    tuple2 (field "value" (delay d_json_expr), field "attr" string),
+    JSONDecode.map (fn (((e, attr), tc_opt), src_id_opt) => mk_JE_Attribute(e, attr, tc_opt, src_id_opt)) $
+    tuple2 (tuple2 (tuple2 (field "value" (delay d_json_expr), field "attr" string),
+                    try (field "type" $ field "typeclass" string)),
+            orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_opt_tm,
+                    succeed (optionSyntax.mk_none numSyntax.num))),
 
   (* Subscript *)
   check_ast_type "Subscript" $
@@ -673,10 +683,7 @@ fun d_json_expr () : term decoder = achoose "expr" [
                     field "args" (array (delay d_json_expr)),
                     orElse(field "keywords" (array (delay d_json_keyword)), succeed [])),
             tuple2 (field "type" json_type,
-                    orElse (JSONDecode.map (fn n =>
-                              if n < 0 then optionSyntax.mk_none numSyntax.num
-                              else optionSyntax.mk_some (numSyntax.mk_numeral (Arbnum.fromLargeInt (IntInf.toLarge n))))
-                              (field "func" $ field "type" $ field "type_decl_node" $ field "source_id" intInf),
+                    orElse (field "func" $ field "type" $ field "type_decl_node" $ field "source_id" source_id_opt_tm,
                             succeed (optionSyntax.mk_none numSyntax.num)))),
 
   (* ExtCall - wraps a Call node; func is Attribute with target and method name *)
@@ -825,10 +832,7 @@ fun d_json_stmt () : term decoder = achoose "stmt" [
     JSONDecode.map (fn ((name, src_id_opt), args) => mk_JS_Log(mk_nsid(src_id_opt, name), args)) $
     tuple2 (field "func" $ check_ast_type "Name" $
               tuple2 (field "id" string,
-                      orElse (JSONDecode.map (fn n =>
-                                if n < 0 then optionSyntax.mk_none numSyntax.num
-                                else optionSyntax.mk_some (numSyntax.mk_numeral (Arbnum.fromLargeInt (IntInf.toLarge n))))
-                                (field "type" $ field "type_decl_node" $ field "source_id" intInf),
+                      orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_opt_tm,
                               succeed (optionSyntax.mk_none numSyntax.num))),
             achoose "log args" [
               field "keywords" (array (field "value" json_expr)),
