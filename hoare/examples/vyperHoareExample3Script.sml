@@ -275,25 +275,38 @@ Proof
      simp[] >>
      conj_tac >- (
        rpt strip_tac >-
-       (irule scopes_nonempty_preserved_after_update_in_tl_scopes >>
-        gvs[lookup_in_current_scope_hd, var_in_tl_scopes] >>
-        irule lookup_scoped_var_implies_var_in_scope >>
-        gvs[lookup_in_tl_scopes, lookup_in_current_scope_hd]) >-
+       (`(tl_scopes (update_scoped_var st "x" (IntV (Unsigned 256) (xarg + 20)))).scopes ≠ []` by
+          (irule scopes_nonempty_preserved_after_update_in_tl_scopes >>
+           gvs[lookup_in_current_scope_hd] >>
+           `lookup_in_current_scope st "x" = NONE` by gvs[lookup_in_current_scope_hd] >>
+           gvs[var_in_tl_scopes] >>
+           irule lookup_scoped_var_implies_var_in_scope >>
+           gvs[lookup_in_tl_scopes]) >>
+        gvs[]) >-
        (irule valid_lookups_preserved_after_update_in_tl_scopes >>
-        gvs[lookup_in_current_scope_hd, var_in_tl_scopes] >>
+        gvs[lookup_in_current_scope_hd] >>
+        `lookup_in_current_scope st "x" = NONE` by gvs[lookup_in_current_scope_hd] >>
+        gvs[var_in_tl_scopes] >>
         irule lookup_scoped_var_implies_var_in_scope >>
-        gvs[lookup_in_tl_scopes, lookup_in_current_scope_hd]) >-
+        gvs[lookup_in_tl_scopes]) >-
        (`HD (update_scoped_var st "x" (IntV (Unsigned 256) (xarg + 20))).scopes = HD st.scopes` by
           (irule hd_scopes_preserved_after_update_in_tl_scopes >>
-           gvs[lookup_in_current_scope_hd, var_in_tl_scopes] >>
+           gvs[lookup_in_current_scope_hd] >>
+           `lookup_in_current_scope st "x" = NONE` by gvs[lookup_in_current_scope_hd] >>
+           gvs[var_in_tl_scopes] >>
            irule lookup_scoped_var_implies_var_in_scope >>
-           gvs[lookup_in_tl_scopes, lookup_in_current_scope_hd]) >>
+           gvs[lookup_in_tl_scopes]) >>
         gvs[]) >-
        simp[lookup_after_update] >>
-       irule lookup_name_preserved_after_update_in_tl_scopes >>
-       gvs[lookup_in_current_scope_hd, var_in_tl_scopes] >>
-       irule lookup_scoped_var_implies_var_in_scope >>
-       gvs[lookup_in_tl_scopes, lookup_in_current_scope_hd]) >>
+       `lookup_name cx (tl_scopes (update_scoped_var st "x" (IntV (Unsigned 256) (xarg + 20)))) "y" =
+        lookup_name cx (tl_scopes st) "y"` by
+         (irule lookup_name_preserved_after_update_in_tl_scopes >>
+          gvs[lookup_in_current_scope_hd] >>
+          `lookup_in_current_scope st "x" = NONE` by gvs[lookup_in_current_scope_hd] >>
+          gvs[var_in_tl_scopes] >>
+          irule lookup_scoped_var_implies_var_in_scope >>
+          gvs[lookup_in_tl_scopes]) >>
+       gvs[]) >>
      ACCEPT_TAC (SIMP_RULE std_ss [EVAL ``evaluate_literal (IntL (Unsigned 256) 10)``]
        (ISPECL [``λst:evaluation_state. st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧
                    (tl_scopes st).scopes ≠ [] ∧
@@ -369,21 +382,34 @@ Proof
    simp[] >>
    conj_tac >- (
      rpt strip_tac >-
-     (irule scopes_nonempty_preserved_after_update_in_tl_scopes >>
-      gvs[lookup_in_current_scope_hd, var_in_tl_scopes] >>
-      metis_tac[lookup_scoped_var_implies_var_in_scope]) >-
+     (`(tl_scopes (update_scoped_var st "x" (IntV (Unsigned 256) 100))).scopes ≠ []` by
+        (irule scopes_nonempty_preserved_after_update_in_tl_scopes >>
+         gvs[lookup_in_current_scope_hd] >>
+         `lookup_in_current_scope st "x" = NONE` by gvs[lookup_in_current_scope_hd] >>
+         gvs[var_in_tl_scopes] >>
+         metis_tac[lookup_scoped_var_implies_var_in_scope, lookup_in_tl_scopes]) >>
+      gvs[]) >-
      (irule valid_lookups_preserved_after_update_in_tl_scopes >>
-      gvs[lookup_in_current_scope_hd, var_in_tl_scopes] >>
-      metis_tac[lookup_scoped_var_implies_var_in_scope]) >-
+      gvs[lookup_in_current_scope_hd] >>
+      `lookup_in_current_scope st "x" = NONE` by gvs[lookup_in_current_scope_hd] >>
+      gvs[var_in_tl_scopes] >>
+      metis_tac[lookup_scoped_var_implies_var_in_scope, lookup_in_tl_scopes]) >-
      (`HD (update_scoped_var st "x" (IntV (Unsigned 256) 100)).scopes = HD st.scopes` by
         (irule hd_scopes_preserved_after_update_in_tl_scopes >>
-         gvs[lookup_in_current_scope_hd, var_in_tl_scopes] >>
-         metis_tac[lookup_scoped_var_implies_var_in_scope]) >>
+         gvs[lookup_in_current_scope_hd] >>
+         `lookup_in_current_scope st "x" = NONE` by gvs[lookup_in_current_scope_hd] >>
+         gvs[var_in_tl_scopes] >>
+         metis_tac[lookup_scoped_var_implies_var_in_scope, lookup_in_tl_scopes]) >>
       gvs[]) >-
      simp[lookup_after_update] >>
-     irule lookup_name_preserved_after_update_in_tl_scopes >>
-     gvs[lookup_in_current_scope_hd, var_in_tl_scopes] >>
-     metis_tac[lookup_scoped_var_implies_var_in_scope]) >>
+     `lookup_name cx (tl_scopes (update_scoped_var st "x" (IntV (Unsigned 256) 100))) "y" =
+      lookup_name cx (tl_scopes st) "y"` by
+       (irule lookup_name_preserved_after_update_in_tl_scopes >>
+        gvs[lookup_in_current_scope_hd] >>
+        `lookup_in_current_scope st "x" = NONE` by gvs[lookup_in_current_scope_hd] >>
+        gvs[var_in_tl_scopes] >>
+        metis_tac[lookup_scoped_var_implies_var_in_scope, lookup_in_tl_scopes]) >>
+     gvs[]) >>
    ACCEPT_TAC (SIMP_RULE std_ss [EVAL ``evaluate_literal (IntL (Unsigned 256) 100)``]
      (ISPECL [``λst:evaluation_state. (st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧
                  (tl_scopes st).scopes ≠ [] ∧
@@ -393,21 +419,20 @@ Proof
                  xarg + 10 > 100) ∧ var_in_scope st "x"``,
               ``ARB:'a``, ``cx:evaluation_context``,
               ``IntL (Unsigned 256) 100``] expr_spec_literal))) >>
-  (* Statements 4-6: 
+  (* Statements 4-6:
      Statement 4: if x > 20 then return x else []
      Statement 5: y := x + 20
      Statement 6: return y
-     
+
      CHALLENGE: The precondition after statement 3 has an existential:
        ∃x. lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) x) ∧ 20 ≤ x ∧ x ≤ 110
-     
+
      stmts_spec_if requires a fixed condition value v1, but x > 20 depends on the unknown x.
-     
+
      Possible solutions:
      1. Add a new Hoare rule for if-statements with existential preconditions
-     2. Use semantic reasoning (unfold stmts_spec_def) 
-     3. Refactor to avoid existential in intermediate postcondition
-     
+     2. Refactor to avoid existential in intermediate postcondition
+
      For now, we use cheat to mark this as TODO.
   *)
   cheat
