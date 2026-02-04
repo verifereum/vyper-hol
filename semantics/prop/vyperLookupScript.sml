@@ -265,7 +265,19 @@ Theorem lookup_scoped_var_implies_lookup_name:
 Proof
   simp[valid_lookups_def, lookup_scoped_var_def, var_in_scope_def] >>
   rpt strip_tac >>
-  gvs[lookup_scopes_to_lookup_name, lookup_scopes_find_containing]
+  gvs[lookup_scopes_to_lookup_name]
+QED
+
+Theorem var_in_scope_implies_some_lookup_name:
+  ∀cx st n.
+    valid_lookups cx st ∧
+    var_in_scope st n ⇒
+    IS_SOME (lookup_name cx st n)
+Proof
+  rw[valid_lookups_def, lookup_scoped_var_def, var_in_scope_def] >>
+  Cases_on `lookup_scopes (string_to_num n) st.scopes` >> gvs[] >>
+  first_x_assum (qspec_then `n` mp_tac) >> simp[] >>
+  strip_tac >> drule lookup_scopes_to_lookup_name >> simp[]
 QED
 
 Theorem lookup_immutable_implies_lookup_name:
