@@ -1,6 +1,6 @@
 Theory jsonToVyper
 Ancestors
-  integer jsonAST vyperAST
+  integer alist jsonAST vyperAST
 Libs
   cv_transLib intLib
   integerTheory[qualified]
@@ -855,6 +855,122 @@ End
 
 (* val () = cv_auto_trans translate_toplevel_def; *)
 
+(* ===== Exports Extraction ===== *)
+
+(* Build alias -> source_id map from import info list *)
+Definition build_import_map_def:
+  build_import_map [] = [] ∧
+  build_import_map (JImportInfo alias src_id _ :: rest) =
+    (alias, src_id) :: build_import_map rest
+End
+
+val () = cv_auto_trans build_import_map_def;
+
+(* Extract import infos from a toplevel (returns list since JTL_Import has list) *)
+Definition get_import_infos_def:
+  get_import_infos (JTL_Import infos) = infos ∧
+  get_import_infos _ = []
+End
+
+val () = cv_auto_trans get_import_infos_def;
+
+(* Collect all import infos from toplevels *)
+Definition collect_imports_def:
+  collect_imports [] = [] ∧
+  collect_imports (t::ts) = get_import_infos t ++ collect_imports ts
+End
+
+val () = cv_auto_trans collect_imports_def;
+
+(* Check if a function decl is external *)
+Definition is_external_function_def:
+  is_external_function (JTL_FunctionDef _ decs _ _ _) = MEM "external" decs ∧
+  is_external_function _ = F
+End
+
+(* Get function name from a function decl *)
+Definition get_function_name_def:
+  get_function_name (JTL_FunctionDef name _ _ _ _) = SOME name ∧
+  get_function_name _ = NONE
+End
+
+(* Get all external function names from a module's toplevels *)
+Definition get_external_func_names_def:
+  get_external_func_names [] = [] ∧
+  get_external_func_names (t::ts) =
+    if is_external_function t then
+      case get_function_name t of
+        SOME name => name :: get_external_func_names ts
+      | NONE => get_external_func_names ts
+    else get_external_func_names ts
+End
+
+(* Find module body by source_id in imports list *)
+Definition find_module_body_def:
+  find_module_body src_id [] = [] ∧
+  find_module_body src_id (JImportedModule sid _ body :: rest) =
+    if src_id = sid then body else find_module_body src_id rest
+End
+
+(* Extract single export: given alias.func_name or alias.__interface__, return list of (func_name, source_id) *)
+(* import_map: alias -> source_id, imports: list of JImportedModule *)
+Definition extract_single_export_def:
+  (* lib.func pattern: JE_Attribute (JE_Name alias _ _) func_name _ _ *)
+  extract_single_export import_map imports (JE_Attribute (JE_Name alias _ _) func_name _ _) =
+    (case ALOOKUP import_map alias of
+       SOME src_id =>
+         if func_name = "__interface__" then
+           (* Export all external functions from that module *)
+           let body = find_module_body src_id imports in
+           let names = get_external_func_names body in
+           MAP (λname. (name, src_id)) names
+         else [(func_name, src_id)]
+     | NONE => []) ∧
+  (* Nested module: lib2.lib1.func - need to find innermost module's source_id *)
+  (* For now, just handle the simple case; nested modules are complex *)
+  extract_single_export _ _ _ = []
+End
+
+(* Extract exports from a tuple of export expressions *)
+Definition extract_tuple_exports_def:
+  extract_tuple_exports import_map imports [] = [] ∧
+  extract_tuple_exports import_map imports (e::es) =
+    extract_single_export import_map imports e ++ extract_tuple_exports import_map imports es
+End
+
+(* Extract exports from an ExportsDecl annotation *)
+Definition extract_export_annotation_def:
+  extract_export_annotation import_map imports (JE_Tuple exprs) =
+    extract_tuple_exports import_map imports exprs ∧
+  extract_export_annotation import_map imports (JE_Attribute base attr tc sid) =
+    extract_single_export import_map imports (JE_Attribute base attr tc sid) ∧
+  extract_export_annotation _ _ _ = []
+End
+
+(* Get export annotation from a toplevel if it's an ExportsDecl *)
+Definition get_export_annotation_def:
+  get_export_annotation (JTL_ExportsDecl ann) = SOME ann ∧
+  get_export_annotation _ = NONE
+End
+
+(* Extract all exports from main module toplevels *)
+Definition extract_exports_from_toplevels_def:
+  extract_exports_from_toplevels import_map imports [] = [] ∧
+  extract_exports_from_toplevels import_map imports (t::ts) =
+    (case get_export_annotation t of
+       SOME ann => extract_export_annotation import_map imports ann
+     | NONE => []) ++
+    extract_exports_from_toplevels import_map imports ts
+End
+
+(* Main function: extract exports from a json_module given imports *)
+Definition extract_exports_def:
+  extract_exports (JModule toplevels) imports =
+    let import_infos = collect_imports toplevels in
+    let import_map = build_import_map import_infos in
+    extract_exports_from_toplevels import_map imports toplevels
+End
+
 (* ===== Module Translation ===== *)
 
 Definition filter_some_def:
@@ -877,6 +993,7 @@ End
 
 Definition translate_annotated_ast_def:
   translate_annotated_ast (JAnnotatedAST main imports) =
-    (NONE, translate_module main) ::
-    MAP translate_imported_module imports
+    let sources = (NONE, translate_module main) :: MAP translate_imported_module imports in
+    let exports = extract_exports main imports in
+    (sources, exports)
 End

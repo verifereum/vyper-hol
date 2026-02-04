@@ -24,6 +24,7 @@ End
 Datatype:
   deployment_trace = <|
     sourceAst: (num option, toplevel list) alist
+  ; sourceExports: (string # num) list
   ; contractAbi: abi_entry list
   ; deployedAddress: address
   ; deployer: address
@@ -150,7 +151,7 @@ Definition run_deployment_def:
           ; blob_base_fee := dt.blobBaseFee
           ; gas_price := dt.gasPrice
           ; is_creation := T |>;
-    in load_contract am tx dt.sourceAst
+    in load_contract am tx dt.sourceAst dt.sourceExports
   in (sns, res)
 End
 

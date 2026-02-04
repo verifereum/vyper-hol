@@ -159,7 +159,7 @@ End
 
 Datatype:
   json_import_info
-  = JImportInfo string string string                   (* alias, path, qualified_module_name *)
+  = JImportInfo string num string                      (* alias, source_id, qualified_module_name *)
 End
 
 (* ===== Interface Function Signature ===== *)

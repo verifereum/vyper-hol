@@ -3061,6 +3061,7 @@ val () = cv_auto_trans initial_evaluation_context_def;
 Datatype:
   abstract_machine = <|
     sources: (address, (num option, toplevel list) alist) alist
+  ; exports: (address, (string, num) alist) alist  (* address -> (func_name -> source_id) *)
   ; immutables: (address, module_immutables) alist
   ; accounts: evm_accounts
   ; layouts: (address, storage_layout # storage_layout) alist  (* (storage, transient) *)
@@ -3071,6 +3072,7 @@ End
 Definition initial_machine_state_def:
   initial_machine_state : abstract_machine = <|
     sources := []
+  ; exports := []
   ; immutables := []
   ; accounts := empty_accounts
   ; layouts := []
@@ -3091,8 +3093,9 @@ End
 val () = cv_auto_trans initial_state_def;
 
 Definition abstract_machine_from_state_def:
-  abstract_machine_from_state srcs layouts (st: evaluation_state) =
+  abstract_machine_from_state srcs exps layouts (st: evaluation_state) =
   <| sources := srcs
+   ; exports := exps
    ; immutables := st.immutables
    ; accounts := st.accounts
    ; layouts := layouts
@@ -3140,21 +3143,43 @@ Definition call_external_function_def:
     | SOME cenv => (* TODO: how do we stop constants being assigned to? *)
    let st = initial_state am [env; cenv] in
    let srcs = am.sources in
+   let exps = am.exports in
    let layouts = am.layouts in
    let (res, st) =
      (case do send_call_value mut cx; eval_stmts cx body od st
       of
-       | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs layouts st)
+       | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs exps layouts st)
        | (INR (ReturnException v), st) =>
-           (let am = abstract_machine_from_state srcs layouts st in
+           (let am = abstract_machine_from_state srcs exps layouts st in
             case evaluate_type tenv ret
             of NONE => (INR (Error "eval ret"), am)
              | SOME tv =>
             case safe_cast tv v
             of NONE => (INR (Error "ext cast ret"), am)
              | SOME v => (INL v, am))
-       | (INR e, st) => (INR e, abstract_machine_from_state srcs layouts st)) in
+       | (INR e, st) => (INR e, abstract_machine_from_state srcs exps layouts st)) in
     (res, st (* transient storage cleared separately via ClearTransientStorage action *)))
+End
+
+(* Lookup function, checking exports first for external calls *)
+Definition lookup_exported_function_def:
+  lookup_exported_function cx am func_name =
+    (* First check if this function is exported from another module *)
+    case ALOOKUP am.exports cx.txn.target of
+      NONE => (* No exports for this contract, use main module *)
+        (case get_self_code cx of
+           SOME ts => lookup_function func_name External ts
+         | NONE => NONE)
+    | SOME export_map =>
+        (case ALOOKUP export_map func_name of
+           SOME src_id => (* Function is exported from module src_id *)
+             (case get_module_code cx (SOME src_id) of
+                SOME ts => lookup_function func_name External ts
+              | NONE => NONE)
+         | NONE => (* Not in exports, try main module *)
+             (case get_self_code cx of
+                SOME ts => lookup_function func_name External ts
+              | NONE => NONE))
 End
 
 Definition call_external_def:
@@ -3163,19 +3188,20 @@ Definition call_external_def:
   case get_self_code cx
   of NONE => (INR $ Error "call get_self_code", am)
    | SOME ts =>
-  case lookup_function tx.function_name External ts
+  case lookup_exported_function cx am tx.function_name
   of NONE => (INR $ Error "call lookup_function", am)
    | SOME (mut, args, ret, body) =>
        call_external_function am cx mut ts args tx.args body ret
 End
 
 Definition load_contract_def:
-  load_contract am tx mods =
+  load_contract am tx mods exps =
   let addr = tx.target in
   let ts = case ALOOKUP mods NONE of SOME ts => ts | NONE => [] in
   let tenv = type_env ts in
   let imms = initial_immutables tenv ts in
-  let am = am with immutables updated_by CONS (addr, imms) in
+  let am = am with <| immutables updated_by CONS (addr, imms);
+                      exports updated_by CONS (addr, exps) |> in
   case lookup_function tx.function_name Deploy ts of
      | NONE => INR $ Error "no constructor"
      | SOME (mut, args, ret, body) =>

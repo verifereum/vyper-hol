@@ -454,9 +454,11 @@ end
 
 val deployment : term decoder =
   check_trace_type "deployment" $
-  JSONDecode.map (fn ((((c,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e),bc),sl) =>
+  JSONDecode.map (fn ((((srcs_exps,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e),bc),sl) =>
+             let val (srcs, exps) = pairSyntax.dest_pair srcs_exps in
              TypeBase.mk_record (deployment_trace_ty, [
-               ("sourceAst", c),
+               ("sourceAst", srcs),
+               ("sourceExports", exps),
                ("contractAbi", mk_list(i, abi_entry_ty)),
                ("deployedAddress", a),
                ("deployer", s),
@@ -471,7 +473,7 @@ val deployment : term decoder =
                ("callData", d),
                ("runtimeBytecode", bc),
                ("storageLayout", sl)
-             ]))
+             ]) end)
           (tuple2 (tuple2 (tuple2 (tuple4 (toplevels_via_jsonast,
                            tuple3 (
                              field "contract_abi" (array abiEntry),

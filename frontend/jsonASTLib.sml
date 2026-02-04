@@ -301,9 +301,9 @@ fun mk_JInterfaceFunc (name, args, ret_ty, decorators) =
 fun mk_JTL_InterfaceDef (name, funcs) =
   list_mk_comb(JTL_InterfaceDef_tm,
     [fromMLstring name, mk_list(funcs, json_interface_func_ty)])
-fun mk_JImportInfo (alias, path, qual_name) =
+fun mk_JImportInfo (alias, src_id, qual_name) =
   list_mk_comb(JImportInfo_tm,
-    [fromMLstring alias, fromMLstring path, fromMLstring qual_name])
+    [fromMLstring alias, src_id, fromMLstring qual_name])
 fun mk_JTL_Import infos =
   mk_comb(JTL_Import_tm, mk_list(infos, json_import_info_ty))
 fun mk_JTL_ExportsDecl ann = mk_comb(JTL_ExportsDecl_tm, ann)
@@ -1021,7 +1021,7 @@ val json_toplevel : term decoder = achoose "toplevel" [
     field "import_infos" $ array $
       JSONDecode.map mk_JImportInfo $
       tuple3 (field "alias" string,
-              field "path" string,
+              field "source_id" numtm,
               field "qualified_module_name" string),
 
   (* ImportFrom - from X import Y statement *)
@@ -1030,7 +1030,7 @@ val json_toplevel : term decoder = achoose "toplevel" [
     field "import_infos" $ array $
       JSONDecode.map mk_JImportInfo $
       tuple3 (field "alias" string,
-              field "path" string,
+              field "source_id" numtm,
               field "qualified_module_name" string),
 
   (* ExportsDecl - exports declaration *)
