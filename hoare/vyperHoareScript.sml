@@ -364,6 +364,20 @@ Proof
   Cases_on `y` >> gvs[]
 QED
 
+Theorem stmts_spec_false_pre:
+  ∀Q R cx ss. ⟦cx⟧ ⦃λst. F⦄ ss ⦃Q ∥ R⦄
+Proof
+  rw[stmts_spec_def]
+QED
+
+Theorem stmts_spec_precond:
+  ∀P Q R cx ss cond.
+    (cond ⇒ ⟦cx⟧ ⦃P⦄ ss ⦃Q ∥ R⦄) ⇔
+    ⟦cx⟧ ⦃λst. cond ∧ P st⦄ ss ⦃Q ∥ R⦄
+Proof
+  rw[stmts_spec_def] >> metis_tac[]
+QED
+
 Theorem stmts_spec_exists:
   ∀P Q R cx ss.
     (∀x . ⟦cx⟧ ⦃P x⦄ ss ⦃Q x ∥ R x⦄) ⇒

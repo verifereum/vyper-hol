@@ -288,7 +288,8 @@ Proof
     conj_tac >- simp[] >> conj_tac >- (simp[] >> intLib.ARITH_TAC) >> conj_tac >- simp[] >>
     irule stmt4_lemma) >>
   irule stmts_spec_consequence >>
-  qexistsl_tac [`λst. F`, `λst. F`, `λv st. F`] >> simp[stmts_spec_def]
+  qexistsl_tac [`λst. F`, `λst. F`, `λv st. F`] >> simp[] >>
+  irule stmts_spec_false_pre
 QED
 
 (* Case 2: xval ≤ 20 - stmt4 doesn't return, proceeds to stmt5 and stmt6 *)
@@ -347,14 +348,47 @@ Theorem stmts_4_6_lemma:
     ⦃λst. F ∥ λv st. ∃n. v = IntV (Unsigned 256) n ∧ 20 < n ∧ n ≤ 110⦄
 Proof
   rpt strip_tac >>
-  Cases_on `xval > 20` >- (irule stmts_4_6_xval_gt_20_lemma >> simp[]) >>
-  (* ¬(xval > 20) case: extract bounds from precondition via stmts_spec_def *)
-  simp[stmts_spec_def] >> rpt strip_tac >>
-  `20 ≤ xval ∧ xval ≤ 110 ∧ ¬(xval > 20)` by simp[] >>
-  drule stmts_4_6_xval_le_20_lemma >> strip_tac >>
-  first_x_assum (qspec_then `cx` mp_tac) >> simp[] >>
-  simp[stmts_spec_def] >> strip_tac >>
-  first_x_assum (qspec_then `st` mp_tac) >> simp[]
+  (* Extract 20 ≤ xval ∧ xval ≤ 110 to meta-level using stmts_spec_precond *)
+  irule stmts_spec_consequence >>
+  qexistsl_tac [`λst. (20 ≤ xval ∧ xval ≤ 110) ∧
+                      st.scopes ≠ [] ∧ valid_lookups cx st ∧
+                      lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) xval) ∧
+                      lookup_name cx st "y" = NONE`,
+                `λst. F`,
+                `λv st. ∃n. v = IntV (Unsigned 256) n ∧ 20 < n ∧ n ≤ 110`] >> simp[] >>
+  MATCH_MP_TAC (iffLR (BETA_RULE (ISPECL [
+    ``λst:evaluation_state. st.scopes ≠ [] ∧ valid_lookups (cx:evaluation_context) st ∧
+                            lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xval:int)) ∧
+                            lookup_name cx st "y" = NONE``,
+    ``λst:evaluation_state. F``,
+    ``λ(v:value) (st:evaluation_state). ∃n. v = IntV (Unsigned 256) n ∧ 20 < n ∧ n ≤ 110``,
+    ``cx:evaluation_context``,
+    ``[If (Builtin (Bop Gt) [Name "x"; Literal (IntL (Unsigned 256) 20)])
+         [Return (SOME (Name "x"))] [];
+       AnnAssign "y" (BaseT (UintT 256))
+         (Builtin (Bop Add) [Name "x"; Literal (IntL (Unsigned 256) 20)]);
+       Return (SOME (Name "y"))]``,
+    ``(20:int) ≤ (xval:int) ∧ xval ≤ 110``] stmts_spec_precond))) >>
+  strip_tac >>
+  Cases_on `xval > 20` >- (
+    (* xval > 20 case *)
+    irule stmts_spec_consequence >>
+    qexistsl_tac [`λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
+                        lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) xval) ∧
+                        20 ≤ xval ∧ xval ≤ 110 ∧ lookup_name cx st "y" = NONE`,
+                  `λst. F`,
+                  `λv st. ∃n. v = IntV (Unsigned 256) n ∧ 20 < n ∧ n ≤ 110`] >>
+    conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
+    irule stmts_4_6_xval_gt_20_lemma >> simp[]) >>
+  (* ¬(xval > 20) case *)
+  irule stmts_spec_consequence >>
+  qexistsl_tac [`λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
+                      lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) xval) ∧
+                      20 ≤ xval ∧ xval ≤ 110 ∧ lookup_name cx st "y" = NONE`,
+                `λst. F`,
+                `λv st. ∃n. v = IntV (Unsigned 256) n ∧ 20 < n ∧ n ≤ 110`] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
+  irule stmts_4_6_xval_le_20_lemma >> simp[]
 QED
 
 (* The postcondition says:
