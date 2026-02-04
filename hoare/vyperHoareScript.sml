@@ -278,7 +278,10 @@ Theorem target_spec_exists:
     (∀x. ⟦cx⟧ ⦃P x⦄ tgt ⇓ᵗ av ⦃Q x⦄) ⇒
     ⟦cx⟧ ⦃λst. ∃x. P x st⦄ tgt ⇓ᵗ av ⦃λst. ∃x. Q x st⦄
 Proof
-  cheat
+  rw[target_spec_def] >>
+  first_x_assum (qspecl_then [`x`, `st`] mp_tac) >> simp[] >>
+  Cases_on `eval_target cx tgt st` >> Cases_on `q` >> simp[] >>
+  metis_tac[]
 QED
 
 Theorem target_spec_name:
@@ -366,7 +369,12 @@ Theorem stmts_spec_exists:
     (∀x . ⟦cx⟧ ⦃P x⦄ ss ⦃Q x ∥ R x⦄) ⇒
     ⟦cx⟧ ⦃λst. ∃x. P x st⦄ ss ⦃λst. ∃x. Q x st ∥ λv st. ∃x. R x v st⦄
 Proof
-  cheat
+  rw[stmts_spec_def] >>
+  first_x_assum (qspecl_then [`x`, `st`] mp_tac) >> simp[] >>
+  Cases_on `eval_stmts cx ss st` >> Cases_on `q` >> simp[] >-
+  metis_tac[] >>
+  Cases_on `y` >> simp[] >>
+  metis_tac[]
 QED
 
 Theorem stmts_spec_nil:
