@@ -59,6 +59,13 @@ Datatype:
   |>
 End
 
+Datatype:
+  opt_analysis = <|
+    hints: (num # opt_hint) list;
+    subst: (string # operand) list
+  |>
+End
+
 Definition default_hint_def:
   default_hint = <|
     prefer_iszero := F;
@@ -72,6 +79,105 @@ Definition hint_lookup_def:
     case ALOOKUP hints id of
       SOME h => h
     | NONE => default_hint
+End
+
+Definition opt_analysis_init_def:
+  opt_analysis_init = <|
+    hints := [];
+    subst := []
+  |>
+End
+
+(* ==========================================================================
+   Analysis (Fixpoint over Hints/Substitution)
+   ========================================================================== *)
+
+Definition all_insts_def:
+  all_insts fn = FLAT (MAP (\bb. bb.bb_instructions) fn.fn_blocks)
+End
+
+Definition inst_uses_var_def:
+  inst_uses_var v inst = MEM (Var v) inst.inst_operands
+End
+
+Definition uses_of_var_def:
+  uses_of_var fn v = FILTER (inst_uses_var v) (all_insts fn)
+End
+
+Definition uses_all_truthy_def:
+  uses_all_truthy fn v <=>
+    EVERY (\i. MEM i.inst_opcode [ISZERO; JNZ; ASSERT; ASSERT_UNREACHABLE])
+          (uses_of_var fn v)
+End
+
+Definition uses_prefer_iszero_def:
+  uses_prefer_iszero fn v <=>
+    EVERY (\i. MEM i.inst_opcode [ISZERO; ASSERT]) (uses_of_var fn v)
+End
+
+Definition cmp_flip_hint_def:
+  cmp_flip_hint fn inst =
+    if ~is_comparator inst.inst_opcode then F
+    else
+      case inst.inst_operands of
+        [op1; op2] =>
+          if ~is_lit op1 then F
+          else
+            (case inst_output inst of
+               NONE => F
+             | SOME v =>
+                 (case uses_of_var fn v of
+                    [after] =>
+                      if MEM after.inst_opcode [ISZERO; ASSERT] then
+                        if after.inst_opcode = ISZERO then
+                          (case inst_output after of
+                             NONE => F
+                           | SOME v2 =>
+                               (case uses_of_var fn v2 of
+                                  [use2] =>
+                                    if use2.inst_opcode = ASSERT then F else T
+                                | _ => F))
+                        else T
+                      else F
+                  | _ => F))
+      | _ => F
+End
+
+Definition compute_hint_def:
+  compute_hint fn inst =
+    case inst_output inst of
+      NONE => default_hint
+    | SOME v =>
+        <| prefer_iszero := uses_prefer_iszero fn v;
+           is_truthy := uses_all_truthy fn v;
+           cmp_flip := cmp_flip_hint fn inst |>
+End
+
+Definition compute_hints_def:
+  compute_hints fn =
+    MAP (\inst. (inst.inst_id, compute_hint fn inst)) (all_insts fn)
+End
+
+Definition compute_iszero_subst_def:
+  compute_iszero_subst fn = ([]:(string # operand) list)
+End
+
+Definition analysis_step_def:
+  analysis_step fn st =
+    st with <| hints := compute_hints fn;
+               subst := compute_iszero_subst fn |>
+End
+
+Definition analysis_iter_def:
+  analysis_iter fn 0 st = st /\
+  analysis_iter fn (SUC n) st =
+    let st' = analysis_step fn st in
+      if st' = st then st else analysis_iter fn n st'
+End
+
+Definition analysis_fixpoint_def:
+  analysis_fixpoint fn =
+    analysis_iter fn (SUC (LENGTH (all_insts fn))) opt_analysis_init
 End
 
 (* ==========================================================================
@@ -551,11 +657,14 @@ Definition rewrite_iszero_chains_op_def:
       fn' = subst_function_op sigma fn
 End
 
+Definition algebraic_opt_pass_def:
+  algebraic_opt_pass fn =
+    let st = analysis_fixpoint fn in
+      subst_function_op st.subst (transform_function_hints st.hints fn)
+End
+
 Definition algebraic_opt_transform_def:
-  algebraic_opt_transform fn fn' <=>
-    ?prefer_iszero is_truthy cmp_flip fn1.
-      fn1 = transform_function prefer_iszero is_truthy cmp_flip fn /\
-      rewrite_iszero_chains fn1 fn'
+  algebraic_opt_transform fn fn' <=> fn' = algebraic_opt_pass fn
 End
 
 Definition algebraic_opt_transform_hints_def:
