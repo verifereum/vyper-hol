@@ -308,6 +308,21 @@ Proof
   Cases_on `q` >> gvs[]
 QED
 
+Theorem stmts_spec_false_pre:
+  ∀cx ss Q R.
+     ⟦cx⟧ ⦃λst. F⦄ ss ⦃Q ∥ R⦄
+Proof
+  simp[stmts_spec_def]
+QED
+
+Theorem stmts_spec_precond:
+  ∀P Q R cx ss cond.
+     (cond ⇒ ⟦cx⟧ ⦃P⦄ ss ⦃Q ∥ R⦄) ⇔
+     ⟦cx⟧ ⦃λst. cond ∧ P st⦄ ss ⦃Q ∥ R⦄
+Proof
+  rw[stmts_spec_def] >> metis_tac[]
+QED
+
 Theorem target_spec_exists:
   ∀P Q cx (tgt:assignment_target).
     (∀x. ⟦cx⟧ ⦃P x⦄ tgt ⇓ᵗ⦃Q x⦄) ⇒
