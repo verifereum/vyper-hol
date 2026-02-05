@@ -22,6 +22,23 @@ fun mk_nsid (src_id_opt, name) =
 
 fun mk_nsid_none name = mk_nsid(mk_none num, name);
 
+(* Source_id encoding:
+   -1 => NONE (main module)
+   >= 0 => even numbers
+   <= -2 => odd numbers *)
+fun encode_source_id n =
+  if n < 0 then
+    let val m = IntInf.~ n in (2 * m) - 3 end
+  else 2 * n;
+
+fun mk_source_id_opt n =
+  if n = ~1 then optionSyntax.mk_none numSyntax.num
+  else optionSyntax.mk_some (numSyntax.mk_numeral
+    (Arbnum.fromLargeInt (IntInf.toLarge (encode_source_id n))));
+
+fun mk_source_id_num n =
+  numSyntax.mk_numeral (Arbnum.fromLargeInt (IntInf.toLarge (encode_source_id n)));
+
 (* ===== Types ===== *)
 
 val json_typeclass_ty = jasty "json_typeclass"
@@ -344,12 +361,9 @@ val numtm : term decoder = JSONDecode.map mk_num_from_largeint intInf
 val inttm : term decoder =
   JSONDecode.map (intSyntax.term_of_int o Arbint.fromLargeInt) intInf
 
-(* Decode source_id: negative means NONE, non-negative means SOME n *)
+(* Decode source_id: -1 = main module (NONE), others encoded as SOME *)
 val source_id_opt_tm : term decoder =
-  JSONDecode.map (fn n =>
-    if n < 0 then optionSyntax.mk_none numSyntax.num
-    else optionSyntax.mk_some (mk_num_from_largeint n))
-  intInf
+  JSONDecode.map mk_source_id_opt intInf
 
 val stringtm : term decoder = JSONDecode.map fromMLstring string
 val booltm : bool decoder = bool
@@ -597,7 +611,7 @@ fun d_json_expr () : term decoder = achoose "expr" [
             orElse(field "type" json_type, succeed JT_None_tm)),
 
   (* Name - extract typeclass and source_id for module references *)
-  (* source_id < 0 means main module (NONE), >= 0 means imported module *)
+  (* Vyper convention: -1 = main module (NONE), -2 = builtin, >= 0 = imported *)
   check_ast_type "Name" $
     JSONDecode.map (fn (id, (tc, src_id_opt)) => mk_JE_Name(id, tc, src_id_opt)) $
     tuple2 (field "id" string,
@@ -675,8 +689,7 @@ fun d_json_expr () : term decoder = achoose "expr" [
             field "type" json_type),
 
   (* Call - also extract source_id from func.type.type_decl_node for module calls *)
-  (* Vyper convention: -1 = main module, -2 = builtin, >= 0 = imported module *)
-  (* We map negative source_ids to NONE (main module) *)
+  (* Vyper convention: -1 = main module (NONE), -2 = builtin, >= 0 = imported *)
   check_ast_type "Call" $
     JSONDecode.map (fn ((func, args, kwargs), (ty, src_id_opt)) => mk_JE_Call(func, args, kwargs, ty, src_id_opt)) $
     tuple2 (tuple3 (field "func" (delay d_json_expr),
@@ -1064,7 +1077,7 @@ val json_module : term decoder =
 
 val json_imported_module : term decoder =
   JSONDecode.map mk_JImportedModule $
-  tuple3 (field "source_id" numtm,
+  tuple3 (field "source_id" $ JSONDecode.map mk_source_id_num intInf,
           field "path" string,
           field "body" (array json_toplevel))
 
