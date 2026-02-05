@@ -607,12 +607,15 @@ fun d_json_expr () : term decoder = achoose "expr" [
                             succeed (optionSyntax.mk_none numSyntax.num)))),
 
   (* Attribute - extract result typeclass and source_id for flag/module member detection *)
+  (* source_id comes from type.type_decl_node.source_id OR variable_reads[0].decl_node.source_id *)
   check_ast_type "Attribute" $
     JSONDecode.map (fn (((e, attr), tc_opt), src_id_opt) => mk_JE_Attribute(e, attr, tc_opt, src_id_opt)) $
     tuple2 (tuple2 (tuple2 (field "value" (delay d_json_expr), field "attr" string),
                     try (field "type" $ field "typeclass" string)),
             orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_opt_tm,
-                    succeed (optionSyntax.mk_none numSyntax.num))),
+                    orElse (field "variable_reads" $ sub 0 $
+                              field "decl_node" $ field "source_id" source_id_opt_tm,
+                            succeed (optionSyntax.mk_none numSyntax.num)))),
 
   (* Subscript *)
   check_ast_type "Subscript" $

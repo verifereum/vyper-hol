@@ -499,7 +499,8 @@ Definition translate_expr_def:
     else if obj = "tx" /\ attr = "gasprice" then Builtin (Env GasPrice) []
     else if obj = "self" /\ attr = "balance" then
       Builtin (Acc Balance) [Builtin (Env SelfAddr) []]
-    else if obj = "self" then TopLevelName (NONE, attr)
+    (* self.x uses source_id from variable_reads (4th arg) for cross-module storage access *)
+    else if obj = "self" then TopLevelName (src_id_opt, attr)
     (* Module variable access: tc = SOME "module" *)
     else if tc = SOME "module" then TopLevelName (src_id_opt, attr)
     else if attr = "balance" then Builtin (Acc Balance) [Name obj]
