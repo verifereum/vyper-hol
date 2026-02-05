@@ -51,7 +51,9 @@ val _ =
         BreakSpace(1,0),
         TOK "⦃",
         TM,
+        BreakSpace(1,0),
         TOK "∥",
+        BreakSpace(1,0),
         TM,
         TOK "⦄" ],
       paren_style = OnlyIfNecessary,
@@ -72,6 +74,7 @@ val _ =
         BreakSpace(1,0),
         TM,
         BreakSpace(1,0),
+        TOK "⇓",
         TOK "⦃",
         TM,
         TOK "⦄" ],
@@ -91,10 +94,9 @@ val _ =
         TM,
         TOK "⦄",
         BreakSpace(1,0),
-        TOK "⟨",
         TM,
-        TOK "⟩ᵗ",
         BreakSpace(1,0),
+        TOK "⇓ᵗ",
         TOK "⦃",
         TM,
         TOK "⦄" ],
@@ -122,15 +124,20 @@ Definition get_value_def[simp]:
   get_value _ = NONE
 End
 
+Definition get_value_to_key_def[simp]:
+  get_value_to_key (Value v) = value_to_key v ∧
+  get_value_to_key _ = NONE
+End
+
 (**********************************************************************)
 (* Rules *)
 
 Theorem expr_spec_consequence:
   ∀P P' Q Q' cx e.
     (∀st. P' st ⇒ P st) ∧
-    (∀v st. Q v st ⇒ Q' v st) ∧
-    (⟦cx⟧ ⦃P⦄ e ⦃Q⦄) ⇒
-    ⟦cx⟧ ⦃P'⦄ e ⦃Q'⦄
+    (∀tv st. Q tv st ⇒ Q' tv st) ∧
+    (⟦cx⟧ ⦃P⦄ e ⇓⦃Q⦄) ⇒
+    ⟦cx⟧ ⦃P'⦄ e ⇓⦃Q'⦄
 Proof
   rw[expr_spec_def] >>
   first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
@@ -140,8 +147,8 @@ QED
 
 Theorem expr_spec_exists:
   ∀P Q cx e.
-    (∀x. ⟦cx⟧ ⦃P x⦄ e ⦃Q x⦄) ⇒
-    ⟦cx⟧ ⦃λst. ∃x. P x st⦄ e ⦃λv st. ∃x. Q x v st⦄
+    (∀x. ⟦cx⟧ ⦃P x⦄ e ⇓⦃Q x⦄) ⇒
+    ⟦cx⟧ ⦃λst. ∃x. P x st⦄ e ⇓⦃λtv st. ∃x. Q x tv st⦄
 Proof
   rw[expr_spec_def] >>
   first_x_assum (qspecl_then [`x`, `st`] mp_tac) >> simp[] >>
@@ -150,13 +157,13 @@ Proof
 QED
 
 Theorem expr_spec_literal:
-  ∀P P' cx l. ⟦cx⟧ ⦃P⦄ Literal l ⦃λv st. P st ∧ v = Value (evaluate_literal l)⦄
+  ∀P P' cx l. ⟦cx⟧ ⦃P⦄ Literal l ⇓⦃λtv st. P st ∧ tv = Value (evaluate_literal l)⦄
 Proof
   rw[expr_spec_def, evaluate_def, return_def]
 QED
 
 Theorem expr_spec_name:
-  ∀P cx n. ⟦cx⟧ ⦃λst. P st ∧ IS_SOME (lookup_name cx st n)⦄ Name n ⦃λv st. P st ∧ lookup_name cx st n = get_value v⦄
+  ∀P cx n. ⟦cx⟧ ⦃λst. P st ∧ IS_SOME (lookup_name cx st n)⦄ Name n ⇓⦃λtv st. P st ∧ lookup_name cx st n = get_value tv⦄
 Proof
   rw[expr_spec_def, lookup_name_def] >> rpt strip_tac >>
   Cases_on `eval_expr cx (Name n) st` >>
@@ -166,7 +173,7 @@ Proof
 QED
 
 Theorem expr_spec_scoped_var:
-  ∀P cx n. ⟦cx⟧ ⦃λst. P st ∧ valid_lookups cx st ∧ var_in_scope st n⦄ Name n ⦃λv st. P st ∧ valid_lookups cx st ∧ lookup_scoped_var st n = get_value v⦄
+  ∀P cx n. ⟦cx⟧ ⦃λst. P st ∧ valid_lookups cx st ∧ var_in_scope st n⦄ Name n ⇓⦃λtv st. P st ∧ valid_lookups cx st ∧ lookup_scoped_var st n = get_value tv⦄
 Proof
   rw[expr_spec_def] >>
   Cases_on `eval_expr cx (Name n) st` >> Cases_on `q` >> gvs[] >-
@@ -187,7 +194,7 @@ Proof
 QED
 
 Theorem expr_spec_name_eq:
-  ∀P cx n v. ⟦cx⟧ ⦃λst. P st ∧ lookup_name cx st n = SOME v⦄ Name n ⦃λtv st. P st ∧ lookup_name cx st n = SOME v ∧ tv = Value v⦄
+  ∀P cx n v. ⟦cx⟧ ⦃λst. P st ∧ lookup_name cx st n = SOME v⦄ Name n ⇓⦃λtv st. P st ∧ lookup_name cx st n = SOME v ∧ tv = Value v⦄
 Proof
   rw[expr_spec_def, lookup_name_def] >> rpt strip_tac >>
   Cases_on `eval_expr cx (Name n) st` >>
@@ -197,7 +204,7 @@ Proof
 QED
 
 Theorem expr_spec_scoped_var_eq:
-  ∀P cx n v. ⟦cx⟧ ⦃λst. P st ∧ valid_lookups cx st ∧ lookup_scoped_var st n = SOME v⦄ Name n ⦃λtv st. P st ∧ valid_lookups cx st ∧ lookup_scoped_var st n = SOME v ∧ tv = Value v⦄
+  ∀P cx n v. ⟦cx⟧ ⦃λst. P st ∧ valid_lookups cx st ∧ lookup_scoped_var st n = SOME v⦄ Name n ⇓⦃λtv st. P st ∧ valid_lookups cx st ∧ lookup_scoped_var st n = SOME v ∧ tv = Value v⦄
 Proof
   rw[expr_spec_def] >>
   `lookup_name cx st n = SOME v` by metis_tac[lookup_scoped_var_implies_lookup_name] >>
@@ -208,10 +215,10 @@ QED
 Theorem expr_spec_if:
   ∀P P' Q cx e1 e2 e3 v1 v2 v3.
     (v1 = BoolV T ∨ v1 = BoolV F) ∧
-    (⟦cx⟧ ⦃P⦄ e1 ⦃λtv st. tv = Value v1 ∧ P' st⦄) ∧
-    (⟦cx⟧ ⦃λst. P' st ∧ v1 = BoolV T⦄ e2 ⦃λtv st. tv = v2 ∧ Q st⦄) ∧
-    (⟦cx⟧ ⦃λst. P' st ∧ v1 = BoolV F⦄ e3 ⦃λtv st. tv = v3 ∧ Q st⦄) ⇒
-          ⟦cx⟧ ⦃P⦄ (IfExp e1 e2 e3) ⦃λtv st. tv = (if v1 = BoolV T then v2 else v3) ∧ Q st⦄
+    (⟦cx⟧ ⦃P⦄ e1 ⇓⦃λtv st. tv = Value v1 ∧ P' st⦄) ∧
+    (⟦cx⟧ ⦃λst. P' st ∧ v1 = BoolV T⦄ e2 ⇓⦃λtv st. tv = v2 ∧ Q st⦄) ∧
+    (⟦cx⟧ ⦃λst. P' st ∧ v1 = BoolV F⦄ e3 ⇓⦃λtv st. tv = v3 ∧ Q st⦄) ⇒
+          ⟦cx⟧ ⦃P⦄ (IfExp e1 e2 e3) ⇓⦃λtv st. tv = (if v1 = BoolV T then v2 else v3) ∧ Q st⦄
 Proof
   rw[expr_spec_def] >>
   simp[Once evaluate_def, bind_def] >>
@@ -225,9 +232,9 @@ QED
 Theorem expr_spec_builtin_bop:
   ∀P P' Q cx e1 e2 v1 v2 bop v_result.
     evaluate_binop bop v1 v2 = INL v_result ∧
-    (⟦cx⟧ ⦃P⦄ e1 ⦃λtv st. tv = Value v1 ∧ P' st⦄) ∧
-    (⟦cx⟧ ⦃P'⦄ e2 ⦃λtv st. tv = Value v2 ∧ Q st⦄) ⇒
-    ⟦cx⟧ ⦃P⦄ (Builtin (Bop bop) [e1; e2]) ⦃λtv st. tv = Value v_result ∧ Q st⦄
+    (⟦cx⟧ ⦃P⦄ e1 ⇓⦃λtv st. tv = Value v1 ∧ P' st⦄) ∧
+    (⟦cx⟧ ⦃P'⦄ e2 ⇓⦃λtv st. tv = Value v2 ∧ Q st⦄) ⇒
+    ⟦cx⟧ ⦃P⦄ (Builtin (Bop bop) [e1; e2]) ⇓⦃λtv st. tv = Value v_result ∧ Q st⦄
 Proof
   rw[expr_spec_def] >>
   simp[Once evaluate_def, bind_def, check_def, assert_def,
@@ -244,7 +251,7 @@ Proof
 QED
 
 Theorem expr_spec_builtin_env_sender:
-  ∀P cx. ⟦cx⟧ ⦃P⦄ (Builtin (Env Sender) []) ⦃λtv st. tv = Value (AddressV cx.txn.sender) ∧ P st⦄
+  ∀P cx. ⟦cx⟧ ⦃P⦄ (Builtin (Env Sender) []) ⇓⦃λtv st. tv = Value (AddressV cx.txn.sender) ∧ P st⦄
 Proof
   rw[expr_spec_def, evaluate_def, return_def] >>
   simp[check_def, assert_def, builtin_args_length_ok_def, bind_def,
@@ -258,9 +265,9 @@ Theorem expr_spec_subscript_array:
   ∀P P' Q cx e1 e2 av sign i v.
     IS_SOME (get_self_code cx) ∧
     array_index av i = SOME v ∧
-    (⟦cx⟧ ⦃P⦄ e1 ⦃λtv st. tv = Value (ArrayV av) ∧ P' st⦄) ∧
-    (⟦cx⟧ ⦃P'⦄ e2 ⦃λtv st. tv = Value (IntV sign i) ∧ Q st⦄) ⇒
-    ⟦cx⟧ ⦃P⦄ (Subscript e1 e2) ⦃λtv st. tv = Value v ∧ Q st⦄
+    (⟦cx⟧ ⦃P⦄ e1 ⇓⦃λtv st. tv = Value (ArrayV av) ∧ P' st⦄) ∧
+    (⟦cx⟧ ⦃P'⦄ e2 ⇓⦃λtv st. tv = Value (IntV sign i) ∧ Q st⦄) ⇒
+    ⟦cx⟧ ⦃P⦄ (Subscript e1 e2) ⇓⦃λtv st. tv = Value v ∧ Q st⦄
 Proof
   rw[expr_spec_def] >>
   simp[Once evaluate_def, bind_def] >>
@@ -278,8 +285,8 @@ QED
 
 Theorem expr_spec_preserves_var_in_scope:
   ∀P Q cx n e.
-    (⟦cx⟧ ⦃λst. P st ∧ var_in_scope st n⦄ e ⦃Q⦄) ⇒
-    ⟦cx⟧ ⦃λst. P st ∧ var_in_scope st n⦄ e ⦃λv st. Q v st ∧ var_in_scope st n⦄
+    (⟦cx⟧ ⦃λst. P st ∧ var_in_scope st n⦄ e ⇓⦃Q⦄) ⇒
+    ⟦cx⟧ ⦃λst. P st ∧ var_in_scope st n⦄ e ⇓⦃λv st. Q v st ∧ var_in_scope st n⦄
 Proof
   rw[expr_spec_def] >>
   Cases_on `eval_expr cx e st` >> Cases_on `q` >> gvs[] >-
@@ -292,8 +299,8 @@ Theorem target_spec_consequence:
   ∀P P' Q Q' cx (tgt:assignment_target).
     (∀st. P' st ⇒ P st) ∧
     (∀av st. Q av st ⇒ Q' av st) ∧
-    target_spec cx P tgt Q ⇒
-    target_spec cx P' tgt Q'
+    (⟦cx⟧ ⦃P⦄ tgt ⇓ᵗ⦃Q⦄) ⇒
+    ⟦cx⟧ ⦃P'⦄ tgt ⇓ᵗ⦃Q'⦄
 Proof
   rw[target_spec_def] >>
   first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
@@ -303,8 +310,8 @@ QED
 
 Theorem target_spec_exists:
   ∀P Q cx (tgt:assignment_target).
-    (∀x. target_spec cx (P x) tgt (Q x)) ⇒
-    target_spec cx (λst. ∃x. P x st) tgt (λav st. ∃x. Q x av st)
+    (∀x. ⟦cx⟧ ⦃P x⦄ tgt ⇓ᵗ⦃Q x⦄) ⇒
+    ⟦cx⟧ ⦃λst. ∃x. P x st⦄ tgt ⇓ᵗ⦃λav st. ∃x. Q x av st⦄
 Proof
   rw[target_spec_def] >>
   first_x_assum (qspecl_then [`x`, `st`] mp_tac) >> simp[] >>
@@ -313,8 +320,15 @@ Proof
 QED
 
 Theorem target_spec_name:
+  ∀P cx n.
+    ⟦cx⟧ ⦃λst. P st ∧ IS_SOME (lookup_name_target cx st n)⦄ (BaseTarget (NameTarget n)) ⇓ᵗ⦃λav st. P st ∧ lookup_name_target cx st n = SOME av⦄
+Proof
+  cheat
+QED
+
+Theorem target_spec_name_eq:
   ∀P cx n av.
-     target_spec cx (λst. P st ∧ lookup_name_target cx st n = SOME av) (BaseTarget (NameTarget n)) (λav' st. av' = av ∧ P st ∧ lookup_name_target cx st n = SOME av)
+    ⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ (BaseTarget (NameTarget n)) ⇓ᵗ⦃λav' st. av' = av ∧ P st ∧ lookup_name_target cx st n = SOME av⦄
 Proof
   rw[target_spec_def, lookup_name_target_def] >> rpt strip_tac >>
   simp[Once evaluate_def, bind_def, return_def] >>
@@ -328,7 +342,7 @@ QED
 
 Theorem target_spec_scoped_var:
   ∀P cx n.
-     target_spec cx (λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n) (BaseTarget (NameTarget n)) (λav st. av = (BaseTargetV (ScopedVar n) []) ∧ P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n)
+   ⟦cx⟧ ⦃λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄ (BaseTarget (NameTarget n)) ⇓ᵗ⦃λav st. av = (BaseTargetV (ScopedVar n) []) ∧ P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄
 Proof
   rw[target_spec_def] >> rpt strip_tac >>
   simp[Once evaluate_def, bind_def, return_def] >>
@@ -344,9 +358,9 @@ Proof
   gvs[lookup_name_target_def, lookup_base_target_def]
 QED
 
-Theorem target_spec_toplevelname_target:
+Theorem target_spec_toplevel_name_target:
   ∀P cx src_id_opt id.
-    target_spec cx P (BaseTarget (TopLevelNameTarget (src_id_opt, id))) (λav st. av = (BaseTargetV (TopLevelVar src_id_opt id) []) ∧ P st)
+   ⟦cx⟧ ⦃P⦄ BaseTarget (TopLevelNameTarget (src_id_opt, id)) ⇓ᵗ⦃λav st. av = (BaseTargetV (TopLevelVar src_id_opt id) []) ∧ P st⦄
 Proof
   rw[target_spec_def] >>
   simp[Once evaluate_def, bind_def, return_def] >>
@@ -354,11 +368,10 @@ Proof
 QED
 
 Theorem target_spec_subscript_target:
-  ∀P P' Q cx bt e loc sbs v k.
-    value_to_key v = SOME k ∧
-    target_spec cx P (BaseTarget bt) (λav st. av = (BaseTargetV loc sbs) ∧ P' st) ∧
-    (⟦cx⟧ ⦃P'⦄ e ⦃λtv st. tv = Value v ∧ Q st⦄) ⇒
-    target_spec cx P (BaseTarget (SubscriptTarget bt e)) (λav st. av = (BaseTargetV loc (k::sbs)) ∧ Q st)
+  ∀P P' Q cx bt e loc sbs k.
+    (⟦cx⟧ ⦃P⦄ BaseTarget bt ⇓ᵗ⦃λav st. av = (BaseTargetV loc sbs) ∧ P' st⦄) ∧
+    (⟦cx⟧ ⦃P'⦄ e ⇓⦃λtv st. get_value_to_key tv = SOME k ∧ Q st⦄) ⇒
+    ⟦cx⟧ ⦃P⦄ BaseTarget (SubscriptTarget bt e) ⇓ᵗ⦃λav st. av = (BaseTargetV loc (k::sbs)) ∧ Q st⦄
 Proof
   rw[target_spec_def, expr_spec_def] >>
   simp[Once evaluate_def, bind_def, return_def] >>
@@ -377,11 +390,11 @@ Proof
 QED
 
 Theorem stmts_spec_consequence:
-  !P P' Q Q' R R' cx ss.
-    (!st. P' st ==> P st) /\
-    (!st. Q st ==> Q' st) /\
-    (!v st. R v st ==> R' v st) /\
-    (⟦cx⟧ ⦃P⦄ ss ⦃Q ∥ R⦄) ==>
+  ∀P P' Q Q' R R' cx ss.
+    (∀st. P' st ⇒ P st) ∧
+    (∀st. Q st ⇒ Q' st) ∧
+    (∀v st. R v st ⇒ R' v st) ∧
+    (⟦cx⟧ ⦃P⦄ ss ⦃Q ∥ R⦄) ⇒
     ⟦cx⟧ ⦃P'⦄ ss ⦃Q' ∥ R'⦄
 Proof
   rw[stmts_spec_def] >> rpt strip_tac >>
@@ -422,7 +435,7 @@ QED
 Theorem stmts_spec_if:
   ∀P P' Q R cx e ss1 ss2 v1.
     (v1 = BoolV T ∨ v1 = BoolV F) ∧
-    (⟦cx⟧ ⦃P⦄ e ⦃λtv st. tv = Value v1 ∧ P' st⦄) ∧
+    (⟦cx⟧ ⦃P⦄ e ⇓⦃λtv st. tv = Value v1 ∧ P' st⦄) ∧
     (⟦cx⟧ ⦃λst.
             st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧
             P' (tl_scopes st) ∧
@@ -497,9 +510,9 @@ Proof
 QED
 
 Theorem stmts_spec_assign:
-  ∀P P' Q cx tgt av e v.
-     (⟦cx⟧ ⦃P⦄ tgt ⦃λav' st. av' = av ∧ P' st⦄) ⇒
-     (⟦cx⟧ ⦃P'⦄ e ⦃λtv st. tv = Value v ∧ assign_target_spec cx st av (Replace v) Q⦄) ⇒
+  ∀P P' Q cx tgt av e.
+     (⟦cx⟧ ⦃P⦄ tgt ⇓ᵗ⦃λav' st. av' = av ∧ P' st⦄) ⇒
+     (⟦cx⟧ ⦃P'⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ assign_target_spec cx st av (Replace v) Q⦄) ⇒
      ⟦cx⟧ ⦃P⦄ [Assign tgt e] ⦃Q ∥ λ_ _. F⦄
 Proof
   rw[stmts_spec_def, target_spec_def, expr_spec_def, assign_target_spec_def]
@@ -521,8 +534,8 @@ Proof
 QED
 
 Theorem stmts_spec_assign_name:
-  ∀P Q cx n av e v.
-    (⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ e ⦃λtv st. tv = Value v ∧ assign_target_spec cx st av (Replace v) Q⦄) ⇒
+  ∀P Q cx n av e.
+    (⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ assign_target_spec cx st av (Replace v) Q⦄) ⇒
     ⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ [Assign (BaseTarget (NameTarget n)) e] ⦃Q ∥ λ_ _. F⦄
 Proof
   rpt strip_tac >>
@@ -540,8 +553,8 @@ Proof
 QED
 
 Theorem stmts_spec_assign_scoped_var:
-  ∀P Q cx n e v.
-    (⟦cx⟧ ⦃λst. P st ∧ var_in_scope st n⦄ e ⦃λtv st. tv = Value v ∧ Q (update_scoped_var st n v)⦄) ⇒
+  ∀P Q cx n e.
+    (⟦cx⟧ ⦃λst. P st ∧ var_in_scope st n⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ Q (update_scoped_var st n v)⦄) ⇒
     ⟦cx⟧ ⦃λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄ [Assign (BaseTarget (NameTarget n)) e] ⦃Q ∥ λ_ _. F⦄
 Proof
   rpt strip_tac >>
@@ -576,10 +589,10 @@ Proof
 QED
 
 Theorem stmts_spec_ann_assign:
-  ∀P Q cx n ty e v.
-    (⟦cx⟧ ⦃P⦄ e ⦃λtv st. tv = Value v ∧ st.scopes ≠ [] ∧
-                                lookup_scoped_var st n = NONE ∧
-                                Q (update_scoped_var st n v)⦄) ⇒
+  ∀P Q cx n ty e.
+    (⟦cx⟧ ⦃P⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ st.scopes ≠ [] ∧
+                              lookup_scoped_var st n = NONE ∧
+                              Q (update_scoped_var st n v)⦄) ⇒
     ⟦cx⟧ ⦃P⦄ [AnnAssign n ty e] ⦃Q ∥ λ_ _. F⦄
 Proof
   rw[stmts_spec_def, expr_spec_def] >>
@@ -601,8 +614,8 @@ QED
 
 Theorem stmts_spec_aug_assign:
   ∀P P' Q cx (tgt:base_assignment_target) av bop e v.
-     (⟦cx⟧ ⦃P⦄ (BaseTarget tgt) ⦃λav' st. av' = av ∧ P' st⦄) ∧
-     (⟦cx⟧ ⦃P'⦄ e ⦃λtv st. tv = Value v ∧ assign_target_spec cx st av (Update bop v) Q⦄) ⇒
+     (⟦cx⟧ ⦃P⦄ (BaseTarget tgt) ⇓ᵗ⦃λav' st. av' = av ∧ P' st⦄) ∧
+     (⟦cx⟧ ⦃P'⦄ e ⇓⦃λtv st. tv = Value v ∧ assign_target_spec cx st av (Update bop v) Q⦄) ⇒
      ⟦cx⟧ ⦃P⦄ [AugAssign tgt bop e] ⦃Q ∥ λ_ _. F⦄
 Proof
   rw[stmts_spec_def, target_spec_def, expr_spec_def, assign_target_spec_def] >>
@@ -625,8 +638,8 @@ Proof
 QED
 
 Theorem stmts_spec_aug_assign_name:
-  ∀P Q cx n av bop e v.
-    (⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ e ⦃λtv st. tv = Value v ∧ assign_target_spec cx st av (Update bop v) Q⦄) ⇒
+  ∀P Q cx n av bop e.
+    (⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ assign_target_spec cx st av (Update bop v) Q⦄) ⇒
     ⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ [AugAssign (NameTarget n) bop e] ⦃Q ∥ λ_ _. F⦄
 Proof
   rpt strip_tac >>
@@ -707,8 +720,8 @@ Proof
 QED
 
 Theorem stmts_spec_return_some:
-  ∀P Q cx e v.
-     (⟦cx⟧ ⦃P⦄ e ⦃λtv st. tv = Value v ∧ Q v st⦄) ⇒
+  ∀P Q cx e.
+     (⟦cx⟧ ⦃P⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ Q v st⦄) ⇒
      ⟦cx⟧ ⦃P⦄ [Return (SOME e)] ⦃λ_. F ∥ Q⦄
 Proof
   rw[stmts_spec_def, expr_spec_def] >>
@@ -721,7 +734,7 @@ QED
 
 Theorem stmts_spec_assert_true:
   ∀P Q cx e se.
-    (⟦cx⟧ ⦃P⦄ e ⦃λtv st. tv = Value (BoolV T) ∧ Q st⦄) ⇒
+    (⟦cx⟧ ⦃P⦄ e ⇓⦃λtv st. tv = Value (BoolV T) ∧ Q st⦄) ⇒
     ⟦cx⟧ ⦃P⦄ [Assert e se] ⦃Q ∥ λ_ _. F⦄
 Proof
   rw[stmts_spec_def, expr_spec_def] >>
