@@ -1104,6 +1104,16 @@ End
 
 val () = cv_auto_trans type_env_def;
 
+(* Build combined type_env from all modules for a contract.
+   This is needed because a function in one module can return a type from another. *)
+Definition type_env_all_modules_def:
+  type_env_all_modules [] = FEMPTY ∧
+  type_env_all_modules ((src_id, ts) :: rest) =
+    FUNION (type_env ts) (type_env_all_modules rest)
+End
+
+val () = cv_auto_trans type_env_all_modules_def;
+
 (* Build var_layout from storage_layout and toplevels.
    For each storage variable or hashmap, record its slot number. *)
 Definition get_matching_var_id_def:
@@ -1117,30 +1127,40 @@ End
 
 val () = cv_auto_trans get_matching_var_id_def;
 
+(* Build var_layout entry for a single module.
+   src_id_opt: NONE for main module, SOME n for imported module.
+   Layout keys are (src_id_opt, var_name). *)
 Definition build_var_layout_entry_def:
-  build_var_layout_entry is_transient layout [] = LN ∧
-  build_var_layout_entry is_transient layout (t :: ts) =
-    let rest = build_var_layout_entry is_transient layout ts in
+  build_var_layout_entry is_transient src_id_opt layout [] = LN ∧
+  build_var_layout_entry is_transient src_id_opt layout (t :: ts) =
+    let rest = build_var_layout_entry is_transient src_id_opt layout ts in
     case get_matching_var_id is_transient t of
     | SOME id =>
-        (case ALOOKUP layout id of
+        (case ALOOKUP layout (src_id_opt, id) of
          | SOME slot => insert (string_to_num id) slot rest
          | NONE => rest)
     | NONE => rest
+End
+
+(* Build var_layout for all modules *)
+Definition build_var_layout_for_all_def:
+  build_var_layout_for_all storage_layout transient_layout [] = (LN, LN) ∧
+  build_var_layout_for_all storage_layout transient_layout ((src_id_opt, ts) :: rest) =
+    let (s_rest, t_rest) = build_var_layout_for_all storage_layout transient_layout rest in
+    let s_this = build_var_layout_entry F src_id_opt storage_layout ts in
+    let t_this = build_var_layout_entry T src_id_opt transient_layout ts in
+    (union s_this s_rest, union t_this t_rest)
 End
 
 Definition build_var_layout_def:
   build_var_layout sources storage_layout transient_layout addr =
     case ALOOKUP sources addr of
     | NONE => (LN, LN)
-    | SOME mods =>
-        case ALOOKUP mods NONE of
-        | NONE => (LN, LN)
-        | SOME ts => (build_var_layout_entry F storage_layout ts,
-                      build_var_layout_entry T transient_layout ts)
+    | SOME mods => build_var_layout_for_all storage_layout transient_layout mods
 End
 
 val () = cv_auto_trans build_var_layout_entry_def;
+val () = cv_auto_trans build_var_layout_for_all_def;
 val () = cv_auto_trans build_var_layout_def;
 
 (* Look up an interface by nsid (source_id, name) *)
@@ -1534,23 +1554,20 @@ Definition finally_def:
      | (INR e, s) => ignore_bind g (raise e) s
 End
 
-val option_CASE_rator =
+(* TODO: move these? *)
+Theorem option_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
 
-val sum_CASE_rator =
+Theorem sum_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="sum",Tyop="sum"}));
 
-val list_CASE_rator =
+Theorem list_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="list",Tyop="list"}));
 
-val prod_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
-
-val prod_CASE_rator =
+Theorem prod_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
 
@@ -2545,6 +2562,139 @@ End
 
 val () = cv_auto_trans get_range_limits_def;
 
+(* ===== External Call Execution via Verifereum ===== *)
+
+(* Build a transaction record for initial_context.
+   Only the fields used by initial_msg_params matter:
+   - from: becomes msg.sender (caller)
+   - to: target address
+   - value: becomes msg.value
+   - data: becomes msg.data (calldata)
+   - gasLimit: gas available for the call
+   Other fields are unused placeholders. *)
+Definition make_call_tx_def:
+  make_call_tx caller callee value calldata gas_limit : transaction =
+    <| from := caller
+     ; to := SOME callee
+     ; data := calldata
+     ; nonce := 0
+     ; value := value
+     ; gasLimit := gas_limit
+     ; gasPrice := 0
+     ; accessList := []
+     ; blobVersionedHashes := []
+     ; maxFeePerBlobGas := NONE
+     ; maxFeePerGas := NONE
+     ; authorizationList := []
+     |>
+End
+
+val () = cv_auto_trans make_call_tx_def;
+
+(* Build transaction_parameters from Vyper call_txn.
+   These are the transaction-level parameters that persist across calls.
+
+   TODO: Some fields are not yet in call_txn and use defaults:
+   - origin should be original tx.origin, currently using txn.sender
+   - blockCoinBase, blockGasLimit, prevRandao, chainId need to be added *)
+Definition vyper_to_tx_params_def:
+  vyper_to_tx_params (txn: call_txn) : transaction_parameters =
+    <| origin := txn.sender  (* TODO: track tx.origin separately *)
+     ; gasPrice := txn.gas_price
+     ; baseFeePerGas := 0
+     ; baseFeePerBlobGas := txn.blob_base_fee
+     ; blockNumber := txn.block_number
+     ; blockTimeStamp := txn.time_stamp
+     ; blockCoinBase := 0w   (* TODO: add to call_txn *)
+     ; blockGasLimit := 0    (* TODO: add to call_txn *)
+     ; prevRandao := 0w      (* TODO: add to call_txn *)
+     ; prevHashes := txn.block_hashes
+     ; blobHashes := txn.blob_hashes
+     ; chainId := 0          (* TODO: add to call_txn *)
+     ; authRefund := 0
+     |>
+End
+
+val () = cv_auto_trans vyper_to_tx_params_def;
+
+(* Default gas limit for external calls - effectively infinite.
+   TODO: May need to be configurable or come from an oracle. *)
+Definition default_call_gas_limit_def:
+  default_call_gas_limit : num = 2 ** 64
+End
+
+val () = cv_auto_trans default_call_gas_limit_def;
+
+(* Build execution_state for an external call *)
+Definition make_ext_call_state_def:
+  make_ext_call_state caller callee code calldata value is_static
+                      accounts tStorage txParams =
+    let gas_limit = default_call_gas_limit in
+    let tx = make_call_tx caller callee value calldata gas_limit in
+    let ctxt = initial_context callee code is_static empty_return_destination tx in
+    let accesses = <| addresses := fINSERT caller (fINSERT callee fEMPTY)
+                    ; storageKeys := fEMPTY |> in
+    let rollback = <| accounts := accounts
+                    ; tStorage := tStorage
+                    ; accesses := accesses
+                    ; toDelete := [] |> in
+    <| contexts := [(ctxt, rollback)]
+     ; txParams := txParams
+     ; rollback := rollback
+     ; msdomain := Collect empty_domain
+     |>
+End
+
+val () = cv_auto_trans make_ext_call_state_def;
+
+(* Extract results from verifereum execution.
+   On success: return updated accounts/tStorage.
+   On revert: return original accounts/tStorage (changes are discarded).
+   On other exception: return NONE. *)
+Definition extract_call_result_def:
+  extract_call_result orig_accounts orig_tStorage (result, final_state) =
+    case final_state.contexts of
+    | [(ctxt, _)] =>
+        (case result of
+         | INR NONE =>  (* success - no exception *)
+             SOME (T, ctxt.returnData,
+                   final_state.rollback.accounts,
+                   final_state.rollback.tStorage)
+         | INR (SOME Reverted) =>  (* revert - return original state *)
+             SOME (F, ctxt.returnData, orig_accounts, orig_tStorage)
+         | _ => NONE)  (* other exception or still running *)
+    | _ => NONE  (* shouldn't happen for single-context call *)
+End
+
+val () = cv_auto_trans extract_call_result_def;
+
+(* Run external call via verifereum.
+
+   Parameters:
+   - caller: address of the calling contract (becomes msg.sender)
+   - callee: address being called
+   - calldata: encoded function call (from build_ext_calldata)
+   - value: ETH to send (becomes msg.value)
+   - is_static: true for staticcall (read-only)
+   - accounts: current account states
+   - tStorage: current transient storage
+   - txParams: transaction parameters (preserves tx.origin, block info)
+
+   Returns SOME (success, returnData, accounts', tStorage') or NONE on error. *)
+Definition run_ext_call_def:
+  run_ext_call caller callee calldata value is_static
+               accounts tStorage txParams =
+    let code = (lookup_account callee accounts).code in
+    let s0 = make_ext_call_state caller callee code calldata value is_static
+                                 accounts tStorage txParams in
+    case vfmExecution$run s0 of
+    | SOME (result, final_state) =>
+        extract_call_result accounts tStorage (result, final_state)
+    | NONE => NONE
+End
+
+val () = cv_auto_trans run_ext_call_def;
+
 (* top-level definition of the Vyper interpreter *)
 
 Definition evaluate_def:
@@ -2766,8 +2916,29 @@ Definition evaluate_def:
     transfer_value cx.txn.target toAddr amount;
     return $ Value $ NoneV
   od ∧
-  eval_expr cx (Call (ExtCall sig) _) = raise $ Error "TODO: ExtCall" ∧
-  eval_expr cx (Call (StaticCall sig) _) = raise $ Error "TODO: StaticCall" ∧
+  eval_expr cx (Call (ExtCall is_static (func_name, arg_types, ret_type)) es) = do
+    vs <- eval_exprs cx es;
+    check (vs ≠ []) "ExtCall no target";
+    target_addr <- lift_option (dest_AddressV (HD vs)) "ExtCall target not address";
+    arg_vals <<- TL vs;
+    ts <- lift_option (get_self_code cx) "ExtCall get_self_code";
+    tenv <<- type_env ts;
+    calldata <- lift_option (build_ext_calldata tenv func_name arg_types arg_vals)
+                            "ExtCall build_calldata";
+    accounts <- get_accounts;
+    tStorage <- get_transient_storage;
+    txParams <<- vyper_to_tx_params cx.txn;
+    caller <<- cx.txn.target;
+    result <- lift_option
+      (run_ext_call caller target_addr calldata 0 is_static accounts tStorage txParams)
+      "ExtCall run failed";
+    (success, returnData, accounts', tStorage') <<- result;
+    check success "ExtCall reverted";
+    update_accounts (K accounts');
+    update_transient (K tStorage');
+    ret_val <- lift_sum (evaluate_abi_decode_return tenv ret_type returnData);
+    return $ Value ret_val
+  od ∧
   eval_expr cx (Call (IntCall (src_id_opt, fn)) es) = do
     check (¬MEM (src_id_opt, fn) cx.stk) "recursion";
     ts <- lift_option (get_module_code cx src_id_opt) "IntCall get_module_code";
@@ -2777,9 +2948,12 @@ Definition evaluate_def:
     check (LENGTH args = LENGTH es) "IntCall args length"; (* TODO: needed? *)
     vs <- eval_exprs cx es;
     tenv <<- type_env ts;
+    (* Use combined type env for return type (may reference types from other modules) *)
+    all_mods <<- (case ALOOKUP cx.sources cx.txn.target of SOME m => m | NONE => []);
+    all_tenv <<- type_env_all_modules all_mods;
     env <- lift_option (bind_arguments tenv args vs) "IntCall bind_arguments";
     prev <- get_scopes;
-    rtv <- lift_option (evaluate_type tenv ret) "IntCall eval ret";
+    rtv <- lift_option (evaluate_type all_tenv ret) "IntCall eval ret";
     cxf <- push_function (src_id_opt, fn) env cx;
     rv <- finally
       (try (do eval_stmts cxf body; return NoneV od) handle_function)
@@ -2879,13 +3053,7 @@ Definition initial_immutables_def:
    let key = string_to_num id in
    let iv = force_default_value env typ in
      update_immutable NONE key iv imms) ∧
-  (* TODO: prevent flag value being updated even in constructor *)
-  initial_immutables env (FlagDecl id ls :: ts) =
-  (let imms = initial_immutables env ts in
-   let key = string_to_num id in
-   let iv = flag_value (LENGTH ls) 1 [] ls in
-     update_immutable NONE key iv imms) ∧
-  (* TODO: handle Constants? or ignore since assuming folded into AST *)
+  (* Flags are accessed via FlagMember and lookup_flag_mem, not immutables *)
   (* HashMaps are not stored in immutables - they're constructed on-the-fly in lookup_global *)
   initial_immutables env (t :: ts) = initial_immutables env ts
 End
@@ -2916,6 +3084,7 @@ val () = cv_auto_trans initial_evaluation_context_def;
 Datatype:
   abstract_machine = <|
     sources: (address, (num option, toplevel list) alist) alist
+  ; exports: (address, (string, num) alist) alist  (* address -> (func_name -> source_id) *)
   ; immutables: (address, module_immutables) alist
   ; accounts: evm_accounts
   ; layouts: (address, storage_layout # storage_layout) alist  (* (storage, transient) *)
@@ -2926,6 +3095,7 @@ End
 Definition initial_machine_state_def:
   initial_machine_state : abstract_machine = <|
     sources := []
+  ; exports := []
   ; immutables := []
   ; accounts := empty_accounts
   ; layouts := []
@@ -2946,8 +3116,9 @@ End
 val () = cv_auto_trans initial_state_def;
 
 Definition abstract_machine_from_state_def:
-  abstract_machine_from_state srcs layouts (st: evaluation_state) =
+  abstract_machine_from_state srcs exps layouts (st: evaluation_state) =
   <| sources := srcs
+   ; exports := exps
    ; immutables := st.immutables
    ; accounts := st.accounts
    ; layouts := layouts
@@ -2956,8 +3127,6 @@ Definition abstract_machine_from_state_def:
 End
 
 val () = cv_auto_trans abstract_machine_from_state_def;
-
-
 
 (* Top-level entry-points into the semantics: loading (deploying) a contract,
 * and calling its external functions *)
@@ -2987,8 +3156,11 @@ val () = send_call_value_def
   |> cv_auto_trans;
 
 Definition call_external_function_def:
-  call_external_function am cx mut ts args vals body ret =
+  call_external_function am cx mut ts all_mods args vals body ret =
   let tenv = type_env ts in
+  (* Use combined type_env from all modules for return type evaluation,
+     since return types can reference types from imported modules *)
+  let all_tenv = type_env_all_modules all_mods in
   case bind_arguments tenv args vals
   of NONE => (INR $ Error "call bind_arguments", am)
    | SOME env =>
@@ -2997,47 +3169,87 @@ Definition call_external_function_def:
     | SOME cenv => (* TODO: how do we stop constants being assigned to? *)
    let st = initial_state am [env; cenv] in
    let srcs = am.sources in
+   let exps = am.exports in
    let layouts = am.layouts in
    let (res, st) =
      (case do send_call_value mut cx; eval_stmts cx body od st
       of
-       | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs layouts st)
+       | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs exps layouts st)
        | (INR (ReturnException v), st) =>
-           (let am = abstract_machine_from_state srcs layouts st in
-            case evaluate_type tenv ret
+           (let am = abstract_machine_from_state srcs exps layouts st in
+            case evaluate_type all_tenv ret
             of NONE => (INR (Error "eval ret"), am)
              | SOME tv =>
             case safe_cast tv v
             of NONE => (INR (Error "ext cast ret"), am)
              | SOME v => (INL v, am))
-       | (INR e, st) => (INR e, abstract_machine_from_state srcs layouts st)) in
+       | (INR e, st) => (INR e, abstract_machine_from_state srcs exps layouts st)) in
     (res, st (* transient storage cleared separately via ClearTransientStorage action *)))
+End
+
+(* Lookup function, checking exports first for external calls *)
+Definition lookup_exported_function_def:
+  lookup_exported_function cx am func_name =
+    (* First check if this function is exported from another module *)
+    case ALOOKUP am.exports cx.txn.target of
+      NONE => (* No exports for this contract, use main module *)
+        (case get_self_code cx of
+           SOME ts => lookup_function func_name External ts
+         | NONE => NONE)
+    | SOME export_map =>
+        (case ALOOKUP export_map func_name of
+           SOME src_id => (* Function is exported from module src_id *)
+             (case get_module_code cx (SOME src_id) of
+                SOME ts => lookup_function func_name External ts
+              | NONE => NONE)
+         | NONE => (* Not in exports, try main module *)
+             (case get_self_code cx of
+                SOME ts => lookup_function func_name External ts
+              | NONE => NONE))
+End
+
+(* Find which module a function is in (for exported functions) *)
+Definition find_function_module_def:
+  find_function_module cx am func_name =
+    case ALOOKUP am.exports cx.txn.target of
+      NONE => NONE  (* Use main module *)
+    | SOME export_map =>
+        ALOOKUP export_map func_name  (* Returns SOME src_id if exported *)
 End
 
 Definition call_external_def:
   call_external am tx =
   let cx = initial_evaluation_context am.sources am.layouts tx in
-  case get_self_code cx
+  (* Get all modules for this contract (needed for combined type_env) *)
+  case ALOOKUP am.sources tx.target of
+    NONE => (INR $ Error "call get sources", am)
+  | SOME all_mods =>
+  (* Determine which module to use for type environment *)
+  let src_id_opt = find_function_module cx am tx.function_name in
+  case (case src_id_opt of
+          NONE => get_self_code cx
+        | SOME src_id => get_module_code cx (SOME src_id))
   of NONE => (INR $ Error "call get_self_code", am)
    | SOME ts =>
-  case lookup_function tx.function_name External ts
+  case lookup_exported_function cx am tx.function_name
   of NONE => (INR $ Error "call lookup_function", am)
    | SOME (mut, args, ret, body) =>
-       call_external_function am cx mut ts args tx.args body ret
+       call_external_function am cx mut ts all_mods args tx.args body ret
 End
 
 Definition load_contract_def:
-  load_contract am tx mods =
+  load_contract am tx mods exps =
   let addr = tx.target in
   let ts = case ALOOKUP mods NONE of SOME ts => ts | NONE => [] in
   let tenv = type_env ts in
   let imms = initial_immutables tenv ts in
-  let am = am with immutables updated_by CONS (addr, imms) in
+  let am = am with <| immutables updated_by CONS (addr, imms);
+                      exports updated_by CONS (addr, exps) |> in
   case lookup_function tx.function_name Deploy ts of
      | NONE => INR $ Error "no constructor"
      | SOME (mut, args, ret, body) =>
        let cx = initial_evaluation_context ((addr,mods)::am.sources) am.layouts tx in
-       case call_external_function am cx mut ts args tx.args body ret
+       case call_external_function am cx mut ts mods args tx.args body ret
          of (INR e, _) => INR e
        (* TODO: update balances on return *)
           | (_, am) => INL (am with sources updated_by CONS (addr, mods))

@@ -226,21 +226,24 @@ Proof
 QED
 
 Theorem case_ExtCall[local]:
-  ∀cx sig vs.
+  ∀cx is_static sig es.
     (∀st res st'.
-       eval_expr cx (Call (ExtCall sig) vs) st = (res, st') ⇒
-       st.scopes = st'.scopes)
-Proof
-  simp[evaluate_def, raise_def]
-QED
-
-Theorem case_StaticCall[local]:
-  ∀cx sig vs.
+       eval_exprs cx es st = (res, st') ⇒ EVERY scope_preserving_expr es ⇒ st.scopes = st'.scopes) ⇒
     (∀st res st'.
-       eval_expr cx (Call (StaticCall sig) vs) st = (res, st') ⇒
-       st.scopes = st'.scopes)
+       eval_expr cx (Call (ExtCall is_static sig) es) st = (res, st') ⇒
+       scope_preserving_expr (Call (ExtCall is_static sig) es) ⇒ st.scopes = st'.scopes)
 Proof
-  simp[evaluate_def, raise_def]
+  rpt strip_tac >>
+  PairCases_on`sig` >>
+  gvs[evaluate_def, bind_def, ignore_bind_def, CaseEq"prod", CaseEq"sum",
+      lift_option_def, CaseEq"option", option_CASE_rator, raise_def,
+      return_def, check_def, assert_def, scope_preserving_expr_def,
+      get_transient_storage_def, get_accounts_def] >>
+  first_x_assum drule >> gvs[ETA_THM] >>
+  PairCases_on `result` \\
+  gvs[bind_def, ignore_bind_def, assert_def, CaseEq"prod", CaseEq"sum",
+      lift_sum_def, update_accounts_def, update_transient_def, return_def,
+      sum_CASE_rator, raise_def]
 QED
 
 (* Case: IntCall - the complex case with finally/pop_function.
@@ -265,26 +268,20 @@ Theorem case_IntCall[local]:
        eval_expr cx (Call (IntCall (src_id_opt, fn)) es) st = (res, st') ⇒
        scope_preserving_expr (Call (IntCall (src_id_opt, fn)) es) ⇒ st.scopes = st'.scopes)
 Proof
-  let
-    val sub_tac =
-      TRY (drule_all finally_set_scopes >> strip_tac >> gvs[]) >>
-      TRY (Cases_on `safe_cast rtv rv` >> gvs[return_def, raise_def]) >>
-      TRY (Cases_on `evaluate_type (type_env ts) (FST (SND (SND tup)))` >> gvs[return_def, raise_def]) >>
-      TRY (Cases_on `bind_arguments (type_env ts) (FST (SND tup)) vs` >> gvs[return_def, raise_def]) >>
-      TRY (Cases_on `lookup_function fn Internal ts` >> gvs[return_def, raise_def]) >>
-      TRY (Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def]) >>
-      TRY (last_x_assum mp_tac >> simp[check_def, assert_def, return_def, lift_option_def] >>
-           strip_tac >> first_x_assum drule >> gvs[scope_preserving_expr_def] >> metis_tac[])
-  in
-    rpt strip_tac >>
-    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-    simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
-         check_def, assert_def, lift_option_def, get_scopes_def, push_function_def,
-         pop_function_def, set_scopes_def, scope_preserving_expr_def] >>
-    strip_tac >> gvs[return_def, raise_def] >>
-    sub_tac >> sub_tac >> sub_tac >> sub_tac >> sub_tac >>
-    sub_tac >> sub_tac >> sub_tac >> sub_tac
-  end
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
+       check_def, assert_def, lift_option_def, get_scopes_def, push_function_def,
+       pop_function_def, set_scopes_def, scope_preserving_expr_def] >>
+  strip_tac >> gvs[return_def, raise_def] >>
+  TRY (drule_all finally_set_scopes >> strip_tac >> gvs[]) >>
+  TRY (Cases_on `safe_cast rtv rv` >> gvs[return_def, raise_def]) >>
+  TRY (gvs[CaseEq"option", option_CASE_rator, raise_def, return_def]) >>
+  TRY (Cases_on `bind_arguments (type_env ts) (FST (SND tup)) vs` >> gvs[return_def, raise_def]) >>
+  TRY (Cases_on `lookup_function fn Internal ts` >> gvs[return_def, raise_def]) >>
+  TRY (Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def]) >>
+  TRY (last_x_assum mp_tac >> simp[check_def, assert_def, return_def, lift_option_def] >>
+       strip_tac >> first_x_assum drule >> gvs[scope_preserving_expr_def] >> metis_tac[])
 QED
 
 Theorem case_eval_exprs_nil[local]:
@@ -395,10 +392,8 @@ Proof
       ACCEPT_TAC case_TypeBuiltin' >-
       (* Send *)
       ACCEPT_TAC case_Send' >-
-      (* ExtCall *)
+      (* ExtCall - covers both static and non-static *)
       metis_tac[case_ExtCall] >-
-      (* StaticCall *)
-      metis_tac[case_StaticCall] >-
       (* IntCall *)
       ACCEPT_TAC case_IntCall' >-
       (* eval_exprs [] *)

@@ -273,6 +273,29 @@ Proof
   TRY (drule_all eval_exprs_preserves_scopes_dom_helper >> simp[])
 QED
 
+Theorem case_Call_ExtCall_ind[local]:
+  ∀es.
+    (∀e. MEM e es ⇒
+         ∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
+    ∀is_static sig cx st res st'.
+      eval_expr cx (Call (ExtCall is_static sig) es) st = (res,st') ⇒ 
+      MAP FDOM st.scopes = MAP FDOM st'.scopes
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  PairCases_on `sig` >>
+  simp[evaluate_def, bind_def, ignore_bind_def, CaseEq"prod", CaseEq"sum",
+       lift_option_def, CaseEq"option", option_CASE_rator, raise_def,
+       return_def, check_def, assert_def,
+       get_transient_storage_def, get_accounts_def] >>
+  strip_tac >> gvs[return_def, raise_def] >>
+  drule_all eval_exprs_preserves_scopes_dom_helper >> strip_tac >> gvs[] >>
+  PairCases_on `result` >>
+  gvs[bind_def, ignore_bind_def, assert_def, CaseEq"prod", CaseEq"sum",
+      lift_sum_def, update_accounts_def, update_transient_def, return_def,
+      sum_CASE_rator, raise_def]
+QED
+
 (* ========================================================================
    Preservation Theorem proved by structural induction on expr/base_target types
    ======================================================================== *)
@@ -342,8 +365,7 @@ Proof
       (* Case 12: Call *)
       >- (rpt strip_tac >> Cases_on `c`
           >- (PairCases_on `p` >> drule_all case_Call_IntCall_ind >> simp[])
-          >- gvs[evaluate_def, raise_def]
-          >- gvs[evaluate_def, raise_def]
+          >- (PairCases_on `p` >> drule_all case_Call_ExtCall_ind >> simp[])
           >- (drule_all case_Call_Send_ind >> simp[]))
       (* Case 13: NameTarget *)
       >- (rpt strip_tac >> drule case_NameTarget_dom >> simp[])

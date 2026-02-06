@@ -76,7 +76,7 @@ Datatype:
 
   (* Variables and access *)
   | JE_Name string (string option) (num option)        (* id, typeclass, source_id for modules *)
-  | JE_Attribute json_expr string                      (* value, attr *)
+  | JE_Attribute json_expr string (string option) (num option)  (* value, attr, result_typeclass, source_id *)
   | JE_Subscript json_expr json_expr                   (* value, slice *)
 
   (* Operators *)
@@ -159,7 +159,7 @@ End
 
 Datatype:
   json_import_info
-  = JImportInfo string string string                   (* alias, path, qualified_module_name *)
+  = JImportInfo string num string                      (* alias, source_id, qualified_module_name *)
 End
 
 (* ===== Interface Function Signature ===== *)
@@ -234,11 +234,14 @@ Datatype:
 End
 
 (* Complete storage layout for a contract *)
+(* Storage keys are (module_alias_opt, var_name):
+   - (NONE, "counter") for main module variables
+   - (SOME "lib1", "counter") for module lib1's variables *)
 Datatype:
   json_storage_layout = <|
-    storage : (string # storage_slot_info) list;    (* variable name -> slot info *)
-    transient : (string # storage_slot_info) list;  (* transient variable -> slot info *)
-    code : (string # code_slot_info) list           (* immutable name -> code info *)
+    storage : ((string option # string) # storage_slot_info) list;
+    transient : ((string option # string) # storage_slot_info) list;
+    code : (string # code_slot_info) list  (* immutables - no module nesting *)
   |>
 End
 

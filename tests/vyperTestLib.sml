@@ -227,17 +227,17 @@ val unsupported_code = [
 ]
 
 val unsupported_patterns = unsupported_code @ [
-  "extcall ",
-  "staticcall ",
   "raw_call(",
   "raw_log(",
   "raw_revert(",
   "selfdestruct",
   "msg.mana", "msg.gas",
-  "exports",
-  "import ",
   "create_minimal_proxy_to(",
-  "create_copy_of("
+  "create_copy_of(",
+  "gas=",
+  "# pragma nonreentrancy",
+  "@nonreentrant",
+  "default_return_value="
 ]
 
 fun has_default_arg src =
@@ -272,22 +272,8 @@ fun has_default_arg src =
     has_default_from 0
   end
 
-fun has_sqrt_call src =
-  let
-    val n = String.size src
-    fun loop i =
-      if i + 5 > n then false
-      else if String.substring (src, i, 5) = "sqrt(" andalso
-              (i = 0 orelse String.sub (src, i - 1) <> #"i")
-           then true
-           else loop (i + 1)
-  in
-    loop 0
-  end
-
 fun has_unsupported_patterns src =
   has_default_arg src orelse
-  has_sqrt_call src orelse
   List.exists (fn x => String.isSubstring x src) unsupported_patterns
 
 fun is_blank s =
@@ -344,6 +330,39 @@ val allowed_test_patterns = [
 ]
 
 val excluded_test_patterns = [
+]
+
+(* Individual test names that bypass unsupported pattern checks *)
+val allowed_test_names = [
+  (* extcall tests - staticcall now enabled globally *)
+  "test_external_contract_call_state_change",
+  "test_complicated_external_contract_calls"
+]
+
+(* Tests excluded by name - require architectural changes *)
+val excluded_test_names = [
+  (* TODO: Storage arrays with huge sizes require ArrayRef support.
+     Currently we try to load entire array into memory. Fix: Add ArrayRef
+     constructor to typed_value (like HashMapRef) and compute slot offsets
+     directly instead of materializing the whole array. *)
+  "test_boundary_access_to_arr",
+  "test_negative_ix_access_to_large_arr",
+  "test_oob_access_to_large_arr",
+  (* TODO: extcall with value= (sending ETH) not yet supported.
+     Requires adding value field to ext_call_sig and passing it to run_ext_call. *)
+  "test_external_with_payable_value",
+  (* TODO: Transitive exports (lib2.__interface__ where lib2 re-exports lib1.__interface__)
+     Currently we only look at direct functions in a module, not transitively re-exported ones. *)
+  "test_exported_fun_part_of_interface",
+  (* TODO: Cross-module __init__ calls (module.__init__() from main contract's __init__)
+     Currently IntCall looks up with Internal visibility, but __init__ has Deploy visibility. *)
+  "test_immutable_hashing_overlap_regression",
+  (* TODO: __at__ builtin (lib.__at__(addr)) for creating interface instances
+     Not yet implemented. *)
+  "test_intrinsic_interface_converts",
+  "test_intrinsic_interface_defaults",
+  "test_intrinsic_interface_instantiation",
+  "test_intrinsic_interface_kws"
 ]
 
 fun glob_match pat str =
@@ -433,12 +452,14 @@ end
 
 val deployment : term decoder =
   check_trace_type "deployment" $
-  check (field "source_code" string)
-        (fn src => not (has_unsupported_patterns src))
-        "has unsupported_pattern" $
-  JSONDecode.map (fn ((((c,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e),bc),sl) =>
+  JSONDecode.map (fn ((((srcs_exps_imap,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e),bc),sl) =>
+             (* translate_annotated_ast returns (sources, exports, import_map) *)
+             let val (srcs_exps, import_map) = pairSyntax.dest_pair srcs_exps_imap
+                 val (srcs, exps) = pairSyntax.dest_pair srcs_exps in
              TypeBase.mk_record (deployment_trace_ty, [
-               ("sourceAst", c),
+               ("sourceAst", srcs),
+               ("sourceExports", exps),
+               ("importMap", import_map),
                ("contractAbi", mk_list(i, abi_entry_ty)),
                ("deployedAddress", a),
                ("deployer", s),
@@ -453,7 +474,7 @@ val deployment : term decoder =
                ("callData", d),
                ("runtimeBytecode", bc),
                ("storageLayout", sl)
-             ]))
+             ]) end)
           (tuple2 (tuple2 (tuple2 (tuple4 (toplevels_via_jsonast,
                            tuple3 (
                              field "contract_abi" (array abiEntry),
@@ -492,10 +513,14 @@ val test_decoder =
    field "traces" (array trace))
 
 fun trydecode ((name,json),(s,f)) =
-  if has_unsupported_source_json json then (s,f)
-  else ((name, decode test_decoder json)::s, f)
-  handle JSONError e => (s, (name, JSONError e)::f)
-       | e => (s, (name, JSONError (e, JSON.OBJECT [("source_code", JSON.STRING "")]))::f)
+  if List.exists (equal name) excluded_test_names
+  then (s,f)
+  else if List.exists (equal name) allowed_test_names
+     orelse not (has_unsupported_source_json json)
+  then ((name, decode test_decoder json)::s, f)
+       handle JSONError e => (s, (name, JSONError e)::f)
+            | e => (s, (name, JSONError (e, JSON.OBJECT [("source_code", JSON.STRING "")]))::f)
+  else (s,f)
 
 fun read_test_json json_path = let
   val test_jsons = decodeFile rawObject json_path
