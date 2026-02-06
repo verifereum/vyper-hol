@@ -40,7 +40,7 @@ Definition example_4_body_def:
 End
 
 Theorem example_4_body_length:
-  LENGTH example_4_body = 3
+  LENGTH example_4_body = 4
 Proof
   EVAL_TAC
 QED
