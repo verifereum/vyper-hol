@@ -351,9 +351,6 @@ val excluded_test_names = [
   (* TODO: extcall with value= (sending ETH) not yet supported.
      Requires adding value field to ext_call_sig and passing it to run_ext_call. *)
   "test_external_with_payable_value",
-  (* TODO: Cross-module __init__ calls (module.__init__() from main contract's __init__)
-     Currently IntCall looks up with Internal visibility, but __init__ has Deploy visibility. *)
-  "test_immutable_hashing_overlap_regression",
   (* TODO: __at__ builtin (lib.__at__(addr)) for creating interface instances
      Not yet implemented. *)
   "test_intrinsic_interface_converts",

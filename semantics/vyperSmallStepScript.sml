@@ -187,7 +187,7 @@ Definition eval_expr_cps_def:
     (case do
       check (no_recursion (ns, fn) cx10.stk) "recursion";
       ts <- lift_option (get_module_code cx10 ns) "IntCall get_module_code";
-      tup <- lift_option (lookup_function fn Internal ts) "IntCall lookup_function";
+      tup <- lift_option (lookup_callable_function cx10.in_deploy fn ts) "IntCall lookup_function";
       stup <<- SND tup; args <<- FST stup; sstup <<- SND stup;
       ret <<- FST $ sstup; body <<- SND $ sstup;
       check (LENGTH args = LENGTH es) "IntCall args length";

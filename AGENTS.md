@@ -232,6 +232,49 @@ These are related but different:
 - `metis_tac[]` struggles with quantifier instantiation - use `gvs[]` or explicit `first_x_assum irule >> simp[]`
 - If `irule thm` fails, try `drule_all thm` for forward reasoning
 
+### ALOOKUP/MAP/FILTER Proofs
+
+When proving properties about `ALOOKUP` on mapped or filtered lists:
+
+1. **Use abbreviations systematically** - Abbreviate complex terms to make proof structure clear:
+   ```sml
+   \\ qmatch_goalsub_abbrev_tac`option_CASE alo`
+   \\ `alo = SOME z` suffices_by simp[]
+   ```
+
+2. **Show function equality for MAP** - When using `ALOOKUP_MAP_KEY_INJ`:
+   ```sml
+   \\ qmatch_goalsub_abbrev_tac`MAP fi`
+   \\ `fi = $, src_id ## I` by simp[Abbr`fi`, FUN_EQ_THM, FORALL_PROD]
+   \\ pop_assum SUBST_ALL_TAC
+   ```
+
+3. **Substitute in the right direction** - Use `SUBST1_TAC o SYM` when needed:
+   ```sml
+   \\ pop_assum $ SUBST1_TAC o SYM
+   ```
+
+4. **For drule with extra quantifiers** - Use `drule_all_then` with `qspec_then`:
+   ```sml
+   \\ drule_all_then(qspec_then`src_id_opt`strip_assume_tac) lookup_callable_function_eq_ALOOKUP_module_fns
+   ```
+
+5. **Chain drules properly** - Use `drule_at_then`:
+   ```sml
+   \\ drule_at_then Any drule ALOOKUP_FLAT_MAP_module_fns
+   ```
+
+6. **For filter equality** - Abbreviate predicate, prove equality, substitute:
+   ```sml
+   \\ qmatch_goalsub_abbrev_tac`ALOOKUP (FILTER P ls) k`
+   \\ `P = λ(k,v). ¬MEM k cx.stk` by simp[Abbr`P`,FUN_EQ_THM,FORALL_PROD]
+   \\ pop_assum SUBST_ALL_TAC
+   ```
+
+7. **Avoid `rw[]` too early** - Use `rpt gen_tac \\ simp[]` then `strip_tac` to control when hypotheses are introduced
+
+8. **Use `reverse strip_tac`** - To handle disjunctive cases in the natural order after `CaseEq"option"`
+
 ## HOL4 Script Style
 
 Use modern syntax for HOL4 script files. Scripts should start with the `Theory` keyword and use `Ancestors` and `Libs` to specify dependencies, rather than using `open` explicitly.
