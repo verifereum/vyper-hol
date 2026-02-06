@@ -533,7 +533,7 @@ QED
 Theorem stmts_spec_assign:
   ∀P P' Q cx tgt e.
      (⟦cx⟧ ⦃P⦄ tgt ⇓ᵗ⦃λav st. P' av st⦄) ∧
-     (⟦cx⟧ ⦃λst. ∃av. P' av st⦄ e ⇓⦃λtv st. ∃av v. tv = Value v ∧ assign_target_spec cx st av (Replace v) Q⦄) ⇒
+     (∀av. ⟦cx⟧ ⦃P' av⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ assign_target_spec cx st av (Replace v) Q⦄) ⇒
      ⟦cx⟧ ⦃P⦄ [Assign tgt e] ⦃Q ∥ λ_ _. F⦄
 Proof
   rw[stmts_spec_def, target_spec_def, expr_spec_def, assign_target_spec_def]
@@ -544,13 +544,12 @@ Proof
    Cases_on `eval_target cx tgt st` >> Cases_on `q` >> simp[] >>
    strip_tac >> gvs[] >>
    rename [`eval_target _ _ _ = (INL av, st')`] >>
-   first_x_assum (qspec_then `st'` mp_tac) >>
-   impl_tac >- metis_tac[] >>
+   first_x_assum (qspecl_then [`av`, `st'`] mp_tac) >> simp[] >>
    Cases_on `eval_expr cx e st'` >> Cases_on `q` >> simp[] >>
    strip_tac >> gvs[return_def, bind_def] >>
    simp[bind_def, ignore_bind_def, get_Value_def, return_def] >>
    rename [`eval_expr _ _ _ = (INL _, st'')`] >>
-   Cases_on `assign_target cx av' (Replace v) st''` >> Cases_on `q`
+   Cases_on `assign_target cx av (Replace v) st''` >> Cases_on `q`
     >> gvs[return_def] >>
    simp[Once evaluate_def, return_def]
 QED
@@ -564,7 +563,7 @@ Proof
   irule stmts_spec_assign >>
   qexists_tac `λav' st. av' = av ∧ P st ∧ lookup_name_target cx st n = SOME av` >>
   conj_tac >-
-  (rpt strip_tac >> Cases_on `av' = av` >> gvs[expr_spec_def]) >>
+  (rpt strip_tac >> gvs[expr_spec_def]) >>
   rw[target_spec_def, lookup_name_target_def] >>
   simp[Once evaluate_def, bind_def, return_def] >>
   Cases_on `eval_base_target cx (NameTarget n) st` >>
@@ -583,7 +582,7 @@ Proof
   qexists_tac `λav st. av = BaseTargetV (ScopedVar n) [] ∧
                        P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n` >>
   conj_tac >-
-  (rpt strip_tac >> Cases_on `av = BaseTargetV (ScopedVar n) []` >> gvs[expr_spec_def] >>
+  (rpt strip_tac >> gvs[expr_spec_def] >>
    rpt strip_tac >> first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
    Cases_on `eval_expr cx e st` >> Cases_on `q` >> simp[] >>
    strip_tac >> qexists_tac `v` >> simp[] >>
@@ -700,7 +699,7 @@ Proof
   qexists_tac `λav st. av = BaseTargetV (ScopedVar n) [] ∧
                        P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n` >>
   conj_tac >-
-  (rpt strip_tac >> Cases_on `av = BaseTargetV (ScopedVar n) []` >> gvs[expr_spec_def] >>
+  (rpt strip_tac >> gvs[expr_spec_def] >>
    rpt strip_tac >> first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
    Cases_on `eval_expr cx e st` >> Cases_on `q` >> simp[] >>
    strip_tac >> qexists_tac `v2` >> simp[] >>
