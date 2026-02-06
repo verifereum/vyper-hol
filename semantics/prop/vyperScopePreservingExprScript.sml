@@ -258,7 +258,7 @@ Theorem case_IntCall[local]:
     (∀s'' x t s'3' ts t' s'4' tup t'' stup args sstup ret ss s'5' x' t'3'.
        check (¬MEM (src_id_opt, fn) cx.stk) "recursion" s'' = (INL x, t) ∧
        lift_option (get_module_code cx src_id_opt) "IntCall get_module_code" s'3' = (INL ts, t') ∧
-       lift_option (lookup_function fn Internal ts) "IntCall lookup_function" s'4' = (INL tup, t'') ∧
+       lift_option (lookup_callable_function cx.in_deploy fn ts) "IntCall lookup_function" s'4' = (INL tup, t'') ∧
        stup = SND tup ∧ args = FST stup ∧ sstup = SND stup ∧
        ret = FST sstup ∧ ss = SND sstup ∧
        check (LENGTH args = LENGTH es) "IntCall args length" s'5' = (INL x', t'3') ⇒
@@ -278,7 +278,7 @@ Proof
   TRY (Cases_on `safe_cast rtv rv` >> gvs[return_def, raise_def]) >>
   TRY (gvs[CaseEq"option", option_CASE_rator, raise_def, return_def]) >>
   TRY (Cases_on `bind_arguments (type_env ts) (FST (SND tup)) vs` >> gvs[return_def, raise_def]) >>
-  TRY (Cases_on `lookup_function fn Internal ts` >> gvs[return_def, raise_def]) >>
+  TRY (Cases_on `lookup_callable_function cx.in_deploy fn ts` >> gvs[return_def, raise_def]) >>
   TRY (Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def]) >>
   TRY (last_x_assum mp_tac >> simp[check_def, assert_def, return_def, lift_option_def] >>
        strip_tac >> first_x_assum drule >> gvs[scope_preserving_expr_def] >> metis_tac[])
