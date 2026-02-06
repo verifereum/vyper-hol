@@ -591,7 +591,6 @@ Proof
   simp[target_spec_scoped_var]
 QED
 
-(*
 Theorem stmts_spec_assign_subscripts:
   ∀P P' Q cx tgt loc sbs e.
      (⟦cx⟧ ⦃P⦄ tgt ⇓ᵗ⦃λav st. av = BaseTargetV loc sbs ∧ P' st⦄) ⇒
@@ -600,7 +599,6 @@ Theorem stmts_spec_assign_subscripts:
 Proof
   cheat
 QED
-*)
 
 Theorem stmts_spec_ann_assign:
   ∀P Q cx n ty e.
