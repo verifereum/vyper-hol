@@ -272,22 +272,8 @@ fun has_default_arg src =
     has_default_from 0
   end
 
-fun has_sqrt_call src =
-  let
-    val n = String.size src
-    fun loop i =
-      if i + 5 > n then false
-      else if String.substring (src, i, 5) = "sqrt(" andalso
-              (i = 0 orelse String.sub (src, i - 1) <> #"i")
-           then true
-           else loop (i + 1)
-  in
-    loop 0
-  end
-
 fun has_unsupported_patterns src =
   has_default_arg src orelse
-  has_sqrt_call src orelse
   List.exists (fn x => String.isSubstring x src) unsupported_patterns
 
 fun is_blank s =
