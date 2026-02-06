@@ -214,15 +214,23 @@ Proof
   drule lookup_scoped_var_implies_lookup_name >> simp[]
 QED
 
-Theorem update_target_preserves_valid_lookups:
+Theorem update_target_valid_lookups:
   ∀cx st av ao.
-    valid_lookups cx st ∧ valid_target cx st av ao ⇒
-    valid_lookups cx (update_target cx st av ao)
+    valid_target cx st av ao ⇒
+    (valid_lookups cx (update_target cx st av ao) ⇔ valid_lookups cx st)
 Proof
-  rw[valid_lookups_def, valid_target_def, update_target_def] >>
+  rw[valid_lookups_def, valid_target_def, update_target_def, EQ_IMP_THM] >>
   Cases_on `assign_target cx av ao st` >> Cases_on `q` >> gvs[] >>
   `MAP FDOM r.scopes = MAP FDOM st.scopes`
     by (drule (CONJUNCT1 vyperScopePreservationTheory.assign_target_preserves_scopes_dom) >> simp[]) >>
+  (* Both directions use similar structure *)
+  TRY (drule assign_target_preserves_immutables_addr_dom_rev >> simp[] >> strip_tac >>
+       Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[] >>
+       rpt strip_tac >>
+       `var_in_scope r n` by (gvs[var_in_scope_def, lookup_scoped_var_def] >> metis_tac[lookup_scopes_dom_iff]) >>
+       `FLOOKUP (get_source_immutables NONE imms) (string_to_num n) = NONE` by metis_tac[] >>
+       drule assign_target_preserves_immutables_dom >> simp[] >> strip_tac >>
+       first_x_assum (qspec_then `string_to_num n` mp_tac) >> gvs[] >> NO_TAC) >>
   drule assign_target_preserves_immutables_addr_dom >> simp[] >> strip_tac >>
   Cases_on `ALOOKUP r.immutables cx.txn.target` >> gvs[] >>
   rpt strip_tac >>
@@ -241,4 +249,12 @@ Proof
   `MAP FDOM r.scopes = MAP FDOM st.scopes`
     by (drule (CONJUNCT1 vyperScopePreservationTheory.assign_target_preserves_scopes_dom) >> simp[]) >>
   metis_tac[lookup_scopes_dom_iff]
+QED
+
+Theorem update_target_no_subscripts_preserves_valid_target:
+  ∀cx st av ao loc ao'.
+    valid_target cx st av ao ⇒
+    valid_target cx (update_target cx st (BaseTargetV loc []) ao') av ao
+Proof
+  cheat
 QED
