@@ -334,7 +334,7 @@ Proof
                   `λv st. ∃n. v = IntV (Unsigned 256) n ∧ 20 < n ∧ n ≤ 110`] >>
     conj_tac >- simp[] >> conj_tac >- (simp[] >> intLib.ARITH_TAC) >> conj_tac >- simp[] >>
     irule stmt4_lemma) >>
-  simp[stmts_spec_def]
+  irule stmts_spec_false_pre
 QED
 
 (* Case 2: xval ≤ 20 - stmt4 doesn't return, proceeds to stmt5 and stmt6 *)
