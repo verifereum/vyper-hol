@@ -12,10 +12,10 @@ Definition stmts_spec_def:
       case eval_stmts cx ss st of
       | (INL (), st') => Q_ok st'
       | (INR (ReturnException v), st') => Q_ret v st'
-      | (INR (AssertException s), st') => F (* assertions not allowed to fail *)
+      | (INR (AssertException str), st') => F (* assertions not allowed to fail *)
       | (INR BreakException, st') => F  (* TODO: break not yet supported *)
       | (INR ContinueException, st') => F (* TODO: continue not yet supported *)
-      | (INR (Error s), st') => F
+      | (INR (Error str'), st') => F
 End
 
 Definition expr_spec_def:
@@ -543,13 +543,14 @@ Proof
    qpat_x_assum `!st. P st ==> _` (qspec_then `st` mp_tac) >> simp[] >>
    Cases_on `eval_target cx tgt st` >> Cases_on `q` >> simp[] >>
    strip_tac >> gvs[] >>
-   rename [`eval_target _ _ _ = (INL _, st')`] >>
-   first_x_assum (qspec_then `st'` mp_tac) >> simp[] >>
+   rename [`eval_target _ _ _ = (INL av, st')`] >>
+   first_x_assum (qspec_then `st'` mp_tac) >>
+   impl_tac >- metis_tac[] >>
    Cases_on `eval_expr cx e st'` >> Cases_on `q` >> simp[] >>
    strip_tac >> gvs[return_def, bind_def] >>
-   simp[bind_def, ignore_bind_def] >>
+   simp[bind_def, ignore_bind_def, get_Value_def, return_def] >>
    rename [`eval_expr _ _ _ = (INL _, st'')`] >>
-   Cases_on `assign_target cx av (Replace v) st''` >> Cases_on `q`
+   Cases_on `assign_target cx av' (Replace v) st''` >> Cases_on `q`
     >> gvs[return_def] >>
    simp[Once evaluate_def, return_def]
 QED
@@ -561,17 +562,15 @@ Theorem stmts_spec_assign_name:
 Proof
   rpt strip_tac >>
   irule stmts_spec_assign >>
-  qexists_tac `λst. P st ∧ lookup_name_target cx st n = SOME av` >>
-  qexists_tac `av` >>
-  conj_tac >- simp[] >>
+  qexists_tac `λav' st. av' = av ∧ P st ∧ lookup_name_target cx st n = SOME av` >>
+  conj_tac >-
+  (rpt strip_tac >> Cases_on `av' = av` >> gvs[expr_spec_def]) >>
   rw[target_spec_def, lookup_name_target_def] >>
   simp[Once evaluate_def, bind_def, return_def] >>
   Cases_on `eval_base_target cx (NameTarget n) st` >>
-  Cases_on `q` >> gvs[] >-
+  Cases_on `q` >> gvs[lookup_base_target_def] >-
   (PairCases_on `x` >> gvs[return_def] >>
-   drule eval_base_target_NameTarget_preserves_state >> strip_tac >>
-   gvs[lookup_base_target_def]) >>
-  gvs[lookup_base_target_def]
+   drule eval_base_target_NameTarget_preserves_state >> strip_tac >> gvs[])
 QED
 
 Theorem stmts_spec_assign_scoped_var:
@@ -579,17 +578,17 @@ Theorem stmts_spec_assign_scoped_var:
     (⟦cx⟧ ⦃λst. P st ∧ var_in_scope st n⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ Q (update_scoped_var st n v)⦄) ⇒
     ⟦cx⟧ ⦃λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄ [Assign (BaseTarget (NameTarget n)) e] ⦃Q ∥ λ_ _. F⦄
 Proof
-  (* use stmts_spec_assign and expr_spec_exists in this proof *)
   rpt strip_tac >>
   irule stmts_spec_assign >>
-  qexists_tac `λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n` >>
-  qexists_tac `BaseTargetV (ScopedVar n) []` >> conj_tac >-
-  (drule expr_spec_preserves_var_in_scope >> strip_tac >>
-   irule expr_spec_consequence >>
-   qexists_tac `λst. P st ∧ var_in_scope st n` >>
-   qexists_tac `λv st. (∃v'. v = Value v' ∧ Q (update_scoped_var st n v')) ∧ var_in_scope st n` >> simp[] >>
-   conj_tac >- (rpt strip_tac >> qexists_tac `v'` >> simp[assign_target_spec_scoped_var_replace_intro]) >>
-   gvs[]) >>
+  qexists_tac `λav st. av = BaseTargetV (ScopedVar n) [] ∧
+                       P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n` >>
+  conj_tac >-
+  (rpt strip_tac >> Cases_on `av = BaseTargetV (ScopedVar n) []` >> gvs[expr_spec_def] >>
+   rpt strip_tac >> first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
+   Cases_on `eval_expr cx e st` >> Cases_on `q` >> simp[] >>
+   strip_tac >> qexists_tac `v` >> simp[] >>
+   irule assign_target_spec_scoped_var_replace_intro >> simp[] >>
+   drule eval_expr_preserves_var_in_scope >> metis_tac[]) >>
   simp[target_spec_scoped_var]
 QED
 
@@ -631,7 +630,7 @@ QED
 Theorem stmts_spec_aug_assign:
   ∀P P' Q cx (tgt:base_assignment_target) bop e.
      (⟦cx⟧ ⦃P⦄ (BaseTarget tgt) ⇓ᵗ⦃λav st. P' av st⦄) ∧
-     (⟦cx⟧ ⦃λst. ∃av. P' av st⦄ e ⇓⦃λtv st. ∃av. tv = Value v ∧ assign_target_spec cx st av (Update bop v) Q⦄) ⇒
+     (∀av. ⟦cx⟧ ⦃P' av⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ assign_target_spec cx st av (Update bop v) Q⦄) ⇒
      ⟦cx⟧ ⦃P⦄ [AugAssign tgt bop e] ⦃Q ∥ λ_ _. F⦄
 Proof
   rw[stmts_spec_def, target_spec_def, expr_spec_def, assign_target_spec_def] >>
@@ -641,14 +640,16 @@ Proof
   simp[Once evaluate_def, bind_def, return_def] >>
   Cases_on `eval_base_target cx tgt st` >> Cases_on `q` >> simp[] >-
   (Cases_on `x` >> simp[return_def] >> strip_tac >>
-   first_x_assum (qspec_then `r` mp_tac) >>
+   rename [`eval_base_target _ _ _ = (INL (loc, sbs), st')`] >>
+   first_x_assum (qspecl_then [`BaseTargetV loc sbs`, `st'`] mp_tac) >>
    simp[bind_def, return_def] >>
-   Cases_on `eval_expr cx e r` >> Cases_on `q'` >> simp[] >-
-   (simp[return_def, bind_def, ignore_bind_def] >>
-    strip_tac >>
-    Cases_on `assign_target cx av (Update bop v) r''` >>
-    Cases_on `q'` >> simp[] >-
-    (simp[Once evaluate_def, return_def] >> fs[]) >>
+   Cases_on `eval_expr cx e st'` >> Cases_on `q` >> simp[] >-
+   (simp[return_def, bind_def, ignore_bind_def, get_Value_def] >> strip_tac >>
+    gvs[return_def] >>
+    rename [`eval_expr _ _ _ = (INL _, st'')`] >>
+    Cases_on `assign_target cx (BaseTargetV loc sbs) (Update bop v) st''` >>
+    Cases_on `q` >> simp[] >-
+    (simp[Once evaluate_def, return_def] >> gvs[]) >>
     gvs[AllCaseEqs()]) >>
    simp[])
 QED
@@ -694,22 +695,18 @@ Theorem stmts_spec_aug_assign_scoped_var:
      [AugAssign (NameTarget n) bop e]
      ⦃Q ∥ λ_ _. F⦄
 Proof
-  (* Proof sketch:
-     1. Use assign_target_spec_scoped_var_update_intro and stmts_spec_consequence to obtain:
-         ⟦cx⟧ ⦃P⦄ e ⇓⦃λtv st. tv = Value v2 ∧ assign_target_spec cx st (BaseTargetV (ScopedVar n) []) (Update bop v) Q⦄
-     2. Use target_spec_scoped_var to obtain:
-        ⟦cx⟧ ⦃λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄ (BaseTarget (NameTarget n)) ⇓ᵗ⦃λav st. av = (BaseTargetV (ScopedVar n) []) ∧ P st⦄
-     3. Use stmts_spec_aug_assign to obtain:
-         ⟦cx⟧ ⦃λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄ [AugAssign (NameTarget n) bop e] ⦃Q ∥ λ_ _. F⦄
-   *)
   rpt strip_tac >>
   irule stmts_spec_aug_assign >>
-  qexistsl_tac [`(λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n)`, `BaseTargetV (ScopedVar n) []`, `v2`] >>
-  reverse conj_tac >-
-  simp[target_spec_scoped_var] >>
-  irule expr_spec_consequence >>
-  qexistsl_tac [`P`, `(λtv st. tv = Value v2 ∧ lookup_scoped_var st n = SOME v1 ∧ Q (update_scoped_var st n v))`] >>
-  simp[assign_target_spec_scoped_var_update_intro]
+  qexists_tac `λav st. av = BaseTargetV (ScopedVar n) [] ∧
+                       P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n` >>
+  conj_tac >-
+  (rpt strip_tac >> Cases_on `av = BaseTargetV (ScopedVar n) []` >> gvs[expr_spec_def] >>
+   rpt strip_tac >> first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
+   Cases_on `eval_expr cx e st` >> Cases_on `q` >> simp[] >>
+   strip_tac >> qexists_tac `v2` >> simp[] >>
+   irule assign_target_spec_scoped_var_update_intro >>
+   qexistsl_tac [`v`, `v1`] >> simp[]) >>
+  simp[target_spec_scoped_var]
 QED
 
 Theorem stmts_spec_append:
