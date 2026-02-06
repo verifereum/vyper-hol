@@ -86,46 +86,52 @@ Proof
   conj_tac
   (* ===== First statement: AnnAssign "x" _ (Literal 10) ===== *)
   >- (irule stmts_spec_ann_assign >>
-      qexists_tac `IntV (Signed 128) 10` >>
       irule expr_spec_consequence >>
       qexistsl_tac [
         `λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
               lookup_name cx st "x" = NONE ∧ lookup_name cx st "y" = NONE`,
-        `λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
-              lookup_name cx st "x" = NONE ∧ lookup_name cx st "y" = NONE`
+        `λtv st. st.scopes ≠ [] ∧ valid_lookups cx st ∧
+                 lookup_name cx st "x" = NONE ∧ lookup_name cx st "y" = NONE ∧
+                 tv = Value (IntV (Signed 128) 10)`
       ] >>
-      rpt conj_tac >> simp[]
-      (* Goal 1: postcondition implication *)
-      >- (rpt strip_tac >> simp[Abbr `P1`] >> rpt conj_tac
-          >- metis_tac[lookup_name_none_to_lookup_scoped_var]
-          >- simp[scopes_nonempty_after_update]
-          >- metis_tac[valid_lookups_preserved_after_update_no_name]
-          >- simp[lookup_after_update]
-          >- (`"x" ≠ "y"` by EVAL_TAC >> metis_tac[lookup_name_preserved_after_update]))
+      rpt conj_tac >> simp[Abbr `P1`]
+      (* Goal 1: postcondition implication - 5 subgoals after rpt strip_tac *)
+      >- (rpt strip_tac >|
+          [metis_tac[lookup_name_none_to_lookup_scoped_var],
+           metis_tac[scopes_nonempty_after_update],
+           metis_tac[valid_lookups_preserved_after_update_no_name],
+           simp[lookup_after_update],
+           `"x" ≠ "y"` by EVAL_TAC >> simp[lookup_name_preserved_after_update]])
       (* Goal 2: expr_spec for Literal *)
-      >- (`IntV (Signed 128) 10 = evaluate_literal (IntL (Signed 128) 10)` by EVAL_TAC >>
-          pop_assum (fn th => ONCE_REWRITE_TAC [th]) >>
-          irule expr_spec_literal))
+      >- (irule expr_spec_consequence >>
+          qexistsl_tac [
+            `λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
+                  lookup_name cx st "x" = NONE ∧ lookup_name cx st "y" = NONE`,
+            `λtv st. (st.scopes ≠ [] ∧ valid_lookups cx st ∧
+                      lookup_name cx st "x" = NONE ∧ lookup_name cx st "y" = NONE) ∧
+                     tv = Value (evaluate_literal (IntL (Signed 128) 10))`
+          ] >>
+          simp[expr_spec_literal, evaluate_literal_def]))
   (* ===== Second statement: AnnAssign "y" _ (Name "x") ===== *)
   >- (irule stmts_spec_ann_assign >>
-      qexists_tac `IntV (Signed 128) 10` >>
       irule expr_spec_consequence >>
       qexistsl_tac [
         `λst. (st.scopes ≠ [] ∧ lookup_name cx st "y" = NONE) ∧
               valid_lookups cx st ∧ lookup_scoped_var st "x" = SOME (IntV (Signed 128) 10)`,
-        `λst. (st.scopes ≠ [] ∧ lookup_name cx st "y" = NONE) ∧
-              valid_lookups cx st ∧ lookup_scoped_var st "x" = SOME (IntV (Signed 128) 10)`
+        `λtv st. (st.scopes ≠ [] ∧ lookup_name cx st "y" = NONE) ∧
+                 valid_lookups cx st ∧ lookup_scoped_var st "x" = SOME (IntV (Signed 128) 10) ∧
+                 tv = Value (IntV (Signed 128) 10)`
       ] >>
       rpt conj_tac >> simp[Abbr `P1`]
-      (* Goal 1: postcondition implication *)
-      >- (rpt strip_tac >> rpt conj_tac
-          >- metis_tac[lookup_name_none_to_lookup_scoped_var]
-          >- (irule sum_scoped_vars_xy_20 >>
-              simp[lookup_after_update] >>
-              `"y" ≠ "x"` by EVAL_TAC >>
-              drule_all lookup_scoped_var_preserved_after_update >> simp[]))
+      (* Goal 1: postcondition implication - 2 subgoals after rpt strip_tac *)
+      >- (rpt strip_tac >|
+          [metis_tac[lookup_name_none_to_lookup_scoped_var],
+           irule sum_scoped_vars_xy_20 >>
+           simp[lookup_after_update] >>
+           `"y" ≠ "x"` by EVAL_TAC >>
+           drule_all lookup_scoped_var_preserved_after_update >> simp[]])
       (* Goal 2: expr_spec for Name "x" *)
       >- (ACCEPT_TAC (SIMP_RULE std_ss []
             (Q.SPECL [`λst. st.scopes ≠ [] ∧ lookup_name cx st "y" = NONE`,
-                      `cx`, `"x"`, `IntV (Signed 128) 10`] expr_spec_scoped_var))))
+                      `cx`, `"x"`, `IntV (Signed 128) 10`] expr_spec_scoped_var_eq))))
 QED
