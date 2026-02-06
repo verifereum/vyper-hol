@@ -232,13 +232,12 @@ Proof
   first_x_assum (qspec_then `string_to_num n` mp_tac) >> gvs[]
 QED
 
-Theorem update_target_preserves_var_in_scope:
-  ∀cx st av ao n v.
-    var_in_scope st n ⇒
-    var_in_scope (update_target cx st av ao) n
+Theorem update_target_var_in_scope:
+  ∀cx st av ao n.
+    var_in_scope (update_target cx st av ao) n ⇔ var_in_scope st n
 Proof
-  rw[var_in_scope_def, lookup_scoped_var_def, update_target_def] >>
-  Cases_on `assign_target cx av ao st` >> simp[] >>
+  rw[var_in_scope_def, lookup_scoped_var_def, update_target_def, EQ_IMP_THM] >>
+  Cases_on `assign_target cx av ao st` >> gvs[] >>
   `MAP FDOM r.scopes = MAP FDOM st.scopes`
     by (drule (CONJUNCT1 vyperScopePreservationTheory.assign_target_preserves_scopes_dom) >> simp[]) >>
   metis_tac[lookup_scopes_dom_iff]
