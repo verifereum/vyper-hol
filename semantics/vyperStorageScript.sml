@@ -494,26 +494,28 @@ val () = cv_auto_trans encode_hashmap_key_def;
 
 (* ===== Top-Level Variable Access ===== *)
 
-(* Storage layout: maps variable names to their base slot numbers.
+(* Storage layout: maps (source_id, variable_name) to base slot numbers.
+   source_id is NONE for main module, SOME n for imported module n.
    This is a simplified representation - the full json_storage_layout
    from jsonAST includes additional info like n_slots and type_str,
    but for storage access we only need the base slot. *)
-Type storage_layout = “:(string # num) list”
+Type storage_layout = “:((num option # string) # num) list”
 
 (* Enriched storage layout: maps variable name keys (num) to slot numbers.
    Used at runtime for reading/writing variables to EVM storage. *)
 Type var_layout = “:num spt”
 
-(* Look up base slot for a variable name *)
+(* Look up base slot for a variable by (source_id, name) *)
 Definition lookup_var_slot_def:
-  lookup_var_slot (layout : storage_layout) (var_name : string) : num option =
-    ALOOKUP layout var_name
+  lookup_var_slot (layout : storage_layout) (src_id_opt : num option) (var_name : string) : num option =
+    ALOOKUP layout (src_id_opt, var_name)
 End
 
 (* Read a top-level variable from storage *)
+(* TODO: update to use new lookup_var_slot signature if needed *)
 Definition read_storage_var_def:
-  read_storage_var layout (storage : storage) var_name tv =
-    case lookup_var_slot layout var_name of
+  read_storage_var layout (storage : storage) src_id_opt var_name tv =
+    case lookup_var_slot layout src_id_opt var_name of
     | NONE => NONE
     | SOME slot =>
         case decode_value storage slot tv of
@@ -522,9 +524,10 @@ Definition read_storage_var_def:
 End
 
 (* Write a top-level variable to storage *)
+(* TODO: update to use new lookup_var_slot signature if needed *)
 Definition write_storage_var_def:
-  write_storage_var layout (storage : storage) var_name tv v =
-    case lookup_var_slot layout var_name of
+  write_storage_var layout (storage : storage) src_id_opt var_name tv v =
+    case lookup_var_slot layout src_id_opt var_name of
     | NONE => NONE
     | SOME slot =>
         (case encode_value tv v of

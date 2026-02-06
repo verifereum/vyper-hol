@@ -487,7 +487,8 @@ Definition translate_expr_def:
     if id = "self" then Builtin (Env SelfAddr) [] else Name id) /\
 
   (* Special attributes: msg.*, block.*, tx.*, self.*, module.*, flag members *)
-  (translate_expr (JE_Attribute (JE_Name obj tc src_id_opt) attr result_tc _) =
+  (* attr_src_id_opt is from variable_reads on the outer Attribute (for self.x storage access) *)
+  (translate_expr (JE_Attribute (JE_Name obj tc src_id_opt) attr result_tc attr_src_id_opt) =
     (* Same-module flag member: Action.BUY where tc = SOME "flag" *)
     if tc = SOME "flag" /\ result_tc = SOME "flag" then FlagMember (src_id_opt, obj) attr
     else if obj = "msg" /\ attr = "sender" then Builtin (Env Sender) []
@@ -499,9 +500,9 @@ Definition translate_expr_def:
     else if obj = "tx" /\ attr = "gasprice" then Builtin (Env GasPrice) []
     else if obj = "self" /\ attr = "balance" then
       Builtin (Acc Balance) [Builtin (Env SelfAddr) []]
-    (* self.x uses source_id from variable_reads (4th arg) for cross-module storage access *)
-    else if obj = "self" then TopLevelName (src_id_opt, attr)
-    (* Module variable access: tc = SOME "module" *)
+    (* self.x: use attr_src_id_opt from variable_reads for cross-module storage access *)
+    else if obj = "self" then TopLevelName (attr_src_id_opt, attr)
+    (* Module variable access (lib1.x): use src_id_opt from module type *)
     else if tc = SOME "module" then TopLevelName (src_id_opt, attr)
     else if attr = "balance" then Builtin (Acc Balance) [Name obj]
     else if attr = "address" then Builtin (Acc Address) [Name obj]
@@ -883,6 +884,35 @@ End
 
 val () = cv_auto_trans collect_imports_def;
 
+(* ===== Storage Layout Key Transformation ===== *)
+(* Transform storage layout keys from (alias_opt, var_name) to (source_id_opt, var_name).
+   Uses import_map to convert alias to source_id. *)
+
+(* Transform a single storage layout key.
+   (NONE, "counter") -> (NONE, "counter")  -- main module
+   (SOME "lib1", "counter") -> (SOME 0, "counter")  -- if import_map has ("lib1", 0) *)
+Definition transform_layout_key_def:
+  transform_layout_key import_map (alias_opt, var_name) =
+    case alias_opt of
+    | NONE => (NONE, var_name)  (* Main module variable *)
+    | SOME alias =>
+        case ALOOKUP import_map alias of
+        | NONE => (NONE, var_name)  (* Unknown alias, treat as main module *)
+        | SOME src_id => (SOME src_id, var_name)
+End
+
+val () = cv_auto_trans transform_layout_key_def;
+
+(* Transform all keys in a storage layout *)
+Definition transform_storage_layout_def:
+  transform_storage_layout import_map [] = [] ∧
+  transform_storage_layout import_map ((key, slot) :: rest) =
+    (transform_layout_key import_map key, slot) ::
+    transform_storage_layout import_map rest
+End
+
+val () = cv_auto_trans transform_storage_layout_def;
+
 (* Check if a function decl is external *)
 Definition is_external_function_def:
   is_external_function (JTL_FunctionDef _ decs _ _ _) = MEM "external" decs ∧
@@ -992,9 +1022,22 @@ Definition translate_imported_module_def:
     (SOME src_id, filter_some (MAP translate_toplevel body))
 End
 
+(* Extract toplevels from a JModule (needed to get import infos) *)
+Definition main_toplevels_def:
+  main_toplevels (JModule toplevels) = toplevels
+End
+
+val () = cv_auto_trans main_toplevels_def;
+
+(* Translate annotated AST, returning:
+   - sources: (source_id, toplevels) alist
+   - exports: func_name -> source_id
+   - import_map: alias -> source_id (for storage layout key transformation) *)
 Definition translate_annotated_ast_def:
   translate_annotated_ast (JAnnotatedAST main imports) =
+    let import_infos = collect_imports (main_toplevels main) in
+    let import_map = build_import_map import_infos in
     let sources = (NONE, translate_module main) :: MAP translate_imported_module imports in
     let exports = extract_exports main imports in
-    (sources, exports)
+    (sources, exports, import_map)
 End

@@ -466,11 +466,14 @@ end
 
 val deployment : term decoder =
   check_trace_type "deployment" $
-  JSONDecode.map (fn ((((srcs_exps,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e),bc),sl) =>
-             let val (srcs, exps) = pairSyntax.dest_pair srcs_exps in
+  JSONDecode.map (fn ((((srcs_exps_imap,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e),bc),sl) =>
+             (* translate_annotated_ast returns (sources, exports, import_map) *)
+             let val (srcs_exps, import_map) = pairSyntax.dest_pair srcs_exps_imap
+                 val (srcs, exps) = pairSyntax.dest_pair srcs_exps in
              TypeBase.mk_record (deployment_trace_ty, [
                ("sourceAst", srcs),
                ("sourceExports", exps),
+               ("importMap", import_map),
                ("contractAbi", mk_list(i, abi_entry_ty)),
                ("deployedAddress", a),
                ("deployer", s),

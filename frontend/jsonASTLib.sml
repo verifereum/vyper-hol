@@ -725,17 +725,31 @@ val json_keyword = delay d_json_keyword
 (* ===== Target Decoders ===== *)
 
 fun d_json_base_target () : term decoder = achoose "base_target" [
-  (* self.x -> TopLevelName (NONE, x) *)
+  (* self.x -> TopLevelName with source_id from variable_writes *)
   check_ast_type "Attribute" $
     check (field "value" (tuple2 (field "ast_type" string, field "id" string)))
           (fn p => p = ("Name", "self")) "not self" $
-    JSONDecode.map (fn attr => mk_JBT_TopLevelName (mk_nsid_none attr)) (field "attr" string),
+    JSONDecode.map (fn (attr, src_id_opt) => mk_JBT_TopLevelName (mk_nsid (src_id_opt, attr)))
+      (tuple2 (field "attr" string,
+               orElse (field "variable_writes" $ sub 0 $
+                         field "decl_node" $ field "source_id" source_id_opt_tm,
+                       succeed (optionSyntax.mk_none numSyntax.num)))),
+
+  (* module.x (lib1.counter) -> TopLevelName with source_id from type.type_decl_node *)
+  check_ast_type "Attribute" $
+    check (field "value" $ field "type" $ field "typeclass" string)
+          (fn tc => tc = "module") "not module" $
+    JSONDecode.map (fn (attr, src_id_opt) => mk_JBT_TopLevelName (mk_nsid (src_id_opt, attr)))
+      (tuple2 (field "attr" string,
+               orElse (field "value" $ field "type" $
+                         field "type_decl_node" $ field "source_id" source_id_opt_tm,
+                       succeed (optionSyntax.mk_none numSyntax.num)))),
 
   (* Name *)
   check_ast_type "Name" $
     JSONDecode.map mk_JBT_Name (field "id" string),
 
-  (* Attribute (non-self) *)
+  (* Attribute (non-self, non-module) *)
   check_ast_type "Attribute" $
     JSONDecode.map (fn (bt, attr) => mk_JBT_Attribute(bt, attr)) $
     tuple2 (field "value" (delay d_json_base_target), field "attr" string),
@@ -1098,9 +1112,12 @@ fun mk_code_slot_info (offset, length, type_str) =
       [("offset", offset), ("length", length), ("type_str", fromMLstring type_str)])
   in reccon end
 
+(* Storage key is (string option # string) = (module_alias_opt, var_name) *)
 fun mk_json_storage_layout (storage_list, transient_list, code_list) =
   let
-    val storage_pair_ty = mk_prod(string_ty, storage_slot_info_ty)
+    val string_option_ty = mk_option string_ty
+    val storage_key_ty = mk_prod(string_option_ty, string_ty)
+    val storage_pair_ty = mk_prod(storage_key_ty, storage_slot_info_ty)
     val code_pair_ty = mk_prod(string_ty, code_slot_info_ty)
     val storage_tm = mk_list(storage_list, storage_pair_ty)
     val transient_tm = mk_list(transient_list, storage_pair_ty)
@@ -1134,19 +1151,62 @@ fun decode_object_alist (decoder : term decoder) : (string * term) list decoder 
       succeed (List.map decode_pair pairs)
     end)
 
+(* Decode storage layout, handling arbitrarily nested module structures.
+   Flat: {"counter": {"slot": 0, ...}} -> [(NONE, "counter", info)]
+   Nested: {"lib1": {"counter": {"slot": 0, ...}}} -> [(SOME "lib1", "counter", info)]
+   Deep: {"lib2": {"lib1": {"counter": {...}}}} -> [(SOME "lib1", "counter", info)]
+   
+   The innermost module name is used as the alias - this corresponds to the
+   source_id in the AST. The outer nesting reflects initialization hierarchy
+   but the variable is "owned" by the innermost module.
+   
+   Returns (module_alias_opt, var_name, slot_info) triples. *)
+fun decode_storage_layout_nested (slot_decoder : term decoder)
+    : (string option * string * term) list decoder =
+  andThen rawObject (fn pairs =>
+    let
+      (* Check if a value looks like a slot info (has "slot" field) or is nested (module) *)
+      fun is_slot_info (JSON.OBJECT fields) =
+            List.exists (fn (k,_) => k = "slot") fields
+        | is_slot_info _ = false
+
+      (* Recursively decode, tracking the innermost module name seen *)
+      fun decode_entry innermost_module_opt (name, value) =
+        if is_slot_info value
+        then [(innermost_module_opt, name, decode slot_decoder value)]
+        else (* Nested module - recurse, updating innermost module to current name *)
+          case value of
+            JSON.OBJECT nested_fields =>
+              List.concat (List.map (decode_entry (SOME name)) nested_fields)
+          | _ => []
+    in
+      succeed (List.concat (List.map (decode_entry NONE) pairs))
+    end)
+
+(* Helper to make storage key term: (module_alias_opt, var_name) *)
+fun mk_storage_key (module_opt : string option, var_name : string) : term =
+  let
+    val alias_tm = case module_opt of
+                     NONE => optionSyntax.mk_none string_ty
+                   | SOME s => optionSyntax.mk_some (fromMLstring s)
+  in
+    pairSyntax.mk_pair(alias_tm, fromMLstring var_name)
+  end
+
 (* Parse the storage_layout object from a trace *)
 (* Structure: { "storage_layout": {...}, "transient_storage_layout": {...}, "code_layout": {...} } *)
 (* Note: inner storage_layout field is optional - some contracts have empty {} *)
+(* Storage layout keys: (module_alias_opt, var_name) *)
 val storage_layout : term decoder =
-  JSONDecode.map (fn ((storage_pairs, transient_pairs), code_pairs) =>
+  JSONDecode.map (fn ((storage_triples, transient_triples), code_pairs) =>
                     mk_json_storage_layout (
-                      List.map (fn (n,t) => pairSyntax.mk_pair(fromMLstring n, t)) storage_pairs,
-                      List.map (fn (n,t) => pairSyntax.mk_pair(fromMLstring n, t)) transient_pairs,
+                      List.map (fn (m,n,t) => pairSyntax.mk_pair(mk_storage_key(m,n), t)) storage_triples,
+                      List.map (fn (m,n,t) => pairSyntax.mk_pair(mk_storage_key(m,n), t)) transient_triples,
                       List.map (fn (n,t) => pairSyntax.mk_pair(fromMLstring n, t)) code_pairs))
   (tuple2 (
      tuple2 (
-       orElse (field "storage_layout" (decode_object_alist storage_slot_info), succeed []),
-       orElse (field "transient_storage_layout" (decode_object_alist storage_slot_info), succeed [])),
+       orElse (field "storage_layout" (decode_storage_layout_nested storage_slot_info), succeed []),
+       orElse (field "transient_storage_layout" (decode_storage_layout_nested storage_slot_info), succeed [])),
      orElse (field "code_layout" (decode_object_alist code_slot_info), succeed [])))
 
 end

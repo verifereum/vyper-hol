@@ -1,6 +1,6 @@
 Theory vyperTestRunner
 Ancestors
-  contractABI vyperABI vyperSmallStep jsonAST
+  contractABI vyperABI vyperSmallStep jsonAST jsonToVyper
 Libs
   cv_transLib
 
@@ -25,6 +25,7 @@ Datatype:
   deployment_trace = <|
     sourceAst: (num option, toplevel list) alist
   ; sourceExports: (string # num) list
+  ; importMap: (string # num) list  (* alias -> source_id, for storage layout key transform *)
   ; contractAbi: abi_entry list
   ; deployedAddress: address
   ; deployer: address
@@ -42,11 +43,12 @@ Datatype:
   |>
 End
 
-(* Extract simple storage_layout from json_storage_layout *)
+(* Extract storage_layout from json_storage_layout, transforming keys using import_map.
+   Input keys are (alias_opt, var_name), output keys are (source_id_opt, var_name). *)
 Definition extract_storage_layout_def:
-  extract_storage_layout (jsl: json_storage_layout) : storage_layout # storage_layout =
-    (MAP (λ(name, info). (name, info.slot)) jsl.storage,
-     MAP (λ(name, info). (name, info.slot)) jsl.transient)
+  extract_storage_layout import_map (jsl: json_storage_layout) : storage_layout # storage_layout =
+    (transform_storage_layout import_map (MAP (λ(key, info). (key, info.slot)) jsl.storage),
+     transform_storage_layout import_map (MAP (λ(key, info). (key, info.slot)) jsl.transient))
 End
 
 val () = cv_auto_trans extract_storage_layout_def;
@@ -232,7 +234,7 @@ Definition run_trace_def:
   run_trace snss am tr =
   case tr
   of Deployment dt => let
-      (s_layout, t_layout) = extract_storage_layout dt.storageLayout;
+      (s_layout, t_layout) = extract_storage_layout dt.importMap dt.storageLayout;
       am_with_layout = am with layouts updated_by CONS (dt.deployedAddress, (s_layout, t_layout));
       result = run_deployment am_with_layout dt;
       sns = FST result; res = SND result;

@@ -1127,30 +1127,40 @@ End
 
 val () = cv_auto_trans get_matching_var_id_def;
 
+(* Build var_layout entry for a single module.
+   src_id_opt: NONE for main module, SOME n for imported module.
+   Layout keys are (src_id_opt, var_name). *)
 Definition build_var_layout_entry_def:
-  build_var_layout_entry is_transient layout [] = LN ∧
-  build_var_layout_entry is_transient layout (t :: ts) =
-    let rest = build_var_layout_entry is_transient layout ts in
+  build_var_layout_entry is_transient src_id_opt layout [] = LN ∧
+  build_var_layout_entry is_transient src_id_opt layout (t :: ts) =
+    let rest = build_var_layout_entry is_transient src_id_opt layout ts in
     case get_matching_var_id is_transient t of
     | SOME id =>
-        (case ALOOKUP layout id of
+        (case ALOOKUP layout (src_id_opt, id) of
          | SOME slot => insert (string_to_num id) slot rest
          | NONE => rest)
     | NONE => rest
+End
+
+(* Build var_layout for all modules *)
+Definition build_var_layout_for_all_def:
+  build_var_layout_for_all storage_layout transient_layout [] = (LN, LN) ∧
+  build_var_layout_for_all storage_layout transient_layout ((src_id_opt, ts) :: rest) =
+    let (s_rest, t_rest) = build_var_layout_for_all storage_layout transient_layout rest in
+    let s_this = build_var_layout_entry F src_id_opt storage_layout ts in
+    let t_this = build_var_layout_entry T src_id_opt transient_layout ts in
+    (union s_this s_rest, union t_this t_rest)
 End
 
 Definition build_var_layout_def:
   build_var_layout sources storage_layout transient_layout addr =
     case ALOOKUP sources addr of
     | NONE => (LN, LN)
-    | SOME mods =>
-        case ALOOKUP mods NONE of
-        | NONE => (LN, LN)
-        | SOME ts => (build_var_layout_entry F storage_layout ts,
-                      build_var_layout_entry T transient_layout ts)
+    | SOME mods => build_var_layout_for_all storage_layout transient_layout mods
 End
 
 val () = cv_auto_trans build_var_layout_entry_def;
+val () = cv_auto_trans build_var_layout_for_all_def;
 val () = cv_auto_trans build_var_layout_def;
 
 (* Look up an interface by nsid (source_id, name) *)
