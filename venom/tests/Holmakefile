@@ -1,0 +1,6 @@
+# Venom pass trace tests
+INCLUDES = ../../semantics ../../frontend ../../syntax $(VFMDIR)/util $(VFMDIR)/spec
+
+all:
+	$(HOLDIR)/bin/hol -q $$PWD/runPassTraceTest.sml
+.PHONY: all
