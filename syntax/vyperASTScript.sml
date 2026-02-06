@@ -152,10 +152,9 @@ Type ext_call_sig = “:identifier # (type list) # type”;
 Datatype:
   call_target
   = IntCall nsid
-  | ExtCall ext_call_sig    (* resolved signature - mutating external call *)
-                            (* Convention: first arg is target address *)
-  | StaticCall ext_call_sig (* resolved signature - read-only external call *)
-                            (* Convention: first arg is target address *)
+  | ExtCall bool ext_call_sig (* is_static, resolved signature *)
+                              (* is_static: T for staticcall (read-only), F for extcall *)
+                              (* Convention: first arg is target address *)
   | Send
   (* TODO: external raw call *)
 End

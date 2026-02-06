@@ -1,6 +1,6 @@
 Theory jsonToVyper
 Ancestors
-  integer jsonAST vyperAST
+  integer alist jsonAST vyperAST
 Libs
   cv_transLib intLib
   integerTheory[qualified]
@@ -423,12 +423,44 @@ val () = cv_auto_trans make_builtin_call_def;
 (* Extract function name from a func expression *)
 (* For JE_Attribute base fname, returns fname *)
 Definition extract_func_name_def:
-  (extract_func_name (JE_Attribute _ fname) = fname) /\
+  (extract_func_name (JE_Attribute _ fname _ _) = fname) /\
   (extract_func_name (JE_Name name _ _) = name) /\
   (extract_func_name _ = "")
 End
 
 val () = cv_auto_trans extract_func_name_def;
+
+(* Extract the innermost module's source_id from a module chain *)
+(* For lib1: returns SOME 0 (from JE_Name) *)
+(* For lib1.lib2: returns SOME 1 (from the .lib2 Attribute) *)
+Definition extract_innermost_module_src_def:
+  (* Attribute with module typeclass has source_id directly *)
+  (extract_innermost_module_src (JE_Attribute _ _ (SOME tc) src_id_opt) =
+    if tc = "module" then src_id_opt else NONE) /\
+  (* JE_Name with module typeclass *)
+  (extract_innermost_module_src (JE_Name _ (SOME tc) src_id_opt) =
+    if tc = "module" then src_id_opt else NONE) /\
+  (* Other cases *)
+  (extract_innermost_module_src _ = NONE)
+End
+
+val () = cv_auto_trans extract_innermost_module_src_def;
+
+(* Detect cross-module flag member pattern: lib1.Action.BUY or lib1.lib2.Roles3.NOBODY *)
+(* Returns SOME (src_id_opt, flag_name) if it matches, NONE otherwise *)
+(* e is the expression immediately under the flag member attribute (i.e., the flag type expression) *)
+(* For lib1.Roles.ADMIN: e = JE_Attribute (JE_Name "lib1"...) "Roles" _ _ *)
+(* For lib1.lib2.Roles3.NOBODY: e = JE_Attribute (JE_Attribute ... "lib2" (SOME "module") (SOME 1)) "Roles3" _ _ *)
+Definition extract_module_flag_def:
+  (* Attribute expression for the flag type - look inside for the module *)
+  (extract_module_flag (JE_Attribute inner flag_name _ _) =
+    case extract_innermost_module_src inner of
+    | SOME src_id => SOME (SOME src_id, flag_name)
+    | NONE => NONE) /\
+  (extract_module_flag _ = NONE)
+End
+
+val () = cv_auto_trans extract_module_flag_def;
 
 (* ===== Expression Translation ===== *)
 
@@ -454,9 +486,12 @@ Definition translate_expr_def:
   (translate_expr (JE_Name id tc src_id_opt) =
     if id = "self" then Builtin (Env SelfAddr) [] else Name id) /\
 
-  (* Special attributes: msg.*, block.*, tx.*, self.*, module.* *)
-  (translate_expr (JE_Attribute (JE_Name obj tc src_id_opt) attr) =
-    if obj = "msg" /\ attr = "sender" then Builtin (Env Sender) []
+  (* Special attributes: msg.*, block.*, tx.*, self.*, module.*, flag members *)
+  (* attr_src_id_opt is from variable_reads on the outer Attribute (for self.x storage access) *)
+  (translate_expr (JE_Attribute (JE_Name obj tc src_id_opt) attr result_tc attr_src_id_opt) =
+    (* Same-module flag member: Action.BUY where tc = SOME "flag" *)
+    if tc = SOME "flag" /\ result_tc = SOME "flag" then FlagMember (src_id_opt, obj) attr
+    else if obj = "msg" /\ attr = "sender" then Builtin (Env Sender) []
     else if obj = "msg" /\ attr = "value" then Builtin (Env ValueSent) []
     else if obj = "block" /\ attr = "timestamp" then Builtin (Env TimeStamp) []
     else if obj = "block" /\ attr = "number" then Builtin (Env BlockNumber) []
@@ -465,16 +500,22 @@ Definition translate_expr_def:
     else if obj = "tx" /\ attr = "gasprice" then Builtin (Env GasPrice) []
     else if obj = "self" /\ attr = "balance" then
       Builtin (Acc Balance) [Builtin (Env SelfAddr) []]
-    else if obj = "self" then TopLevelName (NONE, attr)
-    (* Module variable access: tc = SOME "module" *)
+    (* self.x: use attr_src_id_opt from variable_reads for cross-module storage access *)
+    else if obj = "self" then TopLevelName (attr_src_id_opt, attr)
+    (* Module variable access (lib1.x): use src_id_opt from module type *)
     else if tc = SOME "module" then TopLevelName (src_id_opt, attr)
     else if attr = "balance" then Builtin (Acc Balance) [Name obj]
     else if attr = "address" then Builtin (Acc Address) [Name obj]
     else Attribute (Name obj) attr) /\
 
-  (* General attribute *)
-  (translate_expr (JE_Attribute e attr) =
-    if attr = "balance" then Builtin (Acc Balance) [translate_expr e]
+  (* General attribute - handles nested and simple cases *)
+  (* Check for cross-module flag access: lib1.Action.BUY *)
+  (translate_expr (JE_Attribute e attr result_tc _) =
+    if result_tc = SOME "flag" then
+      case extract_module_flag e of
+      | SOME (src_id_opt, flag_name) => FlagMember (src_id_opt, flag_name) attr
+      | NONE => Attribute (translate_expr e) attr
+    else if attr = "balance" then Builtin (Acc Balance) [translate_expr e]
     else if attr = "address" then Builtin (Acc Address) [translate_expr e]
     else Attribute (translate_expr e) attr) /\
 
@@ -524,35 +565,36 @@ Definition translate_expr_def:
     let args' = translate_expr_list args in
     let kwargs' = translate_kwargs kwargs in
     case func of
+    | JE_Name name (SOME "interface") _ => HD args'
     | JE_Name name _ _ => make_builtin_call name args' kwargs' ret_ty
-    | JE_Attribute base "pop" =>
+    | JE_Attribute base "pop" _ _ =>
         (case base of
          | JE_Name id _ _ => Pop (NameTarget id)
-         | JE_Attribute (JE_Name "self" _ _) attr => Pop (TopLevelNameTarget (NONE, attr))
-         | JE_Attribute (JE_Name id (SOME "module") src_id_opt) attr =>
+         | JE_Attribute (JE_Name "self" _ _) attr _ _ => Pop (TopLevelNameTarget (NONE, attr))
+         | JE_Attribute (JE_Name id (SOME "module") src_id_opt) attr _ _ =>
              Pop (TopLevelNameTarget (src_id_opt, attr))
-         | JE_Attribute (JE_Name id _ _) attr =>
+         | JE_Attribute (JE_Name id _ _) attr _ _ =>
              Pop (AttributeTarget (NameTarget id) attr)
          | JE_Subscript (JE_Name id _ _) idx =>
              Pop (SubscriptTarget (NameTarget id) (translate_expr idx))
          | _ => Call (IntCall (NONE, "pop")) args')
     (* self.func(args) - internal call *)
-    | JE_Attribute (JE_Name "self" _ _) fname => Call (IntCall (NONE, fname)) args'
+    | JE_Attribute (JE_Name "self" _ _) fname _ _ => Call (IntCall (NONE, fname)) args'
     (* Module call: use source_id from type_decl_node *)
     | _ => (case src_id_opt of
               SOME src_id => Call (IntCall (SOME src_id, extract_func_name func)) args'
             | NONE => Call (IntCall (NONE, "")) args')) /\
 
-  (* ExtCall - mutating external call *)
+  (* ExtCall - mutating external call (is_static = F) *)
   (* args includes target as first element (convention) *)
   (translate_expr (JE_ExtCall func_name arg_types ret_ty args) =
-    Call (ExtCall (func_name, translate_type_list arg_types, translate_type ret_ty))
+    Call (ExtCall F (func_name, translate_type_list arg_types, translate_type ret_ty))
          (translate_expr_list args)) /\
 
-  (* StaticCall - read-only external call *)
+  (* StaticCall - read-only external call (is_static = T) *)
   (* args includes target as first element (convention) *)
   (translate_expr (JE_StaticCall func_name arg_types ret_ty args) =
-    Call (StaticCall (func_name, translate_type_list arg_types, translate_type ret_ty))
+    Call (ExtCall T (func_name, translate_type_list arg_types, translate_type ret_ty))
          (translate_expr_list args)) /\
 
   (* Helper for translating expression lists *)
@@ -815,6 +857,151 @@ End
 
 (* val () = cv_auto_trans translate_toplevel_def; *)
 
+(* ===== Exports Extraction ===== *)
+
+(* Build alias -> source_id map from import info list *)
+Definition build_import_map_def:
+  build_import_map [] = [] ∧
+  build_import_map (JImportInfo alias src_id _ :: rest) =
+    (alias, src_id) :: build_import_map rest
+End
+
+val () = cv_auto_trans build_import_map_def;
+
+(* Extract import infos from a toplevel (returns list since JTL_Import has list) *)
+Definition get_import_infos_def:
+  get_import_infos (JTL_Import infos) = infos ∧
+  get_import_infos _ = []
+End
+
+val () = cv_auto_trans get_import_infos_def;
+
+(* Collect all import infos from toplevels *)
+Definition collect_imports_def:
+  collect_imports [] = [] ∧
+  collect_imports (t::ts) = get_import_infos t ++ collect_imports ts
+End
+
+val () = cv_auto_trans collect_imports_def;
+
+(* ===== Storage Layout Key Transformation ===== *)
+(* Transform storage layout keys from (alias_opt, var_name) to (source_id_opt, var_name).
+   Uses import_map to convert alias to source_id. *)
+
+(* Transform a single storage layout key.
+   (NONE, "counter") -> (NONE, "counter")  -- main module
+   (SOME "lib1", "counter") -> (SOME 0, "counter")  -- if import_map has ("lib1", 0) *)
+Definition transform_layout_key_def:
+  transform_layout_key import_map (alias_opt, var_name) =
+    case alias_opt of
+    | NONE => (NONE, var_name)  (* Main module variable *)
+    | SOME alias =>
+        case ALOOKUP import_map alias of
+        | NONE => (NONE, var_name)  (* Unknown alias, treat as main module *)
+        | SOME src_id => (SOME src_id, var_name)
+End
+
+val () = cv_auto_trans transform_layout_key_def;
+
+(* Transform all keys in a storage layout *)
+Definition transform_storage_layout_def:
+  transform_storage_layout import_map [] = [] ∧
+  transform_storage_layout import_map ((key, slot) :: rest) =
+    (transform_layout_key import_map key, slot) ::
+    transform_storage_layout import_map rest
+End
+
+val () = cv_auto_trans transform_storage_layout_def;
+
+(* Check if a function decl is external *)
+Definition is_external_function_def:
+  is_external_function (JTL_FunctionDef _ decs _ _ _) = MEM "external" decs ∧
+  is_external_function _ = F
+End
+
+(* Get function name from a function decl *)
+Definition get_function_name_def:
+  get_function_name (JTL_FunctionDef name _ _ _ _) = SOME name ∧
+  get_function_name _ = NONE
+End
+
+(* Get all external function names from a module's toplevels *)
+Definition get_external_func_names_def:
+  get_external_func_names [] = [] ∧
+  get_external_func_names (t::ts) =
+    if is_external_function t then
+      case get_function_name t of
+        SOME name => name :: get_external_func_names ts
+      | NONE => get_external_func_names ts
+    else get_external_func_names ts
+End
+
+(* Find module body by source_id in imports list *)
+Definition find_module_body_def:
+  find_module_body src_id [] = [] ∧
+  find_module_body src_id (JImportedModule sid _ body :: rest) =
+    if src_id = sid then body else find_module_body src_id rest
+End
+
+(* Extract single export: given alias.func_name or alias.__interface__, return list of (func_name, source_id) *)
+(* import_map: alias -> source_id, imports: list of JImportedModule *)
+Definition extract_single_export_def:
+  (* lib.func pattern: JE_Attribute (JE_Name alias _ _) func_name _ _ *)
+  extract_single_export import_map imports (JE_Attribute (JE_Name alias _ _) func_name _ _) =
+    (case ALOOKUP import_map alias of
+       SOME src_id =>
+         if func_name = "__interface__" then
+           (* Export all external functions from that module *)
+           let body = find_module_body src_id imports in
+           let names = get_external_func_names body in
+           MAP (λname. (name, src_id)) names
+         else [(func_name, src_id)]
+     | NONE => []) ∧
+  (* Nested module: lib2.lib1.func - need to find innermost module's source_id *)
+  (* For now, just handle the simple case; nested modules are complex *)
+  extract_single_export _ _ _ = []
+End
+
+(* Extract exports from a tuple of export expressions *)
+Definition extract_tuple_exports_def:
+  extract_tuple_exports import_map imports [] = [] ∧
+  extract_tuple_exports import_map imports (e::es) =
+    extract_single_export import_map imports e ++ extract_tuple_exports import_map imports es
+End
+
+(* Extract exports from an ExportsDecl annotation *)
+Definition extract_export_annotation_def:
+  extract_export_annotation import_map imports (JE_Tuple exprs) =
+    extract_tuple_exports import_map imports exprs ∧
+  extract_export_annotation import_map imports (JE_Attribute base attr tc sid) =
+    extract_single_export import_map imports (JE_Attribute base attr tc sid) ∧
+  extract_export_annotation _ _ _ = []
+End
+
+(* Get export annotation from a toplevel if it's an ExportsDecl *)
+Definition get_export_annotation_def:
+  get_export_annotation (JTL_ExportsDecl ann) = SOME ann ∧
+  get_export_annotation _ = NONE
+End
+
+(* Extract all exports from main module toplevels *)
+Definition extract_exports_from_toplevels_def:
+  extract_exports_from_toplevels import_map imports [] = [] ∧
+  extract_exports_from_toplevels import_map imports (t::ts) =
+    (case get_export_annotation t of
+       SOME ann => extract_export_annotation import_map imports ann
+     | NONE => []) ++
+    extract_exports_from_toplevels import_map imports ts
+End
+
+(* Main function: extract exports from a json_module given imports *)
+Definition extract_exports_def:
+  extract_exports (JModule toplevels) imports =
+    let import_infos = collect_imports toplevels in
+    let import_map = build_import_map import_infos in
+    extract_exports_from_toplevels import_map imports toplevels
+End
+
 (* ===== Module Translation ===== *)
 
 Definition filter_some_def:
@@ -835,8 +1022,22 @@ Definition translate_imported_module_def:
     (SOME src_id, filter_some (MAP translate_toplevel body))
 End
 
+(* Extract toplevels from a JModule (needed to get import infos) *)
+Definition main_toplevels_def:
+  main_toplevels (JModule toplevels) = toplevels
+End
+
+val () = cv_auto_trans main_toplevels_def;
+
+(* Translate annotated AST, returning:
+   - sources: (source_id, toplevels) alist
+   - exports: func_name -> source_id
+   - import_map: alias -> source_id (for storage layout key transformation) *)
 Definition translate_annotated_ast_def:
   translate_annotated_ast (JAnnotatedAST main imports) =
-    (NONE, translate_module main) ::
-    MAP translate_imported_module imports
+    let import_infos = collect_imports (main_toplevels main) in
+    let import_map = build_import_map import_infos in
+    let sources = (NONE, translate_module main) :: MAP translate_imported_module imports in
+    let exports = extract_exports main imports in
+    (sources, exports, import_map)
 End

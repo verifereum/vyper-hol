@@ -1,6 +1,6 @@
 Theory vyperTestRunner
 Ancestors
-  contractABI vyperABI vyperSmallStep jsonAST
+  contractABI vyperABI vyperSmallStep jsonAST jsonToVyper
 Libs
   cv_transLib
 
@@ -24,6 +24,8 @@ End
 Datatype:
   deployment_trace = <|
     sourceAst: (num option, toplevel list) alist
+  ; sourceExports: (string # num) list
+  ; importMap: (string # num) list  (* alias -> source_id, for storage layout key transform *)
   ; contractAbi: abi_entry list
   ; deployedAddress: address
   ; deployer: address
@@ -41,11 +43,12 @@ Datatype:
   |>
 End
 
-(* Extract simple storage_layout from json_storage_layout *)
+(* Extract storage_layout from json_storage_layout, transforming keys using import_map.
+   Input keys are (alias_opt, var_name), output keys are (source_id_opt, var_name). *)
 Definition extract_storage_layout_def:
-  extract_storage_layout (jsl: json_storage_layout) : storage_layout # storage_layout =
-    (MAP (λ(name, info). (name, info.slot)) jsl.storage,
-     MAP (λ(name, info). (name, info.slot)) jsl.transient)
+  extract_storage_layout import_map (jsl: json_storage_layout) : storage_layout # storage_layout =
+    (transform_storage_layout import_map (MAP (λ(key, info). (key, info.slot)) jsl.storage),
+     transform_storage_layout import_map (MAP (λ(key, info). (key, info.slot)) jsl.transient))
 End
 
 val () = cv_auto_trans extract_storage_layout_def;
@@ -109,7 +112,7 @@ Datatype:
 End
 
 Definition compute_vyper_args_def:
-  compute_vyper_args ts vis name argTys cd = let
+  compute_vyper_args all_mods ts vis name argTys cd = let
     abiTupTy = Tuple argTys;
     vyTysRet = case lookup_function name vis ts
                 of SOME (_,args,ret,_) => (MAP SND args, ret)
@@ -120,7 +123,8 @@ Definition compute_vyper_args_def:
     then let
       abiArgsTup = dec abiTupTy cd;
       vyTys = FST vyTysRet;
-      tenv = type_env ts;
+      (* Use combined type env from all modules so cross-module types work *)
+      tenv = type_env_all_modules all_mods;
       vyArgsTup = abi_to_vyper tenv (TupleT vyTys) abiArgsTup;
       vyArgs = (case OPTION_BIND vyArgsTup extract_elements
                   of NONE => [] | SOME ls => ls)
@@ -132,10 +136,11 @@ End
 Definition run_deployment_def:
   run_deployment am dt = let
     sns = compute_selector_names dt.contractAbi;
-    ts = case ALOOKUP dt.sourceAst NONE of SOME ts => ts | NONE => [];
+    all_mods = dt.sourceAst;
+    ts = case ALOOKUP all_mods NONE of SOME ts => ts | NONE => [];
     name = find_deploy_function_name ts;
     argTys = find_args_by_name name dt.contractAbi;
-    ar = compute_vyper_args ts Deploy name argTys dt.callData;
+    ar = compute_vyper_args all_mods ts Deploy name argTys dt.callData;
     res = case FST ar of NONE => INR (Error "run_deployment args")
           | SOME (args, _) => let
     tx = <| sender := dt.deployer
@@ -150,7 +155,7 @@ Definition run_deployment_def:
           ; blob_base_fee := dt.blobBaseFee
           ; gas_price := dt.gasPrice
           ; is_creation := T |>;
-    in load_contract am tx dt.sourceAst
+    in load_contract am tx dt.sourceAst dt.sourceExports
   in (sns, res)
 End
 
@@ -162,10 +167,11 @@ Definition run_call_def:
     fna = case ALOOKUP sns sel of SOME fna => fna
              | NONE => ("__default__", [], []);
     name = FST fna; argTys = FST (SND fna);
-    ts = case ALOOKUP am.sources ct.target of
-           SOME mods => (case ALOOKUP mods NONE of SOME ts => ts | _ => [])
-         | _ => [];
-    ar = compute_vyper_args ts External name argTys (DROP 4 ct.callData);
+    all_mods = case ALOOKUP am.sources ct.target of
+                 SOME mods => mods
+               | _ => [];
+    ts = case ALOOKUP all_mods NONE of SOME ts => ts | _ => [];
+    ar = compute_vyper_args all_mods ts External name argTys (DROP 4 ct.callData);
     retTys = SND (SND fna);
   in
     case FST ar of NONE => ((INR (Error "run_call args"), am),
@@ -228,7 +234,7 @@ Definition run_trace_def:
   run_trace snss am tr =
   case tr
   of Deployment dt => let
-      (s_layout, t_layout) = extract_storage_layout dt.storageLayout;
+      (s_layout, t_layout) = extract_storage_layout dt.importMap dt.storageLayout;
       am_with_layout = am with layouts updated_by CONS (dt.deployedAddress, (s_layout, t_layout));
       result = run_deployment am_with_layout dt;
       sns = FST result; res = SND result;
@@ -270,22 +276,15 @@ Definition run_trace_def:
        case ct.expectedOutput
          of NONE => INR (Error "error expected")
           | SOME out => let
-              rets = SND cr;
-              abiRetTys = FST rets;
-              abiRetTy = Tuple abiRetTys;
-              ar = SND rets;
+              ar = SND (SND cr);
               rawVyRetTy = FST ar; tenv = SND ar;
-              alreadyTuple = (rawVyRetTy = NoneT ∨ is_TupleT rawVyRetTy);
-              vyRetTy = if alreadyTuple then rawVyRetTy
-                        else TupleT [rawVyRetTy];
-              abiret = dec abiRetTy out;
-              vyret = abi_to_vyper tenv vyRetTy abiret;
-              expect = if alreadyTuple then v
-                       else ArrayV $ TupleV [v];
             in
-              if vyret = SOME expect
-              then INL am
-              else INR (Error "output mismatch"))
+              case evaluate_abi_decode_return tenv rawVyRetTy out of
+              | INR _ => INR (Error "output mismatch")
+              | INL decoded =>
+                  if decoded = v
+                  then INL am
+                  else INR (Error "output mismatch"))
 End
 
 val () = cv_auto_trans run_trace_def;
