@@ -441,9 +441,12 @@ Proof
 QED
 
 Theorem var_in_scope_preserved_after_update:
-  ∀st n1 n2 v. n1 ≠ n2 ∧ var_in_scope st n2 ⇒ var_in_scope (update_scoped_var st n1 v) n2
+  ∀st n1 n2 v. var_in_scope st n2 ⇒ var_in_scope (update_scoped_var st n1 v) n2
 Proof
-  simp[var_in_scope_def, lookup_scoped_var_preserved_after_update]
+  rpt strip_tac >>
+  Cases_on ‘n1 = n2’ >>
+  fs[var_in_scope_def, lookup_scoped_var_preserved_after_update] >-
+   simp[lookup_after_update]
 QED
 
 Theorem immutables_preserved_after_update:

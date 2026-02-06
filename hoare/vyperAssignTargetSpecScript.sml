@@ -410,7 +410,7 @@ Proof
 QED
 
 Theorem assign_target_spec_preserves_valid_lookups:
-  ∀cx st n v.
+  ∀P cx st av ao.
     valid_lookups cx st ∧
     assign_target_spec cx st av ao P ⇒
     assign_target_spec cx st av ao (λst'. P st' ∧ valid_lookups cx st')
