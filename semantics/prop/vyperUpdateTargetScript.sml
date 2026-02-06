@@ -34,7 +34,7 @@ Proof
   imp_res_tac assign_target_scoped_var_update >> simp[]
 QED
 
-Theorem valid_target_scoped_var:
+Theorem valid_target_scoped_var_implies_var_in_scope:
   ∀cx st n ao. valid_target cx st (BaseTargetV (ScopedVar n) []) ao ⇒ var_in_scope st n
 Proof
   rw[var_in_scope_def, lookup_scoped_var_def, valid_target_def] >>
