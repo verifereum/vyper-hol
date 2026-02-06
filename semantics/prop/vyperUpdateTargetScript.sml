@@ -25,7 +25,7 @@ QED
 
 Theorem update_target_scoped_var_update:
   ∀cx st n bop v1 v2 v.
-    evaluate_binop bop v1 v2 = v ∧
+    evaluate_binop bop v1 v2 = INL v ∧
     lookup_scoped_var st n = SOME v1 ⇒
     update_target cx st (BaseTargetV (ScopedVar n) []) (Update bop v2) =
     update_scoped_var st n v
