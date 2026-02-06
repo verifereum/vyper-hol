@@ -943,63 +943,94 @@ Definition find_module_body_def:
     if src_id = sid then body else find_module_body src_id rest
 End
 
-(* Extract single export: given alias.func_name or alias.__interface__, return list of (func_name, source_id) *)
-(* import_map: alias -> source_id, imports: list of JImportedModule *)
-Definition extract_single_export_def:
-  (* lib.func pattern: JE_Attribute (JE_Name alias _ _) func_name _ _ *)
-  extract_single_export import_map imports (JE_Attribute (JE_Name alias _ _) func_name _ _) =
-    (case ALOOKUP import_map alias of
-       SOME src_id =>
-         if func_name = "__interface__" then
-           (* Export all external functions from that module *)
-           let body = find_module_body src_id imports in
-           let names = get_external_func_names body in
-           MAP (λname. (name, src_id)) names
-         else [(func_name, src_id)]
-     | NONE => []) ∧
-  (* Nested module: lib2.lib1.func - need to find innermost module's source_id *)
-  (* For now, just handle the simple case; nested modules are complex *)
-  extract_single_export _ _ _ = []
-End
-
-(* Extract exports from a tuple of export expressions *)
-Definition extract_tuple_exports_def:
-  extract_tuple_exports import_map imports [] = [] ∧
-  extract_tuple_exports import_map imports (e::es) =
-    extract_single_export import_map imports e ++ extract_tuple_exports import_map imports es
-End
-
-(* Extract exports from an ExportsDecl annotation *)
-Definition extract_export_annotation_def:
-  extract_export_annotation import_map imports (JE_Tuple exprs) =
-    extract_tuple_exports import_map imports exprs ∧
-  extract_export_annotation import_map imports (JE_Attribute base attr tc sid) =
-    extract_single_export import_map imports (JE_Attribute base attr tc sid) ∧
-  extract_export_annotation _ _ _ = []
-End
-
 (* Get export annotation from a toplevel if it's an ExportsDecl *)
 Definition get_export_annotation_def:
   get_export_annotation (JTL_ExportsDecl ann) = SOME ann ∧
   get_export_annotation _ = NONE
 End
 
-(* Extract all exports from main module toplevels *)
-Definition extract_exports_from_toplevels_def:
-  extract_exports_from_toplevels import_map imports [] = [] ∧
-  extract_exports_from_toplevels import_map imports (t::ts) =
-    (case get_export_annotation t of
-       SOME ann => extract_export_annotation import_map imports ann
-     | NONE => []) ++
-    extract_exports_from_toplevels import_map imports ts
+(* ===== Exports Extraction with Transitive Support =====
+
+   When main has `exports: lib2.__interface__`, we need lib2's full exports,
+   which includes lib2's external functions PLUS anything lib2 re-exports.
+
+   Design: Build an exports_map by processing imports in topological order.
+   When we see `lib.__interface__`, we look up lib's exports in the map.
+
+   ASSUMPTION: The imports list from Vyper's JSON is topologically sorted
+   (leaf modules first, modules depending on them later). This ensures that
+   when we process module M, any module M references has already been processed.
+*)
+
+(* Expand a single export expression using pre-computed exports_map.
+   exports_map: source_id -> list of (func_name, source_id) exports
+   import_map: alias -> source_id for the current module's imports *)
+Definition expand_single_export_def:
+  expand_single_export exports_map import_map (JE_Attribute (JE_Name alias _ _) func_name _ _) =
+    (case ALOOKUP import_map alias of
+     | NONE => []
+     | SOME src_id =>
+         if func_name = "__interface__" then
+           case ALOOKUP exports_map src_id of
+           | NONE => []
+           | SOME exps => exps
+         else [(func_name, src_id)]) ∧
+  expand_single_export _ _ _ = []
 End
 
-(* Main function: extract exports from a json_module given imports *)
+(* Expand exports from a tuple of export expressions *)
+Definition expand_tuple_exports_def:
+  expand_tuple_exports exports_map import_map [] = [] ∧
+  expand_tuple_exports exports_map import_map (e::es) =
+    expand_single_export exports_map import_map e ++
+    expand_tuple_exports exports_map import_map es
+End
+
+(* Expand exports from an ExportsDecl annotation *)
+Definition expand_export_annotation_def:
+  expand_export_annotation exports_map import_map (JE_Tuple exprs) =
+    expand_tuple_exports exports_map import_map exprs ∧
+  expand_export_annotation exports_map import_map (JE_Attribute base attr tc sid) =
+    expand_single_export exports_map import_map (JE_Attribute base attr tc sid) ∧
+  expand_export_annotation _ _ _ = []
+End
+
+(* Expand all exports from a module's toplevels *)
+Definition expand_exports_from_toplevels_def:
+  expand_exports_from_toplevels exports_map import_map [] = [] ∧
+  expand_exports_from_toplevels exports_map import_map (t::ts) =
+    (case get_export_annotation t of
+     | SOME ann => expand_export_annotation exports_map import_map ann
+     | NONE => []) ++
+    expand_exports_from_toplevels exports_map import_map ts
+End
+
+(* Compute a single module's full exports: its external functions + expanded re-exports *)
+Definition compute_module_exports_def:
+  compute_module_exports exports_map src_id body =
+    let ext_funcs = MAP (λn. (n, src_id)) (get_external_func_names body) in
+    let import_map = build_import_map (collect_imports body) in
+    let reexports = expand_exports_from_toplevels exports_map import_map body in
+    ext_funcs ++ reexports
+End
+
+(* Build exports_map by processing imports in topological order.
+   ASSUMES: imports list is topologically sorted (leaf modules first).
+   This ensures when we process module M, any module M references via
+   __interface__ has already been added to the accumulator. *)
+Definition build_exports_map_def:
+  build_exports_map acc [] = acc ∧
+  build_exports_map acc (JImportedModule src_id _ body :: rest) =
+    let exps = compute_module_exports acc src_id body in
+    build_exports_map ((src_id, exps) :: acc) rest
+End
+
+(* Main function: extract exports from main module given imports *)
 Definition extract_exports_def:
   extract_exports (JModule toplevels) imports =
-    let import_infos = collect_imports toplevels in
-    let import_map = build_import_map import_infos in
-    extract_exports_from_toplevels import_map imports toplevels
+    let exports_map = build_exports_map [] imports in
+    let import_map = build_import_map (collect_imports toplevels) in
+    expand_exports_from_toplevels exports_map import_map toplevels
 End
 
 (* ===== Module Translation ===== *)
