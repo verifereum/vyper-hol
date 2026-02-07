@@ -237,10 +237,11 @@ Proof
   PairCases_on`sig` >>
   gvs[evaluate_def, bind_def, ignore_bind_def, CaseEq"prod", CaseEq"sum",
       lift_option_def, CaseEq"option", option_CASE_rator, raise_def,
-      return_def, check_def, assert_def, scope_preserving_expr_def,
-      get_transient_storage_def, get_accounts_def] >>
+      return_def, check_def, assert_def, scope_preserving_expr_def, COND_RATOR,
+      get_transient_storage_def, get_accounts_def, CaseEq"bool",pairTheory.UNCURRY] >>
   first_x_assum drule >> gvs[ETA_THM] >>
-  PairCases_on `result` \\
+  rename1 `run_ext_call _ _ _ _ _ _ _ _ = SOME result` >>
+  PairCases_on `result` >>
   gvs[bind_def, ignore_bind_def, assert_def, CaseEq"prod", CaseEq"sum",
       lift_sum_def, update_accounts_def, update_transient_def, return_def,
       sum_CASE_rator, raise_def]
