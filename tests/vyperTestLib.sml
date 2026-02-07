@@ -349,10 +349,7 @@ val excluded_test_names = [
      directly instead of materializing the whole array. *)
   "test_boundary_access_to_arr",
   "test_negative_ix_access_to_large_arr",
-  "test_oob_access_to_large_arr",
-  (* TODO: extcall with value= (sending ETH) not yet supported.
-     Requires adding value field to ext_call_sig and passing it to run_ext_call. *)
-  "test_external_with_payable_value"
+  "test_oob_access_to_large_arr"
 ]
 
 fun glob_match pat str =

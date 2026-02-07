@@ -464,6 +464,38 @@ val () = cv_auto_trans extract_module_flag_def;
 
 (* ===== Expression Translation ===== *)
 
+(* Find a keyword by name in a keyword list, returns the json_expr if found *)
+Definition find_keyword_def:
+  find_keyword name [] = NONE ∧
+  find_keyword name (JKeyword kw_name kw_val :: rest) =
+    if kw_name = name then SOME kw_val
+    else find_keyword name rest
+End
+
+val () = cv_auto_trans find_keyword_def;
+
+(* Lemma: if find_keyword returns SOME v, then v is in the keyword list *)
+Theorem find_keyword_MEM:
+  ∀name kws v. find_keyword name kws = SOME v ⇒ ∃k. MEM (JKeyword k v) kws
+Proof
+  Induct_on `kws` >> rw[find_keyword_def] >>
+  Cases_on `h` >> gvs[find_keyword_def] >>
+  Cases_on `s = name` >> gvs[] >>
+  metis_tac[]
+QED
+
+(* Size lemma for termination: keyword value is smaller than keyword list *)
+Theorem find_keyword_size:
+  ∀name kws v.
+    find_keyword name kws = SOME v ⇒
+    json_expr_size v < list_size json_keyword_size kws
+Proof
+  Induct_on `kws` >> rw[find_keyword_def] >>
+  Cases_on `h` >> gvs[find_keyword_def, json_expr_size_def] >>
+  Cases_on `s = name` >> gvs[json_expr_size_def] >>
+  res_tac >> gvs[]
+QED
+
 Definition translate_expr_def:
   (translate_expr (JE_Int v ty) =
     Literal (IntL (int_bound_of_type ty) v)) /\
@@ -588,14 +620,19 @@ Definition translate_expr_def:
             | NONE => Call (IntCall (NONE, "")) args')) /\
 
   (* ExtCall - mutating external call (is_static = F) *)
-  (* args includes target as first element (convention) *)
-  (* TODO: keywords is ignored until vyperAST is updated to support value= *)
+  (* Convention: args = [target; value; arg1; arg2; ...] *)
   (translate_expr (JE_ExtCall func_name arg_types ret_ty args keywords) =
+    let value_expr = case find_keyword "value" keywords of
+                     | SOME v => translate_expr v
+                     | NONE => Literal (IntL (Unsigned 256) 0) in
+    let translated_args = translate_expr_list args in
     Call (ExtCall F (func_name, translate_type_list arg_types, translate_type ret_ty))
-         (translate_expr_list args)) /\
+         (case translated_args of
+          | (target :: rest) => target :: value_expr :: rest
+          | [] => [])) /\
 
   (* StaticCall - read-only external call (is_static = T) *)
-  (* args includes target as first element (convention) *)
+  (* Convention: args = [target; arg1; arg2; ...] (no value) *)
   (translate_expr (JE_StaticCall func_name arg_types ret_ty args) =
     Call (ExtCall T (func_name, translate_type_list arg_types, translate_type ret_ty))
          (translate_expr_list args)) /\
@@ -607,6 +644,14 @@ Definition translate_expr_def:
   (* Helper for translating keywords *)
   (translate_kwargs [] = []) /\
   (translate_kwargs (JKeyword k v :: rest) = (k, translate_expr v) :: translate_kwargs rest)
+Termination
+  WF_REL_TAC `measure (λx. case x of
+    | INL e => json_expr_size e
+    | INR (INL es) => list_size json_expr_size es
+    | INR (INR kws) => list_size json_keyword_size kws)`
+  >> rw[]
+  >> imp_res_tac find_keyword_size
+  >> gvs[]
 End
 
 (* Skip cv_auto_trans for translate_expr - cv_auto doesn't handle mutual recursion well *)

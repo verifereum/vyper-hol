@@ -590,7 +590,15 @@ Definition apply_vals_def:
     liftk cx ApplyTv (do
       check (vs ≠ []) "ExtCall no target";
       target_addr <- lift_option (dest_AddressV (HD vs)) "ExtCall target not address";
-      arg_vals <<- TL vs;
+      (* Convention: staticcall (T) args = [target; arg1; ...]
+                     extcall (F) args = [target; value; arg1; ...] *)
+      (value, arg_vals) <- if is_static then
+        return (0, TL vs)
+      else do
+        check (TL vs ≠ []) "ExtCall no value";
+        v <- lift_option (dest_NumV (HD (TL vs))) "ExtCall value not int";
+        return (v, TL (TL vs))
+      od;
       ts <- lift_option (get_self_code cx) "ExtCall get_self_code";
       tenv <<- type_env ts;
       calldata <- lift_option (build_ext_calldata tenv func_name arg_types arg_vals)
@@ -600,7 +608,7 @@ Definition apply_vals_def:
       txParams <<- vyper_to_tx_params cx.txn;
       caller <<- cx.txn.target;
       result <- lift_option
-        (run_ext_call caller target_addr calldata 0 is_static accounts tStorage txParams)
+        (run_ext_call caller target_addr calldata value is_static accounts tStorage txParams)
         "ExtCall run failed";
       (success, returnData, accounts', tStorage') <<- result;
       check success "ExtCall reverted";
@@ -635,7 +643,7 @@ QED
 val apply_vals_pre_def = apply_vals_def
   |> SRULE [liftk1, bind_def, ignore_bind_def, lift_option_def,
             lift_sum_def, prod_CASE_rator, LET_RATOR, LET4_UNCURRY,
-            sum_CASE_rator, option_CASE_rator]
+            UNCURRY, sum_CASE_rator, option_CASE_rator, COND_RATOR]
   |> cv_auto_trans_pre "apply_vals_pre";
 
 Theorem apply_vals_pre[cv_pre]:
