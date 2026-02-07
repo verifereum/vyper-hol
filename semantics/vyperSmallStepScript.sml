@@ -592,12 +592,12 @@ Definition apply_vals_def:
       target_addr <- lift_option (dest_AddressV (HD vs)) "ExtCall target not address";
       (* Convention: staticcall (T) args = [target; arg1; ...]
                      extcall (F) args = [target; value; arg1; ...] *)
-      (value, arg_vals) <- if is_static then
-        return (0, TL vs)
+      (value_opt, arg_vals) <- if is_static then
+        return (NONE, TL vs)
       else do
         check (TL vs ≠ []) "ExtCall no value";
         v <- lift_option (dest_NumV (HD (TL vs))) "ExtCall value not int";
-        return (v, TL (TL vs))
+        return (SOME v, TL (TL vs))
       od;
       ts <- lift_option (get_self_code cx) "ExtCall get_self_code";
       tenv <<- type_env ts;
@@ -608,7 +608,7 @@ Definition apply_vals_def:
       txParams <<- vyper_to_tx_params cx.txn;
       caller <<- cx.txn.target;
       result <- lift_option
-        (run_ext_call caller target_addr calldata value is_static accounts tStorage txParams)
+        (run_ext_call caller target_addr calldata value_opt accounts tStorage txParams)
         "ExtCall run failed";
       (success, returnData, accounts', tStorage') <<- result;
       check success "ExtCall reverted";

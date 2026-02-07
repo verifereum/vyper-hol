@@ -290,7 +290,7 @@ Proof
        get_transient_storage_def, get_accounts_def, CaseEq"bool", pairTheory.UNCURRY] >>
   strip_tac >> gvs[return_def, raise_def] >>
   drule_all eval_exprs_preserves_scopes_dom_helper >> strip_tac >> gvs[] >>
-  rename1 `run_ext_call _ _ _ _ _ _ _ _ = SOME result` >>
+  rename1 `run_ext_call _ _ _ _ _ _ _ = SOME result` >>
   PairCases_on `result` >>
   gvs[bind_def, ignore_bind_def, assert_def, CaseEq"prod", CaseEq"sum",
       lift_sum_def, update_accounts_def, update_transient_def, return_def,

@@ -2726,9 +2726,11 @@ val () = cv_auto_trans default_call_gas_limit_def;
 
 (* Build execution_state for an external call *)
 Definition make_ext_call_state_def:
-  make_ext_call_state caller callee code calldata value is_static
+  make_ext_call_state caller callee code calldata value_opt
                       accounts tStorage txParams =
     let gas_limit = default_call_gas_limit in
+    let value = (case value_opt of NONE => 0 | SOME v => v) in
+    let is_static = IS_NONE value_opt in
     let tx = make_call_tx caller callee value calldata gas_limit in
     let ctxt = initial_context callee code is_static empty_return_destination tx in
     let accesses = <| addresses := fINSERT caller (fINSERT callee fEMPTY)
@@ -2781,10 +2783,10 @@ val () = cv_auto_trans extract_call_result_def;
 
    Returns SOME (success, returnData, accounts', tStorage') or NONE on error. *)
 Definition run_ext_call_def:
-  run_ext_call caller callee calldata value is_static
+  run_ext_call caller callee calldata value_opt
                accounts tStorage txParams =
     let code = (lookup_account callee accounts).code in
-    let s0 = make_ext_call_state caller callee code calldata value is_static
+    let s0 = make_ext_call_state caller callee code calldata value_opt
                                  accounts tStorage txParams in
     case vfmExecution$run s0 of
     | SOME (result, final_state) =>
@@ -3021,12 +3023,12 @@ Definition evaluate_def:
     target_addr <- lift_option (dest_AddressV (HD vs)) "ExtCall target not address";
     (* Convention: staticcall (T) args = [target; arg1; ...]
                    extcall (F) args = [target; value; arg1; ...] *)
-    (value, arg_vals) <- if is_static then
-      return (0, TL vs)
+    (value_opt, arg_vals) <- if is_static then
+      return (NONE, TL vs)
     else do
       check (TL vs ≠ []) "ExtCall no value";
       v <- lift_option (dest_NumV (HD (TL vs))) "ExtCall value not int";
-      return (v, TL (TL vs))
+      return (SOME v, TL (TL vs))
     od;
     ts <- lift_option (get_self_code cx) "ExtCall get_self_code";
     tenv <<- type_env ts;
@@ -3037,7 +3039,7 @@ Definition evaluate_def:
     txParams <<- vyper_to_tx_params cx.txn;
     caller <<- cx.txn.target;
     result <- lift_option
-      (run_ext_call caller target_addr calldata value is_static accounts tStorage txParams)
+      (run_ext_call caller target_addr calldata value_opt accounts tStorage txParams)
       "ExtCall run failed";
     (success, returnData, accounts', tStorage') <<- result;
     check success "ExtCall reverted";
