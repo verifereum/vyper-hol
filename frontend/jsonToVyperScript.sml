@@ -886,6 +886,26 @@ End
 
 val () = cv_auto_trans collect_imports_def;
 
+(* Extract source_ids that a module depends on from its body *)
+Definition get_module_deps_def:
+  get_module_deps body =
+    MAP (λinfo. case info of JImportInfo _ src_id _ => src_id) (collect_imports body)
+End
+
+val () = cv_auto_trans get_module_deps_def;
+
+(* Check if imports are topologically sorted (dependencies come before dependents).
+   seen: list of source_ids already processed
+   Returns T if sorted, F otherwise. *)
+Definition imports_topsorted_def:
+  imports_topsorted seen [] = T ∧
+  imports_topsorted seen (JImportedModule src_id _ body :: rest) =
+    let deps = get_module_deps body in
+    if EVERY (λd. MEM d seen) deps
+    then imports_topsorted (src_id :: seen) rest
+    else F
+End
+
 (* ===== Storage Layout Key Transformation ===== *)
 (* Transform storage layout keys from (alias_opt, var_name) to (source_id_opt, var_name).
    Uses import_map to convert alias to source_id. *)
@@ -959,9 +979,9 @@ End
    Design: Build an exports_map by processing imports in topological order.
    When we see `lib.__interface__`, we look up lib's exports in the map.
 
-   ASSUMPTION: The imports list from Vyper's JSON is topologically sorted
-   (leaf modules first, modules depending on them later). This ensures that
-   when we process module M, any module M references has already been processed.
+   The imports list must be topologically sorted (leaf modules first, modules
+   depending on them later). This is validated by imports_topsorted in
+   translate_annotated_ast, which returns NONE if the ordering is invalid.
 *)
 
 (* Expand a single export expression using pre-computed exports_map.
@@ -1017,7 +1037,7 @@ Definition compute_module_exports_def:
 End
 
 (* Build exports_map by processing imports in topological order.
-   ASSUMES: imports list is topologically sorted (leaf modules first).
+   Requires: imports list is topologically sorted (validated by imports_topsorted).
    This ensures when we process module M, any module M references via
    __interface__ has already been added to the accumulator. *)
 Definition build_exports_map_def:
@@ -1065,12 +1085,14 @@ val () = cv_auto_trans main_toplevels_def;
 (* Translate annotated AST, returning:
    - sources: (source_id, toplevels) alist
    - exports: func_name -> source_id
-   - import_map: alias -> source_id (for storage layout key transformation) *)
+   - import_map: alias -> source_id (for storage layout key transformation)
+   Returns NONE if imports are not topologically sorted. *)
 Definition translate_annotated_ast_def:
   translate_annotated_ast (JAnnotatedAST main imports) =
+    if ¬imports_topsorted [] imports then NONE else
     let import_infos = collect_imports (main_toplevels main) in
     let import_map = build_import_map import_infos in
     let sources = (NONE, translate_module main) :: MAP translate_imported_module imports in
     let exports = extract_exports main imports in
-    (sources, exports, import_map)
+    SOME (sources, exports, import_map)
 End

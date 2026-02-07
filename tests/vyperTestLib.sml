@@ -19,7 +19,9 @@ fun translate_jsonast_to_vyper jsonast_tm = let
   val thm = EVAL app
   val rhs = rhs (concl thm)
 in
-  rhs
+  (* translate_annotated_ast returns SOME (...) or NONE if imports not topsorted *)
+  if optionSyntax.is_some rhs then optionSyntax.dest_some rhs
+  else raise JSONError (Fail "imports not topologically sorted", JSON.OBJECT [])
 end
 
 (* Decoder that uses the jsonAST pipeline with full module support *)
