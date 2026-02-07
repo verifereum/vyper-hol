@@ -93,8 +93,8 @@ Datatype:
   (* Last field is source_id for module calls, extracted from func.type.type_decl_node *)
   | JE_Call json_expr (json_expr list) (json_keyword list) json_type (num option)
 
-  (* External calls - func_name, arg_types, return_type, args (first is target) *)
-  | JE_ExtCall string (json_type list) json_type (json_expr list)
+  (* External calls - func_name, arg_types, return_type, args (first is target), keywords *)
+  | JE_ExtCall string (json_type list) json_type (json_expr list) (json_keyword list)
   | JE_StaticCall string (json_type list) json_type (json_expr list)
 ;
   json_keyword = JKeyword string json_expr             (* arg, value *)

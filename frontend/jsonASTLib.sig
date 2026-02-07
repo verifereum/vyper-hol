@@ -133,7 +133,7 @@ signature jsonASTLib = sig
   val mk_JE_Tuple : term list -> term
   val mk_JE_List : term list * term -> term
   val mk_JE_Call : term * term list * term list * term * term -> term
-  val mk_JE_ExtCall : string * term list * term * term list -> term
+  val mk_JE_ExtCall : string * term list * term * term list * term list -> term
   val mk_JE_StaticCall : string * term list * term * term list -> term
   val mk_JKeyword : string * term -> term
 

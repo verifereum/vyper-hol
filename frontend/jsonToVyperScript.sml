@@ -589,7 +589,8 @@ Definition translate_expr_def:
 
   (* ExtCall - mutating external call (is_static = F) *)
   (* args includes target as first element (convention) *)
-  (translate_expr (JE_ExtCall func_name arg_types ret_ty args) =
+  (* TODO: keywords is ignored until vyperAST is updated to support value= *)
+  (translate_expr (JE_ExtCall func_name arg_types ret_ty args keywords) =
     Call (ExtCall F (func_name, translate_type_list arg_types, translate_type ret_ty))
          (translate_expr_list args)) /\
 
