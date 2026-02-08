@@ -858,7 +858,7 @@ End
 (* val () = cv_auto_trans translate_var_mutability_def; *)
 
 Definition translate_toplevel_def:
-  (translate_toplevel (JTL_FunctionDef name decs args (JFuncType arg_tys ret_ty) body) =
+  (translate_toplevel (JTL_FunctionDef name decs args defaults (JFuncType arg_tys ret_ty) body) =
     SOME (FunctionDecl
       (translate_visibility decs)
       (translate_mutability decs)
@@ -983,13 +983,13 @@ val () = cv_auto_trans transform_storage_layout_def;
 
 (* Check if a function decl is external *)
 Definition is_external_function_def:
-  is_external_function (JTL_FunctionDef _ decs _ _ _) = MEM "external" decs ∧
+  is_external_function (JTL_FunctionDef _ decs _ _ _ _) = MEM "external" decs ∧
   is_external_function _ = F
 End
 
 (* Get function name from a function decl *)
 Definition get_function_name_def:
-  get_function_name (JTL_FunctionDef name _ _ _ _) = SOME name ∧
+  get_function_name (JTL_FunctionDef name _ _ _ _ _) = SOME name ∧
   get_function_name _ = NONE
 End
 

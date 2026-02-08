@@ -173,8 +173,8 @@ End
 
 Datatype:
   json_toplevel
-  = JTL_FunctionDef string (string list) (json_arg list) json_func_type (json_stmt list)
-      (* name, decorators, args, func_type, body *)
+  = JTL_FunctionDef string (string list) (json_arg list) (json_expr list) json_func_type (json_stmt list)
+      (* name, decorators, args, defaults, func_type, body *)
   | JTL_VariableDecl string json_type bool bool bool (json_expr option)
       (* name, type, is_public, is_immutable, is_transient, value (for constants) *)
   | JTL_HashMapDecl string json_type json_value_type bool bool

@@ -272,11 +272,12 @@ fun mk_JFuncType (argtys, retty) =
   list_mk_comb(JFuncType_tm, [mk_list(argtys, json_type_ty), retty])
 fun mk_JVT_Type ty = mk_comb(JVT_Type_tm, ty)
 fun mk_JVT_HashMap (kt, vt) = list_mk_comb(JVT_HashMap_tm, [kt, vt])
-fun mk_JTL_FunctionDef (name, decs, args, func_type, body) =
+fun mk_JTL_FunctionDef (name, decs, args, defaults, func_type, body) =
   list_mk_comb(JTL_FunctionDef_tm,
     [fromMLstring name,
      mk_list(List.map fromMLstring decs, string_ty),
      mk_list(args, json_arg_ty),
+     mk_list(defaults, json_expr_ty),
      func_type,
      mk_list(body, json_stmt_ty)])
 fun mk_JTL_VariableDecl (name, ty, is_public, is_immutable, is_transient, valopt) =
@@ -959,13 +960,14 @@ val json_interface_func : term decoder =
 val json_toplevel : term decoder = achoose "toplevel" [
   (* FunctionDef *)
   check_ast_type "FunctionDef" $
-    JSONDecode.map (fn ((n, d), (a, f), b) =>
-      mk_JTL_FunctionDef(n, d, a, f, b)) $
+    JSONDecode.map (fn ((n, d), ((a, df), f), b) =>
+      mk_JTL_FunctionDef(n, d, a, df, f, b)) $
     tuple3 (
       tuple2 (field "name" string,
               field "decorator_list" (array (field "id" string))),
       tuple2 (field "args" $ check_ast_type "arguments" $
-                field "args" (array json_arg),
+                tuple2 (field "args" (array json_arg),
+                        orElse(field "defaults" (array json_expr), succeed [])),
               field "func_type" json_func_type),
       field "body" (array json_stmt)
     ),
