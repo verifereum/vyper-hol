@@ -189,7 +189,8 @@ Definition eval_expr_cps_def:
       ts <- lift_option (get_module_code cx10 ns) "IntCall get_module_code";
       tup <- lift_option (lookup_callable_function cx10.in_deploy fn ts) "IntCall lookup_function";
       stup <<- SND tup; args <<- FST stup; sstup <<- SND stup;
-      ret <<- FST $ sstup; body <<- SND $ sstup;
+      dflts <<- FST sstup; sstup2 <<- SND sstup;
+      ret <<- FST $ sstup2; body <<- SND $ sstup2;
       check (LENGTH args = LENGTH es) "IntCall args length";
       (* Use combined type env for return type (may reference types from other modules) *)
       all_mods <<- (case ALOOKUP cx10.sources cx10.txn.target of SOME m => m | NONE => []);
@@ -1193,7 +1194,7 @@ Proof
        no_recursion_def]
     \\ BasicProvers.TOP_CASE_TAC
     \\ gvs[cont_def,CaseEq"prod",CaseEq"sum",return_def]
-    \\ qmatch_goalsub_rename_tac`SND p`
+    \\ qmatch_goalsub_rename_tac`SND (SND (SND p))`
     \\ PairCases_on`p` \\ gvs[]
     \\ first_assum (drule_then (drule_then drule))
     \\ simp_tac std_ss [] \\ disch_then drule

@@ -256,12 +256,13 @@ Theorem case_IntCall[local]:
   ∀cx src_id_opt fn es drv.
     (* IH from evaluate_ind for eval_stmts in function body - not needed for scopes *)
     (* IH for eval_exprs on arguments *)
-    (∀s'' x t s'3' ts t' s'4' tup t'' stup args sstup ret ss s'5' x' t'3'.
+    (∀s'' x t s'3' ts t' s'4' tup t'' stup args sstup dflts sstup2 ret ss s'5' x' t'3'.
        check (¬MEM (src_id_opt, fn) cx.stk) "recursion" s'' = (INL x, t) ∧
        lift_option (get_module_code cx src_id_opt) "IntCall get_module_code" s'3' = (INL ts, t') ∧
        lift_option (lookup_callable_function cx.in_deploy fn ts) "IntCall lookup_function" s'4' = (INL tup, t'') ∧
        stup = SND tup ∧ args = FST stup ∧ sstup = SND stup ∧
-       ret = FST sstup ∧ ss = SND sstup ∧
+       dflts = FST sstup ∧ sstup2 = SND sstup ∧
+       ret = FST sstup2 ∧ ss = SND sstup2 ∧
        check (LENGTH args = LENGTH es) "IntCall args length" s'5' = (INL x', t'3') ⇒
        ∀st res st'.
          eval_exprs cx es st = (res, st') ⇒ EVERY scope_preserving_expr es ⇒ st.scopes = st'.scopes) ⇒

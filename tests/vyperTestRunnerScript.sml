@@ -115,7 +115,7 @@ Definition compute_vyper_args_def:
   compute_vyper_args all_mods ts vis name argTys cd = let
     abiTupTy = Tuple argTys;
     vyTysRet = case lookup_function name vis ts
-                of SOME (_,args,ret,_) => (MAP SND args, ret)
+                of SOME (_,args,_,ret,_) => (MAP SND args, ret)
                   | NONE => ([], NoneT);
     vyArgsTenvOpt = if
       static_length abiTupTy ≤ LENGTH cd ∧

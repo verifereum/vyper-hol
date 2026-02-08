@@ -2155,7 +2155,7 @@ Definition getter_def:
   let (args, ret, exp) =
     build_getter ne kt vt 0
   in
-    (View, args, ret, [Return $ SOME exp])
+    (View, args, [], ret, [Return $ SOME exp])
 End
 
 val () = cv_auto_trans getter_def;
@@ -2170,15 +2170,15 @@ End
 val () = cv_auto_trans name_expression_def;
 
 Definition lookup_function_def:
-  lookup_function name Deploy [] = SOME (Payable, [], NoneT, []) ∧
+  lookup_function name Deploy [] = SOME (Payable, [], [], NoneT, []) ∧
   lookup_function name vis [] = NONE ∧
-  lookup_function name vis (FunctionDecl fv fm id args _ ret body :: ts) =
-  (if id = name ∧ vis = fv then SOME (fm, args, ret, body)
+  lookup_function name vis (FunctionDecl fv fm id args dflts ret body :: ts) =
+  (if id = name ∧ vis = fv then SOME (fm, args, dflts, ret, body)
    else lookup_function name vis ts) ∧
   lookup_function name External (VariableDecl Public mut id typ :: ts) =
   (if id = name then
     if ¬is_ArrayT typ
-    then SOME (View, [], typ, [Return (SOME (name_expression mut id))])
+    then SOME (View, [], [], typ, [Return (SOME (name_expression mut id))])
     else SOME $ getter (name_expression mut id) (BaseT (UintT 256)) (Type (ArrayT_type typ))
    else lookup_function name External ts) ∧
   lookup_function name External (HashMapDecl Public _ id kt vt :: ts) =
@@ -2496,8 +2496,8 @@ QED
 
 (* lookup_function with Internal finds body via ALOOKUP on dest_Internal_Fn *)
 Theorem lookup_function_Internal_imp_ALOOKUP:
-  ∀fn vis ts v x y z.
-  lookup_function fn vis ts = SOME (v,x,y,z) ∧ vis = Internal ⇒
+  ∀fn vis ts v w x y z.
+  lookup_function fn vis ts = SOME (v,w,x,y,z) ∧ vis = Internal ⇒
   z = [] ∨ ALOOKUP (FLAT (MAP dest_Internal_Fn ts)) fn = SOME z
 Proof
   ho_match_mp_tac lookup_function_ind
@@ -2509,8 +2509,8 @@ QED
 
 (* lookup_function with Deploy finds body via ALOOKUP on dest_Deploy_Fn *)
 Theorem lookup_function_Deploy_imp_ALOOKUP:
-  ∀fn vis ts v x y z.
-  lookup_function fn vis ts = SOME (v,x,y,z) ∧ vis = Deploy ⇒
+  ∀fn vis ts v w x y z.
+  lookup_function fn vis ts = SOME (v,w,x,y,z) ∧ vis = Deploy ⇒
   z = [] ∨ ALOOKUP (FLAT (MAP dest_Deploy_Fn ts)) fn = SOME z
 Proof
   ho_match_mp_tac lookup_function_ind
@@ -2549,8 +2549,8 @@ QED
 (* This works because module_fns orders Internal entries before Deploy entries, *)
 (* matching lookup_callable_function which tries Internal first. *)
 Theorem lookup_callable_function_eq_ALOOKUP_module_fns:
-  ∀in_deploy fn ts src_id v x y z.
-  lookup_callable_function in_deploy fn ts = SOME (v,x,y,z) ∧ z ≠ [] ⇒
+  ∀in_deploy fn ts src_id v w x y z.
+  lookup_callable_function in_deploy fn ts = SOME (v,w,x,y,z) ∧ z ≠ [] ⇒
   ALOOKUP (module_fns src_id ts) (src_id, fn) = SOME z
 Proof
   rpt gen_tac
@@ -3053,7 +3053,8 @@ Definition evaluate_def:
     ts <- lift_option (get_module_code cx src_id_opt) "IntCall get_module_code";
     tup <- lift_option (lookup_callable_function cx.in_deploy fn ts) "IntCall lookup_function";
     stup <<- SND tup; args <<- FST stup; sstup <<- SND stup;
-    ret <<- FST $ sstup; body <<- SND $ sstup;
+    dflts <<- FST sstup; sstup2 <<- SND sstup;
+    ret <<- FST $ sstup2; body <<- SND $ sstup2;
     check (LENGTH args = LENGTH es) "IntCall args length"; (* TODO: needed? *)
     vs <- eval_exprs cx es;
     tenv <<- type_env ts;
@@ -3110,7 +3111,7 @@ Termination
   \\ qpat_x_assum`OUTR _ _ = _`kall_tac
   \\ gvs[CaseEq"option"]
   (* Use lookup_callable_function_eq_ALOOKUP_module_fns to get ALOOKUP result *)
-  \\ qmatch_asmsub_rename_tac`lookup_callable_function _ fn ts = SOME (_, args, ret, body)`
+  \\ qmatch_asmsub_rename_tac`lookup_callable_function _ fn ts = SOME (_, args, _, ret, body)`
   \\ Cases_on`body = []`
   (* Case 1: body = [] (default constructor) - trivial, bound is 0 *)
   >- simp[bound_def]
@@ -3349,7 +3350,7 @@ Definition call_external_def:
    | SOME ts =>
   case lookup_exported_function cx am tx.function_name
   of NONE => (INR $ Error "call lookup_function", am)
-   | SOME (mut, args, ret, body) =>
+   | SOME (mut, args, _, ret, body) =>
        call_external_function am cx mut ts all_mods args tx.args body ret
 End
 
@@ -3363,7 +3364,7 @@ Definition load_contract_def:
                       exports updated_by CONS (addr, exps) |> in
   case lookup_function tx.function_name Deploy ts of
      | NONE => INR $ Error "no constructor"
-     | SOME (mut, args, ret, body) =>
+     | SOME (mut, args, _, ret, body) =>
        let cx = (initial_evaluation_context ((addr,mods)::am.sources) am.layouts tx)
                 with in_deploy := T in
        case call_external_function am cx mut ts mods args tx.args body ret
