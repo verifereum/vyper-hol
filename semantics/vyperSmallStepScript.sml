@@ -177,13 +177,13 @@ Definition eval_expr_cps_def:
             "TypeBuiltin args" st of
         (INR ex, st) => AK cx8 (ApplyExc ex) st k
       | (INL tv, st) => eval_exprs_cps cx8 es st (TypeBuiltinK tb typ k)) ∧
-  eval_expr_cps cx9 (Call Send es) st k =
+  eval_expr_cps cx9 (Call Send es _) st k =
     (case check (LENGTH es = 2) "Send args" st of
        (INR ex, st) => AK cx9 (ApplyExc ex) st k
      | (INL (), st) => eval_exprs_cps cx9 es st (CallSendK k)) ∧
-  eval_expr_cps cx10 (Call (ExtCall is_static (func_name, arg_types, ret_type)) es) st k =
+  eval_expr_cps cx10 (Call (ExtCall is_static (func_name, arg_types, ret_type)) es _) st k =
     eval_exprs_cps cx10 es st (ExtCallK is_static func_name arg_types ret_type k) ∧
-  eval_expr_cps cx10 (Call (IntCall (ns, fn)) es) st k =
+  eval_expr_cps cx10 (Call (IntCall (ns, fn)) es _) st k =
     (case do
       check (no_recursion (ns, fn) cx10.stk) "recursion";
       ts <- lift_option (get_module_code cx10 ns) "IntCall get_module_code";

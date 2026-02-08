@@ -19,7 +19,7 @@ Definition scope_preserving_expr_def:
   scope_preserving_expr (Builtin _ es) = EVERY scope_preserving_expr es ∧
   scope_preserving_expr (TypeBuiltin _ _ es) = EVERY scope_preserving_expr es ∧
   scope_preserving_expr (Pop _) = F ∧
-  scope_preserving_expr (Call _ es) = EVERY scope_preserving_expr es
+  scope_preserving_expr (Call _ es _) = EVERY scope_preserving_expr es
 Termination
   WF_REL_TAC `measure expr_size` >>
   rw[] >>
@@ -213,8 +213,8 @@ Theorem case_Send[local]:
        ∀st res st'.
          eval_exprs cx es st = (res, st') ⇒ EVERY scope_preserving_expr es ⇒ st.scopes = st'.scopes) ⇒
     (∀st res st'.
-       eval_expr cx (Call Send es) st = (res, st') ⇒
-       scope_preserving_expr (Call Send es) ⇒ st.scopes = st'.scopes)
+       eval_expr cx (Call Send es drv) st = (res, st') ⇒
+       scope_preserving_expr (Call Send es drv) ⇒ st.scopes = st'.scopes)
 Proof
   rpt strip_tac >>
   gvs[evaluate_def, bind_def, AllCaseEqs(), scope_preserving_expr_def, ignore_bind_def,
@@ -230,8 +230,8 @@ Theorem case_ExtCall[local]:
     (∀st res st'.
        eval_exprs cx es st = (res, st') ⇒ EVERY scope_preserving_expr es ⇒ st.scopes = st'.scopes) ⇒
     (∀st res st'.
-       eval_expr cx (Call (ExtCall is_static sig) es) st = (res, st') ⇒
-       scope_preserving_expr (Call (ExtCall is_static sig) es) ⇒ st.scopes = st'.scopes)
+       eval_expr cx (Call (ExtCall is_static sig) es drv) st = (res, st') ⇒
+       scope_preserving_expr (Call (ExtCall is_static sig) es drv) ⇒ st.scopes = st'.scopes)
 Proof
   rpt strip_tac >>
   PairCases_on`sig` >>
@@ -266,8 +266,8 @@ Theorem case_IntCall[local]:
        ∀st res st'.
          eval_exprs cx es st = (res, st') ⇒ EVERY scope_preserving_expr es ⇒ st.scopes = st'.scopes) ⇒
     (∀st res st'.
-       eval_expr cx (Call (IntCall (src_id_opt, fn)) es) st = (res, st') ⇒
-       scope_preserving_expr (Call (IntCall (src_id_opt, fn)) es) ⇒ st.scopes = st'.scopes)
+       eval_expr cx (Call (IntCall (src_id_opt, fn)) es drv) st = (res, st') ⇒
+       scope_preserving_expr (Call (IntCall (src_id_opt, fn)) es drv) ⇒ st.scopes = st'.scopes)
 Proof
   rpt strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>

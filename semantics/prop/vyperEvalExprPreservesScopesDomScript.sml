@@ -243,7 +243,7 @@ Theorem case_Call_Send_ind[local]:
     (∀e. MEM e es ⇒
          ∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀cx st res st'.
-      eval_expr cx (Call Send es) st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
+      eval_expr cx (Call Send es drv) st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
@@ -259,7 +259,7 @@ Theorem case_Call_IntCall_ind[local]:
     (∀e. MEM e es ⇒
          ∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀src_id_opt fn cx st res st'.
-      eval_expr cx (Call (IntCall (src_id_opt, fn)) es) st = (res,st') ⇒
+      eval_expr cx (Call (IntCall (src_id_opt, fn)) es drv) st = (res,st') ⇒
       MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >>
@@ -278,7 +278,7 @@ Theorem case_Call_ExtCall_ind[local]:
     (∀e. MEM e es ⇒
          ∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀is_static sig cx st res st'.
-      eval_expr cx (Call (ExtCall is_static sig) es) st = (res,st') ⇒ 
+      eval_expr cx (Call (ExtCall is_static sig) es drv) st = (res,st') ⇒ 
       MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >>

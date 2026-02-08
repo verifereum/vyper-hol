@@ -2172,7 +2172,7 @@ val () = cv_auto_trans name_expression_def;
 Definition lookup_function_def:
   lookup_function name Deploy [] = SOME (Payable, [], NoneT, []) ∧
   lookup_function name vis [] = NONE ∧
-  lookup_function name vis (FunctionDecl fv fm id args ret body :: ts) =
+  lookup_function name vis (FunctionDecl fv fm id args _ ret body :: ts) =
   (if id = name ∧ vis = fv then SOME (fm, args, ret, body)
    else lookup_function name vis ts) ∧
   lookup_function name External (VariableDecl Public mut id typ :: ts) =
@@ -2334,12 +2334,12 @@ Definition bound_def:
     1 + base_target_bound ts bt ∧
   expr_bound ts (TypeBuiltin _ _ es) =
     1 + exprs_bound ts es ∧
-  expr_bound ts (Call (IntCall (src_id_opt, fn)) es) =
+  expr_bound ts (Call (IntCall (src_id_opt, fn)) es _) =
     1 + exprs_bound ts es
       + (case ALOOKUP ts (src_id_opt, fn) of
          | SOME ss => stmts_bound (ADELKEY (src_id_opt, fn) ts) ss
          | NONE => 0) ∧
-  expr_bound ts (Call t es) =
+  expr_bound ts (Call t es _) =
     1 + exprs_bound ts es ∧
   exprs_bound ts [] = 0 ∧
   exprs_bound ts (e::es) =
@@ -2383,12 +2383,12 @@ End
 (* Extract callable functions - for termination proof *)
 (* Internal and Deploy are separate so we can order Internal before Deploy *)
 Definition dest_Internal_Fn_def:
-  dest_Internal_Fn (FunctionDecl Internal _ fn _ _ ss) = [(fn, ss)] ∧
+  dest_Internal_Fn (FunctionDecl Internal _ fn _ _ _ ss) = [(fn, ss)] ∧
   dest_Internal_Fn _ = []
 End
 
 Definition dest_Deploy_Fn_def:
-  dest_Deploy_Fn (FunctionDecl Deploy _ fn _ _ ss) = [(fn, ss)] ∧
+  dest_Deploy_Fn (FunctionDecl Deploy _ fn _ _ _ ss) = [(fn, ss)] ∧
   dest_Deploy_Fn _ = []
 End
 
@@ -2503,7 +2503,7 @@ Proof
   ho_match_mp_tac lookup_function_ind
   \\ rw[lookup_function_def, dest_Internal_Fn_def]
   \\ gvs[dest_Internal_Fn_def]
-  \\ rename1 `FunctionDecl fv _ _ _ _ _`
+  \\ rename1 `FunctionDecl fv _ _ _ _ _ _`
   \\ Cases_on `fv` \\ gvs[dest_Internal_Fn_def]
 QED
 
@@ -2516,7 +2516,7 @@ Proof
   ho_match_mp_tac lookup_function_ind
   \\ rw[lookup_function_def, dest_Deploy_Fn_def]
   \\ gvs[dest_Deploy_Fn_def]
-  \\ rename1 `FunctionDecl fv _ _ _ _ _`
+  \\ rename1 `FunctionDecl fv _ _ _ _ _ _`
   \\ Cases_on `fv` \\ gvs[dest_Deploy_Fn_def]
 QED
 
@@ -2529,7 +2529,7 @@ Proof
   ho_match_mp_tac lookup_function_ind
   \\ rw[lookup_function_def, dest_Internal_Fn_def]
   \\ gvs[dest_Internal_Fn_def]
-  \\ rename1 `FunctionDecl fv _ _ _ _ _`
+  \\ rename1 `FunctionDecl fv _ _ _ _ _ _`
   \\ Cases_on `fv` \\ gvs[dest_Internal_Fn_def]
 QED
 
@@ -3009,7 +3009,7 @@ Definition evaluate_def:
     v <- lift_sum $ evaluate_type_builtin cx tb typ vs;
     return $ Value v
   od ∧
-  eval_expr cx (Call Send es) = do
+  eval_expr cx (Call Send es _) = do
     check (LENGTH es = 2) "Send args";
     vs <- eval_exprs cx es;
     toAddr <- lift_option (dest_AddressV $ EL 0 vs) "Send not AddressV";
@@ -3017,7 +3017,7 @@ Definition evaluate_def:
     transfer_value cx.txn.target toAddr amount;
     return $ Value $ NoneV
   od ∧
-  eval_expr cx (Call (ExtCall is_static (func_name, arg_types, ret_type)) es) = do
+  eval_expr cx (Call (ExtCall is_static (func_name, arg_types, ret_type)) es _) = do
     vs <- eval_exprs cx es;
     check (vs ≠ []) "ExtCall no target";
     target_addr <- lift_option (dest_AddressV (HD vs)) "ExtCall target not address";
@@ -3048,7 +3048,7 @@ Definition evaluate_def:
     ret_val <- lift_sum (evaluate_abi_decode_return tenv ret_type returnData);
     return $ Value ret_val
   od ∧
-  eval_expr cx (Call (IntCall (src_id_opt, fn)) es) = do
+  eval_expr cx (Call (IntCall (src_id_opt, fn)) es _) = do
     check (¬MEM (src_id_opt, fn) cx.stk) "recursion";
     ts <- lift_option (get_module_code cx src_id_opt) "IntCall get_module_code";
     tup <- lift_option (lookup_callable_function cx.in_deploy fn ts) "IntCall lookup_function";

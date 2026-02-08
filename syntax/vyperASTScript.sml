@@ -179,7 +179,7 @@ Datatype:
   | Builtin builtin (expr list)
   | TypeBuiltin type_builtin type (expr list)
   | Pop base_assignment_target
-  | Call call_target (expr list)
+  | Call call_target (expr list) (expr option)
 ; base_assignment_target
   = NameTarget identifier
   | TopLevelNameTarget nsid
@@ -255,7 +255,7 @@ End
 
 Datatype:
   toplevel
-  = FunctionDecl function_visibility function_mutability identifier (argument list) type (stmt list)
+  = FunctionDecl function_visibility function_mutability identifier (argument list) (expr list) type (stmt list)
   | VariableDecl variable_visibility variable_mutability identifier type
   | HashMapDecl variable_visibility bool (* transient? *) identifier type value_type
   | StructDecl identifier (argument list)

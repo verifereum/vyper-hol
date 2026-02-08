@@ -175,7 +175,7 @@ structure vyperASTSyntax :> vyperASTSyntax = struct
   fun mk_uint n = mk_comb(BaseT_tm, mk_comb(UintT_tm, n))
   fun mk_int n = mk_comb(BaseT_tm, mk_comb(IntT_tm, n))
   fun mk_bytes n = mk_comb(BaseT_tm, mk_comb(BytesT_tm, mk_Fixed n))
-  fun mk_FunctionDecl v m n a t b = list_mk_comb(FunctionDecl_tm, [v,m,n,a,t,b])
+  fun mk_FunctionDecl v m n a d t b = list_mk_comb(FunctionDecl_tm, [v,m,n,a,d,t,b])
   fun mk_VariableDecl (v,m,n,t) = list_mk_comb(VariableDecl_tm, [v,m,n,t])
   fun mk_HashMapDecl (v,bt,n,t,vt) = list_mk_comb(HashMapDecl_tm, [v,bt,n,t,vt])
   fun mk_String n = mk_comb(BaseT_tm, mk_comb(StringT_tm, n))
@@ -202,7 +202,7 @@ structure vyperASTSyntax :> vyperASTSyntax = struct
     AbiDecode_tm, t, mk_list([bytes], expr_ty)])
   fun mk_AbiEncode (t,v) = list_mk_comb(TypeBuiltin_tm, [
     AbiEncode_tm, t, mk_list([v], expr_ty)])
-  fun mk_Call ct args = list_mk_comb(AstCall_tm, [ct, mk_list (args, expr_ty)])
+  fun mk_Call ct args drv = list_mk_comb(AstCall_tm, [ct, mk_list (args, expr_ty), drv])
   fun mk_Assert (e,s) = list_mk_comb(Assert_tm, [e, s])
   fun mk_Log (id,es) = list_mk_comb(Log_tm, [id, es])
   fun mk_Subscript e1 e2 = list_mk_comb(Subscript_tm, [e1, e2])

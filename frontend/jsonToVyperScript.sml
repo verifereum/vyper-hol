@@ -354,7 +354,7 @@ Definition make_builtin_call_def:
     else if name = "mulmod" then Builtin MulMod args
     else if name = "min" then Builtin (Bop Min) args
     else if name = "max" then Builtin (Bop Max) args
-    else if name = "send" then Call Send args
+    else if name = "send" then Call Send args NONE
     else if name = "as_wei_value" then
       (case args of
          (v::d::_) =>
@@ -390,12 +390,12 @@ Definition make_builtin_call_def:
                        | _ =>
                            (case args of
                               (arg::_) => arg
-                            | _ => Call (IntCall (NONE, name)) args))
+                            | _ => Call (IntCall (NONE, name)) args NONE))
                     else
                       (case args of
                          (arg::_) => arg
-                       | _ => Call (IntCall (NONE, name)) args)
-                else Call (IntCall (NONE, name)) args
+                       | _ => Call (IntCall (NONE, name)) args NONE)
+                else Call (IntCall (NONE, name)) args NONE
           | _ =>
               if is_cast_name name then
                 let ty' = translate_type ret_ty in
@@ -408,12 +408,12 @@ Definition make_builtin_call_def:
                      | _ =>
                          (case args of
                             (arg::_) => arg
-                          | _ => Call (IntCall (NONE, name)) args))
+                          | _ => Call (IntCall (NONE, name)) args NONE))
                   else
                     (case args of
                        (arg::_) => arg
-                     | _ => Call (IntCall (NONE, name)) args)
-              else Call (IntCall (NONE, name)) args)
+                     | _ => Call (IntCall (NONE, name)) args NONE)
+              else Call (IntCall (NONE, name)) args NONE)
 End
 
 val () = cv_auto_trans make_builtin_call_def;
@@ -611,13 +611,13 @@ Definition translate_expr_def:
              Pop (AttributeTarget (NameTarget id) attr)
          | JE_Subscript (JE_Name id _ _) idx =>
              Pop (SubscriptTarget (NameTarget id) (translate_expr idx))
-         | _ => Call (IntCall (NONE, "pop")) args')
+         | _ => Call (IntCall (NONE, "pop")) args' NONE)
     (* self.func(args) - internal call *)
-    | JE_Attribute (JE_Name "self" _ _) fname _ _ => Call (IntCall (NONE, fname)) args'
+    | JE_Attribute (JE_Name "self" _ _) fname _ _ => Call (IntCall (NONE, fname)) args' NONE
     (* Module call: use source_id from type_decl_node *)
     | _ => (case src_id_opt of
-              SOME src_id => Call (IntCall (SOME src_id, extract_func_name func)) args'
-            | NONE => Call (IntCall (NONE, "")) args')) /\
+              SOME src_id => Call (IntCall (SOME src_id, extract_func_name func)) args' NONE
+            | NONE => Call (IntCall (NONE, "")) args' NONE)) /\
 
   (* ExtCall - mutating external call (is_static = F) *)
   (* Convention: args = [target; value; arg1; arg2; ...] *)
@@ -629,13 +629,15 @@ Definition translate_expr_def:
     Call (ExtCall F (func_name, translate_type_list arg_types, translate_type ret_ty))
          (case translated_args of
           | (target :: rest) => target :: value_expr :: rest
-          | [] => [])) /\
+          | [] => [])
+         NONE) /\
 
   (* StaticCall - read-only external call (is_static = T) *)
   (* Convention: args = [target; arg1; arg2; ...] (no value) *)
   (translate_expr (JE_StaticCall func_name arg_types ret_ty args) =
     Call (ExtCall T (func_name, translate_type_list arg_types, translate_type ret_ty))
-         (translate_expr_list args)) /\
+         (translate_expr_list args)
+         NONE) /\
 
   (* Helper for translating expression lists *)
   (translate_expr_list [] = []) /\
@@ -864,6 +866,7 @@ Definition translate_toplevel_def:
       (translate_mutability decs)
       name
       (translate_args_with_types args arg_tys)
+      (MAP translate_expr defaults)
       (translate_type ret_ty)
       (MAP translate_stmt body))) /\
 

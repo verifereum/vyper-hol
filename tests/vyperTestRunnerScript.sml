@@ -68,7 +68,7 @@ val () = cv_auto_trans compute_selector_names_def;
 
 Definition find_deploy_function_name_def:
   find_deploy_function_name [] = "__init__" ∧
-  find_deploy_function_name ((FunctionDecl Deploy _ name _ _ _)::_) = name ∧
+  find_deploy_function_name ((FunctionDecl Deploy _ name _ _ _ _)::_) = name ∧
   find_deploy_function_name (_::ts) = find_deploy_function_name ts
 End
 
