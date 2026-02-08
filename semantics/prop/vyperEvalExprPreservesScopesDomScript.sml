@@ -80,7 +80,8 @@ QED
    - scopes_P0 e = ∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
    - scopes_P1 bt = ∀cx st res st'. eval_base_target cx bt st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
    - scopes_P2 kes = ∀e. MEM e (MAP SND kes) ⇒ scopes_P0 e
-   - scopes_P4 es = ∀e. MEM e es ⇒ scopes_P0 e
+   - scopes_P4 eo = ∀e. eo = SOME e ⇒ scopes_P0 e
+   - scopes_P5 es = ∀e. MEM e es ⇒ scopes_P0 e
 
    The helper lemmas are formulated to match what we get after
    unfolding the predicates in each induction case.
@@ -239,7 +240,7 @@ QED
 (* Call: P4 l ⇒ ∀c. P0 (Call c l)
    Need to case split on c (Send, ExtCall, StaticCall, IntCall) *)
 Theorem case_Call_Send_ind[local]:
-  ∀es.
+  ∀es drv.
     (∀e. MEM e es ⇒
          ∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀cx st res st'.
@@ -255,7 +256,7 @@ Proof
 QED
 
 Theorem case_Call_IntCall_ind[local]:
-  ∀es.
+  ∀es drv.
     (∀e. MEM e es ⇒
          ∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀src_id_opt fn cx st res st'.
@@ -274,7 +275,7 @@ Proof
 QED
 
 Theorem case_Call_ExtCall_ind[local]:
-  ∀es.
+  ∀es drv.
     (∀e. MEM e es ⇒
          ∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀is_static sig cx st res st'.
@@ -319,7 +320,11 @@ Definition scopes_P3_def[local]:
 End
 
 Definition scopes_P4_def[local]:
-  scopes_P4 es = ∀e. MEM e es ⇒ scopes_P0 e
+  scopes_P4 (eo:expr option) = ∀e. eo = SOME e ⇒ scopes_P0 e
+End
+
+Definition scopes_P5_def[local]:
+  scopes_P5 es = ∀e. MEM e es ⇒ scopes_P0 e
 End
 
 Theorem eval_mutual_preserves_scopes_dom[local]:
@@ -328,9 +333,10 @@ Theorem eval_mutual_preserves_scopes_dom[local]:
 Proof
   sg `(∀e:expr. scopes_P0 e) ∧ (∀bt:base_assignment_target. scopes_P1 bt) ∧
       (∀kes:(string#expr)list. scopes_P2 kes) ∧
-      (∀ke:string#expr. scopes_P3 ke) ∧ (∀es:expr list. scopes_P4 es)`
+      (∀ke:string#expr. scopes_P3 ke) ∧ (∀eo:expr option. scopes_P4 eo) ∧
+      (∀es:expr list. scopes_P5 es)`
   >- (ho_match_mp_tac (TypeBase.induction_of ``:expr``) >> rpt conj_tac >>
-      simp[scopes_P0_def, scopes_P1_def, scopes_P2_def, scopes_P3_def, scopes_P4_def]
+      simp[scopes_P0_def, scopes_P1_def, scopes_P2_def, scopes_P3_def, scopes_P4_def, scopes_P5_def]
       (* Case 1: Name *)
       >- (rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs()] >>
           imp_res_tac get_scopes_id >> imp_res_tac get_immutables_scopes >>
@@ -377,9 +383,9 @@ Proof
       >- (rpt strip_tac >> drule_all case_SubscriptTarget_ind >> simp[])
       (* Case 16: AttributeTarget *)
       >- (rpt strip_tac >> drule_all case_AttributeTarget_ind >> simp[])
-      (* Case 17: P2 cons *)
+      (* P2 cons *)
       >- (rpt strip_tac >> gvs[] >> metis_tac[])
-      (* Case 18: P4 cons *)
+      (* P5 cons *)
       >- (rpt strip_tac >> gvs[] >> metis_tac[]))
   >> gvs[scopes_P0_def, scopes_P1_def] >> metis_tac[]
 QED

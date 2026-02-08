@@ -207,7 +207,7 @@ Proof
 QED
 
 Theorem case_Send[local]:
-  ∀cx es.
+  ∀cx es drv.
     (∀s'' x t.
        check (LENGTH es = 2) "Send args" s'' = (INL x, t) ⇒
        ∀st res st'.
@@ -226,7 +226,7 @@ Proof
 QED
 
 Theorem case_ExtCall[local]:
-  ∀cx is_static sig es.
+  ∀cx is_static sig es drv.
     (∀st res st'.
        eval_exprs cx es st = (res, st') ⇒ EVERY scope_preserving_expr es ⇒ st.scopes = st'.scopes) ⇒
     (∀st res st'.
@@ -253,7 +253,7 @@ QED
    and finally ... (pop_function prev) restores scopes to prev at the end,
    regardless of whether the function body succeeded or failed. *)
 Theorem case_IntCall[local]:
-  ∀cx src_id_opt fn es.
+  ∀cx src_id_opt fn es drv.
     (* IH from evaluate_ind for eval_stmts in function body - not needed for scopes *)
     (* IH for eval_exprs on arguments *)
     (∀s'' x t s'3' ts t' s'4' tup t'' stup args sstup ret ss s'5' x' t'3'.
