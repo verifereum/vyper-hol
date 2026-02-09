@@ -1,6 +1,6 @@
 Theory vyperInterpreter
 Ancestors
-  arithmetic alist combin list finite_map pair rich_list
+  arithmetic alist combin option list finite_map pair rich_list
   cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
   vfmExecution[ignore_grammar] vyperAST vyperABI
   vyperMisc vyperTypeValue vyperStorage
@@ -2334,13 +2334,15 @@ Definition bound_def:
     1 + base_target_bound ts bt ∧
   expr_bound ts (TypeBuiltin _ _ es) =
     1 + exprs_bound ts es ∧
-  expr_bound ts (Call (IntCall (src_id_opt, fn)) es _) =
+  expr_bound ts (Call (IntCall (src_id_opt, fn)) es drv) =
     1 + exprs_bound ts es
+      + (case drv of NONE => 0 | SOME e => expr_bound ts e)
       + (case ALOOKUP ts (src_id_opt, fn) of
          | SOME ss => stmts_bound (ADELKEY (src_id_opt, fn) ts) ss
          | NONE => 0) ∧
-  expr_bound ts (Call t es _) =
-    1 + exprs_bound ts es ∧
+  expr_bound ts (Call t es drv) =
+    1 + exprs_bound ts es
+      + (case drv of NONE => 0 | SOME e => expr_bound ts e) ∧
   exprs_bound ts [] = 0 ∧
   exprs_bound ts (e::es) =
     1 + expr_bound ts e
@@ -3017,7 +3019,7 @@ Definition evaluate_def:
     transfer_value cx.txn.target toAddr amount;
     return $ Value $ NoneV
   od ∧
-  eval_expr cx (Call (ExtCall is_static (func_name, arg_types, ret_type)) es _) = do
+  eval_expr cx (Call (ExtCall is_static (func_name, arg_types, ret_type)) es drv) = do
     vs <- eval_exprs cx es;
     check (vs ≠ []) "ExtCall no target";
     target_addr <- lift_option (dest_AddressV (HD vs)) "ExtCall target not address";
@@ -3045,8 +3047,12 @@ Definition evaluate_def:
     check success "ExtCall reverted";
     update_accounts (K accounts');
     update_transient (K tStorage');
-    ret_val <- lift_sum (evaluate_abi_decode_return tenv ret_type returnData);
-    return $ Value ret_val
+    if returnData = [] ∧ IS_SOME drv then
+      eval_expr cx (THE drv)
+    else do
+      ret_val <- lift_sum (evaluate_abi_decode_return tenv ret_type returnData);
+      return $ Value ret_val
+    od
   od ∧
   eval_expr cx (Call (IntCall (src_id_opt, fn)) es _) = do
     check (¬MEM (src_id_opt, fn) cx.stk) "recursion";
@@ -3096,7 +3102,7 @@ Termination
     => iterator_bound (remcode cx) it
   | INR (INL (cx, ss)) => stmts_bound (remcode cx) ss
   | INL (cx, s) => stmt_bound (remcode cx) s)’
-  \\ reverse(rw[bound_def, MAX_DEF, MULT])
+  \\ reverse(rw[bound_def, MAX_DEF, MULT, IS_SOME_EXISTS]) \\ gvs[]
   >- (
     gvs[compatible_bound_def, check_def, assert_def]
     \\ qmatch_goalsub_abbrev_tac`(LENGTH vs) * x`
@@ -3124,8 +3130,8 @@ Termination
   \\ pop_assum SUBST_ALL_TAC
   \\ simp[ALOOKUP_FILTER]
   \\ rw[FILTER_FILTER,UNCURRY,Abbr`k`]
-  \\ qmatch_goalsub_abbrev_tac`a < _ + (b + 1)`
-  \\ `a = b` suffices_by rw[]
+  \\ qmatch_goalsub_abbrev_tac`a < _ + (b + _)`
+  \\ `a = b` suffices_by (CASE_TAC \\ rw[])
   \\ rw[Abbr`a`,Abbr`b`]
   \\ AP_THM_TAC \\ AP_TERM_TAC
   \\ rw[FILTER_EQ,FORALL_PROD]

@@ -57,7 +57,7 @@ Datatype:
   | BuiltinK builtin eval_continuation
   | TypeBuiltinK type_builtin type eval_continuation
   | CallSendK eval_continuation
-  | ExtCallK bool identifier (type list) type eval_continuation
+  | ExtCallK bool identifier (type list) type (expr option) eval_continuation
   | IntCallK (num |-> type_args) (num |-> type_args) (num option # identifier) ((identifier # type) list) type (stmt list) eval_continuation
   | IntCallK1 (scope list) type_value eval_continuation
   | ExprsK (expr list) eval_continuation
@@ -181,8 +181,8 @@ Definition eval_expr_cps_def:
     (case check (LENGTH es = 2) "Send args" st of
        (INR ex, st) => AK cx9 (ApplyExc ex) st k
      | (INL (), st) => eval_exprs_cps cx9 es st (CallSendK k)) ∧
-  eval_expr_cps cx10 (Call (ExtCall is_static (func_name, arg_types, ret_type)) es _) st k =
-    eval_exprs_cps cx10 es st (ExtCallK is_static func_name arg_types ret_type k) ∧
+  eval_expr_cps cx10 (Call (ExtCall is_static (func_name, arg_types, ret_type)) es drv) st k =
+    eval_exprs_cps cx10 es st (ExtCallK is_static func_name arg_types ret_type drv k) ∧
   eval_expr_cps cx10 (Call (IntCall (ns, fn)) es _) st k =
     (case do
       check (no_recursion (ns, fn) cx10.stk) "recursion";
@@ -369,7 +369,7 @@ Definition apply_exc_def:
   apply_exc cx ex st (BuiltinK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (TypeBuiltinK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CallSendK k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (ExtCallK _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (ExtCallK _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IntCallK _ _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IntCallK1 prev rtv k) =
     liftk (cx with stk updated_by TL) (ApplyTv o Value)
@@ -587,8 +587,8 @@ Definition apply_vals_def:
       transfer_value cx.txn.target toAddr amount;
       return $ Value NoneV
     od st) k ∧
-  apply_vals cx vs st (ExtCallK is_static func_name arg_types ret_type k) =
-    liftk cx ApplyTv (do
+  apply_vals cx vs st (ExtCallK is_static func_name arg_types ret_type drv k) =
+    (case do
       check (vs ≠ []) "ExtCall no target";
       target_addr <- lift_option (dest_AddressV (HD vs)) "ExtCall target not address";
       (* Convention: staticcall (T) args = [target; arg1; ...]
@@ -615,9 +615,16 @@ Definition apply_vals_def:
       check success "ExtCall reverted";
       update_accounts (K accounts');
       update_transient (K tStorage');
-      ret_val <- lift_sum (evaluate_abi_decode_return tenv ret_type returnData);
-      return $ Value ret_val
-    od st) k ∧
+      if returnData = [] ∧ IS_SOME drv then
+        return (INL (THE drv))
+      else do
+        ret_val <- lift_sum (evaluate_abi_decode_return tenv ret_type returnData);
+        return (INR (Value ret_val))
+      od
+    od st
+    of (INR ex, st) => AK cx (ApplyExc ex) st k
+     | (INL (INL e), st) => eval_expr_cps cx e st k
+     | (INL (INR tv), st) => AK cx (ApplyTv tv) st k) ∧
   apply_vals cx vs st (IntCallK tenv all_tenv src_fn args ret body k) =
     (case do
       env <- lift_option (bind_arguments tenv args vs) "IntCall bind_arguments";
@@ -1188,7 +1195,22 @@ Proof
     rw[eval_expr_cps_def, evaluate_def, bind_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    \\ rw[Once OWHILE_THM, stepk_def, apply_vals_def, liftk1])
+    \\ simp[Once OWHILE_THM, stepk_def, apply_vals_def, liftk1]
+    \\ qmatch_goalsub_abbrev_tac`pair_CASE cc1`
+    \\ qmatch_goalsub_abbrev_tac`lhs = _`
+    \\ qmatch_goalsub_abbrev_tac`pair_CASE cc2`
+    \\ qunabbrev_tac`lhs`
+    \\ Cases_on`cc1` \\ Cases_on`cc2` \\ gvs[]
+    \\ gvs[bind_def, ignore_bind_def,CaseEq"prod",CaseEq"sum"]
+    \\ pairarg_tac \\ gvs[bind_def,CaseEq"prod",CaseEq"sum"]
+    \\ pairarg_tac \\ gvs[bind_def,CaseEq"prod",CaseEq"sum"]
+    \\ qmatch_asmsub_abbrev_tac`COND b`
+    \\ reverse $ Cases_on`b` \\ gvs[]
+    >- gvs[bind_def, return_def, CaseEq"prod", CaseEq"sum"]
+    \\ gvs[return_def]
+    \\ first_x_assum drule
+    \\ disch_then $ funpow 10 drule_then drule
+    \\ rw[] )
   \\ conj_tac >- ( (* IntCall *)
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def,
        no_recursion_def]

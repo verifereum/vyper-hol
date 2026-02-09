@@ -278,6 +278,8 @@ Theorem case_Call_ExtCall_ind[local]:
   ∀es drv.
     (∀e. MEM e es ⇒
          ∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
+    (∀e. drv = SOME e ⇒
+         ∀cx st res st'. eval_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀is_static sig cx st res st'.
       eval_expr cx (Call (ExtCall is_static sig) es drv) st = (res,st') ⇒ 
       MAP FDOM st.scopes = MAP FDOM st'.scopes
@@ -289,13 +291,16 @@ Proof
        lift_option_def, CaseEq"option", option_CASE_rator, raise_def,
        return_def, check_def, assert_def, COND_RATOR,
        get_transient_storage_def, get_accounts_def, CaseEq"bool", pairTheory.UNCURRY] >>
-  strip_tac >> gvs[return_def, raise_def] >>
-  drule_all eval_exprs_preserves_scopes_dom_helper >> strip_tac >> gvs[] >>
-  rename1 `run_ext_call _ _ _ _ _ _ _ = SOME result` >>
-  PairCases_on `result` >>
-  gvs[bind_def, ignore_bind_def, assert_def, CaseEq"prod", CaseEq"sum",
-      lift_sum_def, update_accounts_def, update_transient_def, return_def,
-      sum_CASE_rator, raise_def]
+  simp[update_accounts_def, update_transient_def, lift_sum_def,
+       return_def, raise_def] >>
+  strip_tac >> rw[] >>
+  imp_res_tac eval_exprs_preserves_scopes_dom_helper >> rw[] >>
+  rpt (qpat_x_assum `(case _ of INL _ => _ | INR _ => _) _ = _` mp_tac >>
+       simp[CaseEq"sum", sum_CASE_rator, return_def, raise_def] >> rw[]) >>
+  TRY (Cases_on `drv` >> fs[] >>
+       first_x_assum (fn th => first_x_assum (mp_tac o MATCH_MP th)) >>
+       simp[] >> NO_TAC) >>
+  simp[]
 QED
 
 (* ========================================================================

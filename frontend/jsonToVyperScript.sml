@@ -630,7 +630,7 @@ Definition translate_expr_def:
          (case translated_args of
           | (target :: rest) => target :: value_expr :: rest
           | [] => [])
-         NONE) /\
+         (OPTION_MAP translate_expr (find_keyword "default_return_value" keywords))) /\
 
   (* StaticCall - read-only external call (is_static = T) *)
   (* Convention: args = [target; arg1; arg2; ...] (no value) *)

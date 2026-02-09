@@ -1,7 +1,6 @@
 Theory vyperScopePreservingExpr
-
 Ancestors
-  vyperInterpreter vyperLookup vyperScopePreservation
+  option vyperInterpreter vyperLookup vyperScopePreservation
 
 (* Scope-preserving expressions: expressions that do not modify scopes.
    Pop is the only expression constructor that modifies scoped variables.
@@ -19,7 +18,9 @@ Definition scope_preserving_expr_def:
   scope_preserving_expr (Builtin _ es) = EVERY scope_preserving_expr es ∧
   scope_preserving_expr (TypeBuiltin _ _ es) = EVERY scope_preserving_expr es ∧
   scope_preserving_expr (Pop _) = F ∧
-  scope_preserving_expr (Call _ es _) = EVERY scope_preserving_expr es
+  scope_preserving_expr (Call _ es drv) =
+    (EVERY scope_preserving_expr es ∧
+     OPTION_ALL scope_preserving_expr drv)
 Termination
   WF_REL_TAC `measure expr_size` >>
   rw[] >>
@@ -226,25 +227,144 @@ Proof
 QED
 
 Theorem case_ExtCall[local]:
-  ∀cx is_static sig es drv.
+  ∀cx is_static func_name arg_types ret_type es drv.
+    (∀s'' vs t s'3' t' s'4' target_addr t'' s'5' value_opt arg_vals t'3'
+         s'6' ts t'4' s'7' calldata t'5' s'8' accounts t'6' s'9' tStorage
+         t'7' s'10' t'8' success accounts' tStorage' s'11' t'9' s'12' t'10'
+         s'13' t'11'.
+       eval_exprs cx es s'' = (INL vs,t) ∧
+       check (vs ≠ []) "ExtCall no target" s'3' = (INL (),t') ∧
+       lift_option (dest_AddressV (HD vs))
+         "ExtCall target not address" s'4' = (INL target_addr,t'') ∧
+       (if is_static then return (NONE,TL vs)
+        else do
+          check (TL vs ≠ []) "ExtCall no value";
+          v <- lift_option (dest_NumV (HD (TL vs))) "ExtCall value not int";
+          return (SOME v,TL (TL vs))
+        od) s'5' = (INL (value_opt,arg_vals),t'3') ∧
+       lift_option (get_self_code cx)
+         "ExtCall get_self_code" s'6' = (INL ts,t'4') ∧
+       lift_option (build_ext_calldata (type_env ts) func_name arg_types arg_vals)
+         "ExtCall build_calldata" s'7' = (INL calldata,t'5') ∧
+       get_accounts s'8' = (INL accounts,t'6') ∧
+       get_transient_storage s'9' = (INL tStorage,t'7') ∧
+       lift_option (run_ext_call cx.txn.target target_addr calldata value_opt
+                      accounts tStorage (vyper_to_tx_params cx.txn))
+         "ExtCall run failed" s'10' = (INL (success,[],accounts',tStorage'),t'8') ∧
+       check success "ExtCall reverted" s'11' = (INL (),t'9') ∧
+       update_accounts (K accounts') s'12' = (INL (),t'10') ∧
+       update_transient (K tStorage') s'13' = (INL (),t'11') ∧
+       IS_SOME drv ⇒
+       ∀st res st'.
+         eval_expr cx (THE drv) st = (res,st') ⇒
+         scope_preserving_expr (THE drv) ⇒ st.scopes = st'.scopes) ∧
     (∀st res st'.
        eval_exprs cx es st = (res, st') ⇒ EVERY scope_preserving_expr es ⇒ st.scopes = st'.scopes) ⇒
     (∀st res st'.
-       eval_expr cx (Call (ExtCall is_static sig) es drv) st = (res, st') ⇒
-       scope_preserving_expr (Call (ExtCall is_static sig) es drv) ⇒ st.scopes = st'.scopes)
+       eval_expr cx (Call (ExtCall is_static (func_name,arg_types,ret_type)) es drv) st = (res, st') ⇒
+       scope_preserving_expr (Call (ExtCall is_static (func_name,arg_types,ret_type)) es drv) ⇒ st.scopes = st'.scopes)
 Proof
   rpt strip_tac >>
-  PairCases_on`sig` >>
-  gvs[evaluate_def, bind_def, ignore_bind_def, CaseEq"prod", CaseEq"sum",
-      lift_option_def, CaseEq"option", option_CASE_rator, raise_def,
-      return_def, check_def, assert_def, scope_preserving_expr_def, COND_RATOR,
-      get_transient_storage_def, get_accounts_def, CaseEq"bool",pairTheory.UNCURRY] >>
-  first_x_assum drule >> gvs[ETA_THM] >>
-  rename1 `run_ext_call _ _ _ _ _ _ _ = SOME result` >>
-  PairCases_on `result` >>
-  gvs[bind_def, ignore_bind_def, assert_def, CaseEq"prod", CaseEq"sum",
-      lift_sum_def, update_accounts_def, update_transient_def, return_def,
-      sum_CASE_rator, raise_def]
+  qhdtm_x_assum`scope_preserving_expr`mp_tac >>
+  qhdtm_x_assum`eval_expr`mp_tac >>
+  rw[scope_preserving_expr_def, evaluate_def, ETA_AX] >>
+  qpat_x_assum`_ = (_,_)`mp_tac >>
+  simp_tac(srw_ss()++DNF_ss)[
+    bind_def, ignore_bind_def, CaseEq"prod", CaseEq"sum", COND_RATOR,
+    CaseEq"bool", return_def] >>
+  reverse strip_tac >-  rw[] >>
+  reverse strip_tac >- rw[check_def, assert_def] >>
+  reverse strip_tac >-
+    rw[check_def, assert_def, lift_option_def, CaseEq"option",
+       raise_def, return_def, option_CASE_rator] >>
+  reverse strip_tac >- (
+    reverse strip_tac >-
+      rw[check_def, assert_def, lift_option_def, CaseEq"option",
+         raise_def, return_def, option_CASE_rator] >>
+    reverse strip_tac >-
+      rw[check_def, assert_def, lift_option_def, CaseEq"option",
+         raise_def, return_def, option_CASE_rator] >>
+    reverse strip_tac >-
+      rw[check_def, assert_def, lift_option_def, CaseEq"option",
+         raise_def, return_def, option_CASE_rator] >>
+    reverse strip_tac >-
+      rw[check_def, assert_def, lift_option_def, CaseEq"option",
+         raise_def, return_def, option_CASE_rator] >>
+    reverse strip_tac >-
+      rw[check_def, assert_def, lift_option_def, CaseEq"option",
+         raise_def, return_def, option_CASE_rator, get_accounts_def] >>
+    reverse strip_tac >-
+      rw[check_def, assert_def, lift_option_def, CaseEq"option",
+         raise_def, return_def, option_CASE_rator, get_accounts_def,
+         get_transient_storage_def] >>
+    reverse strip_tac >-
+      rw[check_def, assert_def, lift_option_def, CaseEq"option",
+         raise_def, return_def, option_CASE_rator, get_accounts_def,
+         get_transient_storage_def] >>
+    rpt gen_tac >>
+    simp[check_def, assert_def, lift_option_def, get_accounts_def,
+         get_transient_storage_def, return_def] >>
+    pairarg_tac >>
+    simp[bind_def, assert_def, update_accounts_def, update_transient_def, return_def,
+         lift_sum_def] >>
+    simp[CaseEq"option", raise_def, return_def, option_CASE_rator] >>
+    rw[]
+    >- (
+      last_x_assum drule >>
+      simp[check_def, assert_def, lift_option_def, return_def, bind_def,
+           ignore_bind_def, get_accounts_def, get_transient_storage_def,
+           option_CASE_rator, update_accounts_def, update_transient_def] >>
+      disch_then $ drule_at Any >> simp[] >>
+      gvs[IS_SOME_EXISTS] >>
+      first_x_assum drule \\ rw[] >>
+      gvs[CaseEq"option",CaseEq"prod",raise_def] >>
+      first_x_assum irule >>
+      goal_assum drule )
+    \\ pop_assum mp_tac
+    \\ simp[bind_def, CaseEq"prod", CaseEq"sum", sum_CASE_rator]
+    \\ srw_tac[DNF_ss][return_def,raise_def] \\ rw[] )
+ \\ reverse strip_tac
+ >- rw[check_def, assert_def, lift_option_def, CaseEq"option",
+       raise_def, return_def, option_CASE_rator, get_accounts_def,
+       get_transient_storage_def]
+ \\ reverse strip_tac
+ >- rw[check_def, assert_def, lift_option_def, CaseEq"option",
+       raise_def, return_def, option_CASE_rator, get_accounts_def,
+       get_transient_storage_def]
+ \\ reverse strip_tac
+ >- rw[check_def, assert_def, lift_option_def, CaseEq"option",
+       raise_def, return_def, option_CASE_rator, get_accounts_def,
+       get_transient_storage_def]
+ \\ reverse strip_tac
+ >- rw[check_def, assert_def, lift_option_def, CaseEq"option",
+       raise_def, return_def, option_CASE_rator, get_accounts_def,
+       get_transient_storage_def]
+ \\ reverse strip_tac
+ >- rw[check_def, assert_def, lift_option_def, CaseEq"option",
+       raise_def, return_def, option_CASE_rator, get_accounts_def,
+       get_transient_storage_def] >>
+  rpt gen_tac >>
+  simp[check_def, assert_def, lift_option_def, get_accounts_def,
+       get_transient_storage_def, return_def] >>
+  pairarg_tac >>
+  simp[bind_def, assert_def, update_accounts_def, update_transient_def, return_def,
+       lift_sum_def] >>
+  simp[CaseEq"option", raise_def, return_def, option_CASE_rator] >>
+  rw[]
+  >- (
+    last_x_assum drule >>
+    simp[check_def, assert_def, lift_option_def, return_def, bind_def,
+         ignore_bind_def, get_accounts_def, get_transient_storage_def,
+         option_CASE_rator, update_accounts_def, update_transient_def] >>
+    disch_then $ drule_at Any >> simp[] >>
+    gvs[IS_SOME_EXISTS] >>
+    first_x_assum drule \\ rw[] >>
+    gvs[CaseEq"option",CaseEq"prod",raise_def] >>
+    first_x_assum irule >>
+    goal_assum drule )
+  \\ pop_assum mp_tac
+  \\ simp[bind_def, CaseEq"prod", CaseEq"sum", sum_CASE_rator]
+  \\ srw_tac[DNF_ss][return_def,raise_def] \\ rw[]
 QED
 
 (* Case: IntCall - the complex case with finally/pop_function.
@@ -365,6 +485,7 @@ Proof
     val case_Builtin' = SIMP_RULE (srw_ss()) [] case_Builtin
     val case_TypeBuiltin' = SIMP_RULE (srw_ss()) [] case_TypeBuiltin
     val case_Send' = SIMP_RULE (srw_ss()) [] case_Send
+    val case_ExtCall' = SIMP_RULE (srw_ss()) [] case_ExtCall
     val case_IntCall' = SIMP_RULE (srw_ss()) [] case_IntCall
     val case_eval_exprs_cons' = SIMP_RULE (srw_ss()) [] case_eval_exprs_cons
   in
@@ -395,7 +516,7 @@ Proof
       (* Send *)
       ACCEPT_TAC case_Send' >-
       (* ExtCall - covers both static and non-static *)
-      metis_tac[case_ExtCall] >-
+      ACCEPT_TAC case_ExtCall' >-
       (* IntCall *)
       ACCEPT_TAC case_IntCall' >-
       (* eval_exprs [] *)
