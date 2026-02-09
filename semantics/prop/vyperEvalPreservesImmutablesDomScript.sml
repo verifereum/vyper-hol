@@ -99,6 +99,60 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
+(* Helper: the HashMap do-block in assign_target preserves immutables *)
+Theorem hashmap_do_block_immutables[local]:
+  ∀cx b c t' v' x key_types remaining_subs final_type h t ao r res st'.
+    (λ(final_type,key_types,remaining_subs).
+       do
+         final_slot <-
+           case
+             compute_hashmap_slot c (t'::key_types)
+               (h::TAKE (LENGTH t − LENGTH remaining_subs) t)
+           of
+             NONE => raise (Error "assign_target compute_hashmap_slot")
+           | SOME v => return v;
+         final_tv <-
+           case evaluate_type (type_env x) final_type of
+             NONE => raise (Error "assign_target evaluate_type")
+           | SOME v => return v;
+         current_val <- read_storage_slot cx b final_slot final_tv;
+         new_val <-
+           case assign_subscripts current_val remaining_subs ao of
+             INL v => return v
+           | INR str => raise (Error str);
+         x <- write_storage_slot cx b final_slot final_tv new_val;
+         return (HashMapRef b c t' v')
+       od) (final_type,key_types,remaining_subs) r = (res,st') ⇒
+    st'.immutables = r.immutables
+Proof
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `_ = (res, st')` mp_tac >>
+  simp[bind_def, return_def, raise_def] >> strip_tac >>
+  (* Step 1: compute_hashmap_slot *)
+  Cases_on `compute_hashmap_slot c (t'::key_types)
+              (h::TAKE (LENGTH t − LENGTH remaining_subs) t)` >>
+  gvs[return_def, raise_def] >>
+  rename1 `compute_hashmap_slot _ _ _ = SOME slot` >>
+  (* Step 2: evaluate_type *)
+  Cases_on `evaluate_type (type_env x) final_type` >>
+  gvs[return_def, raise_def] >>
+  rename1 `evaluate_type _ _ = SOME tv` >>
+  (* Step 3: read_storage_slot *)
+  `∃rr sr. read_storage_slot cx b slot tv r = (rr, sr)` by
+    metis_tac[pairTheory.PAIR] >>
+  Cases_on `rr` >> gvs[] >>
+  imp_res_tac read_storage_slot_immutables >>
+  (* Step 4: assign_subscripts *)
+  Cases_on `assign_subscripts x' remaining_subs ao` >>
+  gvs[return_def, raise_def] >>
+  rename1 `assign_subscripts _ _ _ = INL new_val` >>
+  (* Step 5: write_storage_slot *)
+  `∃rw sw. write_storage_slot cx b slot tv new_val sr = (rw, sw)` by
+    metis_tac[pairTheory.PAIR] >>
+  Cases_on `rw` >> gvs[] >>
+  imp_res_tac write_storage_slot_immutables >> gvs[]
+QED
+
 Theorem assign_target_imm_dom_TopLevelVar[local]:
   ∀cx src_id_opt id is ao st res st'.
     assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) is) ao st = (res, st') ⇒
@@ -114,16 +168,16 @@ Proof
   imp_res_tac lookup_global_immutables >> gvs[] >>
   BasicProvers.EVERY_CASE_TAC >> gvs[return_def, raise_def, bind_def] >>
   rpt strip_tac >> gvs[] >>
-  TRY (imp_res_tac set_global_immutables >> gvs[] >> NO_TAC) >>
-  (* HashMap branch: further decompose the remaining do-block *)
-  qpat_x_assum `_ = (res, st')` mp_tac >>
-  simp[bind_def, return_def, raise_def] >>
-  BasicProvers.EVERY_CASE_TAC >> gvs[return_def, raise_def] >>
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac read_storage_slot_immutables >>
-  imp_res_tac write_storage_slot_immutables >> gvs[] >>
-  (* remaining goals: chain read/write immutables preservation *)
-  cheat
+  (* subgoals 1-2: set_global case expression *)
+  TRY (
+    `∃rsg ssg. set_global cx src_id_opt (string_to_num id) x' r = (rsg, ssg)` by
+      metis_tac[pairTheory.PAIR] >>
+    Cases_on `rsg` >> gvs[] >>
+    imp_res_tac set_global_immutables >> gvs[] >> NO_TAC) >>
+  (* HashMap branch *)
+  Cases_on `split_hashmap_subscripts v t` >> gvs[return_def, raise_def] >>
+  PairCases_on `x'` >>
+  imp_res_tac hashmap_do_block_immutables >> gvs[]
 QED
 
 Theorem assign_target_imm_dom_ImmutableVar[local]:
