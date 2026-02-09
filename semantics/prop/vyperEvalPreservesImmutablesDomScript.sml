@@ -247,10 +247,12 @@ Theorem finally_preserves_imm_dom[local]:
     (∀st1 res1 st1'. cleanup st1 = (res1, st1') ⇒ st1'.immutables = st1.immutables) ⇒
     preserves_immutables_dom cx st st'
 Proof
-  rw[finally_def, AllCaseEqs()] >> gvs[] >>
-  irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
-  first_x_assum drule >> simp[] >>
-  irule preserves_immutables_dom_eq >> first_x_assum drule >> simp[]
+  rw[finally_def, AllCaseEqs()] >> gvs[] >> (
+    irule preserves_immutables_dom_trans >> qexists_tac `s''` >> conj_tac
+    >- (first_x_assum drule >> simp[])
+    >- (gvs[ignore_bind_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+        irule preserves_immutables_dom_eq >> first_x_assum drule >> simp[])
+  )
 QED
 
 (* ===== Main Mutual Induction ===== *)
@@ -290,7 +292,8 @@ Theorem eval_expr_preserves_immutables_dom:
       (IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) ⇔
        IS_SOME (FLOOKUP (get_source_immutables NONE imms') n))
 Proof
-  metis_tac[immutables_dom_mutual, preserves_immutables_dom_def]
+  rpt strip_tac >> drule (cj 8 immutables_dom_mutual) >>
+  rw[preserves_immutables_dom_def] >> metis_tac[]
 QED
 
 Theorem eval_base_target_preserves_immutables_addr_dom:
@@ -310,7 +313,8 @@ Theorem eval_base_target_preserves_immutables_dom:
       (IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) ⇔
        IS_SOME (FLOOKUP (get_source_immutables NONE imms') n))
 Proof
-  metis_tac[immutables_dom_mutual, preserves_immutables_dom_def]
+  rpt strip_tac >> drule (cj 6 immutables_dom_mutual) >>
+  rw[preserves_immutables_dom_def] >> metis_tac[]
 QED
 
 Theorem eval_exprs_preserves_immutables_addr_dom:
@@ -338,5 +342,6 @@ Theorem eval_stmts_preserves_immutables_dom:
       (IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) ⇔
        IS_SOME (FLOOKUP (get_source_immutables NONE imms') n))
 Proof
-  metis_tac[immutables_dom_mutual, preserves_immutables_dom_def]
+  rpt strip_tac >> drule (cj 2 immutables_dom_mutual) >>
+  rw[preserves_immutables_dom_def] >> metis_tac[]
 QED
