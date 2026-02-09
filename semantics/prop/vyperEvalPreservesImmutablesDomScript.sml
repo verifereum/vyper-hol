@@ -311,6 +311,13 @@ QED
 
 (* ===== IntCall helper ===== *)
 
+Theorem handle_function_immutables[local]:
+  ∀exc st res st'.
+    handle_function exc st = (res, st') ⇒ st'.immutables = st.immutables
+Proof
+  Cases_on `exc` >> simp[handle_function_def, return_def, raise_def]
+QED
+
 Theorem preserves_immutables_dom_txn_eq[local]:
   ∀cx cx' st st'.
     cx'.txn = cx.txn ⇒
@@ -355,7 +362,7 @@ Proof
   irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
   irule preserves_immutables_dom_eq >>
   gvs[handle_function_def, return_def, raise_def, AllCaseEqs()] >>
-  cheat
+  imp_res_tac handle_function_immutables >> gvs[]
 QED
 
 Theorem case_IntCall_imm_dom[local]:
@@ -378,7 +385,7 @@ Proof
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
   rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def,
        preserves_immutables_dom_refl, preserves_immutables_dom_eq]) >>
-  irule case_IntCall_imm_dom_inner >> gvs[] >> cheat
+  irule case_IntCall_imm_dom_inner >> gvs[] >> metis_tac[]
 QED
 
 (* ===== Main Mutual Induction ===== *)
