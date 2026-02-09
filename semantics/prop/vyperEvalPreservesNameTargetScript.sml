@@ -130,7 +130,33 @@ Theorem eval_expr_preserves_lookup_name_target:
     lookup_name_target cx st n = SOME av ⇒
     lookup_name_target cx st' n = SOME av
 Proof
-  cheat
+  rpt strip_tac >> drule lookup_name_target_facts >> strip_tac >> gvs[] >-
+  ((* Scoped variable case *)
+   irule reconstruct_scoped_lookup >>
+   `var_in_scope st' n` by metis_tac[eval_expr_preserves_var_in_scope] >>
+   simp[] >>
+   Cases_on `cx.txn.is_creation` >> gvs[] >>
+   first_x_assum strip_assume_tac >>
+   drule eval_expr_preserves_immutables_addr_dom >>
+   disch_then (qspec_then `cx.txn.target` mp_tac) >> simp[] >>
+   strip_tac >>
+   Cases_on `ALOOKUP st'.immutables cx.txn.target` >> gvs[] >>
+   qpat_x_assum `eval_expr _ _ _ = _`
+     (fn th => assume_tac (MATCH_MP eval_expr_preserves_immutables_dom th)) >>
+   first_x_assum (qspecl_then [`string_to_num n`, `imms`, `x`] mp_tac) >>
+   simp[]) >>
+  (* Immutable variable case *)
+  irule reconstruct_immutable_lookup >>
+  `¬var_in_scope st' n` by metis_tac[eval_expr_preserves_var_in_scope] >>
+  simp[] >>
+  drule eval_expr_preserves_immutables_addr_dom >>
+  disch_then (qspec_then `cx.txn.target` mp_tac) >> simp[] >>
+  strip_tac >>
+  Cases_on `ALOOKUP st'.immutables cx.txn.target` >> gvs[] >>
+  qpat_x_assum `eval_expr _ _ _ = _`
+    (fn th => assume_tac (MATCH_MP eval_expr_preserves_immutables_dom th)) >>
+  first_x_assum (qspecl_then [`string_to_num n`, `imms`, `x`] mp_tac) >>
+  simp[]
 QED
 
 Theorem eval_stmts_preserves_lookup_name_target:
@@ -140,5 +166,28 @@ Theorem eval_stmts_preserves_lookup_name_target:
     (¬var_in_scope st n ⇒ valid_lookups cx st') ⇒
     lookup_name_target cx st' n = SOME av
 Proof
-  cheat
+  rpt strip_tac >> drule lookup_name_target_facts >> strip_tac >> gvs[] >-
+  ((* Scoped variable case *)
+   irule reconstruct_scoped_lookup >>
+   `var_in_scope st' n` by metis_tac[eval_stmts_preserves_var_in_scope] >>
+   simp[] >>
+   Cases_on `cx.txn.is_creation` >> gvs[] >>
+   first_x_assum strip_assume_tac >>
+   drule eval_stmts_preserves_immutables_addr_dom >>
+   disch_then (qspec_then `cx.txn.target` mp_tac) >> simp[] >>
+   strip_tac >>
+   Cases_on `ALOOKUP st'.immutables cx.txn.target` >> gvs[] >>
+   qpat_x_assum `eval_stmts _ _ _ = _`
+     (fn th => assume_tac (MATCH_MP eval_stmts_preserves_immutables_dom th)) >>
+   first_x_assum (qspecl_then [`string_to_num n`, `imms`, `x`] mp_tac) >>
+   simp[]) >>
+  (* Immutable variable case *)
+  `preserves_immutables_dom cx st st'` by
+    (simp[preserves_immutables_dom_def] >> conj_tac >-
+     metis_tac[eval_stmts_preserves_immutables_addr_dom] >>
+     metis_tac[eval_stmts_preserves_immutables_dom]) >>
+  drule_all imm_dom_transfer_some >> strip_tac >>
+  irule reconstruct_immutable_lookup >> simp[] >>
+  CCONTR_TAC >> gvs[] >>
+  gvs[valid_lookups_def]
 QED
