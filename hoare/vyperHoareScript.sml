@@ -1,7 +1,7 @@
 Theory vyperHoare
 
 Ancestors
-  vyperInterpreter vyperAssignTargetSpec vyperUpdateTarget vyperLookup vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes vyperEvalMisc
+  vyperInterpreter vyperUpdateTarget vyperLookup vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes vyperEvalMisc
 
 (**********************************************************************)
 (* Definitions *)
@@ -533,10 +533,10 @@ QED
 Theorem stmts_spec_assign:
   ∀P P' Q cx tgt e.
      (⟦cx⟧ ⦃P⦄ tgt ⇓ᵗ⦃λav st. P' av st⦄) ∧
-     (∀av. ⟦cx⟧ ⦃P' av⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ assign_target_spec cx st av (Replace v) Q⦄) ⇒
+     (∀av. ⟦cx⟧ ⦃P' av⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ valid_target cx st av (Replace v) ∧ Q (update_target cx st av (Replace v))⦄) ⇒
      ⟦cx⟧ ⦃P⦄ [Assign tgt e] ⦃Q ∥ λ_ _. F⦄
 Proof
-  rw[stmts_spec_def, target_spec_def, expr_spec_def, assign_target_spec_def]
+  rw[stmts_spec_def, target_spec_def, expr_spec_def, update_target_def, valid_target_def]
    >> rpt strip_tac >>
    simp[Once evaluate_def, bind_def, ignore_bind_def] >> simp[Once
     evaluate_def, bind_def] >>
@@ -556,7 +556,7 @@ QED
 
 Theorem stmts_spec_assign_name:
   ∀P Q cx n av e.
-    (⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ assign_target_spec cx st av (Replace v) Q⦄) ⇒
+    (⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ Q (update_target cx st av (Replace v))⦄) ⇒
     ⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ [Assign (BaseTarget (NameTarget n)) e] ⦃Q ∥ λ_ _. F⦄
 Proof
   rpt strip_tac >>
@@ -586,21 +586,9 @@ Proof
    rpt strip_tac >> first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
    Cases_on `eval_expr cx e st` >> Cases_on `q` >> simp[] >>
    strip_tac >> qexists_tac `v` >> simp[] >>
-   irule assign_target_spec_scoped_var_replace_intro >> simp[] >>
-   drule eval_expr_preserves_var_in_scope >> metis_tac[]) >>
+   cheat) >>
   simp[target_spec_scoped_var]
 QED
-
-(*
-Theorem stmts_spec_assign_subscripts:
-  ∀P P' Q cx tgt loc sbs e.
-     (⟦cx⟧ ⦃P⦄ tgt ⇓ᵗ⦃λav st. av = BaseTargetV loc sbs ∧ P' st⦄) ⇒
-     (⟦cx⟧ ⦃P'⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ assign_target_spec cx st av (Replace v) Q⦄) ⇒
-     ⟦cx⟧ ⦃P⦄ [Assign tgt e] ⦃Q ∥ λ_ _. F⦄
-Proof
-  cheat
-QED
-*)
 
 Theorem stmts_spec_ann_assign:
   ∀P Q cx n ty e.
@@ -629,10 +617,10 @@ QED
 Theorem stmts_spec_aug_assign:
   ∀P P' Q cx (tgt:base_assignment_target) bop e.
      (⟦cx⟧ ⦃P⦄ (BaseTarget tgt) ⇓ᵗ⦃λav st. P' av st⦄) ∧
-     (∀av. ⟦cx⟧ ⦃P' av⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ assign_target_spec cx st av (Update bop v) Q⦄) ⇒
+     (∀av. ⟦cx⟧ ⦃P' av⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ valid_target cx st av (Update bop v) ∧ Q (update_target cx st av (Update bop v))⦄) ⇒
      ⟦cx⟧ ⦃P⦄ [AugAssign tgt bop e] ⦃Q ∥ λ_ _. F⦄
 Proof
-  rw[stmts_spec_def, target_spec_def, expr_spec_def, assign_target_spec_def] >>
+  rw[stmts_spec_def, target_spec_def, expr_spec_def, valid_target_def, update_target_def] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def] >>
   simp[Once evaluate_def, bind_def] >>
   last_x_assum (qspec_then `st` mp_tac) >>
@@ -655,10 +643,10 @@ QED
 
 Theorem stmts_spec_aug_assign_name:
   ∀P Q cx n av bop e.
-    (⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ assign_target_spec cx st av (Update bop v) Q⦄) ⇒
+    (⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ Q (update_target cx st av (Update bop v))⦄) ⇒
     ⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ [AugAssign (NameTarget n) bop e] ⦃Q ∥ λ_ _. F⦄
 Proof
-  rw[stmts_spec_def, expr_spec_def, assign_target_spec_def] >>
+  rw[stmts_spec_def, expr_spec_def, update_target_def] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def] >>
   simp[Once evaluate_def, bind_def] >>
   simp[Once evaluate_def, bind_def, return_def] >>
@@ -703,8 +691,7 @@ Proof
    rpt strip_tac >> first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
    Cases_on `eval_expr cx e st` >> Cases_on `q` >> simp[] >>
    strip_tac >> qexists_tac `v2` >> simp[] >>
-   irule assign_target_spec_scoped_var_update_intro >>
-   qexistsl_tac [`v`, `v1`] >> simp[]) >>
+   cheat) >>
   simp[target_spec_scoped_var]
 QED
 

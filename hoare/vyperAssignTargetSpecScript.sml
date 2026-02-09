@@ -2,7 +2,7 @@ Theory vyperAssignTargetSpec
 
 Ancestors
   vyperInterpreter vyperTypeValue vyperLookup vyperAssignTarget
-  vyperScopePreservation
+  vyperScopePreservation vyperUpdateTarget
 
 Definition assign_target_spec_def:
   assign_target_spec cx st (av : assignment_value) (ao : assign_operation) Q ⇔
@@ -88,6 +88,14 @@ Proof
   rw[assign_target_spec_def] >>
   Cases_on `assign_target cx av ao st` >> gvs[] >>
   Cases_on `q` >> gvs[]
+QED
+
+Theorem assign_target_spec_equiv_update_target:
+  ∀P cx st av ao.
+     assign_target_spec cx st av ao P ⇔ valid_target cx st av ao ∧ P (update_target cx st av ao)
+Proof
+  rw[assign_target_spec_def, valid_target_def, update_target_def] >>
+  Cases_on `assign_target cx av ao st` >> Cases_on `q` >> gvs[]
 QED
 
 Theorem assign_target_spec_preserves_toplevel_name_targets:
