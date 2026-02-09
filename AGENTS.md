@@ -159,6 +159,8 @@ When proving a theorem by induction or by cases with many complex cases:
 - prove directly only simple cases that can be closed with at most 3 tactics,
 - formulate a helper lemma stating the exact subgoal for each complex case that requires more than 3 tactics to close.
 
+Re-use existing theorems as much as possible. Before creating a new helper lemma, always check if an existing theorem can be applied directly.
+
 ## Key Theories
 
 ### venomSemTheory
