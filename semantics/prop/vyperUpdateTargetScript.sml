@@ -58,6 +58,23 @@ Proof
        ignore_bind_def, set_scopes_def]
 QED
 
+Theorem valid_target_scoped_var_update:
+  ∀cx st n bop v1 v2 v.
+    lookup_scoped_var st n = SOME v1 ∧
+    evaluate_binop bop v1 v2 = INL v ⇒
+    valid_target cx st (BaseTargetV (ScopedVar n) []) (Update bop v2)
+Proof
+  rw[lookup_scoped_var_def, valid_target_def] >>
+  `IS_SOME (find_containing_scope (string_to_num n) st.scopes)`
+    by (irule lookup_scopes_find_containing >> simp[]) >>
+  Cases_on `find_containing_scope (string_to_num n) st.scopes` >> gvs[] >>
+  PairCases_on `x` >> gvs[] >>
+  `x2 = v1` by (drule find_containing_scope_lookup >> simp[]) >> gvs[] >>
+  simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
+       lift_option_def, LET_THM, assign_subscripts_def, lift_sum_def,
+       ignore_bind_def, set_scopes_def]
+QED
+
 Theorem update_target_preserves_toplevel_name_targets:
   ∀cx st av ao n.
     lookup_toplevel_name_target cx (update_target cx st av ao) n = lookup_toplevel_name_target cx st n
@@ -249,12 +266,4 @@ Proof
   `MAP FDOM r.scopes = MAP FDOM st.scopes`
     by (drule (CONJUNCT1 vyperScopePreservationTheory.assign_target_preserves_scopes_dom) >> simp[]) >>
   metis_tac[lookup_scopes_dom_iff]
-QED
-
-Theorem update_target_no_subscripts_preserves_valid_target:
-  ∀cx st av ao loc ao'.
-    valid_target cx st av ao ⇒
-    valid_target cx (update_target cx st (BaseTargetV loc []) ao') av ao
-Proof
-  cheat
 QED
