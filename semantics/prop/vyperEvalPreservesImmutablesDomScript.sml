@@ -1064,7 +1064,14 @@ Theorem case_Name_imm_dom[local]:
       eval_expr cx (Name id) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
+       get_scopes_def, get_immutables_def, get_address_immutables_def,
+       lift_option_def, lift_sum_def, LET_THM] >>
+  rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
+  BasicProvers.EVERY_CASE_TAC >>
+  gvs[return_def, raise_def, preserves_immutables_dom_refl]
 QED
 
 (* ----- Case: eval_expr (Builtin bt es) ----- *)
