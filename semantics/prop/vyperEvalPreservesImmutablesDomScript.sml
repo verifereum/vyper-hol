@@ -952,8 +952,9 @@ Proof
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
   imp_res_tac get_Value_immutables >>
   irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
-  gvs[preserves_immutables_dom_eq]
-  >> cheat
+  gvs[preserves_immutables_dom_eq] >>
+  Cases_on `evaluate_attribute sv id` >>
+  gvs[return_def, raise_def, preserves_immutables_dom_eq]
 QED
 
 (* ----- Case 39: eval_expr (Pop bt) ----- *)
