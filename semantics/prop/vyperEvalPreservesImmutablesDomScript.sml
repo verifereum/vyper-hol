@@ -997,6 +997,168 @@ Proof
   gvs[raise_def, preserves_immutables_dom_refl]
 QED
 
+(* ----- Subscript helper lemmas ----- *)
+
+(* Subgoal 1: success path - res' branches into value or storage read.
+   Need to show preserves_immutables_dom cx s_e2 st'
+   where s_e2 is the state after eval_expr e2. *)
+Theorem subscript_helper_success_path[local]:
+  ∀cx s_e2 s_gv s_gc s_es s_rs st' tv1 tv2 v2 ts res' res.
+    s_gv.immutables = s_e2.immutables ⇒
+    get_Value tv2 s_e2 = (INL v2, s_gv) ⇒
+    (case get_self_code cx of
+       NONE => raise (Error "Subscript get_self_code")
+     | SOME v => return v) s_gv = (INL ts, s_gc) ⇒
+    (case evaluate_subscript tv1 v2 of
+       INL v => return v
+     | INR str => raise (Error str)) s_gc = (INL res', s_es) ⇒
+    (case res' of
+       INL v => return v
+     | INR (is_transient,slot,t) =>
+       do
+         tv <-
+           case evaluate_type (type_env ts) t of
+             NONE => raise (Error "Subscript evaluate_type")
+           | SOME v => return v;
+         v <- read_storage_slot cx is_transient slot tv;
+         return (Value v)
+       od) s_es = (res, st') ⇒
+    preserves_immutables_dom cx s_e2 st'
+Proof
+  cheat
+QED
+
+(* Subgoal 2: evaluate_subscript returns INR (error) -
+   need preserves_immutables_dom cx st s_e2
+   (chaining st → s_e1 → s_e2 via e1 and e2 IHs) *)
+Theorem subscript_helper_eval_sub_err_fwd[local]:
+  ∀cx e1 e2 st s_e1 s_e2 tv1 tv2 v2 s_gv s_gc s_es ts e' s_raise.
+    (∀st res st'. eval_expr cx e1 st = (res,st') ⇒
+       preserves_immutables_dom cx st st') ⇒
+    (∀st' res st''. eval_expr cx e2 st' = (res,st'') ⇒
+       preserves_immutables_dom cx st' st'') ⇒
+    preserves_immutables_dom cx st s_e1 ⇒
+    s_gv.immutables = s_e2.immutables ⇒
+    eval_expr cx e1 st = (INL tv1, s_e1) ⇒
+    eval_expr cx e2 s_e1 = (INL tv2, s_e2) ⇒
+    get_Value tv2 s_e2 = (INL v2, s_gv) ⇒
+    (case get_self_code cx of
+       NONE => raise (Error "Subscript get_self_code")
+     | SOME v => return v) s_gv = (INL ts, s_gc) ⇒
+    (case evaluate_subscript tv1 v2 of
+       INL v => return v
+     | INR str => raise (Error str)) s_gc = (INR e', s_es) ⇒
+    preserves_immutables_dom cx st s_e2
+Proof
+  cheat
+QED
+
+(* Subgoal 3: evaluate_subscript returns INR (error) -
+   need preserves_immutables_dom cx s_e2 s_raise *)
+Theorem subscript_helper_eval_sub_err_bwd[local]:
+  ∀cx s_e2 s_gv s_gc s_es tv1 tv2 v2 ts e'.
+    s_gv.immutables = s_e2.immutables ⇒
+    get_Value tv2 s_e2 = (INL v2, s_gv) ⇒
+    (case get_self_code cx of
+       NONE => raise (Error "Subscript get_self_code")
+     | SOME v => return v) s_gv = (INL ts, s_gc) ⇒
+    (case evaluate_subscript tv1 v2 of
+       INL v => return v
+     | INR str => raise (Error str)) s_gc = (INR e', s_es) ⇒
+    preserves_immutables_dom cx s_e2 s_es
+Proof
+  cheat
+QED
+
+(* Subgoal 4: get_self_code returns INR (NONE case / error) -
+   need preserves_immutables_dom cx st s_e2 *)
+Theorem subscript_helper_get_code_err_fwd[local]:
+  ∀cx e1 e2 st s_e1 s_e2 tv1 tv2 v2 s_gv s_gc e'.
+    (∀st res st'. eval_expr cx e1 st = (res,st') ⇒
+       preserves_immutables_dom cx st st') ⇒
+    (∀st' res st''. eval_expr cx e2 st' = (res,st'') ⇒
+       preserves_immutables_dom cx st' st'') ⇒
+    preserves_immutables_dom cx st s_e1 ⇒
+    s_gv.immutables = s_e2.immutables ⇒
+    eval_expr cx e1 st = (INL tv1, s_e1) ⇒
+    eval_expr cx e2 s_e1 = (INL tv2, s_e2) ⇒
+    get_Value tv2 s_e2 = (INL v2, s_gv) ⇒
+    (case get_self_code cx of
+       NONE => raise (Error "Subscript get_self_code")
+     | SOME v => return v) s_gv = (INR e', s_gc) ⇒
+    preserves_immutables_dom cx st s_e2
+Proof
+  cheat
+QED
+
+(* Subgoal 5: get_self_code returns INR (NONE case / error) -
+   need preserves_immutables_dom cx s_e2 s_gc *)
+Theorem subscript_helper_get_code_err_bwd[local]:
+  ∀cx s_e2 s_gv s_gc tv2 v2 e'.
+    s_gv.immutables = s_e2.immutables ⇒
+    get_Value tv2 s_e2 = (INL v2, s_gv) ⇒
+    (case get_self_code cx of
+       NONE => raise (Error "Subscript get_self_code")
+     | SOME v => return v) s_gv = (INR e', s_gc) ⇒
+    preserves_immutables_dom cx s_e2 s_gc
+Proof
+  cheat
+QED
+
+(* Subgoal 6: get_Value returns INR (error) -
+   need preserves_immutables_dom cx st s_e2 *)
+Theorem subscript_helper_get_value_err_fwd[local]:
+  ∀cx e1 e2 st s_e1 s_e2 tv1 tv2 s_gv e'.
+    (∀st res st'. eval_expr cx e1 st = (res,st') ⇒
+       preserves_immutables_dom cx st st') ⇒
+    (∀st' res st''. eval_expr cx e2 st' = (res,st'') ⇒
+       preserves_immutables_dom cx st' st'') ⇒
+    preserves_immutables_dom cx st s_e1 ⇒
+    s_gv.immutables = s_e2.immutables ⇒
+    eval_expr cx e1 st = (INL tv1, s_e1) ⇒
+    eval_expr cx e2 s_e1 = (INL tv2, s_e2) ⇒
+    get_Value tv2 s_e2 = (INR e', s_gv) ⇒
+    preserves_immutables_dom cx st s_e2
+Proof
+  cheat
+QED
+
+(* Subgoal 7: get_Value returns INR (error) -
+   need preserves_immutables_dom cx s_e2 s_gv *)
+Theorem subscript_helper_get_value_err_bwd[local]:
+  ∀cx s_e2 s_gv tv2 e'.
+    s_gv.immutables = s_e2.immutables ⇒
+    get_Value tv2 s_e2 = (INR e', s_gv) ⇒
+    preserves_immutables_dom cx s_e2 s_gv
+Proof
+  cheat
+QED
+
+(* Subgoal 8: eval_expr e2 returns INR (error) -
+   need preserves_immutables_dom cx st s_e2 *)
+Theorem subscript_helper_e2_err_fwd[local]:
+  ∀cx e1 e2 st s_e1 s_e2 tv1 e'.
+    (∀st res st'. eval_expr cx e1 st = (res,st') ⇒
+       preserves_immutables_dom cx st st') ⇒
+    (∀st' res st''. eval_expr cx e2 st' = (res,st'') ⇒
+       preserves_immutables_dom cx st' st'') ⇒
+    preserves_immutables_dom cx st s_e1 ⇒
+    eval_expr cx e1 st = (INL tv1, s_e1) ⇒
+    eval_expr cx e2 s_e1 = (INR e', s_e2) ⇒
+    preserves_immutables_dom cx st s_e2
+Proof
+  cheat
+QED
+
+(* Subgoal 9: eval_expr e2 returns INR (error) -
+   need preserves_immutables_dom cx s_e2 s_e2 (trivial refl) *)
+Theorem subscript_helper_e2_err_refl[local]:
+  ∀cx (s_e2:evaluation_state).
+    preserves_immutables_dom cx s_e2 s_e2
+Proof
+  simp[preserves_immutables_dom_refl]
+QED
+
 (* ----- Case 36: eval_expr (Subscript e1 e2) ----- *)
 Theorem case_Subscript_imm_dom[local]:
   ∀cx e1 e2.
@@ -1024,11 +1186,20 @@ Proof
   (* Chain: st -> s'' -> s'³' -> <target> *)
   irule preserves_immutables_dom_trans >> qexists_tac `s'³'` >>
   conj_tac
-  >- (irule preserves_immutables_dom_trans >>
-      qexists_tac `s''` >> conj_tac >- gvs[] >>
-      qpat_x_assum `∀st0 res0 st0'. eval_expr _ e2 _ = _ ⇒ _`
-        drule >> simp[])
-  >> cheat
+   >- (irule preserves_immutables_dom_trans >>
+       qexists_tac `s''` >> conj_tac >- gvs[] >>
+       qpat_x_assum `∀st0 res0 st0'. eval_expr _ e2 _ = _ ⇒ _`
+         drule >> simp[])
+   (* 10 remaining goals: apply helpers *)
+   >- (irule subscript_helper_success_path >> metis_tac[])
+   >- (irule subscript_helper_eval_sub_err_fwd >> metis_tac[])
+   >- (irule subscript_helper_eval_sub_err_bwd >> metis_tac[])
+   >- (irule subscript_helper_get_code_err_fwd >> metis_tac[])
+   >- (irule subscript_helper_get_code_err_bwd >> metis_tac[])
+   >- (irule subscript_helper_get_value_err_fwd >> metis_tac[])
+   >- (irule subscript_helper_get_value_err_bwd >> metis_tac[])
+   >- (irule subscript_helper_e2_err_fwd >> metis_tac[])
+   >- simp[subscript_helper_e2_err_refl]
 QED
 
 (* ----- Case 37: eval_expr (Attribute e id) ----- *)
