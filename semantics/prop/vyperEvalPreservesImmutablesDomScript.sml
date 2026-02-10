@@ -1025,7 +1025,16 @@ Theorem subscript_helper_success_path[local]:
        od) s_es = (res, st') ⇒
     preserves_immutables_dom cx s_e2 st'
 Proof
-  cheat
+  rpt strip_tac >>
+  irule preserves_immutables_dom_eq >>
+  Cases_on `get_self_code cx` >> gvs[raise_def, return_def] >>
+  Cases_on `evaluate_subscript tv1 v2` >> gvs[raise_def, return_def] >>
+  Cases_on `res'` >> gvs[return_def] >>
+  rename1 `INR trip` >> PairCases_on `trip` >>
+  gvs[bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac read_storage_slot_immutables >>
+  Cases_on `evaluate_type (type_env ts) trip2` >>
+  gvs[raise_def, return_def]
 QED
 
 (* Subgoal 2: evaluate_subscript returns INR (error) -
@@ -1050,7 +1059,10 @@ Theorem subscript_helper_eval_sub_err_fwd[local]:
      | INR str => raise (Error str)) s_gc = (INR e', s_es) ⇒
     preserves_immutables_dom cx st s_e2
 Proof
-  cheat
+  rpt strip_tac >>
+  irule preserves_immutables_dom_trans >> qexists_tac `s_e1` >>
+  conj_tac >- gvs[] >>
+  first_x_assum drule >> simp[]
 QED
 
 (* Subgoal 3: evaluate_subscript returns INR (error) -
@@ -1067,7 +1079,10 @@ Theorem subscript_helper_eval_sub_err_bwd[local]:
      | INR str => raise (Error str)) s_gc = (INR e', s_es) ⇒
     preserves_immutables_dom cx s_e2 s_es
 Proof
-  cheat
+  rpt strip_tac >>
+  irule preserves_immutables_dom_eq >>
+  Cases_on `get_self_code cx` >> gvs[raise_def, return_def] >>
+  Cases_on `evaluate_subscript tv1 v2` >> gvs[raise_def, return_def]
 QED
 
 (* Subgoal 4: get_self_code returns INR (NONE case / error) -
@@ -1088,7 +1103,10 @@ Theorem subscript_helper_get_code_err_fwd[local]:
      | SOME v => return v) s_gv = (INR e', s_gc) ⇒
     preserves_immutables_dom cx st s_e2
 Proof
-  cheat
+  rpt strip_tac >>
+  irule preserves_immutables_dom_trans >> qexists_tac `s_e1` >>
+  conj_tac >- gvs[] >>
+  first_x_assum drule >> simp[]
 QED
 
 (* Subgoal 5: get_self_code returns INR (NONE case / error) -
@@ -1102,7 +1120,9 @@ Theorem subscript_helper_get_code_err_bwd[local]:
      | SOME v => return v) s_gv = (INR e', s_gc) ⇒
     preserves_immutables_dom cx s_e2 s_gc
 Proof
-  cheat
+  rpt strip_tac >>
+  irule preserves_immutables_dom_eq >>
+  Cases_on `get_self_code cx` >> gvs[raise_def, return_def]
 QED
 
 (* Subgoal 6: get_Value returns INR (error) -
@@ -1120,7 +1140,10 @@ Theorem subscript_helper_get_value_err_fwd[local]:
     get_Value tv2 s_e2 = (INR e', s_gv) ⇒
     preserves_immutables_dom cx st s_e2
 Proof
-  cheat
+  rpt strip_tac >>
+  irule preserves_immutables_dom_trans >> qexists_tac `s_e1` >>
+  conj_tac >- gvs[] >>
+  first_x_assum drule >> simp[]
 QED
 
 (* Subgoal 7: get_Value returns INR (error) -
@@ -1131,7 +1154,7 @@ Theorem subscript_helper_get_value_err_bwd[local]:
     get_Value tv2 s_e2 = (INR e', s_gv) ⇒
     preserves_immutables_dom cx s_e2 s_gv
 Proof
-  cheat
+  rpt strip_tac >> irule preserves_immutables_dom_eq >> gvs[]
 QED
 
 (* Subgoal 8: eval_expr e2 returns INR (error) -
@@ -1147,7 +1170,10 @@ Theorem subscript_helper_e2_err_fwd[local]:
     eval_expr cx e2 s_e1 = (INR e', s_e2) ⇒
     preserves_immutables_dom cx st s_e2
 Proof
-  cheat
+  rpt strip_tac >>
+  irule preserves_immutables_dom_trans >> qexists_tac `s_e1` >>
+  conj_tac >- gvs[] >>
+  first_x_assum drule >> simp[]
 QED
 
 (* Subgoal 9: eval_expr e2 returns INR (error) -
