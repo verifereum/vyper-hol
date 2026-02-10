@@ -365,7 +365,7 @@ Proof
   imp_res_tac handle_function_immutables >> gvs[]
 QED
 
-Theorem case_IntCall_imm_dom[local]:
+Theorem case_IntCall_imm_dom_unconditional[local]:
   ∀src_id_opt fname es cx.
     (∀st res st'.
        eval_exprs cx es st = (res, st') ⇒ preserves_immutables_dom cx st st') ∧
@@ -1091,7 +1091,7 @@ Proof
 QED
 
 (* ----- Case: eval_expr (Call (IntCall ...) es) - updated ----- *)
-Theorem case_IntCall_imm_dom2[local]:
+Theorem case_IntCall_imm_dom[local]:
   ∀src_id_opt fn es cx.
     (∀s'' x t s'³' ts t' s'⁴' tup t'' stup args sstup ret body' s'⁵' x'
         t'³'.
@@ -1151,70 +1151,74 @@ Theorem immutables_dom_mutual[local]:
   (∀cx e st res st'. eval_expr cx e st = (res, st') ⇒ preserves_immutables_dom cx st st') ∧
   (∀cx es st res st'. eval_exprs cx es st = (res, st') ⇒ preserves_immutables_dom cx st st')
 Proof
-  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt strip_tac >>
-  TRY (gvs[evaluate_def, return_def, preserves_immutables_dom_refl] >> NO_TAC) >>
-  TRY (gvs[evaluate_def, raise_def, preserves_immutables_dom_refl] >> NO_TAC) >>
-  TRY (drule_all case_Return_SOME_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_Raise_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_Assert_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_Log_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_AnnAssign_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_Append_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_Assign_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_AugAssign_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_If_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_For_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_Expr_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_eval_stmts_cons_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_Array_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_Range_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_eval_targets_cons_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_SubscriptTarget_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_eval_for_cons_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_IfExp_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_Subscript_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_Attribute_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_Pop_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_Send_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_eval_exprs_cons_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_IntCall_imm_dom >> simp[] >> NO_TAC) >>
-  (* Remaining inline cases *)
-  TRY (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-       simp[Once evaluate_def] >> strip_tac >>
-       imp_res_tac lookup_global_immutables >>
-       irule preserves_immutables_dom_eq >> gvs[] >> NO_TAC) >>
-  TRY (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-       simp[Once evaluate_def] >> strip_tac >>
-       imp_res_tac lookup_flag_mem_immutables >>
-       irule preserves_immutables_dom_eq >> gvs[] >> NO_TAC) >>
-  TRY (qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt strip_tac
+  >- gvs[evaluate_def, return_def, preserves_immutables_dom_refl]
+  >- gvs[evaluate_def, raise_def, preserves_immutables_dom_refl]
+  >- gvs[evaluate_def, raise_def, preserves_immutables_dom_refl]
+  >- gvs[evaluate_def, raise_def, preserves_immutables_dom_refl]
+  >- (drule_all case_Return_SOME_imm_dom >> simp[])
+  >- (drule_all case_Raise_imm_dom >> simp[])
+  >- (drule_all case_Assert_imm_dom >> simp[])
+  >- (drule_all case_Log_imm_dom >> simp[])
+  >- (drule_all case_AnnAssign_imm_dom >> simp[])
+  >- (drule_all case_Append_imm_dom >> simp[])
+  >- (drule_all case_Assign_imm_dom >> simp[])
+  >- (drule_all case_AugAssign_imm_dom >> simp[])
+  >- (drule_all case_If_imm_dom >> simp[])
+  >- (drule_all case_For_imm_dom >> simp[])
+  >- (drule_all case_Expr_imm_dom >> simp[])
+  >- (gvs[evaluate_def, return_def, preserves_immutables_dom_refl])
+  >- (drule_all case_eval_stmts_cons_imm_dom >> simp[])
+  >- (drule_all case_Array_imm_dom >> simp[])
+  >- (drule_all case_Range_imm_dom >> simp[])
+  >- (drule_all case_BaseTarget_imm_dom >> simp[])
+  >- (qpat_x_assum `eval_target _ _ _ = _` mp_tac >>
+       simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+       rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
+       first_x_assum irule >> first_assum (irule_at Any))
+  >- gvs[evaluate_def, return_def, preserves_immutables_dom_refl]
+  >- (drule_all case_eval_targets_cons_imm_dom >> simp[])
+  >- (drule_all case_NameTarget_imm_dom >> simp[])
+  >- (qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
        simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
             get_scopes_def, LET_THM, get_immutables_def, get_address_immutables_def,
             lift_option_def, lift_sum_def] >>
        rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
-       TRY (first_x_assum irule >> first_assum (irule_at Any)) >> NO_TAC) >>
-  TRY (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+       first_x_assum irule >> first_assum (irule_at Any))
+  >- (drule_all case_AttributeTarget_imm_dom >> simp[])
+  >- (drule_all case_SubscriptTarget_imm_dom >> simp[])
+  >- gvs[evaluate_def, return_def, preserves_immutables_dom_refl]
+  >- (drule_all case_eval_for_cons_imm_dom >> simp[])
+  >- (drule_all case_Name_imm_dom >> simp[])
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+       simp[Once evaluate_def] >> strip_tac >>
+       imp_res_tac lookup_global_immutables >>
+       irule preserves_immutables_dom_eq >> gvs[])
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+       simp[Once evaluate_def] >> strip_tac >>
+       imp_res_tac lookup_flag_mem_immutables >>
+       irule preserves_immutables_dom_eq >> gvs[])
+  >- (drule_all case_IfExp_imm_dom >> simp[])
+  >- gvs[evaluate_def, return_def, preserves_immutables_dom_refl]
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
        simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
             get_scopes_def, get_immutables_def, get_address_immutables_def,
             lift_option_def, lift_sum_def, LET_THM, check_def, assert_def,
             ignore_bind_def, get_accounts_def, lift_sum_def,
             get_transient_storage_def, update_accounts_def, update_transient_def] >>
        rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
-       TRY (first_x_assum irule >> first_assum (irule_at Any) >>
-            simp[check_def, assert_def]) >> NO_TAC) >>
-  TRY (qpat_x_assum `eval_target _ _ _ = _` mp_tac >>
-       simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-       rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
-       first_x_assum irule >> first_assum (irule_at Any) >> NO_TAC) >>
-  (* Remaining 8 cases handled by dedicated helpers *)
-  TRY (drule_all case_BaseTarget_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_NameTarget_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_AttributeTarget_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_Name_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_Builtin_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_TypeBuiltin_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_ExtCall_imm_dom >> simp[] >> NO_TAC) >>
-  TRY (drule_all case_IntCall_imm_dom2 >> simp[] >> NO_TAC)
+       first_x_assum irule >> first_assum (irule_at Any) >>
+            simp[check_def, assert_def])
+  >- (drule_all case_Subscript_imm_dom >> simp[])
+  >- (drule_all case_Attribute_imm_dom >> simp[])
+  >- (drule_all case_Builtin_imm_dom >> simp[])
+  >- (drule_all case_Pop_imm_dom >> simp[])
+  >- (drule_all case_TypeBuiltin_imm_dom >> simp[])
+  >- (drule_all case_Send_imm_dom >> simp[])
+  >- (drule_all case_ExtCall_imm_dom >> simp[])
+  >- (drule_all case_IntCall_imm_dom >> simp[])
+  >- gvs[evaluate_def, return_def, preserves_immutables_dom_refl]
+  >- (drule_all case_eval_exprs_cons_imm_dom >> simp[])
 QED
 (* OLD PROOF of immutables_dom_mutual (before conditional IH reformulation):
 Proof
