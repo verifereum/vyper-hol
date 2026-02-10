@@ -154,7 +154,10 @@ Datatype:
   = IntCall nsid
   | ExtCall bool ext_call_sig (* is_static, resolved signature *)
                               (* is_static: T for staticcall (read-only), F for extcall *)
-                              (* Convention: first arg is target address *)
+                              (* Convention for Call (ExtCall is_static sig) args:
+                                 - staticcall (T): args = [target; arg1; arg2; ...]
+                                 - extcall (F):    args = [target; value; arg1; arg2; ...]
+                                 where target is address and value is uint256 to send *)
   | Send
   (* TODO: external raw call *)
 End

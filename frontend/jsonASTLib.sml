@@ -169,10 +169,11 @@ fun mk_JE_List (es, ty) = list_mk_comb(JE_List_tm, [mk_list(es, json_expr_ty), t
 fun mk_JE_Call (func, args, kwargs, ty, src_id_opt_tm) =
   list_mk_comb(JE_Call_tm, [func, mk_list(args, json_expr_ty),
                             mk_list(kwargs, json_keyword_ty), ty, src_id_opt_tm])
-fun mk_JE_ExtCall (func_name, arg_types, ret_ty, args) =
+fun mk_JE_ExtCall (func_name, arg_types, ret_ty, args, keywords) =
   list_mk_comb(JE_ExtCall_tm, [fromMLstring func_name,
                                mk_list(arg_types, json_type_ty),
-                               ret_ty, mk_list(args, json_expr_ty)])
+                               ret_ty, mk_list(args, json_expr_ty),
+                               mk_list(keywords, json_keyword_ty)])
 fun mk_JE_StaticCall (func_name, arg_types, ret_ty, args) =
   list_mk_comb(JE_StaticCall_tm, [fromMLstring func_name,
                                   mk_list(arg_types, json_type_ty),
@@ -693,15 +694,16 @@ fun d_json_expr () : term decoder = achoose "expr" [
   (* Convention: target is prepended to args *)
   (* Signature extracted from func.type: argument_types, return_type *)
   check_ast_type "ExtCall" $
-    JSONDecode.map (fn ((func_name, arg_types), (ret_ty, (target, args))) =>
-      mk_JE_ExtCall(func_name, arg_types, ret_ty, target :: args)) $
-    tuple2 (tuple2 (field "value" $ field "func" $ field "attr" string,
-                    field "value" $ field "func" $ field "type" $
-                      orElse (field "argument_types" (array json_type), succeed [])),
-            tuple2 (field "value" $ field "func" $ field "type" $
-                      orElse (field "return_type" json_type, succeed JT_None_tm),
-                    tuple2 (field "value" $ field "func" $ field "value" (delay d_json_expr),
-                            field "value" $ field "args" (array (delay d_json_expr))))),
+    JSONDecode.map (fn (((func_name, arg_types), (ret_ty, (target, args))), keywords) =>
+      mk_JE_ExtCall(func_name, arg_types, ret_ty, target :: args, keywords)) $
+    tuple2 (tuple2 (tuple2 (field "value" $ field "func" $ field "attr" string,
+                            field "value" $ field "func" $ field "type" $
+                              orElse (field "argument_types" (array json_type), succeed [])),
+                    tuple2 (field "value" $ field "func" $ field "type" $
+                              orElse (field "return_type" json_type, succeed JT_None_tm),
+                            tuple2 (field "value" $ field "func" $ field "value" (delay d_json_expr),
+                                    field "value" $ field "args" (array (delay d_json_expr))))),
+            field "value" $ orElse (field "keywords" (array (delay d_json_keyword)), succeed [])),
 
   (* StaticCall - same structure as ExtCall *)
   check_ast_type "StaticCall" $

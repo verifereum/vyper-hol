@@ -19,7 +19,9 @@ fun translate_jsonast_to_vyper jsonast_tm = let
   val thm = EVAL app
   val rhs = rhs (concl thm)
 in
-  rhs
+  (* translate_annotated_ast returns SOME (...) or NONE if imports not topsorted *)
+  if optionSyntax.is_some rhs then optionSyntax.dest_some rhs
+  else raise JSONError (Fail "imports not topologically sorted", JSON.OBJECT [])
 end
 
 (* Decoder that uses the jsonAST pipeline with full module support *)
@@ -347,22 +349,7 @@ val excluded_test_names = [
      directly instead of materializing the whole array. *)
   "test_boundary_access_to_arr",
   "test_negative_ix_access_to_large_arr",
-  "test_oob_access_to_large_arr",
-  (* TODO: extcall with value= (sending ETH) not yet supported.
-     Requires adding value field to ext_call_sig and passing it to run_ext_call. *)
-  "test_external_with_payable_value",
-  (* TODO: Transitive exports (lib2.__interface__ where lib2 re-exports lib1.__interface__)
-     Currently we only look at direct functions in a module, not transitively re-exported ones. *)
-  "test_exported_fun_part_of_interface",
-  (* TODO: Cross-module __init__ calls (module.__init__() from main contract's __init__)
-     Currently IntCall looks up with Internal visibility, but __init__ has Deploy visibility. *)
-  "test_immutable_hashing_overlap_regression",
-  (* TODO: __at__ builtin (lib.__at__(addr)) for creating interface instances
-     Not yet implemented. *)
-  "test_intrinsic_interface_converts",
-  "test_intrinsic_interface_defaults",
-  "test_intrinsic_interface_instantiation",
-  "test_intrinsic_interface_kws"
+  "test_oob_access_to_large_arr"
 ]
 
 fun glob_match pat str =

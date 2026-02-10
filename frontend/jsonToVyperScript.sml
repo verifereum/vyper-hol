@@ -464,6 +464,38 @@ val () = cv_auto_trans extract_module_flag_def;
 
 (* ===== Expression Translation ===== *)
 
+(* Find a keyword by name in a keyword list, returns the json_expr if found *)
+Definition find_keyword_def:
+  find_keyword name [] = NONE ∧
+  find_keyword name (JKeyword kw_name kw_val :: rest) =
+    if kw_name = name then SOME kw_val
+    else find_keyword name rest
+End
+
+val () = cv_auto_trans find_keyword_def;
+
+(* Lemma: if find_keyword returns SOME v, then v is in the keyword list *)
+Theorem find_keyword_MEM:
+  ∀name kws v. find_keyword name kws = SOME v ⇒ ∃k. MEM (JKeyword k v) kws
+Proof
+  Induct_on `kws` >> rw[find_keyword_def] >>
+  Cases_on `h` >> gvs[find_keyword_def] >>
+  Cases_on `s = name` >> gvs[] >>
+  metis_tac[]
+QED
+
+(* Size lemma for termination: keyword value is smaller than keyword list *)
+Theorem find_keyword_size:
+  ∀name kws v.
+    find_keyword name kws = SOME v ⇒
+    json_expr_size v < list_size json_keyword_size kws
+Proof
+  Induct_on `kws` >> rw[find_keyword_def] >>
+  Cases_on `h` >> gvs[find_keyword_def, json_expr_size_def] >>
+  Cases_on `s = name` >> gvs[json_expr_size_def] >>
+  res_tac >> gvs[]
+QED
+
 Definition translate_expr_def:
   (translate_expr (JE_Int v ty) =
     Literal (IntL (int_bound_of_type ty) v)) /\
@@ -567,6 +599,8 @@ Definition translate_expr_def:
     case func of
     | JE_Name name (SOME "interface") _ => HD args'
     | JE_Name name _ _ => make_builtin_call name args' kwargs' ret_ty
+    (* lib.__at__(addr) - interface instantiation, just returns the address *)
+    | JE_Attribute _ "__at__" _ _ => HD args'
     | JE_Attribute base "pop" _ _ =>
         (case base of
          | JE_Name id _ _ => Pop (NameTarget id)
@@ -586,13 +620,19 @@ Definition translate_expr_def:
             | NONE => Call (IntCall (NONE, "")) args')) /\
 
   (* ExtCall - mutating external call (is_static = F) *)
-  (* args includes target as first element (convention) *)
-  (translate_expr (JE_ExtCall func_name arg_types ret_ty args) =
+  (* Convention: args = [target; value; arg1; arg2; ...] *)
+  (translate_expr (JE_ExtCall func_name arg_types ret_ty args keywords) =
+    let value_expr = case find_keyword "value" keywords of
+                     | SOME v => translate_expr v
+                     | NONE => Literal (IntL (Unsigned 256) 0) in
+    let translated_args = translate_expr_list args in
     Call (ExtCall F (func_name, translate_type_list arg_types, translate_type ret_ty))
-         (translate_expr_list args)) /\
+         (case translated_args of
+          | (target :: rest) => target :: value_expr :: rest
+          | [] => [])) /\
 
   (* StaticCall - read-only external call (is_static = T) *)
-  (* args includes target as first element (convention) *)
+  (* Convention: args = [target; arg1; arg2; ...] (no value) *)
   (translate_expr (JE_StaticCall func_name arg_types ret_ty args) =
     Call (ExtCall T (func_name, translate_type_list arg_types, translate_type ret_ty))
          (translate_expr_list args)) /\
@@ -604,6 +644,14 @@ Definition translate_expr_def:
   (* Helper for translating keywords *)
   (translate_kwargs [] = []) /\
   (translate_kwargs (JKeyword k v :: rest) = (k, translate_expr v) :: translate_kwargs rest)
+Termination
+  WF_REL_TAC `measure (λx. case x of
+    | INL e => json_expr_size e
+    | INR (INL es) => list_size json_expr_size es
+    | INR (INR kws) => list_size json_keyword_size kws)`
+  >> rw[]
+  >> imp_res_tac find_keyword_size
+  >> gvs[]
 End
 
 (* Skip cv_auto_trans for translate_expr - cv_auto doesn't handle mutual recursion well *)
@@ -884,6 +932,26 @@ End
 
 val () = cv_auto_trans collect_imports_def;
 
+(* Extract source_ids that a module depends on from its body *)
+Definition get_module_deps_def:
+  get_module_deps body =
+    MAP (λinfo. case info of JImportInfo _ src_id _ => src_id) (collect_imports body)
+End
+
+val () = cv_auto_trans get_module_deps_def;
+
+(* Check if imports are topologically sorted (dependencies come before dependents).
+   seen: list of source_ids already processed
+   Returns T if sorted, F otherwise. *)
+Definition imports_topsorted_def:
+  imports_topsorted seen [] = T ∧
+  imports_topsorted seen (JImportedModule src_id _ body :: rest) =
+    let deps = get_module_deps body in
+    if EVERY (λd. MEM d seen) deps
+    then imports_topsorted (src_id :: seen) rest
+    else F
+End
+
 (* ===== Storage Layout Key Transformation ===== *)
 (* Transform storage layout keys from (alias_opt, var_name) to (source_id_opt, var_name).
    Uses import_map to convert alias to source_id. *)
@@ -943,63 +1011,94 @@ Definition find_module_body_def:
     if src_id = sid then body else find_module_body src_id rest
 End
 
-(* Extract single export: given alias.func_name or alias.__interface__, return list of (func_name, source_id) *)
-(* import_map: alias -> source_id, imports: list of JImportedModule *)
-Definition extract_single_export_def:
-  (* lib.func pattern: JE_Attribute (JE_Name alias _ _) func_name _ _ *)
-  extract_single_export import_map imports (JE_Attribute (JE_Name alias _ _) func_name _ _) =
-    (case ALOOKUP import_map alias of
-       SOME src_id =>
-         if func_name = "__interface__" then
-           (* Export all external functions from that module *)
-           let body = find_module_body src_id imports in
-           let names = get_external_func_names body in
-           MAP (λname. (name, src_id)) names
-         else [(func_name, src_id)]
-     | NONE => []) ∧
-  (* Nested module: lib2.lib1.func - need to find innermost module's source_id *)
-  (* For now, just handle the simple case; nested modules are complex *)
-  extract_single_export _ _ _ = []
-End
-
-(* Extract exports from a tuple of export expressions *)
-Definition extract_tuple_exports_def:
-  extract_tuple_exports import_map imports [] = [] ∧
-  extract_tuple_exports import_map imports (e::es) =
-    extract_single_export import_map imports e ++ extract_tuple_exports import_map imports es
-End
-
-(* Extract exports from an ExportsDecl annotation *)
-Definition extract_export_annotation_def:
-  extract_export_annotation import_map imports (JE_Tuple exprs) =
-    extract_tuple_exports import_map imports exprs ∧
-  extract_export_annotation import_map imports (JE_Attribute base attr tc sid) =
-    extract_single_export import_map imports (JE_Attribute base attr tc sid) ∧
-  extract_export_annotation _ _ _ = []
-End
-
 (* Get export annotation from a toplevel if it's an ExportsDecl *)
 Definition get_export_annotation_def:
   get_export_annotation (JTL_ExportsDecl ann) = SOME ann ∧
   get_export_annotation _ = NONE
 End
 
-(* Extract all exports from main module toplevels *)
-Definition extract_exports_from_toplevels_def:
-  extract_exports_from_toplevels import_map imports [] = [] ∧
-  extract_exports_from_toplevels import_map imports (t::ts) =
-    (case get_export_annotation t of
-       SOME ann => extract_export_annotation import_map imports ann
-     | NONE => []) ++
-    extract_exports_from_toplevels import_map imports ts
+(* ===== Exports Extraction with Transitive Support =====
+
+   When main has `exports: lib2.__interface__`, we need lib2's full exports,
+   which includes lib2's external functions PLUS anything lib2 re-exports.
+
+   Design: Build an exports_map by processing imports in topological order.
+   When we see `lib.__interface__`, we look up lib's exports in the map.
+
+   The imports list must be topologically sorted (leaf modules first, modules
+   depending on them later). This is validated by imports_topsorted in
+   translate_annotated_ast, which returns NONE if the ordering is invalid.
+*)
+
+(* Expand a single export expression using pre-computed exports_map.
+   exports_map: source_id -> list of (func_name, source_id) exports
+   import_map: alias -> source_id for the current module's imports *)
+Definition expand_single_export_def:
+  expand_single_export exports_map import_map (JE_Attribute (JE_Name alias _ _) func_name _ _) =
+    (case ALOOKUP import_map alias of
+     | NONE => []
+     | SOME src_id =>
+         if func_name = "__interface__" then
+           case ALOOKUP exports_map src_id of
+           | NONE => []
+           | SOME exps => exps
+         else [(func_name, src_id)]) ∧
+  expand_single_export _ _ _ = []
 End
 
-(* Main function: extract exports from a json_module given imports *)
+(* Expand exports from a tuple of export expressions *)
+Definition expand_tuple_exports_def:
+  expand_tuple_exports exports_map import_map [] = [] ∧
+  expand_tuple_exports exports_map import_map (e::es) =
+    expand_single_export exports_map import_map e ++
+    expand_tuple_exports exports_map import_map es
+End
+
+(* Expand exports from an ExportsDecl annotation *)
+Definition expand_export_annotation_def:
+  expand_export_annotation exports_map import_map (JE_Tuple exprs) =
+    expand_tuple_exports exports_map import_map exprs ∧
+  expand_export_annotation exports_map import_map (JE_Attribute base attr tc sid) =
+    expand_single_export exports_map import_map (JE_Attribute base attr tc sid) ∧
+  expand_export_annotation _ _ _ = []
+End
+
+(* Expand all exports from a module's toplevels *)
+Definition expand_exports_from_toplevels_def:
+  expand_exports_from_toplevels exports_map import_map [] = [] ∧
+  expand_exports_from_toplevels exports_map import_map (t::ts) =
+    (case get_export_annotation t of
+     | SOME ann => expand_export_annotation exports_map import_map ann
+     | NONE => []) ++
+    expand_exports_from_toplevels exports_map import_map ts
+End
+
+(* Compute a single module's full exports: its external functions + expanded re-exports *)
+Definition compute_module_exports_def:
+  compute_module_exports exports_map src_id body =
+    let ext_funcs = MAP (λn. (n, src_id)) (get_external_func_names body) in
+    let import_map = build_import_map (collect_imports body) in
+    let reexports = expand_exports_from_toplevels exports_map import_map body in
+    ext_funcs ++ reexports
+End
+
+(* Build exports_map by processing imports in topological order.
+   Requires: imports list is topologically sorted (validated by imports_topsorted).
+   This ensures when we process module M, any module M references via
+   __interface__ has already been added to the accumulator. *)
+Definition build_exports_map_def:
+  build_exports_map acc [] = acc ∧
+  build_exports_map acc (JImportedModule src_id _ body :: rest) =
+    let exps = compute_module_exports acc src_id body in
+    build_exports_map ((src_id, exps) :: acc) rest
+End
+
+(* Main function: extract exports from main module given imports *)
 Definition extract_exports_def:
   extract_exports (JModule toplevels) imports =
-    let import_infos = collect_imports toplevels in
-    let import_map = build_import_map import_infos in
-    extract_exports_from_toplevels import_map imports toplevels
+    let exports_map = build_exports_map [] imports in
+    let import_map = build_import_map (collect_imports toplevels) in
+    expand_exports_from_toplevels exports_map import_map toplevels
 End
 
 (* ===== Module Translation ===== *)
@@ -1032,12 +1131,14 @@ val () = cv_auto_trans main_toplevels_def;
 (* Translate annotated AST, returning:
    - sources: (source_id, toplevels) alist
    - exports: func_name -> source_id
-   - import_map: alias -> source_id (for storage layout key transformation) *)
+   - import_map: alias -> source_id (for storage layout key transformation)
+   Returns NONE if imports are not topologically sorted. *)
 Definition translate_annotated_ast_def:
   translate_annotated_ast (JAnnotatedAST main imports) =
+    if ¬imports_topsorted [] imports then NONE else
     let import_infos = collect_imports (main_toplevels main) in
     let import_map = build_import_map import_infos in
     let sources = (NONE, translate_module main) :: MAP translate_imported_module imports in
     let exports = extract_exports main imports in
-    (sources, exports, import_map)
+    SOME (sources, exports, import_map)
 End
