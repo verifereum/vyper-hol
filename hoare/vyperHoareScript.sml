@@ -530,6 +530,22 @@ Proof
   Cases_on `r_after_ss.scopes` >> gvs[return_def, raise_def]
 QED
 
+Theorem stmts_spec_for_range:
+  ∀P P' I cx id typ ib e1 e2 b body v1 v2 n m.
+    b ≤ m ∧
+    get_range_limit v1 v2 = INL (ib, n, m) ∧
+    (⟦cx⟧ ⦃P⦄ e1 ⇓⦃λtv st. tv = Value v1 ∧ P' st⦄) ∧
+    (⟦cx⟧ ⦃P'⦄ e2 ⇓⦃λtv st. tv = Value v2 ∧ I n st⦄) ∧
+    (∀k:int. n ≤ k ∧ k < n + m ⇒
+         ⟦cx⟧
+         ⦃λst. lookup_scoped_var st id = SOME (IntV ib k) ∧ I k st⦄
+         body
+         ⦃I (k + 1) ∥ R⦄) ⇒
+    ⟦cx⟧ ⦃P⦄ [For id typ (Range e1 e2) b body] ⦃I (n + m) ∥ R⦄
+Proof
+  cheat
+QED
+
 Theorem stmts_spec_assign:
   ∀P P' Q cx tgt e.
      (⟦cx⟧ ⦃P⦄ tgt ⇓ᵗ⦃λav st. P' av st⦄) ∧
