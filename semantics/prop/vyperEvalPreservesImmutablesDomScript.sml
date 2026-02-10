@@ -990,7 +990,22 @@ Theorem case_Send_imm_dom[local]:
       eval_expr cx (Call Send es) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def] >>
+  PURE_REWRITE_TAC [ignore_bind_def] >>
+  simp[bind_def, AllCaseEqs(), return_def, raise_def, check_def, assert_def,
+       lift_option_def] >>
+  rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
+  (* Simplify conditional IH *)
+  RULE_ASSUM_TAC (REWRITE_RULE [check_def, assert_def, return_def]) >>
+  gvs[] >>
+  (* Resolve case expressions on dest_AddressV/dest_NumV *)
+  rpt (BasicProvers.FULL_CASE_TAC >>
+       gvs[return_def, raise_def]) >>
+  imp_res_tac transfer_value_immutables >> gvs[] >>
+  first_x_assum drule >>
+  metis_tac[preserves_immutables_dom_trans, preserves_immutables_dom_eq]
 QED
 
 (* ----- Case 45: eval_exprs (e::es) ----- *)
