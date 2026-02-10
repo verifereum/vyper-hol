@@ -1177,7 +1177,33 @@ Theorem case_IntCall_imm_dom[local]:
       eval_expr cx (Call (IntCall (src_id_opt,fn)) es) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  pop_assum (fn ih2 => pop_assum (fn ih1 =>
+    let val ih1' = SIMP_RULE (srw_ss())
+          [check_def, assert_def, lift_option_def, return_def, AllCaseEqs()] ih1
+        val ih2' = SIMP_RULE (srw_ss())
+          [check_def, assert_def, lift_option_def, return_def, AllCaseEqs(),
+           get_scopes_def, push_function_def] ih2
+    in
+    rpt strip_tac >>
+    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    simp[Once evaluate_def] >>
+    PURE_REWRITE_TAC [ignore_bind_def] >>
+    simp[bind_def, AllCaseEqs(), return_def, raise_def, check_def, assert_def,
+         lift_option_def, lift_sum_def, get_scopes_def, push_function_def,
+         LET_THM] >>
+    rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
+    rpt (BasicProvers.FULL_CASE_TAC >>
+         gvs[return_def, raise_def,
+             preserves_immutables_dom_refl, preserves_immutables_dom_eq]) >>
+    TRY (
+      irule case_IntCall_imm_dom_inner_specific >>
+      REVERSE (rpt (first_assum (irule_at (Pos last)))) >>
+      conj_tac >- (rpt strip_tac >> irule ih2' >> gvs[]) >>
+      rpt strip_tac >> irule ih1' >> gvs[] >> NO_TAC) >>
+    (* remaining subgoal *)
+    cheat
+    end))
 QED
 
 (* ===== Main Mutual Induction ===== *)
