@@ -118,12 +118,6 @@ QED
 
 (* ===== Main theorems ===== *)
 
-(* CHEAT: the individual pieces (lookup_name_target_facts, reconstruct_*,
-   imm_dom_transfer_*, eval_expr_preserves_var_in_scope,
-   preserves_immutables_dom) are all proved above.
-   The assembly into the final proof has variable-name management issues
-   that need interactive debugging to resolve. *)
-
 Theorem eval_expr_preserves_lookup_name_target:
   ∀cx e st res st' n av.
     eval_expr cx e st = (res, st') ∧
