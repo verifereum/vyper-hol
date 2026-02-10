@@ -760,7 +760,8 @@ Proof
        ignore_bind_def] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
   irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
-  gvs[] >> cheat
+  conj_tac >- (last_x_assum irule >> metis_tac[]) >>
+  first_x_assum irule >> first_assum (irule_at Any) >> metis_tac[]
 QED
 
 (* ----- Case 18: eval_iterator (Array e) ----- *)
