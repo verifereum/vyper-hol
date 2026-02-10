@@ -538,7 +538,15 @@ Proof
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
   imp_res_tac get_Value_immutables >>
   irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
-  gvs[preserves_immutables_dom_eq] >> cheat
+  gvs[preserves_immutables_dom_eq] >>
+  irule preserves_immutables_dom_eq >>
+  qpat_x_assum `_ s'³' = (res, st')` mp_tac >>
+  PURE_REWRITE_TAC [ignore_bind_def] >>
+  simp[bind_def, assert_def, return_def, raise_def, set_scopes_def,
+       AllCaseEqs()] >>
+  Cases_on `s'³'.scopes` >>
+  simp[raise_def, set_scopes_def, return_def] >>
+  rpt strip_tac >> gvs[]
 QED
 
 (* ----- Case 10: Append bt e ----- *)
