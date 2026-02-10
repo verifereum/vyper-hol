@@ -801,12 +801,30 @@ Proof
        lift_sum_def, LET_THM] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
   imp_res_tac get_Value_immutables >>
-  first_x_assum (qspecl_then [`st`, `tv1`, `s''`, `s''`, `v1`, `t`] mp_tac) >>
-  simp[] >> rpt strip_tac >>
+  (* Derive unconditional IH for e2 from the conditional one *)
+  TRY (
+    `∀st res st'. eval_expr cx e2 st = (res,st') ⇒
+       preserves_immutables_dom cx st st'` by (
+      rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
+    (* get_range_limits cases: prove final immutables equality *)
+    TRY (
+      `s'⁶'.immutables = s'⁵'.immutables` by (
+        qpat_x_assum `(case _ of _ => _ | _ => _) _ = _` mp_tac >>
+        BasicProvers.EVERY_CASE_TAC >>
+        gvs[return_def, raise_def])) >>
+    (* Chain transitions: st -> s'' -> s'³' -> s'⁴' -> ... *)
+    irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
+    conj_tac >- gvs[] >>
+    irule preserves_immutables_dom_trans >> qexists_tac `s'³'` >>
+    conj_tac >- (irule preserves_immutables_dom_eq >> gvs[]) >>
+    TRY (
+      irule preserves_immutables_dom_trans >> qexists_tac `s'⁴'` >>
+      conj_tac >- gvs[] >>
+      irule preserves_immutables_dom_eq >> gvs[]) >>
+    gvs[] >> NO_TAC) >>
+  (* get_Value tv1 error: chain st -> s'' -> s'³' *)
   irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
-  conj_tac >- gvs[] >>
-  irule preserves_immutables_dom_trans >> qexists_tac `t` >>
-  gvs[preserves_immutables_dom_eq] >> cheat
+  gvs[preserves_immutables_dom_eq]
 QED
 
 (* ----- Case 23: eval_targets (g::gs) ----- *)
