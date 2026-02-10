@@ -1065,7 +1065,11 @@ Theorem case_AttributeTarget_imm_dom[local]:
       eval_base_target cx (AttributeTarget bt id) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, pairTheory.UNCURRY] >>
+  rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
+  first_x_assum irule >> metis_tac[]
 QED
 
 (* ----- Case: eval_expr (Name id) ----- *)
