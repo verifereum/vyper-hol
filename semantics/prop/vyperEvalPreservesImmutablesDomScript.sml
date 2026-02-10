@@ -856,12 +856,30 @@ Proof
        lift_sum_def, LET_THM] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
   imp_res_tac get_Value_immutables >>
-  first_x_assum (qspecl_then [`st`, `tv1`, `s''`, `s''`, `v1`, `t`] mp_tac) >>
-  simp[] >> rpt strip_tac >>
+  (* Derive unconditional IH for e2 from the conditional one *)
+  TRY (
+    `∀st res st'. eval_expr cx e2 st = (res,st') ⇒
+       preserves_immutables_dom cx st st'` by (
+      rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
+    (* get_range_limits cases: prove final immutables equality *)
+    TRY (
+      `s'⁶'.immutables = s'⁵'.immutables` by (
+        qpat_x_assum `(case _ of _ => _ | _ => _) _ = _` mp_tac >>
+        BasicProvers.EVERY_CASE_TAC >>
+        gvs[return_def, raise_def])) >>
+    (* Chain transitions: st -> s'' -> s'³' -> s'⁴' -> ... *)
+    irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
+    conj_tac >- gvs[] >>
+    irule preserves_immutables_dom_trans >> qexists_tac `s'³'` >>
+    conj_tac >- (irule preserves_immutables_dom_eq >> gvs[]) >>
+    TRY (
+      irule preserves_immutables_dom_trans >> qexists_tac `s'⁴'` >>
+      conj_tac >- gvs[] >>
+      irule preserves_immutables_dom_eq >> gvs[]) >>
+    gvs[] >> NO_TAC) >>
+  (* get_Value tv1 error: chain st -> s'' -> s'³' *)
   irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
-  conj_tac >- gvs[] >>
-  irule preserves_immutables_dom_trans >> qexists_tac `t` >>
-  gvs[preserves_immutables_dom_eq] >> cheat
+  gvs[preserves_immutables_dom_eq]
 QED
 
 (* ----- Case 23: eval_targets (g::gs) ----- *)
@@ -1079,8 +1097,9 @@ Proof
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
   imp_res_tac get_Value_immutables >>
   irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
-  gvs[preserves_immutables_dom_eq]
-  >> cheat
+  gvs[preserves_immutables_dom_eq] >>
+  Cases_on `evaluate_attribute sv id` >>
+  gvs[return_def, raise_def, preserves_immutables_dom_eq]
 QED
 
 (* ----- Case 39: eval_expr (Pop bt) ----- *)
@@ -1123,7 +1142,22 @@ Theorem case_Send_imm_dom[local]:
       eval_expr cx (Call Send es) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def] >>
+  PURE_REWRITE_TAC [ignore_bind_def] >>
+  simp[bind_def, AllCaseEqs(), return_def, raise_def, check_def, assert_def,
+       lift_option_def] >>
+  rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
+  (* Simplify conditional IH *)
+  RULE_ASSUM_TAC (REWRITE_RULE [check_def, assert_def, return_def]) >>
+  gvs[] >>
+  (* Resolve case expressions on dest_AddressV/dest_NumV *)
+  rpt (BasicProvers.FULL_CASE_TAC >>
+       gvs[return_def, raise_def]) >>
+  imp_res_tac transfer_value_immutables >> gvs[] >>
+  first_x_assum drule >>
+  metis_tac[preserves_immutables_dom_trans, preserves_immutables_dom_eq]
 QED
 
 (* ----- Case 45: eval_exprs (e::es) ----- *)
@@ -1293,7 +1327,33 @@ Theorem case_ExtCall_imm_dom[local]:
         st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def] >>
+  PURE_REWRITE_TAC [ignore_bind_def] >>
+  simp[bind_def, AllCaseEqs(), return_def, raise_def, check_def, assert_def,
+       lift_option_def, lift_sum_def,
+       get_accounts_def, get_transient_storage_def,
+       update_accounts_def, update_transient_def, LET_THM] >>
+  rpt strip_tac >> gvs[preserves_immutables_dom_refl] >> (
+    irule preserves_immutables_dom_trans >> qexists_tac `s''` >> conj_tac
+    >- gvs[]
+    (* Error paths: case-split lift_option results *)
+    >> rpt (BasicProvers.FULL_CASE_TAC >>
+            gvs[return_def, raise_def, preserves_immutables_dom_refl,
+                preserves_immutables_dom_eq,
+                update_accounts_def, update_transient_def, assert_def]) >>
+    (* Success path: decompose result tuple and remaining do-block *)
+    TRY (PairCases_on `result` >> gvs[] >>
+         qpat_x_assum `_ s'' = (res, st')` mp_tac >>
+         simp[bind_def, assert_def, return_def, raise_def,
+              update_accounts_def, update_transient_def] >>
+         Cases_on `result0` >> gvs[return_def, raise_def] >>
+         Cases_on `evaluate_abi_decode_return (type_env ts) ret_type result1` >>
+         gvs[return_def, raise_def] >>
+         rpt strip_tac >> gvs[]) >>
+    irule preserves_immutables_dom_eq >> gvs[]
+  )
 QED
 
 (* ----- Case: eval_expr (Call (IntCall ...) es) - updated ----- *)
