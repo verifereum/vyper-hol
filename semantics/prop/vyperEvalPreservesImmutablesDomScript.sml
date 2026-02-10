@@ -365,6 +365,48 @@ Proof
   imp_res_tac handle_function_immutables >> gvs[]
 QED
 
+Theorem case_IntCall_imm_dom_inner_specific[local]:
+  ∀cx src_id_opt fname body env st0 vs sevl fres sfnl es prev.
+    (∀st res st'.
+       eval_exprs cx es st = (res,st') ⇒ preserves_immutables_dom cx st st') ∧
+    (∀st res st'.
+       eval_stmts (cx with stk updated_by CONS (src_id_opt,fname)) body st =
+       (res,st') ⇒
+       preserves_immutables_dom
+         (cx with stk updated_by CONS (src_id_opt,fname)) st st') ∧
+    eval_exprs cx es st0 = (INL vs, sevl) ∧
+    finally
+      (try (bind (eval_stmts (cx with stk updated_by CONS (src_id_opt,fname))
+         body) (λx. return NoneV)) handle_function)
+      (pop_function prev)
+      (sevl with scopes := [env]) = (fres, sfnl) ⇒
+    preserves_immutables_dom cx st0 sfnl
+Proof
+  rpt strip_tac >>
+  irule preserves_immutables_dom_trans >> qexists_tac `sevl` >> conj_tac >- gvs[] >>
+  qpat_x_assum `finally _ _ _ = _` mp_tac >>
+  simp[finally_def, AllCaseEqs(), pop_function_def, set_scopes_def,
+       return_def, ignore_bind_def, bind_def, raise_def] >>
+  rpt strip_tac >> gvs[preserves_immutables_dom_eq, preserves_immutables_dom_refl] >>
+  irule preserves_immutables_dom_trans >> qexists_tac `sevl with scopes := [env]` >>
+  gvs[preserves_immutables_dom_eq] >>
+  irule (iffLR preserves_immutables_dom_txn_eq) >>
+  qexists_tac `cx with stk updated_by CONS (src_id_opt,fname)` >> simp[] >>
+  qpat_x_assum `try _ _ _ = _` mp_tac >>
+  simp[try_def, bind_def, AllCaseEqs(), return_def, raise_def,
+       handle_function_def] >>
+  rpt strip_tac >> gvs[preserves_immutables_dom_refl, preserves_immutables_dom_eq] >>
+  first_x_assum drule >> gvs[preserves_immutables_dom_eq] >>
+  BasicProvers.EVERY_CASE_TAC >>
+  gvs[handle_function_def, return_def, raise_def, preserves_immutables_dom_eq] >>
+  first_x_assum drule >> gvs[preserves_immutables_dom_eq] >>
+  rpt strip_tac >>
+  irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
+  irule preserves_immutables_dom_eq >>
+  gvs[handle_function_def, return_def, raise_def, AllCaseEqs()] >>
+  imp_res_tac handle_function_immutables >> gvs[]
+QED
+
 Theorem case_IntCall_imm_dom_unconditional[local]:
   ∀src_id_opt fname es cx.
     (∀st res st'.
