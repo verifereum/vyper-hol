@@ -1004,11 +1004,26 @@ Proof
   qpat_x_assum `eval_exprs _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
-  imp_res_tac get_Value_immutables >>
-  irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
-  conj_tac >- gvs[] >>
-  irule preserves_immutables_dom_trans >> qexists_tac `t` >>
-  cheat
+  imp_res_tac get_Value_immutables
+  (* Goals 1-2: get_Value succeeded *)
+  >- (irule preserves_immutables_dom_trans >> qexists_tac `s'³'` >> conj_tac
+      >- (irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
+          conj_tac >- gvs[] >>
+          irule preserves_immutables_dom_eq >> gvs[])
+      >- (first_x_assum
+            (qspecl_then [`st`, `tv`, `s''`, `s''`, `v''`, `s'³'`] mp_tac) >>
+          simp[] >> disch_then drule >> simp[]))
+  >- (irule preserves_immutables_dom_trans >> qexists_tac `s'³'` >> conj_tac
+      >- (irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
+          conj_tac >- gvs[] >>
+          irule preserves_immutables_dom_eq >> gvs[])
+      >- (first_x_assum
+            (qspecl_then [`st`, `tv`, `s''`, `s''`, `v''`, `s'³'`] mp_tac) >>
+          simp[] >> disch_then drule >> simp[]))
+  (* Goal 3: get_Value failed *)
+  >- (irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
+      conj_tac >- gvs[] >>
+      irule preserves_immutables_dom_eq >> gvs[])
 QED
 
 (* ----- Case: eval_target (BaseTarget bt) ----- *)
