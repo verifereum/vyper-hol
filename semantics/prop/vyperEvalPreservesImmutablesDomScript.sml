@@ -1501,6 +1501,301 @@ Proof
   )
 QED
 
+(* ----- Subgoal helpers for case_IntCall_imm_dom ----- *)
+
+(* Subgoal 1: finally INL, safe_cast SOME, ALOOKUP NONE *)
+Theorem case_IntCall_sg1[local]:
+  ∀cx src_id_opt fn es ts tup vs env rtv rv crv s'' s'⁴' s'⁷'.
+    (∀st res st'. eval_exprs cx es st = (res,st') ⇒
+       preserves_immutables_dom cx st st') ∧
+    (∀st res st'.
+       eval_stmts (cx with stk updated_by CONS (src_id_opt,fn))
+         (SND (SND (SND tup))) st = (res,st') ⇒
+       preserves_immutables_dom
+         (cx with stk updated_by CONS (src_id_opt,fn)) st st') ∧
+    get_module_code cx src_id_opt = SOME ts ∧
+    lookup_function fn Internal ts = SOME tup ∧
+    bind_arguments (type_env ts) (FST (SND tup)) vs = SOME env ∧
+    evaluate_type (type_env_all_modules []) (FST (SND (SND tup))) = SOME rtv ∧
+    ALOOKUP cx.sources cx.txn.target = NONE ∧
+    safe_cast rtv rv = SOME crv ∧
+    finally
+      (try
+         do
+           x <-
+             eval_stmts (cx with stk updated_by CONS (src_id_opt,fn))
+               (SND (SND (SND tup)));
+           return NoneV
+         od handle_function) (pop_function s'⁴'.scopes)
+      (s'⁴' with scopes := [env]) = (INL rv,s'⁷') ∧
+    eval_exprs cx es s'' = (INL vs,s'⁴') ∧
+    LENGTH (FST (SND tup)) = LENGTH es ∧
+    ¬MEM (src_id_opt,fn) cx.stk ⇒
+    preserves_immutables_dom cx s'' s'⁷'
+Proof
+  rpt strip_tac >>
+  irule case_IntCall_imm_dom_inner >>
+  MAP_EVERY qexists_tac
+    [`SND (SND (SND tup))`, `env`, `es`, `fn`, `INL rv`,
+     `s'⁴'.scopes`, `s'⁴'`, `src_id_opt`, `vs`] >>
+  gvs[]
+QED
+
+(* Subgoal 2: finally INL, safe_cast SOME, ALOOKUP SOME *)
+Theorem case_IntCall_sg2[local]:
+  ∀cx src_id_opt fn es ts tup vs env rtv rv crv s'' s'⁴' s'⁷' x.
+    (∀st res st'. eval_exprs cx es st = (res,st') ⇒
+       preserves_immutables_dom cx st st') ∧
+    (∀st res st'.
+       eval_stmts (cx with stk updated_by CONS (src_id_opt,fn))
+         (SND (SND (SND tup))) st = (res,st') ⇒
+       preserves_immutables_dom
+         (cx with stk updated_by CONS (src_id_opt,fn)) st st') ∧
+    get_module_code cx src_id_opt = SOME ts ∧
+    lookup_function fn Internal ts = SOME tup ∧
+    bind_arguments (type_env ts) (FST (SND tup)) vs = SOME env ∧
+    evaluate_type (type_env_all_modules x) (FST (SND (SND tup))) = SOME rtv ∧
+    ALOOKUP cx.sources cx.txn.target = SOME x ∧
+    safe_cast rtv rv = SOME crv ∧
+    finally
+      (try
+         do
+           x <-
+             eval_stmts (cx with stk updated_by CONS (src_id_opt,fn))
+               (SND (SND (SND tup)));
+           return NoneV
+         od handle_function) (pop_function s'⁴'.scopes)
+      (s'⁴' with scopes := [env]) = (INL rv,s'⁷') ∧
+    eval_exprs cx es s'' = (INL vs,s'⁴') ∧
+    LENGTH (FST (SND tup)) = LENGTH es ∧
+    ¬MEM (src_id_opt,fn) cx.stk ⇒
+    preserves_immutables_dom cx s'' s'⁷'
+Proof
+  rpt strip_tac >>
+  irule case_IntCall_imm_dom_inner >>
+  MAP_EVERY qexists_tac
+    [`SND (SND (SND tup))`, `env`, `es`, `fn`, `INL rv`,
+     `s'⁴'.scopes`, `s'⁴'`, `src_id_opt`, `vs`] >>
+  gvs[]
+QED
+
+(* Subgoal 3: finally INL, safe_cast NONE, ALOOKUP NONE *)
+Theorem case_IntCall_sg3[local]:
+  ∀cx src_id_opt fn es ts tup vs env rtv rv s'' s'⁴' s'⁷'.
+    (∀st res st'. eval_exprs cx es st = (res,st') ⇒
+       preserves_immutables_dom cx st st') ∧
+    (∀st res st'.
+       eval_stmts (cx with stk updated_by CONS (src_id_opt,fn))
+         (SND (SND (SND tup))) st = (res,st') ⇒
+       preserves_immutables_dom
+         (cx with stk updated_by CONS (src_id_opt,fn)) st st') ∧
+    get_module_code cx src_id_opt = SOME ts ∧
+    lookup_function fn Internal ts = SOME tup ∧
+    bind_arguments (type_env ts) (FST (SND tup)) vs = SOME env ∧
+    evaluate_type (type_env_all_modules []) (FST (SND (SND tup))) = SOME rtv ∧
+    ALOOKUP cx.sources cx.txn.target = NONE ∧
+    safe_cast rtv rv = NONE ∧
+    finally
+      (try
+         do
+           x <-
+             eval_stmts (cx with stk updated_by CONS (src_id_opt,fn))
+               (SND (SND (SND tup)));
+           return NoneV
+         od handle_function) (pop_function s'⁴'.scopes)
+      (s'⁴' with scopes := [env]) = (INL rv,s'⁷') ∧
+    eval_exprs cx es s'' = (INL vs,s'⁴') ∧
+    LENGTH (FST (SND tup)) = LENGTH es ∧
+    ¬MEM (src_id_opt,fn) cx.stk ⇒
+    preserves_immutables_dom cx s'' s'⁷'
+Proof
+  rpt strip_tac >>
+  irule case_IntCall_imm_dom_inner >>
+  MAP_EVERY qexists_tac
+    [`SND (SND (SND tup))`, `env`, `es`, `fn`, `INL rv`,
+     `s'⁴'.scopes`, `s'⁴'`, `src_id_opt`, `vs`] >>
+  gvs[]
+QED
+
+(* Subgoal 4: finally INL, safe_cast NONE, ALOOKUP SOME *)
+Theorem case_IntCall_sg4[local]:
+  ∀cx src_id_opt fn es ts tup vs env rtv rv s'' s'⁴' s'⁷' x.
+    (∀st res st'. eval_exprs cx es st = (res,st') ⇒
+       preserves_immutables_dom cx st st') ∧
+    (∀st res st'.
+       eval_stmts (cx with stk updated_by CONS (src_id_opt,fn))
+         (SND (SND (SND tup))) st = (res,st') ⇒
+       preserves_immutables_dom
+         (cx with stk updated_by CONS (src_id_opt,fn)) st st') ∧
+    get_module_code cx src_id_opt = SOME ts ∧
+    lookup_function fn Internal ts = SOME tup ∧
+    bind_arguments (type_env ts) (FST (SND tup)) vs = SOME env ∧
+    evaluate_type (type_env_all_modules x) (FST (SND (SND tup))) = SOME rtv ∧
+    ALOOKUP cx.sources cx.txn.target = SOME x ∧
+    safe_cast rtv rv = NONE ∧
+    finally
+      (try
+         do
+           x <-
+             eval_stmts (cx with stk updated_by CONS (src_id_opt,fn))
+               (SND (SND (SND tup)));
+           return NoneV
+         od handle_function) (pop_function s'⁴'.scopes)
+      (s'⁴' with scopes := [env]) = (INL rv,s'⁷') ∧
+    eval_exprs cx es s'' = (INL vs,s'⁴') ∧
+    LENGTH (FST (SND tup)) = LENGTH es ∧
+    ¬MEM (src_id_opt,fn) cx.stk ⇒
+    preserves_immutables_dom cx s'' s'⁷'
+Proof
+  rpt strip_tac >>
+  irule case_IntCall_imm_dom_inner >>
+  MAP_EVERY qexists_tac
+    [`SND (SND (SND tup))`, `env`, `es`, `fn`, `INL rv`,
+     `s'⁴'.scopes`, `s'⁴'`, `src_id_opt`, `vs`] >>
+  gvs[]
+QED
+
+(* Subgoal 5: finally INR, ALOOKUP NONE *)
+Theorem case_IntCall_sg5[local]:
+  ∀cx src_id_opt fn es ts tup vs env rtv e s'' s'⁴' s'⁷'.
+    (∀st res st'. eval_exprs cx es st = (res,st') ⇒
+       preserves_immutables_dom cx st st') ∧
+    (∀st res st'.
+       eval_stmts (cx with stk updated_by CONS (src_id_opt,fn))
+         (SND (SND (SND tup))) st = (res,st') ⇒
+       preserves_immutables_dom
+         (cx with stk updated_by CONS (src_id_opt,fn)) st st') ∧
+    get_module_code cx src_id_opt = SOME ts ∧
+    lookup_function fn Internal ts = SOME tup ∧
+    bind_arguments (type_env ts) (FST (SND tup)) vs = SOME env ∧
+    evaluate_type (type_env_all_modules []) (FST (SND (SND tup))) = SOME rtv ∧
+    ALOOKUP cx.sources cx.txn.target = NONE ∧
+    finally
+      (try
+         do
+           x <-
+             eval_stmts (cx with stk updated_by CONS (src_id_opt,fn))
+               (SND (SND (SND tup)));
+           return NoneV
+         od handle_function) (pop_function s'⁴'.scopes)
+      (s'⁴' with scopes := [env]) = (INR e,s'⁷') ∧
+    eval_exprs cx es s'' = (INL vs,s'⁴') ∧
+    LENGTH (FST (SND tup)) = LENGTH es ∧
+    ¬MEM (src_id_opt,fn) cx.stk ⇒
+    preserves_immutables_dom cx s'' s'⁷'
+Proof
+  rpt strip_tac >>
+  irule case_IntCall_imm_dom_inner >>
+  MAP_EVERY qexists_tac
+    [`SND (SND (SND tup))`, `env`, `es`, `fn`, `INR e`,
+     `s'⁴'.scopes`, `s'⁴'`, `src_id_opt`, `vs`] >>
+  gvs[]
+QED
+
+(* Subgoal 6: finally INR, ALOOKUP SOME *)
+Theorem case_IntCall_sg6[local]:
+  ∀cx src_id_opt fn es ts tup vs env rtv e s'' s'⁴' s'⁷' x.
+    (∀st res st'. eval_exprs cx es st = (res,st') ⇒
+       preserves_immutables_dom cx st st') ∧
+    (∀st res st'.
+       eval_stmts (cx with stk updated_by CONS (src_id_opt,fn))
+         (SND (SND (SND tup))) st = (res,st') ⇒
+       preserves_immutables_dom
+         (cx with stk updated_by CONS (src_id_opt,fn)) st st') ∧
+    get_module_code cx src_id_opt = SOME ts ∧
+    lookup_function fn Internal ts = SOME tup ∧
+    bind_arguments (type_env ts) (FST (SND tup)) vs = SOME env ∧
+    evaluate_type (type_env_all_modules x) (FST (SND (SND tup))) = SOME rtv ∧
+    ALOOKUP cx.sources cx.txn.target = SOME x ∧
+    finally
+      (try
+         do
+           x <-
+             eval_stmts (cx with stk updated_by CONS (src_id_opt,fn))
+               (SND (SND (SND tup)));
+           return NoneV
+         od handle_function) (pop_function s'⁴'.scopes)
+      (s'⁴' with scopes := [env]) = (INR e,s'⁷') ∧
+    eval_exprs cx es s'' = (INL vs,s'⁴') ∧
+    LENGTH (FST (SND tup)) = LENGTH es ∧
+    ¬MEM (src_id_opt,fn) cx.stk ⇒
+    preserves_immutables_dom cx s'' s'⁷'
+Proof
+  rpt strip_tac >>
+  irule case_IntCall_imm_dom_inner >>
+  MAP_EVERY qexists_tac
+    [`SND (SND (SND tup))`, `env`, `es`, `fn`, `INR e`,
+     `s'⁴'.scopes`, `s'⁴'`, `src_id_opt`, `vs`] >>
+  gvs[]
+QED
+
+(* Subgoal 7: no finally, evaluate_type NONE, ALOOKUP NONE *)
+Theorem case_IntCall_sg7[local]:
+  ∀cx src_id_opt fn es ts tup vs env s'' s'⁴'.
+    (∀st res st'. eval_exprs cx es st = (res,st') ⇒
+       preserves_immutables_dom cx st st') ∧
+    get_module_code cx src_id_opt = SOME ts ∧
+    lookup_function fn Internal ts = SOME tup ∧
+    bind_arguments (type_env ts) (FST (SND tup)) vs = SOME env ∧
+    evaluate_type (type_env_all_modules []) (FST (SND (SND tup))) = NONE ∧
+    ALOOKUP cx.sources cx.txn.target = NONE ∧
+    eval_exprs cx es s'' = (INL vs,s'⁴') ∧
+    LENGTH (FST (SND tup)) = LENGTH es ∧
+    ¬MEM (src_id_opt,fn) cx.stk ⇒
+    preserves_immutables_dom cx s'' s'⁴'
+Proof
+  rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
+(* Subgoal 8: no finally, evaluate_type NONE, ALOOKUP SOME *)
+Theorem case_IntCall_sg8[local]:
+  ∀cx src_id_opt fn es ts tup vs env s'' s'⁴' x.
+    (∀st res st'. eval_exprs cx es st = (res,st') ⇒
+       preserves_immutables_dom cx st st') ∧
+    get_module_code cx src_id_opt = SOME ts ∧
+    lookup_function fn Internal ts = SOME tup ∧
+    bind_arguments (type_env ts) (FST (SND tup)) vs = SOME env ∧
+    evaluate_type (type_env_all_modules x) (FST (SND (SND tup))) = NONE ∧
+    ALOOKUP cx.sources cx.txn.target = SOME x ∧
+    eval_exprs cx es s'' = (INL vs,s'⁴') ∧
+    LENGTH (FST (SND tup)) = LENGTH es ∧
+    ¬MEM (src_id_opt,fn) cx.stk ⇒
+    preserves_immutables_dom cx s'' s'⁴'
+Proof
+  rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
+(* Subgoal 9: no finally, bind_arguments NONE *)
+Theorem case_IntCall_sg9[local]:
+  ∀cx src_id_opt fn es ts tup vs s'' s'⁴'.
+    (∀st res st'. eval_exprs cx es st = (res,st') ⇒
+       preserves_immutables_dom cx st st') ∧
+    get_module_code cx src_id_opt = SOME ts ∧
+    lookup_function fn Internal ts = SOME tup ∧
+    bind_arguments (type_env ts) (FST (SND tup)) vs = NONE ∧
+    eval_exprs cx es s'' = (INL vs,s'⁴') ∧
+    LENGTH (FST (SND tup)) = LENGTH es ∧
+    ¬MEM (src_id_opt,fn) cx.stk ⇒
+    preserves_immutables_dom cx s'' s'⁴'
+Proof
+  rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
+(* Subgoal 10: eval_exprs returns INR *)
+Theorem case_IntCall_sg10[local]:
+  ∀cx src_id_opt fn es ts tup e s'' s'⁴'.
+    (∀st res st'. eval_exprs cx es st = (res,st') ⇒
+       preserves_immutables_dom cx st st') ∧
+    get_module_code cx src_id_opt = SOME ts ∧
+    lookup_function fn Internal ts = SOME tup ∧
+    eval_exprs cx es s'' = (INR e,s'⁴') ∧
+    LENGTH (FST (SND tup)) = LENGTH es ∧
+    ¬MEM (src_id_opt,fn) cx.stk ⇒
+    preserves_immutables_dom cx s'' s'⁴'
+Proof
+  rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
 (* ----- Case: eval_expr (Call (IntCall ...) es) - updated ----- *)
 Theorem case_IntCall_imm_dom[local]:
   ∀src_id_opt fn es cx.
@@ -1553,6 +1848,14 @@ Proof
         val ih2' = SIMP_RULE (srw_ss())
           [check_def, assert_def, lift_option_def, return_def, AllCaseEqs(),
            get_scopes_def, push_function_def] ih2
+        (* Derive clean eval_exprs IH from conditional one *)
+        val derive_ih1 =
+          assume_tac ih1' >>
+          first_x_assum (mp_tac o SPECL [``st:evaluation_state``, ``ts:toplevel list``,
+            ``st:evaluation_state``, ``st:evaluation_state``,
+            ``tup:function_mutability # (string # type) list # type # stmt list``,
+            ``st:evaluation_state``]) >>
+          gvs[return_def] >> strip_tac
     in
     rpt strip_tac >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
@@ -1564,14 +1867,27 @@ Proof
     rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
     rpt (BasicProvers.FULL_CASE_TAC >>
          gvs[return_def, raise_def,
-             preserves_immutables_dom_refl, preserves_immutables_dom_eq]) >>
-    TRY (
-      irule case_IntCall_imm_dom_inner >>
-      REVERSE (rpt (first_assum (irule_at (Pos last)))) >>
-      conj_tac >- (rpt strip_tac >> irule ih2' >> gvs[]) >>
-      rpt strip_tac >> irule ih1' >> gvs[] >> NO_TAC) >>
-    (* remaining subgoal *)
-    cheat
+             preserves_immutables_dom_refl]) >>
+    (* Derive clean eval_exprs IH *)
+    derive_ih1 >>
+    (* Non-finally cases: eval_exprs IH suffices *)
+    TRY (first_x_assum drule >> simp[] >> NO_TAC) >>
+    (* Finally cases: derive eval_stmts IH, then use case_IntCall_imm_dom_inner *)
+    (`∀st res st'.
+        eval_stmts (cx with stk updated_by CONS (src_id_opt,fn))
+          (SND (SND (SND tup))) st = (res,st') ⇒
+        preserves_immutables_dom
+          (cx with stk updated_by CONS (src_id_opt,fn)) st st'` by
+      (rpt strip_tac >>
+       mp_tac (SPECL [``st':evaluation_state``, ``ts:toplevel list``,
+         ``st':evaluation_state``, ``st':evaluation_state``,
+         ``tup:function_mutability # (string # type) list # type # stmt list``,
+         ``st':evaluation_state``] ih2') >>
+       gvs[return_def] >>
+       disch_then drule >> simp[return_def] >>
+       disch_then irule >> gvs[])) >>
+    irule case_IntCall_imm_dom_inner >>
+    metis_tac[]
     end))
 QED
 
