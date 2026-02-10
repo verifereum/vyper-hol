@@ -958,13 +958,20 @@ Proof
   simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
        lift_option_def, lift_sum_def] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
-  imp_res_tac (cj 1 assign_target_imm_dom_any) >>
-  imp_res_tac get_Value_immutables >>
+  (* Chain through eval_base_target state s'' *)
   irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
   conj_tac >- gvs[] >>
-  irule preserves_immutables_dom_trans >> qexists_tac `t` >>
-  gvs[preserves_immutables_dom_eq]
-  >> cheat
+  (* Now case-split on x = (loc, sbs) and unfold the do block *)
+  PairCases_on `x` >>
+  gvs[bind_def, AllCaseEqs(), return_def, raise_def] >>
+  (* assign_target: s'' -> s_at *)
+  imp_res_tac (cj 1 assign_target_imm_dom_any) >>
+  imp_res_tac get_Value_immutables >>
+  irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
+  irule preserves_immutables_dom_eq >>
+  gvs[] >>
+  BasicProvers.EVERY_CASE_TAC >>
+  gvs[return_def, raise_def]
 QED
 
 (* ----- Case 41: eval_expr (Call Send es) ----- *)
