@@ -826,7 +826,8 @@ Proof
   simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
   irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
-  gvs[] >> cheat
+  conj_tac >- gvs[] >>
+  first_x_assum drule >> disch_then drule >> simp[]
 QED
 
 (* ----- Case 27: eval_base_target (SubscriptTarget bt e) ----- *)
