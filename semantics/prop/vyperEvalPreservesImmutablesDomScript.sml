@@ -810,7 +810,8 @@ Proof
        ignore_bind_def] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
   irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
-  gvs[] >> cheat
+  conj_tac >- (last_x_assum irule >> metis_tac[]) >>
+  first_x_assum irule >> first_assum (irule_at Any) >> metis_tac[]
 QED
 
 (* ----- Case 18: eval_iterator (Array e) ----- *)
@@ -1013,10 +1014,15 @@ Proof
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
   irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
   conj_tac >- gvs[] >>
-  irule preserves_immutables_dom_trans >>
-  qexists_tac ‘s'' with scopes updated_by CONS FEMPTY’ >>
-  conj_tac >- (irule preserves_immutables_dom_eq >> simp[]) >>
-  cheat
+  (* Derive unconditional IHs for e' and e'' *)
+  `∀st res st'. eval_expr cx e' st = (res,st') ⇒
+     preserves_immutables_dom cx st st'` by metis_tac[] >>
+  `∀st res st'. eval_expr cx e'' st = (res,st') ⇒
+     preserves_immutables_dom cx st st'` by metis_tac[] >>
+  Cases_on `tv = Value (BoolV T)` >>
+  gvs[raise_def, preserves_immutables_dom_refl] >>
+  Cases_on `tv = Value (BoolV F)` >>
+  gvs[raise_def, preserves_immutables_dom_refl]
 QED
 
 (* ----- Case 36: eval_expr (Subscript e1 e2) ----- *)
@@ -1068,13 +1074,20 @@ Proof
   simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
        lift_option_def, lift_sum_def] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
-  imp_res_tac (cj 1 assign_target_imm_dom_any) >>
-  imp_res_tac get_Value_immutables >>
+  (* Chain through eval_base_target state s'' *)
   irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
   conj_tac >- gvs[] >>
-  irule preserves_immutables_dom_trans >> qexists_tac `t` >>
-  gvs[preserves_immutables_dom_eq]
-  >> cheat
+  (* Now case-split on x = (loc, sbs) and unfold the do block *)
+  PairCases_on `x` >>
+  gvs[bind_def, AllCaseEqs(), return_def, raise_def] >>
+  (* assign_target: s'' -> s_at *)
+  imp_res_tac (cj 1 assign_target_imm_dom_any) >>
+  imp_res_tac get_Value_immutables >>
+  irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
+  irule preserves_immutables_dom_eq >>
+  gvs[] >>
+  BasicProvers.EVERY_CASE_TAC >>
+  gvs[return_def, raise_def]
 QED
 
 (* ----- Case 41: eval_expr (Call Send es) ----- *)
@@ -1107,11 +1120,26 @@ Proof
   qpat_x_assum `eval_exprs _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
-  imp_res_tac get_Value_immutables >>
-  irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
-  conj_tac >- gvs[] >>
-  irule preserves_immutables_dom_trans >> qexists_tac `t` >>
-  cheat
+  imp_res_tac get_Value_immutables
+  (* Goals 1-2: get_Value succeeded *)
+  >- (irule preserves_immutables_dom_trans >> qexists_tac `s'³'` >> conj_tac
+      >- (irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
+          conj_tac >- gvs[] >>
+          irule preserves_immutables_dom_eq >> gvs[])
+      >- (first_x_assum
+            (qspecl_then [`st`, `tv`, `s''`, `s''`, `v''`, `s'³'`] mp_tac) >>
+          simp[] >> disch_then drule >> simp[]))
+  >- (irule preserves_immutables_dom_trans >> qexists_tac `s'³'` >> conj_tac
+      >- (irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
+          conj_tac >- gvs[] >>
+          irule preserves_immutables_dom_eq >> gvs[])
+      >- (first_x_assum
+            (qspecl_then [`st`, `tv`, `s''`, `s''`, `v''`, `s'³'`] mp_tac) >>
+          simp[] >> disch_then drule >> simp[]))
+  (* Goal 3: get_Value failed *)
+  >- (irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
+      conj_tac >- gvs[] >>
+      irule preserves_immutables_dom_eq >> gvs[])
 QED
 
 (* ----- Case: eval_target (BaseTarget bt) ----- *)
@@ -1124,7 +1152,13 @@ Theorem case_BaseTarget_imm_dom[local]:
       eval_target cx (BaseTarget bt) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `eval_target _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
+  PairCases_on `x` >>
+  gvs[return_def] >>
+  first_x_assum irule >> metis_tac[]
 QED
 
 (* ----- Case: eval_base_target (NameTarget id) ----- *)
@@ -1157,7 +1191,11 @@ Theorem case_AttributeTarget_imm_dom[local]:
       eval_base_target cx (AttributeTarget bt id) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, pairTheory.UNCURRY] >>
+  rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
+  first_x_assum irule >> metis_tac[]
 QED
 
 (* ----- Case: eval_expr (Name id) ----- *)
@@ -1183,7 +1221,16 @@ Theorem case_Builtin_imm_dom[local]:
       eval_expr cx (Builtin bt es) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def] >>
+  PURE_REWRITE_TAC [ignore_bind_def] >>
+  simp[bind_def, AllCaseEqs(), return_def, raise_def,
+       check_def, assert_def, get_accounts_def, lift_sum_def] >>
+  rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
+  TRY (Cases_on `evaluate_builtin cx s''.accounts bt vs` >>
+       gvs[return_def, raise_def]) >>
+  first_x_assum irule >> simp[check_def, assert_def, return_def]
 QED
 
 (* ----- Case: eval_expr (TypeBuiltin tb typ es) ----- *)
