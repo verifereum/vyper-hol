@@ -1,7 +1,7 @@
 Theory vyperHoare
 
 Ancestors
-  vyperInterpreter vyperUpdateTarget vyperLookup vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes vyperEvalMisc
+  vyperInterpreter vyperUpdateTarget vyperLookup vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes vyperEvalMisc vyperEvalPreservesNameTarget
 
 (**********************************************************************)
 (* Definitions *)
@@ -556,14 +556,22 @@ QED
 
 Theorem stmts_spec_assign_name:
   ∀P Q cx n av e.
-    (⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ valid_target cx st av (Replace v) ∧ Q (update_target cx st av (Replace v))⦄) ⇒
+    (⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ Q (update_target cx st av (Replace v))⦄) ⇒
     ⟦cx⟧ ⦃λst. P st ∧ lookup_name_target cx st n = SOME av⦄ [Assign (BaseTarget (NameTarget n)) e] ⦃Q ∥ λ_ _. F⦄
 Proof
   rpt strip_tac >>
   irule stmts_spec_assign >>
   qexists_tac `λav' st. av' = av ∧ P st ∧ lookup_name_target cx st n = SOME av` >>
   conj_tac >-
-  (rpt strip_tac >> gvs[expr_spec_def]) >>
+  (rpt strip_tac >> gvs[expr_spec_def] >>
+   rpt strip_tac >>
+   first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
+   Cases_on `eval_expr cx e st` >> Cases_on `q` >> simp[] >>
+   strip_tac >> qexists_tac `v` >> simp[] >>
+   irule lookup_name_target_is_valid_target_Replace >>
+   qexists_tac `n` >>
+   irule eval_expr_preserves_lookup_name_target >>
+   qexistsl_tac [`e`, `INL x`, `st`] >> simp[]) >>
   rw[target_spec_def, lookup_name_target_def] >>
   simp[Once evaluate_def, bind_def, return_def] >>
   Cases_on `eval_base_target cx (NameTarget n) st` >>
