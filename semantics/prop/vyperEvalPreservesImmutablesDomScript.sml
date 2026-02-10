@@ -1157,7 +1157,17 @@ Theorem case_TypeBuiltin_imm_dom[local]:
       eval_expr cx (TypeBuiltin tb typ es) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def] >>
+  PURE_REWRITE_TAC [ignore_bind_def] >>
+  simp[bind_def, AllCaseEqs(), return_def, raise_def,
+       check_def, assert_def, lift_sum_def] >>
+  rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
+  TRY (Cases_on `evaluate_type_builtin cx tb typ vs` >>
+       gvs[return_def, raise_def]) >>
+  first_x_assum (qspec_then `st` mp_tac) >>
+  simp[check_def, assert_def, return_def]
 QED
 
 (* ----- Case: eval_expr (Call (ExtCall ...) es) ----- *)
