@@ -1176,15 +1176,6 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-(* Subgoal 9: eval_expr e2 returns INR (error) -
-   need preserves_immutables_dom cx s_e2 s_e2 (trivial refl) *)
-Theorem subscript_helper_e2_err_refl[local]:
-  ∀cx (s_e2:evaluation_state).
-    preserves_immutables_dom cx s_e2 s_e2
-Proof
-  simp[preserves_immutables_dom_refl]
-QED
-
 (* ----- Case 36: eval_expr (Subscript e1 e2) ----- *)
 Theorem case_Subscript_imm_dom[local]:
   ∀cx e1 e2.
@@ -1225,7 +1216,7 @@ Proof
    >- (irule subscript_helper_get_value_err_fwd >> metis_tac[])
    >- (irule subscript_helper_get_value_err_bwd >> metis_tac[])
    >- (irule subscript_helper_e2_err_fwd >> metis_tac[])
-   >- simp[subscript_helper_e2_err_refl]
+   >- simp[preserves_immutables_dom_refl]
 QED
 
 (* ----- Case 37: eval_expr (Attribute e id) ----- *)
