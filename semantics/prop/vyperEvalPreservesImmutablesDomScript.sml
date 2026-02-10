@@ -847,13 +847,24 @@ Proof
   simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
        lift_option_def] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
-  imp_res_tac get_Value_immutables >>
-  first_x_assum (qspecl_then [`st`, `loc`, `sbs`, `s''`] mp_tac) >> simp[] >>
+  (* Case split on x to get (loc, sbs) and unfold the lambda *)
+  Cases_on `x` >> gvs[] >>
+  (* Derive unconditional eval_expr IH and base_target preservation *)
+  first_x_assum (qspecl_then [`st`, `q`, `r`, `s''`] mp_tac) >> simp[] >>
   strip_tac >>
+  (* Unfold the do-block *)
+  qpat_x_assum `_ s'' = (res, st')` mp_tac >>
+  simp[bind_def, AllCaseEqs(), return_def, raise_def] >>
+  rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
+  imp_res_tac get_Value_immutables >>
   irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
   conj_tac >- gvs[] >>
-  irule preserves_immutables_dom_trans >> qexists_tac `t'` >>
-  gvs[preserves_immutables_dom_eq] >> cheat
+  TRY (first_x_assum drule >> simp[] >> NO_TAC) >>
+  irule preserves_immutables_dom_trans >> qexists_tac `s'³'` >>
+  conj_tac >- (first_x_assum drule >> simp[]) >>
+  TRY (irule preserves_immutables_dom_eq >> gvs[] >> NO_TAC) >>
+  Cases_on `value_to_key v''` >> gvs[return_def, raise_def] >>
+  irule preserves_immutables_dom_eq >> gvs[]
 QED
 
 (* ----- Case 29: eval_for (v::vs) ----- *)
@@ -992,11 +1003,22 @@ Proof
   qpat_x_assum `eval_exprs _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
+  `preserves_immutables_dom cx s_bt r` by
+    (qpat_x_assum `∀st0 res0 st0'. eval_expr _ _ st0 = _ ⇒ _` drule >>
+     simp[]) >>
+  `preserves_immutables_dom cx st r` by
+    (irule preserves_immutables_dom_trans >> metis_tac[]) >>
+  (* eval_expr error case: st -> s_bt -> r *)
+  TRY (gvs[] >> NO_TAC) >>
+  (* eval_expr success case: unpack get_Value + value_to_key *)
+  qpat_x_assum `(case get_Value _ _ of _ => _ | _ => _) = _` mp_tac >>
+  Cases_on `get_Value x r` >> Cases_on `q` >> simp[] >>
   imp_res_tac get_Value_immutables >>
-  irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
-  conj_tac >- gvs[] >>
-  irule preserves_immutables_dom_trans >> qexists_tac `t` >>
-  cheat
+  TRY (Cases_on `value_to_key x'` >> simp[return_def, raise_def]) >>
+  rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  irule preserves_immutables_dom_trans >> qexists_tac `r` >>
+  conj_tac >- simp[] >>
+  irule preserves_immutables_dom_eq >> gvs[]
 QED
 
 (* ----- Case: eval_target (BaseTarget bt) ----- *)
