@@ -898,10 +898,15 @@ Proof
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
   irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
   conj_tac >- gvs[] >>
-  irule preserves_immutables_dom_trans >>
-  qexists_tac ‘s'' with scopes updated_by CONS FEMPTY’ >>
-  conj_tac >- (irule preserves_immutables_dom_eq >> simp[]) >>
-  cheat
+  (* Derive unconditional IHs for e' and e'' *)
+  `∀st res st'. eval_expr cx e' st = (res,st') ⇒
+     preserves_immutables_dom cx st st'` by metis_tac[] >>
+  `∀st res st'. eval_expr cx e'' st = (res,st') ⇒
+     preserves_immutables_dom cx st st'` by metis_tac[] >>
+  Cases_on `tv = Value (BoolV T)` >>
+  gvs[raise_def, preserves_immutables_dom_refl] >>
+  Cases_on `tv = Value (BoolV F)` >>
+  gvs[raise_def, preserves_immutables_dom_refl]
 QED
 
 (* ----- Case 36: eval_expr (Subscript e1 e2) ----- *)
