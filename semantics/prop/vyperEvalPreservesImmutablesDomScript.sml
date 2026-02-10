@@ -880,7 +880,73 @@ Theorem case_eval_for_cons_imm_dom[local]:
       eval_for cx nm body (v::vs) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
-  cheat
+  rpt strip_tac >>
+  (* Simplify IHs: push_scope_with_var always succeeds *)
+  RULE_ASSUM_TAC (REWRITE_RULE [push_scope_with_var_def, return_def]) >>
+  gvs[] >>
+  (* Unfold eval_for (v::vs) *)
+  qpat_x_assum `eval_for _ _ _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def] >>
+  PURE_REWRITE_TAC [ignore_bind_def] >>
+  simp[bind_def, push_scope_with_var_def, return_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >|
+  [ (* Success case: finally returned INL broke *)
+    irule preserves_immutables_dom_trans >>
+    qexists_tac `st with scopes updated_by CONS (FEMPTY |+ (nm,v))` >>
+    conj_tac >- (irule preserves_immutables_dom_eq >> simp[]) >>
+    qpat_x_assum `finally _ _ _ = _` mp_tac >>
+    simp[finally_def, AllCaseEqs(), pop_scope_def, return_def, raise_def,
+         bind_def, ignore_bind_def] >>
+    rpt strip_tac >> gvs[] >>
+    rename1 `try _ _ _ = (_, s_try)` >>
+    irule preserves_immutables_dom_trans >>
+    qexists_tac `s_try with scopes := tl` >> conj_tac
+    >- (irule preserves_immutables_dom_trans >> qexists_tac `s_try` >> conj_tac
+        >- (qpat_x_assum `try _ _ _ = _` mp_tac >>
+            PURE_REWRITE_TAC [ignore_bind_def] >>
+            simp[try_def, bind_def, return_def, AllCaseEqs(),
+                 handle_loop_exception_def, raise_def] >>
+            rpt strip_tac >> gvs[return_def, raise_def] >>
+            TRY (first_x_assum drule >> simp[] >> NO_TAC) >>
+            first_x_assum drule >> simp[] >> strip_tac >>
+            BasicProvers.EVERY_CASE_TAC >> gvs[return_def, raise_def])
+        >- (irule preserves_immutables_dom_eq >> simp[]))
+    >- (Cases_on `broke` >> gvs[return_def, preserves_immutables_dom_refl] >>
+        first_x_assum (qspecl_then [
+            `st with scopes updated_by CONS (FEMPTY |+ (nm,v))`,
+            `s_try with scopes := tl`] mp_tac) >>
+        simp[finally_def, ignore_bind_def, bind_def,
+             pop_scope_def, return_def] >>
+        disch_then drule >> simp[]),
+    (* Error case: finally returned INR e *)
+    irule preserves_immutables_dom_trans >>
+    qexists_tac `st with scopes updated_by CONS (FEMPTY |+ (nm,v))` >>
+    conj_tac >- (irule preserves_immutables_dom_eq >> simp[]) >>
+    qpat_x_assum `finally _ _ _ = _` mp_tac >>
+    simp[finally_def, AllCaseEqs(), pop_scope_def, return_def, raise_def,
+         bind_def, ignore_bind_def] >>
+    rpt strip_tac >> gvs[] >>
+    TRY (rename1 `try _ _ _ = (_, s_try)` >>
+         irule preserves_immutables_dom_trans >> qexists_tac `s_try` >>
+         conj_tac
+         >- (qpat_x_assum `try _ _ _ = _` mp_tac >>
+             PURE_REWRITE_TAC [ignore_bind_def] >>
+             simp[try_def, bind_def, return_def, AllCaseEqs(),
+                  handle_loop_exception_def, raise_def] >>
+             rpt strip_tac >> gvs[return_def, raise_def] >>
+             TRY (first_x_assum drule >> simp[] >> NO_TAC) >>
+             first_x_assum drule >> simp[] >> strip_tac >>
+             BasicProvers.EVERY_CASE_TAC >> gvs[return_def, raise_def])
+         >- (irule preserves_immutables_dom_eq >> simp[]) >> NO_TAC) >>
+    qpat_x_assum `try _ _ _ = _` mp_tac >>
+    PURE_REWRITE_TAC [ignore_bind_def] >>
+    simp[try_def, bind_def, return_def, AllCaseEqs(),
+         handle_loop_exception_def, raise_def] >>
+    rpt strip_tac >> gvs[return_def, raise_def] >>
+    TRY (first_x_assum drule >> simp[] >> NO_TAC) >>
+    first_x_assum drule >> simp[] >> strip_tac >>
+    BasicProvers.EVERY_CASE_TAC >> gvs[return_def, raise_def]
+  ]
 QED
 
 (* ----- Case 33: eval_expr (IfExp e e' e'') ----- *)
