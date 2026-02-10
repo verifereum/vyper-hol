@@ -218,6 +218,130 @@ Proof
   metis_tac[assign_target_preserves_immutables_dom_main]
 QED
 
+(* Helper lemma for assign_targets cons case of the reverse direction *)
+Theorem assign_targets_cons_preserves_immutables_addr_dom_rev[local]:
+  ∀cx av v gvs vs.
+    (∀st res st'.
+       assign_target cx av (Replace v) st = (res,st') ⇒
+       IS_SOME (ALOOKUP st'.immutables cx.txn.target) ⇒
+       IS_SOME (ALOOKUP st.immutables cx.txn.target)) ∧
+    (∀st res st'.
+       assign_targets cx gvs vs st = (res,st') ⇒
+       IS_SOME (ALOOKUP st'.immutables cx.txn.target) ⇒
+       IS_SOME (ALOOKUP st.immutables cx.txn.target)) ⇒
+    ∀st res st'.
+      assign_targets cx (av::gvs) (v::vs) st = (res,st') ⇒
+      IS_SOME (ALOOKUP st'.immutables cx.txn.target) ⇒
+      IS_SOME (ALOOKUP st.immutables cx.txn.target)
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[Once assign_target_def, bind_def, get_Value_def, AllCaseEqs(),
+       return_def, raise_def] >>
+  strip_tac >> gvs[] >>
+  rename1 `assign_target _ _ _ st = (INL tgtw, s_mid)` >>
+  rename1 `get_Value tgtw s_mid = (_, s_mid2)` >>
+  TRY (rename1 `assign_targets _ _ _ s_mid2 = (_, st')`) >>
+  `s_mid = s_mid2` by (Cases_on `tgtw` >> gvs[get_Value_def, return_def, raise_def]) >>
+  gvs[] >> metis_tac[]
+QED
+
+(* Reverse direction: if st' has immutables entry, so does st *)
+Theorem assign_target_preserves_immutables_addr_dom_rev:
+  ∀cx av ao st res st'.
+    assign_target cx av ao st = (res, st') ⇒
+    IS_SOME (ALOOKUP st'.immutables cx.txn.target) ⇒
+    IS_SOME (ALOOKUP st.immutables cx.txn.target)
+Proof
+  (* This is provable: assign_target can only modify immutables if get_address_immutables
+     succeeds, which requires st to already have an entry. For ScopedVar and TopLevelVar,
+     immutables are unchanged. For ImmutableVar, the get_address_immutables check fails
+     if st doesn't have the entry. *)
+  `(∀cx av ao st res st'. assign_target cx av ao st = (res, st') ⇒
+      IS_SOME (ALOOKUP st'.immutables cx.txn.target) ⇒
+      IS_SOME (ALOOKUP st.immutables cx.txn.target)) ∧
+   (∀cx gvs vs st res st'. assign_targets cx gvs vs st = (res, st') ⇒
+      IS_SOME (ALOOKUP st'.immutables cx.txn.target) ⇒
+      IS_SOME (ALOOKUP st.immutables cx.txn.target))`
+    suffices_by metis_tac[] >>
+  ho_match_mp_tac assign_target_ind >> rpt conj_tac >> rpt gen_tac >-
+  (* ScopedVar case: set_scopes doesn't touch immutables *)
+  (simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
+        lift_option_def, lift_sum_def, AllCaseEqs(), raise_def, LET_THM,
+        ignore_bind_def, set_scopes_def] >> strip_tac >> gvs[] >>
+   Cases_on `find_containing_scope (string_to_num id) st.scopes` >>
+   gvs[return_def, raise_def] >>
+   rename1 `find_containing_scope _ _.scopes = SOME fcs_result` >>
+   PairCases_on `fcs_result` >>
+   gvs[bind_def, AllCaseEqs(), return_def, raise_def, set_scopes_def] >>
+   Cases_on `assign_subscripts fcs_result2 (REVERSE is) ao` >>
+   gvs[return_def, raise_def]) >-
+  (* TopLevelVar case: storage operations don't touch immutables *)
+  (strip_tac >>
+   gvs[Once assign_target_def, AllCaseEqs(), return_def, raise_def,
+       bind_def, lift_option_def, lift_sum_def, ignore_bind_def] >>
+   imp_res_tac lookup_global_immutables >> gvs[] >>
+   Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def] >>
+   Cases_on `tv` >> gvs[bind_def]
+   (* Value case *)
+   >- (Cases_on `assign_subscripts v (REVERSE is) ao` >> gvs[return_def, raise_def] >>
+       Cases_on `set_global cx src_id_opt (string_to_num id) x s''` >> gvs[] >>
+       imp_res_tac set_global_immutables >> gvs[return_def] >>
+       Cases_on `q` >> gvs[return_def, raise_def])
+   (* HashMapRef case *)
+   >> (Cases_on `REVERSE is` >> gvs[return_def, raise_def] >>
+       Cases_on `split_hashmap_subscripts v t'` >> gvs[bind_def, return_def, raise_def] >>
+       PairCases_on `x` >> gvs[] >>
+       Cases_on `compute_hashmap_slot c (t::x1) (h::TAKE (LENGTH t' − LENGTH x2) t')` >>
+       gvs[bind_def, return_def, raise_def] >>
+       Cases_on `evaluate_type (type_env ts) x0` >> gvs[return_def, raise_def] >>
+       Cases_on `read_storage_slot cx b x x' s''` >> gvs[] >>
+       imp_res_tac read_storage_slot_immutables >> gvs[] >>
+       Cases_on `q` >> gvs[] >>
+       Cases_on `assign_subscripts x'' x2 ao` >> gvs[return_def, raise_def] >>
+       Cases_on `write_storage_slot cx b x x' x'³' r` >> gvs[] >>
+       imp_res_tac write_storage_slot_immutables >> gvs[] >>
+       Cases_on `q` >> gvs[])) >-
+  (* ImmutableVar case: get_address_immutables must succeed for any result.
+     The goal is IS_SOME st' => IS_SOME st. If st doesn't have the entry,
+     get_address_immutables raises, so either we return that error (st' = st)
+     or we continue but any successful path also requires st to have the entry. *)
+  (simp[Once assign_target_def, bind_def, get_immutables_def, get_address_immutables_def,
+        lift_option_def, LET_THM, return_def, raise_def] >>
+   Cases_on `ALOOKUP st.immutables cx.txn.target` >> simp[return_def, raise_def] >>
+   BasicProvers.EVERY_CASE_TAC >>
+   gvs[raise_def, return_def, lift_sum_def, AllCaseEqs(), bind_def, ignore_bind_def,
+       set_immutable_def, get_address_immutables_def, lift_option_def,
+       set_address_immutables_def, LET_THM] >>
+   strip_tac >> gvs[]) >-
+  (* TupleTargetV with TupleV - delegate to assign_targets *)
+  (rpt gen_tac >> strip_tac >> rpt gen_tac >>
+   simp[Once assign_target_def, check_def, AllCaseEqs(), return_def, raise_def] >>
+   simp[bind_def, ignore_bind_def, assert_def, AllCaseEqs()] >>
+   strip_tac >> gvs[return_def] >> first_x_assum drule >> simp[]) >-
+  (* Other TupleTargetV cases - all raise (13 cases) *)
+  simp[Once assign_target_def, raise_def] >-
+  simp[Once assign_target_def, raise_def] >-
+  simp[Once assign_target_def, raise_def] >-
+  simp[Once assign_target_def, raise_def] >-
+  simp[Once assign_target_def, raise_def] >-
+  simp[Once assign_target_def, raise_def] >-
+  simp[Once assign_target_def, raise_def] >-
+  simp[Once assign_target_def, raise_def] >-
+  simp[Once assign_target_def, raise_def] >-
+  simp[Once assign_target_def, raise_def] >-
+  simp[Once assign_target_def, raise_def] >-
+  simp[Once assign_target_def, raise_def] >-
+  simp[Once assign_target_def, raise_def] >-
+  (* assign_targets [] [] - trivial *)
+  simp[Once assign_target_def, return_def] >-
+  (* assign_targets cons case - use helper lemma *)
+  MATCH_ACCEPT_TAC assign_targets_cons_preserves_immutables_addr_dom_rev >-
+  (* assign_targets [] (v::vs) - vacuous *)
+  simp[Once assign_target_def, raise_def] >-
+  (* assign_targets (v::vs) [] - vacuous *)
+  simp[Once assign_target_def, raise_def]
+QED
+
 Theorem assign_targets_preserves_immutables_addr_dom:
   ∀cx gvs vs st res st'.
     assign_targets cx gvs vs st = (INL res, st') ⇒

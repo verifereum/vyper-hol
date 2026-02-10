@@ -324,17 +324,6 @@ Proof
   gvs[lookup_scopes_dom_iff]
 QED
 
-Theorem var_not_in_scope_update:
-  ∀st n v.
-    st.scopes ≠ [] ∧ ¬ var_in_scope st n ⇒
-    update_scoped_var st n v = (st with scopes := (HD st.scopes |+ (string_to_num n, v)) :: TL st.scopes)
-Proof
-  rw[var_in_scope_def, lookup_scoped_var_def, update_scoped_var_def] >>
-  Cases_on `find_containing_scope (string_to_num n) st.scopes` >-
-   (Cases_on `st.scopes` >> gvs[]) >>
-  PairCases_on `x` >> drule find_containing_scope_lookup >> simp[]
-QED
-
 Theorem assign_target_scoped_var_replace:
   ∀cx st n v.
     var_in_scope st n ⇒
@@ -441,9 +430,12 @@ Proof
 QED
 
 Theorem var_in_scope_preserved_after_update:
-  ∀st n1 n2 v. n1 ≠ n2 ∧ var_in_scope st n2 ⇒ var_in_scope (update_scoped_var st n1 v) n2
+  ∀st n1 n2 v. var_in_scope st n2 ⇒ var_in_scope (update_scoped_var st n1 v) n2
 Proof
-  simp[var_in_scope_def, lookup_scoped_var_preserved_after_update]
+  rpt strip_tac >>
+  Cases_on ‘n1 = n2’ >>
+  fs[var_in_scope_def, lookup_scoped_var_preserved_after_update] >-
+   simp[lookup_after_update]
 QED
 
 Theorem immutables_preserved_after_update:

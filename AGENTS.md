@@ -138,6 +138,16 @@ The proofs should not depend on automatically generated variable names. Use `ren
 - Chaining: `irule state_equiv_trans >> qexists_tac \`s_mid\` >> gvs[]`
 - run_block induction: `ho_match_mp_tac run_block_ind >> ...`
 
+## Proof structure guidelines
+
+Avoid long proofs. If you encounter difficulties with a complex subgoal, formulate this exact subgoal as a helper lemma and prove it separately. Make sure you can use the formulated helper lemma in the original proof.
+
+When proving a theorem by induction or by cases with many complex cases:
+- prove directly only simple cases that can be closed with at most 3 tactics,
+- formulate a helper lemma stating the exact subgoal for each complex case that requires more than 3 tactics to close.
+
+Re-use existing theorems as much as possible. Before creating a new helper lemma, always check if an existing theorem can be applied directly.
+
 ## Key Theories
 
 ### venomSemTheory
