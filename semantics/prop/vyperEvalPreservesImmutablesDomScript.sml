@@ -828,9 +828,13 @@ Proof
   simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
        lift_option_def] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
-  imp_res_tac get_Value_immutables >>
-  irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
-  gvs[preserves_immutables_dom_eq] >> cheat
+  imp_res_tac get_Value_immutables >> (
+    irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
+    conj_tac >- gvs[] >>
+    irule preserves_immutables_dom_eq >>
+    TRY (qpat_x_assum `(case _ of NONE => _ | SOME _ => _) _ = _` mp_tac >>
+         CASE_TAC >> simp[return_def, raise_def] >> rpt strip_tac >> gvs[]) >>
+    gvs[])
 QED
 
 (* ----- Case 19: eval_iterator (Range e1 e2) ----- *)
@@ -1037,7 +1041,26 @@ Theorem case_Subscript_imm_dom[local]:
       eval_expr cx (Subscript e1 e2) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def] >>
+  PURE_REWRITE_TAC [ignore_bind_def] >>
+  simp[bind_def, AllCaseEqs(), return_def, raise_def,
+       lift_option_def, lift_sum_def] >>
+  rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
+  imp_res_tac get_Value_immutables >>
+  (* Derive IHs before case splits consume them *)
+  `preserves_immutables_dom cx st s''` by gvs[] >>
+  (* Derive unconditional e2 IH *)
+  qpat_x_assum `∀s''. _` (drule_then strip_assume_tac) >>
+  (* Chain: st -> s'' -> s'³' -> <target> *)
+  irule preserves_immutables_dom_trans >> qexists_tac `s'³'` >>
+  conj_tac
+  >- (irule preserves_immutables_dom_trans >>
+      qexists_tac `s''` >> conj_tac >- gvs[] >>
+      qpat_x_assum `∀st0 res0 st0'. eval_expr _ e2 _ = _ ⇒ _`
+        drule >> simp[])
+  >> cheat
 QED
 
 (* ----- Case 37: eval_expr (Attribute e id) ----- *)
