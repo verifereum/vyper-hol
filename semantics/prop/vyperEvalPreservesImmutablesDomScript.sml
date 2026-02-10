@@ -998,6 +998,146 @@ Proof
   cheat
 QED
 
+(* ----- Case: eval_target (BaseTarget bt) ----- *)
+Theorem case_BaseTarget_imm_dom[local]:
+  ∀cx bt.
+    (∀st res st'.
+       eval_base_target cx bt st = (res,st') ⇒
+       preserves_immutables_dom cx st st') ⇒
+    ∀st res st'.
+      eval_target cx (BaseTarget bt) st = (res, st') ⇒
+      preserves_immutables_dom cx st st'
+Proof
+  cheat
+QED
+
+(* ----- Case: eval_base_target (NameTarget id) ----- *)
+Theorem case_NameTarget_imm_dom[local]:
+  ∀cx id.
+    ∀st res st'.
+      eval_base_target cx (NameTarget id) st = (res, st') ⇒
+      preserves_immutables_dom cx st st'
+Proof
+  cheat
+QED
+
+(* ----- Case: eval_base_target (AttributeTarget bt id) ----- *)
+Theorem case_AttributeTarget_imm_dom[local]:
+  ∀cx bt id.
+    (∀st res st'.
+       eval_base_target cx bt st = (res,st') ⇒
+       preserves_immutables_dom cx st st') ⇒
+    ∀st res st'.
+      eval_base_target cx (AttributeTarget bt id) st = (res, st') ⇒
+      preserves_immutables_dom cx st st'
+Proof
+  cheat
+QED
+
+(* ----- Case: eval_expr (Name id) ----- *)
+Theorem case_Name_imm_dom[local]:
+  ∀cx id.
+    ∀st res st'.
+      eval_expr cx (Name id) st = (res, st') ⇒
+      preserves_immutables_dom cx st st'
+Proof
+  cheat
+QED
+
+(* ----- Case: eval_expr (Builtin bt es) ----- *)
+Theorem case_Builtin_imm_dom[local]:
+  ∀cx bt es.
+    (∀s'' x t.
+       check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) ⇒
+       ∀st res st'.
+         eval_exprs cx es st = (res,st') ⇒
+         preserves_immutables_dom cx st st') ⇒
+    ∀st res st'.
+      eval_expr cx (Builtin bt es) st = (res, st') ⇒
+      preserves_immutables_dom cx st st'
+Proof
+  cheat
+QED
+
+(* ----- Case: eval_expr (TypeBuiltin tb typ es) ----- *)
+Theorem case_TypeBuiltin_imm_dom[local]:
+  ∀cx tb typ es.
+    (∀s'' x t.
+       check (type_builtin_args_length_ok tb (LENGTH es))
+         "TypeBuiltin args" s'' = (INL x,t) ⇒
+       ∀st res st'.
+         eval_exprs cx es st = (res,st') ⇒
+         preserves_immutables_dom cx st st') ⇒
+    ∀st res st'.
+      eval_expr cx (TypeBuiltin tb typ es) st = (res, st') ⇒
+      preserves_immutables_dom cx st st'
+Proof
+  cheat
+QED
+
+(* ----- Case: eval_expr (Call (ExtCall ...) es) ----- *)
+Theorem case_ExtCall_imm_dom[local]:
+  ∀cx is_static' func_name arg_types ret_type es.
+    (∀st res st'.
+       eval_exprs cx es st = (res,st') ⇒
+       preserves_immutables_dom cx st st') ⇒
+    ∀st res st'.
+      eval_expr cx (Call (ExtCall is_static' (func_name,arg_types,ret_type)) es)
+        st = (res, st') ⇒
+      preserves_immutables_dom cx st st'
+Proof
+  cheat
+QED
+
+(* ----- Case: eval_expr (Call (IntCall ...) es) - updated ----- *)
+Theorem case_IntCall_imm_dom2[local]:
+  ∀src_id_opt fn es cx.
+    (∀s'' x t s'³' ts t' s'⁴' tup t'' stup args sstup ret body' s'⁵' x'
+        t'³'.
+       check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
+       lift_option (get_module_code cx src_id_opt)
+         "IntCall get_module_code" s'³' = (INL ts,t') ∧
+       lift_option (lookup_function fn Internal ts)
+         "IntCall lookup_function" s'⁴' = (INL tup,t'') ∧ stup = SND tup ∧
+       args = FST stup ∧ sstup = SND stup ∧ ret = FST sstup ∧
+       body' = SND sstup ∧
+       check (LENGTH args = LENGTH es) "IntCall args length" s'⁵' =
+       (INL x',t'³') ⇒
+       ∀st res st'.
+         eval_exprs cx es st = (res,st') ⇒
+         preserves_immutables_dom cx st st') ∧
+    (∀s'' x t s'³' ts t' s'⁴' tup t'' stup args sstup ret ss s'⁵' x' t'³'
+        s'⁶' vs t'⁴' tenv all_mods all_tenv s'⁷' env t'⁵' s'⁸' prev t'⁶'
+        s'⁹' rtv t'⁷' s'¹⁰' cx' t'⁸'.
+       check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
+       lift_option (get_module_code cx src_id_opt)
+         "IntCall get_module_code" s'³' = (INL ts,t') ∧
+       lift_option (lookup_function fn Internal ts)
+         "IntCall lookup_function" s'⁴' = (INL tup,t'') ∧ stup = SND tup ∧
+       args = FST stup ∧ sstup = SND stup ∧ ret = FST sstup ∧
+       ss = SND sstup ∧
+       check (LENGTH args = LENGTH es) "IntCall args length" s'⁵' =
+       (INL x',t'³') ∧ eval_exprs cx es s'⁶' = (INL vs,t'⁴') ∧
+       tenv = type_env ts ∧
+       all_mods =
+       (case ALOOKUP cx.sources cx.txn.target of NONE => [] | SOME m => m) ∧
+       all_tenv = type_env_all_modules all_mods ∧
+       lift_option (bind_arguments tenv args vs) "IntCall bind_arguments"
+         s'⁷' = (INL env,t'⁵') ∧ get_scopes s'⁸' = (INL prev,t'⁶') ∧
+       lift_option (evaluate_type all_tenv ret) "IntCall eval ret" s'⁹' =
+       (INL rtv,t'⁷') ∧
+       push_function (src_id_opt,fn) env cx s'¹⁰' = (INL cx',t'⁸') ⇒
+       ∀st res st'.
+         eval_stmts cx' ss st = (res,st') ⇒
+         preserves_immutables_dom cx' st st') ⇒
+    ∀st res st'.
+      eval_expr cx (Call (IntCall (src_id_opt,fn)) es) st = (res, st') ⇒
+      preserves_immutables_dom cx st st'
+Proof
+  cheat
+QED
+
 (* ===== Main Mutual Induction ===== *)
 
 Theorem immutables_dom_mutual[local]:
@@ -1066,7 +1206,15 @@ Proof
        simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
        rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
        first_x_assum irule >> first_assum (irule_at Any) >> NO_TAC) >>
-  cheat
+  (* Remaining 8 cases handled by dedicated helpers *)
+  TRY (drule_all case_BaseTarget_imm_dom >> simp[] >> NO_TAC) >>
+  TRY (drule_all case_NameTarget_imm_dom >> simp[] >> NO_TAC) >>
+  TRY (drule_all case_AttributeTarget_imm_dom >> simp[] >> NO_TAC) >>
+  TRY (drule_all case_Name_imm_dom >> simp[] >> NO_TAC) >>
+  TRY (drule_all case_Builtin_imm_dom >> simp[] >> NO_TAC) >>
+  TRY (drule_all case_TypeBuiltin_imm_dom >> simp[] >> NO_TAC) >>
+  TRY (drule_all case_ExtCall_imm_dom >> simp[] >> NO_TAC) >>
+  TRY (drule_all case_IntCall_imm_dom2 >> simp[] >> NO_TAC)
 QED
 (* OLD PROOF of immutables_dom_mutual (before conditional IH reformulation):
 Proof
