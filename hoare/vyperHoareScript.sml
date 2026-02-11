@@ -1,7 +1,7 @@
 Theory vyperHoare
 
 Ancestors
-  vyperInterpreter vyperUpdateTarget vyperLookup vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes vyperEvalMisc vyperEvalPreservesNameTarget
+  vyperInterpreter vyperUpdateTarget vyperLookup vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes vyperEvalMisc vyperEvalPreservesNameTarget vyperTypeValue
 
 (**********************************************************************)
 (* Definitions *)
@@ -530,6 +530,101 @@ Proof
   Cases_on `r_after_ss.scopes` >> gvs[return_def, raise_def]
 QED
 
+(* ===================================================================== *)
+(* Helper lemmas for stmts_spec_for_range                                *)
+(* ===================================================================== *)
+
+(* After pushing a scope with (string_to_num id, v), looking up id finds v.
+   WHY THIS IS TRUE: push prepends FEMPTY |+ (string_to_num id, v) to scopes.
+   lookup_in_current_scope does FLOOKUP (HD scopes) (string_to_num id).
+   FLOOKUP_UPDATE gives SOME v directly.
+   Plan ref: Section 3a. Used in: stmts_spec_for_range phase 5 *)
+Theorem lookup_in_current_scope_push:
+  lookup_in_current_scope
+    (st with scopes updated_by CONS (FEMPTY |+ (string_to_num id, v))) id
+  = SOME v
+Proof
+  cheat (* TODO: simp[lookup_in_current_scope_def, evaluation_state_accfupds,
+                       FLOOKUP_UPDATE] *)
+QED
+
+(* After pushing a scope, tl_scopes recovers the original state.
+   WHY THIS IS TRUE: tl_scopes = st with scopes := TL st.scopes.
+   CONS sc prepends, TL removes it, and st with scopes := st.scopes = st.
+   Plan ref: Section 3b. Used in: stmts_spec_for_range phase 5 *)
+Theorem tl_scopes_push:
+  tl_scopes (st with scopes updated_by CONS sc) = st
+Proof
+  cheat (* TODO: simp[tl_scopes_def, evaluation_state_accfupds] >>
+                  Cases_on `st` >> simp[evaluation_state_fn_updates] *)
+QED
+
+(* When scopes non-empty, pop_scope ≡ (INL (), tl_scopes st).
+   WHY THIS IS TRUE: pop_scope cases on st.scopes; non-empty case returns
+   (INL (), st with scopes := TL st.scopes) = (INL (), tl_scopes st).
+   Plan ref: Section 3c. Used in: eval_for_spec inductive case *)
+Theorem pop_scope_tl_scopes:
+  st.scopes ≠ [] ⇒ pop_scope st = (INL (), tl_scopes st)
+Proof
+  cheat (* TODO: Cases_on `st.scopes` >>
+                  simp[pop_scope_def, tl_scopes_def, return_def] *)
+QED
+
+(* After eval_stmts in pushed scope, scopes still non-empty.
+   WHY THIS IS TRUE: eval_stmts_preserves_scopes_len ensures same length.
+   Pushed state has ≥ 1 scope, so result has ≥ 1.
+   Plan ref: Section 3d. Used in: eval_for_spec to justify pop_scope *)
+Theorem scopes_nonempty_after_eval_stmts_push:
+  eval_stmts cx bdy (st with scopes updated_by CONS sc) = (res, st') ⇒
+  st'.scopes ≠ []
+Proof
+  cheat (* TODO: drule eval_stmts_preserves_scopes_len >>
+                  simp[evaluation_state_accfupds] >>
+                  Cases_on `st'.scopes` >> simp[] *)
+QED
+
+(* ===================================================================== *)
+(* Core helper: eval_for on GENLIST by induction on m.
+   WHY THIS IS TRUE:
+   Base (m=0): GENLIST f 0 = [], eval_for [] = return (), I(n+0) = I n.
+   Step (SUC m'): GENLIST gives (IntV ib n)::tail. eval_for unfolds:
+     push scope, try body, pop scope. Body hyp at k=n gives:
+     INL: I(n+1), continue with IH.  INR Return: R v, propagates.
+     Others: F, contradiction.
+   pop_scope_tl_scopes + scopes_nonempty justify pop_scope succeeds.
+   Plan ref: Section 4. Used in: stmts_spec_for_range *)
+Theorem eval_for_spec:
+  ∀m n ib nm bdy cx (I: int -> evaluation_state -> bool) R st.
+    (∀k:int. n ≤ k ∧ k < n + &m ⇒
+      ∀st0. I k st0 ⇒
+        case eval_stmts cx bdy
+               (st0 with scopes updated_by CONS (FEMPTY |+ (nm, IntV ib k))) of
+        | (INL (), st1) => I (k + 1) (tl_scopes st1)
+        | (INR (ReturnException v), st1) => R v (tl_scopes st1)
+        | _ => F) ∧
+    I n st ⇒
+    case eval_for cx nm bdy (GENLIST (λi. IntV ib (n + &i)) m) st of
+    | (INL (), st') => I (n + &m) st'
+    | (INR (ReturnException v), st') => R v st'
+    | _ => F
+Proof
+  cheat (* TODO: Induct_on `m`
+     Base: simp[Once evaluate_def, return_def]
+     Step: Rewrite GENLIST (SUC m'), simp[Once evaluate_def, bind_def,
+       push_scope_with_var_def, return_def, ignore_bind_def, finally_def,
+       try_def], Cases_on eval_stmts, use body hyp at k=n,
+       subcases: INL → IH, INR Return → propagate, others → contradiction.
+       Use scopes_nonempty_after_eval_stmts_push + pop_scope_tl_scopes. *)
+QED
+
+(* ===================================================================== *)
+(* Main theorem: Hoare rule for for-range loops.
+   WHY THIS IS TRUE:
+   Unfold eval_stmts [For ...] through eval_stmt/eval_iterator to reach
+   eval_for on GENLIST. Use expr_spec for e1/e2 to evaluate range bounds.
+   Connect stmts_spec body hypothesis to eval_for_spec body hypothesis
+   via lookup_in_current_scope_push and tl_scopes_push. Apply eval_for_spec.
+   Plan ref: Section 5. *)
 Theorem stmts_spec_for_range:
   ∀P P' I cx id typ ib e1 e2 b body v1 v2 n m.
     m ≤ b ∧
@@ -543,7 +638,38 @@ Theorem stmts_spec_for_range:
          ⦃λst. I (k + 1) (tl_scopes st) ∥ λv st. R v (tl_scopes st)⦄) ⇒
     ⟦cx⟧ ⦃P⦄ [For id typ (Range e1 e2) b body] ⦃I (n + &m) ∥ R⦄
 Proof
-  cheat
+  rw[stmts_spec_def, expr_spec_def] >> rpt strip_tac >>
+  (* Phase 1: Unfold eval_stmts [For ...] → eval_stmt *)
+  simp[Once evaluate_def, bind_def, ignore_bind_def] >>
+  (* Phase 2: Unfold eval_stmt (For ...) → eval_iterator + check + eval_for *)
+  simp[Once evaluate_def, bind_def] >>
+  (* Phase 3: Unfold eval_iterator (Range ...) *)
+  simp[Once evaluate_def, bind_def] >>
+  (* Phase 4: Evaluate e1 using expr_spec hypothesis *)
+  qpat_x_assum `∀st. P st ⇒ _` (qspec_then `st` mp_tac) >> simp[] >>
+  Cases_on `eval_expr cx e1 st` >> Cases_on `q` >> simp[] >>
+  strip_tac >> gvs[] >>
+  (* get_Value for e1 result, then evaluate e2 *)
+  simp[bind_def, get_Value_def, return_def] >>
+  qpat_x_assum `∀st. P' st ⇒ _` (qspec_then `r` mp_tac) >> simp[] >>
+  Cases_on `eval_expr cx e2 r` >> Cases_on `q` >> simp[] >>
+  strip_tac >> gvs[] >>
+  (* Phase 5: get_Value, get_range_limits, lift_sum, compatible_bound *)
+  simp[get_Value_def, return_def, bind_def, lift_sum_def,
+       check_def, assert_def, ignore_bind_def, compatible_bound_def] >>
+  (* Phase 6: Apply eval_for_spec.
+     Connect body hypothesis: instantiate stmts_spec body hyp with pushed
+     state, use lookup_in_current_scope_push and tl_scopes_push. *)
+  cheat (* TODO:
+     Step 1: Establish eval_for_spec body hypothesis from stmts_spec body hyp
+       rpt strip_tac >>
+       last_x_assum (qspec_then `k` mp_tac) >> simp[] >>
+       disch_then (qspec_then `st0 with scopes updated_by
+         CONS (FEMPTY |+ (string_to_num id, IntV ib k))` mp_tac) >>
+       simp[lookup_in_current_scope_push, tl_scopes_push]
+     Step 2: Apply eval_for_spec with I n r' (state after e2)
+       drule_all eval_for_spec
+     Step 3: Case split on eval_for result to match goal *)
 QED
 
 Theorem stmts_spec_assign:
