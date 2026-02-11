@@ -1217,14 +1217,14 @@ Proof
   gvs[return_def, raise_def]
 QED
 
-(* ----- Case 41: eval_expr (Call Send es) ----- *)
+(* ----- Case 41: eval_expr (Call Send es drv) ----- *)
 Theorem case_Send_imm_dom[local]:
-  ∀cx es.
+  ∀cx es drv.
     (∀s'' x t. check (LENGTH es = 2) "Send args" s'' = (INL x,t) ⇒
        ∀st res st'. eval_exprs cx es st = (res,st') ⇒
          preserves_immutables_dom cx st st') ⇒
     ∀st res st'.
-      eval_expr cx (Call Send es) st = (res, st') ⇒
+      eval_expr cx (Call Send es drv) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
   rpt strip_tac >>
@@ -1408,96 +1408,136 @@ Proof
   simp[check_def, assert_def, return_def]
 QED
 
-(* ----- Case: eval_expr (Call (ExtCall ...) es) ----- *)
+Theorem check_same_state[local]:
+  check b msg s = (r, s') ⇒ s' = s
+Proof
+  rw[check_def, assert_def] >> gvs[AllCaseEqs()]
+QED
+
+Theorem lift_option_same_state[local]:
+  lift_option v msg s = (r, s') ⇒ s' = s
+Proof
+  rw[lift_option_def] >> Cases_on `v` >> gvs[return_def, raise_def]
+QED
+
+(* ----- Case: eval_expr (Call (ExtCall ...) es drv) ----- *)
 Theorem case_ExtCall_imm_dom[local]:
-  ∀cx is_static' func_name arg_types ret_type es.
-    (∀st res st'.
-       eval_exprs cx es st = (res,st') ⇒
+  ∀cx is_static func_name arg_types ret_type es drv.
+    (* drv IH from evaluate_ind *)
+    (∀s'' vs t s'³' x t' s'⁴' target_addr t'' s'⁵' value_opt arg_vals t'³'
+         s'⁶' ts t'⁴' tenv s'⁷' calldata t'⁵' s'⁸' accounts t'⁶' s'⁹'
+         tStorage t'⁷' txParams caller s'¹⁰' result t'⁸' success returnData
+         accounts' tStorage' s'¹¹' x' t'⁹' s'¹²' x'' t'¹⁰' s'¹³' x'³' t'¹¹'.
+       eval_exprs cx es s'' = (INL vs,t) ∧
+       check (vs ≠ []) "ExtCall no target" s'³' = (INL x,t') ∧
+       lift_option (dest_AddressV (HD vs))
+         "ExtCall target not address" s'⁴' = (INL target_addr,t'') ∧
+       (if is_static then return (NONE,TL vs)
+        else do
+          check (TL vs ≠ []) "ExtCall no value";
+          v <- lift_option (dest_NumV (HD (TL vs))) "ExtCall value not int";
+          return (SOME v,TL (TL vs))
+        od) s'⁵' = (INL (value_opt,arg_vals),t'³') ∧
+       lift_option (get_self_code cx) "ExtCall get_self_code" s'⁶' =
+       (INL ts,t'⁴') ∧ tenv = type_env ts ∧
+       lift_option (build_ext_calldata tenv func_name arg_types arg_vals)
+         "ExtCall build_calldata" s'⁷' = (INL calldata,t'⁵') ∧
+       get_accounts s'⁸' = (INL accounts,t'⁶') ∧
+       get_transient_storage s'⁹' = (INL tStorage,t'⁷') ∧
+       txParams = vyper_to_tx_params cx.txn ∧ caller = cx.txn.target ∧
+       lift_option
+         (run_ext_call caller target_addr calldata value_opt accounts tStorage
+            txParams) "ExtCall run failed" s'¹⁰' = (INL result,t'⁸') ∧
+       (success,returnData,accounts',tStorage') = result ∧
+       check success "ExtCall reverted" s'¹¹' = (INL x',t'⁹') ∧
+       update_accounts (K accounts') s'¹²' = (INL x'',t'¹⁰') ∧
+       update_transient (K tStorage') s'¹³' = (INL x'³',t'¹¹') ∧
+       returnData = [] ∧ IS_SOME drv ⇒
+       ∀st res st'. eval_expr cx (THE drv) st = (res,st') ⇒
+         preserves_immutables_dom cx st st') ∧
+    (* eval_exprs IH *)
+    (∀st res st'. eval_exprs cx es st = (res,st') ⇒
        preserves_immutables_dom cx st st') ⇒
     ∀st res st'.
-      eval_expr cx (Call (ExtCall is_static' (func_name,arg_types,ret_type)) es)
+      eval_expr cx (Call (ExtCall is_static (func_name,arg_types,ret_type)) es drv)
         st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
-  let
-    (* Tactic to resolve the result tuple and remaining do-block *)
-    val resolve_result_tac =
-      rename1 `run_ext_call _ _ _ _ _ _ _ = SOME result` >>
-      PairCases_on `result` >> gvs[] >>
-      qpat_x_assum `_ = (res, st')` mp_tac >>
-      simp[bind_def, assert_def, return_def, raise_def,
-           update_accounts_def, update_transient_def] >>
-      rpt (BasicProvers.FULL_CASE_TAC >>
-           gvs[return_def, raise_def,
-               update_accounts_def, update_transient_def, assert_def]) >>
-      rpt strip_tac >> gvs[]
-    (* Tactic to case-split the do-block after is_static resolution *)
-    val resolve_do_block_tac =
-      rpt (BasicProvers.FULL_CASE_TAC >>
-           gvs[return_def, raise_def,
-               get_accounts_def, get_transient_storage_def,
-               update_accounts_def, update_transient_def, assert_def]) >>
-      TRY resolve_result_tac
-  in
-  rpt strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def] >>
-  PURE_REWRITE_TAC [ignore_bind_def] >>
-  simp[bind_def, AllCaseEqs(), return_def, raise_def, check_def, assert_def,
-       lift_option_def, lift_sum_def,
-       get_accounts_def, get_transient_storage_def,
-       update_accounts_def, update_transient_def, LET_THM] >>
-  rpt strip_tac >> gvs[preserves_immutables_dom_refl] >> (
-    irule preserves_immutables_dom_trans >> qexists_tac `s''` >> conj_tac
-    >- gvs[]
-    >> irule preserves_immutables_dom_eq
-    (* Early error paths: dest_AddressV or is_static branch errors *)
-    >> TRY (Cases_on `dest_AddressV (HD vs)` >>
-            gvs[return_def, raise_def] >> NO_TAC)
-    >> TRY (Cases_on `is_static'` >>
-            gvs[return_def, raise_def, bind_def, assert_def] >>
-            TRY (Cases_on `TL vs ≠ []` >> gvs[return_def, raise_def]) >>
-            TRY (Cases_on `dest_NumV (HD (TL vs))` >>
-                 gvs[return_def, raise_def]) >> NO_TAC)
-    (* Success path: resolve is_static branch, then case-split do-block *)
-    >> Cases_on `dest_AddressV (HD vs)` >> gvs[return_def, raise_def]
-    >> Cases_on `is_static'` >> gvs[return_def, raise_def, bind_def, assert_def]
-    >> TRY (Cases_on `TL vs ≠ []` >> gvs[return_def, raise_def])
-    >> TRY (Cases_on `dest_NumV (HD (TL vs))` >> gvs[return_def, raise_def])
-    >> resolve_do_block_tac
-    >> gvs[bind_def, return_def]
-    >> resolve_do_block_tac
-  )
-  end
+  rpt strip_tac
+  \\ qhdtm_x_assum`eval_expr`mp_tac
+  \\ rw[evaluate_def, ETA_AX]
+  \\ qpat_x_assum`_ = (_,_)`mp_tac
+  \\ simp_tac(srw_ss())[
+       bind_def, ignore_bind_def, CaseEq"prod", CaseEq"sum", COND_RATOR,
+       CaseEq"bool", return_def]
+  \\ rpt strip_tac \\ gvs[preserves_immutables_dom_refl]
+  (* All goals: chain through s'' (state after eval_exprs) *)
+  \\ irule preserves_immutables_dom_trans
+  \\ qexists_tac `s''`
+  \\ (conj_tac >- (first_x_assum drule >> simp[]))
+  (* Error paths: state unchanged through check/lift_option *)
+  \\ TRY (imp_res_tac check_same_state
+          >> imp_res_tac lift_option_same_state
+          >> gvs[preserves_immutables_dom_refl]
+          >> NO_TAC)
+  (* Main path: unfold the remaining do-block *)
+  \\ qpat_x_assum `do _ od _ = _` mp_tac
+  \\ simp[bind_def, ignore_bind_def, CaseEq"prod", CaseEq"sum", COND_RATOR,
+          CaseEq"bool", return_def]
+  \\ strip_tac
+  \\ rpt (FIRST [qpat_x_assum `(_,_) = _` (assume_tac o GSYM),
+                  pairarg_tac >> gvs[]])
+  (* Close error sub-paths *)
+  \\ TRY (imp_res_tac check_same_state
+          >> imp_res_tac lift_option_same_state
+          >> gvs[AllCaseEqs(), return_def, raise_def,
+                 preserves_immutables_dom_refl]
+          >> NO_TAC)
+  (* Unfold case expressions for get_self_code/build_ext_calldata/run_ext_call *)
+  \\ gvs[option_CASE_rator, return_def, raise_def]
+  \\ gvs[AllCaseEqs()]
+  (* Unfold the inner do-block (check success, update_accounts, update_transient) *)
+  \\ qpat_x_assum `do _ od _ = _` mp_tac
+  \\ simp[bind_def, ignore_bind_def, check_def, assert_def,
+          update_accounts_def, update_transient_def, CaseEq"prod",
+          CaseEq"sum", CaseEq"bool", COND_RATOR, return_def]
+  \\ strip_tac
+  \\ gvs[return_def, lift_sum_def, preserves_immutables_dom_refl]
+  (* Non-drv cases: state only changed accounts/tStorage *)
+  \\ TRY (irule preserves_immutables_dom_eq
+          >> gvs[sum_CASE_rator, return_def, raise_def, AllCaseEqs()]
+          >> NO_TAC)
+  (* drv branch: chain through updated state *)
+  \\ irule preserves_immutables_dom_trans
+  \\ qexists_tac `s'' with <|accounts := accounts'; tStorage := tStorage'|>`
+  \\ (conj_tac >- (irule preserves_immutables_dom_eq >> simp[]))
+  (* Use drv IH *)
+  \\ last_x_assum drule
+  \\ simp[check_def, assert_def, lift_option_def, return_def, bind_def,
+          ignore_bind_def, get_accounts_def, get_transient_storage_def,
+          option_CASE_rator, update_accounts_def, update_transient_def]
+  \\ disch_then $ drule_at Any \\ simp[]
+  \\ strip_tac \\ first_x_assum irule
+  \\ gvs[check_def, assert_def, lift_option_def, return_def, raise_def,
+         AllCaseEqs()]
+  \\ qexistsl_tac [`accounts'`, `s''`, `s''`, `tStorage'`, `target_addr`]
+  \\ gvs[option_CASE_rator, return_def, raise_def, AllCaseEqs()]
 QED
 
-(* ----- Case: eval_expr (Call (IntCall ...) es) - updated ----- *)
+(* ----- Case: eval_expr (Call (IntCall ...) es drv) - updated ----- *)
 Theorem case_IntCall_imm_dom[local]:
-  ∀src_id_opt fn es cx.
-    (∀s'' x t s'³' ts t' s'⁴' tup t'' stup args sstup ret body' s'⁵' x'
-        t'³'.
+  ∀src_id_opt fn es cx v3.
+    (∀s'' x t s'³' ts t' s'⁴' tup t'' stup args sstup dflts sstup2 ret
+        body' s'⁵' x' t'³' s'⁶' vs t'⁴' tenv all_mods all_tenv s'⁷' env
+        t'⁵' s'⁸' prev t'⁶' s'⁹' rtv t'⁷' s'¹⁰' cxf t'⁸'.
        check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
        lift_option (get_module_code cx src_id_opt)
          "IntCall get_module_code" s'³' = (INL ts,t') ∧
        lift_option (lookup_callable_function cx.in_deploy fn ts)
          "IntCall lookup_function" s'⁴' = (INL tup,t'') ∧ stup = SND tup ∧
-       args = FST stup ∧ sstup = SND stup ∧ ret = FST sstup ∧
-       body' = SND sstup ∧
-       check (LENGTH args = LENGTH es) "IntCall args length" s'⁵' =
-       (INL x',t'³') ⇒
-       ∀st res st'.
-         eval_exprs cx es st = (res,st') ⇒
-         preserves_immutables_dom cx st st') ∧
-    (∀s'' x t s'³' ts t' s'⁴' tup t'' stup args sstup ret body' s'⁵' x' t'³'
-        s'⁶' vs t'⁴' tenv all_mods all_tenv s'⁷' env t'⁵' s'⁸' prev t'⁶'
-        s'⁹' rtv t'⁷' s'¹⁰' cxf t'⁸'.
-       check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
-       lift_option (get_module_code cx src_id_opt)
-         "IntCall get_module_code" s'³' = (INL ts,t') ∧
-       lift_option (lookup_callable_function cx.in_deploy fn ts)
-         "IntCall lookup_function" s'⁴' = (INL tup,t'') ∧ stup = SND tup ∧
-       args = FST stup ∧ sstup = SND stup ∧ ret = FST sstup ∧
-       body' = SND sstup ∧
+       args = FST stup ∧ sstup = SND stup ∧
+       dflts = FST sstup ∧ sstup2 = SND sstup ∧
+       ret = FST sstup2 ∧ body' = SND sstup2 ∧
        check (LENGTH args = LENGTH es) "IntCall args length" s'⁵' =
        (INL x',t'³') ∧ eval_exprs cx es s'⁶' = (INL vs,t'⁴') ∧
        tenv = type_env ts ∧
@@ -1511,24 +1551,41 @@ Theorem case_IntCall_imm_dom[local]:
        push_function (src_id_opt,fn) env cx s'¹⁰' = (INL cxf,t'⁸') ⇒
        ∀st res st'.
          eval_stmts cxf body' st = (res,st') ⇒
-         preserves_immutables_dom cxf st st') ⇒
+         preserves_immutables_dom cxf st st') ∧
+    (∀s'' x t s'³' ts t' s'⁴' tup t'' stup args sstup dflts sstup2 ret
+        body' s'⁵' x' t'³'.
+       check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
+       lift_option (get_module_code cx src_id_opt)
+         "IntCall get_module_code" s'³' = (INL ts,t') ∧
+       lift_option (lookup_callable_function cx.in_deploy fn ts)
+         "IntCall lookup_function" s'⁴' = (INL tup,t'') ∧ stup = SND tup ∧
+       args = FST stup ∧ sstup = SND stup ∧
+       dflts = FST sstup ∧ sstup2 = SND sstup ∧
+       ret = FST sstup2 ∧ body' = SND sstup2 ∧
+       check (LENGTH args = LENGTH es) "IntCall args length" s'⁵' =
+       (INL x',t'³') ⇒
+       ∀st res st'.
+         eval_exprs cx es st = (res,st') ⇒
+         preserves_immutables_dom cx st st') ⇒
     ∀st res st'.
-      eval_expr cx (Call (IntCall (src_id_opt,fn)) es) st = (res, st') ⇒
+      eval_expr cx (Call (IntCall (src_id_opt,fn)) es v3) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
   rpt gen_tac >> strip_tac >>
-  pop_assum (fn ih2 => pop_assum (fn ih1 =>
+  pop_assum (fn ih1 => pop_assum (fn ih2 =>
     let val ih1' = SIMP_RULE (srw_ss())
           [check_def, assert_def, lift_option_def, return_def, AllCaseEqs()] ih1
         val ih2' = SIMP_RULE (srw_ss())
           [check_def, assert_def, lift_option_def, return_def, AllCaseEqs(),
            get_scopes_def, push_function_def] ih2
+        val tup_ty = ``:function_mutability # (string # type) list #
+                        expr list # type # stmt list``
         (* Derive clean eval_exprs IH from conditional one *)
         val derive_ih1 =
           assume_tac ih1' >>
           first_x_assum (mp_tac o SPECL [``st:evaluation_state``, ``ts:toplevel list``,
             ``st:evaluation_state``, ``st:evaluation_state``,
-            ``tup:function_mutability # (string # type) list # type # stmt list``,
+            mk_var("tup", tup_ty),
             ``st:evaluation_state``]) >>
           gvs[return_def] >> strip_tac
     in
@@ -1550,13 +1607,13 @@ Proof
     (* Finally cases: derive eval_stmts IH, then use case_IntCall_imm_dom_inner *)
     (`∀st res st'.
         eval_stmts (cx with stk updated_by CONS (src_id_opt,fn))
-          (SND (SND (SND tup))) st = (res,st') ⇒
+          (SND (SND (SND (SND tup)))) st = (res,st') ⇒
         preserves_immutables_dom
           (cx with stk updated_by CONS (src_id_opt,fn)) st st'` by
       (rpt strip_tac >>
        mp_tac (SPECL [``st':evaluation_state``, ``ts:toplevel list``,
          ``st':evaluation_state``, ``st':evaluation_state``,
-         ``tup:function_mutability # (string # type) list # type # stmt list``,
+         mk_var("tup", tup_ty),
          ``st':evaluation_state``] ih2') >>
        gvs[return_def] >>
        disch_then drule >> simp[return_def] >>
