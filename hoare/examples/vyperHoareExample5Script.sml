@@ -45,8 +45,196 @@ Proof
   EVAL_TAC
 QED
 
+(* ===== Semantic Helper Lemmas ===== *)
+
+(* lookup_immutable only depends on st.immutables, which update_scoped_var
+   does not change *)
+Theorem lookup_immutable_preserved_after_update:
+  ∀cx st n v k.
+    lookup_immutable cx (update_scoped_var st n v) k =
+    lookup_immutable cx st k
+Proof
+  rw[lookup_immutable_def, immutables_preserved_after_update]
+QED
+
+(* Gauss sum: base case *)
+Theorem gauss_sum_zero:
+  0 * (0 − 1:int) / 2 = 0
+Proof
+  EVAL_TAC
+QED
+
+(* Gauss sum: inductive step identity and bounds *)
+Theorem gauss_sum_step:
+  ∀k n:int. 0 ≤ k ∧ k < n ∧ n ≤ 1000000 ⇒
+    within_int_bound (Unsigned 256) (k * (k − 1) / 2 + k) ∧
+    k * (k − 1) / 2 + k = (k + 1) * k / 2
+Proof
+  cheat
+QED
+
+(* ===== Lemma 1: AnnAssign s := 0 ===== *)
+
+(*
+  Proof strategy:
+  1. irule stmts_spec_ann_assign
+  2. Use expr_spec_literal for Literal (IntL (Unsigned 256) 0)
+  3. Postcondition obligations via lookup lemmas:
+     - lookup_scoped_var st "s" = NONE (from lookup_name_none_to_lookup_scoped_var)
+     - scopes_nonempty_after_update
+     - valid_lookups_preserved_after_update_no_name
+     - lookup_after_update
+     - lookup_immutable_preserved_after_update
+*)
+Theorem stmt1_ann_assign_s:
+  ∀cx n.
+    ⟦cx⟧
+    ⦃λst. valid_lookups cx st ∧
+          lookup_immutable cx st "n" = SOME (IntV (Unsigned 256) n) ∧
+          lookup_name cx st "s" = NONE⦄
+    [AnnAssign "s" (BaseT (UintT 256)) (Literal (IntL (Unsigned 256) 0))]
+    ⦃λst. valid_lookups cx st ∧ st.scopes ≠ [] ∧
+          lookup_scoped_var st "s" = SOME (IntV (Unsigned 256) 0) ∧
+          lookup_immutable cx st "n" = SOME (IntV (Unsigned 256) n)
+     ∥ λ_ _. F⦄
+Proof
+  cheat
+QED
+
+(* ===== Lemma 2: For loop body s += i ===== *)
+
+(*
+  Proof strategy:
+  1. Use stmts_spec_consequence to connect for-body precondition to
+     stmts_spec_aug_assign_scoped_var precondition
+  2. Derive var_in_scope st "s" from lookup_scoped_var (tl_scopes st) "s"
+     via lookup_in_tl_scopes (reversed)
+  3. Evaluate Name "i" using expr_spec_scoped_var_eq
+     (needs valid_lookups cx st, derived from valid_lookups cx (tl_scopes st))
+  4. evaluate_binop Add gives k*(k-1)/2 + k = (k+1)*k/2 (gauss_sum_step)
+  5. Postcondition: tl_scopes (update_scoped_var st "s" v)
+     = update_scoped_var (tl_scopes st) "s" v
+     (by tl_scopes_update_eq_update_tl_scopes, since "s" not in current scope)
+*)
+Theorem for_body_lemma:
+  ∀cx n k.
+    0 ≤ k ∧ k < n ∧ n ≤ 1000000 ⇒
+    ⟦cx⟧
+    ⦃λst. lookup_in_current_scope st "i" = SOME (IntV (Unsigned 256) k) ∧
+          valid_lookups cx (tl_scopes st) ∧
+          (tl_scopes st).scopes ≠ [] ∧
+          lookup_scoped_var (tl_scopes st) "s" =
+            SOME (IntV (Unsigned 256) (k * (k − 1) / 2)) ∧
+          lookup_immutable cx (tl_scopes st) "n" =
+            SOME (IntV (Unsigned 256) n)⦄
+    [AugAssign (NameTarget "s") Add (Name "i")]
+    ⦃λst. valid_lookups cx (tl_scopes st) ∧
+          (tl_scopes st).scopes ≠ [] ∧
+          lookup_scoped_var (tl_scopes st) "s" =
+            SOME (IntV (Unsigned 256) ((k + 1) * k / 2)) ∧
+          lookup_immutable cx (tl_scopes st) "n" =
+            SOME (IntV (Unsigned 256) n)
+     ∥ λv st. F⦄
+Proof
+  cheat
+QED
+
+(* ===== Lemma 3: For loop ===== *)
+
+(*
+  Proof strategy:
+  1. irule stmts_spec_for_range with:
+     - I = λk st. valid_lookups cx st ∧ st.scopes ≠ [] ∧
+                   lookup_scoped_var st "s" = SOME (IntV (Unsigned 256) (k*(k-1)/2)) ∧
+                   lookup_immutable cx st "n" = SOME (IntV (Unsigned 256) n)
+     - v1 = IntV (Unsigned 256) 0, v2 = IntV (Unsigned 256) n
+     - n_start = 0, m = Num n
+  2. Subgoals:
+     a. Num n ≤ 1000000 (from 0 ≤ n ∧ n ≤ 1000000)
+     b. get_range_limits v1 v2 = INL (Unsigned 256, 0, Num n)
+        (needs 0 ≤ n, via get_range_limits_def)
+     c. expr_spec for e1 = Literal 0 (via expr_spec_literal)
+     d. expr_spec for e2 = Name "n"
+        (via expr_spec_name_eq + lookup_immutable_implies_lookup_name)
+        Postcondition establishes I(0) with gauss_sum_zero
+     e. Body: use for_body_lemma
+  3. Postcondition: I(0 + &(Num n)) = I(n) (since 0 ≤ n)
+*)
+Theorem stmt2_for_range:
+  ∀cx n.
+    0 ≤ n ∧ n ≤ 1000000 ⇒
+    ⟦cx⟧
+    ⦃λst. valid_lookups cx st ∧ st.scopes ≠ [] ∧
+          lookup_scoped_var st "s" = SOME (IntV (Unsigned 256) 0) ∧
+          lookup_immutable cx st "n" = SOME (IntV (Unsigned 256) n)⦄
+    [For "i" (BaseT (UintT 256))
+      (Range (Literal (IntL (Unsigned 256) 0)) (Name "n")) 1000000
+      [AugAssign (NameTarget "s") Add (Name "i")]]
+    ⦃λst. valid_lookups cx st ∧ st.scopes ≠ [] ∧
+          lookup_scoped_var st "s" =
+            SOME (IntV (Unsigned 256) (n * (n − 1) / 2)) ∧
+          lookup_immutable cx st "n" = SOME (IntV (Unsigned 256) n)
+     ∥ λ_ _. F⦄
+Proof
+  cheat
+QED
+
+(* ===== Lemma 4: Return s ===== *)
+
+(*
+  Proof strategy:
+  1. irule stmts_spec_return_some
+  2. Use expr_spec_scoped_var_eq to evaluate Name "s"
+     to IntV (Unsigned 256) (n*(n-1)/2)
+  3. Wrap with expr_spec_consequence
+*)
+Theorem stmt3_return_s:
+  ∀cx n.
+    ⟦cx⟧
+    ⦃λst. valid_lookups cx st ∧ st.scopes ≠ [] ∧
+          lookup_scoped_var st "s" =
+            SOME (IntV (Unsigned 256) (n * (n − 1) / 2)) ∧
+          lookup_immutable cx st "n" = SOME (IntV (Unsigned 256) n)⦄
+    [Return (SOME (Name "s"))]
+    ⦃λ_. F ∥ λv st. v = IntV (Unsigned 256) (n * (n − 1) / 2)⦄
+Proof
+  rpt strip_tac >>
+  irule stmts_spec_return_some >>
+  irule expr_spec_consequence >>
+  qexistsl_tac [
+    `λst. (st.scopes ≠ [] ∧
+           lookup_immutable cx st "n" = SOME (IntV (Unsigned 256) n)) ∧
+          valid_lookups cx st ∧
+          lookup_scoped_var st "s" =
+            SOME (IntV (Unsigned 256) (n * (n − 1) / 2))`,
+    `λtv st. (st.scopes ≠ [] ∧
+              lookup_immutable cx st "n" = SOME (IntV (Unsigned 256) n)) ∧
+             valid_lookups cx st ∧
+             lookup_scoped_var st "s" =
+               SOME (IntV (Unsigned 256) (n * (n − 1) / 2)) ∧
+             tv = Value (IntV (Unsigned 256) (n * (n − 1) / 2))`] >>
+  simp[] >>
+  ACCEPT_TAC (BETA_RULE (ISPECL [
+    ``λst:evaluation_state. st.scopes ≠ [] ∧
+       lookup_immutable (cx:evaluation_context) st "n" =
+         SOME (IntV (Unsigned 256) (n:int))``,
+    ``cx:evaluation_context``, ``"s":string``,
+    ``IntV (Unsigned 256) (n * (n − 1) / 2)``] expr_spec_scoped_var_eq))
+QED
+
+(* ===== Main Theorem ===== *)
+
+(*
+  Proof structure:
+  1. Unfold example_5_body to 3 statements
+  2. stmts_spec_cons: split [s:=0] from [for; return]
+     - stmt 1 via stmt1_ann_assign_s + consequence (F ⇒ R)
+  3. stmts_spec_cons: split [for] from [return]
+     - stmt 2 via stmt2_for_range + consequence (F ⇒ R)
+     - stmt 3 via stmt3_return_s
+*)
 Theorem example_5_thm:
-  ∀cx n. n ≤ 1000000 ⇒
+  ∀cx n. 0 ≤ n ∧ n ≤ 1000000 ⇒
     ⟦cx⟧
     ⦃λst.
       valid_lookups cx st ∧
@@ -55,5 +243,46 @@ Theorem example_5_thm:
     example_5_body
     ⦃λ_. F ∥ λv st. v = IntV (Unsigned 256) (n * (n - 1) / 2)⦄
 Proof
-  cheat
+  rpt strip_tac >>
+  simp[example_5_body_def, example_5_decl_def, example_5_module_def] >>
+  (* Split: [AnnAssign s] ++ [For; Return] *)
+  irule stmts_spec_cons >>
+  qexists_tac `λst. valid_lookups cx st ∧ st.scopes ≠ [] ∧
+                    lookup_scoped_var st "s" = SOME (IntV (Unsigned 256) 0) ∧
+                    lookup_immutable cx st "n" = SOME (IntV (Unsigned 256) n)` >>
+  conj_tac >- (
+    (* Statement 1: s := 0 *)
+    irule stmts_spec_consequence >>
+    qexistsl_tac [
+      `λst. valid_lookups cx st ∧
+            lookup_immutable cx st "n" = SOME (IntV (Unsigned 256) n) ∧
+            lookup_name cx st "s" = NONE`,
+      `λst. valid_lookups cx st ∧ st.scopes ≠ [] ∧
+            lookup_scoped_var st "s" = SOME (IntV (Unsigned 256) 0) ∧
+            lookup_immutable cx st "n" = SOME (IntV (Unsigned 256) n)`,
+      `λ_ _. F`] >>
+    simp[] >>
+    irule stmt1_ann_assign_s) >>
+  (* Split: [For] ++ [Return] *)
+  irule stmts_spec_cons >>
+  qexists_tac `λst. valid_lookups cx st ∧ st.scopes ≠ [] ∧
+                    lookup_scoped_var st "s" =
+                      SOME (IntV (Unsigned 256) (n * (n − 1) / 2)) ∧
+                    lookup_immutable cx st "n" = SOME (IntV (Unsigned 256) n)` >>
+  conj_tac >- (
+    (* Statement 2: For loop *)
+    irule stmts_spec_consequence >>
+    qexistsl_tac [
+      `λst. valid_lookups cx st ∧ st.scopes ≠ [] ∧
+            lookup_scoped_var st "s" = SOME (IntV (Unsigned 256) 0) ∧
+            lookup_immutable cx st "n" = SOME (IntV (Unsigned 256) n)`,
+      `λst. valid_lookups cx st ∧ st.scopes ≠ [] ∧
+            lookup_scoped_var st "s" =
+              SOME (IntV (Unsigned 256) (n * (n − 1) / 2)) ∧
+            lookup_immutable cx st "n" = SOME (IntV (Unsigned 256) n)`,
+      `λ_ _. F`] >>
+    simp[] >>
+    irule stmt2_for_range >> simp[]) >>
+  (* Statement 3: Return s *)
+  irule stmt3_return_s
 QED

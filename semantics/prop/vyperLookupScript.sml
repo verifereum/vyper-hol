@@ -802,3 +802,19 @@ Proof
     by simp[tl_scopes_update_eq_update_tl_scopes] >>
   simp[lookup_name_preserved_after_update]
 QED
+
+(* valid_lookups through scope push when the pushed scope has only
+   variables that are not immutables *)
+Theorem valid_lookups_push_non_immutable:
+  ∀cx st id v.
+    valid_lookups cx (tl_scopes st) ∧
+    HD st.scopes = FEMPTY |+ (string_to_num id, v) ∧
+    lookup_immutable cx st id = NONE ⇒
+    (cx.txn.is_creation ⇒ valid_lookups cx st)
+Proof
+  rw[valid_lookups_def, tl_scopes_def, lookup_immutable_def,
+     var_in_scope_def, lookup_scoped_var_def] >>
+  qexists_tac `imms` >> simp[] >> rpt strip_tac >>
+  Cases_on `st.scopes` >> gvs[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `string_to_num id = string_to_num n` >> gvs[]
+QED
