@@ -551,7 +551,7 @@ QED
      INL: I(n+1), continue with IH.  INR Return: R v, propagates.
      Others: F, contradiction.
    pop_scope_tl_scopes + scopes_nonempty justify pop_scope succeeds. *)
-Theorem eval_for_spec:
+Theorem eval_for_spec[local]:
   ∀m n ib nm bdy cx (I: int -> evaluation_state -> bool) R st.
     (∀k:int. n ≤ k ∧ k < n + &m ⇒
       ∀st0. I k st0 ⇒

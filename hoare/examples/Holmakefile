@@ -18,6 +18,7 @@ example_1.json: example_1.vy
 example_2.json: example_2.vy
 example_3.json: example_3.vy
 example_4.json: example_4.vy
+example_5.json: example_5.vy
 $(VYPER_JSONS):
 	$(VYPER) $< -f annotated_ast > $@
 else
@@ -31,3 +32,4 @@ vyperHoareExample1Theory.uo: example_1.json
 vyperHoareExample2Theory.uo: example_2.json
 vyperHoareExample3Theory.uo: example_3.json
 vyperHoareExample4Theory.uo: example_4.json
+vyperHoareExample5Theory.uo: example_5.json
