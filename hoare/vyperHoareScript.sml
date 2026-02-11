@@ -700,19 +700,28 @@ Proof
   (* Phase 5: get_Value, get_range_limits, lift_sum, compatible_bound *)
   simp[get_Value_def, return_def, bind_def, lift_sum_def,
        check_def, assert_def, ignore_bind_def, compatible_bound_def] >>
-  (* Phase 6: Apply eval_for_spec.
-     Connect body hypothesis: instantiate stmts_spec body hyp with pushed
-     state, use lookup_in_current_scope_push and tl_scopes_push. *)
-  cheat (* TODO:
-     Step 1: Establish eval_for_spec body hypothesis from stmts_spec body hyp
-       rpt strip_tac >>
-       last_x_assum (qspec_then `k` mp_tac) >> simp[] >>
-       disch_then (qspec_then `st0 with scopes updated_by
-         CONS (FEMPTY |+ (string_to_num id, IntV ib k))` mp_tac) >>
-       simp[lookup_in_current_scope_push, tl_scopes_push]
-     Step 2: Apply eval_for_spec with I n r' (state after e2)
-       drule_all eval_for_spec
-     Step 3: Case split on eval_for result to match goal *)
+  (* Phase 6: Apply eval_for_spec *)
+  `∀k:int. n ≤ k ∧ k < n + &m ⇒
+     ∀st0. I' k st0 ⇒
+       case eval_stmts cx body
+              (st0 with scopes updated_by CONS
+                 (FEMPTY |+ (string_to_num id, IntV ib k))) of
+       | (INL (),st1) => I' (k + 1) (tl_scopes st1)
+       | (INR (ReturnException v),st1) => R v (tl_scopes st1)
+       | _ => F` by (
+    rpt strip_tac >>
+    qpat_x_assum `∀k. _ ⇒ ∀st. _ ⇒ _` (qspec_then `k` mp_tac) >>
+    simp[] >>
+    disch_then (qspec_then
+      `st0 with scopes updated_by CONS
+         (FEMPTY |+ (string_to_num id, IntV ib k))` mp_tac) >>
+    simp[lookup_in_current_scope_push, tl_scopes_push]
+  ) >>
+  drule_all eval_for_spec >> strip_tac >>
+  Cases_on `eval_for cx (string_to_num id) body
+              (GENLIST (λn'. IntV ib (n + &n')) m) r''` >>
+  Cases_on `q` >> gvs[Once evaluate_def, return_def] >>
+  Cases_on `y` >> gvs[]
 QED
 
 Theorem stmts_spec_assign:
