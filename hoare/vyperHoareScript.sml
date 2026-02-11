@@ -607,13 +607,57 @@ Theorem eval_for_spec:
     | (INR (ReturnException v), st') => R v st'
     | _ => F
 Proof
-  cheat (* TODO: Induct_on `m`
-     Base: simp[Once evaluate_def, return_def]
-     Step: Rewrite GENLIST (SUC m'), simp[Once evaluate_def, bind_def,
-       push_scope_with_var_def, return_def, ignore_bind_def, finally_def,
-       try_def], Cases_on eval_stmts, use body hyp at k=n,
-       subcases: INL → IH, INR Return → propagate, others → contradiction.
-       Use scopes_nonempty_after_eval_stmts_push + pop_scope_tl_scopes. *)
+  Induct_on `m`
+  >- simp[Once evaluate_def, return_def]
+  >> rpt strip_tac
+  >> simp[listTheory.GENLIST_CONS, combinTheory.o_DEF]
+  >> simp[Once evaluate_def, bind_def, push_scope_with_var_def,
+          return_def, ignore_bind_def, finally_def, try_def]
+  >> Cases_on `eval_stmts cx bdy
+        (st with scopes updated_by CONS (FEMPTY |+ (nm, IntV ib n)))`
+  >> rename1 `_ = (res, st1)`
+  >> `st1.scopes ≠ []` by metis_tac[scopes_nonempty_after_eval_stmts_push]
+  >> Cases_on `res`
+  >> simp[pop_scope_tl_scopes, return_def, handle_loop_exception_def, raise_def]
+  >- (
+    (* INL case: apply IH with n+1 *)
+    first_x_assum (qspecl_then
+      [`n + 1`, `ib`, `nm`, `bdy`, `cx`, `I'`, `R`, `tl_scopes st1`] mp_tac) >>
+    simp[integerTheory.INT_ADD_ASSOC] >>
+    impl_tac >- (
+      conj_tac >- (
+        rpt strip_tac >>
+        qpat_assum `∀k. n ≤ k ∧ _ ⇒ _` (qspec_then `k` mp_tac) >>
+        impl_tac >- intLib.ARITH_TAC >>
+        disch_then (qspec_then `st0` mp_tac) >> simp[]
+      ) >>
+      qpat_x_assum `∀k. n ≤ k ∧ _ ⇒ _` (qspec_then `n` mp_tac) >>
+      impl_tac >- intLib.ARITH_TAC >>
+      disch_then (qspec_then `st` mp_tac) >>
+      impl_tac >- simp[] >>
+      asm_rewrite_tac[] >> simp[]
+    ) >>
+    `(λi. IntV ib (n + 1 + &i)) = (λx. IntV ib (n + &SUC x))` by (
+      simp[FUN_EQ_THM] >> intLib.ARITH_TAC
+    ) >>
+    `n + 1 + &m = n + &SUC m` by intLib.ARITH_TAC >>
+    simp[]
+  )
+  >> (
+    (* INR case: use body hypothesis at k=n *)
+    rename1 `_ = (INR exc, _)` >>
+    qpat_x_assum `∀k. n ≤ k ∧ _ ⇒ _` (qspec_then `n` mp_tac) >>
+    impl_tac >- intLib.ARITH_TAC >>
+    disch_then (qspec_then `st` mp_tac) >>
+    impl_tac >- simp[] >>
+    disch_then assume_tac >>
+    Cases_on `exc` >>
+    simp[return_def, raise_def, pop_scope_tl_scopes] >>
+    pop_assum mp_tac >>
+    pop_assum mp_tac >>
+    pop_assum (fn th => REWRITE_TAC[th]) >>
+    simp[]
+  )
 QED
 
 (* ===================================================================== *)
