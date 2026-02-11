@@ -544,8 +544,8 @@ Theorem lookup_in_current_scope_push:
     (st with scopes updated_by CONS (FEMPTY |+ (string_to_num id, v))) id
   = SOME v
 Proof
-  cheat (* TODO: simp[lookup_in_current_scope_def, evaluation_state_accfupds,
-                       FLOOKUP_UPDATE] *)
+  simp[lookup_in_current_scope_def, evaluation_state_accfupds,
+       finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 (* After pushing a scope, tl_scopes recovers the original state.
@@ -555,8 +555,8 @@ QED
 Theorem tl_scopes_push:
   tl_scopes (st with scopes updated_by CONS sc) = st
 Proof
-  cheat (* TODO: simp[tl_scopes_def, evaluation_state_accfupds] >>
-                  Cases_on `st` >> simp[evaluation_state_fn_updates] *)
+  simp[tl_scopes_def, evaluation_state_accfupds] >>
+  Cases_on `st` >> simp[evaluation_state_fn_updates]
 QED
 
 (* When scopes non-empty, pop_scope ≡ (INL (), tl_scopes st).
@@ -566,8 +566,7 @@ QED
 Theorem pop_scope_tl_scopes:
   st.scopes ≠ [] ⇒ pop_scope st = (INL (), tl_scopes st)
 Proof
-  cheat (* TODO: Cases_on `st.scopes` >>
-                  simp[pop_scope_def, tl_scopes_def, return_def] *)
+  Cases_on `st.scopes` >> simp[pop_scope_def, tl_scopes_def, return_def]
 QED
 
 (* After eval_stmts in pushed scope, scopes still non-empty.
@@ -578,9 +577,9 @@ Theorem scopes_nonempty_after_eval_stmts_push:
   eval_stmts cx bdy (st with scopes updated_by CONS sc) = (res, st') ⇒
   st'.scopes ≠ []
 Proof
-  cheat (* TODO: drule eval_stmts_preserves_scopes_len >>
-                  simp[evaluation_state_accfupds] >>
-                  Cases_on `st'.scopes` >> simp[] *)
+  strip_tac >> drule eval_stmts_preserves_scopes_len >>
+  simp[evaluation_state_accfupds] >>
+  Cases_on `st'.scopes` >> simp[]
 QED
 
 (* ===================================================================== *)
