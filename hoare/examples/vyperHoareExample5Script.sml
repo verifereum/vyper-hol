@@ -64,13 +64,99 @@ Proof
   EVAL_TAC
 QED
 
+(* Helper: product of consecutive integers is even *)
+Theorem consecutive_product_mod2:
+  ∀k:int. 0 ≤ k ⇒ (k * (k − 1)) % 2 = 0
+Proof
+  rpt strip_tac >>
+  (* Suffices: ((k%2) * ((k-1)%2)) % 2 = 0, then use INT_MOD_MUL *)
+  `((k % 2) * ((k − 1) % 2)) % 2 = 0` suffices_by (
+    disch_tac >>
+    `(k * (k − 1)) % 2 = ((k % 2) * ((k − 1) % 2)) % 2` suffices_by simp[] >>
+    irule ratTheory.INT_MOD_MUL >> simp[]) >>
+  Cases_on `k % 2 = 0` >- simp[] >>
+  (* k % 2 ≠ 0, so k % 2 = 1 by INT_DIVISION *)
+  `k % 2 = 1` by (
+    `0 ≤ k % 2 ∧ k % 2 < 2` suffices_by intLib.COOPER_TAC >>
+    mp_tac (Q.SPEC `2` integerTheory.INT_DIVISION |> SIMP_RULE (srw_ss()) []) >>
+    disch_then (qspec_then `k` mp_tac) >> simp[]) >>
+  (* (k-1) % 2 = 0 by INT_MOD_SUB *)
+  `(k − 1) % 2 = 0` by (
+    `(k − 1) % 2 = (k % 2 − 1 % 2) % 2` by (
+      irule (GSYM integerTheory.INT_MOD_SUB) >> simp[]) >>
+    simp[]) >>
+  simp[]
+QED
+
+(* Helper: algebraic identity for Gauss sum step *)
+Theorem gauss_sum_identity:
+  ∀k:int. 0 ≤ k ⇒ k * (k − 1) / 2 + k = (k + 1) * k / 2
+Proof
+  rpt strip_tac >>
+  `(k * (k − 1)) % 2 = 0` by simp[consecutive_product_mod2] >>
+  `(k + 1) * k = k * (k − 1) + 2 * k` by (
+    simp[integerTheory.INT_RDISTRIB, integerTheory.INT_LDISTRIB,
+         integerTheory.INT_SUB_LDISTRIB] >> intLib.COOPER_TAC) >>
+  pop_assum (fn th => REWRITE_TAC [th]) >>
+  `(k * (k − 1) + 2 * k) / 2 = k * (k − 1) / 2 + 2 * k / 2` by (
+    irule integerTheory.INT_ADD_DIV >> simp[]) >>
+  simp[integerTheory.INT_DIV_LMUL]
+QED
+
 (* Gauss sum: inductive step identity and bounds *)
 Theorem gauss_sum_step:
   ∀k n:int. 0 ≤ k ∧ k < n ∧ n ≤ 1000000 ⇒
     within_int_bound (Unsigned 256) (k * (k − 1) / 2 + k) ∧
     k * (k − 1) / 2 + k = (k + 1) * k / 2
 Proof
-  cheat
+  rpt strip_tac >- (
+    (* within_int_bound *)
+    rw[vyperTypeValueTheory.within_int_bound_def] >- (
+      (* 0 ≤ k * (k − 1) / 2 + k *)
+      `k * (k − 1) / 2 + k = (k + 1) * k / 2` by simp[gauss_sum_identity] >>
+      pop_assum SUBST_ALL_TAC >>
+      `0 ≤ (k + 1) * k` by (irule integerTheory.INT_LE_MUL >> intLib.COOPER_TAC) >>
+      mp_tac (Q.SPECL [`λq. 0i ≤ q`, `(k+1)*k`, `2`] integerTheory.INT_DIV_FORALL_P
+        |> SIMP_RULE (srw_ss()) []) >>
+      simp[] >> rpt strip_tac >> intLib.COOPER_TAC) >>
+    (* Num (k * (k − 1) / 2 + k) < 2 ** 256 *)
+    `k * (k − 1) / 2 + k = (k + 1) * k / 2` by simp[gauss_sum_identity] >>
+    pop_assum SUBST_ALL_TAC >>
+    irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
+    qexists_tac `1000000 * 1000000` >> conj_tac >- (
+      (* Num ((k+1)*k/2) < 10^12 *)
+      `0 ≤ (k + 1) * k / 2` by (
+        `0 ≤ (k + 1) * k` by (irule integerTheory.INT_LE_MUL >> intLib.COOPER_TAC) >>
+        mp_tac (Q.SPECL [`λq. 0i ≤ q`, `(k+1)*k`, `2`] integerTheory.INT_DIV_FORALL_P
+          |> SIMP_RULE (srw_ss()) []) >>
+        simp[] >> rpt strip_tac >> intLib.COOPER_TAC) >>
+      `(k + 1) * k / 2 < &1000000000000` suffices_by (
+        strip_tac >>
+        `Num ((k + 1) * k / 2) < Num (&1000000000000:int)` suffices_by simp[] >>
+        simp[integerTheory.NUM_LT]) >>
+      (* (k+1)*k/2 < 10^12: use INT_DIV_FORALL_P *)
+      mp_tac (Q.SPECL [`λq. q < 1000000000000i`, `(k+1)*k`, `2`]
+        integerTheory.INT_DIV_FORALL_P |> SIMP_RULE (srw_ss()) []) >>
+      simp[] >> rpt strip_tac >>
+      Cases_on `k = 0` >- (gvs[] >> intLib.COOPER_TAC) >>
+      (* k ≠ 0: bound (k+1)*k ≤ n*n ≤ 10^12 *)
+      `(k + 1) * k ≤ n * n` by (
+        irule integerTheory.INT_LE_TRANS >> qexists_tac `n * k` >> conj_tac >- (
+          `0 < k ∧ k + 1 ≤ n` by intLib.COOPER_TAC >>
+          `k * (k + 1) ≤ k * n` by simp[integerTheory.INT_LE_MONO] >>
+          metis_tac[integerTheory.INT_MUL_COMM]) >>
+        `0 < n` by intLib.COOPER_TAC >>
+        simp[integerTheory.INT_LE_MONO] >> intLib.COOPER_TAC) >>
+      `n * n ≤ 1000000 * 1000000` by (
+        `0 < n` by intLib.COOPER_TAC >>
+        irule integerTheory.INT_LE_TRANS >> qexists_tac `1000000 * n` >> conj_tac >- (
+          `n * n ≤ n * 1000000` suffices_by simp[integerTheory.INT_MUL_COMM] >>
+          simp[integerTheory.INT_LE_MONO]) >>
+        simp[integerTheory.INT_LE_MONO]) >>
+      intLib.COOPER_TAC) >>
+    EVAL_TAC) >>
+  (* algebraic identity *)
+  simp[gauss_sum_identity]
 QED
 
 (* ===== Lemma 1: AnnAssign s := 0 ===== *)
