@@ -209,6 +209,28 @@ Proof
   gvs[finite_mapTheory.flookup_thm]
 QED
 
+Theorem lookup_in_current_scope_push:
+  lookup_in_current_scope
+    (st with scopes updated_by CONS (FEMPTY |+ (string_to_num id, v))) id
+  = SOME v
+Proof
+  simp[lookup_in_current_scope_def, evaluation_state_accfupds,
+       finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem tl_scopes_push:
+  tl_scopes (st with scopes updated_by CONS sc) = st
+Proof
+  simp[tl_scopes_def, evaluation_state_accfupds] >>
+  Cases_on `st` >> simp[evaluation_state_fn_updates]
+QED
+
+Theorem pop_scope_tl_scopes:
+  st.scopes ≠ [] ⇒ pop_scope st = (INL (), tl_scopes st)
+Proof
+  Cases_on `st.scopes` >> simp[pop_scope_def, tl_scopes_def, return_def]
+QED
+
 (****************************************)
 (* Theorems *)
 

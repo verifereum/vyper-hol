@@ -34,6 +34,19 @@ Definition target_spec_def:
       | (INR _, st') => F (* ignore exceptions in target expressions for now *)
 End
 
+Definition get_value_def[simp]:
+  get_value (Value v) = SOME v ∧
+  get_value _ = NONE
+End
+
+Definition get_value_to_key_def[simp]:
+  get_value_to_key (Value v) = value_to_key v ∧
+  get_value_to_key _ = NONE
+End
+
+(**********************************************************************)
+(* Syntax *)
+
 val _ =
   add_rule
     { term_name   = "stmts_spec",
@@ -119,15 +132,14 @@ Proof
   Cases_on `r` >> simp[evaluation_state_fn_updates]
 QED
 
-Definition get_value_def[simp]:
-  get_value (Value v) = SOME v ∧
-  get_value _ = NONE
-End
-
-Definition get_value_to_key_def[simp]:
-  get_value_to_key (Value v) = value_to_key v ∧
-  get_value_to_key _ = NONE
-End
+Theorem scopes_nonempty_after_eval_stmts_push[local]:
+  eval_stmts cx bdy (st with scopes updated_by CONS sc) = (res, st') ⇒
+  st'.scopes ≠ []
+Proof
+  strip_tac >> drule eval_stmts_preserves_scopes_len >>
+  simp[evaluation_state_accfupds] >>
+  Cases_on `st'.scopes` >> simp[]
+QED
 
 (**********************************************************************)
 (* Rules *)
@@ -531,58 +543,6 @@ Proof
 QED
 
 (* ===================================================================== *)
-(* Helper lemmas for stmts_spec_for_range                                *)
-(* ===================================================================== *)
-
-(* After pushing a scope with (string_to_num id, v), looking up id finds v.
-   WHY THIS IS TRUE: push prepends FEMPTY |+ (string_to_num id, v) to scopes.
-   lookup_in_current_scope does FLOOKUP (HD scopes) (string_to_num id).
-   FLOOKUP_UPDATE gives SOME v directly.
-   Plan ref: Section 3a. Used in: stmts_spec_for_range phase 5 *)
-Theorem lookup_in_current_scope_push:
-  lookup_in_current_scope
-    (st with scopes updated_by CONS (FEMPTY |+ (string_to_num id, v))) id
-  = SOME v
-Proof
-  simp[lookup_in_current_scope_def, evaluation_state_accfupds,
-       finite_mapTheory.FLOOKUP_UPDATE]
-QED
-
-(* After pushing a scope, tl_scopes recovers the original state.
-   WHY THIS IS TRUE: tl_scopes = st with scopes := TL st.scopes.
-   CONS sc prepends, TL removes it, and st with scopes := st.scopes = st.
-   Plan ref: Section 3b. Used in: stmts_spec_for_range phase 5 *)
-Theorem tl_scopes_push:
-  tl_scopes (st with scopes updated_by CONS sc) = st
-Proof
-  simp[tl_scopes_def, evaluation_state_accfupds] >>
-  Cases_on `st` >> simp[evaluation_state_fn_updates]
-QED
-
-(* When scopes non-empty, pop_scope ≡ (INL (), tl_scopes st).
-   WHY THIS IS TRUE: pop_scope cases on st.scopes; non-empty case returns
-   (INL (), st with scopes := TL st.scopes) = (INL (), tl_scopes st).
-   Plan ref: Section 3c. Used in: eval_for_spec inductive case *)
-Theorem pop_scope_tl_scopes:
-  st.scopes ≠ [] ⇒ pop_scope st = (INL (), tl_scopes st)
-Proof
-  Cases_on `st.scopes` >> simp[pop_scope_def, tl_scopes_def, return_def]
-QED
-
-(* After eval_stmts in pushed scope, scopes still non-empty.
-   WHY THIS IS TRUE: eval_stmts_preserves_scopes_len ensures same length.
-   Pushed state has ≥ 1 scope, so result has ≥ 1.
-   Plan ref: Section 3d. Used in: eval_for_spec to justify pop_scope *)
-Theorem scopes_nonempty_after_eval_stmts_push:
-  eval_stmts cx bdy (st with scopes updated_by CONS sc) = (res, st') ⇒
-  st'.scopes ≠ []
-Proof
-  strip_tac >> drule eval_stmts_preserves_scopes_len >>
-  simp[evaluation_state_accfupds] >>
-  Cases_on `st'.scopes` >> simp[]
-QED
-
-(* ===================================================================== *)
 (* Core helper: eval_for on GENLIST by induction on m.
    WHY THIS IS TRUE:
    Base (m=0): GENLIST f 0 = [], eval_for [] = return (), I(n+0) = I n.
@@ -590,8 +550,7 @@ QED
      push scope, try body, pop scope. Body hyp at k=n gives:
      INL: I(n+1), continue with IH.  INR Return: R v, propagates.
      Others: F, contradiction.
-   pop_scope_tl_scopes + scopes_nonempty justify pop_scope succeeds.
-   Plan ref: Section 4. Used in: stmts_spec_for_range *)
+   pop_scope_tl_scopes + scopes_nonempty justify pop_scope succeeds. *)
 Theorem eval_for_spec:
   ∀m n ib nm bdy cx (I: int -> evaluation_state -> bool) R st.
     (∀k:int. n ≤ k ∧ k < n + &m ⇒
@@ -660,14 +619,6 @@ Proof
   )
 QED
 
-(* ===================================================================== *)
-(* Main theorem: Hoare rule for for-range loops.
-   WHY THIS IS TRUE:
-   Unfold eval_stmts [For ...] through eval_stmt/eval_iterator to reach
-   eval_for on GENLIST. Use expr_spec for e1/e2 to evaluate range bounds.
-   Connect stmts_spec body hypothesis to eval_for_spec body hypothesis
-   via lookup_in_current_scope_push and tl_scopes_push. Apply eval_for_spec.
-   Plan ref: Section 5. *)
 Theorem stmts_spec_for_range:
   ∀P P' I cx id typ ib e1 e2 b body v1 v2 n m.
     m ≤ b ∧
