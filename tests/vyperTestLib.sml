@@ -391,8 +391,8 @@ val deployment : term decoder =
   check_trace_type "deployment" $
   JSONDecode.map (fn ((((srcs_exps_imap,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e),bc),sl) =>
              (* translate_annotated_ast returns (sources, exports, import_map) *)
-             let val (srcs_exps, import_map) = pairSyntax.dest_pair srcs_exps_imap
-                 val (srcs, exps) = pairSyntax.dest_pair srcs_exps in
+             let val (srcs, exps_import_map) = pairSyntax.dest_pair srcs_exps_imap
+                 val (exps, import_map) = pairSyntax.dest_pair exps_import_map in
              TypeBase.mk_record (deployment_trace_ty, [
                ("sourceAst", srcs),
                ("sourceExports", exps),
