@@ -803,14 +803,40 @@ Proof
   simp[lookup_name_preserved_after_update]
 QED
 
-(* valid_lookups through scope push when the pushed scope has only
-   variables that are not immutables *)
+Theorem lookup_immutable_tl_scopes:
+  ∀cx st n. lookup_immutable cx (tl_scopes st) n = lookup_immutable cx st n
+Proof
+  rw[lookup_immutable_def, tl_scopes_def]
+QED
+
+Theorem lookup_immutable_preserved_after_update:
+  ∀cx st n v k.
+    lookup_immutable cx (update_scoped_var st n v) k =
+    lookup_immutable cx st k
+Proof
+  rw[lookup_immutable_def, immutables_preserved_after_update]
+QED
+
 Theorem valid_lookups_push_non_immutable:
   ∀cx st id v.
     valid_lookups cx (tl_scopes st) ∧
     HD st.scopes = FEMPTY |+ (string_to_num id, v) ∧
     lookup_immutable cx st id = NONE ⇒
     (cx.txn.is_creation ⇒ valid_lookups cx st)
+Proof
+  rw[valid_lookups_def, tl_scopes_def, lookup_immutable_def,
+     var_in_scope_def, lookup_scoped_var_def] >>
+  qexists_tac `imms` >> simp[] >> rpt strip_tac >>
+  Cases_on `st.scopes` >> gvs[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `string_to_num id = string_to_num n` >> gvs[]
+QED
+
+Theorem valid_lookups_push_singleton:
+  ∀cx st id v.
+    valid_lookups cx (tl_scopes st) ∧
+    HD st.scopes = FEMPTY |+ (string_to_num id, v) ∧
+    lookup_immutable cx st id = NONE ⇒
+    valid_lookups cx st
 Proof
   rw[valid_lookups_def, tl_scopes_def, lookup_immutable_def,
      var_in_scope_def, lookup_scoped_var_def] >>

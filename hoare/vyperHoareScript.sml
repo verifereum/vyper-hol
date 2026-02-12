@@ -627,7 +627,9 @@ Theorem stmts_spec_for_range:
     (⟦cx⟧ ⦃P'⦄ e2 ⇓⦃λtv st. tv = Value v2 ∧ I n st⦄) ∧
     (∀k:int. n ≤ k ∧ k < n + &m ⇒
          ⟦cx⟧
-         ⦃λst. lookup_in_current_scope st id = SOME (IntV ib k) ∧ I k (tl_scopes st)⦄
+         ⦃λst. st.scopes ≠ [] ∧
+               HD st.scopes = FEMPTY |+ (string_to_num id, IntV ib k) ∧
+               I k (tl_scopes st)⦄
          body
          ⦃λst. I (k + 1) (tl_scopes st) ∥ λv st. R v (tl_scopes st)⦄) ⇒
     ⟦cx⟧ ⦃P⦄ [For id typ (Range e1 e2) b body] ⦃I (n + &m) ∥ R⦄
@@ -666,7 +668,7 @@ Proof
     disch_then (qspec_then
       `st0 with scopes updated_by CONS
          (FEMPTY |+ (string_to_num id, IntV ib k))` mp_tac) >>
-    simp[lookup_in_current_scope_push, tl_scopes_push]
+    simp[tl_scopes_push]
   ) >>
   drule_all eval_for_spec >> strip_tac >>
   Cases_on `eval_for cx (string_to_num id) body
