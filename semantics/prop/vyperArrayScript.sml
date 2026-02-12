@@ -56,7 +56,7 @@ Proof
 QED
 
 Theorem array_index_after_pop:
-  ∀a a' i. i ≠ &array_length a ∧ pop_element (ArrayV a) = INL (ArrayV a') ⇒ array_index a i = array_index a' i
+  ∀a a' i. valid_index a' i ∧ pop_element (ArrayV a) = INL (ArrayV a') ⇒ array_index a i = array_index a' i
 Proof
   cheat
 QED
@@ -80,7 +80,7 @@ Proof
 QED
 
 Theorem array_index_after_append_other:
-  ∀a a' i v. valid_index a i ∧ append_element (ArrayV a) v = INL (ArrayV a') ⇒ array_index a' i = SOME v
+  ∀a a' i v. valid_index a i ∧ append_element (ArrayV a) v = INL (ArrayV a') ⇒ array_index a' i = array_index a i
 Proof
   cheat
 QED
@@ -116,7 +116,7 @@ QED
 Theorem array_elements_after_append:
   ∀a a' v.
     append_element (ArrayV a) v = INL (ArrayV a') ⇒
-    array_elements a' = array_elements a ++ [v]
+    ∃ty v'. safe_cast ty v = SOME v' ∧ array_elements a' = array_elements a ++ [v']
 Proof
   cheat
 QED
