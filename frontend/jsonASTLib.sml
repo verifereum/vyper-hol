@@ -1141,9 +1141,9 @@ val storage_slot_info : term decoder =
 (* Decoder for a single code (immutable) slot entry *)
 val code_slot_info : term decoder =
   JSONDecode.map (fn (offset, length, type_str) =>
-                    mk_code_slot_info (mk_num_from_int offset, mk_num_from_int length, type_str))
-  (tuple3 (field "offset" int,
-           field "length" int,
+                    mk_code_slot_info (offset, length, type_str))
+  (tuple3 (field "offset" numtm,
+           field "length" numtm,
            field "type" string))
 
 (* Decode a JSON object as an association list, applying decoder to each value *)
