@@ -35,7 +35,7 @@ End
 
 Definition example_4_body_def:
   example_4_body = case example_4_decl of
-    | FunctionDecl _ _ _ _ _ body => body
+    | FunctionDecl _ _ _ _ _ _ body => body
     | _ => []
 End
 
