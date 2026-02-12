@@ -447,7 +447,9 @@ val test_decoder =
    field "traces" (array trace))
 
 fun trydecode ((name,json),(s,f)) =
-  if List.exists (equal name) excluded_test_names
+  if decode (field "item_type" string) json <> "test"
+  then (s,f)  (* skip fixtures and other non-test entries *)
+  else if List.exists (equal name) excluded_test_names
   then (s,f)
   else if List.exists (equal name) allowed_test_names
      orelse not (has_unsupported_source_json json)
