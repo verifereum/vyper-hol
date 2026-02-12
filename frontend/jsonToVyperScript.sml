@@ -5,6 +5,28 @@ Libs
   cv_transLib intLib
   integerTheory[qualified]
 
+
+(* Vyper uses negative source_ids for builtin modules (e.g., -2 for math).
+   We add this offset to convert source_ids to non-negative nums.
+   If Vyper adds more builtin modules, this value may need to increase. *)
+Definition builtin_source_id_offset_def:
+  builtin_source_id_offset = 2n
+End
+val () = cv_trans_deep_embedding EVAL builtin_source_id_offset_def;
+
+(* Convert a JSON source_id (int) to a vyperAST source_id (num option).
+   -1 maps to NONE (main module), others are offset to be non-negative. *)
+Definition source_id_to_nsid_def:
+  source_id_to_nsid (src_id:int) =
+    if src_id = -1 then NONE
+    else SOME (Num (src_id + &builtin_source_id_offset))
+End
+val () = cv_auto_trans source_id_to_nsid_def;
+
+Definition json_nsid_to_nsid_def:
+  json_nsid_to_nsid (src_id:int, name:string) =
+    (source_id_to_nsid src_id, name) : nsid
+End
 (* ===== Type Translation ===== *)
 
 (* Define mutual recursion to handle lists explicitly *)
@@ -436,10 +458,10 @@ val () = cv_auto_trans extract_func_name_def;
 Definition extract_innermost_module_src_def:
   (* Attribute with module typeclass has source_id directly *)
   (extract_innermost_module_src (JE_Attribute _ _ (SOME tc) src_id_opt) =
-    if tc = "module" then src_id_opt else NONE) /\
+    if tc = "module" then SOME src_id_opt else NONE) /\
   (* JE_Name with module typeclass *)
   (extract_innermost_module_src (JE_Name _ (SOME tc) src_id_opt) =
-    if tc = "module" then src_id_opt else NONE) /\
+    if tc = "module" then SOME src_id_opt else NONE) /\
   (* Other cases *)
   (extract_innermost_module_src _ = NONE)
 End
@@ -455,7 +477,7 @@ Definition extract_module_flag_def:
   (* Attribute expression for the flag type - look inside for the module *)
   (extract_module_flag (JE_Attribute inner flag_name _ _) =
     case extract_innermost_module_src inner of
-    | SOME src_id => SOME (SOME src_id, flag_name)
+    | SOME src_id => SOME (source_id_to_nsid src_id, flag_name)
     | NONE => NONE) /\
   (extract_module_flag _ = NONE)
 End
@@ -522,7 +544,7 @@ Definition translate_expr_def:
   (* attr_src_id_opt is from variable_reads on the outer Attribute (for self.x storage access) *)
   (translate_expr (JE_Attribute (JE_Name obj tc src_id_opt) attr result_tc attr_src_id_opt) =
     (* Same-module flag member: Action.BUY where tc = SOME "flag" *)
-    if tc = SOME "flag" /\ result_tc = SOME "flag" then FlagMember (src_id_opt, obj) attr
+    if tc = SOME "flag" /\ result_tc = SOME "flag" then FlagMember (source_id_to_nsid src_id_opt, obj) attr
     else if obj = "msg" /\ attr = "sender" then Builtin (Env Sender) []
     else if obj = "msg" /\ attr = "value" then Builtin (Env ValueSent) []
     else if obj = "block" /\ attr = "timestamp" then Builtin (Env TimeStamp) []
@@ -533,9 +555,9 @@ Definition translate_expr_def:
     else if obj = "self" /\ attr = "balance" then
       Builtin (Acc Balance) [Builtin (Env SelfAddr) []]
     (* self.x: use attr_src_id_opt from variable_reads for cross-module storage access *)
-    else if obj = "self" then TopLevelName (attr_src_id_opt, attr)
+    else if obj = "self" then TopLevelName (source_id_to_nsid attr_src_id_opt, attr)
     (* Module variable access (lib1.x): use src_id_opt from module type *)
-    else if tc = SOME "module" then TopLevelName (src_id_opt, attr)
+    else if tc = SOME "module" then TopLevelName (source_id_to_nsid src_id_opt, attr)
     else if attr = "balance" then Builtin (Acc Balance) [Name obj]
     else if attr = "address" then Builtin (Acc Address) [Name obj]
     else Attribute (Name obj) attr) /\
@@ -606,7 +628,7 @@ Definition translate_expr_def:
          | JE_Name id _ _ => Pop (NameTarget id)
          | JE_Attribute (JE_Name "self" _ _) attr _ _ => Pop (TopLevelNameTarget (NONE, attr))
          | JE_Attribute (JE_Name id (SOME "module") src_id_opt) attr _ _ =>
-             Pop (TopLevelNameTarget (src_id_opt, attr))
+             Pop (TopLevelNameTarget (source_id_to_nsid src_id_opt, attr))
          | JE_Attribute (JE_Name id _ _) attr _ _ =>
              Pop (AttributeTarget (NameTarget id) attr)
          | JE_Subscript (JE_Name id _ _) idx =>
@@ -615,9 +637,7 @@ Definition translate_expr_def:
     (* self.func(args) - internal call *)
     | JE_Attribute (JE_Name "self" _ _) fname _ _ => Call (IntCall (NONE, fname)) args' NONE
     (* Module call: use source_id from type_decl_node *)
-    | _ => (case src_id_opt of
-              SOME src_id => Call (IntCall (SOME src_id, extract_func_name func)) args' NONE
-            | NONE => Call (IntCall (NONE, "")) args' NONE)) /\
+    | _ => Call (IntCall (source_id_to_nsid src_id_opt, extract_func_name func)) args' NONE) /\
 
   (* ExtCall - mutating external call (is_static = F) *)
   (* Convention: args = [target; value; arg1; arg2; ...] *)
@@ -665,7 +685,7 @@ End
 Definition translate_base_target_def:
   (translate_base_target (JBT_Name id) = NameTarget id) /\
   (* JBT_TopLevelName is (source_id, name) for self.x and module.x *)
-  (translate_base_target (JBT_TopLevelName nsid) = TopLevelNameTarget nsid) /\
+  (translate_base_target (JBT_TopLevelName nsid) = TopLevelNameTarget (json_nsid_to_nsid nsid)) /\
   (translate_base_target (JBT_Subscript tgt idx) =
     SubscriptTarget (translate_base_target tgt) (translate_expr idx)) /\
   (translate_base_target (JBT_Attribute tgt attr) =
@@ -764,7 +784,7 @@ Definition translate_stmt_def:
   (translate_stmt (JS_Assert test (SOME msg)) =
     Assert (translate_expr test) (translate_expr msg)) /\
   (translate_stmt (JS_Log event args) =
-    Log event (MAP translate_expr args)) /\
+    Log (json_nsid_to_nsid event) (MAP translate_expr args)) /\
   (translate_stmt (JS_If test body orelse) =
     If (translate_expr test)
        (MAP translate_stmt body)
@@ -914,7 +934,7 @@ End
 Definition build_import_map_def:
   build_import_map [] = [] ∧
   build_import_map (JImportInfo alias src_id _ :: rest) =
-    (alias, src_id) :: build_import_map rest
+    (alias, Num (src_id + &builtin_source_id_offset)) :: build_import_map rest
 End
 
 val () = cv_auto_trans build_import_map_def;
@@ -1092,8 +1112,9 @@ End
 Definition build_exports_map_def:
   build_exports_map acc [] = acc ∧
   build_exports_map acc (JImportedModule src_id _ body :: rest) =
-    let exps = compute_module_exports acc src_id body in
-    build_exports_map ((src_id, exps) :: acc) rest
+    let nsid = Num (src_id + &builtin_source_id_offset) in
+    let exps = compute_module_exports acc nsid body in
+    build_exports_map ((nsid, exps) :: acc) rest
 End
 
 (* Main function: extract exports from main module given imports *)
@@ -1121,7 +1142,7 @@ End
 
 Definition translate_imported_module_def:
   translate_imported_module (JImportedModule src_id path body) =
-    (SOME src_id, filter_some (MAP translate_toplevel body))
+    (SOME (Num (src_id + &builtin_source_id_offset)), filter_some (MAP translate_toplevel body))
 End
 
 (* Extract toplevels from a JModule (needed to get import infos) *)
