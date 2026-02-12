@@ -79,7 +79,7 @@ The focus of this work so far has been the core execution semantics of Vyper con
 Here are the specific aspects of Vyper that are currently not part of the formal model:
 
 - Chain interaction ([#37](https://github.com/verifereum/vyper-hol/issues/37))
-    - external contract calls: `staticcall`, `extcall`, and `extcall` with `value=` (sending ETH) are implemented, but `gas=` and `default_return_value=` parameters are not yet supported ([#38](https://github.com/verifereum/vyper-hol/issues/38))
+    - external contract calls: `staticcall`, `extcall`, and `extcall` with `value=` (sending ETH) are implemented, but the `gas=` parameter is not yet supported; `default_return_value=` is supported ([#38](https://github.com/verifereum/vyper-hol/issues/38))
     - `print` (which uses external calls under the hood) ([#38](https://github.com/verifereum/vyper-hol/issues/38))
     - gas modeling for `msg.gas` and external call gas limits ([#98](https://github.com/verifereum/vyper-hol/issues/98))
     - [chain interaction builtins](https://docs.vyperlang.org/en/latest/built-in-functions.html#chain-interaction) (`create_minimal_proxy_to`, `create_copy_of`, `create_from_blueprint`, `raw_call`, etc.) and `@raw_return` ([#39](https://github.com/verifereum/vyper-hol/issues/39))
@@ -89,7 +89,7 @@ Here are the specific aspects of Vyper that are currently not part of the formal
     - type-checking (the interpreter can fail during execution on badly-typed input) ([#47](https://github.com/verifereum/vyper-hol/issues/47))
     - interfaces, which are only relevant for type-checking ([#47](https://github.com/verifereum/vyper-hol/issues/47))
     - some cases of constant inlining (where, e.g., a literal value, not constant expression, is needed for the abstract syntax) ([#50](https://github.com/verifereum/vyper-hol/issues/50))
-    - internal and external functions with default arguments ([#49](https://github.com/verifereum/vyper-hol/issues/49))
+    - external functions with default arguments (internal function defaults are supported) ([#49](https://github.com/verifereum/vyper-hol/issues/49))
 - Storage
     - large storage arrays require ArrayRef support to avoid materializing entire arrays in memory ([#97](https://github.com/verifereum/vyper-hol/issues/97))
 
@@ -108,7 +108,7 @@ In achieving these outcomes, some of the technical details were more complex tha
 - The need for a small-step semantics for `cv_compute`, and the somewhat non-trivial termination argument for the semantics. The difficulty here was mostly due to pushing some of the edges of HOL4's libraries for defining functions and for providing fast execution for logical definitions.
 
 Next steps (all can be done in parallel):
-- Complete external call support: `gas=` parameter, `default_return_value=`, `print`, and gas modeling ([#38](https://github.com/verifereum/vyper-hol/issues/38), [#98](https://github.com/verifereum/vyper-hol/issues/98)).
+- Complete external call support: `gas=` parameter, `print`, and gas modeling ([#38](https://github.com/verifereum/vyper-hol/issues/38), [#98](https://github.com/verifereum/vyper-hol/issues/98)).
 - Add remaining chain interaction features: `@nonreentrant`, `raw_call`, contract creation builtins ([#39](https://github.com/verifereum/vyper-hol/issues/39), [#40](https://github.com/verifereum/vyper-hol/issues/40)).
 - Prove safety properties about the language: arithmetic safety, array bounds, type preservation, etc. ([#90](https://github.com/verifereum/vyper-hol/issues/90)).
 - Possibly revisit some of the design decisions in the semantics. For example, currently, runtime values carry some typing information (e.g., bit size for integers), but we could try leaving this information entirely in the syntax and not in the runtime values, which could simplify some operations like implicit casting ([#45](https://github.com/verifereum/vyper-hol/issues/45)).
