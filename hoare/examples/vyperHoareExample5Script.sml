@@ -269,22 +269,16 @@ Proof
         qexistsl_tac [`"i"`, `IntV (Unsigned 256) k`] >>
         simp[] >> metis_tac[lookup_immutable_tl_scopes])
     >- (irule lookup_in_current_scope_to_lookup_scoped_var >> simp[] >>
-        simp[lookup_in_current_scope_def, finite_mapTheory.FLOOKUP_UPDATE])
-    >- (`lookup_in_current_scope st "s" = NONE` by (
-          simp[lookup_in_current_scope_def] >>
-          `string_to_num "s" ≠ string_to_num "i"` suffices_by
-            simp[finite_mapTheory.FLOOKUP_UPDATE] >>
-          simp[vyperMiscTheory.string_to_num_inj]) >>
+        irule lookup_in_current_scope_singleton_same >> simp[])
+    >- (`lookup_in_current_scope st "s" = NONE` by
+          (irule lookup_in_current_scope_singleton_other >> simp[]) >>
         metis_tac[lookup_in_tl_scopes])
     >- (irule valid_lookups_push_singleton >> simp[] >>
         qexistsl_tac [`"i"`, `IntV (Unsigned 256) k`] >>
         simp[] >> metis_tac[lookup_immutable_tl_scopes])
     >- (irule lookup_scoped_var_implies_var_in_scope >>
-        `lookup_in_current_scope st "s" = NONE` by (
-          simp[lookup_in_current_scope_def] >>
-          `string_to_num "s" ≠ string_to_num "i"` suffices_by
-            simp[finite_mapTheory.FLOOKUP_UPDATE] >>
-          simp[vyperMiscTheory.string_to_num_inj]) >>
+        `lookup_in_current_scope st "s" = NONE` by
+          (irule lookup_in_current_scope_singleton_other >> simp[]) >>
         metis_tac[lookup_in_tl_scopes])) >>
   MATCH_MP_TAC (BETA_RULE (ISPECL [
     ``λst:evaluation_state.
@@ -335,11 +329,8 @@ Proof
       `k * (k − 1) / 2 + k = (k + 1) * k / 2` by
         (drule_all gauss_sum_step >> simp[]) >>
       simp[]) >>
-    `lookup_in_current_scope st "s" = NONE` by (
-      simp[lookup_in_current_scope_def] >>
-      `string_to_num "s" ≠ string_to_num "i"` suffices_by
-        simp[finite_mapTheory.FLOOKUP_UPDATE] >>
-      simp[vyperMiscTheory.string_to_num_inj]) >>
+    `lookup_in_current_scope st "s" = NONE` by
+      (irule lookup_in_current_scope_singleton_other >> simp[]) >>
     `lookup_scoped_var (tl_scopes st) "s" =
        SOME (IntV (Unsigned 256) (k * (k − 1) / 2))` by
       metis_tac[lookup_in_tl_scopes] >>

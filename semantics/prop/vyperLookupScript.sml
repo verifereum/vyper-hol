@@ -595,6 +595,24 @@ Proof
   simp[lookup_in_current_scope_def, finite_mapTheory.FLOOKUP_EMPTY]
 QED
 
+Theorem lookup_in_current_scope_singleton_same:
+  ∀st id v.
+    HD st.scopes = FEMPTY |+ (string_to_num id, v) ⇒
+    lookup_in_current_scope st id = SOME v
+Proof
+  simp[lookup_in_current_scope_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem lookup_in_current_scope_singleton_other:
+  ∀st id v n.
+    HD st.scopes = FEMPTY |+ (string_to_num id, v) ∧ n ≠ id ⇒
+    lookup_in_current_scope st n = NONE
+Proof
+  simp[lookup_in_current_scope_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[finite_mapTheory.FLOOKUP_EMPTY] >>
+  metis_tac[vyperMiscTheory.string_to_num_inj]
+QED
+
 Theorem lookup_in_tl_scopes:
   ∀st n.
     lookup_in_current_scope st n = NONE ⇒
