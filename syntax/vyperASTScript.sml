@@ -180,6 +180,8 @@ Datatype:
   | TypeBuiltin type_builtin type (expr list)
   | Pop base_assignment_target
   | Call call_target (expr list) (expr option)
+      (* expr list: arguments -- see ExtCall above for conventions *)
+      (* expr option: default return value *)
 ; base_assignment_target
   = NameTarget identifier
   | TopLevelNameTarget nsid
