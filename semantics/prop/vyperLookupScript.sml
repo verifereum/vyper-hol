@@ -209,6 +209,28 @@ Proof
   gvs[finite_mapTheory.flookup_thm]
 QED
 
+Theorem lookup_in_current_scope_push:
+  lookup_in_current_scope
+    (st with scopes updated_by CONS (FEMPTY |+ (string_to_num id, v))) id
+  = SOME v
+Proof
+  simp[lookup_in_current_scope_def, evaluation_state_accfupds,
+       finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem tl_scopes_push:
+  tl_scopes (st with scopes updated_by CONS sc) = st
+Proof
+  simp[tl_scopes_def, evaluation_state_accfupds] >>
+  Cases_on `st` >> simp[evaluation_state_fn_updates]
+QED
+
+Theorem pop_scope_tl_scopes:
+  st.scopes ≠ [] ⇒ pop_scope st = (INL (), tl_scopes st)
+Proof
+  Cases_on `st.scopes` >> simp[pop_scope_def, tl_scopes_def, return_def]
+QED
+
 (****************************************)
 (* Theorems *)
 
@@ -573,6 +595,24 @@ Proof
   simp[lookup_in_current_scope_def, finite_mapTheory.FLOOKUP_EMPTY]
 QED
 
+Theorem lookup_in_current_scope_singleton_same:
+  ∀st id v.
+    HD st.scopes = FEMPTY |+ (string_to_num id, v) ⇒
+    lookup_in_current_scope st id = SOME v
+Proof
+  simp[lookup_in_current_scope_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem lookup_in_current_scope_singleton_other:
+  ∀st id v n.
+    HD st.scopes = FEMPTY |+ (string_to_num id, v) ∧ n ≠ id ⇒
+    lookup_in_current_scope st n = NONE
+Proof
+  simp[lookup_in_current_scope_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[finite_mapTheory.FLOOKUP_EMPTY] >>
+  metis_tac[vyperMiscTheory.string_to_num_inj]
+QED
+
 Theorem lookup_in_tl_scopes:
   ∀st n.
     lookup_in_current_scope st n = NONE ⇒
@@ -779,4 +819,46 @@ Proof
   `tl_scopes (update_scoped_var st n1 v) = update_scoped_var (tl_scopes st) n1 v`
     by simp[tl_scopes_update_eq_update_tl_scopes] >>
   simp[lookup_name_preserved_after_update]
+QED
+
+Theorem lookup_immutable_tl_scopes:
+  ∀cx st n. lookup_immutable cx (tl_scopes st) n = lookup_immutable cx st n
+Proof
+  rw[lookup_immutable_def, tl_scopes_def]
+QED
+
+Theorem lookup_immutable_preserved_after_update:
+  ∀cx st n v k.
+    lookup_immutable cx (update_scoped_var st n v) k =
+    lookup_immutable cx st k
+Proof
+  rw[lookup_immutable_def, immutables_preserved_after_update]
+QED
+
+Theorem valid_lookups_push_non_immutable:
+  ∀cx st id v.
+    valid_lookups cx (tl_scopes st) ∧
+    HD st.scopes = FEMPTY |+ (string_to_num id, v) ∧
+    lookup_immutable cx st id = NONE ⇒
+    (cx.txn.is_creation ⇒ valid_lookups cx st)
+Proof
+  rw[valid_lookups_def, tl_scopes_def, lookup_immutable_def,
+     var_in_scope_def, lookup_scoped_var_def] >>
+  qexists_tac `imms` >> simp[] >> rpt strip_tac >>
+  Cases_on `st.scopes` >> gvs[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `string_to_num id = string_to_num n` >> gvs[]
+QED
+
+Theorem valid_lookups_push_singleton:
+  ∀cx st id v.
+    valid_lookups cx (tl_scopes st) ∧
+    HD st.scopes = FEMPTY |+ (string_to_num id, v) ∧
+    lookup_immutable cx st id = NONE ⇒
+    valid_lookups cx st
+Proof
+  rw[valid_lookups_def, tl_scopes_def, lookup_immutable_def,
+     var_in_scope_def, lookup_scoped_var_def] >>
+  qexists_tac `imms` >> simp[] >> rpt strip_tac >>
+  Cases_on `st.scopes` >> gvs[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `string_to_num id = string_to_num n` >> gvs[]
 QED
