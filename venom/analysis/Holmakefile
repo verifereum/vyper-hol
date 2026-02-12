@@ -1,0 +1,2 @@
+# Venom analysis passes
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec .. ../../syntax ../../semantics

@@ -1,2 +1,2 @@
 # PHI elimination pass for Venom IR
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../../syntax ../../../semantics
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../analysis ../../../syntax ../../../semantics

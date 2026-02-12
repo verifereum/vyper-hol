@@ -95,17 +95,16 @@ Proof
     Cases_on `lookup_block s.vs_current_bb func.fn_blocks` >> gvs[result_equiv_def] >>
     rename1 `lookup_block _ _ = SOME bb` >>
     (* Normalize to use transform_function for IH *)
-    `(func with fn_blocks := MAP (transform_block (build_dfg_fn func)) func.fn_blocks) =
+    `(func with fn_blocks := MAP (transform_block (dfg_build_function func)) func.fn_blocks) =
      transform_function func` by simp[transform_function_def, LET_DEF] >>
     pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> REWRITE_TAC [th]) >>
     `MEM bb func.fn_blocks` by metis_tac[lookup_block_MEM] >>
-    `result_equiv (run_block bb s) (run_block (transform_block (build_dfg_fn func) bb) s)` by (
+    `result_equiv (run_block bb s) (run_block (transform_block (dfg_build_function func) bb) s)` by (
       irule transform_block_result_equiv >> simp[] >>
       fs[phi_wf_fn_def, LET_DEF] >> rpt conj_tac >>
-      rpt strip_tac >> TRY (first_x_assum drule_all >> simp[]) >>
-      simp[build_dfg_fn_well_formed]
+      rpt strip_tac >> first_x_assum drule_all >> simp[]
     ) >>
-    Cases_on `run_block bb s` >> Cases_on `run_block (transform_block (build_dfg_fn func) bb) s` >>
+    Cases_on `run_block bb s` >> Cases_on `run_block (transform_block (dfg_build_function func) bb) s` >>
     gvs[result_equiv_def] >>
     TRY (`v.vs_halted <=> v'.vs_halted` by fs[state_equiv_def]) >>
     Cases_on `v.vs_halted` >> gvs[result_equiv_def] >>
@@ -135,13 +134,13 @@ Proof
   Cases_on `lookup_block s.vs_current_bb func.fn_blocks` >> gvs[result_equiv_def] >>
   rename1 `lookup_block _ _ = SOME bb` >>
   (* Normalize to use transform_function for IH *)
-  `(func with fn_blocks := MAP (transform_block (build_dfg_fn func)) func.fn_blocks) =
+  `(func with fn_blocks := MAP (transform_block (dfg_build_function func)) func.fn_blocks) =
    transform_function func` by simp[transform_function_def, LET_DEF] >>
   pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> REWRITE_TAC [th]) >>
   (* At entry block: use run_block_transform_identity since entry block has no PHI with single origin *)
   (* Since s.vs_current_bb = (HD func.fn_blocks).bb_label and lookup succeeded, bb = HD func.fn_blocks *)
   (* From phi_wf_fn, entry block has no PHI with single origin, so transform is identity *)
-  `run_block (transform_block (build_dfg_fn func) bb) s = run_block bb s` by (
+  `run_block (transform_block (dfg_build_function func) bb) s = run_block bb s` by (
     irule run_block_transform_identity >>
     rpt strip_tac >>
     (* First prove bb = HD func.fn_blocks *)
@@ -222,4 +221,3 @@ Proof
   simp[transform_context_def, transform_function_def, MEM_MAP] >>
   qexists_tac `func` >> simp[]
 QED
-
