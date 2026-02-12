@@ -48,9 +48,6 @@ val numOfLargeInt =
 fun achoose err ls = orElse(choose ls, fail err)
 
 fun triml n s = String.extract(s,n,NONE)
-val stringToNumTm =
-  numSyntax.term_of_int o
-  Option.valOf o Int.fromString
 
 val numtm = JSONDecode.map numOfLargeInt intInf
 val stringtm = JSONDecode.map fromMLstring string
