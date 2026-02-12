@@ -543,7 +543,7 @@ Proof
 QED
 
 (* ===================================================================== *)
-(* Core helper: eval_for on GENLIST by induction on m.
+(* Helper for stmts_spec_for_range: eval_for on GENLIST by induction on m.
    WHY THIS IS TRUE:
    Base (m=0): GENLIST f 0 = [], eval_for [] = return (), I(n+0) = I n.
    Step (SUC m'): GENLIST gives (IntV ib n)::tail. eval_for unfolds:
@@ -746,6 +746,15 @@ Proof
    simp[update_target_scoped_var_replace]) >>
   simp[target_spec_scoped_var]
 QED
+
+(*
+Theorem stmts_spec_assign_subscript:
+  ∀P Q cx tgt e.
+     (⟦cx⟧ ⦃P⦄ BaseTarget (SubscriptTarget tgt ⇓ᵗ⦃λav st. Q av st⦄))
+Proof
+  cheat
+QED
+*)
 
 Theorem stmts_spec_ann_assign:
   ∀P Q cx n ty e.

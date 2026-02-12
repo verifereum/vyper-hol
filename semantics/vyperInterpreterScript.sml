@@ -129,14 +129,19 @@ End
 
 val () = cv_trans array_index_def;
 
+Definition array_elements_def:
+  array_elements av =
+    case av of TupleV vs => vs
+    | DynArrayV _ _ vs => vs
+    | SArrayV t n al =>
+        let d = default_value t in
+          GENLIST (λi. case ALOOKUP al i of SOME v => v | NONE => d) n
+End
+
+val () = cv_auto_trans array_elements_def;
+
 Definition extract_elements_def:
-  extract_elements (ArrayV av) =
-  (SOME $ case av
-     of TupleV vs => vs
-      | DynArrayV _ _ vs => vs
-      | SArrayV t n al =>
-          let d = default_value t in
-          GENLIST (λi. case ALOOKUP al i of SOME v => v | NONE => d) n) ∧
+  extract_elements (ArrayV av) = (SOME $ array_elements av) ∧
   extract_elements _ = NONE
 End
 
