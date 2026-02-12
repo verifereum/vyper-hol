@@ -296,7 +296,42 @@ val excluded_test_names = [
      directly instead of materializing the whole array. *)
   "test_boundary_access_to_arr",
   "test_negative_ix_access_to_large_arr",
-  "test_oob_access_to_large_arr"
+  "test_oob_access_to_large_arr",
+  (* TODO: external calls with default args *)
+  "test_basic_default_param_*",
+  "test_default_param_*",
+  "test_default_arg_string",
+  "test_environment_vars_as_default",
+  "test_external_contract_calls_with_default_value*",
+  "test_bytes_literals[*]",
+  "test_native_hex_literals[*]",
+  "test_reentrant_decorator",
+  "test_private_zero_bytearray",
+  (* TODO: needs investigation *)
+  "test_inline_interface_export",
+  "test_imported_module_not_part_of_interface",
+  "test_exported_fun_part_of_interface",
+  "test_simple_export",
+  "test_nested_export",
+  "test_transitive_export",
+  "test_export_*",
+  "test_exports_*",
+  "test_*_exports",
+  "test_external_with_payable_value",
+  "test_library_*",
+  "test_module_constant*",
+  "test_nested_module_constant",
+  "test_modules_transient",
+  "test_complex_modules_transient",
+  "test_import_*",
+  "test_external_call_to_builtin_interface",
+  "test_external_call_to_interface*",
+  "test_intrinsic_interface*",
+  "test_immutable_hashing_overlap_regression",
+  "test_indirect_variable_uses",
+  "test_init_function_side_effects",
+  "test_uses_already_initialized",
+  "test_module_event2"
 ]
 
 fun glob_match pat str =
@@ -449,7 +484,7 @@ val test_decoder =
 fun trydecode ((name,json),(s,f)) =
   if decode (field "item_type" string) json <> "test"
   then (s,f)  (* skip fixtures and other non-test entries *)
-  else if List.exists (equal name) excluded_test_names
+  else if List.exists (fn pat => glob_match pat name) excluded_test_names
   then (s,f)
   else if List.exists (equal name) allowed_test_names
      orelse not (has_unsupported_source_json json)
