@@ -513,11 +513,11 @@ fun make_definitions_for_file (id, json_path) = let
     case decode_fails of
         [] => ()
       | (name, err)::_ =>
-          TextIO.output(TextIO.stdErr,
+          raise Fail (
             String.concat ["decode failure in ", json_path, ": ", name,
-                           " - ", exnMessage err, " (skipping ",
+                           " - ", exnMessage err, " (",
                            Int.toString (List.length decode_fails),
-                           " tests)\n"])
+                           " tests failed to decode)"])
   val path_vn = String.concat["json_path_", id]
   val path_def = new_definition(path_vn ^ "_def",
                    mk_eq(mk_var(path_vn, string_ty),
