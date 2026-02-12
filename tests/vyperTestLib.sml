@@ -209,22 +209,6 @@ val ClearTransientStorage_tm =
   prim_mk_const{Thy="vyperTestRunner",Name="ClearTransientStorage"}
 
 val unsupported_code = [
-  "def boo(a: DynArray[uint256, 12] =", (* TODO: default argument values *)
-  "def addition(a: uint256, b: uint256 = 1)", (* TODO: ditto *)
-  "def test(a: uint256, b: String[50] =", (* TODO: ditto *)
-  "def test2(l: bytes2 =", (* TODO: ditto *)
-  "def test2(l: Bytes[2] =", (* TODO: ditto *)
-  "def test2(l: Bytes[3] =", (* TODO: ditto *)
-  "def test2(l: Bytes[4] =", (* TODO: ditto *)
-  "def test2(l: bytes3 =", (* TODO: ditto *)
-  "def test2(l: bytes4 =", (* TODO: ditto *)
-  "def foo(a: Bytes[65] =", (* TODO: ditto *)
-  "def foo(a: String[65] =", (* TODO: ditto *)
-  "def foo(a: uint256 =", (* TODO: ditto *)
-  "def foo(a: uint256[3] =", (* TODO: ditto *)
-  "def foo(a: DynArray[uint256, 3] =", (* TODO: ditto *)
-  "def fooBar(a: int128 =", (* TODO: ditto *)
-  "def outer(xs: Bytes[256] = ", (* TODO: default arguments on external fns *)
   "@raw_return\n" (* TODO: add *)
 ]
 
@@ -238,8 +222,7 @@ val unsupported_patterns = unsupported_code @ [
   "create_copy_of(",
   "gas=",
   "# pragma nonreentrancy",
-  "@nonreentrant",
-  "default_return_value="
+  "@nonreentrant"
 ]
 
 fun has_default_arg src =
@@ -275,7 +258,6 @@ fun has_default_arg src =
   end
 
 fun has_unsupported_patterns src =
-  has_default_arg src orelse
   List.exists (fn x => String.isSubstring x src) unsupported_patterns
 
 fun is_blank s =
