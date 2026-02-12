@@ -225,38 +225,6 @@ val unsupported_patterns = unsupported_code @ [
   "@nonreentrant"
 ]
 
-fun has_default_arg src =
-  let
-    val n = String.size src
-    fun find_sub sub i =
-      let val m = String.size sub in
-        if i + m > n then NONE
-        else if String.substring (src, i, m) = sub then SOME i
-        else find_sub sub (i + 1)
-      end
-    fun find_char c i =
-      if i >= n then NONE
-      else if String.sub (src, i) = c then SOME i
-      else find_char c (i + 1)
-    fun has_default_from i =
-      case find_sub "def " i of
-        NONE => false
-      | SOME d =>
-          (case find_char #"(" (d + 4) of
-             NONE => false
-           | SOME l =>
-               (case find_char #")" (l + 1) of
-                  NONE => false
-                | SOME r =>
-                    let
-                      val args = String.substring (src, l + 1, r - l - 1)
-                    in
-                      String.isSubstring "=" args orelse has_default_from (r + 1)
-                    end))
-  in
-    has_default_from 0
-  end
-
 fun has_unsupported_patterns src =
   List.exists (fn x => String.isSubstring x src) unsupported_patterns
 
