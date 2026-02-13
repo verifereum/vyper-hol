@@ -60,10 +60,12 @@ Definition lookup_base_target_def:
     | (INR _, _) => NONE
 End
 
+(* ScopedVar or ImmutableVar *)
 Definition lookup_name_target_def:
   lookup_name_target cx st n = lookup_base_target cx st (NameTarget n)
 End
 
+(* TopLevelVar *)
 Definition lookup_toplevel_name_target_def:
   lookup_toplevel_name_target cx st n = lookup_base_target cx st (TopLevelNameTarget n)
 End
@@ -378,6 +380,24 @@ Proof
   `x2 = v` by (drule find_containing_scope_lookup >> simp[]) >> gvs[] >>
   simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
        lift_option_def, lift_sum_def, assign_subscripts_def,
+       ignore_bind_def, set_scopes_def, update_scoped_var_def, LET_THM]
+QED
+
+Theorem assign_target_scoped_var_subscripts:
+  ∀cx st n sbs ao a a'.
+    lookup_scoped_var st n = SOME a ∧
+    assign_subscripts a (REVERSE sbs) ao = INL a' ⇒
+    assign_target cx (BaseTargetV (ScopedVar n) sbs) ao st =
+    (INL (Value a), update_scoped_var st n a')
+Proof
+  rw[lookup_scoped_var_def] >>
+  `IS_SOME (find_containing_scope (string_to_num n) st.scopes)`
+    by (irule lookup_scopes_find_containing >> simp[]) >>
+  Cases_on `find_containing_scope (string_to_num n) st.scopes` >- gvs[] >>
+  PairCases_on `x` >> gvs[] >>
+  `x2 = a` by (drule find_containing_scope_lookup >> simp[]) >> gvs[] >>
+  simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
+       lift_option_def, lift_sum_def,
        ignore_bind_def, set_scopes_def, update_scoped_var_def, LET_THM]
 QED
 

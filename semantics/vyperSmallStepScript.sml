@@ -442,7 +442,7 @@ Proof
   \\ rw[assign_subscripts_def, oneline pop_element_def]
   \\ gvs[evaluate_subscripts_def]
   \\ CASE_TAC \\ gvs[]
-  \\ CASE_TAC \\ gvs[CaseEq"sum", extract_elements_def]
+  \\ CASE_TAC \\ gvs[CaseEq"sum", extract_elements_def, array_elements_def]
   \\ CASE_TAC \\ gvs[]
 QED
 

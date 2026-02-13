@@ -1,7 +1,7 @@
 Theory vyperHoare
 
 Ancestors
-  vyperInterpreter vyperUpdateTarget vyperLookup vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes vyperEvalMisc vyperEvalPreservesNameTarget vyperTypeValue
+  vyperInterpreter vyperUpdateTarget vyperLookup vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes vyperEvalMisc vyperEvalPreservesNameTarget vyperTypeValue vyperArray
 
 (**********************************************************************)
 (* Definitions *)
@@ -42,6 +42,12 @@ End
 Definition get_value_to_key_def[simp]:
   get_value_to_key (Value v) = value_to_key v ∧
   get_value_to_key _ = NONE
+End
+
+Definition exprs_spec_def:
+  exprs_spec cx (P : evaluation_state -> bool) (es : expr list) (Q : value list -> evaluation_state -> bool) ⇔
+    ∀st. P st ⇒
+      ∃vs rt. eval_exprs cx es st = (INL vs, rt) ∧ Q vs rt
 End
 
 (**********************************************************************)
@@ -450,6 +456,14 @@ Proof
   metis_tac[]
 QED
 
+Theorem stmts_spec_exists_precond:
+  ∀P C Q R cx ss.
+    (∀x. C x ⇒ ⟦cx⟧ ⦃P x⦄ ss ⦃Q ∥ R⦄) ⇒
+    ⟦cx⟧ ⦃λst. ∃x. C x ∧ P x st⦄ ss ⦃Q ∥ R⦄
+Proof
+  rw[stmts_spec_def] >> metis_tac[]
+QED
+
 Theorem stmts_spec_nil:
   ∀P Q_ret cx. ⟦cx⟧ ⦃P⦄ [] ⦃P ∥ Q_ret⦄
 Proof
@@ -543,7 +557,7 @@ Proof
 QED
 
 (* ===================================================================== *)
-(* Core helper: eval_for on GENLIST by induction on m.
+(* Helper for stmts_spec_for_range: eval_for on GENLIST by induction on m.
    WHY THIS IS TRUE:
    Base (m=0): GENLIST f 0 = [], eval_for [] = return (), I(n+0) = I n.
    Step (SUC m'): GENLIST gives (IntV ib n)::tail. eval_for unfolds:
@@ -729,7 +743,7 @@ QED
 
 Theorem stmts_spec_assign_scoped_var:
   ∀P Q cx n e.
-    (⟦cx⟧ ⦃λst. P st ∧ var_in_scope st n⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ Q (update_scoped_var st n v)⦄) ⇒
+    (⟦cx⟧ ⦃λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ Q (update_scoped_var st n v)⦄) ⇒
     ⟦cx⟧ ⦃λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄ [Assign (BaseTarget (NameTarget n)) e] ⦃Q ∥ λ_ _. F⦄
 Proof
   rpt strip_tac >>
@@ -745,6 +759,95 @@ Proof
    simp[valid_target_scoped_var_replace] >>
    simp[update_target_scoped_var_replace]) >>
   simp[target_spec_scoped_var]
+QED
+
+Theorem stmts_spec_assign_scoped_var_subscripts:
+  ∀P P' Q cx bt n sbs e.
+    (⟦cx⟧ ⦃P⦄ BaseTarget bt ⇓ᵗ⦃λav st. av = (BaseTargetV (ScopedVar n) sbs) ∧ P' st⦄) ∧
+    (⟦cx⟧
+     ⦃P'⦄
+     e
+     ⇓⦃λtv st. ∃v0 v1 v2.
+                 tv = Value v1 ∧
+                 lookup_scoped_var st n = SOME v0 ∧
+                 assign_subscripts v0 (REVERSE sbs) (Replace v1) = INL v2 ∧
+                 Q (update_scoped_var st n v2)⦄) ⇒
+    ⟦cx⟧ ⦃P⦄ [Assign (BaseTarget bt) e] ⦃Q ∥ λ_ _. F⦄
+Proof
+  rpt strip_tac >>
+  irule stmts_spec_assign >>
+  qexists_tac `λav st. av = BaseTargetV (ScopedVar n) sbs ∧ P' st` >>
+  conj_tac >-
+  (rpt strip_tac >> gvs[expr_spec_def] >>
+   rpt strip_tac >>
+   first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
+   Cases_on `eval_expr cx e st` >> Cases_on `q` >> simp[] >>
+   strip_tac >> qexists_tac `v1` >> simp[] >>
+   conj_tac >-
+   (irule valid_target_scoped_var_subscripts >>
+    qexistsl_tac [`v0`, `v2`] >> simp[]) >>
+   `update_target cx r (BaseTargetV (ScopedVar n) sbs) (Replace v1) =
+    update_scoped_var r n v2`
+     by (irule update_target_scoped_var_subscripts >>
+         qexists_tac `v0` >> simp[]) >>
+   simp[]) >>
+  BETA_TAC >> simp[]
+QED
+
+Theorem stmts_spec_assign_scoped_var_single_subscript:
+  ∀P P' Q cx n k idx_e e.
+    (⟦cx⟧ ⦃λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄
+       idx_e ⇓⦃λtv st. get_value_to_key tv = SOME k ∧ P' st⦄) ∧
+    (⟦cx⟧ ⦃P'⦄ e ⇓⦃λtv st. ∃a v a'.
+        tv = Value v ∧
+        lookup_scoped_var st n = SOME a ∧
+        assign_subscripts a [k] (Replace v) = INL a' ∧
+        Q (update_scoped_var st n a')⦄) ⇒
+    ⟦cx⟧ ⦃λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄
+     [Assign (BaseTarget (SubscriptTarget (NameTarget n) idx_e)) e] ⦃Q ∥ λ_ _. F⦄
+Proof
+  rpt strip_tac >>
+  irule stmts_spec_assign_scoped_var_subscripts >>
+  qexistsl_tac [`P'`, `n`, `[k]`] >> simp[] >>
+  irule target_spec_subscript_target >>
+  qexists_tac `λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n` >>
+  simp[target_spec_scoped_var]
+QED
+
+Theorem stmts_spec_assign_scoped_var_array:
+  ∀P P' Q cx n k idx_e e.
+    (⟦cx⟧ ⦃λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄
+       idx_e ⇓⦃λtv st. get_value_to_key tv = SOME (IntSubscript k) ∧ P' st⦄) ∧
+    (⟦cx⟧ ⦃P'⦄ e ⇓⦃λtv st. ∃a v.
+        tv = Value v ∧
+        lookup_scoped_var st n = SOME (ArrayV a) ∧
+        array_is_mutable a ∧
+        valid_index a k ∧
+        Q (update_scoped_var st n (OUTL (array_set_index a k v)))⦄) ⇒
+    ⟦cx⟧ ⦃λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄
+     [Assign (BaseTarget (SubscriptTarget (NameTarget n) idx_e)) e] ⦃Q ∥ λ_ _. F⦄
+Proof
+  rpt strip_tac >>
+  irule stmts_spec_assign_scoped_var_single_subscript >>
+  qexists_tac `P'` >> simp[] >>
+  qexists_tac `IntSubscript k` >>
+  reverse conj_tac >- first_x_assum ACCEPT_TAC >>
+  irule expr_spec_consequence >>
+  qexistsl_tac [`P'`,
+    `λtv st. ∃a v.
+       tv = Value v ∧
+       lookup_scoped_var st n = SOME (ArrayV a) ∧
+       array_is_mutable a ∧ valid_index a k ∧
+       Q (update_scoped_var st n (OUTL (array_set_index a k v)))`] >>
+  rpt conj_tac
+  >- simp[]
+  >- (BETA_TAC >> rpt strip_tac >>
+      qexistsl_tac [`ArrayV a`, `v`, `OUTL (array_set_index a k v)`] >>
+      simp[assign_subscripts_array_replace] >>
+      `∃a'. array_set_index a k v = INL (ArrayV a')`
+        by (irule (fst $ EQ_IMP_RULE $ SPEC_ALL array_set_index_valid) >> simp[]) >>
+      Cases_on `array_set_index a k v` >> gvs[])
+  >- first_x_assum ACCEPT_TAC
 QED
 
 Theorem stmts_spec_ann_assign:
@@ -910,4 +1013,49 @@ Proof
   Cases_on `q` >> gvs[] >>
   strip_tac >> gvs[switch_BoolV_def, return_def] >>
   simp[Once evaluate_def, return_def]
+QED
+
+(**********************************************************************)
+(* Expression list specification *)
+
+Theorem exprs_spec_nil:
+  ∀cx P. exprs_spec cx P [] (λvs st. vs = [] ∧ P st)
+Proof
+  rw[exprs_spec_def] >>
+  simp[Once evaluate_def, return_def]
+QED
+
+Theorem exprs_spec_cons:
+  ∀cx P P' e es v vs Q.
+    (⟦cx⟧ ⦃P⦄ e ⇓⦃λtv st. tv = Value v ∧ P' st⦄) ∧
+    exprs_spec cx P' es (λvs' st. vs' = vs ∧ Q st) ⇒
+    exprs_spec cx P (e::es) (λvs' st. vs' = v::vs ∧ Q st)
+Proof
+  rw[exprs_spec_def, expr_spec_def] >>
+  last_x_assum (qspec_then `st` mp_tac) >> simp[] >>
+  Cases_on `eval_expr cx e st` >> Cases_on `q` >> simp[] >>
+  strip_tac >> gvs[] >>
+  simp[Once evaluate_def, bind_def, get_Value_def, return_def] >>
+  first_x_assum (qspec_then `r` mp_tac) >> simp[] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem expr_spec_builtin_make_array:
+  ∀P Q cx ty bd es vs tv_eval.
+    IS_SOME (get_self_code cx) ∧
+    evaluate_type (type_env (THE (get_self_code cx))) ty = SOME tv_eval ∧
+    compatible_bound bd (LENGTH es) ∧
+    exprs_spec cx P es (λvs' st. vs' = vs ∧ Q st) ⇒
+    ⟦cx⟧ ⦃P⦄ (Builtin (MakeArray (SOME ty) bd) es)
+      ⇓⦃λtv st. tv = Value (ArrayV (make_array_value tv_eval bd vs)) ∧ Q st⦄
+Proof
+  rw[expr_spec_def, exprs_spec_def] >> rpt strip_tac >>
+  simp[Once evaluate_def, bind_def, check_def, assert_def,
+       builtin_args_length_ok_def, ignore_bind_def] >>
+  first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
+  strip_tac >> gvs[] >>
+  simp[bind_def, get_accounts_def, return_def, lift_sum_def] >>
+  simp[evaluate_builtin_def] >>
+  Cases_on `get_self_code cx` >> gvs[] >>
+  simp[return_def]
 QED

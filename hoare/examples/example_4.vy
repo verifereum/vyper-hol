@@ -6,4 +6,4 @@ def example_4(x: uint256) -> int128:
     y: uint256 = x % 3
     arr[y] = arr[2 - y] + 7
     return arr[y]
-    # {result >= 17 /\ result <= 19 }
+    # {result >= 17 /\ result <= 19}

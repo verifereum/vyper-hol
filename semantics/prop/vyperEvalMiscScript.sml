@@ -1,7 +1,10 @@
 Theory vyperEvalMisc
 
 Ancestors
-  vyperInterpreter
+  vyperInterpreter vyperArray vyperTypeValue
+
+Libs
+  intLib
 
 Theorem eval_stmts_append:
   ∀cx ss1 ss2. eval_stmts cx (ss1 ++ ss2) = do eval_stmts cx ss1; eval_stmts cx ss2 od
@@ -53,4 +56,36 @@ Proof
                 SOME (ScopedVar n)
               else NONE) NONE` >>
   gvs[return_def, raise_def]
+QED
+
+(* ===== Binop Helper Lemmas ===== *)
+
+(* Unsigned subtraction when y ≤ x *)
+Theorem evaluate_binop_sub_small_unsigned:
+  ∀x y.
+    within_int_bound (Unsigned 256) x ∧
+    within_int_bound (Unsigned 256) y ∧
+    y ≤ x ⇒
+    evaluate_binop Sub (IntV (Unsigned 256) x) (IntV (Unsigned 256) y) =
+    INL (IntV (Unsigned 256) (x − y))
+Proof
+  rpt strip_tac >>
+  simp[evaluate_binop_def, bounded_int_op_def] >>
+  gvs[within_int_bound_def] >>
+  `0 ≤ x - y` by intLib.ARITH_TAC >> simp[] >>
+  `Num (x - y) ≤ Num x` suffices_by simp[] >>
+  simp[integerTheory.INT_OF_NUM] >> intLib.ARITH_TAC
+QED
+
+(* Signed 128 addition when result is in bounds *)
+Theorem evaluate_binop_add_int128:
+  ∀a b.
+    within_int_bound (Signed 128) a ∧
+    within_int_bound (Signed 128) b ∧
+    within_int_bound (Signed 128) (a + b) ⇒
+    evaluate_binop Add (IntV (Signed 128) a) (IntV (Signed 128) b) =
+    INL (IntV (Signed 128) (a + b))
+Proof
+  rpt strip_tac >>
+  simp[evaluate_binop_def, bounded_int_op_def]
 QED

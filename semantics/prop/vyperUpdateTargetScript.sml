@@ -75,6 +75,26 @@ Proof
        ignore_bind_def, set_scopes_def]
 QED
 
+Theorem update_target_scoped_var_subscripts:
+  ∀cx st n sbs ao a a'.
+    lookup_scoped_var st n = SOME a ∧
+    assign_subscripts a (REVERSE sbs) ao = INL a' ⇒
+    update_target cx st (BaseTargetV (ScopedVar n) sbs) ao = update_scoped_var st n a'
+Proof
+  rw[update_target_def] >>
+  imp_res_tac assign_target_scoped_var_subscripts >> simp[]
+QED
+
+Theorem valid_target_scoped_var_subscripts:
+  ∀cx st n sbs ao a a'.
+    lookup_scoped_var st n = SOME a ∧
+    assign_subscripts a (REVERSE sbs) ao = INL a' ⇒
+    valid_target cx st (BaseTargetV (ScopedVar n) sbs) ao
+Proof
+  rw[valid_target_def] >>
+  imp_res_tac assign_target_scoped_var_subscripts >> simp[]
+QED
+
 Theorem update_target_preserves_toplevel_name_targets:
   ∀cx st av ao n.
     lookup_toplevel_name_target cx (update_target cx st av ao) n = lookup_toplevel_name_target cx st n
