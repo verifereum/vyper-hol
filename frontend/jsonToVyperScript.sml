@@ -372,8 +372,9 @@ Definition make_builtin_call_def:
     else if name = "unsafe_sub" then Builtin (Bop USub) args
     else if name = "unsafe_mul" then Builtin (Bop UMul) args
     else if name = "unsafe_div" then Builtin (Bop UDiv) args
-    else if name = "addmod" then Builtin AddMod args
-    else if name = "mulmod" then Builtin MulMod args
+    else if name = "uint256_addmod" then Builtin AddMod args
+    else if name = "uint256_mulmod" then Builtin MulMod args
+    else if name = "pow_mod256" then Builtin PowMod256 args
     else if name = "min" then Builtin (Bop Min) args
     else if name = "max" then Builtin (Bop Max) args
     else if name = "send" then Call Send args NONE

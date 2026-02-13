@@ -144,6 +144,7 @@ Datatype:
   | ECRecover    (* ecrecover(hash, v, r, s) -> address *)
   | ECAdd        (* ecadd((x1,y1), (x2,y2)) -> (x3,y3) on BN254 *)
   | ECMul        (* ecmul((x,y), scalar) -> (x',y') on BN254 *)
+  | PowMod256   (* pow_mod256(base, exp) -> (base ** exp) % 2^256 *)
 End
 
 (* Resolved external call signature: (func_name, arg_types, return_type) *)

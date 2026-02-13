@@ -1330,6 +1330,10 @@ Definition evaluate_builtin_def:
     (if u1 = Unsigned 256 ∧ u2 = u1 ∧ u3 = u1
      then INL $ IntV u1 $ &((Num i1 * Num i2) MOD Num i3)
      else INR "MulMod type") ∧
+  evaluate_builtin cx _ PowMod256 [IntV u1 base; IntV u2 exp] =
+    (if u1 = Unsigned 256 ∧ u2 = u1
+     then INL $ IntV u1 $ &(vfmExecution$modexp (Num base) (Num exp) (2 ** 256) 1)
+     else INR "PowMod256 type") ∧
   evaluate_builtin cx _ Floor [DecimalV i] =
     INL $ IntV (Signed 256) (i / 10000000000) ∧
   evaluate_builtin cx _ Ceil [DecimalV i] =
@@ -1422,7 +1426,8 @@ Definition builtin_args_length_ok_def:
   builtin_args_length_ok MethodId n = (n = 1) ∧
   builtin_args_length_ok ECRecover n = (n = 4) ∧
   builtin_args_length_ok ECAdd n = (n = 2) ∧
-  builtin_args_length_ok ECMul n = (n = 2)
+  builtin_args_length_ok ECMul n = (n = 2) ∧
+  builtin_args_length_ok PowMod256 n = (n = 2)
 End
 
 val () = cv_auto_trans builtin_args_length_ok_def;
