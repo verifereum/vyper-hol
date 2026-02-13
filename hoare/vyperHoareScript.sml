@@ -44,6 +44,12 @@ Definition get_value_to_key_def[simp]:
   get_value_to_key _ = NONE
 End
 
+Definition exprs_spec_def:
+  exprs_spec cx (P : evaluation_state -> bool) (es : expr list) (Q : value list -> evaluation_state -> bool) ⇔
+    ∀st. P st ⇒
+      ∃vs rt. eval_exprs cx es st = (INL vs, rt) ∧ Q vs rt
+End
+
 (**********************************************************************)
 (* Syntax *)
 
@@ -999,4 +1005,49 @@ Proof
   Cases_on `q` >> gvs[] >>
   strip_tac >> gvs[switch_BoolV_def, return_def] >>
   simp[Once evaluate_def, return_def]
+QED
+
+(**********************************************************************)
+(* Expression list specification *)
+
+Theorem exprs_spec_nil:
+  ∀cx P. exprs_spec cx P [] (λvs st. vs = [] ∧ P st)
+Proof
+  rw[exprs_spec_def] >>
+  simp[Once evaluate_def, return_def]
+QED
+
+Theorem exprs_spec_cons:
+  ∀cx P P' e es v vs Q.
+    (⟦cx⟧ ⦃P⦄ e ⇓⦃λtv st. tv = Value v ∧ P' st⦄) ∧
+    exprs_spec cx P' es (λvs' st. vs' = vs ∧ Q st) ⇒
+    exprs_spec cx P (e::es) (λvs' st. vs' = v::vs ∧ Q st)
+Proof
+  rw[exprs_spec_def, expr_spec_def] >>
+  last_x_assum (qspec_then `st` mp_tac) >> simp[] >>
+  Cases_on `eval_expr cx e st` >> Cases_on `q` >> simp[] >>
+  strip_tac >> gvs[] >>
+  simp[Once evaluate_def, bind_def, get_Value_def, return_def] >>
+  first_x_assum (qspec_then `r` mp_tac) >> simp[] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem expr_spec_builtin_make_array:
+  ∀P Q cx ty bd es vs tv_eval.
+    IS_SOME (get_self_code cx) ∧
+    evaluate_type (type_env (THE (get_self_code cx))) ty = SOME tv_eval ∧
+    compatible_bound bd (LENGTH es) ∧
+    exprs_spec cx P es (λvs' st. vs' = vs ∧ Q st) ⇒
+    ⟦cx⟧ ⦃P⦄ (Builtin (MakeArray (SOME ty) bd) es)
+      ⇓⦃λtv st. tv = Value (ArrayV (make_array_value tv_eval bd vs)) ∧ Q st⦄
+Proof
+  rw[expr_spec_def, exprs_spec_def] >> rpt strip_tac >>
+  simp[Once evaluate_def, bind_def, check_def, assert_def,
+       builtin_args_length_ok_def, ignore_bind_def] >>
+  first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
+  strip_tac >> gvs[] >>
+  simp[bind_def, get_accounts_def, return_def, lift_sum_def] >>
+  simp[evaluate_builtin_def] >>
+  Cases_on `get_self_code cx` >> gvs[] >>
+  simp[return_def]
 QED

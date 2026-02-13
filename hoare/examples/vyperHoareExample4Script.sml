@@ -47,15 +47,16 @@ QED
 
 Theorem example_4_thm:
   ∀cx x.
-    within_int_bound (Unsigned 256) x ⇒
+    within_int_bound (Unsigned 256) x ∧
+    IS_SOME (get_self_code cx) ⇒
     ⟦cx⟧
     ⦃λst. st.scopes ≠ [] ∧
           valid_lookups cx st ∧
           lookup_immutable cx st "x" = SOME (IntV (Unsigned 256) x) ∧
           lookup_name cx st "arr" = NONE ∧
-          lookup_name cx st "x" = NONE⦄
-    example_3_body
-    ⦃λst. F ∥ λv st. ∃n. v = IntV (Unsigned 256) n ∧ 17 ≤ n ∧ n ≤ 19⦄
+          lookup_name cx st "y" = NONE⦄
+    example_4_body
+    ⦃λst. F ∥ λv st. ∃n. v = IntV (Signed 128) n ∧ 17 ≤ n ∧ n ≤ 19⦄
 Proof
   cheat
 QED
