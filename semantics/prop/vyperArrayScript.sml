@@ -21,21 +21,21 @@ End
 
 (* ===== Helper Lemmas for insert_sarray ===== *)
 
-Theorem ALOOKUP_insert_sarray_same:
+Theorem ALOOKUP_insert_sarray_same[local]:
   ∀k v al. ALOOKUP (insert_sarray k v al) k = SOME v
 Proof
   ho_match_mp_tac insert_sarray_ind
   \\ rw[insert_sarray_def]
 QED
 
-Theorem ALOOKUP_insert_sarray_other:
+Theorem ALOOKUP_insert_sarray_other[local]:
   ∀k v al k'. k ≠ k' ⇒ ALOOKUP (insert_sarray k v al) k' = ALOOKUP al k'
 Proof
   ho_match_mp_tac insert_sarray_ind
   \\ rw[insert_sarray_def]
 QED
 
-Theorem TAKE_DROP_LUPDATE:
+Theorem TAKE_DROP_LUPDATE[local]:
   ∀ls k e. k < LENGTH ls ⇒ TAKE k ls ++ [e] ++ DROP (SUC k) ls = LUPDATE e k ls
 Proof
   Induct \\ simp[]

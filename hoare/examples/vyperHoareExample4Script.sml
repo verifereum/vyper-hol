@@ -44,3 +44,18 @@ Theorem example_4_body_length:
 Proof
   EVAL_TAC
 QED
+
+Theorem example_4_thm:
+  ∀cx x.
+    within_int_bound (Unsigned 256) x ⇒
+    ⟦cx⟧
+    ⦃λst. st.scopes ≠ [] ∧
+          valid_lookups cx st ∧
+          lookup_immutable cx st "x" = SOME (IntV (Unsigned 256) x) ∧
+          lookup_name cx st "arr" = NONE ∧
+          lookup_name cx st "x" = NONE⦄
+    example_3_body
+    ⦃λst. F ∥ λv st. ∃n. v = IntV (Unsigned 256) n ∧ 17 ≤ n ∧ n ≤ 19⦄
+Proof
+  cheat
+QED

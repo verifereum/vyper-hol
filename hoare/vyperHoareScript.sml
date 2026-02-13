@@ -800,6 +800,22 @@ Proof
   simp[target_spec_scoped_var]
 QED
 
+Theorem stmts_spec_assign_scoped_var_array:
+  ∀P P' Q cx n k idx_e e.
+    (⟦cx⟧ ⦃λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄
+       idx_e ⇓⦃λtv st. get_value_to_key tv = SOME (IntSubscript k) ∧ P' st⦄) ∧
+    (⟦cx⟧ ⦃P'⦄ e ⇓⦃λtv st. ∃a v a'.
+        tv = Value v ∧
+        lookup_scoped_var st n = SOME (ArrayV a) ∧
+        array_is_mutable a ∧
+        valid_index a k ∧
+        Q (update_scoped_var st n (OUTL (array_set_index a i v)))⦄) ⇒
+    ⟦cx⟧ ⦃λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄
+     [Assign (BaseTarget (SubscriptTarget (NameTarget n) idx_e)) e] ⦃Q ∥ λ_ _. F⦄
+Proof
+  cheat
+QED
+
 Theorem stmts_spec_ann_assign:
   ∀P Q cx n ty e.
     (⟦cx⟧ ⦃P⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ st.scopes ≠ [] ∧
