@@ -604,6 +604,13 @@ fun d_json_expr () : term decoder = achoose "expr" [
                     orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
                             succeed (intSyntax.term_of_int (Arbint.fromInt ~1))))),
 
+  (* Attribute with folded_value (cross-module constant) *)
+  check_ast_type "Attribute" $
+    JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
+    tuple2 (field "folded_value" $
+              check_ast_type "Int" $ field "value" inttm,
+            orElse(field "type" json_type, succeed JT_None_tm)),
+
   (* Attribute - extract result typeclass and source_id for flag/module member detection *)
   (* source_id comes from type.type_decl_node.source_id OR variable_reads[0].decl_node.source_id *)
   check_ast_type "Attribute" $
