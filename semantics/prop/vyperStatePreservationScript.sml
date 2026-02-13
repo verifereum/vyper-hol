@@ -1,0 +1,259 @@
+Theory vyperStatePreservation
+
+Ancestors
+  vyperInterpreter vyperLookup
+
+(* ===== Lemmas about scopes preservation ===== *)
+
+(* Basic monad operations preserve scopes *)
+Theorem return_state:
+  !x st res st'. return x st = (res, st') ==> st' = st
+Proof
+  rw[return_def]
+QED
+
+Theorem raise_state:
+  !e st res st'. raise e st = (res, st') ==> st' = st
+Proof
+  rw[raise_def]
+QED
+
+Theorem get_state_state:
+  ∀st res st'. get_state st = (res, st') ⇒ st' = st
+Proof
+  rw[get_state_def, return_def]
+QED
+
+Theorem check_state:
+  !b s st res st'. check b s st = (res, st') ==> st' = st
+Proof
+  rw[check_def, assert_def]
+QED
+
+Theorem lift_option_state:
+  !x s st res st'. lift_option x s st = (res, st') ==> st' = st
+Proof
+  rw[lift_option_def] >> Cases_on `x` >> fs[return_def, raise_def]
+QED
+
+Theorem lift_sum_state:
+  !x st res st'. lift_sum x st = (res, st') ==> st' = st
+Proof
+  rw[lift_sum_def] >> Cases_on `x` >> fs[return_def, raise_def]
+QED
+
+Theorem get_Value_state:
+  !tv st res st'. get_Value tv st = (res, st') ==> st' = st
+Proof
+  Cases_on `tv` >> rw[get_Value_def, return_def, raise_def]
+QED
+
+Theorem get_state_id:
+  !st res st'. get_state st = (res, st') ==> st' = st
+Proof
+  rw[get_state_def, return_def]
+QED
+
+Theorem get_accounts_state:
+  !st res st'. get_accounts st = (res, st') ==> st' = st
+Proof
+  rw[get_accounts_def, return_def]
+QED
+
+Theorem get_address_immutables_state:
+  !cx st res st'. get_address_immutables cx st = (res, st') ==> st' = st
+Proof
+  rw[get_address_immutables_def, lift_option_def] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> fs[return_def, raise_def]
+QED
+
+Theorem set_address_immutables_state:
+  !cx imms st res st'. set_address_immutables cx imms st = (res, st') ==> st' = st
+Proof
+  rw[set_address_immutables_def, return_def] >> simp[]
+QED
+
+Theorem get_transient_storage_state:
+  !st res st'. get_transient_storage st = (res, st') ==> st' = st
+Proof
+  rw[get_transient_storage_def, return_def]
+QED
+
+Theorem update_transient_state:
+  !f st res st'. update_transient f st = (res, st') ==> st' = st
+Proof
+  rw[update_transient_def, return_def] >> simp[]
+QED
+
+Theorem update_accounts_state:
+  !f st res st'. update_accounts f st = (res, st') ==> st' = st
+Proof
+  rw[update_accounts_def, return_def] >> simp[]
+QED
+
+Theorem get_storage_backend_state:
+  !cx is_trans st res st'. get_storage_backend cx is_trans st = (res, st') ==> st' = st
+Proof
+  Cases_on `is_trans` >>
+  rw[get_storage_backend_def, bind_def, get_transient_storage_def, get_accounts_def, return_def]
+QED
+
+Theorem set_storage_backend_state:
+  !cx is_trans storage' st res st'. set_storage_backend cx is_trans storage' st = (res, st') ==> st' = st
+Proof
+  Cases_on `is_trans` >>
+  rw[set_storage_backend_def, bind_def, update_transient_def, get_accounts_def,
+     update_accounts_def, return_def] >> simp[]
+QED
+
+Theorem read_storage_slot_state:
+  !cx is_trans slot tv st res st'. read_storage_slot cx is_trans slot tv st = (res, st') ==> st' = st
+Proof
+  Cases_on `is_trans` >>
+  rw[read_storage_slot_def, bind_def, get_storage_backend_def,
+     get_transient_storage_def, get_accounts_def, return_def, lift_option_def] >>
+  qpat_x_assum `_ = _` mp_tac >> CASE_TAC >> gvs[raise_def, return_def]
+QED
+
+Theorem write_storage_slot_state:
+  !cx is_trans slot tv v st res st'. write_storage_slot cx is_trans slot tv v st = (res, st') ==> st' = st
+Proof
+  Cases_on `is_trans` >>
+  rw[write_storage_slot_def, bind_def, ignore_bind_def, lift_option_def,
+     get_storage_backend_def, set_storage_backend_def,
+     get_transient_storage_def, update_transient_def,
+     get_accounts_def, update_accounts_def, return_def, raise_def] >>
+  gvs[AllCaseEqs()] >>
+  Cases_on `encode_value tv v` >> gvs[return_def, raise_def]
+QED
+
+(* ===== Lemmas about immutables preservation ===== *)
+
+(* Storage operations preserve immutables *)
+Theorem read_storage_slot_immutables:
+  !cx is_trans slot tv st res st'.
+    read_storage_slot cx is_trans slot tv st = (res, st') ==>
+    st'.immutables = st.immutables
+Proof
+  Cases_on `is_trans` >>
+  rw[read_storage_slot_def, bind_def, get_storage_backend_def,
+     get_transient_storage_def, get_accounts_def, return_def, lift_option_def] >>
+  qpat_x_assum `_ = _` mp_tac >> CASE_TAC >> gvs[raise_def, return_def]
+QED
+
+Theorem write_storage_slot_immutables:
+  !cx is_trans slot tv v st res st'.
+    write_storage_slot cx is_trans slot tv v st = (res, st') ==>
+    st'.immutables = st.immutables
+Proof
+  Cases_on `is_trans` >>
+  rw[write_storage_slot_def, bind_def, ignore_bind_def, lift_option_def,
+     get_storage_backend_def, set_storage_backend_def,
+     get_transient_storage_def, update_transient_def,
+     get_accounts_def, update_accounts_def, return_def, raise_def] >>
+  gvs[AllCaseEqs()] >>
+  Cases_on `encode_value tv v` >> gvs[return_def, raise_def]
+QED
+
+Theorem lookup_global_immutables:
+  !cx src n st res st'.
+    lookup_global cx src n st = (res, st') ==>
+    st'.immutables = st.immutables
+Proof
+  rw[lookup_global_def, bind_def, return_def, lift_option_def] >>
+  Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
+  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >>
+  PairCases_on `x'` >> gvs[] >>
+  Cases_on `x'0` >> gvs[bind_def, return_def, raise_def] >>
+  qpat_x_assum `_ = (res, st')` mp_tac >>
+  rpt CASE_TAC >> gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
+  imp_res_tac read_storage_slot_immutables >> simp[]
+QED
+
+Theorem set_global_immutables:
+  !cx src n v st res st'.
+    set_global cx src n v st = (res, st') ==>
+    st'.immutables = st.immutables
+Proof
+  rw[set_global_def, bind_def, return_def, lift_option_def] >>
+  Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
+  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >>
+  PairCases_on `x'` >> gvs[] >>
+  Cases_on `x'0` >> gvs[return_def, raise_def, bind_def] >>
+  Cases_on `lookup_var_slot_from_layout cx b n` >> gvs[return_def, raise_def] >>
+  Cases_on `evaluate_type (type_env x) t` >> gvs[return_def, raise_def] >>
+  imp_res_tac write_storage_slot_immutables >> gvs[]
+QED
+
+Theorem get_immutables_state:
+  !cx src st res st'. get_immutables cx src st = (res, st') ==> st' = st
+Proof
+  rw[get_immutables_def, bind_def, return_def, get_address_immutables_def, lift_option_def] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> fs[return_def, raise_def]
+QED
+
+Theorem lookup_global_state:
+  !cx src n st res st'. lookup_global cx src n st = (res, st') ==> st' = st
+Proof
+  rw[lookup_global_def, bind_def, return_def, lift_option_def] >>
+  Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
+  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >>
+  PairCases_on `x'` >> gvs[] >>
+  Cases_on `x'0` >> gvs[bind_def, return_def, raise_def] >>
+  qpat_x_assum `_ = (res, st')` mp_tac >>
+  rpt CASE_TAC >> gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
+  drule read_storage_slot_state >> simp[]
+QED
+
+Theorem set_global_state:
+  !cx src n v st res st'. set_global cx src n v st = (res, st') ==> st' = st
+Proof
+  rw[set_global_def, bind_def, return_def, lift_option_def] >>
+  Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
+  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >>
+  PairCases_on `x'` >> gvs[] >>
+  Cases_on `x'0` >> gvs[return_def, raise_def, bind_def] >>
+  imp_res_tac lift_option_state >> gvs[] >>
+  Cases_on `lookup_var_slot_from_layout cx b n` >> gvs[return_def, raise_def] >>
+  Cases_on `evaluate_type (type_env x) t` >> gvs[return_def, raise_def] >>
+  imp_res_tac write_storage_slot_state >> gvs[]
+QED
+
+Theorem set_immutable_state:
+  !cx src n v st res st'. set_immutable cx src n v st = (res, st') ==> st' = st
+Proof
+  rw[set_immutable_def, bind_def, return_def, get_address_immutables_def,
+     set_address_immutables_def, lift_option_def] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[raise_def, return_def]
+QED
+
+Theorem push_log_state:
+  !l st res st'. push_log l st = (res, st') ==> st' = st
+Proof
+  rw[push_log_def, return_def] >> simp[]
+QED
+
+Theorem transfer_value_state:
+  !f t a st res st'. transfer_value f t a st = (res, st') ==> st' = st
+Proof
+  rw[transfer_value_def, bind_def, ignore_bind_def, get_accounts_def, return_def, check_def, assert_def, update_accounts_def] >>
+  gvs[raise_def] >> simp[]
+QED
+
+Theorem lookup_flag_mem_state:
+  !cx nsid mid st res st'. lookup_flag_mem cx nsid mid st = (res, st') ==> st' = st
+Proof
+  rpt gen_tac >> PairCases_on `nsid` >>
+  simp[lookup_flag_mem_def, return_def, raise_def] >>
+  rpt CASE_TAC >> simp[return_def, raise_def]
+QED
+
+Theorem switch_BoolV_state:
+  ∀v f g st res st'.
+    switch_BoolV v f g st = (res, st') ∧
+    (∀st1 res1 st1'. f st1 = (res1, st1') ⇒ st1' = st1) ∧
+    (∀st1 res1 st1'. g st1 = (res1, st1') ⇒ st1' = st1) ⇒
+    st' = st
+Proof
+  rw[switch_BoolV_def, raise_def]
+QED
