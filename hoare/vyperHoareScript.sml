@@ -747,14 +747,21 @@ Proof
   simp[target_spec_scoped_var]
 QED
 
-(*
-Theorem stmts_spec_assign_subscript:
-  ∀P Q cx tgt e.
-     (⟦cx⟧ ⦃P⦄ BaseTarget (SubscriptTarget tgt ⇓ᵗ⦃λav st. Q av st⦄))
+Theorem stmts_spec_assign_scoped_var_subscripts:
+  ∀P P' Q cx bt n sbs e.
+    (⟦cx⟧ ⦃P⦄ BaseTarget bt ⇓ᵗ⦃λav st. av = (BaseTargetV (ScopedVar n) sbs) ∧ P' st⦄) ∧
+    (⟦cx⟧
+     ⦃P'⦄
+     e
+     ⇓⦃λtv st. ∃v0 v1 v2.
+                 tv = Value v1 ∧
+                 lookup_scoped_var st n = SOME v0 ∧
+                 assign_subscripts v0 sbs (Replace v1) = INL v2 ∧
+                 Q (update_scoped_var st n v2)⦄) ⇒
+    ⟦cx⟧ ⦃P⦄ [Assign (BaseTarget (SubscriptTarget t ei)) e] ⦃Q ∥ λ_ _. F⦄
 Proof
   cheat
 QED
-*)
 
 Theorem stmts_spec_ann_assign:
   ∀P Q cx n ty e.

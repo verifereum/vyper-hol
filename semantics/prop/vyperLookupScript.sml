@@ -60,10 +60,12 @@ Definition lookup_base_target_def:
     | (INR _, _) => NONE
 End
 
+(* ScopedVar or ImmutableVar *)
 Definition lookup_name_target_def:
   lookup_name_target cx st n = lookup_base_target cx st (NameTarget n)
 End
 
+(* TopLevelVar *)
 Definition lookup_toplevel_name_target_def:
   lookup_toplevel_name_target cx st n = lookup_base_target cx st (TopLevelNameTarget n)
 End
