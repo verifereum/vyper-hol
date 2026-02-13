@@ -35,7 +35,7 @@ End
 
 Definition example_3_body_def:
   example_3_body = case example_3_decl of
-    | FunctionDecl _ _ _ _ _ body => body
+    | FunctionDecl _ _ _ _ _ _ body => body
     | _ => []
 End
 
@@ -529,25 +529,23 @@ Proof
                               lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
                               lookup_name cx st "y" = NONE``,
      ``cx:evaluation_context``, ``"x":string``, ``Add:binop``,
-     ``Literal (IntL (Unsigned 256) 10):expr``,
-     ``IntV (Unsigned 256) xarg``, ``IntV (Unsigned 256) 10``,
-     ``IntV (Unsigned 256) (xarg + 10)``] stmts_spec_aug_assign_scoped_var)) >>
+      ``Literal (IntL (Unsigned 256) 10):expr``] stmts_spec_aug_assign_scoped_var)) >>
+   irule expr_spec_consequence >>
+   qexistsl_tac [`λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
+                        lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) xarg) ∧
+                        lookup_name cx st "y" = NONE`,
+                 `λtv st. (st.scopes ≠ [] ∧ valid_lookups cx st ∧
+                        lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) xarg) ∧
+                        lookup_name cx st "y" = NONE) ∧
+                        tv = Value (IntV (Unsigned 256) 10)`] >>
+   conj_tac >- simp[] >>
    conj_tac >-
-     (simp[evaluate_binop_def, bounded_int_op_def] >>
-      gvs[vyperTypeValueTheory.within_int_bound_def] >>
-      intLib.ARITH_TAC) >>
-    irule expr_spec_consequence >>
-    qexistsl_tac [`λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
-                         lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) xarg) ∧
-                         lookup_name cx st "y" = NONE`,
-                  `λtv st. (st.scopes ≠ [] ∧ valid_lookups cx st ∧
-                         lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) xarg) ∧
-                         lookup_name cx st "y" = NONE) ∧
-                         tv = Value (IntV (Unsigned 256) 10)`] >>
-    conj_tac >- simp[] >>
-    conj_tac >-
-       (simp[scopes_nonempty_after_update, lookup_after_update, lookup_name_preserved_after_update] >>
-        metis_tac[valid_lookups_preserved_after_update_var_in_scope, lookup_scoped_var_implies_var_in_scope]) >>
+      (rpt strip_tac >> gvs[] >>
+       qexists_tac `IntV (Unsigned 256) (xarg + 10)` >>
+       gvs[evaluate_binop_def, bounded_int_op_def, scopes_nonempty_after_update, lookup_after_update,
+           lookup_name_preserved_after_update, vyperTypeValueTheory.within_int_bound_def] >>
+       conj_tac >- intLib.ARITH_TAC >>
+       metis_tac[valid_lookups_preserved_after_update_var_in_scope, lookup_scoped_var_implies_var_in_scope]) >>
    ACCEPT_TAC (SIMP_RULE std_ss [EVAL ``evaluate_literal (IntL (Unsigned 256) 10)``]
      (ISPECL [``λst:evaluation_state. st.scopes ≠ [] ∧ valid_lookups (cx:evaluation_context) st ∧
                                        lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) xarg) ∧
@@ -658,60 +656,61 @@ Proof
                                lookup_name cx (tl_scopes st) "y" = NONE ∧
                                ¬(xarg + 10 > 100)``,
        ``cx:evaluation_context``, ``"x":string``, ``Add:binop``,
-       ``Literal (IntL (Unsigned 256) 10):expr``,
-       ``IntV (Unsigned 256) (xarg + 10)``, ``IntV (Unsigned 256) 10``,
-       ``IntV (Unsigned 256) (xarg + 20)``] stmts_spec_aug_assign_scoped_var)) >>
-     conj_tac >- (
-       simp[evaluate_binop_def, bounded_int_op_def] >>
-       gvs[vyperTypeValueTheory.within_int_bound_def] >> intLib.ARITH_TAC) >>
-      irule expr_spec_consequence >>
-      qexistsl_tac [
-        `λst. st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧ (tl_scopes st).scopes ≠ [] ∧
-              valid_lookups cx (tl_scopes st) ∧
-              lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
-              lookup_name cx (tl_scopes st) "y" = NONE ∧
-              ¬(xarg + 10 > 100)`,
-        `λtv st. (st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧ (tl_scopes st).scopes ≠ [] ∧
-              valid_lookups cx (tl_scopes st) ∧
-              lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
-              lookup_name cx (tl_scopes st) "y" = NONE ∧
-              ¬(xarg + 10 > 100)) ∧
-              tv = Value (IntV (Unsigned 256) 10)`] >>
-      simp[] >>
-      conj_tac >- (
-        rpt strip_tac >-
-        (`(tl_scopes (update_scoped_var st "x" (IntV (Unsigned 256) (xarg + 20)))).scopes ≠ []` by
-          (irule scopes_nonempty_preserved_after_update_in_tl_scopes >>
+        ``Literal (IntL (Unsigned 256) 10):expr``] stmts_spec_aug_assign_scoped_var)) >>
+       irule expr_spec_consequence >>
+       qexistsl_tac [
+         `λst. st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧ (tl_scopes st).scopes ≠ [] ∧
+               valid_lookups cx (tl_scopes st) ∧
+               lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
+               lookup_name cx (tl_scopes st) "y" = NONE ∧
+               ¬(xarg + 10 > 100)`,
+         `λtv st. (st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧ (tl_scopes st).scopes ≠ [] ∧
+               valid_lookups cx (tl_scopes st) ∧
+               lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
+               lookup_name cx (tl_scopes st) "y" = NONE ∧
+               ¬(xarg + 10 > 100)) ∧
+               tv = Value (IntV (Unsigned 256) 10)`] >>
+       simp[] >>
+       conj_tac >- (
+         rpt strip_tac >> gvs[] >>
+         qexists_tac `IntV (Unsigned 256) (xarg + 20)` >>
+         gvs[evaluate_binop_def, bounded_int_op_def, vyperTypeValueTheory.within_int_bound_def] >>
+         conj_tac >- intLib.ARITH_TAC >>
+         conj_tac >-
+         (`(tl_scopes (update_scoped_var st "x" (IntV (Unsigned 256) (xarg + 20)))).scopes ≠ []` by
+           (irule scopes_nonempty_preserved_after_update_in_tl_scopes >>
+            gvs[lookup_in_current_scope_hd] >>
+            `lookup_in_current_scope st "x" = NONE` by gvs[lookup_in_current_scope_hd] >>
+            gvs[var_in_tl_scopes] >>
+            irule lookup_scoped_var_implies_var_in_scope >>
+            gvs[lookup_in_tl_scopes]) >>
+         gvs[]) >>
+         conj_tac >-
+        (irule valid_lookups_preserved_after_update_in_tl_scopes >>
+         gvs[lookup_in_current_scope_hd] >>
+         `lookup_in_current_scope st "x" = NONE` by gvs[lookup_in_current_scope_hd] >>
+         gvs[var_in_tl_scopes] >>
+         irule lookup_scoped_var_implies_var_in_scope >>
+         gvs[lookup_in_tl_scopes]) >>
+         conj_tac >-
+        (`HD (update_scoped_var st "x" (IntV (Unsigned 256) (xarg + 20))).scopes = HD st.scopes` by
+           (irule hd_scopes_preserved_after_update_in_tl_scopes >>
+            gvs[lookup_in_current_scope_hd] >>
+            `lookup_in_current_scope st "x" = NONE` by gvs[lookup_in_current_scope_hd] >>
+            gvs[var_in_tl_scopes] >>
+            irule lookup_scoped_var_implies_var_in_scope >>
+            gvs[lookup_in_tl_scopes]) >>
+         gvs[]) >>
+         conj_tac >- simp[lookup_after_update] >>
+        `lookup_name cx (tl_scopes (update_scoped_var st "x" (IntV (Unsigned 256) (xarg + 20)))) "y" =
+         lookup_name cx (tl_scopes st) "y"` by
+          (irule lookup_name_preserved_after_update_in_tl_scopes >>
            gvs[lookup_in_current_scope_hd] >>
            `lookup_in_current_scope st "x" = NONE` by gvs[lookup_in_current_scope_hd] >>
            gvs[var_in_tl_scopes] >>
            irule lookup_scoped_var_implies_var_in_scope >>
            gvs[lookup_in_tl_scopes]) >>
-        gvs[]) >-
-       (irule valid_lookups_preserved_after_update_in_tl_scopes >>
-        gvs[lookup_in_current_scope_hd] >>
-        `lookup_in_current_scope st "x" = NONE` by gvs[lookup_in_current_scope_hd] >>
-        gvs[var_in_tl_scopes] >>
-        irule lookup_scoped_var_implies_var_in_scope >>
-        gvs[lookup_in_tl_scopes]) >-
-       (`HD (update_scoped_var st "x" (IntV (Unsigned 256) (xarg + 20))).scopes = HD st.scopes` by
-          (irule hd_scopes_preserved_after_update_in_tl_scopes >>
-           gvs[lookup_in_current_scope_hd] >>
-           `lookup_in_current_scope st "x" = NONE` by gvs[lookup_in_current_scope_hd] >>
-           gvs[var_in_tl_scopes] >>
-           irule lookup_scoped_var_implies_var_in_scope >>
-           gvs[lookup_in_tl_scopes]) >>
-        gvs[]) >-
-       simp[lookup_after_update] >>
-       `lookup_name cx (tl_scopes (update_scoped_var st "x" (IntV (Unsigned 256) (xarg + 20)))) "y" =
-        lookup_name cx (tl_scopes st) "y"` by
-         (irule lookup_name_preserved_after_update_in_tl_scopes >>
-          gvs[lookup_in_current_scope_hd] >>
-          `lookup_in_current_scope st "x" = NONE` by gvs[lookup_in_current_scope_hd] >>
-          gvs[var_in_tl_scopes] >>
-          irule lookup_scoped_var_implies_var_in_scope >>
-          gvs[lookup_in_tl_scopes]) >>
-       gvs[]) >>
+        gvs[]) >>
      ACCEPT_TAC (SIMP_RULE std_ss [EVAL ``evaluate_literal (IntL (Unsigned 256) 10)``]
        (ISPECL [``λst:evaluation_state. st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧
                    (tl_scopes st).scopes ≠ [] ∧

@@ -57,9 +57,10 @@ Datatype:
   | BuiltinK builtin eval_continuation
   | TypeBuiltinK type_builtin type eval_continuation
   | CallSendK eval_continuation
-  | ExtCallK bool identifier (type list) type eval_continuation
-  | IntCallK (num |-> type_args) (num |-> type_args) (num option # identifier) ((identifier # type) list) type (stmt list) eval_continuation
-  | IntCallK1 (scope list) type_value eval_continuation
+  | ExtCallK bool identifier (type list) type (expr option) eval_continuation
+  | IntCallK (num |-> type_args) (num |-> type_args) (num option # identifier) ((identifier # type) list) (expr list) type (stmt list) eval_continuation
+  | IntCallK1 (num |-> type_args) (num |-> type_args) (num option # identifier) ((identifier # type) list) (value list) type (stmt list) eval_continuation
+  | IntCallK2 (scope list) type_value eval_continuation
   | ExprsK (expr list) eval_continuation
   | ExprsK1 value eval_continuation
   | DoneK
@@ -177,26 +178,28 @@ Definition eval_expr_cps_def:
             "TypeBuiltin args" st of
         (INR ex, st) => AK cx8 (ApplyExc ex) st k
       | (INL tv, st) => eval_exprs_cps cx8 es st (TypeBuiltinK tb typ k)) ∧
-  eval_expr_cps cx9 (Call Send es) st k =
+  eval_expr_cps cx9 (Call Send es _) st k =
     (case check (LENGTH es = 2) "Send args" st of
        (INR ex, st) => AK cx9 (ApplyExc ex) st k
      | (INL (), st) => eval_exprs_cps cx9 es st (CallSendK k)) ∧
-  eval_expr_cps cx10 (Call (ExtCall is_static (func_name, arg_types, ret_type)) es) st k =
-    eval_exprs_cps cx10 es st (ExtCallK is_static func_name arg_types ret_type k) ∧
-  eval_expr_cps cx10 (Call (IntCall (ns, fn)) es) st k =
+  eval_expr_cps cx10 (Call (ExtCall is_static (func_name, arg_types, ret_type)) es drv) st k =
+    eval_exprs_cps cx10 es st (ExtCallK is_static func_name arg_types ret_type drv k) ∧
+  eval_expr_cps cx10 (Call (IntCall (ns, fn)) es _) st k =
     (case do
       check (no_recursion (ns, fn) cx10.stk) "recursion";
       ts <- lift_option (get_module_code cx10 ns) "IntCall get_module_code";
       tup <- lift_option (lookup_callable_function cx10.in_deploy fn ts) "IntCall lookup_function";
       stup <<- SND tup; args <<- FST stup; sstup <<- SND stup;
-      ret <<- FST $ sstup; body <<- SND $ sstup;
-      check (LENGTH args = LENGTH es) "IntCall args length";
+      dflts <<- FST sstup; sstup2 <<- SND sstup;
+      ret <<- FST $ sstup2; body <<- SND $ sstup2;
+      check (LENGTH es ≤ LENGTH args ∧
+           LENGTH args - LENGTH es ≤ LENGTH dflts) "IntCall args length";
       (* Use combined type env for return type (may reference types from other modules) *)
       all_mods <<- (case ALOOKUP cx10.sources cx10.txn.target of SOME m => m | NONE => []);
-      return (type_env ts, type_env_all_modules all_mods, args, ret, body) od st
+      return (type_env ts, type_env_all_modules all_mods, args, dflts, ret, body) od st
      of (INR ex, st) => AK cx10 (ApplyExc ex) st k
-      | (INL (tenv, all_tenv, args, ret, body), st) =>
-          eval_exprs_cps cx10 es st (IntCallK tenv all_tenv (ns, fn) args ret body k)) ∧
+      | (INL (tenv, all_tenv, args, dflts, ret, body), st) =>
+          eval_exprs_cps cx10 es st (IntCallK tenv all_tenv (ns, fn) args dflts ret body k)) ∧
   eval_exprs_cps cx11 [] st k = AK cx11 (ApplyVals []) st k ∧
   eval_exprs_cps cx12 (e::es) st k =
     eval_expr_cps cx12 e st (ExprsK es k)
@@ -309,7 +312,7 @@ Definition apply_def:
     AK cx (ApplyExc $ Error "not BoolV") st (IfK2 k) ∧
   apply cx st (IfK1 _ ss1 ss2 k) =
     AK cx (ApplyExc $ Error "not Value") st (IfK2 k) ∧
-  apply cx st (IntCallK1 prev rtv k) =
+  apply cx st (IntCallK2 prev rtv k) =
     liftk (cx with stk updated_by TL) (ApplyTv o Value)
       (do pop_function prev;
           crv <- lift_option (safe_cast rtv NoneV) "IntCall cast ret";
@@ -368,9 +371,10 @@ Definition apply_exc_def:
   apply_exc cx ex st (BuiltinK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (TypeBuiltinK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CallSendK k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (ExtCallK _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (IntCallK _ _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (IntCallK1 prev rtv k) =
+  apply_exc cx ex st (ExtCallK _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (IntCallK _ _ _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (IntCallK1 _ _ _ _ _ _ _ k) = AK (cx with stk updated_by TL) (ApplyExc ex) st k ∧
+  apply_exc cx ex st (IntCallK2 prev rtv k) =
     liftk (cx with stk updated_by TL) (ApplyTv o Value)
       (do rv <- finally (handle_function ex) (pop_function prev);
           crv <- lift_option (safe_cast rtv rv) "IntCall cast ret";
@@ -586,8 +590,8 @@ Definition apply_vals_def:
       transfer_value cx.txn.target toAddr amount;
       return $ Value NoneV
     od st) k ∧
-  apply_vals cx vs st (ExtCallK is_static func_name arg_types ret_type k) =
-    liftk cx ApplyTv (do
+  apply_vals cx vs st (ExtCallK is_static func_name arg_types ret_type drv k) =
+    (case do
       check (vs ≠ []) "ExtCall no target";
       target_addr <- lift_option (dest_AddressV (HD vs)) "ExtCall target not address";
       (* Convention: staticcall (T) args = [target; arg1; ...]
@@ -614,19 +618,30 @@ Definition apply_vals_def:
       check success "ExtCall reverted";
       update_accounts (K accounts');
       update_transient (K tStorage');
-      ret_val <- lift_sum (evaluate_abi_decode_return tenv ret_type returnData);
-      return $ Value ret_val
-    od st) k ∧
-  apply_vals cx vs st (IntCallK tenv all_tenv src_fn args ret body k) =
+      if returnData = [] ∧ IS_SOME drv then
+        return (INL (THE drv))
+      else do
+        ret_val <- lift_sum (evaluate_abi_decode_return tenv ret_type returnData);
+        return (INR (Value ret_val))
+      od
+    od st
+    of (INR ex, st) => AK cx (ApplyExc ex) st k
+     | (INL (INL e), st) => eval_expr_cps cx e st k
+     | (INL (INR tv), st) => AK cx (ApplyTv tv) st k) ∧
+  apply_vals cx vs st (IntCallK tenv all_tenv src_fn args dflts ret body k) =
+    eval_exprs_cps (cx with stk updated_by CONS src_fn)
+      (DROP (LENGTH dflts - (LENGTH args - LENGTH vs)) dflts) st
+      (IntCallK1 tenv all_tenv src_fn args vs ret body k) ∧
+  apply_vals cx dflt_vs st (IntCallK1 tenv all_tenv src_fn args vs ret body k) =
     (case do
-      env <- lift_option (bind_arguments tenv args vs) "IntCall bind_arguments";
+      env <- lift_option (bind_arguments tenv args (vs ++ dflt_vs)) "IntCall bind_arguments";
       prev <- get_scopes;
       rtv <- lift_option (evaluate_type all_tenv ret) "IntCall eval ret";
-      cxf <- push_function src_fn env cx;
+      cxf <- push_function src_fn env (cx with stk updated_by TL);
       return (prev, cxf, body, rtv) od st
-     of (INR ex, st) => apply_exc cx ex st k
+     of (INR ex, st) => apply_exc (cx with stk updated_by TL) ex st k
       | (INL (prev, cxf, body, rtv), st) =>
-          eval_stmts_cps cxf body st (IntCallK1 prev rtv k)) ∧
+          eval_stmts_cps cxf body st (IntCallK2 prev rtv k)) ∧
   apply_vals cx vs st DoneK = AK cx (ApplyVals vs) st DoneK ∧
   apply_vals cx vs st _ =
     AK cx (ApplyExc $ Error "apply_vals k") st DoneK
@@ -1187,31 +1202,61 @@ Proof
     rw[eval_expr_cps_def, evaluate_def, bind_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    \\ rw[Once OWHILE_THM, stepk_def, apply_vals_def, liftk1])
+    \\ simp[Once OWHILE_THM, stepk_def, apply_vals_def, liftk1]
+    \\ qmatch_goalsub_abbrev_tac`pair_CASE cc1`
+    \\ qmatch_goalsub_abbrev_tac`lhs = _`
+    \\ qmatch_goalsub_abbrev_tac`pair_CASE cc2`
+    \\ qunabbrev_tac`lhs`
+    \\ Cases_on`cc1` \\ Cases_on`cc2` \\ gvs[]
+    \\ gvs[bind_def, ignore_bind_def,CaseEq"prod",CaseEq"sum"]
+    \\ pairarg_tac \\ gvs[bind_def,CaseEq"prod",CaseEq"sum"]
+    \\ pairarg_tac \\ gvs[bind_def,CaseEq"prod",CaseEq"sum"]
+    \\ qmatch_asmsub_abbrev_tac`COND b`
+    \\ reverse $ Cases_on`b` \\ gvs[]
+    >- gvs[bind_def, return_def, CaseEq"prod", CaseEq"sum"]
+    \\ gvs[return_def]
+    \\ first_x_assum drule
+    \\ disch_then $ funpow 10 drule_then drule
+    \\ rw[] )
   \\ conj_tac >- ( (* IntCall *)
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def,
        no_recursion_def]
     \\ BasicProvers.TOP_CASE_TAC
     \\ gvs[cont_def,CaseEq"prod",CaseEq"sum",return_def]
-    \\ qmatch_goalsub_rename_tac`SND p`
+    \\ qmatch_goalsub_rename_tac`SND (SND (SND p))`
     \\ PairCases_on`p` \\ gvs[]
-    \\ first_assum (drule_then (drule_then drule))
+    \\ first_x_assum (drule_then (drule_then drule))
     \\ simp_tac std_ss [] \\ disch_then drule
     \\ simp_tac std_ss [] \\ disch_then kall_tac
     \\ CASE_TAC
     \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    >> rw[Once OWHILE_THM, stepk_def, apply_vals_def]
+    (* after eval_exprs for es, now in IntCallK: dispatch to eval defaults *)
+    \\ drule eval_exprs_length \\ strip_tac
+    \\ first_x_assum $ funpow 2 drule_then drule
+    \\ simp_tac std_ss []
+    \\ disch_then $ drule_then drule \\ asm_simp_tac std_ss []
+    \\ disch_then kall_tac
+    \\ CASE_TAC
+    \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def, o_DEF]
     >> rw[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def]
+    (* after eval_exprs for defaults, now in IntCallK1: bind_arguments etc *)
     \\ BasicProvers.TOP_CASE_TAC
     \\ gvs[CaseEq"prod",CaseEq"sum",return_def]
     \\ TRY (
-      rw[Once OWHILE_THM, SimpRHS, stepk_def]
+      gvs[o_DEF]
+      \\ rw[Once OWHILE_THM, SimpRHS, stepk_def]
       \\ CHANGED_TAC $ gvs[apply_exc_def]
+      \\ gvs[o_DEF]
       \\ rw[Once OWHILE_THM] \\ NO_TAC )
+    (* (expecting 1 subgoal) *)
     \\ rw[return_def, finally_def, try_def, bind_def]
+    \\ gvs[o_DEF]
     \\ last_x_assum $ funpow 2 drule_then drule
-    \\ simp_tac std_ss []
-    \\ disch_then $ funpow 5 drule_then drule
+    \\ asm_simp_tac std_ss []
+    \\ disch_then $ funpow 6 drule_then drule
     \\ simp_tac std_ss [] \\ disch_then kall_tac
     \\ gvs[push_function_def, return_def, pop_function_def]
     \\ CASE_TAC
@@ -1222,7 +1267,7 @@ Proof
       \\ CASE_TAC
       \\ rw[return_def]
       \\ CASE_TAC
-      \\ rw[o_DEF]
+      \\ gvs[o_DEF]
       \\ ntac 3 CASE_TAC \\ gvs[] )
     \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def, o_DEF, liftk1]
     \\ rw[bind_def, ignore_bind_def, finally_def]

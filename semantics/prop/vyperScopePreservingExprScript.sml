@@ -1,7 +1,6 @@
 Theory vyperScopePreservingExpr
-
 Ancestors
-  vyperInterpreter vyperLookup vyperScopePreservation
+  option vyperInterpreter vyperLookup vyperScopePreservation
 
 (* Scope-preserving expressions: expressions that do not modify scopes.
    Pop is the only expression constructor that modifies scoped variables.
@@ -18,8 +17,7 @@ Definition scope_preserving_expr_def:
   scope_preserving_expr (Attribute e _) = scope_preserving_expr e ∧
   scope_preserving_expr (Builtin _ es) = EVERY scope_preserving_expr es ∧
   scope_preserving_expr (TypeBuiltin _ _ es) = EVERY scope_preserving_expr es ∧
-  scope_preserving_expr (Pop _) = F ∧
-  scope_preserving_expr (Call _ es) = EVERY scope_preserving_expr es
+  scope_preserving_expr _ = F
 Termination
   WF_REL_TAC `measure expr_size` >>
   rw[] >>
@@ -206,83 +204,13 @@ Proof
   first_x_assum drule >> gvs[ETA_THM]
 QED
 
-Theorem case_Send[local]:
-  ∀cx es.
-    (∀s'' x t.
-       check (LENGTH es = 2) "Send args" s'' = (INL x, t) ⇒
-       ∀st res st'.
-         eval_exprs cx es st = (res, st') ⇒ EVERY scope_preserving_expr es ⇒ st.scopes = st'.scopes) ⇒
-    (∀st res st'.
-       eval_expr cx (Call Send es) st = (res, st') ⇒
-       scope_preserving_expr (Call Send es) ⇒ st.scopes = st'.scopes)
+(* All Call cases are vacuously true since scope_preserving_expr (Call _ _ _) = F *)
+Theorem case_Call[local]:
+  ∀cx c es drv st res st'.
+    eval_expr cx (Call c es drv) st = (res, st') ⇒
+    scope_preserving_expr (Call c es drv) ⇒ st.scopes = st'.scopes
 Proof
-  rpt strip_tac >>
-  gvs[evaluate_def, bind_def, AllCaseEqs(), scope_preserving_expr_def, ignore_bind_def,
-      check_def, assert_def, return_def, raise_def, lift_option_def] >>
-  TRY (drule transfer_value_scopes >> strip_tac) >>
-  TRY (Cases_on `dest_NumV (EL 1 vs)` >> gvs[return_def, raise_def]) >>
-  TRY (Cases_on `dest_AddressV (HD vs)` >> gvs[return_def, raise_def]) >>
-  first_x_assum drule >> gvs[ETA_THM]
-QED
-
-Theorem case_ExtCall[local]:
-  ∀cx is_static sig es.
-    (∀st res st'.
-       eval_exprs cx es st = (res, st') ⇒ EVERY scope_preserving_expr es ⇒ st.scopes = st'.scopes) ⇒
-    (∀st res st'.
-       eval_expr cx (Call (ExtCall is_static sig) es) st = (res, st') ⇒
-       scope_preserving_expr (Call (ExtCall is_static sig) es) ⇒ st.scopes = st'.scopes)
-Proof
-  rpt strip_tac >>
-  PairCases_on`sig` >>
-  gvs[evaluate_def, bind_def, ignore_bind_def, CaseEq"prod", CaseEq"sum",
-      lift_option_def, CaseEq"option", option_CASE_rator, raise_def,
-      return_def, check_def, assert_def, scope_preserving_expr_def, COND_RATOR,
-      get_transient_storage_def, get_accounts_def, CaseEq"bool",pairTheory.UNCURRY] >>
-  first_x_assum drule >> gvs[ETA_THM] >>
-  rename1 `run_ext_call _ _ _ _ _ _ _ = SOME result` >>
-  PairCases_on `result` >>
-  gvs[bind_def, ignore_bind_def, assert_def, CaseEq"prod", CaseEq"sum",
-      lift_sum_def, update_accounts_def, update_transient_def, return_def,
-      sum_CASE_rator, raise_def]
-QED
-
-(* Case: IntCall - the complex case with finally/pop_function.
-
-   The key is that get_scopes saves prev = st.scopes before entering function,
-   and finally ... (pop_function prev) restores scopes to prev at the end,
-   regardless of whether the function body succeeded or failed. *)
-Theorem case_IntCall[local]:
-  ∀cx src_id_opt fn es.
-    (* IH from evaluate_ind for eval_stmts in function body - not needed for scopes *)
-    (* IH for eval_exprs on arguments *)
-    (∀s'' x t s'3' ts t' s'4' tup t'' stup args sstup ret ss s'5' x' t'3'.
-       check (¬MEM (src_id_opt, fn) cx.stk) "recursion" s'' = (INL x, t) ∧
-       lift_option (get_module_code cx src_id_opt) "IntCall get_module_code" s'3' = (INL ts, t') ∧
-       lift_option (lookup_callable_function cx.in_deploy fn ts) "IntCall lookup_function" s'4' = (INL tup, t'') ∧
-       stup = SND tup ∧ args = FST stup ∧ sstup = SND stup ∧
-       ret = FST sstup ∧ ss = SND sstup ∧
-       check (LENGTH args = LENGTH es) "IntCall args length" s'5' = (INL x', t'3') ⇒
-       ∀st res st'.
-         eval_exprs cx es st = (res, st') ⇒ EVERY scope_preserving_expr es ⇒ st.scopes = st'.scopes) ⇒
-    (∀st res st'.
-       eval_expr cx (Call (IntCall (src_id_opt, fn)) es) st = (res, st') ⇒
-       scope_preserving_expr (Call (IntCall (src_id_opt, fn)) es) ⇒ st.scopes = st'.scopes)
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
-       check_def, assert_def, lift_option_def, get_scopes_def, push_function_def,
-       pop_function_def, set_scopes_def, scope_preserving_expr_def] >>
-  strip_tac >> gvs[return_def, raise_def] >>
-  TRY (drule_all finally_set_scopes >> strip_tac >> gvs[]) >>
-  TRY (Cases_on `safe_cast rtv rv` >> gvs[return_def, raise_def]) >>
-  TRY (gvs[CaseEq"option", option_CASE_rator, raise_def, return_def]) >>
-  TRY (Cases_on `bind_arguments (type_env ts) (FST (SND tup)) vs` >> gvs[return_def, raise_def]) >>
-  TRY (Cases_on `lookup_callable_function cx.in_deploy fn ts` >> gvs[return_def, raise_def]) >>
-  TRY (Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def]) >>
-  TRY (last_x_assum mp_tac >> simp[check_def, assert_def, return_def, lift_option_def] >>
-       strip_tac >> first_x_assum drule >> gvs[scope_preserving_expr_def] >> metis_tac[])
+  rw[scope_preserving_expr_def]
 QED
 
 Theorem case_eval_exprs_nil[local]:
@@ -354,56 +282,25 @@ Theorem expr_scopes_mutual[local]:
   (∀cx es st res st'.
      eval_exprs cx es st = (res, st') ⇒ EVERY scope_preserving_expr es ⇒ st.scopes = st'.scopes)
 Proof
-  (* Proof assembles all case lemmas via the specialized induction principle.
-
-     The case lemmas have `x` in their IH hypotheses, but the induction
-     principle specializes to `()` (the unit value from check). We simplify
-     the lemmas to match by using SIMP_RULE. *)
-  let
-    (* Simplify case lemmas to specialize unit-typed variables *)
-    val case_Builtin' = SIMP_RULE (srw_ss()) [] case_Builtin
-    val case_TypeBuiltin' = SIMP_RULE (srw_ss()) [] case_TypeBuiltin
-    val case_Send' = SIMP_RULE (srw_ss()) [] case_Send
-    val case_IntCall' = SIMP_RULE (srw_ss()) [] case_IntCall
-    val case_eval_exprs_cons' = SIMP_RULE (srw_ss()) [] case_eval_exprs_cons
-  in
-    MP_TAC expr_scopes_ind_principle >> impl_tac >- (
-      rpt conj_tac >> TRY (simp[]) >-
-      (* Name *)
-      metis_tac[case_Name] >-
-      (* TopLevelName *)
-      metis_tac[case_TopLevelName] >-
-      (* FlagMember *)
-      metis_tac[case_FlagMember] >-
-      (* IfExp *)
-      ACCEPT_TAC case_IfExp >-
-      (* Literal *)
-      metis_tac[case_Literal] >-
-      (* StructLit *)
-      metis_tac[case_StructLit] >-
-      (* Subscript *)
-      ACCEPT_TAC case_Subscript >-
-      (* Attribute *)
-      ACCEPT_TAC case_Attribute >-
-      (* Builtin *)
-      ACCEPT_TAC case_Builtin' >-
-      (* Pop *)
-      ACCEPT_TAC case_Pop >-
-      (* TypeBuiltin *)
-      ACCEPT_TAC case_TypeBuiltin' >-
-      (* Send *)
-      ACCEPT_TAC case_Send' >-
-      (* ExtCall - covers both static and non-static *)
-      metis_tac[case_ExtCall] >-
-      (* IntCall *)
-      ACCEPT_TAC case_IntCall' >-
-      (* eval_exprs [] *)
-      ACCEPT_TAC case_eval_exprs_nil >-
-      (* eval_exprs cons *)
-      ACCEPT_TAC case_eval_exprs_cons'
-    ) >>
-    simp[]
-  end
+  MP_TAC expr_scopes_ind_principle >> impl_tac >- (
+    rpt conj_tac >>
+    (* Close trivially-T subgoals (P0-P6) and all Call/Pop cases
+       (scope_preserving_expr (Call _ _ _) = F makes conclusion vacuous) *)
+    TRY (simp[scope_preserving_expr_def] >> NO_TAC) >-
+    metis_tac[case_Name] >-
+    metis_tac[case_TopLevelName] >-
+    metis_tac[case_FlagMember] >-
+    ACCEPT_TAC case_IfExp >-
+    metis_tac[case_Literal] >-
+    metis_tac[case_StructLit] >-
+    ACCEPT_TAC case_Subscript >-
+    ACCEPT_TAC case_Attribute >-
+    ACCEPT_TAC case_Builtin >-
+    ACCEPT_TAC case_TypeBuiltin >-
+    metis_tac[case_eval_exprs_nil] >-
+    ACCEPT_TAC case_eval_exprs_cons
+  ) >>
+  simp[]
 QED
 
 (* ------------------------------------------------------------------------

@@ -35,7 +35,7 @@ End
 
 Definition example_2_body_def:
   example_2_body = case example_2_decl of
-    | FunctionDecl _ _ _ _ _ body => body
+    | FunctionDecl _ _ _ _ _ _ body => body
     | _ => []
 End
 
@@ -175,13 +175,7 @@ Proof outline:
      ``λst:evaluation_state. st.scopes ≠ [] ∧ valid_lookups cx st ∧
                               lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10))``,
      ``cx:evaluation_context``, ``"x":string``, ``Add:binop``,
-     ``Literal (IntL (Unsigned 256) 10):expr``,
-     ``IntV (Unsigned 256) xarg``, ``IntV (Unsigned 256) 10``,
-     ``IntV (Unsigned 256) (xarg + 10)``] stmts_spec_aug_assign_scoped_var)) >>
-   conj_tac >-
-     (simp[evaluate_binop_def, bounded_int_op_def] >>
-      gvs[vyperTypeValueTheory.within_int_bound_def] >>
-      intLib.ARITH_TAC) >>
+     ``Literal (IntL (Unsigned 256) 10):expr``] stmts_spec_aug_assign_scoped_var)) >>
    irule expr_spec_consequence >>
    qexistsl_tac [`λst. st.scopes ≠ [] ∧ valid_lookups cx st ∧
                         lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) xarg)`,
@@ -190,7 +184,11 @@ Proof outline:
                         tv = Value (IntV (Unsigned 256) 10)`] >>
    conj_tac >- simp[] >>
    conj_tac >-
-      (simp[scopes_nonempty_after_update, lookup_after_update] >>
+      (rpt strip_tac >> gvs[] >>
+       qexists_tac `IntV (Unsigned 256) (xarg + 10)` >>
+       gvs[evaluate_binop_def, bounded_int_op_def, scopes_nonempty_after_update, lookup_after_update,
+           vyperTypeValueTheory.within_int_bound_def] >>
+       conj_tac >- intLib.ARITH_TAC >>
        metis_tac[valid_lookups_preserved_after_update_var_in_scope, lookup_scoped_var_implies_var_in_scope]) >>
    ACCEPT_TAC (SIMP_RULE std_ss [EVAL ``evaluate_literal (IntL (Unsigned 256) 10)``]
      (ISPECL [``λst:evaluation_state. st.scopes ≠ [] ∧ valid_lookups (cx:evaluation_context) st ∧
@@ -282,12 +280,7 @@ Proof outline:
                               lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 20)) ∧
                               ¬(xarg + 10 > 100)``,
       ``cx:evaluation_context``, ``"x":string``, ``Add:binop``,
-      ``Literal (IntL (Unsigned 256) 10):expr``,
-      ``IntV (Unsigned 256) (xarg + 10)``, ``IntV (Unsigned 256) 10``,
-      ``IntV (Unsigned 256) (xarg + 20)``] stmts_spec_aug_assign_scoped_var)) >>
-    conj_tac >- (
-      simp[evaluate_binop_def, bounded_int_op_def] >>
-      gvs[vyperTypeValueTheory.within_int_bound_def] >> intLib.ARITH_TAC) >>
+      ``Literal (IntL (Unsigned 256) 10):expr``] stmts_spec_aug_assign_scoped_var)) >>
     irule expr_spec_consequence >>
     qexistsl_tac [
       `λst. st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧ (tl_scopes st).scopes ≠ [] ∧
@@ -298,15 +291,17 @@ Proof outline:
             valid_lookups cx (tl_scopes st) ∧
             lookup_scoped_var st "x" = SOME (IntV (Unsigned 256) (xarg + 10)) ∧
             ¬(xarg + 10 > 100)) ∧ tv = Value (IntV (Unsigned 256) 10)`] >>
-    simp[] >>
+    conj_tac >- simp[] >>
     conj_tac >- (
-      rpt strip_tac >- (
-        `HD (update_scoped_var st "x" (IntV (Unsigned 256) (xarg + 20))).scopes = HD st.scopes` by
-          (irule hd_scopes_preserved_after_update_in_tl_scopes >>
-           simp[lookup_in_current_scope_hd, var_in_tl_scopes] >>
-           metis_tac[lookup_scoped_var_implies_var_in_scope]) >>
-        gvs[]) >>
-      simp[lookup_after_update]) >>
+      rpt strip_tac >> gvs[] >>
+      qexists_tac `IntV (Unsigned 256) (xarg + 20)` >>
+      gvs[evaluate_binop_def, bounded_int_op_def, lookup_after_update,
+          vyperTypeValueTheory.within_int_bound_def] >>
+      `HD (update_scoped_var st "x" (IntV (Unsigned 256) (xarg + 20))).scopes = HD st.scopes` by
+        (irule hd_scopes_preserved_after_update_in_tl_scopes >>
+         simp[lookup_in_current_scope_hd, var_in_tl_scopes] >>
+         metis_tac[lookup_scoped_var_implies_var_in_scope]) >>
+      gvs[] >> intLib.ARITH_TAC) >>
     ACCEPT_TAC (SIMP_RULE std_ss [EVAL ``evaluate_literal (IntL (Unsigned 256) 10)``]
       (ISPECL [``λst:evaluation_state. st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ∧
                   (tl_scopes st).scopes ≠ [] ∧

@@ -208,7 +208,7 @@ signature jsonASTLib = sig
   val mk_JFuncType : term list * term -> term
   val mk_JVT_Type : term -> term
   val mk_JVT_HashMap : term * term -> term
-  val mk_JTL_FunctionDef : string * string list * term list * term * term list -> term
+  val mk_JTL_FunctionDef : string * string list * term list * term list * term * term list -> term
   val mk_JTL_VariableDecl : string * term * bool * bool * bool * term option -> term
   val mk_JTL_HashMapDecl : string * term * term * bool * bool -> term
   val mk_JTL_EventDef : string * term list -> term

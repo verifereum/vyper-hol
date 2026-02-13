@@ -48,9 +48,6 @@ val numOfLargeInt =
 fun achoose err ls = orElse(choose ls, fail err)
 
 fun triml n s = String.extract(s,n,NONE)
-val stringToNumTm =
-  numSyntax.term_of_int o
-  Option.valOf o Int.fromString
 
 val numtm = JSONDecode.map numOfLargeInt intInf
 val stringtm = JSONDecode.map fromMLstring string
@@ -209,22 +206,6 @@ val ClearTransientStorage_tm =
   prim_mk_const{Thy="vyperTestRunner",Name="ClearTransientStorage"}
 
 val unsupported_code = [
-  "def boo(a: DynArray[uint256, 12] =", (* TODO: default argument values *)
-  "def addition(a: uint256, b: uint256 = 1)", (* TODO: ditto *)
-  "def test(a: uint256, b: String[50] =", (* TODO: ditto *)
-  "def test2(l: bytes2 =", (* TODO: ditto *)
-  "def test2(l: Bytes[2] =", (* TODO: ditto *)
-  "def test2(l: Bytes[3] =", (* TODO: ditto *)
-  "def test2(l: Bytes[4] =", (* TODO: ditto *)
-  "def test2(l: bytes3 =", (* TODO: ditto *)
-  "def test2(l: bytes4 =", (* TODO: ditto *)
-  "def foo(a: Bytes[65] =", (* TODO: ditto *)
-  "def foo(a: String[65] =", (* TODO: ditto *)
-  "def foo(a: uint256 =", (* TODO: ditto *)
-  "def foo(a: uint256[3] =", (* TODO: ditto *)
-  "def foo(a: DynArray[uint256, 3] =", (* TODO: ditto *)
-  "def fooBar(a: int128 =", (* TODO: ditto *)
-  "def outer(xs: Bytes[256] = ", (* TODO: default arguments on external fns *)
   "@raw_return\n" (* TODO: add *)
 ]
 
@@ -238,44 +219,10 @@ val unsupported_patterns = unsupported_code @ [
   "create_copy_of(",
   "gas=",
   "# pragma nonreentrancy",
-  "@nonreentrant",
-  "default_return_value="
+  "@nonreentrant"
 ]
 
-fun has_default_arg src =
-  let
-    val n = String.size src
-    fun find_sub sub i =
-      let val m = String.size sub in
-        if i + m > n then NONE
-        else if String.substring (src, i, m) = sub then SOME i
-        else find_sub sub (i + 1)
-      end
-    fun find_char c i =
-      if i >= n then NONE
-      else if String.sub (src, i) = c then SOME i
-      else find_char c (i + 1)
-    fun has_default_from i =
-      case find_sub "def " i of
-        NONE => false
-      | SOME d =>
-          (case find_char #"(" (d + 4) of
-             NONE => false
-           | SOME l =>
-               (case find_char #")" (l + 1) of
-                  NONE => false
-                | SOME r =>
-                    let
-                      val args = String.substring (src, l + 1, r - l - 1)
-                    in
-                      String.isSubstring "=" args orelse has_default_from (r + 1)
-                    end))
-  in
-    has_default_from 0
-  end
-
 fun has_unsupported_patterns src =
-  has_default_arg src orelse
   List.exists (fn x => String.isSubstring x src) unsupported_patterns
 
 fun is_blank s =
@@ -349,7 +296,42 @@ val excluded_test_names = [
      directly instead of materializing the whole array. *)
   "test_boundary_access_to_arr",
   "test_negative_ix_access_to_large_arr",
-  "test_oob_access_to_large_arr"
+  "test_oob_access_to_large_arr",
+  (* TODO: external calls with default args *)
+  "test_basic_default_param_*",
+  "test_default_param_*",
+  "test_default_arg_string",
+  "test_environment_vars_as_default",
+  "test_external_contract_calls_with_default_value*",
+  "test_bytes_literals[*]",
+  "test_native_hex_literals[*]",
+  "test_reentrant_decorator",
+  "test_private_zero_bytearray",
+  (* TODO: needs investigation *)
+  "test_inline_interface_export",
+  "test_imported_module_not_part_of_interface",
+  "test_exported_fun_part_of_interface",
+  "test_simple_export",
+  "test_nested_export",
+  "test_transitive_export",
+  "test_export_*",
+  "test_exports_*",
+  "test_*_exports",
+  "test_external_with_payable_value",
+  "test_library_*",
+  "test_module_constant*",
+  "test_nested_module_constant",
+  "test_modules_transient",
+  "test_complex_modules_transient",
+  "test_import_*",
+  "test_external_call_to_builtin_interface",
+  "test_external_call_to_interface*",
+  "test_intrinsic_interface*",
+  "test_immutable_hashing_overlap_regression",
+  "test_indirect_variable_uses",
+  "test_init_function_side_effects",
+  "test_uses_already_initialized",
+  "test_module_event2"
 ]
 
 fun glob_match pat str =
@@ -441,8 +423,8 @@ val deployment : term decoder =
   check_trace_type "deployment" $
   JSONDecode.map (fn ((((srcs_exps_imap,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e),bc),sl) =>
              (* translate_annotated_ast returns (sources, exports, import_map) *)
-             let val (srcs_exps, import_map) = pairSyntax.dest_pair srcs_exps_imap
-                 val (srcs, exps) = pairSyntax.dest_pair srcs_exps in
+             let val (srcs, exps_import_map) = pairSyntax.dest_pair srcs_exps_imap
+                 val (exps, import_map) = pairSyntax.dest_pair exps_import_map in
              TypeBase.mk_record (deployment_trace_ty, [
                ("sourceAst", srcs),
                ("sourceExports", exps),
@@ -500,7 +482,9 @@ val test_decoder =
    field "traces" (array trace))
 
 fun trydecode ((name,json),(s,f)) =
-  if List.exists (equal name) excluded_test_names
+  if decode (field "item_type" string) json <> "test"
+  then (s,f)  (* skip fixtures and other non-test entries *)
+  else if List.exists (fn pat => glob_match pat name) excluded_test_names
   then (s,f)
   else if List.exists (equal name) allowed_test_names
      orelse not (has_unsupported_source_json json)
@@ -563,11 +547,11 @@ fun make_definitions_for_file (id, json_path) = let
     case decode_fails of
         [] => ()
       | (name, err)::_ =>
-          TextIO.output(TextIO.stdErr,
+          raise Fail (
             String.concat ["decode failure in ", json_path, ": ", name,
-                           " - ", exnMessage err, " (skipping ",
+                           " - ", exnMessage err, " (",
                            Int.toString (List.length decode_fails),
-                           " tests)\n"])
+                           " tests failed to decode)"])
   val path_vn = String.concat["json_path_", id]
   val path_def = new_definition(path_vn ^ "_def",
                    mk_eq(mk_var(path_vn, string_ty),

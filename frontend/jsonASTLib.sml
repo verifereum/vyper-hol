@@ -20,7 +20,7 @@ fun jasty s = mk_thy_type{Thy="jsonAST",Tyop=s,Args=[]};
 fun mk_nsid (src_id_opt, name) =
   mk_pair(src_id_opt, fromMLstring name);
 
-fun mk_nsid_none name = mk_nsid(mk_none num, name);
+fun mk_nsid_none name = mk_nsid(intSyntax.term_of_int (Arbint.fromInt ~1), name);
 
 (* ===== Types ===== *)
 
@@ -272,11 +272,12 @@ fun mk_JFuncType (argtys, retty) =
   list_mk_comb(JFuncType_tm, [mk_list(argtys, json_type_ty), retty])
 fun mk_JVT_Type ty = mk_comb(JVT_Type_tm, ty)
 fun mk_JVT_HashMap (kt, vt) = list_mk_comb(JVT_HashMap_tm, [kt, vt])
-fun mk_JTL_FunctionDef (name, decs, args, func_type, body) =
+fun mk_JTL_FunctionDef (name, decs, args, defaults, func_type, body) =
   list_mk_comb(JTL_FunctionDef_tm,
     [fromMLstring name,
      mk_list(List.map fromMLstring decs, string_ty),
      mk_list(args, json_arg_ty),
+     mk_list(defaults, json_expr_ty),
      func_type,
      mk_list(body, json_stmt_ty)])
 fun mk_JTL_VariableDecl (name, ty, is_public, is_immutable, is_transient, valopt) =
@@ -345,13 +346,9 @@ val numtm : term decoder = JSONDecode.map mk_num_from_largeint intInf
 val inttm : term decoder =
   JSONDecode.map (intSyntax.term_of_int o Arbint.fromLargeInt) intInf
 
-(* Decode source_id: negative means NONE, non-negative means SOME n *)
-val source_id_opt_tm : term decoder =
-  JSONDecode.map (fn n =>
-    if n < 0 then optionSyntax.mk_none numSyntax.num
-    else optionSyntax.mk_some (mk_num_from_largeint n))
-  intInf
-
+(* Decode source_id as raw int, faithfully mirroring JSON. *)
+(* Conversion to vyperAST nsid (num option) is done in jsonToVyper. *)
+val source_id_tm : term decoder = inttm
 val stringtm : term decoder = JSONDecode.map fromMLstring string
 val booltm : bool decoder = bool
 
@@ -604,8 +601,8 @@ fun d_json_expr () : term decoder = achoose "expr" [
     tuple2 (field "id" string,
             tuple2 (try (orElse (field "type" $ field "typeclass" string,
                                 field "type" $ field "type_t" $ field "typeclass" string)),
-                    orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_opt_tm,
-                            succeed (optionSyntax.mk_none numSyntax.num)))),
+                    orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
+                            succeed (intSyntax.term_of_int (Arbint.fromInt ~1))))),
 
   (* Attribute - extract result typeclass and source_id for flag/module member detection *)
   (* source_id comes from type.type_decl_node.source_id OR variable_reads[0].decl_node.source_id *)
@@ -613,10 +610,10 @@ fun d_json_expr () : term decoder = achoose "expr" [
     JSONDecode.map (fn (((e, attr), tc_opt), src_id_opt) => mk_JE_Attribute(e, attr, tc_opt, src_id_opt)) $
     tuple2 (tuple2 (tuple2 (field "value" (delay d_json_expr), field "attr" string),
                     try (field "type" $ field "typeclass" string)),
-            orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_opt_tm,
+            orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
                     orElse (field "variable_reads" $ sub 0 $
-                              field "decl_node" $ field "source_id" source_id_opt_tm,
-                            succeed (optionSyntax.mk_none numSyntax.num)))),
+                              field "decl_node" $ field "source_id" source_id_tm,
+                            succeed (intSyntax.term_of_int (Arbint.fromInt ~1))))),
 
   (* Subscript *)
   check_ast_type "Subscript" $
@@ -687,8 +684,8 @@ fun d_json_expr () : term decoder = achoose "expr" [
                     field "args" (array (delay d_json_expr)),
                     orElse(field "keywords" (array (delay d_json_keyword)), succeed [])),
             tuple2 (field "type" json_type,
-                    orElse (field "func" $ field "type" $ field "type_decl_node" $ field "source_id" source_id_opt_tm,
-                            succeed (optionSyntax.mk_none numSyntax.num)))),
+                    orElse (field "func" $ field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
+                            succeed (intSyntax.term_of_int (Arbint.fromInt ~1))))),
 
   (* ExtCall - wraps a Call node; func is Attribute with target and method name *)
   (* Convention: target is prepended to args *)
@@ -734,8 +731,8 @@ fun d_json_base_target () : term decoder = achoose "base_target" [
     JSONDecode.map (fn (attr, src_id_opt) => mk_JBT_TopLevelName (mk_nsid (src_id_opt, attr)))
       (tuple2 (field "attr" string,
                orElse (field "variable_writes" $ sub 0 $
-                         field "decl_node" $ field "source_id" source_id_opt_tm,
-                       succeed (optionSyntax.mk_none numSyntax.num)))),
+                         field "decl_node" $ field "source_id" source_id_tm,
+                       succeed (intSyntax.term_of_int (Arbint.fromInt ~1))))),
 
   (* module.x (lib1.counter) -> TopLevelName with source_id from type.type_decl_node *)
   check_ast_type "Attribute" $
@@ -744,8 +741,8 @@ fun d_json_base_target () : term decoder = achoose "base_target" [
     JSONDecode.map (fn (attr, src_id_opt) => mk_JBT_TopLevelName (mk_nsid (src_id_opt, attr)))
       (tuple2 (field "attr" string,
                orElse (field "value" $ field "type" $
-                         field "type_decl_node" $ field "source_id" source_id_opt_tm,
-                       succeed (optionSyntax.mk_none numSyntax.num)))),
+                         field "type_decl_node" $ field "source_id" source_id_tm,
+                       succeed (intSyntax.term_of_int (Arbint.fromInt ~1))))),
 
   (* Name *)
   check_ast_type "Name" $
@@ -851,8 +848,8 @@ fun d_json_stmt () : term decoder = achoose "stmt" [
     JSONDecode.map (fn ((name, src_id_opt), args) => mk_JS_Log(mk_nsid(src_id_opt, name), args)) $
     tuple2 (field "func" $ check_ast_type "Name" $
               tuple2 (field "id" string,
-                      orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_opt_tm,
-                              succeed (optionSyntax.mk_none numSyntax.num))),
+                      orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
+                              succeed (intSyntax.term_of_int (Arbint.fromInt ~1)))),
             achoose "log args" [
               field "keywords" (array (field "value" json_expr)),
               field "args" (array json_expr)
@@ -959,13 +956,14 @@ val json_interface_func : term decoder =
 val json_toplevel : term decoder = achoose "toplevel" [
   (* FunctionDef *)
   check_ast_type "FunctionDef" $
-    JSONDecode.map (fn ((n, d), (a, f), b) =>
-      mk_JTL_FunctionDef(n, d, a, f, b)) $
+    JSONDecode.map (fn ((n, d), ((a, df), f), b) =>
+      mk_JTL_FunctionDef(n, d, a, df, f, b)) $
     tuple3 (
       tuple2 (field "name" string,
               field "decorator_list" (array (field "id" string))),
       tuple2 (field "args" $ check_ast_type "arguments" $
-                field "args" (array json_arg),
+                tuple2 (field "args" (array json_arg),
+                        orElse(field "defaults" (array json_expr), succeed [])),
               field "func_type" json_func_type),
       field "body" (array json_stmt)
     ),
@@ -1040,7 +1038,7 @@ val json_toplevel : term decoder = achoose "toplevel" [
     field "import_infos" $ array $
       JSONDecode.map mk_JImportInfo $
       tuple3 (field "alias" string,
-              field "source_id" numtm,
+              field "source_id" inttm,
               field "qualified_module_name" string),
 
   (* ImportFrom - from X import Y statement *)
@@ -1049,7 +1047,7 @@ val json_toplevel : term decoder = achoose "toplevel" [
     field "import_infos" $ array $
       JSONDecode.map mk_JImportInfo $
       tuple3 (field "alias" string,
-              field "source_id" numtm,
+              field "source_id" inttm,
               field "qualified_module_name" string),
 
   (* ExportsDecl - exports declaration *)
@@ -1083,7 +1081,7 @@ val json_module : term decoder =
 
 val json_imported_module : term decoder =
   JSONDecode.map mk_JImportedModule $
-  tuple3 (field "source_id" numtm,
+  tuple3 (field "source_id" inttm,
           field "path" string,
           field "body" (array json_toplevel))
 
@@ -1139,9 +1137,9 @@ val storage_slot_info : term decoder =
 (* Decoder for a single code (immutable) slot entry *)
 val code_slot_info : term decoder =
   JSONDecode.map (fn (offset, length, type_str) =>
-                    mk_code_slot_info (mk_num_from_int offset, mk_num_from_int length, type_str))
-  (tuple3 (field "offset" int,
-           field "length" int,
+                    mk_code_slot_info (offset, length, type_str))
+  (tuple3 (field "offset" numtm,
+           field "length" numtm,
            field "type" string))
 
 (* Decode a JSON object as an association list, applying decoder to each value *)

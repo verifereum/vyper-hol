@@ -1,6 +1,6 @@
 Theory vyperInterpreter
 Ancestors
-  arithmetic alist combin list finite_map pair rich_list
+  arithmetic alist combin option list finite_map pair rich_list
   cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
   vfmExecution[ignore_grammar] vyperAST vyperABI
   vyperMisc vyperTypeValue vyperStorage
@@ -2160,7 +2160,7 @@ Definition getter_def:
   let (args, ret, exp) =
     build_getter ne kt vt 0
   in
-    (View, args, ret, [Return $ SOME exp])
+    (View, args, [], ret, [Return $ SOME exp])
 End
 
 val () = cv_auto_trans getter_def;
@@ -2175,15 +2175,15 @@ End
 val () = cv_auto_trans name_expression_def;
 
 Definition lookup_function_def:
-  lookup_function name Deploy [] = SOME (Payable, [], NoneT, []) ∧
+  lookup_function name Deploy [] = SOME (Payable, [], [], NoneT, []) ∧
   lookup_function name vis [] = NONE ∧
-  lookup_function name vis (FunctionDecl fv fm id args ret body :: ts) =
-  (if id = name ∧ vis = fv then SOME (fm, args, ret, body)
+  lookup_function name vis (FunctionDecl fv fm id args dflts ret body :: ts) =
+  (if id = name ∧ vis = fv then SOME (fm, args, dflts, ret, body)
    else lookup_function name vis ts) ∧
   lookup_function name External (VariableDecl Public mut id typ :: ts) =
   (if id = name then
     if ¬is_ArrayT typ
-    then SOME (View, [], typ, [Return (SOME (name_expression mut id))])
+    then SOME (View, [], [], typ, [Return (SOME (name_expression mut id))])
     else SOME $ getter (name_expression mut id) (BaseT (UintT 256)) (Type (ArrayT_type typ))
    else lookup_function name External ts) ∧
   lookup_function name External (HashMapDecl Public _ id kt vt :: ts) =
@@ -2339,13 +2339,16 @@ Definition bound_def:
     1 + base_target_bound ts bt ∧
   expr_bound ts (TypeBuiltin _ _ es) =
     1 + exprs_bound ts es ∧
-  expr_bound ts (Call (IntCall (src_id_opt, fn)) es) =
+  expr_bound ts (Call (IntCall (src_id_opt, fn)) es drv) =
     1 + exprs_bound ts es
+      + (case drv of NONE => 0 | SOME e => expr_bound ts e)
       + (case ALOOKUP ts (src_id_opt, fn) of
-         | SOME ss => stmts_bound (ADELKEY (src_id_opt, fn) ts) ss
+         | SOME (dflts, ss) => exprs_bound (ADELKEY (src_id_opt, fn) ts) dflts
+                             + stmts_bound (ADELKEY (src_id_opt, fn) ts) ss
          | NONE => 0) ∧
-  expr_bound ts (Call t es) =
-    1 + exprs_bound ts es ∧
+  expr_bound ts (Call t es drv) =
+    1 + exprs_bound ts es
+      + (case drv of NONE => 0 | SOME e => expr_bound ts e) ∧
   exprs_bound ts [] = 0 ∧
   exprs_bound ts (e::es) =
     1 + expr_bound ts e
@@ -2353,28 +2356,28 @@ Definition bound_def:
 Termination
   WF_REL_TAC ‘measure (λx. case x of
   | INR (INR (INR (INR (INR (INR (INR (ts, es))))))) =>
-      SUM (MAP (list_size stmt_size o SND) ts) +
+      SUM (MAP (λ(k, dflts, ss). list_size expr_size dflts + list_size stmt_size ss) ts) +
       list_size expr_size es
   | INR (INR (INR (INR (INR (INR (INL (ts, e))))))) =>
-      SUM (MAP (list_size stmt_size o SND) ts) +
+      SUM (MAP (λ(k, dflts, ss). list_size expr_size dflts + list_size stmt_size ss) ts) +
       expr_size e
   | INR (INR (INR (INR (INR (INL (ts, bt)))))) =>
-      SUM (MAP (list_size stmt_size o SND) ts) +
+      SUM (MAP (λ(k, dflts, ss). list_size expr_size dflts + list_size stmt_size ss) ts) +
       base_assignment_target_size bt
   | INR (INR (INR (INR (INL (ts, gs))))) =>
-      SUM (MAP (list_size stmt_size o SND) ts) +
+      SUM (MAP (λ(k, dflts, ss). list_size expr_size dflts + list_size stmt_size ss) ts) +
       list_size assignment_target_size gs
   | INR (INR (INR (INL (ts, g)))) =>
-      SUM (MAP (list_size stmt_size o SND) ts) +
+      SUM (MAP (λ(k, dflts, ss). list_size expr_size dflts + list_size stmt_size ss) ts) +
       assignment_target_size g
   | INR (INR (INL (ts, it))) =>
-      SUM (MAP (list_size stmt_size o SND) ts) +
+      SUM (MAP (λ(k, dflts, ss). list_size expr_size dflts + list_size stmt_size ss) ts) +
       iterator_size it
   | INR (INL (ts, ss)) =>
-      SUM (MAP (list_size stmt_size o SND) ts) +
+      SUM (MAP (λ(k, dflts, ss). list_size expr_size dflts + list_size stmt_size ss) ts) +
       list_size stmt_size ss
   | INL (ts, s) =>
-      SUM (MAP (list_size stmt_size o SND) ts) +
+      SUM (MAP (λ(k, dflts, ss). list_size expr_size dflts + list_size stmt_size ss) ts) +
       stmt_size s)’
   \\ rw[expr1_size_map, expr2_size_map, SUM_MAP_expr2_size,
         MAP_MAP_o, list_size_pair_size_map]
@@ -2385,15 +2388,25 @@ Termination
   \\ simp[Abbr`P`, Abbr`f`]
 End
 
+Theorem exprs_bound_DROP:
+  ∀ts n es. exprs_bound ts (DROP n es) ≤ exprs_bound ts es
+Proof
+  Induct_on `es` \\ rw[bound_def, DROP_def]
+  \\ Cases_on`n` \\ gvs[]
+  \\ qmatch_goalsub_rename_tac`DROP n es`
+  \\ first_x_assum(qspecl_then[`ts`,`n`]mp_tac)
+  \\ simp[]
+QED
+
 (* Extract callable functions - for termination proof *)
 (* Internal and Deploy are separate so we can order Internal before Deploy *)
 Definition dest_Internal_Fn_def:
-  dest_Internal_Fn (FunctionDecl Internal _ fn _ _ ss) = [(fn, ss)] ∧
+  dest_Internal_Fn (FunctionDecl Internal _ fn _ dflts _ ss) = [(fn, (dflts, ss))] ∧
   dest_Internal_Fn _ = []
 End
 
 Definition dest_Deploy_Fn_def:
-  dest_Deploy_Fn (FunctionDecl Deploy _ fn _ _ ss) = [(fn, ss)] ∧
+  dest_Deploy_Fn (FunctionDecl Deploy _ fn _ dflts _ ss) = [(fn, (dflts, ss))] ∧
   dest_Deploy_Fn _ = []
 End
 
@@ -2501,27 +2514,27 @@ QED
 
 (* lookup_function with Internal finds body via ALOOKUP on dest_Internal_Fn *)
 Theorem lookup_function_Internal_imp_ALOOKUP:
-  ∀fn vis ts v x y z.
-  lookup_function fn vis ts = SOME (v,x,y,z) ∧ vis = Internal ⇒
-  z = [] ∨ ALOOKUP (FLAT (MAP dest_Internal_Fn ts)) fn = SOME z
+  ∀fn vis ts v w x y z.
+  lookup_function fn vis ts = SOME (v,w,x,y,z) ∧ vis = Internal ⇒
+  (x, z) = ([], []) ∨ ALOOKUP (FLAT (MAP dest_Internal_Fn ts)) fn = SOME (x, z)
 Proof
   ho_match_mp_tac lookup_function_ind
   \\ rw[lookup_function_def, dest_Internal_Fn_def]
   \\ gvs[dest_Internal_Fn_def]
-  \\ rename1 `FunctionDecl fv _ _ _ _ _`
+  \\ rename1 `FunctionDecl fv _ _ _ _ _ _`
   \\ Cases_on `fv` \\ gvs[dest_Internal_Fn_def]
 QED
 
 (* lookup_function with Deploy finds body via ALOOKUP on dest_Deploy_Fn *)
 Theorem lookup_function_Deploy_imp_ALOOKUP:
-  ∀fn vis ts v x y z.
-  lookup_function fn vis ts = SOME (v,x,y,z) ∧ vis = Deploy ⇒
-  z = [] ∨ ALOOKUP (FLAT (MAP dest_Deploy_Fn ts)) fn = SOME z
+  ∀fn vis ts v w x y z.
+  lookup_function fn vis ts = SOME (v,w,x,y,z) ∧ vis = Deploy ⇒
+  (x, z) = ([], []) ∨ ALOOKUP (FLAT (MAP dest_Deploy_Fn ts)) fn = SOME (x, z)
 Proof
   ho_match_mp_tac lookup_function_ind
   \\ rw[lookup_function_def, dest_Deploy_Fn_def]
   \\ gvs[dest_Deploy_Fn_def]
-  \\ rename1 `FunctionDecl fv _ _ _ _ _`
+  \\ rename1 `FunctionDecl fv _ _ _ _ _ _`
   \\ Cases_on `fv` \\ gvs[dest_Deploy_Fn_def]
 QED
 
@@ -2534,7 +2547,7 @@ Proof
   ho_match_mp_tac lookup_function_ind
   \\ rw[lookup_function_def, dest_Internal_Fn_def]
   \\ gvs[dest_Internal_Fn_def]
-  \\ rename1 `FunctionDecl fv _ _ _ _ _`
+  \\ rename1 `FunctionDecl fv _ _ _ _ _ _`
   \\ Cases_on `fv` \\ gvs[dest_Internal_Fn_def]
 QED
 
@@ -2554,9 +2567,9 @@ QED
 (* This works because module_fns orders Internal entries before Deploy entries, *)
 (* matching lookup_callable_function which tries Internal first. *)
 Theorem lookup_callable_function_eq_ALOOKUP_module_fns:
-  ∀in_deploy fn ts src_id v x y z.
-  lookup_callable_function in_deploy fn ts = SOME (v,x,y,z) ∧ z ≠ [] ⇒
-  ALOOKUP (module_fns src_id ts) (src_id, fn) = SOME z
+  ∀in_deploy fn ts src_id v w x y z.
+  lookup_callable_function in_deploy fn ts = SOME (v,w,x,y,z) ∧ (x, z) ≠ ([], []) ⇒
+  ALOOKUP (module_fns src_id ts) (src_id, fn) = SOME (x, z)
 Proof
   rpt gen_tac
   \\ simp[lookup_callable_function_def, module_fns_def]
@@ -2567,7 +2580,7 @@ Proof
     drule lookup_function_Internal_imp_ALOOKUP \\ rw[]
     \\ simp[ALOOKUP_APPEND]
     \\ qmatch_goalsub_abbrev_tac`option_CASE alo`
-    \\ `alo = SOME z` suffices_by simp[]
+    \\ `alo = SOME (x, z)` suffices_by simp[]
     \\ qunabbrev_tac `alo`
     \\ pop_assum $ SUBST1_TAC o SYM
     \\ qmatch_goalsub_abbrev_tac`MAP fi`
@@ -3014,7 +3027,7 @@ Definition evaluate_def:
     v <- lift_sum $ evaluate_type_builtin cx tb typ vs;
     return $ Value v
   od ∧
-  eval_expr cx (Call Send es) = do
+  eval_expr cx (Call Send es _) = do
     check (LENGTH es = 2) "Send args";
     vs <- eval_exprs cx es;
     toAddr <- lift_option (dest_AddressV $ EL 0 vs) "Send not AddressV";
@@ -3022,7 +3035,7 @@ Definition evaluate_def:
     transfer_value cx.txn.target toAddr amount;
     return $ Value $ NoneV
   od ∧
-  eval_expr cx (Call (ExtCall is_static (func_name, arg_types, ret_type)) es) = do
+  eval_expr cx (Call (ExtCall is_static (func_name, arg_types, ret_type)) es drv) = do
     vs <- eval_exprs cx es;
     check (vs ≠ []) "ExtCall no target";
     target_addr <- lift_option (dest_AddressV (HD vs)) "ExtCall target not address";
@@ -3050,22 +3063,31 @@ Definition evaluate_def:
     check success "ExtCall reverted";
     update_accounts (K accounts');
     update_transient (K tStorage');
-    ret_val <- lift_sum (evaluate_abi_decode_return tenv ret_type returnData);
-    return $ Value ret_val
+    if returnData = [] ∧ IS_SOME drv then
+      eval_expr cx (THE drv)
+    else do
+      ret_val <- lift_sum (evaluate_abi_decode_return tenv ret_type returnData);
+      return $ Value ret_val
+    od
   od ∧
-  eval_expr cx (Call (IntCall (src_id_opt, fn)) es) = do
+  eval_expr cx (Call (IntCall (src_id_opt, fn)) es _) = do
     check (¬MEM (src_id_opt, fn) cx.stk) "recursion";
     ts <- lift_option (get_module_code cx src_id_opt) "IntCall get_module_code";
     tup <- lift_option (lookup_callable_function cx.in_deploy fn ts) "IntCall lookup_function";
     stup <<- SND tup; args <<- FST stup; sstup <<- SND stup;
-    ret <<- FST $ sstup; body <<- SND $ sstup;
-    check (LENGTH args = LENGTH es) "IntCall args length"; (* TODO: needed? *)
+    dflts <<- FST sstup; sstup2 <<- SND sstup;
+    ret <<- FST $ sstup2; body <<- SND $ sstup2;
+    check (LENGTH es ≤ LENGTH args ∧
+           LENGTH args - LENGTH es ≤ LENGTH dflts) "IntCall args length";
     vs <- eval_exprs cx es;
+    needed_dflts <<- DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts;
+    cxd <<- cx with stk updated_by CONS (src_id_opt, fn);
+    dflt_vs <- eval_exprs cxd needed_dflts;
     tenv <<- type_env ts;
     (* Use combined type env for return type (may reference types from other modules) *)
     all_mods <<- (case ALOOKUP cx.sources cx.txn.target of SOME m => m | NONE => []);
     all_tenv <<- type_env_all_modules all_mods;
-    env <- lift_option (bind_arguments tenv args vs) "IntCall bind_arguments";
+    env <- lift_option (bind_arguments tenv args (vs ++ dflt_vs)) "IntCall bind_arguments";
     prev <- get_scopes;
     rtv <- lift_option (evaluate_type all_tenv ret) "IntCall eval ret";
     cxf <- push_function (src_id_opt, fn) env cx;
@@ -3100,13 +3122,35 @@ Termination
     => iterator_bound (remcode cx) it
   | INR (INL (cx, ss)) => stmts_bound (remcode cx) ss
   | INL (cx, s) => stmt_bound (remcode cx) s)’
-  \\ reverse(rw[bound_def, MAX_DEF, MULT])
+  \\ reverse(rw[bound_def, MAX_DEF, MULT, IS_SOME_EXISTS]) \\ gvs[]
   >- (
     gvs[compatible_bound_def, check_def, assert_def]
     \\ qmatch_goalsub_abbrev_tac`(LENGTH vs) * x`
     \\ irule LESS_EQ_LESS_TRANS
     \\ qexists_tac`LENGTH vs + n * x + 1` \\ simp[]
     \\ PROVE_TAC[MULT_COMM, LESS_MONO_MULT])
+  >- (
+    gvs[check_def, assert_def]
+    \\ gvs[push_function_def, return_def]
+    \\ gvs[lift_option_def, CaseEq"option", CaseEq"prod", option_CASE_rator,
+           raise_def, return_def]
+    \\ gvs[remcode_def, get_module_code_def, ADELKEY_def]
+    \\ qpat_x_assum`OUTR _ _ = _`kall_tac
+    \\ gvs[CaseEq"option"]
+    \\ simp[bound_def]
+    \\ qmatch_asmsub_rename_tac`lookup_callable_function _ fn ts = SOME (_, args, dflts, ret, body)`
+    \\ Cases_on`(dflts, body) = ([], [])`
+    >- gvs[bound_def]
+    \\ drule_all_then(qspec_then`src_id_opt`strip_assume_tac)
+         lookup_callable_function_eq_ALOOKUP_module_fns
+    \\ drule_at_then Any drule ALOOKUP_FLAT_MAP_module_fns
+    \\ qmatch_goalsub_abbrev_tac`ALOOKUP (FILTER P ls) k`
+    \\ `P = λ(k,v). ¬MEM k cx.stk` by simp[Abbr`P`,FUN_EQ_THM,FORALL_PROD]
+    \\ simp[ALOOKUP_FILTER, FILTER_FILTER, Abbr`k`]
+    \\ simp[LAMBDA_PROD]
+    \\ qmatch_goalsub_abbrev_tac`exprs_bound fts (DROP n dflts)`
+    \\ qspecl_then[`fts`,`n`,`dflts`]mp_tac exprs_bound_DROP
+    \\ simp[])
   \\ gvs[check_def, assert_def]
   \\ gvs[push_function_def, return_def]
   \\ gvs[lift_option_def, CaseEq"option", CaseEq"prod", option_CASE_rator,
@@ -3115,10 +3159,10 @@ Termination
   \\ qpat_x_assum`OUTR _ _ = _`kall_tac
   \\ gvs[CaseEq"option"]
   (* Use lookup_callable_function_eq_ALOOKUP_module_fns to get ALOOKUP result *)
-  \\ qmatch_asmsub_rename_tac`lookup_callable_function _ fn ts = SOME (_, args, ret, body)`
-  \\ Cases_on`body = []`
+  \\ qmatch_asmsub_rename_tac`lookup_callable_function _ fn ts = SOME (_, args, dflts, ret, body)`
+  \\ Cases_on`(dflts, body) = ([], [])`
   (* Case 1: body = [] (default constructor) - trivial, bound is 0 *)
-  >- simp[bound_def]
+  >- gvs[bound_def]
   (* Case 2: body ≠ [] - use the key lemma *)
   \\ drule_all_then(qspec_then`src_id_opt`strip_assume_tac)
        lookup_callable_function_eq_ALOOKUP_module_fns
@@ -3128,11 +3172,7 @@ Termination
   \\ pop_assum SUBST_ALL_TAC
   \\ simp[ALOOKUP_FILTER]
   \\ rw[FILTER_FILTER,UNCURRY,Abbr`k`]
-  \\ qmatch_goalsub_abbrev_tac`a < _ + (b + 1)`
-  \\ `a = b` suffices_by rw[]
-  \\ rw[Abbr`a`,Abbr`b`]
-  \\ AP_THM_TAC \\ AP_TERM_TAC
-  \\ rw[FILTER_EQ,FORALL_PROD]
+  \\ simp[LAMBDA_PROD]
 End
 
 Theorem eval_exprs_length:
@@ -3354,7 +3394,7 @@ Definition call_external_def:
    | SOME ts =>
   case lookup_exported_function cx am tx.function_name
   of NONE => (INR $ Error "call lookup_function", am)
-   | SOME (mut, args, ret, body) =>
+   | SOME (mut, args, _, ret, body) =>
        call_external_function am cx mut ts all_mods args tx.args body ret
 End
 
@@ -3368,7 +3408,7 @@ Definition load_contract_def:
                       exports updated_by CONS (addr, exps) |> in
   case lookup_function tx.function_name Deploy ts of
      | NONE => INR $ Error "no constructor"
-     | SOME (mut, args, ret, body) =>
+     | SOME (mut, args, _, ret, body) =>
        let cx = (initial_evaluation_context ((addr,mods)::am.sources) am.layouts tx)
                 with in_deploy := T in
        case call_external_function am cx mut ts mods args tx.args body ret

@@ -162,7 +162,7 @@ signature vyperASTSyntax = sig
   val mk_uint      : term -> term
   val mk_int       : term -> term
   val mk_bytes     : term -> term
-  val mk_FunctionDecl : term -> term -> term -> term -> term -> term -> term
+  val mk_FunctionDecl : term -> term -> term -> term -> term -> term -> term -> term
   val mk_VariableDecl : term * term * term * term -> term
   val mk_HashMapDecl  : term * term * term * term * term -> term
   val mk_String    : term -> term
@@ -181,7 +181,7 @@ signature vyperASTSyntax = sig
   val mk_Extract32 : term * term * term -> term
   val mk_AbiDecode : term * term -> term
   val mk_MethodId  : term -> term
-  val mk_Call      : term -> term list -> term
+  val mk_Call      : term -> term list -> term -> term
   val mk_Assert    : term * term -> term
   val mk_Log       : term * term -> term
   val mk_Subscript : term -> term -> term
