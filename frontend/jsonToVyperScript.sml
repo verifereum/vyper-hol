@@ -1054,55 +1054,92 @@ End
    translate_annotated_ast, which returns NONE if the ordering is invalid.
 *)
 
+(* Build a map from source_id to import_map for all imported modules *)
+Definition build_all_import_maps_def:
+  build_all_import_maps [] = [] ∧
+  build_all_import_maps (JImportedModule src_id _ body :: rest) =
+    let nsid = Num (src_id + &builtin_source_id_offset) in
+    (nsid, build_import_map (collect_imports body)) ::
+    build_all_import_maps rest
+End
+
+(* Resolve a module expression (possibly nested) to a source_id.
+   e.g. lib1 -> SOME src_id_of_lib1
+        lib2.lib1 -> SOME src_id_of_lib1 (via lib2's import_map)
+   all_import_maps: source_id -> import_map for each module
+   import_map: current module's alias -> source_id map *)
+Definition resolve_module_expr_def:
+  (resolve_module_expr all_import_maps import_map (JE_Name alias _ _) =
+     ALOOKUP import_map alias) ∧
+  (resolve_module_expr all_import_maps import_map (JE_Attribute inner alias _ _) =
+     case resolve_module_expr all_import_maps import_map inner of
+     | NONE => NONE
+     | SOME parent_src_id =>
+         case ALOOKUP all_import_maps parent_src_id of
+         | NONE => NONE
+         | SOME parent_import_map => ALOOKUP parent_import_map alias) ∧
+  (resolve_module_expr _ _ _ = NONE)
+Termination
+  WF_REL_TAC `measure (λ(_,_,e). json_expr_size e)` >> simp[]
+End
+
 (* Expand a single export expression using pre-computed exports_map.
    exports_map: source_id -> list of (func_name, source_id) exports
+   all_import_maps: source_id -> import_map for each module
    import_map: alias -> source_id for the current module's imports *)
 Definition expand_single_export_def:
-  expand_single_export exports_map import_map (JE_Attribute (JE_Name alias _ _) func_name _ _) =
-    (case ALOOKUP import_map alias of
+  expand_single_export exports_map all_import_maps import_map (JE_Attribute base func_name _ _) =
+    (case resolve_module_expr all_import_maps import_map base of
      | NONE => []
      | SOME src_id =>
          if func_name = "__interface__" then
            case ALOOKUP exports_map src_id of
            | NONE => []
            | SOME exps => exps
-         else [(func_name, src_id)]) ∧
-  expand_single_export _ _ _ = []
+         else
+           (* Check if the function is re-exported from another module *)
+           case ALOOKUP exports_map src_id of
+           | SOME exps =>
+               (case ALOOKUP exps func_name of
+                | SOME final_src_id => [(func_name, final_src_id)]
+                | NONE => [(func_name, src_id)])
+           | NONE => [(func_name, src_id)]) ∧
+  expand_single_export _ _ _ _ = []
 End
 
 (* Expand exports from a tuple of export expressions *)
 Definition expand_tuple_exports_def:
-  expand_tuple_exports exports_map import_map [] = [] ∧
-  expand_tuple_exports exports_map import_map (e::es) =
-    expand_single_export exports_map import_map e ++
-    expand_tuple_exports exports_map import_map es
+  expand_tuple_exports exports_map all_import_maps import_map [] = [] ∧
+  expand_tuple_exports exports_map all_import_maps import_map (e::es) =
+    expand_single_export exports_map all_import_maps import_map e ++
+    expand_tuple_exports exports_map all_import_maps import_map es
 End
 
 (* Expand exports from an ExportsDecl annotation *)
 Definition expand_export_annotation_def:
-  expand_export_annotation exports_map import_map (JE_Tuple exprs) =
-    expand_tuple_exports exports_map import_map exprs ∧
-  expand_export_annotation exports_map import_map (JE_Attribute base attr tc sid) =
-    expand_single_export exports_map import_map (JE_Attribute base attr tc sid) ∧
-  expand_export_annotation _ _ _ = []
+  expand_export_annotation exports_map all_import_maps import_map (JE_Tuple exprs) =
+    expand_tuple_exports exports_map all_import_maps import_map exprs ∧
+  expand_export_annotation exports_map all_import_maps import_map (JE_Attribute base attr tc sid) =
+    expand_single_export exports_map all_import_maps import_map (JE_Attribute base attr tc sid) ∧
+  expand_export_annotation _ _ _ _ = []
 End
 
 (* Expand all exports from a module's toplevels *)
 Definition expand_exports_from_toplevels_def:
-  expand_exports_from_toplevels exports_map import_map [] = [] ∧
-  expand_exports_from_toplevels exports_map import_map (t::ts) =
+  expand_exports_from_toplevels exports_map all_import_maps import_map [] = [] ∧
+  expand_exports_from_toplevels exports_map all_import_maps import_map (t::ts) =
     (case get_export_annotation t of
-     | SOME ann => expand_export_annotation exports_map import_map ann
+     | SOME ann => expand_export_annotation exports_map all_import_maps import_map ann
      | NONE => []) ++
-    expand_exports_from_toplevels exports_map import_map ts
+    expand_exports_from_toplevels exports_map all_import_maps import_map ts
 End
 
 (* Compute a single module's full exports: its external functions + expanded re-exports *)
 Definition compute_module_exports_def:
-  compute_module_exports exports_map src_id body =
+  compute_module_exports exports_map all_import_maps src_id body =
     let ext_funcs = MAP (λn. (n, src_id)) (get_external_func_names body) in
     let import_map = build_import_map (collect_imports body) in
-    let reexports = expand_exports_from_toplevels exports_map import_map body in
+    let reexports = expand_exports_from_toplevels exports_map all_import_maps import_map body in
     ext_funcs ++ reexports
 End
 
@@ -1111,19 +1148,20 @@ End
    This ensures when we process module M, any module M references via
    __interface__ has already been added to the accumulator. *)
 Definition build_exports_map_def:
-  build_exports_map acc [] = acc ∧
-  build_exports_map acc (JImportedModule src_id _ body :: rest) =
+  build_exports_map all_import_maps acc [] = acc ∧
+  build_exports_map all_import_maps acc (JImportedModule src_id _ body :: rest) =
     let nsid = Num (src_id + &builtin_source_id_offset) in
-    let exps = compute_module_exports acc nsid body in
-    build_exports_map ((nsid, exps) :: acc) rest
+    let exps = compute_module_exports acc all_import_maps nsid body in
+    build_exports_map all_import_maps ((nsid, exps) :: acc) rest
 End
 
 (* Main function: extract exports from main module given imports *)
 Definition extract_exports_def:
   extract_exports (JModule toplevels) imports =
-    let exports_map = build_exports_map [] imports in
+    let all_import_maps = build_all_import_maps imports in
+    let exports_map = build_exports_map all_import_maps [] imports in
     let import_map = build_import_map (collect_imports toplevels) in
-    expand_exports_from_toplevels exports_map import_map toplevels
+    expand_exports_from_toplevels exports_map all_import_maps import_map toplevels
 End
 
 (* ===== Module Translation ===== *)

@@ -170,7 +170,13 @@ Definition run_call_def:
     all_mods = case ALOOKUP am.sources ct.target of
                  SOME mods => mods
                | _ => [];
-    ts = case ALOOKUP all_mods NONE of SOME ts => ts | _ => [];
+    (* Check exports to find which module the function lives in *)
+    src_id_opt = case ALOOKUP am.exports ct.target of
+                   NONE => NONE
+                 | SOME export_map => ALOOKUP export_map name;
+    ts = case ALOOKUP all_mods src_id_opt of
+           SOME ts => ts
+         | NONE => case ALOOKUP all_mods NONE of SOME ts => ts | _ => [];
     ar = compute_vyper_args all_mods ts External name argTys (DROP 4 ct.callData);
     retTys = SND (SND fna);
   in
