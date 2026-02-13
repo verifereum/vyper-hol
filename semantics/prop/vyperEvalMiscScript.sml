@@ -97,16 +97,6 @@ Proof
   `x % 3 = 0 ∨ x % 3 = 1 ∨ x % 3 = 2` by ARITH_TAC >> gvs[]
 QED
 
-(* Bounds on x % 3 *)
-Theorem uint256_mod_3_bounds:
-  ∀x. 0 ≤ x ⇒ 0 ≤ x % 3 ∧ x % 3 < 3
-Proof
-  rpt strip_tac >>
-  `(3:int) ≠ 0` by simp[] >>
-  drule integerTheory.INT_MOD_BOUNDS >>
-  disch_then (qspec_then `x` mp_tac) >> simp[]
-QED
-
 (* Unsigned subtraction when y ≤ x *)
 Theorem evaluate_binop_sub_small_unsigned:
   ∀x y.
@@ -135,6 +125,16 @@ Theorem evaluate_binop_add_int128:
 Proof
   rpt strip_tac >>
   simp[evaluate_binop_def, bounded_int_op_def]
+QED
+
+(* Bounds on x % 3 *)
+Theorem uint256_mod_3_bounds:
+  ∀x. 0 ≤ x ⇒ 0 ≤ x % 3 ∧ x % 3 < 3
+Proof
+  rpt strip_tac >>
+  `(3:int) ≠ 0` by simp[] >>
+  drule integerTheory.INT_MOD_BOUNDS >>
+  disch_then (qspec_then `x` mp_tac) >> simp[]
 QED
 
 (* ===== Array Init Properties ===== *)

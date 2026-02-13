@@ -456,6 +456,14 @@ Proof
   metis_tac[]
 QED
 
+Theorem stmts_spec_exists_precond:
+  ∀P C Q R cx ss.
+    (∀x. C x ⇒ ⟦cx⟧ ⦃P x⦄ ss ⦃Q ∥ R⦄) ⇒
+    ⟦cx⟧ ⦃λst. ∃x. C x ∧ P x st⦄ ss ⦃Q ∥ R⦄
+Proof
+  rw[stmts_spec_def] >> metis_tac[]
+QED
+
 Theorem stmts_spec_nil:
   ∀P Q_ret cx. ⟦cx⟧ ⦃P⦄ [] ⦃P ∥ Q_ret⦄
 Proof
