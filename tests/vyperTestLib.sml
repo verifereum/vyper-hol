@@ -308,12 +308,12 @@ val excluded_test_names = [
   "test_reentrant_decorator",
   "test_private_zero_bytearray",
   (* TODO: needs investigation *)
+  "test_library_structs",
   "test_inline_interface_export",
   "test_export_*",
   "test_exports_*",
   "test_variable_decl_exports",
   "test_external_with_payable_value",
-  "test_library_*",
   "test_module_constant_builtin",
   "test_modules_transient",
   "test_complex_modules_transient",

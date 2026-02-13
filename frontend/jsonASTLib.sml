@@ -587,6 +587,9 @@ fun d_json_expr () : term decoder = achoose "expr" [
   check_ast_type "NameConstant" $
     JSONDecode.map mk_JE_Bool (field "value" bool),
 
+  (* Ellipsis - appears in .vyi interface stub function bodies *)
+  check_ast_type "Ellipsis" $ succeed (mk_JE_Bool true),
+
   (* Name with folded_value (constant) *)
   check_ast_type "Name" $
     JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
