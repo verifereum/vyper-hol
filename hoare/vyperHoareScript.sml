@@ -1,7 +1,7 @@
 Theory vyperHoare
 
 Ancestors
-  vyperInterpreter vyperUpdateTarget vyperLookup vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes vyperEvalMisc vyperEvalPreservesNameTarget vyperTypeValue
+  vyperInterpreter vyperUpdateTarget vyperLookup vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes vyperEvalMisc vyperEvalPreservesNameTarget vyperTypeValue vyperArray
 
 (**********************************************************************)
 (* Definitions *)
@@ -804,16 +804,36 @@ Theorem stmts_spec_assign_scoped_var_array:
   ∀P P' Q cx n k idx_e e.
     (⟦cx⟧ ⦃λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄
        idx_e ⇓⦃λtv st. get_value_to_key tv = SOME (IntSubscript k) ∧ P' st⦄) ∧
-    (⟦cx⟧ ⦃P'⦄ e ⇓⦃λtv st. ∃a v a'.
+    (⟦cx⟧ ⦃P'⦄ e ⇓⦃λtv st. ∃a v.
         tv = Value v ∧
         lookup_scoped_var st n = SOME (ArrayV a) ∧
         array_is_mutable a ∧
         valid_index a k ∧
-        Q (update_scoped_var st n (OUTL (array_set_index a i v)))⦄) ⇒
+        Q (update_scoped_var st n (OUTL (array_set_index a k v)))⦄) ⇒
     ⟦cx⟧ ⦃λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄
      [Assign (BaseTarget (SubscriptTarget (NameTarget n) idx_e)) e] ⦃Q ∥ λ_ _. F⦄
 Proof
-  cheat
+  rpt strip_tac >>
+  irule stmts_spec_assign_scoped_var_single_subscript >>
+  qexists_tac `P'` >> simp[] >>
+  qexists_tac `IntSubscript k` >>
+  reverse conj_tac >- first_x_assum ACCEPT_TAC >>
+  irule expr_spec_consequence >>
+  qexistsl_tac [`P'`,
+    `λtv st. ∃a v.
+       tv = Value v ∧
+       lookup_scoped_var st n = SOME (ArrayV a) ∧
+       array_is_mutable a ∧ valid_index a k ∧
+       Q (update_scoped_var st n (OUTL (array_set_index a k v)))`] >>
+  rpt conj_tac
+  >- simp[]
+  >- (BETA_TAC >> rpt strip_tac >>
+      qexistsl_tac [`ArrayV a`, `v`, `OUTL (array_set_index a k v)`] >>
+      simp[assign_subscripts_array_replace] >>
+      `∃a'. array_set_index a k v = INL (ArrayV a')`
+        by (irule (fst $ EQ_IMP_RULE $ SPEC_ALL array_set_index_valid) >> simp[]) >>
+      Cases_on `array_set_index a k v` >> gvs[])
+  >- first_x_assum ACCEPT_TAC
 QED
 
 Theorem stmts_spec_ann_assign:

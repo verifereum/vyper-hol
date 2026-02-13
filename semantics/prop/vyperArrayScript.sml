@@ -192,3 +192,15 @@ Proof
   \\ qexists_tac`t` \\ qexists_tac`v'`
   \\ simp[array_elements_def, listTheory.SNOC_APPEND]
 QED
+
+Theorem assign_subscripts_array_replace:
+  ∀a k v.
+    array_is_mutable a ∧ valid_index a k ⇒
+    assign_subscripts (ArrayV a) [IntSubscript k] (Replace v) =
+    array_set_index a k v
+Proof
+  rpt strip_tac >>
+  simp[Once assign_subscripts_def] >>
+  `IS_SOME (array_index a k)` by metis_tac[array_index_valid] >>
+  Cases_on `array_index a k` >> gvs[assign_subscripts_def]
+QED
