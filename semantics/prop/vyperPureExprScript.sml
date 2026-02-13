@@ -1,6 +1,6 @@
 Theory vyperPureExpr
 Ancestors
-  option vyperInterpreter vyperLookup vyperScopePreservation
+  option vyperInterpreter vyperLookup vyperStatePreservation
 
 (* Pure expressions: expressions that do not modify state. *)
 Definition pure_expr_def:
