@@ -1331,8 +1331,8 @@ Definition evaluate_builtin_def:
      then INL $ IntV u1 $ &((Num i1 * Num i2) MOD Num i3)
      else INR "MulMod type") ∧
   evaluate_builtin cx _ PowMod256 [IntV u1 base; IntV u2 exp] =
-    (if u1 = Unsigned 256 ∧ u2 = Unsigned 256
-     then INL $ IntV (Unsigned 256) $ &(vfmExecution$modexp (Num base) (Num exp) (2 ** 256) 1)
+    (if u1 = Unsigned 256 ∧ u2 = u1
+     then INL $ IntV u1 $ &(vfmExecution$modexp (Num base) (Num exp) (2 ** 256) 1)
      else INR "PowMod256 type") ∧
   evaluate_builtin cx _ Floor [DecimalV i] =
     INL $ IntV (Signed 256) (i / 10000000000) ∧
