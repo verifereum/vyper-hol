@@ -729,7 +729,7 @@ QED
 
 Theorem stmts_spec_assign_scoped_var:
   ∀P Q cx n e.
-    (⟦cx⟧ ⦃λst. P st ∧ var_in_scope st n⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ Q (update_scoped_var st n v)⦄) ⇒
+    (⟦cx⟧ ⦃λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄ e ⇓⦃λtv st. ∃v. tv = Value v ∧ Q (update_scoped_var st n v)⦄) ⇒
     ⟦cx⟧ ⦃λst. P st ∧ (cx.txn.is_creation ⇒ valid_lookups cx st) ∧ var_in_scope st n⦄ [Assign (BaseTarget (NameTarget n)) e] ⦃Q ∥ λ_ _. F⦄
 Proof
   rpt strip_tac >>
@@ -793,11 +793,28 @@ Theorem stmts_spec_assign_scoped_var_subscripts:
      ⇓⦃λtv st. ∃v0 v1 v2.
                  tv = Value v1 ∧
                  lookup_scoped_var st n = SOME v0 ∧
-                 assign_subscripts v0 sbs (Replace v1) = INL v2 ∧
+                 assign_subscripts v0 (REVERSE sbs) (Replace v1) = INL v2 ∧
                  Q (update_scoped_var st n v2)⦄) ⇒
-    ⟦cx⟧ ⦃P⦄ [Assign (BaseTarget (SubscriptTarget t ei)) e] ⦃Q ∥ λ_ _. F⦄
+    ⟦cx⟧ ⦃P⦄ [Assign (BaseTarget bt) e] ⦃Q ∥ λ_ _. F⦄
 Proof
-  cheat
+  rpt strip_tac >>
+  irule stmts_spec_assign >>
+  qexists_tac `λav st. av = BaseTargetV (ScopedVar n) sbs ∧ P' st` >>
+  conj_tac >-
+  (rpt strip_tac >> gvs[expr_spec_def] >>
+   rpt strip_tac >>
+   first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
+   Cases_on `eval_expr cx e st` >> Cases_on `q` >> simp[] >>
+   strip_tac >> qexists_tac `v1` >> simp[] >>
+   conj_tac >-
+   (irule valid_target_scoped_var_subscripts >>
+    qexistsl_tac [`v0`, `v2`] >> simp[]) >>
+   `update_target cx r (BaseTargetV (ScopedVar n) sbs) (Replace v1) =
+    update_scoped_var r n v2`
+     by (irule update_target_scoped_var_subscripts >>
+         qexists_tac `v0` >> simp[]) >>
+   simp[]) >>
+  BETA_TAC >> simp[]
 QED
 
 Theorem stmts_spec_ann_assign:
