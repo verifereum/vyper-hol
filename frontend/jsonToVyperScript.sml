@@ -578,6 +578,10 @@ Definition translate_expr_def:
   (translate_expr (JE_Subscript arr idx) =
     Subscript (translate_expr arr) (translate_expr idx)) /\
 
+  (* NamedExpr - only appears in initializes:/uses: annotations, not in executable code *)
+  (translate_expr (JE_NamedExpr target value) =
+    Literal (BoolL T)) /\
+
   (* BinOp *)
   (translate_expr (JE_BinOp l op r) =
     Builtin (Bop (translate_binop op)) [translate_expr l; translate_expr r]) /\

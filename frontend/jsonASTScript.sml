@@ -78,6 +78,7 @@ Datatype:
   | JE_Name string (string option) int                   (* id, typeclass, source_id for modules *)
   | JE_Attribute json_expr string (string option) int  (* value, attr, result_typeclass, source_id *)
   | JE_Subscript json_expr json_expr                   (* value, slice *)
+  | JE_NamedExpr json_expr json_expr                   (* target, value - dependency binding in initializes: lib[dep := dep] *)
 
   (* Operators *)
   | JE_BinOp json_expr json_binop json_expr            (* left, op, right *)

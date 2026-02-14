@@ -343,12 +343,8 @@ val excluded_test_names = [
   (* TODO: complex module constants *)
   "test_import_constant_array",
   "test_module_constant_builtin",
-  (* TODO: cross-module transient storage *)
-  "test_modules_transient",
-  "test_complex_modules_transient",
   (* TODO: complex module variable types *)
   "test_import_complex_types",
-  "test_import_namespace",
   (* TODO: extcall with value= *)
   "test_external_with_payable_value"
 ]

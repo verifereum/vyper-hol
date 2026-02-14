@@ -1012,7 +1012,7 @@ Datatype:
     stk: (num option # identifier) list
   ; txn: call_txn
   ; sources: (address, (num option, toplevel list) alist) alist
-  ; layouts: (address, var_layout # var_layout) alist  (* (storage, transient) *)
+  ; layouts: (address, storage_layout # storage_layout) alist  (* (storage, transient) *)
   ; in_deploy: bool  (* T when executing during deployment, allows calling Deploy functions *)
   |>
 End
@@ -1116,54 +1116,6 @@ End
 
 val () = cv_auto_trans type_env_all_modules_def;
 
-(* Build var_layout from storage_layout and toplevels.
-   For each storage variable or hashmap, record its slot number. *)
-Definition get_matching_var_id_def:
-  get_matching_var_id is_transient (VariableDecl _ mut id typ) =
-    (if (mut = Storage ∨ mut = Transient) ∧ (mut = Transient) = is_transient
-     then SOME id else NONE) ∧
-  get_matching_var_id is_transient (HashMapDecl _ flag id kt vt) =
-    (if flag = is_transient then SOME id else NONE) ∧
-  get_matching_var_id is_transient _ = NONE
-End
-
-val () = cv_auto_trans get_matching_var_id_def;
-
-(* Build var_layout entry for a single module.
-   src_id_opt: NONE for main module, SOME n for imported module.
-   Layout keys are (src_id_opt, var_name). *)
-Definition build_var_layout_entry_def:
-  build_var_layout_entry is_transient src_id_opt layout [] = LN ∧
-  build_var_layout_entry is_transient src_id_opt layout (t :: ts) =
-    let rest = build_var_layout_entry is_transient src_id_opt layout ts in
-    case get_matching_var_id is_transient t of
-    | SOME id =>
-        (case ALOOKUP layout (src_id_opt, id) of
-         | SOME slot => insert (string_to_num id) slot rest
-         | NONE => rest)
-    | NONE => rest
-End
-
-(* Build var_layout for all modules *)
-Definition build_var_layout_for_all_def:
-  build_var_layout_for_all storage_layout transient_layout [] = (LN, LN) ∧
-  build_var_layout_for_all storage_layout transient_layout ((src_id_opt, ts) :: rest) =
-    let (s_rest, t_rest) = build_var_layout_for_all storage_layout transient_layout rest in
-    let s_this = build_var_layout_entry F src_id_opt storage_layout ts in
-    let t_this = build_var_layout_entry T src_id_opt transient_layout ts in
-    (union s_this s_rest, union t_this t_rest)
-End
-
-Definition build_var_layout_def:
-  build_var_layout sources storage_layout transient_layout addr =
-    case ALOOKUP sources addr of
-    | NONE => (LN, LN)
-    | SOME mods => build_var_layout_for_all storage_layout transient_layout mods
-End
-
-val () = cv_auto_trans build_var_layout_entry_def;
-val () = cv_auto_trans build_var_layout_for_all_def;
-val () = cv_auto_trans build_var_layout_def;
 
 (* Look up an interface by nsid (source_id, name) *)
 Definition lookup_interface_def:
@@ -1636,13 +1588,13 @@ val var_decl_info_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="vyperInterpreter",Tyop="var_decl_info"}));
 
-(* Look up variable slot from var_layout *)
+(* Look up variable slot from storage_layout *)
 Definition lookup_var_slot_from_layout_def:
-  lookup_var_slot_from_layout cx is_transient n =
+  lookup_var_slot_from_layout cx is_transient src_id_opt var_name =
     case ALOOKUP cx.layouts cx.txn.target of
     | NONE => NONE
     | SOME (storage_lay, transient_lay) =>
-        lookup n (if is_transient then transient_lay else storage_lay)
+        ALOOKUP (if is_transient then transient_lay else storage_lay) (src_id_opt, var_name)
 End
 
 val () = cv_auto_trans lookup_var_slot_from_layout_def;
@@ -1747,13 +1699,13 @@ Definition lookup_global_def:
     case find_var_decl_by_num n ts of
     | NONE => raise $ Error "lookup_global: var not found"
     | SOME (StorageVarDecl is_transient typ, id) => do
-        var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient n) "lookup_global var_slot";
+        var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient src_id_opt id) "lookup_global var_slot";
         tv <- lift_option (evaluate_type tenv typ) "lookup_global evaluate_type";
         v <- read_storage_slot cx is_transient (n2w var_slot) tv;
         return (Value v)
       od
     | SOME (HashMapVarDecl is_transient kt vt, id) => do
-        var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient n) "lookup_global hashmap var_slot";
+        var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient src_id_opt id) "lookup_global hashmap var_slot";
         return (HashMapRef is_transient (n2w var_slot) kt vt)
       od
   od
@@ -1882,7 +1834,7 @@ Definition set_global_def:
     case find_var_decl_by_num n ts of
     | NONE => raise $ Error "set_global: var not found"
     | SOME (StorageVarDecl is_transient typ, id) => do
-        var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient n) "set_global var_slot";
+        var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient src_id_opt id) "set_global var_slot";
         tv <- lift_option (evaluate_type tenv typ) "set_global evaluate_type";
         write_storage_slot cx is_transient (n2w var_slot) tv v
       od
@@ -3220,20 +3172,10 @@ End
 
 val () = cv_auto_trans initial_immutables_def;
 
-(* Convert all storage_layouts to var_layouts *)
-Definition convert_all_layouts_def:
-  convert_all_layouts srcs [] = [] ∧
-  convert_all_layouts srcs ((addr, (s_layout, t_layout)) :: rest) =
-    let var_lays = build_var_layout srcs s_layout t_layout addr in
-    (addr, var_lays) :: convert_all_layouts srcs rest
-End
-
-val () = cv_auto_trans convert_all_layouts_def;
-
 Definition initial_evaluation_context_def:
   initial_evaluation_context srcs layouts tx =
   <| sources := srcs
-   ; layouts := convert_all_layouts srcs layouts
+   ; layouts := layouts
    ; txn := tx
    ; stk := [(NONE, tx.function_name)]
    ; in_deploy := F

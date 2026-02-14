@@ -133,6 +133,7 @@ val JE_Bool_tm = jastk "JE_Bool"
 val JE_Name_tm = jastk "JE_Name"
 val JE_Attribute_tm = jastk "JE_Attribute"
 val JE_Subscript_tm = jastk "JE_Subscript"
+val JE_NamedExpr_tm = jastk "JE_NamedExpr"
 val JE_BinOp_tm = jastk "JE_BinOp"
 val JE_BoolOp_tm = jastk "JE_BoolOp"
 val JE_UnaryOp_tm = jastk "JE_UnaryOp"
@@ -160,6 +161,7 @@ fun mk_JE_Attribute (e, attr, tc_opt, src_id_opt) =
                                  lift_option (mk_option string_ty) fromMLstring tc_opt,
                                  src_id_opt])
 fun mk_JE_Subscript (e1, e2) = list_mk_comb(JE_Subscript_tm, [e1, e2])
+fun mk_JE_NamedExpr (e1, e2) = list_mk_comb(JE_NamedExpr_tm, [e1, e2])
 fun mk_JE_BinOp (l, op_tm, r) = list_mk_comb(JE_BinOp_tm, [l, op_tm, r])
 fun mk_JE_BoolOp (op_tm, es) = list_mk_comb(JE_BoolOp_tm, [op_tm, mk_list(es, json_expr_ty)])
 fun mk_JE_UnaryOp (op_tm, e) = list_mk_comb(JE_UnaryOp_tm, [op_tm, e])
@@ -629,6 +631,11 @@ fun d_json_expr () : term decoder = achoose "expr" [
   check_ast_type "Subscript" $
     JSONDecode.map (fn (e1, e2) => mk_JE_Subscript(e1, e2)) $
     tuple2 (field "value" (delay d_json_expr), field "slice" (delay d_json_expr)),
+
+  (* NamedExpr - dependency binding in initializes: lib[dep := dep] *)
+  check_ast_type "NamedExpr" $
+    JSONDecode.map (fn (e1, e2) => mk_JE_NamedExpr(e1, e2)) $
+    tuple2 (field "target" (delay d_json_expr), field "value" (delay d_json_expr)),
 
   (* BinOp *)
   check_ast_type "BinOp" $
