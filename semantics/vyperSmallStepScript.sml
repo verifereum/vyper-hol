@@ -58,8 +58,8 @@ Datatype:
   | TypeBuiltinK type_builtin type eval_continuation
   | CallSendK eval_continuation
   | ExtCallK bool identifier (type list) type (expr option) eval_continuation
-  | IntCallK (num |-> type_args) (num |-> type_args) (num option # identifier) ((identifier # type) list) (expr list) type (stmt list) eval_continuation
-  | IntCallK1 (num |-> type_args) (num |-> type_args) (num option # identifier) ((identifier # type) list) (value list) type (stmt list) eval_continuation
+  | IntCallK (num |-> type_args) (num option # identifier) ((identifier # type) list) (expr list) type (stmt list) eval_continuation
+  | IntCallK1 (num |-> type_args) (num option # identifier) ((identifier # type) list) (value list) type (stmt list) eval_continuation
   | IntCallK2 (scope list) type_value eval_continuation
   | ExprsK (expr list) eval_continuation
   | ExprsK1 value eval_continuation
@@ -194,12 +194,12 @@ Definition eval_expr_cps_def:
       ret <<- FST $ sstup2; body <<- SND $ sstup2;
       check (LENGTH es ≤ LENGTH args ∧
            LENGTH args - LENGTH es ≤ LENGTH dflts) "IntCall args length";
-      (* Use combined type env for return type (may reference types from other modules) *)
-      all_mods <<- (case ALOOKUP cx10.sources cx10.txn.target of SOME m => m | NONE => []);
-      return (type_env ts, type_env_all_modules all_mods, args, dflts, ret, body) od st
+      (* Use combined type env (may reference types from other modules) *)
+      all_tenv <<- get_tenv cx10;
+      return (all_tenv, args, dflts, ret, body) od st
      of (INR ex, st) => AK cx10 (ApplyExc ex) st k
-      | (INL (tenv, all_tenv, args, dflts, ret, body), st) =>
-          eval_exprs_cps cx10 es st (IntCallK tenv all_tenv (ns, fn) args dflts ret body k)) ∧
+      | (INL (all_tenv, args, dflts, ret, body), st) =>
+          eval_exprs_cps cx10 es st (IntCallK all_tenv (ns, fn) args dflts ret body k)) ∧
   eval_exprs_cps cx11 [] st k = AK cx11 (ApplyVals []) st k ∧
   eval_exprs_cps cx12 (e::es) st k =
     eval_expr_cps cx12 e st (ExprsK es k)
@@ -372,8 +372,8 @@ Definition apply_exc_def:
   apply_exc cx ex st (TypeBuiltinK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CallSendK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (ExtCallK _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (IntCallK _ _ _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (IntCallK1 _ _ _ _ _ _ _ k) = AK (cx with stk updated_by TL) (ApplyExc ex) st k ∧
+  apply_exc cx ex st (IntCallK _ _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (IntCallK1 _ _ _ _ _ _ k) = AK (cx with stk updated_by TL) (ApplyExc ex) st k ∧
   apply_exc cx ex st (IntCallK2 prev rtv k) =
     liftk (cx with stk updated_by TL) (ApplyTv o Value)
       (do rv <- finally (handle_function ex) (pop_function prev);
@@ -536,10 +536,10 @@ Definition apply_val_def:
     apply_exc cx (Error "not BoolV") st k ∧
   apply_val cx v2 st (SubscriptK1 tv1 k) =
     liftk cx ApplyTv (do
-      ts <- lift_option (get_self_code cx) "Subscript get_self_code";
+      tenv <<- get_tenv cx;
       res <- lift_sum (evaluate_subscript tv1 v2);
        case res of INL v => return v | INR (is_transient, slot, t) => do
-         tv <- lift_option (evaluate_type (type_env ts) t) "Subscript evaluate_type";
+         tv <- lift_option (evaluate_type tenv t) "Subscript evaluate_type";
          v <- read_storage_slot cx is_transient slot tv;
          return $ Value v
        od
@@ -603,8 +603,7 @@ Definition apply_vals_def:
         v <- lift_option (dest_NumV (HD (TL vs))) "ExtCall value not int";
         return (SOME v, TL (TL vs))
       od;
-      ts <- lift_option (get_self_code cx) "ExtCall get_self_code";
-      tenv <<- type_env ts;
+      tenv <<- get_tenv cx;
       calldata <- lift_option (build_ext_calldata tenv func_name arg_types arg_vals)
                               "ExtCall build_calldata";
       accounts <- get_accounts;
@@ -628,13 +627,13 @@ Definition apply_vals_def:
     of (INR ex, st) => AK cx (ApplyExc ex) st k
      | (INL (INL e), st) => eval_expr_cps cx e st k
      | (INL (INR tv), st) => AK cx (ApplyTv tv) st k) ∧
-  apply_vals cx vs st (IntCallK tenv all_tenv src_fn args dflts ret body k) =
+  apply_vals cx vs st (IntCallK all_tenv src_fn args dflts ret body k) =
     eval_exprs_cps (cx with stk updated_by CONS src_fn)
       (DROP (LENGTH dflts - (LENGTH args - LENGTH vs)) dflts) st
-      (IntCallK1 tenv all_tenv src_fn args vs ret body k) ∧
-  apply_vals cx dflt_vs st (IntCallK1 tenv all_tenv src_fn args vs ret body k) =
+      (IntCallK1 all_tenv src_fn args vs ret body k) ∧
+  apply_vals cx dflt_vs st (IntCallK1 all_tenv src_fn args vs ret body k) =
     (case do
-      env <- lift_option (bind_arguments tenv args (vs ++ dflt_vs)) "IntCall bind_arguments";
+      env <- lift_option (bind_arguments all_tenv args (vs ++ dflt_vs)) "IntCall bind_arguments";
       prev <- get_scopes;
       rtv <- lift_option (evaluate_type all_tenv ret) "IntCall eval ret";
       cxf <- push_function src_fn env (cx with stk updated_by TL);
@@ -1216,7 +1215,7 @@ Proof
     >- gvs[bind_def, return_def, CaseEq"prod", CaseEq"sum"]
     \\ gvs[return_def]
     \\ first_x_assum drule
-    \\ disch_then $ funpow 10 drule_then drule
+    \\ disch_then $ funpow 9 drule_then drule
     \\ rw[] )
   \\ conj_tac >- ( (* IntCall *)
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def,

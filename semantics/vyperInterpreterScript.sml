@@ -1116,6 +1116,15 @@ End
 
 val () = cv_auto_trans type_env_all_modules_def;
 
+(* Combined type env for the current contract *)
+Definition get_tenv_def:
+  get_tenv cx =
+    case ALOOKUP cx.sources cx.txn.target of
+      SOME mods => type_env_all_modules mods
+    | NONE => FEMPTY
+End
+
+val () = cv_auto_trans get_tenv_def;
 
 (* Look up an interface by nsid (source_id, name) *)
 Definition lookup_interface_def:
@@ -1165,12 +1174,9 @@ val () = cv_trans evaluate_extract32_def;
 
 Definition evaluate_type_builtin_def:
   evaluate_type_builtin cx Empty typ vs =
-  (case get_self_code cx
-     of SOME ts =>
-        (case evaluate_type (type_env ts) typ
-         of SOME tv => INL $ default_value tv
-          | NONE => INR "Empty evaluate_type")
-      | _ => INR "Empty get_self_code") ∧
+  (case evaluate_type (get_tenv cx) typ
+   of SOME tv => INL $ default_value tv
+    | NONE => INR "Empty evaluate_type") ∧
   evaluate_type_builtin cx MaxValue typ vs =
     evaluate_max_value typ ∧
   evaluate_type_builtin cx MinValue typ vs =
@@ -1184,15 +1190,11 @@ Definition evaluate_type_builtin_def:
     (if u = Unsigned 256 then evaluate_extract32 bs (Num i) bt
      else INR "Extract32 type") ∧
   evaluate_type_builtin cx AbiDecode typ [BytesV _ bs] =
-    (case get_self_code cx of
-       SOME ts => evaluate_abi_decode (type_env ts) typ bs
-     | NONE => INR "abi_decode code") ∧
+    evaluate_abi_decode (get_tenv cx) typ bs ∧
   evaluate_type_builtin _ AbiDecode _ _ =
     INR "abi_decode args" ∧
   evaluate_type_builtin cx AbiEncode typ [v] =
-    (case get_self_code cx of
-       SOME ts => evaluate_abi_encode (type_env ts) typ v
-     | NONE => INR "abi_encode code") ∧
+    evaluate_abi_encode (get_tenv cx) typ v ∧
   evaluate_type_builtin _ AbiEncode _ _ =
     INR "abi_encode args" ∧
   evaluate_type_builtin _ _ _ _ =
@@ -1308,14 +1310,12 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ (Concat n) vs = evaluate_concat n vs ∧
   evaluate_builtin cx _ (Slice n) [v1; v2; v3] = evaluate_slice v1 v2 v3 n ∧
   evaluate_builtin cx _ (MakeArray to bd) vs =
-    (case get_self_code cx of SOME ts =>
-     (case to
-      of NONE => INL $ ArrayV $ TupleV vs
-       | SOME t =>
-         (case evaluate_type (type_env ts) t
-          of NONE => INR "MakeArray type"
-           | SOME tv => INL $ ArrayV $ make_array_value tv bd vs))
-     | _ => INR "MakeArray code") ∧
+    (case to
+     of NONE => INL $ ArrayV $ TupleV vs
+      | SOME t =>
+        (case evaluate_type (get_tenv cx) t
+         of NONE => INR "MakeArray type"
+          | SOME tv => INL $ ArrayV $ make_array_value tv bd vs)) ∧
   evaluate_builtin cx acc (Acc aop) [BytesV _ bs] =
     (let a = lookup_account (word_of_bytes T (0w:address) bs) acc in
       INL $ evaluate_account_op aop bs a) ∧
@@ -1695,7 +1695,7 @@ val () = write_storage_slot_def
 Definition lookup_global_def:
   lookup_global cx src_id_opt n = do
     ts <- lift_option (get_module_code cx src_id_opt) "lookup_global get_module_code";
-    tenv <<- type_env ts;
+    tenv <<- get_tenv cx;
     case find_var_decl_by_num n ts of
     | NONE => raise $ Error "lookup_global: var not found"
     | SOME (StorageVarDecl is_transient typ, id) => do
@@ -1830,7 +1830,7 @@ val () = cv_auto_trans set_address_immutables_def;
 Definition set_global_def:
   set_global cx src_id_opt n v = do
     ts <- lift_option (get_module_code cx src_id_opt) "set_global get_module_code";
-    tenv <<- type_env ts;
+    tenv <<- get_tenv cx;
     case find_var_decl_by_num n ts of
     | NONE => raise $ Error "set_global: var not found"
     | SOME (StorageVarDecl is_transient typ, id) => do
@@ -1959,7 +1959,7 @@ Definition assign_target_def:
     ni <<- string_to_num id;
     tv <- lookup_global cx src_id_opt ni;
     ts <- lift_option (get_module_code cx src_id_opt) "assign_target get_module_code";
-    tenv <<- type_env ts;
+    tenv <<- get_tenv cx;
     case tv of
     | Value v => do
         (* Regular variable: apply assignment and write back *)
@@ -2944,10 +2944,10 @@ Definition evaluate_def:
     tv1 <- eval_expr cx e1;
     tv2 <- eval_expr cx e2;
     v2 <- get_Value tv2;
-    ts <- lift_option (get_self_code cx) "Subscript get_self_code";
+    tenv <<- get_tenv cx;
     res <- lift_sum $ evaluate_subscript tv1 v2;
     case res of INL v => return v | INR (is_transient, slot, t) => do
-      tv <- lift_option (evaluate_type (type_env ts) t) "Subscript evaluate_type";
+      tv <- lift_option (evaluate_type tenv t) "Subscript evaluate_type";
       v <- read_storage_slot cx is_transient slot tv;
       return $ Value v
     od
@@ -3000,8 +3000,7 @@ Definition evaluate_def:
       v <- lift_option (dest_NumV (HD (TL vs))) "ExtCall value not int";
       return (SOME v, TL (TL vs))
     od;
-    ts <- lift_option (get_self_code cx) "ExtCall get_self_code";
-    tenv <<- type_env ts;
+    tenv <<- get_tenv cx;
     calldata <- lift_option (build_ext_calldata tenv func_name arg_types arg_vals)
                             "ExtCall build_calldata";
     accounts <- get_accounts;
@@ -3035,11 +3034,9 @@ Definition evaluate_def:
     needed_dflts <<- DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts;
     cxd <<- cx with stk updated_by CONS (src_id_opt, fn);
     dflt_vs <- eval_exprs cxd needed_dflts;
-    tenv <<- type_env ts;
-    (* Use combined type env for return type (may reference types from other modules) *)
-    all_mods <<- (case ALOOKUP cx.sources cx.txn.target of SOME m => m | NONE => []);
-    all_tenv <<- type_env_all_modules all_mods;
-    env <- lift_option (bind_arguments tenv args (vs ++ dflt_vs)) "IntCall bind_arguments";
+    (* Use combined type env (may reference types from other modules) *)
+    all_tenv <<- get_tenv cx;
+    env <- lift_option (bind_arguments all_tenv args (vs ++ dflt_vs)) "IntCall bind_arguments";
     prev <- get_scopes;
     rtv <- lift_option (evaluate_type all_tenv ret) "IntCall eval ret";
     cxf <- push_function (src_id_opt, fn) env cx;
@@ -3260,11 +3257,8 @@ val () = send_call_value_def
 
 Definition call_external_function_def:
   call_external_function am cx mut ts all_mods args vals body ret =
-  let tenv = type_env ts in
-  (* Use combined type_env from all modules for return type evaluation,
-     since return types can reference types from imported modules *)
   let all_tenv = type_env_all_modules all_mods in
-  case bind_arguments tenv args vals
+  case bind_arguments all_tenv args vals
   of NONE => (INR $ Error "call bind_arguments", am)
    | SOME env =>
   (case constants_env cx am ts FEMPTY

@@ -511,6 +511,10 @@ fun d_ast_type () : term decoder = achoose "ast_type" [
           (fn p => p = ("Name", "indexed")) "not indexed" $
     field "args" $ sub 0 (delay d_ast_type),
 
+  (* Attribute node - cross-module type reference: library.SomeStruct, lib1.Roles *)
+  check_ast_type "Attribute" $
+    JSONDecode.map mk_JT_Named (field "attr" string),
+
   (* null type *)
   null JT_None_tm
 ]

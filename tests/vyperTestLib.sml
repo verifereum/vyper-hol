@@ -332,9 +332,6 @@ val excluded_test_names = [
   "test_import_interface_types",
   "test_import_interface_flags",
   "test_import_interface_types_stability",
-  (* TODO: cross-module struct/flag types *)
-  "test_library_structs",
-  "test_import_flag_types",
   (* TODO: module __init__ calls *)
   "test_indirect_variable_uses",
   "test_init_function_side_effects",

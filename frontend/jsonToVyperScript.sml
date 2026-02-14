@@ -641,8 +641,26 @@ Definition translate_expr_def:
          | _ => Call (IntCall (NONE, "pop")) args' NONE)
     (* self.func(args) - internal call *)
     | JE_Attribute (JE_Name "self" _ _) fname _ _ => Call (IntCall (NONE, fname)) args' NONE
-    (* Module call: use source_id from type_decl_node *)
-    | _ => Call (IntCall (source_id_to_nsid src_id_opt, extract_func_name func)) args' NONE) /\
+    (* Module struct constructor or module function call *)
+    | _ => let nsid = source_id_to_nsid src_id_opt;
+               fname = extract_func_name func in
+           (case ret_ty of
+              JT_Struct sname =>
+                if fname = sname then
+                  (* Struct constructor: library.SomeStruct(x=2) *)
+                  let mod_nsid = case func of
+                      JE_Attribute base _ _ _ =>
+                        (case extract_innermost_module_src base of
+                           SOME sid => source_id_to_nsid sid
+                         | NONE => nsid)
+                    | _ => nsid in
+                  StructLit (mod_nsid, fname) kwargs'
+                else
+                  (* Function call that returns a struct: library.foo() *)
+                  Call (IntCall (nsid, fname)) args' NONE
+            | _ =>
+              (* Module call: use source_id from type_decl_node *)
+              Call (IntCall (nsid, fname)) args' NONE)) /\
 
   (* ExtCall - mutating external call (is_static = F) *)
   (* Convention: args = [target; value; arg1; arg2; ...] *)
