@@ -324,8 +324,7 @@ val excluded_test_names = [
   "test_immutable_hashing_overlap_regression",
   "test_indirect_variable_uses",
   "test_init_function_side_effects",
-  "test_uses_already_initialized",
-  "test_module_event2"
+  "test_uses_already_initialized"
 ]
 
 fun glob_match pat str =

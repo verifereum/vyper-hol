@@ -856,10 +856,18 @@ fun d_json_stmt () : term decoder = achoose "stmt" [
     field "value" $
     check_ast_type "Call" $
     JSONDecode.map (fn ((name, src_id_opt), args) => mk_JS_Log(mk_nsid(src_id_opt, name), args)) $
-    tuple2 (field "func" $ check_ast_type "Name" $
+    tuple2 (field "func" $ achoose "log func" [
+              (* Same-module event: log MyEvent(...) *)
+              check_ast_type "Name" $
               tuple2 (field "id" string,
                       orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
                               succeed (intSyntax.term_of_int (Arbint.fromInt ~1)))),
+              (* Cross-module event: log lib1.MyEvent(...) *)
+              check_ast_type "Attribute" $
+              tuple2 (field "attr" string,
+                      orElse (field "value" $ field "type" $
+                                field "type_decl_node" $ field "source_id" source_id_tm,
+                              succeed (intSyntax.term_of_int (Arbint.fromInt ~1))))],
             achoose "log args" [
               field "keywords" (array (field "value" json_expr)),
               field "args" (array json_expr)
