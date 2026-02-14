@@ -2703,6 +2703,9 @@ Definition make_ext_call_state_def:
     let is_static = IS_NONE value_opt in
     let tx = make_call_tx caller callee value calldata gas_limit in
     let ctxt = initial_context callee code is_static empty_return_destination tx in
+    (* Transfer value from caller to callee, mirroring EVM CALL behavior.
+       The EVM does this in proceed_call before entering the sub-context. *)
+    let accounts = vfmExecution$transfer_value caller callee value accounts in
     let accesses = <| addresses := fINSERT caller (fINSERT callee fEMPTY)
                     ; storageKeys := fEMPTY |> in
     let rollback = <| accounts := accounts

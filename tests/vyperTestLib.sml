@@ -341,9 +341,7 @@ val excluded_test_names = [
   "test_import_constant_array",
   "test_module_constant_builtin",
   (* TODO: complex module variable types *)
-  "test_import_complex_types",
-  (* TODO: extcall with value= *)
-  "test_external_with_payable_value"
+  "test_import_complex_types"
 ]
 
 fun glob_match pat str =
