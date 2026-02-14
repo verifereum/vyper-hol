@@ -307,24 +307,50 @@ val excluded_test_names = [
   "test_native_hex_literals[*]",
   "test_reentrant_decorator",
   "test_private_zero_bytearray",
-  (* TODO: needs investigation *)
-  "test_library_structs",
+  (* TODO: exports: lib.__interface__ / named interface re-export *)
+  "test_export_interface_multiple_choices",
+  "test_export_module_with_default",
+  "test_export_module_with_getter",
+  "test_export_module_with_init",
+  "test_export_unimplemented_function",
+  "test_export_with_state",
+  "test_exports_interface2",
+  "test_exports_interface_simple",
   "test_inline_interface_export",
-  "test_export_*",
-  "test_exports_*",
   "test_variable_decl_exports",
-  "test_external_with_payable_value",
-  "test_module_constant_builtin",
-  "test_modules_transient",
-  "test_complex_modules_transient",
-  "test_import_*",
+  (* TODO: intrinsic interface expressions (lib.__interface__/lib.__at__ in exprs) *)
+  "test_intrinsic_interface[__at__]",
+  "test_intrinsic_interface[__interface__]",
+  "test_intrinsic_interface_converts",
+  "test_intrinsic_interface_defaults",
+  "test_intrinsic_interface_instantiation",
+  "test_intrinsic_interface_kws",
+  (* TODO: cross-contract calls via interface types *)
   "test_external_call_to_builtin_interface",
-  "test_external_call_to_interface*",
-  "test_intrinsic_interface*",
-  "test_immutable_hashing_overlap_regression",
+  "test_external_call_to_interface",
+  "test_external_call_to_interface_kwarg[*]",
+  "test_import_interface_types",
+  "test_import_interface_flags",
+  "test_import_interface_types_stability",
+  (* TODO: cross-module struct/flag types *)
+  "test_library_structs",
+  "test_import_flag_types",
+  (* TODO: module __init__ calls *)
   "test_indirect_variable_uses",
   "test_init_function_side_effects",
-  "test_uses_already_initialized"
+  "test_uses_already_initialized",
+  "test_immutable_hashing_overlap_regression",
+  (* TODO: complex module constants *)
+  "test_import_constant_array",
+  "test_module_constant_builtin",
+  (* TODO: cross-module transient storage *)
+  "test_modules_transient",
+  "test_complex_modules_transient",
+  (* TODO: complex module variable types *)
+  "test_import_complex_types",
+  "test_import_namespace",
+  (* TODO: extcall with value= *)
+  "test_external_with_payable_value"
 ]
 
 fun glob_match pat str =
