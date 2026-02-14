@@ -58,7 +58,7 @@ End
 (* TOP-LEVEL: Transform a function - builds DFG and transforms all blocks *)
 Definition transform_function_def:
   transform_function fn =
-    let dfg = build_dfg_fn fn in
+    let dfg = dfg_build_function fn in
     fn with fn_blocks := MAP (transform_block dfg) fn.fn_blocks
 End
 
@@ -192,4 +192,3 @@ Proof
   ) >>
   simp[]
 QED
-

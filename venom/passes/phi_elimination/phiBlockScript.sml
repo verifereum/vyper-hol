@@ -69,18 +69,17 @@ QED
 Theorem transform_inst_correct:
   !dfg inst s s' origin prev_bb v.
     step_inst inst s = OK s' /\
-    well_formed_dfg dfg /\
     phi_single_origin dfg inst = SOME origin /\
     s.vs_prev_bb = SOME prev_bb /\
     resolve_phi prev_bb inst.inst_operands = SOME (Var v) /\
-    FLOOKUP dfg v = SOME origin
+    dfg_lookup dfg v = SOME origin
   ==>
     ?s''. step_inst (transform_inst dfg inst) s = OK s'' /\
           state_equiv s' s''
 Proof
   rpt strip_tac >>
   `is_phi_inst inst` by metis_tac[phi_single_origin_is_phi] >>
-  `origin.inst_outputs = [v]` by fs[well_formed_dfg_def] >>
+  `origin.inst_outputs = [v]` by metis_tac[dfg_lookup_single_output] >>
   fs[transform_inst_def, is_phi_inst_def] >>
   qexists_tac `s'` >>
   conj_tac >- (
@@ -102,7 +101,6 @@ QED
 Theorem step_in_block_equiv:
   !dfg bb s s' is_term.
     step_in_block bb s = (OK s', is_term) /\
-    well_formed_dfg dfg /\
     (!idx inst. get_instruction bb idx = SOME inst /\ is_phi_inst inst ==>
        phi_well_formed inst.inst_operands) /\
     (!idx inst origin prev_bb v.
@@ -110,7 +108,7 @@ Theorem step_in_block_equiv:
        phi_single_origin dfg inst = SOME origin /\
        s.vs_prev_bb = SOME prev_bb /\
        resolve_phi prev_bb inst.inst_operands = SOME (Var v) ==>
-       FLOOKUP dfg v = SOME origin)
+       dfg_lookup dfg v = SOME origin)
   ==>
     ?s''. step_in_block (transform_block dfg bb) s = (OK s'', is_term) /\
           state_equiv s' s''
@@ -140,10 +138,10 @@ Proof
     Cases_on `eval_operand resolved_op s` >> fs[] >>
     `?var. resolved_op = Var var` by metis_tac[resolve_phi_well_formed] >>
     gvs[] >>
-    (* Use the FLOOKUP assumption - prev_bb already substituted, 4 args *)
+    (* Use the compatibility lookup assumption. *)
     first_x_assum (qspecl_then [`s.vs_inst_idx`, `curr_inst`, `origin_inst`, `var`] mp_tac) >>
     simp[] >> strip_tac >>
-    `origin_inst.inst_outputs = [var]` by fs[well_formed_dfg_def] >>
+    `origin_inst.inst_outputs = [var]` by metis_tac[dfg_lookup_single_output] >>
     fs[transform_inst_def, eval_operand_def, step_inst_def] >>
     simp[state_equiv_refl]
   ) >>
@@ -286,14 +284,13 @@ QED
 Theorem transform_block_correct:
   !bb st graph final_st.
     run_block bb st = OK final_st /\
-    well_formed_dfg graph /\
     (!idx inst. get_instruction bb idx = SOME inst /\ is_phi_inst inst ==>
        phi_well_formed inst.inst_operands) /\
     (!idx inst origin prev_bb v.
        get_instruction bb idx = SOME inst /\
        phi_single_origin graph inst = SOME origin /\
        resolve_phi prev_bb inst.inst_operands = SOME (Var v) ==>
-       FLOOKUP graph v = SOME origin)
+       dfg_lookup graph v = SOME origin)
   ==>
     ?xformed_st. run_block (transform_block graph bb) st = OK xformed_st /\
                  state_equiv final_st xformed_st
@@ -340,7 +337,6 @@ QED
 (* Block-level correctness: transform preserves result equivalence. *)
 Theorem transform_block_result_equiv:
   !bb st graph.
-    well_formed_dfg graph /\
     st.vs_prev_bb <> NONE /\  (* Not at entry - PHI semantics require prev_bb *)
     (!idx inst. get_instruction bb idx = SOME inst /\ is_phi_inst inst ==>
        phi_well_formed inst.inst_operands) /\
@@ -348,7 +344,7 @@ Theorem transform_block_result_equiv:
        get_instruction bb idx = SOME inst /\
        phi_single_origin graph inst = SOME origin /\
        resolve_phi prev_bb inst.inst_operands = SOME (Var v) ==>
-       FLOOKUP graph v = SOME origin) /\
+       dfg_lookup graph v = SOME origin) /\
     (* For Error case: if PHI with single origin errors, origin's output undefined *)
     (!inst origin src_var prev e s'.
        get_instruction bb s'.vs_inst_idx = SOME inst /\
@@ -469,4 +465,3 @@ Proof
     simp[result_equiv_def]
   ]
 QED
-
