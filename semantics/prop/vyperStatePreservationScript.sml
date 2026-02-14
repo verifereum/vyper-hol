@@ -127,11 +127,14 @@ Theorem set_global_immutables:
 Proof
   rw[set_global_def, bind_def, return_def, lift_option_def] >>
   Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
-  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >>
-  PairCases_on `x'` >> gvs[] >>
-  Cases_on `x'0` >> gvs[return_def, raise_def, bind_def] >>
-  Cases_on `lookup_var_slot_from_layout cx b n` >> gvs[return_def, raise_def] >>
-  Cases_on `evaluate_type (type_env x) t` >> gvs[return_def, raise_def] >>
+  rename1 `SOME ts` >>
+  Cases_on `find_var_decl_by_num n ts` >> gvs[return_def, raise_def] >>
+  rename1 `SOME decl_id` >> PairCases_on `decl_id` >> gvs[] >>
+  Cases_on `decl_id0` >> gvs[return_def, raise_def, bind_def] >>
+  rename1 `StorageVarDecl is_tr typ` >>
+  Cases_on `lookup_var_slot_from_layout cx is_tr src decl_id1` >>
+  gvs[return_def, raise_def] >>
+  Cases_on `evaluate_type (get_tenv cx) typ` >> gvs[return_def, raise_def] >>
   imp_res_tac write_storage_slot_immutables >> gvs[]
 QED
 

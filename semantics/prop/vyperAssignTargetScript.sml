@@ -126,7 +126,7 @@ Proof
         PairCases_on `x` >> gvs[] >>
         Cases_on `compute_hashmap_slot c (t::x1) (h::TAKE (LENGTH t' − LENGTH x2) t')` >>
         gvs[bind_def, return_def, raise_def] >>
-        Cases_on `evaluate_type (type_env ts) x0` >> gvs[return_def, raise_def] >>
+        Cases_on `evaluate_type (get_tenv cx) x0` >> gvs[return_def, raise_def] >>
         Cases_on `read_storage_slot cx b x x' s''` >> gvs[] >>
         imp_res_tac read_storage_slot_immutables >> gvs[] >>
         Cases_on `q` >> gvs[] >>
@@ -293,7 +293,7 @@ Proof
        PairCases_on `x` >> gvs[] >>
        Cases_on `compute_hashmap_slot c (t::x1) (h::TAKE (LENGTH t' − LENGTH x2) t')` >>
        gvs[bind_def, return_def, raise_def] >>
-       Cases_on `evaluate_type (type_env ts) x0` >> gvs[return_def, raise_def] >>
+       Cases_on `evaluate_type (get_tenv cx) x0` >> gvs[return_def, raise_def] >>
        Cases_on `read_storage_slot cx b x x' s''` >> gvs[] >>
        imp_res_tac read_storage_slot_immutables >> gvs[] >>
        Cases_on `q` >> gvs[] >>
