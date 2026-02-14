@@ -1,6 +1,6 @@
 (* jsonASTLib.sml - Parse JSON into jsonAST HOL terms
  *
- * This is a "dumb" parser that mirrors JSON structure exactly.
+ * This is a dead simple parser that mirrors JSON structure exactly.
  * NO semantic decisions (msg.sender recognition, loop bounds, etc.)
  * Those are handled in jsonToVyperScript.sml (Phase 3).
  *)
