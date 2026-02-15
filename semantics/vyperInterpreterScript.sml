@@ -1277,8 +1277,9 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ Neg [DecimalV i] = bounded_decimal_op (-i) ∧
   evaluate_builtin cx _ Keccak256 [BytesV _ ls] = INL $ BytesV (Fixed 32) $
     Keccak_256_w64 ls ∧
+  evaluate_builtin cx _ Keccak256 [StringV _ s] = INL $ BytesV (Fixed 32) $
+    Keccak_256_w64 (MAP (n2w o ORD) s) ∧
   (* TODO: reject BytesV with invalid bounds for Keccak256 *)
-  (* TODO: support Keccak256 on strings *)
   evaluate_builtin cx _ (Uint2Str n) [IntV u i] =
     (if is_Unsigned u then INL $ StringV n (num_to_dec_string (Num i))
      else INR "Uint2Str") ∧

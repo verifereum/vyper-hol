@@ -290,7 +290,7 @@ val allowed_test_names = [
 
 (* Tests excluded by name - require architectural changes *)
 val excluded_test_names = [
-  (* TODO: keccak on strings *)
+  (* TODO: multi-arg abi_encode *)
   "test_immutable_hashing_overlap_regression",
   (* TODO: Storage arrays with huge sizes require ArrayRef support.
      Currently we try to load entire array into memory. Fix: Add ArrayRef
