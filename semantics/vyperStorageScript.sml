@@ -501,9 +501,6 @@ val () = cv_auto_trans encode_hashmap_key_def;
    but for storage access we only need the base slot. *)
 Type storage_layout = “:((num option # string) # num) list”
 
-(* Enriched storage layout: maps variable name keys (num) to slot numbers.
-   Used at runtime for reading/writing variables to EVM storage. *)
-Type var_layout = “:num spt”
 
 (* Look up base slot for a variable by (source_id, name) *)
 Definition lookup_var_slot_def:

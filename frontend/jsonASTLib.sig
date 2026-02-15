@@ -106,6 +106,7 @@ signature jsonASTLib = sig
   val JE_Name_tm : term
   val JE_Attribute_tm : term
   val JE_Subscript_tm : term
+  val JE_NamedExpr_tm : term
   val JE_BinOp_tm : term
   val JE_BoolOp_tm : term
   val JE_UnaryOp_tm : term
@@ -126,6 +127,7 @@ signature jsonASTLib = sig
   val mk_JE_Name : string * string option * term -> term
   val mk_JE_Attribute : term * string * string option * term -> term
   val mk_JE_Subscript : term * term -> term
+  val mk_JE_NamedExpr : term * term -> term
   val mk_JE_BinOp : term * term * term -> term
   val mk_JE_BoolOp : term * term list -> term
   val mk_JE_UnaryOp : term * term -> term

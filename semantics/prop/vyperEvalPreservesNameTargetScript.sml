@@ -20,11 +20,11 @@ Theorem lookup_name_target_facts[local]:
     (var_in_scope st n ∧ av = BaseTargetV (ScopedVar n) [] ∧
      (cx.txn.is_creation ⇒
        ∃imms. ALOOKUP st.immutables cx.txn.target = SOME imms ∧
-              FLOOKUP (get_source_immutables NONE imms) (string_to_num n) = NONE)) ∨
+              FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num n) = NONE)) ∨
     (¬var_in_scope st n ∧ av = BaseTargetV (ImmutableVar n) [] ∧
      cx.txn.is_creation ∧
      ∃imms. ALOOKUP st.immutables cx.txn.target = SOME imms ∧
-            IS_SOME (FLOOKUP (get_source_immutables NONE imms) (string_to_num n)))
+            IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num n)))
 Proof
   rpt strip_tac >>
   gvs[lookup_name_target_def, lookup_base_target_def,
@@ -37,7 +37,7 @@ Proof
       exactly_one_option_def, immutable_target_def] >-
   (Cases_on `ALOOKUP st.immutables cx.txn.target` >>
    gvs[raise_def, return_def, exactly_one_option_def] >>
-   Cases_on `FLOOKUP (get_source_immutables NONE x) (string_to_num n)` >>
+   Cases_on `FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num n)` >>
    gvs[return_def, raise_def, exactly_one_option_def] >>
    IF_CASES_TAC >> gvs[exactly_one_option_def, return_def, raise_def]) >>
   IF_CASES_TAC >> gvs[exactly_one_option_def, return_def, raise_def]
@@ -50,7 +50,7 @@ Theorem reconstruct_scoped_lookup[local]:
     var_in_scope st' n ∧
     (¬cx.txn.is_creation ∨
      ∃imms'. ALOOKUP st'.immutables cx.txn.target = SOME imms' ∧
-             FLOOKUP (get_source_immutables NONE imms') (string_to_num n) = NONE) ⇒
+             FLOOKUP (get_source_immutables (current_module cx) imms') (string_to_num n) = NONE) ⇒
     lookup_name_target cx st' n = SOME (BaseTargetV (ScopedVar n) [])
 Proof
   rpt strip_tac >>
@@ -72,13 +72,13 @@ Theorem reconstruct_immutable_lookup[local]:
     ¬var_in_scope st' n ∧
     cx.txn.is_creation ∧
     (∃imms'. ALOOKUP st'.immutables cx.txn.target = SOME imms' ∧
-             IS_SOME (FLOOKUP (get_source_immutables NONE imms') (string_to_num n))) ⇒
+             IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms') (string_to_num n))) ⇒
     lookup_name_target cx st' n = SOME (BaseTargetV (ImmutableVar n) [])
 Proof
   rpt strip_tac >>
   gvs[lookup_name_target_def, lookup_base_target_def,
       var_in_scope_def, lookup_scoped_var_def] >>
-  Cases_on `FLOOKUP (get_source_immutables NONE imms') (string_to_num n)` >>
+  Cases_on `FLOOKUP (get_source_immutables (current_module cx) imms') (string_to_num n)` >>
   gvs[] >>
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
        get_immutables_def, get_address_immutables_def,
@@ -92,28 +92,28 @@ Theorem imm_dom_transfer_none[local]:
   ∀cx st st' n imms.
     preserves_immutables_dom cx st st' ∧
     ALOOKUP st.immutables cx.txn.target = SOME imms ∧
-    FLOOKUP (get_source_immutables NONE imms) (string_to_num n) = NONE ⇒
+    FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num n) = NONE ⇒
     ∃imms'. ALOOKUP st'.immutables cx.txn.target = SOME imms' ∧
-            FLOOKUP (get_source_immutables NONE imms') (string_to_num n) = NONE
+            FLOOKUP (get_source_immutables (current_module cx) imms') (string_to_num n) = NONE
 Proof
   rpt strip_tac >> fs[preserves_immutables_dom_def] >>
   `IS_SOME (ALOOKUP st'.immutables cx.txn.target)` by fs[] >>
   Cases_on `ALOOKUP st'.immutables cx.txn.target` >> fs[] >>
-  first_x_assum (qspec_then `string_to_num n` mp_tac) >> fs[]
+  first_x_assum (qspecl_then [`current_module cx`, `string_to_num n`] mp_tac) >> fs[]
 QED
 
 Theorem imm_dom_transfer_some[local]:
   ∀cx st st' n imms.
     preserves_immutables_dom cx st st' ∧
     ALOOKUP st.immutables cx.txn.target = SOME imms ∧
-    IS_SOME (FLOOKUP (get_source_immutables NONE imms) (string_to_num n)) ⇒
+    IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num n)) ⇒
     ∃imms'. ALOOKUP st'.immutables cx.txn.target = SOME imms' ∧
-            IS_SOME (FLOOKUP (get_source_immutables NONE imms') (string_to_num n))
+            IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms') (string_to_num n))
 Proof
   rpt strip_tac >> fs[preserves_immutables_dom_def] >>
   `IS_SOME (ALOOKUP st'.immutables cx.txn.target)` by fs[] >>
   Cases_on `ALOOKUP st'.immutables cx.txn.target` >> fs[] >>
-  first_x_assum (qspec_then `string_to_num n` mp_tac) >> fs[]
+  first_x_assum (qspecl_then [`current_module cx`, `string_to_num n`] mp_tac) >> fs[]
 QED
 
 (* ===== Main theorems ===== *)
@@ -137,7 +137,7 @@ Proof
    Cases_on `ALOOKUP st'.immutables cx.txn.target` >> gvs[] >>
    qpat_x_assum `eval_expr _ _ _ = _`
      (fn th => assume_tac (MATCH_MP eval_expr_preserves_immutables_dom th)) >>
-   first_x_assum (qspecl_then [`string_to_num n`, `imms`, `x`] mp_tac) >>
+   first_x_assum (qspecl_then [`current_module cx`, `string_to_num n`, `imms`, `x`] mp_tac) >>
    simp[]) >>
   (* Immutable variable case *)
   irule reconstruct_immutable_lookup >>
@@ -149,7 +149,7 @@ Proof
   Cases_on `ALOOKUP st'.immutables cx.txn.target` >> gvs[] >>
   qpat_x_assum `eval_expr _ _ _ = _`
     (fn th => assume_tac (MATCH_MP eval_expr_preserves_immutables_dom th)) >>
-  first_x_assum (qspecl_then [`string_to_num n`, `imms`, `x`] mp_tac) >>
+  first_x_assum (qspecl_then [`current_module cx`, `string_to_num n`, `imms`, `x`] mp_tac) >>
   simp[]
 QED
 
@@ -173,11 +173,11 @@ Proof
    Cases_on `ALOOKUP st'.immutables cx.txn.target` >> gvs[] >>
    qpat_x_assum `eval_stmts _ _ _ = _`
      (fn th => assume_tac (MATCH_MP eval_stmts_preserves_immutables_dom th)) >>
-   first_x_assum (qspecl_then [`string_to_num n`, `imms`, `x`] mp_tac) >>
+   first_x_assum (qspecl_then [`current_module cx`, `string_to_num n`, `imms`, `x`] mp_tac) >>
    simp[]) >>
   (* Immutable variable case *)
   `preserves_immutables_dom cx st st'` by
-    (simp[preserves_immutables_dom_def] >> conj_tac >-
+    (simp[preserves_immutables_dom_def] >> rpt conj_tac >-
      metis_tac[eval_stmts_preserves_immutables_addr_dom] >>
      metis_tac[eval_stmts_preserves_immutables_dom]) >>
   drule_all imm_dom_transfer_some >> strip_tac >>

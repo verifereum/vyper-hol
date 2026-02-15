@@ -136,7 +136,7 @@ Proof
       (* INR case - storage slot access *)
       >> PairCases_on `y` >> gvs[bind_def, AllCaseEqs(), lift_option_def, return_def, raise_def]
       >> imp_res_tac read_storage_slot_state >> gvs[]
-      >> Cases_on `evaluate_type (type_env ts) y2` >> gvs[return_def, raise_def]
+      >> Cases_on `evaluate_type (get_tenv cx) y2` >> gvs[return_def, raise_def]
       >> metis_tac[])
   (* Remaining error cases *)
   >> metis_tac[]

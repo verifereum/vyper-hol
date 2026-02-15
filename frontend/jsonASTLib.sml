@@ -133,6 +133,7 @@ val JE_Bool_tm = jastk "JE_Bool"
 val JE_Name_tm = jastk "JE_Name"
 val JE_Attribute_tm = jastk "JE_Attribute"
 val JE_Subscript_tm = jastk "JE_Subscript"
+val JE_NamedExpr_tm = jastk "JE_NamedExpr"
 val JE_BinOp_tm = jastk "JE_BinOp"
 val JE_BoolOp_tm = jastk "JE_BoolOp"
 val JE_UnaryOp_tm = jastk "JE_UnaryOp"
@@ -160,6 +161,7 @@ fun mk_JE_Attribute (e, attr, tc_opt, src_id_opt) =
                                  lift_option (mk_option string_ty) fromMLstring tc_opt,
                                  src_id_opt])
 fun mk_JE_Subscript (e1, e2) = list_mk_comb(JE_Subscript_tm, [e1, e2])
+fun mk_JE_NamedExpr (e1, e2) = list_mk_comb(JE_NamedExpr_tm, [e1, e2])
 fun mk_JE_BinOp (l, op_tm, r) = list_mk_comb(JE_BinOp_tm, [l, op_tm, r])
 fun mk_JE_BoolOp (op_tm, es) = list_mk_comb(JE_BoolOp_tm, [op_tm, mk_list(es, json_expr_ty)])
 fun mk_JE_UnaryOp (op_tm, e) = list_mk_comb(JE_UnaryOp_tm, [op_tm, e])
@@ -509,6 +511,10 @@ fun d_ast_type () : term decoder = achoose "ast_type" [
           (fn p => p = ("Name", "indexed")) "not indexed" $
     field "args" $ sub 0 (delay d_ast_type),
 
+  (* Attribute node - cross-module type reference: library.SomeStruct, lib1.Roles *)
+  check_ast_type "Attribute" $
+    JSONDecode.map mk_JT_Named (field "attr" string),
+
   (* null type *)
   null JT_None_tm
 ]
@@ -630,6 +636,11 @@ fun d_json_expr () : term decoder = achoose "expr" [
     JSONDecode.map (fn (e1, e2) => mk_JE_Subscript(e1, e2)) $
     tuple2 (field "value" (delay d_json_expr), field "slice" (delay d_json_expr)),
 
+  (* NamedExpr - dependency binding in initializes: lib[dep := dep] *)
+  check_ast_type "NamedExpr" $
+    JSONDecode.map (fn (e1, e2) => mk_JE_NamedExpr(e1, e2)) $
+    tuple2 (field "target" (delay d_json_expr), field "value" (delay d_json_expr)),
+
   (* BinOp *)
   check_ast_type "BinOp" $
     JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
@@ -734,7 +745,7 @@ val json_keyword = delay d_json_keyword
 (* ===== Target Decoders ===== *)
 
 fun d_json_base_target () : term decoder = achoose "base_target" [
-  (* self.x -> TopLevelName with source_id from variable_writes *)
+  (* self.x -> TopLevelName with source_id from variable_writes or variable_reads *)
   check_ast_type "Attribute" $
     check (field "value" (tuple2 (field "ast_type" string, field "id" string)))
           (fn p => p = ("Name", "self")) "not self" $
@@ -742,7 +753,9 @@ fun d_json_base_target () : term decoder = achoose "base_target" [
       (tuple2 (field "attr" string,
                orElse (field "variable_writes" $ sub 0 $
                          field "decl_node" $ field "source_id" source_id_tm,
-                       succeed (intSyntax.term_of_int (Arbint.fromInt ~1))))),
+                       orElse (field "variable_reads" $ sub 0 $
+                                 field "decl_node" $ field "source_id" source_id_tm,
+                               succeed (intSyntax.term_of_int (Arbint.fromInt ~1)))))),
 
   (* module.x (lib1.counter) -> TopLevelName with source_id from type.type_decl_node *)
   check_ast_type "Attribute" $
