@@ -218,7 +218,7 @@ val unsupported_patterns = unsupported_code @ [
   "create_minimal_proxy_to(",
   "create_copy_of(",
   "gas=",
-  "# pragma nonreentrancy",
+  "pragma nonreentrancy",
   "@nonreentrant"
 ]
 
@@ -307,7 +307,6 @@ val excluded_test_names = [
   "test_external_contract_calls_with_default_value*",
   "test_bytes_literals[*]",
   "test_native_hex_literals[*]",
-  "test_reentrant_decorator",
   "test_private_zero_bytearray",
   (* TODO: exports: lib.__interface__ / named interface re-export *)
   "test_export_interface_multiple_choices",
