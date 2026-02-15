@@ -290,6 +290,8 @@ val allowed_test_names = [
 
 (* Tests excluded by name - require architectural changes *)
 val excluded_test_names = [
+  (* TODO: keccak on strings *)
+  "test_immutable_hashing_overlap_regression",
   (* TODO: Storage arrays with huge sizes require ArrayRef support.
      Currently we try to load entire array into memory. Fix: Add ArrayRef
      constructor to typed_value (like HashMapRef) and compute slot offsets
@@ -332,10 +334,6 @@ val excluded_test_names = [
   "test_import_interface_types",
   "test_import_interface_flags",
   "test_import_interface_types_stability",
-  (* TODO: module __init__ calls *)
-  "test_indirect_variable_uses",
-  "test_uses_already_initialized",
-  "test_immutable_hashing_overlap_regression",
   (* TODO: complex module constants *)
   "test_import_constant_array",
   "test_module_constant_builtin"
