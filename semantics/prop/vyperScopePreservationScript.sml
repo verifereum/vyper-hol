@@ -162,12 +162,16 @@ Theorem lookup_global_immutables:
 Proof
   rw[lookup_global_def, bind_def, return_def, lift_option_def] >>
   Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
-  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >>
+  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >-
+  (qpat_x_assum `_ = (res, st')` mp_tac >>
+   simp[get_immutables_def, get_address_immutables_def, bind_def,
+        lift_option_def, return_def, raise_def] >>
+   rpt CASE_TAC >> gvs[return_def, raise_def]) >>
   PairCases_on `x'` >> gvs[] >>
   Cases_on `x'0` >> gvs[bind_def, return_def, raise_def] >>
   qpat_x_assum `_ = (res, st')` mp_tac >>
   rpt CASE_TAC >> gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
-  imp_res_tac read_storage_slot_immutables >> simp[]
+  imp_res_tac read_storage_slot_immutables
 QED
 
 Theorem set_global_immutables:
@@ -200,7 +204,11 @@ Theorem lookup_global_scopes:
 Proof
   rw[lookup_global_def, bind_def, return_def, lift_option_def] >>
   Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
-  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >>
+  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >-
+  (qpat_x_assum `_ = (res, st')` mp_tac >>
+   simp[get_immutables_def, get_address_immutables_def, bind_def,
+        lift_option_def, return_def, raise_def] >>
+   rpt CASE_TAC >> gvs[return_def, raise_def]) >>
   PairCases_on `x'` >> gvs[] >>
   Cases_on `x'0` >> gvs[bind_def, return_def, raise_def] >>
   qpat_x_assum `_ = (res, st')` mp_tac >>
@@ -339,7 +347,7 @@ Proof
                imp_res_tac write_storage_slot_scopes >> gvs[])))
   (* ImmutableVar case *)
   >- (strip_tac >> gvs[assign_target_def, bind_def] >>
-      Cases_on `get_immutables cx NONE st` >> gvs[] >>
+      Cases_on `get_immutables cx (current_module cx) st` >> gvs[] >>
       drule get_immutables_scopes >> strip_tac >>
       Cases_on `q` >> gvs[] >>
       gvs[lift_option_def, AllCaseEqs(), return_def, raise_def]

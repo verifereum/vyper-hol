@@ -23,11 +23,11 @@ Definition preserves_immutables_dom_def:
   preserves_immutables_dom cx (st:evaluation_state) (st':evaluation_state) ⇔
     (∀tgt. IS_SOME (ALOOKUP st.immutables tgt) ⇒
            IS_SOME (ALOOKUP st'.immutables tgt)) ∧
-    (∀n imms imms'.
+    (∀src n imms imms'.
        ALOOKUP st.immutables cx.txn.target = SOME imms ∧
        ALOOKUP st'.immutables cx.txn.target = SOME imms' ⇒
-       (IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) ⇔
-        IS_SOME (FLOOKUP (get_source_immutables NONE imms') n)))
+       (IS_SOME (FLOOKUP (get_source_immutables src imms) n) ⇔
+        IS_SOME (FLOOKUP (get_source_immutables src imms') n)))
 End
 
 Theorem preserves_immutables_dom_refl[local]:
@@ -197,7 +197,7 @@ Proof
   (* resolve error paths by case-splitting on each case expression *)
   Cases_on `ALOOKUP st.immutables cx.txn.target` >>
   gvs[return_def, raise_def, preserves_immutables_dom_refl] >>
-  Cases_on `FLOOKUP (get_source_immutables NONE imms) (string_to_num id)` >>
+  Cases_on `FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num id)` >>
   gvs[return_def, raise_def, preserves_immutables_dom_refl] >>
   Cases_on `assign_subscripts a (REVERSE is) ao` >>
   gvs[return_def, raise_def, preserves_immutables_dom_refl] >>
@@ -208,11 +208,13 @@ Proof
   >- (rpt strip_tac >>
       Cases_on `cx.txn.target = tgt` >>
       gvs[alistTheory.ALOOKUP_ADELKEY])
-  >> gen_tac >> rename1 `IS_SOME (FLOOKUP _ n)` >>
+  >> rpt gen_tac >> rename1 `IS_SOME (FLOOKUP (get_source_immutables src _) n)` >>
      simp[set_source_immutables_def, get_source_immutables_def,
+          alistTheory.ALOOKUP_ADELKEY,
           finite_mapTheory.FLOOKUP_UPDATE] >>
+     Cases_on `src = current_module cx` >> gvs[] >>
      Cases_on `n = string_to_num id` >>
-     gvs[get_source_immutables_def]
+     gvs[get_source_immutables_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 Theorem assign_target_imm_dom_TupleV[local]:
@@ -1575,11 +1577,11 @@ QED
 Theorem eval_expr_preserves_immutables_dom:
   ∀cx e st res st'.
     eval_expr cx e st = (res, st') ⇒
-    ∀n imms imms'.
+    ∀src n imms imms'.
       ALOOKUP st.immutables cx.txn.target = SOME imms ∧
       ALOOKUP st'.immutables cx.txn.target = SOME imms' ⇒
-      (IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) ⇔
-       IS_SOME (FLOOKUP (get_source_immutables NONE imms') n))
+      (IS_SOME (FLOOKUP (get_source_immutables src imms) n) ⇔
+       IS_SOME (FLOOKUP (get_source_immutables src imms') n))
 Proof
   rpt strip_tac >> drule (cj 8 immutables_dom_mutual) >>
   rw[preserves_immutables_dom_def] >> metis_tac[]
@@ -1596,11 +1598,11 @@ QED
 Theorem eval_base_target_preserves_immutables_dom:
   ∀cx bt st res st'.
     eval_base_target cx bt st = (res, st') ⇒
-    ∀n imms imms'.
+    ∀src n imms imms'.
       ALOOKUP st.immutables cx.txn.target = SOME imms ∧
       ALOOKUP st'.immutables cx.txn.target = SOME imms' ⇒
-      (IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) ⇔
-       IS_SOME (FLOOKUP (get_source_immutables NONE imms') n))
+      (IS_SOME (FLOOKUP (get_source_immutables src imms) n) ⇔
+       IS_SOME (FLOOKUP (get_source_immutables src imms') n))
 Proof
   rpt strip_tac >> drule (cj 6 immutables_dom_mutual) >>
   rw[preserves_immutables_dom_def] >> metis_tac[]
@@ -1625,11 +1627,11 @@ QED
 Theorem eval_stmts_preserves_immutables_dom:
   ∀cx ss st res st'.
     eval_stmts cx ss st = (res, st') ⇒
-    ∀n imms imms'.
+    ∀src n imms imms'.
       ALOOKUP st.immutables cx.txn.target = SOME imms ∧
       ALOOKUP st'.immutables cx.txn.target = SOME imms' ⇒
-      (IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) ⇔
-       IS_SOME (FLOOKUP (get_source_immutables NONE imms') n))
+      (IS_SOME (FLOOKUP (get_source_immutables src imms) n) ⇔
+       IS_SOME (FLOOKUP (get_source_immutables src imms') n))
 Proof
   rpt strip_tac >> drule (cj 2 immutables_dom_mutual) >>
   rw[preserves_immutables_dom_def] >> metis_tac[]

@@ -78,19 +78,19 @@ Proof
   IF_CASES_TAC >> gvs[return_def, bind_def] >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac get_immutables_scopes >> gvs[]
-  >- (Cases_on `get_immutables cx NONE st` >> Cases_on `q` >> gvs[] >>
+  >- (Cases_on `get_immutables cx (current_module cx) st` >> Cases_on `q` >> gvs[] >>
       imp_res_tac get_immutables_scopes >> gvs[] >>
       Cases_on `exactly_one_option
                   (if IS_SOME (lookup_scopes (string_to_num nm) st.scopes) then
                      SOME (ScopedVar nm) else NONE)
                   (immutable_target x nm (string_to_num nm))` >> gvs[return_def, raise_def])
-  >- (Cases_on `get_immutables cx NONE st` >> Cases_on `q` >> gvs[] >>
+  >- (Cases_on `get_immutables cx (current_module cx) st` >> Cases_on `q` >> gvs[] >>
       imp_res_tac get_immutables_scopes >> gvs[] >>
       Cases_on `exactly_one_option
                   (if IS_SOME (lookup_scopes (string_to_num nm) st.scopes) then
                      SOME (ScopedVar nm) else NONE)
                   (immutable_target x nm (string_to_num nm))` >> gvs[return_def, raise_def])
-  >- (Cases_on `get_immutables cx NONE st` >> Cases_on `q` >> gvs[] >>
+  >- (Cases_on `get_immutables cx (current_module cx) st` >> Cases_on `q` >> gvs[] >>
       imp_res_tac get_immutables_scopes >> gvs[])
   >> Cases_on `exactly_one_option
                  (if IS_SOME (lookup_scopes (string_to_num nm) st.scopes) then
