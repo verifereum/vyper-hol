@@ -339,9 +339,7 @@ val excluded_test_names = [
   "test_immutable_hashing_overlap_regression",
   (* TODO: complex module constants *)
   "test_import_constant_array",
-  "test_module_constant_builtin",
-  (* TODO: complex module variable types *)
-  "test_import_complex_types"
+  "test_module_constant_builtin"
 ]
 
 fun glob_match pat str =

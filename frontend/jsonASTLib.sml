@@ -745,7 +745,7 @@ val json_keyword = delay d_json_keyword
 (* ===== Target Decoders ===== *)
 
 fun d_json_base_target () : term decoder = achoose "base_target" [
-  (* self.x -> TopLevelName with source_id from variable_writes *)
+  (* self.x -> TopLevelName with source_id from variable_writes or variable_reads *)
   check_ast_type "Attribute" $
     check (field "value" (tuple2 (field "ast_type" string, field "id" string)))
           (fn p => p = ("Name", "self")) "not self" $
@@ -753,7 +753,9 @@ fun d_json_base_target () : term decoder = achoose "base_target" [
       (tuple2 (field "attr" string,
                orElse (field "variable_writes" $ sub 0 $
                          field "decl_node" $ field "source_id" source_id_tm,
-                       succeed (intSyntax.term_of_int (Arbint.fromInt ~1))))),
+                       orElse (field "variable_reads" $ sub 0 $
+                                 field "decl_node" $ field "source_id" source_id_tm,
+                               succeed (intSyntax.term_of_int (Arbint.fromInt ~1)))))),
 
   (* module.x (lib1.counter) -> TopLevelName with source_id from type.type_decl_node *)
   check_ast_type "Attribute" $
