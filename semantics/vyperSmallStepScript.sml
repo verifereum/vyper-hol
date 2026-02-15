@@ -122,7 +122,7 @@ Definition eval_base_target_cps_def:
                 then SOME $ ScopedVar id
                 else NONE;
         ivo <- if cx.txn.is_creation
-               then do imms <- get_immutables cx NONE;
+               then do imms <- get_immutables cx (current_module cx);
                        return $ immutable_target imms id n
                     od
                else return NONE;
@@ -148,7 +148,7 @@ Definition eval_expr_cps_def:
   eval_expr_cps cx1 (Name id) st k =
     liftk cx1 ApplyTv
       (do env <- get_scopes;
-          imms <- get_immutables cx1 NONE;
+          imms <- get_immutables cx1 (current_module cx1);
           n <<- string_to_num id;
           v <- lift_sum $ exactly_one_option
                  (lookup_scopes n env) (FLOOKUP imms n);

@@ -1035,6 +1035,13 @@ End
 
 val () = cv_auto_trans empty_evaluation_context_def;
 
+(* Current module source_id: top of call stack, or NONE for main module *)
+Definition current_module_def:
+  current_module cx = case cx.stk of [] => NONE | (src,_)::_ => src
+End
+
+val () = cv_auto_trans current_module_def;
+
 (* Now we can define semantics for builtins that depend on the environment *)
 
 Definition evaluate_account_op_def:
@@ -1691,13 +1698,31 @@ val () = write_storage_slot_def
             update_transient_def, update_accounts_def]
   |> cv_auto_trans;
 
+(* Module-aware immutables lookup *)
+Definition get_immutables_def:
+  get_immutables cx src_id_opt = do
+    imms <- get_address_immutables cx;
+    return (get_source_immutables src_id_opt imms)
+  od
+End
+
+val () = get_immutables_def
+  |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
+  |> cv_auto_trans;
+
 (* Module-aware global lookup: look up variable n in module src_id_opt *)
 Definition lookup_global_def:
   lookup_global cx src_id_opt n = do
     ts <- lift_option (get_module_code cx src_id_opt) "lookup_global get_module_code";
     tenv <<- get_tenv cx;
     case find_var_decl_by_num n ts of
-    | NONE => raise $ Error "lookup_global: var not found"
+    | NONE => do
+        (* Not a storage/hashmap var — check immutables *)
+        imms <- get_immutables cx src_id_opt;
+        case FLOOKUP imms n of
+        | SOME v => return (Value v)
+        | NONE => raise $ Error "lookup_global: var not found"
+      od
     | SOME (StorageVarDecl is_transient typ, id) => do
         var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient src_id_opt id) "lookup_global var_slot";
         tv <- lift_option (evaluate_type tenv typ) "lookup_global evaluate_type";
@@ -1715,20 +1740,6 @@ val () = lookup_global_def
   |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator,
             prod_CASE_rator, var_decl_info_CASE_rator, UNCURRY, LET_THM]
   |> cv_auto_trans;
-
-(* Module-aware immutables lookup *)
-Definition get_immutables_def:
-  get_immutables cx src_id_opt = do
-    imms <- get_address_immutables cx;
-    return (get_source_immutables src_id_opt imms)
-  od
-End
-
-val () = get_immutables_def
-  |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
-  |> cv_auto_trans;
-
-
 
 Definition update_immutable_def:
   update_immutable src_id key v (imms: module_immutables) =
@@ -1992,10 +2003,11 @@ Definition assign_target_def:
   od ∧
   assign_target cx (BaseTargetV (ImmutableVar id) is) ao = do
     ni <<- string_to_num id;
-    imms <- get_immutables cx NONE;
+    src <<- current_module cx;
+    imms <- get_immutables cx src;
     a <- lift_option (FLOOKUP imms ni) "assign_target ImmutableVar";
     a' <- lift_sum $ assign_subscripts a (REVERSE is) ao;
-    set_immutable cx NONE ni a';
+    set_immutable cx src ni a';
     return $ Value a
   od ∧
   assign_target cx (TupleTargetV gvs) (Replace (ArrayV (TupleV vs))) = do
@@ -2891,7 +2903,7 @@ Definition evaluate_def:
             then SOME $ ScopedVar id
 	    else NONE;
     ivo <- if cx.txn.is_creation
-           then do imms <- get_immutables cx NONE;
+           then do imms <- get_immutables cx (current_module cx);
                    return $ immutable_target imms id n
                 od
            else return NONE;
@@ -2921,7 +2933,7 @@ Definition evaluate_def:
   od ∧
   eval_expr cx (Name id) = do
     env <- get_scopes;
-    imms <- get_immutables cx NONE;
+    imms <- get_immutables cx (current_module cx);
     n <<- string_to_num id;
     v <- lift_sum $ exactly_one_option
            (lookup_scopes n env) (FLOOKUP imms n);
@@ -3155,19 +3167,25 @@ Definition force_default_value_def:
      | NONE => NoneV
 End
 
-(* TODO: assumes unique identifiers, but should check? *)
-(* All initial_immutables are for main contract (NONE source_id) *)
+(* Initialize immutables for a single module's toplevels *)
+Definition initial_immutables_module_def:
+  initial_immutables_module env src_id_opt [] acc = acc ∧
+  initial_immutables_module env src_id_opt (VariableDecl _ Immutable id typ :: ts) acc =
+  (let key = string_to_num id in
+   let iv = force_default_value env typ in
+     initial_immutables_module env src_id_opt ts
+       (update_immutable src_id_opt key iv acc)) ∧
+  initial_immutables_module env src_id_opt (_ :: ts) acc =
+    initial_immutables_module env src_id_opt ts acc
+End
+
+val () = cv_auto_trans initial_immutables_module_def;
+
+(* Initialize immutables for all modules *)
 Definition initial_immutables_def:
   initial_immutables env [] = empty_immutables ∧
-  (* Storage and transient variables use EVM storage, which is zero-initialized *)
-  initial_immutables env (VariableDecl _ Immutable id typ :: ts) =
-  (let imms = initial_immutables env ts in
-   let key = string_to_num id in
-   let iv = force_default_value env typ in
-     update_immutable NONE key iv imms) ∧
-  (* Flags are accessed via FlagMember and lookup_flag_mem, not immutables *)
-  (* HashMaps are not stored in immutables - they're constructed on-the-fly in lookup_global *)
-  initial_immutables env (t :: ts) = initial_immutables env ts
+  initial_immutables env ((src_id_opt, ts) :: rest) =
+    initial_immutables_module env src_id_opt ts (initial_immutables env rest)
 End
 
 val () = cv_auto_trans initial_immutables_def;
@@ -3341,8 +3359,8 @@ Definition load_contract_def:
   load_contract am tx mods exps =
   let addr = tx.target in
   let ts = case ALOOKUP mods NONE of SOME ts => ts | NONE => [] in
-  let tenv = type_env ts in
-  let imms = initial_immutables tenv ts in
+  let tenv = type_env_all_modules mods in
+  let imms = initial_immutables tenv mods in
   let am = am with <| immutables updated_by CONS (addr, imms);
                       exports updated_by CONS (addr, exps) |> in
   case lookup_function tx.function_name Deploy ts of

@@ -334,7 +334,6 @@ val excluded_test_names = [
   "test_import_interface_types_stability",
   (* TODO: module __init__ calls *)
   "test_indirect_variable_uses",
-  "test_init_function_side_effects",
   "test_uses_already_initialized",
   "test_immutable_hashing_overlap_regression",
   (* TODO: complex module constants *)
