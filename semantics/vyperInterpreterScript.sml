@@ -71,7 +71,7 @@ Datatype:
                  | ArrayRef bool bytes32 type_value bound
 End
 
-val toplevel_value_CASE_rator =
+Theorem toplevel_value_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="vyperInterpreter",Tyop="toplevel_value"}));
 
@@ -971,7 +971,7 @@ Datatype:
   | PopOp
 End
 
-val assign_operation_CASE_rator =
+Theorem assign_operation_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="vyperInterpreter",Tyop="assign_operation"}));
 
@@ -1645,7 +1645,7 @@ Datatype:
   | HashMapVarDecl bool type value_type (* is_transient, key type, value type *)
 End
 
-val var_decl_info_CASE_rator =
+Theorem var_decl_info_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="vyperInterpreter",Tyop="var_decl_info"}));
 
