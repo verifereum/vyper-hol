@@ -209,10 +209,16 @@ Definition entry_block_def:
     else SOME (HD fn.fn_blocks)
 End
 
+(* Optional invariant: fn_name labels the first block. *)
+Definition fn_wf_entry_def:
+  fn_wf_entry fn <=>
+    fn.fn_blocks <> [] /\
+    lookup_block fn.fn_name fn.fn_blocks = SOME (HD fn.fn_blocks)
+End
+
 (* Get successor labels of a terminator instruction *)
 Definition get_successors_def:
   get_successors inst =
     if ~is_terminator inst.inst_opcode then [] else
     MAP THE (FILTER IS_SOME (MAP get_label inst.inst_operands))
 End
-
