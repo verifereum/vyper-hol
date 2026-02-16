@@ -283,6 +283,13 @@ End
 
 val () = cv_auto_trans is_Unsigned_def;
 
+Definition bound_length_def[simp]:
+  bound_length (Fixed n) = n ∧
+  bound_length (Dynamic n) = n
+End
+
+val () = cv_trans bound_length_def;
+
 Definition int_bound_bits_def[simp]:
   int_bound_bits (Unsigned b) = b ∧
   int_bound_bits (Signed b) = b
