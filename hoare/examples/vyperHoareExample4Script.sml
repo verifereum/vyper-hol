@@ -1,7 +1,7 @@
 Theory vyperHoareExample4
 
 Ancestors
-  jsonToVyper vyperHoare vyperInterpreter vyperTypeValue vyperLookup vyperEvalMisc vyperArray
+  jsonToVyper vyperHoare vyperInterpreter vyperTypeValue vyperLookup vyperEvalMisc vyperEvalBinop vyperArray
 
 Libs
   jsonASTLib intLib wordsLib
@@ -55,26 +55,12 @@ Theorem evaluate_binop_mod_uint256_3:
     evaluate_binop Mod (IntV (Unsigned 256) x) (IntV (Unsigned 256) 3) =
     INL (IntV (Unsigned 256) (x % 3))
 Proof
-  rpt strip_tac >> gvs[within_int_bound_def] >>
-  simp[evaluate_binop_def, bounded_int_op_def, within_int_bound_def] >>
-  (* Establish key equation: w2i (word_mod (i2w x) (i2w 3)) = x % 3 *)
-  sg `w2i (word_mod ((i2w x):bytes32) (i2w 3)) = x % 3` >- (
-    `x = &(Num x)` by gvs[integerTheory.INT_OF_NUM] >>
-    pop_assum SUBST_ALL_TAC >>
-    simp[integer_wordTheory.i2w_pos, wordsTheory.word_mod_def, wordsTheory.w2n_n2w] >>
-    CONV_TAC (DEPTH_CONV (TRY_CONV wordsLib.SIZES_CONV)) >> fs[] >>
-    simp[GSYM integer_wordTheory.i2w_pos] >>
-    irule integer_wordTheory.w2i_i2w_pos >>
-    CONV_TAC (RAND_CONV (TRY_CONV wordsLib.SIZES_CONV)) >>
-    `Num x MOD 3 < 3` by simp[] >> simp[]
-  ) >>
-  gvs[] >>
-  `0 ≤ x % 3 ∧ x % 3 < 3` by (
-    `(3:int) ≠ 0` by simp[] >>
-    drule integerTheory.INT_MOD_BOUNDS >>
-    disch_then (qspec_then `x` mp_tac) >> simp[]
-  ) >>
-  `x % 3 = 0 ∨ x % 3 = 1 ∨ x % 3 = 2` by intLib.ARITH_TAC >> gvs[]
+  rpt strip_tac >>
+  `0 ≤ x` by gvs[within_int_bound_def] >>
+  `¬(x < 0)` by intLib.ARITH_TAC >>
+  `within_int_bound (Unsigned 256) 3` by EVAL_TAC >>
+  mp_tac (Q.SPECL [`x`, `3`, `256`] evaluate_binop_mod_unsigned) >>
+  simp[integerTheory.INT_REM_EQ_MOD]
 QED
 
 (* Bounds on x % 3 *)
