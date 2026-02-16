@@ -1054,8 +1054,7 @@ QED
 
 Theorem expr_spec_builtin_make_array:
   ∀P Q cx ty bd es vs tv_eval.
-    IS_SOME (get_self_code cx) ∧
-    evaluate_type (type_env (THE (get_self_code cx))) ty = SOME tv_eval ∧
+    evaluate_type (get_tenv cx) ty = SOME tv_eval ∧
     compatible_bound bd (LENGTH es) ∧
     exprs_spec cx P es (λvs' st. vs' = vs ∧ Q st) ⇒
     ⟦cx⟧ ⦃P⦄ (Builtin (MakeArray (SOME ty) bd) es)
@@ -1067,7 +1066,5 @@ Proof
   first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
   strip_tac >> gvs[] >>
   simp[bind_def, get_accounts_def, return_def, lift_sum_def] >>
-  simp[evaluate_builtin_def] >>
-  Cases_on `get_self_code cx` >> gvs[] >>
-  simp[return_def]
+  simp[evaluate_builtin_def, return_def]
 QED
