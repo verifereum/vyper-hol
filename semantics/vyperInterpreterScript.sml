@@ -268,8 +268,10 @@ Definition evaluate_binop_def:
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
            (if i2 = 0 then INR "Div0" else
             bounded_int_op u1 u2 $
-              w2i $ (if is_Unsigned u1 then word_div else word_quot)
-                      ((i2w i1):bytes32) (i2w i2)) | _ => INR "binop")
+              (if is_Unsigned u1
+               then &(w2n $ word_div ((i2w i1):bytes32) (i2w i2))
+               else w2i $ word_quot ((i2w i1):bytes32) (i2w i2)))
+                | _ => INR "binop")
        | DecimalV i1 => (case v2 of DecimalV i2 =>
            (if i2 = 0 then INR "Div0" else
             bounded_decimal_op $
@@ -297,8 +299,10 @@ Definition evaluate_binop_def:
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
            (if i2 = 0 then INR "Mod0" else
             bounded_int_op u1 u2 $
-              w2i $ (if is_Unsigned u1 then word_mod else word_rem)
-                      ((i2w i1):bytes32) (i2w i2)) | _ => INR "binop")
+              (if is_Unsigned u1
+               then &(w2n $ word_mod ((i2w i1):bytes32) (i2w i2))
+               else w2i $ word_rem ((i2w i1):bytes32) (i2w i2)))
+                | _ => INR "binop")
        | DecimalV i1 => (case v2 of DecimalV i2 =>
            (if i2 = 0 then INR "Mod0" else
             bounded_decimal_op $
