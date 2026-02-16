@@ -12,6 +12,7 @@ tests/vyper-test-exports
 CLAUDE.local.md
 .mcp.json
 .opencode/
+.setup.sh
 
 .agent-files/
 
