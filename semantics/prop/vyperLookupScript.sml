@@ -351,9 +351,8 @@ QED
 Theorem assign_target_scoped_var_replace:
   ∀cx st n v.
     var_in_scope st n ⇒
-    ∃old_v.
       assign_target cx (BaseTargetV (ScopedVar n) []) (Replace v) st =
-      (INL (Value old_v), update_scoped_var st n v)
+      (INL NONE, update_scoped_var st n v)
 Proof
   rw[var_in_scope_def, lookup_scoped_var_def] >>
   `IS_SOME (find_containing_scope (string_to_num n) st.scopes)`
@@ -362,7 +361,8 @@ Proof
   PairCases_on `x` >> gvs[] >>
   simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
        lift_option_def, lift_sum_def, assign_subscripts_def,
-       ignore_bind_def, set_scopes_def, update_scoped_var_def, LET_THM]
+       ignore_bind_def, set_scopes_def, update_scoped_var_def, LET_THM,
+       assign_result_def]
 QED
 
 Theorem assign_target_scoped_var_update:
@@ -370,7 +370,7 @@ Theorem assign_target_scoped_var_update:
     lookup_scoped_var st n = SOME v ∧
     evaluate_binop bop v v' = INL new_v ⇒
     assign_target cx (BaseTargetV (ScopedVar n) []) (Update bop v') st =
-    (INL (Value v), update_scoped_var st n new_v)
+    (INL NONE, update_scoped_var st n new_v)
 Proof
   rw[lookup_scoped_var_def] >>
   `IS_SOME (find_containing_scope (string_to_num n) st.scopes)`
@@ -380,17 +380,63 @@ Proof
   `x2 = v` by (drule find_containing_scope_lookup >> simp[]) >> gvs[] >>
   simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
        lift_option_def, lift_sum_def, assign_subscripts_def,
-       ignore_bind_def, set_scopes_def, update_scoped_var_def, LET_THM]
+       ignore_bind_def, set_scopes_def, update_scoped_var_def, LET_THM,
+       assign_result_def]
 QED
 
-Theorem assign_target_scoped_var_subscripts:
+Theorem assign_target_scoped_var_subscripts_state:
   ∀cx st n sbs ao a a'.
     lookup_scoped_var st n = SOME a ∧
     assign_subscripts a (REVERSE sbs) ao = INL a' ⇒
-    assign_target cx (BaseTargetV (ScopedVar n) sbs) ao st =
-    (INL (Value a), update_scoped_var st n a')
+    SND (assign_target cx (BaseTargetV (ScopedVar n) sbs) ao st) =
+      update_scoped_var st n a'
 Proof
-  rw[lookup_scoped_var_def] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[lookup_scoped_var_def] >>
+  `IS_SOME (find_containing_scope (string_to_num n) st.scopes)`
+    by (irule lookup_scopes_find_containing >> simp[]) >>
+  Cases_on `find_containing_scope (string_to_num n) st.scopes` >- gvs[] >>
+  PairCases_on `x` >> gvs[] >>
+  `x2 = a` by (drule find_containing_scope_lookup >> simp[]) >> gvs[] >>
+  simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
+       lift_option_def, lift_sum_def, assign_result_def,
+       ignore_bind_def, set_scopes_def, update_scoped_var_def, LET_THM] >>
+  Cases_on `ao` >> simp[assign_result_def, return_def, bind_def, lift_sum_def] >>
+  rpt (CASE_TAC >> gvs[return_def, raise_def])
+QED
+
+Theorem assign_subscripts_PopOp_assign_result:
+  ∀a subs a'.
+    assign_subscripts a subs PopOp = INL a' ⇒
+    ∃v. evaluate_subscripts a subs = INL v ∧ ISL (popped_value v)
+Proof
+  Induct_on `subs`
+  (* base case *)
+  >- (rw[assign_subscripts_def, evaluate_subscripts_def] >>
+      Cases_on `a` >> gvs[pop_element_def, popped_value_def] >>
+      rename1 `ArrayV av` >> Cases_on `av` >> gvs[pop_element_def, popped_value_def])
+  (* step case *)
+  >> rpt gen_tac >>
+  Cases_on `h` >> simp[assign_subscripts_def, evaluate_subscripts_def] >>
+  rpt (CASE_TAC >> gvs[]) >>
+  strip_tac >> res_tac >> gvs[] >>
+  (* AttrSubscript: case split on the value being subscripted *)
+  Cases_on `a` >>
+  gvs[assign_subscripts_def, evaluate_subscripts_def] >>
+  rpt (CASE_TAC >> gvs[]) >>
+  qpat_x_assum `(case _ of INL _ => _ | INR _ => _) = _` mp_tac >>
+  CASE_TAC >> gvs[] >> strip_tac >>
+  res_tac >> gvs[]
+QED
+
+Theorem assign_target_scoped_var_subscripts_valid:
+  ∀cx st n sbs ao a a'.
+    lookup_scoped_var st n = SOME a ∧
+    assign_subscripts a (REVERSE sbs) ao = INL a' ⇒
+    ISL (FST (assign_target cx (BaseTargetV (ScopedVar n) sbs) ao st))
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[lookup_scoped_var_def] >>
   `IS_SOME (find_containing_scope (string_to_num n) st.scopes)`
     by (irule lookup_scopes_find_containing >> simp[]) >>
   Cases_on `find_containing_scope (string_to_num n) st.scopes` >- gvs[] >>
@@ -398,7 +444,12 @@ Proof
   `x2 = a` by (drule find_containing_scope_lookup >> simp[]) >> gvs[] >>
   simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
        lift_option_def, lift_sum_def,
-       ignore_bind_def, set_scopes_def, update_scoped_var_def, LET_THM]
+       ignore_bind_def, set_scopes_def, update_scoped_var_def, LET_THM] >>
+  Cases_on `ao` >> simp[assign_result_def, return_def, bind_def, lift_sum_def]
+  >- (drule assign_subscripts_PopOp_assign_result >> strip_tac >>
+      gvs[return_def, raise_def] >>
+      Cases_on `popped_value v` >> gvs[return_def])
+  >> rpt (CASE_TAC >> gvs[return_def, raise_def])
 QED
 
 Theorem lookup_name_none_to_lookup_scoped_var:

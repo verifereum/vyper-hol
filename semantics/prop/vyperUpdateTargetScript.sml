@@ -55,7 +55,7 @@ Proof
   PairCases_on `x` >>
   simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
        lift_option_def, LET_THM, assign_subscripts_def, lift_sum_def,
-       ignore_bind_def, set_scopes_def]
+       ignore_bind_def, set_scopes_def, assign_result_def]
 QED
 
 Theorem valid_target_scoped_var_update:
@@ -72,7 +72,7 @@ Proof
   `x2 = v1` by (drule find_containing_scope_lookup >> simp[]) >> gvs[] >>
   simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
        lift_option_def, LET_THM, assign_subscripts_def, lift_sum_def,
-       ignore_bind_def, set_scopes_def]
+       ignore_bind_def, set_scopes_def, assign_result_def]
 QED
 
 Theorem update_target_scoped_var_subscripts:
@@ -82,7 +82,7 @@ Theorem update_target_scoped_var_subscripts:
     update_target cx st (BaseTargetV (ScopedVar n) sbs) ao = update_scoped_var st n a'
 Proof
   rw[update_target_def] >>
-  imp_res_tac assign_target_scoped_var_subscripts >> simp[]
+  imp_res_tac assign_target_scoped_var_subscripts_state >> simp[]
 QED
 
 Theorem valid_target_scoped_var_subscripts:
@@ -92,7 +92,7 @@ Theorem valid_target_scoped_var_subscripts:
     valid_target cx st (BaseTargetV (ScopedVar n) sbs) ao
 Proof
   rw[valid_target_def] >>
-  imp_res_tac assign_target_scoped_var_subscripts >> simp[]
+  imp_res_tac assign_target_scoped_var_subscripts_valid >> simp[]
 QED
 
 Theorem update_target_preserves_toplevel_name_targets:
@@ -171,7 +171,7 @@ Proof
   (simp[update_target_def, Once assign_target_def, bind_def, get_immutables_def,
         get_address_immutables_def, lift_option_def, LET_THM, return_def,
         assign_subscripts_def, lift_sum_def, ignore_bind_def, set_immutable_def,
-        set_address_immutables_def] >>
+        set_address_immutables_def, assign_result_def] >>
    simp[lookup_name_def, Once evaluate_def, bind_def, get_scopes_def, return_def,
         get_immutables_def, get_address_immutables_def, lift_option_def, lift_sum_def,
         get_source_immutables_def, set_source_immutables_def,
@@ -215,7 +215,7 @@ Proof
    `lookup_scoped_var r n = SOME v1` by (drule lookup_name_to_lookup_scoped_var >> simp[]) >>
    simp[update_target_def] >>
    `assign_target cx (BaseTargetV (ScopedVar n) []) (Update bop v2) r =
-    (INL (Value v1), update_scoped_var r n v)` by (drule assign_target_scoped_var_update >> simp[]) >>
+    (INL NONE, update_scoped_var r n v)` by (drule assign_target_scoped_var_update >> simp[]) >>
    simp[] >>
    `lookup_scoped_var (update_scoped_var r n v) n = SOME v` by simp[lookup_after_update] >>
    `valid_lookups cx (update_scoped_var r n v)`
@@ -230,7 +230,7 @@ Proof
    simp[update_target_def, Once assign_target_def, bind_def, get_immutables_def,
         get_address_immutables_def, lift_option_def, LET_THM, return_def,
         assign_subscripts_def, lift_sum_def, ignore_bind_def, set_immutable_def,
-        set_address_immutables_def, lookup_immutable_def] >>
+        set_address_immutables_def, lookup_immutable_def, assign_result_def] >>
    `x = v1` by gvs[lookup_immutable_def] >> gvs[return_def, raise_def] >>
    simp[lookup_name_def, Once evaluate_def, bind_def, get_scopes_def, return_def,
         get_immutables_def, get_address_immutables_def, lift_option_def, lift_sum_def,
@@ -243,7 +243,7 @@ Proof
   `lookup_scoped_var r n = SOME v1` by (drule lookup_name_to_lookup_scoped_var >> simp[]) >>
   simp[update_target_def] >>
   `assign_target cx (BaseTargetV (ScopedVar n) []) (Update bop v2) r =
-   (INL (Value v1), update_scoped_var r n v)` by (drule assign_target_scoped_var_update >> simp[]) >>
+   (INL NONE, update_scoped_var r n v)` by (drule assign_target_scoped_var_update >> simp[]) >>
   simp[] >>
   `lookup_scoped_var (update_scoped_var r n v) n = SOME v` by simp[lookup_after_update] >>
   `valid_lookups cx (update_scoped_var r n v)`
@@ -317,12 +317,12 @@ Proof
     PairCases_on `x'` >>
     simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
          lift_option_def, LET_THM, assign_subscripts_def, lift_sum_def,
-         ignore_bind_def, set_scopes_def]) >>
+         ignore_bind_def, set_scopes_def, assign_result_def]) >>
    (* ImmutableVar case *)
    simp[Once assign_target_def, bind_def, get_immutables_def,
         get_address_immutables_def, lift_option_def, LET_THM, return_def,
         assign_subscripts_def, lift_sum_def, ignore_bind_def,
-        set_immutable_def, set_address_immutables_def]) >>
+        set_immutable_def, set_address_immutables_def, assign_result_def]) >>
   (* is_creation = F, must be ScopedVar *)
   Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
   gvs[exactly_one_option_def, return_def, raise_def] >>
@@ -333,5 +333,5 @@ Proof
   PairCases_on `x` >>
   simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
        lift_option_def, LET_THM, assign_subscripts_def, lift_sum_def,
-       ignore_bind_def, set_scopes_def]
+       ignore_bind_def, set_scopes_def, assign_result_def]
 QED
