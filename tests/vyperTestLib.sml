@@ -218,7 +218,7 @@ val unsupported_patterns = unsupported_code @ [
   "create_minimal_proxy_to(",
   "create_copy_of(",
   "gas=",
-  "# pragma nonreentrancy",
+  "pragma nonreentrancy",
   "@nonreentrant"
 ]
 
@@ -290,6 +290,8 @@ val allowed_test_names = [
 
 (* Tests excluded by name - require architectural changes *)
 val excluded_test_names = [
+  (* TODO: multi-arg abi_encode *)
+  "test_immutable_hashing_overlap_regression",
   (* TODO: Storage arrays with huge sizes require ArrayRef support.
      Currently we try to load entire array into memory. Fix: Add ArrayRef
      constructor to typed_value (like HashMapRef) and compute slot offsets
@@ -305,33 +307,35 @@ val excluded_test_names = [
   "test_external_contract_calls_with_default_value*",
   "test_bytes_literals[*]",
   "test_native_hex_literals[*]",
-  "test_reentrant_decorator",
   "test_private_zero_bytearray",
-  (* TODO: needs investigation *)
+  (* TODO: exports: lib.__interface__ / named interface re-export *)
+  "test_export_interface_multiple_choices",
+  "test_export_module_with_default",
+  "test_export_module_with_getter",
+  "test_export_module_with_init",
+  "test_export_unimplemented_function",
+  "test_export_with_state",
+  "test_exports_interface2",
+  "test_exports_interface_simple",
   "test_inline_interface_export",
-  "test_imported_module_not_part_of_interface",
-  "test_exported_fun_part_of_interface",
-  "test_simple_export",
-  "test_nested_export",
-  "test_transitive_export",
-  "test_export_*",
-  "test_exports_*",
-  "test_*_exports",
-  "test_external_with_payable_value",
-  "test_library_*",
-  "test_module_constant*",
-  "test_nested_module_constant",
-  "test_modules_transient",
-  "test_complex_modules_transient",
-  "test_import_*",
+  "test_variable_decl_exports",
+  (* TODO: intrinsic interface expressions (lib.__interface__/lib.__at__ in exprs) *)
+  "test_intrinsic_interface[__at__]",
+  "test_intrinsic_interface[__interface__]",
+  "test_intrinsic_interface_converts",
+  "test_intrinsic_interface_defaults",
+  "test_intrinsic_interface_instantiation",
+  "test_intrinsic_interface_kws",
+  (* TODO: cross-contract calls via interface types *)
   "test_external_call_to_builtin_interface",
-  "test_external_call_to_interface*",
-  "test_intrinsic_interface*",
-  "test_immutable_hashing_overlap_regression",
-  "test_indirect_variable_uses",
-  "test_init_function_side_effects",
-  "test_uses_already_initialized",
-  "test_module_event2"
+  "test_external_call_to_interface",
+  "test_external_call_to_interface_kwarg[*]",
+  "test_import_interface_types",
+  "test_import_interface_flags",
+  "test_import_interface_types_stability",
+  (* TODO: complex module constants *)
+  "test_import_constant_array",
+  "test_module_constant_builtin"
 ]
 
 fun glob_match pat str =

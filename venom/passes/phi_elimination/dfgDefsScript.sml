@@ -1,237 +1,98 @@
 (*
- * Data-Flow Graph (DFG) Definitions
+ * Data-Flow Graph (DFG) Definitions for PHI Elimination
  *
- * This theory defines the DFG structure and basic operations.
- * The DFG maps each variable to the instruction that produces it.
- *
- * This is reusable infrastructure for multiple optimization passes.
- *
- * ============================================================================
- * STRUCTURE OVERVIEW
- * ============================================================================
- *
- * TOP-LEVEL DEFINITIONS:
- *   - dfg                    : Type alias for the DFG map
- *   - build_dfg_fn           : Build DFG from a function
- *   - well_formed_dfg        : DFG well-formedness predicate
- *
- * TOP-LEVEL THEOREMS:
- *   - build_dfg_fn_well_formed   : DFG construction preserves well-formedness
- *   - build_dfg_fn_correct       : DFG correctly maps variables to instructions
- *
- * HELPER DEFINITIONS:
- *   - build_dfg_block, build_dfg_blocks : Inductive DFG construction
- *   - phi_var_operands, assign_var_operand, etc. : PHI/ASSIGN helpers
- *   - dfg_ids : Set of instruction IDs in DFG (for termination proofs)
- *
- * ============================================================================
+ * This theory is a PHI-local compatibility layer over the shared DFG analysis.
+ * The shared analysis keeps multi-output definitions; PHI elimination uses a
+ * lookup view that treats non-singleton outputs as absent.
  *)
 
 Theory dfgDefs
 Ancestors
-  list finite_map pred_set
+  dfgAnalysisCorrectness pred_set list finite_map
   venomState venomInst venomSem
 
 (* ==========================================================================
-   Data-Flow Graph Type and Basic Operations
+   Shared DFG compatibility layer
    ========================================================================== *)
 
-(* TOP-LEVEL: The DFG type - maps variable names to defining instructions *)
-Type dfg = ``:(string, instruction) fmap``
+Type dfg = ``:dfg_analysis``
 
-(* TOP-LEVEL: DFG well-formedness - if a variable maps to an instruction,
-   that instruction must produce the variable. This is a key invariant.
-   Note: for single-output instructions, inst_outputs = [v]. *)
-Definition well_formed_dfg_def:
-  well_formed_dfg dfg <=>
-    !v inst. FLOOKUP dfg v = SOME inst ==> inst.inst_outputs = [v]
+(* PHI compatibility lookup: only singleton-output defs are visible. *)
+Definition dfg_lookup_def:
+  dfg_lookup dfg v =
+    case dfg_get_def dfg v of
+      NONE => NONE
+    | SOME inst =>
+        if inst.inst_outputs = [v] then SOME inst else NONE
 End
 
-(* ==========================================================================
-   Building the DFG from a Function
-   ========================================================================== *)
-
-(* Helper: Build DFG from a single basic block's instructions.
-   Only handles single-output instructions - multi-output (like invoke)
-   would need separate treatment for each output. *)
-Definition build_dfg_def:
-  build_dfg_block dfg [] = dfg /\
-  build_dfg_block dfg (inst::insts) =
-    let dfg' = case inst.inst_outputs of
-                 [v] => dfg |+ (v, inst)
-               | _ => dfg
-    in build_dfg_block dfg' insts
-End
-
-(* Helper: Build DFG from a list of basic blocks *)
-Definition build_dfg_blocks_def:
-  build_dfg_blocks dfg [] = dfg /\
-  build_dfg_blocks dfg (bb::bbs) =
-    build_dfg_blocks (build_dfg_block dfg bb.bb_instructions) bbs
-End
-
-(* TOP-LEVEL: Build the DFG for an entire function.
-   This is the main entry point for DFG construction. *)
-Definition build_dfg_fn_def:
-  build_dfg_fn fn = build_dfg_blocks FEMPTY fn.fn_blocks
-End
-
-(* ==========================================================================
-   Well-formedness Theorems
-   ========================================================================== *)
-
-(* Helper: Updating a well-formed DFG preserves well-formedness *)
-Theorem well_formed_dfg_update:
-  !dfg inst v.
-    well_formed_dfg dfg /\ inst.inst_outputs = [v]
-    ==> well_formed_dfg (dfg |+ (v, inst))
+Theorem dfg_lookup_implies_get_def:
+  !dfg v inst.
+    dfg_lookup dfg v = SOME inst
+    ==>
+    dfg_get_def dfg v = SOME inst /\ inst.inst_outputs = [v]
 Proof
-  rw[well_formed_dfg_def, FLOOKUP_UPDATE] >>
-  Cases_on `v' = v` >> fs[]
+  rw[dfg_lookup_def] >> gvs[AllCaseEqs()]
 QED
 
-(* Helper: Block-level construction preserves well-formedness *)
-Theorem build_dfg_block_well_formed:
-  !dfg insts.
-    well_formed_dfg dfg ==> well_formed_dfg (build_dfg_block dfg insts)
+Theorem dfg_lookup_single_output:
+  !dfg v inst.
+    dfg_lookup dfg v = SOME inst ==> inst.inst_outputs = [v]
 Proof
-  Induct_on `insts` >>
-  simp[build_dfg_def] >>
+  metis_tac[dfg_lookup_implies_get_def]
+QED
+
+Theorem dfg_build_function_lookup_correct:
+  !fn v inst.
+    dfg_lookup (dfg_build_function fn) v = SOME inst
+    ==>
+    inst.inst_outputs = [v] /\ MEM inst (fn_insts fn)
+Proof
   rpt strip_tac >>
-  Cases_on `h.inst_outputs` >> simp[build_dfg_def] >>
-  Cases_on `t` >> simp[build_dfg_def] >>
-  metis_tac[well_formed_dfg_update]
+  drule dfg_lookup_implies_get_def >> strip_tac >>
+  drule dfg_build_function_correct >> simp[]
 QED
 
-(* Helper: Multi-block construction preserves well-formedness *)
-Theorem build_dfg_blocks_well_formed:
-  !dfg bbs.
-    well_formed_dfg dfg ==> well_formed_dfg (build_dfg_blocks dfg bbs)
-Proof
-  Induct_on `bbs` >> rw[build_dfg_blocks_def] >>
-  rpt strip_tac >>
-  first_x_assum (qspec_then `build_dfg_block dfg h.bb_instructions` mp_tac) >>
-  impl_tac >- (match_mp_tac build_dfg_block_well_formed >> simp[]) >>
-  simp[]
-QED
-
-(* TOP-LEVEL: The DFG built from any function is well-formed.
-   This is used by PHI elimination to ensure FLOOKUP gives correct outputs. *)
-Theorem build_dfg_fn_well_formed:
-  !fn. well_formed_dfg (build_dfg_fn fn)
-Proof
-  simp[build_dfg_fn_def] >>
-  match_mp_tac build_dfg_blocks_well_formed >>
-  simp[well_formed_dfg_def, FLOOKUP_DEF]
-QED
-
-(* ==========================================================================
-   DFG Correctness Theorems
-   ========================================================================== *)
-
-(* Helper: Collect all instructions from a function *)
-Definition fn_instructions_def:
-  fn_instructions fn = FLAT (MAP (\bb. bb.bb_instructions) fn.fn_blocks)
-End
-
-(* Helper: SSA form predicate - each variable has at most one definition.
-   For single-output instructions, inst_outputs = [v]. *)
+(* SSA form predicate - each variable has at most one singleton definition. *)
 Definition ssa_form_def:
   ssa_form fn <=>
     !v inst1 inst2.
-      MEM inst1 (fn_instructions fn) /\
-      MEM inst2 (fn_instructions fn) /\
+      MEM inst1 (fn_insts fn) /\
+      MEM inst2 (fn_insts fn) /\
       inst1.inst_outputs = [v] /\
       inst2.inst_outputs = [v]
       ==>
       inst1 = inst2
 End
 
-(* Helper: Block-level DFG correctness *)
-Theorem build_dfg_block_correct:
-  !insts dfg v inst.
-    FLOOKUP (build_dfg_block dfg insts) v = SOME inst ==>
-    (FLOOKUP dfg v = SOME inst \/ (MEM inst insts /\ inst.inst_outputs = [v]))
-Proof
-  Induct_on `insts` >> simp[build_dfg_def] >>
-  rpt strip_tac >>
-  Cases_on `h.inst_outputs` >> fs[build_dfg_def] >- (
-    first_x_assum (qspecl_then [`dfg`, `v`, `inst`] mp_tac) >> simp[] >>
-    strip_tac >> metis_tac[]
-  ) >>
-  Cases_on `t` >> fs[build_dfg_def] >- (
-    first_x_assum (qspecl_then [`dfg |+ (h', h)`, `v`, `inst`] mp_tac) >>
-    simp[FLOOKUP_UPDATE] >>
-    Cases_on `h' = v` >> fs[] >>
-    strip_tac >> metis_tac[]
-  ) >>
-  first_x_assum (qspecl_then [`dfg`, `v`, `inst`] mp_tac) >> simp[] >>
-  strip_tac >> metis_tac[]
-QED
-
-(* Helper: Multi-block DFG correctness *)
-Theorem build_dfg_blocks_correct:
-  !bbs dfg v inst.
-    FLOOKUP (build_dfg_blocks dfg bbs) v = SOME inst ==>
-    (FLOOKUP dfg v = SOME inst \/
-     (?bb. MEM bb bbs /\ MEM inst bb.bb_instructions /\ inst.inst_outputs = [v]))
-Proof
-  Induct_on `bbs` >> simp[build_dfg_blocks_def] >>
-  rpt strip_tac >>
-  first_x_assum (qspecl_then [`build_dfg_block dfg h.bb_instructions`, `v`, `inst`] mp_tac) >>
-  simp[] >> strip_tac >- (
-    drule build_dfg_block_correct >> strip_tac >- fs[] >>
-    disj2_tac >> qexists_tac `h` >> simp[]
-  ) >>
-  metis_tac[]
-QED
-
-(* TOP-LEVEL: If FLOOKUP returns an instruction, that instruction is in the
-   function and produces the variable. *)
-Theorem build_dfg_fn_correct:
-  !fn v inst.
-    FLOOKUP (build_dfg_fn fn) v = SOME inst
-    ==>
-    inst.inst_outputs = [v] /\
-    MEM inst (fn_instructions fn)
-Proof
-  rw[build_dfg_fn_def, fn_instructions_def] >>
-  drule build_dfg_blocks_correct >> fs[MEM_FLAT, MEM_MAP] >>
-  strip_tac >> qexists_tac `bb.bb_instructions` >> simp[] >>
-  qexists_tac `bb` >> simp[]
-QED
-
-(* ==========================================================================
-   DFG IDs and Finiteness (for termination proofs)
-   ========================================================================== *)
-
-(* Helper: Set of all instruction IDs in the DFG (for termination measure) *)
+(* IDs visible through compatibility lookup (for termination measure). *)
 Definition dfg_ids_def:
-  dfg_ids dfg = { inst.inst_id | ?v. FLOOKUP dfg v = SOME inst }
+  dfg_ids dfg = { inst.inst_id | ?v. dfg_lookup dfg v = SOME inst }
 End
 
-(* Helper: dfg_ids is always finite (enables CARD-based termination) *)
+Theorem dfg_ids_subset_dfg_def_ids:
+  !dfg. dfg_ids dfg SUBSET dfg_def_ids dfg
+Proof
+  rw[dfg_ids_def, SUBSET_DEF, GSPECIFICATION] >>
+  drule dfg_lookup_implies_get_def >> strip_tac >>
+  drule dfg_get_def_implies_dfg_def_ids >> simp[]
+QED
+
 Theorem dfg_ids_finite:
   !dfg. FINITE (dfg_ids dfg)
 Proof
-  rw[dfg_ids_def] >>
-  `{inst.inst_id | ?v. FLOOKUP dfg v = SOME inst} =
-   IMAGE (\inst. inst.inst_id) (FRANGE dfg)` by (
-    simp[EXTENSION, GSPECIFICATION, IN_FRANGE_FLOOKUP] >>
-    metis_tac[]
-  ) >>
-  simp[IMAGE_FINITE, FINITE_FRANGE]
+  metis_tac[dfg_ids_subset_dfg_def_ids, dfg_def_ids_finite, SUBSET_FINITE]
 QED
 
-(* Helper: FLOOKUP finding an instruction implies its ID is in dfg_ids *)
-Theorem FLOOKUP_implies_dfg_ids:
-  !dfg v inst. FLOOKUP dfg v = SOME inst ==> inst.inst_id IN dfg_ids dfg
+Theorem dfg_lookup_implies_dfg_ids:
+  !dfg v inst.
+    dfg_lookup dfg v = SOME inst ==> inst.inst_id IN dfg_ids dfg
 Proof
   rw[dfg_ids_def, GSPECIFICATION] >> metis_tac[]
 QED
 
 (* ==========================================================================
-   PHI Instruction Helpers
+   PHI instruction helpers
    ========================================================================== *)
 
 (* Helper: Extract variable names from PHI operands (Label,Var pairs) *)
@@ -281,4 +142,3 @@ Proof
   first_x_assum (qspec_then `t'` mp_tac) >> simp[] >>
   rpt strip_tac >> res_tac
 QED
-

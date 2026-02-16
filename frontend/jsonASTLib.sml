@@ -1,6 +1,6 @@
 (* jsonASTLib.sml - Parse JSON into jsonAST HOL terms
  *
- * This is a "dumb" parser that mirrors JSON structure exactly.
+ * This is a dead simple parser that mirrors JSON structure exactly.
  * NO semantic decisions (msg.sender recognition, loop bounds, etc.)
  * Those are handled in jsonToVyperScript.sml (Phase 3).
  *)
@@ -133,6 +133,7 @@ val JE_Bool_tm = jastk "JE_Bool"
 val JE_Name_tm = jastk "JE_Name"
 val JE_Attribute_tm = jastk "JE_Attribute"
 val JE_Subscript_tm = jastk "JE_Subscript"
+val JE_NamedExpr_tm = jastk "JE_NamedExpr"
 val JE_BinOp_tm = jastk "JE_BinOp"
 val JE_BoolOp_tm = jastk "JE_BoolOp"
 val JE_UnaryOp_tm = jastk "JE_UnaryOp"
@@ -160,6 +161,7 @@ fun mk_JE_Attribute (e, attr, tc_opt, src_id_opt) =
                                  lift_option (mk_option string_ty) fromMLstring tc_opt,
                                  src_id_opt])
 fun mk_JE_Subscript (e1, e2) = list_mk_comb(JE_Subscript_tm, [e1, e2])
+fun mk_JE_NamedExpr (e1, e2) = list_mk_comb(JE_NamedExpr_tm, [e1, e2])
 fun mk_JE_BinOp (l, op_tm, r) = list_mk_comb(JE_BinOp_tm, [l, op_tm, r])
 fun mk_JE_BoolOp (op_tm, es) = list_mk_comb(JE_BoolOp_tm, [op_tm, mk_list(es, json_expr_ty)])
 fun mk_JE_UnaryOp (op_tm, e) = list_mk_comb(JE_UnaryOp_tm, [op_tm, e])
@@ -509,6 +511,10 @@ fun d_ast_type () : term decoder = achoose "ast_type" [
           (fn p => p = ("Name", "indexed")) "not indexed" $
     field "args" $ sub 0 (delay d_ast_type),
 
+  (* Attribute node - cross-module type reference: library.SomeStruct, lib1.Roles *)
+  check_ast_type "Attribute" $
+    JSONDecode.map mk_JT_Named (field "attr" string),
+
   (* null type *)
   null JT_None_tm
 ]
@@ -587,6 +593,9 @@ fun d_json_expr () : term decoder = achoose "expr" [
   check_ast_type "NameConstant" $
     JSONDecode.map mk_JE_Bool (field "value" bool),
 
+  (* Ellipsis - appears in .vyi interface stub function bodies *)
+  check_ast_type "Ellipsis" $ succeed (mk_JE_Bool true),
+
   (* Name with folded_value (constant) *)
   check_ast_type "Name" $
     JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
@@ -604,6 +613,13 @@ fun d_json_expr () : term decoder = achoose "expr" [
                     orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
                             succeed (intSyntax.term_of_int (Arbint.fromInt ~1))))),
 
+  (* Attribute with folded_value (cross-module constant) *)
+  check_ast_type "Attribute" $
+    JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
+    tuple2 (field "folded_value" $
+              check_ast_type "Int" $ field "value" inttm,
+            orElse(field "type" json_type, succeed JT_None_tm)),
+
   (* Attribute - extract result typeclass and source_id for flag/module member detection *)
   (* source_id comes from type.type_decl_node.source_id OR variable_reads[0].decl_node.source_id *)
   check_ast_type "Attribute" $
@@ -619,6 +635,11 @@ fun d_json_expr () : term decoder = achoose "expr" [
   check_ast_type "Subscript" $
     JSONDecode.map (fn (e1, e2) => mk_JE_Subscript(e1, e2)) $
     tuple2 (field "value" (delay d_json_expr), field "slice" (delay d_json_expr)),
+
+  (* NamedExpr - dependency binding in initializes: lib[dep := dep] *)
+  check_ast_type "NamedExpr" $
+    JSONDecode.map (fn (e1, e2) => mk_JE_NamedExpr(e1, e2)) $
+    tuple2 (field "target" (delay d_json_expr), field "value" (delay d_json_expr)),
 
   (* BinOp *)
   check_ast_type "BinOp" $
@@ -724,7 +745,7 @@ val json_keyword = delay d_json_keyword
 (* ===== Target Decoders ===== *)
 
 fun d_json_base_target () : term decoder = achoose "base_target" [
-  (* self.x -> TopLevelName with source_id from variable_writes *)
+  (* self.x -> TopLevelName with source_id from variable_writes or variable_reads *)
   check_ast_type "Attribute" $
     check (field "value" (tuple2 (field "ast_type" string, field "id" string)))
           (fn p => p = ("Name", "self")) "not self" $
@@ -732,7 +753,9 @@ fun d_json_base_target () : term decoder = achoose "base_target" [
       (tuple2 (field "attr" string,
                orElse (field "variable_writes" $ sub 0 $
                          field "decl_node" $ field "source_id" source_id_tm,
-                       succeed (intSyntax.term_of_int (Arbint.fromInt ~1))))),
+                       orElse (field "variable_reads" $ sub 0 $
+                                 field "decl_node" $ field "source_id" source_id_tm,
+                               succeed (intSyntax.term_of_int (Arbint.fromInt ~1)))))),
 
   (* module.x (lib1.counter) -> TopLevelName with source_id from type.type_decl_node *)
   check_ast_type "Attribute" $
@@ -846,10 +869,18 @@ fun d_json_stmt () : term decoder = achoose "stmt" [
     field "value" $
     check_ast_type "Call" $
     JSONDecode.map (fn ((name, src_id_opt), args) => mk_JS_Log(mk_nsid(src_id_opt, name), args)) $
-    tuple2 (field "func" $ check_ast_type "Name" $
+    tuple2 (field "func" $ achoose "log func" [
+              (* Same-module event: log MyEvent(...) *)
+              check_ast_type "Name" $
               tuple2 (field "id" string,
                       orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
                               succeed (intSyntax.term_of_int (Arbint.fromInt ~1)))),
+              (* Cross-module event: log lib1.MyEvent(...) *)
+              check_ast_type "Attribute" $
+              tuple2 (field "attr" string,
+                      orElse (field "value" $ field "type" $
+                                field "type_decl_node" $ field "source_id" source_id_tm,
+                              succeed (intSyntax.term_of_int (Arbint.fromInt ~1))))],
             achoose "log args" [
               field "keywords" (array (field "value" json_expr)),
               field "args" (array json_expr)

@@ -1,7 +1,7 @@
 Theory vyperHoare
 
 Ancestors
-  vyperInterpreter vyperUpdateTarget vyperLookup vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes vyperEvalMisc vyperEvalPreservesNameTarget vyperTypeValue vyperArray
+  vyperInterpreter vyperUpdateTarget vyperLookup vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes vyperEvalMisc vyperEvalPreservesNameTarget vyperTypeValue vyperPureExpr vyperArray
 
 (**********************************************************************)
 (* Definitions *)
@@ -172,6 +172,18 @@ Proof
   first_x_assum (qspecl_then [`x`, `st`] mp_tac) >> simp[] >>
   Cases_on `eval_expr cx e st` >> Cases_on `q` >> simp[] >>
   metis_tac[]
+QED
+
+Theorem expr_spec_pure:
+  ∀P Q cx e.
+    pure_expr e ∧ (⟦cx⟧ ⦃P⦄ e ⇓⦃Q⦄) ⇒
+    ⟦cx⟧ ⦃P⦄ e ⇓⦃λtv st. Q tv st ∧ P st⦄
+Proof
+  rw[expr_spec_def] >> rpt strip_tac >>
+  first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
+  Cases_on `eval_expr cx e st` >> Cases_on `q` >> simp[] >>
+  strip_tac >>
+  metis_tac[eval_expr_preserves_state]
 QED
 
 Theorem expr_spec_literal:

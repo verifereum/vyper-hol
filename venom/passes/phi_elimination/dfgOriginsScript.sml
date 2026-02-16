@@ -16,7 +16,7 @@
  *
  * TOP-LEVEL THEOREMS:
  *   - compute_origins_valid      : Checked version equals unchecked for valid IR
- *   - phi_operands_direct_flookup: Key lemma for PHI elimination correctness
+ *   - phi_operands_direct_lookup : Key lemma for PHI elimination correctness
  *
  * HELPER DEFINITIONS:
  *   - get_origins, get_origins_checked : Origin computation internals
@@ -41,7 +41,7 @@ Ancestors
 Definition get_origins_def:
   get_origins_list dfg (visited: num set) [] = {} /\
   get_origins_list dfg visited (v::vs) =
-    (case FLOOKUP dfg v of
+    (case dfg_lookup dfg v of
        NONE => get_origins_list dfg visited vs
      | SOME src_inst =>
          get_origins dfg visited src_inst UNION get_origins_list dfg visited vs) /\
@@ -62,7 +62,7 @@ Definition get_origins_def:
         let visited' = inst.inst_id INSERT visited in
         case assign_var_operand inst of
           SOME v =>
-            (case FLOOKUP dfg v of
+            (case dfg_lookup dfg v of
                NONE => {inst}
              | SOME src_inst => get_origins dfg visited' src_inst)
         | NONE => {inst}
@@ -77,7 +77,7 @@ Termination
              (CARD (dfg_ids dfg DIFF visited) +
                 (if inst.inst_id IN dfg_ids dfg then 0 else 1), 0))` >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac FLOOKUP_implies_dfg_ids >> simp[] >>
+  imp_res_tac dfg_lookup_implies_dfg_ids >> simp[] >>
   Cases_on `inst.inst_id IN dfg_ids dfg` >> simp[] >>
   TRY (irule CARD_PSUBSET >> simp[FINITE_DIFF, dfg_ids_finite, PSUBSET_DEF, SUBSET_DEF, EXTENSION] >>
        qexists_tac `inst.inst_id` >> simp[] >> NO_TAC) >>
@@ -101,7 +101,7 @@ End
 Definition get_origins_checked_def:
   get_origins_list_checked dfg (visited: num set) [] = SOME {} /\
   get_origins_list_checked dfg visited (v::vs) =
-    (case FLOOKUP dfg v of
+    (case dfg_lookup dfg v of
        NONE => get_origins_list_checked dfg visited vs
      | SOME src_inst =>
          case (get_origins_checked dfg visited src_inst,
@@ -130,7 +130,7 @@ Definition get_origins_checked_def:
         let visited' = inst.inst_id INSERT visited in
         case assign_var_operand inst of
           SOME v =>
-            (case FLOOKUP dfg v of
+            (case dfg_lookup dfg v of
                NONE => SOME {inst}
              | SOME src_inst => get_origins_checked dfg visited' src_inst)
         | NONE => SOME {inst}
@@ -145,7 +145,7 @@ Termination
              (CARD (dfg_ids dfg DIFF visited) +
                 (if inst.inst_id IN dfg_ids dfg then 0 else 1), 0))` >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac FLOOKUP_implies_dfg_ids >> simp[] >>
+  imp_res_tac dfg_lookup_implies_dfg_ids >> simp[] >>
   Cases_on `inst.inst_id IN dfg_ids dfg` >> simp[] >>
   TRY (irule CARD_PSUBSET >> simp[FINITE_DIFF, dfg_ids_finite, PSUBSET_DEF, SUBSET_DEF, EXTENSION] >>
        qexists_tac `inst.inst_id` >> simp[] >> NO_TAC) >>
@@ -166,7 +166,7 @@ End
 Definition defs_dominate_uses_def:
   defs_dominate_uses dfg <=>
     !inst v def_inst.
-      FLOOKUP dfg v = SOME def_inst /\
+      dfg_lookup dfg v = SOME def_inst /\
       inst.inst_opcode = ASSIGN /\
       assign_var_operand inst = SOME v
       ==>
@@ -191,7 +191,7 @@ Proof
   ) >- (
     rpt strip_tac >>
     simp[Once get_origins_checked_def, Once get_origins_def] >>
-    Cases_on `FLOOKUP dfg v` >> fs[] >- (
+    Cases_on `dfg_lookup dfg v` >> fs[] >- (
       fs[Once get_origins_checked_def]
     ) >>
     fs[Once get_origins_checked_def] >> gvs[AllCaseEqs()] >>
@@ -225,7 +225,7 @@ Proof
   (* Handle all case splits uniformly *)
   TRY (
     (* v::vars case *)
-    Cases_on `FLOOKUP dfg v` >> simp[] >>
+    Cases_on `dfg_lookup dfg v` >> simp[] >>
     TRY (first_x_assum (qspec_then `ARB` mp_tac) >> simp[] >> NO_TAC) >>
     `?r1. get_origins_checked dfg visited x = SOME r1` by (
       qpat_x_assum `!inst. _` (qspec_then `x` mp_tac) >> simp[]
@@ -253,7 +253,7 @@ Proof
     Cases_on `inst.inst_opcode = ASSIGN` >> simp[] >>
     Cases_on `inst.inst_id IN visited` >> simp[] >>
     Cases_on `assign_var_operand inst` >> simp[] >>
-    Cases_on `FLOOKUP dfg x` >> simp[] >>
+    Cases_on `dfg_lookup dfg x` >> simp[] >>
     `FINITE (inst.inst_id INSERT visited)` by simp[] >>
     first_x_assum (qspecl_then [`inst.inst_id INSERT visited`, `x`, `x'`] mp_tac) >>
     simp[]
@@ -311,10 +311,10 @@ End
 Theorem get_origins_in_dfg_or_self:
   (!dfg visited vars origin.
      origin IN get_origins_list dfg visited vars ==>
-     (?v. FLOOKUP dfg v = SOME origin)) /\
+     (?v. dfg_lookup dfg v = SOME origin)) /\
   (!dfg visited inst origin.
      origin IN get_origins dfg visited inst ==>
-     origin = inst \/ (?v. FLOOKUP dfg v = SOME origin))
+     origin = inst \/ (?v. dfg_lookup dfg v = SOME origin))
 Proof
   ho_match_mp_tac get_origins_ind >> rpt conj_tac >> rpt gen_tac >- (
     (* Base case: empty list *)
@@ -322,7 +322,7 @@ Proof
   ) >- (
     (* v::vars case *)
     strip_tac >> simp[Once get_origins_def] >>
-    Cases_on `FLOOKUP dfg v` >> gvs[] >>
+    Cases_on `dfg_lookup dfg v` >> gvs[] >>
     rpt strip_tac >> fs[IN_UNION] >> metis_tac[]
   ) >- (
     (* get_origins case *)
@@ -339,7 +339,7 @@ QED
 Theorem compute_origins_non_self_in_dfg:
   !dfg inst origin.
     origin IN compute_origins dfg inst /\ origin <> inst ==>
-    ?v. FLOOKUP dfg v = SOME origin
+    ?v. dfg_lookup dfg v = SOME origin
 Proof
   rw[compute_origins_def] >>
   drule (cj 2 get_origins_in_dfg_or_self) >> simp[]
@@ -348,14 +348,13 @@ QED
 (* TOP-LEVEL: Key lemma for PHI elimination correctness.
    If phi_operands_direct holds, then looking up the PHI operand variable
    gives the single origin. *)
-Theorem phi_operands_direct_flookup:
+Theorem phi_operands_direct_lookup:
   !dfg inst origin prev_bb v.
-    well_formed_dfg dfg /\
     phi_single_origin dfg inst = SOME origin /\
     phi_operands_direct dfg inst /\
     resolve_phi prev_bb inst.inst_operands = SOME (Var v)
   ==>
-    FLOOKUP dfg v = SOME origin
+    dfg_lookup dfg v = SOME origin
 Proof
   rpt strip_tac >>
   fs[phi_single_origin_def, AllCaseEqs(), is_phi_inst_def] >>
@@ -364,14 +363,13 @@ Proof
     strip_tac >> fs[CARD_EQ_0, FINITE_DELETE]
   ) >>
   drule CHOICE_DEF >> strip_tac >> fs[IN_DELETE] >>
-  (* Get FLOOKUP dfg v' = SOME origin *)
+  (* Get dfg_lookup dfg v' = SOME origin *)
   drule_all compute_origins_non_self_in_dfg >> strip_tac >>
-  (* Get origin.inst_outputs = [v'] *)
-  `origin.inst_outputs = [v']` by fs[well_formed_dfg_def] >>
+  (* Singleton compatibility lookup implies singleton output. *)
+  `origin.inst_outputs = [v']` by metis_tac[dfg_lookup_single_output] >>
   (* Get MEM v (phi_var_operands) *)
   drule_all resolve_phi_in_operands >> strip_tac >>
   (* Unfold phi_operands_direct and use EVERY_MEM to get v = v' *)
   fs[phi_operands_direct_def, phi_single_origin_def, is_phi_inst_def, EVERY_MEM] >>
   gvs[AllCaseEqs()]
 QED
-

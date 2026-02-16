@@ -120,8 +120,8 @@ Proof
   `IS_SOME (ALOOKUP r.immutables cx.txn.target)`
     by (drule assign_target_preserves_immutables_addr_dom >> simp[]) >>
   Cases_on `ALOOKUP r.immutables cx.txn.target` >> gvs[] >>
-  `(IS_SOME (FLOOKUP (get_source_immutables NONE imms) (string_to_num n)) ⇔
-    IS_SOME (FLOOKUP (get_source_immutables NONE x') (string_to_num n)))`
+  `(IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num n)) ⇔
+    IS_SOME (FLOOKUP (get_source_immutables (current_module cx) x') (string_to_num n)))`
     by (drule assign_target_preserves_immutables_dom >> simp[]) >>
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def, lift_sum_def, LET_THM,
        get_immutables_def, get_address_immutables_def, lift_option_def] >>
@@ -131,9 +131,9 @@ Proof
   Cases_on `cx.txn.is_creation` >>
   gvs[return_def, exactly_one_option_def, bind_def, get_address_immutables_def,
       lift_option_def, return_def, raise_def, immutable_target_def] >>
-  Cases_on `FLOOKUP (get_source_immutables NONE imms) (string_to_num n)` >>
+  Cases_on `FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num n)` >>
   gvs[exactly_one_option_def, return_def, raise_def] >>
-  Cases_on `FLOOKUP (get_source_immutables NONE x') (string_to_num n)` >>
+  Cases_on `FLOOKUP (get_source_immutables (current_module cx) x') (string_to_num n)` >>
   gvs[exactly_one_option_def, return_def, raise_def] >>
   Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
   gvs[exactly_one_option_def, return_def, raise_def]
@@ -156,7 +156,7 @@ Proof
   gvs[return_def, bind_def, get_address_immutables_def, lift_option_def,
       immutable_target_def] >>
   Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
-  Cases_on `FLOOKUP (get_source_immutables NONE imms) (string_to_num n)` >>
+  Cases_on `FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num n)` >>
   gvs[exactly_one_option_def, return_def, raise_def] >>
   strip_tac >> gvs[] >-
   (* ScopedVar case (creation) *)
@@ -206,7 +206,7 @@ Proof
   gvs[return_def, bind_def, get_address_immutables_def, lift_option_def,
       immutable_target_def] >>
   Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
-  Cases_on `FLOOKUP (get_source_immutables NONE imms) (string_to_num n)` >>
+  Cases_on `FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num n)` >>
   gvs[exactly_one_option_def, return_def, raise_def] >>
   strip_tac >> gvs[] >-
   (* ScopedVar case (creation) *)
@@ -265,14 +265,14 @@ Proof
        Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[] >>
        rpt strip_tac >>
        `var_in_scope r n` by (gvs[var_in_scope_def, lookup_scoped_var_def] >> metis_tac[lookup_scopes_dom_iff]) >>
-       `FLOOKUP (get_source_immutables NONE imms) (string_to_num n) = NONE` by metis_tac[] >>
+       `FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num n) = NONE` by metis_tac[] >>
        drule assign_target_preserves_immutables_dom >> simp[] >> strip_tac >>
        first_x_assum (qspec_then `string_to_num n` mp_tac) >> gvs[] >> NO_TAC) >>
   drule assign_target_preserves_immutables_addr_dom >> simp[] >> strip_tac >>
   Cases_on `ALOOKUP r.immutables cx.txn.target` >> gvs[] >>
   rpt strip_tac >>
   `var_in_scope st n` by (gvs[var_in_scope_def, lookup_scoped_var_def] >> metis_tac[lookup_scopes_dom_iff]) >>
-  `FLOOKUP (get_source_immutables NONE imms) (string_to_num n) = NONE` by metis_tac[] >>
+  `FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num n) = NONE` by metis_tac[] >>
   drule assign_target_preserves_immutables_dom >> simp[] >> strip_tac >>
   first_x_assum (qspec_then `string_to_num n` mp_tac) >> gvs[]
 QED
@@ -307,7 +307,7 @@ Proof
   (Cases_on `ALOOKUP st.immutables cx.txn.target` >>
    gvs[return_def, raise_def] >>
    Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
-   Cases_on `FLOOKUP (get_source_immutables NONE x) (string_to_num n)` >>
+   Cases_on `FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num n)` >>
    gvs[exactly_one_option_def, return_def, raise_def] >>
    strip_tac >> gvs[] >-
    (* ScopedVar case *)

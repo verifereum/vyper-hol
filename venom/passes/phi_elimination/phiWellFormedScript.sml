@@ -51,7 +51,7 @@ Definition wf_ir_fn_def:
                   ~is_phi_inst inst) /\
     (* For PHIs with single origin, operands directly use the origin's output *)
     (!bb idx inst.
-       let dfg = build_dfg_fn func in
+       let dfg = dfg_build_function func in
        MEM bb func.fn_blocks /\
        get_instruction bb idx = SOME inst /\
        is_phi_inst inst ==>
@@ -80,15 +80,15 @@ Definition phi_wf_fn_def:
     (* DFG origins are consistent with phi resolution - scoped to blocks
        Note: is_phi_inst is implied by phi_single_origin = SOME *)
     (!bb idx inst origin prev_bb v.
-       let dfg = build_dfg_fn func in
+       let dfg = dfg_build_function func in
        MEM bb func.fn_blocks /\
        get_instruction bb idx = SOME inst /\
        phi_single_origin dfg inst = SOME origin /\
        resolve_phi prev_bb inst.inst_operands = SOME (Var v) ==>
-       FLOOKUP dfg v = SOME origin) /\
+       dfg_lookup dfg v = SOME origin) /\
     (* Entry block has no PHI instructions with single origin (crucial for correctness) *)
     (!idx inst.
-       let dfg = build_dfg_fn func in
+       let dfg = dfg_build_function func in
        func.fn_blocks <> [] /\
        get_instruction (HD func.fn_blocks) idx = SOME inst ==>
        phi_single_origin dfg inst = NONE) /\
@@ -96,7 +96,7 @@ Definition phi_wf_fn_def:
        This holds in well-formed SSA due to dominator properties.
        Note: is_phi_inst is implied by phi_single_origin = SOME *)
     (!bb inst origin src_var prev e s.
-       let dfg = build_dfg_fn func in
+       let dfg = dfg_build_function func in
        MEM bb func.fn_blocks /\
        get_instruction bb s.vs_inst_idx = SOME inst /\
        phi_single_origin dfg inst = SOME origin /\
@@ -163,16 +163,15 @@ Proof
     metis_tac[]
   )
   >- (
-    (* DFG origin lookup - use phi_operands_direct_flookup *)
+    (* DFG origin lookup - use phi_operands_direct_lookup *)
     (* First derive is_phi_inst from phi_single_origin = SOME *)
     `is_phi_inst inst` by metis_tac[phi_single_origin_is_phi] >>
     (* Then derive phi_operands_direct from wf_ir_fn assumption *)
-    `phi_operands_direct (build_dfg_fn func) inst` by (
+    `phi_operands_direct (dfg_build_function func) inst` by (
       qpat_x_assum `!bb idx inst. _ ==> phi_operands_direct _ _`
         (qspecl_then [`bb`, `idx`, `inst`] mp_tac) >> simp[]
     ) >>
-    irule phi_operands_direct_flookup >>
-    simp[build_dfg_fn_well_formed] >>
+    irule phi_operands_direct_lookup >>
     qexists_tac `inst` >> qexists_tac `prev_bb` >> simp[]
   )
   >- (
@@ -201,7 +200,7 @@ Proof
         (qspecl_then [`bb`, `s.vs_inst_idx`, `inst`, `prev`, `s`, `e`] mp_tac) >> simp[]
     ) >>
     (* Get phi_operands_direct from wf_ir_fn assumption *)
-    `phi_operands_direct (build_dfg_fn func) inst` by (
+    `phi_operands_direct (dfg_build_function func) inst` by (
       qpat_x_assum `!bb' idx inst'. _ ==> phi_operands_direct _ _`
         (qspecl_then [`bb`, `s.vs_inst_idx`, `inst`] mp_tac) >> simp[]
     ) >>

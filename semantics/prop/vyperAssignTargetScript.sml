@@ -15,16 +15,16 @@ Theorem assign_target_tuple_preserves_immutables_dom[local]:
        ∀n imms imms'.
          ALOOKUP st.immutables cx.txn.target = SOME imms ∧
          ALOOKUP st'.immutables cx.txn.target = SOME imms' ⇒
-         (IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) ⇔
-          IS_SOME (FLOOKUP (get_source_immutables NONE imms') n))) ⇒
+         (IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms) n) ⇔
+          IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms') n))) ⇒
     ∀st res st'.
       assign_target cx (TupleTargetV gvs) (Replace (ArrayV (TupleV vs))) st = (INL res,st') ⇒
       (∀tgt. IS_SOME (ALOOKUP st.immutables tgt) ⇒ IS_SOME (ALOOKUP st'.immutables tgt)) ∧
       ∀n imms imms'.
         ALOOKUP st.immutables cx.txn.target = SOME imms ∧
         ALOOKUP st'.immutables cx.txn.target = SOME imms' ⇒
-        (IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) ⇔
-         IS_SOME (FLOOKUP (get_source_immutables NONE imms') n))
+        (IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms) n) ⇔
+         IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms') n))
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >>
   simp[Once assign_target_def, check_def, AllCaseEqs(), return_def, raise_def] >>
@@ -42,24 +42,24 @@ Theorem assign_targets_cons_preserves_immutables_dom[local]:
        ∀n imms imms'.
          ALOOKUP st.immutables cx.txn.target = SOME imms ∧
          ALOOKUP st'.immutables cx.txn.target = SOME imms' ⇒
-         (IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) ⇔
-          IS_SOME (FLOOKUP (get_source_immutables NONE imms') n))) ∧
+         (IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms) n) ⇔
+          IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms') n))) ∧
     (∀st res st'.
        assign_targets cx gvs vs st = (INL res,st') ⇒
        (∀tgt. IS_SOME (ALOOKUP st.immutables tgt) ⇒ IS_SOME (ALOOKUP st'.immutables tgt)) ∧
        ∀n imms imms'.
          ALOOKUP st.immutables cx.txn.target = SOME imms ∧
          ALOOKUP st'.immutables cx.txn.target = SOME imms' ⇒
-         (IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) ⇔
-          IS_SOME (FLOOKUP (get_source_immutables NONE imms') n))) ⇒
+         (IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms) n) ⇔
+          IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms') n))) ⇒
     ∀st res st'.
       assign_targets cx (av::gvs) (v::vs) st = (INL res,st') ⇒
       (∀tgt. IS_SOME (ALOOKUP st.immutables tgt) ⇒ IS_SOME (ALOOKUP st'.immutables tgt)) ∧
       ∀n imms imms'.
         ALOOKUP st.immutables cx.txn.target = SOME imms ∧
         ALOOKUP st'.immutables cx.txn.target = SOME imms' ⇒
-        (IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) ⇔
-         IS_SOME (FLOOKUP (get_source_immutables NONE imms') n))
+        (IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms) n) ⇔
+         IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms') n))
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >>
   simp[Once assign_target_def, bind_def, get_Value_def, AllCaseEqs(),
@@ -85,16 +85,16 @@ Theorem assign_target_preserves_immutables_dom_main[local]:
      (∀n imms imms'.
         ALOOKUP st.immutables cx.txn.target = SOME imms ∧
         ALOOKUP st'.immutables cx.txn.target = SOME imms' ⇒
-        IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) =
-        IS_SOME (FLOOKUP (get_source_immutables NONE imms') n))) ∧
+        IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms) n) =
+        IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms') n))) ∧
   (∀cx gvs vs st res st'.
      assign_targets cx gvs vs st = (INL res, st') ⇒
      (∀tgt. IS_SOME (ALOOKUP st.immutables tgt) ⇒ IS_SOME (ALOOKUP st'.immutables tgt)) ∧
      (∀n imms imms'.
         ALOOKUP st.immutables cx.txn.target = SOME imms ∧
         ALOOKUP st'.immutables cx.txn.target = SOME imms' ⇒
-        IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) =
-        IS_SOME (FLOOKUP (get_source_immutables NONE imms') n)))
+        IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms) n) =
+        IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms') n)))
 Proof
   ho_match_mp_tac assign_target_ind >> rpt conj_tac >> rpt gen_tac >-
   (* ScopedVar case: set_scopes doesn't touch immutables *)
@@ -126,7 +126,7 @@ Proof
         PairCases_on `x` >> gvs[] >>
         Cases_on `compute_hashmap_slot c (t::x1) (h::TAKE (LENGTH t' − LENGTH x2) t')` >>
         gvs[bind_def, return_def, raise_def] >>
-        Cases_on `evaluate_type (type_env ts) x0` >> gvs[return_def, raise_def] >>
+        Cases_on `evaluate_type (get_tenv cx) x0` >> gvs[return_def, raise_def] >>
         Cases_on `read_storage_slot cx b x x' s''` >> gvs[] >>
         imp_res_tac read_storage_slot_immutables >> gvs[] >>
         Cases_on `q` >> gvs[] >>
@@ -144,7 +144,7 @@ Proof
     qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
     simp[Once assign_target_def, bind_def, get_immutables_def, get_address_immutables_def,
          lift_option_def, LET_THM, return_def, raise_def] >>
-    Cases_on `FLOOKUP (get_source_immutables NONE x) (string_to_num id)` >>
+    Cases_on `FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num id)` >>
     simp[return_def, raise_def] >>
     Cases_on `assign_subscripts x' (REVERSE is) ao` >> simp[lift_sum_def, return_def, raise_def] >>
     simp[ignore_bind_def, bind_def, set_immutable_def, get_address_immutables_def,
@@ -191,8 +191,8 @@ Theorem assign_target_preserves_immutables_dom:
     ∀n imms imms'.
       ALOOKUP st.immutables cx.txn.target = SOME imms ∧
       ALOOKUP st'.immutables cx.txn.target = SOME imms' ⇒
-      IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) =
-      IS_SOME (FLOOKUP (get_source_immutables NONE imms') n)
+      IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms) n) =
+      IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms') n)
 Proof
   metis_tac[assign_target_preserves_immutables_dom_main]
 QED
@@ -203,8 +203,8 @@ Theorem assign_targets_preserves_immutables_dom:
     ∀n imms imms'.
       ALOOKUP st.immutables cx.txn.target = SOME imms ∧
       ALOOKUP st'.immutables cx.txn.target = SOME imms' ⇒
-      IS_SOME (FLOOKUP (get_source_immutables NONE imms) n) =
-      IS_SOME (FLOOKUP (get_source_immutables NONE imms') n)
+      IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms) n) =
+      IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms') n)
 Proof
   metis_tac[assign_target_preserves_immutables_dom_main]
 QED
@@ -293,7 +293,7 @@ Proof
        PairCases_on `x` >> gvs[] >>
        Cases_on `compute_hashmap_slot c (t::x1) (h::TAKE (LENGTH t' − LENGTH x2) t')` >>
        gvs[bind_def, return_def, raise_def] >>
-       Cases_on `evaluate_type (type_env ts) x0` >> gvs[return_def, raise_def] >>
+       Cases_on `evaluate_type (get_tenv cx) x0` >> gvs[return_def, raise_def] >>
        Cases_on `read_storage_slot cx b x x' s''` >> gvs[] >>
        imp_res_tac read_storage_slot_immutables >> gvs[] >>
        Cases_on `q` >> gvs[] >>
@@ -364,7 +364,7 @@ Proof
   simp[Once assign_target_def, bind_def, get_immutables_def, get_address_immutables_def,
        lift_option_def, LET_THM, return_def] >>
   simp[lift_sum_def, assign_subscripts_def, return_def, ignore_bind_def, bind_def] >>
-  Cases_on `FLOOKUP (get_source_immutables NONE x) (string_to_num n)` >> gvs[return_def, raise_def] >>
+  Cases_on `FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num n)` >> gvs[return_def, raise_def] >>
   simp[set_immutable_def, get_address_immutables_def, lift_option_def, bind_def,
        set_address_immutables_def, return_def, LET_THM] >>
   strip_tac >> gvs[] >>

@@ -29,7 +29,7 @@ Proof
   Cases_on `ALOOKUP st.immutables cx.txn.target` >>
   gvs[raise_def, return_def, lift_sum_def] >>
   Cases_on `exactly_one_option (lookup_scopes (string_to_num n) st.scopes)
-                                (FLOOKUP (get_source_immutables NONE x) (string_to_num n))` >>
+                                (FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num n))` >>
   gvs[return_def, raise_def]
 QED
 
@@ -47,7 +47,7 @@ Proof
               (if IS_SOME (lookup_scopes (string_to_num n) st.scopes) then
                  SOME (ScopedVar n)
                else NONE)
-              (immutable_target (get_source_immutables NONE x) n
+              (immutable_target (get_source_immutables (current_module cx) x) n
                  (string_to_num n))` >>
    gvs[return_def, raise_def]) >>
   gvs[lift_sum_def, bind_def] >>

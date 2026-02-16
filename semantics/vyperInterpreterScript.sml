@@ -1017,7 +1017,7 @@ Datatype:
     stk: (num option # identifier) list
   ; txn: call_txn
   ; sources: (address, (num option, toplevel list) alist) alist
-  ; layouts: (address, var_layout # var_layout) alist  (* (storage, transient) *)
+  ; layouts: (address, storage_layout # storage_layout) alist  (* (storage, transient) *)
   ; in_deploy: bool  (* T when executing during deployment, allows calling Deploy functions *)
   |>
 End
@@ -1039,6 +1039,13 @@ Definition empty_evaluation_context_def:
 End
 
 val () = cv_auto_trans empty_evaluation_context_def;
+
+(* Current module source_id: top of call stack, or NONE for main module *)
+Definition current_module_def:
+  current_module cx = case cx.stk of [] => NONE | (src,_)::_ => src
+End
+
+val () = cv_auto_trans current_module_def;
 
 (* Now we can define semantics for builtins that depend on the environment *)
 
@@ -1121,54 +1128,15 @@ End
 
 val () = cv_auto_trans type_env_all_modules_def;
 
-(* Build var_layout from storage_layout and toplevels.
-   For each storage variable or hashmap, record its slot number. *)
-Definition get_matching_var_id_def:
-  get_matching_var_id is_transient (VariableDecl _ mut id typ) =
-    (if (mut = Storage ∨ mut = Transient) ∧ (mut = Transient) = is_transient
-     then SOME id else NONE) ∧
-  get_matching_var_id is_transient (HashMapDecl _ flag id kt vt) =
-    (if flag = is_transient then SOME id else NONE) ∧
-  get_matching_var_id is_transient _ = NONE
+(* Combined type env for the current contract *)
+Definition get_tenv_def:
+  get_tenv cx =
+    case ALOOKUP cx.sources cx.txn.target of
+      SOME mods => type_env_all_modules mods
+    | NONE => FEMPTY
 End
 
-val () = cv_auto_trans get_matching_var_id_def;
-
-(* Build var_layout entry for a single module.
-   src_id_opt: NONE for main module, SOME n for imported module.
-   Layout keys are (src_id_opt, var_name). *)
-Definition build_var_layout_entry_def:
-  build_var_layout_entry is_transient src_id_opt layout [] = LN ∧
-  build_var_layout_entry is_transient src_id_opt layout (t :: ts) =
-    let rest = build_var_layout_entry is_transient src_id_opt layout ts in
-    case get_matching_var_id is_transient t of
-    | SOME id =>
-        (case ALOOKUP layout (src_id_opt, id) of
-         | SOME slot => insert (string_to_num id) slot rest
-         | NONE => rest)
-    | NONE => rest
-End
-
-(* Build var_layout for all modules *)
-Definition build_var_layout_for_all_def:
-  build_var_layout_for_all storage_layout transient_layout [] = (LN, LN) ∧
-  build_var_layout_for_all storage_layout transient_layout ((src_id_opt, ts) :: rest) =
-    let (s_rest, t_rest) = build_var_layout_for_all storage_layout transient_layout rest in
-    let s_this = build_var_layout_entry F src_id_opt storage_layout ts in
-    let t_this = build_var_layout_entry T src_id_opt transient_layout ts in
-    (union s_this s_rest, union t_this t_rest)
-End
-
-Definition build_var_layout_def:
-  build_var_layout sources storage_layout transient_layout addr =
-    case ALOOKUP sources addr of
-    | NONE => (LN, LN)
-    | SOME mods => build_var_layout_for_all storage_layout transient_layout mods
-End
-
-val () = cv_auto_trans build_var_layout_entry_def;
-val () = cv_auto_trans build_var_layout_for_all_def;
-val () = cv_auto_trans build_var_layout_def;
+val () = cv_auto_trans get_tenv_def;
 
 (* Look up an interface by nsid (source_id, name) *)
 Definition lookup_interface_def:
@@ -1218,12 +1186,9 @@ val () = cv_trans evaluate_extract32_def;
 
 Definition evaluate_type_builtin_def:
   evaluate_type_builtin cx Empty typ vs =
-  (case get_self_code cx
-     of SOME ts =>
-        (case evaluate_type (type_env ts) typ
-         of SOME tv => INL $ default_value tv
-          | NONE => INR "Empty evaluate_type")
-      | _ => INR "Empty get_self_code") ∧
+  (case evaluate_type (get_tenv cx) typ
+   of SOME tv => INL $ default_value tv
+    | NONE => INR "Empty evaluate_type") ∧
   evaluate_type_builtin cx MaxValue typ vs =
     evaluate_max_value typ ∧
   evaluate_type_builtin cx MinValue typ vs =
@@ -1237,15 +1202,11 @@ Definition evaluate_type_builtin_def:
     (if u = Unsigned 256 then evaluate_extract32 bs (Num i) bt
      else INR "Extract32 type") ∧
   evaluate_type_builtin cx AbiDecode typ [BytesV _ bs] =
-    (case get_self_code cx of
-       SOME ts => evaluate_abi_decode (type_env ts) typ bs
-     | NONE => INR "abi_decode code") ∧
+    evaluate_abi_decode (get_tenv cx) typ bs ∧
   evaluate_type_builtin _ AbiDecode _ _ =
     INR "abi_decode args" ∧
   evaluate_type_builtin cx AbiEncode typ [v] =
-    (case get_self_code cx of
-       SOME ts => evaluate_abi_encode (type_env ts) typ v
-     | NONE => INR "abi_encode code") ∧
+    evaluate_abi_encode (get_tenv cx) typ v ∧
   evaluate_type_builtin _ AbiEncode _ _ =
     INR "abi_encode args" ∧
   evaluate_type_builtin _ _ _ _ =
@@ -1321,8 +1282,9 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ Neg [DecimalV i] = bounded_decimal_op (-i) ∧
   evaluate_builtin cx _ Keccak256 [BytesV _ ls] = INL $ BytesV (Fixed 32) $
     Keccak_256_w64 ls ∧
+  evaluate_builtin cx _ Keccak256 [StringV _ s] = INL $ BytesV (Fixed 32) $
+    Keccak_256_w64 (MAP (n2w o ORD) s) ∧
   (* TODO: reject BytesV with invalid bounds for Keccak256 *)
-  (* TODO: support Keccak256 on strings *)
   evaluate_builtin cx _ (Uint2Str n) [IntV u i] =
     (if is_Unsigned u then INL $ StringV n (num_to_dec_string (Num i))
      else INR "Uint2Str") ∧
@@ -1361,14 +1323,12 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ (Concat n) vs = evaluate_concat n vs ∧
   evaluate_builtin cx _ (Slice n) [v1; v2; v3] = evaluate_slice v1 v2 v3 n ∧
   evaluate_builtin cx _ (MakeArray to bd) vs =
-    (case get_self_code cx of SOME ts =>
-     (case to
-      of NONE => INL $ ArrayV $ TupleV vs
-       | SOME t =>
-         (case evaluate_type (type_env ts) t
-          of NONE => INR "MakeArray type"
-           | SOME tv => INL $ ArrayV $ make_array_value tv bd vs))
-     | _ => INR "MakeArray code") ∧
+    (case to
+     of NONE => INL $ ArrayV $ TupleV vs
+      | SOME t =>
+        (case evaluate_type (get_tenv cx) t
+         of NONE => INR "MakeArray type"
+          | SOME tv => INL $ ArrayV $ make_array_value tv bd vs)) ∧
   evaluate_builtin cx acc (Acc aop) [BytesV _ bs] =
     (let a = lookup_account (word_of_bytes T (0w:address) bs) acc in
       INL $ evaluate_account_op aop bs a) ∧
@@ -1641,13 +1601,13 @@ val var_decl_info_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="vyperInterpreter",Tyop="var_decl_info"}));
 
-(* Look up variable slot from var_layout *)
+(* Look up variable slot from storage_layout *)
 Definition lookup_var_slot_from_layout_def:
-  lookup_var_slot_from_layout cx is_transient n =
+  lookup_var_slot_from_layout cx is_transient src_id_opt var_name =
     case ALOOKUP cx.layouts cx.txn.target of
     | NONE => NONE
     | SOME (storage_lay, transient_lay) =>
-        lookup n (if is_transient then transient_lay else storage_lay)
+        ALOOKUP (if is_transient then transient_lay else storage_lay) (src_id_opt, var_name)
 End
 
 val () = cv_auto_trans lookup_var_slot_from_layout_def;
@@ -1744,31 +1704,6 @@ val () = write_storage_slot_def
             update_transient_def, update_accounts_def]
   |> cv_auto_trans;
 
-(* Module-aware global lookup: look up variable n in module src_id_opt *)
-Definition lookup_global_def:
-  lookup_global cx src_id_opt n = do
-    ts <- lift_option (get_module_code cx src_id_opt) "lookup_global get_module_code";
-    tenv <<- type_env ts;
-    case find_var_decl_by_num n ts of
-    | NONE => raise $ Error "lookup_global: var not found"
-    | SOME (StorageVarDecl is_transient typ, id) => do
-        var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient n) "lookup_global var_slot";
-        tv <- lift_option (evaluate_type tenv typ) "lookup_global evaluate_type";
-        v <- read_storage_slot cx is_transient (n2w var_slot) tv;
-        return (Value v)
-      od
-    | SOME (HashMapVarDecl is_transient kt vt, id) => do
-        var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient n) "lookup_global hashmap var_slot";
-        return (HashMapRef is_transient (n2w var_slot) kt vt)
-      od
-  od
-End
-
-val () = lookup_global_def
-  |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator,
-            prod_CASE_rator, var_decl_info_CASE_rator, UNCURRY, LET_THM]
-  |> cv_auto_trans;
-
 (* Module-aware immutables lookup *)
 Definition get_immutables_def:
   get_immutables cx src_id_opt = do
@@ -1781,7 +1716,36 @@ val () = get_immutables_def
   |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
   |> cv_auto_trans;
 
+(* Module-aware global lookup: look up variable n in module src_id_opt *)
+Definition lookup_global_def:
+  lookup_global cx src_id_opt n = do
+    ts <- lift_option (get_module_code cx src_id_opt) "lookup_global get_module_code";
+    tenv <<- get_tenv cx;
+    case find_var_decl_by_num n ts of
+    | NONE => do
+        (* Not a storage/hashmap var — check immutables *)
+        imms <- get_immutables cx src_id_opt;
+        case FLOOKUP imms n of
+        | SOME v => return (Value v)
+        | NONE => raise $ Error "lookup_global: var not found"
+      od
+    | SOME (StorageVarDecl is_transient typ, id) => do
+        var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient src_id_opt id) "lookup_global var_slot";
+        tv <- lift_option (evaluate_type tenv typ) "lookup_global evaluate_type";
+        v <- read_storage_slot cx is_transient (n2w var_slot) tv;
+        return (Value v)
+      od
+    | SOME (HashMapVarDecl is_transient kt vt, id) => do
+        var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient src_id_opt id) "lookup_global hashmap var_slot";
+        return (HashMapRef is_transient (n2w var_slot) kt vt)
+      od
+  od
+End
 
+val () = lookup_global_def
+  |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator,
+            prod_CASE_rator, var_decl_info_CASE_rator, UNCURRY, LET_THM]
+  |> cv_auto_trans;
 
 Definition update_immutable_def:
   update_immutable src_id key v (imms: module_immutables) =
@@ -1883,11 +1847,11 @@ val () = cv_auto_trans set_address_immutables_def;
 Definition set_global_def:
   set_global cx src_id_opt n v = do
     ts <- lift_option (get_module_code cx src_id_opt) "set_global get_module_code";
-    tenv <<- type_env ts;
+    tenv <<- get_tenv cx;
     case find_var_decl_by_num n ts of
     | NONE => raise $ Error "set_global: var not found"
     | SOME (StorageVarDecl is_transient typ, id) => do
-        var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient n) "set_global var_slot";
+        var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient src_id_opt id) "set_global var_slot";
         tv <- lift_option (evaluate_type tenv typ) "set_global evaluate_type";
         write_storage_slot cx is_transient (n2w var_slot) tv v
       od
@@ -2012,7 +1976,7 @@ Definition assign_target_def:
     ni <<- string_to_num id;
     tv <- lookup_global cx src_id_opt ni;
     ts <- lift_option (get_module_code cx src_id_opt) "assign_target get_module_code";
-    tenv <<- type_env ts;
+    tenv <<- get_tenv cx;
     case tv of
     | Value v => do
         (* Regular variable: apply assignment and write back *)
@@ -2045,10 +2009,11 @@ Definition assign_target_def:
   od ∧
   assign_target cx (BaseTargetV (ImmutableVar id) is) ao = do
     ni <<- string_to_num id;
-    imms <- get_immutables cx NONE;
+    src <<- current_module cx;
+    imms <- get_immutables cx src;
     a <- lift_option (FLOOKUP imms ni) "assign_target ImmutableVar";
     a' <- lift_sum $ assign_subscripts a (REVERSE is) ao;
-    set_immutable cx NONE ni a';
+    set_immutable cx src ni a';
     return $ Value a
   od ∧
   assign_target cx (TupleTargetV gvs) (Replace (ArrayV (TupleV vs))) = do
@@ -2756,6 +2721,9 @@ Definition make_ext_call_state_def:
     let is_static = IS_NONE value_opt in
     let tx = make_call_tx caller callee value calldata gas_limit in
     let ctxt = initial_context callee code is_static empty_return_destination tx in
+    (* Transfer value from caller to callee, mirroring EVM CALL behavior.
+       The EVM does this in proceed_call before entering the sub-context. *)
+    let accounts = vfmExecution$transfer_value caller callee value accounts in
     let accesses = <| addresses := fINSERT caller (fINSERT callee fEMPTY)
                     ; storageKeys := fEMPTY |> in
     let rollback = <| accounts := accounts
@@ -2941,7 +2909,7 @@ Definition evaluate_def:
             then SOME $ ScopedVar id
 	    else NONE;
     ivo <- if cx.txn.is_creation
-           then do imms <- get_immutables cx NONE;
+           then do imms <- get_immutables cx (current_module cx);
                    return $ immutable_target imms id n
                 od
            else return NONE;
@@ -2971,7 +2939,7 @@ Definition evaluate_def:
   od ∧
   eval_expr cx (Name id) = do
     env <- get_scopes;
-    imms <- get_immutables cx NONE;
+    imms <- get_immutables cx (current_module cx);
     n <<- string_to_num id;
     v <- lift_sum $ exactly_one_option
            (lookup_scopes n env) (FLOOKUP imms n);
@@ -2997,10 +2965,10 @@ Definition evaluate_def:
     tv1 <- eval_expr cx e1;
     tv2 <- eval_expr cx e2;
     v2 <- get_Value tv2;
-    ts <- lift_option (get_self_code cx) "Subscript get_self_code";
+    tenv <<- get_tenv cx;
     res <- lift_sum $ evaluate_subscript tv1 v2;
     case res of INL v => return v | INR (is_transient, slot, t) => do
-      tv <- lift_option (evaluate_type (type_env ts) t) "Subscript evaluate_type";
+      tv <- lift_option (evaluate_type tenv t) "Subscript evaluate_type";
       v <- read_storage_slot cx is_transient slot tv;
       return $ Value v
     od
@@ -3053,8 +3021,7 @@ Definition evaluate_def:
       v <- lift_option (dest_NumV (HD (TL vs))) "ExtCall value not int";
       return (SOME v, TL (TL vs))
     od;
-    ts <- lift_option (get_self_code cx) "ExtCall get_self_code";
-    tenv <<- type_env ts;
+    tenv <<- get_tenv cx;
     calldata <- lift_option (build_ext_calldata tenv func_name arg_types arg_vals)
                             "ExtCall build_calldata";
     accounts <- get_accounts;
@@ -3088,11 +3055,9 @@ Definition evaluate_def:
     needed_dflts <<- DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts;
     cxd <<- cx with stk updated_by CONS (src_id_opt, fn);
     dflt_vs <- eval_exprs cxd needed_dflts;
-    tenv <<- type_env ts;
-    (* Use combined type env for return type (may reference types from other modules) *)
-    all_mods <<- (case ALOOKUP cx.sources cx.txn.target of SOME m => m | NONE => []);
-    all_tenv <<- type_env_all_modules all_mods;
-    env <- lift_option (bind_arguments tenv args (vs ++ dflt_vs)) "IntCall bind_arguments";
+    (* Use combined type env (may reference types from other modules) *)
+    all_tenv <<- get_tenv cx;
+    env <- lift_option (bind_arguments all_tenv args (vs ++ dflt_vs)) "IntCall bind_arguments";
     prev <- get_scopes;
     rtv <- lift_option (evaluate_type all_tenv ret) "IntCall eval ret";
     cxf <- push_function (src_id_opt, fn) env cx;
@@ -3208,37 +3173,33 @@ Definition force_default_value_def:
      | NONE => NoneV
 End
 
-(* TODO: assumes unique identifiers, but should check? *)
-(* All initial_immutables are for main contract (NONE source_id) *)
+(* Initialize immutables for a single module's toplevels *)
+Definition initial_immutables_module_def:
+  initial_immutables_module env src_id_opt [] acc = acc ∧
+  initial_immutables_module env src_id_opt (VariableDecl _ Immutable id typ :: ts) acc =
+  (let key = string_to_num id in
+   let iv = force_default_value env typ in
+     initial_immutables_module env src_id_opt ts
+       (update_immutable src_id_opt key iv acc)) ∧
+  initial_immutables_module env src_id_opt (_ :: ts) acc =
+    initial_immutables_module env src_id_opt ts acc
+End
+
+val () = cv_auto_trans initial_immutables_module_def;
+
+(* Initialize immutables for all modules *)
 Definition initial_immutables_def:
   initial_immutables env [] = empty_immutables ∧
-  (* Storage and transient variables use EVM storage, which is zero-initialized *)
-  initial_immutables env (VariableDecl _ Immutable id typ :: ts) =
-  (let imms = initial_immutables env ts in
-   let key = string_to_num id in
-   let iv = force_default_value env typ in
-     update_immutable NONE key iv imms) ∧
-  (* Flags are accessed via FlagMember and lookup_flag_mem, not immutables *)
-  (* HashMaps are not stored in immutables - they're constructed on-the-fly in lookup_global *)
-  initial_immutables env (t :: ts) = initial_immutables env ts
+  initial_immutables env ((src_id_opt, ts) :: rest) =
+    initial_immutables_module env src_id_opt ts (initial_immutables env rest)
 End
 
 val () = cv_auto_trans initial_immutables_def;
 
-(* Convert all storage_layouts to var_layouts *)
-Definition convert_all_layouts_def:
-  convert_all_layouts srcs [] = [] ∧
-  convert_all_layouts srcs ((addr, (s_layout, t_layout)) :: rest) =
-    let var_lays = build_var_layout srcs s_layout t_layout addr in
-    (addr, var_lays) :: convert_all_layouts srcs rest
-End
-
-val () = cv_auto_trans convert_all_layouts_def;
-
 Definition initial_evaluation_context_def:
   initial_evaluation_context srcs layouts tx =
   <| sources := srcs
-   ; layouts := convert_all_layouts srcs layouts
+   ; layouts := layouts
    ; txn := tx
    ; stk := [(NONE, tx.function_name)]
    ; in_deploy := F
@@ -3323,11 +3284,8 @@ val () = send_call_value_def
 
 Definition call_external_function_def:
   call_external_function am cx mut ts all_mods args vals body ret =
-  let tenv = type_env ts in
-  (* Use combined type_env from all modules for return type evaluation,
-     since return types can reference types from imported modules *)
   let all_tenv = type_env_all_modules all_mods in
-  case bind_arguments tenv args vals
+  case bind_arguments all_tenv args vals
   of NONE => (INR $ Error "call bind_arguments", am)
    | SOME env =>
   (case constants_env cx am ts FEMPTY
@@ -3407,8 +3365,8 @@ Definition load_contract_def:
   load_contract am tx mods exps =
   let addr = tx.target in
   let ts = case ALOOKUP mods NONE of SOME ts => ts | NONE => [] in
-  let tenv = type_env ts in
-  let imms = initial_immutables tenv ts in
+  let tenv = type_env_all_modules mods in
+  let imms = initial_immutables tenv mods in
   let am = am with <| immutables updated_by CONS (addr, imms);
                       exports updated_by CONS (addr, exps) |> in
   case lookup_function tx.function_name Deploy ts of

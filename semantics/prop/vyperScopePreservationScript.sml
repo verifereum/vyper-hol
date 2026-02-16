@@ -162,12 +162,16 @@ Theorem lookup_global_immutables:
 Proof
   rw[lookup_global_def, bind_def, return_def, lift_option_def] >>
   Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
-  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >>
+  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >-
+  (qpat_x_assum `_ = (res, st')` mp_tac >>
+   simp[get_immutables_def, get_address_immutables_def, bind_def,
+        lift_option_def, return_def, raise_def] >>
+   rpt CASE_TAC >> gvs[return_def, raise_def]) >>
   PairCases_on `x'` >> gvs[] >>
   Cases_on `x'0` >> gvs[bind_def, return_def, raise_def] >>
   qpat_x_assum `_ = (res, st')` mp_tac >>
   rpt CASE_TAC >> gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
-  imp_res_tac read_storage_slot_immutables >> simp[]
+  imp_res_tac read_storage_slot_immutables
 QED
 
 Theorem set_global_immutables:
@@ -177,11 +181,14 @@ Theorem set_global_immutables:
 Proof
   rw[set_global_def, bind_def, return_def, lift_option_def] >>
   Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
-  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >>
-  PairCases_on `x'` >> gvs[] >>
-  Cases_on `x'0` >> gvs[return_def, raise_def, bind_def] >>
-  Cases_on `lookup_var_slot_from_layout cx b n` >> gvs[return_def, raise_def] >>
-  Cases_on `evaluate_type (type_env x) t` >> gvs[return_def, raise_def] >>
+  rename1 `SOME ts` >>
+  Cases_on `find_var_decl_by_num n ts` >> gvs[return_def, raise_def] >>
+  rename1 `SOME decl_id` >> PairCases_on `decl_id` >> gvs[] >>
+  Cases_on `decl_id0` >> gvs[return_def, raise_def, bind_def] >>
+  rename1 `StorageVarDecl is_tr typ` >>
+  Cases_on `lookup_var_slot_from_layout cx is_tr src decl_id1` >>
+  gvs[return_def, raise_def] >>
+  Cases_on `evaluate_type (get_tenv cx) typ` >> gvs[return_def, raise_def] >>
   imp_res_tac write_storage_slot_immutables >> gvs[]
 QED
 
@@ -197,7 +204,11 @@ Theorem lookup_global_scopes:
 Proof
   rw[lookup_global_def, bind_def, return_def, lift_option_def] >>
   Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
-  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >>
+  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >-
+  (qpat_x_assum `_ = (res, st')` mp_tac >>
+   simp[get_immutables_def, get_address_immutables_def, bind_def,
+        lift_option_def, return_def, raise_def] >>
+   rpt CASE_TAC >> gvs[return_def, raise_def]) >>
   PairCases_on `x'` >> gvs[] >>
   Cases_on `x'0` >> gvs[bind_def, return_def, raise_def] >>
   qpat_x_assum `_ = (res, st')` mp_tac >>
@@ -210,12 +221,15 @@ Theorem set_global_scopes:
 Proof
   rw[set_global_def, bind_def, return_def, lift_option_def] >>
   Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
-  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >>
-  PairCases_on `x'` >> gvs[] >>
-  Cases_on `x'0` >> gvs[return_def, raise_def, bind_def] >>
+  rename1 `SOME ts` >>
+  Cases_on `find_var_decl_by_num n ts` >> gvs[return_def, raise_def] >>
+  rename1 `SOME decl_id` >> PairCases_on `decl_id` >> gvs[] >>
+  Cases_on `decl_id0` >> gvs[return_def, raise_def, bind_def] >>
+  rename1 `StorageVarDecl is_tr typ` >>
   imp_res_tac lift_option_scopes >> gvs[] >>
-  Cases_on `lookup_var_slot_from_layout cx b n` >> gvs[return_def, raise_def] >>
-  Cases_on `evaluate_type (type_env x) t` >> gvs[return_def, raise_def] >>
+  Cases_on `lookup_var_slot_from_layout cx is_tr src decl_id1` >>
+  gvs[return_def, raise_def] >>
+  Cases_on `evaluate_type (get_tenv cx) typ` >> gvs[return_def, raise_def] >>
   imp_res_tac write_storage_slot_scopes >> gvs[]
 QED
 
@@ -333,7 +347,7 @@ Proof
                imp_res_tac write_storage_slot_scopes >> gvs[])))
   (* ImmutableVar case *)
   >- (strip_tac >> gvs[assign_target_def, bind_def] >>
-      Cases_on `get_immutables cx NONE st` >> gvs[] >>
+      Cases_on `get_immutables cx (current_module cx) st` >> gvs[] >>
       drule get_immutables_scopes >> strip_tac >>
       Cases_on `q` >> gvs[] >>
       gvs[lift_option_def, AllCaseEqs(), return_def, raise_def]
