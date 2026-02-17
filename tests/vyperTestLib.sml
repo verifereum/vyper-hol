@@ -305,20 +305,14 @@ val excluded_test_names = [
   "test_export_interface_multiple_choices",
   "test_export_module_with_default",
   "test_export_module_with_getter",
-  "test_export_module_with_init",
   "test_export_unimplemented_function",
-  "test_export_with_state",
   "test_exports_interface2",
-  "test_exports_interface_simple",
   "test_inline_interface_export",
   "test_variable_decl_exports",
-  (* TODO: intrinsic interface expressions (lib.__interface__/lib.__at__ in exprs) *)
-  "test_intrinsic_interface[__at__]",
+  (* TODO: intrinsic interfaces *)
   "test_intrinsic_interface[__interface__]",
-  "test_intrinsic_interface_converts",
   "test_intrinsic_interface_defaults",
   "test_intrinsic_interface_instantiation",
-  "test_intrinsic_interface_kws",
   (* TODO: cross-contract calls via interface types *)
   "test_external_call_to_builtin_interface",
   "test_external_call_to_interface",
