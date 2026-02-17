@@ -1,7 +1,7 @@
 Theory vyperEvalExprPreservesScopesDom
 
 Ancestors
-  vyperInterpreter vyperLookup vyperScopePreservation
+  vyperInterpreter vyperLookup vyperScopePreservation vyperStatePreservation
 
 (* ========================================================================
    Utility: eval_exprs preserves scopes dom from per-element IH
@@ -14,8 +14,8 @@ Theorem eval_exprs_preserves_scopes_dom_helper[local]:
     eval_exprs cx es st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   Induct >> simp[evaluate_def, return_def] >>
-  rpt strip_tac >> gvs[bind_def, AllCaseEqs(), return_def, get_Value_def] >>
-  imp_res_tac get_Value_scopes >> gvs[]
+  rpt strip_tac >> gvs[bind_def, AllCaseEqs(), return_def] >>
+  imp_res_tac materialise_scopes >> gvs[]
   >- (`MAP FDOM st.scopes = MAP FDOM s''.scopes` by (first_assum (qspec_then `h` mp_tac) >> simp[] >> disch_then drule >> simp[]) >>
       first_x_assum (qspecl_then [`cx`, `s'³'`, `INL vs`, `s'⁴'`] mp_tac) >> simp[] >>
       disch_then irule >> rpt strip_tac >> first_assum irule >> simp[] >>
@@ -248,13 +248,13 @@ Proof
        ignore_bind_def] >>
   strip_tac >> gvs[] >>
   imp_res_tac get_Value_scopes >> imp_res_tac lift_sum_scopes >> gvs[] >>
+  imp_res_tac check_array_bounds_state >> gvs[] >>
   first_x_assum $ drule_then assume_tac >>
   first_x_assum (qspecl_then [`st`, `tv1`, `s''`] mp_tac) >> simp[] >>
   disch_then $ drule_then assume_tac >> gvs[] >>
   Cases_on `res'` >> gvs[return_def, bind_def, AllCaseEqs()] >>
   PairCases_on `y` >> gvs[bind_def, AllCaseEqs(), lift_option_def, return_def, raise_def] >>
-  imp_res_tac read_storage_slot_scopes >> gvs[] >>
-  Cases_on `evaluate_type (get_tenv cx) y2` >> gvs[return_def, raise_def]
+  imp_res_tac read_storage_slot_scopes >> gvs[]
 QED
 
 (* Goal 12: Attribute (unguarded IH) *)
@@ -276,8 +276,14 @@ QED
 Theorem case_Builtin_dom[local]:
   ∀cx bt es.
     (∀s'' x t.
-       check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x,t) ⇒
+       check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x,t) ∧
+       bt ≠ Len ⇒
        ∀st res st'. eval_exprs cx es st = (res,st') ⇒
+         MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
+    (∀s'' x t.
+       check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x,t) ∧
+       bt = Len ⇒
+       ∀st res st'. eval_expr cx (HD es) st = (res,st') ⇒
          MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
       eval_expr cx (Builtin bt es) st = (res,st') ⇒
@@ -286,7 +292,10 @@ Proof
   rpt strip_tac >>
   gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def, ignore_bind_def,
       check_def, assert_def, get_accounts_def, lift_sum_def] >>
-  TRY (Cases_on `evaluate_builtin cx s''.accounts bt vs` >> gvs[return_def, raise_def])
+  Cases_on `bt = Len` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def]
+  >> TRY (imp_res_tac toplevel_array_length_state >> gvs[] >>
+          res_tac >> gvs[] >> NO_TAC)
+  >> gvs[get_accounts_def, return_def, sum_CASE_rator, CaseEq"sum", raise_def]
 QED
 
 (* Goal 14: Pop (unguarded IH for eval_base_target) *)
@@ -360,7 +369,7 @@ QED
 Theorem case_eval_exprs_cons_dom[local]:
   ∀cx e es.
     (∀s'' tv t s'³' v t'.
-       eval_expr cx e s'' = (INL tv,t) ∧ get_Value tv s'³' = (INL v,t') ⇒
+       eval_expr cx e s'' = (INL tv,t) ∧ materialise cx tv s'³' = (INL v,t') ⇒
        ∀st res st'.
          eval_exprs cx es st = (res,st') ⇒
          MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
@@ -374,10 +383,10 @@ Proof
   rpt strip_tac >> qpat_x_assum `eval_exprs _ (_::_) _ = _` mp_tac >>
   simp[evaluate_def, bind_def, AllCaseEqs(), return_def] >>
   strip_tac >> gvs[] >>
-  imp_res_tac get_Value_scopes >> gvs[] >>
+  imp_res_tac materialise_scopes >> gvs[] >>
   (* Cases where e fails: closed by unguarded IH *)
   TRY (qpat_x_assum `∀st res st'. eval_expr _ _ _ = _ ⇒ _` drule >> simp[] >> NO_TAC) >>
-  (* Cases where e and get_Value both succeed: chain IHs *)
+  (* Cases where e and materialise both succeed: chain IHs *)
   qpat_x_assum `∀st res st'. eval_expr _ _ _ = _ ⇒ _` $ drule_then assume_tac >>
   metis_tac[]
 QED

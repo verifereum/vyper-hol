@@ -309,6 +309,15 @@ Proof
   gvs[pred_setTheory.ABSORPTION_RWT]
 QED
 
+Theorem materialise_scopes:
+  !cx tv st res st'. materialise cx tv st = (res, st') ==> st'.scopes = st.scopes
+Proof
+  Cases_on `tv` >>
+  rw[materialise_def, return_def, raise_def] >>
+  gvs[bind_def, AllCaseEqs(), return_def] >>
+  imp_res_tac read_storage_slot_scopes >> gvs[]
+QED
+
 Theorem assign_result_scopes:
   !ao v subs st res st'. assign_result ao v subs st = (res, st') ==> st'.scopes = st.scopes
 Proof
