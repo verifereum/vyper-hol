@@ -303,10 +303,7 @@ val excluded_test_names = [
   "test_native_hex_literals[*]",
   "test_private_zero_bytearray",
   (* TODO: cross-contract calls via interface types *)
-  "test_external_call_to_builtin_interface",
-  "test_external_call_to_interface",
   "test_external_call_to_interface_kwarg[*]",
-  "test_import_interface_types",
   "test_import_interface_flags",
   "test_import_interface_types_stability",
   (* TODO: complex module constants *)
