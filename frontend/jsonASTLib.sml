@@ -626,9 +626,9 @@ fun d_json_expr () : term decoder = achoose "expr" [
     JSONDecode.map (fn (((e, attr), tc_opt), src_id_opt) => mk_JE_Attribute(e, attr, tc_opt, src_id_opt)) $
     tuple2 (tuple2 (tuple2 (field "value" (delay d_json_expr), field "attr" string),
                     try (field "type" $ field "typeclass" string)),
-            orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
-                    orElse (field "variable_reads" $ sub 0 $
+            orElse (field "variable_reads" $ sub 0 $
                               field "decl_node" $ field "source_id" source_id_tm,
+                    orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
                             succeed (intSyntax.term_of_int (Arbint.fromInt ~1))))),
 
   (* Subscript *)

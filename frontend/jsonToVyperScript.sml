@@ -626,8 +626,9 @@ Definition translate_expr_def:
     case func of
     | JE_Name name (SOME "interface") _ => HD args'
     | JE_Name name _ _ => make_builtin_call name args' kwargs' ret_ty
-    (* lib.__at__(addr) - interface instantiation, just returns the address *)
+    (* lib.__at__(addr) / lib.__interface__(addr) - interface instantiation, just returns the address *)
     | JE_Attribute _ "__at__" _ _ => HD args'
+    | JE_Attribute _ "__interface__" _ _ => HD args'
     | JE_Attribute base "pop" _ _ =>
         (case base of
          | JE_Name id _ _ => Pop (NameTarget id)

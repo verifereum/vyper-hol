@@ -298,13 +298,10 @@ val excluded_test_names = [
   "test_default_arg_string",
   "test_environment_vars_as_default",
   "test_external_contract_calls_with_default_value*",
+  "test_intrinsic_interface_defaults",
   "test_bytes_literals[*]",
   "test_native_hex_literals[*]",
   "test_private_zero_bytearray",
-  (* TODO: intrinsic interfaces *)
-  "test_intrinsic_interface[__interface__]",
-  "test_intrinsic_interface_defaults",
-  "test_intrinsic_interface_instantiation",
   (* TODO: cross-contract calls via interface types *)
   "test_external_call_to_builtin_interface",
   "test_external_call_to_interface",
