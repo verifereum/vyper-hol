@@ -1039,7 +1039,15 @@ Definition get_function_name_def:
   get_function_name _ = NONE
 End
 
-(* Get all external function names from a module's toplevels *)
+(* Get name of a public variable or hashmap (generates an external getter) *)
+Definition get_public_var_name_def:
+  get_public_var_name (JTL_VariableDecl name _ T _ _ _) = SOME name ∧
+  get_public_var_name (JTL_HashMapDecl name _ _ T _) = SOME name ∧
+  get_public_var_name _ = NONE
+End
+
+(* Get all externally-callable names from a module's toplevels:
+   external functions + public variable/hashmap getters *)
 Definition get_external_func_names_def:
   get_external_func_names [] = [] ∧
   get_external_func_names (t::ts) =
@@ -1047,7 +1055,10 @@ Definition get_external_func_names_def:
       case get_function_name t of
         SOME name => name :: get_external_func_names ts
       | NONE => get_external_func_names ts
-    else get_external_func_names ts
+    else
+      case get_public_var_name t of
+        SOME name => name :: get_external_func_names ts
+      | NONE => get_external_func_names ts
 End
 
 (* Find module body by source_id in imports list *)
