@@ -1,6 +1,6 @@
 structure vyperTestLib :> vyperTestLib = struct
 
-open HolKernel boolLib bossLib cv_transLib wordsLib
+open HolKernel boolLib bossLib cv_transLib wordsLib intLib
      pairSyntax listSyntax stringSyntax optionSyntax
      intSyntax wordsSyntax fcpSyntax
      vfmTypesSyntax contractABISyntax byteStringCacheLib
@@ -301,11 +301,6 @@ val excluded_test_names = [
   "test_bytes_literals[*]",
   "test_native_hex_literals[*]",
   "test_private_zero_bytearray",
-  (* TODO: exports: lib.__interface__ / named interface re-export *)
-  "test_export_interface_multiple_choices",
-  "test_export_unimplemented_function",
-  "test_exports_interface2",
-  "test_inline_interface_export",
   (* TODO: intrinsic interfaces *)
   "test_intrinsic_interface[__interface__]",
   "test_intrinsic_interface_defaults",
