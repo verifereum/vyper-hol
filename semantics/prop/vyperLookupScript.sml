@@ -1010,7 +1010,7 @@ QED
 
 (* ===== new_variable = update when var doesn't exist ===== *)
 
-Theorem lookup_scopes_none_fcs_none:
+Theorem lookup_scopes_none_fcs_none[local]:
   ∀id sc. lookup_scopes id sc = NONE ⇒ find_containing_scope id sc = NONE
 Proof
   Induct_on `sc` >> simp[lookup_scopes_def, find_containing_scope_def] >>
