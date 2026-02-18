@@ -386,38 +386,42 @@ QED
 Theorem evaluate_binop_uadd:
   ∀u x y.
     evaluate_binop UAdd (IntV u x) (IntV u y) =
-    INL (IntV u ((x + y) % &(2 ** int_bound_bits u)))
+    INL (IntV u (if is_Unsigned u then (x + y) % &(2 ** int_bound_bits u)
+                 else signed_int_mod (int_bound_bits u) (x + y)))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def,
-       vyperInterpreterTheory.wrapped_int_op_def]
+  Cases >> simp[vyperInterpreterTheory.evaluate_binop_def,
+                vyperInterpreterTheory.wrapped_int_op_def]
 QED
 
 Theorem evaluate_binop_usub:
   ∀u x y.
     evaluate_binop USub (IntV u x) (IntV u y) =
-    INL (IntV u ((x − y) % &(2 ** int_bound_bits u)))
+    INL (IntV u (if is_Unsigned u then (x − y) % &(2 ** int_bound_bits u)
+                 else signed_int_mod (int_bound_bits u) (x − y)))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def,
-       vyperInterpreterTheory.wrapped_int_op_def]
+  Cases >> simp[vyperInterpreterTheory.evaluate_binop_def,
+                vyperInterpreterTheory.wrapped_int_op_def]
 QED
 
 Theorem evaluate_binop_umul:
   ∀u x y.
     evaluate_binop UMul (IntV u x) (IntV u y) =
-    INL (IntV u ((x * y) % &(2 ** int_bound_bits u)))
+    INL (IntV u (if is_Unsigned u then (x * y) % &(2 ** int_bound_bits u)
+                 else signed_int_mod (int_bound_bits u) (x * y)))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def,
-       vyperInterpreterTheory.wrapped_int_op_def]
+  Cases >> simp[vyperInterpreterTheory.evaluate_binop_def,
+                vyperInterpreterTheory.wrapped_int_op_def]
 QED
 
 Theorem evaluate_binop_udiv:
   ∀u x y.
     y ≠ 0 ⇒
     evaluate_binop UDiv (IntV u x) (IntV u y) =
-    INL (IntV u ((x / y) % &(2 ** int_bound_bits u)))
+    INL (IntV u (if is_Unsigned u then (x / y) % &(2 ** int_bound_bits u)
+                 else signed_int_mod (int_bound_bits u) (x / y)))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def,
-       vyperInterpreterTheory.wrapped_int_op_def]
+  Cases >> simp[vyperInterpreterTheory.evaluate_binop_def,
+                vyperInterpreterTheory.wrapped_int_op_def]
 QED
 
 (* ========= Shifts ========== *)

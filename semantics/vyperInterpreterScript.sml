@@ -236,13 +236,47 @@ Definition bounded_decimal_op_def:
   else INR "bounded_decimal_op"
 End
 
+Definition signed_int_mod_def:
+  signed_int_mod b i =
+    let n = 2 ** b in
+    let r = int_mod i &n in
+      if r ≥ &(2 ** (b − 1)) then r − &n else r
+End
+
+(* signed_int_mod is equivalent to w2i (i2w i) at the corresponding word width *)
+Theorem signed_int_mod_w2i:
+  ∀i. signed_int_mod (dimindex(:'a)) i = w2i ((i2w i):'a word)
+Proof
+  rpt strip_tac
+  >> simp[signed_int_mod_def, integer_wordTheory.w2i_eq_w2n,
+          wordsTheory.INT_MIN_def, wordsTheory.dimword_def]
+  >> `&(w2n ((i2w i):'a word)) = i % &(2 ** dimindex(:'a))`
+       by simp[integer_wordTheory.w2n_i2w, wordsTheory.dimword_def]
+  >> pop_assum (fn th => REWRITE_TAC [SYM th])
+  >> `(w2n ((i2w i):'a word) < 2 ** (dimindex(:'a) − 1))
+       ⇔ ¬(&(w2n ((i2w i):'a word)) ≥ &(2 ** (dimindex(:'a) − 1)))`
+       by simp[integerTheory.INT_NOT_LE]
+  >> pop_assum SUBST_ALL_TAC
+  >> rw[]
+  >> gvs[integerTheory.int_ge]
+QED
+
 Definition wrapped_int_op_def:
   wrapped_int_op u1 u2 i =
   if u1 = u2 then
     let b = int_bound_bits u1 in
-      INL $ IntV u1 (int_mod i &(2 ** b))
+      if is_Unsigned u1 then INL $ IntV u1 (int_mod i &(2 ** b))
+      else INL $ IntV u1 (signed_int_mod b i)
   else INR "wrapped_int_op"
 End
+
+val signed_int_mod_pre_def = cv_trans_pre "signed_int_mod_pre" signed_int_mod_def;
+
+Theorem signed_int_mod_pre[cv_pre]:
+  signed_int_mod_pre x y
+Proof
+  rw[signed_int_mod_pre_def]
+QED
 
 val wrapped_int_op_pre_def = cv_trans_pre "wrapped_int_op_pre" wrapped_int_op_def;
 
