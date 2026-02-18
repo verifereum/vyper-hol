@@ -50,6 +50,8 @@ End
    Correctness statements (cheated)
    ========================================================================== *)
 
+(* Desiderata: prove the analysis finishes in O(n) time. *)
+
 Theorem cfg_analyze_wf:
   !fn. cfg_wf (cfg_analyze fn) fn
 Proof
@@ -79,22 +81,29 @@ Proof
   cheat
 QED
 
-(* reachable labels are exactly the DFS postorder labels. *)
-Theorem cfg_analyze_dfs_post_reachable:
-  !fn lbl.
-    cfg_reachable_of (cfg_analyze fn) lbl <=>
-    MEM lbl (cfg_dfs_post (cfg_analyze fn))
+(* postorder labels, preorder labels, and reachable labels coincide as sets. *)
+Theorem cfg_analyze_reachable_sets:
+  !fn.
+    set (cfg_dfs_post (cfg_analyze fn)) = set (cfg_dfs_pre (cfg_analyze fn)) /\
+    set (cfg_dfs_post (cfg_analyze fn)) =
+      {lbl | cfg_reachable_of (cfg_analyze fn) lbl}
 Proof
   cheat
 QED
 
-(* DFS preorder only contains labels from the function. *)
-Theorem cfg_analyze_dfs_pre_in_labels:
-  !fn lbl.
-    MEM lbl (cfg_dfs_pre (cfg_analyze fn)) ==>
-    MEM lbl (cfg_labels fn)
+(* DFS postorder contains no duplicates. *)
+Theorem cfg_analyze_dfs_post_distinct:
+  !fn. ALL_DISTINCT (cfg_dfs_post (cfg_analyze fn))
 Proof
   cheat
 QED
+
+(* DFS preorder contains no duplicates. *)
+Theorem cfg_analyze_dfs_pre_distinct:
+  !fn. ALL_DISTINCT (cfg_dfs_pre (cfg_analyze fn))
+Proof
+  cheat
+QED
+
 
 val _ = export_theory();
