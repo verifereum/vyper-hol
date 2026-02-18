@@ -596,13 +596,6 @@ fun d_json_expr () : term decoder = achoose "expr" [
   (* Ellipsis - appears in .vyi interface stub function bodies *)
   check_ast_type "Ellipsis" $ succeed (mk_JE_Bool true),
 
-  (* Name with folded_value (constant) *)
-  check_ast_type "Name" $
-    JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
-    tuple2 (field "folded_value" $
-              check_ast_type "Int" $ field "value" inttm,
-            orElse(field "type" json_type, succeed JT_None_tm)),
-
   (* Name - extract typeclass and source_id for module references *)
   (* source_id < 0 means main module (NONE), >= 0 means imported module *)
   check_ast_type "Name" $
@@ -613,13 +606,6 @@ fun d_json_expr () : term decoder = achoose "expr" [
                     orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
                             orElse (field "type" $ field "type_t" $ field "type_decl_node" $ field "source_id" source_id_tm,
                             succeed (intSyntax.term_of_int (Arbint.fromInt ~1)))))),
-
-  (* Attribute with folded_value (cross-module constant) *)
-  check_ast_type "Attribute" $
-    JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
-    tuple2 (field "folded_value" $
-              check_ast_type "Int" $ field "value" inttm,
-            orElse(field "type" json_type, succeed JT_None_tm)),
 
   (* Attribute - extract result typeclass and source_id for flag/module member detection *)
   (* source_id comes from variable_reads[0].decl_node.source_id OR type.type_decl_node.source_id *)
@@ -645,24 +631,12 @@ fun d_json_expr () : term decoder = achoose "expr" [
 
   (* BinOp *)
   check_ast_type "BinOp" $
-    JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
-    tuple2 (field "folded_value" $
-              check_ast_type "Int" $ field "value" inttm,
-            orElse(field "type" json_type, succeed JT_None_tm)),
-
-  check_ast_type "BinOp" $
     JSONDecode.map (fn (l, op_tm, r) => mk_JE_BinOp(l, op_tm, r)) $
     tuple3 (field "left" (delay d_json_expr),
             field "op" json_binop,
             field "right" (delay d_json_expr)),
 
   (* Compare (treated like BinOp) *)
-  check_ast_type "Compare" $
-    JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
-    tuple2 (field "folded_value" $
-              check_ast_type "Int" $ field "value" inttm,
-            orElse(field "type" json_type, succeed JT_None_tm)),
-
   check_ast_type "Compare" $
     JSONDecode.map (fn (l, op_tm, r) => mk_JE_BinOp(l, op_tm, r)) $
     tuple3 (field "left" (delay d_json_expr),
@@ -986,8 +960,7 @@ val json_interface_func : term decoder =
     )
   )
 
-(* Parser for export annotations that preserves Attribute structure.
-   Unlike json_expr, this does NOT fold constants via folded_value,
+(* Parser for export annotations that preserves Attribute structure,
    so exports: lib1.CONST keeps the JE_Attribute form. *)
 fun d_export_annotation_expr () : term decoder = achoose "export_annotation" [
   (* Tuple of export expressions *)

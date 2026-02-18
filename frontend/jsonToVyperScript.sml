@@ -574,11 +574,14 @@ Definition translate_expr_def:
 
   (* General attribute - handles nested and simple cases *)
   (* Check for cross-module flag access: lib1.Action.BUY *)
-  (translate_expr (JE_Attribute e attr result_tc _) =
+  (translate_expr (JE_Attribute e attr result_tc attr_src_id_opt) =
     if result_tc = SOME "flag" then
       case extract_module_flag e of
       | SOME (src_id_opt, flag_name) => FlagMember (src_id_opt, flag_name) attr
       | NONE => Attribute (translate_expr e) attr
+    (* Nested module access: mod3.mod2.mod1.X — use variable_reads source_id *)
+    else if IS_SOME (extract_innermost_module_src e) then
+      TopLevelName (source_id_to_nsid attr_src_id_opt, attr)
     else if attr = "balance" then Builtin (Acc Balance) [translate_expr e]
     else if attr = "address" then Builtin (Acc Address) [translate_expr e]
     else Attribute (translate_expr e) attr) /\
