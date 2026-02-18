@@ -2336,31 +2336,31 @@ End
 val () = cv_auto_trans getter_def;
 
 Definition name_expression_def:
-  name_expression mut id =
-  if mut = Immutable ∨ is_Constant mut
+  name_expression src_id_opt mut id =
+  if is_Constant mut
   then Name id
-  else TopLevelName (NONE, id)
+  else TopLevelName (src_id_opt, id)
 End
 
 val () = cv_auto_trans name_expression_def;
 
 Definition lookup_function_def:
-  lookup_function name Deploy [] = SOME (Payable, [], [], NoneT, []) ∧
-  lookup_function name vis [] = NONE ∧
-  lookup_function name vis (FunctionDecl fv fm id args dflts ret body :: ts) =
+  lookup_function src_id_opt name Deploy [] = SOME (Payable, [], [], NoneT, []) ∧
+  lookup_function src_id_opt name vis [] = NONE ∧
+  lookup_function src_id_opt name vis (FunctionDecl fv fm id args dflts ret body :: ts) =
   (if id = name ∧ vis = fv then SOME (fm, args, dflts, ret, body)
-   else lookup_function name vis ts) ∧
-  lookup_function name External (VariableDecl Public mut id typ :: ts) =
+   else lookup_function src_id_opt name vis ts) ∧
+  lookup_function src_id_opt name External (VariableDecl Public mut id typ :: ts) =
   (if id = name then
     if ¬is_ArrayT typ
-    then SOME (View, [], [], typ, [Return (SOME (name_expression mut id))])
-    else SOME $ getter (name_expression mut id) (BaseT (UintT 256)) (Type (ArrayT_type typ))
-   else lookup_function name External ts) ∧
-  lookup_function name External (HashMapDecl Public _ id kt vt :: ts) =
-  (if id = name then SOME $ getter (TopLevelName (NONE, id)) kt vt
-   else lookup_function name External ts) ∧
-  lookup_function name vis (_ :: ts) =
-    lookup_function name vis ts
+    then SOME (View, [], [], typ, [Return (SOME (name_expression src_id_opt mut id))])
+    else SOME $ getter (name_expression src_id_opt mut id) (BaseT (UintT 256)) (Type (ArrayT_type typ))
+   else lookup_function src_id_opt name External ts) ∧
+  lookup_function src_id_opt name External (HashMapDecl Public _ id kt vt :: ts) =
+  (if id = name then SOME $ getter (TopLevelName (src_id_opt, id)) kt vt
+   else lookup_function src_id_opt name External ts) ∧
+  lookup_function src_id_opt name vis (_ :: ts) =
+    lookup_function src_id_opt name vis ts
 End
 
 val () = cv_auto_trans lookup_function_def;
@@ -2368,9 +2368,9 @@ val () = cv_auto_trans lookup_function_def;
 (* Lookup function callable via IntCall: Internal always, Deploy only during deployment *)
 Definition lookup_callable_function_def:
   lookup_callable_function in_deploy name ts =
-    case lookup_function name Internal ts of
+    case lookup_function NONE name Internal ts of
     | SOME x => SOME x
-    | NONE => if in_deploy then lookup_function name Deploy ts else NONE
+    | NONE => if in_deploy then lookup_function NONE name Deploy ts else NONE
 End
 
 val () = cv_auto_trans lookup_callable_function_def;
@@ -2684,8 +2684,8 @@ QED
 
 (* lookup_function with Internal finds body via ALOOKUP on dest_Internal_Fn *)
 Theorem lookup_function_Internal_imp_ALOOKUP:
-  ∀fn vis ts v w x y z.
-  lookup_function fn vis ts = SOME (v,w,x,y,z) ∧ vis = Internal ⇒
+  ∀src_id_opt fn vis ts v w x y z.
+  lookup_function src_id_opt fn vis ts = SOME (v,w,x,y,z) ∧ vis = Internal ⇒
   (x, z) = ([], []) ∨ ALOOKUP (FLAT (MAP dest_Internal_Fn ts)) fn = SOME (x, z)
 Proof
   ho_match_mp_tac lookup_function_ind
@@ -2697,8 +2697,8 @@ QED
 
 (* lookup_function with Deploy finds body via ALOOKUP on dest_Deploy_Fn *)
 Theorem lookup_function_Deploy_imp_ALOOKUP:
-  ∀fn vis ts v w x y z.
-  lookup_function fn vis ts = SOME (v,w,x,y,z) ∧ vis = Deploy ⇒
+  ∀src_id_opt fn vis ts v w x y z.
+  lookup_function src_id_opt fn vis ts = SOME (v,w,x,y,z) ∧ vis = Deploy ⇒
   (x, z) = ([], []) ∨ ALOOKUP (FLAT (MAP dest_Deploy_Fn ts)) fn = SOME (x, z)
 Proof
   ho_match_mp_tac lookup_function_ind
@@ -2710,8 +2710,8 @@ QED
 
 (* If Internal lookup fails, no Internal entry in the list *)
 Theorem lookup_function_Internal_NONE_imp:
-  ∀fn vis ts.
-  lookup_function fn vis ts = NONE ∧ vis = Internal ⇒
+  ∀src_id_opt fn vis ts.
+  lookup_function src_id_opt fn vis ts = NONE ∧ vis = Internal ⇒
   ALOOKUP (FLAT (MAP dest_Internal_Fn ts)) fn = NONE
 Proof
   ho_match_mp_tac lookup_function_ind
@@ -3540,17 +3540,17 @@ Definition lookup_exported_function_def:
     case ALOOKUP am.exports cx.txn.target of
       NONE => (* No exports for this contract, use main module *)
         (case get_self_code cx of
-           SOME ts => lookup_function func_name External ts
+           SOME ts => lookup_function NONE func_name External ts
          | NONE => NONE)
     | SOME export_map =>
         (case ALOOKUP export_map func_name of
            SOME src_id => (* Function is exported from module src_id *)
              (case get_module_code cx (SOME src_id) of
-                SOME ts => lookup_function func_name External ts
+                SOME ts => lookup_function (SOME src_id) func_name External ts
               | NONE => NONE)
          | NONE => (* Not in exports, try main module *)
              (case get_self_code cx of
-                SOME ts => lookup_function func_name External ts
+                SOME ts => lookup_function NONE func_name External ts
               | NONE => NONE))
 End
 
@@ -3591,7 +3591,7 @@ Definition load_contract_def:
   let imms = initial_immutables tenv mods in
   let am = am with <| immutables updated_by CONS (addr, imms);
                       exports updated_by CONS (addr, exps) |> in
-  case lookup_function tx.function_name Deploy ts of
+  case lookup_function NONE tx.function_name Deploy ts of
      | NONE => INR $ Error "no constructor"
      | SOME (mut, args, _, ret, body) =>
        let cx = (initial_evaluation_context ((addr,mods)::am.sources) am.layouts tx)

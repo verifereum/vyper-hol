@@ -114,7 +114,7 @@ End
 Definition compute_vyper_args_def:
   compute_vyper_args all_mods ts vis name argTys cd = let
     abiTupTy = Tuple argTys;
-    vyTysRet = case lookup_function name vis ts
+    vyTysRet = case lookup_function NONE name vis ts
                 of SOME (_,args,_,ret,_) => (MAP SND args, ret)
                   | NONE => ([], NoneT);
     vyArgsTenvOpt = if
@@ -266,9 +266,9 @@ Definition run_trace_def:
              ((lookup_account addr am.accounts) with balance := bal)))
      )
    | Call ct => (snss,
-     if is_transfer ct then do_transfer ct am else
      case ALOOKUP snss ct.target
-     of NONE => if IS_NONE ct.expectedOutput then INL am
+     of NONE => if is_transfer ct then do_transfer ct am
+                else if IS_NONE ct.expectedOutput then INL am
                 else INR (Error "sns not found")
       | SOME sns => let
         cr = run_call sns am ct;

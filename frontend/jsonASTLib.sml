@@ -611,7 +611,8 @@ fun d_json_expr () : term decoder = achoose "expr" [
             tuple2 (try (orElse (field "type" $ field "typeclass" string,
                                 field "type" $ field "type_t" $ field "typeclass" string)),
                     orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
-                            succeed (intSyntax.term_of_int (Arbint.fromInt ~1))))),
+                            orElse (field "type" $ field "type_t" $ field "type_decl_node" $ field "source_id" source_id_tm,
+                            succeed (intSyntax.term_of_int (Arbint.fromInt ~1)))))),
 
   (* Attribute with folded_value (cross-module constant) *)
   check_ast_type "Attribute" $
@@ -621,14 +622,15 @@ fun d_json_expr () : term decoder = achoose "expr" [
             orElse(field "type" json_type, succeed JT_None_tm)),
 
   (* Attribute - extract result typeclass and source_id for flag/module member detection *)
-  (* source_id comes from type.type_decl_node.source_id OR variable_reads[0].decl_node.source_id *)
+  (* source_id comes from variable_reads[0].decl_node.source_id OR type.type_decl_node.source_id *)
   check_ast_type "Attribute" $
     JSONDecode.map (fn (((e, attr), tc_opt), src_id_opt) => mk_JE_Attribute(e, attr, tc_opt, src_id_opt)) $
     tuple2 (tuple2 (tuple2 (field "value" (delay d_json_expr), field "attr" string),
-                    try (field "type" $ field "typeclass" string)),
-            orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
-                    orElse (field "variable_reads" $ sub 0 $
+                    try (orElse (field "type" $ field "typeclass" string,
+                                field "type" $ field "type_t" $ field "typeclass" string))),
+            orElse (field "variable_reads" $ sub 0 $
                               field "decl_node" $ field "source_id" source_id_tm,
+                    orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
                             succeed (intSyntax.term_of_int (Arbint.fromInt ~1))))),
 
   (* Subscript *)
@@ -984,6 +986,27 @@ val json_interface_func : term decoder =
     )
   )
 
+(* Parser for export annotations that preserves Attribute structure.
+   Unlike json_expr, this does NOT fold constants via folded_value,
+   so exports: lib1.CONST keeps the JE_Attribute form. *)
+fun d_export_annotation_expr () : term decoder = achoose "export_annotation" [
+  (* Tuple of export expressions *)
+  check_ast_type "Tuple" $
+    JSONDecode.map mk_JE_Tuple (field "elements" (array (delay d_export_annotation_expr))),
+
+  (* Attribute - always parse as JE_Attribute, never fold *)
+  check_ast_type "Attribute" $
+    JSONDecode.map (fn (((e, attr), tc_opt), src_id_opt) => mk_JE_Attribute(e, attr, tc_opt, src_id_opt)) $
+    tuple2 (tuple2 (tuple2 (field "value" (delay d_json_expr), field "attr" string),
+                    try (field "type" $ field "typeclass" string)),
+            orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
+                    orElse (field "variable_reads" $ sub 0 $
+                              field "decl_node" $ field "source_id" source_id_tm,
+                            succeed (intSyntax.term_of_int (Arbint.fromInt ~1)))))
+]
+
+val export_annotation_expr : term decoder = d_export_annotation_expr ()
+
 val json_toplevel : term decoder = achoose "toplevel" [
   (* FunctionDef *)
   check_ast_type "FunctionDef" $
@@ -1082,9 +1105,11 @@ val json_toplevel : term decoder = achoose "toplevel" [
               field "qualified_module_name" string),
 
   (* ExportsDecl - exports declaration *)
+  (* Use a dedicated parser that doesn't fold constants, so that
+     exports: lib1.CONST keeps the Attribute structure *)
   check_ast_type "ExportsDecl" $
     JSONDecode.map mk_JTL_ExportsDecl $
-    field "annotation" json_expr,
+    field "annotation" export_annotation_expr,
 
   (* InitializesDecl - initializes declaration *)
   check_ast_type "InitializesDecl" $

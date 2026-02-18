@@ -1,6 +1,6 @@
 structure vyperTestLib :> vyperTestLib = struct
 
-open HolKernel boolLib bossLib cv_transLib wordsLib
+open HolKernel boolLib bossLib cv_transLib wordsLib intLib
      pairSyntax listSyntax stringSyntax optionSyntax
      intSyntax wordsSyntax fcpSyntax
      vfmTypesSyntax contractABISyntax byteStringCacheLib
@@ -298,34 +298,11 @@ val excluded_test_names = [
   "test_default_arg_string",
   "test_environment_vars_as_default",
   "test_external_contract_calls_with_default_value*",
+  "test_intrinsic_interface_defaults",
   "test_bytes_literals[*]",
   "test_native_hex_literals[*]",
   "test_private_zero_bytearray",
-  (* TODO: exports: lib.__interface__ / named interface re-export *)
-  "test_export_interface_multiple_choices",
-  "test_export_module_with_default",
-  "test_export_module_with_getter",
-  "test_export_module_with_init",
-  "test_export_unimplemented_function",
-  "test_export_with_state",
-  "test_exports_interface2",
-  "test_exports_interface_simple",
-  "test_inline_interface_export",
-  "test_variable_decl_exports",
-  (* TODO: intrinsic interface expressions (lib.__interface__/lib.__at__ in exprs) *)
-  "test_intrinsic_interface[__at__]",
-  "test_intrinsic_interface[__interface__]",
-  "test_intrinsic_interface_converts",
-  "test_intrinsic_interface_defaults",
-  "test_intrinsic_interface_instantiation",
-  "test_intrinsic_interface_kws",
-  (* TODO: cross-contract calls via interface types *)
-  "test_external_call_to_builtin_interface",
-  "test_external_call_to_interface",
   "test_external_call_to_interface_kwarg[*]",
-  "test_import_interface_types",
-  "test_import_interface_flags",
-  "test_import_interface_types_stability",
   (* TODO: complex module constants *)
   "test_import_constant_array",
   "test_module_constant_builtin"
