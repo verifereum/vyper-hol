@@ -2335,15 +2335,6 @@ End
 
 val () = cv_auto_trans getter_def;
 
-Definition name_expression_def:
-  name_expression src_id_opt mut id =
-  if is_Constant mut
-  then Name id
-  else TopLevelName (src_id_opt, id)
-End
-
-val () = cv_auto_trans name_expression_def;
-
 Definition lookup_function_def:
   lookup_function src_id_opt name Deploy [] = SOME (Payable, [], [], NoneT, []) ∧
   lookup_function src_id_opt name vis [] = NONE ∧
@@ -2352,9 +2343,10 @@ Definition lookup_function_def:
    else lookup_function src_id_opt name vis ts) ∧
   lookup_function src_id_opt name External (VariableDecl Public mut id typ :: ts) =
   (if id = name then
+    let ne = TopLevelName (src_id_opt, id) in
     if ¬is_ArrayT typ
-    then SOME (View, [], [], typ, [Return (SOME (name_expression src_id_opt mut id))])
-    else SOME $ getter (name_expression src_id_opt mut id) (BaseT (UintT 256)) (Type (ArrayT_type typ))
+    then SOME (View, [], [], typ, [Return (SOME ne)])
+    else SOME $ getter ne (BaseT (UintT 256)) (Type (ArrayT_type typ))
    else lookup_function src_id_opt name External ts) ∧
   lookup_function src_id_opt name External (HashMapDecl Public _ id kt vt :: ts) =
   (if id = name then SOME $ getter (TopLevelName (src_id_opt, id)) kt vt
