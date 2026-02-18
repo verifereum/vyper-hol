@@ -3508,6 +3508,31 @@ Definition constants_env_def:
   constants_env cx am (t::ts) acc = constants_env cx am ts acc
 End
 
+(* Merge a constants fmap into the immutables for a given module *)
+Definition merge_constants_def:
+  merge_constants addr src_id_opt cenv (am: abstract_machine) =
+    let imms = case ALOOKUP am.immutables addr of
+                 SOME m => m | NONE => empty_immutables in
+    let src_imms = get_source_immutables src_id_opt imms in
+    let merged = FUNION cenv src_imms in
+    let imms' = set_source_immutables src_id_opt merged imms in
+    am with immutables updated_by
+      (λal. (addr, imms') :: ADELKEY addr al)
+End
+
+val () = cv_auto_trans merge_constants_def;
+
+(* Evaluate constants for all modules and merge into am.immutables *)
+Definition evaluate_all_constants_def:
+  evaluate_all_constants cx am addr [] = SOME am ∧
+  evaluate_all_constants cx am addr ((src_id_opt, ts) :: rest) =
+    case constants_env cx am ts FEMPTY of
+    | NONE => NONE
+    | SOME cenv =>
+        let am' = merge_constants addr src_id_opt cenv am in
+        evaluate_all_constants cx am' addr rest
+End
+
 Definition send_call_value_def:
   send_call_value mut cx =
   let n = cx.txn.value in
@@ -3528,10 +3553,10 @@ Definition call_external_function_def:
   case bind_arguments all_tenv args vals
   of NONE => (INR $ Error "call bind_arguments", am)
    | SOME env =>
-  (case constants_env cx am ts FEMPTY
+  (case evaluate_all_constants cx am cx.txn.target all_mods
    of NONE => (INR $ Error "call constants_env", am)
-    | SOME cenv => (* TODO: how do we stop constants being assigned to? *)
-   let st = initial_state am [env; cenv] in
+    | SOME am =>
+   let st = initial_state am [env] in
    let srcs = am.sources in
    let exps = am.exports in
    let layouts = am.layouts in
