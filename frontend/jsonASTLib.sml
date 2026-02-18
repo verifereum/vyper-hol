@@ -611,7 +611,8 @@ fun d_json_expr () : term decoder = achoose "expr" [
             tuple2 (try (orElse (field "type" $ field "typeclass" string,
                                 field "type" $ field "type_t" $ field "typeclass" string)),
                     orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
-                            succeed (intSyntax.term_of_int (Arbint.fromInt ~1))))),
+                            orElse (field "type" $ field "type_t" $ field "type_decl_node" $ field "source_id" source_id_tm,
+                            succeed (intSyntax.term_of_int (Arbint.fromInt ~1)))))),
 
   (* Attribute with folded_value (cross-module constant) *)
   check_ast_type "Attribute" $
@@ -621,11 +622,12 @@ fun d_json_expr () : term decoder = achoose "expr" [
             orElse(field "type" json_type, succeed JT_None_tm)),
 
   (* Attribute - extract result typeclass and source_id for flag/module member detection *)
-  (* source_id comes from type.type_decl_node.source_id OR variable_reads[0].decl_node.source_id *)
+  (* source_id comes from variable_reads[0].decl_node.source_id OR type.type_decl_node.source_id *)
   check_ast_type "Attribute" $
     JSONDecode.map (fn (((e, attr), tc_opt), src_id_opt) => mk_JE_Attribute(e, attr, tc_opt, src_id_opt)) $
     tuple2 (tuple2 (tuple2 (field "value" (delay d_json_expr), field "attr" string),
-                    try (field "type" $ field "typeclass" string)),
+                    try (orElse (field "type" $ field "typeclass" string,
+                                field "type" $ field "type_t" $ field "typeclass" string))),
             orElse (field "variable_reads" $ sub 0 $
                               field "decl_node" $ field "source_id" source_id_tm,
                     orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,

@@ -453,16 +453,25 @@ End
 
 val () = cv_auto_trans extract_func_name_def;
 
+(* Check if a func expression has interface typeclass (for cross-module interface constructors) *)
+Definition is_interface_constructor_def:
+  (is_interface_constructor (JE_Attribute _ _ (SOME tc) _) = (tc = "interface")) /\
+  (is_interface_constructor (JE_Name _ (SOME tc) _) = (tc = "interface")) /\
+  (is_interface_constructor _ = F)
+End
+
+val () = cv_auto_trans is_interface_constructor_def;
+
 (* Extract the innermost module's source_id from a module chain *)
 (* For lib1: returns SOME 0 (from JE_Name) *)
 (* For lib1.lib2: returns SOME 1 (from the .lib2 Attribute) *)
 Definition extract_innermost_module_src_def:
-  (* Attribute with module typeclass has source_id directly *)
+  (* Attribute with module/interface typeclass has source_id directly *)
   (extract_innermost_module_src (JE_Attribute _ _ (SOME tc) src_id_opt) =
-    if tc = "module" then SOME src_id_opt else NONE) /\
-  (* JE_Name with module typeclass *)
+    if tc = "module" ∨ tc = "interface" then SOME src_id_opt else NONE) /\
+  (* JE_Name with module/interface typeclass *)
   (extract_innermost_module_src (JE_Name _ (SOME tc) src_id_opt) =
-    if tc = "module" then SOME src_id_opt else NONE) /\
+    if tc = "module" ∨ tc = "interface" then SOME src_id_opt else NONE) /\
   (* Other cases *)
   (extract_innermost_module_src _ = NONE)
 End
@@ -642,8 +651,9 @@ Definition translate_expr_def:
          | _ => Call (IntCall (NONE, "pop")) args' NONE)
     (* self.func(args) - internal call *)
     | JE_Attribute (JE_Name "self" _ _) fname _ _ => Call (IntCall (NONE, fname)) args' NONE
-    (* Module struct constructor or module function call *)
-    | _ => let nsid = source_id_to_nsid src_id_opt;
+    (* Module struct constructor, interface constructor, or module function call *)
+    | _ => if is_interface_constructor func then HD args'
+           else let nsid = source_id_to_nsid src_id_opt;
                fname = extract_func_name func in
            (case ret_ty of
               JT_Struct sname =>
