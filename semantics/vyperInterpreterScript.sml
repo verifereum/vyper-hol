@@ -238,8 +238,9 @@ End
 
 Definition signed_int_mod_def:
   signed_int_mod b i =
-    let r = int_mod i &(2 ** b) in
-      if r ≥ &(2 ** (b − 1)) then r − &(2 ** b) else r
+    let n = 2 ** b in
+    let r = int_mod i &n in
+      if r ≥ &(2 ** (b − 1)) then r − &n else r
 End
 
 (* signed_int_mod is equivalent to w2i (i2w i) at the corresponding word width *)
