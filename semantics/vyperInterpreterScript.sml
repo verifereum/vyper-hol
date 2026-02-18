@@ -2829,6 +2829,16 @@ End
 
 val () = cv_auto_trans exactly_one_option_def;
 
+(* Check whether variable n is declared as Immutable (not Constant) in toplevels *)
+Definition is_immutable_decl_def:
+  is_immutable_decl n [] = F ∧
+  is_immutable_decl n (VariableDecl _ Immutable vid _ :: ts) =
+    (if string_to_num vid = n then T else is_immutable_decl n ts) ∧
+  is_immutable_decl n (_ :: ts) = is_immutable_decl n ts
+End
+
+val () = cv_auto_trans is_immutable_decl_def;
+
 Definition immutable_target_def:
   immutable_target (imms: num |-> value) id n =
   case FLOOKUP imms n of SOME _ => SOME $ ImmutableVar id
@@ -3124,7 +3134,15 @@ Definition evaluate_def:
 	    else NONE;
     ivo <- if cx.txn.is_creation
            then do imms <- get_immutables cx (current_module cx);
-                   return $ immutable_target imms id n
+                   case immutable_target imms id n of
+                   | NONE => return NONE
+                   | SOME tgt => do
+                       ts <- lift_option
+                               (get_module_code cx (current_module cx))
+                               "NameTarget get_module_code";
+                       check (is_immutable_decl n ts) "assign to constant";
+                       return (SOME tgt)
+                     od
                 od
            else return NONE;
     v <- lift_sum $ exactly_one_option svo ivo;

@@ -124,7 +124,15 @@ Definition eval_base_target_cps_def:
                 else NONE;
         ivo <- if cx.txn.is_creation
                then do imms <- get_immutables cx (current_module cx);
-                       return $ immutable_target imms id n
+                       case immutable_target imms id n of
+                       | NONE => return NONE
+                       | SOME tgt => do
+                           ts <- lift_option
+                                   (get_module_code cx (current_module cx))
+                                   "NameTarget get_module_code";
+                           check (is_immutable_decl n ts) "assign to constant";
+                           return (SOME tgt)
+                         od
                     od
                else return NONE;
         v <- lift_sum $ exactly_one_option svo ivo;
