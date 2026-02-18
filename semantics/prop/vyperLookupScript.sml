@@ -979,7 +979,7 @@ Proof
   simp[valid_lookups_def, var_in_scope_fempty_prepend]
 QED
 
-Theorem fcs_fempty:
+Theorem fcs_fempty[local]:
   ∀ni rest.
     find_containing_scope ni (FEMPTY :: rest) =
     OPTION_MAP (λ(pre,env,a,post). (FEMPTY::pre,env,a,post))
