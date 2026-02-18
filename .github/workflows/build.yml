@@ -7,6 +7,12 @@ on:
     - main
   pull_request:
 
+concurrency:
+  # Cancel older in-progress runs from same PR/workflow.
+  # Push-triggered runs use unique run_id so they never cancel each other.
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
