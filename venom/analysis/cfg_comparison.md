@@ -1,67 +1,39 @@
-CFG Analysis Parity Notes
-=========================
+CFG Analysis Parity Notes (Vyper vs HOL)
+========================================
 
-This note captures the disparities found between:
+This note compares the Vyper CFG analysis with the HOL CFG analysis in
+`venom/analysis/cfgAnalysisScript.sml`. We intentionally ignore the
+compiler-pass-definitions branch.
 
-- this branch’s HOL CFG (`venom/analysis/cfgAnalysisScript.sml`)
-- the compiler-pass-definitions branch (`origin/compiler-pass-definitions`)
-- the Python Vyper implementation (`vyper/venom/analysis/cfg.py`)
+Vyper (Python) reference
+------------------------
 
-It is intentionally concrete so we can track parity changes.
+Source: `vyper/venom/analysis/cfg.py`
 
-Disparities vs Vyper (Python)
+Key behaviors:
+- Successor order: `cfg_out` is populated using `reversed(bb.out_bbs)`.
+- DFS postorder: visit successors first, then add the block to `_dfs`.
+- DFS preorder: yielded by a separate recursive walk.
+- Reachability: per-block boolean map.
+- Entry: `IRFunction.entry` is the first block in insertion order.
+- Optional APIs: add/remove edges and invalidation hooks.
+
+HOL implementation (this branch)
+--------------------------------
+
+Location: `venom/analysis/cfgAnalysisScript.sml`
+
+Parity summary:
+- Successor order matches Vyper (reverse order).
+- DFS postorder matches Vyper (append after visiting successors).
+- DFS preorder is computed explicitly.
+- Reachability is stored as `label -> bool` map.
+- Entry is `HD fn.fn_blocks` (first block), matching `IRFunction.entry`.
+- We provide `cfg_is_normalized` predicate (equivalent to Vyper’s check).
+
+Known differences / non-goals
 -----------------------------
 
-1) Successor order
-- Vyper inserts successors in *reverse* order of `bb.out_bbs`:
-  `for next_bb in reversed(bb.out_bbs)`
-- Our branch previously used successors in the direct order.
-- compiler-pass-definitions also reverses.
-
-Impact: DFS and worklist order differ; analyses like liveness can converge to
-the same fixpoint but do not mirror Vyper’s traversal order.
-
-2) DFS postorder list orientation
-- Vyper’s DFS postorder `_dfs` preserves postorder (visit succs, then add bb).
-- Our branch previously built `cfg_dfs_post` by consing on EXIT, which produced
-  the reverse of Vyper’s order.
-- compiler-pass-definitions builds postorder with `orders ++ [lbl]`, matching Vyper.
-
-3) Missing DFS preorder
-- Vyper exposes `dfs_pre_walk` (used by other analyses).
-- compiler-pass-definitions contains `dfs_pre`.
-- Our branch originally had no preorder list.
-
-4) Reachability shape
-- Vyper stores `reachable: bb -> bool`.
-- compiler-pass-definitions stores `reachable: label -> bool`.
-- Our branch stored `cfg_reachable` as a list of labels (membership test only).
-
-5) Entry block choice
-- Vyper uses `function.entry`.
-- compiler-pass-definitions uses the first block `bb :: _`.
-- Our branch uses `entry_block fn` (needs to be equivalent to Vyper’s entry).
-
-6) Dynamic update hooks
-- Vyper supports `add_cfg_in/out`, `remove_cfg_in/out`, `invalidate`.
-- HOL analysis is pure and has no update/invalidate API (expected), but this is
-  a semantic difference if we later model in-place CFG mutation.
-
-Status / Actions in this branch
--------------------------------
-
-- Successor order reversed to match Vyper.
-- DFS postorder switched to the recursive, append-based form (postorder).
-- DFS preorder added.
-- Reachability now modeled as a map `label -> bool`.
-- Entry selection now uses the *first block* (`HD fn.fn_blocks`), matching
-  Vyper’s `IRFunction.entry` which is the first basic block in insertion order.
-- Added `cfg_is_normalized` predicate (mirrors Vyper’s `is_normalized` check).
-- Entry still uses `entry_block fn` (should be checked to equal Vyper entry).
-
-Remaining differences to consider
----------------------------------
-
-- Optional dynamic-update APIs only if we decide to model in-place mutation.
-- If `fn_name` differs from the entry block label, that is allowed (but then
-  `fn_wf_entry` does not hold). We do not rely on that invariant for entry.
+- We do not implement in-place mutation hooks (`add_cfg_in/out`, `remove_cfg_in/out`)
+  or invalidation; HOL analysis is pure. If we later model a mutable analysis cache,
+  we may add these APIs, but semantics of the analysis output already match Vyper.

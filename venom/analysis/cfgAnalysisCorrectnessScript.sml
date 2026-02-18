@@ -62,8 +62,8 @@ QED
    Structural correctness statements (cheated)
    ========================================================================== *)
 
-(* cfg_analyze produces succs that match bb_succs on each block. *)
-Theorem cfg_analyze_succs_correct:
+(* cfg_analyze preserves bb_succs on each block. *)
+Theorem cfg_analyze_preserves_bb_succs:
   !fn bb.
     MEM bb fn.fn_blocks ==>
     cfg_succs_of (cfg_analyze fn) bb.bb_label = bb_succs bb
@@ -72,7 +72,7 @@ Proof
 QED
 
 (* preds are the inverse edge relation of succs. *)
-Theorem cfg_analyze_preds_correct:
+Theorem cfg_analyze_inverse_edges_correct:
   !fn bb pred_lbl.
     MEM bb fn.fn_blocks ==>
     (MEM pred_lbl (cfg_preds_of (cfg_analyze fn) bb.bb_label) <=>
