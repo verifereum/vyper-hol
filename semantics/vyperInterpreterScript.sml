@@ -55,18 +55,23 @@ Datatype:
   | AttrSubscript identifier
 End
 
-(* since HashMaps can only appear at the top level, they are not mutually
-* recursive with other `value`s, and we have `toplevel_value` as follows: *)
+(* since HashMaps and storage arrays can only appear at the top level, they are
+* not mutually recursive with other `value`s, and we have `toplevel_value`: *)
 (* HashMapRef stores a base slot, key type, and value_type for lazy storage access.
    When subscripted:
    - If value_type is HashMapT kt vt, returns HashMapRef with new slot and kt
-   - If value_type is Type t, reads from storage at the computed slot *)
+   - If value_type is Type t, reads from storage at the computed slot
+   ArrayRef stores a base slot, element type_value, and bound for lazy storage
+   access. When subscripted, computes the element slot offset instead of
+   materializing the entire array. *)
 
 Datatype:
-  toplevel_value = Value value | HashMapRef bool bytes32 type value_type
+  toplevel_value = Value value
+                 | HashMapRef bool bytes32 type value_type
+                 | ArrayRef bool bytes32 type_value bound
 End
 
-val toplevel_value_CASE_rator =
+Theorem toplevel_value_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="vyperInterpreter",Tyop="toplevel_value"}));
 
@@ -76,6 +81,13 @@ Definition is_Value_def[simp]:
 End
 
 val () = cv_auto_trans is_Value_def;
+
+Definition is_HashMapRef_def[simp]:
+  (is_HashMapRef (HashMapRef _ _ _ _) ⇔ T) ∧
+  (is_HashMapRef _ ⇔ F)
+End
+
+val () = cv_auto_trans is_HashMapRef_def;
 
 (* Evaluation of some of the simpler language constructs *)
 
@@ -599,16 +611,28 @@ End
 val () = cv_auto_trans value_to_key_def;
 
 Definition evaluate_subscript_def:
-  evaluate_subscript (Value (ArrayV av)) (IntV _ i) =
+  evaluate_subscript tenv (Value (ArrayV av)) (IntV _ i) =
   (case array_index av i
    of SOME v => INL $ INL $ Value v
     | _ => INR "subscript array_index") ∧
-  evaluate_subscript (HashMapRef is_transient slot kt vt) kv =
+  evaluate_subscript tenv (HashMapRef is_transient slot kt vt) kv =
   (let new_slot = hashmap_slot slot $ encode_hashmap_key kt kv in
    case vt
    of HashMapT kt' vt' => INL $ INL $ HashMapRef is_transient new_slot kt' vt'
-    | Type t => INL $ INR (is_transient, new_slot, t)) ∧
-  evaluate_subscript _ _ = INR "evaluate_subscript"
+    | Type t =>
+        (case evaluate_type tenv t of
+         | SOME tv => INL $ INR (is_transient, new_slot, tv)
+         | NONE => INR "evaluate_subscript evaluate_type")) ∧
+  evaluate_subscript tenv (ArrayRef is_transient base_slot elem_tv bd) (IntV _ i) =
+  (if 0 ≤ i ∧ Num i < bound_length bd then
+    let elem_offset = (case bd of Fixed _ => 0 | Dynamic _ => 1) in
+    let slot = base_slot + n2w (elem_offset + Num i * type_slot_size elem_tv) in
+    case elem_tv of
+    | ArrayTV inner_tv inner_bd =>
+        INL $ INL $ ArrayRef is_transient slot inner_tv inner_bd
+    | _ => INL $ INR (is_transient, slot, elem_tv)
+   else INR "subscript array out of bounds") ∧
+  evaluate_subscript _ _ _ = INR "evaluate_subscript"
 End
 
 val () = cv_auto_trans evaluate_subscript_def;
@@ -898,6 +922,14 @@ End
 
 val () = cv_auto_trans pop_element_def;
 
+Definition popped_value_def:
+  popped_value (ArrayV (DynArrayV _ _ vs)) =
+    (if vs = [] then INR "pop empty" else INL $ LAST vs) ∧
+  popped_value _ = INR "popped_value"
+End
+
+val () = cv_auto_trans popped_value_def;
+
 Definition insert_sarray_def:
   insert_sarray k v [] = [(k:num,v:value)] ∧
   insert_sarray k v ((k1,v1)::al) =
@@ -938,6 +970,10 @@ Datatype:
   | AppendOp value
   | PopOp
 End
+
+Theorem assign_operation_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vyperInterpreter",Tyop="assign_operation"}));
 
 Definition assign_subscripts_def:
   assign_subscripts a [] (Replace v) = INL v (* TODO: cast to type of a *) ∧
@@ -1547,6 +1583,18 @@ Theorem prod_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
 
+Theorem value_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vyperTypeValue",Tyop="value"}));
+
+Theorem type_value_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vyperTypeValue",Tyop="type_value"}));
+
+Theorem bound_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vyperAST",Tyop="bound"}));
+
 Definition lift_option_def:
   lift_option x str =
     case x of SOME v => return v | NONE => raise $ Error str
@@ -1601,7 +1649,7 @@ Datatype:
   | HashMapVarDecl bool type value_type (* is_transient, key type, value type *)
 End
 
-val var_decl_info_CASE_rator =
+Theorem var_decl_info_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="vyperInterpreter",Tyop="var_decl_info"}));
 
@@ -1736,8 +1784,12 @@ Definition lookup_global_def:
     | SOME (StorageVarDecl is_transient typ, id) => do
         var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient src_id_opt id) "lookup_global var_slot";
         tv <- lift_option (evaluate_type tenv typ) "lookup_global evaluate_type";
-        v <- read_storage_slot cx is_transient (n2w var_slot) tv;
-        return (Value v)
+        case tv of
+        | ArrayTV elem_tv bd => return (ArrayRef is_transient (n2w var_slot) elem_tv bd)
+        | _ => do
+            v <- read_storage_slot cx is_transient (n2w var_slot) tv;
+            return (Value v)
+          od
       od
     | SOME (HashMapVarDecl is_transient kt vt, id) => do
         var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient src_id_opt id) "lookup_global hashmap var_slot";
@@ -1748,7 +1800,8 @@ End
 
 val () = lookup_global_def
   |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator,
-            prod_CASE_rator, var_decl_info_CASE_rator, UNCURRY, LET_THM]
+            prod_CASE_rator, var_decl_info_CASE_rator,
+            type_value_CASE_rator, UNCURRY, LET_THM]
   |> cv_auto_trans;
 
 Definition update_immutable_def:
@@ -1952,6 +2005,39 @@ val () = get_Value_def
   |> SIMP_RULE std_ss [FUN_EQ_THM]
   |> cv_auto_trans;
 
+Definition materialise_def:
+  materialise cx (ArrayRef is_transient base_slot elem_tv bd) = do
+    v <- read_storage_slot cx is_transient base_slot (ArrayTV elem_tv bd);
+    return v
+  od ∧
+  materialise cx (Value v) = return v ∧
+  materialise _ _ = raise $ Error "materialise"
+End
+
+val () = materialise_def
+  |> SRULE [bind_def, FUN_EQ_THM, LET_THM, toplevel_value_CASE_rator]
+  |> cv_auto_trans;
+
+Definition toplevel_array_length_def:
+  toplevel_array_length cx (ArrayRef is_transient base_slot _ (Fixed n)) =
+    return $ (&n : num) ∧
+  toplevel_array_length cx (ArrayRef is_transient base_slot _ (Dynamic _)) = do
+    storage <- get_storage_backend cx is_transient;
+    return $ &(w2n (lookup_storage base_slot storage))
+  od ∧
+  toplevel_array_length cx (Value (ArrayV av)) =
+    return $ &(array_length av) ∧
+  toplevel_array_length cx (Value (BytesV _ ls)) =
+    return $ &(LENGTH ls) ∧
+  toplevel_array_length cx (Value (StringV _ ls)) =
+    return $ &(LENGTH ls) ∧
+  toplevel_array_length _ _ = raise $ Error "toplevel_array_length"
+End
+
+val () = toplevel_array_length_def
+  |> SRULE [bind_def, FUN_EQ_THM, LET_THM, toplevel_value_CASE_rator]
+  |> cv_auto_trans;
+
 Datatype:
   location
   = ScopedVar identifier
@@ -1967,6 +2053,54 @@ End
 
 Type base_target_value = “:location # subscript list”;
 
+(* Walk through nested array subscripts computing the final element slot *)
+Definition resolve_array_element_def:
+  resolve_array_element cx is_transient base_slot (ArrayTV elem_tv bd) ((IntSubscript idx)::rest) = do
+    elem_offset <- (case bd of
+     | Fixed n => do
+         check (0 ≤ idx ∧ Num idx < n) "array fixed oob";
+         return 0
+       od
+     | Dynamic n => do
+         check (0 ≤ idx ∧ Num idx < n) "array dynamic capacity oob";
+         storage <- get_storage_backend cx is_transient;
+         stored_len <<- w2n (lookup_storage base_slot storage);
+         check (Num idx < stored_len) "array dynamic length oob";
+         return 1
+       od);
+    elem_slot <<- base_slot + n2w (elem_offset + Num idx * type_slot_size elem_tv);
+    resolve_array_element cx is_transient elem_slot elem_tv rest
+  od ∧
+  resolve_array_element _ _ _ (ArrayTV _ _) (_::_) =
+    raise (Error "resolve_array_element: array needs int subscript") ∧
+  resolve_array_element _ _ base_slot tv rest = return (base_slot, tv, rest)
+End
+
+val resolve_array_element_pre_def = resolve_array_element_def
+  |> SRULE [bind_def, FUN_EQ_THM, LET_THM, check_def,
+            ignore_bind_def, bound_CASE_rator]
+  |> cv_auto_trans_pre "resolve_array_element_pre";
+
+Theorem resolve_array_element_pre[cv_pre]:
+  ∀a b c d e f. resolve_array_element_pre a b c d e f
+Proof
+  ho_match_mp_tac resolve_array_element_ind \\ rw[]
+  \\ rw[Once resolve_array_element_pre_def]
+QED
+
+Definition assign_result_def:
+  assign_result PopOp old_val subs = do
+    arr <- lift_sum $ evaluate_subscripts old_val subs;
+    p <- lift_sum $ popped_value arr;
+    return $ SOME p
+  od ∧
+  assign_result _ _ _ = return NONE
+End
+
+val () = assign_result_def
+  |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
+  |> cv_auto_trans;
+
 Definition assign_target_def:
   assign_target cx (BaseTargetV (ScopedVar id) is) ao = do
     ni <<- string_to_num id;
@@ -1974,7 +2108,7 @@ Definition assign_target_def:
     (pre, env, a, rest) <- lift_option (find_containing_scope ni sc) "assign_target lookup";
     a' <- lift_sum $ assign_subscripts a (REVERSE is) ao;
     set_scopes $ pre ++ env |+ (ni, a') :: rest;
-    return $ Value a
+    assign_result ao a (REVERSE is)
   od ∧
   assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) is) ao = do
     ni <<- string_to_num id;
@@ -1983,32 +2117,60 @@ Definition assign_target_def:
     tenv <<- get_tenv cx;
     case tv of
     | Value v => do
-        (* Regular variable: apply assignment and write back *)
         v' <- lift_sum $ assign_subscripts v (REVERSE is) ao;
         set_global cx src_id_opt ni v';
-        return tv
+        assign_result ao v (REVERSE is)
       od
     | HashMapRef is_transient base_slot kt vt => do
-        (* HashMap: compute slot, read/modify/write storage *)
-        (* First subscript is always for the outermost hashmap *)
         (first_sub, rest_subs) <- lift_option
           (case REVERSE is of x::xs => SOME (x, xs) | [] => NONE)
           "assign_target hashmap needs subscript";
         (final_type, key_types, remaining_subs) <- lift_option
           (split_hashmap_subscripts vt rest_subs)
           "assign_target split_hashmap_subscripts";
-        (* Compute how many subscripts are for the hashmap (first + nested) *)
         hashmap_subs <<- first_sub :: TAKE (LENGTH rest_subs - LENGTH remaining_subs) rest_subs;
         all_key_types <<- kt :: key_types;
         final_slot <- lift_option
           (compute_hashmap_slot base_slot all_key_types hashmap_subs)
           "assign_target compute_hashmap_slot";
         final_tv <- lift_option (evaluate_type tenv final_type) "assign_target evaluate_type";
-        (* Read current value, apply assignment, write back *)
         current_val <- read_storage_slot cx is_transient final_slot final_tv;
         new_val <- lift_sum $ assign_subscripts current_val remaining_subs ao;
         write_storage_slot cx is_transient final_slot final_tv new_val;
-        return tv
+        assign_result ao current_val remaining_subs
+      od
+    | ArrayRef is_transient base_slot elem_tv bd => do
+        (elem_slot, final_tv, remaining_subs) <-
+          resolve_array_element cx is_transient base_slot (ArrayTV elem_tv bd) (REVERSE is);
+        case (ao, final_tv) of
+        | (PopOp, ArrayTV pop_elem_tv (Dynamic _)) => do
+            storage <- get_storage_backend cx is_transient;
+            stored_len <<- w2n (lookup_storage elem_slot storage);
+            check (stored_len > 0) "pop empty storage array";
+            last_idx <<- stored_len - 1;
+            last_slot <<- elem_slot + n2w (1 + last_idx * type_slot_size pop_elem_tv);
+            popped <- read_storage_slot cx is_transient last_slot pop_elem_tv;
+            write_storage_slot cx is_transient last_slot pop_elem_tv (default_value pop_elem_tv);
+            write_storage_slot cx is_transient elem_slot (BaseTV (UintT 256))
+              (IntV (Unsigned 256) &last_idx);
+            return $ SOME popped
+          od
+        | (AppendOp v, ArrayTV app_elem_tv (Dynamic n)) => do
+            storage <- get_storage_backend cx is_transient;
+            stored_len <<- w2n (lookup_storage elem_slot storage);
+            check (stored_len < n) "append full storage array";
+            new_slot <<- elem_slot + n2w (1 + stored_len * type_slot_size app_elem_tv);
+            write_storage_slot cx is_transient new_slot app_elem_tv v;
+            write_storage_slot cx is_transient elem_slot (BaseTV (UintT 256))
+              (IntV (Unsigned 256) &(stored_len + 1));
+            return NONE
+          od
+        | _ => do
+            current_val <- read_storage_slot cx is_transient elem_slot final_tv;
+            new_val <- lift_sum $ assign_subscripts current_val remaining_subs ao;
+            write_storage_slot cx is_transient elem_slot final_tv new_val;
+            assign_result ao current_val remaining_subs
+          od
       od
   od ∧
   assign_target cx (BaseTargetV (ImmutableVar id) is) ao = do
@@ -2018,20 +2180,18 @@ Definition assign_target_def:
     a <- lift_option (FLOOKUP imms ni) "assign_target ImmutableVar";
     a' <- lift_sum $ assign_subscripts a (REVERSE is) ao;
     set_immutable cx src ni a';
-    return $ Value a
+    assign_result ao a (REVERSE is)
   od ∧
   assign_target cx (TupleTargetV gvs) (Replace (ArrayV (TupleV vs))) = do
     check (LENGTH gvs = LENGTH vs) "TupleTargetV length";
-    ws <- assign_targets cx gvs vs;
-    return $ Value $ ArrayV (TupleV ws)
+    assign_targets cx gvs vs;
+    return NONE
   od ∧
   assign_target _ _ _ = raise (Error "assign_target") ∧
-  assign_targets cx [] [] = return [] ∧
+  assign_targets cx [] [] = return () ∧
   assign_targets cx (gv::gvs) (v::vs) = do
-    tw <- assign_target cx gv (Replace v);
-    w <- get_Value tw;
-    ws <- assign_targets cx gvs vs;
-    return $ w::ws
+    assign_target cx gv (Replace v);
+    assign_targets cx gvs vs
   od ∧
   assign_targets _ _ _ = raise (Error "assign_targets")
 End
@@ -2039,7 +2199,9 @@ End
 val assign_target_pre_def = assign_target_def
   |> SRULE [FUN_EQ_THM, bind_def, LET_RATOR, ignore_bind_def,
             UNCURRY, prod_CASE_rator, option_CASE_rator,
-            toplevel_value_CASE_rator, lift_option_def]
+            toplevel_value_CASE_rator, lift_option_def,
+            type_value_CASE_rator, bound_CASE_rator,
+            assign_operation_CASE_rator]
   |> cv_auto_trans_pre "assign_target_pre assign_targets_pre";
 
 Theorem assign_target_pre[cv_pre]:
@@ -2791,6 +2953,21 @@ End
 
 val () = cv_auto_trans run_ext_call_def;
 
+(* Dynamic array bounds check: reads stored length from storage *)
+Definition check_array_bounds_def:
+  check_array_bounds cx (ArrayRef is_transient base_slot _ (Dynamic _)) (IntV _ i) = do
+    storage <- get_storage_backend cx is_transient;
+    stored_len <<- w2n (lookup_storage base_slot storage);
+    check (0 ≤ i ∧ Num i < stored_len) "subscript dynamic array oob"
+  od ∧
+  check_array_bounds _ _ _ = return ()
+End
+
+val () = check_array_bounds_def
+  |> SRULE [bind_def, FUN_EQ_THM, LET_THM, check_def,
+            toplevel_value_CASE_rator]
+  |> cv_auto_trans;
+
 (* top-level definition of the Vyper interpreter *)
 
 Definition evaluate_def:
@@ -2800,7 +2977,7 @@ Definition evaluate_def:
   eval_stmt cx (Return NONE) = raise $ ReturnException NoneV ∧
   eval_stmt cx (Return (SOME e)) = do
     tv <- eval_expr cx e;
-    v <- get_Value tv;
+    v <- materialise cx tv;
     raise $ ReturnException v
   od ∧
   eval_stmt cx (Raise e) = do
@@ -2827,21 +3004,21 @@ Definition evaluate_def:
   od ∧
   eval_stmt cx (AnnAssign id typ e) = do
     tv <- eval_expr cx e;
-    v <- get_Value tv;
+    v <- materialise cx tv;
     (* TODO: check type *)
     new_variable id v
   od ∧
   eval_stmt cx (Append t e) = do
     (loc, sbs) <- eval_base_target cx t;
     tv <- eval_expr cx e;
-    v <- get_Value tv;
+    v <- materialise cx tv;
     assign_target cx (BaseTargetV loc sbs) (AppendOp v);
     return ()
   od ∧
   eval_stmt cx (Assign g e) = do
     gv <- eval_target cx g;
     tv <- eval_expr cx e;
-    v <- get_Value tv;
+    v <- materialise cx tv;
     assign_target cx gv (Replace v);
     return ()
   od ∧
@@ -2870,8 +3047,7 @@ Definition evaluate_def:
   od ∧
   eval_stmt cx (Expr e) = do
     tv <- eval_expr cx e;
-    get_Value tv;
-    return ()
+    check (¬is_HashMapRef tv) "Expr HashMapRef"
   od ∧
   eval_stmts cx [] = return () ∧
   eval_stmts cx (s::ss) = do
@@ -2879,7 +3055,7 @@ Definition evaluate_def:
   od ∧
   eval_iterator cx (Array e) = do
     tv <- eval_expr cx e;
-    v <- get_Value tv;
+    v <- materialise cx tv;
     vs <- lift_option (extract_elements v) "For not ArrayV";
     return vs
   od ∧
@@ -2970,9 +3146,9 @@ Definition evaluate_def:
     tv2 <- eval_expr cx e2;
     v2 <- get_Value tv2;
     tenv <<- get_tenv cx;
-    res <- lift_sum $ evaluate_subscript tv1 v2;
-    case res of INL v => return v | INR (is_transient, slot, t) => do
-      tv <- lift_option (evaluate_type tenv t) "Subscript evaluate_type";
+    check_array_bounds cx tv1 v2;
+    res <- lift_sum $ evaluate_subscript tenv tv1 v2;
+    case res of INL v => return v | INR (is_transient, slot, tv) => do
       v <- read_storage_slot cx is_transient slot tv;
       return $ Value v
     od
@@ -2985,18 +3161,22 @@ Definition evaluate_def:
   od ∧
   eval_expr cx (Builtin bt es) = do
     check (builtin_args_length_ok bt (LENGTH es)) "Builtin args";
-    vs <- eval_exprs cx es;
-    acc <- get_accounts;
-    v <- lift_sum $ evaluate_builtin cx acc bt vs;
+    v <- if bt = Len then do
+      tv <- eval_expr cx (HD es);
+      len <- toplevel_array_length cx tv;
+      return $ IntV (Unsigned 256) (&len)
+    od else do
+      vs <- eval_exprs cx es;
+      acc <- get_accounts;
+      lift_sum $ evaluate_builtin cx acc bt vs
+    od;
     return $ Value v
   od ∧
   eval_expr cx (Pop bt) = do
     (loc, sbs) <- eval_base_target cx bt;
-    tv <- assign_target cx (BaseTargetV loc sbs) PopOp;
-    v <- get_Value tv;
-    av <- lift_sum $ evaluate_subscripts v (REVERSE sbs);
-    vs <- lift_option (extract_elements av) "pop not ArrayV";
-    return $ Value $ LAST vs
+    popped <- assign_target cx (BaseTargetV loc sbs) PopOp;
+    v <- lift_option popped "Pop returned NONE";
+    return $ Value v
   od ∧
   eval_expr cx (TypeBuiltin tb typ es) = do
     check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args";
@@ -3074,7 +3254,7 @@ Definition evaluate_def:
   eval_exprs cx [] = return [] ∧
   eval_exprs cx (e::es) = do
     tv <- eval_expr cx e;
-    v <- get_Value tv;
+    v <- materialise cx tv;
     vs <- eval_exprs cx es;
     return $ v::vs
   od
@@ -3125,6 +3305,10 @@ Termination
     \\ qmatch_goalsub_abbrev_tac`exprs_bound fts (DROP n dflts)`
     \\ qspecl_then[`fts`,`n`,`dflts`]mp_tac exprs_bound_DROP
     \\ simp[])
+  \\ TRY (
+    rename1`builtin_args_length_ok Len`
+    \\ gvs[builtin_args_length_ok_def, check_def, assert_def,
+           LENGTH_EQ_NUM_compute, bound_def] \\ NO_TAC)
   \\ gvs[check_def, assert_def]
   \\ gvs[push_function_def, return_def]
   \\ gvs[lift_option_def, CaseEq"option", CaseEq"prod", option_CASE_rator,

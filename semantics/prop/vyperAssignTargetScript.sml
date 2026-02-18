@@ -1,7 +1,7 @@
 Theory vyperAssignTarget
 
 Ancestors
-  vyperInterpreter vyperScopePreservation vyperLookup
+  vyperInterpreter vyperScopePreservation vyperStatePreservation vyperLookup
 
 (*********************************************************************************)
 (* Helper lemmas for immutables preservation *)
@@ -62,14 +62,11 @@ Theorem assign_targets_cons_preserves_immutables_dom[local]:
          IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms') n))
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >>
-  simp[Once assign_target_def, bind_def, get_Value_def, AllCaseEqs(),
+  simp[Once assign_target_def, bind_def, ignore_bind_def, AllCaseEqs(),
        return_def, raise_def] >>
   strip_tac >> gvs[] >>
-  rename1 `assign_target _ _ _ st = (INL tw, s_mid)` >>
-  rename1 `get_Value tw s_mid = (INL w, s_mid2)` >>
-  rename1 `assign_targets _ _ _ s_mid2 = (INL ws, st')` >>
-  `s_mid = s_mid2` by (Cases_on `tw` >> gvs[get_Value_def, return_def, raise_def]) >>
-  gvs[] >>
+  rename1 `assign_target _ _ _ st = (INL _, s_mid)` >>
+  rename1 `assign_targets _ _ _ s_mid = (INL _, st')` >>
   last_x_assum (qspec_then `st` mp_tac) >> disch_then drule >> strip_tac >>
   first_x_assum (qspec_then `s_mid` mp_tac) >> disch_then drule >> strip_tac >>
   conj_tac >- metis_tac[] >>
@@ -107,7 +104,8 @@ Proof
    PairCases_on `fcs_result` >>
    gvs[bind_def, AllCaseEqs(), return_def, raise_def, set_scopes_def] >>
    Cases_on `assign_subscripts fcs_result2 (REVERSE is) ao` >>
-   gvs[return_def, raise_def] >> rw[] >> gvs[]) >-
+   gvs[return_def, raise_def] >> rw[] >> gvs[] >>
+   imp_res_tac assign_result_state >> gvs[] >> rw[] >> gvs[]) >-
   (* TopLevelVar case: storage operations don't touch immutables *)
    (strip_tac >>
     gvs[Once assign_target_def, AllCaseEqs(), return_def, raise_def,
@@ -119,9 +117,10 @@ Proof
     >- (Cases_on `assign_subscripts v (REVERSE is) ao` >> gvs[return_def, raise_def] >>
         Cases_on `set_global cx src_id_opt (string_to_num id) x s''` >> gvs[] >>
         drule set_global_immutables >> strip_tac >> gvs[return_def] >>
-        Cases_on `q` >> gvs[return_def, raise_def] >> rw[] >> gvs[])
+        Cases_on `q` >> gvs[return_def, raise_def] >>
+        imp_res_tac assign_result_state >> gvs[] >> rw[] >> gvs[])
     (* HashMapRef case *)
-    >> (Cases_on `REVERSE is` >> gvs[return_def, raise_def] >>
+    >- (Cases_on `REVERSE is` >> gvs[return_def, raise_def] >>
         Cases_on `split_hashmap_subscripts v t'` >> gvs[bind_def, return_def, raise_def] >>
         PairCases_on `x` >> gvs[] >>
         Cases_on `compute_hashmap_slot c (t::x1) (h::TAKE (LENGTH t' − LENGTH x2) t')` >>
@@ -133,7 +132,29 @@ Proof
         Cases_on `assign_subscripts x'' x2 ao` >> gvs[return_def, raise_def] >>
         Cases_on `write_storage_slot cx b x x' x'³' r` >> gvs[] >>
         imp_res_tac write_storage_slot_immutables >> gvs[] >>
-        Cases_on `q` >> gvs[] >> rw[] >> gvs[])) >-
+        Cases_on `q` >> gvs[] >>
+        imp_res_tac assign_result_state >> gvs[] >> rw[] >> gvs[])
+    (* ArrayRef case *)
+    >> imp_res_tac resolve_array_element_state >> gvs[]
+    >> gvs[AllCaseEqs(), type_value_CASE_rator]
+    >> imp_res_tac resolve_array_element_state >> gvs[]
+    >> pairarg_tac
+    >> gvs[bind_def, type_value_CASE_rator, AllCaseEqs(), sum_CASE_rator,
+           return_def, raise_def, assign_operation_CASE_rator,
+           bound_CASE_rator, check_def, assert_def]
+    >> imp_res_tac assign_result_state
+    >> imp_res_tac write_storage_slot_immutables
+    >> imp_res_tac read_storage_slot_immutables
+    >> imp_res_tac get_storage_backend_state
+    >> gvs[] >> rw[] >> gvs[]
+    >> pairarg_tac
+    >> gvs[bind_def, AllCaseEqs(), sum_CASE_rator,
+           option_CASE_rator, return_def, raise_def]
+    >> imp_res_tac write_storage_slot_immutables
+    >> imp_res_tac read_storage_slot_immutables
+    >> imp_res_tac assign_result_state
+    >> imp_res_tac get_storage_backend_state
+    >> gvs[] >> rw[] >> gvs[]) >-
   (* ImmutableVar case: updates st.immutables, but preserves domain *)
    (strip_tac >>
     simp[Once assign_target_def, bind_def, get_immutables_def, get_address_immutables_def,
@@ -150,6 +171,7 @@ Proof
     simp[ignore_bind_def, bind_def, set_immutable_def, get_address_immutables_def,
          set_address_immutables_def, lift_option_def, return_def, LET_THM] >>
     strip_tac >> gvs[] >>
+    imp_res_tac assign_result_state >> gvs[] >>
     conj_tac >-
     (rpt strip_tac >> Cases_on `cx.txn.target = tgt` >> simp[alistTheory.ALOOKUP_ADELKEY]) >>
     simp[get_source_immutables_def, set_source_immutables_def,
@@ -235,14 +257,9 @@ Theorem assign_targets_cons_preserves_immutables_addr_dom_rev[local]:
       IS_SOME (ALOOKUP st.immutables cx.txn.target)
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >>
-  simp[Once assign_target_def, bind_def, get_Value_def, AllCaseEqs(),
+  simp[Once assign_target_def, bind_def, ignore_bind_def, AllCaseEqs(),
        return_def, raise_def] >>
-  strip_tac >> gvs[] >>
-  rename1 `assign_target _ _ _ st = (INL tgtw, s_mid)` >>
-  rename1 `get_Value tgtw s_mid = (_, s_mid2)` >>
-  TRY (rename1 `assign_targets _ _ _ s_mid2 = (_, st')`) >>
-  `s_mid = s_mid2` by (Cases_on `tgtw` >> gvs[get_Value_def, return_def, raise_def]) >>
-  gvs[] >> metis_tac[]
+  strip_tac >> gvs[]
 QED
 
 (* Reverse direction: if st' has immutables entry, so does st *)
@@ -274,7 +291,8 @@ Proof
    PairCases_on `fcs_result` >>
    gvs[bind_def, AllCaseEqs(), return_def, raise_def, set_scopes_def] >>
    Cases_on `assign_subscripts fcs_result2 (REVERSE is) ao` >>
-   gvs[return_def, raise_def]) >-
+   gvs[return_def, raise_def] >>
+   imp_res_tac assign_result_state >> gvs[]) >-
   (* TopLevelVar case: storage operations don't touch immutables *)
   (strip_tac >>
    gvs[Once assign_target_def, AllCaseEqs(), return_def, raise_def,
@@ -286,9 +304,10 @@ Proof
    >- (Cases_on `assign_subscripts v (REVERSE is) ao` >> gvs[return_def, raise_def] >>
        Cases_on `set_global cx src_id_opt (string_to_num id) x s''` >> gvs[] >>
        imp_res_tac set_global_immutables >> gvs[return_def] >>
-       Cases_on `q` >> gvs[return_def, raise_def])
+       Cases_on `q` >> gvs[return_def, raise_def] >>
+       imp_res_tac assign_result_state >> gvs[])
    (* HashMapRef case *)
-   >> (Cases_on `REVERSE is` >> gvs[return_def, raise_def] >>
+   >- (Cases_on `REVERSE is` >> gvs[return_def, raise_def] >>
        Cases_on `split_hashmap_subscripts v t'` >> gvs[bind_def, return_def, raise_def] >>
        PairCases_on `x` >> gvs[] >>
        Cases_on `compute_hashmap_slot c (t::x1) (h::TAKE (LENGTH t' − LENGTH x2) t')` >>
@@ -300,7 +319,21 @@ Proof
        Cases_on `assign_subscripts x'' x2 ao` >> gvs[return_def, raise_def] >>
        Cases_on `write_storage_slot cx b x x' x'³' r` >> gvs[] >>
        imp_res_tac write_storage_slot_immutables >> gvs[] >>
-       Cases_on `q` >> gvs[])) >-
+       Cases_on `q` >> gvs[] >>
+       imp_res_tac assign_result_state >> gvs[])
+   (* ArrayRef case *)
+   >> imp_res_tac resolve_array_element_state >> gvs[]
+   >> gvs[AllCaseEqs(), type_value_CASE_rator]
+   >> imp_res_tac resolve_array_element_state >> gvs[]
+   >> pairarg_tac
+   >> gvs[bind_def, type_value_CASE_rator, AllCaseEqs(), sum_CASE_rator,
+          return_def, raise_def, assign_operation_CASE_rator,
+          bound_CASE_rator, check_def, assert_def]
+   >> imp_res_tac assign_result_state
+   >> imp_res_tac write_storage_slot_immutables
+   >> imp_res_tac read_storage_slot_immutables
+   >> imp_res_tac get_storage_backend_state
+   >> gvs[]) >-
   (* ImmutableVar case: get_address_immutables must succeed for any result.
      The goal is IS_SOME st' => IS_SOME st. If st doesn't have the entry,
      get_address_immutables raises, so either we return that error (st' = st)
@@ -367,7 +400,7 @@ Proof
   Cases_on `FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num n)` >> gvs[return_def, raise_def] >>
   simp[set_immutable_def, get_address_immutables_def, lift_option_def, bind_def,
        set_address_immutables_def, return_def, LET_THM] >>
-  strip_tac >> gvs[] >>
+  strip_tac >> gvs[assign_result_def, return_def] >>
   simp[get_source_immutables_def, set_source_immutables_def,
        alistTheory.ALOOKUP_ADELKEY,
        finite_mapTheory.FLOOKUP_UPDATE]
@@ -389,7 +422,7 @@ Proof
   simp[lift_sum_def, assign_subscripts_def, return_def, ignore_bind_def, bind_def] >>
   simp[set_immutable_def, get_address_immutables_def, lift_option_def, bind_def,
        set_address_immutables_def, return_def, LET_THM] >>
-  strip_tac >> gvs[] >>
+  strip_tac >> gvs[assign_result_def, return_def] >>
   simp[get_source_immutables_def, set_source_immutables_def,
        alistTheory.ALOOKUP_ADELKEY,
        finite_mapTheory.FLOOKUP_UPDATE]

@@ -80,7 +80,7 @@ Proof
     (first_x_assum drule >> simp[] >> metis_tac[]) >>
   Cases_on `tv = Value (BoolV F)` >> gvs[raise_def] >>
   qpat_x_assum `∀s'' tv1 t. eval_expr cx e1 s'' = (INL tv1, t) ⇒ _` drule >>
-  simp[] >> metis_tac[]
+  simp[]
 QED
 
 Theorem case_Literal[local]:
@@ -128,18 +128,20 @@ Theorem case_Subscript[local]:
 Proof
   rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def] >>
   imp_res_tac return_state >> imp_res_tac lift_sum_state >>
-  imp_res_tac lift_option_state >> imp_res_tac get_Value_state
-  (* First subgoal is the main success path with case on res' *)
-  >- (Cases_on `res'` >> gvs[return_def, bind_def, AllCaseEqs()]
-      (* INL case - direct return *)
-      >- metis_tac[]
-      (* INR case - storage slot access *)
-      >> PairCases_on `y` >> gvs[bind_def, AllCaseEqs(), lift_option_def, return_def, raise_def]
-      >> imp_res_tac read_storage_slot_state >> gvs[]
-      >> Cases_on `evaluate_type (get_tenv cx) y2` >> gvs[return_def, raise_def]
-      >> metis_tac[])
-  (* Remaining error cases *)
-  >> metis_tac[]
+  imp_res_tac lift_option_state >> imp_res_tac get_Value_state >>
+  imp_res_tac lift_sum_state >>
+  gvs[check_array_bounds_def, bind_def, ignore_bind_def, AllCaseEqs(),
+      check_def, assert_def, return_def, raise_def] >>
+  imp_res_tac get_storage_backend_state >>
+  gvs[return_def, bind_def, AllCaseEqs(), sum_CASE_rator, prod_CASE_rator] >>
+  imp_res_tac return_state >> imp_res_tac lift_sum_state >>
+  imp_res_tac lift_option_state >> imp_res_tac get_Value_state >>
+  imp_res_tac lift_sum_state >>
+  imp_res_tac get_Value_state >>
+  imp_res_tac read_storage_slot_state >>
+  imp_res_tac check_array_bounds_state >>
+  gvs[] >>
+  metis_tac []
 QED
 
 Theorem case_Attribute[local]:
@@ -152,15 +154,21 @@ Theorem case_Attribute[local]:
 Proof
   rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def] >>
   imp_res_tac return_state >> imp_res_tac lift_sum_state >>
-  imp_res_tac get_Value_state >> res_tac >> gvs[] >> metis_tac[]
+  imp_res_tac get_Value_state >> res_tac >> gvs[]
 QED
 
 Theorem case_Builtin[local]:
   ∀cx bt es.
     (∀s'' x t.
-       check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x, t) ⇒
+       check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x, t) ∧
+       bt ≠ Len ⇒
        ∀st res st'.
-         eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st = st') ⇒
+         eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st = st') ∧
+    (∀s'' x t.
+       check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x, t) ∧
+       bt = Len ⇒
+       ∀st res st'.
+         eval_expr cx (HD es) st = (res, st') ⇒ pure_expr (HD es) ⇒ st = st') ⇒
     (∀st res st'.
        eval_expr cx (Builtin bt es) st = (res, st') ⇒
        pure_expr (Builtin bt es) ⇒ st = st')
@@ -168,8 +176,24 @@ Proof
   rpt strip_tac >>
   gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def, ignore_bind_def,
       check_def, assert_def, return_def, raise_def, get_accounts_def, lift_sum_def] >>
-  TRY (Cases_on `evaluate_builtin cx s''.accounts bt vs` >> gvs[return_def, raise_def]) >>
-  first_x_assum drule >> gvs[ETA_THM]
+  Cases_on `bt = Len` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def]
+  (* Len case: eval_expr (HD es) + toplevel_array_length *)
+  (* Len case *)
+  >- (gvs[toplevel_array_length_def, bind_def, AllCaseEqs(),
+          return_def, raise_def, get_accounts_def] >>
+      imp_res_tac get_storage_backend_state >> gvs[] >>
+      imp_res_tac check_array_bounds_state >> gvs[] >>
+      imp_res_tac materialise_state >> gvs[] >>
+      imp_res_tac toplevel_array_length_state >>
+      `pure_expr (HD es)` by
+        (Cases_on `es` >> fs[builtin_args_length_ok_def]) >>
+      first_x_assum drule >> gvs[])
+  (* non-Len case: eval_exprs + evaluate_builtin *)
+  >> TRY (Cases_on `evaluate_builtin cx s''.accounts bt vs` >> gvs[return_def, raise_def]) >>
+  first_x_assum drule >> gvs[ETA_THM, sum_CASE_rator, CaseEq"sum",
+    return_def, raise_def, get_accounts_def, builtin_args_length_ok_def,
+    listTheory.LENGTH_EQ_NUM_compute] >>
+  imp_res_tac toplevel_array_length_state >> gvs[]
 QED
 
 Theorem case_Pop[local]:
@@ -219,7 +243,7 @@ QED
 Theorem case_eval_exprs_cons[local]:
   ∀cx e es.
     (∀s'' tv t s'3' v t'.
-       eval_expr cx e s'' = (INL tv, t) ∧ get_Value tv s'3' = (INL v, t') ⇒
+       eval_expr cx e s'' = (INL tv, t) ∧ materialise cx tv s'3' = (INL v, t') ⇒
        ∀st res st'.
          eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st = st') ∧
     (∀st res st'.
@@ -229,7 +253,7 @@ Theorem case_eval_exprs_cons[local]:
        EVERY pure_expr (e::es) ⇒ st = st')
 Proof
   rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def] >>
-  imp_res_tac get_Value_state >> gvs[] >>
+  imp_res_tac materialise_state >> gvs[] >>
   metis_tac[]
 QED
 

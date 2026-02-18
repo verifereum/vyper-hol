@@ -292,13 +292,6 @@ val allowed_test_names = [
 val excluded_test_names = [
   (* TODO: multi-arg abi_encode *)
   "test_immutable_hashing_overlap_regression",
-  (* TODO: Storage arrays with huge sizes require ArrayRef support.
-     Currently we try to load entire array into memory. Fix: Add ArrayRef
-     constructor to typed_value (like HashMapRef) and compute slot offsets
-     directly instead of materializing the whole array. *)
-  "test_boundary_access_to_arr",
-  "test_negative_ix_access_to_large_arr",
-  "test_oob_access_to_large_arr",
   (* TODO: external calls with default args *)
   "test_basic_default_param_*",
   "test_default_param_*",

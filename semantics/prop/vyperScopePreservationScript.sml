@@ -170,7 +170,8 @@ Proof
   PairCases_on `x'` >> gvs[] >>
   Cases_on `x'0` >> gvs[bind_def, return_def, raise_def] >>
   qpat_x_assum `_ = (res, st')` mp_tac >>
-  rpt CASE_TAC >> gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
+  rpt (CASE_TAC >> gvs[return_def, raise_def, bind_def]) >>
+  rpt strip_tac >> gvs[] >>
   imp_res_tac read_storage_slot_immutables
 QED
 
@@ -189,7 +190,7 @@ Proof
   Cases_on `lookup_var_slot_from_layout cx is_tr src decl_id1` >>
   gvs[return_def, raise_def] >>
   Cases_on `evaluate_type (get_tenv cx) typ` >> gvs[return_def, raise_def] >>
-  imp_res_tac write_storage_slot_immutables >> gvs[]
+  imp_res_tac write_storage_slot_immutables
 QED
 
 Theorem get_immutables_scopes:
@@ -212,7 +213,8 @@ Proof
   PairCases_on `x'` >> gvs[] >>
   Cases_on `x'0` >> gvs[bind_def, return_def, raise_def] >>
   qpat_x_assum `_ = (res, st')` mp_tac >>
-  rpt CASE_TAC >> gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
+  rpt (CASE_TAC >> gvs[return_def, raise_def, bind_def]) >>
+  rpt strip_tac >> gvs[] >>
   drule read_storage_slot_scopes >> simp[]
 QED
 
@@ -230,7 +232,7 @@ Proof
   Cases_on `lookup_var_slot_from_layout cx is_tr src decl_id1` >>
   gvs[return_def, raise_def] >>
   Cases_on `evaluate_type (get_tenv cx) typ` >> gvs[return_def, raise_def] >>
-  imp_res_tac write_storage_slot_scopes >> gvs[]
+  imp_res_tac write_storage_slot_scopes
 QED
 
 Theorem set_immutable_scopes:
@@ -251,7 +253,7 @@ Theorem transfer_value_scopes:
   !f t a st res st'. transfer_value f t a st = (res, st') ==> st'.scopes = st.scopes
 Proof
   rw[transfer_value_def, bind_def, ignore_bind_def, get_accounts_def, return_def, check_def, assert_def, update_accounts_def] >>
-  gvs[raise_def] >> simp[]
+  gvs[raise_def]
 QED
 
 Theorem lookup_flag_mem_scopes:
@@ -307,85 +309,190 @@ Proof
   gvs[pred_setTheory.ABSORPTION_RWT]
 QED
 
+Theorem materialise_scopes:
+  !cx tv st res st'. materialise cx tv st = (res, st') ==> st'.scopes = st.scopes
+Proof
+  Cases_on `tv` >>
+  rw[materialise_def, return_def, raise_def] >>
+  gvs[bind_def, AllCaseEqs(), return_def] >>
+  imp_res_tac read_storage_slot_scopes >> gvs[]
+QED
+
+Theorem assign_result_scopes:
+  !ao v subs st res st'. assign_result ao v subs st = (res, st') ==> st'.scopes = st.scopes
+Proof
+  Cases_on `ao` >> rw[assign_result_def, return_def, bind_def, lift_sum_def] >>
+  qpat_x_assum `_ = (res, st')` mp_tac >>
+  rpt (CASE_TAC >> gvs[return_def, raise_def])
+QED
+
+Theorem resolve_array_element_scopes:
+  !cx b base tv subs st res st'.
+    resolve_array_element cx b base tv subs st = (res, st') ==> st'.scopes = st.scopes
+Proof
+  ho_match_mp_tac resolve_array_element_ind >> rw[] >>
+  qpat_x_assum `_ = (res, st')` mp_tac >>
+  simp[Once resolve_array_element_def, bind_def, return_def, raise_def] >>
+  rpt (CASE_TAC >> gvs[return_def, raise_def, bind_def, check_def, assert_def, AllCaseEqs()]) >>
+  rpt strip_tac >> gvs[] >>
+  rpt (TRY (first_x_assum drule >>
+            gvs[check_def, assert_def, return_def, raise_def, bind_def,
+                ignore_bind_def, AllCaseEqs()] >>
+            TRY (imp_res_tac get_storage_backend_scopes >> gvs[]) >> NO_TAC) >>
+       gvs[check_def, assert_def, return_def, raise_def, bind_def,
+           ignore_bind_def, AllCaseEqs()] >>
+       TRY (imp_res_tac get_storage_backend_scopes >> gvs[]))
+QED
+
+Theorem bind_scopes:
+  ∀f g st res st'.
+    bind f g st = (res, st') ∧
+    (∀r s s'. f s = (INL r, s') ⇒ s'.scopes = s.scopes) ∧
+    (∀r s s'. f s = (INR r, s') ⇒ s'.scopes = s.scopes) ∧
+    (∀x s r s'. g x s = (r, s') ⇒ s'.scopes = s.scopes) ⇒
+    st'.scopes = st.scopes
+Proof
+  rpt gen_tac
+  >> strip_tac
+  >> gvs[bind_def]
+  >> Cases_on `f st`
+  >> Cases_on `q`
+  >> gvs[]
+  >> res_tac
+  >> gvs[]
+QED
+
+Theorem hashmap_branch_scopes:
+  ∀cx b c t v is ao r res st'.
+    do
+      (first_sub,rest_subs) <-
+        lift_option
+          (case REVERSE is of x::xs => SOME (x,xs) | [] => NONE)
+          "assign_target hashmap needs subscript";
+      (final_type,key_types,remaining_subs) <-
+        lift_option (split_hashmap_subscripts v rest_subs)
+          "assign_target split_hashmap_subscripts";
+      final_slot <-
+        lift_option
+          (compute_hashmap_slot c (t::key_types)
+             (first_sub::TAKE (LENGTH rest_subs − LENGTH remaining_subs) rest_subs))
+          "assign_target compute_hashmap_slot";
+      final_tv <-
+        lift_option (evaluate_type (get_tenv cx) final_type)
+          "assign_target evaluate_type";
+      current_val <- read_storage_slot cx b final_slot final_tv;
+      new_val <- lift_sum (assign_subscripts current_val remaining_subs ao);
+      write_storage_slot cx b final_slot final_tv new_val;
+      assign_result ao current_val remaining_subs
+    od r = (res, st') ⇒
+    st'.scopes = r.scopes
+Proof
+  rpt gen_tac
+  >> strip_tac
+  >> qpat_x_assum `_ = _` mp_tac
+  >> simp[bind_def, ignore_bind_def, return_def, raise_def,
+          lift_option_def, lift_sum_def, check_def, assert_def,
+          pairTheory.UNCURRY_DEF]
+  >> rpt (CASE_TAC >> simp[return_def, raise_def])
+  >> rpt strip_tac >> gvs[]
+  (* NONE case: raise => trivial *)
+  >- gvs[bind_def, raise_def]
+  (* SOME case: decompose pair and continue *)
+  >> PairCases_on `x` >> gvs[]
+  >> qpat_x_assum `_ = (res, st')` mp_tac
+  >> simp[bind_def, ignore_bind_def, return_def, raise_def,
+          lift_option_def, lift_sum_def, check_def, assert_def]
+  >> rpt (CASE_TAC >> simp[return_def, raise_def])
+  >> rpt strip_tac >> gvs[]
+  >> imp_res_tac read_storage_slot_scopes
+  >> imp_res_tac write_storage_slot_scopes
+  >> imp_res_tac assign_result_scopes
+  >> gvs[]
+QED
+
+val monad_defs = [bind_def, ignore_bind_def, return_def, raise_def,
+  lift_sum_def, lift_option_def, check_def, assert_def];
+val scopes_thms = [
+  lookup_global_scopes, set_global_scopes,
+  resolve_array_element_scopes, read_storage_slot_scopes,
+  write_storage_slot_scopes, assign_result_scopes,
+  get_storage_backend_scopes, check_scopes];
+val peel_tac =
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
+  MAP_EVERY (fn th => TRY (imp_res_tac th)) scopes_thms >> gvs[] >>
+  gvs(AllCaseEqs() :: PULL_EXISTS :: pairTheory.UNCURRY_DEF :: monad_defs) >>
+  MAP_EVERY (fn th => TRY (imp_res_tac th)) scopes_thms >> gvs[];
+
+Theorem assign_target_toplevel_scopes:
+  ∀cx src_id_opt id is ao st res st'.
+    assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) is) ao st = (res, st') ⇒
+    st'.scopes = st.scopes
+Proof
+  rpt gen_tac >> strip_tac
+  >> gvs(Once assign_target_def :: pairTheory.UNCURRY_DEF ::
+         AllCaseEqs() :: PULL_EXISTS :: monad_defs)
+  >> imp_res_tac lookup_global_scopes
+  >> gvs[option_CASE_rator, CaseEq"option", raise_def, return_def,
+         toplevel_value_CASE_rator, type_value_CASE_rator,
+         CaseEq"toplevel_value", CaseEq"type_value", bind_def,
+         CaseEq"sum", ignore_bind_def, CaseEq"prod", sum_CASE_rator]
+  >> imp_res_tac assign_result_scopes
+  >> imp_res_tac set_global_scopes
+  >> imp_res_tac resolve_array_element_scopes
+  >> gvs[]
+  >> pairarg_tac
+  >> gvs[bind_def, AllCaseEqs(), option_CASE_rator, raise_def, return_def,
+         type_value_CASE_rator, sum_CASE_rator, bound_CASE_rator,
+         assign_operation_CASE_rator, assert_def]
+  >> imp_res_tac write_storage_slot_scopes
+  >> imp_res_tac read_storage_slot_scopes
+  >> imp_res_tac assign_result_scopes
+  >> imp_res_tac get_storage_backend_scopes
+  >> gvs[]
+  >> pairarg_tac
+  >> gvs[bind_def, AllCaseEqs(), sum_CASE_rator, option_CASE_rator,
+         return_def, raise_def]
+  >> imp_res_tac assign_result_scopes
+  >> imp_res_tac write_storage_slot_scopes
+  >> imp_res_tac read_storage_slot_scopes
+  >> gvs[]
+QED
+
 Theorem assign_target_preserves_scopes_dom:
   (∀cx gv ao st res st'. assign_target cx gv ao st = (res, st') ⇒ MAP FDOM st'.scopes = MAP FDOM st.scopes) ∧
   (∀cx gvs vs st res st'. assign_targets cx gvs vs st = (res, st') ⇒ MAP FDOM st'.scopes = MAP FDOM st.scopes)
 Proof
-  ho_match_mp_tac assign_target_ind >> rpt conj_tac >> rpt gen_tac
-  (* ScopedVar case *)
-  >- (strip_tac >> gvs[assign_target_def, bind_def, get_scopes_def, return_def, lift_option_def] >>
-      Cases_on `find_containing_scope (string_to_num id) st.scopes` >> gvs[return_def, raise_def] >>
-      PairCases_on `x` >> gvs[bind_def, lift_sum_def] >>
-      Cases_on `assign_subscripts x2 (REVERSE is) ao` >>
-      gvs[return_def, raise_def, bind_def, ignore_bind_def, set_scopes_def] >>
-      drule find_containing_scope_map_fdom >> simp[])
-  (* TopLevelVar case - now uses storage operations *)
-  >- (strip_tac >> gvs[assign_target_def, bind_def, lift_option_def] >>
-      Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def]
-      (* NONE case: lookup_global still runs, then error *)
-      >- (qpat_x_assum `_ = (res, st')` mp_tac >>
-          rpt CASE_TAC >> gvs[return_def, raise_def] >>
-          rpt strip_tac >> gvs[] >>
-          imp_res_tac lookup_global_scopes >> gvs[])
-      (* SOME case: main execution path *)
-      >> (qpat_x_assum `_ = (res, st')` mp_tac >>
-          simp[return_def] >> rpt CASE_TAC >>
-          gvs[return_def, raise_def, lift_sum_def, bind_def, ignore_bind_def] >>
-          rpt strip_tac >> gvs[] >>
-          imp_res_tac lookup_global_scopes >> gvs[] >>
-          (* Value case: use set_global_scopes *)
-          TRY (qpat_x_assum `_ = (res, st')` mp_tac >>
-               rpt CASE_TAC >> gvs[return_def, raise_def] >>
-               rpt strip_tac >> gvs[] >>
-               imp_res_tac set_global_scopes >> gvs[]) >>
-          (* HashMapRef case: decompose tuple, use read/write_storage_slot_scopes *)
-          TRY (PairCases_on `x'` >> gvs[bind_def] >>
-               qpat_x_assum `_ = (res, st')` mp_tac >>
-               rpt CASE_TAC >> gvs[return_def, raise_def] >>
-               rpt strip_tac >> gvs[] >>
-               imp_res_tac read_storage_slot_scopes >>
-               imp_res_tac write_storage_slot_scopes >> gvs[])))
-  (* ImmutableVar case *)
-  >- (strip_tac >> gvs[assign_target_def, bind_def] >>
-      Cases_on `get_immutables cx (current_module cx) st` >> gvs[] >>
-      drule get_immutables_scopes >> strip_tac >>
-      Cases_on `q` >> gvs[] >>
-      gvs[lift_option_def, AllCaseEqs(), return_def, raise_def]
-      >- (imp_res_tac lift_sum_scopes >> gvs[bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def]
-          >- (imp_res_tac set_immutable_scopes >> gvs[] >>
-              Cases_on `FLOOKUP x (string_to_num id)` >> gvs[return_def, raise_def])
-          >- (imp_res_tac set_immutable_scopes >> gvs[] >>
-              Cases_on `FLOOKUP x (string_to_num id)` >> gvs[return_def, raise_def]))
-      >- (imp_res_tac lift_sum_scopes >> gvs[] >>
-          Cases_on `FLOOKUP x (string_to_num id)` >> gvs[return_def, raise_def])
-      >- (Cases_on `FLOOKUP x (string_to_num id)` >> gvs[return_def, raise_def]))
-  (* TupleTargetV with TupleV - uses IH *)
-  >- (rpt strip_tac >>
-      gvs[assign_target_def, bind_def, check_def, assert_def, return_def, raise_def,
-          ignore_bind_def, AllCaseEqs()])
-  (* TupleTargetV error cases - all just raise *)
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
-  (* assign_targets [] [] *)
-  >- simp[assign_target_def, return_def]
-  (* assign_targets cons case - uses IH *)
-  >- (rpt strip_tac >>
-      gvs[assign_target_def, bind_def, AllCaseEqs(), return_def, get_Value_def] >>
-      res_tac >> imp_res_tac get_Value_scopes >> gvs[] >> TRY (first_x_assum drule >> simp[]))
-  (* assign_targets length mismatch cases *)
-  >- simp[assign_target_def, raise_def]
-  >- simp[assign_target_def, raise_def]
+  ho_match_mp_tac assign_target_ind
+  (* ScopedVar *)
+  >> conj_tac >- (
+    rpt gen_tac >> strip_tac >>
+    gvs[assign_target_def, bind_def, get_scopes_def, return_def, lift_option_def] >>
+    Cases_on `find_containing_scope (string_to_num id) st.scopes` >> gvs[return_def, raise_def] >>
+    PairCases_on `x` >> gvs[bind_def, lift_sum_def] >>
+    Cases_on `assign_subscripts x2 (REVERSE is) ao` >>
+    gvs[return_def, raise_def, bind_def, ignore_bind_def, set_scopes_def] >>
+    imp_res_tac assign_result_scopes >> gvs[] >>
+    drule find_containing_scope_map_fdom >> simp[])
+  (* TopLevelVar *)
+  >> conj_tac >- (
+    rpt gen_tac >> strip_tac >>
+    imp_res_tac assign_target_toplevel_scopes >> gvs[]
+    )
+  (* remaining cases: ImmutableVar, TupleTargetV, assign_targets *)
+  >> rpt conj_tac
+  >> rpt gen_tac
+  >> TRY (strip_tac >> imp_res_tac assign_target_toplevel_scopes >> gvs[] >> NO_TAC)
+  >> simp[Once assign_target_def, bind_def, return_def, raise_def, check_def, assert_def,
+          ignore_bind_def, lift_option_def, lift_sum_def, get_scopes_def, set_scopes_def,
+          get_immutables_def, get_address_immutables_def, set_immutable_def,
+          set_address_immutables_def, AllCaseEqs()]
+  >> rpt strip_tac >> gvs[]
+  >> TRY (res_tac >> gvs[] >> NO_TAC)
+  >> TRY (imp_res_tac assign_result_scopes >> gvs[] >>
+          drule find_containing_scope_map_fdom >> simp[] >> NO_TAC)
+  >> TRY (first_x_assum drule >> gvs[] >> NO_TAC)
+  >> rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])
+  >> imp_res_tac assign_result_scopes >> gvs[]
 QED
 
 Theorem assign_target_preserves_scopes_dom_lookup:
