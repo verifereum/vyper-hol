@@ -122,6 +122,8 @@ Definition dfs_post_walk_def:
                  (v', ords ++ ords'))
               (visited', []) succs_lbl in
           (vis2, orders ++ [lbl])
+Termination
+  WF_REL_TAC `measure (\(fuel, succs, visited, lbl). fuel)` >> simp[]
 End
 
 Definition dfs_pre_walk_def:
@@ -141,6 +143,8 @@ Definition dfs_pre_walk_def:
                  (v', ords ++ ords'))
               (visited', []) succs_lbl in
           (vis2, lbl :: orders)
+Termination
+  WF_REL_TAC `measure (\(fuel, succs, visited, lbl). fuel)` >> simp[]
 End
 
 Definition build_reachable_def:
