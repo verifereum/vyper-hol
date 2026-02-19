@@ -171,7 +171,7 @@ signature jsonASTLib = sig
   val JIter_Range_tm : term
   val JIter_Array_tm : term
 
-  val mk_JIter_Range : term * term option -> term
+  val mk_JIter_Range : term * term * term option -> term
   val mk_JIter_Array : term * term -> term
 
   (* ===== Target Constructors ===== *)

@@ -122,7 +122,8 @@ Datatype:
 ;
   (* Iterator - need type info for computing bounds *)
   json_iter
-  = JIter_Range (json_expr list) (num option)          (* args, explicit bound if given *)
+  = JIter_Range (json_expr list) (int option list) (num option)
+                (* args, folded values per arg, explicit bound if given *)
   | JIter_Array json_expr json_type                    (* array expr, array type for bound *)
 ;
   (* Assignment targets *)
