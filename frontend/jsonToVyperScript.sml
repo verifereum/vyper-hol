@@ -466,17 +466,29 @@ val () = cv_auto_trans is_interface_constructor_def;
 (* For lib1: returns SOME 0 (from JE_Name) *)
 (* For lib1.lib2: returns SOME 1 (from the .lib2 Attribute) *)
 Definition extract_innermost_module_src_def:
-  (* Attribute with module typeclass has source_id directly *)
+  (* Attribute with module/interface typeclass has source_id directly *)
   (extract_innermost_module_src (JE_Attribute _ _ (SOME tc) src_id_opt) =
-    if tc = "module" then SOME src_id_opt else NONE) /\
-  (* JE_Name with module typeclass *)
+    if tc = "module" ∨ tc = "interface" then SOME src_id_opt else NONE) /\
+  (* JE_Name with module/interface typeclass *)
   (extract_innermost_module_src (JE_Name _ (SOME tc) src_id_opt) =
-    if tc = "module" then SOME src_id_opt else NONE) /\
+    if tc = "module" ∨ tc = "interface" then SOME src_id_opt else NONE) /\
   (* Other cases *)
   (extract_innermost_module_src _ = NONE)
 End
 
 val () = cv_auto_trans extract_innermost_module_src_def;
+
+(* Check if an expression is a module reference (not an interface-typed value).
+   Used to detect nested module attribute access: mod3.mod2.mod1.X
+   Interface-typed expressions like self.f should NOT match, because they are
+   runtime values with attributes like .address and .balance. *)
+Definition is_module_expr_def:
+  (is_module_expr (JE_Attribute _ _ (SOME tc) _) = (tc = "module")) /\
+  (is_module_expr (JE_Name _ (SOME tc) _) = (tc = "module")) /\
+  (is_module_expr _ = F)
+End
+
+val () = cv_auto_trans is_module_expr_def;
 
 (* Detect cross-module flag member pattern: lib1.Action.BUY or lib1.lib2.Roles3.NOBODY *)
 (* Returns SOME (src_id_opt, flag_name) if it matches, NONE otherwise *)
@@ -580,7 +592,7 @@ Definition translate_expr_def:
       | SOME (src_id_opt, flag_name) => FlagMember (src_id_opt, flag_name) attr
       | NONE => Attribute (translate_expr e) attr
     (* Nested module access: mod3.mod2.mod1.X — use variable_reads source_id *)
-    else if IS_SOME (extract_innermost_module_src e) then
+    else if is_module_expr e then
       TopLevelName (source_id_to_nsid attr_src_id_opt, attr)
     else if attr = "balance" then Builtin (Acc Balance) [translate_expr e]
     else if attr = "address" then Builtin (Acc Address) [translate_expr e]

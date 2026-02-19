@@ -3545,7 +3545,8 @@ Definition call_external_function_def:
   case bind_arguments all_tenv args vals
   of NONE => (INR $ Error "call bind_arguments", am)
    | SOME env =>
-  (case evaluate_all_constants cx am cx.txn.target all_mods
+  (case (if cx.in_deploy then evaluate_all_constants cx am cx.txn.target all_mods
+         else SOME am)
    of NONE => (INR $ Error "call constants_env", am)
     | SOME am =>
    let st = initial_state am [env] in
