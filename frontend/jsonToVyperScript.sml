@@ -466,12 +466,12 @@ val () = cv_auto_trans is_interface_constructor_def;
 (* For lib1: returns SOME 0 (from JE_Name) *)
 (* For lib1.lib2: returns SOME 1 (from the .lib2 Attribute) *)
 Definition extract_innermost_module_src_def:
-  (* Attribute with module/interface typeclass has source_id directly *)
+  (* Attribute with module typeclass has source_id directly *)
   (extract_innermost_module_src (JE_Attribute _ _ (SOME tc) src_id_opt) =
-    if tc = "module" ∨ tc = "interface" then SOME src_id_opt else NONE) /\
-  (* JE_Name with module/interface typeclass *)
+    if tc = "module" then SOME src_id_opt else NONE) /\
+  (* JE_Name with module typeclass *)
   (extract_innermost_module_src (JE_Name _ (SOME tc) src_id_opt) =
-    if tc = "module" ∨ tc = "interface" then SOME src_id_opt else NONE) /\
+    if tc = "module" then SOME src_id_opt else NONE) /\
   (* Other cases *)
   (extract_innermost_module_src _ = NONE)
 End
