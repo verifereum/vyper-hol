@@ -36,7 +36,7 @@ The abstract syntax tree (AST) for Vyper is defined in `vyperAST`. The main data
 
 We syntactically restrict the targets for assignment statements/expressions, using the `assignment_target` type which can be seen as a restriction of the expression syntax to only variables (`x`), subscripting (`x[3]`), and attribute selection (`x.y`) with arbitrary nesting. This in particular also applies to the `append` and `pop` builtin functions on arrays, which are stateful (mutating) operations that we treat as assignments.
 
-Interface declarations are not present in this AST because they are only needed for type-checking and hence not relevant for our current purposes (see [#47](https://github.com/verifereum/vyper-hol/issues/47) for future type-checking support). Module imports and exports are supported: the AST includes `ImportDecl` and `ExportsDecl` top-level declarations, and expressions carry `source_id` information to identify which module they belong to.
+Interface declarations (`InterfaceDecl`) are included in the AST, with interface function signatures parsed from JSON and stored in the interpreter's type environment. This enables resolution of external calls to interface-typed targets. Full type-checking of interfaces remains future work (see [#47](https://github.com/verifereum/vyper-hol/issues/47)). Module imports and exports are supported: the AST includes `ImportDecl` and `ExportsDecl` top-level declarations, and expressions carry `source_id` information to identify which module they belong to.
 
 ### vyperInterpreter
 
@@ -87,11 +87,7 @@ Here are the specific aspects of Vyper that are currently not part of the formal
 - Compiler front-end
     - concrete syntax, i.e., parsing ([#46](https://github.com/verifereum/vyper-hol/issues/46))
     - type-checking (the interpreter can fail during execution on badly-typed input) ([#47](https://github.com/verifereum/vyper-hol/issues/47))
-    - interfaces, which are only relevant for type-checking ([#47](https://github.com/verifereum/vyper-hol/issues/47))
-    - some cases of constant inlining (where, e.g., a literal value, not constant expression, is needed for the abstract syntax) ([#50](https://github.com/verifereum/vyper-hol/issues/50))
-    - external functions with default arguments (internal function defaults are supported) ([#49](https://github.com/verifereum/vyper-hol/issues/49))
-- Storage
-    - large storage arrays require ArrayRef support to avoid materializing entire arrays in memory ([#97](https://github.com/verifereum/vyper-hol/issues/97))
+    - some constant expression evaluation is still performed by the JSON front-end rather than formally; formalising this processing is tracked in [#135](https://github.com/verifereum/vyper-hol/issues/135)
 
 ## Outcomes, Challenges, and Next Steps
 
@@ -99,7 +95,7 @@ The main outcomes of this work so far are:
 - We have defined a formal executable specification of a subset of Vyper in higher-order logic,
 - which passes the `functional/codegen` section of the Vyper language test suite, modulo the exclusions listed above.
 
-Passing a substantial portion of the official test suite means our formal semantics is a solid foundation for future work on formal verification for Vyper including both proving properties about the language and producing a verified compiler and other verified tools. In addition, we have proved some initial basic properties (in addition to the test executions), most notably, that the language is total (i.e., the interpreter always terminates).
+Passing a substantial portion of the official test suite means our formal semantics is a solid foundation for future work on formal verification for Vyper including both proving properties about the language and producing a verified compiler and other verified tools. In addition to the test executions, we have proved a number of properties about the semantics, including totality of the language (the interpreter always terminates), scope and state preservation properties for the evaluator (in `semantics/prop/`), and correctness of two Venom IR compiler passes (phi elimination and revert-to-assert, in `venom/passes/`).
 
 It should also be noted that the export of the test suite in a format consumable by others was motivated in part by this project.
 
@@ -108,7 +104,7 @@ In achieving these outcomes, some of the technical details were more complex tha
 - The need for a small-step semantics for `cv_compute`, and the somewhat non-trivial termination argument for the semantics. The difficulty here was mostly due to pushing some of the edges of HOL4's libraries for defining functions and for providing fast execution for logical definitions.
 
 Next steps (all can be done in parallel):
-- Complete external call support: `gas=` parameter, `print`, and gas modeling ([#38](https://github.com/verifereum/vyper-hol/issues/38), [#98](https://github.com/verifereum/vyper-hol/issues/98)).
+- Complete remaining external call features: `gas=` parameter, `print`, and gas modeling ([#38](https://github.com/verifereum/vyper-hol/issues/38), [#98](https://github.com/verifereum/vyper-hol/issues/98)).
 - Add remaining chain interaction features: `@nonreentrant`, `raw_call`, contract creation builtins ([#39](https://github.com/verifereum/vyper-hol/issues/39), [#40](https://github.com/verifereum/vyper-hol/issues/40)).
 - Prove safety properties about the language: arithmetic safety, array bounds, type preservation, etc. ([#90](https://github.com/verifereum/vyper-hol/issues/90)).
 - Possibly revisit some of the design decisions in the semantics. For example, currently, runtime values carry some typing information (e.g., bit size for integers), but we could try leaving this information entirely in the syntax and not in the runtime values, which could simplify some operations like implicit casting ([#45](https://github.com/verifereum/vyper-hol/issues/45)).
@@ -132,7 +128,7 @@ The test runner expects exported JSON fixtures to be available at `tests/vyper-t
 The exported fixtures are obtained using the Vyper repository.
 To run the Vyper test suite on our definitional interpreter, follow this approach:
 
-1. Generate the Vyper tests using `pytest -s -n 1 --export tests/export -m "not fuzzing" tests/functional`.
+1. Generate the Vyper tests using `pytest -s -n0 --export tests/export -m "not fuzzing" tests/functional`.
 2. Link the export directory into `tests/vyper-test-exports` (e.g., `ln -s ../vyper/tests/export tests/vyper-test-exports`).
 3. Set the `VFMDIR` environment variable to a path of a clone of the Verifereum repository (tracking `main`).
 4. `cd tests/generated` and then run `Holmake`.
