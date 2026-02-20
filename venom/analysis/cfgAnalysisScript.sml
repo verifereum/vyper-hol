@@ -68,20 +68,6 @@ Definition cfg_is_normalized_def:
          LENGTH (cfg_succs_of cfg pred) <= 1)
 End
 
-(* wf_function captures basic IR well-formedness assumptions
- * needed by CFG analysis and downstream passes. *)
-Definition wf_function_def:
-  wf_function fn <=>
-    ALL_DISTINCT (cfg_labels fn) /\
-    fn_wf_entry fn /\
-    (!bb. MEM bb fn.fn_blocks ==>
-      bb.bb_instructions <> [] /\
-      is_terminator (LAST bb.bb_instructions).inst_opcode) /\
-    (!bb succ.
-      MEM bb fn.fn_blocks /\ MEM succ (bb_succs bb) ==>
-      MEM succ (cfg_labels fn))
-End
-
 (* ==========================================================================
    Successors / predecessors from blocks
    ========================================================================== *)

@@ -46,6 +46,20 @@ Ancestors
    1) Label-domain and shape invariants (cheated)
    ========================================================================== *)
 
+(* wf_function captures basic IR well-formedness assumptions
+ * needed by CFG analysis and downstream passes. *)
+Definition wf_function_def:
+  wf_function fn <=>
+    ALL_DISTINCT (cfg_labels fn) /\
+    fn_wf_entry fn /\
+    (!bb. MEM bb fn.fn_blocks ==>
+      bb.bb_instructions <> [] /\
+      is_terminator (LAST bb.bb_instructions).inst_opcode) /\
+    (!bb succ.
+      MEM bb fn.fn_blocks /\ MEM succ (bb_succs bb) ==>
+      MEM succ (cfg_labels fn))
+End
+
 (* Desiderata: prove the analysis finishes in O(n) time. *)
 
 (* Reachable labels are labels of blocks in the function. *)
@@ -184,9 +198,13 @@ Definition index_of_def:
     | y::ys => if x = y then 0 else SUC (index_of x ys)
 End
 
-(* TOP-LEVEL: Non-back-edge successors appear earlier than predecessors in postorder. *)
+(* non-back-edge successors appear earlier than predecessors in postorder.
+ * reachable assumption is necessary since otherwise an unreachable node
+ * and their successor will have index_of = LENGTH
+ *)
 Theorem cfg_analyze_postorder_order:
   !fn a b.
+    cfg_reachable_of (cfg_analyze fn) a /\
     MEM b (cfg_succs_of (cfg_analyze fn) a) /\
     ~cfg_path (cfg_analyze fn) b a ==>
     index_of b (cfg_dfs_post (cfg_analyze fn)) <
@@ -200,9 +218,13 @@ Definition cfg_acyclic_def:
     !a b. cfg_path cfg a b /\ cfg_path cfg b a ==> a = b
 End
 
-(* TOP-LEVEL: Acyclic CFGs yield a clean postorder ordering for all edges. *)
+(* acyclic CFGs yield a clean postorder ordering for all edges.
+ * can be proved from cfg_analyze_postorder_order since cfg_acyclic
+ * implies there can be no back-edge b->a if b is a successor of a.
+ *)
 Theorem cfg_analyze_postorder_order_acyclic:
   !fn a b.
+    cfg_reachable_of (cfg_analyze fn) a /\
     cfg_acyclic (cfg_analyze fn) /\
     MEM b (cfg_succs_of (cfg_analyze fn) a) ==>
     index_of b (cfg_dfs_post (cfg_analyze fn)) <
