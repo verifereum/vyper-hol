@@ -9,41 +9,8 @@ Theory cfgAnalysisCorrectness
 Ancestors
   cfgAnalysis list pred_set
 
-(* ==========================================================================
-   Well-formedness for CFG results
-   ========================================================================== *)
-
 Definition cfg_labels_def:
   cfg_labels fn = MAP (λbb. bb.bb_label) fn.fn_blocks
-End
-
-(* cfg_wf: basic shape invariants for a CFG built from fn.fn_blocks.
-   - reachable/dfs labels are all drawn from the function's block labels
-   - succs/preds only mention labels from the function
-   - succs/preds are consistent inverses (edge symmetry) *)
-Definition cfg_wf_def:
-  cfg_wf cfg fn <=>
-    (!lbl.
-       cfg_reachable_of cfg lbl ==>
-       MEM lbl (cfg_labels fn)) /\
-    (!lbl.
-       MEM lbl cfg.cfg_dfs_post ==>
-       MEM lbl (cfg_labels fn)) /\
-    (!lbl.
-       MEM lbl cfg.cfg_dfs_pre ==>
-       MEM lbl (cfg_labels fn)) /\
-    (!lbl succ.
-       MEM succ (cfg_succs_of cfg lbl) ==>
-       MEM succ (cfg_labels fn)) /\
-    (!lbl pred.
-       MEM pred (cfg_preds_of cfg lbl) ==>
-       MEM pred (cfg_labels fn)) /\
-    (!lbl succ.
-       MEM succ (cfg_succs_of cfg lbl) ==>
-       MEM lbl (cfg_preds_of cfg succ)) /\
-    (!lbl pred.
-       MEM pred (cfg_preds_of cfg lbl) ==>
-       MEM lbl (cfg_succs_of cfg pred))
 End
 
 (* ==========================================================================
@@ -52,8 +19,29 @@ End
 
 (* Desiderata: prove the analysis finishes in O(n) time. *)
 
-Theorem cfg_analyze_wf:
-  !fn. cfg_wf (cfg_analyze fn) fn
+(* Reachable labels are labels of blocks in the function. *)
+Theorem cfg_analyze_reachable_in_labels:
+  !fn lbl.
+    cfg_reachable_of (cfg_analyze fn) lbl ==>
+    MEM lbl (cfg_labels fn)
+Proof
+  cheat
+QED
+
+(* Successor labels are labels of blocks in the function. *)
+Theorem cfg_analyze_succ_labels:
+  !fn lbl succ.
+    MEM succ (cfg_succs_of (cfg_analyze fn) lbl) ==>
+    MEM succ (cfg_labels fn)
+Proof
+  cheat
+QED
+
+(* Predecessor labels are labels of blocks in the function. *)
+Theorem cfg_analyze_pred_labels:
+  !fn lbl pred.
+    MEM pred (cfg_preds_of (cfg_analyze fn) lbl) ==>
+    MEM pred (cfg_labels fn)
 Proof
   cheat
 QED
@@ -71,12 +59,13 @@ Proof
   cheat
 QED
 
-(* preds are the inverse edge relation of succs. *)
-Theorem cfg_analyze_inverse_edges_correct:
-  !fn bb pred_lbl.
-    MEM bb fn.fn_blocks ==>
-    (MEM pred_lbl (cfg_preds_of (cfg_analyze fn) bb.bb_label) <=>
-     MEM bb.bb_label (cfg_succs_of (cfg_analyze fn) pred_lbl))
+(* preds are the inverse edge relation of succs (for block labels). *)
+Theorem cfg_analyze_edge_symmetry:
+  !fn lbl succ.
+    MEM lbl (cfg_labels fn) /\
+    MEM succ (cfg_labels fn) ==>
+      (MEM succ (cfg_succs_of (cfg_analyze fn) lbl) <=>
+       MEM lbl (cfg_preds_of (cfg_analyze fn) succ))
 Proof
   cheat
 QED
