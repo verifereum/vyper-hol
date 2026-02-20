@@ -10,12 +10,28 @@
  *    - succs match block terminator successors.
  *    - preds are the inverse edge relation (within the label domain).
  *
- * 3) Semantic reachability / traversal properties
+ * 3) Traversal properties
  *    - DFS preorder/postorder enumerate exactly the reachable labels.
  *    - Entry label is the DFS root (first in preorder, last in postorder).
- *    - Reachability coincides with a path relation over succ edges.
+ *
+ * 4) Semantic reachability
+ *    - Reachability coincides with a path relation over successor edges.
  *
  * Proofs are intentionally omitted for now.
+ *)
+
+(* my own analysis of correctness (should shove somewhere else?)
+ * we just refactored the theorem statements so they are more cohesive while keeping their strenght
+ * so ok we have
+ * 1. reachable \subset labels
+ * 2. succs \subset labels
+ * 3. preds \subset labels
+ * 4. for two labels A and B, A succ B iff B pred A
+ * 5. dfs_{pre,post} equal each other and reachable as sets
+ *   5.1. this together with 1. implies dfs_{pre,post} are a subset of labels
+ *   5.2. but they are lists so we add an additional theorem that they contain no duplicates, making set equality imply equality up to reordering
+ * 6. entry is first in preorder and last on postorder
+ * 7. cfg_reachable_of is compatible with the inductive relation cfg_path
  *)
 
 Theory cfgAnalysisCorrectness
@@ -24,12 +40,6 @@ Ancestors
 
 Definition cfg_labels_def:
   cfg_labels fn = MAP (λbb. bb.bb_label) fn.fn_blocks
-End
-
-Inductive cfg_path:
-  (!cfg n. cfg_path cfg n n) /\
-  (!cfg x y z.
-     MEM y (cfg_succs_of cfg x) /\ cfg_path cfg y z ==> cfg_path cfg x z)
 End
 
 (* ==========================================================================
@@ -90,10 +100,26 @@ Proof
 QED
 
 (* ==========================================================================
-   3) Semantic reachability / traversal statements (cheated)
+   3) Traversal statements (cheated)
    ========================================================================== *)
 
-(* postorder labels, preorder labels, and reachable labels coincide as sets. *)
+(* DFS postorder contains no duplicates. *)
+Theorem cfg_analyze_dfs_post_distinct:
+  !fn. ALL_DISTINCT (cfg_dfs_post (cfg_analyze fn))
+Proof
+  cheat
+QED
+
+(* DFS preorder contains no duplicates. *)
+Theorem cfg_analyze_dfs_pre_distinct:
+  !fn. ALL_DISTINCT (cfg_dfs_pre (cfg_analyze fn))
+Proof
+  cheat
+QED
+
+(* postorder labels, preorder labels, and reachable labels coincide as sets.
+ * together with the previous distinctness theorems, implies that pre and postorders
+ * are permutations of each other. *)
 Theorem cfg_analyze_reachable_sets:
   !fn.
     set (cfg_dfs_post (cfg_analyze fn)) = set (cfg_dfs_pre (cfg_analyze fn)) /\
@@ -123,6 +149,18 @@ Proof
   cheat
 QED
 
+(* ==========================================================================
+   4) Semantic reachability (cheated)
+   ========================================================================== *)
+
+(* cfg_path inductively defines a relation for which nodes have directed paths between
+ * them, from the successor sets *)
+Inductive cfg_path:
+  (!cfg n. cfg_path cfg n n) /\
+  (!cfg x y z.
+     MEM y (cfg_succs_of cfg x) /\ cfg_path cfg y z ==> cfg_path cfg x z)
+End
+
 (* Reachable labels are exactly those on a CFG path from the entry label. *)
 Theorem cfg_analyze_semantic_reachability:
   !fn bb lbl.
@@ -132,20 +170,5 @@ Theorem cfg_analyze_semantic_reachability:
 Proof
   cheat
 QED
-
-(* DFS postorder contains no duplicates. *)
-Theorem cfg_analyze_dfs_post_distinct:
-  !fn. ALL_DISTINCT (cfg_dfs_post (cfg_analyze fn))
-Proof
-  cheat
-QED
-
-(* DFS preorder contains no duplicates. *)
-Theorem cfg_analyze_dfs_pre_distinct:
-  !fn. ALL_DISTINCT (cfg_dfs_pre (cfg_analyze fn))
-Proof
-  cheat
-QED
-
 
 val _ = export_theory();

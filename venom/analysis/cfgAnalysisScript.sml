@@ -53,6 +53,8 @@ Definition cfg_reachable_of_def:
     | SOME b => b
 End
 
+(* cfg_is_normalized defines a predicate for CFG analysis with no critical-edges.
+ * it's not currently used but could be a necessary precondition of SSA/phi-elimination. *)
 Definition cfg_is_normalized_def:
   cfg_is_normalized cfg fn <=>
     !bb. MEM bb fn.fn_blocks ==>
