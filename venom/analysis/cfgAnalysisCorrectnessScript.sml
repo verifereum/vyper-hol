@@ -1,7 +1,7 @@
 (*
  * CFG Analysis Correctness (Statements Only)
  *
- * We structure the statements in three layers:
+ * We structure the statements in five layers:
  *
  * 1) Label-domain and shape invariants
  *    - All reachable/succ/pred labels are drawn from the function's labels.
@@ -16,6 +16,10 @@
  *
  * 4) Semantic reachability
  *    - Reachability coincides with a path relation over successor edges.
+ *
+ * 5) Traversal ordering
+ *    - Postorder respects edge direction for non-back-edges.
+ *    - Acyclic CFGs yield a clean postorder ordering.
  *
  * Proofs are intentionally omitted for now.
  *)
@@ -165,6 +169,42 @@ Theorem cfg_analyze_semantic_reachability:
     entry_block fn = SOME bb ==>
     (cfg_reachable_of (cfg_analyze fn) lbl <=>
      cfg_path (cfg_analyze fn) bb.bb_label lbl)
+Proof
+  cheat
+QED
+
+(* ==========================================================================
+   5) Traversal ordering (cheated)
+   ========================================================================== *)
+
+Definition index_of_def:
+  index_of x xs =
+    case xs of
+      [] => 0
+    | y::ys => if x = y then 0 else SUC (index_of x ys)
+End
+
+Theorem cfg_analyze_postorder_order:
+  !fn a b.
+    MEM b (cfg_succs_of (cfg_analyze fn) a) /\
+    ~cfg_path (cfg_analyze fn) b a ==>
+    index_of b (cfg_dfs_post (cfg_analyze fn)) <
+    index_of a (cfg_dfs_post (cfg_analyze fn))
+Proof
+  cheat
+QED
+
+Definition cfg_acyclic_def:
+  cfg_acyclic cfg <=>
+    !a b. cfg_path cfg a b /\ cfg_path cfg b a ==> a = b
+End
+
+Theorem cfg_analyze_postorder_order_acyclic:
+  !fn a b.
+    cfg_acyclic (cfg_analyze fn) /\
+    MEM b (cfg_succs_of (cfg_analyze fn) a) ==>
+    index_of b (cfg_dfs_post (cfg_analyze fn)) <
+    index_of a (cfg_dfs_post (cfg_analyze fn))
 Proof
   cheat
 QED
