@@ -715,7 +715,7 @@ Definition evaluate_convert_def:
      then INL $ BytesV bd bs
      else INR "convert BytesV bound") ∧
   evaluate_convert (BytesV _ bs) (BaseT (UintT n)) =
-    (let i = w2i $ word_of_bytes T (0w:bytes32) bs in
+    (let i = &(w2n $ word_of_bytes T (0w:bytes32) bs) in
      if within_int_bound (Unsigned n) i
      then INL $ IntV (Unsigned n) i
      else INR "convert BytesV uint bound") ∧
