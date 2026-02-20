@@ -1,7 +1,20 @@
 (*
  * CFG Analysis Correctness (Statements Only)
  *
- * Lightweight correctness statements for the CFG analysis.
+ * We structure the statements in three layers:
+ *
+ * 1) Label-domain and shape invariants
+ *    - All reachable/succ/pred labels are drawn from the function's labels.
+ *
+ * 2) Structural correctness
+ *    - succs match block terminator successors.
+ *    - preds are the inverse edge relation (within the label domain).
+ *
+ * 3) Semantic reachability / traversal properties
+ *    - DFS preorder/postorder enumerate exactly the reachable labels.
+ *    - Entry label is the DFS root (first in preorder, last in postorder).
+ *    - Reachability coincides with a path relation over succ edges.
+ *
  * Proofs are intentionally omitted for now.
  *)
 
@@ -20,7 +33,7 @@ Inductive cfg_path:
 End
 
 (* ==========================================================================
-   Correctness statements (cheated)
+   1) Label-domain and shape invariants (cheated)
    ========================================================================== *)
 
 (* Desiderata: prove the analysis finishes in O(n) time. *)
@@ -53,7 +66,7 @@ Proof
 QED
 
 (* ==========================================================================
-   Structural correctness statements (cheated)
+   2) Structural correctness statements (cheated)
    ========================================================================== *)
 
 (* cfg_analyze preserves bb_succs on each block. *)
@@ -75,6 +88,10 @@ Theorem cfg_analyze_edge_symmetry:
 Proof
   cheat
 QED
+
+(* ==========================================================================
+   3) Semantic reachability / traversal statements (cheated)
+   ========================================================================== *)
 
 (* postorder labels, preorder labels, and reachable labels coincide as sets. *)
 Theorem cfg_analyze_reachable_sets:
