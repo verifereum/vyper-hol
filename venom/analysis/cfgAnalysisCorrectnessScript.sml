@@ -13,6 +13,12 @@ Definition cfg_labels_def:
   cfg_labels fn = MAP (λbb. bb.bb_label) fn.fn_blocks
 End
 
+Inductive cfg_path:
+  (!cfg n. cfg_path cfg n n) /\
+  (!cfg x y z.
+     MEM y (cfg_succs_of cfg x) /\ cfg_path cfg y z ==> cfg_path cfg x z)
+End
+
 (* ==========================================================================
    Correctness statements (cheated)
    ========================================================================== *)
@@ -76,6 +82,36 @@ Theorem cfg_analyze_reachable_sets:
     set (cfg_dfs_post (cfg_analyze fn)) = set (cfg_dfs_pre (cfg_analyze fn)) /\
     set (cfg_dfs_post (cfg_analyze fn)) =
       {lbl | cfg_reachable_of (cfg_analyze fn) lbl}
+Proof
+  cheat
+QED
+
+(* Entry label is the first label in DFS preorder. *)
+Theorem cfg_analyze_preorder_entry_first:
+  !fn bb.
+    entry_block fn = SOME bb ==>
+    cfg_dfs_pre (cfg_analyze fn) <> [] /\
+    HD (cfg_dfs_pre (cfg_analyze fn)) = bb.bb_label
+Proof
+  cheat
+QED
+
+(* Entry label is the last label in DFS postorder. *)
+Theorem cfg_analyze_postorder_entry_last:
+  !fn bb.
+    entry_block fn = SOME bb /\
+    cfg_dfs_post (cfg_analyze fn) <> [] ==>
+    LAST (cfg_dfs_post (cfg_analyze fn)) = bb.bb_label
+Proof
+  cheat
+QED
+
+(* Reachable labels are exactly those on a CFG path from the entry label. *)
+Theorem cfg_analyze_semantic_reachability:
+  !fn bb lbl.
+    entry_block fn = SOME bb ==>
+    (cfg_reachable_of (cfg_analyze fn) lbl <=>
+     cfg_path (cfg_analyze fn) bb.bb_label lbl)
 Proof
   cheat
 QED
