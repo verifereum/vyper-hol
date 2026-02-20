@@ -38,10 +38,6 @@ Theory cfgAnalysisCorrectness
 Ancestors
   cfgAnalysis list pred_set
 
-Definition cfg_labels_def:
-  cfg_labels fn = MAP (λbb. bb.bb_label) fn.fn_blocks
-End
-
 (* ==========================================================================
    1) Label-domain and shape invariants (cheated)
    ========================================================================== *)
@@ -60,6 +56,7 @@ QED
 (* Successor labels are labels of blocks in the function. *)
 Theorem cfg_analyze_succ_labels:
   !fn lbl succ.
+    wf_function fn /\
     MEM succ (cfg_succs_of (cfg_analyze fn) lbl) ==>
     MEM succ (cfg_labels fn)
 Proof
@@ -69,6 +66,7 @@ QED
 (* Predecessor labels are labels of blocks in the function. *)
 Theorem cfg_analyze_pred_labels:
   !fn lbl pred.
+    wf_function fn /\
     MEM pred (cfg_preds_of (cfg_analyze fn) lbl) ==>
     MEM pred (cfg_labels fn)
 Proof

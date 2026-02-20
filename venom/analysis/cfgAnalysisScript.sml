@@ -53,6 +53,10 @@ Definition cfg_reachable_of_def:
     | SOME b => b
 End
 
+Definition cfg_labels_def:
+  cfg_labels fn = MAP (λbb. bb.bb_label) fn.fn_blocks
+End
+
 (* cfg_is_normalized defines a predicate for CFG analysis with no critical-edges.
  * it's not currently used but could be a necessary precondition of SSA/phi-elimination. *)
 Definition cfg_is_normalized_def:
@@ -62,6 +66,20 @@ Definition cfg_is_normalized_def:
       (!pred.
          MEM pred (cfg_preds_of cfg bb.bb_label) ==>
          LENGTH (cfg_succs_of cfg pred) <= 1)
+End
+
+(* wf_function captures basic IR well-formedness assumptions
+ * needed by CFG analysis and downstream passes. *)
+Definition wf_function_def:
+  wf_function fn <=>
+    ALL_DISTINCT (cfg_labels fn) /\
+    fn_wf_entry fn /\
+    (!bb. MEM bb fn.fn_blocks ==>
+      bb.bb_instructions <> [] /\
+      is_terminator (LAST bb.bb_instructions).inst_opcode) /\
+    (!bb succ.
+      MEM bb fn.fn_blocks /\ MEM succ (bb_succs bb) ==>
+      MEM succ (cfg_labels fn))
 End
 
 (* ==========================================================================
