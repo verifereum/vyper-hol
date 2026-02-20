@@ -97,6 +97,7 @@ val call : term decoder =
                 ("blobBaseFee", bf),
                 ("gasLimit", g),
                 ("gasPrice", p),
+                ("chainId", numSyntax.term_of_int 1),
                 ("static", a),
                 ("expectedOutput", e)]))
           (tuple3 (
@@ -290,8 +291,7 @@ val allowed_test_names = [
 
 (* Tests excluded by name - require architectural changes *)
 val excluded_test_names = [
-  (* TODO: multi-arg abi_encode *)
-  "test_immutable_hashing_overlap_regression",
+
   (* TODO: external calls with default args *)
   "test_basic_default_param_*",
   "test_default_param_*",
@@ -411,6 +411,7 @@ val deployment : term decoder =
                ("blobHashes", bh),
                ("blobBaseFee", bf),
                ("gasPrice", g),
+               ("chainId", numSyntax.term_of_int 1),
                ("callData", d),
                ("runtimeBytecode", bc),
                ("storageLayout", sl)

@@ -1063,6 +1063,7 @@ Datatype:
   ; blob_hashes: bytes32 list
   ; blob_base_fee: num
   ; gas_price: num
+  ; chain_id: num
   ; is_creation: bool
   |>
 End
@@ -1080,6 +1081,7 @@ Definition empty_call_txn_def:
     blob_hashes := [];
     blob_base_fee := 0;
     gas_price := 0;
+    chain_id := 0;
     is_creation := F
   |>
 End
@@ -1279,10 +1281,8 @@ Definition evaluate_type_builtin_def:
     evaluate_abi_decode (get_tenv cx) typ bs ∧
   evaluate_type_builtin _ AbiDecode _ _ =
     INR "abi_decode args" ∧
-  evaluate_type_builtin cx AbiEncode typ [v] =
-    evaluate_abi_encode (get_tenv cx) typ v ∧
-  evaluate_type_builtin _ AbiEncode _ _ =
-    INR "abi_encode args" ∧
+  evaluate_type_builtin cx AbiEncode typ vs =
+    evaluate_abi_encode (get_tenv cx) typ (ArrayV (TupleV vs)) ∧
   evaluate_type_builtin _ _ _ _ =
     INR "evaluate_type_builtin"
 End
@@ -1387,6 +1387,7 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ (Env BlockNumber) [] = INL $ IntV (Unsigned 256) &cx.txn.block_number ∧
   evaluate_builtin cx _ (Env BlobBaseFee) [] = INL $ IntV (Unsigned 256) &cx.txn.blob_base_fee ∧
   evaluate_builtin cx _ (Env GasPrice) [] = INL $ IntV (Unsigned 256) &cx.txn.gas_price ∧
+  evaluate_builtin cx _ (Env ChainId) [] = INL $ IntV (Unsigned 256) &cx.txn.chain_id ∧
   evaluate_builtin cx _ (Env PrevHash) [] = evaluate_block_hash cx.txn (cx.txn.block_number - 1) ∧
   evaluate_builtin cx _ BlockHash [IntV u i] =
     (if u = Unsigned 256 then evaluate_block_hash cx.txn (Num i)
@@ -1437,7 +1438,7 @@ Definition type_builtin_args_length_ok_def:
   type_builtin_args_length_ok Extract32 n = (n = 2) ∧
   type_builtin_args_length_ok Convert n = (n = 1) ∧
   type_builtin_args_length_ok AbiDecode n = (n = 1) ∧
-  type_builtin_args_length_ok AbiEncode n = (n = 1)
+  type_builtin_args_length_ok AbiEncode n = (n >= 1)
 End
 
 val () = cv_auto_trans type_builtin_args_length_ok_def;

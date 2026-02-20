@@ -37,6 +37,7 @@ Datatype:
   ; blobHashes: bytes32 list
   ; blobBaseFee: num
   ; gasPrice: num
+  ; chainId: num
   ; callData: byte list
   ; runtimeBytecode: byte list
   ; storageLayout: json_storage_layout
@@ -98,6 +99,7 @@ Datatype:
   ; blobBaseFee: num
   ; gasLimit: num
   ; gasPrice: num
+  ; chainId: num
   ; static: bool
   ; expectedOutput: byte list option
   |>
@@ -154,6 +156,7 @@ Definition run_deployment_def:
           ; blob_hashes := dt.blobHashes
           ; blob_base_fee := dt.blobBaseFee
           ; gas_price := dt.gasPrice
+          ; chain_id := dt.chainId
           ; is_creation := T |>;
     in load_contract am tx dt.sourceAst dt.sourceExports
   in (sns, res)
@@ -194,6 +197,7 @@ Definition run_call_def:
           ; blob_hashes := ct.blobHashes
           ; blob_base_fee := ct.blobBaseFee
           ; gas_price := ct.gasPrice
+          ; chain_id := ct.chainId
           ; is_creation := F |>;
     (* TODO: set static based on ct.static *)
     (* TODO: set env data somewhere? *)

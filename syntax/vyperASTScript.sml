@@ -91,6 +91,7 @@ Datatype:
   | BlobBaseFee
   | GasPrice
   | PrevHash
+  | ChainId
 End
 
 Datatype:

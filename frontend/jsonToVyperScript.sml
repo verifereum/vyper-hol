@@ -45,7 +45,7 @@ Definition translate_type_def:
   (translate_type JT_None = NoneT) /\
   (translate_type (JT_Named name) =
      if name = "bool" then BaseT BoolT
-     else if name = "address" then BaseT AddressT
+     else if name = "address" ∨ name = "self" then BaseT AddressT
      else if name = "decimal" then BaseT DecimalT
      else StructT name) /\
   (translate_type_list [] = []) /\
@@ -574,6 +574,7 @@ Definition translate_expr_def:
     else if obj = "block" /\ attr = "prevhash" then Builtin (Env PrevHash) []
     else if obj = "block" /\ attr = "blobbasefee" then Builtin (Env BlobBaseFee) []
     else if obj = "tx" /\ attr = "gasprice" then Builtin (Env GasPrice) []
+    else if obj = "chain" /\ attr = "id" then Builtin (Env ChainId) []
     else if obj = "self" /\ attr = "balance" then
       Builtin (Acc Balance) [Builtin (Env SelfAddr) []]
     (* self.x: use attr_src_id_opt from variable_reads for cross-module storage access *)
