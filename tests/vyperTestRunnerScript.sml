@@ -124,7 +124,7 @@ Definition compute_vyper_args_def:
       valid_enc abiTupTy cd
     then let
       abiArgsTup = dec abiTupTy cd;
-      vyTys = FST vyTysRet;
+      vyTys = TAKE (LENGTH argTys) (FST vyTysRet);
       (* Use combined type env from all modules so cross-module types work *)
       tenv = type_env_all_modules all_mods;
       vyArgsTup = abi_to_vyper tenv (TupleT vyTys) abiArgsTup;

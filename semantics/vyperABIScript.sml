@@ -1055,9 +1055,10 @@ val () = cv_auto_trans evaluate_abi_encode_def;
    Returns: byte list (selector ++ encoded args) or NONE on encoding failure *)
 Definition build_ext_calldata_def:
   build_ext_calldata env func_name arg_types arg_vals =
-    let abi_types = vyper_to_abi_types env arg_types in
+    let actual_types = TAKE (LENGTH arg_vals) arg_types in
+    let abi_types = vyper_to_abi_types env actual_types in
     let selector = function_selector func_name abi_types in
-    case vyper_to_abi_list env arg_types arg_vals of
+    case vyper_to_abi_list env actual_types arg_vals of
     | SOME abi_vals =>
         SOME (selector ++ enc (Tuple abi_types) (ListV abi_vals))
     | NONE => NONE
