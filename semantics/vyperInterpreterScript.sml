@@ -3540,10 +3540,31 @@ val () = send_call_value_def
             LET_RATOR, COND_RATOR]
   |> cv_auto_trans;
 
+Definition evaluate_defaults_def:
+  evaluate_defaults cx am [] = SOME [] ∧
+  evaluate_defaults cx am (e::es) =
+    (case FST $ eval_expr cx e (initial_state am []) of
+     | INL (Value v) =>
+         (case evaluate_defaults cx am es of
+          | SOME vs => SOME (v :: vs)
+          | NONE => NONE)
+     | _ => NONE)
+End
+
 Definition call_external_function_def:
-  call_external_function am cx mut ts all_mods args vals body ret =
+  call_external_function am cx mut ts all_mods args dflts vals body ret =
   let all_tenv = type_env_all_modules all_mods in
-  case bind_arguments all_tenv args vals
+  let n_provided = LENGTH vals in
+  let n_expected = LENGTH args in
+  let n_missing = n_expected - n_provided in
+  if n_provided > n_expected ∨ n_missing > LENGTH dflts then
+    (INR $ Error "call args length", am)
+  else
+  let needed_dflts = DROP (LENGTH dflts - n_missing) dflts in
+  case evaluate_defaults cx am needed_dflts of
+  | NONE => (INR $ Error "call evaluate_defaults", am)
+  | SOME dflt_vs =>
+  case bind_arguments all_tenv args (vals ++ dflt_vs)
   of NONE => (INR $ Error "call bind_arguments", am)
    | SOME env =>
   (case (if cx.in_deploy then evaluate_all_constants cx am cx.txn.target all_mods
@@ -3616,8 +3637,8 @@ Definition call_external_def:
    | SOME ts =>
   case lookup_exported_function cx am tx.function_name
   of NONE => (INR $ Error "call lookup_function", am)
-   | SOME (mut, args, _, ret, body) =>
-       call_external_function am cx mut ts all_mods args tx.args body ret
+   | SOME (mut, args, dflts, ret, body) =>
+       call_external_function am cx mut ts all_mods args dflts tx.args body ret
 End
 
 Definition load_contract_def:
@@ -3630,10 +3651,10 @@ Definition load_contract_def:
                       exports updated_by CONS (addr, exps) |> in
   case lookup_function NONE tx.function_name Deploy ts of
      | NONE => INR $ Error "no constructor"
-     | SOME (mut, args, _, ret, body) =>
+     | SOME (mut, args, dflts, ret, body) =>
        let cx = (initial_evaluation_context ((addr,mods)::am.sources) am.layouts tx)
                 with in_deploy := T in
-       case call_external_function am cx mut ts mods args tx.args body ret
+       case call_external_function am cx mut ts mods args dflts tx.args body ret
          of (INR e, _) => INR e
        (* TODO: update balances on return *)
           | (_, am) => INL (am with sources updated_by CONS (addr, mods))

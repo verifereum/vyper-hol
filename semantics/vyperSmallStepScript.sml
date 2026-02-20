@@ -1398,12 +1398,32 @@ Proof
   \\ rw[Once OWHILE_THM, Abbr`dk`]
 QED
 
+val evaluate_defaults_pre_def = evaluate_defaults_def
+  |> SRULE [eval_expr_eq_cont_cps]
+  |> cv_auto_trans_pre "evaluate_defaults_pre";
+
+Theorem evaluate_defaults_pre[cv_pre]:
+  ∀cx am v. evaluate_defaults_pre cx am v
+Proof
+  ntac 2 gen_tac
+  \\ Induct \\ rw[]
+  \\ rw[Once evaluate_defaults_pre_def]
+  \\ gs[eval_expr_eq_cont_cps]
+  \\ rw[cont_pre_IS_SOME_cont]
+  \\ qmatch_goalsub_abbrev_tac`eval_expr_cps ec ee es dk`
+  \\ qspecl_then[`ec`,`ee`,`es`,`dk`]mp_tac $ cj 8 eval_cps_eq
+  \\ rw[cont_def]
+  \\ CASE_TAC
+  \\ CASE_TAC \\ gvs[]
+  \\ rw[Once OWHILE_THM, Abbr`dk`]
+QED
+
 val call_external_function_pre_def = call_external_function_def
      |> SRULE [eval_stmts_eq_cont_cps, ignore_bind_def, bind_def]
      |> cv_auto_trans_pre "call_external_function_pre";
 
 Theorem call_external_function_pre[cv_pre]:
-  call_external_function_pre am cx mut ts all_mods args vals body ret
+  call_external_function_pre am cx mut ts all_mods args dflts vals body ret
 Proof
   rw[call_external_function_pre_def]
   \\ rw[cont_pre_IS_SOME_cont]

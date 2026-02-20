@@ -291,18 +291,6 @@ val allowed_test_names = [
 
 (* Tests excluded by name - require architectural changes *)
 val excluded_test_names = [
-
-  (* TODO: external calls with default args *)
-  "test_basic_default_param_*",
-  "test_default_param_*",
-  "test_default_arg_string",
-  "test_environment_vars_as_default",
-  "test_external_contract_calls_with_default_value*",
-  "test_intrinsic_interface_defaults",
-  "test_bytes_literals[*]",
-  "test_native_hex_literals[*]",
-  "test_private_zero_bytearray",
-  "test_external_call_to_interface_kwarg[*]"
 ]
 
 fun glob_match pat str =
