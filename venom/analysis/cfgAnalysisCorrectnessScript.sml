@@ -184,6 +184,7 @@ Definition index_of_def:
     | y::ys => if x = y then 0 else SUC (index_of x ys)
 End
 
+(* TOP-LEVEL: Non-back-edge successors appear earlier than predecessors in postorder. *)
 Theorem cfg_analyze_postorder_order:
   !fn a b.
     MEM b (cfg_succs_of (cfg_analyze fn) a) /\
@@ -199,6 +200,7 @@ Definition cfg_acyclic_def:
     !a b. cfg_path cfg a b /\ cfg_path cfg b a ==> a = b
 End
 
+(* TOP-LEVEL: Acyclic CFGs yield a clean postorder ordering for all edges. *)
 Theorem cfg_analyze_postorder_order_acyclic:
   !fn a b.
     cfg_acyclic (cfg_analyze fn) /\
