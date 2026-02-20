@@ -77,24 +77,13 @@ Proof
        get_scopes_def, lift_sum_def] >>
   IF_CASES_TAC >> gvs[return_def, bind_def] >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac get_immutables_scopes >> gvs[]
-  >- (Cases_on `get_immutables cx (current_module cx) st` >> Cases_on `q` >> gvs[] >>
-      imp_res_tac get_immutables_scopes >> gvs[] >>
-      Cases_on `exactly_one_option
-                  (if IS_SOME (lookup_scopes (string_to_num nm) st.scopes) then
-                     SOME (ScopedVar nm) else NONE)
-                  (immutable_target x nm (string_to_num nm))` >> gvs[return_def, raise_def])
-  >- (Cases_on `get_immutables cx (current_module cx) st` >> Cases_on `q` >> gvs[] >>
-      imp_res_tac get_immutables_scopes >> gvs[] >>
-      Cases_on `exactly_one_option
-                  (if IS_SOME (lookup_scopes (string_to_num nm) st.scopes) then
-                     SOME (ScopedVar nm) else NONE)
-                  (immutable_target x nm (string_to_num nm))` >> gvs[return_def, raise_def])
-  >- (Cases_on `get_immutables cx (current_module cx) st` >> Cases_on `q` >> gvs[] >>
-      imp_res_tac get_immutables_scopes >> gvs[])
-  >> Cases_on `exactly_one_option
-                 (if IS_SOME (lookup_scopes (string_to_num nm) st.scopes) then
-                    SOME (ScopedVar nm) else NONE) NONE` >> gvs[return_def, raise_def]
+  imp_res_tac get_immutables_scopes >> gvs[] >>
+  Cases_on `get_immutables cx (current_module cx) st` >> Cases_on `q` >> gvs[] >>
+  imp_res_tac get_immutables_scopes >> gvs[] >>
+  gvs[option_CASE_rator, sum_CASE_rator, prod_CASE_rator,
+      bind_def, return_def, raise_def, check_def, ignore_bind_def,
+      assert_def, get_module_code_def, lift_option_def,
+      AllCaseEqs(), exactly_one_option_def, lift_sum_def]
 QED
 
 (* Goal 2: TopLevelNameTarget (no IH) *)

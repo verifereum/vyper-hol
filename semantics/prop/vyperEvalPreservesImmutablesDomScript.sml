@@ -1263,9 +1263,10 @@ Proof
   rpt strip_tac >> gvs[return_def, raise_def] >>
   Cases_on `cx.txn.is_creation` >>
   gvs[return_def, raise_def, bind_def, get_address_immutables_def,
-      lift_option_def, immutable_target_def, AllCaseEqs()] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[return_def, raise_def, exactly_one_option_def])
+      lift_option_def, immutable_target_def,
+      option_CASE_rator, sum_CASE_rator, prod_CASE_rator,
+      get_module_code_def, check_def, ignore_bind_def, assert_def,
+      AllCaseEqs(), exactly_one_option_def, lift_sum_def]
 QED
 
 (* ----- Case: eval_base_target (AttributeTarget bt id) ----- *)

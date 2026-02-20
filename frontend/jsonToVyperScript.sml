@@ -478,6 +478,18 @@ End
 
 val () = cv_auto_trans extract_innermost_module_src_def;
 
+(* Check if an expression is a module reference (not an interface-typed value).
+   Used to detect nested module attribute access: mod3.mod2.mod1.X
+   Interface-typed expressions like self.f should NOT match, because they are
+   runtime values with attributes like .address and .balance. *)
+Definition is_module_expr_def:
+  (is_module_expr (JE_Attribute _ _ (SOME tc) _) = (tc = "module")) /\
+  (is_module_expr (JE_Name _ (SOME tc) _) = (tc = "module")) /\
+  (is_module_expr _ = F)
+End
+
+val () = cv_auto_trans is_module_expr_def;
+
 (* Detect cross-module flag member pattern: lib1.Action.BUY or lib1.lib2.Roles3.NOBODY *)
 (* Returns SOME (src_id_opt, flag_name) if it matches, NONE otherwise *)
 (* e is the expression immediately under the flag member attribute (i.e., the flag type expression) *)
@@ -574,11 +586,14 @@ Definition translate_expr_def:
 
   (* General attribute - handles nested and simple cases *)
   (* Check for cross-module flag access: lib1.Action.BUY *)
-  (translate_expr (JE_Attribute e attr result_tc _) =
+  (translate_expr (JE_Attribute e attr result_tc attr_src_id_opt) =
     if result_tc = SOME "flag" then
       case extract_module_flag e of
       | SOME (src_id_opt, flag_name) => FlagMember (src_id_opt, flag_name) attr
       | NONE => Attribute (translate_expr e) attr
+    (* Nested module access: mod3.mod2.mod1.X — use variable_reads source_id *)
+    else if is_module_expr e then
+      TopLevelName (source_id_to_nsid attr_src_id_opt, attr)
     else if attr = "balance" then Builtin (Acc Balance) [translate_expr e]
     else if attr = "address" then Builtin (Acc Address) [translate_expr e]
     else Attribute (translate_expr e) attr) /\
@@ -776,10 +791,27 @@ End
 
 val () = cv_auto_trans range_bound_of_args_def;
 
+Definition folded_bound_of_args_def:
+  (folded_bound_of_args [] = NONE) /\
+  (folded_bound_of_args [fv] =
+     case fv of
+       SOME n => if 0 <= n then SOME (Num n) else SOME 0
+     | NONE => NONE) /\
+  (folded_bound_of_args (fs::fe::_) =
+     case (fs, fe) of
+       (SOME s, SOME e) =>
+         if s <= e then SOME (Num (e - s)) else SOME 0
+     | _ => NONE)
+End
+
+val () = cv_auto_trans folded_bound_of_args_def;
+
 Definition get_iter_bound_def:
-  (get_iter_bound (JIter_Range args (SOME n)) = n) /\
-  (get_iter_bound (JIter_Range args NONE) =
-     case range_bound_of_args args of SOME n => n | NONE => 0) /\
+  (get_iter_bound (JIter_Range args _ (SOME n)) = n) /\
+  (get_iter_bound (JIter_Range args fvs NONE) =
+     case range_bound_of_args args of
+       SOME n => n
+     | NONE => case folded_bound_of_args fvs of SOME n => n | NONE => 0) /\
   (get_iter_bound (JIter_Array _ (JT_StaticArray _ len)) = len) /\
   (get_iter_bound (JIter_Array _ (JT_DynArray _ len)) = len) /\
   (get_iter_bound (JIter_Array _ _) = 0)
@@ -788,13 +820,13 @@ End
 val () = cv_auto_trans get_iter_bound_def;
 
 Definition translate_iter_def:
-  (translate_iter var_ty (JIter_Range [] _) =
+  (translate_iter var_ty (JIter_Range [] _ _) =
     Range (Literal (IntL (int_bound_of_type var_ty) (integer$int_of_num 0)))
           (Literal (IntL (int_bound_of_type var_ty) (integer$int_of_num 0)))) /\
-  (translate_iter var_ty (JIter_Range [e] _) =
+  (translate_iter var_ty (JIter_Range [e] _ _) =
     Range (Literal (IntL (int_bound_of_type var_ty) (integer$int_of_num 0)))
           (translate_expr e)) /\
-  (translate_iter var_ty (JIter_Range (s::e::_) _) =
+  (translate_iter var_ty (JIter_Range (s::e::_) _ _) =
     Range (translate_expr s) (translate_expr e)) /\
   (translate_iter var_ty (JIter_Array e _) =
     Array (translate_expr e))

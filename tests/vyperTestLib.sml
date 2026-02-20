@@ -302,10 +302,7 @@ val excluded_test_names = [
   "test_bytes_literals[*]",
   "test_native_hex_literals[*]",
   "test_private_zero_bytearray",
-  "test_external_call_to_interface_kwarg[*]",
-  (* TODO: complex module constants *)
-  "test_import_constant_array",
-  "test_module_constant_builtin"
+  "test_external_call_to_interface_kwarg[*]"
 ]
 
 fun glob_match pat str =

@@ -270,15 +270,13 @@ Proof
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def] >>
   Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >- simp[] >>
   fs[] >>
-  Cases_on `cx.txn.is_creation` >-
-   (simp[get_immutables_def, get_address_immutables_def,
-         bind_def, lift_option_def,
-         return_def, raise_def] >>
-    Cases_on `ALOOKUP st.immutables cx.txn.target` >>
-    simp[return_def, immutable_target_def] >>
-    Cases_on `FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num n)` >>
-    simp[exactly_one_option_def, lift_sum_def, return_def, raise_def]) >>
-  simp[return_def, exactly_one_option_def, lift_sum_def, raise_def]
+  Cases_on `cx.txn.is_creation` >>
+  simp[get_immutables_def, get_address_immutables_def,
+       bind_def, lift_option_def, return_def, raise_def,
+       option_CASE_rator, sum_CASE_rator, prod_CASE_rator,
+       get_module_code_def, check_def, ignore_bind_def, assert_def,
+       lift_sum_def, exactly_one_option_def, immutable_target_def] >>
+  rpt CASE_TAC >> gvs[exactly_one_option_def]
 QED
 
 Theorem lookup_scoped_var_implies_lookup_name:

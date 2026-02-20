@@ -221,9 +221,9 @@ fun mk_JS_Append (tgt, v) = list_mk_comb(JS_Append_tm, [tgt, v])
 val JIter_Range_tm = jastk "JIter_Range"
 val JIter_Array_tm = jastk "JIter_Array"
 
-fun mk_JIter_Range (args, boundopt) =
+fun mk_JIter_Range (args, fvs, boundopt) =
   list_mk_comb(JIter_Range_tm,
-    [args,
+    [args, fvs,
      lift_option (mk_option num) I boundopt])
 fun mk_JIter_Array (e, ty) = list_mk_comb(JIter_Array_tm, [e, ty])
 
@@ -596,13 +596,6 @@ fun d_json_expr () : term decoder = achoose "expr" [
   (* Ellipsis - appears in .vyi interface stub function bodies *)
   check_ast_type "Ellipsis" $ succeed (mk_JE_Bool true),
 
-  (* Name with folded_value (constant) *)
-  check_ast_type "Name" $
-    JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
-    tuple2 (field "folded_value" $
-              check_ast_type "Int" $ field "value" inttm,
-            orElse(field "type" json_type, succeed JT_None_tm)),
-
   (* Name - extract typeclass and source_id for module references *)
   (* source_id < 0 means main module (NONE), >= 0 means imported module *)
   check_ast_type "Name" $
@@ -613,13 +606,6 @@ fun d_json_expr () : term decoder = achoose "expr" [
                     orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
                             orElse (field "type" $ field "type_t" $ field "type_decl_node" $ field "source_id" source_id_tm,
                             succeed (intSyntax.term_of_int (Arbint.fromInt ~1)))))),
-
-  (* Attribute with folded_value (cross-module constant) *)
-  check_ast_type "Attribute" $
-    JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
-    tuple2 (field "folded_value" $
-              check_ast_type "Int" $ field "value" inttm,
-            orElse(field "type" json_type, succeed JT_None_tm)),
 
   (* Attribute - extract result typeclass and source_id for flag/module member detection *)
   (* source_id comes from variable_reads[0].decl_node.source_id OR type.type_decl_node.source_id *)
@@ -645,24 +631,12 @@ fun d_json_expr () : term decoder = achoose "expr" [
 
   (* BinOp *)
   check_ast_type "BinOp" $
-    JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
-    tuple2 (field "folded_value" $
-              check_ast_type "Int" $ field "value" inttm,
-            orElse(field "type" json_type, succeed JT_None_tm)),
-
-  check_ast_type "BinOp" $
     JSONDecode.map (fn (l, op_tm, r) => mk_JE_BinOp(l, op_tm, r)) $
     tuple3 (field "left" (delay d_json_expr),
             field "op" json_binop,
             field "right" (delay d_json_expr)),
 
   (* Compare (treated like BinOp) *)
-  check_ast_type "Compare" $
-    JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
-    tuple2 (field "folded_value" $
-              check_ast_type "Int" $ field "value" inttm,
-            orElse(field "type" json_type, succeed JT_None_tm)),
-
   check_ast_type "Compare" $
     JSONDecode.map (fn (l, op_tm, r) => mk_JE_BinOp(l, op_tm, r)) $
     tuple3 (field "left" (delay d_json_expr),
@@ -800,7 +774,7 @@ val json_target = delay d_json_target
 (* ===== Iterator Decoder ===== *)
 
 (* Internal representation for iterator parsing *)
-datatype iter_parse = RangeParse of term list * term option | ArrayParse of term * term
+datatype iter_parse = RangeParse of term list * term list * term option | ArrayParse of term * term
 
 val json_iter_internal : iter_parse decoder = achoose "iter" [
   (* range(...) call *)
@@ -809,16 +783,20 @@ val json_iter_internal : iter_parse decoder = achoose "iter" [
     achoose "range variants" [
       (* range with explicit bound keyword *)
       check (field "keywords" $ sub 0 $ field "arg" string) (fn s => s = "bound") "not bounded" $
-      JSONDecode.map (fn (args, bound) => RangeParse(args, SOME bound)) $
+      JSONDecode.map (fn (args, bound) => RangeParse(args, [], SOME bound)) $
       tuple2 (field "args" (array json_expr),
               field "keywords" $ sub 0 $ field "value" $
                 achoose "bound value" [
                   field "folded_value" $ field "value" numtm,
                   field "value" numtm
                 ]),
-      (* range without explicit bound *)
-      JSONDecode.map (fn args => RangeParse(args, NONE)) $
-      field "args" (array json_expr)
+      (* range without explicit bound - also extract folded_value integers for bound computation *)
+      JSONDecode.map (fn (args, fvs) => RangeParse(args, fvs, NONE)) $
+      tuple2 (field "args" (array json_expr),
+              field "args" (array (
+                orElse(
+                  JSONDecode.map mk_some (field "folded_value" $ check_ast_type "Int" $ field "value" inttm),
+                  succeed (mk_none intSyntax.int_ty)))))
     ],
 
   (* Array iteration *)
@@ -826,8 +804,10 @@ val json_iter_internal : iter_parse decoder = achoose "iter" [
   tuple2 (json_expr, field "type" json_type)
 ]
 
-fun iter_parse_to_term (RangeParse(args, boundopt)) =
-      mk_JIter_Range(mk_list(args, json_expr_ty), boundopt)
+fun iter_parse_to_term (RangeParse(args, fvs, boundopt)) =
+      mk_JIter_Range(mk_list(args, json_expr_ty),
+                      mk_list(fvs, mk_option intSyntax.int_ty),
+                      boundopt)
   | iter_parse_to_term (ArrayParse(e, ty)) =
       mk_JIter_Array(e, ty)
 
@@ -986,8 +966,7 @@ val json_interface_func : term decoder =
     )
   )
 
-(* Parser for export annotations that preserves Attribute structure.
-   Unlike json_expr, this does NOT fold constants via folded_value,
+(* Parser for export annotations that preserves Attribute structure,
    so exports: lib1.CONST keeps the JE_Attribute form. *)
 fun d_export_annotation_expr () : term decoder = achoose "export_annotation" [
   (* Tuple of export expressions *)

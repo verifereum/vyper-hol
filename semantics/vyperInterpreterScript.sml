@@ -2335,15 +2335,6 @@ End
 
 val () = cv_auto_trans getter_def;
 
-Definition name_expression_def:
-  name_expression src_id_opt mut id =
-  if is_Constant mut
-  then Name id
-  else TopLevelName (src_id_opt, id)
-End
-
-val () = cv_auto_trans name_expression_def;
-
 Definition lookup_function_def:
   lookup_function src_id_opt name Deploy [] = SOME (Payable, [], [], NoneT, []) ∧
   lookup_function src_id_opt name vis [] = NONE ∧
@@ -2352,9 +2343,10 @@ Definition lookup_function_def:
    else lookup_function src_id_opt name vis ts) ∧
   lookup_function src_id_opt name External (VariableDecl Public mut id typ :: ts) =
   (if id = name then
+    let ne = TopLevelName (src_id_opt, id) in
     if ¬is_ArrayT typ
-    then SOME (View, [], [], typ, [Return (SOME (name_expression src_id_opt mut id))])
-    else SOME $ getter (name_expression src_id_opt mut id) (BaseT (UintT 256)) (Type (ArrayT_type typ))
+    then SOME (View, [], [], typ, [Return (SOME ne)])
+    else SOME $ getter ne (BaseT (UintT 256)) (Type (ArrayT_type typ))
    else lookup_function src_id_opt name External ts) ∧
   lookup_function src_id_opt name External (HashMapDecl Public _ id kt vt :: ts) =
   (if id = name then SOME $ getter (TopLevelName (src_id_opt, id)) kt vt
@@ -2829,6 +2821,16 @@ End
 
 val () = cv_auto_trans exactly_one_option_def;
 
+(* Check whether variable n is declared as Immutable (not Constant) in toplevels *)
+Definition is_immutable_decl_def:
+  is_immutable_decl n [] = F ∧
+  is_immutable_decl n (VariableDecl _ Immutable vid _ :: ts) =
+    (if string_to_num vid = n then T else is_immutable_decl n ts) ∧
+  is_immutable_decl n (_ :: ts) = is_immutable_decl n ts
+End
+
+val () = cv_auto_trans is_immutable_decl_def;
+
 Definition immutable_target_def:
   immutable_target (imms: num |-> value) id n =
   case FLOOKUP imms n of SOME _ => SOME $ ImmutableVar id
@@ -3124,7 +3126,15 @@ Definition evaluate_def:
 	    else NONE;
     ivo <- if cx.txn.is_creation
            then do imms <- get_immutables cx (current_module cx);
-                   return $ immutable_target imms id n
+                   case immutable_target imms id n of
+                   | NONE => return NONE
+                   | SOME tgt => do
+                       ts <- lift_option
+                               (get_module_code cx (current_module cx))
+                               "NameTarget get_module_code";
+                       check (is_immutable_decl n ts) "assign to constant";
+                       return (SOME tgt)
+                     od
                 od
            else return NONE;
     v <- lift_sum $ exactly_one_option svo ivo;
@@ -3490,6 +3500,31 @@ Definition constants_env_def:
   constants_env cx am (t::ts) acc = constants_env cx am ts acc
 End
 
+(* Merge a constants fmap into the immutables for a given module *)
+Definition merge_constants_def:
+  merge_constants addr src_id_opt cenv (am: abstract_machine) =
+    let imms = case ALOOKUP am.immutables addr of
+                 SOME m => m | NONE => empty_immutables in
+    let src_imms = get_source_immutables src_id_opt imms in
+    let merged = FUNION cenv src_imms in
+    let imms' = set_source_immutables src_id_opt merged imms in
+    am with immutables updated_by
+      (λal. (addr, imms') :: ADELKEY addr al)
+End
+
+val () = cv_auto_trans merge_constants_def;
+
+(* Evaluate constants for all modules and merge into am.immutables *)
+Definition evaluate_all_constants_def:
+  evaluate_all_constants cx am addr [] = SOME am ∧
+  evaluate_all_constants cx am addr ((src_id_opt, ts) :: rest) =
+    case constants_env cx am ts FEMPTY of
+    | NONE => NONE
+    | SOME cenv =>
+        let am' = merge_constants addr src_id_opt cenv am in
+        evaluate_all_constants cx am' addr rest
+End
+
 Definition send_call_value_def:
   send_call_value mut cx =
   let n = cx.txn.value in
@@ -3510,10 +3545,11 @@ Definition call_external_function_def:
   case bind_arguments all_tenv args vals
   of NONE => (INR $ Error "call bind_arguments", am)
    | SOME env =>
-  (case constants_env cx am ts FEMPTY
+  (case (if cx.in_deploy then evaluate_all_constants cx am cx.txn.target all_mods
+         else SOME am)
    of NONE => (INR $ Error "call constants_env", am)
-    | SOME cenv => (* TODO: how do we stop constants being assigned to? *)
-   let st = initial_state am [env; cenv] in
+    | SOME am =>
+   let st = initial_state am [env] in
    let srcs = am.sources in
    let exps = am.exports in
    let layouts = am.layouts in
