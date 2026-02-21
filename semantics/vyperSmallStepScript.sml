@@ -321,16 +321,16 @@ Definition apply_def:
   apply cx st (IfK1 (Value (BoolV b)) ss1 ss2 k) =
     eval_stmts_cps cx (if b then ss1 else ss2) st (IfK2 k) ∧
   apply cx st (IfK1 (Value _) ss1 ss2 k) =
-    AK cx (ApplyExc $ TypeError "not BoolV") st (IfK2 k) ∧
+    AK cx (ApplyExc $ Error (TypeError "not BoolV")) st (IfK2 k) ∧
   apply cx st (IfK1 _ ss1 ss2 k) =
-    AK cx (ApplyExc $ TypeError "not Value") st (IfK2 k) ∧
+    AK cx (ApplyExc $ Error (TypeError "not Value")) st (IfK2 k) ∧
   apply cx st (IntCallK2 prev rtv k) =
     liftk (cx with stk updated_by TL) (ApplyTv o Value)
       (do pop_function prev;
           crv <- lift_option_type (safe_cast rtv NoneV) "IntCall cast ret";
           return crv od st) k ∧
   apply cx st DoneK = AK cx Apply st DoneK ∧
-  apply cx st _ = AK cx (ApplyExc $ TypeError "apply k") st DoneK
+  apply cx st _ = AK cx (ApplyExc $ Error (TypeError "apply k")) st DoneK
 End
 
 val () = apply_def
@@ -409,7 +409,7 @@ Definition apply_targets_def:
   apply_targets cx gvs st (TupleTargetK k) =
       AK cx (ApplyTarget (TupleTargetV gvs)) st k ∧
   apply_targets cx _ st _ =
-    AK cx (ApplyExc $ TypeError "apply_targets k") st DoneK
+    AK cx (ApplyExc $ Error (TypeError "apply_targets k")) st DoneK
 End
 
 val () = cv_auto_trans apply_targets_def;
@@ -433,7 +433,7 @@ Definition apply_base_target_def:
       return $ Value v od st) k ∧
   apply_base_target cx btv st DoneK = AK cx (ApplyBaseTarget btv) st DoneK ∧
   apply_base_target cx _ st _ =
-    AK cx (ApplyExc $ TypeError "apply_base_target k") st DoneK
+    AK cx (ApplyExc $ Error (TypeError "apply_base_target k")) st DoneK
 End
 
 val () = apply_base_target_def
@@ -447,7 +447,7 @@ Definition apply_target_def:
   apply_target cx gv st (TargetsK gs k) =
     eval_targets_cps cx gs st (TargetsK1 gv k) ∧
   apply_target cx gv st _ =
-    AK cx (ApplyExc $ TypeError "apply_target k") st DoneK
+    AK cx (ApplyExc $ Error (TypeError "apply_target k")) st DoneK
 End
 
 val () = cv_auto_trans apply_target_def;
@@ -491,11 +491,11 @@ Definition apply_val_def:
   apply_val cx v st (ReturnK k) = apply_exc cx (ReturnException v) st k ∧
   apply_val cx (BoolV T) st (AssertK se k) = apply cx st k ∧
   apply_val cx (BoolV F) st (AssertK se k) = eval_expr_cps cx se st (RaiseK k) ∧
-  apply_val cx _ st (AssertK e k) = apply_exc cx (TypeError "not BoolV") st k ∧
+  apply_val cx _ st (AssertK e k) = apply_exc cx (Error (TypeError "not BoolV")) st k ∧
   apply_val cx (StringV _ str) st (RaiseK k) =
     apply_exc cx (AssertException str) st k ∧
   apply_val cx _ st (RaiseK k) =
-    apply_exc cx (TypeError "not StringV") st k ∧
+    apply_exc cx (Error (TypeError "not StringV")) st k ∧
   apply_val cx v st (AnnAssignK id k) =
     liftk cx (K Apply) (new_variable id v st) k ∧
   apply_val cx v st (AssignK1 gv k) =
@@ -524,7 +524,7 @@ Definition apply_val_def:
   apply_val cx (BoolV F) st (IfExpK e2 e3 k) =
     eval_expr_cps cx e3 st k ∧
   apply_val cx v st (IfExpK _ _ k) =
-    apply_exc cx (TypeError "not BoolV") st k ∧
+    apply_exc cx (Error (TypeError "not BoolV")) st k ∧
   apply_val cx v2 st (SubscriptK1 tv1 k) =
     liftk cx ApplyTv (do
       tenv <<- get_tenv cx;
@@ -541,12 +541,12 @@ Definition apply_val_def:
     eval_exprs_cps cx es st (ExprsK1 v k) ∧
   apply_val cx v st DoneK = AK cx (ApplyVal v) st DoneK ∧
   apply_val cx v st _ =
-    AK cx (ApplyExc $ TypeError "apply_val k") st DoneK
+    AK cx (ApplyExc $ Error (TypeError "apply_val k")) st DoneK
 End
 
 val () = apply_val_def
   |> SRULE [liftk1, prod_CASE_rator, sum_CASE_rator,
-            option_CASE_rator, lift_option_def, lift_option_type_def, lift_sum_def, lift_sum_error_def,
+            option_CASE_rator, lift_option_def, lift_option_type_def, lift_sum_def, lift_sum_runtime_def,
             LET_RATOR, bind_def, ignore_bind_def]
   |> cv_auto_trans;
 
@@ -611,7 +611,7 @@ Definition apply_vals_def:
       if returnData = [] ∧ IS_SOME drv then
         return (INL (THE drv))
       else do
-        ret_val <- lift_sum_error (evaluate_abi_decode_return tenv ret_type returnData);
+        ret_val <- lift_sum_runtime (evaluate_abi_decode_return tenv ret_type returnData);
         return (INR (Value ret_val))
       od
     od st
@@ -634,7 +634,7 @@ Definition apply_vals_def:
           eval_stmts_cps cxf body st (IntCallK2 prev rtv k)) ∧
   apply_vals cx vs st DoneK = AK cx (ApplyVals vs) st DoneK ∧
   apply_vals cx vs st _ =
-    AK cx (ApplyExc $ TypeError "apply_vals k") st DoneK
+    AK cx (ApplyExc $ Error (TypeError "apply_vals k")) st DoneK
 End
 
 Triviality LET4_UNCURRY:
@@ -647,7 +647,7 @@ QED
 
 val apply_vals_pre_def = apply_vals_def
   |> SRULE [liftk1, bind_def, ignore_bind_def, lift_option_def, lift_option_type_def, lift_option_type_def,
-            lift_sum_def, lift_sum_error_def, prod_CASE_rator, LET_RATOR, LET4_UNCURRY,
+            lift_sum_def, lift_sum_runtime_def, prod_CASE_rator, LET_RATOR, LET4_UNCURRY,
             UNCURRY, sum_CASE_rator, option_CASE_rator, COND_RATOR]
   |> cv_auto_trans_pre "apply_vals_pre";
 
@@ -1298,7 +1298,7 @@ QED
 Definition fromk_def[simp]:
   fromk (SOME (AK cx Apply st DoneK)) = (INL (), st) ∧
   fromk (SOME (AK cx (ApplyExc ex) st DoneK)) = (INR ex, st) ∧
-  fromk _ = (INR $ TypeError "fromk", empty_state)
+  fromk _ = (INR $ Error (TypeError "fromk"), empty_state)
 End
 
 val () = cv_trans fromk_def;
@@ -1360,7 +1360,7 @@ QED
 Definition fromtvk_def:
   fromtvk (SOME (AK cx (ApplyTv tv) st DoneK)) = (INL tv, st) ∧
   fromtvk (SOME (AK cx (ApplyExc ex) st DoneK)) = (INR ex, st) ∧
-  fromtvk _ = (INR $ TypeError "fromtvk", empty_state)
+  fromtvk _ = (INR $ Error (TypeError "fromtvk"), empty_state)
 End
 
 val () = cv_auto_trans fromtvk_def;

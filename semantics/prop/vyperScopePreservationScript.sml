@@ -54,10 +54,10 @@ Proof
   rw[lift_sum_def] >> Cases_on `x` >> fs[return_def, raise_def]
 QED
 
-Theorem lift_sum_error_scopes:
-  !x st res st'. lift_sum_error x st = (res, st') ==> st'.scopes = st.scopes
+Theorem lift_sum_runtime_scopes:
+  !x st res st'. lift_sum_runtime x st = (res, st') ==> st'.scopes = st.scopes
 Proof
-  rw[lift_sum_error_def] >> Cases_on `x` >> fs[return_def, raise_def]
+  rw[lift_sum_runtime_def] >> Cases_on `x` >> fs[return_def, raise_def]
 QED
 
 Theorem get_Value_scopes:
