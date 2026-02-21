@@ -8,18 +8,6 @@ Libs
   cv_transLib wordsLib monadsyntax
   integerTheory[qualified] intSimps[qualified]
 
-(* cv_rep theorem for FUNION on num-keyed fmaps *)
-Theorem cv_rep_FUNION[cv_rep]:
-  from_fmap f (FUNION m1 m2) = cv_union (from_fmap f m1) (from_fmap f m2)
-Proof
-  rw[cv_stdTheory.from_fmap_def, GSYM cv_stdTheory.cv_union_thm]
-  \\ AP_TERM_TAC
-  \\ dep_rewrite.DEP_REWRITE_TAC[sptreeTheory.spt_eq_thm]
-  \\ simp[sptreeTheory.wf_union, sptreeTheory.wf_fromAList]
-  \\ simp[sptreeTheory.lookup_union, sptreeTheory.lookup_fromAList]
-  \\ simp[FLOOKUP_FUNION]
-QED
-
 Definition dest_NumV_def:
   dest_NumV (IntV _ i) =
     (if i < 0 then NONE else SOME (Num i)) ∧
