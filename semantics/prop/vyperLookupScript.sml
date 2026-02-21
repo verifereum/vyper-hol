@@ -83,7 +83,7 @@ Proof
   rpt strip_tac >>
   simp[lookup_name_def, Once evaluate_def, bind_def, get_scopes_def, return_def,
        get_immutables_def, get_address_immutables_def,
-       lift_option_def, exactly_one_option_def, lift_sum_def]
+       lift_option_def, lift_option_type_def, exactly_one_option_def, lift_sum_def]
 QED
 
 Theorem lookup_scopes_update_other[local]:
@@ -255,7 +255,7 @@ Proof
   simp[] >>
   Cases_on `cx.txn.is_creation` >-
     gvs[get_immutables_def, get_address_immutables_def,
-        bind_def, lift_option_def, return_def,
+        bind_def, lift_option_def, lift_option_type_def, return_def,
         lift_sum_def, exactly_one_option_def, immutable_target_def, raise_def] >>
   simp[return_def, lift_sum_def, exactly_one_option_def]
 QED
@@ -272,7 +272,7 @@ Proof
   fs[] >>
   Cases_on `cx.txn.is_creation` >>
   simp[get_immutables_def, get_address_immutables_def,
-       bind_def, lift_option_def, return_def, raise_def,
+       bind_def, lift_option_def, lift_option_type_def, return_def, raise_def,
        option_CASE_rator, sum_CASE_rator, prod_CASE_rator,
        get_module_code_def, check_def, ignore_bind_def, assert_def,
        lift_sum_def, exactly_one_option_def, immutable_target_def] >>
@@ -358,7 +358,7 @@ Proof
   Cases_on `find_containing_scope (string_to_num n) st.scopes` >- gvs[] >>
   PairCases_on `x` >> gvs[] >>
   simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
-       lift_option_def, lift_sum_def, assign_subscripts_def,
+       lift_option_def, lift_option_type_def, lift_sum_def, assign_subscripts_def,
        ignore_bind_def, set_scopes_def, update_scoped_var_def, LET_THM,
        assign_result_def]
 QED
@@ -377,7 +377,7 @@ Proof
   PairCases_on `x` >> gvs[] >>
   `x2 = v` by (drule find_containing_scope_lookup >> simp[]) >> gvs[] >>
   simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
-       lift_option_def, lift_sum_def, assign_subscripts_def,
+       lift_option_def, lift_option_type_def, lift_sum_def, assign_subscripts_def,
        ignore_bind_def, set_scopes_def, update_scoped_var_def, LET_THM,
        assign_result_def]
 QED
@@ -397,7 +397,7 @@ Proof
   PairCases_on `x` >> gvs[] >>
   `x2 = a` by (drule find_containing_scope_lookup >> simp[]) >> gvs[] >>
   simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
-       lift_option_def, lift_sum_def, assign_result_def,
+       lift_option_def, lift_option_type_def, lift_sum_def, assign_result_def,
        ignore_bind_def, set_scopes_def, update_scoped_var_def, LET_THM] >>
   Cases_on `ao` >> simp[assign_result_def, return_def, bind_def, lift_sum_def] >>
   rpt (CASE_TAC >> gvs[return_def, raise_def])
@@ -441,7 +441,7 @@ Proof
   PairCases_on `x` >> gvs[] >>
   `x2 = a` by (drule find_containing_scope_lookup >> simp[]) >> gvs[] >>
   simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
-       lift_option_def, lift_sum_def,
+       lift_option_def, lift_option_type_def, lift_sum_def,
        ignore_bind_def, set_scopes_def, update_scoped_var_def, LET_THM] >>
   Cases_on `ao` >> simp[assign_result_def, return_def, bind_def, lift_sum_def]
   >- (drule assign_subscripts_PopOp_assign_result >> strip_tac >>
@@ -480,7 +480,7 @@ Proof
   Cases_on `lookup_scopes (string_to_num n) st.scopes` >-
    gvs[Once evaluate_def, bind_def, get_scopes_def, return_def,
        get_immutables_def, get_address_immutables_def,
-       lift_option_def, exactly_one_option_def, lift_sum_def, return_def] >>
+       lift_option_def, lift_option_type_def, exactly_one_option_def, lift_sum_def, return_def] >>
   first_x_assum (qspec_then `n` mp_tac) >> simp[]
 QED
 
@@ -547,12 +547,12 @@ Proof
   simp[lookup_name_def] >>
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
        get_immutables_def, get_address_immutables_def,
-       lift_option_def, lift_sum_def,
+       lift_option_def, lift_option_type_def, lift_sum_def,
        immutables_preserved_after_update,
        lookup_scoped_var_preserved_after_update, GSYM lookup_scoped_var_def] >>
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
        get_immutables_def, get_address_immutables_def,
-       lift_option_def, lift_sum_def,
+       lift_option_def, lift_option_type_def, lift_sum_def,
        GSYM lookup_scoped_var_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> simp[raise_def, return_def] >>
   Cases_on `exactly_one_option (lookup_scoped_var st n2)
@@ -620,7 +620,7 @@ Proof
   (* Need: lookup_name cx st n = NONE *)
   gvs[var_in_scope_def, lookup_scoped_var_def, lookup_immutable_def, valid_lookups_def] >>
   simp[lookup_name_def, Once evaluate_def, bind_def, get_scopes_def, return_def,
-       get_immutables_def, get_address_immutables_def, lift_option_def,
+       get_immutables_def, get_address_immutables_def, lift_option_def, lift_option_type_def,
        exactly_one_option_def, raise_def, lift_sum_def]
 QED
 
@@ -737,11 +737,11 @@ Proof
   (* Expand both eval_expr calls *)
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
        get_immutables_def, get_address_immutables_def,
-       lift_option_def, lift_sum_def, GSYM lookup_scoped_var_def,
+       lift_option_def, lift_option_type_def, lift_sum_def, GSYM lookup_scoped_var_def,
        exactly_one_option_def, raise_def] >>
   CONV_TAC (RHS_CONV (SIMP_CONV (srw_ss()) [Once evaluate_def, bind_def, get_scopes_def, return_def,
        get_immutables_def, get_address_immutables_def,
-       lift_option_def, lift_sum_def, GSYM lookup_scoped_var_def,
+       lift_option_def, lift_option_type_def, lift_sum_def, GSYM lookup_scoped_var_def,
        exactly_one_option_def, raise_def])) >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> simp[raise_def, return_def] >>
   simp[GSYM lookup_scoped_var_def, exactly_one_option_def] >>
@@ -1023,7 +1023,7 @@ Proof
   `lookup_scopes (string_to_num id) st.scopes = NONE`
     by fs[lookup_scoped_var_def] >>
   simp[new_variable_def, LET_THM, get_scopes_def, return_def, bind_def,
-       check_def] >>
+       check_def, type_check_def] >>
   ASM_REWRITE_TAC[] >> simp[assert_def, ignore_bind_def, bind_def] >>
   Cases_on `st.scopes` >> fs[] >>
   simp[set_scopes_def, return_def] >>

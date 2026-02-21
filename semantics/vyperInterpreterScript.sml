@@ -159,6 +159,17 @@ End
 
 val () = cv_auto_trans extract_elements_def;
 
+(* exception type - defined early so pure functions can tag errors *)
+Datatype:
+  exception
+  = AssertException string
+  | Error string
+  | TypeError string
+  | BreakException
+  | ContinueException
+  | ReturnException value
+End
+
 (* binary operators and bounds checking *)
 
 Definition binop_negate_def:
@@ -173,8 +184,8 @@ Definition bounded_int_op_def:
   if u1 = u2 then
     if within_int_bound u1 r
     then INL (IntV u1 r)
-    else INR "bounded_int_op bound"
-  else INR "bounded_int_op type"
+    else INR (Error "bounded_int_op bound")
+  else INR (TypeError "bounded_int_op type")
 End
 
 (* optimisation on exponentiation: overflow immediately if power is too big *)
@@ -182,11 +193,11 @@ Theorem bounded_exp:
   bounded_int_op u1 u2 (i1 ** n2) =
   if u1 = u2 then
     if 2 ≤ ABS i1 ∧ int_bound_bits u1 < n2
-    then INR "bounded_int_op bound"
+    then INR (Error "bounded_int_op bound")
     else let r = i1 ** n2 in
       if within_int_bound u1 r then INL (IntV u1 r)
-    else INR "bounded_int_op bound"
-  else INR "bounded_int_op type"
+    else INR (Error "bounded_int_op bound")
+  else INR (TypeError "bounded_int_op type")
 Proof
   rw[bounded_int_op_def]
   \\ gvs[int_exp_num]
@@ -233,7 +244,7 @@ Definition bounded_decimal_op_def:
   bounded_decimal_op i =
   if within_int_bound (Signed 168) i
   then INL $ DecimalV i
-  else INR "bounded_decimal_op"
+  else INR (Error "bounded_decimal_op")
 End
 
 Definition signed_int_mod_def:
@@ -267,7 +278,7 @@ Definition wrapped_int_op_def:
     let b = int_bound_bits u1 in
       if is_Unsigned u1 then INL $ IntV u1 (int_mod i &(2 ** b))
       else INL $ IntV u1 (signed_int_mod b i)
-  else INR "wrapped_int_op"
+  else INR (TypeError "wrapped_int_op")
 End
 
 val signed_int_mod_pre_def = cv_trans_pre "signed_int_mod_pre" signed_int_mod_def;
@@ -291,187 +302,187 @@ Definition evaluate_binop_def:
   case bop
     of Add => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           bounded_int_op u1 u2 (i1 + i2) | _ => INR "binop")
+           bounded_int_op u1 u2 (i1 + i2) | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
-           bounded_decimal_op (i1 + i2) | _ => INR "binop")
-       | _ => INR "binop")
+           bounded_decimal_op (i1 + i2) | _ => INR (TypeError "binop"))
+       | _ => INR (TypeError "binop"))
      | Sub => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           bounded_int_op u1 u2 (i1 - i2) | _ => INR "binop")
+           bounded_int_op u1 u2 (i1 - i2) | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
-           bounded_decimal_op (i1 - i2) | _ => INR "binop")
-       | _ => INR "binop")
+           bounded_decimal_op (i1 - i2) | _ => INR (TypeError "binop"))
+       | _ => INR (TypeError "binop"))
      | Mul => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           bounded_int_op u1 u2 (i1 * i2) | _ => INR "binop")
+           bounded_int_op u1 u2 (i1 * i2) | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
            (let p = i1 * i2 in
             if within_int_bound (Signed 168) ((ABS p) / 10000000000)
             then INL $ DecimalV $ w2i $ word_quot (i2w p) (10000000000w: bytes32)
-            else INR "Decimal Mul bound") | _ => INR "binop")
-       | _ => INR "binop")
+            else INR (Error "Decimal Mul bound")) | _ => INR (TypeError "binop"))
+       | _ => INR (TypeError "binop"))
      | Div => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           (if i2 = 0 then INR "Div0" else
+           (if i2 = 0 then INR (Error "Div0") else
             bounded_int_op u1 u2 $
               (if is_Unsigned u1
                then &(w2n $ word_div ((i2w i1):bytes32) (i2w i2))
                else w2i $ word_quot ((i2w i1):bytes32) (i2w i2)))
-                | _ => INR "binop")
+                | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
-           (if i2 = 0 then INR "Div0" else
+           (if i2 = 0 then INR (Error "Div0") else
             bounded_decimal_op $
               w2i $ word_quot ((i2w (i1 * 10000000000)):bytes32) (i2w i2))
-                         | _ => INR "binop")
-       | _ => INR "binop")
+                         | _ => INR (TypeError "binop"))
+       | _ => INR (TypeError "binop"))
      | UAdd => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           wrapped_int_op u1 u2 (i1 + i2) | _ => INR "binop")
-       | _ => INR "binop")
+           wrapped_int_op u1 u2 (i1 + i2) | _ => INR (TypeError "binop"))
+       | _ => INR (TypeError "binop"))
      | USub => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           wrapped_int_op u1 u2 (i1 - i2) | _ => INR "binop")
-       | _ => INR "binop")
+           wrapped_int_op u1 u2 (i1 - i2) | _ => INR (TypeError "binop"))
+       | _ => INR (TypeError "binop"))
      | UMul => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           wrapped_int_op u1 u2 (i1 * i2) | _ => INR "binop")
-       | _ => INR "binop")
+           wrapped_int_op u1 u2 (i1 * i2) | _ => INR (TypeError "binop"))
+       | _ => INR (TypeError "binop"))
      | UDiv => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           if i2 = 0 then INR "UDiv0" else
-           wrapped_int_op u1 u2 (i1 / i2) | _ => INR "binop")
-       | _ => INR "binop")
+           if i2 = 0 then INR (Error "UDiv0") else
+           wrapped_int_op u1 u2 (i1 / i2) | _ => INR (TypeError "binop"))
+       | _ => INR (TypeError "binop"))
      | Mod => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           (if i2 = 0 then INR "Mod0" else
+           (if i2 = 0 then INR (Error "Mod0") else
             bounded_int_op u1 u2 $
               (if is_Unsigned u1
                then &(w2n $ word_mod ((i2w i1):bytes32) (i2w i2))
                else w2i $ word_rem ((i2w i1):bytes32) (i2w i2)))
-                | _ => INR "binop")
+                | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
-           (if i2 = 0 then INR "Mod0" else
+           (if i2 = 0 then INR (Error "Mod0") else
             bounded_decimal_op $
               (w2i $ word_rem ((i2w i1):bytes32) (i2w i2)))
-                         | _ => INR "binop")
-       | _ => INR "binop")
+                         | _ => INR (TypeError "binop"))
+       | _ => INR (TypeError "binop"))
      | Exp => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           (if i2 < 0 then INR "Exp~" else
-            bounded_int_op u1 u2 $ (i1 ** (Num i2))) | _ => INR "binop")
-       | _ => INR "binop")
+           (if i2 < 0 then INR (Error "Exp~") else
+            bounded_int_op u1 u2 $ (i1 ** (Num i2))) | _ => INR (TypeError "binop"))
+       | _ => INR (TypeError "binop"))
      | ExpMod => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
            (if u1 = Unsigned 256 ∧ u2 = u1
             then INL $ IntV u1 (w2i (word_exp (i2w i1 : bytes32) (i2w i2)))
-            else INR "ExpMod") | _ => INR "binop")
-       | _ => INR "binop")
+            else INR (TypeError "ExpMod")) | _ => INR (TypeError "binop"))
+       | _ => INR (TypeError "binop"))
      | ShL => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
            (* TODO: check type constraints on shifts *)
-           (if i2 < 0 then INR "ShL0"
-            else INL $ IntV u1 $ int_shift_left (Num i2) i1) | _ => INR "binop")
-       | _ => INR "binop")
+           (if i2 < 0 then INR (Error "ShL0")
+            else INL $ IntV u1 $ int_shift_left (Num i2) i1) | _ => INR (TypeError "binop"))
+       | _ => INR (TypeError "binop"))
      | ShR => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
            (* TODO: check type constraints on shifts *)
-           (if i2 < 0 then INR "ShR0"
-            else INL $ IntV u1 $ int_shift_right (Num i2) i1) | _ => INR "binop")
-       | _ => INR "binop")
+           (if i2 < 0 then INR (Error "ShR0")
+            else INL $ IntV u1 $ int_shift_right (Num i2) i1) | _ => INR (TypeError "binop"))
+       | _ => INR (TypeError "binop"))
      | And => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           bounded_int_op u1 u2 (int_and i1 i2) | _ => INR "binop")
+           bounded_int_op u1 u2 (int_and i1 i2) | _ => INR (TypeError "binop"))
        | BoolV b1 => (case v2 of BoolV b2 =>
-           INL $ BoolV (b1 ∧ b2) | _ => INR "binop")
+           INL $ BoolV (b1 ∧ b2) | _ => INR (TypeError "binop"))
        | FlagV m1 n1 => (case v2 of FlagV m2 n2 =>
            (if m1 = m2
             then INL $ FlagV m1 (Num(int_and (&n1) (&n2))) (* TODO: bitwise nums *)
-            else INR "binop flag type") | _ => INR "binop")
-       | _ => INR "binop")
+            else INR (TypeError "binop flag type")) | _ => INR (TypeError "binop"))
+       | _ => INR (TypeError "binop"))
      | Or => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           bounded_int_op u1 u2 (int_or i1 i2) | _ => INR "binop")
+           bounded_int_op u1 u2 (int_or i1 i2) | _ => INR (TypeError "binop"))
        | BoolV b1 => (case v2 of BoolV b2 =>
-           INL $ BoolV (b1 ∨ b2) | _ => INR "binop")
+           INL $ BoolV (b1 ∨ b2) | _ => INR (TypeError "binop"))
        | FlagV m1 n1 => (case v2 of FlagV m2 n2 =>
            (if m1 = m2
             then INL $ FlagV m1 (Num(int_or (&n1) (&n2))) (* TODO: bitwise nums *)
-            else INR "binop flag type") | _ => INR "binop")
-       | _ => INR "binop")
+            else INR (TypeError "binop flag type")) | _ => INR (TypeError "binop"))
+       | _ => INR (TypeError "binop"))
      | XOr => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           bounded_int_op u1 u2 (int_xor i1 i2) | _ => INR "binop")
+           bounded_int_op u1 u2 (int_xor i1 i2) | _ => INR (TypeError "binop"))
        | BoolV b1 => (case v2 of BoolV b2 =>
-           INL $ BoolV (b1 ≠ b2) | _ => INR "binop")
+           INL $ BoolV (b1 ≠ b2) | _ => INR (TypeError "binop"))
        | FlagV m1 n1 => (case v2 of FlagV m2 n2 =>
            (if m1 = m2
             then INL $ FlagV m1 (Num(int_xor (&n1) (&n2))) (* TODO: bitwise nums *)
-            else INR "binop flag type") | _ => INR "binop")
-       | _ => INR "binop")
+            else INR (TypeError "binop flag type")) | _ => INR (TypeError "binop"))
+       | _ => INR (TypeError "binop"))
      | In => (case v2 of
          FlagV m2 n2 => (case v1 of FlagV m1 n1 =>
            (if m1 = m2
             then INL $ BoolV (int_and (&n1) (&n2) ≠ 0) (* TODO: use bitwise ∧ on nums *)
-            else INR "In type") | _ => INR "binop")
+            else INR (TypeError "In type")) | _ => INR (TypeError "binop"))
        | ArrayV av => INL $ BoolV $ evaluate_in_array v1 av
-       | _ => INR "binop")
+       | _ => INR (TypeError "binop"))
      | Eq => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           (if u1 = u2 then INL (BoolV (i1 = i2)) else INR "Eq type")
-                                 | _ => INR "binop")
+           (if u1 = u2 then INL (BoolV (i1 = i2)) else INR (TypeError "Eq type"))
+                                 | _ => INR (TypeError "binop"))
        | FlagV m1 n1 => (case v2 of FlagV m2 n2 =>
-           (if m1 = m2 then INL (BoolV (n1 = n2)) else INR "Eq type")
-                                 | _ => INR "binop")
+           (if m1 = m2 then INL (BoolV (n1 = n2)) else INR (TypeError "Eq type"))
+                                 | _ => INR (TypeError "binop"))
        | StringV _ s1 => (case v2 of StringV _ s2 =>
-           INL (BoolV (s1 = s2)) | _ => INR "binop")
+           INL (BoolV (s1 = s2)) | _ => INR (TypeError "binop"))
        | BytesV _ s1 => (case v2 of BytesV _ s2 =>
-           INL (BoolV (s1 = s2)) | _ => INR "binop")
+           INL (BoolV (s1 = s2)) | _ => INR (TypeError "binop"))
        | BoolV s1 => (case v2 of BoolV s2 =>
-           INL (BoolV (s1 = s2)) | _ => INR "binop")
+           INL (BoolV (s1 = s2)) | _ => INR (TypeError "binop"))
        | DecimalV s1 => (case v2 of DecimalV s2 =>
-           INL (BoolV (s1 = s2)) | _ => INR "binop")
-       | _ => INR "binop")
+           INL (BoolV (s1 = s2)) | _ => INR (TypeError "binop"))
+       | _ => INR (TypeError "binop"))
      | Lt => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           (if u1 = u2 then INL (BoolV (i1 < i2)) else INR "Lt type") | _ => INR "binop")
+           (if u1 = u2 then INL (BoolV (i1 < i2)) else INR (TypeError "Lt type")) | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
-           INL (BoolV (i1 < i2)) | _ => INR "binop")
-       | _ => INR "binop")
+           INL (BoolV (i1 < i2)) | _ => INR (TypeError "binop"))
+       | _ => INR (TypeError "binop"))
      | Gt => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           (if u1 = u2 then INL (BoolV (i1 > i2)) else INR "Gt type") | _ => INR "binop")
+           (if u1 = u2 then INL (BoolV (i1 > i2)) else INR (TypeError "Gt type")) | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
-           INL (BoolV (i1 > i2)) | _ => INR "binop")
-       | _ => INR "binop")
+           INL (BoolV (i1 > i2)) | _ => INR (TypeError "binop"))
+       | _ => INR (TypeError "binop"))
      | LtE => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           (if u1 = u2 then INL (BoolV (i1 ≤ i2)) else INR "LtE type") | _ => INR "binop")
+           (if u1 = u2 then INL (BoolV (i1 ≤ i2)) else INR (TypeError "LtE type")) | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
-           INL (BoolV (i1 ≤ i2)) | _ => INR "binop")
-       | _ => INR "binop")
+           INL (BoolV (i1 ≤ i2)) | _ => INR (TypeError "binop"))
+       | _ => INR (TypeError "binop"))
      | GtE => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           (if u1 = u2 then INL (BoolV (i1 ≥ i2)) else INR "GtE type") | _ => INR "binop")
+           (if u1 = u2 then INL (BoolV (i1 ≥ i2)) else INR (TypeError "GtE type")) | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
-           INL (BoolV (i1 ≥ i2)) | _ => INR "binop")
-       | _ => INR "binop")
+           INL (BoolV (i1 ≥ i2)) | _ => INR (TypeError "binop"))
+       | _ => INR (TypeError "binop"))
      | Min => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
            (if u1 = u2 then INL (IntV u1 (if i1 < i2 then i1 else i2))
-            else INR "Min type") | _ => INR "binop")
+            else INR (TypeError "Min type")) | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
-           INL (DecimalV (if i1 < i2 then i1 else i2)) | _ => INR "binop")
-       | _ => INR "binop")
+           INL (DecimalV (if i1 < i2 then i1 else i2)) | _ => INR (TypeError "binop"))
+       | _ => INR (TypeError "binop"))
      | Max => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
            (if u1 = u2 then INL (IntV u1 (if i1 < i2 then i2 else i1))
-            else INR "Min type") | _ => INR "binop")
+            else INR (TypeError "Min type")) | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
-           INL (DecimalV (if i1 < i2 then i2 else i1)) | _ => INR "binop")
-       | _ => INR "binop")
+           INL (DecimalV (if i1 < i2 then i2 else i1)) | _ => INR (TypeError "binop"))
+       | _ => INR (TypeError "binop"))
      | NotIn => binop_negate $ evaluate_binop In v1 v2
      | NotEq => binop_negate $ evaluate_binop Eq v1 v2
-     | _ => INR "binop"
+     | _ => INR (TypeError "binop")
 Termination
   WF_REL_TAC ‘inv_image $< (λ(b,x,y). if b = NotIn ∨ b = NotEq then 2n else 0n)’
   \\ rw[]
@@ -505,28 +516,28 @@ Definition evaluate_concat_loop_def:
   (let s = FLAT $ s1::REVERSE sa in
    (if compatible_bound (Dynamic n) (LENGTH s)
     then INL (StringV n s)
-    else INR "concat bound")) ∧
+    else INR (Error "concat bound"))) ∧
   evaluate_concat_loop (BytesV b b1) sa ba [] =
   (let bs = FLAT $ b1::REVERSE ba in
    (if compatible_bound b (LENGTH bs)
     then INL (BytesV b bs)
-    else INR "concat bound")) ∧
+    else INR (Error "concat bound"))) ∧
   evaluate_concat_loop (StringV n s1) sa ba ((StringV _ s2)::vs) =
   evaluate_concat_loop (StringV n s1) (s2::sa) ba vs ∧
   evaluate_concat_loop (BytesV b b1) sa ba ((BytesV _ b2)::vs) =
   evaluate_concat_loop (BytesV b b1) sa (b2::ba) vs ∧
-  evaluate_concat_loop _ _ _ _ = INR "concat types"
+  evaluate_concat_loop _ _ _ _ = INR (TypeError "concat types")
 End
 
 val () = cv_auto_trans evaluate_concat_loop_def;
 
 Definition evaluate_concat_def:
   evaluate_concat n vs =
-  if NULL vs ∨ NULL (TL vs) then INR "concat <2"
+  if NULL vs ∨ NULL (TL vs) then INR (TypeError "concat <2")
   else
     case init_concat_output n (HD vs)
       of SOME v => evaluate_concat_loop v [] [] (TL vs)
-       | NONE => INR "concat type or bound"
+       | NONE => INR (TypeError "concat type or bound")
 End
 
 val evaluate_concat_pre_def = cv_auto_trans_pre "evaluate_concat_pre" evaluate_concat_def;
@@ -543,24 +554,24 @@ QED
 Definition evaluate_slice_def:
   evaluate_slice v sv lv n =
   let b = Dynamic n in
-  case dest_NumV sv of NONE => INR "evaluate_slice start" | SOME start =>
-  case dest_NumV lv of NONE => INR "evaluate_slice length" | SOME length =>
+  case dest_NumV sv of NONE => INR (TypeError "evaluate_slice start") | SOME start =>
+  case dest_NumV lv of NONE => INR (TypeError "evaluate_slice length") | SOME length =>
   case v
   of BytesV bb bs => (
        if (case bb of Fixed m => m = 32 | _ => T) then
        if start + length ≤ LENGTH bs then
        if compatible_bound b length then
          INL $ BytesV b (TAKE length (DROP start bs))
-       else INR "evaluate_slice bound"
-       else INR "evaluate_slice range"
-       else INR "evaluate_slice BytesV bound")
+       else INR (Error "evaluate_slice bound")
+       else INR (Error "evaluate_slice range")
+       else INR (Error "evaluate_slice BytesV bound"))
    | StringV _ s => (
        if start + length ≤ LENGTH s then
        if compatible_bound b length then
          INL $ StringV n (TAKE length (DROP start s))
-       else INR "evaluate_slice bound"
-       else INR "evaluate_slice range")
-  | _ => INR "evaluate_slice v"
+       else INR (Error "evaluate_slice bound")
+       else INR (Error "evaluate_slice range"))
+  | _ => INR (TypeError "evaluate_slice v")
 End
 
 val () = cv_auto_trans evaluate_slice_def;
@@ -588,8 +599,8 @@ Definition evaluate_as_wei_value_def:
     let u = Unsigned 256 in
     if within_int_bound u r then
       INL $ IntV u r
-    else INR "ewv bound"
-  else INR "ewv neg"
+    else INR (Error "ewv bound")
+  else INR (TypeError "ewv neg")
 End
 
 val evaluate_as_wei_value_pre_def =
@@ -604,10 +615,10 @@ QED
 Definition evaluate_max_value_def:
   evaluate_max_value (BaseT (UintT n)) = INL $ IntV (Unsigned n) (&(2 ** n) - 1) ∧
   evaluate_max_value (BaseT (IntT n)) = (if n = 0
-                                         then INR "max_value IntT"
+                                         then INR (TypeError "max_value IntT")
                                          else INL $ IntV (Signed n) (&(2 ** (n-1)) - 1)) ∧
   evaluate_max_value (BaseT DecimalT) = INL $ DecimalV (&(2 ** 167) - 1) ∧
-  evaluate_max_value _ = INR "evaluate_max_value"
+  evaluate_max_value _ = INR (TypeError "evaluate_max_value")
 End
 
 val () = cv_auto_trans evaluate_max_value_def;
@@ -615,10 +626,10 @@ val () = cv_auto_trans evaluate_max_value_def;
 Definition evaluate_min_value_def:
   evaluate_min_value (BaseT (UintT n)) = INL $ IntV (Unsigned n) 0 ∧
   evaluate_min_value (BaseT (IntT n)) = (if n = 0
-                                         then INR "min_value IntT"
+                                         then INR (TypeError "min_value IntT")
                                          else INL $ IntV (Signed n) (-&(2 ** (n-1)))) ∧
   evaluate_min_value (BaseT DecimalT) = INL $ DecimalV (-&(2 ** 167)) ∧
-  evaluate_min_value _ = INR "evaluate_min_value"
+  evaluate_min_value _ = INR (TypeError "evaluate_min_value")
 End
 
 val () = cv_auto_trans evaluate_min_value_def;
@@ -628,8 +639,8 @@ val () = cv_auto_trans evaluate_min_value_def;
 Definition evaluate_attribute_def:
   evaluate_attribute (StructV kvs) id =
   (case ALOOKUP kvs id of SOME v => INL v
-   | _ => INR "attribute") ∧
-  evaluate_attribute _ _ = INR "evaluate_attribute"
+   | _ => INR (TypeError "attribute")) ∧
+  evaluate_attribute _ _ = INR (TypeError "evaluate_attribute")
 End
 
 val () = cv_auto_trans evaluate_attribute_def;
@@ -648,7 +659,7 @@ Definition evaluate_subscript_def:
   evaluate_subscript tenv (Value (ArrayV av)) (IntV _ i) =
   (case array_index av i
    of SOME v => INL $ INL $ Value v
-    | _ => INR "subscript array_index") ∧
+    | _ => INR (Error "subscript array_index")) ∧
   evaluate_subscript tenv (HashMapRef is_transient slot kt vt) kv =
   (let new_slot = hashmap_slot slot $ encode_hashmap_key kt kv in
    case vt
@@ -656,7 +667,7 @@ Definition evaluate_subscript_def:
     | Type t =>
         (case evaluate_type tenv t of
          | SOME tv => INL $ INR (is_transient, new_slot, tv)
-         | NONE => INR "evaluate_subscript evaluate_type")) ∧
+         | NONE => INR (TypeError "evaluate_subscript evaluate_type"))) ∧
   evaluate_subscript tenv (ArrayRef is_transient base_slot elem_tv bd) (IntV _ i) =
   (if 0 ≤ i ∧ Num i < bound_length bd then
     let elem_offset = (case bd of Fixed _ => 0 | Dynamic _ => 1) in
@@ -665,8 +676,8 @@ Definition evaluate_subscript_def:
     | ArrayTV inner_tv inner_bd =>
         INL $ INL $ ArrayRef is_transient slot inner_tv inner_bd
     | _ => INL $ INR (is_transient, slot, elem_tv)
-   else INR "subscript array out of bounds") ∧
-  evaluate_subscript _ _ _ = INR "evaluate_subscript"
+   else INR (Error "subscript array out of bounds")) ∧
+  evaluate_subscript _ _ _ = INR (TypeError "evaluate_subscript")
 End
 
 val () = cv_auto_trans evaluate_subscript_def;
@@ -678,14 +689,14 @@ Definition evaluate_subscripts_def:
    (case array_index av i of SOME v =>
     (case evaluate_subscripts v is of INL vj => INL vj
      | INR err => INR err)
-    | _ => INR "evaluate_subscripts array_index")
-   | _ => INR "evaluate_subscripts type") ∧
+    | _ => INR (Error "evaluate_subscripts array_index"))
+   | _ => INR (TypeError "evaluate_subscripts type")) ∧
   evaluate_subscripts (StructV al) ((AttrSubscript id)::is) =
   (case ALOOKUP al id of SOME v =>
     (case evaluate_subscripts v is of INL v' => INL v'
      | INR err => INR err)
-   | _ => INR "evaluate_subscripts AttrSubscript") ∧
-  evaluate_subscripts _ _ = INR "evaluate_subscripts"
+   | _ => INR (TypeError "evaluate_subscripts AttrSubscript")) ∧
+  evaluate_subscripts _ _ = INR (TypeError "evaluate_subscripts")
 End
 
 val evaluate_subscripts_pre_def =
@@ -713,64 +724,64 @@ Definition evaluate_convert_def:
   evaluate_convert (BytesV _ bs) (BaseT (BytesT bd)) =
     (if compatible_bound bd (LENGTH bs)
      then INL $ BytesV bd bs
-     else INR "convert BytesV bound") ∧
+     else INR (Error "convert BytesV bound")) ∧
   evaluate_convert (BytesV _ bs) (BaseT (UintT n)) =
     (let i = &(w2n $ word_of_bytes T (0w:bytes32) bs) in
      if within_int_bound (Unsigned n) i
      then INL $ IntV (Unsigned n) i
-     else INR "convert BytesV uint bound") ∧
+     else INR (Error "convert BytesV uint bound")) ∧
   evaluate_convert (BytesV _ bs) (BaseT (IntT n)) =
     (let i = w2i $ word_of_bytes T (0w:bytes32) bs in
      if within_int_bound (Signed n) i
      then INL $ IntV (Signed n) i
-     else INR "convert BytesV int bound") ∧
+     else INR (Error "convert BytesV int bound")) ∧
   evaluate_convert (IntV u i) (BaseT (IntT n)) =
     (if within_int_bound (Signed n) i
      then INL $ IntV (Signed n) i
-     else INR "convert int bound") ∧
+     else INR (Error "convert int bound")) ∧
   evaluate_convert (IntV u i) (BaseT (UintT n)) =
     (if within_int_bound (Unsigned n) i
      then INL $ IntV (Unsigned n) i
-     else INR "convert uint bound") ∧
+     else INR (Error "convert uint bound")) ∧
   evaluate_convert (IntV u i) (BaseT AddressT) =
     (if within_int_bound (Unsigned 160) i
      then INL $ AddressV (i2w i)
-     else INR $ "convert int address") ∧
+     else INR (Error "convert int address")) ∧
   evaluate_convert (FlagV _ m) (BaseT (IntT n)) =
     (let i = &m in
      if within_int_bound (Signed n) i
      then INL $ IntV (Signed n) i
-     else INR "convert flag int bound") ∧
+     else INR (Error "convert flag int bound")) ∧
   evaluate_convert (FlagV _ m) (BaseT (UintT n)) =
     (let i = &m in
      if within_int_bound (Unsigned n) i
      then INL $ IntV (Unsigned n) i
-     else INR "convert flag uint bound") ∧
+     else INR (Error "convert flag uint bound")) ∧
   evaluate_convert (IntV u i) (BaseT (BytesT bd)) =
   (* TODO: check and use type for width etc. *)
     (if compatible_bound bd 32
      then INL $ BytesV bd (word_to_bytes ((i2w i):bytes32) T)
-     else INR "convert int to bytes") ∧
+     else INR (Error "convert int to bytes")) ∧
   evaluate_convert (BytesV _ bs) (BaseT (StringT n)) =
     (if LENGTH bs ≤ n
      then INL $ StringV n (MAP (CHR o w2n) bs)
-     else INR "convert bytes string") ∧
+     else INR (Error "convert bytes string")) ∧
   evaluate_convert (StringV _ s) (BaseT (BytesT bd)) =
     (if compatible_bound bd (LENGTH s)
      then INL $ BytesV bd (MAP (n2w o ORD) s)
-     else INR "convert string bytes") ∧
+     else INR (Error "convert string bytes")) ∧
   evaluate_convert (IntV _ i) (BaseT DecimalT) =
     bounded_decimal_op (i * 10000000000) ∧
   evaluate_convert (DecimalV i) (BaseT (IntT n)) =
     (if within_int_bound (Signed 168) ((ABS i) / 10000000000)
      then INL $ IntV (Signed n) (i / 10000000000)
-     else INR "convert decimal int") ∧
+     else INR (Error "convert decimal int")) ∧
   evaluate_convert (DecimalV i) (BaseT (UintT n)) =
     (let r = i / 10000000000 in
      if 0 ≤ i ∧ within_int_bound (Signed 168) r
      then INL $ IntV (Unsigned n) r
-     else INR "convert decimal uint") ∧
-  evaluate_convert _ _ = INR "convert"
+     else INR (Error "convert decimal uint")) ∧
+  evaluate_convert _ _ = INR (TypeError "convert")
 End
 
 val evaluate_convert_pre_def =
@@ -939,27 +950,27 @@ QED
 Definition append_element_def:
   append_element (ArrayV (DynArrayV tv n vs)) v =
     (if compatible_bound (Dynamic n) (SUC (LENGTH vs))
-     then case safe_cast tv v of NONE => INR "append cast"
+     then case safe_cast tv v of NONE => INR (TypeError "append cast")
           | SOME v => INL $ ArrayV $ DynArrayV tv n (SNOC v vs)
-     else INR "append overflow") ∧
-  append_element _ _ = INR "append_element"
+     else INR (Error "append overflow")) ∧
+  append_element _ _ = INR (TypeError "append_element")
 End
 
 val () = cv_auto_trans append_element_def;
 
 Definition pop_element_def:
   pop_element (ArrayV (DynArrayV tv n vs)) =
-    (if vs = [] then INR "pop empty"
+    (if vs = [] then INR (Error "pop empty")
      else INL $ ArrayV $ DynArrayV tv n (FRONT vs)) ∧
-  pop_element _ = INR "pop_element"
+  pop_element _ = INR (TypeError "pop_element")
 End
 
 val () = cv_auto_trans pop_element_def;
 
 Definition popped_value_def:
   popped_value (ArrayV (DynArrayV _ _ vs)) =
-    (if vs = [] then INR "pop empty" else INL $ LAST vs) ∧
-  popped_value _ = INR "popped_value"
+    (if vs = [] then INR (Error "pop empty") else INL $ LAST vs) ∧
+  popped_value _ = INR (TypeError "popped_value")
 End
 
 val () = cv_auto_trans popped_value_def;
@@ -980,7 +991,7 @@ Definition array_set_index_def:
     case av of DynArrayV tv n vs =>
       if j < LENGTH vs then
         INL $ ArrayV $ DynArrayV tv n (TAKE j vs ++ [v] ++ DROP (SUC j) vs)
-      else INR "array_set_index index"
+      else INR (Error "array_set_index index")
     | SArrayV tv n al =>
       if j < n then
         INL $ ArrayV $ SArrayV tv n $
@@ -988,9 +999,9 @@ Definition array_set_index_def:
           ADELKEY j al
         else
           insert_sarray j v al
-      else INR "array_set_index size"
-    | TupleV vs => INR "array_set_index tuple"
-  else INR "array_set_index negative"
+      else INR (Error "array_set_index size")
+    | TupleV vs => INR (TypeError "array_set_index tuple")
+  else INR (TypeError "array_set_index negative")
 End
 
 val () = cv_auto_trans array_set_index_def;
@@ -1020,15 +1031,15 @@ Definition assign_subscripts_def:
     (case assign_subscripts v is ao of INL vj =>
        array_set_index av i vj
      | INR err => INR err)
-    | _ => INR "assign_subscripts array_index")
-   | _ => INR "assign_subscripts type") ∧
+    | _ => INR (Error "assign_subscripts array_index"))
+   | _ => INR (TypeError "assign_subscripts type")) ∧
   assign_subscripts (StructV al) ((AttrSubscript id)::is) ao =
   (case ALOOKUP al id of SOME v =>
     (case assign_subscripts v is ao of INL v' =>
       INL $ StructV $ AFUPDKEY id (K v') al
      | INR err => INR err)
-   | _ => INR "assign_subscripts AttrSubscript") ∧
-  assign_subscripts _ _ _ = INR "assign_subscripts"
+   | _ => INR (TypeError "assign_subscripts AttrSubscript")) ∧
+  assign_subscripts _ _ _ = INR (TypeError "assign_subscripts")
 End
 
 val assign_subscripts_pre_def =
@@ -1141,10 +1152,12 @@ Definition evaluate_block_hash_def:
   let pbn = t.block_number - 1 in
   if t.block_number ≤ n ∨
      LENGTH t.block_hashes ≤ pbn - n
-  then INR "evaluate_block_hash"
+  then INR (Error "evaluate_block_hash")
   else INL $ BytesV (Fixed 32)
     (word_to_bytes (EL (pbn - n) t.block_hashes) T)
 End
+
+(* evaluate_block_hash returns Error since block availability is runtime *)
 
 val evaluate_block_hash_pre_def = cv_auto_trans_pre "evaluate_block_hash_pre" evaluate_block_hash_def;
 
@@ -1245,7 +1258,7 @@ Definition evaluate_extract32_def:
      of BytesT (Fixed m) =>
           if m ≤ LENGTH bs then
             INL $ BytesV (Fixed m) (TAKE m bs)
-          else INR "evaluate_extract32 bytesM"
+          else INR (Error "evaluate_extract32 bytesM")
       | UintT m =>
           evaluate_convert (BytesV (Dynamic 32) (TAKE 32 bs)) (BaseT (UintT m))
       | IntT m =>
@@ -1253,9 +1266,9 @@ Definition evaluate_extract32_def:
       | AddressT =>
           if 20 ≤ LENGTH bs then
             INL $ BytesV (Fixed 20) (TAKE 20 bs)
-          else INR "evaluate_extract32 address"
-      | _ => INR "evaluate_extract32 type"
-  else INR "evaluate_extract32 start"
+          else INR (Error "evaluate_extract32 address")
+      | _ => INR (TypeError "evaluate_extract32 type")
+  else INR (Error "evaluate_extract32 start")
 End
 
 val () = cv_trans evaluate_extract32_def;
@@ -1264,7 +1277,7 @@ Definition evaluate_type_builtin_def:
   evaluate_type_builtin cx Empty typ vs =
   (case evaluate_type (get_tenv cx) typ
    of SOME tv => INL $ default_value tv
-    | NONE => INR "Empty evaluate_type") ∧
+    | NONE => INR (TypeError "Empty evaluate_type")) ∧
   evaluate_type_builtin cx MaxValue typ vs =
     evaluate_max_value typ ∧
   evaluate_type_builtin cx MinValue typ vs =
@@ -1273,18 +1286,20 @@ Definition evaluate_type_builtin_def:
     evaluate_convert v typ ∧
   evaluate_type_builtin cx Epsilon typ [] =
     (if typ = BaseT DecimalT then INL $ DecimalV 1
-     else INR "Epsilon: not decimal") ∧
+     else INR (TypeError "Epsilon: not decimal")) ∧
   evaluate_type_builtin cx Extract32 (BaseT bt) [BytesV _ bs; IntV u i] =
     (if u = Unsigned 256 then evaluate_extract32 bs (Num i) bt
-     else INR "Extract32 type") ∧
+     else INR (TypeError "Extract32 type")) ∧
   evaluate_type_builtin cx AbiDecode typ [BytesV _ bs] =
-    evaluate_abi_decode (get_tenv cx) typ bs ∧
+    (case evaluate_abi_decode (get_tenv cx) typ bs of
+       INL v => INL v | INR str => INR (Error str)) ∧
   evaluate_type_builtin _ AbiDecode _ _ =
-    INR "abi_decode args" ∧
+    INR (TypeError "abi_decode args") ∧
   evaluate_type_builtin cx AbiEncode typ vs =
-    evaluate_abi_encode (get_tenv cx) typ (ArrayV (TupleV vs)) ∧
+    (case evaluate_abi_encode (get_tenv cx) typ (ArrayV (TupleV vs)) of
+       INL v => INL v | INR str => INR (Error str)) ∧
   evaluate_type_builtin _ _ _ _ =
-    INR "evaluate_type_builtin"
+    INR (TypeError "evaluate_type_builtin")
 End
 
 val () = cv_auto_trans evaluate_type_builtin_def;
@@ -1301,8 +1316,8 @@ Definition evaluate_ecrecover_def:
      in case vfmExecution$ecrecover hash v r s of
           NONE => INL $ AddressV 0w
         | SOME addr => INL $ AddressV addr
-     else INR "ECRecover type") ∧
-  evaluate_ecrecover _ = INR "ECRecover args"
+     else INR (TypeError "ECRecover type")) ∧
+  evaluate_ecrecover _ = INR (TypeError "ECRecover args")
 End
 
 val () = cv_auto_trans evaluate_ecrecover_def;
@@ -1320,8 +1335,8 @@ Definition evaluate_ecadd_def:
             [IntV (Unsigned 256) 0; IntV (Unsigned 256) 0]
         | SOME (rx, ry) => INL $ ArrayV $ TupleV
             [IntV (Unsigned 256) (&rx); IntV (Unsigned 256) (&ry)]
-     else INR "ECAdd type") ∧
-  evaluate_ecadd _ = INR "ECAdd args"
+     else INR (TypeError "ECAdd type")) ∧
+  evaluate_ecadd _ = INR (TypeError "ECAdd args")
 End
 
 val () = cv_auto_trans evaluate_ecadd_def;
@@ -1337,8 +1352,8 @@ Definition evaluate_ecmul_def:
             [IntV (Unsigned 256) 0; IntV (Unsigned 256) 0]
         | SOME (rx, ry) => INL $ ArrayV $ TupleV
             [IntV (Unsigned 256) (&rx); IntV (Unsigned 256) (&ry)]
-     else INR "ECMul type") ∧
-  evaluate_ecmul _ = INR "ECMul args"
+     else INR (TypeError "ECMul type")) ∧
+  evaluate_ecmul _ = INR (TypeError "ECMul args")
 End
 
 val () = cv_auto_trans evaluate_ecmul_def;
@@ -1349,7 +1364,7 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ Len [ArrayV av] = INL (IntV (Unsigned 256) &(array_length av)) ∧
   evaluate_builtin cx _ Not [BoolV b] = INL (BoolV (¬b)) ∧
   evaluate_builtin cx _ Not [IntV u i] =
-    (if is_Unsigned u ∧ 0 ≤ i then INL (IntV u (int_not i)) else INR "signed Not") ∧
+    (if is_Unsigned u ∧ 0 ≤ i then INL (IntV u (int_not i)) else INR (TypeError "signed Not")) ∧
   evaluate_builtin cx _ Not [FlagV m n] = INL $ FlagV m $
     w2n $ (~((n2w n):bytes32)) && ~(~(0w:bytes32) << m) ∧
   evaluate_builtin cx _ Neg [IntV u i] = bounded_int_op u u (-i) ∧
@@ -1361,20 +1376,20 @@ Definition evaluate_builtin_def:
   (* TODO: reject BytesV with invalid bounds for Keccak256 *)
   evaluate_builtin cx _ (Uint2Str n) [IntV u i] =
     (if is_Unsigned u then INL $ StringV n (num_to_dec_string (Num i))
-     else INR "Uint2Str") ∧
+     else INR (TypeError "Uint2Str")) ∧
   evaluate_builtin cx _ (AsWeiValue dn) [v] = evaluate_as_wei_value dn v ∧
   evaluate_builtin cx _ AddMod [IntV u1 i1; IntV u2 i2; IntV u3 i3] =
     (if u1 = Unsigned 256 ∧ u2 = u1 ∧ u3 = u1
      then INL $ IntV u1 $ &((Num i1 + Num i2) MOD Num i3)
-     else INR "AddMod type") ∧
+     else INR (TypeError "AddMod type")) ∧
   evaluate_builtin cx _ MulMod [IntV u1 i1; IntV u2 i2; IntV u3 i3] =
     (if u1 = Unsigned 256 ∧ u2 = u1 ∧ u3 = u1
      then INL $ IntV u1 $ &((Num i1 * Num i2) MOD Num i3)
-     else INR "MulMod type") ∧
+     else INR (TypeError "MulMod type")) ∧
   evaluate_builtin cx _ PowMod256 [IntV u1 base; IntV u2 exp] =
     (if u1 = Unsigned 256 ∧ u2 = u1
      then INL $ IntV u1 $ &(vfmExecution$modexp (Num base) (Num exp) (2 ** 256) 1)
-     else INR "PowMod256 type") ∧
+     else INR (TypeError "PowMod256 type")) ∧
   evaluate_builtin cx _ Floor [DecimalV i] =
     INL $ IntV (Signed 256) (i / 10000000000) ∧
   evaluate_builtin cx _ Ceil [DecimalV i] =
@@ -1391,10 +1406,10 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ (Env PrevHash) [] = evaluate_block_hash cx.txn (cx.txn.block_number - 1) ∧
   evaluate_builtin cx _ BlockHash [IntV u i] =
     (if u = Unsigned 256 then evaluate_block_hash cx.txn (Num i)
-     else INR "BlockHash type") ∧
+     else INR (TypeError "BlockHash type")) ∧
   evaluate_builtin cx _ BlobHash [IntV u i] =
     (if u = Unsigned 256 then INL $ evaluate_blob_hash cx.txn (Num i)
-     else INR "BlobHash type") ∧
+     else INR (TypeError "BlobHash type")) ∧
   evaluate_builtin cx _ (Concat n) vs = evaluate_concat n vs ∧
   evaluate_builtin cx _ (Slice n) [v1; v2; v3] = evaluate_slice v1 v2 v3 n ∧
   evaluate_builtin cx _ (MakeArray to bd) vs =
@@ -1402,14 +1417,14 @@ Definition evaluate_builtin_def:
      of NONE => INL $ ArrayV $ TupleV vs
       | SOME t =>
         (case evaluate_type (get_tenv cx) t
-         of NONE => INR "MakeArray type"
+         of NONE => INR (TypeError "MakeArray type")
           | SOME tv => INL $ ArrayV $ make_array_value tv bd vs)) ∧
   evaluate_builtin cx acc (Acc aop) [BytesV _ bs] =
     (let a = lookup_account (word_of_bytes T (0w:address) bs) acc in
       INL $ evaluate_account_op aop bs a) ∧
   evaluate_builtin cx _ Isqrt [IntV u i] =
     (if is_Unsigned u ∧ 0 ≤ i then INL $ IntV u &(num_sqrt (Num i))
-     else INR "Isqrt type") ∧
+     else INR (TypeError "Isqrt type")) ∧
   (* method_id: compute keccak256(signature)[:4] - returns 4-byte function selector *)
   evaluate_builtin cx _ MethodId [StringV _ sig] =
     INL $ BytesV (Fixed 4) (TAKE 4 (Keccak_256_w64 (MAP (n2w o ORD) sig))) ∧
@@ -1419,7 +1434,7 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ ECRecover vs = evaluate_ecrecover vs ∧
   evaluate_builtin cx _ ECAdd vs = evaluate_ecadd vs ∧
   evaluate_builtin cx _ ECMul vs = evaluate_ecmul vs ∧
-  evaluate_builtin _ _ _ _ = INR "builtin"
+  evaluate_builtin _ _ _ _ = INR (TypeError "builtin")
 End
 
 val evaluate_builtin_pre_def = cv_auto_trans_pre "evaluate_builtin_pre" evaluate_builtin_def;
@@ -1538,15 +1553,6 @@ val () = cv_trans empty_state_def;
 
 (* state-exception monad used for the main interpreter *)
 
-Datatype:
-  exception
-  = AssertException string
-  | Error string
-  | BreakException
-  | ContinueException
-  | ReturnException value
-End
-
 Type evaluation_result = “:(α + exception) # evaluation_state”
 
 Definition return_def:
@@ -1581,6 +1587,12 @@ Definition check_def:
 End
 
 val () = cv_auto_trans check_def;
+
+Definition type_check_def:
+  type_check b str = assert b (TypeError str)
+End
+
+val () = cv_auto_trans type_check_def;
 
 val () = declare_monad ("vyper_evaluation",
   { bind = “bind”, unit = “return”,
@@ -1641,11 +1653,29 @@ val () = lift_option_def
 
 Definition lift_sum_def:
   lift_sum x =
-    case x of INL v => return v | INR str => raise $ Error str
+    case x of INL v => return v | INR e => raise e
 End
 
 val () = lift_sum_def
   |> SRULE [FUN_EQ_THM, sum_CASE_rator]
+  |> cv_auto_trans;
+
+Definition lift_sum_error_def:
+  lift_sum_error x =
+    case x of INL v => return v | INR str => raise $ Error str
+End
+
+val () = lift_sum_error_def
+  |> SRULE [FUN_EQ_THM, sum_CASE_rator]
+  |> cv_auto_trans;
+
+Definition lift_option_type_def:
+  lift_option_type x str =
+    case x of SOME v => return v | NONE => raise $ TypeError str
+End
+
+val () = lift_option_type_def
+  |> SRULE [FUN_EQ_THM, option_CASE_rator]
   |> cv_auto_trans;
 
 (* reading from the state *)
@@ -1806,7 +1836,7 @@ val () = get_immutables_def
 (* Module-aware global lookup: look up variable n in module src_id_opt *)
 Definition lookup_global_def:
   lookup_global cx src_id_opt n = do
-    ts <- lift_option (get_module_code cx src_id_opt) "lookup_global get_module_code";
+    ts <- lift_option_type (get_module_code cx src_id_opt) "lookup_global get_module_code";
     tenv <<- get_tenv cx;
     case find_var_decl_by_num n ts of
     | NONE => do
@@ -1814,11 +1844,11 @@ Definition lookup_global_def:
         imms <- get_immutables cx src_id_opt;
         case FLOOKUP imms n of
         | SOME v => return (Value v)
-        | NONE => raise $ Error "lookup_global: var not found"
+        | NONE => raise $ TypeError "lookup_global: var not found"
       od
     | SOME (StorageVarDecl is_transient typ, id) => do
-        var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient src_id_opt id) "lookup_global var_slot";
-        tv <- lift_option (evaluate_type tenv typ) "lookup_global evaluate_type";
+        var_slot <- lift_option_type (lookup_var_slot_from_layout cx is_transient src_id_opt id) "lookup_global var_slot";
+        tv <- lift_option_type (evaluate_type tenv typ) "lookup_global evaluate_type";
         case tv of
         | ArrayTV elem_tv bd => return (ArrayRef is_transient (n2w var_slot) elem_tv bd)
         | _ => do
@@ -1827,7 +1857,7 @@ Definition lookup_global_def:
           od
       od
     | SOME (HashMapVarDecl is_transient kt vt, id) => do
-        var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient src_id_opt id) "lookup_global hashmap var_slot";
+        var_slot <- lift_option_type (lookup_var_slot_from_layout cx is_transient src_id_opt id) "lookup_global hashmap var_slot";
         return (HashMapRef is_transient (n2w var_slot) kt vt)
       od
   od
@@ -1910,13 +1940,13 @@ val () = cv_auto_trans lookup_flag_def;
 Definition lookup_flag_mem_def:
   lookup_flag_mem cx (src_id_opt, fid) mid =
   case get_module_code cx src_id_opt
-    of NONE => raise $ Error "lookup_flag_mem code"
+    of NONE => raise $ TypeError "lookup_flag_mem code"
      | SOME ts =>
   case lookup_flag fid ts
-    of NONE => raise $ Error "lookup_flag"
+    of NONE => raise $ TypeError "lookup_flag"
      | SOME ls =>
   case INDEX_OF mid ls
-    of NONE => raise $ Error "lookup_flag_mem index"
+    of NONE => raise $ TypeError "lookup_flag_mem index"
      | SOME i => return $ Value $ FlagV (LENGTH ls) (2 ** i)
 End
 
@@ -1938,17 +1968,17 @@ val () = cv_auto_trans set_address_immutables_def;
 (* Module-aware global set: write a value to EVM storage *)
 Definition set_global_def:
   set_global cx src_id_opt n v = do
-    ts <- lift_option (get_module_code cx src_id_opt) "set_global get_module_code";
+    ts <- lift_option_type (get_module_code cx src_id_opt) "set_global get_module_code";
     tenv <<- get_tenv cx;
     case find_var_decl_by_num n ts of
-    | NONE => raise $ Error "set_global: var not found"
+    | NONE => raise $ TypeError "set_global: var not found"
     | SOME (StorageVarDecl is_transient typ, id) => do
-        var_slot <- lift_option (lookup_var_slot_from_layout cx is_transient src_id_opt id) "set_global var_slot";
-        tv <- lift_option (evaluate_type tenv typ) "set_global evaluate_type";
+        var_slot <- lift_option_type (lookup_var_slot_from_layout cx is_transient src_id_opt id) "set_global var_slot";
+        tv <- lift_option_type (evaluate_type tenv typ) "set_global evaluate_type";
         write_storage_slot cx is_transient (n2w var_slot) tv v
       od
     | SOME (HashMapVarDecl _ kt vt, id) =>
-        raise $ Error "set_global: cannot set hashmap directly"
+        raise $ TypeError "set_global: cannot set hashmap directly"
   od
 End
 
@@ -1991,7 +2021,7 @@ val () = cv_auto_trans push_scope_with_var_def;
 Definition pop_scope_def:
   pop_scope st =
     case st.scopes
-    of [] => raise (Error "pop_scope") st
+    of [] => raise (TypeError "pop_scope") st
        | _::tl => return () (st with scopes := tl)
 End
 
@@ -2003,8 +2033,8 @@ Definition new_variable_def:
   new_variable id v = do
     n <<- string_to_num id;
     env <- get_scopes;
-    check (IS_NONE (lookup_scopes n env)) "new_variable bound";
-    case env of [] => raise $ Error "new_variable null"
+    type_check (IS_NONE (lookup_scopes n env)) "new_variable bound";
+    case env of [] => raise $ TypeError "new_variable null"
     | e::es => set_scopes ((e |+ (n, v))::es)
   od
 End
@@ -2019,7 +2049,7 @@ Definition set_variable_def:
     n <<- string_to_num id;
     sc <- get_scopes;
     (pre, env, _, rest) <-
-      lift_option (find_containing_scope n sc) "set_variable not found";
+      lift_option_type (find_containing_scope n sc) "set_variable not found";
     set_scopes (pre ++ (env |+ (n, v))::rest)
   od
 End
@@ -2033,7 +2063,7 @@ val () = set_variable_def
 
 Definition get_Value_def[simp]:
   get_Value (Value v) = return v ∧
-  get_Value _ = raise $ Error "not Value"
+  get_Value _ = raise $ TypeError "not Value"
 End
 
 val () = get_Value_def
@@ -2046,7 +2076,7 @@ Definition materialise_def:
     return v
   od ∧
   materialise cx (Value v) = return v ∧
-  materialise _ _ = raise $ Error "materialise"
+  materialise _ _ = raise $ TypeError "materialise"
 End
 
 val () = materialise_def
@@ -2066,7 +2096,7 @@ Definition toplevel_array_length_def:
     return $ &(LENGTH ls) ∧
   toplevel_array_length cx (Value (StringV _ ls)) =
     return $ &(LENGTH ls) ∧
-  toplevel_array_length _ _ = raise $ Error "toplevel_array_length"
+  toplevel_array_length _ _ = raise $ TypeError "toplevel_array_length"
 End
 
 val () = toplevel_array_length_def
@@ -2107,7 +2137,7 @@ Definition resolve_array_element_def:
     resolve_array_element cx is_transient elem_slot elem_tv rest
   od ∧
   resolve_array_element _ _ _ (ArrayTV _ _) (_::_) =
-    raise (Error "resolve_array_element: array needs int subscript") ∧
+    raise (TypeError "resolve_array_element: array needs int subscript") ∧
   resolve_array_element _ _ base_slot tv rest = return (base_slot, tv, rest)
 End
 
@@ -2148,7 +2178,7 @@ Definition assign_target_def:
   assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) is) ao = do
     ni <<- string_to_num id;
     tv <- lookup_global cx src_id_opt ni;
-    ts <- lift_option (get_module_code cx src_id_opt) "assign_target get_module_code";
+    ts <- lift_option_type (get_module_code cx src_id_opt) "assign_target get_module_code";
     tenv <<- get_tenv cx;
     case tv of
     | Value v => do
@@ -2157,18 +2187,18 @@ Definition assign_target_def:
         assign_result ao v (REVERSE is)
       od
     | HashMapRef is_transient base_slot kt vt => do
-        (first_sub, rest_subs) <- lift_option
+        (first_sub, rest_subs) <- lift_option_type
           (case REVERSE is of x::xs => SOME (x, xs) | [] => NONE)
           "assign_target hashmap needs subscript";
-        (final_type, key_types, remaining_subs) <- lift_option
+        (final_type, key_types, remaining_subs) <- lift_option_type
           (split_hashmap_subscripts vt rest_subs)
           "assign_target split_hashmap_subscripts";
         hashmap_subs <<- first_sub :: TAKE (LENGTH rest_subs - LENGTH remaining_subs) rest_subs;
         all_key_types <<- kt :: key_types;
-        final_slot <- lift_option
+        final_slot <- lift_option_type
           (compute_hashmap_slot base_slot all_key_types hashmap_subs)
           "assign_target compute_hashmap_slot";
-        final_tv <- lift_option (evaluate_type tenv final_type) "assign_target evaluate_type";
+        final_tv <- lift_option_type (evaluate_type tenv final_type) "assign_target evaluate_type";
         current_val <- read_storage_slot cx is_transient final_slot final_tv;
         new_val <- lift_sum $ assign_subscripts current_val remaining_subs ao;
         write_storage_slot cx is_transient final_slot final_tv new_val;
@@ -2212,23 +2242,23 @@ Definition assign_target_def:
     ni <<- string_to_num id;
     src <<- current_module cx;
     imms <- get_immutables cx src;
-    a <- lift_option (FLOOKUP imms ni) "assign_target ImmutableVar";
+    a <- lift_option_type (FLOOKUP imms ni) "assign_target ImmutableVar";
     a' <- lift_sum $ assign_subscripts a (REVERSE is) ao;
     set_immutable cx src ni a';
     assign_result ao a (REVERSE is)
   od ∧
   assign_target cx (TupleTargetV gvs) (Replace (ArrayV (TupleV vs))) = do
-    check (LENGTH gvs = LENGTH vs) "TupleTargetV length";
+    type_check (LENGTH gvs = LENGTH vs) "TupleTargetV length";
     assign_targets cx gvs vs;
     return NONE
   od ∧
-  assign_target _ _ _ = raise (Error "assign_target") ∧
+  assign_target _ _ _ = raise (TypeError "assign_target") ∧
   assign_targets cx [] [] = return () ∧
   assign_targets cx (gv::gvs) (v::vs) = do
     assign_target cx gv (Replace v);
     assign_targets cx gvs vs
   od ∧
-  assign_targets _ _ _ = raise (Error "assign_targets")
+  assign_targets _ _ _ = raise (TypeError "assign_targets")
 End
 
 val assign_target_pre_def = assign_target_def
@@ -2390,8 +2420,9 @@ QED
 Definition handle_function_def:
   handle_function (ReturnException v) = return v ∧
   handle_function (Error str) = raise $ Error str ∧
+  handle_function (TypeError str) = raise $ TypeError str ∧
   handle_function (AssertException str) = raise $ AssertException str ∧
-  handle_function _ = raise $ Error "handle_function"
+  handle_function _ = raise $ TypeError "handle_function"
 End
 
 val () = handle_function_def
@@ -2810,12 +2841,12 @@ Definition switch_BoolV_def:
   switch_BoolV v f g =
   if v = Value $ BoolV T then f
   else if v = Value $ BoolV F then g
-  else raise $ Error (if is_Value v then "not BoolV" else "not Value")
+  else raise $ TypeError (if is_Value v then "not BoolV" else "not Value")
 End
 
 Definition exactly_one_option_def:
-  exactly_one_option NONE NONE = INR "no option" ∧
-  exactly_one_option (SOME _) (SOME _) = INR "two options" ∧
+  exactly_one_option NONE NONE = INR (TypeError "no option") ∧
+  exactly_one_option (SOME _) (SOME _) = INR (TypeError "two options") ∧
   exactly_one_option (SOME x) _ = INL x ∧
   exactly_one_option _ (SOME y) = INL y
 End
@@ -2845,9 +2876,9 @@ Definition get_range_limits_def:
   (if u1 = u2 then
      if n1 ≤ n2
      then INL (u1, n1, Num (n2 - n1))
-     else INR "no range"
-   else INR "range type") ∧
-  get_range_limits _ _ = INR "range not IntV"
+     else INR (Error "no range")
+   else INR (TypeError "range type")) ∧
+  get_range_limits _ _ = INR (TypeError "range not IntV")
 End
 
 val () = cv_auto_trans get_range_limits_def;
@@ -3020,7 +3051,7 @@ Definition evaluate_def:
   eval_stmt cx (Raise e) = do
     tv <- eval_expr cx e;
     v <- get_Value tv;
-    s <- lift_option (dest_StringV v) "not StringV";
+    s <- lift_option_type (dest_StringV v) "not StringV";
     raise $ AssertException s
   od ∧
   eval_stmt cx (Assert e se) = do
@@ -3030,7 +3061,7 @@ Definition evaluate_def:
       (do
          stv <- eval_expr cx se;
          sv <- get_Value stv;
-         s <- lift_option (dest_StringV sv) "not StringV";
+         s <- lift_option_type (dest_StringV sv) "not StringV";
          raise $ AssertException s
        od)
   od ∧
@@ -3084,7 +3115,7 @@ Definition evaluate_def:
   od ∧
   eval_stmt cx (Expr e) = do
     tv <- eval_expr cx e;
-    check (¬is_HashMapRef tv) "Expr HashMapRef"
+    type_check (¬is_HashMapRef tv) "Expr HashMapRef"
   od ∧
   eval_stmts cx [] = return () ∧
   eval_stmts cx (s::ss) = do
@@ -3093,7 +3124,7 @@ Definition evaluate_def:
   eval_iterator cx (Array e) = do
     tv <- eval_expr cx e;
     v <- materialise cx tv;
-    vs <- lift_option (extract_elements v) "For not ArrayV";
+    vs <- lift_option_type (extract_elements v) "For not ArrayV";
     return vs
   od ∧
   eval_iterator cx (Range e1 e2) = do
@@ -3130,10 +3161,10 @@ Definition evaluate_def:
                    case immutable_target imms id n of
                    | NONE => return NONE
                    | SOME tgt => do
-                       ts <- lift_option
+                       ts <- lift_option_type
                                (get_module_code cx (current_module cx))
                                "NameTarget get_module_code";
-                       check (is_immutable_decl n ts) "assign to constant";
+                       type_check (is_immutable_decl n ts) "assign to constant";
                        return (SOME tgt)
                      od
                 od
@@ -3151,7 +3182,7 @@ Definition evaluate_def:
     (loc, sbs) <- eval_base_target cx t;
     tv <- eval_expr cx e;
     v <- get_Value tv;
-    k <- lift_option (value_to_key v) "SubscriptTarget value_to_key";
+    k <- lift_option_type (value_to_key v) "SubscriptTarget value_to_key";
     return $ (loc, k :: sbs)
   od ∧
   eval_for cx nm body [] = return () ∧
@@ -3205,7 +3236,7 @@ Definition evaluate_def:
     return $ Value $ v
   od ∧
   eval_expr cx (Builtin bt es) = do
-    check (builtin_args_length_ok bt (LENGTH es)) "Builtin args";
+    type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args";
     v <- if bt = Len then do
       tv <- eval_expr cx (HD es);
       len <- toplevel_array_length cx tv;
@@ -3220,34 +3251,34 @@ Definition evaluate_def:
   eval_expr cx (Pop bt) = do
     (loc, sbs) <- eval_base_target cx bt;
     popped <- assign_target cx (BaseTargetV loc sbs) PopOp;
-    v <- lift_option popped "Pop returned NONE";
+    v <- lift_option_type popped "Pop returned NONE";
     return $ Value v
   od ∧
   eval_expr cx (TypeBuiltin tb typ es) = do
-    check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args";
+    type_check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args";
     vs <- eval_exprs cx es;
     v <- lift_sum $ evaluate_type_builtin cx tb typ vs;
     return $ Value v
   od ∧
   eval_expr cx (Call Send es _) = do
-    check (LENGTH es = 2) "Send args";
+    type_check (LENGTH es = 2) "Send args";
     vs <- eval_exprs cx es;
-    toAddr <- lift_option (dest_AddressV $ EL 0 vs) "Send not AddressV";
-    amount <- lift_option (dest_NumV $ EL 1 vs) "Send not NumV";
+    toAddr <- lift_option_type (dest_AddressV $ EL 0 vs) "Send not AddressV";
+    amount <- lift_option_type (dest_NumV $ EL 1 vs) "Send not NumV";
     transfer_value cx.txn.target toAddr amount;
     return $ Value $ NoneV
   od ∧
   eval_expr cx (Call (ExtCall is_static (func_name, arg_types, ret_type)) es drv) = do
     vs <- eval_exprs cx es;
     check (vs ≠ []) "ExtCall no target";
-    target_addr <- lift_option (dest_AddressV (HD vs)) "ExtCall target not address";
+    target_addr <- lift_option_type (dest_AddressV (HD vs)) "ExtCall target not address";
     (* Convention: staticcall (T) args = [target; arg1; ...]
                    extcall (F) args = [target; value; arg1; ...] *)
     (value_opt, arg_vals) <- if is_static then
       return (NONE, TL vs)
     else do
       check (TL vs ≠ []) "ExtCall no value";
-      v <- lift_option (dest_NumV (HD (TL vs))) "ExtCall value not int";
+      v <- lift_option_type (dest_NumV (HD (TL vs))) "ExtCall value not int";
       return (SOME v, TL (TL vs))
     od;
     tenv <<- get_tenv cx;
@@ -3267,18 +3298,18 @@ Definition evaluate_def:
     if returnData = [] ∧ IS_SOME drv then
       eval_expr cx (THE drv)
     else do
-      ret_val <- lift_sum (evaluate_abi_decode_return tenv ret_type returnData);
+      ret_val <- lift_sum_error (evaluate_abi_decode_return tenv ret_type returnData);
       return $ Value ret_val
     od
   od ∧
   eval_expr cx (Call (IntCall (src_id_opt, fn)) es _) = do
     check (¬MEM (src_id_opt, fn) cx.stk) "recursion";
-    ts <- lift_option (get_module_code cx src_id_opt) "IntCall get_module_code";
-    tup <- lift_option (lookup_callable_function cx.in_deploy fn ts) "IntCall lookup_function";
+    ts <- lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code";
+    tup <- lift_option_type (lookup_callable_function cx.in_deploy fn ts) "IntCall lookup_function";
     stup <<- SND tup; args <<- FST stup; sstup <<- SND stup;
     dflts <<- FST sstup; sstup2 <<- SND sstup;
     ret <<- FST $ sstup2; body <<- SND $ sstup2;
-    check (LENGTH es ≤ LENGTH args ∧
+    type_check (LENGTH es ≤ LENGTH args ∧
            LENGTH args - LENGTH es ≤ LENGTH dflts) "IntCall args length";
     vs <- eval_exprs cx es;
     needed_dflts <<- DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts;
@@ -3286,14 +3317,14 @@ Definition evaluate_def:
     dflt_vs <- eval_exprs cxd needed_dflts;
     (* Use combined type env (may reference types from other modules) *)
     all_tenv <<- get_tenv cx;
-    env <- lift_option (bind_arguments all_tenv args (vs ++ dflt_vs)) "IntCall bind_arguments";
+    env <- lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs)) "IntCall bind_arguments";
     prev <- get_scopes;
-    rtv <- lift_option (evaluate_type all_tenv ret) "IntCall eval ret";
+    rtv <- lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret";
     cxf <- push_function (src_id_opt, fn) env cx;
     rv <- finally
       (try (do eval_stmts cxf body; return NoneV od) handle_function)
       (pop_function prev);
-    crv <- lift_option (safe_cast rtv rv) "IntCall cast ret";
+    crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
     return $ Value crv
   od ∧
   eval_exprs cx [] = return [] ∧
@@ -3323,15 +3354,15 @@ Termination
   | INL (cx, s) => stmt_bound (remcode cx) s)’
   \\ reverse(rw[bound_def, MAX_DEF, MULT, IS_SOME_EXISTS]) \\ gvs[]
   >- (
-    gvs[compatible_bound_def, check_def, assert_def]
+    gvs[compatible_bound_def, check_def, type_check_def, assert_def]
     \\ qmatch_goalsub_abbrev_tac`(LENGTH vs) * x`
     \\ irule LESS_EQ_LESS_TRANS
     \\ qexists_tac`LENGTH vs + n * x + 1` \\ simp[]
     \\ PROVE_TAC[MULT_COMM, LESS_MONO_MULT])
   >- (
-    gvs[check_def, assert_def]
+    gvs[check_def, type_check_def, assert_def]
     \\ gvs[push_function_def, return_def]
-    \\ gvs[lift_option_def, CaseEq"option", CaseEq"prod", option_CASE_rator,
+    \\ gvs[lift_option_def, lift_option_type_def, CaseEq"option", CaseEq"prod", option_CASE_rator,
            raise_def, return_def]
     \\ gvs[remcode_def, get_module_code_def, ADELKEY_def]
     \\ qpat_x_assum`OUTR _ _ = _`kall_tac
@@ -3352,11 +3383,11 @@ Termination
     \\ simp[])
   \\ TRY (
     rename1`builtin_args_length_ok Len`
-    \\ gvs[builtin_args_length_ok_def, check_def, assert_def,
+    \\ gvs[builtin_args_length_ok_def, check_def, type_check_def, type_check_def, assert_def,
            LENGTH_EQ_NUM_compute, bound_def] \\ NO_TAC)
-  \\ gvs[check_def, assert_def]
+  \\ gvs[check_def, type_check_def, assert_def]
   \\ gvs[push_function_def, return_def]
-  \\ gvs[lift_option_def, CaseEq"option", CaseEq"prod", option_CASE_rator,
+  \\ gvs[lift_option_def, lift_option_type_def, CaseEq"option", CaseEq"prod", option_CASE_rator,
          raise_def, return_def]
   \\ gvs[remcode_def, get_module_code_def, ADELKEY_def]
   \\ qpat_x_assum`OUTR _ _ = _`kall_tac
@@ -3530,7 +3561,7 @@ Definition send_call_value_def:
   send_call_value mut cx =
   let n = cx.txn.value in
   if n = 0 then return () else do
-    check (mut = Payable) "not Payable";
+    type_check (mut = Payable) "not Payable";
     transfer_value cx.txn.sender cx.txn.target n
   od
 End

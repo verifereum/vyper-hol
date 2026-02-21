@@ -81,8 +81,8 @@ Proof
   Cases_on `get_immutables cx (current_module cx) st` >> Cases_on `q` >> gvs[] >>
   imp_res_tac get_immutables_scopes >> gvs[] >>
   gvs[option_CASE_rator, sum_CASE_rator, prod_CASE_rator,
-      bind_def, return_def, raise_def, check_def, ignore_bind_def,
-      assert_def, get_module_code_def, lift_option_def,
+      bind_def, return_def, raise_def, check_def, type_check_def, ignore_bind_def,
+      assert_def, get_module_code_def, lift_option_def, lift_option_type_def,
       AllCaseEqs(), exactly_one_option_def, lift_sum_def]
 QED
 
@@ -123,7 +123,8 @@ Theorem case_SubscriptTarget_dom[local]:
 Proof
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, pairTheory.UNCURRY] >>
-  imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >> gvs[] >>
+  imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes >>
+  imp_res_tac lift_option_type_scopes >> gvs[] >>
   `MAP FDOM st.scopes = MAP FDOM s''.scopes` by (
     qpat_x_assum `∀st res st'. eval_base_target _ _ _ = _ ⇒ _` drule >> simp[]) >>
   PairCases_on `x` >>
@@ -142,7 +143,7 @@ Theorem case_Name_dom[local]:
 Proof
   rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs()] >>
   imp_res_tac get_scopes_id >> imp_res_tac get_immutables_scopes >>
-  imp_res_tac lift_sum_scopes >> imp_res_tac return_scopes >> gvs[]
+  imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_error_scopes >> imp_res_tac return_scopes >> gvs[]
 QED
 
 (* Goal 6: TopLevelName (no IH) *)
@@ -236,13 +237,13 @@ Proof
   simp[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
        ignore_bind_def] >>
   strip_tac >> gvs[] >>
-  imp_res_tac get_Value_scopes >> imp_res_tac lift_sum_scopes >> gvs[] >>
+  imp_res_tac get_Value_scopes >> imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_error_scopes >> gvs[] >>
   imp_res_tac check_array_bounds_state >> gvs[] >>
   first_x_assum $ drule_then assume_tac >>
   first_x_assum (qspecl_then [`st`, `tv1`, `s''`] mp_tac) >> simp[] >>
   disch_then $ drule_then assume_tac >> gvs[] >>
   Cases_on `res'` >> gvs[return_def, bind_def, AllCaseEqs()] >>
-  PairCases_on `y` >> gvs[bind_def, AllCaseEqs(), lift_option_def, return_def, raise_def] >>
+  PairCases_on `y` >> gvs[bind_def, AllCaseEqs(), lift_option_def, lift_option_type_def, return_def, raise_def] >>
   imp_res_tac read_storage_slot_scopes >> gvs[]
 QED
 
@@ -258,19 +259,19 @@ Proof
   rpt strip_tac >>
   gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def, get_Value_def, lift_option_def] >>
   TRY (`MAP FDOM st.scopes = MAP FDOM s''.scopes` by (first_x_assum drule >> simp[])) >>
-  imp_res_tac get_Value_scopes >> imp_res_tac lift_sum_scopes >> gvs[]
+  imp_res_tac get_Value_scopes >> imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_error_scopes >> gvs[]
 QED
 
 (* Goal 13: Builtin (guarded P8 IH) *)
 Theorem case_Builtin_dom[local]:
   ∀cx bt es.
     (∀s'' x t.
-       check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x,t) ∧
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x,t) ∧
        bt ≠ Len ⇒
        ∀st res st'. eval_exprs cx es st = (res,st') ⇒
          MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
     (∀s'' x t.
-       check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x,t) ∧
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x,t) ∧
        bt = Len ⇒
        ∀st res st'. eval_expr cx (HD es) st = (res,st') ⇒
          MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
@@ -280,7 +281,7 @@ Theorem case_Builtin_dom[local]:
 Proof
   rpt strip_tac >>
   gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def, ignore_bind_def,
-      check_def, assert_def, get_accounts_def, lift_sum_def] >>
+      check_def, type_check_def, assert_def, get_accounts_def, lift_sum_def] >>
   Cases_on `bt = Len` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def]
   >> TRY (imp_res_tac toplevel_array_length_state >> gvs[] >>
           res_tac >> gvs[] >> NO_TAC)
@@ -301,15 +302,15 @@ Proof
   PairCases_on `x` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac (CONJUNCT1 assign_target_preserves_scopes_dom) >> gvs[] >>
   imp_res_tac get_Value_scopes >> gvs[] >>
-  imp_res_tac lift_sum_scopes >> gvs[] >>
-  imp_res_tac lift_option_scopes >> gvs[]
+  imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_error_scopes >> gvs[] >>
+  imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes >> imp_res_tac lift_option_type_scopes >> gvs[]
 QED
 
 (* Goal 15: TypeBuiltin (guarded P8 IH) *)
 Theorem case_TypeBuiltin_dom[local]:
   ∀cx tb typ es.
     (∀s'' x t.
-       check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args" s'' = (INL x,t) ⇒
+       type_check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args" s'' = (INL x,t) ⇒
        ∀st res st'. eval_exprs cx es st = (res,st') ⇒
          MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
@@ -318,7 +319,7 @@ Theorem case_TypeBuiltin_dom[local]:
 Proof
   rpt strip_tac >>
   gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def, ignore_bind_def,
-      check_def, assert_def, lift_sum_def] >>
+      check_def, type_check_def, assert_def, lift_sum_def] >>
   TRY (Cases_on `evaluate_type_builtin cx tb typ vs` >> gvs[return_def, raise_def])
 QED
 
@@ -326,7 +327,7 @@ QED
 Theorem case_Send_dom[local]:
   ∀cx es v0.
     (∀s'' x t.
-       check (LENGTH es = 2) "Send args" s'' = (INL x,t) ⇒
+       type_check (LENGTH es = 2) "Send args" s'' = (INL x,t) ⇒
        ∀st res st'. eval_exprs cx es st = (res,st') ⇒
          MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
@@ -335,10 +336,11 @@ Theorem case_Send_dom[local]:
 Proof
   rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
-       check_def, assert_def, lift_option_def] >>
-  strip_tac >> gvs[return_def, raise_def, GSYM lift_option_def] >>
-  imp_res_tac transfer_value_scopes >> imp_res_tac lift_option_scopes >> gvs[] >>
-  first_x_assum (qspec_then `st` mp_tac) >> simp[check_def, assert_def, return_def]
+       check_def, type_check_def, assert_def, lift_option_def, lift_option_type_def] >>
+  strip_tac >> gvs[return_def, raise_def, GSYM lift_option_def, GSYM lift_option_type_def] >>
+  imp_res_tac transfer_value_scopes >>
+  imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes >> imp_res_tac lift_option_type_scopes >> gvs[] >>
+  first_x_assum (qspec_then `st` mp_tac) >> simp[check_def, type_check_def, assert_def, return_def]
 QED
 
 (* Goal 17: ExtCall (exact evaluate_ind shape) *)
@@ -430,14 +432,14 @@ Resume eval_mutual_preserves_scopes_dom[ExtCall]:
   \\ rewrite_tac[bind_def, ignore_bind_def]
   \\ BasicProvers.TOP_CASE_TAC
   \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (pop_assum mp_tac \\ rw[check_def, assert_def])
+  >- (pop_assum mp_tac \\ rw[check_def, type_check_def, assert_def])
   \\ BasicProvers.TOP_CASE_TAC
   \\ reverse BasicProvers.TOP_CASE_TAC
   >- (
     first_x_assum drule
-    \\ drule lift_option_scopes
+    \\ FIRST [drule lift_option_type_scopes, drule lift_option_scopes]
     \\ first_x_assum(qspec_then`ARB`kall_tac)
-    \\ gvs[check_def, assert_def]
+    \\ gvs[check_def, type_check_def, assert_def]
     \\ rw[] \\ gvs[] )
   \\ rewrite_tac[bind_def, ignore_bind_def]
   \\ BasicProvers.TOP_CASE_TAC
@@ -445,12 +447,12 @@ Resume eval_mutual_preserves_scopes_dom[ExtCall]:
   >- (
     first_x_assum drule
     \\ first_x_assum(qspec_then`ARB`kall_tac)
-    \\ drule lift_option_scopes
-    \\ gvs[check_def, assert_def, bind_def, COND_RATOR, CaseEq"bool",
+    \\ FIRST [drule lift_option_type_scopes, drule lift_option_scopes]
+    \\ gvs[check_def, type_check_def, assert_def, bind_def, COND_RATOR, CaseEq"bool",
            return_def, CaseEq"sum", CaseEq"prod"]
     \\ rw[]
-    \\ drule lift_option_scopes
-    \\ rw[] )
+    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
+    \\ gvs[] )
   \\ pairarg_tac
   \\ asm_simp_tac std_ss []
   \\ BasicProvers.LET_ELIM_TAC
@@ -462,10 +464,10 @@ Resume eval_mutual_preserves_scopes_dom[ExtCall]:
     first_x_assum drule
     \\ first_x_assum(qspec_then`ARB`kall_tac)
     \\ rw[]
-    \\ imp_res_tac lift_option_scopes
-    \\ gvs[check_def, assert_def, bind_def, COND_RATOR, CaseEq"bool",
+    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
+    \\ gvs[check_def, type_check_def, assert_def, bind_def, COND_RATOR, CaseEq"bool",
            return_def, CaseEq"sum", CaseEq"prod"]
-    \\ imp_res_tac lift_option_scopes \\ gvs[] )
+    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes \\ gvs[] )
   \\ rewrite_tac[bind_def, ignore_bind_def]
   \\ BasicProvers.TOP_CASE_TAC
   \\ reverse BasicProvers.TOP_CASE_TAC
@@ -483,11 +485,11 @@ Resume eval_mutual_preserves_scopes_dom[ExtCall]:
     first_x_assum drule
     \\ first_x_assum(qspec_then`ARB`kall_tac)
     \\ rw[]
-    \\ imp_res_tac lift_option_scopes
-    \\ gvs[check_def, assert_def, bind_def, COND_RATOR, CaseEq"bool",
+    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
+    \\ gvs[check_def, type_check_def, assert_def, bind_def, COND_RATOR, CaseEq"bool",
            return_def, CaseEq"sum", CaseEq"prod", get_accounts_def,
            get_transient_storage_def]
-    \\ imp_res_tac lift_option_scopes \\ gvs[] )
+    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes \\ gvs[] )
   \\ BasicProvers.LET_ELIM_TAC
   \\ qpat_x_assum`_ = _`mp_tac
   \\ rewrite_tac[bind_def, ignore_bind_def]
@@ -497,11 +499,11 @@ Resume eval_mutual_preserves_scopes_dom[ExtCall]:
     first_x_assum drule
     \\ first_x_assum(qspec_then`ARB`kall_tac)
     \\ rw[]
-    \\ imp_res_tac lift_option_scopes
-    \\ gvs[check_def, assert_def, bind_def, COND_RATOR, CaseEq"bool",
+    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
+    \\ gvs[check_def, type_check_def, assert_def, bind_def, COND_RATOR, CaseEq"bool",
            return_def, CaseEq"sum", CaseEq"prod", get_accounts_def,
            get_transient_storage_def]
-    \\ imp_res_tac lift_option_scopes \\ gvs[] )
+    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes \\ gvs[] )
   \\ rewrite_tac[bind_def, ignore_bind_def]
   \\ BasicProvers.TOP_CASE_TAC
   \\ reverse BasicProvers.TOP_CASE_TAC
@@ -520,15 +522,15 @@ Resume eval_mutual_preserves_scopes_dom[ExtCall]:
     \\ rpt $ disch_then $ drule_at Any
     \\ gvs[ignore_bind_def]
     \\ disch_then $ drule_at Any
-    \\ imp_res_tac check_scopes
+    \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
     \\ imp_res_tac update_accounts_scopes
     \\ imp_res_tac update_transient_scopes
-    \\ imp_res_tac lift_option_scopes
+    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
     \\ first_x_assum drule
     \\ gvs[get_accounts_def, get_transient_storage_def, return_def,
            COND_RATOR, CaseEq"bool", bind_def, CaseEq"sum", CaseEq"prod"]
-    \\ imp_res_tac check_scopes
-    \\ imp_res_tac lift_option_scopes
+    \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
+    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
     \\ gvs[])
   \\ rewrite_tac[bind_def, ignore_bind_def]
   \\ BasicProvers.TOP_CASE_TAC
@@ -536,27 +538,27 @@ Resume eval_mutual_preserves_scopes_dom[ExtCall]:
   >- (
     first_x_assum drule
     \\ first_x_assum(qspec_then`ARB`kall_tac)
-    \\ rw[] \\ imp_res_tac check_scopes
+    \\ rw[] \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
     \\ imp_res_tac update_accounts_scopes
     \\ imp_res_tac update_transient_scopes
-    \\ imp_res_tac lift_option_scopes
-    \\ imp_res_tac lift_sum_scopes
+    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
+    \\ imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_error_scopes
     \\ gvs[get_accounts_def, get_transient_storage_def, return_def,
            COND_RATOR, CaseEq"bool", bind_def, CaseEq"sum", CaseEq"prod"]
-    \\ imp_res_tac check_scopes
-    \\ imp_res_tac lift_option_scopes
+    \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
+    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
     \\ gvs[] )
   \\ first_x_assum drule
   \\ first_x_assum(qspec_then`ARB`kall_tac)
-  \\ rw[return_def] \\ imp_res_tac check_scopes
+  \\ rw[return_def] \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
   \\ imp_res_tac update_accounts_scopes
   \\ imp_res_tac update_transient_scopes
-  \\ imp_res_tac lift_option_scopes
-  \\ imp_res_tac lift_sum_scopes
+  \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
+  \\ imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_error_scopes
   \\ gvs[get_accounts_def, get_transient_storage_def, return_def,
          COND_RATOR, CaseEq"bool", bind_def, CaseEq"sum", CaseEq"prod"]
-  \\ imp_res_tac check_scopes
-  \\ imp_res_tac lift_option_scopes
+  \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
+  \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
   \\ gvs[]
 QED
 
@@ -568,13 +570,13 @@ Resume eval_mutual_preserves_scopes_dom[IntCall]:
   \\ rpt gen_tac
   \\ BasicProvers.TOP_CASE_TAC
   \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (drule check_scopes \\ rpt (pop_assum kall_tac) \\ rw[] \\ rw[])
+  >- (FIRST [drule type_check_scopes, drule check_scopes] \\ rpt (pop_assum kall_tac) \\ rw[] \\ rw[])
   \\ rewrite_tac[bind_def, ignore_bind_def]
   \\ BasicProvers.TOP_CASE_TAC
   \\ reverse BasicProvers.TOP_CASE_TAC
   >- (
-    imp_res_tac check_scopes
-    \\ imp_res_tac lift_option_scopes
+    imp_res_tac check_scopes >> imp_res_tac type_check_scopes
+    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
     \\ rpt(qpat_x_assum`!x. _`kall_tac)
     \\ rw[] \\ gvs[] )
   \\ rewrite_tac[bind_def, ignore_bind_def]
@@ -582,8 +584,8 @@ Resume eval_mutual_preserves_scopes_dom[IntCall]:
   \\ reverse BasicProvers.TOP_CASE_TAC
   >- (
     rpt(qpat_x_assum`!x. _`kall_tac)
-    \\ imp_res_tac check_scopes
-    \\ imp_res_tac lift_option_scopes
+    \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
+    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
     \\ rw[] \\ gvs[] )
   \\ BasicProvers.LET_ELIM_TAC
   \\ qpat_x_assum`_ = _`mp_tac
@@ -592,8 +594,8 @@ Resume eval_mutual_preserves_scopes_dom[IntCall]:
   \\ reverse BasicProvers.TOP_CASE_TAC
   >- (
     rpt(qpat_x_assum`!x. _`kall_tac)
-    \\ imp_res_tac check_scopes
-    \\ imp_res_tac lift_option_scopes
+    \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
+    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
     \\ rw[] \\ gvs[] )
   \\ pop_assum mp_tac
   \\ first_x_assum $ funpow 2 drule_then drule
@@ -605,8 +607,8 @@ Resume eval_mutual_preserves_scopes_dom[IntCall]:
   \\ reverse BasicProvers.TOP_CASE_TAC
   >- (
     rpt(qpat_x_assum`!x. _`kall_tac)
-    \\ imp_res_tac check_scopes
-    \\ imp_res_tac lift_option_scopes
+    \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
+    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
     \\ rw[] )
   \\ strip_tac
   \\ rewrite_tac[bind_def, ignore_bind_def]
@@ -617,15 +619,15 @@ Resume eval_mutual_preserves_scopes_dom[IntCall]:
   \\ strip_tac
   \\ reverse BasicProvers.TOP_CASE_TAC
   >- (
-    imp_res_tac check_scopes
-    \\ imp_res_tac lift_option_scopes
+    imp_res_tac check_scopes >> imp_res_tac type_check_scopes
+    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
     \\ rw[] \\ gvs[])
   \\ rewrite_tac[bind_def, ignore_bind_def]
   \\ BasicProvers.TOP_CASE_TAC
   \\ reverse BasicProvers.TOP_CASE_TAC
   >- (
-    imp_res_tac lift_option_scopes
-    \\ imp_res_tac check_scopes
+    imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
+    \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
     \\ rw[] \\ gvs[] )
   \\ rewrite_tac[bind_def, ignore_bind_def]
   \\ rw[get_scopes_def, return_def]
@@ -634,8 +636,8 @@ Resume eval_mutual_preserves_scopes_dom[IntCall]:
   \\ BasicProvers.TOP_CASE_TAC
   \\ reverse BasicProvers.TOP_CASE_TAC
   >- (
-    imp_res_tac lift_option_scopes
-    \\ imp_res_tac check_scopes
+    imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
+    \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
     \\ rw[] \\ gvs[] )
   \\ rewrite_tac[bind_def, ignore_bind_def]
   \\ rw[push_function_def, return_def]
@@ -645,13 +647,13 @@ Resume eval_mutual_preserves_scopes_dom[IntCall]:
   \\ drule finally_set_scopes_dom
   \\ reverse BasicProvers.TOP_CASE_TAC
   >- (
-    imp_res_tac lift_option_scopes
-    \\ imp_res_tac check_scopes
+    imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
+    \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
     \\ rw[] \\ gvs[] )
   \\ rewrite_tac[bind_def]
   \\ BasicProvers.TOP_CASE_TAC
-  \\ imp_res_tac lift_option_scopes
-  \\ imp_res_tac check_scopes
+  \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
+  \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
   \\ BasicProvers.TOP_CASE_TAC
   \\ rw[] \\ gvs[return_def]
 QED
