@@ -1,6 +1,6 @@
 Theory vyperABI
 Ancestors
-  contractABI vyperAST vyperTypeValue
+  contractABI vyperAST vyperValue
   vyperMisc byte string words list rich_list cv cv_std
   divides finite_map alist combin pair arithmetic option
 Libs

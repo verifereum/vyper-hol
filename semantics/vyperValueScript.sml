@@ -1,4 +1,4 @@
-Theory vyperTypeValue
+Theory vyperValue
 Ancestors
   arithmetic alist combin list finite_map pair rich_list
   cv cv_std vfmState vyperAST

@@ -1,7 +1,7 @@
 Theory vyperLookup
 
 Ancestors
-  vyperInterpreter vyperTypeValue
+  vyperInterpreter vyperValue
 
 Definition lookup_scoped_var_def:
   lookup_scoped_var st n = lookup_scopes (string_to_num n) st.scopes

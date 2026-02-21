@@ -3,7 +3,7 @@ Ancestors
   arithmetic alist combin option list finite_map pair rich_list
   cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
   vfmExecution[ignore_grammar] vyperAST vyperABI
-  vyperMisc vyperTypeValue vyperStorage
+  vyperMisc vyperValue vyperStorage
 Libs
   cv_transLib wordsLib monadsyntax
   integerTheory[qualified] intSimps[qualified]
@@ -1599,11 +1599,11 @@ Theorem prod_CASE_rator =
 
 Theorem value_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="vyperTypeValue",Tyop="value"}));
+    (Option.valOf (TypeBase.read {Thy="vyperValue",Tyop="value"}));
 
 Theorem type_value_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="vyperTypeValue",Tyop="type_value"}));
+    (Option.valOf (TypeBase.read {Thy="vyperValue",Tyop="type_value"}));
 
 Theorem bound_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo

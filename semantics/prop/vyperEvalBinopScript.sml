@@ -74,7 +74,7 @@ Theorem w2i_i2w_within_signed[local]:
     within_int_bound (Signed n) x ∧ n ≤ 256 ⇒
     w2i ((i2w x):bytes32) = x
 Proof
-  rpt strip_tac >> gvs[vyperTypeValueTheory.within_int_bound_def] >>
+  rpt strip_tac >> gvs[vyperValueTheory.within_int_bound_def] >>
   Cases_on `0 ≤ x` >> gvs[] >- (
     `¬(x < 0)` by intLib.ARITH_TAC >> gvs[] >>
     `x = &Num x` by simp[Once $ GSYM integerTheory.INT_OF_NUM] >>
@@ -169,8 +169,8 @@ Theorem evaluate_binop_mod_unsigned:
     INL (IntV (Unsigned n) (x rem y))
 Proof
   rpt strip_tac >>
-  gvs[vyperTypeValueTheory.within_int_bound_def] >>
-  simp[vyperInterpreterTheory.evaluate_binop_def, vyperInterpreterTheory.bounded_int_op_def, vyperTypeValueTheory.within_int_bound_def] >>
+  gvs[vyperValueTheory.within_int_bound_def] >>
+  simp[vyperInterpreterTheory.evaluate_binop_def, vyperInterpreterTheory.bounded_int_op_def, vyperValueTheory.within_int_bound_def] >>
   `x = &Num x` by simp[Once $ GSYM integerTheory.INT_OF_NUM] >>
   `y = &Num y` by simp[Once $ GSYM integerTheory.INT_OF_NUM] >>
   `0 < Num y` by (CCONTR_TAC >> fs[]) >>
@@ -200,8 +200,8 @@ Theorem evaluate_binop_div_unsigned:
     INL (IntV (Unsigned n) (x / y))
 Proof
   rpt strip_tac >>
-  gvs[vyperTypeValueTheory.within_int_bound_def] >>
-  simp[vyperInterpreterTheory.evaluate_binop_def, vyperInterpreterTheory.bounded_int_op_def, vyperTypeValueTheory.within_int_bound_def] >>
+  gvs[vyperValueTheory.within_int_bound_def] >>
+  simp[vyperInterpreterTheory.evaluate_binop_def, vyperInterpreterTheory.bounded_int_op_def, vyperValueTheory.within_int_bound_def] >>
   `x = &Num x` by simp[Once $ GSYM integerTheory.INT_OF_NUM] >>
   `y = &Num y` by simp[Once $ GSYM integerTheory.INT_OF_NUM] >>
   `0 < Num y` by (CCONTR_TAC >> fs[]) >>
@@ -234,7 +234,7 @@ Theorem within_int_bound_rem:
 Proof
   rpt strip_tac >>
   Cases_on `u` >>
-  gvs[vyperTypeValueTheory.within_int_bound_def]
+  gvs[vyperValueTheory.within_int_bound_def]
   >- ( (* Signed *)
     `y ≠ 0` by simp[] >>
     drule integerTheory.INT_REMQUOT >>
