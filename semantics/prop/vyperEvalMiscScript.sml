@@ -42,9 +42,10 @@ Proof
   Cases_on `cx.txn.is_creation` >> gvs[return_def]
   (* is_creation = T *)
   >> gvs[bind_def, get_immutables_def, get_address_immutables_def,
-         lift_option_def,
+         lift_option_def, lift_option_type_def,
          option_CASE_rator, sum_CASE_rator, prod_CASE_rator] >>
-     gvs[return_def, raise_def, bind_def, check_def, ignore_bind_def,
+     gvs[return_def, raise_def, bind_def, check_def, type_check_def,
+         ignore_bind_def,
          get_module_code_def, lift_sum_def, exactly_one_option_def,
          sum_CASE_rator, assert_def, AllCaseEqs()]
 QED

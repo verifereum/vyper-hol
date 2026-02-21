@@ -35,10 +35,10 @@ Proof
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def] >>
   Cases_on `cx.txn.is_creation` >>
   gvs[bind_def, get_immutables_def, get_address_immutables_def,
-      lift_option_def, return_def, raise_def, lift_sum_def,
+      lift_option_def, lift_option_type_def, return_def, raise_def, lift_sum_def,
       exactly_one_option_def, immutable_target_def,
       option_CASE_rator, sum_CASE_rator, prod_CASE_rator,
-      get_module_code_def, check_def, ignore_bind_def, assert_def] >-
+      get_module_code_def, check_def, type_check_def, ignore_bind_def, assert_def] >-
   (Cases_on `ALOOKUP st.immutables cx.txn.target` >>
    gvs[raise_def, return_def, exactly_one_option_def] >>
    Cases_on `FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num n)` >>
@@ -65,10 +65,10 @@ Proof
   Cases_on `cx.txn.is_creation` >-
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
        get_immutables_def, get_address_immutables_def,
-       lift_option_def, return_def, lift_sum_def,
+       lift_option_def, lift_option_type_def, return_def, lift_sum_def,
        exactly_one_option_def, immutable_target_def,
        option_CASE_rator, sum_CASE_rator, prod_CASE_rator,
-       get_module_code_def, check_def, ignore_bind_def, assert_def] >>
+       get_module_code_def, check_def, type_check_def, ignore_bind_def, assert_def] >>
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
        lift_sum_def, exactly_one_option_def, return_def]
 QED
@@ -90,10 +90,10 @@ Proof
   gvs[] >>
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
        get_immutables_def, get_address_immutables_def,
-       lift_option_def, return_def, raise_def, lift_sum_def,
+       lift_option_def, lift_option_type_def, return_def, raise_def, lift_sum_def,
        exactly_one_option_def, immutable_target_def,
        option_CASE_rator, sum_CASE_rator, prod_CASE_rator,
-       get_module_code_def, check_def, ignore_bind_def, assert_def] >>
+       get_module_code_def, check_def, type_check_def, ignore_bind_def, assert_def] >>
   rpt CASE_TAC >> gvs[]
 QED
 
