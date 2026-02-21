@@ -235,3 +235,30 @@ Definition within_int_bound_def:
     else Num i < m
   )
 End
+
+(* value destructors *)
+
+Definition dest_NumV_def:
+  dest_NumV (IntV _ i) =
+    (if i < 0 then NONE else SOME (Num i)) ∧
+  dest_NumV _ = NONE
+End
+
+val () = cv_auto_trans dest_NumV_def;
+
+Definition dest_AddressV_def:
+  dest_AddressV (BytesV (Fixed b) bs) =
+    (if b = 20 ∧ LENGTH bs = 20 then
+      SOME (word_of_bytes T (0w:address) bs)
+     else NONE) ∧
+  dest_AddressV _ = NONE
+End
+
+val () = cv_auto_trans dest_AddressV_def;
+
+Definition dest_StringV_def:
+  dest_StringV (StringV _ s) = SOME s ∧
+  dest_StringV _ = NONE
+End
+
+val () = cv_auto_trans dest_StringV_def;
