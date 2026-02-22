@@ -1,7 +1,8 @@
 Theory vyperMisc
 Ancestors
-  byte pair int_bitwise rich_list
-  cv_std vfmTypes
+  ASCIInumbers byte pair integer string pred_set
+  int_bitwise numposrep list rich_list words
+  cv cv_std vfmTypes
 Libs
   cv_transLib blastLib
 
@@ -18,7 +19,7 @@ Theorem CHR_o_w2n_pre[cv_pre]:
   CHR_o_w2n_pre x
 Proof
   rw[CHR_o_w2n_pre_def]
-  \\ qspec_then`x`mp_tac wordsTheory.w2n_lt
+  \\ qspec_then`x`mp_tac w2n_lt
   \\ rw[]
 QED
 
@@ -62,16 +63,16 @@ Proof
 QED
 
 val num_to_dec_string_pre_def =
-  ASCIInumbersTheory.num_to_dec_string_def
-  |> SRULE [ASCIInumbersTheory.n2s_def, FUN_EQ_THM, GSYM MAP_HEX_MAP]
+  num_to_dec_string_def
+  |> SRULE [n2s_def, FUN_EQ_THM, GSYM MAP_HEX_MAP]
   |> cv_trans_pre "num_to_dec_string_pre";
 
 Theorem num_to_dec_string_pre[cv_pre]:
   num_to_dec_string_pre x
 Proof
   rw[num_to_dec_string_pre_def, MAP_HEX_pre_EVERY]
-  \\ qspecl_then[`10`,`x`]mp_tac numposrepTheory.n2l_BOUND
-  \\ rw[listTheory.EVERY_MEM]
+  \\ qspecl_then[`10`,`x`]mp_tac n2l_BOUND
+  \\ rw[EVERY_MEM]
   \\ first_x_assum drule \\ rw[]
 QED
 
@@ -81,7 +82,7 @@ Theorem int_exp_num:
   else if EVEN n then &(Num (-i) ** n)
   else -&(Num (-i) ** n)
 Proof
-  Cases_on`i` \\ simp[integerTheory.INT_POW_NEG]
+  Cases_on`i` \\ simp[INT_POW_NEG]
 QED
 
 val () = cv_trans int_exp_num;
@@ -235,7 +236,7 @@ Proof
       \\ `w2n a MOD 20 < 20` by rw[]
       \\ pop_assum mp_tac
       \\ qmatch_goalsub_abbrev_tac`z < 20 ⇒ f`
-      \\ simp_tac std_ss [wordsTheory.NUMERAL_LESS_THM]
+      \\ simp_tac std_ss [NUMERAL_LESS_THM]
       \\ strip_tac \\ gs[Abbr`f`]
       \\ rw[] \\ gs[] )
     \\ asm_simp_tac std_ss []
@@ -267,7 +268,7 @@ QED
 Theorem list_size_SUM_MAP:
   list_size f ls = LENGTH ls + SUM (MAP f ls)
 Proof
-  Induct_on `ls` \\ rw[listTheory.list_size_def]
+  Induct_on `ls` \\ rw[list_size_def]
 QED
 
 Theorem list_size_pair_size_map:
@@ -317,27 +318,27 @@ Proof
   rpt strip_tac
   \\ Cases_on `l1 = []`
   >- (
-    gvs[numposrepTheory.l2n_def, numposrepTheory.l2n_eq_0]
+    gvs[l2n_def, l2n_eq_0]
     \\ Cases_on `l2` \\ gvs[]
   )
   \\ Cases_on `l2 = []`
   >- (
-    gvs[numposrepTheory.l2n_def, numposrepTheory.l2n_eq_0]
+    gvs[l2n_def, l2n_eq_0]
     \\ Cases_on `l1` \\ gvs[]
   )
   \\ `0 < LAST l1 ∧ 0 < LAST l2`
-     by gvs[listTheory.EVERY_MEM, rich_listTheory.MEM_LAST_NOT_NIL]
+     by gvs[EVERY_MEM, MEM_LAST_NOT_NIL]
   \\ `LOG 257 (l2n 257 l1) = PRE (LENGTH l1)`
-     by (irule numposrepTheory.LOG_l2n >> simp[])
+     by (irule LOG_l2n >> simp[])
   \\ `LOG 257 (l2n 257 l2) = PRE (LENGTH l2)`
-     by (irule numposrepTheory.LOG_l2n >> simp[])
+     by (irule LOG_l2n >> simp[])
   \\ gvs[]
-  \\ `LENGTH l1 ≠ 0 ∧ LENGTH l2 ≠ 0` by gvs[listTheory.LENGTH_NIL_SYM]
+  \\ `LENGTH l1 ≠ 0 ∧ LENGTH l2 ≠ 0` by gvs[LENGTH_NIL_SYM]
   \\ `LENGTH l1 = LENGTH l2` by decide_tac
   \\ `l2n 257 (l1 ++ [1]) = l2n 257 (l2 ++ [1])`
-     by simp[numposrepTheory.l2n_APPEND]
-  \\ metis_tac[numposrepTheory.l2n_11, DECIDE ``1n < 257``,
-               GSYM rich_listTheory.SNOC_APPEND, rich_listTheory.SNOC_11]
+     by simp[l2n_APPEND]
+  \\ metis_tac[l2n_11, DECIDE ``1n < 257``,
+               GSYM SNOC_APPEND, SNOC_11]
 QED
 
 Theorem string_to_num_inj:
@@ -348,15 +349,15 @@ Proof
   \\ `MAP (SUC ∘ ORD) n1 = MAP (SUC ∘ ORD) n2`
      by (
        irule l2n_257_inj \\ simp[]
-       \\ simp[listTheory.EVERY_MAP, listTheory.EVERY_MEM]
+       \\ simp[EVERY_MAP, EVERY_MEM]
        \\ rw[]
-       \\ qspec_then `x` mp_tac stringTheory.ORD_BOUND
+       \\ qspec_then `x` mp_tac ORD_BOUND
        \\ simp[]
      )
   \\ `n1 = n2` suffices_by gvs[]
   \\ sg `INJ (SUC ∘ ORD) (set n1 ∪ set n2) UNIV`
-  >- (simp[pred_setTheory.INJ_DEF] \\ metis_tac[stringTheory.ORD_11])
-  \\ drule_all listTheory.INJ_MAP_EQ \\ simp[]
+  >- (simp[INJ_DEF] \\ metis_tac[ORD_11])
+  \\ drule_all INJ_MAP_EQ \\ simp[]
 QED
 
 (* Integer square root using Newton's method iteration *)
@@ -377,3 +378,47 @@ Definition num_sqrt_def:
 End
 
 val () = cv_auto_trans num_sqrt_def;
+
+(* Helper: projections don't increase size *)
+Theorem cv_size_cv_fst_le:
+  !x. cv_size (cv_fst x) <= cv_size x
+Proof
+  Cases >> rw[cv_size_def, cv_fst_def]
+QED
+
+Theorem cv_size_cv_snd_le:
+  !x. cv_size (cv_snd x) <= cv_size x
+Proof
+  Cases >> rw[cv_size_def, cv_snd_def]
+QED
+
+Theorem c2n_le_cv_size:
+  !x. cv$c2n x <= cv_size x
+Proof
+  Cases >> rw[c2n_def, cv_size_def]
+QED
+
+Theorem OPT_MMAP_SOME_IFF:
+  ∀f ls vs.
+    OPT_MMAP f ls = SOME vs ⇔
+    EVERY IS_SOME (MAP f ls) ∧
+    vs = MAP (THE o f) ls
+Proof
+  Induct_on `ls` \\ rw[]
+  \\ Cases_on `f h` \\ rw[EQ_IMP_THM]
+QED
+
+Theorem ZIP_REPLICATE:
+  ZIP (REPLICATE n x, REPLICATE n y) =
+  REPLICATE n (x,y)
+Proof
+  Induct_on `n` \\ rw[]
+QED
+
+Theorem TAKE_SNOC_EL:
+  LENGTH vs = SUC n ⇒ TAKE n vs ++ [EL n vs] = vs
+Proof
+  rw[LIST_EQ_REWRITE, EL_APPEND_EQN, EL_TAKE, LENGTH_TAKE]
+  \\ Cases_on `x < n` \\ gvs[EL_TAKE]
+  \\ `x = n` by gvs[] \\ gvs[]
+QED

@@ -1,6 +1,6 @@
 Theory vyperValue
 Ancestors
-  arithmetic list finite_map integer pair
+  alist arithmetic finite_map list pair rich_list
   cv cv_std vfmState vyperAST vyperMisc
 Libs
   cv_transLib wordsLib
@@ -134,6 +134,16 @@ val () = cv_auto_trans_rec evaluate_type_def (
   \\ IF_CASES_TAC \\ gs[]
 );
 
+(* Helper: evaluate_types in terms of OPT_MMAP *)
+Theorem evaluate_types_OPT_MMAP:
+  ∀ts acc. evaluate_types env ts acc =
+    OPTION_MAP ((++) (REVERSE acc)) (OPT_MMAP (evaluate_type env) ts)
+Proof
+  Induct \\ rw[evaluate_type_def]
+  \\ CASE_TAC \\ gvs[]
+  \\ Cases_on `OPT_MMAP (evaluate_type env) ts` \\ gvs[]
+QED
+
 (* Vyper (runtime) values *)
 
 Datatype:
@@ -193,6 +203,22 @@ End
 
 val () = cv_auto_trans default_value_def;
 
+(* Helper: default_value_tuple computes MAP default_value *)
+Theorem default_value_tuple_MAP:
+  ∀ts acc. default_value_tuple acc ts = ArrayV (TupleV (REVERSE acc ++ MAP default_value ts))
+Proof
+  Induct \\ rw[default_value_def] \\ gvs[]
+QED
+
+(* Helper: default_value_struct computes MAP with default_value on SND *)
+Theorem default_value_struct_MAP:
+  ∀ps acc. default_value_struct acc ps =
+           StructV (REVERSE acc ++ MAP (λ(id,t). (id, default_value t)) ps)
+Proof
+  Induct \\ rw[default_value_def]
+  \\ PairCases_on `h` \\ rw[default_value_def]
+QED
+
 (* creating arrays *)
 
 Definition enumerate_static_array_def:
@@ -203,6 +229,57 @@ Definition enumerate_static_array_def:
 End
 
 val () = cv_trans enumerate_static_array_def;
+
+Theorem MEM_enumerate_static_array_iff:
+  ∀vs n.
+  MEM (i,v) (enumerate_static_array d n vs) ⇔
+  n ≤ i ∧ i-n < LENGTH vs ∧ EL (i-n) vs = v ∧ v ≠ d
+Proof
+  Induct
+  \\ simp[enumerate_static_array_def]
+  \\ rpt gen_tac
+  \\ IF_CASES_TAC \\ gvs[]
+  \\ Cases_on `i < n` \\ gvs[]
+  \\ Cases_on `i = n` \\ gvs[]
+  \\ TRY(rw[EQ_IMP_THM] \\ NO_TAC)
+  \\ simp[EL_CONS, PRE_SUB1, ADD1]
+  \\ Cases_on `0 < LENGTH vs` \\ gvs[]
+QED
+
+Theorem ALL_DISTINCT_MAP_FST_enumerate_static_array[simp]:
+  ∀vs n. ALL_DISTINCT (MAP FST (enumerate_static_array d n vs))
+Proof
+  Induct \\ rw[enumerate_static_array_def, MEM_MAP, EXISTS_PROD]
+  \\ rw[MEM_enumerate_static_array_iff]
+QED
+
+Theorem enumerate_static_array_ALOOKUP:
+  ∀d k vs i. i < LENGTH vs ⇒
+    ALOOKUP (enumerate_static_array d k vs) (k + i) =
+      if EL i vs = d then NONE else SOME (EL i vs)
+Proof
+  rw[]
+  >- rw[ALOOKUP_FAILS, MEM_enumerate_static_array_iff]
+  \\ irule ALOOKUP_ALL_DISTINCT_MEM
+  \\ rw[MEM_enumerate_static_array_iff]
+QED
+
+Theorem enumerate_ALOOKUP_TAKE:
+  ∀d n i vs'. i < n ∧ n ≤ LENGTH vs' ⇒
+    ALOOKUP (enumerate_static_array d 0 vs') i =
+    ALOOKUP (enumerate_static_array d 0 (TAKE n vs')) i
+Proof
+  rw[]
+  \\ `i < LENGTH vs'` by gvs[]
+  \\ `i < LENGTH (TAKE n vs')` by gvs[LENGTH_TAKE]
+  \\ `ALOOKUP (enumerate_static_array d 0 vs') (0 + i) =
+      if EL i vs' = d then NONE else SOME (EL i vs')`
+      by (irule enumerate_static_array_ALOOKUP \\ gvs[])
+  \\ `ALOOKUP (enumerate_static_array d 0 (TAKE n vs')) (0 + i) =
+      if EL i (TAKE n vs') = d then NONE else SOME (EL i (TAKE n vs'))`
+      by (irule enumerate_static_array_ALOOKUP \\ gvs[])
+  \\ gvs[EL_TAKE]
+QED
 
 Definition make_array_value_def:
   make_array_value tv (Fixed n) vs =

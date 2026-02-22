@@ -1,12 +1,11 @@
 Theory vyperValueOperation
 Ancestors
   arithmetic alist combin option list finite_map pair rich_list
-  cv cv_std words[qualified] integer[ignore_grammar, qualified]
+  cv cv_std words integer[ignore_grammar]
   integer_word[ignore_grammar, qualified]
   vyperAST vyperMisc vyperValue
 Libs
-  cv_transLib wordsLib
-  intSimps[qualified]
+  cv_transLib wordsLib intSimps
 
 (* Evaluation of some of the simpler language constructs *)
 
@@ -119,18 +118,18 @@ Proof
     reverse $ Cases_on`u1`
     >- (
       gvs[within_int_bound_def]
-      \\ gvs[integerTheory.INT_ABS]
+      \\ gvs[INT_ABS]
       \\ IF_CASES_TAC
-      \\ fsrw_tac[intSimps.INT_ARITH_ss][Num_int_exp]
+      \\ fsrw_tac[INT_ARITH_ss][Num_int_exp]
       \\ Cases_on`EVEN n2`
-      \\ fsrw_tac[intSimps.INT_ARITH_ss][] )
+      \\ fsrw_tac[INT_ARITH_ss][] )
     \\ gvs[within_int_bound_def]
-    \\ gvs[integerTheory.INT_ABS]
+    \\ gvs[INT_ABS]
     \\ IF_CASES_TAC
-    \\ fsrw_tac[intSimps.INT_ARITH_ss][Num_int_exp]
+    \\ fsrw_tac[INT_ARITH_ss][Num_int_exp]
     >- (
       Cases_on`EVEN n2`
-      \\ fsrw_tac[intSimps.INT_ARITH_ss][]
+      \\ fsrw_tac[INT_ARITH_ss][]
       >- (
         irule LESS_LESS_EQ_TRANS
         \\ goal_assum drule \\ simp[] )
@@ -144,7 +143,7 @@ Proof
   \\ qmatch_asmsub_abbrev_tac`n1 ** n2 < _`
   \\ `2 ≤ n1` by (
     simp[Abbr`n1`]
-    \\ irule integerTheory.LE_NUM_OF_INT
+    \\ irule LE_NUM_OF_INT
     \\ simp[] )
   \\ `2 ** n2 ≤ n1 ** n2` by simp[]
   \\ `2n ** n2 < 2 ** b` by (
@@ -173,16 +172,16 @@ Theorem signed_int_mod_w2i:
 Proof
   rpt strip_tac
   >> simp[signed_int_mod_def, integer_wordTheory.w2i_eq_w2n,
-          wordsTheory.INT_MIN_def, wordsTheory.dimword_def]
+          INT_MIN_def, dimword_def]
   >> `&(w2n ((i2w i):'a word)) = i % &(2 ** dimindex(:'a))`
-       by simp[integer_wordTheory.w2n_i2w, wordsTheory.dimword_def]
+       by simp[integer_wordTheory.w2n_i2w, dimword_def]
   >> pop_assum (fn th => REWRITE_TAC [SYM th])
   >> `(w2n ((i2w i):'a word) < 2 ** (dimindex(:'a) − 1))
        ⇔ ¬(&(w2n ((i2w i):'a word)):num ≥ &(2 ** (dimindex(:'a) − 1)))`
-       by simp[integerTheory.INT_NOT_LE]
+       by simp[INT_NOT_LE]
   >> pop_assum SUBST_ALL_TAC
   >> rw[]
-  >> gvs[integerTheory.int_ge]
+  >> gvs[int_ge]
 QED
 
 Definition wrapped_int_op_def:

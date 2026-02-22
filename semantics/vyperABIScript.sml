@@ -1,8 +1,8 @@
 Theory vyperABI
 Ancestors
-  contractABI vyperAST vyperValue
-  vyperMisc byte string words list rich_list cv cv_std
-  divides finite_map alist combin pair arithmetic option
+  contractABI vyperAST vyperValue vyperMisc
+  arithmetic byte combin cv cv_std divides
+  finite_map list option pair rich_list string words
 Libs
   cv_transLib wordsLib dep_rewrite
 
@@ -51,10 +51,10 @@ val () = cv_auto_trans_rec vyper_to_abi_type_def (
       INL (env, t) => (cv$c2n $ cv_size' env, cv_size t)
     | INR (env, ts) => (cv$c2n $ cv_size' env, cv_size ts))’
   \\ rw[]
-  \\ TRY (Cases_on `cv_v` \\ gvs[cvTheory.cv_size_def] \\ NO_TAC)
-  \\ TRY (Cases_on `cv_v` \\ gvs[cvTheory.cv_size_def]
+  \\ TRY (Cases_on `cv_v` \\ gvs[cv_size_def] \\ NO_TAC)
+  \\ TRY (Cases_on `cv_v` \\ gvs[cv_size_def]
           \\ qmatch_goalsub_rename_tac `cv_fst cv_v`
-          \\ Cases_on `cv_v` \\ gvs[cvTheory.cv_size_def] \\ NO_TAC)
+          \\ Cases_on `cv_v` \\ gvs[cv_size_def] \\ NO_TAC)
   \\ disj1_tac
   \\ pop_assum mp_tac
   \\ qmatch_goalsub_abbrev_tac `cv_lookup ck`
@@ -67,7 +67,7 @@ val () = cv_auto_trans_rec vyper_to_abi_type_def (
   \\ qid_spec_tac `cv_env`
   \\ qid_spec_tac `ck`
   \\ rpt (pop_assum kall_tac)
-  \\ ho_match_mp_tac cv_stdTheory.cv_delete_ind
+  \\ ho_match_mp_tac cv_delete_ind
   \\ rpt gen_tac \\ strip_tac
   \\ simp[Once cv_lookup_def]
   \\ IF_CASES_TAC \\ gs[]
@@ -376,31 +376,12 @@ Theorem cv_ALOOKUP_snd_size:
     cv_size (cv_snd (cv_ALOOKUP sparse k)) < cv_size sparse
 Proof
   Induct_on `sparse`
-  >- rw[Once cv_stdTheory.cv_ALOOKUP_def]
-  >- (rw[Once cv_stdTheory.cv_ALOOKUP_def]
-      >- (simp[Once cv_stdTheory.cv_ALOOKUP_def, cvTheory.cv_if_def0]
-          \\ gvs[cv_repTheory.cv_termination_simp, cvTheory.cv_size_def])
-      >- (simp[Once cv_stdTheory.cv_ALOOKUP_def, cvTheory.cv_if_def0]
+  >- rw[Once cv_ALOOKUP_def]
+  >- (rw[Once cv_ALOOKUP_def]
+      >- (simp[Once cv_ALOOKUP_def, cv_if_def0]
+          \\ gvs[cv_repTheory.cv_termination_simp, cv_size_def])
+      >- (simp[Once cv_ALOOKUP_def, cv_if_def0]
           \\ first_x_assum drule \\ simp[]))
-QED
-
-(* Helper: projections don't increase size *)
-Theorem cv_size_cv_fst_le:
-  !x. cv_size (cv_fst x) <= cv_size x
-Proof
-  Cases >> rw[cvTheory.cv_size_def, cvTheory.cv_fst_def]
-QED
-
-Theorem cv_size_cv_snd_le:
-  !x. cv_size (cv_snd x) <= cv_size x
-Proof
-  Cases >> rw[cvTheory.cv_size_def, cvTheory.cv_snd_def]
-QED
-
-Theorem c2n_le_cv_size:
-  !x. cv$c2n x <= cv_size x
-Proof
-  Cases >> rw[cvTheory.c2n_def, cvTheory.cv_size_def]
 QED
 
 (* Helper tactic: find cv_fst/cv_snd subterms in the goal and add bounds as assumptions.
@@ -467,24 +448,24 @@ val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
           (cv$c2n (cv_size' env), cv_size t + cv_size sparse + cv$c2n n, cv$c2n n))`
   \\ rw[]
   (* Handle simple cv_snd cases *)
-  \\ TRY (gvs[cv_repTheory.cv_termination_simp, cvTheory.cv_size_def, cvTheory.cv_snd_def]
-          \\ rw[cvTheory.cv_snd_def, cvTheory.cv_size_def] \\ NO_TAC)
+  \\ TRY (gvs[cv_repTheory.cv_termination_simp, cv_size_def, cv_snd_def]
+          \\ rw[cv_snd_def, cv_size_def] \\ NO_TAC)
   (* Handle cv_sub for sparse n-1 *)
-  \\ TRY (gvs[cv_repTheory.cv_termination_simp, cvTheory.cv_sub_def, cvTheory.c2n_def] \\ NO_TAC)
+  \\ TRY (gvs[cv_repTheory.cv_termination_simp, cv_sub_def, c2n_def] \\ NO_TAC)
   (* Handle ALOOKUP result *)
   \\ TRY (drule cv_ALOOKUP_snd_size
-          \\ gvs[cv_repTheory.cv_termination_simp, cvTheory.c2n_def] \\ NO_TAC)
+          \\ gvs[cv_repTheory.cv_termination_simp, c2n_def] \\ NO_TAC)
   (* Handle StructT list projection (second lex component) - these are direct inequalities
      (not disjunctions), so we can't use disj1_tac. Use cv_size bounds and arithmetic. *)
   \\ TRY (
       gvs[cv_repTheory.cv_termination_simp]
       \\ sg `!x. cv_size (cv_snd (cv_snd x)) <= cv_size x`
-      >- (gen_tac >> irule arithmeticTheory.LESS_EQ_TRANS >> qexists_tac `cv_size (cv_snd x)` >> rw[cv_size_cv_snd_le])
+      >- (gen_tac >> irule LESS_EQ_TRANS >> qexists_tac `cv_size (cv_snd x)` >> rw[cv_size_cv_snd_le])
       \\ sg `!x. cv_size (cv_snd (cv_snd (cv_snd x))) <= cv_size x`
-      >- (gen_tac >> irule arithmeticTheory.LESS_EQ_TRANS >> qexists_tac `cv_size (cv_snd (cv_snd x))` >> gvs[])
+      >- (gen_tac >> irule LESS_EQ_TRANS >> qexists_tac `cv_size (cv_snd (cv_snd x))` >> gvs[])
       \\ sg `!x. cv$c2n (cv_fst (cv_snd x)) <= cv_size x`
-      >- (gen_tac >> irule arithmeticTheory.LESS_EQ_TRANS >> qexists_tac `cv_size (cv_fst (cv_snd x))` >> rw[c2n_le_cv_size]
-          >> irule arithmeticTheory.LESS_EQ_TRANS >> qexists_tac `cv_size (cv_snd x)` >> rw[cv_size_cv_fst_le, cv_size_cv_snd_le])
+      >- (gen_tac >> irule LESS_EQ_TRANS >> qexists_tac `cv_size (cv_fst (cv_snd x))` >> rw[c2n_le_cv_size]
+          >> irule LESS_EQ_TRANS >> qexists_tac `cv_size (cv_snd x)` >> rw[cv_size_cv_fst_le, cv_size_cv_snd_le])
       \\ gvs[]
       \\ NO_TAC)
   (* Handle StructT cv_delete - first try the disjunction case *)
@@ -495,14 +476,14 @@ val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
       \\ `cv_ispair ck = cv$Num 0`
          by (rw[Abbr`ck`, cv_string_to_num_def]
              \\ rw[Once keccakTheory.cv_l2n_def]
-             \\ rw[cvTheory.cv_ispair_cv_add])
+             \\ rw[cv_ispair_cv_add])
       \\ pop_assum mp_tac
       \\ qid_spec_tac `cv_env`
       \\ qid_spec_tac `ck`
       \\ rpt (pop_assum kall_tac)
-      \\ ho_match_mp_tac cv_stdTheory.cv_delete_ind
+      \\ ho_match_mp_tac cv_delete_ind
       \\ rpt gen_tac \\ strip_tac
-      \\ simp[Once cv_stdTheory.cv_lookup_def]
+      \\ simp[Once cv_lookup_def]
       \\ IF_CASES_TAC \\ gs[]
       \\ strip_tac \\ gs[]
       \\ reverse(IF_CASES_TAC \\ gs[])
@@ -510,25 +491,25 @@ val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
           \\ IF_CASES_TAC \\ gs[]
           \\ Cases_on `cv_env` \\ gs[]
           \\ Cases_on `0 < m` \\ gs[]
-          \\ simp[Once cv_stdTheory.cv_delete_def]
-          \\ rw[Once cv_stdTheory.cv_size'_def]
-          \\ rw[Once cv_stdTheory.cv_size'_def])
+          \\ simp[Once cv_delete_def]
+          \\ rw[Once cv_size'_def]
+          \\ rw[Once cv_size'_def])
       \\ Cases_on `cv_env` \\ gs[]
       \\ Cases_on `ck` \\ gs[]
       \\ strip_tac
-      \\ simp[Once cv_stdTheory.cv_delete_def]
+      \\ simp[Once cv_delete_def]
       \\ Cases_on `g` \\ gs[]
       \\ Cases_on `m=0` \\ gs[]
       >- (rw[] \\ gs[]
-          \\ rw[Once cv_stdTheory.cv_size'_def]
-          \\ rw[Once cv_stdTheory.cv_size'_def, SimpR ``prim_rec$<``]
+          \\ rw[Once cv_size'_def]
+          \\ rw[Once cv_size'_def, SimpR ``prim_rec$<``]
           \\ rw[])
-      \\ simp[Once cv_stdTheory.cv_size'_def, SimpR ``prim_rec$<``]
+      \\ simp[Once cv_size'_def, SimpR ``prim_rec$<``]
       \\ qmatch_goalsub_rename_tac `2 < p`
       \\ Cases_on `p=0` \\ gs[]
       \\ Cases_on `p=1` \\ gs[]
       \\ Cases_on `p=2` \\ gvs[]
-      >- (IF_CASES_TAC \\ gs[cv_stdTheory.cv_size'_cv_mk_BN])
+      >- (IF_CASES_TAC \\ gs[cv_size'_cv_mk_BN])
       \\ IF_CASES_TAC \\ gs[]
       \\ NO_TAC)
   (* Remaining goals: arithmetic inequalities on cv_size of nested projections.
@@ -537,7 +518,7 @@ val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
   \\ TRY (
       gvs[cv_repTheory.cv_termination_simp]
       \\ rw[]
-      \\ simp[cvTheory.cv_fst_def, cvTheory.cv_snd_def, cvTheory.cv_size_def]
+      \\ simp[cv_fst_def, cv_snd_def, cv_size_def]
       \\ cv_bounds_tac
       \\ decide_tac
       \\ NO_TAC)
@@ -545,21 +526,21 @@ val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
      Direct case split proof - 7 splits to expose enough Pair constructor overhead. *)
   \\ TRY (
       rpt strip_tac
-      \\ Cases_on `cv_v` >> fs[cvTheory.cv_ispair_def, cvTheory.c2b_def]
-      \\ Cases_on `cv_v0` >> fs[cvTheory.cv_ispair_def, cvTheory.c2b_def,
-           cvTheory.cv_snd_def, cvTheory.cv_size_def]
+      \\ Cases_on `cv_v` >> fs[cv_ispair_def, c2b_def]
+      \\ Cases_on `cv_v0` >> fs[cv_ispair_def, c2b_def,
+           cv_snd_def, cv_size_def]
       \\ qmatch_asmsub_rename_tac `cv_ispair (cv_snd ggg)`
-      \\ Cases_on `ggg` >> fs[cvTheory.cv_ispair_def, cvTheory.cv_snd_def, cvTheory.c2b_def]
-      \\ Cases_on `g'` >> fs[cvTheory.cv_snd_def, cvTheory.cv_fst_def,
-           cvTheory.cv_size_def, cvTheory.c2n_def]
+      \\ Cases_on `ggg` >> fs[cv_ispair_def, cv_snd_def, c2b_def]
+      \\ Cases_on `g'` >> fs[cv_snd_def, cv_fst_def,
+           cv_size_def, c2n_def]
       \\ qmatch_goalsub_rename_tac `cv_fst (cv_snd gSix)`
-      \\ Cases_on `gSix` >> fs[cvTheory.cv_snd_def, cvTheory.cv_fst_def,
-           cvTheory.cv_size_def, cvTheory.c2n_def]
+      \\ Cases_on `gSix` >> fs[cv_snd_def, cv_fst_def,
+           cv_size_def, c2n_def]
       \\ qmatch_goalsub_rename_tac `cv_fst gLast`
-      \\ Cases_on `gLast` >> simp[cvTheory.cv_snd_def, cvTheory.cv_fst_def,
-           cvTheory.cv_size_def, cvTheory.c2n_def]
+      \\ Cases_on `gLast` >> simp[cv_snd_def, cv_fst_def,
+           cv_size_def, c2n_def]
       \\ qmatch_goalsub_rename_tac `cv$c2n gNum`
-      \\ Cases_on `gNum` >> simp[cvTheory.cv_size_def, cvTheory.c2n_def]
+      \\ Cases_on `gNum` >> simp[cv_size_def, c2n_def]
       \\ NO_TAC)
 );
 
@@ -575,40 +556,6 @@ Proof
 QED
 
 (* ===== Roundtrip Theorems ===== *)
-
-(* TODO: move *)
-Theorem OPT_MMAP_SOME_IFF:
-  ∀f ls vs.
-    OPT_MMAP f ls = SOME vs ⇔
-    EVERY IS_SOME (MAP f ls) ∧
-    vs = MAP (THE o f) ls
-Proof
-  Induct_on `ls` \\ rw[]
-  \\ Cases_on `f h` \\ rw[EQ_IMP_THM]
-QED
-
-Theorem ZIP_REPLICATE:
-  ZIP (REPLICATE n x, REPLICATE n y) =
-  REPLICATE n (x,y)
-Proof
-  Induct_on `n` \\ rw[]
-QED
-
-(* Helper: default_value_tuple computes MAP default_value *)
-Theorem default_value_tuple_MAP:
-  ∀ts acc. default_value_tuple acc ts = ArrayV (TupleV (REVERSE acc ++ MAP default_value ts))
-Proof
-  Induct \\ rw[default_value_def] \\ gvs[]
-QED
-
-(* Helper: default_value_struct computes MAP with default_value on SND *)
-Theorem default_value_struct_MAP:
-  ∀ps acc. default_value_struct acc ps =
-           StructV (REVERSE acc ++ MAP (λ(id,t). (id, default_value t)) ps)
-Proof
-  Induct \\ rw[default_value_def]
-  \\ PairCases_on `h` \\ rw[default_value_def]
-QED
 
 (* Helper: abi_to_vyper_list in terms of OPT_MMAP *)
 Theorem abi_to_vyper_list_OPT_MMAP:
@@ -639,16 +586,6 @@ Proof
   rw[MAP_MAP_o, o_DEF]
   \\ CONV_TAC (DEPTH_CONV ETA_CONV)
   \\ rw[GSYM o_DEF, bytes_encode_decode_roundtrip]
-QED
-
-(* Helper: evaluate_types in terms of OPT_MMAP *)
-Theorem evaluate_types_OPT_MMAP:
-  ∀ts acc. evaluate_types env ts acc =
-    OPTION_MAP ((++) (REVERSE acc)) (OPT_MMAP (evaluate_type env) ts)
-Proof
-  Induct \\ rw[evaluate_type_def]
-  \\ CASE_TAC \\ gvs[]
-  \\ Cases_on `OPT_MMAP (evaluate_type env) ts` \\ gvs[]
 QED
 
 (* ===== Helper Lemmas for Roundtrip Theorems ===== *)
@@ -702,41 +639,6 @@ Proof
   \\ Induct_on `vs` \\ rw[]
 QED
 
-Theorem MEM_enumerate_static_array_iff:
-  ∀vs n.
-  MEM (i,v) (enumerate_static_array d n vs) ⇔
-  n ≤ i ∧ i-n < LENGTH vs ∧ EL (i-n) vs = v ∧ v ≠ d
-Proof
-  Induct
-  \\ simp[enumerate_static_array_def]
-  \\ rpt gen_tac
-  \\ IF_CASES_TAC \\ gvs[]
-  \\ Cases_on `i < n` \\ gvs[]
-  \\ Cases_on `i = n` \\ gvs[]
-  \\ TRY(rw[EQ_IMP_THM] \\ NO_TAC)
-  \\ simp[EL_CONS, PRE_SUB1, ADD1]
-  \\ Cases_on `0 < LENGTH vs` \\ gvs[]
-QED
-
-Theorem ALL_DISTINCT_MAP_FST_enumerate_static_array[simp]:
-  ∀vs n. ALL_DISTINCT (MAP FST (enumerate_static_array d n vs))
-Proof
-  Induct \\ rw[enumerate_static_array_def, MEM_MAP, EXISTS_PROD]
-  \\ rw[MEM_enumerate_static_array_iff]
-QED
-
-(* Helper 3: enumerate_static_array lookup *)
-Theorem enumerate_static_array_ALOOKUP:
-  ∀d k vs i. i < LENGTH vs ⇒
-    ALOOKUP (enumerate_static_array d k vs) (k + i) =
-      if EL i vs = d then NONE else SOME (EL i vs)
-Proof
-  rw[]
-  >- rw[ALOOKUP_FAILS, MEM_enumerate_static_array_iff]
-  \\ irule ALOOKUP_ALL_DISTINCT_MEM
-  \\ rw[MEM_enumerate_static_array_iff]
-QED
-
 (* Helper 4: Default value inverse - if decoding gives default, input was default encoding *)
 Theorem abi_to_vyper_default_value_inv_mutual:
   (∀env t av v. abi_to_vyper env t av = SOME v ⇒
@@ -787,24 +689,6 @@ Proof
   metis_tac[abi_to_vyper_default_value_inv_mutual]
 QED
 
-(* Helper: ALOOKUP enumerate_static_array agrees on indices < n for full list vs TAKE *)
-Theorem enumerate_ALOOKUP_TAKE:
-  ∀d n i vs'. i < n ∧ n ≤ LENGTH vs' ⇒
-    ALOOKUP (enumerate_static_array d 0 vs') i =
-    ALOOKUP (enumerate_static_array d 0 (TAKE n vs')) i
-Proof
-  rw[]
-  \\ `i < LENGTH vs'` by gvs[]
-  \\ `i < LENGTH (TAKE n vs')` by gvs[LENGTH_TAKE]
-  \\ `ALOOKUP (enumerate_static_array d 0 vs') (0 + i) =
-      if EL i vs' = d then NONE else SOME (EL i vs')`
-      by (irule enumerate_static_array_ALOOKUP \\ gvs[])
-  \\ `ALOOKUP (enumerate_static_array d 0 (TAKE n vs')) (0 + i) =
-      if EL i (TAKE n vs') = d then NONE else SOME (EL i (TAKE n vs'))`
-      by (irule enumerate_static_array_ALOOKUP \\ gvs[])
-  \\ gvs[EL_TAKE]
-QED
-
 (* Helper: vyper_to_abi_sparse only depends on ALOOKUP for indices < n *)
 Theorem vyper_to_abi_sparse_ALOOKUP_cong:
   ∀n env t tv sparse1 sparse2.
@@ -832,15 +716,6 @@ Proof
   \\ rw[]
   \\ irule enumerate_ALOOKUP_TAKE
   \\ gvs[]
-QED
-
-(* Helper: TAKE n vs ++ [EL n vs] = vs when LENGTH vs = SUC n *)
-Theorem TAKE_SNOC_EL:
-  LENGTH vs = SUC n ⇒ TAKE n vs ++ [EL n vs] = vs
-Proof
-  rw[LIST_EQ_REWRITE, EL_APPEND_EQN, EL_TAKE, LENGTH_TAKE]
-  \\ Cases_on `x < n` \\ gvs[EL_TAKE]
-  \\ `x = n` by gvs[] \\ gvs[]
 QED
 
 (* Helper 5: vyper_to_abi_sparse reconstruction *)
@@ -992,7 +867,7 @@ QED
 
 (* Helper for word8 bounds *)
 val w2n_lt_256 = REWRITE_RULE [EVAL ``dimword (:8)``]
-  (INST_TYPE [``:'a`` |-> ``:8``] wordsTheory.w2n_lt);
+  (INST_TYPE [``:'a`` |-> ``:8``] w2n_lt);
 
 Theorem abi_to_vyper_vyper_to_abi:
   (∀env ty av v. abi_to_vyper env ty av = SOME v ⇒ vyper_to_abi env ty v = SOME av) ∧
