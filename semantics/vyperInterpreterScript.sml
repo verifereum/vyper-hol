@@ -1,12 +1,11 @@
 Theory vyperInterpreter
 Ancestors
-  arithmetic alist combin option list finite_map pair rich_list
-  cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
+  arithmetic alist combin option list finite_map integer[qualified] pair
+  rich_list cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
   vfmExecution[ignore_grammar] vyperAST vyperABI
   vyperMisc vyperValue vyperValueOperation vyperStorage
 Libs
-  cv_transLib wordsLib monadsyntax
-  integerTheory[qualified] intSimps[qualified]
+  cv_transLib wordsLib monadsyntax intSimps[qualified]
 
 (* `subscript`s are the possible kinds of keys into HashMaps *)
 

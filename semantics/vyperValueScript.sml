@@ -1,11 +1,9 @@
 Theory vyperValue
 Ancestors
-  arithmetic alist combin list finite_map pair rich_list
-  cv cv_std vfmState vyperAST
-  vyperMisc
+  arithmetic list finite_map integer pair
+  cv cv_std vfmState vyperAST vyperMisc
 Libs
-  cv_transLib cv_typeLib wordsLib
-  integerTheory[qualified] intSimps[qualified]
+  cv_transLib wordsLib
 
 (* `evaluate_type` is used to convert a Vyper `type` to a `type_value` with
 * structure and flag declaration information inlined *)
