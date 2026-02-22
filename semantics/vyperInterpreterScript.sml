@@ -1,11 +1,11 @@
 Theory vyperInterpreter
 Ancestors
-  arithmetic alist combin option list finite_map integer[qualified] pair
+  arithmetic alist combin option list finite_map pair
   rich_list cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
   vfmExecution[ignore_grammar] vyperAST vyperABI
   vyperMisc vyperValue vyperValueOperation vyperStorage
 Libs
-  cv_transLib wordsLib monadsyntax intSimps[qualified]
+  cv_transLib wordsLib monadsyntax
 
 (* `subscript`s are the possible kinds of keys into HashMaps *)
 
@@ -737,35 +737,6 @@ Definition finally_def:
   case f s of (INL x, s) => ignore_bind g (return x) s
      | (INR e, s) => ignore_bind g (raise e) s
 End
-
-(* TODO: move these? *)
-Theorem option_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
-
-Theorem sum_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="sum",Tyop="sum"}));
-
-Theorem list_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="list",Tyop="list"}));
-
-Theorem prod_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
-
-Theorem value_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="vyperValue",Tyop="value"}));
-
-Theorem type_value_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="vyperValue",Tyop="type_value"}));
-
-Theorem bound_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="vyperAST",Tyop="bound"}));
 
 Definition lift_option_def:
   lift_option x str =
@@ -1867,18 +1838,6 @@ Proof
   \\ gvs[dest_Internal_Fn_def]
   \\ rename1 `FunctionDecl fv _ _ _ _ _ _`
   \\ Cases_on `fv` \\ gvs[dest_Internal_Fn_def]
-QED
-
-(* TODO: move? *)
-Theorem ALOOKUP_MAP_KEY_INJ:
-  (∀x y. f x = f y ⇒ x = y) ∧ fk = (f k) ⇒
-  ALOOKUP (MAP (f ## I) ls) fk =
-  ALOOKUP ls k
-Proof
-  map_every qid_spec_tac[`k`,`fk`]
-  \\ Induct_on `ls` \\ simp[]
-  \\ Cases \\ rw[]
-  \\ metis_tac[]
 QED
 
 (* Key lemma: lookup_callable_function finds exactly what ALOOKUP on module_fns finds *)

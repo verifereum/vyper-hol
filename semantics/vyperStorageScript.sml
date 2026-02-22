@@ -7,7 +7,7 @@
 Theory vyperStorage
 Ancestors
   vyperValue vfmState vfmTypes vfmConstants
-  vyperMisc
+  vyperMisc arithmetic cv cv_rep
 Libs
   cv_transLib wordsLib
 
@@ -399,17 +399,8 @@ Termination
   rw[type_value_size_def] >>
   ‘type_value1_size ftypes ≤
    list_size (pair_size (list_size char_size) type_value_size) ftypes’
-   by rw[type_value1_size_le] >> simp[arithmeticTheory.MIN_DEF]
+   by rw[type_value1_size_le] >> simp[MIN_DEF]
 End
-
-(* TODO: refactor helper theorems into a shared library
-   (duplicated from vyperABIScript.sml) *)
-
-Theorem c2n_le_cv_size:
-  !x. cv$c2n x <= cv_size x
-Proof
-  Cases >> rw[cvTheory.c2n_def, cvTheory.cv_size_def]
-QED
 
 val decode_value_pre_def =
   cv_auto_trans_pre_rec
@@ -423,21 +414,18 @@ val decode_value_pre_def =
          | INR (INR (INR (INL (storage, offset, tv, n)))) => cv_size tv + cv$c2n n
          | INR (INR (INR (INR (storage, offset, ftypes)))) => cv_size ftypes)`
      \\ rw[]
-     \\ TRY (gvs[cv_repTheory.cv_termination_simp, cvTheory.cv_size_def,
-                 cvTheory.cv_snd_def, cvTheory.cv_fst_def]
+     \\ TRY (gvs[cv_termination_simp, cv_size_def, cv_snd_def, cv_fst_def]
              \\ decide_tac \\ NO_TAC)
      (* Handle ArrayTV Dynamic cases - need case splits to expose Pair overhead *)
      \\ rpt strip_tac
      \\ Cases_on `cv_v`
-     >> gvs[cvTheory.cv_ispair_def, cvTheory.c2b_def]
+     >> gvs[cv_ispair_def, c2b_def]
      \\ rename1 `cv_size (cv_fst rest1)`
      \\ Cases_on `rest1`
-     >> gvs[cvTheory.cv_ispair_def, cvTheory.c2b_def, cvTheory.cv_lt_def,
-            cvTheory.cv_fst_def, cvTheory.cv_snd_def, cvTheory.cv_size_def]
+     >> gvs[cv_ispair_def, c2b_def, cv_lt_def, cv_fst_def, cv_snd_def, cv_size_def]
      \\ (rename1 `cv_ispair rest2` ORELSE rename1 `cv_fst rest2`)
      \\ Cases_on `rest2`
-     >> gvs[cvTheory.cv_ispair_def, cvTheory.c2b_def, cvTheory.cv_lt_def,
-            cvTheory.cv_fst_def, cvTheory.cv_snd_def, cvTheory.cv_size_def]
+     >> gvs[cv_ispair_def, c2b_def, cv_lt_def, cv_fst_def, cv_snd_def, cv_size_def]
      \\ rename1`cv_lt (cv$Num _) nn = cv$Num _`
      \\ Cases_on`nn` \\ gvs[CaseEq"bool"]
      \\ rename1`cv_lt (cv$Num _) nn = cv$Num _`
@@ -447,10 +435,10 @@ val decode_value_pre_def =
      \\ gvs[cv_primTheory.cv_min_def]
      \\ rename1`cv_lt n1 n2`
      \\ Cases_on`cv_lt n1 n2` \\ gvs[]
-     \\ TRY(Cases_on`n1` \\ Cases_on `n2` \\ gvs[cvTheory.cv_lt_def] \\ NO_TAC)
+     \\ TRY(Cases_on`n1` \\ Cases_on `n2` \\ gvs[cv_lt_def] \\ NO_TAC)
      \\ rename1`cv$c2b (cv$Num bb)`
      \\ Cases_on`bb` \\ gvs[]
-     \\ Cases_on`n1` \\ Cases_on `n2` \\ gvs[cvTheory.cv_lt_def]
+     \\ Cases_on`n1` \\ Cases_on `n2` \\ gvs[cv_lt_def]
     );
 
 Theorem decode_value_pre[cv_pre]:

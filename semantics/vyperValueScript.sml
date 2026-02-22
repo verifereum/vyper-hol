@@ -18,6 +18,10 @@ Datatype:
   | NoneTV
 End
 
+Theorem type_value_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vyperValue",Tyop="type_value"}));
+
 Datatype:
   type_args
   = StructArgs (argument list)
@@ -162,6 +166,10 @@ Datatype:
   | SArrayV type_value num ((num, value) alist)
   | TupleV (value list)
 End
+
+Theorem value_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vyperValue",Tyop="value"}));
 
 val from_to_value_thm = cv_typeLib.from_to_thm_for “:value”;
 val from_value = from_to_value_thm |> concl |> rator |> rand

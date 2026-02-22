@@ -422,3 +422,30 @@ Proof
   \\ Cases_on `x < n` \\ gvs[EL_TAKE]
   \\ `x = n` by gvs[] \\ gvs[]
 QED
+
+Theorem ALOOKUP_MAP_KEY_INJ:
+  (∀x y. f x = f y ⇒ x = y) ∧ fk = (f k) ⇒
+  ALOOKUP (MAP (f ## I) ls) fk =
+  ALOOKUP ls k
+Proof
+  map_every qid_spec_tac[`k`,`fk`]
+  \\ Induct_on `ls` \\ simp[]
+  \\ Cases \\ rw[]
+  \\ metis_tac[]
+QED
+
+Theorem option_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
+
+Theorem sum_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="sum",Tyop="sum"}));
+
+Theorem list_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="list",Tyop="list"}));
+
+Theorem prod_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
