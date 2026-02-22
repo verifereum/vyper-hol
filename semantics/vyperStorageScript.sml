@@ -488,38 +488,3 @@ val () = cv_auto_trans encode_hashmap_key_def;
    from jsonAST includes additional info like n_slots and type_str,
    but for storage access we only need the base slot. *)
 Type storage_layout = “:((num option # string) # num) list”
-
-
-(* Look up base slot for a variable by (source_id, name) *)
-Definition lookup_var_slot_def:
-  lookup_var_slot (layout : storage_layout) (src_id_opt : num option) (var_name : string) : num option =
-    ALOOKUP layout (src_id_opt, var_name)
-End
-
-(* Read a top-level variable from storage *)
-(* TODO: update to use new lookup_var_slot signature if needed *)
-Definition read_storage_var_def:
-  read_storage_var layout (storage : storage) src_id_opt var_name tv =
-    case lookup_var_slot layout src_id_opt var_name of
-    | NONE => NONE
-    | SOME slot =>
-        case decode_value storage slot tv of
-        | SOME v => SOME v
-        | NONE => NONE
-End
-
-(* Write a top-level variable to storage *)
-(* TODO: update to use new lookup_var_slot signature if needed *)
-Definition write_storage_var_def:
-  write_storage_var layout (storage : storage) src_id_opt var_name tv v =
-    case lookup_var_slot layout src_id_opt var_name of
-    | NONE => NONE
-    | SOME slot =>
-        (case encode_value tv v of
-         | NONE => NONE
-         | SOME writes =>
-             let base_slot : bytes32 = n2w slot in
-             SOME (apply_writes base_slot writes storage))
-End
-
-
