@@ -1,5 +1,10 @@
-name: 'Setup HOL Environment'
+name: 'Setup Dependencies'
 description: 'Sets up PolyML, HOL4, and Verifereum'
+
+outputs:
+  deps-hash:
+    description: 'Hash of PolyML+HOL4+Verifereum versions for cache keys'
+    value: ${{ steps.versions.outputs.deps-hash }}
 
 runs:
   using: 'composite'
@@ -13,31 +18,13 @@ runs:
       id: versions
       shell: bash
       run: |
-        echo "polyml=$(git ls-remote https://github.com/polyml/polyml.git refs/tags/${POLYML_TAG} | cut -f1)" >> $GITHUB_OUTPUT
-        echo "verifereum=$(git ls-remote https://github.com/verifereum/verifereum.git HEAD | cut -f1)" >> $GITHUB_OUTPUT
-        echo "hol4=$(git ls-remote https://github.com/HOL-Theorem-Prover/HOL.git master | cut -f1)" >> $GITHUB_OUTPUT
-        echo "vyper=$(git ls-remote https://github.com/vyperlang/vyper.git master | cut -f1)" >> $GITHUB_OUTPUT
-
-    - name: Cache Vyper
-      uses: actions/cache@v4
-      id: cache-vyper
-      with:
-        path: ~/vyper-install
-        key: vyper-${{ runner.os }}-${{ steps.versions.outputs.vyper }}
-
-    - name: Build Vyper
-      if: steps.cache-vyper.outputs.cache-hit != 'true'
-      shell: bash
-      run: |
-        git clone -b master https://github.com/vyperlang/vyper.git
-        cd vyper
-        python3 -m venv ~/vyper-install
-        source ~/vyper-install/bin/activate
-        pip install .
-
-    - name: Add Vyper to PATH
-      shell: bash
-      run: echo "$HOME/vyper-install/bin" >> "$GITHUB_PATH"
+        polyml=$(git ls-remote https://github.com/polyml/polyml.git refs/tags/${POLYML_TAG} | cut -f1)
+        verifereum=$(git ls-remote https://github.com/verifereum/verifereum.git HEAD | cut -f1)
+        hol4=$(git ls-remote https://github.com/HOL-Theorem-Prover/HOL.git master | cut -f1)
+        echo "polyml=$polyml" >> $GITHUB_OUTPUT
+        echo "verifereum=$verifereum" >> $GITHUB_OUTPUT
+        echo "hol4=$hol4" >> $GITHUB_OUTPUT
+        echo "deps-hash=$(echo "${polyml}${hol4}${verifereum}" | sha256sum | cut -d' ' -f1)" >> $GITHUB_OUTPUT
 
     - name: Cache PolyML
       uses: actions/cache@v4
