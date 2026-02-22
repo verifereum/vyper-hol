@@ -1,8 +1,7 @@
 Theory vyperEvalPreservesImmutablesDom
-
 Ancestors
-  vyperInterpreter vyperLookup vyperScopePreservation vyperStatePreservation
-    vyperAssignTarget vyperEvalExprPreservesScopesDom
+  vyperMisc vyperAST vyperValue vyperInterpreter vyperLookup vyperScopePreservation
+  vyperStatePreservation vyperAssignTarget vyperEvalExprPreservesScopesDom
 
 (* ========================================================================
    Preservation of immutables domain through eval_expr / eval_stmts.
@@ -110,17 +109,17 @@ Theorem hashmap_do_block_immutables[local]:
              compute_hashmap_slot c (t'::key_types)
                (h::TAKE (LENGTH t − LENGTH remaining_subs) t)
            of
-             NONE => raise (TypeError "assign_target compute_hashmap_slot")
+             NONE => raise (Error (TypeError "assign_target compute_hashmap_slot"))
            | SOME v => return v;
          final_tv <-
            case evaluate_type tenv final_type of
-             NONE => raise (TypeError "assign_target evaluate_type")
+             NONE => raise (Error (TypeError "assign_target evaluate_type"))
            | SOME v => return v;
          current_val <- read_storage_slot cx b final_slot final_tv;
          new_val <-
            case assign_subscripts current_val remaining_subs ao of
              INL v => return v
-           | INR e => raise e;
+           | INR e => raise (Error e);
          x <- write_storage_slot cx b final_slot final_tv new_val;
          assign_result ao current_val remaining_subs
        od) (final_type,key_types,remaining_subs) r = (res,st') ⇒
@@ -1012,7 +1011,7 @@ Theorem subscript_helper_eval_sub_err_fwd[local]:
     get_Value tv2 s_e2 = (INL v2, s_gv) ⇒
     (case evaluate_subscript (get_tenv cx) tv1 v2 of
        INL v => return v
-     | INR e => raise e) s_gv = (INR e', s_es) ⇒
+     | INR e => raise (Error e)) s_gv = (INR e', s_es) ⇒
     preserves_immutables_dom cx st s_e2
 Proof
   rpt strip_tac >>
@@ -1029,7 +1028,7 @@ Theorem subscript_helper_eval_sub_err_bwd[local]:
     get_Value tv2 s_e2 = (INL v2, s_gv) ⇒
     (case evaluate_subscript (get_tenv cx) tv1 v2 of
        INL v => return v
-     | INR e => raise e) s_gv = (INR e', s_es) ⇒
+     | INR e => raise (Error e)) s_gv = (INR e', s_es) ⇒
     preserves_immutables_dom cx s_e2 s_es
 Proof
   rpt strip_tac >>
@@ -1406,7 +1405,7 @@ Theorem extcall_inner_pipeline_imm_dom[local]:
       else
         do
           ret_val <-
-            lift_sum_error (evaluate_abi_decode_return tenv ret_type returnData);
+            lift_sum_runtime (evaluate_abi_decode_return tenv ret_type returnData);
           return (Value ret_val)
         od
     od s = (res, s') ⇒
@@ -1414,7 +1413,7 @@ Theorem extcall_inner_pipeline_imm_dom[local]:
 Proof
   rw[bind_def, ignore_bind_def, check_def, type_check_def, assert_def,
      update_accounts_def, update_transient_def, return_def,
-     raise_def, lift_sum_def, lift_sum_error_def]
+     raise_def, lift_sum_def, lift_sum_runtime_def]
   \\ rpt strip_tac \\ gvs[AllCaseEqs(), preserves_immutables_dom_refl]
   \\ TRY (irule preserves_immutables_dom_eq
           >> Cases_on `evaluate_abi_decode_return tenv ret_type returnData`
@@ -1461,7 +1460,7 @@ Theorem extcall_pipeline_preserves_imm_dom[local]:
              else
                do
                  ret_val <-
-                   lift_sum_error
+                   lift_sum_runtime
                      (evaluate_abi_decode_return (type_env ts) ret_type
                         returnData);
                  return (Value ret_val)

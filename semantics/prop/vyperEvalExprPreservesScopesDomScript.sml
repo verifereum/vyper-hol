@@ -1,7 +1,6 @@
 Theory vyperEvalExprPreservesScopesDom
-
 Ancestors
-  vyperInterpreter vyperLookup vyperScopePreservation vyperStatePreservation
+  vyperMisc vyperInterpreter vyperLookup vyperScopePreservation vyperStatePreservation
 
 (* ========================================================================
    Utility: eval_exprs preserves scopes dom from per-element IH
@@ -143,7 +142,7 @@ Theorem case_Name_dom[local]:
 Proof
   rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs()] >>
   imp_res_tac get_scopes_id >> imp_res_tac get_immutables_scopes >>
-  imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_error_scopes >> imp_res_tac return_scopes >> gvs[]
+  imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_runtime_scopes >> imp_res_tac return_scopes >> gvs[]
 QED
 
 (* Goal 6: TopLevelName (no IH) *)
@@ -237,7 +236,7 @@ Proof
   simp[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
        ignore_bind_def] >>
   strip_tac >> gvs[] >>
-  imp_res_tac get_Value_scopes >> imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_error_scopes >> gvs[] >>
+  imp_res_tac get_Value_scopes >> imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_runtime_scopes >> gvs[] >>
   imp_res_tac check_array_bounds_state >> gvs[] >>
   first_x_assum $ drule_then assume_tac >>
   first_x_assum (qspecl_then [`st`, `tv1`, `s''`] mp_tac) >> simp[] >>
@@ -259,7 +258,7 @@ Proof
   rpt strip_tac >>
   gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def, get_Value_def, lift_option_def] >>
   TRY (`MAP FDOM st.scopes = MAP FDOM s''.scopes` by (first_x_assum drule >> simp[])) >>
-  imp_res_tac get_Value_scopes >> imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_error_scopes >> gvs[]
+  imp_res_tac get_Value_scopes >> imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_runtime_scopes >> gvs[]
 QED
 
 (* Goal 13: Builtin (guarded P8 IH) *)
@@ -302,7 +301,7 @@ Proof
   PairCases_on `x` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac (CONJUNCT1 assign_target_preserves_scopes_dom) >> gvs[] >>
   imp_res_tac get_Value_scopes >> gvs[] >>
-  imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_error_scopes >> gvs[] >>
+  imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_runtime_scopes >> gvs[] >>
   imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes >> imp_res_tac lift_option_type_scopes >> gvs[]
 QED
 
@@ -542,7 +541,7 @@ Resume eval_mutual_preserves_scopes_dom[ExtCall]:
     \\ imp_res_tac update_accounts_scopes
     \\ imp_res_tac update_transient_scopes
     \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
-    \\ imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_error_scopes
+    \\ imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_runtime_scopes
     \\ gvs[get_accounts_def, get_transient_storage_def, return_def,
            COND_RATOR, CaseEq"bool", bind_def, CaseEq"sum", CaseEq"prod"]
     \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
@@ -554,7 +553,7 @@ Resume eval_mutual_preserves_scopes_dom[ExtCall]:
   \\ imp_res_tac update_accounts_scopes
   \\ imp_res_tac update_transient_scopes
   \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
-  \\ imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_error_scopes
+  \\ imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_runtime_scopes
   \\ gvs[get_accounts_def, get_transient_storage_def, return_def,
          COND_RATOR, CaseEq"bool", bind_def, CaseEq"sum", CaseEq"prod"]
   \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
