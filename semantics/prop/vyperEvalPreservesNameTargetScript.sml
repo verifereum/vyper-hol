@@ -1,6 +1,6 @@
 Theory vyperEvalPreservesNameTarget
 Ancestors
-  vyperMisc vyperInterpreter vyperLookup vyperEvalPreservesImmutablesDom
+  vyperMisc vyperContext vyperInterpreter vyperLookup vyperEvalPreservesImmutablesDom
   vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes vyperEvalMisc
 
 (* ========================================================================

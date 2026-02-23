@@ -1,6 +1,6 @@
 Theory vyperUpdateTarget
 Ancestors
-  vyperMisc vyperInterpreter vyperLookup vyperAssignTarget
+  vyperMisc vyperContext vyperInterpreter vyperLookup vyperAssignTarget
 
 Definition update_target_def:
   update_target cx st av ao = SND (assign_target cx av ao st)
