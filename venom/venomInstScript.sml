@@ -209,11 +209,9 @@ Definition entry_block_def:
     else SOME (HD fn.fn_blocks)
 End
 
-(* Optional invariant: fn_name labels the first block. *)
-Definition fn_wf_entry_def:
-  fn_wf_entry fn <=>
-    fn.fn_blocks <> [] /\
-    lookup_block fn.fn_name fn.fn_blocks = SOME (HD fn.fn_blocks)
+(* The function has an entry block (fn_blocks is non-empty). *)
+Definition fn_has_entry_def:
+  fn_has_entry fn <=> fn.fn_blocks <> []
 End
 
 (* Get successor labels of a terminator instruction *)

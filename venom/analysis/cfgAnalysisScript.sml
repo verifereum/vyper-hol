@@ -186,13 +186,13 @@ End
 
 (* wf_function: IR well-formedness for CFG analysis.
  * - unique block labels
- * - entry block exists (fn_wf_entry)
+ * - at least one block
  * - every block is non-empty and ends with a terminator
  * - successor labels of every block exist in the function *)
 Definition wf_function_def:
   wf_function fn <=>
     ALL_DISTINCT (cfg_labels fn) /\
-    fn_wf_entry fn /\
+    fn_has_entry fn /\
     (!bb. MEM bb fn.fn_blocks ==>
       bb.bb_instructions <> [] /\
       is_terminator (LAST bb.bb_instructions).inst_opcode) /\
