@@ -1,6 +1,7 @@
 Theory vyperEvalExprPreservesScopesDom
 Ancestors
-  vyperMisc vyperContext vyperInterpreter vyperLookup vyperScopePreservation vyperStatePreservation
+  vyperMisc vyperContext vyperState vyperInterpreter vyperLookup
+  vyperScopePreservation vyperStatePreservation
 
 (* ========================================================================
    Utility: eval_exprs preserves scopes dom from per-element IH

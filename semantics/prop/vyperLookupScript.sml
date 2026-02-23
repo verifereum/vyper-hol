@@ -1,6 +1,6 @@
 Theory vyperLookup
 Ancestors
-  vyperMisc vyperContext vyperInterpreter vyperValue vyperValueOperation
+  vyperMisc vyperContext vyperState vyperInterpreter vyperValue vyperValueOperation
 
 Definition lookup_scoped_var_def:
   lookup_scoped_var st n = lookup_scopes (string_to_num n) st.scopes
