@@ -188,7 +188,8 @@ End
    Well-formedness and reachability predicates
    ========================================================================== *)
 
-(* wf_function: IR well-formedness for CFG analysis.
+(* TODO: consider moving to venomInstScript.sml — other passes will need this too.
+ * wf_function: IR well-formedness for CFG analysis.
  * - unique block labels
  * - at least one block (fn_has_entry)
  * - every block is non-empty and ends with a terminator (bb_well_formed)
