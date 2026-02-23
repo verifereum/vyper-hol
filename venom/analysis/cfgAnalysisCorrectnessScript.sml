@@ -35,12 +35,12 @@
  *   5.1. this together with 1. implies dfs_{pre,post} are a subset of labels
  *   5.2. but they are lists so we add an additional theorem that they contain no duplicates, making set equality imply equality up to reordering
  * 6. entry is first in preorder and last on postorder
- * 7. cfg_reachable_of is compatible with the inductive relation cfg_path
+ * 7. cfg_reachable_of is compatible with cfg_path (RTC over successor edges)
  *)
 
 Theory cfgAnalysisCorrectness
 Ancestors
-  cfgAnalysis list pred_set
+  cfgAnalysis list pred_set relation
 
 (* ==========================================================================
    1) Label-domain and shape invariants (cheated)
@@ -169,12 +169,9 @@ QED
    4) Semantic reachability (cheated)
    ========================================================================== *)
 
-(* cfg_path inductively defines a relation for which nodes have directed paths between
- * them, from the successor sets *)
-Inductive cfg_path:
-  (!cfg n. cfg_path cfg n n) /\
-  (!cfg x y z.
-     MEM y (cfg_succs_of cfg x) /\ cfg_path cfg y z ==> cfg_path cfg x z)
+(* cfg_path: reachability via successor edges (defined as RTC). *)
+Definition cfg_path_def:
+  cfg_path cfg = RTC (λa b. MEM b (cfg_succs_of cfg a))
 End
 
 (* Reachable labels are exactly those on a CFG path from the entry label. *)
@@ -191,46 +188,31 @@ QED
    5) Traversal ordering (cheated)
    ========================================================================== *)
 
-Definition index_of_def:
-  index_of x xs =
-    case xs of
-      [] => 0
-    | y::ys => if x = y then 0 else SUC (index_of x ys)
-End
-
-(* non-back-edge successors appear earlier than predecessors in postorder.
- * reachable assumption is necessary since otherwise an unreachable node
- * and their successor will have index_of = LENGTH
- *)
+(* Non-back-edge successors appear earlier than predecessors in postorder.
+ * Uses INDEX_OF from listTheory (returns SOME i for position, NONE if absent).
+ * Reachable assumption needed so INDEX_OF returns SOME. *)
 Theorem cfg_analyze_postorder_order:
-  !fn a b.
+  !fn a b i j.
     cfg_reachable_of (cfg_analyze fn) a /\
     MEM b (cfg_succs_of (cfg_analyze fn) a) /\
-    ~cfg_path (cfg_analyze fn) b a ==>
-    index_of b (cfg_dfs_post (cfg_analyze fn)) <
-    index_of a (cfg_dfs_post (cfg_analyze fn))
+    ~cfg_path (cfg_analyze fn) b a /\
+    INDEX_OF b (cfg_dfs_post (cfg_analyze fn)) = SOME i /\
+    INDEX_OF a (cfg_dfs_post (cfg_analyze fn)) = SOME j ==>
+    i < j
 Proof
   cheat
 QED
 
-Definition cfg_acyclic_def:
-  cfg_acyclic cfg <=>
-    !a b. cfg_path cfg a b /\ cfg_path cfg b a ==> a = b
-End
-
-(* acyclic CFGs yield a clean postorder ordering for all edges.
- * can be proved from cfg_analyze_postorder_order since cfg_acyclic
- * implies there can be no back-edge b->a if b is a successor of a.
- *)
-Theorem cfg_analyze_postorder_order_acyclic:
-  !fn a b.
+(* Symmetric preorder property: non-back-edge successors appear later
+ * than predecessors in preorder. *)
+Theorem cfg_analyze_preorder_order:
+  !fn a b i j.
     cfg_reachable_of (cfg_analyze fn) a /\
-    cfg_acyclic (cfg_analyze fn) /\
-    MEM b (cfg_succs_of (cfg_analyze fn) a) ==>
-    index_of b (cfg_dfs_post (cfg_analyze fn)) <
-    index_of a (cfg_dfs_post (cfg_analyze fn))
+    MEM b (cfg_succs_of (cfg_analyze fn) a) /\
+    ~cfg_path (cfg_analyze fn) b a /\
+    INDEX_OF a (cfg_dfs_pre (cfg_analyze fn)) = SOME i /\
+    INDEX_OF b (cfg_dfs_pre (cfg_analyze fn)) = SOME j ==>
+    i < j
 Proof
   cheat
 QED
-
-val _ = export_theory();

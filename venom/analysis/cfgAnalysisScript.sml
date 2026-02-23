@@ -13,8 +13,8 @@ Ancestors
    Small ordered-set helpers (list-backed)
    ========================================================================== *)
 
-Definition ordset_add_def:
-  ordset_add x xs = if MEM x xs then xs else x::xs
+Definition set_insert_def:
+  set_insert x xs = if MEM x xs then xs else x::xs
 End
 
 Definition fmap_lookup_list_def:
@@ -102,7 +102,7 @@ Definition build_preds_def:
          FOLDR
            (λsucc m2.
               let old = fmap_lookup_list m2 succ in
-              m2 |+ (succ, ordset_add bb.bb_label old))
+              m2 |+ (succ, set_insert bb.bb_label old))
            m succs_lbl)
       (init_preds bbs) bbs
 End
@@ -118,7 +118,7 @@ Definition dfs_post_walk_def:
     | SUC fuel' =>
         if MEM lbl visited then (visited, [])
         else
-          let visited' = ordset_add lbl visited in
+          let visited' = set_insert lbl visited in
           let succs_lbl = fmap_lookup_list succs lbl in
           let (vis2, orders) =
             FOLDL
@@ -139,7 +139,7 @@ Definition dfs_pre_walk_def:
     | SUC fuel' =>
         if MEM lbl visited then (visited, [])
         else
-          let visited' = ordset_add lbl visited in
+          let visited' = set_insert lbl visited in
           let succs_lbl = fmap_lookup_list succs lbl in
           let (vis2, orders) =
             FOLDL
@@ -189,4 +189,4 @@ Definition cfg_analyze_def:
        cfg_dfs_pre := pre |>
 End
 
-val _ = export_theory();
+
