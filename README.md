@@ -20,17 +20,17 @@ The interpreter operates on abstract syntax (defined in `vyperAST`) and produces
 
 The repository is organised into the following directories:
 
-- **`syntax/`** - Vyper abstract syntax tree definitions (`vyperAST`)
-- **`frontend/`** - JSON import/parsing layer (`jsonAST`, `jsonToVyper`)
-- **`semantics/`** - Core Vyper semantics (`vyperInterpreter`, `vyperSmallStep`, `vyperABI`, `vyperStorage`, `vyperMisc`)
-- **`tests/`** - Test infrastructure and runner (`vyperTestRunner`, `vyperTestLib`)
-  - **`tests/generated/`** - Auto-generated test scripts from the Vyper test suite
-- **`venom/`** - Venom IR semantics and compiler pass proofs
-  - **`venom/passes/`** - Individual compiler passes (e.g., `phi_elimination`, `revert_to_assert`)
+- **`syntax/`** — Vyper abstract syntax tree definitions
+- **`frontend/`** — JSON import and parsing
+- **`semantics/`** — Vyper semantics, organised across several theories covering values and types, value-level operations, storage encoding, ABI encoding, evaluation context and builtins, interpreter state and monad, the definitional interpreter itself, and a CPS/small-step version for efficient execution
+  - **`semantics/prop/`** — Properties of the semantics (scope preservation, state preservation, etc.)
+- **`tests/`** — Test infrastructure and generated test scripts from the Vyper test suite
+- **`venom/`** — Venom IR semantics and compiler pass proofs
+  - **`venom/passes/`** — Individual compiler passes
 
-We describe the main contents and notable features of each theory in the repository below.
+We describe the main contents and notable features below.
 
-### vyperAST
+### Syntax (`syntax/`)
 
 The abstract syntax tree (AST) for Vyper is defined in `vyperAST`. The main datatypes are `expr` for expressions, `stmt` for statements, and `toplevel` for top-level declarations. This definition of Vyper's syntax is intended for use _after_ parsing, type-checking, constant and module inlining, and any other front-end elaboration done to user-written sources. As such, the syntax includes hints used by the interpreter, e.g., the `concat()` builtin is represented syntactically as `Concat n` where `n` is the type-inferrable maximum length of the result.
 
@@ -38,39 +38,33 @@ We syntactically restrict the targets for assignment statements/expressions, usi
 
 Interface declarations (`InterfaceDecl`) are included in the AST, with interface function signatures parsed from JSON and stored in the interpreter's type environment. This enables resolution of external calls to interface-typed targets. Full type-checking of interfaces remains future work (see [#47](https://github.com/verifereum/vyper-hol/issues/47)). Module imports and exports are supported: the AST includes `ImportDecl` and `ExportsDecl` top-level declarations, and expressions carry `source_id` information to identify which module they belong to.
 
-### vyperInterpreter
+### Semantics (`semantics/`)
 
-The formal semantics for Vyper is defined in `vyperInterpreter`. The top-level entry-points are `load_contract` (for running a contract-deployment transaction given the Vyper source code of the contract), and `call_external` (for calling an external function of an already-deployed contract). These entry-points use the `eval_stmts` function defined in `evaluate_def` for interpreting Vyper code. These functions operate on Vyper values; see `vyperTestRunner` below for how to wrap these calls with encoding/decoding to ABI-encoded bytes.
+The formal semantics for Vyper is defined across several theories in `semantics/`. The top-level entry-points are `load_contract` (for running a contract-deployment transaction given the Vyper source code of the contract), and `call_external` (for calling an external function of an already-deployed contract). These entry-points use the `eval_stmts` function defined in `evaluate_def` for interpreting Vyper code. These functions operate on Vyper values; see the test infrastructure below for how to wrap these calls with encoding/decoding to ABI-encoded bytes.
 
-The interpreter  in `evaluate_def` is written in a state-exception monad; the state contains the EVM machine state, Vyper-level globals in contracts, logs generated so far during execution, and the environment with variable bindings (since variables can be assigned to statefully). The non-stateful environment for the interpreter contains the stack of names of (internal) functions that have been called, information about the transaction that initiated the call, and the source code of existing contracts (including the current one). Exceptions are used for semantic errors (e.g., looking up a variable that was not bound, or in general attempting to interpret a badly-typed program), for legitimate runtime exceptions (e.g., failed assertions in user code, attempting to call a non-existent external function, etc.), and to manage control flow for internal function calls and loops (`return`, `break`, `continue`).
+The semantics is organised into layers:
+- **Values and types** — runtime values (`value`), type representations (`type_value`), and operations on values such as arithmetic, comparisons, conversions, and array manipulation.
+- **Storage** — encoding and decoding of Vyper values to/from EVM storage slots, and hashmap slot computation using Keccak256.
+- **ABI** — conversions between Vyper types and the standard [Contract ABI](https://docs.soliditylang.org/en/latest/abi-spec.html) encoding, used for encoding/decoding call data and return values. This defers to the ABI encoder/decoder in Verifereum for conversions to/from raw bytes.
+- **Evaluation context** — the non-stateful environment for the interpreter, containing the transaction information, source code of existing contracts, and semantics for builtins that depend on this context (e.g., `msg.sender`, `block.number`, `ecrecover`).
+- **Interpreter state** — the stateful machinery for the interpreter, including a state-exception monad, the mutable state (EVM accounts, variable scopes, immutables, logs, transient storage), and operations for reading/writing storage, variables, and globals. Assignment to nested targets (e.g., `x[3].n = 9`) is also handled at this level.
+- **Interpreter** — the main definitional interpreter (`evaluate_def`), function lookup and calling conventions, the termination proof, and the top-level entry-points.
 
-Termination is proved for the interpreter, validating Vyper's design as a total language (note, this does not rely on gas consumption, which is invisible at the Vyper source level). The termination argument uses the facts that internal function calls cannot recurse (even indirectly) and that all loops have an explicit (syntactic) bound.
+The interpreter is written in a state-exception monad. Exceptions are used for semantic errors (e.g., looking up a variable that was not bound), legitimate runtime exceptions (e.g., failed assertions), and control flow for internal function calls and loops (`return`, `break`, `continue`).
+
+Termination is proved for the interpreter, validating Vyper's design as a total language (this does not rely on gas consumption, which is invisible at the Vyper source level). The termination argument uses the facts that internal function calls cannot recurse (even indirectly) and that all loops have an explicit (syntactic) bound.
 
 External calls (`staticcall` and `extcall`) are implemented by deferring to the low-level EVM execution defined in Verifereum. This makes termination straightforward since the interpreter is not recursive for external calls; termination depends on gas consumption (and this being sufficient has already been proven in Verifereum). The interpreter also supports module imports, with internal function calls across modules tracked via `source_id`, and `@deploy` functions callable during contract deployment.
 
-### vyperSmallStep
+A continuation-passing (small-step) version of the interpreter is also defined and proved equivalent to the big-step version. Its main purpose is to facilitate efficient execution via HOL4's `cv_compute` mechanism.
 
-This theory defines a continuation-passing version of the interpreter from `vyperInterpreter`, where each function in the interpreter takes a small step before returning a continuation. The small-step interpreter is proved equivalent to the normal (big-step) interpreter (theorem: `eval_cps_eq`).
+Properties of the semantics — such as scope preservation and state preservation — are proved in `semantics/prop/`.
 
-The main purpose of the small-step interpreter is to make it easier to produce the executable version of the interpreter using HOL4's `cv_compute` mechanism. In particular, the relatively simple termination proofs for the small-step functions make the automatic translation via `cv_compute` work more smoothly.
+### Tests (`tests/`)
 
-### vyperABI
-
-This theory defines conversions between Vyper types and the standard [Contract ABI](https://docs.soliditylang.org/en/latest/abi-spec.html) types used for most Ethereum smart contracts. These conversion functions are used when decoding the low-level call data supplied when calling functions in a Vyper contract, and for encoding the return value of a contract call. The `vyperABI` theory focuses on conversion between Vyper and ABI types, deferring to the ABI encoder/decoder in Verifereum for conversions to/from raw bytes.
-
-### vyperStorage
-
-This theory defines storage layout computation for Vyper contracts, mapping variable names to EVM storage slots. The layout supports module imports by keying variables with `(source_id, variable_name)` pairs, allowing variables from different modules to coexist without collision. Storage slots are computed using Keccak256 hashing following Vyper's storage layout conventions.
-
-### vyperTestRunner
-
-This theory defines functions for re-running execution traces, as used in the Vyper test suite, using the Vyper-HOL definitional interpreter. The main entry-point is the `run_test` function. Machinery for decoding exported JSON test files and running them using the functions defined in `vyperTestRunner` is defined in the `vyperTestLib` library (and `vyperTestRunnerLib`). The library also includes functions for generating script files for running the tests; the generated files are visible in the `tests/generated` subdirectory.
+The test infrastructure defines functions for re-running execution traces from the Vyper test suite using the definitional interpreter. The main entry-point is the `run_test` function defined in `vyperTestRunner`. Machinery for decoding exported JSON test files is defined in the `vyperTestLib` library; the generated test scripts are in `tests/generated/`.
 
 The decoding of JSON into our AST type is somewhat ad-hoc, in part because the JSON format is not fully specified. In future work, we might formalise more of the front-end or elaboration process, including parsing and type-checking, so that we can run source code directly. For now, we rely on an external front-end (e.g., as used in Vyper's test export process) and decode its output to construct terms in our formal syntax.
-
-### vyperMisc
-
-Some helper functions and theorems, some of which might eventually be upstreamed to the HOL repository.
 
 ## What is Missing
 
