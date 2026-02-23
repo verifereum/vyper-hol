@@ -44,7 +44,7 @@ Ancestors
    1) Label-domain and shape invariants
    ========================================================================== *)
 
-(* Reachable labels are labels of blocks in the function. *)
+(* Any label marked reachable by cfg_analyze belongs to the function's blocks. *)
 Theorem cfg_analyze_reachable_in_labels:
   !fn lbl.
     cfg_reachable_of (cfg_analyze fn) lbl ==>
@@ -53,7 +53,8 @@ Proof
   ACCEPT_TAC cfg_analyze_reachable_in_labels_proof
 QED
 
-(* Successor labels are labels of blocks in the function. *)
+(* Every successor computed by cfg_analyze is a label of some block in the function.
+ * Requires wf_function (terminators only target existing blocks). *)
 Theorem cfg_analyze_succ_labels:
   !fn lbl succ.
     wf_function fn /\
@@ -63,7 +64,8 @@ Proof
   ACCEPT_TAC cfg_analyze_succ_labels_proof
 QED
 
-(* Predecessor labels are labels of blocks in the function. *)
+(* Every predecessor computed by cfg_analyze is a label of some block in the function.
+ * Requires wf_function (terminators only target existing blocks). *)
 Theorem cfg_analyze_pred_labels:
   !fn lbl pred.
     wf_function fn /\
@@ -77,7 +79,8 @@ QED
    2) Structural correctness
    ========================================================================== *)
 
-(* cfg_analyze preserves bb_succs on each block. *)
+(* The successors recorded by cfg_analyze for a block match the block's
+ * terminator targets (as extracted by bb_succs). *)
 Theorem cfg_analyze_preserves_bb_succs:
   !fn bb.
     MEM bb fn.fn_blocks ==>
@@ -127,7 +130,8 @@ Proof
   ACCEPT_TAC cfg_analyze_reachable_sets_proof
 QED
 
-(* Entry label is the first label in DFS preorder. *)
+(* When an entry block exists, the DFS preorder is nonempty and the
+ * entry label is its first element. *)
 Theorem cfg_analyze_preorder_entry_first:
   !fn bb.
     entry_block fn = SOME bb ==>
@@ -137,11 +141,12 @@ Proof
   ACCEPT_TAC cfg_analyze_preorder_entry_first_proof
 QED
 
-(* Entry label is the last label in DFS postorder. *)
+(* When an entry block exists, the DFS postorder is nonempty and the
+ * entry label is its last element. *)
 Theorem cfg_analyze_postorder_entry_last:
   !fn bb.
-    entry_block fn = SOME bb /\
-    cfg_dfs_post (cfg_analyze fn) <> [] ==>
+    entry_block fn = SOME bb ==>
+    cfg_dfs_post (cfg_analyze fn) <> [] /\
     LAST (cfg_dfs_post (cfg_analyze fn)) = bb.bb_label
 Proof
   ACCEPT_TAC cfg_analyze_postorder_entry_last_proof
@@ -165,9 +170,9 @@ QED
    5) Traversal ordering
    ========================================================================== *)
 
-(* Non-back-edge successors appear earlier than predecessors in postorder.
- * Uses INDEX_OF from listTheory (returns SOME i for position, NONE if absent).
- * Reachable assumption needed so INDEX_OF returns SOME. *)
+(* For an edge a->b where b cannot reach a (i.e. not a back-edge),
+ * b appears before a in postorder. Reachable assumption ensures both
+ * appear in the postorder list (INDEX_OF returns SOME). *)
 Theorem cfg_analyze_postorder_order:
   !fn a b i j.
     cfg_reachable_of (cfg_analyze fn) a /\
@@ -180,8 +185,8 @@ Proof
   ACCEPT_TAC cfg_analyze_postorder_order_proof
 QED
 
-(* Symmetric preorder property: non-back-edge successors appear later
- * than predecessors in preorder. *)
+(* For an edge a->b where b cannot reach a (i.e. not a back-edge),
+ * a appears before b in preorder. *)
 Theorem cfg_analyze_preorder_order:
   !fn a b i j.
     cfg_reachable_of (cfg_analyze fn) a /\

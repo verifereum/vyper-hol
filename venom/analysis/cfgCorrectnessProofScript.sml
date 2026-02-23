@@ -97,8 +97,8 @@ QED
 
 Theorem cfg_analyze_postorder_entry_last_proof:
   !fn bb.
-    entry_block fn = SOME bb /\
-    cfg_dfs_post (cfg_analyze fn) <> [] ==>
+    entry_block fn = SOME bb ==>
+    cfg_dfs_post (cfg_analyze fn) <> [] /\
     LAST (cfg_dfs_post (cfg_analyze fn)) = bb.bb_label
 Proof
   cheat
