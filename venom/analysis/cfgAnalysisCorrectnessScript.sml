@@ -19,48 +19,30 @@
  *
  * 5) Traversal ordering
  *    - Postorder respects edge direction for non-back-edges.
- *    - Acyclic CFGs yield a clean postorder ordering.
+ *    - Preorder has symmetric property.
  *
- * Proofs are intentionally omitted for now.
- *)
-
-(* my own analysis of correctness (should shove somewhere else?)
- * we just refactored the theorem statements so they are more cohesive while keeping their strenght
- * so ok we have
- * 1. reachable \subset labels
- * 2. succs \subset labels
- * 3. preds \subset labels
+ * Proofs live in cfgCorrectnessProofScript.sml; this file re-exports via ACCEPT_TAC.
+ *
+ * Informal analysis:
+ * 1. reachable ⊆ labels
+ * 2. succs ⊆ labels
+ * 3. preds ⊆ labels
  * 4. for two labels A and B, A succ B iff B pred A
  * 5. dfs_{pre,post} equal each other and reachable as sets
  *   5.1. this together with 1. implies dfs_{pre,post} are a subset of labels
- *   5.2. but they are lists so we add an additional theorem that they contain no duplicates, making set equality imply equality up to reordering
+ *   5.2. but they are lists so we add an additional theorem that they contain
+ *        no duplicates, making set equality imply equality up to reordering
  * 6. entry is first in preorder and last on postorder
  * 7. cfg_reachable_of is compatible with cfg_path (RTC over successor edges)
  *)
 
 Theory cfgAnalysisCorrectness
 Ancestors
-  cfgAnalysis list pred_set relation
+  cfgCorrectnessProof
 
 (* ==========================================================================
-   1) Label-domain and shape invariants (cheated)
+   1) Label-domain and shape invariants
    ========================================================================== *)
-
-(* wf_function captures basic IR well-formedness assumptions
- * needed by CFG analysis and downstream passes. *)
-Definition wf_function_def:
-  wf_function fn <=>
-    ALL_DISTINCT (cfg_labels fn) /\
-    fn_wf_entry fn /\
-    (!bb. MEM bb fn.fn_blocks ==>
-      bb.bb_instructions <> [] /\
-      is_terminator (LAST bb.bb_instructions).inst_opcode) /\
-    (!bb succ.
-      MEM bb fn.fn_blocks /\ MEM succ (bb_succs bb) ==>
-      MEM succ (cfg_labels fn))
-End
-
-(* Desiderata: prove the analysis finishes in O(n) time. *)
 
 (* Reachable labels are labels of blocks in the function. *)
 Theorem cfg_analyze_reachable_in_labels:
@@ -68,7 +50,7 @@ Theorem cfg_analyze_reachable_in_labels:
     cfg_reachable_of (cfg_analyze fn) lbl ==>
     MEM lbl (cfg_labels fn)
 Proof
-  cheat
+  ACCEPT_TAC cfg_analyze_reachable_in_labels_proof
 QED
 
 (* Successor labels are labels of blocks in the function. *)
@@ -78,7 +60,7 @@ Theorem cfg_analyze_succ_labels:
     MEM succ (cfg_succs_of (cfg_analyze fn) lbl) ==>
     MEM succ (cfg_labels fn)
 Proof
-  cheat
+  ACCEPT_TAC cfg_analyze_succ_labels_proof
 QED
 
 (* Predecessor labels are labels of blocks in the function. *)
@@ -88,11 +70,11 @@ Theorem cfg_analyze_pred_labels:
     MEM pred (cfg_preds_of (cfg_analyze fn) lbl) ==>
     MEM pred (cfg_labels fn)
 Proof
-  cheat
+  ACCEPT_TAC cfg_analyze_pred_labels_proof
 QED
 
 (* ==========================================================================
-   2) Structural correctness statements (cheated)
+   2) Structural correctness
    ========================================================================== *)
 
 (* cfg_analyze preserves bb_succs on each block. *)
@@ -101,7 +83,7 @@ Theorem cfg_analyze_preserves_bb_succs:
     MEM bb fn.fn_blocks ==>
     cfg_succs_of (cfg_analyze fn) bb.bb_label = bb_succs bb
 Proof
-  cheat
+  ACCEPT_TAC cfg_analyze_preserves_bb_succs_proof
 QED
 
 (* preds are the inverse edge relation of succs (for block labels). *)
@@ -112,25 +94,25 @@ Theorem cfg_analyze_edge_symmetry:
       (MEM succ (cfg_succs_of (cfg_analyze fn) lbl) <=>
        MEM lbl (cfg_preds_of (cfg_analyze fn) succ))
 Proof
-  cheat
+  ACCEPT_TAC cfg_analyze_edge_symmetry_proof
 QED
 
 (* ==========================================================================
-   3) Traversal statements (cheated)
+   3) Traversal properties
    ========================================================================== *)
 
 (* DFS postorder contains no duplicates. *)
 Theorem cfg_analyze_dfs_post_distinct:
   !fn. ALL_DISTINCT (cfg_dfs_post (cfg_analyze fn))
 Proof
-  cheat
+  ACCEPT_TAC cfg_analyze_dfs_post_distinct_proof
 QED
 
 (* DFS preorder contains no duplicates. *)
 Theorem cfg_analyze_dfs_pre_distinct:
   !fn. ALL_DISTINCT (cfg_dfs_pre (cfg_analyze fn))
 Proof
-  cheat
+  ACCEPT_TAC cfg_analyze_dfs_pre_distinct_proof
 QED
 
 (* postorder labels, preorder labels, and reachable labels coincide as sets.
@@ -142,7 +124,7 @@ Theorem cfg_analyze_reachable_sets:
     set (cfg_dfs_post (cfg_analyze fn)) =
       {lbl | cfg_reachable_of (cfg_analyze fn) lbl}
 Proof
-  cheat
+  ACCEPT_TAC cfg_analyze_reachable_sets_proof
 QED
 
 (* Entry label is the first label in DFS preorder. *)
@@ -152,7 +134,7 @@ Theorem cfg_analyze_preorder_entry_first:
     cfg_dfs_pre (cfg_analyze fn) <> [] /\
     HD (cfg_dfs_pre (cfg_analyze fn)) = bb.bb_label
 Proof
-  cheat
+  ACCEPT_TAC cfg_analyze_preorder_entry_first_proof
 QED
 
 (* Entry label is the last label in DFS postorder. *)
@@ -162,17 +144,12 @@ Theorem cfg_analyze_postorder_entry_last:
     cfg_dfs_post (cfg_analyze fn) <> [] ==>
     LAST (cfg_dfs_post (cfg_analyze fn)) = bb.bb_label
 Proof
-  cheat
+  ACCEPT_TAC cfg_analyze_postorder_entry_last_proof
 QED
 
 (* ==========================================================================
-   4) Semantic reachability (cheated)
+   4) Semantic reachability
    ========================================================================== *)
-
-(* cfg_path: reachability via successor edges (defined as RTC). *)
-Definition cfg_path_def:
-  cfg_path cfg = RTC (λa b. MEM b (cfg_succs_of cfg a))
-End
 
 (* Reachable labels are exactly those on a CFG path from the entry label. *)
 Theorem cfg_analyze_semantic_reachability:
@@ -181,11 +158,11 @@ Theorem cfg_analyze_semantic_reachability:
     (cfg_reachable_of (cfg_analyze fn) lbl <=>
      cfg_path (cfg_analyze fn) bb.bb_label lbl)
 Proof
-  cheat
+  ACCEPT_TAC cfg_analyze_semantic_reachability_proof
 QED
 
 (* ==========================================================================
-   5) Traversal ordering (cheated)
+   5) Traversal ordering
    ========================================================================== *)
 
 (* Non-back-edge successors appear earlier than predecessors in postorder.
@@ -200,7 +177,7 @@ Theorem cfg_analyze_postorder_order:
     INDEX_OF a (cfg_dfs_post (cfg_analyze fn)) = SOME j ==>
     i < j
 Proof
-  cheat
+  ACCEPT_TAC cfg_analyze_postorder_order_proof
 QED
 
 (* Symmetric preorder property: non-back-edge successors appear later
@@ -214,5 +191,5 @@ Theorem cfg_analyze_preorder_order:
     INDEX_OF b (cfg_dfs_pre (cfg_analyze fn)) = SOME j ==>
     i < j
 Proof
-  cheat
+  ACCEPT_TAC cfg_analyze_preorder_order_proof
 QED

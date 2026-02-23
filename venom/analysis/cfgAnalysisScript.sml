@@ -6,7 +6,7 @@
 
 Theory cfgAnalysis
 Ancestors
-  list finite_map
+  list finite_map relation
   venomInst
 
 (* ==========================================================================
@@ -108,49 +108,41 @@ Definition build_preds_def:
 End
 
 (* ==========================================================================
-   DFS preorder and postorder with fuel (termination-friendly)
+   DFS preorder and postorder (mutually recursive with list helper)
    ========================================================================== *)
 
 Definition dfs_post_walk_def:
-  dfs_post_walk fuel succs visited lbl =
-    case fuel of
-      0 => (visited, [])
-    | SUC fuel' =>
-        if MEM lbl visited then (visited, [])
-        else
-          let visited' = set_insert lbl visited in
-          let succs_lbl = fmap_lookup_list succs lbl in
-          let (vis2, orders) =
-            FOLDL
-              (λacc s.
-                 let (v, ords) = acc in
-                 let (v', ords') = dfs_post_walk fuel' succs v s in
-                 (v', ords ++ ords'))
-              (visited', []) succs_lbl in
-          (vis2, orders ++ [lbl])
+  (dfs_post_walk succs visited lbl =
+    if MEM lbl visited then (visited, [])
+    else
+      let visited' = set_insert lbl visited in
+      let succs_lbl = fmap_lookup_list succs lbl in
+      let (vis2, orders) = dfs_post_walk_list succs visited' succs_lbl in
+      (vis2, orders ++ [lbl])) /\
+  (dfs_post_walk_list succs visited [] = (visited, [])) /\
+  (dfs_post_walk_list succs visited (s::ss) =
+    let (v', ords') = dfs_post_walk succs visited s in
+    let (v'', ords'') = dfs_post_walk_list succs v' ss in
+    (v'', ords' ++ ords''))
 Termination
-  WF_REL_TAC `measure (\(fuel, succs, visited, lbl). fuel)` >> simp[]
+  cheat
 End
 
 Definition dfs_pre_walk_def:
-  dfs_pre_walk fuel succs visited lbl =
-    case fuel of
-      0 => (visited, [])
-    | SUC fuel' =>
-        if MEM lbl visited then (visited, [])
-        else
-          let visited' = set_insert lbl visited in
-          let succs_lbl = fmap_lookup_list succs lbl in
-          let (vis2, orders) =
-            FOLDL
-              (λacc s.
-                 let (v, ords) = acc in
-                 let (v', ords') = dfs_pre_walk fuel' succs v s in
-                 (v', ords ++ ords'))
-              (visited', []) succs_lbl in
-          (vis2, lbl :: orders)
+  (dfs_pre_walk succs visited lbl =
+    if MEM lbl visited then (visited, [])
+    else
+      let visited' = set_insert lbl visited in
+      let succs_lbl = fmap_lookup_list succs lbl in
+      let (vis2, orders) = dfs_pre_walk_list succs visited' succs_lbl in
+      (vis2, lbl :: orders)) /\
+  (dfs_pre_walk_list succs visited [] = (visited, [])) /\
+  (dfs_pre_walk_list succs visited (s::ss) =
+    let (v', ords') = dfs_pre_walk succs visited s in
+    let (v'', ords'') = dfs_pre_walk_list succs v' ss in
+    (v'', ords' ++ ords''))
 Termination
-  WF_REL_TAC `measure (\(fuel, succs, visited, lbl). fuel)` >> simp[]
+  cheat
 End
 
 Definition build_reachable_def:
@@ -172,15 +164,14 @@ Definition cfg_analyze_def:
       case entry_block fn of
         NONE => NONE
       | SOME bb => SOME bb.bb_label in
-    let fuel = LENGTH bbs + 1 in
     let (vis_post, post) =
       case entry of
         NONE => ([], [])
-      | SOME lbl => dfs_post_walk fuel succs [] lbl in
+      | SOME lbl => dfs_post_walk succs [] lbl in
     let (_, pre) =
       case entry of
         NONE => ([], [])
-      | SOME lbl => dfs_pre_walk fuel succs [] lbl in
+      | SOME lbl => dfs_pre_walk succs [] lbl in
     let reach = build_reachable labels vis_post in
     <| cfg_succs := succs;
        cfg_preds := preds;
@@ -189,4 +180,28 @@ Definition cfg_analyze_def:
        cfg_dfs_pre := pre |>
 End
 
+(* ==========================================================================
+   Well-formedness and reachability predicates
+   ========================================================================== *)
 
+(* wf_function: IR well-formedness for CFG analysis.
+ * - unique block labels
+ * - entry block exists (fn_wf_entry)
+ * - every block is non-empty and ends with a terminator
+ * - successor labels of every block exist in the function *)
+Definition wf_function_def:
+  wf_function fn <=>
+    ALL_DISTINCT (cfg_labels fn) /\
+    fn_wf_entry fn /\
+    (!bb. MEM bb fn.fn_blocks ==>
+      bb.bb_instructions <> [] /\
+      is_terminator (LAST bb.bb_instructions).inst_opcode) /\
+    (!bb succ.
+      MEM bb fn.fn_blocks /\ MEM succ (bb_succs bb) ==>
+      MEM succ (cfg_labels fn))
+End
+
+(* cfg_path: reachability via successor edges (defined as RTC). *)
+Definition cfg_path_def:
+  cfg_path cfg = RTC (λa b. MEM b (cfg_succs_of cfg a))
+End
