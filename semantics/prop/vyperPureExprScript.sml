@@ -1,6 +1,6 @@
 Theory vyperPureExpr
 Ancestors
-  option vyperInterpreter vyperLookup vyperStatePreservation
+  vyperMisc vyperInterpreter vyperLookup vyperStatePreservation
 
 (* Pure expressions: expressions that do not modify state. *)
 Definition pure_expr_def:
@@ -131,7 +131,7 @@ Proof
   imp_res_tac lift_option_state >> imp_res_tac get_Value_state >>
   imp_res_tac lift_sum_state >>
   gvs[check_array_bounds_def, bind_def, ignore_bind_def, AllCaseEqs(),
-      check_def, assert_def, return_def, raise_def] >>
+      check_def, type_check_def, assert_def, return_def, raise_def] >>
   imp_res_tac get_storage_backend_state >>
   gvs[return_def, bind_def, AllCaseEqs(), sum_CASE_rator, prod_CASE_rator] >>
   imp_res_tac return_state >> imp_res_tac lift_sum_state >>
@@ -160,12 +160,12 @@ QED
 Theorem case_Builtin[local]:
   ∀cx bt es.
     (∀s'' x t.
-       check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x, t) ∧
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x, t) ∧
        bt ≠ Len ⇒
        ∀st res st'.
          eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st = st') ∧
     (∀s'' x t.
-       check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x, t) ∧
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x, t) ∧
        bt = Len ⇒
        ∀st res st'.
          eval_expr cx (HD es) st = (res, st') ⇒ pure_expr (HD es) ⇒ st = st') ⇒
@@ -175,7 +175,7 @@ Theorem case_Builtin[local]:
 Proof
   rpt strip_tac >>
   gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def, ignore_bind_def,
-      check_def, assert_def, return_def, raise_def, get_accounts_def, lift_sum_def] >>
+      check_def, type_check_def, assert_def, return_def, raise_def, get_accounts_def, lift_sum_def] >>
   Cases_on `bt = Len` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def]
   (* Len case: eval_expr (HD es) + toplevel_array_length *)
   (* Len case *)
@@ -208,7 +208,7 @@ QED
 Theorem case_TypeBuiltin[local]:
   ∀cx tb typ es.
     (∀s'' x t.
-       check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args" s'' = (INL x, t) ⇒
+       type_check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args" s'' = (INL x, t) ⇒
        ∀st res st'.
          eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st = st') ⇒
     (∀st res st'.
@@ -217,7 +217,7 @@ Theorem case_TypeBuiltin[local]:
 Proof
   rpt strip_tac >>
   gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def, ignore_bind_def,
-      check_def, assert_def, return_def, raise_def, lift_sum_def] >>
+      check_def, type_check_def, assert_def, return_def, raise_def, lift_sum_def] >>
   TRY (Cases_on `evaluate_type_builtin cx tb typ vs` >> gvs[return_def, raise_def]) >>
   first_x_assum drule >> gvs[ETA_THM]
 QED

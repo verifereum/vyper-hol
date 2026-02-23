@@ -45,7 +45,7 @@ Definition translate_type_def:
   (translate_type JT_None = NoneT) /\
   (translate_type (JT_Named name) =
      if name = "bool" then BaseT BoolT
-     else if name = "address" then BaseT AddressT
+     else if name = "address" ∨ name = "self" then BaseT AddressT
      else if name = "decimal" then BaseT DecimalT
      else StructT name) /\
   (translate_type_list [] = []) /\
@@ -453,21 +453,42 @@ End
 
 val () = cv_auto_trans extract_func_name_def;
 
+(* Check if a func expression has interface typeclass (for cross-module interface constructors) *)
+Definition is_interface_constructor_def:
+  (is_interface_constructor (JE_Attribute _ _ (SOME tc) _) = (tc = "interface")) /\
+  (is_interface_constructor (JE_Name _ (SOME tc) _) = (tc = "interface")) /\
+  (is_interface_constructor _ = F)
+End
+
+val () = cv_auto_trans is_interface_constructor_def;
+
 (* Extract the innermost module's source_id from a module chain *)
 (* For lib1: returns SOME 0 (from JE_Name) *)
 (* For lib1.lib2: returns SOME 1 (from the .lib2 Attribute) *)
 Definition extract_innermost_module_src_def:
-  (* Attribute with module typeclass has source_id directly *)
+  (* Attribute with module/interface typeclass has source_id directly *)
   (extract_innermost_module_src (JE_Attribute _ _ (SOME tc) src_id_opt) =
-    if tc = "module" then SOME src_id_opt else NONE) /\
-  (* JE_Name with module typeclass *)
+    if tc = "module" ∨ tc = "interface" then SOME src_id_opt else NONE) /\
+  (* JE_Name with module/interface typeclass *)
   (extract_innermost_module_src (JE_Name _ (SOME tc) src_id_opt) =
-    if tc = "module" then SOME src_id_opt else NONE) /\
+    if tc = "module" ∨ tc = "interface" then SOME src_id_opt else NONE) /\
   (* Other cases *)
   (extract_innermost_module_src _ = NONE)
 End
 
 val () = cv_auto_trans extract_innermost_module_src_def;
+
+(* Check if an expression is a module reference (not an interface-typed value).
+   Used to detect nested module attribute access: mod3.mod2.mod1.X
+   Interface-typed expressions like self.f should NOT match, because they are
+   runtime values with attributes like .address and .balance. *)
+Definition is_module_expr_def:
+  (is_module_expr (JE_Attribute _ _ (SOME tc) _) = (tc = "module")) /\
+  (is_module_expr (JE_Name _ (SOME tc) _) = (tc = "module")) /\
+  (is_module_expr _ = F)
+End
+
+val () = cv_auto_trans is_module_expr_def;
 
 (* Detect cross-module flag member pattern: lib1.Action.BUY or lib1.lib2.Roles3.NOBODY *)
 (* Returns SOME (src_id_opt, flag_name) if it matches, NONE otherwise *)
@@ -553,6 +574,7 @@ Definition translate_expr_def:
     else if obj = "block" /\ attr = "prevhash" then Builtin (Env PrevHash) []
     else if obj = "block" /\ attr = "blobbasefee" then Builtin (Env BlobBaseFee) []
     else if obj = "tx" /\ attr = "gasprice" then Builtin (Env GasPrice) []
+    else if obj = "chain" /\ attr = "id" then Builtin (Env ChainId) []
     else if obj = "self" /\ attr = "balance" then
       Builtin (Acc Balance) [Builtin (Env SelfAddr) []]
     (* self.x: use attr_src_id_opt from variable_reads for cross-module storage access *)
@@ -565,11 +587,14 @@ Definition translate_expr_def:
 
   (* General attribute - handles nested and simple cases *)
   (* Check for cross-module flag access: lib1.Action.BUY *)
-  (translate_expr (JE_Attribute e attr result_tc _) =
+  (translate_expr (JE_Attribute e attr result_tc attr_src_id_opt) =
     if result_tc = SOME "flag" then
       case extract_module_flag e of
       | SOME (src_id_opt, flag_name) => FlagMember (src_id_opt, flag_name) attr
       | NONE => Attribute (translate_expr e) attr
+    (* Nested module access: mod3.mod2.mod1.X — use variable_reads source_id *)
+    else if is_module_expr e then
+      TopLevelName (source_id_to_nsid attr_src_id_opt, attr)
     else if attr = "balance" then Builtin (Acc Balance) [translate_expr e]
     else if attr = "address" then Builtin (Acc Address) [translate_expr e]
     else Attribute (translate_expr e) attr) /\
@@ -626,8 +651,9 @@ Definition translate_expr_def:
     case func of
     | JE_Name name (SOME "interface") _ => HD args'
     | JE_Name name _ _ => make_builtin_call name args' kwargs' ret_ty
-    (* lib.__at__(addr) - interface instantiation, just returns the address *)
+    (* lib.__at__(addr) / lib.__interface__(addr) - interface instantiation, just returns the address *)
     | JE_Attribute _ "__at__" _ _ => HD args'
+    | JE_Attribute _ "__interface__" _ _ => HD args'
     | JE_Attribute base "pop" _ _ =>
         (case base of
          | JE_Name id _ _ => Pop (NameTarget id)
@@ -641,8 +667,9 @@ Definition translate_expr_def:
          | _ => Call (IntCall (NONE, "pop")) args' NONE)
     (* self.func(args) - internal call *)
     | JE_Attribute (JE_Name "self" _ _) fname _ _ => Call (IntCall (NONE, fname)) args' NONE
-    (* Module struct constructor or module function call *)
-    | _ => let nsid = source_id_to_nsid src_id_opt;
+    (* Module struct constructor, interface constructor, or module function call *)
+    | _ => if is_interface_constructor func then HD args'
+           else let nsid = source_id_to_nsid src_id_opt;
                fname = extract_func_name func in
            (case ret_ty of
               JT_Struct sname =>
@@ -765,10 +792,27 @@ End
 
 val () = cv_auto_trans range_bound_of_args_def;
 
+Definition folded_bound_of_args_def:
+  (folded_bound_of_args [] = NONE) /\
+  (folded_bound_of_args [fv] =
+     case fv of
+       SOME n => if 0 <= n then SOME (Num n) else SOME 0
+     | NONE => NONE) /\
+  (folded_bound_of_args (fs::fe::_) =
+     case (fs, fe) of
+       (SOME s, SOME e) =>
+         if s <= e then SOME (Num (e - s)) else SOME 0
+     | _ => NONE)
+End
+
+val () = cv_auto_trans folded_bound_of_args_def;
+
 Definition get_iter_bound_def:
-  (get_iter_bound (JIter_Range args (SOME n)) = n) /\
-  (get_iter_bound (JIter_Range args NONE) =
-     case range_bound_of_args args of SOME n => n | NONE => 0) /\
+  (get_iter_bound (JIter_Range args _ (SOME n)) = n) /\
+  (get_iter_bound (JIter_Range args fvs NONE) =
+     case range_bound_of_args args of
+       SOME n => n
+     | NONE => case folded_bound_of_args fvs of SOME n => n | NONE => 0) /\
   (get_iter_bound (JIter_Array _ (JT_StaticArray _ len)) = len) /\
   (get_iter_bound (JIter_Array _ (JT_DynArray _ len)) = len) /\
   (get_iter_bound (JIter_Array _ _) = 0)
@@ -777,13 +821,13 @@ End
 val () = cv_auto_trans get_iter_bound_def;
 
 Definition translate_iter_def:
-  (translate_iter var_ty (JIter_Range [] _) =
+  (translate_iter var_ty (JIter_Range [] _ _) =
     Range (Literal (IntL (int_bound_of_type var_ty) (integer$int_of_num 0)))
           (Literal (IntL (int_bound_of_type var_ty) (integer$int_of_num 0)))) /\
-  (translate_iter var_ty (JIter_Range [e] _) =
+  (translate_iter var_ty (JIter_Range [e] _ _) =
     Range (Literal (IntL (int_bound_of_type var_ty) (integer$int_of_num 0)))
           (translate_expr e)) /\
-  (translate_iter var_ty (JIter_Range (s::e::_) _) =
+  (translate_iter var_ty (JIter_Range (s::e::_) _ _) =
     Range (translate_expr s) (translate_expr e)) /\
   (translate_iter var_ty (JIter_Array e _) =
     Array (translate_expr e))
@@ -1039,7 +1083,15 @@ Definition get_function_name_def:
   get_function_name _ = NONE
 End
 
-(* Get all external function names from a module's toplevels *)
+(* Get name of a public variable or hashmap (generates an external getter) *)
+Definition get_public_var_name_def:
+  get_public_var_name (JTL_VariableDecl name _ T _ _ _) = SOME name ∧
+  get_public_var_name (JTL_HashMapDecl name _ _ T _) = SOME name ∧
+  get_public_var_name _ = NONE
+End
+
+(* Get all externally-callable names from a module's toplevels:
+   external functions + public variable/hashmap getters *)
 Definition get_external_func_names_def:
   get_external_func_names [] = [] ∧
   get_external_func_names (t::ts) =
@@ -1047,14 +1099,25 @@ Definition get_external_func_names_def:
       case get_function_name t of
         SOME name => name :: get_external_func_names ts
       | NONE => get_external_func_names ts
-    else get_external_func_names ts
+    else
+      case get_public_var_name t of
+        SOME name => name :: get_external_func_names ts
+      | NONE => get_external_func_names ts
 End
 
-(* Find module body by source_id in imports list *)
+(* Find module body by raw source_id in imports list *)
 Definition find_module_body_def:
   find_module_body src_id [] = [] ∧
   find_module_body src_id (JImportedModule sid _ body :: rest) =
     if src_id = sid then body else find_module_body src_id rest
+End
+
+(* Find module body by offset source_id (num) in imports list *)
+Definition find_module_body_nsid_def:
+  find_module_body_nsid nsid [] = [] ∧
+  find_module_body_nsid nsid (JImportedModule sid _ body :: rest) =
+    if nsid = Num (sid + &builtin_source_id_offset) then body
+    else find_module_body_nsid nsid rest
 End
 
 (* Get export annotation from a toplevel if it's an ExportsDecl *)
@@ -1105,12 +1168,52 @@ Termination
   WF_REL_TAC `measure (λ(_,_,e). json_expr_size e)` >> simp[]
 End
 
+(* Get function names from an inline interface definition *)
+Definition get_interface_func_names_def:
+  get_interface_func_names [] = [] ∧
+  get_interface_func_names (JInterfaceFunc name _ _ _ :: rest) =
+    name :: get_interface_func_names rest
+End
+
+(* Look up an inline interface definition by name in a module's toplevels *)
+Definition find_inline_interface_def:
+  find_inline_interface_def name [] = NONE ∧
+  find_inline_interface_def name (JTL_InterfaceDef iname funcs :: ts) =
+    (if iname = name then SOME (get_interface_func_names funcs)
+     else find_inline_interface_def name ts) ∧
+  find_inline_interface_def name (_ :: ts) =
+    find_inline_interface_def name ts
+End
+
+(* Look up interface function names for a named export.
+   Checks two sources:
+   1. Inline JTL_InterfaceDef in the module's toplevels
+   2. Imported interface module (whose exported function names define the interface)
+   Returns SOME (list of function names) if found, NONE otherwise. *)
+Definition find_interface_functions_def:
+  find_interface_functions exports_map all_import_maps src_id func_name =
+    (* First check if func_name is an imported interface module *)
+    case ALOOKUP all_import_maps src_id of
+    | NONE => NONE
+    | SOME module_import_map =>
+        case ALOOKUP module_import_map func_name of
+        | SOME iface_src_id =>
+            (* func_name is an imported module; its exported function names
+               are the interface's function declarations *)
+            (case ALOOKUP exports_map iface_src_id of
+             | SOME iface_exps => SOME (MAP FST iface_exps)
+             | NONE => NONE)
+        | NONE => NONE
+End
+
 (* Expand a single export expression using pre-computed exports_map.
    exports_map: source_id -> list of (func_name, source_id) exports
    all_import_maps: source_id -> import_map for each module
-   import_map: alias -> source_id for the current module's imports *)
+   import_map: alias -> source_id for the current module's imports
+   all_imports: the full imports list (for looking up module bodies) *)
 Definition expand_single_export_def:
-  expand_single_export exports_map all_import_maps import_map (JE_Attribute base func_name _ _) =
+  expand_single_export exports_map all_import_maps all_imports import_map
+    (JE_Attribute base func_name _ _) =
     (case resolve_module_expr all_import_maps import_map base of
      | NONE => []
      | SOME src_id =>
@@ -1119,49 +1222,62 @@ Definition expand_single_export_def:
            | NONE => []
            | SOME exps => exps
          else
-           (* Check if the function is re-exported from another module *)
+           (* Check if the function is a direct export *)
            case ALOOKUP exports_map src_id of
            | SOME exps =>
                (case ALOOKUP exps func_name of
                 | SOME final_src_id => [(func_name, final_src_id)]
-                | NONE => [(func_name, src_id)])
+                | NONE =>
+                    (* Not a direct function — check if it's a named interface *)
+                    case find_interface_functions exports_map all_import_maps
+                           src_id func_name of
+                    | SOME iface_fns =>
+                        (* Expand to all interface functions, mapped to src_id *)
+                        MAP (λn. (n, src_id)) iface_fns
+                    | NONE =>
+                        (* Check inline interface definitions *)
+                        let body = find_module_body_nsid src_id all_imports in
+                        case find_inline_interface_def func_name body of
+                        | SOME iface_fns =>
+                            MAP (λn. (n, src_id)) iface_fns
+                        | NONE => [(func_name, src_id)])
            | NONE => [(func_name, src_id)]) ∧
-  expand_single_export _ _ _ _ = []
+  expand_single_export _ _ _ _ _ = []
 End
 
 (* Expand exports from a tuple of export expressions *)
 Definition expand_tuple_exports_def:
-  expand_tuple_exports exports_map all_import_maps import_map [] = [] ∧
-  expand_tuple_exports exports_map all_import_maps import_map (e::es) =
-    expand_single_export exports_map all_import_maps import_map e ++
-    expand_tuple_exports exports_map all_import_maps import_map es
+  expand_tuple_exports exports_map all_import_maps all_imports import_map [] = [] ∧
+  expand_tuple_exports exports_map all_import_maps all_imports import_map (e::es) =
+    expand_single_export exports_map all_import_maps all_imports import_map e ++
+    expand_tuple_exports exports_map all_import_maps all_imports import_map es
 End
 
 (* Expand exports from an ExportsDecl annotation *)
 Definition expand_export_annotation_def:
-  expand_export_annotation exports_map all_import_maps import_map (JE_Tuple exprs) =
-    expand_tuple_exports exports_map all_import_maps import_map exprs ∧
-  expand_export_annotation exports_map all_import_maps import_map (JE_Attribute base attr tc sid) =
-    expand_single_export exports_map all_import_maps import_map (JE_Attribute base attr tc sid) ∧
-  expand_export_annotation _ _ _ _ = []
+  expand_export_annotation exports_map all_import_maps all_imports import_map (JE_Tuple exprs) =
+    expand_tuple_exports exports_map all_import_maps all_imports import_map exprs ∧
+  expand_export_annotation exports_map all_import_maps all_imports import_map (JE_Attribute base attr tc sid) =
+    expand_single_export exports_map all_import_maps all_imports import_map (JE_Attribute base attr tc sid) ∧
+  expand_export_annotation _ _ _ _ _ = []
 End
 
 (* Expand all exports from a module's toplevels *)
 Definition expand_exports_from_toplevels_def:
-  expand_exports_from_toplevels exports_map all_import_maps import_map [] = [] ∧
-  expand_exports_from_toplevels exports_map all_import_maps import_map (t::ts) =
+  expand_exports_from_toplevels exports_map all_import_maps all_imports import_map [] = [] ∧
+  expand_exports_from_toplevels exports_map all_import_maps all_imports import_map (t::ts) =
     (case get_export_annotation t of
-     | SOME ann => expand_export_annotation exports_map all_import_maps import_map ann
+     | SOME ann => expand_export_annotation exports_map all_import_maps all_imports import_map ann
      | NONE => []) ++
-    expand_exports_from_toplevels exports_map all_import_maps import_map ts
+    expand_exports_from_toplevels exports_map all_import_maps all_imports import_map ts
 End
 
 (* Compute a single module's full exports: its external functions + expanded re-exports *)
 Definition compute_module_exports_def:
-  compute_module_exports exports_map all_import_maps src_id body =
+  compute_module_exports exports_map all_import_maps all_imports src_id body =
     let ext_funcs = MAP (λn. (n, src_id)) (get_external_func_names body) in
     let import_map = build_import_map (collect_imports body) in
-    let reexports = expand_exports_from_toplevels exports_map all_import_maps import_map body in
+    let reexports = expand_exports_from_toplevels exports_map all_import_maps all_imports import_map body in
     ext_funcs ++ reexports
 End
 
@@ -1170,20 +1286,20 @@ End
    This ensures when we process module M, any module M references via
    __interface__ has already been added to the accumulator. *)
 Definition build_exports_map_def:
-  build_exports_map all_import_maps acc [] = acc ∧
-  build_exports_map all_import_maps acc (JImportedModule src_id _ body :: rest) =
+  build_exports_map all_import_maps all_imports acc [] = acc ∧
+  build_exports_map all_import_maps all_imports acc (JImportedModule src_id _ body :: rest) =
     let nsid = Num (src_id + &builtin_source_id_offset) in
-    let exps = compute_module_exports acc all_import_maps nsid body in
-    build_exports_map all_import_maps ((nsid, exps) :: acc) rest
+    let exps = compute_module_exports acc all_import_maps all_imports nsid body in
+    build_exports_map all_import_maps all_imports ((nsid, exps) :: acc) rest
 End
 
 (* Main function: extract exports from main module given imports *)
 Definition extract_exports_def:
   extract_exports (JModule toplevels) imports =
     let all_import_maps = build_all_import_maps imports in
-    let exports_map = build_exports_map all_import_maps [] imports in
+    let exports_map = build_exports_map all_import_maps imports [] imports in
     let import_map = build_import_map (collect_imports toplevels) in
-    expand_exports_from_toplevels exports_map all_import_maps import_map toplevels
+    expand_exports_from_toplevels exports_map all_import_maps imports import_map toplevels
 End
 
 (* ===== Module Translation ===== *)

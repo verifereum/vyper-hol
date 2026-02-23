@@ -1,7 +1,7 @@
 Theory vyperAssignTarget
-
 Ancestors
-  vyperInterpreter vyperScopePreservation vyperStatePreservation vyperLookup
+  vyperMisc vyperAST vyperValue vyperInterpreter
+  vyperScopePreservation vyperStatePreservation vyperLookup
 
 (*********************************************************************************)
 (* Helper lemmas for immutables preservation *)
@@ -27,7 +27,7 @@ Theorem assign_target_tuple_preserves_immutables_dom[local]:
          IS_SOME (FLOOKUP (get_source_immutables (current_module cx) imms') n))
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >>
-  simp[Once assign_target_def, check_def, AllCaseEqs(), return_def, raise_def] >>
+  simp[Once assign_target_def, check_def, type_check_def, AllCaseEqs(), return_def, raise_def] >>
   simp[bind_def, ignore_bind_def, assert_def, return_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
   first_x_assum drule >> simp[]
@@ -96,7 +96,7 @@ Proof
   ho_match_mp_tac assign_target_ind >> rpt conj_tac >> rpt gen_tac >-
   (* ScopedVar case: set_scopes doesn't touch immutables *)
   (simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
-        lift_option_def, lift_sum_def, AllCaseEqs(), raise_def, LET_THM,
+        lift_option_def, lift_option_type_def, lift_sum_def, AllCaseEqs(), raise_def, LET_THM,
         ignore_bind_def, set_scopes_def] >> strip_tac >>
    Cases_on `find_containing_scope (string_to_num id) st.scopes` >>
    gvs[return_def, raise_def] >>
@@ -109,7 +109,7 @@ Proof
   (* TopLevelVar case: storage operations don't touch immutables *)
    (strip_tac >>
     gvs[Once assign_target_def, AllCaseEqs(), return_def, raise_def,
-        bind_def, lift_option_def, lift_sum_def, ignore_bind_def] >>
+        bind_def, lift_option_def, lift_option_type_def, lift_sum_def, ignore_bind_def] >>
     drule lookup_global_immutables >> strip_tac >>
     Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def] >>
     Cases_on `tv` >> gvs[bind_def]
@@ -141,7 +141,7 @@ Proof
     >> pairarg_tac
     >> gvs[bind_def, type_value_CASE_rator, AllCaseEqs(), sum_CASE_rator,
            return_def, raise_def, assign_operation_CASE_rator,
-           bound_CASE_rator, check_def, assert_def]
+           bound_CASE_rator, check_def, type_check_def, assert_def]
     >> imp_res_tac assign_result_state
     >> imp_res_tac write_storage_slot_immutables
     >> imp_res_tac read_storage_slot_immutables
@@ -158,18 +158,18 @@ Proof
   (* ImmutableVar case: updates st.immutables, but preserves domain *)
    (strip_tac >>
     simp[Once assign_target_def, bind_def, get_immutables_def, get_address_immutables_def,
-         lift_option_def, LET_THM, return_def, raise_def] >>
+         lift_option_def, lift_option_type_def, LET_THM, return_def, raise_def] >>
     Cases_on `ALOOKUP st.immutables cx.txn.target` >> simp[return_def, raise_def] >-
     gvs[Once assign_target_def, bind_def, get_immutables_def, get_address_immutables_def,
-        lift_option_def, LET_THM, return_def, raise_def] >>
+        lift_option_def, lift_option_type_def, LET_THM, return_def, raise_def] >>
     qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
     simp[Once assign_target_def, bind_def, get_immutables_def, get_address_immutables_def,
-         lift_option_def, LET_THM, return_def, raise_def] >>
+         lift_option_def, lift_option_type_def, LET_THM, return_def, raise_def] >>
     Cases_on `FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num id)` >>
     simp[return_def, raise_def] >>
     Cases_on `assign_subscripts x' (REVERSE is) ao` >> simp[lift_sum_def, return_def, raise_def] >>
     simp[ignore_bind_def, bind_def, set_immutable_def, get_address_immutables_def,
-         set_address_immutables_def, lift_option_def, return_def, LET_THM] >>
+         set_address_immutables_def, lift_option_def, lift_option_type_def, return_def, LET_THM] >>
     strip_tac >> gvs[] >>
     imp_res_tac assign_result_state >> gvs[] >>
     conj_tac >-
@@ -283,7 +283,7 @@ Proof
   ho_match_mp_tac assign_target_ind >> rpt conj_tac >> rpt gen_tac >-
   (* ScopedVar case: set_scopes doesn't touch immutables *)
   (simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
-        lift_option_def, lift_sum_def, AllCaseEqs(), raise_def, LET_THM,
+        lift_option_def, lift_option_type_def, lift_sum_def, AllCaseEqs(), raise_def, LET_THM,
         ignore_bind_def, set_scopes_def] >> strip_tac >> gvs[] >>
    Cases_on `find_containing_scope (string_to_num id) st.scopes` >>
    gvs[return_def, raise_def] >>
@@ -296,7 +296,7 @@ Proof
   (* TopLevelVar case: storage operations don't touch immutables *)
   (strip_tac >>
    gvs[Once assign_target_def, AllCaseEqs(), return_def, raise_def,
-       bind_def, lift_option_def, lift_sum_def, ignore_bind_def] >>
+       bind_def, lift_option_def, lift_option_type_def, lift_sum_def, ignore_bind_def] >>
    imp_res_tac lookup_global_immutables >> gvs[] >>
    Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def] >>
    Cases_on `tv` >> gvs[bind_def]
@@ -328,7 +328,7 @@ Proof
    >> pairarg_tac
    >> gvs[bind_def, type_value_CASE_rator, AllCaseEqs(), sum_CASE_rator,
           return_def, raise_def, assign_operation_CASE_rator,
-          bound_CASE_rator, check_def, assert_def]
+          bound_CASE_rator, check_def, type_check_def, assert_def]
    >> imp_res_tac assign_result_state
    >> imp_res_tac write_storage_slot_immutables
    >> imp_res_tac read_storage_slot_immutables
@@ -339,16 +339,16 @@ Proof
      get_address_immutables raises, so either we return that error (st' = st)
      or we continue but any successful path also requires st to have the entry. *)
   (simp[Once assign_target_def, bind_def, get_immutables_def, get_address_immutables_def,
-        lift_option_def, LET_THM, return_def, raise_def] >>
+        lift_option_def, lift_option_type_def, LET_THM, return_def, raise_def] >>
    Cases_on `ALOOKUP st.immutables cx.txn.target` >> simp[return_def, raise_def] >>
    BasicProvers.EVERY_CASE_TAC >>
    gvs[raise_def, return_def, lift_sum_def, AllCaseEqs(), bind_def, ignore_bind_def,
-       set_immutable_def, get_address_immutables_def, lift_option_def,
+       set_immutable_def, get_address_immutables_def, lift_option_def, lift_option_type_def,
        set_address_immutables_def, LET_THM] >>
    strip_tac >> gvs[]) >-
   (* TupleTargetV with TupleV - delegate to assign_targets *)
   (rpt gen_tac >> strip_tac >> rpt gen_tac >>
-   simp[Once assign_target_def, check_def, AllCaseEqs(), return_def, raise_def] >>
+   simp[Once assign_target_def, check_def, type_check_def, AllCaseEqs(), return_def, raise_def] >>
    simp[bind_def, ignore_bind_def, assert_def, AllCaseEqs()] >>
    strip_tac >> gvs[return_def] >> first_x_assum drule >> simp[]) >-
   (* Other TupleTargetV cases - all raise (13 cases) *)
@@ -395,10 +395,10 @@ Proof
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[] >>
   qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
   simp[Once assign_target_def, bind_def, get_immutables_def, get_address_immutables_def,
-       lift_option_def, LET_THM, return_def] >>
+       lift_option_def, lift_option_type_def, LET_THM, return_def] >>
   simp[lift_sum_def, assign_subscripts_def, return_def, ignore_bind_def, bind_def] >>
   Cases_on `FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num n)` >> gvs[return_def, raise_def] >>
-  simp[set_immutable_def, get_address_immutables_def, lift_option_def, bind_def,
+  simp[set_immutable_def, get_address_immutables_def, lift_option_def, lift_option_type_def, bind_def,
        set_address_immutables_def, return_def, LET_THM] >>
   strip_tac >> gvs[assign_result_def, return_def] >>
   simp[get_source_immutables_def, set_source_immutables_def,
@@ -418,9 +418,9 @@ Proof
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[] >>
   qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
   simp[Once assign_target_def, bind_def, get_immutables_def, get_address_immutables_def,
-       lift_option_def, LET_THM, return_def] >>
+       lift_option_def, lift_option_type_def, LET_THM, return_def] >>
   simp[lift_sum_def, assign_subscripts_def, return_def, ignore_bind_def, bind_def] >>
-  simp[set_immutable_def, get_address_immutables_def, lift_option_def, bind_def,
+  simp[set_immutable_def, get_address_immutables_def, lift_option_def, lift_option_type_def, bind_def,
        set_address_immutables_def, return_def, LET_THM] >>
   strip_tac >> gvs[assign_result_def, return_def] >>
   simp[get_source_immutables_def, set_source_immutables_def,

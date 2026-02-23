@@ -1,7 +1,6 @@
 Theory vyperStatePreservation
-
 Ancestors
-  vyperInterpreter vyperLookup
+  vyperAST vyperValue vyperInterpreter vyperLookup
 
 (* ===== Lemmas about scopes preservation ===== *)
 
@@ -21,7 +20,19 @@ QED
 Theorem check_state:
   !b s st res st'. check b s st = (res, st') ==> st' = st
 Proof
-  rw[check_def, assert_def]
+  rw[check_def, type_check_def, assert_def]
+QED
+
+Theorem type_check_state:
+  !b s st res st'. type_check b s st = (res, st') ==> st' = st
+Proof
+  rw[type_check_def, assert_def]
+QED
+
+Theorem lift_option_type_state:
+  !x s st res st'. lift_option_type x s st = (res, st') ==> st' = st
+Proof
+  rw[lift_option_type_def] >> Cases_on `x` >> fs[return_def, raise_def]
 QED
 
 Theorem lift_option_state:
@@ -97,7 +108,7 @@ Theorem write_storage_slot_immutables:
     st'.immutables = st.immutables
 Proof
   Cases_on `is_trans` >>
-  rw[write_storage_slot_def, bind_def, ignore_bind_def, lift_option_def,
+  rw[write_storage_slot_def, bind_def, ignore_bind_def, lift_option_def, lift_option_type_def,
      get_storage_backend_def, set_storage_backend_def,
      get_transient_storage_def, update_transient_def,
      get_accounts_def, update_accounts_def, return_def, raise_def] >>
@@ -110,13 +121,13 @@ Theorem lookup_global_immutables:
     lookup_global cx src n st = (res, st') ==>
     st'.immutables = st.immutables
 Proof
-  rw[lookup_global_def, bind_def, return_def, lift_option_def] >>
+  rw[lookup_global_def, bind_def, return_def, lift_option_def, lift_option_type_def] >>
   Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
   Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >-
   ((* NONE case: get_immutables is read-only *)
    qpat_x_assum `_ = (res, st')` mp_tac >>
    simp[get_immutables_def, get_address_immutables_def, bind_def,
-        lift_option_def, return_def, raise_def] >>
+        lift_option_def, lift_option_type_def, return_def, raise_def] >>
    rpt CASE_TAC >> gvs[return_def, raise_def]) >>
   PairCases_on `x'` >> gvs[] >>
   Cases_on `x'0` >> gvs[bind_def, return_def, raise_def] >>
@@ -131,7 +142,7 @@ Theorem set_global_immutables:
     set_global cx src n v st = (res, st') ==>
     st'.immutables = st.immutables
 Proof
-  rw[set_global_def, bind_def, return_def, lift_option_def] >>
+  rw[set_global_def, bind_def, return_def, lift_option_def, lift_option_type_def] >>
   Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
   rename1 `SOME ts` >>
   Cases_on `find_var_decl_by_num n ts` >> gvs[return_def, raise_def] >>
@@ -154,12 +165,12 @@ QED
 Theorem lookup_global_state:
   !cx src n st res st'. lookup_global cx src n st = (res, st') ==> st' = st
 Proof
-  rw[lookup_global_def, bind_def, return_def, lift_option_def] >>
+  rw[lookup_global_def, bind_def, return_def, lift_option_def, lift_option_type_def] >>
   Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
   Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >-
   (qpat_x_assum `_ = (res, st')` mp_tac >>
    simp[get_immutables_def, get_address_immutables_def, bind_def,
-        lift_option_def, return_def, raise_def] >>
+        lift_option_def, lift_option_type_def, return_def, raise_def] >>
    rpt CASE_TAC >> gvs[return_def, raise_def]) >>
   PairCases_on `x'` >> gvs[] >>
   Cases_on `x'0` >> gvs[bind_def, return_def, raise_def] >>
@@ -202,7 +213,7 @@ Proof
   ho_match_mp_tac resolve_array_element_ind >> rw[] >>
   qpat_x_assum `_ = (res, st')` mp_tac >>
   simp[Once resolve_array_element_def, bind_def, return_def, raise_def] >>
-  rpt (CASE_TAC >> gvs[return_def, raise_def, bind_def, check_def, assert_def, AllCaseEqs()]) >>
+  rpt (CASE_TAC >> gvs[return_def, raise_def, bind_def, check_def, type_check_def, assert_def, AllCaseEqs()]) >>
   rpt strip_tac >> gvs[] >>
   gvs[assert_def, bind_def, ignore_bind_def, return_def, raise_def,
       AllCaseEqs()] >>
@@ -227,7 +238,7 @@ Theorem check_array_bounds_state:
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[oneline check_array_bounds_def, return_def, raise_def,
-      bind_def, ignore_bind_def, check_def, assert_def,
+      bind_def, ignore_bind_def, check_def, type_check_def, assert_def,
       AllCaseEqs(), toplevel_value_CASE_rator, value_CASE_rator,
       bound_CASE_rator] >>
   imp_res_tac get_storage_backend_state >> gvs[]
@@ -238,7 +249,7 @@ Theorem toplevel_array_length_state:
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[oneline toplevel_array_length_def, return_def, raise_def,
-      bind_def, ignore_bind_def, check_def, assert_def,
+      bind_def, ignore_bind_def, check_def, type_check_def, assert_def,
       AllCaseEqs(), toplevel_value_CASE_rator, value_CASE_rator,
       bound_CASE_rator] >>
   imp_res_tac get_storage_backend_state >> gvs[]

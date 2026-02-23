@@ -1,4 +1,4 @@
-name: Vyper-HOL Theories Build
+name: CI
 
 on:
   workflow_dispatch:
@@ -7,20 +7,35 @@ on:
     - main
   pull_request:
 
+concurrency:
+  # Cancel older in-progress runs from same PR/workflow.
+  # Push-triggered runs use unique run_id so they never cancel each other.
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      build-cache-key: ${{ steps.build-key.outputs.key }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-hol
-      - run: Holmake
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+      - uses: ./.github/actions/deps
+        id: deps
+      - name: Compute build cache key
+        id: build-key
+        run: |
+          echo "key=vyper-hol-${{ runner.os }}-${{ steps.deps.outputs.deps-hash }}-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+      - name: Restore build cache
+        id: build-cache
+        uses: actions/cache@v4
         with:
-          name: hol-build
           path: '**/.hol'
-          include-hidden-files: true
-          retention-days: 1
+          key: ${{ steps.build-key.outputs.key }}
+      - name: Fix restored timestamps
+        if: steps.build-cache.outputs.cache-hit == 'true'
+        run: find . -path '*/.hol/*' -type f -exec touch {} +
+      - run: Holmake
 
   export-vyper-tests:
     runs-on: ubuntu-latest
@@ -60,12 +75,14 @@ jobs:
         group: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-hol
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
+      - uses: ./.github/actions/deps
+      - name: Restore build cache
+        uses: actions/cache/restore@v4
         with:
-          name: hol-build
-      - name: Fix artifact timestamps
+          path: '**/.hol'
+          key: ${{ needs.build.outputs.build-cache-key }}
+          fail-on-cache-miss: true
+      - name: Fix restored timestamps
         run: find . -path '*/.hol/*' -type f -exec touch {} +
       - name: Restore Vyper test exports
         uses: actions/cache/restore@v4

@@ -91,6 +91,7 @@ Datatype:
   | BlobBaseFee
   | GasPrice
   | PrevHash
+  | ChainId
 End
 
 Datatype:
@@ -268,6 +269,10 @@ Datatype:
 End
 
 (* some helper functions over the AST datatypes *)
+
+Theorem bound_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vyperAST",Tyop="bound"}));
 
 Definition is_Constant_def[simp]:
   is_Constant (Constant _) = T ∧

@@ -101,7 +101,8 @@ Theorem case_Raise_dom[local]:
 Proof
   rpt strip_tac >> irule map_fdom_eq_preserves_dom >>
   gvs[evaluate_def, bind_def, AllCaseEqs()] >>
-  imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >>
+  imp_res_tac get_Value_scopes >>
+  imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes >> imp_res_tac lift_option_type_scopes >>
   imp_res_tac raise_scopes >> gvs[]
 QED
 
@@ -116,11 +117,11 @@ Theorem case_Assert_dom[local]:
 Proof
   rpt strip_tac >> irule map_fdom_eq_preserves_dom >>
   gvs[evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >> gvs[] >>
+  imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes >> gvs[] >>
   qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
   rpt IF_CASES_TAC >> simp[return_def, raise_def, bind_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
-  TRY (imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >> gvs[]) >>
+  TRY (imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes >> gvs[]) >>
   rpt (qpat_x_assum `∀st res st'. eval_expr cx e st = _ ⇒ _` (drule_then assume_tac) >>
        qpat_x_assum `∀st res st'. eval_expr cx se st = _ ⇒ _` (drule_then assume_tac) >> gvs[])
 QED
@@ -204,7 +205,7 @@ Proof
   rpt strip_tac >> irule map_fdom_eq_preserves_dom >>
   gvs[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
   imp_res_tac get_Value_scopes >> imp_res_tac return_scopes >>
-  imp_res_tac check_scopes >> gvs[]
+  imp_res_tac check_scopes >> imp_res_tac type_check_scopes >> imp_res_tac type_check_scopes >> gvs[]
 QED
 
 Theorem case_AnnAssign_dom[local]:
@@ -224,8 +225,7 @@ Proof
     imp_res_tac materialise_scopes >> gvs[] >>
     Cases_on `s''.scopes` >> gvs[] >-
     (* Empty scopes case - new_variable raises error *)
-    gvs[new_variable_def, bind_def, get_scopes_def, return_def, check_def,
-        assert_def, lookup_scopes_def, ignore_bind_def, raise_def] >>
+    gvs[new_variable_def, bind_def, get_scopes_def, return_def, check_def, type_check_def, assert_def, lookup_scopes_def, ignore_bind_def, raise_def] >>
     (* Non-empty scopes case - apply new_variable_scope_property *)
     `s'³'.scopes ≠ []` by simp[] >>
     drule_all new_variable_scope_property >> strip_tac >> gvs[] >>
@@ -317,10 +317,10 @@ Proof
   (* Case: eval_iterator failed *)
   TRY (irule map_fdom_eq_preserves_dom >> first_x_assum drule >> simp[] >> NO_TAC) >>
   (* Case: check failed *)
-  TRY (imp_res_tac check_scopes >> gvs[] >>
+  TRY (imp_res_tac check_scopes >> imp_res_tac type_check_scopes >> gvs[] >>
        irule map_fdom_eq_preserves_dom >> first_x_assum drule >> gvs[] >> NO_TAC) >>
   (* Case: both succeeded, use IH *)
-  imp_res_tac check_scopes >> gvs[] >>
+  imp_res_tac check_scopes >> imp_res_tac type_check_scopes >> gvs[] >>
   `preserves_scopes_dom s'³' st'` by
     (first_x_assum (qspecl_then [`st`, `vs`, `s''`, `s''`, `s'³'`] mp_tac) >>
      simp[] >> strip_tac >> first_x_assum drule >> simp[]) >>
@@ -466,7 +466,7 @@ Proof
   simp[evaluate_def, bind_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
   imp_res_tac get_Value_scopes >> imp_res_tac materialise_scopes >>
-  imp_res_tac lift_option_scopes >>
+  imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes >>
   imp_res_tac return_scopes >> first_x_assum drule >> gvs[]
 QED
 
@@ -484,7 +484,7 @@ Proof
   qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
   simp[evaluate_def, bind_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
-  imp_res_tac get_Value_scopes >> imp_res_tac lift_sum_scopes >>
+  imp_res_tac get_Value_scopes >> imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_runtime_scopes >>
   imp_res_tac return_scopes >> gvs[] >>
   rpt (first_x_assum drule >> strip_tac >> gvs[])
 QED
