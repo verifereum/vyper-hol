@@ -39,6 +39,14 @@ Proof
   cheat
 QED
 
+Theorem cfg_analyze_preds_domain_proof:
+  !fn lbl.
+    cfg_preds_of (cfg_analyze fn) lbl <> [] ==>
+    MEM lbl (cfg_labels fn)
+Proof
+  cheat
+QED
+
 (* ==========================================================================
    2) Structural correctness
    ========================================================================== *)

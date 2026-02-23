@@ -75,6 +75,16 @@ Proof
   ACCEPT_TAC cfg_analyze_pred_labels_proof
 QED
 
+(* cfg_analyze only records predecessors for labels in the function:
+ * if a label has any predecessors, it must be a block label. *)
+Theorem cfg_analyze_preds_domain:
+  !fn lbl.
+    cfg_preds_of (cfg_analyze fn) lbl <> [] ==>
+    MEM lbl (cfg_labels fn)
+Proof
+  ACCEPT_TAC cfg_analyze_preds_domain_proof
+QED
+
 (* ==========================================================================
    2) Structural correctness
    ========================================================================== *)
