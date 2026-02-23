@@ -58,10 +58,7 @@ Definition cfg_reachable_of_def:
     | SOME b => b
 End
 
-(* The block labels of a function, in block order. *)
-Definition cfg_labels_def:
-  cfg_labels fn = MAP (λbb. bb.bb_label) fn.fn_blocks
-End
+
 
 (* No critical edges: every block either has at most one predecessor,
  * or all its predecessors have at most one successor.
@@ -76,17 +73,8 @@ Definition cfg_is_normalized_def:
 End
 
 (* ==========================================================================
-   Successors / predecessors from blocks
+   Successor / predecessor map construction
    ========================================================================== *)
-
-(* Successor labels of a basic block: the labels targeted by its terminator,
- * reversed to match Vyper's iteration order (see cfg_analysis_parity.md §2). *)
-Definition bb_succs_def:
-  bb_succs bb =
-    case bb.bb_instructions of
-      [] => []
-    | insts => REVERSE (get_successors (LAST insts))
-End
 
 (* Initialize a label -> [] map for all block labels. *)
 Definition init_succs_def:
@@ -202,19 +190,15 @@ End
 
 (* wf_function: IR well-formedness for CFG analysis.
  * - unique block labels
- * - at least one block
- * - every block is non-empty and ends with a terminator
- * - successor labels of every block exist in the function *)
+ * - at least one block (fn_has_entry)
+ * - every block is non-empty and ends with a terminator (bb_well_formed)
+ * - successor labels of every block exist in the function (fn_succs_closed) *)
 Definition wf_function_def:
   wf_function fn <=>
-    ALL_DISTINCT (cfg_labels fn) /\
+    ALL_DISTINCT (fn_labels fn) /\
     fn_has_entry fn /\
-    (!bb. MEM bb fn.fn_blocks ==>
-      bb.bb_instructions <> [] /\
-      is_terminator (LAST bb.bb_instructions).inst_opcode) /\
-    (!bb succ.
-      MEM bb fn.fn_blocks /\ MEM succ (bb_succs bb) ==>
-      MEM succ (cfg_labels fn))
+    (!bb. MEM bb fn.fn_blocks ==> bb_well_formed bb) /\
+    fn_succs_closed fn
 End
 
 (* cfg_path: reachability via successor edges (defined as RTC). *)

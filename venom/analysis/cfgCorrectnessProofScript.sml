@@ -16,7 +16,7 @@ Ancestors
 Theorem cfg_analyze_reachable_in_labels_proof:
   !fn lbl.
     cfg_reachable_of (cfg_analyze fn) lbl ==>
-    MEM lbl (cfg_labels fn)
+    MEM lbl (fn_labels fn)
 Proof
   cheat
 QED
@@ -25,7 +25,7 @@ Theorem cfg_analyze_succ_labels_proof:
   !fn lbl succ.
     wf_function fn /\
     MEM succ (cfg_succs_of (cfg_analyze fn) lbl) ==>
-    MEM succ (cfg_labels fn)
+    MEM succ (fn_labels fn)
 Proof
   cheat
 QED
@@ -34,7 +34,7 @@ Theorem cfg_analyze_pred_labels_proof:
   !fn lbl pred.
     wf_function fn /\
     MEM pred (cfg_preds_of (cfg_analyze fn) lbl) ==>
-    MEM pred (cfg_labels fn)
+    MEM pred (fn_labels fn)
 Proof
   cheat
 QED
@@ -42,7 +42,7 @@ QED
 Theorem cfg_analyze_preds_domain_proof:
   !fn lbl.
     cfg_preds_of (cfg_analyze fn) lbl <> [] ==>
-    MEM lbl (cfg_labels fn)
+    MEM lbl (fn_labels fn)
 Proof
   cheat
 QED
@@ -61,8 +61,8 @@ QED
 
 Theorem cfg_analyze_edge_symmetry_proof:
   !fn lbl succ.
-    MEM lbl (cfg_labels fn) /\
-    MEM succ (cfg_labels fn) ==>
+    MEM lbl (fn_labels fn) /\
+    MEM succ (fn_labels fn) ==>
       (MEM succ (cfg_succs_of (cfg_analyze fn) lbl) <=>
        MEM lbl (cfg_preds_of (cfg_analyze fn) succ))
 Proof

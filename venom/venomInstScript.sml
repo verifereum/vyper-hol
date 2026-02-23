@@ -214,9 +214,38 @@ Definition fn_has_entry_def:
   fn_has_entry fn <=> fn.fn_blocks <> []
 End
 
+(* A basic block is well-formed: non-empty and ends with a terminator. *)
+Definition bb_well_formed_def:
+  bb_well_formed bb <=>
+    bb.bb_instructions <> [] /\
+    is_terminator (LAST bb.bb_instructions).inst_opcode
+End
+
 (* Get successor labels of a terminator instruction *)
 Definition get_successors_def:
   get_successors inst =
     if ~is_terminator inst.inst_opcode then [] else
     MAP THE (FILTER IS_SOME (MAP get_label inst.inst_operands))
+End
+
+(* The block labels of a function, in block order. *)
+Definition fn_labels_def:
+  fn_labels fn = MAP (λbb. bb.bb_label) fn.fn_blocks
+End
+
+(* Successor labels of a basic block: the labels targeted by its terminator,
+ * reversed to match Vyper's iteration order (see cfg_analysis_parity.md §2). *)
+Definition bb_succs_def:
+  bb_succs bb =
+    case bb.bb_instructions of
+      [] => []
+    | insts => REVERSE (get_successors (LAST insts))
+End
+
+(* All successor labels of every block exist as block labels in the function. *)
+Definition fn_succs_closed_def:
+  fn_succs_closed fn <=>
+    !bb succ.
+      MEM bb fn.fn_blocks /\ MEM succ (bb_succs bb) ==>
+      MEM succ (fn_labels fn)
 End

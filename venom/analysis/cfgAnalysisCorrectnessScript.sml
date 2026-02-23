@@ -48,7 +48,7 @@ Ancestors
 Theorem cfg_analyze_reachable_in_labels:
   !fn lbl.
     cfg_reachable_of (cfg_analyze fn) lbl ==>
-    MEM lbl (cfg_labels fn)
+    MEM lbl (fn_labels fn)
 Proof
   ACCEPT_TAC cfg_analyze_reachable_in_labels_proof
 QED
@@ -59,7 +59,7 @@ Theorem cfg_analyze_succ_labels:
   !fn lbl succ.
     wf_function fn /\
     MEM succ (cfg_succs_of (cfg_analyze fn) lbl) ==>
-    MEM succ (cfg_labels fn)
+    MEM succ (fn_labels fn)
 Proof
   ACCEPT_TAC cfg_analyze_succ_labels_proof
 QED
@@ -70,7 +70,7 @@ Theorem cfg_analyze_pred_labels:
   !fn lbl pred.
     wf_function fn /\
     MEM pred (cfg_preds_of (cfg_analyze fn) lbl) ==>
-    MEM pred (cfg_labels fn)
+    MEM pred (fn_labels fn)
 Proof
   ACCEPT_TAC cfg_analyze_pred_labels_proof
 QED
@@ -80,7 +80,7 @@ QED
 Theorem cfg_analyze_preds_domain:
   !fn lbl.
     cfg_preds_of (cfg_analyze fn) lbl <> [] ==>
-    MEM lbl (cfg_labels fn)
+    MEM lbl (fn_labels fn)
 Proof
   ACCEPT_TAC cfg_analyze_preds_domain_proof
 QED
@@ -102,8 +102,8 @@ QED
 (* preds are the inverse edge relation of succs (for block labels). *)
 Theorem cfg_analyze_edge_symmetry:
   !fn lbl succ.
-    MEM lbl (cfg_labels fn) /\
-    MEM succ (cfg_labels fn) ==>
+    MEM lbl (fn_labels fn) /\
+    MEM succ (fn_labels fn) ==>
       (MEM succ (cfg_succs_of (cfg_analyze fn) lbl) <=>
        MEM lbl (cfg_preds_of (cfg_analyze fn) succ))
 Proof
