@@ -570,12 +570,12 @@ Definition evaluate_convert_def:
      then INL $ BytesV bd bs
      else INR (RuntimeError "convert BytesV bound")) ∧
   evaluate_convert (BytesV _ bs) (BaseT (UintT n)) =
-    (let i = &(w2n $ word_of_bytes T (0w:bytes32) bs) in
+    (let i = &(w2n $ (word_of_bytes_be bs : bytes32)) in
      if within_int_bound (Unsigned n) i
      then INL $ IntV (Unsigned n) i
      else INR (RuntimeError "convert BytesV uint bound")) ∧
   evaluate_convert (BytesV _ bs) (BaseT (IntT n)) =
-    (let i = w2i $ word_of_bytes T (0w:bytes32) bs in
+    (let i = w2i $ (word_of_bytes_be bs : bytes32) in
      if within_int_bound (Signed n) i
      then INL $ IntV (Signed n) i
      else INR (RuntimeError "convert BytesV int bound")) ∧
@@ -604,7 +604,7 @@ Definition evaluate_convert_def:
   evaluate_convert (IntV u i) (BaseT (BytesT bd)) =
   (* TODO: check and use type for width etc. *)
     (if compatible_bound bd 32
-     then INL $ BytesV bd (word_to_bytes ((i2w i):bytes32) T)
+     then INL $ BytesV bd (word_to_bytes_be ((i2w i):bytes32))
      else INR (RuntimeError "convert int to bytes")) ∧
   evaluate_convert (BytesV _ bs) (BaseT (StringT n)) =
     (if LENGTH bs ≤ n
