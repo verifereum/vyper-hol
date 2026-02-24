@@ -962,5 +962,3 @@ Proof
        listTheory.MEM_FILTER] >>
   metis_tac[]
 QED
-
-val _ = export_theory();
