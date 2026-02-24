@@ -240,5 +240,3 @@ Definition fcg_analyze_def:
     | SOME entry_name =>
         fcg_dfs ctx [entry_name] [] fcg_empty
 End
-
-val _ = export_theory();

@@ -264,5 +264,3 @@ Theorem fcg_analyze_unreachable_correct:
 Proof
   cheat
 QED
-
-val _ = export_theory();
