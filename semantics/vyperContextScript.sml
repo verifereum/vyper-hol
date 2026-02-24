@@ -102,7 +102,7 @@ Definition evaluate_block_hash_def:
      LENGTH t.block_hashes ≤ pbn - n
   then INR (RuntimeError "evaluate_block_hash")
   else INL $ BytesV (Fixed 32)
-    (word_to_bytes (EL (pbn - n) t.block_hashes) T)
+    (word_to_bytes_be (EL (pbn - n) t.block_hashes))
 End
 
 (* evaluate_block_hash returns RuntimeError since block availability is runtime *)
@@ -118,9 +118,10 @@ QED
 Definition evaluate_blob_hash_def:
   evaluate_blob_hash t n =
     BytesV (Fixed 32) $
-      word_to_bytes (if n < LENGTH t.blob_hashes
-                     then EL n t.blob_hashes
-                     else 0w) T
+      word_to_bytes_be $
+        if n < LENGTH t.blob_hashes
+        then EL n t.blob_hashes
+        else 0w
 End
 
 val () = cv_auto_trans evaluate_blob_hash_def;
@@ -257,7 +258,7 @@ Definition evaluate_ecrecover_def:
     (if u1 = Unsigned 256 ∧ u2 = Unsigned 256 ∧ u3 = Unsigned 256 ∧
         LENGTH hash_bytes = 32
      then let
-       hash = word_of_bytes T (0w:bytes32) hash_bytes;
+       hash:bytes32 = word_of_bytes_be hash_bytes;
        v = Num v_int;
        r = Num r_int;
        s = Num s_int
@@ -368,7 +369,7 @@ Definition evaluate_builtin_def:
          of NONE => INR (TypeError "MakeArray type")
           | SOME tv => INL $ ArrayV $ make_array_value tv bd vs)) ∧
   evaluate_builtin cx acc (Acc aop) [BytesV _ bs] =
-    (let a = lookup_account (word_of_bytes T (0w:address) bs) acc in
+    (let a = lookup_account (word_of_bytes_be bs) acc in
       INL $ evaluate_account_op aop bs a) ∧
   evaluate_builtin cx _ Isqrt [IntV u i] =
     (if is_Unsigned u ∧ 0 ≤ i then INL $ IntV u &(num_sqrt (Num i))
