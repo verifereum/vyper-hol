@@ -26,7 +26,7 @@
 
 Theory fcgAnalysis
 Ancestors
-  venomInst dfgAnalysis pred_set
+  venomInst dfgAnalysis
 
 (* ==========================================================================
    FCG Analysis Result Type
