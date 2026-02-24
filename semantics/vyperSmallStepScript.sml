@@ -1,7 +1,7 @@
 Theory vyperSmallStep
 Ancestors
   arithmetic combin pair list While
-  vyperMisc vyperValue vyperInterpreter vyperABI
+  vyperMisc vyperValue vyperContext vyperState vyperInterpreter vyperABI
 Libs
   cv_transLib
 
@@ -112,7 +112,7 @@ val prod_CASE_rator =
 
 val toplevel_value_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="vyperInterpreter",Tyop="toplevel_value"}));
+    (Option.valOf (TypeBase.read {Thy="vyperState",Tyop="toplevel_value"}));
 
 Definition eval_base_target_cps_def:
   eval_base_target_cps cx (NameTarget id) st k =
