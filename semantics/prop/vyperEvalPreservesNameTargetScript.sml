@@ -1,7 +1,8 @@
 Theory vyperEvalPreservesNameTarget
 Ancestors
-  vyperMisc vyperInterpreter vyperLookup vyperEvalPreservesImmutablesDom
-  vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes vyperEvalMisc
+  vyperMisc vyperContext vyperState vyperInterpreter vyperLookup
+  vyperEvalPreservesImmutablesDom vyperEvalExprPreservesScopesDom
+  vyperEvalPreservesScopes vyperEvalMisc
 
 (* ========================================================================
    Preservation of lookup_name_target through eval_expr / eval_stmts.

@@ -1,6 +1,6 @@
 Theory vyperAssignTarget
 Ancestors
-  vyperMisc vyperAST vyperValue vyperInterpreter
+  vyperMisc vyperAST vyperValue vyperState vyperInterpreter
   vyperScopePreservation vyperStatePreservation vyperLookup
 
 (*********************************************************************************)

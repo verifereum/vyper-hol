@@ -1,7 +1,8 @@
 Theory vyperEvalPreservesImmutablesDom
 Ancestors
-  vyperMisc vyperAST vyperValue vyperInterpreter vyperLookup vyperScopePreservation
-  vyperStatePreservation vyperAssignTarget vyperEvalExprPreservesScopesDom
+  vyperMisc vyperAST vyperValue vyperContext vyperState vyperInterpreter
+  vyperLookup vyperScopePreservation vyperStatePreservation
+  vyperAssignTarget vyperEvalExprPreservesScopesDom
 
 (* ========================================================================
    Preservation of immutables domain through eval_expr / eval_stmts.
