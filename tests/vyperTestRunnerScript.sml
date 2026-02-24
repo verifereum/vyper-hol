@@ -143,7 +143,7 @@ Definition run_deployment_def:
     name = find_deploy_function_name ts;
     argTys = find_args_by_name name dt.contractAbi;
     ar = compute_vyper_args all_mods ts Deploy name argTys dt.callData;
-    res = case FST ar of NONE => INR (Error "run_deployment args")
+    res = case FST ar of NONE => INR (Error $ RuntimeError "run_deployment args")
           | SOME (args, _) => let
     tx = <| sender := dt.deployer
           ; target := dt.deployedAddress
@@ -183,7 +183,7 @@ Definition run_call_def:
     ar = compute_vyper_args all_mods ts External name argTys (DROP 4 ct.callData);
     retTys = SND (SND fna);
   in
-    case FST ar of NONE => ((INR (Error "run_call args"), am),
+    case FST ar of NONE => ((INR (Error $ RuntimeError "run_call args"), am),
                             (retTys, (SND ar, FEMPTY)))
   | SOME (args, tenv) => let
     tx = <| sender := ct.sender
@@ -233,7 +233,7 @@ Definition do_transfer_def:
                           nonce updated_by SUC |>) o
           (update_account taddr
             (target with balance updated_by ($+ value))))
-    else INR (Error "do_transfer")
+    else INR (Error $ RuntimeError "do_transfer")
 End
 
 val () = do_transfer_def
@@ -258,7 +258,7 @@ Definition run_trace_def:
                         with code := dt.runtimeBytecode)))
               | err => err
             else if ISR res then INL am
-            else INR (Error "deployment success");
+            else INR (Error $ RuntimeError "deployment success");
       snss = (dt.deployedAddress,sns)::snss;
     in
       (snss, res)
@@ -273,7 +273,7 @@ Definition run_trace_def:
      case ALOOKUP snss ct.target
      of NONE => if is_transfer ct then do_transfer ct am
                 else if IS_NONE ct.expectedOutput then INL am
-                else INR (Error "sns not found")
+                else INR (Error $ TypeError "sns not found")
       | SOME sns => let
         cr = run_call sns am ct;
         call_res = FST cr;
@@ -284,17 +284,17 @@ Definition run_trace_def:
                    else INR ex
        | INL v =>
        case ct.expectedOutput
-         of NONE => INR (Error "error expected")
+         of NONE => INR (Error $ RuntimeError "error expected")
           | SOME out => let
               ar = SND (SND cr);
               rawVyRetTy = FST ar; tenv = SND ar;
             in
               case evaluate_abi_decode_return tenv rawVyRetTy out of
-              | INR _ => INR (Error "output mismatch")
+              | INR _ => INR (Error $ RuntimeError "output mismatch")
               | INL decoded =>
                   if decoded = v
                   then INL am
-                  else INR (Error "output mismatch"))
+                  else INR (Error $ RuntimeError "output mismatch"))
 End
 
 val () = cv_auto_trans run_trace_def;

@@ -1,7 +1,7 @@
 Theory vyperEvalPreservesScopes
-
 Ancestors
-  vyperInterpreter vyperLookup vyperEvalExprPreservesScopesDom vyperScopePreservation
+  vyperState vyperInterpreter vyperLookup
+  vyperEvalExprPreservesScopesDom vyperScopePreservation
 
 Definition preserves_scopes_dom_def:
   preserves_scopes_dom st st' ⇔
@@ -484,7 +484,7 @@ Proof
   qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
   simp[evaluate_def, bind_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
-  imp_res_tac get_Value_scopes >> imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_error_scopes >>
+  imp_res_tac get_Value_scopes >> imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_runtime_scopes >>
   imp_res_tac return_scopes >> gvs[] >>
   rpt (first_x_assum drule >> strip_tac >> gvs[])
 QED

@@ -1,8 +1,7 @@
 Theory vyperEvalMisc
-
 Ancestors
-  vyperInterpreter vyperArray vyperTypeValue
-
+  vyperMisc vyperContext vyperState vyperInterpreter
+  vyperArray vyperValue vyperValueOperation
 Libs
   intLib
 
