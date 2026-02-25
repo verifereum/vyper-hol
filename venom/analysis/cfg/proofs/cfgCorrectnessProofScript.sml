@@ -7,7 +7,7 @@
 
 Theory cfgCorrectnessProof
 Ancestors
-  cfgAnalysis
+  cfgDefs
 
 (* ==========================================================================
    1) Label-domain and shape invariants
