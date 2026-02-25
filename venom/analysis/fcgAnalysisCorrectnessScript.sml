@@ -33,7 +33,7 @@ Theorem fcg_analyze_reachable_in_context:
   fcg_is_reachable (fcg_analyze ctx) fn_name ==>
   MEM fn_name (ctx_fn_names ctx)
 Proof
-  simp[fcg_is_reachable_def, fcg_analyze_def, ctx_fn_names_def] >>
+  simp[fcg_is_reachable_def, fcg_analyze_def] >>
   Cases_on `ctx.ctx_entry` >> simp[fcg_empty_def] >>
   strip_tac >>
   drule (SIMP_RULE (srw_ss()) [fcg_empty_def]

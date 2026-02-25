@@ -45,9 +45,9 @@ fun asm_visit_fst_tac th = RULE_ASSUM_TAC (REWRITE_RULE
 Theorem fcg_dfs_reachable_in_context:
   !ctx stack visited fcg.
     (!x. MEM x fcg.fcg_reachable ==>
-         MEM x (MAP (\f. f.fn_name) ctx.ctx_functions)) ==>
+         MEM x (ctx_fn_names ctx)) ==>
     (!x. MEM x (fcg_dfs ctx stack visited fcg).fcg_reachable ==>
-         MEM x (MAP (\f. f.fn_name) ctx.ctx_functions))
+         MEM x (ctx_fn_names ctx))
 Proof
   ho_match_mp_tac fcg_dfs_ind >> rpt gen_tac >> strip_tac
   >> simp[fcg_dfs_def]
@@ -61,7 +61,7 @@ Proof
   >> rpt strip_tac
   >> `MEM x' (SND (fcg_visit ctx fn_name fcg)).fcg_reachable`
        by gvs[]
-  >> drule fcg_visit_reachable >> strip_tac >> gvs[]
+  >> drule fcg_visit_reachable >> strip_tac >> gvs[ctx_fn_names_def]
 QED
 
 (* ===== Visited reachable ===== *)
@@ -70,10 +70,10 @@ QED
 Theorem fcg_dfs_visited_reachable:
   !ctx stack visited fcg.
     (!x. MEM x visited /\
-         MEM x (MAP (\f. f.fn_name) ctx.ctx_functions) ==>
+         MEM x (ctx_fn_names ctx) ==>
          MEM x fcg.fcg_reachable) ==>
     (!x. MEM x visited /\
-         MEM x (MAP (\f. f.fn_name) ctx.ctx_functions) ==>
+         MEM x (ctx_fn_names ctx) ==>
          MEM x (fcg_dfs ctx stack visited fcg).fcg_reachable)
 Proof
   ho_match_mp_tac fcg_dfs_ind >> rpt gen_tac >> strip_tac
@@ -88,7 +88,7 @@ Proof
   >> Cases_on `lookup_function fn_name ctx.ctx_functions`
   >> simp[listTheory.MEM_SNOC]
   >> gvs[]
-  >> imp_res_tac lookup_function_not_mem >> gvs[]
+  >> imp_res_tac lookup_function_not_mem >> gvs[ctx_fn_names_def]
 QED
 
 (* ===== Callees invariants ===== *)
@@ -248,7 +248,7 @@ Theorem fcg_dfs_call_sites_sound:
         lookup_function caller ctx.ctx_functions = SOME func /\
         MEM (callee, inst) (fcg_scan_function func)) /\
     (!x. MEM x visited /\
-         MEM x (MAP (\f. f.fn_name) ctx.ctx_functions) ==>
+         MEM x (ctx_fn_names ctx) ==>
          MEM x fcg.fcg_reachable) ==>
     (!callee inst. MEM inst (fcg_get_call_sites
                     (fcg_dfs ctx stack visited fcg) callee) ==>
@@ -279,14 +279,12 @@ Proof
       >> simp[listTheory.MEM_SNOC])
   (* Subgoal 2: visited <= r.fcg_reachable *)
   >> rpt strip_tac >> gvs[]
-  >> `r.fcg_reachable = (SND (fcg_visit ctx fn_name fcg)).fcg_reachable`
-       by simp[]
-  >> pop_assum (fn eq => REWRITE_TAC [eq])
+  >> qpat_x_assum `fcg_visit _ _ _ = _` visit_snd_tac
   >> simp[fcg_visit_reachable_eq]
   >> Cases_on `lookup_function fn_name ctx.ctx_functions`
   >> simp[listTheory.MEM_SNOC]
   >> gvs[]
-  >> imp_res_tac lookup_function_not_mem >> gvs[]
+  >> imp_res_tac lookup_function_not_mem >> gvs[ctx_fn_names_def]
 QED
 
 (* ===== Reachable soundness ===== *)
@@ -335,6 +333,21 @@ QED
 
 (* ===== Stack reachable ===== *)
 
+(* Local tactics for "extends" and "contracts" patterns using Visit helpers.
+ * visit_extends_reachable_tac: closes goal
+ *   !x. (x = fn_name \/ MEM x visited) /\ ... ==> MEM x r.fcg_reachable
+ * visit_contracts_visited_tac: closes goal
+ *   !x. MEM x r.fcg_reachable ==> x = fn_name \/ MEM x visited
+ * Both take a `fcg_visit ctx fn_name fcg = (q,r)` equation as thm. *)
+fun visit_extends_reachable_tac th =
+  visit_snd_tac th
+  >> MATCH_MP_TAC fcg_visit_visited_in_reachable
+  >> first_assum ACCEPT_TAC;
+fun visit_contracts_visited_tac th =
+  visit_snd_tac th
+  >> MATCH_MP_TAC fcg_visit_reachable_in_visited
+  >> first_assum ACCEPT_TAC;
+
 (* fcg_dfs: stack elements in context end up reachable *)
 Theorem fcg_dfs_stack_reachable:
   !ctx stack visited fcg.
@@ -352,44 +365,21 @@ Proof
   (* visited: use fcg_dfs_visited_reachable *)
   >- (gvs[]
       >> irule (Q.SPECL [`ctx`,`stack`,`visited`,`fcg`]
-           fcg_dfs_visited_reachable
-           |> SIMP_RULE (srw_ss()) [ctx_fn_names_def])
-      >> gvs[ctx_fn_names_def])
+           fcg_dfs_visited_reachable |> SIMP_RULE (srw_ss()) [])
+      >> simp[])
   (* not visited: use IH *)
   >> Cases_on `fcg_visit ctx fn_name fcg` >> gvs[]
   (* Goal 1: fn_n = fn_name, just visited *)
   >- (irule (Q.SPECL [`ctx`,`q ++ stack`,`fn_n :: visited`,`r`]
-         fcg_dfs_visited_reachable
-         |> SIMP_RULE (srw_ss()) [ctx_fn_names_def])
-      >> gvs[ctx_fn_names_def]
-      >> rpt strip_tac
-      >> qpat_x_assum `fcg_visit _ _ _ = _` visit_snd_tac
-      >> simp[fcg_visit_reachable_eq]
-      >> Cases_on `lookup_function fn_n ctx.ctx_functions`
-      >> simp[listTheory.MEM_SNOC]
-      >> gvs[]
-      >> imp_res_tac lookup_function_not_mem >> gvs[])
+         fcg_dfs_visited_reachable |> SIMP_RULE (srw_ss()) [])
+      >> simp[]
+      >> qpat_x_assum `fcg_visit _ _ _ = _` visit_extends_reachable_tac)
   (* Goal 2: fn_n on stack -- use IH *)
   >> first_x_assum irule >> simp[]
-  >> conj_tac
-  >- (rpt strip_tac >> gvs[]
-      >- (qpat_x_assum `fcg_visit _ _ _ = _` visit_snd_tac
-          >> simp[fcg_visit_reachable_eq]
-          >> Cases_on `lookup_function fn_name ctx.ctx_functions`
-          >> simp[listTheory.MEM_SNOC]
-          >> imp_res_tac lookup_function_not_mem
-          >> gvs[ctx_fn_names_def])
-      >> qpat_x_assum `fcg_visit _ _ _ = _` visit_snd_tac
-      >> simp[fcg_visit_reachable_eq]
-      >> Cases_on `lookup_function fn_name ctx.ctx_functions`
-      >> simp[listTheory.MEM_SNOC]
-      >> gvs[]
-      >> imp_res_tac lookup_function_not_mem >> gvs[])
-  >> rpt strip_tac
-  >> qpat_x_assum `fcg_visit _ _ _ = _` asm_visit_snd_tac
-  >> pop_assum mp_tac >> simp[fcg_visit_reachable_eq]
-  >> Cases_on `lookup_function fn_name ctx.ctx_functions`
-  >> simp[listTheory.MEM_SNOC] >> strip_tac >> gvs[]
+  >> qpat_x_assum `fcg_visit _ _ _ = _`
+       (fn th => conj_tac
+          >- visit_extends_reachable_tac th
+          >> visit_contracts_visited_tac th)
 QED
 
 (* ===== Reachable closed ===== *)
@@ -425,39 +415,20 @@ Proof
   (* not visited: split on fcg_visit *)
   >> Cases_on `fcg_visit ctx fn_name fcg` >> gvs[]
   >> qpat_x_assum `(_ /\ _ /\ _) ==> _` mp_tac >> impl_tac
-  >- (rpt conj_tac
-      (* visited U {fn_name} -> r.fcg_reachable *)
-      >- (rpt strip_tac >> gvs[]
-          (* fn_name itself *)
-          >- (qpat_x_assum `fcg_visit _ _ _ = _` visit_snd_tac
-              >> simp[fcg_visit_reachable_eq]
+  >- (qpat_x_assum `fcg_visit _ _ _ = _`
+       (fn th => rpt conj_tac
+          >- visit_extends_reachable_tac th
+          >- visit_contracts_visited_tac th
+          (* callees of fn_name :: visited are visited or on q ++ stack *)
+          >> visit_fst_tac th
+          >> rpt strip_tac >> fs[]
+          >- (disj2_tac
+              >> simp[fcg_visit_def, fn_directly_calls_scan]
+              >> gvs[fn_directly_calls_scan]
               >> Cases_on `lookup_function fn_name ctx.ctx_functions`
-              >> simp[listTheory.MEM_SNOC]
-              >> imp_res_tac lookup_function_not_mem
-              >> gvs[ctx_fn_names_def])
-          (* old visited *)
-          >> qpat_x_assum `fcg_visit _ _ _ = _` visit_snd_tac
-          >> simp[fcg_visit_reachable_eq]
-          >> Cases_on `lookup_function fn_name ctx.ctx_functions`
-          >> simp[listTheory.MEM_SNOC]
-          >> gvs[]
-          >> imp_res_tac lookup_function_not_mem >> gvs[])
-      (* r.fcg_reachable -> fn_name :: visited *)
-      >- (rpt strip_tac
-          >> qpat_x_assum `fcg_visit _ _ _ = _` asm_visit_snd_tac
-          >> pop_assum mp_tac >> simp[fcg_visit_reachable_eq]
-          >> Cases_on `lookup_function fn_name ctx.ctx_functions`
-          >> simp[listTheory.MEM_SNOC] >> strip_tac >> gvs[])
-      (* callees of fn_name :: visited are visited or on q ++ stack *)
-      >> rpt strip_tac >> fs[]
-      >- (disj2_tac
-          >> qpat_x_assum `fcg_visit _ _ _ = _` visit_fst_tac
-          >> simp[fcg_visit_def, fn_directly_calls_scan]
-          >> gvs[fn_directly_calls_scan]
-          >> Cases_on `lookup_function fn_name ctx.ctx_functions`
-          >> gvs[listTheory.MEM_REVERSE, listTheory.MEM_MAP]
-          >> metis_tac[])
-      >> res_tac >> gvs[])
+              >> gvs[listTheory.MEM_REVERSE, listTheory.MEM_MAP]
+              >> metis_tac[])
+          >> res_tac >> gvs[]))
   >> strip_tac >> res_tac
 QED
 

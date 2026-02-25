@@ -244,4 +244,35 @@ Proof
        fcg_get_call_sites_reachable_update]
 QED
 
+(* ===== Composite helpers for DFS proofs ===== *)
+
+(* fcg_visit: visited context-names in fcg.fcg_reachable implies
+   (fn_name :: visited) context-names in (SND (fcg_visit ...)).fcg_reachable *)
+Theorem fcg_visit_visited_in_reachable:
+  (!x. MEM x visited /\ MEM x (ctx_fn_names ctx) ==>
+       MEM x fcg.fcg_reachable) ==>
+  (!x. (x = fn_name \/ MEM x visited) /\ MEM x (ctx_fn_names ctx) ==>
+       MEM x (SND (fcg_visit ctx fn_name fcg)).fcg_reachable)
+Proof
+  rpt strip_tac
+  >> simp[fcg_visit_reachable_eq]
+  >> Cases_on `lookup_function fn_name ctx.ctx_functions`
+  >> simp[listTheory.MEM_SNOC]
+  >> gvs[]
+  >> imp_res_tac lookup_function_not_mem >> gvs[ctx_fn_names_def]
+QED
+
+(* fcg_visit: fcg.fcg_reachable subset of visited implies
+   (SND (fcg_visit ...)).fcg_reachable subset of fn_name :: visited *)
+Theorem fcg_visit_reachable_in_visited:
+  (!x. MEM x fcg.fcg_reachable ==> MEM x visited) ==>
+  (!x. MEM x (SND (fcg_visit ctx fn_name fcg)).fcg_reachable ==>
+       x = fn_name \/ MEM x visited)
+Proof
+  rpt strip_tac >> pop_assum mp_tac
+  >> simp[fcg_visit_reachable_eq]
+  >> Cases_on `lookup_function fn_name ctx.ctx_functions`
+  >> simp[listTheory.MEM_SNOC] >> strip_tac >> gvs[]
+QED
+
 val _ = export_theory();
