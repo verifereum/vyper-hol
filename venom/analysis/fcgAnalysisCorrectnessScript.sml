@@ -31,9 +31,7 @@
 
 Theory fcgAnalysisCorrectness
 Ancestors
-  fcgAnalysis relation
-Libs
-  venomInstTheory
+  fcgAnalysis relation venomInst
 
 (* ==========================================================================
    Section 0: Convenience Helper
@@ -194,8 +192,25 @@ Proof
   metis_tac[]
 QED
 
+(* Local tactics: rewrite r/q back to SND/FST (fcg_visit ...) via pair eq.
+ * visit_{snd,fst}_tac rewrite the goal;
+ * asm_visit_{snd,fst}_tac rewrite assumptions.
+ * Usage: qpat_x_assum `fcg_visit _ _ _ = _` visit_snd_tac *)
+fun visit_snd_tac th = REWRITE_TAC [GSYM (CONV_RULE
+  (RAND_CONV (REWR_CONV pairTheory.SND))
+  (AP_TERM ``SND : string list # fcg_analysis -> fcg_analysis`` th))];
+fun visit_fst_tac th = REWRITE_TAC [GSYM (CONV_RULE
+  (RAND_CONV (REWR_CONV pairTheory.FST))
+  (AP_TERM ``FST : string list # fcg_analysis -> string list`` th))];
+fun asm_visit_snd_tac th = RULE_ASSUM_TAC (REWRITE_RULE
+  [GSYM (CONV_RULE (RAND_CONV (REWR_CONV pairTheory.SND))
+    (AP_TERM ``SND : string list # fcg_analysis -> fcg_analysis`` th))]);
+fun asm_visit_fst_tac th = RULE_ASSUM_TAC (REWRITE_RULE
+  [GSYM (CONV_RULE (RAND_CONV (REWR_CONV pairTheory.FST))
+    (AP_TERM ``FST : string list # fcg_analysis -> string list`` th))]);
+
 (* ==========================================================================
-   Section 3.5: Structural helpers for fcg_record_edges / fcg_visit / fcg_dfs
+   Section 4: Structural helpers for fcg_record_edges / fcg_visit / fcg_dfs
    ========================================================================== *)
 
 (* fcg_record_edges does not change fcg_reachable *)
@@ -552,29 +567,16 @@ Proof
   >- (rpt strip_tac
       >> reverse (Cases_on `fn_n' = fn_name`) >> gvs[]
       (* fn_name case: rewrite r -> SND(fcg_visit ...) *)
-      >- (qpat_x_assum `fcg_visit _ _ _ = _`
-            (fn th => REWRITE_TAC [GSYM (CONV_RULE
-               (RAND_CONV (REWR_CONV pairTheory.SND))
-               (AP_TERM ``SND : string list # fcg_analysis -> fcg_analysis``
-                        th))])
+      >- (qpat_x_assum `fcg_visit _ _ _ = _` visit_snd_tac
           >> simp[fcg_visit_callees, fn_directly_calls_scan]
           >> disj2_tac >> gvs[fn_directly_calls_scan])
       (* visited case *)
-      >> qpat_x_assum `fcg_visit _ _ _ = _`
-           (fn th => REWRITE_TAC [GSYM (CONV_RULE
-              (RAND_CONV (REWR_CONV pairTheory.SND))
-              (AP_TERM ``SND : string list # fcg_analysis -> fcg_analysis``
-                       th))])
+      >> qpat_x_assum `fcg_visit _ _ _ = _` visit_snd_tac
       >> simp[fcg_visit_callees_other]
       >> res_tac)
   (* r.fcg_reachable ⊆ fn_name :: visited *)
   >> rpt strip_tac
-  >> qpat_x_assum `fcg_visit _ _ _ = _`
-       (fn th => RULE_ASSUM_TAC (REWRITE_RULE
-          [GSYM (CONV_RULE
-             (RAND_CONV (REWR_CONV pairTheory.SND))
-             (AP_TERM ``SND : string list # fcg_analysis -> fcg_analysis``
-                      th))]))
+  >> qpat_x_assum `fcg_visit _ _ _ = _` asm_visit_snd_tac
   >> pop_assum mp_tac
   >> simp[fcg_visit_reachable_eq]
   >> Cases_on `lookup_function fn_name ctx.ctx_functions`
@@ -607,22 +609,13 @@ Proof
   >- (conj_tac
       (* call sites for fn_name :: visited are in r *)
       >- (rpt strip_tac
-          >> qpat_x_assum `fcg_visit _ _ _ = _`
-               (fn th => REWRITE_TAC [GSYM (CONV_RULE
-                  (RAND_CONV (REWR_CONV pairTheory.SND))
-                  (AP_TERM ``SND : string list # fcg_analysis
-                                  -> fcg_analysis`` th))])
+          >> qpat_x_assum `fcg_visit _ _ _ = _` visit_snd_tac
           >> simp[fcg_visit_call_sites]
           >> TRY (metis_tac[])
           >> disj1_tac >> res_tac)
       (* r.fcg_reachable ⊆ fn_name :: visited *)
       >> rpt strip_tac
-      >> qpat_x_assum `fcg_visit _ _ _ = _`
-           (fn th => RULE_ASSUM_TAC (REWRITE_RULE
-              [GSYM (CONV_RULE
-                 (RAND_CONV (REWR_CONV pairTheory.SND))
-                 (AP_TERM ``SND : string list # fcg_analysis
-                                 -> fcg_analysis`` th))]))
+      >> qpat_x_assum `fcg_visit _ _ _ = _` asm_visit_snd_tac
       >> pop_assum mp_tac >> simp[fcg_visit_reachable_eq]
       >> Cases_on `lookup_function fn_name ctx.ctx_functions`
       >> simp[listTheory.MEM_SNOC] >> strip_tac >> gvs[])
@@ -648,21 +641,13 @@ Proof
   (* Establish the three IH preconditions *)
   >> `!x'. MEM x' r.fcg_reachable ==> fcg_path ctx entry_name x'`
        by (rpt strip_tac
-           >> qpat_x_assum `fcg_visit _ _ _ = _`
-                (fn th => RULE_ASSUM_TAC (REWRITE_RULE
-                   [GSYM (CONV_RULE (RAND_CONV (REWR_CONV pairTheory.SND))
-                          (AP_TERM ``SND : string list # fcg_analysis
-                                        -> fcg_analysis`` th))]))
+           >> qpat_x_assum `fcg_visit _ _ _ = _` asm_visit_snd_tac
            >> pop_assum mp_tac >> simp[fcg_visit_reachable_eq]
            >> Cases_on `lookup_function fn_name ctx.ctx_functions`
            >> simp[listTheory.MEM_SNOC] >> strip_tac >> gvs[])
   >> `!x'. MEM x' q ==> fcg_path ctx entry_name x'`
        by (rpt strip_tac
-           >> qpat_x_assum `fcg_visit _ _ _ = _`
-                (fn th => RULE_ASSUM_TAC (REWRITE_RULE
-                   [GSYM (CONV_RULE (RAND_CONV (REWR_CONV pairTheory.FST))
-                          (AP_TERM ``FST : string list # fcg_analysis
-                                        -> string list`` th))]))
+           >> qpat_x_assum `fcg_visit _ _ _ = _` asm_visit_fst_tac
            >> drule fcg_visit_fst_calls >> strip_tac
            >> simp[fcg_path_def]
            >> irule relationTheory.RTC_TRANS
@@ -707,11 +692,7 @@ Proof
          |> SIMP_RULE (srw_ss()) [ctx_fn_names_def])
       >> gvs[ctx_fn_names_def]
       >> rpt strip_tac
-      >> qpat_x_assum `fcg_visit _ _ _ = _`
-           (fn th => REWRITE_TAC [GSYM (CONV_RULE
-              (RAND_CONV (REWR_CONV pairTheory.SND))
-              (AP_TERM ``SND : string list # fcg_analysis
-                              -> fcg_analysis`` th))])
+      >> qpat_x_assum `fcg_visit _ _ _ = _` visit_snd_tac
       >> simp[fcg_visit_reachable_eq]
       >> Cases_on `lookup_function fn_n ctx.ctx_functions`
       >> simp[listTheory.MEM_SNOC]
@@ -721,33 +702,20 @@ Proof
   >> first_x_assum irule >> simp[]
   >> conj_tac
   >- (rpt strip_tac >> gvs[]
-      >- (qpat_x_assum `fcg_visit _ _ _ = _`
-            (fn th => REWRITE_TAC [GSYM (CONV_RULE
-               (RAND_CONV (REWR_CONV pairTheory.SND))
-               (AP_TERM ``SND : string list # fcg_analysis
-                               -> fcg_analysis`` th))])
+      >- (qpat_x_assum `fcg_visit _ _ _ = _` visit_snd_tac
           >> simp[fcg_visit_reachable_eq]
           >> Cases_on `lookup_function fn_name ctx.ctx_functions`
           >> simp[listTheory.MEM_SNOC]
           >> imp_res_tac lookup_function_not_mem
           >> gvs[ctx_fn_names_def])
-      >> qpat_x_assum `fcg_visit _ _ _ = _`
-           (fn th => REWRITE_TAC [GSYM (CONV_RULE
-              (RAND_CONV (REWR_CONV pairTheory.SND))
-              (AP_TERM ``SND : string list # fcg_analysis
-                              -> fcg_analysis`` th))])
+      >> qpat_x_assum `fcg_visit _ _ _ = _` visit_snd_tac
       >> simp[fcg_visit_reachable_eq]
       >> Cases_on `lookup_function fn_name ctx.ctx_functions`
       >> simp[listTheory.MEM_SNOC]
       >> gvs[]
       >> imp_res_tac lookup_function_not_mem >> gvs[])
   >> rpt strip_tac
-  >> qpat_x_assum `fcg_visit _ _ _ = _`
-       (fn th => RULE_ASSUM_TAC (REWRITE_RULE
-          [GSYM (CONV_RULE
-             (RAND_CONV (REWR_CONV pairTheory.SND))
-             (AP_TERM ``SND : string list # fcg_analysis
-                             -> fcg_analysis`` th))]))
+  >> qpat_x_assum `fcg_visit _ _ _ = _` asm_visit_snd_tac
   >> pop_assum mp_tac >> simp[fcg_visit_reachable_eq]
   >> Cases_on `lookup_function fn_name ctx.ctx_functions`
   >> simp[listTheory.MEM_SNOC] >> strip_tac >> gvs[]
@@ -787,22 +755,14 @@ Proof
       (* visited ∪ {fn_name} → r.fcg_reachable *)
       >- (rpt strip_tac >> gvs[]
           (* fn_name itself *)
-          >- (qpat_x_assum `fcg_visit _ _ _ = _`
-                (fn th => REWRITE_TAC [GSYM (CONV_RULE
-                   (RAND_CONV (REWR_CONV pairTheory.SND))
-                   (AP_TERM ``SND : string list # fcg_analysis
-                                   -> fcg_analysis`` th))])
+          >- (qpat_x_assum `fcg_visit _ _ _ = _` visit_snd_tac
               >> simp[fcg_visit_reachable_eq]
               >> Cases_on `lookup_function fn_name ctx.ctx_functions`
               >> simp[listTheory.MEM_SNOC]
               >> imp_res_tac lookup_function_not_mem
               >> gvs[ctx_fn_names_def])
           (* old visited *)
-          >> qpat_x_assum `fcg_visit _ _ _ = _`
-               (fn th => REWRITE_TAC [GSYM (CONV_RULE
-                  (RAND_CONV (REWR_CONV pairTheory.SND))
-                  (AP_TERM ``SND : string list # fcg_analysis
-                                  -> fcg_analysis`` th))])
+          >> qpat_x_assum `fcg_visit _ _ _ = _` visit_snd_tac
           >> simp[fcg_visit_reachable_eq]
           >> Cases_on `lookup_function fn_name ctx.ctx_functions`
           >> simp[listTheory.MEM_SNOC]
@@ -810,23 +770,14 @@ Proof
           >> imp_res_tac lookup_function_not_mem >> gvs[])
       (* r.fcg_reachable → fn_name :: visited *)
       >- (rpt strip_tac
-          >> qpat_x_assum `fcg_visit _ _ _ = _`
-               (fn th => RULE_ASSUM_TAC (REWRITE_RULE
-                  [GSYM (CONV_RULE
-                     (RAND_CONV (REWR_CONV pairTheory.SND))
-                     (AP_TERM ``SND : string list # fcg_analysis
-                                     -> fcg_analysis`` th))]))
+          >> qpat_x_assum `fcg_visit _ _ _ = _` asm_visit_snd_tac
           >> pop_assum mp_tac >> simp[fcg_visit_reachable_eq]
           >> Cases_on `lookup_function fn_name ctx.ctx_functions`
           >> simp[listTheory.MEM_SNOC] >> strip_tac >> gvs[])
       (* callees of fn_name :: visited are visited or on q ++ stack *)
       >> rpt strip_tac >> fs[]
       >- (disj2_tac
-          >> qpat_x_assum `fcg_visit _ _ _ = _`
-               (fn th => REWRITE_TAC [GSYM (CONV_RULE
-                  (RAND_CONV (REWR_CONV pairTheory.FST))
-                  (AP_TERM ``FST : string list # fcg_analysis
-                                  -> string list`` th))])
+          >> qpat_x_assum `fcg_visit _ _ _ = _` visit_fst_tac
           >> simp[fcg_visit_def, fn_directly_calls_scan]
           >> gvs[fn_directly_calls_scan]
           >> Cases_on `lookup_function fn_name ctx.ctx_functions`
@@ -862,11 +813,7 @@ Proof
   (* Subgoal 1: call_sites in r come from reachable callers *)
   >- (rpt strip_tac
       >> qpat_x_assum `MEM _ (fcg_get_call_sites r _)` mp_tac
-      >> qpat_x_assum `fcg_visit _ _ _ = _`
-           (fn th => REWRITE_TAC [GSYM (CONV_RULE
-              (RAND_CONV (REWR_CONV pairTheory.SND))
-              (AP_TERM ``SND : string list # fcg_analysis -> fcg_analysis``
-                       th))])
+      >> qpat_x_assum `fcg_visit _ _ _ = _` visit_snd_tac
       >> simp[fcg_visit_call_sites] >> strip_tac
       >> TRY (MAP_EVERY qexists_tac [`fn_name`, `func`]
               >> simp[fcg_visit_reachable_eq, listTheory.MEM_SNOC]
@@ -890,7 +837,7 @@ Proof
 QED
 
 (* ==========================================================================
-   Section 4: Domain Invariants
+   Section 5: Domain Invariants
    ========================================================================== *)
 
 Theorem fcg_analyze_reachable_in_context:
@@ -917,7 +864,7 @@ Proof
 QED
 
 (* ==========================================================================
-   Section 5: Callees Correctness
+   Section 6: Callees Correctness
    ========================================================================== *)
 
 (* Soundness: recorded callee => semantic direct call *)
@@ -982,7 +929,7 @@ Proof
 QED
 
 (* ==========================================================================
-   Section 6: Call Sites Correctness
+   Section 7: Call Sites Correctness
    ========================================================================== *)
 
 (* Soundness: recorded call site is a real INVOKE from a reachable caller *)
@@ -1039,7 +986,7 @@ Proof
 QED
 
 (* ==========================================================================
-   Section 7: Reachability Correctness
+   Section 8: Reachability Correctness
    ========================================================================== *)
 
 (* Soundness: analysis says reachable => semantic path from entry *)
@@ -1103,7 +1050,7 @@ Proof
 QED
 
 (* ==========================================================================
-   Section 8: No-Entry Edge Cases
+   Section 9: No-Entry Edge Cases
    ========================================================================== *)
 
 Theorem fcg_analyze_no_entry:
@@ -1135,7 +1082,7 @@ Proof
 QED
 
 (* ==========================================================================
-   Section 9: Unreachable Correctness
+   Section 10: Unreachable Correctness
    ========================================================================== *)
 
 (* Unreachable = complement of reachable within context functions *)
