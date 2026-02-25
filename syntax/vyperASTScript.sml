@@ -171,6 +171,7 @@ End
 Datatype:
   expr
   = Name identifier
+  | ImmutableName identifier
   | TopLevelName nsid
   | FlagMember nsid identifier
   | IfExp expr expr expr
@@ -186,6 +187,7 @@ Datatype:
       (* expr option: default return value *)
 ; base_assignment_target
   = NameTarget identifier
+  | ImmutableNameTarget identifier
   | TopLevelNameTarget nsid
   | SubscriptTarget base_assignment_target expr
   | AttributeTarget base_assignment_target identifier
