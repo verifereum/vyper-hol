@@ -333,20 +333,18 @@ QED
 
 (* ===== Stack reachable ===== *)
 
-(* Local tactics for "extends" and "contracts" patterns using Visit helpers.
- * visit_extends_reachable_tac: closes goal
- *   !x. (x = fn_name \/ MEM x visited) /\ ... ==> MEM x r.fcg_reachable
- * visit_contracts_visited_tac: closes goal
- *   !x. MEM x r.fcg_reachable ==> x = fn_name \/ MEM x visited
+(* Local tactics: rewrite r -> SND(fcg_visit ...) then apply Visit helpers.
+ * visit_extends_reachable_tac: closes "visited ∪ {fn_name} ⊆ r.fcg_reachable"
+ * visit_contracts_visited_tac: closes "r.fcg_reachable ⊆ fn_name :: visited"
  * Both take a `fcg_visit ctx fn_name fcg = (q,r)` equation as thm. *)
 fun visit_extends_reachable_tac th =
   visit_snd_tac th
   >> MATCH_MP_TAC fcg_visit_visited_in_reachable
-  >> first_assum ACCEPT_TAC;
+  >> simp[];
 fun visit_contracts_visited_tac th =
   visit_snd_tac th
   >> MATCH_MP_TAC fcg_visit_reachable_in_visited
-  >> first_assum ACCEPT_TAC;
+  >> simp[];
 
 (* fcg_dfs: stack elements in context end up reachable *)
 Theorem fcg_dfs_stack_reachable:
