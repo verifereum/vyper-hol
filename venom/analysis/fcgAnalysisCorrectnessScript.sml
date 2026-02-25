@@ -1,8 +1,7 @@
 (*
- * FCG Analysis Correctness Statements
+ * FCG Analysis Correctness
  *
- * Theorem statements characterizing soundness and completeness
- * of the FCG analysis, with cheated proofs as scaffolding.
+ * Soundness and completeness of the FCG analysis.
  *
  * TOP-LEVEL definitions:
  *   ctx_fn_names          - convenience: function names in context
@@ -11,7 +10,7 @@
  *   fn_directly_calls     - semantic direct-call relation
  *   fcg_path              - reachability via RTC of direct calls
  *
- * TOP-LEVEL theorems (all cheated):
+ * TOP-LEVEL theorems:
  *   fn_directly_calls_scan               - bridge to get_invoke_targets
  *   fcg_analyze_reachable_in_context     - reachable => in context
  *   fcg_analyze_callees_in_context       - callees => in context
@@ -91,24 +90,6 @@ Definition fcg_path_def:
   fcg_path ctx = RTC (fn_directly_calls ctx)
 End
 
-(* Helper: lookup_function success implies the function is in the list *)
-Theorem lookup_function_mem_func:
-  lookup_function name fns = SOME func ==> MEM func fns
-Proof
-  Induct_on `fns` >> simp[lookup_function_def] >>
-  rpt strip_tac >> Cases_on `h.fn_name = name` >> gvs[]
-QED
-
-(* Helper: if name is in the function name list, lookup succeeds *)
-Theorem lookup_function_mem_name:
-  MEM name (MAP (\f. f.fn_name) fns) ==>
-  ?func. lookup_function name fns = SOME func
-Proof
-  Induct_on `fns` >> simp[lookup_function_def] >>
-  rpt strip_tac >> gvs[] >>
-  Cases_on `h.fn_name = name` >> gvs[]
-QED
-
 (* ==========================================================================
    Section 3: Bridge Lemma — connects semantic spec to analysis impl
    ========================================================================== *)
@@ -153,6 +134,31 @@ Theorem get_invoke_targets_skip:
 Proof
   strip_tac >> simp[Once get_invoke_targets_def] >>
   Cases_on `h.inst_opcode` >> gvs[]
+QED
+
+(* Helper: tail results are a subset of cons results *)
+Theorem get_invoke_targets_mono:
+  MEM pair (get_invoke_targets insts) ==>
+  MEM pair (get_invoke_targets (h :: insts))
+Proof
+  Cases_on `h.inst_opcode = INVOKE`
+  >- (simp[Once get_invoke_targets_def] >>
+      Cases_on `h.inst_operands`
+      >- simp[]
+      >> rename1 `op :: ops` >> Cases_on `op` >> simp[])
+  >> simp[get_invoke_targets_skip]
+QED
+
+(* Helper: reverse of mem_get_invoke_targets_pair *)
+Theorem get_invoke_targets_intro:
+  !insts callee inst rest.
+    MEM inst insts /\ inst.inst_opcode = INVOKE /\
+    inst.inst_operands = Label callee :: rest ==>
+    MEM (callee, inst) (get_invoke_targets insts)
+Proof
+  Induct >> simp[] >> rpt strip_tac >> gvs[]
+  >- (simp[Once get_invoke_targets_def] >> simp[])
+  >> irule get_invoke_targets_mono >> res_tac
 QED
 
 (* Helper: characterizes MEM in MAP FST of get_invoke_targets *)
@@ -684,7 +690,150 @@ Theorem fcg_dfs_stack_reachable:
        MEM fn_n (ctx_fn_names ctx) ==>
        MEM fn_n (fcg_dfs ctx stack visited fcg).fcg_reachable)
 Proof
-  cheat
+  ho_match_mp_tac fcg_dfs_ind >> rpt gen_tac >> strip_tac
+  >> simp[fcg_dfs_def] >> rpt strip_tac
+  >> Cases_on `MEM fn_name visited` >> fs[]
+  (* visited: use fcg_dfs_visited_reachable *)
+  >- (gvs[]
+      >> irule (Q.SPECL [`ctx`,`stack`,`visited`,`fcg`]
+           fcg_dfs_visited_reachable
+           |> SIMP_RULE (srw_ss()) [ctx_fn_names_def])
+      >> gvs[ctx_fn_names_def])
+  (* not visited: use IH *)
+  >> Cases_on `fcg_visit ctx fn_name fcg` >> gvs[]
+  (* Goal 1: fn_n = fn_name, just visited — use fcg_dfs_visited_reachable *)
+  >- (irule (Q.SPECL [`ctx`,`q ++ stack`,`fn_n :: visited`,`r`]
+         fcg_dfs_visited_reachable
+         |> SIMP_RULE (srw_ss()) [ctx_fn_names_def])
+      >> gvs[ctx_fn_names_def]
+      >> rpt strip_tac
+      >> qpat_x_assum `fcg_visit _ _ _ = _`
+           (fn th => REWRITE_TAC [GSYM (CONV_RULE
+              (RAND_CONV (REWR_CONV pairTheory.SND))
+              (AP_TERM ``SND : string list # fcg_analysis
+                              -> fcg_analysis`` th))])
+      >> simp[fcg_visit_reachable_eq]
+      >> Cases_on `lookup_function fn_n ctx.ctx_functions`
+      >> simp[listTheory.MEM_SNOC]
+      >> gvs[]
+      >> imp_res_tac lookup_function_not_mem >> gvs[])
+  (* Goal 2: fn_n on stack — use IH *)
+  >> first_x_assum irule >> simp[]
+  >> conj_tac
+  >- (rpt strip_tac >> gvs[]
+      >- (qpat_x_assum `fcg_visit _ _ _ = _`
+            (fn th => REWRITE_TAC [GSYM (CONV_RULE
+               (RAND_CONV (REWR_CONV pairTheory.SND))
+               (AP_TERM ``SND : string list # fcg_analysis
+                               -> fcg_analysis`` th))])
+          >> simp[fcg_visit_reachable_eq]
+          >> Cases_on `lookup_function fn_name ctx.ctx_functions`
+          >> simp[listTheory.MEM_SNOC]
+          >> imp_res_tac lookup_function_not_mem
+          >> gvs[ctx_fn_names_def])
+      >> qpat_x_assum `fcg_visit _ _ _ = _`
+           (fn th => REWRITE_TAC [GSYM (CONV_RULE
+              (RAND_CONV (REWR_CONV pairTheory.SND))
+              (AP_TERM ``SND : string list # fcg_analysis
+                              -> fcg_analysis`` th))])
+      >> simp[fcg_visit_reachable_eq]
+      >> Cases_on `lookup_function fn_name ctx.ctx_functions`
+      >> simp[listTheory.MEM_SNOC]
+      >> gvs[]
+      >> imp_res_tac lookup_function_not_mem >> gvs[])
+  >> rpt strip_tac
+  >> qpat_x_assum `fcg_visit _ _ _ = _`
+       (fn th => RULE_ASSUM_TAC (REWRITE_RULE
+          [GSYM (CONV_RULE
+             (RAND_CONV (REWR_CONV pairTheory.SND))
+             (AP_TERM ``SND : string list # fcg_analysis
+                             -> fcg_analysis`` th))]))
+  >> pop_assum mp_tac >> simp[fcg_visit_reachable_eq]
+  >> Cases_on `lookup_function fn_name ctx.ctx_functions`
+  >> simp[listTheory.MEM_SNOC] >> strip_tac >> gvs[]
+QED
+
+(* fcg_dfs: output reachable is closed under fn_directly_calls for in-context callees *)
+Theorem fcg_dfs_reachable_closed:
+  !ctx stack visited fcg.
+    (!x. MEM x visited /\
+         MEM x (ctx_fn_names ctx) ==>
+         MEM x fcg.fcg_reachable) /\
+    (!x. MEM x fcg.fcg_reachable ==> MEM x visited) /\
+    (!fn_n callee. MEM fn_n visited /\
+       fn_directly_calls ctx fn_n callee /\
+       MEM callee (ctx_fn_names ctx) ==>
+       MEM callee visited \/ MEM callee stack) ==>
+    (!fn_n callee.
+       MEM fn_n (fcg_dfs ctx stack visited fcg).fcg_reachable /\
+       fn_directly_calls ctx fn_n callee /\
+       MEM callee (ctx_fn_names ctx) ==>
+       MEM callee (fcg_dfs ctx stack visited fcg).fcg_reachable)
+Proof
+  ho_match_mp_tac fcg_dfs_ind >> rpt gen_tac >> strip_tac
+  >> simp[fcg_dfs_def] >> rpt strip_tac
+  (* Base case: empty stack *)
+  >- (res_tac >> res_tac)
+  >> Cases_on `MEM fn_name visited` >> gvs[]
+  (* visited case: fn_name already visited, IH applies directly *)
+  >- (first_x_assum irule >> simp[]
+      >> conj_tac
+      >- (rpt strip_tac >> res_tac >> gvs[])
+      >> qexists_tac `fn_n` >> simp[])
+  (* not visited: split on fcg_visit *)
+  >> Cases_on `fcg_visit ctx fn_name fcg` >> gvs[]
+  >> qpat_x_assum `(_ /\ _ /\ _) ==> _` mp_tac >> impl_tac
+  >- (rpt conj_tac
+      (* visited ∪ {fn_name} → r.fcg_reachable *)
+      >- (rpt strip_tac >> gvs[]
+          (* fn_name itself *)
+          >- (qpat_x_assum `fcg_visit _ _ _ = _`
+                (fn th => REWRITE_TAC [GSYM (CONV_RULE
+                   (RAND_CONV (REWR_CONV pairTheory.SND))
+                   (AP_TERM ``SND : string list # fcg_analysis
+                                   -> fcg_analysis`` th))])
+              >> simp[fcg_visit_reachable_eq]
+              >> Cases_on `lookup_function fn_name ctx.ctx_functions`
+              >> simp[listTheory.MEM_SNOC]
+              >> imp_res_tac lookup_function_not_mem
+              >> gvs[ctx_fn_names_def])
+          (* old visited *)
+          >> qpat_x_assum `fcg_visit _ _ _ = _`
+               (fn th => REWRITE_TAC [GSYM (CONV_RULE
+                  (RAND_CONV (REWR_CONV pairTheory.SND))
+                  (AP_TERM ``SND : string list # fcg_analysis
+                                  -> fcg_analysis`` th))])
+          >> simp[fcg_visit_reachable_eq]
+          >> Cases_on `lookup_function fn_name ctx.ctx_functions`
+          >> simp[listTheory.MEM_SNOC]
+          >> gvs[]
+          >> imp_res_tac lookup_function_not_mem >> gvs[])
+      (* r.fcg_reachable → fn_name :: visited *)
+      >- (rpt strip_tac
+          >> qpat_x_assum `fcg_visit _ _ _ = _`
+               (fn th => RULE_ASSUM_TAC (REWRITE_RULE
+                  [GSYM (CONV_RULE
+                     (RAND_CONV (REWR_CONV pairTheory.SND))
+                     (AP_TERM ``SND : string list # fcg_analysis
+                                     -> fcg_analysis`` th))]))
+          >> pop_assum mp_tac >> simp[fcg_visit_reachable_eq]
+          >> Cases_on `lookup_function fn_name ctx.ctx_functions`
+          >> simp[listTheory.MEM_SNOC] >> strip_tac >> gvs[])
+      (* callees of fn_name :: visited are visited or on q ++ stack *)
+      >> rpt strip_tac >> fs[]
+      >- (disj2_tac
+          >> qpat_x_assum `fcg_visit _ _ _ = _`
+               (fn th => REWRITE_TAC [GSYM (CONV_RULE
+                  (RAND_CONV (REWR_CONV pairTheory.FST))
+                  (AP_TERM ``FST : string list # fcg_analysis
+                                  -> string list`` th))])
+          >> simp[fcg_visit_def, fn_directly_calls_scan]
+          >> gvs[fn_directly_calls_scan]
+          >> Cases_on `lookup_function fn_name ctx.ctx_functions`
+          >> gvs[listTheory.MEM_REVERSE, listTheory.MEM_MAP]
+          >> metis_tac[])
+      >> res_tac >> gvs[])
+  >> strip_tac >> res_tac
 QED
 
 (* fcg_dfs: call_sites soundness - recorded sites come from reachable callers *)
@@ -745,7 +894,6 @@ QED
    ========================================================================== *)
 
 Theorem fcg_analyze_reachable_in_context:
-  wf_fn_names ctx /\
   fcg_is_reachable (fcg_analyze ctx) fn_name ==>
   MEM fn_name (ctx_fn_names ctx)
 Proof
@@ -759,12 +907,10 @@ Proof
 QED
 
 Theorem fcg_analyze_reachable_distinct:
-  wf_fn_names ctx ==>
   ALL_DISTINCT (fcg_analyze ctx).fcg_reachable
 Proof
   simp[fcg_analyze_def] >>
   Cases_on `ctx.ctx_entry` >> simp[fcg_empty_def] >>
-  strip_tac >>
   irule (Q.SPECL [`ctx`,`[x]`,`[]`,`fcg_empty`]
     fcg_dfs_reachable_distinct
     |> SIMP_RULE (srw_ss()) [fcg_empty_def])
@@ -800,7 +946,7 @@ Proof
   drule_all fcg_analyze_callees_sound >> strip_tac >>
   gvs[fn_directly_calls_def, wf_invoke_targets_def,
       ctx_fn_names_def] >>
-  imp_res_tac lookup_function_mem_func >>
+  imp_res_tac lookup_function_MEM >>
   res_tac >> gvs[]
 QED
 
@@ -877,7 +1023,19 @@ Theorem fcg_analyze_call_sites_complete:
   inst.inst_operands = Label callee :: rest ==>
   MEM inst (fcg_get_call_sites (fcg_analyze ctx) callee)
 Proof
-  cheat
+  simp[fcg_analyze_def, fcg_is_reachable_def] >>
+  Cases_on `ctx.ctx_entry` >> simp[fcg_empty_def] >>
+  strip_tac >>
+  `MEM (callee, inst) (fcg_scan_function func)` by
+    (simp[fcg_scan_function_def] >>
+     irule get_invoke_targets_intro >> simp[] >>
+     metis_tac[]) >>
+  drule (Q.SPECL [`ctx`,`[x]`,`[]`,`fcg_empty`]
+    fcg_dfs_call_sites_complete
+    |> SIMP_RULE (srw_ss())
+         [fcg_empty_def, fcg_get_call_sites_def]
+    |> REWRITE_RULE [GSYM fcg_get_call_sites_def]) >>
+  simp[fcg_empty_def]
 QED
 
 (* ==========================================================================
@@ -911,7 +1069,37 @@ Theorem fcg_analyze_reachable_complete:
   MEM fn_name (ctx_fn_names ctx) ==>
   fcg_is_reachable (fcg_analyze ctx) fn_name
 Proof
-  cheat
+  simp[fcg_analyze_def, fcg_is_reachable_def, fcg_path_def] >>
+  Cases_on `ctx.ctx_entry` >> simp[fcg_empty_def] >>
+  strip_tac >> gvs[] >>
+  qabbrev_tac `result = fcg_dfs ctx [entry_name] []
+    <|fcg_callees := FEMPTY; fcg_call_sites := FEMPTY;
+      fcg_reachable := []|>` >>
+  `!fn_n. (fn_directly_calls ctx)^* entry_name fn_n ==>
+     MEM fn_n (ctx_fn_names ctx) ==>
+     MEM fn_n result.fcg_reachable`
+    suffices_by (strip_tac >> res_tac) >>
+  ho_match_mp_tac (GEN_ALL relationTheory.RTC_ALT_RIGHT_INDUCT) >>
+  conj_tac
+  (* Base: entry_name itself *)
+  >- (strip_tac >> simp[Abbr`result`] >>
+      irule (Q.SPECL [`ctx`,`[entry_name]`,`[]`,
+        `<|fcg_callees := FEMPTY; fcg_call_sites := FEMPTY;
+          fcg_reachable := []|>`]
+        fcg_dfs_stack_reachable |> SIMP_RULE (srw_ss()) []) >> simp[])
+  (* Step: fn_n -> fn_name via fn_directly_calls *)
+  >> rpt strip_tac
+  >> `MEM fn_n (ctx_fn_names ctx)` by
+       (gvs[fn_directly_calls_def, ctx_fn_names_def] >>
+        imp_res_tac lookup_function_mem >> simp[listTheory.MEM_MAP] >>
+        qexists_tac `func` >> simp[])
+  >> `MEM fn_n result.fcg_reachable` by res_tac
+  >> simp[Abbr`result`]
+  >> drule_all (Q.SPECL [`ctx`,`[entry_name]`,`[]`,
+       `<|fcg_callees := FEMPTY; fcg_call_sites := FEMPTY;
+         fcg_reachable := []|>`]
+       fcg_dfs_reachable_closed |> SIMP_RULE (srw_ss()) [])
+  >> simp[]
 QED
 
 (* ==========================================================================
@@ -952,12 +1140,10 @@ QED
 
 (* Unreachable = complement of reachable within context functions *)
 Theorem fcg_analyze_unreachable_correct:
-  wf_fn_names ctx ==>
-  (MEM func (fcg_get_unreachable ctx (fcg_analyze ctx)) <=>
-   MEM func ctx.ctx_functions /\
-   ~fcg_is_reachable (fcg_analyze ctx) func.fn_name)
+  MEM func (fcg_get_unreachable ctx (fcg_analyze ctx)) <=>
+  MEM func ctx.ctx_functions /\
+  ~fcg_is_reachable (fcg_analyze ctx) func.fn_name
 Proof
-  strip_tac >>
   simp[fcg_get_unreachable_def, fcg_is_reachable_def,
        listTheory.MEM_FILTER] >>
   metis_tac[]
