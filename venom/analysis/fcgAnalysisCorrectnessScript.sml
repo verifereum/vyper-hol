@@ -56,7 +56,6 @@ QED
 
 (* Soundness: recorded callee => semantic direct call *)
 Theorem fcg_analyze_callees_sound:
-  wf_fn_names ctx /\
   MEM callee (fcg_get_callees (fcg_analyze ctx) fn_name) ==>
   fn_directly_calls ctx fn_name callee
 Proof
@@ -69,9 +68,8 @@ Proof
   disch_then irule
 QED
 
-(* Domain: callees are in context (needs wf_invoke_targets) *)
+(* Domain: callees are in context *)
 Theorem fcg_analyze_callees_in_context:
-  wf_fn_names ctx /\
   wf_invoke_targets ctx /\
   MEM callee (fcg_get_callees (fcg_analyze ctx) fn_name) ==>
   MEM callee (ctx_fn_names ctx)
@@ -104,12 +102,10 @@ QED
 
 (* Distinctness: callee lists have no duplicates *)
 Theorem fcg_analyze_callees_distinct:
-  wf_fn_names ctx ==>
   ALL_DISTINCT (fcg_get_callees (fcg_analyze ctx) fn_name)
 Proof
   simp[fcg_analyze_def] >>
   Cases_on `ctx.ctx_entry` >> simp[fcg_empty_def, fcg_get_callees_def] >>
-  strip_tac >>
   irule (Q.SPECL [`ctx`,`[x]`,`[]`,`fcg_empty`]
     fcg_dfs_callees_distinct
     |> SIMP_RULE (srw_ss()) [fcg_empty_def, fcg_get_callees_def])
@@ -275,5 +271,3 @@ Proof
        listTheory.MEM_FILTER] >>
   metis_tac[]
 QED
-
-val _ = export_theory();

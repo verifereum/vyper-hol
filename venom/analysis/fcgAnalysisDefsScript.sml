@@ -165,5 +165,3 @@ Proof
        mem_get_invoke_targets] >>
   metis_tac[]
 QED
-
-val _ = export_theory();

@@ -278,13 +278,8 @@ Proof
       >> Cases_on `lookup_function fn_name ctx.ctx_functions`
       >> simp[listTheory.MEM_SNOC])
   (* Subgoal 2: visited <= r.fcg_reachable *)
-  >> rpt strip_tac >> gvs[]
   >> qpat_x_assum `fcg_visit _ _ _ = _` visit_snd_tac
-  >> simp[fcg_visit_reachable_eq]
-  >> Cases_on `lookup_function fn_name ctx.ctx_functions`
-  >> simp[listTheory.MEM_SNOC]
-  >> gvs[]
-  >> imp_res_tac lookup_function_not_mem >> gvs[ctx_fn_names_def]
+  >> MATCH_MP_TAC fcg_visit_visited_in_reachable >> simp[]
 QED
 
 (* ===== Reachable soundness ===== *)
@@ -429,5 +424,3 @@ Proof
           >> res_tac >> gvs[]))
   >> strip_tac >> res_tac
 QED
-
-val _ = export_theory();

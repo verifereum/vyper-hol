@@ -17,11 +17,11 @@
  *    this difference.
  *  - Well-formed IR is assumed: every INVOKE's first operand is a Label,
  *    and every callee label names a function in the context. Malformed
- *    cases are silently skipped; future well-formedness predicates should
- *    rule them out.
+ *    cases are silently skipped; wf_invoke_targets (in fcgAnalysisDefs)
+ *    formalizes this assumption.
  *  - Function names in ctx_functions are assumed distinct. lookup_function
- *    returns the first match; correctness proofs will likely need
- *    ALL_DISTINCT (MAP (\f. f.fn_name) ctx.ctx_functions).
+ *    returns the first match; wf_fn_names (in fcgAnalysisDefs) formalizes
+ *    this as ALL_DISTINCT (ctx_fn_names ctx).
  *)
 
 Theory fcgAnalysis

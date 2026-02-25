@@ -221,16 +221,6 @@ Proof
   Cases_on `h.fn_name = name` >> gvs[]
 QED
 
-(* lookup_function: if name is in the function name list, lookup succeeds *)
-Theorem lookup_function_mem_name:
-  MEM name (MAP (\f. f.fn_name) fns) ==>
-  ?func. lookup_function name fns = SOME func
-Proof
-  Induct_on `fns` >> simp[lookup_function_def] >>
-  rpt strip_tac >> gvs[] >>
-  Cases_on `h.fn_name = name` >> gvs[]
-QED
-
 (* Get instruction at index in a block *)
 Definition get_instruction_def:
   get_instruction bb idx =

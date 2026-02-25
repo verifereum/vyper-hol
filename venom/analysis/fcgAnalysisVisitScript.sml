@@ -19,6 +19,8 @@
  *   fcg_visit_call_sites                - call_sites after visit
  *   fcg_get_callees_reachable_update    - reachable update doesn't affect callees
  *   fcg_get_call_sites_reachable_update - reachable update doesn't affect call_sites
+ *   fcg_visit_visited_in_reachable     - visited ∪ {fn_name} ⊆ reachable after visit
+ *   fcg_visit_reachable_in_visited     - reachable after visit ⊆ fn_name :: visited
  *)
 
 Theory fcgAnalysisVisit
@@ -274,5 +276,3 @@ Proof
   >> Cases_on `lookup_function fn_name ctx.ctx_functions`
   >> simp[listTheory.MEM_SNOC] >> strip_tac >> gvs[]
 QED
-
-val _ = export_theory();
