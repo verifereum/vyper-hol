@@ -86,12 +86,11 @@ End
 Definition get_invoke_targets_def:
   get_invoke_targets [] = [] /\
   get_invoke_targets (inst::rest) =
-    case inst.inst_opcode of
-      INVOKE =>
-        (case inst.inst_operands of
-           (Label lbl)::_ => (lbl, inst) :: get_invoke_targets rest
-         | _ => get_invoke_targets rest)
-    | _ => get_invoke_targets rest
+    if inst.inst_opcode = INVOKE then
+      (case inst.inst_operands of
+         (Label lbl)::_ => (lbl, inst) :: get_invoke_targets rest
+       | _ => get_invoke_targets rest)
+    else get_invoke_targets rest
 End
 
 (* Scan all blocks of a function for INVOKE instructions *)

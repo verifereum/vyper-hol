@@ -77,16 +77,15 @@ Proof
   >> rpt gen_tac >> strip_tac
   >> qpat_x_assum `MEM _ _` mp_tac
   >> simp[Once get_invoke_targets_def]
-  >> Cases_on `h.inst_opcode` >> simp[]
-  >> TRY (strip_tac >> res_tac >> simp[] >> NO_TAC)
-  >> Cases_on `h.inst_operands` >> simp[]
-  >> TRY (strip_tac >> res_tac >> simp[] >> NO_TAC)
-  >> rename1 `op :: ops`
-  >> Cases_on `op` >> simp[]
-  >> TRY (strip_tac >> res_tac >> simp[] >> NO_TAC)
-  >> strip_tac >> gvs[]
-  >> TRY (res_tac >> simp[])
-  >> metis_tac[]
+  >> Cases_on `h.inst_opcode = INVOKE` >> simp[]
+  >- (Cases_on `h.inst_operands` >> simp[]
+      >> TRY (strip_tac >> res_tac >> simp[] >> NO_TAC)
+      >> rename1 `op :: ops`
+      >> Cases_on `op` >> simp[]
+      >> TRY (strip_tac >> res_tac >> simp[] >> NO_TAC)
+      >> strip_tac >> gvs[]
+      >> res_tac >> simp[])
+  >> strip_tac >> res_tac >> simp[]
 QED
 
 (* Corollary: MEM pair in fcg_scan_function => instruction properties *)
@@ -104,8 +103,7 @@ Theorem get_invoke_targets_skip:
   h.inst_opcode <> INVOKE ==>
   get_invoke_targets (h::rest) = get_invoke_targets rest
 Proof
-  strip_tac >> simp[Once get_invoke_targets_def] >>
-  Cases_on `h.inst_opcode` >> gvs[]
+  simp[Once get_invoke_targets_def]
 QED
 
 (* Helper: tail results are a subset of cons results *)
