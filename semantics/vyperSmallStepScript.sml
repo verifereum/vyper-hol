@@ -1384,7 +1384,7 @@ val constants_env_pre_def = constants_env_def
   |> cv_auto_trans_pre "constants_env_pre";
 
 Theorem constants_env_pre[cv_pre]:
-  ∀w x y z. constants_env_pre w x y z
+  ∀v0 v1 v2 v3 v acc. constants_env_pre v0 v1 v2 v3 v acc
 Proof
   ho_match_mp_tac constants_env_ind
   \\ rw[]

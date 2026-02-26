@@ -1239,16 +1239,6 @@ val () = cv_auto_trans abstract_machine_from_state_def;
 (* Top-level entry-points into the semantics: loading (deploying) a contract,
 * and calling its external functions *)
 
-Definition constants_env_def:
-  constants_env _ _ [] acc = SOME acc ∧
-  constants_env cx am ((VariableDecl vis (Constant e) id typ)::ts) acc =
-    (case FST $ eval_expr cx e (initial_state am [acc]) of
-     | INL (Value v) => constants_env cx am ts $
-                        acc |+ (string_to_num id, v)
-     | _ => NONE) ∧
-  constants_env cx am (t::ts) acc = constants_env cx am ts acc
-End
-
 (* Merge a constants fmap into the immutables for a given module *)
 Definition merge_constants_def:
   merge_constants addr src_id_opt cenv (am: abstract_machine) =
@@ -1263,11 +1253,38 @@ End
 
 val () = cv_auto_trans merge_constants_def;
 
-(* Evaluate constants for all modules and merge into am.immutables *)
+(* Evaluate constant expressions in a module's toplevels.
+   Previously-evaluated constants are merged into am.immutables so that
+   ImmutableName lookups find them (constants and immutables share the
+   same runtime storage). *)
+Definition constants_env_def:
+  constants_env _ _ _ _ [] acc = SOME acc ∧
+  constants_env cx am addr src_id_opt ((VariableDecl vis (Constant e) id typ)::ts) acc =
+    (case FST $ eval_expr cx e
+       (initial_state (merge_constants addr src_id_opt acc am) []) of
+     | INL (Value v) => constants_env cx am addr src_id_opt ts $
+                        acc |+ (string_to_num id, v)
+     | _ => NONE) ∧
+  constants_env cx am addr src_id_opt (t::ts) acc =
+    constants_env cx am addr src_id_opt ts acc
+End
+
+(* Set current_module to a given src_id_opt so ImmutableName lookups resolve
+   correctly when evaluating constant expressions. *)
+Definition set_current_module_def:
+  set_current_module cx src_id_opt = cx with stk := [(src_id_opt, "")]
+End
+
+val () = cv_auto_trans set_current_module_def;
+
+(* Evaluate constants for all modules and merge into am.immutables.
+   Uses set_current_module so ImmutableName lookups resolve correctly
+   when a constant expression references a previously-defined constant. *)
 Definition evaluate_all_constants_def:
   evaluate_all_constants cx am addr [] = SOME am ∧
   evaluate_all_constants cx am addr ((src_id_opt, ts) :: rest) =
-    case constants_env cx am ts FEMPTY of
+    case constants_env (set_current_module cx src_id_opt)
+                       am addr src_id_opt ts FEMPTY of
     | NONE => NONE
     | SOME cenv =>
         let am' = merge_constants addr src_id_opt cenv am in
