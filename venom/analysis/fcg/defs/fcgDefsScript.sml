@@ -237,12 +237,21 @@ Definition ctx_fn_names_def:
   ctx_fn_names ctx = MAP (\f. f.fn_name) ctx.ctx_functions
 End
 
-(* Distinct function names and valid entry point. *)
-Definition wf_fn_names_def:
-  wf_fn_names ctx <=>
-    ALL_DISTINCT (ctx_fn_names ctx) /\
-    (!entry_name. ctx.ctx_entry = SOME entry_name ==>
-       MEM entry_name (ctx_fn_names ctx))
+(* Function names in the context are distinct. *)
+Definition ctx_distinct_fn_names_def:
+  ctx_distinct_fn_names ctx <=> ALL_DISTINCT (ctx_fn_names ctx)
+End
+
+(* The context has an entry function that names a real function. *)
+Definition ctx_has_entry_def:
+  ctx_has_entry ctx <=>
+    ?entry_name. ctx.ctx_entry = SOME entry_name /\
+       MEM entry_name (ctx_fn_names ctx)
+End
+
+(* Well-formed context. *)
+Definition ctx_wf_def:
+  ctx_wf ctx <=> ctx_distinct_fn_names ctx /\ ctx_has_entry ctx
 End
 
 (* Every INVOKE instruction's first operand is a Label naming a
