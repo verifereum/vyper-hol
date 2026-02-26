@@ -229,46 +229,6 @@ Definition fcg_analyze_def:
 End
 
 (* ==========================================================================
-   Well-formedness predicates
-   ========================================================================== *)
-
-(* Convenience: the function names in a context. *)
-Definition ctx_fn_names_def:
-  ctx_fn_names ctx = MAP (\f. f.fn_name) ctx.ctx_functions
-End
-
-(* Function names in the context are distinct. *)
-Definition ctx_distinct_fn_names_def:
-  ctx_distinct_fn_names ctx <=> ALL_DISTINCT (ctx_fn_names ctx)
-End
-
-(* The context has an entry function that names a real function. *)
-Definition ctx_has_entry_def:
-  ctx_has_entry ctx <=>
-    ?entry_name. ctx.ctx_entry = SOME entry_name /\
-       MEM entry_name (ctx_fn_names ctx)
-End
-
-(* Well-formed context. *)
-Definition ctx_wf_def:
-  ctx_wf ctx <=> ctx_distinct_fn_names ctx /\ ctx_has_entry ctx
-End
-
-(* Every INVOKE instruction's first operand is a Label naming a
- * function in the context.
- * TODO: candidate for inclusion in ctx_wf once we have a
- * ctx_wf => fn_wf => bb_wf => inst_wf hierarchy. *)
-Definition wf_invoke_targets_def:
-  wf_invoke_targets ctx <=>
-    (!func inst.
-       MEM func ctx.ctx_functions /\
-       MEM inst (fn_insts func) /\
-       inst.inst_opcode = INVOKE ==>
-       ?lbl rest. inst.inst_operands = Label lbl :: rest /\
-                  MEM lbl (ctx_fn_names ctx))
-End
-
-(* ==========================================================================
    Semantic relations
    ========================================================================== *)
 
