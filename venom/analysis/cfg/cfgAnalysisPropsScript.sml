@@ -36,7 +36,7 @@
  * 7. cfg_reachable_of is compatible with cfg_path (RTC over successor edges)
  *)
 
-Theory cfgAnalysisCorrectness
+Theory cfgAnalysisProps
 Ancestors
   cfgCorrectnessProof
 

@@ -9,4 +9,4 @@ Ancestors
   (* compiler passes *)
   phiFunction
   rtaPassCorrectness
-  cfgAnalysisCorrectness
+  cfgAnalysis
