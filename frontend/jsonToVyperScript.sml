@@ -508,12 +508,15 @@ val () = cv_auto_trans extract_module_flag_def;
 
 (* ===== Name/ImmutableName Helpers ===== *)
 
-(* Collect immutable variable names from module toplevels *)
+(* Collect immutable and constant variable names from module toplevels.
+   Both immutables (is_immutable = T) and constants (const_val = SOME _)
+   are stored in the immutables map at runtime, so both need ImmutableName. *)
 Definition collect_immutable_vars_def:
   collect_immutable_vars [] = [] ∧
   collect_immutable_vars (t :: rest) =
     (case t of
        JTL_VariableDecl name _ _ T _ _ => name :: collect_immutable_vars rest
+     | JTL_VariableDecl name _ _ _ _ (SOME _) => name :: collect_immutable_vars rest
      | _ => collect_immutable_vars rest)
 End
 
