@@ -10,3 +10,4 @@ Ancestors
   phiFunction
   rtaPassCorrectness
   cfgAnalysis
+  fcgAnalysis

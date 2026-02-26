@@ -1,5 +1,7 @@
 # Agent Guide for vyper-hol workflow
 
+See also `skills/` for additional agent documentation (e.g. review checklists).
+
 ## CRITICAL: Tool Usage
 
 Prefer using dedicated tools instead of bash operation:

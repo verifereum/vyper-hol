@@ -249,3 +249,74 @@ Definition fn_succs_closed_def:
       MEM bb fn.fn_blocks /\ MEM succ (bb_succs bb) ==>
       MEM succ (fn_labels fn)
 End
+
+(* All instructions across all blocks, in block order. *)
+Definition fn_insts_blocks_def:
+  fn_insts_blocks [] = [] /\
+  fn_insts_blocks (bb::bbs) =
+    bb.bb_instructions ++ fn_insts_blocks bbs
+End
+
+Definition fn_insts_def:
+  fn_insts fn = fn_insts_blocks fn.fn_blocks
+End
+
+(* lookup_function succeeds => the name appears in the function list. *)
+Theorem lookup_function_mem:
+  lookup_function name fns = SOME func ==>
+  MEM name (MAP (\f. f.fn_name) fns)
+Proof
+  Induct_on `fns` >> simp[lookup_function_def] >>
+  rpt strip_tac >> rw[] >> gvs[] >>
+  Cases_on `h.fn_name = name` >> gvs[]
+QED
+
+(* lookup_function fails => the name is not in the function list. *)
+Theorem lookup_function_not_mem:
+  lookup_function name fns = NONE ==>
+  ~MEM name (MAP (\f. f.fn_name) fns)
+Proof
+  Induct_on `fns` >> simp[lookup_function_def] >>
+  rpt strip_tac >>
+  Cases_on `h.fn_name = name` >> gvs[]
+QED
+
+(* ==========================================================================
+   Context well-formedness
+   ========================================================================== *)
+
+(* The function names in a context. *)
+Definition ctx_fn_names_def:
+  ctx_fn_names ctx = MAP (\f. f.fn_name) ctx.ctx_functions
+End
+
+(* Function names in the context are distinct. *)
+Definition ctx_distinct_fn_names_def:
+  ctx_distinct_fn_names ctx <=> ALL_DISTINCT (ctx_fn_names ctx)
+End
+
+(* The context has an entry function that names a real function. *)
+Definition ctx_has_entry_def:
+  ctx_has_entry ctx <=>
+    ?entry_name. ctx.ctx_entry = SOME entry_name /\
+       MEM entry_name (ctx_fn_names ctx)
+End
+
+(* Well-formed context. *)
+Definition ctx_wf_def:
+  ctx_wf ctx <=> ctx_distinct_fn_names ctx /\ ctx_has_entry ctx
+End
+
+(* Every INVOKE instruction's first operand is a Label naming a
+ * function in the context.
+ * TODO: candidate for inclusion in ctx_wf once we have a
+ * ctx_wf => fn_wf => bb_wf => inst_wf hierarchy. *)
+Definition wf_invoke_targets_def:
+  wf_invoke_targets ctx <=>
+    (!func inst.
+       MEM func ctx.ctx_functions /\
+       MEM inst (fn_insts func) /\
+       inst.inst_opcode = INVOKE ==>
+       ?lbl rest. inst.inst_operands = Label lbl :: rest /\
+                  MEM lbl (ctx_fn_names ctx))
+End
