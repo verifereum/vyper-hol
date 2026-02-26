@@ -260,3 +260,23 @@ End
 Definition fn_insts_def:
   fn_insts fn = fn_insts_blocks fn.fn_blocks
 End
+
+(* lookup_function succeeds => the name appears in the function list. *)
+Theorem lookup_function_mem:
+  lookup_function name fns = SOME func ==>
+  MEM name (MAP (\f. f.fn_name) fns)
+Proof
+  Induct_on `fns` >> simp[lookup_function_def] >>
+  rpt strip_tac >> rw[] >> gvs[] >>
+  Cases_on `h.fn_name = name` >> gvs[]
+QED
+
+(* lookup_function fails => the name is not in the function list. *)
+Theorem lookup_function_not_mem:
+  lookup_function name fns = NONE ==>
+  ~MEM name (MAP (\f. f.fn_name) fns)
+Proof
+  Induct_on `fns` >> simp[lookup_function_def] >>
+  rpt strip_tac >>
+  Cases_on `h.fn_name = name` >> gvs[]
+QED

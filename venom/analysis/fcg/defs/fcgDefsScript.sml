@@ -23,14 +23,12 @@
  *   filter_length_mono     - stricter predicate => shorter FILTER
  *   filter_visited_mono    - adding to visited can only shrink FILTER
  *   filter_visited_shrink  - adding unvisited name strictly shrinks FILTER
- *   lookup_function_mem    - lookup success => name in function list
- *   lookup_function_not_mem - lookup failure => name not in function list
  *   filter_neq_redundant   - name not in list => neq conjunct redundant
  *)
 
 Theory fcgDefs
 Ancestors
-  venomInst
+  venomInst relation
 
 (* ==========================================================================
    Result type
@@ -174,24 +172,6 @@ Proof
   simp[] >> irule filter_length_mono >> simp[]
 QED
 
-Theorem lookup_function_mem:
-  lookup_function name fns = SOME func ==>
-  MEM name (MAP (\f. f.fn_name) fns)
-Proof
-  Induct_on `fns` >> simp[lookup_function_def] >>
-  rpt strip_tac >> rw[] >> gvs[] >>
-  Cases_on `h.fn_name = name` >> gvs[]
-QED
-
-Theorem lookup_function_not_mem:
-  lookup_function name fns = NONE ==>
-  ~MEM name (MAP (\f. f.fn_name) fns)
-Proof
-  Induct_on `fns` >> simp[lookup_function_def] >>
-  rpt strip_tac >>
-  Cases_on `h.fn_name = name` >> gvs[]
-QED
-
 Theorem filter_neq_redundant:
   ~MEM name (MAP (\f. f.fn_name) fns) ==>
   FILTER (\f. f.fn_name <> name /\ P f) fns =
@@ -246,4 +226,53 @@ Definition fcg_analyze_def:
       NONE => fcg_empty
     | SOME entry_name =>
         fcg_dfs ctx [entry_name] [] fcg_empty
+End
+
+(* ==========================================================================
+   Well-formedness predicates
+   ========================================================================== *)
+
+(* Convenience: the function names in a context. *)
+Definition ctx_fn_names_def:
+  ctx_fn_names ctx = MAP (\f. f.fn_name) ctx.ctx_functions
+End
+
+(* Distinct function names and valid entry point. *)
+Definition wf_fn_names_def:
+  wf_fn_names ctx <=>
+    ALL_DISTINCT (ctx_fn_names ctx) /\
+    (!entry_name. ctx.ctx_entry = SOME entry_name ==>
+       MEM entry_name (ctx_fn_names ctx))
+End
+
+(* Every INVOKE instruction's first operand is a Label naming a
+ * function in the context. *)
+Definition wf_invoke_targets_def:
+  wf_invoke_targets ctx <=>
+    (!func inst.
+       MEM func ctx.ctx_functions /\
+       MEM inst (fn_insts func) /\
+       inst.inst_opcode = INVOKE ==>
+       ?lbl rest. inst.inst_operands = Label lbl :: rest /\
+                  MEM lbl (ctx_fn_names ctx))
+End
+
+(* ==========================================================================
+   Semantic relations
+   ========================================================================== *)
+
+(* Direct call edge: fn_a has an INVOKE instruction targeting fn_b.
+ * Defined purely from instruction structure — no analysis functions. *)
+Definition fn_directly_calls_def:
+  fn_directly_calls ctx fn_a fn_b <=>
+    ?func inst rest.
+      lookup_function fn_a ctx.ctx_functions = SOME func /\
+      MEM inst (fn_insts func) /\
+      inst.inst_opcode = INVOKE /\
+      inst.inst_operands = Label fn_b :: rest
+End
+
+(* Reachability = reflexive-transitive closure of direct calls. *)
+Definition fcg_path_def:
+  fcg_path ctx = RTC (fn_directly_calls ctx)
 End
