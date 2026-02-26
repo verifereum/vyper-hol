@@ -1,57 +1,23 @@
 (*
- * FCG Analysis Correctness Statements
+ * FCG Analysis Correctness Proofs
  *
- * Theorem statements characterizing soundness and completeness
- * of the FCG analysis, with cheated proofs as scaffolding.
- *
- * TOP-LEVEL definitions:
- *   ctx_fn_names          - convenience: function names in context
- *   wf_fn_names           - well-formedness: distinct names, entry valid
- *   wf_invoke_targets     - well-formedness: INVOKE targets are valid
- *   fn_directly_calls     - semantic direct-call relation
- *   fcg_path              - reachability via RTC of direct calls
- *
- * TOP-LEVEL theorems (all cheated):
- *   fn_directly_calls_scan               - bridge to get_invoke_targets
- *   fcg_analyze_reachable_in_context     - reachable => in context
- *   fcg_analyze_callees_in_context       - callees => in context
- *   fcg_analyze_reachable_distinct       - reachable list is distinct
- *   fcg_analyze_callees_sound            - callees => fn_directly_calls
- *   fcg_analyze_callees_complete         - fn_directly_calls => callees
- *   fcg_analyze_callees_distinct         - callee lists are distinct
- *   fcg_analyze_call_sites_sound         - recorded => real INVOKE
- *   fcg_analyze_call_sites_complete      - real INVOKE => recorded
- *   fcg_analyze_reachable_sound          - reachable => fcg_path
- *   fcg_analyze_reachable_complete       - fcg_path => reachable
- *   fcg_analyze_no_entry                 - NONE entry => nothing reachable
- *   fcg_analyze_no_entry_callees         - NONE entry => callees empty
- *   fcg_analyze_no_entry_call_sites      - NONE entry => call sites empty
- *   fcg_analyze_no_entry_unreachable     - NONE entry => all unreachable
- *   fcg_analyze_unreachable_correct      - unreachable = complement
+ * Actual proofs for theorems stated in fcgAnalysisPropsScript.
+ * Currently cheated; fill in as proofs are developed.
  *)
 
-Theory fcgAnalysisCorrectness
+Theory fcgCorrectnessProof
 Ancestors
-  fcgAnalysis relation
+  fcgDefs
 
 (* ==========================================================================
-   Section 0: Convenience Helper
+   Well-formedness predicates (used as preconditions)
    ========================================================================== *)
 
 Definition ctx_fn_names_def:
   ctx_fn_names ctx = MAP (\f. f.fn_name) ctx.ctx_functions
 End
 
-(* ==========================================================================
-   Section 1: Well-Formedness Predicates
-
-   Most theorems assume only wf_fn_names (distinct names, valid entry).
-   wf_invoke_targets is stronger and only needed by
-   fcg_analyze_callees_in_context, which must know that INVOKE targets
-   name real functions in the context. Each theorem uses the minimal
-   precondition it actually requires.
-   ========================================================================== *)
-
+(* Distinct function names and valid entry point. *)
 Definition wf_fn_names_def:
   wf_fn_names ctx <=>
     ALL_DISTINCT (ctx_fn_names ctx) /\
@@ -59,6 +25,8 @@ Definition wf_fn_names_def:
        MEM entry_name (ctx_fn_names ctx))
 End
 
+(* Every INVOKE instruction's first operand is a Label naming a
+ * function in the context. *)
 Definition wf_invoke_targets_def:
   wf_invoke_targets ctx <=>
     (!func inst.
@@ -70,11 +38,11 @@ Definition wf_invoke_targets_def:
 End
 
 (* ==========================================================================
-   Section 2: Semantic Relation via RTC
+   Semantic relations
    ========================================================================== *)
 
 (* Direct call edge: fn_a has an INVOKE instruction targeting fn_b.
-   Defined purely from instruction structure — no analysis functions. *)
+ * Defined purely from instruction structure — no analysis functions. *)
 Definition fn_directly_calls_def:
   fn_directly_calls ctx fn_a fn_b <=>
     ?func inst rest.
@@ -84,19 +52,16 @@ Definition fn_directly_calls_def:
       inst.inst_operands = Label fn_b :: rest
 End
 
-(* Reachability = reflexive-transitive closure of direct calls *)
+(* Reachability = reflexive-transitive closure of direct calls. *)
 Definition fcg_path_def:
   fcg_path ctx = RTC (fn_directly_calls ctx)
 End
 
 (* ==========================================================================
-   Section 3: Bridge Lemma — connects semantic spec to analysis impl
+   Bridge lemma
    ========================================================================== *)
 
-(* Key equivalence: the raw-instruction definition of fn_directly_calls
-   is equivalent to the analysis's fcg_scan_function / get_invoke_targets.
-   This is the only place that bridges semantics to implementation. *)
-Theorem fn_directly_calls_scan:
+Theorem fn_directly_calls_scan_proof:
   fn_directly_calls ctx fn_a fn_b <=>
   ?func. lookup_function fn_a ctx.ctx_functions = SOME func /\
          MEM fn_b (MAP FST (fcg_scan_function func))
@@ -105,10 +70,11 @@ Proof
 QED
 
 (* ==========================================================================
-   Section 4: Domain Invariants
+   Domain invariants
    ========================================================================== *)
 
-Theorem fcg_analyze_reachable_in_context:
+Theorem fcg_analyze_reachable_in_context_proof:
+  !ctx fn_name.
   wf_fn_names ctx /\
   fcg_is_reachable (fcg_analyze ctx) fn_name ==>
   MEM fn_name (ctx_fn_names ctx)
@@ -116,7 +82,8 @@ Proof
   cheat
 QED
 
-Theorem fcg_analyze_callees_in_context:
+Theorem fcg_analyze_callees_in_context_proof:
+  !ctx fn_name callee.
   wf_fn_names ctx /\
   wf_invoke_targets ctx /\
   MEM callee (fcg_get_callees (fcg_analyze ctx) fn_name) ==>
@@ -125,7 +92,8 @@ Proof
   cheat
 QED
 
-Theorem fcg_analyze_reachable_distinct:
+Theorem fcg_analyze_reachable_distinct_proof:
+  !ctx.
   wf_fn_names ctx ==>
   ALL_DISTINCT (fcg_analyze ctx).fcg_reachable
 Proof
@@ -133,11 +101,11 @@ Proof
 QED
 
 (* ==========================================================================
-   Section 5: Callees Correctness
+   Callees correctness
    ========================================================================== *)
 
-(* Soundness: recorded callee => semantic direct call *)
-Theorem fcg_analyze_callees_sound:
+Theorem fcg_analyze_callees_sound_proof:
+  !ctx fn_name callee.
   wf_fn_names ctx /\
   MEM callee (fcg_get_callees (fcg_analyze ctx) fn_name) ==>
   fn_directly_calls ctx fn_name callee
@@ -145,8 +113,8 @@ Proof
   cheat
 QED
 
-(* Completeness: reachable + direct call => recorded callee *)
-Theorem fcg_analyze_callees_complete:
+Theorem fcg_analyze_callees_complete_proof:
+  !ctx fn_name callee.
   wf_fn_names ctx /\
   fcg_is_reachable (fcg_analyze ctx) fn_name /\
   fn_directly_calls ctx fn_name callee ==>
@@ -155,8 +123,8 @@ Proof
   cheat
 QED
 
-(* Distinctness: callee lists have no duplicates *)
-Theorem fcg_analyze_callees_distinct:
+Theorem fcg_analyze_callees_distinct_proof:
+  !ctx fn_name.
   wf_fn_names ctx ==>
   ALL_DISTINCT (fcg_get_callees (fcg_analyze ctx) fn_name)
 Proof
@@ -164,11 +132,11 @@ Proof
 QED
 
 (* ==========================================================================
-   Section 6: Call Sites Correctness
+   Call sites correctness
    ========================================================================== *)
 
-(* Soundness: recorded call site is a real INVOKE from a reachable caller *)
-Theorem fcg_analyze_call_sites_sound:
+Theorem fcg_analyze_call_sites_sound_proof:
+  !ctx callee inst.
   wf_fn_names ctx /\
   MEM inst (fcg_get_call_sites (fcg_analyze ctx) callee) ==>
   ?caller func.
@@ -181,8 +149,8 @@ Proof
   cheat
 QED
 
-(* Completeness: every INVOKE targeting callee from a reachable caller is recorded *)
-Theorem fcg_analyze_call_sites_complete:
+Theorem fcg_analyze_call_sites_complete_proof:
+  !ctx caller callee func inst rest.
   wf_fn_names ctx /\
   fcg_is_reachable (fcg_analyze ctx) caller /\
   lookup_function caller ctx.ctx_functions = SOME func /\
@@ -195,11 +163,11 @@ Proof
 QED
 
 (* ==========================================================================
-   Section 7: Reachability Correctness
+   Reachability correctness
    ========================================================================== *)
 
-(* Soundness: analysis says reachable => semantic path from entry *)
-Theorem fcg_analyze_reachable_sound:
+Theorem fcg_analyze_reachable_sound_proof:
+  !ctx entry_name fn_name.
   wf_fn_names ctx /\
   ctx.ctx_entry = SOME entry_name /\
   fcg_is_reachable (fcg_analyze ctx) fn_name ==>
@@ -208,8 +176,8 @@ Proof
   cheat
 QED
 
-(* Completeness: semantic path + in context => analysis says reachable *)
-Theorem fcg_analyze_reachable_complete:
+Theorem fcg_analyze_reachable_complete_proof:
+  !ctx entry_name fn_name.
   wf_fn_names ctx /\
   ctx.ctx_entry = SOME entry_name /\
   fcg_path ctx entry_name fn_name /\
@@ -220,31 +188,35 @@ Proof
 QED
 
 (* ==========================================================================
-   Section 8: No-Entry Edge Cases
+   No-entry edge cases
    ========================================================================== *)
 
-Theorem fcg_analyze_no_entry:
+Theorem fcg_analyze_no_entry_proof:
+  !ctx fn_name.
   ctx.ctx_entry = NONE ==>
   ~fcg_is_reachable (fcg_analyze ctx) fn_name
 Proof
   cheat
 QED
 
-Theorem fcg_analyze_no_entry_callees:
+Theorem fcg_analyze_no_entry_callees_proof:
+  !ctx fn_name.
   ctx.ctx_entry = NONE ==>
   fcg_get_callees (fcg_analyze ctx) fn_name = []
 Proof
   cheat
 QED
 
-Theorem fcg_analyze_no_entry_call_sites:
+Theorem fcg_analyze_no_entry_call_sites_proof:
+  !ctx fn_name.
   ctx.ctx_entry = NONE ==>
   fcg_get_call_sites (fcg_analyze ctx) fn_name = []
 Proof
   cheat
 QED
 
-Theorem fcg_analyze_no_entry_unreachable:
+Theorem fcg_analyze_no_entry_unreachable_proof:
+  !ctx.
   ctx.ctx_entry = NONE ==>
   fcg_get_unreachable ctx (fcg_analyze ctx) = ctx.ctx_functions
 Proof
@@ -252,11 +224,11 @@ Proof
 QED
 
 (* ==========================================================================
-   Section 9: Unreachable Correctness
+   Unreachable correctness
    ========================================================================== *)
 
-(* Unreachable = complement of reachable within context functions *)
-Theorem fcg_analyze_unreachable_correct:
+Theorem fcg_analyze_unreachable_correct_proof:
+  !ctx func.
   wf_fn_names ctx ==>
   (MEM func (fcg_get_unreachable ctx (fcg_analyze ctx)) <=>
    MEM func ctx.ctx_functions /\

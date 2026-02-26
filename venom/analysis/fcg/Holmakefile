@@ -1,0 +1,3 @@
+# FCG analysis: public API
+# defs/ = definitions, proofs/ = correctness proofs
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../../syntax ../../../semantics defs proofs

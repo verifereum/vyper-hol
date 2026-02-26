@@ -249,3 +249,14 @@ Definition fn_succs_closed_def:
       MEM bb fn.fn_blocks /\ MEM succ (bb_succs bb) ==>
       MEM succ (fn_labels fn)
 End
+
+(* All instructions across all blocks, in block order. *)
+Definition fn_insts_blocks_def:
+  fn_insts_blocks [] = [] /\
+  fn_insts_blocks (bb::bbs) =
+    bb.bb_instructions ++ fn_insts_blocks bbs
+End
+
+Definition fn_insts_def:
+  fn_insts fn = fn_insts_blocks fn.fn_blocks
+End
