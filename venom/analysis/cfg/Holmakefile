@@ -1,2 +1,3 @@
-# CFG analysis
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../../syntax ../../../semantics
+# CFG analysis: public API
+# defs/ = definitions, proofs/ = correctness proofs
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../../syntax ../../../semantics defs proofs
