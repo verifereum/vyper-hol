@@ -77,10 +77,10 @@ Proof
   Cases_on `IS_SOME (lookup_scopes (string_to_num nm) st.scopes)` >> gvs[return_def, raise_def]
 QED
 
-(* Goal 1b: ImmutableNameTarget (no IH) *)
-Theorem case_ImmutableNameTarget_dom[local]:
+(* Goal 1b: BareGlobalNameTarget (no IH) *)
+Theorem case_BareGlobalNameTarget_dom[local]:
   ∀cx nm st res st'.
-    eval_base_target cx (ImmutableNameTarget nm) st = (res, st') ⇒
+    eval_base_target cx (BareGlobalNameTarget nm) st = (res, st') ⇒
     MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >>
@@ -157,10 +157,10 @@ Proof
   Cases_on `lookup_scopes (string_to_num id) st.scopes` >> gvs[return_def, raise_def]
 QED
 
-(* Goal 5b: ImmutableName (no IH) *)
-Theorem case_ImmutableName_dom[local]:
+(* Goal 5b: BareGlobalName (no IH) *)
+Theorem case_BareGlobalName_dom[local]:
   ∀cx id st res st'.
-    eval_expr cx (ImmutableName id) st = (res,st') ⇒
+    eval_expr cx (BareGlobalName id) st = (res,st') ⇒
     MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >>
@@ -425,12 +425,12 @@ Proof
     rpt conj_tac >>
     TRY (simp[] >> NO_TAC) >-
     ACCEPT_TAC case_NameTarget_dom >-
-    ACCEPT_TAC case_ImmutableNameTarget_dom >-
+    ACCEPT_TAC case_BareGlobalNameTarget_dom >-
     ACCEPT_TAC case_TopLevelNameTarget_dom >-
     ACCEPT_TAC case_AttributeTarget_dom >-
     ACCEPT_TAC case_SubscriptTarget_dom >-
     ACCEPT_TAC case_Name_dom >-
-    ACCEPT_TAC case_ImmutableName_dom >-
+    ACCEPT_TAC case_BareGlobalName_dom >-
     ACCEPT_TAC case_TopLevelName_dom >-
     ACCEPT_TAC case_FlagMember_dom >-
     ACCEPT_TAC case_IfExp_dom >-

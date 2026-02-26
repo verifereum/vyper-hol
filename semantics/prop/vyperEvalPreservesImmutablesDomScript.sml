@@ -1272,11 +1272,11 @@ Proof
   gvs[return_def, raise_def]
 QED
 
-(* ----- Case: eval_base_target (ImmutableNameTarget id) ----- *)
-Theorem case_ImmutableNameTarget_imm_dom[local]:
+(* ----- Case: eval_base_target (BareGlobalNameTarget id) ----- *)
+Theorem case_BareGlobalNameTarget_imm_dom[local]:
   ∀cx id.
     ∀st res st'.
-      eval_base_target cx (ImmutableNameTarget id) st = (res, st') ⇒
+      eval_base_target cx (BareGlobalNameTarget id) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
   rpt strip_tac >> irule preserves_immutables_dom_eq >>
@@ -1324,11 +1324,11 @@ Proof
   gvs[return_def, raise_def]
 QED
 
-(* ----- Case: eval_expr (ImmutableName id) ----- *)
-Theorem case_ImmutableName_imm_dom[local]:
+(* ----- Case: eval_expr (BareGlobalName id) ----- *)
+Theorem case_BareGlobalName_imm_dom[local]:
   ∀cx id.
     ∀st res st'.
-      eval_expr cx (ImmutableName id) st = (res, st') ⇒
+      eval_expr cx (BareGlobalName id) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
   rpt strip_tac >> irule preserves_immutables_dom_eq >>
@@ -1854,7 +1854,7 @@ Proof
   >- gvs[evaluate_def, return_def, preserves_immutables_dom_refl]
   >- (drule_all case_eval_targets_cons_imm_dom >> simp[])
   >- (drule_all case_NameTarget_imm_dom >> simp[])
-  >- (drule_all case_ImmutableNameTarget_imm_dom >> simp[])
+  >- (drule_all case_BareGlobalNameTarget_imm_dom >> simp[])
   >- (qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
        simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
             get_scopes_def, LET_THM, get_immutables_def, get_address_immutables_def,
@@ -1866,7 +1866,7 @@ Proof
   >- gvs[evaluate_def, return_def, preserves_immutables_dom_refl]
   >- (drule_all case_eval_for_cons_imm_dom >> simp[])
   >- (drule_all case_Name_imm_dom >> simp[])
-  >- (drule_all case_ImmutableName_imm_dom >> simp[])
+  >- (drule_all case_BareGlobalName_imm_dom >> simp[])
   >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
        simp[Once evaluate_def] >> strip_tac >>
        imp_res_tac lookup_global_immutables >>

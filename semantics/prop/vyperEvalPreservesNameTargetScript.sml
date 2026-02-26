@@ -6,9 +6,9 @@ Ancestors
 (* ========================================================================
    Preservation of lookup_name_target through eval_expr / eval_stmts.
 
-   After the Name/ImmutableName split, lookup_name_target (which uses
+   After the Name/BareGlobalName split, lookup_name_target (which uses
    NameTarget) can only return ScopedVar. The immutable case is handled
-   separately via ImmutableNameTarget.
+   separately via BareGlobalNameTarget.
 
    TOP-LEVEL:
      eval_expr_preserves_lookup_name_target

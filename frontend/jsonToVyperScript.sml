@@ -510,7 +510,7 @@ val () = cv_auto_trans extract_module_flag_def;
 
 (* Collect immutable and constant variable names from module toplevels.
    Both immutables (is_immutable = T) and constants (const_val = SOME _)
-   are stored in the immutables map at runtime, so both need ImmutableName. *)
+   are stored in the immutables map at runtime, so both need BareGlobalName. *)
 Definition collect_consts_and_immutables_def:
   collect_consts_and_immutables [] = [] ∧
   collect_consts_and_immutables (t :: rest) =
@@ -522,16 +522,16 @@ End
 
 val () = cv_auto_trans collect_consts_and_immutables_def;
 
-(* Make Name or ImmutableName based on constants/immutables list *)
+(* Make Name or BareGlobalName based on constants/immutables list *)
 Definition make_name_def:
   make_name ctx id =
-    if MEM id ctx then ImmutableName id else Name id
+    if MEM id ctx then BareGlobalName id else Name id
 End
 
-(* Make NameTarget or ImmutableNameTarget based on constants/immutables list *)
+(* Make NameTarget or BareGlobalNameTarget based on constants/immutables list *)
 Definition make_name_target_def:
   make_name_target ctx id =
-    if MEM id ctx then ImmutableNameTarget id else NameTarget id
+    if MEM id ctx then BareGlobalNameTarget id else NameTarget id
 End
 
 (* ===== Expression Translation ===== *)

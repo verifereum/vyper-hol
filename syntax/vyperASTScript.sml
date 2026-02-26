@@ -170,9 +170,9 @@ End
 
 Datatype:
   expr
-  = Name identifier
-  | ImmutableName identifier
-  | TopLevelName nsid
+  = Name identifier              (* local/scoped variable *)
+  | BareGlobalName identifier    (* constant or immutable, looked up by bare name *)
+  | TopLevelName nsid            (* module-qualified global: self.x, lib.x *)
   | FlagMember nsid identifier
   | IfExp expr expr expr
   | Literal literal
@@ -186,9 +186,9 @@ Datatype:
       (* expr list: arguments -- see ExtCall above for conventions *)
       (* expr option: default return value *)
 ; base_assignment_target
-  = NameTarget identifier
-  | ImmutableNameTarget identifier
-  | TopLevelNameTarget nsid
+  = NameTarget identifier              (* local/scoped variable target *)
+  | BareGlobalNameTarget identifier    (* immutable target (assignment only during __init__) *)
+  | TopLevelNameTarget nsid            (* module-qualified global target *)
   | SubscriptTarget base_assignment_target expr
   | AttributeTarget base_assignment_target identifier
 End
