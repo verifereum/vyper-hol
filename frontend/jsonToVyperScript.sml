@@ -506,32 +506,32 @@ End
 
 val () = cv_auto_trans extract_module_flag_def;
 
-(* ===== Name/ImmutableName Helpers ===== *)
+(* ===== Constants/Immutables and Name Helpers ===== *)
 
 (* Collect immutable and constant variable names from module toplevels.
    Both immutables (is_immutable = T) and constants (const_val = SOME _)
    are stored in the immutables map at runtime, so both need ImmutableName. *)
-Definition collect_immutable_vars_def:
-  collect_immutable_vars [] = [] ∧
-  collect_immutable_vars (t :: rest) =
+Definition collect_consts_and_immutables_def:
+  collect_consts_and_immutables [] = [] ∧
+  collect_consts_and_immutables (t :: rest) =
     (case t of
-       JTL_VariableDecl name _ _ T _ _ => name :: collect_immutable_vars rest
-     | JTL_VariableDecl name _ _ _ _ (SOME _) => name :: collect_immutable_vars rest
-     | _ => collect_immutable_vars rest)
+       JTL_VariableDecl name _ _ T _ _ => name :: collect_consts_and_immutables rest
+     | JTL_VariableDecl name _ _ _ _ (SOME _) => name :: collect_consts_and_immutables rest
+     | _ => collect_consts_and_immutables rest)
 End
 
-val () = cv_auto_trans collect_immutable_vars_def;
+val () = cv_auto_trans collect_consts_and_immutables_def;
 
-(* Make Name or ImmutableName based on immutable vars list *)
+(* Make Name or ImmutableName based on constants/immutables list *)
 Definition make_name_def:
-  make_name imm_vars id =
-    if MEM id imm_vars then ImmutableName id else Name id
+  make_name ctx id =
+    if MEM id ctx then ImmutableName id else Name id
 End
 
-(* Make NameTarget or ImmutableNameTarget based on immutable vars list *)
+(* Make NameTarget or ImmutableNameTarget based on constants/immutables list *)
 Definition make_name_target_def:
-  make_name_target imm_vars id =
-    if MEM id imm_vars then ImmutableNameTarget id else NameTarget id
+  make_name_target ctx id =
+    if MEM id ctx then ImmutableNameTarget id else NameTarget id
 End
 
 (* ===== Expression Translation ===== *)
@@ -569,30 +569,30 @@ Proof
 QED
 
 Definition translate_expr_def:
-  (translate_expr imm_vars (JE_Int v ty) =
+  (translate_expr ctx (JE_Int v ty) =
     Literal (IntL (int_bound_of_type ty) v)) /\
 
-  (translate_expr imm_vars (JE_Decimal s) =
+  (translate_expr ctx (JE_Decimal s) =
     Literal (DecimalL (decimal_string_to_int s))) /\
 
-  (translate_expr imm_vars (JE_Str len s) =
+  (translate_expr ctx (JE_Str len s) =
     Literal (StringL len s)) /\
 
-  (translate_expr imm_vars (JE_Bytes len hex) =
+  (translate_expr ctx (JE_Bytes len hex) =
     Literal (BytesL (Dynamic len) (hex_string_to_bytes (strip_0x hex)))) /\
 
-  (translate_expr imm_vars (JE_Hex hex) =
+  (translate_expr ctx (JE_Hex hex) =
     let bytes = hex_string_to_bytes (strip_0x hex) in
     Literal (BytesL (Fixed (LENGTH bytes)) bytes)) /\
 
-  (translate_expr imm_vars (JE_Bool b) = Literal (BoolL b)) /\
+  (translate_expr ctx (JE_Bool b) = Literal (BoolL b)) /\
 
-  (translate_expr imm_vars (JE_Name id tc src_id_opt) =
-    if id = "self" then Builtin (Env SelfAddr) [] else make_name imm_vars id) /\
+  (translate_expr ctx (JE_Name id tc src_id_opt) =
+    if id = "self" then Builtin (Env SelfAddr) [] else make_name ctx id) /\
 
   (* Special attributes: msg.*, block.*, tx.*, self.*, module.*, flag members *)
   (* attr_src_id_opt is from variable_reads on the outer Attribute (for self.x storage access) *)
-  (translate_expr imm_vars (JE_Attribute (JE_Name obj tc src_id_opt) attr result_tc attr_src_id_opt) =
+  (translate_expr ctx (JE_Attribute (JE_Name obj tc src_id_opt) attr result_tc attr_src_id_opt) =
     (* Same-module flag member: Action.BUY where tc = SOME "flag" *)
     if tc = SOME "flag" /\ result_tc = SOME "flag" then FlagMember (source_id_to_nsid src_id_opt, obj) attr
     else if obj = "msg" /\ attr = "sender" then Builtin (Env Sender) []
@@ -609,73 +609,73 @@ Definition translate_expr_def:
     else if obj = "self" then TopLevelName (source_id_to_nsid attr_src_id_opt, attr)
     (* Module variable access (lib1.x): use src_id_opt from module type *)
     else if tc = SOME "module" then TopLevelName (source_id_to_nsid src_id_opt, attr)
-    else if attr = "balance" then Builtin (Acc Balance) [make_name imm_vars obj]
-    else if attr = "address" then Builtin (Acc Address) [make_name imm_vars obj]
-    else Attribute (make_name imm_vars obj) attr) /\
+    else if attr = "balance" then Builtin (Acc Balance) [make_name ctx obj]
+    else if attr = "address" then Builtin (Acc Address) [make_name ctx obj]
+    else Attribute (make_name ctx obj) attr) /\
 
   (* General attribute - handles nested and simple cases *)
   (* Check for cross-module flag access: lib1.Action.BUY *)
-  (translate_expr imm_vars (JE_Attribute e attr result_tc attr_src_id_opt) =
+  (translate_expr ctx (JE_Attribute e attr result_tc attr_src_id_opt) =
     if result_tc = SOME "flag" then
       case extract_module_flag e of
       | SOME (src_id_opt, flag_name) => FlagMember (src_id_opt, flag_name) attr
-      | NONE => Attribute (translate_expr imm_vars e) attr
+      | NONE => Attribute (translate_expr ctx e) attr
     (* Nested module access: mod3.mod2.mod1.X — use variable_reads source_id *)
     else if is_module_expr e then
       TopLevelName (source_id_to_nsid attr_src_id_opt, attr)
-    else if attr = "balance" then Builtin (Acc Balance) [translate_expr imm_vars e]
-    else if attr = "address" then Builtin (Acc Address) [translate_expr imm_vars e]
-    else Attribute (translate_expr imm_vars e) attr) /\
+    else if attr = "balance" then Builtin (Acc Balance) [translate_expr ctx e]
+    else if attr = "address" then Builtin (Acc Address) [translate_expr ctx e]
+    else Attribute (translate_expr ctx e) attr) /\
 
   (* Subscript *)
-  (translate_expr imm_vars (JE_Subscript arr idx) =
-    Subscript (translate_expr imm_vars arr) (translate_expr imm_vars idx)) /\
+  (translate_expr ctx (JE_Subscript arr idx) =
+    Subscript (translate_expr ctx arr) (translate_expr ctx idx)) /\
 
   (* NamedExpr - only appears in initializes:/uses: annotations, not in executable code *)
-  (translate_expr imm_vars (JE_NamedExpr target value) =
+  (translate_expr ctx (JE_NamedExpr target value) =
     Literal (BoolL T)) /\
 
   (* BinOp *)
-  (translate_expr imm_vars (JE_BinOp l op r) =
-    Builtin (Bop (translate_binop op)) [translate_expr imm_vars l; translate_expr imm_vars r]) /\
+  (translate_expr ctx (JE_BinOp l op r) =
+    Builtin (Bop (translate_binop op)) [translate_expr ctx l; translate_expr ctx r]) /\
 
   (* BoolOp - convert to nested IfExp *)
-  (translate_expr imm_vars (JE_BoolOp JBoolop_And es) =
-    boolop_and (translate_expr_list imm_vars es)) /\
-  (translate_expr imm_vars (JE_BoolOp JBoolop_Or es) =
-    boolop_or (translate_expr_list imm_vars es)) /\
+  (translate_expr ctx (JE_BoolOp JBoolop_And es) =
+    boolop_and (translate_expr_list ctx es)) /\
+  (translate_expr ctx (JE_BoolOp JBoolop_Or es) =
+    boolop_or (translate_expr_list ctx es)) /\
 
   (* UnaryOp *)
-  (translate_expr imm_vars (JE_UnaryOp JUop_USub e) =
-    Builtin Neg [translate_expr imm_vars e]) /\
-  (translate_expr imm_vars (JE_UnaryOp JUop_Not e) =
-    Builtin Not [translate_expr imm_vars e]) /\
-  (translate_expr imm_vars (JE_UnaryOp JUop_Invert e) =
-    Builtin Not [translate_expr imm_vars e]) /\
+  (translate_expr ctx (JE_UnaryOp JUop_USub e) =
+    Builtin Neg [translate_expr ctx e]) /\
+  (translate_expr ctx (JE_UnaryOp JUop_Not e) =
+    Builtin Not [translate_expr ctx e]) /\
+  (translate_expr ctx (JE_UnaryOp JUop_Invert e) =
+    Builtin Not [translate_expr ctx e]) /\
 
   (* IfExp (ternary) *)
-  (translate_expr imm_vars (JE_IfExp test body orelse) =
-    IfExp (translate_expr imm_vars test) (translate_expr imm_vars body) (translate_expr imm_vars orelse)) /\
+  (translate_expr ctx (JE_IfExp test body orelse) =
+    IfExp (translate_expr ctx test) (translate_expr ctx body) (translate_expr ctx orelse)) /\
 
   (* Tuple *)
-  (translate_expr imm_vars (JE_Tuple es) =
-    Builtin (MakeArray NONE (Fixed (LENGTH es))) (translate_expr_list imm_vars es)) /\
+  (translate_expr ctx (JE_Tuple es) =
+    Builtin (MakeArray NONE (Fixed (LENGTH es))) (translate_expr_list ctx es)) /\
 
   (* List - array literal *)
-  (translate_expr imm_vars (JE_List es ty) =
+  (translate_expr ctx (JE_List es ty) =
     case ty of
     | JT_StaticArray vt len =>
-        Builtin (MakeArray (SOME (translate_type vt)) (Fixed len)) (translate_expr_list imm_vars es)
+        Builtin (MakeArray (SOME (translate_type vt)) (Fixed len)) (translate_expr_list ctx es)
     | JT_DynArray vt len =>
-        Builtin (MakeArray (SOME (translate_type vt)) (Dynamic len)) (translate_expr_list imm_vars es)
+        Builtin (MakeArray (SOME (translate_type vt)) (Dynamic len)) (translate_expr_list ctx es)
     | _ =>
-        Builtin (MakeArray NONE (Fixed (LENGTH es))) (translate_expr_list imm_vars es)) /\
+        Builtin (MakeArray NONE (Fixed (LENGTH es))) (translate_expr_list ctx es)) /\
 
   (* Call - single case with internal dispatch to avoid pattern completion issues *)
   (* JE_Call now includes source_id for module calls *)
-  (translate_expr imm_vars (JE_Call func args kwargs ret_ty src_id_opt) =
-    let args' = translate_expr_list imm_vars args in
-    let kwargs' = translate_kwargs imm_vars kwargs in
+  (translate_expr ctx (JE_Call func args kwargs ret_ty src_id_opt) =
+    let args' = translate_expr_list ctx args in
+    let kwargs' = translate_kwargs ctx kwargs in
     case func of
     | JE_Name name (SOME "interface") _ => HD args'
     | JE_Name name _ _ => make_builtin_call name args' kwargs' ret_ty
@@ -684,14 +684,14 @@ Definition translate_expr_def:
     | JE_Attribute _ "__interface__" _ _ => HD args'
     | JE_Attribute base "pop" _ _ =>
         (case base of
-         | JE_Name id _ _ => Pop (make_name_target imm_vars id)
+         | JE_Name id _ _ => Pop (make_name_target ctx id)
          | JE_Attribute (JE_Name "self" _ _) attr _ _ => Pop (TopLevelNameTarget (NONE, attr))
          | JE_Attribute (JE_Name id (SOME "module") src_id_opt) attr _ _ =>
              Pop (TopLevelNameTarget (source_id_to_nsid src_id_opt, attr))
          | JE_Attribute (JE_Name id _ _) attr _ _ =>
-             Pop (AttributeTarget (make_name_target imm_vars id) attr)
+             Pop (AttributeTarget (make_name_target ctx id) attr)
          | JE_Subscript (JE_Name id _ _) idx =>
-             Pop (SubscriptTarget (make_name_target imm_vars id) (translate_expr imm_vars idx))
+             Pop (SubscriptTarget (make_name_target ctx id) (translate_expr ctx idx))
          | _ => Call (IntCall (NONE, "pop")) args' NONE)
     (* self.func(args) - internal call *)
     | JE_Attribute (JE_Name "self" _ _) fname _ _ => Call (IntCall (NONE, fname)) args' NONE
@@ -719,31 +719,31 @@ Definition translate_expr_def:
 
   (* ExtCall - mutating external call (is_static = F) *)
   (* Convention: args = [target; value; arg1; arg2; ...] *)
-  (translate_expr imm_vars (JE_ExtCall func_name arg_types ret_ty args keywords) =
+  (translate_expr ctx (JE_ExtCall func_name arg_types ret_ty args keywords) =
     let value_expr = case find_keyword "value" keywords of
-                     | SOME v => translate_expr imm_vars v
+                     | SOME v => translate_expr ctx v
                      | NONE => Literal (IntL (Unsigned 256) 0) in
-    let translated_args = translate_expr_list imm_vars args in
+    let translated_args = translate_expr_list ctx args in
     Call (ExtCall F (func_name, translate_type_list arg_types, translate_type ret_ty))
          (case translated_args of
           | (target :: rest) => target :: value_expr :: rest
           | [] => [])
-         (OPTION_MAP (translate_expr imm_vars) (find_keyword "default_return_value" keywords))) /\
+         (OPTION_MAP (translate_expr ctx) (find_keyword "default_return_value" keywords))) /\
 
   (* StaticCall - read-only external call (is_static = T) *)
   (* Convention: args = [target; arg1; arg2; ...] (no value) *)
-  (translate_expr imm_vars (JE_StaticCall func_name arg_types ret_ty args) =
+  (translate_expr ctx (JE_StaticCall func_name arg_types ret_ty args) =
     Call (ExtCall T (func_name, translate_type_list arg_types, translate_type ret_ty))
-         (translate_expr_list imm_vars args)
+         (translate_expr_list ctx args)
          NONE) /\
 
   (* Helper for translating expression lists *)
-  (translate_expr_list imm_vars [] = []) /\
-  (translate_expr_list imm_vars (e::es) = translate_expr imm_vars e :: translate_expr_list imm_vars es) /\
+  (translate_expr_list ctx [] = []) /\
+  (translate_expr_list ctx (e::es) = translate_expr ctx e :: translate_expr_list ctx es) /\
 
   (* Helper for translating keywords *)
-  (translate_kwargs imm_vars [] = []) /\
-  (translate_kwargs imm_vars (JKeyword k v :: rest) = (k, translate_expr imm_vars v) :: translate_kwargs imm_vars rest)
+  (translate_kwargs ctx [] = []) /\
+  (translate_kwargs ctx (JKeyword k v :: rest) = (k, translate_expr ctx v) :: translate_kwargs ctx rest)
 Termination
   WF_REL_TAC `measure (λx. case x of
     | INL (_, e) => json_expr_size e
@@ -761,13 +761,13 @@ End
 (* Defined after translate_expr since it uses it for subscript indices *)
 
 Definition translate_base_target_def:
-  (translate_base_target imm_vars (JBT_Name id) = make_name_target imm_vars id) /\
+  (translate_base_target ctx (JBT_Name id) = make_name_target ctx id) /\
   (* JBT_TopLevelName is (source_id, name) for self.x and module.x *)
-  (translate_base_target imm_vars (JBT_TopLevelName nsid) = TopLevelNameTarget (json_nsid_to_nsid nsid)) /\
-  (translate_base_target imm_vars (JBT_Subscript tgt idx) =
-    SubscriptTarget (translate_base_target imm_vars tgt) (translate_expr imm_vars idx)) /\
-  (translate_base_target imm_vars (JBT_Attribute tgt attr) =
-    AttributeTarget (translate_base_target imm_vars tgt) attr)
+  (translate_base_target ctx (JBT_TopLevelName nsid) = TopLevelNameTarget (json_nsid_to_nsid nsid)) /\
+  (translate_base_target ctx (JBT_Subscript tgt idx) =
+    SubscriptTarget (translate_base_target ctx tgt) (translate_expr ctx idx)) /\
+  (translate_base_target ctx (JBT_Attribute tgt attr) =
+    AttributeTarget (translate_base_target ctx tgt) attr)
 Termination
   WF_REL_TAC `measure (json_base_target_size o SND)` >> simp[]
 End
@@ -776,8 +776,8 @@ End
 (* val () = cv_auto_trans translate_base_target_def; *)
 
 Definition translate_target_def:
-  (translate_target imm_vars (JTgt_Base bt) = BaseTarget (translate_base_target imm_vars bt)) /\
-  (translate_target imm_vars (JTgt_Tuple tgts) = TupleTarget (MAP (translate_target imm_vars) tgts))
+  (translate_target ctx (JTgt_Base bt) = BaseTarget (translate_base_target ctx bt)) /\
+  (translate_target ctx (JTgt_Tuple tgts) = TupleTarget (MAP (translate_target ctx) tgts))
 Termination
   WF_REL_TAC `measure (json_target_size o SND)` >> simp[]
 End
@@ -849,16 +849,16 @@ End
 val () = cv_auto_trans get_iter_bound_def;
 
 Definition translate_iter_def:
-  (translate_iter imm_vars var_ty (JIter_Range [] _ _) =
+  (translate_iter ctx var_ty (JIter_Range [] _ _) =
     Range (Literal (IntL (int_bound_of_type var_ty) (integer$int_of_num 0)))
           (Literal (IntL (int_bound_of_type var_ty) (integer$int_of_num 0)))) /\
-  (translate_iter imm_vars var_ty (JIter_Range [e] _ _) =
+  (translate_iter ctx var_ty (JIter_Range [e] _ _) =
     Range (Literal (IntL (int_bound_of_type var_ty) (integer$int_of_num 0)))
-          (translate_expr imm_vars e)) /\
-  (translate_iter imm_vars var_ty (JIter_Range (s::e::_) _ _) =
-    Range (translate_expr imm_vars s) (translate_expr imm_vars e)) /\
-  (translate_iter imm_vars var_ty (JIter_Array e _) =
-    Array (translate_expr imm_vars e))
+          (translate_expr ctx e)) /\
+  (translate_iter ctx var_ty (JIter_Range (s::e::_) _ _) =
+    Range (translate_expr ctx s) (translate_expr ctx e)) /\
+  (translate_iter ctx var_ty (JIter_Array e _) =
+    Array (translate_expr ctx e))
 End
 
 (* val () = cv_auto_trans translate_iter_def; *)
@@ -866,35 +866,35 @@ End
 (* ===== Statement Translation ===== *)
 
 Definition translate_stmt_def:
-  (translate_stmt imm_vars JS_Pass = Pass) /\
-  (translate_stmt imm_vars JS_Break = Break) /\
-  (translate_stmt imm_vars JS_Continue = Continue) /\
-  (translate_stmt imm_vars (JS_Expr e) = Expr (translate_expr imm_vars e)) /\
-  (translate_stmt imm_vars (JS_Return NONE) = Return NONE) /\
-  (translate_stmt imm_vars (JS_Return (SOME e)) = Return (SOME (translate_expr imm_vars e))) /\
-  (translate_stmt imm_vars (JS_Raise NONE) = Raise (Literal (StringL 0 ""))) /\
-  (translate_stmt imm_vars (JS_Raise (SOME e)) = Raise (translate_expr imm_vars e)) /\
-  (translate_stmt imm_vars (JS_Assert test NONE) =
-    Assert (translate_expr imm_vars test) (Literal (StringL 0 ""))) /\
-  (translate_stmt imm_vars (JS_Assert test (SOME msg)) =
-    Assert (translate_expr imm_vars test) (translate_expr imm_vars msg)) /\
-  (translate_stmt imm_vars (JS_Log event args) =
-    Log (json_nsid_to_nsid event) (MAP (translate_expr imm_vars) args)) /\
-  (translate_stmt imm_vars (JS_If test body orelse) =
-    If (translate_expr imm_vars test)
-       (MAP (translate_stmt imm_vars) body)
-       (MAP (translate_stmt imm_vars) orelse)) /\
-  (translate_stmt imm_vars (JS_For var ty iter body) =
-    For var (translate_type ty) (translate_iter imm_vars ty iter)
-        (get_iter_bound iter) (MAP (translate_stmt imm_vars) body)) /\
-  (translate_stmt imm_vars (JS_Assign tgt val) =
-    Assign (translate_target imm_vars tgt) (translate_expr imm_vars val)) /\
-  (translate_stmt imm_vars (JS_AnnAssign var ty val) =
-    AnnAssign var (translate_type ty) (translate_expr imm_vars val)) /\
-  (translate_stmt imm_vars (JS_AugAssign tgt op val) =
-    AugAssign (translate_base_target imm_vars tgt) (translate_binop op) (translate_expr imm_vars val)) /\
-  (translate_stmt imm_vars (JS_Append tgt val) =
-    Append (translate_base_target imm_vars tgt) (translate_expr imm_vars val))
+  (translate_stmt ctx JS_Pass = Pass) /\
+  (translate_stmt ctx JS_Break = Break) /\
+  (translate_stmt ctx JS_Continue = Continue) /\
+  (translate_stmt ctx (JS_Expr e) = Expr (translate_expr ctx e)) /\
+  (translate_stmt ctx (JS_Return NONE) = Return NONE) /\
+  (translate_stmt ctx (JS_Return (SOME e)) = Return (SOME (translate_expr ctx e))) /\
+  (translate_stmt ctx (JS_Raise NONE) = Raise (Literal (StringL 0 ""))) /\
+  (translate_stmt ctx (JS_Raise (SOME e)) = Raise (translate_expr ctx e)) /\
+  (translate_stmt ctx (JS_Assert test NONE) =
+    Assert (translate_expr ctx test) (Literal (StringL 0 ""))) /\
+  (translate_stmt ctx (JS_Assert test (SOME msg)) =
+    Assert (translate_expr ctx test) (translate_expr ctx msg)) /\
+  (translate_stmt ctx (JS_Log event args) =
+    Log (json_nsid_to_nsid event) (MAP (translate_expr ctx) args)) /\
+  (translate_stmt ctx (JS_If test body orelse) =
+    If (translate_expr ctx test)
+       (MAP (translate_stmt ctx) body)
+       (MAP (translate_stmt ctx) orelse)) /\
+  (translate_stmt ctx (JS_For var ty iter body) =
+    For var (translate_type ty) (translate_iter ctx ty iter)
+        (get_iter_bound iter) (MAP (translate_stmt ctx) body)) /\
+  (translate_stmt ctx (JS_Assign tgt val) =
+    Assign (translate_target ctx tgt) (translate_expr ctx val)) /\
+  (translate_stmt ctx (JS_AnnAssign var ty val) =
+    AnnAssign var (translate_type ty) (translate_expr ctx val)) /\
+  (translate_stmt ctx (JS_AugAssign tgt op val) =
+    AugAssign (translate_base_target ctx tgt) (translate_binop op) (translate_expr ctx val)) /\
+  (translate_stmt ctx (JS_Append tgt val) =
+    Append (translate_base_target ctx tgt) (translate_expr ctx val))
 Termination
   WF_REL_TAC `measure (json_stmt_size o SND)` >>
   rw[] >> simp[json_stmt_size_def]
@@ -962,12 +962,12 @@ End
 val () = cv_auto_trans translate_value_type_def;
 
 Definition translate_var_mutability_def:
-  translate_var_mutability imm_vars is_immutable is_transient is_constant const_val =
+  translate_var_mutability ctx is_immutable is_transient is_constant const_val =
     if is_immutable then Immutable
     else if is_transient then Transient
     else if is_constant then
       (case const_val of
-         SOME e => Constant (translate_expr imm_vars e)
+         SOME e => Constant (translate_expr ctx e)
        | NONE => Storage)
     else Storage
 End
@@ -975,25 +975,25 @@ End
 (* val () = cv_auto_trans translate_var_mutability_def; *)
 
 Definition translate_toplevel_def:
-  (translate_toplevel imm_vars (JTL_FunctionDef name decs args defaults (JFuncType arg_tys ret_ty) body) =
+  (translate_toplevel ctx (JTL_FunctionDef name decs args defaults (JFuncType arg_tys ret_ty) body) =
     SOME (FunctionDecl
       (translate_visibility decs)
       (translate_mutability decs)
       name
       (translate_args_with_types args arg_tys)
-      (MAP (translate_expr imm_vars) defaults)
+      (MAP (translate_expr ctx) defaults)
       (translate_type ret_ty)
-      (MAP (translate_stmt imm_vars) body))) /\
+      (MAP (translate_stmt ctx) body))) /\
 
-  (translate_toplevel imm_vars (JTL_VariableDecl name ty is_public is_immutable is_transient const_val) =
+  (translate_toplevel ctx (JTL_VariableDecl name ty is_public is_immutable is_transient const_val) =
     SOME (VariableDecl
       (if is_public then Public else Private)
-      (translate_var_mutability imm_vars is_immutable is_transient
+      (translate_var_mutability ctx is_immutable is_transient
         (case const_val of SOME _ => T | NONE => F) const_val)
       name
       (translate_type ty))) /\
 
-  (translate_toplevel imm_vars (JTL_HashMapDecl name key_ty val_ty is_public is_transient) =
+  (translate_toplevel ctx (JTL_HashMapDecl name key_ty val_ty is_public is_transient) =
     SOME (HashMapDecl
       (if is_public then Public else Private)
       is_transient
@@ -1001,24 +1001,24 @@ Definition translate_toplevel_def:
       (translate_type key_ty)
       (translate_value_type val_ty))) /\
 
-  (translate_toplevel imm_vars (JTL_EventDef name args) =
+  (translate_toplevel ctx (JTL_EventDef name args) =
     SOME (EventDecl name (MAP translate_arg args))) /\
 
-  (translate_toplevel imm_vars (JTL_StructDef name args) =
+  (translate_toplevel ctx (JTL_StructDef name args) =
     SOME (StructDecl name (MAP translate_arg args))) /\
 
-  (translate_toplevel imm_vars (JTL_FlagDef name members) =
+  (translate_toplevel ctx (JTL_FlagDef name members) =
     SOME (FlagDecl name members)) /\
 
-  (translate_toplevel imm_vars (JTL_InterfaceDef name funcs) =
+  (translate_toplevel ctx (JTL_InterfaceDef name funcs) =
     SOME (InterfaceDecl name (MAP translate_interface_func funcs))) /\
 
   (* Module declarations are compiled away - the imported content is already inlined *)
-  (translate_toplevel imm_vars (JTL_Import _) = NONE) /\
-  (translate_toplevel imm_vars (JTL_ExportsDecl _) = NONE) /\
-  (translate_toplevel imm_vars (JTL_InitializesDecl _) = NONE) /\
-  (translate_toplevel imm_vars (JTL_UsesDecl _) = NONE) /\
-  (translate_toplevel imm_vars (JTL_ImplementsDecl _) = NONE)
+  (translate_toplevel ctx (JTL_Import _) = NONE) /\
+  (translate_toplevel ctx (JTL_ExportsDecl _) = NONE) /\
+  (translate_toplevel ctx (JTL_InitializesDecl _) = NONE) /\
+  (translate_toplevel ctx (JTL_UsesDecl _) = NONE) /\
+  (translate_toplevel ctx (JTL_ImplementsDecl _) = NONE)
 End
 
 (* val () = cv_auto_trans translate_toplevel_def; *)
@@ -1342,14 +1342,14 @@ val () = cv_auto_trans filter_some_def;
 
 Definition translate_module_def:
   translate_module (JModule toplevels) =
-    let imm_vars = collect_immutable_vars toplevels in
-    filter_some (MAP (translate_toplevel imm_vars) toplevels)
+    let ctx = collect_consts_and_immutables toplevels in
+    filter_some (MAP (translate_toplevel ctx) toplevels)
 End
 
 Definition translate_imported_module_def:
   translate_imported_module (JImportedModule src_id path body) =
-    let imm_vars = collect_immutable_vars body in
-    (SOME (Num (src_id + &builtin_source_id_offset)), filter_some (MAP (translate_toplevel imm_vars) body))
+    let ctx = collect_consts_and_immutables body in
+    (SOME (Num (src_id + &builtin_source_id_offset)), filter_some (MAP (translate_toplevel ctx) body))
 End
 
 (* Extract toplevels from a JModule (needed to get import infos) *)
