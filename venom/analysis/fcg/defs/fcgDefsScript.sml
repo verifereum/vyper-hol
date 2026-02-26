@@ -255,7 +255,9 @@ Definition ctx_wf_def:
 End
 
 (* Every INVOKE instruction's first operand is a Label naming a
- * function in the context. *)
+ * function in the context.
+ * TODO: candidate for inclusion in ctx_wf once we have a
+ * ctx_wf => fn_wf => bb_wf => inst_wf hierarchy. *)
 Definition wf_invoke_targets_def:
   wf_invoke_targets ctx <=>
     (!func inst.
