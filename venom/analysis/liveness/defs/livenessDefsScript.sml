@@ -27,7 +27,7 @@
 Theory livenessDefs
 Ancestors
   list finite_map pred_set
-  venomInst cfgDefs
+  venomInst cfgDefs dfIterateDefs
 
 (* inst_uses, inst_defs, phi_pairs come from venomInst *)
 
@@ -196,11 +196,14 @@ End
    Process one block: update out_vars then backward-transfer liveness.
    ========================================================================== *)
 
+(* Merge new out_vars with existing (ensures monotonicity for all inputs,
+   not just those reachable from init — needed for termination). *)
 Definition process_block_def:
   process_block cfg bbs lr bb =
     let new_out = calculate_out_vars cfg lr bb bbs in
     let bl = lookup_block_liveness lr bb.bb_label in
-    let bl' = bl with bl_out_vars := new_out in
+    let merged_out = list_union bl.bl_out_vars new_out in
+    let bl' = bl with bl_out_vars := merged_out in
     let bl'' = calculate_liveness bb bl' in
     lr with lr_blocks := lr.lr_blocks |+ (bb.bb_label, bl'')
 End
@@ -264,22 +267,18 @@ Definition all_var_slots_def:
 End
 
 (* ==========================================================================
-   Iterate passes until fixpoint.
-   Termination: total_live_count strictly increases on each non-fixpoint
-   pass, bounded by all_var_slots.
+   Iterate passes until fixpoint via df_iterate (WHILE-based).
+
+   The step function is liveness_one_pass with fixed cfg/bbs/order.
+   Convergence follows from:
+     - inflationary: total_live_count strictly increases on non-fixpoint steps
+       (guaranteed by list_union merge in process_block)
+     - bounded: total_live_count ≤ all_var_slots
    ========================================================================== *)
 
 Definition liveness_iterate_def:
   liveness_iterate cfg bbs order lr =
-    let lr' = liveness_one_pass cfg bbs lr order in
-    if lr' = lr then lr
-    else liveness_iterate cfg bbs order lr'
-Termination
-  WF_REL_TAC `measure (λ(cfg, bbs, order, lr).
-    all_var_slots bbs - total_live_count lr)` >>
-  (* Needs: (1) monotone: total_live_count lr' > total_live_count lr
-            (2) bounded: total_live_count lr ≤ all_var_slots bbs *)
-  cheat
+    df_iterate (λlr'. liveness_one_pass cfg bbs lr' order) lr
 End
 
 (* ==========================================================================
@@ -300,4 +299,63 @@ Definition liveness_analyze_def:
     let lr0 = init_liveness bbs in
     let order = cfg.cfg_dfs_post in
     liveness_iterate cfg bbs order lr0
+End
+
+(* ==========================================================================
+   Ordering on liveness results (for monotonicity statements)
+   ========================================================================== *)
+
+(* Pointwise ordering: lr1 ≤ lr2 when every live set in lr1 is a subset
+   of the corresponding set in lr2. *)
+Definition lr_leq_def:
+  lr_leq lr1 lr2 =
+    ((∀lbl. set (out_vars_of lr1 lbl) ⊆ set (out_vars_of lr2 lbl)) ∧
+     (∀lbl idx. set (live_vars_at lr1 lbl idx) ⊆ set (live_vars_at lr2 lbl idx)))
+End
+
+(* ==========================================================================
+   Execution path and use/def at a point (for soundness statement)
+   ========================================================================== *)
+
+(* An execution path through the CFG: a list of (block_label, inst_index)
+   positions visited in order.  Consecutive positions are either
+   within the same block (idx+1) or across a CFG edge (new block, idx 0). *)
+Definition cfg_exec_path_def:
+  cfg_exec_path cfg ([] : (string # num) list) = T ∧
+  cfg_exec_path cfg [(lbl, idx)] = T ∧
+  cfg_exec_path cfg ((lbl1, idx1) :: (lbl2, idx2) :: rest) =
+    (((lbl1 = lbl2 ∧ idx2 = idx1 + 1) ∨
+      (lbl1 ≠ lbl2 ∧ MEM lbl2 (cfg_succs_of cfg lbl1) ∧ idx2 = 0)) ∧
+     cfg_exec_path cfg ((lbl2, idx2) :: rest))
+End
+
+(* Variable v is used (read) at position (lbl, idx). *)
+Definition var_used_at_def:
+  var_used_at bbs lbl idx v =
+    (∃bb inst.
+      lookup_block lbl bbs = SOME bb ∧
+      idx < LENGTH bb.bb_instructions ∧
+      EL idx bb.bb_instructions = inst ∧
+      MEM v (inst_uses inst))
+End
+
+(* Variable v is defined (written) at position (lbl, idx). *)
+Definition var_defined_at_def:
+  var_defined_at bbs lbl idx v =
+    (∃bb inst.
+      lookup_block lbl bbs = SOME bb ∧
+      idx < LENGTH bb.bb_instructions ∧
+      EL idx bb.bb_instructions = inst ∧
+      MEM v (inst_defs inst))
+End
+
+(* v is used-before-defined along a position sequence: there exists some
+   position k where v is used, and v is not defined at any earlier position. *)
+Definition used_before_defined_def:
+  used_before_defined bbs v positions =
+    (∃k. k < LENGTH positions ∧
+         var_used_at bbs (FST (EL k positions)) (SND (EL k positions)) v ∧
+         ∀j. j < k ==>
+             ¬var_defined_at bbs (FST (EL j positions))
+                                 (SND (EL j positions)) v)
 End
