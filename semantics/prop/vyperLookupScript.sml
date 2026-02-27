@@ -69,6 +69,19 @@ Definition lookup_toplevel_name_target_def:
   lookup_toplevel_name_target cx st n = lookup_base_target cx st (TopLevelNameTarget n)
 End
 
+Definition lookup_flag_member_def:
+  lookup_flag_member cx (src_id_opt, fid) mid =
+  case get_module_code cx src_id_opt
+    of NONE => NONE
+     | SOME ts =>
+  case lookup_flag fid ts
+    of NONE => NONE
+     | SOME ls =>
+  case INDEX_OF mid ls
+    of NONE => NONE
+     | SOME i => SOME $ Value $ FlagV (LENGTH ls) (2 ** i)
+End
+
 (****************************************)
 (* Helpers *)
 
@@ -947,6 +960,39 @@ Proof
   metis_tac[valid_lookups_preserved_after_update_var_in_scope,
             var_in_scope_preserved_after_update,
             var_in_scope_def, optionTheory.IS_SOME_DEF]
+QED
+
+Theorem lookup_flag_member_to_lookup_flag_mem:
+  ∀cx st nsid mid v.
+    lookup_flag_member cx nsid mid = SOME v ⇒
+    lookup_flag_mem cx nsid mid st = (INL v, st)
+Proof
+  rpt gen_tac
+  >> PairCases_on `nsid`
+  >> simp[lookup_flag_member_def, lookup_flag_mem_def]
+  >> rpt CASE_TAC >> gvs[return_def, raise_def]
+QED
+
+Theorem lookup_flag_mem_to_lookup_flag_member_some:
+  ∀cx st st' nsid mid v.
+    lookup_flag_mem cx nsid mid st = (INL v, st') ⇒
+    lookup_flag_member cx nsid mid = SOME v
+Proof
+  rpt gen_tac
+  >> PairCases_on `nsid`
+  >> simp[lookup_flag_member_def, lookup_flag_mem_def]
+  >> rpt CASE_TAC >> gvs[return_def, raise_def]
+QED
+
+Theorem lookup_flag_mem_to_lookup_flag_member_none:
+  ∀cx st st' nsid mid e.
+    lookup_flag_mem cx nsid mid st = (INR e, st') ⇒
+    lookup_flag_member cx nsid mid = NONE
+Proof
+  rpt gen_tac
+  >> PairCases_on `nsid`
+  >> simp[lookup_flag_member_def, lookup_flag_mem_def]
+  >> rpt CASE_TAC >> gvs[return_def, raise_def]
 QED
 
 (* ===== FEMPTY prepend: lookup/var/valid pass through FEMPTY :: scopes ===== *)
