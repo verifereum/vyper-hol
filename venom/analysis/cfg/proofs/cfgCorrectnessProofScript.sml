@@ -443,7 +443,7 @@ QED
    Pre output: [entry,s,b,a]. a→b is non-back (succs["b"]=[]).
    INDEX_OF "a" = 3, INDEX_OF "b" = 2. Want 3 < 2? FALSE.
    Fix: this property does not hold for preorder (only postorder). *)
-Triviality ce_preorder_order_false:
+Theorem ce_preorder_order_false:
   cfg_reachable_of (cfg_analyze ce_fn3) "a" /\
   MEM "b" (cfg_succs_of (cfg_analyze ce_fn3) "a") /\
   ~cfg_path (cfg_analyze ce_fn3) "b" "a" /\
@@ -459,7 +459,6 @@ Proof
   simp[Once relationTheory.RTC_CASES1]
 QED
 
-(* preorder_order DELETED — inherently false for DFS preorder (cross edges).
-   See ce_preorder_order_false counterexample above. *)
+
 
 

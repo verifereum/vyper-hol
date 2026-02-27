@@ -200,5 +200,9 @@ Proof
   ACCEPT_TAC cfg_analyze_postorder_order_proof
 QED
 
-(* preorder_order DELETED — inherently false for DFS preorder (cross edges).
-   See ce_preorder_order_false in cfgCorrectnessProofScript.sml. *)
+(* Preorder does NOT have the analogous ordering property. Cross edges in DFS
+ * can cause a successor b to appear before its predecessor a in preorder.
+ * Counterexample: ce_fn3 (entry→{s,a}, s→{b}, b→{}, a→{b}).
+ * DFS preorder: [entry,s,b,a]. a→b is non-back, but INDEX_OF "a"=3 > INDEX_OF "b"=2. *)
+Triviality ce_preorder_order_false =
+  cfgCorrectnessProofTheory.ce_preorder_order_false

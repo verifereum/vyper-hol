@@ -16,10 +16,12 @@ Libs
    Small helpers
    ========================================================================== *)
 
+(* Cons x onto xs if x is not already a member (list-backed set insert). *)
 Definition set_insert_def:
   set_insert x xs = if MEM x xs then xs else x::xs
 End
 
+(* Look up a key in a finite map, returning [] if absent. *)
 Definition fmap_lookup_list_def:
   fmap_lookup_list m k =
     case FLOOKUP m k of
@@ -41,14 +43,17 @@ Datatype:
   |>
 End
 
+(* Successor labels of lbl in the CFG ([] if lbl is absent). *)
 Definition cfg_succs_of_def:
   cfg_succs_of cfg lbl = fmap_lookup_list cfg.cfg_succs lbl
 End
 
+(* Predecessor labels of lbl in the CFG ([] if lbl is absent). *)
 Definition cfg_preds_of_def:
   cfg_preds_of cfg lbl = fmap_lookup_list cfg.cfg_preds lbl
 End
 
+(* Whether lbl was reached during DFS from the entry block. *)
 Definition cfg_reachable_of_def:
   cfg_reachable_of cfg lbl =
     case FLOOKUP cfg.cfg_reachable lbl of
@@ -56,6 +61,9 @@ Definition cfg_reachable_of_def:
     | SOME b => b
 End
 
+(* No critical edges: every block either has at most one predecessor,
+ * or all its predecessors have at most one successor.
+ * Not currently used but may be a precondition for SSA/phi-elimination. *)
 Definition cfg_is_normalized_def:
   cfg_is_normalized cfg fn <=>
     !bb. MEM bb fn.fn_blocks ==>
@@ -69,21 +77,25 @@ End
    Successor / predecessor map construction
    ========================================================================== *)
 
+(* Initialize a label -> [] map for all block labels. *)
 Definition init_succs_def:
   init_succs bbs =
     FOLDL (λm bb. m |+ (bb.bb_label, [])) FEMPTY bbs
 End
 
+(* Initialize a label -> [] map for all block labels. *)
 Definition init_preds_def:
   init_preds bbs =
     FOLDL (λm bb. m |+ (bb.bb_label, [])) FEMPTY bbs
 End
 
+(* Map each block label to its bb_succs. *)
 Definition build_succs_def:
   build_succs bbs =
     FOLDL (λm bb. m |+ (bb.bb_label, bb_succs bb)) (init_succs bbs) bbs
 End
 
+(* For each block, add it as a predecessor of each of its successors. *)
 Definition build_preds_def:
   build_preds bbs succs =
     FOLDL
@@ -328,11 +340,14 @@ Theorem dfs_pre_walk_ind = dfs_pre_walk_ind
    Remaining definitions
    ========================================================================== *)
 
+(* Map each label to whether it appears in the visited set. *)
 Definition build_reachable_def:
   build_reachable labels visited =
     FOLDL (λm k. m |+ (k, MEM k visited)) FEMPTY labels
 End
 
+(* Run the full CFG analysis on a function: build successor/predecessor maps,
+ * run DFS from the entry block to compute pre/postorder and reachability. *)
 Definition cfg_analyze_def:
   cfg_analyze fn =
     let bbs = fn.fn_blocks in
@@ -359,6 +374,7 @@ Definition cfg_analyze_def:
        cfg_dfs_pre := pre |>
 End
 
+(* cfg_path: reachability via successor edges (defined as RTC). *)
 Definition cfg_path_def:
   cfg_path cfg = RTC (λa b. MEM b (cfg_succs_of cfg a))
 End
