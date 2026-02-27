@@ -282,6 +282,10 @@ fun mk_mono_aux inv_thm aux_def =
     )
   end;
 
+(* TODO: investigate if Definition/Termination syntax can be used here.
+   Currently Hol_defn/Defn.tprove is needed to access UNION_AUX_def
+   for the INDUCTIVE_INVARIANT monotonicity proof. *)
+
 (* ===== dfs_post_walk ===== *)
 
 val dfs_post_defn = Hol_defn "dfs_post_walk" `
