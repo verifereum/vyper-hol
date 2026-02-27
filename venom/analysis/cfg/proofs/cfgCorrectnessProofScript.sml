@@ -122,10 +122,7 @@ Proof
   simp[MEM_MAP] >> metis_tac[]
 QED
 
-(* FALSE: cfg_preds_of can list predecessors for labels not in fn_labels.
-   Counterexample: ce_fn1 has block "a"→"b", fn_labels = ["a"].
-   cfg_preds_of ... "b" = ["a"] ≠ [], but ¬MEM "b" ["a"].
-   Fix: add wf_function fn (which implies fn_succs_closed). *)
+(* Without wf_function, preds can reference labels outside fn_labels. *)
 Triviality ce_preds_domain_false:
   cfg_preds_of (cfg_analyze ce_fn1) "b" <> [] /\ ~MEM "b" (fn_labels ce_fn1)
 Proof
@@ -153,10 +150,8 @@ QED
    2) Structural correctness
    ========================================================================== *)
 
-(* FALSE: with duplicate labels, build_succs takes the last block's succs.
-   Counterexample: ce_fn2 has blocks "a"→"b", "b"→STOP, "a"→STOP.
-   The first block "a" has bb_succs = ["b"], but cfg_succs_of "a" = [].
-   Fix: add wf_function fn (which implies ALL_DISTINCT labels). *)
+(* Without wf_function (ALL_DISTINCT labels), duplicate labels cause
+   build_succs to keep only the last block's successors. *)
 Triviality ce_preserves_bb_succs_false:
   let bb = <| bb_label := "a";
      bb_instructions := [<| inst_id := 0; inst_opcode := JMP;
@@ -219,12 +214,8 @@ Proof
   simp[dfs_pre_walk_distinct]
 QED
 
-(* FALSE: the second conjunct fails. cfg_reachable_of requires
-   MEM lbl (fn_labels fn), but DFS output can contain labels not in fn_labels
-   (when a block jumps to a non-existent label).
-   Counterexample: ce_fn1 has block "a"→"b". DFS visits "b" (it's in the
-   output), but cfg_reachable_of "b" = F because "b" ∉ fn_labels.
-   Fix: add wf_function fn (implies fn_succs_closed). *)
+(* Without wf_function, DFS can visit labels outside fn_labels (via
+   jumps to non-existent blocks), breaking the set equality. *)
 Triviality ce_reachable_sets_false:
   MEM "b" (cfg_dfs_post (cfg_analyze ce_fn1)) /\
   ~cfg_reachable_of (cfg_analyze ce_fn1) "b"
@@ -341,12 +332,8 @@ QED
    4) Semantic reachability
    ========================================================================== *)
 
-(* FALSE: cfg_reachable_of requires MEM lbl (fn_labels fn), but
-   cfg_path doesn't. A block can jump to a non-existent label, making
-   cfg_path reach it but cfg_reachable_of reject it.
-   Counterexample: ce_fn1, entry = SOME (block "a"), lbl = "b".
-   cfg_path reaches "b" (a→b), but cfg_reachable_of "b" = F.
-   Fix: add wf_function fn. *)
+(* Without wf_function, cfg_path can reach labels that cfg_reachable_of
+   rejects (because build_reachable only covers fn_labels). *)
 Triviality ce_semantic_reachability_false:
   entry_block ce_fn1 = SOME (HD ce_fn1.fn_blocks) /\
   ~(cfg_reachable_of (cfg_analyze ce_fn1) "b" <=>
@@ -438,11 +425,8 @@ Proof
   ]
 QED
 
-(* FALSE: cross edges in DFS violate preorder ordering.
-   Counterexample: ce_fn3 with entry→{s,a}, s→{b}, b→{}, a→{b}.
-   Pre output: [entry,s,b,a]. a→b is non-back (succs["b"]=[]).
-   INDEX_OF "a" = 3, INDEX_OF "b" = 2. Want 3 < 2? FALSE.
-   Fix: this property does not hold for preorder (only postorder). *)
+(* Preorder does not have the analogous ordering property: cross edges
+   can cause a successor to appear before its predecessor in preorder. *)
 Theorem ce_preorder_order_false:
   cfg_reachable_of (cfg_analyze ce_fn3) "a" /\
   MEM "b" (cfg_succs_of (cfg_analyze ce_fn3) "a") /\
