@@ -3,6 +3,7 @@ Ancestors
   vyperMisc vyperAST vyperValue vyperContext vyperState vyperInterpreter
   vyperLookup vyperScopePreservation vyperStatePreservation
   vyperAssignTarget vyperEvalExprPreservesScopesDom
+  vyperImmutablesPreservation
 
 (* ========================================================================
    Preservation of immutables domain through eval_expr / eval_stmts.
