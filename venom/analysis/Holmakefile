@@ -1,2 +1,2 @@
 # Venom analysis passes
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec .. ../../syntax ../../semantics cfg fcg
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec .. ../../syntax ../../semantics cfg fcg liveness
