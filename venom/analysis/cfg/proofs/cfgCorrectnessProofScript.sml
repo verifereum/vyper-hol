@@ -138,7 +138,15 @@ Theorem cfg_analyze_preds_domain_proof:
     cfg_preds_of (cfg_analyze fn) lbl <> [] ==>
     MEM lbl (fn_labels fn)
 Proof
-  cheat
+  rpt strip_tac >>
+  fs[cfg_analyze_preds] >>
+  Cases_on `fmap_lookup_list (build_preds fn.fn_blocks (build_succs fn.fn_blocks)) lbl` >> gvs[] >>
+  `MEM h (fmap_lookup_list (build_preds fn.fn_blocks (build_succs fn.fn_blocks)) lbl)` by simp[] >>
+  fs[mem_build_preds] >>
+  gvs[wf_function_def, fn_labels_def] >>
+  `fmap_lookup_list (build_succs fn.fn_blocks) bb.bb_label = bb_succs bb` by
+    metis_tac[cfg_succs_of_build_succs] >>
+  gvs[fn_succs_closed_def, fn_labels_def] >> metis_tac[]
 QED
 
 (* ==========================================================================
@@ -165,7 +173,10 @@ Theorem cfg_analyze_preserves_bb_succs_proof:
     MEM bb fn.fn_blocks ==>
     cfg_succs_of (cfg_analyze fn) bb.bb_label = bb_succs bb
 Proof
-  cheat
+  rpt strip_tac >>
+  simp[cfg_analyze_succs] >>
+  irule cfg_succs_of_build_succs >>
+  gvs[wf_function_def, fn_labels_def]
 QED
 
 Theorem cfg_analyze_edge_symmetry_proof:
@@ -221,6 +232,35 @@ Proof
   simp[ce_fn1_def] >> cfg_eval_tac
 QED
 
+(* Local helper: characterize cfg_reachable_of under wf_function.
+   Rewrites cfg_reachable_of in terms of fn_labels and DFS visited set. *)
+Theorem cfg_reachable_of_char[local]:
+  !fn eb lbl.
+    wf_function fn /\ entry_block fn = SOME eb ==>
+    (cfg_reachable_of (cfg_analyze fn) lbl <=>
+     MEM lbl (fn_labels fn) /\
+     MEM lbl (FST (dfs_post_walk (build_succs fn.fn_blocks) [] eb.bb_label)))
+Proof
+  rpt strip_tac >>
+  qspec_then `fn` mp_tac cfg_analyze_reachable >>
+  asm_simp_tac (srw_ss()) [] >> strip_tac >>
+  simp[cfg_reachable_of_def] >>
+  Cases_on `MEM lbl (fn_labels fn)` >> simp[]
+  >- (`ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+        gvs[wf_function_def, fn_labels_def] >>
+      `MEM lbl (MAP (\bb. bb.bb_label) fn.fn_blocks)` by gvs[fn_labels_def] >>
+      drule_all flookup_build_reachable >> simp[])
+  >- (`~MEM lbl (MAP (\bb. bb.bb_label) fn.fn_blocks)` by gvs[fn_labels_def] >>
+      `lbl NOTIN FDOM (build_reachable (MAP (\bb. bb.bb_label) fn.fn_blocks)
+         (FST (dfs_post_walk (build_succs fn.fn_blocks) [] eb.bb_label)))` by
+        gvs[fdom_build_reachable] >>
+      gvs[FLOOKUP_DEF])
+QED
+
+(* String-specialized DFS soundness and visited_eq to avoid polymorphic metis *)
+val post_sound_s = INST_TYPE [alpha |-> ``:string``] dfs_post_walk_sound_thm;
+val post_vis_eq_s = CONJUNCT1 (INST_TYPE [alpha |-> ``:string``] dfs_post_walk_visited_eq);
+
 Theorem cfg_analyze_reachable_sets_proof:
   !fn.
     wf_function fn ==>
@@ -228,7 +268,47 @@ Theorem cfg_analyze_reachable_sets_proof:
     set (cfg_dfs_post (cfg_analyze fn)) =
       {lbl | cfg_reachable_of (cfg_analyze fn) lbl}
 Proof
-  cheat
+  rpt strip_tac >> fs[wf_function_def] >>
+  `fn.fn_blocks <> []` by gvs[fn_has_entry_def] >>
+  `?eb. entry_block fn = SOME eb` by
+    (Cases_on `fn.fn_blocks` >> gvs[entry_block_def]) >>
+  `MEM eb fn.fn_blocks` by
+    (Cases_on `fn.fn_blocks` >> gvs[entry_block_def]) >>
+  `wf_function fn` by gvs[wf_function_def] >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by gvs[fn_labels_def] >>
+  `!bb succ. MEM bb fn.fn_blocks /\ MEM succ (bb_succs bb) ==>
+     MEM succ (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+    gvs[fn_succs_closed_def, fn_labels_def] >>
+  `MEM eb.bb_label (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+    (simp[listTheory.MEM_MAP] >> metis_tac[]) >>
+  qspec_then `fn` mp_tac cfg_analyze_dfs_post >>
+  qspec_then `fn` mp_tac cfg_analyze_dfs_pre >>
+  asm_simp_tac (srw_ss()) [] >> rpt strip_tac
+  >- simp[dfs_walks_same_output_set]
+  >- (
+    simp[pred_setTheory.EXTENSION, IN_DEF] >> gen_tac >> EQ_TAC >> strip_tac
+    >- (
+      (* ⇒: MEM x dfs_post → cfg_reachable_of x *)
+      `MEM x (SND (dfs_post_walk (build_succs fn.fn_blocks) [] eb.bb_label))` by
+        fs[IN_DEF] >>
+      drule post_sound_s >> strip_tac >>
+      drule_all rtc_build_succs_closed >> strip_tac >>
+      `MEM x (fn_labels fn)` by simp[fn_labels_def] >>
+      `MEM x (FST (dfs_post_walk (build_succs fn.fn_blocks) [] eb.bb_label))` by (
+        mp_tac (Q.SPECL [`build_succs fn.fn_blocks`, `[]`, `eb.bb_label`]
+           post_vis_eq_s) >> simp[pred_setTheory.EXTENSION, IN_DEF]) >>
+      metis_tac[cfg_reachable_of_char])
+    >- (
+      (* ⇐: cfg_reachable_of x → MEM x dfs_post *)
+      `MEM x (fn_labels fn) /\
+       MEM x (FST (dfs_post_walk (build_succs fn.fn_blocks) [] eb.bb_label))` by
+        metis_tac[cfg_reachable_of_char] >>
+      simp[IN_DEF] >>
+      mp_tac (Q.SPECL [`build_succs fn.fn_blocks`, `[]`, `eb.bb_label`]
+         post_vis_eq_s) >>
+      simp[pred_setTheory.EXTENSION, IN_DEF] >>
+      strip_tac >> fs[IN_DEF])
+  )
 QED
 
 Theorem cfg_analyze_preorder_entry_first_proof:
@@ -283,7 +363,42 @@ Theorem cfg_analyze_semantic_reachability_proof:
     (cfg_reachable_of (cfg_analyze fn) lbl <=>
      cfg_path (cfg_analyze fn) bb.bb_label lbl)
 Proof
-  cheat
+  rpt strip_tac >>
+  `MEM bb fn.fn_blocks` by
+    (Cases_on `fn.fn_blocks` >>
+     gvs[wf_function_def, fn_has_entry_def, entry_block_def]) >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+    gvs[wf_function_def, fn_labels_def] >>
+  `!bb succ. MEM bb fn.fn_blocks /\ MEM succ (bb_succs bb) ==>
+     MEM succ (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+    gvs[wf_function_def, fn_succs_closed_def, fn_labels_def] >>
+  `MEM bb.bb_label (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+    (simp[listTheory.MEM_MAP] >> metis_tac[]) >>
+  (* Rewrite both sides to DFS / RTC characterizations *)
+  `cfg_reachable_of (cfg_analyze fn) lbl <=>
+   MEM lbl (fn_labels fn) /\
+   MEM lbl (FST (dfs_post_walk (build_succs fn.fn_blocks) [] bb.bb_label))` by
+    metis_tac[cfg_reachable_of_char] >>
+  `cfg_path (cfg_analyze fn) bb.bb_label lbl <=>
+   (λa b. MEM b (fmap_lookup_list (build_succs fn.fn_blocks) a))^* bb.bb_label lbl` by
+    simp[cfg_path_def, cfg_analyze_succs] >>
+  simp[] >> EQ_TAC >> strip_tac
+  >- (
+    (* → : vis_post -> dfs_post -> RTC (soundness) *)
+    `MEM lbl (SND (dfs_post_walk (build_succs fn.fn_blocks) [] bb.bb_label))` by (
+      `set (FST (dfs_post_walk (build_succs fn.fn_blocks) [] bb.bb_label)) =
+       set [] UNION set (SND (dfs_post_walk (build_succs fn.fn_blocks) [] bb.bb_label))` by
+        metis_tac[post_vis_eq_s] >> fs[]) >>
+    metis_tac[post_sound_s])
+  >- (
+    (* ← : RTC -> completeness + rtc_build_succs_closed *)
+    `MEM lbl (SND (dfs_post_walk (build_succs fn.fn_blocks) [] bb.bb_label))` by
+      metis_tac[dfs_post_walk_complete] >>
+    conj_tac
+    >- (simp[fn_labels_def] >> drule_all rtc_build_succs_closed >> simp[])
+    >- (`set (FST (dfs_post_walk (build_succs fn.fn_blocks) [] bb.bb_label)) =
+         set [] UNION set (SND (dfs_post_walk (build_succs fn.fn_blocks) [] bb.bb_label))` by
+          metis_tac[post_vis_eq_s] >> fs[]))
 QED
 
 (* ==========================================================================

@@ -1125,4 +1125,30 @@ QED
    Want INDEX_OF "a" < INDEX_OF "b" = 3 < 2? FALSE.
    Cross edges in DFS can violate preorder ordering. *)
 
+(* ==========================================================================
+   RTC closure: reachable nodes stay within fn_labels under succs_closed
+   ========================================================================== *)
+
+Theorem rtc_build_succs_closed:
+  !bbs start target.
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\
+    (!bb succ. MEM bb bbs /\ MEM succ (bb_succs bb) ==>
+               MEM succ (MAP (\bb. bb.bb_label) bbs)) /\
+    MEM start (MAP (\bb. bb.bb_label) bbs) /\
+    RTC (\a b. MEM b (fmap_lookup_list (build_succs bbs) a)) start target ==>
+    MEM target (MAP (\bb. bb.bb_label) bbs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!start target.
+     (\a b. MEM b (fmap_lookup_list (build_succs bbs) a))^* start target ==>
+     MEM start (MAP (\bb. bb.bb_label) bbs) ==>
+     MEM target (MAP (\bb. bb.bb_label) bbs)` suffices_by metis_tac[] >>
+  ho_match_mp_tac RTC_INDUCT >> rpt strip_tac >> gvs[] >>
+  `MEM start'' (MAP (\bb. bb.bb_label) bbs)` suffices_by simp[] >>
+  gvs[MEM_MAP] >>
+  `fmap_lookup_list (build_succs bbs) bb'.bb_label = bb_succs bb'` by
+    metis_tac[cfg_succs_of_build_succs] >>
+  gvs[] >> metis_tac[]
+QED
+
 val _ = export_theory();
