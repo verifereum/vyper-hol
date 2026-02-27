@@ -106,16 +106,39 @@ QED
 
 Theorem update_target_preserves_name_targets:
   ∀cx st av ao n.
-    valid_lookups cx st ∧ valid_target cx st av ao ⇒
+    valid_target cx st av ao ⇒
     lookup_name_target cx (update_target cx st av ao) n = lookup_name_target cx st n
 Proof
-  rw[valid_lookups_def, valid_target_def, lookup_name_target_def,
+  rw[valid_target_def, lookup_name_target_def,
      lookup_base_target_def, update_target_def] >>
   Cases_on `assign_target cx av ao st` >> Cases_on `q` >> gvs[] >>
   `MAP FDOM r.scopes = MAP FDOM st.scopes`
     by (drule (CONJUNCT1 vyperScopePreservationTheory.assign_target_preserves_scopes_dom) >> simp[]) >>
   `IS_SOME (lookup_scopes (string_to_num n) r.scopes) = IS_SOME (lookup_scopes (string_to_num n) st.scopes)`
     by metis_tac[lookup_scopes_dom_iff] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[] >-
+  (* NONE case: no immutables for this target *)
+  (`ALOOKUP r.immutables cx.txn.target = NONE`
+     by (CCONTR_TAC >> gvs[] >>
+         Cases_on `ALOOKUP r.immutables cx.txn.target` >> gvs[] >>
+         drule assign_target_preserves_immutables_addr_dom_rev >> simp[]) >>
+   simp[Once evaluate_def, bind_def, get_scopes_def, return_def, lift_sum_def, LET_THM,
+        get_immutables_def, get_address_immutables_def, lift_option_def, lift_option_type_def,
+        option_CASE_rator, sum_CASE_rator, prod_CASE_rator] >>
+   CONV_TAC (RHS_CONV (SIMP_CONV (srw_ss()) [Once evaluate_def, bind_def, get_scopes_def,
+        return_def, lift_sum_def, LET_THM, get_immutables_def, get_address_immutables_def,
+        lift_option_def, lift_option_type_def,
+        option_CASE_rator, sum_CASE_rator, prod_CASE_rator])) >>
+   Cases_on `cx.txn.is_creation` >>
+   gvs[return_def, exactly_one_option_def, bind_def, get_address_immutables_def,
+       lift_option_def, lift_option_type_def, return_def, raise_def, immutable_target_def,
+       get_module_code_def, check_def, type_check_def, ignore_bind_def, assert_def,
+       lift_sum_def] >>
+   Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
+   gvs[exactly_one_option_def, return_def, raise_def, bind_def,
+       type_check_def, assert_def, get_module_code_def]) >>
+  (* SOME case: immutables exist *)
+  rename1 `ALOOKUP st.immutables cx.txn.target = SOME imms` >>
   `IS_SOME (ALOOKUP r.immutables cx.txn.target)`
     by (drule assign_target_preserves_immutables_addr_dom >> simp[]) >>
   Cases_on `ALOOKUP r.immutables cx.txn.target` >> gvs[] >>
@@ -149,11 +172,10 @@ QED
 
 Theorem name_lookup_after_update_target_replace:
   ∀cx st n av v.
-    valid_lookups cx st ∧
     lookup_name_target cx st n = SOME av ⇒
     lookup_name cx (update_target cx st av (Replace v)) n = SOME v
 Proof
-  rw[valid_lookups_def, lookup_name_target_def, lookup_base_target_def] >>
+  rw[lookup_name_target_def, lookup_base_target_def] >>
   Cases_on `eval_base_target cx (NameTarget n) st` >> Cases_on `q` >> gvs[] >>
   PairCases_on `x` >> gvs[] >>
   qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
@@ -166,17 +188,11 @@ Proof
       immutable_target_def,
       option_CASE_rator, sum_CASE_rator, prod_CASE_rator,
       get_module_code_def, check_def, type_check_def, ignore_bind_def, assert_def, AllCaseEqs()] >>
-  Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
-  Cases_on `FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num n)` >>
-  gvs[exactly_one_option_def, return_def, raise_def] >>
   strip_tac >> gvs[] >>
   TRY (* ScopedVar cases *)
   (`var_in_scope r n` by simp[var_in_scope_def, lookup_scoped_var_def] >>
    simp[update_target_scoped_var_replace] >>
-   `valid_lookups cx r` by (simp[valid_lookups_def] >> qexists_tac `imms` >> simp[]) >>
    `lookup_scoped_var (update_scoped_var r n v) n = SOME v` by simp[lookup_after_update] >>
-   `valid_lookups cx (update_scoped_var r n v)`
-     by metis_tac[valid_lookups_preserved_after_update_var_in_scope] >>
    drule lookup_scoped_var_implies_lookup_name >> simp[] >> NO_TAC) >>
   (* ImmutableVar case *)
   gvs[exactly_one_option_def] >>
@@ -193,7 +209,6 @@ QED
 
 Theorem name_lookup_after_update_target_update:
   ∀cx st n bop av v1 v2 v.
-    valid_lookups cx st ∧
     lookup_name cx st n = SOME v1 ∧
     lookup_name_target cx st n = SOME av ∧
     evaluate_binop bop v1 v2 = INL v ⇒
@@ -213,35 +228,7 @@ Proof
    (INL NONE, update_scoped_var st n v)` by (drule assign_target_scoped_var_update >> simp[]) >>
   simp[] >>
   `lookup_scoped_var (update_scoped_var st n v) n = SOME v` by simp[lookup_after_update] >>
-  `valid_lookups cx (update_scoped_var st n v)`
-    by metis_tac[valid_lookups_preserved_after_update_var_in_scope] >>
   drule lookup_scoped_var_implies_lookup_name >> simp[]
-QED
-
-Theorem update_target_valid_lookups:
-  ∀cx st av ao.
-    valid_target cx st av ao ⇒
-    (valid_lookups cx (update_target cx st av ao) ⇔ valid_lookups cx st)
-Proof
-  rw[valid_lookups_def, valid_target_def, update_target_def, EQ_IMP_THM] >>
-  Cases_on `assign_target cx av ao st` >> Cases_on `q` >> gvs[] >>
-  `MAP FDOM r.scopes = MAP FDOM st.scopes`
-    by (drule (CONJUNCT1 vyperScopePreservationTheory.assign_target_preserves_scopes_dom) >> simp[]) >>
-  (* Both directions use similar structure *)
-  TRY (drule assign_target_preserves_immutables_addr_dom_rev >> simp[] >> strip_tac >>
-       Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[] >>
-       rpt strip_tac >>
-       `var_in_scope r n` by (gvs[var_in_scope_def, lookup_scoped_var_def] >> metis_tac[lookup_scopes_dom_iff]) >>
-       `FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num n) = NONE` by metis_tac[] >>
-       drule assign_target_preserves_immutables_dom >> simp[] >> strip_tac >>
-       first_x_assum (qspec_then `string_to_num n` mp_tac) >> gvs[] >> NO_TAC) >>
-  drule assign_target_preserves_immutables_addr_dom >> simp[] >> strip_tac >>
-  Cases_on `ALOOKUP r.immutables cx.txn.target` >> gvs[] >>
-  rpt strip_tac >>
-  `var_in_scope st n` by (gvs[var_in_scope_def, lookup_scoped_var_def] >> metis_tac[lookup_scopes_dom_iff]) >>
-  `FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num n) = NONE` by metis_tac[] >>
-  drule assign_target_preserves_immutables_dom >> simp[] >> strip_tac >>
-  first_x_assum (qspec_then `string_to_num n` mp_tac) >> gvs[]
 QED
 
 Theorem update_target_var_in_scope:

@@ -39,12 +39,6 @@ Definition update_scoped_var_def:
         | h :: t => st with scopes := (h |+ (n, v)) :: t
 End
 
-Definition valid_lookups_def:
-  valid_lookups cx st ⇔
-    ∃imms. ALOOKUP st.immutables cx.txn.target = SOME imms ∧
-           ∀n. var_in_scope st n ⇒ FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num n) = NONE
-End
-
 Definition lookup_name_def:
   lookup_name cx st n =
     case eval_expr cx (Name n) st of
@@ -476,56 +470,6 @@ Proof
   simp[lookup_name_eq_lookup_scoped_var, lookup_scoped_var_preserved_after_update]
 QED
 
-Theorem valid_lookups_preserved_after_update_no_name[local]:
-  ∀cx st n v.
-    valid_lookups cx st ∧ ¬var_in_scope st n ∧ lookup_immutable cx st n = NONE ⇒
-    valid_lookups cx (update_scoped_var st n v)
-Proof
-  rw[valid_lookups_def] >>
-  qexists_tac `imms` >>
-  simp[immutables_preserved_after_update] >>
-  rpt strip_tac >>
-  Cases_on `string_to_num n' = string_to_num n` >-
-   (`n = n'` by metis_tac[vyperMiscTheory.string_to_num_inj] >> gvs[] >>
-    gvs[lookup_immutable_def]) >>
-  `n ≠ n'` by metis_tac[vyperMiscTheory.string_to_num_inj] >>
-  `lookup_scoped_var (update_scoped_var st n v) n' = lookup_scoped_var st n'`
-    by simp[lookup_scoped_var_preserved_after_update] >>
-  `var_in_scope st n'` by gvs[var_in_scope_def, lookup_scoped_var_def] >>
-  first_x_assum irule >> simp[]
-QED
-
-Theorem valid_lookups_preserved_after_update_var_in_scope:
-  ∀cx st n v.
-    valid_lookups cx st ∧ var_in_scope st n ⇒
-    valid_lookups cx (update_scoped_var st n v)
-Proof
-  rw[valid_lookups_def] >>
-  qexists_tac `imms` >>
-  simp[immutables_preserved_after_update] >>
-  rpt strip_tac >>
-  (* The key: var_in_scope after update implies var_in_scope before *)
-  `var_in_scope st n'` by (
-    gvs[var_in_scope_def, lookup_scoped_var_def] >>
-    Cases_on `string_to_num n' = string_to_num n` >-
-     (gvs[lookup_after_update, lookup_scoped_var_def]) >>
-    `lookup_scoped_var (update_scoped_var st n v) n' = lookup_scoped_var st n'`
-      by (irule lookup_scoped_var_preserved_after_update >>
-          metis_tac[vyperMiscTheory.string_to_num_inj]) >>
-    gvs[lookup_scoped_var_def]) >>
-  first_x_assum irule >> simp[]
-QED
-
-Theorem valid_lookups_preserved_after_update_no_immutable:
-  ∀cx st n v.
-    valid_lookups cx st ∧ lookup_immutable cx st n = NONE ⇒
-    valid_lookups cx (update_scoped_var st n v)
-Proof
-  rpt strip_tac >>
-  Cases_on `var_in_scope st n` >-
-   metis_tac[valid_lookups_preserved_after_update_var_in_scope] >>
-  irule valid_lookups_preserved_after_update_no_name >> simp[]
-QED
 
 Theorem scopes_nonempty_after_update:
   ∀st n v. (update_scoped_var st n v).scopes ≠ []
@@ -600,29 +544,6 @@ Theorem var_in_tl_scopes:
     (var_in_scope (tl_scopes st) n ⇔ var_in_scope st n)
 Proof
   simp[var_in_scope_def, lookup_in_tl_scopes]
-QED
-
-Theorem valid_lookups_tl_scopes:
-  ∀cx st. valid_lookups cx st ⇒ valid_lookups cx (tl_scopes st)
-Proof
-  rw[valid_lookups_def, tl_scopes_def] >>
-  qexists_tac `imms` >> simp[] >>
-  rpt strip_tac >> first_x_assum irule >>
-  gvs[var_in_scope_def, lookup_scoped_var_def] >>
-  Cases_on `st.scopes` >> gvs[lookup_scopes_def] >>
-  Cases_on `FLOOKUP h (string_to_num n)` >> gvs[]
-QED
-
-Theorem valid_lookups_tl_scopes_rev:
-  ∀cx st.
-    HD st.scopes = FEMPTY ∧
-    valid_lookups cx (tl_scopes st) ⇒
-    valid_lookups cx st
-Proof
-  rw[valid_lookups_def, tl_scopes_def] >>
-  qexists_tac `imms` >> simp[] >> rpt strip_tac >> first_x_assum irule >>
-  gvs[var_in_scope_def, lookup_scoped_var_def] >>
-  Cases_on `st.scopes` >> gvs[lookup_scopes_def, finite_mapTheory.FLOOKUP_EMPTY]
 QED
 
 (* Helper for if-statement: lookup_name is preserved when entering a new scope *)
@@ -700,29 +621,6 @@ Proof
   gvs[tl_scopes_def, scopes_nonempty_after_update]
 QED
 
-Theorem valid_lookups_preserved_after_update_in_tl_scopes:
-  ∀cx st n v.
-    lookup_in_current_scope st n = NONE ∧
-    var_in_scope (tl_scopes st) n ∧
-    valid_lookups cx (tl_scopes st) ⇒
-    valid_lookups cx (tl_scopes (update_scoped_var st n v))
-Proof
-  rpt strip_tac >> gvs[valid_lookups_def, tl_scopes_def] >>
-  qexists_tac `imms` >> simp[immutables_preserved_after_update] >>
-  rpt strip_tac >> first_x_assum irule >>
-  gvs[var_in_scope_def, lookup_scoped_var_def] >>
-  `(tl_scopes (update_scoped_var st n v)).scopes =
-   (update_scoped_var (tl_scopes st) n v).scopes`
-    by (irule update_scoped_var_in_tl_scopes >>
-        gvs[var_in_scope_def, lookup_scoped_var_def, tl_scopes_def]) >>
-  gvs[tl_scopes_def] >>
-  Cases_on `n' = n` >> gvs[] >>
-  `lookup_scoped_var (update_scoped_var (st with scopes := TL st.scopes) n v) n' =
-   lookup_scoped_var (st with scopes := TL st.scopes) n'`
-    by simp[lookup_scoped_var_preserved_after_update] >>
-  gvs[lookup_scoped_var_def]
-QED
-
 Theorem hd_scopes_preserved_after_update_in_tl_scopes:
   ∀st n v.
     st.scopes ≠ [] ∧
@@ -787,49 +685,19 @@ Proof
   rw[lookup_immutable_def, immutables_preserved_after_update]
 QED
 
-Theorem valid_lookups_push_non_immutable:
-  ∀cx st id v.
-    valid_lookups cx (tl_scopes st) ∧
-    HD st.scopes = FEMPTY |+ (string_to_num id, v) ∧
-    lookup_immutable cx st id = NONE ⇒
-    (cx.txn.is_creation ⇒ valid_lookups cx st)
-Proof
-  rw[valid_lookups_def, tl_scopes_def, lookup_immutable_def,
-     var_in_scope_def, lookup_scoped_var_def] >>
-  qexists_tac `imms` >> simp[] >> rpt strip_tac >>
-  Cases_on `st.scopes` >> gvs[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  Cases_on `string_to_num id = string_to_num n` >> gvs[]
-QED
-
-Theorem valid_lookups_push_singleton:
-  ∀cx st id v.
-    valid_lookups cx (tl_scopes st) ∧
-    HD st.scopes = FEMPTY |+ (string_to_num id, v) ∧
-    lookup_immutable cx st id = NONE ⇒
-    valid_lookups cx st
-Proof
-  rw[valid_lookups_def, tl_scopes_def, lookup_immutable_def,
-     var_in_scope_def, lookup_scoped_var_def] >>
-  qexists_tac `imms` >> simp[] >> rpt strip_tac >>
-  Cases_on `st.scopes` >> gvs[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  Cases_on `string_to_num id = string_to_num n` >> gvs[]
-QED
-
 (* ===== update_scoped_var frame: other variables preserved ===== *)
 
 Theorem update_scoped_var_frame:
-  ∀cx st n1 n2 v w.
-    n1 ≠ n2 ∧ var_in_scope st n1 ∧ valid_lookups cx st ∧
+  ∀st n1 n2 v w.
+    n1 ≠ n2 ∧
     lookup_scoped_var st n2 = SOME w ⇒
     lookup_scoped_var (update_scoped_var st n1 v) n2 = SOME w ∧
-    valid_lookups cx (update_scoped_var st n1 v) ∧
     (update_scoped_var st n1 v).scopes ≠ [] ∧
     var_in_scope (update_scoped_var st n1 v) n2
 Proof
   rpt strip_tac >>
   gvs[lookup_scoped_var_preserved_after_update, scopes_nonempty_after_update] >>
-  metis_tac[valid_lookups_preserved_after_update_var_in_scope,
-            var_in_scope_preserved_after_update,
+  metis_tac[var_in_scope_preserved_after_update,
             var_in_scope_def, optionTheory.IS_SOME_DEF]
 QED
 
@@ -849,15 +717,6 @@ Theorem var_in_scope_fempty_prepend:
     var_in_scope st n
 Proof
   simp[var_in_scope_def, lookup_scoped_var_fempty_prepend]
-QED
-
-Theorem valid_lookups_fempty_prepend:
-  ∀cx st.
-    valid_lookups cx (st with scopes := FEMPTY :: st.scopes) ⇔
-    valid_lookups cx st
-Proof
-  rpt gen_tac >> EQ_TAC >>
-  simp[valid_lookups_def, var_in_scope_fempty_prepend]
 QED
 
 Theorem fcs_fempty[local]:
