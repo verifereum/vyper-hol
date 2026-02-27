@@ -18,7 +18,12 @@ Ancestors
 Definition eval_pure_expr_def:
   (* Base cases *)
   eval_pure_expr cx st (Name id) =
-    OPTION_MAP Value (lookup_name cx st id) ∧
+    OPTION_MAP Value (lookup_name st id) ∧
+
+  eval_pure_expr cx st (BareGlobalName id) =
+    (case eval_expr cx (BareGlobalName id) st of
+     | (INL tv, _) => SOME tv
+     | _ => NONE) ∧
 
   eval_pure_expr cx st (TopLevelName nsid) =
     (case eval_expr cx (TopLevelName nsid) st of
@@ -160,7 +165,12 @@ Proof
   rpt conj_tac >> rpt gen_tac >> strip_tac
   (* Name *)
   >- (fs[Once eval_pure_expr_def] >>
-      Cases_on `lookup_name cx st id` >> fs[lookup_name_def] >>
+      Cases_on `lookup_name st id` >> fs[lookup_name_def] >>
+      gvs[AllCaseEqs()] >>
+      drule_at Any eval_expr_preserves_state >> simp[pure_expr_def])
+  (* BareGlobalName *)
+  >- (fs[Once eval_pure_expr_def] >>
+      Cases_on `eval_expr cx (BareGlobalName id) st` >>
       gvs[AllCaseEqs()] >>
       drule_at Any eval_expr_preserves_state >> simp[pure_expr_def])
   (* TopLevelName *)
@@ -283,6 +293,11 @@ Proof
       simp monadic_defs >>
       strip_tac >> gvs[AllCaseEqs()] >>
       simp monadic_defs >> gvs[AllCaseEqs()])
+  (* BareGlobalName *)
+  >- (rpt gen_tac >> strip_tac >>
+      simp[Once eval_pure_expr_def] >>
+      Cases_on `eval_expr cx (BareGlobalName id) st` >>
+      gvs[AllCaseEqs()])
   (* TopLevelName *)
   >- (rpt gen_tac >> strip_tac >>
       simp[Once eval_pure_expr_def] >>

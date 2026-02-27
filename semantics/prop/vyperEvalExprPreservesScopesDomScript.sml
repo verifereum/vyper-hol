@@ -71,19 +71,29 @@ Theorem case_NameTarget_dom[local]:
     eval_base_target cx (NameTarget nm) st = (res, st') ⇒
     MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+       check_def, type_check_def, assert_def, ignore_bind_def, raise_def] >>
   rpt strip_tac >>
-  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
-       get_scopes_def, lift_sum_def] >>
-  IF_CASES_TAC >> gvs[return_def, bind_def] >>
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac get_immutables_scopes >> gvs[] >>
-  Cases_on `get_immutables cx (current_module cx) st` >> Cases_on `q` >> gvs[] >>
-  imp_res_tac get_immutables_scopes >> gvs[] >>
-  gvs[option_CASE_rator, sum_CASE_rator, prod_CASE_rator,
-      bind_def, return_def, raise_def, check_def, type_check_def, ignore_bind_def,
-      assert_def, get_module_code_def, lift_option_def, lift_option_type_def,
-      AllCaseEqs(), exactly_one_option_def, lift_sum_def]
+  Cases_on `IS_SOME (lookup_scopes (string_to_num nm) st.scopes)` >> gvs[return_def, raise_def]
+QED
+
+(* Goal 1b: BareGlobalNameTarget (no IH) *)
+Theorem case_BareGlobalNameTarget_dom[local]:
+  ∀cx nm st res st'.
+    eval_base_target cx (BareGlobalNameTarget nm) st = (res, st') ⇒
+    MAP FDOM st.scopes = MAP FDOM st'.scopes
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `_ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def] >>
+  Cases_on `get_immutables cx (current_module cx) st` >>
+  Cases_on `q` >> simp[return_def, raise_def] >>
+  imp_res_tac get_immutables_state >> gvs[] >>
+  simp[lift_option_type_def, check_def, type_check_def, assert_def,
+       ignore_bind_def, return_def, raise_def] >>
+  strip_tac >>
+  Cases_on `get_module_code cx (current_module cx)` >>
+  gvs[return_def, raise_def, bind_def, assert_def, ignore_bind_def, AllCaseEqs()]
 QED
 
 (* Goal 2: TopLevelNameTarget (no IH) *)
@@ -141,9 +151,27 @@ Theorem case_Name_dom[local]:
     eval_expr cx (Name id) st = (res,st') ⇒
     MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
-  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs()] >>
-  imp_res_tac get_scopes_id >> imp_res_tac get_immutables_scopes >>
-  imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_runtime_scopes >> imp_res_tac return_scopes >> gvs[]
+  simp[evaluate_def, bind_def, get_scopes_def, return_def,
+       lift_option_def, lift_option_type_def] >>
+  rpt strip_tac >>
+  Cases_on `lookup_scopes (string_to_num id) st.scopes` >> gvs[return_def, raise_def]
+QED
+
+(* Goal 5b: BareGlobalName (no IH) *)
+Theorem case_BareGlobalName_dom[local]:
+  ∀cx id st res st'.
+    eval_expr cx (BareGlobalName id) st = (res,st') ⇒
+    MAP FDOM st.scopes = MAP FDOM st'.scopes
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `_ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def] >>
+  Cases_on `get_immutables cx (current_module cx) st` >>
+  Cases_on `q` >> simp[return_def, raise_def] >>
+  simp[lift_option_def, lift_option_type_def, return_def, raise_def] >>
+  Cases_on `FLOOKUP x (string_to_num id)` >> simp[return_def, raise_def] >>
+  strip_tac >> gvs[] >>
+  imp_res_tac get_immutables_scopes >> gvs[]
 QED
 
 (* Goal 6: TopLevelName (no IH) *)
@@ -397,10 +425,12 @@ Proof
     rpt conj_tac >>
     TRY (simp[] >> NO_TAC) >-
     ACCEPT_TAC case_NameTarget_dom >-
+    ACCEPT_TAC case_BareGlobalNameTarget_dom >-
     ACCEPT_TAC case_TopLevelNameTarget_dom >-
     ACCEPT_TAC case_AttributeTarget_dom >-
     ACCEPT_TAC case_SubscriptTarget_dom >-
     ACCEPT_TAC case_Name_dom >-
+    ACCEPT_TAC case_BareGlobalName_dom >-
     ACCEPT_TAC case_TopLevelName_dom >-
     ACCEPT_TAC case_FlagMember_dom >-
     ACCEPT_TAC case_IfExp_dom >-

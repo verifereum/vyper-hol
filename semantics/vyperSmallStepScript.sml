@@ -119,24 +119,19 @@ Definition eval_base_target_cps_def:
     (let r = do
         sc <- get_scopes;
         n <<- string_to_num id;
-        svo <<- if IS_SOME (lookup_scopes n sc)
-                then SOME $ ScopedVar id
-                else NONE;
-        ivo <- if cx.txn.is_creation
-               then do imms <- get_immutables cx (current_module cx);
-                       case immutable_target imms id n of
-                       | NONE => return NONE
-                       | SOME tgt => do
-                           ts <- lift_option_type
-                                   (get_module_code cx (current_module cx))
-                                   "NameTarget get_module_code";
-                           type_check (is_immutable_decl n ts) "assign to constant";
-                           return (SOME tgt)
-                         od
-                    od
-               else return NONE;
-        v <- lift_sum $ exactly_one_option svo ivo;
-        return $ (v, []) od st in
+        type_check (IS_SOME (lookup_scopes n sc)) "NameTarget not in scope";
+        return $ (ScopedVar id, []) od st in
+     liftk cx ApplyBaseTarget r k) ∧
+  eval_base_target_cps cx (BareGlobalNameTarget id) st k =
+    (let r = do
+        imms <- get_immutables cx (current_module cx);
+        n <<- string_to_num id;
+        ts <- lift_option_type
+                (get_module_code cx (current_module cx))
+                "BareGlobalNameTarget get_module_code";
+        type_check (is_immutable_decl n ts) "assign to constant";
+        type_check (IS_SOME (FLOOKUP imms n)) "BareGlobalNameTarget not found";
+        return $ (ImmutableVar id, []) od st in
      liftk cx ApplyBaseTarget r k) ∧
   eval_base_target_cps cx (TopLevelNameTarget (src_id_opt, id)) st k =
     AK cx (ApplyBaseTarget (TopLevelVar src_id_opt id, [])) st k ∧
@@ -157,10 +152,14 @@ Definition eval_expr_cps_def:
   eval_expr_cps cx1 (Name id) st k =
     liftk cx1 ApplyTv
       (do env <- get_scopes;
-          imms <- get_immutables cx1 (current_module cx1);
           n <<- string_to_num id;
-          v <- lift_sum $ exactly_one_option
-                 (lookup_scopes n env) (FLOOKUP imms n);
+          v <- lift_option_type (lookup_scopes n env) "Name not in scope";
+          return $ Value v od st) k ∧
+  eval_expr_cps cx1 (BareGlobalName id) st k =
+    liftk cx1 ApplyTv
+      (do imms <- get_immutables cx1 (current_module cx1);
+          n <<- string_to_num id;
+          v <- lift_option_type (FLOOKUP imms n) "BareGlobalName not found";
           return $ Value v od st) k ∧
   eval_expr_cps cx2 (TopLevelName (src_id_opt, id)) st k =
     liftk cx2 ApplyTv (lookup_global cx2 src_id_opt (string_to_num id) st) k ∧
@@ -1038,6 +1037,7 @@ Proof
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_targets_def] )
   \\ conj_tac >- rw[eval_base_target_cps_def, evaluate_def, liftk1] (* eval_base_target (NameTarget id) *)
+  \\ conj_tac >- rw[eval_base_target_cps_def, evaluate_def, liftk1] (* eval_base_target (BareGlobalNameTarget id) *)
   \\ conj_tac >- rw[eval_base_target_cps_def, evaluate_def, return_def] (* eval_base_target (TopLevelNameTarget ...) *)
   \\ conj_tac >- ( (* eval_base_target (AttributeTarget t id) *)
     rw[eval_base_target_cps_def, evaluate_def, bind_def, UNCURRY, return_def]
@@ -1099,6 +1099,7 @@ Proof
     \\ last_x_assum drule \\ rw[]
     \\ last_x_assum drule \\ rw[])
   \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, liftk1] (* eval_expr (Name id) *)
+  \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, liftk1] (* eval_expr (BareGlobalName id) *)
   \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, liftk1] (* eval_expr (TopLevelName ...) *)
   \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, liftk1] (* eval_expr (FlagMember ...) *)
   \\ conj_tac >- ( (* eval_expr (IfExp e1 e2 e3) *)
@@ -1383,7 +1384,7 @@ val constants_env_pre_def = constants_env_def
   |> cv_auto_trans_pre "constants_env_pre";
 
 Theorem constants_env_pre[cv_pre]:
-  ∀w x y z. constants_env_pre w x y z
+  ∀v0 v1 v2 v3 v acc. constants_env_pre v0 v1 v2 v3 v acc
 Proof
   ho_match_mp_tac constants_env_ind
   \\ rw[]

@@ -51,6 +51,7 @@ Failures to catch:
 
 - Modern syntax: `Theory` / `Ancestors`, no `open` / `export_theory()`.
 - Separate statement file (API) from proof file (implementation). Statements use `ACCEPT_TAC proof_thm`. Shared definitions in a common ancestor to avoid circular deps.
+- Every exporting API theory must be listed as an ancestor in `vyperHolScript.sml` so it is included in the top-level build.
 
 ## Termination
 

@@ -7,6 +7,13 @@ Ancestors
   (* semantics properties *)
   vyperEvalPreservesNameTarget
   (* compiler passes *)
+  (* TODO: Make these tree-like instead of flat. Each API-defining directory
+  * should have its own roll-up theory (e.g. venomAnalysisHol bundles
+  * cfg/fcg/liveness etc, venomHol bundles venomAnalysisHol + passes, then
+  * this file just lists top-level roll-ups). *)
   phiFunction
   rtaPassCorrectness
-  cfgAnalysisCorrectness
+  dfIterateProps
+  cfgAnalysis
+  fcgAnalysis
+  livenessAnalysis

@@ -1,4 +1,9 @@
 # Root Holmakefile - builds all theories including test infrastructure
+# TODO: venom/analysis and venom/passes both back-reference venom/ for shared
+# defs (venomInst, venomState, etc.), preventing venom/ from including them.
+# Refactor shared defs into venom/shared/ so venom/{analysis,passes} can
+# include venom/shared/ without cycles, and root only needs top-level dirs.
 INCLUDES = $(HOLDIR)/examples/Crypto/Keccak $(VFMDIR)/util $(VFMDIR)/spec \
            syntax frontend semantics semantics/prop tests \
-           venom venom/analysis venom/passes/phi_elimination venom/passes/revert_to_assert
+           venom venom/analysis \
+           venom/passes/phi_elimination venom/passes/revert_to_assert

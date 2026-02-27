@@ -157,6 +157,44 @@ Datatype:
 End
 
 (* --------------------------------------------------------------------------
+   Operand helpers
+   -------------------------------------------------------------------------- *)
+
+(* Extract variable name from an operand, if it is a Var. *)
+Definition operand_var_def:
+  operand_var (Var v) = SOME v ∧
+  operand_var _ = NONE
+End
+
+(* All variable names referenced by a list of operands. *)
+Definition operand_vars_def:
+  operand_vars [] = [] ∧
+  operand_vars (op::ops) =
+    case operand_var op of
+      NONE => operand_vars ops
+    | SOME v => v :: operand_vars ops
+End
+
+(* Variables used (read) by an instruction. *)
+Definition inst_uses_def:
+  inst_uses inst = operand_vars inst.inst_operands
+End
+
+(* Variables defined (written) by an instruction. *)
+Definition inst_defs_def:
+  inst_defs inst = inst.inst_outputs
+End
+
+(* Extract (label, var) pairs from PHI operands.
+   PHI format: Label l1, Var v1, Label l2, Var v2, ... *)
+Definition phi_pairs_def:
+  phi_pairs [] = [] ∧
+  phi_pairs [_] = [] ∧
+  phi_pairs (Label l :: Var v :: rest) = (l, v) :: phi_pairs rest ∧
+  phi_pairs (_ :: _ :: rest) = phi_pairs rest
+End
+
+(* --------------------------------------------------------------------------
    Instruction Classification
    -------------------------------------------------------------------------- *)
 
@@ -248,4 +286,85 @@ Definition fn_succs_closed_def:
     !bb succ.
       MEM bb fn.fn_blocks /\ MEM succ (bb_succs bb) ==>
       MEM succ (fn_labels fn)
+End
+
+(* Structural well-formedness for IR functions:
+ * unique labels, has entry, blocks well-formed, successor labels exist. *)
+Definition wf_function_def:
+  wf_function fn <=>
+    ALL_DISTINCT (fn_labels fn) /\
+    fn_has_entry fn /\
+    (!bb. MEM bb fn.fn_blocks ==> bb_well_formed bb) /\
+    fn_succs_closed fn
+End
+
+(* All instructions across all blocks, in block order. *)
+Definition fn_insts_blocks_def:
+  fn_insts_blocks [] = [] /\
+  fn_insts_blocks (bb::bbs) =
+    bb.bb_instructions ++ fn_insts_blocks bbs
+End
+
+Definition fn_insts_def:
+  fn_insts fn = fn_insts_blocks fn.fn_blocks
+End
+
+(* lookup_function succeeds => the name appears in the function list. *)
+Theorem lookup_function_mem:
+  lookup_function name fns = SOME func ==>
+  MEM name (MAP (\f. f.fn_name) fns)
+Proof
+  Induct_on `fns` >> simp[lookup_function_def] >>
+  rpt strip_tac >> rw[] >> gvs[] >>
+  Cases_on `h.fn_name = name` >> gvs[]
+QED
+
+(* lookup_function fails => the name is not in the function list. *)
+Theorem lookup_function_not_mem:
+  lookup_function name fns = NONE ==>
+  ~MEM name (MAP (\f. f.fn_name) fns)
+Proof
+  Induct_on `fns` >> simp[lookup_function_def] >>
+  rpt strip_tac >>
+  Cases_on `h.fn_name = name` >> gvs[]
+QED
+
+(* ==========================================================================
+   Context well-formedness
+   ========================================================================== *)
+
+(* The function names in a context. *)
+Definition ctx_fn_names_def:
+  ctx_fn_names ctx = MAP (\f. f.fn_name) ctx.ctx_functions
+End
+
+(* Function names in the context are distinct. *)
+Definition ctx_distinct_fn_names_def:
+  ctx_distinct_fn_names ctx <=> ALL_DISTINCT (ctx_fn_names ctx)
+End
+
+(* The context has an entry function that names a real function. *)
+Definition ctx_has_entry_def:
+  ctx_has_entry ctx <=>
+    ?entry_name. ctx.ctx_entry = SOME entry_name /\
+       MEM entry_name (ctx_fn_names ctx)
+End
+
+(* Well-formed context. *)
+Definition ctx_wf_def:
+  ctx_wf ctx <=> ctx_distinct_fn_names ctx /\ ctx_has_entry ctx
+End
+
+(* Every INVOKE instruction's first operand is a Label naming a
+ * function in the context.
+ * TODO: candidate for inclusion in ctx_wf once we have a
+ * ctx_wf => fn_wf => bb_wf => inst_wf hierarchy. *)
+Definition wf_invoke_targets_def:
+  wf_invoke_targets ctx <=>
+    (!func inst.
+       MEM func ctx.ctx_functions /\
+       MEM inst (fn_insts func) /\
+       inst.inst_opcode = INVOKE ==>
+       ?lbl rest. inst.inst_operands = Label lbl :: rest /\
+                  MEM lbl (ctx_fn_names ctx))
 End
