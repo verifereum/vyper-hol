@@ -24,7 +24,7 @@ Theorem lookup_name_target_facts[local]:
 Proof
   rpt strip_tac >>
   gvs[lookup_name_target_def, lookup_base_target_def,
-      var_in_scope_def, lookup_scoped_var_def] >>
+      var_in_scope_def, lookup_name_def] >>
   qpat_x_assum `_ = SOME _` mp_tac >>
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
        check_def, type_check_def, assert_def, ignore_bind_def, raise_def] >>
@@ -41,7 +41,7 @@ Theorem reconstruct_scoped_lookup[local]:
 Proof
   rpt strip_tac >>
   gvs[lookup_name_target_def, lookup_base_target_def,
-      var_in_scope_def, lookup_scoped_var_def] >>
+      var_in_scope_def, lookup_name_def] >>
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
        check_def, type_check_def, assert_def, ignore_bind_def]
 QED
