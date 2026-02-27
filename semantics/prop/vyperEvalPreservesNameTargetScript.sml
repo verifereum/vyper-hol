@@ -30,7 +30,7 @@ Theorem lookup_name_target_facts[local]:
 Proof
   rpt strip_tac >>
   gvs[lookup_name_target_def, lookup_base_target_def,
-      var_in_scope_def, lookup_scoped_var_def] >>
+      var_in_scope_def, lookup_name_def] >>
   qpat_x_assum `_ = SOME _` mp_tac >>
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def] >>
   Cases_on `cx.txn.is_creation` >>
@@ -59,7 +59,7 @@ Theorem reconstruct_scoped_lookup[local]:
 Proof
   rpt strip_tac >>
   gvs[lookup_name_target_def, lookup_base_target_def,
-      var_in_scope_def, lookup_scoped_var_def] >-
+      var_in_scope_def, lookup_name_def] >-
   (simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
         lift_sum_def, exactly_one_option_def, return_def]) >>
   Cases_on `cx.txn.is_creation` >-
@@ -85,7 +85,7 @@ Theorem reconstruct_immutable_lookup[local]:
 Proof
   rpt strip_tac >>
   gvs[lookup_name_target_def, lookup_base_target_def,
-      var_in_scope_def, lookup_scoped_var_def] >>
+      var_in_scope_def, lookup_name_def] >>
   Cases_on `FLOOKUP (get_source_immutables (current_module cx) imms') (string_to_num n)` >>
   gvs[] >>
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
