@@ -166,8 +166,11 @@ Proof
   (* Name *)
   >- (fs[Once eval_pure_expr_def] >>
       Cases_on `lookup_name st id` >> fs[lookup_name_def] >>
-      gvs[AllCaseEqs()] >>
-      drule_at Any eval_expr_preserves_state >> simp[pure_expr_def])
+      gvs[] >>
+      simp[Once vyperInterpreterTheory.evaluate_def,
+           vyperStateTheory.get_scopes_def, vyperStateTheory.return_def,
+           vyperStateTheory.bind_def, vyperStateTheory.lift_option_type_def,
+           vyperStateTheory.lift_option_def])
   (* BareGlobalName *)
   >- (fs[Once eval_pure_expr_def] >>
       Cases_on `eval_expr cx (BareGlobalName id) st` >>
@@ -287,12 +290,14 @@ Proof
   (* Name *)
   >- (rpt gen_tac >> strip_tac >>
       simp[Once eval_pure_expr_def, lookup_name_def] >>
-      gvs[AllCaseEqs()] >>
       qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
       simp[Once vyperInterpreterTheory.evaluate_def] >>
       simp monadic_defs >>
+      simp[vyperStateTheory.get_scopes_def, vyperStateTheory.lift_option_type_def,
+           vyperStateTheory.lift_option_def] >>
       strip_tac >> gvs[AllCaseEqs()] >>
-      simp monadic_defs >> gvs[AllCaseEqs()])
+      Cases_on `lookup_scopes (string_to_num id) st.scopes` >>
+      gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def])
   (* BareGlobalName *)
   >- (rpt gen_tac >> strip_tac >>
       simp[Once eval_pure_expr_def] >>
