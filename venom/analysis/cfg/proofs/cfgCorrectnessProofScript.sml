@@ -134,10 +134,11 @@ QED
 
 Theorem cfg_analyze_preds_domain_proof:
   !fn lbl.
+    wf_function fn /\
     cfg_preds_of (cfg_analyze fn) lbl <> [] ==>
     MEM lbl (fn_labels fn)
 Proof
-  cheat (* FALSE — see ce_preds_domain_false *)
+  cheat
 QED
 
 (* ==========================================================================
@@ -160,10 +161,11 @@ QED
 
 Theorem cfg_analyze_preserves_bb_succs_proof:
   !fn bb.
+    wf_function fn /\
     MEM bb fn.fn_blocks ==>
     cfg_succs_of (cfg_analyze fn) bb.bb_label = bb_succs bb
 Proof
-  cheat (* FALSE — see ce_preserves_bb_succs_false *)
+  cheat
 QED
 
 Theorem cfg_analyze_edge_symmetry_proof:
@@ -221,11 +223,12 @@ QED
 
 Theorem cfg_analyze_reachable_sets_proof:
   !fn.
+    wf_function fn ==>
     set (cfg_dfs_post (cfg_analyze fn)) = set (cfg_dfs_pre (cfg_analyze fn)) /\
     set (cfg_dfs_post (cfg_analyze fn)) =
       {lbl | cfg_reachable_of (cfg_analyze fn) lbl}
 Proof
-  cheat (* FALSE — see ce_reachable_sets_false *)
+  cheat
 QED
 
 Theorem cfg_analyze_preorder_entry_first_proof:
@@ -275,11 +278,12 @@ QED
 
 Theorem cfg_analyze_semantic_reachability_proof:
   !fn bb lbl.
+    wf_function fn /\
     entry_block fn = SOME bb ==>
     (cfg_reachable_of (cfg_analyze fn) lbl <=>
      cfg_path (cfg_analyze fn) bb.bb_label lbl)
 Proof
-  cheat (* FALSE — see ce_semantic_reachability_false *)
+  cheat
 QED
 
 (* ==========================================================================
@@ -340,16 +344,7 @@ Proof
   simp[Once relationTheory.RTC_CASES1]
 QED
 
-Theorem cfg_analyze_preorder_order_proof:
-  !fn a b i j.
-    cfg_reachable_of (cfg_analyze fn) a /\
-    MEM b (cfg_succs_of (cfg_analyze fn) a) /\
-    ~cfg_path (cfg_analyze fn) b a /\
-    INDEX_OF a (cfg_dfs_pre (cfg_analyze fn)) = SOME i /\
-    INDEX_OF b (cfg_dfs_pre (cfg_analyze fn)) = SOME j ==>
-    i < j
-Proof
-  cheat (* FALSE — see ce_preorder_order_false *)
-QED
+(* preorder_order DELETED — inherently false for DFS preorder (cross edges).
+   See ce_preorder_order_false counterexample above. *)
 
 val _ = export_theory();

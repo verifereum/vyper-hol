@@ -79,6 +79,7 @@ QED
  * if a label has any predecessors, it must be a block label. *)
 Theorem cfg_analyze_preds_domain:
   !fn lbl.
+    wf_function fn /\
     cfg_preds_of (cfg_analyze fn) lbl <> [] ==>
     MEM lbl (fn_labels fn)
 Proof
@@ -93,6 +94,7 @@ QED
  * terminator targets (as extracted by bb_succs). *)
 Theorem cfg_analyze_preserves_bb_succs:
   !fn bb.
+    wf_function fn /\
     MEM bb fn.fn_blocks ==>
     cfg_succs_of (cfg_analyze fn) bb.bb_label = bb_succs bb
 Proof
@@ -133,6 +135,7 @@ QED
  * are permutations of each other. *)
 Theorem cfg_analyze_reachable_sets:
   !fn.
+    wf_function fn ==>
     set (cfg_dfs_post (cfg_analyze fn)) = set (cfg_dfs_pre (cfg_analyze fn)) /\
     set (cfg_dfs_post (cfg_analyze fn)) =
       {lbl | cfg_reachable_of (cfg_analyze fn) lbl}
@@ -169,6 +172,7 @@ QED
 (* Reachable labels are exactly those on a CFG path from the entry label. *)
 Theorem cfg_analyze_semantic_reachability:
   !fn bb lbl.
+    wf_function fn /\
     entry_block fn = SOME bb ==>
     (cfg_reachable_of (cfg_analyze fn) lbl <=>
      cfg_path (cfg_analyze fn) bb.bb_label lbl)
@@ -195,16 +199,5 @@ Proof
   ACCEPT_TAC cfg_analyze_postorder_order_proof
 QED
 
-(* For an edge a->b where b cannot reach a (i.e. not a back-edge),
- * a appears before b in preorder. *)
-Theorem cfg_analyze_preorder_order:
-  !fn a b i j.
-    cfg_reachable_of (cfg_analyze fn) a /\
-    MEM b (cfg_succs_of (cfg_analyze fn) a) /\
-    ~cfg_path (cfg_analyze fn) b a /\
-    INDEX_OF a (cfg_dfs_pre (cfg_analyze fn)) = SOME i /\
-    INDEX_OF b (cfg_dfs_pre (cfg_analyze fn)) = SOME j ==>
-    i < j
-Proof
-  ACCEPT_TAC cfg_analyze_preorder_order_proof
-QED
+(* preorder_order DELETED — inherently false for DFS preorder (cross edges).
+   See ce_preorder_order_false in cfgCorrectnessProofScript.sml. *)
