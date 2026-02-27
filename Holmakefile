@@ -1,4 +1,3 @@
 # Root Holmakefile - builds all theories including test infrastructure
 INCLUDES = $(HOLDIR)/examples/Crypto/Keccak $(VFMDIR)/util $(VFMDIR)/spec \
-           syntax frontend semantics semantics/prop tests \
-           venom venom/analysis venom/analysis/fcg venom/passes/phi_elimination venom/passes/revert_to_assert
+           syntax frontend semantics semantics/prop tests venom
