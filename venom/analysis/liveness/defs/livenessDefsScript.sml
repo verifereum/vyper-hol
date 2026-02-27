@@ -27,7 +27,7 @@
 Theory livenessDefs
 Ancestors
   list finite_map pred_set
-  venomInst cfgDefs dfIterate
+  venomInst cfgDefs dfIterateDefs
 
 (* inst_uses, inst_defs, phi_pairs come from venomInst *)
 

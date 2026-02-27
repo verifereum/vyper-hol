@@ -2,4 +2,4 @@
 # From liveness/defs/ relative paths:
 #   ../../..  = venom/          (venomInst, venomState)
 #   ../../../.. = project root  (syntax/, semantics/)
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics ../../cfg/defs ../../dataflow
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics ../../cfg/defs ../../dataflow/defs

@@ -1,2 +1,2 @@
-# Dataflow framework (general iterate-until-fixpoint)
-# No project-specific dependencies — just HOL4 standard library.
+# Dataflow framework: public API
+INCLUDES = defs proofs
