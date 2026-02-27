@@ -157,6 +157,44 @@ Datatype:
 End
 
 (* --------------------------------------------------------------------------
+   Operand helpers
+   -------------------------------------------------------------------------- *)
+
+(* Extract variable name from an operand, if it is a Var. *)
+Definition operand_var_def:
+  operand_var (Var v) = SOME v ∧
+  operand_var _ = NONE
+End
+
+(* All variable names referenced by a list of operands. *)
+Definition operand_vars_def:
+  operand_vars [] = [] ∧
+  operand_vars (op::ops) =
+    case operand_var op of
+      NONE => operand_vars ops
+    | SOME v => v :: operand_vars ops
+End
+
+(* Variables used (read) by an instruction. *)
+Definition inst_uses_def:
+  inst_uses inst = operand_vars inst.inst_operands
+End
+
+(* Variables defined (written) by an instruction. *)
+Definition inst_defs_def:
+  inst_defs inst = inst.inst_outputs
+End
+
+(* Extract (label, var) pairs from PHI operands.
+   PHI format: Label l1, Var v1, Label l2, Var v2, ... *)
+Definition phi_pairs_def:
+  phi_pairs [] = [] ∧
+  phi_pairs [_] = [] ∧
+  phi_pairs (Label l :: Var v :: rest) = (l, v) :: phi_pairs rest ∧
+  phi_pairs (_ :: _ :: rest) = phi_pairs rest
+End
+
+(* --------------------------------------------------------------------------
    Instruction Classification
    -------------------------------------------------------------------------- *)
 

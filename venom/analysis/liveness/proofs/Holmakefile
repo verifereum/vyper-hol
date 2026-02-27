@@ -1,0 +1,5 @@
+# Liveness correctness proofs
+# From liveness/proofs/:
+#   ../../..  = venom/
+#   ../../../.. = project root
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics ../defs ../../cfg/defs
