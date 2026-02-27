@@ -6,4 +6,4 @@
 
 Theory livenessAnalysis
 Ancestors
-  livenessDefs livenessProofs
+  livenessDefs livenessAnalysisProps
