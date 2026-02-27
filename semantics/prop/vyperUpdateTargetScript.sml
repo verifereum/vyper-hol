@@ -10,33 +10,33 @@ Definition valid_target_def:
   valid_target cx st av ao = ISL (FST (assign_target cx av ao st))
 End
 
-Theorem update_target_scoped_var_replace:
+Theorem update_target_name_replace:
   ∀cx st n v.
     var_in_scope st n ⇒
     update_target cx st (BaseTargetV (ScopedVar n) []) (Replace v) =
-    update_scoped_var st n v
+    update_name st n v
 Proof
   rw[update_target_def] >>
-  imp_res_tac assign_target_scoped_var_replace >>
+  imp_res_tac assign_target_name_replace >>
   pop_assum (qspecl_then [`v`, `cx`] strip_assume_tac) >>
   simp[]
 QED
 
-Theorem update_target_scoped_var_update:
+Theorem update_target_name_update:
   ∀cx st n bop v1 v2 v.
     evaluate_binop bop v1 v2 = INL v ∧
-    lookup_scoped_var st n = SOME v1 ⇒
+    lookup_name st n = SOME v1 ⇒
     update_target cx st (BaseTargetV (ScopedVar n) []) (Update bop v2) =
-    update_scoped_var st n v
+    update_name st n v
 Proof
   rw[update_target_def] >>
-  imp_res_tac assign_target_scoped_var_update >> simp[]
+  imp_res_tac assign_target_name_update >> simp[]
 QED
 
-Theorem valid_target_scoped_var_implies_var_in_scope:
+Theorem valid_target_name_implies_var_in_scope:
   ∀cx st n ao. valid_target cx st (BaseTargetV (ScopedVar n) []) ao ⇒ var_in_scope st n
 Proof
-  rw[var_in_scope_def, lookup_scoped_var_def, valid_target_def] >>
+  rw[var_in_scope_def, lookup_name_def, valid_target_def] >>
   gvs[Once assign_target_def, bind_def, get_scopes_def, return_def,
       lift_option_def, lift_option_type_def, LET_THM] >>
   Cases_on `find_containing_scope (string_to_num n) st.scopes` >>
@@ -44,10 +44,10 @@ Proof
   irule find_containing_scope_lookup_scopes >> simp[]
 QED
 
-Theorem valid_target_scoped_var_replace:
+Theorem valid_target_name_replace:
   ∀cx st n v. var_in_scope st n ⇒ valid_target cx st (BaseTargetV (ScopedVar n) []) (Replace v)
 Proof
-  rw[var_in_scope_def, lookup_scoped_var_def, valid_target_def] >>
+  rw[var_in_scope_def, lookup_name_def, valid_target_def] >>
   `IS_SOME (find_containing_scope (string_to_num n) st.scopes)`
     by metis_tac[lookup_scopes_find_containing] >>
   Cases_on `find_containing_scope (string_to_num n) st.scopes` >> gvs[] >>
@@ -57,13 +57,13 @@ Proof
        ignore_bind_def, set_scopes_def, assign_result_def]
 QED
 
-Theorem valid_target_scoped_var_update:
+Theorem valid_target_name_update:
   ∀cx st n bop v1 v2 v.
-    lookup_scoped_var st n = SOME v1 ∧
+    lookup_name st n = SOME v1 ∧
     evaluate_binop bop v1 v2 = INL v ⇒
     valid_target cx st (BaseTargetV (ScopedVar n) []) (Update bop v2)
 Proof
-  rw[lookup_scoped_var_def, valid_target_def] >>
+  rw[lookup_name_def, valid_target_def] >>
   `IS_SOME (find_containing_scope (string_to_num n) st.scopes)`
     by (irule lookup_scopes_find_containing >> simp[]) >>
   Cases_on `find_containing_scope (string_to_num n) st.scopes` >> gvs[] >>
@@ -74,24 +74,24 @@ Proof
        ignore_bind_def, set_scopes_def, assign_result_def]
 QED
 
-Theorem update_target_scoped_var_subscripts:
+Theorem update_target_name_subscripts:
   ∀cx st n sbs ao a a'.
-    lookup_scoped_var st n = SOME a ∧
+    lookup_name st n = SOME a ∧
     assign_subscripts a (REVERSE sbs) ao = INL a' ⇒
-    update_target cx st (BaseTargetV (ScopedVar n) sbs) ao = update_scoped_var st n a'
+    update_target cx st (BaseTargetV (ScopedVar n) sbs) ao = update_name st n a'
 Proof
   rw[update_target_def] >>
-  imp_res_tac assign_target_scoped_var_subscripts_state >> simp[]
+  imp_res_tac assign_target_name_subscripts_state >> simp[]
 QED
 
-Theorem valid_target_scoped_var_subscripts:
+Theorem valid_target_name_subscripts:
   ∀cx st n sbs ao a a'.
-    lookup_scoped_var st n = SOME a ∧
+    lookup_name st n = SOME a ∧
     assign_subscripts a (REVERSE sbs) ao = INL a' ⇒
     valid_target cx st (BaseTargetV (ScopedVar n) sbs) ao
 Proof
   rw[valid_target_def] >>
-  imp_res_tac assign_target_scoped_var_subscripts_valid >> simp[]
+  imp_res_tac assign_target_name_subscripts_valid >> simp[]
 QED
 
 Theorem update_target_preserves_toplevel_name_targets:
@@ -173,7 +173,7 @@ QED
 Theorem name_lookup_after_update_target_replace:
   ∀cx st n av v.
     lookup_name_target cx st n = SOME av ⇒
-    lookup_scoped_var (update_target cx st av (Replace v)) n = SOME v
+    lookup_name (update_target cx st av (Replace v)) n = SOME v
 Proof
   rw[lookup_name_target_def, lookup_base_target_def] >>
   Cases_on `eval_base_target cx (NameTarget n) st` >> Cases_on `q` >> gvs[] >>
@@ -183,16 +183,16 @@ Proof
        check_def, type_check_def, assert_def, ignore_bind_def, raise_def] >>
   Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
   gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
-  `var_in_scope r n` by simp[var_in_scope_def, lookup_scoped_var_def] >>
-  simp[update_target_scoped_var_replace, lookup_after_update]
+  `var_in_scope r n` by simp[var_in_scope_def, lookup_name_def] >>
+  simp[update_target_name_replace, lookup_after_update]
 QED
 
 Theorem name_lookup_after_update_target_update:
   ∀cx st n bop av v1 v2 v.
-    lookup_scoped_var st n = SOME v1 ∧
+    lookup_name st n = SOME v1 ∧
     lookup_name_target cx st n = SOME av ∧
     evaluate_binop bop v1 v2 = INL v ⇒
-    lookup_scoped_var (update_target cx st av (Update bop v2)) n = SOME v
+    lookup_name (update_target cx st av (Update bop v2)) n = SOME v
 Proof
   rpt strip_tac >>
   gvs[lookup_name_target_def, lookup_base_target_def] >>
@@ -203,7 +203,7 @@ Proof
   gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
   simp[update_target_def] >>
   `assign_target cx (BaseTargetV (ScopedVar n) []) (Update bop v2) st =
-   (INL NONE, update_scoped_var st n v)` by (drule assign_target_scoped_var_update >> simp[]) >>
+   (INL NONE, update_name st n v)` by (drule assign_target_name_update >> simp[]) >>
   simp[lookup_after_update]
 QED
 
@@ -211,7 +211,7 @@ Theorem update_target_var_in_scope:
   ∀cx st av ao n.
     var_in_scope (update_target cx st av ao) n ⇔ var_in_scope st n
 Proof
-  rw[var_in_scope_def, lookup_scoped_var_def, update_target_def, EQ_IMP_THM] >>
+  rw[var_in_scope_def, lookup_name_def, update_target_def, EQ_IMP_THM] >>
   Cases_on `assign_target cx av ao st` >> gvs[] >>
   `MAP FDOM r.scopes = MAP FDOM st.scopes`
     by (drule (CONJUNCT1 vyperScopePreservationTheory.assign_target_preserves_scopes_dom) >> simp[]) >>
@@ -230,6 +230,6 @@ Proof
        check_def, type_check_def, assert_def, ignore_bind_def, raise_def] >>
   Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
   gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
-  `var_in_scope st n` by simp[var_in_scope_def, lookup_scoped_var_def] >>
-  simp[valid_target_scoped_var_replace]
+  `var_in_scope st n` by simp[var_in_scope_def, lookup_name_def] >>
+  simp[valid_target_name_replace]
 QED
