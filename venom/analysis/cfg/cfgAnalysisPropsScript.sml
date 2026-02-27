@@ -19,7 +19,8 @@
  *
  * 5) Traversal ordering
  *    - Postorder respects edge direction for non-back-edges.
- *    - Preorder has symmetric property.
+ *    - Preorder does NOT have this property (cross edges violate it);
+ *      see ce_preorder_order_false in cfgCorrectnessProofScript.sml.
  *
  * Proofs live in cfgCorrectnessProofScript.sml; this file re-exports via ACCEPT_TAC.
  *

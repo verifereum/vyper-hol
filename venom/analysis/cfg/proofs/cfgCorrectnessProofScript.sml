@@ -462,4 +462,4 @@ QED
 (* preorder_order DELETED — inherently false for DFS preorder (cross edges).
    See ce_preorder_order_false counterexample above. *)
 
-val _ = export_theory();
+

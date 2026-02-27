@@ -359,14 +359,6 @@ Definition cfg_analyze_def:
        cfg_dfs_pre := pre |>
 End
 
-Definition wf_function_def:
-  wf_function fn <=>
-    ALL_DISTINCT (fn_labels fn) /\
-    fn_has_entry fn /\
-    (!bb. MEM bb fn.fn_blocks ==> bb_well_formed bb) /\
-    fn_succs_closed fn
-End
-
 Definition cfg_path_def:
   cfg_path cfg = RTC (λa b. MEM b (cfg_succs_of cfg a))
 End

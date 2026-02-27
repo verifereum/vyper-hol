@@ -346,10 +346,6 @@ QED
 
 (* ==========================================================================
    DFS mutual induction combinator
-   ========================================================================== *)
-
-(* ==========================================================================
-   DFS mutual induction combinator
    
    dfs_prove: Prove a mutual property of walk/walk_list by induction.
    Handles the type variable mismatch between conjuncts by proving at
@@ -1151,4 +1147,4 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
-val _ = export_theory();
+
