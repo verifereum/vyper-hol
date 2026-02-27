@@ -605,10 +605,12 @@ Proof
   >- metis_tac[eval_base_target_preserves_scopes_dom]
   >- metis_tac[eval_base_target_preserves_scopes_dom]
   >- metis_tac[eval_base_target_preserves_scopes_dom]
+  >- metis_tac[eval_base_target_preserves_scopes_dom]
   (* === eval_for cases === *)
   (* [] *) >- gvs[evaluate_def, return_def, preserves_scopes_dom_def]
   (* v::vs *) >- (drule case_eval_for_cons_dom >> metis_tac[])
   (* === Expression cases - use eval_expr_preserves_scopes_dom === *)
+  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
   >- (drule eval_expr_preserves_scopes_dom >> gvs[])
   >- (drule eval_expr_preserves_scopes_dom >> gvs[])
   >- (drule eval_expr_preserves_scopes_dom >> gvs[])
