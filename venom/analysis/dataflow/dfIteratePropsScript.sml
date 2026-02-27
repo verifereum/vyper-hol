@@ -23,12 +23,3 @@ Proof
   ACCEPT_TAC df_iterate_fixpoint_proof
 QED
 
-(* Under the same conditions, df_iterate equals FUNPOW f n x for some n. *)
-Theorem df_iterate_terminates:
-  !(f : 'a -> 'a) (m : 'a -> num) b x.
-    (!y. f y <> y ==> m (f y) > m y) /\
-    (!y. m y <= b) ==>
-    ?n. df_iterate f x = FUNPOW f n x
-Proof
-  ACCEPT_TAC df_iterate_terminates_proof
-QED

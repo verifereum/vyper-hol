@@ -22,12 +22,4 @@ Proof
   cheat
 QED
 
-(* The iterate result equals some finite application of f. *)
-Theorem df_iterate_terminates_proof:
-  !(f : 'a -> 'a) (m : 'a -> num) b x.
-    (!y. f y <> y ==> m (f y) > m y) /\
-    (!y. m y <= b) ==>
-    ?n. df_iterate f x = FUNPOW f n x
-Proof
-  cheat
-QED
+
