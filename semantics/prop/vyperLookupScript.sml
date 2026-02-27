@@ -39,13 +39,6 @@ Definition update_scoped_var_def:
         | h :: t => st with scopes := (h |+ (n, v)) :: t
 End
 
-Definition lookup_name_def:
-  lookup_name cx st n =
-    case eval_expr cx (Name n) st of
-    | (INL (Value v), _) => SOME v
-    | (_, _) => NONE
-End
-
 Definition lookup_base_target_def:
   lookup_base_target cx st tgt =
     case eval_base_target cx tgt st of
@@ -65,23 +58,6 @@ End
 
 (****************************************)
 (* Helpers *)
-
-Theorem lookup_name_eq_lookup_scoped_var:
-  ∀cx st n. lookup_name cx st n = lookup_scoped_var st n
-Proof
-  rw[lookup_name_def, lookup_scoped_var_def] >>
-  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
-       lift_option_def, lift_option_type_def] >>
-  Cases_on `lookup_scopes (string_to_num n) st.scopes` >> simp[return_def, raise_def]
-QED
-
-Theorem lookup_scopes_to_lookup_name[local]:
-  ∀cx st n v.
-    lookup_scopes (string_to_num n) st.scopes = SOME v ⇒
-    lookup_name cx st n = SOME v
-Proof
-  simp[lookup_name_eq_lookup_scoped_var, lookup_scoped_var_def]
-QED
 
 Theorem lookup_scopes_update_other[local]:
   ∀pre n1 n2 env v rest.
@@ -261,32 +237,6 @@ Proof
   Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >> simp[]
 QED
 
-Theorem lookup_scoped_var_implies_lookup_name:
-  ∀cx st n v.
-    lookup_scoped_var st n = SOME v ⇒
-    lookup_name cx st n = SOME v
-Proof
-  simp[lookup_scoped_var_def] >>
-  rpt strip_tac >>
-  irule lookup_scopes_to_lookup_name >> simp[]
-QED
-
-Theorem var_in_scope_implies_some_lookup_name:
-  ∀cx st n.
-    var_in_scope st n ⇒
-    IS_SOME (lookup_name cx st n)
-Proof
-  simp[lookup_name_eq_lookup_scoped_var, var_in_scope_def]
-QED
-
-Theorem lookup_name_to_lookup_scoped_var:
-  ∀cx st n v.
-    lookup_name cx st n = SOME v ⇒
-    lookup_scoped_var st n = SOME v
-Proof
-  simp[lookup_name_eq_lookup_scoped_var]
-QED
-
 Theorem var_in_scope_dom_iff:
   ∀st1 st2 n.
     MAP FDOM st1.scopes = MAP FDOM st2.scopes ⇒
@@ -400,14 +350,6 @@ Proof
   >> rpt (CASE_TAC >> gvs[return_def, raise_def])
 QED
 
-Theorem lookup_name_none_to_lookup_scoped_var:
-  ∀cx st n.
-    lookup_name cx st n = NONE ⇒
-    lookup_scoped_var st n = NONE
-Proof
-  simp[lookup_name_eq_lookup_scoped_var]
-QED
-
 Theorem lookup_after_update:
   ∀st n v. lookup_scoped_var (update_scoped_var st n v) n = SOME v
 Proof
@@ -461,15 +403,6 @@ Proof
    (Cases_on `st.scopes` >> simp[evaluation_state_accfupds]) >>
   PairCases_on `x` >> simp[evaluation_state_accfupds]
 QED
-
-Theorem lookup_name_preserved_after_update:
-  ∀cx st n1 n2 v.
-    n1 ≠ n2 ⇒
-    lookup_name cx (update_scoped_var st n1 v) n2 = lookup_name cx st n2
-Proof
-  simp[lookup_name_eq_lookup_scoped_var, lookup_scoped_var_preserved_after_update]
-QED
-
 
 Theorem scopes_nonempty_after_update:
   ∀st n v. (update_scoped_var st n v).scopes ≠ []
@@ -544,17 +477,6 @@ Theorem var_in_tl_scopes:
     (var_in_scope (tl_scopes st) n ⇔ var_in_scope st n)
 Proof
   simp[var_in_scope_def, lookup_in_tl_scopes]
-QED
-
-(* Helper for if-statement: lookup_name is preserved when entering a new scope *)
-Theorem lookup_name_tl_scopes:
-  ∀cx st n.
-    st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ⇒
-    lookup_name cx st n = lookup_name cx (tl_scopes st) n
-Proof
-  simp[lookup_name_eq_lookup_scoped_var, lookup_scoped_var_def, tl_scopes_def] >>
-  rpt strip_tac >>
-  Cases_on `st.scopes` >> gvs[lookup_scopes_def, finite_mapTheory.FLOOKUP_EMPTY]
 QED
 
 Theorem update_scoped_var_in_tl_scopes:
@@ -655,20 +577,6 @@ Proof
   rpt (simp[Once find_containing_scope_def] >>
        Cases_on `find_containing_scope (string_to_num n) t` >> gvs[] >>
        TRY (PairCases_on `x'` >> gvs[]))
-QED
-
-Theorem lookup_name_preserved_after_update_in_tl_scopes:
-  ∀cx st n1 n2 v.
-    n1 ≠ n2 ∧
-    lookup_in_current_scope st n1 = NONE ∧
-    var_in_scope (tl_scopes st) n1 ⇒
-    lookup_name cx (tl_scopes (update_scoped_var st n1 v)) n2 =
-    lookup_name cx (tl_scopes st) n2
-Proof
-  rpt strip_tac >>
-  `tl_scopes (update_scoped_var st n1 v) = update_scoped_var (tl_scopes st) n1 v`
-    by simp[tl_scopes_update_eq_update_tl_scopes] >>
-  simp[lookup_name_preserved_after_update]
 QED
 
 Theorem lookup_immutable_tl_scopes:
