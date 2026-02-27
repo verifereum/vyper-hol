@@ -72,17 +72,21 @@ End
 (****************************************)
 (* Helpers *)
 
+Theorem lookup_name_eq_lookup_scoped_var:
+  ∀cx st n. lookup_name cx st n = lookup_scoped_var st n
+Proof
+  rw[lookup_name_def, lookup_scoped_var_def] >>
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+       lift_option_def, lift_option_type_def] >>
+  Cases_on `lookup_scopes (string_to_num n) st.scopes` >> simp[return_def, raise_def]
+QED
+
 Theorem lookup_scopes_to_lookup_name[local]:
-  ∀cx st n v imms.
-    lookup_scopes (string_to_num n) st.scopes = SOME v ∧
-    ALOOKUP st.immutables cx.txn.target = SOME imms ∧
-    FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num n) = NONE ⇒
+  ∀cx st n v.
+    lookup_scopes (string_to_num n) st.scopes = SOME v ⇒
     lookup_name cx st n = SOME v
 Proof
-  rpt strip_tac >>
-  simp[lookup_name_def, Once evaluate_def, bind_def, get_scopes_def, return_def,
-       get_immutables_def, get_address_immutables_def,
-       lift_option_def, lift_option_type_def, exactly_one_option_def, lift_sum_def]
+  simp[lookup_name_eq_lookup_scoped_var, lookup_scoped_var_def]
 QED
 
 Theorem lookup_scopes_update_other[local]:
@@ -243,20 +247,12 @@ QED
 
 Theorem var_in_scope_implies_name_target:
   ∀cx (st:evaluation_state) n.
-    (cx.txn.is_creation ⇒ valid_lookups cx st) ∧
     var_in_scope st n ⇒
     lookup_name_target cx st n = SOME (BaseTargetV (ScopedVar n) [])
 Proof
-  rw[var_in_scope_def, valid_lookups_def, lookup_scoped_var_def, lookup_name_target_def, lookup_base_target_def] >>
-  simp[Once evaluate_def, bind_def, get_scopes_def, return_def] >>
-  `IS_SOME (lookup_scopes (string_to_num n) st.scopes)`
-    by metis_tac[find_containing_scope_lookup_scopes] >>
-  simp[] >>
-  Cases_on `cx.txn.is_creation` >-
-    gvs[get_immutables_def, get_address_immutables_def,
-        bind_def, lift_option_def, lift_option_type_def, return_def,
-        lift_sum_def, exactly_one_option_def, immutable_target_def, raise_def] >>
-  simp[return_def, lift_sum_def, exactly_one_option_def]
+  rw[var_in_scope_def, lookup_scoped_var_def, lookup_name_target_def, lookup_base_target_def] >>
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+       check_def, type_check_def, assert_def, ignore_bind_def]
 QED
 
 Theorem lookup_name_target_implies_var_in_scope:
@@ -266,74 +262,35 @@ Theorem lookup_name_target_implies_var_in_scope:
 Proof
   rw[var_in_scope_def, lookup_scoped_var_def, lookup_name_target_def, lookup_base_target_def] >>
   pop_assum mp_tac >>
-  simp[Once evaluate_def, bind_def, get_scopes_def, return_def] >>
-  Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >- simp[] >>
-  fs[] >>
-  Cases_on `cx.txn.is_creation` >>
-  simp[get_immutables_def, get_address_immutables_def,
-       bind_def, lift_option_def, lift_option_type_def, return_def, raise_def,
-       option_CASE_rator, sum_CASE_rator, prod_CASE_rator,
-       get_module_code_def, check_def, ignore_bind_def, assert_def,
-       lift_sum_def, exactly_one_option_def, immutable_target_def] >>
-  rpt CASE_TAC >> gvs[exactly_one_option_def]
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+       check_def, type_check_def, assert_def, ignore_bind_def, raise_def] >>
+  Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >> simp[]
 QED
 
 Theorem lookup_scoped_var_implies_lookup_name:
   ∀cx st n v.
-    valid_lookups cx st ∧
     lookup_scoped_var st n = SOME v ⇒
     lookup_name cx st n = SOME v
 Proof
-  simp[valid_lookups_def, lookup_scoped_var_def, var_in_scope_def] >>
+  simp[lookup_scoped_var_def] >>
   rpt strip_tac >>
-  gvs[lookup_scopes_to_lookup_name]
+  irule lookup_scopes_to_lookup_name >> simp[]
 QED
 
 Theorem var_in_scope_implies_some_lookup_name:
   ∀cx st n.
-    valid_lookups cx st ∧
     var_in_scope st n ⇒
     IS_SOME (lookup_name cx st n)
 Proof
-  rw[valid_lookups_def, lookup_scoped_var_def, var_in_scope_def] >>
-  Cases_on `lookup_scopes (string_to_num n) st.scopes` >> gvs[] >>
-  first_x_assum (qspec_then `n` mp_tac) >> simp[] >>
-  strip_tac >> drule lookup_scopes_to_lookup_name >> simp[]
-QED
-
-Theorem lookup_immutable_implies_lookup_name:
-  ∀cx st n v.
-    valid_lookups cx st ∧
-    lookup_immutable cx st n = SOME v ⇒
-    lookup_name cx st n = SOME v
-Proof
-  rpt strip_tac >>
-  fs[valid_lookups_def, lookup_immutable_def, lookup_name_def] >> gvs[] >>
-  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
-       get_immutables_def, get_address_immutables_def,
-       lift_option_def] >>
-  `lookup_scopes (string_to_num n) st.scopes = NONE` suffices_by
-    (strip_tac >> simp[exactly_one_option_def, lift_sum_def, return_def]) >>
-  CCONTR_TAC >> gvs[] >>
-  first_x_assum (qspec_then `n` mp_tac) >>
-  simp[var_in_scope_def, lookup_scoped_var_def] >>
-  Cases_on `lookup_scopes (string_to_num n) st.scopes` >> gvs[]
+  simp[lookup_name_eq_lookup_scoped_var, var_in_scope_def]
 QED
 
 Theorem lookup_name_to_lookup_scoped_var:
   ∀cx st n v.
-    valid_lookups cx st ∧
-    var_in_scope st n ∧
     lookup_name cx st n = SOME v ⇒
     lookup_scoped_var st n = SOME v
 Proof
-  rw[valid_lookups_def, var_in_scope_def, lookup_scoped_var_def, lookup_name_def] >>
-  qpat_x_assum `_ = SOME v` mp_tac >>
-  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
-       get_immutables_def, get_address_immutables_def, lift_option_def] >>
-  `FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num n) = NONE` by simp[] >>
-  Cases_on `lookup_scopes (string_to_num n) st.scopes` >> gvs[] >>
-  simp[exactly_one_option_def, lift_sum_def, return_def]
+  simp[lookup_name_eq_lookup_scoped_var]
 QED
 
 Theorem var_in_scope_dom_iff:
@@ -451,36 +408,10 @@ QED
 
 Theorem lookup_name_none_to_lookup_scoped_var:
   ∀cx st n.
-    valid_lookups cx st ∧ lookup_name cx st n = NONE ⇒
+    lookup_name cx st n = NONE ⇒
     lookup_scoped_var st n = NONE
 Proof
-  rw[valid_lookups_def, lookup_name_def, lookup_scoped_var_def,
-     var_in_scope_def] >>
-  CCONTR_TAC >> gvs[] >>
-  first_x_assum (qspec_then `n` mp_tac) >>
-  Cases_on `lookup_scopes (string_to_num n) st.scopes` >> gvs[] >>
-  qpat_x_assum `_ = NONE` mp_tac >>
-  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
-       get_immutables_def, get_address_immutables_def,
-       lift_option_def] >>
-  Cases_on `FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num n)` >>
-  simp[exactly_one_option_def, lift_sum_def, return_def, raise_def]
-QED
-
-Theorem lookup_name_none_to_lookup_immutable:
-  ∀cx st n.
-    valid_lookups cx st ∧ lookup_name cx st n = NONE ⇒
-    lookup_immutable cx st n = NONE
-Proof
-  rw[valid_lookups_def, lookup_name_def, lookup_immutable_def,
-     var_in_scope_def, lookup_scoped_var_def] >> gvs[] >>
-  Cases_on `FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num n)` >>
-  simp[] >>
-  Cases_on `lookup_scopes (string_to_num n) st.scopes` >-
-   gvs[Once evaluate_def, bind_def, get_scopes_def, return_def,
-       get_immutables_def, get_address_immutables_def,
-       lift_option_def, lift_option_type_def, exactly_one_option_def, lift_sum_def, return_def] >>
-  first_x_assum (qspec_then `n` mp_tac) >> simp[]
+  simp[lookup_name_eq_lookup_scoped_var]
 QED
 
 Theorem lookup_after_update:
@@ -542,26 +473,12 @@ Theorem lookup_name_preserved_after_update:
     n1 ≠ n2 ⇒
     lookup_name cx (update_scoped_var st n1 v) n2 = lookup_name cx st n2
 Proof
-  rpt strip_tac >>
-  simp[lookup_name_def] >>
-  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
-       get_immutables_def, get_address_immutables_def,
-       lift_option_def, lift_option_type_def, lift_sum_def,
-       immutables_preserved_after_update,
-       lookup_scoped_var_preserved_after_update, GSYM lookup_scoped_var_def] >>
-  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
-       get_immutables_def, get_address_immutables_def,
-       lift_option_def, lift_option_type_def, lift_sum_def,
-       GSYM lookup_scoped_var_def] >>
-  Cases_on `ALOOKUP st.immutables cx.txn.target` >> simp[raise_def, return_def] >>
-  Cases_on `exactly_one_option (lookup_scoped_var st n2)
-              (FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num n2))` >>
-  simp[return_def, raise_def]
+  simp[lookup_name_eq_lookup_scoped_var, lookup_scoped_var_preserved_after_update]
 QED
 
-Theorem valid_lookups_preserved_after_update_no_name:
+Theorem valid_lookups_preserved_after_update_no_name[local]:
   ∀cx st n v.
-    valid_lookups cx st ∧ lookup_name cx st n = NONE ⇒
+    valid_lookups cx st ∧ ¬var_in_scope st n ∧ lookup_immutable cx st n = NONE ⇒
     valid_lookups cx (update_scoped_var st n v)
 Proof
   rw[valid_lookups_def] >>
@@ -569,18 +486,11 @@ Proof
   simp[immutables_preserved_after_update] >>
   rpt strip_tac >>
   Cases_on `string_to_num n' = string_to_num n` >-
-   ((* n' = n: use lookup_name_none_to_lookup_immutable *)
-    `lookup_immutable cx st n = NONE`
-      by (irule lookup_name_none_to_lookup_immutable >>
-          simp[valid_lookups_def] >> metis_tac[]) >>
+   (`n = n'` by metis_tac[vyperMiscTheory.string_to_num_inj] >> gvs[] >>
     gvs[lookup_immutable_def]) >>
-  (* n' ≠ n: n' was already in scope before update, use valid_lookups *)
-  `lookup_scoped_var st n = NONE`
-    by (irule lookup_name_none_to_lookup_scoped_var >>
-        simp[valid_lookups_def] >> metis_tac[]) >>
   `n ≠ n'` by metis_tac[vyperMiscTheory.string_to_num_inj] >>
   `lookup_scoped_var (update_scoped_var st n v) n' = lookup_scoped_var st n'`
-    by (irule lookup_scoped_var_preserved_after_update >> simp[]) >>
+    by simp[lookup_scoped_var_preserved_after_update] >>
   `var_in_scope st n'` by gvs[var_in_scope_def, lookup_scoped_var_def] >>
   first_x_assum irule >> simp[]
 QED
@@ -614,13 +524,7 @@ Proof
   rpt strip_tac >>
   Cases_on `var_in_scope st n` >-
    metis_tac[valid_lookups_preserved_after_update_var_in_scope] >>
-  (* ¬var_in_scope st n: need to show lookup_name cx st n = NONE *)
-  irule valid_lookups_preserved_after_update_no_name >> simp[] >>
-  (* Need: lookup_name cx st n = NONE *)
-  gvs[var_in_scope_def, lookup_scoped_var_def, lookup_immutable_def, valid_lookups_def] >>
-  simp[lookup_name_def, Once evaluate_def, bind_def, get_scopes_def, return_def,
-       get_immutables_def, get_address_immutables_def, lift_option_def, lift_option_type_def,
-       exactly_one_option_def, raise_def, lift_sum_def]
+  irule valid_lookups_preserved_after_update_no_name >> simp[]
 QED
 
 Theorem scopes_nonempty_after_update:
@@ -727,29 +631,9 @@ Theorem lookup_name_tl_scopes:
     st.scopes ≠ [] ∧ HD st.scopes = FEMPTY ⇒
     lookup_name cx st n = lookup_name cx (tl_scopes st) n
 Proof
+  simp[lookup_name_eq_lookup_scoped_var, lookup_scoped_var_def, tl_scopes_def] >>
   rpt strip_tac >>
-  simp[lookup_name_def, tl_scopes_def] >>
-  (* First, prove lookup_scoped_var equality *)
-  `lookup_scoped_var st n = lookup_scoped_var (st with scopes := TL st.scopes) n` by (
-    simp[lookup_scoped_var_def] >>
-    Cases_on `st.scopes` >> gvs[lookup_scopes_def, finite_mapTheory.FLOOKUP_EMPTY]) >>
-  (* Expand both eval_expr calls *)
-  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
-       get_immutables_def, get_address_immutables_def,
-       lift_option_def, lift_option_type_def, lift_sum_def, GSYM lookup_scoped_var_def,
-       exactly_one_option_def, raise_def] >>
-  CONV_TAC (RHS_CONV (SIMP_CONV (srw_ss()) [Once evaluate_def, bind_def, get_scopes_def, return_def,
-       get_immutables_def, get_address_immutables_def,
-       lift_option_def, lift_option_type_def, lift_sum_def, GSYM lookup_scoped_var_def,
-       exactly_one_option_def, raise_def])) >>
-  Cases_on `ALOOKUP st.immutables cx.txn.target` >> simp[raise_def, return_def] >>
-  simp[GSYM lookup_scoped_var_def, exactly_one_option_def] >>
-  `lookup_scoped_var (st with scopes := TL st.scopes) n = lookup_scopes (string_to_num n) (TL st.scopes)`
-    by simp[lookup_scoped_var_def] >>
-  gvs[] >>
-  Cases_on `exactly_one_option (lookup_scopes (string_to_num n) (TL st.scopes))
-              (FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num n))` >>
-  simp[return_def, raise_def, bind_def]
+  Cases_on `st.scopes` >> gvs[lookup_scopes_def, finite_mapTheory.FLOOKUP_EMPTY]
 QED
 
 Theorem update_scoped_var_in_tl_scopes:

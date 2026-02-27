@@ -199,52 +199,23 @@ Theorem name_lookup_after_update_target_update:
     evaluate_binop bop v1 v2 = INL v ⇒
     lookup_name cx (update_target cx st av (Update bop v2)) n = SOME v
 Proof
-  rw[valid_lookups_def, lookup_name_target_def, lookup_base_target_def] >>
-  Cases_on `eval_base_target cx (NameTarget n) st` >> Cases_on `q` >> gvs[] >>
-  PairCases_on `x` >> gvs[] >>
-  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
+  rpt strip_tac >>
+  gvs[lookup_name_target_def, lookup_base_target_def] >>
+  qpat_x_assum `_ = SOME _` mp_tac >>
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
-       get_immutables_def, get_address_immutables_def, lift_option_def, lift_option_type_def,
-       lift_sum_def, LET_THM,
-       option_CASE_rator, sum_CASE_rator, prod_CASE_rator] >>
-  Cases_on `cx.txn.is_creation` >>
-  gvs[return_def, bind_def, get_address_immutables_def, lift_option_def, lift_option_type_def,
-      immutable_target_def,
-      option_CASE_rator, sum_CASE_rator, prod_CASE_rator,
-      get_module_code_def, check_def, type_check_def, ignore_bind_def, assert_def, AllCaseEqs()] >>
+       check_def, type_check_def, assert_def, ignore_bind_def, raise_def] >>
   Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
-  Cases_on `FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num n)` >>
-  gvs[exactly_one_option_def, return_def, raise_def] >>
-  strip_tac >> gvs[] >>
-  TRY (* ScopedVar cases *)
-  (`var_in_scope r n` by simp[var_in_scope_def, lookup_scoped_var_def] >>
-   `valid_lookups cx r` by (simp[valid_lookups_def] >> qexists_tac `imms` >> simp[]) >>
-   `lookup_scoped_var r n = SOME v1` by (drule lookup_name_to_lookup_scoped_var >> simp[]) >>
-   simp[update_target_def] >>
-   `assign_target cx (BaseTargetV (ScopedVar n) []) (Update bop v2) r =
-    (INL NONE, update_scoped_var r n v)` by (drule assign_target_scoped_var_update >> simp[]) >>
-   simp[] >>
-   `lookup_scoped_var (update_scoped_var r n v) n = SOME v` by simp[lookup_after_update] >>
-   `valid_lookups cx (update_scoped_var r n v)`
-     by metis_tac[valid_lookups_preserved_after_update_var_in_scope] >>
-   drule lookup_scoped_var_implies_lookup_name >> simp[] >> NO_TAC) >>
-  (* ImmutableVar case *)
-  gvs[exactly_one_option_def] >>
-  sg `lookup_immutable cx r n = SOME v1` >-
-     (qpat_x_assum `lookup_name _ _ _ = _` mp_tac >>
-      simp[lookup_name_def, Once evaluate_def, bind_def, get_scopes_def, return_def,
-           get_immutables_def, get_address_immutables_def, lift_option_def, lift_option_type_def,
-           exactly_one_option_def, lift_sum_def, lookup_immutable_def]) >>
-   simp[update_target_def, Once assign_target_def, bind_def, get_immutables_def,
-        get_address_immutables_def, lift_option_def, lift_option_type_def, LET_THM, return_def,
-        assign_subscripts_def, lift_sum_def, ignore_bind_def, set_immutable_def,
-        set_address_immutables_def, lookup_immutable_def, assign_result_def] >>
-   `x = v1` by gvs[lookup_immutable_def] >> gvs[return_def, raise_def] >>
-   simp[lookup_name_def, Once evaluate_def, bind_def, get_scopes_def, return_def,
-        get_immutables_def, get_address_immutables_def, lift_option_def, lift_option_type_def, lift_sum_def,
-        get_source_immutables_def, set_source_immutables_def,
-        finite_mapTheory.FLOOKUP_UPDATE, alistTheory.ALOOKUP_ADELKEY,
-        exactly_one_option_def]
+  gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
+  `var_in_scope st n` by simp[var_in_scope_def, lookup_scoped_var_def] >>
+  `lookup_scoped_var st n = SOME v1` by (drule lookup_name_to_lookup_scoped_var >> simp[]) >>
+  simp[update_target_def] >>
+  `assign_target cx (BaseTargetV (ScopedVar n) []) (Update bop v2) st =
+   (INL NONE, update_scoped_var st n v)` by (drule assign_target_scoped_var_update >> simp[]) >>
+  simp[] >>
+  `lookup_scoped_var (update_scoped_var st n v) n = SOME v` by simp[lookup_after_update] >>
+  `valid_lookups cx (update_scoped_var st n v)`
+    by metis_tac[valid_lookups_preserved_after_update_var_in_scope] >>
+  drule lookup_scoped_var_implies_lookup_name >> simp[]
 QED
 
 Theorem update_target_valid_lookups:
@@ -289,50 +260,13 @@ Theorem lookup_name_target_is_valid_target_Replace:
     lookup_name_target cx st n = SOME av ⇒
     valid_target cx st av (Replace v)
 Proof
-  rw[lookup_name_target_def, lookup_base_target_def, valid_target_def] >>
-  Cases_on `eval_base_target cx (NameTarget n) st` >> Cases_on `q` >> gvs[] >>
-  PairCases_on `x` >> gvs[] >>
-  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
+  rpt strip_tac >>
+  gvs[lookup_name_target_def, lookup_base_target_def] >>
+  qpat_x_assum `_ = SOME _` mp_tac >>
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
-       get_immutables_def, get_address_immutables_def, lift_option_def, lift_option_type_def,
-       lift_sum_def, LET_THM,
-       option_CASE_rator, sum_CASE_rator, prod_CASE_rator] >>
-  Cases_on `cx.txn.is_creation` >>
-  gvs[return_def, bind_def, get_address_immutables_def, lift_option_def, lift_option_type_def,
-      immutable_target_def, raise_def,
-      option_CASE_rator, sum_CASE_rator, prod_CASE_rator,
-      get_module_code_def, check_def, type_check_def, ignore_bind_def, assert_def, AllCaseEqs()] >-
-  (* is_creation = T *)
-  (Cases_on `ALOOKUP st.immutables cx.txn.target` >>
-   gvs[return_def, raise_def] >>
-   Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
-   Cases_on `FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num n)` >>
-   gvs[exactly_one_option_def, return_def, raise_def] >>
-   strip_tac >> gvs[] >>
-   TRY
-   (* ScopedVar case *)
-   (`IS_SOME (find_containing_scope (string_to_num n) r.scopes)`
-      by metis_tac[lookup_scopes_find_containing] >>
-    Cases_on `find_containing_scope (string_to_num n) r.scopes` >> gvs[] >>
-    PairCases_on `x'` >>
-    simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
-         lift_option_def, lift_option_type_def, LET_THM, assign_subscripts_def, lift_sum_def,
-         ignore_bind_def, set_scopes_def, assign_result_def] >> NO_TAC) >>
-   (* ImmutableVar case *)
-   gvs[exactly_one_option_def] >>
-   simp[Once assign_target_def, bind_def, get_immutables_def,
-        get_address_immutables_def, lift_option_def, lift_option_type_def, LET_THM, return_def,
-        assign_subscripts_def, lift_sum_def, ignore_bind_def,
-        set_immutable_def, set_address_immutables_def, assign_result_def]) >>
-  (* is_creation = F, must be ScopedVar *)
+       check_def, type_check_def, assert_def, ignore_bind_def, raise_def] >>
   Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
-  gvs[exactly_one_option_def, return_def, raise_def] >>
-  strip_tac >> gvs[] >>
-  `IS_SOME (find_containing_scope (string_to_num n) r.scopes)`
-    by metis_tac[lookup_scopes_find_containing] >>
-  Cases_on `find_containing_scope (string_to_num n) r.scopes` >> gvs[] >>
-  PairCases_on `x` >>
-  simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
-       lift_option_def, lift_option_type_def, LET_THM, assign_subscripts_def, lift_sum_def,
-       ignore_bind_def, set_scopes_def, assign_result_def]
+  gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
+  `var_in_scope st n` by simp[var_in_scope_def, lookup_scoped_var_def] >>
+  simp[valid_target_scoped_var_replace]
 QED
