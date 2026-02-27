@@ -288,6 +288,16 @@ Definition fn_succs_closed_def:
       MEM succ (fn_labels fn)
 End
 
+(* Structural well-formedness for IR functions:
+ * unique labels, has entry, blocks well-formed, successor labels exist. *)
+Definition wf_function_def:
+  wf_function fn <=>
+    ALL_DISTINCT (fn_labels fn) /\
+    fn_has_entry fn /\
+    (!bb. MEM bb fn.fn_blocks ==> bb_well_formed bb) /\
+    fn_succs_closed fn
+End
+
 (* All instructions across all blocks, in block order. *)
 Definition fn_insts_blocks_def:
   fn_insts_blocks [] = [] /\
