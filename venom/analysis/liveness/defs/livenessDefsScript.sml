@@ -27,7 +27,7 @@
 Theory livenessDefs
 Ancestors
   list finite_map pred_set
-  venomInst cfgDefs
+  venomInst cfgDefs dfIterate
 
 (* inst_uses, inst_defs, phi_pairs come from venomInst *)
 
@@ -196,11 +196,14 @@ End
    Process one block: update out_vars then backward-transfer liveness.
    ========================================================================== *)
 
+(* Merge new out_vars with existing (ensures monotonicity for all inputs,
+   not just those reachable from init — needed for termination). *)
 Definition process_block_def:
   process_block cfg bbs lr bb =
     let new_out = calculate_out_vars cfg lr bb bbs in
     let bl = lookup_block_liveness lr bb.bb_label in
-    let bl' = bl with bl_out_vars := new_out in
+    let merged_out = list_union bl.bl_out_vars new_out in
+    let bl' = bl with bl_out_vars := merged_out in
     let bl'' = calculate_liveness bb bl' in
     lr with lr_blocks := lr.lr_blocks |+ (bb.bb_label, bl'')
 End
@@ -264,22 +267,18 @@ Definition all_var_slots_def:
 End
 
 (* ==========================================================================
-   Iterate passes until fixpoint.
-   Termination: total_live_count strictly increases on each non-fixpoint
-   pass, bounded by all_var_slots.
+   Iterate passes until fixpoint via df_iterate (WHILE-based).
+
+   The step function is liveness_one_pass with fixed cfg/bbs/order.
+   Convergence follows from:
+     - inflationary: total_live_count strictly increases on non-fixpoint steps
+       (guaranteed by list_union merge in process_block)
+     - bounded: total_live_count ≤ all_var_slots
    ========================================================================== *)
 
 Definition liveness_iterate_def:
   liveness_iterate cfg bbs order lr =
-    let lr' = liveness_one_pass cfg bbs lr order in
-    if lr' = lr then lr
-    else liveness_iterate cfg bbs order lr'
-Termination
-  WF_REL_TAC `measure (λ(cfg, bbs, order, lr).
-    all_var_slots bbs - total_live_count lr)` >>
-  (* Needs: (1) monotone: total_live_count lr' > total_live_count lr
-            (2) bounded: total_live_count lr ≤ all_var_slots bbs *)
-  cheat
+    df_iterate (λlr'. liveness_one_pass cfg bbs lr' order) lr
 End
 
 (* ==========================================================================
