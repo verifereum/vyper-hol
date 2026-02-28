@@ -103,9 +103,13 @@ Theorem df_iterate_inflationary_fixpoint_proof:
     (!y. P y ==> P (f y)) ==>
     f (df_iterate f x) = df_iterate f x
 Proof
-  (* irule df_iterate_fixpoint_orbit; bridge: conditions 1+2 give
-     P y ∧ f y ≠ y ⟹ m y < m (f y) *)
-  cheat
+  rpt strip_tac >>
+  irule df_iterate_fixpoint_orbit >>
+  qexistsl_tac [`P`, `b`, `m`] >>
+  rw[] >> `leq y (f y)` by res_tac >>
+  `y <> f y` by metis_tac[] >>
+  `m y < m (f y)` by res_tac >>
+  simp[]
 QED
 
 (* Corollary of df_iterate_invariant: same bridge. *)
@@ -119,6 +123,59 @@ Theorem df_iterate_inflationary_invariant_proof:
     (!y. P y ==> P (f y)) ==>
     P (df_iterate f x)
 Proof
-  (* irule df_iterate_invariant; same bridge as above *)
-  cheat
+  rpt strip_tac >>
+  qspecl_then [`f`, `m`, `b`, `P`, `x`] mp_tac df_iterate_invariant >>
+  impl_tac >- (
+    rw[] >> `leq y (f y)` by res_tac >>
+    `y <> f y` by metis_tac[] >>
+    `m y < m (f y)` by res_tac >>
+    simp[]) >>
+  simp[]
+QED
+
+(* WHILE step: df_iterate f x = df_iterate f (f x) when f x ≠ x *)
+Theorem df_iterate_step_proof:
+  ∀(f : 'a -> 'a) x. f x ≠ x ==> df_iterate f x = df_iterate f (f x)
+Proof
+  rw[df_iterate_def, Once WHILE]
+QED
+
+(* Like fixpoint_orbit, but P holds at f x (not x).
+   Useful when init doesn't satisfy P but the first application does. *)
+Theorem df_iterate_fixpoint_step:
+  !(f : 'a -> 'a) (m : 'a -> num) b (P : 'a -> bool) x.
+    (!y. P y /\ f y <> y ==> m (f y) > m y) /\
+    P (f x) /\
+    (!y. P y ==> m y <= b) /\
+    (!y. P y ==> P (f y)) ==>
+    f (df_iterate f x) = df_iterate f x
+Proof
+  rpt strip_tac >>
+  `f x = x \/ f x <> x` by metis_tac[]
+  >- (gvs[df_iterate_def, Once WHILE] >> ONCE_REWRITE_TAC[WHILE] >> gvs[])
+  >> `df_iterate f x = df_iterate f (f x)` by
+       (irule df_iterate_step_proof >> simp[]) >>
+     simp[] >>
+     irule df_iterate_fixpoint_orbit >>
+     qexistsl_tac [`P`, `b`, `m`] >> simp[]
+QED
+
+(* Like invariant, but P holds at f x (not x). *)
+Theorem df_iterate_invariant_step:
+  !(f : 'a -> 'a) (m : 'a -> num) b (P : 'a -> bool) x.
+    (!y. P y /\ f y <> y ==> m (f y) > m y) /\
+    P (f x) /\
+    (!y. P y ==> m y <= b) /\
+    (!y. P y ==> P (f y)) ==>
+    P (df_iterate f x)
+Proof
+  rpt strip_tac >>
+  Cases_on `f x = x`
+  >- (`df_iterate f x = x` by simp[df_iterate_def, Once WHILE] >>
+      gvs[])
+  >> `df_iterate f x = df_iterate f (f x)` by
+       (irule df_iterate_step_proof >> simp[]) >>
+     simp[] >>
+     qspecl_then [`f`, `m`, `b`, `P`, `f x`] mp_tac df_iterate_invariant >>
+     simp[]
 QED
