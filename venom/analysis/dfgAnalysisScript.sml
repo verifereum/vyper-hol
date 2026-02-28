@@ -121,16 +121,6 @@ End
    Build DFG from Instruction Lists / Functions
    ========================================================================== *)
 
-Definition fn_insts_blocks_def:
-  fn_insts_blocks [] = [] /\
-  fn_insts_blocks (bb::bbs) =
-    bb.bb_instructions ++ fn_insts_blocks bbs
-End
-
-Definition fn_insts_def:
-  fn_insts fn = fn_insts_blocks fn.fn_blocks
-End
-
 Definition dfg_build_insts_rev_def:
   dfg_build_insts_rev dfg [] = dfg /\
   dfg_build_insts_rev dfg (inst::rest) =

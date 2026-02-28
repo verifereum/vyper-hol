@@ -74,7 +74,7 @@ Theorem w2i_i2w_within_signed[local]:
     within_int_bound (Signed n) x ∧ n ≤ 256 ⇒
     w2i ((i2w x):bytes32) = x
 Proof
-  rpt strip_tac >> gvs[vyperTypeValueTheory.within_int_bound_def] >>
+  rpt strip_tac >> gvs[vyperValueTheory.within_int_bound_def] >>
   Cases_on `0 ≤ x` >> gvs[] >- (
     `¬(x < 0)` by intLib.ARITH_TAC >> gvs[] >>
     `x = &Num x` by simp[Once $ GSYM integerTheory.INT_OF_NUM] >>
@@ -135,8 +135,8 @@ Theorem evaluate_binop_add:
     evaluate_binop Add (IntV u x) (IntV u y) =
     INL (IntV u (x + y))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def,
-       vyperInterpreterTheory.bounded_int_op_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def,
+       vyperValueOperationTheory.bounded_int_op_def]
 QED
 
 Theorem evaluate_binop_sub:
@@ -145,8 +145,8 @@ Theorem evaluate_binop_sub:
     evaluate_binop Sub (IntV u x) (IntV u y) =
     INL (IntV u (x − y))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def,
-       vyperInterpreterTheory.bounded_int_op_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def,
+       vyperValueOperationTheory.bounded_int_op_def]
 QED
 
 Theorem evaluate_binop_mul:
@@ -155,8 +155,8 @@ Theorem evaluate_binop_mul:
     evaluate_binop Mul (IntV u x) (IntV u y) =
     INL (IntV u (x * y))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def,
-       vyperInterpreterTheory.bounded_int_op_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def,
+       vyperValueOperationTheory.bounded_int_op_def]
 QED
 
 (* ========= Mod / Div (Unsigned) ========== *)
@@ -169,8 +169,8 @@ Theorem evaluate_binop_mod_unsigned:
     INL (IntV (Unsigned n) (x rem y))
 Proof
   rpt strip_tac >>
-  gvs[vyperTypeValueTheory.within_int_bound_def] >>
-  simp[vyperInterpreterTheory.evaluate_binop_def, vyperInterpreterTheory.bounded_int_op_def, vyperTypeValueTheory.within_int_bound_def] >>
+  gvs[vyperValueTheory.within_int_bound_def] >>
+  simp[vyperValueOperationTheory.evaluate_binop_def, vyperValueOperationTheory.bounded_int_op_def, vyperValueTheory.within_int_bound_def] >>
   `x = &Num x` by simp[Once $ GSYM integerTheory.INT_OF_NUM] >>
   `y = &Num y` by simp[Once $ GSYM integerTheory.INT_OF_NUM] >>
   `0 < Num y` by (CCONTR_TAC >> fs[]) >>
@@ -200,8 +200,8 @@ Theorem evaluate_binop_div_unsigned:
     INL (IntV (Unsigned n) (x / y))
 Proof
   rpt strip_tac >>
-  gvs[vyperTypeValueTheory.within_int_bound_def] >>
-  simp[vyperInterpreterTheory.evaluate_binop_def, vyperInterpreterTheory.bounded_int_op_def, vyperTypeValueTheory.within_int_bound_def] >>
+  gvs[vyperValueTheory.within_int_bound_def] >>
+  simp[vyperValueOperationTheory.evaluate_binop_def, vyperValueOperationTheory.bounded_int_op_def, vyperValueTheory.within_int_bound_def] >>
   `x = &Num x` by simp[Once $ GSYM integerTheory.INT_OF_NUM] >>
   `y = &Num y` by simp[Once $ GSYM integerTheory.INT_OF_NUM] >>
   `0 < Num y` by (CCONTR_TAC >> fs[]) >>
@@ -234,7 +234,7 @@ Theorem within_int_bound_rem:
 Proof
   rpt strip_tac >>
   Cases_on `u` >>
-  gvs[vyperTypeValueTheory.within_int_bound_def]
+  gvs[vyperValueTheory.within_int_bound_def]
   >- ( (* Signed *)
     `y ≠ 0` by simp[] >>
     drule integerTheory.INT_REMQUOT >>
@@ -276,7 +276,7 @@ Theorem evaluate_binop_div_signed:
     INL (IntV (Signed n) (x quot y))
 Proof
   rpt strip_tac >>
-  simp[vyperInterpreterTheory.evaluate_binop_def, vyperInterpreterTheory.bounded_int_op_def] >>
+  simp[vyperValueOperationTheory.evaluate_binop_def, vyperValueOperationTheory.bounded_int_op_def] >>
   `w2i ((i2w x):bytes32) = x` by (irule w2i_i2w_within_signed >> metis_tac[]) >>
   `w2i ((i2w y):bytes32) = y` by (irule w2i_i2w_within_signed >> metis_tac[]) >>
   `(i2w y):bytes32 ≠ 0w` by (
@@ -297,7 +297,7 @@ Theorem evaluate_binop_mod_signed:
     INL (IntV (Signed n) (x rem y))
 Proof
   rpt strip_tac >>
-  simp[vyperInterpreterTheory.evaluate_binop_def, vyperInterpreterTheory.bounded_int_op_def] >>
+  simp[vyperValueOperationTheory.evaluate_binop_def, vyperValueOperationTheory.bounded_int_op_def] >>
   `w2i ((i2w x):bytes32) = x` by (irule w2i_i2w_within_signed >> metis_tac[]) >>
   `w2i ((i2w y):bytes32) = y` by (irule w2i_i2w_within_signed >> metis_tac[]) >>
   `(i2w y):bytes32 ≠ 0w` by (
@@ -322,8 +322,8 @@ Theorem evaluate_binop_exp:
 Proof
   rpt strip_tac >>
   `¬(y < 0)` by intLib.ARITH_TAC >>
-  simp[vyperInterpreterTheory.evaluate_binop_def,
-       vyperInterpreterTheory.bounded_int_op_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def,
+       vyperValueOperationTheory.bounded_int_op_def]
 QED
 
 (* ========= Bitwise (IntV) ========== *)
@@ -334,8 +334,8 @@ Theorem evaluate_binop_and_int:
     evaluate_binop And (IntV u x) (IntV u y) =
     INL (IntV u (int_and x y))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def,
-       vyperInterpreterTheory.bounded_int_op_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def,
+       vyperValueOperationTheory.bounded_int_op_def]
 QED
 
 Theorem evaluate_binop_or_int:
@@ -344,8 +344,8 @@ Theorem evaluate_binop_or_int:
     evaluate_binop Or (IntV u x) (IntV u y) =
     INL (IntV u (int_or x y))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def,
-       vyperInterpreterTheory.bounded_int_op_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def,
+       vyperValueOperationTheory.bounded_int_op_def]
 QED
 
 Theorem evaluate_binop_xor_int:
@@ -354,8 +354,8 @@ Theorem evaluate_binop_xor_int:
     evaluate_binop XOr (IntV u x) (IntV u y) =
     INL (IntV u (int_xor x y))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def,
-       vyperInterpreterTheory.bounded_int_op_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def,
+       vyperValueOperationTheory.bounded_int_op_def]
 QED
 
 (* ========= Bitwise (BoolV) ========== *)
@@ -364,21 +364,21 @@ Theorem evaluate_binop_and_bool:
   ∀a b.
     evaluate_binop And (BoolV a) (BoolV b) = INL (BoolV (a ∧ b))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def]
 QED
 
 Theorem evaluate_binop_or_bool:
   ∀a b.
     evaluate_binop Or (BoolV a) (BoolV b) = INL (BoolV (a ∨ b))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def]
 QED
 
 Theorem evaluate_binop_xor_bool:
   ∀a b.
     evaluate_binop XOr (BoolV a) (BoolV b) = INL (BoolV (a ≠ b))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def]
 QED
 
 (* ========= Wrapped arithmetic (UAdd, USub, UMul, UDiv) ========== *)
@@ -389,8 +389,8 @@ Theorem evaluate_binop_uadd:
     INL (IntV u (if is_Unsigned u then (x + y) % &(2 ** int_bound_bits u)
                  else signed_int_mod (int_bound_bits u) (x + y)))
 Proof
-  Cases >> simp[vyperInterpreterTheory.evaluate_binop_def,
-                vyperInterpreterTheory.wrapped_int_op_def]
+  Cases >> simp[vyperValueOperationTheory.evaluate_binop_def,
+                vyperValueOperationTheory.wrapped_int_op_def]
 QED
 
 Theorem evaluate_binop_usub:
@@ -399,8 +399,8 @@ Theorem evaluate_binop_usub:
     INL (IntV u (if is_Unsigned u then (x − y) % &(2 ** int_bound_bits u)
                  else signed_int_mod (int_bound_bits u) (x − y)))
 Proof
-  Cases >> simp[vyperInterpreterTheory.evaluate_binop_def,
-                vyperInterpreterTheory.wrapped_int_op_def]
+  Cases >> simp[vyperValueOperationTheory.evaluate_binop_def,
+                vyperValueOperationTheory.wrapped_int_op_def]
 QED
 
 Theorem evaluate_binop_umul:
@@ -409,8 +409,8 @@ Theorem evaluate_binop_umul:
     INL (IntV u (if is_Unsigned u then (x * y) % &(2 ** int_bound_bits u)
                  else signed_int_mod (int_bound_bits u) (x * y)))
 Proof
-  Cases >> simp[vyperInterpreterTheory.evaluate_binop_def,
-                vyperInterpreterTheory.wrapped_int_op_def]
+  Cases >> simp[vyperValueOperationTheory.evaluate_binop_def,
+                vyperValueOperationTheory.wrapped_int_op_def]
 QED
 
 Theorem evaluate_binop_udiv:
@@ -420,8 +420,8 @@ Theorem evaluate_binop_udiv:
     INL (IntV u (if is_Unsigned u then (x / y) % &(2 ** int_bound_bits u)
                  else signed_int_mod (int_bound_bits u) (x / y)))
 Proof
-  Cases >> simp[vyperInterpreterTheory.evaluate_binop_def,
-                vyperInterpreterTheory.wrapped_int_op_def]
+  Cases >> simp[vyperValueOperationTheory.evaluate_binop_def,
+                vyperValueOperationTheory.wrapped_int_op_def]
 QED
 
 (* ========= Shifts ========== *)
@@ -434,7 +434,7 @@ Theorem evaluate_binop_shl:
 Proof
   rpt strip_tac >>
   `¬(y < 0)` by intLib.ARITH_TAC >>
-  simp[vyperInterpreterTheory.evaluate_binop_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def]
 QED
 
 Theorem evaluate_binop_shr:
@@ -445,7 +445,7 @@ Theorem evaluate_binop_shr:
 Proof
   rpt strip_tac >>
   `¬(y < 0)` by intLib.ARITH_TAC >>
-  simp[vyperInterpreterTheory.evaluate_binop_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def]
 QED
 
 (* ========= ExpMod ========== *)
@@ -455,7 +455,7 @@ Theorem evaluate_binop_expmod:
     evaluate_binop ExpMod (IntV (Unsigned 256) x) (IntV (Unsigned 256) y) =
     INL (IntV (Unsigned 256) (w2i (word_exp ((i2w x):bytes32) (i2w y))))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def]
 QED
 
 (* ========= Min / Max ========== *)
@@ -465,7 +465,7 @@ Theorem evaluate_binop_min:
     evaluate_binop Min (IntV u x) (IntV u y) =
     INL (IntV u (if x < y then x else y))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def]
 QED
 
 Theorem evaluate_binop_max:
@@ -473,7 +473,7 @@ Theorem evaluate_binop_max:
     evaluate_binop Max (IntV u x) (IntV u y) =
     INL (IntV u (if x < y then y else x))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def]
 QED
 
 (* ========= Comparisons ========== *)
@@ -482,56 +482,56 @@ Theorem evaluate_binop_eq_int:
   ∀u x y.
     evaluate_binop Eq (IntV u x) (IntV u y) = INL (BoolV (x = y))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def]
 QED
 
 Theorem evaluate_binop_lt:
   ∀u x y.
     evaluate_binop Lt (IntV u x) (IntV u y) = INL (BoolV (x < y))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def]
 QED
 
 Theorem evaluate_binop_lte:
   ∀u x y.
     evaluate_binop LtE (IntV u x) (IntV u y) = INL (BoolV (x ≤ y))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def]
 QED
 
 Theorem evaluate_binop_gt:
   ∀u x y.
     evaluate_binop Gt (IntV u x) (IntV u y) = INL (BoolV (x > y))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def]
 QED
 
 Theorem evaluate_binop_gte:
   ∀u x y.
     evaluate_binop GtE (IntV u x) (IntV u y) = INL (BoolV (x ≥ y))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def]
 QED
 
 Theorem evaluate_binop_noteq_int:
   ∀u x y.
     evaluate_binop NotEq (IntV u x) (IntV u y) = INL (BoolV (x ≠ y))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def,
-       vyperInterpreterTheory.binop_negate_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def,
+       vyperValueOperationTheory.binop_negate_def]
 QED
 
 Theorem evaluate_binop_eq_bool:
   ∀a b.
     evaluate_binop Eq (BoolV a) (BoolV b) = INL (BoolV (a = b))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def]
 QED
 
 Theorem evaluate_binop_noteq_bool:
   ∀a b.
     evaluate_binop NotEq (BoolV a) (BoolV b) = INL (BoolV (a ≠ b))
 Proof
-  simp[vyperInterpreterTheory.evaluate_binop_def,
-       vyperInterpreterTheory.binop_negate_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def,
+       vyperValueOperationTheory.binop_negate_def]
 QED

@@ -1,0 +1,2 @@
+# CFG analysis definitions
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics

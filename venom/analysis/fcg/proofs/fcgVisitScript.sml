@@ -23,9 +23,9 @@
  *   fcg_visit_reachable_in_visited     - reachable after visit ⊆ fn_name :: visited
  *)
 
-Theory fcgAnalysisVisit
+Theory fcgVisit
 Ancestors
-  fcgAnalysisDefs fcgAnalysis venomInst
+  fcgBridge fcgDefs venomInst
 
 (* ===== fcg_record_edges helpers ===== *)
 
@@ -128,6 +128,27 @@ Proof
   Cases >> rpt gen_tac >> rename1 `(target_name, inst)` >>
   simp[fcg_record_edges_def] >> strip_tac >>
   simp[fcg_get_call_sites_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+(* fcg_record_edges: preserves ALL_DISTINCT of call_sites *)
+Theorem fcg_record_edges_call_sites_distinct:
+  !fn_name targets fcg.
+    (!callee. ALL_DISTINCT (fcg_get_call_sites fcg callee)) ==>
+    (!callee. ALL_DISTINCT (fcg_get_call_sites
+      (fcg_record_edges fn_name targets fcg) callee))
+Proof
+  Induct_on `targets`
+  >- simp[fcg_record_edges_def]
+  >> Cases >> rpt gen_tac >> rename1 `(target_name, inst)`
+  >> once_rewrite_tac[fcg_record_edges_def] >> simp[]
+  >> strip_tac
+  >> first_x_assum irule
+  >> rpt strip_tac
+  >> simp[fcg_get_call_sites_def, finite_mapTheory.FLOOKUP_UPDATE]
+  >> Cases_on `callee = target_name`
+  >> simp[GSYM fcg_get_call_sites_def]
+  >> Cases_on `MEM inst (fcg_get_call_sites fcg target_name)`
+  >> simp[listTheory.ALL_DISTINCT_SNOC]
 QED
 
 (* ===== fcg_visit helpers ===== *)
@@ -244,6 +265,19 @@ Proof
   Cases_on `lookup_function fn_name ctx.ctx_functions` >>
   simp[fcg_record_edges_call_sites_mem,
        fcg_get_call_sites_reachable_update]
+QED
+
+(* fcg_visit: preserves ALL_DISTINCT of call_sites *)
+Theorem fcg_visit_call_sites_distinct:
+  (!callee. ALL_DISTINCT (fcg_get_call_sites fcg callee)) ==>
+  (!callee. ALL_DISTINCT (fcg_get_call_sites
+             (SND (fcg_visit ctx fn_name fcg)) callee))
+Proof
+  rpt strip_tac >>
+  simp[fcg_visit_def] >>
+  Cases_on `lookup_function fn_name ctx.ctx_functions` >>
+  simp[fcg_get_call_sites_reachable_update] >>
+  irule fcg_record_edges_call_sites_distinct >> simp[]
 QED
 
 (* ===== Composite helpers for DFS proofs ===== *)

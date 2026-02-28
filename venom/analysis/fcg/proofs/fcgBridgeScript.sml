@@ -1,68 +1,23 @@
 (*
- * FCG Analysis Definitions
+ * FCG Bridge Lemmas
  *
- * Semantic definitions and bridge lemmas for FCG correctness.
- *
- * TOP-LEVEL definitions:
- *   ctx_fn_names          - convenience: function names in context
- *   wf_fn_names           - well-formedness: distinct names, entry valid
- *   wf_invoke_targets     - well-formedness: INVOKE targets are valid
- *   fn_directly_calls     - semantic direct-call relation
- *   fcg_path              - reachability via RTC of direct calls
+ * Bridge lemmas connecting raw instruction structure to analysis functions.
+ * These bridge the semantic fn_directly_calls relation to get_invoke_targets
+ * and fcg_scan_function.
  *
  * TOP-LEVEL theorems:
- *   fn_directly_calls_scan               - bridge to get_invoke_targets
- *   mem_get_invoke_targets_pair          - pair membership => inst properties
- *   mem_scan_function_pair              - scan pair => inst properties
- *   mem_get_invoke_targets              - MEM in MAP FST characterization
+ *   mem_get_invoke_targets_pair   - pair membership => inst properties
+ *   mem_scan_function_pair        - scan pair => inst properties
+ *   get_invoke_targets_skip       - non-INVOKE instructions are skipped
+ *   get_invoke_targets_mono       - tail results are subset of cons results
+ *   get_invoke_targets_intro      - reverse of mem_get_invoke_targets_pair
+ *   mem_get_invoke_targets        - MEM in MAP FST characterization
+ *   fn_directly_calls_scan        - bridge to get_invoke_targets
  *)
 
-Theory fcgAnalysisDefs
+Theory fcgBridge
 Ancestors
-  fcgAnalysis relation venomInst
-
-(* ===== Convenience Helper ===== *)
-
-Definition ctx_fn_names_def:
-  ctx_fn_names ctx = MAP (\f. f.fn_name) ctx.ctx_functions
-End
-
-(* ===== Well-Formedness Predicates ===== *)
-
-Definition wf_fn_names_def:
-  wf_fn_names ctx <=>
-    ALL_DISTINCT (ctx_fn_names ctx) /\
-    (!entry_name. ctx.ctx_entry = SOME entry_name ==>
-       MEM entry_name (ctx_fn_names ctx))
-End
-
-Definition wf_invoke_targets_def:
-  wf_invoke_targets ctx <=>
-    (!func inst.
-       MEM func ctx.ctx_functions /\
-       MEM inst (fn_insts func) /\
-       inst.inst_opcode = INVOKE ==>
-       ?lbl rest. inst.inst_operands = Label lbl :: rest /\
-                  MEM lbl (ctx_fn_names ctx))
-End
-
-(* ===== Semantic Relation via RTC ===== *)
-
-(* Direct call edge: fn_a has an INVOKE instruction targeting fn_b.
-   Defined purely from instruction structure -- no analysis functions. *)
-Definition fn_directly_calls_def:
-  fn_directly_calls ctx fn_a fn_b <=>
-    ?func inst rest.
-      lookup_function fn_a ctx.ctx_functions = SOME func /\
-      MEM inst (fn_insts func) /\
-      inst.inst_opcode = INVOKE /\
-      inst.inst_operands = Label fn_b :: rest
-End
-
-(* Reachability = reflexive-transitive closure of direct calls *)
-Definition fcg_path_def:
-  fcg_path ctx = RTC (fn_directly_calls ctx)
-End
+  fcgDefs
 
 (* ===== Bridge Lemmas ===== *)
 

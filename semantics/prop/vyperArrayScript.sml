@@ -1,7 +1,6 @@
 Theory vyperArray
-
 Ancestors
-  vyperInterpreter
+  vyperValueOperation vyperState vyperInterpreter
 
 Definition array_is_mutable_def[simp]:
   array_is_mutable (DynArrayV _ _ _) = T ∧

@@ -17,9 +17,9 @@
  *   fcg_dfs_reachable_closed       - reachable closed under direct calls
  *)
 
-Theory fcgAnalysisDfs
+Theory fcgDfs
 Ancestors
-  fcgAnalysisVisit fcgAnalysisDefs fcgAnalysis venomInst relation
+  fcgVisit fcgBridge fcgDefs venomInst
 
 (* Local tactics: rewrite r/q back to SND/FST (fcg_visit ...) via pair eq.
  * visit_{snd,fst}_tac rewrite the goal;
@@ -201,6 +201,24 @@ Proof
 QED
 
 (* ===== Call sites invariants ===== *)
+
+(* fcg_dfs: call_sites distinctness invariant *)
+Theorem fcg_dfs_call_sites_distinct:
+  !ctx stack visited fcg.
+    (!callee. ALL_DISTINCT (fcg_get_call_sites fcg callee)) ==>
+    (!callee. ALL_DISTINCT (fcg_get_call_sites
+              (fcg_dfs ctx stack visited fcg) callee))
+Proof
+  ho_match_mp_tac fcg_dfs_ind >> rpt gen_tac >> strip_tac
+  >> simp[fcg_dfs_def] >> rpt strip_tac
+  >> Cases_on `MEM fn_name visited` >> gvs[]
+  >> Cases_on `fcg_visit ctx fn_name fcg` >> gvs[]
+  >> first_x_assum irule >> simp[]
+  >> rpt strip_tac
+  >> `r = SND (fcg_visit ctx fn_name fcg)` by simp[]
+  >> pop_assum SUBST1_TAC
+  >> irule fcg_visit_call_sites_distinct >> simp[]
+QED
 
 (* fcg_dfs: call_sites completeness - all INVOKEs from visited are recorded *)
 Theorem fcg_dfs_call_sites_complete:

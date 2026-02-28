@@ -6,8 +6,8 @@
 
 Theory vyperStorage
 Ancestors
-  vyperTypeValue vfmState vfmTypes vfmConstants
-  vyperMisc
+  vyperValue vfmState vfmTypes vfmConstants
+  vyperMisc arithmetic cv cv_rep
 Libs
   cv_transLib wordsLib
 
@@ -26,12 +26,12 @@ val () = cv_auto_trans slot_to_bool_def;
 (* ===== Bytes/String Slot Helpers ===== *)
 
 Definition bytes_to_slots_aux_def:
-  bytes_to_slots_aux acc ([]:byte list) = REVERSE acc /\
+  bytes_to_slots_aux acc ([]:byte list): bytes32 list = REVERSE acc /\
   bytes_to_slots_aux acc bs =
     let chunk = TAKE 32 bs in
     let rest = DROP 32 bs in
     let padded = chunk ++ REPLICATE (32 - LENGTH chunk) 0w in
-    bytes_to_slots_aux (word_of_bytes T (0w: bytes32) padded :: acc) rest
+    bytes_to_slots_aux (word_of_bytes_be padded :: acc) rest
 Termination
   WF_REL_TAC ‘measure (LENGTH o SND)’ >> gvs[]
 End
@@ -47,7 +47,7 @@ Definition slots_to_bytes_def:
   slots_to_bytes 0 _ = ([]:byte list) /\
   slots_to_bytes _ [] = [] /\
   slots_to_bytes len ((slot:bytes32)::slots) =
-    let bs = word_to_bytes slot T in
+    let bs = word_to_bytes_be slot in
     let take_n = MIN 32 len in
     TAKE take_n bs ++ slots_to_bytes (len - take_n) slots
 End
@@ -95,11 +95,11 @@ Definition encode_base_to_slot_def:
   encode_base_to_slot (BoolV b) (BaseTV BoolT) = SOME (bool_to_slot b) /\
   encode_base_to_slot (BytesV (Fixed m) bs) (BaseTV AddressT) =
     (if LENGTH bs = m /\ m = 20
-     then SOME (word_of_bytes T 0w (PAD_LEFT 0w 32 bs))
+     then SOME (word_of_bytes_be (PAD_LEFT 0w 32 bs))
      else NONE) /\
   encode_base_to_slot (BytesV (Fixed m) bs) (BaseTV (BytesT (Fixed n))) =
     (if m = n /\ LENGTH bs = n /\ n ≤ 32 then
-       SOME (word_of_bytes T 0w bs)
+       SOME (word_of_bytes_be bs)
      else NONE) /\
   encode_base_to_slot (FlagV m k) (FlagTV m') =
     (if m = m' then SOME (n2w k) else NONE) /\
@@ -116,9 +116,9 @@ Definition decode_base_from_slot_def:
   decode_base_from_slot slot (BaseTV DecimalT) = DecimalV (w2i slot) /\
   decode_base_from_slot slot (BaseTV BoolT) = BoolV (slot_to_bool slot) /\
   decode_base_from_slot slot (BaseTV AddressT) =
-    BytesV (Fixed 20) (DROP 12 (word_to_bytes slot T)) /\
+    BytesV (Fixed 20) (DROP 12 (word_to_bytes_be slot)) /\
   decode_base_from_slot slot (BaseTV (BytesT (Fixed n))) =
-    BytesV (Fixed n) (TAKE n (word_to_bytes slot T)) /\
+    BytesV (Fixed n) (TAKE n (word_to_bytes_be slot)) /\
   decode_base_from_slot slot (FlagTV m) = FlagV m (w2n slot) /\
   decode_base_from_slot slot NoneTV = NoneV /\
   decode_base_from_slot slot _ = NoneV
@@ -399,17 +399,8 @@ Termination
   rw[type_value_size_def] >>
   ‘type_value1_size ftypes ≤
    list_size (pair_size (list_size char_size) type_value_size) ftypes’
-   by rw[type_value1_size_le] >> simp[arithmeticTheory.MIN_DEF]
+   by rw[type_value1_size_le] >> simp[MIN_DEF]
 End
-
-(* TODO: refactor helper theorems into a shared library
-   (duplicated from vyperABIScript.sml) *)
-
-Theorem c2n_le_cv_size:
-  !x. cv$c2n x <= cv_size x
-Proof
-  Cases >> rw[cvTheory.c2n_def, cvTheory.cv_size_def]
-QED
 
 val decode_value_pre_def =
   cv_auto_trans_pre_rec
@@ -423,21 +414,18 @@ val decode_value_pre_def =
          | INR (INR (INR (INL (storage, offset, tv, n)))) => cv_size tv + cv$c2n n
          | INR (INR (INR (INR (storage, offset, ftypes)))) => cv_size ftypes)`
      \\ rw[]
-     \\ TRY (gvs[cv_repTheory.cv_termination_simp, cvTheory.cv_size_def,
-                 cvTheory.cv_snd_def, cvTheory.cv_fst_def]
+     \\ TRY (gvs[cv_termination_simp, cv_size_def, cv_snd_def, cv_fst_def]
              \\ decide_tac \\ NO_TAC)
      (* Handle ArrayTV Dynamic cases - need case splits to expose Pair overhead *)
      \\ rpt strip_tac
      \\ Cases_on `cv_v`
-     >> gvs[cvTheory.cv_ispair_def, cvTheory.c2b_def]
+     >> gvs[cv_ispair_def, c2b_def]
      \\ rename1 `cv_size (cv_fst rest1)`
      \\ Cases_on `rest1`
-     >> gvs[cvTheory.cv_ispair_def, cvTheory.c2b_def, cvTheory.cv_lt_def,
-            cvTheory.cv_fst_def, cvTheory.cv_snd_def, cvTheory.cv_size_def]
+     >> gvs[cv_ispair_def, c2b_def, cv_lt_def, cv_fst_def, cv_snd_def, cv_size_def]
      \\ (rename1 `cv_ispair rest2` ORELSE rename1 `cv_fst rest2`)
      \\ Cases_on `rest2`
-     >> gvs[cvTheory.cv_ispair_def, cvTheory.c2b_def, cvTheory.cv_lt_def,
-            cvTheory.cv_fst_def, cvTheory.cv_snd_def, cvTheory.cv_size_def]
+     >> gvs[cv_ispair_def, c2b_def, cv_lt_def, cv_fst_def, cv_snd_def, cv_size_def]
      \\ rename1`cv_lt (cv$Num _) nn = cv$Num _`
      \\ Cases_on`nn` \\ gvs[CaseEq"bool"]
      \\ rename1`cv_lt (cv$Num _) nn = cv$Num _`
@@ -447,10 +435,10 @@ val decode_value_pre_def =
      \\ gvs[cv_primTheory.cv_min_def]
      \\ rename1`cv_lt n1 n2`
      \\ Cases_on`cv_lt n1 n2` \\ gvs[]
-     \\ TRY(Cases_on`n1` \\ Cases_on `n2` \\ gvs[cvTheory.cv_lt_def] \\ NO_TAC)
+     \\ TRY(Cases_on`n1` \\ Cases_on `n2` \\ gvs[cv_lt_def] \\ NO_TAC)
      \\ rename1`cv$c2b (cv$Num bb)`
      \\ Cases_on`bb` \\ gvs[]
-     \\ Cases_on`n1` \\ Cases_on `n2` \\ gvs[cvTheory.cv_lt_def]
+     \\ Cases_on`n1` \\ Cases_on `n2` \\ gvs[cv_lt_def]
     );
 
 Theorem decode_value_pre[cv_pre]:
@@ -472,7 +460,7 @@ QED
    Both key and base_slot are 32 bytes, big-endian encoded *)
 Definition hashmap_slot_def:
   hashmap_slot (base_slot : bytes32) (key : bytes32) : bytes32 =
-    word_of_bytes T 0w (Keccak_256_w64 (word_to_bytes base_slot T ++ word_to_bytes key T))
+    word_of_bytes_be (Keccak_256_w64 (word_to_bytes_be base_slot ++ word_to_bytes_be key))
 End
 val () = cv_trans hashmap_slot_def;
 
@@ -481,12 +469,12 @@ Definition encode_hashmap_key_def:
    encode_hashmap_key _ (IntV _ i) = i2w i ∧
    encode_hashmap_key _ (FlagV _ n) = n2w n ∧
    encode_hashmap_key (BaseT AddressT) (BytesV _ bs) =
-     word_of_bytes T 0w (PAD_LEFT 0w 32 bs) ∧
+     word_of_bytes_be (PAD_LEFT 0w 32 bs) ∧
    encode_hashmap_key (BaseT (BytesT _)) (BytesV _ bs) =
-     word_of_bytes T 0w (Keccak_256_w64 bs) ∧
+     word_of_bytes_be (Keccak_256_w64 bs) ∧
    encode_hashmap_key (BaseT (StringT _)) (StringV _ s) =
      (let bs = MAP n2w_o_ORD s in
-      word_of_bytes T 0w (Keccak_256_w64 bs)) ∧
+      word_of_bytes_be (Keccak_256_w64 bs)) ∧
    encode_hashmap_key _ (BoolV b) = (if b then 1w else 0w) ∧
    encode_hashmap_key _ _ = (0w:bytes32)
 End
@@ -500,38 +488,3 @@ val () = cv_auto_trans encode_hashmap_key_def;
    from jsonAST includes additional info like n_slots and type_str,
    but for storage access we only need the base slot. *)
 Type storage_layout = “:((num option # string) # num) list”
-
-
-(* Look up base slot for a variable by (source_id, name) *)
-Definition lookup_var_slot_def:
-  lookup_var_slot (layout : storage_layout) (src_id_opt : num option) (var_name : string) : num option =
-    ALOOKUP layout (src_id_opt, var_name)
-End
-
-(* Read a top-level variable from storage *)
-(* TODO: update to use new lookup_var_slot signature if needed *)
-Definition read_storage_var_def:
-  read_storage_var layout (storage : storage) src_id_opt var_name tv =
-    case lookup_var_slot layout src_id_opt var_name of
-    | NONE => NONE
-    | SOME slot =>
-        case decode_value storage slot tv of
-        | SOME v => SOME v
-        | NONE => NONE
-End
-
-(* Write a top-level variable to storage *)
-(* TODO: update to use new lookup_var_slot signature if needed *)
-Definition write_storage_var_def:
-  write_storage_var layout (storage : storage) src_id_opt var_name tv v =
-    case lookup_var_slot layout src_id_opt var_name of
-    | NONE => NONE
-    | SOME slot =>
-        (case encode_value tv v of
-         | NONE => NONE
-         | SOME writes =>
-             let base_slot : bytes32 = n2w slot in
-             SOME (apply_writes base_slot writes storage))
-End
-
-

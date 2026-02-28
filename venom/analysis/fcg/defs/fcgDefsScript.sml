@@ -1,35 +1,37 @@
 (*
- * Function Call Graph (FCG) Analysis
+ * FCG Analysis Definitions
  *
+ * Function Call Graph construction for Venom IR.
  * Computes which functions call which via INVOKE instructions,
- * starting from the entry function. Tracks:
- *  - Callees: function name -> list of callee function names
- *  - Call sites: function name -> INVOKE instructions that call it
- *  - Reachable: function names reachable from entry
+ * starting from the entry function.
  *
+ * TOP-LEVEL definitions:
+ *   fcg_analysis           - result record type
+ *   fcg_empty              - empty analysis result
+ *   fcg_get_callees        - query: callees of a function
+ *   fcg_get_call_sites     - query: INVOKE instructions targeting a function
+ *   fcg_is_reachable       - query: is a function reachable from entry?
+ *   fcg_get_unreachable    - query: unreachable functions in context
+ *   get_invoke_targets     - extract (callee, instruction) pairs from INVOKE list
+ *   fcg_scan_function      - scan a function's blocks for INVOKE targets
+ *   fcg_record_edges       - record caller->callee edges into analysis
+ *   fcg_visit              - process a single unvisited function
+ *   fcg_dfs                - DFS worklist traversal (has termination proof)
+ *   fcg_analyze            - top-level entry point
  *
- * API contract:
- *  - Use fcg_get_callees / fcg_get_call_sites / fcg_is_reachable to query
- *    results; these return sensible defaults for absent keys.
- *  - Do not inspect fmap domains directly; maps are sparse (only populated
- *    for functions with at least one edge). Python pre-initializes empty
- *    entries for every visited function, but the getter-based API hides
- *    this difference.
- *  - Well-formed IR is assumed: every INVOKE's first operand is a Label,
- *    and every callee label names a function in the context. Malformed
- *    cases are silently skipped; wf_invoke_targets (in fcgAnalysisDefs)
- *    formalizes this assumption.
- *  - Function names in ctx_functions are assumed distinct. lookup_function
- *    returns the first match; wf_fn_names (in fcgAnalysisDefs) formalizes
- *    this as ALL_DISTINCT (ctx_fn_names ctx).
+ * Helper lemmas (termination):
+ *   filter_length_mono     - stricter predicate => shorter FILTER
+ *   filter_visited_mono    - adding to visited can only shrink FILTER
+ *   filter_visited_shrink  - adding unvisited name strictly shrinks FILTER
+ *   filter_neq_redundant   - name not in list => neq conjunct redundant
  *)
 
-Theory fcgAnalysis
+Theory fcgDefs
 Ancestors
-  venomInst dfgAnalysis
+  venomInst relation
 
 (* ==========================================================================
-   FCG Analysis Result Type
+   Result type
    ========================================================================== *)
 
 Datatype:
@@ -49,7 +51,11 @@ Definition fcg_empty_def:
 End
 
 (* ==========================================================================
-   Query Helpers
+   Query API
+
+   Use these to inspect results; they return sensible defaults for absent
+   keys.  Do not inspect fmap domains directly — maps are sparse (only
+   populated for functions with at least one edge).
    ========================================================================== *)
 
 Definition fcg_get_callees_def:
@@ -76,13 +82,12 @@ Definition fcg_get_unreachable_def:
 End
 
 (* ==========================================================================
-   Instruction Scanning
+   Instruction scanning
    ========================================================================== *)
 
 (* Extract (callee_name, instruction) pairs from INVOKE instructions.
- * Note: Python asserts that INVOKE's first operand is always a Label.
- * Here we silently skip malformed INVOKEs; a well-formedness predicate
- * should guarantee this case never arises. *)
+ * Silently skips malformed INVOKEs (first operand not a Label);
+ * wf_invoke_targets should rule this out. *)
 Definition get_invoke_targets_def:
   get_invoke_targets [] = [] /\
   get_invoke_targets (inst::rest) =
@@ -93,17 +98,18 @@ Definition get_invoke_targets_def:
     else get_invoke_targets rest
 End
 
-(* Scan all blocks of a function for INVOKE instructions *)
+(* All INVOKE targets across every block of a function. *)
 Definition fcg_scan_function_def:
   fcg_scan_function func =
     get_invoke_targets (fn_insts func)
 End
 
 (* ==========================================================================
-   DFS Traversal
+   Edge recording
    ========================================================================== *)
 
-(* Record edges from a single function's invoke targets into the analysis *)
+(* Record caller->callee edges from invoke targets into the analysis.
+ * Uses SNOC for append-order (matching Python reference). *)
 Definition fcg_record_edges_def:
   fcg_record_edges fn_name [] fcg = fcg /\
   fcg_record_edges fn_name ((callee, inst)::rest) fcg =
@@ -118,7 +124,8 @@ Definition fcg_record_edges_def:
     fcg_record_edges fn_name rest fcg'
 End
 
-(* Process a single unvisited function: scan for invokes, record edges *)
+(* Process a single unvisited function: scan for invokes, record edges,
+ * mark as reachable, return new callees to explore. *)
 Definition fcg_visit_def:
   fcg_visit ctx fn_name fcg =
     case lookup_function fn_name ctx.ctx_functions of
@@ -132,7 +139,10 @@ Definition fcg_visit_def:
         (new_callees, fcg'')
 End
 
-(* Helper: stricter predicate gives shorter or equal FILTER *)
+(* ==========================================================================
+   Termination helpers
+   ========================================================================== *)
+
 Theorem filter_length_mono:
   (!x. P x ==> Q x) ==>
   LENGTH (FILTER P ls) <= LENGTH (FILTER Q ls)
@@ -141,7 +151,6 @@ Proof
   rw[] >> simp[] >> res_tac >> simp[]
 QED
 
-(* Helper: adding a name to visited can only shrink or keep the filter *)
 Theorem filter_visited_mono:
   LENGTH (FILTER (\f. ~MEM f.fn_name (name :: visited)) fns) <=
   LENGTH (FILTER (\f. ~MEM f.fn_name visited) fns)
@@ -149,7 +158,6 @@ Proof
   irule filter_length_mono >> simp[]
 QED
 
-(* Helper: if name matches some element, adding it strictly shrinks the filter *)
 Theorem filter_visited_shrink:
   ~MEM name visited /\
   MEM name (MAP (\f. f.fn_name) fns) ==>
@@ -163,7 +171,6 @@ Proof
   simp[] >> irule filter_length_mono >> simp[]
 QED
 
-(* Helper: if name not in function names, the neq conjunct is redundant *)
 Theorem filter_neq_redundant:
   ~MEM name (MAP (\f. f.fn_name) fns) ==>
   FILTER (\f. f.fn_name <> name /\ P f) fns =
@@ -173,15 +180,15 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-(* DFS worklist traversal
- * stack: function names left to visit
- * visited: function names already processed
- * fcg: accumulator for results
- *
- * Terminates because:
- *  - visited names are skipped (stack shrinks)
- *  - new names are added to visited (unvisited set shrinks)
- *  - measure: (|context functions not in visited|, |stack|) lexicographic *)
+(* ==========================================================================
+   DFS worklist traversal
+
+   Terminates because:
+    - visited names are skipped (stack shrinks)
+    - new names are added to visited (unvisited set shrinks)
+    - measure: (|context functions not in visited|, |stack|) lexicographic
+   ========================================================================== *)
+
 Definition fcg_dfs_def:
   fcg_dfs ctx [] visited fcg = fcg /\
   fcg_dfs ctx (fn_name::stack) visited fcg =
@@ -197,25 +204,45 @@ Termination
         LENGTH stack))` >>
   rpt strip_tac >- simp[] >>
   Cases_on `lookup_function fn_name ctx.ctx_functions` >-
-  (* NONE: new_callees = [], filter unchanged, stack shrinks *)
   (disj2_tac >>
    fs[fcg_visit_def] >> gvs[] >>
    imp_res_tac lookup_function_not_mem >>
    simp[filter_neq_redundant]) >>
-  (* SOME: filter strictly shrinks *)
   (disj1_tac >>
    imp_res_tac lookup_function_mem >>
    irule filter_visited_shrink >> simp[])
 End
 
 (* ==========================================================================
-   Top-level Entry Point
+   Top-level entry point
    ========================================================================== *)
 
+(* Run the full FCG analysis: if the context has an entry function,
+ * DFS from it to discover all reachable callees and call sites. *)
 Definition fcg_analyze_def:
   fcg_analyze ctx =
     case ctx.ctx_entry of
       NONE => fcg_empty
     | SOME entry_name =>
         fcg_dfs ctx [entry_name] [] fcg_empty
+End
+
+(* ==========================================================================
+   Semantic relations
+   ========================================================================== *)
+
+(* Direct call edge: fn_a has an INVOKE instruction targeting fn_b.
+ * Defined purely from instruction structure — no analysis functions. *)
+Definition fn_directly_calls_def:
+  fn_directly_calls ctx fn_a fn_b <=>
+    ?func inst rest.
+      lookup_function fn_a ctx.ctx_functions = SOME func /\
+      MEM inst (fn_insts func) /\
+      inst.inst_opcode = INVOKE /\
+      inst.inst_operands = Label fn_b :: rest
+End
+
+(* Reachability = reflexive-transitive closure of direct calls. *)
+Definition fcg_path_def:
+  fcg_path ctx = RTC (fn_directly_calls ctx)
 End
