@@ -330,9 +330,9 @@ End
 val () = cv_auto_trans dest_NumV_def;
 
 Definition dest_AddressV_def:
-  dest_AddressV (BytesV (Fixed b) bs) =
+  dest_AddressV (BytesV (Fixed b) bs) : address option =
     (if b = 20 ∧ LENGTH bs = 20 then
-      SOME (word_of_bytes T (0w:address) bs)
+      SOME (word_of_bytes_be bs)
      else NONE) ∧
   dest_AddressV _ = NONE
 End
