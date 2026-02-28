@@ -325,7 +325,7 @@ Definition cfg_exec_path_def:
   cfg_exec_path cfg [(lbl, idx)] = T ∧
   cfg_exec_path cfg ((lbl1, idx1) :: (lbl2, idx2) :: rest) =
     (((lbl1 = lbl2 ∧ idx2 = idx1 + 1) ∨
-      (lbl1 ≠ lbl2 ∧ MEM lbl2 (cfg_succs_of cfg lbl1) ∧ idx2 = 0)) ∧
+      (MEM lbl2 (cfg_succs_of cfg lbl1) ∧ idx2 = 0)) ∧
      cfg_exec_path cfg ((lbl2, idx2) :: rest))
 End
 
