@@ -292,6 +292,21 @@ val allowed_test_names = [
 
 (* Tests excluded by name - require architectural changes *)
 val excluded_test_names = [
+  (* These tests have a helper contract deployed via raw_bytecode with
+     annotated_ast: null. The deployment decoder cannot handle null ASTs.
+     Fix: add a RawDeployment trace type that only carries address +
+     runtime bytecode + ABI, skipping source compilation entirely. *)
+  "test_abi_decode_child_head_points_to_parent",
+  "test_abi_decode_complex_arithmetic_overflow",
+  "test_abi_decode_complex_empty_dynarray",
+  "test_abi_decode_empty_toplevel_dynarray",
+  "test_abi_decode_extcall_complex_empty_dynarray",
+  "test_abi_decode_extcall_empty_array",
+  "test_abi_decode_extcall_zero_len_array2",
+  "test_abi_decode_invalid_toplevel_dynarray_head",
+  "test_abi_decode_merge_head_and_length",
+  "test_abi_decode_nonstrict_head",
+  "test_abi_decode_nonstrict_head_oob"
 ]
 
 fun glob_match pat str =
