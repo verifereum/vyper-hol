@@ -20,8 +20,6 @@
  *   calculate_out_vars    — compute out_vars from successors
  *   liveness_one_pass     — process all blocks once (in postorder)
  *   liveness_iterate      — iterate passes until fixpoint
- *   total_live_count      — measure for termination
- *   all_var_slots         — upper bound on total_live_count
  *)
 
 Theory livenessDefs
@@ -119,23 +117,6 @@ Definition live_vars_at_def:
     | SOME vars => vars
 End
 
-(* Count leading PHI instructions. *)
-Definition count_phis_def:
-  count_phis [] = (0:num) ∧
-  count_phis (inst::rest) =
-    if inst.inst_opcode ≠ PHI then 0
-    else 1 + count_phis rest
-End
-
-(* Live-in variables = liveness at the first non-PHI instruction. *)
-Definition liveness_in_vars_def:
-  liveness_in_vars lr bb =
-    let i = count_phis bb.bb_instructions in
-    if i < LENGTH bb.bb_instructions then
-      live_vars_at lr bb.bb_label i
-    else []
-End
-
 (* ==========================================================================
    Backward transfer: calculate_liveness
 
@@ -223,11 +204,7 @@ Definition liveness_one_pass_def:
 End
 
 (* ==========================================================================
-   Measure for termination
-
-   total_live_count = sum of lengths of all live sets across all blocks.
-   all_var_slots = upper bound (total instruction slots × variable count).
-   When the result changes, total_live_count strictly increases.
+   Variable universe and instruction counts (used in termination measure)
    ========================================================================== *)
 
 (* All variable names mentioned anywhere in a function. *)
@@ -244,36 +221,14 @@ Definition fn_total_insts_def:
   fn_total_insts bbs = SUM (MAP (λbb. LENGTH bb.bb_instructions) bbs)
 End
 
-(* Count of live variables across all inst_liveness maps + all out_vars.
-   Used as termination measure (increases monotonically). *)
-Definition block_live_count_def:
-  block_live_count bl =
-    LENGTH bl.bl_out_vars +
-    SUM (MAP (λ(k,vs). LENGTH vs) (fmap_to_alist bl.bl_inst_liveness))
-End
-
-Definition total_live_count_def:
-  total_live_count lr =
-    SUM (MAP (λ(k,bl). block_live_count bl)
-      (fmap_to_alist lr.lr_blocks))
-End
-
-(* Upper bound: each slot can hold at most |all_vars| variables. *)
-Definition all_var_slots_def:
-  all_var_slots bbs =
-    let nv = LENGTH (nub (fn_all_vars bbs)) in
-    let ni = fn_total_insts bbs + LENGTH bbs in  (* +|bbs| for out_vars *)
-    nv * ni
-End
-
 (* ==========================================================================
    Iterate passes until fixpoint via df_iterate (WHILE-based).
 
    The step function is liveness_one_pass with fixed cfg/bbs/order.
    Convergence follows from:
-     - inflationary: total_live_count strictly increases on non-fixpoint steps
+     - inflationary: set_live_count strictly increases on non-fixpoint steps
        (guaranteed by list_union merge in process_block)
-     - bounded: total_live_count ≤ all_var_slots
+     - bounded: set_live_count ≤ (nv+1) * (fn_total_insts + LENGTH bbs)
    ========================================================================== *)
 
 Definition liveness_iterate_def:
@@ -325,7 +280,7 @@ Definition cfg_exec_path_def:
   cfg_exec_path cfg [(lbl, idx)] = T ∧
   cfg_exec_path cfg ((lbl1, idx1) :: (lbl2, idx2) :: rest) =
     (((lbl1 = lbl2 ∧ idx2 = idx1 + 1) ∨
-      (lbl1 ≠ lbl2 ∧ MEM lbl2 (cfg_succs_of cfg lbl1) ∧ idx2 = 0)) ∧
+      (MEM lbl2 (cfg_succs_of cfg lbl1) ∧ idx2 = 0)) ∧
      cfg_exec_path cfg ((lbl2, idx2) :: rest))
 End
 
@@ -346,6 +301,7 @@ Definition var_defined_at_def:
       lookup_block lbl bbs = SOME bb ∧
       idx < LENGTH bb.bb_instructions ∧
       EL idx bb.bb_instructions = inst ∧
+      inst.inst_opcode ≠ PHI ∧
       MEM v (inst_defs inst))
 End
 
