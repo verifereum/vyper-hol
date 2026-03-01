@@ -155,20 +155,6 @@ Proof
   first_x_assum irule >> rw[FLOOKUP_UPDATE] >> res_tac
 QED
 
-Theorem foldl_init_lookup[local]:
-  ∀bbs lbl.
-    (case FLOOKUP (FOLDL (λm bb. m |+ (bb.bb_label, empty_block_liveness))
-           FEMPTY bbs) lbl of
-      NONE => empty_block_liveness
-    | SOME bl => bl) = empty_block_liveness
-Proof
-  rpt gen_tac >>
-  qspecl_then [`bbs`, `FEMPTY`, `lbl`] mp_tac foldl_init_lookup_gen >>
-  impl_tac >- rw[FLOOKUP_DEF] >>
-  Cases_on `FLOOKUP (FOLDL (λm bb. m |+ (bb.bb_label, empty_block_liveness))
-    FEMPTY bbs) lbl` >> simp[]
-QED
-
 Theorem init_lookup_block[local]:
   ∀bbs lbl.
     lookup_block_liveness (init_liveness bbs) lbl = empty_block_liveness
@@ -392,38 +378,6 @@ Proof
      lookup_block_liveness_def, FLOOKUP_UPDATE]
 QED
 
-(* Characterization of process_block: live_vars, same label *)
-Theorem process_block_live_vars_eq[local]:
-  ∀cfg bbs lr bb idx vars.
-    live_vars_at (process_block cfg bbs lr bb) bb.bb_label idx = vars ∧
-    vars ≠ [] ==>
-    ∃bl'. (∀v. MEM v bl'.bl_out_vars ==>
-              MEM v (out_vars_of lr bb.bb_label) ∨
-              MEM v (calculate_out_vars cfg lr bb bbs)) ∧
-          FLOOKUP (calculate_liveness bb bl').bl_inst_liveness idx = SOME vars
-Proof
-  rw[live_vars_at_def, process_block_def, LET_DEF,
-     lookup_block_liveness_def, FLOOKUP_UPDATE] >>
-  Cases_on `FLOOKUP
-    (calculate_liveness bb
-       ((case FLOOKUP lr.lr_blocks bb.bb_label of
-           NONE => empty_block_liveness | SOME bl => bl) with
-        bl_out_vars :=
-          list_union
-            (case FLOOKUP lr.lr_blocks bb.bb_label of
-               NONE => empty_block_liveness | SOME bl => bl).bl_out_vars
-            (calculate_out_vars cfg lr bb bbs))).bl_inst_liveness idx` >>
-  fs[] >>
-  qexists_tac `(case FLOOKUP lr.lr_blocks bb.bb_label of
-     NONE => empty_block_liveness | SOME bl => bl) with
-    bl_out_vars :=
-      list_union
-        (case FLOOKUP lr.lr_blocks bb.bb_label of
-           NONE => empty_block_liveness | SOME bl => bl).bl_out_vars
-        (calculate_out_vars cfg lr bb bbs)` >>
-  fs[list_union_mem, out_vars_of_def, lookup_block_liveness_def]
-QED
-
 (* process_block preserves U-boundedness (generic) *)
 Theorem process_block_preserves_gen_bounded[local]:
   ∀cfg bbs lr bb U.
@@ -486,15 +440,6 @@ Proof
 QED
 
 (* ===== Instantiations for fn_all_vars ===== *)
-
-Theorem calculate_out_vars_bounded[local]:
-  ∀cfg lr bb bbs v.
-    lr_vars_bounded lr (fn_all_vars bbs) ∧
-    MEM v (calculate_out_vars cfg lr bb bbs) ==>
-    MEM v (fn_all_vars bbs)
-Proof
-  metis_tac[calculate_out_vars_gen_bounded, fn_all_vars_mem]
-QED
 
 Theorem process_block_preserves_bounded[local]:
   ∀cfg bbs lr bb.
@@ -1629,74 +1574,6 @@ Proof
   fs[list_union_set_proof, SUBSET_DEF, MEM_FILTER] >> metis_tac[]
 QED
 
-(* calculate_out_vars is monotone: lr_leq lr1 lr2 ⟹
-   set (calc_out lr1) ⊆ set (calc_out lr2) *)
-Theorem calc_out_vars_mono[local]:
-  ∀cfg lr1 lr2 bb bbs.
-    lr_leq lr1 lr2 ==>
-    set (calculate_out_vars cfg lr1 bb bbs) ⊆
-    set (calculate_out_vars cfg lr2 bb bbs)
-Proof
-  rw[calculate_out_vars_def, LET_DEF] >>
-  `∀succs acc1 acc2. set acc1 ⊆ set acc2 ==>
-     set (FOLDL (λacc succ_lbl. case lookup_block succ_lbl bbs of
-        NONE => acc
-      | SOME succ_bb => list_union acc
-          (input_vars_from bb.bb_label succ_bb.bb_instructions
-             (live_vars_at lr1 succ_lbl 0))) acc1 succs) ⊆
-     set (FOLDL (λacc succ_lbl. case lookup_block succ_lbl bbs of
-        NONE => acc
-      | SOME succ_bb => list_union acc
-          (input_vars_from bb.bb_label succ_bb.bb_instructions
-             (live_vars_at lr2 succ_lbl 0))) acc2 succs)` suffices_by
-    simp[] >>
-  Induct >> simp[] >> rpt strip_tac >>
-  first_x_assum irule >>
-  Cases_on `lookup_block h bbs` >> simp[] >>
-  fs[list_union_set_proof, SUBSET_DEF] >> rpt strip_tac >>
-  res_tac >> simp[] >>
-  `set (input_vars_from bb.bb_label x.bb_instructions (live_vars_at lr1 h 0)) ⊆
-   set (input_vars_from bb.bb_label x.bb_instructions (live_vars_at lr2 h 0))` by
-    (irule input_vars_from_mono >> fs[lr_leq_def]) >>
-  fs[SUBSET_DEF]
-QED
-
-(* out_vars are justified at every step of the FOLDL in one_pass:
-   set(out_vars) ⊆ set(calc_out at the current lr).
-   This is an inductive invariant on the one_pass FOLDL. *)
-Theorem one_pass_out_justified[local]:
-  ∀cfg bbs order lr.
-    lr_consistent bbs lr ∧
-    (∀lbl bb. lookup_block lbl bbs = SOME bb ∧ bb.bb_label = lbl ==>
-      set (out_vars_of lr lbl) ⊆
-      set (calculate_out_vars cfg lr bb bbs)) ==>
-    let lr' = liveness_one_pass cfg bbs lr order in
-    ∀lbl bb. lookup_block lbl bbs = SOME bb ∧ bb.bb_label = lbl ==>
-      set (out_vars_of lr' lbl) ⊆
-      set (calculate_out_vars cfg lr' bb bbs)
-Proof
-  Induct_on `order` >> rw[liveness_one_pass_def, LET_DEF] >>
-  Cases_on `lookup_block h bbs` >> fs[] >>
-  rename1 `lookup_block h bbs = SOME bb'` >>
-  imp_res_tac lookup_block_label >> gvs[] >>
-  first_x_assum (qspecl_then [`cfg`, `bbs`,
-    `process_block cfg bbs lr bb'`] mp_tac) >>
-  impl_tac >| [
-    conj_tac >- metis_tac[process_block_preserves_consistent] >>
-    rpt strip_tac >>
-    `lr_leq lr (process_block cfg bbs lr bb')` by
-      metis_tac[process_block_inflationary] >>
-    `set (calculate_out_vars cfg lr bb'' bbs) ⊆
-     set (calculate_out_vars cfg (process_block cfg bbs lr bb') bb'' bbs)` by
-      (irule calc_out_vars_mono >> simp[]) >>
-    simp[process_block_out_vars] >>
-    Cases_on `bb''.bb_label = bb'.bb_label` >> simp[]
-    >- (fs[list_union_set_proof, SUBSET_DEF] >> metis_tac[])
-    >> metis_tac[SUBSET_TRANS],
-    simp[]
-  ]
-QED
-
 (* Extract a witness from the FOLDL in calculate_out_vars *)
 Theorem calc_out_vars_witness[local]:
   ∀cfg lr bb bbs v.
@@ -1802,36 +1679,6 @@ Proof
   rw[cfg_exec_path_def] >> simp[ADD1]
 QED
 
-(* Appending a valid transition preserves cfg_exec_path. *)
-Theorem cfg_exec_path_snoc[local]:
-  ∀path lbl1 idx1 lbl2 idx2 cfg.
-    cfg_exec_path cfg (path ++ [(lbl1, idx1)]) ∧
-    ((lbl1 = lbl2 ∧ idx2 = idx1 + 1) ∨
-     (MEM lbl2 (cfg_succs_of cfg lbl1) ∧ idx2 = 0)) ==>
-    cfg_exec_path cfg (path ++ [(lbl1, idx1); (lbl2, idx2)])
-Proof
-  Induct >- (rw[cfg_exec_path_def] >> PairCases_on `h` >> gvs[cfg_exec_path_def]) >>
-  rpt gen_tac >> PairCases_on `h` >> strip_tac >>
-  Cases_on `path` >> fs[cfg_exec_path_def] >>
-  PairCases_on `h` >> gvs[cfg_exec_path_def] >>
-  first_x_assum irule >> metis_tac[]
-QED
-
-(* Concatenating two valid paths sharing an endpoint. *)
-Theorem cfg_exec_path_append[local]:
-  ∀p1 lbl idx p2 cfg.
-    cfg_exec_path cfg (p1 ++ [(lbl, idx)]) ∧
-    cfg_exec_path cfg ((lbl, idx) :: p2) ==>
-    cfg_exec_path cfg (p1 ++ (lbl, idx) :: p2)
-Proof
-  Induct >- simp[] >>
-  rpt gen_tac >> PairCases_on `h` >> strip_tac >>
-  Cases_on `p1`
-  >- gvs[cfg_exec_path_def] >>
-  rename1 `q :: t` >> PairCases_on `q` >>
-  gvs[cfg_exec_path_def]
-QED
-
 (* Extend a path with a valid step and append a suffix.
    Combines snoc + append into one reusable lemma. *)
 Theorem cfg_exec_path_extend[local]:
@@ -1865,18 +1712,6 @@ Theorem lookup_block_unique[local]:
     bb = bb'
 Proof
   rw[] >> gvs[]
-QED
-
-(* If inst_defs doesn't contain v, then var_defined_at is false *)
-Theorem not_var_defined_at_no_def[local]:
-  ∀bbs lbl idx v bb.
-    lookup_block lbl bbs = SOME bb ∧ bb.bb_label = lbl ∧
-    idx < LENGTH bb.bb_instructions ∧
-    ¬MEM v (inst_defs (EL idx bb.bb_instructions)) ==>
-    ¬var_defined_at bbs lbl idx v
-Proof
-  rw[var_defined_at_def] >>
-  imp_res_tac lookup_block_unique >> gvs[]
 QED
 
 (* If instruction is a PHI, then var_defined_at is false *)
@@ -2279,7 +2114,6 @@ Proof
   simp[Abbr`lr1`, process_block_out_vars]
 QED
 
-(* At fixpoint: if v ∈ out_vars(lbl) and v ∉ inst_uses of any instruction in bb,
 (* lr_inv holds at any FUNPOW iteration *)
 Theorem iter_lr_inv[local]:
   ∀n fn.
@@ -2293,157 +2127,6 @@ Proof
   irule (INST_TYPE [alpha |-> ``:liveness_result``]
     (DB.fetch "arithmetic" "FUNPOW_invariant" |> SPEC_ALL |> GEN_ALL)) >>
   rw[init_lr_inv] >> irule one_pass_preserves_inv >> simp[]
-QED
-
-(* ===== Generalized nonself witness at any iteration ===== *)
-
-(* If v is not used in any instruction, it can't appear in out_vars via
-   non-self successors only. Holds at all FUNPOW iterations. *)
-Theorem out_vars_nonself_at_iter[local]:
-  ∀n fn bb lbl v.
-    let cfg = cfg_analyze fn in
-    let bbs = fn.fn_blocks in
-    let order = cfg.cfg_dfs_post in
-    let f = λlr. liveness_one_pass cfg bbs lr order in
-    let lr = FUNPOW f n (init_liveness bbs) in
-    wf_function fn ∧
-    lookup_block lbl bbs = SOME bb ∧ bb.bb_label = lbl ∧
-    MEM v (lookup_block_liveness lr lbl).bl_out_vars ∧
-    (∀i. i < LENGTH bb.bb_instructions ==>
-         ¬MEM v (inst_uses (EL i bb.bb_instructions))) ==>
-    ∃succ_lbl succ_bb.
-      succ_lbl ≠ lbl ∧
-      MEM succ_lbl (cfg_succs_of cfg lbl) ∧
-      lookup_block succ_lbl bbs = SOME succ_bb ∧
-      MEM v (input_vars_from lbl succ_bb.bb_instructions
-               (live_vars_at lr succ_lbl 0))
-Proof
-  simp[LET_DEF] >> rpt strip_tac >>
-  qabbrev_tac `cfg = cfg_analyze fn` >>
-  qabbrev_tac `bbs = fn.fn_blocks` >>
-  qabbrev_tac `f = λlr'. liveness_one_pass cfg bbs lr' cfg.cfg_dfs_post` >>
-  qabbrev_tac `lr = FUNPOW f n (init_liveness bbs)` >>
-  CCONTR_TAC >> fs[] >>
-  `¬MEM v (out_vars_of lr bb.bb_label)` suffices_by fs[out_vars_of_def] >>
-  qabbrev_tac `P = λlr'.
-    lr_inv bbs lr' ∧
-    ((∀s sb. s ≠ bb.bb_label ∧ MEM s (cfg_succs_of cfg bb.bb_label) ∧
-       lookup_block s bbs = SOME sb ==>
-       ¬MEM v (input_vars_from bb.bb_label sb.bb_instructions
-                 (live_vars_at lr' s 0))) ==>
-     ¬MEM v (out_vars_of lr' bb.bb_label))` >>
-  `P lr` suffices_by (
-    simp[Abbr`P`] >> strip_tac >>
-    first_x_assum irule >> rpt strip_tac >>
-    first_x_assum (qspecl_then [`s`, `sb`] mp_tac) >> simp[]) >>
-  `lr = FUNPOW f n (init_liveness bbs)` by simp[Abbr`lr`] >>
-  pop_assum SUBST1_TAC >>
-  irule (INST_TYPE [alpha |-> ``:liveness_result``]
-    (DB.fetch "arithmetic" "FUNPOW_invariant" |> SPEC_ALL |> GEN_ALL)) >>
-  simp[Abbr`P`, Abbr`f`] >>
-  conj_tac >- (
-    conj_tac >- simp[init_lr_inv] >>
-    strip_tac >>
-    simp[out_vars_of_def, init_liveness_def, lookup_block_liveness_def] >>
-    Cases_on `FLOOKUP (FOLDL (λm bb'. m |+ (bb'.bb_label, empty_block_liveness))
-                FEMPTY bbs) bb.bb_label` >>
-    simp[empty_block_liveness_def] >>
-    imp_res_tac foldl_init_flookup >> simp[empty_block_liveness_def]
-  ) >- (
-    rpt strip_tac >- (irule one_pass_preserves_inv >> simp[]) >- (
-    `∀s sb.
-       s ≠ bb.bb_label ∧ MEM s (cfg_succs_of cfg bb.bb_label) ∧
-       lookup_block s bbs = SOME sb ⇒
-       ¬MEM v (input_vars_from bb.bb_label sb.bb_instructions
-                 (live_vars_at x s 0))` by (
-      rpt strip_tac >> CCONTR_TAC >> fs[] >>
-      `set (input_vars_from bb.bb_label sb.bb_instructions (live_vars_at x s 0)) ⊆
-       set (input_vars_from bb.bb_label sb.bb_instructions
-         (live_vars_at (liveness_one_pass cfg bbs x cfg.cfg_dfs_post) s 0))` by (
-        irule input_vars_from_mono_one_pass >> simp[]) >>
-      fs[SUBSET_DEF] >> res_tac >> res_tac) >>
-    `¬MEM v (out_vars_of x bb.bb_label)` by (res_tac >> fs[]) >>
-    qpat_x_assum `MEM v (out_vars_of (liveness_one_pass _ _ _ _) _)` mp_tac >>
-    simp[] >>
-    qspecl_then [`cfg`, `bbs`, `cfg.cfg_dfs_post`, `x`, `bb`, `bb.bb_label`, `v`]
-      mp_tac one_pass_preserves_no_v >>
-    simp[] >> fs[lr_inv_def]
-    )
-  )
-QED
-
-(* out_vars are justified (⊆ calculate_out_vars) at any FUNPOW iteration *)
-Theorem out_vars_justified_at_iter[local]:
-  ∀n fn lbl bb.
-    let cfg = cfg_analyze fn in
-    let bbs = fn.fn_blocks in
-    let order = cfg.cfg_dfs_post in
-    let f = λlr. liveness_one_pass cfg bbs lr order in
-    let lr = FUNPOW f n (init_liveness bbs) in
-    lookup_block lbl bbs = SOME bb ∧ bb.bb_label = lbl ==>
-    set (out_vars_of lr lbl) ⊆ set (calculate_out_vars cfg lr bb bbs)
-Proof
-  simp[LET_DEF] >> rpt strip_tac >>
-  qabbrev_tac `cfg = cfg_analyze fn` >>
-  qabbrev_tac `bbs = fn.fn_blocks` >>
-  qabbrev_tac `f = λlr'. liveness_one_pass cfg bbs lr'
-    cfg.cfg_dfs_post` >>
-  qabbrev_tac `P = λlr'.
-    lr_inv bbs lr' ∧
-    ∀lbl' bb'. lookup_block lbl' bbs = SOME bb' ∧ bb'.bb_label = lbl' ==>
-      set (out_vars_of lr' lbl') ⊆ set (calculate_out_vars cfg lr' bb' bbs)` >>
-  `P (FUNPOW f n (init_liveness bbs))` suffices_by (
-    simp[Abbr`P`] >> strip_tac >> res_tac) >>
-  irule (INST_TYPE [alpha |-> ``:liveness_result``]
-    (DB.fetch "arithmetic" "FUNPOW_invariant" |> SPEC_ALL |> GEN_ALL)) >>
-  simp[Abbr`P`, Abbr`f`] >>
-  conj_tac >- (
-    conj_tac >- simp[init_lr_inv] >>
-    rpt strip_tac >>
-    simp[out_vars_of_def, init_liveness_def, lookup_block_liveness_def] >>
-    Cases_on `FLOOKUP (FOLDL (λm bb. m |+ (bb.bb_label, empty_block_liveness))
-                FEMPTY bbs) bb'.bb_label` >>
-    simp[empty_block_liveness_def] >>
-    imp_res_tac foldl_init_flookup >> simp[empty_block_liveness_def]) >>
-  rpt strip_tac
-  >- (irule one_pass_preserves_inv >> simp[])
-  >>
-  qspecl_then [`cfg`, `bbs`, `cfg.cfg_dfs_post`, `x`]
-    mp_tac one_pass_out_justified >>
-  impl_tac >- fs[lr_inv_def] >>
-  simp[LET_DEF]
-QED
-
-(* Combine justified + witness + phi_correct for any iteration *)
-Theorem out_to_succ_at_iter[local]:
-  ∀n fn bb lbl v.
-    let cfg = cfg_analyze fn in
-    let bbs = fn.fn_blocks in
-    let order = cfg.cfg_dfs_post in
-    let f = λlr. liveness_one_pass cfg bbs lr order in
-    let lr = FUNPOW f n (init_liveness bbs) in
-    lookup_block lbl bbs = SOME bb ∧ bb.bb_label = lbl ∧
-    MEM v (lookup_block_liveness lr lbl).bl_out_vars ==>
-    ∃succ_lbl succ_bb.
-      MEM succ_lbl (cfg_succs_of cfg lbl) ∧
-      lookup_block succ_lbl bbs = SOME succ_bb ∧
-      (MEM v (live_vars_at lr succ_lbl 0) ∨
-       ∃inst. MEM inst succ_bb.bb_instructions ∧ inst.inst_opcode = PHI ∧
-              MEM (lbl, v) (phi_pairs inst.inst_operands))
-Proof
-  simp[LET_DEF] >> rpt strip_tac >>
-  qabbrev_tac `cfg = cfg_analyze fn` >>
-  qabbrev_tac `bbs = fn.fn_blocks` >>
-  qabbrev_tac `lr = FUNPOW (λlr'. liveness_one_pass cfg bbs lr'
-    cfg.cfg_dfs_post) n (init_liveness bbs)` >>
-  `MEM v (calculate_out_vars cfg lr bb bbs)` by (
-    mp_tac (Q.SPECL [`n`, `fn`, `bb.bb_label`, `bb`] out_vars_justified_at_iter) >>
-    simp[LET_DEF, Abbr`cfg`, Abbr`bbs`, Abbr`lr`] >>
-    disch_tac >> fs[SUBSET_DEF, out_vars_of_def]) >>
-  drule calc_out_vars_witness >> strip_tac >>
-  qexistsl_tac [`succ_lbl`, `succ_bb`] >> simp[] >>
-  drule input_vars_from_phi_correct_proof >> strip_tac >> fs[] >>
-  disj2_tac >> metis_tac[]
 QED
 
 (* liveness_one_pass decomposes over list concatenation *)
