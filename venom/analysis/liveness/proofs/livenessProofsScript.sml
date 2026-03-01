@@ -36,23 +36,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem list_union_no_dups_proof[local]:
-  ∀xs ys. ALL_DISTINCT xs ∧ ALL_DISTINCT ys ==>
-    ALL_DISTINCT (list_union xs ys)
-Proof
-  rw[list_union_def, ALL_DISTINCT_APPEND, MEM_FILTER] >>
-  metis_tac[FILTER_ALL_DISTINCT]
-QED
-
-Theorem live_update_no_dups_proof[local]:
-  ∀defs uses live.
-    ALL_DISTINCT live ∧ ALL_DISTINCT uses ==>
-    ALL_DISTINCT (live_update defs uses live)
-Proof
-  rw[live_update_def, ALL_DISTINCT_APPEND, MEM_FILTER] >>
-  metis_tac[FILTER_ALL_DISTINCT]
-QED
-
 Theorem live_update_mem[local]:
   ∀v defs uses live.
     MEM v (live_update defs uses live) ⇔
@@ -93,15 +76,6 @@ Proof
   fs[list_union_mem, MEM_FILTER, MEM_MAP] >>
   TRY (metis_tac[]) >>
   disj2_tac >> qexists_tac `h` >> Cases_on `y` >> gvs[]
-QED
-
-Theorem input_vars_from_non_phi_proof[local]:
-  ∀src_label instrs base.
-    EVERY (λinst. inst.inst_opcode ≠ PHI) instrs ==>
-    input_vars_from src_label instrs base = base
-Proof
-  Induct_on `instrs` >- simp[input_vars_from_def] >>
-  rpt strip_tac >> fs[input_vars_from_def, FOLDL]
 QED
 
 (* input_vars_from only adds vars from inst_uses of PHI instructions *)
@@ -1551,29 +1525,6 @@ QED
 
 (* === Monotonicity helpers === *)
 
-(* input_vars_from is monotone in base_liveness:
-   set base1 ⊆ set base2 ⟹ set (input_vars_from src instrs base1) ⊆
-                               set (input_vars_from src instrs base2)
-   Proof: FILTER preserves ⊆, list_union with same rhs preserves ⊆ *)
-Theorem input_vars_from_mono[local]:
-  ∀src instrs base1 base2.
-    set base1 ⊆ set base2 ==>
-    set (input_vars_from src instrs base1) ⊆ set (input_vars_from src instrs base2)
-Proof
-  gen_tac >> Induct_on `instrs` >- simp[input_vars_from_def] >>
-  rpt gen_tac >> strip_tac >>
-  `∀b. input_vars_from src (h::instrs) b = input_vars_from src instrs
-    (if h.inst_opcode ≠ PHI then b
-     else list_union
-       (FILTER (λv. ¬MEM v (MAP SND (FILTER (λ(l,v). l ≠ src)
-          (phi_pairs h.inst_operands)))) b)
-       (MAP SND (FILTER (λ(l,v). l = src) (phi_pairs h.inst_operands))))` by
-    simp[input_vars_from_def] >>
-  simp[] >> first_x_assum irule >>
-  Cases_on `h.inst_opcode = PHI` >> simp[] >>
-  fs[list_union_set_proof, SUBSET_DEF, MEM_FILTER] >> metis_tac[]
-QED
-
 (* Extract a witness from the FOLDL in calculate_out_vars *)
 Theorem calc_out_vars_witness[local]:
   ∀cfg lr bb bbs v.
@@ -1902,140 +1853,6 @@ Proof
 QED
 
 (* ===== Main soundness proof ===== *)
-
-(* If v is not used in any instruction, input_vars_from only propagates from base *)
-Theorem input_vars_from_no_use[local]:
-  ∀src instrs base v.
-    (∀inst. MEM inst instrs ==> ¬MEM v (inst_uses inst)) ∧
-    MEM v (input_vars_from src instrs base) ==>
-    MEM v base
-Proof
-  rpt strip_tac >>
-  drule input_vars_from_phi_correct_proof >> strip_tac >> fs[] >>
-  `MEM v (operand_vars inst.inst_operands)` by (
-    irule phi_pairs_subset_uses >>
-    simp[MEM_MAP] >> qexists_tac `(src, v)` >> simp[]) >>
-  `MEM v (inst_uses inst)` by fs[inst_uses_def] >>
-  metis_tac[]
-QED
-
-(* calc_liveness_loop: if v ∉ inst_uses for all instructions and v ∉ out_vars,
-   then v doesn't appear in any liveness entry *)
-Theorem calc_loop_no_use_no_mem[local]:
-  ∀n instrs out v.
-    n < LENGTH instrs ∧
-    (∀i. i ≤ n ==> ¬MEM v (inst_uses (EL i instrs))) ∧
-    ¬MEM v out ==>
-    ¬MEM v (FST (calc_liveness_loop instrs out n)) ∧
-    ∀idx vars. idx ≤ n ∧
-      FLOOKUP (SND (calc_liveness_loop instrs out n)) idx = SOME vars ==>
-      ¬MEM v vars
-Proof
-  Induct_on `n`
-  >- (
-    rpt gen_tac >> strip_tac >>
-    simp[calc_liveness_loop_def, LET_DEF, FLOOKUP_UPDATE] >>
-    Cases_on `NULL (inst_uses (EL 0 instrs)) ∧ NULL (inst_defs (EL 0 instrs))`
-    >> gvs[] >>
-    fs[live_update_set_proof, EXTENSION] >> rpt strip_tac >> gvs[NULL_EQ])
-  >>
-  rpt gen_tac >> strip_tac >>
-  qabbrev_tac `live' = if NULL (inst_uses (EL (SUC n) instrs)) ∧
-    NULL (inst_defs (EL (SUC n) instrs)) then out
-    else live_update (inst_defs (EL (SUC n) instrs))
-      (inst_uses (EL (SUC n) instrs)) out` >>
-  `¬MEM v live'` by (
-    unabbrev_all_tac >> rw[] >>
-    fs[live_update_set_proof, EXTENSION] >>
-    first_x_assum (qspec_then `SUC n` mp_tac) >> simp[]) >>
-  `¬MEM v (FST (calc_liveness_loop instrs live' n)) ∧
-   ∀idx vars. idx ≤ n ∧ FLOOKUP (SND (calc_liveness_loop instrs live' n)) idx = SOME vars ==>
-     ¬MEM v vars` by (
-    first_x_assum irule >> simp[] >>
-    rpt strip_tac >> first_x_assum (qspec_then `i` mp_tac) >> simp[]) >>
-  Cases_on `calc_liveness_loop instrs live' n` >> gvs[] >>
-  `calc_liveness_loop instrs out (SUC n) = (q, r |+ (SUC n, live'))` by (
-    simp[Once calc_liveness_loop_def, LET_DEF] >>
-    unabbrev_all_tac >> simp[]) >>
-  simp[FLOOKUP_UPDATE] >>
-  rpt strip_tac >> Cases_on `SUC n = idx` >> gvs[] >>
-  `idx ≤ n` by simp[] >> res_tac
-QED
-
-(* If v ∉ inst_uses for all instructions and v ∉ out_vars,
-   then v ∉ live_vars_at (under lr_consistent + lr_shaped) *)
-Theorem live_vars_no_use_no_out[local]:
-  ∀bbs lr bb lbl idx v.
-    lr_consistent bbs lr ∧ lr_shaped bbs lr ∧
-    lookup_block lbl bbs = SOME bb ∧ bb.bb_label = lbl ∧
-    (∀i. i < LENGTH bb.bb_instructions ==>
-         ¬MEM v (inst_uses (EL i bb.bb_instructions))) ∧
-    ¬MEM v (out_vars_of lr lbl) ==>
-    ¬MEM v (live_vars_at lr lbl idx)
-Proof
-  rpt gen_tac >> strip_tac >>
-  simp[live_vars_at_def, LET_DEF, lookup_block_liveness_def] >>
-  Cases_on `FLOOKUP lr.lr_blocks lbl` >>
-  gvs[empty_block_liveness_def] >>
-  rename1 `FLOOKUP lr.lr_blocks lbl = SOME bl` >>
-  Cases_on `FLOOKUP bl.bl_inst_liveness idx` >> gvs[] >>
-  rename1 `FLOOKUP bl.bl_inst_liveness idx = SOME vars` >>
-  strip_tac >>
-  `¬MEM v bl.bl_out_vars` by
-    fs[out_vars_of_def, lookup_block_liveness_def] >>
-  `calculate_liveness bb bl = bl` by (
-    fs[lr_consistent_def] >>
-    first_x_assum (qspecl_then [`lbl`, `bl`, `bb`] mp_tac) >> simp[] >>
-    strip_tac >> gvs[FLOOKUP_DEF, FDOM_FEMPTY]) >>
-  `idx < LENGTH bb.bb_instructions` by (
-    fs[lr_shaped_def] >> res_tac >>
-    gvs[SUBSET_DEF, IN_COUNT] >>
-    pop_assum irule >> fs[FLOOKUP_DEF]) >>
-  `¬NULL bb.bb_instructions` by
-    (Cases_on `bb.bb_instructions` >> fs[]) >>
-  fs[calculate_liveness_def, LET_DEF] >> pairarg_tac >>
-  gvs[block_liveness_component_equality] >>
-  `¬MEM v (FST (calc_liveness_loop bb.bb_instructions bl.bl_out_vars
-      (LENGTH bb.bb_instructions − 1))) ∧
-   ∀idx vars. idx ≤ LENGTH bb.bb_instructions − 1 ∧
-     FLOOKUP (SND (calc_liveness_loop bb.bb_instructions bl.bl_out_vars
-       (LENGTH bb.bb_instructions − 1))) idx = SOME vars ==>
-     ¬MEM v vars` by (
-    irule calc_loop_no_use_no_mem >> simp[] >>
-    rpt strip_tac >> first_x_assum irule >> simp[]) >>
-  gvs[] >>
-  first_x_assum (qspecl_then [`idx`, `vars`] mp_tac) >> simp[]
-QED
-
-(* v ∉ calculate_out_vars when self-loop is transparent and non-self don't contribute *)
-Theorem calc_out_no_v[local]:
-  ∀cfg lr bb bbs lbl v.
-    lr_consistent bbs lr ∧ lr_shaped bbs lr ∧
-    lookup_block lbl bbs = SOME bb ∧ bb.bb_label = lbl ∧
-    (∀i. i < LENGTH bb.bb_instructions ==>
-         ¬MEM v (inst_uses (EL i bb.bb_instructions))) ∧
-    ¬MEM v (out_vars_of lr lbl) ∧
-    (∀s sb. s ≠ lbl ∧ MEM s (cfg_succs_of cfg lbl) ∧
-       lookup_block s bbs = SOME sb ==>
-       ¬MEM v (input_vars_from lbl sb.bb_instructions
-                 (live_vars_at lr s 0))) ==>
-    ¬MEM v (calculate_out_vars cfg lr bb bbs)
-Proof
-  rpt strip_tac >>
-  drule calc_out_vars_witness >> strip_tac >>
-  Cases_on `succ_lbl = lbl`
-  >- (
-    gvs[] >>
-    `∀inst. MEM inst bb.bb_instructions ==> ¬MEM v (inst_uses inst)` by (
-      rpt strip_tac >>
-      qpat_x_assum `MEM inst _` (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
-      metis_tac[]) >>
-    drule_all input_vars_from_no_use >> strip_tac >>
-    (* v ∈ live_vars_at lr lbl 0 contradicts v ∉ out_vars *)
-    imp_res_tac live_vars_no_use_no_out >> gvs[])
-  >>
-  metis_tac[]
-QED
 
 (* lr_leq is transitive *)
 Theorem lr_leq_trans[local]:
