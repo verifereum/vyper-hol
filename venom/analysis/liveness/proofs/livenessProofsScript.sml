@@ -21,14 +21,14 @@ Proof
   rw[list_union_def, MEM_APPEND, MEM_FILTER] >> metis_tac[]
 QED
 
-Theorem list_union_set_proof:
+Theorem list_union_set_proof[local]:
   ∀xs ys. set (list_union xs ys) = set xs ∪ set ys
 Proof
   rw[list_union_def, LIST_TO_SET_APPEND, LIST_TO_SET_FILTER, EXTENSION] >>
   metis_tac[]
 QED
 
-Theorem live_update_set_proof:
+Theorem live_update_set_proof[local]:
   ∀defs uses live.
     set (live_update defs uses live) = (set live DIFF set defs) ∪ set uses
 Proof
@@ -36,7 +36,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem list_union_no_dups_proof:
+Theorem list_union_no_dups_proof[local]:
   ∀xs ys. ALL_DISTINCT xs ∧ ALL_DISTINCT ys ==>
     ALL_DISTINCT (list_union xs ys)
 Proof
@@ -44,7 +44,7 @@ Proof
   metis_tac[FILTER_ALL_DISTINCT]
 QED
 
-Theorem live_update_no_dups_proof:
+Theorem live_update_no_dups_proof[local]:
   ∀defs uses live.
     ALL_DISTINCT live ∧ ALL_DISTINCT uses ==>
     ALL_DISTINCT (live_update defs uses live)
@@ -72,7 +72,7 @@ Proof
   TRY (Cases_on `operand_var v1`) >> fs[] >> metis_tac[]
 QED
 
-Theorem input_vars_from_phi_correct_proof:
+Theorem input_vars_from_phi_correct_proof[local]:
   ∀src_label instrs base v.
     MEM v (input_vars_from src_label instrs base) ==>
     MEM v base ∨
@@ -95,7 +95,7 @@ Proof
   disj2_tac >> qexists_tac `h` >> Cases_on `y` >> gvs[]
 QED
 
-Theorem input_vars_from_non_phi_proof:
+Theorem input_vars_from_non_phi_proof[local]:
   ∀src_label instrs base.
     EVERY (λinst. inst.inst_opcode ≠ PHI) instrs ==>
     input_vars_from src_label instrs base = base
@@ -2042,76 +2042,6 @@ Theorem lr_leq_trans[local]:
   ∀a b c. lr_leq a b ∧ lr_leq b c ==> lr_leq a c
 Proof
   rw[lr_leq_def] >> metis_tac[SUBSET_TRANS]
-QED
-
-(* Factored monotonicity: input_vars_from at lr ⊆ input_vars_from at one_pass(lr).
-   Used to discharge CCONTR_TAC obligations in one_pass_preserves_no_v. *)
-Theorem input_vars_from_mono_one_pass[local]:
-  ∀cfg bbs lr order lbl s sb.
-    lr_inv bbs lr ∧ lookup_block s bbs = SOME sb ==>
-    set (input_vars_from lbl sb.bb_instructions (live_vars_at lr s 0)) ⊆
-    set (input_vars_from lbl sb.bb_instructions
-      (live_vars_at (liveness_one_pass cfg bbs lr order) s 0))
-Proof
-  rpt strip_tac >>
-  irule input_vars_from_mono >>
-  `lr_leq lr (liveness_one_pass cfg bbs lr order)` suffices_by fs[lr_leq_def] >>
-  irule one_pass_inflationary >> fs[lr_inv_def]
-QED
-
-(* Common tactic for showing non-self input mono in one_pass_preserves_no_v:
-   if v ∉ input_vars_from at one_pass(lr_final) and lr_mid ≤ lr_final,
-   then v ∉ input_vars_from at lr_mid (by SUBSET containment). *)
-
-(* one_pass preserves "v ∉ out_vars(lbl)" when self-loop is transparent and
-   non-self successors don't contribute v at the final one_pass result.
-   The key: intermediate lr_partial ⊑ one_pass(lr), so non-self don't contribute at lr_partial either. *)
-Theorem one_pass_preserves_no_v[local]:
-  ∀cfg bbs order lr bb lbl v.
-    lr_inv bbs lr ∧
-    lookup_block lbl bbs = SOME bb ∧ bb.bb_label = lbl ∧
-    (∀i. i < LENGTH bb.bb_instructions ==>
-         ¬MEM v (inst_uses (EL i bb.bb_instructions))) ∧
-    ¬MEM v (out_vars_of lr lbl) ∧
-    (∀s sb. s ≠ lbl ∧ MEM s (cfg_succs_of cfg lbl) ∧
-       lookup_block s bbs = SOME sb ==>
-       ¬MEM v (input_vars_from lbl sb.bb_instructions
-                 (live_vars_at (liveness_one_pass cfg bbs lr order) s 0))) ==>
-    ¬MEM v (out_vars_of (liveness_one_pass cfg bbs lr order) lbl)
-Proof
-  gen_tac >> gen_tac >> Induct_on `order`
-  >- rw[liveness_one_pass_def, LET_DEF]
-  >>
-  rw[liveness_one_pass_def, LET_DEF] >>
-  Cases_on `lookup_block h bbs` >> gvs[] >>
-  rename1 `lookup_block h bbs = SOME blk` >>
-  imp_res_tac lookup_block_label >> gvs[] >>
-  qabbrev_tac `lr1 = process_block cfg bbs lr blk` >>
-  `lr_inv bbs lr1` by
-    (simp[Abbr`lr1`] >> irule process_block_preserves_inv >> fs[lr_inv_def]) >>
-  (* Apply IH — leaves ¬MEM v (out_vars_of lr1 bb.bb_label) *)
-  first_x_assum irule >> simp[] >>
-  Cases_on `blk.bb_label = bb.bb_label`
-  >- ( (* blk = bb: process_block adds calculate_out_vars *)
-    `blk = bb` by metis_tac[lookup_block_unique] >> gvs[] >>
-    `¬MEM v (calculate_out_vars cfg lr bb bbs)` suffices_by
-      simp[Abbr`lr1`, process_block_out_vars, list_union_mem] >>
-    irule calc_out_no_v >> fs[lr_inv_def] >> rpt strip_tac >>
-    first_x_assum (qspecl_then [`s`, `sb`] mp_tac) >> simp[] >>
-    `set (input_vars_from bb.bb_label sb.bb_instructions (live_vars_at lr s 0)) ⊆
-     set (input_vars_from bb.bb_label sb.bb_instructions
-       (live_vars_at (liveness_one_pass cfg bbs (process_block cfg bbs lr bb)
-                        order) s 0))` by (
-      irule input_vars_from_mono >>
-      `lr_leq lr (liveness_one_pass cfg bbs (process_block cfg bbs lr bb) order)`
-        suffices_by fs[lr_leq_def] >>
-      irule lr_leq_trans >>
-      qexists_tac `process_block cfg bbs lr bb` >> conj_tac
-      >- (irule process_block_inflationary >> fs[])
-      >> irule one_pass_inflationary >> fs[]) >>
-    fs[Abbr`lr1`, SUBSET_DEF])
-  >> (* blk ≠ bb: out_vars unchanged *)
-  simp[Abbr`lr1`, process_block_out_vars]
 QED
 
 (* lr_inv holds at any FUNPOW iteration *)
