@@ -346,6 +346,7 @@ Definition var_defined_at_def:
       lookup_block lbl bbs = SOME bb ∧
       idx < LENGTH bb.bb_instructions ∧
       EL idx bb.bb_instructions = inst ∧
+      inst.inst_opcode ≠ PHI ∧
       MEM v (inst_defs inst))
 End
 
