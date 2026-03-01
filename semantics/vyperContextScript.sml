@@ -240,8 +240,18 @@ Definition evaluate_type_builtin_def:
     (if u = Unsigned 256 then evaluate_extract32 bs (Num i) bt
      else INR (TypeError "Extract32 type")) ∧
   evaluate_type_builtin cx AbiDecode typ [BytesV _ bs] =
-    (case evaluate_abi_decode (get_tenv cx) typ bs of
-       INL v => INL v | INR str => INR (RuntimeError str)) ∧
+    (* unwrap_tuple=True (default): single types are wrapped in a tuple.
+       TODO: support unwrap_tuple=False keyword argument *)
+    (let tenv = get_tenv cx in
+     if needs_external_call_wrap typ then
+       case evaluate_abi_decode tenv (TupleT [typ]) bs of
+         INL (ArrayV (TupleV [v])) => INL v
+       | INL _ => INR (RuntimeError "abi_decode conversion")
+       | INR str => INR (RuntimeError str)
+     else
+       case evaluate_abi_decode tenv typ bs of
+         INL v => INL v
+       | INR str => INR (RuntimeError str)) ∧
   evaluate_type_builtin _ AbiDecode _ _ =
     INR (TypeError "abi_decode args") ∧
   evaluate_type_builtin cx AbiEncode typ vs =
