@@ -29,10 +29,12 @@ QED
    This is the abstract Kleene argument: f^n(x) is ascending and bounded,
    so it must reach a fixpoint. *)
 Theorem inflationary_bounded_fixpoint_proof:
-  !(leq : 'a -> 'a -> bool) f (m : 'a -> num) b x.
+  !(S : 'a -> bool) (leq : 'a -> 'a -> bool) f (m : 'a -> num) b x.
     partial_order leq /\
     inflationary leq f /\
-    bounded_measure leq m b ==>
+    (!x. S x ==> S (f x)) /\
+    S x /\
+    bounded_measure S leq m b ==>
     ?n. f (FUNPOW f n x) = FUNPOW f n x
 Proof
   cheat
@@ -40,8 +42,8 @@ QED
 
 (* bounded_measure implies leq is monotone in m *)
 Theorem bounded_measure_leq_proof:
-  !(leq : 'a -> 'a -> bool) (m : 'a -> num) b x y.
-    bounded_measure leq m b /\ leq x y ==>
+  !(S : 'a -> bool) (leq : 'a -> 'a -> bool) (m : 'a -> num) b x y.
+    bounded_measure S leq m b /\ S x /\ S y /\ leq x y ==>
     m x <= m y
 Proof
   cheat

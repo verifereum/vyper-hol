@@ -24,11 +24,13 @@ Definition partial_order_def:
 End
 
 (* Bounded measure witnessing finite height:
-   m is bounded above by b and strictly reflects the order *)
+   m is bounded above by b and strictly reflects the order,
+   within domain S *)
 Definition bounded_measure_def:
-  bounded_measure (leq : 'a -> 'a -> bool) (m : 'a -> num) (b : num) <=>
-    (!x. m x <= b) /\
-    (!x y. leq x y /\ x <> y ==> m x < m y)
+  bounded_measure (S : 'a -> bool) (leq : 'a -> 'a -> bool)
+                  (m : 'a -> num) (b : num) <=>
+    (!x. S x ==> m x <= b) /\
+    (!x y. S x /\ S y /\ leq x y /\ x <> y ==> m x < m y)
 End
 
 (* Monotone function: order-preserving *)

@@ -60,7 +60,7 @@ QED
    Reuses set_live_count_bounded and one_pass_set_measure_increase. *)
 Theorem liveness_wl_bounded_proof:
   !bbs.
-    bounded_measure lr_leq set_live_count
+    bounded_measure (lr_inv bbs) lr_leq set_live_count
       ((LENGTH (nub (fn_all_vars bbs)) + 1) *
        (fn_total_insts bbs + LENGTH bbs))
 Proof

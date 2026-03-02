@@ -17,18 +17,20 @@ Proof
 QED
 
 Theorem inflationary_bounded_fixpoint:
-  !(leq : 'a -> 'a -> bool) f (m : 'a -> num) b x.
+  !(S : 'a -> bool) (leq : 'a -> 'a -> bool) f (m : 'a -> num) b x.
     partial_order leq /\
     inflationary leq f /\
-    bounded_measure leq m b ==>
+    (!x. S x ==> S (f x)) /\
+    S x /\
+    bounded_measure S leq m b ==>
     ?n. f (FUNPOW f n x) = FUNPOW f n x
 Proof
   ACCEPT_TAC inflationary_bounded_fixpoint_proof
 QED
 
 Theorem bounded_measure_leq:
-  !(leq : 'a -> 'a -> bool) (m : 'a -> num) b x y.
-    bounded_measure leq m b /\ leq x y ==>
+  !(S : 'a -> bool) (leq : 'a -> 'a -> bool) (m : 'a -> num) b x y.
+    bounded_measure S leq m b /\ S x /\ S y /\ leq x y ==>
     m x <= m y
 Proof
   ACCEPT_TAC bounded_measure_leq_proof

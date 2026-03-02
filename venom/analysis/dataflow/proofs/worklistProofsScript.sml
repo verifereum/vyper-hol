@@ -24,7 +24,7 @@ Theorem wl_iterate_terminates_proof:
     (!lbl st. P st ==> leq st (process lbl st)) /\
     (!lbl st. P st ==> P (process lbl st)) /\
     P st0 /\
-    bounded_measure leq m b ==>
+    bounded_measure P leq m b ==>
     FST (wl_iterate process deps wl0 st0) = []
 Proof
   cheat
@@ -40,7 +40,7 @@ Theorem wl_iterate_fixpoint_proof:
     (!lbl st. P st ==> leq st (process lbl st)) /\
     (!lbl st. P st ==> P (process lbl st)) /\
     P st0 /\
-    bounded_measure leq m b /\
+    bounded_measure P leq m b /\
     wl_deps_complete process deps /\
     (!lbl. MEM lbl all_lbls ==> MEM lbl wl0) ==>
     is_fixpoint process all_lbls (SND (wl_iterate process deps wl0 st0))
@@ -57,7 +57,7 @@ Theorem wl_iterate_above_proof:
     (!lbl st. P st ==> leq st (process lbl st)) /\
     (!lbl st. P st ==> P (process lbl st)) /\
     P st0 /\
-    bounded_measure leq m b ==>
+    bounded_measure P leq m b ==>
     leq st0 (SND (wl_iterate process deps wl0 st0))
 Proof
   cheat
@@ -73,7 +73,7 @@ Theorem wl_iterate_invariant_proof:
     (!lbl st. P st ==> leq st (process lbl st)) /\
     (!lbl st. P st ==> P (process lbl st)) /\
     P st0 /\
-    bounded_measure leq m b ==>
+    bounded_measure P leq m b ==>
     P (SND (wl_iterate process deps wl0 st0))
 Proof
   cheat
