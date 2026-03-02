@@ -19,9 +19,9 @@ Theorem preserves_scopes_dom_var_in_scope:
 Proof
   simp[preserves_scopes_dom_def] >> rpt strip_tac >-
   (* Empty scopes case: contradicts var_in_scope *)
-  gvs[var_in_scope_def, lookup_scoped_var_def, lookup_scopes_def] >>
+  gvs[var_in_scope_def, lookup_name_def, lookup_scopes_def] >>
   (* Non-empty scopes case *)
-  gvs[var_in_scope_def, lookup_scoped_var_def] >>
+  gvs[var_in_scope_def, lookup_name_def] >>
   Cases_on `st.scopes` >> Cases_on `st'.scopes` >> gvs[] >>
   fs[lookup_scopes_def, AllCaseEqs()] >>
   Cases_on `FLOOKUP h (string_to_num n)` >> gvs[] >-
@@ -605,10 +605,12 @@ Proof
   >- metis_tac[eval_base_target_preserves_scopes_dom]
   >- metis_tac[eval_base_target_preserves_scopes_dom]
   >- metis_tac[eval_base_target_preserves_scopes_dom]
+  >- metis_tac[eval_base_target_preserves_scopes_dom]
   (* === eval_for cases === *)
   (* [] *) >- gvs[evaluate_def, return_def, preserves_scopes_dom_def]
   (* v::vs *) >- (drule case_eval_for_cons_dom >> metis_tac[])
   (* === Expression cases - use eval_expr_preserves_scopes_dom === *)
+  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
   >- (drule eval_expr_preserves_scopes_dom >> gvs[])
   >- (drule eval_expr_preserves_scopes_dom >> gvs[])
   >- (drule eval_expr_preserves_scopes_dom >> gvs[])
