@@ -677,6 +677,8 @@ Definition safe_cast_def:
     (case v of
      | BytesV (Dynamic m) bs =>
        if m ≤ n then SOME $ BytesV (Dynamic n) bs else NONE
+     | BytesV (Fixed m) bs =>
+       if m ≤ n then SOME $ BytesV (Dynamic n) bs else NONE
      | _ => NONE)
   | BaseTV AddressT =>
     (case v of
