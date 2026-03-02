@@ -190,15 +190,6 @@ Proof
 QED
 
 (*
- * Helper: If lookup_function succeeds, the function is in the list.
- *)
-Theorem lookup_function_MEM:
-  !name fns fn. lookup_function name fns = SOME fn ==> MEM fn fns
-Proof
-  gen_tac >> Induct >> rw[lookup_function_def] >> gvs[AllCaseEqs()]
-QED
-
-(*
  * Helper: step_in_block is the same for two blocks with matching prefix.
  *
  * WHY THIS IS TRUE: step_in_block uses get_instruction to fetch current instruction.
