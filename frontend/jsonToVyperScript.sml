@@ -239,6 +239,7 @@ Definition decimal_string_to_int_def:
     let exp_num = num_of_digits exp_digits in
     let exp_int = if neg_exp then &0 - &exp_num else &exp_num in
     let (bd, ad) = split_at_dot base in
+    let ad = FILTER is_digit ad in
     let target = &10 + exp_int in
     let pad_len =
       if target <= & (LENGTH ad) then LENGTH ad else Num target in
