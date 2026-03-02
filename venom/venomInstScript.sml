@@ -194,6 +194,8 @@ Definition lookup_function_def:
     else lookup_function name fns
 End
 
+(* TODO: replace lookup_function with FIND or ALOOKUP based definition *)
+
 (* lookup_function: if SOME, the function is in the list *)
 Theorem lookup_function_MEM:
   !name fns fn. lookup_function name fns = SOME fn ==> MEM fn fns
