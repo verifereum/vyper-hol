@@ -256,7 +256,11 @@ End
 Definition bb_well_formed_def:
   bb_well_formed bb <=>
     bb.bb_instructions <> [] /\
-    is_terminator (LAST bb.bb_instructions).inst_opcode
+    is_terminator (LAST bb.bb_instructions).inst_opcode /\
+    (* PHI instructions form a prefix of the block *)
+    (!i j. i < j /\ j < LENGTH bb.bb_instructions /\
+           (EL j bb.bb_instructions).inst_opcode = PHI ==>
+           (EL i bb.bb_instructions).inst_opcode = PHI)
 End
 
 (* Get successor labels of a terminator instruction *)
