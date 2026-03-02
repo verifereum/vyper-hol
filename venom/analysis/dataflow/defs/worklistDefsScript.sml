@@ -8,10 +8,13 @@
  * deps    : 'a -> 'a list     (labels to re-add when a label changes)
  * Changed is detected by st' <> st (no explicit flag).
  *
+ * The convergence theorems (in proofs/) take an invariant P so that
+ * inflationary need only hold under P.  For the unconditional case,
+ * instantiate P = λ_. T.
+ *
  * TOP-LEVEL:
  *   wl_step           — single worklist step
  *   wl_iterate        — iterate to fixpoint via WHILE
- *   wl_inflationary   — process only grows state
  *   wl_deps_complete  — deps cover all affected labels
  *   is_fixpoint       — no label changes state
  *)
@@ -37,13 +40,6 @@ Definition wl_iterate_def:
     WHILE (\p. FST p <> [])
           (wl_step process deps)
           (wl0, st0)
-End
-
-(* Process is inflationary: state can only grow *)
-Definition wl_inflationary_def:
-  wl_inflationary (leq : 'b -> 'b -> bool)
-                  (process : 'a -> 'b -> 'b) <=>
-    !lbl st. leq st (process lbl st)
 End
 
 (* Deps are complete: after processing lbl changes st, every label

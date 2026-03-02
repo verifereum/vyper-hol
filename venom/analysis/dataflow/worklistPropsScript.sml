@@ -2,6 +2,7 @@
  * Worklist Iteration — Correctness (Statements Only)
  *
  * Convergence and fixpoint theorems for worklist-based iteration.
+ * All take an invariant P (instantiate with λ_. T for unconditional).
  * Proofs live in proofs/worklistProofsScript.sml;
  * this file re-exports via ACCEPT_TAC.
  *)
@@ -10,11 +11,13 @@ Theory worklistProps
 Ancestors
   worklistProofs
 
-(* Worklist empties under inflationary + bounded measure. *)
+(* Worklist empties under inflationary-under-P + bounded measure. *)
 Theorem wl_iterate_terminates:
   !(leq : 'a -> 'a -> bool) m b
-   (process : 'b -> 'a -> 'a) deps wl0 st0.
-    wl_inflationary leq process /\
+   (process : 'b -> 'a -> 'a) deps wl0 st0 (P : 'a -> bool).
+    (!lbl st. P st ==> leq st (process lbl st)) /\
+    (!lbl st. P st ==> P (process lbl st)) /\
+    P st0 /\
     bounded_measure leq m b ==>
     FST (wl_iterate process deps wl0 st0) = []
 Proof
@@ -24,8 +27,10 @@ QED
 (* Processing any label is a no-op at termination. *)
 Theorem wl_iterate_fixpoint:
   !(leq : 'a -> 'a -> bool) m b
-   (process : 'b -> 'a -> 'a) deps wl0 st0 all_lbls.
-    wl_inflationary leq process /\
+   (process : 'b -> 'a -> 'a) deps wl0 st0 all_lbls (P : 'a -> bool).
+    (!lbl st. P st ==> leq st (process lbl st)) /\
+    (!lbl st. P st ==> P (process lbl st)) /\
+    P st0 /\
     bounded_measure leq m b /\
     wl_deps_complete process deps /\
     (!lbl. MEM lbl all_lbls ==> MEM lbl wl0) ==>
@@ -37,23 +42,25 @@ QED
 (* Result state is above initial state. *)
 Theorem wl_iterate_above:
   !(leq : 'a -> 'a -> bool) m b
-   (process : 'b -> 'a -> 'a) deps wl0 st0.
+   (process : 'b -> 'a -> 'a) deps wl0 st0 (P : 'a -> bool).
     partial_order leq /\
-    wl_inflationary leq process /\
+    (!lbl st. P st ==> leq st (process lbl st)) /\
+    (!lbl st. P st ==> P (process lbl st)) /\
+    P st0 /\
     bounded_measure leq m b ==>
     leq st0 (SND (wl_iterate process deps wl0 st0))
 Proof
   ACCEPT_TAC wl_iterate_above_proof
 QED
 
-(* Property preserved through iteration. *)
+(* Property P preserved through iteration. *)
 Theorem wl_iterate_invariant:
   !(leq : 'a -> 'a -> bool) m b
    (process : 'b -> 'a -> 'a) deps wl0 st0 (P : 'a -> bool).
-    wl_inflationary leq process /\
-    bounded_measure leq m b /\
+    (!lbl st. P st ==> leq st (process lbl st)) /\
+    (!lbl st. P st ==> P (process lbl st)) /\
     P st0 /\
-    (!lbl st. P st ==> P (process lbl st)) ==>
+    bounded_measure leq m b ==>
     P (SND (wl_iterate process deps wl0 st0))
 Proof
   ACCEPT_TAC wl_iterate_invariant_proof

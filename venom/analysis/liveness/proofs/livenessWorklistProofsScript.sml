@@ -4,8 +4,13 @@
  * Proves liveness_process_block satisfies the worklist framework conditions,
  * giving convergence and fixpoint properties for liveness_wl_analyze.
  *
+ * The framework requires inflationary under an invariant P.
+ * For liveness, P = lr_inv (boundedness + shaped + consistent).
+ *
  * TOP-LEVEL:
- *   liveness_wl_inflationary   — process_block only grows liveness
+ *   liveness_wl_inflationary   — process_block inflationary under lr_inv
+ *   liveness_wl_inv_preserved  — lr_inv preserved by process_block
+ *   liveness_wl_inv_init       — lr_inv holds for init_liveness
  *   liveness_wl_bounded        — set_live_count is a bounded measure for lr_leq
  *   liveness_wl_deps_complete  — preds cover all affected blocks
  *   liveness_wl_fixpoint       — worklist liveness reaches fixpoint
@@ -19,20 +24,41 @@ Ancestors
 
 open arithmeticTheory
 
-(* ===== Framework condition: inflationary ===== *)
+(* ===== Framework condition: inflationary under lr_inv ===== *)
 
-(* liveness_process_block is inflationary w.r.t. lr_leq.
-   Reuses process_block_inflationary from livenessProofsScript. *)
+(* liveness_process_block is inflationary w.r.t. lr_leq when lr_inv holds.
+   Reuses process_block_inflationary from livenessProofsScript
+   (which requires lr_consistent, a component of lr_inv). *)
 Theorem liveness_wl_inflationary_proof:
-  !cfg bbs.
-    wl_inflationary lr_leq (liveness_process_block cfg bbs)
+  !cfg bbs lbl lr.
+    lr_inv bbs lr ==>
+    lr_leq lr (liveness_process_block cfg bbs lbl lr)
+Proof
+  cheat
+QED
+
+(* ===== Framework condition: invariant preserved ===== *)
+
+(* lr_inv is preserved by liveness_process_block.
+   Reuses process_block_preserves_lr_inv from livenessProofsScript. *)
+Theorem liveness_wl_inv_preserved_proof:
+  !cfg bbs lbl lr.
+    lr_inv bbs lr ==>
+    lr_inv bbs (liveness_process_block cfg bbs lbl lr)
+Proof
+  cheat
+QED
+
+(* lr_inv holds for the initial state *)
+Theorem liveness_wl_inv_init_proof:
+  !bbs. lr_inv bbs (init_liveness bbs)
 Proof
   cheat
 QED
 
 (* ===== Framework condition: bounded measure ===== *)
 
-(* lr_leq + set_live_count form a bounded_measure under lr_inv.
+(* lr_leq + set_live_count form a bounded_measure.
    Reuses set_live_count_bounded and one_pass_set_measure_increase. *)
 Theorem liveness_wl_bounded_proof:
   !bbs.
@@ -73,16 +99,6 @@ QED
 Theorem liveness_wl_invariant_proof:
   !fn.
     lr_inv fn.fn_blocks (liveness_wl_analyze fn)
-Proof
-  cheat
-QED
-
-(* Variable boundedness: live vars ⊆ fn_all_vars *)
-Theorem liveness_wl_vars_bounded_proof:
-  !fn lbl idx v.
-    let lr = liveness_wl_analyze fn in
-    MEM v (live_vars_at lr lbl idx) ==>
-    MEM v (fn_all_vars fn.fn_blocks)
 Proof
   cheat
 QED
