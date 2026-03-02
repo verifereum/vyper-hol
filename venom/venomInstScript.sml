@@ -232,6 +232,33 @@ Definition lookup_function_def:
     else lookup_function name fns
 End
 
+(* lookup_function: if SOME, the function is in the list *)
+Theorem lookup_function_MEM:
+  !name fns fn. lookup_function name fns = SOME fn ==> MEM fn fns
+Proof
+  gen_tac >> Induct >> rw[lookup_function_def] >> gvs[AllCaseEqs()]
+QED
+
+(* lookup_function: if SOME, the name is in the function name list *)
+Theorem lookup_function_mem:
+  lookup_function name fns = SOME func ==>
+  MEM name (MAP (\f. f.fn_name) fns)
+Proof
+  Induct_on `fns` >> simp[lookup_function_def] >>
+  rpt strip_tac >> rw[] >> gvs[] >>
+  Cases_on `h.fn_name = name` >> gvs[]
+QED
+
+(* lookup_function: if NONE, the name is not in the function name list *)
+Theorem lookup_function_not_mem:
+  lookup_function name fns = NONE ==>
+  ~MEM name (MAP (\f. f.fn_name) fns)
+Proof
+  Induct_on `fns` >> simp[lookup_function_def] >>
+  rpt strip_tac >>
+  Cases_on `h.fn_name = name` >> gvs[]
+QED
+
 (* Get instruction at index in a block *)
 Definition get_instruction_def:
   get_instruction bb idx =
@@ -308,26 +335,6 @@ End
 Definition fn_insts_def:
   fn_insts fn = fn_insts_blocks fn.fn_blocks
 End
-
-(* lookup_function succeeds => the name appears in the function list. *)
-Theorem lookup_function_mem:
-  lookup_function name fns = SOME func ==>
-  MEM name (MAP (\f. f.fn_name) fns)
-Proof
-  Induct_on `fns` >> simp[lookup_function_def] >>
-  rpt strip_tac >> rw[] >> gvs[] >>
-  Cases_on `h.fn_name = name` >> gvs[]
-QED
-
-(* lookup_function fails => the name is not in the function list. *)
-Theorem lookup_function_not_mem:
-  lookup_function name fns = NONE ==>
-  ~MEM name (MAP (\f. f.fn_name) fns)
-Proof
-  Induct_on `fns` >> simp[lookup_function_def] >>
-  rpt strip_tac >>
-  Cases_on `h.fn_name = name` >> gvs[]
-QED
 
 (* ==========================================================================
    Context well-formedness
