@@ -2,4 +2,4 @@
 # From liveness/proofs/:
 #   ../../..  = venom/
 #   ../../../.. = project root
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics ../defs ../../cfg/defs ../../dataflow/defs ../../dataflow/proofs
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics ../defs ../../cfg/defs ../../cfg/proofs ../../cfg ../../dataflow/defs ../../dataflow/proofs
