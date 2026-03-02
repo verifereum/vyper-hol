@@ -19,10 +19,18 @@ Definition tl_scopes_def:
 End
 
 Definition lookup_immutable_def:
-  lookup_immutable cx (st:evaluation_state) n =
+  lookup_immutable cx (st:evaluation_state) mid n =
   case ALOOKUP st.immutables cx.txn.target of
-  | SOME imms => FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num n)
+  | SOME imms => FLOOKUP (get_source_immutables mid imms) (string_to_num n)
   | NONE => NONE
+End
+
+Definition lookup_bare_global_name_def:
+  lookup_bare_global_name cx st n = lookup_immutable cx st (current_module cx) n
+End
+
+Definition lookup_toplevel_name_def:
+  lookup_toplevel_name cx st mid n = lookup_global cx mid (string_to_num n) st
 End
 
 (* For convenience, we define the case st.scopes = [] in such a way
@@ -39,6 +47,20 @@ Definition update_name_def:
         | h :: t => st with scopes := (h |+ (n, v)) :: t
 End
 
+(*
+Definition update_toplevel_name_def:
+  update_toplevel_name st mid id v =
+  let n = string_to_num id in
+    case get_module_code cx mid of
+    | NONE => st
+    | SOME ts =>
+        case find_var_decl_by_num n ts of
+        | NONE => lookup_immutable cx st mid n
+        | SOME (StorageVarDecl is_transient typ, id) => (* TODO: read storage *)
+        | SOME (HashMapVarDecl is_transient kt vt, id) => (* TODO: return hashmap ref *)
+End
+*)
+
 Definition lookup_base_target_def:
   lookup_base_target cx st tgt =
     case eval_base_target cx tgt st of
@@ -46,12 +68,10 @@ Definition lookup_base_target_def:
     | (INR _, _) => NONE
 End
 
-(* ScopedVar or ImmutableVar *)
 Definition lookup_name_target_def:
   lookup_name_target cx st n = lookup_base_target cx st (NameTarget n)
 End
 
-(* TopLevelVar *)
 Definition lookup_toplevel_name_target_def:
   lookup_toplevel_name_target cx st n = lookup_base_target cx st (TopLevelNameTarget n)
 End
@@ -430,7 +450,7 @@ QED
 Theorem lookup_immutable_after_set_immutable:
   ∀cx n v st st'.
     set_immutable cx (current_module cx) (string_to_num n) v st = (INL (), st') ⇒
-    lookup_immutable cx st' n = SOME v
+    lookup_immutable cx st' (current_module cx) n = SOME v
 Proof
   rw[set_immutable_def, lookup_immutable_def,
      bind_def, LET_THM, get_address_immutables_def,
@@ -593,15 +613,15 @@ Proof
 QED
 
 Theorem lookup_immutable_tl_scopes:
-  ∀cx st n. lookup_immutable cx (tl_scopes st) n = lookup_immutable cx st n
+  ∀cx st mid n. lookup_immutable cx (tl_scopes st) mid n = lookup_immutable cx st mid n
 Proof
   rw[lookup_immutable_def, tl_scopes_def]
 QED
 
 Theorem lookup_immutable_preserved_after_update:
-  ∀cx st n v k.
-    lookup_immutable cx (update_name st n v) k =
-    lookup_immutable cx st k
+  ∀cx st n v mid k.
+    lookup_immutable cx (update_name st n v) mid k =
+    lookup_immutable cx st mid k
 Proof
   rw[lookup_immutable_def, immutables_preserved_after_update]
 QED
