@@ -2,6 +2,7 @@
  * Lattice Predicates — Definitions
  *
  * Predicate-based lattice infrastructure for dataflow analysis.
+ * Uses reflexive/transitive/antisymmetric from relationTheory.
  * No project-specific dependencies.
  *
  * TOP-LEVEL:
@@ -12,13 +13,14 @@
  *)
 
 Theory latticeDefs
+Ancestors
+  relation
 
-(* Partial order: reflexive, antisymmetric, transitive *)
+(* Partial order: reflexive, antisymmetric, transitive.
+   Uses existing definitions from relationTheory. *)
 Definition partial_order_def:
   partial_order (leq : 'a -> 'a -> bool) <=>
-    (!x. leq x x) /\
-    (!x y. leq x y /\ leq y x ==> (x = y)) /\
-    (!x y z. leq x y /\ leq y z ==> leq x z)
+    reflexive leq /\ antisymmetric leq /\ transitive leq
 End
 
 (* Bounded measure witnessing finite height:

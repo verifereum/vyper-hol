@@ -20,9 +20,7 @@
 
 Theory livenessWorklistProofs
 Ancestors
-  livenessWorklistDefs livenessProofs worklistProofs
-
-open arithmeticTheory
+  livenessWorklistDefs livenessProofs worklistProofs arithmetic
 
 (* ===== Framework condition: inflationary under lr_inv ===== *)
 

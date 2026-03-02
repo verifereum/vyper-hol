@@ -12,9 +12,7 @@
 
 Theory latticeProofs
 Ancestors
-  latticeDefs
-
-open arithmeticTheory
+  latticeDefs arithmetic
 
 (* ===== Basic lattice properties ===== *)
 
