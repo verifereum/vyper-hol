@@ -16,6 +16,8 @@ CLAUDE.local.md
 
 .agent-files/
 .sandbox
+.worktrees/
+.local/
 
 .hol-vscode/
 .DS_Store

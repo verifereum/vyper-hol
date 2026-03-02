@@ -6,8 +6,11 @@
 
 Theory cfgDefs
 Ancestors
-  list finite_map relation
+  list finite_map relation pred_set
   venomInst
+Libs
+  Defn TotalDefn pairLib pairTheory relationTheory pred_setTheory
+  finite_mapTheory
 
 (* ==========================================================================
    Small helpers
@@ -58,8 +61,6 @@ Definition cfg_reachable_of_def:
     | SOME b => b
 End
 
-
-
 (* No critical edges: every block either has at most one predecessor,
  * or all its predecessors have at most one successor.
  * Not currently used but may be a precondition for SSA/phi-elimination. *)
@@ -109,10 +110,185 @@ Definition build_preds_def:
 End
 
 (* ==========================================================================
-   DFS preorder and postorder (mutually recursive with list helper)
+   DFS termination machinery
    ========================================================================== *)
 
-Definition dfs_post_walk_def:
+val sum_ty = ``:('a |-> 'a list) # 'a list # 'a +
+                ('a |-> 'a list) # 'a list # 'a list``;
+
+val dfs_R = ``inv_image ($< LEX $< LEX ($< : num -> num -> bool))
+  (\x. case (x : ^(ty_antiq sum_ty)) of
+    INL (succs, visited, lbl) =>
+        (CARD (FDOM succs DIFF set visited),
+         if lbl IN FDOM succs then 0n else 1n, 0n)
+    | INR (succs, visited, lst) =>
+        (CARD (FDOM succs DIFF set visited), LENGTH lst, 1n))``;
+
+val dfs_P = ``\(x : ^(ty_antiq sum_ty)) (result : 'a list # 'a list).
+  set (case x of INL (s,v,l) => v | INR (s,v,l) => v) SUBSET set (FST result)``;
+
+val dfs_wf_thm = prove(``WF ^dfs_R``,
+  MATCH_MP_TAC WF_inv_image >>
+  MATCH_MP_TAC WF_LEX >> simp[] >>
+  MATCH_MP_TAC WF_LEX >> simp[]);
+
+(* Shared INDUCTIVE_INVARIANT tactic for both DFS functions.
+   Generic: avoids naming UNION' function variable via qmatch_goalsub_abbrev_tac.
+   INL case: pairarg_tac exposes pair, IH via first_x_assum, SUBSET_TRANS.
+   INR case: existential pair witnesses, IH applied twice, SUBSET_TRANS. *)
+val dfs_inv_tac =
+  simp[INDUCTIVE_INVARIANT_DEF, inv_image_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `x` >> simp[]
+  (* INL case *)
+  >- (
+    PairCases_on `x'` >> simp[] >> rw[] >>
+    pairarg_tac >> gvs[] >>
+    first_x_assum (qspec_then
+      `INR(x'0, set_insert x'2 x'1, fmap_lookup_list x'0 x'2)`
+      (fn th => mp_tac (SIMP_RULE (srw_ss()) [] th))) >>
+    impl_tac
+    >- (
+      Cases_on `x'2 IN FDOM x'0` >> simp[LEX_DEF]
+      >- (
+        `FDOM x'0 INTER set x'1 PSUBSET
+         FDOM x'0 INTER set (set_insert x'2 x'1)` by (
+          simp[PSUBSET_DEF, SUBSET_DEF, set_insert_def, EXTENSION] >>
+          qexists_tac `x'2` >> simp[]
+        ) >>
+        `FINITE (FDOM x'0 INTER set (set_insert x'2 x'1))` by simp[] >>
+        `CARD (FDOM x'0 INTER set x'1) <
+         CARD (FDOM x'0 INTER set (set_insert x'2 x'1))` by
+          metis_tac[CARD_PSUBSET] >>
+        `CARD (FDOM x'0 INTER set (set_insert x'2 x'1)) <=
+         CARD (FDOM x'0)` by (irule CARD_SUBSET >> simp[SUBSET_DEF]) >>
+        simp[]
+      )
+      >- (
+        DISJ2_TAC >>
+        `FDOM x'0 INTER set (set_insert x'2 x'1) =
+         FDOM x'0 INTER set x'1` by
+          (simp[EXTENSION, set_insert_def] >> metis_tac[]) >>
+        simp[fmap_lookup_list_def, FLOOKUP_DEF]
+      )
+    )
+    >- (
+      strip_tac >>
+      `set x'1 SUBSET set (set_insert x'2 x'1)` by
+        simp[set_insert_def, SUBSET_DEF] >>
+      `set (set_insert x'2 x'1) SUBSET set vis2` by gvs[] >>
+      metis_tac[SUBSET_TRANS]
+    )
+  )
+  (* INR case *)
+  >- (
+    PairCases_on `y` >> simp[] >>
+    Cases_on `y2` >> simp[] >>
+    qmatch_goalsub_abbrev_tac `ff (INL _)` >>
+    `?q1 q2. ff (INL (y0,y1,h)) = (q1,q2)` by
+      metis_tac[pairTheory.PAIR] >>
+    `?r1 r2. ff (INR (y0,q1,t)) = (r1,r2)` by
+      metis_tac[pairTheory.PAIR] >>
+    simp[] >>
+    qunabbrev_tac `ff` >>
+    first_assum (qspec_then `INL(y0, y1, h)`
+      (fn th => mp_tac (SIMP_RULE (srw_ss()) [] th))) >>
+    impl_tac
+    >- (simp[LEX_DEF] >>
+        Cases_on `h IN FDOM y0` >> simp[] >>
+        Cases_on `t` >> simp[])
+    >- (
+      strip_tac >>
+      `set y1 SUBSET set q1` by gvs[] >>
+      first_assum (qspec_then `INR(y0, q1, t)`
+        (fn th => mp_tac (SIMP_RULE (srw_ss()) [] th))) >>
+      impl_tac
+      >- (
+        simp[LEX_DEF] >>
+        `CARD (FDOM y0 INTER set y1) <= CARD (FDOM y0 INTER set q1)` by (
+          irule CARD_SUBSET >> simp[SUBSET_DEF] >> metis_tac[SUBSET_DEF]
+        ) >>
+        simp[]
+      )
+      >- (
+        strip_tac >>
+        `set q1 SUBSET set r1` by gvs[] >>
+        metis_tac[SUBSET_TRANS]
+      )
+    )
+  );
+
+(* Obligation tactic *)
+fun dfs_obl_tac mono_aux =
+  EXISTS_TAC dfs_R >>
+  conj_tac >- (ACCEPT_TAC dfs_wf_thm) >>
+  conj_tac >- (
+    rpt strip_tac >>
+    simp[inv_image_def, LEX_DEF, set_insert_def] >>
+    Cases_on `lbl IN FDOM succs` >> simp[]
+    >- (
+      `FDOM succs INTER set visited PSUBSET
+       FDOM succs INTER (lbl INSERT set visited)` by (
+        simp[PSUBSET_DEF, SUBSET_DEF, EXTENSION] >>
+        qexists_tac `lbl` >> simp[]
+      ) >>
+      `FINITE (FDOM succs INTER (lbl INSERT set visited))` by simp[] >>
+      `CARD (FDOM succs INTER set visited) <
+       CARD (FDOM succs INTER (lbl INSERT set visited))` by
+        metis_tac[CARD_PSUBSET] >>
+      `CARD (FDOM succs INTER (lbl INSERT set visited)) <=
+       CARD (FDOM succs)` by (irule CARD_SUBSET >> simp[SUBSET_DEF]) >>
+      simp[]
+    )
+    >- (
+      `FDOM succs INTER (lbl INSERT set visited) =
+       FDOM succs INTER set visited` by
+        (simp[EXTENSION] >> metis_tac[]) >>
+      simp[fmap_lookup_list_def, FLOOKUP_DEF]
+    )
+  ) >>
+  conj_tac >- (
+    rpt strip_tac >>
+    simp[inv_image_def, LEX_DEF] >>
+    `set visited SUBSET set v'` by metis_tac[mono_aux] >>
+    `CARD (FDOM succs INTER set visited) <=
+     CARD (FDOM succs INTER set v')` by (
+      irule CARD_SUBSET >> simp[SUBSET_DEF] >> metis_tac[SUBSET_DEF]
+    ) >>
+    simp[]
+  ) >>
+  rpt strip_tac >>
+  simp[inv_image_def, LEX_DEF] >>
+  Cases_on `s IN FDOM succs` >> simp[] >>
+  Cases_on `ss` >> simp[];
+
+(* Helper: extract clean monotonicity lemma from INDUCTIVE_INVARIANT *)
+fun mk_mono_aux inv_thm aux_def =
+  let
+    val mono = MATCH_MP INDUCTIVE_INVARIANT_WFREC (CONJ dfs_wf_thm inv_thm)
+    val mono' = REWRITE_RULE [GSYM aux_def] mono
+    val mono_simp = SIMP_RULE (srw_ss()) [] mono'
+    val aux_tm = aux_def |> SPEC_ALL |> concl |> lhs |> rator
+  in
+    prove(
+      ``!succs visited s v' ords'.
+        (v', ords') = ^aux_tm ^dfs_R (INL (succs, visited, s)) ==>
+        set visited SUBSET set v'``,
+      rpt strip_tac >>
+      mp_tac (Q.SPEC `INL(succs,visited,s)` mono_simp) >>
+      pop_assum (fn th =>
+        REWRITE_TAC [GSYM (SIMP_RULE (srw_ss()) [CARD_DIFF_EQN] th)]) >>
+      simp[]
+    )
+  end;
+
+(* TODO: investigate if Definition/Termination syntax can be used here.
+   Currently Hol_defn/Defn.tprove is needed to access UNION_AUX_def
+   for the INDUCTIVE_INVARIANT monotonicity proof. *)
+
+(* ===== dfs_post_walk ===== *)
+
+val dfs_post_defn = Hol_defn "dfs_post_walk" `
   (dfs_post_walk succs visited lbl =
     if MEM lbl visited then (visited, [])
     else
@@ -124,12 +300,22 @@ Definition dfs_post_walk_def:
   (dfs_post_walk_list succs visited (s::ss) =
     let (v', ords') = dfs_post_walk succs visited s in
     let (v'', ords'') = dfs_post_walk_list succs v' ss in
-    (v'', ords' ++ ords''))
-Termination
-  cheat
-End
+    (v'', ords' ++ ords''))`;
 
-Definition dfs_pre_walk_def:
+val dfs_post_aux_def = DB.fetch "-" "dfs_post_walk_UNION_AUX_def";
+val dfs_post_M = dfs_post_aux_def |> SPEC_ALL |> concl |> rhs |> rand;
+val dfs_post_inv = prove(
+  ``INDUCTIVE_INVARIANT ^dfs_R ^dfs_P ^dfs_post_M``, dfs_inv_tac);
+val dfs_post_mono_aux = mk_mono_aux dfs_post_inv dfs_post_aux_def;
+val (dfs_post_walk_def, dfs_post_walk_ind) =
+  Defn.tprove(dfs_post_defn, dfs_obl_tac dfs_post_mono_aux);
+
+Theorem dfs_post_walk_def = dfs_post_walk_def
+Theorem dfs_post_walk_ind = dfs_post_walk_ind
+
+(* ===== dfs_pre_walk ===== *)
+
+val dfs_pre_defn = Hol_defn "dfs_pre_walk" `
   (dfs_pre_walk succs visited lbl =
     if MEM lbl visited then (visited, [])
     else
@@ -141,20 +327,28 @@ Definition dfs_pre_walk_def:
   (dfs_pre_walk_list succs visited (s::ss) =
     let (v', ords') = dfs_pre_walk succs visited s in
     let (v'', ords'') = dfs_pre_walk_list succs v' ss in
-    (v'', ords' ++ ords''))
-Termination
-  cheat
-End
+    (v'', ords' ++ ords''))`;
+
+val dfs_pre_aux_def = DB.fetch "-" "dfs_pre_walk_UNION_AUX_def";
+val dfs_pre_M = dfs_pre_aux_def |> SPEC_ALL |> concl |> rhs |> rand;
+val dfs_pre_inv = prove(
+  ``INDUCTIVE_INVARIANT ^dfs_R ^dfs_P ^dfs_pre_M``, dfs_inv_tac);
+val dfs_pre_mono_aux = mk_mono_aux dfs_pre_inv dfs_pre_aux_def;
+val (dfs_pre_walk_def, dfs_pre_walk_ind) =
+  Defn.tprove(dfs_pre_defn, dfs_obl_tac dfs_pre_mono_aux);
+
+Theorem dfs_pre_walk_def = dfs_pre_walk_def
+Theorem dfs_pre_walk_ind = dfs_pre_walk_ind
+
+(* ==========================================================================
+   Remaining definitions
+   ========================================================================== *)
 
 (* Map each label to whether it appears in the visited set. *)
 Definition build_reachable_def:
   build_reachable labels visited =
     FOLDL (λm k. m |+ (k, MEM k visited)) FEMPTY labels
 End
-
-(* ==========================================================================
-   Top-level analysis
-   ========================================================================== *)
 
 (* Run the full CFG analysis on a function: build successor/predecessor maps,
  * run DFS from the entry block to compute pre/postorder and reachability. *)
@@ -182,24 +376,6 @@ Definition cfg_analyze_def:
        cfg_reachable := reach;
        cfg_dfs_post := post;
        cfg_dfs_pre := pre |>
-End
-
-(* ==========================================================================
-   Well-formedness and reachability predicates
-   ========================================================================== *)
-
-(* TODO: consider moving to venomInstScript.sml — other passes will need this too.
- * wf_function: IR well-formedness for CFG analysis.
- * - unique block labels
- * - at least one block (fn_has_entry)
- * - every block is non-empty and ends with a terminator (bb_well_formed)
- * - successor labels of every block exist in the function (fn_succs_closed) *)
-Definition wf_function_def:
-  wf_function fn <=>
-    ALL_DISTINCT (fn_labels fn) /\
-    fn_has_entry fn /\
-    (!bb. MEM bb fn.fn_blocks ==> bb_well_formed bb) /\
-    fn_succs_closed fn
 End
 
 (* cfg_path: reachability via successor edges (defined as RTC). *)

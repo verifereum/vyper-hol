@@ -1,6 +1,6 @@
 # Agent Guide for vyper-hol workflow
 
-See also `skills/` for additional agent documentation (e.g. review checklists).
+See also `./skills/` for additional agent documentation (e.g. review checklists).
 
 ## CRITICAL: Tool Usage
 

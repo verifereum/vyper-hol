@@ -1,0 +1,5 @@
+# Liveness analysis: public API
+# From liveness/:
+#   ../..  = venom/
+#   ../../.. = project root
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../../syntax ../../../semantics defs proofs ../cfg/defs ../dataflow/defs ../dataflow/proofs
