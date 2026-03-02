@@ -280,7 +280,7 @@ Definition vyper_to_abi_base_def[simp]:
   (* AddressT uses BytesV but converts to NumV - must come after BytesT to avoid
      pattern overlap issues in cv_trans *)
   vyper_to_abi_base AddressT (BytesV _ bs) =
-    SOME (NumV (w2n (word_of_bytes T (0w:address) bs))) ∧
+    SOME (NumV (w2n (word_of_bytes_be bs : address))) ∧
   vyper_to_abi_base _ _ = NONE
 End
 
@@ -590,16 +590,6 @@ QED
 
 (* ===== Helper Lemmas for Roundtrip Theorems ===== *)
 
-(* Helper 1: Address word roundtrip *)
-Theorem address_word_roundtrip:
-  ∀n. n < dimword (:160) ⇒
-      w2n (word_of_bytes T (0w:address) (word_to_bytes (n2w n : address) T)) = n
-Proof
-  rpt strip_tac \\
-  DEP_REWRITE_TAC[word_of_bytes_word_to_bytes] \\
-  gvs[divides_def]
-QED
-
 Theorem within_int_bound_Unsigned_dimword:
   within_int_bound (Unsigned n) (&m) ⇒ m < 2 ** n
 Proof
@@ -829,7 +819,8 @@ Proof
        default_value_def, default_to_abi_def] \\
     TRY (rename1`BytesT bd` \\ Cases_on `bd`) \\
     rw[evaluate_type_def, vyper_to_abi_def,
-       default_value_def, default_to_abi_def] \\
+       default_value_def, default_to_abi_def,
+       word_of_bytes_be_def] \\
     DEP_REWRITE_TAC[word_of_bytes_word_to_bytes] \\
     rw[divides_def] )
   (* TupleT ts: use IH on list, default_value_tuple_MAP *)
@@ -879,7 +870,9 @@ Proof
          integerTheory.NUM_OF_INT, bytes_encode_decode_roundtrip', NULL_EQ]
   (* AddressT: need word roundtrip *)
   >- (drule within_int_bound_Unsigned_dimword
-      \\ gvs[address_word_roundtrip, dimword_def])
+      \\ rw[word_of_bytes_be_def]
+      \\ DEP_REWRITE_TAC[word_of_bytes_word_to_bytes]
+      \\ gvs[dimword_def, divides_def])
   (* StringT: need MAP for CHR/ORD roundtrip on word8 list *)
   >- (gvs[n2w_o_ORD_def, MAP_MAP_o, o_DEF, ORD_CHR_RWT, w2n_lt_256, n2w_w2n])
   (* ArrayT: Fixed and Dynamic cases - case split on the bound *)
