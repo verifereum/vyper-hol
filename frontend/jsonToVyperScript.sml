@@ -585,6 +585,9 @@ Definition translate_expr_def:
   (translate_expr ctx (JE_Str len s) =
     Literal (StringL len s)) /\
 
+  (translate_expr ctx (JE_GenericStr s) =
+    Literal (StringL (STRLEN s) s)) /\
+
   (translate_expr ctx (JE_Bytes len hex) =
     Literal (BytesL (Dynamic len) (hex_string_to_bytes (strip_0x hex)))) /\
 
