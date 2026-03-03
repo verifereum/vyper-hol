@@ -153,13 +153,21 @@ End
 
 (* ===== Address Spaces ===== *)
 
+(* Matches vyper/evm/address_space.py *)
 Datatype:
-  addr_space = Memory | Storage | Transient
+  addr_space =
+    AddrSp_Memory | AddrSp_Storage | AddrSp_Transient |
+    AddrSp_Calldata | AddrSp_Immutables | AddrSp_Data |
+    AddrSp_Code | AddrSp_Returndata
 End
 
+(* Partial: only addr spaces with mutable state have effects.
+ * Matches Python to_addr_space (which maps effect→addr_space for these 4). *)
 Definition effect_of_addr_space_def:
-  effect_of_addr_space Memory = Eff_MEMORY /\
-  effect_of_addr_space Storage = Eff_STORAGE /\
-  effect_of_addr_space Transient = Eff_TRANSIENT
+  effect_of_addr_space AddrSp_Memory = SOME Eff_MEMORY /\
+  effect_of_addr_space AddrSp_Storage = SOME Eff_STORAGE /\
+  effect_of_addr_space AddrSp_Transient = SOME Eff_TRANSIENT /\
+  effect_of_addr_space AddrSp_Immutables = SOME Eff_IMMUTABLES /\
+  effect_of_addr_space _ = NONE
 End
 
