@@ -246,7 +246,7 @@ QED
    of y such that n dominates p but n does not strictly dominate y.
    For single-predecessor y, the condition is never satisfiable: the unique
    pred's dominator must also strictly dominate y. *)
-Theorem df_correct:
+Theorem dom_frontier_correct:
   ∀fn cfg n y.
     wf_function fn ∧
     cfg = cfg_analyze fn ∧
