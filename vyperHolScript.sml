@@ -13,8 +13,5 @@ Ancestors
   * this file just lists top-level roll-ups). *)
   phiFunction
   rtaPassCorrectness
-  dfIterateProps
-  cfgAnalysis
-  fcgAnalysis
-  livenessAnalysis
-  dominatorAnalysis
+  (* analysis roll-up *)
+  venomAnalysisHol
