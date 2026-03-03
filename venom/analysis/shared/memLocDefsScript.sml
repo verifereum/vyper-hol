@@ -4,11 +4,13 @@
  * Ported from vyper/venom/memory_location.py.
  *
  * TOP-LEVEL:
- *   allocation, ptr, mem_loc,
+ *   allocation, mem_loc,
  *   ml_empty, ml_undefined,
  *   completely_contains, may_overlap, mk_volatile,
- *   offset_ptr,
- *   inst_write_ops, inst_read_ops
+ *   inst_access_ops, mem_write_ops, mem_read_ops
+ *
+ * Divergences from Python:
+ *   - allocation uses inst_id (num) instead of instruction object (no object identity in HOL)
  *)
 
 Theory memLocDefs
@@ -20,11 +22,6 @@ Ancestors
 (* An allocation is identified by the alloca/palloca instruction that created it *)
 Datatype:
   allocation = Allocation num   (* inst_id *)
-End
-
-(* A pointer: base allocation + optional known offset *)
-Datatype:
-  ptr = Ptr allocation (num option)
 End
 
 (* ===== Memory Location ===== *)
@@ -101,119 +98,156 @@ Definition mk_volatile_def:
   mk_volatile loc = loc with ml_volatile := T
 End
 
-Definition offset_ptr_def:
-  offset_ptr (Lit n) (Ptr alloc (SOME base_off)) =
-    Ptr alloc (SOME (w2n n + base_off)) /\
-  offset_ptr _ (Ptr alloc _) = Ptr alloc NONE
-End
-
 (* ===== Memory Access Dispatch Tables ===== *)
 
-(* Extract (dst_operand, size_option) for memory-writing instructions.
- * Matches Python memory_write_ops in memory_location.py. *)
-Definition inst_write_ops_def:
-  inst_write_ops inst =
+(* Matches Python InstAccessOps from memory_location.py.
+ * ofst/size/max_size are all operand option, matching Python's Optional[IROperand].
+ * Functions always return a record (Python always returns InstAccessOps). *)
+Datatype:
+  inst_access_ops = <|
+    iao_ofst : operand option;
+    iao_size : operand option;
+    iao_max_size : operand option
+  |>
+End
+
+Definition empty_access_ops_def:
+  empty_access_ops = <| iao_ofst := NONE; iao_size := NONE; iao_max_size := NONE |>
+End
+
+(* Matches Python memory_write_ops in memory_location.py. *)
+Definition mem_write_ops_def:
+  mem_write_ops inst =
     case inst.inst_opcode of
       MSTORE =>
         (case inst.inst_operands of
-           [_; dst] => SOME (dst, SOME 32)
-         | _ => NONE)
+           [_; dst] =>
+             <| iao_ofst := SOME dst; iao_size := SOME (Lit 32w);
+                iao_max_size := SOME (Lit 32w) |>
+         | _ => empty_access_ops)
     | ISTORE =>
         (case inst.inst_operands of
-           [dst; _] => SOME (dst, SOME 32)
-         | _ => NONE)
+           [dst; _] =>
+             <| iao_ofst := SOME dst; iao_size := SOME (Lit 32w);
+                iao_max_size := SOME (Lit 32w) |>
+         | _ => empty_access_ops)
     | MCOPY =>
         (case inst.inst_operands of
-           [sz; _; dst] => SOME (dst, NONE)
-         | _ => NONE)
+           [sz; _; dst] =>
+             <| iao_ofst := SOME dst; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => empty_access_ops)
     | CALLDATACOPY =>
         (case inst.inst_operands of
-           [sz; _; dst] => SOME (dst, NONE)
-         | _ => NONE)
+           [sz; _; dst] =>
+             <| iao_ofst := SOME dst; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => empty_access_ops)
     | DLOADBYTES =>
         (case inst.inst_operands of
-           [sz; _; dst] => SOME (dst, NONE)
-         | _ => NONE)
+           [sz; _; dst] =>
+             <| iao_ofst := SOME dst; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => empty_access_ops)
     | CODECOPY =>
         (case inst.inst_operands of
-           [sz; _; dst] => SOME (dst, NONE)
-         | _ => NONE)
+           [sz; _; dst] =>
+             <| iao_ofst := SOME dst; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => empty_access_ops)
     | RETURNDATACOPY =>
         (case inst.inst_operands of
-           [sz; _; dst] => SOME (dst, NONE)
-         | _ => NONE)
+           [sz; _; dst] =>
+             <| iao_ofst := SOME dst; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => empty_access_ops)
     | EXTCODECOPY =>
         (case inst.inst_operands of
-           [sz; _; dst; _] => SOME (dst, NONE)
-         | _ => NONE)
+           [sz; _; dst; _] =>
+             <| iao_ofst := SOME dst; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => empty_access_ops)
     | CALL =>
         (case inst.inst_operands of
-           [maxsz; dst; _; _; _; _; _] => SOME (dst, NONE)
-         | _ => NONE)
+           [maxsz; dst; _; _; _; _; _] =>
+             <| iao_ofst := SOME dst; iao_size := NONE; iao_max_size := SOME maxsz |>
+         | _ => empty_access_ops)
     | DELEGATECALL =>
         (case inst.inst_operands of
-           [maxsz; dst; _; _; _; _] => SOME (dst, NONE)
-         | _ => NONE)
+           [maxsz; dst; _; _; _; _] =>
+             <| iao_ofst := SOME dst; iao_size := NONE; iao_max_size := SOME maxsz |>
+         | _ => empty_access_ops)
     | STATICCALL =>
         (case inst.inst_operands of
-           [maxsz; dst; _; _; _; _] => SOME (dst, NONE)
-         | _ => NONE)
-    | _ => NONE
+           [maxsz; dst; _; _; _; _] =>
+             <| iao_ofst := SOME dst; iao_size := NONE; iao_max_size := SOME maxsz |>
+         | _ => empty_access_ops)
+    | _ => empty_access_ops
 End
 
-(* Extract (src_operand, size_option) for memory-reading instructions.
- * Matches Python memory_read_ops in memory_location.py. *)
-Definition inst_read_ops_def:
-  inst_read_ops inst =
+(* Matches Python memory_read_ops in memory_location.py. *)
+Definition mem_read_ops_def:
+  mem_read_ops inst =
     case inst.inst_opcode of
       MLOAD =>
         (case inst.inst_operands of
-           [src] => SOME (src, SOME 32)
-         | _ => NONE)
+           [src] =>
+             <| iao_ofst := SOME src; iao_size := SOME (Lit 32w);
+                iao_max_size := SOME (Lit 32w) |>
+         | _ => empty_access_ops)
     | ILOAD =>
         (case inst.inst_operands of
-           [src] => SOME (src, SOME 32)
-         | _ => NONE)
+           [src] =>
+             <| iao_ofst := SOME src; iao_size := SOME (Lit 32w);
+                iao_max_size := SOME (Lit 32w) |>
+         | _ => empty_access_ops)
     | MCOPY =>
         (case inst.inst_operands of
-           [sz; src; _] => SOME (src, NONE)
-         | _ => NONE)
+           [sz; src; _] =>
+             <| iao_ofst := SOME src; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => empty_access_ops)
     | CALL =>
         (case inst.inst_operands of
-           [_; _; sz; src; _; _; _] => SOME (src, NONE)
-         | _ => NONE)
+           [_; _; sz; src; _; _; _] =>
+             <| iao_ofst := SOME src; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => empty_access_ops)
     | DELEGATECALL =>
         (case inst.inst_operands of
-           [_; _; sz; src; _; _] => SOME (src, NONE)
-         | _ => NONE)
+           [_; _; sz; src; _; _] =>
+             <| iao_ofst := SOME src; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => empty_access_ops)
     | STATICCALL =>
         (case inst.inst_operands of
-           [_; _; sz; src; _; _] => SOME (src, NONE)
-         | _ => NONE)
+           [_; _; sz; src; _; _] =>
+             <| iao_ofst := SOME src; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => empty_access_ops)
     | RETURN =>
         (case inst.inst_operands of
-           [sz; src] => SOME (src, NONE)
-         | _ => NONE)
+           [sz; src] =>
+             <| iao_ofst := SOME src; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => empty_access_ops)
     | CREATE =>
         (case inst.inst_operands of
-           [sz; src; _] => SOME (src, NONE)
-         | _ => NONE)
+           [sz; src; _] =>
+             <| iao_ofst := SOME src; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => empty_access_ops)
     | CREATE2 =>
         (case inst.inst_operands of
-           [_; sz; src; _] => SOME (src, NONE)
-         | _ => NONE)
+           [_; sz; src; _] =>
+             <| iao_ofst := SOME src; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => empty_access_ops)
     | SHA3 =>
         (case inst.inst_operands of
-           [sz; ofst] => SOME (ofst, NONE)
-         | _ => NONE)
+           [sz; ofst] =>
+             <| iao_ofst := SOME ofst; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => empty_access_ops)
     | LOG =>
         (case inst.inst_operands of
-           [] => NONE
-         | ops => SOME (LAST ops, NONE))
+           _::_::_ =>
+             let ops = inst.inst_operands in
+             <| iao_ofst := SOME (LAST ops);
+                iao_size := SOME (LAST (FRONT ops));
+                iao_max_size := SOME (LAST (FRONT ops)) |>
+         | _ => empty_access_ops)
     | REVERT =>
         (case inst.inst_operands of
-           [sz; src] => SOME (src, NONE)
-         | _ => NONE)
-    | _ => NONE
+           [sz; src] =>
+             <| iao_ofst := SOME src; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => empty_access_ops)
+    | _ => empty_access_ops
 End
 
