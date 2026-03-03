@@ -30,7 +30,9 @@ End
 (* ===== Memory Location ===== *)
 
 (* A memory location for alias analysis.
- * Tracks offset, size, base allocation, and volatility. *)
+ * Tracks offset, size, base allocation, and volatility.
+ * Note: ml_volatile is not checked in may_overlap (matching Python);
+ * callers must check volatility separately at a higher level. *)
 Datatype:
   mem_loc = <|
     ml_offset   : num option;         (* byte offset, NONE = unknown *)
@@ -63,8 +65,6 @@ Definition completely_contains_def:
     (IS_SOME outer.ml_offset /\ IS_SOME outer.ml_size /\
      IS_SOME inner.ml_offset /\ IS_SOME inner.ml_size /\
      outer.ml_alloca = inner.ml_alloca /\
-     (* concrete vs abstract must match *)
-     (IS_SOME outer.ml_alloca <=> IS_SOME inner.ml_alloca) /\
      THE outer.ml_offset <= THE inner.ml_offset /\
      THE inner.ml_offset + THE inner.ml_size <=
        THE outer.ml_offset + THE outer.ml_size)

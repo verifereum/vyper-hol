@@ -8,7 +8,7 @@
  *
  * TOP-LEVEL:
  *   effect, read_effects, write_effects, effects_independent,
- *   is_nonidempotent, addr_space, effect_of_addr_space
+ *   has_conflicting_effects, is_nonidempotent, addr_space, effect_of_addr_space
  *)
 
 Theory venomEffects
