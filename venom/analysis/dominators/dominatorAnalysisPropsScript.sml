@@ -3,14 +3,18 @@
  *
  * Exported API for consumers of the dominator analysis.
  *
- * 1) Fixpoint — dom_analyze returns a stable dom set.
- * 2) Boundedness — dominator sets ⊆ fn_labels.
- * 3) Entry dominance — entry dominates all reachable blocks.
- * 4) Self dominance — every block dominates itself.
- * 5) Transitivity — dominates is transitive.
- * 6) Antisymmetry — dominates is antisymmetric (for reachable blocks).
- * 7) Immediate dominator — idom is closest strict dominator.
- * 8) Dominance frontier — DF characterization.
+ *  1) Domain — da_dominators covers all fn_labels
+ *  2) Fixpoint equation — dom sets satisfy the dominator recurrence
+ *  3) Boundedness — dominator sets ⊆ fn_labels
+ *  4) Entry dominance — entry dominates all reachable blocks
+ *  5) Self dominance — every block dominates itself
+ *  6) Transitivity — dominates is transitive
+ *  7) Antisymmetry — dominates is antisymmetric (for reachable blocks)
+ *  8) Immediate dominator — idom is closest strict dominator
+ *  9) Immediate dominator existence — every reachable non-entry block has an idom
+ * 10) Immediate dominator — entry has no idom
+ * 11) Dom-tree children ↔ idom inverse
+ * 12) Dominance frontier correctness
  *
  * Proofs will live in proofs/dominatorProofsScript.sml.
  *)
@@ -20,25 +24,59 @@ Ancestors
   dominatorProofs
 
 (* ==========================================================================
-   1) Fixpoint — one more pass does not change dom sets
+   1) Domain — da_dominators covers all fn_labels
    ========================================================================== *)
 
-(* After dom_analyze, applying dom_one_pass again yields the same map.
-   Ensures the iterative fixpoint has converged. *)
-Theorem dom_analyze_fixpoint:
-  ∀fn cfg.
+(* Every label in the function has a dominator set entry. *)
+Theorem dom_analyze_domain:
+  ∀fn cfg lbl.
     wf_function fn ∧
-    cfg = cfg_analyze fn ⇒
-    let dom = dom_analyze cfg fn in
-    let entry = case entry_block fn of NONE => "" | SOME bb => bb.bb_label in
-    dom_one_pass cfg entry cfg.cfg_dfs_post dom.da_dominators =
-      dom.da_dominators
+    cfg = cfg_analyze fn ∧
+    MEM lbl (fn_labels fn) ⇒
+    lbl ∈ FDOM (dom_analyze cfg fn).da_dominators
 Proof
   cheat
 QED
 
 (* ==========================================================================
-   2) Boundedness — dominator sets only contain function labels
+   2) Fixpoint equation — dom sets satisfy the dominator recurrence
+
+   For non-entry reachable blocks, dom(lbl) as a set equals
+   {lbl} ∪ ∩{dom(p) | p ∈ preds(lbl)}.
+   This is the fundamental characterization of the dominator fixpoint.
+   ========================================================================== *)
+
+Theorem dom_fixpoint_equation:
+  ∀fn cfg bb lbl.
+    wf_function fn ∧
+    cfg = cfg_analyze fn ∧
+    entry_block fn = SOME bb ∧
+    cfg_reachable_of cfg lbl ∧
+    lbl ≠ bb.bb_label ∧
+    cfg_preds_of cfg lbl ≠ [] ⇒
+    let dom = dom_analyze cfg fn in
+    set (fmap_lookup_list dom.da_dominators lbl) =
+      {lbl} ∪
+      BIGINTER (IMAGE (λp. set (fmap_lookup_list dom.da_dominators p))
+                      (set (cfg_preds_of cfg lbl)))
+Proof
+  cheat
+QED
+
+(* Entry block dominates only itself. *)
+Theorem dom_entry_self:
+  ∀fn cfg bb.
+    wf_function fn ∧
+    cfg = cfg_analyze fn ∧
+    entry_block fn = SOME bb ⇒
+    set (fmap_lookup_list (dom_analyze cfg fn).da_dominators bb.bb_label) =
+      {bb.bb_label}
+Proof
+  cheat
+QED
+
+(* ==========================================================================
+   3) Boundedness — dominator sets only contain function labels
    ========================================================================== *)
 
 (* Every element of dom(lbl) is a label of some block in the function. *)
@@ -55,7 +93,7 @@ Proof
 QED
 
 (* ==========================================================================
-   3) Entry dominance — entry dominates all reachable blocks
+   4) Entry dominance — entry dominates all reachable blocks
    ========================================================================== *)
 
 (* For a well-formed function with entry block, the entry label appears
@@ -72,10 +110,12 @@ Proof
 QED
 
 (* ==========================================================================
-   4) Self dominance — every block in the function dominates itself
+   5) Self dominance — every block in the function dominates itself
    ========================================================================== *)
 
-(* Every label that appears in the function's blocks dominates itself. *)
+(* Every label in the function dominates itself.
+   For unreachable blocks this holds vacuously (dom set = all labels from init,
+   since dom_transfer only visits reachable blocks in cfg_dfs_post order). *)
 Theorem dom_self:
   ∀fn cfg lbl.
     wf_function fn ∧
@@ -87,10 +127,12 @@ Proof
 QED
 
 (* ==========================================================================
-   5) Transitivity — if a dominates b and b dominates c, then a dominates c
+   6) Transitivity — if a dominates b and b dominates c, then a dominates c
    ========================================================================== *)
 
-(* Dominates is transitive on reachable blocks. *)
+(* Dominates is transitive on reachable blocks.
+   Reachability of c suffices: b ∈ dom(c) with c reachable implies b reachable,
+   and a ∈ dom(b) with b reachable implies a reachable. *)
 Theorem dominates_trans:
   ∀fn cfg a b c.
     wf_function fn ∧
@@ -104,11 +146,13 @@ Proof
 QED
 
 (* ==========================================================================
-   6) Antisymmetry — if a dominates b and b dominates a, then a = b
+   7) Antisymmetry — if a dominates b and b dominates a, then a = b
    ========================================================================== *)
 
 (* Dominates is antisymmetric on reachable blocks. Together with reflexivity
-   (dom_self) and transitivity, this makes dominance a partial order. *)
+   (dom_self) and transitivity, this makes dominance a partial order.
+   Both reachability conditions are needed: for unreachable blocks,
+   dom = all labels, so mutual dominance holds for any two unreachable blocks. *)
 Theorem dominates_antisym:
   ∀fn cfg a b.
     wf_function fn ∧
@@ -123,11 +167,12 @@ Proof
 QED
 
 (* ==========================================================================
-   7) Immediate dominator — idom is closest strict dominator
+   8) Immediate dominator — idom is closest strict dominator
    ========================================================================== *)
 
 (* If idom(lbl) = SOME d, then d strictly dominates lbl and every other
-   strict dominator of lbl also dominates d. *)
+   strict dominator of lbl also dominates d (i.e., d is the closest
+   strict dominator in the dominator tree). *)
 Theorem idom_is_immediate:
   ∀fn cfg lbl d.
     wf_function fn ∧
@@ -142,7 +187,29 @@ Proof
   cheat
 QED
 
-(* Entry block has no immediate dominator. *)
+(* ==========================================================================
+   9) Immediate dominator existence — every reachable non-entry block has idom
+   ========================================================================== *)
+
+(* Every reachable non-entry block has an immediate dominator.
+   Consumers (make_ssa, mem_ssa) rely on idom_of returning SOME. *)
+Theorem idom_exists:
+  ∀fn cfg bb lbl.
+    wf_function fn ∧
+    cfg = cfg_analyze fn ∧
+    entry_block fn = SOME bb ∧
+    cfg_reachable_of cfg lbl ∧
+    lbl ≠ bb.bb_label ⇒
+    ∃d. idom_of (dom_analyze cfg fn) lbl = SOME d
+Proof
+  cheat
+QED
+
+(* ==========================================================================
+  10) Immediate dominator — entry has no idom
+   ========================================================================== *)
+
+(* Entry block has no immediate dominator (it is the root of the dom tree). *)
 Theorem idom_entry_none:
   ∀fn cfg bb.
     wf_function fn ∧
@@ -154,11 +221,31 @@ Proof
 QED
 
 (* ==========================================================================
-   8) Dominance frontier correctness
+  11) Dom-tree children — dominated_of is the inverse of idom_of
    ========================================================================== *)
 
-(* y is in the dominance frontier of n iff there exists a predecessor p
-   of y such that n dominates p but n does not strictly dominate y. *)
+(* c appears in dominated_of(n) iff idom(c) = n. This is the bidirectional
+   link consumers need to traverse the dominator tree. *)
+Theorem dominated_iff_idom:
+  ∀fn cfg n c.
+    wf_function fn ∧
+    cfg = cfg_analyze fn ∧
+    MEM n (fn_labels fn) ∧
+    MEM c (fn_labels fn) ⇒
+    let dom = dom_analyze cfg fn in
+    (MEM c (dominated_of dom n) ⇔ idom_of dom c = SOME n)
+Proof
+  cheat
+QED
+
+(* ==========================================================================
+  12) Dominance frontier correctness
+   ========================================================================== *)
+
+(* y is in the dominance frontier of n iff there exists a CFG predecessor p
+   of y such that n dominates p but n does not strictly dominate y.
+   For single-predecessor y, the condition is never satisfiable: the unique
+   pred's dominator must also strictly dominate y. *)
 Theorem df_correct:
   ∀fn cfg n y.
     wf_function fn ∧
