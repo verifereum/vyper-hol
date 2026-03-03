@@ -476,21 +476,6 @@ Definition step_inst_def:
             | _ => Error "undefined operand")
         | _ => Error "sha3 requires 2 operands")
 
-    | SHA3_64 =>
-        (* SHA3_64 is a Vyper optimization: hash exactly 64 bytes (two words) *)
-        (case inst.inst_operands of
-          [op2; op1] =>
-            (case (eval_operand op1 s, eval_operand op2 s) of
-              (SOME v1, SOME v2) =>
-                (case inst.inst_outputs of
-                  [out] =>
-                    let data = word_to_bytes v1 T ++ word_to_bytes v2 T in
-                    let hash = word_of_bytes T (0w:bytes32) (Keccak_256_w64 data) in
-                    OK (update_var out hash s)
-                | _ => Error "sha3_64 requires single output")
-            | _ => Error "undefined operand")
-        | _ => Error "sha3_64 requires 2 operands")
-
     (* Default - unimplemented *)
     | _ => Error "unimplemented opcode"
 End

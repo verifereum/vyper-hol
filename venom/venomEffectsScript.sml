@@ -69,7 +69,6 @@ Definition read_effects_def:
   read_effects LOG = {Eff_MEMORY} /\
   read_effects REVERT = {Eff_MEMORY} /\
   read_effects SHA3 = {Eff_MEMORY} /\
-  read_effects SHA3_64 = {Eff_MEMORY} /\
   read_effects MSIZE = {Eff_MSIZE} /\
   read_effects RETURN = {Eff_MEMORY} /\
   read_effects _ = empty_effects
@@ -119,7 +118,6 @@ Definition write_effects_def:
   write_effects MLOAD = {Eff_MSIZE} /\
   write_effects REVERT = {Eff_MSIZE} /\
   write_effects SHA3 = {Eff_MSIZE} /\
-  write_effects SHA3_64 = {Eff_MSIZE} /\
   write_effects RETURN = {Eff_MSIZE} /\
   write_effects _ = empty_effects
 End

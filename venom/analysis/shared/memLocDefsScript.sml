@@ -101,153 +101,158 @@ End
 (* ===== Memory Access Dispatch Tables ===== *)
 
 (* Matches Python InstAccessOps from memory_location.py.
- * ofst/size/max_size are all operand option, matching Python's Optional[IROperand].
- * Functions always return a record (Python always returns InstAccessOps). *)
+ * size is NONE when actual bytes accessed is indeterminate (e.g. CALL writes).
+ * max_size defaults to size (matching Python __post_init__).
+ *
+ * Divergence: Python always returns InstAccessOps (crashes on malformed operands).
+ * HOL returns NONE for non-memory opcodes and malformed operand counts. *)
 Datatype:
   inst_access_ops = <|
-    iao_ofst : operand option;
+    iao_ofst : operand;
     iao_size : operand option;
     iao_max_size : operand option
   |>
 End
 
-Definition empty_access_ops_def:
-  empty_access_ops = <| iao_ofst := NONE; iao_size := NONE; iao_max_size := NONE |>
-End
-
-(* Matches Python memory_write_ops in memory_location.py. *)
+(* Matches Python memory_write_ops in memory_location.py.
+ * SOME record: valid memory-writing instruction with well-formed operands.
+ *   Within the record, iao_size = NONE means indeterminate byte count.
+ * NONE (outer): opcode doesn't write memory, or operand count is wrong
+ *   (the latter would be a compiler bug in Python). *)
 Definition mem_write_ops_def:
   mem_write_ops inst =
     case inst.inst_opcode of
       MSTORE =>
         (case inst.inst_operands of
            [_; dst] =>
-             <| iao_ofst := SOME dst; iao_size := SOME (Lit 32w);
-                iao_max_size := SOME (Lit 32w) |>
-         | _ => empty_access_ops)
+             SOME <| iao_ofst := dst; iao_size := SOME (Lit 32w);
+                     iao_max_size := SOME (Lit 32w) |>
+         | _ => NONE)
     | ISTORE =>
         (case inst.inst_operands of
            [dst; _] =>
-             <| iao_ofst := SOME dst; iao_size := SOME (Lit 32w);
-                iao_max_size := SOME (Lit 32w) |>
-         | _ => empty_access_ops)
+             SOME <| iao_ofst := dst; iao_size := SOME (Lit 32w);
+                     iao_max_size := SOME (Lit 32w) |>
+         | _ => NONE)
     | MCOPY =>
         (case inst.inst_operands of
            [sz; _; dst] =>
-             <| iao_ofst := SOME dst; iao_size := SOME sz; iao_max_size := SOME sz |>
-         | _ => empty_access_ops)
+             SOME <| iao_ofst := dst; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => NONE)
     | CALLDATACOPY =>
         (case inst.inst_operands of
            [sz; _; dst] =>
-             <| iao_ofst := SOME dst; iao_size := SOME sz; iao_max_size := SOME sz |>
-         | _ => empty_access_ops)
+             SOME <| iao_ofst := dst; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => NONE)
     | DLOADBYTES =>
         (case inst.inst_operands of
            [sz; _; dst] =>
-             <| iao_ofst := SOME dst; iao_size := SOME sz; iao_max_size := SOME sz |>
-         | _ => empty_access_ops)
+             SOME <| iao_ofst := dst; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => NONE)
     | CODECOPY =>
         (case inst.inst_operands of
            [sz; _; dst] =>
-             <| iao_ofst := SOME dst; iao_size := SOME sz; iao_max_size := SOME sz |>
-         | _ => empty_access_ops)
+             SOME <| iao_ofst := dst; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => NONE)
     | RETURNDATACOPY =>
         (case inst.inst_operands of
            [sz; _; dst] =>
-             <| iao_ofst := SOME dst; iao_size := SOME sz; iao_max_size := SOME sz |>
-         | _ => empty_access_ops)
+             SOME <| iao_ofst := dst; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => NONE)
     | EXTCODECOPY =>
         (case inst.inst_operands of
            [sz; _; dst; _] =>
-             <| iao_ofst := SOME dst; iao_size := SOME sz; iao_max_size := SOME sz |>
-         | _ => empty_access_ops)
+             SOME <| iao_ofst := dst; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => NONE)
     | CALL =>
         (case inst.inst_operands of
            [maxsz; dst; _; _; _; _; _] =>
-             <| iao_ofst := SOME dst; iao_size := NONE; iao_max_size := SOME maxsz |>
-         | _ => empty_access_ops)
+             SOME <| iao_ofst := dst; iao_size := NONE; iao_max_size := SOME maxsz |>
+         | _ => NONE)
     | DELEGATECALL =>
         (case inst.inst_operands of
            [maxsz; dst; _; _; _; _] =>
-             <| iao_ofst := SOME dst; iao_size := NONE; iao_max_size := SOME maxsz |>
-         | _ => empty_access_ops)
+             SOME <| iao_ofst := dst; iao_size := NONE; iao_max_size := SOME maxsz |>
+         | _ => NONE)
     | STATICCALL =>
         (case inst.inst_operands of
            [maxsz; dst; _; _; _; _] =>
-             <| iao_ofst := SOME dst; iao_size := NONE; iao_max_size := SOME maxsz |>
-         | _ => empty_access_ops)
-    | _ => empty_access_ops
+             SOME <| iao_ofst := dst; iao_size := NONE; iao_max_size := SOME maxsz |>
+         | _ => NONE)
+    | _ => NONE
 End
 
-(* Matches Python memory_read_ops in memory_location.py. *)
+(* Matches Python memory_read_ops in memory_location.py.
+ * SOME record: valid memory-reading instruction with well-formed operands.
+ * NONE (outer): opcode doesn't read memory, or operand count is wrong. *)
 Definition mem_read_ops_def:
   mem_read_ops inst =
     case inst.inst_opcode of
       MLOAD =>
         (case inst.inst_operands of
            [src] =>
-             <| iao_ofst := SOME src; iao_size := SOME (Lit 32w);
-                iao_max_size := SOME (Lit 32w) |>
-         | _ => empty_access_ops)
+             SOME <| iao_ofst := src; iao_size := SOME (Lit 32w);
+                     iao_max_size := SOME (Lit 32w) |>
+         | _ => NONE)
     | ILOAD =>
         (case inst.inst_operands of
            [src] =>
-             <| iao_ofst := SOME src; iao_size := SOME (Lit 32w);
-                iao_max_size := SOME (Lit 32w) |>
-         | _ => empty_access_ops)
+             SOME <| iao_ofst := src; iao_size := SOME (Lit 32w);
+                     iao_max_size := SOME (Lit 32w) |>
+         | _ => NONE)
     | MCOPY =>
         (case inst.inst_operands of
            [sz; src; _] =>
-             <| iao_ofst := SOME src; iao_size := SOME sz; iao_max_size := SOME sz |>
-         | _ => empty_access_ops)
+             SOME <| iao_ofst := src; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => NONE)
     | CALL =>
         (case inst.inst_operands of
            [_; _; sz; src; _; _; _] =>
-             <| iao_ofst := SOME src; iao_size := SOME sz; iao_max_size := SOME sz |>
-         | _ => empty_access_ops)
+             SOME <| iao_ofst := src; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => NONE)
     | DELEGATECALL =>
         (case inst.inst_operands of
            [_; _; sz; src; _; _] =>
-             <| iao_ofst := SOME src; iao_size := SOME sz; iao_max_size := SOME sz |>
-         | _ => empty_access_ops)
+             SOME <| iao_ofst := src; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => NONE)
     | STATICCALL =>
         (case inst.inst_operands of
            [_; _; sz; src; _; _] =>
-             <| iao_ofst := SOME src; iao_size := SOME sz; iao_max_size := SOME sz |>
-         | _ => empty_access_ops)
+             SOME <| iao_ofst := src; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => NONE)
     | RETURN =>
         (case inst.inst_operands of
            [sz; src] =>
-             <| iao_ofst := SOME src; iao_size := SOME sz; iao_max_size := SOME sz |>
-         | _ => empty_access_ops)
+             SOME <| iao_ofst := src; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => NONE)
     | CREATE =>
         (case inst.inst_operands of
            [sz; src; _] =>
-             <| iao_ofst := SOME src; iao_size := SOME sz; iao_max_size := SOME sz |>
-         | _ => empty_access_ops)
+             SOME <| iao_ofst := src; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => NONE)
     | CREATE2 =>
         (case inst.inst_operands of
            [_; sz; src; _] =>
-             <| iao_ofst := SOME src; iao_size := SOME sz; iao_max_size := SOME sz |>
-         | _ => empty_access_ops)
+             SOME <| iao_ofst := src; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => NONE)
     | SHA3 =>
         (case inst.inst_operands of
            [sz; ofst] =>
-             <| iao_ofst := SOME ofst; iao_size := SOME sz; iao_max_size := SOME sz |>
-         | _ => empty_access_ops)
+             SOME <| iao_ofst := ofst; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => NONE)
     | LOG =>
         (case inst.inst_operands of
            _::_::_ =>
              let ops = inst.inst_operands in
-             <| iao_ofst := SOME (LAST ops);
-                iao_size := SOME (LAST (FRONT ops));
-                iao_max_size := SOME (LAST (FRONT ops)) |>
-         | _ => empty_access_ops)
+             SOME <| iao_ofst := LAST ops;
+                     iao_size := SOME (LAST (FRONT ops));
+                     iao_max_size := SOME (LAST (FRONT ops)) |>
+         | _ => NONE)
     | REVERT =>
         (case inst.inst_operands of
            [sz; src] =>
-             <| iao_ofst := SOME src; iao_size := SOME sz; iao_max_size := SOME sz |>
-         | _ => empty_access_ops)
-    | _ => empty_access_ops
+             SOME <| iao_ofst := src; iao_size := SOME sz; iao_max_size := SOME sz |>
+         | _ => NONE)
+    | _ => NONE
 End
 

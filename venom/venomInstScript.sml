@@ -49,7 +49,7 @@ Datatype:
     | RETURNDATASIZE | RETURNDATACOPY
     | BLOBHASH | BLOBBASEFEE
     (* Hashing *)
-    | SHA3 | SHA3_64
+    | SHA3
     (* External calls *)
     | CALL | STATICCALL | DELEGATECALL | CREATE | CREATE2
     (* Logging *)
