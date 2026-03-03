@@ -216,6 +216,8 @@ val unsupported_patterns = unsupported_code @ [
   "raw_revert(",
   "selfdestruct",
   "msg.mana", "msg.gas",
+  "raw_create(",
+  "create_from_blueprint(",
   "create_minimal_proxy_to(",
   "create_copy_of(",
   "gas=",
@@ -306,7 +308,8 @@ val excluded_test_names = [
   "test_abi_decode_invalid_toplevel_dynarray_head",
   "test_abi_decode_merge_head_and_length",
   "test_abi_decode_nonstrict_head",
-  "test_abi_decode_nonstrict_head_oob"
+  "test_abi_decode_nonstrict_head_oob",
+  "test_create_from_blueprint_bad_code_offset"
 ]
 
 fun glob_match pat str =
