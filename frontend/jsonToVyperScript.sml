@@ -590,10 +590,10 @@ Definition translate_expr_def:
     Literal (StringL (STRLEN s) s)) /\
 
   (translate_expr ctx (JE_Bytes len hex) =
-    Literal (BytesL (Dynamic len) (hex_string_to_bytes (strip_0x hex)))) /\
+    Literal (BytesL (Dynamic len) (hex_string_to_bytes (FILTER isHexDigit (strip_0x hex))))) /\
 
   (translate_expr ctx (JE_Hex hex) =
-    let bytes = hex_string_to_bytes (strip_0x hex) in
+    let bytes = hex_string_to_bytes (FILTER isHexDigit (strip_0x hex)) in
     Literal (BytesL (Fixed (LENGTH bytes)) bytes)) /\
 
   (translate_expr ctx (JE_Bool b) = Literal (BoolL b)) /\
