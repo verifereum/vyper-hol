@@ -139,8 +139,8 @@ QED
 
 (* bp_handle_inst preserves pointers for non-output variables *)
 Theorem bp_handle_inst_other_var:
-  ∀result inst c r v.
-    bp_handle_inst result inst = (c, r) ∧
+  ∀ctx result inst c r v.
+    bp_handle_inst ctx result inst = (c, r) ∧
     inst_output inst ≠ SOME v ⇒
     bp_get_ptrs r v = bp_get_ptrs result v
 Proof
@@ -152,8 +152,8 @@ Proof
 QED
 
 Theorem bp_handle_inst_no_output_unchanged:
-  ∀result inst c r.
-    bp_handle_inst result inst = (c, r) ∧
+  ∀ctx result inst c r.
+    bp_handle_inst ctx result inst = (c, r) ∧
     inst_output inst = NONE ⇒
     r = result
 Proof

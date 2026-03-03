@@ -74,13 +74,25 @@ Definition phi_operand_vars_def:
   phi_operand_vars (_ :: _ :: rest) = phi_operand_vars rest
 End
 
+(* ===== Cross-Function Helpers ===== *)
+
+(* Find a palloca instruction with a given alloca_id in a function.
+ * Scans all blocks' instructions for a PALLOCA with matching inst_id.
+ * Matches Python IRFunction.get_palloca_inst. *)
+Definition find_palloca_inst_def:
+  find_palloca_inst fn alloca_id =
+    FIND (λinst. inst.inst_opcode = PALLOCA ∧ inst.inst_id = alloca_id)
+         (FLAT (MAP (λbb. bb.bb_instructions) fn.fn_blocks))
+End
+
 (* ===== Transfer Function ===== *)
 
 (* Process a single instruction, updating the pointer map.
+ * ctx: program context (needed for calloca cross-function lookup)
  * Returns (changed, new_result).
  * Matches Python _handle_inst. *)
 Definition bp_handle_inst_def:
-  bp_handle_inst (result : bp_result) inst =
+  bp_handle_inst ctx (result : bp_result) inst =
     case inst_output inst of
       NONE => (F, result)
     | SOME out =>
@@ -109,6 +121,22 @@ Definition bp_handle_inst_def:
               (case inst.inst_operands of
                  [Var src] => result |+ (out, bp_get_ptrs result src)
                | _ => result)
+            (* calloca: cross-function allocation.
+             * operands = [size, Lit alloca_id, Label callee_label]
+             * Look up callee's palloca instruction and use its allocation. *)
+          | CALLOCA =>
+              (case inst.inst_operands of
+                 [_; Lit alloca_id; Label callee_label] =>
+                   (case lookup_function callee_label ctx.ctx_functions of
+                      SOME callee =>
+                        (case find_palloca_inst callee (w2n alloca_id) of
+                           SOME palloca =>
+                             if palloca.inst_opcode = PALLOCA then
+                               result |+ (out, {ptr_from_alloca palloca})
+                             else result
+                         | NONE => result)
+                    | NONE => result)
+               | _ => result)
             (* all other opcodes: don't update pointer info *)
           | _ => result
         in
@@ -121,10 +149,10 @@ End
 (* Process all instructions in a block, accumulating the result.
  * Returns (changed, result). *)
 Definition bp_process_block_def:
-  bp_process_block result [] = (F, result) ∧
-  bp_process_block result (inst::insts) =
-    let (c1, r1) = bp_handle_inst result inst in
-    let (c2, r2) = bp_process_block r1 insts in
+  bp_process_block ctx result [] = (F, result) ∧
+  bp_process_block ctx result (inst::insts) =
+    let (c1, r1) = bp_handle_inst ctx result inst in
+    let (c2, r2) = bp_process_block ctx r1 insts in
     (c1 ∨ c2, r2)
 End
 
@@ -133,28 +161,28 @@ End
 (* One pass over all blocks in DFS pre-order.
  * Returns (changed, result). *)
 Definition bp_one_pass_aux_def:
-  bp_one_pass_aux fn result [] = (F, result) ∧
-  bp_one_pass_aux fn result (lbl::lbls) =
+  bp_one_pass_aux ctx fn result [] = (F, result) ∧
+  bp_one_pass_aux ctx fn result (lbl::lbls) =
     case FIND (λbb. bb.bb_label = lbl) fn.fn_blocks of
-      NONE => bp_one_pass_aux fn result lbls
+      NONE => bp_one_pass_aux ctx fn result lbls
     | SOME bb =>
-        let (c1, r1) = bp_process_block result bb.bb_instructions in
-        let (c2, r2) = bp_one_pass_aux fn r1 lbls in
+        let (c1, r1) = bp_process_block ctx result bb.bb_instructions in
+        let (c2, r2) = bp_one_pass_aux ctx fn r1 lbls in
         (c1 ∨ c2, r2)
 End
 
 Definition bp_one_pass_def:
-  bp_one_pass fn order result =
-    bp_one_pass_aux fn result order
+  bp_one_pass ctx fn order result =
+    bp_one_pass_aux ctx fn result order
 End
 
 (* Top-level analysis: iterate one-pass until fixpoint.
  * Uses df_iterate (WHILE-based). *)
 Definition bp_analyze_def:
-  bp_analyze cfg fn =
+  bp_analyze ctx cfg fn =
     let order = cfg.cfg_dfs_pre in
     let init : bp_result = FEMPTY in
-    df_iterate (λr. SND (bp_one_pass fn order r)) init
+    df_iterate (λr. SND (bp_one_pass ctx fn order r)) init
 End
 
 (* ===== Memory Location Queries ===== *)
@@ -277,8 +305,60 @@ Definition bp_get_read_location_def:
                                      INVOKE; CREATE; CREATE2} then ml_undefined
         else if inst.inst_opcode ∈ {RETURN; STOP; SINK; RET} then ml_undefined
         else ml_empty
-    | _ =>
-        (* Read-only/copyable address spaces: calldata, data, code, returndata *)
-        ml_empty  (* TODO: implement _get_copyable_read_location *)
+    (* Read-only/copyable address spaces.
+     * Matches Python _get_copyable_read_location.
+     * Bulk copy ops: [size, src_ofst, dst].
+     * Single-word load ops: [ofst] → word_scale=32 bytes. *)
+    | AddrSp_Calldata =>
+        if inst.inst_opcode = CALLDATACOPY then
+          (case inst.inst_operands of
+             [sz; src_ofst; _] =>
+               bp_segment_from_ops result
+                 <| iao_ofst := src_ofst; iao_size := SOME sz;
+                    iao_max_size := SOME sz |>
+           | _ => ml_empty)
+        else if inst.inst_opcode = CALLDATALOAD then
+          (case inst.inst_operands of
+             [ofst] =>
+               bp_segment_from_ops result
+                 <| iao_ofst := ofst; iao_size := SOME (Lit 32w);
+                    iao_max_size := SOME (Lit 32w) |>
+           | _ => ml_empty)
+        else ml_empty
+    | AddrSp_Data =>
+        if inst.inst_opcode = DLOADBYTES then
+          (case inst.inst_operands of
+             [sz; src_ofst; _] =>
+               bp_segment_from_ops result
+                 <| iao_ofst := src_ofst; iao_size := SOME sz;
+                    iao_max_size := SOME sz |>
+           | _ => ml_empty)
+        else if inst.inst_opcode = DLOAD then
+          (case inst.inst_operands of
+             [ofst] =>
+               bp_segment_from_ops result
+                 <| iao_ofst := ofst; iao_size := SOME (Lit 32w);
+                    iao_max_size := SOME (Lit 32w) |>
+           | _ => ml_empty)
+        else ml_empty
+    | AddrSp_Code =>
+        if inst.inst_opcode = CODECOPY then
+          (case inst.inst_operands of
+             [sz; src_ofst; _] =>
+               bp_segment_from_ops result
+                 <| iao_ofst := src_ofst; iao_size := SOME sz;
+                    iao_max_size := SOME sz |>
+           | _ => ml_empty)
+        else ml_empty
+    | AddrSp_Returndata =>
+        if inst.inst_opcode = RETURNDATACOPY then
+          (case inst.inst_operands of
+             [sz; src_ofst; _] =>
+               bp_segment_from_ops result
+                 <| iao_ofst := src_ofst; iao_size := SOME sz;
+                    iao_max_size := SOME sz |>
+           | _ => ml_empty)
+        else ml_empty
+    | _ => ml_empty  (* Immutables handled by Memory case *)
 End
 
