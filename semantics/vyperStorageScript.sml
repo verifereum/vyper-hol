@@ -99,7 +99,7 @@ Definition encode_base_to_slot_def:
      else NONE) /\
   encode_base_to_slot (BytesV (Fixed m) bs) (BaseTV (BytesT (Fixed n))) =
     (if m = n /\ LENGTH bs = n /\ n ≤ 32 then
-       SOME (word_of_bytes_be bs)
+       SOME (word_of_bytes_be (bs ++ REPLICATE (32 - n) 0w))
      else NONE) /\
   encode_base_to_slot (FlagV m k) (FlagTV m') =
     (if m = m' then SOME (n2w k) else NONE) /\

@@ -1,6 +1,7 @@
 Theory vyperLookup
 Ancestors
   vyperMisc vyperContext vyperState vyperInterpreter vyperValue vyperValueOperation
+  vyperStorageRoundtrip
 
 Definition lookup_name_def:
   lookup_name st n = lookup_scopes (string_to_num n) st.scopes
@@ -30,7 +31,20 @@ Definition lookup_bare_global_name_def:
 End
 
 Definition lookup_toplevel_name_def:
-  lookup_toplevel_name cx st mid n = lookup_global cx mid (string_to_num n) st
+  lookup_toplevel_name cx st mid n =
+  case lookup_global cx mid (string_to_num n) st of
+  | (INL v, st) => SOME v
+  | _ => NONE
+End
+
+Definition var_in_storage_def:
+  var_in_storage cx mid n tv ⇔
+  ∃code b t id offset.
+    get_module_code cx mid = SOME code ∧
+    find_var_decl_by_num (string_to_num n) code = SOME (StorageVarDecl b t, id) ∧
+    lookup_var_slot_from_layout cx b mid id = SOME offset ∧
+    offset < dimword(:256) ∧
+    evaluate_type (get_tenv cx) t = SOME tv
 End
 
 (* For convenience, we define the case st.scopes = [] in such a way
@@ -47,19 +61,10 @@ Definition update_name_def:
         | h :: t => st with scopes := (h |+ (n, v)) :: t
 End
 
-(*
 Definition update_toplevel_name_def:
-  update_toplevel_name st mid id v =
-  let n = string_to_num id in
-    case get_module_code cx mid of
-    | NONE => st
-    | SOME ts =>
-        case find_var_decl_by_num n ts of
-        | NONE => lookup_immutable cx st mid n
-        | SOME (StorageVarDecl is_transient typ, id) => (* TODO: read storage *)
-        | SOME (HashMapVarDecl is_transient kt vt, id) => (* TODO: return hashmap ref *)
+  update_toplevel_name cx st mid n v =
+  SND (set_global cx mid (string_to_num n) v st)
 End
-*)
 
 Definition lookup_base_target_def:
   lookup_base_target cx st tgt =
@@ -748,4 +753,56 @@ Proof
     (irule lookup_scopes_none_fcs_none >> ASM_REWRITE_TAC[]) >>
   ASM_REWRITE_TAC[] >>
   simp[evaluation_state_component_equality]
+QED
+
+(* =================== Global Storage ============================= *)
+
+Theorem get_after_set_storage_backend[local]:
+  ∀cx is_transient storage' st.
+    get_storage_backend cx is_transient
+      (SND (set_storage_backend cx is_transient storage' st)) =
+    (INL storage', SND (set_storage_backend cx is_transient storage' st))
+Proof
+  Cases_on `is_transient` >>
+  rw[get_storage_backend_def, set_storage_backend_def,
+     bind_def, return_def, get_accounts_def, update_accounts_def,
+     get_transient_storage_def, update_transient_def,
+     vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def,
+     vfmExecutionTheory.lookup_transient_storage_def,
+     vfmExecutionTheory.update_transient_storage_def,
+     combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem get_storage_backend_INL[local]:
+  ∀cx b st. ∃storage. get_storage_backend cx b st = (INL storage, st)
+Proof
+  Cases_on `b` >>
+  simp[get_storage_backend_def, bind_def, return_def,
+       get_accounts_def, get_transient_storage_def]
+QED
+
+Theorem lookup_toplevel_name_after_update:
+  ∀cx st mid n v tv.
+    var_in_storage cx mid n tv ∧
+    (∀e bd. tv ≠ ArrayTV e bd) ∧
+    roundtrip_ok tv v ∧
+    IS_SOME (encode_value tv v) ⇒
+    lookup_toplevel_name cx (update_toplevel_name cx st mid n v) mid n = SOME (Value v)
+Proof
+  rpt strip_tac >>
+  fs[var_in_storage_def] >>
+  Cases_on `encode_value tv v` >> gvs[] >>
+  simp[lookup_toplevel_name_def, update_toplevel_name_def] >>
+  simp[Once set_global_def, bind_def, lift_option_type_def, return_def, LET_THM, raise_def] >>
+  simp[write_storage_slot_def, bind_def, lift_option_def, LET_THM, raise_def] >>
+  `∃storage0. get_storage_backend cx b st = (INL storage0, st)` by
+    metis_tac[get_storage_backend_INL] >>
+  simp[] >>
+  simp[Once lookup_global_def, bind_def, lift_option_type_def, return_def, LET_THM, raise_def] >>
+  simp[read_storage_slot_def, lift_option_def] >>
+  Cases_on `tv` >> gvs[] >>
+  simp[bind_def, get_after_set_storage_backend, return_def, raise_def] >>
+  fs[roundtrip_ok_def] >>
+  first_x_assum (qspecl_then [`offset`, `storage0`] mp_tac) >>
+  simp[return_def]
 QED
