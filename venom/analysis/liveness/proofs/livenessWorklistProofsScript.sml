@@ -107,10 +107,11 @@ Theorem liveness_wl_sound_proof:
   !fn lbl idx v.
     let cfg = cfg_analyze fn in
     let lr = liveness_wl_analyze fn in
+    wf_function fn /\
     MEM v (live_vars_at lr lbl idx) ==>
-    ?path. cfg_exec_path cfg path /\
-           HD path = (lbl, idx) /\
-           used_before_defined fn.fn_blocks v path
+    ?path.
+      cfg_exec_path cfg ((lbl, idx) :: path) /\
+      used_before_defined fn.fn_blocks v ((lbl, idx) :: path)
 Proof
   cheat
 QED
