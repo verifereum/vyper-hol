@@ -359,44 +359,51 @@ End
      - ≥2 clobbering operands → SOME the phi itself (conservative)
    ========================================================================== *)
 
-(* Collect clobbers from phi operands given a walker function. *)
+(* Collect clobbers from phi operands, threading visited set.
+ * walker : num list → num → num option × num list
+ * Returns (clobbers, updated_visited). *)
 Definition mem_ssa_collect_phi_clobbers_def:
-  mem_ssa_collect_phi_clobbers walker [] = [] ∧
-  mem_ssa_collect_phi_clobbers walker ((rd, _)::ops) =
-    case walker rd of
-      NONE => mem_ssa_collect_phi_clobbers walker ops
-    | SOME c => c :: mem_ssa_collect_phi_clobbers walker ops
+  mem_ssa_collect_phi_clobbers walker visited [] = ([], visited) ∧
+  mem_ssa_collect_phi_clobbers walker visited ((rd, _)::ops) =
+    let (result, visited1) = walker visited rd in
+    let (rest, visited2) =
+      mem_ssa_collect_phi_clobbers walker visited1 ops in
+    case result of
+      NONE => (rest, visited2)
+    | SOME c => (c :: rest, visited2)
 End
 
+(* Returns (result, updated_visited) to share visited across phi branches. *)
 Definition mem_ssa_walk_clobber_def:
-  mem_ssa_walk_clobber ms 0 visited current qloc = NONE ∧
+  mem_ssa_walk_clobber ms 0 visited current qloc = (NONE, visited) ∧
   mem_ssa_walk_clobber ms (SUC fuel) visited current qloc =
-    if current = 0 then NONE
-    else if MEM current visited then NONE
+    if current = 0 then (NONE, visited)
+    else if MEM current visited then (NONE, visited)
     else
       let visited' = current :: visited in
       case FLOOKUP ms.ms_nodes current of
-        NONE => NONE
+        NONE => (NONE, visited')
       | SOME (MnDef _ _ def_loc) =>
-          if completely_contains def_loc qloc then SOME current
+          if completely_contains def_loc qloc then (SOME current, visited')
           else
             (case FLOOKUP ms.ms_reaching current of
-               NONE => NONE
+               NONE => (NONE, visited')
              | SOME rd => mem_ssa_walk_clobber ms fuel visited' rd qloc)
       | SOME (MnUse _ _ _) =>
           (case FLOOKUP ms.ms_reaching current of
-             NONE => NONE
+             NONE => (NONE, visited')
            | SOME rd => mem_ssa_walk_clobber ms fuel visited' rd qloc)
       | SOME (MnPhi _) =>
           (case FLOOKUP ms.ms_phi_ops current of
-             NONE => NONE
+             NONE => (NONE, visited')
            | SOME ops =>
-               let clobbers = mem_ssa_collect_phi_clobbers
-                 (λrd. mem_ssa_walk_clobber ms fuel visited' rd qloc) ops in
+               let (clobbers, visited'') = mem_ssa_collect_phi_clobbers
+                 (λv rd. mem_ssa_walk_clobber ms fuel v rd qloc)
+                 visited' ops in
                case clobbers of
-                 [] => NONE
-               | [c] => SOME c
-               | _ => SOME current)
+                 [] => (NONE, visited'')
+               | [c] => (SOME c, visited'')
+               | _ => (SOME current, visited''))
 End
 
 (* Top-level clobber query.
@@ -414,9 +421,10 @@ Definition mem_ssa_get_clobbered_def:
           case FLOOKUP ms.ms_reaching access_id of
             NONE => SOME 0
           | SOME rd =>
-              (case mem_ssa_walk_clobber ms fuel [] rd qloc of
-                 NONE => SOME 0
-               | SOME c => SOME c)
+              let (result, _) = mem_ssa_walk_clobber ms fuel [] rd qloc in
+              case result of
+                NONE => SOME 0
+              | SOME c => SOME c
 End
 
 (* ==========================================================================
@@ -426,40 +434,46 @@ End
    locations may_alias with the query location.
    ========================================================================== *)
 
-(* Collect aliased accesses from phi operands given a walker function. *)
+(* Collect aliased accesses from phi operands, threading visited set.
+ * Returns (accesses, updated_visited). *)
 Definition mem_ssa_collect_phi_aliased_def:
-  mem_ssa_collect_phi_aliased walker [] = [] ∧
-  mem_ssa_collect_phi_aliased walker ((rd, _)::ops) =
-    walker rd ++ mem_ssa_collect_phi_aliased walker ops
+  mem_ssa_collect_phi_aliased walker visited [] = ([], visited) ∧
+  mem_ssa_collect_phi_aliased walker visited ((rd, _)::ops) =
+    let (results, visited1) = walker visited rd in
+    let (rest, visited2) =
+      mem_ssa_collect_phi_aliased walker visited1 ops in
+    (results ++ rest, visited2)
 End
 
+(* Returns (aliased_accesses, updated_visited). *)
 Definition mem_ssa_walk_aliased_def:
-  mem_ssa_walk_aliased ms alias 0 visited current qloc = [] ∧
+  mem_ssa_walk_aliased ms alias 0 visited current qloc = ([], visited) ∧
   mem_ssa_walk_aliased ms alias (SUC fuel) visited current qloc =
-    if current = 0 then []
-    else if MEM current visited then []
+    if current = 0 then ([], visited)
+    else if MEM current visited then ([], visited)
     else
       let visited' = current :: visited in
-      let from_here =
+      let (from_here, visited2) =
         case FLOOKUP ms.ms_nodes current of
-          NONE => []
+          NONE => ([], visited')
         | SOME (MnDef _ _ def_loc) =>
-            if ma_may_alias alias qloc def_loc then [current] else []
-        | SOME (MnUse _ _ _) => []
+            if ma_may_alias alias qloc def_loc then ([current], visited')
+            else ([], visited')
+        | SOME (MnUse _ _ _) => ([], visited')
         | SOME (MnPhi _) =>
             (case FLOOKUP ms.ms_phi_ops current of
-               NONE => []
+               NONE => ([], visited')
              | SOME ops =>
                  mem_ssa_collect_phi_aliased
-                   (λrd. mem_ssa_walk_aliased ms alias fuel visited' rd qloc)
-                   ops)
+                   (λv rd. mem_ssa_walk_aliased ms alias fuel v rd qloc)
+                   visited' ops)
       in
-      let from_chain =
+      let (from_chain, visited3) =
         case FLOOKUP ms.ms_reaching current of
-          NONE => []
-        | SOME rd => mem_ssa_walk_aliased ms alias fuel visited' rd qloc
+          NONE => ([], visited2)
+        | SOME rd => mem_ssa_walk_aliased ms alias fuel visited2 rd qloc
       in
-      from_here ++ from_chain
+      (from_here ++ from_chain, visited3)
 End
 
 Definition mem_ssa_get_aliased_def:
@@ -469,7 +483,7 @@ Definition mem_ssa_get_aliased_def:
       let qloc = case FLOOKUP ms.ms_nodes access_id of
                    SOME node => mn_loc node
                  | NONE => ml_empty in
-      mem_ssa_walk_aliased ms alias fuel [] access_id qloc
+      FST (mem_ssa_walk_aliased ms alias fuel [] access_id qloc)
 End
 
 (* ==========================================================================
