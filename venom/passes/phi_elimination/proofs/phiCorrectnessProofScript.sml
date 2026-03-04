@@ -18,7 +18,7 @@
  * ============================================================================
  *)
 
-Theory phiFunction
+Theory phiCorrectnessProof
 Ancestors
   phiBlock execEquiv venomSem venomInst stateEquiv phiWellFormed phiTransform phiDefs list
 

@@ -7,7 +7,6 @@ Ancestors
   (* semantics properties *)
   vyperEvalPreservesNameTarget
   (* compiler passes *)
-  phiFunction
-  rtaPassCorrectness
+  venomPassesHol
   (* analysis roll-up *)
   venomAnalysisHol

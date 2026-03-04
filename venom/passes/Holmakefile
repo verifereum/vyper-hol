@@ -1,0 +1,9 @@
+# Venom compiler passes
+INCLUDES = \
+  $(VFMDIR)/util \
+  $(VFMDIR)/spec \
+  .. \
+  ../../syntax \
+  ../../semantics \
+  phi_elimination \
+  revert_to_assert

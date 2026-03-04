@@ -31,9 +31,9 @@
  * ============================================================================
  *)
 
-Theory rtaProofHelpers
+Theory rtaHelpers
 Ancestors
-  rtaPassDefs stateEquiv venomSemProps
+  rtaDefs stateEquiv venomSemProps
 Libs
   finite_mapTheory venomStateTheory venomSemTheory venomInstTheory venomSemPropsTheory
 
@@ -149,7 +149,7 @@ QED
 
    NOTE: Basic properties (refl, sym, trans, state_equiv_implies_except,
    update_var_same_preserves, jump_to_except_preserves, revert_state_except_preserves,
-   state_equiv_except_subset) are proven in rtaPassDefsTheory.
+   state_equiv_except_subset) are proven in rtaDefsTheory.
    ========================================================================== *)
 
 (* WHY THIS IS TRUE: update_var x v s adds (x, v) to vs_vars.
@@ -831,4 +831,3 @@ Proof
   simp[listTheory.EL_APPEND_EQN, listTheory.LENGTH_TAKE]
 QED
 
-val _ = export_theory();
