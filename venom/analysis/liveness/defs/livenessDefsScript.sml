@@ -25,9 +25,10 @@
 Theory livenessDefs
 Ancestors
   list finite_map pred_set
-  venomInst cfgDefs dfIterateDefs
+  venomInst cfgDefs dfIterateDefs dfHelperDefs
 
 (* inst_uses, inst_defs, phi_pairs come from venomInst *)
+(* list_union comes from dfHelperDefs *)
 
 (* ==========================================================================
    Set-as-list helpers (no duplicates invariant)
@@ -39,11 +40,6 @@ Definition live_update_def:
   live_update defs uses live =
     let live' = FILTER (λv. ¬MEM v defs) live in
     live' ++ FILTER (λv. ¬MEM v live') uses
-End
-
-(* Merge: xs ∪ ys as list (no dups if xs has no dups). *)
-Definition list_union_def:
-  list_union xs ys = xs ++ FILTER (λv. ¬MEM v xs) ys
 End
 
 (* ==========================================================================
