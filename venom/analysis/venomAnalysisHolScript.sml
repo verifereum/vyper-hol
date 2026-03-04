@@ -14,3 +14,5 @@ Ancestors
   livenessAnalysis
   (* dfg *)
   dfgAnalysis
+  (* available expression *)
+  availExprAnalysis

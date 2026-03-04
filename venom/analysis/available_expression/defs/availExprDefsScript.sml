@@ -17,13 +17,7 @@ Theory availExprDefs
 Ancestors
   venomEffects dfgDefs cfgDefs dfIterateDefs
 
-(* ===== Pseudo opcodes ===== *)
-
-Definition is_pseudo_def:
-  is_pseudo PHI = T /\
-  is_pseudo PARAM = T /\
-  is_pseudo _ = F
-End
+(* is_pseudo from venomInstTheory *)
 
 (* ===== Expression Tree ===== *)
 
