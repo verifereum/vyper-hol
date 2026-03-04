@@ -24,7 +24,8 @@ Proof
   ACCEPT_TAC wl_iterate_terminates_proof
 QED
 
-(* Processing any label is a no-op at termination. *)
+(* At termination, processing any initial label is a no-op.
+   Requires wl_deps_complete and all labels present in the initial worklist. *)
 Theorem wl_iterate_fixpoint:
   !(leq : 'a -> 'a -> bool) m b
    (process : 'b -> 'a -> 'a) deps wl0 st0 all_lbls (P : 'a -> bool).
@@ -39,7 +40,7 @@ Proof
   ACCEPT_TAC wl_iterate_fixpoint_proof
 QED
 
-(* Result state is above initial state. *)
+(* Result state is above initial state. Requires partial_order. *)
 Theorem wl_iterate_above:
   !(leq : 'a -> 'a -> bool) m b
    (process : 'b -> 'a -> 'a) deps wl0 st0 (P : 'a -> bool).
