@@ -7,6 +7,8 @@
 Theory venomInst
 Ancestors
   venomState
+Libs
+  listTheory
 
 (* --------------------------------------------------------------------------
    Instruction Opcodes
@@ -234,6 +236,27 @@ End
 Definition lookup_function_def:
   lookup_function name fns = FIND (\f. f.fn_name = name) fns
 End
+
+Theorem lookup_function_mem:
+  lookup_function name fns = SOME func ==>
+  MEM name (MAP (\f. f.fn_name) fns)
+Proof
+  Induct_on `fns` >> rw[lookup_function_def, FIND_thm]
+QED
+
+Theorem lookup_function_not_mem:
+  lookup_function name fns = NONE ==>
+  ~MEM name (MAP (\f. f.fn_name) fns)
+Proof
+  Induct_on `fns` >> rw[lookup_function_def, FIND_thm]
+QED
+
+Theorem lookup_function_MEM:
+  !name fns fn. lookup_function name fns = SOME fn ==> MEM fn fns
+Proof
+  Induct_on `fns` >> rw[lookup_function_def, FIND_thm] >>
+  gvs[lookup_function_def] >> res_tac >> simp[]
+QED
 
 (* Get instruction at index in a block *)
 Definition get_instruction_def:

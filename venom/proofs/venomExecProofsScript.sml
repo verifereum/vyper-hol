@@ -225,31 +225,4 @@ Proof
   simp[]
 QED
 
-(* ==========================================================================
-   Lookup Function Properties
-   ========================================================================== *)
 
-Theorem lookup_function_MEM:
-  !name fns fn. lookup_function name fns = SOME fn ==> MEM fn fns
-Proof
-  rw[lookup_function_def] >> drule FIND_MEM >> simp[]
-QED
-
-(* lookup_function: if SOME, the name is in the function name list *)
-Theorem lookup_function_mem[local]:
-  lookup_function name fns = SOME func ==>
-  MEM name (MAP (\f. f.fn_name) fns)
-Proof
-  rw[lookup_function_def] >>
-  drule FIND_MEM >> drule FIND_P >> simp[MEM_MAP] >> metis_tac[]
-QED
-
-(* lookup_function: if NONE, the name is not in the function name list *)
-Theorem lookup_function_not_mem[local]:
-  lookup_function name fns = NONE ==>
-  ~MEM name (MAP (\f. f.fn_name) fns)
-Proof
-  Induct_on `fns` >>
-  rw[lookup_function_def, FIND_thm] >>
-  CASE_TAC >> gvs[]
-QED

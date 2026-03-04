@@ -146,5 +146,5 @@ QED
 Theorem lookup_function_MEM:
   !name fns fn. lookup_function name fns = SOME fn ==> MEM fn fns
 Proof
-  ACCEPT_TAC venomExecProofsTheory.lookup_function_MEM
+  ACCEPT_TAC venomInstTheory.lookup_function_MEM
 QED
