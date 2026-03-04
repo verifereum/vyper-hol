@@ -20,7 +20,7 @@
 
 Theory fcgCorrectnessProof
 Ancestors
-  fcgDfs fcgBridge fcgDefs venomInst
+  fcgDfs fcgBridge fcgDefs venomWf venomInst
 
 (* Helper: unfold ctx_wf to get entry_name, then expand fcg_empty
  * everywhere and simplify. After this, both assumptions and goal

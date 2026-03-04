@@ -183,4 +183,3 @@ Definition effect_of_addr_space_def:
   effect_of_addr_space AddrSp_Immutables = SOME Eff_IMMUTABLES /\
   effect_of_addr_space _ = NONE
 End
-

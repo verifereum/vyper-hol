@@ -12,7 +12,7 @@
 Theory phiDefs
 Ancestors
   dfgDefs dfgAnalysisProps pred_set list finite_map
-  venomState venomInst venomSem
+  venomState venomInst venomExecSemantics
 
 (* ==========================================================================
    Shared DFG compatibility layer

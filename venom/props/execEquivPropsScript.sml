@@ -1,0 +1,49 @@
+(*
+ * Execution Equivalence Properties (API)
+ *
+ * Re-exports top-level theorems from execEquivProofs via ACCEPT_TAC.
+ *
+ * TOP-LEVEL THEOREMS:
+ *   - step_inst_result_equiv : Instruction step preserves result_equiv
+ *   - run_block_state_equiv  : Block execution preserves state_equiv (OK case)
+ *   - run_block_result_equiv : Block execution preserves result_equiv (all cases)
+ *)
+
+Theory execEquivProps
+Ancestors
+  execEquivProofs
+
+(* Single instruction step preserves result_equiv modulo fresh variables,
+   provided operand variables are not in the exception set *)
+Theorem step_inst_result_equiv:
+  !vars inst s1 s2.
+    state_equiv vars s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) ==>
+    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+Proof
+  ACCEPT_TAC execEquivProofsTheory.step_inst_result_equiv
+QED
+
+(* Running a block on equivalent states produces equivalent OK results *)
+Theorem run_block_state_equiv:
+  !vars bb s1 s2 r1.
+    state_equiv vars s1 s2 /\
+    (!inst. MEM inst bb.bb_instructions ==>
+            !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
+    run_block bb s1 = OK r1
+  ==>
+    ?r2. run_block bb s2 = OK r2 /\ state_equiv vars r1 r2
+Proof
+  ACCEPT_TAC execEquivProofsTheory.run_block_state_equiv
+QED
+
+(* Running a block on equivalent states produces equivalent results (all cases) *)
+Theorem run_block_result_equiv:
+  !vars bb s1 s2.
+    state_equiv vars s1 s2 /\
+    (!inst. MEM inst bb.bb_instructions ==>
+            !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) ==>
+    result_equiv vars (run_block bb s1) (run_block bb s2)
+Proof
+  ACCEPT_TAC execEquivProofsTheory.run_block_result_equiv
+QED

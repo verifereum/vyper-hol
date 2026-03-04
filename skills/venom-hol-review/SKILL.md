@@ -53,6 +53,8 @@ Failures to catch:
 - Separate statement file (API) from proof file (implementation). Statements use `ACCEPT_TAC proof_thm`. Shared definitions in a common ancestor to avoid circular deps.
 - Every exporting API theory must be listed as an ancestor in `vyperHolScript.sml` so it is included in the top-level build.
 
+**Props vs proofs**: A props theorem may inline its proof (instead of `ACCEPT_TAC`) only if the proof is a trivial one-liner (e.g. `rw[foo_def]`). But if a theorem's proof is that trivial, question whether it needs to be an exported theorem at all — consumers can just `rw[foo_def]` themselves. Export theorems that save non-trivial work or that name a useful fact for `irule`/`drule`.
+
 ## Termination
 
 - Prefer proper termination over fuel. Mutual recursion with list helper > FOLDL for HOL4's termination checker.

@@ -1,3 +1,5 @@
-# Venom IR semantics
+# Venom IR core
+# proofs/ discovered transitively via props/ -> ../proofs
 INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec $(HOLDIR)/examples/Crypto/Keccak \
-           ../syntax ../semantics
+           ../syntax ../semantics \
+           defs props
