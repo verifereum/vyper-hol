@@ -19,5 +19,7 @@ Ancestors
   dominatorAnalysis
   (* base pointer analysis *)
   basePtrProps
+  (* available expression *)
+  availExprAnalysis
   (* stack order *)
   stackOrderProps

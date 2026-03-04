@@ -211,6 +211,15 @@ Definition is_terminator_def:
   is_terminator _ = F
 End
 
+(* Pseudo-instructions: not real operations, just SSA bookkeeping.
+ * Matches Python IRInstruction.is_pseudo (phi, param, source).
+ * We omit "source" (test-only opcode not in our IR). *)
+Definition is_pseudo_def:
+  is_pseudo PHI = T /\
+  is_pseudo PARAM = T /\
+  is_pseudo _ = F
+End
+
 
 (* --------------------------------------------------------------------------
    Lookup Functions

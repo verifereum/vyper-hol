@@ -13,4 +13,5 @@ INCLUDES = \
   liveness \
   dominators \
   base_ptr \
+  available_expression \
   stack_order
