@@ -33,16 +33,6 @@ Proof
   cheat
 QED
 
-(* Every variable in any per-instruction set comes from fn_all_assignments. *)
-Theorem vardef_at_bounded_proof:
-  !fn inst_id v.
-    wf_function fn /\
-    MEM v (vardef_at (vardef_analyze fn) inst_id) ==>
-    MEM v (fn_all_assignments fn)
-Proof
-  cheat
-QED
-
 (* ===== Soundness ===== *)
 
 (* If v is in the output defined set for block lbl, then on every
@@ -60,21 +50,6 @@ Theorem vardef_sound_proof:
     HD path = (HD fn.fn_blocks).bb_label /\
     LAST path = lbl ==>
     ?lbl'. MEM lbl' path /\ var_assigned_in_block fn lbl' v
-Proof
-  cheat
-QED
-
-(* ===== Local completeness ===== *)
-
-(* If an instruction in block lbl defines variable v, then v is in
-   the block's output defined set. *)
-Theorem vardef_includes_local_proof:
-  !fn lbl bb inst v.
-    wf_function fn /\
-    lookup_block lbl fn.fn_blocks = SOME bb /\
-    MEM inst bb.bb_instructions /\
-    MEM v (inst_defs inst) ==>
-    MEM v (vardef_out_of (vardef_analyze fn) lbl)
 Proof
   cheat
 QED
