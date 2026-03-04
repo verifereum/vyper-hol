@@ -5,20 +5,27 @@
  * All cheated — proofs deferred.
  *
  * TOP-LEVEL:
- *   so_needed_are_live        — needed vars are live at block entry
- *   so_needed_distinct        — needed list has no duplicates
- *   so_handle_inst_stack_top  — after handle_inst, operands are on top
- *   so_from_to_includes_live  — from_to query includes liveness input vars
+ *   so_needed_are_live              — needed vars are live at block entry
+ *   so_analyze_block_needed_distinct — needed list has no duplicates
+ *   so_handle_inst_stack_top        — after handle_inst, operands are on top
+ *   so_from_to_includes_live        — from_to query includes liveness input vars
+ *   so_from_to_includes_base        — from_to query includes base map entries
  *
- * Helper (stack/merge properties):
- *   max_same_prefix_is_prefix — result is prefix of both inputs
+ * Helper — stack operations:
+ *   stack_find_some / stack_find_none — find correctness / completeness
+ *   stack_swap_length / stack_swap_mem / stack_swap_top — swap preserves
+ *   stack_swap_to_length / stack_swap_to_mem — swap_to preserves
+ *
+ * Helper — merge / needed / reorder:
+ *   max_same_prefix_is_prefix / max_same_prefix_comm — prefix properties
  *   so_merge_prefix           — merge result is prefix of each input
- *   so_add_needed_mem         — added variable is a member
- *   so_add_needed_preserves   — existing members are preserved
- *   so_add_needed_distinct    — preserves ALL_DISTINCT
- *   so_reorder_length         — reorder preserves stack length
- *   stack_swap_length         — swap preserves stack length
- *   stack_swap_to_length      — swap_to preserves stack length
+ *   so_add_needed_mem / so_add_needed_preserves / so_add_needed_distinct
+ *   so_reorder_length / so_reorder_correct — reorder preserves length / top
+ *
+ * Helper — handler distinct preservation:
+ *   so_handle_inst_needed_distinct
+ *   so_handle_assign_needed_distinct
+ *   so_handle_terminator_needed_distinct
  *)
 
 Theory stackOrderProps
@@ -136,7 +143,8 @@ Proof
 QED
 
 (* After reorder, target operands appear at top of stack in order.
-   Precondition: all target operands are already on the stack. *)
+   Preconditions: all target operands are on the stack, and
+   target is not longer than the stack. *)
 Theorem so_reorder_correct:
   ∀stack target.
     (∀op. MEM op target ⇒ MEM op stack) ∧
