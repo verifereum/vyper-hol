@@ -2,6 +2,7 @@
 Theory venomAnalysisHol
 Ancestors
   (* shared *)
+  venomWf
   venomEffects
   memLocDefs
   memLocProps

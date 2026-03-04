@@ -4,7 +4,7 @@
 
 Theory cfgCorrectnessProof
 Ancestors
-  cfgDefs cfgHelpers venomInst venomState finite_map list relation pair
+  cfgDefs cfgHelpers venomWf venomInst venomState finite_map list relation pair
 
 (* ==========================================================================
    Concrete evaluation simpset for counterexamples

@@ -6,7 +6,7 @@
 
 Theory livenessProofs
 Ancestors
-  livenessDefs cfgDefs dfIterateProofs cfgAnalysisProps cfgHelpers
+  livenessDefs cfgDefs dfIterateProofs cfgAnalysisProps cfgHelpers venomWf
 
 open listTheory rich_listTheory pred_setTheory arithmeticTheory venomInstTheory
      finite_mapTheory pairTheory alistTheory sptreeTheory
