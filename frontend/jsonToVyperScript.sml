@@ -624,6 +624,9 @@ Definition translate_expr_def:
     else if tc = SOME "module" then TopLevelName (source_id_to_nsid (FST ctx) src_id_opt, attr)
     else if attr = "balance" then Builtin (Acc Balance) [make_name ctx obj]
     else if attr = "address" then Builtin (Acc Address) [make_name ctx obj]
+    else if attr = "is_contract" then Builtin (Acc IsContract) [make_name ctx obj]
+    else if attr = "codesize" then Builtin (Acc Codesize) [make_name ctx obj]
+    else if attr = "codehash" then Builtin (Acc Codehash) [make_name ctx obj]
     else Attribute (make_name ctx obj) attr) /\
 
   (* General attribute - handles nested and simple cases *)
@@ -638,6 +641,9 @@ Definition translate_expr_def:
       TopLevelName (source_id_to_nsid (FST ctx) attr_src_id_opt, attr)
     else if attr = "balance" then Builtin (Acc Balance) [translate_expr ctx e]
     else if attr = "address" then Builtin (Acc Address) [translate_expr ctx e]
+    else if attr = "is_contract" then Builtin (Acc IsContract) [translate_expr ctx e]
+    else if attr = "codesize" then Builtin (Acc Codesize) [translate_expr ctx e]
+    else if attr = "codehash" then Builtin (Acc Codehash) [translate_expr ctx e]
     else Attribute (translate_expr ctx e) attr) /\
 
   (* Subscript *)
