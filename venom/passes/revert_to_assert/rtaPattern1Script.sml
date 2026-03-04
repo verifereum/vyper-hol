@@ -102,11 +102,11 @@ QED
    State Equivalence Helpers
    ========================================================================== *)
 
-(* execution_equiv_except for revert states
+(* execution_equiv for revert states
    Compares original path (JNZ to revert block) with transformed path (ISZERO+ASSERT reverts)
    The two revert_states differ in vs_inst_idx, vs_current_bb, vs_prev_bb and fresh_var,
-   but execution_equiv_except ignores control flow and allows fresh_vars to differ *)
-Theorem revert_states_equiv_except:
+   but execution_equiv ignores control flow and allows fresh_vars to differ *)
+Theorem revert_states_equiv:
   !fn bb s n cond_op if_nonzero if_zero.
     n < LENGTH bb.bb_instructions /\
     (EL n bb.bb_instructions).inst_operands = [cond_op; Label if_nonzero; Label if_zero] /\
@@ -115,21 +115,21 @@ Theorem revert_states_equiv_except:
     ==>
     let fresh_var = fresh_iszero_var (EL n bb.bb_instructions).inst_id in
     let fresh_vars = fresh_vars_in_block fn bb in
-    execution_equiv_except fresh_vars
+    execution_equiv fresh_vars
       (revert_state (jump_to if_nonzero s))
       (revert_state (next_inst (update_var fresh_var 0w s)))
 Proof
   rw[LET_THM] >>
   drule_all rtaProofHelpersTheory.fresh_var_in_fresh_vars >> strip_tac >>
-  simp[execution_equiv_except_def, revert_state_def, jump_to_def,
+  simp[execution_equiv_def, revert_state_def, jump_to_def,
        next_inst_def, update_var_def, lookup_var_def] >>
   rw[] >> simp[finite_mapTheory.FLOOKUP_UPDATE] >> rw[] >> metis_tac[]
 QED
 
-(* state_equiv_except for OK states
+(* state_equiv for OK states
    The two states differ only in fresh_var (in second state) and maybe vs_inst_idx,
    but jump_to sets vs_inst_idx := 0 for both, so they match except for fresh_var *)
-Theorem jumped_states_equiv_except:
+Theorem jumped_states_equiv:
   !fn bb s n cond_op if_nonzero if_zero.
     n < LENGTH bb.bb_instructions /\
     (EL n bb.bb_instructions).inst_operands = [cond_op; Label if_nonzero; Label if_zero] /\
@@ -138,13 +138,13 @@ Theorem jumped_states_equiv_except:
     ==>
     let fresh_var = fresh_iszero_var (EL n bb.bb_instructions).inst_id in
     let fresh_vars = fresh_vars_in_block fn bb in
-    state_equiv_except fresh_vars
+    state_equiv fresh_vars
       (jump_to if_zero s)
       (jump_to if_zero (update_var fresh_var 1w s))
 Proof
   rw[LET_THM] >>
   drule_all rtaProofHelpersTheory.fresh_var_in_fresh_vars >> strip_tac >>
-  simp[state_equiv_except_def, execution_equiv_except_def, jump_to_def,
+  simp[state_equiv_def, execution_equiv_def, jump_to_def,
        update_var_def, lookup_var_def] >>
   rw[] >> simp[finite_mapTheory.FLOOKUP_UPDATE] >> rw[] >> metis_tac[]
 QED
@@ -178,7 +178,7 @@ Theorem pattern1_nonzero_execution:
     run_block bb s = OK (jump_to if_nonzero s) /\
     run_block bb' s = Revert (revert_state s1) /\
     (jump_to if_nonzero s).vs_current_bb = if_nonzero /\
-    execution_equiv_except fresh_vars (revert_state (jump_to if_nonzero s)) (revert_state s1)
+    execution_equiv fresh_vars (revert_state (jump_to if_nonzero s)) (revert_state s1)
 Proof
   rw[LET_THM] >| [
     (* fresh_var IN fresh_vars *)
@@ -192,9 +192,9 @@ Proof
     drule_all run_block_iszero_assert_reverts >> simp[LET_THM],
     (* vs_current_bb *)
     simp[jump_to_def],
-    (* execution_equiv_except - need to derive <> NONE from = SOME *)
+    (* execution_equiv - need to derive <> NONE from = SOME *)
     `transform_jnz fn (EL s.vs_inst_idx bb.bb_instructions) <> NONE` by simp[] >>
-    drule_all revert_states_equiv_except >> simp[LET_THM]
+    drule_all revert_states_equiv >> simp[LET_THM]
   ]
 QED
 
@@ -222,7 +222,7 @@ Theorem pattern1_zero_execution:
     step_inst (EL s.vs_inst_idx bb.bb_instructions) s = OK (jump_to if_zero s) /\
     run_block bb s = OK (jump_to if_zero s) /\
     run_block bb' s = OK s2 /\
-    state_equiv_except fresh_vars (jump_to if_zero s) s2
+    state_equiv fresh_vars (jump_to if_zero s) s2
 Proof
   rw[LET_THM] >| [
     (* fresh_var IN fresh_vars *)
@@ -234,9 +234,9 @@ Proof
          step_inst_def, EVAL ``is_terminator JNZ``, jump_to_def],
     (* Transformed run_block *)
     drule_all run_block_iszero_assert_jumps >> simp[LET_THM],
-    (* state_equiv_except - need to derive <> NONE from = SOME *)
+    (* state_equiv - need to derive <> NONE from = SOME *)
     `transform_jnz fn (EL s.vs_inst_idx bb.bb_instructions) <> NONE` by simp[] >>
-    drule_all jumped_states_equiv_except >> simp[LET_THM]
+    drule_all jumped_states_equiv >> simp[LET_THM]
   ]
 QED
 

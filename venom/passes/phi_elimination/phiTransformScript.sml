@@ -96,17 +96,17 @@ Theorem lookup_block_transform:
     lookup_block lbl (MAP (transform_block dfg) blocks) =
     OPTION_MAP (transform_block dfg) (lookup_block lbl blocks)
 Proof
-  Induct_on `blocks` >> simp[lookup_block_def] >>
+  Induct_on `blocks` >> simp[lookup_block_def, FIND_thm, transform_block_label] >>
   rpt strip_tac >>
-  Cases_on `h.bb_label = lbl` >> simp[lookup_block_def, transform_block_label]
+  Cases_on `h.bb_label = lbl` >> gvs[lookup_block_def, FIND_thm, transform_block_label]
 QED
 
 Theorem lookup_block_MEM:
   !lbl blocks bb.
     lookup_block lbl blocks = SOME bb ==> MEM bb blocks
 Proof
-  Induct_on `blocks` >> simp[lookup_block_def] >>
-  rpt strip_tac >> Cases_on `h.bb_label = lbl` >> fs[] >>
+  Induct_on `blocks` >> simp[lookup_block_def, FIND_thm] >>
+  rpt strip_tac >> Cases_on `h.bb_label = lbl` >> gvs[lookup_block_def] >>
   res_tac >> simp[]
 QED
 
@@ -117,7 +117,7 @@ Theorem lookup_block_at_hd:
     lookup_block lbl blocks = SOME bb ==>
     bb = HD blocks
 Proof
-  Cases_on `blocks` >> simp[lookup_block_def]
+  Cases_on `blocks` >> simp[lookup_block_def, FIND_thm]
 QED
 
 (* ==========================================================================

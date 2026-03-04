@@ -17,10 +17,11 @@
  *   - simple_revert_block_reverts     : Simple revert block always reverts
  *   - run_function_at_simple_revert   : run_function at simple revert returns Revert
  *
- * STATE_EQUIV_EXCEPT PROPERTIES:
- *   - update_var_state_equiv_except_insert : update_var x creates {x}-equiv
- *   - step_inst_result_equiv_except : step_inst preserves result_equiv_except
- *   - run_block_result_equiv_except : run_block preserves result_equiv_except
+ * STATE_EQUIV PROPERTIES:
+ *   - update_var_state_equiv_insert : update_var x creates {x}-equiv
+ *   - revert_state_from_state_equiv : state_equiv → execution_equiv for revert
+ *   - halt_state_from_state_equiv   : state_equiv → execution_equiv for halt
+ *   (step_inst_result_equiv, run_block_result_equiv are in execEquivPropsTheory)
  *
  * TRANSFORM_BLOCK_INSTS PROPERTIES:
  *   - transform_block_insts_TAKE_DROP      : Prefix decomposition
@@ -33,7 +34,7 @@
 
 Theory rtaProofHelpers
 Ancestors
-  rtaPassDefs stateEquiv venomExecProps
+  rtaPassDefs stateEquiv stateEquivProps execEquivProps venomExecProps
 Libs
   finite_mapTheory venomStateTheory venomExecSemanticsTheory venomInstTheory venomExecPropsTheory
 
@@ -145,29 +146,49 @@ Proof
 QED
 
 (* ==========================================================================
-   state_equiv_except Properties
+   state_equiv Properties
 
-   NOTE: Basic properties (refl, sym, trans, state_equiv_implies_except,
-   update_var_same_preserves, jump_to_except_preserves, revert_state_except_preserves,
-   state_equiv_except_subset) are proven in rtaPassDefsTheory.
+   NOTE: Basic properties (refl, sym, trans, state_equiv_implies,
+   update_var_preserves, jump_to_preserves, revert_state_preserves,
+   state_equiv_subset) are proven in rtaPassDefsTheory.
    ========================================================================== *)
 
 (* WHY THIS IS TRUE: update_var x v s adds (x, v) to vs_vars.
    For any y not in {x}, lookup_var y is unchanged.
    Other state components (memory, storage, etc.) unchanged. *)
-Theorem update_var_state_equiv_except_insert:
+Theorem update_var_state_equiv_insert:
   !x v s.
-    state_equiv_except {x} s (update_var x v s)
+    state_equiv {x} s (update_var x v s)
 Proof
-  rw[state_equiv_except_def, execution_equiv_except_def,
+  rw[state_equiv_def, execution_equiv_def,
      update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
+(* Bridge: state_equiv → execution_equiv for revert_state.
+   revert_state_preserves gives state_equiv → state_equiv, but
+   result_equiv for Revert needs execution_equiv. *)
+Theorem revert_state_from_state_equiv:
+  !vars s1 s2.
+    state_equiv vars s1 s2 ==>
+    execution_equiv vars (revert_state s1) (revert_state s2)
+Proof
+  rw[state_equiv_def, execution_equiv_def, revert_state_def, lookup_var_def]
+QED
+
+(* Bridge: state_equiv → execution_equiv for halt_state *)
+Theorem halt_state_from_state_equiv:
+  !vars s1 s2.
+    state_equiv vars s1 s2 ==>
+    execution_equiv vars (halt_state s1) (halt_state s2)
+Proof
+  rw[state_equiv_def, execution_equiv_def, halt_state_def, lookup_var_def]
+QED
+
 (* ==========================================================================
-   state_equiv_except Preservation Through Execution
+   state_equiv Preservation Through Execution
 
    These lemmas show that if fresh vars are not used in operands, then
-   state_equiv_except is preserved through step_inst, run_block, run_function.
+   state_equiv is preserved through step_inst, run_block, run_function.
    ========================================================================== *)
 
 (* --------------------------------------------------------------------------
@@ -177,421 +198,33 @@ QED
 Theorem resolve_phi_MEM:
   !prev ops val_op. resolve_phi prev ops = SOME val_op ==> MEM val_op ops
 Proof
-  ho_match_mp_tac resolve_phi_ind >> rw[resolve_phi_def] >> gvs[AllCaseEqs()]
+  ho_match_mp_tac resolve_phi_ind >> rw[resolve_phi_def]
 QED
 
 (* --------------------------------------------------------------------------
-   Category helpers for step_inst_result_equiv_except
-
-   We split the 93 opcode cases into manageable categories. Each helper proves
-   result_equiv_except for its category. The main theorem uses SOLVE tactical
-   with TRY (SOLVE (irule helper >> simp[])) to dispatch to the right helper.
-
-   Categories (41 opcodes total via helpers):
-   1. Context reads (18): CALLER, ADDRESS, CALLVALUE, GAS, ORIGIN, GASPRICE,
-      CHAINID, COINBASE, TIMESTAMP, NUMBER, PREVRANDAO, GASLIMIT, BASEFEE,
-      BLOBBASEFEE, SELFBALANCE, CALLDATASIZE, RETURNDATASIZE, MSIZE
-   2. 1-op loads (6): MLOAD, SLOAD, TLOAD, CALLDATALOAD, BLOCKHASH, BALANCE
-   3. 2-op stores (3): MSTORE, SSTORE, TSTORE
-   4. Control flow (2): JMP, JNZ
-   5. SSA (3): PHI, ASSIGN, NOP
-   6. Assertions (2): ASSERT, ASSERT_UNREACHABLE
-   7. Termination (4): STOP, RETURN, REVERT, SINK
-   8. 3-op copy (2): CALLDATACOPY, RETURNDATACOPY
-   9. Hash (1): SHA3
-
-   Remaining (handled after step_inst_def unfold):
-   10. Binop/Unop/Modop (~22): exec_pure2/unop/modop_result_equiv_except
-   11. Unimplemented (~30): trivial (Error -> result_equiv_except_def)
+   NOTE: step_inst_result_equiv, step_in_block_result_equiv, and
+   run_block_result_equiv are now in execEquivPropsTheory.
+   The per-opcode category helpers have been removed.
    -------------------------------------------------------------------------- *)
 
-(*
- * Helper 1: Context read opcodes (no operands, read context field)
- * These all have shape: case outputs of [out] => OK (update_var out (context_val s) s)
- *)
-Theorem step_inst_context_read_except:
-  !fresh s1 s2 inst op.
-    state_equiv_except fresh s1 s2 /\
-    op IN {CALLER; ADDRESS; CALLVALUE; GAS; ORIGIN; GASPRICE; CHAINID;
-           COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE;
-           BLOBBASEFEE; SELFBALANCE; CALLDATASIZE; RETURNDATASIZE; MSIZE} /\
-    inst.inst_opcode = op ==>
-    result_equiv_except fresh (step_inst inst s1) (step_inst inst s2)
-Proof
-  rw[] >> simp[step_inst_def] >> rpt CASE_TAC >> gvs[] >>
-  `s1.vs_call_ctx = s2.vs_call_ctx /\ s1.vs_tx_ctx = s2.vs_tx_ctx /\
-   s1.vs_block_ctx = s2.vs_block_ctx /\ s1.vs_accounts = s2.vs_accounts /\
-   s1.vs_returndata = s2.vs_returndata /\ s1.vs_memory = s2.vs_memory`
-     by fs[state_equiv_except_def, execution_equiv_except_def] >>
-  gvs[] >> irule update_var_same_preserves >> simp[]
-QED
-
-(*
- * Helper 2: 1-operand load opcodes
- * These have shape: case [op1] => eval op1 => case [out] => OK (update_var out (load_fn arg s) s)
- *)
-Theorem step_inst_load1_except:
-  !fresh s1 s2 inst op.
-    state_equiv_except fresh s1 s2 /\
-    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) /\
-    op IN {MLOAD; SLOAD; TLOAD; CALLDATALOAD; BLOCKHASH; BALANCE} /\
-    inst.inst_opcode = op ==>
-    result_equiv_except fresh (step_inst inst s1) (step_inst inst s2)
-Proof
-  rw[] >> simp[step_inst_def] >> rpt CASE_TAC >> gvs[] >>
-  `eval_operand h' s1 = eval_operand h' s2` by
-    (irule eval_operand_except >> qexists_tac `fresh` >> simp[]) >> gvs[] >>
-  TRY (drule_all mload_except_same >> strip_tac >> gvs[]) >>
-  TRY (drule_all sload_except_same >> strip_tac >> gvs[]) >>
-  TRY (drule_all tload_except_same >> strip_tac >> gvs[]) >>
-  TRY (`s1.vs_call_ctx = s2.vs_call_ctx` by fs[state_equiv_except_def, execution_equiv_except_def] >> gvs[]) >>
-  TRY (`s1.vs_block_ctx = s2.vs_block_ctx` by fs[state_equiv_except_def, execution_equiv_except_def] >> gvs[]) >>
-  TRY (`s1.vs_accounts = s2.vs_accounts` by fs[state_equiv_except_def, execution_equiv_except_def] >> gvs[]) >>
-  irule update_var_same_preserves >> simp[]
-QED
-
-(*
- * Helper 3: 2-operand store opcodes
- * These have shape: case [op1; op2] => eval both => OK (store_fn args s)
- *)
-Theorem step_inst_store2_except:
-  !fresh s1 s2 inst op.
-    state_equiv_except fresh s1 s2 /\
-    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) /\
-    op IN {MSTORE; SSTORE; TSTORE} /\
-    inst.inst_opcode = op ==>
-    result_equiv_except fresh (step_inst inst s1) (step_inst inst s2)
-Proof
-  rw[] >> simp[step_inst_def] >> rpt CASE_TAC >> gvs[] >>
-  `eval_operand h s1 = eval_operand h s2` by
-    (irule eval_operand_except >> qexists_tac `fresh` >> simp[]) >>
-  `eval_operand h' s1 = eval_operand h' s2` by
-    (irule eval_operand_except >> qexists_tac `fresh` >> simp[]) >> gvs[] >>
-  TRY (irule mstore_except_preserves >> simp[]) >>
-  TRY (irule sstore_except_preserves >> simp[]) >>
-  TRY (irule tstore_except_preserves >> simp[])
-QED
-
-(*
- * Helper 4: Control flow opcodes
- *)
-Theorem step_inst_control_except:
-  !fresh s1 s2 inst op.
-    state_equiv_except fresh s1 s2 /\
-    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) /\
-    op IN {JMP; JNZ} /\
-    inst.inst_opcode = op ==>
-    result_equiv_except fresh (step_inst inst s1) (step_inst inst s2)
-Proof
-  rw[] >> simp[step_inst_def] >> rpt CASE_TAC >> gvs[] >>
-  TRY (`eval_operand h s1 = eval_operand h s2` by
-    (irule eval_operand_except >> qexists_tac `fresh` >> simp[]) >> gvs[]) >>
-  irule jump_to_except_preserves >> simp[]
-QED
-
-(*
- * Helper 5: SSA opcodes (PHI, ASSIGN, NOP)
- *)
-Theorem step_inst_ssa_except:
-  !fresh s1 s2 inst op.
-    state_equiv_except fresh s1 s2 /\
-    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) /\
-    op IN {PHI; ASSIGN; NOP} /\
-    inst.inst_opcode = op ==>
-    result_equiv_except fresh (step_inst inst s1) (step_inst inst s2)
-Proof
-  rw[] >> `s1.vs_prev_bb = s2.vs_prev_bb` by fs[state_equiv_except_def]
-  >- ((* PHI *)
-    simp[step_inst_def] >>
-    `!op. MEM op inst.inst_operands ==> eval_operand op s1 = eval_operand op s2`
-      by (rw[] >> irule eval_operand_except >> qexists_tac `fresh` >>
-          simp[] >> metis_tac[]) >>
-    rpt CASE_TAC >> gvs[] >>
-    TRY (imp_res_tac resolve_phi_MEM >> first_x_assum drule >> simp[]) >>
-    TRY (irule update_var_same_preserves >> simp[]) >>
-    `eval_operand x' s1 = eval_operand x' s2`
-      by (irule eval_operand_except >> qexists_tac `fresh` >>
-          simp[] >> metis_tac[]) >>
-    gvs[] >> irule update_var_same_preserves >> simp[])
-  >- ((* ASSIGN *)
-    simp[step_inst_def] >>
-    `!op. MEM op inst.inst_operands ==> eval_operand op s1 = eval_operand op s2`
-      by (rw[] >> irule eval_operand_except >> qexists_tac `fresh` >>
-          simp[] >> metis_tac[]) >>
-    rpt CASE_TAC >> gvs[] >>
-    TRY (irule update_var_same_preserves >> simp[]))
-  >- ((* NOP *)
-    simp[step_inst_def, result_equiv_except_def, state_equiv_except_refl])
-QED
-
-(*
- * Helper 6: Assertion opcodes
- *)
-Theorem step_inst_assert_except:
-  !fresh s1 s2 inst op.
-    state_equiv_except fresh s1 s2 /\
-    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) /\
-    op IN {ASSERT; ASSERT_UNREACHABLE} /\
-    inst.inst_opcode = op ==>
-    result_equiv_except fresh (step_inst inst s1) (step_inst inst s2)
-Proof
-  rw[] >> simp[step_inst_def] >> rpt CASE_TAC >> gvs[] >>
-  TRY (`eval_operand h s1 = eval_operand h s2` by
-    (irule eval_operand_except >> qexists_tac `fresh` >> simp[]) >> gvs[]) >>
-  TRY (irule revert_state_from_state_except >> simp[]) >>
-  TRY (irule halt_state_from_state_except >> simp[]) >>
-  simp[state_equiv_except_refl]
-QED
-
-(*
- * Helper 7: Termination opcodes (no operands)
- *)
-Theorem step_inst_termination_except:
-  !fresh s1 s2 inst op.
-    state_equiv_except fresh s1 s2 /\
-    op IN {STOP; RETURN; REVERT; SINK} /\
-    inst.inst_opcode = op ==>
-    result_equiv_except fresh (step_inst inst s1) (step_inst inst s2)
-Proof
-  rw[] >>
-  simp[step_inst_def] >>
-  TRY (irule halt_state_from_state_except >> simp[]) >>
-  TRY (irule revert_state_from_state_except >> simp[])
-QED
-
-(*
- * Helper 8: 3-operand copy opcodes
- *)
-Theorem step_inst_copy3_except:
-  !fresh s1 s2 inst op.
-    state_equiv_except fresh s1 s2 /\
-    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) /\
-    op IN {CALLDATACOPY; RETURNDATACOPY} /\
-    inst.inst_opcode = op ==>
-    result_equiv_except fresh (step_inst inst s1) (step_inst inst s2)
-Proof
-  rw[] >> simp[step_inst_def] >> rpt CASE_TAC >> gvs[] >>
-  `eval_operand h s1 = eval_operand h s2` by
-    (irule eval_operand_except >> qexists_tac `fresh` >> simp[]) >>
-  `eval_operand h' s1 = eval_operand h' s2` by
-    (irule eval_operand_except >> qexists_tac `fresh` >> simp[]) >>
-  `eval_operand h'' s1 = eval_operand h'' s2` by
-    (irule eval_operand_except >> qexists_tac `fresh` >> simp[]) >> gvs[] >>
-  TRY (`s1.vs_call_ctx = s2.vs_call_ctx` by fs[state_equiv_except_def, execution_equiv_except_def] >> gvs[]) >>
-  TRY (`s1.vs_returndata = s2.vs_returndata` by fs[state_equiv_except_def, execution_equiv_except_def] >> gvs[]) >>
-  TRY (irule write_memory_with_expansion_except_preserves >> simp[]) >>
-  TRY (irule revert_state_from_state_except >> simp[])
-QED
-
-(*
- * Helper 9: Hash opcodes
- *)
-Theorem step_inst_hash_except:
-  !fresh s1 s2 inst op.
-    state_equiv_except fresh s1 s2 /\
-    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) /\
-    inst.inst_opcode = SHA3 ==>
-    result_equiv_except fresh (step_inst inst s1) (step_inst inst s2)
-Proof
-  rw[] >> simp[step_inst_def] >>
-  `!op. MEM op inst.inst_operands ==> eval_operand op s1 = eval_operand op s2`
-    by (rw[] >> irule eval_operand_except >> qexists_tac `fresh` >>
-        simp[] >> metis_tac[]) >>
-  rpt CASE_TAC >> gvs[] >>
-  `s1.vs_memory = s2.vs_memory` by fs[state_equiv_except_def, execution_equiv_except_def] >> gvs[] >>
-  irule update_var_same_preserves >> simp[]
-QED
-
-(*
- * Helper: exec_pure2 preserves result_equiv_except when operands don't
- * reference fresh vars.
- *)
-Theorem exec_pure2_result_equiv_except:
-  !fresh f inst s1 s2.
-    state_equiv_except fresh s1 s2 /\
-    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) ==>
-    result_equiv_except fresh (exec_pure2 f inst s1) (exec_pure2 f inst s2)
-Proof
-  rw[exec_pure2_def] >>
-  (* Case split on operands *)
-  Cases_on `inst.inst_operands` >> simp[] >>
-  Cases_on `t` >> simp[] >>
-  Cases_on `t'` >> simp[] >>
-  (* Establish operand equivalence *)
-  `eval_operand h s1 = eval_operand h s2` by (
-    irule eval_operand_except >> qexists_tac `fresh` >> simp[]
-  ) >>
-  `eval_operand h' s1 = eval_operand h' s2` by (
-    irule eval_operand_except >> qexists_tac `fresh` >> simp[]
-  ) >>
-  rpt CASE_TAC >> gvs[] >>
-  irule update_var_same_preserves >> simp[]
-QED
-
-(*
- * Helper: exec_pure1 preserves result_equiv_except when operands don't
- * reference fresh vars.
- *)
-Theorem exec_pure1_result_equiv_except:
-  !fresh f inst s1 s2.
-    state_equiv_except fresh s1 s2 /\
-    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) ==>
-    result_equiv_except fresh (exec_pure1 f inst s1) (exec_pure1 f inst s2)
-Proof
-  rw[exec_pure1_def] >>
-  Cases_on `inst.inst_operands` >> simp[] >>
-  Cases_on `t` >> simp[] >>
-  `eval_operand h s1 = eval_operand h s2` by (
-    irule eval_operand_except >> qexists_tac `fresh` >> simp[]
-  ) >>
-  rpt CASE_TAC >> gvs[] >>
-  irule update_var_same_preserves >> simp[]
-QED
-
-(*
- * Helper: exec_pure3 preserves result_equiv_except when operands don't
- * reference fresh vars.
- *)
-Theorem exec_pure3_result_equiv_except:
-  !fresh f inst s1 s2.
-    state_equiv_except fresh s1 s2 /\
-    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) ==>
-    result_equiv_except fresh (exec_pure3 f inst s1) (exec_pure3 f inst s2)
-Proof
-  rw[exec_pure3_def] >>
-  Cases_on `inst.inst_operands` >> simp[] >>
-  Cases_on `t` >> simp[] >>
-  Cases_on `t'` >> simp[] >- (
-    (* Exactly 3 operands: [h; h'; h''] = [op1; op2; op3] *)
-    `eval_operand h s1 = eval_operand h s2` by (
-      irule eval_operand_except >> qexists_tac `fresh` >> simp[]
-    ) >>
-    `eval_operand h' s1 = eval_operand h' s2` by (
-      irule eval_operand_except >> qexists_tac `fresh` >> simp[]
-    ) >>
-    `eval_operand h'' s1 = eval_operand h'' s2` by (
-      irule eval_operand_except >> qexists_tac `fresh` >> simp[]
-    ) >>
-    rpt CASE_TAC >> gvs[] >>
-    irule update_var_same_preserves >> simp[]
-  )
-  (* Wrong number of operands - both sides error *)
-QED
-
-(*
- * Key lemma: step_inst preserves result_equiv_except when operands don't
- * reference fresh vars.
- *
- * WHY THIS IS TRUE: If operands evaluate the same, then:
- * - Computed values are the same (arithmetic, comparisons, etc.)
- * - Branch decisions are the same (JNZ, ASSERT)
- *)
-Theorem step_inst_result_equiv_except:
-  !fresh inst s1 s2.
-    state_equiv_except fresh s1 s2 /\
-    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) ==>
-    result_equiv_except fresh (step_inst inst s1) (step_inst inst s2)
-Proof
-  rw[] >> Cases_on `inst.inst_opcode` >>
-  (* Try category helpers first - they work on step_inst directly *)
-  TRY (SOLVE (irule step_inst_context_read_except >> simp[])) >>
-  TRY (SOLVE (irule step_inst_load1_except >> simp[])) >>
-  TRY (SOLVE (irule step_inst_store2_except >> simp[])) >>
-  TRY (SOLVE (irule step_inst_control_except >> simp[])) >>
-  TRY (SOLVE (irule step_inst_ssa_except >> simp[])) >>
-  TRY (SOLVE (irule step_inst_assert_except >> simp[])) >>
-  TRY (SOLVE (irule step_inst_termination_except >> simp[])) >>
-  TRY (SOLVE (irule step_inst_copy3_except >> simp[])) >>
-  TRY (SOLVE (irule step_inst_hash_except >> simp[])) >>
-  (* Binop/Unop/Modop need step_inst_def unfolded *)
-  simp[step_inst_def] >>
-  TRY (irule exec_pure2_result_equiv_except >> simp[]) >>
-  TRY (irule exec_pure1_result_equiv_except >> simp[]) >>
-  TRY (irule exec_pure3_result_equiv_except >> simp[]) >>
-  (* Remaining cases - unimplemented opcodes that return Error *)
-  simp[result_equiv_except_def]
-QED
-
-(* step_in_block preserves result_equiv_except *)
-Theorem step_in_block_result_equiv_except:
-  !fresh bb s1 s2.
-    state_equiv_except fresh s1 s2 /\
-    (!inst. MEM inst bb.bb_instructions ==>
-            !x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) ==>
-    let (r1, t1) = step_in_block bb s1 in
-    let (r2, t2) = step_in_block bb s2 in
-    t1 = t2 /\ result_equiv_except fresh r1 r2
-Proof
-  rw[step_in_block_def, LET_THM] >>
-  `s1.vs_inst_idx = s2.vs_inst_idx` by fs[state_equiv_except_def] >> simp[] >>
-  Cases_on `get_instruction bb s2.vs_inst_idx` >>
-  simp[result_equiv_except_def] >>
-  `MEM x bb.bb_instructions` by (
-    fs[get_instruction_def] >> rw[] >>
-    Cases_on `s2.vs_inst_idx < LENGTH bb.bb_instructions` >> fs[] >>
-    metis_tac[listTheory.EL_MEM]) >>
-  `result_equiv_except fresh (step_inst x s1) (step_inst x s2)` by (
-    irule step_inst_result_equiv_except >> simp[] >> metis_tac[]) >>
-  Cases_on `step_inst x s1` >> Cases_on `step_inst x s2` >>
-  gvs[result_equiv_except_def] >>
-  Cases_on `is_terminator x.inst_opcode` >>
-  simp[result_equiv_except_def] >>
-  fs[next_inst_def, state_equiv_except_def, execution_equiv_except_def] >>
-  rw[] >> simp[lookup_var_def] >> metis_tac[lookup_var_def]
-QED
-
-(* run_block preserves result_equiv_except *)
-Theorem run_block_result_equiv_except:
-  !fresh bb s1 s2.
-    state_equiv_except fresh s1 s2 /\
-    (!inst. MEM inst bb.bb_instructions ==>
-            !x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) ==>
-    result_equiv_except fresh (run_block bb s1) (run_block bb s2)
-Proof
-  CONV_TAC (RESORT_FORALL_CONV (fn [fresh, bb, s1, s2] =>
-    [bb, s1, fresh, s2])) >>
-  ho_match_mp_tac run_block_ind >> rw[] >>
-  drule_all step_in_block_result_equiv_except >> simp[LET_THM] >> strip_tac >>
-  Cases_on `step_in_block bb s1` >> Cases_on `step_in_block bb s2` >>
-  gvs[] >>
-  simp[Once run_block_def] >>
-  PURE_ONCE_REWRITE_TAC[run_block_def] >> simp[] >>
-  Cases_on `q` >> gvs[result_equiv_except_def]
-  >- (
-    Cases_on `q'` >> gvs[result_equiv_except_def] >>
-    `v.vs_halted = v'.vs_halted` by fs[state_equiv_except_def, execution_equiv_except_def] >>
-    Cases_on `v.vs_halted` >> simp[result_equiv_except_def]
-    >- (
-      (* v.vs_halted = T: run_block returns Halt, need execution_equiv_except *)
-      fs[state_equiv_except_def])
-    >- (
-      gvs[] >>
-      Cases_on `r` >> simp[result_equiv_except_def] >>
-      PURE_ONCE_REWRITE_TAC[GSYM run_block_def] >>
-      first_x_assum irule >> simp[] >> metis_tac[]))
-  >- (Cases_on `q'` >> gvs[result_equiv_except_def])
-  >- (Cases_on `q'` >> gvs[result_equiv_except_def])
-  >- (Cases_on `q'` >> gvs[result_equiv_except_def])
-QED
-
 (* ==========================================================================
-   result_equiv_except Transitivity
+   result_equiv Transitivity
    ========================================================================== *)
 
-(* WHY THIS IS TRUE: result_equiv_except compares results by type:
-   - OK/OK uses state_equiv_except which is transitive
-   - Halt/Halt, Revert/Revert use execution_equiv_except which is transitive
+(* WHY THIS IS TRUE: result_equiv compares results by type:
+   - OK/OK uses state_equiv which is transitive
+   - Halt/Halt, Revert/Revert use execution_equiv which is transitive
    - Error/Error is always T
    Mismatched types are always F, so transitivity holds vacuously. *)
-Theorem result_equiv_except_trans:
+Theorem result_equiv_trans:
   !fresh r1 r2 r3.
-    result_equiv_except fresh r1 r2 /\
-    result_equiv_except fresh r2 r3 ==>
-    result_equiv_except fresh r1 r3
+    result_equiv fresh r1 r2 /\
+    result_equiv fresh r2 r3 ==>
+    result_equiv fresh r1 r3
 Proof
-  rw[result_equiv_except_def] >>
-  Cases_on `r1` >> Cases_on `r2` >> Cases_on `r3` >> fs[] >>
-  metis_tac[state_equiv_except_trans, execution_equiv_except_trans]
+  Cases_on `r1` >> Cases_on `r2` >> Cases_on `r3` >>
+  gvs[result_equiv_def] >>
+  metis_tac[state_equiv_trans, execution_equiv_trans]
 QED
 
 (* ==========================================================================
@@ -769,7 +402,7 @@ Theorem fresh_var_in_fresh_vars:
 Proof
   rw[fresh_vars_in_block_def, pred_setTheory.GSPECIFICATION] >>
   qexists_tac `EL n bb.bb_instructions` >>
-  simp[rich_listTheory.EL_MEM] >> metis_tac[]
+  simp[rich_listTheory.EL_MEM]
 QED
 
 (* ==========================================================================

@@ -7,7 +7,7 @@
 
 Theory venomExecProofs
 Ancestors
-  venomExecSemantics venomInst venomState rich_list
+  venomExecSemantics venomInst venomState rich_list list
 
 (* ==========================================================================
    bool_to_word Properties
@@ -175,12 +175,31 @@ Proof
 QED
 
 (* ==========================================================================
+   FIND Lemmas (stdlib gaps)
+   ========================================================================== *)
+
+Triviality FIND_MEM:
+  !P l x. FIND P l = SOME x ==> MEM x l
+Proof
+  Induct_on `l` >> simp[FIND_thm] >> rw[] >> metis_tac[]
+QED
+
+Triviality FIND_P:
+  !P l x. FIND P l = SOME x ==> P x
+Proof
+  Induct_on `l` >> simp[FIND_thm] >> rw[] >> metis_tac[]
+QED
+
+Triviality FIND_NONE:
+  !P l. FIND P l = NONE ==> ~EXISTS P l
+Proof
+  Induct_on `l` >> simp[FIND_thm] >> rw[] >> gvs[]
+QED
+
+(* ==========================================================================
    Lookup Helpers
    ========================================================================== *)
 
-(*
- * Helper: If lookup_block succeeds, the block is in the list.
- *)
 Theorem lookup_block_MEM:
   !lbl bbs bb.
     lookup_block lbl bbs = SOME bb ==> MEM bb bbs
@@ -188,13 +207,6 @@ Proof
   rw[lookup_block_def] >> drule FIND_MEM >> simp[]
 QED
 
-(*
- * Helper: step_in_block is the same for two blocks with matching prefix.
- *
- * WHY THIS IS TRUE: step_in_block uses get_instruction to fetch current instruction.
- * If TAKE (SUC n) matches and we're at index n, then EL n is the same.
- * So step_in_block executes the same instruction on both.
- *)
 Theorem step_in_block_prefix_same:
   !bb1 bb2 s n.
     TAKE (SUC n) bb1.bb_instructions = TAKE (SUC n) bb2.bb_instructions /\
@@ -217,28 +229,6 @@ QED
    Lookup Function Properties
    ========================================================================== *)
 
-(* General FIND lemma: FIND P l = SOME x ==> MEM x l *)
-Triviality FIND_MEM:
-  !P l x. FIND P l = SOME x ==> MEM x l
-Proof
-  Induct_on `l` >> simp[FIND_thm] >> rw[] >> metis_tac[]
-QED
-
-(* General FIND lemma: FIND P l = SOME x ==> P x *)
-Triviality FIND_P:
-  !P l x. FIND P l = SOME x ==> P x
-Proof
-  Induct_on `l` >> simp[FIND_thm] >> rw[] >> metis_tac[]
-QED
-
-(* General FIND lemma: FIND P l = NONE ==> ~EXISTS P l *)
-Triviality FIND_NONE:
-  !P l. FIND P l = NONE ==> ~EXISTS P l
-Proof
-  Induct_on `l` >> simp[FIND_thm] >> rw[]
-QED
-
-(* lookup_function: if SOME, the function is in the list *)
 Theorem lookup_function_MEM:
   !name fns fn. lookup_function name fns = SOME fn ==> MEM fn fns
 Proof
@@ -259,6 +249,7 @@ Theorem lookup_function_not_mem[local]:
   lookup_function name fns = NONE ==>
   ~MEM name (MAP (\f. f.fn_name) fns)
 Proof
-  rw[lookup_function_def] >>
-  drule FIND_NONE >> simp[EXISTS_MEM, MEM_MAP] >> metis_tac[]
+  Induct_on `fns` >>
+  rw[lookup_function_def, FIND_thm] >>
+  CASE_TAC >> gvs[]
 QED
