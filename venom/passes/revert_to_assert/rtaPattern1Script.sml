@@ -6,7 +6,7 @@
 
 Theory rtaPattern1
 Ancestors
-  rtaProofHelpers rtaPassDefs stateEquiv venomProps venomExecSemantics venomInst venomState list
+  rtaProofHelpers rtaPassDefs stateEquiv venomExecProps venomExecSemantics venomInst venomState list
 
 (* ==========================================================================
    Block Execution Helpers

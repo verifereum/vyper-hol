@@ -5,7 +5,7 @@
  * Contains properties of bool_to_word and instruction behavior lemmas.
  *)
 
-Theory venomProofs
+Theory venomExecProofs
 Ancestors
   venomExecSemantics venomInst venomState rich_list
 

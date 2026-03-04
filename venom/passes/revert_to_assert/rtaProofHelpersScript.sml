@@ -8,7 +8,7 @@
  * STRUCTURE OVERVIEW
  * ============================================================================
  *
- * INSTRUCTION BEHAVIOR (base lemmas in venomPropsTheory):
+ * INSTRUCTION BEHAVIOR (base lemmas in venomExecPropsTheory):
  *   - step_assert_zero_reverts      : ASSERT 0w reverts
  *   - step_assert_nonzero_passes    : ASSERT nonzero continues
  *
@@ -33,9 +33,9 @@
 
 Theory rtaProofHelpers
 Ancestors
-  rtaPassDefs stateEquiv venomProps
+  rtaPassDefs stateEquiv venomExecProps
 Libs
-  finite_mapTheory venomStateTheory venomExecSemanticsTheory venomInstTheory venomPropsTheory
+  finite_mapTheory venomStateTheory venomExecSemanticsTheory venomInstTheory venomExecPropsTheory
 
 (* SOLVE tactical: fails if tactic doesn't completely close the goal *)
 fun SOLVE tac (g as (asl, w)) =
@@ -46,12 +46,12 @@ fun SOLVE tac (g as (asl, w)) =
 (* ==========================================================================
    NOTE: bool_to_word properties and basic instruction behavior lemmas
    (step_iszero_value, step_assert_behavior, step_revert_always_reverts,
-   step_jnz_behavior, step_jmp_behavior) are now in venomPropsTheory.
+   step_jnz_behavior, step_jmp_behavior) are now in venomExecPropsTheory.
    ========================================================================== *)
 
 (* ==========================================================================
    ASSERT Instruction Behavior - Special Cases
-   (Base lemma step_assert_behavior is in venomPropsTheory)
+   (Base lemma step_assert_behavior is in venomExecPropsTheory)
    ========================================================================== *)
 
 (* WHY THIS IS TRUE: Special case of step_assert_behavior with cond = 0w. *)
@@ -95,7 +95,7 @@ QED
 
 (* ==========================================================================
    Simple Revert Block Execution
-   (step_jmp_behavior is in venomPropsTheory)
+   (step_jmp_behavior is in venomExecPropsTheory)
    ========================================================================== *)
 
 (* WHY THIS IS TRUE: A block with only [revert 0 0] will:

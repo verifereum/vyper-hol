@@ -1,13 +1,13 @@
 (*
  * Venom Properties (Statements Only)
  *
- * Re-exports theorems from venomProofs via ACCEPT_TAC.
- * Proofs live in proofs/venomProofsScript.sml.
+ * Re-exports theorems from venomExecProofs via ACCEPT_TAC.
+ * Proofs live in proofs/venomExecProofsScript.sml.
  *)
 
-Theory venomProps
+Theory venomExecProps
 Ancestors
-  venomProofs
+  venomExecProofs
 
 (* ==========================================================================
    bool_to_word Properties
@@ -16,25 +16,25 @@ Ancestors
 Theorem bool_to_word_T:
   bool_to_word T = 1w
 Proof
-  ACCEPT_TAC venomProofsTheory.bool_to_word_T
+  ACCEPT_TAC venomExecProofsTheory.bool_to_word_T
 QED
 
 Theorem bool_to_word_F:
   bool_to_word F = 0w
 Proof
-  ACCEPT_TAC venomProofsTheory.bool_to_word_F
+  ACCEPT_TAC venomExecProofsTheory.bool_to_word_F
 QED
 
 Theorem bool_to_word_eq_0w:
   (bool_to_word b = 0w) <=> ~b
 Proof
-  ACCEPT_TAC venomProofsTheory.bool_to_word_eq_0w
+  ACCEPT_TAC venomExecProofsTheory.bool_to_word_eq_0w
 QED
 
 Theorem bool_to_word_neq_0w:
   (bool_to_word b <> 0w) <=> b
 Proof
-  ACCEPT_TAC venomProofsTheory.bool_to_word_neq_0w
+  ACCEPT_TAC venomExecProofsTheory.bool_to_word_neq_0w
 QED
 
 (* ==========================================================================
@@ -48,7 +48,7 @@ Theorem step_iszero_value:
                  inst_operands := [cond_op]; inst_outputs := [out] |> s =
     OK (update_var out (bool_to_word (cond = 0w)) s)
 Proof
-  ACCEPT_TAC venomProofsTheory.step_iszero_value
+  ACCEPT_TAC venomExecProofsTheory.step_iszero_value
 QED
 
 Theorem step_assert_behavior:
@@ -58,7 +58,7 @@ Theorem step_assert_behavior:
                  inst_operands := [cond_op]; inst_outputs := [] |> s =
     if cond = 0w then Revert (revert_state s) else OK s
 Proof
-  ACCEPT_TAC venomProofsTheory.step_assert_behavior
+  ACCEPT_TAC venomExecProofsTheory.step_assert_behavior
 QED
 
 Theorem step_revert_always_reverts:
@@ -66,7 +66,7 @@ Theorem step_revert_always_reverts:
     inst.inst_opcode = REVERT ==>
     step_inst inst s = Revert (revert_state s)
 Proof
-  ACCEPT_TAC venomProofsTheory.step_revert_always_reverts
+  ACCEPT_TAC venomExecProofsTheory.step_revert_always_reverts
 QED
 
 Theorem step_jmp_behavior:
@@ -75,7 +75,7 @@ Theorem step_jmp_behavior:
                  inst_operands := [Label lbl]; inst_outputs := [] |> s =
     OK (jump_to lbl s)
 Proof
-  ACCEPT_TAC venomProofsTheory.step_jmp_behavior
+  ACCEPT_TAC venomExecProofsTheory.step_jmp_behavior
 QED
 
 Theorem step_jnz_behavior:
@@ -87,7 +87,7 @@ Theorem step_jnz_behavior:
     if cond <> 0w then OK (jump_to if_nonzero s)
     else OK (jump_to if_zero s)
 Proof
-  ACCEPT_TAC venomProofsTheory.step_jnz_behavior
+  ACCEPT_TAC venomExecProofsTheory.step_jnz_behavior
 QED
 
 (* ==========================================================================
@@ -100,19 +100,19 @@ Theorem step_in_block_increments_idx:
     ==>
     v.vs_inst_idx = SUC s.vs_inst_idx
 Proof
-  ACCEPT_TAC venomProofsTheory.step_in_block_increments_idx
+  ACCEPT_TAC venomExecProofsTheory.step_in_block_increments_idx
 QED
 
 Theorem run_block_OK_not_halted:
   !bb s v. run_block bb s = OK v ==> ~v.vs_halted
 Proof
-  ACCEPT_TAC venomProofsTheory.run_block_OK_not_halted
+  ACCEPT_TAC venomExecProofsTheory.run_block_OK_not_halted
 QED
 
 Theorem run_block_OK_inst_idx_0:
   !bb s v. run_block bb s = OK v ==> v.vs_inst_idx = 0
 Proof
-  ACCEPT_TAC venomProofsTheory.run_block_OK_inst_idx_0
+  ACCEPT_TAC venomExecProofsTheory.run_block_OK_inst_idx_0
 QED
 
 (* ==========================================================================
@@ -123,7 +123,7 @@ Theorem lookup_block_MEM:
   !lbl bbs bb.
     lookup_block lbl bbs = SOME bb ==> MEM bb bbs
 Proof
-  ACCEPT_TAC venomProofsTheory.lookup_block_MEM
+  ACCEPT_TAC venomExecProofsTheory.lookup_block_MEM
 QED
 
 Theorem step_in_block_prefix_same:
@@ -135,7 +135,7 @@ Theorem step_in_block_prefix_same:
   ==>
     step_in_block bb1 s = step_in_block bb2 s
 Proof
-  ACCEPT_TAC venomProofsTheory.step_in_block_prefix_same
+  ACCEPT_TAC venomExecProofsTheory.step_in_block_prefix_same
 QED
 
 (* ==========================================================================
@@ -145,19 +145,19 @@ QED
 Theorem lookup_function_MEM:
   !name fns fn. lookup_function name fns = SOME fn ==> MEM fn fns
 Proof
-  ACCEPT_TAC venomProofsTheory.lookup_function_MEM
+  ACCEPT_TAC venomExecProofsTheory.lookup_function_MEM
 QED
 
 Theorem lookup_function_mem:
   lookup_function name fns = SOME func ==>
   MEM name (MAP (\f. f.fn_name) fns)
 Proof
-  ACCEPT_TAC venomProofsTheory.lookup_function_mem
+  ACCEPT_TAC venomExecProofsTheory.lookup_function_mem
 QED
 
 Theorem lookup_function_not_mem:
   lookup_function name fns = NONE ==>
   ~MEM name (MAP (\f. f.fn_name) fns)
 Proof
-  ACCEPT_TAC venomProofsTheory.lookup_function_not_mem
+  ACCEPT_TAC venomExecProofsTheory.lookup_function_not_mem
 QED
