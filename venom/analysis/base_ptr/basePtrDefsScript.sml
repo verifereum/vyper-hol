@@ -17,7 +17,6 @@
  *
  * Divergences from Python:
  *   - allocation uses inst_id (num) instead of instruction object
- *   - calloca not yet handled (requires cross-function context)
  *   - var_to_mem is (string, ptr set) fmap (string keys, not IRVariable)
  *   - get_write_location / get_read_location take bp_result as explicit arg
  *)
@@ -62,18 +61,6 @@ Definition bp_get_ptrs_def:
     | NONE => {}
 End
 
-(* ===== PHI Operand Variables ===== *)
-
-(* Extract variable names from PHI operands.
- * PHI format: Label l1, Var v1, Label l2, Var v2, ...
- * Returns just the variable names. *)
-Definition phi_operand_vars_def:
-  phi_operand_vars [] = [] ∧
-  phi_operand_vars [_] = [] ∧
-  phi_operand_vars (Label _ :: Var v :: rest) = v :: phi_operand_vars rest ∧
-  phi_operand_vars (_ :: _ :: rest) = phi_operand_vars rest
-End
-
 (* ===== Cross-Function Helpers ===== *)
 
 (* Find a palloca instruction with a given alloca_id in a function.
@@ -113,7 +100,7 @@ Definition bp_handle_inst_def:
                | _ => result)
             (* phi: union of all operand pointer sets *)
           | PHI =>
-              let vars = phi_operand_vars inst.inst_operands in
+              let vars = MAP SND (phi_pairs inst.inst_operands) in
               let all_ptrs = BIGUNION (set (MAP (bp_get_ptrs result) vars)) in
               result |+ (out, all_ptrs)
             (* assign: propagate pointers from source variable *)
@@ -131,9 +118,7 @@ Definition bp_handle_inst_def:
                       SOME callee =>
                         (case find_palloca_inst callee (w2n alloca_id) of
                            SOME palloca =>
-                             if palloca.inst_opcode = PALLOCA then
-                               result |+ (out, {ptr_from_alloca palloca})
-                             else result
+                             result |+ (out, {ptr_from_alloca palloca})
                          | NONE => result)
                     | NONE => result)
                | _ => result)
