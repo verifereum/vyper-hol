@@ -13,4 +13,4 @@ Ancestors
   (* liveness *)
   livenessAnalysis
   (* dfg *)
-  dfgAnalysisCorrectness
+  dfgAnalysis
