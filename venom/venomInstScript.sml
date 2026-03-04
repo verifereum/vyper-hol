@@ -37,7 +37,7 @@ Datatype:
     (* SSA/IR-specific *)
     | PHI | PARAM | ASSIGN | NOP
     (* Allocation (Vyper-specific stack slots) *)
-    | ALLOCA | PALLOCA | CALLOCA
+    | ALLOCA | PALLOCA | CALLOCA | GEP
     (* Internal function calls *)
     | INVOKE
     (* Environment *)
@@ -209,6 +209,15 @@ Definition is_terminator_def:
   is_terminator STOP = T /\
   is_terminator SINK = T /\
   is_terminator _ = F
+End
+
+(* Pseudo-instructions: not real operations, just SSA bookkeeping.
+ * Matches Python IRInstruction.is_pseudo (phi, param, source).
+ * We omit "source" (test-only opcode not in our IR). *)
+Definition is_pseudo_def:
+  is_pseudo PHI = T /\
+  is_pseudo PARAM = T /\
+  is_pseudo _ = F
 End
 
 
