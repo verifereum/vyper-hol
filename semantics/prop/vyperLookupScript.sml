@@ -784,12 +784,19 @@ QED
 Theorem lookup_toplevel_name_after_update:
   ∀cx st mid n v tv.
     var_in_storage cx mid n tv ∧
+    well_formed_value v ∧
+    bounds_compat tv v ∧
+    IS_SOME (encode_value tv v) ∧
+    (∀tvs. tv ≠ TupleTV tvs) ∧
     (∀e bd. tv ≠ ArrayTV e bd) ∧
-    roundtrip_ok tv v ∧
-    IS_SOME (encode_value tv v) ⇒
+    (∀ftypes. tv ≠ StructTV ftypes) ∧
+    (tv = NoneTV ⇒ v = NoneV) ⇒
     lookup_toplevel_name cx (update_toplevel_name cx st mid n v) mid n = SOME (Value v)
 Proof
   rpt strip_tac >>
+  `roundtrip_ok tv v` by (
+    irule roundtrip_ok_from_well_formed_base >> simp[]
+  ) >>
   fs[var_in_storage_def] >>
   Cases_on `encode_value tv v` >> gvs[] >>
   simp[lookup_toplevel_name_def, update_toplevel_name_def] >>
@@ -803,6 +810,6 @@ Proof
   Cases_on `tv` >> gvs[] >>
   simp[bind_def, get_after_set_storage_backend, return_def, raise_def] >>
   fs[roundtrip_ok_def] >>
-  first_x_assum (qspecl_then [`offset`, `storage0`] mp_tac) >>
+  TRY (first_x_assum (qspecl_then [`offset`, `storage0`] mp_tac)) >>
   simp[return_def]
 QED
