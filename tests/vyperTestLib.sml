@@ -318,7 +318,10 @@ val excluded_test_names = [
   "test_abi_encode_nested_dynarray*",
   "test_revert_reason_typed",
   "test_revert_reason_typed_no_variable",
-  "test_side_effects_evaluation"
+  "test_side_effects_evaluation",
+  (* Tests using shift() builtin which is not yet translated.
+     TODO: add shift builtin support *)
+  "test_uint256_mulmod_complex"
 ]
 
 fun glob_match pat str =

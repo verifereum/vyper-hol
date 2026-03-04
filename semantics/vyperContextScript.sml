@@ -341,11 +341,13 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ (AsWeiValue dn) [v] = evaluate_as_wei_value dn v ∧
   evaluate_builtin cx _ AddMod [IntV u1 i1; IntV u2 i2; IntV u3 i3] =
     (if u1 = Unsigned 256 ∧ u2 = u1 ∧ u3 = u1
-     then INL $ IntV u1 $ &((Num i1 + Num i2) MOD Num i3)
+     then if i3 = 0 then INR (RuntimeError "AddMod division by zero")
+     else INL $ IntV u1 $ &((Num i1 + Num i2) MOD Num i3)
      else INR (TypeError "AddMod type")) ∧
   evaluate_builtin cx _ MulMod [IntV u1 i1; IntV u2 i2; IntV u3 i3] =
     (if u1 = Unsigned 256 ∧ u2 = u1 ∧ u3 = u1
-     then INL $ IntV u1 $ &((Num i1 * Num i2) MOD Num i3)
+     then if i3 = 0 then INR (RuntimeError "MulMod division by zero")
+     else INL $ IntV u1 $ &((Num i1 * Num i2) MOD Num i3)
      else INR (TypeError "MulMod type")) ∧
   evaluate_builtin cx _ PowMod256 [IntV u1 base; IntV u2 exp] =
     (if u1 = Unsigned 256 ∧ u2 = u1
