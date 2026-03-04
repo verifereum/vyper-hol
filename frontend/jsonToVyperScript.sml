@@ -401,6 +401,8 @@ Definition make_builtin_call_def:
                   | _ => TypeBuiltin AbiDecode (translate_type ret_ty) [])
     else if name = "abi_encode" ∨ name = "_abi_encode" then
       TypeBuiltin AbiEncode (translate_type ret_ty) args
+    else if name = "extract32" then
+      TypeBuiltin Extract32 (translate_type ret_ty) args
     else if name = "method_id" then
       Builtin MethodId args
     (* Struct constructor, cast, or regular call *)

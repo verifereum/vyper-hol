@@ -213,14 +213,16 @@ Definition evaluate_extract32_def:
       | IntT m =>
           evaluate_convert (BytesV (Dynamic 32) (TAKE 32 bs)) (BaseT (IntT m))
       | AddressT =>
-          if 20 ≤ LENGTH bs then
-            INL $ BytesV (Fixed 20) (TAKE 20 bs)
+          if 32 ≤ LENGTH bs then
+            if EVERY ($= 0w) (TAKE 12 bs) then
+              INL $ BytesV (Fixed 20) (DROP 12 (TAKE 32 bs))
+            else INR (RuntimeError "evaluate_extract32 address clamp")
           else INR (RuntimeError "evaluate_extract32 address")
       | _ => INR (TypeError "evaluate_extract32 type")
   else INR (RuntimeError "evaluate_extract32 start")
 End
 
-val () = cv_trans evaluate_extract32_def;
+val () = cv_auto_trans evaluate_extract32_def;
 
 Definition evaluate_type_builtin_def:
   evaluate_type_builtin cx Empty typ vs =
