@@ -1,14 +1,30 @@
 (*
- * Data-Flow Graph Analysis
+ * Data-Flow Graph Analysis — Definitions
  *
  * Reusable DFG helpers for Venom passes.
  * Tracks:
  *  - Uses: variable -> instructions that read it (in program order)
  *  - Defs: variable -> producing instruction
  *  - IDs: instruction id -> instruction
+ *
+ * TOP-LEVEL:
+ *   dfg_analysis          — record type
+ *   dfg_build_function    — build DFG from a function
+ *   dfg_get_def           — query: producing instruction for a variable
+ *   dfg_get_uses          — query: instructions that read a variable
+ *   dfg_get_inst_by_id    — query: instruction by ID
+ *   well_formed_dfg       — well-formedness predicate
+ *   dfg_def_ids           — set of instruction IDs in DFG def range
+ *
+ * Helper:
+ *   operand_var/operand_vars — extract variable names from operands
+ *   dfg_add_use/dfg_add_uses — use-tracking mutations
+ *   dfg_add_defs            — def-tracking mutations
+ *   dfg_add_inst            — add a full instruction to DFG
+ *   dfg_build_insts         — build DFG from instruction list
  *)
 
-Theory dfgAnalysis
+Theory dfgDefs
 Ancestors
   list finite_map
   venomState venomInst
@@ -136,4 +152,16 @@ Definition dfg_build_function_def:
   dfg_build_function fn = dfg_build_insts (fn_insts fn)
 End
 
-val _ = export_theory();
+(* ==========================================================================
+   Well-formedness and ID sets
+   ========================================================================== *)
+
+Definition well_formed_dfg_def:
+  well_formed_dfg dfg <=>
+    !v inst. dfg_get_def dfg v = SOME inst ==> MEM v inst.inst_outputs
+End
+
+Definition dfg_def_ids_def:
+  dfg_def_ids dfg = IMAGE (\inst. inst.inst_id) (FRANGE dfg.dfg_defs)
+End
+

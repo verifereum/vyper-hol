@@ -165,13 +165,184 @@ Proof
   \\ rw[Once abi_to_vyper_pre_def]
 QED
 
+(* Whether a Vyper type has dynamic ABI encoding, defined directly on Vyper types.
+   This mirrors is_dynamic on ABI types but avoids calling vyper_to_abi_type. *)
+Definition vyper_is_dynamic_def:
+  vyper_is_dynamic env (BaseT (StringT _)) = T ∧
+  vyper_is_dynamic env (BaseT (BytesT (Dynamic _))) = T ∧
+  vyper_is_dynamic env (BaseT _) = F ∧
+  vyper_is_dynamic env (TupleT ts) = vyper_any_dynamic env ts ∧
+  vyper_is_dynamic env (ArrayT t (Dynamic _)) = T ∧
+  vyper_is_dynamic env (ArrayT t (Fixed _)) = vyper_is_dynamic env t ∧
+  vyper_is_dynamic env (StructT id) =
+    (let nid = string_to_num id in
+     case FLOOKUP env nid of
+     | SOME (StructArgs args) => vyper_any_dynamic (env \\ nid) (MAP SND args)
+     | _ => F) ∧
+  vyper_is_dynamic env (FlagT _) = F ∧
+  vyper_is_dynamic env NoneT = F ∧
+  vyper_any_dynamic env [] = F ∧
+  vyper_any_dynamic env (t::ts) =
+    (vyper_is_dynamic env t ∨ vyper_any_dynamic env ts)
+Termination
+  WF_REL_TAC ‘inv_image ($< LEX $<) (λx. case x of
+      INL (env, t) => (CARD (FDOM env), type_size t)
+    | INR (env, ts) => (CARD (FDOM env), list_size type_size ts))’
+  \\ rw[FLOOKUP_DEF]
+  \\ disj1_tac
+  \\ CCONTR_TAC
+  \\ fs[]
+End
+
+val () = cv_auto_trans_rec vyper_is_dynamic_def (
+  WF_REL_TAC `inv_image ($< LEX $<) (λx. case x of
+      INL (env, t) => (cv$c2n $ cv_size' env, cv_size t)
+    | INR (env, ts) => (cv$c2n $ cv_size' env, cv_size ts))`
+  \\ reverse $ rw[]
+  \\ TRY (Cases_on `cv_v` \\ gvs[cv_size_def] \\ NO_TAC)
+  >- (
+    qmatch_goalsub_rename_tac`cv_snd cv_v`
+    \\ Cases_on`cv_v` \\ gvs[]
+    \\ qmatch_goalsub_rename_tac`cv_fst cv_v`
+    \\ Cases_on`cv_v` \\ gvs[] )
+  \\ disj1_tac
+  \\ pop_assum mp_tac
+  \\ qmatch_goalsub_abbrev_tac `cv_lookup ck`
+  \\ `cv_ispair ck = cv$Num 0`
+  by (
+    rw[Abbr`ck`, cv_string_to_num_def]
+    \\ rw[Once keccakTheory.cv_l2n_def]
+    \\ rw[cv_ispair_cv_add] )
+  \\ pop_assum mp_tac
+  \\ qid_spec_tac `cv_env`
+  \\ qid_spec_tac `ck`
+  \\ rpt (pop_assum kall_tac)
+  \\ ho_match_mp_tac cv_delete_ind
+  \\ rpt gen_tac \\ strip_tac
+  \\ simp[Once cv_lookup_def]
+  \\ IF_CASES_TAC \\ gs[]
+  \\ strip_tac \\ gs[]
+  \\ reverse (IF_CASES_TAC \\ gs[])
+  >- (
+    Cases_on `ck` \\ gs[]
+    \\ Cases_on `cv_env` \\ gs[Once cv_delete_def]
+    \\ rw[] \\ rw[Once cv_size'_def])
+  \\ Cases_on `cv_env` \\ gs[]
+  \\ Cases_on`ck` \\ gvs[]
+  \\ Cases_on`g` \\ gvs[cv_repTheory.cv_eval,CaseEq"bool"]
+  \\ Cases_on`m=0` \\ gvs[]
+  >- (
+    rw[]
+    \\ simp[Once cv_delete_def]
+    \\ simp[Once cv_size'_def]
+    \\ simp[Once(Q.SPEC`cv$Pair x y`cv_size'_def)])
+  \\ Cases_on`m` \\ gvs[]
+  \\ qmatch_goalsub_rename_tac`2 < p`
+  \\ Cases_on`p=2` \\ gvs[]
+  \\ rw[] \\ gvs[]
+  \\ rw[Once cv_delete_def]
+  \\ rw[Once cv_size'_def, SimpR``prim_rec$<``]
+  \\ gvs[iffRL SUB_EQ_0]
+  \\ Cases_on`1 - SUC n MOD 2` \\ gvs[]
+);
+
+(* Maximum encoding size for a Vyper type, matching Vyper's abi_type.size_bound().
+   This is used to zero-pad calldata to model EVM semantics where reads past the
+   end of calldata return zero bytes. The bounds for dynamic arrays and strings
+   come from the Vyper type (not available in the ABI type alone). *)
+Definition vyper_abi_size_bound_def:
+  vyper_abi_size_bound env (BaseT (StringT n)) = 32 + ceil32 n ∧
+  vyper_abi_size_bound env (BaseT (BytesT (Dynamic n))) = 32 + ceil32 n ∧
+  vyper_abi_size_bound env (BaseT _) = 32 ∧
+  vyper_abi_size_bound env (TupleT ts) =
+    vyper_abi_size_bound_list env ts ∧
+  vyper_abi_size_bound env (ArrayT t (Dynamic n)) =
+    32 + n * vyper_abi_embedded_size env t ∧
+  vyper_abi_size_bound env (ArrayT t (Fixed n)) =
+    n * vyper_abi_embedded_size env t ∧
+  vyper_abi_size_bound env (StructT id) =
+    (let nid = string_to_num id in
+     case FLOOKUP env nid of
+     | SOME (StructArgs args) =>
+         vyper_abi_size_bound_list (env \\ nid) (MAP SND args)
+     | _ => 0) ∧
+  vyper_abi_size_bound env (FlagT _) = 32 ∧
+  vyper_abi_size_bound env NoneT = 0 ∧
+  vyper_abi_embedded_size env t =
+    (if vyper_is_dynamic env t
+     then 32 + vyper_abi_size_bound env t
+     else vyper_abi_size_bound env t) ∧
+  vyper_abi_size_bound_list env [] = 0 ∧
+  vyper_abi_size_bound_list env (t::ts) =
+    vyper_abi_embedded_size env t + vyper_abi_size_bound_list env ts
+Termination
+  WF_REL_TAC ‘inv_image ($< LEX $<) (λx. case x of
+    (* vyper_abi_size_bound *)
+      INL (env, t) => (CARD (FDOM env), 2 * type_size t)
+    (* vyper_abi_embedded_size *)
+    | INR (INL (env, t)) => (CARD (FDOM env), 2 * type_size t + 1)
+    (* vyper_abi_size_bound_list *)
+    | INR (INR (env, ts)) => (CARD (FDOM env), 2 * list_size type_size ts))’
+  \\ rw[FLOOKUP_DEF]
+  \\ TRY (disj1_tac \\ CCONTR_TAC \\ fs[] \\ NO_TAC)
+  \\ simp[type_size_def]
+End
+
+val () = cv_auto_trans_rec vyper_abi_size_bound_def (
+  WF_REL_TAC `inv_image ($< LEX $<) (λx. case x of
+      INL (env, t) => (cv$c2n $ cv_size' env, 2 * cv_size t)
+    | INR (INL (env, t)) => (cv$c2n $ cv_size' env, 2 * cv_size t + 1)
+    | INR (INR (env, ts)) => (cv$c2n $ cv_size' env, 2 * cv_size ts))`
+  \\ rw[]
+  \\ TRY (Cases_on `cv_v` \\ gvs[cv_size_def] \\ NO_TAC)
+  \\ TRY (Cases_on `cv_v` \\ gvs[cv_size_def]
+          \\ qmatch_goalsub_rename_tac `cv_fst cv_v`
+          \\ Cases_on `cv_v` \\ gvs[cv_size_def] \\ NO_TAC)
+  \\ disj1_tac
+  \\ pop_assum mp_tac
+  \\ qmatch_goalsub_abbrev_tac `cv_lookup ck`
+  \\ `cv_ispair ck = cv$Num 0`
+  by (
+    rw[Abbr`ck`, cv_string_to_num_def]
+    \\ rw[Once keccakTheory.cv_l2n_def]
+    \\ rw[cv_ispair_cv_add] )
+  \\ pop_assum mp_tac
+  \\ qid_spec_tac `cv_env`
+  \\ qid_spec_tac `ck`
+  \\ rpt (pop_assum kall_tac)
+  \\ ho_match_mp_tac cv_delete_ind
+  \\ rpt gen_tac \\ strip_tac
+  \\ simp[Once cv_lookup_def]
+  \\ IF_CASES_TAC \\ gs[]
+  \\ strip_tac \\ gs[]
+  \\ reverse (IF_CASES_TAC \\ gs[])
+  >- (
+    Cases_on `ck` \\ gs[]
+    \\ Cases_on `cv_env` \\ gs[Once cv_delete_def]
+    \\ rw[] \\ rw[Once cv_size'_def])
+  \\ Cases_on `cv_env` \\ gs[]
+  \\ Cases_on`ck` \\ gvs[]
+  \\ Cases_on`g` \\ gvs[cv_repTheory.cv_eval,CaseEq"bool"]
+  \\ Cases_on`m=0` \\ gvs[]
+  >- (
+    rw[]
+    \\ simp[Once cv_delete_def]
+    \\ simp[Once cv_size'_def]
+    \\ simp[Once(Q.SPEC`cv$Pair x y`cv_size'_def)])
+  \\ Cases_on`m` \\ gvs[]
+  \\ qmatch_goalsub_rename_tac`2 < p`
+  \\ Cases_on`p=2` \\ gvs[]
+  \\ rw[] \\ gvs[]
+  \\ rw[Once cv_delete_def]
+  \\ rw[Once cv_size'_def, SimpR``prim_rec$<``]
+  \\ gvs[iffRL SUB_EQ_0]
+  \\ Cases_on`1 - SUC n MOD 2` \\ gvs[]
+);
+
 Definition evaluate_abi_decode_def:
   evaluate_abi_decode tenv typ bs =
     let abiTy = vyper_to_abi_type tenv typ in
-    (* Check minimum length - basic types need at least 32 bytes *)
-    (* TODO: remove if this check is added to valid_enc instead *)
-    if static_length abiTy > LENGTH bs then INR "abi_decode too short"
-    else if valid_enc abiTy bs then
+    if valid_enc abiTy bs then
       case abi_to_vyper tenv typ (dec abiTy bs) of
         SOME v => INL v
       | NONE => INR "abi_decode conversion"

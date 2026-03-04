@@ -2,7 +2,7 @@ Theory vyperTestRunner
 Ancestors
   contractABI vyperABI vyperSmallStep jsonAST jsonToVyper
 Libs
-  cv_transLib
+  cv_transLib wordsLib
 
 (* TODO: move to contractABITheory? *)
 
@@ -119,14 +119,19 @@ Definition compute_vyper_args_def:
     vyTysRet = case lookup_function NONE name vis ts
                 of SOME (_,args,_,ret,_) => (MAP SND args, ret)
                   | NONE => ([], NoneT);
+    vyTys = TAKE (LENGTH argTys) (FST vyTysRet);
+    (* Use combined type env from all modules so cross-module types work *)
+    tenv = type_env_all_modules all_mods;
+    (* Pad calldata with zeros to model EVM semantics: CALLDATALOAD past
+       the end of calldata returns zero. We pad to vyper_abi_size_bound,
+       which is the maximum encoding size for this type. *)
+    bound = vyper_abi_size_bound tenv (TupleT vyTys);
+    padded = PAD_RIGHT 0w bound cd;
     vyArgsTenvOpt = if
       static_length abiTupTy ≤ LENGTH cd ∧
-      valid_enc abiTupTy cd
+      valid_enc abiTupTy padded
     then let
-      abiArgsTup = dec abiTupTy cd;
-      vyTys = TAKE (LENGTH argTys) (FST vyTysRet);
-      (* Use combined type env from all modules so cross-module types work *)
-      tenv = type_env_all_modules all_mods;
+      abiArgsTup = dec abiTupTy padded;
       vyArgsTup = abi_to_vyper tenv (TupleT vyTys) abiArgsTup;
       vyArgs = (case OPTION_BIND vyArgsTup extract_elements
                   of NONE => [] | SOME ls => ls)

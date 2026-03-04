@@ -20,7 +20,7 @@
 
 Theory phiFunction
 Ancestors
-  phiBlock execEquiv venomSem venomInst stateEquiv phiWellFormed phiTransform dfgDefs list
+  phiBlock execEquiv venomSem venomInst stateEquiv phiWellFormed phiTransform phiDefs list
 
 (* ==========================================================================
    Function Execution Helpers

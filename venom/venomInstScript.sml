@@ -37,7 +37,7 @@ Datatype:
     (* SSA/IR-specific *)
     | PHI | PARAM | ASSIGN | NOP
     (* Allocation (Vyper-specific stack slots) *)
-    | ALLOCA | PALLOCA | CALLOCA
+    | ALLOCA | PALLOCA | CALLOCA | GEP
     (* Internal function calls *)
     | INVOKE
     (* Environment *)
@@ -49,7 +49,7 @@ Datatype:
     | RETURNDATASIZE | RETURNDATACOPY
     | BLOBHASH | BLOBBASEFEE
     (* Hashing *)
-    | SHA3 | SHA3_64
+    | SHA3
     (* External calls *)
     | CALL | STATICCALL | DELEGATECALL | CREATE | CREATE2
     (* Logging *)

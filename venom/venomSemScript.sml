@@ -7,100 +7,7 @@
 
 Theory venomSem
 Ancestors
-  venomState venomInst keccak
-
-(* --------------------------------------------------------------------------
-   Effects System
-
-   Effects track what state an instruction reads or writes.
-   This is crucial for optimization passes (CSE, DCE, reordering).
-   -------------------------------------------------------------------------- *)
-
-Datatype:
-  effect =
-    | Eff_STORAGE
-    | Eff_TRANSIENT
-    | Eff_MEMORY
-    | Eff_MSIZE
-    | Eff_IMMUTABLES
-    | Eff_RETURNDATA
-    | Eff_LOG
-    | Eff_BALANCE
-    | Eff_EXTCODE
-End
-
-(* Effects as a set *)
-Type effects = ``:effect set``
-
-Definition empty_effects_def:
-  empty_effects : effects = {}
-End
-
-Definition all_effects_def:
-  all_effects : effects =
-    {Eff_STORAGE; Eff_TRANSIENT; Eff_MEMORY; Eff_MSIZE;
-     Eff_IMMUTABLES; Eff_RETURNDATA; Eff_LOG; Eff_BALANCE; Eff_EXTCODE}
-End
-
-(* Read effects for each opcode *)
-Definition read_effects_def:
-  read_effects SLOAD = {Eff_STORAGE} /\
-  read_effects TLOAD = {Eff_TRANSIENT} /\
-  read_effects ILOAD = {Eff_IMMUTABLES} /\
-  read_effects MLOAD = {Eff_MEMORY} /\
-  read_effects MCOPY = {Eff_MEMORY} /\
-  read_effects CALL = all_effects /\
-  read_effects DELEGATECALL = all_effects /\
-  read_effects STATICCALL = all_effects /\
-  read_effects CREATE = all_effects /\
-  read_effects CREATE2 = all_effects /\
-  read_effects INVOKE = all_effects /\
-  read_effects RETURNDATASIZE = {Eff_RETURNDATA} /\
-  read_effects RETURNDATACOPY = {Eff_RETURNDATA} /\
-  read_effects BALANCE = {Eff_BALANCE} /\
-  read_effects SELFBALANCE = {Eff_BALANCE} /\
-  read_effects EXTCODECOPY = {Eff_EXTCODE} /\
-  read_effects EXTCODESIZE = {Eff_EXTCODE} /\
-  read_effects EXTCODEHASH = {Eff_EXTCODE} /\
-  read_effects SELFDESTRUCT = {Eff_BALANCE} /\
-  read_effects LOG = {Eff_MEMORY} /\
-  read_effects REVERT = {Eff_MEMORY} /\
-  read_effects SHA3 = {Eff_MEMORY} /\
-  read_effects SHA3_64 = {Eff_MEMORY} /\
-  read_effects MSIZE = {Eff_MSIZE} /\
-  read_effects RETURN = {Eff_MEMORY} /\
-  read_effects _ = empty_effects
-End
-
-(* Write effects for each opcode *)
-Definition write_effects_def:
-  write_effects SSTORE = {Eff_STORAGE} /\
-  write_effects TSTORE = {Eff_TRANSIENT} /\
-  write_effects MSTORE = {Eff_MEMORY; Eff_MSIZE} /\
-  write_effects ISTORE = {Eff_IMMUTABLES; Eff_MSIZE} /\
-  write_effects CALL = all_effects DIFF {Eff_IMMUTABLES} /\
-  write_effects DELEGATECALL = all_effects DIFF {Eff_IMMUTABLES} /\
-  write_effects STATICCALL = {Eff_MEMORY; Eff_RETURNDATA; Eff_MSIZE} /\
-  write_effects CREATE = all_effects DIFF {Eff_MEMORY; Eff_IMMUTABLES} /\
-  write_effects CREATE2 = all_effects DIFF {Eff_MEMORY; Eff_IMMUTABLES} /\
-  write_effects INVOKE = all_effects /\
-  write_effects LOG = {Eff_LOG} /\
-  write_effects DLOADBYTES = {Eff_MEMORY; Eff_MSIZE} /\
-  write_effects DLOAD = {Eff_MEMORY; Eff_MSIZE} /\
-  write_effects RETURNDATACOPY = {Eff_MEMORY; Eff_MSIZE} /\
-  write_effects CALLDATACOPY = {Eff_MEMORY; Eff_MSIZE} /\
-  write_effects CODECOPY = {Eff_MEMORY; Eff_MSIZE} /\
-  write_effects EXTCODECOPY = {Eff_MEMORY; Eff_MSIZE} /\
-  write_effects MCOPY = {Eff_MEMORY; Eff_MSIZE} /\
-  write_effects _ = empty_effects
-End
-
-(* Check if two instructions can be reordered *)
-Definition effects_independent_def:
-  effects_independent op1 op2 <=>
-    DISJOINT (write_effects op1) (read_effects op2 UNION write_effects op2) /\
-    DISJOINT (write_effects op2) (read_effects op1 UNION write_effects op1)
-End
+  venomState venomInst venomEffects keccak
 
 (* --------------------------------------------------------------------------
    Arithmetic/Logic Operations (using bytes32 = 256 word)
@@ -568,21 +475,6 @@ Definition step_inst_def:
                 | _ => Error "sha3 requires single output")
             | _ => Error "undefined operand")
         | _ => Error "sha3 requires 2 operands")
-
-    | SHA3_64 =>
-        (* SHA3_64 is a Vyper optimization: hash exactly 64 bytes (two words) *)
-        (case inst.inst_operands of
-          [op2; op1] =>
-            (case (eval_operand op1 s, eval_operand op2 s) of
-              (SOME v1, SOME v2) =>
-                (case inst.inst_outputs of
-                  [out] =>
-                    let data = word_to_bytes v1 T ++ word_to_bytes v2 T in
-                    let hash = word_of_bytes T (0w:bytes32) (Keccak_256_w64 data) in
-                    OK (update_var out hash s)
-                | _ => Error "sha3_64 requires single output")
-            | _ => Error "undefined operand")
-        | _ => Error "sha3_64 requires 2 operands")
 
     (* Default - unimplemented *)
     | _ => Error "unimplemented opcode"
