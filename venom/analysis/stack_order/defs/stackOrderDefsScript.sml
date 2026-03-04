@@ -9,6 +9,7 @@
  * TOP-LEVEL:
  *   so_get_stack        — analyze successors of a block, return merged needed
  *   so_from_to_query    — query needed vars for a specific edge (with liveness)
+ *   from_to_wf          — well-formedness invariant for from_to map
  *   so_analyze_block    — analyze one block, return (needed, stack)
  *   so_record_from_to   — record needed vars for all predecessors of a block
  *
@@ -319,6 +320,17 @@ Definition so_from_to_query_def:
         FOLDL (λtgt v.
           if MEM v tgt then tgt else SNOC v tgt)
         base live_in
+End
+
+(* The from_to well-formedness invariant: every variable stored in the
+   from_to map is live at the entry of the target block.
+   Used as the inductive invariant when the DFT threads from_to
+   across successive so_get_stack calls. *)
+Definition from_to_wf_def:
+  from_to_wf lr from_to ⇔
+    ∀pred succ ns w.
+      FLOOKUP from_to (pred, succ) = SOME ns ∧ MEM w ns ⇒
+      MEM w (live_vars_at lr succ 0)
 End
 
 
