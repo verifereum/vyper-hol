@@ -29,3 +29,5 @@ Ancestors
   stackOrderProps
   (* memory alias *)
   memAliasProps
+  (* memory SSA *)
+  memSSAProps
