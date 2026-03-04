@@ -15,5 +15,7 @@ Ancestors
   livenessAnalysis
   (* dfg *)
   dfgAnalysis
+  (* dominators *)
+  dominatorAnalysis
   (* base pointer analysis *)
   basePtrProps
