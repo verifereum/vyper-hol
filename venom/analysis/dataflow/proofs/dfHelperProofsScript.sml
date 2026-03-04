@@ -30,15 +30,3 @@ Theorem list_intersect_all_mono_proof:
 Proof
   cheat
 QED
-
-Theorem fmap_lookup_default_found_proof:
-  !d f k v. FLOOKUP f k = SOME v ==> fmap_lookup_default d f k = v
-Proof
-  cheat
-QED
-
-Theorem fmap_lookup_default_missing_proof:
-  !d f k. FLOOKUP f k = NONE ==> fmap_lookup_default d f k = d
-Proof
-  cheat
-QED

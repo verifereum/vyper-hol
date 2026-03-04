@@ -6,13 +6,16 @@ Generic lattice and worklist infrastructure for dataflow analyses. No project-sp
 
 ```
 defs/
+  dfIterateDefsScript.sml  — df_iterate (round-robin WHILE-based fixpoint)
   latticeDefsScript.sml    — partial_order, bounded_measure, monotone, inflationary
                               Uses reflexive/transitive/antisymmetric from relationTheory.
                               Candidates for upstreaming to HOL4.
   worklistDefsScript.sml   — wl_step, wl_iterate, wl_deps_complete, is_fixpoint
 proofs/
-  latticeProofsScript.sml  — monotone composition, Kleene fixpoint, measure monotonicity
-  worklistProofsScript.sml — convergence: termination, fixpoint, above-initial, invariant
+  dfIterateProofsScript.sml — df_iterate convergence proofs
+  latticeProofsScript.sml   — monotone composition, Kleene fixpoint, measure monotonicity
+  worklistProofsScript.sml  — convergence: termination, fixpoint, above-initial, invariant
+dfIteratePropsScript.sml   — re-exports df_iterate proofs via ACCEPT_TAC
 latticePropsScript.sml     — re-exports lattice proofs via ACCEPT_TAC
 worklistPropsScript.sml    — re-exports worklist proofs via ACCEPT_TAC
 ```

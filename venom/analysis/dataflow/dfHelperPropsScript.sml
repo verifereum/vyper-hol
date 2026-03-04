@@ -8,8 +8,6 @@
  *   list_intersect_mem      — MEM characterization
  *   list_intersect_all_set  — set result = BIGINTER ...
  *   list_intersect_all_mono — result ⊆ first element
- *   fmap_lookup_default_found   — SOME case
- *   fmap_lookup_default_missing — NONE case
  *)
 
 Theory dfHelperProps
@@ -43,18 +41,4 @@ Theorem list_intersect_all_mono:
   !l ls. set (list_intersect_all (l :: ls)) SUBSET set l
 Proof
   ACCEPT_TAC list_intersect_all_mono_proof
-QED
-
-(* Lookup with default returns the value when key is present. *)
-Theorem fmap_lookup_default_found:
-  !d f k v. FLOOKUP f k = SOME v ==> fmap_lookup_default d f k = v
-Proof
-  ACCEPT_TAC fmap_lookup_default_found_proof
-QED
-
-(* Lookup with default returns the default when key is absent. *)
-Theorem fmap_lookup_default_missing:
-  !d f k. FLOOKUP f k = NONE ==> fmap_lookup_default d f k = d
-Proof
-  ACCEPT_TAC fmap_lookup_default_missing_proof
 QED
