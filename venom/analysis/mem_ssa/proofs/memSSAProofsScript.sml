@@ -19,8 +19,8 @@ Libs
    ========================================================================== *)
 
 (* All access ids referenced from block-level maps exist in ms_nodes *)
-Definition mssa_ids_valid_def:
-  mssa_ids_valid ms ⇔
+Definition mem_ssa_ids_valid_def:
+  mem_ssa_ids_valid ms ⇔
     (∀lbl aids aid.
        (FLOOKUP ms.ms_block_defs lbl = SOME aids ∨
         FLOOKUP ms.ms_block_uses lbl = SOME aids) ∧
@@ -32,8 +32,8 @@ Definition mssa_ids_valid_def:
 End
 
 (* Reaching defs and phi operands reference valid access ids *)
-Definition mssa_edges_valid_def:
-  mssa_edges_valid ms ⇔
+Definition mem_ssa_edges_valid_def:
+  mem_ssa_edges_valid ms ⇔
     (∀aid rd.
        FLOOKUP ms.ms_reaching aid = SOME rd ⇒
        rd = 0 ∨ rd ∈ FDOM ms.ms_nodes) ∧
@@ -44,8 +44,8 @@ Definition mssa_edges_valid_def:
 End
 
 (* inst_def/inst_use maps are consistent with node contents *)
-Definition mssa_inst_maps_consistent_def:
-  mssa_inst_maps_consistent ms ⇔
+Definition mem_ssa_inst_maps_consistent_def:
+  mem_ssa_inst_maps_consistent ms ⇔
     (∀iid aid.
        FLOOKUP ms.ms_inst_def iid = SOME aid ⇒
        ∃blk loc. FLOOKUP ms.ms_nodes aid = SOME (MnDef iid blk loc)) ∧
@@ -55,8 +55,8 @@ Definition mssa_inst_maps_consistent_def:
 End
 
 (* Every non-phi access has a reaching def in ms_reaching *)
-Definition mssa_reaching_complete_def:
-  mssa_reaching_complete ms ⇔
+Definition mem_ssa_reaching_complete_def:
+  mem_ssa_reaching_complete ms ⇔
     ∀aid node.
       FLOOKUP ms.ms_nodes aid = SOME node ∧
       (∀blk. node ≠ MnPhi blk) ⇒
@@ -64,26 +64,26 @@ Definition mssa_reaching_complete_def:
 End
 
 (* Composite well-formedness *)
-Definition wf_mssa_def:
+Definition wf_mem_ssa_def:
   wf_mssa ms ⇔
-    mssa_ids_valid ms ∧
-    mssa_edges_valid ms ∧
-    mssa_inst_maps_consistent ms ∧
-    mssa_reaching_complete ms
+    mem_ssa_ids_valid ms ∧
+    mem_ssa_edges_valid ms ∧
+    mem_ssa_inst_maps_consistent ms ∧
+    mem_ssa_reaching_complete ms
 End
 
 (* ==========================================================================
    Property 1: Construction produces well-formed state
    ========================================================================== *)
 
-(* mssa_build on a well-formed function produces a well-formed mssa_state:
+(* mem_ssa_build on a well-formed function produces a well-formed mem_ssa_state:
  * all block/inst index maps are consistent with ms_nodes, all reaching-def
  * edges point to valid nodes or LiveOnEntry, and every non-phi access has
  * a reaching definition. *)
-Theorem mssa_build_wf:
+Theorem mem_ssa_build_wf:
   ∀cfg dom bp fn addr_sp.
     wf_function fn ⇒
-    wf_mssa (mssa_build cfg dom bp fn addr_sp)
+    wf_mssa (mem_ssa_build cfg dom bp fn addr_sp)
 Proof
   cheat
 QED
@@ -94,11 +94,11 @@ QED
 
 (* For every non-phi access, the reaching definition exists and is either
  * LiveOnEntry (0) or a valid access in the state.
- * Stronger than just mssa_edges_valid: also asserts the reaching def exists. *)
-Theorem mssa_reaching_def_exists_and_valid:
+ * Stronger than just mem_ssa_edges_valid: also asserts the reaching def exists. *)
+Theorem mem_ssa_reaching_def_exists_and_valid:
   ∀cfg dom bp fn addr_sp ms aid node.
     wf_function fn ∧
-    ms = mssa_build cfg dom bp fn addr_sp ∧
+    ms = mem_ssa_build cfg dom bp fn addr_sp ∧
     FLOOKUP ms.ms_nodes aid = SOME node ∧
     (∀blk. node ≠ MnPhi blk) ⇒
     ∃rd. FLOOKUP ms.ms_reaching aid = SOME rd ∧
@@ -114,13 +114,13 @@ QED
 (* If a non-phi access has a non-LiveOnEntry reaching definition, then the
  * reaching def's block dominates the access's block.
  * The precondition def_id ∈ FDOM ms.ms_nodes is derivable from the other
- * premises (via mssa_reaching_def_exists_and_valid), but is included for
+ * premises (via mem_ssa_reaching_def_exists_and_valid), but is included for
  * direct usability. *)
-Theorem mssa_reaching_def_dominates:
+Theorem mem_ssa_reaching_def_dominates:
   ∀cfg dom bp fn addr_sp ms use_id def_id.
     wf_function fn ∧
     cfg = cfg_analyze fn ∧
-    ms = mssa_build cfg dom bp fn addr_sp ∧
+    ms = mem_ssa_build cfg dom bp fn addr_sp ∧
     dom = dom_analyze cfg fn ∧
     FLOOKUP ms.ms_reaching use_id = SOME def_id ∧
     def_id ≠ 0 ∧
@@ -138,11 +138,11 @@ QED
 
 (* Every MemPhi is placed at a block in the dominance frontier of some
  * block that contains at least one MemDef. *)
-Theorem mssa_phi_at_frontier:
+Theorem mem_ssa_phi_at_frontier:
   ∀cfg dom bp fn addr_sp ms lbl phi_id.
     wf_function fn ∧
     cfg = cfg_analyze fn ∧
-    ms = mssa_build cfg dom bp fn addr_sp ∧
+    ms = mem_ssa_build cfg dom bp fn addr_sp ∧
     dom = dom_analyze cfg fn ∧
     FLOOKUP ms.ms_block_phis lbl = SOME phi_id ⇒
     ∃def_lbl.
@@ -158,14 +158,14 @@ QED
 
 (* After construction (which includes Phase 4 cleanup), no remaining phi
  * has all operands pointing to the same reaching definition. *)
-Theorem mssa_no_redundant_phis:
+Theorem mem_ssa_no_redundant_phis:
   ∀cfg dom bp fn addr_sp ms lbl phi_id ops.
     wf_function fn ∧
-    ms = mssa_build cfg dom bp fn addr_sp ∧
+    ms = mem_ssa_build cfg dom bp fn addr_sp ∧
     FLOOKUP ms.ms_block_phis lbl = SOME phi_id ∧
     FLOOKUP ms.ms_phi_ops phi_id = SOME ops ∧
     ops ≠ [] ⇒
-    ¬mssa_phi_redundant ops
+    ¬mem_ssa_phi_redundant ops
 Proof
   cheat
 QED
@@ -187,10 +187,10 @@ End
 
 (* The reaching-def chain has no cycles: no non-LiveOnEntry access can
  * reach itself through one or more reaching-def steps. *)
-Theorem mssa_reaching_acyclic:
+Theorem mem_ssa_reaching_acyclic:
   ∀cfg dom bp fn addr_sp ms aid.
     wf_function fn ∧
-    ms = mssa_build cfg dom bp fn addr_sp ∧
+    ms = mem_ssa_build cfg dom bp fn addr_sp ∧
     aid ∈ FDOM ms.ms_nodes ∧ aid ≠ 0 ⇒
     ¬∃n. n > 0 ∧ reaching_chain ms n aid aid
 Proof
@@ -208,14 +208,14 @@ QED
  * This is a structural (dominance-based) soundness statement.  Full
  * execution-path-based semantic soundness would additionally require
  * CFG path reasoning.  *)
-Theorem mssa_clobber_sound:
+Theorem mem_ssa_clobber_sound:
   ∀cfg dom bp fn addr_sp ms alias access_id fuel.
     wf_function fn ∧
     cfg = cfg_analyze fn ∧
-    ms = mssa_build cfg dom bp fn addr_sp ∧
+    ms = mem_ssa_build cfg dom bp fn addr_sp ∧
     dom = dom_analyze cfg fn ∧
     wf_alias_sets alias ∧
-    mssa_get_clobbered ms fuel access_id = SOME 0 ∧
+    mem_ssa_get_clobbered ms fuel access_id = SOME 0 ∧
     access_id ∈ FDOM ms.ms_nodes ⇒
     ∀def_id def_iid def_blk def_loc.
       FLOOKUP ms.ms_nodes def_id = SOME (MnDef def_iid def_blk def_loc) ∧
