@@ -149,6 +149,21 @@ Definition is_nonidempotent_def:
   is_nonidempotent _ = F
 End
 
+(* Commutative opcodes: operand order does not affect result.
+ * Matches Python COMMUTATIVE_INSTRUCTIONS =
+ *   frozenset(["add", "mul", "smul", "or", "xor", "and", "eq"])
+ * Note: Python has "smul" but our IR uses MUL for both (SDIV/SMOD are
+ * separate but smul is just MUL with sign-extension handled elsewhere). *)
+Definition is_commutative_def:
+  is_commutative ADD = T /\
+  is_commutative MUL = T /\
+  is_commutative OR = T /\
+  is_commutative XOR = T /\
+  is_commutative AND = T /\
+  is_commutative EQ = T /\
+  is_commutative _ = F
+End
+
 (* ===== Address Spaces ===== *)
 
 (* Matches vyper/evm/address_space.py *)
