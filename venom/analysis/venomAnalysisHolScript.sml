@@ -1,9 +1,10 @@
 (* Roll-up theory for all venom analysis infrastructure *)
 Theory venomAnalysisHol
 Ancestors
-  (* shared — can be removed once used by other analysis theories *)
+  (* shared *)
   venomEffects
   memLocDefs
+  memLocProps
   (* cfg *)
   cfgAnalysis
   (* fcg *)
