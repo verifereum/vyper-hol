@@ -54,9 +54,7 @@ Proof
   rw[may_overlap_def, ml_empty_def]
 QED
 
-(* Core no-alias result: different allocations ⇒ no overlap.
- * This is the fundamental property that makes base_ptr analysis useful:
- * if two accesses go through different alloca instructions, they can't alias. *)
+(* Locations with different allocations never overlap. *)
 Theorem different_alloca_no_overlap:
   ∀m1 m2 a1 a2.
     m1.ml_alloca = SOME a1 ∧ m2.ml_alloca = SOME a2 ∧ a1 ≠ a2 ⇒
@@ -73,8 +71,7 @@ Proof
   rw[completely_contains_def, ml_empty_def]
 QED
 
-(* Used by DSE: if write1 covers write2 which covers a read,
- * then write1 covers the read. *)
+(* completely_contains is transitive. *)
 Theorem completely_contains_trans:
   ∀m1 m2 m3.
     completely_contains m1 m2 ∧ completely_contains m2 m3 ⇒
@@ -89,6 +86,7 @@ Proof
   gvs[]
 QED
 
+(* Reflexive when offset and size are both known. *)
 Theorem completely_contains_refl:
   ∀m. IS_SOME m.ml_offset ∧ IS_SOME m.ml_size ⇒
     completely_contains m m
@@ -96,8 +94,7 @@ Proof
   rw[completely_contains_def]
 QED
 
-(* Used by DSE/load_elim: if a write completely contains a read region,
- * they definitely overlap (the read is fully covered). *)
+(* Containment of a non-empty region implies overlap. *)
 Theorem contains_implies_overlap:
   ∀m1 m2.
     completely_contains m1 m2 ∧ m2.ml_size ≠ SOME 0 ⇒
