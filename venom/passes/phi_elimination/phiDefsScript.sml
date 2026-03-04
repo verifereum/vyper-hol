@@ -1,14 +1,17 @@
 (*
- * Data-Flow Graph (DFG) Definitions for PHI Elimination
+ * PHI Elimination — Definitions
  *
- * This theory is a PHI-local compatibility layer over the shared DFG analysis.
- * The shared analysis keeps multi-output definitions; PHI elimination uses a
- * lookup view that treats non-singleton outputs as absent.
+ * PHI-specific definitions for the elimination pass:
+ *   - dfg_lookup: singleton-output filtered DFG lookup
+ *   - ssa_form: SSA well-formedness predicate
+ *   - dfg_ids: instruction IDs visible through dfg_lookup
+ *   - phi_var_operands, phi_well_formed: PHI operand helpers
+ *   - assign_var_operand, is_phi_inst: instruction classification
  *)
 
-Theory dfgDefs
+Theory phiDefs
 Ancestors
-  dfgAnalysisCorrectness pred_set list finite_map
+  dfgDefs dfgAnalysisProps pred_set list finite_map
   venomState venomInst venomSem
 
 (* ==========================================================================

@@ -13,6 +13,6 @@ Ancestors
   (* liveness *)
   livenessAnalysis
   (* dfg *)
-  dfgAnalysisCorrectness
+  dfgAnalysis
   (* dominators *)
   dominatorAnalysis
