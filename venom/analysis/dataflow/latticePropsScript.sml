@@ -31,7 +31,7 @@ Proof
   ACCEPT_TAC inflationary_bounded_fixpoint_proof
 QED
 
-(* Bounded measure is weakly monotone: leq x y implies m x ≤ m y. *)
+(* Bounded measure is weakly monotone within domain S: leq x y implies m x ≤ m y. *)
 Theorem bounded_measure_leq:
   !(S : 'a -> bool) (leq : 'a -> 'a -> bool) (m : 'a -> num) b x y.
     bounded_measure S leq m b /\ S x /\ S y /\ leq x y ==>
