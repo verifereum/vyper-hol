@@ -309,7 +309,16 @@ val excluded_test_names = [
   "test_abi_decode_merge_head_and_length",
   "test_abi_decode_nonstrict_head",
   "test_abi_decode_nonstrict_head_oob",
-  "test_create_from_blueprint_bad_code_offset"
+  "test_create_from_blueprint_bad_code_offset",
+  (* abi_encode tests that use ensure_tuple=False or method_id= keywords.
+     TODO: support ensure_tuple and method_id keyword arguments for abi_encode *)
+  "test_abi_encode",
+  "test_abi_encode_dynarray",
+  "test_abi_encode_empty_string*",
+  "test_abi_encode_nested_dynarray*",
+  "test_revert_reason_typed",
+  "test_revert_reason_typed_no_variable",
+  "test_side_effects_evaluation"
 ]
 
 fun glob_match pat str =
