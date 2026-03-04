@@ -198,7 +198,7 @@ QED
    6. Assertions (2): ASSERT, ASSERT_UNREACHABLE
    7. Termination (4): STOP, RETURN, REVERT, SINK
    8. 3-op copy (2): CALLDATACOPY, RETURNDATACOPY
-   9. Hash (2): SHA3, SHA3_64
+   9. Hash (1): SHA3
 
    Remaining (handled after step_inst_def unfold):
    10. Binop/Unop/Modop (~22): exec_binop/unop/modop_result_equiv_except
@@ -390,21 +390,16 @@ Theorem step_inst_hash_except:
   !fresh s1 s2 inst op.
     state_equiv_except fresh s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) /\
-    op IN {SHA3; SHA3_64} /\
-    inst.inst_opcode = op ==>
+    inst.inst_opcode = SHA3 ==>
     result_equiv_except fresh (step_inst inst s1) (step_inst inst s2)
 Proof
   rw[] >> simp[step_inst_def] >>
   `!op. MEM op inst.inst_operands ==> eval_operand op s1 = eval_operand op s2`
     by (rw[] >> irule eval_operand_except >> qexists_tac `fresh` >>
-        simp[] >> metis_tac[])
-  >- ((* SHA3 *)
-    rpt CASE_TAC >> gvs[] >>
-    `s1.vs_memory = s2.vs_memory` by fs[state_equiv_except_def, execution_equiv_except_def] >> gvs[] >>
-    irule update_var_same_preserves >> simp[])
-  >- ((* SHA3_64 *)
-    rpt CASE_TAC >> gvs[] >>
-    irule update_var_same_preserves >> simp[])
+        simp[] >> metis_tac[]) >>
+  rpt CASE_TAC >> gvs[] >>
+  `s1.vs_memory = s2.vs_memory` by fs[state_equiv_except_def, execution_equiv_except_def] >> gvs[] >>
+  irule update_var_same_preserves >> simp[]
 QED
 
 (*
