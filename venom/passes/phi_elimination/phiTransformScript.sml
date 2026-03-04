@@ -27,7 +27,7 @@
 Theory phiTransform
 Ancestors
   list finite_map pred_set
-  venomState venomInst venomSem phiDefs dfgOrigins
+  venomState venomInst venomExecSemantics phiDefs dfgOrigins
 
 (* ==========================================================================
    PHI Elimination Transformation

@@ -24,7 +24,7 @@
 
 Theory phiBlock
 Ancestors
-  phiWellFormed execEquiv venomSem venomState venomInst phiDefs dfgOrigins phiTransform stateEquiv list
+  phiWellFormed execEquivProps venomExecSemantics venomState venomInst phiDefs dfgOrigins phiTransform stateEquivProps list
 
 (* ==========================================================================
    Instruction Step Lemmas
@@ -213,7 +213,7 @@ Proof
   qpat_x_assum `~is_terminator _` mp_tac >>
   simp[step_inst_def] >>
   Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
-  simp[exec_binop_def, exec_unop_def, exec_modop_def] >>
+  simp[exec_pure2_def, exec_pure1_def, exec_pure3_def] >>
   strip_tac >> gvs[AllCaseEqs()] >>
   gvs[update_var_def, mstore_def, sstore_def, tstore_def, write_memory_with_expansion_def]
 QED

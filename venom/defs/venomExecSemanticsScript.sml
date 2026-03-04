@@ -5,9 +5,9 @@
  * It includes the effects system and instruction stepping.
  *)
 
-Theory venomSem
+Theory venomExecSemantics
 Ancestors
-  venomState venomInst venomEffects keccak
+  venomState venomInst keccak
 
 (* --------------------------------------------------------------------------
    Arithmetic/Logic Operations (using bytes32 = 256 word)
@@ -84,46 +84,88 @@ End
    Instruction Semantics
    -------------------------------------------------------------------------- *)
 
-(* Execute a binary arithmetic operation *)
-Definition exec_binop_def:
-  exec_binop f inst s =
-    case inst.inst_operands of
-      [op1; op2] =>
-        (case (eval_operand op1 s, eval_operand op2 s) of
-          (SOME v1, SOME v2) =>
-            (case inst.inst_outputs of
-              [out] => OK (update_var out (f v1 v2) s)
-            | _ => Error "binop requires single output")
-        | _ => Error "undefined operand")
-    | _ => Error "binop requires 2 operands"
-End
+(* --------------------------------------------------------------------------
+   Instruction Execution Helpers
 
-(* Execute a unary operation *)
-Definition exec_unop_def:
-  exec_unop f inst s =
+   Categorized by operand count and state dependency:
+     exec_pure{1,2,3} : pure computation (f doesn't depend on state)
+     exec_read{0,1}   : state-reading (f depends on state)
+     exec_write2      : state-mutating (2 operands, no output)
+   -------------------------------------------------------------------------- *)
+
+(* Pure 1-operand: eval operand, apply pure f, update output *)
+Definition exec_pure1_def:
+  exec_pure1 f inst s =
     case inst.inst_operands of
       [op1] =>
         (case eval_operand op1 s of
           SOME v =>
             (case inst.inst_outputs of
               [out] => OK (update_var out (f v) s)
-            | _ => Error "unop requires single output")
+            | _ => Error "pure1 requires single output")
         | NONE => Error "undefined operand")
-    | _ => Error "unop requires 1 operand"
+    | _ => Error "pure1 requires 1 operand"
 End
 
-(* Execute a ternary modular operation *)
-Definition exec_modop_def:
-  exec_modop f inst s =
+(* Pure 2-operand: eval both operands, apply pure f, update output *)
+Definition exec_pure2_def:
+  exec_pure2 f inst s =
+    case inst.inst_operands of
+      [op1; op2] =>
+        (case (eval_operand op1 s, eval_operand op2 s) of
+          (SOME v1, SOME v2) =>
+            (case inst.inst_outputs of
+              [out] => OK (update_var out (f v1 v2) s)
+            | _ => Error "pure2 requires single output")
+        | _ => Error "undefined operand")
+    | _ => Error "pure2 requires 2 operands"
+End
+
+(* Pure 3-operand: eval all operands, apply pure f, update output *)
+Definition exec_pure3_def:
+  exec_pure3 f inst s =
     case inst.inst_operands of
       [op1; op2; op3] =>
         (case (eval_operand op1 s, eval_operand op2 s, eval_operand op3 s) of
           (SOME v1, SOME v2, SOME v3) =>
             (case inst.inst_outputs of
               [out] => OK (update_var out (f v1 v2 v3) s)
-            | _ => Error "modop requires single output")
+            | _ => Error "pure3 requires single output")
         | _ => Error "undefined operand")
-    | _ => Error "modop requires 3 operands"
+    | _ => Error "pure3 requires 3 operands"
+End
+
+(* State-read 0-operand: read value from state, update output *)
+Definition exec_read0_def:
+  exec_read0 f inst s =
+    case inst.inst_outputs of
+      [out] => OK (update_var out (f s) s)
+    | _ => Error "read0 requires single output"
+End
+
+(* State-read 1-operand: eval operand, read from state, update output *)
+Definition exec_read1_def:
+  exec_read1 f inst s =
+    case inst.inst_operands of
+      [op1] =>
+        (case eval_operand op1 s of
+          SOME v =>
+            (case inst.inst_outputs of
+              [out] => OK (update_var out (f v s) s)
+            | _ => Error "read1 requires single output")
+        | NONE => Error "undefined operand")
+    | _ => Error "read1 requires 1 operand"
+End
+
+(* State-write 2-operand: eval both operands, mutate state, no output *)
+Definition exec_write2_def:
+  exec_write2 f inst s =
+    case inst.inst_operands of
+      [op1; op2] =>
+        (case (eval_operand op1 s, eval_operand op2 s) of
+          (SOME v1, SOME v2) => OK (f v1 v2 s)
+        | _ => Error "undefined operand")
+    | _ => Error "write2 requires 2 operands"
 End
 
 (* Step a single instruction *)
@@ -131,92 +173,44 @@ Definition step_inst_def:
   step_inst inst s =
     case inst.inst_opcode of
     (* Arithmetic *)
-    | ADD => exec_binop word_add inst s
-    | SUB => exec_binop word_sub inst s
-    | MUL => exec_binop word_mul inst s
-    | Div => exec_binop safe_div inst s
-    | Mod => exec_binop safe_mod inst s
-    | SDIV => exec_binop safe_sdiv inst s
-    | SMOD => exec_binop safe_smod inst s
-    | ADDMOD => exec_modop addmod inst s
-    | MULMOD => exec_modop mulmod inst s
+    | ADD => exec_pure2 word_add inst s
+    | SUB => exec_pure2 word_sub inst s
+    | MUL => exec_pure2 word_mul inst s
+    | Div => exec_pure2 safe_div inst s
+    | Mod => exec_pure2 safe_mod inst s
+    | SDIV => exec_pure2 safe_sdiv inst s
+    | SMOD => exec_pure2 safe_smod inst s
+    | ADDMOD => exec_pure3 addmod inst s
+    | MULMOD => exec_pure3 mulmod inst s
 
     (* Comparison *)
-    | EQ => exec_binop (\x y. bool_to_word (x = y)) inst s
-    | LT => exec_binop (\x y. bool_to_word (w2n x < w2n y)) inst s
-    | GT => exec_binop (\x y. bool_to_word (w2n x > w2n y)) inst s
-    | SLT => exec_binop (\x y. bool_to_word (word_lt x y)) inst s
-    | SGT => exec_binop (\x y. bool_to_word (word_gt x y)) inst s
-    | ISZERO => exec_unop (\x. bool_to_word (x = 0w)) inst s
+    | EQ => exec_pure2 (\x y. bool_to_word (x = y)) inst s
+    | LT => exec_pure2 (\x y. bool_to_word (w2n x < w2n y)) inst s
+    | GT => exec_pure2 (\x y. bool_to_word (w2n x > w2n y)) inst s
+    | SLT => exec_pure2 (\x y. bool_to_word (word_lt x y)) inst s
+    | SGT => exec_pure2 (\x y. bool_to_word (word_gt x y)) inst s
+    | ISZERO => exec_pure1 (\x. bool_to_word (x = 0w)) inst s
 
     (* Bitwise *)
-    | AND => exec_binop word_and inst s
-    | OR => exec_binop word_or inst s
-    | XOR => exec_binop word_xor inst s
-    | NOT => exec_unop word_1comp inst s
-    | SHL => exec_binop (\n w. word_lsl w (w2n n)) inst s
-    | SHR => exec_binop (\n w. word_lsr w (w2n n)) inst s
-    | SAR => exec_binop (\n w. word_asr w (w2n n)) inst s
+    | AND => exec_pure2 word_and inst s
+    | OR => exec_pure2 word_or inst s
+    | XOR => exec_pure2 word_xor inst s
+    | NOT => exec_pure1 word_1comp inst s
+    | SHL => exec_pure2 (\n w. word_lsl w (w2n n)) inst s
+    | SHR => exec_pure2 (\n w. word_lsr w (w2n n)) inst s
+    | SAR => exec_pure2 (\n w. word_asr w (w2n n)) inst s
 
     (* Memory *)
-    | MLOAD =>
-        (case inst.inst_operands of
-          [op1] =>
-            (case eval_operand op1 s of
-              SOME addr =>
-                (case inst.inst_outputs of
-                  [out] => OK (update_var out (mload (w2n addr) s) s)
-                | _ => Error "mload requires single output")
-            | NONE => Error "undefined operand")
-        | _ => Error "mload requires 1 operand")
-
-    | MSTORE =>
-        (case inst.inst_operands of
-          [op_val; op_addr] =>
-            (case (eval_operand op_val s, eval_operand op_addr s) of
-              (SOME value, SOME addr) => OK (mstore (w2n addr) value s)
-            | _ => Error "undefined operand")
-        | _ => Error "mstore requires 2 operands")
+    | MLOAD => exec_read1 (\addr s. mload (w2n addr) s) inst s
+    | MSTORE => exec_write2 (\val addr s. mstore (w2n addr) val s) inst s
 
     (* Storage *)
-    | SLOAD =>
-        (case inst.inst_operands of
-          [op1] =>
-            (case eval_operand op1 s of
-              SOME key =>
-                (case inst.inst_outputs of
-                  [out] => OK (update_var out (sload key s) s)
-                | _ => Error "sload requires single output")
-            | NONE => Error "undefined operand")
-        | _ => Error "sload requires 1 operand")
-
-    | SSTORE =>
-        (case inst.inst_operands of
-          [op_val; op_key] =>
-            (case (eval_operand op_val s, eval_operand op_key s) of
-              (SOME value, SOME key) => OK (sstore key value s)
-            | _ => Error "undefined operand")
-        | _ => Error "sstore requires 2 operands")
+    | SLOAD => exec_read1 (\key s. sload key s) inst s
+    | SSTORE => exec_write2 (\val key s. sstore key val s) inst s
 
     (* Transient storage *)
-    | TLOAD =>
-        (case inst.inst_operands of
-          [op1] =>
-            (case eval_operand op1 s of
-              SOME key =>
-                (case inst.inst_outputs of
-                  [out] => OK (update_var out (tload key s) s)
-                | _ => Error "tload requires single output")
-            | NONE => Error "undefined operand")
-        | _ => Error "tload requires 1 operand")
-
-    | TSTORE =>
-        (case inst.inst_operands of
-          [op_val; op_key] =>
-            (case (eval_operand op_val s, eval_operand op_key s) of
-              (SOME value, SOME key) => OK (tstore key value s)
-            | _ => Error "undefined operand")
-        | _ => Error "tstore requires 2 operands")
+    | TLOAD => exec_read1 (\key s. tload key s) inst s
+    | TSTORE => exec_write2 (\val key s. tstore key val s) inst s
 
     (* Control flow - JMP *)
     | JMP =>
@@ -290,129 +284,38 @@ Definition step_inst_def:
     | NOP => OK s
 
     (* Environment - Call context *)
-    | CALLER =>
-        (case inst.inst_outputs of
-          [out] => OK (update_var out (w2w s.vs_call_ctx.cc_caller) s)
-        | _ => Error "caller requires single output")
-
-    | ADDRESS =>
-        (case inst.inst_outputs of
-          [out] => OK (update_var out (w2w s.vs_call_ctx.cc_address) s)
-        | _ => Error "address requires single output")
-
-    | CALLVALUE =>
-        (case inst.inst_outputs of
-          [out] => OK (update_var out s.vs_call_ctx.cc_callvalue s)
-        | _ => Error "callvalue requires single output")
-
-    | GAS =>
-        (case inst.inst_outputs of
-          [out] => OK (update_var out (n2w s.vs_call_ctx.cc_gas) s)
-        | _ => Error "gas requires single output")
+    | CALLER => exec_read0 (\s. w2w s.vs_call_ctx.cc_caller) inst s
+    | ADDRESS => exec_read0 (\s. w2w s.vs_call_ctx.cc_address) inst s
+    | CALLVALUE => exec_read0 (\s. s.vs_call_ctx.cc_callvalue) inst s
+    | GAS => exec_read0 (\s. n2w s.vs_call_ctx.cc_gas) inst s
 
     (* Environment - Transaction context *)
-    | ORIGIN =>
-        (case inst.inst_outputs of
-          [out] => OK (update_var out (w2w s.vs_tx_ctx.tc_origin) s)
-        | _ => Error "origin requires single output")
-
-    | GASPRICE =>
-        (case inst.inst_outputs of
-          [out] => OK (update_var out s.vs_tx_ctx.tc_gasprice s)
-        | _ => Error "gasprice requires single output")
-
-    | CHAINID =>
-        (case inst.inst_outputs of
-          [out] => OK (update_var out s.vs_tx_ctx.tc_chainid s)
-        | _ => Error "chainid requires single output")
+    | ORIGIN => exec_read0 (\s. w2w s.vs_tx_ctx.tc_origin) inst s
+    | GASPRICE => exec_read0 (\s. s.vs_tx_ctx.tc_gasprice) inst s
+    | CHAINID => exec_read0 (\s. s.vs_tx_ctx.tc_chainid) inst s
 
     (* Environment - Block context *)
-    | COINBASE =>
-        (case inst.inst_outputs of
-          [out] => OK (update_var out (w2w s.vs_block_ctx.bc_coinbase) s)
-        | _ => Error "coinbase requires single output")
-
-    | TIMESTAMP =>
-        (case inst.inst_outputs of
-          [out] => OK (update_var out s.vs_block_ctx.bc_timestamp s)
-        | _ => Error "timestamp requires single output")
-
-    | NUMBER =>
-        (case inst.inst_outputs of
-          [out] => OK (update_var out s.vs_block_ctx.bc_number s)
-        | _ => Error "number requires single output")
-
-    | PREVRANDAO =>
-        (case inst.inst_outputs of
-          [out] => OK (update_var out s.vs_block_ctx.bc_prevrandao s)
-        | _ => Error "prevrandao requires single output")
-
-    | GASLIMIT =>
-        (case inst.inst_outputs of
-          [out] => OK (update_var out s.vs_block_ctx.bc_gaslimit s)
-        | _ => Error "gaslimit requires single output")
-
-    | BASEFEE =>
-        (case inst.inst_outputs of
-          [out] => OK (update_var out s.vs_block_ctx.bc_basefee s)
-        | _ => Error "basefee requires single output")
-
-    | BLOBBASEFEE =>
-        (case inst.inst_outputs of
-          [out] => OK (update_var out s.vs_block_ctx.bc_blobbasefee s)
-        | _ => Error "blobbasefee requires single output")
-
-    | BLOCKHASH =>
-        (case inst.inst_operands of
-          [op1] =>
-            (case eval_operand op1 s of
-              SOME blocknum =>
-                (case inst.inst_outputs of
-                  [out] => OK (update_var out (s.vs_block_ctx.bc_blockhash (w2n blocknum)) s)
-                | _ => Error "blockhash requires single output")
-            | NONE => Error "undefined operand")
-        | _ => Error "blockhash requires 1 operand")
+    | COINBASE => exec_read0 (\s. w2w s.vs_block_ctx.bc_coinbase) inst s
+    | TIMESTAMP => exec_read0 (\s. s.vs_block_ctx.bc_timestamp) inst s
+    | NUMBER => exec_read0 (\s. s.vs_block_ctx.bc_number) inst s
+    | PREVRANDAO => exec_read0 (\s. s.vs_block_ctx.bc_prevrandao) inst s
+    | GASLIMIT => exec_read0 (\s. s.vs_block_ctx.bc_gaslimit) inst s
+    | BASEFEE => exec_read0 (\s. s.vs_block_ctx.bc_basefee) inst s
+    | BLOBBASEFEE => exec_read0 (\s. s.vs_block_ctx.bc_blobbasefee) inst s
+    | BLOCKHASH => exec_read1 (\v s. s.vs_block_ctx.bc_blockhash (w2n v)) inst s
 
     (* Environment - Balance *)
-    | BALANCE =>
-        (case inst.inst_operands of
-          [op1] =>
-            (case eval_operand op1 s of
-              SOME addr =>
-                (case inst.inst_outputs of
-                  [out] =>
-                    let acct = lookup_account (w2w addr) s.vs_accounts in
-                    OK (update_var out (n2w acct.balance) s)
-                | _ => Error "balance requires single output")
-            | NONE => Error "undefined operand")
-        | _ => Error "balance requires 1 operand")
-
-    | SELFBALANCE =>
-        (case inst.inst_outputs of
-          [out] =>
-            let acct = lookup_account s.vs_call_ctx.cc_address s.vs_accounts in
-            OK (update_var out (n2w acct.balance) s)
-        | _ => Error "selfbalance requires single output")
+    | BALANCE => exec_read1
+        (\addr s. n2w (lookup_account (w2w addr) s.vs_accounts).balance) inst s
+    | SELFBALANCE => exec_read0
+        (\s. n2w (lookup_account s.vs_call_ctx.cc_address s.vs_accounts).balance) inst s
 
     (* Calldata *)
-    | CALLDATASIZE =>
-        (case inst.inst_outputs of
-          [out] => OK (update_var out (n2w (LENGTH s.vs_call_ctx.cc_calldata)) s)
-        | _ => Error "calldatasize requires single output")
-
-    | CALLDATALOAD =>
-        (case inst.inst_operands of
-          [op1] =>
-            (case eval_operand op1 s of
-              SOME offset =>
-                (case inst.inst_outputs of
-                  [out] =>
-                    let data = s.vs_call_ctx.cc_calldata in
+    | CALLDATASIZE => exec_read0 (\s. n2w (LENGTH s.vs_call_ctx.cc_calldata)) inst s
+    | CALLDATALOAD => exec_read1
+        (\offset s. let data = s.vs_call_ctx.cc_calldata in
                     let bytes = TAKE 32 (DROP (w2n offset) data ++ REPLICATE 32 0w) in
-                    OK (update_var out (word_of_bytes T (0w:bytes32) bytes) s)
-                | _ => Error "calldataload requires single output")
-            | NONE => Error "undefined operand")
-        | _ => Error "calldataload requires 1 operand")
+                    word_of_bytes T (0w:bytes32) bytes) inst s
 
     | CALLDATACOPY =>
         (case inst.inst_operands of
@@ -428,10 +331,7 @@ Definition step_inst_def:
         | _ => Error "calldatacopy requires 3 operands")
 
     (* Return data *)
-    | RETURNDATASIZE =>
-        (case inst.inst_outputs of
-          [out] => OK (update_var out (n2w (LENGTH s.vs_returndata)) s)
-        | _ => Error "returndatasize requires single output")
+    | RETURNDATASIZE => exec_read0 (\s. n2w (LENGTH s.vs_returndata)) inst s
 
     | RETURNDATACOPY =>
         (case inst.inst_operands of
@@ -450,14 +350,10 @@ Definition step_inst_def:
         | _ => Error "returndatacopy requires 3 operands")
 
     (* Memory size *)
-    | MSIZE =>
-        (case inst.inst_outputs of
-          [out] =>
-            (* MSIZE returns memory size rounded up to 32-byte words *)
-            let size = LENGTH s.vs_memory in
-            let words = (size + 31) DIV 32 in
-            OK (update_var out (n2w (words * 32)) s)
-        | _ => Error "msize requires single output")
+    | MSIZE => exec_read0
+        (\s. let size = LENGTH s.vs_memory in
+             let words = (size + 31) DIV 32 in
+             n2w (words * 32)) inst s
 
     (* Hashing - using Keccak256 like EVM *)
     | SHA3 =>
@@ -492,7 +388,8 @@ Theorem step_inst_preserves_inst_idx:
 Proof
   rw[step_inst_def] >>
   gvs[AllCaseEqs(), is_terminator_def] >>
-  fs[exec_binop_def, exec_unop_def, exec_modop_def] >>
+  fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+     exec_read0_def, exec_read1_def, exec_write2_def] >>
   gvs[AllCaseEqs()] >>
   fs[update_var_def, mstore_def, sstore_def, tstore_def,
      write_memory_with_expansion_def]
@@ -555,4 +452,3 @@ Definition run_function_def:
                 else run_function fuel' fn s'
             | other => other
 End
-

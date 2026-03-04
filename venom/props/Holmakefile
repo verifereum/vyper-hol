@@ -1,0 +1,2 @@
+# Venom IR properties (ACCEPT_TAC wrappers)
+INCLUDES = ../defs ../proofs

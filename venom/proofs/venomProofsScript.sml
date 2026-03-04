@@ -5,9 +5,9 @@
  * Contains properties of bool_to_word and instruction behavior lemmas.
  *)
 
-Theory venomSemProps
+Theory venomProofs
 Ancestors
-  venomSem venomInst venomState rich_list
+  venomExecSemantics venomInst venomState rich_list
 
 (* ==========================================================================
    bool_to_word Properties
@@ -46,8 +46,8 @@ QED
    Instruction Behavior Lemmas
    ========================================================================== *)
 
-(* WHY THIS IS TRUE: By step_inst_def, ISZERO uses exec_unop with
-   (\x. bool_to_word (x = 0w)). exec_unop evaluates the single operand,
+(* WHY THIS IS TRUE: By step_inst_def, ISZERO uses exec_pure1 with
+   (\x. bool_to_word (x = 0w)). exec_pure1 evaluates the single operand,
    applies the function, and updates the output variable. *)
 Theorem step_iszero_value:
   !s cond_op out id cond.
@@ -56,7 +56,7 @@ Theorem step_iszero_value:
                  inst_operands := [cond_op]; inst_outputs := [out] |> s =
     OK (update_var out (bool_to_word (cond = 0w)) s)
 Proof
-  rw[step_inst_def, exec_unop_def]
+  rw[step_inst_def, exec_pure1_def]
 QED
 
 (* WHY THIS IS TRUE: By step_inst_def, ASSERT evaluates its operand.
@@ -212,4 +212,31 @@ Proof
     metis_tac[EL_TAKE, DECIDE ``n < SUC n``]
   ) >>
   simp[]
+QED
+
+(* ==========================================================================
+   Lookup Function Properties
+   ========================================================================== *)
+
+(* lookup_function: if SOME, the function is in the list *)
+Theorem lookup_function_MEM:
+  !name fns fn. lookup_function name fns = SOME fn ==> MEM fn fns
+Proof
+  cheat (* TODO: reprove using FIND-based lookup_function_def *)
+QED
+
+(* lookup_function: if SOME, the name is in the function name list *)
+Theorem lookup_function_mem:
+  lookup_function name fns = SOME func ==>
+  MEM name (MAP (\f. f.fn_name) fns)
+Proof
+  cheat (* TODO: reprove using FIND-based lookup_function_def *)
+QED
+
+(* lookup_function: if NONE, the name is not in the function name list *)
+Theorem lookup_function_not_mem:
+  lookup_function name fns = NONE ==>
+  ~MEM name (MAP (\f. f.fn_name) fns)
+Proof
+  cheat (* TODO: reprove using FIND-based lookup_function_def *)
 QED

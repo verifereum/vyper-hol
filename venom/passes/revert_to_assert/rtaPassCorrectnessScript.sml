@@ -32,7 +32,7 @@
 
 Theory rtaPassCorrectness
 Ancestors
-  rtaPattern1 rtaProofHelpers rtaPassDefs stateEquiv venomSemProps venomSem venomInst venomState list rich_list
+  rtaPattern1 rtaProofHelpers rtaPassDefs stateEquiv venomProps venomExecSemantics venomInst venomState list rich_list
 
 (* ==========================================================================
    JNZ Transformation Step Lemmas
@@ -82,7 +82,7 @@ Proof
       (drule_all transform_block_insts_length_pattern1 >> simp[]) >>
     gvs[] >>
     drule_all transform_block_insts_EL_transformed >> simp[LET_THM] >> strip_tac >>
-    simp[transform_pattern1_def, mk_iszero_inst_def, step_inst_def, exec_unop_def])
+    simp[transform_pattern1_def, mk_iszero_inst_def, step_inst_def, exec_pure1_def])
   >>
   Cases_on `x = 0w`
   >- ((* x = 0w: use pattern1_zero_execution *)

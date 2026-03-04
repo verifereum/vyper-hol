@@ -8,7 +8,7 @@
  * STRUCTURE OVERVIEW
  * ============================================================================
  *
- * INSTRUCTION BEHAVIOR (base lemmas in venomSemPropsTheory):
+ * INSTRUCTION BEHAVIOR (base lemmas in venomPropsTheory):
  *   - step_assert_zero_reverts      : ASSERT 0w reverts
  *   - step_assert_nonzero_passes    : ASSERT nonzero continues
  *
@@ -33,9 +33,9 @@
 
 Theory rtaProofHelpers
 Ancestors
-  rtaPassDefs stateEquiv venomSemProps
+  rtaPassDefs stateEquiv venomProps
 Libs
-  finite_mapTheory venomStateTheory venomSemTheory venomInstTheory venomSemPropsTheory
+  finite_mapTheory venomStateTheory venomExecSemanticsTheory venomInstTheory venomPropsTheory
 
 (* SOLVE tactical: fails if tactic doesn't completely close the goal *)
 fun SOLVE tac (g as (asl, w)) =
@@ -46,12 +46,12 @@ fun SOLVE tac (g as (asl, w)) =
 (* ==========================================================================
    NOTE: bool_to_word properties and basic instruction behavior lemmas
    (step_iszero_value, step_assert_behavior, step_revert_always_reverts,
-   step_jnz_behavior, step_jmp_behavior) are now in venomSemPropsTheory.
+   step_jnz_behavior, step_jmp_behavior) are now in venomPropsTheory.
    ========================================================================== *)
 
 (* ==========================================================================
    ASSERT Instruction Behavior - Special Cases
-   (Base lemma step_assert_behavior is in venomSemPropsTheory)
+   (Base lemma step_assert_behavior is in venomPropsTheory)
    ========================================================================== *)
 
 (* WHY THIS IS TRUE: Special case of step_assert_behavior with cond = 0w. *)
@@ -95,7 +95,7 @@ QED
 
 (* ==========================================================================
    Simple Revert Block Execution
-   (step_jmp_behavior is in venomSemPropsTheory)
+   (step_jmp_behavior is in venomPropsTheory)
    ========================================================================== *)
 
 (* WHY THIS IS TRUE: A block with only [revert 0 0] will:
@@ -201,7 +201,7 @@ QED
    9. Hash (1): SHA3
 
    Remaining (handled after step_inst_def unfold):
-   10. Binop/Unop/Modop (~22): exec_binop/unop/modop_result_equiv_except
+   10. Binop/Unop/Modop (~22): exec_pure2/unop/modop_result_equiv_except
    11. Unimplemented (~30): trivial (Error -> result_equiv_except_def)
    -------------------------------------------------------------------------- *)
 
@@ -403,16 +403,16 @@ Proof
 QED
 
 (*
- * Helper: exec_binop preserves result_equiv_except when operands don't
+ * Helper: exec_pure2 preserves result_equiv_except when operands don't
  * reference fresh vars.
  *)
-Theorem exec_binop_result_equiv_except:
+Theorem exec_pure2_result_equiv_except:
   !fresh f inst s1 s2.
     state_equiv_except fresh s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) ==>
-    result_equiv_except fresh (exec_binop f inst s1) (exec_binop f inst s2)
+    result_equiv_except fresh (exec_pure2 f inst s1) (exec_pure2 f inst s2)
 Proof
-  rw[exec_binop_def] >>
+  rw[exec_pure2_def] >>
   (* Case split on operands *)
   Cases_on `inst.inst_operands` >> simp[] >>
   Cases_on `t` >> simp[] >>
@@ -429,16 +429,16 @@ Proof
 QED
 
 (*
- * Helper: exec_unop preserves result_equiv_except when operands don't
+ * Helper: exec_pure1 preserves result_equiv_except when operands don't
  * reference fresh vars.
  *)
-Theorem exec_unop_result_equiv_except:
+Theorem exec_pure1_result_equiv_except:
   !fresh f inst s1 s2.
     state_equiv_except fresh s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) ==>
-    result_equiv_except fresh (exec_unop f inst s1) (exec_unop f inst s2)
+    result_equiv_except fresh (exec_pure1 f inst s1) (exec_pure1 f inst s2)
 Proof
-  rw[exec_unop_def] >>
+  rw[exec_pure1_def] >>
   Cases_on `inst.inst_operands` >> simp[] >>
   Cases_on `t` >> simp[] >>
   `eval_operand h s1 = eval_operand h s2` by (
@@ -449,16 +449,16 @@ Proof
 QED
 
 (*
- * Helper: exec_modop preserves result_equiv_except when operands don't
+ * Helper: exec_pure3 preserves result_equiv_except when operands don't
  * reference fresh vars.
  *)
-Theorem exec_modop_result_equiv_except:
+Theorem exec_pure3_result_equiv_except:
   !fresh f inst s1 s2.
     state_equiv_except fresh s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) ==>
-    result_equiv_except fresh (exec_modop f inst s1) (exec_modop f inst s2)
+    result_equiv_except fresh (exec_pure3 f inst s1) (exec_pure3 f inst s2)
 Proof
-  rw[exec_modop_def] >>
+  rw[exec_pure3_def] >>
   Cases_on `inst.inst_operands` >> simp[] >>
   Cases_on `t` >> simp[] >>
   Cases_on `t'` >> simp[] >- (
@@ -505,9 +505,9 @@ Proof
   TRY (SOLVE (irule step_inst_hash_except >> simp[])) >>
   (* Binop/Unop/Modop need step_inst_def unfolded *)
   simp[step_inst_def] >>
-  TRY (irule exec_binop_result_equiv_except >> simp[]) >>
-  TRY (irule exec_unop_result_equiv_except >> simp[]) >>
-  TRY (irule exec_modop_result_equiv_except >> simp[]) >>
+  TRY (irule exec_pure2_result_equiv_except >> simp[]) >>
+  TRY (irule exec_pure1_result_equiv_except >> simp[]) >>
+  TRY (irule exec_pure3_result_equiv_except >> simp[]) >>
   (* Remaining cases - unimplemented opcodes that return Error *)
   simp[result_equiv_except_def]
 QED

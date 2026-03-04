@@ -6,7 +6,7 @@
 
 Theory rtaPattern1
 Ancestors
-  rtaProofHelpers rtaPassDefs stateEquiv venomSemProps venomSem venomInst venomState list
+  rtaProofHelpers rtaPassDefs stateEquiv venomProps venomExecSemantics venomInst venomState list
 
 (* ==========================================================================
    Block Execution Helpers
@@ -43,7 +43,7 @@ Proof
   simp[LET_THM] >> strip_tac >>
   (* Step 1: Execute ISZERO *)
   simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
-  simp[mk_iszero_inst_def, step_inst_def, exec_unop_def, eval_operand_def] >>
+  simp[mk_iszero_inst_def, step_inst_def, exec_pure1_def, eval_operand_def] >>
   simp[EVAL ``is_terminator ISZERO``, bool_to_word_F] >>
   simp[next_inst_def, update_var_def] >>
   (* Step 2: Execute ASSERT with 0w *)
@@ -84,7 +84,7 @@ Proof
   simp[LET_THM] >> strip_tac >>
   (* Step 1: Execute ISZERO - produces bool_to_word T = 1w *)
   simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
-  simp[mk_iszero_inst_def, step_inst_def, exec_unop_def, eval_operand_def] >>
+  simp[mk_iszero_inst_def, step_inst_def, exec_pure1_def, eval_operand_def] >>
   simp[EVAL ``is_terminator ISZERO``, bool_to_word_T] >>
   simp[next_inst_def, update_var_def] >>
   (* Step 2: Execute ASSERT with 1w - passes *)

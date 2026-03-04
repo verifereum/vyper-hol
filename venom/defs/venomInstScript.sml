@@ -227,48 +227,13 @@ End
 
 (* Find a basic block by label *)
 Definition lookup_block_def:
-  lookup_block lbl [] = NONE /\
-  lookup_block lbl (bb::bbs) =
-    if bb.bb_label = lbl then SOME bb
-    else lookup_block lbl bbs
+  lookup_block lbl bbs = FIND (\bb. bb.bb_label = lbl) bbs
 End
 
 (* Find a function by name *)
 Definition lookup_function_def:
-  lookup_function name [] = NONE /\
-  lookup_function name (fn::fns) =
-    if fn.fn_name = name then SOME fn
-    else lookup_function name fns
+  lookup_function name fns = FIND (\f. f.fn_name = name) fns
 End
-
-(* TODO: replace lookup_function with FIND or ALOOKUP based definition *)
-
-(* lookup_function: if SOME, the function is in the list *)
-Theorem lookup_function_MEM:
-  !name fns fn. lookup_function name fns = SOME fn ==> MEM fn fns
-Proof
-  gen_tac >> Induct >> rw[lookup_function_def] >> gvs[AllCaseEqs()]
-QED
-
-(* lookup_function: if SOME, the name is in the function name list *)
-Theorem lookup_function_mem:
-  lookup_function name fns = SOME func ==>
-  MEM name (MAP (\f. f.fn_name) fns)
-Proof
-  Induct_on `fns` >> simp[lookup_function_def] >>
-  rpt strip_tac >> rw[] >> gvs[] >>
-  Cases_on `h.fn_name = name` >> gvs[]
-QED
-
-(* lookup_function: if NONE, the name is not in the function name list *)
-Theorem lookup_function_not_mem:
-  lookup_function name fns = NONE ==>
-  ~MEM name (MAP (\f. f.fn_name) fns)
-Proof
-  Induct_on `fns` >> simp[lookup_function_def] >>
-  rpt strip_tac >>
-  Cases_on `h.fn_name = name` >> gvs[]
-QED
 
 (* Get instruction at index in a block *)
 Definition get_instruction_def:
@@ -283,22 +248,6 @@ Definition entry_block_def:
   entry_block fn =
     if NULL fn.fn_blocks then NONE
     else SOME (HD fn.fn_blocks)
-End
-
-(* The function has an entry block (fn_blocks is non-empty). *)
-Definition fn_has_entry_def:
-  fn_has_entry fn <=> fn.fn_blocks <> []
-End
-
-(* A basic block is well-formed: non-empty and ends with a terminator. *)
-Definition bb_well_formed_def:
-  bb_well_formed bb <=>
-    bb.bb_instructions <> [] /\
-    is_terminator (LAST bb.bb_instructions).inst_opcode /\
-    (* PHI instructions form a prefix of the block *)
-    (!i j. i < j /\ j < LENGTH bb.bb_instructions /\
-           (EL j bb.bb_instructions).inst_opcode = PHI ==>
-           (EL i bb.bb_instructions).inst_opcode = PHI)
 End
 
 (* Get successor labels of a terminator instruction *)
@@ -322,24 +271,6 @@ Definition bb_succs_def:
     | insts => REVERSE (get_successors (LAST insts))
 End
 
-(* All successor labels of every block exist as block labels in the function. *)
-Definition fn_succs_closed_def:
-  fn_succs_closed fn <=>
-    !bb succ.
-      MEM bb fn.fn_blocks /\ MEM succ (bb_succs bb) ==>
-      MEM succ (fn_labels fn)
-End
-
-(* Structural well-formedness for IR functions:
- * unique labels, has entry, blocks well-formed, successor labels exist. *)
-Definition wf_function_def:
-  wf_function fn <=>
-    ALL_DISTINCT (fn_labels fn) /\
-    fn_has_entry fn /\
-    (!bb. MEM bb fn.fn_blocks ==> bb_well_formed bb) /\
-    fn_succs_closed fn
-End
-
 (* All instructions across all blocks, in block order. *)
 Definition fn_insts_blocks_def:
   fn_insts_blocks [] = [] /\
@@ -351,42 +282,7 @@ Definition fn_insts_def:
   fn_insts fn = fn_insts_blocks fn.fn_blocks
 End
 
-(* ==========================================================================
-   Context well-formedness
-   ========================================================================== *)
-
 (* The function names in a context. *)
 Definition ctx_fn_names_def:
   ctx_fn_names ctx = MAP (\f. f.fn_name) ctx.ctx_functions
-End
-
-(* Function names in the context are distinct. *)
-Definition ctx_distinct_fn_names_def:
-  ctx_distinct_fn_names ctx <=> ALL_DISTINCT (ctx_fn_names ctx)
-End
-
-(* The context has an entry function that names a real function. *)
-Definition ctx_has_entry_def:
-  ctx_has_entry ctx <=>
-    ?entry_name. ctx.ctx_entry = SOME entry_name /\
-       MEM entry_name (ctx_fn_names ctx)
-End
-
-(* Well-formed context. *)
-Definition ctx_wf_def:
-  ctx_wf ctx <=> ctx_distinct_fn_names ctx /\ ctx_has_entry ctx
-End
-
-(* Every INVOKE instruction's first operand is a Label naming a
- * function in the context.
- * TODO: candidate for inclusion in ctx_wf once we have a
- * ctx_wf => fn_wf => bb_wf => inst_wf hierarchy. *)
-Definition wf_invoke_targets_def:
-  wf_invoke_targets ctx <=>
-    (!func inst.
-       MEM func ctx.ctx_functions /\
-       MEM inst (fn_insts func) /\
-       inst.inst_opcode = INVOKE ==>
-       ?lbl rest. inst.inst_operands = Label lbl :: rest /\
-                  MEM lbl (ctx_fn_names ctx))
 End
