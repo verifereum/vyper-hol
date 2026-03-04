@@ -31,3 +31,5 @@ Ancestors
   memAliasProps
   (* memory SSA *)
   memSSAProps
+  (* variable definition *)
+  varDefAnalysis
