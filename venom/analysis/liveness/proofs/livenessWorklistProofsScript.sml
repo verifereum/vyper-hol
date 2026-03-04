@@ -7,6 +7,11 @@
  * The framework requires inflationary under an invariant P.
  * For liveness, P = lr_inv (boundedness + shaped + consistent).
  *
+ * TODO (when starting dataflow proofs): liveness_wl_analyze should replace
+ * liveness_analyze as the public API (round-robin doesn't match Python's
+ * deque-based worklist). Then rename liveness_wl_analyze → liveness_analyze.
+ * See TASK_liveness_worklist.md "API Switchover Plan" for full steps.
+ *
  * TOP-LEVEL:
  *   liveness_wl_inflationary   — process_block inflationary under lr_inv
  *   liveness_wl_inv_preserved  — lr_inv preserved by process_block

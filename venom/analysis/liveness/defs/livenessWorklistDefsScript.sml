@@ -35,7 +35,9 @@ End
 
 (* Worklist-based liveness analysis.
    Initial worklist = DFS post-order (all blocks).
-   Uses wl_iterate from the dataflow framework. *)
+   Uses wl_iterate from the dataflow framework.
+   TODO: Replace liveness_analyze (round-robin) with this, then rename to
+   liveness_analyze. See TASK_liveness_worklist.md. *)
 Definition liveness_wl_analyze_def:
   liveness_wl_analyze fn =
     let cfg = cfg_analyze fn in
