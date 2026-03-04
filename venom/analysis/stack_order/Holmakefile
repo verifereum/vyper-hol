@@ -1,0 +1,5 @@
+# Stack order analysis
+# From stack_order/:
+#   ../..  = venom/
+#   ../../.. = project root
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../../syntax ../../../semantics defs ../cfg/defs ../liveness/defs
