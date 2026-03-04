@@ -38,14 +38,31 @@ Definition lookup_toplevel_name_def:
 End
 
 Definition var_in_storage_def:
-  var_in_storage cx mid n tv ⇔
-  ∃code b t id offset.
+  var_in_storage cx mid n ⇔
+  ∃code b t id offset tv.
     get_module_code cx mid = SOME code ∧
     find_var_decl_by_num (string_to_num n) code = SOME (StorageVarDecl b t, id) ∧
     lookup_var_slot_from_layout cx b mid id = SOME offset ∧
     offset < dimword(:256) ∧
     evaluate_type (get_tenv cx) t = SOME tv
 End
+
+Definition storage_type_of_def:
+  storage_type_of cx mid n =
+    case get_module_code cx mid of
+    | NONE => NONE
+    | SOME code =>
+        case find_var_decl_by_num (string_to_num n) code of
+        | SOME (StorageVarDecl b t, id) => evaluate_type (get_tenv cx) t
+        | _ => NONE
+End
+
+Theorem var_in_storage_has_type:
+  var_in_storage cx mid n ⇒ IS_SOME (storage_type_of cx mid n)
+Proof
+  rw[var_in_storage_def, storage_type_of_def] >>
+  rpt strip_tac >> simp[]
+QED
 
 (* For convenience, we define the case st.scopes = [] in such a way
    that looking up after update returns the updated variable value. *)
@@ -783,8 +800,9 @@ QED
 
 Theorem lookup_toplevel_name_after_update:
   ∀cx st mid n v tv.
-    var_in_storage cx mid n tv ∧
+    var_in_storage cx mid n ∧
     well_formed_value v ∧
+    storage_type_of cx mid n = SOME tv ∧
     bounds_compat tv v ∧
     IS_SOME (encode_value tv v) ∧
     (∀tvs. tv ≠ TupleTV tvs) ∧
@@ -797,7 +815,7 @@ Proof
   `roundtrip_ok tv v` by (
     irule roundtrip_ok_from_well_formed_base >> simp[]
   ) >>
-  fs[var_in_storage_def] >>
+  fs[var_in_storage_def, storage_type_of_def, AllCaseEqs()] >>
   Cases_on `encode_value tv v` >> gvs[] >>
   simp[lookup_toplevel_name_def, update_toplevel_name_def] >>
   simp[Once set_global_def, bind_def, lift_option_type_def, return_def, LET_THM, raise_def] >>
