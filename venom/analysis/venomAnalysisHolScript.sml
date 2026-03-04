@@ -21,3 +21,5 @@ Ancestors
   basePtrProps
   (* available expression *)
   availExprAnalysis
+  (* stack order *)
+  stackOrderProps
