@@ -126,7 +126,7 @@ QED
 (* TEMPORARILY CHEATED - irule exec_read0/read1_state_equiv can't determine s1
    since it only appears in the antecedent, not conclusion. Need drule-based
    approach or prove f s1 = f s2 before drule_all. *)
-Theorem step_inst_state_equiv:
+Theorem step_inst_state_equiv[local]:
   !inst s1 s2 r1.
     state_equiv s1 s2 /\
     step_inst inst s1 = OK r1
@@ -170,7 +170,7 @@ QED
    ========================================================================== *)
 
 (* KEY LEMMA: Single step in block preserves state_equiv (success case) *)
-Theorem step_in_block_state_equiv:
+Theorem step_in_block_state_equiv[local]:
   !bb s1 s2 r1 is_term.
     state_equiv s1 s2 /\
     step_in_block bb s1 = (OK r1, is_term)
@@ -303,7 +303,7 @@ QED
 
 (* TOP-LEVEL: Instruction stepping preserves result_equiv (all cases) *)
 (* TEMPORARILY CHEATED - same irule issue as step_inst_state_equiv *)
-Theorem step_inst_result_equiv:
+Theorem step_inst_result_equiv[local]:
   !inst s1 s2.
     state_equiv s1 s2 ==>
     result_equiv (step_inst inst s1) (step_inst inst s2)
@@ -369,7 +369,7 @@ Proof
 QED
 
 (* TOP-LEVEL: Block stepping preserves result_equiv and termination flag *)
-Theorem step_in_block_result_equiv:
+Theorem step_in_block_result_equiv[local]:
   !bb s1 s2.
     state_equiv s1 s2 ==>
       result_equiv (FST (step_in_block bb s1)) (FST (step_in_block bb s2)) /\

@@ -54,7 +54,7 @@ QED
    ========================================================================== *)
 
 (* TOP-LEVEL: Reflexivity for result_equiv *)
-Theorem result_equiv_refl:
+Theorem result_equiv_refl[local]:
   !r. result_equiv r r
 Proof
   Cases >> rw[result_equiv_def, state_equiv_refl]
@@ -136,7 +136,7 @@ Proof
   rw[state_equiv_def, var_equiv_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
-Theorem mload_state_equiv:
+Theorem mload_state_equiv[local]:
   !offset s1 s2.
     state_equiv s1 s2 ==>
     mload offset s1 = mload offset s2
@@ -161,7 +161,7 @@ Proof
   rw[state_equiv_def, var_equiv_def, write_memory_with_expansion_def, lookup_var_def]
 QED
 
-Theorem sload_state_equiv:
+Theorem sload_state_equiv[local]:
   !key s1 s2.
     state_equiv s1 s2 ==>
     sload key s1 = sload key s2
@@ -177,7 +177,7 @@ Proof
   rw[state_equiv_def, var_equiv_def, sstore_def, lookup_var_def]
 QED
 
-Theorem tload_state_equiv:
+Theorem tload_state_equiv[local]:
   !key s1 s2.
     state_equiv s1 s2 ==>
     tload key s1 = tload key s2
@@ -221,19 +221,19 @@ QED
    Equivalence Relation Properties for observable_equiv
    ========================================================================== *)
 
-Theorem observable_equiv_refl:
+Theorem observable_equiv_refl[local]:
   !s. observable_equiv s s
 Proof
   rw[observable_equiv_def]
 QED
 
-Theorem observable_equiv_sym:
+Theorem observable_equiv_sym[local]:
   !s1 s2. observable_equiv s1 s2 ==> observable_equiv s2 s1
 Proof
   rw[observable_equiv_def]
 QED
 
-Theorem observable_equiv_trans:
+Theorem observable_equiv_trans[local]:
   !s1 s2 s3.
     observable_equiv s1 s2 /\ observable_equiv s2 s3 ==>
     observable_equiv s1 s3
@@ -251,7 +251,7 @@ Proof
   rw[execution_equiv_except_def]
 QED
 
-Theorem execution_equiv_except_sym:
+Theorem execution_equiv_except_sym[local]:
   !vars s1 s2.
     execution_equiv_except vars s1 s2 ==>
     execution_equiv_except vars s2 s1
@@ -287,7 +287,7 @@ Proof
   rw[state_equiv_except_def, execution_equiv_except_def]
 QED
 
-Theorem state_equiv_except_sym:
+Theorem state_equiv_except_sym[local]:
   !vars s1 s2.
     state_equiv_except vars s1 s2 ==>
     state_equiv_except vars s2 s1
@@ -312,7 +312,7 @@ Proof
   rw[state_equiv_def, var_equiv_def, state_equiv_except_def, execution_equiv_except_def]
 QED
 
-Theorem state_equiv_except_empty:
+Theorem state_equiv_except_empty[local]:
   !s1 s2.
     state_equiv_except {} s1 s2 <=>
     (!v. lookup_var v s1 = lookup_var v s2) /\
@@ -337,7 +337,7 @@ QED
    Lifting Lemmas: Stronger Equivalence Implies Weaker
    ========================================================================== *)
 
-Theorem state_equiv_except_implies_execution:
+Theorem state_equiv_except_implies_execution[local]:
   !vars s1 s2.
     state_equiv_except vars s1 s2 ==>
     execution_equiv_except vars s1 s2
@@ -345,7 +345,7 @@ Proof
   rw[state_equiv_except_def]
 QED
 
-Theorem execution_equiv_except_implies_observable:
+Theorem execution_equiv_except_implies_observable[local]:
   !vars s1 s2.
     execution_equiv_except vars s1 s2 ==>
     observable_equiv s1 s2
@@ -353,7 +353,7 @@ Proof
   rw[execution_equiv_except_def, observable_equiv_def]
 QED
 
-Theorem state_equiv_except_implies_observable:
+Theorem state_equiv_except_implies_observable[local]:
   !vars s1 s2.
     state_equiv_except vars s1 s2 ==>
     observable_equiv s1 s2
@@ -365,38 +365,38 @@ QED
    Result Equivalence with Variable Exceptions - Properties
    ========================================================================== *)
 
-Theorem result_equiv_except_refl:
+Theorem result_equiv_except_refl[local]:
   !vars r. result_equiv_except vars r r
 Proof
   gen_tac >> Cases >>
   rw[result_equiv_except_def, state_equiv_except_refl, execution_equiv_except_refl]
 QED
 
-Theorem result_equiv_except_ok[simp]:
+Theorem result_equiv_except_ok[local,simp]:
   result_equiv_except vars (OK s1) (OK s2) = state_equiv_except vars s1 s2
 Proof
   rw[result_equiv_except_def]
 QED
 
-Theorem result_equiv_except_halt[simp]:
+Theorem result_equiv_except_halt[local,simp]:
   result_equiv_except vars (Halt s1) (Halt s2) = execution_equiv_except vars s1 s2
 Proof
   rw[result_equiv_except_def]
 QED
 
-Theorem result_equiv_except_revert[simp]:
+Theorem result_equiv_except_revert[local,simp]:
   result_equiv_except vars (Revert s1) (Revert s2) = execution_equiv_except vars s1 s2
 Proof
   rw[result_equiv_except_def]
 QED
 
-Theorem result_equiv_except_error[simp]:
+Theorem result_equiv_except_error[local,simp]:
   result_equiv_except vars (Error e1) (Error e2) = T
 Proof
   rw[result_equiv_except_def]
 QED
 
-Theorem result_equiv_except_mismatch[simp]:
+Theorem result_equiv_except_mismatch[local,simp]:
   result_equiv_except vars (OK s) (Halt s') = F /\
   result_equiv_except vars (OK s) (Revert s') = F /\
   result_equiv_except vars (OK s) (Error e) = F /\
@@ -417,7 +417,7 @@ QED
    Update Preserves execution_equiv_except
    ========================================================================== *)
 
-Theorem update_var_in_execution_equiv_preserves:
+Theorem update_var_in_execution_equiv_preserves[local]:
   !vars x v1 v2 s1 s2.
     x IN vars /\
     execution_equiv_except vars s1 s2 ==>
@@ -427,7 +427,7 @@ Proof
   Cases_on `x = v` >> gvs[]
 QED
 
-Theorem update_var_same_execution_equiv_preserves:
+Theorem update_var_same_execution_equiv_preserves[local]:
   !vars x v s1 s2.
     execution_equiv_except vars s1 s2 ==>
     execution_equiv_except vars (update_var x v s1) (update_var x v s2)
@@ -435,7 +435,7 @@ Proof
   rw[execution_equiv_except_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
-Theorem update_var_execution_equiv_one_side:
+Theorem update_var_execution_equiv_one_side[local]:
   !vars x v s1 s2.
     x IN vars /\
     execution_equiv_except vars s1 s2 ==>
@@ -449,7 +449,7 @@ QED
    Update Preserves state_equiv_except
    ========================================================================== *)
 
-Theorem update_var_in_except_preserves:
+Theorem update_var_in_except_preserves[local]:
   !vars x v1 v2 s1 s2.
     x IN vars /\
     state_equiv_except vars s1 s2 ==>
@@ -469,7 +469,7 @@ Proof
      update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
-Theorem update_var_except_one_side:
+Theorem update_var_except_one_side[local]:
   !vars x v s1 s2.
     x IN vars /\
     state_equiv_except vars s1 s2 ==>
@@ -484,7 +484,7 @@ QED
    Operand Evaluation under equivalence
    ========================================================================== *)
 
-Theorem eval_operand_execution_equiv:
+Theorem eval_operand_execution_equiv[local]:
   !vars op s1 s2.
     execution_equiv_except vars s1 s2 /\
     (!x. op = Var x ==> x NOTIN vars) ==>
@@ -508,7 +508,7 @@ QED
    Control Flow Preserves execution_equiv_except
    ========================================================================== *)
 
-Theorem halt_state_execution_equiv_preserves:
+Theorem halt_state_execution_equiv_preserves[local]:
   !vars s1 s2.
     execution_equiv_except vars s1 s2 ==>
     execution_equiv_except vars (halt_state s1) (halt_state s2)
@@ -516,7 +516,7 @@ Proof
   rw[execution_equiv_except_def, halt_state_def, lookup_var_def]
 QED
 
-Theorem revert_state_execution_equiv_preserves:
+Theorem revert_state_execution_equiv_preserves[local]:
   !vars s1 s2.
     execution_equiv_except vars s1 s2 ==>
     execution_equiv_except vars (revert_state s1) (revert_state s2)
@@ -553,7 +553,7 @@ Proof
      jump_to_def, lookup_var_def]
 QED
 
-Theorem halt_state_except_preserves:
+Theorem halt_state_except_preserves[local]:
   !vars s1 s2.
     state_equiv_except vars s1 s2 ==>
     state_equiv_except vars (halt_state s1) (halt_state s2)
@@ -603,7 +603,7 @@ QED
    Memory/Storage Operations Preserve execution_equiv_except
    ========================================================================== *)
 
-Theorem mstore_execution_equiv_preserves:
+Theorem mstore_execution_equiv_preserves[local]:
   !vars addr val s1 s2.
     execution_equiv_except vars s1 s2 ==>
     execution_equiv_except vars (mstore addr val s1) (mstore addr val s2)
@@ -611,7 +611,7 @@ Proof
   rw[execution_equiv_except_def, mstore_def, lookup_var_def]
 QED
 
-Theorem mload_execution_equiv_same:
+Theorem mload_execution_equiv_same[local]:
   !vars addr s1 s2.
     execution_equiv_except vars s1 s2 ==>
     mload addr s1 = mload addr s2
@@ -619,7 +619,7 @@ Proof
   rw[execution_equiv_except_def, mload_def]
 QED
 
-Theorem sstore_execution_equiv_preserves:
+Theorem sstore_execution_equiv_preserves[local]:
   !vars key val s1 s2.
     execution_equiv_except vars s1 s2 ==>
     execution_equiv_except vars (sstore key val s1) (sstore key val s2)
@@ -627,7 +627,7 @@ Proof
   rw[execution_equiv_except_def, sstore_def, lookup_var_def]
 QED
 
-Theorem sload_execution_equiv_same:
+Theorem sload_execution_equiv_same[local]:
   !vars key s1 s2.
     execution_equiv_except vars s1 s2 ==>
     sload key s1 = sload key s2
@@ -635,7 +635,7 @@ Proof
   rw[execution_equiv_except_def, sload_def]
 QED
 
-Theorem tstore_execution_equiv_preserves:
+Theorem tstore_execution_equiv_preserves[local]:
   !vars key val s1 s2.
     execution_equiv_except vars s1 s2 ==>
     execution_equiv_except vars (tstore key val s1) (tstore key val s2)
@@ -643,7 +643,7 @@ Proof
   rw[execution_equiv_except_def, tstore_def, lookup_var_def]
 QED
 
-Theorem tload_execution_equiv_same:
+Theorem tload_execution_equiv_same[local]:
   !vars key s1 s2.
     execution_equiv_except vars s1 s2 ==>
     tload key s1 = tload key s2

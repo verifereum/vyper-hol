@@ -30,13 +30,13 @@ Proof
   simp[bool_to_word_def]
 QED
 
-Theorem bool_to_word_eq_0w:
+Theorem bool_to_word_eq_0w[local]:
   (bool_to_word b = 0w) <=> ~b
 Proof
   Cases_on `b` >> simp[bool_to_word_def]
 QED
 
-Theorem bool_to_word_neq_0w:
+Theorem bool_to_word_neq_0w[local]:
   (bool_to_word b <> 0w) <=> b
 Proof
   Cases_on `b` >> simp[bool_to_word_def]
@@ -226,7 +226,7 @@ Proof
 QED
 
 (* lookup_function: if SOME, the name is in the function name list *)
-Theorem lookup_function_mem:
+Theorem lookup_function_mem[local]:
   lookup_function name fns = SOME func ==>
   MEM name (MAP (\f. f.fn_name) fns)
 Proof
@@ -234,7 +234,7 @@ Proof
 QED
 
 (* lookup_function: if NONE, the name is not in the function name list *)
-Theorem lookup_function_not_mem:
+Theorem lookup_function_not_mem[local]:
   lookup_function name fns = NONE ==>
   ~MEM name (MAP (\f. f.fn_name) fns)
 Proof
