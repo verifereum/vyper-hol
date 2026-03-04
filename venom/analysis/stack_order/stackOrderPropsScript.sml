@@ -68,6 +68,16 @@ Proof
   cheat
 QED
 
+(* After swap, op is at the top (last position) of the stack.
+   Precondition: op is on the stack. *)
+Theorem stack_swap_top:
+  ∀stack op.
+    MEM op stack ⇒
+    LAST (stack_swap stack op) = op
+Proof
+  cheat
+QED
+
 (* ==========================================================================
    Merge / prefix properties
    ========================================================================== *)
@@ -75,13 +85,6 @@ QED
 Theorem max_same_prefix_is_prefix:
   ∀a b. isPREFIX (max_same_prefix a b) a ∧
          isPREFIX (max_same_prefix a b) b
-Proof
-  cheat
-QED
-
-Theorem max_same_prefix_length:
-  ∀a b. LENGTH (max_same_prefix a b) ≤ LENGTH a ∧
-         LENGTH (max_same_prefix a b) ≤ LENGTH b
 Proof
   cheat
 QED
@@ -149,9 +152,11 @@ QED
    ========================================================================== *)
 
 (* After handle_inst, the top of stack matches the instruction's operands.
-   This corresponds to the assertion in Python's analyze_bb. *)
+   This corresponds to the assertion in Python's analyze_bb.
+   Requires ALL_DISTINCT operands (duplicate operands would need DUP). *)
 Theorem so_handle_inst_stack_top:
   ∀stack needed inst stack' needed'.
+    ALL_DISTINCT inst.inst_operands ∧
     (stack', needed') = so_handle_inst (stack, needed) inst ⇒
     let n = LENGTH inst.inst_operands in
     n ≤ LENGTH stack' ∧
@@ -210,12 +215,17 @@ QED
    ========================================================================== *)
 
 (* Needed variables computed by analyze_block are live at block entry.
-   Requires well-formed function and consistent liveness/cfg. *)
+   Requires well-formed function, consistent liveness/cfg, and that
+   the from_to map only contains variables that are live at the
+   respective successor block entries (terminator handler reads from it). *)
 Theorem so_needed_are_live:
   ∀fn cfg lr from_to lbl bb needed stack v.
     wf_function fn ∧
     cfg = cfg_analyze fn ∧
     lr = liveness_analyze fn ∧
+    (∀pred succ ns w.
+       FLOOKUP from_to (pred, succ) = SOME ns ∧ MEM w ns ⇒
+       MEM w (live_vars_at lr succ 0)) ∧
     lookup_block lbl fn.fn_blocks = SOME bb ∧
     bb.bb_label = lbl ∧
     (needed, stack) =
@@ -247,4 +257,4 @@ Proof
   cheat
 QED
 
-val _ = export_theory();
+

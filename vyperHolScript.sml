@@ -17,3 +17,4 @@ Ancestors
   cfgAnalysis
   fcgAnalysis
   livenessAnalysis
+  stackOrderProps
