@@ -6,10 +6,11 @@
  * No project-specific dependencies.
  *
  * TOP-LEVEL:
- *   partial_order   — reflexive, antisymmetric, transitive
+ *   partial_order    — reflexive, antisymmetric, transitive
  *   bounded_measure  — bounded + strictly monotone measure
  *   monotone         — order-preserving function
  *   inflationary     — f(x) ≥ x
+ *   widen_operator   — widening for infinite-height lattices
  *)
 
 Theory latticeDefs
@@ -43,4 +44,17 @@ End
 Definition inflationary_def:
   inflationary (leq : 'a -> 'a -> bool) (f : 'a -> 'a) <=>
     !x. leq x (f x)
+End
+
+(* Widening operator for infinite-height lattices.
+   widen x y produces an upper bound of both x and y,
+   with bounded height: a measure exists that strictly increases
+   when widening changes the value, so any widened chain stabilizes.
+   h is the height bound (max number of widening steps per element). *)
+Definition widen_operator_def:
+  widen_operator (leq : 'a -> 'a -> bool) (widen : 'a -> 'a -> 'a) (h : num) <=>
+    (!x y. leq x (widen x y)) /\
+    (!x y. leq y (widen x y)) /\
+    ?m. (!x. m x <= h) /\
+        (!x y. widen x y <> x ==> m x < m (widen x y))
 End
