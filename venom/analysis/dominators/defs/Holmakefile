@@ -1,0 +1,5 @@
+# Dominator analysis definitions
+# From dominators/defs/:
+#   ../../..  = venom/
+#   ../../../.. = project root
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics ../../cfg/defs ../../dataflow/defs

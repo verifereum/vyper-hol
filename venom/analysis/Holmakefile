@@ -11,4 +11,6 @@ INCLUDES = \
   dfg \
   fcg \
   liveness \
+  dominators \
+  base_ptr \
   available_expression

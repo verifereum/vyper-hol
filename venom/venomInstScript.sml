@@ -37,7 +37,7 @@ Datatype:
     (* SSA/IR-specific *)
     | PHI | PARAM | ASSIGN | NOP
     (* Allocation (Vyper-specific stack slots) *)
-    | ALLOCA | PALLOCA | CALLOCA
+    | ALLOCA | PALLOCA | CALLOCA | GEP
     (* Internal function calls *)
     | INVOKE
     (* Environment *)
