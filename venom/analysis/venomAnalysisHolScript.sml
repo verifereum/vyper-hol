@@ -14,6 +14,6 @@ Ancestors
   (* liveness *)
   livenessAnalysis
   (* dfg *)
-  dfgAnalysisCorrectness
+  dfgAnalysis
   (* base pointer analysis *)
   basePtrProps

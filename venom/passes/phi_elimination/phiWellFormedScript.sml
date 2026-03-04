@@ -21,7 +21,7 @@
 
 Theory phiWellFormed
 Ancestors
-  phiTransform stateEquiv venomSem venomState dfgDefs dfgOrigins list
+  phiTransform stateEquiv venomSem venomState phiDefs dfgOrigins list
 
 (* ==========================================================================
    Well-Formedness Definitions
@@ -110,7 +110,7 @@ End
    PHI Resolution Lemmas
    ========================================================================== *)
 
-(* Note: resolve_phi_in_operands is in dfgDefsTheory *)
+(* Note: resolve_phi_in_operands is in phiDefsTheory *)
 
 Theorem resolve_phi_well_formed:
   !prev_bb ops v.
