@@ -41,8 +41,8 @@ QED
 (* ==========================================================================
    2) Fixpoint equation — dom sets satisfy the dominator recurrence
 
-   For non-entry reachable blocks, dom(lbl) as a set equals
-   {lbl} ∪ ∩{dom(p) | p ∈ preds(lbl)}.
+   For non-entry reachable blocks with at least one predecessor,
+   dom(lbl) as a set equals {lbl} ∪ ∩{dom(p) | p ∈ preds(lbl)}.
    This is the fundamental characterization of the dominator fixpoint.
    ========================================================================== *)
 
@@ -63,7 +63,7 @@ Proof
   cheat
 QED
 
-(* Entry block dominates only itself. *)
+(* The only dominator of the entry block is itself. *)
 Theorem dom_entry_self:
   ∀fn cfg bb.
     wf_function fn ∧
@@ -244,8 +244,10 @@ QED
 
 (* y is in the dominance frontier of n iff there exists a CFG predecessor p
    of y such that n dominates p but n does not strictly dominate y.
-   For single-predecessor y, the condition is never satisfiable: the unique
-   pred's dominator must also strictly dominate y. *)
+   Note: compute_df skips single-pred blocks; this is sound because for
+   reachable single-pred y with unique pred p, p dominates y, so any n
+   dominating p also dominates y — making ¬strict_dominates fail unless
+   n = y, which forces y = p by antisymmetry, contradicting y ≠ p. *)
 Theorem dom_frontier_correct:
   ∀fn cfg n y.
     wf_function fn ∧
