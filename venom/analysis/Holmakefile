@@ -7,10 +7,14 @@ INCLUDES = \
   ../../semantics \
   shared \
   dataflow \
+  dataflow/defs \
+  dataflow/proofs \
   cfg \
   dfg \
   fcg \
   liveness \
   dominators \
   base_ptr \
-  available_expression
+  available_expression \
+  stack_order \
+  mem_alias

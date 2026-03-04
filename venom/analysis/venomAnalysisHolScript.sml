@@ -11,6 +11,9 @@ Ancestors
   fcgAnalysis
   (* dataflow *)
   dfIterateProps
+  latticeProps
+  worklistProps
+  dfHelperProps
   (* liveness *)
   livenessAnalysis
   (* dfg *)
@@ -21,3 +24,7 @@ Ancestors
   basePtrProps
   (* available expression *)
   availExprAnalysis
+  (* stack order *)
+  stackOrderProps
+  (* memory alias *)
+  memAliasProps
