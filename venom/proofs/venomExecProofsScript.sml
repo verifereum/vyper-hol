@@ -185,8 +185,7 @@ Theorem lookup_block_MEM:
   !lbl bbs bb.
     lookup_block lbl bbs = SOME bb ==> MEM bb bbs
 Proof
-  Induct_on `bbs` >- simp[lookup_block_def] >>
-  simp[lookup_block_def] >> rw[] >> metis_tac[]
+  rw[lookup_block_def] >> drule FIND_MEM >> simp[]
 QED
 
 (*
@@ -218,11 +217,32 @@ QED
    Lookup Function Properties
    ========================================================================== *)
 
+(* General FIND lemma: FIND P l = SOME x ==> MEM x l *)
+Triviality FIND_MEM:
+  !P l x. FIND P l = SOME x ==> MEM x l
+Proof
+  Induct_on `l` >> simp[FIND_thm] >> rw[] >> metis_tac[]
+QED
+
+(* General FIND lemma: FIND P l = SOME x ==> P x *)
+Triviality FIND_P:
+  !P l x. FIND P l = SOME x ==> P x
+Proof
+  Induct_on `l` >> simp[FIND_thm] >> rw[] >> metis_tac[]
+QED
+
+(* General FIND lemma: FIND P l = NONE ==> ~EXISTS P l *)
+Triviality FIND_NONE:
+  !P l. FIND P l = NONE ==> ~EXISTS P l
+Proof
+  Induct_on `l` >> simp[FIND_thm] >> rw[]
+QED
+
 (* lookup_function: if SOME, the function is in the list *)
 Theorem lookup_function_MEM:
   !name fns fn. lookup_function name fns = SOME fn ==> MEM fn fns
 Proof
-  cheat (* TODO: reprove using FIND-based lookup_function_def *)
+  rw[lookup_function_def] >> drule FIND_MEM >> simp[]
 QED
 
 (* lookup_function: if SOME, the name is in the function name list *)
@@ -230,7 +250,8 @@ Theorem lookup_function_mem[local]:
   lookup_function name fns = SOME func ==>
   MEM name (MAP (\f. f.fn_name) fns)
 Proof
-  cheat (* TODO: reprove using FIND-based lookup_function_def *)
+  rw[lookup_function_def] >>
+  drule FIND_MEM >> drule FIND_P >> simp[MEM_MAP] >> metis_tac[]
 QED
 
 (* lookup_function: if NONE, the name is not in the function name list *)
@@ -238,5 +259,6 @@ Theorem lookup_function_not_mem[local]:
   lookup_function name fns = NONE ==>
   ~MEM name (MAP (\f. f.fn_name) fns)
 Proof
-  cheat (* TODO: reprove using FIND-based lookup_function_def *)
+  rw[lookup_function_def] >>
+  drule FIND_NONE >> simp[EXISTS_MEM, MEM_MAP] >> metis_tac[]
 QED
