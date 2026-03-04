@@ -21,7 +21,9 @@
  *   - update_var_state_equiv_insert : update_var x creates {x}-equiv
  *   - revert_state_from_state_equiv : state_equiv → execution_equiv for revert
  *   - halt_state_from_state_equiv   : state_equiv → execution_equiv for halt
- *   (step_inst_result_equiv, run_block_result_equiv are in execEquivPropsTheory)
+ *   (resolve_phi_MEM in venomExecPropsTheory)
+ *   (result_equiv_trans in stateEquivPropsTheory)
+ *   (step_inst_result_equiv, run_block_result_equiv in execEquivPropsTheory)
  *
  * TRANSFORM_BLOCK_INSTS PROPERTIES:
  *   - transform_block_insts_TAKE_DROP      : Prefix decomposition
@@ -192,40 +194,13 @@ QED
    ========================================================================== *)
 
 (* --------------------------------------------------------------------------
-   Helper: resolve_phi returns a MEM element
+   NOTE: resolve_phi_MEM is in venomExecPropsTheory.
+   step_inst_result_equiv, run_block_result_equiv are in execEquivPropsTheory.
    -------------------------------------------------------------------------- *)
-
-Theorem resolve_phi_MEM:
-  !prev ops val_op. resolve_phi prev ops = SOME val_op ==> MEM val_op ops
-Proof
-  ho_match_mp_tac resolve_phi_ind >> rw[resolve_phi_def]
-QED
 
 (* --------------------------------------------------------------------------
-   NOTE: step_inst_result_equiv, step_in_block_result_equiv, and
-   run_block_result_equiv are now in execEquivPropsTheory.
-   The per-opcode category helpers have been removed.
+   NOTE: result_equiv_trans is in stateEquivPropsTheory.
    -------------------------------------------------------------------------- *)
-
-(* ==========================================================================
-   result_equiv Transitivity
-   ========================================================================== *)
-
-(* WHY THIS IS TRUE: result_equiv compares results by type:
-   - OK/OK uses state_equiv which is transitive
-   - Halt/Halt, Revert/Revert use execution_equiv which is transitive
-   - Error/Error is always T
-   Mismatched types are always F, so transitivity holds vacuously. *)
-Theorem result_equiv_trans:
-  !fresh r1 r2 r3.
-    result_equiv fresh r1 r2 /\
-    result_equiv fresh r2 r3 ==>
-    result_equiv fresh r1 r3
-Proof
-  Cases_on `r1` >> Cases_on `r2` >> Cases_on `r3` >>
-  gvs[result_equiv_def] >>
-  metis_tac[state_equiv_trans, execution_equiv_trans]
-QED
 
 (* ==========================================================================
    transform_block_insts Properties

@@ -175,7 +175,7 @@ Proof
 QED
 
 (* ==========================================================================
-   FIND Lemmas (stdlib gaps)
+   FIND Lemmas (stdlib gaps — candidates for HOL4 upstream)
    ========================================================================== *)
 
 Triviality FIND_MEM:

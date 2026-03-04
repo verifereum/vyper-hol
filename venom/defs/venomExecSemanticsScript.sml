@@ -380,7 +380,9 @@ End
    Block and Function Execution
    -------------------------------------------------------------------------- *)
 
-(* Non-terminator instructions preserve inst_idx *)
+(* Non-terminator instructions preserve inst_idx.
+   Co-located with run_block definition because run_block's
+   termination proof depends on this theorem. *)
 Theorem step_inst_preserves_inst_idx:
   !inst s s'.
     step_inst inst s = OK s' /\ ~is_terminator inst.inst_opcode ==>

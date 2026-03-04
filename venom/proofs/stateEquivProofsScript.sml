@@ -128,6 +128,17 @@ Proof
   rw[result_equiv_def]
 QED
 
+(* result_equiv is transitive *)
+Theorem result_equiv_trans:
+  !vars r1 r2 r3.
+    result_equiv vars r1 r2 /\ result_equiv vars r2 r3 ==>
+    result_equiv vars r1 r3
+Proof
+  Cases_on `r1` >> Cases_on `r2` >> Cases_on `r3` >>
+  gvs[result_equiv_def] >>
+  metis_tac[state_equiv_trans, execution_equiv_trans]
+QED
+
 (* ==========================================================================
    Operand Evaluation
    ========================================================================== *)
@@ -243,10 +254,10 @@ Proof
 QED
 
 (* ==========================================================================
-   Internal helpers used by execEquivProofs
+   execution_equiv variants (currently unused)
+   Kept for future passes that need execution_equiv-level reasoning.
+   Currently all consumers unfold execution_equiv_def directly.
    ========================================================================== *)
-
-(* execution_equiv variants of mutation/read lemmas — used internally *)
 
 Theorem update_var_execution_preserves[local]:
   !vars x v s1 s2.
@@ -340,9 +351,4 @@ Proof
   rw[eval_operand_def, execution_equiv_def, lookup_var_def]
 QED
 
-(* observable_equiv relation properties *)
-Theorem observable_equiv_refl[local]:
-  !s. observable_equiv s s
-Proof
-  rw[observable_equiv_def]
-QED
+

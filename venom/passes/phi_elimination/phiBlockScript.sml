@@ -330,14 +330,6 @@ Proof
   irule state_equiv_trans >> qexists_tac `xformed_st` >> simp[]
 QED
 
-(* result_equiv transitivity *)
-Theorem result_equiv_trans:
-  !r1 r2 r3. result_equiv {} r1 r2 /\ result_equiv {} r2 r3 ==> result_equiv {} r1 r3
-Proof
-  Cases >> Cases >> Cases >>
-  simp[result_equiv_def] >> metis_tac[state_equiv_trans, execution_equiv_trans]
-QED
-
 (* Block-level correctness: transform preserves result equivalence. *)
 Theorem transform_block_result_equiv:
   !bb st graph.

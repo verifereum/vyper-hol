@@ -5,11 +5,11 @@
  * All predicates are parameterized by a variable exception set.
  * For full equivalence, use {} as the exception set.
  *
- * TOP-LEVEL THEOREMS (20):
+ * TOP-LEVEL THEOREMS (21):
  *   Relation properties:
  *     state_equiv_{refl,sym,trans,subset}
  *     execution_equiv_{refl,trans,subset}
- *     result_equiv_subset
+ *     result_equiv_{subset,trans}
  *   Operand evaluation:
  *     eval_operand_equiv
  *   Mutations preserve state_equiv:
@@ -92,6 +92,15 @@ Theorem result_equiv_subset:
     result_equiv vars2 r1 r2
 Proof
   ACCEPT_TAC stateEquivProofsTheory.result_equiv_subset
+QED
+
+(* result_equiv is transitive *)
+Theorem result_equiv_trans:
+  !vars r1 r2 r3.
+    result_equiv vars r1 r2 /\ result_equiv vars r2 r3 ==>
+    result_equiv vars r1 r3
+Proof
+  ACCEPT_TAC stateEquivProofsTheory.result_equiv_trans
 QED
 
 (* ==========================================================================
