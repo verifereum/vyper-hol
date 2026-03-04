@@ -1,8 +1,23 @@
 (*
- * State Equivalence Properties (Statements Only)
+ * State Equivalence Properties (API)
  *
- * Re-exports all theorems from stateEquivProofs via ACCEPT_TAC.
- * Proofs live in proofs/stateEquivProofsScript.sml.
+ * Re-exports theorems from stateEquivProofs via ACCEPT_TAC.
+ * All predicates are parameterized by a variable exception set.
+ * For full equivalence, use {} as the exception set.
+ *
+ * TOP-LEVEL THEOREMS (20):
+ *   Relation properties:
+ *     state_equiv_{refl,sym,trans,subset}
+ *     execution_equiv_{refl,trans,subset}
+ *     result_equiv_subset
+ *   Operand evaluation:
+ *     eval_operand_equiv
+ *   Mutations preserve state_equiv:
+ *     update_var_preserves, mstore_preserves, sstore_preserves,
+ *     tstore_preserves, write_memory_with_expansion_preserves,
+ *     jump_to_preserves, halt_state_preserves, revert_state_preserves
+ *   Reads give same result:
+ *     mload_same, sload_same, tload_same
  *)
 
 Theory stateEquivProps
@@ -10,341 +25,194 @@ Ancestors
   stateEquivProofs
 
 (* ==========================================================================
-   Equivalence Relation Properties
+   Relation Properties
    ========================================================================== *)
 
 (* state_equiv is reflexive *)
 Theorem state_equiv_refl:
-  !s. state_equiv s s
+  !vars s. state_equiv vars s s
 Proof
   ACCEPT_TAC stateEquivProofsTheory.state_equiv_refl
 QED
 
 (* state_equiv is symmetric *)
 Theorem state_equiv_sym:
-  !s1 s2. state_equiv s1 s2 ==> state_equiv s2 s1
+  !vars s1 s2. state_equiv vars s1 s2 ==> state_equiv vars s2 s1
 Proof
   ACCEPT_TAC stateEquivProofsTheory.state_equiv_sym
 QED
 
 (* state_equiv is transitive *)
 Theorem state_equiv_trans:
-  !s1 s2 s3. state_equiv s1 s2 /\ state_equiv s2 s3 ==> state_equiv s1 s3
+  !vars s1 s2 s3.
+    state_equiv vars s1 s2 /\ state_equiv vars s2 s3 ==>
+    state_equiv vars s1 s3
 Proof
   ACCEPT_TAC stateEquivProofsTheory.state_equiv_trans
 QED
 
-(* ==========================================================================
-   Operand Evaluation Preserves Equivalence
-   ========================================================================== *)
-
-(* Operand evaluation gives same result on equivalent states *)
-Theorem eval_operand_state_equiv:
-  !op s1 s2.
-    state_equiv s1 s2 ==>
-    eval_operand op s1 = eval_operand op s2
-Proof
-  ACCEPT_TAC stateEquivProofsTheory.eval_operand_state_equiv
-QED
-
-(* ==========================================================================
-   State Mutation Operations Preserve Equivalence
-   ========================================================================== *)
-
-(* Updating same variable with same value preserves state equivalence *)
-Theorem update_var_state_equiv:
-  !x v s1 s2.
-    state_equiv s1 s2 ==>
-    state_equiv (update_var x v s1) (update_var x v s2)
-Proof
-  ACCEPT_TAC stateEquivProofsTheory.update_var_state_equiv
-QED
-
-(* Memory store preserves state equivalence *)
-Theorem mstore_state_equiv:
-  !offset v s1 s2.
-    state_equiv s1 s2 ==>
-    state_equiv (mstore offset v s1) (mstore offset v s2)
-Proof
-  ACCEPT_TAC stateEquivProofsTheory.mstore_state_equiv
-QED
-
-(* Memory write with expansion preserves state equivalence *)
-Theorem write_memory_with_expansion_state_equiv:
-  !offset bytes s1 s2.
-    state_equiv s1 s2 ==>
-    state_equiv (write_memory_with_expansion offset bytes s1)
-                (write_memory_with_expansion offset bytes s2)
-Proof
-  ACCEPT_TAC stateEquivProofsTheory.write_memory_with_expansion_state_equiv
-QED
-
-(* Storage store preserves state equivalence *)
-Theorem sstore_state_equiv:
-  !key v s1 s2.
-    state_equiv s1 s2 ==>
-    state_equiv (sstore key v s1) (sstore key v s2)
-Proof
-  ACCEPT_TAC stateEquivProofsTheory.sstore_state_equiv
-QED
-
-(* Transient store preserves state equivalence *)
-Theorem tstore_state_equiv:
-  !key v s1 s2.
-    state_equiv s1 s2 ==>
-    state_equiv (tstore key v s1) (tstore key v s2)
-Proof
-  ACCEPT_TAC stateEquivProofsTheory.tstore_state_equiv
-QED
-
-(* Jump preserves state equivalence *)
-Theorem jump_to_state_equiv:
-  !lbl s1 s2.
-    state_equiv s1 s2 ==>
-    state_equiv (jump_to lbl s1) (jump_to lbl s2)
-Proof
-  ACCEPT_TAC stateEquivProofsTheory.jump_to_state_equiv
-QED
-
-(* Halt preserves state equivalence *)
-Theorem halt_state_state_equiv:
-  !s1 s2.
-    state_equiv s1 s2 ==>
-    state_equiv (halt_state s1) (halt_state s2)
-Proof
-  ACCEPT_TAC stateEquivProofsTheory.halt_state_state_equiv
-QED
-
-(* Revert preserves state equivalence *)
-Theorem revert_state_state_equiv:
-  !s1 s2.
-    state_equiv s1 s2 ==>
-    state_equiv (revert_state s1) (revert_state s2)
-Proof
-  ACCEPT_TAC stateEquivProofsTheory.revert_state_state_equiv
-QED
-
-(* ==========================================================================
-   Equivalence Relation Properties for execution_equiv_except
-   ========================================================================== *)
-
-(* execution_equiv_except is reflexive *)
-Theorem execution_equiv_except_refl:
-  !vars s. execution_equiv_except vars s s
-Proof
-  ACCEPT_TAC stateEquivProofsTheory.execution_equiv_except_refl
-QED
-
-(* execution_equiv_except is transitive *)
-Theorem execution_equiv_except_trans:
-  !vars s1 s2 s3.
-    execution_equiv_except vars s1 s2 /\
-    execution_equiv_except vars s2 s3 ==>
-    execution_equiv_except vars s1 s3
-Proof
-  ACCEPT_TAC stateEquivProofsTheory.execution_equiv_except_trans
-QED
-
-(* Widening the exception set preserves execution_equiv_except *)
-Theorem execution_equiv_except_subset:
+(* Widening the exception set preserves state_equiv *)
+Theorem state_equiv_subset:
   !vars1 vars2 s1 s2.
-    execution_equiv_except vars1 s1 s2 /\
-    vars1 SUBSET vars2 ==>
-    execution_equiv_except vars2 s1 s2
+    state_equiv vars1 s1 s2 /\ vars1 SUBSET vars2 ==>
+    state_equiv vars2 s1 s2
 Proof
-  ACCEPT_TAC stateEquivProofsTheory.execution_equiv_except_subset
+  ACCEPT_TAC stateEquivProofsTheory.state_equiv_subset
 QED
 
-(* ==========================================================================
-   Equivalence Relation Properties for state_equiv_except
-   ========================================================================== *)
-
-(* state_equiv_except is reflexive *)
-Theorem state_equiv_except_refl:
-  !vars s. state_equiv_except vars s s
+(* execution_equiv is reflexive *)
+Theorem execution_equiv_refl:
+  !vars s. execution_equiv vars s s
 Proof
-  ACCEPT_TAC stateEquivProofsTheory.state_equiv_except_refl
+  ACCEPT_TAC stateEquivProofsTheory.execution_equiv_refl
 QED
 
-(* state_equiv_except is transitive *)
-Theorem state_equiv_except_trans:
+(* execution_equiv is transitive *)
+Theorem execution_equiv_trans:
   !vars s1 s2 s3.
-    state_equiv_except vars s1 s2 /\
-    state_equiv_except vars s2 s3 ==>
-    state_equiv_except vars s1 s3
+    execution_equiv vars s1 s2 /\ execution_equiv vars s2 s3 ==>
+    execution_equiv vars s1 s3
 Proof
-  ACCEPT_TAC stateEquivProofsTheory.state_equiv_except_trans
+  ACCEPT_TAC stateEquivProofsTheory.execution_equiv_trans
 QED
 
-(* Full state equivalence implies state_equiv_except for any variable set *)
-Theorem state_equiv_implies_except:
-  !vars s1 s2.
-    state_equiv s1 s2 ==>
-    state_equiv_except vars s1 s2
+(* Widening the exception set preserves execution_equiv *)
+Theorem execution_equiv_subset:
+  !vars1 vars2 s1 s2.
+    execution_equiv vars1 s1 s2 /\ vars1 SUBSET vars2 ==>
+    execution_equiv vars2 s1 s2
 Proof
-  ACCEPT_TAC stateEquivProofsTheory.state_equiv_implies_except
+  ACCEPT_TAC stateEquivProofsTheory.execution_equiv_subset
 QED
 
-(* ==========================================================================
-   Update Preserves state_equiv_except
-   ========================================================================== *)
-
-(* Updating same variable with same value preserves state_equiv_except *)
-Theorem update_var_same_preserves:
-  !vars x v s1 s2.
-    state_equiv_except vars s1 s2 ==>
-    state_equiv_except vars (update_var x v s1) (update_var x v s2)
+(* Widening the exception set preserves result_equiv *)
+Theorem result_equiv_subset:
+  !vars1 vars2 r1 r2.
+    result_equiv vars1 r1 r2 /\ vars1 SUBSET vars2 ==>
+    result_equiv vars2 r1 r2
 Proof
-  ACCEPT_TAC stateEquivProofsTheory.update_var_same_preserves
+  ACCEPT_TAC stateEquivProofsTheory.result_equiv_subset
 QED
 
 (* ==========================================================================
-   Operand Evaluation under state_equiv_except
+   Operand Evaluation
    ========================================================================== *)
 
-(* Operand evaluation gives same result when operand's variable is not in exception set *)
-Theorem eval_operand_except:
+(* Operand evaluation gives same result when variable is not in exception set *)
+Theorem eval_operand_equiv:
   !vars op s1 s2.
-    state_equiv_except vars s1 s2 /\
+    state_equiv vars s1 s2 /\
     (!x. op = Var x ==> x NOTIN vars) ==>
     eval_operand op s1 = eval_operand op s2
 Proof
-  ACCEPT_TAC stateEquivProofsTheory.eval_operand_except
+  ACCEPT_TAC stateEquivProofsTheory.eval_operand_equiv
 QED
 
 (* ==========================================================================
-   Control Flow Preserves execution_equiv_except (from state_equiv_except)
+   Mutations Preserve state_equiv
    ========================================================================== *)
 
-(* halt_state on state_equiv_except states gives execution_equiv_except *)
-Theorem halt_state_from_state_except:
-  !vars s1 s2.
-    state_equiv_except vars s1 s2 ==>
-    execution_equiv_except vars (halt_state s1) (halt_state s2)
+(* Updating same variable with same value preserves state_equiv *)
+Theorem update_var_preserves:
+  !vars x v s1 s2.
+    state_equiv vars s1 s2 ==>
+    state_equiv vars (update_var x v s1) (update_var x v s2)
 Proof
-  ACCEPT_TAC stateEquivProofsTheory.halt_state_from_state_except
+  ACCEPT_TAC stateEquivProofsTheory.update_var_preserves
 QED
 
-(* revert_state on state_equiv_except states gives execution_equiv_except *)
-Theorem revert_state_from_state_except:
-  !vars s1 s2.
-    state_equiv_except vars s1 s2 ==>
-    execution_equiv_except vars (revert_state s1) (revert_state s2)
+(* Memory store preserves state_equiv *)
+Theorem mstore_preserves:
+  !vars offset v s1 s2.
+    state_equiv vars s1 s2 ==>
+    state_equiv vars (mstore offset v s1) (mstore offset v s2)
 Proof
-  ACCEPT_TAC stateEquivProofsTheory.revert_state_from_state_except
+  ACCEPT_TAC stateEquivProofsTheory.mstore_preserves
 QED
 
-(* ==========================================================================
-   Control Flow Preserves state_equiv_except
-   ========================================================================== *)
-
-(* Jump preserves state_equiv_except *)
-Theorem jump_to_except_preserves:
-  !vars lbl s1 s2.
-    state_equiv_except vars s1 s2 ==>
-    state_equiv_except vars (jump_to lbl s1) (jump_to lbl s2)
+(* Storage store preserves state_equiv *)
+Theorem sstore_preserves:
+  !vars key v s1 s2.
+    state_equiv vars s1 s2 ==>
+    state_equiv vars (sstore key v s1) (sstore key v s2)
 Proof
-  ACCEPT_TAC stateEquivProofsTheory.jump_to_except_preserves
+  ACCEPT_TAC stateEquivProofsTheory.sstore_preserves
 QED
 
-(* Revert preserves state_equiv_except *)
-Theorem revert_state_except_preserves:
-  !vars s1 s2.
-    state_equiv_except vars s1 s2 ==>
-    state_equiv_except vars (revert_state s1) (revert_state s2)
+(* Transient store preserves state_equiv *)
+Theorem tstore_preserves:
+  !vars key v s1 s2.
+    state_equiv vars s1 s2 ==>
+    state_equiv vars (tstore key v s1) (tstore key v s2)
 Proof
-  ACCEPT_TAC stateEquivProofsTheory.revert_state_except_preserves
+  ACCEPT_TAC stateEquivProofsTheory.tstore_preserves
 QED
 
-(* ==========================================================================
-   Widening the Exception Set
-   ========================================================================== *)
-
-(* Widening exception set preserves state_equiv_except *)
-Theorem state_equiv_except_subset:
-  !vars1 vars2 s1 s2.
-    state_equiv_except vars1 s1 s2 /\
-    vars1 SUBSET vars2 ==>
-    state_equiv_except vars2 s1 s2
-Proof
-  ACCEPT_TAC stateEquivProofsTheory.state_equiv_except_subset
-QED
-
-(* Widening exception set preserves result_equiv_except *)
-Theorem result_equiv_except_subset:
-  !vars1 vars2 r1 r2.
-    result_equiv_except vars1 r1 r2 /\
-    vars1 SUBSET vars2 ==>
-    result_equiv_except vars2 r1 r2
-Proof
-  ACCEPT_TAC stateEquivProofsTheory.result_equiv_except_subset
-QED
-
-(* ==========================================================================
-   Memory/Storage Operations Preserve state_equiv_except
-   ========================================================================== *)
-
-(* Memory store preserves state_equiv_except *)
-Theorem mstore_except_preserves:
-  !vars addr val s1 s2.
-    state_equiv_except vars s1 s2 ==>
-    state_equiv_except vars (mstore addr val s1) (mstore addr val s2)
-Proof
-  ACCEPT_TAC stateEquivProofsTheory.mstore_except_preserves
-QED
-
-(* Memory load gives same result under state_equiv_except *)
-Theorem mload_except_same:
-  !vars addr s1 s2.
-    state_equiv_except vars s1 s2 ==>
-    mload addr s1 = mload addr s2
-Proof
-  ACCEPT_TAC stateEquivProofsTheory.mload_except_same
-QED
-
-(* Storage store preserves state_equiv_except *)
-Theorem sstore_except_preserves:
-  !vars key val s1 s2.
-    state_equiv_except vars s1 s2 ==>
-    state_equiv_except vars (sstore key val s1) (sstore key val s2)
-Proof
-  ACCEPT_TAC stateEquivProofsTheory.sstore_except_preserves
-QED
-
-(* Storage load gives same result under state_equiv_except *)
-Theorem sload_except_same:
-  !vars key s1 s2.
-    state_equiv_except vars s1 s2 ==>
-    sload key s1 = sload key s2
-Proof
-  ACCEPT_TAC stateEquivProofsTheory.sload_except_same
-QED
-
-(* Transient store preserves state_equiv_except *)
-Theorem tstore_except_preserves:
-  !vars key val s1 s2.
-    state_equiv_except vars s1 s2 ==>
-    state_equiv_except vars (tstore key val s1) (tstore key val s2)
-Proof
-  ACCEPT_TAC stateEquivProofsTheory.tstore_except_preserves
-QED
-
-(* Transient load gives same result under state_equiv_except *)
-Theorem tload_except_same:
-  !vars key s1 s2.
-    state_equiv_except vars s1 s2 ==>
-    tload key s1 = tload key s2
-Proof
-  ACCEPT_TAC stateEquivProofsTheory.tload_except_same
-QED
-
-(* Memory write with expansion preserves state_equiv_except *)
-Theorem write_memory_with_expansion_except_preserves:
+(* Memory write with expansion preserves state_equiv *)
+Theorem write_memory_with_expansion_preserves:
   !vars offset bytes s1 s2.
-    state_equiv_except vars s1 s2 ==>
-    state_equiv_except vars
+    state_equiv vars s1 s2 ==>
+    state_equiv vars
       (write_memory_with_expansion offset bytes s1)
       (write_memory_with_expansion offset bytes s2)
 Proof
-  ACCEPT_TAC stateEquivProofsTheory.write_memory_with_expansion_except_preserves
+  ACCEPT_TAC stateEquivProofsTheory.write_memory_with_expansion_preserves
+QED
+
+(* Jump preserves state_equiv *)
+Theorem jump_to_preserves:
+  !vars lbl s1 s2.
+    state_equiv vars s1 s2 ==>
+    state_equiv vars (jump_to lbl s1) (jump_to lbl s2)
+Proof
+  ACCEPT_TAC stateEquivProofsTheory.jump_to_preserves
+QED
+
+(* Halt preserves state_equiv *)
+Theorem halt_state_preserves:
+  !vars s1 s2.
+    state_equiv vars s1 s2 ==>
+    state_equiv vars (halt_state s1) (halt_state s2)
+Proof
+  ACCEPT_TAC stateEquivProofsTheory.halt_state_preserves
+QED
+
+(* Revert preserves state_equiv *)
+Theorem revert_state_preserves:
+  !vars s1 s2.
+    state_equiv vars s1 s2 ==>
+    state_equiv vars (revert_state s1) (revert_state s2)
+Proof
+  ACCEPT_TAC stateEquivProofsTheory.revert_state_preserves
+QED
+
+(* ==========================================================================
+   Reads Give Same Result
+   ========================================================================== *)
+
+(* Memory load gives same result under state_equiv *)
+Theorem mload_same:
+  !vars addr s1 s2.
+    state_equiv vars s1 s2 ==>
+    mload addr s1 = mload addr s2
+Proof
+  ACCEPT_TAC stateEquivProofsTheory.mload_same
+QED
+
+(* Storage load gives same result under state_equiv *)
+Theorem sload_same:
+  !vars key s1 s2.
+    state_equiv vars s1 s2 ==>
+    sload key s1 = sload key s2
+Proof
+  ACCEPT_TAC stateEquivProofsTheory.sload_same
+QED
+
+(* Transient load gives same result under state_equiv *)
+Theorem tload_same:
+  !vars key s1 s2.
+    state_equiv vars s1 s2 ==>
+    tload key s1 = tload key s2
+Proof
+  ACCEPT_TAC stateEquivProofsTheory.tload_same
 QED
