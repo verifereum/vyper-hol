@@ -26,3 +26,5 @@ Ancestors
   availExprAnalysis
   (* stack order *)
   stackOrderProps
+  (* memory alias *)
+  memAliasProps

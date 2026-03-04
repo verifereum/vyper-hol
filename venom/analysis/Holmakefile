@@ -16,4 +16,5 @@ INCLUDES = \
   dominators \
   base_ptr \
   available_expression \
-  stack_order
+  stack_order \
+  mem_alias
