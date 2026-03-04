@@ -1,107 +1,23 @@
 (*
  * Stack Order Analysis — Safety Properties
  *
- * Theorem statements for stack_order correctness.
- * All cheated — proofs deferred.
+ * Consumer-facing correctness properties for stack_order analysis.
+ * All cheated — proofs deferred to proofs/ subdirectory.
  *
- * TOP-LEVEL:
  *   so_needed_are_live              — needed vars are live at block entry
  *   so_analyze_block_needed_distinct — needed list has no duplicates
  *   so_handle_inst_stack_top        — after handle_inst, operands are on top
+ *   so_merge_prefix                 — merge result is prefix of each input
  *   so_from_to_includes_live        — from_to query includes liveness input vars
  *   so_from_to_includes_base        — from_to query includes base map entries
- *
- * Helper — stack operations:
- *   stack_find_some / stack_find_none — find correctness / completeness
- *   stack_swap_length / stack_swap_mem / stack_swap_top — swap preserves
- *   stack_swap_to_length / stack_swap_to_mem — swap_to preserves
- *
- * Helper — merge / needed / reorder:
- *   max_same_prefix_is_prefix / max_same_prefix_comm — prefix properties
- *   so_merge_prefix           — merge result is prefix of each input
- *   so_add_needed_mem / so_add_needed_preserves / so_add_needed_distinct
- *   so_reorder_length / so_reorder_correct — reorder preserves length / top
- *
- * Helper — handler distinct preservation:
- *   so_handle_inst_needed_distinct
- *   so_handle_assign_needed_distinct
- *   so_handle_terminator_needed_distinct
  *)
 
 Theory stackOrderProps
 Ancestors
   stackOrderDefs
 
-(* ==========================================================================
-   Stack operation properties
-   ========================================================================== *)
-
-Theorem stack_find_some:
-  ∀op stack i.
-    stack_find op stack = SOME i ⇒
-    i < LENGTH stack ∧ EL i stack = op
-Proof
-  cheat
-QED
-
-Theorem stack_find_none:
-  ∀op stack.
-    stack_find op stack = NONE ⇔ ¬MEM op stack
-Proof
-  cheat
-QED
-
-Theorem stack_swap_length:
-  ∀stack op. LENGTH (stack_swap stack op) = LENGTH stack
-Proof
-  cheat
-QED
-
-Theorem stack_swap_mem:
-  ∀stack op x. MEM x (stack_swap stack op) ⇔ MEM x stack
-Proof
-  cheat
-QED
-
-Theorem stack_swap_to_length:
-  ∀stack depth. LENGTH (stack_swap_to stack depth) = LENGTH stack
-Proof
-  cheat
-QED
-
-Theorem stack_swap_to_mem:
-  ∀stack depth x. MEM x (stack_swap_to stack depth) ⇔ MEM x stack
-Proof
-  cheat
-QED
-
-(* After swap, op is at the top (last position) of the stack.
-   Precondition: op is on the stack. *)
-Theorem stack_swap_top:
-  ∀stack op.
-    MEM op stack ⇒
-    LAST (stack_swap stack op) = op
-Proof
-  cheat
-QED
-
-(* ==========================================================================
-   Merge / prefix properties
-   ========================================================================== *)
-
-Theorem max_same_prefix_is_prefix:
-  ∀a b. isPREFIX (max_same_prefix a b) a ∧
-         isPREFIX (max_same_prefix a b) b
-Proof
-  cheat
-QED
-
-Theorem max_same_prefix_comm:
-  ∀a b. max_same_prefix a b = max_same_prefix b a
-Proof
-  cheat
-QED
-
+(* Merged needed list is a prefix of every individual successor's needed list.
+   Ensures the common ordering is compatible with all successors. *)
 Theorem so_merge_prefix:
   ∀orders n. MEM n orders ⇒
     isPREFIX (so_merge orders) n
@@ -109,59 +25,9 @@ Proof
   cheat
 QED
 
-(* ==========================================================================
-   Needed list properties
-   ========================================================================== *)
-
-Theorem so_add_needed_mem:
-  ∀needed v. MEM v (so_add_needed needed v)
-Proof
-  cheat
-QED
-
-Theorem so_add_needed_preserves:
-  ∀needed u v. MEM u needed ⇒ MEM u (so_add_needed needed v)
-Proof
-  cheat
-QED
-
-Theorem so_add_needed_distinct:
-  ∀needed v.
-    ALL_DISTINCT needed ⇒ ALL_DISTINCT (so_add_needed needed v)
-Proof
-  cheat
-QED
-
-(* ==========================================================================
-   Reorder properties
-   ========================================================================== *)
-
-Theorem so_reorder_length:
-  ∀stack target. LENGTH (so_reorder stack target) = LENGTH stack
-Proof
-  cheat
-QED
-
-(* After reorder, target operands appear at top of stack in order.
-   Preconditions: all target operands are on the stack, and
-   target is not longer than the stack. *)
-Theorem so_reorder_correct:
-  ∀stack target.
-    (∀op. MEM op target ⇒ MEM op stack) ∧
-    LENGTH target ≤ LENGTH stack ⇒
-    DROP (LENGTH (so_reorder stack target) - LENGTH target)
-         (so_reorder stack target) = target
-Proof
-  cheat
-QED
-
-(* ==========================================================================
-   Instruction handler properties
-   ========================================================================== *)
-
-(* After handle_inst, the top of stack matches the instruction's operands.
-   This corresponds to the assertion in Python's analyze_bb.
-   Requires ALL_DISTINCT operands (duplicate operands would need DUP). *)
+(* After handle_inst, the top n elements of the stack equal the instruction's
+   operands in order. This is the HOL4 counterpart of the assertion in
+   Python's analyze_bb loop. Requires distinct operands (duplicates need DUP). *)
 Theorem so_handle_inst_stack_top:
   ∀stack needed inst stack' needed'.
     ALL_DISTINCT inst.inst_operands ∧
@@ -173,43 +39,8 @@ Proof
   cheat
 QED
 
-(* handle_inst preserves ALL_DISTINCT on needed *)
-Theorem so_handle_inst_needed_distinct:
-  ∀stack needed inst stack' needed'.
-    ALL_DISTINCT needed ∧
-    (stack', needed') = so_handle_inst (stack, needed) inst ⇒
-    ALL_DISTINCT needed'
-Proof
-  cheat
-QED
-
-(* handle_assign preserves ALL_DISTINCT on needed *)
-Theorem so_handle_assign_needed_distinct:
-  ∀lr lbl idx stack needed inst stack' needed'.
-    ALL_DISTINCT needed ∧
-    (stack', needed') =
-      so_handle_assign lr lbl idx (stack, needed) inst ⇒
-    ALL_DISTINCT needed'
-Proof
-  cheat
-QED
-
-(* handle_terminator preserves ALL_DISTINCT on needed *)
-Theorem so_handle_terminator_needed_distinct:
-  ∀cfg from_to lbl stack needed inst stack' needed'.
-    ALL_DISTINCT needed ∧
-    (stack', needed') =
-      so_handle_terminator cfg from_to lbl (stack, needed) inst ⇒
-    ALL_DISTINCT needed'
-Proof
-  cheat
-QED
-
-(* ==========================================================================
-   Block analysis properties
-   ========================================================================== *)
-
-(* Needed list from analyze_block has no duplicates *)
+(* The needed list produced by analyze_block has no duplicates.
+   Follows from so_add_needed preserving ALL_DISTINCT at each step. *)
 Theorem so_analyze_block_needed_distinct:
   ∀cfg lr from_to lbl insts needed stack.
     (needed, stack) = so_analyze_block cfg lr from_to lbl insts ⇒
@@ -218,14 +49,9 @@ Proof
   cheat
 QED
 
-(* ==========================================================================
-   Liveness connection
-   ========================================================================== *)
-
-(* Needed variables computed by analyze_block are live at block entry.
-   Requires well-formed function, consistent liveness/cfg, and that
-   the from_to map only contains variables that are live at the
-   respective successor block entries (terminator handler reads from it). *)
+(* Every variable in the needed list is live at block entry.
+   The from_to precondition is needed because the terminator handler
+   pulls variables from the from_to map (populated by analyzing successors). *)
 Theorem so_needed_are_live:
   ∀fn cfg lr from_to lbl bb needed stack v.
     wf_function fn ∧
@@ -244,7 +70,8 @@ Proof
   cheat
 QED
 
-(* from_to query result includes all liveness input vars *)
+(* The from_to query includes every variable from PHI-aware liveness
+   at the edge (origin → succ). *)
 Theorem so_from_to_includes_live:
   ∀lr fn from_to origin succ v succ_bb.
     lookup_block succ fn.fn_blocks = SOME succ_bb ∧
@@ -255,14 +82,12 @@ Proof
   cheat
 QED
 
-(* from_to query includes the base from_to entries *)
+(* The from_to query includes every variable from the base from_to map. *)
 Theorem so_from_to_includes_base:
-  ∀lr fn from_to origin succ v.
+  ∀lr fn from_to origin succ v needed.
     FLOOKUP from_to (origin, succ) = SOME needed ∧
     MEM v needed ⇒
     MEM v (so_from_to_query lr fn from_to origin succ)
 Proof
   cheat
 QED
-
-
