@@ -1,2 +1,2 @@
-# Available expression analysis
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../../syntax ../../../semantics ../cfg/defs ../cfg ../dataflow/defs defs
+# Available expression analysis: public API
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../../syntax ../../../semantics ../cfg/defs ../dataflow/defs ../dfg/defs defs proofs

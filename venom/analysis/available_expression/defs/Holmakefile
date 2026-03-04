@@ -1,3 +1,3 @@
 # Available expression analysis definitions
 # defs/ is at venom/analysis/available_expression/defs/
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics ../.. ../../cfg/defs ../../dataflow/defs
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics ../../cfg/defs ../../dataflow/defs ../../dfg/defs
