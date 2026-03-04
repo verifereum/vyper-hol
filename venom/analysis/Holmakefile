@@ -1,2 +1,15 @@
 # Venom analysis passes
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec .. ../../syntax ../../semantics shared dataflow cfg dfg fcg liveness dominators
+INCLUDES = \
+  $(VFMDIR)/util \
+  $(VFMDIR)/spec \
+  .. \
+  ../../syntax \
+  ../../semantics \
+  shared \
+  dataflow \
+  cfg \
+  dfg \
+  fcg \
+  liveness \
+  dominators \
+  base_ptr
