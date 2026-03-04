@@ -11,6 +11,9 @@ Ancestors
   fcgAnalysis
   (* dataflow *)
   dfIterateProps
+  latticeProps
+  worklistProps
+  dfHelperProps
   (* liveness *)
   livenessAnalysis
   (* dfg *)

@@ -7,6 +7,8 @@ INCLUDES = \
   ../../semantics \
   shared \
   dataflow \
+  dataflow/defs \
+  dataflow/proofs \
   cfg \
   dfg \
   fcg \

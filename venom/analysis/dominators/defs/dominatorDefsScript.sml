@@ -15,8 +15,6 @@
  *   frontier_set           — dominance frontier of a set of blocks
  *
  * Helper (internal):
- *   list_intersect          — intersection of two lists
- *   list_intersect_all      — intersection of a list of lists
  *   dom_init                — initialize dominator sets
  *   dom_transfer            — one iteration over labels
  *   dom_one_pass            — wrapper for dom_transfer
@@ -31,25 +29,9 @@
 Theory dominatorDefs
 Ancestors
   list finite_map pred_set
-  venomInst cfgDefs dfIterateDefs
+  venomInst cfgDefs dfIterateDefs dfHelperDefs
 Libs
   listTheory finite_mapTheory pred_setTheory pairTheory
-
-(* ==========================================================================
-   List-as-set helpers
-   ========================================================================== *)
-
-(* Intersection of two lists (keeps elements of xs that appear in ys). *)
-Definition list_intersect_def:
-  list_intersect xs ys = FILTER (λx. MEM x ys) xs
-End
-
-(* Intersection of a list of lists. Empty input → []. *)
-Definition list_intersect_all_def:
-  list_intersect_all [] = [] ∧
-  list_intersect_all [xs] = xs ∧
-  list_intersect_all (xs :: rest) = list_intersect xs (list_intersect_all rest)
-End
 
 (* ==========================================================================
    Result type

@@ -1,6 +1,13 @@
 # Agent Guide for vyper-hol workflow
 
-See also `./skills/` for additional agent documentation (e.g. review checklists).
+## Skills
+
+```
+skills/
+  venom-hol-review/SKILL.md  — Review checklist for HOL4 theory files
+```
+
+Use `skills/<name>/SKILL.md` when the task matches. Resolve relative paths against the skill directory.
 
 ## CRITICAL: Tool Usage
 
