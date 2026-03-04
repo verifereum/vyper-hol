@@ -17,4 +17,7 @@ INCLUDES = \
   base_ptr \
   available_expression \
   stack_order \
-  mem_alias
+  mem_alias \
+  mem_ssa \
+  mem_ssa/defs \
+  mem_ssa/proofs

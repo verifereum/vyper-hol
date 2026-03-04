@@ -5,9 +5,9 @@
  * Contains properties of bool_to_word and instruction behavior lemmas.
  *)
 
-Theory venomSemProps
+Theory venomExecProofs
 Ancestors
-  venomSem venomInst venomState rich_list
+  venomExecSemantics venomInst venomState rich_list list
 
 (* ==========================================================================
    bool_to_word Properties
@@ -30,13 +30,13 @@ Proof
   simp[bool_to_word_def]
 QED
 
-Theorem bool_to_word_eq_0w:
+Theorem bool_to_word_eq_0w[local]:
   (bool_to_word b = 0w) <=> ~b
 Proof
   Cases_on `b` >> simp[bool_to_word_def]
 QED
 
-Theorem bool_to_word_neq_0w:
+Theorem bool_to_word_neq_0w[local]:
   (bool_to_word b <> 0w) <=> b
 Proof
   Cases_on `b` >> simp[bool_to_word_def]
@@ -46,8 +46,8 @@ QED
    Instruction Behavior Lemmas
    ========================================================================== *)
 
-(* WHY THIS IS TRUE: By step_inst_def, ISZERO uses exec_unop with
-   (\x. bool_to_word (x = 0w)). exec_unop evaluates the single operand,
+(* WHY THIS IS TRUE: By step_inst_def, ISZERO uses exec_pure1 with
+   (\x. bool_to_word (x = 0w)). exec_pure1 evaluates the single operand,
    applies the function, and updates the output variable. *)
 Theorem step_iszero_value:
   !s cond_op out id cond.
@@ -56,7 +56,7 @@ Theorem step_iszero_value:
                  inst_operands := [cond_op]; inst_outputs := [out] |> s =
     OK (update_var out (bool_to_word (cond = 0w)) s)
 Proof
-  rw[step_inst_def, exec_unop_def]
+  rw[step_inst_def, exec_pure1_def]
 QED
 
 (* WHY THIS IS TRUE: By step_inst_def, ASSERT evaluates its operand.
@@ -175,27 +175,38 @@ Proof
 QED
 
 (* ==========================================================================
+   FIND Lemmas (stdlib gaps — candidates for HOL4 upstream)
+   ========================================================================== *)
+
+Triviality FIND_MEM:
+  !P l x. FIND P l = SOME x ==> MEM x l
+Proof
+  Induct_on `l` >> simp[FIND_thm] >> rw[] >> metis_tac[]
+QED
+
+Triviality FIND_P:
+  !P l x. FIND P l = SOME x ==> P x
+Proof
+  Induct_on `l` >> simp[FIND_thm] >> rw[] >> metis_tac[]
+QED
+
+Triviality FIND_NONE:
+  !P l. FIND P l = NONE ==> ~EXISTS P l
+Proof
+  Induct_on `l` >> simp[FIND_thm] >> rw[] >> gvs[]
+QED
+
+(* ==========================================================================
    Lookup Helpers
    ========================================================================== *)
 
-(*
- * Helper: If lookup_block succeeds, the block is in the list.
- *)
 Theorem lookup_block_MEM:
   !lbl bbs bb.
     lookup_block lbl bbs = SOME bb ==> MEM bb bbs
 Proof
-  Induct_on `bbs` >- simp[lookup_block_def] >>
-  simp[lookup_block_def] >> rw[] >> metis_tac[]
+  rw[lookup_block_def] >> drule FIND_MEM >> simp[]
 QED
 
-(*
- * Helper: step_in_block is the same for two blocks with matching prefix.
- *
- * WHY THIS IS TRUE: step_in_block uses get_instruction to fetch current instruction.
- * If TAKE (SUC n) matches and we're at index n, then EL n is the same.
- * So step_in_block executes the same instruction on both.
- *)
 Theorem step_in_block_prefix_same:
   !bb1 bb2 s n.
     TAKE (SUC n) bb1.bb_instructions = TAKE (SUC n) bb2.bb_instructions /\
@@ -213,3 +224,5 @@ Proof
   ) >>
   simp[]
 QED
+
+

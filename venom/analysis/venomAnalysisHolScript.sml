@@ -2,6 +2,7 @@
 Theory venomAnalysisHol
 Ancestors
   (* shared *)
+  venomWf
   venomEffects
   memLocDefs
   memLocProps
@@ -28,3 +29,5 @@ Ancestors
   stackOrderProps
   (* memory alias *)
   memAliasProps
+  (* memory SSA *)
+  memSSAProps
