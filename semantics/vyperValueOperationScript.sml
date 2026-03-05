@@ -716,24 +716,36 @@ Termination
   \\ rw[list_size_SUM_MAP, list_size_pair_size_map]
 End
 
-(* TODO: update cv_auto_trans_pre_rec proof for untyped values —
-   cv_snd nesting changed because value constructors have fewer fields.
-   Original proof:
-val safe_cast_pre_def = cv_auto_trans_pre_rec
-  "safe_cast_pre safe_cast_list_pre" safe_cast_def (
-  WF_REL_TAC `measure ...`
-  \\ ... cv_snd pattern matching on old value shape ...);
-*)
-(* TODO: fix cv_auto_trans_pre_rec termination proof for untyped values.
-   Value constructors changed arity (IntV: 2→1, FlagV: 2→1), so cv_snd
-   nesting changed. Need to adjust Cases_on pattern depth.
-   Original working proof on main branch used 3 levels of cv_snd. *)
 val safe_cast_pre_def = cv_auto_trans_pre_rec
   "safe_cast_pre safe_cast_list_pre" safe_cast_def (
   WF_REL_TAC `measure (λx. case x of
     INR (_,vs,_) => cv_size vs
   | INL (_,v) => cv_size v)`
-  \\ cheat);
+  \\ rw[]
+  \\ Cases_on`cv_v` \\ gvs[]
+  >- ( (* DynArrayV: cv_snd^3 — 3 case splits *)
+    qmatch_goalsub_rename_tac`cv_snd (cv_snd (cv_snd p))`
+    \\ Cases_on`p` \\ gvs[cv_size_def, cv_snd_def]
+    \\ qmatch_goalsub_rename_tac`cv_snd (cv_snd p)`
+    \\ Cases_on`p` \\ gvs[cv_size_def, cv_snd_def]
+    \\ qmatch_goalsub_rename_tac`cv_snd p`
+    \\ Cases_on`p` \\ gvs[cv_size_def, cv_snd_def] )
+  >- ( (* StructV: cv_map_snd — direct bound *)
+    qspec_then`g'`mp_tac cv_size_cv_map_snd_le \\ simp[] )
+  >- ( (* SArrayV: cv_map_snd (cv_snd^3) — 3 case splits + bound *)
+    qmatch_goalsub_rename_tac`cv_snd (cv_snd (cv_snd p))`
+    \\ Cases_on`p` \\ gvs[cv_size_def, cv_snd_def]
+    \\ qmatch_goalsub_rename_tac`cv_snd (cv_snd p)`
+    \\ Cases_on`p` \\ gvs[cv_size_def, cv_snd_def]
+    >- (rw[Once cv_map_snd_def] \\ gvs[cv_ispair_def])
+    \\ qmatch_goalsub_rename_tac`cv_snd p`
+    \\ Cases_on`p` \\ gvs[cv_size_def, cv_snd_def]
+    >- (rw[Once cv_map_snd_def] \\ gvs[cv_ispair_def])
+    \\ qmatch_goalsub_rename_tac`cv_map_snd l`
+    \\ qspec_then`l`mp_tac cv_size_cv_map_snd_le \\ simp[] )
+  >- ( (* TupleV: cv_snd — 1 case split *)
+    Cases_on`g'` \\ gvs[cv_size_def, cv_snd_def] )
+);
 
 Theorem safe_cast_pre[cv_pre]:
   (∀t v. safe_cast_pre t v) ∧
