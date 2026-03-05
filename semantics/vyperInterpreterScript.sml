@@ -1067,61 +1067,50 @@ Termination
     => iterator_bound (remcode cx) it
   | INR (INL (cx, ss)) => stmts_bound (remcode cx) ss
   | INL (cx, s) => stmt_bound (remcode cx) s)’
-  \\ reverse(rw[bound_def, MAX_DEF, MULT, IS_SOME_EXISTS]) \\ gvs[]
-  >- (
-    gvs[compatible_bound_def, check_def, type_check_def, assert_def]
+  \\ rw[bound_def, MAX_DEF, MULT, IS_SOME_EXISTS] \\ gvs[]
+  \\ rpt (FIRST [
+    (* For loop: compatible_bound case *)
+    (rename1`compatible_bound`
+    \\ gvs[compatible_bound_def, check_def, type_check_def, assert_def]
     \\ qmatch_goalsub_abbrev_tac`(LENGTH vs) * x`
     \\ irule LESS_EQ_LESS_TRANS
     \\ qexists_tac`LENGTH vs + n * x + 1` \\ simp[]
-    \\ PROVE_TAC[MULT_COMM, LESS_MONO_MULT])
-  >- (
-    gvs[check_def, type_check_def, assert_def]
+    \\ PROVE_TAC[MULT_COMM, LESS_MONO_MULT]),
+    (* Builtin: builtin_args_length_ok case *)
+    (rename1`builtin_args_length_ok`
+    \\ gvs[builtin_args_length_ok_def, check_def, type_check_def, assert_def,
+           LENGTH_EQ_NUM_compute, bound_def]),
+    (* TypeBuiltin: type_builtin_args_length_ok case *)
+    (rename1`type_builtin_args_length_ok`
+    \\ gvs[type_builtin_args_length_ok_def, check_def, type_check_def, assert_def,
+           LENGTH_EQ_NUM_compute, bound_def]),
+    (* IntCall cases *)
+    (gvs[check_def, type_check_def, assert_def]
     \\ gvs[push_function_def, return_def]
     \\ gvs[lift_option_def, lift_option_type_def, CaseEq"option", CaseEq"prod", option_CASE_rator,
            raise_def, return_def]
     \\ gvs[remcode_def, get_module_code_def, ADELKEY_def]
-    \\ qpat_x_assum`OUTR _ _ = _`kall_tac
+    \\ TRY (qpat_x_assum`OUTR _ _ = _`kall_tac)
     \\ gvs[CaseEq"option"]
     \\ simp[bound_def]
-    \\ qmatch_asmsub_rename_tac`lookup_callable_function _ fn ts = SOME (_, args, dflts, ret, body)`
-    \\ Cases_on`(dflts, body) = ([], [])`
+    \\ qmatch_asmsub_rename_tac`lookup_callable_function _ fn ts = SOME (_, args, dflts, ret, bdy)`
+    \\ Cases_on`(dflts, bdy) = ([], [])`
     >- gvs[bound_def]
+    \\ `(dflts, bdy) <> ([], [])` by (strip_tac >> gvs[])
     \\ drule_all_then(qspec_then`src_id_opt`strip_assume_tac)
          lookup_callable_function_eq_ALOOKUP_module_fns
     \\ drule_at_then Any drule ALOOKUP_FLAT_MAP_module_fns
     \\ qmatch_goalsub_abbrev_tac`ALOOKUP (FILTER P ls) k`
     \\ `P = λ(k,v). ¬MEM k cx.stk` by simp[Abbr`P`,FUN_EQ_THM,FORALL_PROD]
-    \\ simp[ALOOKUP_FILTER, FILTER_FILTER, Abbr`k`]
-    \\ simp[LAMBDA_PROD]
-    \\ qmatch_goalsub_abbrev_tac`exprs_bound fts (DROP n dflts)`
-    \\ qspecl_then[`fts`,`n`,`dflts`]mp_tac exprs_bound_DROP
-    \\ simp[])
-  \\ TRY (
-    rename1`builtin_args_length_ok Len`
-    \\ gvs[builtin_args_length_ok_def, check_def, type_check_def, type_check_def, assert_def,
-           LENGTH_EQ_NUM_compute, bound_def] \\ NO_TAC)
-  \\ gvs[check_def, type_check_def, assert_def]
-  \\ gvs[push_function_def, return_def]
-  \\ gvs[lift_option_def, lift_option_type_def, CaseEq"option", CaseEq"prod", option_CASE_rator,
-         raise_def, return_def]
-  \\ gvs[remcode_def, get_module_code_def, ADELKEY_def]
-  \\ qpat_x_assum`OUTR _ _ = _`kall_tac
-  \\ gvs[CaseEq"option"]
-  (* Use lookup_callable_function_eq_ALOOKUP_module_fns to get ALOOKUP result *)
-  \\ qmatch_asmsub_rename_tac`lookup_callable_function _ fn ts = SOME (_, args, dflts, ret, body)`
-  \\ Cases_on`(dflts, body) = ([], [])`
-  (* Case 1: body = [] (default constructor) - trivial, bound is 0 *)
-  >- gvs[bound_def]
-  (* Case 2: body ≠ [] - use the key lemma *)
-  \\ drule_all_then(qspec_then`src_id_opt`strip_assume_tac)
-       lookup_callable_function_eq_ALOOKUP_module_fns
-  \\ drule_at_then Any drule ALOOKUP_FLAT_MAP_module_fns
-  \\ qmatch_goalsub_abbrev_tac`ALOOKUP (FILTER P ls) k`
-  \\ `P = λ(k,v). ¬MEM k cx.stk` by simp[Abbr`P`,FUN_EQ_THM,FORALL_PROD]
-  \\ pop_assum SUBST_ALL_TAC
-  \\ simp[ALOOKUP_FILTER]
-  \\ rw[FILTER_FILTER,UNCURRY,Abbr`k`]
-  \\ simp[LAMBDA_PROD]
+    \\ TRY (simp[ALOOKUP_FILTER, FILTER_FILTER, Abbr`k`] \\ simp[LAMBDA_PROD]
+      \\ qmatch_goalsub_abbrev_tac`exprs_bound fts (DROP n dflts)`
+      \\ qspecl_then[`fts`,`n`,`dflts`]mp_tac exprs_bound_DROP
+      \\ simp[] \\ NO_TAC)
+    \\ pop_assum SUBST_ALL_TAC
+    \\ simp[ALOOKUP_FILTER]
+    \\ rw[FILTER_FILTER,UNCURRY,Abbr`k`]
+    \\ simp[LAMBDA_PROD])
+  ])
 End
 
 Theorem eval_exprs_length:

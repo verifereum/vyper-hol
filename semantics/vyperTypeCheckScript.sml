@@ -76,9 +76,9 @@ Definition satisfies_type_def:
   satisfies_type (FlagV m) (FlagTV n) =
     (m < 2 ** n) /\
   (* compound types *)
-  satisfies_type (ArrayV (DynArrayV n vs)) (ArrayTV tv (Dynamic m)) =
+  satisfies_type (ArrayV (DynArrayV _ n vs)) (ArrayTV tv (Dynamic m)) =
     (n = m /\ LENGTH vs <= m /\ all_satisfy_type vs tv) /\
-  satisfies_type (ArrayV (SArrayV n al)) (ArrayTV tv (Fixed m)) =
+  satisfies_type (ArrayV (SArrayV _ n al)) (ArrayTV tv (Fixed m)) =
     (n = m /\ ALL_DISTINCT (MAP FST al) /\
      EVERY (\(k,_). k < n) al /\
      all_satisfy_type (MAP SND al) tv) /\

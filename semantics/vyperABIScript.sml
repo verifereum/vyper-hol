@@ -464,11 +464,11 @@ Definition vyper_to_abi_def[simp]:
     (case vyper_to_abi_list env ts vs of
      | SOME avs => SOME (ListV avs)
      | NONE => NONE) ∧
-  vyper_to_abi env (ArrayT t _) (ArrayV (DynArrayV _ vs)) =
+  vyper_to_abi env (ArrayT t _) (ArrayV (DynArrayV _ _ vs)) =
     (case vyper_to_abi_same env t vs of
      | SOME avs => SOME (ListV avs)
      | NONE => NONE) ∧
-  vyper_to_abi env (ArrayT t (Fixed _)) (ArrayV (SArrayV n sparse)) =
+  vyper_to_abi env (ArrayT t (Fixed _)) (ArrayV (SArrayV _ n sparse)) =
     (case evaluate_type env t of
      | NONE => NONE
      | SOME tv =>
@@ -577,13 +577,9 @@ fun cv_bounds_tac (asl, concl) = let
     else if is_comb tm then
       find_cv_projs (rator tm) (find_cv_projs (rand tm) acc)
     else acc
-  (* Find all c2n applications of cv_fst/cv_snd projections *)
+  (* Find all c2n applications (any argument, not just projections) *)
   fun find_c2n_projs tm acc =
-    if is_c2n tm then
-      let val inner = rand tm in
-        if is_cv_proj inner then (tm :: acc)
-        else find_c2n_projs inner acc
-      end
+    if is_c2n tm then (tm :: acc)
     else if is_comb tm then
       find_c2n_projs (rator tm) (find_c2n_projs (rand tm) acc)
     else acc
@@ -686,28 +682,43 @@ val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
       >- (IF_CASES_TAC \\ gs[cv_size'_cv_mk_BN])
       \\ IF_CASES_TAC \\ gs[]
       \\ NO_TAC)
-  (* Remaining goals: arithmetic inequalities on cv_size of nested projections.
-     The cv_bounds_tac adds weak bounds (<=) for cv_fst/cv_snd projections.
-     This is sufficient when there's overhead from Pair constructors (e.g., +5 on RHS). *)
-  \\ TRY (
-      gvs[cv_repTheory.cv_termination_simp]
-      \\ rw[]
-      \\ simp[cv_fst_def, cv_snd_def, cv_size_def]
-      \\ cv_bounds_tac
-      \\ decide_tac
-      \\ NO_TAC)
-  (* SArrayV/DynArrayV case: case split on cv_v/cv_v0 and use arithmetic *)
-  \\ TRY (
-      rpt strip_tac
-      \\ rpt (CHANGED_TAC (
-           gvs[cv_ispair_def, c2b_def, cv_fst_def, cv_snd_def, cv_size_def, c2n_def]
-           \\ rpt (first_x_assum (fn th =>
-              if is_eq (concl th) andalso is_var (lhs (concl th))
-              then SUBST_ALL_TAC th
-              else NO_TAC) handle HOL_ERR _ => ALL_TAC)))
-      \\ cv_bounds_tac
-      \\ decide_tac
-      \\ NO_TAC)
+  (* DynArrayV/SArrayV cases: expose Pair overhead via case splits. *)
+  \\ rpt strip_tac
+  \\ Cases_on `cv_v` >> fs[cv_ispair_def, c2b_def]
+  \\ Cases_on `cv_v0` >> fs[cv_ispair_def, c2b_def]
+  \\ simp[cv_size_def, cv_snd_def, cv_fst_def]
+  \\ cv_bounds_tac
+  \\ TRY decide_tac
+  (* SArrayV case: c2n term needs more splits to expose inner Pair overhead.
+     Split the inner of cv_v (from cv_ispair guard) and its inner pair. *)
+  (* SArrayV case: c2n(cv_fst(cv_snd gV)) needs gV split into Pair,
+     then inner pair split, to get enough overhead for decide_tac. *)
+  (* SArrayV case: c2n(cv_fst(cv_snd v)) needs 2 splits to expose Pair overhead.
+     Split v (Num dismissed by cv_lt contradiction), then split inner of Pair. *)
+  \\ let
+       val c2n_tm = ``cv$c2n``
+       fun fc tm =
+         if is_comb tm then let val (f,a) = dest_comb tm in
+           if f ~~ c2n_tm then SOME a
+           else case fc a of SOME x => SOME x | NONE => fc f end
+         else NONE
+       fun split_c2n_parent (asl, g) = let
+         val SOME ca = fc g
+         val v = rand (rand ca)
+       in Cases_on [ANTIQUOTE v] (asl, g) end
+       fun split_c2n_arg (asl, g) = let
+         val SOME ca = fc g
+         val v = rand ca
+       in Cases_on [ANTIQUOTE v] (asl, g) end
+     in
+       split_c2n_parent
+       >> fs[cv_fst_def, cv_snd_def, cv_size_def, c2n_def, cv_lt_def]
+       >> split_c2n_arg
+       >> simp[cv_fst_def, cv_snd_def, cv_size_def, c2n_def]
+       >> cv_bounds_tac
+       >> fs[cv_fst_def, cv_snd_def, cv_size_def]
+       >> decide_tac
+     end
 );
 
 Theorem vyper_to_abi_pre[cv_pre]:

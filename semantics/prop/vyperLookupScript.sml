@@ -277,10 +277,11 @@ Proof
 QED
 
 Theorem assign_target_name_update:
-  ∀cx st n bop v v'.
+  ∀cx st n ty bop v v'.
     lookup_name st n = SOME v ∧
-    evaluate_binop bop v v' = INL new_v ⇒
-    assign_target cx (BaseTargetV (ScopedVar n) []) (Update bop v') st =
+    evaluate_binop (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
+                   NoneTV bop v v' = INL new_v ⇒
+    assign_target cx (BaseTargetV (ScopedVar n) []) (Update ty bop v') st =
     (INL NONE, update_name st n new_v)
 Proof
   rw[lookup_name_def] >>

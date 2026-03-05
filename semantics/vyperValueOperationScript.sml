@@ -24,19 +24,19 @@ val () = cv_auto_trans evaluate_literal_def;
 Definition array_length_def:
   array_length av =
   case av of
-  | DynArrayV _ ls => LENGTH ls
-  | SArrayV n _ => n
+  | DynArrayV _ _ ls => LENGTH ls
+  | SArrayV _ n _ => n
   | TupleV ls => LENGTH ls
 End
 
 val () = cv_trans array_length_def;
 
 Definition evaluate_in_array_def:
-  evaluate_in_array tv v av =
+  evaluate_in_array v av =
   case av of
-  | DynArrayV _ ls => MEM v ls
-  | SArrayV n al => (MEM v (MAP SND al) ∨
-                     (LENGTH al < n ∧ v = default_value tv))
+  | DynArrayV _ _ ls => MEM v ls
+  | SArrayV t n al => (MEM v (MAP SND al) ∨
+                       (LENGTH al < n ∧ v = default_value t))
   | TupleV ls => MEM v ls
 End
 
@@ -44,14 +44,14 @@ val () = cv_auto_trans $
   REWRITE_RULE[member_intro]evaluate_in_array_def;
 
 Definition array_index_def:
-  array_index tv av i =
+  array_index av i =
   if 0 ≤ i then let j = Num i in
   case av
-    of DynArrayV _ ls => oEL j ls
-     | SArrayV n al =>
+    of DynArrayV _ _ ls => oEL j ls
+     | SArrayV t n al =>
          if j < n then case ALOOKUP al j
          of SOME v => SOME v
-          | NONE => SOME $ default_value tv
+          | NONE => SOME $ default_value t
          else NONE
      | TupleV ls => oEL j ls
   else NONE
@@ -60,19 +60,19 @@ End
 val () = cv_trans array_index_def;
 
 Definition array_elements_def:
-  array_elements tv av =
+  array_elements av =
     case av of TupleV vs => vs
-    | DynArrayV _ vs => vs
-    | SArrayV n al =>
-        let d = default_value tv in
+    | DynArrayV _ _ vs => vs
+    | SArrayV t n al =>
+        let d = default_value t in
           GENLIST (λi. case ALOOKUP al i of SOME v => v | NONE => d) n
 End
 
 val () = cv_auto_trans array_elements_def;
 
 Definition extract_elements_def:
-  extract_elements tv (ArrayV av) = (SOME $ array_elements tv av) ∧
-  extract_elements tv _ = NONE
+  extract_elements (ArrayV av) = (SOME $ array_elements av) ∧
+  extract_elements _ = NONE
 End
 
 val () = cv_auto_trans extract_elements_def;
@@ -326,7 +326,7 @@ Definition evaluate_binop_def:
          FlagV n2 => (case v1 of FlagV n1 =>
            INL $ BoolV (int_and (&n1) (&n2) ≠ 0) (* TODO: use bitwise ∧ on nums *)
            | _ => INR (TypeError "binop"))
-       | ArrayV av => INL $ BoolV $ evaluate_in_array tv v1 av
+       | ArrayV av => INL $ BoolV $ evaluate_in_array v1 av
        | _ => INR (TypeError "binop"))
      | Eq => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
@@ -679,16 +679,16 @@ Definition safe_cast_def:
      | _ => NONE)
   | ArrayTV t bd =>
     (case (bd, v) of
-     | (Dynamic n, ArrayV (DynArrayV _ vs)) =>
+     | (Dynamic n, ArrayV (DynArrayV _ _ vs)) =>
        (let lvs = LENGTH vs in
         if n < lvs then NONE else
         case safe_cast_list (REPLICATE lvs t) vs []
-        of SOME vs => SOME $ ArrayV (DynArrayV n vs)
+        of SOME vs => SOME $ ArrayV (DynArrayV t n vs)
          | _ => NONE)
-     | (Fixed n, ArrayV (SArrayV m al)) =>
+     | (Fixed n, ArrayV (SArrayV _ m al)) =>
        (if n ≠ m then NONE else
         case safe_cast_list (REPLICATE (LENGTH al) t) (MAP SND al) []
-        of SOME vs => SOME $ ArrayV (SArrayV n (ZIP (MAP FST al, vs)))
+        of SOME vs => SOME $ ArrayV (SArrayV t n (ZIP (MAP FST al, vs)))
          | _ => NONE)
      | _ => NONE)
   | StructTV args =>
@@ -724,6 +724,10 @@ val safe_cast_pre_def = cv_auto_trans_pre_rec
   WF_REL_TAC `measure ...`
   \\ ... cv_snd pattern matching on old value shape ...);
 *)
+(* TODO: fix cv_auto_trans_pre_rec termination proof for untyped values.
+   Value constructors changed arity (IntV: 2→1, FlagV: 2→1), so cv_snd
+   nesting changed. Need to adjust Cases_on pattern depth.
+   Original working proof on main branch used 3 levels of cv_snd. *)
 val safe_cast_pre_def = cv_auto_trans_pre_rec
   "safe_cast_pre safe_cast_list_pre" safe_cast_def (
   WF_REL_TAC `measure (λx. case x of
@@ -742,27 +746,27 @@ QED
 (* mutating arrays *)
 
 Definition append_element_def:
-  append_element tv (ArrayV (DynArrayV n vs)) v =
+  append_element (ArrayV (DynArrayV tv n vs)) v =
     (if compatible_bound (Dynamic n) (SUC (LENGTH vs))
      then case safe_cast tv v of NONE => INR (TypeError "append cast")
-          | SOME v => INL $ ArrayV $ DynArrayV n (SNOC v vs)
+          | SOME v => INL $ ArrayV $ DynArrayV tv n (SNOC v vs)
      else INR (RuntimeError "append overflow")) ∧
-  append_element _ _ _ = INR (TypeError "append_element")
+  append_element _ _ = INR (TypeError "append_element")
 End
 
 val () = cv_auto_trans append_element_def;
 
 Definition pop_element_def:
-  pop_element (ArrayV (DynArrayV n vs)) =
+  pop_element (ArrayV (DynArrayV t n vs)) =
     (if vs = [] then INR (RuntimeError "pop empty")
-     else INL $ ArrayV $ DynArrayV n (FRONT vs)) ∧
+     else INL $ ArrayV $ DynArrayV t n (FRONT vs)) ∧
   pop_element _ = INR (TypeError "pop_element")
 End
 
 val () = cv_auto_trans pop_element_def;
 
 Definition popped_value_def:
-  popped_value (ArrayV (DynArrayV _ vs)) =
+  popped_value (ArrayV (DynArrayV _ _ vs)) =
     (if vs = [] then INR (RuntimeError "pop empty") else INL $ LAST vs) ∧
   popped_value _ = INR (TypeError "popped_value")
 End
@@ -780,16 +784,16 @@ End
 val () = cv_trans insert_sarray_def;
 
 Definition array_set_index_def:
-  array_set_index tv av i v =
+  array_set_index av i v =
   if 0 ≤ i then let j = Num i in
-    case av of DynArrayV n vs =>
+    case av of DynArrayV t n vs =>
       if j < LENGTH vs then
-        INL $ ArrayV $ DynArrayV n (TAKE j vs ++ [v] ++ DROP (SUC j) vs)
+        INL $ ArrayV $ DynArrayV t n (TAKE j vs ++ [v] ++ DROP (SUC j) vs)
       else INR (RuntimeError "array_set_index index")
-    | SArrayV n al =>
+    | SArrayV t n al =>
       if j < n then
-        INL $ ArrayV $ SArrayV n $
-        if v = default_value tv then
+        INL $ ArrayV $ SArrayV t n $
+        if v = default_value t then
           ADELKEY j al
         else
           insert_sarray j v al

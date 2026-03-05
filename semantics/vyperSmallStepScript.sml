@@ -888,7 +888,7 @@ Proof
     \\ CASE_TAC \\ gs[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_base_target_def]
-    \\ qmatch_goalsub_rename_tac`AugAssignK1 p` \\ Cases_on`p`
+    \\ qmatch_goalsub_rename_tac`AugAssignK1 _ p` \\ Cases_on`p`
     \\ first_x_assum drule \\ rw[]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]

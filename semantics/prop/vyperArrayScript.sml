@@ -3,14 +3,14 @@ Ancestors
   vyperValueOperation vyperState vyperInterpreter
 
 Definition array_is_mutable_def[simp]:
-  array_is_mutable (DynArrayV _ _) = T ∧
-  array_is_mutable (SArrayV _ _) = T ∧
+  array_is_mutable (DynArrayV _ _ _) = T ∧
+  array_is_mutable (SArrayV _ _ _) = T ∧
   array_is_mutable (TupleV _) = F
 End
 
 Definition array_is_dynamic_def[simp]:
-  array_is_dynamic (DynArrayV _ _) = T ∧
-  array_is_dynamic (SArrayV _ _) = F ∧
+  array_is_dynamic (DynArrayV _ _ _) = T ∧
+  array_is_dynamic (SArrayV _ _ _) = F ∧
   array_is_dynamic (TupleV _) = F
 End
 

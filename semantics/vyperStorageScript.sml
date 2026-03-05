@@ -214,14 +214,14 @@ Definition encode_value_def:
   encode_value NoneTV v = SOME [] /\
   encode_value (TupleTV tvs) (ArrayV (TupleV vs)) =
     encode_tuple 0 tvs vs /\
-  encode_value (ArrayTV tv (Fixed n)) (ArrayV (SArrayV m sparse)) =
+  encode_value (ArrayTV tv (Fixed n)) (ArrayV (SArrayV _ m sparse)) =
     (if n = m then
        let zeros = GENLIST (λi. (i, 0w)) (n * type_slot_size tv) in
        case encode_static_array tv 0 sparse of
        | SOME nonzeros => SOME (zeros ++ nonzeros)
        | NONE => NONE
      else NONE) /\
-  encode_value (ArrayTV tv (Dynamic max)) (ArrayV (DynArrayV m vs)) =
+  encode_value (ArrayTV tv (Dynamic max)) (ArrayV (DynArrayV _ m vs)) =
     (if max = m then
        (case encode_dyn_array tv 1 vs of
         | SOME slots => SOME ((0, n2w (LENGTH vs)) :: slots)
@@ -275,14 +275,15 @@ Definition encode_value_def:
      else NONE) /\
   encode_struct offset _ _ = NONE
 Termination
-  (* TODO: update for untyped values — pattern completion adds 60 clauses *)
   WF_REL_TAC `measure (λx. case x of
     | INL (_, v) => value_size v
     | INR (INL (_, _, vs)) => list_size value_size vs
     | INR (INR (INL (_, _, sparse))) => list_size (pair_size (λx.0) value_size) sparse
     | INR (INR (INR (INL (_, _, vs)))) => list_size value_size vs
     | INR (INR (INR (INR (_, _, fields)))) => list_size (pair_size (λx.0) value_size) fields)` >>
-  cheat
+  rw[struct_fields_size_lt, sparse_size_lt] >>
+  irule LESS_EQ_LESS_TRANS >> qexists `list_size (pair_size (λx. x) value_size) sparse` >>
+  rw[list_size_pair_0_le]
 End
 
 val encode_value_pre_def =
@@ -338,13 +339,13 @@ Definition decode_value_def:
      | NONE => NONE) /\
   decode_value storage offset (ArrayTV tv (Fixed n)) =
     (case decode_static_array storage offset tv n of
-     | SOME vs => SOME (ArrayV (SArrayV n (enumerate_static_array (default_value tv) 0 vs)))
+     | SOME vs => SOME (ArrayV (SArrayV tv n (enumerate_static_array (default_value tv) 0 vs)))
      | NONE => NONE) /\
   decode_value storage offset (ArrayTV tv (Dynamic max)) =
     (let len = w2n (read_slot storage offset) in
      if len ≤ max then
        (case decode_dyn_array storage (offset + 1) tv (MIN len max) of
-        | SOME vs => SOME (ArrayV (DynArrayV max vs))
+        | SOME vs => SOME (ArrayV (DynArrayV tv max vs))
         | NONE => NONE)
      else NONE) /\
   decode_value storage offset (StructTV ftypes) =
@@ -400,8 +401,6 @@ Termination
    by rw[type_value1_size_le] >> simp[MIN_DEF]
 End
 
-(* TODO: update cv_auto_trans_pre_rec proof for untyped values -
-   cv_snd/cv_fst nesting changed because value constructors have fewer fields *)
 val decode_value_pre_def =
   cv_auto_trans_pre_rec
     "decode_value_pre decode_tuple_pre decode_static_array_pre decode_dyn_array_pre decode_struct_pre"
@@ -413,7 +412,33 @@ val decode_value_pre_def =
          | INR (INR (INL (storage, offset, tv, n))) => cv_size tv + cv$c2n n
          | INR (INR (INR (INL (storage, offset, tv, n)))) => cv_size tv + cv$c2n n
          | INR (INR (INR (INR (storage, offset, ftypes)))) => cv_size ftypes)`
-     \\ cheat);
+     \\ rw[]
+     \\ TRY (gvs[cv_termination_simp, cv_size_def, cv_snd_def, cv_fst_def]
+             \\ decide_tac \\ NO_TAC)
+     (* ArrayTV cases: split cv_v 3 times to expose Pair overhead *)
+     \\ rpt strip_tac
+     \\ Cases_on `cv_v`
+     >> gvs[cv_ispair_def, c2b_def]
+     \\ rename1 `cv_size (cv_fst rest1)`
+     \\ Cases_on `rest1`
+     >> gvs[cv_ispair_def, c2b_def, cv_lt_def, cv_fst_def, cv_snd_def, cv_size_def]
+     \\ (rename1 `cv_ispair rest2` ORELSE rename1 `cv_fst rest2`)
+     \\ Cases_on `rest2`
+     >> gvs[cv_ispair_def, c2b_def, cv_lt_def, cv_fst_def, cv_snd_def, cv_size_def]
+     \\ rename1`cv_lt (cv$Num _) nn = cv$Num _`
+     \\ Cases_on`nn` \\ gvs[CaseEq"bool"]
+     \\ rename1`cv_lt (cv$Num _) nn = cv$Num _`
+     \\ Cases_on`nn` \\ gvs[CaseEq"bool"]
+     \\ qmatch_goalsub_abbrev_tac`cv$c2n nn`
+     \\ qspec_then`nn`assume_tac c2n_le_cv_size
+     \\ gvs[cv_primTheory.cv_min_def]
+     \\ rename1`cv_lt n1 n2`
+     \\ Cases_on`cv_lt n1 n2` \\ gvs[]
+     \\ TRY(Cases_on`n1` \\ Cases_on `n2` \\ gvs[cv_lt_def] \\ NO_TAC)
+     \\ rename1`cv$c2b (cv$Num bb)`
+     \\ Cases_on`bb` \\ gvs[]
+     \\ Cases_on`n1` \\ Cases_on `n2` \\ gvs[cv_lt_def]
+    );
 
 Theorem decode_value_pre[cv_pre]:
   (∀storage offset tv. decode_value_pre storage offset tv) ∧
@@ -461,4 +486,4 @@ val () = cv_auto_trans encode_hashmap_key_def;
    This is a simplified representation - the full json_storage_layout
    from jsonAST includes additional info like n_slots and type_str,
    but for storage access we only need the base slot. *)
-Type storage_layout = ":((num option # string) # num) list"
+Type storage_layout = “:((num option # string) # num) list”

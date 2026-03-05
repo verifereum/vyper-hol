@@ -162,8 +162,8 @@ Datatype:
   | BytesV (word8 list)
   | StructV ((identifier, value) alist) ;
   array_value
-  = DynArrayV num (value list)
-  | SArrayV num ((num, value) alist)
+  = DynArrayV type_value num (value list)
+  | SArrayV type_value num ((num, value) alist)
   | TupleV (value list)
 End
 
@@ -184,8 +184,8 @@ Definition default_value_def:
   default_value (BaseTV (IntT n)) = IntV 0 ∧
   default_value (BaseTV DecimalT) = DecimalV 0 ∧
   default_value (TupleTV ts) = default_value_tuple [] ts ∧
-  default_value (ArrayTV t (Dynamic n)) = ArrayV (DynArrayV n []) ∧
-  default_value (ArrayTV t (Fixed n)) = ArrayV (SArrayV n []) ∧
+  default_value (ArrayTV t (Dynamic n)) = ArrayV (DynArrayV t n []) ∧
+  default_value (ArrayTV t (Fixed n)) = ArrayV (SArrayV t n []) ∧
   default_value (StructTV args) = default_value_struct [] args ∧
   default_value (FlagTV m) = FlagV 0 ∧
   default_value NoneTV = NoneV ∧
@@ -291,9 +291,9 @@ QED
 
 Definition make_array_value_def:
   make_array_value tv (Fixed n) vs =
-    SArrayV n (enumerate_static_array (default_value tv) 0 vs) ∧
+    SArrayV tv n (enumerate_static_array (default_value tv) 0 vs) ∧
   make_array_value tv (Dynamic n) vs =
-    DynArrayV n vs
+    DynArrayV tv n vs
 End
 
 val () = cv_trans make_array_value_def;
