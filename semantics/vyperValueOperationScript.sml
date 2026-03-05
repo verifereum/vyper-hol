@@ -505,7 +505,7 @@ Definition evaluate_as_wei_value_def:
           | GEther => 1000000000000000000000000000
           | TEther => 1000000000000000000000000000000 in
   let r = case v of IntV u i => i * m
-                  | DecimalV i => (i * m) / 1000000000
+                  | DecimalV i => (i * m) / 10000000000
                   | _ => -1 in
   if 0 ≤ r then
     let u = Unsigned 256 in
