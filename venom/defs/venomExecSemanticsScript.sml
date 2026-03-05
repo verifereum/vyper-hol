@@ -337,6 +337,10 @@ Definition step_inst_def:
     | BASEFEE => exec_read0 (\s. s.vs_block_ctx.bc_basefee) inst s
     | BLOBBASEFEE => exec_read0 (\s. s.vs_block_ctx.bc_blobbasefee) inst s
     | BLOCKHASH => exec_read1 (\v s. s.vs_block_ctx.bc_blockhash (w2n v)) inst s
+    | BLOBHASH => exec_read1
+        (\v s. let idx = w2n v in
+               let hashes = s.vs_tx_ctx.tc_blobhashes in
+               if idx < LENGTH hashes then EL idx hashes else 0w) inst s
 
     (* Environment - Balance *)
     | BALANCE => exec_read1
@@ -423,6 +427,54 @@ Definition step_inst_def:
 
     (* Allocation pointer arithmetic - GEP is base + offset, pure *)
     | GEP => exec_pure2 word_add inst s
+
+    (* Logging - variable operand count.
+       Venom IR format: log topic_count, topic_{n-1}, ..., topic_0, size, offset
+       First operand is Lit topic_count (metadata), rest are evaluated. *)
+    | LOG =>
+        (case inst.inst_operands of
+          Lit tc :: rest =>
+            let n = w2n tc in
+            (* rest should be: n topics (reversed) ++ [size; offset] *)
+            if LENGTH rest <> n + 2 then Error "log: wrong operand count"
+            else
+              let topic_ops = TAKE n rest in
+              let size_op = EL n rest in
+              let offset_op = EL (n + 1) rest in
+              (case (eval_operands topic_ops s,
+                     eval_operand size_op s,
+                     eval_operand offset_op s) of
+                (SOME topics, SOME sz, SOME off) =>
+                  let data = TAKE (w2n sz) (DROP (w2n off) s.vs_memory ++
+                                            REPLICATE (w2n sz) 0w) in
+                  let ev = <| logger := w2w s.vs_call_ctx.cc_address;
+                              topics := REVERSE topics;
+                              data := data |> in
+                  OK (s with vs_logs := s.vs_logs ++ [ev])
+              | _ => Error "log: undefined operand")
+        | _ => Error "log requires Lit topic_count as first operand")
+
+    (* Selfdestruct: transfer balance to beneficiary, then halt.
+       Deprecated post-Cancun but still defined in Venom IR. *)
+    | SELFDESTRUCT =>
+        (case inst.inst_operands of
+          [addr_op] =>
+            (case eval_operand addr_op s of
+              SOME addr =>
+                let self = s.vs_call_ctx.cc_address in
+                let bal = (lookup_account self s.vs_accounts).balance in
+                let beneficiary = w2w addr in
+                let accts = s.vs_accounts in
+                let self_acct = lookup_account self accts in
+                let ben_acct = lookup_account beneficiary accts in
+                let accts' = (\a. if a = self then
+                                    self_acct with balance := 0
+                                  else if a = beneficiary then
+                                    ben_acct with balance := ben_acct.balance + bal
+                                  else accts a) in
+                Halt (halt_state (s with vs_accounts := accts'))
+            | NONE => Error "selfdestruct: undefined operand")
+        | _ => Error "selfdestruct requires 1 operand")
 
     (* Invalid opcode — always reverts (EVM: consumes all gas + reverts) *)
     | INVALID => Revert (revert_state s)

@@ -15,6 +15,8 @@
 Theory execEquivProofs
 Ancestors
   stateEquivProofs stateEquiv venomExecSemantics venomState venomInst
+Libs
+  rich_listTheory
 
 (* ==========================================================================
    exec_* Category Helpers
@@ -158,13 +160,13 @@ Triviality step_inst_read1_equiv:
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     MEM inst.inst_opcode
       [MLOAD; SLOAD; TLOAD; BLOCKHASH; BALANCE; CALLDATALOAD;
-       EXTCODESIZE] ==>
+       EXTCODESIZE; BLOBHASH] ==>
     result_equiv vars (step_inst inst s1) (step_inst inst s2)
 Proof
   rw[] >> simp[step_inst_def] >>
   irule exec_read1_result_equiv >> simp[] >> rw[] >>
-  fs[mload_def, sload_def, tload_def,
-     state_equiv_def, execution_equiv_def]
+  gvs[mload_def, sload_def, tload_def,
+      state_equiv_def, execution_equiv_def]
 QED
 
 (* EXTCODEHASH: read1 with if-then-else body *)
@@ -298,6 +300,67 @@ Proof
   irule write_memory_with_expansion_preserves >> simp[]
 QED
 
+(* LOG: appends event to vs_logs.
+   Prove all operand evals are equal, then case analysis collapses. *)
+Triviality step_inst_log_equiv:
+  !vars inst s1 s2.
+    state_equiv vars s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
+    inst.inst_opcode = LOG ==>
+    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> simp[step_inst_def] >>
+  `s1.vs_memory = s2.vs_memory /\
+   s1.vs_call_ctx = s2.vs_call_ctx /\
+   s1.vs_logs = s2.vs_logs` by
+    fs[state_equiv_def, execution_equiv_def] >>
+  `!op. MEM op inst.inst_operands ==>
+     eval_operand op s1 = eval_operand op s2` by (
+    rw[] >> Cases_on `op` >> simp[eval_operand_def] >>
+    fs[state_equiv_def, execution_equiv_def, lookup_var_def]) >>
+  Cases_on `inst.inst_operands` >> simp[result_equiv_def] >>
+  Cases_on `h` >> simp[result_equiv_def] >>
+  rename1 `Lit tc :: rest` >>
+  `!op. MEM op rest ==> eval_operand op s1 = eval_operand op s2`
+    by (rw[] >> first_x_assum irule >> simp[]) >>
+  Cases_on `LENGTH rest = w2n tc + 2` >> simp[result_equiv_def] >>
+  `eval_operand (EL (w2n tc) rest) s1 =
+   eval_operand (EL (w2n tc) rest) s2`
+    by (first_x_assum irule >> irule EL_MEM >> simp[]) >>
+  `eval_operand (EL (w2n tc + 1) rest) s1 =
+   eval_operand (EL (w2n tc + 1) rest) s2`
+    by (first_x_assum irule >> irule EL_MEM >> simp[]) >>
+  sg `eval_operands (TAKE (w2n tc) rest) s1 =
+      eval_operands (TAKE (w2n tc) rest) s2`
+  >- (qsuff_tac `!ops. (!op. MEM op ops ==>
+        eval_operand op s1 = eval_operand op s2) ==>
+        eval_operands ops s1 = eval_operands ops s2`
+      >- (disch_then irule >> rw[] >> first_x_assum irule >>
+          imp_res_tac MEM_TAKE >> simp[])
+      >> Induct >> rw[eval_operands_def]) >>
+  simp[] >>
+  rpt CASE_TAC >> gvs[result_equiv_def, state_equiv_def,
+    execution_equiv_def, lookup_var_def]
+QED
+
+(* SELFDESTRUCT: transfers balance, halts *)
+Triviality step_inst_selfdestruct_equiv:
+  !vars inst s1 s2.
+    state_equiv vars s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
+    inst.inst_opcode = SELFDESTRUCT ==>
+    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> simp[step_inst_def] >>
+  imp_res_tac eval_operand_equiv >>
+  `s1.vs_accounts = s2.vs_accounts /\
+   s1.vs_call_ctx = s2.vs_call_ctx` by
+    fs[state_equiv_def, execution_equiv_def] >>
+  rpt CASE_TAC >> gvs[result_equiv_def, halt_state_def,
+    execution_equiv_def, lookup_var_def] >>
+  fs[state_equiv_def, execution_equiv_def, lookup_var_def]
+QED
+
 (* INVALID: always reverts *)
 Triviality step_inst_invalid_equiv:
   !vars inst s1 s2.
@@ -361,7 +424,7 @@ Proof
       by simp[] >> drule_all step_inst_read0_equiv >> simp[],
     `MEM inst.inst_opcode
        [MLOAD;SLOAD;TLOAD;BLOCKHASH;BALANCE;CALLDATALOAD;
-        EXTCODESIZE]`
+        EXTCODESIZE;BLOBHASH]`
       by simp[] >> drule_all step_inst_read1_equiv >> simp[],
     `inst.inst_opcode = EXTCODEHASH` by simp[] >>
       drule_all step_inst_extcodehash_equiv >> simp[],
@@ -383,6 +446,10 @@ Proof
       drule_all step_inst_mcopy_equiv >> simp[],
     `inst.inst_opcode = INVALID` by simp[] >>
       drule_all step_inst_invalid_equiv >> simp[],
+    `inst.inst_opcode = LOG` by simp[] >>
+      drule_all step_inst_log_equiv >> simp[],
+    `inst.inst_opcode = SELFDESTRUCT` by simp[] >>
+      drule_all step_inst_selfdestruct_equiv >> simp[],
     (* Unimplemented opcodes: wildcard gives Error *)
     simp[step_inst_def, result_equiv_def]
   ]

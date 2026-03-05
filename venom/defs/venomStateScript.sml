@@ -42,7 +42,8 @@ Datatype:
   tx_context = <|
     tc_origin : address;           (* Transaction origin (ORIGIN) *)
     tc_gasprice : bytes32;         (* Gas price (GASPRICE) *)
-    tc_chainid : bytes32           (* Chain ID (CHAINID) *)
+    tc_chainid : bytes32;          (* Chain ID (CHAINID) *)
+    tc_blobhashes : bytes32 list   (* Blob hashes (BLOBHASH) *)
   |>
 End
 
@@ -94,7 +95,8 @@ Datatype:
     vs_accounts : evm_accounts;      (* Account states for BALANCE, etc. *)
     vs_call_ctx : call_context;      (* Call context *)
     vs_tx_ctx : tx_context;          (* Transaction context *)
-    vs_block_ctx : block_context     (* Block context *)
+    vs_block_ctx : block_context;    (* Block context *)
+    vs_logs : event list             (* Log/event accumulator *)
   |>
 End
 
@@ -113,7 +115,8 @@ Definition empty_tx_context_def:
   empty_tx_context = <|
     tc_origin := 0w;
     tc_gasprice := 0w;
-    tc_chainid := 0w
+    tc_chainid := 0w;
+    tc_blobhashes := []
   |>
 End
 
@@ -146,7 +149,8 @@ Definition init_venom_state_def:
     vs_accounts := empty_accounts;
     vs_call_ctx := empty_call_context;
     vs_tx_ctx := empty_tx_context;
-    vs_block_ctx := empty_block_context
+    vs_block_ctx := empty_block_context;
+    vs_logs := []
   |>
 End
 

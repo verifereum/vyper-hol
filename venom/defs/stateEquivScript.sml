@@ -63,7 +63,8 @@ Definition observable_equiv_def:
     s1.vs_accounts = s2.vs_accounts /\
     s1.vs_returndata = s2.vs_returndata /\
     s1.vs_halted = s2.vs_halted /\
-    s1.vs_reverted = s2.vs_reverted
+    s1.vs_reverted = s2.vs_reverted /\
+    s1.vs_logs = s2.vs_logs
 End
 
 (* ==========================================================================
@@ -91,7 +92,8 @@ Definition execution_equiv_def:
     s1.vs_accounts = s2.vs_accounts /\
     s1.vs_call_ctx = s2.vs_call_ctx /\
     s1.vs_tx_ctx = s2.vs_tx_ctx /\
-    s1.vs_block_ctx = s2.vs_block_ctx
+    s1.vs_block_ctx = s2.vs_block_ctx /\
+    s1.vs_logs = s2.vs_logs
 End
 
 (* ==========================================================================
