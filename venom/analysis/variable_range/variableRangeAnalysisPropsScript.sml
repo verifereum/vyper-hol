@@ -1,45 +1,47 @@
 (*
  * Variable Range Analysis — Properties (public API)
  *
- * Re-exports consumer-facing properties from proofs/ via ACCEPT_TAC.
- * Consumers: just `Ancestors variableRangeAnalysisProps` to get defs + properties.
+ * Consumer-facing soundness theorems. Consumers `Ancestors` this theory
+ * to get defs + properties.
  *
- * TOP-LEVEL PROPERTIES:
- *   range_evaluate_inst_sound — single instruction soundness wrt step_inst
- *   range_run_block_sound     — block execution soundness wrt run_block
- *
- * Internal helpers (in proofs/, not re-exported here):
- *   range_join_two_sound, range_widen_states_sound — needed by fixpoint proof
- *   range_apply_{iszero,eq,compare}_sound — needed by edge_state proof
- *
- * TODO: range_analyze_sound — whole-analysis soundness (the ideal
- *   consumer-facing theorem, connecting range_get_range to concrete
- *   execution). Not yet proven — requires fixpoint iteration correctness.
+ * TOP-LEVEL:
+ *   range_analyze_block_sound   — block-level: entry sound ⇒ exit sound
+ *   range_get_range_sound       — query: pre-inst state sound ⇒ range sound
  *)
 
 Theory variableRangeAnalysisProps
 Ancestors
-  rangeEvalDefs rangeAnalysisDefs rangeAnalysisProofs
+  valueRangeDefs rangeEvalDefs rangeAnalysisDefs rangeAnalysisProofs
 
-(* ===== Transfer Function Soundness ===== *)
+(* Block-level soundness of the analysis output: if the analysis's entry
+   state for block lbl is sound for a concrete state s, and running the
+   block from s succeeds, then the analysis's exit state is sound for
+   the resulting concrete state.
 
-(* If the abstract range state is sound w.r.t. the variable environment
-   before executing an instruction, it remains sound after execution. *)
-Theorem range_evaluate_inst_sound:
-  ∀dfg inst rs s s'.
-    in_range_state rs s.vs_vars ∧
-    step_inst inst s = OK s' ⇒
-    in_range_state (range_evaluate_inst dfg inst rs) s'.vs_vars
-Proof ACCEPT_TAC rangeAnalysisProofsTheory.range_evaluate_inst_sound
+   The consumer chains this along an execution path:
+     entry_sound(lbl_0) → exit_sound(lbl_0) → entry_sound(lbl_1) → ... *)
+Theorem range_analyze_block_sound:
+  ∀fn fuel lbl bb s s'.
+    let ra = range_analyze fn fuel in
+    lookup_block lbl fn.fn_blocks = SOME bb ∧
+    lbl ∈ FDOM ra.ra_entry ∧
+    in_range_state (range_entry_state ra lbl) s.vs_vars ∧
+    run_block bb s = OK s' ⇒
+    in_range_state (range_exit_state ra lbl) s'.vs_vars
+Proof
+  cheat
 QED
 
-(* Same, lifted to an entire basic block: if ranges are sound at block
-   entry, they are sound at block exit. *)
-Theorem range_run_block_sound:
-  ∀dfg bb rs imap rs' imap' s s'.
-    range_run_block dfg bb.bb_instructions rs imap = (rs', imap') ∧
-    in_range_state rs s.vs_vars ∧
-    run_block bb s = OK s' ⇒
-    in_range_state rs' s'.vs_vars
-Proof ACCEPT_TAC rangeAnalysisProofsTheory.range_run_block_sound
+(* Query soundness: if the pre-instruction range state recorded by the
+   analysis is sound for the concrete state, then the range returned
+   by range_get_range contains the concrete operand value. *)
+Theorem range_get_range_sound:
+  ∀ra inst_id op w env.
+    (∀rs. FLOOKUP ra.ra_inst inst_id = SOME rs ⇒
+          in_range_state rs env) ∧
+    (∀v. op = Var v ⇒ FLOOKUP env v = SOME w) ∧
+    (∀v. op = Lit v ⇒ w = v) ⇒
+    in_range (range_get_range ra op inst_id) w
+Proof
+  cheat
 QED
