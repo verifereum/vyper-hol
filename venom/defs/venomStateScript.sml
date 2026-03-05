@@ -283,4 +283,3 @@ Definition eval_operands_def:
           NONE => NONE
         | SOME vs => SOME (v::vs)
 End
-

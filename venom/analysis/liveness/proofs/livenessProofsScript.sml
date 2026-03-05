@@ -6,7 +6,7 @@
 
 Theory livenessProofs
 Ancestors
-  livenessDefs cfgDefs dfIterateProofs cfgAnalysisProps cfgHelpers
+  livenessDefs cfgDefs dfIterateProofs cfgAnalysisProps cfgHelpers venomWf
 
 open listTheory rich_listTheory pred_setTheory arithmeticTheory venomInstTheory
      finite_mapTheory pairTheory alistTheory sptreeTheory
@@ -166,15 +166,14 @@ QED
 Theorem lookup_block_mem[local]:
   ∀lbl bbs bb. lookup_block lbl bbs = SOME bb ==> MEM bb bbs
 Proof
-  Induct_on `bbs` >> rw[lookup_block_def] >>
-  Cases_on `h.bb_label = lbl` >> fs[] >> res_tac >> simp[]
+  Induct_on `bbs` >> rw[lookup_block_def, FIND_thm] >>
+  gvs[lookup_block_def] >> res_tac >> simp[]
 QED
 
 Theorem lookup_block_label[local]:
   ∀lbl bbs bb. lookup_block lbl bbs = SOME bb ==> bb.bb_label = lbl
 Proof
-  Induct_on `bbs` >> rw[lookup_block_def] >>
-  Cases_on `h.bb_label = lbl` >> fs[]
+  Induct_on `bbs` >> rw[lookup_block_def, FIND_thm]
 QED
 
 (* Converse: if label is among block labels, lookup_block succeeds *)
@@ -182,7 +181,8 @@ Theorem lookup_block_exists[local]:
   ∀k bbs. MEM k (MAP (λbb. bb.bb_label) bbs) ==>
           ∃bb. lookup_block k bbs = SOME bb
 Proof
-  Induct_on `bbs` >> rw[lookup_block_def] >> metis_tac[]
+  Induct_on `bbs` >> rw[lookup_block_def, FIND_thm] >>
+  gvs[lookup_block_def]
 QED
 
 (* ===== Generic boundedness chain =====

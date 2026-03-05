@@ -10,11 +10,19 @@ cd venom
 Holmake
 ```
 
+## Subdirectories
+
+- **`analysis/`** — Static analyses (CFG, dataflow framework, liveness, FCG)
+- **`passes/`** — Compiler pass implementations and correctness proofs
+- **`simulation/`** — Pass simulation & composition framework (generic block→function lifting)
+
 ## Files
 
 - `venomStateScript.sml` - Execution state, operands, state operations
 - `venomInstScript.sml` - Instructions, basic blocks, functions
 - `venomSemScript.sml` - Operational semantics
+- `stateEquivScript.sml` - State equivalence predicates
+- `execEquivScript.sml` - Execution preserves state equivalence
 
 ## Execution State (`venom_state`)
 

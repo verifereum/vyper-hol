@@ -21,7 +21,7 @@
 
 Theory phiWellFormed
 Ancestors
-  phiTransform stateEquiv venomSem venomState phiDefs phiOrigins list
+  phiTransform stateEquivProps venomExecSemantics venomState phiDefs phiOrigins list
 
 (* ==========================================================================
    Well-Formedness Definitions

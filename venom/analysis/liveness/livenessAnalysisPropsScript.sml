@@ -49,9 +49,9 @@ QED
    3) Soundness
    ========================================================================== *)
 
-(* For a well-formed function, if v is live at (lbl, idx), there exists
-   a CFG execution path starting there on which v is used before being
-   redefined. *)
+(* For a well-formed function (wf_function), if v is live at (lbl, idx),
+   there exists a CFG execution path starting there on which v is used
+   before being redefined. *)
 Theorem liveness_sound:
   ∀fn lbl idx v.
     let cfg = cfg_analyze fn in

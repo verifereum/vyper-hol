@@ -23,7 +23,7 @@ Theorem phi_elim_pass_correct:
      s.vs_current_bb = (HD func.fn_blocks).bb_label) /\
     run_function fuel func s = result ==>
     ?result'. run_function fuel (transform_function func) s = result' /\
-              result_equiv result result'
+              result_equiv {} result result'
 Proof
   ACCEPT_TAC phi_elimination_correct
 QED
@@ -44,7 +44,7 @@ Theorem phi_elim_context_pass_correct:
       MEM func' (transform_context ctx).ctx_functions /\
       func'.fn_name = fn_name /\
       run_function fuel func' s = result' /\
-      result_equiv result result'
+      result_equiv {} result result'
 Proof
   ACCEPT_TAC phi_elimination_context_correct
 QED

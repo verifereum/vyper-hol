@@ -4,9 +4,7 @@
 
 Theory dfIterateProofs
 Ancestors
-  dfIterateDefs
-
-open arithmeticTheory WhileTheory
+  dfIterateDefs arithmetic While
 
 (* Orbit-bounded fixpoint: P is an invariant on the orbit of x under f.
    The measure m strictly increases (under P) when f changes something,

@@ -7,6 +7,8 @@ INCLUDES = \
   ../../semantics \
   shared \
   dataflow \
+  dataflow/defs \
+  dataflow/proofs \
   cfg \
   dfg \
   fcg \
@@ -14,4 +16,8 @@ INCLUDES = \
   dominators \
   base_ptr \
   available_expression \
-  stack_order
+  stack_order \
+  mem_alias \
+  mem_ssa \
+  mem_ssa/defs \
+  mem_ssa/proofs

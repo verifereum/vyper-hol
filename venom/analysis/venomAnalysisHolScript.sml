@@ -2,6 +2,7 @@
 Theory venomAnalysisHol
 Ancestors
   (* shared *)
+  venomWf
   venomEffects
   memLocDefs
   memLocProps
@@ -11,6 +12,9 @@ Ancestors
   fcgAnalysis
   (* dataflow *)
   dfIterateProps
+  latticeProps
+  worklistProps
+  dfHelperProps
   (* liveness *)
   livenessAnalysis
   (* dfg *)
@@ -23,3 +27,7 @@ Ancestors
   availExprAnalysis
   (* stack order *)
   stackOrderProps
+  (* memory alias *)
+  memAliasProps
+  (* memory SSA *)
+  memSSAProps

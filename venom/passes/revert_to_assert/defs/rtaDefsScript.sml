@@ -15,10 +15,10 @@
  *   - transform_jnz             : Transform JNZ to assert pattern if applicable
  *
  * This theory imports state equivalence definitions from stateEquivTheory:
- *   - state_equiv_except        : State equivalence ignoring a set of variables
- *   - execution_equiv_except    : State equivalence ignoring control flow
+ *   - state_equiv        : State equivalence ignoring a set of variables
+ *   - execution_equiv    : State equivalence ignoring control flow
  *   - observable_equiv          : External effect equivalence
- *   - result_equiv_except       : Result equivalence for exec_result
+ *   - result_equiv       : Result equivalence for exec_result
  *   - terminates                : Predicate for successful termination (not Error)
  *
  * ============================================================================
@@ -56,7 +56,7 @@
 
 Theory rtaDefs
 Ancestors
-  stateEquiv venomSem venomInst venomState finite_map pred_set
+  stateEquiv venomExecSemantics venomInst venomState finite_map pred_set
 Libs
   finite_mapTheory venomStateTheory
 

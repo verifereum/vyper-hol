@@ -24,7 +24,7 @@
 
 Theory phiBlock
 Ancestors
-  phiWellFormed execEquiv venomSem venomState venomInst phiDefs phiOrigins phiTransform stateEquiv list
+  phiWellFormed execEquivProps venomExecSemantics venomState venomInst phiDefs phiOrigins phiTransform stateEquiv stateEquivProps list
 
 (* ==========================================================================
    Instruction Step Lemmas
@@ -75,7 +75,7 @@ Theorem transform_inst_correct:
     dfg_lookup dfg v = SOME origin
   ==>
     ?s''. step_inst (transform_inst dfg inst) s = OK s'' /\
-          state_equiv s' s''
+          state_equiv {} s' s''
 Proof
   rpt strip_tac >>
   `is_phi_inst inst` by metis_tac[phi_single_origin_is_phi] >>
@@ -111,7 +111,7 @@ Theorem step_in_block_equiv:
        dfg_lookup dfg v = SOME origin)
   ==>
     ?s''. step_in_block (transform_block dfg bb) s = (OK s'', is_term) /\
-          state_equiv s' s''
+          state_equiv {} s' s''
 Proof
   rpt strip_tac >>
   fs[step_in_block_def] >>
@@ -213,7 +213,8 @@ Proof
   qpat_x_assum `~is_terminator _` mp_tac >>
   simp[step_inst_def] >>
   Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
-  simp[exec_binop_def, exec_unop_def, exec_modop_def] >>
+  simp[exec_pure2_def, exec_pure1_def, exec_pure3_def,
+       exec_read0_def, exec_read1_def, exec_write2_def] >>
   strip_tac >> gvs[AllCaseEqs()] >>
   gvs[update_var_def, mstore_def, sstore_def, tstore_def, write_memory_with_expansion_def]
 QED
@@ -272,8 +273,7 @@ Proof
     qexists_tac `x` >> qexists_tac `s` >> simp[]
   ) >>
   (* Non-terminal case: use IH *)
-  spose_not_then strip_assume_tac >> gvs[] >>
-  first_x_assum (qspecl_then [`OK v`, `F`, `v`] mp_tac) >> simp[]
+  spose_not_then strip_assume_tac >> gvs[]
 QED
 
 (* ==========================================================================
@@ -293,7 +293,7 @@ Theorem transform_block_correct:
        dfg_lookup graph v = SOME origin)
   ==>
     ?xformed_st. run_block (transform_block graph bb) st = OK xformed_st /\
-                 state_equiv final_st xformed_st
+                 state_equiv {} final_st xformed_st
 Proof
   ho_match_mp_tac run_block_ind >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
@@ -311,7 +311,7 @@ Proof
   ) >>
   strip_tac >> simp[Once run_block_def] >>
   Cases_on `v.vs_halted` >> gvs[] >>
-  `~s''.vs_halted` by gvs[state_equiv_def] >> simp[] >>
+  `~s''.vs_halted` by gvs[state_equiv_def, execution_equiv_def] >> simp[] >>
   Cases_on `r` >> gvs[] >- (
     qexists_tac `s''` >> simp[Once run_block_def]
   ) >>
@@ -321,17 +321,13 @@ Proof
     conj_tac >- (rpt strip_tac >> first_x_assum drule_all >> simp[]) >>
     rpt strip_tac >> first_x_assum drule_all >> simp[]
   ) >>
-  strip_tac >> drule_all run_block_state_equiv >> strip_tac >>
+  strip_tac >>
+  `?r2. run_block (transform_block graph bb) s'' = OK r2 /\ state_equiv {} xformed_st r2` by (
+    irule run_block_state_equiv >> simp[] >>
+    qexists_tac `v` >> simp[]
+  ) >>
   qexists_tac `r2` >> simp[] >>
   irule state_equiv_trans >> qexists_tac `xformed_st` >> simp[]
-QED
-
-(* result_equiv transitivity *)
-Theorem result_equiv_trans:
-  !r1 r2 r3. result_equiv r1 r2 /\ result_equiv r2 r3 ==> result_equiv r1 r3
-Proof
-  Cases >> Cases >> Cases >>
-  simp[result_equiv_def] >> metis_tac[state_equiv_trans]
 QED
 
 (* Block-level correctness: transform preserves result equivalence. *)
@@ -354,7 +350,7 @@ Theorem transform_block_result_equiv:
        step_inst inst s' = Error e ==>
        lookup_var src_var s' = NONE)
   ==>
-    result_equiv (run_block bb st) (run_block (transform_block graph bb) st)
+    result_equiv {} (run_block bb st) (run_block (transform_block graph bb) st)
 Proof
   recInduct run_block_ind >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
@@ -376,10 +372,10 @@ Proof
     simp[] >>
     Cases_on `v.vs_halted` >> gvs[]
     >- (
-      `s''.vs_halted` by fs[state_equiv_def] >>
-      gvs[result_equiv_def]
+      `s''.vs_halted` by fs[state_equiv_def, execution_equiv_def] >>
+      gvs[result_equiv_def, state_equiv_def]
     ) >>
-    `~s''.vs_halted` by fs[state_equiv_def] >> simp[] >>
+    `~s''.vs_halted` by fs[state_equiv_def, execution_equiv_def] >> simp[] >>
     Cases_on `is_term` >> gvs[result_equiv_def] >>
     `v.vs_prev_bb = s.vs_prev_bb` by (
       qspecl_then [`bb`, `s`, `v`, `F`] mp_tac step_in_block_preserves_prev_bb >> simp[]
@@ -398,12 +394,12 @@ Proof
   >- ((* Halt case *)
     drule step_in_block_halt_transform >>
     disch_then (qspec_then `graph` mp_tac) >>
-    simp[Once run_block_def, result_equiv_def, state_equiv_refl]
+    simp[Once run_block_def, result_equiv_def, execution_equiv_refl]
   )
   >- ((* Revert case *)
     drule step_in_block_revert_transform >>
     disch_then (qspec_then `graph` mp_tac) >>
-    simp[Once run_block_def, result_equiv_def, state_equiv_refl]
+    simp[Once run_block_def, result_equiv_def, execution_equiv_refl]
   ) >>
   (* Error case - prove directly by case analysis *)
   simp[Once run_block_def] >>
