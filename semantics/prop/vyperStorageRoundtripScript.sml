@@ -711,7 +711,7 @@ Proof
 QED
 
 (* All write offsets from encode functions are bounded by type_slot_size *)
-Theorem encode_writes_bounded[local]:
+Theorem encode_writes_bounded:
   (∀tv v writes.
      encode_value tv v = SOME writes ∧ well_formed_value v ⇒
      ∀off. MEM off (MAP FST writes) ⇒ off < type_slot_size tv) ∧
@@ -1106,6 +1106,65 @@ Proof
   impl_tac >- (
     first_x_assum (qspec_then `off` mp_tac) >> simp[]
   ) >> simp[]
+QED
+
+(* Helper: apply_writes doesn't affect lookup at addresses outside the write set *)
+Theorem apply_writes_lookup_other[local]:
+  ∀writes (base : bytes32) storage (addr : bytes32).
+    (∀off. MEM off (MAP FST writes) ⇒ n2w (w2n base + off) ≠ addr) ⇒
+    lookup_storage addr (apply_writes base writes storage) =
+    lookup_storage addr storage
+Proof
+  Induct >> simp[apply_writes_def] >>
+  Cases >> simp[apply_writes_def] >>
+  rpt strip_tac >>
+  simp[lookup_storage_def, update_storage_def, APPLY_UPDATE_THM]
+QED
+
+(* TOP-LEVEL: decode_value is unchanged when apply_writes touches a disjoint region.
+   sz bounds the write offsets; the write region [off1, off1+sz) must be disjoint
+   from the decode region [off2, off2+type_slot_size tv). *)
+Theorem decode_value_disjoint_writes:
+  ∀tv writes off1 off2 storage sz.
+    (∀wr_off. MEM wr_off (MAP FST writes) ⇒ wr_off < sz) ∧
+    off1 + sz ≤ dimword(:256) ∧
+    off2 + type_slot_size tv ≤ dimword(:256) ∧
+    (off1 + sz ≤ off2 ∨ off2 + type_slot_size tv ≤ off1) ⇒
+    decode_value (apply_writes (n2w off1) writes storage) off2 tv =
+    decode_value storage off2 tv
+Proof
+  rpt strip_tac >>
+  irule (CONJUNCT1 decode_storage_agree) >>
+  rpt strip_tac >>
+  irule apply_writes_lookup_other >>
+  REWRITE_TAC [nwn_eq] >>
+  rpt strip_tac >>
+  `off < sz` by res_tac >>
+  gvs[wordsTheory.n2w_11]
+QED
+
+(* Helper: decode_value unchanged by disjoint apply_writes at word offset *)
+Theorem decode_value_disjoint_apply_writes:
+  ∀tv writes off1 off2 storage sz.
+    (∀wr_off. MEM wr_off (MAP FST writes) ⇒ wr_off < sz) ∧
+    off1 + sz ≤ dimword(:256) ∧
+    off2 + type_slot_size tv ≤ dimword(:256) ∧
+    (off1 + sz ≤ off2 ∨ off2 + type_slot_size tv ≤ off1) ⇒
+    decode_value (apply_writes (n2w off1) writes storage)
+      (w2n ((n2w off2):bytes32)) tv =
+    decode_value storage (w2n ((n2w off2):bytes32)) tv
+Proof
+  rpt gen_tac >> disch_tac >>
+  irule decode_value_disjoint_writes >>
+  conj_tac >- (
+    `off2 MOD dimword(:256) ≤ off2` by
+      simp[arithmeticTheory.MOD_LESS_EQ] >>
+    fs[wordsTheory.w2n_n2w]) >>
+  qexists_tac `sz` >> fs[] >>
+  Cases_on `off2 < dimword(:256)` >>
+  simp[wordsTheory.w2n_n2w, arithmeticTheory.MOD_LESS_EQ] >>
+  `off2 = dimword(:256) ∧ type_slot_size tv = 0` by simp[] >>
+  gvs[]
 QED
 
 (* Helper: roundtrip_ok at an offset.

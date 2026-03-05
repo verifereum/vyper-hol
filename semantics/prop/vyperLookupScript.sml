@@ -112,6 +112,34 @@ Definition storable_value_def:
          well_formed_value v
 End
 
+Definition storage_var_info_def:
+  storage_var_info cx mid n =
+    case get_module_code cx mid of
+    | NONE => NONE
+    | SOME code =>
+        case find_var_decl_by_num (string_to_num n) code of
+        | SOME (StorageVarDecl b t, id) =>
+            (case (lookup_var_slot_from_layout cx b mid id,
+                   evaluate_type (get_tenv cx) t) of
+             | (SOME off, SOME tv) => SOME (b, off, tv)
+             | _ => NONE)
+        | _ => NONE
+End
+
+Definition well_formed_layout_def:
+  well_formed_layout cx ⇔
+    (* Non-overflow: each variable's slot range fits in the address space *)
+    (∀mid n b off tv.
+      storage_var_info cx mid n = SOME (b, off, tv) ⇒
+      off + type_slot_size tv ≤ dimword(:256)) ∧
+    (* Disjointness: distinct variables on the same backend have disjoint slots *)
+    (∀mid1 n1 mid2 n2 b off1 tv1 off2 tv2.
+      storage_var_info cx mid1 n1 = SOME (b, off1, tv1) ∧
+      storage_var_info cx mid2 n2 = SOME (b, off2, tv2) ∧
+      (mid1, n1) ≠ (mid2, n2) ⇒
+      off1 + type_slot_size tv1 ≤ off2 ∨ off2 + type_slot_size tv2 ≤ off1)
+End
+
 (****************************************)
 (* Helpers *)
 
@@ -789,6 +817,15 @@ Proof
   rw[var_in_storage_def, storage_type_of_def] >> gvs[]
 QED
 
+Theorem var_in_storage_storage_var_info[local]:
+  var_in_storage cx mid n ⇒
+  ∃b off tv.
+    storage_var_info cx mid n = SOME (b, off, tv) ∧
+    well_formed_type_value tv
+Proof
+  rw[var_in_storage_def, storage_var_info_def] >> gvs[]
+QED
+
 Theorem get_after_set_storage_backend[local]:
   ∀cx is_transient storage' st.
     get_storage_backend cx is_transient
@@ -803,6 +840,22 @@ Proof
      vfmExecutionTheory.lookup_transient_storage_def,
      vfmExecutionTheory.update_transient_storage_def,
      combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem get_after_set_other_backend[local]:
+  ∀cx b1 b2 storage' st.
+    b1 ≠ b2 ⇒
+    FST (get_storage_backend cx b2
+      (SND (set_storage_backend cx b1 storage' st))) =
+    FST (get_storage_backend cx b2 st)
+Proof
+  Cases_on `b1` >> Cases_on `b2` >> gvs[] >>
+  simp[get_storage_backend_def, set_storage_backend_def,
+       bind_def, return_def, get_accounts_def, update_accounts_def,
+       get_transient_storage_def, update_transient_def,
+       vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def,
+       vfmExecutionTheory.lookup_transient_storage_def,
+       vfmExecutionTheory.update_transient_storage_def]
 QED
 
 Theorem get_storage_backend_INL[local]:
@@ -876,4 +929,92 @@ Proof
   rpt strip_tac >>
   drule_all lookup_toplevel_name_after_update_core >> strip_tac >>
   first_x_assum (qspec_then `st` strip_assume_tac) >> gvs[]
+QED
+
+Theorem lookup_toplevel_name_preserved_after_update:
+  ∀cx st mid1 mid2 n1 n2 v.
+    well_formed_layout cx ∧
+    well_formed_value v ∧
+    (mid1,n1) ≠ (mid2,n2) ∧
+    var_in_storage cx mid1 n1 ∧ var_in_storage cx mid2 n2 ⇒
+    lookup_toplevel_name cx (update_toplevel_name cx st mid1 n1 v) mid2 n2 =
+    lookup_toplevel_name cx st mid2 n2
+Proof
+  rpt gen_tac >> strip_tac >>
+  (* Extract storage var info *)
+  `∃b1 off1 tv1. storage_var_info cx mid1 n1 = SOME (b1, off1, tv1) ∧
+    well_formed_type_value tv1` by metis_tac[var_in_storage_storage_var_info] >>
+  `∃b2 off2 tv2. storage_var_info cx mid2 n2 = SOME (b2, off2, tv2) ∧
+    well_formed_type_value tv2` by metis_tac[var_in_storage_storage_var_info] >>
+  (* Get bounds and disjointness from well_formed_layout *)
+  `off1 + type_slot_size tv1 ≤ dimword(:256)` by
+    (gvs[well_formed_layout_def] >> res_tac) >>
+  `off2 + type_slot_size tv2 ≤ dimword(:256)` by
+    (gvs[well_formed_layout_def] >> res_tac) >>
+  `b1 = b2 ⇒
+    off1 + type_slot_size tv1 ≤ off2 ∨ off2 + type_slot_size tv2 ≤ off1` by (
+    strip_tac >> gvs[well_formed_layout_def] >>
+    first_x_assum drule_all >> simp[]) >>
+  (* Unfold storage_var_info to get concrete lookups *)
+  gvs[storage_var_info_def, AllCaseEqs()] >>
+  (* Unfold update_toplevel_name → set_global → write_storage_slot *)
+  simp[update_toplevel_name_def] >>
+  simp[Once set_global_def, write_storage_slot_def,
+       bind_def, lift_option_type_def, lift_option_def,
+       return_def, LET_THM, raise_def] >>
+  `∃storage0. get_storage_backend cx b1 st = (INL storage0, st)` by
+    metis_tac[get_storage_backend_INL] >>
+  (* Rewrite the write-side case expression, keeping the assumption *)
+  qpat_x_assum `get_storage_backend _ _ _ = _`
+    (fn th => simp[th] >> assume_tac th) >>
+  Cases_on `encode_value tv1 v` >> simp[raise_def, return_def] >>
+  rename1 `encode_value tv1 v = SOME writes` >>
+  (* Unfold lookup_toplevel_name on both sides *)
+  simp[lookup_toplevel_name_def, lookup_global_def, bind_def,
+       lift_option_type_def, lift_option_def, return_def, LET_THM, raise_def] >>
+  (* Case split: same backend vs different backend *)
+  Cases_on `b1 = b2` >- (
+    (* Same backend: use decode_value_disjoint_writes *)
+    pop_assum SUBST_ALL_TAC >>
+    (* Establish decode_value equality before case-splitting tv2 *)
+    `decode_value (apply_writes (n2w off1) writes storage0)
+       (w2n ((n2w off2):bytes32)) tv2 =
+     decode_value storage0 (w2n ((n2w off2):bytes32)) tv2` by (
+      irule decode_value_disjoint_apply_writes >>
+      conj_tac >- simp[] >>
+      qexists_tac `type_slot_size tv1` >> simp[] >>
+      rpt strip_tac >>
+      drule_all (CONJUNCT1 encode_writes_bounded) >> simp[]) >>
+    (* Case-split tv2, unfold read_storage_slot, apply decode equality *)
+    Cases_on `tv2` >> simp[return_def] >>
+    simp[read_storage_slot_def, bind_def, lift_option_def,
+         return_def, raise_def] >>
+    REWRITE_TAC [get_after_set_storage_backend] >> simp[] >>
+    qpat_x_assum `get_storage_backend _ _ st = _` (fn th => simp[th]) >>
+    TRY (qpat_x_assum `decode_value _ _ _ = decode_value _ _ _`
+      (fn th => REWRITE_TAC [REWRITE_RULE [wordsTheory.w2n_n2w] th])) >>
+    ntac 5 (BasicProvers.PURE_CASE_TAC >> simp[return_def, raise_def])
+  ) >>
+  (* Different backend: storage on b2 is unchanged *)
+  Cases_on `tv2` >> simp[return_def] >>
+  simp[read_storage_slot_def, bind_def, lift_option_def, return_def] >>
+  `∃s2. get_storage_backend cx b2 st = (INL s2, st)` by
+    metis_tac[get_storage_backend_INL] >>
+  `∃s2'. get_storage_backend cx b2
+    (SND (set_storage_backend cx b1
+      (apply_writes (n2w off1) writes storage0) st)) =
+    (INL s2', SND (set_storage_backend cx b1
+      (apply_writes (n2w off1) writes storage0) st))` by
+    metis_tac[get_storage_backend_INL] >>
+  `s2' = s2` by (
+    `FST (get_storage_backend cx b2
+      (SND (set_storage_backend cx b1
+        (apply_writes (n2w off1) writes storage0) st))) =
+     FST (get_storage_backend cx b2 st)` by
+      (irule get_after_set_other_backend >> simp[]) >>
+    gvs[]) >>
+  gvs[] >>
+  qpat_x_assum `get_storage_backend cx b2 (SND _) = _` (fn th => simp[th]) >>
+  qpat_x_assum `get_storage_backend cx b2 st = _` (fn th => simp[th]) >>
+  ntac 5 (BasicProvers.PURE_CASE_TAC >> simp[return_def, raise_def])
 QED
