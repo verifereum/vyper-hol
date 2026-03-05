@@ -704,6 +704,179 @@ Termination
   rw[vyperMiscTheory.list_size_pair_size_map]
 End
 
+(* ===== value_has_type: structural characterization of encode_value success ===== *)
+
+Definition value_has_type_def:
+  (* Unsigned integer *)
+  value_has_type (BaseTV (UintT m)) (IntV (Unsigned n) _) = (n = m) ∧
+  (* Signed integer *)
+  value_has_type (BaseTV (IntT m)) (IntV (Signed n) _) = (n = m) ∧
+  (* Decimal *)
+  value_has_type (BaseTV DecimalT) (DecimalV _) = T ∧
+  (* Boolean *)
+  value_has_type (BaseTV BoolT) (BoolV _) = T ∧
+  (* Address *)
+  value_has_type (BaseTV AddressT) (BytesV (Fixed m) bs) =
+    (LENGTH bs = m ∧ m = 20) ∧
+  (* Fixed bytes *)
+  value_has_type (BaseTV (BytesT (Fixed n))) (BytesV (Fixed m) bs) =
+    (m = n ∧ LENGTH bs = n ∧ n ≤ 32) ∧
+  (* Dynamic bytes *)
+  value_has_type (BaseTV (BytesT (Dynamic max))) (BytesV (Dynamic m) bs) =
+    (m = max ∧ LENGTH bs ≤ max ∧ max < dimword(:256)) ∧
+  (* String *)
+  value_has_type (BaseTV (StringT max)) (StringV m s) =
+    (m = max ∧ LENGTH s ≤ max ∧ max < dimword(:256)) ∧
+  (* Flag *)
+  value_has_type (FlagTV m') (FlagV m _) = (m = m') ∧
+  (* None *)
+  value_has_type NoneTV NoneV = T ∧
+  (* Tuple *)
+  value_has_type (TupleTV tvs) (ArrayV (TupleV vs)) =
+    values_have_types tvs vs ∧
+  (* Static array *)
+  value_has_type (ArrayTV tv (Fixed n)) (ArrayV (SArrayV tv' m sparse)) =
+    (tv = tv' ∧ n = m ∧ sparse_has_type tv sparse) ∧
+  (* Dynamic array *)
+  value_has_type (ArrayTV tv (Dynamic max)) (ArrayV (DynArrayV tv' m vs)) =
+    (tv = tv' ∧ max = m ∧ all_have_type tv vs) ∧
+  (* Struct *)
+  value_has_type (StructTV ftypes) (StructV fields) =
+    struct_has_type ftypes fields ∧
+  (* Default: mismatch *)
+  value_has_type _ _ = F ∧
+
+  values_have_types [] [] = T ∧
+  values_have_types (tv::tvs) (v::vs) =
+    (value_has_type tv v ∧ values_have_types tvs vs) ∧
+  values_have_types _ _ = F ∧
+
+  sparse_has_type tv [] = T ∧
+  sparse_has_type tv ((k:num,v)::rest) =
+    (value_has_type tv v ∧ sparse_has_type tv rest) ∧
+
+  all_have_type tv [] = T ∧
+  all_have_type tv (v::vs) =
+    (value_has_type tv v ∧ all_have_type tv vs) ∧
+
+  struct_has_type [] [] = T ∧
+  struct_has_type ((fname,tv)::ftypes) ((vname,v)::fields) =
+    (fname = vname ∧ value_has_type tv v ∧ struct_has_type ftypes fields) ∧
+  struct_has_type _ _ = F
+Termination
+  WF_REL_TAC `measure (λx. case x of
+    | INL (_, v) => value_size v
+    | INR (INL (_, vs)) => list_size value_size vs
+    | INR (INR (INL (_, sparse))) =>
+        list_size (pair_size (λx. 0) value_size) sparse
+    | INR (INR (INR (INL (_, vs)))) => list_size value_size vs
+    | INR (INR (INR (INR (_, fields)))) =>
+        list_size (pair_size (λx. 0) value_size) fields)` >>
+  rpt conj_tac >>
+  TRY (Induct >> simp[basicSizeTheory.pair_size_def] >>
+       Cases >> simp[basicSizeTheory.pair_size_def] >> NO_TAC) >>
+  Induct_on `sparse` >> simp[basicSizeTheory.pair_size_def] >>
+  Cases >> simp[basicSizeTheory.pair_size_def] >>
+  rpt strip_tac >> first_x_assum (qspecl_then [`m`, `tv'`] mp_tac) >> simp[]
+End
+
+(* Helper: IS_SOME of compound encoders doesn't depend on offset *)
+Theorem encode_IS_SOME_offset_indep[local]:
+  (∀offset offset' tvs vs.
+     IS_SOME (encode_tuple offset tvs vs) ⇔
+     IS_SOME (encode_tuple offset' tvs vs)) ∧
+  (∀tv offset offset' sparse.
+     IS_SOME (encode_static_array tv offset sparse) ⇔
+     IS_SOME (encode_static_array tv offset' sparse)) ∧
+  (∀tv offset offset' vs.
+     IS_SOME (encode_dyn_array tv offset vs) ⇔
+     IS_SOME (encode_dyn_array tv offset' vs)) ∧
+  (∀offset offset' ftypes fields.
+     IS_SOME (encode_struct offset ftypes fields) ⇔
+     IS_SOME (encode_struct offset' ftypes fields))
+Proof
+  rpt conj_tac
+  (* encode_tuple *)
+  >- (
+    Induct_on `tvs` >> simp[encode_value_def] >> rpt gen_tac >>
+    Cases_on `vs` >> simp[encode_value_def, AllCaseEqs()] >>
+    Cases_on `encode_value h h'` >> simp[] >>
+    first_x_assum (qspecl_then [`offset + type_slot_size h`,
+      `offset' + type_slot_size h`, `t`] mp_tac) >>
+    Cases_on `encode_tuple (offset + type_slot_size h) tvs t` >>
+    Cases_on `encode_tuple (offset' + type_slot_size h) tvs t` >> simp[]
+  )
+  (* encode_static_array *)
+  >- (
+    Induct_on `sparse` >> simp[encode_value_def] >>
+    Cases >> rpt gen_tac >> simp[encode_value_def, AllCaseEqs()] >>
+    Cases_on `encode_value tv r` >> simp[] >>
+    first_x_assum (qspecl_then [`tv`, `offset`, `offset'`] mp_tac) >>
+    Cases_on `encode_static_array tv offset sparse` >>
+    Cases_on `encode_static_array tv offset' sparse` >> simp[]
+  )
+  (* encode_dyn_array *)
+  >- (
+    Induct_on `vs` >> simp[encode_value_def] >>
+    rpt gen_tac >> simp[encode_value_def, AllCaseEqs()] >>
+    Cases_on `encode_value tv h` >> simp[] >>
+    first_x_assum (qspecl_then [`tv`, `offset + type_slot_size tv`,
+      `offset' + type_slot_size tv`] mp_tac) >>
+    Cases_on `encode_dyn_array tv (offset + type_slot_size tv) vs` >>
+    Cases_on `encode_dyn_array tv (offset' + type_slot_size tv) vs` >> simp[]
+  )
+  (* encode_struct *)
+  >> Induct_on `ftypes` >> simp[encode_value_def] >>
+  rpt gen_tac >> Cases_on `fields` >> simp[encode_value_def, AllCaseEqs()] >>
+  Cases_on `h` >> Cases_on `h'` >>
+  simp[encode_value_def, AllCaseEqs()] >>
+  rpt IF_CASES_TAC >> simp[] >>
+  Cases_on `encode_value r r'` >> simp[] >>
+  first_x_assum (qspecl_then [`offset + type_slot_size r`,
+    `offset' + type_slot_size r`, `t`] mp_tac) >>
+  Cases_on `encode_struct (offset + type_slot_size r) ftypes t` >>
+  Cases_on `encode_struct (offset' + type_slot_size r) ftypes t` >> simp[]
+QED
+
+(* Corollary: normalize IS_SOME to offset 0 *)
+Theorem encode_IS_SOME_at_0[local,simp]:
+  (∀offset tvs vs. IS_SOME (encode_tuple offset tvs vs) ⇔
+     IS_SOME (encode_tuple 0 tvs vs)) ∧
+  (∀tv offset sparse. IS_SOME (encode_static_array tv offset sparse) ⇔
+     IS_SOME (encode_static_array tv 0 sparse)) ∧
+  (∀tv offset vs. IS_SOME (encode_dyn_array tv offset vs) ⇔
+     IS_SOME (encode_dyn_array tv 0 vs)) ∧
+  (∀offset ftypes fields. IS_SOME (encode_struct offset ftypes fields) ⇔
+     IS_SOME (encode_struct 0 ftypes fields))
+Proof
+  metis_tac[encode_IS_SOME_offset_indep]
+QED
+
+(* Helper: IS_SOME distributes over option case *)
+Theorem IS_SOME_option_CASE[local,simp]:
+  IS_SOME (case opt of NONE => NONE | SOME x => f x) ⇔
+  IS_SOME opt ∧ IS_SOME (f (THE opt))
+Proof
+  Cases_on `opt` >> simp[]
+QED
+
+(* KEY LEMMA: value_has_type is equivalent to IS_SOME (encode_value) *)
+Theorem value_has_type_equiv:
+  (∀tv v. value_has_type tv v ⇔ IS_SOME (encode_value tv v)) ∧
+  (∀tvs vs. values_have_types tvs vs ⇔ IS_SOME (encode_tuple 0 tvs vs)) ∧
+  (∀tv sparse. sparse_has_type tv sparse ⇔
+     IS_SOME (encode_static_array tv 0 sparse)) ∧
+  (∀tv vs. all_have_type tv vs ⇔ IS_SOME (encode_dyn_array tv 0 vs)) ∧
+  (∀ftypes fields. struct_has_type ftypes fields ⇔
+     IS_SOME (encode_struct 0 ftypes fields))
+Proof
+  ho_match_mp_tac value_has_type_ind >> rpt conj_tac >> rpt gen_tac >>
+  simp[value_has_type_def, encode_value_def, encode_base_to_slot_def,
+       encode_dyn_bytes_slots_def, AllCaseEqs(), COND_RAND, COND_RATOR,
+       LET_THM] >>
+  strip_tac >> metis_tac[]
+QED
+
 (* ===== General roundtrip_ok from well_formed_value ===== *)
 
 (* For non-compound types, roundtrip_ok follows from well_formed_value

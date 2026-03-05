@@ -57,6 +57,20 @@ Definition storage_type_of_def:
         | _ => NONE
 End
 
+Definition storable_typed_value_def:
+  storable_typed_value tv v ⇔
+    value_has_type tv v ∧
+    well_formed_value v ∧
+    wf_type_value tv ∧
+    (∀e bd. tv ≠ ArrayTV e bd) ∧
+    type_slot_size tv ≤ dimword(:256)
+End
+
+Definition storable_value_def:
+  storable_value cx mid n v ⇔
+    ∀tv. storage_type_of cx mid n = SOME tv ⇒ storable_typed_value tv v
+End
+
 Theorem var_in_storage_has_type:
   var_in_storage cx mid n ⇒ IS_SOME (storage_type_of cx mid n)
 Proof
@@ -799,17 +813,17 @@ Proof
 QED
 
 Theorem lookup_toplevel_name_after_update:
-  ∀cx st mid n v tv.
+  ∀cx st mid n v.
     var_in_storage cx mid n ∧
-    well_formed_value v ∧
-    storage_type_of cx mid n = SOME tv ∧
-    IS_SOME (encode_value tv v) ∧
-    (∀e bd. tv ≠ ArrayTV e bd) ∧
-    wf_type_value tv ∧
-    type_slot_size tv ≤ dimword(:256) ⇒
+    storable_value cx mid n v ⇒
     lookup_toplevel_name cx (update_toplevel_name cx st mid n v) mid n = SOME (Value v)
 Proof
   rpt strip_tac >>
+  fs[storable_value_def, storable_typed_value_def] >>
+  `IS_SOME (storage_type_of cx mid n)` by metis_tac[var_in_storage_has_type] >>
+  Cases_on `storage_type_of cx mid n` >> gvs[] >>
+  rename1 `storage_type_of cx mid n = SOME tv` >>
+  `IS_SOME (encode_value tv v)` by gvs[value_has_type_equiv] >>
   `roundtrip_ok tv v` by (
     irule roundtrip_all >> simp[]
   ) >>
@@ -822,9 +836,7 @@ Proof
     metis_tac[get_storage_backend_INL] >>
   simp[] >>
   simp[Once lookup_global_def, bind_def, lift_option_type_def, return_def, LET_THM, raise_def] >>
-  (* Case split on tv to resolve type_value_CASE before further simp *)
   reverse (Cases_on `tv`) >> gvs[] >>
-  (* ArrayTV eliminated; remaining cases use read_storage_slot *)
   simp[read_storage_slot_def, lift_option_def] >>
   simp[bind_def, get_after_set_storage_backend, return_def, raise_def] >>
   fs[roundtrip_ok_def] >>
