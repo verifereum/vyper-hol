@@ -9,23 +9,18 @@ Ancestors
   execEquivParamProofs
 
 Theorem step_inst_preserves_R:
-  !(R : venom_state -> venom_state -> bool) inst s1 s2.
-    valid_state_rel R /\ R s1 s2 /\
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool) inst s1 s2.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==>
          lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R (step_inst inst s1) (step_inst inst s2)
+    lift_result R_ok R_term (step_inst inst s1) (step_inst inst s2)
 Proof
   ACCEPT_TAC step_inst_preserves_R_proof
 QED
 
-Theorem state_equiv_valid_state_rel:
-  valid_state_rel state_equiv
+Theorem state_equiv_execution_equiv_valid_state_rel:
+  !vars. valid_state_rel (state_equiv vars) (execution_equiv vars)
 Proof
-  ACCEPT_TAC state_equiv_valid_state_rel_proof
-QED
-
-Theorem state_equiv_except_valid_state_rel:
-  !fresh. valid_state_rel (state_equiv_except fresh)
-Proof
-  ACCEPT_TAC state_equiv_except_valid_state_rel_proof
+  ACCEPT_TAC state_equiv_execution_equiv_valid_state_rel_proof
 QED
