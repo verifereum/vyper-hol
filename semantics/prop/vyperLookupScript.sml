@@ -1,7 +1,7 @@
 Theory vyperLookup
 Ancestors
   vyperMisc vyperContext vyperState vyperInterpreter vyperValue vyperValueOperation
-  vyperStorageRoundtrip
+  vyperTyping vyperStorageRoundtrip
 
 Definition lookup_name_def:
   lookup_name st n = lookup_scopes (string_to_num n) st.scopes
