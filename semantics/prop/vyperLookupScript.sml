@@ -37,47 +37,6 @@ Definition lookup_toplevel_name_def:
   | _ => NONE
 End
 
-Definition var_in_storage_def:
-  var_in_storage cx mid n ⇔
-  ∃code b t id offset tv.
-    get_module_code cx mid = SOME code ∧
-    find_var_decl_by_num (string_to_num n) code = SOME (StorageVarDecl b t, id) ∧
-    lookup_var_slot_from_layout cx b mid id = SOME offset ∧
-    offset < dimword(:256) ∧
-    evaluate_type (get_tenv cx) t = SOME tv
-End
-
-Definition storage_type_of_def:
-  storage_type_of cx mid n =
-    case get_module_code cx mid of
-    | NONE => NONE
-    | SOME code =>
-        case find_var_decl_by_num (string_to_num n) code of
-        | SOME (StorageVarDecl b t, id) => evaluate_type (get_tenv cx) t
-        | _ => NONE
-End
-
-Definition storable_typed_value_def:
-  storable_typed_value tv v ⇔
-    value_has_type tv v ∧
-    well_formed_value v ∧
-    wf_type_value tv ∧
-    (∀e bd. tv ≠ ArrayTV e bd) ∧
-    type_slot_size tv ≤ dimword(:256)
-End
-
-Definition storable_value_def:
-  storable_value cx mid n v ⇔
-    ∀tv. storage_type_of cx mid n = SOME tv ⇒ storable_typed_value tv v
-End
-
-Theorem var_in_storage_has_type:
-  var_in_storage cx mid n ⇒ IS_SOME (storage_type_of cx mid n)
-Proof
-  rw[var_in_storage_def, storage_type_of_def] >>
-  rpt strip_tac >> simp[]
-QED
-
 (* For convenience, we define the case st.scopes = [] in such a way
    that looking up after update returns the updated variable value. *)
 Definition update_name_def:
@@ -123,6 +82,39 @@ Definition lookup_flag_member_def:
   case INDEX_OF mid ls
     of NONE => NONE
      | SOME i => SOME $ Value $ FlagV (LENGTH ls) (2 ** i)
+End
+
+Definition var_in_storage_def:
+  var_in_storage cx mid n ⇔
+  ∃code b t id offset tv.
+    get_module_code cx mid = SOME code ∧
+    find_var_decl_by_num (string_to_num n) code = SOME (StorageVarDecl b t, id) ∧
+    lookup_var_slot_from_layout cx b mid id = SOME offset ∧
+    offset < dimword(:256) ∧
+    evaluate_type (get_tenv cx) t = SOME tv
+End
+
+Definition storage_type_of_def:
+  storage_type_of cx mid n =
+    case get_module_code cx mid of
+    | NONE => NONE
+    | SOME code =>
+        case find_var_decl_by_num (string_to_num n) code of
+        | SOME (StorageVarDecl b t, id) => evaluate_type (get_tenv cx) t
+        | _ => NONE
+End
+
+Definition storable_typed_value_def:
+  storable_typed_value tv v ⇔
+    value_has_type tv v ∧
+    well_formed_value v ∧
+    wf_type_value tv ∧
+    type_slot_size tv ≤ dimword(:256)
+End
+
+Definition storable_value_def:
+  storable_value cx mid n v ⇔
+    ∀tv. storage_type_of cx mid n = SOME tv ⇒ storable_typed_value tv v
 End
 
 (****************************************)
@@ -788,6 +780,13 @@ QED
 
 (* =================== Global Storage ============================= *)
 
+Theorem var_in_storage_has_type:
+  var_in_storage cx mid n ⇒ IS_SOME (storage_type_of cx mid n)
+Proof
+  rw[var_in_storage_def, storage_type_of_def] >>
+  rpt strip_tac >> simp[]
+QED
+
 Theorem get_after_set_storage_backend[local]:
   ∀cx is_transient storage' st.
     get_storage_backend cx is_transient
@@ -815,6 +814,7 @@ QED
 Theorem lookup_toplevel_name_after_update:
   ∀cx st mid n v.
     var_in_storage cx mid n ∧
+    (∀av. v ≠ ArrayV av) ∧
     storable_value cx mid n v ⇒
     lookup_toplevel_name cx (update_toplevel_name cx st mid n v) mid n = SOME (Value v)
 Proof
@@ -838,5 +838,6 @@ Proof
   Cases_on `tv` >>
   gvs[read_storage_slot_def, lift_option_def, bind_def,
       get_after_set_storage_backend, return_def, raise_def,
-      roundtrip_ok_def]
+      roundtrip_ok_def] >>
+  Cases_on `v` >> gvs[value_has_type_def]
 QED
