@@ -264,6 +264,46 @@ Proof
   Cases_on `bd` >> simp[well_formed_type_value_def, type_slot_size_def]
 QED
 
+Theorem within_int_bound_unsigned_well_formed:
+  within_int_bound (Unsigned b) i ∧ b ≤ 256 ⇒
+  well_formed_value (IntV (Unsigned b) i)
+Proof
+  rw[within_int_bound_def, well_formed_value_def] >>
+  `Num i < dimword(:256)` by (
+    simp[wordsTheory.dimword_def] >>
+    `dimindex(:256) = 256` by EVAL_TAC >>
+    irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
+    qexists_tac `2 ** b` >> simp[]) >>
+  `&(Num i) = i` by simp[integerTheory.INT_OF_NUM] >>
+  pop_assum (SUBST_ALL_TAC o SYM) >> gvs[]
+QED
+
+Theorem within_int_bound_signed_well_formed:
+  within_int_bound (Signed b) i ∧ b ≤ 256 ⇒
+  well_formed_value (IntV (Signed b) i)
+Proof
+  strip_tac >>
+  gvs[within_int_bound_def, well_formed_value_def] >>
+  Cases_on `i < 0` >> gvs[]
+  >- (
+    `0 ≤ -i` by simp[integerTheory.INT_NEG_GE0, integerTheory.INT_LT_IMP_LE] >>
+    `i = -&(Num (-i))` by (
+      `&(Num(-i)) = -i` by simp[integerTheory.INT_OF_NUM] >> simp[]) >>
+    pop_assum SUBST1_TAC >>
+    `Num (-i) ≤ 2 ** 255` by (
+      irule arithmeticTheory.LESS_EQ_TRANS >>
+      qexists_tac `2 ** (b − 1)` >> simp[]) >>
+    simp[] >> gvs[])
+  >> (
+    `0 ≤ i` by fs[integerTheory.INT_NOT_LT] >>
+    `i = &(Num i)` by simp[integerTheory.INT_OF_NUM] >>
+    pop_assum SUBST1_TAC >>
+    `Num i < 2 ** 255` by (
+      irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
+      qexists_tac `2 ** (b − 1)` >> simp[]) >>
+    simp[] >> gvs[])
+QED
+
 Theorem value_has_type_equiv:
   (∀tv v. value_has_type tv v ⇔ IS_SOME (encode_value tv v)) ∧
   (∀tvs vs. values_have_types tvs vs ⇔ IS_SOME (encode_tuple 0 tvs vs)) ∧
