@@ -10,7 +10,11 @@
  * Variables can only be removed during iteration; convergence follows
  * from finite height.
  *
- * Used by check_venom.py to validate that all used variables are defined.
+ * In Python, used by check_venom.py to validate that all used variables
+ * are defined. Not consumed by any optimization pass directly, but can
+ * serve as a proof obligation added to a pass for additional guarantees
+ * (e.g. proving that a transformation preserves the defined-variable
+ * invariant). Usefulness TBD.
  *
  * TOP-LEVEL:
  *   vardef_result          — record: vd_out (per-block), vd_inst (per-inst)
