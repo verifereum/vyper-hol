@@ -108,8 +108,7 @@ Definition storable_typed_value_def:
   storable_typed_value tv v ⇔
     value_has_type tv v ∧
     well_formed_value v ∧
-    wf_type_value tv ∧
-    type_slot_size tv ≤ dimword(:256)
+    well_formed_type_value tv
 End
 
 Definition storable_value_def:

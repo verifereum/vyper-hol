@@ -7,7 +7,7 @@
  *   well_formed_value_def - structural well-formedness of values
  *   value_has_type_def - value matches a typed_value
  *   value_has_type_equiv - equivalence with encode_value IS_SOME
- *   wf_type_value_def - well-formedness of typed_value descriptors
+ *   well_formed_type_value_def - well-formedness of typed_value descriptors
  *)
 
 Theory vyperTyping
@@ -16,13 +16,24 @@ Ancestors
 Libs
   wordsLib
 
-(* Well-formedness of type_values for storage operations *)
-Definition wf_type_value_def:
-  wf_type_value (BaseTV (BytesT (Fixed n))) = (n ≤ 32) ∧
-  wf_type_value (TupleTV tvs) = EVERY wf_type_value tvs ∧
-  wf_type_value (ArrayTV tv _) = (0 < type_slot_size tv ∧ wf_type_value tv) ∧
-  wf_type_value (StructTV fields) = EVERY (wf_type_value o SND) fields ∧
-  wf_type_value _ = T
+(* Well-formedness of type_values for storage operations.
+   Ensures type_slot_size tv ≤ dimword(:256) for all well-formed types. *)
+Definition well_formed_type_value_def:
+  well_formed_type_value (BaseTV (BytesT (Fixed n))) = (n ≤ 32) ∧
+  well_formed_type_value (BaseTV (BytesT (Dynamic n))) =
+    (type_slot_size (BaseTV (BytesT (Dynamic n))) ≤ dimword(:256)) ∧
+  well_formed_type_value (BaseTV (StringT n)) =
+    (type_slot_size (BaseTV (StringT n)) ≤ dimword(:256)) ∧
+  well_formed_type_value (TupleTV tvs) =
+    (EVERY well_formed_type_value tvs ∧
+     type_slot_size (TupleTV tvs) ≤ dimword(:256)) ∧
+  well_formed_type_value (ArrayTV tv b) =
+    (0 < type_slot_size tv ∧ well_formed_type_value tv ∧
+     type_slot_size (ArrayTV tv b) ≤ dimword(:256)) ∧
+  well_formed_type_value (StructTV fields) =
+    (EVERY (well_formed_type_value o SND) fields ∧
+     type_slot_size (StructTV fields) ≤ dimword(:256)) ∧
+  well_formed_type_value _ = T
 End
 
 (* ===== well_formed_value ===== *)
@@ -159,6 +170,8 @@ Termination
   rpt strip_tac >> first_x_assum (qspecl_then [`m`, `tv'`] mp_tac) >> simp[]
 End
 
+(* ===== Helper lemmas  ===== *)
+
 (* Helper: IS_SOME of compound encoders doesn't depend on offset *)
 Theorem encode_IS_SOME_offset_indep[local]:
   (∀offset offset' tvs vs.
@@ -240,6 +253,16 @@ Proof
 QED
 
 (* ===== Theorems ===== *)
+
+Theorem well_formed_type_value_slot_size:
+  ∀tv. well_formed_type_value tv ⇒ type_slot_size tv ≤ dimword(:256)
+Proof
+  Cases >> simp[well_formed_type_value_def, type_slot_size_def] >>
+  rename1 `BaseTV bt` >>
+  Cases_on `bt` >> simp[well_formed_type_value_def, type_slot_size_def] >>
+  rename1 `BytesT bd` >>
+  Cases_on `bd` >> simp[well_formed_type_value_def, type_slot_size_def]
+QED
 
 Theorem value_has_type_equiv:
   (∀tv v. value_has_type tv v ⇔ IS_SOME (encode_value tv v)) ∧
