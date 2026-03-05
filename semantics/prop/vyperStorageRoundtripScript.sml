@@ -11,7 +11,7 @@
 
 Theory vyperStorageRoundtrip
 Ancestors
-  vyperStorage vfmState byte list rich_list combin bitstring bit sorting
+  vyperStorage vyperValue vfmState byte list rich_list combin bitstring bit sorting
   arithmetic pair indexedLists vfmConstants
 Libs
   wordsLib dep_rewrite
@@ -495,8 +495,7 @@ Theorem MAPi_EL[local]:
     MEM (i + k, EL i slots) (MAPi (λj s. (j + k, s)) slots)
 Proof
   rpt strip_tac >>
-  simp[indexedListsTheory.MEM_MAPi] >>
-  qexists_tac `i` >> simp[]
+  simp[indexedListsTheory.MEM_MAPi]
 QED
 
 (* Bounds compatibility: value bounds match type bounds *)
@@ -758,4 +757,1277 @@ Proof
     irule roundtrip_ok_address >> simp[],
     irule roundtrip_ok_flag >> simp[]
   ]
+QED
+
+(* ===== Compound Type Roundtrip Helpers ===== *)
+
+(* Helper: type_slot_size of BaseTV is always positive *)
+Theorem type_slot_size_BaseTV_pos[simp]:
+  0 < type_slot_size (BaseTV bt)
+Proof
+  Cases_on `bt` >> simp[type_slot_size_def] >>
+  Cases_on `b` >> simp[type_slot_size_def]
+QED
+
+(* All write offsets from encode functions are bounded by type_slot_size *)
+Theorem encode_writes_bounded:
+  (∀tv v writes.
+     encode_value tv v = SOME writes ∧ well_formed_value v ⇒
+     ∀off. MEM off (MAP FST writes) ⇒ off < type_slot_size tv) ∧
+  (∀offset tvs vs writes.
+     encode_tuple offset tvs vs = SOME writes ∧ wf_values vs ⇒
+     ∀off. MEM off (MAP FST writes) ⇒
+       offset ≤ off ∧ off < offset + type_slot_size_list tvs) ∧
+  (∀tv offset sparse writes n.
+     encode_static_array tv offset sparse = SOME writes ∧
+     wf_sparse tv n sparse ⇒
+     ∀off. MEM off (MAP FST writes) ⇒
+       off < offset + n * type_slot_size tv) ∧
+  (∀tv offset vs writes.
+     encode_dyn_array tv offset vs = SOME writes ∧ wf_values vs ⇒
+     ∀off. MEM off (MAP FST writes) ⇒
+       offset ≤ off ∧ off < offset + LENGTH vs * type_slot_size tv) ∧
+  (∀offset ftypes fields writes.
+     encode_struct offset ftypes fields = SOME writes ∧ wf_fields fields ⇒
+     ∀off. MEM off (MAP FST writes) ⇒
+       offset ≤ off ∧ off < offset + type_slot_size_fields ftypes)
+Proof
+  ho_match_mp_tac encode_value_ind >> rpt conj_tac >> rpt gen_tac >>
+  simp[encode_value_def, AllCaseEqs(), PULL_EXISTS] >>
+  rpt strip_tac >> gvs[MEM_MAP, MEM_APPEND, EXISTS_PROD, MEM_GENLIST,
+    type_slot_size_def, well_formed_value_def,
+    encode_dyn_bytes_slots_def, AllCaseEqs(),
+    indexedListsTheory.MEM_MAPi, MULT_CLAUSES] >>
+  (* word_size: i < word_size max *)
+  TRY (
+    fs[LENGTH_bytes_to_slots] >>
+    irule LESS_LESS_EQ_TRANS >> first_assum (irule_at Any) >>
+    simp[vfmConstantsTheory.word_size_def] >>
+    irule DIV_LE_MONOTONE >> simp[] >> NO_TAC
+  ) >>
+  (* Static array shifted: p_1' + k * sz < n * sz via (k+1) * sz *)
+  TRY (
+    first_x_assum (qspec_then `p_1'` mp_tac) >>
+    (impl_tac >- (qexists_tac `p_2` >> simp[])) >> strip_tac >>
+    irule LESS_LESS_EQ_TRANS >>
+    qexists_tac `(k + 1) * type_slot_size tv` >> simp[] >> NO_TAC
+  ) >>
+  (* ∀n' wf_sparse IH: specialize + instantiate *)
+  TRY (
+    qpat_x_assum `∀n'. wf_sparse _ _ _ ⇒ _` (qspec_then `n` mp_tac) >>
+    simp[] >> strip_tac >>
+    first_x_assum (qspec_then `off` mp_tac) >>
+    (impl_tac >- (qexists_tac `p_2` >> simp[])) >> simp[] >> NO_TAC
+  ) >>
+  TRY (
+    qpat_x_assum `∀n'. wf_sparse _ _ _ ⇒ _` (qspec_then `m` mp_tac) >>
+    simp[] >> strip_tac >>
+    first_x_assum (qspec_then `off` mp_tac) >>
+    (impl_tac >- (qexists_tac `p_2` >> simp[])) >> simp[] >> NO_TAC
+  ) >>
+  (* DynArrayV top-level: IH + transitivity + mult monotonicity *)
+  TRY (
+    first_x_assum (qspec_then `off` mp_tac) >>
+    (impl_tac >- (qexists_tac `p_2` >> simp[])) >> strip_tac >>
+    irule LESS_LESS_EQ_TRANS >> first_assum (irule_at Any) >>
+    simp[LE_MULT_RCANCEL] >> NO_TAC
+  ) >>
+  (* Direct IH: off or p_1' in writes *)
+  TRY (
+    first_x_assum (qspec_then `off` mp_tac) >>
+    (impl_tac >- (qexists_tac `p_2` >> simp[])) >>
+    strip_tac >> gvs[] >> NO_TAC
+  ) >>
+  TRY (
+    first_x_assum (qspec_then `p_1'` mp_tac) >>
+    (impl_tac >- (qexists_tac `p_2` >> simp[])) >>
+    strip_tac >> gvs[] >> NO_TAC
+  ) >>
+  (* Compound internal: rest IH (conjunction) *)
+  qpat_x_assum `∀off'. _ ⇒ _ ∧ _` (qspec_then `off` mp_tac) >>
+  (impl_tac >- (qexists_tac `p_2` >> simp[])) >>
+  strip_tac >> simp[]
+QED
+
+(* ===== Storage Agreement (decode depends only on relevant slots) ===== *)
+
+(* Helper: read_slots agrees when individual slots agree *)
+Theorem read_slots_agree:
+  ∀n s1 s2 offset.
+    (∀i. i < n ⇒
+      lookup_storage (n2w (offset + i) : bytes32) s1 =
+      lookup_storage (n2w (offset + i) : bytes32) s2) ⇒
+    read_slots s1 offset n = read_slots s2 offset n
+Proof
+  Induct >> simp[read_slots_def] >> rpt gen_tac >> strip_tac >> conj_tac
+  >- (qpat_x_assum `∀i. _` (qspec_then `0` mp_tac) >> simp[])
+  >> first_x_assum irule >> rw[]
+  >> `n2w (i + (offset + 1)) : bytes32 = n2w (i + 1 + offset)` by simp[]
+  >> pop_assum SUBST_ALL_TAC
+  >> first_x_assum (qspec_then `i + 1` mp_tac) >> simp[]
+QED
+
+(* Helper: word_size is monotone *)
+Theorem word_size_mono:
+  m ≤ n ⇒ word_size m ≤ word_size n
+Proof
+  rw[vfmConstantsTheory.word_size_def] >>
+  irule DIV_LE_MONOTONE >> simp[]
+QED
+
+(* Helper: decode_dyn_bytes agrees when slots agree *)
+Theorem decode_dyn_bytes_agree:
+  ∀s1 s2 offset max.
+    (∀i. i < 1 + word_size max ⇒
+      lookup_storage (n2w (offset + i) : bytes32) s1 =
+      lookup_storage (n2w (offset + i) : bytes32) s2) ⇒
+    decode_dyn_bytes s1 offset max = decode_dyn_bytes s2 offset max
+Proof
+  rpt strip_tac >>
+  `lookup_storage (n2w offset : bytes32) s1 =
+   lookup_storage (n2w offset : bytes32) s2` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  simp[decode_dyn_bytes_def] >>
+  IF_CASES_TAC >> simp[] >>
+  AP_TERM_TAC >>
+  irule read_slots_agree >> rw[] >>
+  `n2w (offset + 1 + i) : bytes32 = n2w (offset + (i + 1))` by simp[] >>
+  pop_assum SUBST_ALL_TAC >>
+  first_x_assum (qspec_then `i + 1` mp_tac) >>
+  impl_tac >- (
+    simp[] >>
+    irule LESS_LESS_EQ_TRANS >>
+    first_assum (irule_at Any) >> simp[word_size_mono]
+  ) >> simp[]
+QED
+
+(* KEY LEMMA: decode only depends on slots within type_slot_size range *)
+Theorem decode_storage_agree:
+  (∀s1 offset tv s2.
+    (∀i. i < type_slot_size tv ⇒
+      lookup_storage (n2w (offset + i) : bytes32) s1 =
+      lookup_storage (n2w (offset + i) : bytes32) s2) ⇒
+    decode_value s1 offset tv = decode_value s2 offset tv) ∧
+  (∀s1 offset tvs s2.
+    (∀i. i < type_slot_size_list tvs ⇒
+      lookup_storage (n2w (offset + i) : bytes32) s1 =
+      lookup_storage (n2w (offset + i) : bytes32) s2) ⇒
+    decode_tuple s1 offset tvs = decode_tuple s2 offset tvs) ∧
+  (∀s1 offset tv n s2.
+    (∀i. i < n * type_slot_size tv ⇒
+      lookup_storage (n2w (offset + i) : bytes32) s1 =
+      lookup_storage (n2w (offset + i) : bytes32) s2) ⇒
+    decode_static_array s1 offset tv n = decode_static_array s2 offset tv n) ∧
+  (∀s1 offset tv n s2.
+    (∀i. i < n * type_slot_size tv ⇒
+      lookup_storage (n2w (offset + i) : bytes32) s1 =
+      lookup_storage (n2w (offset + i) : bytes32) s2) ⇒
+    decode_dyn_array s1 offset tv n = decode_dyn_array s2 offset tv n) ∧
+  (∀s1 offset ftypes s2.
+    (∀i. i < type_slot_size_fields ftypes ⇒
+      lookup_storage (n2w (offset + i) : bytes32) s1 =
+      lookup_storage (n2w (offset + i) : bytes32) s2) ⇒
+    decode_struct s1 offset ftypes = decode_struct s2 offset ftypes)
+Proof
+  ho_match_mp_tac decode_value_ind >> rpt conj_tac >> rpt gen_tac >>
+  simp[decode_value_def, type_slot_size_def, read_slot_def] >>
+  rpt strip_tac
+  (* Dynamic bytes and string *)
+  >> TRY (
+    `decode_dyn_bytes s1 offset max = decode_dyn_bytes s2 offset max` by (
+      irule decode_dyn_bytes_agree >> gen_tac >> strip_tac >>
+      `n2w (offset + i) : bytes32 = n2w (i + offset)` by simp[] >>
+      pop_assum SUBST_ALL_TAC >>
+      first_x_assum irule >> simp[]) >>
+    simp[] >> NO_TAC
+  )
+  (* Pass-through: TupleTV, ArrayTV Fixed, StructTV *)
+  >> TRY (
+    first_x_assum (qspec_then `s2` mp_tac) >>
+    (impl_tac >- rw[]) >> strip_tac >> simp[] >> NO_TAC
+  )
+  (* ArrayTV Dynamic *)
+  >> TRY (
+    `lookup_storage (n2w offset : bytes32) s1 =
+     lookup_storage (n2w offset : bytes32) s2` by (
+      first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+    simp[] >> IF_CASES_TAC >> simp[] >> fs[] >>
+    first_x_assum (qspec_then `s2` mp_tac) >>
+    impl_tac >- (
+      rw[] >>
+      `n2w (i + (offset + 1)) : bytes32 = n2w ((i + 1) + offset)` by simp[] >>
+      pop_assum SUBST_ALL_TAC >>
+      first_x_assum (qspec_then `i + 1` mp_tac) >>
+      impl_tac >- (
+        simp[] >>
+        irule LESS_LESS_EQ_TRANS >>
+        qexists_tac `type_slot_size tv *
+          MIN (w2n (lookup_storage (n2w offset) s2)) max` >>
+        simp[] >>
+        CONV_TAC(RAND_CONV(REWRITE_CONV[Once MULT_COMM])) >>
+        simp[LE_MULT_LCANCEL]
+      ) >> simp[]
+    ) >> simp[] >> NO_TAC
+  )
+  (* Recursive cases: head + tail *)
+  >> `decode_value s1 offset tv = decode_value s2 offset tv` by (
+    qpat_x_assum `∀s2. _ ⇒ decode_value _ _ _ = _` (qspec_then `s2` mp_tac) >>
+    impl_tac >- (rw[] >> first_x_assum irule >> simp[MULT_CLAUSES]) >>
+    simp[]
+  )
+  >> qpat_x_assum `∀s2. _ ⇒ decode_value _ _ _ = _` kall_tac
+  >> simp[] >> Cases_on `decode_value s1 offset tv` >> fs[]
+  >> first_x_assum (qspec_then `s2` mp_tac)
+  >> impl_tac
+  >> TRY (
+    rw[] >>
+    `n2w (i + (offset + type_slot_size tv)) : bytes32 =
+     n2w ((type_slot_size tv + i) + offset)` by simp[] >>
+    pop_assum SUBST_ALL_TAC >>
+    first_x_assum (qspec_then `type_slot_size tv + i` mp_tac) >>
+    simp[MULT_CLAUSES] >> NO_TAC
+  )
+QED
+
+(* ===== Decode Zero Storage ===== *)
+
+(* Well-formedness of type_values for storage operations *)
+Definition wf_type_value_def:
+  wf_type_value (BaseTV (BytesT (Fixed n))) = (n ≤ 32) ∧
+  wf_type_value (TupleTV tvs) = EVERY wf_type_value tvs ∧
+  wf_type_value (ArrayTV tv _) = (0 < type_slot_size tv ∧ wf_type_value tv) ∧
+  wf_type_value (StructTV fields) = EVERY (wf_type_value o SND) fields ∧
+  wf_type_value _ = T
+End
+
+Theorem word_to_bytes_be_zero:
+  word_to_bytes_be (0w : 256 word) = REPLICATE 32 (0w : word8)
+Proof
+  EVAL_TAC
+QED
+
+Theorem TAKE_REPLICATE:
+  n ≤ m ⇒ TAKE n (REPLICATE m x) = REPLICATE n x
+Proof
+  rw[REPLICATE_GENLIST, TAKE_GENLIST, MIN_DEF] >>
+  `n = m` by simp[] >> gvs[]
+QED
+
+Theorem DROP_REPLICATE:
+  n ≤ m ⇒ DROP n (REPLICATE m x) = REPLICATE (m - n) x
+Proof
+  rw[REPLICATE_GENLIST, DROP_GENLIST, combinTheory.o_DEF, combinTheory.K_THM]
+QED
+
+Theorem enumerate_static_array_REPLICATE:
+  ∀n k. enumerate_static_array d k (REPLICATE n d) = []
+Proof
+  Induct >> rw[enumerate_static_array_def]
+QED
+
+Theorem decode_value_zero_is_default:
+  (∀s offset tv.
+    (∀k. s k = 0w) ∧ wf_type_value tv ⇒
+    decode_value s offset tv = SOME (default_value tv)) ∧
+  (∀s offset tvs.
+    (∀k. s k = 0w) ∧ EVERY wf_type_value tvs ⇒
+    decode_tuple s offset tvs = SOME (MAP default_value tvs)) ∧
+  (∀s offset tv n.
+    (∀k. s k = 0w) ∧ wf_type_value tv ⇒
+    decode_static_array s offset tv n =
+      SOME (REPLICATE n (default_value tv))) ∧
+  (∀s offset tv n.
+    (∀k. s k = 0w) ∧ wf_type_value tv ⇒
+    decode_dyn_array s offset tv n =
+      SOME (REPLICATE n (default_value tv))) ∧
+  (∀s offset ftypes.
+    (∀k. s k = 0w) ∧ EVERY (wf_type_value o SND) ftypes ⇒
+    decode_struct s offset ftypes =
+      SOME (MAP (λ(id,t). (id, default_value t)) ftypes))
+Proof
+  ho_match_mp_tac decode_value_ind >> rpt conj_tac >> rpt gen_tac >>
+  simp[decode_value_def, default_value_def, type_slot_size_def,
+       read_slot_def, lookup_storage_def, wf_type_value_def, ETA_THM] >>
+  rpt strip_tac
+  (* BytesT Dynamic / StringT *)
+  >> TRY (
+    simp[decode_dyn_bytes_def, lookup_storage_def,
+         vfmConstantsTheory.word_size_def, read_slots_def,
+         slots_to_bytes_def] >> NO_TAC
+  )
+  (* UintT, FlagTV *)
+  >> TRY (simp[decode_base_from_slot_def] >> NO_TAC)
+  (* IntT, DecimalT *)
+  >> TRY (simp[decode_base_from_slot_def, integer_wordTheory.word_0_w2i] >> NO_TAC)
+  (* BoolT *)
+  >> TRY (simp[decode_base_from_slot_def, slot_to_bool_def] >> NO_TAC)
+  (* BytesT Fixed *)
+  >> TRY (
+    simp[decode_base_from_slot_def, word_to_bytes_be_zero, TAKE_REPLICATE] >> NO_TAC
+  )
+  (* AddressT *)
+  >> TRY (EVAL_TAC >> NO_TAC)
+  (* TupleTV, ArrayTV Fixed, StructTV, ArrayTV Dynamic, recursive cases *)
+  >> fs[] >> gvs[default_value_tuple_MAP, default_value_struct_MAP,
+                 enumerate_static_array_REPLICATE, MIN_DEF]
+QED
+
+(* ===== Non-compound Roundtrip ===== *)
+
+(* For non-compound types (BaseTV, FlagTV, NoneTV), roundtrip_ok follows
+   from well_formed_value alone. Mismatch type/value pairs have encode NONE
+   (vacuously true), valid pairs are handled by specific roundtrip theorems. *)
+(* Helper: IS_SOME (encode_value tv v) implies bounds_compat for non-compound types *)
+Theorem encode_IS_SOME_bounds_compat:
+  (∀tvs. tv ≠ TupleTV tvs) ∧ (∀e bd. tv ≠ ArrayTV e bd) ∧
+  (∀ftypes. tv ≠ StructTV ftypes) ∧ IS_SOME (encode_value tv v) ⇒
+  bounds_compat tv v
+Proof
+  strip_tac >> Cases_on `tv` >> fs[bounds_compat_def] >>
+  Cases_on `v` >>
+  TRY (rename1 `BytesV bnd _` >> Cases_on `bnd`) >>
+  Cases_on `b` >>
+  TRY (rename1 `BytesT btbnd` >> Cases_on `btbnd`) >>
+  gvs[encode_value_def, AllCaseEqs(), encode_base_to_slot_def,
+      encode_dyn_bytes_slots_def, bounds_compat_def] >>
+  pop_assum mp_tac >> rpt IF_CASES_TAC >> simp[]
+QED
+
+Theorem roundtrip_ok_noncompound:
+  well_formed_value v ∧ wf_type_value tv ∧
+  (∀tvs. tv ≠ TupleTV tvs) ∧ (∀e bd. tv ≠ ArrayTV e bd) ∧
+  (∀ftypes. tv ≠ StructTV ftypes) ⇒
+  roundtrip_ok tv v
+Proof
+  strip_tac >>
+  reverse (Cases_on `IS_SOME (encode_value tv v)`)
+  >- (Cases_on `encode_value tv v` >> gvs[roundtrip_ok_def]) >>
+  Cases_on `tv` >> fs[]
+  (* BaseTV *)
+  >- (
+    irule roundtrip_ok_from_well_formed_base >> simp[] >>
+    gvs[bounds_compat_def] >>
+    qpat_x_assum `IS_SOME _` mp_tac >>
+    Cases_on `v` >>
+    TRY (rename1 `BytesV bnd _` >> Cases_on `bnd`) >>
+    Cases_on `b` >>
+    TRY (rename1 `BytesT btbnd` >> Cases_on `btbnd`) >>
+    simp[encode_value_def, AllCaseEqs(), encode_base_to_slot_def,
+         encode_dyn_bytes_slots_def, bounds_compat_def] >>
+    rpt IF_CASES_TAC >> simp[]
+  )
+  (* FlagTV *)
+  >- (
+    rename1 `FlagTV m` >>
+    qpat_x_assum `IS_SOME _` mp_tac >> Cases_on `v` >>
+    simp[encode_value_def, AllCaseEqs(), encode_base_to_slot_def] >>
+    rpt IF_CASES_TAC >> simp[] >> gvs[] >>
+    irule roundtrip_ok_flag >> gvs[well_formed_value_def]
+  )
+  (* NoneTV *)
+  >> Cases_on `v` >> gvs[encode_value_def, roundtrip_ok_none]
+QED
+
+(* ===== Compound Roundtrip ===== *)
+
+(* Helper: writes at non-overlapping offsets don't affect lookup *)
+Theorem apply_writes_lookup_miss_num:
+  ∀writes base storage k.
+    (∀off. MEM off (MAP FST writes) ⇒
+       n2w (base + off) ≠ (n2w (base + k) : bytes32)) ⇒
+    lookup_storage (n2w (base + k))
+      (apply_writes (n2w base) writes storage) =
+    lookup_storage (n2w (base + k)) storage
+Proof
+  rpt strip_tac >>
+  ONCE_REWRITE_TAC [GSYM nwn_eq] >>
+  irule apply_writes_lookup_miss >>
+  REWRITE_TAC [nwn_eq] >> gvs[]
+QED
+
+(* Helper: shifted writes can be un-shifted *)
+Theorem apply_writes_MAP_shift:
+  ∀writes k base storage.
+    apply_writes (n2w base) (MAP (λ(off,s). (off + k, s)) writes) storage =
+    apply_writes (n2w (base + k)) writes storage
+Proof
+  REWRITE_TAC [apply_writes_shift]
+QED
+
+(* Helper: decode_value agrees with a different storage when writes are outside range *)
+Theorem decode_after_disjoint_writes:
+  ∀tv base offset writes storage.
+    (∀off. MEM off (MAP FST writes) ⇒
+       ¬(offset ≤ off ∧ off < offset + type_slot_size tv)) ∧
+    (∀off i. MEM off (MAP FST writes) ∧
+       offset ≤ i ∧ i < offset + type_slot_size tv ∧ off ≠ i ⇒
+       n2w (base + off) ≠ (n2w (base + i) : bytes32)) ⇒
+    decode_value (apply_writes (n2w base) writes storage) (base + offset) tv =
+    decode_value storage (base + offset) tv
+Proof
+  rpt strip_tac >>
+  irule (CONJUNCT1 decode_storage_agree) >>
+  rw[] >>
+  irule apply_writes_lookup_miss_num >>
+  rw[] >>
+  first_x_assum (qspecl_then [`off`, `offset + i`] mp_tac) >>
+  impl_tac >- (
+    first_x_assum (qspec_then `off` mp_tac) >> simp[]
+  ) >> simp[]
+QED
+
+(* Helper: roundtrip_ok at an offset.
+   If tv v has roundtrip_ok, then encoding v and applying the shifted writes
+   at offset k allows decode at base + k to recover v. *)
+Theorem roundtrip_ok_at_offset:
+  ∀tv v writes k base storage.
+    roundtrip_ok tv v ∧
+    encode_value tv v = SOME writes ⇒
+    decode_value
+      (apply_writes (n2w base) (MAP (λ(off,s). (off + k, s)) writes) storage)
+      (base + k) tv = SOME v
+Proof
+  rw[roundtrip_ok_def] >>
+  qpat_x_assum `∀w b s. _` (qspecl_then [`writes`, `base + k`, `storage`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `MAP (λ(off,s). (k + off,s)) writes =
+   MAP (λ(off,s). (off + k,s)) writes` by
+    (irule listTheory.MAP_CONG >> simp[FORALL_PROD]) >>
+  pop_assum SUBST_ALL_TAC >>
+  REWRITE_TAC [apply_writes_shift] >> gvs[]
+QED
+
+(* ===== Element Roundtrip With Disjoint Extra Writes ===== *)
+
+(* Helper: an element at offset round-trips even with extra writes,
+   as long as the extra writes are at strictly higher offsets. *)
+Theorem roundtrip_at_offset_disjoint:
+  ∀tv v offset base storage elem_writes extra_writes.
+    roundtrip_ok tv v ∧
+    encode_value tv v = SOME elem_writes ∧
+    (∀off. MEM off (MAP FST extra_writes) ⇒
+       offset + type_slot_size tv ≤ off ∧ off < dimword(:256)) ∧
+    offset + type_slot_size tv ≤ dimword(:256) ⇒
+    decode_value
+      (apply_writes (n2w base)
+        (MAP (λ(off,s). (off + offset, s)) elem_writes ++ extra_writes)
+        storage)
+      (base + offset) tv = SOME v
+Proof
+  rpt strip_tac >>
+  REWRITE_TAC [apply_writes_append] >>
+  irule EQ_TRANS >>
+  qexists_tac `decode_value
+    (apply_writes (n2w base)
+      (MAP (λ(off,s). (off + offset, s)) elem_writes) storage)
+    (base + offset) tv` >>
+  conj_tac
+  >- (
+    irule decode_after_disjoint_writes >> conj_tac
+    >- (
+      rpt strip_tac >>
+      `n2w (base + off) ≠ (n2w (base + i) : bytes32)` by (
+        irule n2w_add_cancel >>
+        first_x_assum (qspec_then `off` mp_tac) >> simp[]
+      ) >> gvs[]
+    )
+    >> rpt strip_tac >>
+    first_x_assum (qspec_then `off` mp_tac) >> simp[]
+  )
+  >> irule roundtrip_ok_at_offset >> simp[]
+QED
+
+(* ===== Compound Roundtrip Helpers ===== *)
+
+(* Helper: tuple encode/decode roundtrip *)
+Theorem encode_decode_tuple:
+  ∀tvs offset vs writes base storage.
+    EVERY (λtv. ∀v. well_formed_value v ⇒ roundtrip_ok tv v) tvs ∧
+    wf_values vs ∧ EVERY wf_type_value tvs ∧
+    offset + type_slot_size_list tvs ≤ dimword(:256) ∧
+    encode_tuple offset tvs vs = SOME writes ⇒
+    decode_tuple
+      (apply_writes (n2w base) writes storage) (base + offset) tvs =
+    SOME vs
+Proof
+  Induct
+  >- (Cases_on `vs` >>
+      simp[encode_value_def, decode_value_def, apply_writes_nil])
+  >> rpt gen_tac >> strip_tac >>
+  Cases_on `vs` >- gvs[encode_value_def] >>
+  qpat_x_assum `encode_tuple _ _ _ = _` mp_tac >>
+  simp[Once encode_value_def, AllCaseEqs(), PULL_EXISTS] >>
+  rpt strip_tac >>
+  simp[Once decode_value_def] >>
+  rename1 `encode_value htv hv = SOME hslots` >>
+  rename1 `encode_tuple _ _ _ = SOME rslots` >>
+  (* First element decodes correctly *)
+  `decode_value (apply_writes (n2w base) writes storage)
+     (base + offset) htv = SOME hv` by (
+    qpat_x_assum `_ = writes` (SUBST1_TAC o SYM) >>
+    irule roundtrip_at_offset_disjoint >> simp[] >>
+    conj_tac >- (
+      rpt strip_tac >>
+      drule (el 2 (CONJUNCTS encode_writes_bounded)) >>
+      disch_then (qspec_then `off` mp_tac) >>
+      gvs[well_formed_value_def, type_slot_size_def]
+    ) >>
+    conj_tac >- gvs[type_slot_size_def] >>
+    gvs[EVERY_MEM, well_formed_value_def]
+  ) >> simp[] >>
+  (* Rest decodes correctly via IH *)
+  qpat_x_assum `_ = writes` (SUBST1_TAC o SYM) >>
+  REWRITE_TAC [apply_writes_append] >>
+  first_x_assum (qspecl_then
+    [`offset + type_slot_size htv`, `t`, `rslots`, `base`,
+     `apply_writes (n2w base) (MAP (λ(off,s). (off + offset,s)) hslots)
+        storage`] mp_tac) >>
+  gvs[well_formed_value_def, type_slot_size_def]
+QED
+
+(* Helper: dynamic array encode/decode roundtrip *)
+Theorem encode_decode_dyn_array:
+  ∀vs offset tv writes base storage.
+    (∀v. well_formed_value v ⇒ roundtrip_ok tv v) ∧
+    wf_values vs ∧ wf_type_value tv ∧
+    offset + LENGTH vs * type_slot_size tv ≤ dimword(:256) ∧
+    encode_dyn_array tv offset vs = SOME writes ⇒
+    decode_dyn_array
+      (apply_writes (n2w base) writes storage) (base + offset) tv
+      (LENGTH vs) =
+    SOME vs
+Proof
+  Induct
+  >- simp[encode_value_def, decode_value_def, apply_writes_nil]
+  >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `encode_dyn_array _ _ _ = _` mp_tac >>
+  simp[Once encode_value_def, AllCaseEqs(), PULL_EXISTS] >>
+  rpt strip_tac >>
+  simp[Once decode_value_def] >>
+  rename1 `encode_value tv v = SOME elem_slots` >>
+  rename1 `encode_dyn_array _ _ _ = SOME rest_writes` >>
+  (* First element *)
+  `decode_value (apply_writes (n2w base) writes storage)
+     (base + offset) tv = SOME v` by (
+    qpat_x_assum `_ = writes` (SUBST1_TAC o SYM) >>
+    irule roundtrip_at_offset_disjoint >> simp[] >>
+    conj_tac >- (
+      rpt strip_tac >>
+      drule (el 4 (CONJUNCTS encode_writes_bounded)) >>
+      disch_then (qspec_then `off` mp_tac) >>
+      gvs[well_formed_value_def, MULT_CLAUSES]
+    ) >>
+    conj_tac >- gvs[MULT_CLAUSES] >>
+    gvs[well_formed_value_def]
+  ) >> simp[] >>
+  (* Rest via IH *)
+  qpat_x_assum `_ = writes` (SUBST1_TAC o SYM) >>
+  REWRITE_TAC [apply_writes_append] >>
+  first_x_assum (qspecl_then
+    [`offset + type_slot_size tv`, `tv`, `rest_writes`, `base`,
+     `apply_writes (n2w base) (MAP (λ(off,s). (off + offset,s)) elem_slots)
+        storage`] mp_tac) >>
+  gvs[well_formed_value_def, MULT_CLAUSES]
+QED
+
+(* Helper: struct encode/decode roundtrip *)
+Theorem encode_decode_struct:
+  ∀ftypes offset fields writes base storage.
+    EVERY (λ(nm,tv). ∀v. well_formed_value v ⇒
+             roundtrip_ok tv v) ftypes ∧
+    wf_fields fields ∧ EVERY (wf_type_value o SND) ftypes ∧
+    offset + type_slot_size_fields ftypes ≤ dimword(:256) ∧
+    encode_struct offset ftypes fields = SOME writes ⇒
+    decode_struct
+      (apply_writes (n2w base) writes storage) (base + offset) ftypes =
+    SOME fields
+Proof
+  Induct
+  >- (Cases_on `fields` >>
+      simp[encode_value_def, decode_value_def, apply_writes_nil])
+  >> Cases >> rpt gen_tac >> strip_tac >>
+  Cases_on `fields` >- gvs[encode_value_def] >>
+  Cases_on `h` >>
+  qpat_x_assum `encode_struct _ _ _ = _` mp_tac >>
+  simp[Once encode_value_def, AllCaseEqs(), PULL_EXISTS] >>
+  rpt strip_tac >> gvs[] >>
+  simp[Once decode_value_def] >>
+  rename1 `encode_value tv v = SOME elem_slots` >>
+  rename1 `encode_struct _ _ _ = SOME rest_writes` >>
+  rename1 `(fname, tv)` >>
+  (* First element *)
+  `decode_value (apply_writes (n2w base)
+     (MAP (λ(off,s). (off + offset,s)) elem_slots ⧺ rest_writes) storage)
+     (base + offset) tv = SOME v` by (
+    irule roundtrip_at_offset_disjoint >> simp[] >>
+    conj_tac >- (
+      rpt strip_tac >>
+      drule (el 5 (CONJUNCTS encode_writes_bounded)) >>
+      disch_then (qspec_then `off` mp_tac) >>
+      gvs[well_formed_value_def, type_slot_size_def]
+    ) >>
+    conj_tac >- gvs[type_slot_size_def] >>
+    gvs[well_formed_value_def]
+  ) >> simp[] >>
+  (* Rest via IH *)
+  REWRITE_TAC [apply_writes_append] >>
+  first_x_assum (qspecl_then
+    [`offset + type_slot_size tv`, `t`, `rest_writes`, `base`,
+     `apply_writes (n2w base) (MAP (λ(off,s). (off + offset,s)) elem_slots)
+        storage`] mp_tac) >>
+  gvs[well_formed_value_def, type_slot_size_def]
+QED
+
+(* Helper: wf_sparse implies well_formed_value for each entry *)
+Theorem wf_sparse_well_formed[local]:
+  ∀sparse tv n k v.
+    wf_sparse tv n sparse ∧ MEM (k,v) sparse ⇒ well_formed_value v
+Proof
+  Induct >> simp[well_formed_value_def] >>
+  Cases >> rw[well_formed_value_def] >> res_tac >> simp[]
+QED
+
+(* Helper: lower bound on encode_static_array offsets *)
+Theorem encode_static_array_offset_lower[local]:
+  ∀sparse tv offset writes m.
+    encode_static_array tv offset sparse = SOME writes ∧
+    (∀k v. MEM (k,v) sparse ⇒ well_formed_value v) ∧
+    (∀key. MEM key (MAP FST sparse) ⇒ m ≤ key) ⇒
+    ∀off. MEM off (MAP FST writes) ⇒ offset + m * type_slot_size tv ≤ off
+Proof
+  Induct >> simp[] >>
+  Cases >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `encode_static_array _ _ _ = _` mp_tac >>
+  simp[Once encode_value_def, AllCaseEqs(), PULL_EXISTS] >>
+  rpt strip_tac >>
+  gvs[MEM_MAP, EXISTS_PROD, MEM_APPEND]
+  >- (
+    `m ≤ q` by metis_tac[] >>
+    irule LESS_EQ_TRANS >>
+    rename1 `MEM (eoff, _) _` >>
+    qexists_tac `q * type_slot_size tv` >> simp[]
+  )
+  >- (
+    first_x_assum irule >> simp[] >>
+    metis_tac[]
+  )
+QED
+
+(* Helper: apply_writes with agreeing storages gives agreeing results *)
+Theorem apply_writes_storage_agree[local]:
+  ∀writes base s1 s2.
+    (∀k. lookup_storage (n2w (base + k)) s1 =
+         lookup_storage (n2w (base + k)) s2) ⇒
+    ∀k. lookup_storage (n2w (base + k))
+          (apply_writes (n2w base) writes s1) =
+        lookup_storage (n2w (base + k))
+          (apply_writes (n2w base) writes s2)
+Proof
+  Induct >> simp[apply_writes_def] >>
+  Cases >> rpt gen_tac >> strip_tac >>
+  simp[apply_writes_def] >>
+  first_x_assum irule >> rw[] >>
+  rw[lookup_storage_def, update_storage_def, combinTheory.APPLY_UPDATE_THM] >>
+  gvs[lookup_storage_def]
+QED
+
+(* Helper: static array - each sparse entry decodes correctly *)
+Theorem encode_decode_static_array:
+  ∀sparse tv n offset writes base storage.
+    (∀v. well_formed_value v ⇒ roundtrip_ok tv v) ∧
+    wf_sparse tv n sparse ∧ wf_type_value tv ∧
+    SORTED $< (MAP FST sparse) ∧
+    offset + n * type_slot_size tv ≤ dimword(:256) ∧
+    encode_static_array tv offset sparse = SOME writes ⇒
+    ∀k v. MEM (k, v) sparse ⇒
+      decode_value
+        (apply_writes (n2w base) writes storage)
+        (base + offset + k * type_slot_size tv) tv = SOME v
+Proof
+  Induct
+  >- simp[]
+  >> Cases >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `encode_static_array _ _ _ = _` mp_tac >>
+  simp[Once encode_value_def, AllCaseEqs(), PULL_EXISTS] >>
+  rpt strip_tac >>
+  rename1 `encode_value tv v' = SOME elem_slots` >>
+  rename1 `encode_static_array _ _ _ = SOME rest_writes` >>
+  rename1 `(k', v')`
+  (* Head entry: k = k', v = v' *)
+  >- (
+    gvs[] >>
+    irule roundtrip_at_offset_disjoint >>
+    simp[] >>
+    fs[well_formed_value_def] >>
+    rpt conj_tac
+    (* Conjunct 1: ∀off. MEM off (MAP FST rest_writes) ⇒ bounds *)
+    >- (
+      rpt strip_tac
+      (* lower bound: offset + tss + k*tss ≤ off *)
+      >- (
+        qspecl_then [`sparse`, `tv`, `offset`, `rest_writes`, `SUC k`]
+          mp_tac encode_static_array_offset_lower >>
+        impl_tac >- (
+          simp[] >>
+          conj_tac >- metis_tac[wf_sparse_well_formed] >>
+          rpt strip_tac >>
+          `k < key` suffices_by simp[] >>
+          gvs[sortingTheory.SORTED_EQ]
+        ) >>
+        disch_then drule >> simp[MULT_CLAUSES]
+      )
+      (* upper bound: off < dimword(:256) *)
+      >- (
+        drule_all (el 3 (CONJUNCTS encode_writes_bounded)) >>
+        strip_tac >>
+        irule LESS_LESS_EQ_TRANS >>
+        qexists_tac `offset + n * type_slot_size tv` >> simp[]
+      )
+    )
+    (* Conjunct 2: offset + tss + k*tss ≤ dimword(:256) *)
+    >- (
+      irule LESS_EQ_TRANS >>
+      qexists_tac `offset + n * type_slot_size tv` >> simp[] >>
+      `type_slot_size tv + k * type_slot_size tv =
+       SUC k * type_slot_size tv` by simp[MULT_CLAUSES, ADD_COMM] >>
+      pop_assum SUBST1_TAC >> simp[]
+    )
+  )
+  (* Tail entry: MEM (k, v) sparse - IH storage is ∀-quantified *)
+  >> (
+    qpat_x_assum `_ = writes` (SUBST1_TAC o SYM) >>
+    REWRITE_TAC [apply_writes_append] >>
+    `base + (offset + k * type_slot_size tv) =
+     base + offset + k * type_slot_size tv` by simp[] >>
+    pop_assum SUBST1_TAC >>
+    first_x_assum irule >>
+    gvs[well_formed_value_def, sortingTheory.SORTED_EQ] >>
+    qexists_tac `n` >> simp[]
+  )
+QED
+
+(* Helper: reading slot 0 after cons write with disjoint tail *)
+Theorem read_slot_cons_0[local]:
+  ∀slots val0 base storage.
+    (∀off. MEM off (MAP FST slots) ⇒
+      n2w (base + off) ≠ (n2w base : bytes32)) ⇒
+    read_slot (apply_writes (n2w base) ((0, val0) :: slots) storage) base =
+    val0
+Proof
+  rpt strip_tac >>
+  simp[read_slot_def] >>
+  `(0:num, val0) :: slots = [(0, val0)] ++ slots` by simp[] >>
+  pop_assum SUBST_ALL_TAC >>
+  REWRITE_TAC [apply_writes_append] >>
+  qspecl_then [`slots`, `base`,
+    `apply_writes (n2w base) [(0, val0)] storage`, `0`]
+    (mp_tac o REWRITE_RULE [arithmeticTheory.ADD_0])
+    apply_writes_lookup_miss_num >>
+  impl_tac >- (rpt strip_tac >> gvs[]) >>
+  disch_then SUBST1_TAC >>
+  REWRITE_TAC [GSYM read_slot_def] >>
+  simp[read_slot_after_apply_writes_single]
+QED
+
+(* Helper: element slot size bounded by list total *)
+Theorem type_slot_size_list_MEM:
+  ∀tvs tv. MEM tv tvs ⇒ type_slot_size tv ≤ type_slot_size_list tvs
+Proof
+  Induct >> simp[type_slot_size_def] >>
+  rpt strip_tac >> gvs[type_slot_size_def] >>
+  first_x_assum drule >> simp[]
+QED
+
+(* Helper: field slot size bounded by fields total *)
+Theorem type_slot_size_fields_MEM:
+  ∀fields nm tv.
+    MEM (nm,tv) fields ⇒
+    type_slot_size tv ≤ type_slot_size_fields fields
+Proof
+  Induct >> simp[type_slot_size_def, FORALL_PROD] >>
+  rpt strip_tac >> gvs[type_slot_size_def] >>
+  first_x_assum drule >> simp[]
+QED
+
+(* Helper: MEM implies element size < TupleTV size *)
+Theorem MEM_TupleTV_type_value_size:
+  ∀tvs tv. MEM tv tvs ⇒ type_value_size tv < type_value_size (TupleTV tvs)
+Proof
+  Induct >> simp[type_value_size_def] >>
+  rpt strip_tac >> gvs[type_value_size_def] >>
+  first_x_assum drule >> simp[]
+QED
+
+(* Helper: MEM in fields implies type_value_size < StructTV size *)
+Theorem MEM_StructTV_type_value_size:
+  ∀(fields : (string # type_value) list) nm tv.
+    MEM (nm,tv) fields ⇒
+    type_value_size tv < type_value_size (StructTV fields)
+Proof
+  Induct >> simp[type_value_size_def, FORALL_PROD] >>
+  rpt strip_tac >> gvs[type_value_size_def] >>
+  first_x_assum drule >> simp[]
+QED
+
+(* Helper: decode_static_array from individual positions *)
+Theorem decode_static_array_GENLIST:
+  ∀n t s off f.
+    (∀i. i < n ⇒ decode_value s (off + i * type_slot_size t) t = SOME (f i)) ⇒
+    decode_static_array s off t n = SOME (GENLIST f n)
+Proof
+  Induct >- simp[Once decode_value_def] >>
+  rpt strip_tac >>
+  simp[Once decode_value_def, GENLIST_CONS] >>
+  `decode_value s off t = SOME (f 0)` by (
+    first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  simp[] >>
+  first_x_assum (qspecl_then [`t`, `s`, `off + type_slot_size t`,
+    `f o SUC`] mp_tac) >>
+  impl_tac >- (
+    rpt strip_tac >>
+    first_x_assum (qspec_then `SUC i` mp_tac) >>
+    simp[MULT_CLAUSES]) >>
+  strip_tac >> simp[]
+QED
+
+(* Helper: enumerate_static_array roundtrip with GENLIST *)
+Theorem enumerate_GENLIST_roundtrip:
+  ∀n k (sparse : (num # 'a) list) (d : 'a).
+    SORTED $< (MAP FST sparse) ∧
+    (∀j v. MEM (j,v) sparse ⇒ k ≤ j ∧ j < k + n ∧ v ≠ d) ⇒
+    enumerate_static_array d k
+      (GENLIST (λi. case ALOOKUP sparse (k+i) of
+                    | SOME v => v | NONE => d) n) = sparse
+Proof
+  Induct >- (
+    rpt strip_tac >> Cases_on `sparse` >> simp[enumerate_static_array_def] >>
+    PairCases_on `h` >>
+    first_x_assum (qspecl_then [`h0`, `h1`] mp_tac) >>
+    impl_tac >- simp[] >> strip_tac >> gvs[]
+  ) >>
+  rpt strip_tac >>
+  simp[GENLIST_CONS, enumerate_static_array_def] >>
+  Cases_on `ALOOKUP sparse k`
+  >- (
+    (* ALOOKUP sparse k = NONE: head is d, skip *)
+    simp[] >>
+    `(λi. case ALOOKUP sparse (i + k) of NONE => d | SOME v => v) ∘ SUC =
+     (λi. case ALOOKUP sparse (SUC k + i) of NONE => d | SOME v => v)` by
+      simp[FUN_EQ_THM, o_THM, ADD_CLAUSES] >>
+    pop_assum SUBST1_TAC >>
+    first_x_assum irule >> simp[] >>
+    rpt strip_tac >> first_x_assum drule >> strip_tac >> simp[] >>
+    (* j ≠ k since ALOOKUP sparse k = NONE but MEM (j,v) sparse *)
+    `j ≠ k` suffices_by simp[] >>
+    CCONTR_TAC >> gvs[] >>
+    qpat_x_assum `ALOOKUP _ _ = NONE` mp_tac >>
+    simp[alistTheory.ALOOKUP_FAILS] >>
+    qexists_tac `v` >> simp[]
+  )
+  >> (
+    (* ALOOKUP sparse k = SOME x: head is x, include (k, x) *)
+    rename1 `ALOOKUP sparse k = SOME v0` >>
+    (* sparse must start with (k, v0) since all keys ≥ k and sorted *)
+    Cases_on `sparse` >> gvs[] >>
+    PairCases_on `h` >> gvs[] >>
+    `h0 = k` by (
+      CCONTR_TAC >>
+      `k ≤ h0` by (first_x_assum (qspecl_then [`h0`, `h1`] mp_tac) >> simp[]) >>
+      `ALOOKUP t k = SOME v0` by gvs[] >>
+      drule alistTheory.ALOOKUP_MEM >> strip_tac >>
+      fs[sortingTheory.less_sorted_eq] >>
+      `MEM k (MAP FST t)` by (rw[MEM_MAP] >> qexists_tac `(k,v0)` >> simp[]) >>
+      res_tac >> gvs[]
+    ) >>
+    gvs[] >>
+    (* gvs already substituted k=h0, v0=h1, resolved if-then-else *)
+    `(λi. case if i = 0 then SOME h1 else ALOOKUP t (h0 + i) of
+            NONE => d | SOME v => v) ∘ SUC =
+     (λi. case ALOOKUP t (SUC h0 + i) of NONE => d | SOME v => v)` by
+      simp[FUN_EQ_THM, o_THM, ADD_CLAUSES] >>
+    pop_assum SUBST1_TAC >>
+    `enumerate_static_array d (SUC h0)
+       (GENLIST (λi. case ALOOKUP t (i + SUC h0) of NONE => d | SOME v => v) n) = t`
+      suffices_by simp[Once ADD_COMM] >>
+    first_x_assum irule >>
+    gvs[sortingTheory.less_sorted_eq] >>
+    rpt strip_tac >>
+    first_x_assum (qspecl_then [`j`, `v`] mp_tac) >> simp[] >>
+    strip_tac >>
+    `MEM j (MAP FST t)` by (rw[MEM_MAP] >> qexists_tac `(j,v)` >> simp[]) >>
+    res_tac >> simp[]
+  )
+QED
+
+
+(* Helper: encode_static_array writes only at offsets for existing keys *)
+Theorem encode_static_array_miss:
+  ∀sparse tv writes i.
+    encode_static_array tv 0 sparse = SOME writes ∧
+    (∀k v. MEM (k,v) sparse ⇒ well_formed_value v) ∧
+    ALOOKUP sparse i = NONE ⇒
+    ∀off. MEM off (MAP FST writes) ⇒
+      ¬(i * type_slot_size tv ≤ off ∧
+        off < i * type_slot_size tv + type_slot_size tv)
+Proof
+  Induct >- simp[Once encode_value_def] >>
+  Cases >> rpt gen_tac >> strip_tac >>
+  rename1 `(hk, hv) :: rest` >>
+  qpat_x_assum `encode_static_array _ _ _ = _` mp_tac >>
+  simp[Once encode_value_def, AllCaseEqs(), PULL_EXISTS] >>
+  rpt strip_tac >>
+  rename1 `encode_value tv hv = SOME elem_slots` >>
+  rename1 `encode_static_array tv 0 rest = SOME rest_writes` >>
+  qpat_x_assum `_ = writes` (SUBST_ALL_TAC o SYM) >>
+  gvs[MAP_APPEND, MEM_APPEND, MEM_MAP, EXISTS_PROD]
+  (* Case 1: off from shifted elem_slots *)
+  >- (
+    CCONTR_TAC >> gvs[] >>
+    `hk ≠ i` by (qpat_x_assum `ALOOKUP _ _ = NONE` mp_tac >> simp[]) >>
+    `well_formed_value hv` by (
+      first_x_assum irule >> qexists_tac `hk` >> simp[]) >>
+    `p_1' < type_slot_size tv` by (
+      qspecl_then [`tv`, `hv`, `elem_slots`]
+        mp_tac (CONJUNCT1 encode_writes_bounded) >>
+      simp[] >> strip_tac >>
+      first_x_assum (qspec_then `p_1'` mp_tac) >>
+      simp[MEM_MAP, EXISTS_PROD] >> metis_tac[]
+    ) >>
+    `hk < i ∨ i < hk` by simp[]
+    >- (`(hk + 1) * type_slot_size tv ≤ i * type_slot_size tv` by
+          simp[LE_MULT_RCANCEL] >> gvs[])
+    >> (`(i + 1) * type_slot_size tv ≤ hk * type_slot_size tv` by
+          simp[LE_MULT_RCANCEL] >> gvs[])
+  )
+  (* Case 2: off from rest_writes *)
+  >> (
+    qpat_x_assum `∀tv' writes i'. _`
+      (qspecl_then [`tv`, `rest_writes`, `i`] mp_tac) >>
+    simp[] >>
+    impl_tac >- metis_tac[] >>
+    disch_then (qspec_then `off` mp_tac) >> simp[] >>
+    metis_tac[]
+  )
+QED
+
+(* Helper: GENLIST zeros make lookup return 0w *)
+Theorem genlist_zeros_lookup:
+  ∀m base storage k.
+    k < m ∧ m ≤ dimword(:256) ⇒
+    lookup_storage (n2w (base + k) : bytes32)
+      (apply_writes (n2w base) (GENLIST (λi. (i, 0w : bytes32)) m) storage) = 0w
+Proof
+  rpt strip_tac >>
+  irule apply_writes_lookup_hit_num >>
+  conj_tac >- (
+    rpt gen_tac >> strip_tac >>
+    irule n2w_add_cancel >>
+    gvs[MAP_GENLIST, MEM_GENLIST, o_DEF]
+  ) >>
+  simp[MAP_GENLIST, o_DEF, ALL_DISTINCT_GENLIST, MEM_GENLIST]
+QED
+
+
+(* Helper: Static array roundtrip *)
+Theorem roundtrip_static_array:
+  ∀tv n sparse nonzeros base storage.
+    (∀v. well_formed_value v ⇒ roundtrip_ok tv v) ∧
+    wf_sparse tv n sparse ∧ wf_type_value tv ∧
+    SORTED $< (MAP FST sparse) ∧
+    n * type_slot_size tv ≤ dimword(:256) ∧
+    encode_static_array tv 0 sparse = SOME nonzeros ⇒
+    decode_value
+      (apply_writes (n2w base)
+         (GENLIST (λi. (i,0w)) (n * type_slot_size tv) ++ nonzeros) storage)
+      base (ArrayTV tv (Fixed n)) = SOME (ArrayV (SArrayV tv n sparse))
+Proof
+  rpt strip_tac >>
+  simp[Once decode_value_def] >>
+  qabbrev_tac `f = λi. case ALOOKUP sparse i of
+    SOME v => v | NONE => default_value tv` >>
+  (* Step 1: decode_static_array gives GENLIST f n *)
+  sg `decode_static_array
+     (apply_writes (n2w base)
+        (GENLIST (λi. (i,0w)) (n * type_slot_size tv) ⧺ nonzeros) storage)
+     base tv n = SOME (GENLIST f n)` >- (
+    irule decode_static_array_GENLIST >>
+    rpt strip_tac >> simp[Abbr`f`] >>
+    REWRITE_TAC [apply_writes_append] >>
+    Cases_on `ALOOKUP sparse i` >> simp[]
+    (* NONE case first (Cases_on puts NONE as first subgoal) *)
+    >- (
+      `decode_value (λk. 0w) (base + i * type_slot_size tv) tv =
+         SOME (default_value tv)` by
+        simp[CONJUNCT1 decode_value_zero_is_default] >>
+      pop_assum (SUBST1_TAC o SYM) >>
+      irule (CONJUNCT1 decode_storage_agree) >>
+      rpt gen_tac >> strip_tac >>
+      rename1 `j < type_slot_size tv` >>
+      simp[lookup_storage_def] >>
+      `i * type_slot_size tv + j < n * type_slot_size tv` by (
+        irule LESS_LESS_EQ_TRANS >>
+        qexists_tac `(i + 1) * type_slot_size tv` >>
+        simp[LE_MULT_RCANCEL]) >>
+      ONCE_REWRITE_TAC [GSYM vfmStateTheory.lookup_storage_def] >>
+      `lookup_storage (n2w (base + (j + i * type_slot_size tv)))
+         (apply_writes (n2w base) nonzeros
+           (apply_writes (n2w base)
+              (GENLIST (λi. (i,0w)) (n * type_slot_size tv)) storage)) =
+       lookup_storage (n2w (base + (j + i * type_slot_size tv)))
+         (apply_writes (n2w base)
+            (GENLIST (λi. (i,0w)) (n * type_slot_size tv)) storage)` by (
+        irule apply_writes_lookup_miss_num >>
+        rpt gen_tac >> strip_tac >>
+        irule n2w_add_cancel >>
+        (* irule gives: off ≠ k ∧ k < dimword ∧ off < dimword *)
+        conj_tac >- (
+          CCONTR_TAC >> gvs[] >>
+          `∀k v. MEM (k,v) sparse ⇒ well_formed_value v` by
+            metis_tac[wf_sparse_well_formed] >>
+          qspecl_then [`sparse`, `tv`, `nonzeros`, `i`]
+            mp_tac encode_static_array_miss >>
+          impl_tac >- (
+            rpt conj_tac >> first_x_assum ACCEPT_TAC
+          ) >>
+          disch_then (qspec_then `j + i * type_slot_size tv` mp_tac) >>
+          simp[]
+        ) >>
+        conj_tac >- (
+          irule LESS_LESS_EQ_TRANS >>
+          qexists_tac `n * type_slot_size tv` >> gvs[]
+        ) >>
+        irule LESS_LESS_EQ_TRANS >>
+        qexists_tac `n * type_slot_size tv` >> conj_tac >- (
+          qspecl_then [`tv`, `0`, `sparse`, `nonzeros`, `n`]
+            mp_tac (el 3 (CONJUNCTS encode_writes_bounded)) >>
+          impl_tac >- simp[] >>
+          disch_then drule >> simp[]
+        ) >> gvs[]
+      ) >> simp[] >>
+      irule genlist_zeros_lookup >> simp[]
+    )
+    (* SOME case: use encode_decode_static_array *)
+    >> (
+      rename1 `_ = SOME v0` >>
+      qspecl_then [`sparse`, `tv`, `n`, `0`, `nonzeros`, `base`,
+        `apply_writes (n2w base)
+           (GENLIST (λi. (i,0w)) (n * type_slot_size tv)) storage`]
+        mp_tac encode_decode_static_array >>
+      impl_tac >- gvs[] >>
+      disch_then (qspecl_then [`i`, `v0`] mp_tac) >>
+      impl_tac >- metis_tac[alistTheory.ALOOKUP_MEM] >>
+      simp[]
+    )
+  ) >> simp[] >>
+  (* Step 2: enumerate_static_array gives back sparse *)
+  simp[Abbr`f`] >>
+  qspecl_then [`n`, `0`, `sparse`, `default_value tv`]
+    mp_tac enumerate_GENLIST_roundtrip >> simp[] >>
+  strip_tac >> pop_assum mp_tac >> impl_tac >- (
+    rpt gen_tac >> strip_tac >>
+    qpat_x_assum `wf_sparse _ _ _` mp_tac >>
+    pop_assum mp_tac >>
+    MAP_EVERY qid_spec_tac [`sparse`] >>
+    Induct >> simp[well_formed_value_def] >>
+    Cases >> rw[well_formed_value_def] >> gvs[] >>
+    res_tac >> gvs[]
+  ) >> simp[]
+QED
+
+(* Helper: Dynamic array roundtrip (n > 0 case) *)
+Theorem roundtrip_dyn_array:
+  ∀tv n vs slots base storage.
+    (∀v. well_formed_value v ⇒ roundtrip_ok tv v) ∧
+    n ≠ 0 ∧
+    encode_dyn_array tv 1 vs = SOME slots ∧
+    n * type_slot_size tv + 1 ≤ dimword(:256) ∧
+    0 < type_slot_size tv ∧
+    wf_type_value tv ∧
+    well_formed_value (ArrayV (DynArrayV tv n vs)) ⇒
+    decode_value (apply_writes (n2w base) ((0,n2w (LENGTH vs))::slots) storage)
+      base (ArrayTV tv (Dynamic n)) = SOME (ArrayV (DynArrayV tv n vs))
+Proof
+  rpt strip_tac >>
+  simp[Once decode_value_def] >>
+  (* read_slot at base gives n2w (LENGTH vs) *)
+  `read_slot (apply_writes (n2w base)
+      ((0,n2w (LENGTH vs))::slots) storage) base =
+    n2w (LENGTH vs)` by (
+    irule read_slot_cons_0 >>
+    gen_tac >> strip_tac >>
+    irule n2w_add_cancel_0 >>
+    `wf_values vs ∧ LENGTH vs ≤ n` by gvs[well_formed_value_def] >>
+    drule (el 4 (CONJUNCTS encode_writes_bounded)) >>
+    disch_then drule >> strip_tac >>
+    pop_assum drule >> strip_tac >>
+    `LENGTH vs * type_slot_size tv ≤ n * type_slot_size tv` by (
+      irule LESS_MONO_MULT >> simp[]
+    ) >>
+    conj_tac >- simp[] >>
+    irule LESS_LESS_EQ_TRANS >>
+    qexists_tac `n * type_slot_size tv + 1` >>
+    simp[]
+  ) >>
+  (* establish bounds before simp *)
+  `LENGTH vs ≤ n` by gvs[well_formed_value_def] >>
+  `n * type_slot_size tv < dimword(:256)` by gvs[] >>
+  `LENGTH vs ≤ n * type_slot_size tv` by (
+    irule LESS_EQ_TRANS >> qexists_tac `n` >>
+    simp[LE_MULT_CANCEL_LBARE]
+  ) >>
+  `LENGTH vs < dimword(:256)` by gvs[] >>
+  simp[] >>
+  `MIN (LENGTH vs) n = LENGTH vs` by gvs[MIN_DEF] >>
+  `decode_dyn_array
+      (apply_writes (n2w base) ((0,n2w (LENGTH vs))::slots) storage)
+      (base + 1) tv (LENGTH vs) = SOME vs` suffices_by simp[] >>
+  `(0:num, n2w (LENGTH vs) : bytes32) :: slots =
+    [(0, n2w (LENGTH vs))] ++ slots` by simp[] >>
+  pop_assum SUBST_ALL_TAC >>
+  REWRITE_TAC [apply_writes_append] >>
+  irule encode_decode_dyn_array >>
+  simp[] >>
+  gvs[well_formed_value_def] >>
+  `LENGTH vs * type_slot_size tv ≤ n * type_slot_size tv` by (
+    irule LESS_MONO_MULT >> simp[]
+  ) >>
+  irule LESS_EQ_TRANS >>
+  qexists_tac `n * type_slot_size tv + 1` >> simp[]
+QED
+
+(* ===== Main Roundtrip Theorem ===== *)
+
+Theorem roundtrip_all:
+  ∀tv v.
+    well_formed_value v ∧ wf_type_value tv ∧
+    type_slot_size tv ≤ dimword(:256) ⇒
+    roundtrip_ok tv v
+Proof
+  completeInduct_on `type_value_size tv` >>
+  rpt gen_tac >> strip_tac >> rpt strip_tac >>
+  Cases_on `tv`
+  (* BaseTV, FlagTV, NoneTV *)
+  >> TRY (
+    irule roundtrip_ok_noncompound >>
+    simp[well_formed_value_def, wf_type_value_def] >> NO_TAC
+  )
+  (* TupleTV tvs *)
+  >> TRY (
+    rename1 `TupleTV tvs` >>
+    (* Bridge IH: use size < to get unconditional roundtrip *)
+    `EVERY (λtv. ∀v'. well_formed_value v' ⇒ roundtrip_ok tv v') tvs` by (
+      simp[EVERY_MEM] >> rpt strip_tac >>
+      rename1 `MEM tv' tvs` >>
+      `type_value_size tv' < v` by (
+        qpat_x_assum `v = _` SUBST1_TAC >>
+        irule MEM_TupleTV_type_value_size >> simp[]
+      ) >>
+      first_x_assum drule >> strip_tac >>
+      pop_assum (qspec_then `tv'` mp_tac) >> simp[] >>
+      strip_tac >> first_x_assum irule >> simp[] >>
+      fs[wf_type_value_def, EVERY_MEM] >>
+      first_x_assum drule >> simp[] >>
+      drule type_slot_size_list_MEM >>
+      fs[type_slot_size_def]
+    ) >>
+    (* Expand roundtrip_ok in goal only *)
+    CONV_TAC (REWR_CONV roundtrip_ok_def) >>
+    rpt strip_tac >>
+    Cases_on `v'` >> gvs[encode_value_def] >>
+    Cases_on `a` >> gvs[encode_value_def, AllCaseEqs()] >>
+    simp[Once decode_value_def] >>
+    `decode_tuple (apply_writes (n2w base) writes storage)
+       base tvs = SOME l` suffices_by simp[] >>
+    qspecl_then [`tvs`, `0`, `l`, `writes`, `base`, `storage`]
+      mp_tac encode_decode_tuple >> simp[] >>
+    gvs[well_formed_value_def, wf_type_value_def, type_slot_size_def,
+        ETA_THM] >> NO_TAC
+  )
+  (* ArrayTV tv' b *)
+  >- (
+    rename1 `ArrayTV tv' b` >>
+    CONV_TAC (REWR_CONV roundtrip_ok_def) >>
+    rpt strip_tac >>
+    Cases_on `b`
+    (* ArrayTV tv' (Fixed n) *)
+    >- (
+      Cases_on `v'` >> gvs[encode_value_def] >>
+      Cases_on `a` >> gvs[encode_value_def, AllCaseEqs()] >>
+      (* n = 0: empty array *)
+      Cases_on `n = 0` >- (
+        `l = []` by (
+          Cases_on `l` >> gvs[] >>
+          PairCases_on `h` >> gvs[well_formed_value_def]
+        ) >>
+        gvs[encode_value_def, apply_writes_def] >>
+        simp[Once decode_value_def] >>
+        simp[decode_value_def, enumerate_static_array_def]
+      ) >>
+      (* n > 0: use roundtrip_static_array *)
+      irule roundtrip_static_array >>
+      gvs[well_formed_value_def, wf_type_value_def, type_slot_size_def] >>
+      rpt strip_tac >>
+      first_x_assum (qspec_then `type_value_size t` mp_tac) >> simp[] >>
+      disch_then (qspec_then `t` mp_tac) >> simp[] >>
+      disch_then irule >> simp[] >>
+      Cases_on `n` >> gvs[MULT_CLAUSES]
+    )
+    (* ArrayTV tv' (Dynamic n) *)
+    >> (
+      Cases_on `v'` >> gvs[encode_value_def] >>
+      Cases_on `a` >> gvs[encode_value_def, AllCaseEqs()] >>
+      rename1 `encode_dyn_array tv' 1 vs = SOME slots` >>
+      Cases_on `n = 0` >- (
+        `vs = []` by (
+          gvs[well_formed_value_def] >> Cases_on `vs` >> gvs[]
+        ) >>
+        gvs[encode_value_def] >>
+        simp[read_slot_after_apply_writes_single, decode_value_def]
+      ) >>
+      irule roundtrip_dyn_array >> simp[] >>
+      conj_tac >- (
+        rpt strip_tac >>
+        first_x_assum (qspec_then `type_value_size tv'` mp_tac) >>
+        simp[] >>
+        disch_then (qspec_then `tv'` mp_tac) >> simp[] >>
+        disch_then irule >>
+        gvs[wf_type_value_def, type_slot_size_def] >>
+        Cases_on `n` >> gvs[MULT_CLAUSES]
+      ) >>
+      gvs[wf_type_value_def, type_slot_size_def]
+    )
+  )
+  (* StructTV ftypes *)
+  >> (
+    rename1 `StructTV ftypes` >>
+    (* Bridge IH: use size < to get unconditional roundtrip *)
+    `EVERY (λ(nm,tv). ∀v'. well_formed_value v' ⇒
+             roundtrip_ok tv v') ftypes` by (
+      simp[EVERY_MEM, FORALL_PROD] >> rpt strip_tac >>
+      rename1 `MEM (nm, tv') ftypes` >>
+      `type_value_size tv' < v` by (
+        qpat_x_assum `v = _` SUBST1_TAC >>
+        metis_tac[MEM_StructTV_type_value_size]
+      ) >>
+      first_x_assum drule >> strip_tac >>
+      pop_assum (qspec_then `tv'` mp_tac) >> simp[] >>
+      strip_tac >> first_x_assum irule >> simp[] >>
+      fs[wf_type_value_def, EVERY_MEM] >>
+      conj_tac >- (first_x_assum drule >> simp[]) >>
+      drule type_slot_size_fields_MEM >>
+      fs[type_slot_size_def]
+    ) >>
+    (* Expand roundtrip_ok in goal only *)
+    CONV_TAC (REWR_CONV roundtrip_ok_def) >>
+    rpt strip_tac >>
+    Cases_on `v'` >> gvs[encode_value_def, AllCaseEqs()] >>
+    simp[Once decode_value_def] >>
+    rename1 `encode_struct 0 ftypes fields = SOME writes` >>
+    `decode_struct (apply_writes (n2w base) writes storage)
+       base ftypes = SOME fields` suffices_by simp[] >>
+    qspecl_then [`ftypes`, `0`, `fields`, `writes`, `base`, `storage`]
+      mp_tac encode_decode_struct >> simp[] >>
+    gvs[well_formed_value_def, wf_type_value_def, type_slot_size_def,
+        ETA_THM]
+  )
 QED

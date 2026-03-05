@@ -803,17 +803,15 @@ Theorem lookup_toplevel_name_after_update:
     var_in_storage cx mid n ∧
     well_formed_value v ∧
     storage_type_of cx mid n = SOME tv ∧
-    bounds_compat tv v ∧
     IS_SOME (encode_value tv v) ∧
-    (∀tvs. tv ≠ TupleTV tvs) ∧
     (∀e bd. tv ≠ ArrayTV e bd) ∧
-    (∀ftypes. tv ≠ StructTV ftypes) ∧
-    (tv = NoneTV ⇒ v = NoneV) ⇒
+    wf_type_value tv ∧
+    type_slot_size tv ≤ dimword(:256) ⇒
     lookup_toplevel_name cx (update_toplevel_name cx st mid n v) mid n = SOME (Value v)
 Proof
   rpt strip_tac >>
   `roundtrip_ok tv v` by (
-    irule roundtrip_ok_from_well_formed_base >> simp[]
+    irule roundtrip_all >> simp[]
   ) >>
   fs[var_in_storage_def, storage_type_of_def, AllCaseEqs()] >>
   Cases_on `encode_value tv v` >> gvs[] >>
@@ -824,10 +822,11 @@ Proof
     metis_tac[get_storage_backend_INL] >>
   simp[] >>
   simp[Once lookup_global_def, bind_def, lift_option_type_def, return_def, LET_THM, raise_def] >>
+  (* Case split on tv to resolve type_value_CASE before further simp *)
+  reverse (Cases_on `tv`) >> gvs[] >>
+  (* ArrayTV eliminated; remaining cases use read_storage_slot *)
   simp[read_storage_slot_def, lift_option_def] >>
-  Cases_on `tv` >> gvs[] >>
   simp[bind_def, get_after_set_storage_backend, return_def, raise_def] >>
   fs[roundtrip_ok_def] >>
-  TRY (first_x_assum (qspecl_then [`offset`, `storage0`] mp_tac)) >>
   simp[return_def]
 QED

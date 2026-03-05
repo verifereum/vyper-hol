@@ -129,7 +129,7 @@ val () = cv_auto_trans decode_base_from_slot_def;
 
 Definition encode_dyn_bytes_slots_def:
   encode_dyn_bytes_slots max bs =
-    if LENGTH bs ≤ max then
+    if LENGTH bs ≤ max ∧ max < dimword(:256) then
       SOME ((0:num, n2w (LENGTH bs)) :: MAPi (λi s. (i + 1, s)) (bytes_to_slots bs))
     else NONE
 End
@@ -201,10 +201,10 @@ QED
 Definition encode_value_def:
   (* Dynamic bytes - special multi-slot encoding *)
   encode_value (BaseTV (BytesT (Dynamic max))) (BytesV (Dynamic m) bs) =
-    (if m ≤ max then encode_dyn_bytes_slots max bs else NONE) /\
+    (if m = max then encode_dyn_bytes_slots max bs else NONE) /\
   (* String - encode as bytes *)
   encode_value (BaseTV (StringT max)) (StringV m s) =
-    (if m ≤ max then encode_dyn_bytes_slots max (MAP (n2w o ORD) s) else NONE) /\
+    (if m = max then encode_dyn_bytes_slots max (MAP (n2w o ORD) s) else NONE) /\
   (* Other base types - single slot *)
   encode_value (BaseTV bt) v =
     (case encode_base_to_slot v (BaseTV bt) of
@@ -214,7 +214,7 @@ Definition encode_value_def:
     (case encode_base_to_slot v (FlagTV m) of
      | SOME slot => SOME [(0, slot)]
      | NONE => NONE) /\
-  encode_value NoneTV v = SOME [] /\
+  encode_value NoneTV NoneV = SOME [] /\
   encode_value (TupleTV tvs) (ArrayV (TupleV vs)) =
     encode_tuple 0 tvs vs /\
   encode_value (ArrayTV tv (Fixed n)) (ArrayV (SArrayV tv' m sparse)) =
