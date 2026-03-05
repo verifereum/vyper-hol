@@ -103,6 +103,13 @@ Proof
   ACCEPT_TAC stateEquivProofsTheory.result_equiv_trans
 QED
 
+(* result_equiv is the canonical instantiation of lift_result *)
+Theorem result_equiv_is_lift_result:
+  !vars. result_equiv vars = lift_result (state_equiv vars) (execution_equiv vars)
+Proof
+  ACCEPT_TAC stateEquivProofsTheory.result_equiv_is_lift_result
+QED
+
 (* ==========================================================================
    Operand Evaluation
    ========================================================================== *)
