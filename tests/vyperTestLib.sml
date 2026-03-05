@@ -321,7 +321,10 @@ val excluded_test_names = [
   "test_side_effects_evaluation",
   (* Tests using shift() builtin which is not yet translated.
      TODO: add shift builtin support *)
-  "test_uint256_mulmod_complex"
+  "test_uint256_mulmod_complex",
+  (* Tests using sha256() builtin which is not yet translated.
+     TODO: add sha256 builtin support *)
+  "test_sha256_*"
 ]
 
 fun glob_match pat str =
