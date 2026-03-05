@@ -23,10 +23,11 @@ Proof
 QED
 
 Theorem update_target_name_update:
-  ∀cx st n bop v1 v2 v.
-    evaluate_binop bop v1 v2 = INL v ∧
+  ∀cx st n ty bop v1 v2 v.
+    evaluate_binop (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
+                   NoneTV bop v1 v2 = INL v ∧
     lookup_name st n = SOME v1 ⇒
-    update_target cx st (BaseTargetV (ScopedVar n) []) (Update bop v2) =
+    update_target cx st (BaseTargetV (ScopedVar n) []) (Update ty bop v2) =
     update_name st n v
 Proof
   rw[update_target_def] >>
@@ -58,10 +59,11 @@ Proof
 QED
 
 Theorem valid_target_name_update:
-  ∀cx st n bop v1 v2 v.
+  ∀cx st n ty bop v1 v2 v.
     lookup_name st n = SOME v1 ∧
-    evaluate_binop bop v1 v2 = INL v ⇒
-    valid_target cx st (BaseTargetV (ScopedVar n) []) (Update bop v2)
+    evaluate_binop (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
+                   NoneTV bop v1 v2 = INL v ⇒
+    valid_target cx st (BaseTargetV (ScopedVar n) []) (Update ty bop v2)
 Proof
   rw[lookup_name_def, valid_target_def] >>
   `IS_SOME (find_containing_scope (string_to_num n) st.scopes)`
@@ -188,11 +190,12 @@ Proof
 QED
 
 Theorem name_lookup_after_update_target_update:
-  ∀cx st n bop av v1 v2 v.
+  ∀cx st n ty bop av v1 v2 v.
     lookup_name st n = SOME v1 ∧
     lookup_name_target cx st n = SOME av ∧
-    evaluate_binop bop v1 v2 = INL v ⇒
-    lookup_name (update_target cx st av (Update bop v2)) n = SOME v
+    evaluate_binop (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
+                   NoneTV bop v1 v2 = INL v ⇒
+    lookup_name (update_target cx st av (Update ty bop v2)) n = SOME v
 Proof
   rpt strip_tac >>
   gvs[lookup_name_target_def, lookup_base_target_def] >>
@@ -202,7 +205,7 @@ Proof
   Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
   gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
   simp[update_target_def] >>
-  `assign_target cx (BaseTargetV (ScopedVar n) []) (Update bop v2) st =
+  `assign_target cx (BaseTargetV (ScopedVar n) []) (Update ty bop v2) st =
    (INL NONE, update_name st n v)` by (drule assign_target_name_update >> simp[]) >>
   simp[lookup_after_update]
 QED

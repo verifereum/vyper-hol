@@ -43,11 +43,11 @@ QED
 
 (* Unsigned subtraction when y ≤ x *)
 Theorem evaluate_binop_sub_small_unsigned:
-  ∀x y.
+  ∀tv x y.
     within_int_bound (Unsigned 256) x ∧
     within_int_bound (Unsigned 256) y ∧
     y ≤ x ⇒
-    evaluate_binop Sub (IntV x) (IntV y) =
+    evaluate_binop (Unsigned 256) tv Sub (IntV x) (IntV y) =
     INL (IntV (x − y))
 Proof
   rpt strip_tac >>
@@ -60,11 +60,11 @@ QED
 
 (* Signed 128 addition when result is in bounds *)
 Theorem evaluate_binop_add_int128:
-  ∀a b.
+  ∀tv a b.
     within_int_bound (Signed 128) a ∧
     within_int_bound (Signed 128) b ∧
     within_int_bound (Signed 128) (a + b) ⇒
-    evaluate_binop Add (IntV a) (IntV b) =
+    evaluate_binop (Signed 128) tv Add (IntV a) (IntV b) =
     INL (IntV (a + b))
 Proof
   rpt strip_tac >>

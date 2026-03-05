@@ -571,14 +571,14 @@ QED
 
 (* ----- Case 12: AugAssign bt bop e ----- *)
 Theorem case_AugAssign_imm_dom[local]:
-  ∀cx bt bop e.
+  ∀cx ty bt bop e.
     (∀st res st'. eval_base_target cx bt st = (res,st') ⇒
        preserves_immutables_dom cx st st') ∧
     (∀s'' loc sbs t'. eval_base_target cx bt s'' = (INL (loc,sbs),t') ⇒
        ∀st res st'. eval_expr cx e st = (res,st') ⇒
          preserves_immutables_dom cx st st') ⇒
     ∀st res st'.
-      eval_stmt cx (AugAssign bt bop e) st = (res, st') ⇒
+      eval_stmt cx (AugAssign ty bt bop e) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
   rpt strip_tac >>
@@ -1344,7 +1344,7 @@ QED
 
 (* ----- Case: eval_expr (Builtin bt es) ----- *)
 Theorem case_Builtin_imm_dom[local]:
-  ∀cx bt es.
+  ∀cx ty bt es.
     (∀s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
        (INL x,t) ∧ bt ≠ Len ⇒
@@ -1358,7 +1358,7 @@ Theorem case_Builtin_imm_dom[local]:
          eval_expr cx (HD es) st = (res,st') ⇒
          preserves_immutables_dom cx st st') ⇒
     ∀st res st'.
-      eval_expr cx (Builtin _ bt es) st = (res, st') ⇒
+      eval_expr cx (Builtin ty bt es) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
   rpt strip_tac >>
