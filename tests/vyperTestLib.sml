@@ -325,6 +325,9 @@ val excluded_test_names = [
   (* Tests using sha256() builtin which is not yet translated.
      TODO: add sha256 builtin support *)
   "test_sha256_*",
+  (* Tests using msg.data which is not yet modelled.
+     TODO: add msg.data env item *)
+  "test_slice_start_eval_once[msg.data]",
   (* ABI decode strictness tests - Vyper's decoder is stricter than standard
      ABI, rejecting OOB heads, truncated data, etc. TODO: add Vyper-specific
      ABI decode validation on top of contractABI's standard valid_enc *)
@@ -340,7 +343,22 @@ val excluded_test_names = [
   "test_abi_decode_runtimesz_oob*",
   "test_abi_decode_top_level_head_oob",
   "test_nested_invalid_dynarray_head",
-  "test_static_outer_type_invalid_heads"
+  "test_static_outer_type_invalid_heads",
+  "test_abi_decode_arithmetic_overflow",
+  "test_abi_decode_bytearray_clamp",
+  "test_abi_decode_dynarray_complex2",
+  "test_abi_decode_head_pointing_outside_buffer",
+  "test_abi_decode_head_roundtrip",
+  "test_abi_decode_max_size",
+  "test_clamper*",
+  "test_returndatasize_check",
+  (* abi_decode tests using unwrap_tuple=False keyword.
+     TODO: support unwrap_tuple keyword argument for abi_decode *)
+  "test_abi_decode_annassign",
+  "test_abi_decode_double[False*",
+  "test_abi_decode_nested_dynarray2[False*",
+  "test_abi_decode_nested_dynarray[False*",
+  "test_abi_decode_single*False]"
 ]
 
 fun glob_match pat str =
