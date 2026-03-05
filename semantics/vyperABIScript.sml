@@ -98,7 +98,7 @@ val () = cv_auto_trans_rec vyper_to_abi_type_def (
 
 Definition check_IntV_def:
   check_IntV b i =
-  if within_int_bound b i then SOME $ IntV b i else NONE
+  if within_int_bound b i then SOME $ IntV i else NONE
 End
 
 Definition abi_to_vyper_def[simp]:
@@ -111,9 +111,9 @@ Definition abi_to_vyper_def[simp]:
   abi_to_vyper env (BaseT $ BoolT) (NumV n) =
     (if n ≤ 1 then SOME $ BoolV (n = 1) else NONE) ∧
   abi_to_vyper env (BaseT $ BytesT b) (BytesV bs) =
-    (if compatible_bound b (LENGTH bs) then SOME $ BytesV b bs else NONE) ∧
+    (if compatible_bound b (LENGTH bs) then SOME $ BytesV bs else NONE) ∧
   abi_to_vyper env (BaseT $ StringT z) (BytesV bs) =
-    (if LENGTH bs ≤ z then SOME $ StringV z (MAP (CHR o w2n) bs) else NONE) ∧
+    (if LENGTH bs ≤ z then SOME $ StringV (MAP (CHR o w2n) bs) else NONE) ∧
   abi_to_vyper env (BaseT $ DecimalT) (IntV i) =
     (if within_int_bound (Signed 168) i then SOME $ DecimalV i else NONE) ∧
   abi_to_vyper env (TupleT ts) (ListV vs) =
@@ -137,7 +137,7 @@ Definition abi_to_vyper_def[simp]:
   abi_to_vyper env (FlagT id) (NumV n) =
     (case FLOOKUP env (string_to_num id) of
       | SOME (FlagArgs m) =>
-        if m ≤ 256 ∧ n < 2 ** m then SOME $ FlagV m (&n) else NONE
+        if m ≤ 256 ∧ n < 2 ** m then SOME $ FlagV (&n) else NONE
       | _ => NONE) ∧
   abi_to_vyper _ _ _ = NONE ∧
   abi_to_vyper_list env [] [] = SOME [] ∧
@@ -442,15 +442,15 @@ val () = cv_auto_trans_rec default_to_abi_def (
    Factored out to reduce pattern completion in the main mutual recursion,
    which allows cv_auto_trans to succeed. *)
 Definition vyper_to_abi_base_def[simp]:
-  vyper_to_abi_base (UintT _) (IntV (Unsigned _) i) = SOME (NumV (Num i)) ∧
-  vyper_to_abi_base (IntT _) (IntV (Signed _) i) = SOME (contractABI$IntV i) ∧
+  vyper_to_abi_base (UintT _) (IntV i) = SOME (NumV (Num i)) ∧
+  vyper_to_abi_base (IntT _) (IntV i) = SOME (contractABI$IntV i) ∧
   vyper_to_abi_base BoolT (BoolV b) = SOME (NumV (if b then 1 else 0)) ∧
   vyper_to_abi_base DecimalT (DecimalV i) = SOME (contractABI$IntV i) ∧
-  vyper_to_abi_base (StringT _) (StringV _ s) = SOME (contractABI$BytesV (MAP n2w_o_ORD s)) ∧
-  vyper_to_abi_base (BytesT _) (BytesV _ bs) = SOME (contractABI$BytesV bs) ∧
+  vyper_to_abi_base (StringT _) (StringV s) = SOME (contractABI$BytesV (MAP n2w_o_ORD s)) ∧
+  vyper_to_abi_base (BytesT _) (BytesV bs) = SOME (contractABI$BytesV bs) ∧
   (* AddressT uses BytesV but converts to NumV - must come after BytesT to avoid
      pattern overlap issues in cv_trans *)
-  vyper_to_abi_base AddressT (BytesV _ bs) =
+  vyper_to_abi_base AddressT (BytesV bs) =
     SOME (NumV (w2n (word_of_bytes_be bs : address))) ∧
   vyper_to_abi_base _ _ = NONE
 End
@@ -464,15 +464,18 @@ Definition vyper_to_abi_def[simp]:
     (case vyper_to_abi_list env ts vs of
      | SOME avs => SOME (ListV avs)
      | NONE => NONE) ∧
-  vyper_to_abi env (ArrayT t _) (ArrayV (DynArrayV _ _ vs)) =
+  vyper_to_abi env (ArrayT t _) (ArrayV (DynArrayV _ vs)) =
     (case vyper_to_abi_same env t vs of
      | SOME avs => SOME (ListV avs)
      | NONE => NONE) ∧
-  vyper_to_abi env (ArrayT t (Fixed _)) (ArrayV (SArrayV tv n sparse)) =
-    (case vyper_to_abi_sparse env t tv n sparse of
-     | SOME avs => SOME (ListV avs)
-     | NONE => NONE) ∧
-  vyper_to_abi env (FlagT _) (FlagV _ n) = SOME (NumV n) ∧
+  vyper_to_abi env (ArrayT t (Fixed _)) (ArrayV (SArrayV n sparse)) =
+    (case evaluate_type env t of
+     | NONE => NONE
+     | SOME tv =>
+         case vyper_to_abi_sparse env t tv n sparse of
+         | SOME avs => SOME (ListV avs)
+         | NONE => NONE) ∧
+  vyper_to_abi env (FlagT _) (FlagV n) = SOME (NumV n) ∧
   vyper_to_abi env NoneT NoneV = SOME (ListV []) ∧
   vyper_to_abi env (StructT id) (StructV fields) =
     (let nid = string_to_num id in
@@ -1076,7 +1079,7 @@ Definition evaluate_abi_encode_def:
   evaluate_abi_encode tenv typ v =
     let abiTy = vyper_to_abi_type tenv typ in
     case vyper_to_abi tenv typ v of
-      SOME av => INL $ BytesV (Dynamic (LENGTH (enc abiTy av))) (enc abiTy av)
+      SOME av => INL $ BytesV (enc abiTy av)
     | NONE => INR "abi_encode conversion"
 End
 

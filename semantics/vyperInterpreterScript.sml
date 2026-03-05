@@ -59,14 +59,14 @@ Definition build_getter_def:
     (let vn = num_to_dec_string n in
       if is_ArrayT vt then
         (let (args, ret, exp) =
-           build_getter (Subscript e (Name vn))
+           build_getter (Subscript NoneT e (Name NoneT vn))
              (BaseT (UintT 256)) (Type (ArrayT_type vt)) (SUC n) in
            ((vn, kt)::args, ret, exp))
-      else ([(vn, kt)], vt, Subscript e (Name vn))) ∧
+      else ([(vn, kt)], vt, Subscript NoneT e (Name NoneT vn))) ∧
   build_getter e kt (HashMapT typ vtyp) n =
     (let vn = num_to_dec_string n in
      let (args, ret, exp) =
-       build_getter (Subscript e (Name vn)) typ vtyp (SUC n) in
+       build_getter (Subscript NoneT e (Name NoneT vn)) typ vtyp (SUC n) in
      ((vn, kt)::args, ret, exp))
 Termination
   WF_REL_TAC ‘measure (value_type_size o FST o SND o SND)’
@@ -104,13 +104,13 @@ Definition lookup_function_def:
    else lookup_function src_id_opt name vis ts) ∧
   lookup_function src_id_opt name External (VariableDecl Public mut id typ :: ts) =
   (if id = name then
-    let ne = TopLevelName (src_id_opt, id) in
+    let ne = TopLevelName NoneT (src_id_opt, id) in
     if ¬is_ArrayT typ
     then SOME (View, [], [], typ, [Return (SOME ne)])
     else SOME $ getter ne (BaseT (UintT 256)) (Type (ArrayT_type typ))
    else lookup_function src_id_opt name External ts) ∧
   lookup_function src_id_opt name External (HashMapDecl Public _ id kt vt :: ts) =
-  (if id = name then SOME $ getter (TopLevelName (src_id_opt, id)) kt vt
+  (if id = name then SOME $ getter (TopLevelName NoneT (src_id_opt, id)) kt vt
    else lookup_function src_id_opt name External ts) ∧
   lookup_function src_id_opt name vis (_ :: ts) =
     lookup_function src_id_opt name vis ts
@@ -242,36 +242,36 @@ Definition bound_def:
   base_target_bound ts (SubscriptTarget bt e) =
     1 + base_target_bound ts bt
       + expr_bound ts e ∧
-  expr_bound ts (Name _) = 0 ∧
-  expr_bound ts (BareGlobalName _) = 0 ∧
-  expr_bound ts (TopLevelName _) = 0 ∧
-  expr_bound ts (FlagMember _ _) = 0 ∧
-  expr_bound ts (IfExp e1 e2 e3) =
+  expr_bound ts (Name _ _) = 0 ∧
+  expr_bound ts (BareGlobalName _ _) = 0 ∧
+  expr_bound ts (TopLevelName _ _) = 0 ∧
+  expr_bound ts (FlagMember _ _ _) = 0 ∧
+  expr_bound ts (IfExp _ e1 e2 e3) =
     1 + expr_bound ts e1
       + MAX (expr_bound ts e2)
             (expr_bound ts e3) ∧
-  expr_bound ts (Subscript e1 e2) =
+  expr_bound ts (Subscript _ e1 e2) =
     1 + expr_bound ts e1
       + expr_bound ts e2 ∧
-  expr_bound ts (Attribute e _) =
+  expr_bound ts (Attribute _ e _) =
     1 + expr_bound ts e ∧
-  expr_bound ts (Literal _) = 0 ∧
-  expr_bound ts (StructLit _ kes) =
+  expr_bound ts (Literal _ _) = 0 ∧
+  expr_bound ts (StructLit _ _ kes) =
     1 + exprs_bound ts (MAP SND kes) ∧
-  expr_bound ts (Builtin _ es) =
+  expr_bound ts (Builtin _ _ es) =
     1 + exprs_bound ts es ∧
-  expr_bound ts (Pop bt) =
+  expr_bound ts (Pop _ bt) =
     1 + base_target_bound ts bt ∧
-  expr_bound ts (TypeBuiltin _ _ es) =
+  expr_bound ts (TypeBuiltin _ _ _ es) =
     1 + exprs_bound ts es ∧
-  expr_bound ts (Call (IntCall (src_id_opt, fn)) es drv) =
+  expr_bound ts (Call _ (IntCall (src_id_opt, fn)) es drv) =
     1 + exprs_bound ts es
       + (case drv of NONE => 0 | SOME e => expr_bound ts e)
       + (case ALOOKUP ts (src_id_opt, fn) of
          | SOME (dflts, ss) => exprs_bound (ADELKEY (src_id_opt, fn) ts) dflts
                              + stmts_bound (ADELKEY (src_id_opt, fn) ts) ss
          | NONE => 0) ∧
-  expr_bound ts (Call t es drv) =
+  expr_bound ts (Call _ t es drv) =
     1 + exprs_bound ts es
       + (case drv of NONE => 0 | SOME e => expr_bound ts e) ∧
   exprs_bound ts [] = 0 ∧
@@ -591,12 +591,10 @@ End
 val () = cv_auto_trans immutable_target_def;
 
 Definition get_range_limits_def:
-  get_range_limits (IntV u1 n1) (IntV u2 n2) =
-  (if u1 = u2 then
-     if n1 ≤ n2
-     then INL (u1, n1, Num (n2 - n1))
-     else INR (RuntimeError "no range")
-   else INR (TypeError "range type")) ∧
+  get_range_limits (IntV n1) (IntV n2) =
+  (if n1 ≤ n2
+   then INL (n1, Num (n2 - n1))
+   else INR (RuntimeError "no range")) ∧
   get_range_limits _ _ = INR (TypeError "range not IntV")
 End
 
@@ -742,7 +740,7 @@ val () = cv_auto_trans run_ext_call_def;
 
 (* Dynamic array bounds check: reads stored length from storage *)
 Definition check_array_bounds_def:
-  check_array_bounds cx (ArrayRef is_transient base_slot _ (Dynamic _)) (IntV _ i) = do
+  check_array_bounds cx (ArrayRef is_transient base_slot _ (Dynamic _)) (IntV i) = do
     storage <- get_storage_backend cx is_transient;
     stored_len <<- w2n (lookup_storage base_slot storage);
     check (0 ≤ i ∧ Num i < stored_len) "subscript dynamic array oob"
@@ -852,8 +850,8 @@ Definition evaluate_def:
     tv2 <- eval_expr cx e2;
     v2 <- get_Value tv2;
     rl <- lift_sum $ get_range_limits v1 v2;
-    u <<- FST rl; ns <<- SND rl; n1 <<- FST ns; n2 <<- SND ns;
-    return $ GENLIST (λn. IntV u (n1 + &n)) n2
+    n1 <<- FST rl; n2 <<- SND rl;
+    return $ GENLIST (λn. IntV (n1 + &n)) n2
   od ∧
   eval_target cx (BaseTarget t) = do
     (loc, sbs) <- eval_base_target cx t;
@@ -906,35 +904,35 @@ Definition evaluate_def:
       pop_scope ;
     if broke then return () else eval_for cx nm body vs
   od ∧
-  eval_expr cx (Name id) = do
+  eval_expr cx (Name _ id) = do
     env <- get_scopes;
     n <<- string_to_num id;
     v <- lift_option_type (lookup_scopes n env) "Name not in scope";
     return $ Value v
   od ∧
-  eval_expr cx (BareGlobalName id) = do
+  eval_expr cx (BareGlobalName _ id) = do
     imms <- get_immutables cx (current_module cx);
     n <<- string_to_num id;
     v <- lift_option_type (FLOOKUP imms n) "BareGlobalName not found";
     return $ Value v
   od ∧
-  eval_expr cx (TopLevelName (src_id_opt, id)) =
+  eval_expr cx (TopLevelName _ (src_id_opt, id)) =
     lookup_global cx src_id_opt (string_to_num id) ∧
-  eval_expr cx (FlagMember nsid mid) = lookup_flag_mem cx nsid mid ∧
-  eval_expr cx (IfExp e1 e2 e3) = do
+  eval_expr cx (FlagMember _ nsid mid) = lookup_flag_mem cx nsid mid ∧
+  eval_expr cx (IfExp _ e1 e2 e3) = do
     tv <- eval_expr cx e1;
     switch_BoolV tv
       (eval_expr cx e2)
       (eval_expr cx e3)
   od ∧
-  eval_expr cx (Literal l) = return $ Value $ evaluate_literal l ∧
-  eval_expr cx (StructLit (src_id_opt, id) kes) = do
+  eval_expr cx (Literal _ l) = return $ Value $ evaluate_literal l ∧
+  eval_expr cx (StructLit _ (src_id_opt, id) kes) = do
     (* TODO: type checking - validate fields against struct definition from src_id_opt *)
     ks <<- MAP FST kes;
     vs <- eval_exprs cx (MAP SND kes);
     return $ Value $ StructV $ ZIP (ks, vs)
   od ∧
-  eval_expr cx (Subscript e1 e2) = do
+  eval_expr cx (Subscript _ e1 e2) = do
     tv1 <- eval_expr cx e1;
     tv2 <- eval_expr cx e2;
     v2 <- get_Value tv2;
@@ -946,18 +944,18 @@ Definition evaluate_def:
       return $ Value v
     od
   od ∧
-  eval_expr cx (Attribute e id) = do
+  eval_expr cx (Attribute _ e id) = do
     tv <- eval_expr cx e;
     sv <- get_Value tv;
     v <- lift_sum $ evaluate_attribute sv id;
     return $ Value $ v
   od ∧
-  eval_expr cx (Builtin bt es) = do
+  eval_expr cx (Builtin _ bt es) = do
     type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args";
     v <- if bt = Len then do
       tv <- eval_expr cx (HD es);
       len <- toplevel_array_length cx tv;
-      return $ IntV (Unsigned 256) (&len)
+      return $ IntV (&len)
     od else do
       vs <- eval_exprs cx es;
       acc <- get_accounts;
@@ -965,19 +963,19 @@ Definition evaluate_def:
     od;
     return $ Value v
   od ∧
-  eval_expr cx (Pop bt) = do
+  eval_expr cx (Pop _ bt) = do
     (loc, sbs) <- eval_base_target cx bt;
     popped <- assign_target cx (BaseTargetV loc sbs) PopOp;
     v <- lift_option_type popped "Pop returned NONE";
     return $ Value v
   od ∧
-  eval_expr cx (TypeBuiltin tb typ es) = do
+  eval_expr cx (TypeBuiltin _ tb typ es) = do
     type_check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args";
     vs <- eval_exprs cx es;
     v <- lift_sum $ evaluate_type_builtin cx tb typ vs;
     return $ Value v
   od ∧
-  eval_expr cx (Call Send es _) = do
+  eval_expr cx (Call _ Send es _) = do
     type_check (LENGTH es = 2) "Send args";
     vs <- eval_exprs cx es;
     toAddr <- lift_option_type (dest_AddressV $ EL 0 vs) "Send not AddressV";
@@ -985,7 +983,7 @@ Definition evaluate_def:
     transfer_value cx.txn.target toAddr amount;
     return $ Value $ NoneV
   od ∧
-  eval_expr cx (Call (ExtCall is_static (func_name, arg_types, ret_type)) es drv) = do
+  eval_expr cx (Call _ (ExtCall is_static (func_name, arg_types, ret_type)) es drv) = do
     vs <- eval_exprs cx es;
     check (vs ≠ []) "ExtCall no target";
     target_addr <- lift_option_type (dest_AddressV (HD vs)) "ExtCall target not address";
@@ -1019,7 +1017,7 @@ Definition evaluate_def:
       return $ Value ret_val
     od
   od ∧
-  eval_expr cx (Call (IntCall (src_id_opt, fn)) es _) = do
+  eval_expr cx (Call _ (IntCall (src_id_opt, fn)) es _) = do
     check (¬MEM (src_id_opt, fn) cx.stk) "recursion";
     ts <- lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code";
     tup <- lift_option_type (lookup_callable_function cx.in_deploy fn ts) "IntCall lookup_function";
@@ -1142,7 +1140,7 @@ QED
 Definition flag_value_def:
   flag_value m n acc [] = StructV $ REVERSE acc ∧
   flag_value m n acc (id::ids) =
-  flag_value m (2n*n) ((id,FlagV m n)::acc) ids
+  flag_value m (2n*n) ((id,FlagV n)::acc) ids
 End
 
 val () = cv_auto_trans flag_value_def;

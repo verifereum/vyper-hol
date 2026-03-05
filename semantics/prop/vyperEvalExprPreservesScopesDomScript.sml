@@ -148,7 +148,7 @@ QED
 (* Goal 5: Name (no IH) *)
 Theorem case_Name_dom[local]:
   ∀cx id st res st'.
-    eval_expr cx (Name id) st = (res,st') ⇒
+    eval_expr cx (Name _ id) st = (res,st') ⇒
     MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   simp[evaluate_def, bind_def, get_scopes_def, return_def,
@@ -160,7 +160,7 @@ QED
 (* Goal 5b: BareGlobalName (no IH) *)
 Theorem case_BareGlobalName_dom[local]:
   ∀cx id st res st'.
-    eval_expr cx (BareGlobalName id) st = (res,st') ⇒
+    eval_expr cx (BareGlobalName _ id) st = (res,st') ⇒
     MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >>
@@ -177,7 +177,7 @@ QED
 (* Goal 6: TopLevelName (no IH) *)
 Theorem case_TopLevelName_dom[local]:
   ∀cx src_id_opt id st res st'.
-    eval_expr cx (TopLevelName (src_id_opt,id)) st = (res,st') ⇒
+    eval_expr cx (TopLevelName _ (src_id_opt,id)) st = (res,st') ⇒
     MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >> gvs[evaluate_def] >> imp_res_tac lookup_global_scopes >> gvs[]
@@ -186,7 +186,7 @@ QED
 (* Goal 7: FlagMember (no IH) *)
 Theorem case_FlagMember_dom[local]:
   ∀cx nsid mid st res st'.
-    eval_expr cx (FlagMember nsid mid) st = (res,st') ⇒
+    eval_expr cx (FlagMember _ nsid mid) st = (res,st') ⇒
     MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >> gvs[evaluate_def] >> imp_res_tac lookup_flag_mem_scopes >> gvs[]
@@ -206,10 +206,10 @@ Theorem case_IfExp_dom[local]:
     (∀st res st'. eval_expr cx e1 st = (res,st') ⇒
        MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
-      eval_expr cx (IfExp e1 e2 e3) st = (res,st') ⇒
+      eval_expr cx (IfExp _ e1 e2 e3) st = (res,st') ⇒
       MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
-  rpt strip_tac >> qpat_x_assum `eval_expr cx (IfExp _ _ _) _ = _` mp_tac >>
+  rpt strip_tac >> qpat_x_assum `eval_expr cx (IfExp _ _ _ _) _ = _` mp_tac >>
   simp[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def, switch_BoolV_def] >>
   strip_tac >> gvs[] >>
   `MAP FDOM st.scopes = MAP FDOM s''.scopes` by (last_x_assum drule >> simp[]) >>
@@ -229,7 +229,7 @@ QED
 (* Goal 9: Literal (no IH) *)
 Theorem case_Literal_dom[local]:
   ∀cx l st res st'.
-    eval_expr cx (Literal l) st = (res,st') ⇒
+    eval_expr cx (Literal _ l) st = (res,st') ⇒
     MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >> gvs[evaluate_def, return_def]
@@ -242,7 +242,7 @@ Theorem case_StructLit_dom[local]:
        ∀st res st'. eval_exprs cx (MAP SND kes) st = (res,st') ⇒
          MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
-      eval_expr cx (StructLit (src_id_opt,id) kes) st = (res,st') ⇒
+      eval_expr cx (StructLit _ (src_id_opt,id) kes) st = (res,st') ⇒
       MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def]
@@ -258,10 +258,10 @@ Theorem case_Subscript_dom[local]:
     (∀st res st'. eval_expr cx e1 st = (res,st') ⇒
        MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
-      eval_expr cx (Subscript e1 e2) st = (res,st') ⇒
+      eval_expr cx (Subscript _ e1 e2) st = (res,st') ⇒
       MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
-  rpt strip_tac >> qpat_x_assum `eval_expr cx (Subscript _ _) _ = _` mp_tac >>
+  rpt strip_tac >> qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
   simp[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
        ignore_bind_def] >>
   strip_tac >> gvs[] >>
@@ -281,7 +281,7 @@ Theorem case_Attribute_dom[local]:
     (∀st res st'. eval_expr cx e st = (res,st') ⇒
        MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
-      eval_expr cx (Attribute e id) st = (res,st') ⇒
+      eval_expr cx (Attribute _ e id) st = (res,st') ⇒
       MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >>
@@ -304,7 +304,7 @@ Theorem case_Builtin_dom[local]:
        ∀st res st'. eval_expr cx (HD es) st = (res,st') ⇒
          MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
-      eval_expr cx (Builtin bt es) st = (res,st') ⇒
+      eval_expr cx (Builtin _ bt es) st = (res,st') ⇒
       MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >>
@@ -322,7 +322,7 @@ Theorem case_Pop_dom[local]:
     (∀st res st'. eval_base_target cx bt st = (res,st') ⇒
        MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
-      eval_expr cx (Pop bt) st = (res,st') ⇒
+      eval_expr cx (Pop _ bt) st = (res,st') ⇒
       MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >>
@@ -342,7 +342,7 @@ Theorem case_TypeBuiltin_dom[local]:
        ∀st res st'. eval_exprs cx es st = (res,st') ⇒
          MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
-      eval_expr cx (TypeBuiltin tb typ es) st = (res,st') ⇒
+      eval_expr cx (TypeBuiltin _ tb typ es) st = (res,st') ⇒
       MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >>
@@ -359,7 +359,7 @@ Theorem case_Send_dom[local]:
        ∀st res st'. eval_exprs cx es st = (res,st') ⇒
          MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
-      eval_expr cx (Call Send es v0) st = (res,st') ⇒
+      eval_expr cx (Call _ Send es v0) st = (res,st') ⇒
       MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>

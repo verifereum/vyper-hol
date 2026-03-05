@@ -85,12 +85,12 @@ val () = cv_auto_trans current_module_def;
 (* Now we can define semantics for builtins that depend on the environment *)
 
 Definition evaluate_account_op_def:
-  evaluate_account_op Address bs _ = BytesV (Fixed 20) bs ∧
-  evaluate_account_op Balance _ a = IntV (Unsigned 256) &a.balance ∧
-  evaluate_account_op Codehash _ a = BytesV (Fixed 32) (Keccak_256_w64 a.code) ∧
-  evaluate_account_op Codesize _ a = IntV (Unsigned 256) $ &LENGTH a.code ∧
+  evaluate_account_op Address bs _ = BytesV bs ∧
+  evaluate_account_op Balance _ a = IntV &a.balance ∧
+  evaluate_account_op Codehash _ a = BytesV (Keccak_256_w64 a.code) ∧
+  evaluate_account_op Codesize _ a = IntV $ &LENGTH a.code ∧
   evaluate_account_op IsContract _ a = BoolV (a.code ≠ []) ∧
-  evaluate_account_op Code _ a = BytesV (Dynamic (LENGTH a.code)) a.code
+  evaluate_account_op Code _ a = BytesV a.code
 End
 
 val () = cv_auto_trans evaluate_account_op_def;
@@ -101,7 +101,7 @@ Definition evaluate_block_hash_def:
   if t.block_number ≤ n ∨
      LENGTH t.block_hashes ≤ pbn - n
   then INR (RuntimeError "evaluate_block_hash")
-  else INL $ BytesV (Fixed 32)
+  else INL $ BytesV
     (word_to_bytes_be (EL (pbn - n) t.block_hashes))
 End
 
@@ -117,7 +117,7 @@ QED
 
 Definition evaluate_blob_hash_def:
   evaluate_blob_hash t n =
-    BytesV (Fixed 32) $
+    BytesV $
       word_to_bytes_be $
         if n < LENGTH t.blob_hashes
         then EL n t.blob_hashes
@@ -206,15 +206,15 @@ Definition evaluate_extract32_def:
   in case bt
      of BytesT (Fixed m) =>
           if m ≤ LENGTH bs then
-            INL $ BytesV (Fixed m) (TAKE m bs)
+            INL $ BytesV (TAKE m bs)
           else INR (RuntimeError "evaluate_extract32 bytesM")
       | UintT m =>
-          evaluate_convert (BytesV (Dynamic 32) (TAKE 32 bs)) (BaseT (UintT m))
+          evaluate_convert (BytesV (TAKE 32 bs)) (BaseT (UintT m))
       | IntT m =>
-          evaluate_convert (BytesV (Dynamic 32) (TAKE 32 bs)) (BaseT (IntT m))
+          evaluate_convert (BytesV (TAKE 32 bs)) (BaseT (IntT m))
       | AddressT =>
           if 20 ≤ LENGTH bs then
-            INL $ BytesV (Fixed 20) (TAKE 20 bs)
+            INL $ BytesV (TAKE 20 bs)
           else INR (RuntimeError "evaluate_extract32 address")
       | _ => INR (TypeError "evaluate_extract32 type")
   else INR (RuntimeError "evaluate_extract32 start")
@@ -236,10 +236,9 @@ Definition evaluate_type_builtin_def:
   evaluate_type_builtin cx Epsilon typ [] =
     (if typ = BaseT DecimalT then INL $ DecimalV 1
      else INR (TypeError "Epsilon: not decimal")) ∧
-  evaluate_type_builtin cx Extract32 (BaseT bt) [BytesV _ bs; IntV u i] =
-    (if u = Unsigned 256 then evaluate_extract32 bs (Num i) bt
-     else INR (TypeError "Extract32 type")) ∧
-  evaluate_type_builtin cx AbiDecode typ [BytesV _ bs] =
+  evaluate_type_builtin cx Extract32 (BaseT bt) [BytesV bs; IntV i] =
+    evaluate_extract32 bs (Num i) bt ∧
+  evaluate_type_builtin cx AbiDecode typ [BytesV bs] =
     (case evaluate_abi_decode (get_tenv cx) typ bs of
        INL v => INL v | INR str => INR (RuntimeError str)) ∧
   evaluate_type_builtin _ AbiDecode _ _ =
@@ -254,9 +253,8 @@ End
 val () = cv_auto_trans evaluate_type_builtin_def;
 
 Definition evaluate_ecrecover_def:
-  evaluate_ecrecover [BytesV _ hash_bytes; IntV u1 v_int; IntV u2 r_int; IntV u3 s_int] =
-    (if u1 = Unsigned 256 ∧ u2 = Unsigned 256 ∧ u3 = Unsigned 256 ∧
-        LENGTH hash_bytes = 32
+  evaluate_ecrecover [BytesV hash_bytes; IntV v_int; IntV r_int; IntV s_int] =
+    (if LENGTH hash_bytes = 32
      then let
        hash:bytes32 = word_of_bytes_be hash_bytes;
        v = Num v_int;
@@ -272,93 +270,81 @@ End
 val () = cv_auto_trans evaluate_ecrecover_def;
 
 Definition evaluate_ecadd_def:
-  evaluate_ecadd [ArrayV (TupleV [IntV u1 x1; IntV u2 y1]);
-                  ArrayV (TupleV [IntV u3 x2; IntV u4 y2])] =
-    (if u1 = Unsigned 256 ∧ u2 = Unsigned 256 ∧
-        u3 = Unsigned 256 ∧ u4 = Unsigned 256
-     then let
+  evaluate_ecadd [ArrayV (TupleV [IntV x1; IntV y1]);
+                  ArrayV (TupleV [IntV x2; IntV y2])] =
+    (let
        p1 = (Num x1, Num y1);
        p2 = (Num x2, Num y2)
      in case vfmExecution$ecadd p1 p2 of
           NONE => INL $ ArrayV $ TupleV
-            [IntV (Unsigned 256) 0; IntV (Unsigned 256) 0]
+            [IntV 0; IntV 0]
         | SOME (rx, ry) => INL $ ArrayV $ TupleV
-            [IntV (Unsigned 256) (&rx); IntV (Unsigned 256) (&ry)]
-     else INR (TypeError "ECAdd type")) ∧
+            [IntV (&rx); IntV (&ry)]
+     ) ∧
   evaluate_ecadd _ = INR (TypeError "ECAdd args")
 End
 
 val () = cv_auto_trans evaluate_ecadd_def;
 
 Definition evaluate_ecmul_def:
-  evaluate_ecmul [ArrayV (TupleV [IntV u1 x; IntV u2 y]); IntV u3 scalar] =
-    (if u1 = Unsigned 256 ∧ u2 = Unsigned 256 ∧ u3 = Unsigned 256
-     then let
+  evaluate_ecmul [ArrayV (TupleV [IntV x; IntV y]); IntV scalar] =
+    (let
        p = (Num x, Num y);
        n = Num scalar
      in case vfmExecution$ecmul p n of
           NONE => INL $ ArrayV $ TupleV
-            [IntV (Unsigned 256) 0; IntV (Unsigned 256) 0]
+            [IntV 0; IntV 0]
         | SOME (rx, ry) => INL $ ArrayV $ TupleV
-            [IntV (Unsigned 256) (&rx); IntV (Unsigned 256) (&ry)]
-     else INR (TypeError "ECMul type")) ∧
+            [IntV (&rx); IntV (&ry)]
+     ) ∧
   evaluate_ecmul _ = INR (TypeError "ECMul args")
 End
 
 val () = cv_auto_trans evaluate_ecmul_def;
 
 Definition evaluate_builtin_def:
-  evaluate_builtin cx _ Len [BytesV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
-  evaluate_builtin cx _ Len [StringV _ ls] = INL (IntV (Unsigned 256) &(LENGTH ls)) ∧
-  evaluate_builtin cx _ Len [ArrayV av] = INL (IntV (Unsigned 256) &(array_length av)) ∧
+  evaluate_builtin cx _ Len [BytesV ls] = INL (IntV &(LENGTH ls)) ∧
+  evaluate_builtin cx _ Len [StringV ls] = INL (IntV &(LENGTH ls)) ∧
+  evaluate_builtin cx _ Len [ArrayV av] = INL (IntV &(array_length av)) ∧
   evaluate_builtin cx _ Not [BoolV b] = INL (BoolV (¬b)) ∧
-  evaluate_builtin cx _ Not [IntV u i] =
-    (if is_Unsigned u ∧ 0 ≤ i then INL (IntV u (int_not i)) else INR (TypeError "signed Not")) ∧
-  evaluate_builtin cx _ Not [FlagV m n] = INL $ FlagV m $
-    w2n $ (~((n2w n):bytes32)) && ~(~(0w:bytes32) << m) ∧
-  evaluate_builtin cx _ Neg [IntV u i] = bounded_int_op u u (-i) ∧
+  evaluate_builtin cx _ Not [IntV i] =
+    (if 0 ≤ i then INL (IntV (int_not i)) else INR (TypeError "signed Not")) ∧
+  evaluate_builtin cx _ Not [FlagV n] = INL $ FlagV $
+    w2n $ ~((n2w n):bytes32) ∧
+  evaluate_builtin cx _ Neg [IntV i] = bounded_int_op (-i) ∧
   evaluate_builtin cx _ Neg [DecimalV i] = bounded_decimal_op (-i) ∧
-  evaluate_builtin cx _ Keccak256 [BytesV _ ls] = INL $ BytesV (Fixed 32) $
+  evaluate_builtin cx _ Keccak256 [BytesV ls] = INL $ BytesV $
     Keccak_256_w64 ls ∧
-  evaluate_builtin cx _ Keccak256 [StringV _ s] = INL $ BytesV (Fixed 32) $
+  evaluate_builtin cx _ Keccak256 [StringV s] = INL $ BytesV $
     Keccak_256_w64 (MAP (n2w o ORD) s) ∧
   (* TODO: reject BytesV with invalid bounds for Keccak256 *)
-  evaluate_builtin cx _ (Uint2Str n) [IntV u i] =
-    (if is_Unsigned u then INL $ StringV n (num_to_dec_string (Num i))
-     else INR (TypeError "Uint2Str")) ∧
+  evaluate_builtin cx _ (Uint2Str n) [IntV i] =
+    INL $ StringV (num_to_dec_string (Num i)) ∧
   evaluate_builtin cx _ (AsWeiValue dn) [v] = evaluate_as_wei_value dn v ∧
-  evaluate_builtin cx _ AddMod [IntV u1 i1; IntV u2 i2; IntV u3 i3] =
-    (if u1 = Unsigned 256 ∧ u2 = u1 ∧ u3 = u1
-     then INL $ IntV u1 $ &((Num i1 + Num i2) MOD Num i3)
-     else INR (TypeError "AddMod type")) ∧
-  evaluate_builtin cx _ MulMod [IntV u1 i1; IntV u2 i2; IntV u3 i3] =
-    (if u1 = Unsigned 256 ∧ u2 = u1 ∧ u3 = u1
-     then INL $ IntV u1 $ &((Num i1 * Num i2) MOD Num i3)
-     else INR (TypeError "MulMod type")) ∧
-  evaluate_builtin cx _ PowMod256 [IntV u1 base; IntV u2 exp] =
-    (if u1 = Unsigned 256 ∧ u2 = u1
-     then INL $ IntV u1 $ &(vfmExecution$modexp (Num base) (Num exp) (2 ** 256) 1)
-     else INR (TypeError "PowMod256 type")) ∧
+  evaluate_builtin cx _ AddMod [IntV i1; IntV i2; IntV i3] =
+    INL $ IntV $ &((Num i1 + Num i2) MOD Num i3) ∧
+  evaluate_builtin cx _ MulMod [IntV i1; IntV i2; IntV i3] =
+    INL $ IntV $ &((Num i1 * Num i2) MOD Num i3) ∧
+  evaluate_builtin cx _ PowMod256 [IntV base; IntV exp] =
+    INL $ IntV $ &(vfmExecution$modexp (Num base) (Num exp) (2 ** 256) 1) ∧
   evaluate_builtin cx _ Floor [DecimalV i] =
-    INL $ IntV (Signed 256) (i / 10000000000) ∧
+    INL $ IntV (i / 10000000000) ∧
   evaluate_builtin cx _ Ceil [DecimalV i] =
-    INL $ IntV (Signed 256) ((i + 9999999999) / 10000000000) ∧
+    INL $ IntV ((i + 9999999999) / 10000000000) ∧
   evaluate_builtin cx _ (Bop bop) [v1; v2] = evaluate_binop bop v1 v2 ∧
   evaluate_builtin cx _ (Env Sender) [] = INL $ AddressV cx.txn.sender ∧
   evaluate_builtin cx _ (Env SelfAddr) [] = INL $ AddressV cx.txn.target ∧
-  evaluate_builtin cx _ (Env ValueSent) [] = INL $ IntV (Unsigned 256) &cx.txn.value ∧
-  evaluate_builtin cx _ (Env TimeStamp) [] = INL $ IntV (Unsigned 256) &cx.txn.time_stamp ∧
-  evaluate_builtin cx _ (Env BlockNumber) [] = INL $ IntV (Unsigned 256) &cx.txn.block_number ∧
-  evaluate_builtin cx _ (Env BlobBaseFee) [] = INL $ IntV (Unsigned 256) &cx.txn.blob_base_fee ∧
-  evaluate_builtin cx _ (Env GasPrice) [] = INL $ IntV (Unsigned 256) &cx.txn.gas_price ∧
-  evaluate_builtin cx _ (Env ChainId) [] = INL $ IntV (Unsigned 256) &cx.txn.chain_id ∧
+  evaluate_builtin cx _ (Env ValueSent) [] = INL $ IntV &cx.txn.value ∧
+  evaluate_builtin cx _ (Env TimeStamp) [] = INL $ IntV &cx.txn.time_stamp ∧
+  evaluate_builtin cx _ (Env BlockNumber) [] = INL $ IntV &cx.txn.block_number ∧
+  evaluate_builtin cx _ (Env BlobBaseFee) [] = INL $ IntV &cx.txn.blob_base_fee ∧
+  evaluate_builtin cx _ (Env GasPrice) [] = INL $ IntV &cx.txn.gas_price ∧
+  evaluate_builtin cx _ (Env ChainId) [] = INL $ IntV &cx.txn.chain_id ∧
   evaluate_builtin cx _ (Env PrevHash) [] = evaluate_block_hash cx.txn (cx.txn.block_number - 1) ∧
-  evaluate_builtin cx _ BlockHash [IntV u i] =
-    (if u = Unsigned 256 then evaluate_block_hash cx.txn (Num i)
-     else INR (TypeError "BlockHash type")) ∧
-  evaluate_builtin cx _ BlobHash [IntV u i] =
-    (if u = Unsigned 256 then INL $ evaluate_blob_hash cx.txn (Num i)
-     else INR (TypeError "BlobHash type")) ∧
+  evaluate_builtin cx _ BlockHash [IntV i] =
+    evaluate_block_hash cx.txn (Num i) ∧
+  evaluate_builtin cx _ BlobHash [IntV i] =
+    INL $ evaluate_blob_hash cx.txn (Num i) ∧
   evaluate_builtin cx _ (Concat n) vs = evaluate_concat n vs ∧
   evaluate_builtin cx _ (Slice n) [v1; v2; v3] = evaluate_slice v1 v2 v3 n ∧
   evaluate_builtin cx _ (MakeArray to bd) vs =
@@ -368,18 +354,18 @@ Definition evaluate_builtin_def:
         (case evaluate_type (get_tenv cx) t
          of NONE => INR (TypeError "MakeArray type")
           | SOME tv => INL $ ArrayV $ make_array_value tv bd vs)) ∧
-  evaluate_builtin cx acc (Acc aop) [BytesV _ bs] =
+  evaluate_builtin cx acc (Acc aop) [BytesV bs] =
     (let a = lookup_account (word_of_bytes_be bs) acc in
       INL $ evaluate_account_op aop bs a) ∧
-  evaluate_builtin cx _ Isqrt [IntV u i] =
-    (if is_Unsigned u ∧ 0 ≤ i then INL $ IntV u &(num_sqrt (Num i))
+  evaluate_builtin cx _ Isqrt [IntV i] =
+    (if 0 ≤ i then INL $ IntV &(num_sqrt (Num i))
      else INR (TypeError "Isqrt type")) ∧
   (* method_id: compute keccak256(signature)[:4] - returns 4-byte function selector *)
-  evaluate_builtin cx _ MethodId [StringV _ sig] =
-    INL $ BytesV (Fixed 4) (TAKE 4 (Keccak_256_w64 (MAP (n2w o ORD) sig))) ∧
+  evaluate_builtin cx _ MethodId [StringV sig] =
+    INL $ BytesV (TAKE 4 (Keccak_256_w64 (MAP (n2w o ORD) sig))) ∧
   (* Also support Bytes input for method_id *)
-  evaluate_builtin cx _ MethodId [BytesV _ bs] =
-    INL $ BytesV (Fixed 4) (TAKE 4 (Keccak_256_w64 bs)) ∧
+  evaluate_builtin cx _ MethodId [BytesV bs] =
+    INL $ BytesV (TAKE 4 (Keccak_256_w64 bs)) ∧
   evaluate_builtin cx _ ECRecover vs = evaluate_ecrecover vs ∧
   evaluate_builtin cx _ ECAdd vs = evaluate_ecadd vs ∧
   evaluate_builtin cx _ ECMul vs = evaluate_ecmul vs ∧

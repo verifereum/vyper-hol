@@ -256,9 +256,9 @@ val () = cv_auto_trans decimal_string_to_int_def;
 (* These work on vyper expr lists (post-translation) *)
 
 Definition boolop_and_def:
-  (boolop_and [] = Literal (BoolL T)) /\
+  (boolop_and [] = Literal (BaseT BoolT) (BoolL T)) /\
   (boolop_and [e] = e) /\
-  (boolop_and (e::es) = IfExp e (boolop_and es) (Literal (BoolL F)))
+  (boolop_and (e::es) = IfExp (BaseT BoolT) e (boolop_and es) (Literal (BaseT BoolT) (BoolL F)))
 Termination
   WF_REL_TAC `measure LENGTH` >> simp[]
 End
@@ -266,9 +266,9 @@ End
 val () = cv_auto_trans boolop_and_def;
 
 Definition boolop_or_def:
-  (boolop_or [] = Literal (BoolL F)) /\
+  (boolop_or [] = Literal (BaseT BoolT) (BoolL F)) /\
   (boolop_or [e] = e) /\
-  (boolop_or (e::es) = IfExp e (Literal (BoolL T)) (boolop_or es))
+  (boolop_or (e::es) = IfExp (BaseT BoolT) e (Literal (BaseT BoolT) (BoolL T)) (boolop_or es))
 Termination
   WF_REL_TAC `measure LENGTH` >> simp[]
 End
@@ -336,7 +336,7 @@ End
 val () = cv_auto_trans denomination_of_string_def;
 
 Definition denomination_of_expr_def:
-  denomination_of_expr (Literal (StringL _ s)) = denomination_of_string s /\
+  denomination_of_expr (Literal _ (StringL _ s)) = denomination_of_string s /\
   denomination_of_expr _ = NONE
 End
 
@@ -344,99 +344,98 @@ val () = cv_auto_trans denomination_of_expr_def;
 
 Definition make_builtin_call_def:
   make_builtin_call name args kwargs ret_ty =
-    if name = "len" then Builtin Len args
+    let ty = translate_type ret_ty in
+    if name = "len" then Builtin ty Len args
     else if name = "concat" then
-      (case ret_ty of JT_String n => Builtin (Concat n) args
-                    | JT_Bytes n => Builtin (Concat n) args
-                    | _ => Builtin (Concat 0) args)
+      (case ret_ty of JT_String n => Builtin ty (Concat n) args
+                    | JT_Bytes n => Builtin ty (Concat n) args
+                    | _ => Builtin ty (Concat 0) args)
     else if name = "slice" then
-      (case ret_ty of JT_String n => Builtin (Slice n) args
-                    | JT_Bytes n => Builtin (Slice n) args
-                    | _ => Builtin (Slice 0) args)
-    else if name = "keccak256" then Builtin Keccak256 args
-    else if name = "floor" then Builtin Floor args
-    else if name = "ceil" then Builtin Ceil args
-    else if name = "blockhash" then Builtin BlockHash args
-    else if name = "blobhash" then Builtin BlobHash args
-    else if name = "isqrt" then Builtin Isqrt args
-    else if name = "ecrecover" then Builtin ECRecover args
-    else if name = "ecadd" then Builtin ECAdd args
-    else if name = "ecmul" then Builtin ECMul args
-    else if name = "empty" then TypeBuiltin Empty (translate_type ret_ty) []
-    else if name = "max_value" then TypeBuiltin MaxValue (translate_type ret_ty) []
-    else if name = "min_value" then TypeBuiltin MinValue (translate_type ret_ty) []
+      (case ret_ty of JT_String n => Builtin ty (Slice n) args
+                    | JT_Bytes n => Builtin ty (Slice n) args
+                    | _ => Builtin ty (Slice 0) args)
+    else if name = "keccak256" then Builtin ty Keccak256 args
+    else if name = "floor" then Builtin ty Floor args
+    else if name = "ceil" then Builtin ty Ceil args
+    else if name = "blockhash" then Builtin ty BlockHash args
+    else if name = "blobhash" then Builtin ty BlobHash args
+    else if name = "isqrt" then Builtin ty Isqrt args
+    else if name = "ecrecover" then Builtin ty ECRecover args
+    else if name = "ecadd" then Builtin ty ECAdd args
+    else if name = "ecmul" then Builtin ty ECMul args
+    else if name = "empty" then TypeBuiltin ty Empty ty []
+    else if name = "max_value" then TypeBuiltin ty MaxValue ty []
+    else if name = "min_value" then TypeBuiltin ty MinValue ty []
     else if name = "convert" then
-      (case args of (arg::_) => TypeBuiltin Convert (translate_type ret_ty) [arg]
-                  | _ => TypeBuiltin Convert (translate_type ret_ty) [])
-    else if name = "unsafe_add" then Builtin (Bop UAdd) args
-    else if name = "unsafe_sub" then Builtin (Bop USub) args
-    else if name = "unsafe_mul" then Builtin (Bop UMul) args
-    else if name = "unsafe_div" then Builtin (Bop UDiv) args
-    else if name = "uint256_addmod" then Builtin AddMod args
-    else if name = "uint256_mulmod" then Builtin MulMod args
-    else if name = "pow_mod256" then Builtin PowMod256 args
-    else if name = "min" then Builtin (Bop Min) args
-    else if name = "max" then Builtin (Bop Max) args
-    else if name = "send" then Call Send args NONE
+      (case args of (arg::_) => TypeBuiltin ty Convert ty [arg]
+                  | _ => TypeBuiltin ty Convert ty [])
+    else if name = "unsafe_add" then Builtin ty (Bop UAdd) args
+    else if name = "unsafe_sub" then Builtin ty (Bop USub) args
+    else if name = "unsafe_mul" then Builtin ty (Bop UMul) args
+    else if name = "unsafe_div" then Builtin ty (Bop UDiv) args
+    else if name = "uint256_addmod" then Builtin ty AddMod args
+    else if name = "uint256_mulmod" then Builtin ty MulMod args
+    else if name = "pow_mod256" then Builtin ty PowMod256 args
+    else if name = "min" then Builtin ty (Bop Min) args
+    else if name = "max" then Builtin ty (Bop Max) args
+    else if name = "send" then Call ty Send args NONE
     else if name = "as_wei_value" then
       (case args of
          (v::d::_) =>
            (case denomination_of_expr d of
-              SOME dn => Builtin (AsWeiValue dn) [v]
-            | NONE => Builtin (AsWeiValue Wei) [v])
-       | (v::_) => Builtin (AsWeiValue Wei) [v]
-       | _ => Builtin (AsWeiValue Wei) [])
+              SOME dn => Builtin ty (AsWeiValue dn) [v]
+            | NONE => Builtin ty (AsWeiValue Wei) [v])
+       | (v::_) => Builtin ty (AsWeiValue Wei) [v]
+       | _ => Builtin ty (AsWeiValue Wei) [])
     else if name = "uint2str" then
-      (case ret_ty of JT_String n => Builtin (Uint2Str n) args
-                    | _ => Builtin (Uint2Str 0) args)
+      (case ret_ty of JT_String n => Builtin ty (Uint2Str n) args
+                    | _ => Builtin ty (Uint2Str 0) args)
     else if name = "abi_decode" then
-      TypeBuiltin AbiDecode (translate_type ret_ty) args
+      TypeBuiltin ty AbiDecode ty args
     else if name = "abi_encode" then
-      TypeBuiltin AbiEncode (translate_type ret_ty) args
+      TypeBuiltin ty AbiEncode ty args
     else if name = "method_id" then
-      Builtin MethodId args
+      Builtin ty MethodId args
     (* Struct constructor, cast, or regular call *)
     else (case ret_ty of
-          | JT_Struct _ => StructLit (NONE, name) kwargs
+          | JT_Struct _ => StructLit ty (NONE, name) kwargs
           | JT_Named _ =>
               if kwargs <> [] /\ ~is_builtin_cast_name name then
-                StructLit (NONE, name) kwargs
+                StructLit ty (NONE, name) kwargs
               else
                 if is_cast_name name then
-                  let ty' = translate_type ret_ty in
                     if is_builtin_cast_name name then
-                      (case ty' of
+                      (case ty of
                          BaseT _ =>
                            (case args of
-                              (arg::_) => TypeBuiltin Convert ty' [arg]
-                            | _ => TypeBuiltin Convert ty' [])
+                              (arg::_) => TypeBuiltin ty Convert ty [arg]
+                            | _ => TypeBuiltin ty Convert ty [])
                        | _ =>
                            (case args of
                               (arg::_) => arg
-                            | _ => Call (IntCall (NONE, name)) args NONE))
+                            | _ => Call ty (IntCall (NONE, name)) args NONE))
                     else
                       (case args of
                          (arg::_) => arg
-                       | _ => Call (IntCall (NONE, name)) args NONE)
-                else Call (IntCall (NONE, name)) args NONE
+                       | _ => Call ty (IntCall (NONE, name)) args NONE)
+                else Call ty (IntCall (NONE, name)) args NONE
           | _ =>
               if is_cast_name name then
-                let ty' = translate_type ret_ty in
                   if is_builtin_cast_name name then
-                    (case ty' of
+                    (case ty of
                        BaseT _ =>
                          (case args of
-                            (arg::_) => TypeBuiltin Convert ty' [arg]
-                          | _ => TypeBuiltin Convert ty' [])
+                            (arg::_) => TypeBuiltin ty Convert ty [arg]
+                          | _ => TypeBuiltin ty Convert ty [])
                      | _ =>
                          (case args of
                             (arg::_) => arg
-                          | _ => Call (IntCall (NONE, name)) args NONE))
+                          | _ => Call ty (IntCall (NONE, name)) args NONE))
                   else
                     (case args of
                        (arg::_) => arg
-                     | _ => Call (IntCall (NONE, name)) args NONE)
-              else Call (IntCall (NONE, name)) args NONE)
+                     | _ => Call ty (IntCall (NONE, name)) args NONE)
+              else Call ty (IntCall (NONE, name)) args NONE)
 End
 
 val () = cv_auto_trans make_builtin_call_def;
@@ -524,8 +523,8 @@ val () = cv_auto_trans collect_consts_and_immutables_def;
 
 (* Make Name or BareGlobalName based on constants/immutables list *)
 Definition make_name_def:
-  make_name ctx id =
-    if MEM id ctx then BareGlobalName id else Name id
+  make_name ctx ty id =
+    if MEM id ctx then BareGlobalName ty id else Name ty id
 End
 
 (* Make NameTarget or BareGlobalNameTarget based on constants/immutables list *)
@@ -570,74 +569,76 @@ QED
 
 Definition translate_expr_def:
   (translate_expr ctx (JE_Int v ty) =
-    Literal (IntL (int_bound_of_type ty) v)) /\
+    Literal (translate_type ty) (IntL (int_bound_of_type ty) v)) /\
 
   (translate_expr ctx (JE_Decimal s) =
-    Literal (DecimalL (decimal_string_to_int s))) /\
+    Literal (BaseT DecimalT) (DecimalL (decimal_string_to_int s))) /\
 
   (translate_expr ctx (JE_Str len s) =
-    Literal (StringL len s)) /\
+    Literal (BaseT (StringT len)) (StringL len s)) /\
 
   (translate_expr ctx (JE_Bytes len hex) =
-    Literal (BytesL (Dynamic len) (hex_string_to_bytes (strip_0x hex)))) /\
+    Literal (BaseT (BytesT (Dynamic len))) (BytesL (Dynamic len) (hex_string_to_bytes (strip_0x hex)))) /\
 
   (translate_expr ctx (JE_Hex hex) =
     let bytes = hex_string_to_bytes (strip_0x hex) in
-    Literal (BytesL (Fixed (LENGTH bytes)) bytes)) /\
+    Literal (BaseT (BytesT (Fixed (LENGTH bytes)))) (BytesL (Fixed (LENGTH bytes)) bytes)) /\
 
-  (translate_expr ctx (JE_Bool b) = Literal (BoolL b)) /\
+  (translate_expr ctx (JE_Bool b) = Literal (BaseT BoolT) (BoolL b)) /\
 
+  (* TODO: NoneT placeholder - JSON AST does not carry type for Name nodes *)
   (translate_expr ctx (JE_Name id tc src_id_opt) =
-    if id = "self" then Builtin (Env SelfAddr) [] else make_name ctx id) /\
+    if id = "self" then Builtin (BaseT AddressT) (Env SelfAddr) [] else make_name ctx NoneT id) /\
 
   (* Special attributes: msg.*, block.*, tx.*, self.*, module.*, flag members *)
   (* attr_src_id_opt is from variable_reads on the outer Attribute (for self.x storage access) *)
+  (* TODO: NoneT placeholder where JSON AST does not carry type for attribute nodes *)
   (translate_expr ctx (JE_Attribute (JE_Name obj tc src_id_opt) attr result_tc attr_src_id_opt) =
     (* Same-module flag member: Action.BUY where tc = SOME "flag" *)
-    if tc = SOME "flag" /\ result_tc = SOME "flag" then FlagMember (source_id_to_nsid src_id_opt, obj) attr
-    else if obj = "msg" /\ attr = "sender" then Builtin (Env Sender) []
-    else if obj = "msg" /\ attr = "value" then Builtin (Env ValueSent) []
-    else if obj = "block" /\ attr = "timestamp" then Builtin (Env TimeStamp) []
-    else if obj = "block" /\ attr = "number" then Builtin (Env BlockNumber) []
-    else if obj = "block" /\ attr = "prevhash" then Builtin (Env PrevHash) []
-    else if obj = "block" /\ attr = "blobbasefee" then Builtin (Env BlobBaseFee) []
-    else if obj = "tx" /\ attr = "gasprice" then Builtin (Env GasPrice) []
-    else if obj = "chain" /\ attr = "id" then Builtin (Env ChainId) []
+    if tc = SOME "flag" /\ result_tc = SOME "flag" then FlagMember NoneT (source_id_to_nsid src_id_opt, obj) attr
+    else if obj = "msg" /\ attr = "sender" then Builtin (BaseT AddressT) (Env Sender) []
+    else if obj = "msg" /\ attr = "value" then Builtin (BaseT (UintT 256)) (Env ValueSent) []
+    else if obj = "block" /\ attr = "timestamp" then Builtin (BaseT (UintT 256)) (Env TimeStamp) []
+    else if obj = "block" /\ attr = "number" then Builtin (BaseT (UintT 256)) (Env BlockNumber) []
+    else if obj = "block" /\ attr = "prevhash" then Builtin (BaseT (BytesT (Fixed 32))) (Env PrevHash) []
+    else if obj = "block" /\ attr = "blobbasefee" then Builtin (BaseT (UintT 256)) (Env BlobBaseFee) []
+    else if obj = "tx" /\ attr = "gasprice" then Builtin (BaseT (UintT 256)) (Env GasPrice) []
+    else if obj = "chain" /\ attr = "id" then Builtin (BaseT (UintT 256)) (Env ChainId) []
     else if obj = "self" /\ attr = "balance" then
-      Builtin (Acc Balance) [Builtin (Env SelfAddr) []]
+      Builtin (BaseT (UintT 256)) (Acc Balance) [Builtin (BaseT AddressT) (Env SelfAddr) []]
     (* self.x: use attr_src_id_opt from variable_reads for cross-module storage access *)
-    else if obj = "self" then TopLevelName (source_id_to_nsid attr_src_id_opt, attr)
+    else if obj = "self" then TopLevelName NoneT (source_id_to_nsid attr_src_id_opt, attr)
     (* Module variable access (lib1.x): use src_id_opt from module type *)
-    else if tc = SOME "module" then TopLevelName (source_id_to_nsid src_id_opt, attr)
-    else if attr = "balance" then Builtin (Acc Balance) [make_name ctx obj]
-    else if attr = "address" then Builtin (Acc Address) [make_name ctx obj]
-    else Attribute (make_name ctx obj) attr) /\
+    else if tc = SOME "module" then TopLevelName NoneT (source_id_to_nsid src_id_opt, attr)
+    else if attr = "balance" then Builtin (BaseT (UintT 256)) (Acc Balance) [make_name ctx NoneT obj]
+    else if attr = "address" then Builtin (BaseT AddressT) (Acc Address) [make_name ctx NoneT obj]
+    else Attribute NoneT (make_name ctx NoneT obj) attr) /\
 
   (* General attribute - handles nested and simple cases *)
   (* Check for cross-module flag access: lib1.Action.BUY *)
   (translate_expr ctx (JE_Attribute e attr result_tc attr_src_id_opt) =
     if result_tc = SOME "flag" then
       case extract_module_flag e of
-      | SOME (src_id_opt, flag_name) => FlagMember (src_id_opt, flag_name) attr
-      | NONE => Attribute (translate_expr ctx e) attr
+      | SOME (src_id_opt, flag_name) => FlagMember NoneT (src_id_opt, flag_name) attr
+      | NONE => Attribute NoneT (translate_expr ctx e) attr
     (* Nested module access: mod3.mod2.mod1.X — use variable_reads source_id *)
     else if is_module_expr e then
-      TopLevelName (source_id_to_nsid attr_src_id_opt, attr)
-    else if attr = "balance" then Builtin (Acc Balance) [translate_expr ctx e]
-    else if attr = "address" then Builtin (Acc Address) [translate_expr ctx e]
-    else Attribute (translate_expr ctx e) attr) /\
+      TopLevelName NoneT (source_id_to_nsid attr_src_id_opt, attr)
+    else if attr = "balance" then Builtin (BaseT (UintT 256)) (Acc Balance) [translate_expr ctx e]
+    else if attr = "address" then Builtin (BaseT AddressT) (Acc Address) [translate_expr ctx e]
+    else Attribute NoneT (translate_expr ctx e) attr) /\
 
   (* Subscript *)
   (translate_expr ctx (JE_Subscript arr idx) =
-    Subscript (translate_expr ctx arr) (translate_expr ctx idx)) /\
+    Subscript NoneT (translate_expr ctx arr) (translate_expr ctx idx)) /\
 
   (* NamedExpr - only appears in initializes:/uses: annotations, not in executable code *)
   (translate_expr ctx (JE_NamedExpr target value) =
-    Literal (BoolL T)) /\
+    Literal (BaseT BoolT) (BoolL T)) /\
 
   (* BinOp *)
   (translate_expr ctx (JE_BinOp l op r) =
-    Builtin (Bop (translate_binop op)) [translate_expr ctx l; translate_expr ctx r]) /\
+    Builtin NoneT (Bop (translate_binop op)) [translate_expr ctx l; translate_expr ctx r]) /\
 
   (* BoolOp - convert to nested IfExp *)
   (translate_expr ctx (JE_BoolOp JBoolop_And es) =
@@ -647,35 +648,37 @@ Definition translate_expr_def:
 
   (* UnaryOp *)
   (translate_expr ctx (JE_UnaryOp JUop_USub e) =
-    Builtin Neg [translate_expr ctx e]) /\
+    Builtin NoneT Neg [translate_expr ctx e]) /\
   (translate_expr ctx (JE_UnaryOp JUop_Not e) =
-    Builtin Not [translate_expr ctx e]) /\
+    Builtin (BaseT BoolT) Not [translate_expr ctx e]) /\
   (translate_expr ctx (JE_UnaryOp JUop_Invert e) =
-    Builtin Not [translate_expr ctx e]) /\
+    Builtin NoneT Not [translate_expr ctx e]) /\
 
   (* IfExp (ternary) *)
   (translate_expr ctx (JE_IfExp test body orelse) =
-    IfExp (translate_expr ctx test) (translate_expr ctx body) (translate_expr ctx orelse)) /\
+    IfExp NoneT (translate_expr ctx test) (translate_expr ctx body) (translate_expr ctx orelse)) /\
 
   (* Tuple *)
   (translate_expr ctx (JE_Tuple es) =
-    Builtin (MakeArray NONE (Fixed (LENGTH es))) (translate_expr_list ctx es)) /\
+    Builtin (TupleT []) (MakeArray NONE (Fixed (LENGTH es))) (translate_expr_list ctx es)) /\
 
   (* List - array literal *)
   (translate_expr ctx (JE_List es ty) =
+    let ty' = translate_type ty in
     case ty of
     | JT_StaticArray vt len =>
-        Builtin (MakeArray (SOME (translate_type vt)) (Fixed len)) (translate_expr_list ctx es)
+        Builtin ty' (MakeArray (SOME (translate_type vt)) (Fixed len)) (translate_expr_list ctx es)
     | JT_DynArray vt len =>
-        Builtin (MakeArray (SOME (translate_type vt)) (Dynamic len)) (translate_expr_list ctx es)
+        Builtin ty' (MakeArray (SOME (translate_type vt)) (Dynamic len)) (translate_expr_list ctx es)
     | _ =>
-        Builtin (MakeArray NONE (Fixed (LENGTH es))) (translate_expr_list ctx es)) /\
+        Builtin ty' (MakeArray NONE (Fixed (LENGTH es))) (translate_expr_list ctx es)) /\
 
   (* Call - single case with internal dispatch to avoid pattern completion issues *)
   (* JE_Call now includes source_id for module calls *)
   (translate_expr ctx (JE_Call func args kwargs ret_ty src_id_opt) =
     let args' = translate_expr_list ctx args in
     let kwargs' = translate_kwargs ctx kwargs in
+    let rty = translate_type ret_ty in
     case func of
     | JE_Name name (SOME "interface") _ => HD args'
     | JE_Name name _ _ => make_builtin_call name args' kwargs' ret_ty
@@ -684,17 +687,17 @@ Definition translate_expr_def:
     | JE_Attribute _ "__interface__" _ _ => HD args'
     | JE_Attribute base "pop" _ _ =>
         (case base of
-         | JE_Name id _ _ => Pop (make_name_target ctx id)
-         | JE_Attribute (JE_Name "self" _ _) attr _ _ => Pop (TopLevelNameTarget (NONE, attr))
+         | JE_Name id _ _ => Pop rty (make_name_target ctx id)
+         | JE_Attribute (JE_Name "self" _ _) attr _ _ => Pop rty (TopLevelNameTarget (NONE, attr))
          | JE_Attribute (JE_Name id (SOME "module") src_id_opt) attr _ _ =>
-             Pop (TopLevelNameTarget (source_id_to_nsid src_id_opt, attr))
+             Pop rty (TopLevelNameTarget (source_id_to_nsid src_id_opt, attr))
          | JE_Attribute (JE_Name id _ _) attr _ _ =>
-             Pop (AttributeTarget (make_name_target ctx id) attr)
+             Pop rty (AttributeTarget (make_name_target ctx id) attr)
          | JE_Subscript (JE_Name id _ _) idx =>
-             Pop (SubscriptTarget (make_name_target ctx id) (translate_expr ctx idx))
-         | _ => Call (IntCall (NONE, "pop")) args' NONE)
+             Pop rty (SubscriptTarget (make_name_target ctx id) (translate_expr ctx idx))
+         | _ => Call rty (IntCall (NONE, "pop")) args' NONE)
     (* self.func(args) - internal call *)
-    | JE_Attribute (JE_Name "self" _ _) fname _ _ => Call (IntCall (NONE, fname)) args' NONE
+    | JE_Attribute (JE_Name "self" _ _) fname _ _ => Call rty (IntCall (NONE, fname)) args' NONE
     (* Module struct constructor, interface constructor, or module function call *)
     | _ => if is_interface_constructor func then HD args'
            else let nsid = source_id_to_nsid src_id_opt;
@@ -709,22 +712,22 @@ Definition translate_expr_def:
                            SOME sid => source_id_to_nsid sid
                          | NONE => nsid)
                     | _ => nsid in
-                  StructLit (mod_nsid, fname) kwargs'
+                  StructLit rty (mod_nsid, fname) kwargs'
                 else
                   (* Function call that returns a struct: library.foo() *)
-                  Call (IntCall (nsid, fname)) args' NONE
+                  Call rty (IntCall (nsid, fname)) args' NONE
             | _ =>
               (* Module call: use source_id from type_decl_node *)
-              Call (IntCall (nsid, fname)) args' NONE)) /\
+              Call rty (IntCall (nsid, fname)) args' NONE)) /\
 
   (* ExtCall - mutating external call (is_static = F) *)
   (* Convention: args = [target; value; arg1; arg2; ...] *)
   (translate_expr ctx (JE_ExtCall func_name arg_types ret_ty args keywords) =
     let value_expr = case find_keyword "value" keywords of
                      | SOME v => translate_expr ctx v
-                     | NONE => Literal (IntL (Unsigned 256) 0) in
+                     | NONE => Literal (BaseT (UintT 256)) (IntL (Unsigned 256) 0) in
     let translated_args = translate_expr_list ctx args in
-    Call (ExtCall F (func_name, translate_type_list arg_types, translate_type ret_ty))
+    Call (translate_type ret_ty) (ExtCall F (func_name, translate_type_list arg_types, translate_type ret_ty))
          (case translated_args of
           | (target :: rest) => target :: value_expr :: rest
           | [] => [])
@@ -733,7 +736,7 @@ Definition translate_expr_def:
   (* StaticCall - read-only external call (is_static = T) *)
   (* Convention: args = [target; arg1; arg2; ...] (no value) *)
   (translate_expr ctx (JE_StaticCall func_name arg_types ret_ty args) =
-    Call (ExtCall T (func_name, translate_type_list arg_types, translate_type ret_ty))
+    Call (translate_type ret_ty) (ExtCall T (func_name, translate_type_list arg_types, translate_type ret_ty))
          (translate_expr_list ctx args)
          NONE) /\
 
@@ -850,10 +853,10 @@ val () = cv_auto_trans get_iter_bound_def;
 
 Definition translate_iter_def:
   (translate_iter ctx var_ty (JIter_Range [] _ _) =
-    Range (Literal (IntL (int_bound_of_type var_ty) (integer$int_of_num 0)))
-          (Literal (IntL (int_bound_of_type var_ty) (integer$int_of_num 0)))) /\
+    Range (Literal (translate_type var_ty) (IntL (int_bound_of_type var_ty) (integer$int_of_num 0)))
+          (Literal (translate_type var_ty) (IntL (int_bound_of_type var_ty) (integer$int_of_num 0)))) /\
   (translate_iter ctx var_ty (JIter_Range [e] _ _) =
-    Range (Literal (IntL (int_bound_of_type var_ty) (integer$int_of_num 0)))
+    Range (Literal (translate_type var_ty) (IntL (int_bound_of_type var_ty) (integer$int_of_num 0)))
           (translate_expr ctx e)) /\
   (translate_iter ctx var_ty (JIter_Range (s::e::_) _ _) =
     Range (translate_expr ctx s) (translate_expr ctx e)) /\
@@ -872,10 +875,10 @@ Definition translate_stmt_def:
   (translate_stmt ctx (JS_Expr e) = Expr (translate_expr ctx e)) /\
   (translate_stmt ctx (JS_Return NONE) = Return NONE) /\
   (translate_stmt ctx (JS_Return (SOME e)) = Return (SOME (translate_expr ctx e))) /\
-  (translate_stmt ctx (JS_Raise NONE) = Raise (Literal (StringL 0 ""))) /\
+  (translate_stmt ctx (JS_Raise NONE) = Raise (Literal (BaseT (StringT 0)) (StringL 0 ""))) /\
   (translate_stmt ctx (JS_Raise (SOME e)) = Raise (translate_expr ctx e)) /\
   (translate_stmt ctx (JS_Assert test NONE) =
-    Assert (translate_expr ctx test) (Literal (StringL 0 ""))) /\
+    Assert (translate_expr ctx test) (Literal (BaseT (StringT 0)) (StringL 0 ""))) /\
   (translate_stmt ctx (JS_Assert test (SOME msg)) =
     Assert (translate_expr ctx test) (translate_expr ctx msg)) /\
   (translate_stmt ctx (JS_Log event args) =

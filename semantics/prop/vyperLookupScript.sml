@@ -66,7 +66,7 @@ Definition lookup_flag_member_def:
      | SOME ls =>
   case INDEX_OF mid ls
     of NONE => NONE
-     | SOME i => SOME $ Value $ FlagV (LENGTH ls) (2 ** i)
+     | SOME i => SOME $ Value $ FlagV (2 ** i)
 End
 
 (****************************************)

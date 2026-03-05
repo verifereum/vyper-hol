@@ -170,19 +170,19 @@ End
 
 Datatype:
   expr
-  = Name identifier              (* local/scoped variable *)
-  | BareGlobalName identifier    (* constant or immutable, looked up by bare name *)
-  | TopLevelName nsid            (* module-qualified global: self.x, lib.x *)
-  | FlagMember nsid identifier
-  | IfExp expr expr expr
-  | Literal literal
-  | StructLit nsid ((identifier # expr) list)
-  | Subscript expr expr
-  | Attribute expr identifier
-  | Builtin builtin (expr list)
-  | TypeBuiltin type_builtin type (expr list)
-  | Pop base_assignment_target
-  | Call call_target (expr list) (expr option)
+  = Name type identifier              (* local/scoped variable *)
+  | BareGlobalName type identifier    (* constant or immutable, looked up by bare name *)
+  | TopLevelName type nsid            (* module-qualified global: self.x, lib.x *)
+  | FlagMember type nsid identifier
+  | IfExp type expr expr expr
+  | Literal type literal
+  | StructLit type nsid ((identifier # expr) list)
+  | Subscript type expr expr
+  | Attribute type expr identifier
+  | Builtin type builtin (expr list)
+  | TypeBuiltin type type_builtin type (expr list)
+  | Pop type base_assignment_target
+  | Call type call_target (expr list) (expr option)
       (* expr list: arguments -- see ExtCall above for conventions *)
       (* expr option: default return value *)
 ; base_assignment_target
@@ -191,6 +191,22 @@ Datatype:
   | TopLevelNameTarget nsid            (* module-qualified global target *)
   | SubscriptTarget base_assignment_target expr
   | AttributeTarget base_assignment_target identifier
+End
+
+Definition expr_type_def:
+  (expr_type (Name ty _) = ty) /\
+  (expr_type (BareGlobalName ty _) = ty) /\
+  (expr_type (TopLevelName ty _) = ty) /\
+  (expr_type (FlagMember ty _ _) = ty) /\
+  (expr_type (IfExp ty _ _ _) = ty) /\
+  (expr_type (Literal ty _) = ty) /\
+  (expr_type (StructLit ty _ _) = ty) /\
+  (expr_type (Subscript ty _ _) = ty) /\
+  (expr_type (Attribute ty _ _) = ty) /\
+  (expr_type (Builtin ty _ _) = ty) /\
+  (expr_type (TypeBuiltin ty _ _ _) = ty) /\
+  (expr_type (Pop ty _) = ty) /\
+  (expr_type (Call ty _ _ _) = ty)
 End
 
 Datatype:
