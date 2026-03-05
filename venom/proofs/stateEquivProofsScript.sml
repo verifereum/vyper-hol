@@ -139,6 +139,14 @@ Proof
   metis_tac[state_equiv_trans, execution_equiv_trans]
 QED
 
+(* result_equiv is the canonical instantiation of lift_result *)
+Theorem result_equiv_is_lift_result:
+  !vars. result_equiv vars = lift_result (state_equiv vars) (execution_equiv vars)
+Proof
+  rw[FUN_EQ_THM] >> Cases_on `x` >> Cases_on `x'` >>
+  simp[result_equiv_def, lift_result_def]
+QED
+
 (* ==========================================================================
    Operand Evaluation
    ========================================================================== *)
