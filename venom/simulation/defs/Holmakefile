@@ -1,0 +1,5 @@
+# Pass simulation definitions
+# From simulation/defs/ relative paths:
+#   ../..    = venom/
+#   ../../.. = project root
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../../syntax ../../../semantics
