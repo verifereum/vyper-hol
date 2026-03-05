@@ -196,7 +196,7 @@ End
 (* ===== Module ===== *)
 
 Datatype:
-  json_module = JModule (json_toplevel list)
+  json_module = JModule int (json_toplevel list)
 End
 
 (* ===== Imported Module ===== *)
