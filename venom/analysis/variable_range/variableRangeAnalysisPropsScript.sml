@@ -7,20 +7,24 @@
  * TOP-LEVEL PROPERTIES:
  *   range_evaluate_inst_sound — single instruction soundness wrt step_inst
  *   range_run_block_sound     — block execution soundness wrt run_block
- *   range_join_two_sound      — join preserves state soundness
- *   range_widen_states_sound  — widening preserves state soundness
- *   range_apply_iszero_sound  — branch refinement (iszero) soundness
- *   range_apply_eq_sound      — branch refinement (eq) soundness
- *   range_apply_compare_sound — branch refinement (compare) soundness
+ *
+ * Internal helpers (in proofs/, not re-exported here):
+ *   range_join_two_sound, range_widen_states_sound — needed by fixpoint proof
+ *   range_apply_{iszero,eq,compare}_sound — needed by edge_state proof
+ *
+ * TODO: range_analyze_sound — whole-analysis soundness (the ideal
+ *   consumer-facing theorem, connecting range_get_range to concrete
+ *   execution). Not yet proven — requires fixpoint iteration correctness.
  *)
 
 Theory variableRangeAnalysisProps
 Ancestors
-  valueRangeDefs rangeEvalDefs rangeAnalysisDefs
-  valueRangeProofs rangeEvalProofs rangeAnalysisProofs
+  rangeEvalDefs rangeAnalysisDefs rangeAnalysisProofs
 
 (* ===== Transfer Function Soundness ===== *)
 
+(* If the abstract range state is sound w.r.t. the variable environment
+   before executing an instruction, it remains sound after execution. *)
 Theorem range_evaluate_inst_sound:
   ∀dfg inst rs s s'.
     in_range_state rs s.vs_vars ∧
@@ -29,6 +33,8 @@ Theorem range_evaluate_inst_sound:
 Proof ACCEPT_TAC rangeAnalysisProofsTheory.range_evaluate_inst_sound
 QED
 
+(* Same, lifted to an entire basic block: if ranges are sound at block
+   entry, they are sound at block exit. *)
 Theorem range_run_block_sound:
   ∀dfg bb rs imap rs' imap' s s'.
     range_run_block dfg bb.bb_instructions rs imap = (rs', imap') ∧
@@ -36,45 +42,4 @@ Theorem range_run_block_sound:
     run_block bb s = OK s' ⇒
     in_range_state rs' s'.vs_vars
 Proof ACCEPT_TAC rangeAnalysisProofsTheory.range_run_block_sound
-QED
-
-(* ===== State Combiner Soundness ===== *)
-
-Theorem range_join_two_sound:
-  ∀s1 s2 env.
-    in_range_state s1 env ∧ in_range_state s2 env ⇒
-    in_range_state (range_join_two s1 s2) env
-Proof ACCEPT_TAC rangeAnalysisProofsTheory.range_join_two_sound
-QED
-
-Theorem range_widen_states_sound:
-  ∀old_st new_st env.
-    in_range_state new_st env ⇒
-    in_range_state (range_widen_states old_st new_st) env
-Proof ACCEPT_TAC rangeAnalysisProofsTheory.range_widen_states_sound
-QED
-
-(* ===== Branch Refinement Soundness ===== *)
-
-Theorem range_apply_iszero_sound:
-  ∀target is_true rs env.
-    in_range_state rs env ∧
-    (∀w. FLOOKUP env target = SOME w ⇒
-         (is_true ⇒ w = 0w) ∧ (¬is_true ⇒ w ≠ 0w)) ⇒
-    in_range_state (range_apply_iszero target is_true rs) env
-Proof ACCEPT_TAC rangeAnalysisProofsTheory.range_apply_iszero_sound
-QED
-
-Theorem range_apply_eq_sound:
-  ∀lhs rhs is_true rs env.
-    in_range_state rs env ⇒
-    in_range_state (range_apply_eq lhs rhs is_true rs) env
-Proof ACCEPT_TAC rangeAnalysisProofsTheory.range_apply_eq_sound
-QED
-
-Theorem range_apply_compare_sound:
-  ∀op lhs rhs is_true rs env.
-    in_range_state rs env ⇒
-    in_range_state (range_apply_compare op lhs rhs is_true rs) env
-Proof ACCEPT_TAC rangeAnalysisProofsTheory.range_apply_compare_sound
 QED
