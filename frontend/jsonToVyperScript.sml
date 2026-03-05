@@ -15,17 +15,17 @@ End
 val () = cv_trans_deep_embedding EVAL builtin_source_id_offset_def;
 
 (* Convert a JSON source_id (int) to a vyperAST source_id (num option).
-   -1 maps to NONE (main module), others are offset to be non-negative. *)
+   main_src_id maps to NONE (main module), others are offset to be non-negative. *)
 Definition source_id_to_nsid_def:
-  source_id_to_nsid (src_id:int) =
-    if src_id = -1 then NONE
+  source_id_to_nsid (main_src_id:int) (src_id:int) =
+    if src_id = main_src_id then NONE
     else SOME (Num (src_id + &builtin_source_id_offset))
 End
 val () = cv_auto_trans source_id_to_nsid_def;
 
 Definition json_nsid_to_nsid_def:
-  json_nsid_to_nsid (src_id:int, name:string) =
-    (source_id_to_nsid src_id, name) : nsid
+  json_nsid_to_nsid (main_src_id:int) (src_id:int, name:string) =
+    (source_id_to_nsid main_src_id src_id, name) : nsid
 End
 (* ===== Type Translation ===== *)
 
@@ -497,11 +497,11 @@ val () = cv_auto_trans is_module_expr_def;
 (* For lib1.lib2.Roles3.NOBODY: e = JE_Attribute (JE_Attribute ... "lib2" (SOME "module") (SOME 1)) "Roles3" _ _ *)
 Definition extract_module_flag_def:
   (* Attribute expression for the flag type - look inside for the module *)
-  (extract_module_flag (JE_Attribute inner flag_name _ _) =
+  (extract_module_flag main_src_id (JE_Attribute inner flag_name _ _) =
     case extract_innermost_module_src inner of
-    | SOME src_id => SOME (source_id_to_nsid src_id, flag_name)
+    | SOME src_id => SOME (source_id_to_nsid main_src_id src_id, flag_name)
     | NONE => NONE) /\
-  (extract_module_flag _ = NONE)
+  (extract_module_flag main_src_id _ = NONE)
 End
 
 val () = cv_auto_trans extract_module_flag_def;
@@ -525,13 +525,13 @@ val () = cv_auto_trans collect_consts_and_immutables_def;
 (* Make Name or BareGlobalName based on constants/immutables list *)
 Definition make_name_def:
   make_name ctx id =
-    if MEM id ctx then BareGlobalName id else Name id
+    if MEM id (SND ctx) then BareGlobalName id else Name id
 End
 
 (* Make NameTarget or BareGlobalNameTarget based on constants/immutables list *)
 Definition make_name_target_def:
   make_name_target ctx id =
-    if MEM id ctx then BareGlobalNameTarget id else NameTarget id
+    if MEM id (SND ctx) then BareGlobalNameTarget id else NameTarget id
 End
 
 (* ===== Expression Translation ===== *)
@@ -594,7 +594,7 @@ Definition translate_expr_def:
   (* attr_src_id_opt is from variable_reads on the outer Attribute (for self.x storage access) *)
   (translate_expr ctx (JE_Attribute (JE_Name obj tc src_id_opt) attr result_tc attr_src_id_opt) =
     (* Same-module flag member: Action.BUY where tc = SOME "flag" *)
-    if tc = SOME "flag" /\ result_tc = SOME "flag" then FlagMember (source_id_to_nsid src_id_opt, obj) attr
+    if tc = SOME "flag" /\ result_tc = SOME "flag" then FlagMember (source_id_to_nsid (FST ctx) src_id_opt, obj) attr
     else if obj = "msg" /\ attr = "sender" then Builtin (Env Sender) []
     else if obj = "msg" /\ attr = "value" then Builtin (Env ValueSent) []
     else if obj = "block" /\ attr = "timestamp" then Builtin (Env TimeStamp) []
@@ -606,9 +606,9 @@ Definition translate_expr_def:
     else if obj = "self" /\ attr = "balance" then
       Builtin (Acc Balance) [Builtin (Env SelfAddr) []]
     (* self.x: use attr_src_id_opt from variable_reads for cross-module storage access *)
-    else if obj = "self" then TopLevelName (source_id_to_nsid attr_src_id_opt, attr)
+    else if obj = "self" then TopLevelName (source_id_to_nsid (FST ctx) attr_src_id_opt, attr)
     (* Module variable access (lib1.x): use src_id_opt from module type *)
-    else if tc = SOME "module" then TopLevelName (source_id_to_nsid src_id_opt, attr)
+    else if tc = SOME "module" then TopLevelName (source_id_to_nsid (FST ctx) src_id_opt, attr)
     else if attr = "balance" then Builtin (Acc Balance) [make_name ctx obj]
     else if attr = "address" then Builtin (Acc Address) [make_name ctx obj]
     else Attribute (make_name ctx obj) attr) /\
@@ -617,12 +617,12 @@ Definition translate_expr_def:
   (* Check for cross-module flag access: lib1.Action.BUY *)
   (translate_expr ctx (JE_Attribute e attr result_tc attr_src_id_opt) =
     if result_tc = SOME "flag" then
-      case extract_module_flag e of
+      case extract_module_flag (FST ctx) e of
       | SOME (src_id_opt, flag_name) => FlagMember (src_id_opt, flag_name) attr
       | NONE => Attribute (translate_expr ctx e) attr
     (* Nested module access: mod3.mod2.mod1.X — use variable_reads source_id *)
     else if is_module_expr e then
-      TopLevelName (source_id_to_nsid attr_src_id_opt, attr)
+      TopLevelName (source_id_to_nsid (FST ctx) attr_src_id_opt, attr)
     else if attr = "balance" then Builtin (Acc Balance) [translate_expr ctx e]
     else if attr = "address" then Builtin (Acc Address) [translate_expr ctx e]
     else Attribute (translate_expr ctx e) attr) /\
@@ -687,7 +687,7 @@ Definition translate_expr_def:
          | JE_Name id _ _ => Pop (make_name_target ctx id)
          | JE_Attribute (JE_Name "self" _ _) attr _ _ => Pop (TopLevelNameTarget (NONE, attr))
          | JE_Attribute (JE_Name id (SOME "module") src_id_opt) attr _ _ =>
-             Pop (TopLevelNameTarget (source_id_to_nsid src_id_opt, attr))
+             Pop (TopLevelNameTarget (source_id_to_nsid (FST ctx) src_id_opt, attr))
          | JE_Attribute (JE_Name id _ _) attr _ _ =>
              Pop (AttributeTarget (make_name_target ctx id) attr)
          | JE_Subscript (JE_Name id _ _) idx =>
@@ -697,7 +697,7 @@ Definition translate_expr_def:
     | JE_Attribute (JE_Name "self" _ _) fname _ _ => Call (IntCall (NONE, fname)) args' NONE
     (* Module struct constructor, interface constructor, or module function call *)
     | _ => if is_interface_constructor func then HD args'
-           else let nsid = source_id_to_nsid src_id_opt;
+           else let nsid = source_id_to_nsid (FST ctx) src_id_opt;
                fname = extract_func_name func in
            (case ret_ty of
               JT_Struct sname =>
@@ -706,7 +706,7 @@ Definition translate_expr_def:
                   let mod_nsid = case func of
                       JE_Attribute base _ _ _ =>
                         (case extract_innermost_module_src base of
-                           SOME sid => source_id_to_nsid sid
+                           SOME sid => source_id_to_nsid (FST ctx) sid
                          | NONE => nsid)
                     | _ => nsid in
                   StructLit (mod_nsid, fname) kwargs'
@@ -763,7 +763,7 @@ End
 Definition translate_base_target_def:
   (translate_base_target ctx (JBT_Name id) = make_name_target ctx id) /\
   (* JBT_TopLevelName is (source_id, name) for self.x and module.x *)
-  (translate_base_target ctx (JBT_TopLevelName nsid) = TopLevelNameTarget (json_nsid_to_nsid nsid)) /\
+  (translate_base_target ctx (JBT_TopLevelName nsid) = TopLevelNameTarget (json_nsid_to_nsid (FST ctx) nsid)) /\
   (translate_base_target ctx (JBT_Subscript tgt idx) =
     SubscriptTarget (translate_base_target ctx tgt) (translate_expr ctx idx)) /\
   (translate_base_target ctx (JBT_Attribute tgt attr) =
@@ -879,7 +879,7 @@ Definition translate_stmt_def:
   (translate_stmt ctx (JS_Assert test (SOME msg)) =
     Assert (translate_expr ctx test) (translate_expr ctx msg)) /\
   (translate_stmt ctx (JS_Log event args) =
-    Log (json_nsid_to_nsid event) (MAP (translate_expr ctx) args)) /\
+    Log (json_nsid_to_nsid (FST ctx) event) (MAP (translate_expr ctx) args)) /\
   (translate_stmt ctx (JS_If test body orelse) =
     If (translate_expr ctx test)
        (MAP (translate_stmt ctx) body)
@@ -1323,7 +1323,7 @@ End
 
 (* Main function: extract exports from main module given imports *)
 Definition extract_exports_def:
-  extract_exports (JModule toplevels) imports =
+  extract_exports (JModule _ toplevels) imports =
     let all_import_maps = build_all_import_maps imports in
     let exports_map = build_exports_map all_import_maps imports [] imports in
     let import_map = build_import_map (collect_imports toplevels) in
@@ -1341,20 +1341,20 @@ End
 val () = cv_auto_trans filter_some_def;
 
 Definition translate_module_def:
-  translate_module (JModule toplevels) =
-    let ctx = collect_consts_and_immutables toplevels in
+  translate_module (JModule main_src_id toplevels) =
+    let ctx = (main_src_id, collect_consts_and_immutables toplevels) in
     filter_some (MAP (translate_toplevel ctx) toplevels)
 End
 
 Definition translate_imported_module_def:
-  translate_imported_module (JImportedModule src_id path body) =
-    let ctx = collect_consts_and_immutables body in
+  translate_imported_module main_src_id (JImportedModule src_id path body) =
+    let ctx = (main_src_id, collect_consts_and_immutables body) in
     (SOME (Num (src_id + &builtin_source_id_offset)), filter_some (MAP (translate_toplevel ctx) body))
 End
 
 (* Extract toplevels from a JModule (needed to get import infos) *)
 Definition main_toplevels_def:
-  main_toplevels (JModule toplevels) = toplevels
+  main_toplevels (JModule _ toplevels) = toplevels
 End
 
 val () = cv_auto_trans main_toplevels_def;
@@ -1365,11 +1365,12 @@ val () = cv_auto_trans main_toplevels_def;
    - import_map: alias -> source_id (for storage layout key transformation)
    Returns NONE if imports are not topologically sorted. *)
 Definition translate_annotated_ast_def:
-  translate_annotated_ast (JAnnotatedAST main imports) =
+  translate_annotated_ast (JAnnotatedAST (JModule main_src_id toplevels) imports) =
     if ¬imports_topsorted [] imports then NONE else
+    let main = JModule main_src_id toplevels in
     let import_infos = collect_imports (main_toplevels main) in
     let import_map = build_import_map import_infos in
-    let sources = (NONE, translate_module main) :: MAP translate_imported_module imports in
+    let sources = (NONE, translate_module main) :: MAP (translate_imported_module main_src_id) imports in
     let exports = extract_exports main imports in
     SOME (sources, exports, import_map)
 End
