@@ -618,6 +618,8 @@ Definition translate_expr_def:
     else if obj = "chain" /\ attr = "id" then Builtin (Env ChainId) []
     else if obj = "self" /\ attr = "balance" then
       Builtin (Acc Balance) [Builtin (Env SelfAddr) []]
+    else if obj = "self" /\ attr = "code" then
+      Builtin (Acc Code) [Builtin (Env SelfAddr) []]
     (* self.x: use attr_src_id_opt from variable_reads for cross-module storage access *)
     else if obj = "self" then TopLevelName (source_id_to_nsid (FST ctx) attr_src_id_opt, attr)
     (* Module variable access (lib1.x): use src_id_opt from module type *)
@@ -627,6 +629,7 @@ Definition translate_expr_def:
     else if attr = "is_contract" then Builtin (Acc IsContract) [make_name ctx obj]
     else if attr = "codesize" then Builtin (Acc Codesize) [make_name ctx obj]
     else if attr = "codehash" then Builtin (Acc Codehash) [make_name ctx obj]
+    else if attr = "code" then Builtin (Acc Code) [make_name ctx obj]
     else Attribute (make_name ctx obj) attr) /\
 
   (* General attribute - handles nested and simple cases *)
@@ -644,6 +647,7 @@ Definition translate_expr_def:
     else if attr = "is_contract" then Builtin (Acc IsContract) [translate_expr ctx e]
     else if attr = "codesize" then Builtin (Acc Codesize) [translate_expr ctx e]
     else if attr = "codehash" then Builtin (Acc Codehash) [translate_expr ctx e]
+    else if attr = "code" then Builtin (Acc Code) [translate_expr ctx e]
     else Attribute (translate_expr ctx e) attr) /\
 
   (* Subscript *)
