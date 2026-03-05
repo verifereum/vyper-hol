@@ -1,19 +1,17 @@
 (*
  * Variable Range Analysis — Properties (public API)
  *
- * Re-exports proven properties from proofs/ via ACCEPT_TAC.
+ * Re-exports consumer-facing properties from proofs/ via ACCEPT_TAC.
+ * Consumers: just `Ancestors variableRangeAnalysisProps` to get defs + properties.
  *
  * TOP-LEVEL PROPERTIES:
- *   vr_leq_refl/antisym/trans — partial order
- *   vr_union_upper_l/r        — join is upper bound
- *   vr_intersect_lower_l/r    — meet is lower bound
- *   vr_widen_upper_new        — widening is upper bound of new
- *   vr_widen_result           — widening returns TOP or old or new
- *   in_range_top/bottom       — TOP/BOTTOM membership
- *   in_range_constant         — constant range characterization
- *   in_range_monotone         — range containment respects leq
- *   in_range_union_l/r        — union soundness
- *   in_range_intersect        — intersect soundness
+ *   range_evaluate_inst_sound — single instruction soundness wrt step_inst
+ *   range_run_block_sound     — block execution soundness wrt run_block
+ *   range_join_two_sound      — join preserves state soundness
+ *   range_widen_states_sound  — widening preserves state soundness
+ *   range_apply_iszero_sound  — branch refinement (iszero) soundness
+ *   range_apply_eq_sound      — branch refinement (eq) soundness
+ *   range_apply_compare_sound — branch refinement (compare) soundness
  *)
 
 Theory variableRangeAnalysisProps
@@ -21,97 +19,62 @@ Ancestors
   valueRangeDefs rangeEvalDefs rangeAnalysisDefs
   valueRangeProofs rangeEvalProofs rangeAnalysisProofs
 
-(* ===== Partial Order ===== *)
+(* ===== Transfer Function Soundness ===== *)
 
-Theorem vr_leq_refl:
-  ∀r. vr_leq r r
-Proof ACCEPT_TAC valueRangeProofsTheory.vr_leq_refl
+Theorem range_evaluate_inst_sound:
+  ∀dfg inst rs s s'.
+    in_range_state rs s.vs_vars ∧
+    step_inst inst s = OK s' ⇒
+    in_range_state (range_evaluate_inst dfg inst rs) s'.vs_vars
+Proof ACCEPT_TAC rangeAnalysisProofsTheory.range_evaluate_inst_sound
 QED
 
-Theorem vr_leq_antisym:
-  ∀a b. vr_leq a b ∧ vr_leq b a ⇒ a = b
-Proof ACCEPT_TAC valueRangeProofsTheory.vr_leq_antisym
+Theorem range_run_block_sound:
+  ∀dfg bb rs imap rs' imap' s s'.
+    range_run_block dfg bb.bb_instructions rs imap = (rs', imap') ∧
+    in_range_state rs s.vs_vars ∧
+    run_block bb s = OK s' ⇒
+    in_range_state rs' s'.vs_vars
+Proof ACCEPT_TAC rangeAnalysisProofsTheory.range_run_block_sound
 QED
 
-Theorem vr_leq_trans:
-  ∀a b c. vr_leq a b ∧ vr_leq b c ⇒ vr_leq a c
-Proof ACCEPT_TAC valueRangeProofsTheory.vr_leq_trans
+(* ===== State Combiner Soundness ===== *)
+
+Theorem range_join_two_sound:
+  ∀s1 s2 env.
+    in_range_state s1 env ∧ in_range_state s2 env ⇒
+    in_range_state (range_join_two s1 s2) env
+Proof ACCEPT_TAC rangeAnalysisProofsTheory.range_join_two_sound
 QED
 
-(* ===== Join ===== *)
-
-Theorem vr_union_upper_l:
-  ∀a b. vr_leq a (vr_union a b)
-Proof ACCEPT_TAC valueRangeProofsTheory.vr_union_upper_l
+Theorem range_widen_states_sound:
+  ∀old_st new_st env.
+    in_range_state new_st env ⇒
+    in_range_state (range_widen_states old_st new_st) env
+Proof ACCEPT_TAC rangeAnalysisProofsTheory.range_widen_states_sound
 QED
 
-Theorem vr_union_upper_r:
-  ∀a b. vr_leq b (vr_union a b)
-Proof ACCEPT_TAC valueRangeProofsTheory.vr_union_upper_r
+(* ===== Branch Refinement Soundness ===== *)
+
+Theorem range_apply_iszero_sound:
+  ∀target is_true rs env.
+    in_range_state rs env ∧
+    (∀w. FLOOKUP env target = SOME w ⇒
+         (is_true ⇒ w = 0w) ∧ (¬is_true ⇒ w ≠ 0w)) ⇒
+    in_range_state (range_apply_iszero target is_true rs) env
+Proof ACCEPT_TAC rangeAnalysisProofsTheory.range_apply_iszero_sound
 QED
 
-(* ===== Meet ===== *)
-
-Theorem vr_intersect_lower_l:
-  ∀a b. vr_leq (vr_intersect a b) a
-Proof ACCEPT_TAC valueRangeProofsTheory.vr_intersect_lower_l
+Theorem range_apply_eq_sound:
+  ∀lhs rhs is_true rs env.
+    in_range_state rs env ⇒
+    in_range_state (range_apply_eq lhs rhs is_true rs) env
+Proof ACCEPT_TAC rangeAnalysisProofsTheory.range_apply_eq_sound
 QED
 
-Theorem vr_intersect_lower_r:
-  ∀a b. vr_leq (vr_intersect a b) b
-Proof ACCEPT_TAC valueRangeProofsTheory.vr_intersect_lower_r
-QED
-
-(* ===== Widening ===== *)
-
-Theorem vr_widen_upper_new:
-  ∀old new. vr_leq new (vr_widen old new)
-Proof ACCEPT_TAC valueRangeProofsTheory.vr_widen_upper_new
-QED
-
-Theorem vr_widen_result:
-  ∀old new.
-    vr_widen old new = VR_Top ∨
-    vr_widen old new = old ∨
-    vr_widen old new = new
-Proof ACCEPT_TAC valueRangeProofsTheory.vr_widen_result
-QED
-
-(* ===== in_range ===== *)
-
-Theorem in_range_top:
-  ∀w. in_range VR_Top w
-Proof ACCEPT_TAC valueRangeProofsTheory.in_range_top
-QED
-
-Theorem in_range_bottom:
-  ∀w. ¬in_range VR_Bottom w
-Proof ACCEPT_TAC valueRangeProofsTheory.in_range_bottom
-QED
-
-Theorem in_range_constant:
-  ∀v w. in_range (vr_constant v) w ⇔ w2i w = v
-Proof ACCEPT_TAC valueRangeProofsTheory.in_range_constant
-QED
-
-Theorem in_range_monotone:
-  ∀r r' w. in_range r w ∧ vr_leq r r' ⇒ in_range r' w
-Proof ACCEPT_TAC valueRangeProofsTheory.in_range_monotone
-QED
-
-Theorem in_range_union_l:
-  ∀a b w. in_range a w ⇒ in_range (vr_union a b) w
-Proof ACCEPT_TAC valueRangeProofsTheory.in_range_union_l
-QED
-
-Theorem in_range_union_r:
-  ∀a b w. in_range b w ⇒ in_range (vr_union a b) w
-Proof ACCEPT_TAC valueRangeProofsTheory.in_range_union_r
-QED
-
-Theorem in_range_intersect:
-  ∀a b w.
-    in_range (vr_intersect a b) w ⇒
-    in_range a w ∧ in_range b w
-Proof ACCEPT_TAC valueRangeProofsTheory.in_range_intersect
+Theorem range_apply_compare_sound:
+  ∀op lhs rhs is_true rs env.
+    in_range_state rs env ⇒
+    in_range_state (range_apply_compare op lhs rhs is_true rs) env
+Proof ACCEPT_TAC rangeAnalysisProofsTheory.range_apply_compare_sound
 QED
