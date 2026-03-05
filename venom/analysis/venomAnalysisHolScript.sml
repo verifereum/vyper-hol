@@ -33,3 +33,5 @@ Ancestors
   memSSAProps
   (* variable definition *)
   varDefAnalysis
+  (* variable range *)
+  variableRangeAnalysis

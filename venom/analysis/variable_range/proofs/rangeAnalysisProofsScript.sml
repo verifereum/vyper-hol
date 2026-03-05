@@ -9,7 +9,7 @@
 
 Theory rangeAnalysisProofs
 Ancestors
-  rangeAnalysisDefs rangeEvalProofs
+  rangeAnalysisDefs rangeEvalProofs venomExecSemantics
 
 (* ===== Join soundness ===== *)
 
@@ -66,21 +66,27 @@ QED
 
 (* ===== Transfer function soundness ===== *)
 
-(* Evaluating one instruction preserves soundness *)
+(* Evaluating one instruction: if the pre-state ranges are sound wrt
+   the variable environment before execution, then the post-state ranges
+   are sound wrt the environment after execution.
+   step_inst from venomExecSemantics gives the concrete semantics. *)
 Theorem range_evaluate_inst_sound:
-  ∀dfg inst rs env env'.
-    in_range_state rs env ⇒
-    in_range_state (range_evaluate_inst dfg inst rs) env'
+  ∀dfg inst rs s s'.
+    in_range_state rs s.vs_vars ∧
+    step_inst inst s = OK s' ⇒
+    in_range_state (range_evaluate_inst dfg inst rs) s'.vs_vars
 Proof
   cheat
 QED
 
-(* Running a full block preserves soundness *)
+(* Running a full block: ranges track the environment through execution.
+   Uses run_block from venomExecSemantics for the concrete semantics. *)
 Theorem range_run_block_sound:
-  ∀dfg insts rs imap rs' imap' env.
-    range_run_block dfg insts rs imap = (rs', imap') ∧
-    in_range_state rs env ⇒
-    in_range_state rs' env
+  ∀dfg bb rs imap rs' imap' s s'.
+    range_run_block dfg bb.bb_instructions rs imap = (rs', imap') ∧
+    in_range_state rs s.vs_vars ∧
+    run_block bb s = OK s' ⇒
+    in_range_state rs' s'.vs_vars
 Proof
   cheat
 QED

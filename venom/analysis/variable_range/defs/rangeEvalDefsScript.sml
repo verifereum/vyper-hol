@@ -10,6 +10,7 @@
  * TOP-LEVEL:
  *   eval_range              — dispatch by opcode
  *   operand_range           — get range for an operand (Lit/Var)
+ *   operand_lit             — get literal int value from operand (for precision)
  *
  * Helper:
  *   eval_range_add/sub/mul/div/mod/and/or/xor/not/shr/shl/sar/sdiv/smod
@@ -80,6 +81,13 @@ Definition operand_range_def:
   operand_range rs (Lit v) = vr_constant (w2i v) ∧
   operand_range rs (Var v) = rs_lookup rs v ∧
   operand_range rs (Label l) = VR_Top
+End
+
+(* Extract literal value from operand for evaluator precision.
+   Lit → SOME (signed interpretation); Var/Label → NONE. *)
+Definition operand_lit_def:
+  operand_lit (Lit v) = SOME (w2i v) ∧
+  operand_lit _ = NONE
 End
 
 (* ===== Arithmetic Evaluators ===== *)

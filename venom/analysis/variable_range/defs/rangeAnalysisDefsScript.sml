@@ -313,12 +313,6 @@ End
 
 (* ===== Transfer Function ===== *)
 
-(* Extract literal value from operand for evaluator precision *)
-Definition operand_lit_def:
-  operand_lit (Lit v) = SOME (w2i v) ∧
-  operand_lit _ = NONE
-End
-
 (* Evaluate one instruction in the current state.
    Matches Python _evaluate_inst. *)
 Definition range_evaluate_inst_def:
