@@ -30,8 +30,8 @@ Datatype:
   | AnnAssignK identifier eval_continuation
   | AssignK expr eval_continuation
   | AssignK1 assignment_value eval_continuation
-  | AugAssignK binop expr eval_continuation
-  | AugAssignK1 base_target_value binop eval_continuation
+  | AugAssignK type binop expr eval_continuation
+  | AugAssignK1 type base_target_value binop eval_continuation
   | IfK (stmt list) (stmt list) eval_continuation
   | IfK1 toplevel_value (stmt list) (stmt list) eval_continuation
   | IfK2 eval_continuation
@@ -54,7 +54,7 @@ Datatype:
   | SubscriptK expr eval_continuation
   | SubscriptK1 toplevel_value eval_continuation
   | AttributeK identifier eval_continuation
-  | BuiltinK builtin eval_continuation
+  | BuiltinK type builtin eval_continuation
   | LenK eval_continuation
   | TypeBuiltinK type_builtin type eval_continuation
   | CallSendK eval_continuation
@@ -175,11 +175,11 @@ Definition eval_expr_cps_def:
     eval_expr_cps cx6 e1 st (SubscriptK e2 k) ∧
   eval_expr_cps cx7 (Attribute _ e id) st k =
     eval_expr_cps cx7 e st (AttributeK id k) ∧
-  eval_expr_cps cx8 (Builtin _ bt es) st k =
+  eval_expr_cps cx8 (Builtin ty bt es) st k =
     (case type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st of
        (INR ex, st) => AK cx8 (ApplyExc ex) st k
      | (INL (), st) => if bt = Len then eval_expr_cps cx8 (HD es) st (LenK k)
-                       else eval_exprs_cps cx8 es st (BuiltinK bt k)) ∧
+                       else eval_exprs_cps cx8 es st (BuiltinK ty bt k)) ∧
   eval_expr_cps cx8 (Pop _ bt) st k =
     eval_base_target_cps cx8 bt st (PopK k) ∧
   eval_expr_cps cx8 (TypeBuiltin _ tb typ es) st k =
@@ -276,8 +276,8 @@ Definition eval_stmt_cps_def:
     eval_base_target_cps cx t st (AppendK e k) ∧
   eval_stmt_cps cx (Assign g e) st k =
     eval_target_cps cx g st (AssignK e k) ∧
-  eval_stmt_cps cx (AugAssign t bop e) st k =
-    eval_base_target_cps cx t st (AugAssignK bop e k) ∧
+  eval_stmt_cps cx (AugAssign ty t bop e) st k =
+    eval_base_target_cps cx t st (AugAssignK ty bop e k) ∧
   eval_stmt_cps cx (If e ss1 ss2) st k =
     eval_expr_cps cx e st (IfK ss1 ss2 k) ∧
   eval_stmt_cps cx (For id typ it n body) st k =
@@ -346,8 +346,8 @@ Definition apply_exc_def:
   apply_exc cx ex st (AnnAssignK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AssignK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AssignK1 _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (AugAssignK _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (AugAssignK1 _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (AugAssignK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (AugAssignK1 _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IfK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IfK1 _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IfK2 k) =
@@ -379,7 +379,7 @@ Definition apply_exc_def:
   apply_exc cx ex st (SubscriptK1 _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AttributeK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (PopK k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (BuiltinK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (BuiltinK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (LenK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (TypeBuiltinK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CallSendK k) = AK cx (ApplyExc ex) st k ∧
@@ -420,8 +420,8 @@ Definition apply_base_target_def:
     AK cx (ApplyBaseTarget (FST btv, AttrSubscript id :: SND btv)) st k ∧
   apply_base_target cx btv st (SubscriptTargetK e k) =
     eval_expr_cps cx e st (SubscriptTargetK1 btv k) ∧
-  apply_base_target cx btv st (AugAssignK bop e k) =
-    eval_expr_cps cx e st (AugAssignK1 btv bop k) ∧
+  apply_base_target cx btv st (AugAssignK ty bop e k) =
+    eval_expr_cps cx e st (AugAssignK1 ty btv bop k) ∧
   apply_base_target cx btv st (AppendK e k) =
     eval_expr_cps cx e st (AppendK1 btv k) ∧
   apply_base_target cx btv st (PopK k) =
@@ -499,8 +499,8 @@ Definition apply_val_def:
     liftk cx (K Apply) (new_variable id v st) k ∧
   apply_val cx v st (AssignK1 gv k) =
     liftk cx (K Apply) (assign_target cx gv (Replace v) st) k ∧
-  apply_val cx v st (AugAssignK1 (loc, sbs) bop k) =
-    liftk cx (K Apply) (assign_target cx (BaseTargetV loc sbs) (Update bop v) st) k ∧
+  apply_val cx v st (AugAssignK1 ty (loc, sbs) bop k) =
+    liftk cx (K Apply) (assign_target cx (BaseTargetV loc sbs) (Update ty bop v) st) k ∧
   apply_val cx v st (AppendK1 (loc, sbs) k) =
     liftk cx (K Apply) (assign_target cx (BaseTargetV loc sbs) (AppendOp v) st) k ∧
   apply_val cx v st (ArrayK k) =
@@ -559,10 +559,10 @@ Definition apply_vals_def:
       | (INL vs, st) => eval_for_cps cx (string_to_num id) body vs st k) ∧
   apply_vals cx vs st (StructLitK ks k) =
     apply_tv cx (Value $ StructV (ZIP (ks, vs))) st k ∧
-  apply_vals cx vs st (BuiltinK bt k) =
+  apply_vals cx vs st (BuiltinK ty bt k) =
     liftk cx ApplyTv (do
       acc <- get_accounts;
-      v <- lift_sum $ evaluate_builtin cx acc bt vs;
+      v <- lift_sum $ evaluate_builtin cx acc ty bt vs;
       return $ Value v
     od st) k ∧
   apply_vals cx vs st (TypeBuiltinK tb typ k) =

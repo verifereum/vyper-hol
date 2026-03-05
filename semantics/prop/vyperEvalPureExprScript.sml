@@ -78,7 +78,7 @@ Definition eval_pure_expr_def:
      | _ => NONE) ∧
 
   (* General builtins *)
-  eval_pure_expr cx st (Builtin _ bt es) =
+  eval_pure_expr cx st (Builtin ty bt es) =
     (if bt = Len then
        (case es of
         | [e] =>
@@ -92,7 +92,7 @@ Definition eval_pure_expr_def:
      else if builtin_args_length_ok bt (LENGTH es) then
        (case eval_pure_exprs cx st es of
         | SOME vs =>
-          (case evaluate_builtin cx st.accounts bt vs of
+          (case evaluate_builtin cx st.accounts ty bt vs of
            | INL v => SOME (Value v)
            | INR _ => NONE)
         | NONE => NONE)
@@ -433,7 +433,7 @@ Proof
           pop_assum SUBST_ALL_TAC >>
           fs[vyperStateTheory.get_accounts_def, vyperStateTheory.return_def,
              vyperStateTheory.bind_def, vyperStateTheory.lift_sum_def] >>
-          Cases_on `evaluate_builtin cx st.accounts bt vs` >>
+          Cases_on `evaluate_builtin cx st.accounts ty bt vs` >>
           gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]))
   (* TypeBuiltin *)
   >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>

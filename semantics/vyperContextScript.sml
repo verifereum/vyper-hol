@@ -303,79 +303,85 @@ End
 val () = cv_auto_trans evaluate_ecmul_def;
 
 Definition evaluate_builtin_def:
-  evaluate_builtin cx _ Len [BytesV ls] = INL (IntV &(LENGTH ls)) ∧
-  evaluate_builtin cx _ Len [StringV ls] = INL (IntV &(LENGTH ls)) ∧
-  evaluate_builtin cx _ Len [ArrayV av] = INL (IntV &(array_length av)) ∧
-  evaluate_builtin cx _ Not [BoolV b] = INL (BoolV (¬b)) ∧
-  evaluate_builtin cx _ Not [IntV i] =
+  evaluate_builtin cx _ _ Len [BytesV ls] = INL (IntV &(LENGTH ls)) ∧
+  evaluate_builtin cx _ _ Len [StringV ls] = INL (IntV &(LENGTH ls)) ∧
+  evaluate_builtin cx _ _ Len [ArrayV av] = INL (IntV &(array_length av)) ∧
+  evaluate_builtin cx _ _ Not [BoolV b] = INL (BoolV (¬b)) ∧
+  evaluate_builtin cx _ _ Not [IntV i] =
     (if 0 ≤ i then INL (IntV (int_not i)) else INR (TypeError "signed Not")) ∧
-  evaluate_builtin cx _ Not [FlagV n] = INL $ FlagV $
+  evaluate_builtin cx _ _ Not [FlagV n] = INL $ FlagV $
     w2n $ ~((n2w n):bytes32) ∧
-  evaluate_builtin cx _ Neg [IntV i] = bounded_int_op (-i) ∧
-  evaluate_builtin cx _ Neg [DecimalV i] = bounded_decimal_op (-i) ∧
-  evaluate_builtin cx _ Keccak256 [BytesV ls] = INL $ BytesV $
+  evaluate_builtin cx _ ty Neg [IntV i] =
+    (case type_to_int_bound ty
+     of SOME u => bounded_int_op u (-i)
+      | NONE => INR (TypeError "Neg type")) ∧
+  evaluate_builtin cx _ _ Neg [DecimalV i] = bounded_decimal_op (-i) ∧
+  evaluate_builtin cx _ _ Keccak256 [BytesV ls] = INL $ BytesV $
     Keccak_256_w64 ls ∧
-  evaluate_builtin cx _ Keccak256 [StringV s] = INL $ BytesV $
+  evaluate_builtin cx _ _ Keccak256 [StringV s] = INL $ BytesV $
     Keccak_256_w64 (MAP (n2w o ORD) s) ∧
   (* TODO: reject BytesV with invalid bounds for Keccak256 *)
-  evaluate_builtin cx _ (Uint2Str n) [IntV i] =
+  evaluate_builtin cx _ _ (Uint2Str n) [IntV i] =
     INL $ StringV (num_to_dec_string (Num i)) ∧
-  evaluate_builtin cx _ (AsWeiValue dn) [v] = evaluate_as_wei_value dn v ∧
-  evaluate_builtin cx _ AddMod [IntV i1; IntV i2; IntV i3] =
+  evaluate_builtin cx _ _ (AsWeiValue dn) [v] = evaluate_as_wei_value dn v ∧
+  evaluate_builtin cx _ _ AddMod [IntV i1; IntV i2; IntV i3] =
     INL $ IntV $ &((Num i1 + Num i2) MOD Num i3) ∧
-  evaluate_builtin cx _ MulMod [IntV i1; IntV i2; IntV i3] =
+  evaluate_builtin cx _ _ MulMod [IntV i1; IntV i2; IntV i3] =
     INL $ IntV $ &((Num i1 * Num i2) MOD Num i3) ∧
-  evaluate_builtin cx _ PowMod256 [IntV base; IntV exp] =
+  evaluate_builtin cx _ _ PowMod256 [IntV base; IntV exp] =
     INL $ IntV $ &(vfmExecution$modexp (Num base) (Num exp) (2 ** 256) 1) ∧
-  evaluate_builtin cx _ Floor [DecimalV i] =
+  evaluate_builtin cx _ _ Floor [DecimalV i] =
     INL $ IntV (i / 10000000000) ∧
-  evaluate_builtin cx _ Ceil [DecimalV i] =
+  evaluate_builtin cx _ _ Ceil [DecimalV i] =
     INL $ IntV ((i + 9999999999) / 10000000000) ∧
-  evaluate_builtin cx _ (Bop bop) [v1; v2] = evaluate_binop bop v1 v2 ∧
-  evaluate_builtin cx _ (Env Sender) [] = INL $ AddressV cx.txn.sender ∧
-  evaluate_builtin cx _ (Env SelfAddr) [] = INL $ AddressV cx.txn.target ∧
-  evaluate_builtin cx _ (Env ValueSent) [] = INL $ IntV &cx.txn.value ∧
-  evaluate_builtin cx _ (Env TimeStamp) [] = INL $ IntV &cx.txn.time_stamp ∧
-  evaluate_builtin cx _ (Env BlockNumber) [] = INL $ IntV &cx.txn.block_number ∧
-  evaluate_builtin cx _ (Env BlobBaseFee) [] = INL $ IntV &cx.txn.blob_base_fee ∧
-  evaluate_builtin cx _ (Env GasPrice) [] = INL $ IntV &cx.txn.gas_price ∧
-  evaluate_builtin cx _ (Env ChainId) [] = INL $ IntV &cx.txn.chain_id ∧
-  evaluate_builtin cx _ (Env PrevHash) [] = evaluate_block_hash cx.txn (cx.txn.block_number - 1) ∧
-  evaluate_builtin cx _ BlockHash [IntV i] =
+  evaluate_builtin cx _ ty (Bop bop) [v1; v2] =
+    (let u = case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0 in
+     let tv = case evaluate_type (get_tenv cx) ty of SOME tv => tv | NONE => NoneTV in
+       evaluate_binop u tv bop v1 v2) ∧
+  evaluate_builtin cx _ _ (Env Sender) [] = INL $ AddressV cx.txn.sender ∧
+  evaluate_builtin cx _ _ (Env SelfAddr) [] = INL $ AddressV cx.txn.target ∧
+  evaluate_builtin cx _ _ (Env ValueSent) [] = INL $ IntV &cx.txn.value ∧
+  evaluate_builtin cx _ _ (Env TimeStamp) [] = INL $ IntV &cx.txn.time_stamp ∧
+  evaluate_builtin cx _ _ (Env BlockNumber) [] = INL $ IntV &cx.txn.block_number ∧
+  evaluate_builtin cx _ _ (Env BlobBaseFee) [] = INL $ IntV &cx.txn.blob_base_fee ∧
+  evaluate_builtin cx _ _ (Env GasPrice) [] = INL $ IntV &cx.txn.gas_price ∧
+  evaluate_builtin cx _ _ (Env ChainId) [] = INL $ IntV &cx.txn.chain_id ∧
+  evaluate_builtin cx _ _ (Env PrevHash) [] = evaluate_block_hash cx.txn (cx.txn.block_number - 1) ∧
+  evaluate_builtin cx _ _ BlockHash [IntV i] =
     evaluate_block_hash cx.txn (Num i) ∧
-  evaluate_builtin cx _ BlobHash [IntV i] =
+  evaluate_builtin cx _ _ BlobHash [IntV i] =
     INL $ evaluate_blob_hash cx.txn (Num i) ∧
-  evaluate_builtin cx _ (Concat n) vs = evaluate_concat n vs ∧
-  evaluate_builtin cx _ (Slice n) [v1; v2; v3] = evaluate_slice v1 v2 v3 n ∧
-  evaluate_builtin cx _ (MakeArray to bd) vs =
+  evaluate_builtin cx _ _ (Concat n) vs = evaluate_concat n vs ∧
+  evaluate_builtin cx _ _ (Slice n) [v1; v2; v3] = evaluate_slice v1 v2 v3 n ∧
+  evaluate_builtin cx _ _ (MakeArray to bd) vs =
     (case to
      of NONE => INL $ ArrayV $ TupleV vs
       | SOME t =>
         (case evaluate_type (get_tenv cx) t
          of NONE => INR (TypeError "MakeArray type")
           | SOME tv => INL $ ArrayV $ make_array_value tv bd vs)) ∧
-  evaluate_builtin cx acc (Acc aop) [BytesV bs] =
+  evaluate_builtin cx acc _ (Acc aop) [BytesV bs] =
     (let a = lookup_account (word_of_bytes_be bs) acc in
       INL $ evaluate_account_op aop bs a) ∧
-  evaluate_builtin cx _ Isqrt [IntV i] =
+  evaluate_builtin cx _ _ Isqrt [IntV i] =
     (if 0 ≤ i then INL $ IntV &(num_sqrt (Num i))
      else INR (TypeError "Isqrt type")) ∧
   (* method_id: compute keccak256(signature)[:4] - returns 4-byte function selector *)
-  evaluate_builtin cx _ MethodId [StringV sig] =
+  evaluate_builtin cx _ _ MethodId [StringV sig] =
     INL $ BytesV (TAKE 4 (Keccak_256_w64 (MAP (n2w o ORD) sig))) ∧
   (* Also support Bytes input for method_id *)
-  evaluate_builtin cx _ MethodId [BytesV bs] =
+  evaluate_builtin cx _ _ MethodId [BytesV bs] =
     INL $ BytesV (TAKE 4 (Keccak_256_w64 bs)) ∧
-  evaluate_builtin cx _ ECRecover vs = evaluate_ecrecover vs ∧
-  evaluate_builtin cx _ ECAdd vs = evaluate_ecadd vs ∧
-  evaluate_builtin cx _ ECMul vs = evaluate_ecmul vs ∧
-  evaluate_builtin _ _ _ _ = INR (TypeError "builtin")
+  evaluate_builtin cx _ _ ECRecover vs = evaluate_ecrecover vs ∧
+  evaluate_builtin cx _ _ ECAdd vs = evaluate_ecadd vs ∧
+  evaluate_builtin cx _ _ ECMul vs = evaluate_ecmul vs ∧
+  evaluate_builtin _ _ _ _ _ = INR (TypeError "builtin")
 End
 
 val evaluate_builtin_pre_def = cv_auto_trans_pre "evaluate_builtin_pre" evaluate_builtin_def;
 
 Theorem evaluate_builtin_pre[cv_pre]:
-  evaluate_builtin_pre a b c d
+  evaluate_builtin_pre a b c d e
 Proof
   rw[evaluate_builtin_pre_def]
 QED

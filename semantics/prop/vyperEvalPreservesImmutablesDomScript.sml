@@ -1382,7 +1382,7 @@ Proof
     (first_x_assum (qspec_then `st` mp_tac) >>
      simp[check_def, type_check_def, assert_def, return_def]) >>
   gvs[bind_def, AllCaseEqs(), return_def, raise_def, get_accounts_def] >>
-  Cases_on `evaluate_builtin cx s'³'.accounts bt vs` >>
+  Cases_on `evaluate_builtin cx s'³'.accounts ty bt vs` >>
   gvs[return_def, raise_def]
 QED
 

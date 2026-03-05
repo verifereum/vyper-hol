@@ -92,30 +92,26 @@ End
 val () = cv_auto_trans binop_negate_def;
 
 Definition bounded_int_op_def:
-  bounded_int_op u1 u2 r =
-  if u1 = u2 then
-    if within_int_bound u1 r
+  bounded_int_op u r =
+    if within_int_bound u r
     then INL (IntV r)
     else INR (RuntimeError "bounded_int_op bound")
-  else INR (TypeError "bounded_int_op type")
 End
 
 (* optimisation on exponentiation: overflow immediately if power is too big *)
 Theorem bounded_exp:
-  bounded_int_op u1 u2 (i1 ** n2) =
-  if u1 = u2 then
-    if 2 ≤ ABS i1 ∧ int_bound_bits u1 < n2
+  bounded_int_op u (i1 ** n2) =
+    if 2 ≤ ABS i1 ∧ int_bound_bits u < n2
     then INR (RuntimeError "bounded_int_op bound")
     else let r = i1 ** n2 in
-      if within_int_bound u1 r then INL (IntV r)
+      if within_int_bound u r then INL (IntV r)
     else INR (RuntimeError "bounded_int_op bound")
-  else INR (TypeError "bounded_int_op type")
 Proof
   rw[bounded_int_op_def]
   \\ gvs[int_exp_num]
-  \\ `Num (ABS i1 ** n2) < 2 ** int_bound_bits u1`
+  \\ `Num (ABS i1 ** n2) < 2 ** int_bound_bits u`
   by (
-    reverse $ Cases_on`u1`
+    reverse $ Cases_on`u`
     >- (
       gvs[within_int_bound_def]
       \\ gvs[INT_ABS]
@@ -185,12 +181,10 @@ Proof
 QED
 
 Definition wrapped_int_op_def:
-  wrapped_int_op u1 u2 i =
-  if u1 = u2 then
-    let b = int_bound_bits u1 in
-      if is_Unsigned u1 then INL $ IntV (int_mod i &(2 ** b))
+  wrapped_int_op u i =
+    let b = int_bound_bits u in
+      if is_Unsigned u then INL $ IntV (int_mod i &(2 ** b))
       else INL $ IntV (signed_int_mod b i)
-  else INR (TypeError "wrapped_int_op")
 End
 
 val signed_int_mod_pre_def = cv_trans_pre "signed_int_mod_pre" signed_int_mod_def;
@@ -204,7 +198,7 @@ QED
 val wrapped_int_op_pre_def = cv_trans_pre "wrapped_int_op_pre" wrapped_int_op_def;
 
 Theorem wrapped_int_op_pre[cv_pre]:
-  wrapped_int_op_pre x y z
+  wrapped_int_op_pre x y
 Proof
   rw[wrapped_int_op_pre_def]
 QED
@@ -214,19 +208,19 @@ Definition evaluate_binop_def:
   case bop
     of Add => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
-           bounded_int_op u u (i1 + i2) | _ => INR (TypeError "binop"))
+           bounded_int_op u (i1 + i2) | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
            bounded_decimal_op (i1 + i2) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | Sub => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
-           bounded_int_op u u (i1 - i2) | _ => INR (TypeError "binop"))
+           bounded_int_op u (i1 - i2) | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
            bounded_decimal_op (i1 - i2) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | Mul => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
-           bounded_int_op u u (i1 * i2) | _ => INR (TypeError "binop"))
+           bounded_int_op u (i1 * i2) | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
            (let p = i1 * i2 in
             if within_int_bound (Signed 168) ((ABS p) / 10000000000)
@@ -236,7 +230,7 @@ Definition evaluate_binop_def:
      | Div => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
            (if i2 = 0 then INR (RuntimeError "Div0") else
-            bounded_int_op u u $
+            bounded_int_op u $
               (if is_Unsigned u
                then &(w2n $ word_div ((i2w i1):bytes32) (i2w i2))
                else w2i $ word_quot ((i2w i1):bytes32) (i2w i2)))
@@ -249,25 +243,25 @@ Definition evaluate_binop_def:
        | _ => INR (TypeError "binop"))
      | UAdd => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
-           wrapped_int_op u u (i1 + i2) | _ => INR (TypeError "binop"))
+           wrapped_int_op u (i1 + i2) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | USub => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
-           wrapped_int_op u u (i1 - i2) | _ => INR (TypeError "binop"))
+           wrapped_int_op u (i1 - i2) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | UMul => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
-           wrapped_int_op u u (i1 * i2) | _ => INR (TypeError "binop"))
+           wrapped_int_op u (i1 * i2) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | UDiv => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
            if i2 = 0 then INR (RuntimeError "UDiv0") else
-           wrapped_int_op u u (i1 / i2) | _ => INR (TypeError "binop"))
+           wrapped_int_op u (i1 / i2) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | Mod => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
            (if i2 = 0 then INR (RuntimeError "Mod0") else
-            bounded_int_op u u $
+            bounded_int_op u $
               (if is_Unsigned u
                then &(w2n $ word_mod ((i2w i1):bytes32) (i2w i2))
                else w2i $ word_rem ((i2w i1):bytes32) (i2w i2)))
@@ -281,7 +275,7 @@ Definition evaluate_binop_def:
      | Exp => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
            (if i2 < 0 then INR (RuntimeError "Exp~") else
-            bounded_int_op u u $ (i1 ** (Num i2))) | _ => INR (TypeError "binop"))
+            bounded_int_op u $ (i1 ** (Num i2))) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | ExpMod => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
@@ -303,7 +297,7 @@ Definition evaluate_binop_def:
        | _ => INR (TypeError "binop"))
      | And => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
-           bounded_int_op u u (int_and i1 i2) | _ => INR (TypeError "binop"))
+           bounded_int_op u (int_and i1 i2) | _ => INR (TypeError "binop"))
        | BoolV b1 => (case v2 of BoolV b2 =>
            INL $ BoolV (b1 ∧ b2) | _ => INR (TypeError "binop"))
        | FlagV n1 => (case v2 of FlagV n2 =>
@@ -312,7 +306,7 @@ Definition evaluate_binop_def:
        | _ => INR (TypeError "binop"))
      | Or => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
-           bounded_int_op u u (int_or i1 i2) | _ => INR (TypeError "binop"))
+           bounded_int_op u (int_or i1 i2) | _ => INR (TypeError "binop"))
        | BoolV b1 => (case v2 of BoolV b2 =>
            INL $ BoolV (b1 ∨ b2) | _ => INR (TypeError "binop"))
        | FlagV n1 => (case v2 of FlagV n2 =>
@@ -321,7 +315,7 @@ Definition evaluate_binop_def:
        | _ => INR (TypeError "binop"))
      | XOr => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
-           bounded_int_op u u (int_xor i1 i2) | _ => INR (TypeError "binop"))
+           bounded_int_op u (int_xor i1 i2) | _ => INR (TypeError "binop"))
        | BoolV b1 => (case v2 of BoolV b2 =>
            INL $ BoolV (b1 ≠ b2) | _ => INR (TypeError "binop"))
        | FlagV n1 => (case v2 of FlagV n2 =>

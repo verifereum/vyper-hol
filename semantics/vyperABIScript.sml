@@ -696,25 +696,17 @@ val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
       \\ cv_bounds_tac
       \\ decide_tac
       \\ NO_TAC)
-  (* SArrayV case: goal has both cv_v and cv_v0 with ispair guards.
-     Direct case split proof - 7 splits to expose enough Pair constructor overhead. *)
+  (* SArrayV/DynArrayV case: case split on cv_v/cv_v0 and use arithmetic *)
   \\ TRY (
       rpt strip_tac
-      \\ Cases_on `cv_v` >> fs[cv_ispair_def, c2b_def]
-      \\ Cases_on `cv_v0` >> fs[cv_ispair_def, c2b_def,
-           cv_snd_def, cv_size_def]
-      \\ qmatch_asmsub_rename_tac `cv_ispair (cv_snd ggg)`
-      \\ Cases_on `ggg` >> fs[cv_ispair_def, cv_snd_def, c2b_def]
-      \\ Cases_on `g'` >> fs[cv_snd_def, cv_fst_def,
-           cv_size_def, c2n_def]
-      \\ qmatch_goalsub_rename_tac `cv_fst (cv_snd gSix)`
-      \\ Cases_on `gSix` >> fs[cv_snd_def, cv_fst_def,
-           cv_size_def, c2n_def]
-      \\ qmatch_goalsub_rename_tac `cv_fst gLast`
-      \\ Cases_on `gLast` >> simp[cv_snd_def, cv_fst_def,
-           cv_size_def, c2n_def]
-      \\ qmatch_goalsub_rename_tac `cv$c2n gNum`
-      \\ Cases_on `gNum` >> simp[cv_size_def, c2n_def]
+      \\ rpt (CHANGED_TAC (
+           gvs[cv_ispair_def, c2b_def, cv_fst_def, cv_snd_def, cv_size_def, c2n_def]
+           \\ rpt (first_x_assum (fn th =>
+              if is_eq (concl th) andalso is_var (lhs (concl th))
+              then SUBST_ALL_TAC th
+              else NO_TAC) handle HOL_ERR _ => ALL_TAC)))
+      \\ cv_bounds_tac
+      \\ decide_tac
       \\ NO_TAC)
 );
 

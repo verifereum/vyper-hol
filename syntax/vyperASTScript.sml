@@ -238,7 +238,7 @@ Datatype:
   | Raise expr
   | Return (expr option)
   | Assign assignment_target expr
-  | AugAssign base_assignment_target binop expr
+  | AugAssign type base_assignment_target binop expr
   | Append base_assignment_target expr
   | AnnAssign identifier type expr
 End
@@ -319,6 +319,14 @@ Definition int_bound_bits_def[simp]:
 End
 
 val () = cv_trans int_bound_bits_def;
+
+Definition type_to_int_bound_def:
+  type_to_int_bound (BaseT (UintT n)) = SOME (Unsigned n) ∧
+  type_to_int_bound (BaseT (IntT n)) = SOME (Signed n) ∧
+  type_to_int_bound _ = NONE
+End
+
+val () = cv_auto_trans type_to_int_bound_def;
 
 Definition is_TupleT_def[simp]:
   is_TupleT (TupleT _) = T ∧

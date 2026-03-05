@@ -895,7 +895,8 @@ Definition translate_stmt_def:
   (translate_stmt ctx (JS_AnnAssign var ty val) =
     AnnAssign var (translate_type ty) (translate_expr ctx val)) /\
   (translate_stmt ctx (JS_AugAssign tgt op val) =
-    AugAssign (translate_base_target ctx tgt) (translate_binop op) (translate_expr ctx val)) /\
+    AugAssign (expr_type (translate_expr ctx val))
+      (translate_base_target ctx tgt) (translate_binop op) (translate_expr ctx val)) /\
   (translate_stmt ctx (JS_Append tgt val) =
     Append (translate_base_target ctx tgt) (translate_expr ctx val))
 Termination

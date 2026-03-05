@@ -202,7 +202,7 @@ Proof
         (Cases_on `es` >> fs[builtin_args_length_ok_def]) >>
       first_x_assum drule >> gvs[])
   (* non-Len case: eval_exprs + evaluate_builtin *)
-  >> TRY (Cases_on `evaluate_builtin cx s''.accounts bt vs` >> gvs[return_def, raise_def]) >>
+  >> TRY (Cases_on `evaluate_builtin cx s''.accounts ty bt vs` >> gvs[return_def, raise_def]) >>
   first_x_assum drule >> gvs[ETA_THM, sum_CASE_rator, CaseEq"sum",
     return_def, raise_def, get_accounts_def, builtin_args_length_ok_def,
     listTheory.LENGTH_EQ_NUM_compute] >>

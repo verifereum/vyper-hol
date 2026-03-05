@@ -721,7 +721,7 @@ QED
 Datatype:
   assign_operation
   = Replace value
-  | Update binop value
+  | Update type binop value
   | AppendOp value
   | PopOp
 End
@@ -732,7 +732,9 @@ Theorem assign_operation_CASE_rator =
 
 Definition assign_subscripts_def:
   assign_subscripts a [] (Replace v) = INL v (* TODO: cast to type of a *) ∧
-  assign_subscripts a [] (Update bop v) = evaluate_binop bop a v ∧
+  assign_subscripts a [] (Update ty bop v) =
+    (let u = case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0 in
+       evaluate_binop u NoneTV bop a v) ∧
   assign_subscripts a [] (AppendOp v) = append_element a v ∧
   assign_subscripts a [] PopOp = pop_element a ∧
   assign_subscripts a ((IntSubscript i)::is) ao =

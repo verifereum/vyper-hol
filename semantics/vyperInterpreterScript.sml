@@ -205,7 +205,7 @@ Definition bound_def:
   stmt_bound ts (Assign g e) =
     1 + target_bound ts g
       + expr_bound ts e ∧
-  stmt_bound ts (AugAssign bt _ e) =
+  stmt_bound ts (AugAssign _ bt _ e) =
     1 + base_target_bound ts bt
       + expr_bound ts e ∧
   stmt_bound ts (If e ss1 ss2) =
@@ -807,11 +807,11 @@ Definition evaluate_def:
     assign_target cx gv (Replace v);
     return ()
   od ∧
-  eval_stmt cx (AugAssign t bop e) = do
+  eval_stmt cx (AugAssign ty t bop e) = do
     (loc, sbs) <- eval_base_target cx t;
     tv <- eval_expr cx e;
     v <- get_Value tv;
-    assign_target cx (BaseTargetV loc sbs) (Update bop v);
+    assign_target cx (BaseTargetV loc sbs) (Update ty bop v);
     return ()
   od ∧
   eval_stmt cx (If e ss1 ss2) = do
@@ -950,7 +950,7 @@ Definition evaluate_def:
     v <- lift_sum $ evaluate_attribute sv id;
     return $ Value $ v
   od ∧
-  eval_expr cx (Builtin _ bt es) = do
+  eval_expr cx (Builtin ty bt es) = do
     type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args";
     v <- if bt = Len then do
       tv <- eval_expr cx (HD es);
@@ -959,7 +959,7 @@ Definition evaluate_def:
     od else do
       vs <- eval_exprs cx es;
       acc <- get_accounts;
-      lift_sum $ evaluate_builtin cx acc bt vs
+      lift_sum $ evaluate_builtin cx acc ty bt vs
     od;
     return $ Value v
   od ∧
