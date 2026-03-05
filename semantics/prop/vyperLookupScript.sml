@@ -824,21 +824,19 @@ Proof
   Cases_on `storage_type_of cx mid n` >> gvs[] >>
   rename1 `storage_type_of cx mid n = SOME tv` >>
   `IS_SOME (encode_value tv v)` by gvs[value_has_type_equiv] >>
-  `roundtrip_ok tv v` by (
-    irule roundtrip_all >> simp[]
-  ) >>
+  `roundtrip_ok tv v` by (irule roundtrip_all >> simp[]) >>
   fs[var_in_storage_def, storage_type_of_def, AllCaseEqs()] >>
   Cases_on `encode_value tv v` >> gvs[] >>
   simp[lookup_toplevel_name_def, update_toplevel_name_def] >>
-  simp[Once set_global_def, bind_def, lift_option_type_def, return_def, LET_THM, raise_def] >>
-  simp[write_storage_slot_def, bind_def, lift_option_def, LET_THM, raise_def] >>
+  simp[Once set_global_def, write_storage_slot_def,
+       bind_def, lift_option_type_def, lift_option_def,
+       return_def, LET_THM, raise_def] >>
   `∃storage0. get_storage_backend cx b st = (INL storage0, st)` by
     metis_tac[get_storage_backend_INL] >>
-  simp[] >>
-  simp[Once lookup_global_def, bind_def, lift_option_type_def, return_def, LET_THM, raise_def] >>
-  reverse (Cases_on `tv`) >> gvs[] >>
-  simp[read_storage_slot_def, lift_option_def] >>
-  simp[bind_def, get_after_set_storage_backend, return_def, raise_def] >>
-  fs[roundtrip_ok_def] >>
-  simp[return_def]
+  simp[Once lookup_global_def, bind_def, lift_option_type_def,
+       return_def, LET_THM, raise_def] >>
+  Cases_on `tv` >>
+  gvs[read_storage_slot_def, lift_option_def, bind_def,
+      get_after_set_storage_backend, return_def, raise_def,
+      roundtrip_ok_def]
 QED
