@@ -46,6 +46,29 @@ Definition mulmod_def:
     if n = 0w then 0w else n2w ((w2n a * w2n b) MOD w2n n)
 End
 
+(* Sign extension: extend byte n of w to 256 bits.
+   If n >= 31, w is already fully represented.
+   Otherwise, extend sign bit of byte n across higher bytes.
+   Matches EVM SIGNEXTEND semantics. *)
+Definition sign_extend_def:
+  sign_extend (n:bytes32) (w:bytes32) : bytes32 =
+    if w2n n > 30 then w
+    else
+      let byte_pos = w2n n in
+      let bit_pos = byte_pos * 8 + 7 in
+      let mask = (1w:bytes32) << (bit_pos + 1) - 1w in
+      let sign_bit = (w >>> bit_pos) && 1w in
+      if sign_bit = 1w then w || ¬mask
+      else w && mask
+End
+
+(* Memory copy: copy sz bytes from src to dst in memory *)
+Definition mcopy_def:
+  mcopy (dst:num) (src:num) (sz:num) (s:venom_state) =
+    let data = TAKE sz (DROP src s.vs_memory ++ REPLICATE sz 0w) in
+    write_memory_with_expansion dst data s
+End
+
 (* Boolean to word *)
 Definition bool_to_word_def:
   bool_to_word T = (1w:bytes32) /\
@@ -180,6 +203,7 @@ Definition step_inst_def:
     | Mod => exec_pure2 safe_mod inst s
     | SDIV => exec_pure2 safe_sdiv inst s
     | SMOD => exec_pure2 safe_smod inst s
+    | Exp => exec_pure2 word_exp inst s
     | ADDMOD => exec_pure3 addmod inst s
     | MULMOD => exec_pure3 mulmod inst s
 
@@ -199,10 +223,20 @@ Definition step_inst_def:
     | SHL => exec_pure2 (\n w. word_lsl w (w2n n)) inst s
     | SHR => exec_pure2 (\n w. word_lsr w (w2n n)) inst s
     | SAR => exec_pure2 (\n w. word_asr w (w2n n)) inst s
+    | SIGNEXTEND => exec_pure2 sign_extend inst s
 
     (* Memory *)
     | MLOAD => exec_read1 (\addr s. mload (w2n addr) s) inst s
     | MSTORE => exec_write2 (\val addr s. mstore (w2n addr) val s) inst s
+    | MCOPY =>
+        (case inst.inst_operands of
+          [op_size; op_src; op_dst] =>
+            (case (eval_operand op_size s, eval_operand op_src s,
+                   eval_operand op_dst s) of
+              (SOME sz, SOME src, SOME dst) =>
+                OK (mcopy (w2n dst) (w2n src) (w2n sz) s)
+            | _ => Error "undefined operand")
+        | _ => Error "mcopy requires 3 operands")
 
     (* Storage *)
     | SLOAD => exec_read1 (\key s. sload key s) inst s
@@ -372,6 +406,27 @@ Definition step_inst_def:
             | _ => Error "undefined operand")
         | _ => Error "sha3 requires 2 operands")
 
+    (* Code introspection *)
+    | CODESIZE => exec_read0
+        (\s. n2w (LENGTH (lookup_account s.vs_call_ctx.cc_address
+                                         s.vs_accounts).code)) inst s
+    | EXTCODESIZE => exec_read1
+        (\addr s. n2w (LENGTH (lookup_account (w2w addr)
+                                              s.vs_accounts).code)) inst s
+    | EXTCODEHASH =>
+        exec_read1
+          (\addr s.
+            let code = (lookup_account (w2w addr) s.vs_accounts).code in
+            if NULL code then 0w
+            else word_of_bytes T (0w:bytes32)
+                   (Keccak_256_w64 code)) inst s
+
+    (* Allocation pointer arithmetic - GEP is base + offset, pure *)
+    | GEP => exec_pure2 word_add inst s
+
+    (* Invalid opcode — always reverts (EVM: consumes all gas + reverts) *)
+    | INVALID => Revert (revert_state s)
+
     (* Default - unimplemented *)
     | _ => Error "unimplemented opcode"
 End
@@ -394,7 +449,8 @@ Proof
      exec_read0_def, exec_read1_def, exec_write2_def] >>
   gvs[AllCaseEqs()] >>
   fs[update_var_def, mstore_def, sstore_def, tstore_def,
-     write_memory_with_expansion_def]
+     write_memory_with_expansion_def, mcopy_def,
+     revert_state_def]
 QED
 
 (* Step within a basic block - returns (result, is_terminator) *)

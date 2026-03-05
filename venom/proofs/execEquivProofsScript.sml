@@ -102,9 +102,9 @@ Triviality step_inst_pure2_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     MEM inst.inst_opcode
-      [ADD; SUB; MUL; Div; SDIV; Mod; SMOD;
-       AND; OR; XOR; SHL; SHR; SAR;
-       EQ; LT; GT; SLT; SGT] ==>
+      [ADD; SUB; MUL; Div; SDIV; Mod; SMOD; Exp;
+       AND; OR; XOR; SHL; SHR; SAR; SIGNEXTEND;
+       EQ; LT; GT; SLT; SGT; GEP] ==>
     result_equiv vars (step_inst inst s1) (step_inst inst s2)
 Proof
   rw[] >> simp[step_inst_def] >>
@@ -143,7 +143,7 @@ Triviality step_inst_read0_equiv:
       [CALLER; ADDRESS; CALLVALUE; GAS; ORIGIN; GASPRICE;
        CHAINID; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO;
        GASLIMIT; BASEFEE; BLOBBASEFEE; SELFBALANCE;
-       CALLDATASIZE; RETURNDATASIZE; MSIZE] ==>
+       CALLDATASIZE; RETURNDATASIZE; MSIZE; CODESIZE] ==>
     result_equiv vars (step_inst inst s1) (step_inst inst s2)
 Proof
   rw[] >> simp[step_inst_def] >>
@@ -157,13 +157,27 @@ Triviality step_inst_read1_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     MEM inst.inst_opcode
-      [MLOAD; SLOAD; TLOAD; BLOCKHASH; BALANCE; CALLDATALOAD] ==>
+      [MLOAD; SLOAD; TLOAD; BLOCKHASH; BALANCE; CALLDATALOAD;
+       EXTCODESIZE] ==>
     result_equiv vars (step_inst inst s1) (step_inst inst s2)
 Proof
   rw[] >> simp[step_inst_def] >>
   irule exec_read1_result_equiv >> simp[] >> rw[] >>
   fs[mload_def, sload_def, tload_def,
      state_equiv_def, execution_equiv_def]
+QED
+
+(* EXTCODEHASH: read1 with if-then-else body *)
+Triviality step_inst_extcodehash_equiv:
+  !vars inst s1 s2.
+    state_equiv vars s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
+    inst.inst_opcode = EXTCODEHASH ==>
+    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> simp[step_inst_def] >>
+  irule exec_read1_result_equiv >> simp[] >> rw[] >>
+  gvs[state_equiv_def, execution_equiv_def]
 QED
 
 (* Opcodes that use exec_write2 — two operands, writes state *)
@@ -268,6 +282,34 @@ Proof
   irule update_var_preserves >> simp[]
 QED
 
+(* MCOPY: memory-to-memory copy, 3 operands *)
+Triviality step_inst_mcopy_equiv:
+  !vars inst s1 s2.
+    state_equiv vars s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
+    inst.inst_opcode = MCOPY ==>
+    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> simp[step_inst_def] >>
+  imp_res_tac eval_operand_equiv >>
+  `s1.vs_memory = s2.vs_memory` by
+    fs[state_equiv_def, execution_equiv_def] >>
+  rpt CASE_TAC >> gvs[result_equiv_def, mcopy_def] >>
+  irule write_memory_with_expansion_preserves >> simp[]
+QED
+
+(* INVALID: always reverts *)
+Triviality step_inst_invalid_equiv:
+  !vars inst s1 s2.
+    state_equiv vars s1 s2 /\
+    inst.inst_opcode = INVALID ==>
+    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> simp[step_inst_def, result_equiv_def,
+               revert_state_def, execution_equiv_def, lookup_var_def] >>
+  fs[state_equiv_def, execution_equiv_def, lookup_var_def]
+QED
+
 (* Copy: CALLDATACOPY, RETURNDATACOPY *)
 Triviality step_inst_copy_equiv:
   !vars inst s1 s2.
@@ -303,8 +345,9 @@ Proof
   Cases_on `inst.inst_opcode` >>
   (* Dispatch: derive MEM for the opcode's category, then use helper *)
   FIRST [
-    `MEM inst.inst_opcode [ADD;SUB;MUL;Div;SDIV;Mod;SMOD;
-       AND;OR;XOR;SHL;SHR;SAR;EQ;LT;GT;SLT;SGT]` by simp[] >>
+    `MEM inst.inst_opcode [ADD;SUB;MUL;Div;SDIV;Mod;SMOD;Exp;
+       AND;OR;XOR;SHL;SHR;SAR;SIGNEXTEND;EQ;LT;GT;SLT;SGT;GEP]`
+       by simp[] >>
       drule_all step_inst_pure2_equiv >> simp[],
     `MEM inst.inst_opcode [NOT;ISZERO]` by simp[] >>
       drule_all step_inst_pure1_equiv >> simp[],
@@ -313,11 +356,15 @@ Proof
     `MEM inst.inst_opcode
        [CALLER;ADDRESS;CALLVALUE;GAS;ORIGIN;GASPRICE;CHAINID;
         COINBASE;TIMESTAMP;NUMBER;PREVRANDAO;GASLIMIT;BASEFEE;
-        BLOBBASEFEE;SELFBALANCE;CALLDATASIZE;RETURNDATASIZE;MSIZE]`
+        BLOBBASEFEE;SELFBALANCE;CALLDATASIZE;RETURNDATASIZE;MSIZE;
+        CODESIZE]`
       by simp[] >> drule_all step_inst_read0_equiv >> simp[],
     `MEM inst.inst_opcode
-       [MLOAD;SLOAD;TLOAD;BLOCKHASH;BALANCE;CALLDATALOAD]`
+       [MLOAD;SLOAD;TLOAD;BLOCKHASH;BALANCE;CALLDATALOAD;
+        EXTCODESIZE]`
       by simp[] >> drule_all step_inst_read1_equiv >> simp[],
+    `inst.inst_opcode = EXTCODEHASH` by simp[] >>
+      drule_all step_inst_extcodehash_equiv >> simp[],
     `MEM inst.inst_opcode [MSTORE;SSTORE;TSTORE]` by simp[] >>
       drule_all step_inst_write2_equiv >> simp[],
     `MEM inst.inst_opcode [STOP;RETURN;REVERT;SINK]` by simp[] >>
@@ -332,6 +379,10 @@ Proof
       drule_all step_inst_sha3_equiv >> simp[],
     `MEM inst.inst_opcode [CALLDATACOPY;RETURNDATACOPY]` by simp[] >>
       drule_all step_inst_copy_equiv >> simp[],
+    `inst.inst_opcode = MCOPY` by simp[] >>
+      drule_all step_inst_mcopy_equiv >> simp[],
+    `inst.inst_opcode = INVALID` by simp[] >>
+      drule_all step_inst_invalid_equiv >> simp[],
     (* Unimplemented opcodes: wildcard gives Error *)
     simp[step_inst_def, result_equiv_def]
   ]

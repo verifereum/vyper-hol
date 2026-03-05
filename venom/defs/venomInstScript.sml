@@ -20,7 +20,7 @@ Libs
 Datatype:
   opcode =
     (* Arithmetic - note: Div/Mod to avoid HOL4 name clash *)
-    | ADD | SUB | MUL | Div | SDIV | Mod | SMOD | EXP
+    | ADD | SUB | MUL | Div | SDIV | Mod | SMOD | Exp
     | ADDMOD | MULMOD
     (* Comparison *)
     | EQ | LT | GT | SLT | SGT | ISZERO
