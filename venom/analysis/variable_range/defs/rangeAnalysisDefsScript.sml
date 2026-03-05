@@ -155,9 +155,9 @@ Definition range_apply_iszero_def:
               rs_write rs target_var (vr_clamp current (SOME lo) (SOME (-1)))
             else rs  (* spans zero, can't represent [lo,-1] ∪ [1,hi] *)
           else
-            (* non-negative: intersect with [1, UINT256_MAX] *)
+            (* non-negative: intersect with [1, INT256_MAX] — excludes zero *)
             rs_write rs target_var
-              (vr_intersect current (VR_Range 1 UINT256_MAX_int))
+              (vr_intersect current (VR_Range 1 INT256_MAX))
 End
 
 (* Apply eq-based refinement.
@@ -212,10 +212,12 @@ End
 
 (* Apply comparison-based refinement.
    Matches Python _apply_compare. *)
+(* For unsigned: bounds are [0, INT256_MAX] (non-negative signed range).
+   For signed: bounds are [INT256_MIN, INT256_MAX] (full signed range). *)
 Definition range_apply_compare_def:
   range_apply_compare op lhs rhs is_true (rs : range_state) =
     let min_bound = if op = SLT ∨ op = SGT then INT256_MIN else (0 : int) in
-    let max_bound = if op = SLT ∨ op = SGT then INT256_MAX else UINT256_MAX_int in
+    let max_bound = INT256_MAX in
     case (lhs, rhs) of
       (Var v, Lit w) =>
         if ¬(op = SLT ∨ op = SGT) ∧
@@ -344,27 +346,22 @@ End
 (* ===== PHI Handling ===== *)
 
 (* Compute range for one PHI instruction from predecessor exit states.
-   Matches Python _phi_range. *)
+   Matches Python _phi_range. Uses phi_pairs to extract (label, var) pairs
+   from the alternating [Label, Var, Label, Var, ...] operand list. *)
 Definition range_phi_range_def:
   range_phi_range ra inst =
     if inst.inst_opcode ≠ PHI then VR_Top
     else
-      FOLDL (λacc (lbl, var).
-        case var of
-          Var v =>
-            let pred_exit =
-              case FLOOKUP ra.ra_exit lbl of
-                NONE => FEMPTY
-              | SOME rs => rs
-            in
-            vr_union acc (rs_lookup pred_exit v)
-        | Lit w => vr_union acc (vr_constant (w2i w))
-        | Label _ => VR_Top)
+      let pairs = phi_pairs inst.inst_operands in
+      FOLDL (λacc (lbl, v).
+        let pred_exit =
+          case FLOOKUP ra.ra_exit lbl of
+            NONE => FEMPTY
+          | SOME rs => rs
+        in
+        vr_union acc (rs_lookup pred_exit v))
       VR_Bottom
-      (MAP (λop. case op of
-          Label l => (l, Label l)  (* phi operand: (label, var) pairs *)
-        | _ => (ARB, op))
-        inst.inst_operands)
+      pairs
 End
 
 (* Handle PHI instructions at block entry: fold phi results into state.

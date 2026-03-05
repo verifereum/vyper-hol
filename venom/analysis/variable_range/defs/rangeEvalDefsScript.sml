@@ -94,17 +94,15 @@ Definition eval_range_add_def:
     | (_, VR_Top) => VR_Top
     | (VR_Range lo1 hi1, VR_Range lo2 hi2) =>
         if lo1 = hi1 ∧ lo2 = hi2 then
-          let result = lo1 + lo2 in
-          if result < INT256_MIN ∨ result > UINT256_MAX_int then
-            vr_constant (wrap256_signed result)
-          else vr_constant result
+          vr_constant (wrap256_signed (lo1 + lo2))
         else if lo1 < 0 ∨ lo2 < 0 then VR_Top
         else if hi1 - lo1 > RANGE_WIDTH_LIMIT ∨
                 hi2 - lo2 > RANGE_WIDTH_LIMIT then VR_Top
         else
+          let lo = lo1 + lo2 in
           let hi = hi1 + hi2 in
-          if hi > UINT256_MAX_int then VR_Top
-          else VR_Range (lo1 + lo2) hi
+          if hi > INT256_MAX then VR_Top
+          else VR_Range lo hi
 End
 
 (* SUB: matches Python _eval_sub *)
@@ -117,16 +115,13 @@ Definition eval_range_sub_def:
     | (_, VR_Top) => VR_Top
     | (VR_Range lo1 hi1, VR_Range lo2 hi2) =>
         if lo1 = hi1 ∧ lo2 = hi2 then
-          let result = lo1 - lo2 in
-          if result < INT256_MIN ∨ result > UINT256_MAX_int then
-            vr_constant (wrap256_signed result)
-          else vr_constant result
+          vr_constant (wrap256_signed (lo1 - lo2))
         else if hi1 - lo1 > RANGE_WIDTH_LIMIT ∨
                 hi2 - lo2 > RANGE_WIDTH_LIMIT then VR_Top
         else
           let lo = lo1 - hi2 in
           let hi = hi1 - lo2 in
-          if lo < INT256_MIN ∨ hi > UINT256_MAX_int ∨ lo > hi then VR_Top
+          if lo < INT256_MIN ∨ hi > INT256_MAX ∨ lo > hi then VR_Top
           else VR_Range lo hi
 End
 
@@ -142,21 +137,20 @@ Definition eval_range_mul_def:
         if lo1 = hi1 ∧ lo1 = 0 then vr_constant 0
         else if lo2 = hi2 ∧ lo2 = 0 then vr_constant 0
         else if lo1 = hi1 ∧ lo2 = hi2 then
-          let result = lo1 * lo2 in
-          if result < INT256_MIN ∨ result > UINT256_MAX_int then
-            vr_constant (wrap256_signed result)
-          else vr_constant result
+          vr_constant (wrap256_signed (lo1 * lo2))
         else if lo1 < 0 ∨ lo2 < 0 then VR_Top
         else if hi1 - lo1 > RANGE_WIDTH_LIMIT ∨
                 hi2 - lo2 > RANGE_WIDTH_LIMIT then VR_Top
-        else if hi1 > 0 ∧ hi2 > UINT256_MAX_int / hi1 then VR_Top
+        else if hi1 > 0 ∧ hi2 > INT256_MAX / hi1 then VR_Top
         else
           let hi = hi1 * hi2 in
-          if hi > UINT256_MAX_int then VR_Top
+          if hi > INT256_MAX then VR_Top
           else VR_Range (lo1 * lo2) hi
 End
 
-(* DIV (unsigned): matches Python _eval_div *)
+(* DIV (unsigned): matches Python _eval_div.
+   Divisor literal is w2i; negative w2i means unsigned divisor ≥ 2^255.
+   For non-negative dividend (< 2^255), dividing by ≥ 2^255 gives 0. *)
 Definition eval_range_div_def:
   eval_range_div r1 r2 =
     case (r1, r2) of
@@ -168,11 +162,14 @@ Definition eval_range_div_def:
         if lo2 = hi2 then
           if lo2 = 0 then vr_constant 0
           else if lo1 < 0 then VR_Top
+          else if lo2 < 0 then vr_constant 0  (* large unsigned divisor *)
           else VR_Range (lo1 / lo2) (hi1 / lo2)
         else VR_Top
 End
 
-(* MOD (unsigned): matches Python _eval_mod *)
+(* MOD (unsigned): matches Python _eval_mod.
+   Divisor literal is w2i; negative w2i means unsigned divisor ≥ 2^255.
+   For non-negative dividend, mod by large divisor = dividend itself. *)
 Definition eval_range_mod_def:
   eval_range_mod r1 r2 =
     case (r1, r2) of
@@ -183,6 +180,7 @@ Definition eval_range_mod_def:
     | (VR_Range lo1 hi1, VR_Range lo2 hi2) =>
         if lo2 = hi2 then
           if lo2 = 0 then vr_constant 0
+          else if lo2 < 0 then VR_Top  (* large unsigned divisor *)
           else VR_Range 0 (lo2 - 1)
         else VR_Top
 End
@@ -237,7 +235,10 @@ End
 
 (* ===== Bitwise Evaluators ===== *)
 
-(* AND: matches Python _eval_and *)
+(* AND: matches Python _eval_and.
+   lit1/lit2 are w2i of the literal operand.
+   w2i(-1w) = -1, which is all-bits-set (identity for AND).
+   Negative mask (w2i < 0) means high bit set → large unsigned mask → imprecise. *)
 Definition eval_range_and_def:
   eval_range_and r1 r2 lit1 lit2 =
     case (r1, r2) of
@@ -246,13 +247,15 @@ Definition eval_range_and_def:
     | _ =>
         case (lit1, lit2) of
           (SOME mask, _) =>
-            if mask = UINT256_MAX_int then r2
-            else if vr_lo r2 < 0 then VR_Range 0 (ABS mask)
-            else VR_Range 0 (int_min (vr_hi r2) (ABS mask))
+            if mask = -1 then r2               (* AND with all-ones is identity *)
+            else if mask < 0 then VR_Top       (* negative w2i = large unsigned mask *)
+            else if vr_lo r2 < 0 then VR_Range 0 mask
+            else VR_Range 0 (int_min (vr_hi r2) mask)
         | (_, SOME mask) =>
-            if mask = UINT256_MAX_int then r1
-            else if vr_lo r1 < 0 then VR_Range 0 (ABS mask)
-            else VR_Range 0 (int_min (vr_hi r1) (ABS mask))
+            if mask = -1 then r1
+            else if mask < 0 then VR_Top
+            else if vr_lo r1 < 0 then VR_Range 0 mask
+            else VR_Range 0 (int_min (vr_hi r1) mask)
         | _ => VR_Top
 End
 
@@ -293,7 +296,8 @@ End
 
 (* ===== Shift Evaluators ===== *)
 
-(* SHR: matches Python _eval_shr *)
+(* SHR: matches Python _eval_shr.
+   Shift literal is w2i; negative w2i means unsigned shift ≥ 2^255 ≥ 256 → result 0. *)
 Definition eval_range_shr_def:
   eval_range_shr r_shift r_val (shift_lit : int option) =
     case (r_shift, r_val) of
@@ -303,14 +307,16 @@ Definition eval_range_shr_def:
         case shift_lit of
           NONE => VR_Top
         | SOME sh =>
-            if sh ≥ 256 then vr_constant 0
+            if sh < 0 then vr_constant 0    (* unsigned shift ≥ 2^255 *)
+            else if sh ≥ 256 then vr_constant 0
             else if vr_lo r_val < 0 then VR_Top
             else
               let amount = 2 ** Num sh in
               VR_Range (vr_lo r_val / &amount) (vr_hi r_val / &amount)
 End
 
-(* SHL: matches Python _eval_shl *)
+(* SHL: matches Python _eval_shl.
+   Shift literal is w2i; negative w2i means unsigned shift ≥ 2^255 ≥ 256 → result 0. *)
 Definition eval_range_shl_def:
   eval_range_shl r_shift r_val (shift_lit : int option) =
     case (r_shift, r_val) of
@@ -320,7 +326,8 @@ Definition eval_range_shl_def:
         case shift_lit of
           NONE => VR_Top
         | SOME sh =>
-            if sh ≥ 256 then vr_constant 0
+            if sh < 0 then vr_constant 0    (* unsigned shift ≥ 2^255 *)
+            else if sh ≥ 256 then vr_constant 0
             else if vr_lo r_val < 0 then VR_Top
             else
               let max_input = UINT256_MAX_int / &(2 ** Num sh) in
@@ -334,7 +341,9 @@ Definition eval_range_shl_def:
                 else VR_Range lo' hi'
 End
 
-(* SAR (arithmetic shift right): matches Python _eval_sar *)
+(* SAR (arithmetic shift right): matches Python _eval_sar.
+   Shift literal is w2i; negative w2i means unsigned shift ≥ 2^255.
+   For SAR with huge shift: result is 0 (non-negative) or -1 (negative). *)
 Definition eval_range_sar_def:
   eval_range_sar r_shift r_val (shift_lit : int option) =
     case (r_shift, r_val) of
@@ -345,7 +354,7 @@ Definition eval_range_sar_def:
           NONE => VR_Top
         | SOME sh =>
             if vr_hi r_val > INT256_MAX then VR_Top
-            else if sh ≥ 256 then
+            else if sh < 0 ∨ sh ≥ 256 then  (* huge shift *)
               if vr_lo r_val ≥ 0 then vr_constant 0
               else if vr_hi r_val < 0 then vr_constant (-1)
               else VR_Range (-1) 0
@@ -357,7 +366,10 @@ End
 
 (* ===== Comparison Evaluators ===== *)
 
-(* LT/GT/SLT/SGT: matches Python _eval_compare *)
+(* LT/GT/SLT/SGT: matches Python _eval_compare.
+   For unsigned ops (LT/GT), ranges on opposite sides of the sign boundary
+   have reversed ordering: negative signed values are large unsigned values.
+   After sign-boundary-span check, ranges are entirely one side or the other. *)
 Definition eval_range_compare_def:
   eval_range_compare op r1 r2 =
     case (r1, r2) of
@@ -368,7 +380,15 @@ Definition eval_range_compare_def:
         (* For unsigned, if either spans sign boundary → bool_range *)
         if ¬signed ∧ (vr_spans_sign_boundary r1 ∨
                        vr_spans_sign_boundary r2) then vr_bool_range
+        (* For unsigned, ranges on opposite sides of sign boundary *)
+        else if ¬signed ∧ vr_hi r1 < 0 ∧ vr_lo r2 ≥ 0 then
+          (* r1 all-negative (large unsigned), r2 all-non-negative (small unsigned) *)
+          if op = LT then vr_constant 0 else vr_constant 1
+        else if ¬signed ∧ vr_lo r1 ≥ 0 ∧ vr_hi r2 < 0 then
+          (* r1 all-non-negative (small unsigned), r2 all-negative (large unsigned) *)
+          if op = LT then vr_constant 1 else vr_constant 0
         else
+          (* Same sign or signed comparison: signed ordering is correct *)
           let is_lt = (op = LT ∨ op = SLT) in
           if is_lt then
             if vr_hi r1 < vr_lo r2 then vr_constant 1
@@ -408,7 +428,8 @@ End
 
 (* ===== Byte / Signextend ===== *)
 
-(* BYTE: matches Python _eval_byte *)
+(* BYTE: matches Python _eval_byte.
+   Index literal is w2i; negative w2i means unsigned index ≥ 2^255 ≥ 32 → result 0. *)
 Definition eval_range_byte_def:
   eval_range_byte r_idx r_val (idx_lit : int option) =
     case (r_idx, r_val) of
@@ -418,11 +439,12 @@ Definition eval_range_byte_def:
         case idx_lit of
           NONE => vr_bytes_range 1
         | SOME idx =>
-            if idx ≥ 32 then vr_constant 0
+            if idx < 0 ∨ idx ≥ 32 then vr_constant 0
             else vr_bytes_range 1
 End
 
-(* SIGNEXTEND: matches Python _eval_signextend *)
+(* SIGNEXTEND: matches Python _eval_signextend.
+   Index literal is w2i; negative w2i means unsigned index ≥ 2^255 ≥ 32 → identity. *)
 Definition eval_range_signextend_def:
   eval_range_signextend r_idx r_val (idx_lit : int option) =
     case (r_idx, r_val) of
@@ -432,7 +454,7 @@ Definition eval_range_signextend_def:
         case idx_lit of
           NONE => VR_Top
         | SOME idx =>
-            if idx ≥ 32 then r_val
+            if idx < 0 ∨ idx ≥ 32 then r_val  (* large index → identity *)
             else
               let bits = 8 * (Num idx + 1) in
               let lo = -(&(2 ** (bits - 1))) in
