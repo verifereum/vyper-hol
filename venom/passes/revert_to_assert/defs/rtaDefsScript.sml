@@ -54,7 +54,7 @@
  * ============================================================================
  *)
 
-Theory rtaPassDefs
+Theory rtaDefs
 Ancestors
   passSimulationDefs stateEquiv venomExecSemantics venomInst venomState finite_map pred_set
 Libs
@@ -293,4 +293,3 @@ Definition fresh_vars_not_in_context_def:
     !fn. MEM fn ctx.ctx_functions ==> fresh_vars_not_in_function fn
 End
 
-val _ = export_theory();

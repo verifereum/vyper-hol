@@ -2,17 +2,14 @@
  * Dataflow Shared Helpers — Definitions
  *
  * Thin wrappers over HOL4 stdlib used by multiple analyses
- * (dominators, available_expr).
+ * (dominators, available_expr, liveness, var_definition).
  *
  * No project-specific dependencies.
  *
  * TOP-LEVEL:
  *   list_intersect      — FILTER + MEM intersection
  *   list_intersect_all  — iterated intersection
- *
- * NOT defined here (use stdlib directly):
- *   fmap domain intersection → DRESTRICT f (FDOM g)
- *   list union → already in livenessDefsScript (or use nub (xs ++ ys))
+ *   list_union          — xs ++ (ys \ xs), list-backed set union
  *)
 
 Theory dfHelperDefs
@@ -33,4 +30,9 @@ Definition list_intersect_all_def:
   list_intersect_all [xs] = xs ∧
   list_intersect_all (xs :: rest) =
     list_intersect xs (list_intersect_all rest)
+End
+
+(* List union: xs ∪ ys as list (no dups if xs has no dups). *)
+Definition list_union_def:
+  list_union xs ys = xs ++ FILTER (λv. ¬MEM v xs) ys
 End

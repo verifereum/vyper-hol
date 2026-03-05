@@ -25,7 +25,7 @@
  * ============================================================================
  *)
 
-Theory dfgOrigins
+Theory phiOrigins
 Ancestors
   phiDefs pred_set list
 

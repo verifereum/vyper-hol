@@ -6,27 +6,18 @@
 
 Theory livenessProofs
 Ancestors
-  livenessDefs cfgDefs dfIterateProofs cfgAnalysisProps cfgHelpers venomWf
+  livenessDefs cfgDefs dfIterateProofs dfHelperProofs
+  cfgAnalysisProps cfgHelpers venomWf
 
 open listTheory rich_listTheory pred_setTheory arithmeticTheory venomInstTheory
      finite_mapTheory pairTheory alistTheory sptreeTheory
      cfgAnalysisPropsTheory WhileTheory
      cfgHelpersTheory venomStateTheory dfIterateDefsTheory
+     dfHelperDefsTheory
 
-(* ===== Set-as-list helpers ===== *)
-
-Theorem list_union_mem[local]:
-  ∀v xs ys. MEM v (list_union xs ys) ⇔ MEM v xs ∨ MEM v ys
-Proof
-  rw[list_union_def, MEM_APPEND, MEM_FILTER] >> metis_tac[]
-QED
-
-Theorem list_union_set_proof[local]:
-  ∀xs ys. set (list_union xs ys) = set xs ∪ set ys
-Proof
-  rw[list_union_def, LIST_TO_SET_APPEND, LIST_TO_SET_FILTER, EXTENSION] >>
-  metis_tac[]
-QED
+(* list_union_mem_proof, list_union_set_proof from dfHelperProofs *)
+val list_union_mem = list_union_mem_proof;
+val list_union_set_proof = list_union_set_proof;
 
 Theorem live_update_set_proof[local]:
   ∀defs uses live.

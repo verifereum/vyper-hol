@@ -30,9 +30,9 @@
  * ============================================================================
  *)
 
-Theory rtaPassCorrectness
+Theory rtaCorrectnessProof
 Ancestors
-  rtaPattern1 rtaProofHelpers rtaPassDefs passSimulationDefs stateEquiv stateEquivProps execEquivProps venomExecProps venomExecSemantics venomInst venomState list rich_list
+  rtaBlockProof rtaHelpers rtaDefs passSimulationDefs stateEquiv stateEquivProps execEquivProps venomExecProps venomExecSemantics venomInst venomState list rich_list
 
 (* ==========================================================================
    JNZ Transformation Step Lemmas
@@ -87,10 +87,10 @@ Proof
   Cases_on `x = 0w`
   >- ((* x = 0w: use pattern1_zero_execution *)
     gvs[] >>
-    drule_all rtaPattern1Theory.pattern1_zero_execution >>
+    drule_all rtaBlockProofTheory.pattern1_zero_execution >>
     simp[LET_THM] >> strip_tac >> gvs[])
   >> (* x <> 0w: use pattern1_nonzero_execution *)
-  drule_all rtaPattern1Theory.pattern1_nonzero_execution >> simp[LET_THM] >>
+  drule_all rtaBlockProofTheory.pattern1_nonzero_execution >> simp[LET_THM] >>
   strip_tac >> gvs[]
 QED
 
@@ -168,7 +168,7 @@ Proof
   simp[transform_pattern2_def, mk_assert_inst_def, step_inst_def,
        EVAL ``is_terminator ASSERT``, next_inst_def] >>
   drule_all transform_block_insts_length_pattern2 >> strip_tac >>
-  drule_all rtaProofHelpersTheory.pattern2_transformed_instructions >> simp[LET_THM] >> strip_tac >>
+  drule_all rtaHelpersTheory.pattern2_transformed_instructions >> simp[LET_THM] >> strip_tac >>
   simp[Once run_block_def, step_in_block_def, get_instruction_def,
        mk_jmp_inst_def, step_inst_def, EVAL ``is_terminator JMP``,
        venomStateTheory.jump_to_def, state_equiv_refl]
@@ -1026,4 +1026,3 @@ Proof
   simp[LET_THM, transform_context_def]
 QED
 
-val _ = export_theory();
