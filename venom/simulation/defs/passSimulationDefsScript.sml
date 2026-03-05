@@ -12,28 +12,17 @@
  *   uniform R         = lift_result R R
  *
  * TOP-LEVEL:
- *   lift_result              — dual-relation lift through exec_result
  *   block_map_transform      — MAP f over block instructions
  *   function_map_transform   — MAP bt over function blocks
  *   inst_simulates           — per-instruction simulation predicate
  *   block_simulates          — whole-block simulation predicate
+ *   terminates               — execution terminates (not Error)
+ *   pass_correct             — combined termination + result equivalence
  *)
 
 Theory passSimulationDefs
 Ancestors
-  venomExecSemantics venomInst
-
-(* ===== Result relation ===== *)
-
-(* Lift two state relations through exec_result.
-   R_ok for OK (continuation), R_term for Halt/Revert (terminal). *)
-Definition lift_result_def:
-  lift_result R_ok R_term (OK s1) (OK s2) = R_ok s1 s2 /\
-  lift_result R_ok R_term (Halt s1) (Halt s2) = R_term s1 s2 /\
-  lift_result R_ok R_term (Revert s1) (Revert s2) = R_term s1 s2 /\
-  lift_result R_ok R_term (Error e1) (Error e2) = T /\
-  lift_result R_ok R_term _ _ = F
-End
+  stateEquiv venomExecSemantics venomInst
 
 (* ===== Transform definitions ===== *)
 
@@ -68,4 +57,25 @@ Definition block_simulates_def:
   block_simulates R_ok R_term bt <=>
     !bb s.
       lift_result R_ok R_term (run_block bb s) (run_block (bt bb) s)
+End
+
+(* ===== Pass correctness predicates ===== *)
+
+(* Execution terminates (not Error). *)
+Definition terminates_def:
+  terminates r <=> case r of Error _ => F | _ => T
+End
+
+(* Two executions (parameterized by fuel) are pass-correct:
+   1. Termination equivalence: original terminates iff transformed terminates
+   2. Result equivalence: when both terminate, results are equivalent
+      (modulo fresh variables introduced by the transformation)
+   Usage: pass_correct fresh (\fuel. run_function fuel fn s)
+                              (\fuel. run_function fuel fn' s) *)
+Definition pass_correct_def:
+  pass_correct fresh exec1 exec2 <=>
+    ((?fuel. terminates (exec1 fuel)) <=> (?fuel'. terminates (exec2 fuel'))) /\
+    (!fuel fuel'.
+       terminates (exec1 fuel) /\ terminates (exec2 fuel') ==>
+       result_equiv fresh (exec1 fuel) (exec2 fuel'))
 End

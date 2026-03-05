@@ -1,13 +1,14 @@
 (*
- * State Equivalence Definitions
+ * Equivalence Definitions
  *
- * Definitions only — properties/theorems are in props/stateEquivPropsScript.sml
+ * State-level and result-level equivalence relations.
+ * Properties/theorems are in props/stateEquivPropsScript.sml.
  *
  * ============================================================================
  * STRUCTURE OVERVIEW
  * ============================================================================
  *
- * Semantic Equivalence Hierarchy (weakest to strongest):
+ * State Equivalence Hierarchy (weakest to strongest):
  *
  *   1. observable_equiv         : Only externally visible effects
  *   2. execution_equiv vars     : All state except control flow, modulo vars
@@ -17,13 +18,20 @@
  *
  * For full equivalence (no variable exceptions), use state_equiv {}.
  *
+ * Result Equivalence:
+ *
+ *   lift_result R_ok R_term     : Generic combinator — lift two state relations
+ *                                 through exec_result (R_ok for OK, R_term for
+ *                                 Halt/Revert, T for Error)
+ *   result_equiv vars           : Canonical instantiation —
+ *                                 lift_result (state_equiv vars) (execution_equiv vars)
+ *
  * TOP-LEVEL DEFINITIONS:
+ *   - observable_equiv : Only externally visible effects
+ *   - execution_equiv  : State equiv ignoring control flow fields
  *   - state_equiv      : Full state equivalence with variable exceptions
- *   - execution_equiv   : State equiv ignoring control flow fields
- *   - observable_equiv  : Only externally visible effects
- *   - result_equiv      : Equivalence for exec_result
- *   - terminates        : Predicate for successful termination (not Error)
- *   - pass_correct      : Combined termination + result equivalence predicate
+ *   - lift_result      : Generic dual-relation lift through exec_result
+ *   - result_equiv     : Canonical result equivalence (lift_result alias)
  *)
 
 Theory stateEquiv
@@ -110,61 +118,25 @@ End
    Result Equivalence
    ========================================================================== *)
 
-(*
- * PURPOSE: Extend equivalence to exec_result, using the appropriate level
- * of equivalence for each result type.
- *
- * KEY DESIGN DECISION:
- *   - OK: Uses state_equiv (full state comparison)
- *     Reason: Execution continues, so control flow matters for next step
- *
- *   - Halt/Revert: Uses execution_equiv (ignores control flow)
- *     Reason: Execution has terminated, control flow is irrelevant
- *     This enables proving control-flow optimizations correct
- *
- *   - Error: Always equivalent (error messages may differ)
- *)
+(* Generic combinator: lift two state relations through exec_result.
+   R_ok for OK (continuation — needs control flow for next step).
+   R_term for Halt/Revert (terminal — control flow irrelevant).
+   Error results are always equivalent (messages may differ). *)
+Definition lift_result_def:
+  lift_result R_ok R_term (OK s1) (OK s2) = R_ok s1 s2 /\
+  lift_result R_ok R_term (Halt s1) (Halt s2) = R_term s1 s2 /\
+  lift_result R_ok R_term (Revert s1) (Revert s2) = R_term s1 s2 /\
+  lift_result R_ok R_term (Error e1) (Error e2) = T /\
+  lift_result R_ok R_term _ _ = F
+End
+
+(* Canonical instantiation: state_equiv for OK, execution_equiv for terminal.
+   Defined by pattern-matching for proof compatibility (simp[result_equiv_def]
+   works directly). Equivalence with lift_result proven in stateEquivProps. *)
 Definition result_equiv_def:
   result_equiv vars (OK s1) (OK s2) = state_equiv vars s1 s2 /\
   result_equiv vars (Halt s1) (Halt s2) = execution_equiv vars s1 s2 /\
   result_equiv vars (Revert s1) (Revert s2) = execution_equiv vars s1 s2 /\
   result_equiv vars (Error e1) (Error e2) = T /\
   result_equiv vars _ _ = F
-End
-
-(* ==========================================================================
-   Termination Predicate
-   ========================================================================== *)
-
-(*
- * Predicate: execution terminates (not Error).
- * Used for bidirectional correctness proofs where we need to express
- * "termination equivalence and result equivalence assuming termination".
- *)
-Definition terminates_def:
-  terminates r <=> case r of Error _ => F | _ => T
-End
-
-(* ==========================================================================
-   Pass Correctness Predicate
-   ========================================================================== *)
-
-(*
- * Predicate: Two executions (parameterized by fuel) are pass-correct.
- * This captures the pattern used in compiler pass correctness proofs:
- *   1. Termination equivalence: original terminates iff transformed terminates
- *   2. Result equivalence: when both terminate, results are equivalent
- *      (modulo fresh variables introduced by the transformation)
- *
- * Usage: pass_correct fresh (\fuel. run_function fuel fn s)
- *                           (\fuel. run_function fuel fn' s)
- *)
-Definition pass_correct_def:
-  pass_correct fresh exec1 exec2 <=>
-    (* Termination equivalence *)
-    ((?fuel. terminates (exec1 fuel)) <=> (?fuel'. terminates (exec2 fuel'))) /\
-    (* Result equivalence when both terminate *)
-    (!fuel fuel'.
-       terminates (exec1 fuel) /\ terminates (exec2 fuel') ==>
-       result_equiv fresh (exec1 fuel) (exec2 fuel'))
 End

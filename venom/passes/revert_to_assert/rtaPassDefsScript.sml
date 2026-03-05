@@ -56,7 +56,7 @@
 
 Theory rtaPassDefs
 Ancestors
-  stateEquiv venomExecSemantics venomInst venomState finite_map pred_set
+  passSimulationDefs stateEquiv venomExecSemantics venomInst venomState finite_map pred_set
 Libs
   finite_mapTheory venomStateTheory
 

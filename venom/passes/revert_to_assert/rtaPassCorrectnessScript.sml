@@ -32,7 +32,7 @@
 
 Theory rtaPassCorrectness
 Ancestors
-  rtaPattern1 rtaProofHelpers rtaPassDefs stateEquiv stateEquivProps execEquivProps venomExecProps venomExecSemantics venomInst venomState list rich_list
+  rtaPattern1 rtaProofHelpers rtaPassDefs passSimulationDefs stateEquiv stateEquivProps execEquivProps venomExecProps venomExecSemantics venomInst venomState list rich_list
 
 (* ==========================================================================
    JNZ Transformation Step Lemmas
