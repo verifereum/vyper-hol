@@ -565,9 +565,13 @@ Definition evaluate_convert_def:
     INL $ IntV (Signed n) (if b then 1 else 0) ∧
   evaluate_convert (BoolV b) (BaseT (UintT n)) =
     INL $ IntV (Unsigned n) (if b then 1 else 0) ∧
-  evaluate_convert (BytesV _ bs) (BaseT (BytesT bd)) =
-    (if compatible_bound bd (LENGTH bs)
-     then INL $ BytesV bd bs
+  evaluate_convert (BytesV _ bs) (BaseT (BytesT (Fixed n))) =
+    (if LENGTH bs ≤ n
+     then INL $ BytesV (Fixed n) (PAD_RIGHT 0w n bs)
+     else INR (RuntimeError "convert BytesV bound")) ∧
+  evaluate_convert (BytesV _ bs) (BaseT (BytesT (Dynamic n))) =
+    (if LENGTH bs ≤ n
+     then INL $ BytesV (Dynamic n) bs
      else INR (RuntimeError "convert BytesV bound")) ∧
   evaluate_convert (BytesV _ bs) (BaseT (UintT n)) =
     (let i = &(w2n $ (word_of_bytes_be (PAD_LEFT 0w 32 bs) : bytes32)) in
