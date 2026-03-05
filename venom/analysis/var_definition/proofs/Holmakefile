@@ -1,0 +1,2 @@
+# Variable definition analysis proofs
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics ../../cfg/defs ../../cfg/proofs ../../cfg ../../dataflow/defs ../../dataflow/proofs ../../dataflow ../defs

@@ -8,6 +8,8 @@
  *   list_intersect_mem      — MEM characterization
  *   list_intersect_all_set  — set result = BIGINTER ...
  *   list_intersect_all_mono — result ⊆ first element
+ *   list_union_mem          — MEM characterization
+ *   list_union_set          — set (list_union xs ys) = set xs ∪ set ys
  *)
 
 Theory dfHelperProps
@@ -41,4 +43,18 @@ Theorem list_intersect_all_mono:
   !l ls. set (list_intersect_all (l :: ls)) SUBSET set l
 Proof
   ACCEPT_TAC list_intersect_all_mono_proof
+QED
+
+(* Membership in list_union iff member of either list. *)
+Theorem list_union_mem:
+  !v xs ys. MEM v (list_union xs ys) <=> MEM v xs \/ MEM v ys
+Proof
+  ACCEPT_TAC list_union_mem_proof
+QED
+
+(* Set of list_union is the set union. *)
+Theorem list_union_set:
+  !xs ys. set (list_union xs ys) = set xs UNION set ys
+Proof
+  ACCEPT_TAC list_union_set_proof
 QED
