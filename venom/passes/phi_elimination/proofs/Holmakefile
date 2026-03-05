@@ -1,0 +1,2 @@
+# PHI elimination pass proofs
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../analysis ../../../analysis/dfg ../../../analysis/dfg/defs ../../../analysis/dfg/proofs ../../../../syntax ../../../../semantics ../defs
