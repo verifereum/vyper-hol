@@ -91,7 +91,8 @@ Definition var_in_storage_def:
     find_var_decl_by_num (string_to_num n) code = SOME (StorageVarDecl b t, id) ∧
     lookup_var_slot_from_layout cx b mid id = SOME offset ∧
     offset < dimword(:256) ∧
-    evaluate_type (get_tenv cx) t = SOME tv
+    evaluate_type (get_tenv cx) t = SOME tv ∧
+    well_formed_type_value tv
 End
 
 Definition storage_type_of_def:
@@ -104,16 +105,11 @@ Definition storage_type_of_def:
         | _ => NONE
 End
 
-Definition storable_typed_value_def:
-  storable_typed_value tv v ⇔
-    value_has_type tv v ∧
-    well_formed_value v ∧
-    well_formed_type_value tv
-End
-
 Definition storable_value_def:
   storable_value cx mid n v ⇔
-    ∀tv. storage_type_of cx mid n = SOME tv ⇒ storable_typed_value tv v
+    ∀tv. storage_type_of cx mid n = SOME tv ⇒
+         value_has_type tv v ∧
+         well_formed_value v
 End
 
 (****************************************)
@@ -786,6 +782,13 @@ Proof
   rpt strip_tac >> simp[]
 QED
 
+Theorem var_in_storage_well_formed_type:
+  var_in_storage cx mid n ∧ storage_type_of cx mid n = SOME tv ⇒
+  well_formed_type_value tv
+Proof
+  rw[var_in_storage_def, storage_type_of_def] >> gvs[]
+QED
+
 Theorem get_after_set_storage_backend[local]:
   ∀cx is_transient storage' st.
     get_storage_backend cx is_transient
@@ -810,19 +813,22 @@ Proof
        get_accounts_def, get_transient_storage_def]
 QED
 
-Theorem lookup_toplevel_name_after_update:
+Theorem lookup_toplevel_name_after_update_core[local]:
   ∀cx st mid n v.
     var_in_storage cx mid n ∧
-    (∀av. v ≠ ArrayV av) ∧
     storable_value cx mid n v ⇒
-    lookup_toplevel_name cx (update_toplevel_name cx st mid n v) mid n = SOME (Value v)
+    ∃ref_v.
+      lookup_toplevel_name cx (update_toplevel_name cx st mid n v) mid n = SOME ref_v ∧
+      FST (materialise cx ref_v (update_toplevel_name cx st mid n v)) = INL v ∧
+      ((∀av. v ≠ ArrayV av) ⇒ ref_v = Value v)
 Proof
   rpt strip_tac >>
-  fs[storable_value_def, storable_typed_value_def] >>
+  fs[storable_value_def] >>
   `IS_SOME (storage_type_of cx mid n)` by metis_tac[var_in_storage_has_type] >>
   Cases_on `storage_type_of cx mid n` >> gvs[] >>
   rename1 `storage_type_of cx mid n = SOME tv` >>
   `IS_SOME (encode_value tv v)` by gvs[value_has_type_equiv] >>
+  `well_formed_type_value tv` by metis_tac[var_in_storage_well_formed_type] >>
   `roundtrip_ok tv v` by (irule roundtrip_all >> simp[]) >>
   fs[var_in_storage_def, storage_type_of_def, AllCaseEqs()] >>
   Cases_on `encode_value tv v` >> gvs[] >>
@@ -837,6 +843,37 @@ Proof
   Cases_on `tv` >>
   gvs[read_storage_slot_def, lift_option_def, bind_def,
       get_after_set_storage_backend, return_def, raise_def,
-      roundtrip_ok_def] >>
+      roundtrip_ok_def, materialise_def] >>
+  (* ArrayTV case: unfold set_global in materialise side *)
+  simp[Once set_global_def, write_storage_slot_def,
+       bind_def, lift_option_type_def, lift_option_def,
+       return_def, LET_THM, raise_def,
+       get_after_set_storage_backend] >>
   Cases_on `v` >> gvs[value_has_type_def]
+QED
+
+Theorem lookup_toplevel_name_materialise_after_update:
+  ∀cx st mid n v.
+    var_in_storage cx mid n ∧
+    storable_value cx mid n v ⇒
+    ∃ref_v.
+      lookup_toplevel_name cx (update_toplevel_name cx st mid n v) mid n = SOME ref_v ∧
+      FST (materialise cx ref_v (update_toplevel_name cx st mid n v)) = INL v
+Proof
+  rpt strip_tac >>
+  drule_all lookup_toplevel_name_after_update_core >> strip_tac >>
+  first_x_assum (qspec_then `st` strip_assume_tac) >>
+  qexists_tac `ref_v` >> simp[]
+QED
+
+Theorem lookup_toplevel_name_after_update:
+  ∀cx st mid n v.
+    var_in_storage cx mid n ∧
+    (∀av. v ≠ ArrayV av) ∧
+    storable_value cx mid n v ⇒
+    lookup_toplevel_name cx (update_toplevel_name cx st mid n v) mid n = SOME (Value v)
+Proof
+  rpt strip_tac >>
+  drule_all lookup_toplevel_name_after_update_core >> strip_tac >>
+  first_x_assum (qspec_then `st` strip_assume_tac) >> gvs[]
 QED
