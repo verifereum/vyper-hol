@@ -1,0 +1,3 @@
+# Pass simulation and composition proofs
+INCLUDES = ../defs \
+           ../../analysis/dataflow/defs ../../analysis/dataflow/proofs ../../analysis/dataflow
