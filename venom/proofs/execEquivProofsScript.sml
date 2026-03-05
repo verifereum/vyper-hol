@@ -223,6 +223,20 @@ Proof
   irule jump_to_preserves >> simp[]
 QED
 
+(* DJMP: dynamic jump uses selector to index into label list *)
+Triviality step_inst_djmp_equiv:
+  !vars inst s1 s2.
+    state_equiv vars s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
+    inst.inst_opcode = DJMP ==>
+    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> simp[step_inst_def] >>
+  imp_res_tac eval_operand_equiv >>
+  rpt CASE_TAC >> gvs[result_equiv_def] >>
+  irule jump_to_preserves >> simp[]
+QED
+
 (* Helper: resolve_phi result is a member of the operand list *)
 Triviality resolve_phi_MEM:
   !prev_bb ops op. resolve_phi prev_bb ops = SOME op ==> MEM op ops
@@ -450,6 +464,8 @@ Proof
       drule_all step_inst_log_equiv >> simp[],
     `inst.inst_opcode = SELFDESTRUCT` by simp[] >>
       drule_all step_inst_selfdestruct_equiv >> simp[],
+    `inst.inst_opcode = DJMP` by simp[] >>
+      drule_all step_inst_djmp_equiv >> simp[],
     (* Unimplemented opcodes: wildcard gives Error *)
     simp[step_inst_def, result_equiv_def]
   ]

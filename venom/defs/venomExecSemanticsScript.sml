@@ -103,6 +103,16 @@ Definition resolve_phi_def:
   resolve_phi prev_bb (_ :: _ :: rest) = resolve_phi prev_bb rest
 End
 
+(* Extract label names from operand list (for DJMP target list) *)
+Definition extract_labels_def:
+  extract_labels [] = SOME [] /\
+  extract_labels (Label lbl :: rest) =
+    (case extract_labels rest of
+       SOME lbls => SOME (lbl :: lbls)
+     | NONE => NONE) /\
+  extract_labels _ = NONE
+End
+
 (* --------------------------------------------------------------------------
    Instruction Semantics
    -------------------------------------------------------------------------- *)
@@ -262,6 +272,19 @@ Definition step_inst_def:
                 else OK (jump_to if_zero s)
             | NONE => Error "undefined condition")
         | _ => Error "jnz requires cond and 2 labels")
+
+    (* Control flow - DJMP (dynamic jump / jump table) *)
+    | DJMP =>
+        (case inst.inst_operands of
+          selector_op :: label_ops =>
+            (case (eval_operand selector_op s, extract_labels label_ops) of
+              (SOME idx, SOME labels) =>
+                let i = w2n idx in
+                if i < LENGTH labels then
+                  OK (jump_to (EL i labels) s)
+                else Error "djmp: index out of range"
+            | _ => Error "djmp: undefined operand or invalid labels")
+        | _ => Error "djmp requires selector and labels")
 
     (* Termination *)
     | STOP => Halt (halt_state s)
