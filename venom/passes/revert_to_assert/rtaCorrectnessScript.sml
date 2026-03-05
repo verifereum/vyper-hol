@@ -3,10 +3,8 @@
  *
  * Top-level correctness: the transformation preserves semantics
  * modulo fresh variables introduced by the pass.
- * Uses pass_correct which establishes termination equivalence and
- * result equivalence (modulo fresh variables).
  *
- * Proofs live in proofs/rtaCorrectnessScript.sml; re-exported via ACCEPT_TAC.
+ * Proofs live in proofs/rtaCorrectnessProofScript.sml; re-exported via ACCEPT_TAC.
  *)
 
 Theory rtaCorrectness
@@ -14,8 +12,11 @@ Ancestors
   rtaCorrectnessProof
 
 (* Revert-to-assert preserves execution semantics at the context level.
- * For any entry function, the original and transformed contexts
- * produce equivalent results (modulo fresh variables). *)
+ * Given fresh_vars_not_in_context (original code doesn't use fresh names)
+ * and an existing entry function, the transformed context contains a
+ * corresponding function satisfying pass_correct: termination equivalence
+ * and result equivalence modulo fresh variables.
+ * Requires initial state with vs_inst_idx = 0 and not halted. *)
 Theorem rta_pass_correct:
   !ctx entry.
     fresh_vars_not_in_context ctx /\
