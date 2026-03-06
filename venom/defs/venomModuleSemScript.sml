@@ -88,8 +88,10 @@ Definition run_module_fn_def:
                     |> in
                     (case run_module_fn fuel ctx callee_fn callee_s of
                       IntRet ret_vals ret_s =>
-                        OK (update_vars inst.inst_outputs ret_vals
-                              (merge_callee_state s ret_s))
+                        if LENGTH inst.inst_outputs = LENGTH ret_vals then
+                          OK (update_vars inst.inst_outputs ret_vals
+                                (merge_callee_state s ret_s))
+                        else Error "invoke: return value count mismatch"
                     | Halt h => Halt h     (* program halt in callee *)
                     | Revert r => Revert r
                     | Error e => Error e

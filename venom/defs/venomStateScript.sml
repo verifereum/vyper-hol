@@ -95,8 +95,10 @@ Datatype:
 End
 
 (* Oracle type (used inline, not abbreviated):
-     evm_accounts -> address -> num -> byte list -> bool -> ext_call_result
-   accounts -> target -> value -> calldata -> is_static -> result *)
+     evm_accounts -> address -> num -> byte list -> bool ->
+     bytes32 option -> ext_call_result
+   accounts -> target -> value -> calldata -> is_static -> salt -> result
+   salt is NONE for CALL/STATICCALL/DELEGATECALL/CREATE, SOME for CREATE2 *)
 
 (* --------------------------------------------------------------------------
    Venom Execution State
@@ -130,7 +132,8 @@ Datatype:
     vs_code : byte list;             (* Own bytecode (CODECOPY/EXTCODECOPY) *)
     vs_params : bytes32 list;        (* Function parameters (read by PARAM) *)
     vs_ext_call_oracle :
-      evm_accounts -> address -> num -> byte list -> bool -> ext_call_result;
+      evm_accounts -> address -> num -> byte list -> bool ->
+      bytes32 option -> ext_call_result;
     vs_allocas : (num, num # num) fmap  (* alloca_id -> (offset, size) *)
   |>
 End
@@ -191,7 +194,7 @@ Definition init_venom_state_def:
     vs_label_offsets := FEMPTY;
     vs_code := [];
     vs_params := [];
-    vs_ext_call_oracle := (\accts addr val data static.
+    vs_ext_call_oracle := (\accts addr val data static salt.
       <| ecr_output := 0w;
          ecr_returndata := [];
          ecr_accounts := accts;

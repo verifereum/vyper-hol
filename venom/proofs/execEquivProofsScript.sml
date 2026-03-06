@@ -534,11 +534,11 @@ QED
 
 (* Helper: exec_create preserves equiv when states and operands match *)
 Triviality exec_create_equiv:
-  !vars inst s1 s2 value offset sz.
+  !vars inst s1 s2 value offset sz salt_opt.
     state_equiv vars s1 s2 ==>
     result_equiv vars
-      (exec_create inst s1 value offset sz)
-      (exec_create inst s2 value offset sz)
+      (exec_create inst s1 value offset sz salt_opt)
+      (exec_create inst s2 value offset sz salt_opt)
 Proof
   rw[exec_create_def, LET_THM] >>
   `s1.vs_memory = s2.vs_memory /\ s1.vs_accounts = s2.vs_accounts /\
@@ -688,8 +688,10 @@ Proof
       drule_all step_inst_create_equiv >> simp[],
     `MEM inst.inst_opcode [ALLOCA;PALLOCA;CALLOCA]` by simp[] >>
       drule_all step_inst_alloca_equiv >> simp[],
-    (* Unimplemented opcodes: wildcard gives Error *)
-    simp[step_inst_def, result_equiv_def]
+    (* INVOKE: handled in module sem, falls to Error in step_inst.
+       Explicit so new opcode additions cause proof failure here. *)
+    `inst.inst_opcode = INVOKE` by simp[] >>
+      simp[step_inst_def, result_equiv_def]
   ]
 QED
 

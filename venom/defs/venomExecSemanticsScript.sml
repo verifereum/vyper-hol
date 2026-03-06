@@ -215,7 +215,7 @@ Definition exec_ext_call_def:
   exec_ext_call inst s addr_w value argsOff argsSize retOff retSize is_static =
     let calldata = read_memory (w2n argsOff) (w2n argsSize) s in
     let target : address = w2w addr_w in
-    let result = s.vs_ext_call_oracle s.vs_accounts target (w2n value) calldata is_static in
+    let result = s.vs_ext_call_oracle s.vs_accounts target (w2n value) calldata is_static NONE in
     let s' = s with <|
       vs_returndata := result.ecr_returndata;
       vs_accounts := result.ecr_accounts;
@@ -229,13 +229,13 @@ Definition exec_ext_call_def:
 End
 
 (* Execute CREATE/CREATE2 via the oracle.
-   CREATE: operands = [value; offset; size]
-   CREATE2: operands = [value; offset; size; salt]
+   CREATE: operands = [value; offset; size], salt = NONE
+   CREATE2: operands = [value; offset; size; salt], salt = SOME salt_val
 *)
 Definition exec_create_def:
-  exec_create inst s value offset sz =
+  exec_create inst s value offset sz salt_opt =
     let init_code = read_memory (w2n offset) (w2n sz) s in
-    let result = s.vs_ext_call_oracle s.vs_accounts (0w:address) (w2n value) init_code F in
+    let result = s.vs_ext_call_oracle s.vs_accounts (0w:address) (w2n value) init_code F salt_opt in
     let s' = s with <|
       vs_returndata := result.ecr_returndata;
       vs_accounts := result.ecr_accounts;
@@ -386,7 +386,7 @@ Definition step_inst_def:
           [cond_op] =>
             (case eval_operand cond_op s of
               SOME cond =>
-                if cond <> 0w then Halt (halt_state s)
+                if cond = 0w then Revert (revert_state s)
                 else OK s
             | NONE => Error "undefined operand")
         | _ => Error "assert_unreachable requires 1 operand")
@@ -699,7 +699,7 @@ Definition step_inst_def:
             (case (eval_operand val_op s, eval_operand off_op s,
                    eval_operand sz_op s) of
               (SOME value, SOME offset, SOME sz) =>
-                exec_create inst s value offset sz
+                exec_create inst s value offset sz NONE
             | _ => Error "undefined operand")
         | _ => Error "create requires 3 operands")
 
@@ -708,8 +708,8 @@ Definition step_inst_def:
           [val_op; off_op; sz_op; salt_op] =>
             (case (eval_operand val_op s, eval_operand off_op s,
                    eval_operand sz_op s, eval_operand salt_op s) of
-              (SOME value, SOME offset, SOME sz, SOME _) =>
-                exec_create inst s value offset sz
+              (SOME value, SOME offset, SOME sz, SOME salt) =>
+                exec_create inst s value offset sz (SOME salt)
             | _ => Error "undefined operand")
         | _ => Error "create2 requires 4 operands")
 
