@@ -82,8 +82,9 @@ End
 Datatype:
   exec_result =
     | OK venom_state              (* Normal continuation *)
-    | Halt venom_state            (* Normal termination *)
+    | Halt venom_state            (* Normal termination (STOP/RETURN) *)
     | Revert venom_state          (* Revert termination *)
+    | IntRet (bytes32 list) venom_state  (* Internal function return (RET) *)
     | Error string                (* Execution error *)
 End
 
@@ -301,8 +302,7 @@ Definition step_inst_def:
     (* Return from internal function *)
     | RET =>
         (case eval_operands inst.inst_operands s of
-          SOME ret_vals =>
-            Halt (halt_state (s with vs_return_values := SOME ret_vals))
+          SOME ret_vals => IntRet ret_vals s
         | NONE => Error "ret: undefined return value")
 
     (* Termination *)
@@ -635,6 +635,7 @@ Definition step_in_block_def:
             else (OK (next_inst s'), F)
         | Halt s' => (Halt s', T)
         | Revert s' => (Revert s', T)
+        | IntRet vals s' => (IntRet vals s', T)
         | Error e => (Error e, T)
 End
 
@@ -648,6 +649,7 @@ Definition run_block_def:
         else run_block bb s'
     | (Halt s', _) => Halt s'
     | (Revert s', _) => Revert s'
+    | (IntRet vals s', _) => IntRet vals s'
     | (Error e, _) => Error e
 Termination
   (* Termination measure: remaining instructions in block.

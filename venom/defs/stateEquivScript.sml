@@ -98,8 +98,7 @@ Definition execution_equiv_def:
     s1.vs_data_section = s2.vs_data_section /\
     s1.vs_label_offsets = s2.vs_label_offsets /\
     s1.vs_code = s2.vs_code /\
-    s1.vs_params = s2.vs_params /\
-    s1.vs_return_values = s2.vs_return_values
+    s1.vs_params = s2.vs_params
 End
 
 (* ==========================================================================
@@ -134,6 +133,8 @@ Definition lift_result_def:
   lift_result R_ok R_term (OK s1) (OK s2) = R_ok s1 s2 /\
   lift_result R_ok R_term (Halt s1) (Halt s2) = R_term s1 s2 /\
   lift_result R_ok R_term (Revert s1) (Revert s2) = R_term s1 s2 /\
+  lift_result R_ok R_term (IntRet vs1 s1) (IntRet vs2 s2) =
+    (vs1 = vs2 /\ R_term s1 s2) /\
   lift_result R_ok R_term (Error e1) (Error e2) = T /\
   lift_result R_ok R_term _ _ = F
 End
@@ -145,6 +146,8 @@ Definition result_equiv_def:
   result_equiv vars (OK s1) (OK s2) = state_equiv vars s1 s2 /\
   result_equiv vars (Halt s1) (Halt s2) = execution_equiv vars s1 s2 /\
   result_equiv vars (Revert s1) (Revert s2) = execution_equiv vars s1 s2 /\
+  result_equiv vars (IntRet vs1 s1) (IntRet vs2 s2) =
+    (vs1 = vs2 /\ execution_equiv vars s1 s2) /\
   result_equiv vars (Error e1) (Error e2) = T /\
   result_equiv vars _ _ = F
 End

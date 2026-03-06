@@ -81,19 +81,16 @@ Definition run_module_fn_def:
                   SOME entry_bb =>
                     let callee_s = s with <|
                       vs_params := args;
-                      vs_return_values := NONE;
                       vs_current_bb := entry_bb.bb_label;
                       vs_inst_idx := 0;
                       vs_prev_bb := NONE;
                       vs_vars := FEMPTY
                     |> in
                     (case run_module_fn fuel ctx callee_fn callee_s of
-                      Halt ret_s =>
-                        (case ret_s.vs_return_values of
-                          SOME ret_vals =>
-                            OK (update_vars inst.inst_outputs ret_vals
-                                  (merge_callee_state s ret_s))
-                        | NONE => Halt ret_s)  (* program halt in callee *)
+                      IntRet ret_vals ret_s =>
+                        OK (update_vars inst.inst_outputs ret_vals
+                              (merge_callee_state s ret_s))
+                    | Halt h => Halt h     (* program halt in callee *)
                     | Revert r => Revert r
                     | Error e => Error e
                     | OK _ => Error "invoke: callee did not terminate")

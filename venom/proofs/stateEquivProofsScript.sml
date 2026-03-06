@@ -79,11 +79,9 @@ Theorem result_equiv_subset:
     result_equiv vars2 r1 r2
 Proof
   rpt gen_tac >> Cases_on `r1` >> Cases_on `r2` >>
-  rw[result_equiv_def] >| [
-    irule state_equiv_subset >> metis_tac[],
-    irule execution_equiv_subset >> metis_tac[],
-    irule execution_equiv_subset >> metis_tac[]
-  ]
+  rw[result_equiv_def] >>
+  TRY (irule state_equiv_subset >> metis_tac[]) >>
+  TRY (irule execution_equiv_subset >> metis_tac[])
 QED
 
 (* result_equiv simp rules for automatic rewriting *)

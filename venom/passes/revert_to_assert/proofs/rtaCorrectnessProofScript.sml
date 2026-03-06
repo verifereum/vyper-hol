@@ -289,6 +289,7 @@ Theorem run_block_transform_general:
         execution_equiv fresh (revert_state v) v'
     | (Halt v, Halt v') => execution_equiv fresh v v'
     | (Revert v, Revert v') => execution_equiv fresh v v'
+    | (IntRet vs v, IntRet vs' v') => vs = vs' /\ execution_equiv fresh v v'
     | (Error _, Error _) => T
     | _ => F
 Proof
@@ -371,6 +372,12 @@ Proof
             `run_block (transform_block fn bb) s = Revert v` by
               (simp[Once run_block_def] >> gvs[]) >>
             simp[execution_equiv_refl])
+          (* IntRet *)
+          >- (
+            simp[] >>
+            `run_block (transform_block fn bb) s = IntRet l v` by
+              (simp[Once run_block_def] >> gvs[]) >>
+            simp[execution_equiv_refl])
           (* Error *)
           >- (
             simp[] >>
@@ -418,6 +425,7 @@ Theorem run_block_transform_relation:
         execution_equiv fresh (revert_state v) v'
     | (Halt v, Halt v') => execution_equiv fresh v v'
     | (Revert v, Revert v') => execution_equiv fresh v v'
+    | (IntRet vs v, IntRet vs' v') => vs = vs' /\ execution_equiv fresh v v'
     | (Error _, Error _) => T
     | _ => F
 Proof
@@ -611,6 +619,23 @@ Proof
         qexists_tac `fresh_vars_in_block fn x` >> simp[] >> qexists_tac `x` >> simp[]
       ) >> simp[]
     )
+    (* IntRet case *)
+    >- (
+      strip_tac >> `MEM x fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+      `lookup_block s.vs_current_bb (transform_function fn).fn_blocks =
+       SOME (transform_block fn x)` by (irule lookup_block_transform_function >> simp[]) >>
+      qspecl_then [`fn`, `x`, `s`] mp_tac run_block_transform_general >> simp[LET_THM] >>
+      Cases_on `run_block (transform_block fn x) s` >> simp[] >>
+      strip_tac >> simp[Once run_function_def, terminates_def] >>
+      simp[Once run_function_def, result_equiv_def] >>
+      simp[Once run_function_def, result_equiv_def] >>
+      irule execution_equiv_subset >> qexists_tac `fresh_vars_in_block fn x` >>
+      conj_tac >- (
+        simp[fresh_vars_in_function_def, pred_setTheory.SUBSET_DEF,
+             pred_setTheory.IN_BIGUNION] >> rpt strip_tac >>
+        qexists_tac `fresh_vars_in_block fn x` >> simp[] >> qexists_tac `x` >> simp[]
+      ) >> simp[]
+    )
     (* Error case: terminates(Error) = F, premise false *)
     >- simp[terminates_def]
   )
@@ -771,6 +796,10 @@ Proof
         >- ( (* Revert/Revert *)
           qexists_tac `SUC 0` >> simp[run_function_def, terminates_def]
         )
+      )
+      >- ( (* IntRet case *)
+        Cases_on `run_block x s` >> gvs[] >>
+        qexists_tac `SUC 0` >> simp[run_function_def, terminates_def]
       )
     )
   )

@@ -101,8 +101,7 @@ Datatype:
     vs_data_section : byte list;     (* Read-only data section (DLOAD/DLOADBYTES) *)
     vs_label_offsets : (string, bytes32) fmap; (* Label→address map (OFFSET) *)
     vs_code : byte list;             (* Own bytecode (CODECOPY/EXTCODECOPY) *)
-    vs_params : bytes32 list;        (* Function parameters (read by PARAM) *)
-    vs_return_values : bytes32 list option  (* Set by RET; NONE for program halt *)
+    vs_params : bytes32 list         (* Function parameters (read by PARAM) *)
   |>
 End
 
@@ -161,8 +160,7 @@ Definition init_venom_state_def:
     vs_data_section := [];
     vs_label_offsets := FEMPTY;
     vs_code := [];
-    vs_params := [];
-    vs_return_values := NONE
+    vs_params := []
   |>
 End
 

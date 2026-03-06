@@ -153,20 +153,22 @@ QED
    Halt/Revert/Error Cases
    ========================================================================== *)
 
-(* Halt/Revert results only come from non-PHI instructions *)
+(* Halt/Revert/IntRet results only come from non-PHI instructions *)
 Theorem step_inst_halt_revert_not_phi:
   !inst s r.
-    (step_inst inst s = Halt r \/ step_inst inst s = Revert r) ==>
+    (step_inst inst s = Halt r \/ step_inst inst s = Revert r \/
+     (?vs. step_inst inst s = IntRet vs r)) ==>
     ~is_phi_inst inst
 Proof
   rpt strip_tac >> fs[is_phi_inst_def, step_inst_def] >> gvs[AllCaseEqs()]
 QED
 
-(* For Halt/Revert cases, step_in_block on transformed block gives same result *)
+(* For Halt/Revert/IntRet cases, step_in_block on transformed block gives same result *)
 Theorem step_in_block_halt_revert_transform:
   !dfg bb s s' is_term.
     (step_in_block bb s = (Halt s', is_term) \/
-     step_in_block bb s = (Revert s', is_term))
+     step_in_block bb s = (Revert s', is_term) \/
+     (?vs. step_in_block bb s = (IntRet vs s', is_term)))
   ==>
     step_in_block (transform_block dfg bb) s = step_in_block bb s
 Proof
@@ -193,6 +195,14 @@ Theorem step_in_block_revert_transform:
   !dfg bb s s' is_term.
     step_in_block bb s = (Revert s', is_term) ==>
     step_in_block (transform_block dfg bb) s = (Revert s', is_term)
+Proof
+  metis_tac[step_in_block_halt_revert_transform]
+QED
+
+Theorem step_in_block_intret_transform:
+  !dfg bb s vs s' is_term.
+    step_in_block bb s = (IntRet vs s', is_term) ==>
+    step_in_block (transform_block dfg bb) s = (IntRet vs s', is_term)
 Proof
   metis_tac[step_in_block_halt_revert_transform]
 QED
@@ -401,6 +411,11 @@ Proof
     drule step_in_block_revert_transform >>
     disch_then (qspec_then `graph` mp_tac) >>
     simp[Once run_block_def, result_equiv_def, execution_equiv_refl]
+  )
+  >- ((* IntRet case *)
+    drule step_in_block_intret_transform >>
+    disch_then (qspec_then `graph` mp_tac) >>
+    simp[Once run_block_def, result_equiv_def, execution_equiv_refl]
   ) >>
   (* Error case - prove directly by case analysis *)
   simp[Once run_block_def] >>
@@ -455,6 +470,8 @@ Proof
       qpat_x_assum `step_inst _ _ = Halt _` mp_tac >> simp[step_inst_def] >> gvs[AllCaseEqs()],
       (* Revert case: impossible for ASSIGN *)
       qpat_x_assum `step_inst _ _ = Revert _` mp_tac >> simp[step_inst_def] >> gvs[AllCaseEqs()],
+      (* IntRet case: impossible for ASSIGN *)
+      qpat_x_assum `step_inst _ _ = IntRet _ _` mp_tac >> simp[step_inst_def] >> gvs[AllCaseEqs()],
       (* Error case *)
       simp[result_equiv_def]
     ],

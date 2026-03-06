@@ -506,8 +506,7 @@ Proof
           metis_tac[])
       >> Induct >> rw[eval_operands_def]) >>
   rpt CASE_TAC >>
-  gvs[result_equiv_def, halt_state_def, state_equiv_def, execution_equiv_def,
-      lookup_var_def]
+  gvs[result_equiv_def, state_equiv_def, execution_equiv_def]
 QED
 
 (* ==========================================================================
