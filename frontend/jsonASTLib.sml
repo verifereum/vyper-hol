@@ -314,7 +314,8 @@ fun mk_JTL_ExportsDecl ann = mk_comb(JTL_ExportsDecl_tm, ann)
 fun mk_JTL_InitializesDecl ann = mk_comb(JTL_InitializesDecl_tm, ann)
 fun mk_JTL_UsesDecl ann = mk_comb(JTL_UsesDecl_tm, ann)
 fun mk_JTL_ImplementsDecl ann = mk_comb(JTL_ImplementsDecl_tm, ann)
-fun mk_JModule tls = mk_comb(JModule_tm, mk_list(tls, json_toplevel_ty))
+fun mk_JModule (src_id, tls) =
+  list_mk_comb(JModule_tm, [src_id, mk_list(tls, json_toplevel_ty)])
 fun mk_JImportedModule (src_id_tm, path, body) =
   list_mk_comb(JImportedModule_tm,
     [src_id_tm,
@@ -1121,7 +1122,10 @@ val json_toplevel : term decoder = achoose "toplevel" [
 (* ===== Module Decoder ===== *)
 
 val json_module : term decoder =
-  JSONDecode.map mk_JModule (field "body" (array json_toplevel))
+  JSONDecode.map mk_JModule $
+  tuple2 (orElse (field "source_id" inttm,
+                  succeed (intSyntax.term_of_int (Arbint.fromInt ~1))),
+          field "body" (array json_toplevel))
 
 (* ===== Imported Module Decoder ===== *)
 (* Decoder for imported modules from the imports array *)
