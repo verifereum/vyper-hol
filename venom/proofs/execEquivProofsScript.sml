@@ -16,7 +16,7 @@ Theory execEquivProofs
 Ancestors
   stateEquivProofs stateEquiv venomExecSemantics venomState venomInst
 Libs
-  rich_listTheory
+  rich_listTheory finite_mapTheory
 
 (* ==========================================================================
    exec_* Category Helpers
@@ -509,6 +509,83 @@ Proof
   gvs[result_equiv_def, state_equiv_def, execution_equiv_def]
 QED
 
+(* External calls: oracle + state equiv => same result *)
+(* Helper: exec_ext_call preserves equiv when states and operands match *)
+Triviality exec_ext_call_equiv:
+  !vars inst s1 s2 addr value ao as_ ro rs is_static.
+    state_equiv vars s1 s2 ==>
+    result_equiv vars
+      (exec_ext_call inst s1 addr value ao as_ ro rs is_static)
+      (exec_ext_call inst s2 addr value ao as_ ro rs is_static)
+Proof
+  rw[exec_ext_call_def, LET_THM] >>
+  `s1.vs_memory = s2.vs_memory` by fs[state_equiv_def, execution_equiv_def] >>
+  `s1.vs_accounts = s2.vs_accounts` by fs[state_equiv_def, execution_equiv_def] >>
+  `s1.vs_ext_call_oracle = s2.vs_ext_call_oracle`
+    by fs[state_equiv_def, execution_equiv_def] >>
+  `s1.vs_logs = s2.vs_logs` by fs[state_equiv_def, execution_equiv_def] >>
+  simp[read_memory_def] >>
+  Cases_on `inst.inst_outputs` >> simp[result_equiv_def] >>
+  Cases_on `t` >> simp[result_equiv_def] >>
+  simp[update_var_def, state_equiv_def, execution_equiv_def,
+       write_memory_with_expansion_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> fs[state_equiv_def, execution_equiv_def, lookup_var_def] >>
+  rw[] >> fs[]
+QED
+
+(* Helper: exec_create preserves equiv when states and operands match *)
+Triviality exec_create_equiv:
+  !vars inst s1 s2 value offset sz.
+    state_equiv vars s1 s2 ==>
+    result_equiv vars
+      (exec_create inst s1 value offset sz)
+      (exec_create inst s2 value offset sz)
+Proof
+  rw[exec_create_def, LET_THM] >>
+  `s1.vs_memory = s2.vs_memory` by fs[state_equiv_def, execution_equiv_def] >>
+  `s1.vs_accounts = s2.vs_accounts` by fs[state_equiv_def, execution_equiv_def] >>
+  `s1.vs_ext_call_oracle = s2.vs_ext_call_oracle`
+    by fs[state_equiv_def, execution_equiv_def] >>
+  `s1.vs_logs = s2.vs_logs` by fs[state_equiv_def, execution_equiv_def] >>
+  simp[read_memory_def] >>
+  Cases_on `inst.inst_outputs` >> simp[result_equiv_def] >>
+  Cases_on `t` >> simp[result_equiv_def] >>
+  simp[update_var_def, state_equiv_def, execution_equiv_def,
+       lookup_var_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> fs[state_equiv_def, execution_equiv_def, lookup_var_def] >>
+  rw[] >> fs[]
+QED
+
+Triviality step_inst_ext_call_equiv:
+  !vars inst s1 s2.
+    state_equiv vars s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
+    MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL] ==>
+    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+Proof
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  `s1.vs_call_ctx = s2.vs_call_ctx`
+    by fs[state_equiv_def, execution_equiv_def] >>
+  simp[step_inst_def] >>
+  rpt CASE_TAC >> gvs[result_equiv_def] >>
+  imp_res_tac eval_operand_equiv >> gvs[] >>
+  irule exec_ext_call_equiv >> simp[]
+QED
+
+Triviality step_inst_create_equiv:
+  !vars inst s1 s2.
+    state_equiv vars s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
+    MEM inst.inst_opcode [CREATE; CREATE2] ==>
+    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+Proof
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  simp[step_inst_def] >>
+  rpt CASE_TAC >> gvs[result_equiv_def] >>
+  imp_res_tac eval_operand_equiv >> gvs[] >>
+  irule exec_create_equiv >> simp[]
+QED
+
 (* ==========================================================================
    step_inst: Main theorem — dispatches to helpers
    ========================================================================== *)
@@ -579,6 +656,10 @@ Proof
       drule_all step_inst_param_equiv >> simp[],
     `inst.inst_opcode = RET` by simp[] >>
       drule_all step_inst_ret_equiv >> simp[],
+    `MEM inst.inst_opcode [CALL;STATICCALL;DELEGATECALL]` by simp[] >>
+      drule_all step_inst_ext_call_equiv >> simp[],
+    `MEM inst.inst_opcode [CREATE;CREATE2]` by simp[] >>
+      drule_all step_inst_create_equiv >> simp[],
     (* Unimplemented opcodes: wildcard gives Error *)
     simp[step_inst_def, result_equiv_def]
   ]

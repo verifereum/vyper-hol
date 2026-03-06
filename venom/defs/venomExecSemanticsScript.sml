@@ -202,6 +202,50 @@ Definition exec_write2_def:
     | _ => Error "write2 requires 2 operands"
 End
 
+(* --------------------------------------------------------------------------
+   External Call Helpers
+   -------------------------------------------------------------------------- *)
+
+(* Execute an external call via the oracle and apply results to state.
+   call_type: CALL | STATICCALL | DELEGATECALL
+   CALL: operands = [gas; addr; value; argsOff; argsSize; retOff; retSize]
+   STATICCALL/DELEGATECALL: operands = [gas; addr; argsOff; argsSize; retOff; retSize]
+*)
+Definition exec_ext_call_def:
+  exec_ext_call inst s addr_w value argsOff argsSize retOff retSize is_static =
+    let calldata = read_memory (w2n argsOff) (w2n argsSize) s in
+    let target : address = w2w addr_w in
+    let result = s.vs_ext_call_oracle s.vs_accounts target (w2n value) calldata is_static in
+    let s' = s with <|
+      vs_returndata := result.ecr_returndata;
+      vs_accounts := result.ecr_accounts;
+      vs_logs := s.vs_logs ++ result.ecr_new_logs;
+      vs_memory := (write_memory_with_expansion (w2n retOff)
+                      (TAKE (w2n retSize) result.ecr_returndata) s).vs_memory
+    |> in
+    case inst.inst_outputs of
+      [out] => OK (update_var out result.ecr_output s')
+    | _ => Error "ext_call requires single output"
+End
+
+(* Execute CREATE/CREATE2 via the oracle.
+   CREATE: operands = [value; offset; size]
+   CREATE2: operands = [value; offset; size; salt]
+*)
+Definition exec_create_def:
+  exec_create inst s value offset sz =
+    let init_code = read_memory (w2n offset) (w2n sz) s in
+    let result = s.vs_ext_call_oracle s.vs_accounts (0w:address) (w2n value) init_code F in
+    let s' = s with <|
+      vs_returndata := result.ecr_returndata;
+      vs_accounts := result.ecr_accounts;
+      vs_logs := s.vs_logs ++ result.ecr_new_logs
+    |> in
+    case inst.inst_outputs of
+      [out] => OK (update_var out result.ecr_output s')
+    | _ => Error "create requires single output"
+End
+
 (* Step a single instruction *)
 Definition step_inst_def:
   step_inst inst s =
@@ -597,8 +641,72 @@ Definition step_inst_def:
     (* Invalid opcode — always reverts (EVM: consumes all gas + reverts) *)
     | INVALID => Revert (revert_state s)
 
-    (* Default - unimplemented *)
-    | _ => Error "unimplemented opcode"
+    (* ----------------------------------------------------------------
+       External calls
+       ---------------------------------------------------------------- *)
+    | CALL =>
+        (case inst.inst_operands of
+          [gas_op; addr_op; val_op; ao_op; as_op; ro_op; rs_op] =>
+            (case (eval_operand gas_op s, eval_operand addr_op s,
+                   eval_operand val_op s, eval_operand ao_op s,
+                   eval_operand as_op s, eval_operand ro_op s,
+                   eval_operand rs_op s) of
+              (SOME _, SOME addr, SOME value, SOME ao, SOME as_, SOME ro, SOME rs) =>
+                exec_ext_call inst s addr value ao as_ ro rs F
+            | _ => Error "undefined operand")
+        | _ => Error "call requires 7 operands")
+
+    | STATICCALL =>
+        (case inst.inst_operands of
+          [gas_op; addr_op; ao_op; as_op; ro_op; rs_op] =>
+            (case (eval_operand gas_op s, eval_operand addr_op s,
+                   eval_operand ao_op s, eval_operand as_op s,
+                   eval_operand ro_op s, eval_operand rs_op s) of
+              (SOME _, SOME addr, SOME ao, SOME as_, SOME ro, SOME rs) =>
+                exec_ext_call inst s addr (0w:bytes32) ao as_ ro rs T
+            | _ => Error "undefined operand")
+        | _ => Error "staticcall requires 6 operands")
+
+    | DELEGATECALL =>
+        (case inst.inst_operands of
+          [gas_op; addr_op; ao_op; as_op; ro_op; rs_op] =>
+            (case (eval_operand gas_op s, eval_operand addr_op s,
+                   eval_operand ao_op s, eval_operand as_op s,
+                   eval_operand ro_op s, eval_operand rs_op s) of
+              (SOME _, SOME addr, SOME ao, SOME as_, SOME ro, SOME rs) =>
+                exec_ext_call inst s addr s.vs_call_ctx.cc_callvalue ao as_ ro rs F
+            | _ => Error "undefined operand")
+        | _ => Error "delegatecall requires 6 operands")
+
+    | CREATE =>
+        (case inst.inst_operands of
+          [val_op; off_op; sz_op] =>
+            (case (eval_operand val_op s, eval_operand off_op s,
+                   eval_operand sz_op s) of
+              (SOME value, SOME offset, SOME sz) =>
+                exec_create inst s value offset sz
+            | _ => Error "undefined operand")
+        | _ => Error "create requires 3 operands")
+
+    | CREATE2 =>
+        (case inst.inst_operands of
+          [val_op; off_op; sz_op; salt_op] =>
+            (case (eval_operand val_op s, eval_operand off_op s,
+                   eval_operand sz_op s, eval_operand salt_op s) of
+              (SOME value, SOME offset, SOME sz, SOME _) =>
+                exec_create inst s value offset sz
+            | _ => Error "undefined operand")
+        | _ => Error "create2 requires 4 operands")
+
+    (* ----------------------------------------------------------------
+       Allocation (stub — full semantics modeled separately)
+       ---------------------------------------------------------------- *)
+    | ALLOCA => Error "alloca: not yet implemented"
+    | PALLOCA => Error "palloca: not yet implemented"
+    | CALLOCA => Error "calloca: not yet implemented"
+
+    (* Default - truly unknown opcode *)
+    | _ => Error "unknown opcode"
 End
 
 (* --------------------------------------------------------------------------
@@ -616,7 +724,8 @@ Proof
   rw[step_inst_def] >>
   gvs[AllCaseEqs(), is_terminator_def] >>
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def] >>
+     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_ext_call_def, exec_create_def] >>
   gvs[AllCaseEqs()] >>
   fs[update_var_def, mstore_def, sstore_def, tstore_def,
      write_memory_with_expansion_def, mcopy_def,

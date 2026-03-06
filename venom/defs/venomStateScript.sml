@@ -72,6 +72,33 @@ Datatype:
 End
 
 (* --------------------------------------------------------------------------
+   External Call Oracle
+
+   External calls (CALL/STATICCALL/DELEGATECALL/CREATE/CREATE2) are
+   modeled via an abstract oracle. The oracle takes the current account
+   state and call parameters, returning the result. This keeps step_inst
+   deterministic while abstracting external contract execution.
+
+   For CALL/STATICCALL/DELEGATECALL:
+     address = callee, value = wei sent, data = calldata, static flag
+   For CREATE/CREATE2:
+     address = 0w (unused), value = endowment, data = init code
+   -------------------------------------------------------------------------- *)
+
+Datatype:
+  ext_call_result = <|
+    ecr_output : bytes32;         (* CALL: 1w/0w success, CREATE: address/0w *)
+    ecr_returndata : byte list;   (* Return data from callee *)
+    ecr_accounts : evm_accounts;  (* Post-call account state *)
+    ecr_new_logs : event list     (* New log entries from callee *)
+  |>
+End
+
+(* Oracle type (used inline, not abbreviated):
+     evm_accounts -> address -> num -> byte list -> bool -> ext_call_result
+   accounts -> target -> value -> calldata -> is_static -> result *)
+
+(* --------------------------------------------------------------------------
    Venom Execution State
 
    Venom operates at a higher level than raw EVM:
@@ -101,7 +128,9 @@ Datatype:
     vs_data_section : byte list;     (* Read-only data section (DLOAD/DLOADBYTES) *)
     vs_label_offsets : (string, bytes32) fmap; (* Label→address map (OFFSET) *)
     vs_code : byte list;             (* Own bytecode (CODECOPY/EXTCODECOPY) *)
-    vs_params : bytes32 list         (* Function parameters (read by PARAM) *)
+    vs_params : bytes32 list;        (* Function parameters (read by PARAM) *)
+    vs_ext_call_oracle :
+      evm_accounts -> address -> num -> byte list -> bool -> ext_call_result
   |>
 End
 
@@ -160,7 +189,12 @@ Definition init_venom_state_def:
     vs_data_section := [];
     vs_label_offsets := FEMPTY;
     vs_code := [];
-    vs_params := []
+    vs_params := [];
+    vs_ext_call_oracle := (\accts addr val data static.
+      <| ecr_output := 0w;
+         ecr_returndata := [];
+         ecr_accounts := accts;
+         ecr_new_logs := [] |>)
   |>
 End
 
