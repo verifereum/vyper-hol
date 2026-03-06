@@ -699,11 +699,59 @@ Definition step_inst_def:
         | _ => Error "create2 requires 4 operands")
 
     (* ----------------------------------------------------------------
-       Allocation (stub — full semantics modeled separately)
+       Memory Allocation
+
+       All three variants are identical at runtime: bump-allocate in
+       vs_memory and record in vs_allocas. The distinction is metadata
+       for the compiler (PALLOCA=param, CALLOCA=caller-side staging).
+
+       Operands: [Lit size, Lit alloca_id] (CALLOCA has Label callee too)
+       Output: [out] = base address (word256) of allocated region
        ---------------------------------------------------------------- *)
-    | ALLOCA => Error "alloca: not yet implemented"
-    | PALLOCA => Error "palloca: not yet implemented"
-    | CALLOCA => Error "calloca: not yet implemented"
+    | ALLOCA =>
+        (case inst.inst_operands of
+          [Lit alloc_size; Lit alloc_id] =>
+            (case inst.inst_outputs of
+              [out] =>
+                let offset = LENGTH s.vs_memory in
+                let sz = w2n alloc_size in
+                let s' = s with <|
+                  vs_memory := s.vs_memory ++ REPLICATE sz 0w;
+                  vs_allocas := s.vs_allocas |+ (w2n alloc_id, (offset, sz))
+                |> in
+                OK (update_var out (n2w offset) s')
+            | _ => Error "alloca requires single output")
+        | _ => Error "alloca requires 2 literal operands")
+
+    | PALLOCA =>
+        (case inst.inst_operands of
+          [Lit alloc_size; Lit alloc_id] =>
+            (case inst.inst_outputs of
+              [out] =>
+                let offset = LENGTH s.vs_memory in
+                let sz = w2n alloc_size in
+                let s' = s with <|
+                  vs_memory := s.vs_memory ++ REPLICATE sz 0w;
+                  vs_allocas := s.vs_allocas |+ (w2n alloc_id, (offset, sz))
+                |> in
+                OK (update_var out (n2w offset) s')
+            | _ => Error "palloca requires single output")
+        | _ => Error "palloca requires 2 literal operands")
+
+    | CALLOCA =>
+        (case inst.inst_operands of
+          Lit alloc_size :: Lit alloc_id :: _ =>  (* Label callee ignored at runtime *)
+            (case inst.inst_outputs of
+              [out] =>
+                let offset = LENGTH s.vs_memory in
+                let sz = w2n alloc_size in
+                let s' = s with <|
+                  vs_memory := s.vs_memory ++ REPLICATE sz 0w;
+                  vs_allocas := s.vs_allocas |+ (w2n alloc_id, (offset, sz))
+                |> in
+                OK (update_var out (n2w offset) s')
+            | _ => Error "calloca requires single output")
+        | _ => Error "calloca requires literal size and id")
 
     (* Default - truly unknown opcode *)
     | _ => Error "unknown opcode"

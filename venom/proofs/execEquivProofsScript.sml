@@ -556,6 +556,21 @@ Proof
   rw[] >> fs[]
 QED
 
+(* Allocation: operands are literals so state_equiv directly gives same result *)
+Triviality step_inst_alloca_equiv:
+  !vars inst s1 s2.
+    state_equiv vars s1 s2 /\
+    MEM inst.inst_opcode [ALLOCA; PALLOCA; CALLOCA] ==>
+    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+Proof
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  simp[step_inst_def] >>
+  rpt CASE_TAC >> gvs[result_equiv_def, LET_THM] >>
+  gvs[state_equiv_def, execution_equiv_def, update_var_def,
+      lookup_var_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> rw[] >> fs[]
+QED
+
 Triviality step_inst_ext_call_equiv:
   !vars inst s1 s2.
     state_equiv vars s1 s2 /\
@@ -660,6 +675,8 @@ Proof
       drule_all step_inst_ext_call_equiv >> simp[],
     `MEM inst.inst_opcode [CREATE;CREATE2]` by simp[] >>
       drule_all step_inst_create_equiv >> simp[],
+    `MEM inst.inst_opcode [ALLOCA;PALLOCA;CALLOCA]` by simp[] >>
+      drule_all step_inst_alloca_equiv >> simp[],
     (* Unimplemented opcodes: wildcard gives Error *)
     simp[step_inst_def, result_equiv_def]
   ]
