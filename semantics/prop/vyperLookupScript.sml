@@ -1,7 +1,7 @@
 Theory vyperLookup
 Ancestors
   vyperMisc vyperContext vyperState vyperInterpreter vyperValue vyperValueOperation
-  vyperTyping vyperStorageRoundtrip
+  vyperTyping vyperEncodeDecode
 
 Definition lookup_name_def:
   lookup_name st n = lookup_scopes (string_to_num n) st.scopes
@@ -95,23 +95,6 @@ Definition var_in_storage_def:
     well_formed_type_value tv
 End
 
-Definition storage_type_of_def:
-  storage_type_of cx mid n =
-    case get_module_code cx mid of
-    | NONE => NONE
-    | SOME code =>
-        case find_var_decl_by_num (string_to_num n) code of
-        | SOME (StorageVarDecl b t, id) => evaluate_type (get_tenv cx) t
-        | _ => NONE
-End
-
-Definition storable_value_def:
-  storable_value cx mid n v ⇔
-    ∀tv. storage_type_of cx mid n = SOME tv ⇒
-         value_has_type tv v ∧
-         well_formed_value v
-End
-
 Definition storage_var_info_def:
   storage_var_info cx mid n =
     case get_module_code cx mid of
@@ -124,6 +107,34 @@ Definition storage_var_info_def:
              | (SOME off, SOME tv) => SOME (b, off, tv)
              | _ => NONE)
         | _ => NONE
+End
+
+Definition storage_type_of_def:
+  storage_type_of cx mid n =
+    case storage_var_info cx mid n of
+    | NONE => NONE
+    | SOME (_, _, tv) => SOME tv
+End
+
+Theorem storage_var_info_SOME_storage_type_of:
+  storage_var_info cx mid n = SOME (b, off, tv) ⇒
+  storage_type_of cx mid n = SOME tv
+Proof
+  simp[storage_type_of_def]
+QED
+
+Theorem storage_type_of_SOME_storage_var_info:
+  storage_type_of cx mid n = SOME tv ⇒
+  ∃b off. storage_var_info cx mid n = SOME (b, off, tv)
+Proof
+  simp[storage_type_of_def, AllCaseEqs()] >> strip_tac >> gvs[]
+QED
+
+Definition storable_value_def:
+  storable_value cx mid n v ⇔
+    ∀tv. storage_type_of cx mid n = SOME tv ⇒
+         value_has_type tv v ∧
+         well_formed_value v
 End
 
 Definition well_formed_layout_def:
@@ -803,27 +814,29 @@ QED
 
 (* =================== Global Storage ============================= *)
 
-Theorem var_in_storage_has_type:
-  var_in_storage cx mid n ⇒ IS_SOME (storage_type_of cx mid n)
-Proof
-  rw[var_in_storage_def, storage_type_of_def] >>
-  rpt strip_tac >> simp[]
-QED
-
-Theorem var_in_storage_well_formed_type:
-  var_in_storage cx mid n ∧ storage_type_of cx mid n = SOME tv ⇒
-  well_formed_type_value tv
-Proof
-  rw[var_in_storage_def, storage_type_of_def] >> gvs[]
-QED
-
-Theorem var_in_storage_storage_var_info[local]:
+Theorem var_in_storage_storage_var_info:
   var_in_storage cx mid n ⇒
   ∃b off tv.
     storage_var_info cx mid n = SOME (b, off, tv) ∧
     well_formed_type_value tv
 Proof
   rw[var_in_storage_def, storage_var_info_def] >> gvs[]
+QED
+
+Theorem var_in_storage_has_type:
+  var_in_storage cx mid n ⇒ IS_SOME (storage_type_of cx mid n)
+Proof
+  strip_tac >> drule var_in_storage_storage_var_info >> strip_tac >>
+  simp[storage_type_of_def]
+QED
+
+Theorem var_in_storage_well_formed_type:
+  var_in_storage cx mid n ∧ storage_type_of cx mid n = SOME tv ⇒
+  well_formed_type_value tv
+Proof
+  strip_tac >>
+  drule var_in_storage_storage_var_info >> strip_tac >>
+  gvs[storage_type_of_def]
 QED
 
 Theorem get_after_set_storage_backend[local]:
@@ -882,8 +895,8 @@ Proof
   rename1 `storage_type_of cx mid n = SOME tv` >>
   `IS_SOME (encode_value tv v)` by gvs[value_has_type_equiv] >>
   `well_formed_type_value tv` by metis_tac[var_in_storage_well_formed_type] >>
-  `roundtrip_ok tv v` by (irule roundtrip_all >> simp[]) >>
-  fs[var_in_storage_def, storage_type_of_def, AllCaseEqs()] >>
+  `encode_decode_roundtrip_ok tv v` by (irule encode_decode_roundtrip_all >> simp[]) >>
+  fs[var_in_storage_def, storage_type_of_def, storage_var_info_def, AllCaseEqs()] >>
   Cases_on `encode_value tv v` >> gvs[] >>
   simp[lookup_toplevel_name_def, update_toplevel_name_def] >>
   simp[Once set_global_def, write_storage_slot_def,
@@ -896,7 +909,7 @@ Proof
   Cases_on `tv` >>
   gvs[read_storage_slot_def, lift_option_def, bind_def,
       get_after_set_storage_backend, return_def, raise_def,
-      roundtrip_ok_def, materialise_def] >>
+      encode_decode_roundtrip_ok_def, materialise_def] >>
   (* ArrayTV case: unfold set_global in materialise side *)
   simp[Once set_global_def, write_storage_slot_def,
        bind_def, lift_option_type_def, lift_option_def,

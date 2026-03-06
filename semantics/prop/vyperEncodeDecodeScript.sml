@@ -1,14 +1,14 @@
 (*
- * vyperStorageRoundtripScript.sml
+ * vyperEncodeDecodeScript.sml
  *
  * Storage encode/decode roundtrip properties.
  *
  * TOP-LEVEL:
- *   roundtrip_ok_def - predicate: type/value pair round-trips through storage
- *   roundtrip_all - all well-formed values round-trip
+ *   encode_decode_roundtrip_ok_def - predicate: type/value pair round-trips through storage
+ *   encode_decode_roundtrip_all - all well-formed values round-trip
  *)
 
-Theory vyperStorageRoundtrip
+Theory vyperEncodeDecode
 Ancestors
   vyperTyping vyperStorage vyperValue vfmState byte list rich_list combin bitstring
   bit sorting arithmetic pair indexedLists vfmConstants
@@ -17,8 +17,8 @@ Libs
 
 (* ===== Roundtrip Predicate ===== *)
 
-Definition roundtrip_ok_def:
-  roundtrip_ok tv v ⇔
+Definition encode_decode_roundtrip_ok_def:
+  encode_decode_roundtrip_ok tv v ⇔
     ∀writes base storage.
       encode_value tv v = SOME writes ⇒
       decode_value (apply_writes (n2w base) writes storage) base tv = SOME v
@@ -235,9 +235,9 @@ Theorem decode_value_single_slot[local]:
     (∀nn. bt ≠ StringT nn) ∧
     encode_base_to_slot v (BaseTV bt) = SOME slot ∧
     decode_base_from_slot slot (BaseTV bt) = v ⇒
-    roundtrip_ok (BaseTV bt) v
+    encode_decode_roundtrip_ok (BaseTV bt) v
 Proof
-  rw[roundtrip_ok_def] >>
+  rw[encode_decode_roundtrip_ok_def] >>
   (* encode_value for non-dynamic base types: extract writes = [(0, slot)] *)
   `writes = [(0, slot)]` by (
     Cases_on `bt` >> gvs[]
@@ -250,7 +250,7 @@ Proof
   >> gvs[decode_value_def, read_slot_after_apply_writes_single]
 QED
 
-(* ===== roundtrip_ok: BoolT ===== *)
+(* ===== encode_decode_roundtrip_ok: BoolT ===== *)
 
 Theorem slot_to_bool_bool_to_slot[local]:
   ∀b. slot_to_bool (bool_to_slot b) = b
@@ -258,8 +258,8 @@ Proof
   Cases >> simp[bool_to_slot_def, slot_to_bool_def]
 QED
 
-Theorem roundtrip_ok_bool[local]:
-  ∀b. roundtrip_ok (BaseTV BoolT) (BoolV b)
+Theorem encode_decode_roundtrip_ok_bool[local]:
+  ∀b. encode_decode_roundtrip_ok (BaseTV BoolT) (BoolV b)
 Proof
   rw[] >> irule decode_value_single_slot >> simp[] >>
   qexists_tac `bool_to_slot b` >>
@@ -267,10 +267,10 @@ Proof
        slot_to_bool_bool_to_slot]
 QED
 
-(* ===== roundtrip_ok: AddressT ===== *)
+(* ===== encode_decode_roundtrip_ok: AddressT ===== *)
 
-Theorem roundtrip_ok_address[local]:
-  ∀bs. LENGTH bs = 20 ⇒ roundtrip_ok (BaseTV AddressT) (BytesV (Fixed 20) bs)
+Theorem encode_decode_roundtrip_ok_address[local]:
+  ∀bs. LENGTH bs = 20 ⇒ encode_decode_roundtrip_ok (BaseTV AddressT) (BytesV (Fixed 20) bs)
 Proof
   rw[] >> irule decode_value_single_slot >> simp[] >>
   qexists_tac `word_of_bytes_be (PAD_LEFT 0w 32 bs)` >>
@@ -279,11 +279,11 @@ Proof
   simp[length_pad_left, PAD_LEFT, DROP_APPEND, LENGTH_GENLIST]
 QED
 
-(* ===== roundtrip_ok: BytesT (Fixed n) ===== *)
+(* ===== encode_decode_roundtrip_ok: BytesT (Fixed n) ===== *)
 
-Theorem roundtrip_ok_fixed_bytes[local]:
+Theorem encode_decode_roundtrip_ok_fixed_bytes[local]:
   ∀n bs. LENGTH bs = n ∧ n ≤ 32 ⇒
-    roundtrip_ok (BaseTV (BytesT (Fixed n))) (BytesV (Fixed n) bs)
+    encode_decode_roundtrip_ok (BaseTV (BytesT (Fixed n))) (BytesV (Fixed n) bs)
 Proof
   rw[] >> irule decode_value_single_slot >> simp[] >>
   qexists_tac `word_of_bytes_be (bs ++ REPLICATE (32 - LENGTH bs) 0w)` >>
@@ -292,11 +292,11 @@ Proof
   simp[LENGTH_APPEND, LENGTH_REPLICATE, TAKE_LENGTH_APPEND]
 QED
 
-(* ===== roundtrip_ok: UintT ===== *)
+(* ===== encode_decode_roundtrip_ok: UintT ===== *)
 
-Theorem roundtrip_ok_uint[local]:
+Theorem encode_decode_roundtrip_ok_uint[local]:
   ∀n i. 0 ≤ i ∧ i < &dimword(:256) ⇒
-    roundtrip_ok (BaseTV (UintT n)) (IntV (Unsigned n) i)
+    encode_decode_roundtrip_ok (BaseTV (UintT n)) (IntV (Unsigned n) i)
 Proof
   rw[] >> irule decode_value_single_slot >> simp[] >>
   qexists_tac `i2w i` >>
@@ -305,11 +305,11 @@ Proof
        integerTheory.INT_LESS_MOD, integerTheory.INT_OF_NUM]
 QED
 
-(* ===== roundtrip_ok: IntT ===== *)
+(* ===== encode_decode_roundtrip_ok: IntT ===== *)
 
-Theorem roundtrip_ok_int[local]:
+Theorem encode_decode_roundtrip_ok_int[local]:
   ∀n i. INT_MIN(:256) ≤ i ∧ i ≤ INT_MAX(:256) ⇒
-    roundtrip_ok (BaseTV (IntT n)) (IntV (Signed n) i)
+    encode_decode_roundtrip_ok (BaseTV (IntT n)) (IntV (Signed n) i)
 Proof
   rw[] >> irule decode_value_single_slot >> simp[] >>
   qexists_tac `i2w i` >>
@@ -317,11 +317,11 @@ Proof
   simp[integer_wordTheory.w2i_i2w]
 QED
 
-(* ===== roundtrip_ok: DecimalT ===== *)
+(* ===== encode_decode_roundtrip_ok: DecimalT ===== *)
 
-Theorem roundtrip_ok_decimal[local]:
+Theorem encode_decode_roundtrip_ok_decimal[local]:
   ∀i. INT_MIN(:256) ≤ i ∧ i ≤ INT_MAX(:256) ⇒
-    roundtrip_ok (BaseTV DecimalT) (DecimalV i)
+    encode_decode_roundtrip_ok (BaseTV DecimalT) (DecimalV i)
 Proof
   rw[] >> irule decode_value_single_slot >> simp[] >>
   qexists_tac `i2w i` >>
@@ -329,24 +329,24 @@ Proof
   simp[integer_wordTheory.w2i_i2w]
 QED
 
-(* ===== roundtrip_ok: FlagTV ===== *)
+(* ===== encode_decode_roundtrip_ok: FlagTV ===== *)
 
-Theorem roundtrip_ok_flag[local]:
+Theorem encode_decode_roundtrip_ok_flag[local]:
   ∀m k. k < dimword(:256) ⇒
-    roundtrip_ok (FlagTV m) (FlagV m k)
+    encode_decode_roundtrip_ok (FlagTV m) (FlagV m k)
 Proof
-  rw[roundtrip_ok_def] >>
+  rw[encode_decode_roundtrip_ok_def] >>
   gvs[encode_value_def, AllCaseEqs()] >>
   gvs[decode_value_def, read_slot_after_apply_writes_single,
       decode_base_from_slot_def, encode_base_to_slot_def]
 QED
 
-(* ===== roundtrip_ok: NoneTV ===== *)
+(* ===== encode_decode_roundtrip_ok: NoneTV ===== *)
 
-Theorem roundtrip_ok_none[local]:
-  roundtrip_ok NoneTV NoneV
+Theorem encode_decode_roundtrip_ok_none[local]:
+  encode_decode_roundtrip_ok NoneTV NoneV
 Proof
-  rw[roundtrip_ok_def, encode_value_def, decode_value_def, apply_writes_nil]
+  rw[encode_decode_roundtrip_ok_def, encode_value_def, decode_value_def, apply_writes_nil]
 QED
 
 (* ===== Dynamic Bytes/String Roundtrip ===== *)
@@ -606,13 +606,13 @@ Proof
   ) >> simp[slots_to_bytes_bytes_to_slots]
 QED
 
-(* roundtrip_ok for dynamic bytes *)
-Theorem roundtrip_ok_dyn_bytes[local]:
+(* encode_decode_roundtrip_ok for dynamic bytes *)
+Theorem encode_decode_roundtrip_ok_dyn_bytes[local]:
   ∀max bs.
     max < dimword(:256) ∧ LENGTH bs ≤ max ⇒
-    roundtrip_ok (BaseTV (BytesT (Dynamic max))) (BytesV (Dynamic max) bs)
+    encode_decode_roundtrip_ok (BaseTV (BytesT (Dynamic max))) (BytesV (Dynamic max) bs)
 Proof
-  rw[roundtrip_ok_def] >>
+  rw[encode_decode_roundtrip_ok_def] >>
   gvs[encode_value_def, AllCaseEqs(), encode_dyn_bytes_slots_def] >>
   simp[Once decode_value_def] >>
   `decode_dyn_bytes
@@ -624,13 +624,13 @@ Proof
   ) >> simp[]
 QED
 
-(* roundtrip_ok for strings *)
-Theorem roundtrip_ok_string[local]:
+(* encode_decode_roundtrip_ok for strings *)
+Theorem encode_decode_roundtrip_ok_string[local]:
   ∀max s.
     max < dimword(:256) ∧ LENGTH s ≤ max ⇒
-    roundtrip_ok (BaseTV (StringT max)) (StringV max s)
+    encode_decode_roundtrip_ok (BaseTV (StringT max)) (StringV max s)
 Proof
-  rw[roundtrip_ok_def] >>
+  rw[encode_decode_roundtrip_ok_def] >>
   gvs[encode_value_def, AllCaseEqs(), encode_dyn_bytes_slots_def] >>
   simp[Once decode_value_def] >>
   `decode_dyn_bytes
@@ -645,11 +645,11 @@ Proof
   simp[chr_w2n_n2w_ord]
 QED
 
-(* ===== General roundtrip_ok from well_formed_value ===== *)
+(* ===== General encode_decode_roundtrip_ok from well_formed_value ===== *)
 
-(* For non-compound types, roundtrip_ok follows from well_formed_value
+(* For non-compound types, encode_decode_roundtrip_ok follows from well_formed_value
    and IS_SOME (encode_value tv v) *)
-Theorem roundtrip_ok_from_well_formed_base[local]:
+Theorem encode_decode_roundtrip_ok_from_well_formed_base[local]:
   ∀tv v.
     well_formed_value v ∧
     bounds_compat tv v ∧
@@ -658,12 +658,12 @@ Theorem roundtrip_ok_from_well_formed_base[local]:
     (∀e bd. tv ≠ ArrayTV e bd) ∧
     (∀ftypes. tv ≠ StructTV ftypes) ∧
     (tv = NoneTV ⇒ v = NoneV) ⇒
-    roundtrip_ok tv v
+    encode_decode_roundtrip_ok tv v
 Proof
   rpt strip_tac >>
   Cases_on `tv` >> fs[] >>
   (* NoneTV: v = NoneV by precondition *)
-  TRY (simp[roundtrip_ok_none] >> NO_TAC) >>
+  TRY (simp[encode_decode_roundtrip_ok_none] >> NO_TAC) >>
   (* FlagTV *)
   TRY (
     rename1 `FlagTV m` >>
@@ -672,7 +672,7 @@ Proof
     fs[encode_value_def, encode_base_to_slot_def, AllCaseEqs(),
        COND_RAND, COND_RATOR, well_formed_value_def] >>
     strip_tac >>
-    irule roundtrip_ok_flag >> simp[] >> NO_TAC
+    irule encode_decode_roundtrip_ok_flag >> simp[] >> NO_TAC
   ) >>
   (* BaseTV bt *)
   rename1 `BaseTV bt` >>
@@ -688,15 +688,15 @@ Proof
   fs[well_formed_value_def, bounds_compat_def] >>
   rpt strip_tac >>
   FIRST [
-    irule roundtrip_ok_uint >> simp[],
-    irule roundtrip_ok_int >> simp[],
-    irule roundtrip_ok_bool,
-    irule roundtrip_ok_decimal >> simp[],
-    irule roundtrip_ok_string >> simp[],
-    irule roundtrip_ok_fixed_bytes >> simp[],
-    irule roundtrip_ok_dyn_bytes >> simp[],
-    irule roundtrip_ok_address >> simp[],
-    irule roundtrip_ok_flag >> simp[]
+    irule encode_decode_roundtrip_ok_uint >> simp[],
+    irule encode_decode_roundtrip_ok_int >> simp[],
+    irule encode_decode_roundtrip_ok_bool,
+    irule encode_decode_roundtrip_ok_decimal >> simp[],
+    irule encode_decode_roundtrip_ok_string >> simp[],
+    irule encode_decode_roundtrip_ok_fixed_bytes >> simp[],
+    irule encode_decode_roundtrip_ok_dyn_bytes >> simp[],
+    irule encode_decode_roundtrip_ok_address >> simp[],
+    irule encode_decode_roundtrip_ok_flag >> simp[]
   ]
 QED
 
@@ -1006,7 +1006,7 @@ QED
 
 (* ===== Non-compound Roundtrip ===== *)
 
-(* For non-compound types (BaseTV, FlagTV, NoneTV), roundtrip_ok follows
+(* For non-compound types (BaseTV, FlagTV, NoneTV), encode_decode_roundtrip_ok follows
    from well_formed_value alone. Mismatch type/value pairs have encode NONE
    (vacuously true), valid pairs are handled by specific roundtrip theorems. *)
 (* Helper: IS_SOME (encode_value tv v) implies bounds_compat for non-compound types *)
@@ -1025,19 +1025,19 @@ Proof
   pop_assum mp_tac >> rpt IF_CASES_TAC >> simp[]
 QED
 
-Theorem roundtrip_ok_noncompound[local]:
+Theorem encode_decode_roundtrip_ok_noncompound[local]:
   well_formed_value v ∧ well_formed_type_value tv ∧
   (∀tvs. tv ≠ TupleTV tvs) ∧ (∀e bd. tv ≠ ArrayTV e bd) ∧
   (∀ftypes. tv ≠ StructTV ftypes) ⇒
-  roundtrip_ok tv v
+  encode_decode_roundtrip_ok tv v
 Proof
   strip_tac >>
   reverse (Cases_on `IS_SOME (encode_value tv v)`)
-  >- (Cases_on `encode_value tv v` >> gvs[roundtrip_ok_def]) >>
+  >- (Cases_on `encode_value tv v` >> gvs[encode_decode_roundtrip_ok_def]) >>
   Cases_on `tv` >> fs[]
   (* BaseTV *)
   >- (
-    irule roundtrip_ok_from_well_formed_base >> simp[] >>
+    irule encode_decode_roundtrip_ok_from_well_formed_base >> simp[] >>
     gvs[bounds_compat_def] >>
     qpat_x_assum `IS_SOME _` mp_tac >>
     Cases_on `v` >>
@@ -1054,10 +1054,10 @@ Proof
     qpat_x_assum `IS_SOME _` mp_tac >> Cases_on `v` >>
     simp[encode_value_def, AllCaseEqs(), encode_base_to_slot_def] >>
     rpt IF_CASES_TAC >> simp[] >> gvs[] >>
-    irule roundtrip_ok_flag >> gvs[well_formed_value_def]
+    irule encode_decode_roundtrip_ok_flag >> gvs[well_formed_value_def]
   )
   (* NoneTV *)
-  >> Cases_on `v` >> gvs[encode_value_def, roundtrip_ok_none]
+  >> Cases_on `v` >> gvs[encode_value_def, encode_decode_roundtrip_ok_none]
 QED
 
 (* ===== Compound Roundtrip ===== *)
@@ -1157,28 +1157,30 @@ Proof
   rpt gen_tac >> disch_tac >>
   irule decode_value_disjoint_writes >>
   conj_tac >- (
-    `off2 MOD dimword(:256) ≤ off2` by
-      simp[arithmeticTheory.MOD_LESS_EQ] >>
-    fs[wordsTheory.w2n_n2w]) >>
-  qexists_tac `sz` >> fs[] >>
-  Cases_on `off2 < dimword(:256)` >>
-  simp[wordsTheory.w2n_n2w, arithmeticTheory.MOD_LESS_EQ] >>
-  `off2 = dimword(:256) ∧ type_slot_size tv = 0` by simp[] >>
-  gvs[]
+    REWRITE_TAC [wordsTheory.w2n_n2w] >>
+    irule LESS_EQ_TRANS >>
+    qexists_tac `off2 + type_slot_size tv` >>
+    reverse conj_tac >- fs[] >>
+    simp[arithmeticTheory.MOD_LESS_EQ]) >>
+  qexists_tac `sz` >>
+  REWRITE_TAC [wordsTheory.w2n_n2w] >>
+  Cases_on `off2 < dimword(:256)` >- fs[LESS_MOD] >>
+  `off2 = dimword(:256) ∧ type_slot_size tv = 0` by fs[] >>
+  gvs[DIVMOD_ID]
 QED
 
-(* Helper: roundtrip_ok at an offset.
-   If tv v has roundtrip_ok, then encoding v and applying the shifted writes
+(* Helper: encode_decode_roundtrip_ok at an offset.
+   If tv v has encode_decode_roundtrip_ok, then encoding v and applying the shifted writes
    at offset k allows decode at base + k to recover v. *)
-Theorem roundtrip_ok_at_offset[local]:
+Theorem encode_decode_roundtrip_ok_at_offset[local]:
   ∀tv v writes k base storage.
-    roundtrip_ok tv v ∧
+    encode_decode_roundtrip_ok tv v ∧
     encode_value tv v = SOME writes ⇒
     decode_value
       (apply_writes (n2w base) (MAP (λ(off,s). (off + k, s)) writes) storage)
       (base + k) tv = SOME v
 Proof
-  rw[roundtrip_ok_def] >>
+  rw[encode_decode_roundtrip_ok_def] >>
   qpat_x_assum `∀w b s. _` (qspecl_then [`writes`, `base + k`, `storage`] mp_tac) >>
   simp[] >> strip_tac >>
   `MAP (λ(off,s). (k + off,s)) writes =
@@ -1192,9 +1194,9 @@ QED
 
 (* Helper: an element at offset round-trips even with extra writes,
    as long as the extra writes are at strictly higher offsets. *)
-Theorem roundtrip_at_offset_disjoint[local]:
+Theorem encode_decode_roundtrip_at_offset_disjoint[local]:
   ∀tv v offset base storage elem_writes extra_writes.
-    roundtrip_ok tv v ∧
+    encode_decode_roundtrip_ok tv v ∧
     encode_value tv v = SOME elem_writes ∧
     (∀off. MEM off (MAP FST extra_writes) ⇒
        offset + type_slot_size tv ≤ off ∧ off < dimword(:256)) ∧
@@ -1225,7 +1227,7 @@ Proof
     >> rpt strip_tac >>
     first_x_assum (qspec_then `off` mp_tac) >> simp[]
   )
-  >> irule roundtrip_ok_at_offset >> simp[]
+  >> irule encode_decode_roundtrip_ok_at_offset >> simp[]
 QED
 
 (* ===== Compound Roundtrip Helpers ===== *)
@@ -1233,7 +1235,7 @@ QED
 (* Helper: tuple encode/decode roundtrip *)
 Theorem encode_decode_tuple[local]:
   ∀tvs offset vs writes base storage.
-    EVERY (λtv. ∀v. well_formed_value v ⇒ roundtrip_ok tv v) tvs ∧
+    EVERY (λtv. ∀v. well_formed_value v ⇒ encode_decode_roundtrip_ok tv v) tvs ∧
     wf_values vs ∧ EVERY well_formed_type_value tvs ∧
     offset + type_slot_size_list tvs ≤ dimword(:256) ∧
     encode_tuple offset tvs vs = SOME writes ⇒
@@ -1256,7 +1258,7 @@ Proof
   `decode_value (apply_writes (n2w base) writes storage)
      (base + offset) htv = SOME hv` by (
     qpat_x_assum `_ = writes` (SUBST1_TAC o SYM) >>
-    irule roundtrip_at_offset_disjoint >> simp[] >>
+    irule encode_decode_roundtrip_at_offset_disjoint >> simp[] >>
     conj_tac >- (
       rpt strip_tac >>
       drule (el 2 (CONJUNCTS encode_writes_bounded)) >>
@@ -1279,7 +1281,7 @@ QED
 (* Helper: dynamic array encode/decode roundtrip *)
 Theorem encode_decode_dyn_array[local]:
   ∀vs offset tv writes base storage.
-    (∀v. well_formed_value v ⇒ roundtrip_ok tv v) ∧
+    (∀v. well_formed_value v ⇒ encode_decode_roundtrip_ok tv v) ∧
     wf_values vs ∧ well_formed_type_value tv ∧
     offset + LENGTH vs * type_slot_size tv ≤ dimword(:256) ∧
     encode_dyn_array tv offset vs = SOME writes ⇒
@@ -1301,7 +1303,7 @@ Proof
   `decode_value (apply_writes (n2w base) writes storage)
      (base + offset) tv = SOME v` by (
     qpat_x_assum `_ = writes` (SUBST1_TAC o SYM) >>
-    irule roundtrip_at_offset_disjoint >> simp[] >>
+    irule encode_decode_roundtrip_at_offset_disjoint >> simp[] >>
     conj_tac >- (
       rpt strip_tac >>
       drule (el 4 (CONJUNCTS encode_writes_bounded)) >>
@@ -1325,7 +1327,7 @@ QED
 Theorem encode_decode_struct[local]:
   ∀ftypes offset fields writes base storage.
     EVERY (λ(nm,tv). ∀v. well_formed_value v ⇒
-             roundtrip_ok tv v) ftypes ∧
+             encode_decode_roundtrip_ok tv v) ftypes ∧
     wf_fields fields ∧ EVERY (well_formed_type_value o SND) ftypes ∧
     offset + type_slot_size_fields ftypes ≤ dimword(:256) ∧
     encode_struct offset ftypes fields = SOME writes ⇒
@@ -1350,7 +1352,7 @@ Proof
   `decode_value (apply_writes (n2w base)
      (MAP (λ(off,s). (off + offset,s)) elem_slots ⧺ rest_writes) storage)
      (base + offset) tv = SOME v` by (
-    irule roundtrip_at_offset_disjoint >> simp[] >>
+    irule encode_decode_roundtrip_at_offset_disjoint >> simp[] >>
     conj_tac >- (
       rpt strip_tac >>
       drule (el 5 (CONJUNCTS encode_writes_bounded)) >>
@@ -1425,7 +1427,7 @@ QED
 (* Helper: static array - each sparse entry decodes correctly *)
 Theorem encode_decode_static_array[local]:
   ∀sparse tv n offset writes base storage.
-    (∀v. well_formed_value v ⇒ roundtrip_ok tv v) ∧
+    (∀v. well_formed_value v ⇒ encode_decode_roundtrip_ok tv v) ∧
     wf_sparse tv n sparse ∧ well_formed_type_value tv ∧
     SORTED $< (MAP FST sparse) ∧
     offset + n * type_slot_size tv ≤ dimword(:256) ∧
@@ -1447,7 +1449,7 @@ Proof
   (* Head entry: k = k', v = v' *)
   >- (
     gvs[] >>
-    irule roundtrip_at_offset_disjoint >>
+    irule encode_decode_roundtrip_at_offset_disjoint >>
     simp[] >>
     fs[well_formed_value_def] >>
     rpt conj_tac
@@ -1720,9 +1722,9 @@ QED
 
 
 (* Helper: Static array roundtrip *)
-Theorem roundtrip_static_array[local]:
+Theorem encode_decode_roundtrip_static_array[local]:
   ∀tv n sparse nonzeros base storage.
-    (∀v. well_formed_value v ⇒ roundtrip_ok tv v) ∧
+    (∀v. well_formed_value v ⇒ encode_decode_roundtrip_ok tv v) ∧
     wf_sparse tv n sparse ∧ well_formed_type_value tv ∧
     SORTED $< (MAP FST sparse) ∧
     n * type_slot_size tv ≤ dimword(:256) ∧
@@ -1826,9 +1828,9 @@ Proof
 QED
 
 (* Helper: Dynamic array roundtrip (n > 0 case) *)
-Theorem roundtrip_dyn_array[local]:
+Theorem encode_decode_roundtrip_dyn_array[local]:
   ∀tv n vs slots base storage.
-    (∀v. well_formed_value v ⇒ roundtrip_ok tv v) ∧
+    (∀v. well_formed_value v ⇒ encode_decode_roundtrip_ok tv v) ∧
     n ≠ 0 ∧
     encode_dyn_array tv 1 vs = SOME slots ∧
     n * type_slot_size tv + 1 ≤ dimword(:256) ∧
@@ -1888,24 +1890,24 @@ QED
 
 (* ===== Main Roundtrip Theorem ===== *)
 
-Theorem roundtrip_all:
+Theorem encode_decode_roundtrip_all:
   ∀tv v.
     well_formed_value v ∧ well_formed_type_value tv ⇒
-    roundtrip_ok tv v
+    encode_decode_roundtrip_ok tv v
 Proof
   completeInduct_on `type_value_size tv` >>
   rpt gen_tac >> strip_tac >> rpt strip_tac >>
   Cases_on `tv`
   (* BaseTV, FlagTV, NoneTV *)
   >> TRY (
-    irule roundtrip_ok_noncompound >>
+    irule encode_decode_roundtrip_ok_noncompound >>
     simp[well_formed_value_def, well_formed_type_value_def] >> NO_TAC
   )
   (* TupleTV tvs *)
   >> TRY (
     rename1 `TupleTV tvs` >>
     (* Bridge IH: use size < to get unconditional roundtrip *)
-    `EVERY (λtv. ∀v'. well_formed_value v' ⇒ roundtrip_ok tv v') tvs` by (
+    `EVERY (λtv. ∀v'. well_formed_value v' ⇒ encode_decode_roundtrip_ok tv v') tvs` by (
       simp[EVERY_MEM] >> rpt strip_tac >>
       rename1 `MEM tv' tvs` >>
       `type_value_size tv' < v` by (
@@ -1918,8 +1920,8 @@ Proof
       fs[well_formed_type_value_def, EVERY_MEM] >>
       first_x_assum drule >> simp[]
     ) >>
-    (* Expand roundtrip_ok in goal only *)
-    CONV_TAC (REWR_CONV roundtrip_ok_def) >>
+    (* Expand encode_decode_roundtrip_ok in goal only *)
+    CONV_TAC (REWR_CONV encode_decode_roundtrip_ok_def) >>
     rpt strip_tac >>
     Cases_on `v'` >> gvs[encode_value_def] >>
     Cases_on `a` >> gvs[encode_value_def, AllCaseEqs()] >>
@@ -1934,7 +1936,7 @@ Proof
   (* ArrayTV tv' b *)
   >- (
     rename1 `ArrayTV tv' b` >>
-    CONV_TAC (REWR_CONV roundtrip_ok_def) >>
+    CONV_TAC (REWR_CONV encode_decode_roundtrip_ok_def) >>
     rpt strip_tac >>
     Cases_on `b`
     (* ArrayTV tv' (Fixed n) *)
@@ -1951,8 +1953,8 @@ Proof
         simp[Once decode_value_def] >>
         simp[decode_value_def, enumerate_static_array_def]
       ) >>
-      (* n > 0: use roundtrip_static_array *)
-      irule roundtrip_static_array >>
+      (* n > 0: use encode_decode_roundtrip_static_array *)
+      irule encode_decode_roundtrip_static_array >>
       gvs[well_formed_value_def, well_formed_type_value_def, type_slot_size_def] >>
       rpt strip_tac >>
       first_x_assum (qspec_then `type_value_size t` mp_tac) >> simp[] >>
@@ -1971,7 +1973,7 @@ Proof
         gvs[encode_value_def] >>
         simp[read_slot_after_apply_writes_single, decode_value_def]
       ) >>
-      irule roundtrip_dyn_array >> simp[] >>
+      irule encode_decode_roundtrip_dyn_array >> simp[] >>
       conj_tac >- (
         rpt strip_tac >>
         first_x_assum (qspec_then `type_value_size tv'` mp_tac) >>
@@ -1988,7 +1990,7 @@ Proof
     rename1 `StructTV ftypes` >>
     (* Bridge IH: use size < to get unconditional roundtrip *)
     `EVERY (λ(nm,tv). ∀v'. well_formed_value v' ⇒
-             roundtrip_ok tv v') ftypes` by (
+             encode_decode_roundtrip_ok tv v') ftypes` by (
       simp[EVERY_MEM, FORALL_PROD] >> rpt strip_tac >>
       rename1 `MEM (nm, tv') ftypes` >>
       `type_value_size tv' < v` by (
@@ -2001,8 +2003,8 @@ Proof
       fs[well_formed_type_value_def, EVERY_MEM] >>
       first_x_assum drule >> simp[]
     ) >>
-    (* Expand roundtrip_ok in goal only *)
-    CONV_TAC (REWR_CONV roundtrip_ok_def) >>
+    (* Expand encode_decode_roundtrip_ok in goal only *)
+    CONV_TAC (REWR_CONV encode_decode_roundtrip_ok_def) >>
     rpt strip_tac >>
     Cases_on `v'` >> gvs[encode_value_def, AllCaseEqs()] >>
     simp[Once decode_value_def] >>
