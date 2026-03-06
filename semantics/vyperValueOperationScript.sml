@@ -563,6 +563,8 @@ val () = cv_auto_trans evaluate_attribute_def;
 (* convert *)
 
 Definition evaluate_convert_def:
+  evaluate_convert (BytesV _ bs) (BaseT BoolT) =
+    INL $ BoolV (EXISTS (λb. b ≠ 0w) bs) ∧
   evaluate_convert (IntV _ i) (BaseT BoolT) = INL $ BoolV (i ≠ 0) ∧
   evaluate_convert (BoolV b) (BaseT (IntT n)) =
     INL $ IntV (Signed n) (if b then 1 else 0) ∧
@@ -617,6 +619,10 @@ Definition evaluate_convert_def:
     (if LENGTH bs ≤ n
      then INL $ StringV n (MAP (CHR o w2n) bs)
      else INR (RuntimeError "convert bytes string")) ∧
+  evaluate_convert (StringV _ s) (BaseT (StringT n)) =
+    (if LENGTH s ≤ n
+     then INL $ StringV n s
+     else INR (RuntimeError "convert string string bound")) ∧
   evaluate_convert (StringV _ s) (BaseT (BytesT bd)) =
     (if compatible_bound bd (LENGTH s)
      then INL $ BytesV bd (MAP (n2w o ORD) s)
