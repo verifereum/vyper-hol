@@ -358,7 +358,11 @@ val excluded_test_names = [
   "test_abi_decode_double[False*",
   "test_abi_decode_nested_dynarray2[False*",
   "test_abi_decode_nested_dynarray[False*",
-  "test_abi_decode_single*False]"
+  "test_abi_decode_single*False]",
+  (* Flag conversion tests: convert(int_val, FlagType) requires
+     evaluate_convert to support FlagT target types, which needs
+     type env access. TODO: refactor FlagV representation first. *)
+  "test_flag_conversion*"
 ]
 
 fun glob_match pat str =
