@@ -218,7 +218,7 @@ signature jsonASTLib = sig
   val mk_JTL_FlagDef : string * string list -> term
   val mk_JInterfaceFunc : string * term list * term * string list -> term
   val mk_JTL_InterfaceDef : string * term list -> term
-  val mk_JModule : term list -> term
+  val mk_JModule : term * term list -> term
 
   (* ===== Decoders ===== *)
   val json_type : term JSONDecode.decoder

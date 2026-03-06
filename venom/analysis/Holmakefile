@@ -17,4 +17,5 @@ INCLUDES = \
   stack_order \
   mem_alias \
   mem_ssa \
-  var_definition
+  var_definition \
+  variable_range
