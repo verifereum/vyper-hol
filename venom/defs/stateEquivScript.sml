@@ -97,7 +97,9 @@ Definition execution_equiv_def:
     s1.vs_immutables = s2.vs_immutables /\
     s1.vs_data_section = s2.vs_data_section /\
     s1.vs_label_offsets = s2.vs_label_offsets /\
-    s1.vs_code = s2.vs_code
+    s1.vs_code = s2.vs_code /\
+    s1.vs_params = s2.vs_params /\
+    s1.vs_return_values = s2.vs_return_values
 End
 
 (* ==========================================================================

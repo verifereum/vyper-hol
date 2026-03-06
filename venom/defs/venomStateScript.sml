@@ -100,7 +100,9 @@ Datatype:
     vs_immutables : (num, bytes32) fmap; (* Immutable storage (ILOAD/ISTORE) *)
     vs_data_section : byte list;     (* Read-only data section (DLOAD/DLOADBYTES) *)
     vs_label_offsets : (string, bytes32) fmap; (* Label→address map (OFFSET) *)
-    vs_code : byte list              (* Own bytecode (CODECOPY/EXTCODECOPY) *)
+    vs_code : byte list;             (* Own bytecode (CODECOPY/EXTCODECOPY) *)
+    vs_params : bytes32 list;        (* Function parameters (read by PARAM) *)
+    vs_return_values : bytes32 list option  (* Set by RET; NONE for program halt *)
   |>
 End
 
@@ -158,7 +160,9 @@ Definition init_venom_state_def:
     vs_immutables := FEMPTY;
     vs_data_section := [];
     vs_label_offsets := FEMPTY;
-    vs_code := []
+    vs_code := [];
+    vs_params := [];
+    vs_return_values := NONE
   |>
 End
 
@@ -173,6 +177,13 @@ End
 
 Definition lookup_var_def:
   lookup_var x s = FLOOKUP s.vs_vars x
+End
+
+(* Write multiple values to multiple variables (for INVOKE return values) *)
+Definition update_vars_def:
+  update_vars [] [] s = s /\
+  update_vars (x::xs) (v::vs) s = update_vars xs vs (update_var x v s) /\
+  update_vars _ _ s = s  (* mismatched lengths: no-op *)
 End
 
 (* Memory operations - using verifereum-style byte list memory *)

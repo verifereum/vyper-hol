@@ -286,6 +286,25 @@ Definition step_inst_def:
             | _ => Error "djmp: undefined operand or invalid labels")
         | _ => Error "djmp requires selector and labels")
 
+    (* Function parameter access *)
+    | PARAM =>
+        (case inst.inst_operands of
+          [Lit idx] =>
+            let i = w2n idx in
+            if i < LENGTH s.vs_params then
+              (case inst.inst_outputs of
+                [out] => OK (update_var out (EL i s.vs_params) s)
+              | _ => Error "param requires single output")
+            else Error "param: index out of range"
+        | _ => Error "param requires literal index")
+
+    (* Return from internal function *)
+    | RET =>
+        (case eval_operands inst.inst_operands s of
+          SOME ret_vals =>
+            Halt (halt_state (s with vs_return_values := SOME ret_vals))
+        | NONE => Error "ret: undefined return value")
+
     (* Termination *)
     | STOP => Halt (halt_state s)
     | RETURN => Halt (halt_state s)
