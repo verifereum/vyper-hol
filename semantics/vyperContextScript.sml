@@ -265,19 +265,30 @@ End
 
 val () = cv_auto_trans evaluate_type_builtin_def;
 
+Definition ecrecover_arg_to_num_def:
+(* Convert an ecrecover argument to a natural number.
+   Accepts both IntV (uint) and BytesV (bytes32). *)
+  ecrecover_arg_to_num (IntV _ i) = SOME (Num i) ∧
+  ecrecover_arg_to_num (BytesV _ bs) =
+    SOME (w2n (word_of_bytes_be (PAD_LEFT 0w 32 bs) : bytes32)) ∧
+  ecrecover_arg_to_num _ = NONE
+End
+
+val () = cv_auto_trans ecrecover_arg_to_num_def;
+
 Definition evaluate_ecrecover_def:
-  evaluate_ecrecover [BytesV _ hash_bytes; IntV u1 v_int; IntV u2 r_int; IntV u3 s_int] =
-    (if u1 = Unsigned 256 ∧ u2 = Unsigned 256 ∧ u3 = Unsigned 256 ∧
-        LENGTH hash_bytes = 32
-     then let
-       hash:bytes32 = word_of_bytes_be hash_bytes;
-       v = Num v_int;
-       r = Num r_int;
-       s = Num s_int
-     in case vfmExecution$ecrecover hash v r s of
-          NONE => INL $ AddressV 0w
-        | SOME addr => INL $ AddressV addr
-     else INR (TypeError "ECRecover type")) ∧
+  evaluate_ecrecover [BytesV _ hash_bytes; v_arg; r_arg; s_arg] =
+    (case (ecrecover_arg_to_num v_arg,
+           ecrecover_arg_to_num r_arg,
+           ecrecover_arg_to_num s_arg) of
+       (SOME v, SOME r, SOME s) =>
+         if LENGTH hash_bytes = 32
+         then let hash:bytes32 = word_of_bytes_be hash_bytes
+         in case vfmExecution$ecrecover hash v r s of
+              NONE => INL $ AddressV 0w
+            | SOME addr => INL $ AddressV addr
+         else INR (TypeError "ECRecover type")
+     | _ => INR (TypeError "ECRecover type")) ∧
   evaluate_ecrecover _ = INR (TypeError "ECRecover args")
 End
 
