@@ -519,11 +519,10 @@ Triviality exec_ext_call_equiv:
       (exec_ext_call inst s2 addr value ao as_ ro rs is_static)
 Proof
   rw[exec_ext_call_def, LET_THM] >>
-  `s1.vs_memory = s2.vs_memory` by fs[state_equiv_def, execution_equiv_def] >>
-  `s1.vs_accounts = s2.vs_accounts` by fs[state_equiv_def, execution_equiv_def] >>
-  `s1.vs_ext_call_oracle = s2.vs_ext_call_oracle`
+  `s1.vs_memory = s2.vs_memory /\ s1.vs_accounts = s2.vs_accounts /\
+   s1.vs_ext_call_oracle = s2.vs_ext_call_oracle /\
+   s1.vs_logs = s2.vs_logs`
     by fs[state_equiv_def, execution_equiv_def] >>
-  `s1.vs_logs = s2.vs_logs` by fs[state_equiv_def, execution_equiv_def] >>
   simp[read_memory_def] >>
   Cases_on `inst.inst_outputs` >> simp[result_equiv_def] >>
   Cases_on `t` >> simp[result_equiv_def] >>
@@ -542,11 +541,10 @@ Triviality exec_create_equiv:
       (exec_create inst s2 value offset sz)
 Proof
   rw[exec_create_def, LET_THM] >>
-  `s1.vs_memory = s2.vs_memory` by fs[state_equiv_def, execution_equiv_def] >>
-  `s1.vs_accounts = s2.vs_accounts` by fs[state_equiv_def, execution_equiv_def] >>
-  `s1.vs_ext_call_oracle = s2.vs_ext_call_oracle`
+  `s1.vs_memory = s2.vs_memory /\ s1.vs_accounts = s2.vs_accounts /\
+   s1.vs_ext_call_oracle = s2.vs_ext_call_oracle /\
+   s1.vs_logs = s2.vs_logs`
     by fs[state_equiv_def, execution_equiv_def] >>
-  `s1.vs_logs = s2.vs_logs` by fs[state_equiv_def, execution_equiv_def] >>
   simp[read_memory_def] >>
   Cases_on `inst.inst_outputs` >> simp[result_equiv_def] >>
   Cases_on `t` >> simp[result_equiv_def] >>
@@ -554,6 +552,21 @@ Proof
        lookup_var_def, FLOOKUP_UPDATE] >>
   rpt strip_tac >> fs[state_equiv_def, execution_equiv_def, lookup_var_def] >>
   rw[] >> fs[]
+QED
+
+(* Helper: exec_alloca preserves equiv (operands are literals) *)
+Triviality exec_alloca_equiv:
+  !vars inst s1 s2 alloc_size alloc_id.
+    state_equiv vars s1 s2 ==>
+    result_equiv vars
+      (exec_alloca inst s1 alloc_size alloc_id)
+      (exec_alloca inst s2 alloc_size alloc_id)
+Proof
+  rw[exec_alloca_def, LET_THM] >>
+  rpt CASE_TAC >> gvs[result_equiv_def] >>
+  gvs[state_equiv_def, execution_equiv_def, update_var_def,
+      lookup_var_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> rw[] >> fs[]
 QED
 
 (* Allocation: operands are literals so state_equiv directly gives same result *)
@@ -565,10 +578,8 @@ Triviality step_inst_alloca_equiv:
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
   simp[step_inst_def] >>
-  rpt CASE_TAC >> gvs[result_equiv_def, LET_THM] >>
-  gvs[state_equiv_def, execution_equiv_def, update_var_def,
-      lookup_var_def, FLOOKUP_UPDATE] >>
-  rpt strip_tac >> rw[] >> fs[]
+  rpt CASE_TAC >> gvs[result_equiv_def] >>
+  irule exec_alloca_equiv >> simp[]
 QED
 
 Triviality step_inst_ext_call_equiv:

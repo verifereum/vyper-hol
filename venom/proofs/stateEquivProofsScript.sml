@@ -119,9 +119,17 @@ Theorem result_equiv_mismatch[local,simp]:
   result_equiv vars (Revert s) (OK s') = F /\
   result_equiv vars (Revert s) (Halt s') = F /\
   result_equiv vars (Revert s) (Error e) = F /\
+  result_equiv vars (Revert s) (IntRet vs s') = F /\
+  result_equiv vars (IntRet vs s) (OK s') = F /\
+  result_equiv vars (IntRet vs s) (Halt s') = F /\
+  result_equiv vars (IntRet vs s) (Revert s') = F /\
+  result_equiv vars (IntRet vs s) (Error e) = F /\
   result_equiv vars (Error e) (OK s) = F /\
   result_equiv vars (Error e) (Halt s) = F /\
-  result_equiv vars (Error e) (Revert s) = F
+  result_equiv vars (Error e) (Revert s) = F /\
+  result_equiv vars (Error e) (IntRet vs s) = F /\
+  result_equiv vars (OK s) (IntRet vs s') = F /\
+  result_equiv vars (Halt s) (IntRet vs s') = F
 Proof
   rw[result_equiv_def]
 QED

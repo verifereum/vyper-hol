@@ -246,6 +246,21 @@ Definition exec_create_def:
     | _ => Error "create requires single output"
 End
 
+(* Bump-allocate memory and record in vs_allocas *)
+Definition exec_alloca_def:
+  exec_alloca inst s alloc_size alloc_id =
+    case inst.inst_outputs of
+      [out] =>
+        let offset = LENGTH s.vs_memory in
+        let sz = w2n alloc_size in
+        let s' = s with <|
+          vs_memory := s.vs_memory ++ REPLICATE sz 0w;
+          vs_allocas := s.vs_allocas |+ (w2n alloc_id, (offset, sz))
+        |> in
+        OK (update_var out (n2w offset) s')
+    | _ => Error "alloca requires single output"
+End
+
 (* Step a single instruction *)
 Definition step_inst_def:
   step_inst inst s =
@@ -711,46 +726,19 @@ Definition step_inst_def:
     | ALLOCA =>
         (case inst.inst_operands of
           [Lit alloc_size; Lit alloc_id] =>
-            (case inst.inst_outputs of
-              [out] =>
-                let offset = LENGTH s.vs_memory in
-                let sz = w2n alloc_size in
-                let s' = s with <|
-                  vs_memory := s.vs_memory ++ REPLICATE sz 0w;
-                  vs_allocas := s.vs_allocas |+ (w2n alloc_id, (offset, sz))
-                |> in
-                OK (update_var out (n2w offset) s')
-            | _ => Error "alloca requires single output")
+            exec_alloca inst s alloc_size alloc_id
         | _ => Error "alloca requires 2 literal operands")
 
     | PALLOCA =>
         (case inst.inst_operands of
           [Lit alloc_size; Lit alloc_id] =>
-            (case inst.inst_outputs of
-              [out] =>
-                let offset = LENGTH s.vs_memory in
-                let sz = w2n alloc_size in
-                let s' = s with <|
-                  vs_memory := s.vs_memory ++ REPLICATE sz 0w;
-                  vs_allocas := s.vs_allocas |+ (w2n alloc_id, (offset, sz))
-                |> in
-                OK (update_var out (n2w offset) s')
-            | _ => Error "palloca requires single output")
+            exec_alloca inst s alloc_size alloc_id
         | _ => Error "palloca requires 2 literal operands")
 
     | CALLOCA =>
         (case inst.inst_operands of
           Lit alloc_size :: Lit alloc_id :: _ =>  (* Label callee ignored at runtime *)
-            (case inst.inst_outputs of
-              [out] =>
-                let offset = LENGTH s.vs_memory in
-                let sz = w2n alloc_size in
-                let s' = s with <|
-                  vs_memory := s.vs_memory ++ REPLICATE sz 0w;
-                  vs_allocas := s.vs_allocas |+ (w2n alloc_id, (offset, sz))
-                |> in
-                OK (update_var out (n2w offset) s')
-            | _ => Error "calloca requires single output")
+            exec_alloca inst s alloc_size alloc_id
         | _ => Error "calloca requires literal size and id")
 
     (* Default - truly unknown opcode *)
@@ -773,7 +761,7 @@ Proof
   gvs[AllCaseEqs(), is_terminator_def] >>
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
      exec_read0_def, exec_read1_def, exec_write2_def,
-     exec_ext_call_def, exec_create_def] >>
+     exec_ext_call_def, exec_create_def, exec_alloca_def] >>
   gvs[AllCaseEqs()] >>
   fs[update_var_def, mstore_def, sstore_def, tstore_def,
      write_memory_with_expansion_def, mcopy_def,
