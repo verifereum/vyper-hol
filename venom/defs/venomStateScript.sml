@@ -96,7 +96,11 @@ Datatype:
     vs_call_ctx : call_context;      (* Call context *)
     vs_tx_ctx : tx_context;          (* Transaction context *)
     vs_block_ctx : block_context;    (* Block context *)
-    vs_logs : event list             (* Log/event accumulator *)
+    vs_logs : event list;            (* Log/event accumulator *)
+    vs_immutables : (num, bytes32) fmap; (* Immutable storage (ILOAD/ISTORE) *)
+    vs_data_section : byte list;     (* Read-only data section (DLOAD/DLOADBYTES) *)
+    vs_label_offsets : (string, bytes32) fmap; (* Label→address map (OFFSET) *)
+    vs_code : byte list              (* Own bytecode (CODECOPY/EXTCODECOPY) *)
   |>
 End
 
@@ -150,7 +154,11 @@ Definition init_venom_state_def:
     vs_call_ctx := empty_call_context;
     vs_tx_ctx := empty_tx_context;
     vs_block_ctx := empty_block_context;
-    vs_logs := []
+    vs_logs := [];
+    vs_immutables := FEMPTY;
+    vs_data_section := [];
+    vs_label_offsets := FEMPTY;
+    vs_code := []
   |>
 End
 

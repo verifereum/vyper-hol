@@ -434,9 +434,7 @@ Definition step_inst_def:
         | _ => Error "sha3 requires 2 operands")
 
     (* Code introspection *)
-    | CODESIZE => exec_read0
-        (\s. n2w (LENGTH (lookup_account s.vs_call_ctx.cc_address
-                                         s.vs_accounts).code)) inst s
+    | CODESIZE => exec_read0 (\s. n2w (LENGTH s.vs_code)) inst s
     | EXTCODESIZE => exec_read1
         (\addr s. n2w (LENGTH (lookup_account (w2w addr)
                                               s.vs_accounts).code)) inst s
@@ -450,6 +448,84 @@ Definition step_inst_def:
 
     (* Allocation pointer arithmetic - GEP is base + offset, pure *)
     | GEP => exec_pure2 word_add inst s
+
+    (* Immutables - separate from memory, used during constructor *)
+    | ILOAD => exec_read1
+        (\off s.
+          case FLOOKUP s.vs_immutables (w2n off) of
+            SOME v => v
+          | NONE => 0w) inst s
+    | ISTORE =>
+        (case inst.inst_operands of
+          [offset_op; val_op] =>
+            (case (eval_operand offset_op s, eval_operand val_op s) of
+              (SOME off, SOME v) =>
+                OK (s with vs_immutables := s.vs_immutables |+ (w2n off, v))
+            | _ => Error "undefined operand")
+        | _ => Error "istore requires 2 operands")
+
+    (* Data section reads *)
+    | DLOAD => exec_read1
+        (\off s.
+          let bytes = TAKE 32 (DROP (w2n off) s.vs_data_section ++
+                               REPLICATE 32 0w) in
+          word_of_bytes T (0w:bytes32) bytes) inst s
+
+    | DLOADBYTES =>
+        (case inst.inst_operands of
+          [op_size; op_src; op_dst] =>
+            (case (eval_operand op_size s, eval_operand op_src s,
+                   eval_operand op_dst s) of
+              (SOME size_val, SOME src, SOME dst) =>
+                let size = w2n size_val in
+                let bytes = TAKE size (DROP (w2n src) s.vs_data_section ++
+                                      REPLICATE size 0w) in
+                OK (write_memory_with_expansion (w2n dst) bytes s)
+            | _ => Error "undefined operand")
+        | _ => Error "dloadbytes requires 3 operands")
+
+    (* Code access *)
+    | CODECOPY =>
+        (case inst.inst_operands of
+          [op_size; op_src; op_dst] =>
+            (case (eval_operand op_size s, eval_operand op_src s,
+                   eval_operand op_dst s) of
+              (SOME size_val, SOME src, SOME dst) =>
+                let size = w2n size_val in
+                let bytes = TAKE size (DROP (w2n src) s.vs_code ++
+                                      REPLICATE size 0w) in
+                OK (write_memory_with_expansion (w2n dst) bytes s)
+            | _ => Error "undefined operand")
+        | _ => Error "codecopy requires 3 operands")
+
+    | EXTCODECOPY =>
+        (case inst.inst_operands of
+          [op_addr; op_dst; op_src; op_size] =>
+            (case (eval_operand op_addr s, eval_operand op_dst s,
+                   eval_operand op_src s, eval_operand op_size s) of
+              (SOME addr, SOME dst, SOME src, SOME size_val) =>
+                let code = (lookup_account (w2w addr) s.vs_accounts).code in
+                let size = w2n size_val in
+                let bytes = TAKE size (DROP (w2n src) code ++
+                                      REPLICATE size 0w) in
+                OK (write_memory_with_expansion (w2n dst) bytes s)
+            | _ => Error "undefined operand")
+        | _ => Error "extcodecopy requires 4 operands")
+
+    (* Label offset computation - resolves label address + operand offset *)
+    | OFFSET =>
+        (case inst.inst_operands of
+          [Label lbl; offset_op] =>
+            (case eval_operand offset_op s of
+              SOME off =>
+                (case inst.inst_outputs of
+                  [out] =>
+                    (case FLOOKUP s.vs_label_offsets lbl of
+                      SOME base => OK (update_var out (base + off) s)
+                    | NONE => Error "offset: unknown label")
+                | _ => Error "offset requires single output")
+            | NONE => Error "offset: undefined operand")
+        | _ => Error "offset requires label and operand")
 
     (* Logging - variable operand count.
        Venom IR format: log topic_count, topic_{n-1}, ..., topic_0, size, offset

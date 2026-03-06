@@ -160,7 +160,7 @@ Triviality step_inst_read1_equiv:
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     MEM inst.inst_opcode
       [MLOAD; SLOAD; TLOAD; BLOCKHASH; BALANCE; CALLDATALOAD;
-       EXTCODESIZE; BLOBHASH] ==>
+       EXTCODESIZE; BLOBHASH; ILOAD; DLOAD] ==>
     result_equiv vars (step_inst inst s1) (step_inst inst s2)
 Proof
   rw[] >> simp[step_inst_def] >>
@@ -314,6 +314,71 @@ Proof
   irule write_memory_with_expansion_preserves >> simp[]
 QED
 
+(* ISTORE: writes to vs_immutables *)
+Triviality step_inst_istore_equiv:
+  !vars inst s1 s2.
+    state_equiv vars s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
+    inst.inst_opcode = ISTORE ==>
+    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> simp[step_inst_def] >>
+  imp_res_tac eval_operand_equiv >>
+  `s1.vs_immutables = s2.vs_immutables` by
+    fs[state_equiv_def, execution_equiv_def] >>
+  rpt CASE_TAC >> gvs[result_equiv_def,
+    state_equiv_def, execution_equiv_def, lookup_var_def]
+QED
+
+(* DLOADBYTES/CODECOPY: copy from data section/code to memory, 3 operands *)
+Triviality step_inst_data_copy_equiv:
+  !vars inst s1 s2.
+    state_equiv vars s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
+    MEM inst.inst_opcode [DLOADBYTES; CODECOPY] ==>
+    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> simp[step_inst_def] >>
+  imp_res_tac eval_operand_equiv >>
+  `s1.vs_data_section = s2.vs_data_section /\
+   s1.vs_code = s2.vs_code` by
+    fs[state_equiv_def, execution_equiv_def] >>
+  rpt CASE_TAC >> gvs[result_equiv_def] >>
+  irule write_memory_with_expansion_preserves >> simp[]
+QED
+
+(* EXTCODECOPY: copy external code to memory, 4 operands *)
+Triviality step_inst_extcodecopy_equiv:
+  !vars inst s1 s2.
+    state_equiv vars s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
+    inst.inst_opcode = EXTCODECOPY ==>
+    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> simp[step_inst_def] >>
+  imp_res_tac eval_operand_equiv >>
+  `s1.vs_accounts = s2.vs_accounts` by
+    fs[state_equiv_def, execution_equiv_def] >>
+  rpt CASE_TAC >> gvs[result_equiv_def] >>
+  irule write_memory_with_expansion_preserves >> simp[]
+QED
+
+(* OFFSET: label address + operand offset *)
+Triviality step_inst_offset_equiv:
+  !vars inst s1 s2.
+    state_equiv vars s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
+    inst.inst_opcode = OFFSET ==>
+    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> simp[step_inst_def] >>
+  imp_res_tac eval_operand_equiv >>
+  `s1.vs_label_offsets = s2.vs_label_offsets` by
+    fs[state_equiv_def, execution_equiv_def] >>
+  rpt CASE_TAC >> gvs[result_equiv_def] >>
+  irule update_var_preserves >> simp[]
+QED
+
 (* LOG: appends event to vs_logs.
    Prove all operand evals are equal, then case analysis collapses. *)
 Triviality step_inst_log_equiv:
@@ -438,7 +503,7 @@ Proof
       by simp[] >> drule_all step_inst_read0_equiv >> simp[],
     `MEM inst.inst_opcode
        [MLOAD;SLOAD;TLOAD;BLOCKHASH;BALANCE;CALLDATALOAD;
-        EXTCODESIZE;BLOBHASH]`
+        EXTCODESIZE;BLOBHASH;ILOAD;DLOAD]`
       by simp[] >> drule_all step_inst_read1_equiv >> simp[],
     `inst.inst_opcode = EXTCODEHASH` by simp[] >>
       drule_all step_inst_extcodehash_equiv >> simp[],
@@ -466,6 +531,14 @@ Proof
       drule_all step_inst_selfdestruct_equiv >> simp[],
     `inst.inst_opcode = DJMP` by simp[] >>
       drule_all step_inst_djmp_equiv >> simp[],
+    `inst.inst_opcode = ISTORE` by simp[] >>
+      drule_all step_inst_istore_equiv >> simp[],
+    `MEM inst.inst_opcode [DLOADBYTES;CODECOPY]` by simp[] >>
+      drule_all step_inst_data_copy_equiv >> simp[],
+    `inst.inst_opcode = EXTCODECOPY` by simp[] >>
+      drule_all step_inst_extcodecopy_equiv >> simp[],
+    `inst.inst_opcode = OFFSET` by simp[] >>
+      drule_all step_inst_offset_equiv >> simp[],
     (* Unimplemented opcodes: wildcard gives Error *)
     simp[step_inst_def, result_equiv_def]
   ]
