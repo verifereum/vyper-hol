@@ -512,11 +512,11 @@ QED
 (* External calls: oracle + state equiv => same result *)
 (* Helper: exec_ext_call preserves equiv when states and operands match *)
 Triviality exec_ext_call_equiv:
-  !vars inst s1 s2 addr value ao as_ ro rs is_static.
+  !vars inst s1 s2 gas addr value ao as_ ro rs is_static.
     state_equiv vars s1 s2 ==>
     result_equiv vars
-      (exec_ext_call inst s1 addr value ao as_ ro rs is_static)
-      (exec_ext_call inst s2 addr value ao as_ ro rs is_static)
+      (exec_ext_call inst s1 gas addr value ao as_ ro rs is_static)
+      (exec_ext_call inst s2 gas addr value ao as_ ro rs is_static)
 Proof
   rw[exec_ext_call_def, LET_THM] >>
   `s1.vs_memory = s2.vs_memory /\ s1.vs_accounts = s2.vs_accounts /\

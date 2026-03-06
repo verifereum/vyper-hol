@@ -212,10 +212,10 @@ End
    STATICCALL/DELEGATECALL: operands = [gas; addr; argsOff; argsSize; retOff; retSize]
 *)
 Definition exec_ext_call_def:
-  exec_ext_call inst s addr_w value argsOff argsSize retOff retSize is_static =
+  exec_ext_call inst s gas addr_w value argsOff argsSize retOff retSize is_static =
     let calldata = read_memory (w2n argsOff) (w2n argsSize) s in
     let target : address = w2w addr_w in
-    let result = s.vs_ext_call_oracle s.vs_accounts target (w2n value) calldata is_static NONE in
+    let result = s.vs_ext_call_oracle s.vs_accounts target (w2n gas) (w2n value) calldata is_static NONE in
     let s' = s with <|
       vs_returndata := result.ecr_returndata;
       vs_accounts := result.ecr_accounts;
@@ -235,7 +235,7 @@ End
 Definition exec_create_def:
   exec_create inst s value offset sz salt_opt =
     let init_code = read_memory (w2n offset) (w2n sz) s in
-    let result = s.vs_ext_call_oracle s.vs_accounts (0w:address) (w2n value) init_code F salt_opt in
+    let result = s.vs_ext_call_oracle s.vs_accounts (0w:address) 0 (w2n value) init_code F salt_opt in
     let s' = s with <|
       vs_returndata := result.ecr_returndata;
       vs_accounts := result.ecr_accounts;
@@ -666,8 +666,8 @@ Definition step_inst_def:
                    eval_operand val_op s, eval_operand ao_op s,
                    eval_operand as_op s, eval_operand ro_op s,
                    eval_operand rs_op s) of
-              (SOME _, SOME addr, SOME value, SOME ao, SOME as_, SOME ro, SOME rs) =>
-                exec_ext_call inst s addr value ao as_ ro rs F
+              (SOME gas, SOME addr, SOME value, SOME ao, SOME as_, SOME ro, SOME rs) =>
+                exec_ext_call inst s gas addr value ao as_ ro rs F
             | _ => Error "undefined operand")
         | _ => Error "call requires 7 operands")
 
@@ -677,8 +677,8 @@ Definition step_inst_def:
             (case (eval_operand gas_op s, eval_operand addr_op s,
                    eval_operand ao_op s, eval_operand as_op s,
                    eval_operand ro_op s, eval_operand rs_op s) of
-              (SOME _, SOME addr, SOME ao, SOME as_, SOME ro, SOME rs) =>
-                exec_ext_call inst s addr (0w:bytes32) ao as_ ro rs T
+              (SOME gas, SOME addr, SOME ao, SOME as_, SOME ro, SOME rs) =>
+                exec_ext_call inst s gas addr (0w:bytes32) ao as_ ro rs T
             | _ => Error "undefined operand")
         | _ => Error "staticcall requires 6 operands")
 
@@ -688,8 +688,8 @@ Definition step_inst_def:
             (case (eval_operand gas_op s, eval_operand addr_op s,
                    eval_operand ao_op s, eval_operand as_op s,
                    eval_operand ro_op s, eval_operand rs_op s) of
-              (SOME _, SOME addr, SOME ao, SOME as_, SOME ro, SOME rs) =>
-                exec_ext_call inst s addr s.vs_call_ctx.cc_callvalue ao as_ ro rs F
+              (SOME gas, SOME addr, SOME ao, SOME as_, SOME ro, SOME rs) =>
+                exec_ext_call inst s gas addr s.vs_call_ctx.cc_callvalue ao as_ ro rs F
             | _ => Error "undefined operand")
         | _ => Error "delegatecall requires 6 operands")
 
