@@ -21,9 +21,11 @@ Libs
 Definition well_formed_type_value_def:
   well_formed_type_value (BaseTV (BytesT (Fixed n))) = (n ≤ 32) ∧
   well_formed_type_value (BaseTV (BytesT (Dynamic n))) =
-    (type_slot_size (BaseTV (BytesT (Dynamic n))) ≤ dimword(:256)) ∧
+    (n < dimword(:256) ∧
+     type_slot_size (BaseTV (BytesT (Dynamic n))) ≤ dimword(:256)) ∧
   well_formed_type_value (BaseTV (StringT n)) =
-    (type_slot_size (BaseTV (StringT n)) ≤ dimword(:256)) ∧
+    (n < dimword(:256) ∧
+     type_slot_size (BaseTV (StringT n)) ≤ dimword(:256)) ∧
   well_formed_type_value (TupleTV tvs) =
     (EVERY well_formed_type_value tvs ∧
      type_slot_size (TupleTV tvs) ≤ dimword(:256)) ∧
@@ -113,10 +115,10 @@ Definition value_has_type_def:
     (m = n ∧ LENGTH bs = n ∧ n ≤ 32) ∧
   (* Dynamic bytes *)
   value_has_type (BaseTV (BytesT (Dynamic max))) (BytesV (Dynamic m) bs) =
-    (m = max ∧ max < dimword(:256) ∧ LENGTH bs ≤ max) ∧
+    (m = max ∧ LENGTH bs ≤ max) ∧
   (* String *)
   value_has_type (BaseTV (StringT max)) (StringV m s) =
-    (m = max ∧ max < dimword(:256) ∧ LENGTH s ≤ max) ∧
+    (m = max ∧ LENGTH s ≤ max) ∧
   (* Flag *)
   value_has_type (FlagTV m') (FlagV m _) = (m = m') ∧
   (* None *)

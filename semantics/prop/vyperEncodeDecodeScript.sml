@@ -524,10 +524,9 @@ QED
    Needed for exact roundtrip when encode is lenient (m ≤ max, NoneTV v).
    For compound types, bounds_compat is checked recursively on sub-values. *)
 Definition bounds_compat_def:
-  bounds_compat (BaseTV (StringT max)) (StringV m _) =
-    (m = max ∧ max < dimword(:256)) ∧
+  bounds_compat (BaseTV (StringT max)) (StringV m _) = (m = max) ∧
   bounds_compat (BaseTV (BytesT (Dynamic max))) (BytesV (Dynamic m) _) =
-    (m = max ∧ max < dimword(:256)) ∧
+    (m = max) ∧
   bounds_compat NoneTV v = (v = NoneV) ∧
   bounds_compat (TupleTV tvs) (ArrayV (TupleV vs)) =
     LIST_REL bounds_compat tvs vs ∧
@@ -703,6 +702,7 @@ QED
 Theorem encode_decode_roundtrip_ok_from_well_formed_base[local]:
   ∀tv v.
     well_formed_value v ∧
+    well_formed_type_value tv ∧
     bounds_compat tv v ∧
     IS_SOME (encode_value tv v) ∧
     (∀tvs. tv ≠ TupleTV tvs) ∧
@@ -736,7 +736,8 @@ Proof
   simp[encode_value_def, encode_base_to_slot_def, AllCaseEqs(),
        COND_RAND, COND_RATOR, bounds_compat_def,
        encode_dyn_bytes_slots_def] >>
-  fs[well_formed_value_def, bounds_compat_def] >>
+  fs[well_formed_value_def, bounds_compat_def,
+     well_formed_type_value_def, type_slot_size_def] >>
   rpt strip_tac >>
   FIRST [
     irule encode_decode_roundtrip_ok_uint >> simp[],
