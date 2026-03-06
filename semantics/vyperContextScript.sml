@@ -325,7 +325,9 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ Len [ArrayV av] = INL (IntV (Unsigned 256) &(array_length av)) ∧
   evaluate_builtin cx _ Not [BoolV b] = INL (BoolV (¬b)) ∧
   evaluate_builtin cx _ Not [IntV u i] =
-    (if is_Unsigned u ∧ 0 ≤ i then INL (IntV u (int_not i)) else INR (TypeError "signed Not")) ∧
+    (if is_Unsigned u ∧ 0 ≤ i then
+       INL (IntV u (&(2 ** int_bound_bits u) - 1 - i))
+     else INR (TypeError "signed Not")) ∧
   evaluate_builtin cx _ Not [FlagV m n] = INL $ FlagV m $
     w2n $ (~((n2w n):bytes32)) && ~(~(0w:bytes32) << m) ∧
   evaluate_builtin cx _ Neg [IntV u i] = bounded_int_op u u (-i) ∧

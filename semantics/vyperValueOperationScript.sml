@@ -291,9 +291,12 @@ Definition evaluate_binop_def:
        | _ => INR (TypeError "binop"))
      | ShL => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           (* TODO: check type constraints on shifts *)
            (if i2 < 0 then INR (RuntimeError "ShL0")
-            else INL $ IntV u1 $ int_shift_left (Num i2) i1) | _ => INR (TypeError "binop"))
+            else let r = int_shift_left (Num i2) i1;
+                     b = int_bound_bits u1 in
+              if is_Unsigned u1 then INL $ IntV u1 (int_mod r &(2 ** b))
+              else INL $ IntV u1 (signed_int_mod b r))
+           | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | ShR => (case v1 of
          IntV u1 i1 => (case v2 of IntV u2 i2 =>
