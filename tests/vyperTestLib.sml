@@ -328,6 +328,8 @@ val excluded_test_names = [
   (* Tests using msg.data which is not yet modelled.
      TODO: add msg.data env item *)
   "test_slice_start_eval_once[msg.data]",
+  (* Out-of-gas test - we don't model gas *)
+  "test_ecrecover_oog_handling",
   (* ABI decode strictness tests - Vyper's decoder is stricter than standard
      ABI, rejecting OOB heads, truncated data, etc. TODO: add Vyper-specific
      ABI decode validation on top of contractABI's standard valid_enc *)
