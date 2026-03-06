@@ -540,6 +540,23 @@ Definition bounds_compat_def:
   bounds_compat _ _ = T
 End
 
+Theorem value_has_type_implies_bounds_compat:
+  (∀tv v. value_has_type tv v ⇒ bounds_compat tv v) ∧
+  (∀tvs vs. values_have_types tvs vs ⇒ LIST_REL bounds_compat tvs vs) ∧
+  (∀tv sparse. sparse_has_type tv sparse ⇒
+     EVERY (λ(k,v). bounds_compat tv v) sparse) ∧
+  (∀tv vs. all_have_type tv vs ⇒ EVERY (bounds_compat tv) vs) ∧
+  (∀ftypes fields. struct_has_type ftypes fields ⇒
+     LIST_REL (λ(_, tv) (_, v). bounds_compat tv v) ftypes fields)
+Proof
+  ho_match_mp_tac value_has_type_ind >> rpt conj_tac >> rpt gen_tac >>
+  simp[value_has_type_def, bounds_compat_def] >>
+  TRY (rename1 `ArrayTV _ bd` >> Cases_on `bd`) >>
+  simp[bounds_compat_def] >>
+  TRY (CONV_TAC (DEPTH_CONV ETA_CONV)) >>
+  rpt strip_tac >> gvs[]
+QED
+
 (* Helper: word_size n ≤ n for positive n *)
 Theorem word_size_le[local]:
   0 < n ⇒ word_size n ≤ n

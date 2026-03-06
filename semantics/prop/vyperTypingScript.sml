@@ -113,14 +113,14 @@ Definition value_has_type_def:
     (m = n ∧ LENGTH bs = n ∧ n ≤ 32) ∧
   (* Dynamic bytes *)
   value_has_type (BaseTV (BytesT (Dynamic max))) (BytesV (Dynamic m) bs) =
-    (m ≤ max ∧ LENGTH bs ≤ max) ∧
+    (m = max ∧ max < dimword(:256) ∧ LENGTH bs ≤ max) ∧
   (* String *)
   value_has_type (BaseTV (StringT max)) (StringV m s) =
-    (m ≤ max ∧ LENGTH s ≤ max) ∧
+    (m = max ∧ max < dimword(:256) ∧ LENGTH s ≤ max) ∧
   (* Flag *)
   value_has_type (FlagTV m') (FlagV m _) = (m = m') ∧
   (* None *)
-  value_has_type NoneTV _ = T ∧
+  value_has_type NoneTV NoneV = T ∧
   (* Tuple *)
   value_has_type (TupleTV tvs) (ArrayV (TupleV vs)) =
     values_have_types tvs vs ∧
@@ -305,12 +305,12 @@ Proof
 QED
 
 Theorem value_has_type_equiv:
-  (∀tv v. value_has_type tv v ⇔ IS_SOME (encode_value tv v)) ∧
-  (∀tvs vs. values_have_types tvs vs ⇔ IS_SOME (encode_tuple 0 tvs vs)) ∧
-  (∀tv sparse. sparse_has_type tv sparse ⇔
+  (∀tv v. value_has_type tv v ⇒ IS_SOME (encode_value tv v)) ∧
+  (∀tvs vs. values_have_types tvs vs ⇒ IS_SOME (encode_tuple 0 tvs vs)) ∧
+  (∀tv sparse. sparse_has_type tv sparse ⇒
      IS_SOME (encode_static_array tv 0 sparse)) ∧
-  (∀tv vs. all_have_type tv vs ⇔ IS_SOME (encode_dyn_array tv 0 vs)) ∧
-  (∀ftypes fields. struct_has_type ftypes fields ⇔
+  (∀tv vs. all_have_type tv vs ⇒ IS_SOME (encode_dyn_array tv 0 vs)) ∧
+  (∀ftypes fields. struct_has_type ftypes fields ⇒
      IS_SOME (encode_struct 0 ftypes fields))
 Proof
   ho_match_mp_tac value_has_type_ind >> rpt conj_tac >> rpt gen_tac >>

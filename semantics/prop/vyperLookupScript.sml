@@ -134,8 +134,7 @@ Definition storable_value_def:
   storable_value cx mid n v ⇔
     ∀tv. storage_type_of cx mid n = SOME tv ⇒
          value_has_type tv v ∧
-         well_formed_value v ∧
-         bounds_compat tv v
+         well_formed_value v
 End
 
 Definition well_formed_layout_def:
@@ -896,6 +895,7 @@ Proof
   rename1 `storage_type_of cx mid n = SOME tv` >>
   `IS_SOME (encode_value tv v)` by gvs[value_has_type_equiv] >>
   `well_formed_type_value tv` by metis_tac[var_in_storage_well_formed_type] >>
+  `bounds_compat tv v` by metis_tac[value_has_type_implies_bounds_compat] >>
   `encode_decode_roundtrip_ok tv v` by (irule encode_decode_roundtrip_all >> simp[]) >>
   fs[var_in_storage_def, storage_type_of_def, storage_var_info_def, AllCaseEqs()] >>
   Cases_on `encode_value tv v` >> gvs[] >>
