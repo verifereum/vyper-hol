@@ -70,6 +70,7 @@ Datatype:
   = JE_Int int json_type                               (* value, type for bounds *)
   | JE_Decimal string                                  (* value as string *)
   | JE_Str num string                                  (* length, value *)
+  | JE_GenericStr string                               (* generic string, no length *)
   | JE_Bytes num string                                (* length, hex value *)
   | JE_Hex string                                      (* hex value for fixed bytes *)
   | JE_Bool bool                                       (* True/False *)
