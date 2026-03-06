@@ -283,37 +283,55 @@ End
 
 val () = cv_auto_trans evaluate_ecrecover_def;
 
+(* Extract (x, y) uint256 pair from a uint256[2] static array value. *)
+Definition extract_ec_point_def:
+  extract_ec_point (ArrayV av) =
+    (case (array_index av 0, array_index av 1) of
+       (SOME (IntV u1 x), SOME (IntV u2 y)) =>
+         if u1 = Unsigned 256 ∧ u2 = Unsigned 256
+         then SOME (x, y) else NONE
+     | _ => NONE) ∧
+  extract_ec_point _ = NONE
+End
+
+val () = cv_auto_trans extract_ec_point_def;
+
+Definition mk_ec_result_def:
+  mk_ec_result (rx, ry) =
+    ArrayV $ make_array_value (BaseTV (UintT 256)) (Fixed 2)
+      [IntV (Unsigned 256) (&rx); IntV (Unsigned 256) (&ry)]
+End
+
+val () = cv_auto_trans mk_ec_result_def;
+
 Definition evaluate_ecadd_def:
-  evaluate_ecadd [ArrayV (TupleV [IntV u1 x1; IntV u2 y1]);
-                  ArrayV (TupleV [IntV u3 x2; IntV u4 y2])] =
-    (if u1 = Unsigned 256 ∧ u2 = Unsigned 256 ∧
-        u3 = Unsigned 256 ∧ u4 = Unsigned 256
-     then let
-       p1 = (Num x1, Num y1);
-       p2 = (Num x2, Num y2)
-     in case vfmExecution$ecadd p1 p2 of
-          NONE => INL $ ArrayV $ TupleV
-            [IntV (Unsigned 256) 0; IntV (Unsigned 256) 0]
-        | SOME (rx, ry) => INL $ ArrayV $ TupleV
-            [IntV (Unsigned 256) (&rx); IntV (Unsigned 256) (&ry)]
-     else INR (TypeError "ECAdd type")) ∧
+  evaluate_ecadd [p1v; p2v] =
+    (case (extract_ec_point p1v, extract_ec_point p2v) of
+       (SOME (x1, y1), SOME (x2, y2)) => (
+         let p1 = (Num x1, Num y1);
+             p2 = (Num x2, Num y2)
+         in case vfmExecution$ecadd p1 p2 of
+              NONE => INL $ mk_ec_result (0, 0)
+            | SOME r => INL $ mk_ec_result r )
+     | _ => INR (TypeError "ECAdd type")) ∧
   evaluate_ecadd _ = INR (TypeError "ECAdd args")
 End
 
 val () = cv_auto_trans evaluate_ecadd_def;
 
 Definition evaluate_ecmul_def:
-  evaluate_ecmul [ArrayV (TupleV [IntV u1 x; IntV u2 y]); IntV u3 scalar] =
-    (if u1 = Unsigned 256 ∧ u2 = Unsigned 256 ∧ u3 = Unsigned 256
-     then let
-       p = (Num x, Num y);
-       n = Num scalar
-     in case vfmExecution$ecmul p n of
-          NONE => INL $ ArrayV $ TupleV
-            [IntV (Unsigned 256) 0; IntV (Unsigned 256) 0]
-        | SOME (rx, ry) => INL $ ArrayV $ TupleV
-            [IntV (Unsigned 256) (&rx); IntV (Unsigned 256) (&ry)]
-     else INR (TypeError "ECMul type")) ∧
+  evaluate_ecmul [pv; IntV u3 scalar] =
+    (case extract_ec_point pv of
+       SOME (x, y) =>
+         if u3 = Unsigned 256
+         then let
+           p = (Num x, Num y);
+           n = Num scalar
+         in case vfmExecution$ecmul p n of
+              NONE => INL $ mk_ec_result (0, 0)
+            | SOME r => INL $ mk_ec_result r
+         else INR (TypeError "ECMul type")
+     | NONE => INR (TypeError "ECMul type")) ∧
   evaluate_ecmul _ = INR (TypeError "ECMul args")
 End
 
