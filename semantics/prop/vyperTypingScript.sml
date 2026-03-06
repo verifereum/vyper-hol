@@ -113,14 +113,14 @@ Definition value_has_type_def:
     (m = n ∧ LENGTH bs = n ∧ n ≤ 32) ∧
   (* Dynamic bytes *)
   value_has_type (BaseTV (BytesT (Dynamic max))) (BytesV (Dynamic m) bs) =
-    (m = max ∧ LENGTH bs ≤ max ∧ max < dimword(:256)) ∧
+    (m ≤ max ∧ LENGTH bs ≤ max) ∧
   (* String *)
   value_has_type (BaseTV (StringT max)) (StringV m s) =
-    (m = max ∧ LENGTH s ≤ max ∧ max < dimword(:256)) ∧
+    (m ≤ max ∧ LENGTH s ≤ max) ∧
   (* Flag *)
   value_has_type (FlagTV m') (FlagV m _) = (m = m') ∧
   (* None *)
-  value_has_type NoneTV NoneV = T ∧
+  value_has_type NoneTV _ = T ∧
   (* Tuple *)
   value_has_type (TupleTV tvs) (ArrayV (TupleV vs)) =
     values_have_types tvs vs ∧
@@ -317,5 +317,7 @@ Proof
   simp[value_has_type_def, encode_value_def, encode_base_to_slot_def,
        encode_dyn_bytes_slots_def, AllCaseEqs(), COND_RAND, COND_RATOR,
        LET_THM] >>
-  strip_tac >> metis_tac[]
+  TRY (strip_tac >> metis_tac[]) >>
+  TRY (rename1 `ArrayTV _ bd` >> Cases_on `bd`) >>
+  simp[encode_value_def]
 QED

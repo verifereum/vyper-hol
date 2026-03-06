@@ -134,7 +134,8 @@ Definition storable_value_def:
   storable_value cx mid n v ⇔
     ∀tv. storage_type_of cx mid n = SOME tv ⇒
          value_has_type tv v ∧
-         well_formed_value v
+         well_formed_value v ∧
+         bounds_compat tv v
 End
 
 Definition well_formed_layout_def:

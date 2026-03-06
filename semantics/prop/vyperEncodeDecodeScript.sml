@@ -52,6 +52,21 @@ Proof
        word_of_bytes_word_to_bytes]
 QED
 
+Theorem word_of_bytes_replicate_zero[local]:
+  ∀a n. word_of_bytes T a (REPLICATE n (0w:word8)) = (0w : bytes32)
+Proof
+  Induct_on `n` >> simp[byteTheory.word_of_bytes_def] >>
+  simp[byteTheory.set_byte_def, LET_THM, byteTheory.word_slice_alt_zero]
+QED
+
+Theorem word_of_bytes_zero_pad[local]:
+  ∀bs a n.
+    word_of_bytes T a (bs ++ REPLICATE n (0w:word8)) =
+    (word_of_bytes T a bs : bytes32)
+Proof
+  Induct >> simp[byteTheory.word_of_bytes_def, word_of_bytes_replicate_zero]
+QED
+
 (* ===== apply_writes Properties ===== *)
 
 Theorem apply_writes_nil[local]:
@@ -286,8 +301,16 @@ Theorem encode_decode_roundtrip_ok_fixed_bytes[local]:
     encode_decode_roundtrip_ok (BaseTV (BytesT (Fixed n))) (BytesV (Fixed n) bs)
 Proof
   rw[] >> irule decode_value_single_slot >> simp[] >>
-  qexists_tac `word_of_bytes_be (bs ++ REPLICATE (32 - LENGTH bs) 0w)` >>
+  qexists_tac `word_of_bytes_be bs` >>
   simp[encode_base_to_slot_def, decode_base_from_slot_def] >>
+  simp[word_of_bytes_be_def] >>
+  `∀bs:word8 list.
+     word_of_bytes T (0w:bytes32) bs =
+     word_of_bytes T 0w (bs ++ REPLICATE (32 - LENGTH bs) (0w:word8))`
+    by (gen_tac >> irule (GSYM word_of_bytes_zero_pad)) >>
+  pop_assum (fn th =>
+    CONV_TAC (LAND_CONV (RAND_CONV (ONCE_REWRITE_CONV [th])))) >>
+  REWRITE_TAC[GSYM word_of_bytes_be_def] >>
   DEP_REWRITE_TAC[word_to_bytes_be_word_of_bytes_be] >>
   simp[LENGTH_APPEND, LENGTH_REPLICATE, TAKE_LENGTH_APPEND]
 QED
@@ -497,12 +520,23 @@ Proof
   simp[indexedListsTheory.MEM_MAPi]
 QED
 
-(* Bounds compatibility: value bounds match type bounds *)
-Definition bounds_compat_def[local]:
+(* Bounds compatibility: value bounds match type bounds (recursive).
+   Needed for exact roundtrip when encode is lenient (m ≤ max, NoneTV v).
+   For compound types, bounds_compat is checked recursively on sub-values. *)
+Definition bounds_compat_def:
   bounds_compat (BaseTV (StringT max)) (StringV m _) =
     (m = max ∧ max < dimword(:256)) ∧
   bounds_compat (BaseTV (BytesT (Dynamic max))) (BytesV (Dynamic m) _) =
     (m = max ∧ max < dimword(:256)) ∧
+  bounds_compat NoneTV v = (v = NoneV) ∧
+  bounds_compat (TupleTV tvs) (ArrayV (TupleV vs)) =
+    LIST_REL bounds_compat tvs vs ∧
+  bounds_compat (ArrayTV tv (Fixed n)) (ArrayV (SArrayV _ _ sparse)) =
+    EVERY (λ(k,v). bounds_compat tv v) sparse ∧
+  bounds_compat (ArrayTV tv (Dynamic _)) (ArrayV (DynArrayV _ _ vs)) =
+    EVERY (bounds_compat tv) vs ∧
+  bounds_compat (StructTV ftypes) (StructV fields) =
+    LIST_REL (λ(_, tv) (_, v). bounds_compat tv v) ftypes fields ∧
   bounds_compat _ _ = T
 End
 
@@ -1009,24 +1043,9 @@ QED
 (* For non-compound types (BaseTV, FlagTV, NoneTV), encode_decode_roundtrip_ok follows
    from well_formed_value alone. Mismatch type/value pairs have encode NONE
    (vacuously true), valid pairs are handled by specific roundtrip theorems. *)
-(* Helper: IS_SOME (encode_value tv v) implies bounds_compat for non-compound types *)
-Theorem encode_IS_SOME_bounds_compat[local]:
-  (∀tvs. tv ≠ TupleTV tvs) ∧ (∀e bd. tv ≠ ArrayTV e bd) ∧
-  (∀ftypes. tv ≠ StructTV ftypes) ∧ IS_SOME (encode_value tv v) ⇒
-  bounds_compat tv v
-Proof
-  strip_tac >> Cases_on `tv` >> fs[bounds_compat_def] >>
-  Cases_on `v` >>
-  TRY (rename1 `BytesV bnd _` >> Cases_on `bnd`) >>
-  Cases_on `b` >>
-  TRY (rename1 `BytesT btbnd` >> Cases_on `btbnd`) >>
-  gvs[encode_value_def, AllCaseEqs(), encode_base_to_slot_def,
-      encode_dyn_bytes_slots_def, bounds_compat_def] >>
-  pop_assum mp_tac >> rpt IF_CASES_TAC >> simp[]
-QED
-
 Theorem encode_decode_roundtrip_ok_noncompound[local]:
   well_formed_value v ∧ well_formed_type_value tv ∧
+  bounds_compat tv v ∧
   (∀tvs. tv ≠ TupleTV tvs) ∧ (∀e bd. tv ≠ ArrayTV e bd) ∧
   (∀ftypes. tv ≠ StructTV ftypes) ⇒
   encode_decode_roundtrip_ok tv v
@@ -1057,7 +1076,7 @@ Proof
     irule encode_decode_roundtrip_ok_flag >> gvs[well_formed_value_def]
   )
   (* NoneTV *)
-  >> Cases_on `v` >> gvs[encode_value_def, encode_decode_roundtrip_ok_none]
+  >> gvs[bounds_compat_def, encode_decode_roundtrip_ok_none]
 QED
 
 (* ===== Compound Roundtrip ===== *)
@@ -1235,7 +1254,9 @@ QED
 (* Helper: tuple encode/decode roundtrip *)
 Theorem encode_decode_tuple[local]:
   ∀tvs offset vs writes base storage.
-    EVERY (λtv. ∀v. well_formed_value v ⇒ encode_decode_roundtrip_ok tv v) tvs ∧
+    EVERY (λtv. ∀v. well_formed_value v ∧ bounds_compat tv v ⇒
+           encode_decode_roundtrip_ok tv v) tvs ∧
+    LIST_REL bounds_compat tvs vs ∧
     wf_values vs ∧ EVERY well_formed_type_value tvs ∧
     offset + type_slot_size_list tvs ≤ dimword(:256) ∧
     encode_tuple offset tvs vs = SOME writes ⇒
@@ -1248,6 +1269,7 @@ Proof
       simp[encode_value_def, decode_value_def, apply_writes_nil])
   >> rpt gen_tac >> strip_tac >>
   Cases_on `vs` >- gvs[encode_value_def] >>
+  gvs[LIST_REL_CONS1] >>
   qpat_x_assum `encode_tuple _ _ _ = _` mp_tac >>
   simp[Once encode_value_def, AllCaseEqs(), PULL_EXISTS] >>
   rpt strip_tac >>
@@ -1281,7 +1303,9 @@ QED
 (* Helper: dynamic array encode/decode roundtrip *)
 Theorem encode_decode_dyn_array[local]:
   ∀vs offset tv writes base storage.
-    (∀v. well_formed_value v ⇒ encode_decode_roundtrip_ok tv v) ∧
+    (∀v. well_formed_value v ∧ bounds_compat tv v ⇒
+         encode_decode_roundtrip_ok tv v) ∧
+    EVERY (bounds_compat tv) vs ∧
     wf_values vs ∧ well_formed_type_value tv ∧
     offset + LENGTH vs * type_slot_size tv ≤ dimword(:256) ∧
     encode_dyn_array tv offset vs = SOME writes ⇒
@@ -1293,6 +1317,7 @@ Proof
   Induct
   >- simp[encode_value_def, decode_value_def, apply_writes_nil]
   >> rpt gen_tac >> strip_tac >>
+  gvs[] >>
   qpat_x_assum `encode_dyn_array _ _ _ = _` mp_tac >>
   simp[Once encode_value_def, AllCaseEqs(), PULL_EXISTS] >>
   rpt strip_tac >>
@@ -1326,8 +1351,9 @@ QED
 (* Helper: struct encode/decode roundtrip *)
 Theorem encode_decode_struct[local]:
   ∀ftypes offset fields writes base storage.
-    EVERY (λ(nm,tv). ∀v. well_formed_value v ⇒
+    EVERY (λ(nm,tv). ∀v. well_formed_value v ∧ bounds_compat tv v ⇒
              encode_decode_roundtrip_ok tv v) ftypes ∧
+    LIST_REL (λ(_, tv) (_, v). bounds_compat tv v) ftypes fields ∧
     wf_fields fields ∧ EVERY (well_formed_type_value o SND) ftypes ∧
     offset + type_slot_size_fields ftypes ≤ dimword(:256) ∧
     encode_struct offset ftypes fields = SOME writes ⇒
@@ -1341,6 +1367,7 @@ Proof
   >> Cases >> rpt gen_tac >> strip_tac >>
   Cases_on `fields` >- gvs[encode_value_def] >>
   Cases_on `h` >>
+  gvs[LIST_REL_CONS1, FORALL_PROD] >>
   qpat_x_assum `encode_struct _ _ _ = _` mp_tac >>
   simp[Once encode_value_def, AllCaseEqs(), PULL_EXISTS] >>
   rpt strip_tac >> gvs[] >>
@@ -1427,7 +1454,9 @@ QED
 (* Helper: static array - each sparse entry decodes correctly *)
 Theorem encode_decode_static_array[local]:
   ∀sparse tv n offset writes base storage.
-    (∀v. well_formed_value v ⇒ encode_decode_roundtrip_ok tv v) ∧
+    (∀v. well_formed_value v ∧ bounds_compat tv v ⇒
+         encode_decode_roundtrip_ok tv v) ∧
+    EVERY (λ(k,v). bounds_compat tv v) sparse ∧
     wf_sparse tv n sparse ∧ well_formed_type_value tv ∧
     SORTED $< (MAP FST sparse) ∧
     offset + n * type_slot_size tv ≤ dimword(:256) ∧
@@ -1724,7 +1753,9 @@ QED
 (* Helper: Static array roundtrip *)
 Theorem encode_decode_roundtrip_static_array[local]:
   ∀tv n sparse nonzeros base storage.
-    (∀v. well_formed_value v ⇒ encode_decode_roundtrip_ok tv v) ∧
+    (∀v. well_formed_value v ∧ bounds_compat tv v ⇒
+         encode_decode_roundtrip_ok tv v) ∧
+    EVERY (λ(k,v). bounds_compat tv v) sparse ∧
     wf_sparse tv n sparse ∧ well_formed_type_value tv ∧
     SORTED $< (MAP FST sparse) ∧
     n * type_slot_size tv ≤ dimword(:256) ∧
@@ -1830,7 +1861,9 @@ QED
 (* Helper: Dynamic array roundtrip (n > 0 case) *)
 Theorem encode_decode_roundtrip_dyn_array[local]:
   ∀tv n vs slots base storage.
-    (∀v. well_formed_value v ⇒ encode_decode_roundtrip_ok tv v) ∧
+    (∀v. well_formed_value v ∧ bounds_compat tv v ⇒
+         encode_decode_roundtrip_ok tv v) ∧
+    EVERY (bounds_compat tv) vs ∧
     n ≠ 0 ∧
     encode_dyn_array tv 1 vs = SOME slots ∧
     n * type_slot_size tv + 1 ≤ dimword(:256) ∧
@@ -1892,7 +1925,7 @@ QED
 
 Theorem encode_decode_roundtrip_all:
   ∀tv v.
-    well_formed_value v ∧ well_formed_type_value tv ⇒
+    well_formed_value v ∧ well_formed_type_value tv ∧ bounds_compat tv v ⇒
     encode_decode_roundtrip_ok tv v
 Proof
   completeInduct_on `type_value_size tv` >>
@@ -1901,13 +1934,15 @@ Proof
   (* BaseTV, FlagTV, NoneTV *)
   >> TRY (
     irule encode_decode_roundtrip_ok_noncompound >>
-    simp[well_formed_value_def, well_formed_type_value_def] >> NO_TAC
+    simp[well_formed_value_def, well_formed_type_value_def] >>
+    gvs[bounds_compat_def] >> NO_TAC
   )
   (* TupleTV tvs *)
   >> TRY (
     rename1 `TupleTV tvs` >>
-    (* Bridge IH: use size < to get unconditional roundtrip *)
-    `EVERY (λtv. ∀v'. well_formed_value v' ⇒ encode_decode_roundtrip_ok tv v') tvs` by (
+    (* Bridge IH: bounds_compat + well_formed → roundtrip *)
+    `EVERY (λtv. ∀v'. well_formed_value v' ∧ bounds_compat tv v' ⇒
+           encode_decode_roundtrip_ok tv v') tvs` by (
       simp[EVERY_MEM] >> rpt strip_tac >>
       rename1 `MEM tv' tvs` >>
       `type_value_size tv' < v` by (
@@ -1930,8 +1965,11 @@ Proof
        base tvs = SOME l` suffices_by simp[] >>
     qspecl_then [`tvs`, `0`, `l`, `writes`, `base`, `storage`]
       mp_tac encode_decode_tuple >> simp[] >>
+    strip_tac >> first_x_assum irule >>
     gvs[well_formed_value_def, well_formed_type_value_def, type_slot_size_def,
-        ETA_THM] >> NO_TAC
+        bounds_compat_def] >>
+    RULE_ASSUM_TAC (CONV_RULE (TRY_CONV (DEPTH_CONV ETA_CONV))) >>
+    gvs[] >> NO_TAC
   )
   (* ArrayTV tv' b *)
   >- (
@@ -1955,7 +1993,8 @@ Proof
       ) >>
       (* n > 0: use encode_decode_roundtrip_static_array *)
       irule encode_decode_roundtrip_static_array >>
-      gvs[well_formed_value_def, well_formed_type_value_def, type_slot_size_def] >>
+      gvs[well_formed_value_def, well_formed_type_value_def,
+          type_slot_size_def, bounds_compat_def] >>
       rpt strip_tac >>
       first_x_assum (qspec_then `type_value_size t` mp_tac) >> simp[] >>
       disch_then (qspec_then `t` mp_tac) >> simp[] >>
@@ -1982,14 +2021,16 @@ Proof
         disch_then irule >>
         gvs[well_formed_type_value_def, type_slot_size_def]
       ) >>
-      gvs[well_formed_type_value_def, type_slot_size_def]
+      gvs[well_formed_type_value_def, type_slot_size_def, bounds_compat_def] >>
+      RULE_ASSUM_TAC (CONV_RULE (TRY_CONV (DEPTH_CONV ETA_CONV))) >>
+      gvs[]
     )
   )
   (* StructTV ftypes *)
   >> (
     rename1 `StructTV ftypes` >>
-    (* Bridge IH: use size < to get unconditional roundtrip *)
-    `EVERY (λ(nm,tv). ∀v'. well_formed_value v' ⇒
+    (* Bridge IH: bounds_compat + well_formed → roundtrip *)
+    `EVERY (λ(nm,tv). ∀v'. well_formed_value v' ∧ bounds_compat tv v' ⇒
              encode_decode_roundtrip_ok tv v') ftypes` by (
       simp[EVERY_MEM, FORALL_PROD] >> rpt strip_tac >>
       rename1 `MEM (nm, tv') ftypes` >>
@@ -2013,7 +2054,10 @@ Proof
        base ftypes = SOME fields` suffices_by simp[] >>
     qspecl_then [`ftypes`, `0`, `fields`, `writes`, `base`, `storage`]
       mp_tac encode_decode_struct >> simp[] >>
+    strip_tac >> first_x_assum irule >>
     gvs[well_formed_value_def, well_formed_type_value_def, type_slot_size_def,
-        ETA_THM]
+        bounds_compat_def] >>
+    RULE_ASSUM_TAC (CONV_RULE (TRY_CONV (DEPTH_CONV ETA_CONV))) >>
+    gvs[]
   )
 QED
