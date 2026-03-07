@@ -5,12 +5,13 @@
  *
  * TOP-LEVEL:
  *   avail_expr, canon_expr, mk_expr, avail_exprs,
- *   avail_transfer_inst, avail_analyze, avail_get_expression
+ *   avail_transfer_inst, avail_analyze, avail_get_expression,
+ *   ae_lookup_inst, ae_lookup_bb_out
  *
  * Helper:
- *   is_pseudo, expr_leq, mk_operand_expr, mk_inst_expr,
+ *   expr_leq, mk_operand_expr, mk_inst_expr,
  *   expr_effects, avail_remove_effect, avail_add, avail_get_source,
- *   avail_meet_two, avail_meet_opt, avail_transfer_opt,
+ *   avail_empty, avail_meet_two, avail_meet_opt, avail_transfer_opt,
  *   avail_edge_transfer, avail_unwrap
  *)
 
@@ -209,13 +210,10 @@ End
 Definition avail_analyze_def:
   avail_analyze fn =
     let dfg = dfg_build_function fn in
-    let entry_lbl =
-      case entry_block fn of
-        NONE => ""
-      | SOME bb => bb.bb_label in
+    let entry_val =
+      OPTION_MAP (λlbl. (lbl, SOME avail_empty)) (fn_entry_label fn) in
     df_analyze Forward NONE avail_meet_opt avail_transfer_opt
-              avail_edge_transfer dfg
-              (SOME (entry_lbl, SOME avail_empty)) fn
+              avail_edge_transfer dfg entry_val fn
 End
 
 (* ===== Query API ===== *)

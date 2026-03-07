@@ -17,12 +17,11 @@ Theorem vardef_fixpoint_proof:
     wf_function fn ==>
     let cfg = cfg_analyze fn in
     let all_vars = fn_all_assignments fn in
-    let entry_lbl = case entry_block fn of
-                      NONE => "" | SOME bb => bb.bb_label in
+    let entry_val =
+      OPTION_MAP (λlbl. (lbl, [] : string list)) (fn_entry_label fn) in
     let process = df_process_block Forward all_vars list_intersect
                     vardef_transfer vardef_edge_transfer ()
-                    (SOME (entry_lbl, ([] : string list))) cfg
-                    fn.fn_blocks in
+                    entry_val cfg fn.fn_blocks in
     is_fixpoint process (fn_labels fn) (vardef_analyze fn)
 Proof
   cheat

@@ -70,3 +70,54 @@ Theorem df_analysis_pass_correct_proof:
 Proof
   cheat
 QED
+
+(* State-dependent pass correctness: for analyses where transform safety
+   depends on the lattice value being sound for the concrete state.
+   Requires transfer_sound (abstract transfer tracks concrete execution)
+   in addition to convergence and analysis_inst_simulates.
+   This extends the universal case (sound = λv s. T) to range-analysis-driven
+   transforms and similar state-dependent optimizations. *)
+Theorem df_analysis_pass_correct_sound_proof:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool)
+   (dir : direction) (bottom : 'a) join transfer edge_transfer ctx
+   entry_val fn
+   (sound : 'a -> venom_state -> bool)
+   (f : 'a -> instruction -> instruction)
+   (leq : 'a df_state -> 'a df_state -> bool)
+   m b (P : 'a df_state -> bool).
+    let cfg = cfg_analyze fn in
+    let bbs = fn.fn_blocks in
+    let process = df_process_block dir bottom join transfer edge_transfer
+                                   ctx entry_val cfg bbs in
+    let deps = (case dir of
+                  Forward => cfg_succs_of cfg
+                | Backward => cfg_preds_of cfg) in
+    let st0 = init_df_state bottom (MAP (λbb. bb.bb_label) bbs) in
+    let all_lbls = MAP (λbb. bb.bb_label) bbs in
+    let result = df_analyze dir bottom join transfer edge_transfer
+                            ctx entry_val fn in
+      (* Worklist convergence preconditions *)
+      (!lbl st. P st ==> leq st (process lbl st)) /\
+      (!lbl st. P st ==> P (process lbl st)) /\
+      (case entry_val of NONE => P st0
+       | SOME (lbl, v) =>
+           P (st0 with ds_boundary := st0.ds_boundary |+ (lbl, v))) /\
+      bounded_measure P leq m b /\
+      wl_deps_complete process deps /\
+      (* Analysis soundness: transfer tracks concrete execution *)
+      transfer_sound sound transfer ctx /\
+      (* Bottom is sound for all states (unprocessed blocks are safe) *)
+      (!s. sound bottom s) /\
+      (* Transform simulation (state-dependent) *)
+      analysis_inst_simulates R_ok R_term sound f /\
+      (* R_ok preserves control flow *)
+      (!s1 s2. R_ok s1 s2 ==> s1.vs_current_bb = s2.vs_current_bb) /\
+      (!s1 s2. R_ok s1 s2 ==> s1.vs_halted = s2.vs_halted)
+    ==>
+      !fuel s.
+        lift_result R_ok R_term (run_function fuel fn s)
+          (run_function fuel (analysis_function_transform bottom result f fn) s)
+Proof
+  cheat
+QED

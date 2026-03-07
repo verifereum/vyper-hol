@@ -21,6 +21,7 @@
  *   expr_effects_pure_op           — pure op + pure args ⇒ pure expr
  *   avail_add_FDOM                 — domain = expr INSERT original
  *   avail_add_lookup_same          — fresh add maps to [inst]
+ *   avail_add_lookup_existing      — existing add appends [inst]
  *   avail_add_lookup_other         — add doesn't affect other keys
  *   avail_get_expression_diff      — source ≠ target
  *   avail_get_expression_recorded  — expression was recorded
@@ -189,6 +190,14 @@ Theorem avail_add_lookup_same:
     FLOOKUP ae expr = NONE ⇒
     FLOOKUP (avail_add ae expr inst) expr = SOME [inst]
 Proof ACCEPT_TAC availExprProofsTheory.avail_add_lookup_same
+QED
+
+(* Adding to an existing key appends to the instruction list *)
+Theorem avail_add_lookup_existing:
+  ∀ae expr inst insts.
+    FLOOKUP ae expr = SOME insts ⇒
+    FLOOKUP (avail_add ae expr inst) expr = SOME (insts ++ [inst])
+Proof ACCEPT_TAC availExprProofsTheory.avail_add_lookup_existing
 QED
 
 (* Add doesn't affect other keys *)

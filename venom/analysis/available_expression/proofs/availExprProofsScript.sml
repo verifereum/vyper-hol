@@ -154,6 +154,14 @@ Theorem avail_add_lookup_same:
 Proof cheat
 QED
 
+(* Adding to an existing key appends to the instruction list *)
+Theorem avail_add_lookup_existing:
+  ∀ae expr inst insts.
+    FLOOKUP ae expr = SOME insts ⇒
+    FLOOKUP (avail_add ae expr inst) expr = SOME (insts ++ [inst])
+Proof cheat
+QED
+
 Theorem avail_add_lookup_other:
   ∀ae expr expr' inst.
     expr' ≠ expr ⇒

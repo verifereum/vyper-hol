@@ -345,14 +345,12 @@ End
 Definition range_analyze_def:
   range_analyze fn =
     let dfg = dfg_build_function fn in
-    let entry_lbl =
-      case entry_block fn of
-        NONE => ""
-      | SOME bb => bb.bb_label in
+    let entry_val =
+      OPTION_MAP (λlbl. (lbl, SOME FEMPTY)) (fn_entry_label fn) in
     df_analyze_widen Forward NONE range_join_opt range_widen_opt
                      WIDEN_THRESHOLD range_transfer_opt
                      range_edge_transfer_opt (dfg, fn.fn_blocks)
-                     (SOME (entry_lbl, SOME FEMPTY)) fn
+                     entry_val fn
 End
 
 (* ===== Query API ===== *)

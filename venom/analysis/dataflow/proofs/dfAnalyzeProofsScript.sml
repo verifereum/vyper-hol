@@ -76,6 +76,46 @@ Proof
   cheat
 QED
 
+(* Inter-block transfer: at fixpoint, the fold input to a block equals the
+   join of edge-transferred neighbor boundaries.
+   Forward: df_at(lbl, 0) = FOLDL join bottom [edge_transfer(pred, lbl, boundary(pred))]
+   Backward: df_at(lbl, n) = FOLDL join bottom [edge_transfer(succ, lbl, boundary(succ))]
+   When a block has no neighbors, entry_val is used (or bottom if NONE). *)
+Theorem df_at_inter_transfer_proof:
+  !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx
+   entry_val fn lbl (bb : basic_block).
+    let cfg = cfg_analyze fn in
+    let bbs = fn.fn_blocks in
+    let process = df_process_block dir bottom join transfer edge_transfer
+                                   ctx entry_val cfg bbs in
+    let all_lbls = MAP (λbb. bb.bb_label) bbs in
+    let result = df_analyze dir bottom join transfer edge_transfer
+                            ctx entry_val fn in
+    let neighbors =
+      (case dir of
+         Forward => cfg_preds_of cfg lbl
+       | Backward => cfg_succs_of cfg lbl) in
+    let edge_vals = MAP (λnbr.
+          edge_transfer ctx nbr lbl
+            (df_boundary bottom result nbr)) neighbors in
+    let joined =
+      (case edge_vals of
+         [] => (case entry_val of
+                  NONE => bottom
+                | SOME (ev_lbl, v) =>
+                    if lbl = ev_lbl then v else bottom)
+       | _ => FOLDL join bottom edge_vals) in
+      is_fixpoint process all_lbls result /\
+      lookup_block lbl bbs = SOME bb
+    ==>
+      (dir = Forward ==>
+        df_at bottom result lbl 0 = joined) /\
+      (dir = Backward ==>
+        df_at bottom result lbl (LENGTH bb.bb_instructions) = joined)
+Proof
+  cheat
+QED
+
 (* Lattice invariant: if P holds for bottom, is closed under join/transfer/
    edge_transfer, then P holds for all values in the analysis result. *)
 Theorem df_analyze_invariant_proof:

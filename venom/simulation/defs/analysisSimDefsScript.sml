@@ -31,6 +31,19 @@ Definition analysis_inst_simulates_def:
        is_terminator (f v inst).inst_opcode)
 End
 
+(* Analysis soundness: abstract lattice values describe reachable concrete
+   states. transfer_sound connects the abstract transfer to concrete
+   execution: if the lattice value is sound before an instruction, the
+   transferred value is sound after.
+   initial_sound: the entry lattice value is sound for the initial state. *)
+Definition transfer_sound_def:
+  transfer_sound (sound : 'a -> venom_state -> bool)
+                 (transfer : 'ctx -> instruction -> 'a -> 'a) ctx <=>
+    !v inst s s'.
+      sound v s /\ step_inst inst s = OK s' ==>
+      sound (transfer ctx inst v) s'
+End
+
 (* Transform a block using per-instruction analysis values.
    At each instruction index, query df_at for the lattice value and apply f. *)
 Definition analysis_block_transform_def:

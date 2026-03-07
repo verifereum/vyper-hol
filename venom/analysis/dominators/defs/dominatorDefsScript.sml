@@ -223,13 +223,11 @@ End
 (* Run dominator fixpoint via df_analyze Forward. *)
 Definition dom_fixpoint_def:
   dom_fixpoint fn =
-    let entry =
-      case entry_block fn of
-        NONE => ""
-      | SOME bb => bb.bb_label in
     let all_labels = fn_labels fn in
+    let entry_val =
+      OPTION_MAP (λlbl. (lbl, [lbl])) (fn_entry_label fn) in
     df_analyze Forward all_labels list_intersect dom_transfer_inst
-              dom_edge_transfer () (SOME (entry, [entry])) fn
+              dom_edge_transfer () entry_val fn
 End
 
 (* Extract dominator sets from df_state.
@@ -244,9 +242,9 @@ End
 Definition dom_analyze_def:
   dom_analyze cfg fn =
     let entry =
-      case entry_block fn of
+      case fn_entry_label fn of
         NONE => ""
-      | SOME bb => bb.bb_label in
+      | SOME lbl => lbl in
     let labels = fn_labels fn in
     let st = dom_fixpoint fn in
     let dom_sets = dom_sets_of fn st in

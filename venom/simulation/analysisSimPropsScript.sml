@@ -61,3 +61,45 @@ Theorem df_analysis_pass_correct:
 Proof
   ACCEPT_TAC df_analysis_pass_correct_proof
 QED
+
+(* State-dependent: df_analyze convergence + sound transfer + state-dependent
+   transform → function-level lift_result. For range-analysis-driven transforms. *)
+Theorem df_analysis_pass_correct_sound:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool)
+   (dir : direction) (bottom : 'a) join transfer edge_transfer ctx
+   entry_val fn
+   (sound : 'a -> venom_state -> bool)
+   (f : 'a -> instruction -> instruction)
+   (leq : 'a df_state -> 'a df_state -> bool)
+   m b (P : 'a df_state -> bool).
+    let cfg = cfg_analyze fn in
+    let bbs = fn.fn_blocks in
+    let process = df_process_block dir bottom join transfer edge_transfer
+                                   ctx entry_val cfg bbs in
+    let deps = (case dir of
+                  Forward => cfg_succs_of cfg
+                | Backward => cfg_preds_of cfg) in
+    let st0 = init_df_state bottom (MAP (λbb. bb.bb_label) bbs) in
+    let all_lbls = MAP (λbb. bb.bb_label) bbs in
+    let result = df_analyze dir bottom join transfer edge_transfer
+                            ctx entry_val fn in
+      (!lbl st. P st ==> leq st (process lbl st)) /\
+      (!lbl st. P st ==> P (process lbl st)) /\
+      (case entry_val of NONE => P st0
+       | SOME (lbl, v) =>
+           P (st0 with ds_boundary := st0.ds_boundary |+ (lbl, v))) /\
+      bounded_measure P leq m b /\
+      wl_deps_complete process deps /\
+      transfer_sound sound transfer ctx /\
+      (!s. sound bottom s) /\
+      analysis_inst_simulates R_ok R_term sound f /\
+      (!s1 s2. R_ok s1 s2 ==> s1.vs_current_bb = s2.vs_current_bb) /\
+      (!s1 s2. R_ok s1 s2 ==> s1.vs_halted = s2.vs_halted)
+    ==>
+      !fuel s.
+        lift_result R_ok R_term (run_function fuel fn s)
+          (run_function fuel (analysis_function_transform bottom result f fn) s)
+Proof
+  ACCEPT_TAC df_analysis_pass_correct_sound_proof
+QED
