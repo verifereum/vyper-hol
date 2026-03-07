@@ -21,10 +21,9 @@ Ancestors
    The consumer chains this along an execution path:
      entry_sound(lbl_0) → exit_sound(lbl_0) → entry_sound(lbl_1) → ... *)
 Theorem range_analyze_block_sound:
-  ∀fn fuel lbl bb s s'.
-    let ra = range_analyze fn fuel in
+  ∀fn lbl bb s s'.
+    let ra = range_analyze fn in
     lookup_block lbl fn.fn_blocks = SOME bb ∧
-    lbl ∈ FDOM ra.ra_entry ∧
     in_range_state (range_entry_state ra lbl) s.vs_vars ∧
     run_block bb s = OK s' ⇒
     in_range_state (range_exit_state ra lbl) s'.vs_vars
@@ -36,12 +35,11 @@ QED
    analysis is sound for the concrete state, then the range returned
    by range_get_range contains the concrete operand value. *)
 Theorem range_get_range_sound:
-  ∀ra inst_id op w env.
-    (∀rs. FLOOKUP ra.ra_inst inst_id = SOME rs ⇒
-          in_range_state rs env) ∧
+  ∀ra lbl idx op w env.
+    in_range_state (range_at_inst ra lbl idx) env ∧
     (∀v. op = Var v ⇒ FLOOKUP env v = SOME w) ∧
     (∀v. op = Lit v ⇒ w = v) ⇒
-    in_range (range_get_range ra op inst_id) w
+    in_range (range_get_range ra lbl idx op) w
 Proof
   cheat
 QED
