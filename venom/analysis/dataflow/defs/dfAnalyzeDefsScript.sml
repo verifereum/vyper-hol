@@ -34,7 +34,8 @@ End
      all instructions. Neighbors read this value for inter-block dataflow.
    inst: (block_label, inst_idx) → lattice value BEFORE that instruction.
      For both forward and backward, df_at(lbl, idx) = value just before
-     executing instruction idx. *)
+     executing instruction idx. df_at(lbl, n) where n = LENGTH instrs
+     gives the exit value (after the last instruction). *)
 Datatype:
   df_state = <|
     ds_inst : (string # num, 'a) fmap;
@@ -45,6 +46,7 @@ End
 (* ===== Query API ===== *)
 
 (* Lattice value BEFORE instruction idx in block lbl.
+   For idx = LENGTH instrs, returns the exit value (after last instruction).
    Returns bottom if not computed (block not yet processed). *)
 Definition df_at_def:
   df_at (bottom : 'a) (st : 'a df_state) lbl idx =
@@ -66,10 +68,11 @@ End
 
 (* Fold transfer forward (index 0..n-1), storing each intermediate value.
    val_before_i is stored at index i; transfer produces val_before_(i+1).
+   At the end, the exit value (after last instruction) is stored at index n.
    Returns (final_val, inst_map). *)
 Definition df_fold_forward_def:
   df_fold_forward transfer lbl [] (idx : num) acc inst_map =
-    (acc, inst_map) ∧
+    (acc, inst_map |+ ((lbl, idx), acc)) ∧
   df_fold_forward transfer lbl (inst::rest) idx acc inst_map =
     let inst_map' = inst_map |+ ((lbl, idx), acc) in
     let acc' = transfer inst acc in
@@ -78,10 +81,11 @@ End
 
 (* Fold transfer backward (index n-1..0), storing each intermediate value.
    val_after_i is input; transfer produces val_before_i stored at index i.
+   At the end, the exit value (after last instruction) is stored at index n.
    Returns (final_val, inst_map). *)
 Definition df_fold_backward_def:
   df_fold_backward transfer lbl [] (idx : num) acc inst_map =
-    (acc, inst_map) ∧
+    (acc, inst_map |+ ((lbl, idx), acc)) ∧
   df_fold_backward transfer lbl (inst::rest) idx acc inst_map =
     let (acc', inst_map') =
       df_fold_backward transfer lbl rest (idx + 1) acc inst_map in

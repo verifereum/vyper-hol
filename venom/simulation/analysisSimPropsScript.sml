@@ -8,14 +8,6 @@ Theory analysisSimProps
 Ancestors
   analysisSimProofs
 
-(* Transform preserves block labels. *)
-Theorem analysis_block_transform_label:
-  !(bottom : 'a) (result : 'a df_state) f bb.
-    (analysis_block_transform bottom result f bb).bb_label = bb.bb_label
-Proof
-  ACCEPT_TAC analysis_block_transform_label_proof
-QED
-
 (* Universal-sound analysis_inst_simulates implies block_simulates.
    Covers liveness-based dead code elimination and similar passes
    where the transform is safe regardless of concrete state. *)

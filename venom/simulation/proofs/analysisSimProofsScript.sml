@@ -2,7 +2,6 @@
  * Analysis-Driven Simulation — Proofs
  *
  * TOP-LEVEL:
- *   analysis_block_transform_label_proof — transform preserves block labels
  *   analysis_inst_sim_block_sim_proof    — per-inst sim → block sim (universal sound)
  *   df_analysis_pass_correct_proof       — end-to-end: analysis + transform → function sim
  *)
@@ -10,14 +9,6 @@
 Theory analysisSimProofs
 Ancestors
   analysisSimDefs dfAnalyzeProofs passSimulationDefs
-
-(* Transform preserves block labels — needed by block_sim_function. *)
-Theorem analysis_block_transform_label_proof:
-  !(bottom : 'a) (result : 'a df_state) f bb.
-    (analysis_block_transform bottom result f bb).bb_label = bb.bb_label
-Proof
-  cheat
-QED
 
 (* When sound = λv s. T (analysis doesn't constrain states),
    analysis_inst_simulates implies block simulation unconditionally.

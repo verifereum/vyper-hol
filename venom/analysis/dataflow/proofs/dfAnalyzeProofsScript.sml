@@ -47,6 +47,7 @@ QED
 (* Within a block, the transfer function relates adjacent instruction points.
    True at fixpoint: the fold that produced the inst_map entries applied
    transfer sequentially, so adjacent entries differ by exactly one transfer.
+   Covers all pairs including the exit value at index LENGTH:
    For Forward:  df_at(lbl, idx+1) = transfer(inst_idx, df_at(lbl, idx))
    For Backward: df_at(lbl, idx)   = transfer(inst_idx, df_at(lbl, idx+1)) *)
 Theorem df_at_intra_transfer_proof:
@@ -61,7 +62,7 @@ Theorem df_at_intra_transfer_proof:
                             ctx entry_val fn in
       is_fixpoint process all_lbls result /\
       lookup_block lbl bbs = SOME bb /\
-      SUC idx < LENGTH bb.bb_instructions
+      SUC idx ≤ LENGTH bb.bb_instructions
     ==>
       (dir = Forward ==>
         df_at bottom result lbl (SUC idx) =

@@ -8,6 +8,8 @@
  *   liveness_transfer       — per-instruction transfer: (live \ defs) ∪ uses
  *   liveness_edge_transfer  — PHI-aware edge transfer: input_vars_from
  *   liveness_df_analyze     — liveness via generic df_analyze
+ *   liveness_at             — live variables before instruction idx
+ *   liveness_boundary       — boundary (entry) live variables for a block
  *
  * The lattice is (string list, ⊆, ∪) — sets-as-lists, subset ordering,
  * list_union join. Direction is Backward. Context is fn.fn_blocks
@@ -50,4 +52,19 @@ Definition liveness_df_analyze_def:
   liveness_df_analyze fn =
     df_analyze Backward [] list_union liveness_transfer
               liveness_edge_transfer fn.fn_blocks NONE fn
+End
+
+(* Live variables before instruction idx in block lbl.
+   For idx = LENGTH instrs, returns live variables after the last instruction
+   (the exit liveness = value flowing from successors). *)
+Definition liveness_at_def:
+  liveness_at fn lbl idx =
+    df_at [] (liveness_df_analyze fn) lbl idx
+End
+
+(* Boundary (entry) live variables for block lbl.
+   For backward analysis, this is the fold output = entry liveness. *)
+Definition liveness_boundary_def:
+  liveness_boundary fn lbl =
+    df_boundary [] (liveness_df_analyze fn) lbl
 End
