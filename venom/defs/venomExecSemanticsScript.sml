@@ -7,7 +7,7 @@
 
 Theory venomExecSemantics
 Ancestors
-  venomState venomInst keccak
+  venomState venomInst keccak vfmExecution
 
 (* --------------------------------------------------------------------------
    Arithmetic/Logic Operations (using bytes32 = 256 word)
@@ -203,11 +203,107 @@ Definition exec_write2_def:
 End
 
 (* --------------------------------------------------------------------------
-   External Call Helpers
+   External Call Helpers (using verifereum EVM semantics)
+
+   External calls build an EVM execution_state, run the callee's bytecode
+   via vfmExecution$run, and extract the result. This matches the approach
+   used in the Vyper source-level semantics (run_ext_call).
+
+   CALL/STATICCALL/DELEGATECALL: make_venom_call_state + extract_venom_call_result
+   CREATE/CREATE2: make_venom_create_state + extract_venom_create_result
    -------------------------------------------------------------------------- *)
 
-(* Execute an external call via the oracle and apply results to state.
-   call_type: CALL | STATICCALL | DELEGATECALL
+(* Shared: build a sub-context transaction record *)
+Definition make_sub_tx_def:
+  make_sub_tx (caller:address) (target:address) value gas calldata =
+    <| from := caller; to := SOME target;
+       data := calldata; nonce := 0; value := value;
+       gasLimit := gas; gasPrice := 0;
+       accessList := [];
+       blobVersionedHashes := [];
+       maxFeePerBlobGas := NONE;
+       maxFeePerGas := NONE;
+       authorizationList := [] |>
+End
+
+(* Shared: build initial rollback and accesses *)
+Definition make_rollback_def:
+  make_rollback accounts (caller:address) (target:address) =
+    let accesses = <| addresses := fINSERT caller (fINSERT target fEMPTY);
+                      storageKeys := fEMPTY |> in
+    <| accounts := accounts;
+       tStorage := empty_transient_storage;
+       accesses := accesses;
+       toDelete := [] |>
+End
+
+(* Build an EVM execution_state for CALL/STATICCALL/DELEGATECALL *)
+Definition make_venom_call_state_def:
+  make_venom_call_state s (target:address) gas value calldata code is_static =
+    let caller = s.vs_call_ctx.cc_address in
+    let tx = make_sub_tx caller target value gas calldata in
+    let ctxt = initial_context target code is_static
+                 empty_return_destination tx in
+    let accounts = transfer_value caller target value s.vs_accounts in
+    let rb = make_rollback accounts caller target in
+    <| contexts := [(ctxt, rb)];
+       txParams := s.vs_tx_params;
+       rollback := rb;
+       msdomain := Collect empty_domain |>
+End
+
+(* Build an EVM execution_state for CREATE/CREATE2.
+   Mirrors verifereum's proceed_create: transfers value, uses Code address
+   as return destination so handle_create deploys the init code's output. *)
+Definition make_venom_create_state_def:
+  make_venom_create_state s (new_address:address) gas value init_code =
+    let caller = s.vs_call_ctx.cc_address in
+    let tx = make_sub_tx caller new_address value gas [] in
+    let ctxt = initial_context new_address init_code F
+                 (Code new_address) tx in
+    let accounts = transfer_value caller new_address value s.vs_accounts in
+    let rb = make_rollback accounts caller new_address in
+    <| contexts := [(ctxt, rb)];
+       txParams := s.vs_tx_params;
+       rollback := rb;
+       msdomain := Collect empty_domain |>
+End
+
+(* Extract result from verifereum execution into Venom state update.
+   output_val: function mapping success to output word
+     (CALL: \_ => 1w, CREATE: \addr => w2w addr)
+   update_mem: whether to copy returndata into memory *)
+Definition extract_venom_result_def:
+  extract_venom_result s output_val retOff retSize run_result =
+    case run_result of
+    | NONE => NONE
+    | SOME (result, final_state) =>
+      (case final_state.contexts of
+       | [(ctxt, _)] =>
+           let returndata = ctxt.returnData in
+           let (success, accounts) =
+             (case result of
+              | INR NONE => (T, final_state.rollback.accounts)
+              | INR (SOME Reverted) => (F, s.vs_accounts)
+              | _ => (F, s.vs_accounts)) in
+           let new_logs =
+             (case result of
+              | INR NONE => ctxt.logs
+              | _ => []) in
+           let output : bytes32 =
+             if success then output_val else 0w in
+           let s' = s with <|
+             vs_returndata := returndata;
+             vs_accounts := accounts;
+             vs_logs := s.vs_logs ++ new_logs;
+             vs_memory := (write_memory_with_expansion retOff
+                             (TAKE retSize returndata) s).vs_memory
+           |> in
+           SOME (output, s')
+       | _ => NONE)
+End
+
+(* Execute an external call via verifereum EVM semantics.
    CALL: operands = [gas; addr; value; argsOff; argsSize; retOff; retSize]
    STATICCALL/DELEGATECALL: operands = [gas; addr; argsOff; argsSize; retOff; retSize]
 *)
@@ -215,35 +311,38 @@ Definition exec_ext_call_def:
   exec_ext_call inst s gas addr_w value argsOff argsSize retOff retSize is_static =
     let calldata = read_memory (w2n argsOff) (w2n argsSize) s in
     let target : address = w2w addr_w in
-    let result = s.vs_ext_call_oracle s.vs_accounts target (w2n gas) (w2n value) calldata is_static NONE in
-    let s' = s with <|
-      vs_returndata := result.ecr_returndata;
-      vs_accounts := result.ecr_accounts;
-      vs_logs := s.vs_logs ++ result.ecr_new_logs;
-      vs_memory := (write_memory_with_expansion (w2n retOff)
-                      (TAKE (w2n retSize) result.ecr_returndata) s).vs_memory
-    |> in
-    case inst.inst_outputs of
-      [out] => OK (update_var out result.ecr_output s')
-    | _ => Error "ext_call requires single output"
+    let code = (lookup_account target s.vs_accounts).code in
+    let evm_s = make_venom_call_state s target (w2n gas) (w2n value)
+                  calldata code is_static in
+    case extract_venom_result s 1w (w2n retOff) (w2n retSize) (run evm_s) of
+    | SOME (output, s') =>
+        (case inst.inst_outputs of
+           [out] => OK (update_var out output s')
+         | _ => Error "ext_call requires single output")
+    | NONE => Error "ext_call: non-terminating or invalid state"
 End
 
-(* Execute CREATE/CREATE2 via the oracle.
-   CREATE: operands = [value; offset; size], salt = NONE
-   CREATE2: operands = [value; offset; size; salt], salt = SOME salt_val
+(* Execute CREATE/CREATE2 via verifereum EVM semantics.
+   CREATE: salt_opt = NONE, address from sender + nonce
+   CREATE2: salt_opt = SOME salt, address from sender + salt + code hash
 *)
 Definition exec_create_def:
   exec_create inst s value offset sz salt_opt =
     let init_code = read_memory (w2n offset) (w2n sz) s in
-    let result = s.vs_ext_call_oracle s.vs_accounts (0w:address) 0 (w2n value) init_code F salt_opt in
-    let s' = s with <|
-      vs_returndata := result.ecr_returndata;
-      vs_accounts := result.ecr_accounts;
-      vs_logs := s.vs_logs ++ result.ecr_new_logs
-    |> in
-    case inst.inst_outputs of
-      [out] => OK (update_var out result.ecr_output s')
-    | _ => Error "create requires single output"
+    let sender = s.vs_call_ctx.cc_address in
+    let sender_acct = lookup_account sender s.vs_accounts in
+    let new_address =
+      (case salt_opt of
+         NONE => address_for_create sender sender_acct.nonce
+       | SOME salt => address_for_create2 sender salt init_code) in
+    let evm_s = make_venom_create_state s new_address 0 (w2n value)
+                  init_code in
+    case extract_venom_result s (w2w new_address) 0 0 (run evm_s) of
+    | SOME (output, s') =>
+        (case inst.inst_outputs of
+           [out] => OK (update_var out output s')
+         | _ => Error "create requires single output")
+    | NONE => Error "create: non-terminating or invalid state"
 End
 
 (* Bump-allocate memory and record in vs_allocas *)
@@ -599,7 +698,7 @@ Definition step_inst_def:
                 (case inst.inst_outputs of
                   [out] =>
                     (case FLOOKUP s.vs_label_offsets lbl of
-                      SOME base => OK (update_var out (base + off) s)
+                      SOME lbl_addr => OK (update_var out (lbl_addr + off) s)
                     | NONE => Error "offset: unknown label")
                 | _ => Error "offset requires single output")
             | NONE => Error "offset: undefined operand")
@@ -761,8 +860,10 @@ Proof
   gvs[AllCaseEqs(), is_terminator_def] >>
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
      exec_read0_def, exec_read1_def, exec_write2_def,
-     exec_ext_call_def, exec_create_def, exec_alloca_def] >>
+     exec_ext_call_def, exec_create_def, exec_alloca_def,
+     extract_venom_result_def] >>
   gvs[AllCaseEqs()] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
   fs[update_var_def, mstore_def, sstore_def, tstore_def,
      write_memory_with_expansion_def, mcopy_def,
      revert_state_def]

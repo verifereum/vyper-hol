@@ -509,8 +509,12 @@ Proof
   gvs[result_equiv_def, state_equiv_def, execution_equiv_def]
 QED
 
-(* External calls: oracle + state equiv => same result *)
-(* Helper: exec_ext_call preserves equiv when states and operands match *)
+(* External calls: state_equiv => same EVM state => same run => equiv result.
+   Key: execution_equiv gives equal accounts, memory, call_ctx, tx_params,
+   so make_venom_call_state/make_venom_create_state produce identical EVM states,
+   and extract_venom_result produces state_equiv states. *)
+
+(* exec_ext_call preserves equiv when states and operands match *)
 Triviality exec_ext_call_equiv:
   !vars inst s1 s2 gas addr value ao as_ ro rs is_static.
     state_equiv vars s1 s2 ==>
@@ -520,19 +524,22 @@ Triviality exec_ext_call_equiv:
 Proof
   rw[exec_ext_call_def, LET_THM] >>
   `s1.vs_memory = s2.vs_memory /\ s1.vs_accounts = s2.vs_accounts /\
-   s1.vs_ext_call_oracle = s2.vs_ext_call_oracle /\
-   s1.vs_logs = s2.vs_logs`
+   s1.vs_logs = s2.vs_logs /\ s1.vs_call_ctx = s2.vs_call_ctx /\
+   s1.vs_tx_params = s2.vs_tx_params`
     by fs[state_equiv_def, execution_equiv_def] >>
-  simp[read_memory_def] >>
-  Cases_on `inst.inst_outputs` >> simp[result_equiv_def] >>
-  Cases_on `t` >> simp[result_equiv_def] >>
+  simp[read_memory_def, make_venom_call_state_def,
+       make_sub_tx_def, make_rollback_def, LET_THM] >>
+  simp[extract_venom_result_def] >>
+  rpt CASE_TAC >> gvs[result_equiv_def] >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
   simp[update_var_def, state_equiv_def, execution_equiv_def,
-       write_memory_with_expansion_def, lookup_var_def, FLOOKUP_UPDATE] >>
-  rpt strip_tac >> fs[state_equiv_def, execution_equiv_def, lookup_var_def] >>
-  rw[] >> fs[]
+       lookup_var_def, FLOOKUP_UPDATE,
+       write_memory_with_expansion_def] >>
+  rpt strip_tac >>
+  fs[state_equiv_def, execution_equiv_def, lookup_var_def]
 QED
 
-(* Helper: exec_create preserves equiv when states and operands match *)
+(* exec_create preserves equiv when states and operands match *)
 Triviality exec_create_equiv:
   !vars inst s1 s2 value offset sz salt_opt.
     state_equiv vars s1 s2 ==>
@@ -542,16 +549,19 @@ Triviality exec_create_equiv:
 Proof
   rw[exec_create_def, LET_THM] >>
   `s1.vs_memory = s2.vs_memory /\ s1.vs_accounts = s2.vs_accounts /\
-   s1.vs_ext_call_oracle = s2.vs_ext_call_oracle /\
-   s1.vs_logs = s2.vs_logs`
+   s1.vs_logs = s2.vs_logs /\ s1.vs_call_ctx = s2.vs_call_ctx /\
+   s1.vs_tx_params = s2.vs_tx_params`
     by fs[state_equiv_def, execution_equiv_def] >>
-  simp[read_memory_def] >>
-  Cases_on `inst.inst_outputs` >> simp[result_equiv_def] >>
-  Cases_on `t` >> simp[result_equiv_def] >>
+  simp[read_memory_def, make_venom_create_state_def,
+       make_sub_tx_def, make_rollback_def, LET_THM] >>
+  simp[extract_venom_result_def] >>
+  rpt CASE_TAC >> gvs[result_equiv_def] >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
   simp[update_var_def, state_equiv_def, execution_equiv_def,
-       lookup_var_def, FLOOKUP_UPDATE] >>
-  rpt strip_tac >> fs[state_equiv_def, execution_equiv_def, lookup_var_def] >>
-  rw[] >> fs[]
+       lookup_var_def, FLOOKUP_UPDATE,
+       write_memory_with_expansion_def] >>
+  rpt strip_tac >>
+  fs[state_equiv_def, execution_equiv_def, lookup_var_def]
 QED
 
 (* Helper: exec_alloca preserves equiv (operands are literals) *)
