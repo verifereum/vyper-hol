@@ -13,13 +13,19 @@ Theory varDefAnalysisProps
 Ancestors
   varDefProofs
 
-(* Processing any label is a no-op after analysis completes. *)
+(* The analysis reaches a fixpoint: processing any block is a no-op. *)
 Theorem vardef_fixpoint:
   !fn.
     wf_function fn ==>
     let cfg = cfg_analyze fn in
-    let vd = vardef_analyze fn in
-    is_fixpoint (vardef_process cfg fn) (fn_labels fn) vd
+    let all_vars = fn_all_assignments fn in
+    let entry_lbl = case entry_block fn of
+                      NONE => "" | SOME bb => bb.bb_label in
+    let process = df_process_block Forward all_vars list_intersect
+                    vardef_transfer vardef_edge_transfer ()
+                    (SOME (entry_lbl, ([] : string list))) cfg
+                    fn.fn_blocks in
+    is_fixpoint process (fn_labels fn) (vardef_analyze fn)
 Proof
   ACCEPT_TAC vardef_fixpoint_proof
 QED
@@ -28,7 +34,7 @@ QED
 Theorem vardef_out_bounded:
   !fn lbl v.
     wf_function fn /\
-    MEM v (vardef_out_of (vardef_analyze fn) lbl) ==>
+    MEM v (vardef_out_of fn lbl) ==>
     MEM v (fn_all_assignments fn)
 Proof
   ACCEPT_TAC vardef_out_bounded_proof
@@ -40,7 +46,7 @@ Theorem vardef_sound:
   !fn lbl v path.
     wf_function fn /\
     fn.fn_blocks <> [] /\
-    MEM v (vardef_out_of (vardef_analyze fn) lbl) /\
+    MEM v (vardef_out_of fn lbl) /\
     is_cfg_path (cfg_analyze fn) path /\
     path <> [] /\
     HD path = (HD fn.fn_blocks).bb_label /\

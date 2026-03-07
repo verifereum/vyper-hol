@@ -104,10 +104,14 @@ End
 (* Process one block: gather neighbor values, apply edge_transfer, join,
    fold transfer through instructions, update state.
    - Forward: neighbors = predecessors, boundary = entry value
-   - Backward: neighbors = successors, boundary = exit value *)
+   - Backward: neighbors = successors, boundary = exit value
+   entry_val: when block has no predecessors (forward) or no successors
+   (backward), use this value instead of bottom. For forward analyses,
+   the entry block has no predecessors and needs a different initial value
+   (e.g. [] for var_def, {entry} for dominators). *)
 Definition df_process_block_def:
   df_process_block dir bottom join transfer edge_transfer
-                   ctx cfg bbs lbl (st : 'a df_state) =
+                   ctx entry_val cfg bbs lbl (st : 'a df_state) =
     let neighbors =
       (case dir of
          Forward => cfg_preds_of cfg lbl
@@ -115,7 +119,13 @@ Definition df_process_block_def:
     let edge_vals = MAP (λnbr.
           edge_transfer ctx nbr lbl
             (df_boundary bottom st nbr)) neighbors in
-    let joined = FOLDL join bottom edge_vals in
+    let joined =
+      (case edge_vals of
+         [] => (case entry_val of
+                  NONE => bottom
+                | SOME (ev_lbl, v) =>
+                    if lbl = ev_lbl then v else bottom)
+       | _ => FOLDL join bottom edge_vals) in
     let instrs =
       (case lookup_block lbl bbs of
          NONE => []
@@ -159,7 +169,7 @@ Definition df_analyze_def:
            st0 with ds_boundary := st0.ds_boundary |+ (lbl, v)) in
     let process =
       df_process_block dir bottom join transfer edge_transfer
-                       ctx cfg bbs in
+                       ctx entry_val cfg bbs in
     let deps =
       (case dir of
          Forward => cfg_succs_of cfg

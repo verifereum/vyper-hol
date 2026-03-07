@@ -19,7 +19,7 @@ Theorem df_analyze_fixpoint:
     let cfg = cfg_analyze fn in
     let bbs = fn.fn_blocks in
     let process = df_process_block dir bottom join transfer edge_transfer
-                                   ctx cfg bbs in
+                                   ctx entry_val cfg bbs in
     let deps = (case dir of
                   Forward => cfg_succs_of cfg
                 | Backward => cfg_preds_of cfg) in
@@ -49,7 +49,7 @@ Theorem df_at_intra_transfer:
     let cfg = cfg_analyze fn in
     let bbs = fn.fn_blocks in
     let process = df_process_block dir bottom join transfer edge_transfer
-                                   ctx cfg bbs in
+                                   ctx entry_val cfg bbs in
     let all_lbls = MAP (λbb. bb.bb_label) bbs in
     let result = df_analyze dir bottom join transfer edge_transfer
                             ctx entry_val fn in
@@ -90,8 +90,8 @@ QED
 (* Lattice-to-process lifting: monotone lattice operations imply
    df_process_block is inflationary w.r.t. the pointwise ordering. *)
 Theorem df_process_inflationary:
-  !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx cfg bbs
-   (elem_leq : 'a -> 'a -> bool).
+  !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx
+   entry_val cfg bbs (elem_leq : 'a -> 'a -> bool).
     partial_order elem_leq /\
     (!a b. elem_leq a (join a b)) /\
     (!a b c. elem_leq b c ==> elem_leq (join a b) (join a c)) /\
@@ -102,7 +102,7 @@ Theorem df_process_inflationary:
                 (edge_transfer ctx src dst b))
   ==>
     let process = df_process_block dir bottom join transfer edge_transfer
-                                   ctx cfg bbs in
+                                   ctx entry_val cfg bbs in
     let leq = (λst1 st2.
       (!lbl. elem_leq (df_boundary bottom st1 lbl)
                        (df_boundary bottom st2 lbl)) /\
@@ -115,11 +115,12 @@ QED
 
 (* CFG preds/succs inverse → worklist deps complete for df_process_block. *)
 Theorem df_process_deps_complete:
-  !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx cfg bbs.
+  !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx
+   entry_val cfg bbs.
     (!a b. MEM b (cfg_succs_of cfg a) <=> MEM a (cfg_preds_of cfg b))
   ==>
     let process = df_process_block dir bottom join transfer edge_transfer
-                                   ctx cfg bbs in
+                                   ctx entry_val cfg bbs in
     let deps = (case dir of
                   Forward => cfg_succs_of cfg
                 | Backward => cfg_preds_of cfg) in

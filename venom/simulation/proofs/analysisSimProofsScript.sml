@@ -51,7 +51,7 @@ Theorem df_analysis_pass_correct_proof:
     let cfg = cfg_analyze fn in
     let bbs = fn.fn_blocks in
     let process = df_process_block dir bottom join transfer edge_transfer
-                                   ctx cfg bbs in
+                                   ctx entry_val cfg bbs in
     let deps = (case dir of
                   Forward => cfg_succs_of cfg
                 | Backward => cfg_preds_of cfg) in
