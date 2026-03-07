@@ -82,6 +82,7 @@ Proof
   rw[result_equiv_def] >| [
     irule state_equiv_subset >> metis_tac[],
     irule execution_equiv_subset >> metis_tac[],
+    irule execution_equiv_subset >> metis_tac[],
     irule execution_equiv_subset >> metis_tac[]
   ]
 QED
@@ -111,19 +112,34 @@ Proof
   rw[result_equiv_def]
 QED
 
+Theorem result_equiv_intret[local,simp]:
+  result_equiv vars (IntRet v1 s1) (IntRet v2 s2) =
+    (execution_equiv vars s1 s2 /\ (v1 = v2))
+Proof
+  rw[result_equiv_def]
+QED
+
 Theorem result_equiv_mismatch[local,simp]:
   result_equiv vars (OK s) (Halt s') = F /\
   result_equiv vars (OK s) (Revert s') = F /\
+  result_equiv vars (OK s) (IntRet v s') = F /\
   result_equiv vars (OK s) (Error e) = F /\
   result_equiv vars (Halt s) (OK s') = F /\
   result_equiv vars (Halt s) (Revert s') = F /\
+  result_equiv vars (Halt s) (IntRet v s') = F /\
   result_equiv vars (Halt s) (Error e) = F /\
   result_equiv vars (Revert s) (OK s') = F /\
   result_equiv vars (Revert s) (Halt s') = F /\
+  result_equiv vars (Revert s) (IntRet v s') = F /\
   result_equiv vars (Revert s) (Error e) = F /\
+  result_equiv vars (IntRet v s) (OK s') = F /\
+  result_equiv vars (IntRet v s) (Halt s') = F /\
+  result_equiv vars (IntRet v s) (Revert s') = F /\
+  result_equiv vars (IntRet v s) (Error e) = F /\
   result_equiv vars (Error e) (OK s) = F /\
   result_equiv vars (Error e) (Halt s) = F /\
-  result_equiv vars (Error e) (Revert s) = F
+  result_equiv vars (Error e) (Revert s) = F /\
+  result_equiv vars (Error e) (IntRet v s) = F
 Proof
   rw[result_equiv_def]
 QED
@@ -138,6 +154,9 @@ Proof
   gvs[result_equiv_def] >>
   metis_tac[state_equiv_trans, execution_equiv_trans]
 QED
+
+(* Note: result_equiv_is_lift_result relies on matching patterns
+   between result_equiv and lift_result. Both now include IntRet. *)
 
 (* result_equiv is the canonical instantiation of lift_result *)
 Theorem result_equiv_is_lift_result:

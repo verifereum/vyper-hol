@@ -253,6 +253,49 @@ Proof
   fs[state_equiv_def, execution_equiv_def, lookup_var_def]
 QED
 
+(* Internal function call: PARAM, RET *)
+Triviality step_inst_param_equiv:
+  !vars inst s1 s2.
+    state_equiv vars s1 s2 /\
+    inst.inst_opcode = PARAM ==>
+    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> simp[step_inst_def] >>
+  `s1.vs_params = s2.vs_params` by
+    fs[state_equiv_def, execution_equiv_def] >>
+  rpt CASE_TAC >> gvs[result_equiv_def] >>
+  irule update_var_preserves >> simp[]
+QED
+
+Triviality eval_operands_equiv:
+  !vars ops s1 s2.
+    state_equiv vars s1 s2 /\
+    (!x. MEM (Var x) ops ==> x NOTIN vars) ==>
+    eval_operands ops s1 = eval_operands ops s2
+Proof
+  Induct_on `ops` >> rw[eval_operands_def] >>
+  `eval_operand h s1 = eval_operand h s2` by (
+    irule eval_operand_equiv >> simp[] >> metis_tac[]) >>
+  `eval_operands ops s1 = eval_operands ops s2` by (
+    first_x_assum irule >> simp[] >> metis_tac[]) >>
+  simp[]
+QED
+
+Triviality step_inst_ret_equiv:
+  !vars inst s1 s2.
+    state_equiv vars s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
+    inst.inst_opcode = RET ==>
+    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> simp[step_inst_def] >>
+  `eval_operands inst.inst_operands s1 =
+   eval_operands inst.inst_operands s2` by (
+    irule eval_operands_equiv >> simp[] >> metis_tac[]) >>
+  simp[] >> rpt CASE_TAC >> gvs[result_equiv_def] >>
+  fs[state_equiv_def]
+QED
+
 (* Hash: SHA3 *)
 Triviality step_inst_sha3_equiv:
   !vars inst s1 s2.
@@ -332,6 +375,10 @@ Proof
       drule_all step_inst_sha3_equiv >> simp[],
     `MEM inst.inst_opcode [CALLDATACOPY;RETURNDATACOPY]` by simp[] >>
       drule_all step_inst_copy_equiv >> simp[],
+    `inst.inst_opcode = PARAM` by simp[] >>
+      drule_all step_inst_param_equiv >> simp[],
+    `inst.inst_opcode = RET` by simp[] >>
+      drule_all step_inst_ret_equiv >> simp[],
     (* Unimplemented opcodes: wildcard gives Error *)
     simp[step_inst_def, result_equiv_def]
   ]

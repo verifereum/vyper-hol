@@ -94,7 +94,8 @@ Datatype:
     vs_accounts : evm_accounts;      (* Account states for BALANCE, etc. *)
     vs_call_ctx : call_context;      (* Call context *)
     vs_tx_ctx : tx_context;          (* Transaction context *)
-    vs_block_ctx : block_context     (* Block context *)
+    vs_block_ctx : block_context;    (* Block context *)
+    vs_params : bytes32 list         (* Internal function parameters (PARAM reads from this) *)
   |>
 End
 
@@ -146,7 +147,8 @@ Definition init_venom_state_def:
     vs_accounts := empty_accounts;
     vs_call_ctx := empty_call_context;
     vs_tx_ctx := empty_tx_context;
-    vs_block_ctx := empty_block_context
+    vs_block_ctx := empty_block_context;
+    vs_params := []
   |>
 End
 

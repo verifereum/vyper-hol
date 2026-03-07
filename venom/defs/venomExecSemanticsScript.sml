@@ -62,6 +62,7 @@ Datatype:
     | Halt venom_state            (* Normal termination *)
     | Revert venom_state          (* Revert termination *)
     | Error string                (* Execution error *)
+    | IntRet (bytes32 list) venom_state  (* Internal function return *)
 End
 
 (* --------------------------------------------------------------------------
@@ -283,6 +284,25 @@ Definition step_inst_def:
     (* NOP *)
     | NOP => OK s
 
+    (* Internal function call - PARAM reads from vs_params by index *)
+    | PARAM =>
+        (case inst.inst_operands of
+          [Lit idx] =>
+            let i = w2n idx in
+            (case inst.inst_outputs of
+              [out] =>
+                if i < LENGTH s.vs_params then
+                  OK (update_var out (EL i s.vs_params) s)
+                else Error "param index out of bounds"
+            | _ => Error "param requires single output")
+        | _ => Error "param requires literal index operand")
+
+    (* Internal function return - RET evaluates operands and returns IntRet *)
+    | RET =>
+        (case eval_operands inst.inst_operands s of
+          SOME vals => IntRet vals s
+        | NONE => Error "ret: undefined operand")
+
     (* Environment - Call context *)
     | CALLER => exec_read0 (\s. w2w s.vs_call_ctx.cc_caller) inst s
     | ADDRESS => exec_read0 (\s. w2w s.vs_call_ctx.cc_address) inst s
@@ -394,7 +414,7 @@ Proof
      exec_read0_def, exec_read1_def, exec_write2_def] >>
   gvs[AllCaseEqs()] >>
   fs[update_var_def, mstore_def, sstore_def, tstore_def,
-     write_memory_with_expansion_def]
+     write_memory_with_expansion_def, eval_operands_def]
 QED
 
 (* Step within a basic block - returns (result, is_terminator) *)
@@ -409,6 +429,7 @@ Definition step_in_block_def:
             else (OK (next_inst s'), F)
         | Halt s' => (Halt s', T)
         | Revert s' => (Revert s', T)
+        | IntRet vals s' => (IntRet vals s', T)
         | Error e => (Error e, T)
 End
 
@@ -422,6 +443,7 @@ Definition run_block_def:
         else run_block bb s'
     | (Halt s', _) => Halt s'
     | (Revert s', _) => Revert s'
+    | (IntRet vals s', _) => IntRet vals s'
     | (Error e, _) => Error e
 Termination
   (* Termination measure: remaining instructions in block.
@@ -452,5 +474,6 @@ Definition run_function_def:
               OK s' =>
                 if s'.vs_halted then Halt s'
                 else run_function fuel' fn s'
+            | IntRet vals s' => IntRet vals s'
             | other => other
 End

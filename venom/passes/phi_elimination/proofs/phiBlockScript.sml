@@ -197,6 +197,22 @@ Proof
   metis_tac[step_in_block_halt_revert_transform]
 QED
 
+(* IntRet results only come from RET, not PHI *)
+Theorem step_in_block_intret_transform:
+  !dfg bb s vals s' is_term.
+    step_in_block bb s = (IntRet vals s', is_term) ==>
+    step_in_block (transform_block dfg bb) s = (IntRet vals s', is_term)
+Proof
+  rw[step_in_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> fs[] >>
+  imp_res_tac get_instruction_transform >> fs[] >>
+  gvs[AllCaseEqs()] >>
+  `~is_phi_inst x` by (
+    CCONTR_TAC >> fs[is_phi_inst_def, step_inst_def] >> gvs[AllCaseEqs()]
+  ) >>
+  imp_res_tac transform_inst_non_phi >> fs[]
+QED
+
 (* ==========================================================================
    prev_bb Preservation
    ========================================================================== *)
@@ -359,7 +375,7 @@ Proof
   Cases_on `step_in_block bb s` >>
   rename1 `step_in_block bb s = (res, is_term)` >>
   Cases_on `res` >> gvs[]
-  (* 4 cases: OK, Halt, Revert, Error *)
+  (* 5 cases: OK, Halt, Revert, Error, IntRet *)
   >- ((* OK case *)
     drule step_in_block_equiv >> simp[] >>
     disch_then (qspec_then `graph` mp_tac) >> simp[] >>
@@ -400,8 +416,8 @@ Proof
     drule step_in_block_revert_transform >>
     disch_then (qspec_then `graph` mp_tac) >>
     simp[Once run_block_def, result_equiv_def, execution_equiv_refl]
-  ) >>
-  (* Error case - prove directly by case analysis *)
+  )
+  >- ((* Error case - prove directly by case analysis *)
   simp[Once run_block_def] >>
   fs[step_in_block_def] >>
   Cases_on `get_instruction bb s.vs_inst_idx` >> gvs[AllCaseEqs()]
@@ -438,7 +454,7 @@ Proof
     (* [h]: transform to ASSIGN [Var h] *)
     gvs[] >>  (* First simplify with t = [] giving x'.inst_outputs = [h] *)
     Cases_on `step_inst (x with <| inst_opcode := ASSIGN; inst_operands := [Var h] |>) s`
-    (* 4 subcases: OK, Halt, Revert, Error *)
+    (* 5 subcases: OK, Halt, Revert, Error, IntRet *)
     >| [
       (* OK case: derive contradiction - ASSIGN succeeds means lookup_var h is SOME,
          but hypothesis says PHI erroring means lookup_var h is NONE *)
@@ -455,9 +471,16 @@ Proof
       (* Revert case: impossible for ASSIGN *)
       qpat_x_assum `step_inst _ _ = Revert _` mp_tac >> simp[step_inst_def] >> gvs[AllCaseEqs()],
       (* Error case *)
-      simp[result_equiv_def]
+      simp[result_equiv_def],
+      (* IntRet case: impossible for ASSIGN *)
+      qpat_x_assum `step_inst _ _ = IntRet _ _` mp_tac >> simp[step_inst_def] >> gvs[AllCaseEqs()]
     ],
     (* h::h'::t': transform = identity *)
     simp[result_equiv_def]
   ]
+  ) >>
+  (* IntRet case *)
+  drule step_in_block_intret_transform >>
+  disch_then (qspec_then `graph` mp_tac) >>
+  simp[Once run_block_def, result_equiv_def, execution_equiv_refl]
 QED
