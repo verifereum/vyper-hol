@@ -18,4 +18,5 @@ INCLUDES = \
   mem_alias \
   mem_ssa \
   var_definition \
-  variable_range
+  variable_range \
+  ../simulation

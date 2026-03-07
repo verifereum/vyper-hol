@@ -15,8 +15,10 @@ Ancestors
   latticeProps
   worklistProps
   dfHelperProps
+  dfAnalyzeProps
   (* liveness *)
   livenessAnalysis
+  livenessGenericDefs
   (* dfg *)
   dfgAnalysis
   (* dominators *)
@@ -35,3 +37,5 @@ Ancestors
   varDefAnalysis
   (* variable range *)
   variableRangeAnalysis
+  (* analysis-driven simulation bridge *)
+  analysisSimProps
