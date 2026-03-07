@@ -36,7 +36,8 @@ QED
 Theorem df_analysis_pass_correct:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
-   (dir : direction) (bottom : 'a) join transfer edge_transfer ctx fn
+   (dir : direction) (bottom : 'a) join transfer edge_transfer ctx
+   entry_val fn
    (f : 'a -> instruction -> instruction)
    (leq : 'a df_state -> 'a df_state -> bool)
    m b (P : 'a df_state -> bool).
@@ -47,15 +48,15 @@ Theorem df_analysis_pass_correct:
     let deps = (case dir of
                   Forward => cfg_succs_of cfg
                 | Backward => cfg_preds_of cfg) in
-    let wl0 = (case dir of
-                 Forward => cfg.cfg_dfs_pre
-               | Backward => cfg.cfg_dfs_post) in
     let st0 = init_df_state bottom (MAP (λbb. bb.bb_label) bbs) in
     let all_lbls = MAP (λbb. bb.bb_label) bbs in
-    let result = df_analyze dir bottom join transfer edge_transfer ctx fn in
+    let result = df_analyze dir bottom join transfer edge_transfer
+                            ctx entry_val fn in
       (!lbl st. P st ==> leq st (process lbl st)) /\
       (!lbl st. P st ==> P (process lbl st)) /\
-      P st0 /\
+      (case entry_val of NONE => P st0
+       | SOME (lbl, v) =>
+           P (st0 with ds_boundary := st0.ds_boundary |+ (lbl, v))) /\
       bounded_measure P leq m b /\
       wl_deps_complete process deps /\
       (!lbl. MEM lbl all_lbls ==> MEM lbl wl0) /\

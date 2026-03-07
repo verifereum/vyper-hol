@@ -142,13 +142,21 @@ End
 (* ===== Top-level analysis ===== *)
 
 (* Generic dataflow analysis: initialize, then worklist iterate.
-   Returns df_state with per-instruction lattice values. *)
+   Returns df_state with per-instruction lattice values.
+   entry_val: optional (label, value) to override one block's initial boundary.
+     Forward analyses use this for the entry block (e.g. dom[entry]={entry}).
+     Backward analyses typically pass NONE (exit block's bottom is correct). *)
 Definition df_analyze_def:
-  df_analyze dir bottom join transfer edge_transfer ctx fn =
+  df_analyze dir bottom join transfer edge_transfer ctx entry_val fn =
     let cfg = cfg_analyze fn in
     let bbs = fn.fn_blocks in
     let lbls = MAP (λbb. bb.bb_label) bbs in
     let st0 = init_df_state bottom lbls in
+    let st0' =
+      (case entry_val of
+         NONE => st0
+       | SOME (lbl, v) =>
+           st0 with ds_boundary := st0.ds_boundary |+ (lbl, v)) in
     let process =
       df_process_block dir bottom join transfer edge_transfer
                        ctx cfg bbs in
@@ -160,5 +168,5 @@ Definition df_analyze_def:
       (case dir of
          Forward => cfg.cfg_dfs_pre
        | Backward => cfg.cfg_dfs_post) in
-    SND (wl_iterate process deps wl0 st0)
+    SND (wl_iterate process deps wl0 st0')
 End

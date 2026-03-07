@@ -17,7 +17,8 @@ Ancestors
    Preconditions are on the derived process function (df_process_block).
    Users derive these from lattice-level properties for their specific analysis. *)
 Theorem df_analyze_fixpoint_proof:
-  !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx fn
+  !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx
+   entry_val fn
    (leq : 'a df_state -> 'a df_state -> bool)
    m b (P : 'a df_state -> bool).
     let cfg = cfg_analyze fn in
@@ -27,20 +28,19 @@ Theorem df_analyze_fixpoint_proof:
     let deps = (case dir of
                   Forward => cfg_succs_of cfg
                 | Backward => cfg_preds_of cfg) in
-    let wl0 = (case dir of
-                 Forward => cfg.cfg_dfs_pre
-               | Backward => cfg.cfg_dfs_post) in
     let st0 = init_df_state bottom (MAP (λbb. bb.bb_label) bbs) in
     let all_lbls = MAP (λbb. bb.bb_label) bbs in
       (!lbl st. P st ==> leq st (process lbl st)) /\
       (!lbl st. P st ==> P (process lbl st)) /\
-      P st0 /\
+      (case entry_val of NONE => P st0
+       | SOME (lbl, v) =>
+           P (st0 with ds_boundary := st0.ds_boundary |+ (lbl, v))) /\
       bounded_measure P leq m b /\
       wl_deps_complete process deps /\
       (!lbl. MEM lbl all_lbls ==> MEM lbl wl0)
     ==>
       is_fixpoint process all_lbls
-        (df_analyze dir bottom join transfer edge_transfer ctx fn)
+        (df_analyze dir bottom join transfer edge_transfer ctx entry_val fn)
 Proof
   cheat
 QED
@@ -51,14 +51,15 @@ QED
    For Forward:  df_at(lbl, idx+1) = transfer(inst_idx, df_at(lbl, idx))
    For Backward: df_at(lbl, idx)   = transfer(inst_idx, df_at(lbl, idx+1)) *)
 Theorem df_at_intra_transfer_proof:
-  !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx fn
-   lbl (bb : basic_block) idx.
+  !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx
+   entry_val fn lbl (bb : basic_block) idx.
     let cfg = cfg_analyze fn in
     let bbs = fn.fn_blocks in
     let process = df_process_block dir bottom join transfer edge_transfer
                                    ctx cfg bbs in
     let all_lbls = MAP (λbb. bb.bb_label) bbs in
-    let result = df_analyze dir bottom join transfer edge_transfer ctx fn in
+    let result = df_analyze dir bottom join transfer edge_transfer
+                            ctx entry_val fn in
       is_fixpoint process all_lbls result /\
       lookup_block lbl bbs = SOME bb /\
       SUC idx < LENGTH bb.bb_instructions
@@ -78,9 +79,10 @@ QED
 (* Lattice invariant: if P holds for bottom, is closed under join/transfer/
    edge_transfer, then P holds for all values in the analysis result. *)
 Theorem df_analyze_invariant_proof:
-  !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx fn
-   (P : 'a -> bool).
-    let result = df_analyze dir bottom join transfer edge_transfer ctx fn in
+  !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx
+   entry_val fn (P : 'a -> bool).
+    let result = df_analyze dir bottom join transfer edge_transfer
+                            ctx entry_val fn in
       P bottom /\
       (!a b. P a /\ P b ==> P (join a b)) /\
       (!inst a. P a ==> P (transfer ctx inst a)) /\
