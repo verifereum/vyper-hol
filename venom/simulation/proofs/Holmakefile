@@ -1,4 +1,6 @@
 # Pass simulation and composition proofs
+# analysisSimProofs depends on analysisSimDefs + dfAnalyzeProofs + passSimulationDefs
 INCLUDES = ../defs \
            ../../defs ../../props ../../proofs \
-           ../../analysis/dataflow/defs ../../analysis/dataflow/proofs ../../analysis/dataflow
+           ../../analysis/dataflow/defs ../../analysis/dataflow/proofs ../../analysis/dataflow \
+           ../../analysis/cfg/defs
