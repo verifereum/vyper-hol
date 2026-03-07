@@ -1,6 +1,7 @@
 Theory vyperLookup
 Ancestors
   vyperMisc vyperContext vyperState vyperInterpreter vyperValue vyperValueOperation
+  vyperTyping vyperEncodeDecode
 
 Definition lookup_name_def:
   lookup_name st n = lookup_scopes (string_to_num n) st.scopes
@@ -19,10 +20,21 @@ Definition tl_scopes_def:
 End
 
 Definition lookup_immutable_def:
-  lookup_immutable cx (st:evaluation_state) n =
+  lookup_immutable cx (st:evaluation_state) mid n =
   case ALOOKUP st.immutables cx.txn.target of
-  | SOME imms => FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num n)
+  | SOME imms => FLOOKUP (get_source_immutables mid imms) (string_to_num n)
   | NONE => NONE
+End
+
+Definition lookup_bare_global_name_def:
+  lookup_bare_global_name cx st n = lookup_immutable cx st (current_module cx) n
+End
+
+Definition lookup_toplevel_name_def:
+  lookup_toplevel_name cx st mid n =
+  case lookup_global cx mid (string_to_num n) st of
+  | (INL v, st) => SOME v
+  | _ => NONE
 End
 
 (* For convenience, we define the case st.scopes = [] in such a way
@@ -39,6 +51,11 @@ Definition update_name_def:
         | h :: t => st with scopes := (h |+ (n, v)) :: t
 End
 
+Definition update_toplevel_name_def:
+  update_toplevel_name cx st mid n v =
+  SND (set_global cx mid (string_to_num n) v st)
+End
+
 Definition lookup_base_target_def:
   lookup_base_target cx st tgt =
     case eval_base_target cx tgt st of
@@ -46,12 +63,10 @@ Definition lookup_base_target_def:
     | (INR _, _) => NONE
 End
 
-(* ScopedVar or ImmutableVar *)
 Definition lookup_name_target_def:
   lookup_name_target cx st n = lookup_base_target cx st (NameTarget n)
 End
 
-(* TopLevelVar *)
 Definition lookup_toplevel_name_target_def:
   lookup_toplevel_name_target cx st n = lookup_base_target cx st (TopLevelNameTarget n)
 End
@@ -67,6 +82,73 @@ Definition lookup_flag_member_def:
   case INDEX_OF mid ls
     of NONE => NONE
      | SOME i => SOME $ Value $ FlagV (2 ** i)
+End
+
+Definition var_in_storage_def:
+  var_in_storage cx mid n ⇔
+  ∃code b t id offset tv.
+    get_module_code cx mid = SOME code ∧
+    find_var_decl_by_num (string_to_num n) code = SOME (StorageVarDecl b t, id) ∧
+    lookup_var_slot_from_layout cx b mid id = SOME offset ∧
+    offset < dimword(:256) ∧
+    evaluate_type (get_tenv cx) t = SOME tv ∧
+    well_formed_type_value tv
+End
+
+Definition storage_var_info_def:
+  storage_var_info cx mid n =
+    case get_module_code cx mid of
+    | NONE => NONE
+    | SOME code =>
+        case find_var_decl_by_num (string_to_num n) code of
+        | SOME (StorageVarDecl b t, id) =>
+            (case (lookup_var_slot_from_layout cx b mid id,
+                   evaluate_type (get_tenv cx) t) of
+             | (SOME off, SOME tv) => SOME (b, off, tv)
+             | _ => NONE)
+        | _ => NONE
+End
+
+Definition storage_type_of_def:
+  storage_type_of cx mid n =
+    case storage_var_info cx mid n of
+    | NONE => NONE
+    | SOME (_, _, tv) => SOME tv
+End
+
+Theorem storage_var_info_SOME_storage_type_of:
+  storage_var_info cx mid n = SOME (b, off, tv) ⇒
+  storage_type_of cx mid n = SOME tv
+Proof
+  simp[storage_type_of_def]
+QED
+
+Theorem storage_type_of_SOME_storage_var_info:
+  storage_type_of cx mid n = SOME tv ⇒
+  ∃b off. storage_var_info cx mid n = SOME (b, off, tv)
+Proof
+  simp[storage_type_of_def, AllCaseEqs()] >> strip_tac >> gvs[]
+QED
+
+Definition storable_value_def:
+  storable_value cx mid n v ⇔
+    ∀tv. storage_type_of cx mid n = SOME tv ⇒
+         value_has_type tv v ∧
+         well_formed_value v
+End
+
+Definition well_formed_layout_def:
+  well_formed_layout cx ⇔
+    (* Non-overflow: each variable's slot range fits in the address space *)
+    (∀mid n b off tv.
+      storage_var_info cx mid n = SOME (b, off, tv) ⇒
+      off + type_slot_size tv ≤ dimword(:256)) ∧
+    (* Disjointness: distinct variables on the same backend have disjoint slots *)
+    (∀mid1 n1 mid2 n2 b off1 tv1 off2 tv2.
+      storage_var_info cx mid1 n1 = SOME (b, off1, tv1) ∧
+      storage_var_info cx mid2 n2 = SOME (b, off2, tv2) ∧
+      (mid1, n1) ≠ (mid2, n2) ⇒
+      off1 + type_slot_size tv1 ≤ off2 ∨ off2 + type_slot_size tv2 ≤ off1)
 End
 
 (****************************************)
@@ -431,7 +513,7 @@ QED
 Theorem lookup_immutable_after_set_immutable:
   ∀cx n v st st'.
     set_immutable cx (current_module cx) (string_to_num n) v st = (INL (), st') ⇒
-    lookup_immutable cx st' n = SOME v
+    lookup_immutable cx st' (current_module cx) n = SOME v
 Proof
   rw[set_immutable_def, lookup_immutable_def,
      bind_def, LET_THM, get_address_immutables_def,
@@ -594,15 +676,15 @@ Proof
 QED
 
 Theorem lookup_immutable_tl_scopes:
-  ∀cx st n. lookup_immutable cx (tl_scopes st) n = lookup_immutable cx st n
+  ∀cx st mid n. lookup_immutable cx (tl_scopes st) mid n = lookup_immutable cx st mid n
 Proof
   rw[lookup_immutable_def, tl_scopes_def]
 QED
 
 Theorem lookup_immutable_preserved_after_update:
-  ∀cx st n v k.
-    lookup_immutable cx (update_name st n v) k =
-    lookup_immutable cx st k
+  ∀cx st n v mid k.
+    lookup_immutable cx (update_name st n v) mid k =
+    lookup_immutable cx st mid k
 Proof
   rw[lookup_immutable_def, immutables_preserved_after_update]
 QED
@@ -729,4 +811,225 @@ Proof
     (irule lookup_scopes_none_fcs_none >> ASM_REWRITE_TAC[]) >>
   ASM_REWRITE_TAC[] >>
   simp[evaluation_state_component_equality]
+QED
+
+(* =================== Global Storage ============================= *)
+
+Theorem var_in_storage_storage_var_info:
+  var_in_storage cx mid n ⇒
+  ∃b off tv.
+    storage_var_info cx mid n = SOME (b, off, tv) ∧
+    well_formed_type_value tv
+Proof
+  rw[var_in_storage_def, storage_var_info_def] >> gvs[]
+QED
+
+Theorem var_in_storage_has_type:
+  var_in_storage cx mid n ⇒ IS_SOME (storage_type_of cx mid n)
+Proof
+  strip_tac >> drule var_in_storage_storage_var_info >> strip_tac >>
+  simp[storage_type_of_def]
+QED
+
+Theorem var_in_storage_well_formed_type:
+  var_in_storage cx mid n ∧ storage_type_of cx mid n = SOME tv ⇒
+  well_formed_type_value tv
+Proof
+  strip_tac >>
+  drule var_in_storage_storage_var_info >> strip_tac >>
+  gvs[storage_type_of_def]
+QED
+
+Theorem get_after_set_storage_backend[local]:
+  ∀cx is_transient storage' st.
+    get_storage_backend cx is_transient
+      (SND (set_storage_backend cx is_transient storage' st)) =
+    (INL storage', SND (set_storage_backend cx is_transient storage' st))
+Proof
+  Cases_on `is_transient` >>
+  rw[get_storage_backend_def, set_storage_backend_def,
+     bind_def, return_def, get_accounts_def, update_accounts_def,
+     get_transient_storage_def, update_transient_def,
+     vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def,
+     vfmExecutionTheory.lookup_transient_storage_def,
+     vfmExecutionTheory.update_transient_storage_def,
+     combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem get_after_set_other_backend[local]:
+  ∀cx b1 b2 storage' st.
+    b1 ≠ b2 ⇒
+    FST (get_storage_backend cx b2
+      (SND (set_storage_backend cx b1 storage' st))) =
+    FST (get_storage_backend cx b2 st)
+Proof
+  Cases_on `b1` >> Cases_on `b2` >> gvs[] >>
+  simp[get_storage_backend_def, set_storage_backend_def,
+       bind_def, return_def, get_accounts_def, update_accounts_def,
+       get_transient_storage_def, update_transient_def,
+       vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def,
+       vfmExecutionTheory.lookup_transient_storage_def,
+       vfmExecutionTheory.update_transient_storage_def]
+QED
+
+Theorem get_storage_backend_INL[local]:
+  ∀cx b st. ∃storage. get_storage_backend cx b st = (INL storage, st)
+Proof
+  Cases_on `b` >>
+  simp[get_storage_backend_def, bind_def, return_def,
+       get_accounts_def, get_transient_storage_def]
+QED
+
+Theorem lookup_toplevel_name_after_update_core[local]:
+  ∀cx st mid n v.
+    var_in_storage cx mid n ∧
+    storable_value cx mid n v ⇒
+    ∃ref_v.
+      lookup_toplevel_name cx (update_toplevel_name cx st mid n v) mid n = SOME ref_v ∧
+      FST (materialise cx ref_v (update_toplevel_name cx st mid n v)) = INL v ∧
+      ((∀av. v ≠ ArrayV av) ⇒ ref_v = Value v)
+Proof
+  rpt strip_tac >>
+  fs[storable_value_def] >>
+  `IS_SOME (storage_type_of cx mid n)` by metis_tac[var_in_storage_has_type] >>
+  Cases_on `storage_type_of cx mid n` >> gvs[] >>
+  rename1 `storage_type_of cx mid n = SOME tv` >>
+  `IS_SOME (encode_value tv v)` by gvs[value_has_type_equiv] >>
+  `well_formed_type_value tv` by metis_tac[var_in_storage_well_formed_type] >>
+  `bounds_compat tv v` by metis_tac[value_has_type_implies_bounds_compat] >>
+  `encode_decode_roundtrip_ok tv v` by (irule encode_decode_roundtrip_all >> simp[]) >>
+  fs[var_in_storage_def, storage_type_of_def, storage_var_info_def, AllCaseEqs()] >>
+  Cases_on `encode_value tv v` >> gvs[] >>
+  simp[lookup_toplevel_name_def, update_toplevel_name_def] >>
+  simp[Once set_global_def, write_storage_slot_def,
+       bind_def, lift_option_type_def, lift_option_def,
+       return_def, LET_THM, raise_def] >>
+  `∃storage0. get_storage_backend cx b st = (INL storage0, st)` by
+    metis_tac[get_storage_backend_INL] >>
+  simp[Once lookup_global_def, bind_def, lift_option_type_def,
+       return_def, LET_THM, raise_def] >>
+  Cases_on `tv` >>
+  gvs[read_storage_slot_def, lift_option_def, bind_def,
+      get_after_set_storage_backend, return_def, raise_def,
+      encode_decode_roundtrip_ok_def, materialise_def] >>
+  (* ArrayTV case: unfold set_global in materialise side *)
+  simp[Once set_global_def, write_storage_slot_def,
+       bind_def, lift_option_type_def, lift_option_def,
+       return_def, LET_THM, raise_def,
+       get_after_set_storage_backend] >>
+  Cases_on `v` >> gvs[value_has_type_def]
+QED
+
+Theorem lookup_toplevel_name_materialise_after_update:
+  ∀cx st mid n v.
+    var_in_storage cx mid n ∧
+    storable_value cx mid n v ⇒
+    ∃ref_v.
+      lookup_toplevel_name cx (update_toplevel_name cx st mid n v) mid n = SOME ref_v ∧
+      FST (materialise cx ref_v (update_toplevel_name cx st mid n v)) = INL v
+Proof
+  rpt strip_tac >>
+  drule_all lookup_toplevel_name_after_update_core >> strip_tac >>
+  first_x_assum (qspec_then `st` strip_assume_tac) >>
+  qexists_tac `ref_v` >> simp[]
+QED
+
+Theorem lookup_toplevel_name_after_update:
+  ∀cx st mid n v.
+    var_in_storage cx mid n ∧
+    (∀av. v ≠ ArrayV av) ∧
+    storable_value cx mid n v ⇒
+    lookup_toplevel_name cx (update_toplevel_name cx st mid n v) mid n = SOME (Value v)
+Proof
+  rpt strip_tac >>
+  drule_all lookup_toplevel_name_after_update_core >> strip_tac >>
+  first_x_assum (qspec_then `st` strip_assume_tac) >> gvs[]
+QED
+
+Theorem lookup_toplevel_name_preserved_after_update:
+  ∀cx st mid1 mid2 n1 n2 v.
+    well_formed_layout cx ∧
+    well_formed_value v ∧
+    (mid1,n1) ≠ (mid2,n2) ∧
+    var_in_storage cx mid1 n1 ∧ var_in_storage cx mid2 n2 ⇒
+    lookup_toplevel_name cx (update_toplevel_name cx st mid1 n1 v) mid2 n2 =
+    lookup_toplevel_name cx st mid2 n2
+Proof
+  rpt gen_tac >> strip_tac >>
+  (* Extract storage var info *)
+  `∃b1 off1 tv1. storage_var_info cx mid1 n1 = SOME (b1, off1, tv1) ∧
+    well_formed_type_value tv1` by metis_tac[var_in_storage_storage_var_info] >>
+  `∃b2 off2 tv2. storage_var_info cx mid2 n2 = SOME (b2, off2, tv2) ∧
+    well_formed_type_value tv2` by metis_tac[var_in_storage_storage_var_info] >>
+  (* Get bounds and disjointness from well_formed_layout *)
+  `off1 + type_slot_size tv1 ≤ dimword(:256)` by
+    (gvs[well_formed_layout_def] >> res_tac) >>
+  `off2 + type_slot_size tv2 ≤ dimword(:256)` by
+    (gvs[well_formed_layout_def] >> res_tac) >>
+  `b1 = b2 ⇒
+    off1 + type_slot_size tv1 ≤ off2 ∨ off2 + type_slot_size tv2 ≤ off1` by (
+    strip_tac >> gvs[well_formed_layout_def] >>
+    first_x_assum drule_all >> simp[]) >>
+  (* Unfold storage_var_info to get concrete lookups *)
+  gvs[storage_var_info_def, AllCaseEqs()] >>
+  (* Unfold update_toplevel_name → set_global → write_storage_slot *)
+  simp[update_toplevel_name_def] >>
+  simp[Once set_global_def, write_storage_slot_def,
+       bind_def, lift_option_type_def, lift_option_def,
+       return_def, LET_THM, raise_def] >>
+  `∃storage0. get_storage_backend cx b1 st = (INL storage0, st)` by
+    metis_tac[get_storage_backend_INL] >>
+  (* Rewrite the write-side case expression, keeping the assumption *)
+  qpat_x_assum `get_storage_backend _ _ _ = _`
+    (fn th => simp[th] >> assume_tac th) >>
+  Cases_on `encode_value tv1 v` >> simp[raise_def, return_def] >>
+  rename1 `encode_value tv1 v = SOME writes` >>
+  (* Unfold lookup_toplevel_name on both sides *)
+  simp[lookup_toplevel_name_def, lookup_global_def, bind_def,
+       lift_option_type_def, lift_option_def, return_def, LET_THM, raise_def] >>
+  (* Case split: same backend vs different backend *)
+  Cases_on `b1 = b2` >- (
+    (* Same backend: use decode_value_disjoint_writes *)
+    pop_assum SUBST_ALL_TAC >>
+    (* Establish decode_value equality before case-splitting tv2 *)
+    `decode_value (apply_writes (n2w off1) writes storage0)
+       (w2n ((n2w off2):bytes32)) tv2 =
+     decode_value storage0 (w2n ((n2w off2):bytes32)) tv2` by (
+      irule decode_value_disjoint_apply_writes >>
+      conj_tac >- simp[] >>
+      qexists_tac `type_slot_size tv1` >> simp[] >>
+      rpt strip_tac >>
+      drule_all (CONJUNCT1 encode_writes_bounded) >> simp[]) >>
+    (* Case-split tv2, unfold read_storage_slot, apply decode equality *)
+    Cases_on `tv2` >> simp[return_def] >>
+    simp[read_storage_slot_def, bind_def, lift_option_def,
+         return_def, raise_def] >>
+    REWRITE_TAC [get_after_set_storage_backend] >> simp[] >>
+    qpat_x_assum `get_storage_backend _ _ st = _` (fn th => simp[th]) >>
+    TRY (qpat_x_assum `decode_value _ _ _ = decode_value _ _ _`
+      (fn th => REWRITE_TAC [REWRITE_RULE [wordsTheory.w2n_n2w] th])) >>
+    ntac 5 (BasicProvers.PURE_CASE_TAC >> simp[return_def, raise_def])
+  ) >>
+  (* Different backend: storage on b2 is unchanged *)
+  Cases_on `tv2` >> simp[return_def] >>
+  simp[read_storage_slot_def, bind_def, lift_option_def, return_def] >>
+  `∃s2. get_storage_backend cx b2 st = (INL s2, st)` by
+    metis_tac[get_storage_backend_INL] >>
+  `∃s2'. get_storage_backend cx b2
+    (SND (set_storage_backend cx b1
+      (apply_writes (n2w off1) writes storage0) st)) =
+    (INL s2', SND (set_storage_backend cx b1
+      (apply_writes (n2w off1) writes storage0) st))` by
+    metis_tac[get_storage_backend_INL] >>
+  `s2' = s2` by (
+    `FST (get_storage_backend cx b2
+      (SND (set_storage_backend cx b1
+        (apply_writes (n2w off1) writes storage0) st))) =
+     FST (get_storage_backend cx b2 st)` by
+      (irule get_after_set_other_backend >> simp[]) >>
+    gvs[]) >>
+  gvs[] >>
+  qpat_x_assum `get_storage_backend cx b2 (SND _) = _` (fn th => simp[th]) >>
+  qpat_x_assum `get_storage_backend cx b2 st = _` (fn th => simp[th]) >>
+  ntac 5 (BasicProvers.PURE_CASE_TAC >> simp[return_def, raise_def])
 QED

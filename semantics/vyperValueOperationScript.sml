@@ -285,9 +285,12 @@ Definition evaluate_binop_def:
        | _ => INR (TypeError "binop"))
      | ShL => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
-           (* TODO: check type constraints on shifts *)
            (if i2 < 0 then INR (RuntimeError "ShL0")
-            else INL $ IntV $ int_shift_left (Num i2) i1) | _ => INR (TypeError "binop"))
+            else let r = int_shift_left (Num i2) i1;
+                     b = int_bound_bits u in
+              if is_Unsigned u then INL $ IntV (int_mod r &(2 ** b))
+              else INL $ IntV (signed_int_mod b r))
+           | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | ShR => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
@@ -491,7 +494,7 @@ Definition evaluate_as_wei_value_def:
           | GEther => 1000000000000000000000000000
           | TEther => 1000000000000000000000000000000 in
   let r = case v of IntV i => i * m
-                  | DecimalV i => (i * m) / 1000000000
+                  | DecimalV i => (i * m) / 10000000000
                   | _ => -1 in
   if 0 ≤ r then
     let u = Unsigned 256 in
@@ -546,22 +549,28 @@ val () = cv_auto_trans evaluate_attribute_def;
 (* convert *)
 
 Definition evaluate_convert_def:
+  evaluate_convert (BytesV bs) (BaseT BoolT) =
+    INL $ BoolV (EXISTS (λb. b ≠ 0w) bs) ∧
   evaluate_convert (IntV i) (BaseT BoolT) = INL $ BoolV (i ≠ 0) ∧
   evaluate_convert (BoolV b) (BaseT (IntT n)) =
     INL $ IntV (if b then 1 else 0) ∧
   evaluate_convert (BoolV b) (BaseT (UintT n)) =
     INL $ IntV (if b then 1 else 0) ∧
-  evaluate_convert (BytesV bs) (BaseT (BytesT bd)) =
-    (if compatible_bound bd (LENGTH bs)
+  evaluate_convert (BytesV bs) (BaseT (BytesT (Fixed n))) =
+    (if LENGTH bs ≤ n
+     then INL $ BytesV (PAD_RIGHT 0w n bs)
+     else INR (RuntimeError "convert BytesV bound")) ∧
+  evaluate_convert (BytesV bs) (BaseT (BytesT (Dynamic n))) =
+    (if LENGTH bs ≤ n
      then INL $ BytesV bs
      else INR (RuntimeError "convert BytesV bound")) ∧
   evaluate_convert (BytesV bs) (BaseT (UintT n)) =
-    (let i = &(w2n $ (word_of_bytes_be bs : bytes32)) in
+    (let i = &(w2n $ (word_of_bytes_be (PAD_LEFT 0w 32 bs) : bytes32)) in
      if within_int_bound (Unsigned n) i
      then INL $ IntV i
      else INR (RuntimeError "convert BytesV uint bound")) ∧
   evaluate_convert (BytesV bs) (BaseT (IntT n)) =
-    (let i = w2i $ (word_of_bytes_be bs : bytes32) in
+    (let i = w2i $ (word_of_bytes_be (PAD_LEFT 0w 32 bs) : bytes32) in
      if within_int_bound (Signed n) i
      then INL $ IntV i
      else INR (RuntimeError "convert BytesV int bound")) ∧
@@ -596,6 +605,10 @@ Definition evaluate_convert_def:
     (if LENGTH bs ≤ n
      then INL $ StringV (MAP (CHR o w2n) bs)
      else INR (RuntimeError "convert bytes string")) ∧
+  evaluate_convert (StringV s) (BaseT (StringT n)) =
+    (if LENGTH s ≤ n
+     then INL $ StringV s
+     else INR (RuntimeError "convert string string bound")) ∧
   evaluate_convert (StringV s) (BaseT (BytesT bd)) =
     (if compatible_bound bd (LENGTH s)
      then INL $ BytesV (MAP (n2w o ORD) s)
