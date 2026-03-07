@@ -55,9 +55,9 @@ Theorem block_sim_function:
     (!s1 s2. R_ok s1 s2 ==> s1.vs_current_bb = s2.vs_current_bb) /\
     (!s1 s2. R_ok s1 s2 ==> s1.vs_halted = s2.vs_halted)
   ==>
-    !fuel fn s.
-      lift_result R_ok R_term (run_function fuel fn s)
-                 (run_function fuel (function_map_transform bt fn) s)
+    !fuel ctx fn s.
+      lift_result R_ok R_term (run_function fuel ctx fn s)
+                 (run_function fuel ctx (function_map_transform bt fn) s)
 Proof
   ACCEPT_TAC block_sim_function_proof
 QED
