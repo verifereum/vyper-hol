@@ -15,7 +15,7 @@
 
 Theory availExprDefs
 Ancestors
-  venomEffects dfgDefs cfgDefs dfIterateDefs
+  venomEffects dfgDefs cfgDefs
 
 (* is_pseudo from venomInstTheory *)
 
