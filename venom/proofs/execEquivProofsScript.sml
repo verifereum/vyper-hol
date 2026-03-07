@@ -525,10 +525,12 @@ Proof
   rw[exec_ext_call_def, LET_THM] >>
   `s1.vs_memory = s2.vs_memory /\ s1.vs_accounts = s2.vs_accounts /\
    s1.vs_logs = s2.vs_logs /\ s1.vs_call_ctx = s2.vs_call_ctx /\
-   s1.vs_tx_params = s2.vs_tx_params`
+   s1.vs_tx_ctx = s2.vs_tx_ctx /\ s1.vs_block_ctx = s2.vs_block_ctx /\
+   s1.vs_prev_hashes = s2.vs_prev_hashes`
     by fs[state_equiv_def, execution_equiv_def] >>
   simp[read_memory_def, make_venom_call_state_def,
-       make_sub_tx_def, make_rollback_def, LET_THM] >>
+       make_sub_tx_def, make_rollback_def, venom_to_tx_params_def,
+       LET_THM] >>
   simp[extract_venom_result_def] >>
   rpt CASE_TAC >> gvs[result_equiv_def] >>
   rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
@@ -550,10 +552,12 @@ Proof
   rw[exec_create_def, LET_THM] >>
   `s1.vs_memory = s2.vs_memory /\ s1.vs_accounts = s2.vs_accounts /\
    s1.vs_logs = s2.vs_logs /\ s1.vs_call_ctx = s2.vs_call_ctx /\
-   s1.vs_tx_params = s2.vs_tx_params`
+   s1.vs_tx_ctx = s2.vs_tx_ctx /\ s1.vs_block_ctx = s2.vs_block_ctx /\
+   s1.vs_prev_hashes = s2.vs_prev_hashes`
     by fs[state_equiv_def, execution_equiv_def] >>
   simp[read_memory_def, make_venom_create_state_def,
-       make_sub_tx_def, make_rollback_def, LET_THM] >>
+       make_sub_tx_def, make_rollback_def, venom_to_tx_params_def,
+       LET_THM] >>
   simp[extract_venom_result_def] >>
   rpt CASE_TAC >> gvs[result_equiv_def] >>
   rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>

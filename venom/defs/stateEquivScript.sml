@@ -99,7 +99,7 @@ Definition execution_equiv_def:
     s1.vs_label_offsets = s2.vs_label_offsets /\
     s1.vs_code = s2.vs_code /\
     s1.vs_params = s2.vs_params /\
-    s1.vs_tx_params = s2.vs_tx_params /\
+    s1.vs_prev_hashes = s2.vs_prev_hashes /\
     s1.vs_allocas = s2.vs_allocas
 End
 

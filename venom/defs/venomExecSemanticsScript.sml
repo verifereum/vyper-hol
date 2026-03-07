@@ -213,6 +213,26 @@ End
    CREATE/CREATE2: make_venom_create_state + extract_venom_create_result
    -------------------------------------------------------------------------- *)
 
+(* Build transaction_parameters from venom state for EVM sub-execution.
+   Mirrors vyper_to_tx_params in vyperInterpreterScript.sml.
+   prevHashes comes from vs_prev_hashes; authRefund defaults to 0. *)
+Definition venom_to_tx_params_def:
+  venom_to_tx_params s : transaction_parameters =
+    <| origin := s.vs_tx_ctx.tc_origin;
+       gasPrice := w2n s.vs_tx_ctx.tc_gasprice;
+       baseFeePerGas := w2n s.vs_block_ctx.bc_basefee;
+       baseFeePerBlobGas := w2n s.vs_block_ctx.bc_blobbasefee;
+       blockNumber := w2n s.vs_block_ctx.bc_number;
+       blockTimeStamp := w2n s.vs_block_ctx.bc_timestamp;
+       blockCoinBase := s.vs_block_ctx.bc_coinbase;
+       blockGasLimit := w2n s.vs_block_ctx.bc_gaslimit;
+       prevRandao := s.vs_block_ctx.bc_prevrandao;
+       prevHashes := s.vs_prev_hashes;
+       blobHashes := s.vs_tx_ctx.tc_blobhashes;
+       chainId := w2n s.vs_tx_ctx.tc_chainid;
+       authRefund := 0 |>
+End
+
 (* Shared: build a sub-context transaction record *)
 Definition make_sub_tx_def:
   make_sub_tx (caller:address) (target:address) value gas calldata =
@@ -247,7 +267,7 @@ Definition make_venom_call_state_def:
     let accounts = transfer_value caller target value s.vs_accounts in
     let rb = make_rollback accounts caller target in
     <| contexts := [(ctxt, rb)];
-       txParams := s.vs_tx_params;
+       txParams := venom_to_tx_params s;
        rollback := rb;
        msdomain := Collect empty_domain |>
 End
@@ -264,7 +284,7 @@ Definition make_venom_create_state_def:
     let accounts = transfer_value caller new_address value s.vs_accounts in
     let rb = make_rollback accounts caller new_address in
     <| contexts := [(ctxt, rb)];
-       txParams := s.vs_tx_params;
+       txParams := venom_to_tx_params s;
        rollback := rb;
        msdomain := Collect empty_domain |>
 End

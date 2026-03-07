@@ -47,19 +47,19 @@ Proof
 QED
 
 Theorem input_vars_from_phi_correct_proof[local]:
-  ∀src_label instrs base_var v.
-    MEM v (input_vars_from src_label instrs base_var) ==>
-    MEM v base_var ∨
+  ∀src_label instrs base v.
+    MEM v (input_vars_from src_label instrs base) ==>
+    MEM v base ∨
     ∃inst. MEM inst instrs ∧ inst.inst_opcode = PHI ∧
            MEM (src_label, v) (phi_pairs inst.inst_operands)
 Proof
   Induct_on `instrs` >- simp[input_vars_from_def] >>
   rpt gen_tac >> simp[Once input_vars_from_def] >> strip_tac >>
   first_x_assum (qspecl_then [`src_label`,
-    `if h.inst_opcode ≠ PHI then base_var
+    `if h.inst_opcode ≠ PHI then base
      else list_union
        (FILTER (λv. ¬MEM v (MAP SND (FILTER (λ(l,v). l ≠ src_label)
-          (phi_pairs h.inst_operands)))) base_var)
+          (phi_pairs h.inst_operands)))) base)
        (MAP SND (FILTER (λ(l,v). l = src_label)
           (phi_pairs h.inst_operands)))`, `v`] mp_tac) >>
   impl_tac >- fs[input_vars_from_def] >>
@@ -71,9 +71,9 @@ QED
 
 (* input_vars_from only adds vars from inst_uses of PHI instructions *)
 Theorem input_vars_from_vars_bounded[local]:
-  ∀src_label instrs base_var v.
-    MEM v (input_vars_from src_label instrs base_var) ==>
-    MEM v base_var ∨
+  ∀src_label instrs base v.
+    MEM v (input_vars_from src_label instrs base) ==>
+    MEM v base ∨
     ∃inst. MEM inst instrs ∧ MEM v (inst_uses inst)
 Proof
   rpt strip_tac >>

@@ -8,7 +8,7 @@
 
 Theory venomState
 Ancestors
-  vfmTypes vfmState vfmContext
+  vfmTypes vfmState
 
 (* --------------------------------------------------------------------------
    Venom uses the same basic types as EVM (from verifereum):
@@ -72,15 +72,6 @@ Datatype:
 End
 
 (* --------------------------------------------------------------------------
-   External Call Support
-
-   External calls (CALL/STATICCALL/DELEGATECALL/CREATE/CREATE2) use
-   verifereum's EVM semantics directly: we build an EVM execution_state,
-   run the callee's bytecode, and extract the result. This matches the
-   approach used in the Vyper source-level semantics (run_ext_call).
-   -------------------------------------------------------------------------- *)
-
-(* --------------------------------------------------------------------------
    Venom Execution State
 
    Venom operates at a higher level than raw EVM:
@@ -111,7 +102,7 @@ Datatype:
     vs_label_offsets : (string, bytes32) fmap; (* Label→address map (OFFSET) *)
     vs_code : byte list;             (* Own bytecode (CODECOPY/EXTCODECOPY) *)
     vs_params : bytes32 list;        (* Function parameters (read by PARAM) *)
-    vs_tx_params : transaction_parameters; (* EVM tx params for ext calls *)
+    vs_prev_hashes : bytes32 list;  (* Recent block hashes for EVM BLOCKHASH *)
     vs_allocas : (num, num # num) fmap  (* alloca_id -> (offset, size) *)
   |>
 End
@@ -172,13 +163,7 @@ Definition init_venom_state_def:
     vs_label_offsets := FEMPTY;
     vs_code := [];
     vs_params := [];
-    vs_tx_params := <| origin := 0w; gasPrice := 0;
-                       baseFeePerGas := 0; baseFeePerBlobGas := 0;
-                       blockNumber := 0; blockTimeStamp := 0;
-                       blockCoinBase := 0w; blockGasLimit := 0;
-                       prevRandao := 0w; prevHashes := [];
-                       blobHashes := []; chainId := 0;
-                       authRefund := 0 |>;
+    vs_prev_hashes := [];
     vs_allocas := FEMPTY
   |>
 End
