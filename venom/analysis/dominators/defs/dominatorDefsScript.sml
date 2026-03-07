@@ -15,10 +15,10 @@
  *   frontier_set           — dominance frontier of a set of blocks
  *
  * Helper (internal):
- *   dom_init                — initialize dominator sets
- *   dom_transfer            — one iteration over labels
- *   dom_one_pass            — wrapper for dom_transfer
- *   dom_iterate             — iterate to fixpoint via df_iterate
+ *   dom_transfer_inst       — per-instruction transfer (identity)
+ *   dom_edge_transfer       — add dst to predecessor dom set
+ *   dom_fixpoint            — run df_analyze Forward for dominator sets
+ *   dom_sets_of             — extract dominator fmap from df_state
  *   compute_idom_for        — idom for a single label
  *   compute_idom            — idom for all labels
  *   compute_dominated       — invert idom to get dom-tree children
@@ -29,7 +29,7 @@
 Theory dominatorDefs
 Ancestors
   list finite_map pred_set
-  venomInst cfgDefs dfIterateDefs dfHelperDefs
+  venomInst cfgDefs dfAnalyzeDefs dfHelperDefs
 Libs
   listTheory finite_mapTheory pred_setTheory pairTheory
 
@@ -90,46 +90,34 @@ Definition frontier_set_def:
 End
 
 (* ==========================================================================
-   Phase 1: Compute dominator sets (iterative fixpoint)
+   Phase 1: Compute dominator sets via df_analyze
 
    dom[entry] = {entry}
    dom[b]     = {b} ∪ ∩{dom[p] | p ∈ preds(b)}
+
+   Lattice: (P(labels), ⊇) — all labels = bottom (identity for ∩).
+   Transfer: identity (dominators are block-level, not per-instruction).
+   Edge transfer: set_insert dst — adds current block to each predecessor's
+     dominator set before intersection.
    ========================================================================== *)
 
-(* Initialize: dom[entry] = [entry], dom[b] = all labels for others. *)
-Definition dom_init_def:
-  dom_init entry labels =
-    FOLDL (λm l.
-      m |+ (l, if l = entry then [entry] else labels))
-    FEMPTY labels
+(* Per-instruction transfer: identity.
+   Dominators don't change within a block; the {b} is handled by
+   edge_transfer adding dst to each predecessor's dominator set. *)
+Definition dom_transfer_inst_def:
+  dom_transfer_inst (() : unit) (inst : instruction)
+                    (doms : string list) = doms
 End
 
-(* One pass: update dom[b] for each label in order.
-   Entry block is skipped (dom[entry] = [entry] is invariant). *)
-Definition dom_transfer_def:
-  dom_transfer cfg entry dom [] = dom ∧
-  dom_transfer cfg entry dom (lbl :: rest) =
-    let dom' =
-      if lbl = entry then dom
-      else
-        let preds = cfg_preds_of cfg lbl in
-        let pred_doms = MAP (λp. fmap_lookup_list dom p) preds in
-        let new_dom = set_insert lbl (list_intersect_all pred_doms) in
-        dom |+ (lbl, new_dom)
-    in
-    dom_transfer cfg entry dom' rest
-End
-
-(* One full pass wrapper. *)
-Definition dom_one_pass_def:
-  dom_one_pass cfg entry order dom =
-    dom_transfer cfg entry dom order
-End
-
-(* Iterate to fixpoint via df_iterate (WHILE). *)
-Definition dom_iterate_def:
-  dom_iterate cfg entry order dom =
-    df_iterate (dom_one_pass cfg entry order) dom
+(* Edge transfer: add the destination block to the predecessor's dom set.
+   For block b with predecessors p1, p2:
+     edge_vals = [set_insert b dom[p1], set_insert b dom[p2]]
+     joined = ∩{set_insert b dom[pi]} = {b} ∪ ∩{dom[pi]}
+   This gives dom[b] = {b} ∪ ∩{dom[p] | p ∈ preds(b)} as desired. *)
+Definition dom_edge_transfer_def:
+  dom_edge_transfer (() : unit) (src : string) (dst : string)
+                    (doms : string list) =
+    set_insert dst doms
 End
 
 (* ==========================================================================
@@ -232,6 +220,27 @@ End
    Top-level: run full dominator analysis
    ========================================================================== *)
 
+(* Run dominator fixpoint via df_analyze Forward. *)
+Definition dom_fixpoint_def:
+  dom_fixpoint cfg fn =
+    let entry =
+      case entry_block fn of
+        NONE => ""
+      | SOME bb => bb.bb_label in
+    let all_labels = fn_labels fn in
+    df_analyze Forward all_labels list_intersect dom_transfer_inst
+              dom_edge_transfer () (SOME (entry, [entry])) fn
+End
+
+(* Extract dominator sets from df_state.
+   Boundary value at each block = dom set for that block. *)
+Definition dom_sets_of_def:
+  dom_sets_of fn (st : string list df_state) =
+    let all_labels = fn_labels fn in
+    FOLDL (λm lbl. m |+ (lbl, df_boundary all_labels st lbl))
+          FEMPTY (fn_labels fn)
+End
+
 Definition dom_analyze_def:
   dom_analyze cfg fn =
     let entry =
@@ -239,9 +248,9 @@ Definition dom_analyze_def:
         NONE => ""
       | SOME bb => bb.bb_label in
     let labels = fn_labels fn in
+    let st = dom_fixpoint cfg fn in
+    let dom_sets = dom_sets_of fn st in
     let order = cfg.cfg_dfs_post in
-    let dom0 = dom_init entry labels in
-    let dom_sets = dom_iterate cfg entry order dom0 in
     let idom = compute_idom order entry dom_sets labels in
     let dominated = compute_dominated idom labels in
     let fuel = LENGTH labels in
