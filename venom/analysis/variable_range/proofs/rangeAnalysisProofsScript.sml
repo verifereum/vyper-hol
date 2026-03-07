@@ -91,17 +91,40 @@ QED
 
 (* ===== Edge transfer ===== *)
 
+(* Branch refinement is sound when the concrete execution actually takes
+   the edge pred→succ. For JNZ terminators, this means the condition
+   variable's value matches the branch direction. *)
 Theorem range_branch_refine_sound:
   ∀dfg bbs pred succ rs env.
-    in_range_state rs env ⇒
+    in_range_state rs env ∧
+    (∀bb.
+      lookup_block pred bbs = SOME bb ∧ ¬NULL bb.bb_instructions ⇒
+      let term = LAST bb.bb_instructions in
+      ∀cond_op true_lbl false_lbl.
+        term.inst_opcode = JNZ ∧
+        term.inst_operands = [cond_op; Label true_lbl; Label false_lbl] ⇒
+          (succ = true_lbl ⇒
+            ∀v w. cond_op = Var v ∧ FLOOKUP env v = SOME w ⇒ w ≠ 0w) ∧
+          (succ = false_lbl ⇒
+            ∀v w. cond_op = Var v ∧ FLOOKUP env v = SOME w ⇒ w = 0w)) ⇒
     in_range_state (range_branch_refine dfg bbs pred succ rs) env
 Proof
   cheat
 QED
 
+(* PHI renaming is sound when the concrete values of PHI outputs match
+   the ranges of the predecessor operands. This holds when execution
+   came from pred: PHI assigns out := v, so env(out) = env(v) ∈ range(v). *)
 Theorem range_phi_edge_rename_sound:
   ∀bbs pred succ rs env.
-    in_range_state rs env ⇒
+    in_range_state rs env ∧
+    (∀bb inst out v.
+      lookup_block succ bbs = SOME bb ∧
+      MEM inst bb.bb_instructions ∧
+      inst.inst_opcode = PHI ∧
+      inst.inst_outputs = [out] ∧
+      ALOOKUP (phi_pairs inst.inst_operands) pred = SOME v ⇒
+        ∀w. FLOOKUP env out = SOME w ⇒ in_range (rs_lookup rs v) w) ⇒
     in_range_state (range_phi_edge_rename bbs pred succ rs) env
 Proof
   cheat
