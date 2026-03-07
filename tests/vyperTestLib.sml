@@ -216,6 +216,8 @@ val unsupported_patterns = unsupported_code @ [
   "raw_revert(",
   "selfdestruct",
   "msg.mana", "msg.gas",
+  "raw_create(",
+  "create_from_blueprint(",
   "create_minimal_proxy_to(",
   "create_copy_of(",
   "gas=",
@@ -272,7 +274,8 @@ fun check_generate_dirs () = (
 
 (* Directory-level allowlist plus small explicit allowlist. *)
 val allowed_test_prefixes = [
-  "vyper-test-exports/functional/codegen/"
+  "vyper-test-exports/functional/codegen/",
+  "vyper-test-exports/functional/builtins/codegen/"
 ]
 
 val allowed_test_patterns = [
@@ -291,6 +294,77 @@ val allowed_test_names = [
 
 (* Tests excluded by name - require architectural changes *)
 val excluded_test_names = [
+  (* These tests have a helper contract deployed via raw_bytecode with
+     annotated_ast: null. The deployment decoder cannot handle null ASTs.
+     Fix: add a RawDeployment trace type that only carries address +
+     runtime bytecode + ABI, skipping source compilation entirely. *)
+  "test_abi_decode_child_head_points_to_parent",
+  "test_abi_decode_complex_arithmetic_overflow",
+  "test_abi_decode_complex_empty_dynarray",
+  "test_abi_decode_empty_toplevel_dynarray",
+  "test_abi_decode_extcall_complex_empty_dynarray",
+  "test_abi_decode_extcall_empty_array",
+  "test_abi_decode_extcall_zero_len_array2",
+  "test_abi_decode_invalid_toplevel_dynarray_head",
+  "test_abi_decode_merge_head_and_length",
+  "test_abi_decode_nonstrict_head",
+  "test_abi_decode_nonstrict_head_oob",
+  "test_create_from_blueprint_bad_code_offset",
+  (* abi_encode tests that use ensure_tuple=False or method_id= keywords.
+     TODO: support ensure_tuple and method_id keyword arguments for abi_encode *)
+  "test_abi_encode",
+  "test_abi_encode_dynarray",
+  "test_abi_encode_empty_string*",
+  "test_abi_encode_nested_dynarray*",
+  "test_revert_reason_typed",
+  "test_revert_reason_typed_no_variable",
+  "test_side_effects_evaluation",
+  (* Tests using shift() builtin which is not yet translated.
+     TODO: add shift builtin support *)
+  "test_uint256_mulmod_complex",
+  (* Tests using sha256() builtin which is not yet translated.
+     TODO: add sha256 builtin support *)
+  "test_sha256_*",
+  (* Tests using msg.data which is not yet modelled.
+     TODO: add msg.data env item *)
+  "test_slice_start_eval_once[msg.data]",
+  (* Out-of-gas test - we don't model gas *)
+  "test_ecrecover_oog_handling",
+  (* ABI decode strictness tests - Vyper's decoder is stricter than standard
+     ABI, rejecting OOB heads, truncated data, etc. TODO: add Vyper-specific
+     ABI decode validation on top of contractABI's standard valid_enc *)
+  "test_abi_decode_extcall_array_oob*",
+  "test_abi_decode_extcall_complex_empty_dynarray2",
+  "test_abi_decode_extcall_invalid_head",
+  "test_abi_decode_extcall_oob",
+  "test_abi_decode_extcall_return_nodata",
+  "test_abi_decode_extcall_runtimesz_oob",
+  "test_abi_decode_extcall_truncate_returndata*",
+  "test_abi_decode_dynarray_complex_insufficient_data",
+  "test_abi_decode_nonstrict_head_oob2",
+  "test_abi_decode_runtimesz_oob*",
+  "test_abi_decode_top_level_head_oob",
+  "test_nested_invalid_dynarray_head",
+  "test_static_outer_type_invalid_heads",
+  "test_abi_decode_arithmetic_overflow",
+  "test_abi_decode_bytearray_clamp",
+  "test_abi_decode_dynarray_complex2",
+  "test_abi_decode_head_pointing_outside_buffer",
+  "test_abi_decode_head_roundtrip",
+  "test_abi_decode_max_size",
+  "test_clamper*",
+  "test_returndatasize_check",
+  (* abi_decode tests using unwrap_tuple=False keyword.
+     TODO: support unwrap_tuple keyword argument for abi_decode *)
+  "test_abi_decode_annassign",
+  "test_abi_decode_double[False*",
+  "test_abi_decode_nested_dynarray2[False*",
+  "test_abi_decode_nested_dynarray[False*",
+  "test_abi_decode_single*False]",
+  (* Flag conversion tests: convert(int_val, FlagType) requires
+     evaluate_convert to support FlagT target types, which needs
+     type env access. TODO: refactor FlagV representation first. *)
+  "test_flag_conversion*"
 ]
 
 fun glob_match pat str =
