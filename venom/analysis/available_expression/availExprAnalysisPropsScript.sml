@@ -228,25 +228,25 @@ QED
 
 (* If get_expression returns SOME, the source instruction differs from the target *)
 Theorem avail_get_expression_diff:
-  ∀ar inst expr src.
-    avail_get_expression ar inst = SOME (expr, src) ⇒
+  ∀fn lbl idx inst expr src.
+    avail_get_expression fn lbl idx inst = SOME (expr, src) ⇒
     src.inst_id ≠ inst.inst_id
 Proof ACCEPT_TAC availExprProofsTheory.avail_get_expression_diff
 QED
 
-(* If get_expression returns SOME, the expression was recorded in ae_inst_expr *)
+(* If get_expression returns SOME, the expression matches mk_expr *)
 Theorem avail_get_expression_recorded:
-  ∀ar inst expr src.
-    avail_get_expression ar inst = SOME (expr, src) ⇒
-    FLOOKUP ar.ae_inst_expr inst.inst_id = SOME expr
+  ∀fn lbl idx inst expr src.
+    avail_get_expression fn lbl idx inst = SOME (expr, src) ⇒
+    expr = mk_expr (dfg_build_function fn) inst
 Proof ACCEPT_TAC availExprProofsTheory.avail_get_expression_recorded
 QED
 
 (* If get_expression returns SOME, the source is in the available set at that point *)
 Theorem avail_get_expression_available:
-  ∀ar inst expr src.
-    avail_get_expression ar inst = SOME (expr, src) ⇒
-    ∃insts. FLOOKUP (ae_lookup_inst ar inst.inst_id) expr = SOME insts ∧
+  ∀fn lbl idx inst expr src.
+    avail_get_expression fn lbl idx inst = SOME (expr, src) ⇒
+    ∃insts. FLOOKUP (ae_lookup_inst fn lbl idx) expr = SOME insts ∧
             MEM src insts
 Proof ACCEPT_TAC availExprProofsTheory.avail_get_expression_available
 QED
