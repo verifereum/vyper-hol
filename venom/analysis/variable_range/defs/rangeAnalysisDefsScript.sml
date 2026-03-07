@@ -248,7 +248,9 @@ Definition range_join_opt_def:
     SOME (range_normalize (range_join_two a b))
 End
 
-(* Option-wrapped widening *)
+(* Option-wrapped widening. No normalization after widening —
+   matches Python _widen_states which returns directly.
+   (range_join_opt normalizes; this asymmetry is intentional.) *)
 Definition range_widen_opt_def:
   range_widen_opt NONE x = x ∧
   range_widen_opt x NONE = x ∧

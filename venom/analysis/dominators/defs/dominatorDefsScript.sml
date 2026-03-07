@@ -222,7 +222,7 @@ End
 
 (* Run dominator fixpoint via df_analyze Forward. *)
 Definition dom_fixpoint_def:
-  dom_fixpoint cfg fn =
+  dom_fixpoint fn =
     let entry =
       case entry_block fn of
         NONE => ""
@@ -248,7 +248,7 @@ Definition dom_analyze_def:
         NONE => ""
       | SOME bb => bb.bb_label in
     let labels = fn_labels fn in
-    let st = dom_fixpoint cfg fn in
+    let st = dom_fixpoint fn in
     let dom_sets = dom_sets_of fn st in
     let order = cfg.cfg_dfs_post in
     let idom = compute_idom order entry dom_sets labels in

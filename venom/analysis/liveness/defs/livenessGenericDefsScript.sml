@@ -20,7 +20,8 @@ Ancestors
 
 (* Per-instruction transfer for backward liveness:
    live' = (live \ defs) ∪ uses.
-   Context is unit — liveness transfer doesn't need extra info. *)
+   bbs parameter is the shared context type (needed by edge_transfer
+   for PHI-aware operand lookup; unused by the transfer itself). *)
 Definition liveness_transfer_def:
   liveness_transfer (bbs : basic_block list) (inst : instruction)
                     (live : string list) =

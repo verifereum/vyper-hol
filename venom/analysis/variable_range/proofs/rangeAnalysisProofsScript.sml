@@ -124,3 +124,26 @@ Theorem range_analyze_consistent:
 Proof
   cheat
 QED
+
+(* Block-level soundness: entry sound + run_block OK ⇒ exit sound *)
+Theorem range_analyze_block_sound_proof:
+  ∀fn lbl bb s s'.
+    let ra = range_analyze fn in
+    lookup_block lbl fn.fn_blocks = SOME bb ∧
+    in_range_state (range_entry_state ra lbl) s.vs_vars ∧
+    run_block bb s = OK s' ⇒
+    in_range_state (range_exit_state ra lbl) s'.vs_vars
+Proof
+  cheat
+QED
+
+(* Query soundness: range state sound ⇒ range_get_range contains value *)
+Theorem range_get_range_sound_proof:
+  ∀ra lbl idx op w env.
+    in_range_state (range_at_inst ra lbl idx) env ∧
+    (∀v. op = Var v ⇒ FLOOKUP env v = SOME w) ∧
+    (∀v. op = Lit v ⇒ w = v) ⇒
+    in_range (range_get_range ra lbl idx op) w
+Proof
+  cheat
+QED

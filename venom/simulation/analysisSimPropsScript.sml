@@ -59,7 +59,6 @@ Theorem df_analysis_pass_correct:
            P (st0 with ds_boundary := st0.ds_boundary |+ (lbl, v))) /\
       bounded_measure P leq m b /\
       wl_deps_complete process deps /\
-      (!lbl. MEM lbl all_lbls ==> MEM lbl wl0) /\
       analysis_inst_simulates R_ok R_term (λ(v:'a) s. T) f /\
       (!s1 s2. R_ok s1 s2 ==> s1.vs_current_bb = s2.vs_current_bb) /\
       (!s1 s2. R_ok s1 s2 ==> s1.vs_halted = s2.vs_halted)

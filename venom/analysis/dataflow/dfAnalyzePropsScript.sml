@@ -31,8 +31,7 @@ Theorem df_analyze_fixpoint:
        | SOME (lbl, v) =>
            P (st0 with ds_boundary := st0.ds_boundary |+ (lbl, v))) /\
       bounded_measure P leq m b /\
-      wl_deps_complete process deps /\
-      (!lbl. MEM lbl all_lbls ==> MEM lbl wl0)
+      wl_deps_complete process deps
     ==>
       is_fixpoint process all_lbls
         (df_analyze dir bottom join transfer edge_transfer ctx entry_val fn)
@@ -77,6 +76,8 @@ Theorem df_analyze_invariant:
     let result = df_analyze dir bottom join transfer edge_transfer
                             ctx entry_val fn in
       P bottom /\
+      (case entry_val of NONE => T
+       | SOME (lbl, v) => P v) /\
       (!a b. P a /\ P b ==> P (join a b)) /\
       (!inst a. P a ==> P (transfer ctx inst a)) /\
       (!src dst a. P a ==> P (edge_transfer ctx src dst a))
@@ -92,7 +93,8 @@ QED
 Theorem df_process_inflationary:
   !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx
    entry_val cfg bbs (elem_leq : 'a -> 'a -> bool).
-    partial_order elem_leq /\
+    reflexive elem_leq /\
+    transitive elem_leq /\
     (!a b. elem_leq a (join a b)) /\
     (!a b c. elem_leq b c ==> elem_leq (join a b) (join a c)) /\
     (!inst a b. elem_leq a b ==>

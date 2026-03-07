@@ -67,7 +67,6 @@ Theorem df_analysis_pass_correct_proof:
            P (st0 with ds_boundary := st0.ds_boundary |+ (lbl, v))) /\
       bounded_measure P leq m b /\
       wl_deps_complete process deps /\
-      (!lbl. MEM lbl all_lbls ==> MEM lbl wl0) /\
       (* Transform simulation (universal soundness) *)
       analysis_inst_simulates R_ok R_term (λ(v:'a) s. T) f /\
       (* R_ok preserves control flow *)
