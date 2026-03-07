@@ -7,6 +7,7 @@
  * TOP-LEVEL:
  *   df_analyze         — run analysis on a function
  *   df_at              — query lattice value at instruction point
+ *   df_boundary        — query boundary value (exit for forward, entry for backward)
  *   df_fold_block      — fold transfer across block instructions
  *   df_process_block   — process one block: meet predecessors, fold transfer
  *
@@ -105,10 +106,12 @@ End
 
 (* ===== Per-block processing ===== *)
 
-(* Process one block: gather neighbor values, apply edge_transfer, join,
-   fold transfer through instructions, update state.
-   - Forward: neighbors = predecessors, boundary = entry value
-   - Backward: neighbors = successors, boundary = exit value
+(* Process one block: gather neighbor boundaries, apply edge_transfer per
+   neighbor, join, fold transfer through instructions, update state.
+   - Forward: read predecessors' boundaries (their exits), fold 0→n,
+     store fold output as this block's boundary (exit value)
+   - Backward: read successors' boundaries (their entries), fold n→0,
+     store fold output as this block's boundary (entry value)
    entry_val: when block has no predecessors (forward) or no successors
    (backward), use this value instead of bottom. For forward analyses,
    the entry block has no predecessors and needs a different initial value

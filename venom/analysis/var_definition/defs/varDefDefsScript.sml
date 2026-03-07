@@ -16,6 +16,7 @@
  *   vardef_out_of          — query defined vars at block exit
  *   vardef_at              — query defined vars before an instruction
  *   vardef_transfer        — per-instruction transfer: add inst_defs
+ *   vardef_edge_transfer   — edge transfer: identity (no edge-specific flow)
  *   fn_all_assignments     — all variables assigned anywhere in the function
  *   var_assigned_in_block  — v is assigned by some instruction in a block
  *   is_cfg_path           — block-level path: consecutive labels are CFG edges

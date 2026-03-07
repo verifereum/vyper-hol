@@ -9,6 +9,7 @@
  * TOP-LEVEL:
  *   range_analyze            — top-level analysis (via df_analyze_widen)
  *   range_get_range          — query: range of operand before instruction
+ *   range_at_inst             — query: range state before instruction
  *   range_entry_state        — entry state at block start
  *   range_exit_state         — exit state at block end
  *
