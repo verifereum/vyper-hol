@@ -59,12 +59,6 @@ QED
 
 (* ===== Meet / Lattice ===== *)
 
-Theorem avail_meet_nil:
-  avail_meet [] = FEMPTY
-Proof
-  simp[avail_meet_def, avail_empty_def]
-QED
-
 Theorem avail_meet_two_FDOM:
   ∀a b. FDOM (avail_meet_two a b) = FDOM a ∩ FDOM b
 Proof cheat
@@ -77,20 +71,6 @@ QED
 
 Theorem avail_meet_two_FDOM_SUBSET_r:
   ∀a b. FDOM (avail_meet_two a b) ⊆ FDOM b
-Proof cheat
-QED
-
-Theorem avail_meet_FDOM:
-  ∀aes expr.
-    expr ∈ FDOM (avail_meet aes) ⇒
-    ∀ae. MEM ae aes ⇒ expr ∈ FDOM ae
-Proof cheat
-QED
-
-Theorem avail_meet_mono:
-  ∀ae aes.
-    aes ≠ [] ⇒
-    FDOM (avail_meet (ae::aes)) ⊆ FDOM (avail_meet aes)
 Proof cheat
 QED
 

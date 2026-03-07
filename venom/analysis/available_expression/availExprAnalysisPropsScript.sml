@@ -12,10 +12,7 @@
  *   avail_remove_effect_preserves  — disjoint effects preserved
  *   avail_remove_effect_kills      — overlapping effects killed
  *   avail_remove_effect_FDOM_SUBSET — domain only shrinks
- *   avail_meet_nil                 — meet of [] is FEMPTY
  *   avail_meet_two_FDOM            — meet domain = intersection of input domains
- *   avail_meet_FDOM                — expr in meet ⇒ in all inputs
- *   avail_meet_mono                — adding to meet can only shrink domain
  *   avail_transfer_inst_skip       — pseudo/assign/terminator: unchanged
  *   avail_transfer_inst_nonidempotent_no_add — nonidempotent: domain doesn't grow
  *   avail_transfer_inst_preserves  — disjoint effects + distinct expr: preserved
@@ -90,12 +87,6 @@ QED
 
 (* ===== Meet / Lattice ===== *)
 
-(* Meet of empty list is FEMPTY *)
-Theorem avail_meet_nil:
-  avail_meet [] = FEMPTY
-Proof ACCEPT_TAC availExprProofsTheory.avail_meet_nil
-QED
-
 (* Binary meet domain equals intersection of input domains *)
 Theorem avail_meet_two_FDOM:
   ∀a b. FDOM (avail_meet_two a b) = FDOM a ∩ FDOM b
@@ -110,22 +101,6 @@ QED
 Theorem avail_meet_two_FDOM_SUBSET_r:
   ∀a b. FDOM (avail_meet_two a b) ⊆ FDOM b
 Proof ACCEPT_TAC availExprProofsTheory.avail_meet_two_FDOM_SUBSET_r
-QED
-
-(* If expr is in the meet, it is in every input *)
-Theorem avail_meet_FDOM:
-  ∀aes expr.
-    expr ∈ FDOM (avail_meet aes) ⇒
-    ∀ae. MEM ae aes ⇒ expr ∈ FDOM ae
-Proof ACCEPT_TAC availExprProofsTheory.avail_meet_FDOM
-QED
-
-(* Adding an input to a non-empty meet can only shrink the domain *)
-Theorem avail_meet_mono:
-  ∀ae aes.
-    aes ≠ [] ⇒
-    FDOM (avail_meet (ae::aes)) ⊆ FDOM (avail_meet aes)
-Proof ACCEPT_TAC availExprProofsTheory.avail_meet_mono
 QED
 
 (* ===== Transfer ===== *)

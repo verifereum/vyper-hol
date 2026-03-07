@@ -4,13 +4,14 @@
  * Ports vyper/venom/analysis/available_expression.py to HOL4.
  *
  * TOP-LEVEL:
- *   avail_expr, canon_expr, mk_expr, avail_exprs, avail_meet,
+ *   avail_expr, canon_expr, mk_expr, avail_exprs,
  *   avail_transfer_inst, avail_analyze, avail_get_expression
  *
  * Helper:
  *   is_pseudo, expr_leq, mk_operand_expr, mk_inst_expr,
  *   expr_effects, avail_remove_effect, avail_add, avail_get_source,
- *   avail_meet_opt, avail_transfer_opt, avail_edge_transfer, avail_unwrap
+ *   avail_meet_two, avail_meet_opt, avail_transfer_opt,
+ *   avail_edge_transfer, avail_unwrap
  *)
 
 Theory availExprDefs
@@ -144,12 +145,6 @@ Definition avail_meet_two_def:
             FILTER (λi. MEM i insts_b) insts_a
         | _ => [])
       (FDOM a INTER FDOM b)
-End
-
-Definition avail_meet_def:
-  (avail_meet [] = avail_empty) /\
-  (avail_meet [ae] = ae) /\
-  (avail_meet (ae :: rest) = avail_meet_two ae (avail_meet rest))
 End
 
 Definition avail_get_source_def:

@@ -2,8 +2,7 @@
  * Liveness Analysis — Generic Framework Instantiation
  *
  * Expresses liveness analysis as an instance of df_analyze (backward,
- * set union, live_update transfer). Eventually replaces liveness_analyze
- * and liveness_wl_analyze.
+ * set union, live_update transfer). Eventually replaces liveness_analyze.
  *
  * TOP-LEVEL:
  *   liveness_transfer       — per-instruction transfer: (live \ defs) ∪ uses
