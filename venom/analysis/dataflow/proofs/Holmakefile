@@ -1,2 +1,3 @@
 # Dataflow framework proofs
-INCLUDES = ../defs
+# dfAnalyzeProofs depends on dfAnalyzeDefs which needs cfgDefs + venomInst
+INCLUDES = ../defs $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics ../../cfg/defs
