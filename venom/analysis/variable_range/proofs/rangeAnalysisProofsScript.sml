@@ -90,10 +90,10 @@ Proof
 QED
 
 Theorem range_run_block_sound:
-  ∀dfg bb rs imap rs' imap' s s'.
+  ∀dfg bb rs imap rs' imap' fuel ctx s s'.
     range_run_block dfg bb.bb_instructions rs imap = (rs', imap') ∧
     in_range_state rs s.vs_vars ∧
-    run_block bb s = OK s' ⇒
+    run_block fuel ctx bb s = OK s' ⇒
     in_range_state rs' s'.vs_vars
 Proof
   cheat

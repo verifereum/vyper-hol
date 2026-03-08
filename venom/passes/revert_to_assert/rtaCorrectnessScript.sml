@@ -20,6 +20,7 @@ Ancestors
 Theorem rta_pass_correct:
   !ctx entry.
     fresh_vars_not_in_context ctx /\
+    no_invoke_in_context ctx /\
     lookup_function entry ctx.ctx_functions <> NONE
   ==>
     let ctx' = transform_context ctx in
@@ -29,8 +30,8 @@ Theorem rta_pass_correct:
       lookup_function entry ctx'.ctx_functions = SOME fn' /\
       !s. s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
           pass_correct fresh
-            (\fuel. run_function fuel fn s)
-            (\fuel. run_function fuel fn' s)
+            (\fuel. run_function fuel ctx fn s)
+            (\fuel. run_function fuel ctx fn' s)
 Proof
   ACCEPT_TAC revert_to_assert_pass_correct
 QED
