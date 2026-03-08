@@ -150,11 +150,11 @@ QED
 
 (* Block-level soundness: entry sound + run_block OK ⇒ exit sound *)
 Theorem range_analyze_block_sound_proof:
-  ∀fn lbl bb s s'.
+  ∀fn lbl bb fuel ctx s s'.
     let ra = range_analyze fn in
     lookup_block lbl fn.fn_blocks = SOME bb ∧
     in_range_state (range_entry_state ra lbl) s.vs_vars ∧
-    run_block bb s = OK s' ⇒
+    run_block fuel ctx bb s = OK s' ⇒
     in_range_state (range_exit_state ra lbl) s'.vs_vars
 Proof
   cheat

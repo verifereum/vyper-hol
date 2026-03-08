@@ -13,7 +13,7 @@
  *   - step_assert_nonzero_passes    : ASSERT nonzero continues
  *
  * BLOCK/FUNCTION EXECUTION:
- *   - step_in_block_single_terminator : General single-terminator block lemma
+ *   - block_step_single_terminator : General single-terminator block lemma
  *   - simple_revert_block_reverts     : Simple revert block always reverts
  *   - run_function_at_simple_revert   : run_function at simple revert returns Revert
  *
@@ -83,16 +83,16 @@ QED
    run_block Helper Lemmas
    ========================================================================== *)
 
-(* WHY THIS IS TRUE: step_in_block on a single-instruction terminator block
+(* WHY THIS IS TRUE: block_step on a single-instruction terminator block
    returns the result of step_inst with is_term = T. *)
-Theorem step_in_block_single_terminator:
+Theorem block_step_single_terminator:
   !bb s inst.
     bb.bb_instructions = [inst] /\
     is_terminator inst.inst_opcode ==>
-    step_in_block bb (s with vs_inst_idx := 0) =
+    block_step bb (s with vs_inst_idx := 0) =
     (step_inst inst (s with vs_inst_idx := 0), T)
 Proof
-  rw[step_in_block_def, get_instruction_def] >>
+  rw[block_step_def, get_instruction_def] >>
   Cases_on `step_inst inst (s with vs_inst_idx := 0)` >> simp[]
 QED
 
@@ -102,25 +102,19 @@ QED
    ========================================================================== *)
 
 (* WHY THIS IS TRUE: A block with only [revert 0 0] will:
-   1. step_in_block gets instruction at idx 0 -> the REVERT instruction
+   1. block_step gets instruction at idx 0 -> the REVERT instruction
    2. step_inst returns Revert (revert_state s)
    3. run_block propagates this Revert result *)
 Theorem simple_revert_block_reverts:
-  !bb s.
+  !fuel ctx bb s.
     is_simple_revert_block bb ==>
-    run_block bb (s with vs_inst_idx := 0) =
+    run_block fuel ctx bb (s with vs_inst_idx := 0) =
     Revert (revert_state (s with vs_inst_idx := 0))
 Proof
   rw[is_simple_revert_block_def] >>
-  `bb.bb_instructions = [HD bb.bb_instructions]` by (
-    Cases_on `bb.bb_instructions` >> fs[]
-  ) >>
-  simp[Once run_block_def] >>
-  `step_in_block bb (s with vs_inst_idx := 0) =
-   (step_inst (HD bb.bb_instructions) (s with vs_inst_idx := 0), T)` by (
-    irule step_in_block_single_terminator >> simp[is_terminator_def]
-  ) >>
-  simp[step_inst_def, is_terminator_def]
+  Cases_on `bb.bb_instructions` >> fs[] >>
+  simp[Once run_block_def, get_instruction_def,
+       step_inst_def, is_terminator_def]
 QED
 
 (* ==========================================================================
@@ -130,21 +124,18 @@ QED
 (* WHY THIS IS TRUE: A simple revert block executes its single REVERT instruction
    and produces Revert result. run_function at fuel > 0 unfolds to run_block. *)
 Theorem run_function_at_simple_revert:
-  !fn s fuel bb.
+  !fn s fuel ctx bb.
     is_simple_revert_block bb /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     fuel > 0 ==>
-    run_function fuel fn (s with vs_inst_idx := 0) =
+    run_function fuel ctx fn (s with vs_inst_idx := 0) =
       Revert (revert_state (s with vs_inst_idx := 0))
 Proof
   rw[] >>
-  `fuel > 0` by simp[] >>
   Cases_on `fuel` >- fs[] >>
-  simp[Once run_function_def] >>
-  `run_block bb (s with vs_inst_idx := 0) =
-   Revert (revert_state (s with vs_inst_idx := 0))`
-    by (irule simple_revert_block_reverts >> simp[]) >>
-  simp[]
+  simp[Once (CONJUNCT2 run_block_def)] >>
+  drule simple_revert_block_reverts >>
+  disch_then (qspecl_then [`n`, `ctx`, `s`] mp_tac) >> simp[]
 QED
 
 (* ==========================================================================

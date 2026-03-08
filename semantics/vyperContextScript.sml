@@ -213,14 +213,16 @@ Definition evaluate_extract32_def:
       | IntT m =>
           evaluate_convert (BytesV (Dynamic 32) (TAKE 32 bs)) (BaseT (IntT m))
       | AddressT =>
-          if 20 ≤ LENGTH bs then
-            INL $ BytesV (Fixed 20) (TAKE 20 bs)
+          if 32 ≤ LENGTH bs then
+            if EVERY ($= 0w) (TAKE 12 bs) then
+              INL $ BytesV (Fixed 20) (DROP 12 (TAKE 32 bs))
+            else INR (RuntimeError "evaluate_extract32 address clamp")
           else INR (RuntimeError "evaluate_extract32 address")
       | _ => INR (TypeError "evaluate_extract32 type")
   else INR (RuntimeError "evaluate_extract32 start")
 End
 
-val () = cv_trans evaluate_extract32_def;
+val () = cv_auto_trans evaluate_extract32_def;
 
 Definition evaluate_type_builtin_def:
   evaluate_type_builtin cx Empty typ vs =
@@ -240,8 +242,18 @@ Definition evaluate_type_builtin_def:
     (if u = Unsigned 256 then evaluate_extract32 bs (Num i) bt
      else INR (TypeError "Extract32 type")) ∧
   evaluate_type_builtin cx AbiDecode typ [BytesV _ bs] =
-    (case evaluate_abi_decode (get_tenv cx) typ bs of
-       INL v => INL v | INR str => INR (RuntimeError str)) ∧
+    (* unwrap_tuple=True (default): single types are wrapped in a tuple.
+       TODO: support unwrap_tuple=False keyword argument *)
+    (let tenv = get_tenv cx in
+     if needs_external_call_wrap typ then
+       case evaluate_abi_decode tenv (TupleT [typ]) bs of
+         INL (ArrayV (TupleV [v])) => INL v
+       | INL _ => INR (RuntimeError "abi_decode conversion")
+       | INR str => INR (RuntimeError str)
+     else
+       case evaluate_abi_decode tenv typ bs of
+         INL v => INL v
+       | INR str => INR (RuntimeError str)) ∧
   evaluate_type_builtin _ AbiDecode _ _ =
     INR (TypeError "abi_decode args") ∧
   evaluate_type_builtin cx AbiEncode typ vs =
@@ -253,55 +265,84 @@ End
 
 val () = cv_auto_trans evaluate_type_builtin_def;
 
+Definition ecrecover_arg_to_num_def:
+(* Convert an ecrecover argument to a natural number.
+   Accepts both IntV (uint) and BytesV (bytes32). *)
+  ecrecover_arg_to_num (IntV _ i) = SOME (Num i) ∧
+  ecrecover_arg_to_num (BytesV _ bs) =
+    SOME (w2n (word_of_bytes_be (PAD_LEFT 0w 32 bs) : bytes32)) ∧
+  ecrecover_arg_to_num _ = NONE
+End
+
+val () = cv_auto_trans ecrecover_arg_to_num_def;
+
 Definition evaluate_ecrecover_def:
-  evaluate_ecrecover [BytesV _ hash_bytes; IntV u1 v_int; IntV u2 r_int; IntV u3 s_int] =
-    (if u1 = Unsigned 256 ∧ u2 = Unsigned 256 ∧ u3 = Unsigned 256 ∧
-        LENGTH hash_bytes = 32
-     then let
-       hash:bytes32 = word_of_bytes_be hash_bytes;
-       v = Num v_int;
-       r = Num r_int;
-       s = Num s_int
-     in case vfmExecution$ecrecover hash v r s of
-          NONE => INL $ AddressV 0w
-        | SOME addr => INL $ AddressV addr
-     else INR (TypeError "ECRecover type")) ∧
+  evaluate_ecrecover [BytesV _ hash_bytes; v_arg; r_arg; s_arg] =
+    (case (ecrecover_arg_to_num v_arg,
+           ecrecover_arg_to_num r_arg,
+           ecrecover_arg_to_num s_arg) of
+       (SOME v, SOME r, SOME s) =>
+         if LENGTH hash_bytes = 32
+         then let hash:bytes32 = word_of_bytes_be hash_bytes
+         in case vfmExecution$ecrecover hash v r s of
+              NONE => INL $ AddressV 0w
+            | SOME addr => INL $ AddressV addr
+         else INR (TypeError "ECRecover type")
+     | _ => INR (TypeError "ECRecover type")) ∧
   evaluate_ecrecover _ = INR (TypeError "ECRecover args")
 End
 
 val () = cv_auto_trans evaluate_ecrecover_def;
 
+(* Extract (x, y) uint256 pair from a uint256[2] static array value. *)
+Definition extract_ec_point_def:
+  extract_ec_point (ArrayV av) =
+    (case (array_index av 0, array_index av 1) of
+       (SOME (IntV u1 x), SOME (IntV u2 y)) =>
+         if u1 = Unsigned 256 ∧ u2 = Unsigned 256
+         then SOME (x, y) else NONE
+     | _ => NONE) ∧
+  extract_ec_point _ = NONE
+End
+
+val () = cv_auto_trans extract_ec_point_def;
+
+Definition mk_ec_result_def:
+  mk_ec_result (rx, ry) =
+    ArrayV $ make_array_value (BaseTV (UintT 256)) (Fixed 2)
+      [IntV (Unsigned 256) (&rx); IntV (Unsigned 256) (&ry)]
+End
+
+val () = cv_auto_trans mk_ec_result_def;
+
 Definition evaluate_ecadd_def:
-  evaluate_ecadd [ArrayV (TupleV [IntV u1 x1; IntV u2 y1]);
-                  ArrayV (TupleV [IntV u3 x2; IntV u4 y2])] =
-    (if u1 = Unsigned 256 ∧ u2 = Unsigned 256 ∧
-        u3 = Unsigned 256 ∧ u4 = Unsigned 256
-     then let
-       p1 = (Num x1, Num y1);
-       p2 = (Num x2, Num y2)
-     in case vfmExecution$ecadd p1 p2 of
-          NONE => INL $ ArrayV $ TupleV
-            [IntV (Unsigned 256) 0; IntV (Unsigned 256) 0]
-        | SOME (rx, ry) => INL $ ArrayV $ TupleV
-            [IntV (Unsigned 256) (&rx); IntV (Unsigned 256) (&ry)]
-     else INR (TypeError "ECAdd type")) ∧
+  evaluate_ecadd [p1v; p2v] =
+    (case (extract_ec_point p1v, extract_ec_point p2v) of
+       (SOME (x1, y1), SOME (x2, y2)) => (
+         let p1 = (Num x1, Num y1);
+             p2 = (Num x2, Num y2)
+         in case vfmExecution$ecadd p1 p2 of
+              NONE => INL $ mk_ec_result (0, 0)
+            | SOME r => INL $ mk_ec_result r )
+     | _ => INR (TypeError "ECAdd type")) ∧
   evaluate_ecadd _ = INR (TypeError "ECAdd args")
 End
 
 val () = cv_auto_trans evaluate_ecadd_def;
 
 Definition evaluate_ecmul_def:
-  evaluate_ecmul [ArrayV (TupleV [IntV u1 x; IntV u2 y]); IntV u3 scalar] =
-    (if u1 = Unsigned 256 ∧ u2 = Unsigned 256 ∧ u3 = Unsigned 256
-     then let
-       p = (Num x, Num y);
-       n = Num scalar
-     in case vfmExecution$ecmul p n of
-          NONE => INL $ ArrayV $ TupleV
-            [IntV (Unsigned 256) 0; IntV (Unsigned 256) 0]
-        | SOME (rx, ry) => INL $ ArrayV $ TupleV
-            [IntV (Unsigned 256) (&rx); IntV (Unsigned 256) (&ry)]
-     else INR (TypeError "ECMul type")) ∧
+  evaluate_ecmul [pv; IntV u3 scalar] =
+    (case extract_ec_point pv of
+       SOME (x, y) =>
+         if u3 = Unsigned 256
+         then let
+           p = (Num x, Num y);
+           n = Num scalar
+         in case vfmExecution$ecmul p n of
+              NONE => INL $ mk_ec_result (0, 0)
+            | SOME r => INL $ mk_ec_result r
+         else INR (TypeError "ECMul type")
+     | NONE => INR (TypeError "ECMul type")) ∧
   evaluate_ecmul _ = INR (TypeError "ECMul args")
 End
 
@@ -313,7 +354,9 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ Len [ArrayV av] = INL (IntV (Unsigned 256) &(array_length av)) ∧
   evaluate_builtin cx _ Not [BoolV b] = INL (BoolV (¬b)) ∧
   evaluate_builtin cx _ Not [IntV u i] =
-    (if is_Unsigned u ∧ 0 ≤ i then INL (IntV u (int_not i)) else INR (TypeError "signed Not")) ∧
+    (if is_Unsigned u ∧ 0 ≤ i then
+       INL (IntV u (&(2 ** int_bound_bits u) - 1 - i))
+     else INR (TypeError "signed Not")) ∧
   evaluate_builtin cx _ Not [FlagV m n] = INL $ FlagV m $
     w2n $ (~((n2w n):bytes32)) && ~(~(0w:bytes32) << m) ∧
   evaluate_builtin cx _ Neg [IntV u i] = bounded_int_op u u (-i) ∧
@@ -329,11 +372,13 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ (AsWeiValue dn) [v] = evaluate_as_wei_value dn v ∧
   evaluate_builtin cx _ AddMod [IntV u1 i1; IntV u2 i2; IntV u3 i3] =
     (if u1 = Unsigned 256 ∧ u2 = u1 ∧ u3 = u1
-     then INL $ IntV u1 $ &((Num i1 + Num i2) MOD Num i3)
+     then if i3 = 0 then INR (RuntimeError "AddMod division by zero")
+     else INL $ IntV u1 $ &((Num i1 + Num i2) MOD Num i3)
      else INR (TypeError "AddMod type")) ∧
   evaluate_builtin cx _ MulMod [IntV u1 i1; IntV u2 i2; IntV u3 i3] =
     (if u1 = Unsigned 256 ∧ u2 = u1 ∧ u3 = u1
-     then INL $ IntV u1 $ &((Num i1 * Num i2) MOD Num i3)
+     then if i3 = 0 then INR (RuntimeError "MulMod division by zero")
+     else INL $ IntV u1 $ &((Num i1 * Num i2) MOD Num i3)
      else INR (TypeError "MulMod type")) ∧
   evaluate_builtin cx _ PowMod256 [IntV u1 base; IntV u2 exp] =
     (if u1 = Unsigned 256 ∧ u2 = u1

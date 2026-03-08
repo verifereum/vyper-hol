@@ -55,8 +55,9 @@ End
    Running the transformed block gives a related result. *)
 Definition block_simulates_def:
   block_simulates R_ok R_term bt <=>
-    !bb s.
-      lift_result R_ok R_term (run_block bb s) (run_block (bt bb) s)
+    !fuel ctx bb s.
+      lift_result R_ok R_term (run_block fuel ctx bb s)
+                               (run_block fuel ctx (bt bb) s)
 End
 
 (* ===== Pass correctness predicates ===== *)
@@ -70,8 +71,8 @@ End
    1. Termination equivalence: original terminates iff transformed terminates
    2. Result equivalence: when both terminate, results are equivalent
       (modulo fresh variables introduced by the transformation)
-   Usage: pass_correct fresh (\fuel. run_function fuel fn s)
-                              (\fuel. run_function fuel fn' s) *)
+   Usage: pass_correct fresh (\fuel. run_function fuel ctx fn s)
+                              (\fuel. run_function fuel ctx fn' s) *)
 Definition pass_correct_def:
   pass_correct fresh exec1 exec2 <=>
     ((?fuel. terminates (exec1 fuel)) <=> (?fuel'. terminates (exec2 fuel'))) /\
