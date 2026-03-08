@@ -63,7 +63,7 @@ Theorem step_assert_zero_reverts:
     eval_operand cond_op s = SOME 0w ==>
     step_inst <| inst_id := id; inst_opcode := ASSERT;
                  inst_operands := [cond_op]; inst_outputs := [] |> s =
-    Revert (revert_state s)
+    Abort Revert_abort (revert_state s)
 Proof
   rw[] >> drule step_assert_behavior >> simp[]
 QED
@@ -109,7 +109,7 @@ Theorem simple_revert_block_reverts:
   !fuel ctx bb s.
     is_simple_revert_block bb ==>
     run_block fuel ctx bb (s with vs_inst_idx := 0) =
-    Revert (revert_state (s with vs_inst_idx := 0))
+    Abort Revert_abort (revert_state (s with vs_inst_idx := 0))
 Proof
   rw[is_simple_revert_block_def] >>
   Cases_on `bb.bb_instructions` >> fs[] >>
@@ -129,7 +129,7 @@ Theorem run_function_at_simple_revert:
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     fuel > 0 ==>
     run_function fuel ctx fn (s with vs_inst_idx := 0) =
-      Revert (revert_state (s with vs_inst_idx := 0))
+      Abort Revert_abort (revert_state (s with vs_inst_idx := 0))
 Proof
   rw[] >>
   Cases_on `fuel` >- fs[] >>

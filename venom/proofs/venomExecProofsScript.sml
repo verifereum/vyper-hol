@@ -67,7 +67,7 @@ Theorem step_assert_behavior:
     eval_operand cond_op s = SOME cond ==>
     step_inst <| inst_id := id; inst_opcode := ASSERT;
                  inst_operands := [cond_op]; inst_outputs := [] |> s =
-    if cond = 0w then Revert (revert_state s) else OK s
+    if cond = 0w then Abort Revert_abort (revert_state s) else OK s
 Proof
   rw[step_inst_def]
 QED
@@ -77,7 +77,7 @@ QED
 Theorem step_revert_always_reverts:
   !inst s.
     inst.inst_opcode = REVERT ==>
-    step_inst inst s = Revert (revert_state s)
+    step_inst inst s = Abort Revert_abort (revert_state s)
 Proof
   rw[step_inst_def]
 QED
@@ -186,8 +186,8 @@ Proof
   strip_tac >> strip_tac >> gvs[step_inst_def]
 QED
 
-Theorem step_inst_Revert_not_INVOKE:
-  step_inst inst s = Revert v ==> inst.inst_opcode <> INVOKE
+Theorem step_inst_Abort_not_INVOKE:
+  step_inst inst s = Abort a v ==> inst.inst_opcode <> INVOKE
 Proof
   strip_tac >> strip_tac >> gvs[step_inst_def]
 QED
@@ -235,7 +235,7 @@ Theorem run_block_block_step:
         OK s' => if t then (if s'.vs_halted then Halt s' else OK s')
                  else run_block fuel ctx bb s'
       | Halt s' => Halt s'
-      | Revert s' => Revert s'
+      | Abort a s' => Abort a s'
       | Error e => Error e
       | IntRet vals s' => IntRet vals s'
 Proof
@@ -322,7 +322,7 @@ Proof
                                SOME s' => run_block fuel ctx bb1 (next_inst s')
                              | NONE => Error "invoke: return arity mismatch")
                          | Halt s' => Halt s'
-                         | Revert s' => Revert s'
+                         | Abort a s' => Abort a s'
                          | Error e => Error e
                          | OK _ => Error "invoke: callee did not return")` by
     (qunabbrev_tac `r1` >> simp[Once run_block_def]) >>
@@ -345,7 +345,7 @@ Proof
                                SOME s' => run_block fuel ctx bb2 (next_inst s')
                              | NONE => Error "invoke: return arity mismatch")
                          | Halt s' => Halt s'
-                         | Revert s' => Revert s'
+                         | Abort a s' => Abort a s'
                          | Error e => Error e
                          | OK _ => Error "invoke: callee did not return")` by
     (qunabbrev_tac `r2` >> simp[Once run_block_def]) >>

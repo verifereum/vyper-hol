@@ -134,7 +134,8 @@ End
 Definition lift_result_def:
   lift_result R_ok R_term (OK s1) (OK s2) = R_ok s1 s2 /\
   lift_result R_ok R_term (Halt s1) (Halt s2) = R_term s1 s2 /\
-  lift_result R_ok R_term (Revert s1) (Revert s2) = R_term s1 s2 /\
+  lift_result R_ok R_term (Abort a1 s1) (Abort a2 s2) =
+    ((a1 = a2) /\ R_term s1 s2) /\
   lift_result R_ok R_term (IntRet v1 s1) (IntRet v2 s2) =
     (R_term s1 s2 /\ (v1 = v2)) /\
   lift_result R_ok R_term (Error e1) (Error e2) = T /\
@@ -147,7 +148,8 @@ End
 Definition result_equiv_def:
   result_equiv vars (OK s1) (OK s2) = state_equiv vars s1 s2 /\
   result_equiv vars (Halt s1) (Halt s2) = execution_equiv vars s1 s2 /\
-  result_equiv vars (Revert s1) (Revert s2) = execution_equiv vars s1 s2 /\
+  result_equiv vars (Abort a1 s1) (Abort a2 s2) =
+    ((a1 = a2) /\ execution_equiv vars s1 s2) /\
   result_equiv vars (IntRet v1 s1) (IntRet v2 s2) =
     (execution_equiv vars s1 s2 /\ (v1 = v2)) /\
   result_equiv vars (Error e1) (Error e2) = T /\

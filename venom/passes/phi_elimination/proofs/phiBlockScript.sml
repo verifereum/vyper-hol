@@ -153,21 +153,21 @@ QED
    Halt/Revert/Error Cases
    ========================================================================== *)
 
-(* Halt/Revert/IntRet results only come from non-PHI instructions *)
-Theorem step_inst_halt_revert_not_phi:
+(* Halt/Abort/IntRet results only come from non-PHI instructions *)
+Theorem step_inst_halt_abort_not_phi:
   !inst s r.
-    (step_inst inst s = Halt r \/ step_inst inst s = Revert r \/
+    (step_inst inst s = Halt r \/ step_inst inst s = Abort a r \/
      (?vs. step_inst inst s = IntRet vs r)) ==>
     ~is_phi_inst inst
 Proof
   rpt strip_tac >> fs[is_phi_inst_def, step_inst_def] >> gvs[AllCaseEqs()]
 QED
 
-(* For Halt/Revert/IntRet cases, block_step on transformed block gives same result *)
-Theorem block_step_halt_revert_transform:
+(* For Halt/Abort/IntRet cases, block_step on transformed block gives same result *)
+Theorem block_step_halt_abort_transform:
   !dfg bb s s' is_term.
     (block_step bb s = (Halt s', is_term) \/
-     block_step bb s = (Revert s', is_term) \/
+     block_step bb s = (Abort a s', is_term) \/
      (?vs. block_step bb s = (IntRet vs s', is_term)))
   ==>
     block_step (transform_block dfg bb) s = block_step bb s
@@ -188,15 +188,15 @@ Theorem block_step_halt_transform:
     block_step bb s = (Halt s', is_term) ==>
     block_step (transform_block dfg bb) s = (Halt s', is_term)
 Proof
-  metis_tac[block_step_halt_revert_transform]
+  metis_tac[block_step_halt_abort_transform]
 QED
 
-Theorem block_step_revert_transform:
-  !dfg bb s s' is_term.
-    block_step bb s = (Revert s', is_term) ==>
-    block_step (transform_block dfg bb) s = (Revert s', is_term)
+Theorem block_step_abort_transform:
+  !dfg bb s a s' is_term.
+    block_step bb s = (Abort a s', is_term) ==>
+    block_step (transform_block dfg bb) s = (Abort a s', is_term)
 Proof
-  metis_tac[block_step_halt_revert_transform]
+  metis_tac[block_step_halt_abort_transform]
 QED
 
 (* IntRet results only come from RET, not PHI *)

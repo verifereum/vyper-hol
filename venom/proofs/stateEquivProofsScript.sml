@@ -97,8 +97,9 @@ Proof
   rw[result_equiv_def]
 QED
 
-Theorem result_equiv_revert[local,simp]:
-  result_equiv vars (Revert s1) (Revert s2) = execution_equiv vars s1 s2
+Theorem result_equiv_abort[local,simp]:
+  result_equiv vars (Abort a1 s1) (Abort a2 s2) =
+    ((a1 = a2) /\ execution_equiv vars s1 s2)
 Proof
   rw[result_equiv_def]
 QED
@@ -118,24 +119,24 @@ QED
 
 Theorem result_equiv_mismatch[local,simp]:
   result_equiv vars (OK s) (Halt s') = F /\
-  result_equiv vars (OK s) (Revert s') = F /\
+  result_equiv vars (OK s) (Abort a s') = F /\
   result_equiv vars (OK s) (IntRet v s') = F /\
   result_equiv vars (OK s) (Error e) = F /\
   result_equiv vars (Halt s) (OK s') = F /\
-  result_equiv vars (Halt s) (Revert s') = F /\
+  result_equiv vars (Halt s) (Abort a s') = F /\
   result_equiv vars (Halt s) (IntRet v s') = F /\
   result_equiv vars (Halt s) (Error e) = F /\
-  result_equiv vars (Revert s) (OK s') = F /\
-  result_equiv vars (Revert s) (Halt s') = F /\
-  result_equiv vars (Revert s) (IntRet v s') = F /\
-  result_equiv vars (Revert s) (Error e) = F /\
+  result_equiv vars (Abort a s) (OK s') = F /\
+  result_equiv vars (Abort a s) (Halt s') = F /\
+  result_equiv vars (Abort a s) (IntRet v s') = F /\
+  result_equiv vars (Abort a s) (Error e) = F /\
   result_equiv vars (IntRet v s) (OK s') = F /\
   result_equiv vars (IntRet v s) (Halt s') = F /\
-  result_equiv vars (IntRet v s) (Revert s') = F /\
+  result_equiv vars (IntRet v s) (Abort a s') = F /\
   result_equiv vars (IntRet v s) (Error e) = F /\
   result_equiv vars (Error e) (OK s) = F /\
   result_equiv vars (Error e) (Halt s) = F /\
-  result_equiv vars (Error e) (Revert s) = F /\
+  result_equiv vars (Error e) (Abort a s) = F /\
   result_equiv vars (Error e) (IntRet v s) = F
 Proof
   rw[result_equiv_def]

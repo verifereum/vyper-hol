@@ -462,7 +462,7 @@ Triviality step_inst_invalid_equiv:
     result_equiv vars (step_inst inst s1) (step_inst inst s2)
 Proof
   rw[] >> simp[step_inst_def, result_equiv_def,
-               revert_state_def, execution_equiv_def, lookup_var_def] >>
+               halt_state_def, execution_equiv_def, lookup_var_def] >>
   fs[state_equiv_def, execution_equiv_def, lookup_var_def]
 QED
 

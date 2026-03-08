@@ -28,7 +28,7 @@ Theorem run_block_iszero_assert_reverts:
     let id = (EL s.vs_inst_idx bb.bb_instructions).inst_id in
     let fresh_var = fresh_iszero_var id in
     let s1 = next_inst (update_var fresh_var 0w s) in
-    run_block fuel ctx bb' s = Revert (revert_state s1)
+    run_block fuel ctx bb' s = Abort Revert_abort (revert_state s1)
 Proof
   rw[LET_THM, transform_block_def] >>
   (* Establish length bounds *)
@@ -176,7 +176,7 @@ Theorem pattern1_nonzero_execution:
     fresh_var IN fresh_vars /\
     step_inst (EL s.vs_inst_idx bb.bb_instructions) s = OK (jump_to if_nonzero s) /\
     run_block fuel ctx bb s = OK (jump_to if_nonzero s) /\
-    run_block fuel ctx bb' s = Revert (revert_state s1) /\
+    run_block fuel ctx bb' s = Abort Revert_abort (revert_state s1) /\
     (jump_to if_nonzero s).vs_current_bb = if_nonzero /\
     execution_equiv fresh_vars (revert_state (jump_to if_nonzero s)) (revert_state s1)
 Proof

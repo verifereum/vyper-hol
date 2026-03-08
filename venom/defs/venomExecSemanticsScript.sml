@@ -79,11 +79,19 @@ End
    Execution Result Type
    -------------------------------------------------------------------------- *)
 
+(* Abort reason: distinguishes clean revert from exceptional halt.
+   Matters for EVM lowering (gas refund, returndata availability). *)
+Datatype:
+  abort_type =
+    | Revert_abort        (* REVERT: refunds remaining gas, has returndata *)
+    | ExHalt_abort        (* INVALID/out-of-gas: consumes all gas, no returndata *)
+End
+
 Datatype:
   exec_result =
     | OK venom_state              (* Normal continuation *)
     | Halt venom_state            (* Normal termination (STOP/RETURN) *)
-    | Revert venom_state          (* Revert termination *)
+    | Abort abort_type venom_state  (* Aborted execution *)
     | IntRet (bytes32 list) venom_state  (* Internal function return (RET) *)
     | Error string                (* Execution error *)
 End
@@ -526,7 +534,7 @@ Definition step_inst_def:
     (* Termination *)
     | STOP => Halt (halt_state s)
     | RETURN => Halt (halt_state s)
-    | REVERT => Revert (revert_state s)
+    | REVERT => Abort Revert_abort (revert_state s)
     | SINK => Halt (halt_state s)
 
     (* Assertions *)
@@ -535,7 +543,7 @@ Definition step_inst_def:
           [cond_op] =>
             (case eval_operand cond_op s of
               SOME cond =>
-                if cond = 0w then Revert (revert_state s)
+                if cond = 0w then Abort Revert_abort (revert_state s)
                 else OK s
             | NONE => Error "undefined operand")
         | _ => Error "assert requires 1 operand")
@@ -545,7 +553,7 @@ Definition step_inst_def:
           [cond_op] =>
             (case eval_operand cond_op s of
               SOME cond =>
-                if cond = 0w then Revert (revert_state s)
+                if cond = 0w then Abort ExHalt_abort (halt_state s)
                 else OK s
             | NONE => Error "undefined operand")
         | _ => Error "assert_unreachable requires 1 operand")
@@ -640,7 +648,7 @@ Definition step_inst_def:
                 let src_offset = w2n offset in
                 (* Check for out-of-bounds access *)
                 if src_offset + size > LENGTH s.vs_returndata then
-                  Revert (revert_state s)
+                  Abort Revert_abort (revert_state s)
                 else
                   let bytes = TAKE size (DROP src_offset s.vs_returndata) in
                   OK (write_memory_with_expansion (w2n destOffset) bytes s)
@@ -812,8 +820,8 @@ Definition step_inst_def:
             | NONE => Error "selfdestruct: undefined operand")
         | _ => Error "selfdestruct requires 1 operand")
 
-    (* Invalid opcode — always reverts (EVM: consumes all gas + reverts) *)
-    | INVALID => Revert (revert_state s)
+    (* Invalid opcode — exceptional halt (EVM: consumes all gas, no returndata) *)
+    | INVALID => Abort ExHalt_abort (halt_state s)
 
     (* ----------------------------------------------------------------
        External calls
@@ -948,7 +956,8 @@ Definition block_step_def:
             if is_terminator inst.inst_opcode then (OK s', T)
             else (OK (next_inst s'), F)
         | Halt s' => (Halt s', T)
-        | Revert s' => (Revert s', T)
+        | Abort a s' => (Abort a s', T)
+        
         | IntRet vals s' => (IntRet vals s', T)
         | Error e => (Error e, T)
 End
@@ -1067,7 +1076,7 @@ Definition run_block_def:
                               | NONE =>
                                   Error "invoke: return arity mismatch")
                           | Halt s' => Halt s'
-                          | Revert s' => Revert s'
+                          | Abort a s' => Abort a s'
                           | Error e => Error e
                           | OK _ => Error "invoke: callee did not return"
         else
@@ -1078,7 +1087,7 @@ Definition run_block_def:
               else run_block fuel ctx bb (next_inst s')
           | IntRet vals s' => IntRet vals s'
           | Halt s' => Halt s'
-          | Revert s' => Revert s'
+          | Abort a s' => Abort a s'
           | Error e => Error e)
 /\
   (run_function fuel ctx fn s =
