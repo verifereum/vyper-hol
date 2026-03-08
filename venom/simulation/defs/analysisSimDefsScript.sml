@@ -17,6 +17,8 @@ Ancestors
 (* Per-instruction simulation parameterized by lattice soundness.
    f transforms an instruction given the lattice value at that point.
    sound connects abstract lattice values to concrete states.
+   INVOKE instructions are preserved (handled by run_block dispatch,
+   not step_inst — transforms must not alter them).
    When sound = λv s. T, this reduces to ∀v. inst_simulates R_ok R_term (f v). *)
 Definition analysis_inst_simulates_def:
   analysis_inst_simulates R_ok R_term
@@ -28,7 +30,8 @@ Definition analysis_inst_simulates_def:
          (step_inst inst s) (step_inst (f v inst) s)) /\
     (!v inst.
        is_terminator inst.inst_opcode =
-       is_terminator (f v inst).inst_opcode)
+       is_terminator (f v inst).inst_opcode) /\
+    (!v inst. inst.inst_opcode = INVOKE ==> f v inst = inst)
 End
 
 (* Analysis soundness: abstract lattice values describe reachable concrete

@@ -108,32 +108,6 @@ Proof
   ACCEPT_TAC df_at_inter_transfer_proof
 QED
 
-(* At fixpoint with idempotent join, boundary = exit value (forward) or
-   entry value (backward). Lets consumers relate df_boundary to df_at. *)
-Theorem df_boundary_eq_exit:
-  !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx
-   entry_val fn lbl (bb : basic_block).
-    let cfg = cfg_analyze fn in
-    let bbs = fn.fn_blocks in
-    let process = df_process_block dir bottom join transfer edge_transfer
-                                   ctx entry_val cfg bbs in
-    let all_lbls = MAP (λbb. bb.bb_label) bbs in
-    let result = df_analyze dir bottom join transfer edge_transfer
-                            ctx entry_val fn in
-      is_fixpoint process all_lbls result /\
-      lookup_block lbl bbs = SOME bb /\
-      (!a. join a a = a)
-    ==>
-      (dir = Forward ==>
-        df_boundary bottom result lbl =
-          df_at bottom result lbl (LENGTH bb.bb_instructions)) /\
-      (dir = Backward ==>
-        df_boundary bottom result lbl =
-          df_at bottom result lbl 0)
-Proof
-  ACCEPT_TAC df_boundary_eq_exit_proof
-QED
-
 (* Lattice invariant: closed-under-operations properties propagate
    from bottom through all analysis values. *)
 Theorem df_analyze_invariant:

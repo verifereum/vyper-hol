@@ -5,7 +5,7 @@
  *   df_analyze_fixpoint_proof       — worklist converges to fixpoint
  *   df_at_intra_transfer_proof      — within a block, transfer relates adjacent points
  *   df_at_inter_transfer_proof      — inter-block: fold input = join of neighbors
- *   df_boundary_eq_exit_proof       — at fixpoint, boundary = exit value
+ *   df_boundary_eq_exit_proof       — boundary = exit value (proof-internal, not exported)
  *   df_analyze_invariant_proof      — lattice invariant preserved through analysis
  *   df_process_inflationary_proof   — lattice monotonicity → process inflationary
  *   df_process_deps_complete_proof  — CFG correctness → worklist deps complete
@@ -118,25 +118,35 @@ Proof
   cheat
 QED
 
-(* At fixpoint, boundary equals the exit value (forward) or entry value
-   (backward). Follows from: at fixpoint, fold input is stable, so
-   final_val is deterministic, and boundary = join(boundary, final_val) =
-   boundary only when boundary = final_val (since the sequence is monotone
-   and converged).
-   Requires: join is idempotent (join a a = a). *)
+(* PROOF-INTERNAL: at fixpoint reached by wl_iterate from bottom,
+   boundary = exit df_at value. Needs convergence (to ensure WHILE
+   terminated) and bottom identity (to ensure boundary started correctly).
+   NOT exported via Props — used internally by simulation proofs. *)
 Theorem df_boundary_eq_exit_proof:
   !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx
-   entry_val fn lbl (bb : basic_block).
+   entry_val fn lbl (bb : basic_block)
+   (leq : 'a df_state -> 'a df_state -> bool)
+   m b (P : 'a df_state -> bool).
     let cfg = cfg_analyze fn in
     let bbs = fn.fn_blocks in
     let process = df_process_block dir bottom join transfer edge_transfer
                                    ctx entry_val cfg bbs in
+    let deps = (case dir of
+                  Forward => cfg_succs_of cfg
+                | Backward => cfg_preds_of cfg) in
+    let st0 = init_df_state bottom (MAP (λbb. bb.bb_label) bbs) in
     let all_lbls = MAP (λbb. bb.bb_label) bbs in
     let result = df_analyze dir bottom join transfer edge_transfer
                             ctx entry_val fn in
-      is_fixpoint process all_lbls result /\
+      (!lbl st. P st ==> leq st (process lbl st)) /\
+      (!lbl st. P st ==> P (process lbl st)) /\
+      (case entry_val of NONE => P st0
+       | SOME (lbl, v) =>
+           P (st0 with ds_boundary := st0.ds_boundary |+ (lbl, v))) /\
+      bounded_measure P leq m b /\
+      wl_deps_complete process deps /\
       lookup_block lbl bbs = SOME bb /\
-      (!a. join a a = a)
+      (!a. join bottom a = a)
     ==>
       (dir = Forward ==>
         df_boundary bottom result lbl =
