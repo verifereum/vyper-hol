@@ -81,7 +81,7 @@ QED
 
 (* Inter-block transfer for widening variant.
    The fold input equals the (possibly widened) join of neighbor boundaries.
-   Unlike the base case, widening may have been applied if visits > threshold. *)
+   Unlike the base case, widening may have been applied if visits >= threshold. *)
 Theorem df_widen_at_inter_transfer_proof:
   !(dir : direction) (bottom : 'a) join widen threshold
    transfer edge_transfer ctx entry_val fn lbl (bb : basic_block).

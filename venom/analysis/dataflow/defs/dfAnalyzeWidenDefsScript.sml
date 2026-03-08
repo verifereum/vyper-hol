@@ -105,7 +105,7 @@ Definition df_process_block_widen_def:
                     if lbl = ev_lbl then v else bottom)
        | _ => FOLDL join bottom edge_vals) in
     let entry =
-      if visits > threshold then
+      if visits >= threshold then
         widen (df_widen_entry bottom st lbl) joined
       else joined in
     let instrs =
