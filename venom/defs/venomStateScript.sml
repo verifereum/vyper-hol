@@ -34,7 +34,8 @@ Datatype:
     cc_address : address;          (* Current contract address (ADDRESS) *)
     cc_callvalue : bytes32;        (* Value sent with call (CALLVALUE) *)
     cc_calldata : byte list;       (* Call data (CALLDATALOAD, etc.) *)
-    cc_gas : num                   (* Remaining gas (GAS) *)
+    cc_gas : num;                  (* Remaining gas (GAS) *)
+    cc_static : bool               (* Static mode (STATICCALL sets T, inherits) *)
   |>
 End
 
@@ -114,7 +115,8 @@ Definition empty_call_context_def:
     cc_address := 0w;
     cc_callvalue := 0w;
     cc_calldata := [];
-    cc_gas := 0
+    cc_gas := 0;
+    cc_static := F
   |>
 End
 
@@ -179,13 +181,6 @@ End
 
 Definition lookup_var_def:
   lookup_var x s = FLOOKUP s.vs_vars x
-End
-
-(* Write multiple values to multiple variables (for INVOKE return values) *)
-Definition update_vars_def:
-  update_vars [] [] s = s /\
-  update_vars (x::xs) (v::vs) s = update_vars xs vs (update_var x v s) /\
-  update_vars _ _ s = s  (* mismatched lengths: no-op *)
 End
 
 (* Memory operations - using verifereum-style byte list memory *)

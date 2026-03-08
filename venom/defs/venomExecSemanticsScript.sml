@@ -537,25 +537,6 @@ Definition step_inst_def:
     (* NOP *)
     | NOP => OK s
 
-    (* Internal function call - PARAM reads from vs_params by index *)
-    | PARAM =>
-        (case inst.inst_operands of
-          [Lit idx] =>
-            let i = w2n idx in
-            (case inst.inst_outputs of
-              [out] =>
-                if i < LENGTH s.vs_params then
-                  OK (update_var out (EL i s.vs_params) s)
-                else Error "param index out of bounds"
-            | _ => Error "param requires single output")
-        | _ => Error "param requires literal index operand")
-
-    (* Internal function return - RET evaluates operands and returns IntRet *)
-    | RET =>
-        (case eval_operands inst.inst_operands s of
-          SOME vals => IntRet vals s
-        | NONE => Error "ret: undefined operand")
-
     (* Environment - Call context *)
     | CALLER => exec_read0 (\s. w2w s.vs_call_ctx.cc_caller) inst s
     | ADDRESS => exec_read0 (\s. w2w s.vs_call_ctx.cc_address) inst s
@@ -805,7 +786,8 @@ Definition step_inst_def:
                    eval_operand as_op s, eval_operand ro_op s,
                    eval_operand rs_op s) of
               (SOME gas, SOME addr, SOME value, SOME ao, SOME as_, SOME ro, SOME rs) =>
-                exec_ext_call inst s gas addr value ao as_ ro rs F
+                exec_ext_call inst s gas addr value ao as_ ro rs
+                  s.vs_call_ctx.cc_static
             | _ => Error "undefined operand")
         | _ => Error "call requires 7 operands")
 
@@ -827,7 +809,8 @@ Definition step_inst_def:
                    eval_operand ao_op s, eval_operand as_op s,
                    eval_operand ro_op s, eval_operand rs_op s) of
               (SOME gas, SOME addr, SOME ao, SOME as_, SOME ro, SOME rs) =>
-                exec_ext_call inst s gas addr s.vs_call_ctx.cc_callvalue ao as_ ro rs F
+                exec_ext_call inst s gas addr s.vs_call_ctx.cc_callvalue ao as_ ro rs
+                  s.vs_call_ctx.cc_static
             | _ => Error "undefined operand")
         | _ => Error "delegatecall requires 6 operands")
 
