@@ -92,7 +92,6 @@ Datatype:
     vs_inst_idx : num;               (* Instruction index within block *)
     vs_returndata : byte list;       (* Return data buffer *)
     vs_halted : bool;                (* Execution halted? *)
-    vs_reverted : bool;              (* Execution reverted? *)
     vs_accounts : evm_accounts;      (* Account states for BALANCE, etc. *)
     vs_call_ctx : call_context;      (* Call context *)
     vs_tx_ctx : tx_context;          (* Transaction context *)
@@ -154,7 +153,6 @@ Definition init_venom_state_def:
     vs_inst_idx := 0;
     vs_returndata := [];
     vs_halted := F;
-    vs_reverted := F;
     vs_accounts := empty_accounts;
     vs_call_ctx := empty_call_context;
     vs_tx_ctx := empty_tx_context;
@@ -267,8 +265,10 @@ Definition halt_state_def:
   halt_state s = s with vs_halted := T
 End
 
+(* revert_state = halt_state. The revert/halt distinction lives in
+   abort_type (Revert_abort vs ExHalt_abort), not the state. *)
 Definition revert_state_def:
-  revert_state s = s with <| vs_halted := T; vs_reverted := T |>
+  revert_state s = s with vs_halted := T
 End
 
 Definition set_returndata_def:

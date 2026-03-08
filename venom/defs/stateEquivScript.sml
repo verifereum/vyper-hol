@@ -52,10 +52,10 @@ Ancestors
  *   - vs_accounts  : Account balances/state
  *   - vs_returndata: Return value or revert reason
  *   - vs_halted    : Whether execution halted
- *   - vs_reverted  : Whether execution reverted
  *
  * USE FOR: Proving that two executions have the same external effect,
  * regardless of how they got there.
+ * NOTE: Revert/halt distinction lives in abort_type, not the state.
  *)
 Definition observable_equiv_def:
   observable_equiv s1 s2 <=>
@@ -63,7 +63,6 @@ Definition observable_equiv_def:
     s1.vs_accounts = s2.vs_accounts /\
     s1.vs_returndata = s2.vs_returndata /\
     s1.vs_halted = s2.vs_halted /\
-    s1.vs_reverted = s2.vs_reverted /\
     s1.vs_logs = s2.vs_logs
 End
 
@@ -87,7 +86,6 @@ Definition execution_equiv_def:
     s1.vs_transient = s2.vs_transient /\
     (* OMIT: vs_current_bb, vs_inst_idx, vs_prev_bb *)
     s1.vs_halted = s2.vs_halted /\
-    s1.vs_reverted = s2.vs_reverted /\
     s1.vs_returndata = s2.vs_returndata /\
     s1.vs_accounts = s2.vs_accounts /\
     s1.vs_call_ctx = s2.vs_call_ctx /\

@@ -210,6 +210,8 @@ Definition is_terminator_def:
   is_terminator REVERT = T /\
   is_terminator STOP = T /\
   is_terminator SINK = T /\
+  is_terminator SELFDESTRUCT = T /\
+  is_terminator INVALID = T /\
   is_terminator _ = F
 End
 

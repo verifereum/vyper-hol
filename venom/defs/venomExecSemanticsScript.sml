@@ -435,7 +435,11 @@ Definition exec_alloca_def:
     | _ => Error "alloca requires single output"
 End
 
-(* Step a single instruction *)
+(* Step a single instruction.
+   OPERAND CONVENTION: All operands are in semantic (EVM documentation) order.
+   E.g., SUB [a; b] = a - b, MSTORE [offset; value], CALL [gas; addr; ...].
+   The Venom IR internally reverses EVM operands via _emit_evm (stack order);
+   our model uses semantic order for readability and proof clarity. *)
 Definition step_inst_def:
   step_inst inst s =
     case inst.inst_opcode of
@@ -469,26 +473,30 @@ Definition step_inst_def:
     | SAR => exec_pure2 (\n w. word_asr w (w2n n)) inst s
     | SIGNEXTEND => exec_pure2 sign_extend inst s
 
-    (* Memory *)
+    (* Memory
+       Convention: all operands in semantic (EVM doc) order.
+       MSTORE(offset, value), MCOPY(dst, src, size), etc.
+       The Venom IR internally reverses EVM args via _emit_evm;
+       our model uses semantic order for readability. *)
     | MLOAD => exec_read1 (\addr s. mload (w2n addr) s) inst s
-    | MSTORE => exec_write2 (\val addr s. mstore (w2n addr) val s) inst s
+    | MSTORE => exec_write2 (\addr val s. mstore (w2n addr) val s) inst s
     | MCOPY =>
         (case inst.inst_operands of
-          [op_size; op_src; op_dst] =>
-            (case (eval_operand op_size s, eval_operand op_src s,
-                   eval_operand op_dst s) of
-              (SOME sz, SOME src, SOME dst) =>
+          [op_dst; op_src; op_size] =>
+            (case (eval_operand op_dst s, eval_operand op_src s,
+                   eval_operand op_size s) of
+              (SOME dst, SOME src, SOME sz) =>
                 OK (mcopy (w2n dst) (w2n src) (w2n sz) s)
             | _ => Error "undefined operand")
         | _ => Error "mcopy requires 3 operands")
 
     (* Storage *)
     | SLOAD => exec_read1 (\key s. sload key s) inst s
-    | SSTORE => exec_write2 (\val key s. sstore key val s) inst s
+    | SSTORE => exec_write2 (\key val s. sstore key val s) inst s
 
     (* Transient storage *)
     | TLOAD => exec_read1 (\key s. tload key s) inst s
-    | TSTORE => exec_write2 (\val key s. tstore key val s) inst s
+    | TSTORE => exec_write2 (\key val s. tstore key val s) inst s
 
     (* Control flow - JMP *)
     | JMP =>
@@ -655,9 +663,9 @@ Definition step_inst_def:
 
     | CALLDATACOPY =>
         (case inst.inst_operands of
-          [op_size; op_offset; op_destOffset] =>
-            (case (eval_operand op_size s, eval_operand op_offset s, eval_operand op_destOffset s) of
-              (SOME size_val, SOME offset, SOME destOffset) =>
+          [op_destOffset; op_offset; op_size] =>
+            (case (eval_operand op_destOffset s, eval_operand op_offset s, eval_operand op_size s) of
+              (SOME destOffset, SOME offset, SOME size_val) =>
                 let data = s.vs_call_ctx.cc_calldata in
                 let size = w2n size_val in
                 let src_offset = w2n offset in
@@ -671,9 +679,9 @@ Definition step_inst_def:
 
     | RETURNDATACOPY =>
         (case inst.inst_operands of
-          [op_size; op_offset; op_destOffset] =>
-            (case (eval_operand op_size s, eval_operand op_offset s, eval_operand op_destOffset s) of
-              (SOME size_val, SOME offset, SOME destOffset) =>
+          [op_destOffset; op_offset; op_size] =>
+            (case (eval_operand op_destOffset s, eval_operand op_offset s, eval_operand op_size s) of
+              (SOME destOffset, SOME offset, SOME size_val) =>
                 let size = w2n size_val in
                 let src_offset = w2n offset in
                 (* OOB access is exceptional halt per EIP-211 *)
@@ -694,9 +702,9 @@ Definition step_inst_def:
     (* Hashing - using Keccak256 like EVM *)
     | SHA3 =>
         (case inst.inst_operands of
-          [op_size; op_offset] =>
-            (case (eval_operand op_size s, eval_operand op_offset s) of
-              (SOME size_val, SOME offset) =>
+          [op_offset; op_size] =>
+            (case (eval_operand op_offset s, eval_operand op_size s) of
+              (SOME offset, SOME size_val) =>
                 (case inst.inst_outputs of
                   [out] =>
                     let size = w2n size_val in
@@ -716,10 +724,10 @@ Definition step_inst_def:
     | EXTCODEHASH =>
         exec_read1
           (\addr s.
-            let code = (lookup_account (w2w addr) s.vs_accounts).code in
-            if NULL code then 0w
+            let acct = lookup_account (w2w addr) s.vs_accounts in
+            if account_empty acct then 0w
             else word_of_bytes T (0w:bytes32)
-                   (Keccak_256_w64 code)) inst s
+                   (Keccak_256_w64 acct.code)) inst s
 
     (* Allocation pointer arithmetic - GEP is base + offset, pure *)
     | GEP => exec_pure2 word_add inst s
@@ -748,10 +756,10 @@ Definition step_inst_def:
 
     | DLOADBYTES =>
         (case inst.inst_operands of
-          [op_size; op_src; op_dst] =>
-            (case (eval_operand op_size s, eval_operand op_src s,
-                   eval_operand op_dst s) of
-              (SOME size_val, SOME src, SOME dst) =>
+          [op_dst; op_src; op_size] =>
+            (case (eval_operand op_dst s, eval_operand op_src s,
+                   eval_operand op_size s) of
+              (SOME dst, SOME src, SOME size_val) =>
                 let size = w2n size_val in
                 let bytes = TAKE size (DROP (w2n src) s.vs_data_section ++
                                       REPLICATE size 0w) in
@@ -762,10 +770,10 @@ Definition step_inst_def:
     (* Code access *)
     | CODECOPY =>
         (case inst.inst_operands of
-          [op_size; op_src; op_dst] =>
-            (case (eval_operand op_size s, eval_operand op_src s,
-                   eval_operand op_dst s) of
-              (SOME size_val, SOME src, SOME dst) =>
+          [op_dst; op_src; op_size] =>
+            (case (eval_operand op_dst s, eval_operand op_src s,
+                   eval_operand op_size s) of
+              (SOME dst, SOME src, SOME size_val) =>
                 let size = w2n size_val in
                 let bytes = TAKE size (DROP (w2n src) s.vs_code ++
                                       REPLICATE size 0w) in
@@ -787,10 +795,11 @@ Definition step_inst_def:
             | _ => Error "undefined operand")
         | _ => Error "extcodecopy requires 4 operands")
 
-    (* Label offset computation - resolves label address + operand offset *)
+    (* Label offset computation - resolves label address + operand offset.
+       Operand order matches Python builder: offset(operand, label). *)
     | OFFSET =>
         (case inst.inst_operands of
-          [Label lbl; offset_op] =>
+          [offset_op; Label lbl] =>
             (case eval_operand offset_op s of
               SOME off =>
                 (case inst.inst_outputs of
@@ -800,29 +809,29 @@ Definition step_inst_def:
                     | NONE => Error "offset: unknown label")
                 | _ => Error "offset requires single output")
             | NONE => Error "offset: undefined operand")
-        | _ => Error "offset requires label and operand")
+        | _ => Error "offset requires operand and label")
 
     (* Logging - variable operand count.
-       Venom IR format: log topic_count, topic_{n-1}, ..., topic_0, size, offset
-       First operand is Lit topic_count (metadata), rest are evaluated. *)
+       Semantic order: log topic_count, offset, size, topic_0, ..., topic_{n-1}
+       First operand is Lit topic_count (metadata), then offset, size, topics. *)
     | LOG =>
         (case inst.inst_operands of
           Lit tc :: rest =>
             let n = w2n tc in
-            (* rest should be: n topics (reversed) ++ [size; offset] *)
+            (* rest should be: offset, size, n topics *)
             if LENGTH rest <> n + 2 then Error "log: wrong operand count"
             else
-              let topic_ops = TAKE n rest in
-              let size_op = EL n rest in
-              let offset_op = EL (n + 1) rest in
-              (case (eval_operands topic_ops s,
+              let offset_op = EL 0 rest in
+              let size_op = EL 1 rest in
+              let topic_ops = DROP 2 rest in
+              (case (eval_operand offset_op s,
                      eval_operand size_op s,
-                     eval_operand offset_op s) of
-                (SOME topics, SOME sz, SOME off) =>
+                     eval_operands topic_ops s) of
+                (SOME off, SOME sz, SOME topics) =>
                   let data = TAKE (w2n sz) (DROP (w2n off) s.vs_memory ++
                                             REPLICATE (w2n sz) 0w) in
                   let ev = <| logger := w2w s.vs_call_ctx.cc_address;
-                              topics := REVERSE topics;
+                              topics := topics;
                               data := data |> in
                   OK (s with vs_logs := s.vs_logs ++ [ev])
               | _ => Error "log: undefined operand")
@@ -1018,8 +1027,7 @@ Definition setup_callee_def:
       vs_current_bb := (HD fn.fn_blocks).bb_label;
       vs_inst_idx   := 0;
       vs_prev_bb    := NONE;
-      vs_halted     := F;
-      vs_reverted   := F
+      vs_halted     := F
     |>)
 End
 
