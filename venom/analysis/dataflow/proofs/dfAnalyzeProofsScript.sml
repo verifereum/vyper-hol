@@ -4,6 +4,8 @@
  * TOP-LEVEL:
  *   df_analyze_fixpoint_proof       — worklist converges to fixpoint
  *   df_at_intra_transfer_proof      — within a block, transfer relates adjacent points
+ *   df_at_inter_transfer_proof      — inter-block: fold input = join of neighbors
+ *   df_boundary_eq_exit_proof       — at fixpoint, boundary = exit value
  *   df_analyze_invariant_proof      — lattice invariant preserved through analysis
  *   df_process_inflationary_proof   — lattice monotonicity → process inflationary
  *   df_process_deps_complete_proof  — CFG correctness → worklist deps complete
@@ -112,6 +114,36 @@ Theorem df_at_inter_transfer_proof:
         df_at bottom result lbl 0 = joined) /\
       (dir = Backward ==>
         df_at bottom result lbl (LENGTH bb.bb_instructions) = joined)
+Proof
+  cheat
+QED
+
+(* At fixpoint, boundary equals the exit value (forward) or entry value
+   (backward). Follows from: at fixpoint, fold input is stable, so
+   final_val is deterministic, and boundary = join(boundary, final_val) =
+   boundary only when boundary = final_val (since the sequence is monotone
+   and converged).
+   Requires: join is idempotent (join a a = a). *)
+Theorem df_boundary_eq_exit_proof:
+  !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx
+   entry_val fn lbl (bb : basic_block).
+    let cfg = cfg_analyze fn in
+    let bbs = fn.fn_blocks in
+    let process = df_process_block dir bottom join transfer edge_transfer
+                                   ctx entry_val cfg bbs in
+    let all_lbls = MAP (λbb. bb.bb_label) bbs in
+    let result = df_analyze dir bottom join transfer edge_transfer
+                            ctx entry_val fn in
+      is_fixpoint process all_lbls result /\
+      lookup_block lbl bbs = SOME bb /\
+      (!a. join a a = a)
+    ==>
+      (dir = Forward ==>
+        df_boundary bottom result lbl =
+          df_at bottom result lbl (LENGTH bb.bb_instructions)) /\
+      (dir = Backward ==>
+        df_boundary bottom result lbl =
+          df_at bottom result lbl 0)
 Proof
   cheat
 QED

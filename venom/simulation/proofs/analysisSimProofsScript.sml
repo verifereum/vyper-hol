@@ -73,8 +73,8 @@ QED
 
 (* State-dependent pass correctness: for analyses where transform safety
    depends on the lattice value being sound for the concrete state.
-   Requires transfer_sound (abstract transfer tracks concrete execution)
-   in addition to convergence and analysis_inst_simulates.
+   Requires transfer_sound (intra-block), edge_transfer/join soundness
+   (inter-block), in addition to convergence and analysis_inst_simulates.
    This extends the universal case (sound = λv s. T) to range-analysis-driven
    transforms and similar state-dependent optimizations. *)
 Theorem df_analysis_pass_correct_sound_proof:
@@ -107,8 +107,17 @@ Theorem df_analysis_pass_correct_sound_proof:
       wl_deps_complete process deps /\
       (* Analysis soundness: transfer tracks concrete execution *)
       transfer_sound sound transfer ctx /\
+      (* Edge transfer preserves soundness *)
+      (!src dst v s. sound v s ==>
+        sound (edge_transfer ctx src dst v) s) /\
+      (* Join preserves soundness (upward-closure: if one branch is sound,
+         joining with another value stays sound) *)
+      (!a b s. sound a s ==> sound (join a b) s) /\
       (* Bottom is sound for all states (unprocessed blocks are safe) *)
       (!s. sound bottom s) /\
+      (* Entry value sound for all states, if provided *)
+      (case entry_val of NONE => T
+       | SOME (lbl, v) => !s. sound v s) /\
       (* Transform simulation (state-dependent) *)
       analysis_inst_simulates R_ok R_term sound f /\
       (* R_ok preserves control flow *)

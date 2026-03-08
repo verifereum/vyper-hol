@@ -62,8 +62,9 @@ Proof
   ACCEPT_TAC df_analysis_pass_correct_proof
 QED
 
-(* State-dependent: df_analyze convergence + sound transfer + state-dependent
-   transform → function-level lift_result. For range-analysis-driven transforms. *)
+(* State-dependent: df_analyze convergence + sound transfer/edge_transfer/join
+   + state-dependent transform → function-level lift_result.
+   For range-analysis-driven transforms. *)
 Theorem df_analysis_pass_correct_sound:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
@@ -92,7 +93,12 @@ Theorem df_analysis_pass_correct_sound:
       bounded_measure P leq m b /\
       wl_deps_complete process deps /\
       transfer_sound sound transfer ctx /\
+      (!src dst v s. sound v s ==>
+        sound (edge_transfer ctx src dst v) s) /\
+      (!a b s. sound a s ==> sound (join a b) s) /\
       (!s. sound bottom s) /\
+      (case entry_val of NONE => T
+       | SOME (lbl, v) => !s. sound v s) /\
       analysis_inst_simulates R_ok R_term sound f /\
       (!s1 s2. R_ok s1 s2 ==> s1.vs_current_bb = s2.vs_current_bb) /\
       (!s1 s2. R_ok s1 s2 ==> s1.vs_halted = s2.vs_halted)

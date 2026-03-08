@@ -16,7 +16,7 @@ Ancestors
   worklistProps
   dfHelperProps
   dfAnalyzeProps
-  dfAnalyzeWidenDefs
+  dfAnalyzeWidenProps
   (* liveness *)
   livenessAnalysis
   livenessGenericDefs
