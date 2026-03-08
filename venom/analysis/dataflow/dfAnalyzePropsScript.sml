@@ -129,7 +129,9 @@ Proof
 QED
 
 (* Lattice-to-process lifting: monotone lattice operations imply
-   df_process_block is inflationary w.r.t. the pointwise ordering. *)
+   df_process_block is inflationary w.r.t. the pointwise boundary ordering.
+   Inst values are overwritten on each processing — only boundaries
+   drive worklist convergence. *)
 Theorem df_process_inflationary:
   !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx
    entry_val cfg bbs (elem_leq : 'a -> 'a -> bool).
@@ -147,9 +149,7 @@ Theorem df_process_inflationary:
                                    ctx entry_val cfg bbs in
     let leq = (λst1 st2.
       (!lbl. elem_leq (df_boundary bottom st1 lbl)
-                       (df_boundary bottom st2 lbl)) /\
-      (!lbl idx. elem_leq (df_at bottom st1 lbl idx)
-                           (df_at bottom st2 lbl idx))) in
+                       (df_boundary bottom st2 lbl))) in
     !lbl st. leq st (process lbl st)
 Proof
   ACCEPT_TAC df_process_inflationary_proof

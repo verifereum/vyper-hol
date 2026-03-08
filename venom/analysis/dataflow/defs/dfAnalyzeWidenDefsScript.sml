@@ -83,7 +83,7 @@ End
 (* Process one block: gather neighbor values, join, optionally widen,
    fold transfer, update state.
    - After threshold visits, widen the joined entry against old entry
-   - Boundary is set to final_val directly (no inflationary join)
+   - Boundary uses inflationary join (join old final_val) for convergence
    - Entry value is cached for future widening comparisons *)
 Definition df_process_block_widen_def:
   df_process_block_widen dir bottom join widen threshold
@@ -114,8 +114,10 @@ Definition df_process_block_widen_def:
        | SOME bb => bb.bb_instructions) in
     let (final_val, inst_map) =
       df_fold_block dir (transfer ctx) lbl instrs entry in
+    let old_boundary = df_widen_boundary bottom st lbl in
+    let new_boundary = join old_boundary final_val in
     st with <|
-      dws_boundary := st.dws_boundary |+ (lbl, final_val);
+      dws_boundary := st.dws_boundary |+ (lbl, new_boundary);
       dws_entry := st.dws_entry |+ (lbl, entry);
       dws_inst := FUNION inst_map st.dws_inst;
       dws_visits := st.dws_visits |+ (lbl, visits + 1)

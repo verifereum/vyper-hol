@@ -127,8 +127,11 @@ Proof
   cheat
 QED
 
-(* Monotone lattice ops → df_process_block_widen is inflationary.
-   Requires widen to also be inflationary: widen old new ≥ new. *)
+(* Monotone lattice ops → df_process_block_widen is inflationary
+   w.r.t. the pointwise boundary ordering.
+   Requires widen to also be inflationary: widen old new ≥ new.
+   Boundary uses inflationary join (join old final_val), so convergence
+   follows from the same argument as the base variant. *)
 Theorem df_process_widen_inflationary_proof:
   !(dir : direction) (bottom : 'a) join widen threshold
    transfer edge_transfer ctx entry_val cfg bbs
@@ -148,9 +151,7 @@ Theorem df_process_widen_inflationary_proof:
                     transfer edge_transfer ctx entry_val cfg bbs in
     let leq = (λst1 st2.
       (!lbl. elem_leq (df_widen_boundary bottom st1 lbl)
-                       (df_widen_boundary bottom st2 lbl)) /\
-      (!lbl idx. elem_leq (df_widen_at bottom st1 lbl idx)
-                           (df_widen_at bottom st2 lbl idx))) in
+                       (df_widen_boundary bottom st2 lbl))) in
     !lbl st. leq st (process lbl st)
 Proof
   cheat

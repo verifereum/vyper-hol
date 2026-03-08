@@ -180,9 +180,11 @@ QED
 
 (* Lattice-to-process lifting: if join/transfer/edge_transfer are monotone
    w.r.t. an element-level ordering, then df_process_block is inflationary
-   w.r.t. the induced df_state ordering.
+   w.r.t. the pointwise boundary ordering.
    elem_leq: ordering on lattice elements (e.g., set inclusion).
-   Preconditions: join is an upper bound, transfer and edge_transfer monotone. *)
+   Preconditions: join is an upper bound, transfer and edge_transfer monotone.
+   Note: only boundary values are tracked — inst values are overwritten
+   on each processing and are fully determined by boundaries at fixpoint. *)
 Theorem df_process_inflationary_proof:
   !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx
    entry_val cfg bbs (elem_leq : 'a -> 'a -> bool).
@@ -200,9 +202,7 @@ Theorem df_process_inflationary_proof:
                                    ctx entry_val cfg bbs in
     let leq = (λst1 st2.
       (!lbl. elem_leq (df_boundary bottom st1 lbl)
-                       (df_boundary bottom st2 lbl)) /\
-      (!lbl idx. elem_leq (df_at bottom st1 lbl idx)
-                           (df_at bottom st2 lbl idx))) in
+                       (df_boundary bottom st2 lbl))) in
     !lbl st. leq st (process lbl st)
 Proof
   cheat

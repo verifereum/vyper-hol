@@ -114,7 +114,8 @@ Proof
   ACCEPT_TAC df_analyze_widen_invariant_proof
 QED
 
-(* Monotone ops + widen inflationary → process is inflationary. *)
+(* Monotone ops + widen inflationary → process is inflationary
+   w.r.t. pointwise boundary ordering. *)
 Theorem df_process_widen_inflationary:
   !(dir : direction) (bottom : 'a) join widen threshold
    transfer edge_transfer ctx entry_val cfg bbs
@@ -134,9 +135,7 @@ Theorem df_process_widen_inflationary:
                     transfer edge_transfer ctx entry_val cfg bbs in
     let leq = (λst1 st2.
       (!lbl. elem_leq (df_widen_boundary bottom st1 lbl)
-                       (df_widen_boundary bottom st2 lbl)) /\
-      (!lbl idx. elem_leq (df_widen_at bottom st1 lbl idx)
-                           (df_widen_at bottom st2 lbl idx))) in
+                       (df_widen_boundary bottom st2 lbl))) in
     !lbl st. leq st (process lbl st)
 Proof
   ACCEPT_TAC df_process_widen_inflationary_proof
