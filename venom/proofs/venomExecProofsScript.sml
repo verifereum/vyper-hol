@@ -219,7 +219,7 @@ Proof
       mstore_def, mload_def, sstore_def, sload_def,
       tstore_def, tload_def, write_memory_with_expansion_def,
       mcopy_def, exec_alloca_def,
-      exec_ext_call_def, exec_create_def] >>
+      exec_ext_call_def, exec_delegatecall_def, exec_create_def] >>
   imp_res_tac extract_venom_result_preserves_halted >> gvs[update_var_def]
 QED
 

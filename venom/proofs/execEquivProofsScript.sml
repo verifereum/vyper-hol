@@ -555,6 +555,33 @@ Proof
   fs[state_equiv_def, execution_equiv_def, lookup_var_def]
 QED
 
+(* exec_delegatecall preserves equiv when states and operands match *)
+Triviality exec_delegatecall_equiv:
+  !vars inst s1 s2 gas addr ao as_ ro rs.
+    state_equiv vars s1 s2 ==>
+    result_equiv vars
+      (exec_delegatecall inst s1 gas addr ao as_ ro rs)
+      (exec_delegatecall inst s2 gas addr ao as_ ro rs)
+Proof
+  rw[exec_delegatecall_def, LET_THM] >>
+  `s1.vs_memory = s2.vs_memory /\ s1.vs_accounts = s2.vs_accounts /\
+   s1.vs_logs = s2.vs_logs /\ s1.vs_call_ctx = s2.vs_call_ctx /\
+   s1.vs_tx_ctx = s2.vs_tx_ctx /\ s1.vs_block_ctx = s2.vs_block_ctx /\
+   s1.vs_prev_hashes = s2.vs_prev_hashes`
+    by fs[state_equiv_def, execution_equiv_def] >>
+  simp[read_memory_def, make_venom_delegatecall_state_def,
+       make_sub_tx_def, make_rollback_def, venom_to_tx_params_def,
+       LET_THM] >>
+  simp[extract_venom_result_def] >>
+  rpt CASE_TAC >> gvs[result_equiv_def] >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
+  simp[update_var_def, state_equiv_def, execution_equiv_def,
+       lookup_var_def, FLOOKUP_UPDATE,
+       write_memory_with_expansion_def] >>
+  rpt strip_tac >>
+  fs[state_equiv_def, execution_equiv_def, lookup_var_def]
+QED
+
 (* exec_create preserves equiv when states and operands match *)
 Triviality exec_create_equiv:
   !vars inst s1 s2 value offset sz salt_opt.
@@ -614,7 +641,7 @@ Triviality step_inst_ext_call_equiv:
   !vars inst s1 s2.
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
-    MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL] ==>
+    MEM inst.inst_opcode [CALL; STATICCALL] ==>
     result_equiv vars (step_inst inst s1) (step_inst inst s2)
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
@@ -624,6 +651,20 @@ Proof
   rpt CASE_TAC >> gvs[result_equiv_def] >>
   imp_res_tac eval_operand_equiv >> gvs[] >>
   irule exec_ext_call_equiv >> simp[]
+QED
+
+Triviality step_inst_delegatecall_equiv:
+  !vars inst s1 s2.
+    state_equiv vars s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
+    inst.inst_opcode = DELEGATECALL ==>
+    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+Proof
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  simp[step_inst_def] >>
+  rpt CASE_TAC >> gvs[result_equiv_def] >>
+  imp_res_tac eval_operand_equiv >> gvs[] >>
+  irule exec_delegatecall_equiv >> simp[]
 QED
 
 Triviality step_inst_create_equiv:
@@ -710,8 +751,10 @@ Proof
       drule_all step_inst_param_equiv >> simp[],
     `inst.inst_opcode = RET` by simp[] >>
       drule_all step_inst_ret_equiv >> simp[],
-    `MEM inst.inst_opcode [CALL;STATICCALL;DELEGATECALL]` by simp[] >>
+    `MEM inst.inst_opcode [CALL;STATICCALL]` by simp[] >>
       drule_all step_inst_ext_call_equiv >> simp[],
+    `inst.inst_opcode = DELEGATECALL` by simp[] >>
+      drule_all step_inst_delegatecall_equiv >> simp[],
     `MEM inst.inst_opcode [CREATE;CREATE2]` by simp[] >>
       drule_all step_inst_create_equiv >> simp[],
     `MEM inst.inst_opcode [ALLOCA;PALLOCA;CALLOCA]` by simp[] >>

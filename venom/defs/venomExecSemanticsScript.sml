@@ -257,7 +257,7 @@ Definition make_rollback_def:
        toDelete := [] |>
 End
 
-(* Build an EVM execution_state for CALL/STATICCALL/DELEGATECALL *)
+(* Build an EVM execution_state for CALL/STATICCALL *)
 Definition make_venom_call_state_def:
   make_venom_call_state s (target:address) gas value calldata code is_static =
     let caller = s.vs_call_ctx.cc_address in
@@ -266,6 +266,27 @@ Definition make_venom_call_state_def:
                  empty_return_destination tx in
     let accounts = transfer_value caller target value s.vs_accounts in
     let rb = make_rollback accounts caller target in
+    <| contexts := [(ctxt, rb)];
+       txParams := venom_to_tx_params s;
+       rollback := rb;
+       msdomain := Collect empty_domain |>
+End
+
+(* Build an EVM execution_state for DELEGATECALL.
+   Key differences from CALL/STATICCALL:
+   - Executes target's code in caller's context (ADDRESS returns caller)
+   - msg.sender is caller's original caller (not caller itself)
+   - msg.value is inherited from current call (not re-sent)
+   - No value transfer occurs *)
+Definition make_venom_delegatecall_state_def:
+  make_venom_delegatecall_state s (target:address) gas calldata code is_static =
+    let caller = s.vs_call_ctx.cc_address in
+    let original_caller = s.vs_call_ctx.cc_caller in
+    let call_value = w2n s.vs_call_ctx.cc_callvalue in
+    let tx = make_sub_tx original_caller caller call_value gas calldata in
+    let ctxt = initial_context caller code is_static
+                 empty_return_destination tx in
+    let rb = make_rollback s.vs_accounts caller target in
     <| contexts := [(ctxt, rb)];
        txParams := venom_to_tx_params s;
        rollback := rb;
@@ -323,9 +344,9 @@ Definition extract_venom_result_def:
        | _ => NONE)
 End
 
-(* Execute an external call via verifereum EVM semantics.
+(* Execute CALL/STATICCALL via verifereum EVM semantics.
    CALL: operands = [gas; addr; value; argsOff; argsSize; retOff; retSize]
-   STATICCALL/DELEGATECALL: operands = [gas; addr; argsOff; argsSize; retOff; retSize]
+   STATICCALL: operands = [gas; addr; argsOff; argsSize; retOff; retSize]
 *)
 Definition exec_ext_call_def:
   exec_ext_call inst s gas addr_w value argsOff argsSize retOff retSize is_static =
@@ -340,6 +361,25 @@ Definition exec_ext_call_def:
            [out] => OK (update_var out output s')
          | _ => Error "ext_call requires single output")
     | NONE => Error "ext_call: non-terminating or invalid state"
+End
+
+(* Execute DELEGATECALL via verifereum EVM semantics.
+   Runs target's code in caller's own context (storage, address, balance).
+   msg.sender = caller's original caller; msg.value = inherited.
+   Operands: [gas; addr; argsOff; argsSize; retOff; retSize] *)
+Definition exec_delegatecall_def:
+  exec_delegatecall inst s gas addr_w argsOff argsSize retOff retSize =
+    let calldata = read_memory (w2n argsOff) (w2n argsSize) s in
+    let target : address = w2w addr_w in
+    let code = (lookup_account target s.vs_accounts).code in
+    let evm_s = make_venom_delegatecall_state s target (w2n gas)
+                  calldata code s.vs_call_ctx.cc_static in
+    case extract_venom_result s 1w (w2n retOff) (w2n retSize) (run evm_s) of
+    | SOME (output, s') =>
+        (case inst.inst_outputs of
+           [out] => OK (update_var out output s')
+         | _ => Error "delegatecall requires single output")
+    | NONE => Error "delegatecall: non-terminating or invalid state"
 End
 
 (* Execute CREATE/CREATE2 via verifereum EVM semantics.
@@ -809,8 +849,7 @@ Definition step_inst_def:
                    eval_operand ao_op s, eval_operand as_op s,
                    eval_operand ro_op s, eval_operand rs_op s) of
               (SOME gas, SOME addr, SOME ao, SOME as_, SOME ro, SOME rs) =>
-                exec_ext_call inst s gas addr s.vs_call_ctx.cc_callvalue ao as_ ro rs
-                  s.vs_call_ctx.cc_static
+                exec_delegatecall inst s gas addr ao as_ ro rs
             | _ => Error "undefined operand")
         | _ => Error "delegatecall requires 6 operands")
 
@@ -882,7 +921,8 @@ Proof
   gvs[AllCaseEqs(), is_terminator_def] >>
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
      exec_read0_def, exec_read1_def, exec_write2_def,
-     exec_ext_call_def, exec_create_def, exec_alloca_def,
+     exec_ext_call_def, exec_delegatecall_def,
+     exec_create_def, exec_alloca_def,
      extract_venom_result_def] >>
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
