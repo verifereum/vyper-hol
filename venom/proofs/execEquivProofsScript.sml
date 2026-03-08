@@ -283,20 +283,6 @@ Proof
   fs[state_equiv_def, execution_equiv_def, lookup_var_def]
 QED
 
-(* Internal function call: PARAM, RET *)
-Triviality step_inst_param_equiv:
-  !vars inst s1 s2.
-    state_equiv vars s1 s2 /\
-    inst.inst_opcode = PARAM ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
-Proof
-  rw[] >> simp[step_inst_def] >>
-  `s1.vs_params = s2.vs_params` by
-    fs[state_equiv_def, execution_equiv_def] >>
-  rpt CASE_TAC >> gvs[result_equiv_def] >>
-  irule update_var_preserves >> simp[]
-QED
-
 Triviality eval_operands_equiv:
   !vars ops s1 s2.
     state_equiv vars s1 s2 /\
@@ -309,21 +295,6 @@ Proof
   `eval_operands ops s1 = eval_operands ops s2` by (
     first_x_assum irule >> simp[] >> metis_tac[]) >>
   simp[]
-QED
-
-Triviality step_inst_ret_equiv:
-  !vars inst s1 s2.
-    state_equiv vars s1 s2 /\
-    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
-    inst.inst_opcode = RET ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
-Proof
-  rw[] >> simp[step_inst_def] >>
-  `eval_operands inst.inst_operands s1 =
-   eval_operands inst.inst_operands s2` by (
-    irule eval_operands_equiv >> simp[] >> metis_tac[]) >>
-  simp[] >> rpt CASE_TAC >> gvs[result_equiv_def] >>
-  fs[state_equiv_def]
 QED
 
 (* Hash: SHA3 *)
