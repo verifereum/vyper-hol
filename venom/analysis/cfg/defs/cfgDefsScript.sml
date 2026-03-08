@@ -53,6 +53,14 @@ Definition cfg_preds_of_def:
   cfg_preds_of cfg lbl = fmap_lookup_list cfg.cfg_preds lbl
 End
 
+(* Block-level CFG path: consecutive labels are connected by CFG edges. *)
+Definition is_cfg_path_def:
+  is_cfg_path cfg [] = T ∧
+  is_cfg_path cfg [l] = T ∧
+  is_cfg_path cfg (l1 :: l2 :: rest) =
+    (MEM l2 (cfg_succs_of cfg l1) ∧ is_cfg_path cfg (l2 :: rest))
+End
+
 (* Whether lbl was reached during DFS from the entry block. *)
 Definition cfg_reachable_of_def:
   cfg_reachable_of cfg lbl =

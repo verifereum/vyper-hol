@@ -1,0 +1,160 @@
+(*
+ * Analysis-Driven Simulation — Correctness (Statements Only)
+ *
+ * Re-exports from proofs/analysisSimProofsScript.sml via ACCEPT_TAC.
+ *)
+
+Theory analysisSimProps
+Ancestors
+  analysisSimProofs
+
+(* Universal-sound analysis_inst_simulates implies block_simulates.
+   Covers liveness-based dead code elimination and similar passes
+   where the transform is safe regardless of concrete state. *)
+Theorem analysis_inst_sim_block_sim:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool)
+   (bottom : 'a) (result : 'a df_state)
+   (f : 'a -> instruction -> instruction).
+    analysis_inst_simulates R_ok R_term (λv s. T) f
+  ==>
+    block_simulates R_ok R_term (analysis_block_transform bottom result f)
+Proof
+  ACCEPT_TAC analysis_inst_sim_block_sim_proof
+QED
+
+(* End-to-end: df_analyze convergence + universal-sound transform →
+   function-level lift_result. *)
+Theorem df_analysis_pass_correct:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool)
+   (dir : direction) (bottom : 'a) join transfer edge_transfer ctx
+   entry_val fn
+   (f : 'a -> instruction -> instruction)
+   (leq : 'a df_state -> 'a df_state -> bool)
+   m b (P : 'a df_state -> bool).
+    let cfg = cfg_analyze fn in
+    let bbs = fn.fn_blocks in
+    let process = df_process_block dir bottom join transfer edge_transfer
+                                   ctx entry_val cfg bbs in
+    let deps = (case dir of
+                  Forward => cfg_succs_of cfg
+                | Backward => cfg_preds_of cfg) in
+    let st0 = init_df_state bottom (MAP (λbb. bb.bb_label) bbs) in
+    let all_lbls = MAP (λbb. bb.bb_label) bbs in
+    let result = df_analyze dir bottom join transfer edge_transfer
+                            ctx entry_val fn in
+      (!lbl st. P st ==> leq st (process lbl st)) /\
+      (!lbl st. P st ==> P (process lbl st)) /\
+      (case entry_val of NONE => P st0
+       | SOME (lbl, v) =>
+           P (st0 with ds_boundary := st0.ds_boundary |+ (lbl, v))) /\
+      bounded_measure P leq m b /\
+      wl_deps_complete process deps /\
+      analysis_inst_simulates R_ok R_term (λ(v:'a) s. T) f /\
+      (!s1 s2. R_ok s1 s2 ==> s1.vs_current_bb = s2.vs_current_bb) /\
+      (!s1 s2. R_ok s1 s2 ==> s1.vs_halted = s2.vs_halted)
+    ==>
+      !fuel ctx s.
+        lift_result R_ok R_term (run_function fuel ctx fn s)
+          (run_function fuel ctx (analysis_function_transform bottom result f fn) s)
+Proof
+  ACCEPT_TAC df_analysis_pass_correct_proof
+QED
+
+(* State-dependent: df_analyze convergence + sound transfer/edge_transfer/join
+   + state-dependent transform → function-level lift_result.
+   Edge transfer soundness conditioned on edge reachability (vs_prev_bb),
+   enabling branch-narrowing analyses like variable range. *)
+Theorem df_analysis_pass_correct_sound:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool)
+   (dir : direction) (bottom : 'a) join transfer edge_transfer ctx
+   entry_val fn
+   (sound : 'a -> venom_state -> bool)
+   (f : 'a -> instruction -> instruction)
+   (leq : 'a df_state -> 'a df_state -> bool)
+   m b (P : 'a df_state -> bool).
+    let cfg = cfg_analyze fn in
+    let bbs = fn.fn_blocks in
+    let process = df_process_block dir bottom join transfer edge_transfer
+                                   ctx entry_val cfg bbs in
+    let deps = (case dir of
+                  Forward => cfg_succs_of cfg
+                | Backward => cfg_preds_of cfg) in
+    let st0 = init_df_state bottom (MAP (λbb. bb.bb_label) bbs) in
+    let all_lbls = MAP (λbb. bb.bb_label) bbs in
+    let result = df_analyze dir bottom join transfer edge_transfer
+                            ctx entry_val fn in
+      (!lbl st. P st ==> leq st (process lbl st)) /\
+      (!lbl st. P st ==> P (process lbl st)) /\
+      (case entry_val of NONE => P st0
+       | SOME (lbl, v) =>
+           P (st0 with ds_boundary := st0.ds_boundary |+ (lbl, v))) /\
+      bounded_measure P leq m b /\
+      wl_deps_complete process deps /\
+      transfer_sound sound transfer ctx /\
+      edge_transfer_sound sound edge_transfer ctx /\
+      (!a b s. sound a s ==> sound (join a b) s) /\
+      (!s. sound bottom s) /\
+      (case entry_val of NONE => T
+       | SOME (lbl, v) => !s. sound v s) /\
+      analysis_inst_simulates R_ok R_term sound f /\
+      (!s1 s2. R_ok s1 s2 ==> s1.vs_current_bb = s2.vs_current_bb) /\
+      (!s1 s2. R_ok s1 s2 ==> s1.vs_halted = s2.vs_halted)
+    ==>
+      !fuel ctx s.
+        lift_result R_ok R_term (run_function fuel ctx fn s)
+          (run_function fuel ctx (analysis_function_transform bottom result f fn) s)
+Proof
+  ACCEPT_TAC df_analysis_pass_correct_sound_proof
+QED
+
+(* State-dependent end-to-end for widening analyses.
+   For range-analysis-driven transforms (assert elimination,
+   algebraic signextend folding, comparison folding). *)
+Theorem df_analysis_pass_correct_widen_sound:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool)
+   (dir : direction) (bottom : 'a) join widen threshold
+   transfer edge_transfer ctx entry_val fn
+   (sound : 'a -> venom_state -> bool)
+   (f : 'a -> instruction -> instruction)
+   (leq : 'a df_widen_state -> 'a df_widen_state -> bool)
+   m b (P : 'a df_widen_state -> bool).
+    let cfg = cfg_analyze fn in
+    let bbs = fn.fn_blocks in
+    let process = df_process_block_widen dir bottom join widen threshold
+                    transfer edge_transfer ctx entry_val cfg bbs in
+    let deps = (case dir of
+                  Forward => cfg_succs_of cfg
+                | Backward => cfg_preds_of cfg) in
+    let st0 = init_df_widen_state bottom (MAP (λbb. bb.bb_label) bbs) in
+    let all_lbls = MAP (λbb. bb.bb_label) bbs in
+    let result = df_analyze_widen dir bottom join widen threshold
+                   transfer edge_transfer ctx entry_val fn in
+      (!lbl st. P st ==> leq st (process lbl st)) /\
+      (!lbl st. P st ==> P (process lbl st)) /\
+      (case entry_val of NONE => P st0
+       | SOME (lbl, v) =>
+           P (st0 with dws_boundary := st0.dws_boundary |+ (lbl, v))) /\
+      bounded_measure P leq m b /\
+      wl_deps_complete process deps /\
+      transfer_sound sound transfer ctx /\
+      edge_transfer_sound sound edge_transfer ctx /\
+      (!a b s. sound a s ==> sound (join a b) s) /\
+      (!a b s. sound a s ==> sound (widen a b) s) /\
+      (!s. sound bottom s) /\
+      (case entry_val of NONE => T
+       | SOME (lbl, v) => !s. sound v s) /\
+      analysis_inst_simulates R_ok R_term sound f /\
+      (!s1 s2. R_ok s1 s2 ==> s1.vs_current_bb = s2.vs_current_bb) /\
+      (!s1 s2. R_ok s1 s2 ==> s1.vs_halted = s2.vs_halted)
+    ==>
+      !fuel ctx s.
+        lift_result R_ok R_term (run_function fuel ctx fn s)
+          (run_function fuel ctx
+            (analysis_function_transform_widen bottom result f fn) s)
+Proof
+  ACCEPT_TAC df_analysis_pass_correct_widen_sound_proof
+QED

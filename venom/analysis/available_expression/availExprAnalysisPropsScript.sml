@@ -12,10 +12,7 @@
  *   avail_remove_effect_preserves  — disjoint effects preserved
  *   avail_remove_effect_kills      — overlapping effects killed
  *   avail_remove_effect_FDOM_SUBSET — domain only shrinks
- *   avail_meet_nil                 — meet of [] is FEMPTY
  *   avail_meet_two_FDOM            — meet domain = intersection of input domains
- *   avail_meet_FDOM                — expr in meet ⇒ in all inputs
- *   avail_meet_mono                — adding to meet can only shrink domain
  *   avail_transfer_inst_skip       — pseudo/assign/terminator: unchanged
  *   avail_transfer_inst_nonidempotent_no_add — nonidempotent: domain doesn't grow
  *   avail_transfer_inst_preserves  — disjoint effects + distinct expr: preserved
@@ -24,9 +21,9 @@
  *   expr_effects_pure_op           — pure op + pure args ⇒ pure expr
  *   avail_add_FDOM                 — domain = expr INSERT original
  *   avail_add_lookup_same          — fresh add maps to [inst]
+ *   avail_add_lookup_existing      — existing add appends [inst]
  *   avail_add_lookup_other         — add doesn't affect other keys
  *   avail_get_expression_diff      — source ≠ target
- *   avail_get_expression_recorded  — expression was recorded
  *   avail_get_expression_available — source was available
  *)
 
@@ -90,12 +87,6 @@ QED
 
 (* ===== Meet / Lattice ===== *)
 
-(* Meet of empty list is FEMPTY *)
-Theorem avail_meet_nil:
-  avail_meet [] = FEMPTY
-Proof ACCEPT_TAC availExprProofsTheory.avail_meet_nil
-QED
-
 (* Binary meet domain equals intersection of input domains *)
 Theorem avail_meet_two_FDOM:
   ∀a b. FDOM (avail_meet_two a b) = FDOM a ∩ FDOM b
@@ -110,22 +101,6 @@ QED
 Theorem avail_meet_two_FDOM_SUBSET_r:
   ∀a b. FDOM (avail_meet_two a b) ⊆ FDOM b
 Proof ACCEPT_TAC availExprProofsTheory.avail_meet_two_FDOM_SUBSET_r
-QED
-
-(* If expr is in the meet, it is in every input *)
-Theorem avail_meet_FDOM:
-  ∀aes expr.
-    expr ∈ FDOM (avail_meet aes) ⇒
-    ∀ae. MEM ae aes ⇒ expr ∈ FDOM ae
-Proof ACCEPT_TAC availExprProofsTheory.avail_meet_FDOM
-QED
-
-(* Adding an input to a non-empty meet can only shrink the domain *)
-Theorem avail_meet_mono:
-  ∀ae aes.
-    aes ≠ [] ⇒
-    FDOM (avail_meet (ae::aes)) ⊆ FDOM (avail_meet aes)
-Proof ACCEPT_TAC availExprProofsTheory.avail_meet_mono
 QED
 
 (* ===== Transfer ===== *)
@@ -216,6 +191,14 @@ Theorem avail_add_lookup_same:
 Proof ACCEPT_TAC availExprProofsTheory.avail_add_lookup_same
 QED
 
+(* Adding to an existing key appends to the instruction list *)
+Theorem avail_add_lookup_existing:
+  ∀ae expr inst insts.
+    FLOOKUP ae expr = SOME insts ⇒
+    FLOOKUP (avail_add ae expr inst) expr = SOME (insts ++ [inst])
+Proof ACCEPT_TAC availExprProofsTheory.avail_add_lookup_existing
+QED
+
 (* Add doesn't affect other keys *)
 Theorem avail_add_lookup_other:
   ∀ae expr expr' inst.
@@ -228,25 +211,17 @@ QED
 
 (* If get_expression returns SOME, the source instruction differs from the target *)
 Theorem avail_get_expression_diff:
-  ∀ar inst expr src.
-    avail_get_expression ar inst = SOME (expr, src) ⇒
+  ∀fn lbl idx inst expr src.
+    avail_get_expression fn lbl idx inst = SOME (expr, src) ⇒
     src.inst_id ≠ inst.inst_id
 Proof ACCEPT_TAC availExprProofsTheory.avail_get_expression_diff
 QED
 
-(* If get_expression returns SOME, the expression was recorded in ae_inst_expr *)
-Theorem avail_get_expression_recorded:
-  ∀ar inst expr src.
-    avail_get_expression ar inst = SOME (expr, src) ⇒
-    FLOOKUP ar.ae_inst_expr inst.inst_id = SOME expr
-Proof ACCEPT_TAC availExprProofsTheory.avail_get_expression_recorded
-QED
-
 (* If get_expression returns SOME, the source is in the available set at that point *)
 Theorem avail_get_expression_available:
-  ∀ar inst expr src.
-    avail_get_expression ar inst = SOME (expr, src) ⇒
-    ∃insts. FLOOKUP (ae_lookup_inst ar inst.inst_id) expr = SOME insts ∧
+  ∀fn lbl idx inst expr src.
+    avail_get_expression fn lbl idx inst = SOME (expr, src) ⇒
+    ∃insts. FLOOKUP (ae_lookup_inst fn lbl idx) expr = SOME insts ∧
             MEM src insts
 Proof ACCEPT_TAC availExprProofsTheory.avail_get_expression_available
 QED
