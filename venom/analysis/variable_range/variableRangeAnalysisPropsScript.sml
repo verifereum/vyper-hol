@@ -26,7 +26,7 @@ Theorem range_analyze_block_sound:
     lookup_block lbl fn.fn_blocks = SOME bb ∧
     lbl ∈ FDOM ra.ra_entry ∧
     in_range_state (range_entry_state ra lbl) s.vs_vars ∧
-    run_block bb s = OK s' ⇒
+    run_block fuel' ctx bb s = OK s' ⇒
     in_range_state (range_exit_state ra lbl) s'.vs_vars
 Proof
   cheat

@@ -127,6 +127,7 @@ val JBoolop_Or_tm = jastk "JBoolop_Or"
 val JE_Int_tm = jastk "JE_Int"
 val JE_Decimal_tm = jastk "JE_Decimal"
 val JE_Str_tm = jastk "JE_Str"
+val JE_GenericStr_tm = jastk "JE_GenericStr"
 val JE_Bytes_tm = jastk "JE_Bytes"
 val JE_Hex_tm = jastk "JE_Hex"
 val JE_Bool_tm = jastk "JE_Bool"
@@ -149,6 +150,7 @@ val JKeyword_tm = jastk "JKeyword"
 fun mk_JE_Int (v, ty) = list_mk_comb(JE_Int_tm, [v, ty])
 fun mk_JE_Decimal s = mk_comb(JE_Decimal_tm, fromMLstring s)
 fun mk_JE_Str (len, v) = list_mk_comb(JE_Str_tm, [len, fromMLstring v])
+fun mk_JE_GenericStr v = mk_comb(JE_GenericStr_tm, fromMLstring v)
 fun mk_JE_Bytes (len, v) = list_mk_comb(JE_Bytes_tm, [len, fromMLstring v])
 fun mk_JE_Hex s = mk_comb(JE_Hex_tm, fromMLstring s)
 fun mk_JE_Bool b = mk_comb(JE_Bool_tm, mk_bool b)
@@ -572,6 +574,11 @@ fun d_json_expr () : term decoder = achoose "expr" [
   (* Decimal literal *)
   check_ast_type "Decimal" $
     JSONDecode.map mk_JE_Decimal (field "value" string),
+
+  (* Generic string literal (e.g. method_id argument) - no length in type *)
+  check_ast_type "Str" $
+    check (field "type" $ field "generic" string) (fn s => s = "string") "not generic string" $
+    JSONDecode.map mk_JE_GenericStr (field "value" string),
 
   (* String literal *)
   check_ast_type "Str" $

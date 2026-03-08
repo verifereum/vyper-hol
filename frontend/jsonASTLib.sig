@@ -100,6 +100,7 @@ signature jsonASTLib = sig
   val JE_Int_tm : term
   val JE_Decimal_tm : term
   val JE_Str_tm : term
+  val JE_GenericStr_tm : term
   val JE_Bytes_tm : term
   val JE_Hex_tm : term
   val JE_Bool_tm : term
@@ -121,6 +122,7 @@ signature jsonASTLib = sig
   val mk_JE_Int : term * term -> term
   val mk_JE_Decimal : string -> term
   val mk_JE_Str : term * string -> term
+  val mk_JE_GenericStr : string -> term
   val mk_JE_Bytes : term * string -> term
   val mk_JE_Hex : string -> term
   val mk_JE_Bool : bool -> term

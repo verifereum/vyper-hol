@@ -26,24 +26,26 @@ QED
 
 (* Running a block on equivalent states produces equivalent OK results *)
 Theorem run_block_state_equiv:
-  !vars bb s1 s2 r1.
+  !fuel ctx vars bb s1 s2 r1.
     state_equiv vars s1 s2 /\
+    EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions /\
     (!inst. MEM inst bb.bb_instructions ==>
             !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
-    run_block bb s1 = OK r1
+    run_block fuel ctx bb s1 = OK r1
   ==>
-    ?r2. run_block bb s2 = OK r2 /\ state_equiv vars r1 r2
+    ?r2. run_block fuel ctx bb s2 = OK r2 /\ state_equiv vars r1 r2
 Proof
   ACCEPT_TAC execEquivProofsTheory.run_block_state_equiv
 QED
 
 (* Running a block on equivalent states produces equivalent results (all cases) *)
 Theorem run_block_result_equiv:
-  !vars bb s1 s2.
+  !fuel ctx vars bb s1 s2.
     state_equiv vars s1 s2 /\
+    EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions /\
     (!inst. MEM inst bb.bb_instructions ==>
             !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) ==>
-    result_equiv vars (run_block bb s1) (run_block bb s2)
+    result_equiv vars (run_block fuel ctx bb s1) (run_block fuel ctx bb s2)
 Proof
   ACCEPT_TAC execEquivProofsTheory.run_block_result_equiv
 QED

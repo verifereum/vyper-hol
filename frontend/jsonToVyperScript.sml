@@ -239,6 +239,7 @@ Definition decimal_string_to_int_def:
     let exp_num = num_of_digits exp_digits in
     let exp_int = if neg_exp then &0 - &exp_num else &exp_num in
     let (bd, ad) = split_at_dot base in
+    let ad = FILTER is_digit ad in
     let target = &10 + exp_int in
     let pad_len =
       if target <= & (LENGTH ad) then LENGTH ad else Num target in
@@ -322,12 +323,21 @@ Definition denomination_of_string_def:
   denomination_of_string s =
     if s = "wei" then SOME Wei else
     if s = "kwei" then SOME Kwei else
+    if s = "babbage" then SOME Kwei else
+    if s = "femtoether" then SOME Kwei else
     if s = "mwei" then SOME Mwei else
+    if s = "lovelace" then SOME Mwei else
+    if s = "picoether" then SOME Mwei else
     if s = "gwei" then SOME Gwei else
+    if s = "shannon" then SOME Gwei else
+    if s = "nanoether" then SOME Gwei else
     if s = "szabo" then SOME Szabo else
+    if s = "microether" then SOME Szabo else
     if s = "finney" then SOME Finney else
+    if s = "milliether" then SOME Finney else
     if s = "ether" then SOME Ether else
     if s = "kether" then SOME KEther else
+    if s = "grand" then SOME KEther else
     if s = "mether" then SOME MEther else
     if s = "gether" then SOME GEther else
     if s = "tether" then SOME TEther else NONE
@@ -389,10 +399,19 @@ Definition make_builtin_call_def:
     else if name = "uint2str" then
       (case ret_ty of JT_String n => Builtin (Uint2Str n) args
                     | _ => Builtin (Uint2Str 0) args)
-    else if name = "abi_decode" then
-      TypeBuiltin AbiDecode (translate_type ret_ty) args
-    else if name = "abi_encode" then
+    else if name = "abi_decode" ∨ name = "_abi_decode" then
+      (* abi_decode(data, type, unwrap_tuple=True) has 2-3 args in the AST.
+         We pass only the data arg; the target type comes from ret_ty
+         (the compiler-inferred return type of the Call node), which we
+         assume matches the explicit type argument.
+         TODO: verify that translate_type of arg[1] equals translate_type ret_ty
+         TODO: handle the unwrap_tuple keyword (controls single-element tuple unwrapping) *)
+      (case args of (arg::_) => TypeBuiltin AbiDecode (translate_type ret_ty) [arg]
+                  | _ => TypeBuiltin AbiDecode (translate_type ret_ty) [])
+    else if name = "abi_encode" ∨ name = "_abi_encode" then
       TypeBuiltin AbiEncode (translate_type ret_ty) args
+    else if name = "extract32" then
+      TypeBuiltin Extract32 (translate_type ret_ty) args
     else if name = "method_id" then
       Builtin MethodId args
     (* Struct constructor, cast, or regular call *)
@@ -578,11 +597,14 @@ Definition translate_expr_def:
   (translate_expr ctx (JE_Str len s) =
     Literal (StringL len s)) /\
 
+  (translate_expr ctx (JE_GenericStr s) =
+    Literal (StringL (STRLEN s) s)) /\
+
   (translate_expr ctx (JE_Bytes len hex) =
-    Literal (BytesL (Dynamic len) (hex_string_to_bytes (strip_0x hex)))) /\
+    Literal (BytesL (Dynamic len) (hex_string_to_bytes (FILTER isHexDigit (strip_0x hex))))) /\
 
   (translate_expr ctx (JE_Hex hex) =
-    let bytes = hex_string_to_bytes (strip_0x hex) in
+    let bytes = hex_string_to_bytes (FILTER isHexDigit (strip_0x hex)) in
     Literal (BytesL (Fixed (LENGTH bytes)) bytes)) /\
 
   (translate_expr ctx (JE_Bool b) = Literal (BoolL b)) /\
@@ -605,12 +627,18 @@ Definition translate_expr_def:
     else if obj = "chain" /\ attr = "id" then Builtin (Env ChainId) []
     else if obj = "self" /\ attr = "balance" then
       Builtin (Acc Balance) [Builtin (Env SelfAddr) []]
+    else if obj = "self" /\ attr = "code" then
+      Builtin (Acc Code) [Builtin (Env SelfAddr) []]
     (* self.x: use attr_src_id_opt from variable_reads for cross-module storage access *)
     else if obj = "self" then TopLevelName (source_id_to_nsid (FST ctx) attr_src_id_opt, attr)
     (* Module variable access (lib1.x): use src_id_opt from module type *)
     else if tc = SOME "module" then TopLevelName (source_id_to_nsid (FST ctx) src_id_opt, attr)
     else if attr = "balance" then Builtin (Acc Balance) [make_name ctx obj]
     else if attr = "address" then Builtin (Acc Address) [make_name ctx obj]
+    else if attr = "is_contract" then Builtin (Acc IsContract) [make_name ctx obj]
+    else if attr = "codesize" then Builtin (Acc Codesize) [make_name ctx obj]
+    else if attr = "codehash" then Builtin (Acc Codehash) [make_name ctx obj]
+    else if attr = "code" then Builtin (Acc Code) [make_name ctx obj]
     else Attribute (make_name ctx obj) attr) /\
 
   (* General attribute - handles nested and simple cases *)
@@ -625,6 +653,10 @@ Definition translate_expr_def:
       TopLevelName (source_id_to_nsid (FST ctx) attr_src_id_opt, attr)
     else if attr = "balance" then Builtin (Acc Balance) [translate_expr ctx e]
     else if attr = "address" then Builtin (Acc Address) [translate_expr ctx e]
+    else if attr = "is_contract" then Builtin (Acc IsContract) [translate_expr ctx e]
+    else if attr = "codesize" then Builtin (Acc Codesize) [translate_expr ctx e]
+    else if attr = "codehash" then Builtin (Acc Codehash) [translate_expr ctx e]
+    else if attr = "code" then Builtin (Acc Code) [translate_expr ctx e]
     else Attribute (translate_expr ctx e) attr) /\
 
   (* Subscript *)

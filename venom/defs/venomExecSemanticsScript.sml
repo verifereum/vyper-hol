@@ -86,6 +86,7 @@ Datatype:
     | Revert venom_state          (* Revert termination *)
     | IntRet (bytes32 list) venom_state  (* Internal function return (RET) *)
     | Error string                (* Execution error *)
+    | IntRet (bytes32 list) venom_state  (* Internal function return *)
 End
 
 (* --------------------------------------------------------------------------
@@ -537,6 +538,25 @@ Definition step_inst_def:
     (* NOP *)
     | NOP => OK s
 
+    (* Internal function call - PARAM reads from vs_params by index *)
+    | PARAM =>
+        (case inst.inst_operands of
+          [Lit idx] =>
+            let i = w2n idx in
+            (case inst.inst_outputs of
+              [out] =>
+                if i < LENGTH s.vs_params then
+                  OK (update_var out (EL i s.vs_params) s)
+                else Error "param index out of bounds"
+            | _ => Error "param requires single output")
+        | _ => Error "param requires literal index operand")
+
+    (* Internal function return - RET evaluates operands and returns IntRet *)
+    | RET =>
+        (case eval_operands inst.inst_operands s of
+          SOME vals => IntRet vals s
+        | NONE => Error "ret: undefined operand")
+
     (* Environment - Call context *)
     | CALLER => exec_read0 (\s. w2w s.vs_call_ctx.cc_caller) inst s
     | ADDRESS => exec_read0 (\s. w2w s.vs_call_ctx.cc_address) inst s
@@ -886,12 +906,18 @@ Proof
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
   fs[update_var_def, mstore_def, sstore_def, tstore_def,
      write_memory_with_expansion_def, mcopy_def,
-     revert_state_def]
+     revert_state_def, eval_operands_def]
 QED
 
-(* Step within a basic block - returns (result, is_terminator) *)
-Definition step_in_block_def:
-  step_in_block bb s =
+(* --------------------------------------------------------------------------
+   Block Step (single instruction within a block)
+
+   Does NOT handle INVOKE — use run_block for cross-function execution.
+   Useful as a single-step abstraction for pass correctness proofs.
+   -------------------------------------------------------------------------- *)
+
+Definition block_step_def:
+  block_step bb s =
     case get_instruction bb s.vs_inst_idx of
       NONE => (Error "block not terminated", T)
     | SOME inst =>
@@ -905,46 +931,178 @@ Definition step_in_block_def:
         | Error e => (Error e, T)
 End
 
-(* Run a basic block until we hit a terminator *)
-Definition run_block_def:
-  run_block bb s =
-    case step_in_block bb s of
-      (OK s', is_term) =>
-        if s'.vs_halted then Halt s'
-        else if is_term then OK s'
-        else run_block bb s'
-    | (Halt s', _) => Halt s'
-    | (Revert s', _) => Revert s'
-    | (IntRet vals s', _) => IntRet vals s'
-    | (Error e, _) => Error e
-Termination
-  (* Termination measure: remaining instructions in block.
-     Each non-terminator step increments inst_idx via next_inst, so measure decreases.
-     Terminators exit the loop immediately (is_term = T). *)
-  WF_REL_TAC `measure (\(bb, s). LENGTH bb.bb_instructions - s.vs_inst_idx)` >>
-  rw[step_in_block_def] >>
-  gvs[AllCaseEqs()] >>
-  (* Now we have:
-     - get_instruction bb s.vs_inst_idx = SOME inst
-     - step_inst inst s = OK s''
-     - ~is_terminator inst.inst_opcode (since is_term = F)
-     - s' = next_inst s'' *)
-  imp_res_tac step_inst_preserves_inst_idx >>
-  fs[next_inst_def, get_instruction_def]
+(* --------------------------------------------------------------------------
+   INVOKE Helpers
+   -------------------------------------------------------------------------- *)
+
+(* Side-effect merge: keep callee's shared mutable state, caller's locals *)
+Definition merge_callee_state_def:
+  merge_callee_state caller callee =
+    caller with <|
+      vs_memory     := callee.vs_memory;
+      vs_storage    := callee.vs_storage;
+      vs_transient  := callee.vs_transient;
+      vs_accounts   := callee.vs_accounts;
+      vs_returndata := callee.vs_returndata
+    |>
 End
 
-(* Run a function from current state - uses fuel for termination *)
-Definition run_function_def:
-  run_function fuel fn s =
+(* Prepare callee state: fresh vars, params, entry block *)
+Definition setup_callee_def:
+  setup_callee fn args s =
+    if NULL fn.fn_blocks then NONE
+    else SOME (s with <|
+      vs_vars       := FEMPTY;
+      vs_params     := args;
+      vs_current_bb := (HD fn.fn_blocks).bb_label;
+      vs_inst_idx   := 0;
+      vs_prev_bb    := NONE;
+      vs_halted     := F;
+      vs_reverted   := F
+    |>)
+End
+
+(* Decode INVOKE operands: first is Label (callee name), rest are args *)
+Definition decode_invoke_def:
+  decode_invoke inst =
+    case inst.inst_operands of
+      (Label callee_name :: arg_ops) => SOME (callee_name, arg_ops)
+    | _ => NONE
+End
+
+(* Bind return values to output variables *)
+Definition bind_outputs_def:
+  bind_outputs outs vals s =
+    if LENGTH outs = LENGTH vals then
+      SOME (FOLDL (\s' (out, val). update_var out val s') s (ZIP (outs, vals)))
+    else NONE
+End
+
+(* --------------------------------------------------------------------------
+   Preservation lemmas (needed by run_block/run_function termination proof)
+   -------------------------------------------------------------------------- *)
+
+Theorem merge_callee_state_inst_idx:
+  (merge_callee_state c e).vs_inst_idx = c.vs_inst_idx
+Proof
+  simp[merge_callee_state_def]
+QED
+
+Theorem update_var_inst_idx:
+  (update_var x v s).vs_inst_idx = s.vs_inst_idx
+Proof
+  simp[update_var_def]
+QED
+
+Theorem foldl_update_var_inst_idx:
+  !kvs s. (FOLDL (\s' (k,v). update_var k v s') s kvs).vs_inst_idx =
+          s.vs_inst_idx
+Proof
+  Induct >> simp[pairTheory.FORALL_PROD] >>
+  rw[Once update_var_def] >> simp[update_var_inst_idx]
+QED
+
+Theorem bind_outputs_inst_idx:
+  bind_outputs outs vals s = SOME s' ==> s'.vs_inst_idx = s.vs_inst_idx
+Proof
+  rw[bind_outputs_def] >> gvs[foldl_update_var_inst_idx]
+QED
+
+(* --------------------------------------------------------------------------
+   Block and Function Execution (mutually recursive)
+
+   run_block intercepts INVOKE for cross-function calls; delegates all
+   other opcodes to step_inst.  run_function dispatches blocks using fuel.
+
+   Fuel bounds function-call depth (not instruction count).  Within a
+   block, termination is structural (inst_idx increases toward block end).
+   -------------------------------------------------------------------------- *)
+
+Definition run_block_def:
+  (run_block fuel ctx bb s =
+    case get_instruction bb s.vs_inst_idx of
+      NONE => Error "block not terminated"
+    | SOME inst =>
+        if inst.inst_opcode = INVOKE then
+          case decode_invoke inst of
+            NONE => Error "invoke: bad operand format"
+          | SOME (callee_name, arg_ops) =>
+              case lookup_function callee_name ctx.ctx_functions of
+                NONE => Error "invoke: function not found"
+              | SOME callee_fn =>
+                  case eval_operands arg_ops s of
+                    NONE => Error "invoke: undefined argument"
+                  | SOME args =>
+                      case setup_callee callee_fn args s of
+                        NONE => Error "invoke: empty function"
+                      | SOME callee_s =>
+                          case run_function fuel ctx callee_fn callee_s of
+                            IntRet vals callee_s' =>
+                              (case bind_outputs inst.inst_outputs vals
+                                      (merge_callee_state s callee_s') of
+                                SOME s' =>
+                                  run_block fuel ctx bb (next_inst s')
+                              | NONE =>
+                                  Error "invoke: return arity mismatch")
+                          | Halt s' => Halt s'
+                          | Revert s' => Revert s'
+                          | Error e => Error e
+                          | OK _ => Error "invoke: callee did not return"
+        else
+          case step_inst inst s of
+            OK s' =>
+              if is_terminator inst.inst_opcode then
+                if s'.vs_halted then Halt s' else OK s'
+              else run_block fuel ctx bb (next_inst s')
+          | IntRet vals s' => IntRet vals s'
+          | Halt s' => Halt s'
+          | Revert s' => Revert s'
+          | Error e => Error e)
+/\
+  (run_function fuel ctx fn s =
     case fuel of
       0 => Error "out of fuel"
     | SUC fuel' =>
         case lookup_block s.vs_current_bb fn.fn_blocks of
           NONE => Error "block not found"
         | SOME bb =>
-            case run_block bb s of
+            case run_block fuel' ctx bb s of
               OK s' =>
                 if s'.vs_halted then Halt s'
-                else run_function fuel' fn s'
-            | other => other
+                else run_function fuel' ctx fn s'
+            | IntRet vals s' => IntRet vals s'
+            | other => other)
+Termination
+  WF_REL_TAC `inv_image ($< LEX $<)
+    (\x. case x of
+      | INL (fuel, ctx, bb, s) =>
+          (fuel, LENGTH bb.bb_instructions - s.vs_inst_idx)
+      | INR (fuel, ctx, fn, s) => (fuel, 0))` >>
+  rpt strip_tac >>
+  imp_res_tac step_inst_preserves_inst_idx >>
+  imp_res_tac bind_outputs_inst_idx >>
+  gvs[next_inst_def, merge_callee_state_inst_idx, get_instruction_def]
+End
+
+(* --------------------------------------------------------------------------
+   Context Entry Point
+   -------------------------------------------------------------------------- *)
+
+Definition run_context_def:
+  run_context fuel ctx s =
+    case ctx.ctx_entry of
+      NONE => Error "no entry function"
+    | SOME entry_name =>
+        case lookup_function entry_name ctx.ctx_functions of
+          NONE => Error "entry function not found"
+        | SOME entry_fn =>
+            case entry_block entry_fn of
+              NONE => Error "empty entry function"
+            | SOME entry_bb =>
+                run_function fuel ctx entry_fn
+                  (s with <|
+                    vs_current_bb := entry_bb.bb_label;
+                    vs_inst_idx   := 0;
+                    vs_prev_bb    := NONE
+                  |>)
 End

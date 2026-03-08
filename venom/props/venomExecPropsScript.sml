@@ -86,29 +86,29 @@ Proof
 QED
 
 (* ==========================================================================
-   step_in_block / run_block Properties
+   block_step / run_block Properties
    ========================================================================== *)
 
 (* Non-terminator step increments instruction index by one *)
-Theorem step_in_block_increments_idx:
+Theorem block_step_increments_idx:
   !bb s v.
-    step_in_block bb s = (OK v, F)
+    block_step bb s = (OK v, F)
     ==>
     v.vs_inst_idx = SUC s.vs_inst_idx
 Proof
-  ACCEPT_TAC venomExecProofsTheory.step_in_block_increments_idx
+  ACCEPT_TAC venomExecProofsTheory.block_step_increments_idx
 QED
 
 (* Block returning OK means state is not halted *)
 Theorem run_block_OK_not_halted:
-  !bb s v. run_block bb s = OK v ==> ~v.vs_halted
+  !fuel ctx bb s v. run_block fuel ctx bb s = OK v ==> ~v.vs_halted
 Proof
   ACCEPT_TAC venomExecProofsTheory.run_block_OK_not_halted
 QED
 
 (* Block returning OK resets instruction index to 0 *)
 Theorem run_block_OK_inst_idx_0:
-  !bb s v. run_block bb s = OK v ==> v.vs_inst_idx = 0
+  !fuel ctx bb s v. run_block fuel ctx bb s = OK v ==> v.vs_inst_idx = 0
 Proof
   ACCEPT_TAC venomExecProofsTheory.run_block_OK_inst_idx_0
 QED
@@ -126,16 +126,16 @@ Proof
 QED
 
 (* Blocks with same instruction prefix produce same step result *)
-Theorem step_in_block_prefix_same:
+Theorem block_step_prefix_same:
   !bb1 bb2 s n.
     TAKE (SUC n) bb1.bb_instructions = TAKE (SUC n) bb2.bb_instructions /\
     s.vs_inst_idx = n /\
     n < LENGTH bb1.bb_instructions /\
     n < LENGTH bb2.bb_instructions
   ==>
-    step_in_block bb1 s = step_in_block bb2 s
+    block_step bb1 s = block_step bb2 s
 Proof
-  ACCEPT_TAC venomExecProofsTheory.step_in_block_prefix_same
+  ACCEPT_TAC venomExecProofsTheory.block_step_prefix_same
 QED
 
 (* ==========================================================================

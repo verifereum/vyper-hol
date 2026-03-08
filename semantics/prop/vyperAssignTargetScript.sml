@@ -388,9 +388,9 @@ QED
 (* Lemma: for ImmutableVar Replace, lookup_immutable returns the new value *)
 Theorem assign_target_immutable_replace_gives_lookup:
   ∀cx st n v res st'.
-    IS_SOME (lookup_immutable cx st n) ∧
+    IS_SOME (lookup_immutable cx st (current_module cx) n) ∧
     assign_target cx (BaseTargetV (ImmutableVar n) []) (Replace v) st = (INL res, st') ⇒
-    lookup_immutable cx st' n = SOME v
+    lookup_immutable cx st' (current_module cx) n = SOME v
 Proof
   rw[lookup_immutable_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[] >>
@@ -410,10 +410,10 @@ QED
 (* Lemma: for ImmutableVar Update, lookup_immutable returns the computed value *)
 Theorem assign_target_immutable_update_gives_lookup:
   ∀cx st n bop v1 v2 v res st'.
-    lookup_immutable cx st n = SOME v1 ∧
+    lookup_immutable cx st (current_module cx) n = SOME v1 ∧
     evaluate_binop bop v1 v2 = INL v ∧
     assign_target cx (BaseTargetV (ImmutableVar n) []) (Update bop v2) st = (INL res, st') ⇒
-    lookup_immutable cx st' n = SOME v
+    lookup_immutable cx st' (current_module cx) n = SOME v
 Proof
   rw[lookup_immutable_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[] >>

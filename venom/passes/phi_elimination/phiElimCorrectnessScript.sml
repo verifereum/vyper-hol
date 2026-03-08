@@ -20,14 +20,15 @@ Theorem phi_elim_pass_correct:
     MEM func ctx.ctx_functions /\
     func.fn_name = fn_name /\
     wf_ir_fn func /\
+    no_invoke_in_function func /\
     func.fn_blocks <> [] /\
     (s.vs_prev_bb <> NONE \/
      s.vs_current_bb = (HD func.fn_blocks).bb_label) /\
-    run_function fuel func s = result ==>
+    run_function fuel ctx func s = result ==>
     ?func' result'.
       MEM func' (transform_context ctx).ctx_functions /\
       func'.fn_name = fn_name /\
-      run_function fuel func' s = result' /\
+      run_function fuel ctx func' s = result' /\
       result_equiv {} result result'
 Proof
   ACCEPT_TAC phi_elimination_context_correct

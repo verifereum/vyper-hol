@@ -283,6 +283,49 @@ Proof
   fs[state_equiv_def, execution_equiv_def, lookup_var_def]
 QED
 
+(* Internal function call: PARAM, RET *)
+Triviality step_inst_param_equiv:
+  !vars inst s1 s2.
+    state_equiv vars s1 s2 /\
+    inst.inst_opcode = PARAM ==>
+    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> simp[step_inst_def] >>
+  `s1.vs_params = s2.vs_params` by
+    fs[state_equiv_def, execution_equiv_def] >>
+  rpt CASE_TAC >> gvs[result_equiv_def] >>
+  irule update_var_preserves >> simp[]
+QED
+
+Triviality eval_operands_equiv:
+  !vars ops s1 s2.
+    state_equiv vars s1 s2 /\
+    (!x. MEM (Var x) ops ==> x NOTIN vars) ==>
+    eval_operands ops s1 = eval_operands ops s2
+Proof
+  Induct_on `ops` >> rw[eval_operands_def] >>
+  `eval_operand h s1 = eval_operand h s2` by (
+    irule eval_operand_equiv >> simp[] >> metis_tac[]) >>
+  `eval_operands ops s1 = eval_operands ops s2` by (
+    first_x_assum irule >> simp[] >> metis_tac[]) >>
+  simp[]
+QED
+
+Triviality step_inst_ret_equiv:
+  !vars inst s1 s2.
+    state_equiv vars s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
+    inst.inst_opcode = RET ==>
+    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> simp[step_inst_def] >>
+  `eval_operands inst.inst_operands s1 =
+   eval_operands inst.inst_operands s2` by (
+    irule eval_operands_equiv >> simp[] >> metis_tac[]) >>
+  simp[] >> rpt CASE_TAC >> gvs[result_equiv_def] >>
+  fs[state_equiv_def]
+QED
+
 (* Hash: SHA3 *)
 Triviality step_inst_sha3_equiv:
   !vars inst s1 s2.
@@ -710,19 +753,19 @@ Proof
 QED
 
 (* ==========================================================================
-   step_in_block Preserves Equivalence
+   block_step Preserves Equivalence
    ========================================================================== *)
 
-Triviality step_in_block_result_equiv:
+Triviality block_step_result_equiv:
   !vars bb s1 s2.
     state_equiv vars s1 s2 /\
     (!inst. MEM inst bb.bb_instructions ==>
             !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) ==>
-    let (r1, t1) = step_in_block bb s1 in
-    let (r2, t2) = step_in_block bb s2 in
+    let (r1, t1) = block_step bb s1 in
+    let (r2, t2) = block_step bb s2 in
     t1 = t2 /\ result_equiv vars r1 r2
 Proof
-  rw[step_in_block_def, LET_THM] >>
+  rw[block_step_def, LET_THM] >>
   `s1.vs_inst_idx = s2.vs_inst_idx` by
     fs[state_equiv_def, execution_equiv_def] >>
   simp[] >>
@@ -747,48 +790,67 @@ QED
    run_block Preserves Equivalence
    ========================================================================== *)
 
-(* Induction on run_block to show result_equiv is preserved *)
+(* Induction on run_block to show result_equiv is preserved.
+   Requires no INVOKE instructions in block (for cross-function equiv,
+   use run_function-level simulation). *)
 Theorem run_block_result_equiv:
-  !vars bb s1 s2.
+  !fuel ctx vars bb s1 s2.
     state_equiv vars s1 s2 /\
+    EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions /\
     (!inst. MEM inst bb.bb_instructions ==>
             !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) ==>
-    result_equiv vars (run_block bb s1) (run_block bb s2)
+    result_equiv vars (run_block fuel ctx bb s1) (run_block fuel ctx bb s2)
 Proof
-  gen_tac >>
-  `!bb s1. (!inst. MEM inst bb.bb_instructions ==>
-              !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) ==>
-           !s2. state_equiv vars s1 s2 ==>
-           result_equiv vars (run_block bb s1) (run_block bb s2)`
-    suffices_by metis_tac[] >>
-  ho_match_mp_tac run_block_ind >> rw[] >>
+  rpt gen_tac >> strip_tac >>
+  pop_assum mp_tac >> pop_assum mp_tac >> pop_assum mp_tac >>
+  MAP_EVERY qid_spec_tac [`s2`, `s1`, `bb`, `ctx`, `fuel`] >>
+  ho_match_mp_tac (cj 1 run_block_ind) >>
+  qexists_tac `\fuel ctx fn s. T` >> rw[] >>
+  (* Unfold both LHS and RHS *)
   simp[Once run_block_def] >>
-  drule_all step_in_block_result_equiv >>
-  Cases_on `step_in_block bb s1` >>
-  Cases_on `step_in_block bb s2` >>
-  simp[LET_THM] >> strip_tac >>
-  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >> simp[] >>
-  Cases_on `q` >> Cases_on `q'` >> gvs[result_equiv_def] >>
-  `v.vs_halted = v'.vs_halted` by
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+  `s1.vs_inst_idx = s2.vs_inst_idx` by
     fs[state_equiv_def, execution_equiv_def] >>
-  Cases_on `v.vs_halted` >> gvs[] >-
-    (simp[result_equiv_def] >> fs[state_equiv_def]) >>
-  Cases_on `r` >> gvs[result_equiv_def] >>
-  first_x_assum irule >> simp[] >> first_x_assum ACCEPT_TAC
+  Cases_on `get_instruction bb s1.vs_inst_idx` >>
+  gvs[result_equiv_def] >>
+  rename1 `get_instruction bb _ = SOME inst` >>
+  (* No INVOKE in this block *)
+  `inst.inst_opcode <> INVOKE` by
+    (gvs[listTheory.EVERY_MEM, get_instruction_def] >>
+     first_x_assum irule >> irule listTheory.EL_MEM >> simp[]) >>
+  simp[] >> gvs[] >>
+  (* Derive operand condition for this specific inst *)
+  `!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars` by
+    (gvs[get_instruction_def] >> metis_tac[listTheory.EL_MEM]) >>
+  drule_all step_inst_result_equiv >> strip_tac >>
+  Cases_on `step_inst inst s1` >> Cases_on `step_inst inst s2` >>
+  gvs[result_equiv_def] >>
+  Cases_on `is_terminator inst.inst_opcode` >> gvs[] >-
+    (* Terminator: check vs_halted *)
+    (`v.vs_halted = v'.vs_halted` by
+       fs[state_equiv_def, execution_equiv_def] >>
+     Cases_on `v.vs_halted` >> gvs[result_equiv_def] >>
+     fs[state_equiv_def]) >>
+  (* Non-terminator: recurse via IH *)
+  first_x_assum irule >> simp[] >>
+  fs[state_equiv_def, execution_equiv_def, next_inst_def] >>
+  simp[lookup_var_def] >> metis_tac[lookup_var_def]
 QED
 
 (* Corollary: OK case gives state_equiv *)
 Theorem run_block_state_equiv:
-  !vars bb s1 s2 r1.
+  !fuel ctx vars bb s1 s2 r1.
     state_equiv vars s1 s2 /\
+    EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions /\
     (!inst. MEM inst bb.bb_instructions ==>
             !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
-    run_block bb s1 = OK r1
+    run_block fuel ctx bb s1 = OK r1
   ==>
-    ?r2. run_block bb s2 = OK r2 /\ state_equiv vars r1 r2
+    ?r2. run_block fuel ctx bb s2 = OK r2 /\ state_equiv vars r1 r2
 Proof
   rw[] >>
-  drule_all run_block_result_equiv >>
-  simp[result_equiv_def] >>
-  Cases_on `run_block bb s2` >> gvs[result_equiv_def]
+  `result_equiv vars (run_block fuel ctx bb s1) (run_block fuel ctx bb s2)` by
+    (irule run_block_result_equiv >> metis_tac[]) >>
+  gvs[result_equiv_def] >>
+  Cases_on `run_block fuel ctx bb s2` >> gvs[result_equiv_def]
 QED

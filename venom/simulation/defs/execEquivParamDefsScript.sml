@@ -41,7 +41,8 @@ Definition valid_state_rel_def:
       s1.vs_halted = s2.vs_halted /\
       s1.vs_prev_bb = s2.vs_prev_bb /\
       s1.vs_current_bb = s2.vs_current_bb /\
-      s1.vs_inst_idx = s2.vs_inst_idx) /\
+      s1.vs_inst_idx = s2.vs_inst_idx /\
+      s1.vs_params = s2.vs_params) /\
     (* R_term preserves execution-relevant fields (may omit control flow) *)
     (!s1 s2. R_term s1 s2 ==>
       s1.vs_call_ctx = s2.vs_call_ctx /\
@@ -52,7 +53,8 @@ Definition valid_state_rel_def:
       s1.vs_storage = s2.vs_storage /\
       s1.vs_transient = s2.vs_transient /\
       s1.vs_returndata = s2.vs_returndata /\
-      s1.vs_halted = s2.vs_halted) /\
+      s1.vs_halted = s2.vs_halted /\
+      s1.vs_params = s2.vs_params) /\
     (* Both closed under var update *)
     (!s1 s2 x v. R_ok s1 s2 ==>
                   R_ok (update_var x v s1) (update_var x v s2)) /\

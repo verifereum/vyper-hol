@@ -28,7 +28,7 @@ Theorem run_block_iszero_assert_reverts:
     let id = (EL s.vs_inst_idx bb.bb_instructions).inst_id in
     let fresh_var = fresh_iszero_var id in
     let s1 = next_inst (update_var fresh_var 0w s) in
-    run_block bb' s = Revert (revert_state s1)
+    run_block fuel ctx bb' s = Revert (revert_state s1)
 Proof
   rw[LET_THM, transform_block_def] >>
   (* Establish length bounds *)
@@ -42,12 +42,12 @@ Proof
   drule_all rtaHelpersTheory.pattern1_transformed_instructions >>
   simp[LET_THM] >> strip_tac >>
   (* Step 1: Execute ISZERO *)
-  simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+  simp[Once run_block_def, block_step_def, get_instruction_def] >>
   simp[mk_iszero_inst_def, step_inst_def, exec_pure1_def, eval_operand_def] >>
   simp[EVAL ``is_terminator ISZERO``, bool_to_word_F] >>
   simp[next_inst_def, update_var_def] >>
   (* Step 2: Execute ASSERT with 0w *)
-  simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+  simp[Once run_block_def, block_step_def, get_instruction_def] >>
   simp[mk_assert_inst_def, step_inst_def] >>
   simp[eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   simp[revert_state_def]
@@ -67,7 +67,7 @@ Theorem run_block_iszero_assert_jumps:
     let id = (EL s.vs_inst_idx bb.bb_instructions).inst_id in
     let fresh_var = fresh_iszero_var id in
     let s1 = update_var fresh_var 1w s in
-    run_block bb' s = OK (jump_to if_zero s1)
+    run_block fuel ctx bb' s = OK (jump_to if_zero s1)
 Proof
   rw[LET_THM, transform_block_def] >>
   (* Establish length bounds *)
@@ -83,17 +83,17 @@ Proof
   drule_all rtaHelpersTheory.pattern1_transformed_instructions >>
   simp[LET_THM] >> strip_tac >>
   (* Step 1: Execute ISZERO - produces bool_to_word T = 1w *)
-  simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+  simp[Once run_block_def, block_step_def, get_instruction_def] >>
   simp[mk_iszero_inst_def, step_inst_def, exec_pure1_def, eval_operand_def] >>
   simp[EVAL ``is_terminator ISZERO``, bool_to_word_T] >>
   simp[next_inst_def, update_var_def] >>
   (* Step 2: Execute ASSERT with 1w - passes *)
-  simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+  simp[Once run_block_def, block_step_def, get_instruction_def] >>
   simp[mk_assert_inst_def, step_inst_def] >>
   simp[eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   simp[EVAL ``is_terminator ASSERT``, next_inst_def] >>
   (* Step 3: Execute JMP *)
-  simp[Once run_block_def, step_in_block_def, get_instruction_def] >>
+  simp[Once run_block_def, block_step_def, get_instruction_def] >>
   simp[mk_jmp_inst_def, step_inst_def] >>
   simp[EVAL ``is_terminator JMP``, jump_to_def]
 QED
@@ -175,8 +175,8 @@ Theorem pattern1_nonzero_execution:
     (* Properties *)
     fresh_var IN fresh_vars /\
     step_inst (EL s.vs_inst_idx bb.bb_instructions) s = OK (jump_to if_nonzero s) /\
-    run_block bb s = OK (jump_to if_nonzero s) /\
-    run_block bb' s = Revert (revert_state s1) /\
+    run_block fuel ctx bb s = OK (jump_to if_nonzero s) /\
+    run_block fuel ctx bb' s = Revert (revert_state s1) /\
     (jump_to if_nonzero s).vs_current_bb = if_nonzero /\
     execution_equiv fresh_vars (revert_state (jump_to if_nonzero s)) (revert_state s1)
 Proof
@@ -186,7 +186,7 @@ Proof
     (* Original JNZ step *)
     simp[step_inst_def],
     (* Original run_block *)
-    simp[Once run_block_def, step_in_block_def, get_instruction_def,
+    simp[Once run_block_def, block_step_def, get_instruction_def,
          step_inst_def, EVAL ``is_terminator JNZ``, jump_to_def],
     (* Transformed run_block *)
     drule_all run_block_iszero_assert_reverts >> simp[LET_THM],
@@ -220,8 +220,8 @@ Theorem pattern1_zero_execution:
     (* Properties *)
     fresh_var IN fresh_vars /\
     step_inst (EL s.vs_inst_idx bb.bb_instructions) s = OK (jump_to if_zero s) /\
-    run_block bb s = OK (jump_to if_zero s) /\
-    run_block bb' s = OK s2 /\
+    run_block fuel ctx bb s = OK (jump_to if_zero s) /\
+    run_block fuel ctx bb' s = OK s2 /\
     state_equiv fresh_vars (jump_to if_zero s) s2
 Proof
   rw[LET_THM] >| [
@@ -230,7 +230,7 @@ Proof
     (* Original JNZ step *)
     simp[step_inst_def],
     (* Original run_block *)
-    simp[Once run_block_def, step_in_block_def, get_instruction_def,
+    simp[Once run_block_def, block_step_def, get_instruction_def,
          step_inst_def, EVAL ``is_terminator JNZ``, jump_to_def],
     (* Transformed run_block *)
     drule_all run_block_iszero_assert_jumps >> simp[LET_THM],
