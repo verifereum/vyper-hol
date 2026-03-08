@@ -115,7 +115,7 @@ QED
 
 (* Every label in the function dominates itself.
    For unreachable blocks this holds vacuously (dom set = all labels from init,
-   since dom_transfer only visits reachable blocks in cfg_dfs_post order). *)
+   since df_analyze only processes reachable blocks via worklist). *)
 Theorem dom_self:
   ∀fn cfg lbl.
     wf_function fn ∧
