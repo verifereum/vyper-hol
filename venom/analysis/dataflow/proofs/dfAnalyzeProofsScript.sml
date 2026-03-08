@@ -178,25 +178,17 @@ Proof
   cheat
 QED
 
-(* Lattice-to-process lifting: if join/transfer/edge_transfer are monotone
-   w.r.t. an element-level ordering, then df_process_block is inflationary
-   w.r.t. the pointwise boundary ordering.
-   elem_leq: ordering on lattice elements (e.g., set inclusion).
-   Preconditions: join is an upper bound, transfer and edge_transfer monotone.
-   Note: only boundary values are tracked — inst values are overwritten
+(* Lattice-to-process lifting: join-upper-bound implies df_process_block
+   is inflationary w.r.t. the pointwise boundary ordering.
+   Processing block lbl sets boundary(lbl) := join old final_val, which
+   is ≥ old by the upper-bound property. Other boundaries are unchanged.
+   Only boundary values are tracked — inst values are overwritten
    on each processing and are fully determined by boundaries at fixpoint. *)
 Theorem df_process_inflationary_proof:
   !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx
    entry_val cfg bbs (elem_leq : 'a -> 'a -> bool).
     reflexive elem_leq /\
-    transitive elem_leq /\
-    (!a b. elem_leq a (join a b)) /\
-    (!a b c. elem_leq b c ==> elem_leq (join a b) (join a c)) /\
-    (!inst a b. elem_leq a b ==>
-       elem_leq (transfer ctx inst a) (transfer ctx inst b)) /\
-    (!src dst a b. elem_leq a b ==>
-       elem_leq (edge_transfer ctx src dst a)
-                (edge_transfer ctx src dst b))
+    (!a b. elem_leq a (join a b))
   ==>
     let process = df_process_block dir bottom join transfer edge_transfer
                                    ctx entry_val cfg bbs in

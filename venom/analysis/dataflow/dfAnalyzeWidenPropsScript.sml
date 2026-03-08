@@ -114,22 +114,15 @@ Proof
   ACCEPT_TAC df_analyze_widen_invariant_proof
 QED
 
-(* Monotone ops + widen inflationary → process is inflationary
-   w.r.t. pointwise boundary ordering. *)
+(* Join-upper-bound → process is inflationary w.r.t. pointwise
+   boundary ordering. Same argument as base variant: boundary(lbl) :=
+   join old final_val ≥ old. Widening affects entry, not boundary. *)
 Theorem df_process_widen_inflationary:
   !(dir : direction) (bottom : 'a) join widen threshold
    transfer edge_transfer ctx entry_val cfg bbs
    (elem_leq : 'a -> 'a -> bool).
     reflexive elem_leq /\
-    transitive elem_leq /\
-    (!a b. elem_leq a (join a b)) /\
-    (!a b c. elem_leq b c ==> elem_leq (join a b) (join a c)) /\
-    (!a b. elem_leq b (widen a b)) /\
-    (!inst a b. elem_leq a b ==>
-       elem_leq (transfer ctx inst a) (transfer ctx inst b)) /\
-    (!src dst a b. elem_leq a b ==>
-       elem_leq (edge_transfer ctx src dst a)
-                (edge_transfer ctx src dst b))
+    (!a b. elem_leq a (join a b))
   ==>
     let process = df_process_block_widen dir bottom join widen threshold
                     transfer edge_transfer ctx entry_val cfg bbs in

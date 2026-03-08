@@ -128,22 +128,16 @@ Proof
   ACCEPT_TAC df_analyze_invariant_proof
 QED
 
-(* Lattice-to-process lifting: monotone lattice operations imply
-   df_process_block is inflationary w.r.t. the pointwise boundary ordering.
-   Inst values are overwritten on each processing — only boundaries
-   drive worklist convergence. *)
+(* Lattice-to-process lifting: join-upper-bound implies df_process_block
+   is inflationary w.r.t. the pointwise boundary ordering.
+   Processing block lbl sets boundary(lbl) := join old final_val, which
+   is ≥ old by the upper-bound property. Other boundaries are unchanged.
+   Inst values are overwritten — only boundaries drive convergence. *)
 Theorem df_process_inflationary:
   !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx
    entry_val cfg bbs (elem_leq : 'a -> 'a -> bool).
     reflexive elem_leq /\
-    transitive elem_leq /\
-    (!a b. elem_leq a (join a b)) /\
-    (!a b c. elem_leq b c ==> elem_leq (join a b) (join a c)) /\
-    (!inst a b. elem_leq a b ==>
-       elem_leq (transfer ctx inst a) (transfer ctx inst b)) /\
-    (!src dst a b. elem_leq a b ==>
-       elem_leq (edge_transfer ctx src dst a)
-                (edge_transfer ctx src dst b))
+    (!a b. elem_leq a (join a b))
   ==>
     let process = df_process_block dir bottom join transfer edge_transfer
                                    ctx entry_val cfg bbs in

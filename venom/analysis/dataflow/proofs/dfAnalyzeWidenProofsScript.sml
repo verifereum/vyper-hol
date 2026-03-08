@@ -127,25 +127,16 @@ Proof
   cheat
 QED
 
-(* Monotone lattice ops → df_process_block_widen is inflationary
-   w.r.t. the pointwise boundary ordering.
-   Requires widen to also be inflationary: widen old new ≥ new.
-   Boundary uses inflationary join (join old final_val), so convergence
-   follows from the same argument as the base variant. *)
+(* Join-upper-bound → df_process_block_widen is inflationary w.r.t.
+   the pointwise boundary ordering. Same argument as base variant:
+   boundary(lbl) := join old final_val ≥ old. Widening affects entry
+   (fold input), not boundary (fold output joined with old). *)
 Theorem df_process_widen_inflationary_proof:
   !(dir : direction) (bottom : 'a) join widen threshold
    transfer edge_transfer ctx entry_val cfg bbs
    (elem_leq : 'a -> 'a -> bool).
     reflexive elem_leq /\
-    transitive elem_leq /\
-    (!a b. elem_leq a (join a b)) /\
-    (!a b c. elem_leq b c ==> elem_leq (join a b) (join a c)) /\
-    (!a b. elem_leq b (widen a b)) /\
-    (!inst a b. elem_leq a b ==>
-       elem_leq (transfer ctx inst a) (transfer ctx inst b)) /\
-    (!src dst a b. elem_leq a b ==>
-       elem_leq (edge_transfer ctx src dst a)
-                (edge_transfer ctx src dst b))
+    (!a b. elem_leq a (join a b))
   ==>
     let process = df_process_block_widen dir bottom join widen threshold
                     transfer edge_transfer ctx entry_val cfg bbs in
