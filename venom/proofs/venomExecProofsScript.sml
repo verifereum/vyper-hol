@@ -60,24 +60,33 @@ Proof
 QED
 
 (* WHY THIS IS TRUE: By step_inst_def, ASSERT evaluates its operand.
-   If cond = 0w, it returns Revert (revert_state s).
+   If cond = 0w, it aborts with empty returndata.
    If cond <> 0w, it returns OK s. *)
 Theorem step_assert_behavior:
   !s cond_op id cond.
     eval_operand cond_op s = SOME cond ==>
     step_inst <| inst_id := id; inst_opcode := ASSERT;
                  inst_operands := [cond_op]; inst_outputs := [] |> s =
-    if cond = 0w then Abort Revert_abort (revert_state s) else OK s
+    if cond = 0w then
+      Abort Revert_abort (revert_state (set_returndata [] s))
+    else OK s
 Proof
   rw[step_inst_def]
 QED
 
-(* WHY THIS IS TRUE: By step_inst_def, REVERT unconditionally returns
-   Revert (revert_state s) regardless of operands. *)
-Theorem step_revert_always_reverts:
-  !inst s.
-    inst.inst_opcode = REVERT ==>
-    step_inst inst s = Abort Revert_abort (revert_state s)
+(* WHY THIS IS TRUE: By step_inst_def, REVERT evaluates offset and size
+   operands, reads returndata from memory, and aborts with Revert_abort. *)
+Theorem step_revert_behavior:
+  !s off_op sz_op id off sz.
+    eval_operand off_op s = SOME off /\
+    eval_operand sz_op s = SOME sz ==>
+    step_inst <| inst_id := id; inst_opcode := REVERT;
+                 inst_operands := [off_op; sz_op]; inst_outputs := [] |> s =
+    Abort Revert_abort
+      (revert_state
+        (set_returndata
+          (TAKE (w2n sz) (DROP (w2n off) s.vs_memory ++ REPLICATE (w2n sz) 0w))
+          s))
 Proof
   rw[step_inst_def]
 QED

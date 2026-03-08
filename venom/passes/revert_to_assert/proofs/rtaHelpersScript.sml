@@ -48,7 +48,7 @@ fun SOLVE tac (g as (asl, w)) =
 
 (* ==========================================================================
    NOTE: bool_to_word properties and basic instruction behavior lemmas
-   (step_iszero_value, step_assert_behavior, step_revert_always_reverts,
+   (step_iszero_value, step_assert_behavior, step_revert_behavior,
    step_jnz_behavior, step_jmp_behavior) are now in venomExecPropsTheory.
    ========================================================================== *)
 
@@ -63,7 +63,7 @@ Theorem step_assert_zero_reverts:
     eval_operand cond_op s = SOME 0w ==>
     step_inst <| inst_id := id; inst_opcode := ASSERT;
                  inst_operands := [cond_op]; inst_outputs := [] |> s =
-    Abort Revert_abort (revert_state s)
+    Abort Revert_abort (revert_state (set_returndata [] s))
 Proof
   rw[] >> drule step_assert_behavior >> simp[]
 QED
@@ -101,20 +101,23 @@ QED
    (step_jmp_behavior is in venomExecPropsTheory)
    ========================================================================== *)
 
-(* WHY THIS IS TRUE: A block with only [revert 0 0] will:
-   1. block_step gets instruction at idx 0 -> the REVERT instruction
-   2. step_inst returns Revert (revert_state s)
-   3. run_block propagates this Revert result *)
+(* WHY THIS IS TRUE: A block with only [revert 0w 0w] will:
+   1. run_block gets instruction at idx 0 -> the REVERT instruction
+   2. step_inst evaluates Lit 0w, Lit 0w, reads TAKE 0 bytes = []
+   3. Returns Abort Revert_abort with returndata cleared to [] *)
 Theorem simple_revert_block_reverts:
   !fuel ctx bb s.
     is_simple_revert_block bb ==>
     run_block fuel ctx bb (s with vs_inst_idx := 0) =
-    Abort Revert_abort (revert_state (s with vs_inst_idx := 0))
+    Abort Revert_abort
+      (revert_state (set_returndata []
+        (s with vs_inst_idx := 0)))
 Proof
   rw[is_simple_revert_block_def] >>
   Cases_on `bb.bb_instructions` >> fs[] >>
   simp[Once run_block_def, get_instruction_def,
-       step_inst_def, is_terminator_def]
+       step_inst_def, is_terminator_def, eval_operand_def,
+       set_returndata_def]
 QED
 
 (* ==========================================================================
@@ -129,7 +132,9 @@ Theorem run_function_at_simple_revert:
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     fuel > 0 ==>
     run_function fuel ctx fn (s with vs_inst_idx := 0) =
-      Abort Revert_abort (revert_state (s with vs_inst_idx := 0))
+      Abort Revert_abort
+        (revert_state (set_returndata []
+          (s with vs_inst_idx := 0)))
 Proof
   rw[] >>
   Cases_on `fuel` >- fs[] >>

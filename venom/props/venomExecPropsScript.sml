@@ -42,24 +42,33 @@ Proof
   ACCEPT_TAC venomExecProofsTheory.step_iszero_value
 QED
 
-(* ASSERT reverts on zero, continues on nonzero *)
+(* ASSERT: aborts with empty returndata on zero, continues on nonzero *)
 Theorem step_assert_behavior:
   !s cond_op id cond.
     eval_operand cond_op s = SOME cond ==>
     step_inst <| inst_id := id; inst_opcode := ASSERT;
                  inst_operands := [cond_op]; inst_outputs := [] |> s =
-    if cond = 0w then Abort Revert_abort (revert_state s) else OK s
+    if cond = 0w then
+      Abort Revert_abort (revert_state (set_returndata [] s))
+    else OK s
 Proof
   ACCEPT_TAC venomExecProofsTheory.step_assert_behavior
 QED
 
-(* REVERT instruction always produces Abort Revert_abort result *)
-Theorem step_revert_always_reverts:
-  !inst s.
-    inst.inst_opcode = REVERT ==>
-    step_inst inst s = Abort Revert_abort (revert_state s)
+(* REVERT evaluates offset/size operands and aborts with returndata from memory *)
+Theorem step_revert_behavior:
+  !s off_op sz_op id off sz.
+    eval_operand off_op s = SOME off /\
+    eval_operand sz_op s = SOME sz ==>
+    step_inst <| inst_id := id; inst_opcode := REVERT;
+                 inst_operands := [off_op; sz_op]; inst_outputs := [] |> s =
+    Abort Revert_abort
+      (revert_state
+        (set_returndata
+          (TAKE (w2n sz) (DROP (w2n off) s.vs_memory ++ REPLICATE (w2n sz) 0w))
+          s))
 Proof
-  ACCEPT_TAC venomExecProofsTheory.step_revert_always_reverts
+  ACCEPT_TAC venomExecProofsTheory.step_revert_behavior
 QED
 
 (* JMP instruction jumps to the given label *)

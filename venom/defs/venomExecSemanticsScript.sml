@@ -540,17 +540,39 @@ Definition step_inst_def:
 
     (* Termination *)
     | STOP => Halt (halt_state s)
-    | RETURN => Halt (halt_state s)
-    | REVERT => Abort Revert_abort (revert_state s)
+
+    | RETURN =>
+        (case inst.inst_operands of
+          [off_op; sz_op] =>
+            (case (eval_operand off_op s, eval_operand sz_op s) of
+              (SOME off, SOME sz) =>
+                let rd = TAKE (w2n sz)
+                  (DROP (w2n off) s.vs_memory ++ REPLICATE (w2n sz) 0w) in
+                Halt (halt_state (set_returndata rd s))
+            | _ => Error "return: undefined operand")
+        | _ => Error "return requires 2 operands")
+
+    | REVERT =>
+        (case inst.inst_operands of
+          [off_op; sz_op] =>
+            (case (eval_operand off_op s, eval_operand sz_op s) of
+              (SOME off, SOME sz) =>
+                let rd = TAKE (w2n sz)
+                  (DROP (w2n off) s.vs_memory ++ REPLICATE (w2n sz) 0w) in
+                Abort Revert_abort (revert_state (set_returndata rd s))
+            | _ => Error "revert: undefined operand")
+        | _ => Error "revert requires 2 operands")
+
     | SINK => Halt (halt_state s)
 
-    (* Assertions *)
+    (* Assertions — on failure, clear returndata (matches revert("") / invalid) *)
     | ASSERT =>
         (case inst.inst_operands of
           [cond_op] =>
             (case eval_operand cond_op s of
               SOME cond =>
-                if cond = 0w then Abort Revert_abort (revert_state s)
+                if cond = 0w then
+                  Abort Revert_abort (revert_state (set_returndata [] s))
                 else OK s
             | NONE => Error "undefined operand")
         | _ => Error "assert requires 1 operand")
@@ -560,7 +582,8 @@ Definition step_inst_def:
           [cond_op] =>
             (case eval_operand cond_op s of
               SOME cond =>
-                if cond = 0w then Abort ExHalt_abort (halt_state s)
+                if cond = 0w then
+                  Abort ExHalt_abort (halt_state (set_returndata [] s))
                 else OK s
             | NONE => Error "undefined operand")
         | _ => Error "assert_unreachable requires 1 operand")
@@ -655,7 +678,7 @@ Definition step_inst_def:
                 let src_offset = w2n offset in
                 (* OOB access is exceptional halt per EIP-211 *)
                 if src_offset + size > LENGTH s.vs_returndata then
-                  Abort ExHalt_abort (halt_state s)
+                  Abort ExHalt_abort (halt_state (set_returndata [] s))
                 else
                   let bytes = TAKE size (DROP src_offset s.vs_returndata) in
                   OK (write_memory_with_expansion (w2n destOffset) bytes s)
@@ -828,7 +851,7 @@ Definition step_inst_def:
         | _ => Error "selfdestruct requires 1 operand")
 
     (* Invalid opcode — exceptional halt (EVM: consumes all gas, no returndata) *)
-    | INVALID => Abort ExHalt_abort (halt_state s)
+    | INVALID => Abort ExHalt_abort (halt_state (set_returndata [] s))
 
     (* ----------------------------------------------------------------
        External calls

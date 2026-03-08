@@ -65,7 +65,7 @@ Theorem jnz_pattern1_step:
     | (OK v, OK v') => state_equiv fresh v v'
     | (OK v, Abort Revert_abort v') =>
         is_revert_label fn v.vs_current_bb /\
-        execution_equiv fresh (revert_state v) v'
+        execution_equiv fresh (revert_state (set_returndata [] v)) v'
     | (Error _, Error _) => T
     | _ => F
 Proof
@@ -116,7 +116,7 @@ Theorem jnz_pattern2_step:
     | (OK v, OK v') => state_equiv fresh v v'
     | (OK v, Abort Revert_abort v') =>
         is_revert_label fn v.vs_current_bb /\
-        execution_equiv fresh (revert_state v) v'
+        execution_equiv fresh (revert_state (set_returndata [] v)) v'
     | (Error _, Error _) => T
     | _ => F
 Proof
@@ -152,7 +152,7 @@ Proof
          get_instruction_def, transform_block_def] >>
     gvs[transform_pattern2_def, mk_assert_inst_def, step_inst_def] >>
     simp[EVAL ``is_terminator ASSERT``, execution_equiv_refl, revert_state_def,
-         execution_equiv_def, lookup_var_def])
+         set_returndata_def, execution_equiv_def, lookup_var_def])
   >> (* x <> 0w: both jump to if_nonzero *)
   gvs[] >>
   simp[Once run_block_def, block_step_def, get_instruction_def,
@@ -283,7 +283,7 @@ Theorem run_block_transform_general:
     | (OK v, OK v') => state_equiv fresh v v'
     | (OK v, Abort Revert_abort v') =>
         is_revert_label fn v.vs_current_bb /\
-        execution_equiv fresh (revert_state v) v'
+        execution_equiv fresh (revert_state (set_returndata [] v)) v'
     | (Halt v, Halt v') => execution_equiv fresh v v'
     | (Abort a1 v, Abort a2 v') => (a1 = a2) /\ execution_equiv fresh v v'
     | (IntRet v1 s1, IntRet v2 s2) => (v1 = v2) /\ execution_equiv fresh s1 s2
@@ -427,7 +427,7 @@ Theorem run_block_transform_relation:
     | (OK v, OK v') => state_equiv fresh v v'
     | (OK v, Abort Revert_abort v') =>
         is_revert_label fn v.vs_current_bb /\
-        execution_equiv fresh (revert_state v) v'
+        execution_equiv fresh (revert_state (set_returndata [] v)) v'
     | (Halt v, Halt v') => execution_equiv fresh v v'
     | (Abort a1 v, Abort a2 v') => (a1 = a2) /\ execution_equiv fresh v v'
     | (IntRet v1 s1, IntRet v2 s2) => (v1 = v2) /\ execution_equiv fresh s1 s2
@@ -596,7 +596,7 @@ Proof
           qspecl_then [`fn`, `v`, `SUC n`, `ctx`, `revert_bb`] mp_tac run_function_at_simple_revert >> simp[] >>
           `v with vs_inst_idx := 0 = v` by simp[venom_state_component_equality] >>
           pop_assum SUBST_ALL_TAC >> simp[] >> strip_tac >>
-          `run_function (SUC (SUC n)) ctx fn s = Abort Revert_abort (revert_state v)` by simp[Once (CONJUNCT2 run_block_def)] >>
+          `run_function (SUC (SUC n)) ctx fn s = Abort Revert_abort (revert_state (set_returndata [] v))` by simp[Once (CONJUNCT2 run_block_def)] >>
           `run_function (SUC (SUC n)) ctx (transform_function fn) s = Abort Revert_abort v'` by simp[Once (CONJUNCT2 run_block_def)] >>
           simp[terminates_def, result_equiv_def] >>
           irule execution_equiv_subset >> qexists_tac `fresh_vars_in_block fn x` >>

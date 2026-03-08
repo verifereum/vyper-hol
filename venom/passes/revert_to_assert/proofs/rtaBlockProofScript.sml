@@ -28,7 +28,8 @@ Theorem run_block_iszero_assert_reverts:
     let id = (EL s.vs_inst_idx bb.bb_instructions).inst_id in
     let fresh_var = fresh_iszero_var id in
     let s1 = next_inst (update_var fresh_var 0w s) in
-    run_block fuel ctx bb' s = Abort Revert_abort (revert_state s1)
+    run_block fuel ctx bb' s =
+      Abort Revert_abort (revert_state (set_returndata [] s1))
 Proof
   rw[LET_THM, transform_block_def] >>
   (* Establish length bounds *)
@@ -46,11 +47,11 @@ Proof
   simp[mk_iszero_inst_def, step_inst_def, exec_pure1_def, eval_operand_def] >>
   simp[EVAL ``is_terminator ISZERO``, bool_to_word_F] >>
   simp[next_inst_def, update_var_def] >>
-  (* Step 2: Execute ASSERT with 0w *)
+  (* Step 2: Execute ASSERT with 0w — clears returndata *)
   simp[Once run_block_def, block_step_def, get_instruction_def] >>
   simp[mk_assert_inst_def, step_inst_def] >>
   simp[eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  simp[revert_state_def]
+  simp[revert_state_def, set_returndata_def]
 QED
 
 (* run_block for ISZERO -> ASSERT(1w) -> JMP sequence *)
@@ -116,12 +117,12 @@ Theorem revert_states_equiv:
     let fresh_var = fresh_iszero_var (EL n bb.bb_instructions).inst_id in
     let fresh_vars = fresh_vars_in_block fn bb in
     execution_equiv fresh_vars
-      (revert_state (jump_to if_nonzero s))
-      (revert_state (next_inst (update_var fresh_var 0w s)))
+      (revert_state (set_returndata [] (jump_to if_nonzero s)))
+      (revert_state (set_returndata [] (next_inst (update_var fresh_var 0w s))))
 Proof
   rw[LET_THM] >>
   drule_all rtaHelpersTheory.fresh_var_in_fresh_vars >> strip_tac >>
-  simp[execution_equiv_def, revert_state_def, jump_to_def,
+  simp[execution_equiv_def, revert_state_def, set_returndata_def, jump_to_def,
        next_inst_def, update_var_def, lookup_var_def] >>
   rw[] >> simp[finite_mapTheory.FLOOKUP_UPDATE] >> rw[] >> metis_tac[]
 QED
@@ -176,9 +177,11 @@ Theorem pattern1_nonzero_execution:
     fresh_var IN fresh_vars /\
     step_inst (EL s.vs_inst_idx bb.bb_instructions) s = OK (jump_to if_nonzero s) /\
     run_block fuel ctx bb s = OK (jump_to if_nonzero s) /\
-    run_block fuel ctx bb' s = Abort Revert_abort (revert_state s1) /\
+    run_block fuel ctx bb' s = Abort Revert_abort (revert_state (set_returndata [] s1)) /\
     (jump_to if_nonzero s).vs_current_bb = if_nonzero /\
-    execution_equiv fresh_vars (revert_state (jump_to if_nonzero s)) (revert_state s1)
+    execution_equiv fresh_vars
+      (revert_state (set_returndata [] (jump_to if_nonzero s)))
+      (revert_state (set_returndata [] s1))
 Proof
   rw[LET_THM] >| [
     (* fresh_var IN fresh_vars *)

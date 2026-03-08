@@ -196,16 +196,52 @@ Proof
          irule tstore_preserves] >> simp[]
 QED
 
-(* Terminators: STOP, RETURN, REVERT, SINK *)
+(* Terminators without operands: STOP, SINK *)
 Triviality step_inst_terminator_equiv:
   !vars inst s1 s2.
     state_equiv vars s1 s2 /\
-    MEM inst.inst_opcode [STOP; RETURN; REVERT; SINK] ==>
+    MEM inst.inst_opcode [STOP; SINK] ==>
     result_equiv vars (step_inst inst s1) (step_inst inst s2)
 Proof
   rw[] >> simp[step_inst_def, result_equiv_def,
                halt_state_def, revert_state_def,
                execution_equiv_def, lookup_var_def] >>
+  fs[state_equiv_def, execution_equiv_def, lookup_var_def]
+QED
+
+(* RETURN: reads memory via operands, sets returndata, halts *)
+Triviality step_inst_return_equiv:
+  !vars inst s1 s2.
+    state_equiv vars s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
+    inst.inst_opcode = RETURN ==>
+    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> simp[step_inst_def] >>
+  imp_res_tac eval_operand_equiv >>
+  `s1.vs_memory = s2.vs_memory` by
+    fs[state_equiv_def, execution_equiv_def] >>
+  rpt CASE_TAC >> gvs[result_equiv_def,
+    halt_state_def, set_returndata_def,
+    execution_equiv_def, lookup_var_def] >>
+  fs[state_equiv_def, execution_equiv_def, lookup_var_def]
+QED
+
+(* REVERT: reads memory via operands, sets returndata, aborts *)
+Triviality step_inst_revert_equiv:
+  !vars inst s1 s2.
+    state_equiv vars s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
+    inst.inst_opcode = REVERT ==>
+    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+Proof
+  rw[] >> simp[step_inst_def] >>
+  imp_res_tac eval_operand_equiv >>
+  `s1.vs_memory = s2.vs_memory` by
+    fs[state_equiv_def, execution_equiv_def] >>
+  rpt CASE_TAC >> gvs[result_equiv_def,
+    revert_state_def, set_returndata_def,
+    execution_equiv_def, lookup_var_def] >>
   fs[state_equiv_def, execution_equiv_def, lookup_var_def]
 QED
 
@@ -278,7 +314,7 @@ Proof
   rw[] >> simp[step_inst_def] >>
   imp_res_tac eval_operand_equiv >>
   rpt CASE_TAC >> gvs[result_equiv_def,
-    revert_state_def, halt_state_def,
+    revert_state_def, halt_state_def, set_returndata_def,
     execution_equiv_def, lookup_var_def] >>
   fs[state_equiv_def, execution_equiv_def, lookup_var_def]
 QED
@@ -462,7 +498,8 @@ Triviality step_inst_invalid_equiv:
     result_equiv vars (step_inst inst s1) (step_inst inst s2)
 Proof
   rw[] >> simp[step_inst_def, result_equiv_def,
-               halt_state_def, execution_equiv_def, lookup_var_def] >>
+               halt_state_def, set_returndata_def,
+               execution_equiv_def, lookup_var_def] >>
   fs[state_equiv_def, execution_equiv_def, lookup_var_def]
 QED
 
@@ -482,7 +519,7 @@ Proof
     fs[state_equiv_def, execution_equiv_def] >>
   rpt CASE_TAC >>
   gvs[result_equiv_def, revert_state_def, halt_state_def,
-      execution_equiv_def, lookup_var_def] >>
+      set_returndata_def, execution_equiv_def, lookup_var_def] >>
   TRY (fs[state_equiv_def, execution_equiv_def, lookup_var_def] >> NO_TAC) >>
   irule write_memory_with_expansion_preserves >> simp[]
 QED
@@ -717,8 +754,12 @@ Proof
       drule_all step_inst_extcodehash_equiv >> simp[],
     `MEM inst.inst_opcode [MSTORE;SSTORE;TSTORE]` by simp[] >>
       drule_all step_inst_write2_equiv >> simp[],
-    `MEM inst.inst_opcode [STOP;RETURN;REVERT;SINK]` by simp[] >>
+    `MEM inst.inst_opcode [STOP;SINK]` by simp[] >>
       drule_all step_inst_terminator_equiv >> simp[],
+    `inst.inst_opcode = RETURN` by simp[] >>
+      drule_all step_inst_return_equiv >> simp[],
+    `inst.inst_opcode = REVERT` by simp[] >>
+      drule_all step_inst_revert_equiv >> simp[],
     `MEM inst.inst_opcode [JMP;JNZ]` by simp[] >>
       drule_all step_inst_control_equiv >> simp[],
     `MEM inst.inst_opcode [PHI;ASSIGN;NOP]` by simp[] >>
