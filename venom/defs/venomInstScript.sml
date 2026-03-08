@@ -20,7 +20,7 @@ Libs
 Datatype:
   opcode =
     (* Arithmetic - note: Div/Mod to avoid HOL4 name clash *)
-    | ADD | SUB | MUL | Div | SDIV | Mod | SMOD | EXP
+    | ADD | SUB | MUL | Div | SDIV | Mod | SMOD | Exp
     | ADDMOD | MULMOD
     (* Comparison *)
     | EQ | LT | GT | SLT | SGT | ISZERO
@@ -210,6 +210,8 @@ Definition is_terminator_def:
   is_terminator REVERT = T /\
   is_terminator STOP = T /\
   is_terminator SINK = T /\
+  is_terminator SELFDESTRUCT = T /\
+  is_terminator INVALID = T /\
   is_terminator _ = F
 End
 

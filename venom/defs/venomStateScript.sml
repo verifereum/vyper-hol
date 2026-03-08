@@ -34,7 +34,8 @@ Datatype:
     cc_address : address;          (* Current contract address (ADDRESS) *)
     cc_callvalue : bytes32;        (* Value sent with call (CALLVALUE) *)
     cc_calldata : byte list;       (* Call data (CALLDATALOAD, etc.) *)
-    cc_gas : num                   (* Remaining gas (GAS) *)
+    cc_gas : num;                  (* Remaining gas (GAS) *)
+    cc_static : bool               (* Static mode (STATICCALL sets T, inherits) *)
   |>
 End
 
@@ -42,7 +43,8 @@ Datatype:
   tx_context = <|
     tc_origin : address;           (* Transaction origin (ORIGIN) *)
     tc_gasprice : bytes32;         (* Gas price (GASPRICE) *)
-    tc_chainid : bytes32           (* Chain ID (CHAINID) *)
+    tc_chainid : bytes32;          (* Chain ID (CHAINID) *)
+    tc_blobhashes : bytes32 list   (* Blob hashes (BLOBHASH) *)
   |>
 End
 
@@ -90,12 +92,18 @@ Datatype:
     vs_inst_idx : num;               (* Instruction index within block *)
     vs_returndata : byte list;       (* Return data buffer *)
     vs_halted : bool;                (* Execution halted? *)
-    vs_reverted : bool;              (* Execution reverted? *)
     vs_accounts : evm_accounts;      (* Account states for BALANCE, etc. *)
     vs_call_ctx : call_context;      (* Call context *)
     vs_tx_ctx : tx_context;          (* Transaction context *)
     vs_block_ctx : block_context;    (* Block context *)
-    vs_params : bytes32 list         (* Internal function parameters (PARAM reads from this) *)
+    vs_logs : event list;            (* Log/event accumulator *)
+    vs_immutables : (num, bytes32) fmap; (* Immutable storage (ILOAD/ISTORE) *)
+    vs_data_section : byte list;     (* Read-only data section (DLOAD/DLOADBYTES) *)
+    vs_label_offsets : (string, bytes32) fmap; (* Label→address map (OFFSET) *)
+    vs_code : byte list;             (* Own bytecode (CODECOPY/EXTCODECOPY) *)
+    vs_params : bytes32 list;        (* Function parameters (read by PARAM) *)
+    vs_prev_hashes : bytes32 list;  (* Recent block hashes for EVM BLOCKHASH *)
+    vs_allocas : (num, num # num) fmap  (* alloca_id -> (offset, size) *)
   |>
 End
 
@@ -106,7 +114,8 @@ Definition empty_call_context_def:
     cc_address := 0w;
     cc_callvalue := 0w;
     cc_calldata := [];
-    cc_gas := 0
+    cc_gas := 0;
+    cc_static := F
   |>
 End
 
@@ -114,7 +123,8 @@ Definition empty_tx_context_def:
   empty_tx_context = <|
     tc_origin := 0w;
     tc_gasprice := 0w;
-    tc_chainid := 0w
+    tc_chainid := 0w;
+    tc_blobhashes := []
   |>
 End
 
@@ -143,12 +153,18 @@ Definition init_venom_state_def:
     vs_inst_idx := 0;
     vs_returndata := [];
     vs_halted := F;
-    vs_reverted := F;
     vs_accounts := empty_accounts;
     vs_call_ctx := empty_call_context;
     vs_tx_ctx := empty_tx_context;
     vs_block_ctx := empty_block_context;
-    vs_params := []
+    vs_logs := [];
+    vs_immutables := FEMPTY;
+    vs_data_section := [];
+    vs_label_offsets := FEMPTY;
+    vs_code := [];
+    vs_params := [];
+    vs_prev_hashes := [];
+    vs_allocas := FEMPTY
   |>
 End
 
@@ -249,8 +265,10 @@ Definition halt_state_def:
   halt_state s = s with vs_halted := T
 End
 
+(* revert_state = halt_state. The revert/halt distinction lives in
+   abort_type (Revert_abort vs ExHalt_abort), not the state. *)
 Definition revert_state_def:
-  revert_state s = s with <| vs_halted := T; vs_reverted := T |>
+  revert_state s = s with vs_halted := T
 End
 
 Definition set_returndata_def:

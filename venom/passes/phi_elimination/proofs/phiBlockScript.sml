@@ -153,20 +153,22 @@ QED
    Halt/Revert/Error Cases
    ========================================================================== *)
 
-(* Halt/Revert results only come from non-PHI instructions *)
-Theorem step_inst_halt_revert_not_phi:
+(* Halt/Abort/IntRet results only come from non-PHI instructions *)
+Theorem step_inst_halt_abort_not_phi:
   !inst s r.
-    (step_inst inst s = Halt r \/ step_inst inst s = Revert r) ==>
+    (step_inst inst s = Halt r \/ step_inst inst s = Abort a r \/
+     (?vs. step_inst inst s = IntRet vs r)) ==>
     ~is_phi_inst inst
 Proof
   rpt strip_tac >> fs[is_phi_inst_def, step_inst_def] >> gvs[AllCaseEqs()]
 QED
 
-(* For Halt/Revert cases, block_step on transformed block gives same result *)
-Theorem block_step_halt_revert_transform:
+(* For Halt/Abort/IntRet cases, block_step on transformed block gives same result *)
+Theorem block_step_nonOK_transform:
   !dfg bb s s' is_term.
     (block_step bb s = (Halt s', is_term) \/
-     block_step bb s = (Revert s', is_term))
+     block_step bb s = (Abort a s', is_term) \/
+     (?vs. block_step bb s = (IntRet vs s', is_term)))
   ==>
     block_step (transform_block dfg bb) s = block_step bb s
 Proof
@@ -186,15 +188,15 @@ Theorem block_step_halt_transform:
     block_step bb s = (Halt s', is_term) ==>
     block_step (transform_block dfg bb) s = (Halt s', is_term)
 Proof
-  metis_tac[block_step_halt_revert_transform]
+  metis_tac[block_step_nonOK_transform]
 QED
 
-Theorem block_step_revert_transform:
-  !dfg bb s s' is_term.
-    block_step bb s = (Revert s', is_term) ==>
-    block_step (transform_block dfg bb) s = (Revert s', is_term)
+Theorem block_step_abort_transform:
+  !dfg bb s a s' is_term.
+    block_step bb s = (Abort a s', is_term) ==>
+    block_step (transform_block dfg bb) s = (Abort a s', is_term)
 Proof
-  metis_tac[block_step_halt_revert_transform]
+  metis_tac[block_step_nonOK_transform]
 QED
 
 (* IntRet results only come from RET, not PHI *)
@@ -230,9 +232,14 @@ Proof
   simp[step_inst_def] >>
   Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
   simp[exec_pure2_def, exec_pure1_def, exec_pure3_def,
-       exec_read0_def, exec_read1_def, exec_write2_def] >>
+       exec_read0_def, exec_read1_def, exec_write2_def,
+       exec_ext_call_def, exec_delegatecall_def,
+       exec_create_def, exec_alloca_def,
+       extract_venom_result_def] >>
   strip_tac >> gvs[AllCaseEqs()] >>
-  gvs[update_var_def, mstore_def, sstore_def, tstore_def, write_memory_with_expansion_def]
+  rpt (pairarg_tac >> gvs[AllCaseEqs()]) >>
+  gvs[update_var_def, mstore_def, sstore_def, tstore_def,
+      write_memory_with_expansion_def, mcopy_def, revert_state_def]
 QED
 
 (* Helper: block_step preserves vs_prev_bb for non-terminator steps *)
@@ -335,10 +342,13 @@ Theorem transform_block_result_equiv:
     result_equiv {} (run_block fuel ctx bb st) (run_block fuel ctx (transform_block graph bb) st)
 Proof
   cheat
-  (* Original proof used recInduct run_block_ind.
-     Needs restructuring for mutual run_block/run_function recursion.
-     With EVERY ¬INVOKE precondition, run_block never calls run_function,
-     so ho_match_mp_tac (cj 1 run_block_ind) with P1 := \_ _ _ _. T
-     should work (run_function clause is vacuously satisfied).
-     Alternative: completeInduct_on fuel + structural induction on inst_idx. *)
+  (* TEMPORARILY CHEATED - needs rewrite for new run_block (no step_in_block).
+     Original proof used recInduct run_block_ind and step_in_block_* helpers
+     which no longer exist after run-context refactor.
+     Approach: completeInduct_on inst_idx (like rtaCorrectnessProof),
+     or ho_match_mp_tac (cj 1 run_block_ind) with vacuous run_function clause.
+     The block_step_* helpers above (halt/revert/intret_transform, block_step_equiv)
+     still work — just need to restructure around the new run_block unfolding
+     which dispatches on get_instruction + step_inst directly.
+  *)
 QED

@@ -60,24 +60,33 @@ Proof
 QED
 
 (* WHY THIS IS TRUE: By step_inst_def, ASSERT evaluates its operand.
-   If cond = 0w, it returns Revert (revert_state s).
+   If cond = 0w, it aborts with empty returndata.
    If cond <> 0w, it returns OK s. *)
 Theorem step_assert_behavior:
   !s cond_op id cond.
     eval_operand cond_op s = SOME cond ==>
     step_inst <| inst_id := id; inst_opcode := ASSERT;
                  inst_operands := [cond_op]; inst_outputs := [] |> s =
-    if cond = 0w then Revert (revert_state s) else OK s
+    if cond = 0w then
+      Abort Revert_abort (revert_state (set_returndata [] s))
+    else OK s
 Proof
   rw[step_inst_def]
 QED
 
-(* WHY THIS IS TRUE: By step_inst_def, REVERT unconditionally returns
-   Revert (revert_state s) regardless of operands. *)
-Theorem step_revert_always_reverts:
-  !inst s.
-    inst.inst_opcode = REVERT ==>
-    step_inst inst s = Revert (revert_state s)
+(* WHY THIS IS TRUE: By step_inst_def, REVERT evaluates offset and size
+   operands, reads returndata from memory, and aborts with Revert_abort. *)
+Theorem step_revert_behavior:
+  !s off_op sz_op id off sz.
+    eval_operand off_op s = SOME off /\
+    eval_operand sz_op s = SOME sz ==>
+    step_inst <| inst_id := id; inst_opcode := REVERT;
+                 inst_operands := [off_op; sz_op]; inst_outputs := [] |> s =
+    Abort Revert_abort
+      (revert_state
+        (set_returndata
+          (TAKE (w2n sz) (DROP (w2n off) s.vs_memory ++ REPLICATE (w2n sz) 0w))
+          s))
 Proof
   rw[step_inst_def]
 QED
@@ -186,8 +195,8 @@ Proof
   strip_tac >> strip_tac >> gvs[step_inst_def]
 QED
 
-Theorem step_inst_Revert_not_INVOKE:
-  step_inst inst s = Revert v ==> inst.inst_opcode <> INVOKE
+Theorem step_inst_Abort_not_INVOKE:
+  step_inst inst s = Abort a v ==> inst.inst_opcode <> INVOKE
 Proof
   strip_tac >> strip_tac >> gvs[step_inst_def]
 QED
@@ -196,6 +205,15 @@ Theorem step_inst_IntRet_not_INVOKE:
   step_inst inst s = IntRet vals v ==> inst.inst_opcode <> INVOKE
 Proof
   strip_tac >> strip_tac >> gvs[step_inst_def]
+QED
+
+(* extract_venom_result preserves vs_halted *)
+Triviality extract_venom_result_preserves_halted:
+  extract_venom_result s ov ro rs rr = SOME (out, s') ==>
+  s'.vs_halted = s.vs_halted
+Proof
+  simp[extract_venom_result_def, AllCaseEqs()] >> rw[] >> gvs[] >>
+  pairarg_tac >> gvs[]
 QED
 
 (* step_inst OK preserves vs_halted: no OK-returning instruction modifies it *)
@@ -208,7 +226,10 @@ Proof
       exec_read0_def, exec_read1_def, exec_write2_def,
       update_var_def, AllCaseEqs(), jump_to_def,
       mstore_def, mload_def, sstore_def, sload_def,
-      tstore_def, tload_def, write_memory_with_expansion_def]
+      tstore_def, tload_def, write_memory_with_expansion_def,
+      mcopy_def, exec_alloca_def,
+      exec_ext_call_def, exec_delegatecall_def, exec_create_def] >>
+  imp_res_tac extract_venom_result_preserves_halted >> gvs[update_var_def]
 QED
 
 (* Bridge: For non-INVOKE blocks, run_block unfolds through block_step.
@@ -223,7 +244,7 @@ Theorem run_block_block_step:
         OK s' => if t then (if s'.vs_halted then Halt s' else OK s')
                  else run_block fuel ctx bb s'
       | Halt s' => Halt s'
-      | Revert s' => Revert s'
+      | Abort a s' => Abort a s'
       | Error e => Error e
       | IntRet vals s' => IntRet vals s'
 Proof
@@ -310,7 +331,7 @@ Proof
                                SOME s' => run_block fuel ctx bb1 (next_inst s')
                              | NONE => Error "invoke: return arity mismatch")
                          | Halt s' => Halt s'
-                         | Revert s' => Revert s'
+                         | Abort a s' => Abort a s'
                          | Error e => Error e
                          | OK _ => Error "invoke: callee did not return")` by
     (qunabbrev_tac `r1` >> simp[Once run_block_def]) >>
@@ -333,7 +354,7 @@ Proof
                                SOME s' => run_block fuel ctx bb2 (next_inst s')
                              | NONE => Error "invoke: return arity mismatch")
                          | Halt s' => Halt s'
-                         | Revert s' => Revert s'
+                         | Abort a s' => Abort a s'
                          | Error e => Error e
                          | OK _ => Error "invoke: callee did not return")` by
     (qunabbrev_tac `r2` >> simp[Once run_block_def]) >>

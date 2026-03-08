@@ -7,7 +7,7 @@
 
 Theory venomExecSemantics
 Ancestors
-  venomState venomInst keccak
+  venomState venomInst keccak vfmExecution
 
 (* --------------------------------------------------------------------------
    Arithmetic/Logic Operations (using bytes32 = 256 word)
@@ -46,6 +46,31 @@ Definition mulmod_def:
     if n = 0w then 0w else n2w ((w2n a * w2n b) MOD w2n n)
 End
 
+(* Sign extension: extend byte n of w to 256 bits.
+   If n >= 31, w is already fully represented.
+   Otherwise, extend sign bit of byte n across higher bytes.
+   Matches EVM SIGNEXTEND semantics. *)
+Definition sign_extend_def:
+  sign_extend (n:bytes32) (w:bytes32) : bytes32 =
+    if w2n n > 30 then w
+    else
+      let byte_pos = w2n n in
+      let bit_pos = byte_pos * 8 + 7 in
+      let mask = (1w:bytes32) << (bit_pos + 1) - 1w in
+      let sign_bit = (w >>> bit_pos) && 1w in
+      if sign_bit = 1w then w || ¬mask
+      else w && mask
+End
+
+(* Memory copy: copy sz bytes from src to dst in memory.
+   Snapshots source before write (handles overlapping regions correctly).
+   Pure equivalent of verifereum's monadic copy_to_memory with NONE source. *)
+Definition mcopy_def:
+  mcopy (dst:num) (src:num) (sz:num) (s:venom_state) =
+    let data = TAKE sz (DROP src s.vs_memory ++ REPLICATE sz 0w) in
+    write_memory_with_expansion dst data s
+End
+
 (* Boolean to word *)
 Definition bool_to_word_def:
   bool_to_word T = (1w:bytes32) /\
@@ -56,13 +81,21 @@ End
    Execution Result Type
    -------------------------------------------------------------------------- *)
 
+(* Abort reason: distinguishes clean revert from exceptional halt.
+   Matters for EVM lowering (gas refund, returndata availability). *)
+Datatype:
+  abort_type =
+    | Revert_abort        (* REVERT: refunds remaining gas, has returndata *)
+    | ExHalt_abort        (* INVALID/out-of-gas: consumes all gas, no returndata *)
+End
+
 Datatype:
   exec_result =
     | OK venom_state              (* Normal continuation *)
-    | Halt venom_state            (* Normal termination *)
-    | Revert venom_state          (* Revert termination *)
+    | Halt venom_state            (* Normal termination (STOP/RETURN) *)
+    | Abort abort_type venom_state  (* Aborted execution *)
+    | IntRet (bytes32 list) venom_state  (* Internal function return (RET) *)
     | Error string                (* Execution error *)
-    | IntRet (bytes32 list) venom_state  (* Internal function return *)
 End
 
 (* --------------------------------------------------------------------------
@@ -79,6 +112,16 @@ Definition resolve_phi_def:
   resolve_phi prev_bb (Label lbl :: val_op :: rest) =
     (if lbl = prev_bb then SOME val_op else resolve_phi prev_bb rest) /\
   resolve_phi prev_bb (_ :: _ :: rest) = resolve_phi prev_bb rest
+End
+
+(* Extract label names from operand list (for DJMP target list) *)
+Definition extract_labels_def:
+  extract_labels [] = SOME [] /\
+  extract_labels (Label lbl :: rest) =
+    (case extract_labels rest of
+       SOME lbls => SOME (lbl :: lbls)
+     | NONE => NONE) /\
+  extract_labels _ = NONE
 End
 
 (* --------------------------------------------------------------------------
@@ -169,7 +212,234 @@ Definition exec_write2_def:
     | _ => Error "write2 requires 2 operands"
 End
 
-(* Step a single instruction *)
+(* --------------------------------------------------------------------------
+   External Call Helpers (using verifereum EVM semantics)
+
+   External calls build an EVM execution_state, run the callee's bytecode
+   via vfmExecution$run, and extract the result. This matches the approach
+   used in the Vyper source-level semantics (run_ext_call).
+
+   CALL/STATICCALL/DELEGATECALL: make_venom_call_state + extract_venom_call_result
+   CREATE/CREATE2: make_venom_create_state + extract_venom_create_result
+   -------------------------------------------------------------------------- *)
+
+(* Build transaction_parameters from venom state for EVM sub-execution.
+   Mirrors vyper_to_tx_params in vyperInterpreterScript.sml.
+   prevHashes comes from vs_prev_hashes; authRefund defaults to 0. *)
+Definition venom_to_tx_params_def:
+  venom_to_tx_params s : transaction_parameters =
+    <| origin := s.vs_tx_ctx.tc_origin;
+       gasPrice := w2n s.vs_tx_ctx.tc_gasprice;
+       baseFeePerGas := w2n s.vs_block_ctx.bc_basefee;
+       baseFeePerBlobGas := w2n s.vs_block_ctx.bc_blobbasefee;
+       blockNumber := w2n s.vs_block_ctx.bc_number;
+       blockTimeStamp := w2n s.vs_block_ctx.bc_timestamp;
+       blockCoinBase := s.vs_block_ctx.bc_coinbase;
+       blockGasLimit := w2n s.vs_block_ctx.bc_gaslimit;
+       prevRandao := s.vs_block_ctx.bc_prevrandao;
+       prevHashes := s.vs_prev_hashes;
+       blobHashes := s.vs_tx_ctx.tc_blobhashes;
+       chainId := w2n s.vs_tx_ctx.tc_chainid;
+       authRefund := 0 |>
+End
+
+(* Shared: build a sub-context transaction record *)
+Definition make_sub_tx_def:
+  make_sub_tx (caller:address) (target:address) value gas calldata =
+    <| from := caller; to := SOME target;
+       data := calldata; nonce := 0; value := value;
+       gasLimit := gas; gasPrice := 0;
+       accessList := [];
+       blobVersionedHashes := [];
+       maxFeePerBlobGas := NONE;
+       maxFeePerGas := NONE;
+       authorizationList := [] |>
+End
+
+(* Shared: build initial rollback and accesses *)
+Definition make_rollback_def:
+  make_rollback accounts (caller:address) (target:address) =
+    let accesses = <| addresses := fINSERT caller (fINSERT target fEMPTY);
+                      storageKeys := fEMPTY |> in
+    <| accounts := accounts;
+       tStorage := empty_transient_storage;
+       accesses := accesses;
+       toDelete := [] |>
+End
+
+(* Build an EVM execution_state for CALL/STATICCALL *)
+Definition make_venom_call_state_def:
+  make_venom_call_state s (target:address) gas value calldata code is_static =
+    let caller = s.vs_call_ctx.cc_address in
+    let tx = make_sub_tx caller target value gas calldata in
+    let ctxt = initial_context target code is_static
+                 empty_return_destination tx in
+    let accounts = transfer_value caller target value s.vs_accounts in
+    let rb = make_rollback accounts caller target in
+    <| contexts := [(ctxt, rb)];
+       txParams := venom_to_tx_params s;
+       rollback := rb;
+       msdomain := Collect empty_domain |>
+End
+
+(* Build an EVM execution_state for DELEGATECALL.
+   Key differences from CALL/STATICCALL:
+   - Executes target's code in caller's context (ADDRESS returns caller)
+   - msg.sender is caller's original caller (not caller itself)
+   - msg.value is inherited from current call (not re-sent)
+   - No value transfer occurs *)
+Definition make_venom_delegatecall_state_def:
+  make_venom_delegatecall_state s (target:address) gas calldata code is_static =
+    let caller = s.vs_call_ctx.cc_address in
+    let original_caller = s.vs_call_ctx.cc_caller in
+    let call_value = w2n s.vs_call_ctx.cc_callvalue in
+    let tx = make_sub_tx original_caller caller call_value gas calldata in
+    let ctxt = initial_context caller code is_static
+                 empty_return_destination tx in
+    let rb = make_rollback s.vs_accounts caller target in
+    <| contexts := [(ctxt, rb)];
+       txParams := venom_to_tx_params s;
+       rollback := rb;
+       msdomain := Collect empty_domain |>
+End
+
+(* Build an EVM execution_state for CREATE/CREATE2.
+   Mirrors verifereum's proceed_create: transfers value, uses Code address
+   as return destination so handle_create deploys the init code's output. *)
+Definition make_venom_create_state_def:
+  make_venom_create_state s (new_address:address) gas value init_code =
+    let caller = s.vs_call_ctx.cc_address in
+    let tx = make_sub_tx caller new_address value gas [] in
+    let ctxt = initial_context new_address init_code F
+                 (Code new_address) tx in
+    let accounts = transfer_value caller new_address value s.vs_accounts in
+    let rb = make_rollback accounts caller new_address in
+    <| contexts := [(ctxt, rb)];
+       txParams := venom_to_tx_params s;
+       rollback := rb;
+       msdomain := Collect empty_domain |>
+End
+
+(* Extract result from verifereum execution into Venom state update.
+   output_val: function mapping success to output word
+     (CALL: \_ => 1w, CREATE: \addr => w2w addr)
+   update_mem: whether to copy returndata into memory *)
+Definition extract_venom_result_def:
+  extract_venom_result s output_val retOff retSize run_result =
+    case run_result of
+    | NONE => NONE
+    | SOME (result, final_state) =>
+      (case final_state.contexts of
+       | [(ctxt, _)] =>
+           let returndata = ctxt.returnData in
+           (* verifereum tracks live state in rollback.accounts
+              (SSTORE → update_accounts → s.rollback.accounts),
+              so on success this includes callee's storage changes.
+              On revert/failure, restore pre-call accounts. *)
+           let (success, accounts) =
+             (case result of
+              | INR NONE => (T, final_state.rollback.accounts)
+              | INR (SOME Reverted) => (F, s.vs_accounts)
+              | _ => (F, s.vs_accounts)) in
+           let new_logs =
+             (case result of
+              | INR NONE => ctxt.logs
+              | _ => []) in
+           let output : bytes32 =
+             if success then output_val else 0w in
+           let s' = s with <|
+             vs_returndata := returndata;
+             vs_accounts := accounts;
+             vs_logs := s.vs_logs ++ new_logs;
+             vs_memory := (write_memory_with_expansion retOff
+                             (TAKE retSize returndata) s).vs_memory
+           |> in
+           SOME (output, s')
+       | _ => NONE)
+End
+
+(* Execute CALL/STATICCALL via verifereum EVM semantics.
+   CALL: operands = [gas; addr; value; argsOff; argsSize; retOff; retSize]
+   STATICCALL: operands = [gas; addr; argsOff; argsSize; retOff; retSize]
+*)
+Definition exec_ext_call_def:
+  exec_ext_call inst s gas addr_w value argsOff argsSize retOff retSize is_static =
+    let calldata = read_memory (w2n argsOff) (w2n argsSize) s in
+    let target : address = w2w addr_w in
+    let code = (lookup_account target s.vs_accounts).code in
+    let evm_s = make_venom_call_state s target (w2n gas) (w2n value)
+                  calldata code is_static in
+    case extract_venom_result s 1w (w2n retOff) (w2n retSize) (run evm_s) of
+    | SOME (output, s') =>
+        (case inst.inst_outputs of
+           [out] => OK (update_var out output s')
+         | _ => Error "ext_call requires single output")
+    | NONE => Error "ext_call: non-terminating or invalid state"
+End
+
+(* Execute DELEGATECALL via verifereum EVM semantics.
+   Runs target's code in caller's own context (storage, address, balance).
+   msg.sender = caller's original caller; msg.value = inherited.
+   Operands: [gas; addr; argsOff; argsSize; retOff; retSize] *)
+Definition exec_delegatecall_def:
+  exec_delegatecall inst s gas addr_w argsOff argsSize retOff retSize =
+    let calldata = read_memory (w2n argsOff) (w2n argsSize) s in
+    let target : address = w2w addr_w in
+    let code = (lookup_account target s.vs_accounts).code in
+    let evm_s = make_venom_delegatecall_state s target (w2n gas)
+                  calldata code s.vs_call_ctx.cc_static in
+    case extract_venom_result s 1w (w2n retOff) (w2n retSize) (run evm_s) of
+    | SOME (output, s') =>
+        (case inst.inst_outputs of
+           [out] => OK (update_var out output s')
+         | _ => Error "delegatecall requires single output")
+    | NONE => Error "delegatecall: non-terminating or invalid state"
+End
+
+(* Execute CREATE/CREATE2 via verifereum EVM semantics.
+   CREATE: salt_opt = NONE, address from sender + nonce
+   CREATE2: salt_opt = SOME salt, address from sender + salt + code hash
+*)
+Definition exec_create_def:
+  exec_create inst s value offset sz salt_opt =
+    let init_code = read_memory (w2n offset) (w2n sz) s in
+    let sender = s.vs_call_ctx.cc_address in
+    let sender_acct = lookup_account sender s.vs_accounts in
+    let new_address =
+      (case salt_opt of
+         NONE => address_for_create sender sender_acct.nonce
+       | SOME salt => address_for_create2 sender salt init_code) in
+    let gas = s.vs_call_ctx.cc_gas - s.vs_call_ctx.cc_gas DIV 64 in
+    let evm_s = make_venom_create_state s new_address gas (w2n value)
+                  init_code in
+    case extract_venom_result s (w2w new_address) 0 0 (run evm_s) of
+    | SOME (output, s') =>
+        (case inst.inst_outputs of
+           [out] => OK (update_var out output s')
+         | _ => Error "create requires single output")
+    | NONE => Error "create: non-terminating or invalid state"
+End
+
+(* Bump-allocate memory and record in vs_allocas *)
+Definition exec_alloca_def:
+  exec_alloca inst s alloc_size alloc_id =
+    case inst.inst_outputs of
+      [out] =>
+        let offset = LENGTH s.vs_memory in
+        let sz = w2n alloc_size in
+        let s' = s with <|
+          vs_memory := s.vs_memory ++ REPLICATE sz 0w;
+          vs_allocas := s.vs_allocas |+ (w2n alloc_id, (offset, sz))
+        |> in
+        OK (update_var out (n2w offset) s')
+    | _ => Error "alloca requires single output"
+End
+
+(* Step a single instruction.
+   OPERAND CONVENTION: All operands are in semantic (EVM documentation) order.
+   E.g., SUB [a; b] = a - b, MSTORE [offset; value], CALL [gas; addr; ...].
+   The Venom IR internally reverses EVM operands via _emit_evm (stack order);
+   our model uses semantic order for readability and proof clarity. *)
 Definition step_inst_def:
   step_inst inst s =
     case inst.inst_opcode of
@@ -181,6 +451,7 @@ Definition step_inst_def:
     | Mod => exec_pure2 safe_mod inst s
     | SDIV => exec_pure2 safe_sdiv inst s
     | SMOD => exec_pure2 safe_smod inst s
+    | Exp => exec_pure2 word_exp inst s
     | ADDMOD => exec_pure3 addmod inst s
     | MULMOD => exec_pure3 mulmod inst s
 
@@ -200,18 +471,32 @@ Definition step_inst_def:
     | SHL => exec_pure2 (\n w. word_lsl w (w2n n)) inst s
     | SHR => exec_pure2 (\n w. word_lsr w (w2n n)) inst s
     | SAR => exec_pure2 (\n w. word_asr w (w2n n)) inst s
+    | SIGNEXTEND => exec_pure2 sign_extend inst s
 
-    (* Memory *)
+    (* Memory
+       Convention: all operands in semantic (EVM doc) order.
+       MSTORE(offset, value), MCOPY(dst, src, size), etc.
+       The Venom IR internally reverses EVM args via _emit_evm;
+       our model uses semantic order for readability. *)
     | MLOAD => exec_read1 (\addr s. mload (w2n addr) s) inst s
-    | MSTORE => exec_write2 (\val addr s. mstore (w2n addr) val s) inst s
+    | MSTORE => exec_write2 (\addr val s. mstore (w2n addr) val s) inst s
+    | MCOPY =>
+        (case inst.inst_operands of
+          [op_dst; op_src; op_size] =>
+            (case (eval_operand op_dst s, eval_operand op_src s,
+                   eval_operand op_size s) of
+              (SOME dst, SOME src, SOME sz) =>
+                OK (mcopy (w2n dst) (w2n src) (w2n sz) s)
+            | _ => Error "undefined operand")
+        | _ => Error "mcopy requires 3 operands")
 
     (* Storage *)
     | SLOAD => exec_read1 (\key s. sload key s) inst s
-    | SSTORE => exec_write2 (\val key s. sstore key val s) inst s
+    | SSTORE => exec_write2 (\key val s. sstore key val s) inst s
 
     (* Transient storage *)
     | TLOAD => exec_read1 (\key s. tload key s) inst s
-    | TSTORE => exec_write2 (\val key s. tstore key val s) inst s
+    | TSTORE => exec_write2 (\key val s. tstore key val s) inst s
 
     (* Control flow - JMP *)
     | JMP =>
@@ -230,19 +515,72 @@ Definition step_inst_def:
             | NONE => Error "undefined condition")
         | _ => Error "jnz requires cond and 2 labels")
 
+    (* Control flow - DJMP (dynamic jump / jump table) *)
+    | DJMP =>
+        (case inst.inst_operands of
+          selector_op :: label_ops =>
+            (case (eval_operand selector_op s, extract_labels label_ops) of
+              (SOME idx, SOME labels) =>
+                let i = w2n idx in
+                if i < LENGTH labels then
+                  OK (jump_to (EL i labels) s)
+                else Error "djmp: index out of range"
+            | _ => Error "djmp: undefined operand or invalid labels")
+        | _ => Error "djmp requires selector and labels")
+
+    (* Function parameter access *)
+    | PARAM =>
+        (case inst.inst_operands of
+          [Lit idx] =>
+            let i = w2n idx in
+            if i < LENGTH s.vs_params then
+              (case inst.inst_outputs of
+                [out] => OK (update_var out (EL i s.vs_params) s)
+              | _ => Error "param requires single output")
+            else Error "param: index out of range"
+        | _ => Error "param requires literal index")
+
+    (* Return from internal function *)
+    | RET =>
+        (case eval_operands inst.inst_operands s of
+          SOME ret_vals => IntRet ret_vals s
+        | NONE => Error "ret: undefined return value")
+
     (* Termination *)
     | STOP => Halt (halt_state s)
-    | RETURN => Halt (halt_state s)
-    | REVERT => Revert (revert_state s)
+
+    | RETURN =>
+        (case inst.inst_operands of
+          [off_op; sz_op] =>
+            (case (eval_operand off_op s, eval_operand sz_op s) of
+              (SOME off, SOME sz) =>
+                let rd = TAKE (w2n sz)
+                  (DROP (w2n off) s.vs_memory ++ REPLICATE (w2n sz) 0w) in
+                Halt (halt_state (set_returndata rd s))
+            | _ => Error "return: undefined operand")
+        | _ => Error "return requires 2 operands")
+
+    | REVERT =>
+        (case inst.inst_operands of
+          [off_op; sz_op] =>
+            (case (eval_operand off_op s, eval_operand sz_op s) of
+              (SOME off, SOME sz) =>
+                let rd = TAKE (w2n sz)
+                  (DROP (w2n off) s.vs_memory ++ REPLICATE (w2n sz) 0w) in
+                Abort Revert_abort (revert_state (set_returndata rd s))
+            | _ => Error "revert: undefined operand")
+        | _ => Error "revert requires 2 operands")
+
     | SINK => Halt (halt_state s)
 
-    (* Assertions *)
+    (* Assertions — on failure, clear returndata (matches revert("") / invalid) *)
     | ASSERT =>
         (case inst.inst_operands of
           [cond_op] =>
             (case eval_operand cond_op s of
               SOME cond =>
-                if cond = 0w then Revert (revert_state s)
+                if cond = 0w then
+                  Abort Revert_abort (revert_state (set_returndata [] s))
                 else OK s
             | NONE => Error "undefined operand")
         | _ => Error "assert requires 1 operand")
@@ -252,7 +590,8 @@ Definition step_inst_def:
           [cond_op] =>
             (case eval_operand cond_op s of
               SOME cond =>
-                if cond <> 0w then Halt (halt_state s)
+                if cond = 0w then
+                  Abort ExHalt_abort (halt_state (set_returndata [] s))
                 else OK s
             | NONE => Error "undefined operand")
         | _ => Error "assert_unreachable requires 1 operand")
@@ -284,25 +623,6 @@ Definition step_inst_def:
     (* NOP *)
     | NOP => OK s
 
-    (* Internal function call - PARAM reads from vs_params by index *)
-    | PARAM =>
-        (case inst.inst_operands of
-          [Lit idx] =>
-            let i = w2n idx in
-            (case inst.inst_outputs of
-              [out] =>
-                if i < LENGTH s.vs_params then
-                  OK (update_var out (EL i s.vs_params) s)
-                else Error "param index out of bounds"
-            | _ => Error "param requires single output")
-        | _ => Error "param requires literal index operand")
-
-    (* Internal function return - RET evaluates operands and returns IntRet *)
-    | RET =>
-        (case eval_operands inst.inst_operands s of
-          SOME vals => IntRet vals s
-        | NONE => Error "ret: undefined operand")
-
     (* Environment - Call context *)
     | CALLER => exec_read0 (\s. w2w s.vs_call_ctx.cc_caller) inst s
     | ADDRESS => exec_read0 (\s. w2w s.vs_call_ctx.cc_address) inst s
@@ -323,6 +643,10 @@ Definition step_inst_def:
     | BASEFEE => exec_read0 (\s. s.vs_block_ctx.bc_basefee) inst s
     | BLOBBASEFEE => exec_read0 (\s. s.vs_block_ctx.bc_blobbasefee) inst s
     | BLOCKHASH => exec_read1 (\v s. s.vs_block_ctx.bc_blockhash (w2n v)) inst s
+    | BLOBHASH => exec_read1
+        (\v s. let idx = w2n v in
+               let hashes = s.vs_tx_ctx.tc_blobhashes in
+               if idx < LENGTH hashes then EL idx hashes else 0w) inst s
 
     (* Environment - Balance *)
     | BALANCE => exec_read1
@@ -339,9 +663,9 @@ Definition step_inst_def:
 
     | CALLDATACOPY =>
         (case inst.inst_operands of
-          [op_size; op_offset; op_destOffset] =>
-            (case (eval_operand op_size s, eval_operand op_offset s, eval_operand op_destOffset s) of
-              (SOME size_val, SOME offset, SOME destOffset) =>
+          [op_destOffset; op_offset; op_size] =>
+            (case (eval_operand op_destOffset s, eval_operand op_offset s, eval_operand op_size s) of
+              (SOME destOffset, SOME offset, SOME size_val) =>
                 let data = s.vs_call_ctx.cc_calldata in
                 let size = w2n size_val in
                 let src_offset = w2n offset in
@@ -355,14 +679,14 @@ Definition step_inst_def:
 
     | RETURNDATACOPY =>
         (case inst.inst_operands of
-          [op_size; op_offset; op_destOffset] =>
-            (case (eval_operand op_size s, eval_operand op_offset s, eval_operand op_destOffset s) of
-              (SOME size_val, SOME offset, SOME destOffset) =>
+          [op_destOffset; op_offset; op_size] =>
+            (case (eval_operand op_destOffset s, eval_operand op_offset s, eval_operand op_size s) of
+              (SOME destOffset, SOME offset, SOME size_val) =>
                 let size = w2n size_val in
                 let src_offset = w2n offset in
-                (* Check for out-of-bounds access *)
+                (* OOB access is exceptional halt per EIP-211 *)
                 if src_offset + size > LENGTH s.vs_returndata then
-                  Revert (revert_state s)
+                  Abort ExHalt_abort (halt_state (set_returndata [] s))
                 else
                   let bytes = TAKE size (DROP src_offset s.vs_returndata) in
                   OK (write_memory_with_expansion (w2n destOffset) bytes s)
@@ -378,9 +702,9 @@ Definition step_inst_def:
     (* Hashing - using Keccak256 like EVM *)
     | SHA3 =>
         (case inst.inst_operands of
-          [op_size; op_offset] =>
-            (case (eval_operand op_size s, eval_operand op_offset s) of
-              (SOME size_val, SOME offset) =>
+          [op_offset; op_size] =>
+            (case (eval_operand op_offset s, eval_operand op_size s) of
+              (SOME offset, SOME size_val) =>
                 (case inst.inst_outputs of
                   [out] =>
                     let size = w2n size_val in
@@ -392,8 +716,240 @@ Definition step_inst_def:
             | _ => Error "undefined operand")
         | _ => Error "sha3 requires 2 operands")
 
-    (* Default - unimplemented *)
-    | _ => Error "unimplemented opcode"
+    (* Code introspection *)
+    | CODESIZE => exec_read0 (\s. n2w (LENGTH s.vs_code)) inst s
+    | EXTCODESIZE => exec_read1
+        (\addr s. n2w (LENGTH (lookup_account (w2w addr)
+                                              s.vs_accounts).code)) inst s
+    | EXTCODEHASH =>
+        exec_read1
+          (\addr s.
+            let acct = lookup_account (w2w addr) s.vs_accounts in
+            if account_empty acct then 0w
+            else word_of_bytes T (0w:bytes32)
+                   (Keccak_256_w64 acct.code)) inst s
+
+    (* Allocation pointer arithmetic - GEP is base + offset, pure *)
+    | GEP => exec_pure2 word_add inst s
+
+    (* Immutables - separate from memory, used during constructor *)
+    | ILOAD => exec_read1
+        (\off s.
+          case FLOOKUP s.vs_immutables (w2n off) of
+            SOME v => v
+          | NONE => 0w) inst s
+    | ISTORE =>
+        (case inst.inst_operands of
+          [offset_op; val_op] =>
+            (case (eval_operand offset_op s, eval_operand val_op s) of
+              (SOME off, SOME v) =>
+                OK (s with vs_immutables := s.vs_immutables |+ (w2n off, v))
+            | _ => Error "undefined operand")
+        | _ => Error "istore requires 2 operands")
+
+    (* Data section reads *)
+    | DLOAD => exec_read1
+        (\off s.
+          let bytes = TAKE 32 (DROP (w2n off) s.vs_data_section ++
+                               REPLICATE 32 0w) in
+          word_of_bytes T (0w:bytes32) bytes) inst s
+
+    | DLOADBYTES =>
+        (case inst.inst_operands of
+          [op_dst; op_src; op_size] =>
+            (case (eval_operand op_dst s, eval_operand op_src s,
+                   eval_operand op_size s) of
+              (SOME dst, SOME src, SOME size_val) =>
+                let size = w2n size_val in
+                let bytes = TAKE size (DROP (w2n src) s.vs_data_section ++
+                                      REPLICATE size 0w) in
+                OK (write_memory_with_expansion (w2n dst) bytes s)
+            | _ => Error "undefined operand")
+        | _ => Error "dloadbytes requires 3 operands")
+
+    (* Code access *)
+    | CODECOPY =>
+        (case inst.inst_operands of
+          [op_dst; op_src; op_size] =>
+            (case (eval_operand op_dst s, eval_operand op_src s,
+                   eval_operand op_size s) of
+              (SOME dst, SOME src, SOME size_val) =>
+                let size = w2n size_val in
+                let bytes = TAKE size (DROP (w2n src) s.vs_code ++
+                                      REPLICATE size 0w) in
+                OK (write_memory_with_expansion (w2n dst) bytes s)
+            | _ => Error "undefined operand")
+        | _ => Error "codecopy requires 3 operands")
+
+    | EXTCODECOPY =>
+        (case inst.inst_operands of
+          [op_addr; op_dst; op_src; op_size] =>
+            (case (eval_operand op_addr s, eval_operand op_dst s,
+                   eval_operand op_src s, eval_operand op_size s) of
+              (SOME addr, SOME dst, SOME src, SOME size_val) =>
+                let code = (lookup_account (w2w addr) s.vs_accounts).code in
+                let size = w2n size_val in
+                let bytes = TAKE size (DROP (w2n src) code ++
+                                      REPLICATE size 0w) in
+                OK (write_memory_with_expansion (w2n dst) bytes s)
+            | _ => Error "undefined operand")
+        | _ => Error "extcodecopy requires 4 operands")
+
+    (* Label offset computation - resolves label address + operand offset.
+       Operand order matches Python builder: offset(operand, label). *)
+    | OFFSET =>
+        (case inst.inst_operands of
+          [offset_op; Label lbl] =>
+            (case eval_operand offset_op s of
+              SOME off =>
+                (case inst.inst_outputs of
+                  [out] =>
+                    (case FLOOKUP s.vs_label_offsets lbl of
+                      SOME lbl_addr => OK (update_var out (lbl_addr + off) s)
+                    | NONE => Error "offset: unknown label")
+                | _ => Error "offset requires single output")
+            | NONE => Error "offset: undefined operand")
+        | _ => Error "offset requires operand and label")
+
+    (* Logging - variable operand count.
+       Semantic order: log topic_count, offset, size, topic_0, ..., topic_{n-1}
+       First operand is Lit topic_count (metadata), then offset, size, topics. *)
+    | LOG =>
+        (case inst.inst_operands of
+          Lit tc :: rest =>
+            let n = w2n tc in
+            (* rest should be: offset, size, n topics *)
+            if LENGTH rest <> n + 2 then Error "log: wrong operand count"
+            else
+              let offset_op = EL 0 rest in
+              let size_op = EL 1 rest in
+              let topic_ops = DROP 2 rest in
+              (case (eval_operand offset_op s,
+                     eval_operand size_op s,
+                     eval_operands topic_ops s) of
+                (SOME off, SOME sz, SOME topics) =>
+                  let data = TAKE (w2n sz) (DROP (w2n off) s.vs_memory ++
+                                            REPLICATE (w2n sz) 0w) in
+                  let ev = <| logger := w2w s.vs_call_ctx.cc_address;
+                              topics := topics;
+                              data := data |> in
+                  OK (s with vs_logs := s.vs_logs ++ [ev])
+              | _ => Error "log: undefined operand")
+        | _ => Error "log requires Lit topic_count as first operand")
+
+    (* Selfdestruct: transfer balance to beneficiary, then halt.
+       Deprecated post-Cancun but still defined in Venom IR. *)
+    | SELFDESTRUCT =>
+        (case inst.inst_operands of
+          [addr_op] =>
+            (case eval_operand addr_op s of
+              SOME addr =>
+                let self = s.vs_call_ctx.cc_address in
+                let bal = (lookup_account self s.vs_accounts).balance in
+                let beneficiary = w2w addr in
+                let accts = s.vs_accounts in
+                let self_acct = lookup_account self accts in
+                let ben_acct = lookup_account beneficiary accts in
+                let accts' = (\a. if a = self then
+                                    self_acct with balance := 0
+                                  else if a = beneficiary then
+                                    ben_acct with balance := ben_acct.balance + bal
+                                  else accts a) in
+                Halt (halt_state (s with vs_accounts := accts'))
+            | NONE => Error "selfdestruct: undefined operand")
+        | _ => Error "selfdestruct requires 1 operand")
+
+    (* Invalid opcode — exceptional halt (EVM: consumes all gas, no returndata) *)
+    | INVALID => Abort ExHalt_abort (halt_state (set_returndata [] s))
+
+    (* ----------------------------------------------------------------
+       External calls
+       ---------------------------------------------------------------- *)
+    | CALL =>
+        (case inst.inst_operands of
+          [gas_op; addr_op; val_op; ao_op; as_op; ro_op; rs_op] =>
+            (case (eval_operand gas_op s, eval_operand addr_op s,
+                   eval_operand val_op s, eval_operand ao_op s,
+                   eval_operand as_op s, eval_operand ro_op s,
+                   eval_operand rs_op s) of
+              (SOME gas, SOME addr, SOME value, SOME ao, SOME as_, SOME ro, SOME rs) =>
+                exec_ext_call inst s gas addr value ao as_ ro rs
+                  s.vs_call_ctx.cc_static
+            | _ => Error "undefined operand")
+        | _ => Error "call requires 7 operands")
+
+    | STATICCALL =>
+        (case inst.inst_operands of
+          [gas_op; addr_op; ao_op; as_op; ro_op; rs_op] =>
+            (case (eval_operand gas_op s, eval_operand addr_op s,
+                   eval_operand ao_op s, eval_operand as_op s,
+                   eval_operand ro_op s, eval_operand rs_op s) of
+              (SOME gas, SOME addr, SOME ao, SOME as_, SOME ro, SOME rs) =>
+                exec_ext_call inst s gas addr (0w:bytes32) ao as_ ro rs T
+            | _ => Error "undefined operand")
+        | _ => Error "staticcall requires 6 operands")
+
+    | DELEGATECALL =>
+        (case inst.inst_operands of
+          [gas_op; addr_op; ao_op; as_op; ro_op; rs_op] =>
+            (case (eval_operand gas_op s, eval_operand addr_op s,
+                   eval_operand ao_op s, eval_operand as_op s,
+                   eval_operand ro_op s, eval_operand rs_op s) of
+              (SOME gas, SOME addr, SOME ao, SOME as_, SOME ro, SOME rs) =>
+                exec_delegatecall inst s gas addr ao as_ ro rs
+            | _ => Error "undefined operand")
+        | _ => Error "delegatecall requires 6 operands")
+
+    | CREATE =>
+        (case inst.inst_operands of
+          [val_op; off_op; sz_op] =>
+            (case (eval_operand val_op s, eval_operand off_op s,
+                   eval_operand sz_op s) of
+              (SOME value, SOME offset, SOME sz) =>
+                exec_create inst s value offset sz NONE
+            | _ => Error "undefined operand")
+        | _ => Error "create requires 3 operands")
+
+    | CREATE2 =>
+        (case inst.inst_operands of
+          [val_op; off_op; sz_op; salt_op] =>
+            (case (eval_operand val_op s, eval_operand off_op s,
+                   eval_operand sz_op s, eval_operand salt_op s) of
+              (SOME value, SOME offset, SOME sz, SOME salt) =>
+                exec_create inst s value offset sz (SOME salt)
+            | _ => Error "undefined operand")
+        | _ => Error "create2 requires 4 operands")
+
+    (* ----------------------------------------------------------------
+       Memory Allocation
+
+       All three variants are identical at runtime: bump-allocate in
+       vs_memory and record in vs_allocas. The distinction is metadata
+       for the compiler (PALLOCA=param, CALLOCA=caller-side staging).
+
+       Operands: [Lit size, Lit alloca_id] (CALLOCA has Label callee too)
+       Output: [out] = base address (word256) of allocated region
+       ---------------------------------------------------------------- *)
+    | ALLOCA =>
+        (case inst.inst_operands of
+          [Lit alloc_size; Lit alloc_id] =>
+            exec_alloca inst s alloc_size alloc_id
+        | _ => Error "alloca requires 2 literal operands")
+
+    | PALLOCA =>
+        (case inst.inst_operands of
+          [Lit alloc_size; Lit alloc_id] =>
+            exec_alloca inst s alloc_size alloc_id
+        | _ => Error "palloca requires 2 literal operands")
+
+    | CALLOCA =>
+        (case inst.inst_operands of
+          Lit alloc_size :: Lit alloc_id :: _ =>  (* Label callee ignored at runtime *)
+            exec_alloca inst s alloc_size alloc_id
+        | _ => Error "calloca requires literal size and id")
+
+    (* Default - truly unknown opcode *)
+    | _ => Error "unknown opcode"
 End
 
 (* --------------------------------------------------------------------------
@@ -411,10 +967,15 @@ Proof
   rw[step_inst_def] >>
   gvs[AllCaseEqs(), is_terminator_def] >>
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def] >>
+     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_ext_call_def, exec_delegatecall_def,
+     exec_create_def, exec_alloca_def,
+     extract_venom_result_def] >>
   gvs[AllCaseEqs()] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
   fs[update_var_def, mstore_def, sstore_def, tstore_def,
-     write_memory_with_expansion_def, eval_operands_def]
+     write_memory_with_expansion_def, mcopy_def,
+     revert_state_def, eval_operands_def]
 QED
 
 (* --------------------------------------------------------------------------
@@ -434,7 +995,8 @@ Definition block_step_def:
             if is_terminator inst.inst_opcode then (OK s', T)
             else (OK (next_inst s'), F)
         | Halt s' => (Halt s', T)
-        | Revert s' => (Revert s', T)
+        | Abort a s' => (Abort a s', T)
+        
         | IntRet vals s' => (IntRet vals s', T)
         | Error e => (Error e, T)
 End
@@ -465,8 +1027,7 @@ Definition setup_callee_def:
       vs_current_bb := (HD fn.fn_blocks).bb_label;
       vs_inst_idx   := 0;
       vs_prev_bb    := NONE;
-      vs_halted     := F;
-      vs_reverted   := F
+      vs_halted     := F
     |>)
 End
 
@@ -553,7 +1114,7 @@ Definition run_block_def:
                               | NONE =>
                                   Error "invoke: return arity mismatch")
                           | Halt s' => Halt s'
-                          | Revert s' => Revert s'
+                          | Abort a s' => Abort a s'
                           | Error e => Error e
                           | OK _ => Error "invoke: callee did not return"
         else
@@ -564,7 +1125,7 @@ Definition run_block_def:
               else run_block fuel ctx bb (next_inst s')
           | IntRet vals s' => IntRet vals s'
           | Halt s' => Halt s'
-          | Revert s' => Revert s'
+          | Abort a s' => Abort a s'
           | Error e => Error e)
 /\
   (run_function fuel ctx fn s =
