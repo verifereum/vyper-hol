@@ -136,8 +136,8 @@ End
 
 (* idom for one label. Returns NONE for entry or if dom set is trivial. *)
 Definition compute_idom_for_def:
-  compute_idom_for post_order entry dom_sets lbl =
-    if lbl = entry then NONE
+  compute_idom_for post_order entry_opt dom_sets lbl =
+    if entry_opt = SOME lbl then NONE
     else
       let doms = fmap_lookup_list dom_sets lbl in
       let sorted = QSORT (λa b. post_order_index post_order a <
@@ -151,9 +151,9 @@ End
 (* Compute idom for all labels. Only non-entry blocks with ≥2 dominators
    get an entry in the map. *)
 Definition compute_idom_def:
-  compute_idom post_order entry dom_sets labels =
+  compute_idom post_order entry_opt dom_sets labels =
     FOLDL (λm lbl.
-      case compute_idom_for post_order entry dom_sets lbl of
+      case compute_idom_for post_order entry_opt dom_sets lbl of
         NONE => m
       | SOME idom_lbl => m |+ (lbl, idom_lbl))
     FEMPTY labels
@@ -241,15 +241,12 @@ End
 
 Definition dom_analyze_def:
   dom_analyze cfg fn =
-    let entry =
-      case fn_entry_label fn of
-        NONE => ""
-      | SOME lbl => lbl in
+    let entry_opt = fn_entry_label fn in
     let labels = fn_labels fn in
     let st = dom_fixpoint fn in
     let dom_sets = dom_sets_of fn st in
     let order = cfg.cfg_dfs_post in
-    let idom = compute_idom order entry dom_sets labels in
+    let idom = compute_idom order entry_opt dom_sets labels in
     let dominated = compute_dominated idom labels in
     let fuel = LENGTH labels in
     let df = compute_df cfg idom order fuel in

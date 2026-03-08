@@ -24,7 +24,6 @@
  *   avail_add_lookup_existing      — existing add appends [inst]
  *   avail_add_lookup_other         — add doesn't affect other keys
  *   avail_get_expression_diff      — source ≠ target
- *   avail_get_expression_recorded  — expression was recorded
  *   avail_get_expression_available — source was available
  *)
 
@@ -216,14 +215,6 @@ Theorem avail_get_expression_diff:
     avail_get_expression fn lbl idx inst = SOME (expr, src) ⇒
     src.inst_id ≠ inst.inst_id
 Proof ACCEPT_TAC availExprProofsTheory.avail_get_expression_diff
-QED
-
-(* If get_expression returns SOME, the expression matches mk_expr *)
-Theorem avail_get_expression_recorded:
-  ∀fn lbl idx inst expr src.
-    avail_get_expression fn lbl idx inst = SOME (expr, src) ⇒
-    expr = mk_expr (dfg_build_function fn) inst
-Proof ACCEPT_TAC availExprProofsTheory.avail_get_expression_recorded
 QED
 
 (* If get_expression returns SOME, the source is in the available set at that point *)

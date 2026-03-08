@@ -27,10 +27,7 @@ Ancestors
 Definition liveness_transfer_def:
   liveness_transfer (bbs : basic_block list) (inst : instruction)
                     (live : string list) =
-    let uses = inst_uses inst in
-    let defs = inst_defs inst in
-    if NULL uses ∧ NULL defs then live
-    else live_update defs uses live
+    live_update (inst_defs inst) (inst_uses inst) live
 End
 
 (* PHI-aware edge transfer for backward liveness.

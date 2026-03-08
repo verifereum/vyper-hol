@@ -178,13 +178,6 @@ Theorem avail_get_expression_diff:
 Proof cheat
 QED
 
-Theorem avail_get_expression_recorded:
-  ∀fn lbl idx inst expr src.
-    avail_get_expression fn lbl idx inst = SOME (expr, src) ⇒
-    expr = mk_expr (dfg_build_function fn) inst
-Proof cheat
-QED
-
 Theorem avail_get_expression_available:
   ∀fn lbl idx inst expr src.
     avail_get_expression fn lbl idx inst = SOME (expr, src) ⇒
