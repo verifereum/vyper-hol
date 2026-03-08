@@ -198,6 +198,15 @@ Proof
   strip_tac >> strip_tac >> gvs[step_inst_def]
 QED
 
+(* extract_venom_result preserves vs_halted *)
+Triviality extract_venom_result_preserves_halted:
+  extract_venom_result s ov ro rs rr = SOME (out, s') ==>
+  s'.vs_halted = s.vs_halted
+Proof
+  simp[extract_venom_result_def, AllCaseEqs()] >> rw[] >> gvs[] >>
+  pairarg_tac >> gvs[]
+QED
+
 (* step_inst OK preserves vs_halted: no OK-returning instruction modifies it *)
 Theorem step_inst_OK_preserves_halted:
   step_inst inst s = OK s' ==> s'.vs_halted = s.vs_halted
@@ -208,7 +217,10 @@ Proof
       exec_read0_def, exec_read1_def, exec_write2_def,
       update_var_def, AllCaseEqs(), jump_to_def,
       mstore_def, mload_def, sstore_def, sload_def,
-      tstore_def, tload_def, write_memory_with_expansion_def]
+      tstore_def, tload_def, write_memory_with_expansion_def,
+      mcopy_def, exec_alloca_def,
+      exec_ext_call_def, exec_create_def] >>
+  imp_res_tac extract_venom_result_preserves_halted >> gvs[update_var_def]
 QED
 
 (* Bridge: For non-INVOKE blocks, run_block unfolds through block_step.

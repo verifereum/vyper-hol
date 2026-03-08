@@ -86,7 +86,6 @@ Datatype:
     | Revert venom_state          (* Revert termination *)
     | IntRet (bytes32 list) venom_state  (* Internal function return (RET) *)
     | Error string                (* Execution error *)
-    | IntRet (bytes32 list) venom_state  (* Internal function return *)
 End
 
 (* --------------------------------------------------------------------------
