@@ -481,7 +481,7 @@ Proof
    s1.vs_returndata = s2.vs_returndata` by
     fs[state_equiv_def, execution_equiv_def] >>
   rpt CASE_TAC >>
-  gvs[result_equiv_def, revert_state_def,
+  gvs[result_equiv_def, revert_state_def, halt_state_def,
       execution_equiv_def, lookup_var_def] >>
   TRY (fs[state_equiv_def, execution_equiv_def, lookup_var_def] >> NO_TAC) >>
   irule write_memory_with_expansion_preserves >> simp[]

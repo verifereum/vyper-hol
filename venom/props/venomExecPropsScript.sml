@@ -139,6 +139,59 @@ Proof
 QED
 
 (* ==========================================================================
+   step_inst Result Properties
+   ========================================================================== *)
+
+(* step_inst OK preserves vs_halted *)
+Theorem step_inst_OK_preserves_halted:
+  step_inst inst s = OK s' ==> s'.vs_halted = s.vs_halted
+Proof
+  ACCEPT_TAC venomExecProofsTheory.step_inst_OK_preserves_halted
+QED
+
+(* step_inst never returns OK/Halt/Abort/IntRet for INVOKE *)
+Theorem step_inst_OK_not_INVOKE:
+  step_inst inst s = OK s' ==> inst.inst_opcode <> INVOKE
+Proof
+  ACCEPT_TAC venomExecProofsTheory.step_inst_OK_not_INVOKE
+QED
+
+Theorem step_inst_Halt_not_INVOKE:
+  step_inst inst s = Halt v ==> inst.inst_opcode <> INVOKE
+Proof
+  ACCEPT_TAC venomExecProofsTheory.step_inst_Halt_not_INVOKE
+QED
+
+Theorem step_inst_Abort_not_INVOKE:
+  step_inst inst s = Abort a v ==> inst.inst_opcode <> INVOKE
+Proof
+  ACCEPT_TAC venomExecProofsTheory.step_inst_Abort_not_INVOKE
+QED
+
+Theorem step_inst_IntRet_not_INVOKE:
+  step_inst inst s = IntRet vals v ==> inst.inst_opcode <> INVOKE
+Proof
+  ACCEPT_TAC venomExecProofsTheory.step_inst_IntRet_not_INVOKE
+QED
+
+(* For non-INVOKE blocks, run_block unfolds through block_step *)
+Theorem run_block_block_step:
+  !fuel ctx bb s.
+    EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions ==>
+    run_block fuel ctx bb s =
+      let (r, t) = block_step bb s in
+      case r of
+        OK s' => if t then (if s'.vs_halted then Halt s' else OK s')
+                 else run_block fuel ctx bb s'
+      | Halt s' => Halt s'
+      | Abort a s' => Abort a s'
+      | Error e => Error e
+      | IntRet vals s' => IntRet vals s'
+Proof
+  ACCEPT_TAC venomExecProofsTheory.run_block_block_step
+QED
+
+(* ==========================================================================
    Lookup Function Properties
    ========================================================================== *)
 

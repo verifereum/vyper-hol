@@ -164,7 +164,7 @@ Proof
 QED
 
 (* For Halt/Abort/IntRet cases, block_step on transformed block gives same result *)
-Theorem block_step_halt_abort_transform:
+Theorem block_step_nonOK_transform:
   !dfg bb s s' is_term.
     (block_step bb s = (Halt s', is_term) \/
      block_step bb s = (Abort a s', is_term) \/
@@ -188,7 +188,7 @@ Theorem block_step_halt_transform:
     block_step bb s = (Halt s', is_term) ==>
     block_step (transform_block dfg bb) s = (Halt s', is_term)
 Proof
-  metis_tac[block_step_halt_abort_transform]
+  metis_tac[block_step_nonOK_transform]
 QED
 
 Theorem block_step_abort_transform:
@@ -196,7 +196,7 @@ Theorem block_step_abort_transform:
     block_step bb s = (Abort a s', is_term) ==>
     block_step (transform_block dfg bb) s = (Abort a s', is_term)
 Proof
-  metis_tac[block_step_halt_abort_transform]
+  metis_tac[block_step_nonOK_transform]
 QED
 
 (* IntRet results only come from RET, not PHI *)

@@ -62,7 +62,9 @@ Definition sign_extend_def:
       else w && mask
 End
 
-(* Memory copy: copy sz bytes from src to dst in memory *)
+(* Memory copy: copy sz bytes from src to dst in memory.
+   Snapshots source before write (handles overlapping regions correctly).
+   Pure equivalent of verifereum's monadic copy_to_memory with NONE source. *)
 Definition mcopy_def:
   mcopy (dst:num) (src:num) (sz:num) (s:venom_state) =
     let data = TAKE sz (DROP src s.vs_memory ++ REPLICATE sz 0w) in
@@ -330,6 +332,10 @@ Definition extract_venom_result_def:
       (case final_state.contexts of
        | [(ctxt, _)] =>
            let returndata = ctxt.returnData in
+           (* verifereum tracks live state in rollback.accounts
+              (SSTORE → update_accounts → s.rollback.accounts),
+              so on success this includes callee's storage changes.
+              On revert/failure, restore pre-call accounts. *)
            let (success, accounts) =
              (case result of
               | INR NONE => (T, final_state.rollback.accounts)
@@ -403,7 +409,8 @@ Definition exec_create_def:
       (case salt_opt of
          NONE => address_for_create sender sender_acct.nonce
        | SOME salt => address_for_create2 sender salt init_code) in
-    let evm_s = make_venom_create_state s new_address 0 (w2n value)
+    let gas = s.vs_call_ctx.cc_gas - s.vs_call_ctx.cc_gas DIV 64 in
+    let evm_s = make_venom_create_state s new_address gas (w2n value)
                   init_code in
     case extract_venom_result s (w2w new_address) 0 0 (run evm_s) of
     | SOME (output, s') =>
@@ -646,9 +653,9 @@ Definition step_inst_def:
               (SOME size_val, SOME offset, SOME destOffset) =>
                 let size = w2n size_val in
                 let src_offset = w2n offset in
-                (* Check for out-of-bounds access *)
+                (* OOB access is exceptional halt per EIP-211 *)
                 if src_offset + size > LENGTH s.vs_returndata then
-                  Abort Revert_abort (revert_state s)
+                  Abort ExHalt_abort (halt_state s)
                 else
                   let bytes = TAKE size (DROP src_offset s.vs_returndata) in
                   OK (write_memory_with_expansion (w2n destOffset) bytes s)

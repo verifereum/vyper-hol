@@ -282,6 +282,7 @@ QED
    execution_equiv variants (currently unused)
    Kept for future passes that need execution_equiv-level reasoning.
    Currently all consumers unfold execution_equiv_def directly.
+   TODO: Un-local these when a downstream consumer needs them.
    ========================================================================== *)
 
 Theorem update_var_execution_preserves[local]:
