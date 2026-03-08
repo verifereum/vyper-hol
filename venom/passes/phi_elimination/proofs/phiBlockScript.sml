@@ -303,12 +303,15 @@ Theorem transform_block_correct:
 Proof
   cheat
   (* Original proof used ho_match_mp_tac run_block_ind.
-     Needs restructuring: use cj 1 run_block_ind with P1 = T,
-     run_block_block_step for unfolding, EVERY ¬INVOKE precondition. *)
+     Needs restructuring for mutual run_block/run_function recursion.
+     With EVERY ¬INVOKE precondition, run_block never calls run_function,
+     so ho_match_mp_tac (cj 1 run_block_ind) with P1 := \_ _ _ _. T
+     should work (run_function clause is vacuously satisfied).
+     Alternative: completeInduct_on fuel + structural induction on inst_idx. *)
 QED
 
 (* Block-level correctness: transform preserves result equivalence. *)
-(* TEMPORARILY CHEATED - needs induction restructuring for fuel/ctx *)
+(* TEMPORARILY CHEATED - needs induction restructuring for mutual recursion *)
 Theorem transform_block_result_equiv:
   !fuel ctx bb st graph.
     EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions /\
@@ -333,6 +336,9 @@ Theorem transform_block_result_equiv:
 Proof
   cheat
   (* Original proof used recInduct run_block_ind.
-     Needs restructuring: use cj 1 run_block_ind with P1 = T,
-     run_block_block_step for unfolding, EVERY ¬INVOKE precondition. *)
+     Needs restructuring for mutual run_block/run_function recursion.
+     With EVERY ¬INVOKE precondition, run_block never calls run_function,
+     so ho_match_mp_tac (cj 1 run_block_ind) with P1 := \_ _ _ _. T
+     should work (run_function clause is vacuously satisfied).
+     Alternative: completeInduct_on fuel + structural induction on inst_idx. *)
 QED
