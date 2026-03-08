@@ -2,4 +2,6 @@
 # From simulation/defs/ relative paths:
 #   ../..    = venom/
 #   ../../.. = project root
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../../syntax ../../../semantics
+# analysisSimDefs depends on dfAnalyzeDefs + passSimulationDefs + indexedLists
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../../syntax ../../../semantics \
+           ../../analysis/dataflow/defs ../../analysis/cfg/defs

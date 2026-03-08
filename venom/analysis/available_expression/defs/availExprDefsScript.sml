@@ -4,18 +4,20 @@
  * Ports vyper/venom/analysis/available_expression.py to HOL4.
  *
  * TOP-LEVEL:
- *   avail_expr, canon_expr, mk_expr, avail_exprs, avail_meet,
- *   avail_transfer_inst, avail_result, avail_analyze, avail_get_expression
+ *   avail_expr, canon_expr, mk_expr, avail_exprs,
+ *   avail_transfer_inst, avail_analyze, avail_get_expression,
+ *   ae_lookup_inst, ae_lookup_bb_out
  *
  * Helper:
- *   is_pseudo, expr_leq, mk_operand_expr, mk_inst_expr,
+ *   expr_leq, mk_operand_expr, mk_inst_expr,
  *   expr_effects, avail_remove_effect, avail_add, avail_get_source,
- *   avail_transfer_bb_loop, avail_handle_bb, avail_one_pass, avail_iterate
+ *   avail_empty, avail_meet_two, avail_meet_opt, avail_transfer_opt,
+ *   avail_edge_transfer, avail_unwrap
  *)
 
 Theory availExprDefs
 Ancestors
-  venomEffects dfgDefs cfgDefs dfIterateDefs
+  venomEffects dfgDefs cfgDefs dfAnalyzeDefs
 
 (* is_pseudo from venomInstTheory *)
 
@@ -146,12 +148,6 @@ Definition avail_meet_two_def:
       (FDOM a INTER FDOM b)
 End
 
-Definition avail_meet_def:
-  (avail_meet [] = avail_empty) /\
-  (avail_meet [ae] = ae) /\
-  (avail_meet (ae :: rest) = avail_meet_two ae (avail_meet rest))
-End
-
 Definition avail_get_source_def:
   avail_get_source (ae : avail_exprs) expr =
     case FLOOKUP ae expr of
@@ -177,127 +173,79 @@ Definition avail_transfer_inst_def:
       else avail_add ae' expr inst
 End
 
-(* ===== Analysis Result ===== *)
+(* ===== Option-wrapped lattice for df_analyze ===== *)
 
-Datatype:
-  avail_result = <|
-    ae_bb_ins  : (string, avail_exprs) fmap;
-    ae_bb_outs : (string, avail_exprs) fmap;
-    ae_inst    : (num, avail_exprs) fmap;
-    ae_inst_expr : (num, avail_expr) fmap
-  |>
+(* Meet with option wrapping: NONE = top (all expressions available).
+   FOLDL avail_meet_opt NONE [...] gives the intersection of non-NONE values.
+   This is needed because avail_meet_two has no finite identity element. *)
+Definition avail_meet_opt_def:
+  avail_meet_opt NONE x = x ∧
+  avail_meet_opt x NONE = x ∧
+  avail_meet_opt (SOME a) (SOME b) = SOME (avail_meet_two a b)
 End
 
-Definition avail_result_empty_def:
-  avail_result_empty = <|
-    ae_bb_ins := FEMPTY;
-    ae_bb_outs := FEMPTY;
-    ae_inst := FEMPTY;
-    ae_inst_expr := FEMPTY
-  |>
+(* Per-instruction transfer wrapped for option lattice.
+   NONE (top = unprocessed) → SOME (transfer starting from empty).
+   SOME ae → SOME (transfer ae). *)
+Definition avail_transfer_opt_def:
+  avail_transfer_opt (d : dfg_analysis) (inst : instruction)
+                     (ae_opt : avail_exprs option) =
+    case ae_opt of
+      NONE => SOME (avail_transfer_inst d inst avail_empty)
+    | SOME ae => SOME (avail_transfer_inst d inst ae)
 End
 
-Definition ae_lookup_bb_out_def:
-  ae_lookup_bb_out ar lbl =
-    case FLOOKUP ar.ae_bb_outs lbl of
-      NONE => avail_empty
-    | SOME ae => ae
+(* Edge transfer: identity (no edge-specific handling). *)
+Definition avail_edge_transfer_def:
+  avail_edge_transfer (d : dfg_analysis) (src : string) (dst : string)
+                      (ae_opt : avail_exprs option) = ae_opt
 End
 
-Definition ae_lookup_bb_in_def:
-  ae_lookup_bb_in ar lbl =
-    case FLOOKUP ar.ae_bb_ins lbl of
-      NONE => avail_empty
-    | SOME ae => ae
-End
+(* ===== Top-level analysis via df_analyze ===== *)
 
-Definition ae_lookup_inst_def:
-  ae_lookup_inst ar inst_id =
-    case FLOOKUP ar.ae_inst inst_id of
-      NONE => avail_empty
-    | SOME ae => ae
-End
-
-(* ===== Per-Block Transfer ===== *)
-
-Definition avail_transfer_bb_loop_def:
-  (avail_transfer_bb_loop dfg [] ae imap emap = (ae, imap, emap)) /\
-  (avail_transfer_bb_loop dfg (inst::rest) ae imap emap =
-    let imap' = imap |+ (inst.inst_id, ae) in
-    let expr = mk_expr dfg inst in
-    let emap' = emap |+ (inst.inst_id, expr) in
-    let ae' = avail_transfer_inst dfg inst ae in
-    avail_transfer_bb_loop dfg rest ae' imap' emap')
-End
-
-(* ===== Worklist-Based Analysis ===== *)
-
-Definition avail_handle_bb_def:
-  avail_handle_bb cfg dfg fn ar (bb : basic_block) =
-    let preds = cfg_preds_of cfg bb.bb_label in
-    let pred_outs = MAP (ae_lookup_bb_out ar) preds in
-    let entry_ae = avail_meet pred_outs in
-    let old_in = ae_lookup_bb_in ar bb.bb_label in
-    if entry_ae = old_in ∧ bb.bb_label IN FDOM ar.ae_bb_ins then
-      (F, ar)
-    else
-      let ar' = ar with ae_bb_ins := ar.ae_bb_ins |+ (bb.bb_label, entry_ae) in
-      let (exit_ae, imap, emap) =
-        avail_transfer_bb_loop dfg bb.bb_instructions entry_ae
-          ar'.ae_inst ar'.ae_inst_expr in
-      let ar'' = ar' with <|
-        ae_bb_outs := ar'.ae_bb_outs |+ (bb.bb_label, exit_ae);
-        ae_inst := imap;
-        ae_inst_expr := emap
-      |> in
-      let old_out = ae_lookup_bb_out ar bb.bb_label in
-      (exit_ae <> old_out ∨ bb.bb_label NOTIN FDOM ar.ae_bb_outs, ar'')
-End
-
-Definition avail_one_pass_def:
-  (avail_one_pass cfg dfg fn ar [] = (ar, [])) /\
-  (avail_one_pass cfg dfg fn ar (lbl::rest) =
-    case lookup_block lbl fn.fn_blocks of
-      NONE => avail_one_pass cfg dfg fn ar rest
-    | SOME bb =>
-        let (changed, ar') = avail_handle_bb cfg dfg fn ar bb in
-        let (ar'', more) = avail_one_pass cfg dfg fn ar' rest in
-        if changed then
-          (ar'', cfg_succs_of cfg lbl ++ more)
-        else (ar'', more))
-End
-
-Definition avail_iterate_def:
-  (avail_iterate cfg dfg fn ar (0:num) worklist = ar) /\
-  (avail_iterate cfg dfg fn ar (SUC n) [] = ar) /\
-  (avail_iterate cfg dfg fn ar (SUC n) (lbl::rest) =
-    let (ar', new_wl) = avail_one_pass cfg dfg fn ar (lbl::rest) in
-    if ar' = ar then ar
-    else avail_iterate cfg dfg fn ar' n new_wl)
-End
-
-(* ===== Top-Level ===== *)
-
+(* Available expression analysis via the generic dataflow framework.
+   Forward direction, avail_meet_opt join, NONE bottom (= top of lattice).
+   Context = dfg (needed by avail_transfer_inst for expression lookup).
+   Entry block: SOME avail_empty (no expressions available at entry). *)
 Definition avail_analyze_def:
-  avail_analyze fn iter_fuel =
-    let cfg = cfg_analyze fn in
+  avail_analyze fn =
     let dfg = dfg_build_function fn in
-    let ar0 = avail_result_empty in
-    let worklist = fn_labels fn in
-    avail_iterate cfg dfg fn ar0 iter_fuel worklist
+    let entry_val =
+      OPTION_MAP (λlbl. (lbl, SOME avail_empty)) (fn_entry_label fn) in
+    df_analyze Forward NONE avail_meet_opt avail_transfer_opt
+              avail_edge_transfer dfg entry_val fn
 End
 
 (* ===== Query API ===== *)
 
+(* Unwrap option lattice value to avail_exprs. *)
+Definition avail_unwrap_def:
+  avail_unwrap NONE = avail_empty ∧
+  avail_unwrap (SOME ae) = ae
+End
+
+(* Available expressions at block exit = boundary value. *)
+Definition ae_lookup_bb_out_def:
+  ae_lookup_bb_out fn lbl =
+    avail_unwrap (df_boundary NONE (avail_analyze fn) lbl)
+End
+
+(* Available expressions before instruction idx in block lbl. *)
+Definition ae_lookup_inst_def:
+  ae_lookup_inst fn lbl idx =
+    avail_unwrap (df_at NONE (avail_analyze fn) lbl idx)
+End
+
+(* Query: find a prior instruction computing the same expression.
+   dfg needed to compute mk_expr for the queried instruction. *)
 Definition avail_get_expression_def:
-  avail_get_expression ar inst =
-    case FLOOKUP ar.ae_inst_expr inst.inst_id of
+  avail_get_expression fn lbl idx inst =
+    let dfg = dfg_build_function fn in
+    let expr = mk_expr dfg inst in
+    let ae = ae_lookup_inst fn lbl idx in
+    case avail_get_source ae expr of
       NONE => NONE
-    | SOME expr =>
-        let ae = ae_lookup_inst ar inst.inst_id in
-        case avail_get_source ae expr of
-          NONE => NONE
-        | SOME src =>
-            if src.inst_id = inst.inst_id then NONE
-            else SOME (expr, src)
+    | SOME src =>
+        if src.inst_id = inst.inst_id then NONE
+        else SOME (expr, src)
 End

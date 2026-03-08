@@ -59,12 +59,6 @@ QED
 
 (* ===== Meet / Lattice ===== *)
 
-Theorem avail_meet_nil:
-  avail_meet [] = FEMPTY
-Proof
-  simp[avail_meet_def, avail_empty_def]
-QED
-
 Theorem avail_meet_two_FDOM:
   ∀a b. FDOM (avail_meet_two a b) = FDOM a ∩ FDOM b
 Proof cheat
@@ -77,20 +71,6 @@ QED
 
 Theorem avail_meet_two_FDOM_SUBSET_r:
   ∀a b. FDOM (avail_meet_two a b) ⊆ FDOM b
-Proof cheat
-QED
-
-Theorem avail_meet_FDOM:
-  ∀aes expr.
-    expr ∈ FDOM (avail_meet aes) ⇒
-    ∀ae. MEM ae aes ⇒ expr ∈ FDOM ae
-Proof cheat
-QED
-
-Theorem avail_meet_mono:
-  ∀ae aes.
-    aes ≠ [] ⇒
-    FDOM (avail_meet (ae::aes)) ⊆ FDOM (avail_meet aes)
 Proof cheat
 QED
 
@@ -174,6 +154,14 @@ Theorem avail_add_lookup_same:
 Proof cheat
 QED
 
+(* Adding to an existing key appends to the instruction list *)
+Theorem avail_add_lookup_existing:
+  ∀ae expr inst insts.
+    FLOOKUP ae expr = SOME insts ⇒
+    FLOOKUP (avail_add ae expr inst) expr = SOME (insts ++ [inst])
+Proof cheat
+QED
+
 Theorem avail_add_lookup_other:
   ∀ae expr expr' inst.
     expr' ≠ expr ⇒
@@ -184,23 +172,16 @@ QED
 (* ===== Query API ===== *)
 
 Theorem avail_get_expression_diff:
-  ∀ar inst expr src.
-    avail_get_expression ar inst = SOME (expr, src) ⇒
+  ∀fn lbl idx inst expr src.
+    avail_get_expression fn lbl idx inst = SOME (expr, src) ⇒
     src.inst_id ≠ inst.inst_id
 Proof cheat
 QED
 
-Theorem avail_get_expression_recorded:
-  ∀ar inst expr src.
-    avail_get_expression ar inst = SOME (expr, src) ⇒
-    FLOOKUP ar.ae_inst_expr inst.inst_id = SOME expr
-Proof cheat
-QED
-
 Theorem avail_get_expression_available:
-  ∀ar inst expr src.
-    avail_get_expression ar inst = SOME (expr, src) ⇒
-    ∃insts. FLOOKUP (ae_lookup_inst ar inst.inst_id) expr = SOME insts ∧
+  ∀fn lbl idx inst expr src.
+    avail_get_expression fn lbl idx inst = SOME (expr, src) ⇒
+    ∃insts. FLOOKUP (ae_lookup_inst fn lbl idx) expr = SOME insts ∧
             MEM src insts
 Proof cheat
 QED

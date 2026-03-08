@@ -6,17 +6,23 @@
 
 Theory varDefProofs
 Ancestors
-  varDefDefs cfgAnalysisProps worklistProps dfHelperProps venomWf
+  varDefDefs cfgAnalysisProps dfAnalyzeProps dfHelperProps venomWf
 
 (* ===== Fixpoint ===== *)
 
-(* Processing any label is a no-op after analysis completes. *)
+(* The analysis reaches a fixpoint: processing any block is a no-op.
+   Instantiates df_analyze_fixpoint with var_def's lattice parameters. *)
 Theorem vardef_fixpoint_proof:
   !fn.
     wf_function fn ==>
     let cfg = cfg_analyze fn in
-    let vd = vardef_analyze fn in
-    is_fixpoint (vardef_process cfg fn) (fn_labels fn) vd
+    let all_vars = fn_all_assignments fn in
+    let entry_val =
+      OPTION_MAP (λlbl. (lbl, [] : string list)) (fn_entry_label fn) in
+    let process = df_process_block Forward all_vars list_intersect
+                    vardef_transfer vardef_edge_transfer ()
+                    entry_val cfg fn.fn_blocks in
+    is_fixpoint process (fn_labels fn) (vardef_analyze fn)
 Proof
   cheat
 QED
@@ -27,7 +33,7 @@ QED
 Theorem vardef_out_bounded_proof:
   !fn lbl v.
     wf_function fn /\
-    MEM v (vardef_out_of (vardef_analyze fn) lbl) ==>
+    MEM v (vardef_out_of fn lbl) ==>
     MEM v (fn_all_assignments fn)
 Proof
   cheat
@@ -35,16 +41,14 @@ QED
 
 (* ===== Soundness ===== *)
 
-(* If v is in the output defined set for block lbl, then on every
-   block-level CFG path from the entry block to lbl, some block
-   on the path assigns v.
-   This is the key property: the analysis is sound w.r.t. all-paths
-   reachability of definitions. *)
+(* If v is in the defined set at block exit, then every block-level
+   CFG path from entry to that block passes through some block
+   that assigns v. *)
 Theorem vardef_sound_proof:
   !fn lbl v path.
     wf_function fn /\
     fn.fn_blocks <> [] /\
-    MEM v (vardef_out_of (vardef_analyze fn) lbl) /\
+    MEM v (vardef_out_of fn lbl) /\
     is_cfg_path (cfg_analyze fn) path /\
     path <> [] /\
     HD path = (HD fn.fn_blocks).bb_label /\

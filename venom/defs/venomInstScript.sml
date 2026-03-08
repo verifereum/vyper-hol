@@ -285,6 +285,20 @@ Definition fn_labels_def:
   fn_labels fn = MAP (λbb. bb.bb_label) fn.fn_blocks
 End
 
+(* Entry block label, if the function is non-empty. *)
+Definition fn_entry_label_def:
+  fn_entry_label fn =
+    OPTION_MAP (λbb. bb.bb_label) (entry_block fn)
+End
+
+(* All variable names assigned anywhere in the function (deduplicated). *)
+Definition fn_all_assignments_def:
+  fn_all_assignments fn =
+    nub (FLAT (MAP (λbb.
+      FLAT (MAP inst_defs bb.bb_instructions))
+      fn.fn_blocks))
+End
+
 (* Successor labels of a basic block: the labels targeted by its terminator,
  * reversed to match Vyper's iteration order (see cfg_analysis_parity.md §2). *)
 Definition bb_succs_def:
