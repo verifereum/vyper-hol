@@ -10,11 +10,12 @@ Ancestors
 
 Theorem step_inst_preserves_R:
   !(R_ok : venom_state -> venom_state -> bool)
-   (R_term : venom_state -> venom_state -> bool) inst s1 s2.
+   (R_term : venom_state -> venom_state -> bool) fuel ctx inst s1 s2.
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
+    inst.inst_opcode <> INVOKE /\
     (!x. MEM (Var x) inst.inst_operands ==>
          lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst inst s1) (step_inst inst s2)
+    lift_result R_ok R_term (step_inst fuel ctx inst s1) (step_inst fuel ctx inst s2)
 Proof
   ACCEPT_TAC step_inst_preserves_R_proof
 QED

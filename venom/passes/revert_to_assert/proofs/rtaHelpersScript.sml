@@ -61,7 +61,7 @@ fun SOLVE tac (g as (asl, w)) =
 Theorem step_assert_zero_reverts:
   !s cond_op id.
     eval_operand cond_op s = SOME 0w ==>
-    step_inst <| inst_id := id; inst_opcode := ASSERT;
+    step_inst_base <| inst_id := id; inst_opcode := ASSERT;
                  inst_operands := [cond_op]; inst_outputs := [] |> s =
     Abort Revert_abort (revert_state (set_returndata [] s))
 Proof
@@ -72,7 +72,7 @@ QED
 Theorem step_assert_nonzero_passes:
   !s cond cond_op id.
     eval_operand cond_op s = SOME cond /\ cond <> 0w ==>
-    step_inst <| inst_id := id; inst_opcode := ASSERT;
+    step_inst_base <| inst_id := id; inst_opcode := ASSERT;
                  inst_operands := [cond_op]; inst_outputs := [] |> s =
     OK s
 Proof
@@ -84,16 +84,16 @@ QED
    ========================================================================== *)
 
 (* WHY THIS IS TRUE: block_step on a single-instruction terminator block
-   returns the result of step_inst with is_term = T. *)
+   returns the result of step_inst_base with is_term = T. *)
 Theorem block_step_single_terminator:
   !bb s inst.
     bb.bb_instructions = [inst] /\
     is_terminator inst.inst_opcode ==>
     block_step bb (s with vs_inst_idx := 0) =
-    (step_inst inst (s with vs_inst_idx := 0), T)
+    (step_inst_base inst (s with vs_inst_idx := 0), T)
 Proof
   rw[block_step_def, get_instruction_def] >>
-  Cases_on `step_inst inst (s with vs_inst_idx := 0)` >> simp[]
+  Cases_on `step_inst_base inst (s with vs_inst_idx := 0)` >> simp[]
 QED
 
 (* ==========================================================================
@@ -103,7 +103,7 @@ QED
 
 (* WHY THIS IS TRUE: A block with only [revert 0w 0w] will:
    1. run_block gets instruction at idx 0 -> the REVERT instruction
-   2. step_inst evaluates Lit 0w, Lit 0w, reads TAKE 0 bytes = []
+   2. step_inst_base evaluates Lit 0w, Lit 0w, reads TAKE 0 bytes = []
    3. Returns Abort Revert_abort with returndata cleared to [] *)
 Theorem simple_revert_block_reverts:
   !fuel ctx bb s.
@@ -116,7 +116,8 @@ Proof
   rw[is_simple_revert_block_def] >>
   Cases_on `bb.bb_instructions` >> fs[] >>
   simp[Once run_block_def, get_instruction_def,
-       step_inst_def, is_terminator_def, eval_operand_def,
+       step_inst_non_invoke, step_inst_base_def,
+       is_terminator_def, eval_operand_def,
        set_returndata_def]
 QED
 
@@ -138,7 +139,7 @@ Theorem run_function_at_simple_revert:
 Proof
   rw[] >>
   Cases_on `fuel` >- fs[] >>
-  simp[Once (CONJUNCT2 run_block_def)] >>
+  simp[Once run_function_def] >>
   drule simple_revert_block_reverts >>
   disch_then (qspecl_then [`n`, `ctx`, `s`] mp_tac) >> simp[]
 QED
@@ -186,7 +187,7 @@ QED
    state_equiv Preservation Through Execution
 
    These lemmas show that if fresh vars are not used in operands, then
-   state_equiv is preserved through step_inst, run_block, run_function.
+   state_equiv is preserved through step_inst_base, run_block, run_function.
    ========================================================================== *)
 
 (* --------------------------------------------------------------------------

@@ -440,8 +440,8 @@ End
    E.g., SUB [a; b] = a - b, MSTORE [offset; value], CALL [gas; addr; ...].
    The Venom IR internally reverses EVM operands via _emit_evm (stack order);
    our model uses semantic order for readability and proof clarity. *)
-Definition step_inst_def:
-  step_inst inst s =
+Definition step_inst_base_def:
+  step_inst_base inst s =
     case inst.inst_opcode of
     (* Arithmetic *)
     | ADD => exec_pure2 word_add inst s
@@ -959,12 +959,12 @@ End
 (* Non-terminator instructions preserve inst_idx.
    Co-located with run_block definition because run_block's
    termination proof depends on this theorem. *)
-Theorem step_inst_preserves_inst_idx:
+Theorem step_inst_base_preserves_inst_idx:
   !inst s s'.
-    step_inst inst s = OK s' /\ ~is_terminator inst.inst_opcode ==>
+    step_inst_base inst s = OK s' /\ ~is_terminator inst.inst_opcode ==>
     s'.vs_inst_idx = s.vs_inst_idx
 Proof
-  rw[step_inst_def] >>
+  rw[step_inst_base_def] >>
   gvs[AllCaseEqs(), is_terminator_def] >>
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
      exec_read0_def, exec_read1_def, exec_write2_def,
@@ -990,7 +990,7 @@ Definition block_step_def:
     case get_instruction bb s.vs_inst_idx of
       NONE => (Error "block not terminated", T)
     | SOME inst =>
-        case step_inst inst s of
+        case step_inst_base inst s of
           OK s' =>
             if is_terminator inst.inst_opcode then (OK s', T)
             else (OK (next_inst s'), F)
@@ -1078,56 +1078,61 @@ Proof
 QED
 
 (* --------------------------------------------------------------------------
-   Block and Function Execution (mutually recursive)
+   Execution (3-way mutually recursive: step_inst / run_block / run_function)
 
-   run_block intercepts INVOKE for cross-function calls; delegates all
-   other opcodes to step_inst.  run_function dispatches blocks using fuel.
+   step_inst handles ALL opcodes including INVOKE (which calls run_function).
+   run_block sequences instructions within a basic block.
+   run_function dispatches blocks using fuel.
 
    Fuel bounds function-call depth (not instruction count).  Within a
    block, termination is structural (inst_idx increases toward block end).
+
+   run_block explicitly sets vs_inst_idx := SUC s.vs_inst_idx for the
+   continuation, decoupling termination from step_inst's behavior.
    -------------------------------------------------------------------------- *)
 
-Definition run_block_def:
+Definition run_defs:
+  (step_inst fuel ctx inst s =
+    if inst.inst_opcode = INVOKE then
+      case decode_invoke inst of
+        NONE => Error "invoke: bad operand format"
+      | SOME (callee_name, arg_ops) =>
+          case lookup_function callee_name ctx.ctx_functions of
+            NONE => Error "invoke: function not found"
+          | SOME callee_fn =>
+              case eval_operands arg_ops s of
+                NONE => Error "invoke: undefined argument"
+              | SOME args =>
+                  case setup_callee callee_fn args s of
+                    NONE => Error "invoke: empty function"
+                  | SOME callee_s =>
+                      case run_function fuel ctx callee_fn callee_s of
+                        IntRet vals callee_s' =>
+                          (case bind_outputs inst.inst_outputs vals
+                                  (merge_callee_state s callee_s') of
+                            SOME s' => OK s'
+                          | NONE => Error "invoke: return arity mismatch")
+                      | Halt s' => Halt s'
+                      | Abort a s' => Abort a s'
+                      | Error e => Error e
+                      | OK _ => Error "invoke: callee did not return"
+    else step_inst_base inst s)
+  /\
   (run_block fuel ctx bb s =
     case get_instruction bb s.vs_inst_idx of
       NONE => Error "block not terminated"
     | SOME inst =>
-        if inst.inst_opcode = INVOKE then
-          case decode_invoke inst of
-            NONE => Error "invoke: bad operand format"
-          | SOME (callee_name, arg_ops) =>
-              case lookup_function callee_name ctx.ctx_functions of
-                NONE => Error "invoke: function not found"
-              | SOME callee_fn =>
-                  case eval_operands arg_ops s of
-                    NONE => Error "invoke: undefined argument"
-                  | SOME args =>
-                      case setup_callee callee_fn args s of
-                        NONE => Error "invoke: empty function"
-                      | SOME callee_s =>
-                          case run_function fuel ctx callee_fn callee_s of
-                            IntRet vals callee_s' =>
-                              (case bind_outputs inst.inst_outputs vals
-                                      (merge_callee_state s callee_s') of
-                                SOME s' =>
-                                  run_block fuel ctx bb (next_inst s')
-                              | NONE =>
-                                  Error "invoke: return arity mismatch")
-                          | Halt s' => Halt s'
-                          | Abort a s' => Abort a s'
-                          | Error e => Error e
-                          | OK _ => Error "invoke: callee did not return"
-        else
-          case step_inst inst s of
-            OK s' =>
-              if is_terminator inst.inst_opcode then
-                if s'.vs_halted then Halt s' else OK s'
-              else run_block fuel ctx bb (next_inst s')
-          | IntRet vals s' => IntRet vals s'
-          | Halt s' => Halt s'
-          | Abort a s' => Abort a s'
-          | Error e => Error e)
-/\
+        case step_inst fuel ctx inst s of
+          OK s' =>
+            if is_terminator inst.inst_opcode then
+              if s'.vs_halted then Halt s' else OK s'
+            else run_block fuel ctx bb
+                   (s' with vs_inst_idx := SUC s.vs_inst_idx)
+        | IntRet vals s' => IntRet vals s'
+        | Halt s' => Halt s'
+        | Abort a s' => Abort a s'
+        | Error e => Error e)
+  /\
   (run_function fuel ctx fn s =
     case fuel of
       0 => Error "out of fuel"
@@ -1144,14 +1149,42 @@ Definition run_block_def:
 Termination
   WF_REL_TAC `inv_image ($< LEX $<)
     (\x. case x of
-      | INL (fuel, ctx, bb, s) =>
-          (fuel, LENGTH bb.bb_instructions - s.vs_inst_idx)
-      | INR (fuel, ctx, fn, s) => (fuel, 0))` >>
-  rpt strip_tac >>
-  imp_res_tac step_inst_preserves_inst_idx >>
-  imp_res_tac bind_outputs_inst_idx >>
-  gvs[next_inst_def, merge_callee_state_inst_idx, get_instruction_def]
+      | INL (fuel, ctx, inst, s) => (fuel, 1)
+      | INR (INL (fuel, ctx, bb, s)) =>
+          (fuel, 2 + (LENGTH bb.bb_instructions - s.vs_inst_idx))
+      | INR (INR (fuel, ctx, fn, s)) => (fuel, 0))` >>
+  rpt strip_tac >> gvs[get_instruction_def]
 End
+
+(* Extract individual definitions for downstream use *)
+val step_inst_def = save_thm("step_inst_def", cj 1 run_defs);
+val run_block_def = save_thm("run_block_def", cj 2 run_defs);
+val run_function_def = save_thm("run_function_def", cj 3 run_defs);
+
+(* step_inst preserves inst_idx for non-terminators (all opcodes incl INVOKE) *)
+Theorem step_inst_preserves_inst_idx:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\ ~is_terminator inst.inst_opcode ==>
+    s'.vs_inst_idx = s.vs_inst_idx
+Proof
+  rw[Once step_inst_def] >>
+  gvs[AllCaseEqs(), is_terminator_def] >-
+  (* INVOKE case *)
+  (imp_res_tac bind_outputs_inst_idx >>
+   gvs[merge_callee_state_inst_idx]) >>
+  (* Non-INVOKE: delegate to step_inst_base *)
+  imp_res_tac step_inst_base_preserves_inst_idx >>
+  gvs[is_terminator_def]
+QED
+
+(* step_inst agrees with step_inst_base for non-INVOKE opcodes *)
+Theorem step_inst_non_invoke:
+  !fuel ctx inst s.
+    inst.inst_opcode <> INVOKE ==>
+    step_inst fuel ctx inst s = step_inst_base inst s
+Proof
+  rw[Once step_inst_def]
+QED
 
 (* --------------------------------------------------------------------------
    Context Entry Point
