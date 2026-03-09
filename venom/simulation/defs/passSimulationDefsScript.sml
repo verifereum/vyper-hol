@@ -42,12 +42,15 @@ End
 
 (* Level 1: per-instruction simulation.
    f preserves lift_result for every instruction and state,
-   and preserves the is_terminator property. *)
+   and preserves the is_terminator property.
+   Uses step_inst (not step_inst_base) so INVOKE-modifying transforms
+   can also be expressed. For non-INVOKE passes, the INVOKE case is
+   trivial when f preserves INVOKE instructions. *)
 Definition inst_simulates_def:
   inst_simulates R_ok R_term f <=>
-    (!inst s.
+    (!fuel ctx inst s.
        lift_result R_ok R_term
-         (step_inst_base inst s) (step_inst_base (f inst) s)) /\
+         (step_inst fuel ctx inst s) (step_inst fuel ctx (f inst) s)) /\
     (!inst. is_terminator inst.inst_opcode =
             is_terminator (f inst).inst_opcode)
 End

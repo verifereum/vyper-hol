@@ -331,12 +331,12 @@ Theorem transform_block_result_equiv:
        resolve_phi prev_bb inst.inst_operands = SOME (Var v) ==>
        dfg_lookup graph v = SOME origin) /\
     (* For Error case: if PHI with single origin errors, origin's output undefined *)
-    (!inst origin src_var prev e s'.
+    (!inst origin src_var prev e s' fuel' ctx'.
        get_instruction bb s'.vs_inst_idx = SOME inst /\
        phi_single_origin graph inst = SOME origin /\
        origin.inst_outputs = [src_var] /\
        s'.vs_prev_bb = SOME prev /\
-       step_inst_base inst s' = Error e ==>
+       step_inst fuel' ctx' inst s' = Error e ==>
        lookup_var src_var s' = NONE)
   ==>
     result_equiv {} (run_block fuel ctx bb st) (run_block fuel ctx (transform_block graph bb) st)

@@ -24,15 +24,16 @@ Ancestors
    f transforms an instruction given the lattice value at that point.
    sound connects abstract lattice values to concrete states.
    INVOKE instructions are preserved (transforms must not alter them).
+   Uses step_inst (not step_inst_base) for consistency with inst_simulates.
    When sound = λv s. T, this reduces to ∀v. inst_simulates R_ok R_term (f v). *)
 Definition analysis_inst_simulates_def:
   analysis_inst_simulates R_ok R_term
     (sound : 'a -> venom_state -> bool)
     (f : 'a -> instruction -> instruction) <=>
-    (!v inst s.
+    (!v fuel ctx inst s.
        sound v s ==>
        lift_result R_ok R_term
-         (step_inst_base inst s) (step_inst_base (f v inst) s)) /\
+         (step_inst fuel ctx inst s) (step_inst fuel ctx (f v inst) s)) /\
     (!v inst.
        is_terminator inst.inst_opcode =
        is_terminator (f v inst).inst_opcode) /\

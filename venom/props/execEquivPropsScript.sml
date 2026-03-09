@@ -11,17 +11,32 @@
 
 Theory execEquivProps
 Ancestors
-  execEquivProofs
+  execEquivProofs venomExecSemantics
 
 (* Single instruction step preserves result_equiv modulo fresh variables,
-   provided operand variables are not in the exception set *)
-Theorem step_inst_result_equiv:
+   provided operand variables are not in the exception set.
+   step_inst_base version: internal, used by proof infrastructure.
+   step_inst version (below): public API for non-INVOKE instructions. *)
+Theorem step_inst_base_result_equiv:
   !vars inst s1 s2.
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) ==>
     result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   ACCEPT_TAC execEquivProofsTheory.step_inst_result_equiv
+QED
+
+(* Public API: step_inst preserves result_equiv for non-INVOKE instructions.
+   Bridges to step_inst_base_result_equiv via step_inst_non_invoke. *)
+Theorem step_inst_result_equiv:
+  !fuel ctx vars inst s1 s2.
+    state_equiv vars s1 s2 /\
+    inst.inst_opcode <> INVOKE /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) ==>
+    result_equiv vars (step_inst fuel ctx inst s1) (step_inst fuel ctx inst s2)
+Proof
+  rw[step_inst_non_invoke] >>
+  irule step_inst_base_result_equiv >> simp[]
 QED
 
 (* Running a block on equivalent states produces equivalent OK results *)

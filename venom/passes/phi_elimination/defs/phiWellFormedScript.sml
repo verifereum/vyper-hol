@@ -58,12 +58,12 @@ Definition wf_ir_fn_def:
        phi_operands_direct dfg inst) /\
     (* PHI operands cover all reachable predecessors - if PHI errors, it's from
        undefined operand not missing predecessor *)
-    (!bb idx inst prev s e.
+    (!bb idx inst prev s e fuel ctx.
        MEM bb func.fn_blocks /\
        get_instruction bb idx = SOME inst /\
        is_phi_inst inst /\
        s.vs_prev_bb = SOME prev /\
-       step_inst_base inst s = Error e ==>
+       step_inst fuel ctx inst s = Error e ==>
        ?val_op. resolve_phi prev inst.inst_operands = SOME val_op)
 End
 
@@ -95,14 +95,14 @@ Definition phi_wf_fn_def:
     (* For Error case: if PHI with single origin errors, origin's output undefined
        This holds in well-formed SSA due to dominator properties.
        Note: is_phi_inst is implied by phi_single_origin = SOME *)
-    (!bb inst origin src_var prev e s.
+    (!bb inst origin src_var prev e s fuel ctx.
        let dfg = dfg_build_function func in
        MEM bb func.fn_blocks /\
        get_instruction bb s.vs_inst_idx = SOME inst /\
        phi_single_origin dfg inst = SOME origin /\
        origin.inst_outputs = [src_var] /\
        s.vs_prev_bb = SOME prev /\
-       step_inst_base inst s = Error e ==>
+       step_inst fuel ctx inst s = Error e ==>
        lookup_var src_var s = NONE)
 End
 
@@ -196,8 +196,8 @@ Proof
     ) >>
     (* Get resolve_phi success from wf_ir_fn's error condition *)
     `?val_op. resolve_phi prev inst.inst_operands = SOME val_op` by (
-      qpat_x_assum `!bb' idx inst' prev' s' e'. _ ==> ?val_op. resolve_phi _ _ = SOME _`
-        (qspecl_then [`bb`, `s.vs_inst_idx`, `inst`, `prev`, `s`, `e`] mp_tac) >> simp[]
+      qpat_x_assum `!bb' idx inst' prev' s' e' fuel' ctx'. _ ==> ?val_op. resolve_phi _ _ = SOME _`
+        (qspecl_then [`bb`, `s.vs_inst_idx`, `inst`, `prev`, `s`, `e`, `fuel`, `ctx`] mp_tac) >> simp[]
     ) >>
     (* Get phi_operands_direct from wf_ir_fn assumption *)
     `phi_operands_direct (dfg_build_function func) inst` by (
@@ -205,6 +205,10 @@ Proof
         (qspecl_then [`bb`, `s.vs_inst_idx`, `inst`] mp_tac) >> simp[]
     ) >>
     gvs[] >>
+    (* Bridge step_inst → step_inst_base: PHI ≠ INVOKE *)
+    `step_inst_base inst s = Error e` by (
+      gvs[step_inst_non_invoke, is_phi_inst_def]
+    ) >>
     (* Use step_inst_phi_eval with explicit arguments *)
     qspecl_then [`inst`, `out`, `prev`, `s`] mp_tac step_inst_phi_eval >> simp[] >>
     strip_tac >> gvs[] >>
