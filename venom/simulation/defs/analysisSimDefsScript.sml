@@ -4,12 +4,24 @@
  * Bridge between dataflow analysis results and the simulation framework.
  * Extends inst_simulates/block_simulates with per-instruction lattice values.
  *
- * TOP-LEVEL:
- *   analysis_inst_simulates      — per-instruction sim given sound lattice value
- *   analysis_block_transform     — transform block using per-instruction analysis
- *   analysis_function_transform  — transform function using analysis result
- *   analysis_block_transform_widen  — widen variant of block transform
- *   analysis_function_transform_widen — widen variant of function transform
+ * Two transform signatures:
+ *   1:1  f : 'a → inst → inst         (replace)
+ *   1:N  f : 'a → inst → inst list    (remove/replace/expand)
+ *
+ * TOP-LEVEL (1:1):
+ *   analysis_inst_simulates      — per-instruction sim (1:1)
+ *   analysis_block_transform     — block transform using MAPi
+ *   analysis_function_transform  — function transform
+ *   analysis_block_transform_widen  — widen variant
+ *   analysis_function_transform_widen — widen variant
+ *
+ * TOP-LEVEL (1:N):
+ *   run_insts                         — sequential step_inst over a list
+ *   analysis_inst_simulates_1n        — per-instruction sim (1:N)
+ *   analysis_block_transform_1n       — block transform using FLAT ∘ MAPi
+ *   analysis_function_transform_1n    — function transform
+ *   analysis_block_transform_1n_widen — widen variant
+ *   analysis_function_transform_1n_widen — widen variant
  *
  * Helper:
  *   transfer_sound       — intra-block: transfer tracks concrete execution
@@ -96,4 +108,82 @@ End
 Definition analysis_function_transform_widen_def:
   analysis_function_transform_widen bottom result f fn =
     function_map_transform (analysis_block_transform_widen bottom result f) fn
+End
+
+(* ===== 1:N Transform Framework ===== *)
+
+(* Execute a list of instructions sequentially via step_inst.
+   Does not handle INVOKE dispatch or inst_idx tracking — those are
+   managed by run_block. Used only in the simulation predicate to
+   state what the replacement instructions should compute. *)
+Definition run_insts_def:
+  run_insts [] s = OK s /\
+  run_insts (inst :: rest) s =
+    case step_inst inst s of
+      OK s' => run_insts rest s'
+    | other => other
+End
+
+(* Per-instruction simulation for 1:N transforms.
+   f maps each instruction (given a lattice value) to a replacement list.
+
+   Structural constraints ensure the transformed block is well-formed
+   for run_block:
+   - Terminators and INVOKE pass through unchanged (run_block handles
+     these specially).
+   - Expansion of other instructions produces only non-terminator
+     non-INVOKE instructions (so run_block processes them via step_inst).
+
+   The simulation clause relates one original step_inst to the sequential
+   execution of the replacement list via run_insts. *)
+Definition analysis_inst_simulates_1n_def:
+  analysis_inst_simulates_1n R_ok R_term
+    (sound : 'a -> venom_state -> bool)
+    (f : 'a -> instruction -> instruction list) <=>
+    (* Simulation: original step relates to sequential replacement *)
+    (!v inst s.
+       sound v s ==>
+       lift_result R_ok R_term
+         (step_inst inst s) (run_insts (f v inst) s)) /\
+    (* Terminators preserved *)
+    (!v inst. is_terminator inst.inst_opcode ==> f v inst = [inst]) /\
+    (* INVOKE preserved *)
+    (!v inst. inst.inst_opcode = INVOKE ==> f v inst = [inst]) /\
+    (* Safe expansion: non-preserved produce only non-preserved *)
+    (!v inst.
+       ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE ==>
+       EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
+             (f v inst))
+End
+
+(* Transform a block using 1:N per-instruction analysis values.
+   At each instruction index, query df_at, apply f, then FLAT. *)
+Definition analysis_block_transform_1n_def:
+  analysis_block_transform_1n (bottom : 'a) (result : 'a df_state) f bb =
+    bb with bb_instructions :=
+      FLAT (MAPi (\idx inst. f (df_at bottom result bb.bb_label idx) inst)
+                  bb.bb_instructions)
+End
+
+(* Transform function using 1:N analysis results. *)
+Definition analysis_function_transform_1n_def:
+  analysis_function_transform_1n bottom result f fn =
+    function_map_transform (analysis_block_transform_1n bottom result f) fn
+End
+
+(* 1:N widen variant: transform using df_widen_at. *)
+Definition analysis_block_transform_1n_widen_def:
+  analysis_block_transform_1n_widen (bottom : 'a) (result : 'a df_widen_state)
+                                    f bb =
+    bb with bb_instructions :=
+      FLAT (MAPi (\idx inst.
+              f (df_widen_at bottom result bb.bb_label idx) inst)
+                  bb.bb_instructions)
+End
+
+(* 1:N widen variant: transform function using widening results. *)
+Definition analysis_function_transform_1n_widen_def:
+  analysis_function_transform_1n_widen bottom result f fn =
+    function_map_transform
+      (analysis_block_transform_1n_widen bottom result f) fn
 End
