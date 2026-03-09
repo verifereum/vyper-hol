@@ -46,7 +46,8 @@ End
 Definition inst_simulates_def:
   inst_simulates R_ok R_term f <=>
     (!inst s.
-       lift_result R_ok R_term (step_inst inst s) (step_inst (f inst) s)) /\
+       lift_result R_ok R_term
+         (step_inst_base inst s) (step_inst_base (f inst) s)) /\
     (!inst. is_terminator inst.inst_opcode =
             is_terminator (f inst).inst_opcode)
 End

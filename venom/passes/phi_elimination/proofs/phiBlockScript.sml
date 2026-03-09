@@ -36,12 +36,12 @@ Theorem step_inst_assign_eval:
     inst.inst_operands = [op] /\
     inst.inst_outputs = [out]
   ==>
-    step_inst inst s =
+    step_inst_base inst s =
       case eval_operand op s of
         SOME v => OK (update_var out v s)
       | NONE => Error "undefined operand"
 Proof
-  rw[step_inst_def]
+  rw[step_inst_base_def]
 QED
 
 Theorem step_inst_phi_resolves_var_ok:
@@ -50,14 +50,14 @@ Theorem step_inst_phi_resolves_var_ok:
     inst.inst_outputs = [out] /\
     s.vs_prev_bb = SOME prev /\
     resolve_phi prev inst.inst_operands = SOME (Var src_var) /\
-    step_inst inst s = OK s'
+    step_inst_base inst s = OK s'
   ==>
     ?v. lookup_var src_var s = SOME v /\ s' = update_var out v s
 Proof
   rpt strip_tac >>
   fs[is_phi_inst_def] >>
-  qpat_x_assum `step_inst _ _ = _` mp_tac >>
-  simp[step_inst_def, eval_operand_def] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  simp[step_inst_base_def, eval_operand_def] >>
   Cases_on `lookup_var src_var s` >> simp[]
 QED
 
@@ -68,13 +68,13 @@ QED
 (* KEY LEMMA: Transform instruction correctness *)
 Theorem transform_inst_correct:
   !dfg inst s s' origin prev_bb v.
-    step_inst inst s = OK s' /\
+    step_inst_base inst s = OK s' /\
     phi_single_origin dfg inst = SOME origin /\
     s.vs_prev_bb = SOME prev_bb /\
     resolve_phi prev_bb inst.inst_operands = SOME (Var v) /\
     dfg_lookup dfg v = SOME origin
   ==>
-    ?s''. step_inst (transform_inst dfg inst) s = OK s'' /\
+    ?s''. step_inst_base (transform_inst dfg inst) s = OK s'' /\
           state_equiv {} s' s''
 Proof
   rpt strip_tac >>
@@ -83,8 +83,8 @@ Proof
   fs[transform_inst_def, is_phi_inst_def] >>
   qexists_tac `s'` >>
   conj_tac >- (
-    qpat_x_assum `step_inst inst s = OK s'` mp_tac >>
-    simp[step_inst_def, eval_operand_def] >>
+    qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+    simp[step_inst_base_def, eval_operand_def] >>
     Cases_on `lookup_var v s` >> simp[] >>
     strip_tac >> fs[] >>
     Cases_on `inst.inst_outputs` >> fs[] >>
@@ -119,7 +119,7 @@ Proof
   rename1 `get_instruction bb _ = SOME curr_inst` >>
   imp_res_tac get_instruction_transform >>
   simp[] >>
-  Cases_on `step_inst curr_inst s` >> fs[] >>
+  Cases_on `step_inst_base curr_inst s` >> fs[] >>
   simp[transform_inst_preserves_terminator] >>
   Cases_on `is_phi_inst curr_inst` >- (
     Cases_on `phi_single_origin dfg curr_inst` >- (
@@ -127,7 +127,7 @@ Proof
     ) >>
     rename1 `phi_single_origin dfg curr_inst = SOME origin_inst` >>
     `phi_well_formed curr_inst.inst_operands` by metis_tac[] >>
-    fs[is_phi_inst_def, step_inst_def] >>
+    fs[is_phi_inst_def, step_inst_base_def] >>
     Cases_on `curr_inst.inst_outputs` >> fs[] >>
     Cases_on `t` >> fs[] >>
     rename1 `curr_inst.inst_outputs = [out_var]` >>
@@ -142,7 +142,7 @@ Proof
     first_x_assum (qspecl_then [`s.vs_inst_idx`, `curr_inst`, `origin_inst`, `var`] mp_tac) >>
     simp[] >> strip_tac >>
     `origin_inst.inst_outputs = [var]` by metis_tac[dfg_lookup_single_output] >>
-    fs[transform_inst_def, eval_operand_def, step_inst_def] >>
+    fs[transform_inst_def, eval_operand_def, step_inst_base_def] >>
     simp[state_equiv_refl]
   ) >>
   imp_res_tac transform_inst_non_phi >>
@@ -156,11 +156,11 @@ QED
 (* Halt/Abort/IntRet results only come from non-PHI instructions *)
 Theorem step_inst_halt_abort_not_phi:
   !inst s r.
-    (step_inst inst s = Halt r \/ step_inst inst s = Abort a r \/
-     (?vs. step_inst inst s = IntRet vs r)) ==>
+    (step_inst_base inst s = Halt r \/ step_inst_base inst s = Abort a r \/
+     (?vs. step_inst_base inst s = IntRet vs r)) ==>
     ~is_phi_inst inst
 Proof
-  rpt strip_tac >> fs[is_phi_inst_def, step_inst_def] >> gvs[AllCaseEqs()]
+  rpt strip_tac >> fs[is_phi_inst_def, step_inst_base_def] >> gvs[AllCaseEqs()]
 QED
 
 (* For Halt/Abort/IntRet cases, block_step on transformed block gives same result *)
@@ -177,7 +177,7 @@ Proof
   imp_res_tac get_instruction_transform >> fs[] >>
   gvs[AllCaseEqs()] >>
   `~is_phi_inst x` by (
-    CCONTR_TAC >> fs[is_phi_inst_def, step_inst_def] >> gvs[AllCaseEqs()]
+    CCONTR_TAC >> fs[is_phi_inst_def, step_inst_base_def] >> gvs[AllCaseEqs()]
   ) >>
   imp_res_tac transform_inst_non_phi >> fs[]
 QED
@@ -210,7 +210,7 @@ Proof
   imp_res_tac get_instruction_transform >> fs[] >>
   gvs[AllCaseEqs()] >>
   `~is_phi_inst x` by (
-    CCONTR_TAC >> fs[is_phi_inst_def, step_inst_def] >> gvs[AllCaseEqs()]
+    CCONTR_TAC >> fs[is_phi_inst_def, step_inst_base_def] >> gvs[AllCaseEqs()]
   ) >>
   imp_res_tac transform_inst_non_phi >> fs[]
 QED
@@ -219,17 +219,17 @@ QED
    prev_bb Preservation
    ========================================================================== *)
 
-(* Helper: step_inst preserves vs_prev_bb for non-terminator instructions *)
+(* Helper: step_inst_base preserves vs_prev_bb for non-terminator instructions *)
 Theorem step_inst_preserves_prev_bb:
   !inst s s'.
-    step_inst inst s = OK s' /\
+    step_inst_base inst s = OK s' /\
     ~is_terminator inst.inst_opcode ==>
     s'.vs_prev_bb = s.vs_prev_bb
 Proof
   rpt strip_tac >>
-  qpat_x_assum `step_inst _ _ = _` mp_tac >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   qpat_x_assum `~is_terminator _` mp_tac >>
-  simp[step_inst_def] >>
+  simp[step_inst_base_def] >>
   Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
   simp[exec_pure2_def, exec_pure1_def, exec_pure3_def,
        exec_read0_def, exec_read1_def, exec_write2_def,
@@ -260,14 +260,14 @@ QED
 Theorem step_inst_terminator_sets_prev_bb:
   !inst s s'.
     is_terminator inst.inst_opcode /\
-    step_inst inst s = OK s' /\
+    step_inst_base inst s = OK s' /\
     ~s'.vs_halted ==>
     s'.vs_prev_bb <> NONE
 Proof
   rpt strip_tac >>
-  qpat_x_assum `step_inst _ _ = _` mp_tac >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   qpat_x_assum `is_terminator _` mp_tac >>
-  simp[step_inst_def] >>
+  simp[step_inst_base_def] >>
   (* Only JMP/JNZ give OK without halting, both use jump_to *)
   Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
   strip_tac >> gvs[AllCaseEqs(), jump_to_def]
@@ -336,7 +336,7 @@ Theorem transform_block_result_equiv:
        phi_single_origin graph inst = SOME origin /\
        origin.inst_outputs = [src_var] /\
        s'.vs_prev_bb = SOME prev /\
-       step_inst inst s' = Error e ==>
+       step_inst_base inst s' = Error e ==>
        lookup_var src_var s' = NONE)
   ==>
     result_equiv {} (run_block fuel ctx bb st) (run_block fuel ctx (transform_block graph bb) st)
@@ -349,6 +349,6 @@ Proof
      or ho_match_mp_tac (cj 1 run_block_ind) with vacuous run_function clause.
      The block_step_* helpers above (halt/revert/intret_transform, block_step_equiv)
      still work — just need to restructure around the new run_block unfolding
-     which dispatches on get_instruction + step_inst directly.
+     which dispatches on get_instruction + step_inst_base directly.
   *)
 QED

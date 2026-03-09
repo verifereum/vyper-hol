@@ -75,14 +75,14 @@ Proof
     by simp[transform_jnz_def] >>
   Cases_on `eval_operand cond_op s`
   >- ((* NONE: both error *)
-    simp[Once run_block_def, get_instruction_def, step_inst_def] >>
+    simp[Once run_block_def, get_instruction_def, step_inst_base_def] >>
     simp[Once run_block_def,
          get_instruction_def, transform_block_def] >>
     `s.vs_inst_idx < LENGTH (transform_block_insts fn bb.bb_instructions)` by
       (drule_all transform_block_insts_length_pattern1 >> simp[]) >>
     gvs[] >>
     drule_all transform_block_insts_EL_transformed >> simp[LET_THM] >> strip_tac >>
-    simp[transform_pattern1_def, mk_iszero_inst_def, step_inst_def, exec_pure1_def])
+    simp[transform_pattern1_def, mk_iszero_inst_def, step_inst_base_def, exec_pure1_def])
   >>
   Cases_on `x = 0w`
   >- ((* x = 0w: use pattern1_zero_execution *)
@@ -130,19 +130,19 @@ Proof
     by simp[transform_jnz_def] >>
   Cases_on `eval_operand cond_op s`
   >- ((* NONE: both error *)
-    simp[Once run_block_def, block_step_def, get_instruction_def, step_inst_def] >>
+    simp[Once run_block_def, block_step_def, get_instruction_def, step_inst_base_def] >>
     simp[Once run_block_def, block_step_def,
          get_instruction_def, transform_block_def] >>
     `s.vs_inst_idx < LENGTH (transform_block_insts fn bb.bb_instructions)` by
       (drule_all transform_block_insts_length_pattern2 >> simp[]) >>
     gvs[] >> drule_all transform_block_insts_EL_transformed >> simp[LET_THM] >> strip_tac >>
-    simp[transform_pattern2_def, mk_assert_inst_def, step_inst_def])
+    simp[transform_pattern2_def, mk_assert_inst_def, step_inst_base_def])
   >>
   Cases_on `x = 0w`
   >- ((* x = 0w: original jumps to revert, transformed reverts *)
     gvs[] >>
     simp[Once run_block_def, block_step_def, get_instruction_def,
-         step_inst_def, EVAL ``is_terminator JNZ``, jump_to_def] >>
+         step_inst_base_def, EVAL ``is_terminator JNZ``, jump_to_def] >>
     `s.vs_inst_idx < LENGTH (transform_block fn bb).bb_instructions` by
       (simp[transform_block_def] >>
        `LENGTH (transform_block_insts fn bb.bb_instructions) >= LENGTH bb.bb_instructions`
@@ -150,13 +150,13 @@ Proof
     drule_all transform_block_insts_EL_transformed >> simp[LET_THM] >> strip_tac >>
     simp[Once run_block_def, block_step_def,
          get_instruction_def, transform_block_def] >>
-    gvs[transform_pattern2_def, mk_assert_inst_def, step_inst_def] >>
+    gvs[transform_pattern2_def, mk_assert_inst_def, step_inst_base_def] >>
     simp[EVAL ``is_terminator ASSERT``, execution_equiv_refl, revert_state_def,
          set_returndata_def, execution_equiv_def, lookup_var_def])
   >> (* x <> 0w: both jump to if_nonzero *)
   gvs[] >>
   simp[Once run_block_def, block_step_def, get_instruction_def,
-       step_inst_def, EVAL ``is_terminator JNZ``, jump_to_def] >>
+       step_inst_base_def, EVAL ``is_terminator JNZ``, jump_to_def] >>
   `s.vs_inst_idx < LENGTH (transform_block fn bb).bb_instructions` by
     (simp[transform_block_def] >>
      `LENGTH (transform_block_insts fn bb.bb_instructions) >= LENGTH bb.bb_instructions`
@@ -164,12 +164,12 @@ Proof
   drule_all transform_block_insts_EL_transformed >> simp[LET_THM] >> strip_tac >>
   simp[Once run_block_def, block_step_def,
        get_instruction_def, transform_block_def] >>
-  simp[transform_pattern2_def, mk_assert_inst_def, step_inst_def,
+  simp[transform_pattern2_def, mk_assert_inst_def, step_inst_base_def,
        EVAL ``is_terminator ASSERT``, next_inst_def] >>
   drule_all transform_block_insts_length_pattern2 >> strip_tac >>
   drule_all rtaHelpersTheory.pattern2_transformed_instructions >> simp[LET_THM] >> strip_tac >>
   simp[Once run_block_def, block_step_def, get_instruction_def,
-       mk_jmp_inst_def, step_inst_def, EVAL ``is_terminator JMP``,
+       mk_jmp_inst_def, step_inst_base_def, EVAL ``is_terminator JMP``,
        venomStateTheory.jump_to_def, state_equiv_refl]
 QED
 
@@ -358,15 +358,15 @@ Proof
           simp[next_inst_def] >>
           disch_then (qspec_then `fn` mp_tac) >>
           impl_tac >- simp[GSYM arithmeticTheory.ADD1] >> strip_tac))
-      (* Non-INVOKE: both blocks have same instruction, same step_inst *)
+      (* Non-INVOKE: both blocks have same instruction, same step_inst_base *)
       >- (
         (* Unfold both run_blocks at once *)
         ONCE_REWRITE_TAC[run_block_def] >> simp[get_instruction_def] >>
         (* Substitute EL equality so both sides use bb's instruction *)
         qpat_x_assum `EL _ bb.bb_instructions = EL _ (transform_block _ _).bb_instructions`
           (SUBST_ALL_TAC o SYM) >> simp[] >>
-        (* Now both sides have same step_inst (EL ... bb.bb_instructions) s *)
-        Cases_on `step_inst (EL s.vs_inst_idx bb.bb_instructions) s`
+        (* Now both sides have same step_inst_base (EL ... bb.bb_instructions) s *)
+        Cases_on `step_inst_base (EL s.vs_inst_idx bb.bb_instructions) s`
         (* OK: check terminator or recurse *)
         >- (
           simp[] >>
@@ -375,9 +375,9 @@ Proof
           >- (
             (* Non-terminator: recurse with next_inst v *)
             `v.vs_inst_idx = s.vs_inst_idx`
-              by (drule_all step_inst_preserves_inst_idx >> simp[]) >>
+              by (drule_all step_inst_base_preserves_inst_idx >> simp[]) >>
             `v.vs_halted = s.vs_halted`
-              by (imp_res_tac step_inst_OK_preserves_halted) >>
+              by (imp_res_tac step_inst_base_OK_preserves_halted) >>
             first_x_assum (qspec_then
               `LENGTH bb.bb_instructions - SUC s.vs_inst_idx` mp_tac) >>
             impl_tac >- (simp[next_inst_def] >> decide_tac) >> disch_tac >>
@@ -726,7 +726,7 @@ Proof
     (gvs[EVERY_MEM, get_instruction_def] >>
      first_x_assum irule >> irule EL_MEM >> simp[]) >>
   simp[] >>
-  Cases_on `step_inst inst s` >> simp[] >>
+  Cases_on `step_inst_base inst s` >> simp[] >>
   Cases_on `is_terminator inst.inst_opcode` >> simp[]
 QED
 

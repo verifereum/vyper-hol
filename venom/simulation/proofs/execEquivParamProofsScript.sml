@@ -1,7 +1,7 @@
 (*
  * Parameterized Execution Equivalence — Proofs
  *
- * Master theorem: step_inst preserves any valid_state_rel (R_ok, R_term) pair.
+ * Master theorem: step_inst_base preserves any valid_state_rel (R_ok, R_term) pair.
  *
  * Instantiation: (state_equiv vars, execution_equiv vars) satisfies valid_state_rel.
  *
@@ -14,7 +14,7 @@ Theory execEquivParamProofs
 Ancestors
   execEquivParamDefs passSimulationDefs stateEquivProps execEquivProps
 
-(* Master theorem: step_inst preserves any valid (R_ok, R_term) pair when operand
+(* Master theorem: step_inst_base preserves any valid (R_ok, R_term) pair when operand
    vars agree. *)
 Theorem step_inst_preserves_R_proof:
   !(R_ok : venom_state -> venom_state -> bool)
@@ -22,7 +22,7 @@ Theorem step_inst_preserves_R_proof:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==>
          lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst inst s1) (step_inst inst s2)
+    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   cheat
 QED

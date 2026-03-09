@@ -63,7 +63,7 @@ Definition wf_ir_fn_def:
        get_instruction bb idx = SOME inst /\
        is_phi_inst inst /\
        s.vs_prev_bb = SOME prev /\
-       step_inst inst s = Error e ==>
+       step_inst_base inst s = Error e ==>
        ?val_op. resolve_phi prev inst.inst_operands = SOME val_op)
 End
 
@@ -102,7 +102,7 @@ Definition phi_wf_fn_def:
        phi_single_origin dfg inst = SOME origin /\
        origin.inst_outputs = [src_var] /\
        s.vs_prev_bb = SOME prev /\
-       step_inst inst s = Error e ==>
+       step_inst_base inst s = Error e ==>
        lookup_var src_var s = NONE)
 End
 
@@ -135,7 +135,7 @@ Theorem step_inst_phi_eval:
     inst.inst_outputs = [out] /\
     s.vs_prev_bb = SOME prev
   ==>
-    step_inst inst s =
+    step_inst_base inst s =
       case resolve_phi prev inst.inst_operands of
         NONE => Error "phi: no matching predecessor"
       | SOME val_op =>
@@ -143,7 +143,7 @@ Theorem step_inst_phi_eval:
             SOME v => OK (update_var out v s)
           | NONE => Error "phi: undefined operand"
 Proof
-  rw[step_inst_def]
+  rw[step_inst_base_def]
 QED
 
 (* ==========================================================================

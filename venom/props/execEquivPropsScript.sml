@@ -19,7 +19,7 @@ Theorem step_inst_result_equiv:
   !vars inst s1 s2.
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   ACCEPT_TAC execEquivProofsTheory.step_inst_result_equiv
 QED

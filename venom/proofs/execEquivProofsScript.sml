@@ -1,7 +1,7 @@
 (*
  * Execution Equivalence Proofs
  *
- * Proves that step_inst / run_block preserve state_equiv / result_equiv.
+ * Proves that step_inst_base / run_block preserve state_equiv / result_equiv.
  * All theorems parameterized by variable exception set (vars).
  *
  * Internal proofs — consumers use props/execEquivPropsScript.sml
@@ -94,8 +94,8 @@ Proof
 QED
 
 (* ==========================================================================
-   step_inst: Per-category dispatch helpers
-   Each handles a group of opcodes at the step_inst level.
+   step_inst_base: Per-category dispatch helpers
+   Each handles a group of opcodes at the step_inst_base level.
    ========================================================================== *)
 
 (* Opcodes that use exec_pure2 *)
@@ -107,9 +107,9 @@ Triviality step_inst_pure2_equiv:
       [ADD; SUB; MUL; Div; SDIV; Mod; SMOD; Exp;
        AND; OR; XOR; SHL; SHR; SAR; SIGNEXTEND;
        EQ; LT; GT; SLT; SGT; GEP] ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def] >>
+  rw[] >> simp[step_inst_base_def] >>
   irule exec_pure2_result_equiv >> simp[]
 QED
 
@@ -119,9 +119,9 @@ Triviality step_inst_pure1_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     MEM inst.inst_opcode [NOT; ISZERO] ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def] >>
+  rw[] >> simp[step_inst_base_def] >>
   irule exec_pure1_result_equiv >> simp[]
 QED
 
@@ -131,9 +131,9 @@ Triviality step_inst_pure3_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     MEM inst.inst_opcode [ADDMOD; MULMOD] ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def] >>
+  rw[] >> simp[step_inst_base_def] >>
   irule exec_pure3_result_equiv >> simp[]
 QED
 
@@ -146,9 +146,9 @@ Triviality step_inst_read0_equiv:
        CHAINID; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO;
        GASLIMIT; BASEFEE; BLOBBASEFEE; SELFBALANCE;
        CALLDATASIZE; RETURNDATASIZE; MSIZE; CODESIZE] ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def] >>
+  rw[] >> simp[step_inst_base_def] >>
   irule exec_read0_result_equiv >> simp[] >>
   fs[state_equiv_def, execution_equiv_def]
 QED
@@ -161,9 +161,9 @@ Triviality step_inst_read1_equiv:
     MEM inst.inst_opcode
       [MLOAD; SLOAD; TLOAD; BLOCKHASH; BALANCE; CALLDATALOAD;
        EXTCODESIZE; BLOBHASH; ILOAD; DLOAD] ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def] >>
+  rw[] >> simp[step_inst_base_def] >>
   irule exec_read1_result_equiv >> simp[] >> rw[] >>
   gvs[mload_def, sload_def, tload_def,
       state_equiv_def, execution_equiv_def]
@@ -175,9 +175,9 @@ Triviality step_inst_extcodehash_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     inst.inst_opcode = EXTCODEHASH ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def] >>
+  rw[] >> simp[step_inst_base_def] >>
   irule exec_read1_result_equiv >> simp[] >> rw[] >>
   gvs[state_equiv_def, execution_equiv_def]
 QED
@@ -188,9 +188,9 @@ Triviality step_inst_write2_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     MEM inst.inst_opcode [MSTORE; SSTORE; TSTORE] ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def] >>
+  rw[] >> simp[step_inst_base_def] >>
   irule exec_write2_result_equiv >> simp[] >> rw[] >>
   FIRST [irule mstore_preserves, irule sstore_preserves,
          irule tstore_preserves] >> simp[]
@@ -201,9 +201,9 @@ Triviality step_inst_terminator_equiv:
   !vars inst s1 s2.
     state_equiv vars s1 s2 /\
     MEM inst.inst_opcode [STOP; SINK] ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def, result_equiv_def,
+  rw[] >> simp[step_inst_base_def, result_equiv_def,
                halt_state_def, revert_state_def,
                execution_equiv_def, lookup_var_def] >>
   fs[state_equiv_def, execution_equiv_def, lookup_var_def]
@@ -215,9 +215,9 @@ Triviality step_inst_return_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     inst.inst_opcode = RETURN ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def] >>
+  rw[] >> simp[step_inst_base_def] >>
   imp_res_tac eval_operand_equiv >>
   `s1.vs_memory = s2.vs_memory` by
     fs[state_equiv_def, execution_equiv_def] >>
@@ -233,9 +233,9 @@ Triviality step_inst_revert_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     inst.inst_opcode = REVERT ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def] >>
+  rw[] >> simp[step_inst_base_def] >>
   imp_res_tac eval_operand_equiv >>
   `s1.vs_memory = s2.vs_memory` by
     fs[state_equiv_def, execution_equiv_def] >>
@@ -251,9 +251,9 @@ Triviality step_inst_control_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     MEM inst.inst_opcode [JMP; JNZ] ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def] >>
+  rw[] >> simp[step_inst_base_def] >>
   imp_res_tac eval_operand_equiv >>
   rpt CASE_TAC >> gvs[result_equiv_def] >>
   irule jump_to_preserves >> simp[]
@@ -265,9 +265,9 @@ Triviality step_inst_djmp_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     inst.inst_opcode = DJMP ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def] >>
+  rw[] >> simp[step_inst_base_def] >>
   imp_res_tac eval_operand_equiv >>
   rpt CASE_TAC >> gvs[result_equiv_def] >>
   irule jump_to_preserves >> simp[]
@@ -286,9 +286,9 @@ Triviality step_inst_ssa_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     MEM inst.inst_opcode [PHI; ASSIGN; NOP] ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def] >>
+  rw[] >> simp[step_inst_base_def] >>
   imp_res_tac eval_operand_equiv >>
   `s1.vs_prev_bb = s2.vs_prev_bb` by
     fs[state_equiv_def, execution_equiv_def] >>
@@ -309,9 +309,9 @@ Triviality step_inst_assert_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     MEM inst.inst_opcode [ASSERT; ASSERT_UNREACHABLE] ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def] >>
+  rw[] >> simp[step_inst_base_def] >>
   imp_res_tac eval_operand_equiv >>
   rpt CASE_TAC >> gvs[result_equiv_def,
     revert_state_def, halt_state_def, set_returndata_def,
@@ -339,9 +339,9 @@ Triviality step_inst_sha3_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     inst.inst_opcode = SHA3 ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def] >>
+  rw[] >> simp[step_inst_base_def] >>
   imp_res_tac eval_operand_equiv >>
   `s1.vs_memory = s2.vs_memory` by fs[state_equiv_def, execution_equiv_def] >>
   rpt CASE_TAC >> gvs[result_equiv_def] >>
@@ -354,9 +354,9 @@ Triviality step_inst_mcopy_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     inst.inst_opcode = MCOPY ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def] >>
+  rw[] >> simp[step_inst_base_def] >>
   imp_res_tac eval_operand_equiv >>
   `s1.vs_memory = s2.vs_memory` by
     fs[state_equiv_def, execution_equiv_def] >>
@@ -370,9 +370,9 @@ Triviality step_inst_istore_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     inst.inst_opcode = ISTORE ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def] >>
+  rw[] >> simp[step_inst_base_def] >>
   imp_res_tac eval_operand_equiv >>
   `s1.vs_immutables = s2.vs_immutables` by
     fs[state_equiv_def, execution_equiv_def] >>
@@ -386,9 +386,9 @@ Triviality step_inst_data_copy_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     MEM inst.inst_opcode [DLOADBYTES; CODECOPY] ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def] >>
+  rw[] >> simp[step_inst_base_def] >>
   imp_res_tac eval_operand_equiv >>
   `s1.vs_data_section = s2.vs_data_section /\
    s1.vs_code = s2.vs_code` by
@@ -403,9 +403,9 @@ Triviality step_inst_extcodecopy_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     inst.inst_opcode = EXTCODECOPY ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def] >>
+  rw[] >> simp[step_inst_base_def] >>
   imp_res_tac eval_operand_equiv >>
   `s1.vs_accounts = s2.vs_accounts` by
     fs[state_equiv_def, execution_equiv_def] >>
@@ -419,9 +419,9 @@ Triviality step_inst_offset_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     inst.inst_opcode = OFFSET ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def] >>
+  rw[] >> simp[step_inst_base_def] >>
   imp_res_tac eval_operand_equiv >>
   `s1.vs_label_offsets = s2.vs_label_offsets` by
     fs[state_equiv_def, execution_equiv_def] >>
@@ -436,9 +436,9 @@ Triviality step_inst_log_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     inst.inst_opcode = LOG ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def] >>
+  rw[] >> simp[step_inst_base_def] >>
   `s1.vs_memory = s2.vs_memory /\
    s1.vs_call_ctx = s2.vs_call_ctx /\
    s1.vs_logs = s2.vs_logs` by
@@ -476,9 +476,9 @@ Triviality step_inst_selfdestruct_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     inst.inst_opcode = SELFDESTRUCT ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def] >>
+  rw[] >> simp[step_inst_base_def] >>
   imp_res_tac eval_operand_equiv >>
   `s1.vs_accounts = s2.vs_accounts /\
    s1.vs_call_ctx = s2.vs_call_ctx` by
@@ -493,9 +493,9 @@ Triviality step_inst_invalid_equiv:
   !vars inst s1 s2.
     state_equiv vars s1 s2 /\
     inst.inst_opcode = INVALID ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def, result_equiv_def,
+  rw[] >> simp[step_inst_base_def, result_equiv_def,
                halt_state_def, set_returndata_def,
                execution_equiv_def, lookup_var_def] >>
   fs[state_equiv_def, execution_equiv_def, lookup_var_def]
@@ -507,9 +507,9 @@ Triviality step_inst_copy_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     MEM inst.inst_opcode [CALLDATACOPY; RETURNDATACOPY] ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_def] >>
+  rw[] >> simp[step_inst_base_def] >>
   imp_res_tac eval_operand_equiv >>
   `s1.vs_memory = s2.vs_memory /\
    s1.vs_call_ctx = s2.vs_call_ctx /\
@@ -527,9 +527,9 @@ Triviality step_inst_param_equiv:
   !vars inst s1 s2.
     state_equiv vars s1 s2 /\
     inst.inst_opcode = PARAM ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[step_inst_def] >>
+  rw[step_inst_base_def] >>
   `s1.vs_params = s2.vs_params` by
     fs[state_equiv_def, execution_equiv_def] >>
   rpt CASE_TAC >> gvs[result_equiv_def] >>
@@ -542,9 +542,9 @@ Triviality step_inst_ret_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     inst.inst_opcode = RET ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rpt gen_tac >> strip_tac >> simp[step_inst_def] >>
+  rpt gen_tac >> strip_tac >> simp[step_inst_base_def] >>
   sg `eval_operands inst.inst_operands s1 =
       eval_operands inst.inst_operands s2`
   >- (qsuff_tac `!ops. (!op. MEM op ops ==>
@@ -664,10 +664,10 @@ Triviality step_inst_alloca_equiv:
   !vars inst s1 s2.
     state_equiv vars s1 s2 /\
     MEM inst.inst_opcode [ALLOCA; PALLOCA; CALLOCA] ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
-  simp[step_inst_def] >>
+  simp[step_inst_base_def] >>
   rpt CASE_TAC >> gvs[result_equiv_def] >>
   irule exec_alloca_equiv >> simp[]
 QED
@@ -677,12 +677,12 @@ Triviality step_inst_ext_call_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     MEM inst.inst_opcode [CALL; STATICCALL] ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
   `s1.vs_call_ctx = s2.vs_call_ctx`
     by fs[state_equiv_def, execution_equiv_def] >>
-  simp[step_inst_def] >>
+  simp[step_inst_base_def] >>
   rpt CASE_TAC >> gvs[result_equiv_def] >>
   imp_res_tac eval_operand_equiv >> gvs[] >>
   irule exec_ext_call_equiv >> simp[]
@@ -693,10 +693,10 @@ Triviality step_inst_delegatecall_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     inst.inst_opcode = DELEGATECALL ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
-  simp[step_inst_def] >>
+  simp[step_inst_base_def] >>
   rpt CASE_TAC >> gvs[result_equiv_def] >>
   imp_res_tac eval_operand_equiv >> gvs[] >>
   irule exec_delegatecall_equiv >> simp[]
@@ -707,24 +707,24 @@ Triviality step_inst_create_equiv:
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     MEM inst.inst_opcode [CREATE; CREATE2] ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
-  simp[step_inst_def] >>
+  simp[step_inst_base_def] >>
   rpt CASE_TAC >> gvs[result_equiv_def] >>
   imp_res_tac eval_operand_equiv >> gvs[] >>
   irule exec_create_equiv >> simp[]
 QED
 
 (* ==========================================================================
-   step_inst: Main theorem — dispatches to helpers
+   step_inst_base: Main theorem — dispatches to helpers
    ========================================================================== *)
 
 Theorem step_inst_result_equiv:
   !vars inst s1 s2.
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) ==>
-    result_equiv vars (step_inst inst s1) (step_inst inst s2)
+    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `inst.inst_opcode` >>
@@ -798,10 +798,10 @@ Proof
       drule_all step_inst_create_equiv >> simp[],
     `MEM inst.inst_opcode [ALLOCA;PALLOCA;CALLOCA]` by simp[] >>
       drule_all step_inst_alloca_equiv >> simp[],
-    (* INVOKE: handled in module sem, falls to Error in step_inst.
+    (* INVOKE: handled in module sem, falls to Error in step_inst_base.
        Explicit so new opcode additions cause proof failure here. *)
     `inst.inst_opcode = INVOKE` by simp[] >>
-      simp[step_inst_def, result_equiv_def]
+      simp[step_inst_base_def, result_equiv_def]
   ]
 QED
 
@@ -829,9 +829,9 @@ Proof
     fs[get_instruction_def] >>
     Cases_on `s2.vs_inst_idx < LENGTH bb.bb_instructions` >> fs[] >>
     metis_tac[listTheory.EL_MEM]) >>
-  `result_equiv vars (step_inst cur_inst s1) (step_inst cur_inst s2)` by (
+  `result_equiv vars (step_inst_base cur_inst s1) (step_inst_base cur_inst s2)` by (
     irule step_inst_result_equiv >> simp[] >> metis_tac[]) >>
-  Cases_on `step_inst cur_inst s1` >> Cases_on `step_inst cur_inst s2` >>
+  Cases_on `step_inst_base cur_inst s1` >> Cases_on `step_inst_base cur_inst s2` >>
   gvs[result_equiv_def] >>
   Cases_on `is_terminator cur_inst.inst_opcode` >>
   simp[result_equiv_def] >>
@@ -876,7 +876,7 @@ Proof
   `!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars` by
     (gvs[get_instruction_def] >> metis_tac[listTheory.EL_MEM]) >>
   drule_all step_inst_result_equiv >> strip_tac >>
-  Cases_on `step_inst inst s1` >> Cases_on `step_inst inst s2` >>
+  Cases_on `step_inst_base inst s1` >> Cases_on `step_inst_base inst s2` >>
   gvs[result_equiv_def] >>
   Cases_on `is_terminator inst.inst_opcode` >> gvs[] >-
     (* Terminator: check vs_halted *)
