@@ -73,8 +73,9 @@ Theorem conditional_inst_sim_proof:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool) f P.
     (!s. R_ok s s) /\ (!s. R_term s s) /\
-    (!inst s. P inst ==>
-       lift_result R_ok R_term (step_inst inst s) (step_inst (f inst) s)) /\
+    (!fuel ctx inst s. P inst ==>
+       lift_result R_ok R_term
+         (step_inst fuel ctx inst s) (step_inst fuel ctx (f inst) s)) /\
     (!inst. P inst ==>
        is_terminator inst.inst_opcode =
        is_terminator (f inst).inst_opcode) /\

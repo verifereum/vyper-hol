@@ -35,17 +35,17 @@ Ancestors
 (* Per-instruction simulation parameterized by lattice soundness.
    f transforms an instruction given the lattice value at that point.
    sound connects abstract lattice values to concrete states.
-   INVOKE instructions are preserved (handled by run_block dispatch,
-   not step_inst — transforms must not alter them).
+   INVOKE instructions are preserved (transforms must not alter them).
+   Uses step_inst (not step_inst_base) for consistency with inst_simulates.
    When sound = λv s. T, this reduces to ∀v. inst_simulates R_ok R_term (f v). *)
 Definition analysis_inst_simulates_def:
   analysis_inst_simulates R_ok R_term
     (sound : 'a -> venom_state -> bool)
     (f : 'a -> instruction -> instruction) <=>
-    (!v inst s.
+    (!v fuel ctx inst s.
        sound v s ==>
        lift_result R_ok R_term
-         (step_inst inst s) (step_inst (f v inst) s)) /\
+         (step_inst fuel ctx inst s) (step_inst fuel ctx (f v inst) s)) /\
     (!v inst.
        is_terminator inst.inst_opcode =
        is_terminator (f v inst).inst_opcode) /\
@@ -59,8 +59,8 @@ End
 Definition transfer_sound_def:
   transfer_sound (sound : 'a -> venom_state -> bool)
                  (transfer : 'ctx -> instruction -> 'a -> 'a) ctx <=>
-    !v inst s s'.
-      sound v s /\ step_inst inst s = OK s' ==>
+    !fuel run_ctx v inst s s'.
+      sound v s /\ step_inst fuel run_ctx inst s = OK s' ==>
       sound (transfer ctx inst v) s'
 End
 

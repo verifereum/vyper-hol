@@ -50,14 +50,14 @@ Proof
   >- (
     (* Base case: fuel = 0 - explicitly provide witness *)
     qexists_tac `run_function 0 ctx fn s2` >> simp[] >>
-    gvs[Once (CONJUNCT2 run_block_def), result_equiv_def] >>
-    simp[Once (CONJUNCT2 run_block_def), result_equiv_def]
+    gvs[Once (run_function_def), result_equiv_def] >>
+    simp[Once (run_function_def), result_equiv_def]
   ) >>
   (* SUC fuel case - unfold carefully *)
   qpat_x_assum `run_function (SUC _) _ _ _ = _` mp_tac >>
-  simp[Once (CONJUNCT2 run_block_def)] >> strip_tac >>
+  simp[Once (run_function_def)] >> strip_tac >>
   `s1.vs_current_bb = s2.vs_current_bb` by fs[state_equiv_def, execution_equiv_def] >>
-  simp[Once (CONJUNCT2 run_block_def)] >>
+  simp[Once (run_function_def)] >>
   Cases_on `lookup_block s1.vs_current_bb fn.fn_blocks` >> gvs[result_equiv_def] >>
   `EVERY (\inst. inst.inst_opcode <> INVOKE) x.bb_instructions` by
     (fs[no_invoke_in_function_def, EVERY_MEM] >>
@@ -93,20 +93,20 @@ Proof
   >- (
     (* Base case: fuel = 0, vs_prev_bb <> NONE *)
     qexists_tac `run_function 0 ctx (transform_function func) s` >> simp[] >>
-    gvs[Once (CONJUNCT2 run_block_def), result_equiv_def] >>
-    simp[Once (CONJUNCT2 run_block_def), result_equiv_def]
+    gvs[Once (run_function_def), result_equiv_def] >>
+    simp[Once (run_function_def), result_equiv_def]
   )
   >- (
     (* Base case: fuel = 0, at entry block *)
     qexists_tac `run_function 0 ctx (transform_function func) s` >> simp[] >>
-    gvs[Once (CONJUNCT2 run_block_def), result_equiv_def] >>
-    simp[Once (CONJUNCT2 run_block_def), result_equiv_def]
+    gvs[Once (run_function_def), result_equiv_def] >>
+    simp[Once (run_function_def), result_equiv_def]
   )
   >- (
     (* SUC fuel case: vs_prev_bb <> NONE *)
     qpat_x_assum `run_function (SUC _) _ _ _ = _` mp_tac >>
-    simp[Once (CONJUNCT2 run_block_def)] >> strip_tac >>
-    simp[Once (CONJUNCT2 run_block_def), transform_function_def, lookup_block_transform] >>
+    simp[Once (run_function_def)] >> strip_tac >>
+    simp[Once (run_function_def), transform_function_def, lookup_block_transform] >>
     Cases_on `lookup_block s.vs_current_bb func.fn_blocks` >> gvs[result_equiv_def] >>
     rename1 `lookup_block _ _ = SOME bb` >>
     (* Normalize to use transform_function for IH *)
@@ -145,8 +145,8 @@ Proof
   ) >>
   (* SUC fuel case: at entry block *)
   qpat_x_assum `run_function (SUC _) _ _ _ = _` mp_tac >>
-  simp[Once (CONJUNCT2 run_block_def)] >> strip_tac >>
-  simp[Once (CONJUNCT2 run_block_def), transform_function_def, lookup_block_transform] >>
+  simp[Once (run_function_def)] >> strip_tac >>
+  simp[Once (run_function_def), transform_function_def, lookup_block_transform] >>
   Cases_on `lookup_block s.vs_current_bb func.fn_blocks` >> gvs[result_equiv_def] >>
   rename1 `lookup_block _ _ = SOME bb` >>
   `MEM bb func.fn_blocks` by metis_tac[lookup_block_MEM] >>

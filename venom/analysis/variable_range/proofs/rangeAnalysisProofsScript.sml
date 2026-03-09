@@ -83,7 +83,7 @@ QED
 Theorem range_evaluate_inst_sound:
   ∀dfg inst rs s s'.
     in_range_state rs s.vs_vars ∧
-    step_inst inst s = OK s' ⇒
+    step_inst fuel ctx inst s = OK s' ⇒
     in_range_state (range_evaluate_inst dfg inst rs) s'.vs_vars
 Proof
   cheat
