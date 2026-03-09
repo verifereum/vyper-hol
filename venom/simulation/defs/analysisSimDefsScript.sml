@@ -2,28 +2,17 @@
  * Analysis-Driven Simulation — Definitions
  *
  * Bridge between dataflow analysis results and the simulation framework.
- * Extends inst_simulates/block_simulates with per-instruction lattice values.
+ * 1:N is the primary abstraction: f : 'a → inst → inst list.
+ * 1:1 (f : 'a → inst → inst) is a special case via inst_simulates_implies_1n.
  *
- * Two transform signatures:
- *   1:1  f : 'a → inst → inst         (replace)
- *   1:N  f : 'a → inst → inst list    (remove/replace/expand)
- *
- * TOP-LEVEL (1:1):
- *   analysis_inst_simulates      — per-instruction sim (1:1)
- *   analysis_block_transform     — block transform using MAPi
- *   analysis_function_transform  — function transform
- *   analysis_block_transform_widen  — widen variant
- *   analysis_function_transform_widen — widen variant
- *
- * TOP-LEVEL (1:N):
+ * TOP-LEVEL:
  *   run_insts                         — sequential step_inst over a list
  *   analysis_inst_simulates_1n        — per-instruction sim (1:N)
  *   analysis_block_transform_1n       — block transform using FLAT ∘ MAPi
  *   analysis_function_transform_1n    — function transform
  *   analysis_block_transform_1n_widen — widen variant
  *   analysis_function_transform_1n_widen — widen variant
- *
- * Helper:
+ *   analysis_inst_simulates           — per-instruction sim (1:1, for corollary)
  *   transfer_sound       — intra-block: transfer tracks concrete execution
  *   edge_transfer_sound  — inter-block: edge transfer sound for states on that edge
  *)
@@ -78,36 +67,6 @@ Definition edge_transfer_sound_def:
     !src dst v s.
       sound v s /\ s.vs_prev_bb = SOME src /\ s.vs_current_bb = dst ==>
       sound (edge_transfer ctx src dst v) s
-End
-
-(* Transform a block using per-instruction analysis values.
-   At each instruction index, query df_at for the lattice value and apply f. *)
-Definition analysis_block_transform_def:
-  analysis_block_transform (bottom : 'a) (result : 'a df_state) f bb =
-    bb with bb_instructions :=
-      MAPi (λidx inst. f (df_at bottom result bb.bb_label idx) inst)
-           bb.bb_instructions
-End
-
-(* Transform an entire function using analysis results. *)
-Definition analysis_function_transform_def:
-  analysis_function_transform bottom result f fn =
-    function_map_transform (analysis_block_transform bottom result f) fn
-End
-
-(* Widen variant: transform using df_widen_at instead of df_at. *)
-Definition analysis_block_transform_widen_def:
-  analysis_block_transform_widen (bottom : 'a) (result : 'a df_widen_state)
-                                 f bb =
-    bb with bb_instructions :=
-      MAPi (λidx inst. f (df_widen_at bottom result bb.bb_label idx) inst)
-           bb.bb_instructions
-End
-
-(* Widen variant: transform function using widening analysis results. *)
-Definition analysis_function_transform_widen_def:
-  analysis_function_transform_widen bottom result f fn =
-    function_map_transform (analysis_block_transform_widen bottom result f) fn
 End
 
 (* ===== 1:N Transform Framework ===== *)
