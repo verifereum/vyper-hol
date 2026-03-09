@@ -13,24 +13,40 @@
 
 Theory analysisSimProofs
 Ancestors
-  analysisSimDefs dfAnalyzeProofs dfAnalyzeWidenProofs passSimulationDefs
+  analysisSimDefs execEquivParamDefs dfAnalyzeProofs dfAnalyzeWidenProofs
+  passSimulationDefs
 
-(* When sound = λv s. T, analysis_inst_simulates_1n implies block simulation.
-   Proof sketch: induction on original block. For each original instruction,
-   the expansion is processed by run_block as non-terminator non-INVOKE
-   steps (matching run_insts modulo inst_idx). Terminators and INVOKE
-   pass through unchanged. *)
+(* ===== Block-level lifting ===== *)
+
+(* Per-instruction 1:N simulation → per-block simulation.
+   Needs valid_state_rel + transitivity for triangle composition,
+   plus operand condition: R_ok-related states agree on all operand
+   variables of bb's instructions.
+   For INVOKE/terminators: analysis_inst_simulates_1n requires
+   f v inst = [inst], so both sides dispatch identically. *)
 Theorem analysis_inst_sim_block_sim_1n_proof:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (bottom : 'a) (result : 'a df_state)
-   (f : 'a -> instruction -> instruction list).
-    analysis_inst_simulates_1n R_ok R_term (\v s. T) f
+   (f : 'a -> instruction -> instruction list) bb.
+    valid_state_rel R_ok R_term /\
+    (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
+    (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
+    analysis_inst_simulates_1n R_ok R_term (\v s. T) f /\
+    (!inst x.
+       MEM inst bb.bb_instructions /\ MEM (Var x) inst.inst_operands ==>
+       !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
   ==>
-    block_simulates R_ok R_term (analysis_block_transform_1n bottom result f)
+    !fuel ctx s.
+      lift_result R_ok R_term
+        (run_block fuel ctx bb s)
+        (run_block fuel ctx
+          (analysis_block_transform_1n bottom result f bb) s)
 Proof
   cheat
 QED
+
+(* ===== End-to-end pass correctness ===== *)
 
 (* Universal-sound 1:N pass correctness (non-widening). *)
 Theorem df_analysis_pass_correct_1n_proof:
@@ -51,6 +67,9 @@ Theorem df_analysis_pass_correct_1n_proof:
     let st0 = init_df_state bottom (MAP (\bb. bb.bb_label) bbs) in
     let result = df_analyze dir bottom join transfer edge_transfer
                             ctx entry_val fn in
+      valid_state_rel R_ok R_term /\
+      (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
+      (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
       (!lbl st. P st ==> leq st (process lbl st)) /\
       (!lbl st. P st ==> P (process lbl st)) /\
       (case entry_val of NONE => P st0
@@ -59,8 +78,10 @@ Theorem df_analysis_pass_correct_1n_proof:
       bounded_measure P leq m b /\
       wl_deps_complete process deps /\
       analysis_inst_simulates_1n R_ok R_term (\(v:'a) s. T) f /\
-      (!s1 s2. R_ok s1 s2 ==> s1.vs_current_bb = s2.vs_current_bb) /\
-      (!s1 s2. R_ok s1 s2 ==> s1.vs_halted = s2.vs_halted)
+      (!bb inst x.
+         MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+         MEM (Var x) inst.inst_operands ==>
+         !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
     ==>
       !fuel ctx s.
         lift_result R_ok R_term (run_function fuel ctx fn s)
@@ -90,6 +111,9 @@ Theorem df_analysis_pass_correct_1n_sound_proof:
     let st0 = init_df_state bottom (MAP (\bb. bb.bb_label) bbs) in
     let result = df_analyze dir bottom join transfer edge_transfer
                             ctx entry_val fn in
+      valid_state_rel R_ok R_term /\
+      (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
+      (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
       (!lbl st. P st ==> leq st (process lbl st)) /\
       (!lbl st. P st ==> P (process lbl st)) /\
       (case entry_val of NONE => P st0
@@ -104,8 +128,11 @@ Theorem df_analysis_pass_correct_1n_sound_proof:
       (case entry_val of NONE => T
        | SOME (lbl, v) => !s. sound v s) /\
       analysis_inst_simulates_1n R_ok R_term sound f /\
-      (!s1 s2. R_ok s1 s2 ==> s1.vs_current_bb = s2.vs_current_bb) /\
-      (!s1 s2. R_ok s1 s2 ==> s1.vs_halted = s2.vs_halted)
+      (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
+      (!bb inst x.
+         MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+         MEM (Var x) inst.inst_operands ==>
+         !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
     ==>
       !fuel ctx s.
         lift_result R_ok R_term (run_function fuel ctx fn s)
@@ -135,6 +162,9 @@ Theorem df_analysis_pass_correct_1n_widen_sound_proof:
     let st0 = init_df_widen_state bottom (MAP (\bb. bb.bb_label) bbs) in
     let result = df_analyze_widen dir bottom join widen threshold
                    transfer edge_transfer ctx entry_val fn in
+      valid_state_rel R_ok R_term /\
+      (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
+      (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
       (!lbl st. P st ==> leq st (process lbl st)) /\
       (!lbl st. P st ==> P (process lbl st)) /\
       (case entry_val of NONE => P st0
@@ -150,8 +180,11 @@ Theorem df_analysis_pass_correct_1n_widen_sound_proof:
       (case entry_val of NONE => T
        | SOME (lbl, v) => !s. sound v s) /\
       analysis_inst_simulates_1n R_ok R_term sound f /\
-      (!s1 s2. R_ok s1 s2 ==> s1.vs_current_bb = s2.vs_current_bb) /\
-      (!s1 s2. R_ok s1 s2 ==> s1.vs_halted = s2.vs_halted)
+      (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
+      (!bb inst x.
+         MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+         MEM (Var x) inst.inst_operands ==>
+         !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
     ==>
       !fuel ctx s.
         lift_result R_ok R_term (run_function fuel ctx fn s)
@@ -161,8 +194,10 @@ Proof
   cheat
 QED
 
+(* ===== 1:1 as special case ===== *)
+
 (* 1:1 is a special case of 1:N with singleton output.
-   run_insts [g v inst] s = step_inst (g v inst) s (when step gives OK or terminal).
+   run_insts fuel ctx [g v inst] s reduces to step_inst fuel ctx (g v inst) s.
    FLAT (MAPi (λi inst. [g v_i inst]) insts) = MAPi (λi inst. g v_i inst) insts. *)
 Theorem inst_simulates_implies_1n_proof:
   !(R_ok : venom_state -> venom_state -> bool)

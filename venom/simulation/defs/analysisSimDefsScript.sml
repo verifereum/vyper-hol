@@ -117,10 +117,10 @@ End
    managed by run_block. Used only in the simulation predicate to
    state what the replacement instructions should compute. *)
 Definition run_insts_def:
-  run_insts [] s = OK s /\
-  run_insts (inst :: rest) s =
-    case step_inst inst s of
-      OK s' => run_insts rest s'
+  run_insts fuel ctx [] s = OK s /\
+  run_insts fuel ctx (inst :: rest) s =
+    case step_inst fuel ctx inst s of
+      OK s' => run_insts fuel ctx rest s'
     | other => other
 End
 
@@ -141,10 +141,11 @@ Definition analysis_inst_simulates_1n_def:
     (sound : 'a -> venom_state -> bool)
     (f : 'a -> instruction -> instruction list) <=>
     (* Simulation: original step relates to sequential replacement *)
-    (!v inst s.
+    (!fuel ctx v inst s.
        sound v s ==>
        lift_result R_ok R_term
-         (step_inst inst s) (run_insts (f v inst) s)) /\
+         (step_inst fuel ctx inst s)
+         (run_insts fuel ctx (f v inst) s)) /\
     (* Terminators preserved *)
     (!v inst. is_terminator inst.inst_opcode ==> f v inst = [inst]) /\
     (* INVOKE preserved *)
