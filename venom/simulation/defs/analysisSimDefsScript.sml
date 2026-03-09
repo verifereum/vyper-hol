@@ -2,12 +2,12 @@
  * Analysis-Driven Simulation — Definitions
  *
  * Bridge between dataflow analysis results and the simulation framework.
- * f : 'a → inst → inst list (1:N: remove/replace/expand).
+ * f : 'a → inst → inst list (remove/replace/expand).
  * 1:1 (f : 'a → inst → inst) is a special case via analysis_inst_simulates_from_1.
  *
  * TOP-LEVEL:
  *   run_insts                       — sequential step_inst over a list
- *   analysis_inst_simulates         — per-instruction sim (1:N primary)
+ *   analysis_inst_simulates         — per-instruction simulation
  *   analysis_block_transform        — block transform using FLAT ∘ MAPi
  *   analysis_function_transform     — function transform
  *   analysis_block_transform_widen  — widen variant
@@ -26,7 +26,9 @@ Ancestors
 (* 1:1 simulation helper (used by analysis_inst_simulates_from_1 corollary).
    f : 'a → inst → inst maps each instruction to a single replacement.
    Passes satisfying this automatically satisfy analysis_inst_simulates
-   via the corollary (\v inst. [g v inst]). *)
+   via the corollary (\v inst. [g v inst]).
+   Constraints mirror analysis_inst_simulates: terminators and INVOKE
+   preserved exactly, non-preserved produce non-terminator non-INVOKE. *)
 Definition analysis_inst_simulates_1_def:
   analysis_inst_simulates_1 R_ok R_term
     (sound : 'a -> venom_state -> bool)
@@ -35,10 +37,12 @@ Definition analysis_inst_simulates_1_def:
        sound v s ==>
        lift_result R_ok R_term
          (step_inst fuel ctx inst s) (step_inst fuel ctx (f v inst) s)) /\
+    (!v inst. is_terminator inst.inst_opcode ==> f v inst = inst) /\
+    (!v inst. inst.inst_opcode = INVOKE ==> f v inst = inst) /\
     (!v inst.
-       is_terminator inst.inst_opcode =
-       is_terminator (f v inst).inst_opcode) /\
-    (!v inst. inst.inst_opcode = INVOKE ==> f v inst = inst)
+       ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE ==>
+       ~is_terminator (f v inst).inst_opcode /\
+       (f v inst).inst_opcode <> INVOKE)
 End
 
 (* Analysis soundness: abstract lattice values describe reachable concrete

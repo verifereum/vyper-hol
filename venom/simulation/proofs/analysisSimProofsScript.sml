@@ -16,9 +16,9 @@ Ancestors
 
 (* ===== Block-level lifting ===== *)
 
-(* Per-instruction 1:N sim → per-block sim.
+(* Per-instruction sim → per-block sim.
    Preconditions: valid_state_rel, R_ok/R_term transitivity,
-   universal-sound 1:N simulation, and operand agreement under R_ok.
+   universal-sound simulation, and operand agreement under R_ok.
    Triangle proof: same-code-diff-state (step_inst_preserves_R) composed
    with same-state-diff-code (analysis_inst_simulates) at each step. *)
 Theorem analysis_inst_sim_block_sim_proof:
