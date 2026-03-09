@@ -2,43 +2,56 @@
  * Analysis-Driven Simulation — Proofs
  *
  * TOP-LEVEL:
- *   analysis_inst_sim_block_sim_proof    — per-inst sim → block sim (universal sound)
- *   df_analysis_pass_correct_proof       — end-to-end: analysis + transform → function sim
- *   df_analysis_pass_correct_sound_proof — state-dependent end-to-end (finite lattice)
- *   df_analysis_pass_correct_widen_sound_proof — state-dependent end-to-end (widening)
+ *   analysis_inst_sim_block_sim_proof         — block-level lifting
+ *   df_analysis_pass_correct_proof             — end-to-end (universal sound)
+ *   df_analysis_pass_correct_sound_proof       — end-to-end (state-dependent)
+ *   df_analysis_pass_correct_widen_sound_proof — end-to-end (widening)
+ *   analysis_inst_simulates_from_1_proof       — 1:1 corollary
  *)
 
 Theory analysisSimProofs
 Ancestors
-  analysisSimDefs dfAnalyzeProofs dfAnalyzeWidenProofs passSimulationDefs
+  analysisSimDefs execEquivParamDefs dfAnalyzeProofs dfAnalyzeWidenProofs
+  passSimulationDefs
 
-(* When sound = λv s. T (analysis doesn't constrain states),
-   analysis_inst_simulates implies block simulation unconditionally.
-   This is the common case for liveness-driven dead code elimination. *)
+(* ===== Block-level lifting ===== *)
+
+(* Per-instruction sim → per-block sim.
+   Preconditions: valid_state_rel, R_ok/R_term transitivity,
+   universal-sound simulation, and operand agreement under R_ok.
+   Triangle proof: same-code-diff-state (step_inst_preserves_R) composed
+   with same-state-diff-code (analysis_inst_simulates) at each step. *)
 Theorem analysis_inst_sim_block_sim_proof:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (bottom : 'a) (result : 'a df_state)
-   (f : 'a -> instruction -> instruction).
-    analysis_inst_simulates R_ok R_term (λv s. T) f
+   (f : 'a -> instruction -> instruction list) bb.
+    valid_state_rel R_ok R_term /\
+    (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
+    (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
+    analysis_inst_simulates R_ok R_term (\v s. T) f /\
+    (!inst x.
+       MEM inst bb.bb_instructions /\ MEM (Var x) inst.inst_operands ==>
+       !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
   ==>
-    block_simulates R_ok R_term (analysis_block_transform bottom result f)
+    !fuel ctx s.
+      lift_result R_ok R_term
+        (run_block fuel ctx bb s)
+        (run_block fuel ctx
+          (analysis_block_transform bottom result f bb) s)
 Proof
   cheat
 QED
 
-(* End-to-end pass correctness using df_analyze.
-   Combines: convergence + universal-sound transform → function-level lift_result.
+(* ===== End-to-end pass correctness ===== *)
 
-   For state-dependent soundness (e.g., range analysis), a separate theorem
-   with transfer_sound + initial_sound preconditions is needed — see design
-   notes in TASK_df_refactor.md. *)
+(* Universal-sound pass correctness (non-widening). *)
 Theorem df_analysis_pass_correct_proof:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (dir : direction) (bottom : 'a) join transfer edge_transfer ctx
    entry_val fn
-   (f : 'a -> instruction -> instruction)
+   (f : 'a -> instruction -> instruction list)
    (leq : 'a df_state -> 'a df_state -> bool)
    m b (P : 'a df_state -> bool).
     let cfg = cfg_analyze fn in
@@ -48,11 +61,12 @@ Theorem df_analysis_pass_correct_proof:
     let deps = (case dir of
                   Forward => cfg_succs_of cfg
                 | Backward => cfg_preds_of cfg) in
-    let st0 = init_df_state bottom (MAP (λbb. bb.bb_label) bbs) in
-    let all_lbls = MAP (λbb. bb.bb_label) bbs in
+    let st0 = init_df_state bottom (MAP (\bb. bb.bb_label) bbs) in
     let result = df_analyze dir bottom join transfer edge_transfer
                             ctx entry_val fn in
-      (* Worklist convergence preconditions *)
+      valid_state_rel R_ok R_term /\
+      (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
+      (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
       (!lbl st. P st ==> leq st (process lbl st)) /\
       (!lbl st. P st ==> P (process lbl st)) /\
       (case entry_val of NONE => P st0
@@ -60,33 +74,28 @@ Theorem df_analysis_pass_correct_proof:
            P (st0 with ds_boundary := st0.ds_boundary |+ (lbl, v))) /\
       bounded_measure P leq m b /\
       wl_deps_complete process deps /\
-      (* Transform simulation (universal soundness) *)
-      analysis_inst_simulates R_ok R_term (λ(v:'a) s. T) f /\
-      (* R_ok preserves control flow *)
-      (!s1 s2. R_ok s1 s2 ==> s1.vs_current_bb = s2.vs_current_bb) /\
-      (!s1 s2. R_ok s1 s2 ==> s1.vs_halted = s2.vs_halted)
+      analysis_inst_simulates R_ok R_term (\(v:'a) s. T) f /\
+      (!bb inst x.
+         MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+         MEM (Var x) inst.inst_operands ==>
+         !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
     ==>
       !fuel ctx s.
         lift_result R_ok R_term (run_function fuel ctx fn s)
-          (run_function fuel ctx (analysis_function_transform bottom result f fn) s)
+          (run_function fuel ctx
+            (analysis_function_transform bottom result f fn) s)
 Proof
   cheat
 QED
 
-(* State-dependent pass correctness: for analyses where transform safety
-   depends on the lattice value being sound for the concrete state.
-   Requires transfer_sound (intra-block), edge_transfer_sound (inter-block,
-   conditioned on edge reachability via vs_prev_bb), join soundness,
-   in addition to convergence and analysis_inst_simulates.
-   This extends the universal case (sound = λv s. T) to range-analysis-driven
-   transforms and similar state-dependent optimizations. *)
+(* State-dependent pass correctness (non-widening). *)
 Theorem df_analysis_pass_correct_sound_proof:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (dir : direction) (bottom : 'a) join transfer edge_transfer ctx
    entry_val fn
    (sound : 'a -> venom_state -> bool)
-   (f : 'a -> instruction -> instruction)
+   (f : 'a -> instruction -> instruction list)
    (leq : 'a df_state -> 'a df_state -> bool)
    m b (P : 'a df_state -> bool).
     let cfg = cfg_analyze fn in
@@ -96,11 +105,12 @@ Theorem df_analysis_pass_correct_sound_proof:
     let deps = (case dir of
                   Forward => cfg_succs_of cfg
                 | Backward => cfg_preds_of cfg) in
-    let st0 = init_df_state bottom (MAP (λbb. bb.bb_label) bbs) in
-    let all_lbls = MAP (λbb. bb.bb_label) bbs in
+    let st0 = init_df_state bottom (MAP (\bb. bb.bb_label) bbs) in
     let result = df_analyze dir bottom join transfer edge_transfer
                             ctx entry_val fn in
-      (* Worklist convergence preconditions *)
+      valid_state_rel R_ok R_term /\
+      (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
+      (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
       (!lbl st. P st ==> leq st (process lbl st)) /\
       (!lbl st. P st ==> P (process lbl st)) /\
       (case entry_val of NONE => P st0
@@ -108,42 +118,35 @@ Theorem df_analysis_pass_correct_sound_proof:
            P (st0 with ds_boundary := st0.ds_boundary |+ (lbl, v))) /\
       bounded_measure P leq m b /\
       wl_deps_complete process deps /\
-      (* Analysis soundness: transfer tracks concrete execution *)
       transfer_sound sound transfer ctx /\
-      (* Edge transfer sound for states on that edge (vs_prev_bb) *)
       edge_transfer_sound sound edge_transfer ctx /\
-      (* Join preserves soundness (upward-closure: if one branch is sound,
-         joining with another value stays sound) *)
       (!a b s. sound a s ==> sound (join a b) s) /\
-      (* Bottom is sound for all states (unprocessed blocks are safe) *)
       (!s. sound bottom s) /\
-      (* Entry value sound for all states, if provided *)
       (case entry_val of NONE => T
        | SOME (lbl, v) => !s. sound v s) /\
-      (* Transform simulation (state-dependent) *)
       analysis_inst_simulates R_ok R_term sound f /\
-      (* R_ok preserves control flow *)
-      (!s1 s2. R_ok s1 s2 ==> s1.vs_current_bb = s2.vs_current_bb) /\
-      (!s1 s2. R_ok s1 s2 ==> s1.vs_halted = s2.vs_halted)
+      (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
+      (!bb inst x.
+         MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+         MEM (Var x) inst.inst_operands ==>
+         !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
     ==>
       !fuel ctx s.
         lift_result R_ok R_term (run_function fuel ctx fn s)
-          (run_function fuel ctx (analysis_function_transform bottom result f fn) s)
+          (run_function fuel ctx
+            (analysis_function_transform bottom result f fn) s)
 Proof
   cheat
 QED
 
-(* State-dependent pass correctness for widening analyses.
-   Same structure as df_analysis_pass_correct_sound but uses df_analyze_widen
-   and df_widen_state. For range-analysis-driven transforms (assert elimination,
-   algebraic signextend folding, comparison folding). *)
+(* State-dependent pass correctness (widening). *)
 Theorem df_analysis_pass_correct_widen_sound_proof:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (dir : direction) (bottom : 'a) join widen threshold
    transfer edge_transfer ctx entry_val fn
    (sound : 'a -> venom_state -> bool)
-   (f : 'a -> instruction -> instruction)
+   (f : 'a -> instruction -> instruction list)
    (leq : 'a df_widen_state -> 'a df_widen_state -> bool)
    m b (P : 'a df_widen_state -> bool).
     let cfg = cfg_analyze fn in
@@ -153,11 +156,12 @@ Theorem df_analysis_pass_correct_widen_sound_proof:
     let deps = (case dir of
                   Forward => cfg_succs_of cfg
                 | Backward => cfg_preds_of cfg) in
-    let st0 = init_df_widen_state bottom (MAP (λbb. bb.bb_label) bbs) in
-    let all_lbls = MAP (λbb. bb.bb_label) bbs in
+    let st0 = init_df_widen_state bottom (MAP (\bb. bb.bb_label) bbs) in
     let result = df_analyze_widen dir bottom join widen threshold
                    transfer edge_transfer ctx entry_val fn in
-      (* Worklist convergence preconditions *)
+      valid_state_rel R_ok R_term /\
+      (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
+      (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
       (!lbl st. P st ==> leq st (process lbl st)) /\
       (!lbl st. P st ==> P (process lbl st)) /\
       (case entry_val of NONE => P st0
@@ -165,7 +169,6 @@ Theorem df_analysis_pass_correct_widen_sound_proof:
            P (st0 with dws_boundary := st0.dws_boundary |+ (lbl, v))) /\
       bounded_measure P leq m b /\
       wl_deps_complete process deps /\
-      (* Analysis soundness *)
       transfer_sound sound transfer ctx /\
       edge_transfer_sound sound edge_transfer ctx /\
       (!a b s. sound a s ==> sound (join a b) s) /\
@@ -173,16 +176,33 @@ Theorem df_analysis_pass_correct_widen_sound_proof:
       (!s. sound bottom s) /\
       (case entry_val of NONE => T
        | SOME (lbl, v) => !s. sound v s) /\
-      (* Transform simulation (state-dependent) *)
       analysis_inst_simulates R_ok R_term sound f /\
-      (* R_ok preserves control flow *)
-      (!s1 s2. R_ok s1 s2 ==> s1.vs_current_bb = s2.vs_current_bb) /\
-      (!s1 s2. R_ok s1 s2 ==> s1.vs_halted = s2.vs_halted)
+      (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
+      (!bb inst x.
+         MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+         MEM (Var x) inst.inst_operands ==>
+         !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
     ==>
       !fuel ctx s.
         lift_result R_ok R_term (run_function fuel ctx fn s)
           (run_function fuel ctx
             (analysis_function_transform_widen bottom result f fn) s)
+Proof
+  cheat
+QED
+
+(* ===== 1:1 as special case ===== *)
+
+(* 1:1 is a special case with singleton output.
+   run_insts fuel ctx [g v inst] s reduces to step_inst fuel ctx (g v inst) s.
+   FLAT (MAPi (λi inst. [g v_i inst]) insts) = MAPi (λi inst. g v_i inst) insts. *)
+Theorem analysis_inst_simulates_from_1_proof:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool)
+   (sound : 'a -> venom_state -> bool)
+   (g : 'a -> instruction -> instruction).
+    analysis_inst_simulates_1 R_ok R_term sound g ==>
+    analysis_inst_simulates R_ok R_term sound (\v inst. [g v inst])
 Proof
   cheat
 QED

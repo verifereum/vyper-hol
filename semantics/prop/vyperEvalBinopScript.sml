@@ -430,11 +430,14 @@ Theorem evaluate_binop_shl:
   ∀u x y.
     0 ≤ y ⇒
     evaluate_binop ShL (IntV u x) (IntV u y) =
-    INL (IntV u (int_shift_left (Num y) x))
+    INL (IntV u (if is_Unsigned u then
+                 int_shift_left (Num y) x % &(2 ** int_bound_bits u) else
+                 signed_int_mod (int_bound_bits u) (int_shift_left (Num y) x)))
 Proof
   rpt strip_tac >>
   `¬(y < 0)` by intLib.ARITH_TAC >>
-  simp[vyperValueOperationTheory.evaluate_binop_def]
+  simp[vyperValueOperationTheory.evaluate_binop_def] >>
+  rw[]
 QED
 
 Theorem evaluate_binop_shr:

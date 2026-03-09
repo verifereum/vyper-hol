@@ -43,15 +43,15 @@ Proof
   drule_all rtaHelpersTheory.pattern1_transformed_instructions >>
   simp[LET_THM] >> strip_tac >>
   (* Step 1: Execute ISZERO *)
-  simp[Once run_block_def, block_step_def, get_instruction_def] >>
-  simp[mk_iszero_inst_def, step_inst_def, exec_pure1_def, eval_operand_def] >>
+  simp[Once run_block_def, get_instruction_def] >>
+  simp[mk_iszero_inst_def, step_inst_non_invoke, step_inst_base_def, exec_pure1_def, eval_operand_def] >>
   simp[EVAL ``is_terminator ISZERO``, bool_to_word_F] >>
   simp[next_inst_def, update_var_def] >>
   (* Step 2: Execute ASSERT with 0w — clears returndata *)
-  simp[Once run_block_def, block_step_def, get_instruction_def] >>
-  simp[mk_assert_inst_def, step_inst_def] >>
-  simp[eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  simp[revert_state_def, set_returndata_def]
+  simp[Once run_block_def, get_instruction_def, arithmeticTheory.ADD1,
+       mk_assert_inst_def, step_inst_non_invoke, step_inst_base_def,
+       eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+       revert_state_def, set_returndata_def]
 QED
 
 (* run_block for ISZERO -> ASSERT(1w) -> JMP sequence *)
@@ -84,19 +84,19 @@ Proof
   drule_all rtaHelpersTheory.pattern1_transformed_instructions >>
   simp[LET_THM] >> strip_tac >>
   (* Step 1: Execute ISZERO - produces bool_to_word T = 1w *)
-  simp[Once run_block_def, block_step_def, get_instruction_def] >>
-  simp[mk_iszero_inst_def, step_inst_def, exec_pure1_def, eval_operand_def] >>
+  simp[Once run_block_def, get_instruction_def] >>
+  simp[mk_iszero_inst_def, step_inst_non_invoke, step_inst_base_def, exec_pure1_def, eval_operand_def] >>
   simp[EVAL ``is_terminator ISZERO``, bool_to_word_T] >>
   simp[next_inst_def, update_var_def] >>
   (* Step 2: Execute ASSERT with 1w - passes *)
-  simp[Once run_block_def, block_step_def, get_instruction_def] >>
-  simp[mk_assert_inst_def, step_inst_def] >>
-  simp[eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  simp[EVAL ``is_terminator ASSERT``, next_inst_def] >>
+  simp[Once run_block_def, get_instruction_def, arithmeticTheory.ADD1,
+       mk_assert_inst_def, step_inst_non_invoke, step_inst_base_def,
+       eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+       EVAL ``is_terminator ASSERT``] >>
   (* Step 3: Execute JMP *)
-  simp[Once run_block_def, block_step_def, get_instruction_def] >>
-  simp[mk_jmp_inst_def, step_inst_def] >>
-  simp[EVAL ``is_terminator JMP``, jump_to_def]
+  simp[Once run_block_def, get_instruction_def, arithmeticTheory.ADD1,
+       mk_jmp_inst_def, step_inst_non_invoke, step_inst_base_def,
+       EVAL ``is_terminator JMP``, jump_to_def]
 QED
 
 (* ==========================================================================
@@ -175,7 +175,7 @@ Theorem pattern1_nonzero_execution:
     let s1 = next_inst (update_var fresh_var 0w s) in
     (* Properties *)
     fresh_var IN fresh_vars /\
-    step_inst (EL s.vs_inst_idx bb.bb_instructions) s = OK (jump_to if_nonzero s) /\
+    step_inst_base (EL s.vs_inst_idx bb.bb_instructions) s = OK (jump_to if_nonzero s) /\
     run_block fuel ctx bb s = OK (jump_to if_nonzero s) /\
     run_block fuel ctx bb' s = Abort Revert_abort (revert_state (set_returndata [] s1)) /\
     (jump_to if_nonzero s).vs_current_bb = if_nonzero /\
@@ -187,10 +187,10 @@ Proof
     (* fresh_var IN fresh_vars *)
     irule fresh_var_in_fresh_vars >> simp[] >> metis_tac[],
     (* Original JNZ step *)
-    simp[step_inst_def],
+    simp[step_inst_base_def],
     (* Original run_block *)
-    simp[Once run_block_def, block_step_def, get_instruction_def,
-         step_inst_def, EVAL ``is_terminator JNZ``, jump_to_def],
+    simp[Once run_block_def, get_instruction_def,
+         step_inst_non_invoke, step_inst_base_def, EVAL ``is_terminator JNZ``, jump_to_def],
     (* Transformed run_block *)
     drule_all run_block_iszero_assert_reverts >> simp[LET_THM],
     (* vs_current_bb *)
@@ -222,7 +222,7 @@ Theorem pattern1_zero_execution:
     let s2 = jump_to if_zero s1 in
     (* Properties *)
     fresh_var IN fresh_vars /\
-    step_inst (EL s.vs_inst_idx bb.bb_instructions) s = OK (jump_to if_zero s) /\
+    step_inst_base (EL s.vs_inst_idx bb.bb_instructions) s = OK (jump_to if_zero s) /\
     run_block fuel ctx bb s = OK (jump_to if_zero s) /\
     run_block fuel ctx bb' s = OK s2 /\
     state_equiv fresh_vars (jump_to if_zero s) s2
@@ -231,10 +231,10 @@ Proof
     (* fresh_var IN fresh_vars *)
     irule fresh_var_in_fresh_vars >> simp[] >> metis_tac[],
     (* Original JNZ step *)
-    simp[step_inst_def],
+    simp[step_inst_base_def],
     (* Original run_block *)
-    simp[Once run_block_def, block_step_def, get_instruction_def,
-         step_inst_def, EVAL ``is_terminator JNZ``, jump_to_def],
+    simp[Once run_block_def, get_instruction_def,
+         step_inst_non_invoke, step_inst_base_def, EVAL ``is_terminator JNZ``, jump_to_def],
     (* Transformed run_block *)
     drule_all run_block_iszero_assert_jumps >> simp[LET_THM],
     (* state_equiv - need to derive <> NONE from = SOME *)
