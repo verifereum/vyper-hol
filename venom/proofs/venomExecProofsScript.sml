@@ -127,47 +127,37 @@ QED
 Theorem run_block_OK_not_halted:
   !fuel ctx bb s v. run_block fuel ctx bb s = OK v ==> ~v.vs_halted
 Proof
-  ho_match_mp_tac (cj 1 run_block_ind) >>
+  ho_match_mp_tac (cj 2 run_defs_ind) >>
+  qexists_tac `\fuel ctx inst s. T` >>
   qexists_tac `\fuel ctx fn s. T` >> simp[] >>
   rpt gen_tac >> strip_tac >>
   simp[Once run_block_def] >>
   Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
   rename1 `SOME inst` >>
-  Cases_on `inst.inst_opcode = INVOKE` >> simp[]
-  >- ((* INVOKE: cascade of cases *)
-      gvs[AllCaseEqs()] >> rw[] >> gvs[] >>
-      first_x_assum irule >> simp[])
-  >- ((* Non-INVOKE *)
-      Cases_on `step_inst_base inst s` >> simp[] >>
-      rw[] >> gvs[] >>
-      Cases_on `is_terminator inst.inst_opcode` >> gvs[] >>
-      Cases_on `v'.vs_halted` >> gvs[])
+  Cases_on `step_inst fuel ctx inst s` >> simp[] >>
+  rw[] >> gvs[]
 QED
 
 Theorem run_block_OK_inst_idx_0:
   !fuel ctx bb s v. run_block fuel ctx bb s = OK v ==> v.vs_inst_idx = 0
 Proof
-  ho_match_mp_tac (cj 1 run_block_ind) >>
+  ho_match_mp_tac (cj 2 run_defs_ind) >>
+  qexists_tac `\fuel ctx inst s. T` >>
   qexists_tac `\fuel ctx fn s. T` >> simp[] >>
   rpt gen_tac >> strip_tac >>
   simp[Once run_block_def] >>
   Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
   rename1 `SOME inst` >>
-  Cases_on `inst.inst_opcode = INVOKE` >> simp[]
-  >- ((* INVOKE *)
-      gvs[AllCaseEqs()] >> rw[] >> gvs[] >>
-      first_x_assum irule >> simp[])
-  >- ((* Non-INVOKE: terminator returns OK only via JMP/JNZ *)
-      Cases_on `step_inst_base inst s` >> simp[] >>
-      rw[] >> gvs[] >>
-      Cases_on `is_terminator inst.inst_opcode` >> gvs[] >>
-      (* terminator case: must be JMP/JNZ/DJMP returning OK *)
-      qpat_x_assum `is_terminator _` mp_tac >>
-      simp[is_terminator_def] >>
-      Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-      qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-      simp[step_inst_base_def, jump_to_def] >>
-      gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[])
+  Cases_on `step_inst fuel ctx inst s` >> simp[] >>
+  rw[] >> gvs[] >>
+  Cases_on `is_terminator inst.inst_opcode` >> gvs[] >>
+  (* terminator case: step_inst returned OK, must be JMP/JNZ/DJMP *)
+  qpat_x_assum `is_terminator _` mp_tac >>
+  simp[is_terminator_def] >>
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[Once step_inst_def, step_inst_base_def, jump_to_def] >>
+  gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[]
 QED
 
 (* step_inst_base returns Error for INVOKE *)
@@ -273,9 +263,13 @@ Proof
   `inst.inst_opcode <> INVOKE` by
     (gvs[listTheory.EVERY_MEM, get_instruction_def] >>
      first_x_assum irule >> irule listTheory.EL_MEM >> simp[]) >>
-  simp[] >>
+  simp[Once step_inst_def] >>
   Cases_on `step_inst_base inst s` >> simp[] >>
-  Cases_on `is_terminator inst.inst_opcode` >> simp[]
+  Cases_on `is_terminator inst.inst_opcode` >> simp[] >>
+  (* non-terminator OK: relate new continuation to next_inst *)
+  `v.vs_inst_idx = s.vs_inst_idx` by
+    (drule step_inst_base_preserves_inst_idx >> simp[]) >>
+  simp[next_inst_def, arithmeticTheory.ADD1]
 QED
 
 (* ==========================================================================
@@ -322,79 +316,52 @@ Theorem run_block_invoke_cases:
           s'.vs_inst_idx = s.vs_inst_idx /\
           s'.vs_halted = s.vs_halted)
 Proof
-  rw[] >>
-  (* Unfold both run_blocks at the INVOKE instruction *)
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `res = step_inst fuel ctx inst s` >>
   `run_block fuel ctx bb1 s =
-    (case decode_invoke inst of
-       NONE => Error "invoke: bad operand format"
-     | SOME (cn, ao) =>
-         case lookup_function cn ctx.ctx_functions of
-           NONE => Error "invoke: function not found"
-         | SOME cf =>
-             case eval_operands ao s of
-               NONE => Error "invoke: undefined argument"
-             | SOME args =>
-                 case setup_callee cf args s of
-                   NONE => Error "invoke: empty function"
-                 | SOME cs =>
-                     case run_function fuel ctx cf cs of
-                       IntRet vals cs' =>
-                         (case bind_outputs inst.inst_outputs vals
-                                 (merge_callee_state s cs') of
-                           SOME s' => run_block fuel ctx bb1 (next_inst s')
-                         | NONE => Error "invoke: return arity mismatch")
-                     | Halt s' => Halt s'
-                     | Abort a s' => Abort a s'
-                     | Error e => Error e
-                     | OK _ => Error "invoke: callee did not return")`
-    by simp[Once run_block_def] >>
+    case res of
+      OK s' =>
+        if is_terminator inst.inst_opcode then
+          if s'.vs_halted then Halt s' else OK s'
+        else run_block fuel ctx bb1 (s' with vs_inst_idx := SUC s.vs_inst_idx)
+    | IntRet v s' => IntRet v s'
+    | Halt s' => Halt s'
+    | Abort a s' => Abort a s'
+    | Error e => Error e`
+    by simp[Once run_block_def, Abbr `res`] >>
   `run_block fuel ctx bb2 s =
-    (case decode_invoke inst of
-       NONE => Error "invoke: bad operand format"
-     | SOME (cn, ao) =>
-         case lookup_function cn ctx.ctx_functions of
-           NONE => Error "invoke: function not found"
-         | SOME cf =>
-             case eval_operands ao s of
-               NONE => Error "invoke: undefined argument"
-             | SOME args =>
-                 case setup_callee cf args s of
-                   NONE => Error "invoke: empty function"
-                 | SOME cs =>
-                     case run_function fuel ctx cf cs of
-                       IntRet vals cs' =>
-                         (case bind_outputs inst.inst_outputs vals
-                                 (merge_callee_state s cs') of
-                           SOME s' => run_block fuel ctx bb2 (next_inst s')
-                         | NONE => Error "invoke: return arity mismatch")
-                     | Halt s' => Halt s'
-                     | Abort a s' => Abort a s'
-                     | Error e => Error e
-                     | OK _ => Error "invoke: callee did not return")`
-    by simp[Once run_block_def] >>
-  Cases_on `decode_invoke inst` >> gvs[] >>
-  Cases_on `x` >> rename1 `SOME (cn, ao)` >>
-  Cases_on `lookup_function cn ctx.ctx_functions` >> gvs[] >>
-  rename1 `SOME cf` >>
-  Cases_on `eval_operands ao s` >> gvs[] >>
-  rename1 `SOME args` >>
-  Cases_on `setup_callee cf args s` >> gvs[] >>
-  rename1 `SOME cs` >>
-  Cases_on `run_function fuel ctx cf cs` >> gvs[] >>
-  rename1 `IntRet vals cs'` >>
-  Cases_on `bind_outputs inst.inst_outputs vals (merge_callee_state s cs')` >>
-  gvs[] >>
-  DISJ2_TAC >> qexists_tac `x` >>
-  imp_res_tac bind_outputs_inst_idx >>
-  gvs[merge_callee_state_def, next_inst_def] >>
-  gvs[bind_outputs_def] >>
-  (* FOLDL update_var preserves vs_halted *)
-  qsuff_tac
-    `!l acc. acc.vs_halted = s.vs_halted ==>
-       (FOLDL (\s' (out,val). update_var out val s') acc l).vs_halted =
-       s.vs_halted`
-  >- (disch_then irule >> simp[]) >>
-  Induct >> simp[] >> Cases >> simp[update_var_def]
+    case res of
+      OK s' =>
+        if is_terminator inst.inst_opcode then
+          if s'.vs_halted then Halt s' else OK s'
+        else run_block fuel ctx bb2 (s' with vs_inst_idx := SUC s.vs_inst_idx)
+    | IntRet v s' => IntRet v s'
+    | Halt s' => Halt s'
+    | Abort a s' => Abort a s'
+    | Error e => Error e`
+    by simp[Once run_block_def, Abbr `res`] >>
+  Cases_on `res` >> gvs[]
+  >- ((* OK: INVOKE is not a terminator *)
+      `~is_terminator inst.inst_opcode` by simp[is_terminator_def] >> gvs[] >>
+      DISJ2_TAC >>
+      rename1 `step_inst fuel ctx inst s = OK v` >>
+      qexists_tac `v` >>
+      imp_res_tac step_inst_preserves_inst_idx >> gvs[] >>
+      simp[next_inst_def, arithmeticTheory.ADD1] >>
+      (* vs_halted: need step_inst INVOKE OK preserves halted *)
+      qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+      simp[Once step_inst_def] >>
+      gvs[AllCaseEqs()] >> rw[] >>
+      imp_res_tac bind_outputs_inst_idx >>
+      gvs[merge_callee_state_def, bind_outputs_def] >>
+      qsuff_tac
+        `!l acc. acc.vs_halted = s.vs_halted ==>
+           (FOLDL (\s' (out,val). update_var out val s') acc l).vs_halted =
+           s.vs_halted`
+      >- (disch_then irule >> simp[])
+      >> Induct >> simp[] >> Cases >> simp[update_var_def])
+  >> (* IntRet/Halt/Abort/Error: both sides equal *)
+     DISJ1_TAC >> simp[]
 QED
 
 Theorem block_step_prefix_same:

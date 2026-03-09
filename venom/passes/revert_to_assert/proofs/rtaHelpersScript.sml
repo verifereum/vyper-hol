@@ -116,7 +116,8 @@ Proof
   rw[is_simple_revert_block_def] >>
   Cases_on `bb.bb_instructions` >> fs[] >>
   simp[Once run_block_def, get_instruction_def,
-       step_inst_base_def, is_terminator_def, eval_operand_def,
+       step_inst_non_invoke, step_inst_base_def,
+       is_terminator_def, eval_operand_def,
        set_returndata_def]
 QED
 
@@ -138,7 +139,7 @@ Theorem run_function_at_simple_revert:
 Proof
   rw[] >>
   Cases_on `fuel` >- fs[] >>
-  simp[Once (CONJUNCT2 run_block_def)] >>
+  simp[Once run_function_def] >>
   drule simple_revert_block_reverts >>
   disch_then (qspecl_then [`n`, `ctx`, `s`] mp_tac) >> simp[]
 QED

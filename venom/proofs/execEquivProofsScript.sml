@@ -857,7 +857,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   pop_assum mp_tac >> pop_assum mp_tac >> pop_assum mp_tac >>
   MAP_EVERY qid_spec_tac [`s2`, `s1`, `bb`, `ctx`, `fuel`] >>
-  ho_match_mp_tac (cj 1 run_block_ind) >>
+  ho_match_mp_tac (cj 2 run_defs_ind) >>
+  qexists_tac `\fuel ctx inst s. T` >>
   qexists_tac `\fuel ctx fn s. T` >> rw[] >>
   (* Unfold both LHS and RHS *)
   simp[Once run_block_def] >>
@@ -871,7 +872,7 @@ Proof
   `inst.inst_opcode <> INVOKE` by
     (gvs[listTheory.EVERY_MEM, get_instruction_def] >>
      first_x_assum irule >> irule listTheory.EL_MEM >> simp[]) >>
-  simp[] >> gvs[] >>
+  simp[step_inst_non_invoke] >>
   (* Derive operand condition for this specific inst *)
   `!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars` by
     (gvs[get_instruction_def] >> metis_tac[listTheory.EL_MEM]) >>
@@ -885,8 +886,10 @@ Proof
      Cases_on `v.vs_halted` >> gvs[result_equiv_def] >>
      fs[state_equiv_def]) >>
   (* Non-terminator: recurse via IH *)
-  first_x_assum irule >> simp[] >>
-  fs[state_equiv_def, execution_equiv_def, next_inst_def] >>
+  `step_inst fuel ctx inst s1 = OK v` by simp[step_inst_non_invoke] >>
+  first_x_assum drule >> simp[] >> disch_then irule >>
+  simp[] >>
+  fs[state_equiv_def, execution_equiv_def] >>
   simp[lookup_var_def] >> metis_tac[lookup_var_def]
 QED
 
