@@ -1,20 +1,18 @@
 (*
  * Analysis-Driven Simulation — Correctness (Statements Only)
  *
- * 1:N is the primary framework. 1:1 theorems derived via
- * inst_simulates_implies_1n + the 1:N lifting theorems.
- *
  * Re-exports from proofs/analysisSimProofsScript.sml via ACCEPT_TAC.
+ * 1:1 corollary: analysis_inst_simulates_from_1.
  *)
 
 Theory analysisSimProps
 Ancestors
   analysisSimProofs
 
-(* ===== 1:N theorems (primary) ===== *)
-
-(* Per-instruction 1:N sim → per-block sim (with operand condition). *)
-Theorem analysis_inst_sim_block_sim_1n:
+(* Per-instruction sim → per-block sim.
+   Requires valid_state_rel, R_ok/R_term transitivity,
+   universal-sound simulation, and operand agreement under R_ok. *)
+Theorem analysis_inst_sim_block_sim:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (bottom : 'a) (result : 'a df_state)
@@ -22,7 +20,7 @@ Theorem analysis_inst_sim_block_sim_1n:
     valid_state_rel R_ok R_term /\
     (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
     (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
-    analysis_inst_simulates_1n R_ok R_term (\v s. T) f /\
+    analysis_inst_simulates R_ok R_term (\v s. T) f /\
     (!inst x.
        MEM inst bb.bb_instructions /\ MEM (Var x) inst.inst_operands ==>
        !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
@@ -31,13 +29,13 @@ Theorem analysis_inst_sim_block_sim_1n:
       lift_result R_ok R_term
         (run_block fuel ctx bb s)
         (run_block fuel ctx
-          (analysis_block_transform_1n bottom result f bb) s)
+          (analysis_block_transform bottom result f bb) s)
 Proof
-  ACCEPT_TAC analysis_inst_sim_block_sim_1n_proof
+  ACCEPT_TAC analysis_inst_sim_block_sim_proof
 QED
 
-(* End-to-end 1:N pass correctness (universal sound, non-widening). *)
-Theorem df_analysis_pass_correct_1n:
+(* End-to-end pass correctness (universal sound, non-widening). *)
+Theorem df_analysis_pass_correct:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (dir : direction) (bottom : 'a) join transfer edge_transfer ctx
@@ -65,7 +63,7 @@ Theorem df_analysis_pass_correct_1n:
            P (st0 with ds_boundary := st0.ds_boundary |+ (lbl, v))) /\
       bounded_measure P leq m b /\
       wl_deps_complete process deps /\
-      analysis_inst_simulates_1n R_ok R_term (\(v:'a) s. T) f /\
+      analysis_inst_simulates R_ok R_term (\(v:'a) s. T) f /\
       (!bb inst x.
          MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
          MEM (Var x) inst.inst_operands ==>
@@ -74,13 +72,13 @@ Theorem df_analysis_pass_correct_1n:
       !fuel ctx s.
         lift_result R_ok R_term (run_function fuel ctx fn s)
           (run_function fuel ctx
-            (analysis_function_transform_1n bottom result f fn) s)
+            (analysis_function_transform bottom result f fn) s)
 Proof
-  ACCEPT_TAC df_analysis_pass_correct_1n_proof
+  ACCEPT_TAC df_analysis_pass_correct_proof
 QED
 
-(* State-dependent 1:N pass correctness (non-widening). *)
-Theorem df_analysis_pass_correct_1n_sound:
+(* State-dependent pass correctness (non-widening). *)
+Theorem df_analysis_pass_correct_sound:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (dir : direction) (bottom : 'a) join transfer edge_transfer ctx
@@ -115,7 +113,7 @@ Theorem df_analysis_pass_correct_1n_sound:
       (!s. sound bottom s) /\
       (case entry_val of NONE => T
        | SOME (lbl, v) => !s. sound v s) /\
-      analysis_inst_simulates_1n R_ok R_term sound f /\
+      analysis_inst_simulates R_ok R_term sound f /\
       (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
       (!bb inst x.
          MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
@@ -125,13 +123,13 @@ Theorem df_analysis_pass_correct_1n_sound:
       !fuel ctx s.
         lift_result R_ok R_term (run_function fuel ctx fn s)
           (run_function fuel ctx
-            (analysis_function_transform_1n bottom result f fn) s)
+            (analysis_function_transform bottom result f fn) s)
 Proof
-  ACCEPT_TAC df_analysis_pass_correct_1n_sound_proof
+  ACCEPT_TAC df_analysis_pass_correct_sound_proof
 QED
 
-(* State-dependent 1:N pass correctness (widening). *)
-Theorem df_analysis_pass_correct_1n_widen_sound:
+(* State-dependent pass correctness (widening). *)
+Theorem df_analysis_pass_correct_widen_sound:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (dir : direction) (bottom : 'a) join widen threshold
@@ -167,7 +165,7 @@ Theorem df_analysis_pass_correct_1n_widen_sound:
       (!s. sound bottom s) /\
       (case entry_val of NONE => T
        | SOME (lbl, v) => !s. sound v s) /\
-      analysis_inst_simulates_1n R_ok R_term sound f /\
+      analysis_inst_simulates R_ok R_term sound f /\
       (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
       (!bb inst x.
          MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
@@ -177,21 +175,21 @@ Theorem df_analysis_pass_correct_1n_widen_sound:
       !fuel ctx s.
         lift_result R_ok R_term (run_function fuel ctx fn s)
           (run_function fuel ctx
-            (analysis_function_transform_1n_widen bottom result f fn) s)
+            (analysis_function_transform_widen bottom result f fn) s)
 Proof
-  ACCEPT_TAC df_analysis_pass_correct_1n_widen_sound_proof
+  ACCEPT_TAC df_analysis_pass_correct_widen_sound_proof
 QED
 
 (* ===== 1:1 corollary ===== *)
 
-(* 1:1 is a special case of 1:N with singleton output. *)
-Theorem inst_simulates_implies_1n:
+(* 1:1 is a special case with singleton output. *)
+Theorem analysis_inst_simulates_from_1:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (sound : 'a -> venom_state -> bool)
    (g : 'a -> instruction -> instruction).
-    analysis_inst_simulates R_ok R_term sound g ==>
-    analysis_inst_simulates_1n R_ok R_term sound (\v inst. [g v inst])
+    analysis_inst_simulates_1 R_ok R_term sound g ==>
+    analysis_inst_simulates R_ok R_term sound (\v inst. [g v inst])
 Proof
-  ACCEPT_TAC inst_simulates_implies_1n_proof
+  ACCEPT_TAC analysis_inst_simulates_from_1_proof
 QED

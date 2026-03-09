@@ -2,33 +2,33 @@
  * Analysis-Driven Simulation — Definitions
  *
  * Bridge between dataflow analysis results and the simulation framework.
- * 1:N is the primary abstraction: f : 'a → inst → inst list.
- * 1:1 (f : 'a → inst → inst) is a special case via inst_simulates_implies_1n.
+ * f : 'a → inst → inst list (1:N: remove/replace/expand).
+ * 1:1 (f : 'a → inst → inst) is a special case via analysis_inst_simulates_from_1.
  *
  * TOP-LEVEL:
- *   run_insts                         — sequential step_inst over a list
- *   analysis_inst_simulates_1n        — per-instruction sim (1:N)
- *   analysis_block_transform_1n       — block transform using FLAT ∘ MAPi
- *   analysis_function_transform_1n    — function transform
- *   analysis_block_transform_1n_widen — widen variant
- *   analysis_function_transform_1n_widen — widen variant
- *   analysis_inst_simulates           — per-instruction sim (1:1, for corollary)
+ *   run_insts                       — sequential step_inst over a list
+ *   analysis_inst_simulates         — per-instruction sim (1:N primary)
+ *   analysis_block_transform        — block transform using FLAT ∘ MAPi
+ *   analysis_function_transform     — function transform
+ *   analysis_block_transform_widen  — widen variant
+ *   analysis_function_transform_widen — widen variant
  *   transfer_sound       — intra-block: transfer tracks concrete execution
  *   edge_transfer_sound  — inter-block: edge transfer sound for states on that edge
+ *
+ * Helper:
+ *   analysis_inst_simulates_1       — per-instruction sim (1:1, for corollary)
  *)
 
 Theory analysisSimDefs
 Ancestors
   dfAnalyzeDefs dfAnalyzeWidenDefs passSimulationDefs indexedLists
 
-(* Per-instruction simulation parameterized by lattice soundness.
-   f transforms an instruction given the lattice value at that point.
-   sound connects abstract lattice values to concrete states.
-   INVOKE instructions are preserved (transforms must not alter them).
-   Uses step_inst (not step_inst_base) for consistency with inst_simulates.
-   When sound = λv s. T, this reduces to ∀v. inst_simulates R_ok R_term (f v). *)
-Definition analysis_inst_simulates_def:
-  analysis_inst_simulates R_ok R_term
+(* 1:1 simulation helper (used by analysis_inst_simulates_from_1 corollary).
+   f : 'a → inst → inst maps each instruction to a single replacement.
+   Passes satisfying this automatically satisfy analysis_inst_simulates
+   via the corollary (\v inst. [g v inst]). *)
+Definition analysis_inst_simulates_1_def:
+  analysis_inst_simulates_1 R_ok R_term
     (sound : 'a -> venom_state -> bool)
     (f : 'a -> instruction -> instruction) <=>
     (!v fuel ctx inst s.
@@ -69,7 +69,7 @@ Definition edge_transfer_sound_def:
       sound (edge_transfer ctx src dst v) s
 End
 
-(* ===== 1:N Transform Framework ===== *)
+(* ===== Transform Framework ===== *)
 
 (* Execute a list of instructions sequentially via step_inst.
    Does not handle INVOKE dispatch or inst_idx tracking — those are
@@ -83,20 +83,14 @@ Definition run_insts_def:
     | other => other
 End
 
-(* Per-instruction simulation for 1:N transforms.
-   f maps each instruction (given a lattice value) to a replacement list.
-
-   Structural constraints ensure the transformed block is well-formed
-   for run_block:
-   - Terminators and INVOKE pass through unchanged (run_block handles
-     these specially).
-   - Expansion of other instructions produces only non-terminator
-     non-INVOKE instructions (so run_block processes them via step_inst).
-
-   The simulation clause relates one original step_inst to the sequential
+(* Per-instruction simulation: f maps each instruction (given a lattice
+   value) to a replacement list. Structural constraints ensure the
+   transformed block is well-formed for run_block (terminators/INVOKE
+   preserved, expansions produce only non-terminator non-INVOKE).
+   The simulation clause relates one original step_inst to sequential
    execution of the replacement list via run_insts. *)
-Definition analysis_inst_simulates_1n_def:
-  analysis_inst_simulates_1n R_ok R_term
+Definition analysis_inst_simulates_def:
+  analysis_inst_simulates R_ok R_term
     (sound : 'a -> venom_state -> bool)
     (f : 'a -> instruction -> instruction list) <=>
     (* Simulation: original step relates to sequential replacement *)
@@ -116,24 +110,24 @@ Definition analysis_inst_simulates_1n_def:
              (f v inst))
 End
 
-(* Transform a block using 1:N per-instruction analysis values.
+(* Transform a block using per-instruction analysis values.
    At each instruction index, query df_at, apply f, then FLAT. *)
-Definition analysis_block_transform_1n_def:
-  analysis_block_transform_1n (bottom : 'a) (result : 'a df_state) f bb =
+Definition analysis_block_transform_def:
+  analysis_block_transform (bottom : 'a) (result : 'a df_state) f bb =
     bb with bb_instructions :=
       FLAT (MAPi (\idx inst. f (df_at bottom result bb.bb_label idx) inst)
                   bb.bb_instructions)
 End
 
-(* Transform function using 1:N analysis results. *)
-Definition analysis_function_transform_1n_def:
-  analysis_function_transform_1n bottom result f fn =
-    function_map_transform (analysis_block_transform_1n bottom result f) fn
+(* Transform function using analysis results. *)
+Definition analysis_function_transform_def:
+  analysis_function_transform bottom result f fn =
+    function_map_transform (analysis_block_transform bottom result f) fn
 End
 
-(* 1:N widen variant: transform using df_widen_at. *)
-Definition analysis_block_transform_1n_widen_def:
-  analysis_block_transform_1n_widen (bottom : 'a) (result : 'a df_widen_state)
+(* Widen variant: transform using df_widen_at. *)
+Definition analysis_block_transform_widen_def:
+  analysis_block_transform_widen (bottom : 'a) (result : 'a df_widen_state)
                                     f bb =
     bb with bb_instructions :=
       FLAT (MAPi (\idx inst.
@@ -141,9 +135,9 @@ Definition analysis_block_transform_1n_widen_def:
                   bb.bb_instructions)
 End
 
-(* 1:N widen variant: transform function using widening results. *)
-Definition analysis_function_transform_1n_widen_def:
-  analysis_function_transform_1n_widen bottom result f fn =
+(* Widen variant: transform function using widening results. *)
+Definition analysis_function_transform_widen_def:
+  analysis_function_transform_widen bottom result f fn =
     function_map_transform
-      (analysis_block_transform_1n_widen bottom result f) fn
+      (analysis_block_transform_widen bottom result f) fn
 End
