@@ -35,6 +35,8 @@ Definition well_formed_type_value_def:
   well_formed_type_value (StructTV fields) =
     (EVERY (well_formed_type_value o SND) fields ∧
      type_slot_size (StructTV fields) ≤ dimword(:256)) ∧
+  well_formed_type_value (BaseTV (UintT m)) = (m ≤ 256) ∧
+  well_formed_type_value (BaseTV (IntT m)) = (m ≤ 256) ∧
   well_formed_type_value _ = T
 End
 

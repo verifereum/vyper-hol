@@ -214,15 +214,15 @@ Definition encode_value_def:
   encode_value NoneTV v = SOME [] /\
   encode_value (TupleTV tvs) (ArrayV (TupleV vs)) =
     encode_tuple 0 tvs vs /\
-  encode_value (ArrayTV tv (Fixed n)) (ArrayV (SArrayV _ m sparse)) =
-    (if n = m then
+  encode_value (ArrayTV tv (Fixed n)) (ArrayV (SArrayV tv' m sparse)) =
+    (if tv = tv' ∧ n = m then
        let zeros = GENLIST (λi. (i, 0w)) (n * type_slot_size tv) in
        case encode_static_array tv 0 sparse of
        | SOME nonzeros => SOME (zeros ++ nonzeros)
        | NONE => NONE
      else NONE) /\
-  encode_value (ArrayTV tv (Dynamic max)) (ArrayV (DynArrayV _ m vs)) =
-    (if max = m then
+  encode_value (ArrayTV tv (Dynamic max)) (ArrayV (DynArrayV tv' m vs)) =
+    (if tv = tv' ∧ max = m then
        (case encode_dyn_array tv 1 vs of
         | SOME slots => SOME ((0, n2w (LENGTH vs)) :: slots)
         | NONE => NONE)
