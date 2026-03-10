@@ -26,6 +26,7 @@ Theorem analysis_inst_sim_block_sim:
        !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
   ==>
     !fuel ctx s.
+      s.vs_inst_idx = 0 ==>
       lift_result R_ok R_term
         (run_block fuel ctx bb s)
         (run_block fuel ctx
@@ -51,6 +52,7 @@ Theorem df_analysis_pass_correct:
                   Forward => cfg_succs_of cfg
                 | Backward => cfg_preds_of cfg) in
     let st0 = init_df_state bottom (MAP (\bb. bb.bb_label) bbs) in
+    let all_lbls = MAP (\bb. bb.bb_label) bbs in
     let result = df_analyze dir bottom join transfer edge_transfer
                             ctx entry_val fn in
       valid_state_rel R_ok R_term /\
@@ -70,9 +72,9 @@ Theorem df_analysis_pass_correct:
          !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
     ==>
       !fuel ctx s.
+        s.vs_inst_idx = 0 ==>
         lift_result R_ok R_term (run_function fuel ctx fn s)
-          (run_function fuel ctx
-            (analysis_function_transform bottom result f fn) s)
+          (run_function fuel ctx (analysis_function_transform bottom result f fn) s)
 Proof
   ACCEPT_TAC df_analysis_pass_correct_proof
 QED
@@ -95,8 +97,10 @@ Theorem df_analysis_pass_correct_sound:
                   Forward => cfg_succs_of cfg
                 | Backward => cfg_preds_of cfg) in
     let st0 = init_df_state bottom (MAP (\bb. bb.bb_label) bbs) in
+    let all_lbls = MAP (\bb. bb.bb_label) bbs in
     let result = df_analyze dir bottom join transfer edge_transfer
                             ctx entry_val fn in
+      dir = Forward /\
       valid_state_rel R_ok R_term /\
       (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
       (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
@@ -121,9 +125,9 @@ Theorem df_analysis_pass_correct_sound:
          !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
     ==>
       !fuel ctx s.
+        s.vs_inst_idx = 0 ==>
         lift_result R_ok R_term (run_function fuel ctx fn s)
-          (run_function fuel ctx
-            (analysis_function_transform bottom result f fn) s)
+          (run_function fuel ctx (analysis_function_transform bottom result f fn) s)
 Proof
   ACCEPT_TAC df_analysis_pass_correct_sound_proof
 QED
@@ -146,8 +150,10 @@ Theorem df_analysis_pass_correct_widen_sound:
                   Forward => cfg_succs_of cfg
                 | Backward => cfg_preds_of cfg) in
     let st0 = init_df_widen_state bottom (MAP (\bb. bb.bb_label) bbs) in
+    let all_lbls = MAP (\bb. bb.bb_label) bbs in
     let result = df_analyze_widen dir bottom join widen threshold
                    transfer edge_transfer ctx entry_val fn in
+      dir = Forward /\
       valid_state_rel R_ok R_term /\
       (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
       (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
@@ -173,6 +179,7 @@ Theorem df_analysis_pass_correct_widen_sound:
          !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
     ==>
       !fuel ctx s.
+        s.vs_inst_idx = 0 ==>
         lift_result R_ok R_term (run_function fuel ctx fn s)
           (run_function fuel ctx
             (analysis_function_transform_widen bottom result f fn) s)
