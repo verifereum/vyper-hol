@@ -1178,56 +1178,6 @@ Proof
   irule value_has_type_transfer >> metis_tac[]
 QED
 
-(* decode_value producing IntV (Unsigned b) implies BaseTV (UintT b) *)
-Theorem decode_value_IntV_unsigned_type[local]:
-  ∀storage offset tv b i.
-    decode_value storage offset tv = SOME (IntV (Unsigned b) i) ⇒
-    tv = BaseTV (UintT b)
-Proof
-  rpt gen_tac >>
-  Cases_on `tv` >>
-  simp[decode_value_def, decode_base_from_slot_def, AllCaseEqs()] >>
-  TRY (rename1 `ArrayTV _ bd` >> Cases_on `bd` >>
-       simp[decode_value_def, AllCaseEqs()]) >>
-  rename1 `BaseTV bt` >>
-  Cases_on `bt` >>
-  simp[decode_value_def, decode_base_from_slot_def, AllCaseEqs()] >>
-  TRY (rename1 `BytesT bd` >> Cases_on `bd` >>
-       simp[decode_value_def, decode_base_from_slot_def, AllCaseEqs()])
-QED
-
-(* storable_value for unsigned integers: if a variable currently stores
-   an unsigned integer, any well-formed unsigned integer of the same width
-   can be stored back *)
-Theorem storable_value_from_lookup_unsigned:
-  ∀cx st mid n b i j.
-    var_in_storage cx mid n ∧
-    lookup_toplevel_name cx st mid n = SOME (Value (IntV (Unsigned b) i)) ∧
-    well_formed_value (IntV (Unsigned b) j) ⇒
-    storable_value cx mid n (IntV (Unsigned b) j)
-Proof
-  rpt strip_tac >>
-  rw[storable_value_def] >> rpt strip_tac >>
-  gvs[var_in_storage_def] >>
-  `tv = tv'` by gvs[storage_type_of_def, storage_var_info_def, AllCaseEqs()] >>
-  gvs[] >>
-  qpat_x_assum `lookup_toplevel_name _ _ _ _ = _` mp_tac >>
-  simp[lookup_toplevel_name_def, AllCaseEqs()] >> strip_tac >>
-  qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
-  simp[Once vyperStateTheory.lookup_global_def, vyperStateTheory.bind_def,
-       vyperStateTheory.return_def, LET_THM, vyperStateTheory.lift_option_type_def,
-       vyperStateTheory.read_storage_slot_def, vyperStateTheory.lift_option_def,
-       vyperStateTheory.raise_def, AllCaseEqs()] >>
-  Cases_on `tv` >>
-  simp[vyperStateTheory.bind_def, vyperStateTheory.return_def,
-       vyperStateTheory.raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  ntac 5 (
-    BasicProvers.FULL_CASE_TAC >>
-    gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
-    TRY (imp_res_tac decode_value_IntV_unsigned_type >> gvs[value_has_type_def]))
-QED
-
 Theorem get_after_set_storage_backend[local]:
   ∀cx is_transient storage' st.
     get_storage_backend cx is_transient
@@ -1421,4 +1371,3 @@ Proof
   qpat_x_assum `get_storage_backend cx b2 st = _` (fn th => simp[th]) >>
   ntac 5 (BasicProvers.PURE_CASE_TAC >> simp[return_def, raise_def])
 QED
-
