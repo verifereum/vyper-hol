@@ -14,4 +14,8 @@ INCLUDES = \
   single_use_expansion \
   assert_combiner \
   algebraic_opt \
-  mem2var
+  mem2var \
+  tail_merge \
+  simplify_cfg \
+  cfg_normalization \
+  make_ssa
