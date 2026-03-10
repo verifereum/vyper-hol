@@ -4,6 +4,14 @@
  * Properties of block list operations, label substitution,
  * and their interaction with lookup_block and resolve_phi.
  *
+ * Non-trivial theorems are re-exported via cfgTransformProps.
+ * Trivial results not in props (consumers can unfold directly):
+ *   subst_label_block_label: rw[subst_label_block_def]
+ *   subst_label_inst_fields: rw[subst_label_inst_def]
+ *   ALL_DISTINCT_replace_block: rw[fn_labels_replace_block]
+ *   ALL_DISTINCT_subst_label_fn: rw[fn_labels_subst_label_fn]
+ *   MEM_remove_block_iff: rw[remove_block_def, MEM_FILTER]
+ *
  * TOP-LEVEL (block ops):
  *   lookup_block_remove_neq/eq  -- remove_block preserves/removes lookup
  *   lookup_block_replace_neq/eq -- replace_block preserves/updates lookup

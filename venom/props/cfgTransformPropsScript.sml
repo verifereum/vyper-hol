@@ -4,14 +4,6 @@
  * Re-exports non-trivial theorems from cfgTransformProofs via ACCEPT_TAC.
  * Consumers should use this theory, not cfgTransformProofs directly.
  *
- * Trivial one-liner results (rw[foo_def]) are NOT re-exported here.
- * Consumers can unfold definitions directly for those. Examples:
- *   subst_label_block_label: rw[subst_label_block_def]
- *   subst_label_inst_fields: rw[subst_label_inst_def]
- *   ALL_DISTINCT_replace_block: rw[fn_labels_replace_block]
- *   ALL_DISTINCT_subst_label_fn: rw[fn_labels_subst_label_fn]
- *   MEM_remove_block_iff: rw[remove_block_def, MEM_FILTER]
- *
  * TOP-LEVEL (block ops -- 8):
  *   lookup_block_remove_neq/eq — remove_block + lookup interaction
  *   fn_labels_remove_block     — labels after removal
