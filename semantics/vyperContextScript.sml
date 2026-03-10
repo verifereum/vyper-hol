@@ -333,9 +333,9 @@ Definition evaluate_ecmul_def:
          let
            p = (Num x, Num y);
            n = Num scalar
-         in case vfmExecution$ecmul p n of
-              NONE => INL $ mk_ec_result (0, 0)
-            | SOME r => INL $ mk_ec_result r
+         in (case vfmExecution$ecmul p n of
+               NONE => INL $ mk_ec_result (0, 0)
+             | SOME r => INL $ mk_ec_result r)
      | NONE => INR (TypeError "ECMul type")) ∧
   evaluate_ecmul _ = INR (TypeError "ECMul args")
 End
