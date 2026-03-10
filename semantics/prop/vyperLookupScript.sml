@@ -116,20 +116,6 @@ Definition storage_type_of_def:
     | SOME (_, _, tv) => SOME tv
 End
 
-Theorem storage_var_info_SOME_storage_type_of:
-  storage_var_info cx mid n = SOME (b, off, tv) ⇒
-  storage_type_of cx mid n = SOME tv
-Proof
-  simp[storage_type_of_def]
-QED
-
-Theorem storage_type_of_SOME_storage_var_info:
-  storage_type_of cx mid n = SOME tv ⇒
-  ∃b off. storage_var_info cx mid n = SOME (b, off, tv)
-Proof
-  simp[storage_type_of_def, AllCaseEqs()] >> strip_tac >> gvs[]
-QED
-
 Definition storable_value_def:
   storable_value cx mid n v ⇔
     ∀tv. storage_type_of cx mid n = SOME tv ⇒
@@ -308,6 +294,19 @@ Theorem lookup_name_implies_var_in_scope:
   ∀st n v. lookup_name st n = SOME v ⇒ var_in_scope st n
 Proof
   simp[var_in_scope_def]
+QED
+
+Theorem lookup_name_with_scopes:
+  ∀st1 st2 n. lookup_name (st1 with scopes := st2.scopes) n = lookup_name st2 n
+Proof
+  rw[lookup_name_def]
+QED
+
+Theorem lookup_name_with_scopes_list:
+  ∀st1 st2 n sc.
+    lookup_name (st1 with scopes := sc) n = lookup_name (st2 with scopes := sc) n
+Proof
+  rw[lookup_name_def]
 QED
 
 Theorem var_in_scope_implies_name_target:
@@ -812,7 +811,216 @@ Proof
   simp[evaluation_state_component_equality]
 QED
 
+(* ============================================================
+   Bridge lemmas: scope push via updated_by CONS FEMPTY
+   ============================================================ *)
+
+Theorem lookup_name_push_fempty:
+  ∀st n. lookup_name (st with scopes updated_by CONS FEMPTY) n =
+         lookup_name st n
+Proof
+  rpt gen_tac >>
+  `(st with scopes updated_by CONS FEMPTY) =
+   (st with scopes := FEMPTY :: st.scopes)` by
+    simp[evaluation_state_component_equality, evaluation_state_accfupds] >>
+  simp[lookup_name_fempty_prepend]
+QED
+
+Theorem var_in_scope_push_fempty:
+  ∀st n. var_in_scope (st with scopes updated_by CONS FEMPTY) n ⇔
+         var_in_scope st n
+Proof
+  rpt gen_tac >>
+  `(st with scopes updated_by CONS FEMPTY) =
+   (st with scopes := FEMPTY :: st.scopes)` by
+    simp[evaluation_state_component_equality, evaluation_state_accfupds] >>
+  simp[var_in_scope_fempty_prepend]
+QED
+
+Theorem scopes_nonempty_push_fempty:
+  ∀st. (st with scopes updated_by CONS FEMPTY).scopes ≠ []
+Proof
+  simp[evaluation_state_accfupds]
+QED
+
+Theorem tl_scopes_update_push_fempty:
+  ∀st n v.
+    var_in_scope st n ⇒
+    tl_scopes (update_name (st with scopes updated_by CONS FEMPTY) n v) =
+    update_name st n v
+Proof
+  rpt strip_tac >>
+  `lookup_in_current_scope (st with scopes updated_by CONS FEMPTY) n = NONE` by
+    simp[lookup_in_current_scope_def, evaluation_state_accfupds] >>
+  `var_in_scope (tl_scopes (st with scopes updated_by CONS FEMPTY)) n` by
+    simp[tl_scopes_push] >>
+  drule_all tl_scopes_update_eq_update_tl_scopes >>
+  simp[tl_scopes_push]
+QED
+
+(* ============================================================
+   Bridge lemmas: scope push via updated_by CONS (FEMPTY |+ ...)
+   ============================================================ *)
+
+Theorem lookup_name_push_singleton_same:
+  ∀st id v.
+    lookup_name (st with scopes updated_by
+      CONS (FEMPTY |+ (string_to_num id, v))) id = SOME v
+Proof
+  rpt gen_tac >>
+  `(st with scopes updated_by
+      CONS (FEMPTY |+ (string_to_num id, v))).scopes ≠ []` by
+    simp[evaluation_state_accfupds] >>
+  irule lookup_in_current_scope_to_lookup_name >>
+  simp[evaluation_state_accfupds] >>
+  irule lookup_in_current_scope_singleton_same >>
+  simp[evaluation_state_accfupds]
+QED
+
+Theorem lookup_name_push_singleton_other:
+  ∀st id1 id2 v.
+    id1 ≠ id2 ⇒
+    lookup_name (st with scopes updated_by
+      CONS (FEMPTY |+ (string_to_num id1, v))) id2 =
+    lookup_name st id2
+Proof
+  rpt strip_tac >>
+  `lookup_in_current_scope
+     (st with scopes updated_by
+        CONS (FEMPTY |+ (string_to_num id1, v))) id2 = NONE` by
+    (irule lookup_in_current_scope_singleton_other >>
+     simp[evaluation_state_accfupds] >>
+     qexistsl_tac [`id1`, `v`] >> simp[]) >>
+  `lookup_name
+     (tl_scopes (st with scopes updated_by
+        CONS (FEMPTY |+ (string_to_num id1, v)))) id2 =
+   lookup_name st id2` by
+    simp[tl_scopes_push] >>
+  metis_tac[lookup_in_tl_scopes]
+QED
+
+Theorem var_in_scope_push_singleton:
+  ∀st id1 id2 v.
+    id1 ≠ id2 ⇒
+    (var_in_scope (st with scopes updated_by
+      CONS (FEMPTY |+ (string_to_num id1, v))) id2 ⇔
+     var_in_scope st id2)
+Proof
+  rpt strip_tac >>
+  `lookup_in_current_scope
+     (st with scopes updated_by
+        CONS (FEMPTY |+ (string_to_num id1, v))) id2 = NONE` by
+    (irule lookup_in_current_scope_singleton_other >>
+     simp[evaluation_state_accfupds] >>
+     qexistsl_tac [`id1`, `v`] >> simp[]) >>
+  `tl_scopes (st with scopes updated_by
+     CONS (FEMPTY |+ (string_to_num id1, v))) = st` by
+    simp[tl_scopes_push] >>
+  metis_tac[var_in_tl_scopes]
+QED
+
+Theorem scopes_nonempty_push_singleton:
+  ∀st id v.
+    (st with scopes updated_by
+      CONS (FEMPTY |+ (string_to_num id, v))).scopes ≠ []
+Proof
+  simp[evaluation_state_accfupds]
+QED
+
+Theorem lookup_name_empty_scopes:
+  ∀st n. st.scopes = [] ⇒ lookup_name st n = NONE
+Proof
+  rpt strip_tac >>
+  simp[lookup_name_def, lookup_scopes_def]
+QED
+
+Theorem tl_scopes_update_push_singleton:
+  ∀st id1 id2 v v'.
+    id1 ≠ id2 ∧ var_in_scope st id2 ⇒
+    tl_scopes (update_name (st with scopes updated_by
+      CONS (FEMPTY |+ (string_to_num id1, v))) id2 v') =
+    update_name st id2 v'
+Proof
+  rpt strip_tac >>
+  `lookup_in_current_scope
+     (st with scopes updated_by
+        CONS (FEMPTY |+ (string_to_num id1, v))) id2 = NONE` by
+    (irule lookup_in_current_scope_singleton_other >>
+     simp[evaluation_state_accfupds] >>
+     qexistsl_tac [`id1`, `v`] >> simp[]) >>
+  `var_in_scope (tl_scopes (st with scopes updated_by
+     CONS (FEMPTY |+ (string_to_num id1, v)))) id2` by
+    simp[tl_scopes_push] >>
+  drule_all tl_scopes_update_eq_update_tl_scopes >>
+  simp[tl_scopes_push]
+QED
+
 (* =================== Global Storage ============================= *)
+
+
+Theorem storage_var_info_SOME_storage_type_of:
+  storage_var_info cx mid n = SOME (b, off, tv) ⇒
+  storage_type_of cx mid n = SOME tv
+Proof
+  simp[storage_type_of_def]
+QED
+
+Theorem storage_type_of_SOME_storage_var_info:
+  storage_type_of cx mid n = SOME tv ⇒
+  ∃b off. storage_var_info cx mid n = SOME (b, off, tv)
+Proof
+  simp[storage_type_of_def, AllCaseEqs()] >> strip_tac >> gvs[]
+QED
+
+(* decode_value producing IntV (Unsigned b) implies BaseTV (UintT b) *)
+Theorem decode_value_IntV_unsigned_type[local]:
+  ∀storage offset tv b i.
+    decode_value storage offset tv = SOME (IntV (Unsigned b) i) ⇒
+    tv = BaseTV (UintT b)
+Proof
+  rpt gen_tac >>
+  Cases_on `tv` >>
+  simp[decode_value_def, decode_base_from_slot_def, AllCaseEqs()] >>
+  TRY (rename1 `ArrayTV _ bd` >> Cases_on `bd` >>
+       simp[decode_value_def, AllCaseEqs()]) >>
+  rename1 `BaseTV bt` >>
+  Cases_on `bt` >>
+  simp[decode_value_def, decode_base_from_slot_def, AllCaseEqs()] >>
+  TRY (rename1 `BytesT bd` >> Cases_on `bd` >>
+       simp[decode_value_def, decode_base_from_slot_def, AllCaseEqs()])
+QED
+
+(* storable_value for unsigned integers: if a variable currently stores
+   an unsigned integer, any well-formed unsigned integer of the same width
+   can be stored back *)
+Theorem storable_value_from_lookup_unsigned:
+  ∀cx st mid n b i j.
+    var_in_storage cx mid n ∧
+    lookup_toplevel_name cx st mid n = SOME (Value (IntV (Unsigned b) i)) ∧
+    well_formed_value (IntV (Unsigned b) j) ⇒
+    storable_value cx mid n (IntV (Unsigned b) j)
+Proof
+  rpt strip_tac >>
+  rw[storable_value_def] >> rpt strip_tac >>
+  gvs[var_in_storage_def] >>
+  `tv = tv'` by gvs[storage_type_of_def, storage_var_info_def, AllCaseEqs()] >>
+  gvs[] >>
+  qpat_x_assum `lookup_toplevel_name _ _ _ _ = _` mp_tac >>
+  simp[lookup_toplevel_name_def, AllCaseEqs()] >> strip_tac >>
+  qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
+  simp[Once vyperStateTheory.lookup_global_def, vyperStateTheory.bind_def,
+       vyperStateTheory.return_def, LET_THM, vyperStateTheory.lift_option_type_def,
+       vyperStateTheory.read_storage_slot_def, vyperStateTheory.lift_option_def,
+       vyperStateTheory.raise_def, AllCaseEqs()] >>
+  Cases_on `tv` >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.return_def,
+       vyperStateTheory.raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  ntac 5 (
+    BasicProvers.FULL_CASE_TAC >>
+    gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+    TRY (imp_res_tac decode_value_IntV_unsigned_type >> gvs[value_has_type_def]))
+QED
 
 Theorem var_in_storage_storage_var_info:
   var_in_storage cx mid n ⇒
@@ -1031,4 +1239,13 @@ Proof
   qpat_x_assum `get_storage_backend cx b2 (SND _) = _` (fn th => simp[th]) >>
   qpat_x_assum `get_storage_backend cx b2 st = _` (fn th => simp[th]) >>
   ntac 5 (BasicProvers.PURE_CASE_TAC >> simp[return_def, raise_def])
+QED
+
+Theorem update_toplevel_name_preserves_scopes:
+  ∀cx st mid n v.
+    (update_toplevel_name cx st mid n v).scopes = st.scopes
+Proof
+  rw[update_toplevel_name_def] >>
+  Cases_on `set_global cx mid (string_to_num n) v st` >>
+  imp_res_tac set_global_scopes >> simp[]
 QED
