@@ -13,7 +13,7 @@
  *   - step_assert_nonzero_passes    : ASSERT nonzero continues
  *
  * BLOCK/FUNCTION EXECUTION:
- *   - step_in_block_single_terminator : General single-terminator block lemma
+ *   - block_step_single_terminator : General single-terminator block lemma
  *   - simple_revert_block_reverts     : Simple revert block always reverts
  *   - run_function_at_simple_revert   : run_function at simple revert returns Revert
  *
@@ -48,7 +48,7 @@ fun SOLVE tac (g as (asl, w)) =
 
 (* ==========================================================================
    NOTE: bool_to_word properties and basic instruction behavior lemmas
-   (step_iszero_value, step_assert_behavior, step_revert_always_reverts,
+   (step_iszero_value, step_assert_behavior, step_revert_behavior,
    step_jnz_behavior, step_jmp_behavior) are now in venomExecPropsTheory.
    ========================================================================== *)
 
@@ -61,9 +61,9 @@ fun SOLVE tac (g as (asl, w)) =
 Theorem step_assert_zero_reverts:
   !s cond_op id.
     eval_operand cond_op s = SOME 0w ==>
-    step_inst <| inst_id := id; inst_opcode := ASSERT;
+    step_inst_base <| inst_id := id; inst_opcode := ASSERT;
                  inst_operands := [cond_op]; inst_outputs := [] |> s =
-    Revert (revert_state s)
+    Abort Revert_abort (revert_state (set_returndata [] s))
 Proof
   rw[] >> drule step_assert_behavior >> simp[]
 QED
@@ -72,7 +72,7 @@ QED
 Theorem step_assert_nonzero_passes:
   !s cond cond_op id.
     eval_operand cond_op s = SOME cond /\ cond <> 0w ==>
-    step_inst <| inst_id := id; inst_opcode := ASSERT;
+    step_inst_base <| inst_id := id; inst_opcode := ASSERT;
                  inst_operands := [cond_op]; inst_outputs := [] |> s =
     OK s
 Proof
@@ -83,17 +83,17 @@ QED
    run_block Helper Lemmas
    ========================================================================== *)
 
-(* WHY THIS IS TRUE: step_in_block on a single-instruction terminator block
-   returns the result of step_inst with is_term = T. *)
-Theorem step_in_block_single_terminator:
+(* WHY THIS IS TRUE: block_step on a single-instruction terminator block
+   returns the result of step_inst_base with is_term = T. *)
+Theorem block_step_single_terminator:
   !bb s inst.
     bb.bb_instructions = [inst] /\
     is_terminator inst.inst_opcode ==>
-    step_in_block bb (s with vs_inst_idx := 0) =
-    (step_inst inst (s with vs_inst_idx := 0), T)
+    block_step bb (s with vs_inst_idx := 0) =
+    (step_inst_base inst (s with vs_inst_idx := 0), T)
 Proof
-  rw[step_in_block_def, get_instruction_def] >>
-  Cases_on `step_inst inst (s with vs_inst_idx := 0)` >> simp[]
+  rw[block_step_def, get_instruction_def] >>
+  Cases_on `step_inst_base inst (s with vs_inst_idx := 0)` >> simp[]
 QED
 
 (* ==========================================================================
@@ -101,26 +101,24 @@ QED
    (step_jmp_behavior is in venomExecPropsTheory)
    ========================================================================== *)
 
-(* WHY THIS IS TRUE: A block with only [revert 0 0] will:
-   1. step_in_block gets instruction at idx 0 -> the REVERT instruction
-   2. step_inst returns Revert (revert_state s)
-   3. run_block propagates this Revert result *)
+(* WHY THIS IS TRUE: A block with only [revert 0w 0w] will:
+   1. run_block gets instruction at idx 0 -> the REVERT instruction
+   2. step_inst_base evaluates Lit 0w, Lit 0w, reads TAKE 0 bytes = []
+   3. Returns Abort Revert_abort with returndata cleared to [] *)
 Theorem simple_revert_block_reverts:
-  !bb s.
+  !fuel ctx bb s.
     is_simple_revert_block bb ==>
-    run_block bb (s with vs_inst_idx := 0) =
-    Revert (revert_state (s with vs_inst_idx := 0))
+    run_block fuel ctx bb (s with vs_inst_idx := 0) =
+    Abort Revert_abort
+      (revert_state (set_returndata []
+        (s with vs_inst_idx := 0)))
 Proof
   rw[is_simple_revert_block_def] >>
-  `bb.bb_instructions = [HD bb.bb_instructions]` by (
-    Cases_on `bb.bb_instructions` >> fs[]
-  ) >>
-  simp[Once run_block_def] >>
-  `step_in_block bb (s with vs_inst_idx := 0) =
-   (step_inst (HD bb.bb_instructions) (s with vs_inst_idx := 0), T)` by (
-    irule step_in_block_single_terminator >> simp[is_terminator_def]
-  ) >>
-  simp[step_inst_def, is_terminator_def]
+  Cases_on `bb.bb_instructions` >> fs[] >>
+  simp[Once run_block_def, get_instruction_def,
+       step_inst_non_invoke, step_inst_base_def,
+       is_terminator_def, eval_operand_def,
+       set_returndata_def]
 QED
 
 (* ==========================================================================
@@ -130,21 +128,20 @@ QED
 (* WHY THIS IS TRUE: A simple revert block executes its single REVERT instruction
    and produces Revert result. run_function at fuel > 0 unfolds to run_block. *)
 Theorem run_function_at_simple_revert:
-  !fn s fuel bb.
+  !fn s fuel ctx bb.
     is_simple_revert_block bb /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     fuel > 0 ==>
-    run_function fuel fn (s with vs_inst_idx := 0) =
-      Revert (revert_state (s with vs_inst_idx := 0))
+    run_function fuel ctx fn (s with vs_inst_idx := 0) =
+      Abort Revert_abort
+        (revert_state (set_returndata []
+          (s with vs_inst_idx := 0)))
 Proof
   rw[] >>
-  `fuel > 0` by simp[] >>
   Cases_on `fuel` >- fs[] >>
   simp[Once run_function_def] >>
-  `run_block bb (s with vs_inst_idx := 0) =
-   Revert (revert_state (s with vs_inst_idx := 0))`
-    by (irule simple_revert_block_reverts >> simp[]) >>
-  simp[]
+  drule simple_revert_block_reverts >>
+  disch_then (qspecl_then [`n`, `ctx`, `s`] mp_tac) >> simp[]
 QED
 
 (* ==========================================================================
@@ -190,7 +187,7 @@ QED
    state_equiv Preservation Through Execution
 
    These lemmas show that if fresh vars are not used in operands, then
-   state_equiv is preserved through step_inst, run_block, run_function.
+   state_equiv is preserved through step_inst_base, run_block, run_function.
    ========================================================================== *)
 
 (* --------------------------------------------------------------------------

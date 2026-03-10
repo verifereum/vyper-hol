@@ -20,7 +20,7 @@ Libs
 Datatype:
   opcode =
     (* Arithmetic - note: Div/Mod to avoid HOL4 name clash *)
-    | ADD | SUB | MUL | Div | SDIV | Mod | SMOD | EXP
+    | ADD | SUB | MUL | Div | SDIV | Mod | SMOD | Exp
     | ADDMOD | MULMOD
     (* Comparison *)
     | EQ | LT | GT | SLT | SGT | ISZERO
@@ -210,6 +210,8 @@ Definition is_terminator_def:
   is_terminator REVERT = T /\
   is_terminator STOP = T /\
   is_terminator SINK = T /\
+  is_terminator SELFDESTRUCT = T /\
+  is_terminator INVALID = T /\
   is_terminator _ = F
 End
 
@@ -283,6 +285,20 @@ End
 (* The block labels of a function, in block order. *)
 Definition fn_labels_def:
   fn_labels fn = MAP (λbb. bb.bb_label) fn.fn_blocks
+End
+
+(* Entry block label, if the function is non-empty. *)
+Definition fn_entry_label_def:
+  fn_entry_label fn =
+    OPTION_MAP (λbb. bb.bb_label) (entry_block fn)
+End
+
+(* All variable names assigned anywhere in the function (deduplicated). *)
+Definition fn_all_assignments_def:
+  fn_all_assignments fn =
+    nub (FLAT (MAP (λbb.
+      FLAT (MAP inst_defs bb.bb_instructions))
+      fn.fn_blocks))
 End
 
 (* Successor labels of a basic block: the labels targeted by its terminator,

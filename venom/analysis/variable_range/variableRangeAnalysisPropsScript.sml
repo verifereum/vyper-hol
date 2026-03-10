@@ -21,27 +21,25 @@ Ancestors
    The consumer chains this along an execution path:
      entry_sound(lbl_0) → exit_sound(lbl_0) → entry_sound(lbl_1) → ... *)
 Theorem range_analyze_block_sound:
-  ∀fn fuel lbl bb s s'.
-    let ra = range_analyze fn fuel in
+  ∀fn lbl bb fuel ctx s s'.
+    let ra = range_analyze fn in
     lookup_block lbl fn.fn_blocks = SOME bb ∧
-    lbl ∈ FDOM ra.ra_entry ∧
     in_range_state (range_entry_state ra lbl) s.vs_vars ∧
-    run_block bb s = OK s' ⇒
+    run_block fuel ctx bb s = OK s' ⇒
     in_range_state (range_exit_state ra lbl) s'.vs_vars
 Proof
-  cheat
+  ACCEPT_TAC rangeAnalysisProofsTheory.range_analyze_block_sound_proof
 QED
 
 (* Query soundness: if the pre-instruction range state recorded by the
    analysis is sound for the concrete state, then the range returned
    by range_get_range contains the concrete operand value. *)
 Theorem range_get_range_sound:
-  ∀ra inst_id op w env.
-    (∀rs. FLOOKUP ra.ra_inst inst_id = SOME rs ⇒
-          in_range_state rs env) ∧
+  ∀ra lbl idx op w env.
+    in_range_state (range_at_inst ra lbl idx) env ∧
     (∀v. op = Var v ⇒ FLOOKUP env v = SOME w) ∧
     (∀v. op = Lit v ⇒ w = v) ⇒
-    in_range (range_get_range ra op inst_id) w
+    in_range (range_get_range ra lbl idx op) w
 Proof
-  cheat
+  ACCEPT_TAC rangeAnalysisProofsTheory.range_get_range_sound_proof
 QED

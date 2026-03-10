@@ -42,11 +42,15 @@ End
 
 (* Level 1: per-instruction simulation.
    f preserves lift_result for every instruction and state,
-   and preserves the is_terminator property. *)
+   and preserves the is_terminator property.
+   Uses step_inst (not step_inst_base) so INVOKE-modifying transforms
+   can also be expressed. For non-INVOKE passes, the INVOKE case is
+   trivial when f preserves INVOKE instructions. *)
 Definition inst_simulates_def:
   inst_simulates R_ok R_term f <=>
-    (!inst s.
-       lift_result R_ok R_term (step_inst inst s) (step_inst (f inst) s)) /\
+    (!fuel ctx inst s.
+       lift_result R_ok R_term
+         (step_inst fuel ctx inst s) (step_inst fuel ctx (f inst) s)) /\
     (!inst. is_terminator inst.inst_opcode =
             is_terminator (f inst).inst_opcode)
 End
@@ -55,8 +59,9 @@ End
    Running the transformed block gives a related result. *)
 Definition block_simulates_def:
   block_simulates R_ok R_term bt <=>
-    !bb s.
-      lift_result R_ok R_term (run_block bb s) (run_block (bt bb) s)
+    !fuel ctx bb s.
+      lift_result R_ok R_term (run_block fuel ctx bb s)
+                               (run_block fuel ctx (bt bb) s)
 End
 
 (* ===== Pass correctness predicates ===== *)
@@ -70,8 +75,8 @@ End
    1. Termination equivalence: original terminates iff transformed terminates
    2. Result equivalence: when both terminate, results are equivalent
       (modulo fresh variables introduced by the transformation)
-   Usage: pass_correct fresh (\fuel. run_function fuel fn s)
-                              (\fuel. run_function fuel fn' s) *)
+   Usage: pass_correct fresh (\fuel. run_function fuel ctx fn s)
+                              (\fuel. run_function fuel ctx fn' s) *)
 Definition pass_correct_def:
   pass_correct fresh exec1 exec2 <=>
     ((?fuel. terminates (exec1 fuel)) <=> (?fuel'. terminates (exec2 fuel'))) /\

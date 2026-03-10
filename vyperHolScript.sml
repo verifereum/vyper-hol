@@ -5,7 +5,7 @@ Ancestors
   jsonToVyper
   vyperTestRunner
   (* semantics properties *)
-  vyperEvalPreservesNameTarget
+  vyperSemanticsHol
   (* compiler passes *)
   venomPassesHol
   (* analysis roll-up *)

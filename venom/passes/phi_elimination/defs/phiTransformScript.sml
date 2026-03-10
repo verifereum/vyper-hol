@@ -180,9 +180,9 @@ QED
 
 (* Running a block is the same when transform is identity *)
 Theorem run_block_transform_identity:
-  !bb s dfg.
+  !bb s dfg fuel ctx.
     (!idx inst. get_instruction bb idx = SOME inst ==> phi_single_origin dfg inst = NONE) ==>
-    run_block (transform_block dfg bb) s = run_block bb s
+    run_block fuel ctx (transform_block dfg bb) s = run_block fuel ctx bb s
 Proof
   rpt strip_tac >>
   (* Use transform_block_identity to show block is unchanged *)

@@ -103,9 +103,11 @@ Local test/scratch files use **dot prefixes** (gitignored):
 
 Try to keep theory files under 500 LOC (soft limit).
 
-### Variable names
+### Naming conventions
 
 The proofs should not depend on automatically generated variable names. Use `rename1` when needed.
+
+When generalizing a definition (adding parameters), the general version gets the clean name. If the old simpler version is kept as a helper, it gets a suffix (`_simple`, `_helper`). Never the reverse (`_gen`, `_ctx`). Top-level API = shortest, clearest name.
 
 ## HOL4 Tactics Reference
 

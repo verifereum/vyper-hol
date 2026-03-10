@@ -52,10 +52,10 @@ Ancestors
  *   - vs_accounts  : Account balances/state
  *   - vs_returndata: Return value or revert reason
  *   - vs_halted    : Whether execution halted
- *   - vs_reverted  : Whether execution reverted
  *
  * USE FOR: Proving that two executions have the same external effect,
  * regardless of how they got there.
+ * NOTE: Revert/halt distinction lives in abort_type, not the state.
  *)
 Definition observable_equiv_def:
   observable_equiv s1 s2 <=>
@@ -63,7 +63,7 @@ Definition observable_equiv_def:
     s1.vs_accounts = s2.vs_accounts /\
     s1.vs_returndata = s2.vs_returndata /\
     s1.vs_halted = s2.vs_halted /\
-    s1.vs_reverted = s2.vs_reverted
+    s1.vs_logs = s2.vs_logs
 End
 
 (* ==========================================================================
@@ -86,12 +86,19 @@ Definition execution_equiv_def:
     s1.vs_transient = s2.vs_transient /\
     (* OMIT: vs_current_bb, vs_inst_idx, vs_prev_bb *)
     s1.vs_halted = s2.vs_halted /\
-    s1.vs_reverted = s2.vs_reverted /\
     s1.vs_returndata = s2.vs_returndata /\
     s1.vs_accounts = s2.vs_accounts /\
     s1.vs_call_ctx = s2.vs_call_ctx /\
     s1.vs_tx_ctx = s2.vs_tx_ctx /\
-    s1.vs_block_ctx = s2.vs_block_ctx
+    s1.vs_block_ctx = s2.vs_block_ctx /\
+    s1.vs_logs = s2.vs_logs /\
+    s1.vs_immutables = s2.vs_immutables /\
+    s1.vs_data_section = s2.vs_data_section /\
+    s1.vs_label_offsets = s2.vs_label_offsets /\
+    s1.vs_code = s2.vs_code /\
+    s1.vs_params = s2.vs_params /\
+    s1.vs_prev_hashes = s2.vs_prev_hashes /\
+    s1.vs_allocas = s2.vs_allocas
 End
 
 (* ==========================================================================
@@ -125,7 +132,10 @@ End
 Definition lift_result_def:
   lift_result R_ok R_term (OK s1) (OK s2) = R_ok s1 s2 /\
   lift_result R_ok R_term (Halt s1) (Halt s2) = R_term s1 s2 /\
-  lift_result R_ok R_term (Revert s1) (Revert s2) = R_term s1 s2 /\
+  lift_result R_ok R_term (Abort a1 s1) (Abort a2 s2) =
+    ((a1 = a2) /\ R_term s1 s2) /\
+  lift_result R_ok R_term (IntRet v1 s1) (IntRet v2 s2) =
+    (R_term s1 s2 /\ (v1 = v2)) /\
   lift_result R_ok R_term (Error e1) (Error e2) = T /\
   lift_result R_ok R_term _ _ = F
 End
@@ -136,7 +146,10 @@ End
 Definition result_equiv_def:
   result_equiv vars (OK s1) (OK s2) = state_equiv vars s1 s2 /\
   result_equiv vars (Halt s1) (Halt s2) = execution_equiv vars s1 s2 /\
-  result_equiv vars (Revert s1) (Revert s2) = execution_equiv vars s1 s2 /\
+  result_equiv vars (Abort a1 s1) (Abort a2 s2) =
+    ((a1 = a2) /\ execution_equiv vars s1 s2) /\
+  result_equiv vars (IntRet v1 s1) (IntRet v2 s2) =
+    (execution_equiv vars s1 s2 /\ (v1 = v2)) /\
   result_equiv vars (Error e1) (Error e2) = T /\
   result_equiv vars _ _ = F
 End

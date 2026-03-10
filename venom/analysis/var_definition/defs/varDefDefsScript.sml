@@ -2,6 +2,7 @@
  * Variable Definition (Reaching Definitions) Analysis — Definitions
  *
  * Ports vyper/venom/analysis/var_definition.py to HOL4.
+ * Uses df_analyze (generic dataflow framework).
  *
  * Forward dataflow: at each program point, which variables are
  * guaranteed defined on ALL paths from entry.
@@ -10,95 +11,35 @@
  * Variables can only be removed during iteration; convergence follows
  * from finite height.
  *
- * In Python, used by check_venom.py to validate that all used variables
- * are defined. Not consumed by any optimization pass directly, but can
- * serve as a proof obligation added to a pass for additional guarantees
- * (e.g. proving that a transformation preserves the defined-variable
- * invariant). Usefulness TBD.
- *
  * TOP-LEVEL:
- *   vardef_result          — record: vd_out (per-block), vd_inst (per-inst)
- *   vardef_analyze         — run full analysis via wl_iterate
+ *   vardef_analyze         — run analysis via df_analyze Forward
  *   vardef_out_of          — query defined vars at block exit
  *   vardef_at              — query defined vars before an instruction
- *   fn_all_assignments     — all variables assigned anywhere in the function
+ *   vardef_transfer        — per-instruction transfer: add inst_defs
+ *   vardef_edge_transfer   — edge transfer: identity (no edge-specific flow)
  *   var_assigned_in_block  — v is assigned by some instruction in a block
- *   is_cfg_path           — block-level path: consecutive labels are CFG edges
- *
- * Helper:
- *   vardef_process         — transfer function for one block (for wl_iterate)
- *   vardef_init            — initial state (all_assignments everywhere)
  *)
 
 Theory varDefDefs
 Ancestors
-  venomInst cfgDefs worklistDefs dfHelperDefs
+  venomInst cfgDefs dfAnalyzeDefs dfHelperDefs
 
-(* ===== All assigned variable names in a function ===== *)
+(* ===== Per-instruction transfer ===== *)
 
-Definition fn_all_assignments_def:
-  fn_all_assignments fn =
-    nub (FLAT (MAP (λbb.
-      FLAT (MAP inst_defs bb.bb_instructions))
-      fn.fn_blocks))
+(* Forward transfer: add newly defined variables.
+   defs_before → transfer → defs_after.
+   Context is unit (no analysis-specific context needed). *)
+Definition vardef_transfer_def:
+  vardef_transfer (() : unit) (inst : instruction)
+                  (defs : string list) =
+    list_union defs (inst_defs inst)
 End
 
-(* ===== Result type ===== *)
-
-Datatype:
-  vardef_result = <|
-    vd_out  : (string, string list) fmap;
-    vd_inst : (num, string list) fmap
-  |>
-End
-
-(* ===== Query API ===== *)
-
-(* Defined variables at block exit. [] if block absent. *)
-Definition vardef_out_of_def:
-  vardef_out_of vd lbl = fmap_lookup_list vd.vd_out lbl
-End
-
-(* Defined variables before instruction inst_id. [] if absent. *)
-Definition vardef_at_def:
-  vardef_at vd inst_id = fmap_lookup_list vd.vd_inst inst_id
-End
-
-(* ===== Transfer function for one block ===== *)
-
-(* Process one block: intersect predecessor outputs, then accumulate
-   instruction outputs forward through the block.
-   Matches Python _handle_bb exactly. *)
-Definition vardef_process_def:
-  vardef_process cfg fn lbl (vd : vardef_result) =
-    case lookup_block lbl fn.fn_blocks of
-      NONE => vd
-    | SOME bb =>
-        let preds = cfg_preds_of cfg lbl in
-        let input_defs =
-          if NULL preds then []
-          else list_intersect_all
-                 (MAP (λp. fmap_lookup_list vd.vd_out p) preds) in
-        let (imap, exit_defs) =
-          FOLDL (λ(im, defs) inst.
-            (im |+ (inst.inst_id, defs),
-             list_union defs (inst_defs inst)))
-          (vd.vd_inst, input_defs) bb.bb_instructions in
-        vd with <| vd_out := vd.vd_out |+ (lbl, exit_defs);
-                    vd_inst := imap |>
-End
-
-(* ===== Initialization ===== *)
-
-(* Python: defined_vars_bb = {bb: all_variables.copy() for bb in bbs}
-   Top of lattice: every block starts with all vars defined. *)
-Definition vardef_init_def:
-  vardef_init fn =
-    let all_vars = fn_all_assignments fn in
-    <| vd_out :=
-         FOLDL (λm bb. m |+ (bb.bb_label, all_vars))
-               FEMPTY fn.fn_blocks;
-       vd_inst := FEMPTY |>
+(* Edge transfer: identity. No edge-specific handling needed.
+   (Unlike liveness PHI, var_def doesn't have edge-sensitive flow.) *)
+Definition vardef_edge_transfer_def:
+  vardef_edge_transfer (() : unit) (src : string) (dst : string)
+                       (defs : string list) = defs
 End
 
 (* ===== Soundness predicates ===== *)
@@ -112,25 +53,30 @@ Definition var_assigned_in_block_def:
         EXISTS (λinst. MEM v (inst_defs inst)) bb.bb_instructions
 End
 
-(* A block-level CFG path: consecutive labels are CFG edges. *)
-Definition is_cfg_path_def:
-  is_cfg_path cfg [] = T /\
-  is_cfg_path cfg [l] = T /\
-  is_cfg_path cfg (l1 :: l2 :: rest) =
-    (MEM l2 (cfg_succs_of cfg l1) /\ is_cfg_path cfg (l2 :: rest))
-End
+(* ===== Top-level analysis via df_analyze ===== *)
 
-(* ===== Top-level analysis ===== *)
-
-(* Worklist-based iteration matching the Python implementation.
-   deps = cfg_succs_of: when a block's output changes, re-process successors.
-   Initial worklist = all block labels. *)
+(* Variable definition analysis via the generic dataflow framework.
+   Forward direction, list_intersect join, fn_all_assignments as bottom
+   (identity for ∩). Entry block starts with [] (no vars defined). *)
 Definition vardef_analyze_def:
   vardef_analyze fn =
-    let cfg = cfg_analyze fn in
-    let process = vardef_process cfg fn in
-    let deps = cfg_succs_of cfg in
-    let vd0 = vardef_init fn in
-    let wl = fn_labels fn in
-    SND (wl_iterate process deps wl vd0)
+    let all_vars = fn_all_assignments fn in
+    let entry_val =
+      OPTION_MAP (λlbl. (lbl, [] : string list)) (fn_entry_label fn) in
+    df_analyze Forward all_vars list_intersect vardef_transfer
+              vardef_edge_transfer () entry_val fn
+End
+
+(* ===== Query API ===== *)
+
+(* Defined variables at block exit = boundary value (forward). *)
+Definition vardef_out_of_def:
+  vardef_out_of fn lbl =
+    df_boundary (fn_all_assignments fn) (vardef_analyze fn) lbl
+End
+
+(* Defined variables before instruction idx in block lbl. *)
+Definition vardef_at_def:
+  vardef_at fn lbl idx =
+    df_at (fn_all_assignments fn) (vardef_analyze fn) lbl idx
 End

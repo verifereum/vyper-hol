@@ -1,19 +1,29 @@
 (*
  * Pass Simulation Framework — Proofs
  *
- * TOP-LEVEL:
+ * TOP-LEVEL (frozen):
  *   lookup_block_map_proof       — label-preserving MAP commutes with lookup
  *   lift_result_refl_proof       — R_ok, R_term reflexive ⟹ lift_result reflexive
  *   lift_result_trans_proof      — R_ok, R_term transitive ⟹ lift_result transitive
- *   inst_sim_block_sim_proof     — instruction sim ⟹ block sim
  *   block_sim_function_proof     — block sim ⟹ function sim
- *   conditional_inst_sim_proof   — partial + identity ⟹ full inst_simulates
- *   block_sim_compose_proof      — composition preserves block_simulates
+ *   lift_result_implies_pass_correct_proof — same-fuel lift_result → pass_correct bridge
  *)
 
 Theory passSimulationProofs
 Ancestors
-  passSimulationDefs stateEquivProps execEquivProps
+  passSimulationDefs execEquivParamProofs execEquivParamBase execEquivParamDefs
+  stateEquivProps execEquivProps stateEquiv venomInst venomExecSemantics
+  venomExecProofs
+Libs
+  listTheory
+
+Theorem lookup_block_MEM[local]:
+  !lbl bbs bb. lookup_block lbl bbs = SOME bb ==> MEM bb bbs
+Proof
+  Induct_on `bbs` >> simp[lookup_block_def, listTheory.FIND_thm] >>
+  rw[] >> disj2_tac >> first_x_assum irule >> fs[lookup_block_def] >>
+  metis_tac[]
+QED
 
 Theorem lookup_block_map_proof:
   !lbl bbs bt.
@@ -21,7 +31,9 @@ Theorem lookup_block_map_proof:
     lookup_block lbl (MAP bt bbs) =
       OPTION_MAP bt (lookup_block lbl bbs)
 Proof
-  cheat
+  gen_tac >> Induct >>
+  simp[lookup_block_def, listTheory.FIND_thm] >>
+  rw[] >> res_tac >> fs[lookup_block_def]
 QED
 
 Theorem lift_result_refl_proof:
@@ -30,7 +42,7 @@ Theorem lift_result_refl_proof:
     (!s. R_ok s s) /\ (!s. R_term s s) ==>
     !r. lift_result R_ok R_term r r
 Proof
-  cheat
+  rpt strip_tac >> Cases_on `r` >> simp[lift_result_def]
 QED
 
 Theorem lift_result_trans_proof:
@@ -42,56 +54,123 @@ Theorem lift_result_trans_proof:
                lift_result R_ok R_term r2 r3 ==>
                lift_result R_ok R_term r1 r3
 Proof
-  cheat
+  rpt strip_tac >>
+  Cases_on `r1` >> Cases_on `r2` >> Cases_on `r3` >>
+  fs[lift_result_def] >> metis_tac[]
 QED
 
-Theorem inst_sim_block_sim_proof:
-  !(R_ok : venom_state -> venom_state -> bool)
-   (R_term : venom_state -> venom_state -> bool) f.
-    inst_simulates R_ok R_term f ==>
-    block_simulates R_ok R_term (block_map_transform f)
-Proof
-  cheat
-QED
-
+(* Per-fn-block sim → function sim. Needs valid_state_rel + transitivity for the
+   triangle composition at inter-block transitions: same-state-diff-code
+   composed with same-code-diff-state (run_block_preserves_R) via
+   lift_result_trans.
+   Operand condition: fn's blocks don't read variables that disagree under R_ok.
+   Takes per-fn-block simulation (not block_simulates) since block_simulates is
+   universal over all blocks, which is too strong for state_equiv {vars}.
+   vs_inst_idx = 0 precondition: required because 1:N expansion (FLAT) changes
+   block length; false at arbitrary idx (see counterexampleScript.sml). *)
 Theorem block_sim_function_proof:
   !(R_ok : venom_state -> venom_state -> bool)
-   (R_term : venom_state -> venom_state -> bool) bt.
-    block_simulates R_ok R_term bt /\
-    (!bb. (bt bb).bb_label = bb.bb_label) /\
-    (!s1 s2. R_ok s1 s2 ==> s1.vs_current_bb = s2.vs_current_bb) /\
-    (!s1 s2. R_ok s1 s2 ==> s1.vs_halted = s2.vs_halted)
-  ==>
-    !fuel fn s.
-      lift_result R_ok R_term (run_function fuel fn s)
-                 (run_function fuel (function_map_transform bt fn) s)
-Proof
-  cheat
-QED
-
-Theorem conditional_inst_sim_proof:
-  !(R_ok : venom_state -> venom_state -> bool)
-   (R_term : venom_state -> venom_state -> bool) f P.
-    (!s. R_ok s s) /\ (!s. R_term s s) /\
-    (!inst s. P inst ==>
-       lift_result R_ok R_term (step_inst inst s) (step_inst (f inst) s)) /\
-    (!inst. P inst ==>
-       is_terminator inst.inst_opcode =
-       is_terminator (f inst).inst_opcode) /\
-    (!inst. ~P inst ==> f inst = inst) ==>
-    inst_simulates R_ok R_term f
-Proof
-  cheat
-QED
-
-Theorem block_sim_compose_proof:
-  !(R_ok : venom_state -> venom_state -> bool)
-   (R_term : venom_state -> venom_state -> bool) bt1 bt2.
+   (R_term : venom_state -> venom_state -> bool) bt fn.
+    valid_state_rel R_ok R_term /\
     (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
     (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
-    block_simulates R_ok R_term bt1 /\
-    block_simulates R_ok R_term bt2 ==>
-    block_simulates R_ok R_term (bt2 o bt1)
+    (!bb. (bt bb).bb_label = bb.bb_label) /\
+    (!bb. MEM bb fn.fn_blocks ==>
+      !fuel ctx s.
+        s.vs_inst_idx = 0 ==>
+        lift_result R_ok R_term (run_block fuel ctx bb s)
+                                 (run_block fuel ctx (bt bb) s)) /\
+    (!bb inst x.
+       MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       MEM (Var x) inst.inst_operands ==>
+       !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
+  ==>
+    !fuel ctx s.
+      s.vs_inst_idx = 0 ==>
+      lift_result R_ok R_term (run_function fuel ctx fn s)
+                 (run_function fuel ctx (function_map_transform bt fn) s)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  (* Derive useful consequences of valid_state_rel *)
+  `!s1 s2. R_ok s1 s2 ==> R_term s1 s2` by
+    (rpt strip_tac >> irule vsr_R_ok_R_term >> metis_tac[]) >>
+  `!s1 s2. R_ok s1 s2 ==> (s1.vs_halted <=> s2.vs_halted) /\
+     s1.vs_current_bb = s2.vs_current_bb /\
+     s1.vs_inst_idx = s2.vs_inst_idx` by
+    (rpt strip_tac >> imp_res_tac
+      (REWRITE_RULE [GSYM AND_IMP_INTRO] vsr_R_ok_fields)) >>
+  (* Same-code R_ok preservation *)
+  `!fuel ctx bb s1 s2.
+     MEM bb fn.fn_blocks /\ R_ok s1 s2 ==>
+     lift_result R_ok R_term (run_block fuel ctx bb s1)
+                              (run_block fuel ctx bb s2)` by
+    (match_mp_tac (cj 1 run_block_preserves_R_proof) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  (* Strengthen: work with R_ok s1 s2 /\ idx=0 *)
+  qsuff_tac
+    `!fuel ctx s1 s2. R_ok s1 s2 /\ s1.vs_inst_idx = 0 ==>
+       lift_result R_ok R_term (run_function fuel ctx fn s1)
+         (run_function fuel ctx (function_map_transform bt fn) s2)`
+  >- (rpt strip_tac >>
+      first_x_assum (qspecl_then [`fuel`, `ctx`, `s`, `s`] mp_tac) >>
+      impl_tac >- (conj_tac >- (irule vsr_R_ok_refl >> metis_tac[]) >> simp[]) >>
+      simp[])
+  >>
+  Induct_on `fuel` >> rw[]
+  >- simp[run_function_def, function_map_transform_def, lift_result_def]
+  >>
+  `s1.vs_current_bb = s2.vs_current_bb` by metis_tac[] >>
+  `s2.vs_inst_idx = 0` by metis_tac[] >>
+  ONCE_REWRITE_TAC[run_function_def] >>
+  simp[function_map_transform_def, lookup_block_map_proof] >>
+  Cases_on `lookup_block s2.vs_current_bb fn.fn_blocks` >>
+  gvs[lift_result_def] >>
+  rename1 `lookup_block _ _ = SOME bb` >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  (* Triangle: run_block bb s1 ~ run_block bb s2 ~ run_block (bt bb) s2 *)
+  sg `lift_result R_ok R_term (run_block fuel ctx bb s1)
+                               (run_block fuel ctx (bt bb) s2)`
+  >- (irule lift_result_trans_proof >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      qexists_tac `run_block fuel ctx bb s2` >>
+      conj_tac >- metis_tac[] >- metis_tac[]) >>
+  Cases_on `run_block fuel ctx bb s1` >>
+  Cases_on `run_block fuel ctx (bt bb) s2` >>
+  gvs[lift_result_def] >>
+  (* Both OK: use run_block_OK_inst_idx_0 for IH *)
+  `v'.vs_halted <=> v.vs_halted` by metis_tac[] >>
+  Cases_on `v.vs_halted` >> fs[] >>
+  gvs[lift_result_def, function_map_transform_def] >>
+  (* v and v' have vs_inst_idx = 0 from run_block_OK_inst_idx_0 *)
+  `v.vs_inst_idx = 0 /\ v'.vs_inst_idx = 0` by
+    metis_tac[run_block_OK_inst_idx_0] >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+(* Bridge: same-fuel lift_result → pass_correct.
+   Requires fuel determinism for both executions (when an execution terminates
+   at two different fuel values, the results are equal).
+   run_function_fuel_mono (in rtaCorrectnessProof) provides this for
+   no_invoke_in_function; a general version is future work. *)
+Triviality result_equiv_terminates:
+  !fresh r1 r2. result_equiv fresh r1 r2 ==>
+    (terminates r1 <=> terminates r2)
+Proof
+  Cases_on `r1` >> Cases_on `r2` >>
+  simp[result_equiv_def, terminates_def]
+QED
+
+Theorem lift_result_implies_pass_correct_proof:
+  !fresh exec1 exec2.
+    (!fuel. result_equiv fresh (exec1 fuel) (exec2 fuel)) /\
+    (!fuel fuel'. terminates (exec1 fuel) /\ terminates (exec1 fuel') ==>
+                  exec1 fuel = exec1 fuel') /\
+    (!fuel fuel'. terminates (exec2 fuel) /\ terminates (exec2 fuel') ==>
+                  exec2 fuel = exec2 fuel')
+  ==>
+    pass_correct fresh exec1 exec2
+Proof
+  rw[pass_correct_def] >> (
+    metis_tac[result_equiv_terminates]
+  )
 QED

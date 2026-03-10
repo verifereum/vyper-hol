@@ -3,37 +3,36 @@
  *
  * Ports vyper/venom/analysis/variable_range/analysis.py to HOL4.
  *
- * Forward dataflow with widening-aware iteration.
- * Uses its own iteration loop (not wl_iterate) because widening
- * needs per-block visit counts and custom convergence logic.
+ * Forward dataflow with widening, expressed as an instance of
+ * df_analyze_widen from the generic dataflow framework.
  *
  * TOP-LEVEL:
- *   range_result             — analysis result record
- *   range_analyze            — top-level analysis
+ *   range_analyze            — top-level analysis (via df_analyze_widen)
  *   range_get_range          — query: range of operand before instruction
+ *   range_at_inst             — query: range state before instruction
  *   range_entry_state        — entry state at block start
  *   range_exit_state         — exit state at block end
  *
  * Helper:
- *   range_join_states        — join predecessor states
+ *   range_join_two           — binary join (intersect domains, union ranges)
  *   range_widen_states       — per-variable widening
- *   range_run_block          — transfer function: run block forward
- *   range_evaluate_inst      — evaluate one instruction
- *   range_handle_phi         — handle PHI instructions at block entry
- *   range_edge_state         — state on a CFG edge (with branch refinement)
+ *   range_evaluate_inst      — evaluate one instruction (per-inst transfer)
+ *   range_branch_refine      — branch refinement on JNZ edges
+ *   range_phi_edge_rename    — PHI renaming per CFG edge
+ *   range_edge_transfer_opt  — combined edge transfer (branch + PHI + option)
+ *   range_join_opt           — option-wrapped join (NONE = identity)
+ *   range_widen_opt          — option-wrapped widening
+ *   range_transfer_opt       — option-wrapped per-instruction transfer
  *   range_apply_condition    — narrow state based on branch condition
  *   range_apply_iszero/eq/compare — specific branch refinement
  *   range_narrow_var         — narrow variable for comparison
- *   range_process_block      — process one block in the worklist
- *   range_one_pass           — one worklist pass
- *   range_iterate            — widening-aware fixpoint iteration
  *
  * WIDEN_THRESHOLD = 2: iterate normally for 2 visits, then widen.
  *)
 
 Theory rangeAnalysisDefs
 Ancestors
-  rangeEvalDefs cfgDefs dfgDefs venomInst
+  rangeEvalDefs cfgDefs dfgDefs dfAnalyzeWidenDefs venomInst
 
 (* ===== Constants ===== *)
 
@@ -41,69 +40,15 @@ Definition WIDEN_THRESHOLD_def:
   WIDEN_THRESHOLD = 2 : num
 End
 
-(* ===== Analysis Result ===== *)
-
-Datatype:
-  range_result = <|
-    ra_entry : (string, range_state) fmap;    (* block label → entry state *)
-    ra_exit  : (string, range_state) fmap;    (* block label → exit state *)
-    ra_inst  : (num, range_state) fmap;       (* inst_id → state before inst *)
-    ra_visits : (string, num) fmap            (* block label → visit count *)
-  |>
-End
-
-Definition range_result_empty_def:
-  range_result_empty = <|
-    ra_entry := FEMPTY;
-    ra_exit := FEMPTY;
-    ra_inst := FEMPTY;
-    ra_visits := FEMPTY
-  |>
-End
-
-(* ===== Query API ===== *)
-
-(* Get the range state at block entry *)
-Definition range_entry_state_def:
-  range_entry_state ra lbl =
-    case FLOOKUP ra.ra_entry lbl of
-      NONE => FEMPTY
-    | SOME rs => rs
-End
-
-(* Get the range state at block exit *)
-Definition range_exit_state_def:
-  range_exit_state ra lbl =
-    case FLOOKUP ra.ra_exit lbl of
-      NONE => FEMPTY
-    | SOME rs => rs
-End
-
-(* Get range of an operand just before an instruction.
-   Matches Python VariableRangeAnalysis.get_range. *)
-Definition range_get_range_def:
-  range_get_range ra op inst_id =
-    case op of
-      Lit v => vr_constant (w2i v)
-    | Var v =>
-        (case FLOOKUP ra.ra_inst inst_id of
-          NONE => VR_Top
-        | SOME rs => rs_lookup rs v)
-    | Label _ => VR_Top
-End
-
-(* Get visit count for a block *)
-Definition ra_visit_count_def:
-  ra_visit_count ra lbl =
-    case FLOOKUP ra.ra_visits lbl of
-      NONE => 0
-    | SOME n => n
+(* Default fuel for ASSIGN chain depth *)
+Definition ASSIGN_CHAIN_FUEL_def:
+  ASSIGN_CHAIN_FUEL = 5 : num
 End
 
 (* ===== State Join / Widen ===== *)
 
-(* Join multiple predecessor states.
-   Only variables present in ALL states are kept (intersection of keys).
+(* Join two predecessor states.
+   Only variables present in BOTH states are kept (intersection of keys).
    Ranges are unioned. Missing var in any pred → TOP → dropped.
    Matches Python _join_states. *)
 Definition range_join_two_def:
@@ -111,12 +56,6 @@ Definition range_join_two_def:
     FUN_FMAP
       (λv. vr_union (rs_lookup s1 v) (rs_lookup s2 v))
       (FDOM s1 ∩ FDOM s2)
-End
-
-Definition range_join_states_def:
-  range_join_states [] = FEMPTY ∧
-  range_join_states [s] = s ∧
-  range_join_states (s :: rest) = range_join_two s (range_join_states rest)
 End
 
 (* Per-variable widening. Matches Python _widen_states. *)
@@ -151,11 +90,9 @@ Definition range_apply_iszero_def:
           if lo < 0 then
             if hi < 0 then rs
             else if hi = 0 then
-              (* [lo, 0] → [lo, -1] *)
               rs_write rs target_var (vr_clamp current (SOME lo) (SOME (-1)))
-            else rs  (* spans zero, can't represent [lo,-1] ∪ [1,hi] *)
+            else rs
           else
-            (* non-negative: intersect with [1, INT256_MAX] — excludes zero *)
             rs_write rs target_var
               (vr_intersect current (VR_Range 1 INT256_MAX))
 End
@@ -212,8 +149,6 @@ End
 
 (* Apply comparison-based refinement.
    Matches Python _apply_compare. *)
-(* For unsigned: bounds are [0, INT256_MAX] (non-negative signed range).
-   For signed: bounds are [INT256_MIN, INT256_MAX] (full signed range). *)
 Definition range_apply_compare_def:
   range_apply_compare op lhs rhs is_true (rs : range_state) =
     let min_bound = if op = SLT ∨ op = SGT then INT256_MIN else (0 : int) in
@@ -240,8 +175,6 @@ End
 
 (* Apply condition: dispatch by producing instruction opcode.
    Matches Python _apply_condition (recursive for ASSIGN). *)
-(* Fuel-bounded recursion through ASSIGN chains in DFG.
-   In practice, ASSIGN chains are short (1-2 deep). *)
 Definition range_apply_condition_def:
   range_apply_condition dfg (0 : num) op is_true (rs : range_state) = rs ∧
   range_apply_condition dfg (SUC fuel) op is_true rs =
@@ -279,42 +212,11 @@ Definition range_apply_condition_def:
             else rs
 End
 
-(* Default fuel for ASSIGN chain depth *)
-Definition ASSIGN_CHAIN_FUEL_def:
-  ASSIGN_CHAIN_FUEL = 5 : num
-End
-
-(* Edge state: state on CFG edge pred→succ, with branch refinement on JNZ.
-   Matches Python _edge_state. *)
-Definition range_edge_state_def:
-  range_edge_state dfg fn ra pred succ =
-    case FLOOKUP ra.ra_exit pred of
-      NONE => FEMPTY
-    | SOME pred_exit =>
-        case lookup_block pred fn.fn_blocks of
-          NONE => pred_exit
-        | SOME bb =>
-            if NULL bb.bb_instructions then pred_exit
-            else
-              let term = LAST bb.bb_instructions in
-                if term.inst_opcode ≠ JNZ then pred_exit
-                else
-                  case term.inst_operands of
-                    [cond_op; Label true_lbl; Label false_lbl] =>
-                      if true_lbl = succ then
-                        range_apply_condition dfg ASSIGN_CHAIN_FUEL
-                          cond_op T pred_exit
-                      else if false_lbl = succ then
-                        range_apply_condition dfg ASSIGN_CHAIN_FUEL
-                          cond_op F pred_exit
-                      else pred_exit
-                  | _ => pred_exit
-End
-
 (* ===== Transfer Function ===== *)
 
 (* Evaluate one instruction in the current state.
-   Matches Python _evaluate_inst. *)
+   Matches Python _evaluate_inst. PHIs are skipped because they are
+   handled by edge_transfer (PHI renaming per edge before join). *)
 Definition range_evaluate_inst_def:
   range_evaluate_inst dfg inst (rs : range_state) =
     if inst.inst_opcode = PHI ∨ inst.inst_outputs = [] then rs
@@ -324,138 +226,159 @@ Definition range_evaluate_inst_def:
       let result_range = eval_range inst.inst_opcode ranges lits in
       case inst.inst_outputs of
         [out] => rs_write rs out result_range
-      | _ => rs  (* multi-output: don't track *)
+      | _ => rs
 End
 
-(* Run block forward: evaluate each instruction, recording pre-inst state.
-   Matches Python _run_block. *)
-Definition range_run_block_def:
-  range_run_block dfg [] rs imap = (rs, imap) ∧
-  range_run_block dfg (inst :: rest) rs imap =
-    let imap' = imap |+ (inst.inst_id, rs) in
-    let rs' = range_evaluate_inst dfg inst rs in
-    range_run_block dfg rest rs' imap'
+(* ===== Option-wrapped lattice for df_analyze_widen ===== *)
+
+(* NONE = unprocessed / identity for join.
+   SOME rs = processed range state. *)
+
+(* Unwrap option state, returning FEMPTY for NONE *)
+Definition range_unwrap_def:
+  range_unwrap NONE = (FEMPTY : range_state) ∧
+  range_unwrap (SOME rs) = rs
 End
 
-(* ===== PHI Handling ===== *)
-
-(* Compute range for one PHI instruction from predecessor exit states.
-   Matches Python _phi_range. Uses phi_pairs to extract (label, var) pairs
-   from the alternating [Label, Var, Label, Var, ...] operand list. *)
-Definition range_phi_range_def:
-  range_phi_range ra inst =
-    if inst.inst_opcode ≠ PHI then VR_Top
-    else
-      let pairs = phi_pairs inst.inst_operands in
-      FOLDL (λacc (lbl, v).
-        let pred_exit =
-          case FLOOKUP ra.ra_exit lbl of
-            NONE => FEMPTY
-          | SOME rs => rs
-        in
-        vr_union acc (rs_lookup pred_exit v))
-      VR_Bottom
-      pairs
+(* Option-wrapped join: NONE is identity (unprocessed blocks don't
+   contribute to join). Normalizes after joining. *)
+Definition range_join_opt_def:
+  range_join_opt NONE x = x ∧
+  range_join_opt x NONE = x ∧
+  range_join_opt (SOME a) (SOME b) =
+    SOME (range_normalize (range_join_two a b))
 End
 
-(* Handle PHI instructions at block entry: fold phi results into state.
-   Matches the phi loop in Python _compute_entry_state. *)
-Definition range_handle_phis_def:
-  range_handle_phis ra [] rs = rs ∧
-  range_handle_phis ra (inst :: rest) rs =
-    if inst.inst_opcode ≠ PHI then rs
-    else
-      let phi_range = range_phi_range ra inst in
-      let phi_range' = if vr_is_bottom phi_range then VR_Top
-                        else phi_range in
-      let rs' = case inst.inst_outputs of
-                  [out] => rs_write rs out phi_range'
-                | _ => rs in
-      range_handle_phis ra rest rs'
+(* Option-wrapped widening. No normalization after widening —
+   matches Python _widen_states which returns directly.
+   (range_join_opt normalizes; this asymmetry is intentional.) *)
+Definition range_widen_opt_def:
+  range_widen_opt NONE x = x ∧
+  range_widen_opt x NONE = x ∧
+  range_widen_opt (SOME old_st) (SOME new_st) =
+    SOME (range_widen_states old_st new_st)
 End
 
-(* ===== Block Processing ===== *)
-
-(* Compute entry state for a block.
-   Matches Python _compute_entry_state. *)
-Definition range_compute_entry_def:
-  range_compute_entry cfg dfg fn ra lbl (bb : basic_block) =
-    let preds = cfg_preds_of cfg lbl in
-    let base_state =
-      if NULL preds then FEMPTY
-      else
-        let pred_states = MAP (λp.
-          range_edge_state dfg fn ra p lbl) preds in
-        let joined = range_join_states pred_states in
-        let normalized = range_normalize joined in
-        let visits = ra_visit_count ra lbl in
-        if visits > WIDEN_THRESHOLD then
-          let old_entry = range_entry_state ra lbl in
-          range_widen_states old_entry normalized
-        else normalized in
-    range_handle_phis ra bb.bb_instructions base_state
+(* Option-wrapped per-instruction transfer.
+   Context = (dfg, bbs) — only dfg is used by transfer. *)
+Definition range_transfer_opt_def:
+  range_transfer_opt (ctx : dfg_analysis # basic_block list)
+                     (inst : instruction)
+                     (rs_opt : range_state option) =
+    let dfg = FST ctx in
+    case rs_opt of
+      NONE => SOME (range_evaluate_inst dfg inst FEMPTY)
+    | SOME rs => SOME (range_evaluate_inst dfg inst rs)
 End
 
-(* Process one block: compute entry, run transfer, update result.
-   Returns (changed, updated_result).
-   Matches Python logic in analyze() main loop. *)
-Definition range_process_block_def:
-  range_process_block cfg dfg fn ra lbl =
-    case lookup_block lbl fn.fn_blocks of
-      NONE => (F, ra)
+(* ===== Edge Transfer ===== *)
+
+(* Branch refinement on a CFG edge pred→succ.
+   If the predecessor's terminator is JNZ, narrow ranges based on
+   which branch was taken. Matches Python _edge_state. *)
+Definition range_branch_refine_def:
+  range_branch_refine dfg bbs pred succ pred_exit =
+    case lookup_block pred bbs of
+      NONE => pred_exit
     | SOME bb =>
-        let ra' = ra with ra_visits :=
-          ra.ra_visits |+ (lbl, ra_visit_count ra lbl + 1) in
-        let entry_state = range_compute_entry cfg dfg fn ra' lbl bb in
-        let run_result =
-          range_run_block dfg bb.bb_instructions entry_state ra'.ra_inst in
-        let exit_state = FST run_result in
-        let imap = SND run_result in
-        (¬(exit_state = range_exit_state ra lbl) ∨ lbl ∉ FDOM ra.ra_exit,
-         ra' with <|
-           ra_entry := ra'.ra_entry |+ (lbl, entry_state);
-           ra_exit := ra'.ra_exit |+ (lbl, exit_state);
-           ra_inst := imap
-         |>)
+        if NULL bb.bb_instructions then pred_exit
+        else
+          let term = LAST bb.bb_instructions in
+          if term.inst_opcode ≠ JNZ then pred_exit
+          else
+            case term.inst_operands of
+              [cond_op; Label true_lbl; Label false_lbl] =>
+                if true_lbl = succ then
+                  range_apply_condition dfg ASSIGN_CHAIN_FUEL
+                    cond_op T pred_exit
+                else if false_lbl = succ then
+                  range_apply_condition dfg ASSIGN_CHAIN_FUEL
+                    cond_op F pred_exit
+                else pred_exit
+            | _ => pred_exit
 End
 
-(* ===== Worklist Iteration ===== *)
-
-(* Process worklist: one pass through all queued blocks.
-   Returns (updated_result, new_worklist).
-   Matches Python analyze() worklist loop. *)
-Definition range_one_pass_def:
-  range_one_pass cfg dfg fn ra [] = (ra, []) ∧
-  range_one_pass cfg dfg fn ra (lbl :: rest) =
-    let (changed, ra') = range_process_block cfg dfg fn ra lbl in
-    let (ra'', more) = range_one_pass cfg dfg fn ra' rest in
-    if changed then
-      (ra'', cfg_succs_of cfg lbl ++ more)
-    else (ra'', more)
+(* PHI renaming on a CFG edge pred→succ.
+   For each PHI instruction in succ's block, find the operand associated
+   with pred's label and assign its range to the PHI output variable.
+   This replaces range_handle_phis: instead of post-join PHI handling,
+   we rename per-edge so that join correctly combines per-predecessor
+   PHI contributions. *)
+Definition range_phi_edge_rename_def:
+  range_phi_edge_rename bbs pred succ (rs : range_state) =
+    case lookup_block succ bbs of
+      NONE => rs
+    | SOME bb =>
+        FOLDL (λst inst.
+          if inst.inst_opcode ≠ PHI then st
+          else
+            case inst.inst_outputs of
+              [out] =>
+                let pairs = phi_pairs inst.inst_operands in
+                (case ALOOKUP pairs pred of
+                  NONE => st
+                | SOME v => rs_write st out (rs_lookup rs v))
+            | _ => st
+        ) rs bb.bb_instructions
 End
 
-(* Widening-aware fixpoint iteration with fuel.
-   The fuel ensures termination in HOL4; in practice, widening
-   guarantees convergence in O(|blocks| * WIDEN_THRESHOLD) steps.
-   Matches Python analyze() while-loop. *)
-Definition range_iterate_def:
-  range_iterate cfg dfg fn ra (0 : num) wl = ra ∧
-  range_iterate cfg dfg fn ra (SUC fuel) [] = ra ∧
-  range_iterate cfg dfg fn ra (SUC fuel) wl =
-    let (ra', new_wl) = range_one_pass cfg dfg fn ra wl in
-    if ra' = ra then ra
-    else range_iterate cfg dfg fn ra' fuel new_wl
+(* Combined edge transfer: branch refinement + PHI renaming,
+   wrapped for the option lattice.
+   Context = (dfg, fn.fn_blocks). *)
+Definition range_edge_transfer_opt_def:
+  range_edge_transfer_opt (ctx : dfg_analysis # basic_block list)
+                          pred succ (rs_opt : range_state option) =
+    case rs_opt of
+      NONE => NONE
+    | SOME rs =>
+        let (dfg, bbs) = ctx in
+        let refined = range_branch_refine dfg bbs pred succ rs in
+        SOME (range_phi_edge_rename bbs pred succ refined)
 End
 
-(* ===== Top-Level ===== *)
+(* ===== Top-level analysis via df_analyze_widen ===== *)
 
-(* Run the full variable range analysis.
-   Matches Python VariableRangeAnalysis.analyze(). *)
+(* Variable range analysis via the generic widening dataflow framework.
+   Forward direction, option-wrapped range_state lattice.
+   Context = (dfg, fn.fn_blocks).
+   Entry block: SOME FEMPTY (no ranges known at entry). *)
 Definition range_analyze_def:
-  range_analyze fn iter_fuel =
-    let cfg = cfg_analyze fn in
+  range_analyze fn =
     let dfg = dfg_build_function fn in
-    let ra0 = range_result_empty in
-    let wl = fn_labels fn in
-    range_iterate cfg dfg fn ra0 iter_fuel wl
+    let entry_val =
+      OPTION_MAP (λlbl. (lbl, SOME FEMPTY)) (fn_entry_label fn) in
+    df_analyze_widen Forward NONE range_join_opt range_widen_opt
+                     WIDEN_THRESHOLD range_transfer_opt
+                     range_edge_transfer_opt (dfg, fn.fn_blocks)
+                     entry_val fn
+End
+
+(* ===== Query API ===== *)
+
+(* Entry state at block start *)
+Definition range_entry_state_def:
+  range_entry_state ra lbl =
+    range_unwrap (df_widen_entry NONE ra lbl)
+End
+
+(* Exit state at block end (= boundary for forward analysis) *)
+Definition range_exit_state_def:
+  range_exit_state ra lbl =
+    range_unwrap (df_widen_boundary NONE ra lbl)
+End
+
+(* Range state at instruction point (block lbl, instruction index idx) *)
+Definition range_at_inst_def:
+  range_at_inst ra lbl idx =
+    range_unwrap (df_widen_at NONE ra lbl idx)
+End
+
+(* Get range of an operand before instruction at (lbl, idx).
+   Matches Python VariableRangeAnalysis.get_range. *)
+Definition range_get_range_def:
+  range_get_range ra lbl idx op =
+    case op of
+      Lit v => vr_constant (w2i v)
+    | Var v => rs_lookup (range_at_inst ra lbl idx) v
+    | Label _ => VR_Top
 End

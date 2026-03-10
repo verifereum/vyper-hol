@@ -79,11 +79,9 @@ Theorem result_equiv_subset:
     result_equiv vars2 r1 r2
 Proof
   rpt gen_tac >> Cases_on `r1` >> Cases_on `r2` >>
-  rw[result_equiv_def] >| [
-    irule state_equiv_subset >> metis_tac[],
-    irule execution_equiv_subset >> metis_tac[],
-    irule execution_equiv_subset >> metis_tac[]
-  ]
+  rw[result_equiv_def] >>
+  TRY (irule state_equiv_subset >> metis_tac[]) >>
+  TRY (irule execution_equiv_subset >> metis_tac[])
 QED
 
 (* result_equiv simp rules for automatic rewriting *)
@@ -99,8 +97,9 @@ Proof
   rw[result_equiv_def]
 QED
 
-Theorem result_equiv_revert[local,simp]:
-  result_equiv vars (Revert s1) (Revert s2) = execution_equiv vars s1 s2
+Theorem result_equiv_abort[local,simp]:
+  result_equiv vars (Abort a1 s1) (Abort a2 s2) =
+    ((a1 = a2) /\ execution_equiv vars s1 s2)
 Proof
   rw[result_equiv_def]
 QED
@@ -111,19 +110,34 @@ Proof
   rw[result_equiv_def]
 QED
 
+Theorem result_equiv_intret[local,simp]:
+  result_equiv vars (IntRet v1 s1) (IntRet v2 s2) =
+    (execution_equiv vars s1 s2 /\ (v1 = v2))
+Proof
+  rw[result_equiv_def]
+QED
+
 Theorem result_equiv_mismatch[local,simp]:
   result_equiv vars (OK s) (Halt s') = F /\
-  result_equiv vars (OK s) (Revert s') = F /\
+  result_equiv vars (OK s) (Abort a s') = F /\
+  result_equiv vars (OK s) (IntRet v s') = F /\
   result_equiv vars (OK s) (Error e) = F /\
   result_equiv vars (Halt s) (OK s') = F /\
-  result_equiv vars (Halt s) (Revert s') = F /\
+  result_equiv vars (Halt s) (Abort a s') = F /\
+  result_equiv vars (Halt s) (IntRet v s') = F /\
   result_equiv vars (Halt s) (Error e) = F /\
-  result_equiv vars (Revert s) (OK s') = F /\
-  result_equiv vars (Revert s) (Halt s') = F /\
-  result_equiv vars (Revert s) (Error e) = F /\
+  result_equiv vars (Abort a s) (OK s') = F /\
+  result_equiv vars (Abort a s) (Halt s') = F /\
+  result_equiv vars (Abort a s) (IntRet v s') = F /\
+  result_equiv vars (Abort a s) (Error e) = F /\
+  result_equiv vars (IntRet v s) (OK s') = F /\
+  result_equiv vars (IntRet v s) (Halt s') = F /\
+  result_equiv vars (IntRet v s) (Abort a s') = F /\
+  result_equiv vars (IntRet v s) (Error e) = F /\
   result_equiv vars (Error e) (OK s) = F /\
   result_equiv vars (Error e) (Halt s) = F /\
-  result_equiv vars (Error e) (Revert s) = F
+  result_equiv vars (Error e) (Abort a s) = F /\
+  result_equiv vars (Error e) (IntRet v s) = F
 Proof
   rw[result_equiv_def]
 QED
@@ -138,6 +152,9 @@ Proof
   gvs[result_equiv_def] >>
   metis_tac[state_equiv_trans, execution_equiv_trans]
 QED
+
+(* Note: result_equiv_is_lift_result relies on matching patterns
+   between result_equiv and lift_result. Both now include IntRet. *)
 
 (* result_equiv is the canonical instantiation of lift_result *)
 Theorem result_equiv_is_lift_result:
@@ -265,6 +282,7 @@ QED
    execution_equiv variants (currently unused)
    Kept for future passes that need execution_equiv-level reasoning.
    Currently all consumers unfold execution_equiv_def directly.
+   TODO: Un-local these when a downstream consumer needs them.
    ========================================================================== *)
 
 Theorem update_var_execution_preserves[local]:
