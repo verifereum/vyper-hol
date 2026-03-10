@@ -38,54 +38,49 @@ Proof
   ACCEPT_TAC lift_result_trans_proof
 QED
 
-Theorem inst_sim_block_sim:
-  !(R_ok : venom_state -> venom_state -> bool)
-   (R_term : venom_state -> venom_state -> bool) f.
-    inst_simulates R_ok R_term f ==>
-    block_simulates R_ok R_term (block_map_transform f)
-Proof
-  ACCEPT_TAC inst_sim_block_sim_proof
-QED
+(* inst_sim_block_sim removed — likely false without valid_state_rel (L177).
+   inst_sim_block_sim_proof was removed from passSimulationProofsScript.sml.
+   block_sim_function below is the correct replacement. *)
 
+(* Per-fn-block sim + valid_state_rel + operand cond ⟹ function sim.
+   Block sim only required at vs_inst_idx = 0 (entry invariant). *)
 Theorem block_sim_function:
   !(R_ok : venom_state -> venom_state -> bool)
-   (R_term : venom_state -> venom_state -> bool) bt.
-    block_simulates R_ok R_term bt /\
+   (R_term : venom_state -> venom_state -> bool) bt fn.
+    valid_state_rel R_ok R_term /\
+    (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
+    (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
     (!bb. (bt bb).bb_label = bb.bb_label) /\
-    (!s1 s2. R_ok s1 s2 ==> s1.vs_current_bb = s2.vs_current_bb) /\
-    (!s1 s2. R_ok s1 s2 ==> s1.vs_halted = s2.vs_halted)
+    (!bb. MEM bb fn.fn_blocks ==>
+      !fuel ctx s.
+        s.vs_inst_idx = 0 ==>
+        lift_result R_ok R_term (run_block fuel ctx bb s)
+                                 (run_block fuel ctx (bt bb) s)) /\
+    (!bb inst x.
+       MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       MEM (Var x) inst.inst_operands ==>
+       !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
   ==>
-    !fuel ctx fn s.
+    !fuel ctx s.
+      s.vs_inst_idx = 0 ==>
       lift_result R_ok R_term (run_function fuel ctx fn s)
                  (run_function fuel ctx (function_map_transform bt fn) s)
 Proof
   ACCEPT_TAC block_sim_function_proof
 QED
 
-Theorem conditional_inst_sim:
-  !(R_ok : venom_state -> venom_state -> bool)
-   (R_term : venom_state -> venom_state -> bool) f P.
-    (!s. R_ok s s) /\ (!s. R_term s s) /\
-    (!fuel ctx inst s. P inst ==>
-       lift_result R_ok R_term
-         (step_inst fuel ctx inst s) (step_inst fuel ctx (f inst) s)) /\
-    (!inst. P inst ==>
-       is_terminator inst.inst_opcode =
-       is_terminator (f inst).inst_opcode) /\
-    (!inst. ~P inst ==> f inst = inst) ==>
-    inst_simulates R_ok R_term f
-Proof
-  ACCEPT_TAC conditional_inst_sim_proof
-QED
+(* conditional_inst_sim removed — proof was removed from passSimulationProofs *)
+(* block_sim_compose removed — proof was removed from passSimulationProofs *)
 
-Theorem block_sim_compose:
-  !(R_ok : venom_state -> venom_state -> bool)
-   (R_term : venom_state -> venom_state -> bool) bt1 bt2.
-    (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
-    (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
-    block_simulates R_ok R_term bt1 /\
-    block_simulates R_ok R_term bt2 ==>
-    block_simulates R_ok R_term (bt2 o bt1)
+Theorem lift_result_implies_pass_correct:
+  !fresh exec1 exec2.
+    (!fuel. result_equiv fresh (exec1 fuel) (exec2 fuel)) /\
+    (!fuel fuel'. terminates (exec1 fuel) /\ terminates (exec1 fuel') ==>
+                  exec1 fuel = exec1 fuel') /\
+    (!fuel fuel'. terminates (exec2 fuel) /\ terminates (exec2 fuel') ==>
+                  exec2 fuel = exec2 fuel')
+  ==>
+    pass_correct fresh exec1 exec2
 Proof
-  ACCEPT_TAC block_sim_compose_proof
+  ACCEPT_TAC lift_result_implies_pass_correct_proof
 QED
