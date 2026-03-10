@@ -8,11 +8,17 @@
  *   remove_block          — remove a block by label
  *   replace_block         — replace a block's content by label
  *   subst_label_op/inst/block/fn — label substitution chain
+ *   subst_label_map_op/inst/block/fn — batch label substitution from map
  *   is_jmp_only           — block is a single unconditional jump
  *   no_phis               — block has no PHI instructions
  *   single_succ_jmp       — block's terminator is JMP to a given label
  *   fn_succ               — CFG edge relation (label → label)
  *   reachable             — label reachable from entry via RTC
+ *   is_halting_opcode     — opcode halts execution
+ *   bb_is_halting         — block ends with halting opcode
+ *   block_preds           — predecessor blocks of a label
+ *   num_preds             — number of predecessors
+ *   num_succs             — number of successors
  *)
 
 Theory cfgTransform
@@ -54,6 +60,19 @@ Definition subst_label_block_def:
   subst_label_block old new bb =
     bb with bb_instructions :=
       MAP (subst_label_inst old new) bb.bb_instructions
+End
+
+(* Substitute a label only in terminator instructions of a block.
+   Non-terminator instructions (including PHIs) are left unchanged.
+   Matches Python's replace_label_operands on the last instruction only. *)
+Definition subst_label_terminator_def:
+  subst_label_terminator old new bb =
+    bb with bb_instructions :=
+      MAP (λinst.
+        if is_terminator inst.inst_opcode
+        then subst_label_inst old new inst
+        else inst)
+      bb.bb_instructions
 End
 
 (* Substitute a label in all blocks of a function. *)
@@ -119,4 +138,80 @@ Definition remove_phi_label_def:
      else Label l :: val_op :: remove_phi_label lbl rest) /\
   remove_phi_label lbl (x :: y :: rest) =
     x :: y :: remove_phi_label lbl rest
+End
+
+(* ===== Batch Label Substitution ===== *)
+
+(* Apply a label map (assoc list) to a single operand.
+   Unlike subst_label_op (single old→new), this applies all
+   substitutions in one pass. Matches Python _replace_all_labels. *)
+Definition subst_label_map_op_def:
+  subst_label_map_op label_map (Label l) =
+    (case ALOOKUP label_map l of
+       SOME new_l => Label new_l
+     | NONE => Label l) ∧
+  subst_label_map_op label_map (Var v) = Var v ∧
+  subst_label_map_op label_map (Lit w) = Lit w
+End
+
+Definition subst_label_map_inst_def:
+  subst_label_map_inst label_map inst =
+    inst with inst_operands :=
+      MAP (subst_label_map_op label_map) inst.inst_operands
+End
+
+Definition subst_label_map_block_def:
+  subst_label_map_block label_map bb =
+    bb with bb_instructions :=
+      MAP (subst_label_map_inst label_map) bb.bb_instructions
+End
+
+Definition subst_label_map_fn_def:
+  subst_label_map_fn label_map func =
+    func with fn_blocks :=
+      MAP (subst_label_map_block label_map) func.fn_blocks
+End
+
+(* ===== Halting Block Detection ===== *)
+
+(* Halting opcodes: execution stops, no control flow successor.
+   Matches Python HALTING_TERMINATORS. *)
+Definition is_halting_opcode_def:
+  is_halting_opcode RETURN = T ∧
+  is_halting_opcode REVERT = T ∧
+  is_halting_opcode STOP = T ∧
+  is_halting_opcode INVALID = T ∧
+  is_halting_opcode SELFDESTRUCT = T ∧
+  is_halting_opcode _ = F
+End
+
+(* Block ends with a halting instruction. *)
+Definition bb_is_halting_def:
+  bb_is_halting bb ⇔
+    bb.bb_instructions ≠ [] ∧
+    is_halting_opcode (LAST bb.bb_instructions).inst_opcode
+End
+
+(* ===== Predecessor/Successor Counts ===== *)
+
+(* Predecessor blocks of a given label within a function. *)
+Definition block_preds_def:
+  block_preds func lbl =
+    FILTER (λbb. MEM lbl (bb_succs bb)) func.fn_blocks
+End
+
+(* Predecessor labels of a given label. *)
+Definition pred_labels_def:
+  pred_labels func lbl =
+    MAP (λbb. bb.bb_label) (block_preds func lbl)
+End
+
+(* Number of predecessors. *)
+Definition num_preds_def:
+  num_preds func lbl = LENGTH (block_preds func lbl)
+End
+
+(* Number of successors of a block. *)
+Definition num_succs_def:
+  num_succs bb = LENGTH (bb_succs bb)
 End
