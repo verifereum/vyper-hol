@@ -1,0 +1,3 @@
+Theory singleUseExpansion
+Ancestors
+  singleUseExpansionDefs singleUseExpansionCorrectness
