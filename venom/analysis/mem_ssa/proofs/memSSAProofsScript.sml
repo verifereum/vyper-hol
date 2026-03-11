@@ -145,9 +145,10 @@ Theorem mem_ssa_phi_at_frontier:
     ms = mem_ssa_build cfg dom bp fn addr_sp ∧
     dom = dom_analyze cfg fn ∧
     FLOOKUP ms.ms_block_phis lbl = SOME phi_id ⇒
-    ∃def_lbl.
-      fmap_lookup_list ms.ms_block_defs def_lbl ≠ [] ∧
-      MEM lbl (frontier_of dom def_lbl)
+    ∃src_lbl.
+      (fmap_lookup_list ms.ms_block_defs src_lbl ≠ [] ∨
+       src_lbl ∈ FDOM ms.ms_block_phis) ∧
+      MEM lbl (frontier_of dom src_lbl)
 Proof
   cheat
 QED
@@ -215,6 +216,7 @@ Theorem mem_ssa_clobber_sound:
     ms = mem_ssa_build cfg dom bp fn addr_sp ∧
     dom = dom_analyze cfg fn ∧
     wf_alias_sets alias ∧
+    fuel ≥ CARD (FDOM ms.ms_nodes) ∧
     mem_ssa_get_clobbered ms fuel access_id = SOME 0 ∧
     access_id ∈ FDOM ms.ms_nodes ⇒
     ∀def_id def_iid def_blk def_loc.

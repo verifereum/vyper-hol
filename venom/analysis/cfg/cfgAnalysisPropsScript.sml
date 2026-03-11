@@ -113,6 +113,18 @@ Proof
   ACCEPT_TAC cfg_analyze_edge_symmetry_proof
 QED
 
+(* Unconditional edge symmetry: no MEM-in-fn_labels precondition needed.
+ * If a is not a function label, succs is [] so the LHS is vacuously false;
+ * symmetrically for the RHS. *)
+Theorem cfg_edge_symmetry_uncond:
+  !fn.
+    wf_function fn ==>
+    !a b. MEM b (cfg_succs_of (cfg_analyze fn) a) <=>
+          MEM a (cfg_preds_of (cfg_analyze fn) b)
+Proof
+  ACCEPT_TAC cfg_edge_symmetry_uncond_proof
+QED
+
 (* ==========================================================================
    3) Traversal properties
    ========================================================================== *)

@@ -25,7 +25,7 @@ Theorem df_analyze_widen_fixpoint:
                   Forward => cfg_succs_of cfg
                 | Backward => cfg_preds_of cfg) in
     let st0 = init_df_widen_state bottom (MAP (λbb. bb.bb_label) bbs) in
-    let all_lbls = MAP (λbb. bb.bb_label) bbs in
+    let all_lbls = cfg.cfg_dfs_pre in
       (!lbl st. P st ==> leq st (process lbl st)) /\
       (!lbl st. P st ==> P (process lbl st)) /\
       (case entry_val of NONE => P st0
@@ -49,10 +49,11 @@ Theorem df_widen_at_intra_transfer:
     let bbs = fn.fn_blocks in
     let process = df_process_block_widen dir bottom join widen threshold
                     transfer edge_transfer ctx entry_val cfg bbs in
-    let all_lbls = MAP (λbb. bb.bb_label) bbs in
+    let all_lbls = cfg.cfg_dfs_pre in
     let result = df_analyze_widen dir bottom join widen threshold
                    transfer edge_transfer ctx entry_val fn in
       is_fixpoint process all_lbls result /\
+      MEM lbl all_lbls /\
       lookup_block lbl bbs = SOME bb /\
       SUC idx ≤ LENGTH bb.bb_instructions
     ==>
@@ -77,10 +78,11 @@ Theorem df_widen_at_inter_transfer:
     let bbs = fn.fn_blocks in
     let process = df_process_block_widen dir bottom join widen threshold
                     transfer edge_transfer ctx entry_val cfg bbs in
-    let all_lbls = MAP (λbb. bb.bb_label) bbs in
+    let all_lbls = cfg.cfg_dfs_pre in
     let result = df_analyze_widen dir bottom join widen threshold
                    transfer edge_transfer ctx entry_val fn in
       is_fixpoint process all_lbls result /\
+      MEM lbl all_lbls /\
       lookup_block lbl bbs = SOME bb
     ==>
       (dir = Forward ==>
@@ -93,19 +95,35 @@ Proof
   ACCEPT_TAC df_widen_at_inter_transfer_proof
 QED
 
-(* Lattice invariant: closed-under-ops (including widen) propagates. *)
+(* Lattice invariant: closed-under-ops (including widen) propagates.
+   Requires convergence so WHILE result is well-defined. *)
 Theorem df_analyze_widen_invariant:
   !(dir : direction) (bottom : 'a) join widen threshold
-   transfer edge_transfer ctx entry_val fn (P : 'a -> bool).
+   transfer edge_transfer ctx entry_val fn (P : 'a -> bool)
+   (leq : 'a df_widen_state -> 'a df_widen_state -> bool)
+   m b (Q : 'a df_widen_state -> bool).
+    let cfg = cfg_analyze fn in
+    let bbs = fn.fn_blocks in
+    let process = df_process_block_widen dir bottom join widen threshold
+                    transfer edge_transfer ctx entry_val cfg bbs in
+    let st0 = init_df_widen_state bottom (MAP (λbb. bb.bb_label) bbs) in
     let result = df_analyze_widen dir bottom join widen threshold
                    transfer edge_transfer ctx entry_val fn in
+      (* element-level closure *)
       P bottom /\
       (case entry_val of NONE => T
        | SOME (lbl, v) => P v) /\
       (!a b. P a /\ P b ==> P (join a b)) /\
       (!a b. P a /\ P b ==> P (widen a b)) /\
       (!inst a. P a ==> P (transfer ctx inst a)) /\
-      (!src dst a. P a ==> P (edge_transfer ctx src dst a))
+      (!src dst a. P a ==> P (edge_transfer ctx src dst a)) /\
+      (* convergence *)
+      (!lbl st. Q st ==> leq st (process lbl st)) /\
+      (!lbl st. Q st ==> Q (process lbl st)) /\
+      (case entry_val of NONE => Q st0
+       | SOME (lbl, v) =>
+           Q (st0 with dws_boundary := st0.dws_boundary |+ (lbl, v))) /\
+      bounded_measure Q leq m b
     ==>
       (!lbl idx. P (df_widen_at bottom result lbl idx)) /\
       (!lbl. P (df_widen_boundary bottom result lbl)) /\
@@ -134,11 +152,15 @@ Proof
   ACCEPT_TAC df_process_widen_inflationary_proof
 QED
 
-(* CFG preds/succs inverse → deps complete for widening process. *)
+(* CFG preds/succs inverse → deps complete for widening process.
+   Join absorption needed for self-stability (same as base variant). *)
 Theorem df_process_widen_deps_complete:
   !(dir : direction) (bottom : 'a) join widen threshold
    transfer edge_transfer ctx entry_val cfg bbs.
-    (!a b. MEM b (cfg_succs_of cfg a) <=> MEM a (cfg_preds_of cfg b))
+    (!a b. MEM b (cfg_succs_of cfg a) <=> MEM a (cfg_preds_of cfg b)) /\
+    (!a b. join (join a b) b = join a b) /\
+    (!a b. widen (widen a b) b = widen a b) /\
+    (!a. widen a a = a)
   ==>
     let process = df_process_block_widen dir bottom join widen threshold
                     transfer edge_transfer ctx entry_val cfg bbs in

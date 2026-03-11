@@ -443,6 +443,41 @@ Proof
   simp[Once relationTheory.RTC_CASES1]
 QED
 
+(* ==========================================================================
+   Unconditional edge symmetry
+   ========================================================================== *)
 
+(* Helper: cfg_succs = build_succs *)
+Theorem cfg_succs_build[local]:
+  !fn. (cfg_analyze fn).cfg_succs = build_succs fn.fn_blocks
+Proof
+  rw[cfgDefsTheory.cfg_analyze_def] >> simp_tac std_ss [LET_THM] >>
+  Cases_on `entry_block fn` >> simp[] >>
+  Cases_on `dfs_post_walk (build_succs fn.fn_blocks) [] x.bb_label` >> simp[] >>
+  Cases_on `dfs_pre_walk (build_succs fn.fn_blocks) [] x.bb_label` >> simp[]
+QED
 
-
+(* Unconditional edge symmetry: removes MEM-in-fn_labels precondition.
+   If label is NOT in fn_labels, succs is [] and preds side is vacuously false. *)
+Theorem cfg_edge_symmetry_uncond_proof:
+  !fn.
+    wf_function fn ==>
+    !a b. MEM b (cfg_succs_of (cfg_analyze fn) a) <=>
+          MEM a (cfg_preds_of (cfg_analyze fn) b)
+Proof
+  rpt strip_tac >> EQ_TAC >> strip_tac
+  >- (`MEM a (fn_labels fn)` by
+        (CCONTR_TAC >>
+         `fmap_lookup_list (build_succs fn.fn_blocks) a = []` by
+           (irule cfg_succs_of_not_in_labels >>
+            fs[venomInstTheory.fn_labels_def]) >>
+         fs[cfgDefsTheory.cfg_succs_of_def, cfg_succs_build]) >>
+      `MEM b (fn_labels fn)` by metis_tac[cfg_analyze_succ_labels_proof] >>
+      metis_tac[cfg_analyze_edge_symmetry_proof])
+  >- (`MEM a (fn_labels fn)` by metis_tac[cfg_analyze_pred_labels_proof] >>
+      `MEM b (fn_labels fn)` by
+        (`cfg_preds_of (cfg_analyze fn) b <> []` by
+           (CCONTR_TAC >> fs[]) >>
+         metis_tac[cfg_analyze_preds_domain_proof]) >>
+      metis_tac[cfg_analyze_edge_symmetry_proof])
+QED

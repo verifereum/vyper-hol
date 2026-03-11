@@ -193,65 +193,361 @@ Proof
   metis_tac[dfg_def_ids_def, IN_IMAGE, IN_FRANGE_FLOOKUP, dfg_get_def_def]
 QED
 
+(* ==========================================================================
+   Local helpers for uses/defs/ids correctness
+   ========================================================================== *)
+
+(* --- dfg_add_defs preserves uses and ids fields --- *)
+
+Theorem dfg_add_defs_uses[local]:
+  !vs dfg inst. (dfg_add_defs dfg vs inst).dfg_uses = dfg.dfg_uses
+Proof
+  Induct >> rw[dfg_add_defs_def]
+QED
+
+Theorem dfg_add_defs_ids[local]:
+  !vs dfg inst. (dfg_add_defs dfg vs inst).dfg_ids = dfg.dfg_ids
+Proof
+  Induct >> rw[dfg_add_defs_def]
+QED
+
+(* --- dfg_add_use: soundness, preservation, introduction --- *)
+
+Theorem dfg_add_use_sound[local]:
+  !dfg v inst u w.
+    MEM u (dfg_get_uses (dfg_add_use dfg v inst) w) ==>
+    MEM u (dfg_get_uses dfg w) \/ (u = inst /\ w = v)
+Proof
+  rw[dfg_add_use_def, dfg_get_uses_def, LET_THM] >>
+  Cases_on `MEM inst (dfg_get_uses dfg v)` >> fs[dfg_get_uses_def] >>
+  Cases_on `w = v` >> fs[FLOOKUP_UPDATE] >>
+  Cases_on `FLOOKUP dfg.dfg_uses v` >> fs[] >> metis_tac[]
+QED
+
+Theorem dfg_add_use_preserve[local]:
+  !dfg v inst w u.
+    MEM u (dfg_get_uses dfg w) ==>
+    MEM u (dfg_get_uses (dfg_add_use dfg v inst) w)
+Proof
+  rw[dfg_add_use_def, dfg_get_uses_def, LET_THM] >>
+  Cases_on `MEM inst (dfg_get_uses dfg v)` >> fs[dfg_get_uses_def] >>
+  Cases_on `w = v` >> fs[FLOOKUP_UPDATE] >>
+  Cases_on `FLOOKUP dfg.dfg_uses v` >> fs[]
+QED
+
+Theorem dfg_add_use_intro[local]:
+  !dfg v inst. MEM inst (dfg_get_uses (dfg_add_use dfg v inst) v)
+Proof
+  rw[dfg_add_use_def, dfg_get_uses_def, LET_THM] >>
+  Cases_on `MEM inst (dfg_get_uses dfg v)` >> fs[dfg_get_uses_def] >>
+  Cases_on `FLOOKUP dfg.dfg_uses v` >> fs[FLOOKUP_UPDATE]
+QED
+
+(* --- dfg_add_uses: soundness, preservation, introduction --- *)
+
+Theorem dfg_add_uses_sound[local]:
+  !vs dfg inst u w.
+    MEM u (dfg_get_uses (dfg_add_uses dfg vs inst) w) ==>
+    MEM u (dfg_get_uses dfg w) \/ (u = inst /\ MEM w vs)
+Proof
+  Induct >> rw[dfg_add_uses_def] >>
+  first_x_assum drule >> strip_tac >> fs[] >>
+  drule dfg_add_use_sound >> metis_tac[]
+QED
+
+Theorem dfg_add_uses_preserve[local]:
+  !vs dfg inst w u.
+    MEM u (dfg_get_uses dfg w) ==>
+    MEM u (dfg_get_uses (dfg_add_uses dfg vs inst) w)
+Proof
+  Induct >> rw[dfg_add_uses_def] >>
+  first_x_assum match_mp_tac >>
+  metis_tac[dfg_add_use_preserve]
+QED
+
+Theorem dfg_add_uses_intro[local]:
+  !vs dfg inst w.
+    MEM w vs ==> MEM inst (dfg_get_uses (dfg_add_uses dfg vs inst) w)
+Proof
+  Induct >> rw[dfg_add_uses_def]
+  >- (irule dfg_add_uses_preserve >> metis_tac[dfg_add_use_intro])
+  >- (first_x_assum match_mp_tac >> fs[])
+QED
+
+(* --- dfg_add_inst: uses soundness/completeness, ids --- *)
+
+Theorem dfg_add_inst_uses_sound[local]:
+  !dfg inst0 u w.
+    MEM u (dfg_get_uses (dfg_add_inst dfg inst0) w) ==>
+    MEM u (dfg_get_uses dfg w) \/
+    (u = inst0 /\ MEM w (operand_vars inst0.inst_operands))
+Proof
+  rw[dfg_add_inst_def, LET_THM] >>
+  `(dfg_add_defs (dfg_add_uses dfg (operand_vars inst0.inst_operands) inst0)
+     inst0.inst_outputs inst0).dfg_uses =
+   (dfg_add_uses dfg (operand_vars inst0.inst_operands) inst0).dfg_uses` by
+    metis_tac[dfg_add_defs_uses] >>
+  fs[dfg_get_uses_def] >>
+  `MEM u (dfg_get_uses (dfg_add_uses dfg (operand_vars inst0.inst_operands) inst0) w)` by
+    fs[dfg_get_uses_def] >>
+  drule dfg_add_uses_sound >> fs[dfg_get_uses_def]
+QED
+
+Theorem dfg_add_inst_uses_preserve[local]:
+  !dfg inst0 u w.
+    MEM u (dfg_get_uses dfg w) ==>
+    MEM u (dfg_get_uses (dfg_add_inst dfg inst0) w)
+Proof
+  rw[dfg_add_inst_def, LET_THM, dfg_get_uses_def] >>
+  `(dfg_add_defs (dfg_add_uses dfg (operand_vars inst0.inst_operands) inst0)
+     inst0.inst_outputs inst0).dfg_uses =
+   (dfg_add_uses dfg (operand_vars inst0.inst_operands) inst0).dfg_uses` by
+    metis_tac[dfg_add_defs_uses] >>
+  fs[] >>
+  `MEM u (dfg_get_uses (dfg_add_uses dfg (operand_vars inst0.inst_operands) inst0) w)` by
+    (irule dfg_add_uses_preserve >> fs[dfg_get_uses_def]) >>
+  fs[dfg_get_uses_def]
+QED
+
+Theorem dfg_add_inst_uses_intro[local]:
+  !dfg inst0 w.
+    MEM w (operand_vars inst0.inst_operands) ==>
+    MEM inst0 (dfg_get_uses (dfg_add_inst dfg inst0) w)
+Proof
+  rw[dfg_add_inst_def, LET_THM, dfg_get_uses_def] >>
+  `(dfg_add_defs (dfg_add_uses dfg (operand_vars inst0.inst_operands) inst0)
+     inst0.inst_outputs inst0).dfg_uses =
+   (dfg_add_uses dfg (operand_vars inst0.inst_operands) inst0).dfg_uses` by
+    metis_tac[dfg_add_defs_uses] >>
+  fs[] >>
+  `MEM inst0 (dfg_get_uses (dfg_add_uses dfg (operand_vars inst0.inst_operands) inst0) w)` by
+    (irule dfg_add_uses_intro >> fs[]) >>
+  fs[dfg_get_uses_def]
+QED
+
+Theorem dfg_add_uses_ids[local]:
+  !vs dfg inst. (dfg_add_uses dfg vs inst).dfg_ids = dfg.dfg_ids
+Proof
+  Induct >> rw[dfg_add_uses_def, dfg_add_use_def, LET_THM, dfg_get_uses_def] >>
+  Cases_on `MEM inst (case FLOOKUP dfg.dfg_uses h of NONE => [] | SOME uses => uses)` >> fs[]
+QED
+
+Theorem dfg_add_inst_ids_sound[local]:
+  !dfg inst0 id inst.
+    dfg_get_inst_by_id (dfg_add_inst dfg inst0) id = SOME inst ==>
+    dfg_get_inst_by_id dfg id = SOME inst \/
+    (inst = inst0 /\ id = inst0.inst_id)
+Proof
+  rw[dfg_add_inst_def, LET_THM, dfg_get_inst_by_id_def] >>
+  fs[dfg_add_defs_ids, dfg_add_uses_ids, FLOOKUP_UPDATE] >>
+  Cases_on `id = inst0.inst_id` >> fs[]
+QED
+
+Theorem dfg_add_inst_ids_intro[local]:
+  !dfg inst0.
+    dfg_get_inst_by_id (dfg_add_inst dfg inst0) inst0.inst_id = SOME inst0
+Proof
+  rw[dfg_add_inst_def, LET_THM, dfg_get_inst_by_id_def] >>
+  fs[dfg_add_defs_ids, dfg_add_uses_ids, FLOOKUP_UPDATE]
+QED
+
+Theorem dfg_add_inst_ids_preserve[local]:
+  !dfg inst0 id inst.
+    dfg_get_inst_by_id dfg id = SOME inst ==>
+    dfg_get_inst_by_id (dfg_add_inst dfg inst0) id = SOME inst \/
+    id = inst0.inst_id
+Proof
+  rw[dfg_add_inst_def, LET_THM, dfg_get_inst_by_id_def] >>
+  fs[dfg_add_defs_ids, dfg_add_uses_ids, FLOOKUP_UPDATE] >>
+  Cases_on `id = inst0.inst_id` >> fs[]
+QED
+
+(* --- dfg_add_defs completeness --- *)
+
+Theorem dfg_add_defs_preserve[local]:
+  !vs dfg inst v inst'.
+    dfg_get_def dfg v = SOME inst' ==>
+    ?inst''. dfg_get_def (dfg_add_defs dfg vs inst) v = SOME inst''
+Proof
+  Induct >> rw[dfg_add_defs_def] >>
+  first_x_assum match_mp_tac >>
+  rw[dfg_get_def_def, FLOOKUP_UPDATE] >>
+  Cases_on `v = h` >> fs[dfg_get_def_def]
+QED
+
+Theorem dfg_add_defs_complete[local]:
+  !vs dfg inst v.
+    MEM v vs ==> ?inst'. dfg_get_def (dfg_add_defs dfg vs inst) v = SOME inst'
+Proof
+  Induct >> rw[dfg_add_defs_def]
+  >- (irule dfg_add_defs_preserve >>
+      rw[dfg_get_def_def, FLOOKUP_UPDATE])
+  >- (first_x_assum drule >> metis_tac[])
+QED
+
 (* --------------------------------------------------------------------------
-   Uses correctness
+   build_insts_rev preservation and completeness lemmas
+   Extracted as named local theorems to avoid inline re-proof.
    -------------------------------------------------------------------------- *)
 
-(* If dfg_get_uses reports inst as a user of v, then inst is from the
-   function and v appears among its operand variables. *)
+Theorem build_insts_rev_uses_preserve[local]:
+  !insts dfg u w.
+    MEM u (dfg_get_uses dfg w) ==>
+    MEM u (dfg_get_uses (dfg_build_insts_rev dfg insts) w)
+Proof
+  Induct >> rw[dfg_build_insts_rev_def] >>
+  first_x_assum match_mp_tac >>
+  metis_tac[dfg_add_inst_uses_preserve]
+QED
+
+Theorem build_insts_rev_uses_sound[local]:
+  !insts dfg u w.
+    MEM u (dfg_get_uses (dfg_build_insts_rev dfg insts) w) ==>
+    MEM u (dfg_get_uses dfg w) \/
+    (MEM u insts /\ MEM w (operand_vars u.inst_operands))
+Proof
+  Induct >> rw[dfg_build_insts_rev_def] >>
+  first_x_assum drule >> strip_tac >> fs[] >>
+  drule dfg_add_inst_uses_sound >> metis_tac[]
+QED
+
+Theorem build_insts_rev_uses_complete[local]:
+  !insts dfg inst0 w.
+    MEM inst0 insts /\ MEM w (operand_vars inst0.inst_operands) ==>
+    MEM inst0 (dfg_get_uses (dfg_build_insts_rev dfg insts) w)
+Proof
+  Induct >> rw[dfg_build_insts_rev_def]
+  >- (irule build_insts_rev_uses_preserve >>
+      metis_tac[dfg_add_inst_uses_intro])
+  >- (first_x_assum match_mp_tac >> fs[])
+QED
+
+Theorem dfg_add_inst_defs_preserve[local]:
+  !dfg inst0 v inst'.
+    dfg_get_def dfg v = SOME inst' ==>
+    ?inst''. dfg_get_def (dfg_add_inst dfg inst0) v = SOME inst''
+Proof
+  rw[dfg_add_inst_def, LET_THM] >>
+  `dfg_get_def (dfg_add_uses dfg (operand_vars inst0.inst_operands) inst0) v =
+   SOME inst'` by metis_tac[dfg_add_uses_get_def_proof] >>
+  drule dfg_add_defs_preserve >>
+  rw[dfg_get_def_def]
+QED
+
+Theorem build_insts_rev_defs_preserve[local]:
+  !insts dfg v inst'.
+    dfg_get_def dfg v = SOME inst' ==>
+    ?inst''. dfg_get_def (dfg_build_insts_rev dfg insts) v = SOME inst''
+Proof
+  Induct >> rw[dfg_build_insts_rev_def] >>
+  first_x_assum match_mp_tac >>
+  metis_tac[dfg_add_inst_defs_preserve]
+QED
+
+Theorem dfg_add_inst_defs_complete[local]:
+  !dfg inst0 v.
+    MEM v inst0.inst_outputs ==>
+    ?inst'. dfg_get_def (dfg_add_inst dfg inst0) v = SOME inst'
+Proof
+  rw[dfg_add_inst_def, LET_THM, dfg_get_def_def] >>
+  metis_tac[dfg_add_defs_complete, dfg_get_def_def]
+QED
+
+Theorem build_insts_rev_defs_complete[local]:
+  !insts dfg inst0 v.
+    MEM inst0 insts /\ MEM v inst0.inst_outputs ==>
+    ?inst'. dfg_get_def (dfg_build_insts_rev dfg insts) v = SOME inst'
+Proof
+  Induct >> rw[dfg_build_insts_rev_def]
+  >- (irule build_insts_rev_defs_preserve >>
+      metis_tac[dfg_add_inst_defs_complete])
+  >- metis_tac[]
+QED
+
+Theorem build_insts_rev_ids_sound[local]:
+  !insts dfg id inst.
+    dfg_get_inst_by_id (dfg_build_insts_rev dfg insts) id = SOME inst ==>
+    dfg_get_inst_by_id dfg id = SOME inst \/ MEM inst insts
+Proof
+  Induct >> rw[dfg_build_insts_rev_def] >>
+  first_x_assum drule >> strip_tac >> fs[] >>
+  drule dfg_add_inst_ids_sound >> metis_tac[]
+QED
+
+Theorem build_insts_rev_ids_preserve[local]:
+  !insts dfg id inst.
+    dfg_get_inst_by_id dfg id = SOME inst ==>
+    ?inst'. dfg_get_inst_by_id (dfg_build_insts_rev dfg insts) id = SOME inst'
+Proof
+  Induct >> rw[dfg_build_insts_rev_def] >>
+  first_x_assum match_mp_tac >>
+  drule dfg_add_inst_ids_preserve >> strip_tac >> fs[] >>
+  metis_tac[dfg_add_inst_ids_intro]
+QED
+
+Theorem build_insts_rev_ids_complete[local]:
+  !insts dfg inst0.
+    MEM inst0 insts ==>
+    ?inst'. dfg_get_inst_by_id (dfg_build_insts_rev dfg insts) inst0.inst_id = SOME inst'
+Proof
+  Induct >> rw[dfg_build_insts_rev_def]
+  >- (irule build_insts_rev_ids_preserve >> metis_tac[dfg_add_inst_ids_intro])
+  >- (first_x_assum drule >> metis_tac[])
+QED
+
+(* --------------------------------------------------------------------------
+   Main correctness theorems (uses, defs, ids)
+   All follow: unfold build_function → drule build_insts_rev lemma → MEM_REVERSE
+   -------------------------------------------------------------------------- *)
+
 Theorem dfg_build_function_uses_sound_proof:
   !fn v inst.
     MEM inst (dfg_get_uses (dfg_build_function fn) v) ==>
     MEM inst (fn_insts fn) /\ MEM v (operand_vars inst.inst_operands)
 Proof
-  cheat
+  rw[dfg_build_function_def, dfg_build_insts_def] >>
+  drule build_insts_rev_uses_sound >>
+  simp[dfg_get_uses_def, dfg_empty_def] >>
+  metis_tac[MEM_REVERSE]
 QED
 
-(* Every instruction in the function that mentions v as an operand
-   variable appears in the uses list for v. *)
 Theorem dfg_build_function_uses_complete_proof:
   !fn v inst.
     MEM inst (fn_insts fn) /\
     MEM v (operand_vars inst.inst_operands) ==>
     MEM inst (dfg_get_uses (dfg_build_function fn) v)
 Proof
-  cheat
+  rw[dfg_build_function_def, dfg_build_insts_def] >>
+  irule build_insts_rev_uses_complete >> simp[MEM_REVERSE]
 QED
 
-(* --------------------------------------------------------------------------
-   Defs completeness
-   -------------------------------------------------------------------------- *)
-
-(* If any instruction in the function lists v as an output, then
-   dfg_get_def returns some defining instruction for v. *)
 Theorem dfg_build_function_defs_complete_proof:
   !fn v inst.
     MEM inst (fn_insts fn) /\
     MEM v inst.inst_outputs ==>
     ?inst'. dfg_get_def (dfg_build_function fn) v = SOME inst'
 Proof
-  cheat
+  rw[dfg_build_function_def, dfg_build_insts_def] >>
+  irule build_insts_rev_defs_complete >>
+  qexists_tac `inst` >> simp[MEM_REVERSE]
 QED
 
-(* --------------------------------------------------------------------------
-   ID map correctness
-   -------------------------------------------------------------------------- *)
-
-(* If dfg_get_inst_by_id returns an instruction, it is from the function. *)
 Theorem dfg_build_function_ids_sound_proof:
   !fn id inst.
     dfg_get_inst_by_id (dfg_build_function fn) id = SOME inst ==>
     MEM inst (fn_insts fn)
 Proof
-  cheat
+  rw[dfg_build_function_def, dfg_build_insts_def] >>
+  drule build_insts_rev_ids_sound >>
+  simp[dfg_get_inst_by_id_def, dfg_empty_def] >>
+  metis_tac[MEM_REVERSE]
 QED
 
-(* Every instruction in the function is retrievable by its ID. *)
 Theorem dfg_build_function_ids_complete_proof:
   !fn inst.
     MEM inst (fn_insts fn) ==>
     ?inst'. dfg_get_inst_by_id (dfg_build_function fn) inst.inst_id = SOME inst'
 Proof
-  cheat
+  rw[dfg_build_function_def, dfg_build_insts_def] >>
+  irule build_insts_rev_ids_complete >> simp[MEM_REVERSE]
 QED
-

@@ -97,7 +97,7 @@ Theorem df_analysis_pass_correct_sound:
                   Forward => cfg_succs_of cfg
                 | Backward => cfg_preds_of cfg) in
     let st0 = init_df_state bottom (MAP (\bb. bb.bb_label) bbs) in
-    let all_lbls = MAP (\bb. bb.bb_label) bbs in
+    let all_lbls = (cfg_analyze fn).cfg_dfs_pre in
     let result = df_analyze dir bottom join transfer edge_transfer
                             ctx entry_val fn in
       dir = Forward /\
@@ -119,6 +119,8 @@ Theorem df_analysis_pass_correct_sound:
        | SOME (lbl, v) => !s. sound v s) /\
       analysis_inst_simulates R_ok R_term sound f /\
       (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
+      (!bb. MEM bb fn.fn_blocks ==>
+            MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre) /\
       (!bb inst x.
          MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
          MEM (Var x) inst.inst_operands ==>
@@ -150,7 +152,7 @@ Theorem df_analysis_pass_correct_widen_sound:
                   Forward => cfg_succs_of cfg
                 | Backward => cfg_preds_of cfg) in
     let st0 = init_df_widen_state bottom (MAP (\bb. bb.bb_label) bbs) in
-    let all_lbls = MAP (\bb. bb.bb_label) bbs in
+    let all_lbls = (cfg_analyze fn).cfg_dfs_pre in
     let result = df_analyze_widen dir bottom join widen threshold
                    transfer edge_transfer ctx entry_val fn in
       dir = Forward /\
@@ -173,6 +175,8 @@ Theorem df_analysis_pass_correct_widen_sound:
        | SOME (lbl, v) => !s. sound v s) /\
       analysis_inst_simulates R_ok R_term sound f /\
       (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
+      (!bb. MEM bb fn.fn_blocks ==>
+            MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre) /\
       (!bb inst x.
          MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
          MEM (Var x) inst.inst_operands ==>

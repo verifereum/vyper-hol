@@ -116,12 +116,13 @@ Definition df_process_block_widen_def:
       df_fold_block dir (transfer ctx) lbl instrs entry in
     let old_boundary = df_widen_boundary bottom st lbl in
     let new_boundary = join old_boundary final_val in
-    st with <|
+    let new_st = st with <|
       dws_boundary := st.dws_boundary |+ (lbl, new_boundary);
       dws_entry := st.dws_entry |+ (lbl, entry);
-      dws_inst := FUNION inst_map st.dws_inst;
-      dws_visits := st.dws_visits |+ (lbl, visits + 1)
-    |>
+      dws_inst := FUNION inst_map st.dws_inst
+    |> in
+    if new_st = st then st
+    else new_st with dws_visits := new_st.dws_visits |+ (lbl, visits + 1)
 End
 
 (* ===== Top-level analysis ===== *)

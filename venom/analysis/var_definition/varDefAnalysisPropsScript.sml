@@ -24,7 +24,7 @@ Theorem vardef_fixpoint:
     let process = df_process_block Forward all_vars list_intersect
                     vardef_transfer vardef_edge_transfer ()
                     entry_val cfg fn.fn_blocks in
-    is_fixpoint process (fn_labels fn) (vardef_analyze fn)
+    is_fixpoint process cfg.cfg_dfs_pre (vardef_analyze fn)
 Proof
   ACCEPT_TAC vardef_fixpoint_proof
 QED

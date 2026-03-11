@@ -67,7 +67,9 @@ Definition ma_add_location_def:
       let old = case FLOOKUP s k of SOME l => l | NONE => [] in
       if MEM loc old then s else s |+ (k, loc :: old)) sets overlapping in
     (* Set loc's alias list to all overlapping locations *)
-    sets1 |+ (loc, overlapping ++ current)
+    (* Include loc itself if it self-overlaps (i.e. non-zero size) *)
+    let self = if may_overlap loc loc then [loc] else [] in
+    sets1 |+ (loc, self ++ overlapping ++ current)
 End
 
 (* ===== Instruction-Level Analysis ===== *)
@@ -141,11 +143,16 @@ Definition ma_mark_volatile_def:
     case FLOOKUP sets loc of
       NONE => (vloc, sets)
     | SOME aliases =>
-        (* vloc aliases itself, loc, and everything loc aliases *)
-        let vloc_aliases = vloc :: loc :: FILTER (λa. a ≠ loc ∧ a ≠ vloc) aliases in
+        (* vloc aliases itself, loc, and everything loc aliases —
+         * guarded by may_overlap so zero-size locations stay wf *)
+        let self = if may_overlap vloc vloc then [vloc] else [] in
+        let cross = if may_overlap vloc loc then [loc] else [] in
+        let vloc_aliases = self ++ cross ++ FILTER (λa. a ≠ loc ∧ a ≠ vloc) aliases in
         let sets1 = sets |+ (vloc, vloc_aliases) in
-        (* Add vloc to loc's alias list *)
-        let sets2 = sets1 |+ (loc, vloc :: aliases) in
+        (* Add vloc to loc's alias list (guarded) *)
+        let loc_aliases = if may_overlap loc vloc then vloc :: aliases
+                          else aliases in
+        let sets2 = sets1 |+ (loc, loc_aliases) in
         (* Add vloc to all of loc's existing aliases *)
         let sets3 = FOLDL (λs a.
           if a = loc ∨ a = vloc then s
