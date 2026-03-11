@@ -1352,7 +1352,7 @@ Definition call_external_function_def:
             case safe_cast tv v
             of NONE => (INR (Error (RuntimeError "ext cast ret")), am)
              | SOME v => (INL v, am))
-       | (INR e, st) => (INR e, abstract_machine_from_state srcs exps layouts st)) in
+       | (INR e, st) => (INR e, am)) in
     (res, st (* transient storage cleared separately via ClearTransientStorage action *)))
 End
 
