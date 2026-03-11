@@ -127,6 +127,30 @@ Proof
   cheat
 QED
 
+(* Entry-only soundness: weaker hypotheses than the full invariant.
+   Only needs first-arg closure for join/widen, plus bottom/entry_val.
+   Does NOT need transfer or edge_transfer closure.
+   This is because FOLDL join bottom edge_vals is sound regardless
+   of what edge_vals are (join only needs first arg sound, FOLDL
+   starts from bottom which is sound). And widen preserves first-arg
+   soundness, so the widening step also preserves entry soundness. *)
+Theorem df_widen_entry_sound_proof:
+  !(dir : direction) (bottom : 'a) join widen threshold
+   transfer edge_transfer ctx entry_val fn
+   (sound : 'a -> 'b -> bool).
+    let result = df_analyze_widen dir bottom join widen threshold
+                   transfer edge_transfer ctx entry_val fn in
+      (!a b s. sound a s ==> sound (join a b) s) /\
+      (!a b s. sound a s ==> sound (widen a b) s) /\
+      (!s. sound bottom s) /\
+      (case entry_val of NONE => T
+       | SOME (lbl, v) => !s. sound v s)
+    ==>
+      (!lbl s. sound (df_widen_entry bottom result lbl) s)
+Proof
+  cheat
+QED
+
 (* Join-upper-bound → df_process_block_widen is inflationary w.r.t.
    the pointwise boundary ordering. Same argument as base variant:
    boundary(lbl) := join old final_val ≥ old. Widening affects entry
