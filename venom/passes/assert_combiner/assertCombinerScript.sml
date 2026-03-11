@@ -1,0 +1,3 @@
+Theory assertCombiner
+Ancestors
+  assertCombinerDefs assertCombinerCorrectness

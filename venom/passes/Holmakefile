@@ -6,4 +6,12 @@ INCLUDES = \
   ../../syntax \
   ../../semantics \
   phi_elimination \
-  revert_to_assert
+  revert_to_assert \
+  lower_dload \
+  float_allocas \
+  fix_mem_locations \
+  branch_opt \
+  single_use_expansion \
+  assert_combiner \
+  algebraic_opt \
+  mem2var

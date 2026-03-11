@@ -1,0 +1,3 @@
+Theory algebraicOpt
+Ancestors
+  algebraicOptDefs algebraicOptCorrectness

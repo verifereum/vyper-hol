@@ -1,0 +1,180 @@
+(*
+ * Single Use Expansion Pass — Definitions
+ *
+ * Ports vyper/venom/passes/single_use_expansion.py to HOL4.
+ *
+ * Transforms Venom IR to "single use" form:
+ *   - Each variable is used at most once (by non-ASSIGN opcodes)
+ *   - All operands to non-ASSIGN instructions must be variables
+ *
+ * For each instruction (except ASSIGN, OFFSET, PHI, PARAM):
+ *   - For each operand that is a literal: insert ASSIGN before
+ *   - For each operand that is a variable used more than once: insert ASSIGN
+ *   - Skip: first operand of LOG (magic topic count)
+ *
+ * This is the inverse of AssignElimination.
+ * Required by venom_to_assembly.py and helpful for DFT pass.
+ *
+ * Uses DFG analysis (use counts).
+ *
+ * TOP-LEVEL:
+ *   sue_should_skip          — opcodes excluded from expansion
+ *   sue_needs_assign         — check if operand needs ASSIGN wrapper
+ *   sue_expand_inst          — per-instruction expansion
+ *   sue_expand_block         — block-level transform
+ *   sue_expand_function      — function-level transform
+ *
+ * Helper:
+ *   sue_fresh_var            — fresh variable for inserted ASSIGNs
+ *
+ * Source: vyper/venom/passes/single_use_expansion.py
+ *)
+
+Theory singleUseExpansionDefs
+Ancestors
+  passSimulationDefs dfgDefs venomExecSemantics venomInst
+
+(* ===== Opcodes to skip ===== *)
+
+(* Python: if inst.opcode in ("assign", "offset", "phi", "param"): continue *)
+Definition sue_should_skip_def:
+  sue_should_skip ASSIGN = T /\
+  sue_should_skip OFFSET = T /\
+  sue_should_skip PHI = T /\
+  sue_should_skip PARAM = T /\
+  sue_should_skip _ = F
+End
+
+(* ===== Fresh Variable ===== *)
+
+(* Fresh variable name based on instruction id and operand index. *)
+Definition sue_fresh_var_def:
+  sue_fresh_var (inst_id:num) (op_idx:num) =
+    STRCAT "sue_" (STRCAT (toString inst_id)
+                          (STRCAT "_" (toString op_idx)))
+End
+
+(* ===== Operand Needs Expansion ===== *)
+
+(*
+ * Check if an operand needs an ASSIGN wrapper.
+ *
+ * A variable operand needs wrapping if:
+ *   - It appears more than once in the instruction's operands, OR
+ *   - It has more than one use in the whole function (DFG use count > 1)
+ *
+ * A literal operand always needs wrapping (moved to a variable).
+ * A label operand is never wrapped.
+ *)
+Definition sue_needs_assign_def:
+  sue_needs_assign dfg (inst : instruction) (op_idx : num) =
+    if op_idx >= LENGTH inst.inst_operands then F
+    else
+      let op = EL op_idx inst.inst_operands in
+      (* Skip LOG's first operand (magic topic count) *)
+      if inst.inst_opcode = LOG /\ op_idx = 0 then F
+      else
+        case op of
+          Var v =>
+            let uses = dfg_get_uses dfg v in
+            let self_count = LENGTH (FILTER (\op'. op' = Var v)
+                                            inst.inst_operands) in
+            (* Multi-use: either used >1 times in this inst, or used elsewhere *)
+            if LENGTH uses > 1 \/ self_count > 1 then T
+            else F
+        | Lit _ => T
+        | Label _ => F
+End
+
+(* ===== Per-Instruction Expansion ===== *)
+
+(*
+ * Expand a single instruction.
+ * For each operand that needs expansion, insert an ASSIGN before it
+ * and replace the operand with the ASSIGN's output variable.
+ *
+ * Returns: (prefix_assigns, modified_instruction)
+ *)
+(* Count remaining occurrences of op in a list *)
+Definition sue_count_remaining_def:
+  sue_count_remaining op [] = 0n /\
+  sue_count_remaining op (x :: rest) =
+    if x = op then 1 + sue_count_remaining op rest
+    else sue_count_remaining op rest
+End
+
+(*
+ * Expand operands. Uses 'remaining_ops' (the not-yet-processed tail)
+ * to determine if this is the last occurrence of a multi-use var.
+ * Python skips wrapping the last occurrence (since inst.operands
+ * is mutated in-place, by the last occurrence self_count = 1).
+ *)
+Definition sue_expand_ops_def:
+  sue_expand_ops dfg inst [] op_idx = ([], []) /\
+  sue_expand_ops dfg inst (op :: rest) op_idx =
+    let (more_assigns, more_ops) = sue_expand_ops dfg inst rest (op_idx + 1) in
+    if ~sue_needs_assign dfg inst op_idx then
+      (more_assigns, op :: more_ops)
+    else
+      (* Check if this is the last occurrence — Python skips wrapping it *)
+      let remaining_same = sue_count_remaining op rest in
+      case op of
+        Var v =>
+          let uses = dfg_get_uses dfg v in
+          if LENGTH uses = 1 /\ remaining_same = 0 then
+            (* Single global use AND last in this instruction → skip *)
+            (more_assigns, op :: more_ops)
+          else
+            let vn = sue_fresh_var inst.inst_id op_idx in
+            let assign_inst = <| inst_id := inst.inst_id * 1000 + op_idx;
+                                 inst_opcode := ASSIGN;
+                                 inst_operands := [op];
+                                 inst_outputs := [vn] |> in
+            (assign_inst :: more_assigns, Var vn :: more_ops)
+      | _ =>
+          let vn = sue_fresh_var inst.inst_id op_idx in
+          let assign_inst = <| inst_id := inst.inst_id * 1000 + op_idx;
+                               inst_opcode := ASSIGN;
+                               inst_operands := [op];
+                               inst_outputs := [vn] |> in
+          (assign_inst :: more_assigns, Var vn :: more_ops)
+End
+
+Definition sue_expand_inst_def:
+  sue_expand_inst dfg inst =
+    if sue_should_skip inst.inst_opcode then [inst]
+    else
+      let (assigns, new_ops) =
+        sue_expand_ops dfg inst inst.inst_operands 0 in
+      assigns ++ [inst with inst_operands := new_ops]
+End
+
+(* ===== Block and Function Transform ===== *)
+
+Definition sue_expand_block_def:
+  sue_expand_block dfg bb =
+    bb with bb_instructions :=
+      FLAT (MAP (sue_expand_inst dfg) bb.bb_instructions)
+End
+
+Definition sue_expand_function_def:
+  sue_expand_function fn =
+    let dfg = dfg_build_function fn in
+    fn with fn_blocks :=
+      MAP (sue_expand_block dfg) fn.fn_blocks
+End
+
+(* Fresh variable names introduced by the expansion *)
+Definition sue_fresh_vars_fn_def:
+  sue_fresh_vars_fn fn =
+    set (FLAT (MAP (\bb.
+      FLAT (MAP (\inst.
+        MAPi (\idx op. sue_fresh_var inst.inst_id idx) inst.inst_operands)
+        bb.bb_instructions))
+      fn.fn_blocks))
+End
+
+Definition sue_expand_context_def:
+  sue_expand_context ctx =
+    ctx with ctx_functions := MAP sue_expand_function ctx.ctx_functions
+End
