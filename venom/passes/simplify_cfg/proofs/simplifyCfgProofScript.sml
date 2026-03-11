@@ -11,15 +11,19 @@ Theory simplifyCfgProof
 Ancestors
   simplifyCfgDefs stateEquiv venomExecSemantics
 
-(* Simplify CFG preserves execution semantics at the function level. *)
+(* Simplify CFG preserves execution semantics at the function level.
+ * Since block merging reduces block count, the transformed function
+ * may need less fuel. We existentially quantify: for any fuel where
+ * the original terminates, there exists sufficient fuel for the
+ * transformed function to produce an equivalent result. *)
 Theorem simplify_cfg_fn_correct:
   !func s fuel ctx.
-    wf_ir_fn func /\
-    func.fn_blocks <> [] ==>
+    wf_function func ==>
     let func' = simplify_cfg_fn func in
-    result_equiv {}
-      (run_function fuel ctx func s)
-      (run_function fuel ctx func' s)
+    ?fuel'.
+      result_equiv {}
+        (run_function fuel ctx func s)
+        (run_function fuel' ctx func' s)
 Proof
   cheat
 QED

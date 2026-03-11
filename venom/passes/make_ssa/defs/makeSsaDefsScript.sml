@@ -9,15 +9,18 @@
  *   4. Remove degenerate PHIs (single value → ASSIGN, all same → ASSIGN)
  *
  * TOP-LEVEL:
- *   compute_defs          — definition points for each variable
- *   place_phi             — insert a PHI for a variable at a block
- *   add_phi_nodes         — insert PHIs at dominance frontiers
- *   version_var           — create versioned variable name (e.g., "x:3")
- *   rename_block          — rename variables in a block (SSA renaming)
- *   rename_fn             — rename all variables in a function
- *   remove_degenerate_phis — simplify trivial PHIs to ASSIGNs
- *   make_ssa_fn           — full SSA construction pass
- *   make_ssa_ctx          — transform all functions in context
+ *   dom_tree               — dominator tree datatype
+ *   dom_tree_labels         — all labels in a dominator tree
+ *   compute_defs            — definition points for each variable
+ *   process_frontiers       — process frontier blocks for PHI insertion
+ *   insert_phis_for_var     — insert PHIs for one variable (worklist)
+ *   add_phi_nodes           — insert PHIs at dominance frontiers
+ *   version_var             — create versioned variable name (e.g., "x:3")
+ *   rename_blocks           — rename variables via dom tree walk
+ *   rename_children         — rename across sibling subtrees
+ *   remove_degenerate_phis  — simplify trivial PHIs to ASSIGNs
+ *   make_ssa_fn             — full SSA construction pass
+ *   make_ssa_ctx            — transform all functions in context
  *
  * Source: vyper/venom/passes/make_ssa.py
  *)
@@ -25,6 +28,51 @@
 Theory makeSsaDefs
 Ancestors
   cfgTransform venomWf dominatorDefs
+
+(* ===== Dominator Tree ===== *)
+
+Datatype:
+  dom_tree = DNode string (dom_tree list)
+End
+
+(* All labels in a dominator tree. *)
+Definition dom_tree_labels_def:
+  dom_tree_labels (DNode lbl children) =
+    lbl :: FLAT (MAP dom_tree_labels children)
+End
+
+(* ===== Analysis Validity Predicates ===== *)
+
+(* The dominator tree analysis is valid for the given function.
+   dom_frontiers: block → dominance frontier blocks
+   dtree: dominator tree (root = entry block)
+   dom_post_order: blocks in dominator tree post-order *)
+Definition valid_dom_tree_def:
+  valid_dom_tree dom_frontiers dtree dom_post_order func ⇔
+    (* All labels in the tree correspond to actual blocks *)
+    (∀lbl. MEM lbl (dom_tree_labels dtree) ⇒
+           lookup_block lbl func.fn_blocks ≠ NONE) ∧
+    (* dom_post_order covers exactly the function's block labels *)
+    set dom_post_order = set (MAP (λbb. bb.bb_label) func.fn_blocks) ∧
+    ALL_DISTINCT dom_post_order
+End
+
+(* The CFG predecessor/successor maps are valid for the function. *)
+Definition valid_cfg_maps_def:
+  valid_cfg_maps pred_map succ_map func ⇔
+    (∀lbl. ALOOKUP succ_map lbl =
+           OPTION_MAP bb_succs (lookup_block lbl func.fn_blocks)) ∧
+    (∀lbl ps. ALOOKUP pred_map lbl = SOME ps ⇒
+              set ps = {p | ∃bb. lookup_block p func.fn_blocks = SOME bb ∧
+                                 MEM lbl (bb_succs bb)})
+End
+
+(* The liveness analysis is valid: live_in vars are actually used. *)
+Definition valid_liveness_def:
+  valid_liveness live_in func ⇔
+    (∀lbl vs. ALOOKUP live_in lbl = SOME vs ⇒
+              lookup_block lbl func.fn_blocks ≠ NONE)
+End
 
 (* ===== Definition Points ===== *)
 
@@ -34,18 +82,25 @@ Definition block_assignments_def:
     nub (FLAT (MAP (λinst. inst.inst_outputs) bb.bb_instructions))
 End
 
+(* Update an assoc list entry in place: if key exists, update its value
+   without changing its position. If not, prepend. *)
+Definition alist_update_or_prepend_def:
+  alist_update_or_prepend key f default [] = [(key, default)] ∧
+  alist_update_or_prepend key f default ((k,v)::rest) =
+    if k = key then (k, f v) :: rest
+    else (k,v) :: alist_update_or_prepend key f default rest
+End
+
 (* Compute definition points: for each variable, the set of block labels
-   where it is assigned. Returns assoc list: (var, [block_label]). *)
+   where it is assigned. Returns assoc list: (var, [block_label]).
+   Preserves first-seen variable order (matches Python dict insertion order). *)
 Definition compute_defs_def:
   compute_defs [] = [] ∧
   compute_defs (bb::bbs) =
     let vars = block_assignments bb in
     let rest = compute_defs bbs in
-    FOLDL (λacc var.
-      case ALOOKUP acc var of
-        SOME lbls => (var, bb.bb_label :: lbls) ::
-                     FILTER (λ(v,_). v ≠ var) acc
-      | NONE => (var, [bb.bb_label]) :: acc)
+    FOLDR (λvar acc.
+      alist_update_or_prepend var (CONS bb.bb_label) [bb.bb_label] acc)
     rest vars
 End
 
@@ -70,59 +125,63 @@ Definition insert_phi_at_block_def:
     bb with bb_instructions := phi_inst :: bb.bb_instructions
 End
 
-(* Add PHI nodes for all variables at their dominance frontiers.
-   Implements the standard SSA PHI insertion algorithm:
-   - For each variable v with definitions in blocks D,
-   - For each block d in D, for each block f in DF(d),
-   - Insert PHI for v at f (if not already done and v is live-in at f).
+(* Process frontier blocks for one worklist element.
+   For each frontier block f:
+   - Skip if already has a PHI (MEM f has_phi)
+   - If var not live-in at f: mark as processed (add to has_phi) but don't insert
+   - If var live-in: insert PHI and add f to both worklist and has_phi
+   Structural recursion on the frontier list. *)
+Definition process_frontiers_def:
+  process_frontiers var pred_map live_in bbs rest has_phi [] =
+    (bbs, rest, has_phi) ∧
+  process_frontiers var pred_map live_in bbs rest has_phi (f::fs) =
+    if MEM f has_phi then
+      process_frontiers var pred_map live_in bbs rest has_phi fs
+    else
+      let is_live = case ALOOKUP live_in f of
+                      SOME vars => MEM var vars
+                    | NONE => F in
+      if ¬is_live then
+        process_frontiers var pred_map live_in bbs rest (f :: has_phi) fs
+      else
+        let preds = case ALOOKUP pred_map f of
+                      SOME ps => ps | NONE => [] in
+        let phi = build_phi_inst var preds in
+        let bbs' = MAP (λbb.
+          if bb.bb_label = f
+          then insert_phi_at_block phi bb
+          else bb) bbs in
+        process_frontiers var pred_map live_in bbs' (f :: rest) (f :: has_phi) fs
+End
 
-   dom_frontiers: block_label → [block_label] (dominance frontier map)
-   pred_map: block_label → [block_label] (predecessor labels)
-   live_in: block_label → string set (liveness at block entry)
-
-   Returns updated block list with PHIs inserted. *)
-
-(* Process one variable: insert PHIs at all required frontier blocks.
-   worklist: blocks whose frontiers may need PHIs.
-   has_phi: blocks that already have a PHI for this variable.
-   Returns updated block list. *)
+(* Insert PHIs for one variable at all required frontier blocks.
+   Worklist algorithm: process each block's dominance frontiers,
+   adding new blocks to the worklist when PHIs are inserted. *)
 Definition insert_phis_for_var_def:
-  insert_phis_for_var 0 var dom_frontiers pred_map live_in bbs worklist has_phi
-    = bbs ∧
-  insert_phis_for_var (SUC fuel) var dom_frontiers pred_map live_in bbs [] has_phi
-    = bbs ∧
-  insert_phis_for_var (SUC fuel) var dom_frontiers pred_map live_in bbs
-    (d::rest) has_phi =
+  insert_phis_for_var var dom_frontiers pred_map live_in bbs [] has_phi =
+    bbs ∧
+  insert_phis_for_var var dom_frontiers pred_map live_in bbs (d::rest) has_phi =
     let frontiers = case ALOOKUP dom_frontiers d of
                       SOME fs => fs | NONE => [] in
-    let (bbs', rest', has_phi') = FOLDL
-      (λ(bbs_acc, wl_acc, hp_acc) f.
-        if MEM f hp_acc then (bbs_acc, wl_acc, hp_acc)
-        else
-          (* Check if var is live-in at f *)
-          let is_live = case ALOOKUP live_in f of
-                          SOME vars => MEM var vars
-                        | NONE => F in
-          if ¬is_live then (bbs_acc, wl_acc, f :: hp_acc)
-          else
-            let preds = case ALOOKUP pred_map f of
-                          SOME ps => ps | NONE => [] in
-            let phi = build_phi_inst var preds in
-            let bbs_new = MAP (λbb.
-              if bb.bb_label = f
-              then insert_phi_at_block phi bb
-              else bb) bbs_acc in
-            (bbs_new, f :: wl_acc, f :: hp_acc))
-      (bbs, rest, has_phi) frontiers in
-    insert_phis_for_var fuel var dom_frontiers pred_map live_in bbs' rest' has_phi'
+    let (bbs', rest', has_phi') =
+      process_frontiers var pred_map live_in bbs rest has_phi frontiers in
+    insert_phis_for_var var dom_frontiers pred_map live_in bbs' rest' has_phi'
+Termination
+  (* Measure: 2 * (blocks not yet in has_phi) + worklist length.
+     Consuming d from worklist costs -1.
+     Each new has_phi entry removes a block from FILTER (-2 from first term)
+     but may add at most one entry to worklist (+1).
+     Net per step: at least -1. *)
+  WF_REL_TAC `measure (λ(var, df, pm, li, bbs, wl, hp).
+    2 * LENGTH (FILTER (λbb. ¬MEM bb.bb_label hp) bbs) + LENGTH wl)`
+  >> cheat
 End
 
 (* Insert PHIs for all variables. *)
 Definition add_phi_nodes_def:
   add_phi_nodes dom_frontiers pred_map live_in bbs defs =
     FOLDL (λbbs_acc (var, def_blocks).
-      let fuel = LENGTH bbs * LENGTH bbs in
-      insert_phis_for_var fuel var dom_frontiers pred_map live_in
+      insert_phis_for_var var dom_frontiers pred_map live_in
         bbs_acc def_blocks [])
     bbs defs
 End
@@ -175,16 +234,6 @@ Definition push_version_def:
                       FILTER (λ(v,_). v ≠ var) stacks
       | NONE => (var, [ver]) :: stacks in
     ((counters', stacks'), ver)
-End
-
-(* Pop a version from a variable's stack. *)
-Definition pop_version_def:
-  pop_version (counters : (string # num) list,
-               stacks : (string # num list) list) var =
-    case ALOOKUP stacks var of
-      SOME (_ :: rest) =>
-        (counters, (var, rest) :: FILTER (λ(v,_). v ≠ var) stacks)
-    | _ => (counters, stacks)
 End
 
 (* Rename operands in a non-PHI instruction. *)
@@ -263,7 +312,9 @@ Definition update_succ_phis_def:
 End
 
 (* Rename variables in dominator tree order.
-   Processes a single subtree rooted at lbl.
+   Structural recursion on dom_tree.
+   rename_blocks processes a single subtree rooted at a dom_tree node.
+   rename_children processes a list of sibling subtrees.
    Returns (final_counters, updated_blocks):
    - Counters are threaded through siblings so each gets unique versions
    - Each child sees the parent's stacks (not sibling's pushed versions)
@@ -271,30 +322,23 @@ End
    class attribute (monotonically increasing) while var_name_stacks uses
    push/pop (children see parent's stack, not sibling's). *)
 Definition rename_blocks_def:
-  rename_blocks 0 rs bbs dom_children succ_map lbl = (FST rs, bbs) ∧
-  rename_blocks (SUC fuel) rs bbs dom_children succ_map lbl =
+  (rename_blocks rs bbs succ_map (DNode lbl children) =
     case lookup_block lbl bbs of
       NONE => (FST rs, bbs)
     | SOME bb =>
-        (* Pre-action: rename instructions, push versions for outputs *)
         let (rs1, insts') = rename_block_insts rs bb.bb_instructions in
         let bb' = bb with bb_instructions := insts' in
         let bbs1 = replace_block lbl bb' bbs in
-        (* Update successor PHIs with current rename state *)
         let succs = case ALOOKUP succ_map lbl of
                       SOME ss => ss | NONE => [] in
         let bbs2 = update_succ_phis rs1 lbl bbs1 succs in
-        (* Recurse on dominated children.
-           Thread counters through siblings (so each gets unique versions).
-           Each child gets parent's stacks (not sibling's pushed versions).
-           This matches Python where var_name_counters increases monotonically
-           across all branches, but var_name_stacks is push/popped per subtree. *)
-        let children = case ALOOKUP dom_children lbl of
-                         SOME cs => cs | NONE => [] in
         let parent_stacks = SND rs1 in
-        FOLDL (λ(ctrs, bs) c.
-          rename_blocks fuel (ctrs, parent_stacks) bs dom_children succ_map c)
-          (FST rs1, bbs2) children
+        rename_children (FST rs1) parent_stacks bbs2 succ_map children) ∧
+  (rename_children ctrs stacks bbs succ_map [] = (ctrs, bbs)) ∧
+  (rename_children ctrs stacks bbs succ_map (child::rest) =
+    let (ctrs', bbs') =
+      rename_blocks (ctrs, stacks) bbs succ_map child in
+    rename_children ctrs' stacks bbs' succ_map rest)
 End
 
 (* ===== Degenerate PHI Removal ===== *)
@@ -349,7 +393,7 @@ End
    Matches Python's ensure_well_formed. *)
 Definition inst_sort_key_def:
   inst_sort_key inst =
-    if inst.inst_opcode = PHI then 0n
+    if inst.inst_opcode = PHI ∨ inst.inst_opcode = PARAM then 0n
     else if is_terminator inst.inst_opcode then 2n
     else 1n
 End
@@ -381,10 +425,11 @@ End
 (* Full make_ssa pass on a function.
    Requires pre-computed: CFG, dominator tree, liveness.
    Parameters encode these analyses as maps.
+   dtree: dominator tree (root = entry block, structural recursion target)
    dom_post_order: block labels in dominator tree post-order
      (determines variable/PHI insertion order to match Python). *)
 Definition make_ssa_fn_def:
-  make_ssa_fn dom_frontiers dom_children dom_post_order
+  make_ssa_fn dom_frontiers dtree dom_post_order
               pred_map succ_map live_in func =
     case fn_entry_label func of
       NONE => func
@@ -396,10 +441,9 @@ Definition make_ssa_fn_def:
         (* 1. Insert PHI nodes *)
         let bbs1 = add_phi_nodes dom_frontiers pred_map live_in
                      func.fn_blocks defs in
-        (* 2. Rename variables *)
+        (* 2. Rename variables — structural recursion on dtree *)
         let rs0 = init_rename_state defs in
-        let fuel = LENGTH bbs1 * LENGTH bbs1 in
-        let (_, bbs2) = rename_blocks fuel rs0 bbs1 dom_children succ_map entry in
+        let (_, bbs2) = rename_blocks rs0 bbs1 succ_map dtree in
         (* 3. Remove degenerate PHIs *)
         let bbs3 = remove_degenerate_phis bbs2 in
         (* 4. Ensure PHIs are at top of blocks *)
@@ -411,10 +455,10 @@ End
    Note: in practice, the caller provides pre-computed analyses.
    This definition takes analysis maps as parameters. *)
 Definition make_ssa_ctx_def:
-  make_ssa_ctx dom_frontiers_fn dom_children_fn dom_post_order_fn
+  make_ssa_ctx dom_frontiers_fn dtree_fn dom_post_order_fn
                pred_map_fn succ_map_fn live_in_fn ctx =
     ctx with ctx_functions := MAP (λfunc.
-      make_ssa_fn (dom_frontiers_fn func) (dom_children_fn func)
+      make_ssa_fn (dom_frontiers_fn func) (dtree_fn func)
                   (dom_post_order_fn func)
                   (pred_map_fn func) (succ_map_fn func)
                   (live_in_fn func) func)

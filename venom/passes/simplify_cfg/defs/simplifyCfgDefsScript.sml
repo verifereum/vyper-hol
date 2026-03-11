@@ -184,6 +184,25 @@ Definition do_merge_jump_def:
     | _ => NONE
 End
 
+(* ===== Successor PHI Label Update ===== *)
+
+(* After merging B into A, update successor PHIs to reference A instead of B.
+   Matches Python's _merge_blocks immediate PHI update. *)
+Definition update_succ_phi_labels_def:
+  update_succ_phi_labels old_lbl new_lbl bbs succs =
+    FOLDL (λbs s.
+      case lookup_block s bs of
+        NONE => bs
+      | SOME sbb =>
+          let sbb' = sbb with bb_instructions :=
+            MAP (λinst.
+              if inst.inst_opcode ≠ PHI then inst
+              else subst_label_inst old_lbl new_lbl inst)
+            sbb.bb_instructions in
+          replace_block s sbb' bs)
+    bbs succs
+End
+
 (* ===== DFS Collapse ===== *)
 
 (* Try to bypass one trivial jump successor.
@@ -211,10 +230,10 @@ End
 (* DFS collapse from a block. After a successful merge/bypass, re-process
    the same block (Python recurses on bb after merge). Tracks visited set.
    Returns (updated_fn, updated_label_map, updated_visited).
-   fuel: prevents non-termination. *)
+   collapse_dfs: process a single block
+   collapse_dfs_succs: DFS into a list of successor blocks *)
 Definition collapse_dfs_def:
-  (collapse_dfs 0 func label_map visited lbl = (func, label_map, visited)) ∧
-  (collapse_dfs (SUC fuel) func label_map visited lbl =
+  (collapse_dfs func label_map visited lbl =
     case lookup_block lbl func.fn_blocks of
       NONE => (func, label_map, visited)
     | SOME bb =>
@@ -225,18 +244,24 @@ Definition collapse_dfs_def:
                SOME next_bb =>
                  if can_merge_blocks func bb next_bb then
                    let merged = merge_blocks bb next_bb in
-                   let func' = func with fn_blocks :=
-                     replace_block lbl merged
+                   let bbs' = replace_block lbl merged
                        (remove_block next_lbl func.fn_blocks) in
+                   (* Immediate successor PHI update: next_lbl → lbl *)
+                   let bbs'' = update_succ_phi_labels
+                       next_lbl lbl bbs' (bb_succs merged) in
+                   let func' = func with fn_blocks := bbs'' in
                    let label_map' = (next_bb.bb_label, lbl) :: label_map in
-                   (* Re-process same block after merge *)
-                   collapse_dfs fuel func' label_map' visited lbl
+                   (* TERMINATION: merge removes next_lbl block,
+                      fn_blocks count decreases *)
+                   collapse_dfs func' label_map' visited lbl
                  else
                    (* No merge — mark visited, DFS into successor *)
                    if MEM lbl visited then (func, label_map, visited)
                    else
                      let visited' = lbl :: visited in
-                     collapse_dfs fuel func label_map visited' next_lbl
+                     (* TERMINATION: lbl added to visited,
+                        unvisited count decreases *)
+                     collapse_dfs func label_map visited' next_lbl
              | NONE =>
                  if MEM lbl visited then (func, label_map, visited)
                  else (func, label_map, lbl :: visited))
@@ -245,14 +270,34 @@ Definition collapse_dfs_def:
             let (func', lm', bypassed) =
               try_bypass func label_map bb succs in
             if bypassed then
-              (* Re-process same block *)
-              collapse_dfs fuel func' lm' visited lbl
+              (* TERMINATION: bypass removes a block,
+                 fn_blocks count decreases *)
+              collapse_dfs func' lm' visited lbl
             else if MEM lbl visited then (func', lm', visited)
             else
               let visited' = lbl :: visited in
-              (* DFS into all successors *)
-              FOLDL (λ(f,lm,vis) s. collapse_dfs fuel f lm vis s)
-                    (func', lm', visited') succs)
+              (* TERMINATION: lbl added to visited,
+                 unvisited count decreases *)
+              collapse_dfs_succs func' lm' visited' succs) ∧
+  (collapse_dfs_succs func label_map visited [] =
+    (func, label_map, visited)) ∧
+  (collapse_dfs_succs func label_map visited (s::rest) =
+    let (func', lm', vis') = collapse_dfs func label_map visited s in
+    (* TERMINATION: fn_blocks non-increasing, visited non-shrinking,
+       succ list strictly shorter *)
+    collapse_dfs_succs func' lm' vis' rest)
+Termination
+  WF_REL_TAC `inv_image ($< LEX $< LEX $<)
+    (λx. case x of
+       INL (func, lm, vis, lbl) =>
+         (LENGTH func.fn_blocks,
+          LENGTH (FILTER (λbb. ¬MEM bb.bb_label vis) func.fn_blocks),
+          0)
+     | INR (func, lm, vis, succs) =>
+         (LENGTH func.fn_blocks,
+          LENGTH (FILTER (λbb. ¬MEM bb.bb_label vis) func.fn_blocks),
+          LENGTH succs))`
+  >> cheat
 End
 
 (* ===== Full Pass ===== *)
@@ -265,13 +310,15 @@ Definition simplify_cfg_round_def:
       NONE => func
     | SOME entry =>
         let func1 = remove_unreachable_blocks func in
-        let fuel = LENGTH func1.fn_blocks * LENGTH func1.fn_blocks in
+        (* Fix PHIs before DFS — matches Python's remove_unreachable_blocks
+           which calls fix_phi_instructions for all blocks *)
+        let func1a = fix_all_phis func1 in
         let (func2, label_map, _) =
-          collapse_dfs fuel func1 [] [] entry in
+          collapse_dfs func1a [] [] entry in
         (* Batch label replacement *)
         let func3 = if label_map = [] then func2
                      else subst_label_map_fn label_map func2 in
-        (* Remove newly unreachable blocks + fix PHIs *)
+        (* Remove newly unreachable blocks + final PHI fix *)
         let func4 = remove_unreachable_blocks func3 in
         fix_all_phis func4
 End

@@ -10,10 +10,9 @@ Ancestors
 
 Theorem tail_merge_pass_correct:
   !func s fuel ctx.
-    wf_ir_fn func /\
-    func.fn_blocks <> [] ==>
+    wf_function func ==>
     let func' = tail_merge_fn func in
-    result_equiv {}
+    result_equiv UNIV
       (run_function fuel ctx func s)
       (run_function fuel ctx func' s)
 Proof

@@ -200,12 +200,13 @@ Definition cfg_norm_iter_def:
     else func
 End
 
-(* Python's effective limit is O(N²): 2*N outer rounds × up to N splits
-   per round. We do one split per iteration, so need N² fuel. *)
+(* Each split eliminates exactly one critical edge and never creates new ones.
+   A function with N blocks has at most 2N edges (each block has ≤ 2 successors),
+   so at most 2N critical edges exist. *)
 Definition cfg_norm_fn_def:
   cfg_norm_fn func =
     let n = LENGTH func.fn_blocks in
-    cfg_norm_iter (2 * n * n) func 0
+    cfg_norm_iter (2 * n) func 0
 End
 
 (* Transform all functions in context. *)

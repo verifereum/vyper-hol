@@ -172,6 +172,10 @@ Definition subst_label_map_fn_def:
       MAP (subst_label_map_block label_map) func.fn_blocks
 End
 
+(* NOTE: Python _replace_all_labels also updates ctx.data_segment label
+   references. Deferred until venom_to_bytecode is specified — data segment
+   label resolution depends on bytecode layout (see lower_dload pass). *)
+
 (* ===== Halting Block Detection ===== *)
 
 (* Halting opcodes: execution stops, no control flow successor.
@@ -214,4 +218,16 @@ End
 (* Number of successors of a block. *)
 Definition num_succs_def:
   num_succs bb = LENGTH (bb_succs bb)
+End
+
+(* All variable names in a function (outputs + operand vars). *)
+Definition fn_all_vars_def:
+  fn_all_vars func =
+    FLAT (MAP (λbb.
+      FLAT (MAP (λinst.
+        inst.inst_outputs ++
+        FLAT (MAP (λop. case op of Var v => [v] | _ => [])
+                  inst.inst_operands))
+      bb.bb_instructions))
+    func.fn_blocks)
 End

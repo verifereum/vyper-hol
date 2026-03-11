@@ -149,6 +149,14 @@ End
    Context (whole program)
 
    Contains multiple functions and optional entry point.
+
+   NOTE: Python IRContext also has data_segment : list[DataSection] containing
+   label references and raw bytes (for selector dispatch tables, deploy code,
+   CBOR metadata). Passes that rename labels update data_segment too
+   (base_pass.py _replace_all_labels). This is deferred until venom_to_bytecode
+   is specified — data segment labels resolve to code offsets that depend on
+   the bytecode layout. The lower_dload pass transforms DLOAD/DLOADBYTES
+   into concrete memory operations using these offsets.
    -------------------------------------------------------------------------- *)
 
 Datatype:

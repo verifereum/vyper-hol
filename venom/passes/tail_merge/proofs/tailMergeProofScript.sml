@@ -12,15 +12,14 @@ Ancestors
   tailMergeDefs stateEquiv venomExecSemantics
 
 (* Tail merge preserves execution semantics at the function level.
- * For any well-formed function, redirecting jumps from equivalent halting
- * blocks to a single keeper block and removing duplicates preserves the
- * execution result for any initial state. *)
+ * Merged blocks are halting and self-contained, so variable names differ
+ * (α-renamed) but all observable state (memory, storage, logs, returndata)
+ * is identical. UNIV excludes all variable comparisons. *)
 Theorem tail_merge_fn_correct:
   !func s fuel ctx.
-    wf_ir_fn func /\
-    func.fn_blocks <> [] ==>
+    wf_function func ==>
     let func' = tail_merge_fn func in
-    result_equiv {}
+    result_equiv UNIV
       (run_function fuel ctx func s)
       (run_function fuel ctx func' s)
 Proof

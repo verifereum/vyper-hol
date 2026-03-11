@@ -12,7 +12,7 @@
 Theory phiDefs
 Ancestors
   dfgDefs dfgAnalysisProps pred_set list finite_map
-  venomState venomInst venomExecSemantics
+  venomState venomInst venomWf venomExecSemantics
 
 (* ==========================================================================
    Shared DFG compatibility layer
@@ -56,17 +56,7 @@ Proof
   drule dfg_build_function_correct >> simp[]
 QED
 
-(* SSA form predicate - each variable has at most one singleton definition. *)
-Definition ssa_form_def:
-  ssa_form fn <=>
-    !v inst1 inst2.
-      MEM inst1 (fn_insts fn) /\
-      MEM inst2 (fn_insts fn) /\
-      inst1.inst_outputs = [v] /\
-      inst2.inst_outputs = [v]
-      ==>
-      inst1 = inst2
-End
+(* ssa_form and is_phi_inst are now in venomWfTheory *)
 
 (* IDs visible through compatibility lookup (for termination measure). *)
 Definition dfg_ids_def:
@@ -121,11 +111,6 @@ Definition assign_var_operand_def:
     case inst.inst_operands of
       [Var v] => SOME v
     | _ => NONE
-End
-
-(* Helper: Check if instruction is a PHI *)
-Definition is_phi_inst_def:
-  is_phi_inst inst <=> inst.inst_opcode = PHI
 End
 
 (* Helper: resolve_phi returns one of the phi_var_operands.
