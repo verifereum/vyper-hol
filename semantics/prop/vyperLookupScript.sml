@@ -150,8 +150,7 @@ Theorem lookup_scopes_update_other[local]:
 Proof
   Induct_on `pre` >-
    simp[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  simp[lookup_scopes_def] >> rpt strip_tac >>
-  Cases_on `FLOOKUP h n2` >> simp[]
+  simp[lookup_scopes_def]
 QED
 
 Theorem lookup_scopes_FEMPTY_CONS[local]:
@@ -164,9 +163,7 @@ Theorem find_containing_scope_none_lookup_scopes_none:
   ∀id sc. find_containing_scope id sc = NONE ⇒ lookup_scopes id sc = NONE
 Proof
   Induct_on `sc` >> simp[Once find_containing_scope_def, Once lookup_scopes_def] >>
-  rpt strip_tac >> Cases_on `FLOOKUP h id` >> gvs[] >>
-  first_x_assum irule >>
-  Cases_on `find_containing_scope id sc` >> gvs[]
+  rpt strip_tac >> Cases_on `FLOOKUP h id` >> gvs[]
 QED
 
 Theorem lookup_scopes_find_containing:
@@ -441,10 +438,9 @@ Proof
        lift_option_def, lift_option_type_def, lift_sum_def,
        ignore_bind_def, set_scopes_def, update_name_def, LET_THM] >>
   Cases_on `ao` >> simp[assign_result_def, return_def, bind_def, lift_sum_def]
-  >- (drule assign_subscripts_PopOp_assign_result >> strip_tac >>
-      gvs[return_def, raise_def] >>
-      Cases_on `popped_value v` >> gvs[return_def])
-  >> rpt (CASE_TAC >> gvs[return_def, raise_def])
+  >> drule assign_subscripts_PopOp_assign_result >> strip_tac >>
+     gvs[return_def, raise_def] >>
+     Cases_on `popped_value v` >> gvs[return_def]
 QED
 
 Theorem lookup_after_update:
@@ -487,7 +483,7 @@ Theorem var_in_scope_preserved_after_update:
   ∀st n1 n2 v. var_in_scope st n2 ⇒ var_in_scope (update_name st n1 v) n2
 Proof
   rpt strip_tac >>
-  Cases_on ‘n1 = n2’ >>
+  Cases_on `n1 = n2` >>
   fs[var_in_scope_def, lookup_name_preserved_after_update] >-
    simp[lookup_after_update]
 QED
@@ -507,8 +503,7 @@ Proof
   rw[update_name_def, LET_THM] >>
   Cases_on `find_containing_scope (string_to_num n) st.scopes` >-
    (Cases_on `st.scopes` >> gvs[evaluation_state_accfupds]) >>
-  PairCases_on `x` >> simp[evaluation_state_accfupds] >>
-  Cases_on `x0` >> simp[]
+  PairCases_on `x` >> simp[evaluation_state_accfupds]
 QED
 
 Theorem lookup_immutable_after_set_immutable:
@@ -1037,8 +1032,7 @@ Theorem wf_sparse_enumerate[local]:
 Proof
   Induct >> simp[enumerate_static_array_def, well_formed_value_def, LET_THM] >>
   rpt strip_tac >> rw[] >>
-  simp[well_formed_value_def] >>
-  first_x_assum (qspecl_then [`tv`, `n`, `SUC i`] mp_tac) >> simp[]
+  simp[well_formed_value_def]
 QED
 
 Theorem LENGTH_decode_static_array[local]:
@@ -1046,7 +1040,7 @@ Theorem LENGTH_decode_static_array[local]:
     decode_static_array storage offset tv n = SOME vs ⇒ LENGTH vs = n
 Proof
   Induct_on `n` >>
-  simp[decode_value_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >> res_tac >> simp[]
+  simp[decode_value_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >> res_tac
 QED
 
 Theorem LENGTH_decode_dyn_array[local]:
@@ -1054,7 +1048,7 @@ Theorem LENGTH_decode_dyn_array[local]:
     decode_dyn_array storage offset tv n = SOME vs ⇒ LENGTH vs = n
 Proof
   Induct_on `n` >>
-  simp[decode_value_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >> res_tac >> simp[]
+  simp[decode_value_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >> res_tac
 QED
 
 Theorem var_in_storage_storage_var_info:
@@ -1082,25 +1076,78 @@ Proof
   gvs[storage_type_of_def]
 QED
 
+(* Predicate: slots read during decode_value contain in-range values.
+   Only UintT and IntT base types have non-trivial constraints. *)
+Definition slots_in_range_def:
+  slots_in_range storage offset (BaseTV (UintT n)) =
+    (w2n (read_slot storage offset) < 2 ** n) ∧
+  slots_in_range storage offset (BaseTV (IntT n)) =
+    within_int_bound (Signed n) (w2i (read_slot storage offset)) ∧
+  slots_in_range storage offset (BaseTV _) = T ∧
+  slots_in_range storage offset (FlagTV _) = T ∧
+  slots_in_range storage offset NoneTV = T ∧
+  slots_in_range storage offset (TupleTV tvs) =
+    tuple_slots_in_range storage offset tvs ∧
+  slots_in_range storage offset (ArrayTV tv (Fixed n)) =
+    static_slots_in_range storage offset tv n ∧
+  slots_in_range storage offset (ArrayTV tv (Dynamic max)) =
+    (let len = w2n (read_slot storage offset) in
+       if len ≤ max then
+         dyn_slots_in_range storage (offset + 1) tv (MIN len max)
+       else F) ∧
+  slots_in_range storage offset (StructTV ftypes) =
+    struct_slots_in_range storage offset ftypes ∧
+  tuple_slots_in_range storage offset [] = T ∧
+  tuple_slots_in_range storage offset (tv::tvs) =
+    (slots_in_range storage offset tv ∧
+     tuple_slots_in_range storage (offset + type_slot_size tv) tvs) ∧
+  static_slots_in_range storage offset tv 0 = T ∧
+  static_slots_in_range storage offset tv (SUC n) =
+    (slots_in_range storage offset tv ∧
+     static_slots_in_range storage (offset + type_slot_size tv) tv n) ∧
+  dyn_slots_in_range storage offset tv 0 = T ∧
+  dyn_slots_in_range storage offset tv (SUC n) =
+    (slots_in_range storage offset tv ∧
+     dyn_slots_in_range storage (offset + type_slot_size tv) tv n) ∧
+  struct_slots_in_range storage offset [] = T ∧
+  struct_slots_in_range storage offset ((fname,tv)::ftypes) =
+    (slots_in_range storage offset tv ∧
+     struct_slots_in_range storage (offset + type_slot_size tv) ftypes)
+Termination
+  WF_REL_TAC `measure (λx. case x of
+    | INL (_, _, tv) => type_value_size tv
+    | INR (INL (_, _, tvs)) => list_size type_value_size tvs
+    | INR (INR (INL (_, _, tv, n))) => type_value_size tv + n
+    | INR (INR (INR (INL (_, _, tv, n)))) => type_value_size tv + n
+    | INR (INR (INR (INR (_, _, ftypes)))) =>
+        list_size (pair_size (list_size char_size) type_value_size) ftypes)` >>
+  simp[basicSizeTheory.pair_size_def, arithmeticTheory.MIN_DEF]
+End
+
 Theorem decode_value_storable[local]:
   (∀storage offset tv v.
     well_formed_type_value tv ∧
+    slots_in_range storage offset tv ∧
     decode_value storage offset tv = SOME v ⇒
     value_has_type tv v ∧ well_formed_value v) ∧
   (∀storage offset tvs vs.
     EVERY well_formed_type_value tvs ∧
+    tuple_slots_in_range storage offset tvs ∧
     decode_tuple storage offset tvs = SOME vs ⇒
     values_have_types tvs vs ∧ EVERY well_formed_value vs) ∧
   (∀storage offset tv n vs.
     well_formed_type_value tv ∧
+    static_slots_in_range storage offset tv n ∧
     decode_static_array storage offset tv n = SOME vs ⇒
     EVERY (value_has_type tv) vs ∧ EVERY well_formed_value vs) ∧
   (∀storage offset tv n vs.
     well_formed_type_value tv ∧
+    dyn_slots_in_range storage offset tv n ∧
     decode_dyn_array storage offset tv n = SOME vs ⇒
     EVERY (value_has_type tv) vs ∧ EVERY well_formed_value vs) ∧
   (∀storage offset ftypes fields.
     EVERY (well_formed_type_value o SND) ftypes ∧
+    struct_slots_in_range storage offset ftypes ∧
     decode_struct storage offset ftypes = SOME fields ⇒
     struct_has_type ftypes fields ∧ EVERY (well_formed_value o SND) fields)
 Proof
@@ -1110,40 +1157,39 @@ Proof
     AllCaseEqs(), value_has_type_def, well_formed_value_def,
     wordsTheory.w2n_lt, integer_wordTheory.w2i_le,
     integer_wordTheory.w2i_ge, LENGTH_word_to_bytes_be_256] >>
-  rpt strip_tac >> gvs[value_has_type_def, well_formed_value_def]
-  (* Dynamic bytes / StringT: LENGTH bs ≤ max *)
-  >- metis_tac[decode_dyn_bytes_LENGTH]
-  >- metis_tac[decode_dyn_bytes_LENGTH]
-  (* BytesT Fixed *)
-  >- gvs[well_formed_type_value_def, listTheory.LENGTH_TAKE_EQ,
-         LENGTH_word_to_bytes_be_256]
-  >- gvs[well_formed_type_value_def]
-  (* TupleTV *)
-  >- (gvs[well_formed_type_value_def] >> metis_tac[])
-  >- (gvs[wf_values_EVERY, well_formed_type_value_def] >> metis_tac[])
-  (* ArrayTV Fixed *)
-  >- (gvs[well_formed_type_value_def] >>
-      imp_res_tac LENGTH_decode_static_array >>
-      simp[sparse_has_type_enumerate])
-  >- (gvs[well_formed_type_value_def] >>
-      imp_res_tac LENGTH_decode_static_array >>
-      simp[SORTED_enumerate_static_array] >>
-      irule wf_sparse_enumerate >> simp[])
-  (* ArrayTV Dynamic *)
-  >- (gvs[well_formed_type_value_def] >> simp[all_have_type_EVERY])
-  >- (gvs[well_formed_type_value_def] >>
-      imp_res_tac LENGTH_decode_dyn_array >>
-      simp[wf_values_EVERY] >>
-      irule arithmeticTheory.LESS_EQ_TRANS >>
-      qexists_tac `MIN len max` >> simp[])
-  (* StructTV *)
-  >- (gvs[well_formed_type_value_def] >> metis_tac[])
-  >- (gvs[wf_fields_EVERY, well_formed_type_value_def] >> metis_tac[])
+  rpt strip_tac >>
+  gvs[value_has_type_def, well_formed_value_def,
+      well_formed_type_value_def, within_int_bound_def,
+      listTheory.LENGTH_TAKE_EQ, LENGTH_word_to_bytes_be_256,
+      wf_values_EVERY, wf_fields_EVERY, all_have_type_EVERY,
+      slots_in_range_def] >>
+  TRY (metis_tac[decode_dyn_bytes_LENGTH]) >>
+  TRY (imp_res_tac LENGTH_decode_static_array >>
+       simp[sparse_has_type_enumerate, SORTED_enumerate_static_array] >>
+       TRY (irule wf_sparse_enumerate >> simp[]) >> NO_TAC) >>
+  TRY (imp_res_tac LENGTH_decode_dyn_array >>
+       simp[wf_values_EVERY] >>
+       irule arithmeticTheory.LESS_EQ_TRANS >>
+       qexists_tac `MIN len max` >> simp[] >> NO_TAC) >>
+  irule integerTheory.INT_LET_TRANS >>
+  qexists_tac `INT_MAX(:256)` >>
+  simp[integer_wordTheory.w2i_le, wordsTheory.INT_MAX_def,
+       wordsTheory.INT_MIN_def, wordsTheory.dimword_def]
 QED
+
+(* State invariant: all storage slots contain values in range for their types *)
+Definition well_formed_storage_def:
+  well_formed_storage cx st ⇔
+    ∀mid n is_transient off tv storage st'.
+      storage_var_info cx mid n = SOME (is_transient, off, tv) ∧
+      get_storage_backend cx is_transient st = (INL storage, st') ⇒
+      slots_in_range storage off tv
+End
 
 Theorem storable_value_from_lookup:
   ∀cx st mid n v.
     var_in_storage cx mid n ∧
+    well_formed_storage cx st ∧
     lookup_toplevel_name cx st mid n = SOME (Value v) ⇒
     storable_value cx mid n v
 Proof
@@ -1160,23 +1206,32 @@ Proof
   simp[Once lookup_global_def, bind_def, return_def, LET_THM,
        lift_option_type_def, read_storage_slot_def, lift_option_def,
        raise_def, AllCaseEqs()] >>
+  `∃is_t off. storage_var_info cx mid n = SOME (is_t, off, tv)`
+    by (gvs[storage_type_of_def] >>
+        Cases_on `storage_var_info cx mid n` >> gvs[] >>
+        PairCases_on `x` >> gvs[]) >>
+  `is_t = b ∧ off = offset`
+    by gvs[storage_var_info_def, AllCaseEqs()] >>
+  gvs[] >>
   Cases_on `tv` >>
   simp[bind_def, return_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  BasicProvers.every_case_tac >> gvs[return_def, raise_def] >>
-  metis_tac[decode_value_storable]
+  BasicProvers.every_case_tac >> gvs[return_def, raise_def] >> (
+    qpat_x_assum `well_formed_storage _ _` mp_tac >>
+    simp[well_formed_storage_def] >>
+    disch_then drule >> strip_tac >>
+    metis_tac[decode_value_storable])
 QED
 
 Theorem storable_value_same_type:
   ∀cx mid n v v' tv.
     storable_value cx mid n v ∧
-    value_has_type tv v ∧ value_has_type tv v' ∧
+    storage_type_of cx mid n = SOME tv ∧
+    value_has_type tv v' ∧
     well_formed_value v' ⇒
     storable_value cx mid n v'
 Proof
-  rw[storable_value_def] >> rpt strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  irule value_has_type_transfer >> metis_tac[]
+  rw[storable_value_def]
 QED
 
 Theorem get_after_set_storage_backend[local]:
