@@ -1,0 +1,2 @@
+# Tail merge pass proofs
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../defs ../../../proofs ../../../props ../../../../syntax ../../../../frontend ../../../../semantics ../defs

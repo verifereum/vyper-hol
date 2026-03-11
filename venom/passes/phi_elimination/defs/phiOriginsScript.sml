@@ -27,7 +27,7 @@
 
 Theory phiOrigins
 Ancestors
-  phiDefs pred_set list
+  phiDefs venomWf pred_set list
 
 (* ==========================================================================
    Origin Computation

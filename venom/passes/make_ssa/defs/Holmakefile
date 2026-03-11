@@ -1,0 +1,2 @@
+# Make SSA pass definitions
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics ../../../analysis/dominators ../../../analysis/dominators/defs

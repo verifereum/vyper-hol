@@ -21,3 +21,8 @@ Ancestors
   algebraicOpt
   (* mem2var promotion *)
   mem2var
+  (* CFG structural passes *)
+  tailMerge
+  simplifyCfg
+  cfgNorm
+  makeSsa

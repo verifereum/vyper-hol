@@ -45,6 +45,27 @@ Definition wf_function_def:
 End
 
 (* ==========================================================================
+   SSA and instruction predicates (general IR concepts)
+   ========================================================================== *)
+
+(* SSA form: each variable is defined at most once across all instructions. *)
+Definition ssa_form_def:
+  ssa_form fn <=>
+    !v inst1 inst2.
+      MEM inst1 (fn_insts fn) /\
+      MEM inst2 (fn_insts fn) /\
+      inst1.inst_outputs = [v] /\
+      inst2.inst_outputs = [v]
+      ==>
+      inst1 = inst2
+End
+
+(* Check if instruction is a PHI. *)
+Definition is_phi_inst_def:
+  is_phi_inst inst <=> inst.inst_opcode = PHI
+End
+
+(* ==========================================================================
    Context well-formedness
    ========================================================================== *)
 
