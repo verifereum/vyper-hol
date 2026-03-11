@@ -92,11 +92,13 @@ End
 
 (* Can A and B be chain-merged?
    A has single successor B, B has single predecessor A, B has no PHIs. *)
+(* Python checks: len(cfg_out(bb)) == 1 and len(cfg_in(next_bb)) == 1.
+   No JMP opcode check — any terminator with single successor triggers merge.
+   no_phis: defensive (fix_all_phis should have eliminated PHIs already). *)
 Definition can_merge_blocks_def:
   can_merge_blocks func a b ⇔
-    num_succs a = 1 ∧
+    bb_succs a = [b.bb_label] ∧
     num_preds func b.bb_label = 1 ∧
-    single_succ_jmp a b.bb_label ∧
     no_phis b
 End
 
@@ -110,12 +112,12 @@ End
 (* ===== Trivial Jump Bypass ===== *)
 
 (* Can a trivial jump block be bypassed?
-   b is a single-JMP block, A has 2 successors, b has 1 pred and 1 succ.
-   Matches Python: len(cfg_in(next_bb)) == 1 and len(cfg_out(next_bb)) == 1
-                   and len(next_bb.instructions) == 1 *)
+   Python: len(cfg_in(next_bb)) == 1 and len(cfg_out(next_bb)) == 1
+           and len(next_bb.instructions) == 1
+   Context: called when len(cfg_out(a)) == 2 (from collapse_dfs). *)
 Definition can_bypass_jump_def:
   can_bypass_jump func a b ⇔
-    is_jmp_only b ∧
+    LENGTH b.bb_instructions = 1 ∧
     num_succs a = 2 ∧
     MEM b.bb_label (bb_succs a) ∧
     num_preds func b.bb_label = 1 ∧

@@ -309,13 +309,14 @@ Definition fn_all_assignments_def:
       fn.fn_blocks))
 End
 
-(* Successor labels of a basic block: the labels targeted by its terminator,
- * reversed to match Vyper's iteration order (see cfg_analysis_parity.md §2). *)
+(* Successor labels of a basic block: the unique labels targeted by its
+ * terminator, reversed to match Vyper's iteration order.
+ * Uses nub to match Python's OrderedSet cfg_out (deduplicates). *)
 Definition bb_succs_def:
   bb_succs bb =
     case bb.bb_instructions of
       [] => []
-    | insts => REVERSE (get_successors (LAST insts))
+    | insts => nub (REVERSE (get_successors (LAST insts)))
 End
 
 (* All instructions across all blocks, in block order. *)
