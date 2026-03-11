@@ -1329,7 +1329,7 @@ Theorem df_analysis_pass_correct_sound_proof:
                   Forward => cfg_succs_of cfg
                 | Backward => cfg_preds_of cfg) in
     let st0 = init_df_state bottom (MAP (\bb. bb.bb_label) bbs) in
-    let all_lbls = MAP (\bb. bb.bb_label) bbs in
+    let all_lbls = (cfg_analyze fn).cfg_dfs_pre in
     let result = df_analyze dir bottom join transfer edge_transfer
                             ctx entry_val fn in
       dir = Forward /\
@@ -1351,6 +1351,8 @@ Theorem df_analysis_pass_correct_sound_proof:
        | SOME (lbl, v) => !s. sound v s) /\
       analysis_inst_simulates R_ok R_term sound f /\
       (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
+      (!bb. MEM bb fn.fn_blocks ==>
+            MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre) /\
       (!bb inst x.
          MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
          MEM (Var x) inst.inst_operands ==>
@@ -1367,7 +1369,7 @@ Proof
   sg `is_fixpoint
      (df_process_block Forward bottom join transfer edge_transfer ctx
         entry_val (cfg_analyze fn) fn.fn_blocks)
-     (MAP (\bb. bb.bb_label) fn.fn_blocks)
+     (cfg_analyze fn).cfg_dfs_pre
      (df_analyze Forward bottom join transfer edge_transfer ctx entry_val fn)`
   >- (irule fixpoint_fwd >>
       conj_tac >- first_assum ACCEPT_TAC >>
@@ -1386,6 +1388,7 @@ Proof
         simp[lookup_block_def] >>
         qspec_tac (`fn.fn_blocks`, `bbs`) >>
         Induct >> rw[FIND_thm] >> fs[]) >>
+      `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by metis_tac[] >>
       (* Establish soundness at idx 0 *)
       `!s. sound (df_at bottom
            (df_analyze Forward bottom join transfer edge_transfer ctx
@@ -1474,7 +1477,7 @@ Theorem df_analysis_pass_correct_widen_sound_proof:
                   Forward => cfg_succs_of cfg
                 | Backward => cfg_preds_of cfg) in
     let st0 = init_df_widen_state bottom (MAP (\bb. bb.bb_label) bbs) in
-    let all_lbls = MAP (\bb. bb.bb_label) bbs in
+    let all_lbls = (cfg_analyze fn).cfg_dfs_pre in
     let result = df_analyze_widen dir bottom join widen threshold
                    transfer edge_transfer ctx entry_val fn in
       dir = Forward /\
@@ -1497,6 +1500,8 @@ Theorem df_analysis_pass_correct_widen_sound_proof:
        | SOME (lbl, v) => !s. sound v s) /\
       analysis_inst_simulates R_ok R_term sound f /\
       (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
+      (!bb. MEM bb fn.fn_blocks ==>
+            MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre) /\
       (!bb inst x.
          MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
          MEM (Var x) inst.inst_operands ==>
@@ -1514,7 +1519,7 @@ Proof
   sg `is_fixpoint
      (df_process_block_widen Forward bottom join widen threshold
         transfer edge_transfer ctx entry_val (cfg_analyze fn) fn.fn_blocks)
-     (MAP (\bb. bb.bb_label) fn.fn_blocks)
+     (cfg_analyze fn).cfg_dfs_pre
      (df_analyze_widen Forward bottom join widen threshold
         transfer edge_transfer ctx entry_val fn)`
   >- (irule widen_fixpoint_fwd >>
@@ -1534,6 +1539,7 @@ Proof
         simp[lookup_block_def] >>
         qspec_tac (`fn.fn_blocks`, `bbs`) >>
         Induct >> rw[FIND_thm] >> fs[]) >>
+      `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by metis_tac[] >>
       imp_res_tac widen_inter_fwd >>
       irule analysis_block_sim_gen_sound >>
       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
@@ -1547,7 +1553,8 @@ Proof
       (* Entry soundness: df_at = df_widen_at = df_widen_entry *)
       simp[GSYM df_widen_at_eq_df_at] >>
       ASM_REWRITE_TAC[] >>
-      irule widen_entry_sound >> fs[])
+      irule widen_entry_sound >> fs[] >>
+      qexistsl_tac [`P`, `b`, `leq`, `m`] >> fs[])
   (* R_ok trans, R_term trans *)
   >- metis_tac[]
   >- metis_tac[]

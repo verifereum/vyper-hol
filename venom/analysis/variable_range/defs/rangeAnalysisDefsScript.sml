@@ -158,7 +158,7 @@ Definition range_apply_compare_def:
         if ¬(op = SLT ∨ op = SGT) ∧
            (vr_is_top (rs_lookup rs v) ∨ vr_lo (rs_lookup rs v) < 0) then
           if ¬(((op = LT) ∧ is_true) ∨ (¬(op = LT) ∧ ¬is_true)) ∨
-             w2i w > INT256_MAX then rs
+             w2i w ≤ 0 ∨ w2i w > INT256_MAX then rs
           else range_narrow_var rs v (w2i w) op is_true 0 max_bound T
         else
           range_narrow_var rs v (w2i w) op is_true min_bound max_bound T
@@ -166,7 +166,7 @@ Definition range_apply_compare_def:
         if ¬(op = SLT ∨ op = SGT) ∧
            (vr_is_top (rs_lookup rs v) ∨ vr_lo (rs_lookup rs v) < 0) then
           if ¬((¬(op = LT) ∧ is_true) ∨ ((op = LT) ∧ ¬is_true)) ∨
-             w2i w > INT256_MAX then rs
+             w2i w ≤ 0 ∨ w2i w > INT256_MAX then rs
           else range_narrow_var rs v (w2i w) op is_true 0 max_bound F
         else
           range_narrow_var rs v (w2i w) op is_true min_bound max_bound F
