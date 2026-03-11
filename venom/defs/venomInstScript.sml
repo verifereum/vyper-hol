@@ -25,7 +25,7 @@ Datatype:
     (* Comparison *)
     | EQ | LT | GT | SLT | SGT | ISZERO
     (* Bitwise *)
-    | AND | OR | XOR | NOT | SHL | SHR | SAR | SIGNEXTEND
+    | AND | OR | XOR | NOT | SHL | SHR | SAR | SIGNEXTEND | BYTE
     (* Memory *)
     | MLOAD | MSTORE | MCOPY | MSIZE
     (* Storage *)
@@ -232,6 +232,146 @@ Definition is_pseudo_def:
   is_pseudo _ = F
 End
 
+(* Volatile instructions must not be removed even if their outputs
+   are unused — they have observable side effects or control flow.
+   Matches Python VOLATILE_INSTRUCTIONS frozenset in basicblock.py. *)
+Definition is_volatile_def:
+  is_volatile PARAM = T /\
+  is_volatile CALL = T /\
+  is_volatile STATICCALL = T /\
+  is_volatile DELEGATECALL = T /\
+  is_volatile CREATE = T /\
+  is_volatile CREATE2 = T /\
+  is_volatile INVOKE = T /\
+  is_volatile SSTORE = T /\
+  is_volatile ISTORE = T /\
+  is_volatile TSTORE = T /\
+  is_volatile MSTORE = T /\
+  is_volatile CALLDATACOPY = T /\
+  is_volatile MCOPY = T /\
+  is_volatile EXTCODECOPY = T /\
+  is_volatile RETURNDATACOPY = T /\
+  is_volatile CODECOPY = T /\
+  is_volatile DLOADBYTES = T /\
+  is_volatile RETURN = T /\
+  is_volatile RET = T /\
+  is_volatile SINK = T /\
+  is_volatile JMP = T /\
+  is_volatile JNZ = T /\
+  is_volatile DJMP = T /\
+  is_volatile LOG = T /\
+  is_volatile SELFDESTRUCT = T /\
+  is_volatile INVALID = T /\
+  is_volatile REVERT = T /\
+  is_volatile ASSERT = T /\
+  is_volatile ASSERT_UNREACHABLE = T /\
+  is_volatile STOP = T /\
+  is_volatile _ = F
+End
+
+(* Effect-free opcodes: only modify the output variable, nothing else.
+   Includes pure arithmetic, env/state reads, SSA ops, and NOP. *)
+Definition is_effect_free_op_def:
+  (* Pure arithmetic / logic (exec_pure1/2/3) *)
+  is_effect_free_op ADD = T /\
+  is_effect_free_op SUB = T /\
+  is_effect_free_op MUL = T /\
+  is_effect_free_op Div = T /\
+  is_effect_free_op SDIV = T /\
+  is_effect_free_op Mod = T /\
+  is_effect_free_op SMOD = T /\
+  is_effect_free_op Exp = T /\
+  is_effect_free_op ADDMOD = T /\
+  is_effect_free_op MULMOD = T /\
+  is_effect_free_op EQ = T /\
+  is_effect_free_op LT = T /\
+  is_effect_free_op GT = T /\
+  is_effect_free_op SLT = T /\
+  is_effect_free_op SGT = T /\
+  is_effect_free_op ISZERO = T /\
+  is_effect_free_op AND = T /\
+  is_effect_free_op OR = T /\
+  is_effect_free_op XOR = T /\
+  is_effect_free_op NOT = T /\
+  is_effect_free_op SHL = T /\
+  is_effect_free_op SHR = T /\
+  is_effect_free_op SAR = T /\
+  is_effect_free_op SIGNEXTEND = T /\
+  is_effect_free_op BYTE = T /\
+  is_effect_free_op GEP = T /\
+  (* State reads (exec_read0/1) *)
+  is_effect_free_op MLOAD = T /\
+  is_effect_free_op SLOAD = T /\
+  is_effect_free_op TLOAD = T /\
+  is_effect_free_op ILOAD = T /\
+  is_effect_free_op DLOAD = T /\
+  is_effect_free_op MSIZE = T /\
+  is_effect_free_op SHA3 = T /\
+  (* Environment reads (exec_read0/1) *)
+  is_effect_free_op CALLER = T /\
+  is_effect_free_op ADDRESS = T /\
+  is_effect_free_op CALLVALUE = T /\
+  is_effect_free_op GAS = T /\
+  is_effect_free_op ORIGIN = T /\
+  is_effect_free_op GASPRICE = T /\
+  is_effect_free_op CHAINID = T /\
+  is_effect_free_op COINBASE = T /\
+  is_effect_free_op TIMESTAMP = T /\
+  is_effect_free_op NUMBER = T /\
+  is_effect_free_op PREVRANDAO = T /\
+  is_effect_free_op GASLIMIT = T /\
+  is_effect_free_op BASEFEE = T /\
+  is_effect_free_op BLOBBASEFEE = T /\
+  is_effect_free_op BLOCKHASH = T /\
+  is_effect_free_op BLOBHASH = T /\
+  is_effect_free_op BALANCE = T /\
+  is_effect_free_op SELFBALANCE = T /\
+  is_effect_free_op CALLDATASIZE = T /\
+  is_effect_free_op CALLDATALOAD = T /\
+  is_effect_free_op RETURNDATASIZE = T /\
+  is_effect_free_op CODESIZE = T /\
+  is_effect_free_op EXTCODESIZE = T /\
+  is_effect_free_op EXTCODEHASH = T /\
+  (* SSA bookkeeping *)
+  is_effect_free_op ASSIGN = T /\
+  is_effect_free_op PHI = T /\
+  is_effect_free_op PARAM = T /\
+  is_effect_free_op OFFSET = T /\
+  (* No-op (no outputs, no state change, no side effects) *)
+  is_effect_free_op NOP = T /\
+  (* Everything else *)
+  is_effect_free_op _ = F
+End
+
+(* Memory-writing opcodes: modify vs_memory (and possibly output var) *)
+Definition is_mem_write_op_def:
+  is_mem_write_op MSTORE = T /\
+  is_mem_write_op MCOPY = T /\
+  is_mem_write_op CALLDATACOPY = T /\
+  is_mem_write_op RETURNDATACOPY = T /\
+  is_mem_write_op CODECOPY = T /\
+  is_mem_write_op EXTCODECOPY = T /\
+  is_mem_write_op DLOADBYTES = T /\
+  is_mem_write_op _ = F
+End
+
+(* Allocation opcodes: modify vs_memory AND vs_allocas *)
+Definition is_alloca_op_def:
+  is_alloca_op ALLOCA = T /\
+  is_alloca_op PALLOCA = T /\
+  is_alloca_op CALLOCA = T /\
+  is_alloca_op _ = F
+End
+
+(* External call opcodes: modify multiple state fields *)
+Definition is_ext_call_op_def:
+  is_ext_call_op CALL = T /\
+  is_ext_call_op STATICCALL = T /\
+  is_ext_call_op DELEGATECALL = T /\
+  is_ext_call_op CREATE = T /\
+  is_ext_call_op CREATE2 = T /\
+  is_ext_call_op _ = F
+End
 
 (* --------------------------------------------------------------------------
    Lookup Functions

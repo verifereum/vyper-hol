@@ -107,6 +107,9 @@ Definition write_effects_def:
   write_effects LOG = {Eff_LOG; Eff_MSIZE} /\
   (* Memory-writing bulk ops *)
   write_effects DLOADBYTES = {Eff_MEMORY; Eff_MSIZE} /\
+  (* DLOAD: matches Python effects.py — DLOAD reads from data section into
+     a register (no memory write at Venom level), but at EVM lowering DLOAD
+     expands memory, so write_effects is conservative. *)
   write_effects DLOAD = {Eff_MEMORY; Eff_MSIZE} /\
   write_effects RETURNDATACOPY = {Eff_MEMORY; Eff_MSIZE} /\
   write_effects CALLDATACOPY = {Eff_MEMORY; Eff_MSIZE} /\
@@ -119,7 +122,46 @@ Definition write_effects_def:
   write_effects REVERT = {Eff_MSIZE} /\
   write_effects SHA3 = {Eff_MSIZE} /\
   write_effects RETURN = {Eff_MSIZE} /\
+  (* SELFDESTRUCT: transfers balance to beneficiary, zeros own balance *)
+  write_effects SELFDESTRUCT = {Eff_BALANCE} /\
   write_effects _ = empty_effects
+End
+
+(* ===== MSIZE Stripping ===== *)
+
+(* Python: if ignore_msize: ret &= ~Effects.MSIZE
+   Used by available expression analysis when the function has no MSIZE inst. *)
+Definition strip_msize_def:
+  strip_msize (eff : effects) = eff DELETE Eff_MSIZE
+End
+
+Definition adj_effects_def:
+  adj_effects (ignore_msize : bool) (eff : effects) =
+    if ignore_msize then strip_msize eff else eff
+End
+
+(* Python: _get_read_effects(opcode, ignore_msize) *)
+Definition read_effects_adj_def:
+  read_effects_adj ignore_msize op = adj_effects ignore_msize (read_effects op)
+End
+
+(* Python: _get_write_effects(opcode, ignore_msize) *)
+Definition write_effects_adj_def:
+  write_effects_adj ignore_msize op = adj_effects ignore_msize (write_effects op)
+End
+
+(* Python: _get_overlap_effects(opcode, ignore_msize) =
+     _get_read_effects & _get_write_effects *)
+Definition overlap_effects_adj_def:
+  overlap_effects_adj ignore_msize op =
+    read_effects_adj ignore_msize op INTER write_effects_adj ignore_msize op
+End
+
+(* Python: _get_effects(opcode, ignore_msize) =
+     _get_read_effects | _get_write_effects *)
+Definition all_effects_adj_def:
+  all_effects_adj ignore_msize op =
+    read_effects_adj ignore_msize op UNION write_effects_adj ignore_msize op
 End
 
 (* ===== Derived Predicates ===== *)

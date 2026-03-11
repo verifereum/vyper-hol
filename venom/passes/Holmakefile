@@ -5,6 +5,7 @@ INCLUDES = \
   .. \
   ../../syntax \
   ../../semantics \
+  shared \
   phi_elimination \
   revert_to_assert \
   lower_dload \
