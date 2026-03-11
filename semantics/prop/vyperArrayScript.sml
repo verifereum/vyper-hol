@@ -203,3 +203,27 @@ Proof
   `IS_SOME (array_index a k)` by metis_tac[array_index_valid] >>
   Cases_on `array_index a k` >> gvs[assign_subscripts_def]
 QED
+
+Theorem array_length_sarray[simp]:
+  array_length (SArrayV t n al) = n
+Proof
+  simp[array_length_def]
+QED
+
+Theorem assign_array_read_same:
+  ∀av i v.
+    array_is_mutable av ∧ valid_index av i ⇒
+    ∃av'. assign_subscripts (ArrayV av) [IntSubscript i] (Replace v) =
+            INL (ArrayV av') ∧
+          array_index av' i = SOME v
+Proof
+  rpt strip_tac >>
+  `assign_subscripts (ArrayV av) [IntSubscript i] (Replace v) =
+   array_set_index av i v` by
+    (irule assign_subscripts_array_replace >> simp[]) >>
+  `∃av'. array_set_index av i v = INL (ArrayV av')` by
+    metis_tac[array_set_index_valid] >>
+  qexists_tac `av'` >>
+  conj_tac >- simp[] >>
+  metis_tac[array_index_after_set_same]
+QED
