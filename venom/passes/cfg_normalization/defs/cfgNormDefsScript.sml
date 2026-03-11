@@ -200,9 +200,12 @@ Definition cfg_norm_iter_def:
     else func
 End
 
+(* Python's effective limit is O(N²): 2*N outer rounds × up to N splits
+   per round. We do one split per iteration, so need N² fuel. *)
 Definition cfg_norm_fn_def:
   cfg_norm_fn func =
-    cfg_norm_iter (2 * LENGTH func.fn_blocks) func 0
+    let n = LENGTH func.fn_blocks in
+    cfg_norm_iter (2 * n * n) func 0
 End
 
 (* Transform all functions in context. *)
