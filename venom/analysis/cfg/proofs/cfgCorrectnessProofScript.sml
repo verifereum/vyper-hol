@@ -18,7 +18,7 @@ val cfg_eval_defs = [cfg_analyze_def, build_succs_def, init_succs_def,
   build_preds_def, init_preds_def, build_reachable_def,
   entry_block_def, bb_succs_def, get_successors_def, is_terminator_def,
   get_label_def, cfg_preds_of_def, cfg_succs_of_def, cfg_reachable_of_def,
-  cfg_path_def, fn_labels_def, INDEX_OF_def, INDEX_FIND_def];
+  cfg_path_def, fn_labels_def, INDEX_OF_def, INDEX_FIND_def, nub_def];
 
 val cfg_eval_tac = simp_tac dfs_ss cfg_eval_defs;
 

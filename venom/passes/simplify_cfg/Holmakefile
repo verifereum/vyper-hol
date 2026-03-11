@@ -1,0 +1,2 @@
+# Simplify CFG pass: public API
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../../syntax ../../../semantics defs proofs

@@ -1,0 +1,2 @@
+# Make SSA pass proofs
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../defs ../../../proofs ../../../props ../../../../syntax ../../../../frontend ../../../../semantics ../defs ../../../analysis/dominators/defs ../../../analysis/dominators/proofs ../../../analysis/dominators

@@ -15,5 +15,9 @@ INCLUDES = \
   assert_combiner \
   algebraic_opt \
   mem2var \
+  tail_merge \
+  simplify_cfg \
+  cfg_normalization \
+  make_ssa \
   memmerging \
   dft

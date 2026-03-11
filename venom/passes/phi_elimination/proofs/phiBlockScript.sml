@@ -24,7 +24,7 @@
 
 Theory phiBlock
 Ancestors
-  phiWellFormed execEquivProps venomExecProofs venomExecSemantics venomState venomInst phiDefs phiOrigins phiTransform stateEquiv stateEquivProps list
+  phiWellFormed execEquivProps venomExecProofs venomExecSemantics venomState venomInst venomWf phiDefs phiOrigins phiTransform stateEquiv stateEquivProps list
 
 (* ==========================================================================
    Instruction Step Lemmas
