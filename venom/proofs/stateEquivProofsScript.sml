@@ -204,7 +204,8 @@ Theorem sstore_preserves:
     state_equiv vars s1 s2 ==>
     state_equiv vars (sstore key v s1) (sstore key v s2)
 Proof
-  rw[state_equiv_def, execution_equiv_def, sstore_def, lookup_var_def]
+  rw[state_equiv_def, execution_equiv_def, sstore_def,
+     contract_storage_def, lookup_var_def, LET_THM]
 QED
 
 Theorem tstore_preserves:
@@ -212,7 +213,8 @@ Theorem tstore_preserves:
     state_equiv vars s1 s2 ==>
     state_equiv vars (tstore key v s1) (tstore key v s2)
 Proof
-  rw[state_equiv_def, execution_equiv_def, tstore_def, lookup_var_def]
+  rw[state_equiv_def, execution_equiv_def, tstore_def,
+     contract_transient_def, lookup_var_def, LET_THM]
 QED
 
 Theorem write_memory_with_expansion_preserves:
@@ -267,7 +269,8 @@ Theorem sload_same:
     state_equiv vars s1 s2 ==>
     sload key s1 = sload key s2
 Proof
-  rw[sload_def, state_equiv_def, execution_equiv_def]
+  rw[sload_def, contract_storage_def,
+     state_equiv_def, execution_equiv_def]
 QED
 
 Theorem tload_same:
@@ -275,7 +278,8 @@ Theorem tload_same:
     state_equiv vars s1 s2 ==>
     tload key s1 = tload key s2
 Proof
-  rw[tload_def, state_equiv_def, execution_equiv_def]
+  rw[tload_def, contract_transient_def,
+     state_equiv_def, execution_equiv_def]
 QED
 
 (* ==========================================================================
@@ -306,7 +310,8 @@ Theorem sstore_execution_preserves[local]:
     execution_equiv vars s1 s2 ==>
     execution_equiv vars (sstore key val s1) (sstore key val s2)
 Proof
-  rw[execution_equiv_def, sstore_def, lookup_var_def]
+  rw[execution_equiv_def, sstore_def, contract_storage_def,
+     lookup_var_def, LET_THM]
 QED
 
 Theorem tstore_execution_preserves[local]:
@@ -314,7 +319,8 @@ Theorem tstore_execution_preserves[local]:
     execution_equiv vars s1 s2 ==>
     execution_equiv vars (tstore key val s1) (tstore key val s2)
 Proof
-  rw[execution_equiv_def, tstore_def, lookup_var_def]
+  rw[execution_equiv_def, tstore_def, contract_transient_def,
+     lookup_var_def, LET_THM]
 QED
 
 Theorem halt_state_execution_preserves[local]:
@@ -356,7 +362,7 @@ Theorem sload_execution_same[local]:
     execution_equiv vars s1 s2 ==>
     sload key s1 = sload key s2
 Proof
-  rw[execution_equiv_def, sload_def]
+  rw[execution_equiv_def, sload_def, contract_storage_def]
 QED
 
 Theorem tload_execution_same[local]:
@@ -364,7 +370,7 @@ Theorem tload_execution_same[local]:
     execution_equiv vars s1 s2 ==>
     tload key s1 = tload key s2
 Proof
-  rw[execution_equiv_def, tload_def]
+  rw[execution_equiv_def, tload_def, contract_transient_def]
 QED
 
 Theorem eval_operand_execution_equiv[local]:

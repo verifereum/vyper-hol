@@ -105,7 +105,7 @@ Triviality step_inst_pure2_equiv:
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
     MEM inst.inst_opcode
       [ADD; SUB; MUL; Div; SDIV; Mod; SMOD; Exp;
-       AND; OR; XOR; SHL; SHR; SAR; SIGNEXTEND;
+       AND; OR; XOR; SHL; SHR; SAR; SIGNEXTEND; BYTE;
        EQ; LT; GT; SLT; SGT; GEP] ==>
     result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
@@ -166,6 +166,7 @@ Proof
   rw[] >> simp[step_inst_base_def] >>
   irule exec_read1_result_equiv >> simp[] >> rw[] >>
   gvs[mload_def, sload_def, tload_def,
+      contract_storage_def, contract_transient_def,
       state_equiv_def, execution_equiv_def]
 QED
 
@@ -575,7 +576,8 @@ Proof
   `s1.vs_memory = s2.vs_memory /\ s1.vs_accounts = s2.vs_accounts /\
    s1.vs_logs = s2.vs_logs /\ s1.vs_call_ctx = s2.vs_call_ctx /\
    s1.vs_tx_ctx = s2.vs_tx_ctx /\ s1.vs_block_ctx = s2.vs_block_ctx /\
-   s1.vs_prev_hashes = s2.vs_prev_hashes`
+   s1.vs_prev_hashes = s2.vs_prev_hashes /\
+   s1.vs_transient = s2.vs_transient`
     by fs[state_equiv_def, execution_equiv_def] >>
   simp[read_memory_def, make_venom_call_state_def,
        make_sub_tx_def, make_rollback_def, venom_to_tx_params_def,
@@ -602,7 +604,8 @@ Proof
   `s1.vs_memory = s2.vs_memory /\ s1.vs_accounts = s2.vs_accounts /\
    s1.vs_logs = s2.vs_logs /\ s1.vs_call_ctx = s2.vs_call_ctx /\
    s1.vs_tx_ctx = s2.vs_tx_ctx /\ s1.vs_block_ctx = s2.vs_block_ctx /\
-   s1.vs_prev_hashes = s2.vs_prev_hashes`
+   s1.vs_prev_hashes = s2.vs_prev_hashes /\
+   s1.vs_transient = s2.vs_transient`
     by fs[state_equiv_def, execution_equiv_def] >>
   simp[read_memory_def, make_venom_delegatecall_state_def,
        make_sub_tx_def, make_rollback_def, venom_to_tx_params_def,
@@ -629,7 +632,8 @@ Proof
   `s1.vs_memory = s2.vs_memory /\ s1.vs_accounts = s2.vs_accounts /\
    s1.vs_logs = s2.vs_logs /\ s1.vs_call_ctx = s2.vs_call_ctx /\
    s1.vs_tx_ctx = s2.vs_tx_ctx /\ s1.vs_block_ctx = s2.vs_block_ctx /\
-   s1.vs_prev_hashes = s2.vs_prev_hashes`
+   s1.vs_prev_hashes = s2.vs_prev_hashes /\
+   s1.vs_transient = s2.vs_transient`
     by fs[state_equiv_def, execution_equiv_def] >>
   simp[read_memory_def, make_venom_create_state_def,
        make_sub_tx_def, make_rollback_def, venom_to_tx_params_def,
@@ -731,7 +735,7 @@ Proof
   (* Dispatch: derive MEM for the opcode's category, then use helper *)
   FIRST [
     `MEM inst.inst_opcode [ADD;SUB;MUL;Div;SDIV;Mod;SMOD;Exp;
-       AND;OR;XOR;SHL;SHR;SAR;SIGNEXTEND;EQ;LT;GT;SLT;SGT;GEP]`
+       AND;OR;XOR;SHL;SHR;SAR;SIGNEXTEND;BYTE;EQ;LT;GT;SLT;SGT;GEP]`
        by simp[] >>
       drule_all step_inst_pure2_equiv >> simp[],
     `MEM inst.inst_opcode [NOT;ISZERO]` by simp[] >>

@@ -50,6 +50,15 @@ End
    If n >= 31, w is already fully represented.
    Otherwise, extend sign bit of byte n across higher bytes.
    Matches EVM SIGNEXTEND semantics. *)
+(* EVM BYTE: extract n-th byte (big-endian) from value.
+   byte(n, x) = if n >= 32 then 0 else (x >> ((31-n)*8)) & 0xFF *)
+Definition evm_byte_def:
+  evm_byte (n : bytes32) (x : bytes32) : bytes32 =
+    if w2n n >= 32 then 0w
+    else word_and (word_lsr x ((31 - w2n n) * 8))
+                  (n2w 255)
+End
+
 Definition sign_extend_def:
   sign_extend (n:bytes32) (w:bytes32) : bytes32 =
     if w2n n > 30 then w
@@ -256,18 +265,25 @@ Definition make_sub_tx_def:
        authorizationList := [] |>
 End
 
-(* Shared: build initial rollback and accesses *)
+(* Shared: build initial rollback and accesses.
+   ts = caller's transient storage, wrapped per-address so the EVM
+   sub-execution can TLOAD/TSTORE correctly. *)
 Definition make_rollback_def:
-  make_rollback accounts (caller:address) (target:address) =
+  make_rollback accounts (ts : transient_storage)
+                (caller:address) (target:address) =
     let accesses = <| addresses := fINSERT caller (fINSERT target fEMPTY);
                       storageKeys := fEMPTY |> in
     <| accounts := accounts;
-       tStorage := empty_transient_storage;
+       tStorage := ts;
        accesses := accesses;
        toDelete := [] |>
 End
 
-(* Build an EVM execution_state for CALL/STATICCALL *)
+
+
+(* Build an EVM execution_state for CALL/STATICCALL.
+   vs_accounts already has the current contract's latest SSTORE writes
+   (sstore writes through vs_accounts directly). *)
 Definition make_venom_call_state_def:
   make_venom_call_state s (target:address) gas value calldata code is_static =
     let caller = s.vs_call_ctx.cc_address in
@@ -275,7 +291,8 @@ Definition make_venom_call_state_def:
     let ctxt = initial_context target code is_static
                  empty_return_destination tx in
     let accounts = transfer_value caller target value s.vs_accounts in
-    let rb = make_rollback accounts caller target in
+    let ts = s.vs_transient in
+    let rb = make_rollback accounts ts caller target in
     <| contexts := [(ctxt, rb)];
        txParams := venom_to_tx_params s;
        rollback := rb;
@@ -296,7 +313,8 @@ Definition make_venom_delegatecall_state_def:
     let tx = make_sub_tx original_caller caller call_value gas calldata in
     let ctxt = initial_context caller code is_static
                  empty_return_destination tx in
-    let rb = make_rollback s.vs_accounts caller target in
+    let ts = s.vs_transient in
+    let rb = make_rollback s.vs_accounts ts caller target in
     <| contexts := [(ctxt, rb)];
        txParams := venom_to_tx_params s;
        rollback := rb;
@@ -313,7 +331,8 @@ Definition make_venom_create_state_def:
     let ctxt = initial_context new_address init_code F
                  (Code new_address) tx in
     let accounts = transfer_value caller new_address value s.vs_accounts in
-    let rb = make_rollback accounts caller new_address in
+    let ts = s.vs_transient in
+    let rb = make_rollback accounts ts caller new_address in
     <| contexts := [(ctxt, rb)];
        txParams := venom_to_tx_params s;
        rollback := rb;
@@ -323,7 +342,15 @@ End
 (* Extract result from verifereum execution into Venom state update.
    output_val: function mapping success to output word
      (CALL: \_ => 1w, CREATE: \addr => w2w addr)
-   update_mem: whether to copy returndata into memory *)
+
+   Contract storage lives in vs_accounts (the account's storage field).
+   On success, vs_accounts gets the post-execution accounts from
+   rollback.accounts (includes reentrancy/DELEGATECALL storage changes).
+   On revert, vs_accounts is restored to s.vs_accounts (pre-call).
+
+   Transient storage (EIP-1153) is tracked separately in rollback.tStorage.
+   On success we extract the caller's transient storage; on revert we
+   keep the pre-call value. *)
 Definition extract_venom_result_def:
   extract_venom_result s output_val retOff retSize run_result =
     case run_result of
@@ -332,10 +359,6 @@ Definition extract_venom_result_def:
       (case final_state.contexts of
        | [(ctxt, _)] =>
            let returndata = ctxt.returnData in
-           (* verifereum tracks live state in rollback.accounts
-              (SSTORE → update_accounts → s.rollback.accounts),
-              so on success this includes callee's storage changes.
-              On revert/failure, restore pre-call accounts. *)
            let (success, accounts) =
              (case result of
               | INR NONE => (T, final_state.rollback.accounts)
@@ -347,12 +370,16 @@ Definition extract_venom_result_def:
               | _ => []) in
            let output : bytes32 =
              if success then output_val else 0w in
+           let new_transient =
+             if success then final_state.rollback.tStorage
+             else s.vs_transient in
            let s' = s with <|
              vs_returndata := returndata;
              vs_accounts := accounts;
              vs_logs := s.vs_logs ++ new_logs;
              vs_memory := (write_memory_with_expansion retOff
-                             (TAKE retSize returndata) s).vs_memory
+                             (TAKE retSize returndata) s).vs_memory;
+             vs_transient := new_transient
            |> in
            SOME (output, s')
        | _ => NONE)
@@ -472,6 +499,7 @@ Definition step_inst_base_def:
     | SHR => exec_pure2 (\n w. word_lsr w (w2n n)) inst s
     | SAR => exec_pure2 (\n w. word_asr w (w2n n)) inst s
     | SIGNEXTEND => exec_pure2 sign_extend inst s
+    | BYTE => exec_pure2 evm_byte inst s
 
     (* Memory
        Convention: all operands in semantic (EVM doc) order.
@@ -1006,14 +1034,22 @@ End
    -------------------------------------------------------------------------- *)
 
 (* Side-effect merge: keep callee's shared mutable state, caller's locals *)
+(* Merge callee's side effects back into caller after INVOKE.
+   Internal function calls share the same contract, so ALL mutable
+   state (memory, storage, accounts, logs, immutables, allocas, etc.)
+   must be propagated.  Only caller-local fields are kept:
+   vs_vars, vs_params, vs_current_bb, vs_inst_idx, vs_prev_bb,
+   vs_halted, and the context fields (call/tx/block/code/data/labels/hashes). *)
 Definition merge_callee_state_def:
   merge_callee_state caller callee =
     caller with <|
       vs_memory     := callee.vs_memory;
-      vs_storage    := callee.vs_storage;
       vs_transient  := callee.vs_transient;
       vs_accounts   := callee.vs_accounts;
-      vs_returndata := callee.vs_returndata
+      vs_returndata := callee.vs_returndata;
+      vs_logs       := callee.vs_logs;
+      vs_immutables := callee.vs_immutables;
+      vs_allocas    := callee.vs_allocas
     |>
 End
 

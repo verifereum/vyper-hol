@@ -109,13 +109,13 @@ QED
 Theorem sstore_idx[local]:
   !k v s n. sstore k v (s with vs_inst_idx := n) =
             (sstore k v s) with vs_inst_idx := n
-Proof simp[sstore_def]
+Proof simp[sstore_def, contract_storage_def, LET_THM]
 QED
 
 Theorem tstore_idx[local]:
   !k v s n. tstore k v (s with vs_inst_idx := n) =
             (tstore k v s) with vs_inst_idx := n
-Proof simp[tstore_def]
+Proof simp[tstore_def, contract_transient_def, LET_THM]
 QED
 
 Theorem mcopy_idx[local]:
@@ -132,12 +132,12 @@ QED
 
 Theorem sload_idx[local]:
   !k s n. sload k (s with vs_inst_idx := n) = sload k s
-Proof simp[sload_def]
+Proof simp[sload_def, contract_storage_def]
 QED
 
 Theorem tload_idx[local]:
   !k s n. tload k (s with vs_inst_idx := n) = tload k s
-Proof simp[tload_def]
+Proof simp[tload_def, contract_transient_def]
 QED
 
 (* ================================================================
@@ -252,6 +252,7 @@ Theorem make_venom_delegatecall_state_idx[local]:
     make_venom_delegatecall_state s target gas calldata code is_static
 Proof
   simp[make_venom_delegatecall_state_def, LET_THM, venom_to_tx_params_idx]
+
 QED
 
 Theorem make_venom_create_state_idx[local]:
@@ -261,6 +262,7 @@ Theorem make_venom_create_state_idx[local]:
     make_venom_create_state s new_address gas value init_code
 Proof
   simp[make_venom_create_state_def, LET_THM, venom_to_tx_params_idx]
+
 QED
 
 Theorem extract_venom_result_idx[local]:

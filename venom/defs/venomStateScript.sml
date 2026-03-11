@@ -8,7 +8,7 @@
 
 Theory venomState
 Ancestors
-  vfmTypes vfmState
+  vfmTypes vfmState vfmContext
 
 (* --------------------------------------------------------------------------
    Venom uses the same basic types as EVM (from verifereum):
@@ -84,8 +84,7 @@ End
 Datatype:
   venom_state = <|
     vs_memory : byte list;           (* Memory as byte list (like verifereum) *)
-    vs_storage : storage;            (* Contract storage *)
-    vs_transient : storage;          (* Transient storage (EIP-1153) *)
+    vs_transient : transient_storage; (* Transient storage (EIP-1153), per-address *)
     vs_vars : var_env;               (* SSA variable bindings *)
     vs_prev_bb : string option;      (* Previous basic block (for PHI resolution) *)
     vs_current_bb : string;          (* Current basic block label *)
@@ -145,8 +144,7 @@ End
 Definition init_venom_state_def:
   init_venom_state entry_label = <|
     vs_memory := [];
-    vs_storage := empty_storage;
-    vs_transient := empty_storage;
+    vs_transient := empty_transient_storage;
     vs_vars := FEMPTY;
     vs_prev_bb := NONE;
     vs_current_bb := entry_label;
@@ -227,24 +225,41 @@ Definition mstore_def:
     s with vs_memory := TAKE offset expanded ++ bytes ++ DROP (offset + 32) expanded
 End
 
-(* Storage operations - using verifereum storage type *)
+(* Contract storage: stored in the current account within vs_accounts.
+   sload/sstore read/write through vs_accounts directly. *)
+Definition contract_storage_def:
+  contract_storage s =
+    (lookup_account s.vs_call_ctx.cc_address s.vs_accounts).storage
+End
+
 Definition sload_def:
-  sload key s = lookup_storage key s.vs_storage
+  sload key s = lookup_storage key (contract_storage s)
 End
 
 Definition sstore_def:
   sstore key value s =
-    s with vs_storage := update_storage key value s.vs_storage
+    let addr = s.vs_call_ctx.cc_address in
+    let acct = lookup_account addr s.vs_accounts in
+    s with vs_accounts :=
+      (addr =+ (acct with storage := update_storage key value acct.storage))
+        s.vs_accounts
 End
 
-(* Transient storage operations *)
+(* Transient storage operations — per-address, keyed by cc_address *)
+Definition contract_transient_def:
+  contract_transient s = s.vs_transient s.vs_call_ctx.cc_address
+End
+
 Definition tload_def:
-  tload key s = lookup_storage key s.vs_transient
+  tload key s = lookup_storage key (contract_transient s)
 End
 
 Definition tstore_def:
   tstore key value s =
-    s with vs_transient := update_storage key value s.vs_transient
+    let addr = s.vs_call_ctx.cc_address in
+    let ts = s.vs_transient addr in
+    s with vs_transient :=
+      (addr =+ update_storage key value ts) s.vs_transient
 End
 
 (* Control flow *)

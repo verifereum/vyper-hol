@@ -37,7 +37,6 @@ Definition valid_state_rel_def:
       s1.vs_block_ctx = s2.vs_block_ctx /\
       s1.vs_accounts = s2.vs_accounts /\
       s1.vs_memory = s2.vs_memory /\
-      s1.vs_storage = s2.vs_storage /\
       s1.vs_transient = s2.vs_transient /\
       s1.vs_returndata = s2.vs_returndata /\
       s1.vs_halted = s2.vs_halted /\
@@ -59,7 +58,6 @@ Definition valid_state_rel_def:
       s1.vs_block_ctx = s2.vs_block_ctx /\
       s1.vs_accounts = s2.vs_accounts /\
       s1.vs_memory = s2.vs_memory /\
-      s1.vs_storage = s2.vs_storage /\
       s1.vs_transient = s2.vs_transient /\
       s1.vs_returndata = s2.vs_returndata /\
       s1.vs_halted = s2.vs_halted /\
@@ -99,7 +97,6 @@ Definition valid_state_rel_def:
       t1.vs_block_ctx = t2.vs_block_ctx /\
       t1.vs_accounts = t2.vs_accounts /\
       t1.vs_memory = t2.vs_memory /\
-      t1.vs_storage = t2.vs_storage /\
       t1.vs_transient = t2.vs_transient /\
       t1.vs_returndata = t2.vs_returndata /\
       t1.vs_halted = t2.vs_halted /\
@@ -123,7 +120,6 @@ Definition valid_state_rel_def:
       t1.vs_block_ctx = t2.vs_block_ctx /\
       t1.vs_accounts = t2.vs_accounts /\
       t1.vs_memory = t2.vs_memory /\
-      t1.vs_storage = t2.vs_storage /\
       t1.vs_transient = t2.vs_transient /\
       t1.vs_returndata = t2.vs_returndata /\
       t1.vs_halted = t2.vs_halted /\
