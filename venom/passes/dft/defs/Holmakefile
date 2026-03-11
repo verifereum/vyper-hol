@@ -1,0 +1,7 @@
+# DFT pass definitions
+# ../../.. = venom/ (for venomInst, venomState, venomEffects, venomWf)
+# ../../../analysis/* = analysis directories
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics \
+  ../../../analysis/stack_order/defs \
+  ../../../analysis/cfg/defs \
+  ../../../analysis/liveness/defs

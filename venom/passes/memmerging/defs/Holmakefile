@@ -1,0 +1,2 @@
+# Memmerging pass definitions
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../defs ../../../simulation ../../../simulation/defs ../../../analysis/dfg ../../../analysis/dfg/defs ../../../../syntax ../../../../semantics

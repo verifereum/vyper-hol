@@ -18,4 +18,6 @@ INCLUDES = \
   tail_merge \
   simplify_cfg \
   cfg_normalization \
-  make_ssa
+  make_ssa \
+  memmerging \
+  dft
