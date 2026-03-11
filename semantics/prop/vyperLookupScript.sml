@@ -3,7 +3,7 @@ Ancestors
   vyperMisc vyperContext vyperState vyperStorage vyperInterpreter vyperValue vyperValueOperation
   vyperTyping vyperEncodeDecode
 Libs
-  wordsLib
+  wordsLib intLib
 
 Definition lookup_name_def:
   lookup_name st n = lookup_scopes (string_to_num n) st.scopes
@@ -1081,6 +1081,89 @@ Proof
   gvs[storage_type_of_def]
 QED
 
+Triviality sign_extend_range:
+  ∀v n. 0 < n ⇒
+    let r = if v MOD 2 ** n < 2 ** (n − 1)
+            then &(v MOD 2 ** n) : int
+            else &(v MOD 2 ** n) − &(2 ** n)
+    in -(&(2 ** (n − 1))) ≤ r ∧ r < &(2 ** (n − 1))
+Proof
+  rpt strip_tac >> simp[] >> IF_CASES_TAC >> gvs[] >>
+  `v MOD 2 ** n < 2 ** n` by simp[] >>
+  `2 ** n = 2 * 2 ** (n − 1)` by
+    (Cases_on `n` >> gvs[arithmeticTheory.EXP]) >>
+  conj_tac
+  >- (ONCE_REWRITE_TAC[integerTheory.INT_LE_SUB_LADD] >>
+      simp[integerTheory.INT_ADD_CALCULATE] >> gvs[])
+  >- (simp[integerTheory.INT_LT_SUB_RADD, integerTheory.INT_ADD,
+           integerTheory.INT_LT] >>
+      `v MOD (2 * 2 ** (n-1)) < 2 * 2 ** (n-1)` by simp[] >> DECIDE_TAC)
+QED
+
+Triviality sign_extend_wf_bound:
+  ∀v n. n ≤ 256 ⇒
+    let r = if v MOD 2 ** n < 2 ** (n − 1)
+            then &(v MOD 2 ** n) : int
+            else &(v MOD 2 ** n) − &(2 ** n)
+    in INT_MIN(:256) ≤ r ∧ r ≤ INT_MAX(:256)
+Proof
+  rpt strip_tac >> simp[] >> Cases_on `0 < n`
+  >- (drule sign_extend_range >> disch_then (qspec_then `v` mp_tac) >>
+      simp[] >> strip_tac >>
+      `- &(2 ** 255) ≤ -&(2 ** (n-1)) : int` by
+        (simp[integerTheory.INT_LE_NEG] >> simp[integerTheory.INT_LE]) >>
+      `&(2 ** (n - 1)) ≤ &(2 ** 255) : int` by
+        (`n - 1 ≤ 255` by DECIDE_TAC >> simp[integerTheory.INT_LE]) >>
+      conj_tac
+      >- (irule integerTheory.INT_LE_TRANS >>
+          qexists_tac `-&(2 ** 255)` >> conj_tac >- EVAL_TAC >>
+          irule integerTheory.INT_LE_TRANS >>
+          qexists_tac `-&(2 ** (n-1))` >> gvs[])
+      >- (`57896044618658097711785492504343953926634992332820282019728792003956564819967 + 1 = &(2 ** 255)` by EVAL_TAC >>
+          ONCE_REWRITE_TAC[integerTheory.INT_LE_LT1] >>
+          pop_assum SUBST_ALL_TAC >>
+          irule integerTheory.INT_LTE_TRANS >>
+          qexists_tac `&(2 ** (n-1))` >> gvs[]))
+  >- (`n = 0` by DECIDE_TAC >> gvs[] >> EVAL_TAC)
+QED
+
+(* Pre-evaluated DecimalT sign extension bounds to avoid slow simp on 2^167 *)
+Triviality decimal_range_thm:
+  ∀v. let r = if v MOD 374144419156711147060143317175368453031918731001856 <
+                   187072209578355573530071658587684226515959365500928
+              then &(v MOD 374144419156711147060143317175368453031918731001856) : int
+              else &(v MOD 374144419156711147060143317175368453031918731001856) -
+                   374144419156711147060143317175368453031918731001856
+      in ~187072209578355573530071658587684226515959365500928 ≤ r ∧
+         r < 187072209578355573530071658587684226515959365500928
+Proof
+  gen_tac >>
+  `374144419156711147060143317175368453031918731001856 = 2 ** 168` by EVAL_TAC >>
+  `187072209578355573530071658587684226515959365500928 = 2 ** 167` by EVAL_TAC >>
+  pop_assum (fn t2 => pop_assum (fn t1 =>
+    REWRITE_TAC[t1, t2])) >>
+  mp_tac (Q.SPECL [`v`, `168`] sign_extend_range) >> simp[]
+QED
+
+Triviality decimal_wf_thm:
+  ∀v. let r = if v MOD 374144419156711147060143317175368453031918731001856 <
+                   187072209578355573530071658587684226515959365500928
+              then &(v MOD 374144419156711147060143317175368453031918731001856) : int
+              else &(v MOD 374144419156711147060143317175368453031918731001856) -
+                   374144419156711147060143317175368453031918731001856
+      in ~57896044618658097711785492504343953926634992332820282019728792003956564819968 ≤ r ∧
+         r ≤ 57896044618658097711785492504343953926634992332820282019728792003956564819967
+Proof
+  gen_tac >>
+  `374144419156711147060143317175368453031918731001856 = 2 ** 168` by EVAL_TAC >>
+  `187072209578355573530071658587684226515959365500928 = 2 ** 167` by EVAL_TAC >>
+  pop_assum (fn t2 => pop_assum (fn t1 =>
+    REWRITE_TAC[t1, t2])) >>
+  mp_tac (Q.SPECL [`v`, `168`] sign_extend_wf_bound) >>
+  simp[integer_wordTheory.INT_MIN_def, integer_wordTheory.INT_MAX_def,
+       wordsTheory.dimword_def]
+QED
+
 Theorem decode_value_storable[local]:
   (∀storage offset tv v.
     well_formed_type_value tv ∧
@@ -1109,35 +1192,51 @@ Proof
     AllCaseEqs(), value_has_type_def, well_formed_value_def,
     wordsTheory.w2n_lt, integer_wordTheory.w2i_le,
     integer_wordTheory.w2i_ge, LENGTH_word_to_bytes_be_256] >>
-  rpt strip_tac >> gvs[value_has_type_def, well_formed_value_def]
+  rpt strip_tac >> gvs[value_has_type_def, well_formed_value_def] >>
+  gvs[well_formed_type_value_def] >>
+  (* Integer range goals from decode masking *)
+  TRY (qmatch_goalsub_abbrev_tac `_ MOD m` >>
+       irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
+       qexists_tac `m` >> simp[Abbr`m`] >> NO_TAC) >>
+  (* IntT range: use sign_extend_range via 0 < n assumption *)
+  TRY (first_x_assum (fn th =>
+         mp_tac (MATCH_MP sign_extend_range th)) >>
+       disch_then (qspec_then `w2n (read_slot storage offset)` mp_tac) >>
+       simp[] >> strip_tac >> gvs[] >> NO_TAC) >>
+  (* IntT wf: sign_extend_wf_bound via n ≤ 256 assumption *)
+  TRY (first_x_assum (fn th =>
+         mp_tac (MATCH_MP sign_extend_wf_bound th)) >>
+       disch_then (qspec_then `w2n (read_slot storage offset)` mp_tac) >>
+       simp[] >> strip_tac >> gvs[] >> NO_TAC) >>
+  (* DecimalT range/wf: use pre-evaluated theorems *)
+  TRY (
+    mp_tac (Q.SPEC `w2n (read_slot storage offset)` decimal_range_thm) >>
+    mp_tac (Q.SPEC `w2n (read_slot storage offset)` decimal_wf_thm) >>
+    REWRITE_TAC[LET_THM] >> BETA_TAC >>
+    rpt strip_tac >> gvs[] >> NO_TAC)
   (* Dynamic bytes / StringT: LENGTH bs ≤ max *)
   >- metis_tac[decode_dyn_bytes_LENGTH]
   >- metis_tac[decode_dyn_bytes_LENGTH]
   (* BytesT Fixed *)
-  >- gvs[well_formed_type_value_def, listTheory.LENGTH_TAKE_EQ,
-         LENGTH_word_to_bytes_be_256]
-  >- gvs[well_formed_type_value_def]
+  >- gvs[listTheory.LENGTH_TAKE_EQ, LENGTH_word_to_bytes_be_256]
   (* TupleTV *)
-  >- (gvs[well_formed_type_value_def] >> metis_tac[])
-  >- (gvs[wf_values_EVERY, well_formed_type_value_def] >> metis_tac[])
+  >- metis_tac[]
+  >- (gvs[wf_values_EVERY] >> metis_tac[])
   (* ArrayTV Fixed *)
-  >- (gvs[well_formed_type_value_def] >>
-      imp_res_tac LENGTH_decode_static_array >>
+  >- (imp_res_tac LENGTH_decode_static_array >>
       simp[sparse_has_type_enumerate])
-  >- (gvs[well_formed_type_value_def] >>
-      imp_res_tac LENGTH_decode_static_array >>
+  >- (imp_res_tac LENGTH_decode_static_array >>
       simp[SORTED_enumerate_static_array] >>
       irule wf_sparse_enumerate >> simp[])
   (* ArrayTV Dynamic *)
-  >- (gvs[well_formed_type_value_def] >> simp[all_have_type_EVERY])
-  >- (gvs[well_formed_type_value_def] >>
-      imp_res_tac LENGTH_decode_dyn_array >>
+  >- simp[all_have_type_EVERY]
+  >- (imp_res_tac LENGTH_decode_dyn_array >>
       simp[wf_values_EVERY] >>
       irule arithmeticTheory.LESS_EQ_TRANS >>
       qexists_tac `MIN len max` >> simp[])
   (* StructTV *)
-  >- (gvs[well_formed_type_value_def] >> metis_tac[])
-  >- (gvs[wf_fields_EVERY, well_formed_type_value_def] >> metis_tac[])
+  >- metis_tac[]
+  >- (gvs[wf_fields_EVERY] >> metis_tac[])
 QED
 
 Theorem storable_value_from_lookup:

@@ -1,5 +1,22 @@
 # Agent Guide for vyper-hol workflow
 
+# ⛔⛔⛔ STOP: READ THIS FIRST ⛔⛔⛔
+
+**`hol_send` must NEVER be used to interact with proof state.**
+
+This means: NO `e(...)`, NO `b()`, NO `drop()`, NO `top_goal()`,
+NO `proofManagerLib.*` via `hol_send`. EVER. NO EXCEPTIONS.
+
+Use `hol_state_at` + Edit tool for ALL proof development.
+Use `hol_check_proof` to validate complete proofs.
+`hol_send` is ONLY for read-only queries: `DB.match`, `DB.find`, `type_of`, `EVAL`.
+
+Violating this rule wastes hours of work. If you are tempted to use
+`hol_send` with `e(...)` "just to check something quickly" — DON'T.
+Use `hol_state_at(line, col)` instead.
+
+# ⛔⛔⛔ END MANDATORY RULE ⛔⛔⛔
+
 ## Skills
 
 ```
@@ -16,6 +33,15 @@ Prefer using dedicated tools instead of bash operation:
 - **Grep tool** for searching file contents (not `grep`, `rg`, or `Search` with paths)
 - **Write/Edit tools** for file modifications (not `echo`, `sed`, `awk`)
 - **mcp tools** for hol operations - `hol_send`, `holmake` etc.
+
+## hol_send allowed usage (diagnostic queries ONLY)
+
+- `DB.match`, `DB.find` — searching for theorems
+- `type_of` — checking types
+- `EVAL ``expr``` — evaluating expressions
+- Printing/inspecting theorems
+
+See the ⛔ MANDATORY RULE at the top of this file.
 
 ## Completion Standard
 

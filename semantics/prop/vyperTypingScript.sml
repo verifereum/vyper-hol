@@ -39,6 +39,8 @@ Definition well_formed_type_value_def:
   well_formed_type_value (StructTV fields) =
     (EVERY (well_formed_type_value o SND) fields ∧
      type_slot_size (StructTV fields) ≤ dimword(:256)) ∧
+  well_formed_type_value (BaseTV (UintT n)) = (0 < n ∧ n ≤ 256) ∧
+  well_formed_type_value (BaseTV (IntT n)) = (0 < n ∧ n ≤ 256) ∧
   well_formed_type_value _ = T
 End
 
@@ -104,11 +106,14 @@ End
 
 Definition value_has_type_def:
   (* Unsigned integer *)
-  value_has_type (BaseTV (UintT m)) (IntV (Unsigned n) _) = (n = m) ∧
+  value_has_type (BaseTV (UintT m)) (IntV (Unsigned n) i) =
+    (n = m ∧ 0 ≤ i ∧ i < &(2 ** n)) ∧
   (* Signed integer *)
-  value_has_type (BaseTV (IntT m)) (IntV (Signed n) _) = (n = m) ∧
+  value_has_type (BaseTV (IntT m)) (IntV (Signed n) i) =
+    (n = m ∧ -(&(2 ** (n − 1))) ≤ i ∧ i < &(2 ** (n − 1))) ∧
   (* Decimal *)
-  value_has_type (BaseTV DecimalT) (DecimalV _) = T ∧
+  value_has_type (BaseTV DecimalT) (DecimalV i) =
+    (-(&(2 ** 167)) ≤ i ∧ i < &(2 ** 167)) ∧
   (* Boolean *)
   value_has_type (BaseTV BoolT) (BoolV _) = T ∧
   (* Address *)
@@ -347,9 +352,12 @@ QED
 Theorem value_has_type_inv:
   (value_has_type tv NoneV ⇔ tv = NoneTV) ∧
   (value_has_type tv (BoolV b) ⇔ tv = BaseTV BoolT) ∧
-  (value_has_type tv (IntV (Unsigned n) i) ⇔ tv = BaseTV (UintT n)) ∧
-  (value_has_type tv (IntV (Signed n) i) ⇔ tv = BaseTV (IntT n)) ∧
-  (value_has_type tv (DecimalV d) ⇔ tv = BaseTV DecimalT) ∧
+  (value_has_type tv (IntV (Unsigned n) i) ⇔
+    tv = BaseTV (UintT n) ∧ 0 ≤ i ∧ i < &(2 ** n)) ∧
+  (value_has_type tv (IntV (Signed n) i) ⇔
+    tv = BaseTV (IntT n) ∧ -(&(2 ** (n − 1))) ≤ i ∧ i < &(2 ** (n − 1))) ∧
+  (value_has_type tv (DecimalV d) ⇔
+    tv = BaseTV DecimalT ∧ -(&(2 ** 167)) ≤ d ∧ d < &(2 ** 167)) ∧
   (value_has_type tv (FlagV m k) ⇔ tv = FlagTV m) ∧
   (value_has_type tv (StringV m s) ⇔ tv = BaseTV (StringT m) ∧ LENGTH s ≤ m) ∧
   (value_has_type tv (BytesV (Dynamic m) bs) ⇔

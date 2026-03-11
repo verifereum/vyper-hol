@@ -317,39 +317,207 @@ QED
 
 (* ===== encode_decode_roundtrip_ok: UintT ===== *)
 
+Theorem w2n_i2w_num[local]:
+  ∀i. 0 ≤ i ∧ Num i < dimword(:256) ⇒
+    w2n ((i2w i) : bytes32) = Num i
+Proof
+  rpt strip_tac >>
+  `&(w2n ((i2w i):bytes32)) = &(Num i) :int` suffices_by
+    simp[integerTheory.INT_INJ] >>
+  ONCE_REWRITE_TAC [integer_wordTheory.w2n_i2w] >>
+  `&(Num i):int = i` by (
+    REWRITE_TAC [integerTheory.INT_OF_NUM] >> simp[]) >>
+  pop_assum SUBST_ALL_TAC >>
+  irule integerTheory.INT_LESS_MOD >>
+  conj_tac >- simp[] >>
+  Cases_on `i` >> gvs[integerTheory.INT_OF_NUM]
+QED
+
 Theorem encode_decode_roundtrip_ok_uint[local]:
-  ∀n i. 0 ≤ i ∧ i < &dimword(:256) ⇒
+  ∀n i. 0 ≤ i ∧ i < &(2 ** n) ∧ n ≤ 256 ⇒
     encode_decode_roundtrip_ok (BaseTV (UintT n)) (IntV (Unsigned n) i)
 Proof
   rw[] >> irule decode_value_single_slot >> simp[] >>
   qexists_tac `i2w i` >>
   simp[encode_base_to_slot_def, decode_base_from_slot_def] >>
-  simp[integer_wordTheory.w2n_i2w,
-       integerTheory.INT_LESS_MOD, integerTheory.INT_OF_NUM]
+  `Num i < 2 ** n` by (
+    Cases_on `i` >> gvs[]) >>
+  `Num i < dimword(:256)` by (
+    irule LESS_LESS_EQ_TRANS >> qexists_tac `2 ** n` >>
+    simp[wordsTheory.dimword_def]) >>
+  simp[w2n_i2w_num, integerTheory.INT_OF_NUM]
+QED
+
+(* Helper: sign-extension roundtrip for non-negative integers *)
+Theorem sign_extend_roundtrip_nonneg[local]:
+  ∀n (i:int). 0 ≤ i ∧ i < &(2 ** (n − 1)) ∧ n ≤ 256 ∧ 0 < n ⇒
+    (let v = w2n ((i2w i):bytes32) MOD 2 ** n in
+       if v < 2 ** (n − 1) then &v else &v − &(2 ** n)) = i
+Proof
+  rpt strip_tac >>
+  `Num i < 2 ** (n − 1)` by (Cases_on `i` >> gvs[]) >>
+  `Num i < 2 ** n` by (
+    irule LESS_LESS_EQ_TRANS >> qexists_tac `2 ** (n − 1)` >> simp[]) >>
+  `Num i < dimword(:256)` by (
+    irule LESS_LESS_EQ_TRANS >> qexists_tac `2 ** n` >>
+    simp[wordsTheory.dimword_def]) >>
+  `w2n ((i2w i):bytes32) MOD 2 ** n = Num i` by
+    simp[w2n_i2w_num] >>
+  simp[integerTheory.INT_OF_NUM]
+QED
+
+(* Helper: w2n of i2w for negative values *)
+Theorem w2n_i2w_neg[local]:
+  ∀m. 0 < m ∧ m < dimword(:256) ⇒
+    w2n ((i2w (-&m)):bytes32) = dimword(:256) − m
+Proof
+  rw[integer_wordTheory.i2w_def, integerTheory.INT_NEGNEG,
+     integerTheory.NUM_OF_INT, wordsTheory.word_2comp_n2w,
+     wordsTheory.w2n_n2w]
+QED
+
+(* Helper: 2^a divides 2^b when a ≤ b *)
+Theorem twoexp_divides[local]:
+  ∀a b. a ≤ b ⇒ (2 ** b − 2 ** a) MOD 2 ** a = 0
+Proof
+  rpt strip_tac >>
+  `2 ** a ≤ 2 ** b` by simp[bitTheory.TWOEXP_MONO2] >>
+  `∃k. 2n ** b − 2 ** a = k * 2 ** a` by (
+    qexists_tac `2 ** (b − a) − 1` >>
+    `2n ** b = 2 ** a * 2 ** (b − a)` by simp[GSYM EXP_ADD] >>
+    gvs[] >>
+    ONCE_REWRITE_TAC [RIGHT_SUB_DISTRIB] >>
+    simp[MULT_COMM]) >>
+  simp[]
+QED
+
+(* Helper: (dimword - m) MOD 2^n = 2^n - m *)
+Theorem sub_mod_dimword[local]:
+  ∀m n. 0 < m ∧ m ≤ 2 ** n ∧ n ≤ 256 ⇒
+    (dimword(:256) − m) MOD 2 ** n = 2 ** n − m
+Proof
+  rpt strip_tac >>
+  `2 ** n ≤ dimword(:256)` by (
+    simp[wordsTheory.dimword_def] >>
+    irule bitTheory.TWOEXP_MONO2 >> simp[]) >>
+  (* Express dimword as (q+1) * 2^n for some q *)
+  `∃q. dimword(:256) = (q + 1) * 2 ** n` by (
+    `dimindex(:256) = 256` by EVAL_TAC >>
+    qexists_tac `2 ** (256 − n) − 1` >>
+    REWRITE_TAC [wordsTheory.dimword_def] >>
+    pop_assum SUBST1_TAC >>
+    simp[SUB_ADD, GSYM EXP_ADD]) >>
+  (* Now dimword - m = (q+1) * 2^n - m, use MOD_TIMES_SUB *)
+  simp[MOD_TIMES_SUB]
+QED
+
+(* Helper: m < dimword(:256) from m ≤ 2^(n-1) and n ≤ 256 *)
+Theorem le_exp_lt_dimword[local]:
+  ∀m k. m ≤ 2 ** k ∧ k < 256 ⇒ m < dimword(:256)
+Proof
+  rpt strip_tac >>
+  `2 ** k < dimword(:256)` by (
+    `dimindex(:256) = 256` by EVAL_TAC >>
+    REWRITE_TAC [wordsTheory.dimword_def] >>
+    pop_assum SUBST1_TAC >>
+    irule bitTheory.TWOEXP_MONO >> simp[]) >>
+  DECIDE_TAC
+QED
+
+(* Helper: for negative i, w2n (i2w i) MOD 2^n = Num(i + &(2^n)) *)
+Theorem w2n_i2w_mod_neg[local]:
+  ∀n (i:int). i < 0 ∧ -(&(2 ** (n − 1))) ≤ i ∧ n ≤ 256 ∧ 0 < n ⇒
+    w2n ((i2w i):bytes32) MOD 2 ** n = Num (i + &(2 ** n))
+Proof
+  rpt strip_tac >>
+  Cases_on `i` >> gvs[] >>
+  rename1 `m ≤ 2 ** (n − 1)` >>
+  `m ≤ 2 ** n` by (
+    irule LESS_EQ_TRANS >> qexists_tac `2 ** (n − 1)` >> simp[]) >>
+  (* Simplify RHS *)
+  `(-&m + &(2 ** n)):int = &(2 ** n − m)` by (
+    ONCE_REWRITE_TAC [integerTheory.INT_ADD_COMM] >>
+    REWRITE_TAC [GSYM integerTheory.int_sub] >>
+    simp[integerTheory.INT_SUB]) >>
+  simp[integerTheory.NUM_OF_INT] >>
+  (* Simplify LHS *)
+  `m < dimword(:256)` by (irule le_exp_lt_dimword >> qexists_tac `n − 1` >> simp[]) >>
+  `w2n ((i2w (-&m)):bytes32) = dimword(:256) − m` by simp[w2n_i2w_neg] >>
+  pop_assum (fn th => REWRITE_TAC [th]) >>
+  irule sub_mod_dimword >> simp[]
+QED
+
+(* Helper: sign-extension roundtrip for negative integers *)
+Theorem sign_extend_roundtrip_neg[local]:
+  ∀n (i:int). i < 0 ∧ -(&(2 ** (n − 1))) ≤ i ∧ n ≤ 256 ∧ 0 < n ⇒
+    (let v = w2n ((i2w i):bytes32) MOD 2 ** n in
+       if v < 2 ** (n − 1) then &v else &v − &(2 ** n)) = i
+Proof
+  rpt strip_tac >>
+  `w2n ((i2w i):bytes32) MOD 2 ** n = Num (i + &(2 ** n))` by
+    (irule w2n_i2w_mod_neg >> simp[]) >>
+  simp[] >>
+  `0 ≤ i + &(2 ** n)` by (
+    Cases_on `i` >> gvs[] >>
+    rename1 `m ≤ 2 ** (n − 1)` >>
+    `m ≤ 2 ** n` by (
+      irule LESS_EQ_TRANS >> qexists_tac `2 ** (n − 1)` >> simp[]) >>
+    simp[integerTheory.INT_ADD_CALCULATE]) >>
+  `Num (i + &(2 ** n)) ≥ 2 ** (n − 1)` by (
+    Cases_on `i` >> gvs[] >>
+    rename1 `m ≤ 2 ** (n − 1)` >>
+    `m ≤ 2 ** n` by (
+      irule LESS_EQ_TRANS >> qexists_tac `2 ** (n − 1)` >> simp[]) >>
+    simp[integerTheory.INT_ADD_CALCULATE, integerTheory.NUM_OF_INT] >>
+    `n = SUC (n − 1)` by simp[] >>
+    pop_assum (fn th => REWRITE_TAC [Once th, EXP]) >>
+    DECIDE_TAC) >>
+  simp[] >>
+  Cases_on `i` >> gvs[] >>
+  rename1 `m ≤ 2 ** (n − 1)` >>
+  `m ≤ 2 ** n` by (
+    irule LESS_EQ_TRANS >> qexists_tac `2 ** (n − 1)` >> simp[]) >>
+  `Num (-&m + &(2 ** n)) = 2 ** n − m` by
+    simp[integerTheory.INT_ADD_CALCULATE, integerTheory.NUM_OF_INT] >>
+  simp[GSYM integerTheory.INT_SUB, integerTheory.int_sub] >>
+  ONCE_REWRITE_TAC [integerTheory.INT_ADD_COMM] >>
+  simp[integerTheory.INT_ADD_ASSOC, integerTheory.INT_ADD_RINV]
 QED
 
 (* ===== encode_decode_roundtrip_ok: IntT ===== *)
 
 Theorem encode_decode_roundtrip_ok_int[local]:
-  ∀n i. INT_MIN(:256) ≤ i ∧ i ≤ INT_MAX(:256) ⇒
+  ∀n i. -(&(2 ** (n − 1))) ≤ i ∧ i < &(2 ** (n − 1)) ∧ n ≤ 256 ∧ 0 < n ⇒
     encode_decode_roundtrip_ok (BaseTV (IntT n)) (IntV (Signed n) i)
 Proof
   rw[] >> irule decode_value_single_slot >> simp[] >>
   qexists_tac `i2w i` >>
   simp[encode_base_to_slot_def, decode_base_from_slot_def] >>
-  simp[integer_wordTheory.w2i_i2w]
+  Cases_on `0 ≤ i`
+  >- (drule_all sign_extend_roundtrip_nonneg >> simp[])
+  >>
+  `i < 0` by gvs[integerTheory.INT_NOT_LE] >>
+  drule_all sign_extend_roundtrip_neg >> simp[]
 QED
 
 (* ===== encode_decode_roundtrip_ok: DecimalT ===== *)
 
 Theorem encode_decode_roundtrip_ok_decimal[local]:
-  ∀i. INT_MIN(:256) ≤ i ∧ i ≤ INT_MAX(:256) ⇒
+  ∀i. -(&(2 ** 167)) ≤ i ∧ i < &(2 ** 167) ⇒
     encode_decode_roundtrip_ok (BaseTV DecimalT) (DecimalV i)
 Proof
-  rw[] >> irule decode_value_single_slot >> simp[] >>
+  rpt strip_tac >> irule decode_value_single_slot >> simp[] >>
   qexists_tac `i2w i` >>
-  simp[encode_base_to_slot_def, decode_base_from_slot_def] >>
-  simp[integer_wordTheory.w2i_i2w]
+  REWRITE_TAC[encode_base_to_slot_def, decode_base_from_slot_def] >>
+  `(let v = w2n ((i2w i):bytes32) MOD 2 ** 168 in
+     if v < 2 ** 167 then &v else &v − &(2 ** 168)) = i` suffices_by simp[] >>
+  `167 = 168 − 1n` by simp[] >>
+  pop_assum (fn th => REWRITE_TAC [th]) >>
+  Cases_on `0 ≤ i`
+  >- (irule sign_extend_roundtrip_nonneg >> simp[] >> gvs[])
+  >>
+  `i < 0` by gvs[integerTheory.INT_NOT_LE] >>
+  irule sign_extend_roundtrip_neg >> simp[] >> gvs[]
 QED
 
 (* ===== encode_decode_roundtrip_ok: FlagTV ===== *)
@@ -737,7 +905,8 @@ Proof
        COND_RAND, COND_RATOR, bounds_compat_def,
        encode_dyn_bytes_slots_def] >>
   fs[well_formed_value_def, bounds_compat_def,
-     well_formed_type_value_def, type_slot_size_def] >>
+     well_formed_type_value_def, type_slot_size_def,
+     value_has_type_def] >>
   rpt strip_tac >>
   FIRST [
     irule encode_decode_roundtrip_ok_uint >> simp[],
@@ -749,7 +918,7 @@ Proof
     irule encode_decode_roundtrip_ok_dyn_bytes >> simp[],
     irule encode_decode_roundtrip_ok_address >> simp[],
     irule encode_decode_roundtrip_ok_flag >> simp[]
-  ]
+  ] >> gvs[]
 QED
 
 (* ===== Compound Type Roundtrip Helpers ===== *)

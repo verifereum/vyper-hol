@@ -88,10 +88,13 @@ val () = cv_auto_trans type_slot_size_def;
 
 Definition encode_base_to_slot_def:
   encode_base_to_slot (IntV (Unsigned n) i) (BaseTV (UintT m)) =
-    (if n = m then SOME (i2w i) else NONE) /\
+    (if n = m ∧ 0 ≤ i ∧ i < &(2 ** n) then SOME (i2w i) else NONE) /\
   encode_base_to_slot (IntV (Signed n) i) (BaseTV (IntT m)) =
-    (if n = m then SOME (i2w i) else NONE) /\
-  encode_base_to_slot (DecimalV i) (BaseTV DecimalT) = SOME (i2w i) /\
+    (if n = m ∧ -(&(2 ** (n − 1))) ≤ i ∧ i < &(2 ** (n − 1))
+     then SOME (i2w i) else NONE) /\
+  encode_base_to_slot (DecimalV i) (BaseTV DecimalT) =
+    (if -(&(2 ** 167)) ≤ i ∧ i < &(2 ** 167)
+     then SOME (i2w i) else NONE) /\
   encode_base_to_slot (BoolV b) (BaseTV BoolT) = SOME (bool_to_slot b) /\
   encode_base_to_slot (BytesV (Fixed m) bs) (BaseTV AddressT) =
     (if LENGTH bs = m /\ m = 20
