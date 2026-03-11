@@ -110,10 +110,13 @@ val () = cv_auto_trans encode_base_to_slot_def;
 
 Definition decode_base_from_slot_def:
   decode_base_from_slot (slot : bytes32) (BaseTV (UintT n)) =
-    IntV (Unsigned n) (&(w2n slot)) /\
+    IntV (Unsigned n) (&(w2n slot MOD 2 ** n)) /\
   decode_base_from_slot slot (BaseTV (IntT n)) =
-    IntV (Signed n) (w2i slot) /\
-  decode_base_from_slot slot (BaseTV DecimalT) = DecimalV (w2i slot) /\
+    (let v = w2n slot MOD 2 ** n in
+       IntV (Signed n) (if v < 2 ** (n - 1) then &v else &v - &(2 ** n))) /\
+  decode_base_from_slot slot (BaseTV DecimalT) =
+    (let v = w2n slot MOD 2 ** 168 in
+       DecimalV (if v < 2 ** 167 then &v else &v - &(2 ** 168))) /\
   decode_base_from_slot slot (BaseTV BoolT) = BoolV (slot_to_bool slot) /\
   decode_base_from_slot slot (BaseTV AddressT) =
     BytesV (Fixed 20) (DROP 12 (word_to_bytes_be slot)) /\
