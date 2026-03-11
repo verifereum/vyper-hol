@@ -1,0 +1,2 @@
+# Memmerging pass proofs
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../defs ../../../simulation ../../../simulation/defs ../../../simulation/proofs ../defs ../../../../syntax ../../../../semantics
