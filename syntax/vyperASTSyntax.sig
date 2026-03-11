@@ -32,6 +32,7 @@ signature vyperASTSyntax = sig
   val UMul_tm         : term
   val UDiv_tm         : term
   val Mod_tm          : term
+  val ExpMod_tm       : term
   val Exp_tm          : term
   val And_tm          : term
   val Or_tm           : term
@@ -49,6 +50,10 @@ signature vyperASTSyntax = sig
   val Sender_tm       : term
   val SelfAddr_tm     : term
   val TimeStamp_tm    : term
+  val BlockNumber_tm  : term
+  val BlobBaseFee_tm  : term
+  val GasPrice_tm     : term
+  val PrevHash_tm     : term
   val Address_tm      : term
   val Balance_tm      : term
   val Wei_tm          : term
@@ -68,7 +73,10 @@ signature vyperASTSyntax = sig
   val Keccak256_tm    : term
   val Concat_tm       : term
   val Slice_tm        : term
+  val AsWeiValue_tm   : term
   val MakeArray_tm    : term
+  val AddMod_tm       : term
+  val MulMod_tm       : term
   val Floor_tm        : term
   val Bop_tm          : term
   val Env_tm          : term
@@ -88,8 +96,10 @@ signature vyperASTSyntax = sig
   val Convert_tm      : term
   val Extract32_tm    : term
   val AbiDecode_tm    : term
+  val AbiEncode_tm    : term
   val MethodId_tm     : term
   val Name_tm         : term
+  val BareGlobalName_tm   : term
   val TopLevelName_tm : term
   val IfExp_tm        : term
   val Literal_tm      : term
@@ -101,6 +111,7 @@ signature vyperASTSyntax = sig
   val Pop_tm          : term
   val AstCall_tm      : term
   val NameTarget_tm   : term
+  val BareGlobalNameTarget_tm : term
   val TopLevelNameTarget_tm : term
   val SubscriptTarget_tm    : term
   val AttributeTarget_tm    : term
@@ -171,6 +182,7 @@ signature vyperASTSyntax = sig
   val mk_Expr      : term -> term
   val mk_For       : term -> term -> term -> term -> term -> term
   val mk_Name      : string -> term
+  val mk_BareGlobalName : string -> term
   val mk_StructLit : term * term list -> term
   val mk_IfExp     : term * term * term -> term
   val mk_IntCall   : term -> term
@@ -180,6 +192,7 @@ signature vyperASTSyntax = sig
   val mk_Convert   : term * term -> term
   val mk_Extract32 : term * term * term -> term
   val mk_AbiDecode : term * term -> term
+  val mk_AbiEncode : term * term -> term
   val mk_MethodId  : term -> term
   val mk_Call      : term -> term list -> term -> term
   val mk_Assert    : term * term -> term
@@ -193,7 +206,7 @@ signature vyperASTSyntax = sig
   val empty_lstr   : term
   val mk_Return    : term option -> term
   val mk_AnnAssign : term * term * term -> term
-  val mk_AugAssign : term -> term -> term -> term
+  val mk_AugAssign : term * term * term * term -> term
   val mk_Hex_dyn   : term * string -> term
   val mk_Hex       : string -> term
   val mk_Builtin   : term -> term -> term
