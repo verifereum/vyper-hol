@@ -264,14 +264,17 @@ End
 
 (* Rename variables in dominator tree order.
    Processes a single subtree rooted at lbl.
-   Each dominated child sees the parent's rename state (rs1), NOT siblings'.
-   This matches Python's _rename_vars which pushes in pre-action and
-   pops in post-action, so children of the same parent see identical state. *)
+   Returns (final_counters, updated_blocks):
+   - Counters are threaded through siblings so each gets unique versions
+   - Each child sees the parent's stacks (not sibling's pushed versions)
+   This matches Python's _rename_vars where var_name_counters is a shared
+   class attribute (monotonically increasing) while var_name_stacks uses
+   push/pop (children see parent's stack, not sibling's). *)
 Definition rename_blocks_def:
-  rename_blocks 0 rs bbs dom_children succ_map lbl = bbs ∧
+  rename_blocks 0 rs bbs dom_children succ_map lbl = (FST rs, bbs) ∧
   rename_blocks (SUC fuel) rs bbs dom_children succ_map lbl =
     case lookup_block lbl bbs of
-      NONE => bbs
+      NONE => (FST rs, bbs)
     | SOME bb =>
         (* Pre-action: rename instructions, push versions for outputs *)
         let (rs1, insts') = rename_block_insts rs bb.bb_instructions in
@@ -281,11 +284,17 @@ Definition rename_blocks_def:
         let succs = case ALOOKUP succ_map lbl of
                       SOME ss => ss | NONE => [] in
         let bbs2 = update_succ_phis rs1 lbl bbs1 succs in
-        (* Recurse on dominated children — each child sees rs1 *)
+        (* Recurse on dominated children.
+           Thread counters through siblings (so each gets unique versions).
+           Each child gets parent's stacks (not sibling's pushed versions).
+           This matches Python where var_name_counters increases monotonically
+           across all branches, but var_name_stacks is push/popped per subtree. *)
         let children = case ALOOKUP dom_children lbl of
                          SOME cs => cs | NONE => [] in
-        FOLDL (λbs c. rename_blocks fuel rs1 bs dom_children succ_map c)
-              bbs2 children
+        let parent_stacks = SND rs1 in
+        FOLDL (λ(ctrs, bs) c.
+          rename_blocks fuel (ctrs, parent_stacks) bs dom_children succ_map c)
+          (FST rs1, bbs2) children
 End
 
 (* ===== Degenerate PHI Removal ===== *)
@@ -390,7 +399,7 @@ Definition make_ssa_fn_def:
         (* 2. Rename variables *)
         let rs0 = init_rename_state defs in
         let fuel = LENGTH bbs1 * LENGTH bbs1 in
-        let bbs2 = rename_blocks fuel rs0 bbs1 dom_children succ_map entry in
+        let (_, bbs2) = rename_blocks fuel rs0 bbs1 dom_children succ_map entry in
         (* 3. Remove degenerate PHIs *)
         let bbs3 = remove_degenerate_phis bbs2 in
         (* 4. Ensure PHIs are at top of blocks *)
