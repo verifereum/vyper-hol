@@ -225,9 +225,10 @@ Definition bp_get_write_location_def:
              NONE => ml_undefined
            | SOME ops => bp_segment_from_ops result ops)
     | AddrSp_Storage =>
+        (* EVM: SSTORE key val — key is 1st operand *)
         if inst.inst_opcode = SSTORE then
           (case inst.inst_operands of
-             [_; dst] =>
+             [dst; _] =>
                bp_segment_from_ops result
                  <| iao_ofst := dst; iao_size := SOME (Lit 32w);
                     iao_max_size := SOME (Lit 32w) |>
@@ -236,9 +237,10 @@ Definition bp_get_write_location_def:
                                      INVOKE; CREATE; CREATE2} then ml_undefined
         else ml_empty
     | AddrSp_Transient =>
+        (* EVM: TSTORE key val — key is 1st operand *)
         if inst.inst_opcode = TSTORE then
           (case inst.inst_operands of
-             [_; dst] =>
+             [dst; _] =>
                bp_segment_from_ops result
                  <| iao_ofst := dst; iao_size := SOME (Lit 32w);
                     iao_max_size := SOME (Lit 32w) |>
@@ -292,12 +294,13 @@ Definition bp_get_read_location_def:
         else ml_empty
     (* Read-only/copyable address spaces.
      * Matches Python _get_copyable_read_location.
-     * Bulk copy ops: [size, src_ofst, dst].
+     * EVM order bulk copy ops: [dst, src_ofst, size].
      * Single-word load ops: [ofst] → word_scale=32 bytes. *)
     | AddrSp_Calldata =>
         if inst.inst_opcode = CALLDATACOPY then
+          (* EVM: CALLDATACOPY dst src sz — reads from src in calldata *)
           (case inst.inst_operands of
-             [sz; src_ofst; _] =>
+             [_; src_ofst; sz] =>
                bp_segment_from_ops result
                  <| iao_ofst := src_ofst; iao_size := SOME sz;
                     iao_max_size := SOME sz |>
@@ -312,8 +315,9 @@ Definition bp_get_read_location_def:
         else ml_empty
     | AddrSp_Data =>
         if inst.inst_opcode = DLOADBYTES then
+          (* EVM: DLOADBYTES dst src sz — reads from src in data *)
           (case inst.inst_operands of
-             [sz; src_ofst; _] =>
+             [_; src_ofst; sz] =>
                bp_segment_from_ops result
                  <| iao_ofst := src_ofst; iao_size := SOME sz;
                     iao_max_size := SOME sz |>
@@ -328,8 +332,9 @@ Definition bp_get_read_location_def:
         else ml_empty
     | AddrSp_Code =>
         if inst.inst_opcode = CODECOPY then
+          (* EVM: CODECOPY dst src sz — reads from src in code *)
           (case inst.inst_operands of
-             [sz; src_ofst; _] =>
+             [_; src_ofst; sz] =>
                bp_segment_from_ops result
                  <| iao_ofst := src_ofst; iao_size := SOME sz;
                     iao_max_size := SOME sz |>
@@ -337,8 +342,9 @@ Definition bp_get_read_location_def:
         else ml_empty
     | AddrSp_Returndata =>
         if inst.inst_opcode = RETURNDATACOPY then
+          (* EVM: RETURNDATACOPY dst src sz — reads from src in returndata *)
           (case inst.inst_operands of
-             [sz; src_ofst; _] =>
+             [_; src_ofst; sz] =>
                bp_segment_from_ops result
                  <| iao_ofst := src_ofst; iao_size := SOME sz;
                     iao_max_size := SOME sz |>
