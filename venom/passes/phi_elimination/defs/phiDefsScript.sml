@@ -96,15 +96,6 @@ Definition phi_var_operands_def:
   phi_var_operands (_ :: _ :: rest) = phi_var_operands rest
 End
 
-(* Helper: Check if PHI operands are well-formed (Label,Var pairs) *)
-Definition phi_well_formed_def:
-  phi_well_formed [] = T /\
-  phi_well_formed [_] = T /\
-  phi_well_formed (Label lbl :: Var v :: rest) = phi_well_formed rest /\
-  phi_well_formed (Label lbl :: _ :: rest) = F /\
-  phi_well_formed (_ :: _ :: rest) = phi_well_formed rest
-End
-
 (* Helper: Extract variable from ASSIGN if operand is a single variable *)
 Definition assign_var_operand_def:
   assign_var_operand inst =
