@@ -119,12 +119,15 @@ End
  *   Within the record, iao_size = NONE means indeterminate byte count.
  * NONE (outer): opcode doesn't write memory, or operand count is wrong
  *   (the latter would be a compiler bug in Python). *)
+(* Operand order: EVM semantic order (matching step_inst_base).
+ * MSTORE [addr; val], MCOPY [dst; src; sz], CALL [gas; addr; val; ao; as; ro; rs]
+ * Note: Python uses reversed (stack push) order — this was ported and corrected. *)
 Definition mem_write_ops_def:
   mem_write_ops inst =
     case inst.inst_opcode of
       MSTORE =>
         (case inst.inst_operands of
-           [_; dst] =>
+           [dst; _] =>
              SOME <| iao_ofst := dst; iao_size := SOME (Lit 32w);
                      iao_max_size := SOME (Lit 32w) |>
          | _ => NONE)
@@ -136,47 +139,51 @@ Definition mem_write_ops_def:
          | _ => NONE)
     | MCOPY =>
         (case inst.inst_operands of
-           [sz; _; dst] =>
+           [dst; _; sz] =>
              SOME <| iao_ofst := dst; iao_size := SOME sz; iao_max_size := SOME sz |>
          | _ => NONE)
     | CALLDATACOPY =>
         (case inst.inst_operands of
-           [sz; _; dst] =>
+           [dst; _; sz] =>
              SOME <| iao_ofst := dst; iao_size := SOME sz; iao_max_size := SOME sz |>
          | _ => NONE)
     | DLOADBYTES =>
         (case inst.inst_operands of
-           [sz; _; dst] =>
+           [dst; _; sz] =>
              SOME <| iao_ofst := dst; iao_size := SOME sz; iao_max_size := SOME sz |>
          | _ => NONE)
     | CODECOPY =>
         (case inst.inst_operands of
-           [sz; _; dst] =>
+           [dst; _; sz] =>
              SOME <| iao_ofst := dst; iao_size := SOME sz; iao_max_size := SOME sz |>
          | _ => NONE)
     | RETURNDATACOPY =>
         (case inst.inst_operands of
-           [sz; _; dst] =>
+           [dst; _; sz] =>
              SOME <| iao_ofst := dst; iao_size := SOME sz; iao_max_size := SOME sz |>
          | _ => NONE)
     | EXTCODECOPY =>
+        (* EVM: EXTCODECOPY addr dst src size *)
         (case inst.inst_operands of
-           [sz; _; dst; _] =>
+           [_; dst; _; sz] =>
              SOME <| iao_ofst := dst; iao_size := SOME sz; iao_max_size := SOME sz |>
          | _ => NONE)
     | CALL =>
+        (* EVM: CALL gas addr val argsOff argsLen retOff retLen *)
         (case inst.inst_operands of
-           [maxsz; dst; _; _; _; _; _] =>
+           [_; _; _; _; _; dst; maxsz] =>
              SOME <| iao_ofst := dst; iao_size := NONE; iao_max_size := SOME maxsz |>
          | _ => NONE)
     | DELEGATECALL =>
+        (* EVM: DELEGATECALL gas addr argsOff argsLen retOff retLen *)
         (case inst.inst_operands of
-           [maxsz; dst; _; _; _; _] =>
+           [_; _; _; _; dst; maxsz] =>
              SOME <| iao_ofst := dst; iao_size := NONE; iao_max_size := SOME maxsz |>
          | _ => NONE)
     | STATICCALL =>
+        (* EVM: STATICCALL gas addr argsOff argsLen retOff retLen *)
         (case inst.inst_operands of
-           [maxsz; dst; _; _; _; _] =>
+           [_; _; _; _; dst; maxsz] =>
              SOME <| iao_ofst := dst; iao_size := NONE; iao_max_size := SOME maxsz |>
          | _ => NONE)
     | _ => NONE
@@ -185,6 +192,8 @@ End
 (* Matches Python memory_read_ops in memory_location.py.
  * SOME record: valid memory-reading instruction with well-formed operands.
  * NONE (outer): opcode doesn't read memory, or operand count is wrong. *)
+(* Operand order: EVM semantic order (matching step_inst_base).
+ * MLOAD [addr], MCOPY [dst; src; sz], RETURN [off; sz], etc. *)
 Definition mem_read_ops_def:
   mem_read_ops inst =
     case inst.inst_opcode of
@@ -201,56 +210,65 @@ Definition mem_read_ops_def:
                      iao_max_size := SOME (Lit 32w) |>
          | _ => NONE)
     | MCOPY =>
+        (* EVM: MCOPY dst src sz — reads from src *)
         (case inst.inst_operands of
-           [sz; src; _] =>
+           [_; src; sz] =>
              SOME <| iao_ofst := src; iao_size := SOME sz; iao_max_size := SOME sz |>
          | _ => NONE)
     | CALL =>
+        (* EVM: CALL gas addr val argsOff argsLen retOff retLen — reads from argsOff *)
         (case inst.inst_operands of
-           [_; _; sz; src; _; _; _] =>
+           [_; _; _; src; sz; _; _] =>
              SOME <| iao_ofst := src; iao_size := SOME sz; iao_max_size := SOME sz |>
          | _ => NONE)
     | DELEGATECALL =>
+        (* EVM: DELEGATECALL gas addr argsOff argsLen retOff retLen *)
         (case inst.inst_operands of
-           [_; _; sz; src; _; _] =>
+           [_; _; src; sz; _; _] =>
              SOME <| iao_ofst := src; iao_size := SOME sz; iao_max_size := SOME sz |>
          | _ => NONE)
     | STATICCALL =>
+        (* EVM: STATICCALL gas addr argsOff argsLen retOff retLen *)
         (case inst.inst_operands of
-           [_; _; sz; src; _; _] =>
+           [_; _; src; sz; _; _] =>
              SOME <| iao_ofst := src; iao_size := SOME sz; iao_max_size := SOME sz |>
          | _ => NONE)
     | RETURN =>
+        (* EVM: RETURN offset size *)
         (case inst.inst_operands of
-           [sz; src] =>
+           [src; sz] =>
              SOME <| iao_ofst := src; iao_size := SOME sz; iao_max_size := SOME sz |>
          | _ => NONE)
     | CREATE =>
+        (* EVM: CREATE value offset size — reads from offset *)
         (case inst.inst_operands of
-           [sz; src; _] =>
+           [_; src; sz] =>
              SOME <| iao_ofst := src; iao_size := SOME sz; iao_max_size := SOME sz |>
          | _ => NONE)
     | CREATE2 =>
+        (* EVM: CREATE2 value offset size salt *)
         (case inst.inst_operands of
-           [_; sz; src; _] =>
+           [_; src; sz; _] =>
              SOME <| iao_ofst := src; iao_size := SOME sz; iao_max_size := SOME sz |>
          | _ => NONE)
     | SHA3 =>
+        (* EVM: SHA3 offset size *)
         (case inst.inst_operands of
-           [sz; ofst] =>
+           [ofst; sz] =>
              SOME <| iao_ofst := ofst; iao_size := SOME sz; iao_max_size := SOME sz |>
          | _ => NONE)
     | LOG =>
+        (* EVM: LOG tc offset size topics...
+           In HOL4: Lit tc :: offset :: size :: topics *)
         (case inst.inst_operands of
-           _::_::_ =>
-             let ops = inst.inst_operands in
-             SOME <| iao_ofst := LAST ops;
-                     iao_size := SOME (LAST (FRONT ops));
-                     iao_max_size := SOME (LAST (FRONT ops)) |>
+           _::ofst::sz::_ =>
+             SOME <| iao_ofst := ofst; iao_size := SOME sz;
+                     iao_max_size := SOME sz |>
          | _ => NONE)
     | REVERT =>
+        (* EVM: REVERT offset size *)
         (case inst.inst_operands of
-           [sz; src] =>
+           [src; sz] =>
              SOME <| iao_ofst := src; iao_size := SOME sz; iao_max_size := SOME sz |>
          | _ => NONE)
     | _ => NONE
