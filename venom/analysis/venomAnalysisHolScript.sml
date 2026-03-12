@@ -4,6 +4,7 @@ Ancestors
   (* shared *)
   venomWf
   venomEffects
+  venomInstProps
   memLocDefs
   memLocProps
   (* cfg *)

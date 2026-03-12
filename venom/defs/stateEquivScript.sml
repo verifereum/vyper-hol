@@ -17,6 +17,8 @@
  * Satisfies: state_equiv ⊆ execution_equiv ⊆ observable_equiv
  *
  * For full equivalence (no variable exceptions), use state_equiv {}.
+ * For passes that introduce fresh variables (PHI insertion), use
+ * state_equiv fresh_vars / execution_equiv fresh_vars to exclude them.
  *
  * Result Equivalence:
  *
@@ -48,8 +50,7 @@ Ancestors
  * This is the weakest equivalence - everything else is internal detail.
  *
  * FIELDS COMPARED:
- *   - vs_storage   : Persistent storage (survives transaction)
- *   - vs_accounts  : Account balances/state
+ *   - vs_accounts  : Account states (including persistent storage)
  *   - vs_returndata: Return value or revert reason
  *   - vs_halted    : Whether execution halted
  *
@@ -59,7 +60,6 @@ Ancestors
  *)
 Definition observable_equiv_def:
   observable_equiv s1 s2 <=>
-    s1.vs_storage = s2.vs_storage /\
     s1.vs_accounts = s2.vs_accounts /\
     s1.vs_returndata = s2.vs_returndata /\
     s1.vs_halted = s2.vs_halted /\
@@ -82,7 +82,6 @@ Definition execution_equiv_def:
   execution_equiv vars s1 s2 <=>
     (!v. v NOTIN vars ==> lookup_var v s1 = lookup_var v s2) /\
     s1.vs_memory = s2.vs_memory /\
-    s1.vs_storage = s2.vs_storage /\
     s1.vs_transient = s2.vs_transient /\
     (* OMIT: vs_current_bb, vs_inst_idx, vs_prev_bb *)
     s1.vs_halted = s2.vs_halted /\

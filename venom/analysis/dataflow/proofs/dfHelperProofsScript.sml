@@ -165,36 +165,36 @@ QED
 
 (* FOLDL list_intersect preserves ALL_DISTINCT *)
 Theorem foldl_intersect_all_distinct_proof:
-  !xs base. ALL_DISTINCT base ==>
-    ALL_DISTINCT (FOLDL list_intersect base xs)
+  !xs bse. ALL_DISTINCT bse ==>
+    ALL_DISTINCT (FOLDL list_intersect bse xs)
 Proof
   Induct >> rw[FOLDL] >>
   first_x_assum irule >>
   rw[list_intersect_def, FILTER_ALL_DISTINCT]
 QED
 
-(* FOLDL list_intersect base xs is always a FILTER of base *)
+(* FOLDL list_intersect bse xs is always a FILTER of bse *)
 Theorem foldl_intersect_is_filter_proof:
-  !xs base. ?P. FOLDL list_intersect base xs = FILTER P base
+  !xs bse. ?P. FOLDL list_intersect bse xs = FILTER P bse
 Proof
   Induct >> rw[]
   >- (qexists_tac `\x. T` >> rw[listTheory.FILTER_T])
   >> simp[list_intersect_def] >>
-  first_x_assum (qspec_then `FILTER (\x. MEM x h) base` strip_assume_tac) >>
+  first_x_assum (qspec_then `FILTER (\x. MEM x h) bse` strip_assume_tac) >>
   qexists_tac `\x. P x /\ MEM x h` >>
   simp[rich_listTheory.FILTER_FILTER]
 QED
 
 (* Two FILTERs of an ALL_DISTINCT list with equal sets are equal *)
 Theorem filter_set_eq_filter_eq_proof:
-  !P Q base. ALL_DISTINCT base ==>
-    set (FILTER P base) = set (FILTER Q base) ==>
-    FILTER P base = FILTER Q base
+  !P Q bse. ALL_DISTINCT bse ==>
+    set (FILTER P bse) = set (FILTER Q bse) ==>
+    FILTER P bse = FILTER Q bse
 Proof
   rpt strip_tac >>
   irule (GSYM rich_listTheory.FILTER_EQ |> iffLR) >>
   rpt strip_tac >>
-  `MEM x (FILTER P base) <=> MEM x (FILTER Q base)` suffices_by
+  `MEM x (FILTER P bse) <=> MEM x (FILTER Q bse)` suffices_by
     simp[listTheory.MEM_FILTER] >>
   fs[pred_setTheory.EXTENSION]
 QED

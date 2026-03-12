@@ -495,28 +495,28 @@ Proof
   fs[venomInstTheory.lookup_block_def]
 QED
 
-(* FOLDL list_intersect base xs is always a FILTER of base *)
+(* FOLDL list_intersect bse xs is always a FILTER of bse *)
 Triviality foldl_intersect_is_filter:
-  !xs base. ?P. FOLDL list_intersect base xs = FILTER P base
+  !xs bse. ?P. FOLDL list_intersect bse xs = FILTER P bse
 Proof
   Induct >> rw[]
   >- (qexists_tac `\x. T` >> rw[listTheory.FILTER_T])
   >> simp[dfHelperDefsTheory.list_intersect_def] >>
-  first_x_assum (qspec_then `FILTER (\x. MEM x h) base` strip_assume_tac) >>
+  first_x_assum (qspec_then `FILTER (\x. MEM x h) bse` strip_assume_tac) >>
   qexists_tac `\x. P x /\ MEM x h` >>
   simp[rich_listTheory.FILTER_FILTER]
 QED
 
 (* Two FILTERs of an ALL_DISTINCT list with equal sets are equal *)
 Triviality filter_set_eq_filter_eq:
-  !P Q base. ALL_DISTINCT base ==>
-    set (FILTER P base) = set (FILTER Q base) ==>
-    FILTER P base = FILTER Q base
+  !P Q bse. ALL_DISTINCT bse ==>
+    set (FILTER P bse) = set (FILTER Q bse) ==>
+    FILTER P bse = FILTER Q bse
 Proof
   rpt strip_tac >>
   irule (GSYM rich_listTheory.FILTER_EQ |> iffLR) >>
   rpt strip_tac >>
-  `MEM x (FILTER P base) <=> MEM x (FILTER Q base)` suffices_by
+  `MEM x (FILTER P bse) <=> MEM x (FILTER Q bse)` suffices_by
     (simp[listTheory.MEM_FILTER]) >>
   fs[pred_setTheory.EXTENSION]
 QED

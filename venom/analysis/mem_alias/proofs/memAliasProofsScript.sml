@@ -731,8 +731,8 @@ Theorem mv_correctness[local]:
     let self = if may_overlap vloc vloc then [vloc] else [] in
     let cross = if may_overlap vloc loc then [loc] else [] in
     let loc_als = if may_overlap loc vloc then vloc :: x else x in
-    let base = sets |+ (vloc, self ++ cross ++ filt) |+ (loc, loc_als) in
-    let s3 = FOLDL (mv_fold_step vloc) base filt in
+    let bse = sets |+ (vloc, self ++ cross ++ filt) |+ (loc, loc_als) in
+    let s3 = FOLDL (mv_fold_step vloc) bse filt in
     ∀loc' als a.
       FLOOKUP s3 loc' = SOME als ∧ MEM a als ⇒ may_overlap loc' a
 Proof
@@ -740,7 +740,7 @@ Proof
   simp_tac std_ss [LET_THM] >>
   qabbrev_tac `vloc = mk_volatile loc` >>
   qabbrev_tac `filt = FILTER (λa. a ≠ loc ∧ a ≠ vloc) x` >>
-  qabbrev_tac `base = sets |+ (vloc,
+  qabbrev_tac `bse = sets |+ (vloc,
     (if may_overlap vloc vloc then [vloc] else []) ++
     (if may_overlap vloc loc then [loc] else []) ++ filt)
     |+ (loc, if may_overlap loc vloc then vloc :: x else x)` >>
@@ -757,54 +757,54 @@ Proof
     rw[Abbr `filt`, MEM_FILTER]) >>
   `¬MEM vloc filt ∧ ¬MEM loc filt` by (
     rw[Abbr `filt`, MEM_FILTER]) >>
-  `FDOM base = vloc INSERT FDOM sets` by (
-    rw[Abbr `base`, FDOM_FUPDATE, pred_setTheory.EXTENSION] >>
+  `FDOM bse = vloc INSERT FDOM sets` by (
+    rw[Abbr `bse`, FDOM_FUPDATE, pred_setTheory.EXTENSION] >>
     metis_tac[]) >>
   rpt gen_tac >> strip_tac >>
   imp_res_tac flookup_in_fdom >>
   `loc' ∈ vloc INSERT FDOM sets` by metis_tac[mv_foldl_fdom_exact] >>
   fs[pred_setTheory.IN_INSERT] >- (
     (* CASE 1: loc' = vloc — fold doesn't touch vloc's entry *)
-    `FLOOKUP (FOLDL (mv_fold_step vloc) base filt) vloc = FLOOKUP base vloc` by (
+    `FLOOKUP (FOLDL (mv_fold_step vloc) bse filt) vloc = FLOOKUP bse vloc` by (
       irule mv_foldl_other >> rw[]) >>
     Cases_on `vloc = loc` >- (
-      gvs[Abbr `base`, FLOOKUP_UPDATE, MEM_APPEND] >>
+      gvs[Abbr `bse`, FLOOKUP_UPDATE, MEM_APPEND] >>
       Cases_on `may_overlap loc loc` >> gvs[] >> metis_tac[]
     ) >>
-    `FLOOKUP base vloc = SOME (
+    `FLOOKUP bse vloc = SOME (
       (if may_overlap loc vloc then [vloc] else []) ++
       (if may_overlap loc loc then [loc] else []) ++ filt)` by (
-      rw[Abbr `base`, FLOOKUP_UPDATE]) >>
+      rw[Abbr `bse`, FLOOKUP_UPDATE]) >>
     `may_overlap loc vloc = may_overlap loc loc` by metis_tac[] >>
     gvs[] >> Cases_on `may_overlap loc loc` >> gvs[MEM_FILTER] >> metis_tac[]
   ) >>
   (* CASE 2: loc' ∈ FDOM sets *)
   Cases_on `loc' = loc` >- (
     (* loc' = loc: fold doesn't touch loc's entry *)
-    `FLOOKUP (FOLDL (mv_fold_step vloc) base filt) loc = FLOOKUP base loc` by (
+    `FLOOKUP (FOLDL (mv_fold_step vloc) bse filt) loc = FLOOKUP bse loc` by (
       irule mv_foldl_other >> rw[]) >>
-    gvs[Abbr `base`, FLOOKUP_UPDATE] >>
+    gvs[Abbr `bse`, FLOOKUP_UPDATE] >>
     Cases_on `may_overlap loc loc` >> gvs[] >>
     fs[wf_alias_sets_def] >> metis_tac[]
   ) >>
   Cases_on `loc' = vloc` >- (
     (* loc' = vloc ≠ loc: fold doesn't touch vloc's entry *)
-    `FLOOKUP (FOLDL (mv_fold_step vloc) base filt) vloc = FLOOKUP base vloc` by (
+    `FLOOKUP (FOLDL (mv_fold_step vloc) bse filt) vloc = FLOOKUP bse vloc` by (
       irule mv_foldl_other >> rw[]) >>
-    `FLOOKUP base vloc = SOME (
+    `FLOOKUP bse vloc = SOME (
       (if may_overlap loc vloc then [vloc] else []) ++
       (if may_overlap loc loc then [loc] else []) ++ filt)` by (
-      rw[Abbr `base`, FLOOKUP_UPDATE]) >>
+      rw[Abbr `bse`, FLOOKUP_UPDATE]) >>
     gvs[] >> Cases_on `may_overlap loc loc` >> gvs[MEM_FILTER] >> metis_tac[]
   ) >>
-  (* loc' ≠ loc, loc' ≠ vloc: base loc' = sets loc' *)
-  `FLOOKUP base loc' = FLOOKUP sets loc'` by (
-    rw[Abbr `base`, FLOOKUP_UPDATE]) >>
+  (* loc' ≠ loc, loc' ≠ vloc: bse loc' = sets loc' *)
+  `FLOOKUP bse loc' = FLOOKUP sets loc'` by (
+    rw[Abbr `bse`, FLOOKUP_UPDATE]) >>
   drule_all mv_foldl_sound >> strip_tac >- (
     (* a = vloc: need may_overlap loc' loc *)
     fs[] >>
     Cases_on `MEM loc' filt` >- metis_tac[may_overlap_sym] >>
-    `FLOOKUP (FOLDL (mv_fold_step vloc) base filt) loc' = FLOOKUP base loc'` by (
+    `FLOOKUP (FOLDL (mv_fold_step vloc) bse filt) loc' = FLOOKUP bse loc'` by (
       irule mv_foldl_other >> rw[]) >>
     gvs[] >> fs[wf_alias_sets_def] >> metis_tac[]
   ) >>
@@ -824,8 +824,8 @@ Theorem mv_completeness[local]:
     let self = if may_overlap vloc vloc then [vloc] else [] in
     let cross = if may_overlap vloc loc then [loc] else [] in
     let loc_als = if may_overlap loc vloc then vloc :: x else x in
-    let base = sets |+ (vloc, self ++ cross ++ filt) |+ (loc, loc_als) in
-    let s3 = FOLDL (mv_fold_step vloc) base filt in
+    let bse = sets |+ (vloc, self ++ cross ++ filt) |+ (loc, loc_als) in
+    let s3 = FOLDL (mv_fold_step vloc) bse filt in
     ∀l1 l2 als1.
       FLOOKUP s3 l1 = SOME als1 ∧ l2 ∈ FDOM s3 ∧ may_overlap l1 l2 ⇒
       MEM l2 als1
@@ -834,7 +834,7 @@ Proof
   simp_tac std_ss [LET_THM] >>
   qabbrev_tac `vloc = mk_volatile loc` >>
   qabbrev_tac `filt = FILTER (λa. a ≠ loc ∧ a ≠ vloc) x` >>
-  qabbrev_tac `base = sets |+ (vloc,
+  qabbrev_tac `bse = sets |+ (vloc,
     (if may_overlap vloc vloc then [vloc] else []) ++
     (if may_overlap vloc loc then [loc] else []) ++ filt)
     |+ (loc, if may_overlap loc vloc then vloc :: x else x)` >>
@@ -847,22 +847,22 @@ Proof
     fs[wf_alias_sets_def] >> metis_tac[]) >>
   `∀a'. MEM a' filt ⇒ a' ≠ loc ∧ a' ≠ vloc ∧ may_overlap loc a'` by (
     rw[Abbr `filt`, MEM_FILTER]) >>
-  `FDOM (FOLDL (mv_fold_step vloc) base filt) = FDOM base` by
+  `FDOM (FOLDL (mv_fold_step vloc) bse filt) = FDOM bse` by
     rw[mv_foldl_fdom_exact] >>
-  `FDOM base = vloc INSERT FDOM sets` by (
-    rw[Abbr `base`, FDOM_FUPDATE, pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  `FDOM bse = vloc INSERT FDOM sets` by (
+    rw[Abbr `bse`, FDOM_FUPDATE, pred_setTheory.EXTENSION] >> metis_tac[]) >>
   `¬MEM vloc filt ∧ ¬MEM loc filt` by (
     rw[Abbr `filt`, MEM_FILTER]) >>
   `may_overlap loc vloc = may_overlap loc loc` by metis_tac[] >>
   rpt gen_tac >> strip_tac >>
-  `l2 ∈ FDOM base` by metis_tac[] >>
+  `l2 ∈ FDOM bse` by metis_tac[] >>
   (* === Case l1 = vloc === *)
   Cases_on `l1 = vloc` >- (
-    `FLOOKUP (FOLDL (mv_fold_step vloc) base filt) vloc = FLOOKUP base vloc` by (
+    `FLOOKUP (FOLDL (mv_fold_step vloc) bse filt) vloc = FLOOKUP bse vloc` by (
       irule mv_foldl_other >> rw[]) >>
     Cases_on `vloc = loc` >- (
-      `FLOOKUP base vloc = SOME (if may_overlap loc vloc then vloc :: x else x)` by
-        asm_simp_tac std_ss [Abbr `base`, FLOOKUP_UPDATE] >>
+      `FLOOKUP bse vloc = SOME (if may_overlap loc vloc then vloc :: x else x)` by
+        asm_simp_tac std_ss [Abbr `bse`, FLOOKUP_UPDATE] >>
       `als1 = if may_overlap loc vloc then vloc :: x else x` by
         metis_tac[optionTheory.SOME_11] >>
       `l2 ∈ FDOM sets` by metis_tac[pred_setTheory.IN_INSERT] >>
@@ -870,10 +870,10 @@ Proof
       `MEM l2 x` by (fs[wf_alias_sets_def] >> metis_tac[]) >>
       Cases_on `may_overlap loc vloc` >> rw[]
     ) >>
-    `FLOOKUP base vloc = SOME (
+    `FLOOKUP bse vloc = SOME (
       (if may_overlap loc loc then [vloc] else []) ++
       (if may_overlap loc loc then [loc] else []) ++ filt)` by (
-      simp_tac std_ss [Abbr `base`, FLOOKUP_UPDATE] >> metis_tac[]) >>
+      simp_tac std_ss [Abbr `bse`, FLOOKUP_UPDATE] >> metis_tac[]) >>
     `als1 = (if may_overlap loc loc then [vloc] else []) ++
             (if may_overlap loc loc then [loc] else []) ++ filt` by
       metis_tac[optionTheory.SOME_11] >>
@@ -889,10 +889,10 @@ Proof
   ) >>
   (* === Case l1 = loc === *)
   Cases_on `l1 = loc` >- (
-    `FLOOKUP (FOLDL (mv_fold_step vloc) base filt) loc = FLOOKUP base loc` by (
+    `FLOOKUP (FOLDL (mv_fold_step vloc) bse filt) loc = FLOOKUP bse loc` by (
       irule mv_foldl_other >> rw[]) >>
-    `FLOOKUP base loc = SOME (if may_overlap loc vloc then vloc :: x else x)` by
-      rw[Abbr `base`, FLOOKUP_UPDATE] >>
+    `FLOOKUP bse loc = SOME (if may_overlap loc vloc then vloc :: x else x)` by
+      rw[Abbr `bse`, FLOOKUP_UPDATE] >>
     `als1 = if may_overlap loc vloc then vloc :: x else x` by
       metis_tac[optionTheory.SOME_11] >>
     Cases_on `l2 = vloc` >- (
@@ -904,11 +904,11 @@ Proof
   ) >>
   (* === Case l1 ∈ filt === *)
   Cases_on `MEM l1 filt` >- (
-    `l1 ∈ FDOM base` by (imp_res_tac flookup_in_fdom >> metis_tac[]) >>
+    `l1 ∈ FDOM bse` by (imp_res_tac flookup_in_fdom >> metis_tac[]) >>
     `l1 ∈ FDOM sets` by metis_tac[pred_setTheory.IN_INSERT] >>
     Cases_on `l2 = vloc` >- (
       (* l2=vloc: mv_foldl_adds_vloc shows vloc ∈ als1 *)
-      `∃als'. FLOOKUP (FOLDL (mv_fold_step vloc) base filt) l1 = SOME als' ∧
+      `∃als'. FLOOKUP (FOLDL (mv_fold_step vloc) bse filt) l1 = SOME als' ∧
               MEM vloc als'` by (irule mv_foldl_adds_vloc >> rw[]) >>
       `als1 = als'` by metis_tac[optionTheory.SOME_11] >> gvs[]) >>
     (* l2≠vloc: l2 was already in l1's alias list in sets *)
@@ -919,15 +919,15 @@ Proof
       qpat_assum `wf_alias_sets _` (mp_tac o REWRITE_RULE [wf_alias_sets_def]) >>
       disch_then (fn th => mp_tac (Q.SPECL [`l1`, `l2`, `x'`] (CONJUNCT2 th))) >>
       rw[]) >>
-    `FLOOKUP base l1 = SOME old_als` by rw[Abbr `base`, FLOOKUP_UPDATE] >>
+    `FLOOKUP bse l1 = SOME old_als` by rw[Abbr `bse`, FLOOKUP_UPDATE] >>
     drule_all mv_foldl_preserves_mem >> strip_tac >>
     first_x_assum (qspecl_then [`filt`, `vloc`] strip_assume_tac) >>
     metis_tac[optionTheory.SOME_11]
   ) >>
   (* === Case l1 ∉ filt, l1 ≠ loc, l1 ≠ vloc === *)
-  `FLOOKUP (FOLDL (mv_fold_step vloc) base filt) l1 = FLOOKUP base l1` by (
+  `FLOOKUP (FOLDL (mv_fold_step vloc) bse filt) l1 = FLOOKUP bse l1` by (
     irule mv_foldl_other >> rw[]) >>
-  `FLOOKUP base l1 = FLOOKUP sets l1` by rw[Abbr `base`, FLOOKUP_UPDATE] >>
+  `FLOOKUP bse l1 = FLOOKUP sets l1` by rw[Abbr `bse`, FLOOKUP_UPDATE] >>
   `FLOOKUP sets l1 = SOME als1` by metis_tac[] >>
   Cases_on `l2 = vloc` >- (
     (* l2=vloc: l1 must be in filt (contradiction) *)

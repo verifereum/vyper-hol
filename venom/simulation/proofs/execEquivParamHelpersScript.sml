@@ -35,7 +35,7 @@ Theorem vsr_step_inst_pure2:
   !R_ok R_term inst s1 s2.
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     MEM inst.inst_opcode [ADD;SUB;MUL;Div;SDIV;Mod;SMOD;Exp;
-      AND;OR;XOR;SHL;SHR;SAR;SIGNEXTEND;EQ;LT;GT;SLT;SGT;GEP] /\
+      AND;OR;XOR;SHL;SHR;SAR;SIGNEXTEND;BYTE;EQ;LT;GT;SLT;SGT;GEP] /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
     lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
@@ -92,7 +92,7 @@ Proof
   rpt strip_tac >> gvs[step_inst_base_def] >>
   vsr_irule vsr_exec_read1 >> simp[] >> rw[] >>
   imp_res_tac vsr_R_ok_fields >>
-  gvs[mload_def, sload_def, tload_def]
+  gvs[mload_def, sload_def, tload_def, contract_storage_def, contract_transient_def]
 QED
 
 Theorem vsr_step_inst_extcodehash:

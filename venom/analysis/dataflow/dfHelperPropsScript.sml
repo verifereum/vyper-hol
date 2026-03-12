@@ -140,24 +140,24 @@ QED
 
 (* FOLDL list_intersect preserves ALL_DISTINCT. *)
 Theorem foldl_intersect_all_distinct:
-  !xs base. ALL_DISTINCT base ==>
-    ALL_DISTINCT (FOLDL list_intersect base xs)
+  !xs bse. ALL_DISTINCT bse ==>
+    ALL_DISTINCT (FOLDL list_intersect bse xs)
 Proof
   ACCEPT_TAC foldl_intersect_all_distinct_proof
 QED
 
-(* FOLDL list_intersect base xs is always a FILTER of base. *)
+(* FOLDL list_intersect bse xs is always a FILTER of bse. *)
 Theorem foldl_intersect_is_filter:
-  !xs base. ?P. FOLDL list_intersect base xs = FILTER P base
+  !xs bse. ?P. FOLDL list_intersect bse xs = FILTER P bse
 Proof
   ACCEPT_TAC foldl_intersect_is_filter_proof
 QED
 
 (* Two FILTERs of an ALL_DISTINCT list with equal sets are equal. *)
 Theorem filter_set_eq_filter_eq:
-  !P Q base. ALL_DISTINCT base ==>
-    set (FILTER P base) = set (FILTER Q base) ==>
-    FILTER P base = FILTER Q base
+  !P Q bse. ALL_DISTINCT bse ==>
+    set (FILTER P bse) = set (FILTER Q bse) ==>
+    FILTER P bse = FILTER Q bse
 Proof
   ACCEPT_TAC filter_set_eq_filter_eq_proof
 QED

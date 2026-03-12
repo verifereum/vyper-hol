@@ -50,7 +50,6 @@ Theorem vsr_R_ok_fields:
     s1.vs_block_ctx = s2.vs_block_ctx /\
     s1.vs_accounts = s2.vs_accounts /\
     s1.vs_memory = s2.vs_memory /\
-    s1.vs_storage = s2.vs_storage /\
     s1.vs_transient = s2.vs_transient /\
     s1.vs_returndata = s2.vs_returndata /\
     s1.vs_halted = s2.vs_halted /\
@@ -76,7 +75,6 @@ Theorem vsr_R_term_fields:
     s1.vs_block_ctx = s2.vs_block_ctx /\
     s1.vs_accounts = s2.vs_accounts /\
     s1.vs_memory = s2.vs_memory /\
-    s1.vs_storage = s2.vs_storage /\
     s1.vs_transient = s2.vs_transient /\
     s1.vs_returndata = s2.vs_returndata /\
     s1.vs_halted = s2.vs_halted /\
@@ -167,14 +165,6 @@ Theorem vsr_returndata_R_term:
     R_term (s1 with vs_returndata := rd) (s2 with vs_returndata := rd)
 Proof
   vsr_field_update_R_term_proof ()
-QED
-
-Theorem vsr_storage_R_ok:
-  !R_ok R_term st s1 s2.
-    valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>
-    R_ok (s1 with vs_storage := st) (s2 with vs_storage := st)
-Proof
-  vsr_field_update_proof ()
 QED
 
 Theorem vsr_transient_R_ok:
