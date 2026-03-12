@@ -225,3 +225,12 @@ Definition effect_of_addr_space_def:
   effect_of_addr_space AddrSp_Immutables = SOME Eff_IMMUTABLES /\
   effect_of_addr_space _ = NONE
 End
+
+(* Word scale per address space: matches Python AddrSpace.word_scale.
+   Storage/transient are word-addressed (1 slot per key),
+   all others are byte-addressed (32 bytes per word). *)
+Definition addr_space_word_scale_def:
+  addr_space_word_scale AddrSp_Storage = 1n /\
+  addr_space_word_scale AddrSp_Transient = 1n /\
+  addr_space_word_scale _ = 32n
+End

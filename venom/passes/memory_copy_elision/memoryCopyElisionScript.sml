@@ -1,0 +1,3 @@
+Theory memoryCopyElision
+Ancestors
+  memoryCopyElisionDefs memoryCopyElisionCorrectness
