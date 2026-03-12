@@ -55,17 +55,18 @@ Theorem input_vars_from_phi_correct_proof[local]:
 Proof
   Induct_on `instrs` >- simp[input_vars_from_def] >>
   rpt gen_tac >> simp[Once input_vars_from_def] >> strip_tac >>
+  rename1 `MEM v bse ∨ _` >>
   first_x_assum (qspecl_then [`src_label`,
-    `if h.inst_opcode ≠ PHI then base
+    `if h.inst_opcode ≠ PHI then bse
      else list_union
        (FILTER (λv. ¬MEM v (MAP SND (FILTER (λ(l,v). l ≠ src_label)
-          (phi_pairs h.inst_operands)))) base)
+          (phi_pairs h.inst_operands)))) bse)
        (MAP SND (FILTER (λ(l,v). l = src_label)
           (phi_pairs h.inst_operands)))`, `v`] mp_tac) >>
   impl_tac >- fs[input_vars_from_def] >>
   strip_tac >> Cases_on `h.inst_opcode = PHI` >>
   fs[list_union_mem, MEM_FILTER, MEM_MAP] >>
-  TRY (metis_tac[]) >>
+  TRY (metis_tac[input_vars_from_def]) >>
   disj2_tac >> qexists_tac `h` >> Cases_on `y` >> gvs[]
 QED
 

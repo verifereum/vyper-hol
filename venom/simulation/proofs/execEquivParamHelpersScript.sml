@@ -92,7 +92,7 @@ Proof
   rpt strip_tac >> gvs[step_inst_base_def] >>
   vsr_irule vsr_exec_read1 >> simp[] >> rw[] >>
   imp_res_tac vsr_R_ok_fields >>
-  gvs[mload_def, sload_def, tload_def]
+  gvs[mload_def, sload_def, tload_def, contract_storage_def, contract_transient_def]
 QED
 
 Theorem vsr_step_inst_extcodehash:

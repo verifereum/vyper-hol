@@ -38,18 +38,18 @@ End
    Python: from_to method *)
 Definition so_from_to_query_def:
   so_from_to_query lr fn from_to origin_lbl succ_lbl =
-    let base = (case FLOOKUP from_to (origin_lbl, succ_lbl) of
+    let bse = (case FLOOKUP from_to (origin_lbl, succ_lbl) of
                   NONE => []
                 | SOME n => n) in
     case lookup_block succ_lbl fn.fn_blocks of
-      NONE => base
+      NONE => bse
     | SOME succ_bb =>
         let live_in =
           input_vars_from origin_lbl succ_bb.bb_instructions
             (live_vars_at lr succ_lbl 0) in
         FOLDL (λtgt v.
           if MEM v tgt then tgt else SNOC v tgt)
-        base live_in
+        bse live_in
 End
 
 (* The from_to well-formedness invariant: every variable stored in the
