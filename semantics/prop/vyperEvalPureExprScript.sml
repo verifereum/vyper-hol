@@ -296,7 +296,7 @@ Proof
       simp[vyperStateTheory.get_scopes_def, vyperStateTheory.lift_option_type_def,
            vyperStateTheory.lift_option_def] >>
       strip_tac >> gvs[AllCaseEqs()] >>
-      Cases_on `lookup_scopes (string_to_num id) st.scopes` >>
+      Cases_on `lookup_scopes_val (string_to_num id) st.scopes` >>
       gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def])
   (* BareGlobalName *)
   >- (rpt gen_tac >> strip_tac >>

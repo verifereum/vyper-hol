@@ -104,7 +104,7 @@ Proof
    rename1 `find_containing_scope _ _.scopes = SOME fcs_result` >>
    PairCases_on `fcs_result` >>
    gvs[bind_def, AllCaseEqs(), return_def, raise_def, set_scopes_def] >>
-   Cases_on `assign_subscripts fcs_result2 (REVERSE is) ao` >>
+   Cases_on `assign_subscripts fcs_result3 (REVERSE is) ao` >>
    gvs[return_def, raise_def] >> rw[] >> gvs[] >>
    imp_res_tac assign_result_state >> gvs[] >> rw[] >> gvs[]) >-
   (* TopLevelVar case: storage operations don't touch immutables *)
@@ -291,7 +291,7 @@ Proof
    rename1 `find_containing_scope _ _.scopes = SOME fcs_result` >>
    PairCases_on `fcs_result` >>
    gvs[bind_def, AllCaseEqs(), return_def, raise_def, set_scopes_def] >>
-   Cases_on `assign_subscripts fcs_result2 (REVERSE is) ao` >>
+   Cases_on `assign_subscripts fcs_result3 (REVERSE is) ao` >>
    gvs[return_def, raise_def] >>
    imp_res_tac assign_result_state >> gvs[]) >-
   (* TopLevelVar case: storage operations don't touch immutables *)
