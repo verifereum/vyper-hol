@@ -75,10 +75,12 @@ QED
 
 (* ===== Block List Operations: replace_block ===== *)
 
-(* Replacing a different label preserves lookup (induction + MAP/FIND). *)
+(* Replacing a different label preserves lookup (requires same-label replacement).
+   NOTE: original statement was missing new_bb.bb_label = other precondition.
+   See lookup_block_replace_neq_counterexample in Proofs for why it's needed. *)
 Theorem lookup_block_replace_neq:
   !lbl other new_bb bbs.
-    lbl <> other ==>
+    lbl <> other /\ new_bb.bb_label = other ==>
     lookup_block lbl (replace_block other new_bb bbs) =
     lookup_block lbl bbs
 Proof
