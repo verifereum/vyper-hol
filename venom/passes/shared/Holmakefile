@@ -1,2 +1,2 @@
-# Pass shared definitions
+# Pass shared definitions and proofs
 INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../../syntax ../../../semantics ../../defs
