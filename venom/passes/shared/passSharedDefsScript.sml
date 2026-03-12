@@ -8,6 +8,11 @@
  *   is_removable          — instruction can be NOP'd if output unused
  *   mk_nop_inst           — replace instruction with NOP
  *   mk_assign_inst        — replace instruction with ASSIGN from operand
+ *   ml_is_fixed           — memory location has known offset + size
+ *   is_copy_opcode        — bulk memory copy opcodes (MCOPY, etc.)
+ *   is_store_opcode       — single-word store opcodes (MSTORE, etc.)
+ *   load_opcode_addr_space  — map load opcode to address space
+ *   store_opcode_addr_space — map store opcode to address space
  *   subst_operand         — substitute a variable in an operand
  *   subst_operands        — substitute a variable across all operands
  *   subst_operands_map    — substitute multiple variables via fmap
@@ -15,7 +20,7 @@
 
 Theory passSharedDefs
 Ancestors
-  venomInst
+  venomInst venomEffects memLocDefs
 
 (* ===== Removability ===== *)
 
@@ -82,6 +87,38 @@ Definition is_store_opcode_def:
   is_store_opcode _ = F
 End
 
+(* NOTE: is_alloca_op already in venomInst — use that instead *)
+
+(* ===== Copy opcode predicate ===== *)
+
+(* Bulk memory copy opcodes *)
+Definition is_copy_opcode_def:
+  is_copy_opcode MCOPY = T /\
+  is_copy_opcode CALLDATACOPY = T /\
+  is_copy_opcode CODECOPY = T /\
+  is_copy_opcode DLOADBYTES = T /\
+  is_copy_opcode RETURNDATACOPY = T /\
+  is_copy_opcode _ = F
+End
+
+(* ===== Opcode ↔ address space mappings ===== *)
+
+(* Map load opcode to its address space *)
+Definition load_opcode_addr_space_def:
+  load_opcode_addr_space MLOAD = AddrSp_Memory /\
+  load_opcode_addr_space SLOAD = AddrSp_Storage /\
+  load_opcode_addr_space TLOAD = AddrSp_Transient /\
+  load_opcode_addr_space _ = AddrSp_Memory  (* default; shouldn't happen *)
+End
+
+(* Map store opcode to its address space *)
+Definition store_opcode_addr_space_def:
+  store_opcode_addr_space MSTORE = AddrSp_Memory /\
+  store_opcode_addr_space SSTORE = AddrSp_Storage /\
+  store_opcode_addr_space TSTORE = AddrSp_Transient /\
+  store_opcode_addr_space _ = AddrSp_Memory
+End
+
 (* ===== Operand substitution ===== *)
 
 (* Substitute a single variable: if operand is Var old, replace with new_op *)
@@ -111,4 +148,47 @@ Definition subst_operands_map_def:
   subst_operands_map (subs : (string, operand) fmap) inst =
     inst with inst_operands :=
       MAP (subst_op_map subs) inst.inst_operands
+End
+
+(* ===== Copy propagation helpers ===== *)
+
+(* An ASSIGN instruction is "forwardable" if:
+   1. Source variable doesn't feed a PHI (literals always pass)
+   2. Output variable doesn't feed a PHI
+   Used by copy propagation (assign_elim) transfer, transform,
+   and eliminated_vars computation.
+   phi_vars = phi_used_vars fn *)
+Definition is_forwardable_assign_def:
+  is_forwardable_assign (phi_vars : string set) inst <=>
+    inst.inst_opcode = ASSIGN /\
+    (case (inst.inst_operands, inst.inst_outputs) of
+       ([src_op], [out]) =>
+         (case src_op of Var v => v NOTIN phi_vars | _ => T) /\
+         out NOTIN phi_vars
+     | _ => F)
+End
+
+(* ===== Memory location helpers ===== *)
+
+(* A memory location is "fixed" when it has known offset + size.
+   Python: MemoryLocation.is_fixed. Only fixed locations are tracked
+   as lattice keys in analyses. *)
+Definition ml_is_fixed_def:
+  ml_is_fixed loc <=> IS_SOME loc.ml_offset /\ IS_SOME loc.ml_size
+End
+
+(* ===== NOP clearing ===== *)
+
+(* Remove NOP instructions from a block.
+   Matches Python's IRBasicBlock.clear_nops(). *)
+Definition clear_nops_block_def:
+  clear_nops_block bb =
+    bb with bb_instructions :=
+      FILTER (\inst. inst.inst_opcode <> NOP) bb.bb_instructions
+End
+
+(* Remove NOPs from all blocks in a function *)
+Definition clear_nops_function_def:
+  clear_nops_function fn =
+    fn with fn_blocks := MAP clear_nops_block fn.fn_blocks
 End

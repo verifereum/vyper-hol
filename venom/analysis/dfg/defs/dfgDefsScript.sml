@@ -15,6 +15,8 @@
  *   dfg_get_inst_by_id    — query: instruction by ID
  *   well_formed_dfg       — well-formedness predicate
  *   dfg_def_ids           — set of instruction IDs in DFG def range
+ *   normalize_operand     — follow ASSIGN chain to root operand
+ *   operand_equiv         — operands equal after normalization
  *
  * Helper:
  *   operand_var/operand_vars — extract variable names from operands
@@ -163,5 +165,43 @@ End
 
 Definition dfg_def_ids_def:
   dfg_def_ids dfg = IMAGE (\inst. inst.inst_id) (FRANGE dfg.dfg_defs)
+End
+
+(* ==========================================================================
+   Assign chain traversal
+   ========================================================================== *)
+
+(* Follow ASSIGN chain to root operand. Matches Python's
+   dfg._traverse_assign_chain. Uses visited set for termination:
+   each step adds current var to visited, CARD(FDOM dfg DIFF visited)
+   strictly decreases. *)
+Definition normalize_operand_def:
+  normalize_operand (dfg : dfg_analysis) visited (Var v) =
+    (if v IN visited then Var v
+     else case FLOOKUP dfg.dfg_defs v of
+       SOME inst =>
+         if inst.inst_opcode = ASSIGN then
+           (case inst.inst_operands of
+              [op] => normalize_operand dfg (v INSERT visited) op
+            | _ => Var v)
+         else Var v
+     | NONE => Var v) /\
+  normalize_operand dfg visited op = op
+Termination
+  WF_REL_TAC `measure (\(dfg, visited, op).
+    CARD (FDOM dfg.dfg_defs DIFF visited))`
+  >> rw[]
+  >> irule pred_setTheory.CARD_PSUBSET >> conj_tac
+  >- simp[pred_setTheory.FINITE_DIFF, finite_mapTheory.FDOM_FINITE]
+  >> simp[pred_setTheory.PSUBSET_DEF, pred_setTheory.SUBSET_DEF,
+          pred_setTheory.EXTENSION]
+  >> qexists_tac `v` >> fs[finite_mapTheory.FLOOKUP_DEF]
+End
+
+(* Two operands are equivalent if they normalize to the same root
+   through ASSIGN chain traversal. *)
+Definition operand_equiv_def:
+  operand_equiv dfg op1 op2 =
+    (normalize_operand dfg {} op1 = normalize_operand dfg {} op2)
 End
 
