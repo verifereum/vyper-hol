@@ -21,4 +21,7 @@ INCLUDES = \
   cfg_normalization \
   make_ssa \
   memmerging \
-  dft
+  dft \
+  load_elim \
+  dead_store_elim \
+  memory_copy_elision

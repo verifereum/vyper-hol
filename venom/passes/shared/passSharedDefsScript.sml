@@ -13,6 +13,7 @@
  *   is_store_opcode       — single-word store opcodes (MSTORE, etc.)
  *   load_opcode_addr_space  — map load opcode to address space
  *   store_opcode_addr_space — map store opcode to address space
+ *   (addr_space_word_scale is in venomEffects)
  *   subst_operand         — substitute a variable in an operand
  *   subst_operands        — substitute a variable across all operands
  *   subst_operands_map    — substitute multiple variables via fmap
