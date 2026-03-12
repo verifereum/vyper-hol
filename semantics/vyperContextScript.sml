@@ -306,7 +306,8 @@ val () = cv_auto_trans extract_ec_point_def;
 
 Definition mk_ec_result_def:
   mk_ec_result (rx, ry) =
-    ArrayV $ TupleV [IntV (&rx); IntV (&ry)]
+    ArrayV $ make_array_value (BaseTV (UintT 256)) (Fixed 2)
+      [IntV (&rx); IntV (&ry)]
 End
 
 val () = cv_auto_trans mk_ec_result_def;
