@@ -571,14 +571,14 @@ QED
 
 (* ----- Case 12: AugAssign bt bop e ----- *)
 Theorem case_AugAssign_imm_dom[local]:
-  ∀cx bt bop e.
+  ∀cx ty bt bop e.
     (∀st res st'. eval_base_target cx bt st = (res,st') ⇒
        preserves_immutables_dom cx st st') ∧
     (∀s'' loc sbs t'. eval_base_target cx bt s'' = (INL (loc,sbs),t') ⇒
        ∀st res st'. eval_expr cx e st = (res,st') ⇒
          preserves_immutables_dom cx st st') ⇒
     ∀st res st'.
-      eval_stmt cx (AugAssign bt bop e) st = (res, st') ⇒
+      eval_stmt cx (AugAssign ty bt bop e) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
   rpt strip_tac >>
@@ -949,7 +949,7 @@ Theorem case_IfExp_imm_dom[local]:
        ∀st res st'. eval_expr cx e' st = (res,st') ⇒
          preserves_immutables_dom cx st st') ⇒
     ∀st res st'.
-      eval_expr cx (IfExp e e' e'') st = (res, st') ⇒
+      eval_expr cx (IfExp _ e e' e'') st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
   rpt strip_tac >>
@@ -1098,7 +1098,7 @@ Theorem case_Subscript_imm_dom[local]:
        ∀st res st'. eval_expr cx e2 st = (res,st') ⇒
          preserves_immutables_dom cx st st') ⇒
     ∀st res st'.
-      eval_expr cx (Subscript e1 e2) st = (res, st') ⇒
+      eval_expr cx (Subscript _ e1 e2) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
   rpt strip_tac >>
@@ -1139,7 +1139,7 @@ Theorem case_Attribute_imm_dom[local]:
     (∀st res st'. eval_expr cx e st = (res,st') ⇒
        preserves_immutables_dom cx st st') ⇒
     ∀st res st'.
-      eval_expr cx (Attribute e id) st = (res, st') ⇒
+      eval_expr cx (Attribute _ e id) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
   rpt strip_tac >>
@@ -1160,7 +1160,7 @@ Theorem case_Pop_imm_dom[local]:
     (∀st res st'. eval_base_target cx bt st = (res,st') ⇒
        preserves_immutables_dom cx st st') ⇒
     ∀st res st'.
-      eval_expr cx (Pop bt) st = (res, st') ⇒
+      eval_expr cx (Pop _ bt) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
   rpt strip_tac >>
@@ -1191,7 +1191,7 @@ Theorem case_Send_imm_dom[local]:
        ∀st res st'. eval_exprs cx es st = (res,st') ⇒
          preserves_immutables_dom cx st st') ⇒
     ∀st res st'.
-      eval_expr cx (Call Send es drv) st = (res, st') ⇒
+      eval_expr cx (Call _ Send es drv) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
   rpt strip_tac >>
@@ -1313,7 +1313,7 @@ QED
 Theorem case_Name_imm_dom[local]:
   ∀cx id.
     ∀st res st'.
-      eval_expr cx (Name id) st = (res, st') ⇒
+      eval_expr cx (Name _ id) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
   rpt strip_tac >> irule preserves_immutables_dom_eq >>
@@ -1329,7 +1329,7 @@ QED
 Theorem case_BareGlobalName_imm_dom[local]:
   ∀cx id.
     ∀st res st'.
-      eval_expr cx (BareGlobalName id) st = (res, st') ⇒
+      eval_expr cx (BareGlobalName _ id) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
   rpt strip_tac >> irule preserves_immutables_dom_eq >>
@@ -1344,7 +1344,7 @@ QED
 
 (* ----- Case: eval_expr (Builtin bt es) ----- *)
 Theorem case_Builtin_imm_dom[local]:
-  ∀cx bt es.
+  ∀cx ty bt es.
     (∀s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
        (INL x,t) ∧ bt ≠ Len ⇒
@@ -1358,7 +1358,7 @@ Theorem case_Builtin_imm_dom[local]:
          eval_expr cx (HD es) st = (res,st') ⇒
          preserves_immutables_dom cx st st') ⇒
     ∀st res st'.
-      eval_expr cx (Builtin bt es) st = (res, st') ⇒
+      eval_expr cx (Builtin ty bt es) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
   rpt strip_tac >>
@@ -1382,7 +1382,7 @@ Proof
     (first_x_assum (qspec_then `st` mp_tac) >>
      simp[check_def, type_check_def, assert_def, return_def]) >>
   gvs[bind_def, AllCaseEqs(), return_def, raise_def, get_accounts_def] >>
-  Cases_on `evaluate_builtin cx s'³'.accounts bt vs` >>
+  Cases_on `evaluate_builtin cx s'³'.accounts ty bt vs` >>
   gvs[return_def, raise_def]
 QED
 
@@ -1396,7 +1396,7 @@ Theorem case_TypeBuiltin_imm_dom[local]:
          eval_exprs cx es st = (res,st') ⇒
          preserves_immutables_dom cx st st') ⇒
     ∀st res st'.
-      eval_expr cx (TypeBuiltin tb typ es) st = (res, st') ⇒
+      eval_expr cx (TypeBuiltin _ tb typ es) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
   rpt strip_tac >>
@@ -1530,7 +1530,7 @@ QED
 Theorem case_ExtCall_imm_dom[local]:
   ∀cx is_static' func_name arg_types ret_type es drv st res st'.
   eval_expr cx
-    (Call (ExtCall is_static' (func_name,arg_types,ret_type)) es drv) st =
+    (Call _ (ExtCall is_static' (func_name,arg_types,ret_type)) es drv) st =
     (res,st') ⇒
   (∀st res st'.
     eval_exprs cx es st = (res,st') ⇒ preserves_immutables_dom cx st st') ⇒
@@ -1654,7 +1654,7 @@ QED
 
 Theorem case_IntCall_imm_dom[local]:
   ∀cx src_id_opt fn es vs st res st'.
-  eval_expr cx (Call (IntCall (src_id_opt,fn)) es vs) st = (res,st') ⇒
+  eval_expr cx (Call _ (IntCall (src_id_opt,fn)) es vs) st = (res,st') ⇒
   (∀s'' x t s'³' ts t' s'⁴' tup t'' stup args sstup dflts sstup2 ret body' s'⁵'
       x' t'³'.
     check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧

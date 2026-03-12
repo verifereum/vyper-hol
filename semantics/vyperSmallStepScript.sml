@@ -30,8 +30,8 @@ Datatype:
   | AnnAssignK identifier eval_continuation
   | AssignK expr eval_continuation
   | AssignK1 assignment_value eval_continuation
-  | AugAssignK binop expr eval_continuation
-  | AugAssignK1 base_target_value binop eval_continuation
+  | AugAssignK type binop expr eval_continuation
+  | AugAssignK1 type base_target_value binop eval_continuation
   | IfK (stmt list) (stmt list) eval_continuation
   | IfK1 toplevel_value (stmt list) (stmt list) eval_continuation
   | IfK2 eval_continuation
@@ -54,7 +54,7 @@ Datatype:
   | SubscriptK expr eval_continuation
   | SubscriptK1 toplevel_value eval_continuation
   | AttributeK identifier eval_continuation
-  | BuiltinK builtin eval_continuation
+  | BuiltinK type builtin eval_continuation
   | LenK eval_continuation
   | TypeBuiltinK type_builtin type eval_continuation
   | CallSendK eval_continuation
@@ -149,51 +149,51 @@ val () = eval_base_target_cps_def
   |> cv_auto_trans;
 
 Definition eval_expr_cps_def:
-  eval_expr_cps cx1 (Name id) st k =
+  eval_expr_cps cx1 (Name _ id) st k =
     liftk cx1 ApplyTv
       (do env <- get_scopes;
           n <<- string_to_num id;
           v <- lift_option_type (lookup_scopes n env) "Name not in scope";
           return $ Value v od st) k ∧
-  eval_expr_cps cx1 (BareGlobalName id) st k =
+  eval_expr_cps cx1 (BareGlobalName _ id) st k =
     liftk cx1 ApplyTv
       (do imms <- get_immutables cx1 (current_module cx1);
           n <<- string_to_num id;
           v <- lift_option_type (FLOOKUP imms n) "BareGlobalName not found";
           return $ Value v od st) k ∧
-  eval_expr_cps cx2 (TopLevelName (src_id_opt, id)) st k =
+  eval_expr_cps cx2 (TopLevelName _ (src_id_opt, id)) st k =
     liftk cx2 ApplyTv (lookup_global cx2 src_id_opt (string_to_num id) st) k ∧
-  eval_expr_cps cx2 (FlagMember nsid mid) st k =
+  eval_expr_cps cx2 (FlagMember _ nsid mid) st k =
     liftk cx2 ApplyTv (lookup_flag_mem cx2 nsid mid st) k ∧
-  eval_expr_cps cx3 (IfExp e1 e2 e3) st k =
+  eval_expr_cps cx3 (IfExp _ e1 e2 e3) st k =
     eval_expr_cps cx3 e1 st (IfExpK e2 e3 k) ∧
-  eval_expr_cps cx4 (Literal l) st k =
+  eval_expr_cps cx4 (Literal _ l) st k =
     AK cx4 (ApplyTv (Value $ evaluate_literal l)) st k ∧
-  eval_expr_cps cx5 (StructLit (src_id_opt, id) kes) st k =
+  eval_expr_cps cx5 (StructLit _ (src_id_opt, id) kes) st k =
     eval_exprs_cps cx5 (MAP SND kes) st (StructLitK (MAP FST kes) k) ∧
-  eval_expr_cps cx6 (Subscript e1 e2) st k =
+  eval_expr_cps cx6 (Subscript _ e1 e2) st k =
     eval_expr_cps cx6 e1 st (SubscriptK e2 k) ∧
-  eval_expr_cps cx7 (Attribute e id) st k =
+  eval_expr_cps cx7 (Attribute _ e id) st k =
     eval_expr_cps cx7 e st (AttributeK id k) ∧
-  eval_expr_cps cx8 (Builtin bt es) st k =
+  eval_expr_cps cx8 (Builtin ty bt es) st k =
     (case type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st of
        (INR ex, st) => AK cx8 (ApplyExc ex) st k
      | (INL (), st) => if bt = Len then eval_expr_cps cx8 (HD es) st (LenK k)
-                       else eval_exprs_cps cx8 es st (BuiltinK bt k)) ∧
-  eval_expr_cps cx8 (Pop bt) st k =
+                       else eval_exprs_cps cx8 es st (BuiltinK ty bt k)) ∧
+  eval_expr_cps cx8 (Pop _ bt) st k =
     eval_base_target_cps cx8 bt st (PopK k) ∧
-  eval_expr_cps cx8 (TypeBuiltin tb typ es) st k =
+  eval_expr_cps cx8 (TypeBuiltin _ tb typ es) st k =
     (case type_check (type_builtin_args_length_ok tb (LENGTH es))
             "TypeBuiltin args" st of
         (INR ex, st) => AK cx8 (ApplyExc ex) st k
       | (INL tv, st) => eval_exprs_cps cx8 es st (TypeBuiltinK tb typ k)) ∧
-  eval_expr_cps cx9 (Call Send es _) st k =
+  eval_expr_cps cx9 (Call _ Send es _) st k =
     (case type_check (LENGTH es = 2) "Send args" st of
        (INR ex, st) => AK cx9 (ApplyExc ex) st k
      | (INL (), st) => eval_exprs_cps cx9 es st (CallSendK k)) ∧
-  eval_expr_cps cx10 (Call (ExtCall is_static (func_name, arg_types, ret_type)) es drv) st k =
+  eval_expr_cps cx10 (Call _ (ExtCall is_static (func_name, arg_types, ret_type)) es drv) st k =
     eval_exprs_cps cx10 es st (ExtCallK is_static func_name arg_types ret_type drv k) ∧
-  eval_expr_cps cx10 (Call (IntCall (ns, fn)) es _) st k =
+  eval_expr_cps cx10 (Call _ (IntCall (ns, fn)) es _) st k =
     (case do
       check (no_recursion (ns, fn) cx10.stk) "recursion";
       ts <- lift_option_type (get_module_code cx10 ns) "IntCall get_module_code";
@@ -276,8 +276,8 @@ Definition eval_stmt_cps_def:
     eval_base_target_cps cx t st (AppendK e k) ∧
   eval_stmt_cps cx (Assign g e) st k =
     eval_target_cps cx g st (AssignK e k) ∧
-  eval_stmt_cps cx (AugAssign t bop e) st k =
-    eval_base_target_cps cx t st (AugAssignK bop e k) ∧
+  eval_stmt_cps cx (AugAssign ty t bop e) st k =
+    eval_base_target_cps cx t st (AugAssignK ty bop e k) ∧
   eval_stmt_cps cx (If e ss1 ss2) st k =
     eval_expr_cps cx e st (IfK ss1 ss2 k) ∧
   eval_stmt_cps cx (For id typ it n body) st k =
@@ -346,8 +346,8 @@ Definition apply_exc_def:
   apply_exc cx ex st (AnnAssignK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AssignK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AssignK1 _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (AugAssignK _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (AugAssignK1 _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (AugAssignK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (AugAssignK1 _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IfK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IfK1 _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IfK2 k) =
@@ -379,7 +379,7 @@ Definition apply_exc_def:
   apply_exc cx ex st (SubscriptK1 _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AttributeK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (PopK k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (BuiltinK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (BuiltinK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (LenK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (TypeBuiltinK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CallSendK k) = AK cx (ApplyExc ex) st k ∧
@@ -420,8 +420,8 @@ Definition apply_base_target_def:
     AK cx (ApplyBaseTarget (FST btv, AttrSubscript id :: SND btv)) st k ∧
   apply_base_target cx btv st (SubscriptTargetK e k) =
     eval_expr_cps cx e st (SubscriptTargetK1 btv k) ∧
-  apply_base_target cx btv st (AugAssignK bop e k) =
-    eval_expr_cps cx e st (AugAssignK1 btv bop k) ∧
+  apply_base_target cx btv st (AugAssignK ty bop e k) =
+    eval_expr_cps cx e st (AugAssignK1 ty btv bop k) ∧
   apply_base_target cx btv st (AppendK e k) =
     eval_expr_cps cx e st (AppendK1 btv k) ∧
   apply_base_target cx btv st (PopK k) =
@@ -459,7 +459,7 @@ Definition apply_tv_def:
   apply_tv cx tv st (LenK k) =
     liftk cx ApplyTv (do
       len <- toplevel_array_length cx tv;
-      return $ Value $ IntV (Unsigned 256) (&len)
+      return $ Value $ IntV (&len)
     od st) k ∧
   apply_tv cx tv st (ExprK k) =
     (case type_check (¬is_HashMapRef tv) "Expr HashMapRef" st of
@@ -491,7 +491,7 @@ Definition apply_val_def:
   apply_val cx (BoolV T) st (AssertK se k) = apply cx st k ∧
   apply_val cx (BoolV F) st (AssertK se k) = eval_expr_cps cx se st (RaiseK k) ∧
   apply_val cx _ st (AssertK e k) = apply_exc cx (Error (TypeError "not BoolV")) st k ∧
-  apply_val cx (StringV _ str) st (RaiseK k) =
+  apply_val cx (StringV str) st (RaiseK k) =
     apply_exc cx (AssertException str) st k ∧
   apply_val cx _ st (RaiseK k) =
     apply_exc cx (Error (TypeError "not StringV")) st k ∧
@@ -499,8 +499,8 @@ Definition apply_val_def:
     liftk cx (K Apply) (new_variable id v st) k ∧
   apply_val cx v st (AssignK1 gv k) =
     liftk cx (K Apply) (assign_target cx gv (Replace v) st) k ∧
-  apply_val cx v st (AugAssignK1 (loc, sbs) bop k) =
-    liftk cx (K Apply) (assign_target cx (BaseTargetV loc sbs) (Update bop v) st) k ∧
+  apply_val cx v st (AugAssignK1 ty (loc, sbs) bop k) =
+    liftk cx (K Apply) (assign_target cx (BaseTargetV loc sbs) (Update ty bop v) st) k ∧
   apply_val cx v st (AppendK1 (loc, sbs) k) =
     liftk cx (K Apply) (assign_target cx (BaseTargetV loc sbs) (AppendOp v) st) k ∧
   apply_val cx v st (ArrayK k) =
@@ -509,8 +509,8 @@ Definition apply_val_def:
   apply_val cx v st (RangeK1 e k) = eval_expr_cps cx e st (RangeK2 v k) ∧
   apply_val cx v2 st (RangeK2 v1 k) =
     (case do rl <- lift_sum $ get_range_limits v1 v2;
-             u <<- FST rl; ns <<- SND rl; n1 <<- FST ns; n2 <<- SND ns;
-             return $ GENLIST (λn. IntV u (n1 + &n)) n2
+             n1 <<- FST rl; n2 <<- SND rl;
+             return $ GENLIST (λn. IntV (n1 + &n)) n2
      od st
        of (INR ex, st) => apply_exc cx ex st k
         | (INL vs, st) => AK cx (ApplyVals vs) st k) ∧
@@ -559,10 +559,10 @@ Definition apply_vals_def:
       | (INL vs, st) => eval_for_cps cx (string_to_num id) body vs st k) ∧
   apply_vals cx vs st (StructLitK ks k) =
     apply_tv cx (Value $ StructV (ZIP (ks, vs))) st k ∧
-  apply_vals cx vs st (BuiltinK bt k) =
+  apply_vals cx vs st (BuiltinK ty bt k) =
     liftk cx ApplyTv (do
       acc <- get_accounts;
-      v <- lift_sum $ evaluate_builtin cx acc bt vs;
+      v <- lift_sum $ evaluate_builtin cx acc ty bt vs;
       return $ Value v
     od st) k ∧
   apply_vals cx vs st (TypeBuiltinK tb typ k) =
@@ -832,7 +832,7 @@ Proof
     \\ Cases_on`sv` \\ gvs[dest_StringV_def, apply_val_def, lift_option_def, lift_option_type_def, lift_option_type_def,
                            raise_def]
     \\ TRY (
-      qmatch_asmsub_rename_tac`INL (StringV _ _)`
+      qmatch_asmsub_rename_tac`INL (StringV _)`
       \\ rw[return_def]
       \\ rw[Once OWHILE_THM, SimpRHS, stepk_def, apply_exc_def] \\ gvs[]
       \\ rw[Once OWHILE_THM, apply_exc_def] \\ NO_TAC)
@@ -888,7 +888,7 @@ Proof
     \\ CASE_TAC \\ gs[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_base_target_def]
-    \\ qmatch_goalsub_rename_tac`AugAssignK1 p` \\ Cases_on`p`
+    \\ qmatch_goalsub_rename_tac`AugAssignK1 _ p` \\ Cases_on`p`
     \\ first_x_assum drule \\ rw[]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]

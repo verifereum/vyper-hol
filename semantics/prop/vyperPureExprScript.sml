@@ -4,17 +4,17 @@ Ancestors
 
 (* Pure expressions: expressions that do not modify state. *)
 Definition pure_expr_def:
-  pure_expr (Name _) = T ∧
-  pure_expr (BareGlobalName _) = T ∧
-  pure_expr (TopLevelName _) = T ∧
-  pure_expr (FlagMember _ _) = T ∧
-  pure_expr (Literal _) = T ∧
-  pure_expr (IfExp e1 e2 e3) = (pure_expr e1 ∧ pure_expr e2 ∧ pure_expr e3) ∧
-  pure_expr (StructLit _ kes) = EVERY pure_expr (MAP SND kes) ∧
-  pure_expr (Subscript e1 e2) = (pure_expr e1 ∧ pure_expr e2) ∧
-  pure_expr (Attribute e _) = pure_expr e ∧
-  pure_expr (Builtin _ es) = EVERY pure_expr es ∧
-  pure_expr (TypeBuiltin _ _ es) = EVERY pure_expr es ∧
+  pure_expr (Name _ _) = T ∧
+  pure_expr (BareGlobalName _ _) = T ∧
+  pure_expr (TopLevelName _ _) = T ∧
+  pure_expr (FlagMember _ _ _) = T ∧
+  pure_expr (Literal _ _) = T ∧
+  pure_expr (IfExp _ e1 e2 e3) = (pure_expr e1 ∧ pure_expr e2 ∧ pure_expr e3) ∧
+  pure_expr (StructLit _ _ kes) = EVERY pure_expr (MAP SND kes) ∧
+  pure_expr (Subscript _ e1 e2) = (pure_expr e1 ∧ pure_expr e2) ∧
+  pure_expr (Attribute _ e _) = pure_expr e ∧
+  pure_expr (Builtin _ _ es) = EVERY pure_expr es ∧
+  pure_expr (TypeBuiltin _ _ _ es) = EVERY pure_expr es ∧
   pure_expr _ = F
 Termination
   WF_REL_TAC `measure expr_size` >>
@@ -29,9 +29,9 @@ End
    ------------------------------------------------------------------------ *)
 
 Theorem case_Name[local]:
-  ∀cx id.
+  ∀cx ty id.
     (∀st res st'.
-       eval_expr cx (Name id) st = (res, st') ⇒
+       eval_expr cx (Name ty id) st = (res, st') ⇒
        st = st')
 Proof
   simp[evaluate_def, bind_def, get_scopes_def, return_def,
@@ -41,9 +41,9 @@ Proof
 QED
 
 Theorem case_BareGlobalName[local]:
-  ∀cx id.
+  ∀cx ty id.
     (∀st res st'.
-       eval_expr cx (BareGlobalName id) st = (res, st') ⇒
+       eval_expr cx (BareGlobalName ty id) st = (res, st') ⇒
        st = st')
 Proof
   rpt strip_tac >>
@@ -52,25 +52,25 @@ Proof
 QED
 
 Theorem case_TopLevelName[local]:
-  ∀cx src_id_opt id.
+  ∀cx ty src_id_opt id.
     (∀st res st'.
-       eval_expr cx (TopLevelName (src_id_opt, id)) st = (res, st') ⇒
+       eval_expr cx (TopLevelName ty (src_id_opt, id)) st = (res, st') ⇒
        st = st')
 Proof
   rpt strip_tac >> fs[evaluate_def] >> drule lookup_global_state >> simp[]
 QED
 
 Theorem case_FlagMember[local]:
-  ∀cx nsid mid.
+  ∀cx ty nsid mid.
     (∀st res st'.
-       eval_expr cx (FlagMember nsid mid) st = (res, st') ⇒
+       eval_expr cx (FlagMember ty nsid mid) st = (res, st') ⇒
        st = st')
 Proof
   rpt strip_tac >> fs[evaluate_def] >> drule lookup_flag_mem_state >> simp[]
 QED
 
 Theorem case_IfExp[local]:
-  ∀cx e1 e2 e3.
+  ∀cx ty e1 e2 e3.
     (∀s'' tv1 t.
        eval_expr cx e1 s'' = (INL tv1, t) ⇒
        ∀st res st'.
@@ -82,8 +82,8 @@ Theorem case_IfExp[local]:
     (∀st res st'.
        eval_expr cx e1 st = (res, st') ⇒ pure_expr e1 ⇒ st = st') ⇒
     (∀st res st'.
-       eval_expr cx (IfExp e1 e2 e3) st = (res, st') ⇒
-       pure_expr (IfExp e1 e2 e3) ⇒ st = st')
+       eval_expr cx (IfExp ty e1 e2 e3) st = (res, st') ⇒
+       pure_expr (IfExp ty e1 e2 e3) ⇒ st = st')
 Proof
   rpt strip_tac >>
   fs[evaluate_def, bind_def, AllCaseEqs(), switch_BoolV_def, pure_expr_def, raise_def] >>
@@ -97,9 +97,9 @@ Proof
 QED
 
 Theorem case_Literal[local]:
-  ∀cx l.
+  ∀cx ty l.
     (∀st res st'.
-       eval_expr cx (Literal l) st = (res, st') ⇒
+       eval_expr cx (Literal ty l) st = (res, st') ⇒
        st = st')
 Proof
   rpt strip_tac >> fs[evaluate_def, return_def]
@@ -113,13 +113,13 @@ QED
 
    Plan reference: Case 6 *)
 Theorem case_StructLit[local]:
-  ∀cx src kes.
+  ∀cx ty src kes.
     (∀st res st'.
        eval_exprs cx (MAP SND kes) st = (res, st') ⇒
        EVERY pure_expr (MAP SND kes) ⇒ st = st') ⇒
     (∀st res st'.
-       eval_expr cx (StructLit src kes) st = (res, st') ⇒
-       pure_expr (StructLit src kes) ⇒ st = st')
+       eval_expr cx (StructLit ty src kes) st = (res, st') ⇒
+       pure_expr (StructLit ty src kes) ⇒ st = st')
 Proof
   rpt strip_tac >> PairCases_on `src` >>
   fs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def, return_def] >> gvs[] >>
@@ -128,7 +128,7 @@ Proof
 QED
 
 Theorem case_Subscript[local]:
-  ∀cx e1 e2.
+  ∀cx ty e1 e2.
     (∀s'' tv1 t.
        eval_expr cx e1 s'' = (INL tv1, t) ⇒
        ∀st res st'.
@@ -136,8 +136,8 @@ Theorem case_Subscript[local]:
     (∀st res st'.
        eval_expr cx e1 st = (res, st') ⇒ pure_expr e1 ⇒ st = st') ⇒
     (∀st res st'.
-       eval_expr cx (Subscript e1 e2) st = (res, st') ⇒
-       pure_expr (Subscript e1 e2) ⇒ st = st')
+       eval_expr cx (Subscript ty e1 e2) st = (res, st') ⇒
+       pure_expr (Subscript ty e1 e2) ⇒ st = st')
 Proof
   rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def] >>
   imp_res_tac return_state >> imp_res_tac lift_sum_state >>
@@ -158,12 +158,12 @@ Proof
 QED
 
 Theorem case_Attribute[local]:
-  ∀cx e id.
+  ∀cx ty e id.
     (∀st res st'.
        eval_expr cx e st = (res, st') ⇒ pure_expr e ⇒ st = st') ⇒
     (∀st res st'.
-       eval_expr cx (Attribute e id) st = (res, st') ⇒
-       pure_expr (Attribute e id) ⇒ st = st')
+       eval_expr cx (Attribute ty e id) st = (res, st') ⇒
+       pure_expr (Attribute ty e id) ⇒ st = st')
 Proof
   rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def] >>
   imp_res_tac return_state >> imp_res_tac lift_sum_state >>
@@ -171,7 +171,7 @@ Proof
 QED
 
 Theorem case_Builtin[local]:
-  ∀cx bt es.
+  ∀cx ty bt es.
     (∀s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x, t) ∧
        bt ≠ Len ⇒
@@ -183,8 +183,8 @@ Theorem case_Builtin[local]:
        ∀st res st'.
          eval_expr cx (HD es) st = (res, st') ⇒ pure_expr (HD es) ⇒ st = st') ⇒
     (∀st res st'.
-       eval_expr cx (Builtin bt es) st = (res, st') ⇒
-       pure_expr (Builtin bt es) ⇒ st = st')
+       eval_expr cx (Builtin ty bt es) st = (res, st') ⇒
+       pure_expr (Builtin ty bt es) ⇒ st = st')
 Proof
   rpt strip_tac >>
   gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def, ignore_bind_def,
@@ -202,7 +202,7 @@ Proof
         (Cases_on `es` >> fs[builtin_args_length_ok_def]) >>
       first_x_assum drule >> gvs[])
   (* non-Len case: eval_exprs + evaluate_builtin *)
-  >> TRY (Cases_on `evaluate_builtin cx s''.accounts bt vs` >> gvs[return_def, raise_def]) >>
+  >> TRY (Cases_on `evaluate_builtin cx s''.accounts ty bt vs` >> gvs[return_def, raise_def]) >>
   first_x_assum drule >> gvs[ETA_THM, sum_CASE_rator, CaseEq"sum",
     return_def, raise_def, get_accounts_def, builtin_args_length_ok_def,
     listTheory.LENGTH_EQ_NUM_compute] >>
@@ -210,23 +210,23 @@ Proof
 QED
 
 Theorem case_Pop[local]:
-  ∀cx bt.
+  ∀cx ty bt.
     (∀st res st'.
-       eval_expr cx (Pop bt) st = (res, st') ⇒
-       pure_expr (Pop bt) ⇒ st = st')
+       eval_expr cx (Pop ty bt) st = (res, st') ⇒
+       pure_expr (Pop ty bt) ⇒ st = st')
 Proof
   rw[pure_expr_def]
 QED
 
 Theorem case_TypeBuiltin[local]:
-  ∀cx tb typ es.
+  ∀cx ty tb typ es.
     (∀s'' x t.
        type_check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args" s'' = (INL x, t) ⇒
        ∀st res st'.
          eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st = st') ⇒
     (∀st res st'.
-       eval_expr cx (TypeBuiltin tb typ es) st = (res, st') ⇒
-       pure_expr (TypeBuiltin tb typ es) ⇒ st = st')
+       eval_expr cx (TypeBuiltin ty tb typ es) st = (res, st') ⇒
+       pure_expr (TypeBuiltin ty tb typ es) ⇒ st = st')
 Proof
   rpt strip_tac >>
   gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def, ignore_bind_def,
@@ -237,9 +237,9 @@ QED
 
 (* All Call cases are vacuously true since pure_expr (Call _ _ _) = F *)
 Theorem case_Call[local]:
-  ∀cx c es drv st res st'.
-    eval_expr cx (Call c es drv) st = (res, st') ⇒
-    pure_expr (Call c es drv) ⇒ st = st'
+  ∀cx ty c es drv st res st'.
+    eval_expr cx (Call ty c es drv) st = (res, st') ⇒
+    pure_expr (Call ty c es drv) ⇒ st = st'
 Proof
   rw[pure_expr_def]
 QED

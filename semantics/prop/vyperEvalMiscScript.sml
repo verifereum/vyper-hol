@@ -19,7 +19,7 @@ QED
 
 Theorem eval_expr_Name_preserves_state:
   ∀cx n st v st'.
-    eval_expr cx (Name n) st = (INL (Value v), st') ==> st' = st
+    eval_expr cx (Name _ n) st = (INL (Value v), st') ==> st' = st
 Proof
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
        lift_option_def, lift_option_type_def] >>
@@ -43,12 +43,12 @@ QED
 
 (* Unsigned subtraction when y ≤ x *)
 Theorem evaluate_binop_sub_small_unsigned:
-  ∀x y.
+  ∀tv x y.
     within_int_bound (Unsigned 256) x ∧
     within_int_bound (Unsigned 256) y ∧
     y ≤ x ⇒
-    evaluate_binop Sub (IntV (Unsigned 256) x) (IntV (Unsigned 256) y) =
-    INL (IntV (Unsigned 256) (x − y))
+    evaluate_binop (Unsigned 256) tv Sub (IntV x) (IntV y) =
+    INL (IntV (x − y))
 Proof
   rpt strip_tac >>
   simp[evaluate_binop_def, bounded_int_op_def] >>
@@ -60,12 +60,12 @@ QED
 
 (* Signed 128 addition when result is in bounds *)
 Theorem evaluate_binop_add_int128:
-  ∀a b.
+  ∀tv a b.
     within_int_bound (Signed 128) a ∧
     within_int_bound (Signed 128) b ∧
     within_int_bound (Signed 128) (a + b) ⇒
-    evaluate_binop Add (IntV (Signed 128) a) (IntV (Signed 128) b) =
-    INL (IntV (Signed 128) (a + b))
+    evaluate_binop (Signed 128) tv Add (IntV a) (IntV b) =
+    INL (IntV (a + b))
 Proof
   rpt strip_tac >>
   simp[evaluate_binop_def, bounded_int_op_def]

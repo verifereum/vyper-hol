@@ -59,14 +59,14 @@ Definition build_getter_def:
     (let vn = num_to_dec_string n in
       if is_ArrayT vt then
         (let (args, ret, exp) =
-           build_getter (Subscript e (Name vn))
+           build_getter (Subscript NoneT e (Name NoneT vn))
              (BaseT (UintT 256)) (Type (ArrayT_type vt)) (SUC n) in
            ((vn, kt)::args, ret, exp))
-      else ([(vn, kt)], vt, Subscript e (Name vn))) ∧
+      else ([(vn, kt)], vt, Subscript NoneT e (Name NoneT vn))) ∧
   build_getter e kt (HashMapT typ vtyp) n =
     (let vn = num_to_dec_string n in
      let (args, ret, exp) =
-       build_getter (Subscript e (Name vn)) typ vtyp (SUC n) in
+       build_getter (Subscript NoneT e (Name NoneT vn)) typ vtyp (SUC n) in
      ((vn, kt)::args, ret, exp))
 Termination
   WF_REL_TAC ‘measure (value_type_size o FST o SND o SND)’
@@ -104,13 +104,13 @@ Definition lookup_function_def:
    else lookup_function src_id_opt name vis ts) ∧
   lookup_function src_id_opt name External (VariableDecl Public mut id typ :: ts) =
   (if id = name then
-    let ne = TopLevelName (src_id_opt, id) in
+    let ne = TopLevelName NoneT (src_id_opt, id) in
     if ¬is_ArrayT typ
     then SOME (View, [], [], typ, [Return (SOME ne)])
     else SOME $ getter ne (BaseT (UintT 256)) (Type (ArrayT_type typ))
    else lookup_function src_id_opt name External ts) ∧
   lookup_function src_id_opt name External (HashMapDecl Public _ id kt vt :: ts) =
-  (if id = name then SOME $ getter (TopLevelName (src_id_opt, id)) kt vt
+  (if id = name then SOME $ getter (TopLevelName NoneT (src_id_opt, id)) kt vt
    else lookup_function src_id_opt name External ts) ∧
   lookup_function src_id_opt name vis (_ :: ts) =
     lookup_function src_id_opt name vis ts
@@ -205,7 +205,7 @@ Definition bound_def:
   stmt_bound ts (Assign g e) =
     1 + target_bound ts g
       + expr_bound ts e ∧
-  stmt_bound ts (AugAssign bt _ e) =
+  stmt_bound ts (AugAssign _ bt _ e) =
     1 + base_target_bound ts bt
       + expr_bound ts e ∧
   stmt_bound ts (If e ss1 ss2) =
@@ -242,36 +242,36 @@ Definition bound_def:
   base_target_bound ts (SubscriptTarget bt e) =
     1 + base_target_bound ts bt
       + expr_bound ts e ∧
-  expr_bound ts (Name _) = 0 ∧
-  expr_bound ts (BareGlobalName _) = 0 ∧
-  expr_bound ts (TopLevelName _) = 0 ∧
-  expr_bound ts (FlagMember _ _) = 0 ∧
-  expr_bound ts (IfExp e1 e2 e3) =
+  expr_bound ts (Name _ _) = 0 ∧
+  expr_bound ts (BareGlobalName _ _) = 0 ∧
+  expr_bound ts (TopLevelName _ _) = 0 ∧
+  expr_bound ts (FlagMember _ _ _) = 0 ∧
+  expr_bound ts (IfExp _ e1 e2 e3) =
     1 + expr_bound ts e1
       + MAX (expr_bound ts e2)
             (expr_bound ts e3) ∧
-  expr_bound ts (Subscript e1 e2) =
+  expr_bound ts (Subscript _ e1 e2) =
     1 + expr_bound ts e1
       + expr_bound ts e2 ∧
-  expr_bound ts (Attribute e _) =
+  expr_bound ts (Attribute _ e _) =
     1 + expr_bound ts e ∧
-  expr_bound ts (Literal _) = 0 ∧
-  expr_bound ts (StructLit _ kes) =
+  expr_bound ts (Literal _ _) = 0 ∧
+  expr_bound ts (StructLit _ _ kes) =
     1 + exprs_bound ts (MAP SND kes) ∧
-  expr_bound ts (Builtin _ es) =
+  expr_bound ts (Builtin _ _ es) =
     1 + exprs_bound ts es ∧
-  expr_bound ts (Pop bt) =
+  expr_bound ts (Pop _ bt) =
     1 + base_target_bound ts bt ∧
-  expr_bound ts (TypeBuiltin _ _ es) =
+  expr_bound ts (TypeBuiltin _ _ _ es) =
     1 + exprs_bound ts es ∧
-  expr_bound ts (Call (IntCall (src_id_opt, fn)) es drv) =
+  expr_bound ts (Call _ (IntCall (src_id_opt, fn)) es drv) =
     1 + exprs_bound ts es
       + (case drv of NONE => 0 | SOME e => expr_bound ts e)
       + (case ALOOKUP ts (src_id_opt, fn) of
          | SOME (dflts, ss) => exprs_bound (ADELKEY (src_id_opt, fn) ts) dflts
                              + stmts_bound (ADELKEY (src_id_opt, fn) ts) ss
          | NONE => 0) ∧
-  expr_bound ts (Call t es drv) =
+  expr_bound ts (Call _ t es drv) =
     1 + exprs_bound ts es
       + (case drv of NONE => 0 | SOME e => expr_bound ts e) ∧
   exprs_bound ts [] = 0 ∧
@@ -591,12 +591,10 @@ End
 val () = cv_auto_trans immutable_target_def;
 
 Definition get_range_limits_def:
-  get_range_limits (IntV u1 n1) (IntV u2 n2) =
-  (if u1 = u2 then
-     if n1 ≤ n2
-     then INL (u1, n1, Num (n2 - n1))
-     else INR (RuntimeError "no range")
-   else INR (TypeError "range type")) ∧
+  get_range_limits (IntV n1) (IntV n2) =
+  (if n1 ≤ n2
+   then INL (n1, Num (n2 - n1))
+   else INR (RuntimeError "no range")) ∧
   get_range_limits _ _ = INR (TypeError "range not IntV")
 End
 
@@ -742,7 +740,7 @@ val () = cv_auto_trans run_ext_call_def;
 
 (* Dynamic array bounds check: reads stored length from storage *)
 Definition check_array_bounds_def:
-  check_array_bounds cx (ArrayRef is_transient base_slot _ (Dynamic _)) (IntV _ i) = do
+  check_array_bounds cx (ArrayRef is_transient base_slot _ (Dynamic _)) (IntV i) = do
     storage <- get_storage_backend cx is_transient;
     stored_len <<- w2n (lookup_storage base_slot storage);
     check (0 ≤ i ∧ Num i < stored_len) "subscript dynamic array oob"
@@ -809,11 +807,11 @@ Definition evaluate_def:
     assign_target cx gv (Replace v);
     return ()
   od ∧
-  eval_stmt cx (AugAssign t bop e) = do
+  eval_stmt cx (AugAssign ty t bop e) = do
     (loc, sbs) <- eval_base_target cx t;
     tv <- eval_expr cx e;
     v <- get_Value tv;
-    assign_target cx (BaseTargetV loc sbs) (Update bop v);
+    assign_target cx (BaseTargetV loc sbs) (Update ty bop v);
     return ()
   od ∧
   eval_stmt cx (If e ss1 ss2) = do
@@ -852,8 +850,8 @@ Definition evaluate_def:
     tv2 <- eval_expr cx e2;
     v2 <- get_Value tv2;
     rl <- lift_sum $ get_range_limits v1 v2;
-    u <<- FST rl; ns <<- SND rl; n1 <<- FST ns; n2 <<- SND ns;
-    return $ GENLIST (λn. IntV u (n1 + &n)) n2
+    n1 <<- FST rl; n2 <<- SND rl;
+    return $ GENLIST (λn. IntV (n1 + &n)) n2
   od ∧
   eval_target cx (BaseTarget t) = do
     (loc, sbs) <- eval_base_target cx t;
@@ -906,35 +904,35 @@ Definition evaluate_def:
       pop_scope ;
     if broke then return () else eval_for cx nm body vs
   od ∧
-  eval_expr cx (Name id) = do
+  eval_expr cx (Name _ id) = do
     env <- get_scopes;
     n <<- string_to_num id;
     v <- lift_option_type (lookup_scopes n env) "Name not in scope";
     return $ Value v
   od ∧
-  eval_expr cx (BareGlobalName id) = do
+  eval_expr cx (BareGlobalName _ id) = do
     imms <- get_immutables cx (current_module cx);
     n <<- string_to_num id;
     v <- lift_option_type (FLOOKUP imms n) "BareGlobalName not found";
     return $ Value v
   od ∧
-  eval_expr cx (TopLevelName (src_id_opt, id)) =
+  eval_expr cx (TopLevelName _ (src_id_opt, id)) =
     lookup_global cx src_id_opt (string_to_num id) ∧
-  eval_expr cx (FlagMember nsid mid) = lookup_flag_mem cx nsid mid ∧
-  eval_expr cx (IfExp e1 e2 e3) = do
+  eval_expr cx (FlagMember _ nsid mid) = lookup_flag_mem cx nsid mid ∧
+  eval_expr cx (IfExp _ e1 e2 e3) = do
     tv <- eval_expr cx e1;
     switch_BoolV tv
       (eval_expr cx e2)
       (eval_expr cx e3)
   od ∧
-  eval_expr cx (Literal l) = return $ Value $ evaluate_literal l ∧
-  eval_expr cx (StructLit (src_id_opt, id) kes) = do
+  eval_expr cx (Literal _ l) = return $ Value $ evaluate_literal l ∧
+  eval_expr cx (StructLit _ (src_id_opt, id) kes) = do
     (* TODO: type checking - validate fields against struct definition from src_id_opt *)
     ks <<- MAP FST kes;
     vs <- eval_exprs cx (MAP SND kes);
     return $ Value $ StructV $ ZIP (ks, vs)
   od ∧
-  eval_expr cx (Subscript e1 e2) = do
+  eval_expr cx (Subscript _ e1 e2) = do
     tv1 <- eval_expr cx e1;
     tv2 <- eval_expr cx e2;
     v2 <- get_Value tv2;
@@ -946,38 +944,38 @@ Definition evaluate_def:
       return $ Value v
     od
   od ∧
-  eval_expr cx (Attribute e id) = do
+  eval_expr cx (Attribute _ e id) = do
     tv <- eval_expr cx e;
     sv <- get_Value tv;
     v <- lift_sum $ evaluate_attribute sv id;
     return $ Value $ v
   od ∧
-  eval_expr cx (Builtin bt es) = do
+  eval_expr cx (Builtin ty bt es) = do
     type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args";
     v <- if bt = Len then do
       tv <- eval_expr cx (HD es);
       len <- toplevel_array_length cx tv;
-      return $ IntV (Unsigned 256) (&len)
+      return $ IntV (&len)
     od else do
       vs <- eval_exprs cx es;
       acc <- get_accounts;
-      lift_sum $ evaluate_builtin cx acc bt vs
+      lift_sum $ evaluate_builtin cx acc ty bt vs
     od;
     return $ Value v
   od ∧
-  eval_expr cx (Pop bt) = do
+  eval_expr cx (Pop _ bt) = do
     (loc, sbs) <- eval_base_target cx bt;
     popped <- assign_target cx (BaseTargetV loc sbs) PopOp;
     v <- lift_option_type popped "Pop returned NONE";
     return $ Value v
   od ∧
-  eval_expr cx (TypeBuiltin tb typ es) = do
+  eval_expr cx (TypeBuiltin _ tb typ es) = do
     type_check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args";
     vs <- eval_exprs cx es;
     v <- lift_sum $ evaluate_type_builtin cx tb typ vs;
     return $ Value v
   od ∧
-  eval_expr cx (Call Send es _) = do
+  eval_expr cx (Call _ Send es _) = do
     type_check (LENGTH es = 2) "Send args";
     vs <- eval_exprs cx es;
     toAddr <- lift_option_type (dest_AddressV $ EL 0 vs) "Send not AddressV";
@@ -985,7 +983,7 @@ Definition evaluate_def:
     transfer_value cx.txn.target toAddr amount;
     return $ Value $ NoneV
   od ∧
-  eval_expr cx (Call (ExtCall is_static (func_name, arg_types, ret_type)) es drv) = do
+  eval_expr cx (Call _ (ExtCall is_static (func_name, arg_types, ret_type)) es drv) = do
     vs <- eval_exprs cx es;
     check (vs ≠ []) "ExtCall no target";
     target_addr <- lift_option_type (dest_AddressV (HD vs)) "ExtCall target not address";
@@ -1019,7 +1017,7 @@ Definition evaluate_def:
       return $ Value ret_val
     od
   od ∧
-  eval_expr cx (Call (IntCall (src_id_opt, fn)) es _) = do
+  eval_expr cx (Call _ (IntCall (src_id_opt, fn)) es _) = do
     check (¬MEM (src_id_opt, fn) cx.stk) "recursion";
     ts <- lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code";
     tup <- lift_option_type (lookup_callable_function cx.in_deploy fn ts) "IntCall lookup_function";
@@ -1069,61 +1067,50 @@ Termination
     => iterator_bound (remcode cx) it
   | INR (INL (cx, ss)) => stmts_bound (remcode cx) ss
   | INL (cx, s) => stmt_bound (remcode cx) s)’
-  \\ reverse(rw[bound_def, MAX_DEF, MULT, IS_SOME_EXISTS]) \\ gvs[]
-  >- (
-    gvs[compatible_bound_def, check_def, type_check_def, assert_def]
+  \\ rw[bound_def, MAX_DEF, MULT, IS_SOME_EXISTS] \\ gvs[]
+  \\ rpt (FIRST [
+    (* For loop: compatible_bound case *)
+    (rename1`compatible_bound`
+    \\ gvs[compatible_bound_def, check_def, type_check_def, assert_def]
     \\ qmatch_goalsub_abbrev_tac`(LENGTH vs) * x`
     \\ irule LESS_EQ_LESS_TRANS
     \\ qexists_tac`LENGTH vs + n * x + 1` \\ simp[]
-    \\ PROVE_TAC[MULT_COMM, LESS_MONO_MULT])
-  >- (
-    gvs[check_def, type_check_def, assert_def]
+    \\ PROVE_TAC[MULT_COMM, LESS_MONO_MULT]),
+    (* Builtin: builtin_args_length_ok case *)
+    (rename1`builtin_args_length_ok`
+    \\ gvs[builtin_args_length_ok_def, check_def, type_check_def, assert_def,
+           LENGTH_EQ_NUM_compute, bound_def]),
+    (* TypeBuiltin: type_builtin_args_length_ok case *)
+    (rename1`type_builtin_args_length_ok`
+    \\ gvs[type_builtin_args_length_ok_def, check_def, type_check_def, assert_def,
+           LENGTH_EQ_NUM_compute, bound_def]),
+    (* IntCall cases *)
+    (gvs[check_def, type_check_def, assert_def]
     \\ gvs[push_function_def, return_def]
     \\ gvs[lift_option_def, lift_option_type_def, CaseEq"option", CaseEq"prod", option_CASE_rator,
            raise_def, return_def]
     \\ gvs[remcode_def, get_module_code_def, ADELKEY_def]
-    \\ qpat_x_assum`OUTR _ _ = _`kall_tac
+    \\ TRY (qpat_x_assum`OUTR _ _ = _`kall_tac)
     \\ gvs[CaseEq"option"]
     \\ simp[bound_def]
-    \\ qmatch_asmsub_rename_tac`lookup_callable_function _ fn ts = SOME (_, args, dflts, ret, body)`
-    \\ Cases_on`(dflts, body) = ([], [])`
+    \\ qmatch_asmsub_rename_tac`lookup_callable_function _ fn ts = SOME (_, args, dflts, ret, bdy)`
+    \\ Cases_on`(dflts, bdy) = ([], [])`
     >- gvs[bound_def]
+    \\ `(dflts, bdy) <> ([], [])` by (strip_tac >> gvs[])
     \\ drule_all_then(qspec_then`src_id_opt`strip_assume_tac)
          lookup_callable_function_eq_ALOOKUP_module_fns
     \\ drule_at_then Any drule ALOOKUP_FLAT_MAP_module_fns
     \\ qmatch_goalsub_abbrev_tac`ALOOKUP (FILTER P ls) k`
     \\ `P = λ(k,v). ¬MEM k cx.stk` by simp[Abbr`P`,FUN_EQ_THM,FORALL_PROD]
-    \\ simp[ALOOKUP_FILTER, FILTER_FILTER, Abbr`k`]
-    \\ simp[LAMBDA_PROD]
-    \\ qmatch_goalsub_abbrev_tac`exprs_bound fts (DROP n dflts)`
-    \\ qspecl_then[`fts`,`n`,`dflts`]mp_tac exprs_bound_DROP
-    \\ simp[])
-  \\ TRY (
-    rename1`builtin_args_length_ok Len`
-    \\ gvs[builtin_args_length_ok_def, check_def, type_check_def, type_check_def, assert_def,
-           LENGTH_EQ_NUM_compute, bound_def] \\ NO_TAC)
-  \\ gvs[check_def, type_check_def, assert_def]
-  \\ gvs[push_function_def, return_def]
-  \\ gvs[lift_option_def, lift_option_type_def, CaseEq"option", CaseEq"prod", option_CASE_rator,
-         raise_def, return_def]
-  \\ gvs[remcode_def, get_module_code_def, ADELKEY_def]
-  \\ qpat_x_assum`OUTR _ _ = _`kall_tac
-  \\ gvs[CaseEq"option"]
-  (* Use lookup_callable_function_eq_ALOOKUP_module_fns to get ALOOKUP result *)
-  \\ qmatch_asmsub_rename_tac`lookup_callable_function _ fn ts = SOME (_, args, dflts, ret, body)`
-  \\ Cases_on`(dflts, body) = ([], [])`
-  (* Case 1: body = [] (default constructor) - trivial, bound is 0 *)
-  >- gvs[bound_def]
-  (* Case 2: body ≠ [] - use the key lemma *)
-  \\ drule_all_then(qspec_then`src_id_opt`strip_assume_tac)
-       lookup_callable_function_eq_ALOOKUP_module_fns
-  \\ drule_at_then Any drule ALOOKUP_FLAT_MAP_module_fns
-  \\ qmatch_goalsub_abbrev_tac`ALOOKUP (FILTER P ls) k`
-  \\ `P = λ(k,v). ¬MEM k cx.stk` by simp[Abbr`P`,FUN_EQ_THM,FORALL_PROD]
-  \\ pop_assum SUBST_ALL_TAC
-  \\ simp[ALOOKUP_FILTER]
-  \\ rw[FILTER_FILTER,UNCURRY,Abbr`k`]
-  \\ simp[LAMBDA_PROD]
+    \\ TRY (simp[ALOOKUP_FILTER, FILTER_FILTER, Abbr`k`] \\ simp[LAMBDA_PROD]
+      \\ qmatch_goalsub_abbrev_tac`exprs_bound fts (DROP n dflts)`
+      \\ qspecl_then[`fts`,`n`,`dflts`]mp_tac exprs_bound_DROP
+      \\ simp[] \\ NO_TAC)
+    \\ pop_assum SUBST_ALL_TAC
+    \\ simp[ALOOKUP_FILTER]
+    \\ rw[FILTER_FILTER,UNCURRY,Abbr`k`]
+    \\ simp[LAMBDA_PROD])
+  ])
 End
 
 Theorem eval_exprs_length:
@@ -1142,7 +1129,7 @@ QED
 Definition flag_value_def:
   flag_value m n acc [] = StructV $ REVERSE acc ∧
   flag_value m n acc (id::ids) =
-  flag_value m (2n*n) ((id,FlagV m n)::acc) ids
+  flag_value m (2n*n) ((id,FlagV n)::acc) ids
 End
 
 val () = cv_auto_trans flag_value_def;

@@ -177,13 +177,13 @@ Proof
 QED
 
 Theorem case_AugAssign_dom[local]:
-  ∀cx bt bop e.
+  ∀cx ty bt bop e.
     (∀st res st'. eval_base_target cx bt st = (res, st') ⇒
        MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
     (∀st res st'. eval_expr cx e st = (res, st') ⇒
        MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
-      eval_stmt cx (AugAssign bt bop e) st = (res, st') ⇒ preserves_scopes_dom st st'
+      eval_stmt cx (AugAssign ty bt bop e) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
   rpt strip_tac >> irule map_fdom_eq_preserves_dom >>
   gvs[evaluate_def, bind_def, AllCaseEqs()] >>

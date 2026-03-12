@@ -155,11 +155,11 @@ Datatype:
   = NoneV
   | BoolV bool
   | ArrayV array_value
-  | IntV int_bound int
-  | FlagV num num
+  | IntV int
+  | FlagV num
   | DecimalV int
-  | StringV num string
-  | BytesV bound (word8 list)
+  | StringV string
+  | BytesV (word8 list)
   | StructV ((identifier, value) alist) ;
   array_value
   = DynArrayV type_value num (value list)
@@ -175,25 +175,25 @@ val from_to_value_thm = cv_typeLib.from_to_thm_for “:value”;
 val from_value = from_to_value_thm |> concl |> rator |> rand
 val to_value = from_to_value_thm |> concl |> rand
 
-Overload AddressV = “λw: address. BytesV (Fixed 20) (word_to_bytes w T)”
+Overload AddressV = “λw: address. BytesV (word_to_bytes w T)”
 
 (* default value at each type *)
 
 Definition default_value_def:
-  default_value (BaseTV (UintT n)) = IntV (Unsigned n) 0 ∧
-  default_value (BaseTV (IntT n)) = IntV (Signed n) 0 ∧
+  default_value (BaseTV (UintT n)) = IntV 0 ∧
+  default_value (BaseTV (IntT n)) = IntV 0 ∧
   default_value (BaseTV DecimalT) = DecimalV 0 ∧
   default_value (TupleTV ts) = default_value_tuple [] ts ∧
   default_value (ArrayTV t (Dynamic n)) = ArrayV (DynArrayV t n []) ∧
   default_value (ArrayTV t (Fixed n)) = ArrayV (SArrayV t n []) ∧
   default_value (StructTV args) = default_value_struct [] args ∧
-  default_value (FlagTV m) = FlagV m 0 ∧
+  default_value (FlagTV m) = FlagV 0 ∧
   default_value NoneTV = NoneV ∧
   default_value (BaseTV BoolT) = BoolV F ∧
   default_value (BaseTV AddressT) = AddressV 0w ∧
-  default_value (BaseTV (StringT n)) = StringV n "" ∧
-  default_value (BaseTV (BytesT (Fixed n))) = BytesV (Fixed n) (REPLICATE n 0w) ∧
-  default_value (BaseTV (BytesT (Dynamic n))) = BytesV (Dynamic n) [] ∧
+  default_value (BaseTV (StringT n)) = StringV "" ∧
+  default_value (BaseTV (BytesT (Fixed n))) = BytesV (REPLICATE n 0w) ∧
+  default_value (BaseTV (BytesT (Dynamic n))) = BytesV [] ∧
   default_value_tuple acc [] = ArrayV $ TupleV $ REVERSE acc ∧
   default_value_tuple acc (t::ts) =
     default_value_tuple (default_value t :: acc) ts ∧
@@ -322,7 +322,7 @@ End
 (* value destructors *)
 
 Definition dest_NumV_def:
-  dest_NumV (IntV _ i) =
+  dest_NumV (IntV i) =
     (if i < 0 then NONE else SOME (Num i)) ∧
   dest_NumV _ = NONE
 End
@@ -330,8 +330,8 @@ End
 val () = cv_auto_trans dest_NumV_def;
 
 Definition dest_AddressV_def:
-  dest_AddressV (BytesV (Fixed b) bs) : address option =
-    (if b = 20 ∧ LENGTH bs = 20 then
+  dest_AddressV (BytesV bs) : address option =
+    (if LENGTH bs = 20 then
       SOME (word_of_bytes_be bs)
      else NONE) ∧
   dest_AddressV _ = NONE
@@ -340,7 +340,7 @@ End
 val () = cv_auto_trans dest_AddressV_def;
 
 Definition dest_StringV_def:
-  dest_StringV (StringV _ s) = SOME s ∧
+  dest_StringV (StringV s) = SOME s ∧
   dest_StringV _ = NONE
 End
 

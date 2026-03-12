@@ -9,7 +9,7 @@
  *   value_has_type_equiv - equivalence with encode_value IS_SOME
  *   well_formed_type_value_def - well-formedness of typed_value descriptors
  *   value_has_type_inv - inversion lemma for value_has_type
- *   value_has_type_transfer - if v has types tv and tv', then tv and tv' accept the same values
+
  *   all_have_type_EVERY - all_have_type as EVERY
  *   sparse_has_type_enumerate - enumerate_static_array preserves sparse_has_type
  *)
@@ -39,6 +39,8 @@ Definition well_formed_type_value_def:
   well_formed_type_value (StructTV fields) =
     (EVERY (well_formed_type_value o SND) fields ∧
      type_slot_size (StructTV fields) ≤ dimword(:256)) ∧
+  well_formed_type_value (BaseTV (UintT m)) = (m ≤ 256) ∧
+  well_formed_type_value (BaseTV (IntT m)) = (m ≤ 256) ∧
   well_formed_type_value _ = T
 End
 
@@ -67,14 +69,13 @@ QED
            dynamic array length within bound,
            recursive well-formedness of sub-values. *)
 Definition well_formed_value_def:
-  well_formed_value (IntV (Unsigned _) i) = (0 ≤ i ∧ i < &dimword(:256)) ∧
-  well_formed_value (IntV (Signed _) i) = (INT_MIN(:256) ≤ i ∧ i ≤ INT_MAX(:256)) ∧
+  well_formed_value (IntV i) = (INT_MIN(:256) ≤ i ∧ i < &dimword(:256)) ∧
   well_formed_value (DecimalV i) = (INT_MIN(:256) ≤ i ∧ i ≤ INT_MAX(:256)) ∧
-  well_formed_value (FlagV _ k) = (k < dimword(:256)) ∧
+  well_formed_value (FlagV k) = (k < dimword(:256)) ∧
   well_formed_value (BoolV _) = T ∧
   well_formed_value NoneV = T ∧
-  well_formed_value (BytesV _ _) = T ∧
-  well_formed_value (StringV _ _) = T ∧
+  well_formed_value (BytesV _) = T ∧
+  well_formed_value (StringV _) = T ∧
   well_formed_value (ArrayV av) = wf_array av ∧
   well_formed_value (StructV fields) = wf_fields fields ∧
   wf_array (TupleV vs) = wf_values vs ∧
@@ -104,27 +105,29 @@ End
 
 Definition value_has_type_def:
   (* Unsigned integer *)
-  value_has_type (BaseTV (UintT m)) (IntV (Unsigned n) _) = (n = m) ∧
+  value_has_type (BaseTV (UintT m)) (IntV i) =
+    (0 ≤ i ∧ Num i < 2 ** m) ∧
   (* Signed integer *)
-  value_has_type (BaseTV (IntT m)) (IntV (Signed n) _) = (n = m) ∧
+  value_has_type (BaseTV (IntT m)) (IntV i) =
+    within_int_bound (Signed m) i ∧
   (* Decimal *)
   value_has_type (BaseTV DecimalT) (DecimalV _) = T ∧
   (* Boolean *)
   value_has_type (BaseTV BoolT) (BoolV _) = T ∧
   (* Address *)
-  value_has_type (BaseTV AddressT) (BytesV (Fixed m) bs) =
-    (LENGTH bs = m ∧ m = 20) ∧
+  value_has_type (BaseTV AddressT) (BytesV bs) =
+    (LENGTH bs = 20) ∧
   (* Fixed bytes *)
-  value_has_type (BaseTV (BytesT (Fixed n))) (BytesV (Fixed m) bs) =
-    (m = n ∧ LENGTH bs = n ∧ n ≤ 32) ∧
+  value_has_type (BaseTV (BytesT (Fixed n))) (BytesV bs) =
+    (LENGTH bs = n ∧ n ≤ 32) ∧
   (* Dynamic bytes *)
-  value_has_type (BaseTV (BytesT (Dynamic max))) (BytesV (Dynamic m) bs) =
-    (m = max ∧ LENGTH bs ≤ max) ∧
+  value_has_type (BaseTV (BytesT (Dynamic max))) (BytesV bs) =
+    (LENGTH bs ≤ max) ∧
   (* String *)
-  value_has_type (BaseTV (StringT max)) (StringV m s) =
-    (m = max ∧ LENGTH s ≤ max) ∧
+  value_has_type (BaseTV (StringT max)) (StringV s) =
+    (LENGTH s ≤ max) ∧
   (* Flag *)
-  value_has_type (FlagTV m') (FlagV m _) = (m = m') ∧
+  value_has_type (FlagTV m') (FlagV _) = T ∧
   (* None *)
   value_has_type NoneTV NoneV = T ∧
   (* Tuple *)
@@ -272,7 +275,7 @@ QED
 
 Theorem within_int_bound_unsigned_well_formed:
   within_int_bound (Unsigned b) i ∧ b ≤ 256 ⇒
-  well_formed_value (IntV (Unsigned b) i)
+  well_formed_value (IntV i)
 Proof
   rw[within_int_bound_def, well_formed_value_def] >>
   `Num i < dimword(:256)` by (
@@ -286,7 +289,7 @@ QED
 
 Theorem within_int_bound_signed_well_formed:
   within_int_bound (Signed b) i ∧ b ≤ 256 ⇒
-  well_formed_value (IntV (Signed b) i)
+  well_formed_value (IntV i)
 Proof
   strip_tac >>
   gvs[within_int_bound_def, well_formed_value_def] >>
@@ -323,9 +326,7 @@ Proof
   simp[value_has_type_def, encode_value_def, encode_base_to_slot_def,
        encode_dyn_bytes_slots_def, AllCaseEqs(), COND_RAND, COND_RATOR,
        LET_THM] >>
-  TRY (strip_tac >> metis_tac[]) >>
-  TRY (rename1 `ArrayTV _ bd` >> Cases_on `bd`) >>
-  simp[encode_value_def]
+  TRY (strip_tac >> metis_tac[])
 QED
 
 (* ===== Derived typing properties ===== *)
@@ -347,16 +348,17 @@ QED
 Theorem value_has_type_inv:
   (value_has_type tv NoneV ⇔ tv = NoneTV) ∧
   (value_has_type tv (BoolV b) ⇔ tv = BaseTV BoolT) ∧
-  (value_has_type tv (IntV (Unsigned n) i) ⇔ tv = BaseTV (UintT n)) ∧
-  (value_has_type tv (IntV (Signed n) i) ⇔ tv = BaseTV (IntT n)) ∧
+  (value_has_type tv (IntV i) ⇔
+    (∃n. tv = BaseTV (UintT n) ∧ 0 ≤ i ∧ Num i < 2 ** n) ∨
+    (∃n. tv = BaseTV (IntT n) ∧ within_int_bound (Signed n) i)) ∧
   (value_has_type tv (DecimalV d) ⇔ tv = BaseTV DecimalT) ∧
-  (value_has_type tv (FlagV m k) ⇔ tv = FlagTV m) ∧
-  (value_has_type tv (StringV m s) ⇔ tv = BaseTV (StringT m) ∧ LENGTH s ≤ m) ∧
-  (value_has_type tv (BytesV (Dynamic m) bs) ⇔
-    tv = BaseTV (BytesT (Dynamic m)) ∧ LENGTH bs ≤ m) ∧
-  (value_has_type tv (BytesV (Fixed m) bs) ⇔
-    (tv = BaseTV AddressT ∧ LENGTH bs = m ∧ m = 20) ∨
-    (tv = BaseTV (BytesT (Fixed m)) ∧ LENGTH bs = m ∧ m ≤ 32)) ∧
+  (value_has_type tv (FlagV k) ⇔ ∃m. tv = FlagTV m) ∧
+  (value_has_type tv (StringV s) ⇔
+    ∃m. tv = BaseTV (StringT m) ∧ LENGTH s ≤ m) ∧
+  (value_has_type tv (BytesV bs) ⇔
+    (tv = BaseTV AddressT ∧ LENGTH bs = 20) ∨
+    (∃n. tv = BaseTV (BytesT (Fixed n)) ∧ LENGTH bs = n ∧ n ≤ 32) ∨
+    (∃m. tv = BaseTV (BytesT (Dynamic m)) ∧ LENGTH bs ≤ m)) ∧
   (value_has_type tv (ArrayV (TupleV vs)) ⇔
     ∃tvs. tv = TupleTV tvs ∧ values_have_types tvs vs) ∧
   (value_has_type tv (ArrayV (SArrayV tv0 n sp)) ⇔
@@ -375,115 +377,4 @@ Proof
 QED
 
 (* Helper: values_have_types transfer, assuming element-wise transfer *)
-Theorem values_have_types_transfer[local]:
-  ∀vs tvs tvs' vs'.
-    (∀v. MEM v vs ⇒
-      ∀tv tv' v'.
-        value_has_type tv v ∧ value_has_type tv' v ∧ value_has_type tv v' ⇒
-        value_has_type tv' v') ∧
-    values_have_types tvs vs ∧ values_have_types tvs' vs ∧
-    values_have_types tvs vs' ⇒
-    values_have_types tvs' vs'
-Proof
-  Induct
-  >- (rw[value_has_type_def] >>
-      Cases_on `tvs` >> Cases_on `tvs'` >> gvs[value_has_type_def])
-  >>
-  rpt gen_tac >> strip_tac >>
-  Cases_on `tvs` >> Cases_on `tvs'` >> Cases_on `vs'` >>
-  gvs[value_has_type_def] >>
-  conj_tac
-  >- (qpat_x_assum `∀v. _` (qspec_then `h` mp_tac) >> simp[] >>
-      disch_then (qspecl_then [`h'`, `h''`, `h'³'`] mp_tac) >> simp[])
-  >>
-  first_x_assum irule >> simp[] >> metis_tac[]
-QED
 
-(* Helper: struct_has_type transfer, assuming element-wise transfer *)
-Theorem struct_has_type_transfer[local]:
-  ∀fields ftypes ftypes' fields'.
-    (∀fn v. MEM (fn, v) fields ⇒
-      ∀tv tv' v'.
-        value_has_type tv v ∧ value_has_type tv' v ∧ value_has_type tv v' ⇒
-        value_has_type tv' v') ∧
-    struct_has_type ftypes fields ∧ struct_has_type ftypes' fields ∧
-    struct_has_type ftypes fields' ⇒
-    struct_has_type ftypes' fields'
-Proof
-  Induct
-  >- (rw[value_has_type_def] >>
-      Cases_on `ftypes` >> Cases_on `ftypes'` >> gvs[value_has_type_def])
-  >>
-  rpt gen_tac >> PairCases_on `h` >> strip_tac >>
-  Cases_on `ftypes` >> Cases_on `ftypes'` >> Cases_on `fields'` >>
-  gvs[value_has_type_def] >>
-  PairCases_on `h` >> PairCases_on `h'` >> PairCases_on `h''` >>
-  gvs[value_has_type_def] >>
-  conj_tac
-  >- (qpat_x_assum `∀fn v. _` (qspecl_then [`h''0`, `h1`] mp_tac) >> simp[] >>
-      disch_then (qspecl_then [`h1'`, `h'1`, `h''1`] mp_tac) >> simp[])
-  >>
-  first_x_assum irule >> simp[] >> metis_tac[]
-QED
-
-Theorem MEM_IMP_list_size[local]:
-  ∀f x l. MEM x l ⇒ f x < list_size f l
-Proof
-  gen_tac >> Induct_on `l` >>
-  simp[listTheory.list_size_thm] >>
-  rpt strip_tac >> gvs[] >> res_tac >> simp[]
-QED
-
-Theorem value_has_type_transfer_aux[local]:
-  ∀n v tv tv' w.
-    value_size v ≤ n ⇒
-    value_has_type tv v ∧ value_has_type tv' v ∧ value_has_type tv w ⇒
-    value_has_type tv' w
-Proof
-  Induct >>
-  rpt strip_tac >- (Cases_on `v` >> gvs[value_has_type_inv, value_size_def]) >>
-  Cases_on `v` >> gvs[value_has_type_inv] >>
-  (* IntV: case split int_bound *)
-  TRY (Cases_on `i` >> gvs[value_has_type_inv] >> NO_TAC) >>
-  (* BytesV: case split bound, handle AddressT/BytesT overlap *)
-  TRY (Cases_on `b` >> gvs[value_has_type_inv] >>
-       rpt (qpat_x_assum `_ ∨ _` strip_assume_tac) >>
-       gvs[value_has_type_inv] >>
-       Cases_on `w` >> gvs[value_has_type_def] >>
-       TRY (rename1 `BytesV bd` >> Cases_on `bd` >> gvs[value_has_type_def]) >>
-       TRY (rename1 `ArrayV av` >> Cases_on `av` >> gvs[value_has_type_def]) >>
-       TRY (rename1 `IntV ib` >> Cases_on `ib` >> gvs[value_has_type_def]) >>
-       NO_TAC)
-  (* ArrayV: TupleV needs transfer; SArrayV/DynArrayV trivial *)
-  >- (Cases_on `a` >> gvs[value_has_type_inv] >>
-      Cases_on `w` >> gvs[value_has_type_def] >>
-      TRY (rename1 `ArrayV a'` >> Cases_on `a'` >> gvs[value_has_type_def]) >>
-      simp[value_has_type_def] >>
-      irule values_have_types_transfer >>
-      qexists_tac `tvs` >> qexists_tac `l` >>
-      simp[] >> rpt strip_tac >>
-      first_x_assum irule >> simp[] >>
-      imp_res_tac MEM_IMP_list_size >> simp[] >>
-      qexists_tac `tv` >> qexists_tac `v` >> simp[] >>
-      first_x_assum (qspec_then `value_size` mp_tac) >> simp[])
-  (* StructV *)
-  >- (Cases_on `w` >> gvs[value_has_type_def] >>
-      irule struct_has_type_transfer >>
-      qexists_tac `l` >> qexists_tac `ftypes` >>
-      simp[] >> rpt strip_tac >>
-      first_x_assum (qspecl_then [`v`, `tv`, `tv'`, `v'`] mp_tac) >>
-      impl_tac >- (
-        imp_res_tac MEM_IMP_list_size >>
-        first_x_assum (qspec_then `pair_size (list_size char_size) value_size` mp_tac) >>
-        simp[basicSizeTheory.pair_size_def]) >>
-      simp[])
-QED
-
-Theorem value_has_type_transfer:
-  ∀v tv tv' w.
-    value_has_type tv v ∧ value_has_type tv' v ∧ value_has_type tv w ⇒
-    value_has_type tv' w
-Proof
-  rpt strip_tac >> irule value_has_type_transfer_aux >>
-  qexists_tac `value_size v` >> qexists_tac `tv` >> qexists_tac `v` >> simp[]
-QED

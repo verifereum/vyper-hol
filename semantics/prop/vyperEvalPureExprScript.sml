@@ -17,40 +17,40 @@ Ancestors
 
 Definition eval_pure_expr_def:
   (* Base cases *)
-  eval_pure_expr cx st (Name id) =
+  eval_pure_expr cx st (Name _ id) =
     OPTION_MAP Value (lookup_name st id) ∧
 
-  eval_pure_expr cx st (BareGlobalName id) =
-    (case eval_expr cx (BareGlobalName id) st of
+  eval_pure_expr cx st (BareGlobalName ty id) =
+    (case eval_expr cx (BareGlobalName ty id) st of
      | (INL tv, _) => SOME tv
      | _ => NONE) ∧
 
-  eval_pure_expr cx st (TopLevelName nsid) =
-    (case eval_expr cx (TopLevelName nsid) st of
+  eval_pure_expr cx st (TopLevelName ty nsid) =
+    (case eval_expr cx (TopLevelName ty nsid) st of
      | (INL tv, _) => SOME tv
      | _ => NONE) ∧
 
-  eval_pure_expr cx st (FlagMember nsid mid) =
+  eval_pure_expr cx st (FlagMember _ nsid mid) =
     lookup_flag_member cx nsid mid ∧
 
-  eval_pure_expr cx st (Literal l) =
+  eval_pure_expr cx st (Literal _ l) =
     SOME (Value (evaluate_literal l)) ∧
 
   (* Conditional *)
-  eval_pure_expr cx st (IfExp cond et ef) =
+  eval_pure_expr cx st (IfExp _ cond et ef) =
     (case eval_pure_expr cx st cond of
      | SOME (Value (BoolV T)) => eval_pure_expr cx st et
      | SOME (Value (BoolV F)) => eval_pure_expr cx st ef
      | _ => NONE) ∧
 
   (* Struct literal *)
-  eval_pure_expr cx st (StructLit src kes) =
+  eval_pure_expr cx st (StructLit _ src kes) =
     (case eval_pure_exprs cx st (MAP SND kes) of
      | SOME vs => SOME (Value (StructV (ZIP (MAP FST kes, vs))))
      | NONE => NONE) ∧
 
   (* Subscript *)
-  eval_pure_expr cx st (Subscript e1 e2) =
+  eval_pure_expr cx st (Subscript _ e1 e2) =
     (case eval_pure_expr cx st e1 of
      | SOME tv1 =>
        (case eval_pure_expr cx st e2 of
@@ -69,7 +69,7 @@ Definition eval_pure_expr_def:
      | NONE => NONE) ∧
 
   (* Attribute access *)
-  eval_pure_expr cx st (Attribute e id) =
+  eval_pure_expr cx st (Attribute _ e id) =
     (case eval_pure_expr cx st e of
      | SOME (Value sv) =>
        (case evaluate_attribute sv id of
@@ -78,28 +78,28 @@ Definition eval_pure_expr_def:
      | _ => NONE) ∧
 
   (* General builtins *)
-  eval_pure_expr cx st (Builtin bt es) =
+  eval_pure_expr cx st (Builtin ty bt es) =
     (if bt = Len then
        (case es of
         | [e] =>
           (case eval_pure_expr cx st e of
            | SOME tv =>
              (case toplevel_array_length cx tv st of
-              | (INL len, _) => SOME (Value (IntV (Unsigned 256) (&len)))
+              | (INL len, _) => SOME (Value (IntV (&len)))
               | _ => NONE)
            | NONE => NONE)
         | _ => NONE)
      else if builtin_args_length_ok bt (LENGTH es) then
        (case eval_pure_exprs cx st es of
         | SOME vs =>
-          (case evaluate_builtin cx st.accounts bt vs of
+          (case evaluate_builtin cx st.accounts ty bt vs of
            | INL v => SOME (Value v)
            | INR _ => NONE)
         | NONE => NONE)
      else NONE) ∧
 
   (* General type builtins *)
-  eval_pure_expr cx st (TypeBuiltin tb typ es) =
+  eval_pure_expr cx st (TypeBuiltin _ tb typ es) =
     (if type_builtin_args_length_ok tb (LENGTH es) then
        (case eval_pure_exprs cx st es of
         | SOME vs =>
@@ -173,12 +173,12 @@ Proof
            vyperStateTheory.lift_option_def])
   (* BareGlobalName *)
   >- (fs[Once eval_pure_expr_def] >>
-      Cases_on `eval_expr cx (BareGlobalName id) st` >>
+      Cases_on `eval_expr cx (BareGlobalName ty id) st` >>
       gvs[AllCaseEqs()] >>
       drule_at Any eval_expr_preserves_state >> simp[pure_expr_def])
   (* TopLevelName *)
   >- (fs[Once eval_pure_expr_def] >>
-      Cases_on `eval_expr cx (TopLevelName nsid) st` >>
+      Cases_on `eval_expr cx (TopLevelName ty nsid) st` >>
       gvs[AllCaseEqs()] >>
       drule_at Any eval_expr_preserves_state >> simp[pure_expr_def])
   (* FlagMember *)
@@ -301,12 +301,12 @@ Proof
   (* BareGlobalName *)
   >- (rpt gen_tac >> strip_tac >>
       simp[Once eval_pure_expr_def] >>
-      Cases_on `eval_expr cx (BareGlobalName id) st` >>
+      Cases_on `eval_expr cx (BareGlobalName ty id) st` >>
       gvs[AllCaseEqs()])
   (* TopLevelName *)
   >- (rpt gen_tac >> strip_tac >>
       simp[Once eval_pure_expr_def] >>
-      Cases_on `eval_expr cx (TopLevelName nsid) st` >>
+      Cases_on `eval_expr cx (TopLevelName ty nsid) st` >>
       gvs[AllCaseEqs()])
   (* FlagMember *)
   >- (rpt gen_tac >> strip_tac >>
@@ -323,7 +323,7 @@ Proof
   >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
       simp[Once eval_pure_expr_def] >>
       gvs[pure_expr_def] >>
-      qpat_x_assum `eval_expr _ (IfExp _ _ _) _ = _` mp_tac >>
+      qpat_x_assum `eval_expr _ (IfExp _ _ _ _) _ = _` mp_tac >>
       simp[Once vyperInterpreterTheory.evaluate_def] >>
       simp monadic_defs >>
       strip_tac >> gvs[AllCaseEqs()] >>
@@ -433,7 +433,7 @@ Proof
           pop_assum SUBST_ALL_TAC >>
           fs[vyperStateTheory.get_accounts_def, vyperStateTheory.return_def,
              vyperStateTheory.bind_def, vyperStateTheory.lift_sum_def] >>
-          Cases_on `evaluate_builtin cx st.accounts bt vs` >>
+          Cases_on `evaluate_builtin cx st.accounts ty bt vs` >>
           gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]))
   (* TypeBuiltin *)
   >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>

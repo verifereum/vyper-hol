@@ -424,9 +424,9 @@ val () = cv_auto_trans update_immutable_def;
 
 (* Convert subscript back to a value for hashmap key encoding *)
 Definition subscript_to_value_def:
-  subscript_to_value (IntSubscript i) = SOME (IntV (Signed 256) i) ∧
-  subscript_to_value (StrSubscript s) = SOME (StringV (LENGTH s) s) ∧
-  subscript_to_value (BytesSubscript bs) = SOME (BytesV (Fixed (LENGTH bs)) bs) ∧
+  subscript_to_value (IntSubscript i) = SOME (IntV i) ∧
+  subscript_to_value (StrSubscript s) = SOME (StringV s) ∧
+  subscript_to_value (BytesSubscript bs) = SOME (BytesV bs) ∧
   subscript_to_value (AttrSubscript _) = NONE  (* Attributes are not valid hashmap keys *)
 End
 
@@ -492,7 +492,7 @@ Definition lookup_flag_mem_def:
      | SOME ls =>
   case INDEX_OF mid ls
     of NONE => raise $ Error (TypeError "lookup_flag_mem index")
-     | SOME i => return $ Value $ FlagV (LENGTH ls) (2 ** i)
+     | SOME i => return $ Value $ FlagV (2 ** i)
 End
 
 val () = lookup_flag_mem_def
@@ -637,9 +637,9 @@ Definition toplevel_array_length_def:
   od ∧
   toplevel_array_length cx (Value (ArrayV av)) =
     return $ &(array_length av) ∧
-  toplevel_array_length cx (Value (BytesV _ ls)) =
+  toplevel_array_length cx (Value (BytesV ls)) =
     return $ &(LENGTH ls) ∧
-  toplevel_array_length cx (Value (StringV _ ls)) =
+  toplevel_array_length cx (Value (StringV ls)) =
     return $ &(LENGTH ls) ∧
   toplevel_array_length _ _ = raise $ Error (TypeError "toplevel_array_length")
 End
@@ -649,17 +649,17 @@ val () = toplevel_array_length_def
   |> cv_auto_trans;
 
 Definition value_to_key_def:
-  value_to_key (IntV _ i) = SOME $ IntSubscript i ∧
-  value_to_key (StringV _ s) = SOME $ StrSubscript s ∧
-  value_to_key (BytesV _ bs) = SOME $ BytesSubscript bs ∧
-  value_to_key (FlagV _ n) = SOME $ IntSubscript $ &n ∧
+  value_to_key (IntV i) = SOME $ IntSubscript i ∧
+  value_to_key (StringV s) = SOME $ StrSubscript s ∧
+  value_to_key (BytesV bs) = SOME $ BytesSubscript bs ∧
+  value_to_key (FlagV n) = SOME $ IntSubscript $ &n ∧
   value_to_key _ = NONE
 End
 
 val () = cv_auto_trans value_to_key_def;
 
 Definition evaluate_subscript_def:
-  evaluate_subscript tenv (Value (ArrayV av)) (IntV _ i) =
+  evaluate_subscript tenv (Value (ArrayV av)) (IntV i) =
   (case array_index av i
    of SOME v => INL $ INL $ Value v
     | _ => INR (RuntimeError "subscript array_index")) ∧
@@ -671,7 +671,7 @@ Definition evaluate_subscript_def:
         (case evaluate_type tenv t of
          | SOME tv => INL $ INR (is_transient, new_slot, tv)
          | NONE => INR (TypeError "evaluate_subscript evaluate_type"))) ∧
-  evaluate_subscript tenv (ArrayRef is_transient base_slot elem_tv bd) (IntV _ i) =
+  evaluate_subscript tenv (ArrayRef is_transient base_slot elem_tv bd) (IntV i) =
   (if 0 ≤ i ∧ Num i < bound_length bd then
     let elem_offset = (case bd of Fixed _ => 0 | Dynamic _ => 1) in
     let slot = base_slot + n2w (elem_offset + Num i * type_slot_size elem_tv) in
@@ -721,7 +721,7 @@ QED
 Datatype:
   assign_operation
   = Replace value
-  | Update binop value
+  | Update type binop value
   | AppendOp value
   | PopOp
 End
@@ -732,7 +732,9 @@ Theorem assign_operation_CASE_rator =
 
 Definition assign_subscripts_def:
   assign_subscripts a [] (Replace v) = INL v (* TODO: cast to type of a *) ∧
-  assign_subscripts a [] (Update bop v) = evaluate_binop bop a v ∧
+  assign_subscripts a [] (Update ty bop v) =
+    (let u = case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0 in
+       evaluate_binop u NoneTV bop a v) ∧
   assign_subscripts a [] (AppendOp v) = append_element a v ∧
   assign_subscripts a [] PopOp = pop_element a ∧
   assign_subscripts a ((IntSubscript i)::is) ao =
@@ -880,7 +882,7 @@ Definition assign_target_def:
             popped <- read_storage_slot cx is_transient last_slot pop_elem_tv;
             write_storage_slot cx is_transient last_slot pop_elem_tv (default_value pop_elem_tv);
             write_storage_slot cx is_transient elem_slot (BaseTV (UintT 256))
-              (IntV (Unsigned 256) &last_idx);
+              (IntV &last_idx);
             return $ SOME popped
           od
         | (AppendOp v, ArrayTV app_elem_tv (Dynamic n)) => do
@@ -890,7 +892,7 @@ Definition assign_target_def:
             new_slot <<- elem_slot + n2w (1 + stored_len * type_slot_size app_elem_tv);
             write_storage_slot cx is_transient new_slot app_elem_tv v;
             write_storage_slot cx is_transient elem_slot (BaseTV (UintT 256))
-              (IntV (Unsigned 256) &(stored_len + 1));
+              (IntV &(stored_len + 1));
             return NONE
           od
         | _ => do

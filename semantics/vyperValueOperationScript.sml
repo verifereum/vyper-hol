@@ -11,9 +11,9 @@ Libs
 
 Definition evaluate_literal_def:
   evaluate_literal (BoolL b) = BoolV b ∧
-  evaluate_literal (StringL n s) = StringV n s ∧
-  evaluate_literal (BytesL b bs) = BytesV b bs ∧
-  evaluate_literal (IntL ib i) = IntV ib i ∧
+  evaluate_literal (StringL n s) = StringV s ∧
+  evaluate_literal (BytesL b bs) = BytesV bs ∧
+  evaluate_literal (IntL ib i) = IntV i ∧
   evaluate_literal (DecimalL i) = DecimalV i
 End
 
@@ -92,30 +92,26 @@ End
 val () = cv_auto_trans binop_negate_def;
 
 Definition bounded_int_op_def:
-  bounded_int_op u1 u2 r =
-  if u1 = u2 then
-    if within_int_bound u1 r
-    then INL (IntV u1 r)
+  bounded_int_op u r =
+    if within_int_bound u r
+    then INL (IntV r)
     else INR (RuntimeError "bounded_int_op bound")
-  else INR (TypeError "bounded_int_op type")
 End
 
 (* optimisation on exponentiation: overflow immediately if power is too big *)
 Theorem bounded_exp:
-  bounded_int_op u1 u2 (i1 ** n2) =
-  if u1 = u2 then
-    if 2 ≤ ABS i1 ∧ int_bound_bits u1 < n2
+  bounded_int_op u (i1 ** n2) =
+    if 2 ≤ ABS i1 ∧ int_bound_bits u < n2
     then INR (RuntimeError "bounded_int_op bound")
     else let r = i1 ** n2 in
-      if within_int_bound u1 r then INL (IntV u1 r)
+      if within_int_bound u r then INL (IntV r)
     else INR (RuntimeError "bounded_int_op bound")
-  else INR (TypeError "bounded_int_op type")
 Proof
   rw[bounded_int_op_def]
   \\ gvs[int_exp_num]
-  \\ `Num (ABS i1 ** n2) < 2 ** int_bound_bits u1`
+  \\ `Num (ABS i1 ** n2) < 2 ** int_bound_bits u`
   by (
-    reverse $ Cases_on`u1`
+    reverse $ Cases_on`u`
     >- (
       gvs[within_int_bound_def]
       \\ gvs[INT_ABS]
@@ -163,7 +159,7 @@ Definition signed_int_mod_def:
   signed_int_mod b i =
     let n = 2 ** b in
     let r = int_mod i &n in
-      if r ≥ &(2 ** (b − 1)) then r − &n else r
+      if r ≥ &(2 ** (b - 1)) then r - &n else r
 End
 
 (* signed_int_mod is equivalent to w2i (i2w i) at the corresponding word width *)
@@ -176,8 +172,8 @@ Proof
   >> `&(w2n ((i2w i):'a word)) = i % &(2 ** dimindex(:'a))`
        by simp[integer_wordTheory.w2n_i2w, dimword_def]
   >> pop_assum (fn th => REWRITE_TAC [SYM th])
-  >> `(w2n ((i2w i):'a word) < 2 ** (dimindex(:'a) − 1))
-       ⇔ ¬(&(w2n ((i2w i):'a word)):num ≥ &(2 ** (dimindex(:'a) − 1)))`
+  >> `(w2n ((i2w i):'a word) < 2 ** (dimindex(:'a) - 1))
+       ⇔ ¬(&(w2n ((i2w i):'a word)):num ≥ &(2 ** (dimindex(:'a) - 1)))`
        by simp[INT_NOT_LE]
   >> pop_assum SUBST_ALL_TAC
   >> rw[]
@@ -185,12 +181,10 @@ Proof
 QED
 
 Definition wrapped_int_op_def:
-  wrapped_int_op u1 u2 i =
-  if u1 = u2 then
-    let b = int_bound_bits u1 in
-      if is_Unsigned u1 then INL $ IntV u1 (int_mod i &(2 ** b))
-      else INL $ IntV u1 (signed_int_mod b i)
-  else INR (TypeError "wrapped_int_op")
+  wrapped_int_op u i =
+    let b = int_bound_bits u in
+      if is_Unsigned u then INL $ IntV (int_mod i &(2 ** b))
+      else INL $ IntV (signed_int_mod b i)
 End
 
 val signed_int_mod_pre_def = cv_trans_pre "signed_int_mod_pre" signed_int_mod_def;
@@ -204,29 +198,29 @@ QED
 val wrapped_int_op_pre_def = cv_trans_pre "wrapped_int_op_pre" wrapped_int_op_def;
 
 Theorem wrapped_int_op_pre[cv_pre]:
-  wrapped_int_op_pre x y z
+  wrapped_int_op_pre x y
 Proof
   rw[wrapped_int_op_pre_def]
 QED
 
 Definition evaluate_binop_def:
-  evaluate_binop bop v1 v2 =
+  evaluate_binop u tv bop v1 v2 =
   case bop
     of Add => (case v1 of
-         IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           bounded_int_op u1 u2 (i1 + i2) | _ => INR (TypeError "binop"))
+         IntV i1 => (case v2 of IntV i2 =>
+           bounded_int_op u (i1 + i2) | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
            bounded_decimal_op (i1 + i2) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | Sub => (case v1 of
-         IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           bounded_int_op u1 u2 (i1 - i2) | _ => INR (TypeError "binop"))
+         IntV i1 => (case v2 of IntV i2 =>
+           bounded_int_op u (i1 - i2) | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
            bounded_decimal_op (i1 - i2) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | Mul => (case v1 of
-         IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           bounded_int_op u1 u2 (i1 * i2) | _ => INR (TypeError "binop"))
+         IntV i1 => (case v2 of IntV i2 =>
+           bounded_int_op u (i1 * i2) | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
            (let p = i1 * i2 in
             if within_int_bound (Signed 168) ((ABS p) / 10000000000)
@@ -234,10 +228,10 @@ Definition evaluate_binop_def:
             else INR (RuntimeError "Decimal Mul bound")) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | Div => (case v1 of
-         IntV u1 i1 => (case v2 of IntV u2 i2 =>
+         IntV i1 => (case v2 of IntV i2 =>
            (if i2 = 0 then INR (RuntimeError "Div0") else
-            bounded_int_op u1 u2 $
-              (if is_Unsigned u1
+            bounded_int_op u $
+              (if is_Unsigned u
                then &(w2n $ word_div ((i2w i1):bytes32) (i2w i2))
                else w2i $ word_quot ((i2w i1):bytes32) (i2w i2)))
                 | _ => INR (TypeError "binop"))
@@ -248,27 +242,27 @@ Definition evaluate_binop_def:
                          | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | UAdd => (case v1 of
-         IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           wrapped_int_op u1 u2 (i1 + i2) | _ => INR (TypeError "binop"))
+         IntV i1 => (case v2 of IntV i2 =>
+           wrapped_int_op u (i1 + i2) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | USub => (case v1 of
-         IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           wrapped_int_op u1 u2 (i1 - i2) | _ => INR (TypeError "binop"))
+         IntV i1 => (case v2 of IntV i2 =>
+           wrapped_int_op u (i1 - i2) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | UMul => (case v1 of
-         IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           wrapped_int_op u1 u2 (i1 * i2) | _ => INR (TypeError "binop"))
+         IntV i1 => (case v2 of IntV i2 =>
+           wrapped_int_op u (i1 * i2) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | UDiv => (case v1 of
-         IntV u1 i1 => (case v2 of IntV u2 i2 =>
+         IntV i1 => (case v2 of IntV i2 =>
            if i2 = 0 then INR (RuntimeError "UDiv0") else
-           wrapped_int_op u1 u2 (i1 / i2) | _ => INR (TypeError "binop"))
+           wrapped_int_op u (i1 / i2) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | Mod => (case v1 of
-         IntV u1 i1 => (case v2 of IntV u2 i2 =>
+         IntV i1 => (case v2 of IntV i2 =>
            (if i2 = 0 then INR (RuntimeError "Mod0") else
-            bounded_int_op u1 u2 $
-              (if is_Unsigned u1
+            bounded_int_op u $
+              (if is_Unsigned u
                then &(w2n $ word_mod ((i2w i1):bytes32) (i2w i2))
                else w2i $ word_rem ((i2w i1):bytes32) (i2w i2)))
                 | _ => INR (TypeError "binop"))
@@ -279,78 +273,72 @@ Definition evaluate_binop_def:
                          | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | Exp => (case v1 of
-         IntV u1 i1 => (case v2 of IntV u2 i2 =>
+         IntV i1 => (case v2 of IntV i2 =>
            (if i2 < 0 then INR (RuntimeError "Exp~") else
-            bounded_int_op u1 u2 $ (i1 ** (Num i2))) | _ => INR (TypeError "binop"))
+            bounded_int_op u $ (i1 ** (Num i2))) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | ExpMod => (case v1 of
-         IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           (if u1 = Unsigned 256 ∧ u2 = u1
-            then INL $ IntV u1 (w2i (word_exp (i2w i1 : bytes32) (i2w i2)))
+         IntV i1 => (case v2 of IntV i2 =>
+           (if u = Unsigned 256
+            then INL $ IntV (w2i (word_exp (i2w i1 : bytes32) (i2w i2)))
             else INR (TypeError "ExpMod")) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | ShL => (case v1 of
-         IntV u1 i1 => (case v2 of IntV u2 i2 =>
+         IntV i1 => (case v2 of IntV i2 =>
            (if i2 < 0 then INR (RuntimeError "ShL0")
             else let r = int_shift_left (Num i2) i1;
-                     b = int_bound_bits u1 in
-              if is_Unsigned u1 then INL $ IntV u1 (int_mod r &(2 ** b))
-              else INL $ IntV u1 (signed_int_mod b r))
+                     b = int_bound_bits u in
+              if is_Unsigned u then INL $ IntV (int_mod r &(2 ** b))
+              else INL $ IntV (signed_int_mod b r))
            | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | ShR => (case v1 of
-         IntV u1 i1 => (case v2 of IntV u2 i2 =>
+         IntV i1 => (case v2 of IntV i2 =>
            (* TODO: check type constraints on shifts *)
            (if i2 < 0 then INR (RuntimeError "ShR0")
-            else INL $ IntV u1 $ int_shift_right (Num i2) i1) | _ => INR (TypeError "binop"))
+            else INL $ IntV $ int_shift_right (Num i2) i1) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | And => (case v1 of
-         IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           bounded_int_op u1 u2 (int_and i1 i2) | _ => INR (TypeError "binop"))
+         IntV i1 => (case v2 of IntV i2 =>
+           bounded_int_op u (int_and i1 i2) | _ => INR (TypeError "binop"))
        | BoolV b1 => (case v2 of BoolV b2 =>
            INL $ BoolV (b1 ∧ b2) | _ => INR (TypeError "binop"))
-       | FlagV m1 n1 => (case v2 of FlagV m2 n2 =>
-           (if m1 = m2
-            then INL $ FlagV m1 (Num(int_and (&n1) (&n2))) (* TODO: bitwise nums *)
-            else INR (TypeError "binop flag type")) | _ => INR (TypeError "binop"))
+       | FlagV n1 => (case v2 of FlagV n2 =>
+           INL $ FlagV (Num(int_and (&n1) (&n2))) (* TODO: bitwise nums *)
+           | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | Or => (case v1 of
-         IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           bounded_int_op u1 u2 (int_or i1 i2) | _ => INR (TypeError "binop"))
+         IntV i1 => (case v2 of IntV i2 =>
+           bounded_int_op u (int_or i1 i2) | _ => INR (TypeError "binop"))
        | BoolV b1 => (case v2 of BoolV b2 =>
            INL $ BoolV (b1 ∨ b2) | _ => INR (TypeError "binop"))
-       | FlagV m1 n1 => (case v2 of FlagV m2 n2 =>
-           (if m1 = m2
-            then INL $ FlagV m1 (Num(int_or (&n1) (&n2))) (* TODO: bitwise nums *)
-            else INR (TypeError "binop flag type")) | _ => INR (TypeError "binop"))
+       | FlagV n1 => (case v2 of FlagV n2 =>
+           INL $ FlagV (Num(int_or (&n1) (&n2))) (* TODO: bitwise nums *)
+           | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | XOr => (case v1 of
-         IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           bounded_int_op u1 u2 (int_xor i1 i2) | _ => INR (TypeError "binop"))
+         IntV i1 => (case v2 of IntV i2 =>
+           bounded_int_op u (int_xor i1 i2) | _ => INR (TypeError "binop"))
        | BoolV b1 => (case v2 of BoolV b2 =>
            INL $ BoolV (b1 ≠ b2) | _ => INR (TypeError "binop"))
-       | FlagV m1 n1 => (case v2 of FlagV m2 n2 =>
-           (if m1 = m2
-            then INL $ FlagV m1 (Num(int_xor (&n1) (&n2))) (* TODO: bitwise nums *)
-            else INR (TypeError "binop flag type")) | _ => INR (TypeError "binop"))
+       | FlagV n1 => (case v2 of FlagV n2 =>
+           INL $ FlagV (Num(int_xor (&n1) (&n2))) (* TODO: bitwise nums *)
+           | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | In => (case v2 of
-         FlagV m2 n2 => (case v1 of FlagV m1 n1 =>
-           (if m1 = m2
-            then INL $ BoolV (int_and (&n1) (&n2) ≠ 0) (* TODO: use bitwise ∧ on nums *)
-            else INR (TypeError "In type")) | _ => INR (TypeError "binop"))
+         FlagV n2 => (case v1 of FlagV n1 =>
+           INL $ BoolV (int_and (&n1) (&n2) ≠ 0) (* TODO: use bitwise ∧ on nums *)
+           | _ => INR (TypeError "binop"))
        | ArrayV av => INL $ BoolV $ evaluate_in_array v1 av
        | _ => INR (TypeError "binop"))
      | Eq => (case v1 of
-         IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           (if u1 = u2 then INL (BoolV (i1 = i2)) else INR (TypeError "Eq type"))
-                                 | _ => INR (TypeError "binop"))
-       | FlagV m1 n1 => (case v2 of FlagV m2 n2 =>
-           (if m1 = m2 then INL (BoolV (n1 = n2)) else INR (TypeError "Eq type"))
-                                 | _ => INR (TypeError "binop"))
-       | StringV _ s1 => (case v2 of StringV _ s2 =>
+         IntV i1 => (case v2 of IntV i2 =>
+           INL (BoolV (i1 = i2)) | _ => INR (TypeError "binop"))
+       | FlagV n1 => (case v2 of FlagV n2 =>
+           INL (BoolV (n1 = n2)) | _ => INR (TypeError "binop"))
+       | StringV s1 => (case v2 of StringV s2 =>
            INL (BoolV (s1 = s2)) | _ => INR (TypeError "binop"))
-       | BytesV _ s1 => (case v2 of BytesV _ s2 =>
+       | BytesV s1 => (case v2 of BytesV s2 =>
            INL (BoolV (s1 = s2)) | _ => INR (TypeError "binop"))
        | BoolV s1 => (case v2 of BoolV s2 =>
            INL (BoolV (s1 = s2)) | _ => INR (TypeError "binop"))
@@ -358,48 +346,48 @@ Definition evaluate_binop_def:
            INL (BoolV (s1 = s2)) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | Lt => (case v1 of
-         IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           (if u1 = u2 then INL (BoolV (i1 < i2)) else INR (TypeError "Lt type")) | _ => INR (TypeError "binop"))
+         IntV i1 => (case v2 of IntV i2 =>
+           INL (BoolV (i1 < i2)) | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
            INL (BoolV (i1 < i2)) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | Gt => (case v1 of
-         IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           (if u1 = u2 then INL (BoolV (i1 > i2)) else INR (TypeError "Gt type")) | _ => INR (TypeError "binop"))
+         IntV i1 => (case v2 of IntV i2 =>
+           INL (BoolV (i1 > i2)) | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
            INL (BoolV (i1 > i2)) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | LtE => (case v1 of
-         IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           (if u1 = u2 then INL (BoolV (i1 ≤ i2)) else INR (TypeError "LtE type")) | _ => INR (TypeError "binop"))
+         IntV i1 => (case v2 of IntV i2 =>
+           INL (BoolV (i1 ≤ i2)) | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
            INL (BoolV (i1 ≤ i2)) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | GtE => (case v1 of
-         IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           (if u1 = u2 then INL (BoolV (i1 ≥ i2)) else INR (TypeError "GtE type")) | _ => INR (TypeError "binop"))
+         IntV i1 => (case v2 of IntV i2 =>
+           INL (BoolV (i1 ≥ i2)) | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
            INL (BoolV (i1 ≥ i2)) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | Min => (case v1 of
-         IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           (if u1 = u2 then INL (IntV u1 (if i1 < i2 then i1 else i2))
-            else INR (TypeError "Min type")) | _ => INR (TypeError "binop"))
+         IntV i1 => (case v2 of IntV i2 =>
+           INL (IntV (if i1 < i2 then i1 else i2))
+           | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
            INL (DecimalV (if i1 < i2 then i1 else i2)) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | Max => (case v1 of
-         IntV u1 i1 => (case v2 of IntV u2 i2 =>
-           (if u1 = u2 then INL (IntV u1 (if i1 < i2 then i2 else i1))
-            else INR (TypeError "Min type")) | _ => INR (TypeError "binop"))
+         IntV i1 => (case v2 of IntV i2 =>
+           INL (IntV (if i1 < i2 then i2 else i1))
+           | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
            INL (DecimalV (if i1 < i2 then i2 else i1)) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
-     | NotIn => binop_negate $ evaluate_binop In v1 v2
-     | NotEq => binop_negate $ evaluate_binop Eq v1 v2
+     | NotIn => binop_negate $ evaluate_binop u tv In v1 v2
+     | NotEq => binop_negate $ evaluate_binop u tv Eq v1 v2
      | _ => INR (TypeError "binop")
 Termination
-  WF_REL_TAC ‘inv_image $< (λ(b,x,y). if b = NotIn ∨ b = NotEq then 2n else 0n)’
+  WF_REL_TAC ‘inv_image $< (λ(u,tv,b,x,y). if b = NotIn ∨ b = NotEq then 2n else 0n)’
   \\ rw[]
 End
 
@@ -409,7 +397,7 @@ val cv_NotEq_tm = rand $ rhs $ concl $ cv_eval_raw “NotEq”;
 val () = cv_auto_trans_rec
   (REWRITE_RULE [bounded_exp, COND_RATOR] evaluate_binop_def)
   (WF_REL_TAC
-    ‘inv_image $< (λ(b,x,y).
+    ‘inv_image $< (λ(u,tv,b,x,y).
        if b = ^cv_NotIn_tm ∨ b = ^cv_NotEq_tm
        then 2n else 0n)’
    \\ rw[] \\ rw[] \\ gvs[]
@@ -419,29 +407,29 @@ val () = cv_auto_trans_rec
 (* concat *)
 
 Definition init_concat_output_def:
-  init_concat_output n (BytesV _ bs) = SOME $ BytesV (Dynamic n) bs ∧
-  init_concat_output n (StringV _ s) = SOME $ StringV n s ∧
-  init_concat_output _ _ = NONE
+  init_concat_output (BytesV bs) = SOME $ BytesV bs ∧
+  init_concat_output (StringV s) = SOME $ StringV s ∧
+  init_concat_output _ = NONE
 End
 
 val () = cv_auto_trans init_concat_output_def;
 
 Definition evaluate_concat_loop_def:
-  evaluate_concat_loop (StringV n s1) sa ba [] =
+  evaluate_concat_loop n (StringV s1) sa ba [] =
   (let s = FLAT $ s1::REVERSE sa in
    (if compatible_bound (Dynamic n) (LENGTH s)
-    then INL (StringV n s)
+    then INL (StringV s)
     else INR (RuntimeError "concat bound"))) ∧
-  evaluate_concat_loop (BytesV b b1) sa ba [] =
+  evaluate_concat_loop n (BytesV b1) sa ba [] =
   (let bs = FLAT $ b1::REVERSE ba in
-   (if compatible_bound b (LENGTH bs)
-    then INL (BytesV b bs)
+   (if compatible_bound (Dynamic n) (LENGTH bs)
+    then INL (BytesV bs)
     else INR (RuntimeError "concat bound"))) ∧
-  evaluate_concat_loop (StringV n s1) sa ba ((StringV _ s2)::vs) =
-  evaluate_concat_loop (StringV n s1) (s2::sa) ba vs ∧
-  evaluate_concat_loop (BytesV b b1) sa ba ((BytesV _ b2)::vs) =
-  evaluate_concat_loop (BytesV b b1) sa (b2::ba) vs ∧
-  evaluate_concat_loop _ _ _ _ = INR (TypeError "concat types")
+  evaluate_concat_loop n (StringV s1) sa ba ((StringV s2)::vs) =
+  evaluate_concat_loop n (StringV s1) (s2::sa) ba vs ∧
+  evaluate_concat_loop n (BytesV b1) sa ba ((BytesV b2)::vs) =
+  evaluate_concat_loop n (BytesV b1) sa (b2::ba) vs ∧
+  evaluate_concat_loop _ _ _ _ _ = INR (TypeError "concat types")
 End
 
 val () = cv_auto_trans evaluate_concat_loop_def;
@@ -450,8 +438,8 @@ Definition evaluate_concat_def:
   evaluate_concat n vs =
   if NULL vs ∨ NULL (TL vs) then INR (TypeError "concat <2")
   else
-    case init_concat_output n (HD vs)
-      of SOME v => evaluate_concat_loop v [] [] (TL vs)
+    case init_concat_output (HD vs)
+      of SOME v => evaluate_concat_loop n v [] [] (TL vs)
        | NONE => INR (TypeError "concat type or bound")
 End
 
@@ -472,18 +460,16 @@ Definition evaluate_slice_def:
   case dest_NumV sv of NONE => INR (TypeError "evaluate_slice start") | SOME start =>
   case dest_NumV lv of NONE => INR (TypeError "evaluate_slice length") | SOME length =>
   case v
-  of BytesV bb bs => (
-       if (case bb of Fixed m => m = 32 | _ => T) then
+  of BytesV bs => (
        if start + length ≤ LENGTH bs then
        if compatible_bound b length then
-         INL $ BytesV b (TAKE length (DROP start bs))
+         INL $ BytesV (TAKE length (DROP start bs))
        else INR (RuntimeError "evaluate_slice bound")
-       else INR (RuntimeError "evaluate_slice range")
-       else INR (RuntimeError "evaluate_slice BytesV bound"))
-   | StringV _ s => (
+       else INR (RuntimeError "evaluate_slice range"))
+   | StringV s => (
        if start + length ≤ LENGTH s then
        if compatible_bound b length then
-         INL $ StringV n (TAKE length (DROP start s))
+         INL $ StringV (TAKE length (DROP start s))
        else INR (RuntimeError "evaluate_slice bound")
        else INR (RuntimeError "evaluate_slice range"))
   | _ => INR (TypeError "evaluate_slice v")
@@ -507,13 +493,13 @@ Definition evaluate_as_wei_value_def:
           | MEther => 1000000000000000000000000
           | GEther => 1000000000000000000000000000
           | TEther => 1000000000000000000000000000000 in
-  let r = case v of IntV u i => i * m
+  let r = case v of IntV i => i * m
                   | DecimalV i => (i * m) / 10000000000
                   | _ => -1 in
   if 0 ≤ r then
     let u = Unsigned 256 in
     if within_int_bound u r then
-      INL $ IntV u r
+      INL $ IntV r
     else INR (RuntimeError "ewv bound")
   else INR (TypeError "ewv neg")
 End
@@ -528,10 +514,10 @@ Proof
 QED
 
 Definition evaluate_max_value_def:
-  evaluate_max_value (BaseT (UintT n)) = INL $ IntV (Unsigned n) (&(2 ** n) - 1) ∧
+  evaluate_max_value (BaseT (UintT n)) = INL $ IntV (&(2 ** n) - 1) ∧
   evaluate_max_value (BaseT (IntT n)) = (if n = 0
                                          then INR (TypeError "max_value IntT")
-                                         else INL $ IntV (Signed n) (&(2 ** (n-1)) - 1)) ∧
+                                         else INL $ IntV (&(2 ** (n-1)) - 1)) ∧
   evaluate_max_value (BaseT DecimalT) = INL $ DecimalV (&(2 ** 167) - 1) ∧
   evaluate_max_value _ = INR (TypeError "evaluate_max_value")
 End
@@ -539,10 +525,10 @@ End
 val () = cv_auto_trans evaluate_max_value_def;
 
 Definition evaluate_min_value_def:
-  evaluate_min_value (BaseT (UintT n)) = INL $ IntV (Unsigned n) 0 ∧
+  evaluate_min_value (BaseT (UintT n)) = INL $ IntV 0 ∧
   evaluate_min_value (BaseT (IntT n)) = (if n = 0
                                          then INR (TypeError "min_value IntT")
-                                         else INL $ IntV (Signed n) (-&(2 ** (n-1)))) ∧
+                                         else INL $ IntV (-&(2 ** (n-1)))) ∧
   evaluate_min_value (BaseT DecimalT) = INL $ DecimalV (-&(2 ** 167)) ∧
   evaluate_min_value _ = INR (TypeError "evaluate_min_value")
 End
@@ -563,80 +549,80 @@ val () = cv_auto_trans evaluate_attribute_def;
 (* convert *)
 
 Definition evaluate_convert_def:
-  evaluate_convert (BytesV _ bs) (BaseT BoolT) =
+  evaluate_convert (BytesV bs) (BaseT BoolT) =
     INL $ BoolV (EXISTS (λb. b ≠ 0w) bs) ∧
-  evaluate_convert (IntV _ i) (BaseT BoolT) = INL $ BoolV (i ≠ 0) ∧
+  evaluate_convert (IntV i) (BaseT BoolT) = INL $ BoolV (i ≠ 0) ∧
   evaluate_convert (BoolV b) (BaseT (IntT n)) =
-    INL $ IntV (Signed n) (if b then 1 else 0) ∧
+    INL $ IntV (if b then 1 else 0) ∧
   evaluate_convert (BoolV b) (BaseT (UintT n)) =
-    INL $ IntV (Unsigned n) (if b then 1 else 0) ∧
-  evaluate_convert (BytesV _ bs) (BaseT (BytesT (Fixed n))) =
+    INL $ IntV (if b then 1 else 0) ∧
+  evaluate_convert (BytesV bs) (BaseT (BytesT (Fixed n))) =
     (if LENGTH bs ≤ n
-     then INL $ BytesV (Fixed n) (PAD_RIGHT 0w n bs)
+     then INL $ BytesV (PAD_RIGHT 0w n bs)
      else INR (RuntimeError "convert BytesV bound")) ∧
-  evaluate_convert (BytesV _ bs) (BaseT (BytesT (Dynamic n))) =
+  evaluate_convert (BytesV bs) (BaseT (BytesT (Dynamic n))) =
     (if LENGTH bs ≤ n
-     then INL $ BytesV (Dynamic n) bs
+     then INL $ BytesV bs
      else INR (RuntimeError "convert BytesV bound")) ∧
-  evaluate_convert (BytesV _ bs) (BaseT (UintT n)) =
+  evaluate_convert (BytesV bs) (BaseT (UintT n)) =
     (let i = &(w2n $ (word_of_bytes_be (PAD_LEFT 0w 32 bs) : bytes32)) in
      if within_int_bound (Unsigned n) i
-     then INL $ IntV (Unsigned n) i
+     then INL $ IntV i
      else INR (RuntimeError "convert BytesV uint bound")) ∧
-  evaluate_convert (BytesV _ bs) (BaseT (IntT n)) =
+  evaluate_convert (BytesV bs) (BaseT (IntT n)) =
     (let i = w2i $ (word_of_bytes_be (PAD_LEFT 0w 32 bs) : bytes32) in
      if within_int_bound (Signed n) i
-     then INL $ IntV (Signed n) i
+     then INL $ IntV i
      else INR (RuntimeError "convert BytesV int bound")) ∧
-  evaluate_convert (IntV u i) (BaseT (IntT n)) =
+  evaluate_convert (IntV i) (BaseT (IntT n)) =
     (if within_int_bound (Signed n) i
-     then INL $ IntV (Signed n) i
+     then INL $ IntV i
      else INR (RuntimeError "convert int bound")) ∧
-  evaluate_convert (IntV u i) (BaseT (UintT n)) =
+  evaluate_convert (IntV i) (BaseT (UintT n)) =
     (if within_int_bound (Unsigned n) i
-     then INL $ IntV (Unsigned n) i
+     then INL $ IntV i
      else INR (RuntimeError "convert uint bound")) ∧
-  evaluate_convert (IntV u i) (BaseT AddressT) =
+  evaluate_convert (IntV i) (BaseT AddressT) =
     (if within_int_bound (Unsigned 160) i
      then INL $ AddressV (i2w i)
      else INR (RuntimeError "convert int address")) ∧
-  evaluate_convert (FlagV _ m) (BaseT (IntT n)) =
+  evaluate_convert (FlagV m) (BaseT (IntT n)) =
     (let i = &m in
      if within_int_bound (Signed n) i
-     then INL $ IntV (Signed n) i
+     then INL $ IntV i
      else INR (RuntimeError "convert flag int bound")) ∧
-  evaluate_convert (FlagV _ m) (BaseT (UintT n)) =
+  evaluate_convert (FlagV m) (BaseT (UintT n)) =
     (let i = &m in
      if within_int_bound (Unsigned n) i
-     then INL $ IntV (Unsigned n) i
+     then INL $ IntV i
      else INR (RuntimeError "convert flag uint bound")) ∧
-  evaluate_convert (IntV u i) (BaseT (BytesT bd)) =
+  evaluate_convert (IntV i) (BaseT (BytesT bd)) =
   (* TODO: check and use type for width etc. *)
     (if compatible_bound bd 32
-     then INL $ BytesV bd (word_to_bytes_be ((i2w i):bytes32))
+     then INL $ BytesV (word_to_bytes_be ((i2w i):bytes32))
      else INR (RuntimeError "convert int to bytes")) ∧
-  evaluate_convert (BytesV _ bs) (BaseT (StringT n)) =
+  evaluate_convert (BytesV bs) (BaseT (StringT n)) =
     (if LENGTH bs ≤ n
-     then INL $ StringV n (MAP (CHR o w2n) bs)
+     then INL $ StringV (MAP (CHR o w2n) bs)
      else INR (RuntimeError "convert bytes string")) ∧
-  evaluate_convert (StringV _ s) (BaseT (StringT n)) =
+  evaluate_convert (StringV s) (BaseT (StringT n)) =
     (if LENGTH s ≤ n
-     then INL $ StringV n s
+     then INL $ StringV s
      else INR (RuntimeError "convert string string bound")) ∧
-  evaluate_convert (StringV _ s) (BaseT (BytesT bd)) =
+  evaluate_convert (StringV s) (BaseT (BytesT bd)) =
     (if compatible_bound bd (LENGTH s)
-     then INL $ BytesV bd (MAP (n2w o ORD) s)
+     then INL $ BytesV (MAP (n2w o ORD) s)
      else INR (RuntimeError "convert string bytes")) ∧
-  evaluate_convert (IntV _ i) (BaseT DecimalT) =
+  evaluate_convert (IntV i) (BaseT DecimalT) =
     bounded_decimal_op (i * 10000000000) ∧
   evaluate_convert (DecimalV i) (BaseT (IntT n)) =
     (if within_int_bound (Signed 168) ((ABS i) / 10000000000)
-     then INL $ IntV (Signed n) (i / 10000000000)
+     then INL $ IntV (i / 10000000000)
      else INR (RuntimeError "convert decimal int")) ∧
   evaluate_convert (DecimalV i) (BaseT (UintT n)) =
     (let r = i / 10000000000 in
      if 0 ≤ i ∧ within_int_bound (Signed 168) r
-     then INL $ IntV (Unsigned n) r
+     then INL $ IntV r
      else INR (RuntimeError "convert decimal uint")) ∧
   evaluate_convert _ _ = INR (TypeError "convert")
 End
@@ -661,13 +647,11 @@ Definition safe_cast_def:
   case t of
   | BaseTV (UintT n) =>
     (case v of
-     | IntV (Unsigned m) _
-       => if n = m then SOME v else NONE
+     | IntV _ => SOME v
      | _ => NONE)
   | BaseTV (IntT n) =>
     (case v of
-     | IntV (Signed m) _
-       => if n = m then SOME v else NONE
+     | IntV _ => SOME v
      | _ => NONE)
   | BaseTV BoolT =>
     (case v of
@@ -679,27 +663,25 @@ Definition safe_cast_def:
      | _ => NONE)
   | BaseTV (StringT n) =>
     (case v of
-     | StringV m str
-       => if m ≤ n then SOME $ StringV n str else NONE
+     | StringV str
+       => if LENGTH str ≤ n then SOME v else NONE
      | _ => NONE)
   | BaseTV (BytesT (Fixed n)) =>
     (case v of
-     | BytesV (Fixed m) _ => if n = m then SOME v else NONE
+     | BytesV bs => if LENGTH bs = n then SOME v else NONE
      | _ => NONE)
   | BaseTV (BytesT (Dynamic n)) =>
     (case v of
-     | BytesV (Dynamic m) bs =>
-       if m ≤ n then SOME $ BytesV (Dynamic n) bs else NONE
-     | BytesV (Fixed m) bs =>
-       if m ≤ n then SOME $ BytesV (Dynamic n) bs else NONE
+     | BytesV bs =>
+       if LENGTH bs ≤ n then SOME v else NONE
      | _ => NONE)
   | BaseTV AddressT =>
     (case v of
-     | BytesV (Fixed m) _ => if 20 = m then SOME v else NONE
+     | BytesV bs => if LENGTH bs = 20 then SOME v else NONE
      | _ => NONE)
   | FlagTV n =>
     (case v of
-     | FlagV m _ => if n = m then SOME v else NONE
+     | FlagV _ => SOME v
      | _ => NONE)
   | TupleTV ts =>
     (case v of
@@ -754,46 +736,28 @@ val safe_cast_pre_def = cv_auto_trans_pre_rec
   | INL (_,v) => cv_size v)`
   \\ rw[]
   \\ Cases_on`cv_v` \\ gvs[]
-  >- (
+  >- ( (* DynArrayV: cv_snd^3 — 3 case splits *)
     qmatch_goalsub_rename_tac`cv_snd (cv_snd (cv_snd p))`
-    \\ Cases_on`p` \\ gvs[]
+    \\ Cases_on`p` \\ gvs[cv_size_def, cv_snd_def]
     \\ qmatch_goalsub_rename_tac`cv_snd (cv_snd p)`
-    \\ Cases_on`p` \\ gvs[]
+    \\ Cases_on`p` \\ gvs[cv_size_def, cv_snd_def]
     \\ qmatch_goalsub_rename_tac`cv_snd p`
-    \\ Cases_on`p` \\ gvs[] )
-  >- (
-    qmatch_goalsub_rename_tac`cv_map_snd p`
-    \\ Cases_on`g` \\ gvs[]
-    \\ qid_spec_tac`m`
-    \\ qid_spec_tac`p`
-    \\ rpt (pop_assum kall_tac)
-    \\ ho_match_mp_tac cv_map_snd_ind
-    \\ rw[]
-    \\ rw[Once cv_map_snd_def]
-    \\ gvs[]
-    \\ Cases_on`p` \\ gvs[]
-    \\ qmatch_goalsub_rename_tac`cv_snd p`
-    \\ Cases_on`p` \\ gvs[]
-    >- (
-      first_x_assum(qspec_then`m + m'`mp_tac)
-      \\ rw[] )
-    \\ first_x_assum(qspec_then`m + cv_size g`mp_tac)
-    \\ rw[] )
-  >- (
+    \\ Cases_on`p` \\ gvs[cv_size_def, cv_snd_def] )
+  >- ( (* StructV: cv_map_snd — direct bound *)
+    qspec_then`g'`mp_tac cv_size_cv_map_snd_le \\ simp[] )
+  >- ( (* SArrayV: cv_map_snd (cv_snd^3) — 3 case splits + bound *)
     qmatch_goalsub_rename_tac`cv_snd (cv_snd (cv_snd p))`
-    \\ Cases_on`p` \\ gvs[]
+    \\ Cases_on`p` \\ gvs[cv_size_def, cv_snd_def]
     \\ qmatch_goalsub_rename_tac`cv_snd (cv_snd p)`
-    \\ Cases_on`p` \\ gvs[]
-    >- rw[Once cv_map_snd_def]
+    \\ Cases_on`p` \\ gvs[cv_size_def, cv_snd_def]
+    >- (rw[Once cv_map_snd_def] \\ gvs[cv_ispair_def])
     \\ qmatch_goalsub_rename_tac`cv_snd p`
-    \\ Cases_on`p` \\ gvs[]
-    >- rw[Once cv_map_snd_def]
+    \\ Cases_on`p` \\ gvs[cv_size_def, cv_snd_def]
+    >- (rw[Once cv_map_snd_def] \\ gvs[cv_ispair_def])
     \\ qmatch_goalsub_rename_tac`cv_map_snd l`
-    \\ qspec_then`l`mp_tac cv_size_cv_map_snd_le
-    \\ simp[])
-  >- (
-    qmatch_goalsub_rename_tac`cv_snd p`
-    \\ Cases_on`p` \\ gvs[] )
+    \\ qspec_then`l`mp_tac cv_size_cv_map_snd_le \\ simp[] )
+  >- ( (* TupleV: cv_snd — 1 case split *)
+    Cases_on`g'` \\ gvs[cv_size_def, cv_snd_def] )
 );
 
 Theorem safe_cast_pre[cv_pre]:
@@ -818,9 +782,9 @@ End
 val () = cv_auto_trans append_element_def;
 
 Definition pop_element_def:
-  pop_element (ArrayV (DynArrayV tv n vs)) =
+  pop_element (ArrayV (DynArrayV t n vs)) =
     (if vs = [] then INR (RuntimeError "pop empty")
-     else INL $ ArrayV $ DynArrayV tv n (FRONT vs)) ∧
+     else INL $ ArrayV $ DynArrayV t n (FRONT vs)) ∧
   pop_element _ = INR (TypeError "pop_element")
 End
 
@@ -847,14 +811,14 @@ val () = cv_trans insert_sarray_def;
 Definition array_set_index_def:
   array_set_index av i v =
   if 0 ≤ i then let j = Num i in
-    case av of DynArrayV tv n vs =>
+    case av of DynArrayV t n vs =>
       if j < LENGTH vs then
-        INL $ ArrayV $ DynArrayV tv n (TAKE j vs ++ [v] ++ DROP (SUC j) vs)
+        INL $ ArrayV $ DynArrayV t n (TAKE j vs ++ [v] ++ DROP (SUC j) vs)
       else INR (RuntimeError "array_set_index index")
-    | SArrayV tv n al =>
+    | SArrayV t n al =>
       if j < n then
-        INL $ ArrayV $ SArrayV tv n $
-        if v = default_value tv then
+        INL $ ArrayV $ SArrayV t n $
+        if v = default_value t then
           ADELKEY j al
         else
           insert_sarray j v al

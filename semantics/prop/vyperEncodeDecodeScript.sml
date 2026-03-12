@@ -285,7 +285,7 @@ QED
 (* ===== encode_decode_roundtrip_ok: AddressT ===== *)
 
 Theorem encode_decode_roundtrip_ok_address[local]:
-  ∀bs. LENGTH bs = 20 ⇒ encode_decode_roundtrip_ok (BaseTV AddressT) (BytesV (Fixed 20) bs)
+  ∀bs. LENGTH bs = 20 ⇒ encode_decode_roundtrip_ok (BaseTV AddressT) (BytesV bs)
 Proof
   rw[] >> irule decode_value_single_slot >> simp[] >>
   qexists_tac `word_of_bytes_be (PAD_LEFT 0w 32 bs)` >>
@@ -298,7 +298,7 @@ QED
 
 Theorem encode_decode_roundtrip_ok_fixed_bytes[local]:
   ∀n bs. LENGTH bs = n ∧ n ≤ 32 ⇒
-    encode_decode_roundtrip_ok (BaseTV (BytesT (Fixed n))) (BytesV (Fixed n) bs)
+    encode_decode_roundtrip_ok (BaseTV (BytesT (Fixed n))) (BytesV bs)
 Proof
   rw[] >> irule decode_value_single_slot >> simp[] >>
   qexists_tac `word_of_bytes_be bs` >>
@@ -319,7 +319,7 @@ QED
 
 Theorem encode_decode_roundtrip_ok_uint[local]:
   ∀n i. 0 ≤ i ∧ i < &dimword(:256) ⇒
-    encode_decode_roundtrip_ok (BaseTV (UintT n)) (IntV (Unsigned n) i)
+    encode_decode_roundtrip_ok (BaseTV (UintT n)) (IntV i)
 Proof
   rw[] >> irule decode_value_single_slot >> simp[] >>
   qexists_tac `i2w i` >>
@@ -330,11 +330,34 @@ QED
 
 (* ===== encode_decode_roundtrip_ok: IntT ===== *)
 
-Theorem encode_decode_roundtrip_ok_int[local]:
-  ∀n i. INT_MIN(:256) ≤ i ∧ i ≤ INT_MAX(:256) ⇒
-    encode_decode_roundtrip_ok (BaseTV (IntT n)) (IntV (Signed n) i)
+Theorem within_int_bound_signed_256[local]:
+  within_int_bound (Signed n) i ∧ n ≤ 256 ⇒
+  INT_MIN(:256) ≤ i ∧ i ≤ INT_MAX(:256)
 Proof
-  rw[] >> irule decode_value_single_slot >> simp[] >>
+  strip_tac >>
+  drule_all within_int_bound_signed_well_formed >>
+  simp[well_formed_value_def] >> strip_tac >>
+  gvs[within_int_bound_def] >>
+  simp[integer_wordTheory.INT_MAX_def, wordsTheory.INT_MIN_def] >>
+  Cases_on `i < 0` >> gvs[]
+  >- intLib.ARITH_TAC
+  >> `0 ≤ i` by intLib.ARITH_TAC
+  >> `i = &(Num i)` by simp[integerTheory.INT_OF_NUM]
+  >> `n − 1 ≤ 255` by simp[]
+  >> `Num i < 2 ** 255` by
+       (irule LESS_LESS_EQ_TRANS >> qexists_tac `2 ** (n − 1)` >> simp[])
+  >> `&(Num i) < &(2 ** 255)` by simp[] >> gvs[]
+  >> EVAL_TAC >> intLib.ARITH_TAC
+QED
+
+Theorem encode_decode_roundtrip_ok_int[local]:
+  ∀n i. within_int_bound (Signed n) i ∧ n ≤ 256 ⇒
+    encode_decode_roundtrip_ok (BaseTV (IntT n)) (IntV i)
+Proof
+  rw[] >>
+  `INT_MIN(:256) ≤ i ∧ i ≤ INT_MAX(:256)` by
+    metis_tac[within_int_bound_signed_256] >>
+  irule decode_value_single_slot >> simp[] >>
   qexists_tac `i2w i` >>
   simp[encode_base_to_slot_def, decode_base_from_slot_def] >>
   simp[integer_wordTheory.w2i_i2w]
@@ -356,7 +379,7 @@ QED
 
 Theorem encode_decode_roundtrip_ok_flag[local]:
   ∀m k. k < dimword(:256) ⇒
-    encode_decode_roundtrip_ok (FlagTV m) (FlagV m k)
+    encode_decode_roundtrip_ok (FlagTV m) (FlagV k)
 Proof
   rw[encode_decode_roundtrip_ok_def] >>
   gvs[encode_value_def, AllCaseEqs()] >>
@@ -524,9 +547,17 @@ QED
    Needed for exact roundtrip when encode is lenient (m ≤ max, NoneTV v).
    For compound types, bounds_compat is checked recursively on sub-values. *)
 Definition bounds_compat_def:
-  bounds_compat (BaseTV (StringT max)) (StringV m _) = (m = max) ∧
-  bounds_compat (BaseTV (BytesT (Dynamic max))) (BytesV (Dynamic m) _) =
-    (m = max) ∧
+  bounds_compat (BaseTV (UintT m)) (IntV i) =
+    (0 ≤ i ∧ Num i < 2 ** m) ∧
+  bounds_compat (BaseTV (IntT m)) (IntV i) =
+    (within_int_bound (Signed m) i) ∧
+  bounds_compat (BaseTV AddressT) (BytesV bs) = (LENGTH bs = 20) ∧
+  bounds_compat (BaseTV (BytesT (Fixed n))) (BytesV bs) =
+    (LENGTH bs = n ∧ n ≤ 32) ∧
+  bounds_compat (BaseTV (BytesT (Dynamic max))) (BytesV bs) =
+    (LENGTH bs ≤ max) ∧
+  bounds_compat (BaseTV (StringT max)) (StringV s) = (LENGTH s ≤ max) ∧
+  bounds_compat (FlagTV _) (FlagV _) = T ∧
   bounds_compat NoneTV v = (v = NoneV) ∧
   bounds_compat (TupleTV tvs) (ArrayV (TupleV vs)) =
     LIST_REL bounds_compat tvs vs ∧
@@ -660,7 +691,7 @@ QED
 Theorem encode_decode_roundtrip_ok_dyn_bytes[local]:
   ∀max bs.
     max < dimword(:256) ∧ LENGTH bs ≤ max ⇒
-    encode_decode_roundtrip_ok (BaseTV (BytesT (Dynamic max))) (BytesV (Dynamic max) bs)
+    encode_decode_roundtrip_ok (BaseTV (BytesT (Dynamic max))) (BytesV bs)
 Proof
   rw[encode_decode_roundtrip_ok_def] >>
   gvs[encode_value_def, AllCaseEqs(), encode_dyn_bytes_slots_def] >>
@@ -678,7 +709,7 @@ QED
 Theorem encode_decode_roundtrip_ok_string[local]:
   ∀max s.
     max < dimword(:256) ∧ LENGTH s ≤ max ⇒
-    encode_decode_roundtrip_ok (BaseTV (StringT max)) (StringV max s)
+    encode_decode_roundtrip_ok (BaseTV (StringT max)) (StringV s)
 Proof
   rw[encode_decode_roundtrip_ok_def] >>
   gvs[encode_value_def, AllCaseEqs(), encode_dyn_bytes_slots_def] >>
@@ -715,33 +746,21 @@ Proof
   Cases_on `tv` >> fs[] >>
   (* NoneTV: v = NoneV by precondition *)
   TRY (simp[encode_decode_roundtrip_ok_none] >> NO_TAC) >>
-  (* FlagTV *)
-  TRY (
-    rename1 `FlagTV m` >>
-    qpat_x_assum `IS_SOME _` mp_tac >>
-    Cases_on `v` >>
-    fs[encode_value_def, encode_base_to_slot_def, AllCaseEqs(),
-       COND_RAND, COND_RATOR, well_formed_value_def] >>
-    strip_tac >>
-    irule encode_decode_roundtrip_ok_flag >> simp[] >> NO_TAC
-  ) >>
-  (* BaseTV bt *)
-  rename1 `BaseTV bt` >>
+  (* FlagTV or BaseTV bt *)
   qpat_x_assum `IS_SOME _` mp_tac >>
   Cases_on `v` >>
-  TRY (qmatch_goalsub_rename_tac `BytesV bnd _` >> Cases_on `bnd`) >>
-  TRY (qmatch_goalsub_rename_tac `IntV ib _` >> Cases_on `ib`) >>
-  Cases_on `bt` >>
+  TRY (rename1 `BaseTV bt` >> Cases_on `bt`) >>
   TRY (qmatch_goalsub_rename_tac `BytesT btbnd` >> Cases_on `btbnd`) >>
   simp[encode_value_def, encode_base_to_slot_def, AllCaseEqs(),
        COND_RAND, COND_RATOR, bounds_compat_def,
        encode_dyn_bytes_slots_def] >>
   fs[well_formed_value_def, bounds_compat_def,
-     well_formed_type_value_def, type_slot_size_def] >>
+     well_formed_type_value_def, type_slot_size_def,
+     within_int_bound_def] >>
   rpt strip_tac >>
   FIRST [
     irule encode_decode_roundtrip_ok_uint >> simp[],
-    irule encode_decode_roundtrip_ok_int >> simp[],
+    irule encode_decode_roundtrip_ok_int >> simp[within_int_bound_def],
     irule encode_decode_roundtrip_ok_bool,
     irule encode_decode_roundtrip_ok_decimal >> simp[],
     irule encode_decode_roundtrip_ok_string >> simp[],
@@ -836,10 +855,12 @@ Proof
     (impl_tac >- (qexists_tac `p_2` >> simp[])) >>
     strip_tac >> gvs[] >> NO_TAC
   ) >>
-  (* Compound internal: rest IH (conjunction) *)
-  qpat_x_assum `∀off'. _ ⇒ _ ∧ _` (qspec_then `off` mp_tac) >>
+  (* Sparse array case: different IH shape *)
+  first_x_assum (qspec_then `m` mp_tac) >>
+  simp[] >> strip_tac >>
+  first_x_assum (qspec_then `off` mp_tac) >>
   (impl_tac >- (qexists_tac `p_2` >> simp[])) >>
-  strip_tac >> simp[]
+  simp[]
 QED
 
 (* ===== Storage Agreement (decode depends only on relevant slots) ===== *)
@@ -1078,7 +1099,6 @@ Proof
     gvs[bounds_compat_def] >>
     qpat_x_assum `IS_SOME _` mp_tac >>
     Cases_on `v` >>
-    TRY (rename1 `BytesV bnd _` >> Cases_on `bnd`) >>
     Cases_on `b` >>
     TRY (rename1 `BytesT btbnd` >> Cases_on `btbnd`) >>
     simp[encode_value_def, AllCaseEqs(), encode_base_to_slot_def,
@@ -1094,7 +1114,7 @@ Proof
     irule encode_decode_roundtrip_ok_flag >> gvs[well_formed_value_def]
   )
   (* NoneTV *)
-  >> gvs[bounds_compat_def, encode_decode_roundtrip_ok_none]
+  >> Cases_on `v` >> gvs[bounds_compat_def, encode_decode_roundtrip_ok_none]
 QED
 
 (* ===== Compound Roundtrip ===== *)

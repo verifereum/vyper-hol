@@ -409,10 +409,11 @@ QED
 
 (* Lemma: for ImmutableVar Update, lookup_immutable returns the computed value *)
 Theorem assign_target_immutable_update_gives_lookup:
-  ∀cx st n bop v1 v2 v res st'.
+  ∀cx st n ty bop v1 v2 v res st'.
     lookup_immutable cx st (current_module cx) n = SOME v1 ∧
-    evaluate_binop bop v1 v2 = INL v ∧
-    assign_target cx (BaseTargetV (ImmutableVar n) []) (Update bop v2) st = (INL res, st') ⇒
+    evaluate_binop (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
+                   NoneTV bop v1 v2 = INL v ∧
+    assign_target cx (BaseTargetV (ImmutableVar n) []) (Update ty bop v2) st = (INL res, st') ⇒
     lookup_immutable cx st' (current_module cx) n = SOME v
 Proof
   rw[lookup_immutable_def] >>

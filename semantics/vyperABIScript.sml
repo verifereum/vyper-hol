@@ -98,7 +98,7 @@ val () = cv_auto_trans_rec vyper_to_abi_type_def (
 
 Definition check_IntV_def:
   check_IntV b i =
-  if within_int_bound b i then SOME $ IntV b i else NONE
+  if within_int_bound b i then SOME $ IntV i else NONE
 End
 
 Definition abi_to_vyper_def[simp]:
@@ -111,9 +111,9 @@ Definition abi_to_vyper_def[simp]:
   abi_to_vyper env (BaseT $ BoolT) (NumV n) =
     (if n ≤ 1 then SOME $ BoolV (n = 1) else NONE) ∧
   abi_to_vyper env (BaseT $ BytesT b) (BytesV bs) =
-    (if compatible_bound b (LENGTH bs) then SOME $ BytesV b bs else NONE) ∧
+    (if compatible_bound b (LENGTH bs) then SOME $ BytesV bs else NONE) ∧
   abi_to_vyper env (BaseT $ StringT z) (BytesV bs) =
-    (if LENGTH bs ≤ z then SOME $ StringV z (MAP (CHR o w2n) bs) else NONE) ∧
+    (if LENGTH bs ≤ z then SOME $ StringV (MAP (CHR o w2n) bs) else NONE) ∧
   abi_to_vyper env (BaseT $ DecimalT) (IntV i) =
     (if within_int_bound (Signed 168) i then SOME $ DecimalV i else NONE) ∧
   abi_to_vyper env (TupleT ts) (ListV vs) =
@@ -137,7 +137,7 @@ Definition abi_to_vyper_def[simp]:
   abi_to_vyper env (FlagT id) (NumV n) =
     (case FLOOKUP env (string_to_num id) of
       | SOME (FlagArgs m) =>
-        if m ≤ 256 ∧ n < 2 ** m then SOME $ FlagV m (&n) else NONE
+        if m ≤ 256 ∧ n < 2 ** m then SOME $ FlagV (&n) else NONE
       | _ => NONE) ∧
   abi_to_vyper _ _ _ = NONE ∧
   abi_to_vyper_list env [] [] = SOME [] ∧
@@ -442,15 +442,15 @@ val () = cv_auto_trans_rec default_to_abi_def (
    Factored out to reduce pattern completion in the main mutual recursion,
    which allows cv_auto_trans to succeed. *)
 Definition vyper_to_abi_base_def[simp]:
-  vyper_to_abi_base (UintT _) (IntV (Unsigned _) i) = SOME (NumV (Num i)) ∧
-  vyper_to_abi_base (IntT _) (IntV (Signed _) i) = SOME (contractABI$IntV i) ∧
+  vyper_to_abi_base (UintT _) (IntV i) = SOME (NumV (Num i)) ∧
+  vyper_to_abi_base (IntT _) (IntV i) = SOME (contractABI$IntV i) ∧
   vyper_to_abi_base BoolT (BoolV b) = SOME (NumV (if b then 1 else 0)) ∧
   vyper_to_abi_base DecimalT (DecimalV i) = SOME (contractABI$IntV i) ∧
-  vyper_to_abi_base (StringT _) (StringV _ s) = SOME (contractABI$BytesV (MAP n2w_o_ORD s)) ∧
-  vyper_to_abi_base (BytesT _) (BytesV _ bs) = SOME (contractABI$BytesV bs) ∧
+  vyper_to_abi_base (StringT _) (StringV s) = SOME (contractABI$BytesV (MAP n2w_o_ORD s)) ∧
+  vyper_to_abi_base (BytesT _) (BytesV bs) = SOME (contractABI$BytesV bs) ∧
   (* AddressT uses BytesV but converts to NumV - must come after BytesT to avoid
      pattern overlap issues in cv_trans *)
-  vyper_to_abi_base AddressT (BytesV _ bs) =
+  vyper_to_abi_base AddressT (BytesV bs) =
     SOME (NumV (w2n (word_of_bytes_be bs : address))) ∧
   vyper_to_abi_base _ _ = NONE
 End
@@ -468,11 +468,14 @@ Definition vyper_to_abi_def[simp]:
     (case vyper_to_abi_same env t vs of
      | SOME avs => SOME (ListV avs)
      | NONE => NONE) ∧
-  vyper_to_abi env (ArrayT t (Fixed _)) (ArrayV (SArrayV tv n sparse)) =
-    (case vyper_to_abi_sparse env t tv n sparse of
-     | SOME avs => SOME (ListV avs)
-     | NONE => NONE) ∧
-  vyper_to_abi env (FlagT _) (FlagV _ n) = SOME (NumV n) ∧
+  vyper_to_abi env (ArrayT t (Fixed _)) (ArrayV (SArrayV _ n sparse)) =
+    (case evaluate_type env t of
+     | NONE => NONE
+     | SOME tv =>
+         case vyper_to_abi_sparse env t tv n sparse of
+         | SOME avs => SOME (ListV avs)
+         | NONE => NONE) ∧
+  vyper_to_abi env (FlagT _) (FlagV n) = SOME (NumV n) ∧
   vyper_to_abi env NoneT NoneV = SOME (ListV []) ∧
   vyper_to_abi env (StructT id) (StructV fields) =
     (let nid = string_to_num id in
@@ -574,13 +577,9 @@ fun cv_bounds_tac (asl, concl) = let
     else if is_comb tm then
       find_cv_projs (rator tm) (find_cv_projs (rand tm) acc)
     else acc
-  (* Find all c2n applications of cv_fst/cv_snd projections *)
+  (* Find all c2n applications (any argument, not just projections) *)
   fun find_c2n_projs tm acc =
-    if is_c2n tm then
-      let val inner = rand tm in
-        if is_cv_proj inner then (tm :: acc)
-        else find_c2n_projs inner acc
-      end
+    if is_c2n tm then (tm :: acc)
     else if is_comb tm then
       find_c2n_projs (rator tm) (find_c2n_projs (rand tm) acc)
     else acc
@@ -683,36 +682,43 @@ val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
       >- (IF_CASES_TAC \\ gs[cv_size'_cv_mk_BN])
       \\ IF_CASES_TAC \\ gs[]
       \\ NO_TAC)
-  (* Remaining goals: arithmetic inequalities on cv_size of nested projections.
-     The cv_bounds_tac adds weak bounds (<=) for cv_fst/cv_snd projections.
-     This is sufficient when there's overhead from Pair constructors (e.g., +5 on RHS). *)
-  \\ TRY (
-      gvs[cv_repTheory.cv_termination_simp]
-      \\ rw[]
-      \\ simp[cv_fst_def, cv_snd_def, cv_size_def]
-      \\ cv_bounds_tac
-      \\ decide_tac
-      \\ NO_TAC)
-  (* SArrayV case: goal has both cv_v and cv_v0 with ispair guards.
-     Direct case split proof - 7 splits to expose enough Pair constructor overhead. *)
-  \\ TRY (
-      rpt strip_tac
-      \\ Cases_on `cv_v` >> fs[cv_ispair_def, c2b_def]
-      \\ Cases_on `cv_v0` >> fs[cv_ispair_def, c2b_def,
-           cv_snd_def, cv_size_def]
-      \\ qmatch_asmsub_rename_tac `cv_ispair (cv_snd ggg)`
-      \\ Cases_on `ggg` >> fs[cv_ispair_def, cv_snd_def, c2b_def]
-      \\ Cases_on `g'` >> fs[cv_snd_def, cv_fst_def,
-           cv_size_def, c2n_def]
-      \\ qmatch_goalsub_rename_tac `cv_fst (cv_snd gSix)`
-      \\ Cases_on `gSix` >> fs[cv_snd_def, cv_fst_def,
-           cv_size_def, c2n_def]
-      \\ qmatch_goalsub_rename_tac `cv_fst gLast`
-      \\ Cases_on `gLast` >> simp[cv_snd_def, cv_fst_def,
-           cv_size_def, c2n_def]
-      \\ qmatch_goalsub_rename_tac `cv$c2n gNum`
-      \\ Cases_on `gNum` >> simp[cv_size_def, c2n_def]
-      \\ NO_TAC)
+  (* DynArrayV/SArrayV cases: expose Pair overhead via case splits. *)
+  \\ rpt strip_tac
+  \\ Cases_on `cv_v` >> fs[cv_ispair_def, c2b_def]
+  \\ Cases_on `cv_v0` >> fs[cv_ispair_def, c2b_def]
+  \\ simp[cv_size_def, cv_snd_def, cv_fst_def]
+  \\ cv_bounds_tac
+  \\ TRY decide_tac
+  (* SArrayV case: c2n term needs more splits to expose inner Pair overhead.
+     Split the inner of cv_v (from cv_ispair guard) and its inner pair. *)
+  (* SArrayV case: c2n(cv_fst(cv_snd gV)) needs gV split into Pair,
+     then inner pair split, to get enough overhead for decide_tac. *)
+  (* SArrayV case: c2n(cv_fst(cv_snd v)) needs 2 splits to expose Pair overhead.
+     Split v (Num dismissed by cv_lt contradiction), then split inner of Pair. *)
+  \\ let
+       val c2n_tm = ``cv$c2n``
+       fun fc tm =
+         if is_comb tm then let val (f,a) = dest_comb tm in
+           if f ~~ c2n_tm then SOME a
+           else case fc a of SOME x => SOME x | NONE => fc f end
+         else NONE
+       fun split_c2n_parent (asl, g) = let
+         val SOME ca = fc g
+         val v = rand (rand ca)
+       in Cases_on [ANTIQUOTE v] (asl, g) end
+       fun split_c2n_arg (asl, g) = let
+         val SOME ca = fc g
+         val v = rand ca
+       in Cases_on [ANTIQUOTE v] (asl, g) end
+     in
+       split_c2n_parent
+       >> fs[cv_fst_def, cv_snd_def, cv_size_def, c2n_def, cv_lt_def]
+       >> split_c2n_arg
+       >> simp[cv_fst_def, cv_snd_def, cv_size_def, c2n_def]
+       >> cv_bounds_tac
+       >> fs[cv_fst_def, cv_snd_def, cv_size_def]
+       >> decide_tac
+     end
 );
 
 Theorem vyper_to_abi_pre[cv_pre]:
@@ -1076,7 +1082,7 @@ Definition evaluate_abi_encode_def:
   evaluate_abi_encode tenv typ v =
     let abiTy = vyper_to_abi_type tenv typ in
     case vyper_to_abi tenv typ v of
-      SOME av => INL $ BytesV (Dynamic (LENGTH (enc abiTy av))) (enc abiTy av)
+      SOME av => INL $ BytesV (enc abiTy av)
     | NONE => INR "abi_encode conversion"
 End
 
