@@ -204,3 +204,43 @@ Theorem analysis_inst_simulates_from_1:
 Proof
   ACCEPT_TAC analysis_inst_simulates_from_1_proof
 QED
+
+(* Prepend-aware pass correctness. *)
+Theorem df_analysis_pass_correct_prepend:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool)
+   (dir : direction) (bottom : 'a) join transfer edge_transfer ctx
+   entry_val fn
+   (sound : 'a -> venom_state -> bool)
+   (f : 'a -> instruction -> instruction list)
+   (prepend : string -> instruction list)
+   (fresh : string set).
+    let result = df_analyze dir bottom join transfer edge_transfer
+                            ctx entry_val fn in
+      valid_state_rel R_ok R_term /\
+      (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
+      (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
+      transfer_sound sound transfer ctx /\
+      edge_transfer_sound sound edge_transfer ctx /\
+      (!a b s. sound a s ==> sound (join a b) s) /\
+      (!s. sound bottom s) /\
+      (case entry_val of NONE => T
+       | SOME (lbl, v) => !s. sound v s) /\
+      analysis_inst_simulates R_ok R_term sound f /\
+      (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
+      (!lbl inst. MEM inst (prepend lbl) ==>
+         EVERY (\v. v IN fresh) inst.inst_outputs) /\
+      (!bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
+         EVERY (\op. case op of Var v => v NOTIN fresh | _ => T)
+               inst.inst_operands) /\
+      (!lbl inst. MEM inst (prepend lbl) ==>
+         ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE)
+    ==>
+      !fuel ctx s.
+        lift_result R_ok R_term (run_function fuel ctx fn s)
+          (run_function fuel ctx
+            (analysis_function_transform_prepend
+               bottom result prepend f fn) s)
+Proof
+  ACCEPT_TAC df_analysis_pass_correct_prepend_proof
+QED
