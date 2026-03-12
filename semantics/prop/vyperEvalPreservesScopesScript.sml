@@ -298,16 +298,20 @@ QED
 
 Theorem case_For_dom[local]:
   ∀cx id typ it n body.
-    (* IH for eval_for: conditional on eval_iterator and check succeeding *)
-    (∀s'' tyv vs t s'³' x t'.
-       lift_option_type (evaluate_type (get_tenv cx) typ) "For evaluate_type" s'' = (INL tyv, t) ∧
-       eval_iterator cx it t = (INL vs, s'³') ∧
-       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'³' = (INL x, t') ⇒
+    (* IH for eval_for: conditional on lift_option_type, eval_iterator and check succeeding *)
+    (∀tenv s'' tyv t s'³' vs t' s'⁴' x t''.
+       tenv = get_tenv cx ∧
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' = (INL tyv, t) ∧
+       eval_iterator cx it s'³' = (INL vs, t') ∧
+       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'⁴' = (INL x, t'') ⇒
        ∀st res st'. eval_for cx tyv (string_to_num id) body vs st = (res, st') ⇒
          preserves_scopes_dom st st') ∧
-    (* IH for iterator *)
-    (∀st res st'. eval_iterator cx it st = (res, st') ⇒
-       MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
+    (* IH for iterator: guarded by lift_option_type *)
+    (∀tenv s'' tyv t.
+       tenv = get_tenv cx ∧
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' = (INL tyv, t) ⇒
+       ∀st res st'. eval_iterator cx it st = (res, st') ⇒
+         MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
       eval_stmt cx (For id typ it n body) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
@@ -317,27 +321,20 @@ Proof
   strip_tac >> gvs[] >>
   (* Case: lift_option_type failed *)
   TRY (imp_res_tac lift_option_type_scopes >> gvs[preserves_scopes_dom_def] >> NO_TAC) >>
-  (* Case: eval_iterator failed *)
-  TRY (imp_res_tac lift_option_type_scopes >> gvs[] >>
-       irule map_fdom_eq_preserves_dom >> first_x_assum drule >> simp[] >> NO_TAC) >>
-  (* Case: check failed *)
-  TRY (imp_res_tac check_scopes >> imp_res_tac type_check_scopes >>
-       imp_res_tac lift_option_type_scopes >> gvs[] >>
-       irule map_fdom_eq_preserves_dom >> first_x_assum drule >> gvs[] >> NO_TAC) >>
-  (* Case: both succeeded, use IH *)
-  imp_res_tac check_scopes >> imp_res_tac type_check_scopes >>
+  (* Discharge iterator IH guard *)
+  first_x_assum drule_all >> strip_tac >>
   imp_res_tac lift_option_type_scopes >> gvs[] >>
-  `preserves_scopes_dom s'⁴' st'` by
-    (first_x_assum (qspecl_then [`st`, `tyv`, `vs`, `s''`, `s'³'`, `s'⁴'`] mp_tac) >>
-     simp[] >> strip_tac >> first_x_assum drule >> simp[]) >>
+  (* Case: eval_iterator failed *)
+  TRY (irule map_fdom_eq_preserves_dom >> first_x_assum drule >> simp[] >> NO_TAC) >>
+  (* Case: check failed *)
+  imp_res_tac check_scopes >> imp_res_tac type_check_scopes >> gvs[] >>
+  TRY (irule map_fdom_eq_preserves_dom >> first_x_assum drule >> gvs[] >> NO_TAC) >>
+  (* Case: both succeeded, use eval_for IH *)
+  first_x_assum drule_all >> strip_tac >>
   gvs[preserves_scopes_dom_def] >>
-  Cases_on `st.scopes` >> Cases_on `s'³'.scopes` >> gvs[] >>
-  TRY (`MAP FDOM [] = MAP FDOM (h::t)` by
-         (qpat_x_assum `∀st res st'. eval_iterator _ _ _ = _ ⇒ _` drule >> gvs[]) >> gvs[]) >>
-  TRY (`MAP FDOM (h::t) = MAP FDOM []` by
-         (qpat_x_assum `∀st res st'. eval_iterator _ _ _ = _ ⇒ _` drule >> gvs[]) >> gvs[]) >>
-  `FDOM h::MAP FDOM t = FDOM h'::MAP FDOM t'` by
-    (qpat_x_assum `∀st res st'. eval_iterator _ _ _ = _ ⇒ _` drule >> gvs[]) >> gvs[]
+  Cases_on `st.scopes` >> Cases_on `s'⁴'.scopes` >> gvs[] >>
+  Cases_on `st'.scopes` >> gvs[] >>
+  Cases_on `s'³'.scopes` >> gvs[]
 QED
 
 Theorem case_eval_stmts_nil_dom[local]:
@@ -592,16 +589,7 @@ Proof
   (* Assign *) >- (drule case_Assign_dom >> rpt strip_tac >> metis_tac[eval_expr_preserves_scopes_dom])
   (* AugAssign *) >- (drule case_AugAssign_dom >> rpt strip_tac >> metis_tac[eval_expr_preserves_scopes_dom])
   (* If *) >- (irule case_If_dom >> qexists_tac `cx` >> qexists_tac `e` >> qexists_tac `res` >> qexists_tac `ss` >> qexists_tac `ss'` >> metis_tac[])
-  (* For *) >- (
-    qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-    simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
-    strip_tac >> gvs[] >>
-    imp_res_tac lift_option_type_scopes >> gvs[] >>
-    TRY (gvs[preserves_scopes_dom_def] >> NO_TAC) >>
-    imp_res_tac check_scopes >> imp_res_tac type_check_scopes >> gvs[] >>
-    (* TEMPORARILY CHEATED - For case IH instantiation with lift_option_type guard *)
-    cheat
-  )
+  (* For *) >- (drule_all case_For_dom >> simp[])
   (* Expr *) >- (drule_all case_Expr_dom >> gvs[])
   (* === eval_stmts cases === *)
   (* [] *) >- gvs[evaluate_def, return_def, preserves_scopes_dom_def]
