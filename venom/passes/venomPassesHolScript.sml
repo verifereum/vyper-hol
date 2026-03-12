@@ -28,3 +28,7 @@ Ancestors
   simplifyCfg
   cfgNorm
   makeSsa
+  (* memory passes *)
+  loadElim
+  deadStoreElim
+  memoryCopyElision

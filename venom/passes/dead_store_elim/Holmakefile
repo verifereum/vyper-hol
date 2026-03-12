@@ -1,0 +1,1 @@
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../../syntax ../../../semantics ../../defs ../shared ../../simulation ../../simulation/defs ../../analysis/dataflow ../../analysis/dataflow/defs ../../analysis/cfg ../../analysis/cfg/defs ../../analysis/mem_ssa ../../analysis/mem_ssa/defs defs proofs

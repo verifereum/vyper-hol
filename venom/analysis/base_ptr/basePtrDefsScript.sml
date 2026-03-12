@@ -227,11 +227,12 @@ Definition bp_get_write_location_def:
     | AddrSp_Storage =>
         (* EVM: SSTORE key val — key is 1st operand *)
         if inst.inst_opcode = SSTORE then
+          let ws = Lit (n2w (addr_space_word_scale AddrSp_Storage)) in
           (case inst.inst_operands of
              [dst; _] =>
                bp_segment_from_ops result
-                 <| iao_ofst := dst; iao_size := SOME (Lit 32w);
-                    iao_max_size := SOME (Lit 32w) |>
+                 <| iao_ofst := dst; iao_size := SOME ws;
+                    iao_max_size := SOME ws |>
            | _ => ml_undefined)
         else if inst.inst_opcode ∈ {CALL; DELEGATECALL; STATICCALL;
                                      INVOKE; CREATE; CREATE2} then ml_undefined
@@ -239,11 +240,12 @@ Definition bp_get_write_location_def:
     | AddrSp_Transient =>
         (* EVM: TSTORE key val — key is 1st operand *)
         if inst.inst_opcode = TSTORE then
+          let ws = Lit (n2w (addr_space_word_scale AddrSp_Transient)) in
           (case inst.inst_operands of
              [dst; _] =>
                bp_segment_from_ops result
-                 <| iao_ofst := dst; iao_size := SOME (Lit 32w);
-                    iao_max_size := SOME (Lit 32w) |>
+                 <| iao_ofst := dst; iao_size := SOME ws;
+                    iao_max_size := SOME ws |>
            | _ => ml_undefined)
         else if inst.inst_opcode ∈ {CALL; DELEGATECALL; STATICCALL;
                                      INVOKE; CREATE; CREATE2} then ml_undefined
@@ -269,24 +271,26 @@ Definition bp_get_read_location_def:
              NONE => ml_undefined
            | SOME ops => bp_segment_from_ops result ops)
     | AddrSp_Storage =>
+        (* Storage is word-addressed: word_scale = 1 *)
         if inst.inst_opcode = SLOAD then
           (case inst.inst_operands of
              [ofst] =>
                bp_segment_from_ops result
-                 <| iao_ofst := ofst; iao_size := SOME (Lit 32w);
-                    iao_max_size := SOME (Lit 32w) |>
+                 <| iao_ofst := ofst; iao_size := SOME (Lit 1w);
+                    iao_max_size := SOME (Lit 1w) |>
            | _ => ml_undefined)
         else if inst.inst_opcode ∈ {CALL; DELEGATECALL; STATICCALL;
                                      INVOKE; CREATE; CREATE2} then ml_undefined
         else if inst.inst_opcode ∈ {RETURN; STOP; SINK; RET} then ml_undefined
         else ml_empty
     | AddrSp_Transient =>
+        (* Transient is word-addressed: word_scale = 1 *)
         if inst.inst_opcode = TLOAD then
           (case inst.inst_operands of
              [ofst] =>
                bp_segment_from_ops result
-                 <| iao_ofst := ofst; iao_size := SOME (Lit 32w);
-                    iao_max_size := SOME (Lit 32w) |>
+                 <| iao_ofst := ofst; iao_size := SOME (Lit 1w);
+                    iao_max_size := SOME (Lit 1w) |>
            | _ => ml_undefined)
         else if inst.inst_opcode ∈ {CALL; DELEGATECALL; STATICCALL;
                                      INVOKE; CREATE; CREATE2} then ml_undefined
