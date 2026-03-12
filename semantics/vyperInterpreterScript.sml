@@ -133,7 +133,7 @@ Definition bind_arguments_def:
   bind_arguments tenv ((id, typ)::params) (v::vs) =
     (case evaluate_type tenv typ of NONE => NONE | SOME tv =>
      case safe_cast tv v of NONE => NONE | SOME v =>
-      OPTION_MAP (λm. m |+ (string_to_num id, v))
+      OPTION_MAP (λm. m |+ (string_to_num id, (tv, v)))
         (bind_arguments tenv params vs)) ∧
   bind_arguments _ _ _ = NONE
 End
@@ -788,10 +788,11 @@ Definition evaluate_def:
     push_log (id, vs)
   od ∧
   eval_stmt cx (AnnAssign id typ e) = do
+    tenv <<- get_tenv cx;
+    tyv <- lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type";
     tv <- eval_expr cx e;
     v <- materialise cx tv;
-    (* TODO: check type *)
-    new_variable id v
+    new_variable id tyv v
   od ∧
   eval_stmt cx (Append t e) = do
     (loc, sbs) <- eval_base_target cx t;
@@ -824,11 +825,11 @@ Definition evaluate_def:
     ) pop_scope
   od ∧
   eval_stmt cx (For id typ it n body) = do
-    (* TODO: check and cast to the type *)
+    tenv <<- get_tenv cx;
+    tyv <- lift_option_type (evaluate_type tenv typ) "For evaluate_type";
     vs <- eval_iterator cx it;
     check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long";
-    (* TODO: check id is not in scope already? *)
-    eval_for cx (string_to_num id) body vs
+    eval_for cx tyv (string_to_num id) body vs
   od ∧
   eval_stmt cx (Expr e) = do
     tv <- eval_expr cx e;
@@ -896,18 +897,18 @@ Definition evaluate_def:
     k <- lift_option_type (value_to_key v) "SubscriptTarget value_to_key";
     return $ (loc, k :: sbs)
   od ∧
-  eval_for cx nm body [] = return () ∧
-  eval_for cx nm body (v::vs) = do
-    push_scope_with_var nm v;
+  eval_for cx tyv nm body [] = return () ∧
+  eval_for cx tyv nm body (v::vs) = do
+    push_scope_with_var nm tyv v;
     broke <- finally
       (try (do eval_stmts cx body; return F od) handle_loop_exception)
       pop_scope ;
-    if broke then return () else eval_for cx nm body vs
+    if broke then return () else eval_for cx tyv nm body vs
   od ∧
   eval_expr cx (Name _ id) = do
     env <- get_scopes;
     n <<- string_to_num id;
-    v <- lift_option_type (lookup_scopes n env) "Name not in scope";
+    v <- lift_option_type (lookup_scopes_val n env) "Name not in scope";
     return $ Value v
   od ∧
   eval_expr cx (BareGlobalName _ id) = do
@@ -1055,7 +1056,7 @@ Termination
     => exprs_bound (remcode cx) es
   | INR (INR (INR (INR (INR (INR (INR (INL (cx, e))))))))
     => expr_bound (remcode cx) e
-  | INR (INR (INR (INR (INR (INR (INL (cx, nm, body, vs)))))))
+  | INR (INR (INR (INR (INR (INR (INL (cx, tyv, nm, body, vs)))))))
     => 1 + LENGTH vs + (LENGTH vs) * (stmts_bound (remcode cx) body)
   | INR (INR (INR (INR (INR (INL (cx, t))))))
     => base_target_bound (remcode cx) t
