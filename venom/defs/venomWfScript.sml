@@ -11,6 +11,18 @@ Ancestors
   venomInst
 
 (* ==========================================================================
+   PHI operand well-formedness: alternating (Label, Var) pairs.
+   ========================================================================== *)
+
+Definition phi_well_formed_def:
+  phi_well_formed [] = T /\
+  phi_well_formed [_] = T /\
+  phi_well_formed (Label lbl :: Var v :: rest) = phi_well_formed rest /\
+  phi_well_formed (Label lbl :: _ :: rest) = F /\
+  phi_well_formed (_ :: _ :: rest) = phi_well_formed rest
+End
+
+(* ==========================================================================
    Per-instruction well-formedness (inst_wf)
 
    Captures the structural shape (operand count/type, output count) that
@@ -112,7 +124,8 @@ Definition inst_wf_def:
     | STOP => T
     | SINK => T
     (* ---- SSA ---- *)
-    | PHI => LENGTH inst.inst_outputs = 1
+    | PHI => LENGTH inst.inst_outputs = 1 ∧
+             phi_well_formed inst.inst_operands
     | ASSIGN => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
     | NOP => T
     | PARAM => ∃idx. inst.inst_operands = [Lit idx] ∧
