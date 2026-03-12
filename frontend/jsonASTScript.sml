@@ -76,16 +76,16 @@ Datatype:
   | JE_Bool bool                                       (* True/False *)
 
   (* Variables and access *)
-  | JE_Name string (string option) int                   (* id, typeclass, source_id for modules *)
-  | JE_Attribute json_expr string (string option) int  (* value, attr, result_typeclass, source_id *)
-  | JE_Subscript json_expr json_expr                   (* value, slice *)
+  | JE_Name string (string option) int json_type         (* id, typeclass, source_id, type *)
+  | JE_Attribute json_expr string (string option) int json_type  (* value, attr, result_typeclass, source_id, type *)
+  | JE_Subscript json_expr json_expr json_type         (* value, slice, type *)
   | JE_NamedExpr json_expr json_expr                   (* target, value - dependency binding in initializes: lib[dep := dep] *)
 
   (* Operators *)
-  | JE_BinOp json_expr json_binop json_expr            (* left, op, right *)
+  | JE_BinOp json_expr json_binop json_expr json_type  (* left, op, right, type *)
   | JE_BoolOp json_boolop (json_expr list)             (* op, values *)
-  | JE_UnaryOp json_unaryop json_expr                  (* op, operand *)
-  | JE_IfExp json_expr json_expr json_expr             (* test, body, orelse *)
+  | JE_UnaryOp json_unaryop json_expr json_type        (* op, operand, type *)
+  | JE_IfExp json_expr json_expr json_expr json_type   (* test, body, orelse, type *)
 
   (* Compound - need type for array element type, tuple handling *)
   | JE_Tuple (json_expr list)                          (* elements *)
