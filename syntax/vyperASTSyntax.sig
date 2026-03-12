@@ -199,15 +199,15 @@ signature vyperASTSyntax = sig
   val mk_Log       : term * term -> term
   val mk_Subscript : term -> term -> term -> term
   val mk_If        : term -> term -> term -> term
-  val mk_li        : term * term * term -> term
+  val mk_li        : term * term -> term
   val mk_ld        : term * term -> term
   val mk_lb        : term * term -> term
-  val mk_ls        : term * term * string -> term
+  val mk_ls        : term * string -> term
   val mk_empty_lstr : term -> term
   val mk_Return    : term option -> term
   val mk_AnnAssign : term * term * term -> term
   val mk_AugAssign : term * term * term * term -> term
-  val mk_Hex_dyn   : term * term * string -> term
+  val mk_Hex_dyn   : term * string -> term
   val mk_Hex       : term * string -> term
   val mk_Builtin   : term -> term -> term -> term
   val mk_Concat    : term -> term

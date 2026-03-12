@@ -110,16 +110,16 @@ End
 
 Definition well_typed_literal_def:
   well_typed_literal (BaseT BoolT) (BoolL _) = T /\
-  well_typed_literal (BaseT (UintT k)) (IntL (Unsigned k') n) =
-    (k = k' /\ within_int_bound (Unsigned k) n) /\
-  well_typed_literal (BaseT (IntT k)) (IntL (Signed k') n) =
-    (k = k' /\ within_int_bound (Signed k) n) /\
+  well_typed_literal (BaseT (UintT k)) (IntL n) =
+    within_int_bound (Unsigned k) n /\
+  well_typed_literal (BaseT (IntT k)) (IntL n) =
+    within_int_bound (Signed k) n /\
   well_typed_literal (BaseT DecimalT) (DecimalL n) =
     within_int_bound (Signed 168) n /\
-  well_typed_literal (BaseT (StringT n)) (StringL m s) =
-    (n = m /\ LENGTH s <= n) /\
-  well_typed_literal (BaseT (BytesT bd)) (BytesL bd' bs) =
-    (bd = bd' /\ compatible_bound bd (LENGTH bs)) /\
+  well_typed_literal (BaseT (StringT n)) (StringL s) =
+    (LENGTH s <= n) /\
+  well_typed_literal (BaseT (BytesT bd)) (BytesL bs) =
+    compatible_bound bd (LENGTH bs) /\
   well_typed_literal _ _ = F
 End
 
