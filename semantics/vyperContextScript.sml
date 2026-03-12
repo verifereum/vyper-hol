@@ -351,8 +351,11 @@ Definition evaluate_builtin_def:
            INL (IntV (&(2 ** int_bound_bits u) - 1 - i))
          else INR (TypeError "signed Not")
      | NONE => INR (TypeError "Not type")) ∧
-  evaluate_builtin cx _ _ Not [FlagV n] = INL $ FlagV $
-    w2n $ ~((n2w n):bytes32) ∧
+  evaluate_builtin cx _ ty Not [FlagV n] =
+    (case evaluate_type (get_tenv cx) ty of
+       SOME (FlagTV m) => INL $ FlagV $
+         w2n $ (~((n2w n):bytes32)) && ~(~(0w:bytes32) << m)
+     | _ => INR (TypeError "Not flag type")) ∧
   evaluate_builtin cx _ ty Neg [IntV i] =
     (case type_to_int_bound ty
      of SOME u => bounded_int_op u (-i)
