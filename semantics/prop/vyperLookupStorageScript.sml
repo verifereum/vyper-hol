@@ -76,12 +76,17 @@ Definition well_formed_layout_def:
 End
 
 (* Predicate: slots read during decode_value contain in-range values.
-   Only UintT and IntT base types have non-trivial constraints. *)
+   Captures all conditions needed for decode_value to succeed and
+   produce well-typed values. *)
 Definition slots_in_range_def:
   slots_in_range storage offset (BaseTV (UintT n)) =
     (w2n (read_slot storage offset) < 2 ** n) ∧
   slots_in_range storage offset (BaseTV (IntT n)) =
     within_int_bound (Signed n) (w2i (read_slot storage offset)) ∧
+  slots_in_range storage offset (BaseTV (BytesT (Dynamic max))) =
+    (w2n (read_slot storage offset) ≤ max) ∧
+  slots_in_range storage offset (BaseTV (StringT max)) =
+    (w2n (read_slot storage offset) ≤ max) ∧
   slots_in_range storage offset (BaseTV _) = T ∧
   slots_in_range storage offset (FlagTV _) = T ∧
   slots_in_range storage offset NoneTV = T ∧
@@ -363,6 +368,7 @@ Proof
     read_slot_def, all_have_type_EVERY, well_formed_type_value_def] >>
   rpt strip_tac >> gvs[value_has_type_def, slots_in_range_def,
     all_have_type_EVERY, well_formed_type_value_def, ETA_AX] >>
+  TRY (gvs[decode_dyn_bytes_def, LET_THM, AllCaseEqs()] >> NO_TAC) >>
   TRY (first_x_assum irule >> simp[] >> NO_TAC) >>
   `value_has_type tv (default_value tv)` by
     (irule default_value_well_typed >> simp[]) >>
@@ -370,9 +376,74 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
+Theorem slots_in_range_offset_cong[local]:
+  (∀storage off1 tv off2.
+    (n2w off1 : bytes32) = n2w off2 ⇒
+    slots_in_range storage off1 tv = slots_in_range storage off2 tv) ∧
+  (∀storage off1 tvs off2.
+    (n2w off1 : bytes32) = n2w off2 ⇒
+    tuple_slots_in_range storage off1 tvs =
+    tuple_slots_in_range storage off2 tvs) ∧
+  (∀storage off1 tv n off2.
+    (n2w off1 : bytes32) = n2w off2 ⇒
+    static_slots_in_range storage off1 tv n =
+    static_slots_in_range storage off2 tv n) ∧
+  (∀storage off1 tv n off2.
+    (n2w off1 : bytes32) = n2w off2 ⇒
+    dyn_slots_in_range storage off1 tv n =
+    dyn_slots_in_range storage off2 tv n) ∧
+  (∀storage off1 ftypes off2.
+    (n2w off1 : bytes32) = n2w off2 ⇒
+    struct_slots_in_range storage off1 ftypes =
+    struct_slots_in_range storage off2 ftypes)
+Proof
+  ho_match_mp_tac slots_in_range_ind >>
+  rpt conj_tac >> rpt gen_tac >>
+  DISCH_TAC >> rpt gen_tac >> TRY DISCH_TAC >>
+  `read_slot storage off1 = read_slot storage off2`
+    by simp[read_slot_def] >>
+  PURE_ONCE_REWRITE_TAC [slots_in_range_def] >>
+  simp_tac (srw_ss()) [LET_THM] >>
+  (* Base cases + simple IH: solve via read_slot equality or drule *)
+  TRY (gvs[] >> NO_TAC) >>
+  TRY (first_x_assum drule >> simp[] >> NO_TAC) >>
+  (* Recursive cases with conjunction IH *)
+  TRY (
+    qpat_x_assum `_ ∧ _` strip_assume_tac >>
+    `(n2w (off1 + type_slot_size tv) : bytes32) = n2w (off2 + type_slot_size tv)`
+      by (gvs[wordsTheory.n2w_11] >>
+          simp[Once (GSYM arithmeticTheory.MOD_PLUS)]) >>
+    first_x_assum drule >> first_x_assum drule >>
+    simp[] >> NO_TAC) >>
+  (* DynArray case *)
+  Cases_on `w2n (read_slot storage off1) ≤ max` >- (
+    `(n2w (off1 + 1) : bytes32) = n2w (off2 + 1)`
+      by (gvs[wordsTheory.n2w_11] >>
+          simp[Once (GSYM arithmeticTheory.MOD_PLUS)]) >>
+    qpat_x_assum `∀len. _`
+      (qspec_then `w2n (read_slot storage off1)` mp_tac) >>
+    asm_rewrite_tac[] >> strip_tac >>
+    pop_assum (qspec_then `off2 + 1` mp_tac) >>
+    simp[] >> gvs[]
+  ) >>
+  gvs[]
+QED
+
+Theorem slots_in_range_w2n_n2w[local]:
+  ∀storage off tv.
+    slots_in_range storage (w2n ((n2w off):bytes32)) tv ⇒
+    slots_in_range storage off tv
+Proof
+  rpt strip_tac >>
+  `slots_in_range storage off tv =
+   slots_in_range storage (w2n ((n2w off):bytes32)) tv` by
+    (irule (CONJUNCT1 slots_in_range_offset_cong) >> simp[]) >>
+  gvs[]
+QED
+
 Theorem storage_var_in_range_from_typed_lookup:
   ∀cx st mid n v tv.
-    var_in_storage cx mid n ∧
+    well_formed_type_value tv ∧
     storage_type_of cx mid n = SOME tv ∧
     lookup_toplevel_name cx st mid n = SOME (Value v) ∧
     value_has_type tv v ⇒
@@ -382,8 +453,8 @@ Proof
   simp[storage_var_in_range_def] >> rpt strip_tac >>
   `tv = tv'` by gvs[storage_type_of_def, storage_var_info_def, AllCaseEqs()] >>
   gvs[] >>
-  (* Extract var_in_storage and storage_var_info components *)
-  gvs[var_in_storage_def, storage_var_info_def, AllCaseEqs()] >>
+  (* Extract storage_var_info components from storage_type_of *)
+  gvs[storage_type_of_def, storage_var_info_def, AllCaseEqs()] >>
   (* Now unfold lookup *)
   qpat_x_assum `lookup_toplevel_name _ _ _ _ = _` mp_tac >>
   simp[lookup_toplevel_name_def, AllCaseEqs()] >> strip_tac >>
@@ -395,7 +466,92 @@ Proof
   simp[bind_def, return_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   BasicProvers.every_case_tac >> gvs[return_def, raise_def] >>
-  metis_tac[decode_value_typed_slots_in_range]
+  irule slots_in_range_w2n_n2w >>
+  irule (CONJUNCT1 decode_value_typed_slots_in_range) >>
+  simp[] >>
+  qexists_tac `v` >> simp[wordsTheory.w2n_n2w]
+QED
+
+(* ===== Totality of decode_value under slots_in_range ===== *)
+
+Theorem decode_value_total[local]:
+  (∀storage offset tv.
+    well_formed_type_value tv ∧
+    slots_in_range storage offset tv ⇒
+    ∃v. decode_value storage offset tv = SOME v) ∧
+  (∀storage offset tvs.
+    EVERY well_formed_type_value tvs ∧
+    tuple_slots_in_range storage offset tvs ⇒
+    ∃vs. decode_tuple storage offset tvs = SOME vs) ∧
+  (∀storage offset tv n.
+    well_formed_type_value tv ∧
+    static_slots_in_range storage offset tv n ⇒
+    ∃vs. decode_static_array storage offset tv n = SOME vs) ∧
+  (∀storage offset tv n.
+    well_formed_type_value tv ∧
+    dyn_slots_in_range storage offset tv n ⇒
+    ∃vs. decode_dyn_array storage offset tv n = SOME vs) ∧
+  (∀storage offset ftypes.
+    EVERY (well_formed_type_value o SND) ftypes ∧
+    struct_slots_in_range storage offset ftypes ⇒
+    ∃fields. decode_struct storage offset ftypes = SOME fields)
+Proof
+  ho_match_mp_tac decode_value_ind >>
+  rpt conj_tac >> rpt gen_tac >>
+  strip_tac >> gvs[decode_value_def, slots_in_range_def,
+    well_formed_type_value_def, LET_THM, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[slots_in_range_def] >>
+  TRY (fs[decode_dyn_bytes_def, LET_THM, read_slot_def] >> NO_TAC) >>
+  TRY (res_tac >> gvs[] >> NO_TAC) >>
+  metis_tac[]
+QED
+
+(* ===== Inverse: storage_var_in_range implies typed lookup succeeds ===== *)
+
+Theorem typed_lookup_from_storage_var_in_range_non_array:
+  ∀cx st mid n tv.
+    var_in_storage cx mid n ∧
+    storage_var_in_range cx st mid n ∧
+    storage_type_of cx mid n = SOME tv ∧
+    (∀elem bd. tv ≠ ArrayTV elem bd) ⇒
+    ∃v.
+      lookup_toplevel_name cx st mid n = SOME (Value v) ∧
+      value_has_type tv v ∧
+      well_formed_value v
+Proof
+  rpt strip_tac >>
+  gvs[var_in_storage_def] >>
+  (* Unify type variables *)
+  `tv' = tv`
+    by gvs[storage_type_of_def, storage_var_info_def, AllCaseEqs()] >>
+  gvs[] >>
+  (* Get storage and slots_in_range from storage_var_in_range *)
+  `∃storage. get_storage_backend cx b st = (INL storage, st) ∧
+             slots_in_range storage offset tv`
+    by (qpat_x_assum `storage_var_in_range _ _ _ _` mp_tac >>
+        simp[storage_var_in_range_def, storage_var_info_def, AllCaseEqs()] >>
+        strip_tac >>
+        Cases_on `b` >>
+        fs[get_storage_backend_def, get_accounts_def,
+           get_transient_storage_def, bind_def, return_def] >>
+        first_x_assum irule >>
+        simp[get_storage_backend_def, get_accounts_def,
+             get_transient_storage_def, bind_def, return_def]) >>
+  (* decode_value succeeds *)
+  `w2n ((n2w offset):bytes32) = offset` by simp[wordsTheory.w2n_n2w] >>
+  `∃v. decode_value storage offset tv = SOME v`
+    by (irule (CONJUNCT1 decode_value_total) >> simp[]) >>
+  (* Get typing and well-formedness *)
+  `value_has_type tv v ∧ well_formed_value v`
+    by metis_tac[CONJUNCT1 decode_value_storable] >>
+  (* Show lookup succeeds *)
+  qexists_tac `v` >> simp[] >>
+  simp[lookup_toplevel_name_def, Once lookup_global_def, bind_def,
+       return_def, LET_THM, lift_option_type_def, lift_option_def,
+       read_storage_slot_def, get_storage_backend_def,
+       get_accounts_def, get_transient_storage_def] >>
+  Cases_on `tv` >> gvs[] >>
+  simp[bind_def, return_def, lift_option_def]
 QED
 
 Theorem storable_value_from_lookup:
