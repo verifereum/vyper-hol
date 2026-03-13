@@ -104,7 +104,7 @@ Proof
    rename1 `find_containing_scope _ _.scopes = SOME fcs_result` >>
    PairCases_on `fcs_result` >>
    gvs[bind_def, AllCaseEqs(), return_def, raise_def, set_scopes_def] >>
-   Cases_on `assign_subscripts fcs_result2 (REVERSE is) ao` >>
+   Cases_on `assign_subscripts fcs_result3 (REVERSE is) ao` >>
    gvs[return_def, raise_def] >> rw[] >> gvs[] >>
    imp_res_tac assign_result_state >> gvs[] >> rw[] >> gvs[]) >-
   (* TopLevelVar case: storage operations don't touch immutables *)
@@ -168,7 +168,9 @@ Proof
          lift_option_def, lift_option_type_def, LET_THM, return_def, raise_def] >>
     Cases_on `FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num id)` >>
     simp[return_def, raise_def] >>
-    Cases_on `assign_subscripts x' (REVERSE is) ao` >> simp[lift_sum_def, return_def, raise_def] >>
+    PairCases_on `x'` >>
+    simp[] >>
+    Cases_on `assign_subscripts x'1 (REVERSE is) ao` >> simp[lift_sum_def, return_def, raise_def] >>
     simp[ignore_bind_def, bind_def, set_immutable_def, get_address_immutables_def,
          set_address_immutables_def, lift_option_def, lift_option_type_def, return_def, LET_THM] >>
     strip_tac >> gvs[] >>
@@ -291,7 +293,7 @@ Proof
    rename1 `find_containing_scope _ _.scopes = SOME fcs_result` >>
    PairCases_on `fcs_result` >>
    gvs[bind_def, AllCaseEqs(), return_def, raise_def, set_scopes_def] >>
-   Cases_on `assign_subscripts fcs_result2 (REVERSE is) ao` >>
+   Cases_on `assign_subscripts fcs_result3 (REVERSE is) ao` >>
    gvs[return_def, raise_def] >>
    imp_res_tac assign_result_state >> gvs[]) >-
   (* TopLevelVar case: storage operations don't touch immutables *)
@@ -390,7 +392,7 @@ Theorem assign_target_immutable_replace_gives_lookup:
   ∀cx st n v res st'.
     IS_SOME (lookup_immutable cx st (current_module cx) n) ∧
     assign_target cx (BaseTargetV (ImmutableVar n) []) (Replace v) st = (INL res, st') ⇒
-    lookup_immutable cx st' (current_module cx) n = SOME v
+    ∃tv. lookup_immutable cx st' (current_module cx) n = SOME (tv, v)
 Proof
   rw[lookup_immutable_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[] >>
@@ -399,6 +401,7 @@ Proof
        lift_option_def, lift_option_type_def, LET_THM, return_def] >>
   simp[lift_sum_def, assign_subscripts_def, return_def, ignore_bind_def, bind_def] >>
   Cases_on `FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num n)` >> gvs[return_def, raise_def] >>
+  PairCases_on `x'` >> simp[] >>
   simp[set_immutable_def, get_address_immutables_def, lift_option_def, lift_option_type_def, bind_def,
        set_address_immutables_def, return_def, LET_THM] >>
   strip_tac >> gvs[assign_result_def, return_def] >>
@@ -409,12 +412,12 @@ QED
 
 (* Lemma: for ImmutableVar Update, lookup_immutable returns the computed value *)
 Theorem assign_target_immutable_update_gives_lookup:
-  ∀cx st n ty bop v1 v2 v res st'.
-    lookup_immutable cx st (current_module cx) n = SOME v1 ∧
+  ∀cx st n ty bop v1 v2 v tv res st'.
+    lookup_immutable cx st (current_module cx) n = SOME (tv, v1) ∧
     evaluate_binop (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
                    NoneTV bop v1 v2 = INL v ∧
     assign_target cx (BaseTargetV (ImmutableVar n) []) (Update ty bop v2) st = (INL res, st') ⇒
-    lookup_immutable cx st' (current_module cx) n = SOME v
+    lookup_immutable cx st' (current_module cx) n = SOME (tv, v)
 Proof
   rw[lookup_immutable_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[] >>

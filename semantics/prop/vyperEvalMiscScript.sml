@@ -24,7 +24,7 @@ Proof
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
        lift_option_def, lift_option_type_def] >>
   rpt strip_tac >>
-  Cases_on `lookup_scopes (string_to_num n) st.scopes` >>
+  Cases_on `lookup_scopes_val (string_to_num n) st.scopes` >>
   gvs[return_def, raise_def]
 QED
 

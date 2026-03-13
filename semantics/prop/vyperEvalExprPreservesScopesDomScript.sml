@@ -49,7 +49,7 @@ local
   val p3 = ``\(cx:evaluation_context) (g:assignment_target). T``
   val p4 = ``\(cx:evaluation_context) (gs:assignment_target list). T``
   val p5 = ``\cx bt. !st res st'. eval_base_target cx bt st = (res, st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes``
-  val p6 = ``\(cx:evaluation_context) (nm:num) (body:stmt list) (vs:value list). T``
+  val p6 = ``\(cx:evaluation_context) (tyv:type_value) (nm:num) (body:stmt list) (vs:value list). T``
   val p7 = ``\cx e. !st res st'. eval_expr cx e st = (res, st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes``
   val p8 = ``\cx es. !st res st'. eval_exprs cx es st = (res, st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes``
   val spec_ind = SPECL [p0, p1, p2, p3, p4, p5, p6, p7, p8] evaluate_ind
@@ -154,7 +154,7 @@ Proof
   simp[evaluate_def, bind_def, get_scopes_def, return_def,
        lift_option_def, lift_option_type_def] >>
   rpt strip_tac >>
-  Cases_on `lookup_scopes (string_to_num id) st.scopes` >> gvs[return_def, raise_def]
+  Cases_on `lookup_scopes_val (string_to_num id) st.scopes` >> gvs[return_def, raise_def]
 QED
 
 (* Goal 5b: BareGlobalName (no IH) *)

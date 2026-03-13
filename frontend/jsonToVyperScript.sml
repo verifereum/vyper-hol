@@ -60,14 +60,6 @@ val () = cv_auto_trans translate_type_def;
 
 (* ===== Helper: int_bound from type ===== *)
 
-Definition int_bound_of_type_def:
-  (int_bound_of_type (JT_Integer bits T) = Signed bits) /\
-  (int_bound_of_type (JT_Integer bits F) = Unsigned bits) /\
-  (int_bound_of_type _ = Unsigned 256)
-End
-
-val () = cv_auto_trans int_bound_of_type_def;
-
 (* ===== Operator Translation ===== *)
 
 Definition translate_binop_def:
@@ -346,7 +338,7 @@ End
 val () = cv_auto_trans denomination_of_string_def;
 
 Definition denomination_of_expr_def:
-  denomination_of_expr (Literal _ (StringL _ s)) = denomination_of_string s /\
+  denomination_of_expr (Literal _ (StringL s)) = denomination_of_string s /\
   denomination_of_expr _ = NONE
 End
 
@@ -588,23 +580,23 @@ QED
 
 Definition translate_expr_def:
   (translate_expr ctx (JE_Int v ty) =
-    Literal (translate_type ty) (IntL (int_bound_of_type ty) v)) /\
+    Literal (translate_type ty) (IntL v)) /\
 
   (translate_expr ctx (JE_Decimal s) =
     Literal (BaseT DecimalT) (DecimalL (decimal_string_to_int s))) /\
 
   (translate_expr ctx (JE_Str len s) =
-    Literal (BaseT (StringT len)) (StringL len s)) /\
+    Literal (BaseT (StringT len)) (StringL s)) /\
 
   (translate_expr ctx (JE_GenericStr s) =
-    Literal (BaseT (StringT (STRLEN s))) (StringL (STRLEN s) s)) /\
+    Literal (BaseT (StringT (STRLEN s))) (StringL s)) /\
 
   (translate_expr ctx (JE_Bytes len hex) =
-    Literal (BaseT (BytesT (Dynamic len))) (BytesL (Dynamic len) (hex_string_to_bytes (FILTER isHexDigit (strip_0x hex))))) /\
+    Literal (BaseT (BytesT (Dynamic len))) (BytesL (hex_string_to_bytes (FILTER isHexDigit (strip_0x hex))))) /\
 
   (translate_expr ctx (JE_Hex hex) =
     let bytes = hex_string_to_bytes (FILTER isHexDigit (strip_0x hex)) in
-    Literal (BaseT (BytesT (Fixed (LENGTH bytes)))) (BytesL (Fixed (LENGTH bytes)) bytes)) /\
+    Literal (BaseT (BytesT (Fixed (LENGTH bytes)))) (BytesL bytes)) /\
 
   (translate_expr ctx (JE_Bool b) = Literal (BaseT BoolT) (BoolL b)) /\
 
@@ -758,7 +750,7 @@ Definition translate_expr_def:
   (translate_expr ctx (JE_ExtCall func_name arg_types ret_ty args keywords) =
     let value_expr = case find_keyword "value" keywords of
                      | SOME v => translate_expr ctx v
-                     | NONE => Literal (BaseT (UintT 256)) (IntL (Unsigned 256) 0) in
+                     | NONE => Literal (BaseT (UintT 256)) (IntL 0) in
     let translated_args = translate_expr_list ctx args in
     Call (translate_type ret_ty) (ExtCall F (func_name, translate_type_list arg_types, translate_type ret_ty))
          (case translated_args of
@@ -886,10 +878,10 @@ val () = cv_auto_trans get_iter_bound_def;
 
 Definition translate_iter_def:
   (translate_iter ctx var_ty (JIter_Range [] _ _) =
-    Range (Literal (translate_type var_ty) (IntL (int_bound_of_type var_ty) (integer$int_of_num 0)))
-          (Literal (translate_type var_ty) (IntL (int_bound_of_type var_ty) (integer$int_of_num 0)))) /\
+    Range (Literal (translate_type var_ty) (IntL (integer$int_of_num 0)))
+          (Literal (translate_type var_ty) (IntL (integer$int_of_num 0)))) /\
   (translate_iter ctx var_ty (JIter_Range [e] _ _) =
-    Range (Literal (translate_type var_ty) (IntL (int_bound_of_type var_ty) (integer$int_of_num 0)))
+    Range (Literal (translate_type var_ty) (IntL (integer$int_of_num 0)))
           (translate_expr ctx e)) /\
   (translate_iter ctx var_ty (JIter_Range (s::e::_) _ _) =
     Range (translate_expr ctx s) (translate_expr ctx e)) /\
@@ -908,10 +900,10 @@ Definition translate_stmt_def:
   (translate_stmt ctx (JS_Expr e) = Expr (translate_expr ctx e)) /\
   (translate_stmt ctx (JS_Return NONE) = Return NONE) /\
   (translate_stmt ctx (JS_Return (SOME e)) = Return (SOME (translate_expr ctx e))) /\
-  (translate_stmt ctx (JS_Raise NONE) = Raise (Literal (BaseT (StringT 0)) (StringL 0 ""))) /\
+  (translate_stmt ctx (JS_Raise NONE) = Raise (Literal (BaseT (StringT 0)) (StringL ""))) /\
   (translate_stmt ctx (JS_Raise (SOME e)) = Raise (translate_expr ctx e)) /\
   (translate_stmt ctx (JS_Assert test NONE) =
-    Assert (translate_expr ctx test) (Literal (BaseT (StringT 0)) (StringL 0 ""))) /\
+    Assert (translate_expr ctx test) (Literal (BaseT (StringT 0)) (StringL ""))) /\
   (translate_stmt ctx (JS_Assert test (SOME msg)) =
     Assert (translate_expr ctx test) (translate_expr ctx msg)) /\
   (translate_stmt ctx (JS_Log event args) =

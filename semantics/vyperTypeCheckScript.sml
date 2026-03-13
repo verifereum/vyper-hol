@@ -25,30 +25,32 @@ Ancestors
 
 (* ===== Type Classification Helpers ===== *)
 
-Definition is_numeric_type_def:
-  is_numeric_type (BaseT (UintT _)) = T /\
-  is_numeric_type (BaseT (IntT _)) = T /\
-  is_numeric_type (BaseT DecimalT) = T /\
-  is_numeric_type _ = F
-End
-
-Definition is_int_type_def:
+Definition is_int_type_def[simp]:
   is_int_type (BaseT (UintT _)) = T /\
   is_int_type (BaseT (IntT _)) = T /\
   is_int_type _ = F
 End
 
-Definition is_bool_type_def:
+Definition is_numeric_type_def[simp]:
+  is_numeric_type t = (is_int_type t \/ t = BaseT DecimalT)
+End
+
+Definition is_bool_type_def[simp]:
   is_bool_type (BaseT BoolT) = T /\
   is_bool_type _ = F
 End
 
-Definition is_flag_type_def:
+Definition is_flag_type_def[simp]:
   is_flag_type (FlagT _) = T /\
   is_flag_type _ = F
 End
 
-Definition is_sized_type_def:
+Definition is_struct_type_def[simp]:
+  is_struct_type (StructT _) = T /\
+  is_struct_type _ = F
+End
+
+Definition is_sized_type_def[simp]:
   is_sized_type (ArrayT _ _) = T /\
   is_sized_type (BaseT (StringT _)) = T /\
   is_sized_type (BaseT (BytesT _)) = T /\
@@ -62,7 +64,7 @@ Definition satisfies_type_def:
   satisfies_type NoneV NoneTV = T /\
   satisfies_type (BoolV _) (BaseTV BoolT) = T /\
   satisfies_type (IntV n) (BaseTV (UintT k)) =
-    (0 <= n /\ Num n < 2 ** k) /\
+    within_int_bound (Unsigned k) n /\
   satisfies_type (IntV n) (BaseTV (IntT k)) =
     within_int_bound (Signed k) n /\
   satisfies_type (DecimalV n) (BaseTV DecimalT) =
@@ -108,16 +110,16 @@ End
 
 Definition well_typed_literal_def:
   well_typed_literal (BaseT BoolT) (BoolL _) = T /\
-  well_typed_literal (BaseT (UintT k)) (IntL (Unsigned k') n) =
-    (k = k' /\ within_int_bound (Unsigned k) n) /\
-  well_typed_literal (BaseT (IntT k)) (IntL (Signed k') n) =
-    (k = k' /\ within_int_bound (Signed k) n) /\
+  well_typed_literal (BaseT (UintT k)) (IntL n) =
+    within_int_bound (Unsigned k) n /\
+  well_typed_literal (BaseT (IntT k)) (IntL n) =
+    within_int_bound (Signed k) n /\
   well_typed_literal (BaseT DecimalT) (DecimalL n) =
     within_int_bound (Signed 168) n /\
-  well_typed_literal (BaseT (StringT n)) (StringL m s) =
-    (n = m /\ LENGTH s <= n) /\
-  well_typed_literal (BaseT (BytesT bd)) (BytesL bd' bs) =
-    (bd = bd' /\ compatible_bound bd (LENGTH bs)) /\
+  well_typed_literal (BaseT (StringT n)) (StringL s) =
+    (LENGTH s <= n) /\
+  well_typed_literal (BaseT (BytesT bd)) (BytesL bs) =
+    compatible_bound bd (LENGTH bs) /\
   well_typed_literal _ _ = F
 End
 
@@ -265,10 +267,10 @@ Definition well_typed_builtin_app_def:
   (* AddMod/MulMod: 3x uint256 -> uint256 *)
   well_typed_builtin_app ty AddMod ts =
     (LENGTH ts = 3 /\ ty = BaseT (UintT 256) /\
-     EVERY (\t. t = BaseT (UintT 256)) ts) /\
+     EVERY ((=) (BaseT (UintT 256))) ts) /\
   well_typed_builtin_app ty MulMod ts =
     (LENGTH ts = 3 /\ ty = BaseT (UintT 256) /\
-     EVERY (\t. t = BaseT (UintT 256)) ts) /\
+     EVERY ((=) (BaseT (UintT 256))) ts) /\
   (* BlockHash/BlobHash: uint256 -> bytes32 *)
   well_typed_builtin_app ty BlockHash ts =
     (ts = [BaseT (UintT 256)] /\
@@ -388,7 +390,7 @@ Definition well_typed_expr_def:
   (* StructLit: fields well-typed, result is struct type *)
   well_typed_expr env (StructLit ty _ kes) =
     (well_typed_named_exprs env kes /\
-     (case ty of StructT _ => T | _ => F)) /\
+     is_struct_type ty) /\
 
   (* Subscript: array/tuple subscript *)
   well_typed_expr env (Subscript ty e1 e2) =
