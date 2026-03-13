@@ -32,3 +32,7 @@ Ancestors
   loadElim
   deadStoreElim
   memoryCopyElision
+  (* dataflow-driven passes *)
+  assignElim
+  cse
+  sccp
