@@ -40,7 +40,7 @@ Definition well_formed_type_value_def:
     (EVERY (well_formed_type_value o SND) fields ∧
      type_slot_size (StructTV fields) ≤ dimword(:256)) ∧
   well_formed_type_value (BaseTV (UintT m)) = (m ≤ 256) ∧
-  well_formed_type_value (BaseTV (IntT m)) = (m ≤ 256) ∧
+  well_formed_type_value (BaseTV (IntT m)) = (0 < m ∧ m ≤ 256) ∧
   well_formed_type_value _ = T
 End
 
@@ -343,6 +343,43 @@ Theorem sparse_has_type_enumerate:
 Proof
   Induct >> simp[enumerate_static_array_def, value_has_type_def, LET_THM] >>
   rpt strip_tac >> rw[] >> simp[value_has_type_def]
+QED
+
+Theorem default_value_has_type[local]:
+  (∀tv. well_formed_type_value tv ⇒ value_has_type tv (default_value tv)) ∧
+  (∀ftypes. EVERY (well_formed_type_value o SND) ftypes ⇒
+    struct_has_type ftypes (MAP (λ(id,t). (id, default_value t)) ftypes)) ∧
+  (∀p : string # type_value. well_formed_type_value (SND p) ⇒
+    value_has_type (SND p) (default_value (SND p))) ∧
+  (∀tvs. EVERY well_formed_type_value tvs ⇒
+    values_have_types tvs (MAP default_value tvs))
+Proof
+  ho_match_mp_tac (TypeBase.induction_of ``:type_value``) >>
+  simp[default_value_def, default_value_tuple_MAP,
+       default_value_struct_MAP, value_has_type_def,
+       well_formed_type_value_def, within_int_bound_def] >>
+  rpt conj_tac >> rpt gen_tac >> simp[] >|
+  [(* BaseTV b *)
+   Cases_on `b` >> simp[default_value_def, value_has_type_def,
+     well_formed_type_value_def, within_int_bound_def] >>
+   TRY (Cases_on `b'` >> simp[default_value_def, value_has_type_def,
+        well_formed_type_value_def]) ,
+   (* TupleTV tvs - IH *)
+   strip_tac >> metis_tac[] ,
+   (* ArrayTV tv b *)
+   strip_tac >> Cases_on `b` >>
+   simp[default_value_def, value_has_type_def, all_have_type_EVERY] ,
+   (* StructTV ftypes - IH *)
+   strip_tac >> metis_tac[] ,
+   (* struct cons: p::ftypes *)
+   PairCases_on `p` >> simp[value_has_type_def]
+  ]
+QED
+
+Theorem default_value_well_typed:
+  ∀tv. well_formed_type_value tv ⇒ value_has_type tv (default_value tv)
+Proof
+  metis_tac[default_value_has_type]
 QED
 
 Theorem value_has_type_inv:
