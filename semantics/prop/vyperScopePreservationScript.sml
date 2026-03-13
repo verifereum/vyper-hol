@@ -187,7 +187,7 @@ Proof
 QED
 
 Theorem set_immutable_scopes:
-  !cx src n v st res st'. set_immutable cx src n v st = (res, st') ==> st'.scopes = st.scopes
+  !cx src n tv v st res st'. set_immutable cx src n tv v st = (res, st') ==> st'.scopes = st.scopes
 Proof
   rw[set_immutable_def, bind_def, return_def, get_address_immutables_def,
      set_address_immutables_def, lift_option_def] >>
@@ -249,8 +249,8 @@ Proof
 QED
 
 Theorem find_containing_scope_map_fdom:
-  ∀id sc pre env v rest a'.
-    find_containing_scope id sc = SOME (pre, env, v, rest) ⇒
+  ∀id sc pre env tv v rest a'.
+    find_containing_scope id sc = SOME (pre, env, tv, v, rest) ⇒
     MAP FDOM (pre ++ env |+ (id, a') :: rest) = MAP FDOM sc
 Proof
   rpt strip_tac >>
@@ -420,7 +420,7 @@ Proof
     gvs[assign_target_def, bind_def, get_scopes_def, return_def, lift_option_def] >>
     Cases_on `find_containing_scope (string_to_num id) st.scopes` >> gvs[return_def, raise_def] >>
     PairCases_on `x` >> gvs[bind_def, lift_sum_def] >>
-    Cases_on `assign_subscripts x2 (REVERSE is) ao` >>
+    Cases_on `assign_subscripts x3 (REVERSE is) ao` >>
     gvs[return_def, raise_def, bind_def, ignore_bind_def, set_scopes_def] >>
     imp_res_tac assign_result_scopes >> gvs[] >>
     drule find_containing_scope_map_fdom >> simp[])
@@ -462,8 +462,8 @@ Proof
 QED
 
 Theorem new_variable_scope_property:
-  ∀id v st res st'.
-    new_variable id v st = (res, st') ∧ st.scopes ≠ [] ⇒
+  ∀id tv v st res st'.
+    new_variable id tv v st = (res, st') ∧ st.scopes ≠ [] ⇒
     st'.scopes ≠ [] ∧
     FDOM (HD st.scopes) ⊆ FDOM (HD st'.scopes) ∧
     TL st'.scopes = TL st.scopes
@@ -483,9 +483,9 @@ Proof
 QED
 
 Theorem push_scope_with_var_creates_singleton_hd:
-  ∀nm v st res st'.
-    push_scope_with_var nm v st = (INL (), st') ⇒
-    HD st'.scopes = FEMPTY |+ (nm, v) ∧
+  ∀nm tv v st res st'.
+    push_scope_with_var nm tv v st = (INL (), st') ⇒
+    HD st'.scopes = FEMPTY |+ (nm, (tv, v)) ∧
     TL st'.scopes = st.scopes
 Proof
   rw[push_scope_with_var_def, return_def] >> simp[]

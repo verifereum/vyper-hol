@@ -210,29 +210,26 @@ structure vyperASTSyntax :> vyperASTSyntax = struct
   fun mk_Log (id,es) = list_mk_comb(Log_tm, [id, es])
   fun mk_Subscript ty e1 e2 = list_mk_comb(Subscript_tm, [ty, e1, e2])
   fun mk_If e s1 s2 = list_mk_comb(If_tm, [e,s1,s2])
-  fun mk_li (ty,b,i) = list_mk_comb(Literal_tm, [ty, list_mk_comb(IntL_tm, [b,i])])
+  fun mk_li (ty,i) = list_mk_comb(Literal_tm, [ty, mk_comb(IntL_tm, i)])
   fun mk_ld (ty,i) = list_mk_comb(Literal_tm, [ty, mk_comb(DecimalL_tm, i)])
   fun mk_lb (ty,b) = list_mk_comb(Literal_tm, [ty, mk_comb(BoolL_tm, b)])
-  fun mk_ls (ty,n,s) = list_mk_comb(Literal_tm,
-    [ty, list_mk_comb(StringL_tm, [n, fromMLstring s])])
-  fun mk_empty_lstr ty = mk_ls(ty, numSyntax.zero_tm, "")
+  fun mk_ls (ty,s) = list_mk_comb(Literal_tm,
+    [ty, mk_comb(StringL_tm, fromMLstring s)])
+  fun mk_empty_lstr ty = mk_ls(ty, "")
   fun mk_Return tmo = mk_comb(Return_tm, lift_option (mk_option expr_ty) I tmo)
   fun mk_AnnAssign (s,t,e) = list_mk_comb(AnnAssign_tm, [s, t, e])
   fun mk_AugAssign (ty, t, b, e) = list_mk_comb(AugAssign_tm, [ty, t, b, e])
-  fun mk_Hex_dyn (ty, n, s) = let
+  fun mk_Hex_dyn (ty, s) = let
     val s = if String.isPrefix "0x" s then String.extract(s,2,NONE) else s
-    val b = mk_comb(Dynamic_tm, n)
   in
     list_mk_comb(Literal_tm,
-      [ty, list_mk_comb(BytesL_tm, [b, cached_bytes_from_hex s])])
+      [ty, mk_comb(BytesL_tm, cached_bytes_from_hex s)])
   end
   fun mk_Hex (ty, s) = let
     val s = if String.isPrefix "0x" s then String.extract(s,2,NONE) else s
-    val n = numSyntax.term_of_int $ String.size s div 2
-    val b = mk_comb(Fixed_tm, n)
   in
     list_mk_comb(Literal_tm,
-      [ty, list_mk_comb(BytesL_tm, [b, cached_bytes_from_hex s])])
+      [ty, mk_comb(BytesL_tm, cached_bytes_from_hex s)])
   end
   fun mk_Builtin ty b es = list_mk_comb(Builtin_tm, [ty, b, es])
   fun mk_Concat n = mk_comb(Concat_tm, n)

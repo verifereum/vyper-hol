@@ -213,36 +213,40 @@ Theorem assign_target_imm_dom_ImmutableVar[local]:
 Proof
   rpt strip_tac >>
   qpat_x_assum `_ = (_, _)` mp_tac >>
-  simp[Once assign_target_def] >>
-  PURE_REWRITE_TAC [ignore_bind_def] >>
-  simp[bind_def, get_immutables_def, return_def, lift_option_def, lift_option_type_def, lift_sum_def,
-       AllCaseEqs(), raise_def, set_immutable_def, get_address_immutables_def,
-       set_address_immutables_def] >>
-  rpt strip_tac >>
-  gvs[return_def, raise_def, AllCaseEqs(), preserves_immutables_dom_refl] >>
-  (* resolve error paths by case-splitting on each case expression *)
+  simp[Once assign_target_def, bind_def, ignore_bind_def, get_immutables_def,
+       get_address_immutables_def, lift_option_def, lift_option_type_def,
+       return_def, raise_def, LET_THM, AllCaseEqs()] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >>
-  gvs[return_def, raise_def, preserves_immutables_dom_refl] >>
-  Cases_on `FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num id)` >>
-  gvs[return_def, raise_def, preserves_immutables_dom_refl] >>
-  Cases_on `assign_subscripts a (REVERSE is) ao` >>
-  gvs[return_def, raise_def, preserves_immutables_dom_refl] >>
-  imp_res_tac assign_result_state >> gvs[] >>
-  Cases_on `ALOOKUP s''.immutables cx.txn.target` >>
-  gvs[return_def, raise_def, preserves_immutables_dom_refl] >>
-  (* success path: prove preserves_immutables_dom for the updated state *)
-  simp[preserves_immutables_dom_def] >> conj_tac
-  >- (rpt strip_tac >>
-      Cases_on `cx.txn.target = tgt` >>
-      gvs[alistTheory.ALOOKUP_ADELKEY])
-  >> simp[set_source_immutables_def, get_source_immutables_def,
-          alistTheory.ALOOKUP_ADELKEY,
-          finite_mapTheory.FLOOKUP_UPDATE] >>
-     rpt gen_tac >>
-     TRY (rename1 `IS_SOME (FLOOKUP (get_source_immutables src _) n)`) >>
-     TRY (Cases_on `src = current_module cx` >> gvs[]) >>
-     Cases_on `n = string_to_num id` >>
-     gvs[get_source_immutables_def, finite_mapTheory.FLOOKUP_UPDATE]
+  simp[return_def, raise_def] >-
+  (strip_tac >> gvs[preserves_immutables_dom_refl]) >>
+  Cases_on `FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num id)` >>
+  simp[return_def, raise_def] >-
+  (strip_tac >> gvs[preserves_immutables_dom_refl]) >>
+  PairCases_on `x'` >> simp[] >>
+  Cases_on `assign_subscripts x'1 (REVERSE is) ao` >>
+  simp[lift_sum_def, return_def, raise_def] >>
+  strip_tac >> gvs[preserves_immutables_dom_refl] >>
+  Cases_on `set_immutable cx (current_module cx) (string_to_num id) x'0 x' st` >>
+  Cases_on `q` >> gvs[] >-
+  (imp_res_tac assign_result_state >> gvs[] >>
+   gvs[set_immutable_def, bind_def, get_address_immutables_def, lift_option_def,
+       set_address_immutables_def, return_def, raise_def, LET_THM,
+       AllCaseEqs()] >>
+   simp[preserves_immutables_dom_def] >> conj_tac
+   >- (rpt strip_tac >>
+       Cases_on `cx.txn.target = tgt` >>
+       gvs[alistTheory.ALOOKUP_ADELKEY])
+   >> simp[set_source_immutables_def, get_source_immutables_def,
+           alistTheory.ALOOKUP_ADELKEY,
+           finite_mapTheory.FLOOKUP_UPDATE] >>
+      rpt gen_tac >>
+      TRY (rename1 `IS_SOME (FLOOKUP (get_source_immutables src _) n)`) >>
+      TRY (Cases_on `src = current_module cx` >> gvs[]) >>
+      Cases_on `n = string_to_num id` >>
+      gvs[get_source_immutables_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  gvs[set_immutable_def, bind_def, get_address_immutables_def, lift_option_def,
+      set_address_immutables_def, return_def, raise_def, LET_THM,
+      AllCaseEqs(), preserves_immutables_dom_refl]
 QED
 
 Theorem assign_target_imm_dom_TupleV[local]:
@@ -475,8 +479,12 @@ QED
 (* ----- Case 9: AnnAssign id typ e ----- *)
 Theorem case_AnnAssign_imm_dom[local]:
   ∀cx id typ e.
-    (∀st res st'. eval_expr cx e st = (res,st') ⇒
-       preserves_immutables_dom cx st st') ⇒
+    (∀tenv s'' tyv t.
+       tenv = get_tenv cx ∧
+       lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
+       (INL tyv, t) ⇒
+       ∀st res st'. eval_expr cx e st = (res,st') ⇒
+         preserves_immutables_dom cx st st') ⇒
     ∀st res st'.
       eval_stmt cx (AnnAssign id typ e) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
@@ -487,9 +495,13 @@ Proof
        new_variable_def, LET_THM, get_scopes_def, check_def, type_check_def, assert_def,
        set_scopes_def] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
+  imp_res_tac lift_option_type_same_state >> gvs[preserves_immutables_dom_refl] >>
+  (* Discharge IH guard using lift_option_type assumption *)
+  first_x_assum drule_all >> strip_tac >>
   imp_res_tac get_Value_immutables >> imp_res_tac materialise_state >> gvs[] >>
-  irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
-  gvs[preserves_immutables_dom_eq] >>
+  irule preserves_immutables_dom_trans >>
+  qexists_tac `s'³'` >>
+  conj_tac >- gvs[] >>
   irule preserves_immutables_dom_eq >>
   qpat_x_assum `_ s'³' = (res, st')` mp_tac >>
   PURE_REWRITE_TAC [ignore_bind_def] >>
@@ -497,9 +509,7 @@ Proof
        AllCaseEqs()] >>
   Cases_on `s'³'.scopes` >>
   simp[raise_def, set_scopes_def, return_def] >>
-  rpt strip_tac >> gvs[] >>
-  Cases_on `s''.scopes` >>
-  gvs[raise_def, set_scopes_def, return_def]
+  rpt strip_tac >> gvs[]
 QED
 
 (* ----- Case 10: Append bt e ----- *)
@@ -660,13 +670,20 @@ QED
 (* ----- Case 14: For id typ it n body ----- *)
 Theorem case_For_imm_dom[local]:
   ∀cx id typ it n body.
-    (∀st res st'. eval_iterator cx it st = (res,st') ⇒
-       preserves_immutables_dom cx st st') ∧
-    (∀s'' vs t s'³' x t'.
-       eval_iterator cx it s'' = (INL vs,t) ∧
+    (∀tenv s'' tyv t.
+       tenv = get_tenv cx ∧
+       lift_option_type (evaluate_type tenv typ)
+         "For evaluate_type" s'' = (INL tyv, t) ⇒
+       ∀st res st'. eval_iterator cx it st = (res,st') ⇒
+         preserves_immutables_dom cx st st') ∧
+    (∀tenv s'' tyv t s'³' vs t' s'⁴' x t''.
+       tenv = get_tenv cx ∧
+       lift_option_type (evaluate_type tenv typ)
+         "For evaluate_type" s'' = (INL tyv, t) ∧
+       eval_iterator cx it s'³' = (INL vs, t') ∧
        check (compatible_bound (Dynamic n) (LENGTH vs))
-             "For too long" s'³' = (INL x,t') ⇒
-       ∀st res st'. eval_for cx (string_to_num id) body vs st = (res,st') ⇒
+             "For too long" s'⁴' = (INL x, t'') ⇒
+       ∀st res st'. eval_for cx tyv (string_to_num id) body vs st = (res,st') ⇒
          preserves_immutables_dom cx st st') ⇒
     ∀st res st'.
       eval_stmt cx (For id typ it n body) st = (res, st') ⇒
@@ -675,13 +692,22 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
-       ignore_bind_def, check_def, type_check_def, assert_def] >>
+       ignore_bind_def] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
-  (* Derive unconditional IH for eval_for from the conditional one *)
-  first_x_assum (drule_then mp_tac) >>
-  simp[check_def, type_check_def, assert_def] >> strip_tac >>
-  irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
-  conj_tac >- gvs[] >> first_x_assum irule >> metis_tac[]
+  imp_res_tac lift_option_type_same_state >> gvs[preserves_immutables_dom_refl] >>
+  (* Discharge iterator IH guard: tenv = get_tenv cx ∧ lift_option_type *)
+  `∀st res st'. eval_iterator cx it st = (res,st') ⇒
+     preserves_immutables_dom cx st st'` by
+    (first_x_assum match_mp_tac >> metis_tac[]) >>
+  imp_res_tac check_state >> gvs[preserves_immutables_dom_refl] >>
+  (* iterator error: IH directly *)
+  TRY (first_x_assum drule >> simp[] >> NO_TAC) >>
+  (* Success: chain through iterator then eval_for *)
+  irule preserves_immutables_dom_trans >> qexists_tac `s'³'` >>
+  conj_tac >- (first_x_assum drule >> simp[]) >>
+  first_x_assum drule_all >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  first_x_assum drule_all >> simp[]
 QED
 
 (* ----- Case 15: Expr e ----- *)
@@ -854,18 +880,18 @@ QED
 (* ----- Case 29: eval_for (v::vs) ----- *)
 Theorem case_eval_for_cons_imm_dom[local]:
   ∀cx nm body v vs.
-    (∀s'' x t. push_scope_with_var nm v s'' = (INL x,t) ⇒
+    (∀s'' x t. push_scope_with_var nm tyv v s'' = (INL x,t) ⇒
        ∀st res st'. eval_stmts cx body st = (res,st') ⇒
          preserves_immutables_dom cx st st') ∧
     (∀s'' x t s'³' broke t'.
-       push_scope_with_var nm v s'' = (INL x,t) ∧
+       push_scope_with_var nm tyv v s'' = (INL x,t) ∧
        finally
          (try do eval_stmts cx body; return F od handle_loop_exception)
          pop_scope s'³' = (INL broke,t') ∧ ¬broke ⇒
-       ∀st res st'. eval_for cx nm body vs st = (res,st') ⇒
+       ∀st res st'. eval_for cx tyv nm body vs st = (res,st') ⇒
          preserves_immutables_dom cx st st') ⇒
     ∀st res st'.
-      eval_for cx nm body (v::vs) st = (res, st') ⇒
+      eval_for cx tyv nm body (v::vs) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
   rpt strip_tac >>
@@ -873,14 +899,14 @@ Proof
   RULE_ASSUM_TAC (REWRITE_RULE [push_scope_with_var_def, return_def]) >>
   gvs[] >>
   (* Unfold eval_for (v::vs) *)
-  qpat_x_assum `eval_for _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `eval_for _ _ _ _ _ _ = _` mp_tac >>
   simp[Once evaluate_def] >>
   PURE_REWRITE_TAC [ignore_bind_def] >>
   simp[bind_def, push_scope_with_var_def, return_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >|
   [ (* Success case: finally returned INL broke *)
     irule preserves_immutables_dom_trans >>
-    qexists_tac `st with scopes updated_by CONS (FEMPTY |+ (nm,v))` >>
+    qexists_tac `st with scopes updated_by CONS (FEMPTY |+ (nm,(tyv,v)))` >>
     conj_tac >- (irule preserves_immutables_dom_eq >> simp[]) >>
     qpat_x_assum `finally _ _ _ = _` mp_tac >>
     simp[finally_def, AllCaseEqs(), pop_scope_def, return_def, raise_def,
@@ -901,14 +927,14 @@ Proof
         >- (irule preserves_immutables_dom_eq >> simp[]))
     >- (Cases_on `broke` >> gvs[return_def, preserves_immutables_dom_refl] >>
         first_x_assum (qspecl_then [
-            `st with scopes updated_by CONS (FEMPTY |+ (nm,v))`,
+            `st with scopes updated_by CONS (FEMPTY |+ (nm,(tyv,v)))`,
             `s_try with scopes := tl`] mp_tac) >>
         simp[finally_def, ignore_bind_def, bind_def,
              pop_scope_def, return_def] >>
         disch_then drule >> simp[]),
     (* Error case: finally returned INR e *)
     irule preserves_immutables_dom_trans >>
-    qexists_tac `st with scopes updated_by CONS (FEMPTY |+ (nm,v))` >>
+    qexists_tac `st with scopes updated_by CONS (FEMPTY |+ (nm,(tyv,v)))` >>
     conj_tac >- (irule preserves_immutables_dom_eq >> simp[]) >>
     qpat_x_assum `finally _ _ _ = _` mp_tac >>
     simp[finally_def, AllCaseEqs(), pop_scope_def, return_def, raise_def,
@@ -1321,7 +1347,7 @@ Proof
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
        lift_option_def, lift_option_type_def] >>
   rpt strip_tac >>
-  Cases_on `lookup_scopes (string_to_num id) st.scopes` >>
+  Cases_on `lookup_scopes_val (string_to_num id) st.scopes` >>
   gvs[return_def, raise_def]
 QED
 
@@ -1823,7 +1849,7 @@ Theorem immutables_dom_mutual[local]:
   (∀cx g st res st'. eval_target cx g st = (res, st') ⇒ preserves_immutables_dom cx st st') ∧
   (∀cx gs st res st'. eval_targets cx gs st = (res, st') ⇒ preserves_immutables_dom cx st st') ∧
   (∀cx bt st res st'. eval_base_target cx bt st = (res, st') ⇒ preserves_immutables_dom cx st st') ∧
-  (∀cx nm body vs st res st'. eval_for cx nm body vs st = (res, st') ⇒ preserves_immutables_dom cx st st') ∧
+  (∀cx tyv nm body vs st res st'. eval_for cx tyv nm body vs st = (res, st') ⇒ preserves_immutables_dom cx st st') ∧
   (∀cx e st res st'. eval_expr cx e st = (res, st') ⇒ preserves_immutables_dom cx st st') ∧
   (∀cx es st res st'. eval_exprs cx es st = (res, st') ⇒ preserves_immutables_dom cx st st')
 Proof

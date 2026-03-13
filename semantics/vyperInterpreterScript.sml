@@ -133,7 +133,7 @@ Definition bind_arguments_def:
   bind_arguments tenv ((id, typ)::params) (v::vs) =
     (case evaluate_type tenv typ of NONE => NONE | SOME tv =>
      case safe_cast tv v of NONE => NONE | SOME v =>
-      OPTION_MAP (λm. m |+ (string_to_num id, v))
+      OPTION_MAP (λm. m |+ (string_to_num id, (tv, v)))
         (bind_arguments tenv params vs)) ∧
   bind_arguments _ _ _ = NONE
 End
@@ -583,7 +583,7 @@ End
 val () = cv_auto_trans is_immutable_decl_def;
 
 Definition immutable_target_def:
-  immutable_target (imms: num |-> value) id n =
+  immutable_target (imms: num |-> (type_value # value)) id n =
   case FLOOKUP imms n of SOME _ => SOME $ ImmutableVar id
      | _ => NONE
 End
@@ -788,10 +788,11 @@ Definition evaluate_def:
     push_log (id, vs)
   od ∧
   eval_stmt cx (AnnAssign id typ e) = do
+    tenv <<- get_tenv cx;
+    tyv <- lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type";
     tv <- eval_expr cx e;
     v <- materialise cx tv;
-    (* TODO: check type *)
-    new_variable id v
+    new_variable id tyv v
   od ∧
   eval_stmt cx (Append t e) = do
     (loc, sbs) <- eval_base_target cx t;
@@ -824,11 +825,11 @@ Definition evaluate_def:
     ) pop_scope
   od ∧
   eval_stmt cx (For id typ it n body) = do
-    (* TODO: check and cast to the type *)
+    tenv <<- get_tenv cx;
+    tyv <- lift_option_type (evaluate_type tenv typ) "For evaluate_type";
     vs <- eval_iterator cx it;
     check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long";
-    (* TODO: check id is not in scope already? *)
-    eval_for cx (string_to_num id) body vs
+    eval_for cx tyv (string_to_num id) body vs
   od ∧
   eval_stmt cx (Expr e) = do
     tv <- eval_expr cx e;
@@ -896,25 +897,25 @@ Definition evaluate_def:
     k <- lift_option_type (value_to_key v) "SubscriptTarget value_to_key";
     return $ (loc, k :: sbs)
   od ∧
-  eval_for cx nm body [] = return () ∧
-  eval_for cx nm body (v::vs) = do
-    push_scope_with_var nm v;
+  eval_for cx tyv nm body [] = return () ∧
+  eval_for cx tyv nm body (v::vs) = do
+    push_scope_with_var nm tyv v;
     broke <- finally
       (try (do eval_stmts cx body; return F od) handle_loop_exception)
       pop_scope ;
-    if broke then return () else eval_for cx nm body vs
+    if broke then return () else eval_for cx tyv nm body vs
   od ∧
   eval_expr cx (Name _ id) = do
     env <- get_scopes;
     n <<- string_to_num id;
-    v <- lift_option_type (lookup_scopes n env) "Name not in scope";
+    v <- lift_option_type (lookup_scopes_val n env) "Name not in scope";
     return $ Value v
   od ∧
   eval_expr cx (BareGlobalName _ id) = do
     imms <- get_immutables cx (current_module cx);
     n <<- string_to_num id;
-    v <- lift_option_type (FLOOKUP imms n) "BareGlobalName not found";
-    return $ Value v
+    tvv <- lift_option_type (FLOOKUP imms n) "BareGlobalName not found";
+    return $ Value (SND tvv)
   od ∧
   eval_expr cx (TopLevelName _ (src_id_opt, id)) =
     lookup_global cx src_id_opt (string_to_num id) ∧
@@ -1055,7 +1056,7 @@ Termination
     => exprs_bound (remcode cx) es
   | INR (INR (INR (INR (INR (INR (INR (INL (cx, e))))))))
     => expr_bound (remcode cx) e
-  | INR (INR (INR (INR (INR (INR (INL (cx, nm, body, vs)))))))
+  | INR (INR (INR (INR (INR (INR (INL (cx, tyv, nm, body, vs)))))))
     => 1 + LENGTH vs + (LENGTH vs) * (stmts_bound (remcode cx) body)
   | INR (INR (INR (INR (INR (INL (cx, t))))))
     => base_target_bound (remcode cx) t
@@ -1134,21 +1135,17 @@ End
 
 val () = cv_auto_trans flag_value_def;
 
-(* TODO: propagate errors? *)
-Definition force_default_value_def:
-  force_default_value env typ =
-  case evaluate_type env typ of SOME tv => default_value tv
-     | NONE => NoneV
-End
-
 (* Initialize immutables for a single module's toplevels *)
 Definition initial_immutables_module_def:
-  initial_immutables_module env src_id_opt [] acc = acc ∧
+  initial_immutables_module env src_id_opt [] acc = SOME acc ∧
   initial_immutables_module env src_id_opt (VariableDecl _ Immutable id typ :: ts) acc =
-  (let key = string_to_num id in
-   let iv = force_default_value env typ in
-     initial_immutables_module env src_id_opt ts
-       (update_immutable src_id_opt key iv acc)) ∧
+  (case evaluate_type env typ of
+   | NONE => NONE
+   | SOME tv =>
+     let key = string_to_num id in
+     let iv = default_value tv in
+       initial_immutables_module env src_id_opt ts
+         (update_immutable src_id_opt key tv iv acc)) ∧
   initial_immutables_module env src_id_opt (_ :: ts) acc =
     initial_immutables_module env src_id_opt ts acc
 End
@@ -1157,9 +1154,11 @@ val () = cv_auto_trans initial_immutables_module_def;
 
 (* Initialize immutables for all modules *)
 Definition initial_immutables_def:
-  initial_immutables env [] = empty_immutables ∧
+  initial_immutables env [] = SOME empty_immutables ∧
   initial_immutables env ((src_id_opt, ts) :: rest) =
-    initial_immutables_module env src_id_opt ts (initial_immutables env rest)
+    case initial_immutables env rest of
+    | NONE => NONE
+    | SOME acc => initial_immutables_module env src_id_opt ts acc
 End
 
 val () = cv_auto_trans initial_immutables_def;
@@ -1247,11 +1246,14 @@ val () = cv_auto_trans merge_constants_def;
 Definition constants_env_def:
   constants_env _ _ _ _ [] acc = SOME acc ∧
   constants_env cx am addr src_id_opt ((VariableDecl vis (Constant e) id typ)::ts) acc =
-    (case FST $ eval_expr cx e
-       (initial_state (merge_constants addr src_id_opt acc am) []) of
-     | INL (Value v) => constants_env cx am addr src_id_opt ts $
-                        acc |+ (string_to_num id, v)
-     | _ => NONE) ∧
+    (case evaluate_type (get_tenv cx) typ of
+     | NONE => NONE
+     | SOME tv =>
+       case FST $ eval_expr cx e
+         (initial_state (merge_constants addr src_id_opt acc am) []) of
+       | INL (Value v) => constants_env cx am addr src_id_opt ts $
+                          acc |+ (string_to_num id, (tv, v))
+       | _ => NONE) ∧
   constants_env cx am addr src_id_opt (t::ts) acc =
     constants_env cx am addr src_id_opt ts acc
 End
@@ -1398,7 +1400,9 @@ Definition load_contract_def:
   let addr = tx.target in
   let ts = case ALOOKUP mods NONE of SOME ts => ts | NONE => [] in
   let tenv = type_env_all_modules mods in
-  let imms = initial_immutables tenv mods in
+  case initial_immutables tenv mods of
+  | NONE => INR $ Error (TypeError "load_contract: evaluate_type failed")
+  | SOME imms =>
   let am = am with <| immutables updated_by CONS (addr, imms);
                       exports updated_by CONS (addr, exps) |> in
   case lookup_function NONE tx.function_name Deploy ts of

@@ -66,9 +66,9 @@ End
 
 (*
 We don't use identifiers directly because cv compute prefers num keys
-Type scope = “:identifier |-> value”;
+Type scope = “:identifier |-> (type_value # value)”;
 *)
-Type scope = “:num |-> value”;
+Type scope = “:num |-> (type_value # value)”;
 
 (* find a variable in a list of nested scopes *)
 Definition lookup_scopes_def:
@@ -76,17 +76,28 @@ Definition lookup_scopes_def:
   lookup_scopes id ((env: scope)::rest) =
   case FLOOKUP env id of NONE =>
     lookup_scopes id rest
-  | SOME v => SOME v
+  | SOME tv => SOME tv
 End
 
+(* lookup only the value (discarding the type) *)
+Definition lookup_scopes_val_def:
+  lookup_scopes_val id [] = NONE ∧
+  lookup_scopes_val id ((env: scope)::rest) =
+  case FLOOKUP env id of NONE =>
+    lookup_scopes_val id rest
+  | SOME tv => SOME (SND tv)
+End
+
+val () = cv_auto_trans lookup_scopes_val_def;
+
 (* find the location of a variable in a list of nested scopes (as well as its
-* value): this is used when assigning to that variable *)
+* type and value): this is used when assigning to that variable *)
 Definition find_containing_scope_def:
   find_containing_scope id ([]:scope list) = NONE ∧
   find_containing_scope id (env::rest) =
   case FLOOKUP env id of NONE =>
     OPTION_MAP (λ(p,q). (env::p, q)) (find_containing_scope id rest)
-  | SOME v => SOME ([], env, v, rest)
+  | SOME (tv, v) => SOME ([], env, tv, v, rest)
 End
 
 val () = cv_auto_trans find_containing_scope_def;
@@ -95,7 +106,7 @@ Type log = “:nsid # (value list)”;
 
 (* Module-aware immutables: keyed by source_id *)
 (* NONE = main contract, SOME n = module with source_id n *)
-Type module_immutables = “:(num option, num |-> value) alist”
+Type module_immutables = “:(num option, num |-> (type_value # value)) alist”
 
 Definition empty_immutables_def:
   empty_immutables : module_immutables = []
@@ -385,10 +396,10 @@ Definition lookup_global_def:
     tenv <<- get_tenv cx;
     case find_var_decl_by_num n ts of
     | NONE => do
-        (* Not a storage/hashmap var — check immutables *)
+        (* Not a storage/hashmap var - check immutables *)
         imms <- get_immutables cx src_id_opt;
         case FLOOKUP imms n of
-        | SOME v => return (Value v)
+        | SOME tvv => return (Value (SND tvv))
         | NONE => raise $ Error (TypeError "lookup_global: var not found")
       od
     | SOME (StorageVarDecl is_transient typ, id) => do
@@ -415,9 +426,9 @@ val () = lookup_global_def
   |> cv_auto_trans;
 
 Definition update_immutable_def:
-  update_immutable src_id key v (imms: module_immutables) =
+  update_immutable src_id key tv v (imms: module_immutables) =
     let imm = get_source_immutables src_id imms in
-    set_source_immutables src_id (imm |+ (key, v)) imms
+    set_source_immutables src_id (imm |+ (key, (tv, v))) imms
 End
 
 val () = cv_auto_trans update_immutable_def;
@@ -533,10 +544,10 @@ val () = set_global_def
   |> cv_auto_trans;
 
 Definition set_immutable_def:
-  set_immutable cx src_id_opt n v = do
+  set_immutable cx src_id_opt n tv v = do
     imms <- get_address_immutables cx;
     let imm = get_source_immutables src_id_opt imms in
-    set_address_immutables cx $ set_source_immutables src_id_opt (imm |+ (n, v)) imms
+    set_address_immutables cx $ set_source_immutables src_id_opt (imm |+ (n, (tv, v))) imms
   od
 End
 
@@ -557,8 +568,8 @@ End
 val () = cv_auto_trans push_scope_def;
 
 Definition push_scope_with_var_def:
-  push_scope_with_var nm v st =
-    return () $  st with scopes updated_by CONS (FEMPTY |+ (nm, v))
+  push_scope_with_var nm tv v st =
+    return () $ st with scopes updated_by CONS (FEMPTY |+ (nm, (tv, v)))
 End
 
 val () = cv_auto_trans push_scope_with_var_def;
@@ -575,12 +586,12 @@ val () = cv_auto_trans pop_scope_def;
 (* writing variables *)
 
 Definition new_variable_def:
-  new_variable id v = do
+  new_variable id tv v = do
     n <<- string_to_num id;
     env <- get_scopes;
     type_check (IS_NONE (lookup_scopes n env)) "new_variable bound";
     case env of [] => raise $ Error (TypeError "new_variable null")
-    | e::es => set_scopes ((e |+ (n, v))::es)
+    | e::es => set_scopes ((e |+ (n, (tv, v)))::es)
   od
 End
 
@@ -593,9 +604,9 @@ Definition set_variable_def:
   set_variable id v = do
     n <<- string_to_num id;
     sc <- get_scopes;
-    (pre, env, _, rest) <-
+    (pre, env, tv, _, rest) <-
       lift_option_type (find_containing_scope n sc) "set_variable not found";
-    set_scopes (pre ++ (env |+ (n, v))::rest)
+    set_scopes (pre ++ (env |+ (n, (tv, v)))::rest)
   od
 End
 
@@ -835,9 +846,9 @@ Definition assign_target_def:
   assign_target cx (BaseTargetV (ScopedVar id) is) ao = do
     ni <<- string_to_num id;
     sc <- get_scopes;
-    (pre, env, a, rest) <- lift_option (find_containing_scope ni sc) "assign_target lookup";
+    (pre, env, tv, a, rest) <- lift_option (find_containing_scope ni sc) "assign_target lookup";
     a' <- lift_sum $ assign_subscripts a (REVERSE is) ao;
-    set_scopes $ pre ++ env |+ (ni, a') :: rest;
+    set_scopes $ pre ++ env |+ (ni, (tv, a')) :: rest;
     assign_result ao a (REVERSE is)
   od ∧
   assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) is) ao = do
@@ -907,10 +918,10 @@ Definition assign_target_def:
     ni <<- string_to_num id;
     src <<- current_module cx;
     imms <- get_immutables cx src;
-    a <- lift_option_type (FLOOKUP imms ni) "assign_target ImmutableVar";
-    a' <- lift_sum $ assign_subscripts a (REVERSE is) ao;
-    set_immutable cx src ni a';
-    assign_result ao a (REVERSE is)
+    tva <- lift_option_type (FLOOKUP imms ni) "assign_target ImmutableVar";
+    a' <- lift_sum $ assign_subscripts (SND tva) (REVERSE is) ao;
+    set_immutable cx src ni (FST tva) a';
+    assign_result ao (SND tva) (REVERSE is)
   od ∧
   assign_target cx (TupleTargetV gvs) (Replace (ArrayV (TupleV vs))) = do
     type_check (LENGTH gvs = LENGTH vs) "TupleTargetV length";
