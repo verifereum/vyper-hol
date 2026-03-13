@@ -104,7 +104,7 @@ Theorem analysis_inst_simulates_from_1_proof:
 Proof
   rw[analysis_inst_simulates_def, analysis_inst_simulates_1_def]
   >- (rw[run_insts_def] >> CASE_TAC >> simp[run_insts_def] >> metis_tac[])
-  >> simp[]
+  >> metis_tac[]
 QED
 
 (* EL into FLAT at offset = LENGTH(FLAT(TAKE i ...)) indexes into EL i *)
@@ -322,6 +322,33 @@ Proof
   irule R_ok_idx_change >> fs[] >> metis_tac[]
 QED
 
+(* Halt-wrapping preserves lift_result when valid_state_rel holds.
+   Avoids 5x5 case explosion in terminator proofs. *)
+Triviality lift_result_halt_wrap:
+  !R_ok R_term r1 r2.
+    valid_state_rel R_ok R_term ==>
+    lift_result R_ok R_term r1 r2 ==>
+    lift_result R_ok R_term
+      (case r1 of
+         OK s'' => if s''.vs_halted then Halt s'' else OK s''
+       | Halt s' => Halt s'
+       | Abort a s' => Abort a s'
+       | IntRet rv ss => IntRet rv ss
+       | Error e => Error e)
+      (case r2 of
+         OK s'' => if s''.vs_halted then Halt s'' else OK s''
+       | Halt s' => Halt s'
+       | Abort a s' => Abort a s'
+       | IntRet rv ss => IntRet rv ss
+       | Error e => Error e)
+Proof
+  rpt strip_tac >>
+  Cases_on `r1` >> Cases_on `r2` >> gvs[lift_result_def] >>
+  imp_res_tac vsr_R_ok_fields >> gvs[] >>
+  Cases_on `v.vs_halted` >> gvs[lift_result_def] >>
+  metis_tac[vsr_R_ok_R_term]
+QED
+
 (* For a terminator instruction, run_block's one-step result is
    lift_result-compatible between states differing only in vs_inst_idx.
    Proof: case split on terminator opcodes; jump_to erases idx to 0,
@@ -336,13 +363,13 @@ Triviality terminator_run_block_step_lift:
          OK s'' => if s''.vs_halted then Halt s'' else OK s''
        | Halt s' => Halt s'
        | Abort a s' => Abort a s'
-       | IntRet v s' => IntRet v s'
+       | IntRet rv ss => IntRet rv ss
        | Error e => Error e)
       (case step_inst fuel ctx inst (s with vs_inst_idx := j) of
          OK s'' => if s''.vs_halted then Halt s'' else OK s''
        | Halt s' => Halt s'
        | Abort a s' => Abort a s'
-       | IntRet v s' => IntRet v s'
+       | IntRet rv ss => IntRet rv ss
        | Error e => Error e)
 Proof
   rpt strip_tac >>
@@ -424,6 +451,79 @@ Proof
   BasicProvers.EVERY_CASE_TAC >> gvs[decode_invoke_def]
 QED
 
+(* Bridge: lift_result between two INVOKE instructions at base state
+   implies lift_result at shifted idx (both sides shifted by same amount). *)
+Triviality invoke_lift_result_idx_bridge:
+  !R_ok R_term fuel ctx inst1 inst2 s n.
+    valid_state_rel R_ok R_term /\
+    inst1.inst_opcode = INVOKE /\ inst2.inst_opcode = INVOKE /\
+    lift_result R_ok R_term
+      (step_inst fuel ctx inst1 s)
+      (step_inst fuel ctx inst2 s)
+  ==>
+    lift_result R_ok R_term
+      (step_inst fuel ctx inst1 (s with vs_inst_idx := n))
+      (step_inst fuel ctx inst2 (s with vs_inst_idx := n))
+Proof
+  rpt strip_tac >>
+  `step_inst fuel ctx inst1 (s with vs_inst_idx := n) =
+    case step_inst fuel ctx inst1 s of
+      OK s'' => OK (s'' with vs_inst_idx := n)
+    | x => x` by simp[invoke_step_inst_idx_OK_only] >>
+  `step_inst fuel ctx inst2 (s with vs_inst_idx := n) =
+    case step_inst fuel ctx inst2 s of
+      OK s'' => OK (s'' with vs_inst_idx := n)
+    | x => x` by simp[invoke_step_inst_idx_OK_only] >>
+  ntac 2 (pop_assum SUBST1_TAC) >>
+  Cases_on `step_inst fuel ctx inst1 s` >>
+  Cases_on `step_inst fuel ctx inst2 s` >>
+  gvs[lift_result_def] >>
+  metis_tac[R_ok_idx_change]
+QED
+
+(* For two DIFFERENT INVOKE instructions with simulation between them,
+   relates run_block continuations on both sides with different idx offsets.
+   Generalizes invoke_run_block_step_lift to different instructions. *)
+Triviality invoke_run_block_step_lift_sim:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool).
+  valid_state_rel R_ok R_term ==>
+  !fuel ctx inst1 inst2 s i j bb bb'.
+    inst1.inst_opcode = INVOKE /\ inst2.inst_opcode = INVOKE /\
+    lift_result R_ok R_term
+      (step_inst fuel ctx inst1 s) (step_inst fuel ctx inst2 s) /\
+    (!v1 v2. step_inst fuel ctx inst1 s = OK v1 /\
+             step_inst fuel ctx inst2 s = OK v2 /\ R_ok v1 v2 ==>
+       lift_result R_ok R_term
+         (run_block fuel ctx bb (v1 with vs_inst_idx := SUC i))
+         (run_block fuel ctx bb' (v2 with vs_inst_idx := SUC j)))
+  ==>
+    lift_result R_ok R_term
+      (case step_inst fuel ctx inst1 s of
+         OK s'' => run_block fuel ctx bb (s'' with vs_inst_idx := SUC i)
+       | Halt s' => Halt s'
+       | Abort a s' => Abort a s'
+       | IntRet rv ss => IntRet rv ss
+       | Error e => Error e)
+      (case step_inst fuel ctx inst2 (s with vs_inst_idx := j) of
+         OK s'' => run_block fuel ctx bb' (s'' with vs_inst_idx := SUC j)
+       | Halt s' => Halt s'
+       | Abort a s' => Abort a s'
+       | IntRet rv ss => IntRet rv ss
+       | Error e => Error e)
+Proof
+  rpt strip_tac >>
+  `step_inst fuel ctx inst2 (s with vs_inst_idx := j) =
+    case step_inst fuel ctx inst2 s of
+      OK s'' => OK (s'' with vs_inst_idx := j)
+    | x => x` by simp[invoke_step_inst_idx_OK_only] >>
+  pop_assum SUBST1_TAC >>
+  Cases_on `step_inst fuel ctx inst1 s` >>
+  Cases_on `step_inst fuel ctx inst2 s` >>
+  gvs[lift_result_def] >>
+  first_x_assum irule >> gvs[]
+QED
+
 (* step_inst at idx=0: if step_inst ... s = OK v and inst is non-terminator,
    then step_inst ... (s with idx := 0) = OK (v with idx := 0).
    Unifies INVOKE (invoke_step_inst_idx_OK_only) and non-term non-INVOKE
@@ -493,13 +593,13 @@ Triviality invoke_run_block_step_lift:
          OK s'' => run_block fuel ctx bb (s'' with vs_inst_idx := SUC i)
        | Halt s' => Halt s'
        | Abort a s' => Abort a s'
-       | IntRet v s' => IntRet v s'
+       | IntRet rv ss => IntRet rv ss
        | Error e => Error e)
       (case step_inst fuel ctx inst (s with vs_inst_idx := j) of
          OK s'' => run_block fuel ctx bb' (s'' with vs_inst_idx := SUC j)
        | Halt s' => Halt s'
        | Abort a s' => Abort a s'
-       | IntRet v s' => IntRet v s'
+       | IntRet rv ss => IntRet rv ss
        | Error e => Error e)
 Proof
   rpt strip_tac >>
@@ -657,12 +757,14 @@ Proof
   (* Inductive step: i < LENGTH *)
   `i < LENGTH bb.bb_instructions` by fs[] >>
   qabbrev_tac `v = df_at bottom result bb.bb_label i` >>
-  (* AIS facts (keep AIS in assumptions, extract what we need) *)
+  (* AIS facts *)
   `(!fuel' ctx' v' inst' s''. sound v' s'' ==>
        lift_result R_ok R_term (step_inst fuel' ctx' inst' s'')
          (run_insts fuel' ctx' (f v' inst') s'')) /\
-   (!v' inst'. is_terminator inst'.inst_opcode ==> f v' inst' = [inst']) /\
-   (!v' inst'. inst'.inst_opcode = INVOKE ==> f v' inst' = [inst']) /\
+   (!v' inst'. is_terminator inst'.inst_opcode ==>
+      ?inst''. f v' inst' = [inst''] /\ is_terminator inst''.inst_opcode) /\
+   (!v' inst'. inst'.inst_opcode = INVOKE ==>
+      ?inst''. f v' inst' = [inst''] /\ inst''.inst_opcode = INVOKE) /\
    (!v' inst'. ~is_terminator inst'.inst_opcode /\ inst'.inst_opcode <> INVOKE ==>
     EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE) (f v' inst'))`
     by fs[analysis_inst_simulates_def] >>
@@ -687,51 +789,86 @@ Proof
   (* Case split on instruction type *)
   Cases_on `is_terminator inst.inst_opcode`
   >- (
-    (* Terminator: f v inst = [inst] *)
-    `f v inst = [inst]` by (
-      qpat_x_assum `!v' inst'. is_terminator inst'.inst_opcode ==> _`
-        (qspecl_then [`v`, `inst`] mp_tac) >> simp[]) >>
-    `g i inst = [inst]` by fs[] >>
+    (* Terminator: f v inst = [inst'] with is_terminator inst' *)
+    `?inst'. f v inst = [inst'] /\ is_terminator inst'.inst_opcode` by
+      metis_tac[] >>
+    `g i inst = [inst']` by fs[] >>
     `j < LENGTH (FLAT (MAPi g bb.bb_instructions))` by fs[] >>
-    `EL j (FLAT (MAPi g bb.bb_instructions)) = inst` by
+    `EL j (FLAT (MAPi g bb.bb_instructions)) = inst'` by
       (first_x_assum (qspec_then `0` mp_tac) >> simp[Abbr `inst`, Abbr `j`]) >>
     CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
     simp[get_instruction_def] >>
-    irule terminator_run_block_step_lift >> simp[]
+    (* Simulation: step_inst inst s' ~ step_inst inst' s' *)
+    `sound v s'` by fs[Abbr `v`] >>
+    `lift_result R_ok R_term (step_inst fuel ctx inst s')
+       (step_inst fuel ctx inst' s')` by (
+      `lift_result R_ok R_term (step_inst fuel ctx inst s')
+         (run_insts fuel ctx [inst'] s')` by metis_tac[] >>
+      fs[run_insts_singleton]) >>
+    (* Chain: halt_wrap(inst s') ~ halt_wrap(inst' s') ~ halt_wrap(inst' (s' with idx := j)) *)
+    irule lift_result_trans_proof >>
+    conj_tac >- fs[] >> conj_tac >- fs[] >>
+    qexists_tac `case step_inst fuel ctx inst' s' of
+       OK s'' => if s''.vs_halted then Halt s'' else OK s''
+     | Halt s' => Halt s' | Abort a s' => Abort a s'
+     | IntRet rv ss => IntRet rv ss | Error e => Error e` >>
+    conj_tac
+    >- (irule lift_result_halt_wrap >> simp[])
+    >- (irule terminator_run_block_step_lift >> simp[])
   ) >>
   Cases_on `inst.inst_opcode = INVOKE`
   >- (
-    (* INVOKE: f v inst = [inst], so transformed block has same inst at position j *)
-    `f v inst = [inst]` by (
-      qpat_x_assum `!v' inst'. inst'.inst_opcode = INVOKE ==> _`
-        (qspecl_then [`v`, `inst`] mp_tac) >> simp[]) >>
-    `g i inst = [inst]` by fs[] >>
+    (* INVOKE: f v inst = [inst'] with inst'.inst_opcode = INVOKE *)
+    `?inst'. f v inst = [inst'] /\ inst'.inst_opcode = INVOKE` by
+      metis_tac[] >>
+    `g i inst = [inst']` by fs[] >>
     `j < LENGTH (FLAT (MAPi g bb.bb_instructions))` by fs[] >>
-    `EL j (FLAT (MAPi g bb.bb_instructions)) = inst` by
+    `EL j (FLAT (MAPi g bb.bb_instructions)) = inst'` by
       (first_x_assum (qspec_then `0` mp_tac) >> simp[Abbr `inst`, Abbr `j`]) >>
     CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
-    simp[get_instruction_def, is_terminator_def] >>
-    irule invoke_run_block_step_lift >> simp[] >>
-    (* OK case: IH *)
+    simp[get_instruction_def] >> simp[is_terminator_def] >>
+    (* Derive simulation between inst and inst' at s' *)
+    `sound v s'` by fs[Abbr `v`] >>
+    `lift_result R_ok R_term
+       (step_inst fuel ctx inst s')
+       (step_inst fuel ctx inst' s')` by (
+      `lift_result R_ok R_term (step_inst fuel ctx inst s')
+         (run_insts fuel ctx [inst'] s')` by metis_tac[] >>
+      fs[run_insts_singleton]) >>
+    irule invoke_run_block_step_lift_sim >> simp[] >>
     rpt strip_tac >>
-    `v'.vs_inst_idx = s'.vs_inst_idx` by (
-      `step_inst fuel ctx inst s' = OK v' /\ ~is_terminator inst.inst_opcode`
-        by fs[is_terminator_def] >>
-      imp_res_tac step_inst_preserves_inst_idx) >>
+    rename1 `R_ok v1 v2` >>
+    `v1.vs_inst_idx = s'.vs_inst_idx` by
+      metis_tac[step_inst_preserves_inst_idx] >>
+    `v2.vs_inst_idx = s'.vs_inst_idx` by
+      metis_tac[step_inst_preserves_inst_idx] >>
     `LENGTH (FLAT (TAKE (SUC i) (MAPi g bb.bb_instructions))) = SUC j` by (
       `LENGTH (FLAT (TAKE (SUC i) (MAPi g bb.bb_instructions))) =
        LENGTH (FLAT (TAKE i (MAPi g bb.bb_instructions))) +
        LENGTH (g i (EL i bb.bb_instructions))`
         by (irule FLAT_MAPi_offset_SUC >> simp[]) >>
-      fs[Abbr `j`, Abbr `inst`]
-    ) >>
-    qpat_x_assum `!m. m < n ==> _`
-      (qspec_then `LENGTH bb.bb_instructions - SUC i` mp_tac) >>
-    impl_tac >- fs[] >>
-    disch_then (qspecl_then [`fuel`, `ctx`,
-                              `v' with vs_inst_idx := SUC i`] mp_tac) >>
-    simp[] >>
-    fs[Abbr `i`]
+      fs[Abbr `j`, Abbr `inst`]) >>
+    (* Triangle: run_block bb v1 ~ run_block bb v2 ~ run_block bb' v2 *)
+    irule lift_result_trans_proof >>
+    conj_tac >- fs[] >> conj_tac >- fs[] >>
+    qexists_tac `run_block fuel ctx bb (v2 with vs_inst_idx := SUC i)` >>
+    conj_tac
+    >- (
+      irule run_block_preserves_R_block >> rpt conj_tac
+      >- (rpt strip_tac >> res_tac)
+      >- fs[]
+      >- fs[]
+      >- (irule R_ok_idx_change >> fs[] >> metis_tac[])
+      >- fs[]
+    )
+    >- (
+      qpat_x_assum `!m. m < n ==> _`
+        (qspec_then `LENGTH bb.bb_instructions - SUC i` mp_tac) >>
+      impl_tac >- fs[] >>
+      disch_then (qspecl_then [`fuel`, `ctx`,
+                                `v2 with vs_inst_idx := SUC i`] mp_tac) >>
+      simp[] >> fs[Abbr `i`]
+    )
   ) >>
   (* Non-term non-INVOKE: f v inst may expand to multiple instructions *)
   `EVERY (\i'. ~is_terminator i'.inst_opcode /\ i'.inst_opcode <> INVOKE)
@@ -910,44 +1047,94 @@ Proof
   (* === Terminator case === *)
   Cases_on `is_terminator inst.inst_opcode`
   >- (
-    `f v inst = [inst]` by (
-      qpat_x_assum `!v' inst'. is_terminator inst'.inst_opcode ==> _`
-        (qspecl_then [`v`, `inst`] mp_tac) >> simp[]) >>
-    `g i inst = [inst]` by fs[] >>
+    `?inst'. f v inst = [inst'] /\ is_terminator inst'.inst_opcode` by
+      metis_tac[] >>
+    `g i inst = [inst']` by fs[] >>
     `j < LENGTH (FLAT (MAPi g bb.bb_instructions))` by fs[] >>
-    `EL j (FLAT (MAPi g bb.bb_instructions)) = inst` by
+    `EL j (FLAT (MAPi g bb.bb_instructions)) = inst'` by
       (first_x_assum (qspec_then `0` mp_tac) >> simp[Abbr `inst`, Abbr `j`]) >>
     CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
     simp[get_instruction_def] >>
-    irule terminator_run_block_step_lift >> simp[]
+    (* Simulation at s' with idx := 0 *)
+    `sound v (s' with vs_inst_idx := 0)` by fs[Abbr `v`] >>
+    `lift_result R_ok R_term
+       (step_inst fuel ctx inst (s' with vs_inst_idx := 0))
+       (step_inst fuel ctx inst' (s' with vs_inst_idx := 0))` by (
+      `lift_result R_ok R_term
+         (step_inst fuel ctx inst (s' with vs_inst_idx := 0))
+         (run_insts fuel ctx [inst'] (s' with vs_inst_idx := 0))` by
+        metis_tac[] >>
+      fs[run_insts_singleton]) >>
+    (* Chain: halt_wrap(inst s') ~ halt_wrap(inst (s' idx:=0)) ~ halt_wrap(inst' (s' idx:=0)) ~ halt_wrap(inst' (s' idx:=j)) *)
+    irule lift_result_trans_proof >>
+    conj_tac >- fs[] >> conj_tac >- fs[] >>
+    qexists_tac `case step_inst fuel ctx inst' (s' with vs_inst_idx := 0) of
+       OK s'' => if s''.vs_halted then Halt s'' else OK s''
+     | Halt s' => Halt s' | Abort a s' => Abort a s'
+     | IntRet rv ss => IntRet rv ss | Error e => Error e` >>
+    conj_tac
+    >- (
+      irule lift_result_trans_proof >>
+      conj_tac >- fs[] >> conj_tac >- fs[] >>
+      qexists_tac `case step_inst fuel ctx inst (s' with vs_inst_idx := 0) of
+         OK s'' => if s''.vs_halted then Halt s'' else OK s''
+       | Halt s' => Halt s' | Abort a s' => Abort a s'
+       | IntRet rv ss => IntRet rv ss | Error e => Error e` >>
+      conj_tac
+      >- (irule terminator_run_block_step_lift >> simp[])
+      >- (irule lift_result_halt_wrap >> simp[])
+    )
+    >- (
+      `(s' with vs_inst_idx := 0) with vs_inst_idx := j =
+       s' with vs_inst_idx := j` by simp[] >>
+      pop_assum (SUBST1_TAC o SYM) >>
+      irule terminator_run_block_step_lift >> simp[]
+    )
   ) >>
   (* === INVOKE case === *)
   Cases_on `inst.inst_opcode = INVOKE`
   >- (
-    `f v inst = [inst]` by (
-      qpat_x_assum `!v' inst'. inst'.inst_opcode = INVOKE ==> _`
-        (qspecl_then [`v`, `inst`] mp_tac) >> simp[]) >>
-    `g i inst = [inst]` by fs[] >>
+    (* INVOKE: f v inst = [inst'] with inst'.inst_opcode = INVOKE *)
+    `?inst'. f v inst = [inst'] /\ inst'.inst_opcode = INVOKE` by
+      metis_tac[] >>
+    `g i inst = [inst']` by fs[] >>
     `j < LENGTH (FLAT (MAPi g bb.bb_instructions))` by fs[] >>
-    `EL j (FLAT (MAPi g bb.bb_instructions)) = inst` by
+    `EL j (FLAT (MAPi g bb.bb_instructions)) = inst'` by
       (first_x_assum (qspec_then `0` mp_tac) >> simp[Abbr `inst`, Abbr `j`]) >>
     CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
-    simp[get_instruction_def, is_terminator_def] >>
-    irule invoke_run_block_step_lift >> simp[] >>
+    simp[get_instruction_def] >> simp[is_terminator_def] >>
+    (* Derive simulation at s' via idx-independence *)
+    qabbrev_tac `s_nat = s' with vs_inst_idx := 0` >>
+    `sound v s_nat` by fs[Abbr `v`, Abbr `s_nat`] >>
+    `lift_result R_ok R_term
+       (step_inst fuel ctx inst s_nat)
+       (step_inst fuel ctx inst' s_nat)` by (
+      `lift_result R_ok R_term (step_inst fuel ctx inst s_nat)
+         (run_insts fuel ctx [inst'] s_nat)` by metis_tac[] >>
+      fs[run_insts_singleton]) >>
+    `lift_result R_ok R_term
+       (step_inst fuel ctx inst s')
+       (step_inst fuel ctx inst' s')` by (
+      `s' = s_nat with vs_inst_idx := i`
+        by simp[Abbr `s_nat`, Abbr `i`, venom_state_component_equality] >>
+      pop_assum SUBST1_TAC >>
+      irule invoke_lift_result_idx_bridge >> fs[]) >>
+    irule invoke_run_block_step_lift_sim >> simp[] >>
     rpt strip_tac >>
-    `v'.vs_inst_idx = s'.vs_inst_idx` by (
-      `step_inst fuel ctx inst s' = OK v' /\ ~is_terminator inst.inst_opcode`
-        by fs[is_terminator_def] >>
-      imp_res_tac step_inst_preserves_inst_idx) >>
+    rename1 `R_ok v1 v2` >>
+    `v1.vs_inst_idx = s'.vs_inst_idx` by
+      metis_tac[step_inst_preserves_inst_idx] >>
+    `v2.vs_inst_idx = s'.vs_inst_idx` by
+      metis_tac[step_inst_preserves_inst_idx] >>
     `LENGTH (FLAT (TAKE (SUC i) (MAPi g bb.bb_instructions))) = SUC j` by (
       `LENGTH (FLAT (TAKE (SUC i) (MAPi g bb.bb_instructions))) =
        LENGTH (FLAT (TAKE i (MAPi g bb.bb_instructions))) +
        LENGTH (g i (EL i bb.bb_instructions))`
         by (irule FLAT_MAPi_offset_SUC >> simp[]) >>
       fs[Abbr `j`, Abbr `inst`]) >>
-    (* Soundness for SUC i *)
+    (* Soundness for SUC i via v1 *)
     `sound (df_at bottom result bb.bb_label (SUC i))
-           (v' with vs_inst_idx := 0)` by (
+           (v1 with vs_inst_idx := 0)` by (
       `df_at bottom result bb.bb_label (SUC i) =
        transfer run_ctx (EL i bb.bb_instructions)
          (df_at bottom result bb.bb_label i)` by fs[] >>
@@ -955,20 +1142,45 @@ Proof
       irule transfer_sound_at_0 >>
       simp[Abbr `v`, Abbr `inst`] >>
       qexistsl_tac [`fuel`, `ctx`, `s'`] >> fs[]) >>
-    (* Apply IH *)
-    qpat_x_assum `!m. m < n ==> _`
-      (qspec_then `LENGTH bb.bb_instructions - SUC i` mp_tac) >>
-    impl_tac >- fs[] >>
-    disch_then (qspecl_then [`fuel`, `ctx`,
-                              `v' with vs_inst_idx := SUC i`] mp_tac) >>
-    simp[] >>
-    (* Discharge soundness condition in IH *)
-    disch_then match_mp_tac >>
-    `df_at bottom result bb.bb_label (SUC i) =
-     transfer run_ctx inst v` by (
-      first_x_assum (qspec_then `i` mp_tac) >>
-      simp[Abbr `v`, Abbr `inst`]) >>
-    metis_tac[]
+    (* Triangle: run_block bb v1 ~ run_block bb v2 ~ run_block bb' v2 *)
+    irule lift_result_trans_proof >>
+    conj_tac >- fs[] >> conj_tac >- fs[] >>
+    qexists_tac `run_block fuel ctx bb (v2 with vs_inst_idx := SUC i)` >>
+    conj_tac
+    >- (
+      irule run_block_preserves_R_block >> rpt conj_tac
+      >- (rpt strip_tac >> res_tac)
+      >- fs[]
+      >- fs[]
+      >- (irule R_ok_idx_change >> fs[] >> metis_tac[])
+      >- fs[]
+    )
+    >- (
+      qpat_x_assum `!m. m < n ==> _`
+        (qspec_then `LENGTH bb.bb_instructions - SUC i` mp_tac) >>
+      impl_tac >- fs[] >>
+      disch_then (qspecl_then [`fuel`, `ctx`,
+                                `v2 with vs_inst_idx := SUC i`] mp_tac) >>
+      simp[] >>
+      disch_then match_mp_tac >>
+      `transfer run_ctx inst v =
+       df_at bottom result bb.bb_label (SUC i)` by (
+        qpat_x_assum `Abbrev (inst = _)`
+          (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+        qpat_x_assum `Abbrev (v = _)`
+          (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+        first_x_assum (qspec_then `i` mp_tac) >> simp[]) >>
+      pop_assum SUBST1_TAC >>
+      (* Transfer soundness from v1 to v2 via R_ok *)
+      first_x_assum (qspecl_then
+        [`df_at bottom result bb.bb_label (SUC i)`,
+         `v1 with vs_inst_idx := 0`,
+         `v2 with vs_inst_idx := 0`] mp_tac) >>
+      disch_then match_mp_tac >>
+      conj_tac
+      >- (irule R_ok_idx_change >> fs[] >> metis_tac[])
+      >- first_assum ACCEPT_TAC
+    )
   ) >>
   (* === Non-term non-INVOKE case === *)
   `EVERY (\i'. ~is_terminator i'.inst_opcode /\ i'.inst_opcode <> INVOKE)

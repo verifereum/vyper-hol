@@ -28,4 +28,7 @@ INCLUDES = \
   dft \
   load_elim \
   dead_store_elim \
-  memory_copy_elision
+  memory_copy_elision \
+  assign_elim \
+  cse \
+  sccp
