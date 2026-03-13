@@ -11,9 +11,9 @@ Libs
 
 Definition evaluate_literal_def:
   evaluate_literal (BoolL b) = BoolV b ∧
-  evaluate_literal (StringL n s) = StringV s ∧
-  evaluate_literal (BytesL b bs) = BytesV bs ∧
-  evaluate_literal (IntL ib i) = IntV i ∧
+  evaluate_literal (StringL s) = StringV s ∧
+  evaluate_literal (BytesL bs) = BytesV bs ∧
+  evaluate_literal (IntL i) = IntV i ∧
   evaluate_literal (DecimalL i) = DecimalV i
 End
 

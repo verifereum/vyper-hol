@@ -1,0 +1,486 @@
+(*
+ * Concretize Memory Locations — Definitions
+ *
+ * Ports vyper/venom/passes/concretize_mem_loc.py to HOL4.
+ *
+ * Replaces abstract memory allocation instructions (alloca, palloca)
+ * with concrete ASSIGN of computed memory offsets, and replaces
+ * GEP (get element pointer) with ADD.
+ *
+ * Orphaned callocas (not in allocation map) are NOPped along with
+ * all their transitive uses, matching Python's _remove_unused_calloca.
+ *
+ * TOP-LEVEL:
+ *   mem_liveness_analyze  — MemLiveness analysis (liveat ∩ used)
+ *   compute_alloc_map     — first-fit allocator with liveness-aware reservation
+ *   concretize_inst       — per-instruction transform
+ *   concretize_function   — function-level transform (allocate + rewrite)
+ *)
+
+Theory concretizeMemLocDefs
+Ancestors
+  passSimulationDefs passSharedDefs basePtrDefs cfgDefs
+
+(* ===== Allocation map ===== *)
+
+(* Maps alloca output variable names to their concrete memory offsets *)
+Type alloc_map = ``:(string, 256 word) fmap``
+
+(* =========================================================================
+   Helpers: memory read/write queries for MemLiveness
+   ========================================================================= *)
+
+(* Find base allocations referenced by an operand, using bp_result.
+   Matches Python MemLiveness._find_base_ptrs. *)
+Definition find_base_allocas_def:
+  find_base_allocas (bpr : bp_result) op =
+    case op of
+      Var v => IMAGE (\p. case p of Ptr alloc _ => alloc)
+                     (bp_get_ptrs bpr v)
+    | _ => {}
+End
+
+Definition find_base_allocas_opt_def:
+  find_base_allocas_opt bpr NONE = {} /\
+  find_base_allocas_opt bpr (SOME op) = find_base_allocas bpr op
+End
+
+(* Get write operand (offset) of an instruction *)
+Definition inst_write_op_def:
+  inst_write_op inst =
+    case mem_write_ops inst of
+      NONE => NONE
+    | SOME ops => SOME ops.iao_ofst
+End
+
+(* Get read operand (offset) of an instruction *)
+Definition inst_read_op_def:
+  inst_read_op inst =
+    case mem_read_ops inst of
+      NONE => NONE
+    | SOME ops => SOME ops.iao_ofst
+End
+
+(* Get write size as a number, if literal *)
+Definition inst_write_size_def:
+  inst_write_size inst =
+    case mem_write_ops inst of
+      NONE => NONE
+    | SOME ops =>
+        case ops.iao_size of
+          SOME (Lit n) => SOME (w2n n)
+        | _ => NONE
+End
+
+(* Get alloca size from first operand *)
+Definition inst_alloca_size_def:
+  inst_alloca_size inst =
+    case inst.inst_operands of
+      Lit sz :: _ => SOME (w2n sz)
+    | _ => NONE
+End
+
+(* =========================================================================
+   MemLiveness Analysis
+   Ports Python MemLiveness class.
+
+   Two simultaneous dataflow analyses:
+   1. liveat (backward): which allocations could still be needed
+   2. used (forward): which allocations have been referenced
+
+   An allocation is live at an instruction iff in both liveat and used.
+
+   State indexed by (block_label, instruction_index).
+   ========================================================================= *)
+
+Type inst_addr = ``:string # num``
+Type ml_state[pp] = ``:(inst_addr, allocation set) fmap``
+
+Definition ml_lookup_def:
+  ml_lookup (st : ml_state) (addr : inst_addr) =
+    case FLOOKUP st addr of SOME s => s | NONE => {}
+End
+
+(* ===== liveat helpers ===== *)
+
+(* Kill an alloca from live set if write completely covers it and
+   the instruction doesn't also read it. Re-add if it also reads. *)
+Definition ml_kill_write_def:
+  ml_kill_write alloca_sizes read_allocas wsz live alloc =
+    case alloca_sizes alloc of
+      NONE => live
+    | SOME asz =>
+        if alloc IN live /\ wsz = asz /\ alloc NOTIN read_allocas
+        then live DELETE alloc
+        else if alloc IN read_allocas then alloc INSERT live
+        else live
+End
+
+(* Process one instruction for liveat (called in reverse order).
+   Returns (new_live_set, updated_liveat_state). *)
+Definition ml_liveat_inst_def:
+  ml_liveat_inst bpr mems_used alloca_sizes bb_label
+                 idx inst live (la : ml_state) =
+    let write_allocas = find_base_allocas_opt bpr (inst_write_op inst) in
+    let read_allocas = find_base_allocas_opt bpr (inst_read_op inst) in
+    let live1 = live UNION read_allocas in
+    (* INVOKE: add callee mems_used + all operand base ptrs *)
+    let live2 =
+      if inst.inst_opcode = INVOKE then
+        (case inst.inst_operands of
+           Label callee_lbl :: _ =>
+             live1 UNION mems_used callee_lbl UNION
+             BIGUNION (set (MAP (find_base_allocas bpr) inst.inst_operands))
+         | _ => live1)
+      else live1 in
+    let la' = la |+ ((bb_label, idx), live2) in
+    (* Complete-overwrite kill *)
+    let live3 = case inst_write_size inst of
+      NONE => live2
+    | SOME wsz =>
+        FOLDL (ml_kill_write alloca_sizes read_allocas wsz)
+              live2 (SET_TO_LIST write_allocas) in
+    (live3, la')
+End
+
+(* Process a block's instructions in reverse for liveat *)
+Definition ml_liveat_insts_rev_def:
+  ml_liveat_insts_rev bpr mems_used alloca_sizes bb_label
+                      live la [] = (live, la) /\
+  ml_liveat_insts_rev bpr mems_used alloca_sizes bb_label
+                      live la ((idx, inst) :: rest) =
+    (* Process rest first (they come later in the block) *)
+    let (live', la') = ml_liveat_insts_rev bpr mems_used
+                         alloca_sizes bb_label live la rest in
+    ml_liveat_inst bpr mems_used alloca_sizes bb_label
+                   idx inst live' la'
+End
+
+(* Process one block for liveat. Returns (changed, new_liveat). *)
+Definition ml_liveat_block_def:
+  ml_liveat_block bpr mems_used alloca_sizes cfg
+                  (liveat : ml_state) bb =
+    let succs = cfg_succs_of cfg bb.bb_label in
+    let live_init = BIGUNION (set (MAP
+      (\lbl. ml_lookup liveat (lbl, 0)) succs)) in
+    let before = ml_lookup liveat (bb.bb_label, 0) in
+    let indexed = MAPi (\i inst. (i, inst)) bb.bb_instructions in
+    let (_, liveat') = ml_liveat_insts_rev bpr mems_used
+                         alloca_sizes bb.bb_label live_init liveat
+                         indexed in
+    (ml_lookup liveat' (bb.bb_label, 0) <> before, liveat')
+End
+
+(* ===== used helpers ===== *)
+
+(* Process one instruction for used (forward order). *)
+Definition ml_used_inst_def:
+  ml_used_inst bpr mems_used bb_label
+               idx inst cur_used (us : ml_state) =
+    let new_used = cur_used UNION
+      BIGUNION (set (MAP (find_base_allocas bpr) inst.inst_operands)) in
+    let new_used2 =
+      if inst.inst_opcode = INVOKE then
+        (case inst.inst_operands of
+           Label callee_lbl :: _ => new_used UNION mems_used callee_lbl
+         | _ => new_used)
+      else new_used in
+    (new_used2, us |+ ((bb_label, idx), new_used2))
+End
+
+(* Process a block's instructions forward for used *)
+Definition ml_used_insts_def:
+  ml_used_insts bpr mems_used bb_label
+                cur_used us [] = (cur_used, us) /\
+  ml_used_insts bpr mems_used bb_label
+                cur_used us ((idx, inst) :: rest) =
+    let (cur', us') = ml_used_inst bpr mems_used bb_label
+                        idx inst cur_used us in
+    ml_used_insts bpr mems_used bb_label cur' us' rest
+End
+
+(* Process one block for used. Returns (changed, new_used). *)
+Definition ml_used_block_def:
+  ml_used_block bpr mems_used live_pallocas cfg
+                (used : ml_state) bb fn_blocks =
+    let preds = cfg_preds_of cfg bb.bb_label in
+    let used_init = live_pallocas UNION
+      BIGUNION (set (MAP (\lbl.
+        case FIND (\b. b.bb_label = lbl) fn_blocks of
+          NONE => ml_lookup used (lbl, 0)
+        | SOME pred_bb =>
+            ml_lookup used (pred_bb.bb_label,
+                            PRE (LENGTH pred_bb.bb_instructions)))
+        preds)) in
+    let n = LENGTH bb.bb_instructions in
+    let before = ml_lookup used (bb.bb_label, PRE n) in
+    let indexed = MAPi (\i inst. (i, inst)) bb.bb_instructions in
+    let (_, used') = ml_used_insts bpr mems_used bb.bb_label
+                       used_init used indexed in
+    (ml_lookup used' (bb.bb_label, PRE n) <> before, used')
+End
+
+(* ===== Fixpoint iteration ===== *)
+
+(* One pass: liveat over post-order, used over pre-order *)
+Definition ml_one_pass_liveat_def:
+  ml_one_pass_liveat bpr mems_used alloca_sizes cfg blocks
+                     [] la = (F, la) /\
+  ml_one_pass_liveat bpr mems_used alloca_sizes cfg blocks
+                     (lbl :: lbls) la =
+    case FIND (\bb. bb.bb_label = lbl) blocks of
+      NONE => ml_one_pass_liveat bpr mems_used alloca_sizes
+                cfg blocks lbls la
+    | SOME bb =>
+        let (c1, la') = ml_liveat_block bpr mems_used
+                          alloca_sizes cfg la bb in
+        let (c2, la'') = ml_one_pass_liveat bpr mems_used
+                           alloca_sizes cfg blocks lbls la' in
+        (c1 \/ c2, la'')
+End
+
+Definition ml_one_pass_used_def:
+  ml_one_pass_used bpr mems_used live_pallocas cfg blocks
+                   [] us = (F, us) /\
+  ml_one_pass_used bpr mems_used live_pallocas cfg blocks
+                   (lbl :: lbls) us =
+    case FIND (\bb. bb.bb_label = lbl) blocks of
+      NONE => ml_one_pass_used bpr mems_used live_pallocas
+                cfg blocks lbls us
+    | SOME bb =>
+        let (c1, us') = ml_used_block bpr mems_used
+                          live_pallocas cfg us bb blocks in
+        let (c2, us'') = ml_one_pass_used bpr mems_used
+                           live_pallocas cfg blocks lbls us' in
+        (c1 \/ c2, us'')
+End
+
+Definition ml_one_pass_def:
+  ml_one_pass bpr mems_used alloca_sizes live_pallocas cfg fn
+              la us =
+    let (c1, la') = ml_one_pass_liveat bpr mems_used alloca_sizes
+                      cfg fn.fn_blocks cfg.cfg_dfs_post la in
+    let (c2, us') = ml_one_pass_used bpr mems_used live_pallocas
+                      cfg fn.fn_blocks cfg.cfg_dfs_pre us in
+    (c1 \/ c2, la', us')
+End
+
+(* Iterate until fixpoint via OWHILE *)
+Definition ml_iterate_def:
+  ml_iterate bpr mems_used alloca_sizes live_pallocas cfg fn =
+    OWHILE
+      (\(changed, la, us). changed)
+      (\(_, la, us).
+        ml_one_pass bpr mems_used alloca_sizes live_pallocas
+                    cfg fn la us)
+      (T, FEMPTY, FEMPTY)
+End
+
+(* ===== Compute livesets from liveat ∩ used ===== *)
+
+Definition ml_livesets_insts_def:
+  ml_livesets_insts bb_label liveat used ls [] = ls /\
+  ml_livesets_insts bb_label liveat used ls ((idx, inst) :: rest) =
+    let addr = (bb_label, idx) in
+    let both = ml_lookup liveat addr INTER ml_lookup used addr in
+    let ls' = FOLDL (\m alloc.
+      let cur = case FLOOKUP m alloc of SOME s => s | NONE => {} in
+      m |+ (alloc, addr INSERT cur))
+      ls (SET_TO_LIST both) in
+    ml_livesets_insts bb_label liveat used ls' rest
+End
+
+Definition ml_compute_livesets_def:
+  ml_compute_livesets liveat used fn =
+    FOLDL (\ls bb.
+      ml_livesets_insts bb.bb_label liveat used ls
+        (MAPi (\i inst. (i, inst)) bb.bb_instructions))
+      (FEMPTY : (allocation, inst_addr set) fmap)
+      fn.fn_blocks
+End
+
+(* Mark store locations live *)
+Definition ml_mark_stores_insts_def:
+  ml_mark_stores_insts bpr bb_label ls [] = ls /\
+  ml_mark_stores_insts bpr bb_label ls ((idx, inst) :: rest) =
+    let write_allocas = find_base_allocas_opt bpr (inst_write_op inst) in
+    let addr = (bb_label, idx) in
+    let ls' = FOLDL (\m alloc.
+      let cur = case FLOOKUP m alloc of SOME s => s | NONE => {} in
+      m |+ (alloc, addr INSERT cur))
+      ls (SET_TO_LIST write_allocas) in
+    ml_mark_stores_insts bpr bb_label ls' rest
+End
+
+Definition ml_mark_stores_live_def:
+  ml_mark_stores_live bpr fn ls =
+    FOLDL (\ls' bb.
+      ml_mark_stores_insts bpr bb.bb_label ls'
+        (MAPi (\i inst. (i, inst)) bb.bb_instructions))
+      ls fn.fn_blocks
+End
+
+(* Top-level MemLiveness *)
+Definition mem_liveness_analyze_def:
+  mem_liveness_analyze bpr mems_used alloca_sizes
+                       live_pallocas cfg fn =
+    case ml_iterate bpr mems_used alloca_sizes
+           live_pallocas cfg fn of
+      SOME (_, liveat, used) =>
+        ml_mark_stores_live bpr fn
+          (ml_compute_livesets liveat used fn)
+    | NONE => FEMPTY
+End
+
+(* =========================================================================
+   First-Fit Allocator
+   Ports Python MemoryAllocator.allocate + run_pass allocation loop.
+   ========================================================================= *)
+
+(* Find first position >= start fitting in gap between reserved regions.
+   Reserved must be sorted by position ascending. *)
+Definition first_fit_pos_def:
+  first_fit_pos (reserved : (num # num) list) (size : num) (start : num) =
+    case reserved of
+      [] => start
+    | (rpos, rsz) :: rest =>
+        if rpos + rsz <= start then first_fit_pos rest size start
+        else if start + size <= rpos then start
+        else first_fit_pos rest size (rpos + rsz)
+End
+
+(* Get alloca size from function's instructions *)
+Definition get_alloca_size_def:
+  get_alloca_size fn (Allocation aid) =
+    case FIND (\inst. is_alloca_op inst.inst_opcode /\ inst.inst_id = aid)
+              (FLAT (MAP (\bb. bb.bb_instructions) fn.fn_blocks)) of
+      SOME inst => (case inst.inst_operands of
+                      Lit sz :: _ => w2n sz
+                    | _ => 0)
+    | NONE => 0
+End
+
+(* Allocate one: first-fit among sorted reserved regions *)
+Definition allocate_one_def:
+  allocate_one (reserved : (num # num) list) (size : num) =
+    let sorted = QSORT (\(p1:num,_) (p2,_). p1 <= p2) reserved in
+    let pos = first_fit_pos sorted size 0 in
+    (pos, (pos, size) :: reserved)
+End
+
+(* Liveness-aware allocation loop.
+   already: (alloc, liveset, position, size) — pre-allocated
+   to_alloc: (alloc, liveset, size) — sorted by |liveset| ascending
+   For each: reserve only intersecting, then first-fit. *)
+Definition allocate_with_livesets_def:
+  allocate_with_livesets global_reserved already [] result = result /\
+  allocate_with_livesets global_reserved already
+    ((alloc, live_insts, sz) :: rest) result =
+    let reserved = global_reserved ++
+      MAP (\(_, _, pos, asz). (pos, asz))
+        (FILTER (\(_, other_live, _, _).
+           other_live INTER live_insts <> {}) already) in
+    let (pos, _) = allocate_one reserved sz in
+    allocate_with_livesets global_reserved
+      (already ++ [(alloc, live_insts, pos, sz)])
+      rest (result |+ (alloc, pos))
+End
+
+(* Full allocation pipeline *)
+Definition compute_alloc_map_def:
+  compute_alloc_map fn bpr mems_used live_pallocas cfg
+                    (pre_allocated : (allocation, num) fmap)
+                    (global_reserved : (num # num) list) =
+    let alloca_sz = get_alloca_size fn in
+    let alloca_sz_opt = \a. let sz = alloca_sz a in
+                            if sz = 0 then NONE else SOME sz in
+    let ls = mem_liveness_analyze bpr mems_used alloca_sz_opt
+               live_pallocas cfg fn in
+    let items = fmap_to_alist ls in
+    let already = FILTER (\(alloc, _). alloc IN FDOM pre_allocated) items in
+    let to_alloc = FILTER (\(alloc, _). alloc NOTIN FDOM pre_allocated)
+                     items in
+    let sorted = QSORT (\(_, s1) (_, s2). CARD s1 <= CARD s2)
+                   to_alloc in
+    let already_info = MAP (\(alloc, live).
+      let pos = case FLOOKUP pre_allocated alloc of
+                  SOME p => p | NONE => 0 in
+      (alloc, live, pos, alloca_sz alloc)) already in
+    let sorted_info = MAP (\(alloc, live).
+      (alloc, live, alloca_sz alloc)) sorted in
+    allocate_with_livesets global_reserved already_info
+      sorted_info pre_allocated
+End
+
+(* Convert allocation-keyed result to variable-keyed alloc_map *)
+Definition alloc_result_to_map_def:
+  alloc_result_to_map fn (result : (allocation, num) fmap) : alloc_map =
+    FOLDL (\amap bb.
+      FOLDL (\amap' inst.
+        if is_alloca_op inst.inst_opcode then
+          case inst.inst_outputs of
+            [out] =>
+              (case FLOOKUP result (Allocation inst.inst_id) of
+                 SOME pos => amap' |+ (out, n2w pos)
+               | NONE => amap')
+          | _ => amap'
+        else amap')
+        amap bb.bb_instructions)
+      FEMPTY fn.fn_blocks
+End
+
+(* =========================================================================
+   Per-Instruction Transform
+   ========================================================================= *)
+
+Definition concretize_inst_def:
+  concretize_inst (amap : alloc_map) inst =
+    if is_alloca_op inst.inst_opcode then
+      (case inst.inst_outputs of
+         [out] =>
+           (case FLOOKUP amap out of
+              SOME addr => mk_assign_inst inst (Lit addr)
+            | NONE => mk_nop_inst inst)
+       | _ => inst)
+    else if inst.inst_opcode = GEP then
+      inst with inst_opcode := ADD
+    else inst
+End
+
+(* =========================================================================
+   Function-Level Transform
+   ========================================================================= *)
+
+(* Variables defined by orphaned callocas (not in alloc map) *)
+Definition orphaned_calloca_vars_def:
+  orphaned_calloca_vars (amap : alloc_map) fn =
+    FLAT (MAP (\bb.
+      FLAT (MAP (\inst.
+        if inst.inst_opcode = CALLOCA then
+          case inst.inst_outputs of
+            [out] =>
+              if FLOOKUP amap out = NONE then [out] else []
+          | _ => []
+        else [])
+        bb.bb_instructions))
+      fn.fn_blocks)
+End
+
+(* Two-phase transform:
+   1. Compute orphaned calloca vars + transitive uses → dead_vars
+   2. NOP dead-var instructions, concretize the rest.
+   Matches Python _handle_bb + _remove_unused_calloca. *)
+Definition concretize_function_def:
+  concretize_function amap fn =
+    let orphans = orphaned_calloca_vars amap fn in
+    let dead_vars = transitive_use_vars fn orphans in
+    clear_nops_function
+      (function_map_transform
+        (block_map_transform (\inst.
+          if EXISTS (\v. MEM v dead_vars) inst.inst_outputs \/
+             EXISTS (\op. case op of Var v => MEM v dead_vars | _ => F)
+                    inst.inst_operands
+          then mk_nop_inst inst
+          else concretize_inst amap inst))
+        fn)
+End

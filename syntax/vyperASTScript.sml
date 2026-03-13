@@ -45,9 +45,9 @@ End
 Datatype:
   literal
   = BoolL bool
-  | StringL num string
-  | BytesL bound (word8 list)
-  | IntL int_bound int
+  | StringL string
+  | BytesL (word8 list)
+  | IntL int
   | DecimalL int
 End
 
@@ -181,6 +181,8 @@ Datatype:
   | Attribute type expr identifier
   | Builtin type builtin (expr list)
   | TypeBuiltin type type_builtin type (expr list)
+      (* 1st type: result type of the expression *)
+      (* 2nd type: type argument to the builtin (e.g., target type for Convert) *)
   | Pop type base_assignment_target
   | Call type call_target (expr list) (expr option)
       (* expr list: arguments -- see ExtCall above for conventions *)
@@ -218,7 +220,7 @@ End
 Datatype:
   iterator
   = Array expr
-  | Range expr expr (* start end; use Literal (IntL (Unsigned 256) 0) for start when missing *)
+  | Range expr expr (* start end; use Literal (BaseT (UintT 256)) (IntL 0) for start when missing *)
   (* the For syntax always includes a bound *)
   (* for Array, this should be derived from the type of the expression *)
   (* for Range, if the bound is not given explicitly, use end - start (which

@@ -1,0 +1,3 @@
+Theory deadStoreElim
+Ancestors
+  deadStoreElimDefs deadStoreElimCorrectness

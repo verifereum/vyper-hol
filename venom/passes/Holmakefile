@@ -8,6 +8,10 @@ INCLUDES = \
   shared \
   phi_elimination \
   revert_to_assert \
+  assert_elim \
+  literals_codesize \
+  remove_unused \
+  concretize_mem_loc \
   lower_dload \
   float_allocas \
   fix_mem_locations \
@@ -21,4 +25,10 @@ INCLUDES = \
   cfg_normalization \
   make_ssa \
   memmerging \
-  dft
+  dft \
+  load_elim \
+  dead_store_elim \
+  memory_copy_elision \
+  assign_elim \
+  cse \
+  sccp

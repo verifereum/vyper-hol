@@ -1,0 +1,3 @@
+Theory literalsCodesize
+Ancestors
+  literalsCodesizeDefs literalsCodesizeCorrectness

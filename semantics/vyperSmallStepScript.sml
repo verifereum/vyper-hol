@@ -27,7 +27,7 @@ Datatype:
   | PopK eval_continuation
   | AppendK expr eval_continuation
   | AppendK1 base_target_value eval_continuation
-  | AnnAssignK identifier eval_continuation
+  | AnnAssignK identifier type_value eval_continuation
   | AssignK expr eval_continuation
   | AssignK1 assignment_value eval_continuation
   | AugAssignK type binop expr eval_continuation
@@ -35,8 +35,8 @@ Datatype:
   | IfK (stmt list) (stmt list) eval_continuation
   | IfK1 toplevel_value (stmt list) (stmt list) eval_continuation
   | IfK2 eval_continuation
-  | ForK identifier num (stmt list) eval_continuation
-  | ForK1 num (stmt list) (value list) eval_continuation
+  | ForK identifier type_value num (stmt list) eval_continuation
+  | ForK1 type_value num (stmt list) (value list) eval_continuation
   | ExprK eval_continuation
   | StmtsK (stmt list) eval_continuation
   | ArrayK eval_continuation
@@ -153,14 +153,14 @@ Definition eval_expr_cps_def:
     liftk cx1 ApplyTv
       (do env <- get_scopes;
           n <<- string_to_num id;
-          v <- lift_option_type (lookup_scopes n env) "Name not in scope";
+          v <- lift_option_type (lookup_scopes_val n env) "Name not in scope";
           return $ Value v od st) k ∧
   eval_expr_cps cx1 (BareGlobalName _ id) st k =
     liftk cx1 ApplyTv
       (do imms <- get_immutables cx1 (current_module cx1);
           n <<- string_to_num id;
-          v <- lift_option_type (FLOOKUP imms n) "BareGlobalName not found";
-          return $ Value v od st) k ∧
+          tvv <- lift_option_type (FLOOKUP imms n) "BareGlobalName not found";
+          return $ Value (SND tvv) od st) k ∧
   eval_expr_cps cx2 (TopLevelName _ (src_id_opt, id)) st k =
     liftk cx2 ApplyTv (lookup_global cx2 src_id_opt (string_to_num id) st) k ∧
   eval_expr_cps cx2 (FlagMember _ nsid mid) st k =
@@ -271,7 +271,9 @@ Definition eval_stmt_cps_def:
   eval_stmt_cps cx (Assert e se) st k = eval_expr_cps cx e st (AssertK se k) ∧
   eval_stmt_cps cx (Log id es) st k = eval_exprs_cps cx es st (LogK id k) ∧
   eval_stmt_cps cx (AnnAssign id typ e) st k =
-    eval_expr_cps cx e st (AnnAssignK id k) ∧
+    (case evaluate_type (get_tenv cx) typ of
+       NONE => AK cx (ApplyExc (Error (TypeError "AnnAssign evaluate_type"))) st k
+     | SOME tyv => eval_expr_cps cx e st (AnnAssignK id tyv k)) ∧
   eval_stmt_cps cx (Append t e) st k =
     eval_base_target_cps cx t st (AppendK e k) ∧
   eval_stmt_cps cx (Assign g e) st k =
@@ -281,7 +283,9 @@ Definition eval_stmt_cps_def:
   eval_stmt_cps cx (If e ss1 ss2) st k =
     eval_expr_cps cx e st (IfK ss1 ss2 k) ∧
   eval_stmt_cps cx (For id typ it n body) st k =
-    eval_iterator_cps cx it st (ForK id n body k) ∧
+    (case evaluate_type (get_tenv cx) typ of
+       NONE => AK cx (ApplyExc (Error (TypeError "For evaluate_type"))) st k
+     | SOME tyv => eval_iterator_cps cx it st (ForK id tyv n body k)) ∧
   eval_stmt_cps cx (Expr e) st k =
     eval_expr_cps cx e st (ExprK k)
 End
@@ -297,11 +301,11 @@ End
 val () = cv_auto_trans eval_stmts_cps_def;
 
 Definition eval_for_cps_def:
-  eval_for_cps cx nm body [] st k = AK cx Apply st k ∧
-  eval_for_cps cx nm body (v::vs) st k =
-  (case push_scope_with_var nm v st of
+  eval_for_cps cx tyv nm body [] st k = AK cx Apply st k ∧
+  eval_for_cps cx tyv nm body (v::vs) st k =
+  (case push_scope_with_var nm tyv v st of
         (INR ex, st) => AK cx (ApplyExc ex) st k
-      | (INL (), st) => eval_stmts_cps cx body st (ForK1 nm body vs k))
+      | (INL (), st) => eval_stmts_cps cx body st (ForK1 tyv nm body vs k))
 End
 
 val () = cv_auto_trans eval_for_cps_def;
@@ -309,10 +313,10 @@ val () = cv_auto_trans eval_for_cps_def;
 Definition apply_def:
   apply cx st (StmtsK ss k) =
     eval_stmts_cps cx ss st k ∧
-  apply cx st (ForK1 nm body vs k) =
+  apply cx st (ForK1 tyv nm body vs k) =
     (case pop_scope st
      of (INR ex, st) => AK cx (ApplyExc ex) st k
-      | (INL (), st) => eval_for_cps cx nm body vs st k) ∧
+      | (INL (), st) => eval_for_cps cx tyv nm body vs st k) ∧
   apply cx st (IfK2 k) =
     (case pop_scope st
      of (INR ex, st) => AK cx (ApplyExc ex) st k
@@ -343,7 +347,7 @@ Definition apply_exc_def:
   apply_exc cx ex st (LogK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AppendK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AppendK1 _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (AnnAssignK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (AnnAssignK _ _ k) = AK cx (ApplyExc ex) st k ∧  (* id, tyv unused *)
   apply_exc cx ex st (AssignK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AssignK1 _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AugAssignK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
@@ -354,13 +358,13 @@ Definition apply_exc_def:
     (case pop_scope st
      of (INR ex, st) => AK cx (ApplyExc ex) st k
       | (INL (), st) => AK cx (ApplyExc ex) st k) ∧
-  apply_exc cx ex st (ForK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (ForK1 nm body vs k) =
+  apply_exc cx ex st (ForK _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (ForK1 tyv nm body vs k) =
     (case finally (handle_loop_exception ex) pop_scope st
      of (INR ex, st) => AK cx (ApplyExc ex) st k
       | (INL broke, st) =>
           if broke then AK cx Apply st k
-          else eval_for_cps cx nm body vs st k) ∧
+          else eval_for_cps cx tyv nm body vs st k) ∧
   apply_exc cx ex st (ExprK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (StmtsK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (ArrayK k) = AK cx (ApplyExc ex) st k ∧
@@ -467,8 +471,8 @@ Definition apply_tv_def:
      | (INL (), st) => apply cx st k) ∧
   apply_tv cx tv st (ReturnK k) =
     liftk cx ApplyVal (materialise cx tv st) (ReturnK k) ∧
-  apply_tv cx tv st (AnnAssignK id k) =
-    liftk cx ApplyVal (materialise cx tv st) (AnnAssignK id k) ∧
+  apply_tv cx tv st (AnnAssignK id tyv k) =
+    liftk cx ApplyVal (materialise cx tv st) (AnnAssignK id tyv k) ∧
   apply_tv cx tv st (AppendK1 btv k) =
     liftk cx ApplyVal (materialise cx tv st) (AppendK1 btv k) ∧
   apply_tv cx tv st (AssignK1 gv k) =
@@ -495,8 +499,8 @@ Definition apply_val_def:
     apply_exc cx (AssertException str) st k ∧
   apply_val cx _ st (RaiseK k) =
     apply_exc cx (Error (TypeError "not StringV")) st k ∧
-  apply_val cx v st (AnnAssignK id k) =
-    liftk cx (K Apply) (new_variable id v st) k ∧
+  apply_val cx v st (AnnAssignK id tyv k) =
+    liftk cx (K Apply) (new_variable id tyv v st) k ∧
   apply_val cx v st (AssignK1 gv k) =
     liftk cx (K Apply) (assign_target cx gv (Replace v) st) k ∧
   apply_val cx v st (AugAssignK1 ty (loc, sbs) bop k) =
@@ -552,11 +556,11 @@ val () = apply_val_def
 Definition apply_vals_def:
   apply_vals cx vs st (ExprsK1 v k) =
     apply_vals cx (v::vs) st k ∧
-  apply_vals cx vs st (ForK id n body k) =
+  apply_vals cx vs st (ForK id tyv n body k) =
     (case do check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long";
              return vs od st
      of (INR ex, st) => apply_exc cx ex st k
-      | (INL vs, st) => eval_for_cps cx (string_to_num id) body vs st k) ∧
+      | (INL vs, st) => eval_for_cps cx tyv (string_to_num id) body vs st k) ∧
   apply_vals cx vs st (StructLitK ks k) =
     apply_tv cx (Value $ StructV (ZIP (ks, vs))) st k ∧
   apply_vals cx vs st (BuiltinK ty bt k) =
@@ -727,10 +731,10 @@ Theorem eval_cps_eq:
          of (INL bv, st1) => (AK cx (ApplyBaseTarget bv) st1)
           | (INR ex, st1) => (AK cx (ApplyExc ex) st1)
      ) k)) ∧
-  (∀cx nm body vs st k.
-     cont (eval_for_cps cx nm body vs st k) =
+  (∀cx tyv nm body vs st k.
+     cont (eval_for_cps cx tyv nm body vs st k) =
      cont ((
-       case eval_for cx nm body vs st
+       case eval_for cx tyv nm body vs st
          of (INL (), st1) => (AK cx Apply st1)
           | (INR ex, st1) => (AK cx (ApplyExc ex) st1)
      ) k)) ∧
@@ -846,6 +850,8 @@ Proof
   \\ conj_tac >- ( (* AnnAssign id typ e *)
     rw[eval_stmt_cps_def, evaluate_def, bind_def]
     \\ CASE_TAC \\ rw[cont_def] \\ reverse CASE_TAC
+    \\ gvs[lift_option_type_def, raise_def, return_def, cont_def]
+    \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
     \\ reverse CASE_TAC \\ reverse CASE_TAC
@@ -945,8 +951,11 @@ Proof
     \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     \\ rw[pop_scope_def, return_def] )
   \\ conj_tac >- ( (* For id typ it n body *)
-    rw[eval_stmt_cps_def, evaluate_def, ignore_bind_def, bind_def]
+    rw[eval_stmt_cps_def, evaluate_def, ignore_bind_def, bind_def,
+       lift_option_type_def, return_def, raise_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
+    \\ gvs[return_def, raise_def]
+    \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_vals_def, ignore_bind_def, bind_def]
     \\ CASE_TAC \\ reverse CASE_TAC

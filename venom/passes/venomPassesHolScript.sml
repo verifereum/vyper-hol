@@ -7,6 +7,11 @@ Ancestors
   phiElim
   (* revert-to-assert *)
   rta
+  (* simple rewrite passes *)
+  assertElim
+  literalsCodesize
+  removeUnused
+  concretizeMemLoc
   (* lower dload/dloadbytes *)
   lowerDload
   (* float allocas to entry *)
@@ -28,3 +33,11 @@ Ancestors
   simplifyCfg
   cfgNorm
   makeSsa
+  (* memory passes *)
+  loadElim
+  deadStoreElim
+  memoryCopyElision
+  (* dataflow-driven passes *)
+  assignElim
+  cse
+  sccp
