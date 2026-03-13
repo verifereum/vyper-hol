@@ -27,8 +27,8 @@ Ancestors
    f : 'a → inst → inst maps each instruction to a single replacement.
    Passes satisfying this automatically satisfy analysis_inst_simulates
    via the corollary (\v inst. [g v inst]).
-   Constraints mirror analysis_inst_simulates: terminators and INVOKE
-   preserved exactly, non-preserved produce non-terminator non-INVOKE. *)
+   Terminators may be transformed (e.g. JNZ→JMP) but must remain
+   terminators. INVOKE may be transformed but must remain INVOKE. *)
 Definition analysis_inst_simulates_1_def:
   analysis_inst_simulates_1 R_ok R_term
     (sound : 'a -> venom_state -> bool)
@@ -37,8 +37,10 @@ Definition analysis_inst_simulates_1_def:
        sound v s ==>
        lift_result R_ok R_term
          (step_inst fuel ctx inst s) (step_inst fuel ctx (f v inst) s)) /\
-    (!v inst. is_terminator inst.inst_opcode ==> f v inst = inst) /\
-    (!v inst. inst.inst_opcode = INVOKE ==> f v inst = inst) /\
+    (!v inst. is_terminator inst.inst_opcode ==>
+       is_terminator (f v inst).inst_opcode) /\
+    (!v inst. inst.inst_opcode = INVOKE ==>
+       (f v inst).inst_opcode = INVOKE) /\
     (!v inst.
        ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE ==>
        ~is_terminator (f v inst).inst_opcode /\
@@ -89,8 +91,10 @@ End
 
 (* Per-instruction simulation: f maps each instruction (given a lattice
    value) to a replacement list. Structural constraints ensure the
-   transformed block is well-formed for run_block (terminators/INVOKE
-   preserved, expansions produce only non-terminator non-INVOKE).
+   transformed block is well-formed for run_block:
+   - Terminators map to a single terminator (may change opcode, e.g. JNZ→JMP)
+   - INVOKE maps to a single INVOKE (may change operands)
+   - Non-term non-INVOKE expand to only non-term non-INVOKE
    The simulation clause relates one original step_inst to sequential
    execution of the replacement list via run_insts. *)
 Definition analysis_inst_simulates_def:
@@ -103,10 +107,12 @@ Definition analysis_inst_simulates_def:
        lift_result R_ok R_term
          (step_inst fuel ctx inst s)
          (run_insts fuel ctx (f v inst) s)) /\
-    (* Terminators preserved *)
-    (!v inst. is_terminator inst.inst_opcode ==> f v inst = [inst]) /\
-    (* INVOKE preserved *)
-    (!v inst. inst.inst_opcode = INVOKE ==> f v inst = [inst]) /\
+    (* Terminators map to a single terminator *)
+    (!v inst. is_terminator inst.inst_opcode ==>
+       ?inst'. f v inst = [inst'] /\ is_terminator inst'.inst_opcode) /\
+    (* INVOKE preserved as INVOKE *)
+    (!v inst. inst.inst_opcode = INVOKE ==>
+       ?inst'. f v inst = [inst'] /\ inst'.inst_opcode = INVOKE) /\
     (* Safe expansion: non-preserved produce only non-preserved *)
     (!v inst.
        ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE ==>
