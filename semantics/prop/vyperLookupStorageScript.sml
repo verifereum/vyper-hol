@@ -554,6 +554,63 @@ Proof
   simp[bind_def, return_def, lift_option_def]
 QED
 
+(* Helper: get_storage_backend always succeeds *)
+Theorem get_storage_backend_INL[local]:
+  ∀cx b st. ∃storage. get_storage_backend cx b st = (INL storage, st)
+Proof
+  rpt gen_tac >> Cases_on `b` >>
+  simp[get_storage_backend_def, get_accounts_def,
+       get_transient_storage_def, bind_def, return_def]
+QED
+
+(* Helper: extract slots_in_range from storage_var_in_range *)
+Theorem storage_var_in_range_slots[local]:
+  ∀cx st mid n b offset tv storage.
+    storage_var_in_range cx st mid n ∧
+    storage_var_info cx mid n = SOME (b, offset, tv) ∧
+    get_storage_backend cx b st = (INL storage, st) ⇒
+    slots_in_range storage offset tv
+Proof
+  rw[storage_var_in_range_def] >> res_tac
+QED
+
+Theorem typed_lookup_from_storage_var_in_range_array:
+  ∀cx st mid n elem_tv bd.
+    var_in_storage cx mid n ∧
+    storage_var_in_range cx st mid n ∧
+    storage_type_of cx mid n = SOME (ArrayTV elem_tv bd) ⇒
+    ∃ref_v v.
+      lookup_toplevel_name cx st mid n = SOME ref_v ∧
+      FST (materialise cx ref_v st) = INL v ∧
+      value_has_type (ArrayTV elem_tv bd) v ∧
+      well_formed_value v
+Proof
+  rpt strip_tac >>
+  gvs[var_in_storage_def] >>
+  `tv = ArrayTV elem_tv bd`
+    by gvs[storage_type_of_def, storage_var_info_def, AllCaseEqs()] >>
+  gvs[] >>
+  `storage_var_info cx mid n = SOME (b, offset, ArrayTV elem_tv bd)`
+    by simp[storage_var_info_def] >>
+  `∃storage. get_storage_backend cx b st = (INL storage, st)`
+    by metis_tac[get_storage_backend_INL] >>
+  `slots_in_range storage offset (ArrayTV elem_tv bd)`
+    by metis_tac[storage_var_in_range_slots] >>
+  `w2n ((n2w offset):bytes32) = offset` by simp[wordsTheory.w2n_n2w] >>
+  `∃v. decode_value storage offset (ArrayTV elem_tv bd) = SOME v`
+    by (irule (CONJUNCT1 decode_value_total) >> simp[]) >>
+  `value_has_type (ArrayTV elem_tv bd) v ∧ well_formed_value v`
+    by metis_tac[CONJUNCT1 decode_value_storable] >>
+  MAP_EVERY qexists_tac [`ArrayRef b (n2w offset) elem_tv bd`, `v`] >>
+  simp[] >>
+  conj_tac >- (
+    simp[lookup_toplevel_name_def, Once lookup_global_def, bind_def,
+         return_def, LET_THM, lift_option_type_def]
+  ) >>
+  simp[materialise_def, read_storage_slot_def, bind_def, return_def,
+       lift_option_def]
+QED
+
 Theorem storable_value_from_lookup:
   ∀cx st mid n v.
     var_in_storage cx mid n ∧
