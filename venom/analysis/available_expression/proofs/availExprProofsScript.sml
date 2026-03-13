@@ -51,10 +51,11 @@ Proof
   simp[avail_remove_effect_def]
 QED
 
+(* Root-only effects: preserves if root effects are disjoint *)
 Theorem avail_remove_effect_preserves:
   ∀ae expr eff insts.
     FLOOKUP ae expr = SOME insts ∧
-    DISJOINT (expr_effects expr) eff ⇒
+    DISJOINT (root_effects expr) eff ⇒
     FLOOKUP (avail_remove_effect ae eff) expr = SOME insts
 Proof
   rw[avail_remove_effect_def] >>
@@ -62,10 +63,11 @@ Proof
   fs[finite_mapTheory.FLOOKUP_DEF]
 QED
 
+(* Root-only effects: kills if root effects overlap *)
 Theorem avail_remove_effect_kills:
   ∀ae expr eff insts.
     FLOOKUP ae expr = SOME insts ∧
-    ¬DISJOINT (expr_effects expr) eff ⇒
+    ¬DISJOINT (root_effects expr) eff ⇒
     FLOOKUP (avail_remove_effect ae eff) expr = NONE
 Proof
   rw[avail_remove_effect_def]
@@ -132,7 +134,7 @@ QED
 Theorem avail_transfer_inst_preserves:
   ∀dfg inst ae expr insts.
     FLOOKUP ae expr = SOME insts ∧
-    DISJOINT (expr_effects expr) (write_effects inst.inst_opcode) ∧
+    DISJOINT (root_effects expr) (write_effects inst.inst_opcode) ∧
     expr ≠ mk_expr dfg inst ⇒
     FLOOKUP (avail_transfer_inst dfg inst ae) expr = SOME insts
 Proof

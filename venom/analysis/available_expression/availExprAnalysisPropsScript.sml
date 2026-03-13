@@ -9,13 +9,13 @@
  *   canon_expr_comm                — commutative binary ops: order-independent
  *   mk_expr_canonical              — mk_expr returns canonical form
  *   avail_remove_effect_empty      — empty effect is identity
- *   avail_remove_effect_preserves  — disjoint effects preserved
- *   avail_remove_effect_kills      — overlapping effects killed
+ *   avail_remove_effect_preserves  — disjoint root effects preserved
+ *   avail_remove_effect_kills      — overlapping root effects killed
  *   avail_remove_effect_FDOM_SUBSET — domain only shrinks
  *   avail_meet_two_FDOM            — meet domain = intersection of input domains
  *   avail_transfer_inst_skip       — pseudo/assign/terminator: unchanged
  *   avail_transfer_inst_nonidempotent_no_add — nonidempotent: domain doesn't grow
- *   avail_transfer_inst_preserves  — disjoint effects + distinct expr: preserved
+ *   avail_transfer_inst_preserves  — disjoint root effects + distinct expr: preserved
  *   avail_transfer_inst_adds       — fresh expression maps to [inst]
  *   expr_effects_var/lit           — leaves have no effects
  *   expr_effects_pure_op           — pure op + pure args ⇒ pure expr
@@ -61,20 +61,20 @@ Theorem avail_remove_effect_empty:
 Proof ACCEPT_TAC availExprProofsTheory.avail_remove_effect_empty
 QED
 
-(* Expressions with effects disjoint from the removed set are preserved *)
+(* Expressions with root effects disjoint from the removed set are preserved *)
 Theorem avail_remove_effect_preserves:
   ∀ae expr eff insts.
     FLOOKUP ae expr = SOME insts ∧
-    DISJOINT (expr_effects expr) eff ⇒
+    DISJOINT (root_effects expr) eff ⇒
     FLOOKUP (avail_remove_effect ae eff) expr = SOME insts
 Proof ACCEPT_TAC availExprProofsTheory.avail_remove_effect_preserves
 QED
 
-(* Expressions with overlapping effects are killed *)
+(* Expressions with overlapping root effects are killed *)
 Theorem avail_remove_effect_kills:
   ∀ae expr eff insts.
     FLOOKUP ae expr = SOME insts ∧
-    ¬DISJOINT (expr_effects expr) eff ⇒
+    ¬DISJOINT (root_effects expr) eff ⇒
     FLOOKUP (avail_remove_effect ae eff) expr = NONE
 Proof ACCEPT_TAC availExprProofsTheory.avail_remove_effect_kills
 QED
@@ -128,7 +128,7 @@ QED
 Theorem avail_transfer_inst_preserves:
   ∀dfg inst ae expr insts.
     FLOOKUP ae expr = SOME insts ∧
-    DISJOINT (expr_effects expr) (write_effects inst.inst_opcode) ∧
+    DISJOINT (root_effects expr) (write_effects inst.inst_opcode) ∧
     expr ≠ mk_expr dfg inst ⇒
     FLOOKUP (avail_transfer_inst dfg inst ae) expr = SOME insts
 Proof ACCEPT_TAC availExprProofsTheory.avail_transfer_inst_preserves
