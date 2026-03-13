@@ -213,36 +213,40 @@ Theorem assign_target_imm_dom_ImmutableVar[local]:
 Proof
   rpt strip_tac >>
   qpat_x_assum `_ = (_, _)` mp_tac >>
-  simp[Once assign_target_def] >>
-  PURE_REWRITE_TAC [ignore_bind_def] >>
-  simp[bind_def, get_immutables_def, return_def, lift_option_def, lift_option_type_def, lift_sum_def,
-       AllCaseEqs(), raise_def, set_immutable_def, get_address_immutables_def,
-       set_address_immutables_def] >>
-  rpt strip_tac >>
-  gvs[return_def, raise_def, AllCaseEqs(), preserves_immutables_dom_refl] >>
-  (* resolve error paths by case-splitting on each case expression *)
+  simp[Once assign_target_def, bind_def, ignore_bind_def, get_immutables_def,
+       get_address_immutables_def, lift_option_def, lift_option_type_def,
+       return_def, raise_def, LET_THM, AllCaseEqs()] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >>
-  gvs[return_def, raise_def, preserves_immutables_dom_refl] >>
-  Cases_on `FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num id)` >>
-  gvs[return_def, raise_def, preserves_immutables_dom_refl] >>
-  Cases_on `assign_subscripts a (REVERSE is) ao` >>
-  gvs[return_def, raise_def, preserves_immutables_dom_refl] >>
-  imp_res_tac assign_result_state >> gvs[] >>
-  Cases_on `ALOOKUP s''.immutables cx.txn.target` >>
-  gvs[return_def, raise_def, preserves_immutables_dom_refl] >>
-  (* success path: prove preserves_immutables_dom for the updated state *)
-  simp[preserves_immutables_dom_def] >> conj_tac
-  >- (rpt strip_tac >>
-      Cases_on `cx.txn.target = tgt` >>
-      gvs[alistTheory.ALOOKUP_ADELKEY])
-  >> simp[set_source_immutables_def, get_source_immutables_def,
-          alistTheory.ALOOKUP_ADELKEY,
-          finite_mapTheory.FLOOKUP_UPDATE] >>
-     rpt gen_tac >>
-     TRY (rename1 `IS_SOME (FLOOKUP (get_source_immutables src _) n)`) >>
-     TRY (Cases_on `src = current_module cx` >> gvs[]) >>
-     Cases_on `n = string_to_num id` >>
-     gvs[get_source_immutables_def, finite_mapTheory.FLOOKUP_UPDATE]
+  simp[return_def, raise_def] >-
+  (strip_tac >> gvs[preserves_immutables_dom_refl]) >>
+  Cases_on `FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num id)` >>
+  simp[return_def, raise_def] >-
+  (strip_tac >> gvs[preserves_immutables_dom_refl]) >>
+  PairCases_on `x'` >> simp[] >>
+  Cases_on `assign_subscripts x'1 (REVERSE is) ao` >>
+  simp[lift_sum_def, return_def, raise_def] >>
+  strip_tac >> gvs[preserves_immutables_dom_refl] >>
+  Cases_on `set_immutable cx (current_module cx) (string_to_num id) x'0 x' st` >>
+  Cases_on `q` >> gvs[] >-
+  (imp_res_tac assign_result_state >> gvs[] >>
+   gvs[set_immutable_def, bind_def, get_address_immutables_def, lift_option_def,
+       set_address_immutables_def, return_def, raise_def, LET_THM,
+       AllCaseEqs()] >>
+   simp[preserves_immutables_dom_def] >> conj_tac
+   >- (rpt strip_tac >>
+       Cases_on `cx.txn.target = tgt` >>
+       gvs[alistTheory.ALOOKUP_ADELKEY])
+   >> simp[set_source_immutables_def, get_source_immutables_def,
+           alistTheory.ALOOKUP_ADELKEY,
+           finite_mapTheory.FLOOKUP_UPDATE] >>
+      rpt gen_tac >>
+      TRY (rename1 `IS_SOME (FLOOKUP (get_source_immutables src _) n)`) >>
+      TRY (Cases_on `src = current_module cx` >> gvs[]) >>
+      Cases_on `n = string_to_num id` >>
+      gvs[get_source_immutables_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  gvs[set_immutable_def, bind_def, get_address_immutables_def, lift_option_def,
+      set_address_immutables_def, return_def, raise_def, LET_THM,
+      AllCaseEqs(), preserves_immutables_dom_refl]
 QED
 
 Theorem assign_target_imm_dom_TupleV[local]:

@@ -106,7 +106,7 @@ Type log = “:nsid # (value list)”;
 
 (* Module-aware immutables: keyed by source_id *)
 (* NONE = main contract, SOME n = module with source_id n *)
-Type module_immutables = “:(num option, num |-> value) alist”
+Type module_immutables = “:(num option, num |-> (type_value # value)) alist”
 
 Definition empty_immutables_def:
   empty_immutables : module_immutables = []
@@ -399,7 +399,7 @@ Definition lookup_global_def:
         (* Not a storage/hashmap var - check immutables *)
         imms <- get_immutables cx src_id_opt;
         case FLOOKUP imms n of
-        | SOME v => return (Value v)
+        | SOME tvv => return (Value (SND tvv))
         | NONE => raise $ Error (TypeError "lookup_global: var not found")
       od
     | SOME (StorageVarDecl is_transient typ, id) => do
@@ -426,9 +426,9 @@ val () = lookup_global_def
   |> cv_auto_trans;
 
 Definition update_immutable_def:
-  update_immutable src_id key v (imms: module_immutables) =
+  update_immutable src_id key tv v (imms: module_immutables) =
     let imm = get_source_immutables src_id imms in
-    set_source_immutables src_id (imm |+ (key, v)) imms
+    set_source_immutables src_id (imm |+ (key, (tv, v))) imms
 End
 
 val () = cv_auto_trans update_immutable_def;
@@ -544,10 +544,10 @@ val () = set_global_def
   |> cv_auto_trans;
 
 Definition set_immutable_def:
-  set_immutable cx src_id_opt n v = do
+  set_immutable cx src_id_opt n tv v = do
     imms <- get_address_immutables cx;
     let imm = get_source_immutables src_id_opt imms in
-    set_address_immutables cx $ set_source_immutables src_id_opt (imm |+ (n, v)) imms
+    set_address_immutables cx $ set_source_immutables src_id_opt (imm |+ (n, (tv, v))) imms
   od
 End
 
@@ -918,10 +918,10 @@ Definition assign_target_def:
     ni <<- string_to_num id;
     src <<- current_module cx;
     imms <- get_immutables cx src;
-    a <- lift_option_type (FLOOKUP imms ni) "assign_target ImmutableVar";
-    a' <- lift_sum $ assign_subscripts a (REVERSE is) ao;
-    set_immutable cx src ni a';
-    assign_result ao a (REVERSE is)
+    tva <- lift_option_type (FLOOKUP imms ni) "assign_target ImmutableVar";
+    a' <- lift_sum $ assign_subscripts (SND tva) (REVERSE is) ao;
+    set_immutable cx src ni (FST tva) a';
+    assign_result ao (SND tva) (REVERSE is)
   od ∧
   assign_target cx (TupleTargetV gvs) (Replace (ArrayV (TupleV vs))) = do
     type_check (LENGTH gvs = LENGTH vs) "TupleTargetV length";

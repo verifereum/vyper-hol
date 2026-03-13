@@ -187,7 +187,7 @@ Proof
 QED
 
 Theorem set_immutable_scopes:
-  !cx src n v st res st'. set_immutable cx src n v st = (res, st') ==> st'.scopes = st.scopes
+  !cx src n tv v st res st'. set_immutable cx src n tv v st = (res, st') ==> st'.scopes = st.scopes
 Proof
   rw[set_immutable_def, bind_def, return_def, get_address_immutables_def,
      set_address_immutables_def, lift_option_def] >>

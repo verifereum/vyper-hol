@@ -583,7 +583,7 @@ End
 val () = cv_auto_trans is_immutable_decl_def;
 
 Definition immutable_target_def:
-  immutable_target (imms: num |-> value) id n =
+  immutable_target (imms: num |-> (type_value # value)) id n =
   case FLOOKUP imms n of SOME _ => SOME $ ImmutableVar id
      | _ => NONE
 End
@@ -914,8 +914,8 @@ Definition evaluate_def:
   eval_expr cx (BareGlobalName _ id) = do
     imms <- get_immutables cx (current_module cx);
     n <<- string_to_num id;
-    v <- lift_option_type (FLOOKUP imms n) "BareGlobalName not found";
-    return $ Value v
+    tvv <- lift_option_type (FLOOKUP imms n) "BareGlobalName not found";
+    return $ Value (SND tvv)
   od ∧
   eval_expr cx (TopLevelName _ (src_id_opt, id)) =
     lookup_global cx src_id_opt (string_to_num id) ∧
@@ -1135,21 +1135,17 @@ End
 
 val () = cv_auto_trans flag_value_def;
 
-(* TODO: propagate errors? *)
-Definition force_default_value_def:
-  force_default_value env typ =
-  case evaluate_type env typ of SOME tv => default_value tv
-     | NONE => NoneV
-End
-
 (* Initialize immutables for a single module's toplevels *)
 Definition initial_immutables_module_def:
-  initial_immutables_module env src_id_opt [] acc = acc ∧
+  initial_immutables_module env src_id_opt [] acc = SOME acc ∧
   initial_immutables_module env src_id_opt (VariableDecl _ Immutable id typ :: ts) acc =
-  (let key = string_to_num id in
-   let iv = force_default_value env typ in
-     initial_immutables_module env src_id_opt ts
-       (update_immutable src_id_opt key iv acc)) ∧
+  (case evaluate_type env typ of
+   | NONE => NONE
+   | SOME tv =>
+     let key = string_to_num id in
+     let iv = default_value tv in
+       initial_immutables_module env src_id_opt ts
+         (update_immutable src_id_opt key tv iv acc)) ∧
   initial_immutables_module env src_id_opt (_ :: ts) acc =
     initial_immutables_module env src_id_opt ts acc
 End
@@ -1158,9 +1154,11 @@ val () = cv_auto_trans initial_immutables_module_def;
 
 (* Initialize immutables for all modules *)
 Definition initial_immutables_def:
-  initial_immutables env [] = empty_immutables ∧
+  initial_immutables env [] = SOME empty_immutables ∧
   initial_immutables env ((src_id_opt, ts) :: rest) =
-    initial_immutables_module env src_id_opt ts (initial_immutables env rest)
+    case initial_immutables env rest of
+    | NONE => NONE
+    | SOME acc => initial_immutables_module env src_id_opt ts acc
 End
 
 val () = cv_auto_trans initial_immutables_def;
@@ -1248,11 +1246,14 @@ val () = cv_auto_trans merge_constants_def;
 Definition constants_env_def:
   constants_env _ _ _ _ [] acc = SOME acc ∧
   constants_env cx am addr src_id_opt ((VariableDecl vis (Constant e) id typ)::ts) acc =
-    (case FST $ eval_expr cx e
-       (initial_state (merge_constants addr src_id_opt acc am) []) of
-     | INL (Value v) => constants_env cx am addr src_id_opt ts $
-                        acc |+ (string_to_num id, v)
-     | _ => NONE) ∧
+    (case evaluate_type (get_tenv cx) typ of
+     | NONE => NONE
+     | SOME tv =>
+       case FST $ eval_expr cx e
+         (initial_state (merge_constants addr src_id_opt acc am) []) of
+       | INL (Value v) => constants_env cx am addr src_id_opt ts $
+                          acc |+ (string_to_num id, (tv, v))
+       | _ => NONE) ∧
   constants_env cx am addr src_id_opt (t::ts) acc =
     constants_env cx am addr src_id_opt ts acc
 End
@@ -1399,7 +1400,9 @@ Definition load_contract_def:
   let addr = tx.target in
   let ts = case ALOOKUP mods NONE of SOME ts => ts | NONE => [] in
   let tenv = type_env_all_modules mods in
-  let imms = initial_immutables tenv mods in
+  case initial_immutables tenv mods of
+  | NONE => INR $ Error (TypeError "load_contract: evaluate_type failed")
+  | SOME imms =>
   let am = am with <| immutables updated_by CONS (addr, imms);
                       exports updated_by CONS (addr, exps) |> in
   case lookup_function NONE tx.function_name Deploy ts of

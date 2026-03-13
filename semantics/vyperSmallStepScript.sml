@@ -159,8 +159,8 @@ Definition eval_expr_cps_def:
     liftk cx1 ApplyTv
       (do imms <- get_immutables cx1 (current_module cx1);
           n <<- string_to_num id;
-          v <- lift_option_type (FLOOKUP imms n) "BareGlobalName not found";
-          return $ Value v od st) k ∧
+          tvv <- lift_option_type (FLOOKUP imms n) "BareGlobalName not found";
+          return $ Value (SND tvv) od st) k ∧
   eval_expr_cps cx2 (TopLevelName _ (src_id_opt, id)) st k =
     liftk cx2 ApplyTv (lookup_global cx2 src_id_opt (string_to_num id) st) k ∧
   eval_expr_cps cx2 (FlagMember _ nsid mid) st k =

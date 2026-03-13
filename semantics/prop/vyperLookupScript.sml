@@ -554,9 +554,9 @@ Proof
 QED
 
 Theorem lookup_immutable_after_set_immutable:
-  ∀cx n v st st'.
-    set_immutable cx (current_module cx) (string_to_num n) v st = (INL (), st') ⇒
-    lookup_immutable cx st' (current_module cx) n = SOME v
+  ∀cx n tv v st st'.
+    set_immutable cx (current_module cx) (string_to_num n) tv v st = (INL (), st') ⇒
+    lookup_immutable cx st' (current_module cx) n = SOME (tv, v)
 Proof
   rw[set_immutable_def, lookup_immutable_def,
      bind_def, LET_THM, get_address_immutables_def,
