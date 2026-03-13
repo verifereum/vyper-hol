@@ -10,9 +10,9 @@
  *
  * Helper:
  *   expr_leq, mk_operand_expr, mk_inst_expr,
- *   expr_effects, avail_remove_effect, avail_add, avail_get_source,
- *   avail_empty, avail_meet_two, avail_meet_opt, avail_transfer_opt,
- *   avail_edge_transfer, avail_unwrap
+ *   expr_effects, root_effects, avail_remove_effect, avail_add,
+ *   avail_get_source, avail_empty, avail_meet_two, avail_meet_opt,
+ *   avail_transfer_opt, avail_edge_transfer, avail_unwrap
  *)
 
 Theory availExprDefs
@@ -101,6 +101,8 @@ End
 
 (* ===== Expression Effects ===== *)
 
+(* Recursive effects: includes all sub-expression effects.
+   Kept for correctness proofs, but NOT used for ae removal. *)
 Definition expr_effects_def:
   (expr_effects (ExprVar _) = empty_effects) /\
   (expr_effects (ExprLit _) = empty_effects) /\
@@ -112,6 +114,15 @@ Termination
   rpt strip_tac >>
   Induct_on `args` >> rw[fetch "-" "avail_expr_size_def"] >>
   res_tac >> simp[]
+End
+
+(* Root-only effects: effects of the root opcode only.
+   Matches Python's remove_effect which checks expr.opcode only.
+   Makes ae an overapproximation — CSE uses operand identity (canon map)
+   to filter false matches. *)
+Definition root_effects_def:
+  (root_effects (ExprOp op _) = read_effects op UNION write_effects op) /\
+  (root_effects _ = empty_effects)
 End
 
 (* ===== Available Expression Lattice ===== *)
@@ -129,12 +140,17 @@ Definition avail_add_def:
     | SOME insts => ae |+ (expr, insts ++ [inst])
 End
 
+(* Remove expressions whose ROOT opcode conflicts with the given effects.
+   Matches Python's remove_effect(effect) which only checks expr.opcode.
+   This is an overapproximation — keeps expressions with affected
+   sub-expressions. CSE's canon map + operand_ids check filters out
+   false positives at lookup time. *)
 Definition avail_remove_effect_def:
   avail_remove_effect (ae : avail_exprs) (eff : effects) =
     if eff = empty_effects then ae
     else DRESTRICT ae
       { expr | expr IN FDOM ae /\
-               DISJOINT (expr_effects expr) eff }
+               DISJOINT (root_effects expr) eff }
 End
 
 Definition avail_meet_two_def:
