@@ -857,8 +857,7 @@ QED
    storable_value transfer: prove storable_value for a new value
    from a lookup of an old value of the same type.
 
-   General theorem + specialized versions for integer types that
-   can be used directly as conditional rewrites in vcg_pre_ss.
+   General theorem + specialized versions for integer types.
    ============================================================ *)
 
 Theorem storable_value_transfer:
