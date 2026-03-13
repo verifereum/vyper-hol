@@ -7,6 +7,11 @@ Ancestors
   phiElim
   (* revert-to-assert *)
   rta
+  (* simple rewrite passes *)
+  assertElim
+  literalsCodesize
+  removeUnused
+  concretizeMemLoc
   (* lower dload/dloadbytes *)
   lowerDload
   (* float allocas to entry *)

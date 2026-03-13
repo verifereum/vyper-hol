@@ -21,7 +21,7 @@
 
 Theory passSharedDefs
 Ancestors
-  venomInst venomEffects memLocDefs
+  venomInst venomEffects memLocDefs While
 
 (* ===== Removability ===== *)
 
@@ -192,4 +192,42 @@ End
 Definition clear_nops_function_def:
   clear_nops_function fn =
     fn with fn_blocks := MAP clear_nops_block fn.fn_blocks
+End
+
+(* ===== Transitive use computation ===== *)
+
+(* Collect output variables of instructions that use any variable in vars.
+   Follows the use-def chain forward: if an instruction reads a var
+   in vars, its outputs are added. Matches Python dfg.get_transitive_uses. *)
+Definition use_step_def:
+  use_step fn vars =
+    FLAT (MAP (\bb.
+      FLAT (MAP (\inst.
+        if EXISTS (\op. case op of Var v => MEM v vars | _ => F)
+                  inst.inst_operands
+        then inst.inst_outputs
+        else [])
+        bb.bb_instructions))
+      fn.fn_blocks)
+End
+
+(* Single step of transitive closure: add newly reachable vars. *)
+Definition transitive_use_step_def:
+  transitive_use_step fn vars =
+    let new_vars = FILTER (\v. ~MEM v vars) (use_step fn vars) in
+    if new_vars = [] then NONE
+    else SOME (vars ++ new_vars)
+End
+
+(* Compute transitive closure of use-def chain from starting variables.
+   Iterates until fixpoint via OWHILE (terminates because the set of
+   accumulated variables grows strictly, bounded by total outputs). *)
+Definition transitive_use_vars_def:
+  transitive_use_vars fn vars =
+    case OWHILE ISL (\v. case transitive_use_step fn (OUTL v) of
+                           NONE => INR (OUTL v)
+                         | SOME vs => INL vs)
+                (INL vars) of
+      SOME (INR result) => result
+    | _ => vars
 End

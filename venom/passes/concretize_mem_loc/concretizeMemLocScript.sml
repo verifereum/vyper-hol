@@ -1,0 +1,3 @@
+Theory concretizeMemLoc
+Ancestors
+  concretizeMemLocDefs concretizeMemLocCorrectness

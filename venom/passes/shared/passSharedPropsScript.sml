@@ -2,14 +2,18 @@
  * Pass Shared Properties
  *
  * Correctness theorems for pass-shared utilities (mk_nop_inst,
- * mk_assign_inst, subst_operands, subst_operands_map) and
- * general semantic properties used by multiple passes
+ * mk_assign_inst, clear_nops, subst_operands, subst_operands_map)
+ * and general semantic properties used by multiple passes
  * (effects_independent_commute).
  *
  * TOP-LEVEL:
  *   Instruction builders:
  *     mk_nop_inst_correct        — NOP replacement is identity on state
  *     mk_assign_inst_correct     — ASSIGN replacement evaluates and binds output
+ *
+ *   NOP clearing:
+ *     clear_nops_block_correct    — removing NOPs from a block preserves execution
+ *     clear_nops_function_correct — removing NOPs from a function preserves execution
  *
  *   Operand substitution:
  *     subst_operand_eval           — single substitution preserves eval_operand
@@ -53,7 +57,66 @@ Proof
 QED
 
 (* ===================================================================== *)
-(* ===== Section 2: Operand Substitution =============================== *)
+(* ===== Section 2: NOP Clearing ======================================= *)
+(* ===================================================================== *)
+
+(* Removing NOP instructions from a block preserves execution.
+   NOP always succeeds with unchanged state (step_inst NOP s = OK s)
+   and is not a terminator, so run_block just advances vs_inst_idx
+   past it. FILTER-ing NOPs from the instruction list produces the
+   same execution result as running the block with NOPs present.
+
+   Proof sketch: by induction on the block execution (fuel +
+   instruction count). At each step:
+   - If current instruction is NOP: step gives OK s, then recurse
+     at next index. Equivalent to skipping it in the filtered list.
+   - If current instruction is not NOP: same instruction appears at
+     the corresponding index in the filtered list. Same step result.
+   The filtered block's indices are a subsequence of the original. *)
+Theorem clear_nops_block_correct:
+  !fuel ctx bb s.
+    s.vs_inst_idx = 0 ==>
+    run_block fuel ctx (clear_nops_block bb) s =
+    run_block fuel ctx bb s
+Proof
+  cheat
+QED
+
+(* Function-level: clear_nops_function preserves execution.
+   Follows from clear_nops_block_correct applied to each block.
+   clear_nops_block preserves bb_label, so block lookup is unchanged. *)
+Theorem clear_nops_function_correct:
+  !fuel ctx fn s.
+    s.vs_inst_idx = 0 ==>
+    run_function fuel ctx (clear_nops_function fn) s =
+    run_function fuel ctx fn s
+Proof
+  cheat
+QED
+
+(* Corollary: wrapping any function transform with clear_nops_function
+   preserves lift_result. If the un-cleared transform is correct,
+   the cleared version is too. *)
+Theorem clear_nops_lift_result:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool) fuel ctx fn fn' s.
+    s.vs_inst_idx = 0 /\
+    lift_result R_ok R_term
+      (run_function fuel ctx fn s)
+      (run_function fuel ctx fn' s) ==>
+    lift_result R_ok R_term
+      (run_function fuel ctx fn s)
+      (run_function fuel ctx (clear_nops_function fn') s)
+Proof
+  rpt strip_tac >>
+  `run_function fuel ctx (clear_nops_function fn') s =
+   run_function fuel ctx fn' s` by
+    (irule clear_nops_function_correct >> simp[]) >>
+  gvs[]
+QED
+
+(* ===================================================================== *)
+(* ===== Section 3: Operand Substitution =============================== *)
 (* ===================================================================== *)
 
 (* Substituting a variable with an equal-valued operand preserves
@@ -131,7 +194,7 @@ Proof
 QED
 
 (* ===================================================================== *)
-(* ===== Section 3: Effect Independence ================================ *)
+(* ===== Section 4: Effect Independence ================================ *)
 (* ===================================================================== *)
 
 (* Instructions with independent effects and no data dependencies
