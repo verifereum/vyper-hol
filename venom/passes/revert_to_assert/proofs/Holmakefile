@@ -1,2 +1,2 @@
 # Revert-to-assert pass proofs
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics ../defs ../../../simulation
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics ../defs ../../../simulation ../../../simulation/defs ../../../simulation/proofs
