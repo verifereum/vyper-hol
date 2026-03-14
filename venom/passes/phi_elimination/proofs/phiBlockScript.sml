@@ -251,13 +251,6 @@ QED
    Guarded by vs_prev_bb <> NONE (satisfied for all reachable non-entry blocks).
    ========================================================================== *)
 
-(* Helper: lift_result is reflexive when both relations are reflexive *)
-Theorem lift_result_refl[local]:
-  !R1 R2. (!s. R1 s s) /\ (!s. R2 s s) ==> !x. lift_result R1 R2 x x
-Proof
-  rw[] >> Cases_on `x` >> simp[lift_result_def]
-QED
-
 (* Helper: state_equiv {} implies equality *)
 Theorem state_equiv_empty_eq[local]:
   !s1 s2. state_equiv {} s1 s2 ==> (s1 = s2)
