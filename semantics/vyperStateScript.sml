@@ -646,8 +646,10 @@ Definition toplevel_array_length_def:
     storage <- get_storage_backend cx is_transient;
     return $ &(w2n (lookup_storage base_slot storage))
   od ∧
-  toplevel_array_length cx (Value (ArrayV av)) =
-    return $ &(array_length av) ∧
+  toplevel_array_length cx (Value (ArrayV (DynArrayV vs))) =
+    return $ &(LENGTH vs) ∧
+  toplevel_array_length cx (Value (ArrayV (TupleV vs))) =
+    return $ &(LENGTH vs) ∧
   toplevel_array_length cx (Value (BytesV ls)) =
     return $ &(LENGTH ls) ∧
   toplevel_array_length cx (Value (StringV ls)) =
@@ -670,11 +672,11 @@ End
 val () = cv_auto_trans value_to_key_def;
 
 Definition evaluate_subscript_def:
-  evaluate_subscript tenv (Value (ArrayV av)) (IntV i) =
-  (case array_index av i
+  evaluate_subscript tenv tv (Value (ArrayV av)) (IntV i) =
+  (case array_index tv av i
    of SOME v => INL $ INL $ Value v
     | _ => INR (RuntimeError "subscript array_index")) ∧
-  evaluate_subscript tenv (HashMapRef is_transient slot kt vt) kv =
+  evaluate_subscript tenv _ (HashMapRef is_transient slot kt vt) kv =
   (let new_slot = hashmap_slot slot $ encode_hashmap_key kt kv in
    case vt
    of HashMapT kt' vt' => INL $ INL $ HashMapRef is_transient new_slot kt' vt'
@@ -682,7 +684,7 @@ Definition evaluate_subscript_def:
         (case evaluate_type tenv t of
          | SOME tv => INL $ INR (is_transient, new_slot, tv)
          | NONE => INR (TypeError "evaluate_subscript evaluate_type"))) ∧
-  evaluate_subscript tenv (ArrayRef is_transient base_slot elem_tv bd) (IntV i) =
+  evaluate_subscript tenv _ (ArrayRef is_transient base_slot elem_tv bd) (IntV i) =
   (if 0 ≤ i ∧ Num i < bound_length bd then
     let elem_offset = (case bd of Fixed _ => 0 | Dynamic _ => 1) in
     let slot = base_slot + n2w (elem_offset + Num i * type_slot_size elem_tv) in
@@ -691,33 +693,36 @@ Definition evaluate_subscript_def:
         INL $ INL $ ArrayRef is_transient slot inner_tv inner_bd
     | _ => INL $ INR (is_transient, slot, elem_tv)
    else INR (RuntimeError "subscript array out of bounds")) ∧
-  evaluate_subscript _ _ _ = INR (TypeError "evaluate_subscript")
+  evaluate_subscript _ _ _ _ = INR (TypeError "evaluate_subscript")
 End
 
 val () = cv_auto_trans evaluate_subscript_def;
 
 Definition evaluate_subscripts_def:
-  evaluate_subscripts a [] = INL a ∧
-  evaluate_subscripts a ((IntSubscript i)::is) =
+  evaluate_subscripts tv a [] = INL a ∧
+  evaluate_subscripts tv a ((IntSubscript i)::is) =
   (case a of ArrayV av =>
-   (case array_index av i of SOME v =>
-    (case evaluate_subscripts v is of INL vj => INL vj
+   (let elem_tv = (case tv of ArrayTV t _ => t | _ => NoneTV) in
+    case array_index tv av i of SOME v =>
+    (case evaluate_subscripts elem_tv v is of INL vj => INL vj
      | INR err => INR err)
     | _ => INR (RuntimeError "evaluate_subscripts array_index"))
    | _ => INR (TypeError "evaluate_subscripts type")) ∧
-  evaluate_subscripts (StructV al) ((AttrSubscript id)::is) =
-  (case ALOOKUP al id of SOME v =>
-    (case evaluate_subscripts v is of INL v' => INL v'
+  evaluate_subscripts tv (StructV al) ((AttrSubscript id)::is) =
+  (let field_tv = (case tv of StructTV args =>
+      (case ALOOKUP args id of SOME t => t | NONE => NoneTV) | _ => NoneTV) in
+   case ALOOKUP al id of SOME v =>
+    (case evaluate_subscripts field_tv v is of INL v' => INL v'
      | INR err => INR err)
    | _ => INR (TypeError "evaluate_subscripts AttrSubscript")) ∧
-  evaluate_subscripts _ _ = INR (TypeError "evaluate_subscripts")
+  evaluate_subscripts _ _ _ = INR (TypeError "evaluate_subscripts")
 End
 
 val evaluate_subscripts_pre_def =
   cv_auto_trans_pre "evaluate_subscripts_pre" evaluate_subscripts_def;
 
 Theorem evaluate_subscripts_pre[cv_pre]:
-  !a b. evaluate_subscripts_pre a b
+  !a b c. evaluate_subscripts_pre a b c
 Proof
   ho_match_mp_tac evaluate_subscripts_ind
   \\ rw[Once evaluate_subscripts_pre_def]
@@ -742,34 +747,37 @@ Theorem assign_operation_CASE_rator =
     (Option.valOf (TypeBase.read {Thy="vyperState",Tyop="assign_operation"}));
 
 Definition assign_subscripts_def:
-  assign_subscripts a [] (Replace v) = INL v (* TODO: cast to type of a *) ∧
-  assign_subscripts a [] (Update ty bop v) =
+  assign_subscripts tv a [] (Replace v) = INL v (* TODO: cast to type of a *) ∧
+  assign_subscripts tv a [] (Update ty bop v) =
     (let u = case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0 in
        evaluate_binop u NoneTV bop a v) ∧
-  assign_subscripts a [] (AppendOp v) = append_element a v ∧
-  assign_subscripts a [] PopOp = pop_element a ∧
-  assign_subscripts a ((IntSubscript i)::is) ao =
+  assign_subscripts tv a [] (AppendOp v) = append_element tv a v ∧
+  assign_subscripts tv a [] PopOp = pop_element a ∧
+  assign_subscripts tv a ((IntSubscript i)::is) ao =
   (case a of ArrayV av =>
-   (case array_index av i of SOME v =>
-    (case assign_subscripts v is ao of INL vj =>
-       array_set_index av i vj
+   (let elem_tv = (case tv of ArrayTV t _ => t | _ => NoneTV) in
+    case array_index tv av i of SOME v =>
+    (case assign_subscripts elem_tv v is ao of INL vj =>
+       array_set_index tv av i vj
      | INR err => INR err)
     | _ => INR (RuntimeError "assign_subscripts array_index"))
    | _ => INR (TypeError "assign_subscripts type")) ∧
-  assign_subscripts (StructV al) ((AttrSubscript id)::is) ao =
-  (case ALOOKUP al id of SOME v =>
-    (case assign_subscripts v is ao of INL v' =>
+  assign_subscripts tv (StructV al) ((AttrSubscript id)::is) ao =
+  (let field_tv = (case tv of StructTV args =>
+      (case ALOOKUP args id of SOME t => t | NONE => NoneTV) | _ => NoneTV) in
+   case ALOOKUP al id of SOME v =>
+    (case assign_subscripts field_tv v is ao of INL v' =>
       INL $ StructV $ AFUPDKEY id (K v') al
      | INR err => INR err)
    | _ => INR (TypeError "assign_subscripts AttrSubscript")) ∧
-  assign_subscripts _ _ _ = INR (TypeError "assign_subscripts")
+  assign_subscripts _ _ _ _ = INR (TypeError "assign_subscripts")
 End
 
 val assign_subscripts_pre_def =
   cv_auto_trans_pre "assign_subscripts_pre" assign_subscripts_def;
 
 Theorem assign_subscripts_pre[cv_pre]:
-  !a b c. assign_subscripts_pre a b c
+  !a b c d. assign_subscripts_pre a b c d
 Proof
   ho_match_mp_tac assign_subscripts_ind
   \\ rw[Once assign_subscripts_pre_def]
@@ -830,12 +838,12 @@ Proof
 QED
 
 Definition assign_result_def:
-  assign_result PopOp old_val subs = do
-    arr <- lift_sum $ evaluate_subscripts old_val subs;
+  assign_result tv PopOp old_val subs = do
+    arr <- lift_sum $ evaluate_subscripts tv old_val subs;
     p <- lift_sum $ popped_value arr;
     return $ SOME p
   od ∧
-  assign_result _ _ _ = return NONE
+  assign_result _ _ _ _ = return NONE
 End
 
 val () = assign_result_def
@@ -847,9 +855,9 @@ Definition assign_target_def:
     ni <<- string_to_num id;
     sc <- get_scopes;
     (pre, env, tv, a, rest) <- lift_option (find_containing_scope ni sc) "assign_target lookup";
-    a' <- lift_sum $ assign_subscripts a (REVERSE is) ao;
+    a' <- lift_sum $ assign_subscripts tv a (REVERSE is) ao;
     set_scopes $ pre ++ env |+ (ni, (tv, a')) :: rest;
-    assign_result ao a (REVERSE is)
+    assign_result tv ao a (REVERSE is)
   od ∧
   assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) is) ao = do
     ni <<- string_to_num id;
@@ -858,9 +866,13 @@ Definition assign_target_def:
     tenv <<- get_tenv cx;
     case tv of
     | Value v => do
-        v' <- lift_sum $ assign_subscripts v (REVERSE is) ao;
+        var_tv <- lift_option_type
+          (OPTION_BIND (find_var_decl_by_num ni ts)
+             (λp. case FST p of StorageVarDecl _ typ => evaluate_type tenv typ | _ => NONE))
+          "assign_target TopLevelVar type";
+        v' <- lift_sum $ assign_subscripts var_tv v (REVERSE is) ao;
         set_global cx src_id_opt ni v';
-        assign_result ao v (REVERSE is)
+        assign_result var_tv ao v (REVERSE is)
       od
     | HashMapRef is_transient base_slot kt vt => do
         (first_sub, rest_subs) <- lift_option_type
@@ -876,9 +888,9 @@ Definition assign_target_def:
           "assign_target compute_hashmap_slot";
         final_tv <- lift_option_type (evaluate_type tenv final_type) "assign_target evaluate_type";
         current_val <- read_storage_slot cx is_transient final_slot final_tv;
-        new_val <- lift_sum $ assign_subscripts current_val remaining_subs ao;
+        new_val <- lift_sum $ assign_subscripts final_tv current_val remaining_subs ao;
         write_storage_slot cx is_transient final_slot final_tv new_val;
-        assign_result ao current_val remaining_subs
+        assign_result final_tv ao current_val remaining_subs
       od
     | ArrayRef is_transient base_slot elem_tv bd => do
         (elem_slot, final_tv, remaining_subs) <-
@@ -908,9 +920,9 @@ Definition assign_target_def:
           od
         | _ => do
             current_val <- read_storage_slot cx is_transient elem_slot final_tv;
-            new_val <- lift_sum $ assign_subscripts current_val remaining_subs ao;
+            new_val <- lift_sum $ assign_subscripts final_tv current_val remaining_subs ao;
             write_storage_slot cx is_transient elem_slot final_tv new_val;
-            assign_result ao current_val remaining_subs
+            assign_result final_tv ao current_val remaining_subs
           od
       od
   od ∧
@@ -919,9 +931,9 @@ Definition assign_target_def:
     src <<- current_module cx;
     imms <- get_immutables cx src;
     tva <- lift_option_type (FLOOKUP imms ni) "assign_target ImmutableVar";
-    a' <- lift_sum $ assign_subscripts (SND tva) (REVERSE is) ao;
+    a' <- lift_sum $ assign_subscripts (FST tva) (SND tva) (REVERSE is) ao;
     set_immutable cx src ni (FST tva) a';
-    assign_result ao (SND tva) (REVERSE is)
+    assign_result (FST tva) ao (SND tva) (REVERSE is)
   od ∧
   assign_target cx (TupleTargetV gvs) (Replace (ArrayV (TupleV vs))) = do
     type_check (LENGTH gvs = LENGTH vs) "TupleTargetV length";

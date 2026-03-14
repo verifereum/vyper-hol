@@ -214,19 +214,15 @@ Definition encode_value_def:
   encode_value NoneTV v = SOME [] /\
   encode_value (TupleTV tvs) (ArrayV (TupleV vs)) =
     encode_tuple 0 tvs vs /\
-  encode_value (ArrayTV tv (Fixed n)) (ArrayV (SArrayV tv' m sparse)) =
-    (if tv = tv' ∧ n = m then
-       let zeros = GENLIST (λi. (i, 0w)) (n * type_slot_size tv) in
-       case encode_static_array tv 0 sparse of
-       | SOME nonzeros => SOME (zeros ++ nonzeros)
-       | NONE => NONE
-     else NONE) /\
-  encode_value (ArrayTV tv (Dynamic max)) (ArrayV (DynArrayV tv' m vs)) =
-    (if tv = tv' ∧ max = m then
-       (case encode_dyn_array tv 1 vs of
-        | SOME slots => SOME ((0, n2w (LENGTH vs)) :: slots)
-        | NONE => NONE)
-     else NONE) /\
+  encode_value (ArrayTV tv (Fixed n)) (ArrayV (SArrayV sparse)) =
+    (let zeros = GENLIST (λi. (i, 0w)) (n * type_slot_size tv) in
+     case encode_static_array tv 0 sparse of
+     | SOME nonzeros => SOME (zeros ++ nonzeros)
+     | NONE => NONE) /\
+  encode_value (ArrayTV tv (Dynamic max)) (ArrayV (DynArrayV vs)) =
+    (case encode_dyn_array tv 1 vs of
+     | SOME slots => SOME ((0, n2w (LENGTH vs)) :: slots)
+     | NONE => NONE) /\
   encode_value (StructTV ftypes) (StructV fields) =
     encode_struct 0 ftypes fields /\
   encode_value _ _ = NONE /\
@@ -339,13 +335,13 @@ Definition decode_value_def:
      | NONE => NONE) /\
   decode_value storage offset (ArrayTV tv (Fixed n)) =
     (case decode_static_array storage offset tv n of
-     | SOME vs => SOME (ArrayV (SArrayV tv n (enumerate_static_array (default_value tv) 0 vs)))
+     | SOME vs => SOME (ArrayV (SArrayV (enumerate_static_array (default_value tv) 0 vs)))
      | NONE => NONE) /\
   decode_value storage offset (ArrayTV tv (Dynamic max)) =
     (let len = w2n (read_slot storage offset) in
      if len ≤ max then
        (case decode_dyn_array storage (offset + 1) tv (MIN len max) of
-        | SOME vs => SOME (ArrayV (DynArrayV tv max vs))
+        | SOME vs => SOME (ArrayV (DynArrayV vs))
         | NONE => NONE)
      else NONE) /\
   decode_value storage offset (StructTV ftypes) =
