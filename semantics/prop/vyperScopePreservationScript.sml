@@ -1,6 +1,6 @@
 Theory vyperScopePreservation
 Ancestors
-  vyperAST vyperMisc vyperState vyperValue vyperInterpreter vyperLookup vyperImmutablesPreservation
+  vyperAST vyperMisc vyperState vyperValue vyperInterpreter vyperLookup vyperLookupStorage vyperImmutablesPreservation
 
 (* ===== Lemmas about scopes preservation ===== *)
 
@@ -524,13 +524,4 @@ Proof
   rpt strip_tac >>
   fs[finally_def, set_scopes_def, AllCaseEqs(), ignore_bind_def, return_def, raise_def, bind_def] >>
   gvs[]
-QED
-
-Theorem update_toplevel_name_preserves_scopes:
-  ∀cx st mid n v.
-    (update_toplevel_name cx st mid n v).scopes = st.scopes
-Proof
-  rw[update_toplevel_name_def] >>
-  Cases_on `set_global cx mid (string_to_num n) v st` >>
-  imp_res_tac set_global_scopes >> simp[]
 QED
