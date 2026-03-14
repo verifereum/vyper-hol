@@ -293,3 +293,22 @@ Definition fresh_vars_not_in_context_def:
     !fn. MEM fn ctx.ctx_functions ==> fresh_vars_not_in_function fn
 End
 
+(* ==========================================================================
+   No-INVOKE Constraint
+   ========================================================================== *)
+
+(*
+ * no_invoke_in_function: all blocks in fn have no INVOKE instructions.
+ * Needed for fuel independence (run_block doesn't consume fuel without INVOKE).
+ *)
+Definition no_invoke_in_function_def:
+  no_invoke_in_function fn <=>
+    EVERY (\bb. EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions)
+      fn.fn_blocks
+End
+
+Definition no_invoke_in_context_def:
+  no_invoke_in_context ctx <=>
+    EVERY no_invoke_in_function ctx.ctx_functions
+End
+
