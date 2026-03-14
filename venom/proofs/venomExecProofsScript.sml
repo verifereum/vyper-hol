@@ -160,6 +160,79 @@ Proof
   gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[]
 QED
 
+(* run_block OK implies prev_bb was set by jump_to (JMP/JNZ/DJMP) *)
+Theorem run_block_ok_sets_prev_bb:
+  !fuel ctx bb s s'.
+    run_block fuel ctx bb s = OK s' ==>
+    s'.vs_prev_bb <> NONE
+Proof
+  ho_match_mp_tac (cj 2 run_defs_ind) >>
+  qexists_tac `\fuel ctx inst s. T` >>
+  qexists_tac `\fuel ctx fn s. T` >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  simp[Once run_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
+  rename1 `SOME inst` >>
+  Cases_on `step_inst fuel ctx inst s` >> simp[] >>
+  rw[] >> gvs[] >>
+  Cases_on `is_terminator inst.inst_opcode` >> gvs[] >>
+  (* terminator case: step_inst returned OK, must be JMP/JNZ/DJMP *)
+  qpat_x_assum `is_terminator _` mp_tac >>
+  simp[is_terminator_def] >>
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[Once step_inst_def, step_inst_base_def, jump_to_def] >>
+  gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[]
+QED
+
+(* bind_outputs preserves vs_prev_bb *)
+Triviality foldl_update_var_prev_bb:
+  !kvs s.
+    (FOLDL (\s' (k,v). update_var k v s') s kvs).vs_prev_bb =
+    s.vs_prev_bb
+Proof
+  Induct >> simp[] >> Cases >> simp[update_var_def]
+QED
+
+Triviality bind_outputs_prev_bb:
+  bind_outputs outs vals s = SOME s' ==> s'.vs_prev_bb = s.vs_prev_bb
+Proof
+  rw[bind_outputs_def, AllCaseEqs()] >> simp[foldl_update_var_prev_bb]
+QED
+
+(* step_inst OK preserves vs_prev_bb for non-terminators (including INVOKE) *)
+Theorem step_inst_preserves_prev_bb:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_terminator inst.inst_opcode ==>
+    s'.vs_prev_bb = s.vs_prev_bb
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- ((* INVOKE: step_inst unfolds to run_function + bind_outputs + merge_callee *)
+      qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+      simp[Once step_inst_def] >>
+      gvs[AllCaseEqs()] >> rw[] >>
+      imp_res_tac bind_outputs_prev_bb >>
+      gvs[merge_callee_state_def])
+  >> (* non-INVOKE: step_inst = step_inst_base *)
+     `step_inst fuel ctx inst s = step_inst_base inst s`
+       by metis_tac[step_inst_non_invoke] >>
+     gvs[] >>
+     qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+     simp[step_inst_base_def] >>
+     Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+     simp[exec_pure2_def, exec_pure1_def, exec_pure3_def,
+          exec_read0_def, exec_read1_def, exec_write2_def,
+          exec_ext_call_def, exec_delegatecall_def,
+          exec_create_def, exec_alloca_def,
+          extract_venom_result_def] >>
+     strip_tac >> gvs[AllCaseEqs()] >>
+     rpt (pairarg_tac >> gvs[AllCaseEqs()]) >>
+     gvs[update_var_def, mstore_def, sstore_def, tstore_def,
+         write_memory_with_expansion_def, mcopy_def, revert_state_def]
+QED
+
 (* step_inst_base returns Error for INVOKE *)
 Theorem step_inst_base_OK_not_INVOKE:
   step_inst_base inst s = OK s' ==> inst.inst_opcode <> INVOKE
