@@ -1,22 +1,23 @@
 (*
- * Revert-to-Assert Pass — Correctness Statements
+ * Revert-to-Assert Pass — Correctness
  *
  * Top-level correctness: the transformation preserves semantics
  * modulo fresh variables introduced by the pass.
  *
- * Proofs live in proofs/rtaCorrectnessProofScript.sml; re-exported via ACCEPT_TAC.
+ * Proof strategy: instantiate resolving_block_sim_function from the
+ * cross-block simulation framework. RTA uses resolution n=1 for
+ * JNZ-to-revert blocks (original jumps to revert block, transformed
+ * reverts inline; one resolution step runs the revert block).
  *)
 
 Theory rtaCorrectness
 Ancestors
-  rtaCorrectnessProof
+  rtaDefs rtaCorrectnessProofs
+  crossBlockSimProps passSimulationProps
+  stateEquiv stateEquivProps execEquivProps
+  venomExecProps venomExecSemantics venomInst venomState
 
-(* Revert-to-assert preserves execution semantics at the context level.
- * Given fresh_vars_not_in_context (original code doesn't use fresh names)
- * and an existing entry function, the transformed context contains a
- * corresponding function satisfying pass_correct: termination equivalence
- * and result equivalence modulo fresh variables.
- * Requires initial state with vs_inst_idx = 0 and not halted. *)
+(* Revert-to-assert preserves execution semantics at the context level. *)
 Theorem rta_pass_correct:
   !ctx entry.
     fresh_vars_not_in_context ctx /\
@@ -33,5 +34,5 @@ Theorem rta_pass_correct:
             (\fuel. run_function fuel ctx fn s)
             (\fuel. run_function fuel ctx fn' s)
 Proof
-  ACCEPT_TAC revert_to_assert_pass_correct
+  ACCEPT_TAC rta_pass_correct_proof
 QED
