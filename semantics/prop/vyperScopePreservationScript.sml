@@ -270,7 +270,7 @@ Proof
 QED
 
 Theorem assign_result_scopes:
-  !ao v subs st res st'. assign_result ao v subs st = (res, st') ==> st'.scopes = st.scopes
+  !tv ao v subs st res st'. assign_result tv ao v subs st = (res, st') ==> st'.scopes = st.scopes
 Proof
   Cases_on `ao` >> rw[assign_result_def, return_def, bind_def, lift_sum_def] >>
   qpat_x_assum `_ = (res, st')` mp_tac >>
@@ -317,24 +317,25 @@ Theorem hashmap_branch_scopes:
   ∀cx b c t v is ao r res st'.
     do
       (first_sub,rest_subs) <-
-        lift_option
+        lift_option_type
           (case REVERSE is of x::xs => SOME (x,xs) | [] => NONE)
           "assign_target hashmap needs subscript";
       (final_type,key_types,remaining_subs) <-
-        lift_option (split_hashmap_subscripts v rest_subs)
+        lift_option_type (split_hashmap_subscripts v rest_subs)
           "assign_target split_hashmap_subscripts";
+      hashmap_subs <<- first_sub :: TAKE (LENGTH rest_subs − LENGTH remaining_subs) rest_subs;
+      all_key_types <<- t :: key_types;
       final_slot <-
-        lift_option
-          (compute_hashmap_slot c (t::key_types)
-             (first_sub::TAKE (LENGTH rest_subs − LENGTH remaining_subs) rest_subs))
+        lift_option_type
+          (compute_hashmap_slot c all_key_types hashmap_subs)
           "assign_target compute_hashmap_slot";
       final_tv <-
-        lift_option (evaluate_type (get_tenv cx) final_type)
+        lift_option_type (evaluate_type (get_tenv cx) final_type)
           "assign_target evaluate_type";
       current_val <- read_storage_slot cx b final_slot final_tv;
-      new_val <- lift_sum (assign_subscripts current_val remaining_subs ao);
+      new_val <- lift_sum (assign_subscripts final_tv current_val remaining_subs ao);
       write_storage_slot cx b final_slot final_tv new_val;
-      assign_result ao current_val remaining_subs
+      assign_result final_tv ao current_val remaining_subs
     od r = (res, st') ⇒
     st'.scopes = r.scopes
 Proof
@@ -420,7 +421,7 @@ Proof
     gvs[assign_target_def, bind_def, get_scopes_def, return_def, lift_option_def] >>
     Cases_on `find_containing_scope (string_to_num id) st.scopes` >> gvs[return_def, raise_def] >>
     PairCases_on `x` >> gvs[bind_def, lift_sum_def] >>
-    Cases_on `assign_subscripts x3 (REVERSE is) ao` >>
+    Cases_on `assign_subscripts x2 x3 (REVERSE is) ao` >>
     gvs[return_def, raise_def, bind_def, ignore_bind_def, set_scopes_def] >>
     imp_res_tac assign_result_scopes >> gvs[] >>
     drule find_containing_scope_map_fdom >> simp[])

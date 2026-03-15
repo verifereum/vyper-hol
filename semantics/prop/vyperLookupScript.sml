@@ -372,14 +372,14 @@ Proof
 QED
 
 Theorem assign_target_name_subscripts_state:
-  ∀cx st n sbs ao a a'.
-    lookup_name st n = SOME a ∧
-    assign_subscripts a (REVERSE sbs) ao = INL a' ⇒
+  ∀cx st n sbs ao tv a a'.
+    lookup_name_typed st n = SOME (tv, a) ∧
+    assign_subscripts tv a (REVERSE sbs) ao = INL a' ⇒
     SND (assign_target cx (BaseTargetV (ScopedVar n) sbs) ao st) =
       update_name st n a'
 Proof
   rpt gen_tac >> strip_tac >>
-  gvs[lookup_name_def, lookup_scopes_val_SOME] >>
+  gvs[lookup_name_typed_def] >>
   `IS_SOME (find_containing_scope (string_to_num n) st.scopes)`
     by (irule lookup_scopes_find_containing >> simp[]) >>
   Cases_on `find_containing_scope (string_to_num n) st.scopes` >- gvs[] >>
@@ -393,9 +393,9 @@ Proof
 QED
 
 Theorem assign_subscripts_PopOp_assign_result:
-  ∀a subs a'.
-    assign_subscripts a subs PopOp = INL a' ⇒
-    ∃v. evaluate_subscripts a subs = INL v ∧ ISL (popped_value v)
+  ∀tv a subs a'.
+    assign_subscripts tv a subs PopOp = INL a' ⇒
+    ∃v. evaluate_subscripts tv a subs = INL v ∧ ISL (popped_value v)
 Proof
   Induct_on `subs`
   (* base case *)
@@ -417,13 +417,13 @@ Proof
 QED
 
 Theorem assign_target_name_subscripts_valid:
-  ∀cx st n sbs ao a a'.
-    lookup_name st n = SOME a ∧
-    assign_subscripts a (REVERSE sbs) ao = INL a' ⇒
+  ∀cx st n sbs ao tv a a'.
+    lookup_name_typed st n = SOME (tv, a) ∧
+    assign_subscripts tv a (REVERSE sbs) ao = INL a' ⇒
     ISL (FST (assign_target cx (BaseTargetV (ScopedVar n) sbs) ao st))
 Proof
   rpt gen_tac >> strip_tac >>
-  gvs[lookup_name_def, lookup_scopes_val_SOME] >>
+  gvs[lookup_name_typed_def] >>
   `IS_SOME (find_containing_scope (string_to_num n) st.scopes)`
     by (irule lookup_scopes_find_containing >> simp[]) >>
   Cases_on `find_containing_scope (string_to_num n) st.scopes` >- gvs[] >>
