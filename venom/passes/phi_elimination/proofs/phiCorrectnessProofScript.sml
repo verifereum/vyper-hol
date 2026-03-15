@@ -1,243 +1,86 @@
 (*
  * PHI Elimination Function-Level Correctness
  *
- * This theory proves function and context-level correctness of PHI elimination.
+ * Uses block_sim_function_reachable from the simulation framework
+ * to lift per-block simulation (phi_elim_block_sim) to function level.
  *
- * ============================================================================
- * STRUCTURE OVERVIEW
- * ============================================================================
- *
- * TOP-LEVEL THEOREMS:
- *   - phi_elimination_correct         : Function-level correctness (uses wf_ir_fn)
- *   - phi_elimination_context_correct : Context-level correctness (uses wf_ir_fn)
- *
- * HELPER THEOREMS:
- *   - phi_elimination_correct_internal: Internal version using phi_wf_fn
- *   - run_function_state_equiv        : Function execution preserves equiv
- *
- * ============================================================================
+ * Single top-level theorem: phi_elimination_context_correct.
  *)
 
 Theory phiCorrectnessProof
 Ancestors
-  phiBlock execEquivProps venomExecSemantics venomInst stateEquiv stateEquivProps phiWellFormed phiTransform phiDefs list
+  phiBlock passSimulationProps passSimulationDefs execEquivParamProps
+  venomExecSemantics venomInst stateEquiv stateEquivProps
+  phiWellFormed phiTransform phiDefs list
 
-(* ==========================================================================
-   Function Execution Helpers
-   ========================================================================== *)
-
-(*
- * no_invoke_in_function: all blocks in fn have no INVOKE instructions.
- * Needed because run_block_result_equiv requires ¬INVOKE per block.
- *)
-Definition no_invoke_in_function_def:
-  no_invoke_in_function fn <=>
-    EVERY (\bb. EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions)
-      fn.fn_blocks
-End
-
-(* Function execution preserves state equivalence - induction on fuel *)
-Theorem run_function_state_equiv:
-  !fuel fn s1 s2 r1.
-    state_equiv {} s1 s2 /\
-    no_invoke_in_function fn /\
-    run_function fuel ctx fn s1 = r1
-  ==>
-    ?r2. run_function fuel ctx fn s2 = r2 /\ result_equiv {} r1 r2
+(* Helper: transform_function matches function_map_transform shape *)
+Theorem transform_function_is_function_map_transform:
+  !fn. transform_function fn =
+       function_map_transform (transform_block (dfg_build_function fn)) fn
 Proof
-  Induct_on `fuel` >>
-  rpt strip_tac
-  >- (
-    (* Base case: fuel = 0 - explicitly provide witness *)
-    qexists_tac `run_function 0 ctx fn s2` >> simp[] >>
-    gvs[Once (run_function_def), result_equiv_def] >>
-    simp[Once (run_function_def), result_equiv_def]
-  ) >>
-  (* SUC fuel case - unfold carefully *)
-  qpat_x_assum `run_function (SUC _) _ _ _ = _` mp_tac >>
-  simp[Once (run_function_def)] >> strip_tac >>
-  `s1.vs_current_bb = s2.vs_current_bb` by fs[state_equiv_def, execution_equiv_def] >>
-  simp[Once (run_function_def)] >>
-  Cases_on `lookup_block s1.vs_current_bb fn.fn_blocks` >> gvs[result_equiv_def] >>
-  `EVERY (\inst. inst.inst_opcode <> INVOKE) x.bb_instructions` by
-    (fs[no_invoke_in_function_def, EVERY_MEM] >>
-     metis_tac[lookup_block_MEM]) >>
-  `result_equiv {} (run_block fuel ctx x s1) (run_block fuel ctx x s2)` by (
-    irule run_block_result_equiv >> simp[]
-  ) >>
-  Cases_on `run_block fuel ctx x s1` >> Cases_on `run_block fuel ctx x s2` >>
-  gvs[result_equiv_def] >>
-  (* OK/OK case - check vs_halted *)
-  `v.vs_halted <=> v'.vs_halted` by fs[state_equiv_def, execution_equiv_def] >>
-  Cases_on `v.vs_halted` >> gvs[result_equiv_def, state_equiv_def]
+  simp[transform_function_def, function_map_transform_def, LET_DEF]
 QED
 
-(* ==========================================================================
-   Function-level Correctness
-   ========================================================================== *)
-
-(* Helper: Internal theorem using phi_wf_fn *)
-Theorem phi_elimination_correct_internal:
-  !fuel (func:ir_function) s result.
-    phi_wf_fn func /\
-    no_invoke_in_function func /\
-    func.fn_blocks <> [] /\
-    (s.vs_prev_bb <> NONE \/
-     s.vs_current_bb = (HD func.fn_blocks).bb_label) /\
-    run_function fuel ctx func s = result ==>
-    ?result'. run_function fuel ctx (transform_function func) s = result' /\
-              result_equiv {} result result'
-Proof
-  (* Proof by induction on fuel *)
-  Induct_on `fuel` >> rpt strip_tac
-  >- (
-    (* Base case: fuel = 0, vs_prev_bb <> NONE *)
-    qexists_tac `run_function 0 ctx (transform_function func) s` >> simp[] >>
-    gvs[Once (run_function_def), result_equiv_def] >>
-    simp[Once (run_function_def), result_equiv_def]
-  )
-  >- (
-    (* Base case: fuel = 0, at entry block *)
-    qexists_tac `run_function 0 ctx (transform_function func) s` >> simp[] >>
-    gvs[Once (run_function_def), result_equiv_def] >>
-    simp[Once (run_function_def), result_equiv_def]
-  )
-  >- (
-    (* SUC fuel case: vs_prev_bb <> NONE *)
-    qpat_x_assum `run_function (SUC _) _ _ _ = _` mp_tac >>
-    simp[Once (run_function_def)] >> strip_tac >>
-    simp[Once (run_function_def), transform_function_def, lookup_block_transform] >>
-    Cases_on `lookup_block s.vs_current_bb func.fn_blocks` >> gvs[result_equiv_def] >>
-    rename1 `lookup_block _ _ = SOME bb` >>
-    (* Normalize to use transform_function for IH *)
-    `(func with fn_blocks := MAP (transform_block (dfg_build_function func)) func.fn_blocks) =
-     transform_function func` by simp[transform_function_def, LET_DEF] >>
-    pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> REWRITE_TAC [th]) >>
-    `MEM bb func.fn_blocks` by metis_tac[lookup_block_MEM] >>
-    `EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions` by
-      (fs[no_invoke_in_function_def, EVERY_MEM] >> metis_tac[]) >>
-    `result_equiv {} (run_block fuel ctx bb s) (run_block fuel ctx (transform_block (dfg_build_function func) bb) s)` by (
-      irule transform_block_result_equiv >> simp[] >>
-      fs[phi_wf_fn_def, LET_DEF] >> rpt conj_tac >>
-      rpt strip_tac >> first_x_assum drule_all >> simp[]
-    ) >>
-    Cases_on `run_block fuel ctx bb s` >> Cases_on `run_block fuel ctx (transform_block (dfg_build_function func) bb) s` >>
-    gvs[result_equiv_def] >>
-    TRY (`v.vs_halted <=> v'.vs_halted` by fs[state_equiv_def, execution_equiv_def]) >>
-    Cases_on `v.vs_halted`
-    >- gvs[result_equiv_def, state_equiv_def] >>
-    gvs[] >>
-    (* Not halted - use run_function_state_equiv to bridge state_equiv *)
-    `?r2. run_function fuel ctx func v' = r2 /\ result_equiv {} (run_function fuel ctx func v) r2` by (
-      qspecl_then [`fuel`, `func`, `v`, `v'`, `run_function fuel ctx func v`]
-        mp_tac run_function_state_equiv >> simp[]
-    ) >>
-    irule result_equiv_trans >> qexists_tac `r2` >> simp[] >>
-    (* Use IH - first prove v'.vs_prev_bb <> NONE *)
-    `v.vs_prev_bb <> NONE` by (
-      qspecl_then [`fuel`, `ctx`, `bb`, `s`, `v`] mp_tac
-        run_block_ok_not_halted_sets_prev_bb >> simp[]
-    ) >>
-    `v'.vs_prev_bb <> NONE` by gvs[state_equiv_def] >>
-    first_x_assum (qspecl_then [`func`, `v'`] mp_tac) >>
-    impl_tac >- simp[] >>
-    strip_tac >> gvs[]
-  ) >>
-  (* SUC fuel case: at entry block *)
-  qpat_x_assum `run_function (SUC _) _ _ _ = _` mp_tac >>
-  simp[Once (run_function_def)] >> strip_tac >>
-  simp[Once (run_function_def), transform_function_def, lookup_block_transform] >>
-  Cases_on `lookup_block s.vs_current_bb func.fn_blocks` >> gvs[result_equiv_def] >>
-  rename1 `lookup_block _ _ = SOME bb` >>
-  `MEM bb func.fn_blocks` by metis_tac[lookup_block_MEM] >>
-  `EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions` by
-    (fs[no_invoke_in_function_def, EVERY_MEM] >> metis_tac[]) >>
-  (* Normalize to use transform_function for IH *)
-  `(func with fn_blocks := MAP (transform_block (dfg_build_function func)) func.fn_blocks) =
-   transform_function func` by simp[transform_function_def, LET_DEF] >>
-  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> REWRITE_TAC [th]) >>
-  (* At entry block: use run_block_transform_identity since entry block has no PHI with single origin *)
-  `run_block fuel ctx (transform_block (dfg_build_function func) bb) s = run_block fuel ctx bb s` by (
-    irule run_block_transform_identity >>
-    rpt strip_tac >>
-    `bb = HD func.fn_blocks` by (
-      qpat_x_assum `lookup_block _ _ = _` mp_tac >>
-      qpat_x_assum `_ = (HD _).bb_label` mp_tac >>
-      Cases_on `func.fn_blocks` >> simp[lookup_block_def, FIND_thm]
-    ) >>
-    fs[phi_wf_fn_def, LET_DEF] >>
-    first_x_assum irule >> simp[] >>
-    qexists_tac `idx` >> simp[]
-  ) >>
-  simp[] >>
-  Cases_on `run_block fuel ctx bb s` >>
-  gvs[result_equiv_def, state_equiv_refl, execution_equiv_refl] >>
-  Cases_on `v.vs_halted` >>
-  gvs[result_equiv_def, state_equiv_refl, execution_equiv_refl] >>
-  (* Not halted - use IH via vs_prev_bb *)
-  `v.vs_prev_bb <> NONE` by (
-    qspecl_then [`fuel`, `ctx`, `bb`, `s`, `v`] mp_tac
-      run_block_ok_not_halted_sets_prev_bb >> simp[]
-  ) >>
-  first_x_assum (qspecl_then [`func`, `v`] mp_tac) >> simp[]
-QED
-
-(* TOP-LEVEL: Main correctness theorem for PHI elimination.
+(* TOP-LEVEL: Context-level correctness.
  *
- * Uses the simpler syntactic well-formedness condition wf_ir_fn that users
- * can check directly. The theorem says: running the original and transformed
- * function produces equivalent results (same final state up to state_equiv).
+ * For any well-formed function in a context, the transformed context
+ * contains a same-named function with equivalent execution semantics.
  *
- * Assumptions:
- * 1. wf_ir_fn func - syntactic well-formedness (SSA, PHI operand format, etc.)
- * 2. func.fn_blocks <> [] - function has at least one block
- * 3. Either vs_prev_bb is set (non-entry), or we're at entry block
+ * Proof approach:
+ *   1. Rewrite transform_function as function_map_transform
+ *   2. irule block_sim_function_reachable
+ *   3. Entry block: identity (no single-origin PHIs) via run_block_transform_identity
+ *   4. Non-entry blocks: phi_elim_block_sim (guarded by vs_prev_bb)
+ *   5. Wrap with transform_context membership (MEM_MAP)
  *)
 Theorem phi_elimination_correct:
-  !fuel (func:ir_function) s result.
-    wf_ir_fn func /\
-    no_invoke_in_function func /\
-    func.fn_blocks <> [] /\
-    (s.vs_prev_bb <> NONE \/
-     s.vs_current_bb = (HD func.fn_blocks).bb_label) /\
-    run_function fuel ctx func s = result ==>
-    ?result'. run_function fuel ctx (transform_function func) s = result' /\
-              result_equiv {} result result'
-Proof
-  rpt strip_tac >>
-  irule phi_elimination_correct_internal >>
-  simp[] >> irule wf_ir_implies_phi_wf >> simp[]
-QED
-
-(* ==========================================================================
-   Context-level Correctness
-   ========================================================================== *)
-
-(* TOP-LEVEL: Context-level correctness - transformation preserves semantics
-   for all functions in a context. Uses wf_ir_fn for user convenience. *)
-Theorem phi_elimination_context_correct:
-  !ctx fn_name fuel (func:ir_function) s result.
+  !ctx fn_name fuel (func:ir_function) s.
     MEM func ctx.ctx_functions /\
     func.fn_name = fn_name /\
     wf_ir_fn func /\
-    no_invoke_in_function func /\
     func.fn_blocks <> [] /\
+    s.vs_inst_idx = 0 /\
     (s.vs_prev_bb <> NONE \/
-     s.vs_current_bb = (HD func.fn_blocks).bb_label) /\
-    run_function fuel ctx func s = result ==>
-    ?func' result'.
+     s.vs_current_bb = (HD func.fn_blocks).bb_label)
+  ==>
+    ?func'.
       MEM func' (transform_context ctx).ctx_functions /\
       func'.fn_name = fn_name /\
-      run_function fuel ctx func' s = result' /\
-      result_equiv {} result result'
+      lift_result (state_equiv {}) (execution_equiv {})
+        (run_function fuel ctx func s)
+        (run_function fuel ctx func' s)
 Proof
+  rpt gen_tac >>
+  DISCH_TAC >>
+  qexists_tac `transform_function func` >>
+  `MEM func ctx.ctx_functions` by fs[] >>
+  `func.fn_name = fn_name` by fs[] >>
+  `wf_ir_fn func` by fs[] >>
+  `func.fn_blocks <> []` by fs[] >>
+  `s.vs_inst_idx = 0` by fs[] >>
+  `phi_wf_fn func` by metis_tac[wf_ir_implies_phi_wf] >>
+  fs[phi_wf_fn_def, LET_DEF] >>
+  conj_tac >- (
+    simp[transform_context_def, MEM_MAP] >>
+    qexists_tac `func` >> simp[]) >>
+  conj_tac >- simp[transform_function_def] >>
+  simp[transform_function_is_function_map_transform] >>
+  irule block_sim_function_reachable >>
+  simp[state_equiv_execution_equiv_valid_state_rel, transform_block_label,
+       state_equiv_def, execution_equiv_def] >>
+  (* Per-block simulation — only remaining goal *)
   rpt strip_tac >>
-  `?result'. run_function fuel ctx (transform_function func) s = result' /\
-             result_equiv {} result result'` by (
-    qspecl_then [`fuel`, `func`, `s`, `run_function fuel ctx func s`] mp_tac phi_elimination_correct >>
-    simp[]
-  ) >>
-  qexistsl_tac [`transform_function func`, `result'`] >>
-  simp[transform_context_def, transform_function_def, MEM_MAP] >>
-  qexists_tac `func` >> simp[]
+  Cases_on `s''.vs_prev_bb`
+  >- ( (* prev_bb = NONE => bb = HD fn_blocks => entry block *)
+    fs[] >>
+    `!idx inst. get_instruction (HD func.fn_blocks) idx = SOME inst ==>
+       phi_single_origin (dfg_build_function func) inst = NONE` by
+      (rpt strip_tac >> res_tac) >>
+    imp_res_tac run_block_transform_identity >>
+    fs[] >>
+    irule lift_result_refl >>
+    simp[state_equiv_refl, execution_equiv_refl]) >>
+  (* prev_bb = SOME _ => non-entry block *)
+  irule phi_elim_block_sim >>
+  fs[] >> rpt conj_tac >> rpt strip_tac >> res_tac
 QED

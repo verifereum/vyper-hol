@@ -1,8 +1,9 @@
 Theory vyperSemanticsHol
 Ancestors
+  vyperCall
   vyperEvalBinop
-  vyperEvalMisc
   vyperEvalPreservesImmutablesDom
   vyperEvalPreservesNameTarget
   vyperEvalPureExpr
+  vyperLookupStorageScopes
   vyperUpdateTarget

@@ -113,6 +113,23 @@ Proof
   ACCEPT_TAC venomExecProofsTheory.run_block_OK_inst_idx_0
 QED
 
+Theorem run_block_ok_sets_prev_bb:
+  !fuel ctx bb s s'.
+    run_block fuel ctx bb s = OK s' ==>
+    s'.vs_prev_bb <> NONE
+Proof
+  ACCEPT_TAC venomExecProofsTheory.run_block_ok_sets_prev_bb
+QED
+
+Theorem step_inst_preserves_prev_bb:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_terminator inst.inst_opcode ==>
+    s'.vs_prev_bb = s.vs_prev_bb
+Proof
+  ACCEPT_TAC venomExecProofsTheory.step_inst_preserves_prev_bb
+QED
+
 (* ==========================================================================
    Lookup Helpers
    ========================================================================== *)

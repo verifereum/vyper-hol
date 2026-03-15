@@ -69,6 +69,36 @@ Proof
   ACCEPT_TAC block_sim_function_proof
 QED
 
+(* Reachability-guarded version: entry block unconditional, non-entry needs prev_bb *)
+Theorem block_sim_function_reachable:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool) bt fn.
+    valid_state_rel R_ok R_term /\
+    (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
+    (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
+    (!bb. (bt bb).bb_label = bb.bb_label) /\
+    (!bb. MEM bb fn.fn_blocks ==>
+      !fuel ctx s.
+        s.vs_inst_idx = 0 /\
+        (bb = HD fn.fn_blocks \/ s.vs_prev_bb <> NONE) ==>
+        lift_result R_ok R_term (run_block fuel ctx bb s)
+                                 (run_block fuel ctx (bt bb) s)) /\
+    (!bb inst x.
+       MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       MEM (Var x) inst.inst_operands ==>
+       !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
+  ==>
+    !fuel ctx s.
+      s.vs_inst_idx = 0 /\
+      (fn.fn_blocks <> [] /\
+       s.vs_current_bb = (HD fn.fn_blocks).bb_label \/
+       s.vs_prev_bb <> NONE) ==>
+      lift_result R_ok R_term (run_function fuel ctx fn s)
+                 (run_function fuel ctx (function_map_transform bt fn) s)
+Proof
+  ACCEPT_TAC block_sim_function_reachable_proof
+QED
+
 (* conditional_inst_sim removed — proof was removed from passSimulationProofs *)
 (* block_sim_compose removed — proof was removed from passSimulationProofs *)
 

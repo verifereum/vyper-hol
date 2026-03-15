@@ -1,2 +1,2 @@
 # PHI elimination pass proofs
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../analysis ../../../analysis/dfg ../../../analysis/dfg/defs ../../../analysis/dfg/proofs ../../../../syntax ../../../../semantics ../defs
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../analysis ../../../analysis/dfg ../../../analysis/dfg/defs ../../../analysis/dfg/proofs ../../../../syntax ../../../../semantics ../defs ../../../simulation ../../../simulation/defs ../../../simulation/proofs
