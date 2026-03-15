@@ -15,10 +15,6 @@ Ancestors
   each result to a value (reading from storage if needed).
 *)
 
-Definition get_expr_type_def:
-  get_expr_type (e:expr) = expr_type e
-End
-
 Definition eval_pure_expr_def:
   (* Base cases *)
   eval_pure_expr cx st (Name _ id) =
@@ -59,7 +55,7 @@ Definition eval_pure_expr_def:
      | SOME tv1 =>
        (case eval_pure_expr cx st e2 of
         | SOME (Value v2) =>
-          (case evaluate_type (get_tenv cx) (get_expr_type e1) of
+          (case evaluate_type (get_tenv cx) (expr_type e1) of
            | SOME arr_tv =>
              (case check_array_bounds cx tv1 v2 st of
               | (INL _, _) =>
@@ -213,7 +209,7 @@ Proof
       simp (LET_DEF :: monadic_defs))
   (* Subscript *)
   >- (rpt gen_tac >>
-      simp[Once eval_pure_expr_def, get_expr_type_def] >> strip_tac >>
+      simp[Once eval_pure_expr_def] >> strip_tac >>
       gvs[AllCaseEqs()] >>
       simp[Once vyperInterpreterTheory.evaluate_def] >>
       simp monadic_defs >> gvs[] >>
@@ -361,7 +357,7 @@ Proof
       gvs[])
   (* Subscript *)
   >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-      simp[Once eval_pure_expr_def, get_expr_type_def] >>
+      simp[Once eval_pure_expr_def] >>
       gvs[pure_expr_def] >>
       qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
       simp[Once vyperInterpreterTheory.evaluate_def] >>
