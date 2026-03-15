@@ -119,11 +119,11 @@ Theorem hashmap_do_block_immutables[local]:
            | SOME v => return v;
          current_val <- read_storage_slot cx b final_slot final_tv;
          new_val <-
-           case assign_subscripts current_val remaining_subs ao of
+           case assign_subscripts final_tv current_val remaining_subs ao of
              INL v => return v
            | INR e => raise (Error e);
          x <- write_storage_slot cx b final_slot final_tv new_val;
-         assign_result ao current_val remaining_subs
+         assign_result final_tv ao current_val remaining_subs
        od) (final_type,key_types,remaining_subs) r = (res,st') ⇒
     st'.immutables = r.immutables
 Proof
@@ -145,9 +145,9 @@ Proof
   Cases_on `rr` >> gvs[] >>
   imp_res_tac read_storage_slot_immutables >>
   (* Step 4: assign_subscripts *)
-  Cases_on `assign_subscripts x remaining_subs ao` >>
+  Cases_on `assign_subscripts tv x remaining_subs ao` >>
   gvs[return_def, raise_def] >>
-  rename1 `assign_subscripts _ _ _ = INL new_val` >>
+  rename1 `assign_subscripts _ _ _ _ = INL new_val` >>
   (* Step 5: write_storage_slot *)
   `∃rw sw. write_storage_slot cx b slot tv new_val sr = (rw, sw)` by
     metis_tac[pairTheory.PAIR] >>
@@ -223,7 +223,7 @@ Proof
   simp[return_def, raise_def] >-
   (strip_tac >> gvs[preserves_immutables_dom_refl]) >>
   PairCases_on `x'` >> simp[] >>
-  Cases_on `assign_subscripts x'1 (REVERSE is) ao` >>
+  Cases_on `assign_subscripts x'0 x'1 (REVERSE is) ao` >>
   simp[lift_sum_def, return_def, raise_def] >>
   strip_tac >> gvs[preserves_immutables_dom_refl] >>
   Cases_on `set_immutable cx (current_module cx) (string_to_num id) x'0 x' st` >>
@@ -763,15 +763,16 @@ Theorem case_Array_imm_dom[local]:
 Proof
   rpt strip_tac >>
   qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
+  simp[Once evaluate_def, bind_def, return_def, raise_def,
        lift_option_def, lift_option_type_def] >>
-  rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
-  imp_res_tac get_Value_immutables >> imp_res_tac materialise_state >> gvs[] >> (
+  simp[option_CASE_rator] >>
+  simp[AllCaseEqs()] >>
+  rpt strip_tac >> gvs[preserves_immutables_dom_refl, return_def, raise_def] >>
+  imp_res_tac get_Value_immutables >>
+  imp_res_tac materialise_state >> gvs[] >> (
     irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
     conj_tac >- gvs[] >>
-    irule preserves_immutables_dom_eq >>
-    TRY (qpat_x_assum `(case _ of NONE => _ | SOME _ => _) _ = _` mp_tac >>
-         CASE_TAC >> simp[return_def, raise_def] >> rpt strip_tac >> gvs[]))
+    irule preserves_immutables_dom_eq >> gvs[])
 QED
 
 (* ----- Case 19: eval_iterator (Range e1 e2) ----- *)
@@ -1004,7 +1005,7 @@ QED
 Theorem subscript_helper_success_path[local]:
   ∀cx s_cab s_es st' tv1 v2 res' res.
     s_cab.immutables = s_es.immutables ⇒
-    lift_sum (evaluate_subscript (get_tenv cx) tv1 v2) s_cab = (INL res', s_es) ⇒
+    lift_sum (evaluate_subscript (get_tenv cx) arr_tv tv1 v2) s_cab = (INL res', s_es) ⇒
     (case res' of
        INL v => return v
      | INR (is_transient,slot,tv) =>
@@ -1037,7 +1038,7 @@ Theorem subscript_helper_eval_sub_err_fwd[local]:
     eval_expr cx e1 st = (INL tv1, s_e1) ⇒
     eval_expr cx e2 s_e1 = (INL tv2, s_e2) ⇒
     get_Value tv2 s_e2 = (INL v2, s_gv) ⇒
-    (case evaluate_subscript (get_tenv cx) tv1 v2 of
+    (case evaluate_subscript (get_tenv cx) arr_tv tv1 v2 of
        INL v => return v
      | INR e => raise (Error e)) s_gv = (INR e', s_es) ⇒
     preserves_immutables_dom cx st s_e2
@@ -1054,14 +1055,14 @@ Theorem subscript_helper_eval_sub_err_bwd[local]:
   ∀cx s_e2 s_gv s_es tv1 tv2 v2 e'.
     s_gv.immutables = s_e2.immutables ⇒
     get_Value tv2 s_e2 = (INL v2, s_gv) ⇒
-    (case evaluate_subscript (get_tenv cx) tv1 v2 of
+    (case evaluate_subscript (get_tenv cx) arr_tv tv1 v2 of
        INL v => return v
      | INR e => raise (Error e)) s_gv = (INR e', s_es) ⇒
     preserves_immutables_dom cx s_e2 s_es
 Proof
   rpt strip_tac >>
   irule preserves_immutables_dom_eq >>
-  Cases_on `evaluate_subscript (get_tenv cx) tv1 v2` >> gvs[raise_def, return_def]
+  Cases_on `evaluate_subscript (get_tenv cx) arr_tv tv1 v2` >> gvs[raise_def, return_def]
 QED
 
 (* Subgoal 6: get_Value returns INR (error) -
@@ -1132,9 +1133,10 @@ Proof
   simp[Once evaluate_def] >>
   PURE_REWRITE_TAC [ignore_bind_def] >>
   simp[bind_def, AllCaseEqs(), return_def, raise_def,
-       lift_option_def, lift_option_type_def, lift_sum_def, sum_CASE_rator] >>
+       lift_option_def, lift_sum_def, sum_CASE_rator] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
   imp_res_tac get_Value_immutables >>
+  imp_res_tac lift_option_type_same_state >>
   imp_res_tac check_array_bounds_state >>
   imp_res_tac lift_sum_state >>
   imp_res_tac read_storage_slot_immutables >>

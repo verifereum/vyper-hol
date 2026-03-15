@@ -77,9 +77,9 @@ Proof
 QED
 
 Theorem update_target_name_subscripts:
-  ∀cx st n sbs ao a a'.
-    lookup_name st n = SOME a ∧
-    assign_subscripts a (REVERSE sbs) ao = INL a' ⇒
+  ∀cx st n sbs ao tv a a'.
+    lookup_name_typed st n = SOME (tv, a) ∧
+    assign_subscripts tv a (REVERSE sbs) ao = INL a' ⇒
     update_target cx st (BaseTargetV (ScopedVar n) sbs) ao = update_name st n a'
 Proof
   rw[update_target_def] >>
@@ -87,9 +87,9 @@ Proof
 QED
 
 Theorem valid_target_name_subscripts:
-  ∀cx st n sbs ao a a'.
-    lookup_name st n = SOME a ∧
-    assign_subscripts a (REVERSE sbs) ao = INL a' ⇒
+  ∀cx st n sbs ao tv a a'.
+    lookup_name_typed st n = SOME (tv, a) ∧
+    assign_subscripts tv a (REVERSE sbs) ao = INL a' ⇒
     valid_target cx st (BaseTargetV (ScopedVar n) sbs) ao
 Proof
   rw[valid_target_def] >>
