@@ -3,19 +3,19 @@ Ancestors
   vyperValueOperation vyperState vyperInterpreter
 
 Definition array_is_mutable_def[simp]:
-  array_is_mutable (DynArrayV _ _ _) = T ∧
-  array_is_mutable (SArrayV _ _ _) = T ∧
+  array_is_mutable (DynArrayV _) = T ∧
+  array_is_mutable (SArrayV _) = T ∧
   array_is_mutable (TupleV _) = F
 End
 
 Definition array_is_dynamic_def[simp]:
-  array_is_dynamic (DynArrayV _ _ _) = T ∧
-  array_is_dynamic (SArrayV _ _ _) = F ∧
+  array_is_dynamic (DynArrayV _) = T ∧
+  array_is_dynamic (SArrayV _) = F ∧
   array_is_dynamic (TupleV _) = F
 End
 
 Definition valid_index_def[simp]:
-  valid_index a (i:int) ⇔ 0 ≤ i ∧ i < &array_length a
+  valid_index tv a (i:int) ⇔ 0 ≤ i ∧ i < &array_length tv a
 End
 
 (* ===== Helper Lemmas for insert_sarray ===== *)
@@ -40,46 +40,59 @@ Proof
   Induct \\ simp[]
   \\ rpt gen_tac \\ Cases_on`k`
   \\ simp[listTheory.LUPDATE_DEF]
-  \\ strip_tac \\ gvs[]
 QED
 
 Theorem array_index_valid:
-  ∀a i. valid_index a i ⇔ IS_SOME (array_index a i)
+  ∀tv a i. valid_index tv a i ⇒ IS_SOME (array_index tv a i)
 Proof
-  Cases \\ rw[array_index_def, array_length_def, listTheory.oEL_THM]
-  \\ gvs[]
+  rpt gen_tac \\ simp[valid_index_def] \\ strip_tac
   \\ drule integerTheory.NUM_POSINT_EXISTS \\ strip_tac \\ gvs[]
+  \\ Cases_on `a`
+  \\ gvs[array_index_def, array_length_def, listTheory.oEL_THM]
+  (* SArrayV *)
+  \\ Cases_on `tv`
+  \\ gvs[array_length_def, array_index_def]
+  \\ Cases_on `b`
+  \\ gvs[array_length_def, array_index_def]
   \\ CASE_TAC \\ simp[]
 QED
 
 Theorem array_set_index_valid:
-  ∀a i v. array_is_mutable a ∧ valid_index a i ⇔ ∃a'. array_set_index a i v = INL (ArrayV a')
+  ∀tv a i v. array_is_mutable a ∧ valid_index tv a i ⇒ ∃a'. array_set_index tv a i v = INL (ArrayV a')
 Proof
-  Cases \\ rw[array_set_index_def, array_length_def, EQ_IMP_THM]
-  \\ gvs[]
+  rpt gen_tac \\ simp[valid_index_def] \\ strip_tac
   \\ drule integerTheory.NUM_POSINT_EXISTS \\ strip_tac \\ gvs[]
+  \\ Cases_on `a`
+  \\ gvs[array_set_index_def, array_length_def, AllCaseEqs()]
+  \\ Cases_on `tv`
+  \\ gvs[array_length_def, array_set_index_def, AllCaseEqs()]
+  \\ Cases_on `b`
+  \\ gvs[array_length_def, array_set_index_def, AllCaseEqs()]
 QED
 
 Theorem array_length_after_set:
-  ∀a a' i v. array_set_index a i v = INL (ArrayV a') ⇒ array_length a' = array_length a
+  ∀tv a a' i v. array_set_index tv a i v = INL (ArrayV a') ⇒ array_length tv a' = array_length tv a
 Proof
-  Cases \\ rw[array_set_index_def, array_length_def]
-  \\ gvs[AllCaseEqs()]
+  gen_tac \\ Cases \\ rw[array_set_index_def, array_length_def]
+  \\ gvs[AllCaseEqs(), array_length_def]
+  \\ Cases_on `v = default_value t` \\ gvs[]
 QED
 
 Theorem array_index_after_set_same:
-  ∀a a' i v. array_set_index a i v = INL (ArrayV a') ⇒ array_index a' i = SOME v
+  ∀tv a a' i v. array_set_index tv a i v = INL (ArrayV a') ⇒ array_index tv a' i = SOME v
 Proof
-  Cases \\ simp[array_set_index_def, AllCaseEqs()]
+  gen_tac \\ Cases \\ simp[array_set_index_def, AllCaseEqs()]
   \\ rw[] \\ simp[array_index_def, listTheory.oEL_THM,
                    listTheory.EL_APPEND_EQN, listTheory.LENGTH_TAKE_EQ,
                    ALOOKUP_insert_sarray_same, alistTheory.ALOOKUP_ADELKEY]
+  \\ Cases_on `v = default_value t`
+  \\ gvs[alistTheory.ALOOKUP_ADELKEY, ALOOKUP_insert_sarray_same]
 QED
 
 Theorem array_index_after_set_other:
-  ∀a a' i j v. i ≠ j ∧ array_set_index a i v = INL (ArrayV a') ⇒ array_index a' j = array_index a j
+  ∀tv a a' i j v. i ≠ j ∧ array_set_index tv a i v = INL (ArrayV a') ⇒ array_index tv a' j = array_index tv a j
 Proof
-  Cases \\ simp[array_set_index_def, AllCaseEqs()]
+  gen_tac \\ Cases \\ simp[array_set_index_def, AllCaseEqs()]
   \\ rpt gen_tac \\ strip_tac
   \\ drule integerTheory.NUM_POSINT_EXISTS \\ strip_tac \\ gvs[]
   \\ simp[array_index_def, TAKE_DROP_LUPDATE,
@@ -91,16 +104,16 @@ Proof
 QED
 
 Theorem array_length_after_pop:
-  ∀a a'. pop_element (ArrayV a) = INL (ArrayV a') ⇒ array_length a' = array_length a - 1
+  ∀tv a a'. pop_element (ArrayV a) = INL (ArrayV a') ⇒ array_length tv a' = array_length tv a - 1
 Proof
-  Cases \\ simp[pop_element_def, array_length_def]
+  gen_tac \\ Cases \\ simp[pop_element_def, array_length_def]
   \\ rw[] \\ gvs[rich_listTheory.LENGTH_FRONT]
 QED
 
 Theorem array_index_after_pop:
-  ∀a a' i. valid_index a' i ∧ pop_element (ArrayV a) = INL (ArrayV a') ⇒ array_index a i = array_index a' i
+  ∀tv a a' i. valid_index tv a' i ∧ pop_element (ArrayV a) = INL (ArrayV a') ⇒ array_index tv a i = array_index tv a' i
 Proof
-  Cases \\ simp[pop_element_def]
+  gen_tac \\ Cases \\ simp[pop_element_def]
   \\ rw[] \\ gvs[array_index_def, array_length_def]
   \\ drule integerTheory.NUM_POSINT_EXISTS \\ strip_tac \\ gvs[]
   \\ Cases_on`l`
@@ -109,61 +122,78 @@ Proof
 QED
 
 Theorem array_pop_valid:
-  ∀a. array_is_dynamic a ∧ array_length a ≠ 0 ⇔ ∃a'. pop_element (ArrayV a) = INL (ArrayV a')
+  ∀tv a. array_is_dynamic a ∧ array_length tv a ≠ 0 ⇒ ∃a'. pop_element (ArrayV a) = INL (ArrayV a')
 Proof
-  Cases \\ rw[pop_element_def, array_length_def, EQ_IMP_THM]
-  \\ gvs[listTheory.LENGTH_NIL_SYM]
+  gen_tac \\ Cases \\ rw[pop_element_def, array_length_def]
 QED
 
 Theorem array_length_after_append:
-  ∀a a' v. append_element (ArrayV a) v = INL (ArrayV a') ⇒ array_length a' = array_length a + 1
+  ∀tv a a' v. append_element tv (ArrayV a) v = INL (ArrayV a') ⇒ array_length tv a' = array_length tv a + 1
 Proof
-  Cases \\ simp[append_element_def, array_length_def, AllCaseEqs()]
-  \\ rw[] \\ gvs[listTheory.LENGTH_SNOC, arithmeticTheory.ADD1]
+  gen_tac \\ Cases \\ simp[append_element_def, array_length_def, AllCaseEqs()]
+  \\ rw[]
 QED
 
 Theorem array_index_after_append:
-  ∀a a' v. append_element (ArrayV a) v = INL (ArrayV a') ⇒ ∃ty v'. safe_cast ty v = SOME v' ∧ array_index a' &(array_length a) = SOME v'
+  ∀tv a a' v. append_element tv (ArrayV a) v = INL (ArrayV a') ⇒ ∃ty v'. safe_cast ty v = SOME v' ∧ array_index tv a' &(array_length tv a) = SOME v'
 Proof
-  Cases \\ simp[append_element_def, AllCaseEqs()]
+  gen_tac \\ Cases \\ simp[append_element_def, AllCaseEqs()]
   \\ rw[] \\ gvs[]
-  \\ qexists_tac`t` \\ qexists_tac`v'`
+  \\ qexists_tac`elem_tv` \\ qexists_tac`v'`
   \\ simp[array_index_def, array_length_def,
           listTheory.oEL_EQ_EL, listTheory.LENGTH_SNOC,
           listTheory.EL_LENGTH_SNOC]
 QED
 
 Theorem array_index_after_append_other:
-  ∀a a' i v. valid_index a i ∧ append_element (ArrayV a) v = INL (ArrayV a') ⇒ array_index a' i = array_index a i
+  ∀tv a a' i v. valid_index tv a i ∧ append_element tv (ArrayV a) v = INL (ArrayV a') ⇒ array_index tv a' i = array_index tv a i
 Proof
-  Cases \\ simp[append_element_def, AllCaseEqs()]
+  gen_tac \\ Cases \\ simp[append_element_def, AllCaseEqs()]
   \\ rw[] \\ gvs[array_index_def, array_length_def]
   \\ drule integerTheory.NUM_POSINT_EXISTS \\ strip_tac \\ gvs[]
   \\ simp[listTheory.oEL_THM, listTheory.LENGTH_SNOC, listTheory.EL_SNOC]
 QED
 
-Theorem array_elements_length:
-  ∀a. LENGTH (array_elements a) = array_length a
+Theorem array_elements_length_dyn:
+  ∀tv vs. LENGTH (array_elements tv (DynArrayV vs)) = array_length tv (DynArrayV vs)
 Proof
-  Cases \\ simp[array_elements_def, array_length_def]
+  simp[array_elements_def, array_length_def]
+QED
+
+Theorem array_elements_length_tuple:
+  ∀tv vs. LENGTH (array_elements tv (TupleV vs)) = array_length tv (TupleV vs)
+Proof
+  simp[array_elements_def, array_length_def]
+QED
+
+Theorem array_elements_length_sarray:
+  ∀t n al. LENGTH (array_elements (ArrayTV t (Fixed n)) (SArrayV al)) = array_length (ArrayTV t (Fixed n)) (SArrayV al)
+Proof
+  simp[array_elements_def, array_length_def]
 QED
 
 Theorem array_elements_index:
-  ∀a i v. valid_index a i ⇒ (EL (Num i) (array_elements a) = v ⇔ array_index a i = SOME v)
+  ∀tv a i v. valid_index tv a i ⇒ (EL (Num i) (array_elements tv a) = v ⇔ array_index tv a i = SOME v)
 Proof
-  Cases \\ simp[array_elements_def, array_index_def, array_length_def]
-  \\ rw[] \\ gvs[]
+  rpt gen_tac \\ simp[valid_index_def] \\ strip_tac
   \\ drule integerTheory.NUM_POSINT_EXISTS \\ strip_tac \\ gvs[]
-  \\ simp[listTheory.oEL_EQ_EL, EQ_SYM_EQ]
-  \\ CASE_TAC \\ simp[]
+  \\ Cases_on `a`
+  \\ gvs[array_elements_def, array_index_def, array_length_def,
+         listTheory.oEL_EQ_EL, EQ_SYM_EQ]
+  (* SArrayV *)
+  \\ Cases_on `tv`
+  \\ gvs[array_elements_def, array_index_def, array_length_def]
+  \\ Cases_on `b`
+  \\ gvs[array_elements_def, array_index_def, array_length_def]
+  \\ CASE_TAC
 QED
 
 Theorem array_elements_after_set:
-  ∀a a' i v.
-    array_set_index a i v = INL (ArrayV a') ⇒
-    array_elements a' = (TAKE (Num i) (array_elements a) ++ [v] ++ DROP (SUC (Num i)) (array_elements a))
+  ∀tv a a' i v.
+    array_set_index tv a i v = INL (ArrayV a') ⇒
+    array_elements tv a' = (TAKE (Num i) (array_elements tv a) ++ [v] ++ DROP (SUC (Num i)) (array_elements tv a))
 Proof
-  Cases \\ simp[array_set_index_def, array_elements_def, AllCaseEqs()]
+  gen_tac \\ Cases \\ simp[array_set_index_def, array_elements_def, AllCaseEqs()]
   \\ rw[]
   \\ simp[TAKE_DROP_LUPDATE, listTheory.LENGTH_GENLIST,
           listTheory.LUPDATE_GENLIST, listTheory.GENLIST_FUN_EQ]
@@ -173,57 +203,55 @@ Proof
 QED
 
 Theorem array_elements_after_pop:
-  ∀a a'.
+  ∀tv a a'.
     pop_element (ArrayV a) = INL (ArrayV a') ⇒
-    array_elements a' = FRONT (array_elements a)
+    array_elements tv a' = FRONT (array_elements tv a)
 Proof
-  Cases \\ simp[pop_element_def, array_elements_def]
-  \\ rw[] \\ gvs[]
+  gen_tac \\ Cases \\ simp[pop_element_def, array_elements_def]
 QED
 
 Theorem array_elements_after_append:
-  ∀a a' v.
-    append_element (ArrayV a) v = INL (ArrayV a') ⇒
-    ∃ty v'. safe_cast ty v = SOME v' ∧ array_elements a' = array_elements a ++ [v']
+  ∀tv a a' v.
+    append_element tv (ArrayV a) v = INL (ArrayV a') ⇒
+    ∃ty v'. safe_cast ty v = SOME v' ∧ array_elements tv a' = array_elements tv a ++ [v']
 Proof
-  Cases \\ simp[append_element_def, AllCaseEqs()]
+  gen_tac \\ Cases \\ simp[append_element_def, AllCaseEqs()]
   \\ rpt strip_tac \\ gvs[]
-  \\ qexists_tac`t` \\ qexists_tac`v'`
+  \\ qexists_tac`elem_tv` \\ qexists_tac`v'`
   \\ simp[array_elements_def, listTheory.SNOC_APPEND]
 QED
 
 Theorem assign_subscripts_array_replace:
-  ∀a k v.
-    array_is_mutable a ∧ valid_index a k ⇒
-    assign_subscripts (ArrayV a) [IntSubscript k] (Replace v) =
-    array_set_index a k v
+  ∀tv a k v.
+    array_is_mutable a ∧ valid_index tv a k ⇒
+    assign_subscripts tv (ArrayV a) [IntSubscript k] (Replace v) =
+    array_set_index tv a k v
 Proof
   rpt strip_tac >>
   simp[Once assign_subscripts_def] >>
-  `IS_SOME (array_index a k)` by metis_tac[array_index_valid] >>
-  Cases_on `array_index a k` >> gvs[assign_subscripts_def]
+  `IS_SOME (array_index tv a k)` by metis_tac[array_index_valid] >>
+  Cases_on `array_index tv a k` >> gvs[assign_subscripts_def]
 QED
 
 Theorem array_length_sarray[simp]:
-  array_length (SArrayV t n al) = n
+  array_length (ArrayTV t (Fixed n)) (SArrayV al) = n
 Proof
   simp[array_length_def]
 QED
 
 Theorem assign_array_read_same:
-  ∀av i v.
-    array_is_mutable av ∧ valid_index av i ⇒
-    ∃av'. assign_subscripts (ArrayV av) [IntSubscript i] (Replace v) =
+  ∀tv av i v.
+    array_is_mutable av ∧ valid_index tv av i ⇒
+    ∃av'. assign_subscripts tv (ArrayV av) [IntSubscript i] (Replace v) =
             INL (ArrayV av') ∧
-          array_index av' i = SOME v
+          array_index tv av' i = SOME v
 Proof
   rpt strip_tac >>
-  `assign_subscripts (ArrayV av) [IntSubscript i] (Replace v) =
-   array_set_index av i v` by
-    (irule assign_subscripts_array_replace >> simp[]) >>
-  `∃av'. array_set_index av i v = INL (ArrayV av')` by
-    metis_tac[array_set_index_valid] >>
+  `IS_SOME (array_index tv av i)` by metis_tac[array_index_valid] >>
+  Cases_on `array_index tv av i` >> gvs[] >>
+  `∃av'. array_set_index tv av i v = INL (ArrayV av')` by (
+    irule array_set_index_valid >> simp[]) >>
   qexists_tac `av'` >>
-  conj_tac >- simp[] >>
+  simp[Once assign_subscripts_def, assign_subscripts_def] >>
   metis_tac[array_index_after_set_same]
 QED
