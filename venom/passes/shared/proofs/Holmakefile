@@ -1,2 +1,2 @@
 # Pass shared proof internals
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../../../syntax ../../../../semantics ../../../defs ../../../proofs ../../../props ../../../analysis/shared ..
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../../../syntax ../../../../semantics ../../../defs ../../../proofs ../../../props ../../../analysis/shared ../defs

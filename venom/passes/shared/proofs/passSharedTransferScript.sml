@@ -16,7 +16,7 @@
 
 Theory passSharedTransfer
 Ancestors
-  passSharedProps
+  passSharedDefs venomExecSemantics venomEffects
 
 open venomStateTheory venomInstTheory venomExecSemanticsTheory
      venomEffectsTheory venomInstPropsTheory;
