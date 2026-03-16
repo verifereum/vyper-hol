@@ -487,6 +487,99 @@ Proof
   metis_tac[evaluate_binop_add_uint]
 QED
 
+(* ===== safe_cast on well-typed values is identity ===== *)
+(*
+ * KEY LEMMA: If a value already satisfies a type, safe_cast is identity.
+ * Needed for IntCall return path.
+ *)
+
+(* Helper: distinct keys < n means length ≤ n (pigeonhole) *)
+Theorem all_distinct_keys_length:
+  !l (n:num). ALL_DISTINCT (MAP FST l) /\ EVERY (\(k, _). k < n) l ==>
+              LENGTH l <= n
+Proof
+  rpt strip_tac >>
+  `CARD (set (MAP FST l)) = LENGTH l`
+    by simp[listTheory.ALL_DISTINCT_CARD_LIST_TO_SET] >>
+  `set (MAP FST l) SUBSET count n`
+    by (simp[pred_setTheory.SUBSET_DEF, listTheory.MEM_MAP,
+             PULL_EXISTS, pairTheory.FORALL_PROD] >>
+        gvs[listTheory.EVERY_MEM, pairTheory.FORALL_PROD] >> metis_tac[]) >>
+  `CARD (set (MAP FST l)) <= CARD (count n)`
+    by (irule pred_setTheory.CARD_SUBSET >>
+        simp[pred_setTheory.FINITE_COUNT]) >>
+  gvs[pred_setTheory.CARD_COUNT]
+QED
+
+(* Helper: all_satisfy_type ↔ list_satisfies_type with REPLICATE *)
+Theorem all_satisfy_list_satisfies:
+  !vs tv. all_satisfy_type vs tv ==>
+          list_satisfies_type vs (REPLICATE (LENGTH vs) tv)
+Proof
+  Induct >> REWRITE_TAC[satisfies_type_def] >>
+  simp[rich_listTheory.REPLICATE] >>
+  REWRITE_TAC[satisfies_type_def] >> metis_tac[]
+QED
+
+(* ZIP (MAP FST l, MAP SND l) = l *)
+val zip_fst_snd = listTheory.ZIP_UNZIP
+  |> ONCE_REWRITE_RULE[listTheory.UNZIP_MAP];
+
+(*
+ * Mutual induction using safe_cast_ind.
+ * P0: safe_cast tv v = SOME v when satisfies_type v tv
+ * P1: safe_cast_list tvs vs acc = SOME (REVERSE acc ++ vs)
+ *     when list_satisfies_type vs tvs
+ *)
+Theorem safe_cast_satisfies_type_mutual:
+  (!tv v. satisfies_type v tv ==> safe_cast tv v = SOME v) /\
+  (!tvs vs acc.
+     list_satisfies_type vs tvs ==>
+     safe_cast_list tvs vs acc = SOME (REVERSE acc ++ vs))
+Proof
+  ho_match_mp_tac safe_cast_ind >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac
+  (* P0: main safe_cast case — case split on type and value *)
+  >- (Cases_on `tv` >> Cases_on `v` >>
+      TRY (Cases_on `b`) >>
+      TRY (Cases_on `b'`) >>
+      TRY (Cases_on `a`) >>
+      REWRITE_TAC[satisfies_type_def] >>
+      simp[Once safe_cast_def, compatible_bound_def] >>
+      rpt strip_tac >> gvs[]
+      (* SArrayV impossible case: n < LENGTH l contradicts pigeonhole *)
+      >- (imp_res_tac all_distinct_keys_length >> gvs[])
+      (* SArrayV: safe_cast_list on MAP SND *)
+      >- (`LENGTH l <= n` by (irule all_distinct_keys_length >> simp[]) >>
+          imp_res_tac all_satisfy_list_satisfies >>
+          `safe_cast_list (REPLICATE (LENGTH l) t) (MAP SND l) [] =
+           SOME (MAP SND l)`
+            by (first_x_assum irule >> gvs[listTheory.LENGTH_MAP]) >>
+          simp[zip_fst_snd])
+      (* DynArrayV *)
+      >- (imp_res_tac all_satisfy_list_satisfies >>
+          first_x_assum drule >> simp[])
+      (* StructTV *)
+      >- (`ZIP (MAP FST l, MAP SND l') = l'`
+            by (qpat_x_assum `MAP FST l' = _` (SUBST1_TAC o SYM) >>
+                simp[zip_fst_snd]) >>
+          first_x_assum drule >> simp[])
+     )
+  (* P1: [] [] *)
+  >- simp[Once safe_cast_def]
+  (* P1: (t::ts) (v::vs) *)
+  >- (strip_tac >>
+      simp[Once safe_cast_def] >>
+      gvs[Once satisfies_type_def] >>
+      `safe_cast tv v = SOME v` by (first_x_assum irule >> simp[]) >>
+      simp[] >>
+      first_x_assum drule >> simp[])
+  (* P1: mismatch (t::ts) [] — vacuous: list_satisfies_type [] _ = F *)
+  >- gvs[Once satisfies_type_def]
+  (* P1: mismatch [] (v::vs) — vacuous: list_satisfies_type _ [] = F *)
+  >- gvs[Once satisfies_type_def]
+QED
+
 (* ===== Static typing environment ===== *)
 (*
  * typing_env captures the static type information a type checker would produce.
