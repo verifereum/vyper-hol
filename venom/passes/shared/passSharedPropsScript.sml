@@ -468,9 +468,6 @@ Theorem eligible_no_write_balance_extcode =
 Theorem step_inst_base_ok_transfer =
   passSharedTransferTheory.step_inst_base_ok_transfer
 
-Theorem step_inst_base_output_determined =
-  passSharedTransferTheory.step_inst_base_output_determined
-
 Theorem step_inst_base_output_determined_fields =
   passSharedTransferTheory.step_inst_base_output_determined_fields
 
