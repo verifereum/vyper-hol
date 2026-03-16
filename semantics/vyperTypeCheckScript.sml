@@ -1,21 +1,31 @@
 (*
  * vyperTypeCheckScript.sml
  *
- * Type checking for the Vyper AST with checked type annotations.
+ * Type system definitions and type soundness roadmap.
  *
  * TOP-LEVEL:
- *   satisfies_type    : value → type_value → bool  (value matches resolved type)
- *   well_typed_literal : type → literal → bool     (literal consistent with type)
- *   well_typed_expr   : typing_env → expr → bool   (AST annotations consistent)
- *   type_soundness    : well_typed + eval succeeds ⇒ satisfies_type (CHEATED)
+ *   satisfies_type     : value → type_value → bool  (value matches resolved type)
+ *   scope_well_typed   : scope → bool               (all values in scope satisfy their types)
+ *   state_well_typed   : evaluation_state → bool     (runtime state type invariant)
+ *   type_preservation  : eval_expr preserves state_well_typed (CHEATED)
+ *   no_type_errors     : well-typed state + valid program ⇒ no TypeError (CHEATED)
  *
  * Helper:
  *   is_numeric_type, is_int_type, is_bool_type, is_flag_type : type → bool
- *   well_typed_binop  : type → binop → type → type → bool
+ *   well_typed_binop   : type → binop → type → type → bool
  *   well_typed_builtin_app : type → builtin → type list → bool
+ *   well_typed_literal : type → literal → bool
  *   env_item_type, account_item_type : item → type
- *   well_formed_type  : (num |-> type_args) → type → bool
+ *   well_formed_type   : (num |-> type_args) → type → bool
  *   all_satisfy_type, list_satisfies_type : list helpers for satisfies_type
+ *
+ * ROADMAP:
+ *   Phase 1: Definitions (state_well_typed, well_formed_context)
+ *   Phase 2: Preservation for pure operations (binop, builtin, literal helpers)
+ *   Phase 3: Preservation for simple expressions (Name, Literal, IfExp, etc.)
+ *   Phase 4: Preservation for builtins and subscripts
+ *   Phase 5: Preservation for calls (requires stmt preservation)
+ *   Phase 6: No-TypeError theorem
  *)
 
 Theory vyperTypeCheck
@@ -335,165 +345,111 @@ Definition attribute_type_ok_def:
   attribute_type_ok _ _ _ _ = F
 End
 
-(* ===== Typing environment ===== *)
-
-Datatype:
-  typing_env = <|
-    var_types : (num |-> type);      (* local variable types *)
-    global_types : (num |-> type);   (* constants/immutables *)
-    toplevel_types : ((num option # num) |-> type);
-                                     (* module-qualified globals: (src_id, name) -> type *)
-    type_defs : (num |-> type_args); (* struct/flag declarations *)
-  |>
-End
-
-(* ===== well_typed_expr: AST annotation consistency ===== *)
+(* ===== Runtime type invariant ===== *)
 (*
- * Mutually recursive with:
- *   well_typed_target : typing_env -> base_assignment_target -> bool
- *   well_typed_exprs  : typing_env -> expr list -> bool
- *   well_typed_opt    : typing_env -> expr option -> bool
- *   well_typed_named_exprs : typing_env -> (identifier # expr) list -> bool
+ * The runtime already stores (type_value # value) pairs in scopes and
+ * immutables. state_well_typed asserts that every such pair is consistent:
+ * the value actually satisfies its associated type_value.
+ *
+ * This is a runtime invariant — no ghost typing environment needed.
  *)
 
-Definition well_typed_expr_def:
-  (* --- expr cases --- *)
-
-  (* Name: variable in scope with matching type *)
-  well_typed_expr env (Name ty id) =
-    (FLOOKUP env.var_types (string_to_num id) = SOME ty) /\
-
-  (* BareGlobalName: constant/immutable with matching type *)
-  well_typed_expr env (BareGlobalName ty id) =
-    (FLOOKUP env.global_types (string_to_num id) = SOME ty) /\
-
-  (* TopLevelName: module-qualified global with matching type *)
-  well_typed_expr env (TopLevelName ty (src_id_opt, id)) =
-    (FLOOKUP env.toplevel_types (src_id_opt, string_to_num id) = SOME ty) /\
-
-  (* FlagMember: must be a flag type *)
-  well_typed_expr env (FlagMember ty _ _) =
-    is_flag_type ty /\
-
-  (* IfExp: condition is bool, branches have result type *)
-  well_typed_expr env (IfExp ty cond e1 e2) =
-    (well_typed_expr env cond /\
-     well_typed_expr env e1 /\
-     well_typed_expr env e2 /\
-     expr_type cond = BaseT BoolT /\
-     expr_type e1 = ty /\ expr_type e2 = ty) /\
-
-  (* Literal: literal consistent with annotated type *)
-  well_typed_expr env (Literal ty l) =
-    well_typed_literal ty l /\
-
-  (* StructLit: fields well-typed, result is struct type *)
-  well_typed_expr env (StructLit ty _ kes) =
-    (well_typed_named_exprs env kes /\
-     is_struct_type ty) /\
-
-  (* Subscript: array/tuple subscript *)
-  well_typed_expr env (Subscript ty e1 e2) =
-    (well_typed_expr env e1 /\
-     well_typed_expr env e2 /\
-     subscript_type_ok (expr_type e1) (expr_type e2) ty) /\
-
-  (* Attribute: struct field access *)
-  well_typed_expr env (Attribute ty e id) =
-    (well_typed_expr env e /\
-     attribute_type_ok env.type_defs (expr_type e) id ty) /\
-
-  (* Builtin: sub-exprs well-typed, builtin typing rules *)
-  well_typed_expr env (Builtin ty blt es) =
-    (well_typed_exprs env es /\
-     well_typed_builtin_app ty blt (MAP expr_type es)) /\
-
-  (* TypeBuiltin: sub-exprs well-typed, both types well-formed *)
-  well_typed_expr env (TypeBuiltin ty _ target_ty es) =
-    (well_typed_exprs env es /\
-     well_formed_type env.type_defs ty /\
-     well_formed_type env.type_defs target_ty) /\
-
-  (* Pop: target well-typed, result is element type of array *)
-  well_typed_expr env (Pop ty tgt) =
-    (well_typed_target env tgt /\
-     well_formed_type env.type_defs ty) /\
-
-  (* Call IntCall: args well-typed, return type well-formed *)
-  well_typed_expr env (Call ty (IntCall _) args drv) =
-    (well_typed_exprs env args /\
-     well_typed_opt env drv /\
-     well_formed_type env.type_defs ty) /\
-
-  (* Call ExtCall: args well-typed, return type matches signature *)
-  well_typed_expr env (Call ty (ExtCall _ (_, arg_types, ret_ty)) args drv) =
-    (well_typed_exprs env args /\
-     well_typed_opt env drv /\
-     ty = ret_ty) /\
-
-  (* Call Send: exactly 2 args (address, value), returns None *)
-  well_typed_expr env (Call ty Send args drv) =
-    (well_typed_exprs env args /\
-     LENGTH args = 2 /\ ty = NoneT) /\
-
-  (* --- base_assignment_target cases --- *)
-
-  well_typed_target env (NameTarget id) =
-    (string_to_num id IN FDOM env.var_types) /\
-
-  well_typed_target env (BareGlobalNameTarget id) =
-    (string_to_num id IN FDOM env.global_types) /\
-
-  well_typed_target env (TopLevelNameTarget (src_id_opt, id)) =
-    ((src_id_opt, string_to_num id) IN FDOM env.toplevel_types) /\
-
-  well_typed_target env (SubscriptTarget tgt e) =
-    (well_typed_target env tgt /\ well_typed_expr env e) /\
-
-  well_typed_target env (AttributeTarget tgt _) =
-    well_typed_target env tgt /\
-
-  (* --- list/option helpers --- *)
-
-  well_typed_exprs env [] = T /\
-  well_typed_exprs env (e::es) =
-    (well_typed_expr env e /\ well_typed_exprs env es) /\
-
-  well_typed_opt env NONE = T /\
-  well_typed_opt env (SOME e) = well_typed_expr env e /\
-
-  well_typed_named_exprs env [] = T /\
-  well_typed_named_exprs env ((k,e)::kes) =
-    (well_typed_expr env e /\ well_typed_named_exprs env kes)
-Termination
-  WF_REL_TAC `measure (\x. case x of
-    | INL (_, e) => expr_size e
-    | INR (INL (_, tgt)) => base_assignment_target_size tgt
-    | INR (INR (INL (_, es))) => expr4_size es
-    | INR (INR (INR (INL (_, opt)))) => expr3_size opt
-    | INR (INR (INR (INR (_, kes)))) => expr1_size kes)`
-  \\ simp[expr_size_def]
-  \\ qsuff_tac
-       `(!es. expr4_size es = list_size expr_size es) /\
-        (!drv. expr3_size drv = option_size expr_size drv) /\
-        (!kes. expr1_size kes =
-               list_size (pair_size (list_size char_size) expr_size) kes)`
-  >- (strip_tac \\ asm_rewrite_tac[] \\ DECIDE_TAC)
-  \\ rpt conj_tac
-  \\ TRY (Induct \\ simp[expr_size_def, listTheory.list_size_def,
-            basicSizeTheory.pair_size_def])
-  \\ Cases
-  \\ simp[expr_size_def, basicSizeTheory.option_size_def]
+Definition scope_well_typed_def:
+  scope_well_typed (sc : scope) ⇔
+    ∀id tv v. FLOOKUP sc id = SOME (tv, v) ⇒ satisfies_type v tv
 End
 
-(* ===== Soundness theorem (CHEATED) ===== *)
+Definition imms_well_typed_def:
+  imms_well_typed (imms : module_immutables) ⇔
+    ∀src_id_opt m id tv v.
+      ALOOKUP imms src_id_opt = SOME m ∧
+      FLOOKUP m id = SOME (tv, v) ⇒
+      satisfies_type v tv
+End
 
-Theorem type_soundness:
-  !env cx e st v st' tv.
-    well_typed_expr env e /\
-    eval_expr cx e st = (INL (Value v), st') /\
-    evaluate_type env.type_defs (expr_type e) = SOME tv
-    ==> satisfies_type v tv
+Definition state_well_typed_def:
+  state_well_typed st ⇔
+    EVERY scope_well_typed st.scopes ∧
+    EVERY (λ(addr, mods). imms_well_typed mods) st.immutables
+End
+
+(* ===== Type soundness roadmap ===== *)
+(*
+ * The overall goal is to show that well-typed programs never raise TypeError.
+ * The proof proceeds in phases:
+ *
+ * Phase 2: Operation-level lemmas
+ *   - evaluate_literal produces values satisfying the literal's type
+ *   - evaluate_binop preserves types when inputs satisfy their types
+ *   - evaluate_builtin preserves types
+ *   These are independent of eval_expr and can be proved first.
+ *
+ * Phase 3-5: Type preservation (the workhorse)
+ *   If state_well_typed st, and eval_expr cx e st succeeds with (Value v, st'),
+ *   then satisfies_type v tv (where tv = evaluate_type ... (expr_type e))
+ *   and state_well_typed st'.
+ *   Proved by structural induction on e, one helper lemma per constructor.
+ *
+ * Phase 6: No-TypeError
+ *   Every TypeError raise site in the interpreter is guarded by a type check
+ *   that succeeds when state_well_typed holds and the program is well-formed.
+ *   Derived from type preservation.
+ *)
+
+(* Phase 2: Operation-level helpers (TODO) *)
+
+Theorem evaluate_literal_satisfies_type:
+  ∀ty l tv.
+    well_typed_literal ty l ∧
+    evaluate_type tenv ty = SOME tv ⇒
+    satisfies_type (evaluate_literal l) tv
 Proof
+  cheat
+QED
+
+(* TODO: evaluate_binop_satisfies_type
+ *   Need to relate runtime type_values (tv1, tv2) back to syntactic types
+ *   (t1, t2) used by well_typed_binop. Statement needs refinement once
+ *   we work through the Literal and Name cases first.
+ *)
+
+(* Phase 3: Type preservation for simple expressions (TODO) *)
+
+Theorem type_preservation:
+  ∀cx e st v st' tv.
+    state_well_typed st ∧
+    eval_expr cx e st = (INL (Value v), st') ∧
+    evaluate_type (get_tenv cx) (expr_type e) = SOME tv
+    ⇒ satisfies_type v tv ∧ state_well_typed st'
+Proof
+  (* By structural induction on e.
+     Each case unfolds eval_expr one step and uses:
+     - state_well_typed for variable lookups (Name, BareGlobalName)
+     - Operation-level lemmas for Literal, Builtin
+     - Inductive hypothesis for sub-expressions (IfExp, Subscript, etc.)
+     Complex cases (Call) require proving eval_stmt preserves state_well_typed.
+  *)
+  cheat
+QED
+
+(* Phase 6: No-TypeError theorem (TODO) *)
+(* TODO: define well_formed_context capturing static validity of cx
+ *   - all referenced variables exist in scopes/immutables/storage
+ *   - get_tenv cx is well-formed (struct/flag definitions resolve)
+ *   - AST type annotations resolve (evaluate_type succeeds)
+ *   - function signatures match their bodies
+ *   - storage layout is consistent with declarations
+ *)
+
+Theorem no_type_errors:
+  ∀cx e st msg st'.
+    state_well_typed st ∧
+    (* well_formed_context cx ∧ -- TODO: define this *)
+    eval_expr cx e st = (INR (Error (TypeError msg)), st')
+    ⇒ F
+Proof
+  (* Derived from type_preservation: each TypeError site in the interpreter
+     corresponds to a type check that succeeds when state_well_typed holds
+     and the program is well-formed. *)
   cheat
 QED
