@@ -8,7 +8,9 @@
  *
  * TOP-LEVEL:
  *   effect, read_effects, write_effects, effects_independent,
- *   has_conflicting_effects, is_nonidempotent, addr_space, effect_of_addr_space
+ *   has_conflicting_effects, is_nonidempotent,
+ *   fail_class, opcode_fail_class, abort_compatible,
+ *   addr_space, effect_of_addr_space
  *)
 
 Theory venomEffects
@@ -204,6 +206,38 @@ Definition is_commutative_def:
   is_commutative AND = T /\
   is_commutative EQ = T /\
   is_commutative _ = F
+End
+
+(* ===== Abort Compatibility for Reordering ===== *)
+
+(* Failure class of a non-terminator opcode: what non-OK result types
+   step_inst can produce (besides Error, which is structural).
+   - NoFail: only OK or Error (pure ops, reads, writes)
+   - CanRevert: can Abort with Revert_abort (ASSERT)
+   - CanExHalt: can Abort with ExHalt_abort (ASSERT_UNREACHABLE, RETURNDATACOPY, INVALID)
+   - AnyFail: can Halt or Abort with any type (INVOKE — from callee)
+   Note: effects_independent INVOKE INVOKE = F, so AnyFail never pairs with itself. *)
+Datatype:
+  fail_class = NoFail | CanRevert | CanExHalt | AnyFail
+End
+
+Definition opcode_fail_class_def:
+  opcode_fail_class ASSERT = CanRevert /\
+  opcode_fail_class ASSERT_UNREACHABLE = CanExHalt /\
+  opcode_fail_class RETURNDATACOPY = CanExHalt /\
+  opcode_fail_class INVALID = CanExHalt /\
+  opcode_fail_class INVOKE = AnyFail /\
+  opcode_fail_class _ = NoFail
+End
+
+(* Two opcodes have compatible non-OK behavior: either at least one
+   never fails, or both fail with the same class.
+   Required for instruction reordering to preserve abort types. *)
+Definition abort_compatible_def:
+  abort_compatible op1 op2 <=>
+    opcode_fail_class op1 = NoFail \/
+    opcode_fail_class op2 = NoFail \/
+    opcode_fail_class op1 = opcode_fail_class op2
 End
 
 (* ===== Address Spaces ===== *)
