@@ -1,31 +1,29 @@
 (*
  * vyperTypeCheckScript.sml
  *
- * Type system definitions and type soundness roadmap.
+ * Type system definitions and type soundness proof infrastructure.
  *
  * TOP-LEVEL:
- *   satisfies_type     : value → type_value → bool  (value matches resolved type)
- *   scope_well_typed   : scope → bool               (all values in scope satisfy their types)
- *   state_well_typed   : evaluation_state → bool     (runtime state type invariant)
- *   type_preservation  : eval_expr preserves state_well_typed (CHEATED)
- *   no_type_errors     : well-typed state + valid program ⇒ no TypeError (CHEATED)
+ *   typing_env          : static type environment (var_types, global_types, etc.)
+ *   well_typed_expr     : typing_env → expr → bool (static type consistency)
+ *   env_consistent      : typing_env → cx → st → bool (env matches runtime state)
+ *   state_well_typed    : evaluation_state → bool (runtime values satisfy stored types)
+ *   satisfies_type      : value → type_value → bool (value matches resolved type)
+ *   type_preservation   : well_typed + consistent + eval ⇒ preserves types (CHEATED)
  *
- * Helper:
- *   is_numeric_type, is_int_type, is_bool_type, is_flag_type : type → bool
- *   well_typed_binop   : type → binop → type → type → bool
- *   well_typed_builtin_app : type → builtin → type list → bool
- *   well_typed_literal : type → literal → bool
- *   env_item_type, account_item_type : item → type
- *   well_formed_type   : (num |-> type_args) → type → bool
- *   all_satisfy_type, list_satisfies_type : list helpers for satisfies_type
+ * Operation-level helpers (proved):
+ *   evaluate_literal_satisfies_type, bounded_int_op_unsigned/signed,
+ *   evaluate_binop_add_uint, evaluate_builtin_bop_add_uint
  *
- * ROADMAP:
- *   Phase 1: Definitions (state_well_typed, well_formed_context)
- *   Phase 2: Preservation for pure operations (binop, builtin, literal helpers)
- *   Phase 3: Preservation for simple expressions (Name, Literal, IfExp, etc.)
- *   Phase 4: Preservation for builtins and subscripts
- *   Phase 5: Preservation for calls (requires stmt preservation)
- *   Phase 6: No-TypeError theorem
+ * State helpers (proved):
+ *   lookup_scopes_well_typed, lookup_scopes_val_well_typed
+ *
+ * PROOF STATUS:
+ *   type_preservation: Name and Literal cases proved by induction.
+ *   11 cases cheated (BareGlobalName, TopLevelName, FlagMember, IfExp,
+ *   StructLit, Subscript, Attribute, Builtin, TypeBuiltin, Pop, Call).
+ *   Induction structure validated — IH provides env_consistent for
+ *   intermediate states, enabling compositional proofs for IfExp etc.
  *)
 
 Theory vyperTypeCheck
@@ -443,58 +441,233 @@ Proof
   simp[]
 QED
 
-(* ===== Phase 3: Per-expression-case preservation lemmas ===== *)
+(* Phase 2: bounded_int_op result satisfies the bound's type *)
+Theorem bounded_int_op_unsigned:
+  !k r v.
+    bounded_int_op (Unsigned k) r = INL v ==>
+    satisfies_type v (BaseTV (UintT k))
+Proof
+  rw[bounded_int_op_def] >> gvs[] >>
+  REWRITE_TAC[satisfies_type_def] >> simp[]
+QED
+
+Theorem bounded_int_op_signed:
+  !k r v.
+    bounded_int_op (Signed k) r = INL v ==>
+    satisfies_type v (BaseTV (IntT k))
+Proof
+  rw[bounded_int_op_def] >> gvs[] >>
+  REWRITE_TAC[satisfies_type_def] >> simp[]
+QED
+
+(* Phase 2: evaluate_binop Add on uint preserves satisfies_type *)
+Theorem evaluate_binop_add_uint:
+  !k tv v1 v2 r.
+    evaluate_binop (Unsigned k) tv Add v1 v2 = INL r /\
+    satisfies_type v1 (BaseTV (UintT k)) /\
+    satisfies_type v2 (BaseTV (UintT k)) ==>
+    satisfies_type r (BaseTV (UintT k))
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `v1` >> Cases_on `v2` >>
+  gvs[satisfies_type_def] >>
+  gvs[Once evaluate_binop_def] >>
+  metis_tac[bounded_int_op_unsigned]
+QED
+
+(* Phase 2: evaluate_builtin Bop Add on uint preserves satisfies_type *)
+Theorem evaluate_builtin_bop_add_uint:
+  !cx acc k v1 v2 r.
+    evaluate_builtin cx acc (BaseT (UintT k)) (Bop Add) [v1; v2] = INL r /\
+    satisfies_type v1 (BaseTV (UintT k)) /\
+    satisfies_type v2 (BaseTV (UintT k)) ==>
+    satisfies_type r (BaseTV (UintT k))
+Proof
+  rw[evaluate_builtin_def, type_to_int_bound_def, LET_THM] >>
+  metis_tac[evaluate_binop_add_uint]
+QED
+
+(* ===== Static typing environment ===== *)
 (*
- * For variable lookup cases (Name, BareGlobalName, TopLevelName), the runtime
- * stores (type_value, value) pairs. We need the stored type_value to match
- * the AST annotation. This requires a consistency invariant between AST
- * annotations and runtime type_values — to be captured by well_formed_context.
+ * typing_env captures the static type information a type checker would produce.
+ * It maps variable names to their declared (syntactic) types.
+ * This is state-independent — it doesn't change during evaluation.
  *
- * For now, we prove what we can without that connection:
- * - Literal: no variable lookup needed
- * - Name: stated with explicit assumption connecting stored tv to AST type
+ * env_consistent links the typing_env to the runtime state:
+ * for every variable in scope, the stored type_value equals
+ * evaluate_type of the declared type.
  *)
 
-(* Literal case: eval_expr on a literal preserves types *)
-Theorem type_preservation_literal:
-  !cx ty l st v st' tv tenv.
-    eval_expr cx (Literal ty l) st = (INL (Value v), st') /\
+Datatype:
+  typing_env = <|
+    var_types : (num |-> type);
+    global_types : (num |-> type);
+    toplevel_types : ((num option # num) |-> type);
+    type_defs : (num |-> type_args);
+  |>
+End
+
+(* env_consistent: typing env matches runtime state *)
+Definition env_consistent_def:
+  env_consistent env cx st <=>
+    env.type_defs = get_tenv cx /\
+    (!id ty tv v.
+       FLOOKUP env.var_types id = SOME ty /\
+       lookup_scopes id st.scopes = SOME (tv, v) ==>
+       evaluate_type (get_tenv cx) ty = SOME tv) /\
+    (!id ty tv v.
+       FLOOKUP env.global_types id = SOME ty /\
+       FLOOKUP (get_source_immutables (current_module cx)
+         (case ALOOKUP st.immutables cx.txn.target of
+            SOME m => m | NONE => [])) id = SOME (tv, v) ==>
+       evaluate_type (get_tenv cx) ty = SOME tv)
+End
+
+(* ===== well_typed_expr: state-independent AST annotation consistency ===== *)
+
+Definition well_typed_expr_def:
+  well_typed_expr env (Name ty id) =
+    (FLOOKUP env.var_types (string_to_num id) = SOME ty) /\
+  well_typed_expr env (BareGlobalName ty id) =
+    (FLOOKUP env.global_types (string_to_num id) = SOME ty) /\
+  well_typed_expr env (TopLevelName ty (src_id_opt, id)) =
+    (FLOOKUP env.toplevel_types (src_id_opt, string_to_num id) = SOME ty) /\
+  well_typed_expr env (FlagMember ty _ _) =
+    is_flag_type ty /\
+  well_typed_expr env (IfExp ty cond e1 e2) =
+    (well_typed_expr env cond /\
+     well_typed_expr env e1 /\
+     well_typed_expr env e2 /\
+     expr_type cond = BaseT BoolT /\
+     expr_type e1 = ty /\ expr_type e2 = ty) /\
+  well_typed_expr env (Literal ty l) =
     well_typed_literal ty l /\
-    evaluate_type tenv ty = SOME tv ==>
-    satisfies_type v tv /\ st' = st
-Proof
-  simp[Once evaluate_def, return_def] >>
-  metis_tac[evaluate_literal_satisfies_type]
-QED
+  well_typed_expr env (StructLit ty _ kes) =
+    (well_typed_named_exprs env kes /\
+     is_struct_type ty) /\
+  well_typed_expr env (Subscript ty e1 e2) =
+    (well_typed_expr env e1 /\
+     well_typed_expr env e2 /\
+     subscript_type_ok (expr_type e1) (expr_type e2) ty) /\
+  well_typed_expr env (Attribute ty e id) =
+    (well_typed_expr env e /\
+     attribute_type_ok env.type_defs (expr_type e) id ty) /\
+  well_typed_expr env (Builtin ty blt es) =
+    (well_typed_exprs env es /\
+     well_typed_builtin_app ty blt (MAP expr_type es)) /\
+  well_typed_expr env (TypeBuiltin ty _ target_ty es) =
+    (well_typed_exprs env es /\
+     well_formed_type env.type_defs ty /\
+     well_formed_type env.type_defs target_ty) /\
+  well_typed_expr env (Pop ty tgt) =
+    (well_typed_target env tgt /\
+     well_formed_type env.type_defs ty) /\
+  well_typed_expr env (Call ty (IntCall _) args drv) =
+    (well_typed_exprs env args /\
+     well_typed_opt env drv /\
+     well_formed_type env.type_defs ty) /\
+  well_typed_expr env (Call ty (ExtCall _ (_, arg_types, ret_ty)) args drv) =
+    (well_typed_exprs env args /\
+     well_typed_opt env drv /\
+     ty = ret_ty) /\
+  well_typed_expr env (Call ty Send args drv) =
+    (well_typed_exprs env args /\
+     LENGTH args = 2 /\ ty = NoneT) /\
+  well_typed_target env (NameTarget id) =
+    (string_to_num id IN FDOM env.var_types) /\
+  well_typed_target env (BareGlobalNameTarget id) =
+    (string_to_num id IN FDOM env.global_types) /\
+  well_typed_target env (TopLevelNameTarget (src_id_opt, id)) =
+    ((src_id_opt, string_to_num id) IN FDOM env.toplevel_types) /\
+  well_typed_target env (SubscriptTarget tgt e) =
+    (well_typed_target env tgt /\ well_typed_expr env e) /\
+  well_typed_target env (AttributeTarget tgt _) =
+    well_typed_target env tgt /\
+  well_typed_exprs env [] = T /\
+  well_typed_exprs env (e::es) =
+    (well_typed_expr env e /\ well_typed_exprs env es) /\
+  well_typed_opt env NONE = T /\
+  well_typed_opt env (SOME e) = well_typed_expr env e /\
+  well_typed_named_exprs env [] = T /\
+  well_typed_named_exprs env ((k,e)::kes) =
+    (well_typed_expr env e /\ well_typed_named_exprs env kes)
+Termination
+  WF_REL_TAC `measure (\x. case x of
+    | INL (_, e) => expr_size e
+    | INR (INL (_, tgt)) => base_assignment_target_size tgt
+    | INR (INR (INL (_, es))) => expr4_size es
+    | INR (INR (INR (INL (_, opt)))) => expr3_size opt
+    | INR (INR (INR (INR (_, kes)))) => expr1_size kes)`
+  \\ simp[expr_size_def]
+  \\ qsuff_tac
+       `(!es. expr4_size es = list_size expr_size es) /\
+        (!drv. expr3_size drv = option_size expr_size drv) /\
+        (!kes. expr1_size kes =
+               list_size (pair_size (list_size char_size) expr_size) kes)`
+  >- (strip_tac \\ asm_rewrite_tac[] \\ DECIDE_TAC)
+  \\ rpt conj_tac
+  \\ TRY (Induct \\ simp[expr_size_def, listTheory.list_size_def,
+            basicSizeTheory.pair_size_def])
+  \\ Cases
+  \\ simp[expr_size_def, basicSizeTheory.option_size_def]
+End
 
-(* Name case: if the stored type_value matches the AST annotation *)
-Theorem type_preservation_name:
-  !cx ty id st v st' tv.
-    eval_expr cx (Name ty id) st = (INL (Value v), st') /\
-    state_well_typed st /\
-    (* Consistency: stored type_value matches AST annotation *)
-    (!tv' v'. lookup_scopes (string_to_num id) st.scopes = SOME (tv', v') ==>
-              evaluate_type (get_tenv cx) ty = SOME tv') /\
-    evaluate_type (get_tenv cx) ty = SOME tv ==>
-    satisfies_type v tv /\ state_well_typed st'
-Proof
-  rw[Once evaluate_def, bind_def, get_scopes_def,
-     lift_option_type_def, return_def, LET_THM] >>
-  Cases_on `lookup_scopes_val (string_to_num id) st.scopes` >>
-  fs[return_def, raise_def] >>
-  rw[] >>
-  imp_res_tac lookup_scopes_val_well_typed >>
-  gvs[state_well_typed_def]
-QED
-
-(* ===== Phase 6: Top-level theorems (TODO) ===== *)
+(* ===== Type preservation by induction ===== *)
 (*
- * TODO: define well_formed_context capturing static validity of cx:
- *   - AST type annotations match stored type_values in scopes/immutables
- *   - get_tenv cx is well-formed (struct/flag definitions resolve)
- *   - function signatures match their bodies
- *   - storage layout is consistent with declarations
+ * The theorem: if the expression is well-typed (statically) and the
+ * typing environment is consistent with the runtime state, then
+ * evaluation preserves types and the state invariant.
  *
- * TODO: type_preservation (full, by induction on e)
- * TODO: no_type_errors (derived from type_preservation)
+ * env_consistent is the bridge: it says the typing_env matches
+ * what's actually stored in scopes/immutables.
  *)
+
+Theorem type_preservation:
+  !e cx env st v st' tv.
+    well_typed_expr env e /\
+    env_consistent env cx st /\
+    state_well_typed st /\
+    eval_expr cx e st = (INL (Value v), st') /\
+    evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
+    satisfies_type v tv /\ state_well_typed st' /\ env_consistent env cx st'
+Proof
+  Induct >> rpt gen_tac >>
+  simp[expr_type_def, well_typed_expr_def] >> strip_tac
+  (* Name: eval_expr doesn't change state, so st' = st *)
+  >- (qpat_x_assum `eval_expr _ _ _ = _`
+        (mp_tac o ONCE_REWRITE_RULE[evaluate_def]) >>
+      simp[bind_def, get_scopes_def, lift_option_type_def,
+           return_def, LET_THM] >>
+      Cases_on `lookup_scopes_val (string_to_num s) st.scopes` >>
+      simp[return_def, raise_def] >> strip_tac >> rw[] >>
+      `EVERY scope_well_typed st.scopes` by fs[state_well_typed_def] >>
+      imp_res_tac lookup_scopes_val_well_typed >>
+      fs[env_consistent_def] >>
+      first_x_assum drule >> disch_then drule >> gvs[])
+  (* BareGlobalName *)
+  >- cheat
+  (* TopLevelName *)
+  >- cheat
+  (* FlagMember *)
+  >- cheat
+  (* IfExp *)
+  >- cheat
+  (* Literal *)
+  >- (gvs[Once evaluate_def, return_def] >>
+      fs[env_consistent_def] >>
+      metis_tac[evaluate_literal_satisfies_type])
+  (* StructLit *)
+  >- cheat
+  (* Subscript *)
+  >- cheat
+  (* Attribute *)
+  >- cheat
+  (* Builtin *)
+  >- cheat
+  (* TypeBuiltin *)
+  >- cheat
+  (* Pop *)
+  >- cheat
+  (* Call *)
+  >- cheat
+QED
