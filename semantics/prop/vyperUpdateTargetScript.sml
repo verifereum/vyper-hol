@@ -65,7 +65,7 @@ Theorem valid_target_name_update:
                    NoneTV bop v1 v2 = INL v ⇒
     valid_target cx st (BaseTargetV (ScopedVar n) []) (Update ty bop v2)
 Proof
-  rw[lookup_name_def, lookup_scopes_val_SOME, valid_target_def] >>
+  rw[lookup_name_SOME, lookup_name_typed_def, valid_target_def] >>
   `IS_SOME (find_containing_scope (string_to_num n) st.scopes)`
     by (irule lookup_scopes_find_containing >> simp[]) >>
   Cases_on `find_containing_scope (string_to_num n) st.scopes` >> gvs[] >>

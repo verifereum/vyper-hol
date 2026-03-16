@@ -292,7 +292,7 @@ Proof
 QED
 
 (****************************************)
-(* Theorems *)
+(* Bridge lemmas *)
 
 Theorem lookup_name_typed_to_lookup_name:
   ∀st n.
@@ -304,7 +304,7 @@ Proof
   Cases_on `x` >> simp[lookup_scopes_val_SOME]
 QED
 
-Theorem lookup_name_SOME[local]:
+Theorem lookup_name_SOME:
   ∀id sc v.
     lookup_name id sc = SOME v ⇔
     ∃tv. lookup_name_typed id sc = SOME (tv, v)
@@ -312,10 +312,16 @@ Proof
   simp[lookup_name_def, lookup_name_typed_def, lookup_scopes_val_SOME]
 QED
 
-Theorem lookup_name_NONE[local]:
+Theorem lookup_name_NONE:
   ∀id sc. lookup_name id sc = NONE ⇔ lookup_name_typed id sc = NONE
 Proof
   simp[lookup_name_def, lookup_name_typed_def, lookup_scopes_val_NONE]
+QED
+
+Theorem var_in_scope_lookup_name_typed[local]:
+  ∀st n. var_in_scope st n ⇔ IS_SOME (lookup_name_typed st n)
+Proof
+  simp[var_in_scope_def, lookup_name_def, lookup_name_typed_def]
 QED
 
 Theorem lookup_name_implies_var_in_scope:
@@ -324,17 +330,35 @@ Proof
   simp[var_in_scope_def]
 QED
 
+(* ===== lookup_name_typed with_scopes ===== *)
+
+Theorem lookup_name_typed_with_scopes:
+  ∀st1 st2 n. lookup_name_typed (st1 with scopes := st2.scopes) n = lookup_name_typed st2 n
+Proof
+  rw[lookup_name_typed_def]
+QED
+
 Theorem lookup_name_with_scopes:
   ∀st1 st2 n. lookup_name (st1 with scopes := st2.scopes) n = lookup_name st2 n
 Proof
-  rw[lookup_name_def]
+  simp[lookup_name_typed_to_lookup_name, lookup_name_typed_with_scopes]
+QED
+
+Theorem lookup_name_typed_with_scopes_list:
+  ∀st1 st2 n sc.
+    lookup_name_typed (st1 with scopes := sc) n = lookup_name_typed (st2 with scopes := sc) n
+Proof
+  rw[lookup_name_typed_def]
 QED
 
 Theorem lookup_name_with_scopes_list:
   ∀st1 st2 n sc.
     lookup_name (st1 with scopes := sc) n = lookup_name (st2 with scopes := sc) n
 Proof
-  rw[lookup_name_def]
+  rpt gen_tac >>
+  simp[lookup_name_typed_to_lookup_name] >>
+  AP_TERM_TAC >>
+  simp[lookup_name_typed_with_scopes_list]
 QED
 
 Theorem var_in_scope_implies_name_target:
@@ -472,18 +496,66 @@ Proof
      Cases_on `popped_value v` >> gvs[return_def]
 QED
 
+(* ===== lookup_name_typed after update_name ===== *)
+
+(* Type-preserving: when the variable exists, its type is preserved *)
+Theorem lookup_name_typed_after_update:
+  ∀st n tv v0 v.
+    lookup_name_typed st n = SOME (tv, v0) ⇒
+    lookup_name_typed (update_name st n v) n = SOME (tv, v)
+Proof
+  rw[lookup_name_typed_def, update_name_def, LET_THM] >>
+  `IS_SOME (find_containing_scope (string_to_num n) st.scopes)`
+    by (irule lookup_scopes_find_containing >> simp[]) >>
+  Cases_on `find_containing_scope (string_to_num n) st.scopes` >- gvs[] >>
+  PairCases_on `x` >> gvs[evaluation_state_accfupds] >>
+  imp_res_tac find_containing_scope_lookup >> gvs[] >>
+  imp_res_tac find_containing_scope_pre_none >>
+  irule lookup_scopes_update >> simp[]
+QED
+
+(* When the variable does not exist, update_name still succeeds *)
+Theorem lookup_name_typed_after_update_none[local]:
+  ∀st n v.
+    lookup_name_typed st n = NONE ⇒
+    ∃tv. lookup_name_typed (update_name st n v) n = SOME (tv, v)
+Proof
+  rw[lookup_name_typed_def, update_name_def, LET_THM] >>
+  `find_containing_scope (string_to_num n) st.scopes = NONE` by
+    (Cases_on `find_containing_scope (string_to_num n) st.scopes` >> gvs[] >>
+     PairCases_on `x` >> imp_res_tac find_containing_scope_lookup >> gvs[]) >>
+  simp[] >> Cases_on `st.scopes` >> gvs[evaluation_state_accfupds] >>
+  simp[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
 Theorem lookup_after_update:
   ∀st n v. lookup_name (update_name st n v) n = SOME v
 Proof
-  rw[lookup_name_def, update_name_def, LET_THM] >>
-  Cases_on `find_containing_scope (string_to_num n) st.scopes` >-
-   (Cases_on `st.scopes` >> gvs[] >>
-    simp[evaluation_state_accfupds, lookup_scopes_val_def,
-         finite_mapTheory.FLOOKUP_UPDATE]) >>
+  simp[lookup_name_SOME] >> rpt gen_tac >>
+  Cases_on `lookup_name_typed st n` >-
+    metis_tac[lookup_name_typed_after_update_none] >>
+  PairCases_on `x` >> metis_tac[lookup_name_typed_after_update]
+QED
+
+(* ===== lookup_name_typed preserved after update_name ===== *)
+
+Theorem lookup_name_typed_preserved_after_update:
+  ∀st n1 n2 v.
+    n1 ≠ n2 ⇒
+    lookup_name_typed (update_name st n1 v) n2 = lookup_name_typed st n2
+Proof
+  rw[lookup_name_typed_def, update_name_def, LET_THM] >>
+  `string_to_num n1 ≠ string_to_num n2` by metis_tac[vyperMiscTheory.string_to_num_inj] >>
+  Cases_on `find_containing_scope (string_to_num n1) st.scopes` >-
+   (simp[evaluation_state_accfupds, lookup_scopes_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+    Cases_on `st.scopes` >>
+    gvs[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
   PairCases_on `x` >> simp[evaluation_state_accfupds] >>
-  drule find_containing_scope_pre_none >> strip_tac >>
-  simp[lookup_scopes_val_SOME] >>
-  drule lookup_scopes_update >> simp[]
+  drule find_containing_scope_structure >> strip_tac >> gvs[] >>
+  `x0 ⧺ [x1] ⧺ x4 = x0 ⧺ x1::x4` by simp[] >>
+  pop_assum SUBST1_TAC >>
+  simp[lookup_scopes_update_other]
 QED
 
 Theorem lookup_name_preserved_after_update:
@@ -491,18 +563,7 @@ Theorem lookup_name_preserved_after_update:
     n1 ≠ n2 ⇒
     lookup_name (update_name st n1 v) n2 = lookup_name st n2
 Proof
-  rw[lookup_name_def, update_name_def, LET_THM] >>
-  `string_to_num n1 ≠ string_to_num n2` by metis_tac[vyperMiscTheory.string_to_num_inj] >>
-  Cases_on `find_containing_scope (string_to_num n1) st.scopes` >-
-   (simp[evaluation_state_accfupds, lookup_scopes_val_def,
-         finite_mapTheory.FLOOKUP_UPDATE] >>
-    Cases_on `st.scopes` >>
-    gvs[lookup_scopes_val_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
-  PairCases_on `x` >> simp[evaluation_state_accfupds] >>
-  drule find_containing_scope_structure >> strip_tac >> gvs[] >>
-  `x0 ⧺ [x1] ⧺ x4 = x0 ⧺ x1::x4` by simp[] >>
-  pop_assum SUBST1_TAC >>
-  simp[lookup_scopes_val_update_other]
+  simp[lookup_name_typed_to_lookup_name, lookup_name_typed_preserved_after_update]
 QED
 
 Theorem var_in_scope_after_update:
@@ -552,14 +613,25 @@ Proof
        finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
+(* ===== lookup_in_current_scope to lookup_name_typed ===== *)
+
+Theorem lookup_in_current_scope_to_lookup_name_typed:
+  ∀st n tv v.
+    st.scopes ≠ [] ∧
+    lookup_in_current_scope st n = SOME (tv, v) ⇒
+    lookup_name_typed st n = SOME (tv, v)
+Proof
+  rw[lookup_in_current_scope_def, lookup_name_typed_def] >>
+  Cases_on `st.scopes` >> gvs[lookup_scopes_def]
+QED
+
 Theorem lookup_in_current_scope_to_lookup_name:
   ∀st n tv v.
     st.scopes ≠ [] ∧
     lookup_in_current_scope st n = SOME (tv, v) ⇒
     lookup_name st n = SOME v
 Proof
-  rw[lookup_in_current_scope_def, lookup_name_def] >>
-  Cases_on `st.scopes` >> gvs[lookup_scopes_val_def]
+  simp[lookup_name_SOME] >> metis_tac[lookup_in_current_scope_to_lookup_name_typed]
 QED
 
 Theorem lookup_in_current_scope_hd:
@@ -586,13 +658,23 @@ Proof
   metis_tac[vyperMiscTheory.string_to_num_inj]
 QED
 
+(* ===== lookup_name_typed in tl_scopes ===== *)
+
+Theorem lookup_name_typed_in_tl_scopes:
+  ∀st n.
+    lookup_in_current_scope st n = NONE ⇒
+    (lookup_name_typed (tl_scopes st) n = lookup_name_typed st n)
+Proof
+  rw[lookup_in_current_scope_def, lookup_name_typed_def, tl_scopes_def] >>
+  Cases_on `st.scopes` >> gvs[lookup_scopes_def]
+QED
+
 Theorem lookup_in_tl_scopes:
   ∀st n.
     lookup_in_current_scope st n = NONE ⇒
     (lookup_name (tl_scopes st) n = lookup_name st n)
 Proof
-  rw[lookup_in_current_scope_def, lookup_name_def, tl_scopes_def] >>
-  Cases_on `st.scopes` >> gvs[lookup_scopes_val_def]
+  simp[lookup_name_typed_to_lookup_name, lookup_name_typed_in_tl_scopes]
 QED
 
 Theorem var_in_tl_scopes:
@@ -621,6 +703,25 @@ Proof
   PairCases_on `x` >> gvs[evaluation_state_accfupds]
 QED
 
+(* ===== lookup_name_typed update in tl_scopes ===== *)
+
+Theorem lookup_name_typed_update_in_tl_scopes:
+  ∀st n tv v0 v.
+    lookup_in_current_scope st n = NONE ∧
+    lookup_name_typed (tl_scopes st) n = SOME (tv, v0) ⇒
+    lookup_name_typed (tl_scopes (update_name st n v)) n = SOME (tv, v)
+Proof
+  rpt strip_tac >>
+  `var_in_scope (tl_scopes st) n` by
+    simp[var_in_scope_lookup_name_typed] >>
+  `(tl_scopes (update_name st n v)).scopes =
+   (update_name (tl_scopes st) n v).scopes`
+    by metis_tac[update_name_in_tl_scopes] >>
+  `lookup_name_typed (update_name (tl_scopes st) n v) n = SOME (tv, v)` by
+    (irule lookup_name_typed_after_update >> qexists_tac `v0` >> simp[]) >>
+  gvs[lookup_name_typed_def]
+QED
+
 Theorem lookup_name_update_in_tl_scopes:
   ∀st n v.
     lookup_in_current_scope st n = NONE ∧
@@ -628,12 +729,32 @@ Theorem lookup_name_update_in_tl_scopes:
     lookup_name (tl_scopes (update_name st n v)) n = SOME v
 Proof
   rpt strip_tac >>
-  simp[lookup_name_def, tl_scopes_def] >>
-  `(tl_scopes (update_name st n v)).scopes =
-   (update_name (tl_scopes st) n v).scopes`
+  simp[lookup_name_SOME] >>
+  `∃tv v0. lookup_name_typed (tl_scopes st) n = SOME (tv, v0)` by
+    (Cases_on `lookup_name_typed (tl_scopes st) n` >>
+     gvs[var_in_scope_lookup_name_typed] >>
+     PairCases_on `x` >> metis_tac[]) >>
+  metis_tac[lookup_name_typed_update_in_tl_scopes]
+QED
+
+(* ===== lookup_name_typed preserved after update in tl_scopes ===== *)
+
+Theorem lookup_name_typed_preserved_after_update_in_tl_scopes:
+  ∀st n1 n2 v tv w.
+    n1 ≠ n2 ∧
+    lookup_in_current_scope st n1 = NONE ∧
+    lookup_in_current_scope st n2 = NONE ∧
+    var_in_scope (tl_scopes st) n1 ∧
+    lookup_name_typed (tl_scopes st) n2 = SOME (tv, w) ⇒
+    lookup_name_typed (tl_scopes (update_name st n1 v)) n2 = SOME (tv, w)
+Proof
+  rpt strip_tac >>
+  `(tl_scopes (update_name st n1 v)).scopes =
+   (update_name (tl_scopes st) n1 v).scopes`
     by simp[update_name_in_tl_scopes] >>
-  gvs[tl_scopes_def] >>
-  simp[GSYM lookup_name_def, lookup_after_update]
+  `lookup_name_typed (update_name (tl_scopes st) n1 v) n2 = SOME (tv, w)` by
+    simp[lookup_name_typed_preserved_after_update] >>
+  gvs[lookup_name_typed_def]
 QED
 
 Theorem lookup_name_preserved_after_update_in_tl_scopes:
@@ -646,12 +767,9 @@ Theorem lookup_name_preserved_after_update_in_tl_scopes:
     lookup_name (tl_scopes (update_name st n1 v)) n2 = SOME w
 Proof
   rpt strip_tac >>
-  `(tl_scopes (update_name st n1 v)).scopes =
-   (update_name (tl_scopes st) n1 v).scopes`
-    by simp[update_name_in_tl_scopes] >>
-  gvs[lookup_name_def, tl_scopes_def] >>
-  simp[GSYM lookup_name_def, lookup_name_preserved_after_update] >>
-  simp[lookup_name_def]
+  gvs[lookup_name_SOME] >>
+  simp[lookup_name_SOME] >>
+  metis_tac[lookup_name_typed_preserved_after_update_in_tl_scopes]
 QED
 
 Theorem scopes_nonempty_preserved_after_update_in_tl_scopes:
@@ -721,6 +839,19 @@ QED
 
 (* ===== update_name frame: other variables preserved ===== *)
 
+Theorem update_name_typed_frame:
+  ∀st n1 n2 v tv w.
+    n1 ≠ n2 ∧
+    lookup_name_typed st n2 = SOME (tv, w) ⇒
+    lookup_name_typed (update_name st n1 v) n2 = SOME (tv, w) ∧
+    (update_name st n1 v).scopes ≠ [] ∧
+    var_in_scope (update_name st n1 v) n2
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[lookup_name_typed_preserved_after_update, scopes_nonempty_after_update,
+      var_in_scope_lookup_name_typed, lookup_name_typed_preserved_after_update]
+QED
+
 Theorem update_name_frame:
   ∀st n1 n2 v w.
     n1 ≠ n2 ∧
@@ -729,10 +860,11 @@ Theorem update_name_frame:
     (update_name st n1 v).scopes ≠ [] ∧
     var_in_scope (update_name st n1 v) n2
 Proof
-  rpt strip_tac >>
-  gvs[lookup_name_preserved_after_update, scopes_nonempty_after_update] >>
-  metis_tac[var_in_scope_preserved_after_update,
-            var_in_scope_def, optionTheory.IS_SOME_DEF]
+  rpt gen_tac >> strip_tac >>
+  `∃tv. lookup_name_typed st n2 = SOME (tv, w)` by
+    metis_tac[lookup_name_SOME] >>
+  imp_res_tac update_name_typed_frame >>
+  gvs[lookup_name_typed_to_lookup_name]
 QED
 
 Theorem lookup_flag_member_to_lookup_flag_mem:
@@ -772,12 +904,20 @@ QED
 
 (* TODO: this should be encapsulated more, with declare_name probably *)
 
+Theorem lookup_name_typed_fempty_prepend:
+  ∀st n.
+    lookup_name_typed (st with scopes := FEMPTY :: st.scopes) n =
+    lookup_name_typed st n
+Proof
+  simp[lookup_name_typed_def, lookup_scopes_def, finite_mapTheory.FLOOKUP_DEF]
+QED
+
 Theorem lookup_name_fempty_prepend:
   ∀st n.
     lookup_name (st with scopes := FEMPTY :: st.scopes) n =
     lookup_name st n
 Proof
-  simp[lookup_name_def, lookup_scopes_val_def, finite_mapTheory.FLOOKUP_DEF]
+  simp[lookup_name_typed_to_lookup_name, lookup_name_typed_fempty_prepend]
 QED
 
 Theorem var_in_scope_fempty_prepend:
@@ -827,13 +967,35 @@ Proof
   rw[declare_name_def] >> Cases_on `st.scopes` >> fs[]
 QED
 
+(* ===== lookup_name_typed after declare_name ===== *)
+
+Theorem lookup_name_typed_after_declare:
+  ∀st n tyv v. st.scopes ≠ [] ⇒
+    lookup_name_typed (declare_name st n tyv v) n = SOME (tyv, v)
+Proof
+  rpt strip_tac >>
+  simp[lookup_name_typed_def, declare_name_def] >>
+  Cases_on `st.scopes` >> gvs[] >>
+  simp[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
 Theorem lookup_after_declare:
   ∀st n tyv v.
     st.scopes ≠ [] ⇒
     lookup_name (declare_name st n tyv v) n = SOME v
 Proof
-  rw[declare_name_def, lookup_name_def] >>
-  Cases_on `st.scopes` >> fs[lookup_scopes_val_def, finite_mapTheory.FLOOKUP_UPDATE]
+  simp[lookup_name_SOME] >> metis_tac[lookup_name_typed_after_declare]
+QED
+
+Theorem lookup_name_typed_preserved_after_declare:
+  ∀st n1 n2 tyv v. n1 ≠ n2 ∧ st.scopes ≠ [] ⇒
+    lookup_name_typed (declare_name st n1 tyv v) n2 = lookup_name_typed st n2
+Proof
+  rpt strip_tac >>
+  simp[lookup_name_typed_def, declare_name_def] >>
+  Cases_on `st.scopes` >> gvs[] >>
+  simp[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gvs[vyperMiscTheory.string_to_num_inj]
 QED
 
 Theorem lookup_name_preserved_after_declare:
@@ -841,9 +1003,7 @@ Theorem lookup_name_preserved_after_declare:
     n1 ≠ n2 ∧ st.scopes ≠ [] ⇒
     lookup_name (declare_name st n1 tyv v) n2 = lookup_name st n2
 Proof
-  rw[declare_name_def, lookup_name_def] >>
-  Cases_on `st.scopes` >> fs[lookup_scopes_val_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  drule vyperMiscTheory.string_to_num_inj >> simp[]
+  simp[lookup_name_typed_to_lookup_name, lookup_name_typed_preserved_after_declare]
 QED
 
 Theorem scopes_nonempty_after_declare:
@@ -872,43 +1032,26 @@ Proof
   rw[lookup_name_preserved_after_declare]
 QED
 
-(* ============================================================ *)
-(* lookup_name_typed lemmas *)
-
-Theorem lookup_name_typed_after_declare:
-  ∀st n tyv v. st.scopes ≠ [] ⇒
-    lookup_name_typed (declare_name st n tyv v) n = SOME (tyv, v)
-Proof
-  rpt strip_tac >>
-  simp[lookup_name_typed_def, declare_name_def] >>
-  Cases_on `st.scopes` >> gvs[] >>
-  simp[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE]
-QED
-
-Theorem lookup_name_typed_preserved_after_declare:
-  ∀st n1 n2 tyv v. n1 ≠ n2 ∧ st.scopes ≠ [] ⇒
-    lookup_name_typed (declare_name st n1 tyv v) n2 = lookup_name_typed st n2
-Proof
-  rpt strip_tac >>
-  simp[lookup_name_typed_def, declare_name_def] >>
-  Cases_on `st.scopes` >> gvs[] >>
-  simp[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  gvs[vyperMiscTheory.string_to_num_inj]
-QED
-
 (* ============================================================
    Bridge lemmas: scope push via updated_by CONS FEMPTY
    ============================================================ *)
 
-Theorem lookup_name_push_fempty:
-  ∀st n. lookup_name (st with scopes updated_by CONS FEMPTY) n =
-         lookup_name st n
+Theorem lookup_name_typed_push_fempty:
+  ∀st n. lookup_name_typed (st with scopes updated_by CONS FEMPTY) n =
+         lookup_name_typed st n
 Proof
   rpt gen_tac >>
   `(st with scopes updated_by CONS FEMPTY) =
    (st with scopes := FEMPTY :: st.scopes)` by
     simp[evaluation_state_component_equality, evaluation_state_accfupds] >>
-  simp[lookup_name_fempty_prepend]
+  simp[lookup_name_typed_fempty_prepend]
+QED
+
+Theorem lookup_name_push_fempty:
+  ∀st n. lookup_name (st with scopes updated_by CONS FEMPTY) n =
+         lookup_name st n
+Proof
+  simp[lookup_name_typed_to_lookup_name, lookup_name_typed_push_fempty]
 QED
 
 Theorem var_in_scope_push_fempty:
@@ -949,14 +1092,44 @@ QED
 
 (* TODO: these should be encapsulated more, probably using declare_name *)
 
+Theorem lookup_name_typed_push_singleton_same:
+  ∀st id tv v.
+    lookup_name_typed (st with scopes updated_by
+      CONS (FEMPTY |+ (string_to_num id, (tv, v)))) id = SOME (tv, v)
+Proof
+  rpt gen_tac >>
+  simp[lookup_name_typed_def, lookup_scopes_def, evaluation_state_accfupds,
+       finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
 Theorem lookup_name_push_singleton_same:
   ∀st id tv v.
     lookup_name (st with scopes updated_by
       CONS (FEMPTY |+ (string_to_num id, (tv, v)))) id = SOME v
 Proof
-  rpt gen_tac >>
-  simp[lookup_name_def, lookup_scopes_val_def, evaluation_state_accfupds,
-       finite_mapTheory.FLOOKUP_UPDATE]
+  simp[lookup_name_SOME] >> metis_tac[lookup_name_typed_push_singleton_same]
+QED
+
+Theorem lookup_name_typed_push_singleton_other:
+  ∀st id1 id2 v.
+    id1 ≠ id2 ⇒
+    lookup_name_typed (st with scopes updated_by
+      CONS (FEMPTY |+ (string_to_num id1, v))) id2 =
+    lookup_name_typed st id2
+Proof
+  rpt strip_tac >>
+  `lookup_in_current_scope
+     (st with scopes updated_by
+        CONS (FEMPTY |+ (string_to_num id1, v))) id2 = NONE` by
+    (irule lookup_in_current_scope_singleton_other >>
+     simp[evaluation_state_accfupds] >>
+     qexistsl_tac [`id1`, `v`] >> simp[]) >>
+  `lookup_name_typed
+     (tl_scopes (st with scopes updated_by
+        CONS (FEMPTY |+ (string_to_num id1, v)))) id2 =
+   lookup_name_typed st id2` by
+    simp[tl_scopes_push] >>
+  metis_tac[lookup_name_typed_in_tl_scopes]
 QED
 
 Theorem lookup_name_push_singleton_other:
@@ -966,19 +1139,7 @@ Theorem lookup_name_push_singleton_other:
       CONS (FEMPTY |+ (string_to_num id1, v))) id2 =
     lookup_name st id2
 Proof
-  rpt strip_tac >>
-  `lookup_in_current_scope
-     (st with scopes updated_by
-        CONS (FEMPTY |+ (string_to_num id1, v))) id2 = NONE` by
-    (irule lookup_in_current_scope_singleton_other >>
-     simp[evaluation_state_accfupds] >>
-     qexistsl_tac [`id1`, `v`] >> simp[]) >>
-  `lookup_name
-     (tl_scopes (st with scopes updated_by
-        CONS (FEMPTY |+ (string_to_num id1, v)))) id2 =
-   lookup_name st id2` by
-    simp[tl_scopes_push] >>
-  metis_tac[lookup_in_tl_scopes]
+  simp[lookup_name_typed_to_lookup_name, lookup_name_typed_push_singleton_other]
 QED
 
 Theorem var_in_scope_push_singleton:
@@ -1009,11 +1170,17 @@ Proof
   simp[evaluation_state_accfupds]
 QED
 
+Theorem lookup_name_typed_empty_scopes:
+  ∀st n. st.scopes = [] ⇒ lookup_name_typed st n = NONE
+Proof
+  rpt strip_tac >>
+  simp[lookup_name_typed_def, lookup_scopes_def]
+QED
+
 Theorem lookup_name_empty_scopes:
   ∀st n. st.scopes = [] ⇒ lookup_name st n = NONE
 Proof
-  rpt strip_tac >>
-  simp[lookup_name_def, lookup_scopes_val_def]
+  simp[lookup_name_typed_to_lookup_name, lookup_name_typed_empty_scopes]
 QED
 
 Theorem tl_scopes_update_push_singleton:
