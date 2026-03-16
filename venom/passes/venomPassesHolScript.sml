@@ -2,7 +2,7 @@
 Theory venomPassesHol
 Ancestors
   (* shared pass infrastructure *)
-  passSharedDefs passSharedProps
+  passSharedDefs passSharedProps passSharedFrame
   (* phi elimination *)
   phiElim
   (* revert-to-assert *)

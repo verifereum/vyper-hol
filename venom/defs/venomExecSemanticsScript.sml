@@ -447,17 +447,17 @@ Definition exec_create_def:
     | NONE => Error "create: non-terminating or invalid state"
 End
 
-(* Bump-allocate memory and record in vs_allocas *)
+(* Bump-allocate: record region in vs_allocas without touching vs_memory.
+   Memory is extended lazily by mstore when the region is actually written. *)
 Definition exec_alloca_def:
   exec_alloca inst s alloc_size alloc_id =
     case inst.inst_outputs of
       [out] =>
-        let offset = LENGTH s.vs_memory in
+        let offset = next_alloca_offset s in
         let sz = w2n alloc_size in
-        let s' = s with <|
-          vs_memory := s.vs_memory ++ REPLICATE sz 0w;
+        let s' = s with
           vs_allocas := s.vs_allocas |+ (w2n alloc_id, (offset, sz))
-        |> in
+        in
         OK (update_var out (n2w offset) s')
     | _ => Error "alloca requires single output"
 End
