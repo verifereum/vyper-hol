@@ -30,8 +30,8 @@
 
 Theory vyperTypeCheck
 Ancestors
-  vyperAST vyperValue vyperMisc
-  vyperInterpreter vyperState
+  vyperAST vyperValue vyperValueOperation vyperMisc
+  vyperInterpreter vyperState vyperContext
 
 (* ===== Type Classification Helpers ===== *)
 
@@ -373,6 +373,35 @@ Definition state_well_typed_def:
     EVERY (λ(addr, mods). imms_well_typed mods) st.immutables
 End
 
+(* Helper: looking up a variable in well-typed scopes gives a well-typed value *)
+Theorem lookup_scopes_well_typed:
+  !scopes id tv v.
+    EVERY scope_well_typed scopes /\
+    lookup_scopes id scopes = SOME (tv, v) ==>
+    satisfies_type v tv
+Proof
+  Induct >> simp[lookup_scopes_def] >>
+  rpt gen_tac >>
+  Cases_on `FLOOKUP h id` >> fs[] >>
+  strip_tac >> fs[scope_well_typed_def] >>
+  res_tac
+QED
+
+(* Helper: lookup_scopes_val returns a value that satisfies some type_value *)
+Theorem lookup_scopes_val_well_typed:
+  !scopes id v.
+    EVERY scope_well_typed scopes /\
+    lookup_scopes_val id scopes = SOME v ==>
+    ?tv. lookup_scopes id scopes = SOME (tv, v) /\
+         satisfies_type v tv
+Proof
+  Induct >> simp[lookup_scopes_def, lookup_scopes_val_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `FLOOKUP h id` >> gvs[] >>
+  Cases_on `x` >> simp[] >>
+  fs[scope_well_typed_def] >> res_tac
+QED
+
 (* ===== Type soundness roadmap ===== *)
 (*
  * The overall goal is to show that well-typed programs never raise TypeError.
@@ -404,52 +433,68 @@ Theorem evaluate_literal_satisfies_type:
     evaluate_type tenv ty = SOME tv ⇒
     satisfies_type (evaluate_literal l) tv
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ty` >> gvs[well_typed_literal_def] >>
+  Cases_on `l` >> Cases_on `b` >>
+  gvs[well_typed_literal_def] >>
+  gvs[Once evaluate_type_def] >>
+  REWRITE_TAC[evaluate_literal_def] >>
+  REWRITE_TAC[satisfies_type_def] >>
+  simp[]
 QED
 
-(* TODO: evaluate_binop_satisfies_type
- *   Need to relate runtime type_values (tv1, tv2) back to syntactic types
- *   (t1, t2) used by well_typed_binop. Statement needs refinement once
- *   we work through the Literal and Name cases first.
+(* ===== Phase 3: Per-expression-case preservation lemmas ===== *)
+(*
+ * For variable lookup cases (Name, BareGlobalName, TopLevelName), the runtime
+ * stores (type_value, value) pairs. We need the stored type_value to match
+ * the AST annotation. This requires a consistency invariant between AST
+ * annotations and runtime type_values — to be captured by well_formed_context.
+ *
+ * For now, we prove what we can without that connection:
+ * - Literal: no variable lookup needed
+ * - Name: stated with explicit assumption connecting stored tv to AST type
  *)
 
-(* Phase 3: Type preservation for simple expressions (TODO) *)
-
-Theorem type_preservation:
-  ∀cx e st v st' tv.
-    state_well_typed st ∧
-    eval_expr cx e st = (INL (Value v), st') ∧
-    evaluate_type (get_tenv cx) (expr_type e) = SOME tv
-    ⇒ satisfies_type v tv ∧ state_well_typed st'
+(* Literal case: eval_expr on a literal preserves types *)
+Theorem type_preservation_literal:
+  !cx ty l st v st' tv tenv.
+    eval_expr cx (Literal ty l) st = (INL (Value v), st') /\
+    well_typed_literal ty l /\
+    evaluate_type tenv ty = SOME tv ==>
+    satisfies_type v tv /\ st' = st
 Proof
-  (* By structural induction on e.
-     Each case unfolds eval_expr one step and uses:
-     - state_well_typed for variable lookups (Name, BareGlobalName)
-     - Operation-level lemmas for Literal, Builtin
-     - Inductive hypothesis for sub-expressions (IfExp, Subscript, etc.)
-     Complex cases (Call) require proving eval_stmt preserves state_well_typed.
-  *)
-  cheat
+  simp[Once evaluate_def, return_def] >>
+  metis_tac[evaluate_literal_satisfies_type]
 QED
 
-(* Phase 6: No-TypeError theorem (TODO) *)
-(* TODO: define well_formed_context capturing static validity of cx
- *   - all referenced variables exist in scopes/immutables/storage
+(* Name case: if the stored type_value matches the AST annotation *)
+Theorem type_preservation_name:
+  !cx ty id st v st' tv.
+    eval_expr cx (Name ty id) st = (INL (Value v), st') /\
+    state_well_typed st /\
+    (* Consistency: stored type_value matches AST annotation *)
+    (!tv' v'. lookup_scopes (string_to_num id) st.scopes = SOME (tv', v') ==>
+              evaluate_type (get_tenv cx) ty = SOME tv') /\
+    evaluate_type (get_tenv cx) ty = SOME tv ==>
+    satisfies_type v tv /\ state_well_typed st'
+Proof
+  rw[Once evaluate_def, bind_def, get_scopes_def,
+     lift_option_type_def, return_def, LET_THM] >>
+  Cases_on `lookup_scopes_val (string_to_num id) st.scopes` >>
+  fs[return_def, raise_def] >>
+  rw[] >>
+  imp_res_tac lookup_scopes_val_well_typed >>
+  gvs[state_well_typed_def]
+QED
+
+(* ===== Phase 6: Top-level theorems (TODO) ===== *)
+(*
+ * TODO: define well_formed_context capturing static validity of cx:
+ *   - AST type annotations match stored type_values in scopes/immutables
  *   - get_tenv cx is well-formed (struct/flag definitions resolve)
- *   - AST type annotations resolve (evaluate_type succeeds)
  *   - function signatures match their bodies
  *   - storage layout is consistent with declarations
+ *
+ * TODO: type_preservation (full, by induction on e)
+ * TODO: no_type_errors (derived from type_preservation)
  *)
-
-Theorem no_type_errors:
-  ∀cx e st msg st'.
-    state_well_typed st ∧
-    (* well_formed_context cx ∧ -- TODO: define this *)
-    eval_expr cx e st = (INR (Error (TypeError msg)), st')
-    ⇒ F
-Proof
-  (* Derived from type_preservation: each TypeError site in the interpreter
-     corresponds to a type check that succeeds when state_well_typed holds
-     and the program is well-formed. *)
-  cheat
-QED
