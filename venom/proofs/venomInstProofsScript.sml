@@ -330,15 +330,10 @@ fun step_inst_lift_from_all_tac field_fn =
 (* ===== Section 6: Write-Effects Soundness ============================ *)
 (* ===================================================================== *)
 
-(* ---- Write-Effects Soundness ----
-   STATUS: 2 of 7 proved (immutables, returndata).
-   Remaining 5 BLOCKED: they require EVM-level guarantees about what `run`
-   preserves in static mode (for STATICCALL) or CREATE/CREATE2 paths.
-   Provable cases:
-   - immutables: extract_venom_result never touches vs_immutables, and
-     INVOKE (which does via merge_callee_state) is filtered by write_effects.
-   - returndata: ALL ext-calls have Eff_RETURNDATA in write_effects,
-     so the filter excludes them all. Pure step_inst_base proof. *)
+(* Write-effects soundness: step_inst only modifies state fields
+   listed in write_effects. 2 of 7 proved (immutables, returndata).
+   Remaining 5 require EVM-level guarantees about what `run` preserves
+   in static mode (STATICCALL) or CREATE/CREATE2 paths. *)
 
 (* ===================================================================== *)
 (* ===== EVM Static-Mode Invariant (upstream dependency) =============== *)

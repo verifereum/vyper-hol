@@ -54,7 +54,11 @@ Theorem independent_commute:
     (* No output aliasing *)
     DISJOINT (set inst1.inst_outputs) (set inst2.inst_outputs) /\
     (* No effect conflict: read/write effects don't interfere *)
-    effects_independent inst1.inst_opcode inst2.inst_opcode ==>
+    effects_independent inst1.inst_opcode inst2.inst_opcode /\
+    (* ALLOCA modifies vs_allocas (untracked by effects system) which
+       INVOKE reads via setup_callee — exclude from commutativity *)
+    ~is_alloca_op inst1.inst_opcode /\
+    ~is_alloca_op inst2.inst_opcode ==>
     (case step_inst fuel ctx inst1 s of
        OK s1 => step_inst fuel ctx inst2 s1
      | other => other)
