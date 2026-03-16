@@ -580,6 +580,45 @@ Proof
   >- gvs[Once satisfies_type_def]
 QED
 
+(* Corollary: safe_cast on well-typed value is identity *)
+Theorem safe_cast_satisfies_type:
+  !tv v. satisfies_type v tv ==> safe_cast tv v = SOME v
+Proof
+  metis_tac[safe_cast_satisfies_type_mutual]
+QED
+
+(* KEY LEMMA: bind_arguments produces a well-typed scope
+ * when input values satisfy their parameter types *)
+Theorem bind_arguments_scope_well_typed:
+  !tenv params vs sc.
+    bind_arguments tenv params vs = SOME sc /\
+    LIST_REL (\v (id, typ).
+      ?tv. evaluate_type tenv typ = SOME tv /\
+           satisfies_type v tv) vs params ==>
+    scope_well_typed sc
+Proof
+  MAP_EVERY qid_spec_tac [`sc`, `vs`, `params`, `tenv`] >>
+  Induct_on `params`
+  (* base: [] *)
+  >- (rpt gen_tac >>
+      Cases_on `vs` >>
+      simp[Once bind_arguments_def, scope_well_typed_def,
+           finite_mapTheory.FLOOKUP_EMPTY]) >>
+  (* cons *)
+  simp[pairTheory.FORALL_PROD] >>
+  rpt gen_tac >>
+  Cases_on `vs` >> simp[Once bind_arguments_def] >>
+  rpt strip_tac >>
+  gvs[AllCaseEqs(), listTheory.LIST_REL_CONS1,
+      pairTheory.FORALL_PROD] >>
+  `scope_well_typed m`
+    by (first_x_assum (qspecl_then [`tenv`, `t`, `m`] mp_tac) >>
+        gvs[]) >>
+  imp_res_tac safe_cast_satisfies_type >>
+  gvs[scope_well_typed_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt gen_tac >> IF_CASES_TAC >> strip_tac >> gvs[] >> res_tac
+QED
+
 (* ===== Static typing environment ===== *)
 (*
  * typing_env captures the static type information a type checker would produce.
@@ -705,62 +744,588 @@ Termination
   \\ simp[expr_size_def, basicSizeTheory.option_size_def]
 End
 
-(* ===== Type preservation by induction ===== *)
-(*
- * The theorem: if the expression is well-typed (statically) and the
- * typing environment is consistent with the runtime state, then
- * evaluation preserves types and the state invariant.
+(* ===== well_typed_stmt: static typing for statements ===== *)
+
+(* well_typed for assignment targets (base + tuple) *)
+Definition well_typed_atarget_def:
+  well_typed_atarget env (BaseTarget bt) =
+    well_typed_target env bt /\
+  well_typed_atarget env (TupleTarget tgts) =
+    EVERY (well_typed_atarget env) tgts
+End
+
+Definition well_typed_stmt_def:
+  well_typed_stmt env ret_ty Pass = T /\
+  well_typed_stmt env ret_ty Continue = T /\
+  well_typed_stmt env ret_ty Break = T /\
+  well_typed_stmt env ret_ty (Expr e) =
+    well_typed_expr env e /\
+  well_typed_stmt env ret_ty (Return NONE) =
+    (ret_ty = NoneT) /\
+  well_typed_stmt env ret_ty (Return (SOME e)) =
+    (well_typed_expr env e /\ expr_type e = ret_ty) /\
+  well_typed_stmt env ret_ty (Raise e) =
+    well_typed_expr env e /\
+  well_typed_stmt env ret_ty (Assert e se) =
+    (well_typed_expr env e /\
+     well_typed_expr env se /\
+     expr_type e = BaseT BoolT) /\
+  well_typed_stmt env ret_ty (Log id es) =
+    well_typed_exprs env es /\
+  well_typed_stmt env ret_ty (AnnAssign id typ e) =
+    (well_typed_expr env e /\
+     well_formed_type env.type_defs typ) /\
+  well_typed_stmt env ret_ty (Append bt e) =
+    (well_typed_target env bt /\
+     well_typed_expr env e) /\
+  well_typed_stmt env ret_ty (Assign tgt e) =
+    (well_typed_atarget env tgt /\
+     well_typed_expr env e) /\
+  well_typed_stmt env ret_ty (AugAssign ty bt bop e) =
+    (well_typed_target env bt /\
+     well_typed_expr env e /\
+     well_formed_type env.type_defs ty) /\
+  well_typed_stmt env ret_ty (If e ss1 ss2) =
+    (well_typed_expr env e /\
+     expr_type e = BaseT BoolT /\
+     well_typed_stmts env ret_ty ss1 /\
+     well_typed_stmts env ret_ty ss2) /\
+  well_typed_stmt env ret_ty (For id typ it n body) =
+    (well_formed_type env.type_defs typ /\
+     well_typed_stmts env ret_ty body) /\
+  well_typed_stmts env ret_ty [] = T /\
+  well_typed_stmts env ret_ty (s::ss) =
+    (well_typed_stmt env ret_ty s /\
+     well_typed_stmts env ret_ty ss)
+End
+
+(* ===== functions_well_typed: all callable functions are well-typed ===== *)
+(* functions_well_typed: global invariant about callable functions.
+ * For every callable function:
+ *   - body is well-typed under some env_body
+ *   - defaults are well-typed in a minimal env (no local var refs)
+ *   - parameters are tracked in env_body.var_types
+ *   - return type evaluates successfully
+ * Also: the call site's type annotation must match (safe_cast will
+ * only produce a satisfies_type result if types match).
+ *)
+(* functions_well_typed cx:
+ *   For every callable function in the program:
+ *   1. There exists a typing env env_body with matching type_defs
+ *   2. The return type evaluates to some ret_tv
+ *   3. The function body is well-typed under env_body
+ *   4. Default values are well-typed (in a minimal env with no local vars)
+ *   5. Each parameter is in env_body.var_types
  *
- * env_consistent is the bridge: it says the typing_env matches
- * what's actually stored in scopes/immutables.
+ *   The call site's type annotation ty must match the function's declared
+ *   return type ret — this is ensured by the Vyper compiler frontend.
+ *)
+Definition functions_well_typed_def:
+  functions_well_typed cx <=>
+    !src_id_opt fn ts fm args dflts ret body.
+      get_module_code cx src_id_opt = SOME ts /\
+      lookup_callable_function cx.in_deploy fn ts =
+        SOME (fm, args, dflts, ret, body) ==>
+      ?env_body ret_tv.
+        env_body.type_defs = get_tenv cx /\
+        evaluate_type (get_tenv cx) ret = SOME ret_tv /\
+        well_typed_stmts env_body ret body /\
+        well_typed_exprs
+          <| var_types := FEMPTY;
+             global_types := FEMPTY;
+             toplevel_types := FEMPTY;
+             type_defs := get_tenv cx |> dflts /\
+        (!id typ. MEM (id, typ) args ==>
+           FLOOKUP env_body.var_types (string_to_num id) = SOME typ)
+End
+
+(* Separate predicate: call site type annotations match function return types *)
+
+Theorem env_consistent_empty:
+  !cx st.
+    env_consistent
+      <| var_types := FEMPTY;
+         global_types := FEMPTY;
+         toplevel_types := FEMPTY;
+         type_defs := get_tenv cx |> cx st
+Proof
+  simp[env_consistent_def, finite_mapTheory.FLOOKUP_EMPTY]
+QED
+
+(* ===== Helper lemmas for type preservation ===== *)
+
+(* well_typed_exprs is preserved by DROP *)
+Theorem well_typed_exprs_DROP:
+  !env es n. well_typed_exprs env es ==> well_typed_exprs env (DROP n es)
+Proof
+  gen_tac >> Induct >> simp[well_typed_expr_def] >>
+  rpt strip_tac >> Cases_on `n` >> simp[well_typed_expr_def]
+QED
+
+(* get_tenv is independent of cx.stk *)
+Theorem get_tenv_stk_irrelevant:
+  !cx f. get_tenv (cx with stk updated_by f) = get_tenv cx
+Proof
+  simp[get_tenv_def]
+QED
+
+Theorem functions_well_typed_stk_irrelevant:
+  !cx f. functions_well_typed (cx with stk updated_by f) <=>
+         functions_well_typed cx
+Proof
+  simp[functions_well_typed_def, get_module_code_def,
+       get_tenv_stk_irrelevant]
+QED
+
+(* state_well_typed depends only on scopes and immutables *)
+Theorem state_well_typed_with_scopes:
+  !st scopes.
+    EVERY scope_well_typed scopes /\
+    EVERY (\(addr, mods). imms_well_typed mods) st.immutables ==>
+    state_well_typed (st with scopes := scopes)
+Proof
+  simp[state_well_typed_def]
+QED
+
+(* push_function preserves state_well_typed if sc is well-typed *)
+Theorem state_well_typed_push_function:
+  !src_fn sc cx st cxf st'.
+    push_function src_fn sc cx st = (INL cxf, st') /\
+    scope_well_typed sc /\
+    state_well_typed st ==>
+    state_well_typed st'
+Proof
+  simp[push_function_def, return_def, state_well_typed_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+(* pop_function (set_scopes prev) restores scopes *)
+Theorem state_well_typed_pop_function:
+  !prev st res st'.
+    pop_function prev st = (res, st') /\
+    EVERY scope_well_typed prev /\
+    EVERY (\(addr, mods). imms_well_typed mods) st.immutables ==>
+    state_well_typed st'
+Proof
+  simp[pop_function_def, set_scopes_def, return_def,
+       state_well_typed_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+(* finally: if f preserves state_well_typed (even on error) and
+   g preserves state_well_typed, then finally f g does too *)
+Theorem state_well_typed_finally:
+  !f g st res st'.
+    finally f g st = (res, st') /\
+    (!r s. f st = (r, s) ==> state_well_typed s) /\
+    (!s r' s'. state_well_typed s /\ g s = (r', s') ==> state_well_typed s') ==>
+    state_well_typed st'
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[vyperStateTheory.finally_def] >>
+  Cases_on `f st` >>
+  rename1 `f st = (f_res, f_st)` >>
+  `state_well_typed f_st` by metis_tac[] >>
+  Cases_on `f_res` >>
+  gvs[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def] >>
+  Cases_on `g f_st` >>
+  rename1 `g f_st = (g_res, g_st)` >>
+  `state_well_typed g_st` by metis_tac[] >>
+  Cases_on `g_res` >>
+  gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+QED
+
+(* handle_function doesn't change state *)
+Theorem handle_function_state:
+  !e st r st'.
+    handle_function e st = (r, st') ==> st' = st
+Proof
+  Cases >> simp[handle_function_def, return_def, raise_def]
+QED
+
+(* Key lemma: decompose finally+try+handle_function+pop_function success *)
+Theorem finally_try_handle_pop_success:
+  !f prev st rv st_final.
+    finally
+      (try (bind f (\x. return NoneV)) handle_function)
+      (pop_function prev)
+      st = (INL rv, st_final) ==>
+    (?st_body.
+       f st = (INL (), st_body) /\
+       st_final = st_body with scopes := prev /\
+       rv = NoneV)
+    \/
+    (?v st_body.
+       f st = (INR (ReturnException v), st_body) /\
+       st_final = st_body with scopes := prev /\
+       rv = v)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[finally_def, try_def, bind_def, ignore_bind_def,
+      pop_function_def, set_scopes_def,
+      AllCaseEqs()] >>
+  gvs[return_def, raise_def] >>
+  imp_res_tac handle_function_state >>
+  Cases_on `e` >> gvs[handle_function_def, return_def, raise_def]
+QED
+
+(* try doesn't change state on its own (it's just exception handling) *)
+Theorem try_state:
+  !f g st r st'.
+    try f g st = (r, st') ==>
+    ?r1 s1. f st = (r1, s1) /\
+      ((!v. r1 = INL v ==> r = INL v /\ st' = s1) /\
+       (!e. r1 = INR e ==> g e s1 = (r, st')))
+Proof
+  simp[try_def] >> rpt strip_tac >>
+  Cases_on `f st` >> gvs[] >>
+  Cases_on `q` >> gvs[return_def]
+QED
+
+(* env_consistent: stk update doesn't affect var_types part *)
+Theorem env_consistent_stk_var_types:
+  !env cx st f.
+    env.type_defs = get_tenv cx ==>
+    env.type_defs = get_tenv (cx with stk updated_by f)
+Proof
+  simp[get_tenv_stk_irrelevant]
+QED
+
+(* get_scopes just reads st.scopes *)
+Theorem get_scopes_result:
+  !st r st'.
+    get_scopes st = (r, st') ==> r = INL st.scopes /\ st' = st
+Proof
+  simp[get_scopes_def, return_def]
+QED
+
+(* state_well_typed depends on scopes only through EVERY scope_well_typed *)
+Theorem state_well_typed_immutables:
+  !st. state_well_typed st ==>
+       EVERY (\(addr, mods). imms_well_typed mods) st.immutables
+Proof
+  simp[state_well_typed_def]
+QED
+
+(* pop_function preserves immutables (it only changes scopes) *)
+Theorem pop_function_immutables:
+  !prev st res st'.
+    pop_function prev st = (res, st') ==>
+    st'.immutables = st.immutables
+Proof
+  simp[pop_function_def, set_scopes_def, return_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+(* push_function preserves immutables *)
+Theorem push_function_immutables:
+  !src_fn sc cx st cxf st'.
+    push_function src_fn sc cx st = (INL cxf, st') ==>
+    st'.immutables = st.immutables
+Proof
+  simp[push_function_def, return_def] >> rpt strip_tac >> gvs[]
+QED
+
+(* state_well_typed through try+handle_function:
+   if f preserves state_well_typed on all outcomes,
+   then try f handle_function does too *)
+Theorem state_well_typed_try_handle:
+  !f st r st'.
+    try f handle_function st = (r, st') /\
+    (!r0 s0. f st = (r0, s0) ==> state_well_typed s0) ==>
+    state_well_typed st'
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[try_def] >>
+  Cases_on `f st` >> rename1 `f st = (f_res, f_st)` >> gvs[] >>
+  Cases_on `f_res` >> gvs[return_def] >>
+  rename1 `f st = (INR exc, f_st)` >>
+  Cases_on `exc` >> gvs[handle_function_def, return_def, raise_def]
+QED
+
+(* env_consistent only cares about scopes, not other state fields *)
+Theorem env_consistent_scopes_only:
+  !env cx st scopes.
+    env_consistent env cx (st with scopes := scopes) <=>
+    env.type_defs = get_tenv cx /\
+    (!id ty tv v.
+       FLOOKUP env.var_types id = SOME ty /\
+       lookup_scopes id scopes = SOME (tv, v) ==>
+       evaluate_type (get_tenv cx) ty = SOME tv) /\
+    (!id ty tv v.
+       FLOOKUP env.global_types id = SOME ty /\
+       FLOOKUP (get_source_immutables (current_module cx)
+         (case ALOOKUP st.immutables cx.txn.target of
+            SOME m => m | NONE => [])) id = SOME (tv, v) ==>
+       evaluate_type (get_tenv cx) ty = SOME tv)
+Proof
+  simp[env_consistent_def]
+QED
+
+(* After pop_function prev restores caller scopes, env_consistent is restored
+   (assuming immutables unchanged and caller env was consistent with prev) *)
+Theorem env_consistent_pop_function:
+  !env cx st prev res st'.
+    pop_function prev st = (res, st') /\
+    env.type_defs = get_tenv cx /\
+    (!id ty tv v.
+       FLOOKUP env.var_types id = SOME ty /\
+       lookup_scopes id prev = SOME (tv, v) ==>
+       evaluate_type (get_tenv cx) ty = SOME tv) /\
+    (!id ty tv v.
+       FLOOKUP env.global_types id = SOME ty /\
+       FLOOKUP (get_source_immutables (current_module cx)
+         (case ALOOKUP st.immutables cx.txn.target of
+            SOME m => m | NONE => [])) id = SOME (tv, v) ==>
+       evaluate_type (get_tenv cx) ty = SOME tv) ==>
+    env_consistent env cx st'
+Proof
+  simp[pop_function_def, set_scopes_def, return_def,
+       env_consistent_def] >> metis_tac[]
+QED
+
+(* ===== IntCall helper for type preservation ===== *)
+
+(* Helper: state_well_typed is preserved through IntCall.
+   Takes simplified IHs as hypotheses. *)
+Theorem intcall_state_preserved:
+  !cx src_id_opt fn es v17 env st v st' tv.
+    (* IH for eval_exprs cx es (args) *)
+    (!env0 st0 vs0 st0'.
+       well_typed_exprs env0 es /\ env_consistent env0 cx st0 /\
+       state_well_typed st0 /\ functions_well_typed cx /\
+       eval_exprs cx es st0 = (INL vs0, st0') ==>
+       state_well_typed st0' /\ env_consistent env0 cx st0') /\
+    (* IH for eval_exprs cxd needed_dflts (defaults) *)
+    (!dflts_sub env0 st0 vs0 st0'.
+       well_typed_exprs env0 dflts_sub /\
+       env_consistent env0 (cx with stk updated_by CONS (src_id_opt, fn)) st0 /\
+       state_well_typed st0 /\
+       functions_well_typed (cx with stk updated_by CONS (src_id_opt, fn)) /\
+       eval_exprs (cx with stk updated_by CONS (src_id_opt, fn))
+         dflts_sub st0 = (INL vs0, st0') ==>
+       state_well_typed st0') /\
+    (* IH for eval_stmts cxf body *)
+    (!body env0 ret_ty st0 res0 st0'.
+       well_typed_stmts env0 ret_ty body /\
+       env_consistent env0 (cx with stk updated_by CONS (src_id_opt, fn)) st0 /\
+       state_well_typed st0 /\
+       functions_well_typed (cx with stk updated_by CONS (src_id_opt, fn)) /\
+       eval_stmts (cx with stk updated_by CONS (src_id_opt, fn))
+         body st0 = (res0, st0') ==>
+       state_well_typed st0') ==>
+    well_typed_expr env (Call v16 (IntCall (src_id_opt, fn)) es v17) /\
+    env_consistent env cx st /\
+    state_well_typed st /\
+    functions_well_typed cx /\
+    eval_expr cx (Call v16 (IntCall (src_id_opt, fn)) es v17) st =
+      (INL (Value v), st') ==>
+    state_well_typed st'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _`
+    (mp_tac o ONCE_REWRITE_RULE[evaluate_def]) >>
+  simp[bind_def, ignore_bind_def, LET_THM,
+       check_def, assert_def, lift_option_type_def,
+       type_check_def, get_scopes_def, push_function_def,
+       return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  (* Simplify option wrappers using qmatch *)
+  qpat_x_assum `option_CASE (get_module_code _ _) _ _ _ = _` mp_tac >>
+  CASE_TAC >> simp[return_def, raise_def] >> strip_tac >> gvs[] >>
+  rename1 `get_module_code cx src_id_opt = SOME ts` >>
+  qpat_x_assum `option_CASE (lookup_callable_function _ _ _) _ _ _ = _` mp_tac >>
+  CASE_TAC >> simp[return_def, raise_def] >> strip_tac >> gvs[] >>
+  rename1 `lookup_callable_function _ _ _ = SOME fn_info` >>
+  qpat_x_assum `option_CASE (bind_arguments _ _ _) _ _ _ = _` mp_tac >>
+  CASE_TAC >> simp[return_def, raise_def] >> strip_tac >> gvs[] >>
+  rename1 `bind_arguments _ _ _ = SOME sc` >>
+  qpat_x_assum `option_CASE (evaluate_type _ _) _ _ _ = _` mp_tac >>
+  CASE_TAC >> simp[return_def, raise_def] >> strip_tac >> gvs[] >>
+  rename1 `evaluate_type _ _ = SOME ret_tv` >>
+  qpat_x_assum `option_CASE (safe_cast _ _) _ _ _ = _` mp_tac >>
+  CASE_TAC >> simp[return_def, raise_def] >> strip_tac >> gvs[] >>
+  rename1 `safe_cast _ _ = SOME crv` >>
+  (* Step 1: Apply IH_args *)
+  `well_typed_exprs env es` by gvs[well_typed_expr_def] >>
+  `state_well_typed s'⁴'` by
+    (last_x_assum (qspecl_then [`env`, `s''`, `vs`, `s'⁴'`] mp_tac) >>
+     simp[]) >>
+  (* Step 2: Apply IH_dflts (cheated: need env_consistent for empty env) *)
+  `state_well_typed s'⁵'` by cheat >>
+  (* Step 3: Decompose the finally block *)
+  drule finally_try_handle_pop_success >> strip_tac >> gvs[]
+  (* Case 1: body succeeded (INL) *)
+  >- (
+    rename1 `eval_stmts _ _ _ = (INL (), st_body)` >>
+    (* Apply IH_body (cheated: need well_typed_stmts and env_consistent) *)
+    `state_well_typed st_body` by cheat >>
+    gvs[state_well_typed_def]
+  )
+  (* Case 2: body raised ReturnException *)
+  >- (
+    rename1 `eval_stmts _ _ _ = (INR (ReturnException rv_val), st_body)` >>
+    `state_well_typed st_body` by cheat >>
+    gvs[state_well_typed_def]
+  )
+QED
+
+(* ===== Type preservation by mutual induction ===== *)
+(*
+ * Uses evaluate_ind (9 predicates, 47 hypotheses).
+ *
+ * P0 (eval_stmt): well_typed_stmt env ret_ty s ∧ env_consistent ∧
+ *   state_well_typed ⇒ state_well_typed st' ∧ return exceptions well-typed
+ * P1 (eval_stmts): same for statement lists
+ * P2 (eval_iterator): state_well_typed preserved
+ * P3 (eval_target): state_well_typed preserved
+ * P4 (eval_targets): state_well_typed preserved
+ * P5 (eval_base_target): state_well_typed preserved
+ * P6 (eval_for): state_well_typed preserved
+ * P7 (eval_expr): well_typed_expr ∧ env_consistent ∧ state_well_typed ⇒
+ *   result satisfies type ∧ state_well_typed st'
+ * P8 (eval_exprs): well_typed_exprs ∧ env_consistent ∧ state_well_typed ⇒
+ *   results satisfy types ∧ state_well_typed st'
  *)
 
 Theorem type_preservation:
-  !e cx env st v st' tv.
+  (* P0: eval_stmt — state preserved, return exceptions well-typed *)
+  (!cx s. !env ret_ty st res st'.
+    well_typed_stmt env ret_ty s /\
+    env_consistent env cx st /\
+    state_well_typed st /\
+    functions_well_typed cx /\
+    eval_stmt cx s st = (res, st') ==>
+    state_well_typed st' /\
+    (!v ret_tv. res = INR (ReturnException v) /\
+                evaluate_type (get_tenv cx) ret_ty = SOME ret_tv ==>
+                satisfies_type v ret_tv)) /\
+  (* P1: eval_stmts — state preserved, return exceptions well-typed *)
+  (!cx ss. !env ret_ty st res st'.
+    well_typed_stmts env ret_ty ss /\
+    env_consistent env cx st /\
+    state_well_typed st /\
+    functions_well_typed cx /\
+    eval_stmts cx ss st = (res, st') ==>
+    state_well_typed st' /\
+    (!v ret_tv. res = INR (ReturnException v) /\
+                evaluate_type (get_tenv cx) ret_ty = SOME ret_tv ==>
+                satisfies_type v ret_tv)) /\
+  (* P2: eval_iterator *)
+  (!cx it. !st res st'.
+    state_well_typed st /\
+    eval_iterator cx it st = (res, st') ==>
+    state_well_typed st') /\
+  (* P3: eval_target *)
+  (!cx g. !st res st'.
+    state_well_typed st /\
+    eval_target cx g st = (res, st') ==>
+    state_well_typed st') /\
+  (* P4: eval_targets *)
+  (!cx gs. !st res st'.
+    state_well_typed st /\
+    eval_targets cx gs st = (res, st') ==>
+    state_well_typed st') /\
+  (* P5: eval_base_target *)
+  (!cx bt. !st res st'.
+    state_well_typed st /\
+    eval_base_target cx bt st = (res, st') ==>
+    state_well_typed st') /\
+  (* P6: eval_for *)
+  (!cx tyv nm body vs. !st res st'.
+    state_well_typed st /\
+    eval_for cx tyv nm body vs st = (res, st') ==>
+    state_well_typed st') /\
+  (* P7: eval_expr *)
+  (!cx e. !env st v st' tv.
     well_typed_expr env e /\
     env_consistent env cx st /\
     state_well_typed st /\
+    functions_well_typed cx /\
     eval_expr cx e st = (INL (Value v), st') /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
-    satisfies_type v tv /\ state_well_typed st' /\ env_consistent env cx st'
+    satisfies_type v tv /\ state_well_typed st' /\
+    env_consistent env cx st') /\
+  (* P8: eval_exprs *)
+  (!cx es. !env st vs st'.
+    well_typed_exprs env es /\
+    env_consistent env cx st /\
+    state_well_typed st /\
+    functions_well_typed cx /\
+    eval_exprs cx es st = (INL vs, st') ==>
+    state_well_typed st' /\ env_consistent env cx st')
 Proof
-  Induct >> rpt gen_tac >>
-  simp[expr_type_def, well_typed_expr_def] >> strip_tac
-  (* Name: eval_expr doesn't change state, so st' = st *)
-  >- (qpat_x_assum `eval_expr _ _ _ = _`
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac
+  (* ===== P0: eval_stmt (goals 0-14) ===== *)
+  (* 0: Pass *)          >- cheat
+  (* 1: Continue *)      >- cheat
+  (* 2: Break *)         >- cheat
+  (* 3: Return NONE *)   >- cheat
+  (* 4: Return SOME *)   >- cheat
+  (* 5: Raise *)         >- cheat
+  (* 6: Assert *)        >- cheat
+  (* 7: Log *)           >- cheat
+  (* 8: AnnAssign *)     >- cheat
+  (* 9: Append *)        >- cheat
+  (* 10: Assign *)       >- cheat
+  (* 11: AugAssign *)    >- cheat
+  (* 12: If *)           >- cheat
+  (* 13: For *)          >- cheat
+  (* 14: Expr *)         >- cheat
+  (* ===== P1: eval_stmts (goals 15-16) ===== *)
+  (* 15: [] *)           >- cheat
+  (* 16: s::ss *)        >- cheat
+  (* ===== P2: eval_iterator (goals 17-18) ===== *)
+  (* 17: Array *)        >- cheat
+  (* 18: Range *)        >- cheat
+  (* ===== P3: eval_target (goals 19-20) ===== *)
+  (* 19: BaseTarget *)   >- cheat
+  (* 20: TupleTarget *)  >- cheat
+  (* ===== P4: eval_targets (goals 21-22) ===== *)
+  (* 21: [] *)           >- cheat
+  (* 22: g::gs *)        >- cheat
+  (* ===== P5: eval_base_target (goals 23-27) ===== *)
+  (* 23: NameTarget *)        >- cheat
+  (* 24: BareGlobalNameTarget *) >- cheat
+  (* 25: TopLevelNameTarget *) >- cheat
+  (* 26: AttributeTarget *)   >- cheat
+  (* 27: SubscriptTarget *)   >- cheat
+  (* ===== P6: eval_for (goals 28-29) ===== *)
+  (* 28: [] *)           >- cheat
+  (* 29: v::vs *)        >- cheat
+  (* ===== P7: eval_expr (goals 30-44) ===== *)
+  (* 30: Name *)
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `eval_expr _ _ _ = _`
         (mp_tac o ONCE_REWRITE_RULE[evaluate_def]) >>
       simp[bind_def, get_scopes_def, lift_option_type_def,
            return_def, LET_THM] >>
-      Cases_on `lookup_scopes_val (string_to_num s) st.scopes` >>
+      Cases_on `lookup_scopes_val (string_to_num id) st.scopes` >>
       simp[return_def, raise_def] >> strip_tac >> rw[] >>
+      gvs[well_typed_expr_def, expr_type_def] >>
       `EVERY scope_well_typed st.scopes` by fs[state_well_typed_def] >>
       imp_res_tac lookup_scopes_val_well_typed >>
       fs[env_consistent_def] >>
       first_x_assum drule >> disch_then drule >> gvs[])
-  (* BareGlobalName *)
-  >- cheat
-  (* TopLevelName *)
-  >- cheat
-  (* FlagMember *)
-  >- cheat
-  (* IfExp *)
-  >- cheat
-  (* Literal *)
-  >- (gvs[Once evaluate_def, return_def] >>
-      fs[env_consistent_def] >>
+  (* 31: BareGlobalName *) >- cheat
+  (* 32: TopLevelName *)   >- cheat
+  (* 33: FlagMember *)     >- cheat
+  (* 34: IfExp *)          >- cheat
+  (* 35: Literal *)
+  >- (rpt gen_tac >> strip_tac >>
+      gvs[Once evaluate_def, return_def,
+           well_typed_expr_def, expr_type_def] >>
       metis_tac[evaluate_literal_satisfies_type])
-  (* StructLit *)
-  >- cheat
-  (* Subscript *)
-  >- cheat
-  (* Attribute *)
-  >- cheat
-  (* Builtin *)
-  >- cheat
-  (* TypeBuiltin *)
-  >- cheat
-  (* Pop *)
-  >- cheat
-  (* Call *)
-  >- cheat
+  (* 36: StructLit *)      >- cheat
+  (* 37: Subscript *)      >- cheat
+  (* 38: Attribute *)      >- cheat
+  (* 39: Builtin *)        >- cheat
+  (* 40: Pop *)            >- cheat
+  (* 41: TypeBuiltin *)    >- cheat
+  (* 42: Call Send *)      >- cheat
+  (* 43: Call ExtCall *)   >- cheat
+  (* 44: Call IntCall *)   >- cheat
+  (* ===== P8: eval_exprs (goals 45-46) ===== *)
+  (* 45: [] *)             >- cheat
+  (* 46: e::es *)          >- cheat
 QED
