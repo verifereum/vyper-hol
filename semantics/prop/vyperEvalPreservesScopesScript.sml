@@ -21,15 +21,7 @@ Proof
   (* Empty scopes case: contradicts var_in_scope *)
   gvs[var_in_scope_def, lookup_name_def, lookup_scopes_def] >>
   (* Non-empty scopes case *)
-  gvs[var_in_scope_def, lookup_name_def] >>
-  Cases_on `st.scopes` >> Cases_on `st'.scopes` >> gvs[] >>
-  fs[lookup_scopes_def, AllCaseEqs()] >>
-  Cases_on `FLOOKUP h (string_to_num n)` >> gvs[] >-
-  (* n not in head: must be in tail, use lookup_scopes_dom_iff *)
-  (Cases_on `FLOOKUP h' (string_to_num n)` >> gvs[] >> metis_tac[lookup_scopes_dom_iff]) >>
-  (* n in head: must also be in h' by SUBSET *)
-  `FLOOKUP h' (string_to_num n) ≠ NONE` by fs[finite_mapTheory.flookup_thm, pred_setTheory.SUBSET_DEF] >>
-  Cases_on `FLOOKUP h' (string_to_num n)` >> gvs[]
+  irule var_in_scope_scopes_subset >> metis_tac[]
 QED
 
 Theorem preserves_scopes_dom_length:

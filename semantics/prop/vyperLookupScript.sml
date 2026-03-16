@@ -142,7 +142,7 @@ Proof
   rpt gen_tac >> Cases_on `FLOOKUP h id` >> simp[]
 QED
 
-Theorem find_containing_scope_none_lookup_scopes_none:
+Theorem find_containing_scope_none_lookup_scopes_none[local]:
   ∀id sc. find_containing_scope id sc = NONE ⇒ lookup_scopes id sc = NONE
 Proof
   Induct_on `sc` >> simp[Once find_containing_scope_def, Once lookup_scopes_def] >>
@@ -150,7 +150,7 @@ Proof
   Cases_on `x` >> gvs[]
 QED
 
-Theorem lookup_scopes_find_containing:
+Theorem lookup_scopes_find_containing[local]:
   ∀id sc. IS_SOME (lookup_scopes id sc) ⇒ IS_SOME (find_containing_scope id sc)
 Proof
   Induct_on `sc` >- rw[lookup_scopes_def] >>
@@ -164,7 +164,7 @@ Proof
   Cases_on `x` >> simp[]
 QED
 
-Theorem find_containing_scope_pre_none:
+Theorem find_containing_scope_pre_none[local]:
   ∀id sc pre env tv v rest.
     find_containing_scope id sc = SOME (pre,env,tv,v,rest) ⇒
     lookup_scopes id pre = NONE
@@ -176,7 +176,7 @@ Proof
   Cases_on `x` >> simp[lookup_scopes_def]
 QED
 
-Theorem lookup_scopes_update:
+Theorem lookup_scopes_update[local]:
   ∀id pre env v rest.
     lookup_scopes id pre = NONE ⇒
     lookup_scopes id (pre ++ env |+ (id,v) :: rest) = SOME v
@@ -186,7 +186,7 @@ Proof
   rpt strip_tac >> gvs[lookup_scopes_def, AllCaseEqs()]
 QED
 
-Theorem find_containing_scope_structure:
+Theorem find_containing_scope_structure[local]:
   ∀id sc pre env tv v rest.
     find_containing_scope id sc = SOME (pre, env, tv, v, rest) ⇒
     sc = pre ++ env :: rest ∧ FLOOKUP env id = SOME (tv, v)
@@ -199,7 +199,7 @@ Proof
   Cases_on `x` >> strip_tac >> gvs[]
 QED
 
-Theorem find_containing_scope_lookup:
+Theorem find_containing_scope_lookup[local]:
   ∀id sc pre env tv v rest.
     find_containing_scope id sc = SOME (pre, env, tv, v, rest) ⇒
     lookup_scopes id sc = SOME (tv, v)
@@ -211,7 +211,7 @@ Proof
   Cases_on `x` >> gvs[]
 QED
 
-Theorem find_containing_scope_lookup_scopes:
+Theorem find_containing_scope_lookup_scopes[local]:
   ∀id sc. IS_SOME (find_containing_scope id sc) ⇒ IS_SOME (lookup_scopes id sc)
 Proof
   rpt strip_tac >>
@@ -234,7 +234,7 @@ Proof
   Cases_on `FLOOKUP h n` >> gvs[]
 QED
 
-Theorem lookup_scopes_dom_iff:
+Theorem lookup_scopes_dom_iff[local]:
   ∀id sc1 sc2.
     MAP FDOM sc1 = MAP FDOM sc2 ⇒
     (IS_SOME (lookup_scopes id sc1) ⇔ IS_SOME (lookup_scopes id sc2))
@@ -390,6 +390,44 @@ Theorem var_in_scope_dom_iff:
 Proof
   fs[var_in_scope_def, lookup_name_def] >>
   gvs[lookup_scopes_dom_iff]
+QED
+
+Theorem var_in_scope_iff_lookup_scopes:
+  ∀st n. var_in_scope st n ⇔ IS_SOME (lookup_scopes (string_to_num n) st.scopes)
+Proof
+  simp[var_in_scope_def, lookup_name_def]
+QED
+
+Theorem var_in_scope_scopes_subset:
+  ∀st st' n.
+    st.scopes ≠ [] ∧ st'.scopes ≠ [] ∧
+    FDOM (HD st.scopes) ⊆ FDOM (HD st'.scopes) ∧
+    MAP FDOM (TL st.scopes) = MAP FDOM (TL st'.scopes) ∧
+    var_in_scope st n ⇒
+    var_in_scope st' n
+Proof
+  rpt strip_tac >>
+  gvs[var_in_scope_def, lookup_name_def] >>
+  Cases_on `st.scopes` >> Cases_on `st'.scopes` >> gvs[] >>
+  fs[lookup_scopes_def, AllCaseEqs()] >>
+  Cases_on `FLOOKUP h (string_to_num n)` >> gvs[] >-
+  (Cases_on `FLOOKUP h' (string_to_num n)` >> gvs[] >> metis_tac[lookup_scopes_dom_iff]) >>
+  `FLOOKUP h' (string_to_num n) ≠ NONE`
+    by fs[finite_mapTheory.flookup_thm, pred_setTheory.SUBSET_DEF] >>
+  Cases_on `FLOOKUP h' (string_to_num n)` >> gvs[]
+QED
+
+Theorem assign_target_scoped_var_implies_var_in_scope:
+  ∀cx st n sbs ao.
+    ISL (FST (assign_target cx (BaseTargetV (ScopedVar n) sbs) ao st)) ⇒
+    var_in_scope st n
+Proof
+  rw[var_in_scope_def, lookup_name_def] >>
+  gvs[Once assign_target_def, bind_def, get_scopes_def, return_def,
+      lift_option_def, lift_option_type_def, LET_THM] >>
+  Cases_on `find_containing_scope (string_to_num n) st.scopes` >>
+  gvs[raise_def] >>
+  irule find_containing_scope_lookup_scopes >> simp[]
 QED
 
 Theorem assign_target_name_replace:
