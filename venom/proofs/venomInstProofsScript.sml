@@ -3,78 +3,50 @@
  *
  * Classifies opcodes by their effect on state and provides preservation
  * lemmas for pass correctness proofs.
- *
- * SCOPE: All theorems are about step_inst (full instruction semantics
- * including INVOKE).  For non-INVOKE opcodes, step_inst agrees with
- * step_inst_base (step_inst_non_invoke).  For INVOKE, preservation
- * follows from merge_callee_state + bind_outputs preserving caller
- * fields, or is excluded by the precondition (is_effect_free_op etc.).
- *
- * TOP-LEVEL:
- *   Classification:
- *     is_effect_free_op  — opcode has no side effects (only assigns output var)
- *     is_mem_write_op    — opcode writes memory (+ possibly output var)
- *     is_alloca_op       — allocation opcodes (memory + allocas)
- *     is_ext_call_op     — external calls (multiple state fields)
- *
- *   Helper preservation (exec_pure/read/write level):
- *     exec_pure1_state_equiv, exec_pure2_state_equiv, exec_pure3_state_equiv
- *     exec_read0_state_equiv, exec_read1_state_equiv
- *     exec_write2_preserves_vars, exec_write2_preserves_control_flow
- *
- *   Main preservation:
- *     step_effect_free_state_equiv — workhorse for simulation proofs
- *     step_nop_identity            — NOP is identity
- *     step_assert_identity         — ASSERT is identity on OK path
- *
- *   Write-opcode field preservation:
- *     step_mstore_preserves, step_sstore_preserves, step_tstore_preserves
- *     step_istore_preserves, step_log_preserves
- *     step_alloca_preserves
- *
- *   Write-effects soundness:
- *     write_effects_sound_storage, write_effects_sound_transient, ...
- *
- *   Context preservation (immutable fields):
- *     step_preserves_call_ctx, step_preserves_tx_ctx, step_preserves_block_ctx
- *     step_preserves_code, step_preserves_data_section, step_preserves_params
- *     step_preserves_label_offsets, step_preserves_prev_hashes
- *
- *   Non-output variable preservation:
- *     step_preserves_non_output_vars
  *)
 
 Theory venomInstProofs
 Ancestors
-  venomExecSemantics venomEffects stateEquiv
+  venomExecSemantics venomEffects stateEquiv stateEquivProofs
+
+open stateEquivProofsTheory
+open finite_mapTheory
+open venomStateTheory venomExecSemanticsTheory venomInstTheory
+open venomEffectsTheory pred_setTheory
 
 (* ===================================================================== *)
 (* ===== Section 1: Opcode Classification Properties ================== *)
 (* ===================================================================== *)
 
-(* Classification definitions (is_effect_free_op, is_mem_write_op,
-   is_alloca_op, is_ext_call_op) are in venomInstScript.sml alongside
-   is_terminator, is_volatile, is_pseudo. *)
-
-(* Effect-free implies not a terminator *)
 Theorem is_effect_free_not_terminator:
   !op. is_effect_free_op op ==> ~is_terminator op
 Proof
-  cheat
+  Cases >> EVAL_TAC
 QED
 
 (* ===================================================================== *)
 (* ===== Section 2: Helper-Level Preservation ========================== *)
 (* ===================================================================== *)
 
-(* exec_pure1/2/3 produce state_equiv modulo output var *)
+Theorem update_var_state_equiv[local]:
+  !out v s. state_equiv {out} s (update_var out v s)
+Proof
+  rw[state_equiv_def, execution_equiv_def,
+     update_var_def, lookup_var_def, FLOOKUP_UPDATE]
+QED
+
+val exec_state_equiv_tac =
+  gvs[AllCaseEqs()] >>
+  irule state_equiv_subset >>
+  qexists_tac `{out}` >>
+  simp[update_var_state_equiv, SUBSET_DEF];
 
 Theorem exec_pure1_state_equiv:
   !f inst s s'.
     exec_pure1 f inst s = OK s' ==>
     state_equiv (set inst.inst_outputs) s s'
 Proof
-  cheat
+  rw[exec_pure1_def] >> exec_state_equiv_tac
 QED
 
 Theorem exec_pure2_state_equiv:
@@ -82,7 +54,7 @@ Theorem exec_pure2_state_equiv:
     exec_pure2 f inst s = OK s' ==>
     state_equiv (set inst.inst_outputs) s s'
 Proof
-  cheat
+  rw[exec_pure2_def] >> exec_state_equiv_tac
 QED
 
 Theorem exec_pure3_state_equiv:
@@ -90,17 +62,15 @@ Theorem exec_pure3_state_equiv:
     exec_pure3 f inst s = OK s' ==>
     state_equiv (set inst.inst_outputs) s s'
 Proof
-  cheat
+  rw[exec_pure3_def] >> exec_state_equiv_tac
 QED
-
-(* exec_read0/1 produce state_equiv modulo output var *)
 
 Theorem exec_read0_state_equiv:
   !f inst s s'.
     exec_read0 f inst s = OK s' ==>
     state_equiv (set inst.inst_outputs) s s'
 Proof
-  cheat
+  rw[exec_read0_def] >> exec_state_equiv_tac
 QED
 
 Theorem exec_read1_state_equiv:
@@ -108,11 +78,11 @@ Theorem exec_read1_state_equiv:
     exec_read1 f inst s = OK s' ==>
     state_equiv (set inst.inst_outputs) s s'
 Proof
-  cheat
+  rw[exec_read1_def] >> exec_state_equiv_tac
 QED
 
-(* exec_write2 preserves variables when f preserves them.
-   Applies to mstore, sstore, tstore (the actual use sites). *)
+val exec_write2_tac =
+  rw[exec_write2_def, AllCaseEqs()] >> gvs[];
 
 Theorem exec_write2_preserves_vars:
   !f inst s s'.
@@ -120,10 +90,8 @@ Theorem exec_write2_preserves_vars:
     (!v1 v2 s0. (f v1 v2 s0).vs_vars = s0.vs_vars) ==>
     (!v. lookup_var v s' = lookup_var v s)
 Proof
-  cheat
+  exec_write2_tac >> rw[lookup_var_def]
 QED
-
-(* exec_write2 preserves control flow when f preserves it *)
 
 Theorem exec_write2_preserves_control_flow:
   !f inst s s'.
@@ -135,89 +103,61 @@ Theorem exec_write2_preserves_control_flow:
     s'.vs_inst_idx = s.vs_inst_idx /\
     s'.vs_prev_bb = s.vs_prev_bb
 Proof
-  cheat
+  exec_write2_tac
 QED
 
 (* ===================================================================== *)
 (* ===== Section 3: Main Preservation Theorems ========================= *)
 (* ===================================================================== *)
 
-(* KEY LEMMA: Effect-free opcodes produce state_equiv modulo output vars.
-   This is the main workhorse for simulation proofs. When replacing one
-   effect-free instruction with another that produces the same value,
-   the rest of the state is provably identical. *)
-Theorem step_effect_free_state_equiv:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    is_effect_free_op inst.inst_opcode ==>
-    state_equiv (set inst.inst_outputs) s s'
-Proof
-  cheat
-QED
+(* step_effect_free_state_equiv: proved after mega-lemma is available. *)
 
 (* NOP is identity: produces OK with unchanged state *)
+val reduce_to_base_tac =
+  rw[Once step_inst_def] >> simp[step_inst_base_def];
+
 Theorem step_nop_identity:
   !fuel ctx inst s. inst.inst_opcode = NOP ==> step_inst fuel ctx inst s = OK s
 Proof
-  cheat
+  reduce_to_base_tac
 QED
 
-(* ASSERT is identity on OK path *)
 Theorem step_assert_identity:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\ inst.inst_opcode = ASSERT ==>
     s' = s
 Proof
-  cheat
+  rw[Once step_inst_def, step_inst_base_def] >> gvs[AllCaseEqs()]
 QED
 
-(* ASSERT_UNREACHABLE is identity on OK path *)
 Theorem step_assert_unreachable_identity:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\
     inst.inst_opcode = ASSERT_UNREACHABLE ==>
     s' = s
 Proof
-  cheat
-QED
-
-(* ===================================================================== *)
-(* ===== Section 4: Non-Output Variable Preservation =================== *)
-(* ===================================================================== *)
-
-(* For any non-terminator opcode that produces OK, variables not in
-   inst_outputs are preserved. This covers ALL opcodes, not just
-   effect-free ones — even MSTORE/SSTORE/LOG etc. preserve variables
-   (they write state fields, not vars). *)
-Theorem step_preserves_non_output_vars:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_terminator inst.inst_opcode ==>
-    !v. ~MEM v inst.inst_outputs ==> lookup_var v s' = lookup_var v s
-Proof
-  cheat
-QED
-
-(* Corollary: exec_write2 opcodes (MSTORE, SSTORE, TSTORE) have no
-   outputs, so ALL variables are preserved *)
-Theorem step_write2_preserves_all_vars:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    (inst.inst_opcode = MSTORE \/ inst.inst_opcode = SSTORE \/
-     inst.inst_opcode = TSTORE) ==>
-    !v. lookup_var v s' = lookup_var v s
-Proof
-  cheat
+  rw[Once step_inst_def, step_inst_base_def] >> gvs[AllCaseEqs()]
 QED
 
 (* ===================================================================== *)
 (* ===== Section 5: Write-Opcode Field Preservation ==================== *)
 (* ===================================================================== *)
 
-(* Each write opcode has a precise characterization of what it changes.
-   These lemmas enumerate exactly which fields are preserved. *)
+val write_finish_tac =
+  gvs[AllCaseEqs(), exec_write2_def, exec_alloca_def, exec_ext_call_def,
+      exec_delegatecall_def, exec_create_def,
+      extract_venom_result_def] >>
+  gvs[AllCaseEqs()] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+  simp[update_var_def, mstore_def, sstore_def, tstore_def,
+       write_memory_with_expansion_def, mcopy_def,
+       contract_storage_def, revert_state_def,
+       lookup_var_def, FLOOKUP_UPDATE, eval_operands_def];
 
-(* MSTORE: only changes vs_memory *)
+val step_specific_write_tac =
+  rw[Once step_inst_def, step_inst_base_def] >>
+  gvs[AllCaseEqs()] >> write_finish_tac;
+
 Theorem step_mstore_preserves:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\ inst.inst_opcode = MSTORE ==>
@@ -233,10 +173,9 @@ Theorem step_mstore_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. lookup_var v s' = lookup_var v s)
 Proof
-  cheat
+  step_specific_write_tac
 QED
 
-(* SSTORE: only changes contract storage (in vs_accounts) *)
 Theorem step_sstore_preserves:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\ inst.inst_opcode = SSTORE ==>
@@ -252,10 +191,9 @@ Theorem step_sstore_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. lookup_var v s' = lookup_var v s)
 Proof
-  cheat
+  step_specific_write_tac
 QED
 
-(* TSTORE: only changes vs_transient *)
 Theorem step_tstore_preserves:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\ inst.inst_opcode = TSTORE ==>
@@ -271,10 +209,9 @@ Theorem step_tstore_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. lookup_var v s' = lookup_var v s)
 Proof
-  cheat
+  step_specific_write_tac
 QED
 
-(* ISTORE: only changes vs_immutables *)
 Theorem step_istore_preserves:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\ inst.inst_opcode = ISTORE ==>
@@ -290,10 +227,9 @@ Theorem step_istore_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. lookup_var v s' = lookup_var v s)
 Proof
-  cheat
+  step_specific_write_tac
 QED
 
-(* LOG: only changes vs_logs *)
 Theorem step_log_preserves:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\ inst.inst_opcode = LOG ==>
@@ -309,10 +245,471 @@ Theorem step_log_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. lookup_var v s' = lookup_var v s)
 Proof
+  step_specific_write_tac
+QED
+
+(* ===================================================================== *)
+(* ===== Mega-Lemma Infrastructure ===================================== *)
+(* ===================================================================== *)
+
+(* FOLDL of update_var preserves any field that update_var preserves *)
+Theorem foldl_update_var_preserves[local]:
+  !f. (!k v s. f (update_var k v s) = f s) ==>
+      !kvs s. f (FOLDL (\s' (k,v). update_var k v s') s kvs) = f s
+Proof
+  strip_tac >> strip_tac >> Induct >>
+  simp[pairTheory.FORALL_PROD]
+QED
+
+(* bind_outputs preserves any field that update_var preserves *)
+Theorem bind_outputs_preserves[local]:
+  !f. (!k v s. f (update_var k v s) = f s) ==>
+      !outs vals s s'. bind_outputs outs vals s = SOME s' ==> f s' = f s
+Proof
+  rw[bind_outputs_def] >> gvs[] >> metis_tac[foldl_update_var_preserves]
+QED
+
+(* Tactic: prove step_inst_base preserves a field for non-terminators.
+   Includes write_effects/is_alloca_op for conditional preservation. *)
+val step_base_field_tac =
+  rw[step_inst_base_def] >>
+  gvs[AllCaseEqs(), is_terminator_def,
+      write_effects_def, all_effects_def, empty_effects_def,
+      is_alloca_op_def] >>
+  fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_ext_call_def, exec_delegatecall_def,
+     exec_create_def, exec_alloca_def,
+     extract_venom_result_def] >>
+  gvs[AllCaseEqs()] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+  fs[update_var_def, mstore_def, sstore_def, tstore_def,
+     write_memory_with_expansion_def, mcopy_def,
+     revert_state_def, eval_operands_def,
+     lookup_var_def, FLOOKUP_UPDATE];
+
+(* Single mega-lemma: all fields preserved by step_inst_base for
+   non-terminators. One 94-opcode case split instead of 11 separate ones.
+   Also includes non-output variable preservation and conditional
+   write-effects preservation (for fields not in write_effects). *)
+Theorem step_inst_base_preserves_all[local]:
+  !inst s s'. step_inst_base inst s = OK s' /\
+    ~is_terminator inst.inst_opcode ==>
+    s'.vs_call_ctx = s.vs_call_ctx /\
+    s'.vs_tx_ctx = s.vs_tx_ctx /\
+    s'.vs_block_ctx = s.vs_block_ctx /\
+    s'.vs_code = s.vs_code /\
+    s'.vs_data_section = s.vs_data_section /\
+    s'.vs_label_offsets = s.vs_label_offsets /\
+    s'.vs_params = s.vs_params /\
+    s'.vs_prev_hashes = s.vs_prev_hashes /\
+    s'.vs_halted = s.vs_halted /\
+    s'.vs_current_bb = s.vs_current_bb /\
+    s'.vs_prev_bb = s.vs_prev_bb /\
+    (!v. ~MEM v inst.inst_outputs ==> lookup_var v s' = lookup_var v s) /\
+    (~is_alloca_op inst.inst_opcode /\
+     Eff_IMMUTABLES NOTIN write_effects inst.inst_opcode ==>
+     s'.vs_immutables = s.vs_immutables) /\
+    (~is_alloca_op inst.inst_opcode /\
+     Eff_RETURNDATA NOTIN write_effects inst.inst_opcode ==>
+     s'.vs_returndata = s.vs_returndata)
+Proof
+  step_base_field_tac
+QED
+
+(* Generic lift: from step_inst_base mega-lemma to step_inst for any field *)
+fun step_inst_lift_from_all_tac field_fn =
+  rw[Once step_inst_def] >>
+  gvs[AllCaseEqs(), is_terminator_def] >-
+  (gvs[bind_outputs_def, merge_callee_state_def] >>
+   qspecl_then [field_fn] mp_tac foldl_update_var_preserves >>
+   simp[update_var_def]) >>
+  imp_res_tac step_inst_base_preserves_all >> gvs[is_terminator_def];
+
+(* ===================================================================== *)
+(* ===== Section 6: Write-Effects Soundness ============================ *)
+(* ===================================================================== *)
+
+(* ---- Write-Effects Soundness ----
+   STATUS: 2 of 7 proved (immutables, returndata).
+   Remaining 5 BLOCKED: they require EVM-level guarantees about what `run`
+   preserves in static mode (for STATICCALL) or CREATE/CREATE2 paths.
+   Provable cases:
+   - immutables: extract_venom_result never touches vs_immutables, and
+     INVOKE (which does via merge_callee_state) is filtered by write_effects.
+   - returndata: ALL ext-calls have Eff_RETURNDATA in write_effects,
+     so the filter excludes them all. Pure step_inst_base proof. *)
+
+(* ===================================================================== *)
+(* ===== EVM Static-Mode Invariant (upstream dependency) =============== *)
+(* ===================================================================== *)
+
+(* EVM static-mode invariant: when the top context has static=T,
+   `run` preserves rollback state fields and produces no logs.
+   Follows from assert_not_static guarding every state-modifying
+   operation in verifereum (SSTORE, TSTORE, LOG, SELFDESTRUCT,
+   CREATE, CALL-with-value).
+
+   Upstream: https://github.com/verifereum/verifereum/issues/100
+   Once proven there, import and remove cheat. *)
+Theorem run_static_preserves:
+  !es result final_state ctxt rb.
+    run es = SOME (result, final_state) /\
+    es.contexts = [(ctxt, rb)] /\
+    ctxt.msgParams.static = T ==>
+    final_state.rollback.accounts = es.rollback.accounts /\
+    final_state.rollback.tStorage = es.rollback.tStorage /\
+    final_state.rollback.toDelete = es.rollback.toDelete /\
+    (case final_state.contexts of
+       [(ctxt', _)] => ctxt'.logs = []
+     | _ => T)
+Proof
   cheat
 QED
 
-(* Memory-writing opcodes: only change vs_memory (not storage/transient/etc) *)
+(* ---- STATICCALL Helper ----
+   STATICCALL goes through exec_ext_call with value=0w, is_static=T.
+   transfer_value with 0 is identity, run_static_preserves gives
+   final_state.rollback = initial rollback, ctxt.logs = [].
+   So accounts/transient/logs are all preserved. *)
+Theorem exec_ext_call_static_preserves[local]:
+  !inst s gas addr_w argsOff argsSize retOff retSize s'.
+    exec_ext_call inst s gas addr_w (0w:bytes32) argsOff argsSize
+                  retOff retSize T = OK s' ==>
+    s'.vs_accounts = s.vs_accounts /\
+    s'.vs_transient = s.vs_transient /\
+    s'.vs_logs = s.vs_logs /\
+    s'.vs_call_ctx = s.vs_call_ctx
+Proof
+  rw[exec_ext_call_def, make_venom_call_state_def, LET_DEF] >>
+  gvs[AllCaseEqs()] >>
+  simp[update_var_def] >>
+  fs[extract_venom_result_def] >> gvs[AllCaseEqs()] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+  Cases_on `result` >> gvs[] >>
+  Cases_on `y` >> gvs[] >>
+  drule run_static_preserves >>
+  simp[vfmContextTheory.initial_context_def,
+       vfmContextTheory.initial_msg_params_def,
+       make_rollback_def, vfmExecutionTheory.transfer_value_def] >>
+  strip_tac >> gvs[]
+QED
+
+(* ---- step_inst_base preservation for static fields ----
+   Per-field lemmas for storage/transient/log/accounts.
+   Same tactic pattern as step_inst_base_preserves_memory.
+   STATICCALL is the only non-excluded opcode that touches these
+   fields — handled by exec_ext_call_static_preserves. *)
+
+val step_base_static_field_tac =
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[is_terminator_def, is_alloca_op_def,
+      write_effects_def, all_effects_def, empty_effects_def] >>
+  fs[step_inst_base_def] >>
+  gvs[AllCaseEqs()] >>
+  fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_create_def, extract_venom_result_def] >>
+  gvs[AllCaseEqs()] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+  simp[update_var_def, mstore_def, sstore_def, tstore_def,
+       write_memory_with_expansion_def, mcopy_def,
+       contract_storage_def] >>
+  imp_res_tac exec_ext_call_static_preserves >> gvs[];
+
+Theorem step_inst_base_preserves_storage[local]:
+  !inst s s'. step_inst_base inst s = OK s' /\
+    ~is_terminator inst.inst_opcode /\
+    ~is_alloca_op inst.inst_opcode /\
+    Eff_STORAGE NOTIN write_effects inst.inst_opcode ==>
+    contract_storage s' = contract_storage s
+Proof
+  step_base_static_field_tac
+QED
+
+Theorem step_inst_base_preserves_transient[local]:
+  !inst s s'. step_inst_base inst s = OK s' /\
+    ~is_terminator inst.inst_opcode /\
+    ~is_alloca_op inst.inst_opcode /\
+    Eff_TRANSIENT NOTIN write_effects inst.inst_opcode ==>
+    s'.vs_transient = s.vs_transient
+Proof
+  step_base_static_field_tac
+QED
+
+Theorem step_inst_base_preserves_log[local]:
+  !inst s s'. step_inst_base inst s = OK s' /\
+    ~is_terminator inst.inst_opcode /\
+    ~is_alloca_op inst.inst_opcode /\
+    Eff_LOG NOTIN write_effects inst.inst_opcode ==>
+    s'.vs_logs = s.vs_logs
+Proof
+  step_base_static_field_tac
+QED
+
+Theorem step_inst_base_preserves_accounts[local]:
+  !inst s s'. step_inst_base inst s = OK s' /\
+    ~is_terminator inst.inst_opcode /\
+    ~is_alloca_op inst.inst_opcode /\
+    Eff_BALANCE NOTIN write_effects inst.inst_opcode /\
+    Eff_STORAGE NOTIN write_effects inst.inst_opcode ==>
+    s'.vs_accounts = s.vs_accounts
+Proof
+  step_base_static_field_tac
+QED
+
+Theorem step_inst_base_preserves_memory[local]:
+  !inst s s'. step_inst_base inst s = OK s' /\
+    ~is_terminator inst.inst_opcode /\
+    ~is_alloca_op inst.inst_opcode /\
+    Eff_MEMORY NOTIN write_effects inst.inst_opcode ==>
+    s'.vs_memory = s.vs_memory
+Proof
+  step_base_static_field_tac
+QED
+
+(* ---- Write-Effects Soundness ----
+   INVOKE is vacuously excluded (write_effects INVOKE = all_effects).
+   Non-INVOKE reduces to step_inst_base via step_inst_non_invoke. *)
+
+val write_effects_invoke_tac =
+  gvs[write_effects_def, all_effects_def, empty_effects_def];
+
+Theorem write_effects_sound_storage:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_alloca_op inst.inst_opcode /\
+    ~is_terminator inst.inst_opcode /\
+    Eff_STORAGE NOTIN write_effects inst.inst_opcode ==>
+    contract_storage s' = contract_storage s
+Proof
+  rw[Once step_inst_def] >>
+  gvs[AllCaseEqs(), is_terminator_def] >-
+  write_effects_invoke_tac >>
+  imp_res_tac step_inst_base_preserves_storage
+QED
+
+Theorem write_effects_sound_transient:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_alloca_op inst.inst_opcode /\
+    ~is_terminator inst.inst_opcode /\
+    Eff_TRANSIENT NOTIN write_effects inst.inst_opcode ==>
+    s'.vs_transient = s.vs_transient
+Proof
+  rw[Once step_inst_def] >>
+  gvs[AllCaseEqs(), is_terminator_def] >-
+  write_effects_invoke_tac >>
+  imp_res_tac step_inst_base_preserves_transient
+QED
+
+Theorem write_effects_sound_memory:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_alloca_op inst.inst_opcode /\
+    ~is_terminator inst.inst_opcode /\
+    Eff_MEMORY NOTIN write_effects inst.inst_opcode ==>
+    s'.vs_memory = s.vs_memory
+Proof
+  rw[Once step_inst_def] >>
+  gvs[AllCaseEqs(), is_terminator_def] >-
+  write_effects_invoke_tac >>
+  imp_res_tac step_inst_base_preserves_memory >> gvs[is_terminator_def]
+QED
+
+Theorem write_effects_sound_immutables:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_alloca_op inst.inst_opcode /\
+    ~is_terminator inst.inst_opcode /\
+    Eff_IMMUTABLES NOTIN write_effects inst.inst_opcode ==>
+    s'.vs_immutables = s.vs_immutables
+Proof
+  rw[Once step_inst_def] >>
+  gvs[AllCaseEqs(), is_terminator_def] >-
+  write_effects_invoke_tac >>
+  imp_res_tac step_inst_base_preserves_all >> gvs[is_terminator_def]
+QED
+
+Theorem write_effects_sound_returndata:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_alloca_op inst.inst_opcode /\
+    ~is_terminator inst.inst_opcode /\
+    Eff_RETURNDATA NOTIN write_effects inst.inst_opcode ==>
+    s'.vs_returndata = s.vs_returndata
+Proof
+  rw[Once step_inst_def] >>
+  gvs[AllCaseEqs(), is_terminator_def] >-
+  write_effects_invoke_tac >>
+  imp_res_tac step_inst_base_preserves_all >> gvs[is_terminator_def]
+QED
+
+Theorem write_effects_sound_log:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_alloca_op inst.inst_opcode /\
+    ~is_terminator inst.inst_opcode /\
+    Eff_LOG NOTIN write_effects inst.inst_opcode ==>
+    s'.vs_logs = s.vs_logs
+Proof
+  rw[Once step_inst_def] >>
+  gvs[AllCaseEqs(), is_terminator_def] >-
+  write_effects_invoke_tac >>
+  imp_res_tac step_inst_base_preserves_log
+QED
+
+Theorem write_effects_sound_accounts:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_alloca_op inst.inst_opcode /\
+    ~is_terminator inst.inst_opcode /\
+    Eff_BALANCE NOTIN write_effects inst.inst_opcode /\
+    Eff_STORAGE NOTIN write_effects inst.inst_opcode ==>
+    s'.vs_accounts = s.vs_accounts
+Proof
+  rw[Once step_inst_def] >>
+  gvs[AllCaseEqs(), is_terminator_def] >-
+  write_effects_invoke_tac >>
+  imp_res_tac step_inst_base_preserves_accounts
+QED
+
+(* ===================================================================== *)
+(* ===== Section 7: Context Field Preservation ========================= *)
+(* ===================================================================== *)
+
+(* Exported step_inst versions — derived from mega-lemma *)
+Theorem step_preserves_call_ctx:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_terminator inst.inst_opcode ==> s'.vs_call_ctx = s.vs_call_ctx
+Proof
+  step_inst_lift_from_all_tac `\s:venom_state. s.vs_call_ctx`
+QED
+
+Theorem step_preserves_tx_ctx:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_terminator inst.inst_opcode ==> s'.vs_tx_ctx = s.vs_tx_ctx
+Proof
+  step_inst_lift_from_all_tac `\s:venom_state. s.vs_tx_ctx`
+QED
+
+Theorem step_preserves_block_ctx:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_terminator inst.inst_opcode ==> s'.vs_block_ctx = s.vs_block_ctx
+Proof
+  step_inst_lift_from_all_tac `\s:venom_state. s.vs_block_ctx`
+QED
+
+Theorem step_preserves_code:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_terminator inst.inst_opcode ==> s'.vs_code = s.vs_code
+Proof
+  step_inst_lift_from_all_tac `\s:venom_state. s.vs_code`
+QED
+
+Theorem step_preserves_data_section:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_terminator inst.inst_opcode ==> s'.vs_data_section = s.vs_data_section
+Proof
+  step_inst_lift_from_all_tac `\s:venom_state. s.vs_data_section`
+QED
+
+Theorem step_preserves_label_offsets:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_terminator inst.inst_opcode ==> s'.vs_label_offsets = s.vs_label_offsets
+Proof
+  step_inst_lift_from_all_tac `\s:venom_state. s.vs_label_offsets`
+QED
+
+Theorem step_preserves_params:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_terminator inst.inst_opcode ==> s'.vs_params = s.vs_params
+Proof
+  step_inst_lift_from_all_tac `\s:venom_state. s.vs_params`
+QED
+
+Theorem step_preserves_prev_hashes:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_terminator inst.inst_opcode ==> s'.vs_prev_hashes = s.vs_prev_hashes
+Proof
+  step_inst_lift_from_all_tac `\s:venom_state. s.vs_prev_hashes`
+QED
+
+Theorem step_preserves_halted:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_terminator inst.inst_opcode ==> s'.vs_halted = s.vs_halted
+Proof
+  step_inst_lift_from_all_tac `\s:venom_state. s.vs_halted`
+QED
+
+Theorem step_preserves_current_bb[local]:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_terminator inst.inst_opcode ==> s'.vs_current_bb = s.vs_current_bb
+Proof
+  step_inst_lift_from_all_tac `\s:venom_state. s.vs_current_bb`
+QED
+
+Theorem step_preserves_prev_bb[local]:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_terminator inst.inst_opcode ==> s'.vs_prev_bb = s.vs_prev_bb
+Proof
+  step_inst_lift_from_all_tac `\s:venom_state. s.vs_prev_bb`
+QED
+
+Theorem step_preserves_control_flow:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_terminator inst.inst_opcode ==>
+    s'.vs_current_bb = s.vs_current_bb /\
+    s'.vs_inst_idx = s.vs_inst_idx /\
+    s'.vs_prev_bb = s.vs_prev_bb
+Proof
+  metis_tac[step_preserves_current_bb, step_inst_preserves_inst_idx,
+            step_preserves_prev_bb]
+QED
+
+(* ===================================================================== *)
+(* ===== Section 5b: Write-Opcode Class Preservation =================== *)
+(* ===================================================================== *)
+
+Theorem is_mem_write_not_terminator[local]:
+  !op. is_mem_write_op op ==> ~is_terminator op
+Proof
+  Cases >> EVAL_TAC
+QED
+
+Theorem is_alloca_not_terminator[local]:
+  !op. is_alloca_op op ==> ~is_terminator op
+Proof
+  Cases >> EVAL_TAC
+QED
+
+Theorem is_ext_call_not_terminator[local]:
+  !op. is_ext_call_op op ==> ~is_terminator op
+Proof
+  Cases >> EVAL_TAC
+QED
+
+(* Full tactic for opcode-class theorems: prove all conjuncts at once
+   via full case split. Avoids issues with Once/subgoal ordering. *)
+val step_class_write_tac =
+  rw[Once step_inst_def, step_inst_base_def] >>
+  gvs[AllCaseEqs(), is_mem_write_op_def, is_alloca_op_def,
+      is_ext_call_op_def, is_terminator_def] >>
+  write_finish_tac;
+
 Theorem step_mem_write_preserves:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\ is_mem_write_op inst.inst_opcode ==>
@@ -336,13 +733,13 @@ Theorem step_mem_write_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. lookup_var v s' = lookup_var v s)
 Proof
-  cheat
+  step_class_write_tac
 QED
 
-(* ALLOCA/PALLOCA/CALLOCA: change vs_memory + vs_allocas + output var *)
 Theorem step_alloca_preserves:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\ is_alloca_op inst.inst_opcode ==>
+    s'.vs_memory = s.vs_memory /\
     s'.vs_transient = s.vs_transient /\
     s'.vs_accounts = s.vs_accounts /\
     s'.vs_logs = s.vs_logs /\
@@ -362,16 +759,9 @@ Theorem step_alloca_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. ~MEM v inst.inst_outputs ==> lookup_var v s' = lookup_var v s)
 Proof
-  cheat
+  step_class_write_tac
 QED
 
-(* External calls: change accounts, storage, memory, returndata, logs,
-   transient, and output var.
-   Preserve: immutables, allocas, context fields, non-output vars.
-   NOTE: vs_accounts and vs_transient are NOT preserved — reentrancy
-   allows the callee to call back and execute SSTORE/TSTORE at the
-   caller's address.  DELEGATECALL does this directly (callee runs
-   at caller's address). *)
 Theorem step_ext_call_preserves:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\ is_ext_call_op inst.inst_opcode ==>
@@ -391,222 +781,103 @@ Theorem step_ext_call_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. ~MEM v inst.inst_outputs ==> lookup_var v s' = lookup_var v s)
 Proof
-  cheat
-QED
-
-
-
-(* ===================================================================== *)
-(* ===== Section 6: Write-Effects Soundness ============================ *)
-(* ===================================================================== *)
-
-(* These link the effects system (write_effects) to actual semantics.
-   Each theorem: if the declared write_effects don't include effect X,
-   then state field Y is preserved.
-   Excludes allocation opcodes (ALLOCA/PALLOCA/CALLOCA) which are not
-   tracked by the effects system (they're IR-level, not EVM). *)
-
-Theorem write_effects_sound_storage:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_alloca_op inst.inst_opcode /\
-    ~is_terminator inst.inst_opcode /\
-    Eff_STORAGE NOTIN write_effects inst.inst_opcode ==>
-    contract_storage s' = contract_storage s
-Proof
-  cheat
-QED
-
-Theorem write_effects_sound_transient:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_alloca_op inst.inst_opcode /\
-    ~is_terminator inst.inst_opcode /\
-    Eff_TRANSIENT NOTIN write_effects inst.inst_opcode ==>
-    s'.vs_transient = s.vs_transient
-Proof
-  cheat
-QED
-
-(* Eff_MSIZE is NOT required: in our model, opcodes with Eff_MSIZE but
-   not Eff_MEMORY (MLOAD, SHA3, LOG, ILOAD, CREATE/CREATE2) do not
-   actually modify vs_memory. EVM memory expansion is not modeled. *)
-Theorem write_effects_sound_memory:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_alloca_op inst.inst_opcode /\
-    ~is_terminator inst.inst_opcode /\
-    Eff_MEMORY NOTIN write_effects inst.inst_opcode ==>
-    s'.vs_memory = s.vs_memory
-Proof
-  cheat
-QED
-
-Theorem write_effects_sound_immutables:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_alloca_op inst.inst_opcode /\
-    ~is_terminator inst.inst_opcode /\
-    Eff_IMMUTABLES NOTIN write_effects inst.inst_opcode ==>
-    s'.vs_immutables = s.vs_immutables
-Proof
-  cheat
-QED
-
-Theorem write_effects_sound_returndata:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_alloca_op inst.inst_opcode /\
-    ~is_terminator inst.inst_opcode /\
-    Eff_RETURNDATA NOTIN write_effects inst.inst_opcode ==>
-    s'.vs_returndata = s.vs_returndata
-Proof
-  cheat
-QED
-
-Theorem write_effects_sound_log:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_alloca_op inst.inst_opcode /\
-    ~is_terminator inst.inst_opcode /\
-    Eff_LOG NOTIN write_effects inst.inst_opcode ==>
-    s'.vs_logs = s.vs_logs
-Proof
-  cheat
-QED
-
-(* vs_accounts is preserved when neither balance nor storage effects
-   are present. SSTORE writes contract storage through vs_accounts,
-   so Eff_STORAGE alone can change vs_accounts. *)
-Theorem write_effects_sound_accounts:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_alloca_op inst.inst_opcode /\
-    ~is_terminator inst.inst_opcode /\
-    Eff_BALANCE NOTIN write_effects inst.inst_opcode /\
-    Eff_STORAGE NOTIN write_effects inst.inst_opcode ==>
-    s'.vs_accounts = s.vs_accounts
-Proof
-  cheat
+  step_class_write_tac
 QED
 
 (* ===================================================================== *)
-(* ===== Section 7: Context Field Preservation ========================= *)
+(* ===== Section 4: Non-Output Variable Preservation =================== *)
 (* ===================================================================== *)
 
-(* These "immutable context" fields are never modified by any non-terminator
-   opcode. They are set at call entry and remain constant throughout
-   intra-function execution. *)
-
-Theorem step_preserves_call_ctx:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_terminator inst.inst_opcode ==>
-    s'.vs_call_ctx = s.vs_call_ctx
+(* Helper: FOLDL of update_var preserves lookup_var for non-output vars *)
+Theorem foldl_update_var_lookup[local]:
+  !kvs s v. ~MEM v (MAP FST kvs) ==>
+    lookup_var v (FOLDL (\s' (k,w). update_var k w s') s kvs) = lookup_var v s
 Proof
-  cheat
+  Induct >> simp[pairTheory.FORALL_PROD] >>
+  rw[update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
-Theorem step_preserves_tx_ctx:
+Theorem step_preserves_non_output_vars:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\
     ~is_terminator inst.inst_opcode ==>
-    s'.vs_tx_ctx = s.vs_tx_ctx
+    !v. ~MEM v inst.inst_outputs ==> lookup_var v s' = lookup_var v s
 Proof
-  cheat
+  rw[Once step_inst_def] >>
+  gvs[AllCaseEqs(), is_terminator_def] >-
+  (* INVOKE case *)
+  (gvs[bind_outputs_def, merge_callee_state_def] >>
+   `~MEM v (MAP FST (ZIP (inst.inst_outputs, vals)))` by
+     simp[listTheory.MAP_ZIP] >>
+   drule foldl_update_var_lookup >> simp[lookup_var_def]) >>
+  (* Non-INVOKE: use mega-lemma *)
+  metis_tac[step_inst_base_preserves_all, is_terminator_def]
 QED
 
-Theorem step_preserves_block_ctx:
+Theorem step_write2_preserves_all_vars:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\
-    ~is_terminator inst.inst_opcode ==>
-    s'.vs_block_ctx = s.vs_block_ctx
+    (inst.inst_opcode = MSTORE \/ inst.inst_opcode = SSTORE \/
+     inst.inst_opcode = TSTORE) ==>
+    !v. lookup_var v s' = lookup_var v s
 Proof
-  cheat
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac step_mstore_preserves >> gvs[] >>
+  imp_res_tac step_sstore_preserves >> gvs[] >>
+  imp_res_tac step_tstore_preserves >> gvs[]
 QED
 
-Theorem step_preserves_code:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_terminator inst.inst_opcode ==>
-    s'.vs_code = s.vs_code
+(* ===================================================================== *)
+(* ===== Section 3b: step_effect_free_state_equiv ====================== *)
+(* ===================================================================== *)
+
+(* step_inst_base level: effect-free opcodes produce state_equiv *)
+Theorem step_inst_base_effect_free_state_equiv[local]:
+  !inst s s'.
+    step_inst_base inst s = OK s' /\
+    is_effect_free_op inst.inst_opcode ==>
+    state_equiv (set inst.inst_outputs) s s'
 Proof
-  cheat
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_effect_free_op_def] >>
+  fs[step_inst_base_def] >>
+  TRY (metis_tac[exec_pure1_state_equiv, exec_pure2_state_equiv,
+                 exec_pure3_state_equiv, exec_read0_state_equiv,
+                 exec_read1_state_equiv]) >>
+  (* Remaining: NOP, ASSIGN, PARAM, PHI, SHA3, OFFSET *)
+  gvs[AllCaseEqs()] >>
+  TRY (irule state_equiv_refl) >>
+  TRY (irule state_equiv_subset >> qexists_tac `{out}` >>
+       simp[update_var_state_equiv, SUBSET_DEF])
 QED
 
-Theorem step_preserves_data_section:
+Theorem step_effect_free_state_equiv:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\
-    ~is_terminator inst.inst_opcode ==>
-    s'.vs_data_section = s.vs_data_section
+    is_effect_free_op inst.inst_opcode ==>
+    state_equiv (set inst.inst_outputs) s s'
 Proof
-  cheat
-QED
-
-Theorem step_preserves_label_offsets:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_terminator inst.inst_opcode ==>
-    s'.vs_label_offsets = s.vs_label_offsets
-Proof
-  cheat
-QED
-
-Theorem step_preserves_params:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_terminator inst.inst_opcode ==>
-    s'.vs_params = s.vs_params
-Proof
-  cheat
-QED
-
-Theorem step_preserves_prev_hashes:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_terminator inst.inst_opcode ==>
-    s'.vs_prev_hashes = s.vs_prev_hashes
-Proof
-  cheat
-QED
-
-(* Halted flag is never set by non-terminator opcodes *)
-Theorem step_preserves_halted:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_terminator inst.inst_opcode ==>
-    s'.vs_halted = s.vs_halted
-Proof
-  cheat
-QED
-
-(* Control flow fields preserved by non-terminator opcodes *)
-Theorem step_preserves_control_flow:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_terminator inst.inst_opcode ==>
-    s'.vs_current_bb = s.vs_current_bb /\
-    s'.vs_inst_idx = s.vs_inst_idx /\
-    s'.vs_prev_bb = s.vs_prev_bb
-Proof
-  cheat
+  rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE` by (CCONTR_TAC >> gvs[is_effect_free_op_def]) >>
+  `step_inst_base inst s = OK s'` by metis_tac[step_inst_non_invoke] >>
+  metis_tac[step_inst_base_effect_free_state_equiv]
 QED
 
 (* ===================================================================== *)
 (* ===== Section 8: Derived Equivalences =============================== *)
 (* ===================================================================== *)
 
-(* Effect-free opcodes also give execution_equiv (weaker, for terminals) *)
 Theorem step_effect_free_execution_equiv:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\
     is_effect_free_op inst.inst_opcode ==>
     execution_equiv (set inst.inst_outputs) s s'
 Proof
-  cheat
+  rpt strip_tac >>
+  imp_res_tac step_effect_free_state_equiv >>
+  gvs[state_equiv_def]
 QED
 
-(* Combining effect-free with same-value output gives full state_equiv {} *)
 Theorem step_effect_free_same_value:
   !fuel ctx inst1 inst2 s s1 s2.
     step_inst fuel ctx inst1 s = OK s1 /\
@@ -619,5 +890,13 @@ Theorem step_effect_free_same_value:
          lookup_var v s1 = lookup_var v s2) ==>
     state_equiv {} s1 s2
 Proof
-  cheat
+  rpt strip_tac >>
+  `state_equiv (set inst1.inst_outputs) s s1`
+    by metis_tac[step_effect_free_state_equiv] >>
+  `state_equiv (set inst2.inst_outputs) s s2`
+    by metis_tac[step_effect_free_state_equiv] >>
+  gvs[state_equiv_def, execution_equiv_def] >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `MEM v (inst1.inst_outputs)` >> gvs[] >>
+  metis_tac[]
 QED

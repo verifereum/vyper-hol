@@ -659,7 +659,7 @@ Proof
   rw[exec_alloca_def, LET_THM] >>
   rpt CASE_TAC >> gvs[result_equiv_def] >>
   gvs[state_equiv_def, execution_equiv_def, update_var_def,
-      lookup_var_def, FLOOKUP_UPDATE] >>
+      lookup_var_def, FLOOKUP_UPDATE, next_alloca_offset_def] >>
   rpt strip_tac >> rw[] >> fs[]
 QED
 
