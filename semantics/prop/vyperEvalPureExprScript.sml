@@ -50,21 +50,24 @@ Definition eval_pure_expr_def:
      | NONE => NONE) ∧
 
   (* Subscript *)
-  eval_pure_expr cx st (Subscript _ e1 e2) =
+  eval_pure_expr cx st (Subscript ty e1 e2) =
     (case eval_pure_expr cx st e1 of
      | SOME tv1 =>
        (case eval_pure_expr cx st e2 of
         | SOME (Value v2) =>
-          (case check_array_bounds cx tv1 v2 st of
-           | (INL _, _) =>
-             (case evaluate_subscript (get_tenv cx) tv1 v2 of
-              | INL (INL tv) => SOME tv
-              | INL (INR (is_transient, slot, tv)) =>
-                (case read_storage_slot cx is_transient slot tv st of
-                 | (INL v, _) => SOME (Value v)
-                 | _ => NONE)
-              | INR _ => NONE)
-           | _ => NONE)
+          (case evaluate_type (get_tenv cx) (expr_type e1) of
+           | SOME arr_tv =>
+             (case check_array_bounds cx tv1 v2 st of
+              | (INL _, _) =>
+                (case evaluate_subscript (get_tenv cx) arr_tv tv1 v2 of
+                 | INL (INL tv) => SOME tv
+                 | INL (INR (is_transient, slot, tv)) =>
+                   (case read_storage_slot cx is_transient slot tv st of
+                    | (INL v, _) => SOME (Value v)
+                    | _ => NONE)
+                 | INR _ => NONE)
+              | _ => NONE)
+           | NONE => NONE)
         | _ => NONE)
      | NONE => NONE) ∧
 
@@ -209,7 +212,11 @@ Proof
       simp[Once eval_pure_expr_def] >> strip_tac >>
       gvs[AllCaseEqs()] >>
       simp[Once vyperInterpreterTheory.evaluate_def] >>
-      simp monadic_defs >>
+      simp monadic_defs >> gvs[] >>
+      simp[vyperStateTheory.lift_option_type_def,
+           vyperStateTheory.lift_option_def,
+           vyperStateTheory.return_def,
+           vyperStateTheory.bind_def] >>
       drule vyperStatePreservationTheory.check_array_bounds_state >>
       strip_tac >> gvs[] >>
       TRY (drule vyperStatePreservationTheory.read_storage_slot_state >>
@@ -369,12 +376,21 @@ Proof
         fs[vyperStateTheory.get_Value_def, vyperStateTheory.return_def] >>
       pop_assum SUBST_ALL_TAC >>
       `s'⁵' = st` by
+        (imp_res_tac vyperStatePreservationTheory.lift_option_type_state >> gvs[]) >>
+      pop_assum SUBST_ALL_TAC >>
+      qpat_x_assum `lift_option_type _ _ _ = _` mp_tac >>
+      simp[vyperStateTheory.lift_option_type_def,
+           vyperStateTheory.lift_option_def] >>
+      Cases_on `evaluate_type (get_tenv cx) (expr_type e)` >>
+      simp[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+      strip_tac >> gvs[] >>
+      `s'⁶' = st` by
         metis_tac[vyperStatePreservationTheory.check_array_bounds_state] >>
       pop_assum SUBST_ALL_TAC >>
-      Cases_on `evaluate_subscript (get_tenv cx) tv1 v2` >>
+      Cases_on `evaluate_subscript (get_tenv cx) arr_tv tv1 v2` >>
       fs[vyperStateTheory.lift_sum_def, vyperStateTheory.return_def,
          vyperStateTheory.raise_def] >>
-      qpat_x_assum `_ = s'⁶'` (SUBST_ALL_TAC o SYM) >>
+      qpat_x_assum `_ = s'⁷'` (SUBST_ALL_TAC o SYM) >>
       pop_assum SUBST_ALL_TAC >>
       Cases_on `res` >>
       fs[vyperStateTheory.return_def, vyperStateTheory.bind_def,

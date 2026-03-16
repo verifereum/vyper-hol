@@ -296,7 +296,8 @@ val () = cv_auto_trans evaluate_ecrecover_def;
 (* Extract (x, y) uint256 pair from a uint256[2] static array value. *)
 Definition extract_ec_point_def:
   extract_ec_point (ArrayV av) =
-    (case (array_index av 0, array_index av 1) of
+    (let tv = ArrayTV (BaseTV (UintT 256)) (Fixed 2) in
+     case (array_index tv av 0, array_index tv av 1) of
        (SOME (IntV x), SOME (IntV y)) => SOME (x, y)
      | _ => NONE) ∧
   extract_ec_point _ = NONE

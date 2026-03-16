@@ -265,12 +265,14 @@ Proof
   simp[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
        ignore_bind_def] >>
   strip_tac >> gvs[] >>
-  imp_res_tac get_Value_scopes >> imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_runtime_scopes >> gvs[] >>
+  imp_res_tac get_Value_scopes >> imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_runtime_scopes >>
+  imp_res_tac lift_option_type_state >> gvs[] >>
   imp_res_tac check_array_bounds_state >> gvs[] >>
   first_x_assum $ drule_then assume_tac >>
   first_x_assum (qspecl_then [`st`, `tv1`, `s''`] mp_tac) >> simp[] >>
   disch_then $ drule_then assume_tac >> gvs[] >>
-  Cases_on `res'` >> gvs[return_def, bind_def, AllCaseEqs()] >>
+  rename1 `lift_sum _ _ = (INL subscript_res, _)` >>
+  Cases_on `subscript_res` >> gvs[return_def, bind_def, AllCaseEqs()] >>
   PairCases_on `y` >> gvs[bind_def, AllCaseEqs(), lift_option_def, lift_option_type_def, return_def, raise_def] >>
   imp_res_tac read_storage_slot_scopes >> gvs[]
 QED

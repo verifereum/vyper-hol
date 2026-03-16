@@ -4,7 +4,6 @@
  * Type-value compatibility predicates for Vyper values and typed_values.
  *
  * TOP-LEVEL:
- *   well_formed_value_def - structural well-formedness of values
  *   value_has_type_def - value matches a typed_value
  *   value_has_type_equiv - equivalence with encode_value IS_SOME
  *   well_formed_type_value_def - well-formedness of typed_value descriptors
@@ -41,64 +40,8 @@ Definition well_formed_type_value_def:
      type_slot_size (StructTV fields) ≤ dimword(:256)) ∧
   well_formed_type_value (BaseTV (UintT m)) = (m ≤ 256) ∧
   well_formed_type_value (BaseTV (IntT m)) = (0 < m ∧ m ≤ 256) ∧
+  well_formed_type_value (FlagTV m) = (m ≤ 256) ∧
   well_formed_type_value _ = T
-End
-
-(* ===== well_formed_value ===== *)
-
-(* Termination helpers for well_formed_value *)
-Theorem wf_struct_size_helper[local]:
-  ∀fields : (identifier # value) list.
-    list_size (pair_size (K 0) value_size) fields ≤
-    list_size (pair_size (list_size char_size) value_size) fields
-Proof
-  Induct >> rw[] >> PairCases_on `h` >> rw[]
-QED
-
-Theorem wf_sparse_size_helper[local]:
-  ∀sparse : (num # value) list.
-    list_size (pair_size (K 0) value_size) sparse ≤
-    list_size (pair_size I value_size) sparse
-Proof
-  Induct >> rw[] >> PairCases_on `h` >> rw[]
-QED
-
-(* Well-formedness predicate on values (no type needed).
-   Checks: numeric range fits in 256-bit words,
-           static array keys in range and non-default,
-           dynamic array length within bound,
-           recursive well-formedness of sub-values. *)
-Definition well_formed_value_def:
-  well_formed_value (IntV i) = (INT_MIN(:256) ≤ i ∧ i < &dimword(:256)) ∧
-  well_formed_value (DecimalV i) = (INT_MIN(:256) ≤ i ∧ i ≤ INT_MAX(:256)) ∧
-  well_formed_value (FlagV k) = (k < dimword(:256)) ∧
-  well_formed_value (BoolV _) = T ∧
-  well_formed_value NoneV = T ∧
-  well_formed_value (BytesV _) = T ∧
-  well_formed_value (StringV _) = T ∧
-  well_formed_value (ArrayV av) = wf_array av ∧
-  well_formed_value (StructV fields) = wf_fields fields ∧
-  wf_array (TupleV vs) = wf_values vs ∧
-  wf_array (SArrayV tv n sparse) =
-    (SORTED $< (MAP FST sparse) ∧ wf_sparse tv n sparse) ∧
-  wf_array (DynArrayV tv max vs) = (LENGTH vs ≤ max ∧ wf_values vs) ∧
-  wf_values [] = T ∧
-  wf_values (v::vs) = (well_formed_value v ∧ wf_values vs) ∧
-  wf_sparse tv n [] = T ∧
-  wf_sparse tv n ((k,v)::rest) =
-    (k < n ∧ v ≠ default_value tv ∧ well_formed_value v ∧ wf_sparse tv n rest) ∧
-  wf_fields [] = T ∧
-  wf_fields ((name,v)::rest) = (well_formed_value v ∧ wf_fields rest)
-Termination
-  WF_REL_TAC `measure (λx. case x of
-    | INL v => value_size v
-    | INR (INL av) => array_value_size av
-    | INR (INR (INL vs)) => list_size value_size vs
-    | INR (INR (INR (INL (_, _, sparse)))) =>
-        list_size value_size (MAP SND sparse)
-    | INR (INR (INR (INR fields))) =>
-        list_size value_size (MAP SND fields))` >>
-  rw[vyperMiscTheory.list_size_pair_size_map]
 End
 
 (* ===== value_has_type: structural characterization of encode_value success ===== *)
@@ -111,7 +54,8 @@ Definition value_has_type_def:
   value_has_type (BaseTV (IntT m)) (IntV i) =
     within_int_bound (Signed m) i ∧
   (* Decimal *)
-  value_has_type (BaseTV DecimalT) (DecimalV _) = T ∧
+  value_has_type (BaseTV DecimalT) (DecimalV d) =
+    within_int_bound (Signed 168) d ∧
   (* Boolean *)
   value_has_type (BaseTV BoolT) (BoolV _) = T ∧
   (* Address *)
@@ -127,18 +71,18 @@ Definition value_has_type_def:
   value_has_type (BaseTV (StringT max)) (StringV s) =
     (LENGTH s ≤ max) ∧
   (* Flag *)
-  value_has_type (FlagTV m') (FlagV _) = T ∧
+  value_has_type (FlagTV m') (FlagV k) = (k < 2 ** m' ∧ m' ≤ 256) ∧
   (* None *)
   value_has_type NoneTV NoneV = T ∧
   (* Tuple *)
   value_has_type (TupleTV tvs) (ArrayV (TupleV vs)) =
     values_have_types tvs vs ∧
   (* Static array *)
-  value_has_type (ArrayTV tv (Fixed n)) (ArrayV (SArrayV tv' m sparse)) =
-    (tv = tv' ∧ n = m ∧ sparse_has_type tv sparse) ∧
+  value_has_type (ArrayTV tv (Fixed n)) (ArrayV (SArrayV sparse)) =
+    (SORTED $< (MAP FST sparse) ∧ sparse_has_type tv n sparse) ∧
   (* Dynamic array *)
-  value_has_type (ArrayTV tv (Dynamic max)) (ArrayV (DynArrayV tv' m vs)) =
-    (tv = tv' ∧ max = m ∧ all_have_type tv vs) ∧
+  value_has_type (ArrayTV tv (Dynamic max)) (ArrayV (DynArrayV vs)) =
+    (LENGTH vs ≤ max ∧ all_have_type tv vs) ∧
   (* Struct *)
   value_has_type (StructTV ftypes) (StructV fields) =
     struct_has_type ftypes fields ∧
@@ -150,9 +94,9 @@ Definition value_has_type_def:
     (value_has_type tv v ∧ values_have_types tvs vs) ∧
   values_have_types _ _ = F ∧
 
-  sparse_has_type tv [] = T ∧
-  sparse_has_type tv ((k:num,v)::rest) =
-    (value_has_type tv v ∧ sparse_has_type tv rest) ∧
+  sparse_has_type tv n [] = T ∧
+  sparse_has_type tv n ((k:num,v)::rest) =
+    (k < n ∧ v ≠ default_value tv ∧ value_has_type tv v ∧ sparse_has_type tv n rest) ∧
 
   all_have_type tv [] = T ∧
   all_have_type tv (v::vs) =
@@ -166,7 +110,7 @@ Termination
   WF_REL_TAC `measure (λx. case x of
     | INL (_, v) => value_size v
     | INR (INL (_, vs)) => list_size value_size vs
-    | INR (INR (INL (_, sparse))) =>
+    | INR (INR (INL (_, _, sparse))) =>
         list_size (pair_size (λx. 0) value_size) sparse
     | INR (INR (INR (INL (_, vs)))) => list_size value_size vs
     | INR (INR (INR (INR (_, fields)))) =>
@@ -175,8 +119,7 @@ Termination
   TRY (Induct >> simp[basicSizeTheory.pair_size_def] >>
        Cases >> simp[basicSizeTheory.pair_size_def] >> NO_TAC) >>
   Induct_on `sparse` >> simp[basicSizeTheory.pair_size_def] >>
-  Cases >> simp[basicSizeTheory.pair_size_def] >>
-  rpt strip_tac >> first_x_assum (qspecl_then [`m`, `tv'`] mp_tac) >> simp[]
+  Cases >> simp[basicSizeTheory.pair_size_def]
 End
 
 (* ===== Helper lemmas  ===== *)
@@ -273,50 +216,10 @@ Proof
   Cases_on `bd` >> simp[well_formed_type_value_def, type_slot_size_def]
 QED
 
-Theorem within_int_bound_unsigned_well_formed:
-  within_int_bound (Unsigned b) i ∧ b ≤ 256 ⇒
-  well_formed_value (IntV i)
-Proof
-  rw[within_int_bound_def, well_formed_value_def] >>
-  `Num i < dimword(:256)` by (
-    simp[wordsTheory.dimword_def] >>
-    `dimindex(:256) = 256` by EVAL_TAC >>
-    irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
-    qexists_tac `2 ** b` >> simp[]) >>
-  `&(Num i) = i` by simp[integerTheory.INT_OF_NUM] >>
-  pop_assum (SUBST_ALL_TAC o SYM) >> gvs[]
-QED
-
-Theorem within_int_bound_signed_well_formed:
-  within_int_bound (Signed b) i ∧ b ≤ 256 ⇒
-  well_formed_value (IntV i)
-Proof
-  strip_tac >>
-  gvs[within_int_bound_def, well_formed_value_def] >>
-  Cases_on `i < 0` >> gvs[]
-  >- (
-    `0 ≤ -i` by simp[integerTheory.INT_NEG_GE0, integerTheory.INT_LT_IMP_LE] >>
-    `i = -&(Num (-i))` by (
-      `&(Num(-i)) = -i` by simp[integerTheory.INT_OF_NUM] >> simp[]) >>
-    pop_assum SUBST1_TAC >>
-    `Num (-i) ≤ 2 ** 255` by (
-      irule arithmeticTheory.LESS_EQ_TRANS >>
-      qexists_tac `2 ** (b − 1)` >> simp[]) >>
-    simp[] >> gvs[])
-  >> (
-    `0 ≤ i` by fs[integerTheory.INT_NOT_LT] >>
-    `i = &(Num i)` by simp[integerTheory.INT_OF_NUM] >>
-    pop_assum SUBST1_TAC >>
-    `Num i < 2 ** 255` by (
-      irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
-      qexists_tac `2 ** (b − 1)` >> simp[]) >>
-    simp[] >> gvs[])
-QED
-
 Theorem value_has_type_equiv:
   (∀tv v. value_has_type tv v ⇒ IS_SOME (encode_value tv v)) ∧
   (∀tvs vs. values_have_types tvs vs ⇒ IS_SOME (encode_tuple 0 tvs vs)) ∧
-  (∀tv sparse. sparse_has_type tv sparse ⇒
+  (∀tv n sparse. sparse_has_type tv n sparse ⇒
      IS_SOME (encode_static_array tv 0 sparse)) ∧
   (∀tv vs. all_have_type tv vs ⇒ IS_SOME (encode_dyn_array tv 0 vs)) ∧
   (∀ftypes fields. struct_has_type ftypes fields ⇒
@@ -338,8 +241,8 @@ Proof
 QED
 
 Theorem sparse_has_type_enumerate:
-  ∀vs tv d i. EVERY (value_has_type tv) vs ⇒
-    sparse_has_type tv (enumerate_static_array d i vs)
+  ∀vs tv d n i. EVERY (value_has_type tv) vs ∧ i + LENGTH vs ≤ n ∧ d = default_value tv ⇒
+    sparse_has_type tv n (enumerate_static_array d i vs)
 Proof
   Induct >> simp[enumerate_static_array_def, value_has_type_def, LET_THM] >>
   rpt strip_tac >> rw[] >> simp[value_has_type_def]
@@ -388,8 +291,9 @@ Theorem value_has_type_inv:
   (value_has_type tv (IntV i) ⇔
     (∃n. tv = BaseTV (UintT n) ∧ 0 ≤ i ∧ Num i < 2 ** n) ∨
     (∃n. tv = BaseTV (IntT n) ∧ within_int_bound (Signed n) i)) ∧
-  (value_has_type tv (DecimalV d) ⇔ tv = BaseTV DecimalT) ∧
-  (value_has_type tv (FlagV k) ⇔ ∃m. tv = FlagTV m) ∧
+  (value_has_type tv (DecimalV d) ⇔
+    tv = BaseTV DecimalT ∧ within_int_bound (Signed 168) d) ∧
+  (value_has_type tv (FlagV k) ⇔ ∃m. tv = FlagTV m ∧ k < 2 ** m ∧ m ≤ 256) ∧
   (value_has_type tv (StringV s) ⇔
     ∃m. tv = BaseTV (StringT m) ∧ LENGTH s ≤ m) ∧
   (value_has_type tv (BytesV bs) ⇔
@@ -398,10 +302,11 @@ Theorem value_has_type_inv:
     (∃m. tv = BaseTV (BytesT (Dynamic m)) ∧ LENGTH bs ≤ m)) ∧
   (value_has_type tv (ArrayV (TupleV vs)) ⇔
     ∃tvs. tv = TupleTV tvs ∧ values_have_types tvs vs) ∧
-  (value_has_type tv (ArrayV (SArrayV tv0 n sp)) ⇔
-    tv = ArrayTV tv0 (Fixed n) ∧ sparse_has_type tv0 sp) ∧
-  (value_has_type tv (ArrayV (DynArrayV tv0 m vs)) ⇔
-    tv = ArrayTV tv0 (Dynamic m) ∧ all_have_type tv0 vs) ∧
+  (value_has_type tv (ArrayV (SArrayV sp)) ⇔
+    ∃tv0 n. tv = ArrayTV tv0 (Fixed n) ∧ SORTED $< (MAP FST sp) ∧
+            sparse_has_type tv0 n sp) ∧
+  (value_has_type tv (ArrayV (DynArrayV vs)) ⇔
+    ∃tv0 m. tv = ArrayTV tv0 (Dynamic m) ∧ LENGTH vs ≤ m ∧ all_have_type tv0 vs) ∧
   (value_has_type tv (StructV fields) ⇔
     ∃ftypes. tv = StructTV ftypes ∧ struct_has_type ftypes fields)
 Proof

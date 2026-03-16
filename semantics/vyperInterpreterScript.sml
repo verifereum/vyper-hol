@@ -842,7 +842,8 @@ Definition evaluate_def:
   eval_iterator cx (Array e) = do
     tv <- eval_expr cx e;
     v <- materialise cx tv;
-    vs <- lift_option_type (extract_elements v) "For not ArrayV";
+    arr_tv <- lift_option_type (evaluate_type (get_tenv cx) (expr_type e)) "For array type";
+    vs <- lift_option_type (extract_elements arr_tv v) "For not ArrayV";
     return vs
   od ∧
   eval_iterator cx (Range e1 e2) = do
@@ -938,8 +939,9 @@ Definition evaluate_def:
     tv2 <- eval_expr cx e2;
     v2 <- get_Value tv2;
     tenv <<- get_tenv cx;
+    arr_tv <- lift_option_type (evaluate_type tenv (expr_type e1)) "Subscript array type";
     check_array_bounds cx tv1 v2;
-    res <- lift_sum $ evaluate_subscript tenv tv1 v2;
+    res <- lift_sum $ evaluate_subscript tenv arr_tv tv1 v2;
     case res of INL v => return v | INR (is_transient, slot, tv) => do
       v <- read_storage_slot cx is_transient slot tv;
       return $ Value v

@@ -142,14 +142,14 @@ Proof
   rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def] >>
   imp_res_tac return_state >> imp_res_tac lift_sum_state >>
   imp_res_tac lift_option_state >> imp_res_tac get_Value_state >>
-  imp_res_tac lift_sum_state >>
+  imp_res_tac lift_sum_state >> imp_res_tac lift_option_type_state >>
   gvs[check_array_bounds_def, bind_def, ignore_bind_def, AllCaseEqs(),
       check_def, type_check_def, assert_def, return_def, raise_def] >>
   imp_res_tac get_storage_backend_state >>
   gvs[return_def, bind_def, AllCaseEqs(), sum_CASE_rator, prod_CASE_rator] >>
   imp_res_tac return_state >> imp_res_tac lift_sum_state >>
   imp_res_tac lift_option_state >> imp_res_tac get_Value_state >>
-  imp_res_tac lift_sum_state >>
+  imp_res_tac lift_sum_state >> imp_res_tac lift_option_type_state >>
   imp_res_tac get_Value_state >>
   imp_res_tac read_storage_slot_state >>
   imp_res_tac check_array_bounds_state >>

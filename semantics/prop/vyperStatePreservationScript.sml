@@ -132,7 +132,7 @@ Proof
 QED
 
 Theorem assign_result_state:
-  !ao v subs st res st'. assign_result ao v subs st = (res, st') ==> st' = st
+  !tv ao v subs st res st'. assign_result tv ao v subs st = (res, st') ==> st' = st
 Proof
   Cases_on `ao` >> rw[assign_result_def, return_def, bind_def, lift_sum_def] >>
   qpat_x_assum `_ = (res, st')` mp_tac >>
@@ -163,7 +163,7 @@ Proof
   Cases_on `tv` >>
   rw[materialise_def, return_def, raise_def] >>
   gvs[bind_def, AllCaseEqs(), return_def] >>
-  imp_res_tac read_storage_slot_state >> gvs[]
+  imp_res_tac read_storage_slot_state
 QED
 
 Theorem check_array_bounds_state:
@@ -174,7 +174,7 @@ Proof
       bind_def, ignore_bind_def, check_def, type_check_def, assert_def,
       AllCaseEqs(), toplevel_value_CASE_rator, value_CASE_rator,
       bound_CASE_rator] >>
-  imp_res_tac get_storage_backend_state >> gvs[]
+  imp_res_tac get_storage_backend_state
 QED
 
 Theorem toplevel_array_length_state:
@@ -185,5 +185,6 @@ Proof
       bind_def, ignore_bind_def, check_def, type_check_def, assert_def,
       AllCaseEqs(), toplevel_value_CASE_rator, value_CASE_rator,
       bound_CASE_rator] >>
-  imp_res_tac get_storage_backend_state >> gvs[]
+  imp_res_tac get_storage_backend_state >> gvs[] >>
+  Cases_on `v16` >> gvs[return_def, raise_def]
 QED

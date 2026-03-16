@@ -464,11 +464,11 @@ Definition vyper_to_abi_def[simp]:
     (case vyper_to_abi_list env ts vs of
      | SOME avs => SOME (ListV avs)
      | NONE => NONE) ∧
-  vyper_to_abi env (ArrayT t _) (ArrayV (DynArrayV _ _ vs)) =
+  vyper_to_abi env (ArrayT t _) (ArrayV (DynArrayV vs)) =
     (case vyper_to_abi_same env t vs of
      | SOME avs => SOME (ListV avs)
      | NONE => NONE) ∧
-  vyper_to_abi env (ArrayT t (Fixed _)) (ArrayV (SArrayV _ n sparse)) =
+  vyper_to_abi env (ArrayT t (Fixed n)) (ArrayV (SArrayV sparse)) =
     (case evaluate_type env t of
      | NONE => NONE
      | SOME tv =>
@@ -518,30 +518,29 @@ Definition vyper_to_abi_def[simp]:
               | NONE => NONE)
          | NONE => SOME (avs ++ [default_to_abi tv]))
 Termination
-  WF_REL_TAC `measure (λx. case x of
-    | INL (_, _, v) => value_size v
-    | INR (INL (_, _, vs)) => list_size value_size vs
-    | INR (INR (INL (_, _, vs))) => list_size value_size vs
+  WF_REL_TAC `inv_image ($< LEX $<) (λx. case x of
+    | INL (_, _, v) => (value_size v, 0)
+    | INR (INL (_, _, vs)) => (list_size value_size vs, 0)
+    | INR (INR (INL (_, _, vs))) => (list_size value_size vs, 0)
     | INR (INR (INR (_, _, _, n, sparse))) =>
-        list_size (pair_size (λx. 0) value_size) sparse + n)`
+        (list_size (pair_size (λx. 0) value_size) sparse, n))`
   \\ simp[] \\ rpt conj_tac
   (* Goal 1: StructV *)
   >- (rw[] \\ Induct_on `fields` \\ simp[] \\ rw[] \\ Cases_on `h` \\ simp[])
-  (* Goal 2: Sparse ALOOKUP case *)
-  >- (rpt strip_tac
-      \\ sg `∀sp n' v'. ALOOKUP sp n' = SOME v' ⇒
-             value_size v' < SUC n' + list_size (pair_size (λx. 0) value_size) sp`
-      >- (Induct \\ simp[] \\ rw[]
-          \\ PairCases_on `h` \\ fs[]
-          \\ Cases_on `h0 = n'` \\ fs[]
-          \\ first_x_assum drule \\ simp[])
-      \\ first_x_assum drule \\ simp[])
-  (* Goal 3: Main -> sparse *)
-  \\ rw[]
-  \\ `list_size (pair_size (λx. 0) value_size) sparse ≤
-       list_size (pair_size (λx. x) value_size) sparse`
-       by (Induct_on `sparse` \\ simp[] \\ rw[] \\ PairCases_on `h` \\ simp[])
-  \\ simp[]
+  (* Goal 2 *)
+  >- (
+    rw[]
+    \\ `list_size (pair_size (λx. 0) value_size) sparse ≤
+         list_size (pair_size (λx. x) value_size) sparse`
+         by (Induct_on `sparse` \\ simp[] \\ rw[] \\ PairCases_on `h` \\ simp[])
+    \\ simp[])
+  (* Goal 3 *)
+  >- (rpt strip_tac \\ disj1_tac
+      \\ pop_assum mp_tac
+      \\ pop_assum kall_tac
+      \\ Induct_on `sparse` \\ simp[] \\ rw[]
+      \\ PairCases_on `h` \\ fs[]
+      \\ Cases_on `h0 = n` \\ fs[])
 End
 
 (* Helper: cv_ALOOKUP result size is smaller than sparse list *)
