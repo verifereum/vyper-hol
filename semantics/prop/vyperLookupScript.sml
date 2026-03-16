@@ -53,6 +53,16 @@ Definition update_name_def:
         | h :: t => st with scopes := (h |+ (n, (ARB, v))) :: t
 End
 
+(* declare_name: like update_name but for creating new variables with an
+   explicit type_value. *)
+Definition declare_name_def:
+  declare_name st id tyv v =
+    let n = string_to_num id in
+    case st.scopes of
+    | [] => st with scopes := [FEMPTY |+ (n, (tyv, v))]
+    | h :: t => st with scopes := (h |+ (n, (tyv, v))) :: t
+End
+
 Definition lookup_base_target_def:
   lookup_base_target cx st tgt =
     case eval_base_target cx tgt st of
@@ -115,7 +125,7 @@ Proof
   rpt gen_tac >> Cases_on `FLOOKUP h id` >> simp[]
 QED
 
-Theorem lookup_scopes_val_SOME:
+Theorem lookup_scopes_val_SOME[local]:
   ∀id sc v.
     lookup_scopes_val id sc = SOME v ⇔
     ∃tv. lookup_scopes id sc = SOME (tv, v)
@@ -125,7 +135,7 @@ Proof
   Cases_on `x` >> simp[]
 QED
 
-Theorem lookup_scopes_val_NONE:
+Theorem lookup_scopes_val_NONE[local]:
   ∀id sc. lookup_scopes_val id sc = NONE ⇔ lookup_scopes id sc = NONE
 Proof
   Induct_on `sc` >> simp[lookup_scopes_val_def, lookup_scopes_def] >>
@@ -283,6 +293,30 @@ QED
 
 (****************************************)
 (* Theorems *)
+
+Theorem lookup_name_typed_to_lookup_name:
+  ∀st n.
+    lookup_name st n = OPTION_MAP SND (lookup_name_typed st n)
+Proof
+  rw[lookup_name_def, lookup_name_typed_def] >>
+  Cases_on `lookup_scopes (string_to_num n) st.scopes` >>
+  simp[lookup_scopes_val_NONE] >>
+  Cases_on `x` >> simp[lookup_scopes_val_SOME]
+QED
+
+Theorem lookup_name_SOME[local]:
+  ∀id sc v.
+    lookup_name id sc = SOME v ⇔
+    ∃tv. lookup_name_typed id sc = SOME (tv, v)
+Proof
+  simp[lookup_name_def, lookup_name_typed_def, lookup_scopes_val_SOME]
+QED
+
+Theorem lookup_name_NONE[local]:
+  ∀id sc. lookup_name id sc = NONE ⇔ lookup_name_typed id sc = NONE
+Proof
+  simp[lookup_name_def, lookup_name_typed_def, lookup_scopes_val_NONE]
+QED
 
 Theorem lookup_name_implies_var_in_scope:
   ∀st n v. lookup_name st n = SOME v ⇒ var_in_scope st n
@@ -736,6 +770,8 @@ QED
 
 (* ===== FEMPTY prepend: lookup/var/valid pass through FEMPTY :: scopes ===== *)
 
+(* TODO: this should be encapsulated more, with declare_name probably *)
+
 Theorem lookup_name_fempty_prepend:
   ∀st n.
     lookup_name (st with scopes := FEMPTY :: st.scopes) n =
@@ -780,29 +816,84 @@ Proof
   simp[find_containing_scope_def, evaluation_state_component_equality]
 QED
 
-(* ===== new_variable = update when var doesn't exist ===== *)
+(* ============================================================ *)
+(* declare_name lemmas *)
 
-Theorem lookup_scopes_none_fcs_none[local]:
-  ∀id sc. lookup_scopes id sc = NONE ⇒ find_containing_scope id sc = NONE
+Theorem declare_name_preserves_length:
+  ∀st n tyv v.
+    st.scopes ≠ [] ⇒
+    LENGTH (declare_name st n tyv v).scopes = LENGTH st.scopes
 Proof
-  Induct_on `sc` >> simp[lookup_scopes_def, find_containing_scope_def] >>
-  rpt strip_tac >> Cases_on `FLOOKUP h id` >> fs[]
+  rw[declare_name_def] >> Cases_on `st.scopes` >> fs[]
 QED
 
-Theorem new_variable_eq_update:
-  lookup_name st id = NONE ∧ st.scopes ≠ [] ⇒
-  new_variable id tv v st =
-    (INL (), st with scopes :=
-       (HD st.scopes |+ (string_to_num id, (tv, v))) :: TL st.scopes)
+Theorem lookup_after_declare:
+  ∀st n tyv v.
+    st.scopes ≠ [] ⇒
+    lookup_name (declare_name st n tyv v) n = SOME v
 Proof
-  strip_tac >>
-  `lookup_scopes (string_to_num id) st.scopes = NONE`
-    by fs[lookup_name_def, lookup_scopes_val_NONE] >>
-  simp[new_variable_def, LET_THM, get_scopes_def, return_def, bind_def,
-       check_def, type_check_def] >>
-  ASM_REWRITE_TAC[] >> simp[assert_def, ignore_bind_def, bind_def] >>
-  Cases_on `st.scopes` >> fs[] >>
-  simp[set_scopes_def, return_def]
+  rw[declare_name_def, lookup_name_def] >>
+  Cases_on `st.scopes` >> fs[lookup_scopes_val_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem lookup_name_preserved_after_declare:
+  ∀st n1 n2 tyv v.
+    n1 ≠ n2 ∧ st.scopes ≠ [] ⇒
+    lookup_name (declare_name st n1 tyv v) n2 = lookup_name st n2
+Proof
+  rw[declare_name_def, lookup_name_def] >>
+  Cases_on `st.scopes` >> fs[lookup_scopes_val_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  drule vyperMiscTheory.string_to_num_inj >> simp[]
+QED
+
+Theorem scopes_nonempty_after_declare:
+  ∀st n tyv v.
+    st.scopes ≠ [] ⇒
+    (declare_name st n tyv v).scopes ≠ []
+Proof
+  rw[declare_name_def] >> Cases_on `st.scopes` >> fs[]
+QED
+
+Theorem var_in_scope_after_declare:
+  ∀st n tyv v.
+    st.scopes ≠ [] ⇒
+    var_in_scope (declare_name st n tyv v) n
+Proof
+  rw[var_in_scope_def, lookup_after_declare]
+QED
+
+Theorem var_in_scope_preserved_after_declare:
+  ∀st n1 n2 tyv v.
+    var_in_scope st n2 ∧ st.scopes ≠ [] ⇒
+    var_in_scope (declare_name st n1 tyv v) n2
+Proof
+  rw[var_in_scope_def] >>
+  Cases_on `n1 = n2` >- (rw[lookup_after_declare]) >>
+  rw[lookup_name_preserved_after_declare]
+QED
+
+(* ============================================================ *)
+(* lookup_name_typed lemmas *)
+
+Theorem lookup_name_typed_after_declare:
+  ∀st n tyv v. st.scopes ≠ [] ⇒
+    lookup_name_typed (declare_name st n tyv v) n = SOME (tyv, v)
+Proof
+  rpt strip_tac >>
+  simp[lookup_name_typed_def, declare_name_def] >>
+  Cases_on `st.scopes` >> gvs[] >>
+  simp[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem lookup_name_typed_preserved_after_declare:
+  ∀st n1 n2 tyv v. n1 ≠ n2 ∧ st.scopes ≠ [] ⇒
+    lookup_name_typed (declare_name st n1 tyv v) n2 = lookup_name_typed st n2
+Proof
+  rpt strip_tac >>
+  simp[lookup_name_typed_def, declare_name_def] >>
+  Cases_on `st.scopes` >> gvs[] >>
+  simp[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gvs[vyperMiscTheory.string_to_num_inj]
 QED
 
 (* ============================================================
@@ -855,6 +946,8 @@ QED
 (* ============================================================
    Bridge lemmas: scope push via updated_by CONS (FEMPTY |+ ...)
    ============================================================ *)
+
+(* TODO: these should be encapsulated more, probably using declare_name *)
 
 Theorem lookup_name_push_singleton_same:
   ∀st id tv v.
