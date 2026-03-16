@@ -133,7 +133,9 @@ Definition compute_vyper_args_def:
     then let
       abiArgsTup = dec abiTupTy padded;
       vyArgsTup = abi_to_vyper tenv (TupleT vyTys) abiArgsTup;
-      vyArgs = (case OPTION_BIND vyArgsTup extract_elements
+      vyArgsTv = evaluate_type tenv (TupleT vyTys);
+      vyArgs = (case OPTION_BIND vyArgsTv
+                  (λtv. OPTION_BIND vyArgsTup (extract_elements tv))
                   of NONE => [] | SOME ls => ls)
       in SOME (vyArgs, tenv) else NONE;
   in
