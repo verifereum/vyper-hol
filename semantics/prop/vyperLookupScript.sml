@@ -838,6 +838,18 @@ Proof
   PairCases_on `x` >> gvs[evaluation_state_accfupds]
 QED
 
+Theorem update_name_preserves_length:
+  ∀st n v.
+    st.scopes ≠ [] ⇒
+    LENGTH (update_name st n v).scopes = LENGTH st.scopes
+Proof
+  rw[update_name_def] >>
+  Cases_on `find_containing_scope (string_to_num n) st.scopes` >> simp[]
+  >- (Cases_on `st.scopes` >> fs[]) >>
+  PairCases_on `x` >> simp[] >>
+  drule find_containing_scope_structure >> strip_tac >> rw[]
+QED
+
 (* ===== lookup_name_typed update in tl_scopes ===== *)
 
 Theorem lookup_name_typed_update_in_tl_scopes:
