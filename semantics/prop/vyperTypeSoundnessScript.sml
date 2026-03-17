@@ -631,19 +631,129 @@ Proof
   rpt strip_tac >> simp[Once safe_cast_def]
 QED
 
-(*
- * safe_cast_well_typed: value_has_type tv v ⇒ safe_cast tv v = SOME v
- * Proof outline: completeInduct_on type_value_size tv, case split on v,
- * use value_has_type_inv to determine type, unfold safe_cast.
- * Base types: trivial (within_int_bound matches).
- * Compound types: use safe_cast_list_identity with IH providing the
- * MEM hypothesis (each sub-type has smaller type_value_size).
- * SArrayV: also needs sparse_has_type_length for the length check.
- *)
+Theorem safe_cast_list_identity_nil:
+  !tvs vs.
+    values_have_types tvs vs /\
+    (!tv v. MEM tv tvs /\ value_has_type tv v ==> safe_cast tv v = SOME v) ==>
+    safe_cast_list tvs vs [] = SOME vs
+Proof
+  rpt strip_tac >> drule_all safe_cast_list_identity >> simp[]
+QED
+
+Theorem MEM_type_value_size_TupleTV:
+  !tvs tv. MEM tv tvs ==> type_value_size tv < type_value_size (TupleTV tvs)
+Proof
+  Induct >> simp[type_value_size_def] >>
+  rpt strip_tac >> gvs[type_value_size_def] >> res_tac >> simp[]
+QED
+
+Theorem type_value1_size_MEM:
+  !fields nm tv. MEM (nm,tv) fields ==>
+    type_value_size tv < type_value1_size fields
+Proof
+  Induct >> simp[] >> Cases >> simp[type_value_size_def] >>
+  rpt strip_tac >> gvs[] >> res_tac >> simp[]
+QED
+
+Theorem MEM_type_value_size_StructTV:
+  !fields nm tv. MEM (nm,tv) fields ==>
+    type_value_size tv < type_value_size (StructTV fields)
+Proof
+  rpt strip_tac >> simp[type_value_size_def] >>
+  imp_res_tac type_value1_size_MEM >> simp[]
+QED
+
+Theorem ArrayTV_type_value_size:
+  !tv b. type_value_size tv < type_value_size (ArrayTV tv b)
+Proof
+  Cases_on `b` >> simp[type_value_size_def]
+QED
+
+Theorem safe_cast_well_typed_tuple_helper:
+  !tvs l.
+    (!tv'. type_value_size tv' < list_size type_value_size tvs + 1 ==>
+           !v'. value_has_type tv' v' ==> safe_cast tv' v' = SOME v') ==>
+    values_have_types tvs l ==>
+    safe_cast_list tvs l [] = SOME l
+Proof
+  rpt strip_tac >>
+  irule safe_cast_list_identity_nil >> simp[] >>
+  rpt strip_tac >> first_x_assum irule >>
+  imp_res_tac MEM_type_value_size_TupleTV >> gvs[]
+QED
+
+Theorem safe_cast_well_typed_struct_helper:
+  !ftypes l.
+    (!tv'. type_value_size tv' <
+           list_size (pair_size (list_size char_size) type_value_size) ftypes + 1 ==>
+           !v'. value_has_type tv' v' ==> safe_cast tv' v' = SOME v') ==>
+    struct_has_type ftypes l ==>
+    MAP FST l = MAP FST ftypes ==>
+    safe_cast_list (MAP SND ftypes) (MAP SND l) [] = SOME (MAP SND l)
+Proof
+  rpt strip_tac >>
+  irule safe_cast_list_identity_nil >>
+  imp_res_tac struct_has_type_values_have_types >> simp[] >>
+  rpt strip_tac >> first_x_assum irule >>
+  `?nm. MEM (nm, tv) ftypes` by (
+    qpat_x_assum `MEM _ _` mp_tac >>
+    simp[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >>
+    metis_tac[]) >>
+  imp_res_tac MEM_type_value_size_StructTV >> gvs[]
+QED
+
 Theorem safe_cast_well_typed:
   !tv v. value_has_type tv v ==> safe_cast tv v = SOME v
 Proof
-  cheat
+  completeInduct_on `type_value_size tv` >>
+  rpt gen_tac >> rpt strip_tac >>
+  rename1 `value_has_type tv val` >>
+  (* Extract the IH into a reusable form *)
+  `!tv'. type_value_size tv' < type_value_size tv ==>
+         !v'. value_has_type tv' v' ==> safe_cast tv' v' = SOME v'`
+    by (rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  (* Now case split without completeInduct's awkward IH *)
+  Cases_on `val` >> gvs[value_has_type_inv] >>
+  TRY (simp[Once safe_cast_def, within_int_bound_def] >> NO_TAC) >>
+  TRY (simp[Once safe_cast_def] >> NO_TAC)
+  (* ArrayV — first of 2 remaining goals *)
+  >- (rename1 `ArrayV av` >> Cases_on `av` >> gvs[value_has_type_inv] >>
+      simp[Once safe_cast_def] >>
+      TRY (imp_res_tac sparse_has_type_all_have_type >>
+           imp_res_tac sparse_has_type_length >> simp[]) >>
+      (* TupleV *)
+      TRY (drule_all safe_cast_well_typed_tuple_helper >> simp[] >> NO_TAC) >>
+      (* DynArrayV and SArrayV: both use REPLICATE *)
+      (`values_have_types (REPLICATE (LENGTH l) tv0) l`
+        by (irule all_have_type_values_have_types_replicate >> simp[]) >>
+       `!tv v. MEM tv (REPLICATE (LENGTH l) tv0) /\
+               value_has_type tv v ==> safe_cast tv v = SOME v`
+         by (rpt strip_tac >> gvs[rich_listTheory.MEM_REPLICATE] >>
+             first_x_assum irule >> simp[]) >>
+       drule_all safe_cast_list_identity_nil >> simp[zip_fst_snd]
+       ORELSE
+       (`values_have_types (REPLICATE (LENGTH (MAP SND l)) tv0) (MAP SND l)`
+          by (irule all_have_type_values_have_types_replicate >> simp[]) >>
+        `!tv v. MEM tv (REPLICATE (LENGTH (MAP SND l)) tv0) /\
+                value_has_type tv v ==> safe_cast tv v = SOME v`
+          by (rpt strip_tac >> gvs[rich_listTheory.MEM_REPLICATE] >>
+              first_x_assum irule >> simp[]) >>
+        drule_all safe_cast_list_identity_nil >> simp[zip_fst_snd])))
+  (* StructV *)
+  >> (simp[Once safe_cast_def] >>
+      imp_res_tac struct_has_type_map_fst >> simp[] >>
+      imp_res_tac struct_has_type_values_have_types >>
+      `!tv v. MEM tv (MAP SND ftypes) /\
+              value_has_type tv v ==> safe_cast tv v = SOME v`
+        by (rpt strip_tac >> first_x_assum irule >>
+            `?nm. MEM (nm, tv) ftypes` by (
+              qpat_x_assum `MEM _ (MAP _ _)` mp_tac >>
+              simp[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >>
+              metis_tac[]) >>
+            imp_res_tac MEM_type_value_size_StructTV >> gvs[]) >>
+      drule_all safe_cast_list_identity_nil >> strip_tac >>
+      `MAP FST ftypes = MAP FST l` by gvs[] >>
+      gvs[zip_fst_snd])
 QED
 
 Theorem safe_cast_well_typed_mutual:
@@ -652,7 +762,9 @@ Theorem safe_cast_well_typed_mutual:
      values_have_types tvs vs ==>
      safe_cast_list tvs vs acc = SOME (REVERSE acc ++ vs))
 Proof
-  cheat
+  conj_tac >- metis_tac[safe_cast_well_typed] >>
+  rpt strip_tac >> irule safe_cast_list_identity >> simp[] >>
+  rpt strip_tac >> irule safe_cast_well_typed >> simp[]
 QED
 
 
@@ -671,11 +783,7 @@ Proof
   imp_res_tac safe_cast_well_typed >> gvs[]
 QED
 
-(* KEY LEMMA: bind_arguments on well-typed values produces a well-typed scope.
- * Each value must already satisfy its target type (ensured by IH in IntCall). *)
-(* KEY LEMMA: bind_arguments on well-typed values produces a well-typed scope.
- * Proof uses safe_cast_preserves_well_typed + induction on params.
- * Cheated pending safe_cast_well_typed proof. *)
+(* KEY LEMMA: bind_arguments on well-typed values produces a well-typed scope. *)
 Theorem bind_arguments_scope_well_typed:
   !tenv params vs sc.
     bind_arguments tenv params vs = SOME sc /\
@@ -684,7 +792,28 @@ Theorem bind_arguments_scope_well_typed:
             value_has_type tv (EL i vs)) ==>
     scope_well_typed sc
 Proof
-  cheat
+  MAP_EVERY qid_spec_tac [`sc`, `vs`, `params`, `tenv`] >>
+  Induct_on `params`
+  >- (rpt gen_tac >> Cases_on `vs` >>
+      simp[Once bind_arguments_def, scope_well_typed_def,
+           finite_mapTheory.FLOOKUP_EMPTY]) >>
+  simp[pairTheory.FORALL_PROD] >>
+  rpt gen_tac >> Cases_on `vs` >> simp[Once bind_arguments_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  rename1 `safe_cast tv0 hval = SOME v0` >>
+  rename1 `evaluate_type tenv _ = SOME tv0` >>
+  `value_has_type tv0 hval` by (
+    first_x_assum (qspecl_then [`0`, `tv0`] mp_tac) >> simp[]) >>
+  imp_res_tac safe_cast_preserves_well_typed >>
+  rename1 `bind_arguments tenv params tl = SOME sc0` >>
+  `scope_well_typed sc0` by (
+    qpat_x_assum `!tenv vs sc. _`
+      (qspecl_then [`tenv`, `tl`, `sc0`] mp_tac) >>
+    simp[] >> disch_then irule >>
+    rpt strip_tac >>
+    first_x_assum (qspecl_then [`SUC i`, `tv`] mp_tac) >> simp[]) >>
+  gvs[scope_well_typed_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt gen_tac >> IF_CASES_TAC >> strip_tac >> gvs[] >> res_tac
 QED
 
 (* ===== Static typing environment ===== *)
@@ -1236,9 +1365,7 @@ Theorem intcall_state_preserved:
       (INL (Value v), st') ==>
     state_well_typed st'
 Proof
-  (* CHEATED — needs update for new bind_arguments_scope_well_typed signature *)
-  cheat
-(*  rpt strip_tac >>
+  rpt strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _`
     (mp_tac o ONCE_REWRITE_RULE[evaluate_def]) >>
   simp[bind_def, ignore_bind_def, LET_THM,
@@ -1316,8 +1443,9 @@ Proof
   (* state_well_typed for callee entry state *)
   `state_well_typed (s'⁵' with scopes := [sc])` by
     (simp[state_well_typed_def] >> gvs[state_well_typed_def] >>
-     (* scope_well_typed sc: follows directly from bind_arguments success *)
-     drule bind_arguments_scope_well_typed >> simp[]) >>
+     (* scope_well_typed sc: from bind_arguments + IH typing *)
+     irule (SIMP_RULE std_ss [] (Q.SPEC `get_tenv cx` bind_arguments_scope_well_typed)) >>
+     simp[] >> cheat (* TODO: connect IH typing to EL precondition *)) >>
   (* env_consistent for callee *)
   `env_consistent env_body
      (cx with stk updated_by CONS (src_id_opt, fn))
@@ -1341,7 +1469,6 @@ Proof
        simp[]) >>
     fs[state_well_typed_def]
   )
-*)
 QED
 
 (* ===== Type preservation by mutual induction ===== *)
