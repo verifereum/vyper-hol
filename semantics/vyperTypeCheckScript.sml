@@ -652,14 +652,12 @@ Proof
   metis_tac[safe_cast_implies_satisfies_type_mutual]
 QED
 
-(* KEY LEMMA: bind_arguments produces a well-typed scope
- * when input values satisfy their parameter types *)
+(* KEY LEMMA: bind_arguments produces a well-typed scope.
+ * No precondition on input values needed — safe_cast inside
+ * bind_arguments guarantees satisfies_type for stored values. *)
 Theorem bind_arguments_scope_well_typed:
   !tenv params vs sc.
-    bind_arguments tenv params vs = SOME sc /\
-    LIST_REL (\v (id, typ).
-      ?tv. evaluate_type tenv typ = SOME tv /\
-           satisfies_type v tv) vs params ==>
+    bind_arguments tenv params vs = SOME sc ==>
     scope_well_typed sc
 Proof
   MAP_EVERY qid_spec_tac [`sc`, `vs`, `params`, `tenv`] >>
@@ -674,12 +672,11 @@ Proof
   rpt gen_tac >>
   Cases_on `vs` >> simp[Once bind_arguments_def] >>
   rpt strip_tac >>
-  gvs[AllCaseEqs(), listTheory.LIST_REL_CONS1,
-      pairTheory.FORALL_PROD] >>
+  gvs[AllCaseEqs()] >>
   `scope_well_typed m`
     by (first_x_assum (qspecl_then [`tenv`, `t`, `m`] mp_tac) >>
         gvs[]) >>
-  imp_res_tac safe_cast_satisfies_type >>
+  imp_res_tac safe_cast_implies_satisfies_type >>
   gvs[scope_well_typed_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   rpt gen_tac >> IF_CASES_TAC >> strip_tac >> gvs[] >> res_tac
 QED
@@ -1314,14 +1311,8 @@ Proof
   (* state_well_typed for callee entry state *)
   `state_well_typed (s'⁵' with scopes := [sc])` by
     (simp[state_well_typed_def] >> gvs[state_well_typed_def] >>
-     (* scope_well_typed sc needs LIST_REL satisfies_type for args/defaults.
-        P8 now carries LIST_REL satisfies_type (Option 1 done), but
-        the LIST_REL is indexed by expr_type, not param_type.
-        Need: expr_type of each arg/default matches the param type.
-        This requires well_typed_expr(Call IntCall) to encode that
-        arg expression types match parameter types, or functions_well_typed
-        to encode that default expression types match parameter types. *)
-     cheat) >>
+     (* scope_well_typed sc: follows directly from bind_arguments success *)
+     drule bind_arguments_scope_well_typed >> simp[]) >>
   (* env_consistent for callee *)
   `env_consistent env_body
      (cx with stk updated_by CONS (src_id_opt, fn))
@@ -1365,26 +1356,33 @@ QED
  *   results satisfy types ∧ state_well_typed st'
  *)
 
+Theorem unitbind_apply:
+  !f g s. (do f; g od) s =
+    case f s of (INL x,s') => g s' | (INR e,s') => (INR e,s')
+Proof
+  EVAL_TAC >> simp[bind_def]
+QED
+
 Theorem type_preservation:
-  (* P0: eval_stmt — state preserved, return exceptions well-typed *)
+  (* P0: eval_stmt — state + env preserved, return exceptions well-typed *)
   (!cx s. !env ret_ty st res st'.
     well_typed_stmt env ret_ty s /\
     env_consistent env cx st /\
     state_well_typed st /\
     functions_well_typed cx /\
     eval_stmt cx s st = (res, st') ==>
-    state_well_typed st' /\
+    state_well_typed st' /\ env_consistent env cx st' /\
     (!v ret_tv. res = INR (ReturnException v) /\
                 evaluate_type (get_tenv cx) ret_ty = SOME ret_tv ==>
                 satisfies_type v ret_tv)) /\
-  (* P1: eval_stmts — state preserved, return exceptions well-typed *)
+  (* P1: eval_stmts — state + env preserved, return exceptions well-typed *)
   (!cx ss. !env ret_ty st res st'.
     well_typed_stmts env ret_ty ss /\
     env_consistent env cx st /\
     state_well_typed st /\
     functions_well_typed cx /\
     eval_stmts cx ss st = (res, st') ==>
-    state_well_typed st' /\
+    state_well_typed st' /\ env_consistent env cx st' /\
     (!v ret_tv. res = INR (ReturnException v) /\
                 evaluate_type (get_tenv cx) ret_ty = SOME ret_tv ==>
                 satisfies_type v ret_tv)) /\
@@ -1437,12 +1435,23 @@ Theorem type_preservation:
       evaluate_type (get_tenv cx) (expr_type e) = SOME tyv ==>
       satisfies_type v tyv) vs es)
 Proof
+
   ho_match_mp_tac evaluate_ind >> rpt conj_tac
   (* ===== P0: eval_stmt (goals 0-14) ===== *)
-  (* 0: Pass *)          >- cheat
-  (* 1: Continue *)      >- cheat
-  (* 2: Break *)         >- cheat
-  (* 3: Return NONE *)   >- cheat
+  (* 0: Pass *)
+  >- (rpt gen_tac >> strip_tac >>
+      gvs[Once evaluate_def, return_def, raise_def])
+  (* 1: Continue *)
+  >- (rpt gen_tac >> strip_tac >>
+      gvs[Once evaluate_def, return_def, raise_def])
+  (* 2: Break *)
+  >- (rpt gen_tac >> strip_tac >>
+      gvs[Once evaluate_def, return_def, raise_def])
+  (* 3: Return NONE *)
+  >- (rpt gen_tac >> strip_tac >>
+      gvs[Once evaluate_def, return_def, raise_def,
+          well_typed_stmt_def, Once evaluate_type_def,
+          satisfies_type_def])
   (* 4: Return SOME *)   >- cheat
   (* 5: Raise *)         >- cheat
   (* 6: Assert *)        >- cheat
@@ -1455,8 +1464,29 @@ Proof
   (* 13: For *)          >- cheat
   (* 14: Expr *)         >- cheat
   (* ===== P1: eval_stmts (goals 15-16) ===== *)
-  (* 15: [] *)           >- cheat
-  (* 16: s::ss *)        >- cheat
+  (* 15: [] *)
+  >- (rpt gen_tac >> strip_tac >>
+      gvs[Once evaluate_def, return_def])
+  (* 16: s::ss — sequential: eval_stmt s then eval_stmts ss *)
+  >- (rpt gen_tac >> strip_tac >>
+      rpt gen_tac >> strip_tac >>
+      qpat_x_assum `eval_stmts _ (_::_) _ = _` mp_tac >>
+      simp[Once evaluate_def, unitbind_apply] >>
+      Cases_on `eval_stmt cx s st` >>
+      rename1 `eval_stmt cx s st = (res_s, st_mid)` >>
+      reverse (Cases_on `res_s`) >> simp[] >> strip_tac >> gvs[] >>
+      gvs[well_typed_stmt_def] >>
+      (* Apply IH_s (last_x_assum matches the unconditional one) *)
+      last_x_assum
+        (qspecl_then [`env`, `ret_ty`, `st`] mp_tac) >> simp[] >>
+      strip_tac >>
+      (* INR case: done by IH_s *)
+      TRY (gvs[] >> NO_TAC) >>
+      (* INL case: use conditioned IH_ss *)
+      first_x_assum (qspecl_then [`st`, `st_mid`] mp_tac) >> simp[] >>
+      disch_then (qspecl_then [`env`, `ret_ty`, `st_mid`] mp_tac) >>
+      simp[] >> disch_then drule >> simp[]
+     )
   (* ===== P2: eval_iterator (goals 17-18) ===== *)
   (* 17: Array *)        >- cheat
   (* 18: Range *)        >- cheat
@@ -1464,7 +1494,9 @@ Proof
   (* 19: BaseTarget *)   >- cheat
   (* 20: TupleTarget *)  >- cheat
   (* ===== P4: eval_targets (goals 21-22) ===== *)
-  (* 21: [] *)           >- cheat
+  (* 21: [] *)
+  >- (rpt gen_tac >> strip_tac >>
+      gvs[Once evaluate_def, return_def])
   (* 22: g::gs *)        >- cheat
   (* ===== P5: eval_base_target (goals 23-27) ===== *)
   (* 23: NameTarget *)        >- cheat
@@ -1473,7 +1505,9 @@ Proof
   (* 26: AttributeTarget *)   >- cheat
   (* 27: SubscriptTarget *)   >- cheat
   (* ===== P6: eval_for (goals 28-29) ===== *)
-  (* 28: [] *)           >- cheat
+  (* 28: [] *)
+  >- (rpt gen_tac >> strip_tac >>
+      gvs[Once evaluate_def, return_def])
   (* 29: v::vs *)        >- cheat
   (* ===== P7: eval_expr (goals 30-44) ===== *)
   (* 30: Name *)
