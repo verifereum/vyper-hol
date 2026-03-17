@@ -289,6 +289,45 @@ Proof
 QED
 
 (****************************************)
+(* Bridge lemmas *)
+
+Theorem lookup_name_typed_to_lookup_name:
+  ∀st n.
+    lookup_name st n = OPTION_MAP SND (lookup_name_typed st n)
+Proof
+  rw[lookup_name_def, lookup_name_typed_def] >>
+  Cases_on `lookup_scopes (string_to_num n) st.scopes` >>
+  simp[lookup_scopes_val_NONE] >>
+  Cases_on `x` >> simp[lookup_scopes_val_SOME]
+QED
+
+Theorem lookup_name_SOME:
+  ∀id sc v.
+    lookup_name id sc = SOME v ⇔
+    ∃tv. lookup_name_typed id sc = SOME (tv, v)
+Proof
+  simp[lookup_name_def, lookup_name_typed_def, lookup_scopes_val_SOME]
+QED
+
+Theorem lookup_name_NONE:
+  ∀id sc. lookup_name id sc = NONE ⇔ lookup_name_typed id sc = NONE
+Proof
+  simp[lookup_name_def, lookup_name_typed_def, lookup_scopes_val_NONE]
+QED
+
+Theorem var_in_scope_lookup_name_typed[local]:
+  ∀st n. var_in_scope st n ⇔ IS_SOME (lookup_name_typed st n)
+Proof
+  simp[var_in_scope_def, lookup_name_def, lookup_name_typed_def]
+QED
+
+Theorem lookup_name_implies_var_in_scope:
+  ∀st n v. lookup_name st n = SOME v ⇒ var_in_scope st n
+Proof
+  simp[var_in_scope_def]
+QED
+
+(****************************************)
 (* Scope lemmas *)
 
 Theorem tl_scopes_open_scope:
@@ -307,8 +346,7 @@ QED
 Theorem lookup_name_open_scope:
   ∀st n. lookup_name (open_scope st) n = lookup_name st n
 Proof
-  simp[open_scope_def, lookup_name_def, evaluation_state_accfupds] >>
-  simp[Once lookup_scopes_val_def, finite_mapTheory.FLOOKUP_EMPTY]
+  simp[lookup_name_typed_to_lookup_name, lookup_name_typed_open_scope]
 QED
 
 Theorem var_in_scope_open_scope:
@@ -371,45 +409,6 @@ Theorem open_scope_tl_scopes_id:
     open_scope (tl_scopes st) = st
 Proof
   simp[open_scope_def, tl_scopes_cons_id]
-QED
-
-(****************************************)
-(* Bridge lemmas *)
-
-Theorem lookup_name_typed_to_lookup_name:
-  ∀st n.
-    lookup_name st n = OPTION_MAP SND (lookup_name_typed st n)
-Proof
-  rw[lookup_name_def, lookup_name_typed_def] >>
-  Cases_on `lookup_scopes (string_to_num n) st.scopes` >>
-  simp[lookup_scopes_val_NONE] >>
-  Cases_on `x` >> simp[lookup_scopes_val_SOME]
-QED
-
-Theorem lookup_name_SOME:
-  ∀id sc v.
-    lookup_name id sc = SOME v ⇔
-    ∃tv. lookup_name_typed id sc = SOME (tv, v)
-Proof
-  simp[lookup_name_def, lookup_name_typed_def, lookup_scopes_val_SOME]
-QED
-
-Theorem lookup_name_NONE:
-  ∀id sc. lookup_name id sc = NONE ⇔ lookup_name_typed id sc = NONE
-Proof
-  simp[lookup_name_def, lookup_name_typed_def, lookup_scopes_val_NONE]
-QED
-
-Theorem var_in_scope_lookup_name_typed[local]:
-  ∀st n. var_in_scope st n ⇔ IS_SOME (lookup_name_typed st n)
-Proof
-  simp[var_in_scope_def, lookup_name_def, lookup_name_typed_def]
-QED
-
-Theorem lookup_name_implies_var_in_scope:
-  ∀st n v. lookup_name st n = SOME v ⇒ var_in_scope st n
-Proof
-  simp[var_in_scope_def]
 QED
 
 (* ===== lookup_name_typed with_scopes ===== *)
