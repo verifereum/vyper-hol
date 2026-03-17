@@ -164,6 +164,18 @@ Proof
   PairCases_on `x` >> simp[lookup_toplevel_name_scopes]
 QED
 
+(* lookup_toplevel_name is independent of declare_name *)
+Theorem lookup_toplevel_name_declare_name:
+  ∀cx st n ty v mid m.
+    lookup_toplevel_name cx (declare_name st n ty v) mid m =
+    lookup_toplevel_name cx st mid m
+Proof
+  rpt gen_tac >>
+  simp[declare_name_def] >>
+  Cases_on `st.scopes` >>
+  simp[lookup_toplevel_name_scopes]
+QED
+
 Theorem update_toplevel_name_preserves_scopes:
   ∀cx st mid n v.
     (update_toplevel_name cx st mid n v).scopes = st.scopes

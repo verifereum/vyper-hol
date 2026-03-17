@@ -1,6 +1,6 @@
 Theory vyperScopePreservation
 Ancestors
-  vyperAST vyperMisc vyperState vyperValue vyperInterpreter vyperLookup vyperLookupStorage vyperImmutablesPreservation
+  vyperAST vyperMisc vyperState vyperValue vyperInterpreter vyperImmutablesPreservation
 
 (* ===== Lemmas about scopes preservation ===== *)
 

@@ -876,7 +876,7 @@ QED
 
 (* Specialized lookup_toplevel_name_after_update for integer types.
    These combine storable_value_transfer with lookup_toplevel_name_after_update
-   into a single conditional rewrite whose conditions are more easilt
+   into a single conditional rewrite whose conditions are more easily
    checkable. *)
 
 Theorem lookup_toplevel_name_after_update_uint:
