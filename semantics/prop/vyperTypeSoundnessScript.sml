@@ -1,6 +1,4 @@
 (*
- * vyperTypeCheckScript.sml
- *
  * Type system definitions and type soundness proof infrastructure.
  *
  * TOP-LEVEL:
@@ -20,8 +18,7 @@
  *
  * ===== TYPE SOUNDNESS ROADMAP =====
  *
- * NEXT STEP: Move this file to semantics/prop/vyperTypeSoundnessScript.sml
- *   and unify satisfies_type with value_has_type (from vyperTypingTheory).
+ * NEXT STEP: unify satisfies_type with value_has_type (from vyperTypingTheory).
  *
  *   value_has_type (in prop/vyperTypingScript.sml) is the correct typing
  *   predicate — it includes SArrayV canonicity (SORTED, keys < n, no
@@ -32,13 +29,11 @@
  *   canonicity. It should be deleted and replaced by value_has_type.
  *
  *   Migration steps:
- *     1. Move file to semantics/prop/vyperTypeSoundnessScript.sml
- *     2. Add vyperTyping, vyperEncodeDecode as ancestors
- *     3. Delete satisfies_type_def and all its helpers
- *     4. Rewrite state_well_typed, scope_well_typed, imms_well_typed
+ *     1. Delete satisfies_type_def and all its helpers
+ *     2. Rewrite state_well_typed, scope_well_typed, imms_well_typed
  *        to use value_has_type
- *     5. Update safe_cast bridge theorems for value_has_type
- *     6. Update all proved cases and helpers
+ *     3. Update safe_cast bridge theorems for value_has_type
+ *     4. Update all proved cases and helpers
  *
  * After migration, remaining work (ordered by risk):
  *
@@ -108,10 +103,11 @@
  *   (intcall_state_preserved), needs return value typing.
  *)
 
-Theory vyperTypeCheck
+Theory vyperTypeSoundness
 Ancestors
   vyperAST vyperValue vyperValueOperation vyperMisc
   vyperInterpreter vyperState vyperContext
+  vyperTyping vyperEncodeDecode
 
 (* ===== Type Classification Helpers ===== *)
 

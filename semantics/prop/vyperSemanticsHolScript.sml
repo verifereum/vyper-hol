@@ -6,4 +6,5 @@ Ancestors
   vyperEvalPreservesNameTarget
   vyperEvalPureExpr
   vyperLookupStorageScopes
+  vyperTypeSoundness
   vyperUpdateTarget
