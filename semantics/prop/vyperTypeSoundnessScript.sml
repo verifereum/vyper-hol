@@ -6,36 +6,39 @@
  *   well_typed_expr     : typing_env → expr → bool (static type consistency)
  *   env_consistent      : typing_env → cx → st → bool (env matches runtime state)
  *   state_well_typed    : evaluation_state → bool (runtime values satisfy stored types)
- *   satisfies_type      : value → type_value → bool (value matches resolved type)
+ *   (uses value_has_type from vyperTypingTheory for value/type compatibility)
  *   type_preservation   : well_typed + consistent + eval ⇒ preserves types (36 CHEATS)
  *
  * PROOF STATUS:
+ *   35/38 helper theorems verified, 3 cheated (safe_cast bridge x2,
+ *   type_preservation).
  *   type_preservation has 47 inductive cases (from evaluate_ind).
- *   11 proved: Pass, Continue, Break, Return NONE, eval_stmts [],
- *   eval_stmts s::ss, eval_targets [], eval_for [], Name, Literal,
+ *   10 proved: Pass, Continue, Break, Return NONE, eval_stmts [],
+ *   eval_stmts s::ss, eval_targets [], eval_for [], Name,
  *   eval_exprs [], eval_exprs e::es.
- *   36 cheated (see individual goal comments in proof).
+ *   37 cheated (Literal regressed: needs well_formed_type_value).
  *
  * ===== TYPE SOUNDNESS ROADMAP =====
  *
- * NEXT STEP: unify satisfies_type with value_has_type (from vyperTypingTheory).
+ * DONE: Unified with value_has_type (from vyperTypingTheory).
+ *   - Deleted satisfies_type_def (weaker duplicate lacking SArrayV canonicity)
+ *   - scope_well_typed/imms_well_typed now use value_has_type
+ *   - All helper theorems updated; 35/38 verified, 3 cheated
+ *   - encode/decode roundtrip (vyperEncodeDecodeTheory) already proved
  *
- *   value_has_type (in prop/vyperTypingScript.sml) is the correct typing
- *   predicate — it includes SArrayV canonicity (SORTED, keys < n, no
- *   default entries) and is used by the encode/decode roundtrip proof
- *   (in prop/vyperEncodeDecodeScript.sml), which is ALREADY FULLY PROVED.
+ * OPEN: safe_cast bridge theorems (2 cheats)
+ *   - safe_cast_well_typed_mutual: value_has_type tv v ⇒ safe_cast tv v = SOME v
+ *     SArrayV case needs: canonical sparse array → safe_cast_list identity on values
+ *   - safe_cast_implies_well_typed: safe_cast tv v = SOME v' ⇒ value_has_type tv v'
+ *     Needs: safe_cast preserves SORTED, keys < n, and non-default entries
  *
- *   satisfies_type (in this file) is a weaker duplicate that lacks
- *   canonicity. It should be deleted and replaced by value_has_type.
+ * OPEN: well_formed_type_value threading
+ *   evaluate_literal_has_type now requires well_formed_type_value tv.
+ *   Need to add well_formed_type_value to type_preservation hypotheses
+ *   (all types in a well-formed program should satisfy this).
+ *   Literal case (goal 35) temporarily cheated pending this.
  *
- *   Migration steps:
- *     1. Delete satisfies_type_def and all its helpers
- *     2. Rewrite state_well_typed, scope_well_typed, imms_well_typed
- *        to use value_has_type
- *     3. Update safe_cast bridge theorems for value_has_type
- *     4. Update all proved cases and helpers
- *
- * After migration, remaining work (ordered by risk):
+ * Remaining work (ordered by risk):
  *
  * --- RISK 1: assign_subscripts preserves value_has_type ---
  * Risk: Deep recursive reasoning over nested subscript operations on
@@ -143,53 +146,6 @@ Definition is_sized_type_def[simp]:
   is_sized_type _ = F
 End
 
-(* ===== satisfies_type: value matches resolved type ===== *)
-
-Definition satisfies_type_def:
-  (* base types *)
-  satisfies_type NoneV NoneTV = T /\
-  satisfies_type (BoolV _) (BaseTV BoolT) = T /\
-  satisfies_type (IntV n) (BaseTV (UintT k)) =
-    within_int_bound (Unsigned k) n /\
-  satisfies_type (IntV n) (BaseTV (IntT k)) =
-    within_int_bound (Signed k) n /\
-  satisfies_type (DecimalV n) (BaseTV DecimalT) =
-    within_int_bound (Signed 168) n /\
-  satisfies_type (StringV s) (BaseTV (StringT n)) =
-    (LENGTH s <= n) /\
-  satisfies_type (BytesV bs) (BaseTV (BytesT bd)) =
-    compatible_bound bd (LENGTH bs) /\
-  satisfies_type (BytesV bs) (BaseTV AddressT) =
-    (LENGTH bs = 20) /\
-  satisfies_type (FlagV m) (FlagTV n) =
-    (m < 2 ** n) /\
-  (* compound types *)
-  satisfies_type (ArrayV (DynArrayV vs)) (ArrayTV tv (Dynamic m)) =
-    (LENGTH vs <= m /\ all_satisfy_type vs tv) /\
-  satisfies_type (ArrayV (SArrayV al)) (ArrayTV tv (Fixed m)) =
-    (LENGTH al <= m /\
-     all_satisfy_type (MAP SND al) tv) /\
-  satisfies_type (ArrayV (TupleV vs)) (TupleTV ts) =
-    list_satisfies_type vs ts /\
-  satisfies_type (StructV al) (StructTV args) =
-    (MAP FST al = MAP FST args /\
-     list_satisfies_type (MAP SND al) (MAP SND args)) /\
-  satisfies_type _ _ = F /\
-  (* list helpers *)
-  all_satisfy_type [] _ = T /\
-  all_satisfy_type (v::vs) tv =
-    (satisfies_type v tv /\ all_satisfy_type vs tv) /\
-  list_satisfies_type [] [] = T /\
-  list_satisfies_type (v::vs) (tv::ts) =
-    (satisfies_type v tv /\ list_satisfies_type vs ts) /\
-  list_satisfies_type _ _ = F
-Termination
-  WF_REL_TAC `measure (\x. case x of
-    | INL (v, _) => value_size v
-    | INR (INL (vs, _)) => list_size value_size vs
-    | INR (INR (vs, _)) => list_size value_size vs)`
-  \\ rw[list_size_pair_size_map]
-End
 
 (* ===== well_typed_literal ===== *)
 
@@ -431,7 +387,7 @@ End
 
 Definition scope_well_typed_def:
   scope_well_typed (sc : scope) ⇔
-    ∀id tv v. FLOOKUP sc id = SOME (tv, v) ⇒ satisfies_type v tv
+    ∀id tv v. FLOOKUP sc id = SOME (tv, v) ⇒ value_has_type tv v
 End
 
 Definition imms_well_typed_def:
@@ -439,7 +395,7 @@ Definition imms_well_typed_def:
     ∀src_id_opt m id tv v.
       ALOOKUP imms src_id_opt = SOME m ∧
       FLOOKUP m id = SOME (tv, v) ⇒
-      satisfies_type v tv
+      value_has_type tv v
 End
 
 Definition state_well_typed_def:
@@ -453,7 +409,7 @@ Theorem lookup_scopes_well_typed:
   !scopes id tv v.
     EVERY scope_well_typed scopes /\
     lookup_scopes id scopes = SOME (tv, v) ==>
-    satisfies_type v tv
+    value_has_type tv v
 Proof
   Induct >> simp[lookup_scopes_def] >>
   rpt gen_tac >>
@@ -468,7 +424,7 @@ Theorem lookup_scopes_val_well_typed:
     EVERY scope_well_typed scopes /\
     lookup_scopes_val id scopes = SOME v ==>
     ?tv. lookup_scopes id scopes = SOME (tv, v) /\
-         satisfies_type v tv
+         value_has_type tv v
 Proof
   Induct >> simp[lookup_scopes_def, lookup_scopes_val_def] >>
   rpt gen_tac >> strip_tac >>
@@ -502,11 +458,12 @@ QED
 
 (* Phase 2: Operation-level helpers (TODO) *)
 
-Theorem evaluate_literal_satisfies_type:
+Theorem evaluate_literal_has_type:
   ∀ty l tv.
     well_typed_literal ty l ∧
-    evaluate_type tenv ty = SOME tv ⇒
-    satisfies_type (evaluate_literal l) tv
+    evaluate_type tenv ty = SOME tv ∧
+    well_formed_type_value tv ⇒
+    value_has_type tv (evaluate_literal l)
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `ty` >> gvs[well_typed_literal_def] >>
@@ -514,51 +471,55 @@ Proof
   gvs[well_typed_literal_def] >>
   gvs[Once evaluate_type_def] >>
   REWRITE_TAC[evaluate_literal_def] >>
-  REWRITE_TAC[satisfies_type_def] >>
-  simp[]
+  REWRITE_TAC[value_has_type_def] >>
+  simp[within_int_bound_def] >>
+  TRY (Cases_on `b'` >>
+       gvs[compatible_bound_def, value_has_type_def,
+           well_formed_type_value_def]) >>
+  gvs[within_int_bound_def]
 QED
 
-(* Phase 2: bounded_int_op result satisfies the bound's type *)
+(* Phase 2: bounded_int_op result has the bound's type *)
 Theorem bounded_int_op_unsigned:
   !k r v.
     bounded_int_op (Unsigned k) r = INL v ==>
-    satisfies_type v (BaseTV (UintT k))
+    value_has_type (BaseTV (UintT k)) v
 Proof
-  rw[bounded_int_op_def] >> gvs[] >>
-  REWRITE_TAC[satisfies_type_def] >> simp[]
+  rw[bounded_int_op_def] >>
+  gvs[value_has_type_def, within_int_bound_def]
 QED
 
 Theorem bounded_int_op_signed:
   !k r v.
     bounded_int_op (Signed k) r = INL v ==>
-    satisfies_type v (BaseTV (IntT k))
+    value_has_type (BaseTV (IntT k)) v
 Proof
   rw[bounded_int_op_def] >> gvs[] >>
-  REWRITE_TAC[satisfies_type_def] >> simp[]
+  REWRITE_TAC[value_has_type_def] >> simp[]
 QED
 
-(* Phase 2: evaluate_binop Add on uint preserves satisfies_type *)
+(* Phase 2: evaluate_binop Add on uint preserves value_has_type *)
 Theorem evaluate_binop_add_uint:
   !k tv v1 v2 r.
     evaluate_binop (Unsigned k) tv Add v1 v2 = INL r /\
-    satisfies_type v1 (BaseTV (UintT k)) /\
-    satisfies_type v2 (BaseTV (UintT k)) ==>
-    satisfies_type r (BaseTV (UintT k))
+    value_has_type (BaseTV (UintT k)) v1 /\
+    value_has_type (BaseTV (UintT k)) v2 ==>
+    value_has_type (BaseTV (UintT k)) r
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `v1` >> Cases_on `v2` >>
-  gvs[satisfies_type_def] >>
+  gvs[value_has_type_def] >>
   gvs[Once evaluate_binop_def] >>
   metis_tac[bounded_int_op_unsigned]
 QED
 
-(* Phase 2: evaluate_builtin Bop Add on uint preserves satisfies_type *)
+(* Phase 2: evaluate_builtin Bop Add on uint preserves value_has_type *)
 Theorem evaluate_builtin_bop_add_uint:
   !cx acc k v1 v2 r.
     evaluate_builtin cx acc (BaseT (UintT k)) (Bop Add) [v1; v2] = INL r /\
-    satisfies_type v1 (BaseTV (UintT k)) /\
-    satisfies_type v2 (BaseTV (UintT k)) ==>
-    satisfies_type r (BaseTV (UintT k))
+    value_has_type (BaseTV (UintT k)) v1 /\
+    value_has_type (BaseTV (UintT k)) v2 ==>
+    value_has_type (BaseTV (UintT k)) r
 Proof
   rw[evaluate_builtin_def, type_to_int_bound_def, LET_THM] >>
   metis_tac[evaluate_binop_add_uint]
@@ -588,151 +549,58 @@ Proof
   gvs[pred_setTheory.CARD_COUNT]
 QED
 
-(* Helper: all_satisfy_type ↔ list_satisfies_type with REPLICATE *)
-Theorem all_satisfy_list_satisfies:
-  !vs tv. all_satisfy_type vs tv ==>
-          list_satisfies_type vs (REPLICATE (LENGTH vs) tv)
-Proof
-  Induct >> REWRITE_TAC[satisfies_type_def] >>
-  simp[rich_listTheory.REPLICATE] >>
-  REWRITE_TAC[satisfies_type_def] >> metis_tac[]
-QED
-
 (* ZIP (MAP FST l, MAP SND l) = l *)
 val zip_fst_snd = listTheory.ZIP_UNZIP
   |> ONCE_REWRITE_RULE[listTheory.UNZIP_MAP];
 
 (*
  * Mutual induction using safe_cast_ind.
- * P0: safe_cast tv v = SOME v when satisfies_type v tv
+ * P0: safe_cast tv v = SOME v when value_has_type tv v
  * P1: safe_cast_list tvs vs acc = SOME (REVERSE acc ++ vs)
- *     when list_satisfies_type vs tvs
+ *     when values_have_types tvs vs
  *)
-Theorem safe_cast_satisfies_type_mutual:
-  (!tv v. satisfies_type v tv ==> safe_cast tv v = SOME v) /\
+Theorem safe_cast_well_typed_mutual:
+  (!tv v. value_has_type tv v ==> safe_cast tv v = SOME v) /\
   (!tvs vs acc.
-     list_satisfies_type vs tvs ==>
+     values_have_types tvs vs ==>
      safe_cast_list tvs vs acc = SOME (REVERSE acc ++ vs))
 Proof
-  ho_match_mp_tac safe_cast_ind >>
-  rpt conj_tac >> rpt gen_tac >> strip_tac
-  (* P0: main safe_cast case — case split on type and value *)
-  >- (Cases_on `tv` >> Cases_on `v` >>
-      TRY (Cases_on `b`) >>
-      TRY (Cases_on `b'`) >>
-      TRY (Cases_on `a`) >>
-      REWRITE_TAC[satisfies_type_def] >>
-      simp[Once safe_cast_def, compatible_bound_def] >>
-      rpt strip_tac >> gvs[]
-      (* SArrayV Fixed: safe_cast_list on MAP SND *)
-      >- (imp_res_tac all_satisfy_list_satisfies >>
-          `safe_cast_list (REPLICATE (LENGTH l) t) (MAP SND l) [] =
-           SOME (MAP SND l)`
-            by (first_x_assum irule >> gvs[listTheory.LENGTH_MAP]) >>
-          simp[zip_fst_snd])
-      (* DynArrayV *)
-      >- (imp_res_tac all_satisfy_list_satisfies >>
-          first_x_assum drule >> simp[])
-      (* StructTV *)
-      >- (`ZIP (MAP FST l, MAP SND l') = l'`
-            by (qpat_x_assum `MAP FST l' = _` (SUBST1_TAC o SYM) >>
-                simp[zip_fst_snd]) >>
-          first_x_assum drule >> simp[])
-     )
-  (* P1: [] [] *)
-  >- simp[Once safe_cast_def]
-  (* P1: (t::ts) (v::vs) *)
-  >- (strip_tac >>
-      simp[Once safe_cast_def] >>
-      gvs[Once satisfies_type_def] >>
-      `safe_cast tv v = SOME v` by (first_x_assum irule >> simp[]) >>
-      simp[] >>
-      first_x_assum drule >> simp[])
-  (* P1: mismatch (t::ts) [] — vacuous: list_satisfies_type [] _ = F *)
-  >- gvs[Once satisfies_type_def]
-  (* P1: mismatch [] (v::vs) — vacuous: list_satisfies_type _ [] = F *)
-  >- gvs[Once satisfies_type_def]
+  (* CHEATED — needs proof that value_has_type identity under safe_cast.
+     SArrayV case requires: SORTED + sparse_has_type → safe_cast_list
+     on MAP SND preserves values (since all elements already have type).
+     Struct case: field names match, safe_cast_list on values is identity.
+     TODO: prove by mutual induction on safe_cast_ind *)
+  cheat
 QED
 
 (* Corollary: safe_cast on well-typed value is identity *)
-Theorem safe_cast_satisfies_type:
-  !tv v. satisfies_type v tv ==> safe_cast tv v = SOME v
+Theorem safe_cast_well_typed:
+  !tv v. value_has_type tv v ==> safe_cast tv v = SOME v
 Proof
-  metis_tac[safe_cast_satisfies_type_mutual]
+  metis_tac[safe_cast_well_typed_mutual]
 QED
 
-Theorem list_satisfies_replicate:
-  !vs tv. list_satisfies_type vs (REPLICATE (LENGTH vs) tv) <=>
-          all_satisfy_type vs tv
+Theorem values_have_types_length:
+  !tvs vs. values_have_types tvs vs ==> LENGTH vs = LENGTH tvs
 Proof
-  Induct >> simp[Once satisfies_type_def, Once satisfies_type_def]
+  Induct >> Cases_on `vs` >> simp[Once value_has_type_def]
 QED
 
-Theorem list_satisfies_length:
-  !vs tvs. list_satisfies_type vs tvs ==> LENGTH vs = LENGTH tvs
+(* Converse: safe_cast success implies value_has_type.
+ * This is the harder direction — safe_cast output must satisfy
+ * the stronger value_has_type (including SArrayV canonicity).
+ * TODO: need to verify safe_cast preserves SORTED, keys < n,
+ * and that casting a non-default value produces a non-default value. *)
+Theorem safe_cast_implies_well_typed:
+  !tv v v'. safe_cast tv v = SOME v' ==> value_has_type tv v'
 Proof
-  Induct >> Cases_on `tvs` >>
-  simp[Once satisfies_type_def] >> rpt strip_tac >> res_tac
-QED
-
-(* Converse: safe_cast success implies satisfies_type.
- * P1: safe_cast_list produces REVERSE acc ++ rs where
- * list_satisfies_type rs tvs. *)
-Theorem safe_cast_implies_satisfies_type_mutual:
-  (!tv v v'. safe_cast tv v = SOME v' ==> satisfies_type v' tv) /\
-  (!tvs vs acc vs'.
-     safe_cast_list tvs vs acc = SOME vs' ==>
-     ?rs. vs' = REVERSE acc ++ rs /\ list_satisfies_type rs tvs)
-Proof
-  ho_match_mp_tac safe_cast_ind >>
-  rpt conj_tac >> rpt gen_tac
-  >- suspend "P0"
-  >- suspend "P1_nil"
-  >- suspend "P1_cons"
-  >- simp[Once safe_cast_def]
-  >- simp[Once safe_cast_def]
-QED
-
-Resume safe_cast_implies_satisfies_type_mutual[P0]:
-  strip_tac >> rpt strip_tac >>
-  pop_assum mp_tac >>
-  simp[Once safe_cast_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[satisfies_type_def, compatible_bound_def] >>
-  (* compound types: IH already applied by gvs, resolve ZIP/MAP algebra *)
-  imp_res_tac list_satisfies_length >>
-  gvs[GSYM list_satisfies_replicate, zip_fst_snd,
-      listTheory.MAP_ZIP, listTheory.LENGTH_MAP,
-      rich_listTheory.LENGTH_REPLICATE]
-QED
-
-Resume safe_cast_implies_satisfies_type_mutual[P1_nil]:
-  strip_tac >> gvs[Once safe_cast_def] >>
-  simp[Once satisfies_type_def]
-QED
-
-Resume safe_cast_implies_satisfies_type_mutual[P1_cons]:
-  strip_tac >>
-  simp[Once safe_cast_def, AllCaseEqs()] >>
-  rpt strip_tac >>
-  rename1 `safe_cast tv v = SOME cv` >>
-  `satisfies_type cv tv` by res_tac >>
-  (* IH for tail *)
-  last_x_assum (qspec_then `cv` mp_tac) >> simp[] >>
-  strip_tac >> gvs[] >>
-  simp[Once satisfies_type_def]
-QED
-
-Finalise safe_cast_implies_satisfies_type_mutual
-
-Theorem safe_cast_implies_satisfies_type:
-  !tv v v'. safe_cast tv v = SOME v' ==> satisfies_type v' tv
-Proof
-  metis_tac[safe_cast_implies_satisfies_type_mutual]
+  (* CHEATED — needs careful analysis of safe_cast for SArrayV case *)
+  cheat
 QED
 
 (* KEY LEMMA: bind_arguments produces a well-typed scope.
  * No precondition on input values needed — safe_cast inside
- * bind_arguments guarantees satisfies_type for stored values. *)
+ * bind_arguments guarantees value_has_type for stored values. *)
 Theorem bind_arguments_scope_well_typed:
   !tenv params vs sc.
     bind_arguments tenv params vs = SOME sc ==>
@@ -754,7 +622,7 @@ Proof
   `scope_well_typed m`
     by (first_x_assum (qspecl_then [`tenv`, `t`, `m`] mp_tac) >>
         gvs[]) >>
-  imp_res_tac safe_cast_implies_satisfies_type >>
+  imp_res_tac safe_cast_implies_well_typed >>
   gvs[scope_well_typed_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   rpt gen_tac >> IF_CASES_TAC >> strip_tac >> gvs[] >> res_tac
 QED
@@ -1036,8 +904,7 @@ Theorem state_well_typed_push_function:
     state_well_typed st ==>
     state_well_typed st'
 Proof
-  simp[push_function_def, return_def, state_well_typed_def] >>
-  rpt strip_tac >> gvs[]
+  simp[push_function_def, return_def, state_well_typed_def]
 QED
 
 (* pop_function (set_scopes prev) restores scopes *)
@@ -1049,8 +916,7 @@ Theorem state_well_typed_pop_function:
     state_well_typed st'
 Proof
   simp[pop_function_def, set_scopes_def, return_def,
-       state_well_typed_def] >>
-  rpt strip_tac >> gvs[]
+       state_well_typed_def]
 QED
 
 (* finally: if f preserves state_well_typed (even on error) and
@@ -1154,8 +1020,7 @@ Theorem pop_function_immutables:
     pop_function prev st = (res, st') ==>
     st'.immutables = st.immutables
 Proof
-  simp[pop_function_def, set_scopes_def, return_def] >>
-  rpt strip_tac >> gvs[]
+  simp[pop_function_def, set_scopes_def, return_def]
 QED
 
 (* push_function preserves immutables *)
@@ -1164,7 +1029,7 @@ Theorem push_function_immutables:
     push_function src_fn sc cx st = (INL cxf, st') ==>
     st'.immutables = st.immutables
 Proof
-  simp[push_function_def, return_def] >> rpt strip_tac >> gvs[]
+  simp[push_function_def, return_def]
 QED
 
 (* state_well_typed through try+handle_function:
@@ -1280,7 +1145,7 @@ Theorem intcall_state_preserved:
        state_well_typed st0' /\ env_consistent env0 cx st0' /\
        LIST_REL (\v e. !tyv.
          evaluate_type (get_tenv cx) (expr_type e) = SOME tyv ==>
-         satisfies_type v tyv) vs0 es) /\
+         value_has_type tyv v) vs0 es) /\
     (* IH for eval_exprs cxd needed_dflts (defaults) *)
     (!dflts_sub env0 st0 vs0 st0'.
        well_typed_exprs env0 dflts_sub /\
@@ -1293,7 +1158,7 @@ Theorem intcall_state_preserved:
        LIST_REL (\v e. !tyv.
          evaluate_type (get_tenv (cx with stk updated_by CONS (src_id_opt, fn)))
            (expr_type e) = SOME tyv ==>
-         satisfies_type v tyv) vs0 dflts_sub) /\
+         value_has_type tyv v) vs0 dflts_sub) /\
     (* IH for eval_stmts cxf body *)
     (!body env0 ret_ty st0 res0 st0'.
        well_typed_stmts env0 ret_ty body /\
@@ -1412,7 +1277,7 @@ Proof
             [`fn_info4`, `env_body`, `fn_info3`,
              `s'⁵' with scopes := [sc]`] mp_tac) >>
        simp[]) >>
-    gvs[state_well_typed_def]
+    fs[state_well_typed_def]
   )
 QED
 
@@ -1452,7 +1317,7 @@ Theorem type_preservation:
     state_well_typed st' /\ env_consistent env cx st' /\
     (!v ret_tv. res = INR (ReturnException v) /\
                 evaluate_type (get_tenv cx) ret_ty = SOME ret_tv ==>
-                satisfies_type v ret_tv)) /\
+                value_has_type ret_tv v)) /\
   (* P1: eval_stmts — state + env preserved, return exceptions well-typed *)
   (!cx ss. !env ret_ty st res st'.
     well_typed_stmts env ret_ty ss /\
@@ -1463,7 +1328,7 @@ Theorem type_preservation:
     state_well_typed st' /\ env_consistent env cx st' /\
     (!v ret_tv. res = INR (ReturnException v) /\
                 evaluate_type (get_tenv cx) ret_ty = SOME ret_tv ==>
-                satisfies_type v ret_tv)) /\
+                value_has_type ret_tv v)) /\
   (* P2: eval_iterator *)
   (!cx it. !st res st'.
     state_well_typed st /\
@@ -1500,7 +1365,7 @@ Theorem type_preservation:
     (!v st''. materialise cx tv st' = (INL v, st'') ==>
        state_well_typed st'' /\ env_consistent env cx st'' /\
        (!tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv ==>
-              satisfies_type v tyv))) /\
+              value_has_type tyv v))) /\
   (* P8: eval_exprs — with LIST_REL satisfies_type *)
   (!cx es. !env st vs st'.
     well_typed_exprs env es /\
@@ -1511,7 +1376,7 @@ Theorem type_preservation:
     state_well_typed st' /\ env_consistent env cx st' /\
     LIST_REL (\v e. !tyv.
       evaluate_type (get_tenv cx) (expr_type e) = SOME tyv ==>
-      satisfies_type v tyv) vs es)
+      value_has_type tyv v) vs es)
 Proof
 
   ho_match_mp_tac evaluate_ind >> rpt conj_tac
@@ -1529,7 +1394,7 @@ Proof
   >- (rpt gen_tac >> strip_tac >>
       gvs[Once evaluate_def, return_def, raise_def,
           well_typed_stmt_def, Once evaluate_type_def,
-          satisfies_type_def])
+          value_has_type_def])
   (* 4: Return SOME *)   >- cheat
   (* 5: Raise *)         >- cheat
   (* 6: Assert *)        >- cheat
@@ -1607,12 +1472,8 @@ Proof
   (* 32: TopLevelName *)   >- cheat
   (* 33: FlagMember *)     >- cheat
   (* 34: IfExp *)          >- cheat
-  (* 35: Literal *)
-  >- (rpt gen_tac >> strip_tac >>
-      gvs[Once evaluate_def, return_def] >>
-      simp[materialise_def, return_def] >> rpt strip_tac >> gvs[] >>
-      gvs[well_typed_expr_def, expr_type_def] >>
-      metis_tac[evaluate_literal_satisfies_type])
+  (* 35: Literal — TODO: needs well_formed_type_value hypothesis *)
+  >- cheat
   (* 36: StructLit *)      >- cheat
   (* 37: Subscript *)      >- cheat
   (* 38: Attribute *)      >- cheat
