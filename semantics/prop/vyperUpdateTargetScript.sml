@@ -169,7 +169,7 @@ Proof
        check_def, type_check_def, assert_def, ignore_bind_def, raise_def] >>
   Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
   gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
-  `var_in_scope r n` by simp[var_in_scope_def, lookup_name_def] >>
+  `var_in_scope r n` by simp[var_in_scope_iff_lookup_scopes] >>
   simp[update_target_name_replace, lookup_after_update]
 QED
 
@@ -217,6 +217,6 @@ Proof
        check_def, type_check_def, assert_def, ignore_bind_def, raise_def] >>
   Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
   gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
-  `var_in_scope st n` by simp[var_in_scope_def, lookup_name_def] >>
+  `var_in_scope st n` by simp[var_in_scope_iff_lookup_scopes] >>
   simp[valid_target_name_replace]
 QED
