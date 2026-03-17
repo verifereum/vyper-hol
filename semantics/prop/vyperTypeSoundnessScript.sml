@@ -9,96 +9,43 @@
  *   (uses value_has_type from vyperTypingTheory for value/type compatibility)
  *   type_preservation   : well_typed + consistent + eval ⇒ preserves types
  *
- * PROOF STATUS:
- *   All helper theorems verified. type_preservation has 47 inductive cases.
- *   10 proved: Pass, Continue, Break, Return NONE, eval_stmts [],
- *   eval_stmts s::ss, eval_targets [], eval_for [], Name,
- *   eval_exprs [], eval_exprs e::es.
- *   37 cheated. intcall_state_preserved has 1 cheat.
+ * PROOF STATUS (this file):
+ *   type_preservation: 10/47 cases proved, 37 cheated.
+ *   intcall_state_preserved: 1 internal cheat (EL precondition for bind_arguments).
+ *   All other helper theorems verified.
  *
- * ===== TYPE SOUNDNESS ROADMAP =====
+ * REMAINING WORK (ordered by risk):
  *
- * DONE: Unified with value_has_type (from vyperTypingTheory).
- *   - Deleted satisfies_type_def (weaker duplicate lacking SArrayV canonicity)
- *   - scope_well_typed/imms_well_typed now use value_has_type
- *   - encode/decode roundtrip (vyperEncodeDecodeTheory) already proved
- *
- * DONE: safe_cast bridge theorems
- *   - safe_cast_well_typed: value_has_type tv v ⇒ safe_cast tv v = SOME v
- *   - safe_cast_well_typed_mutual: also covers safe_cast_list
- *   - safe_cast_preserves_well_typed: safe_cast tv v = SOME v' ⇒ value_has_type tv v'
- *
- * DONE: Typing consistency cleanup
- *   - value_has_type now embeds m ≤ 256 for UintT/IntT (matching FlagTV, BytesT Fixed)
- *   - well_typed_literal now embeds k ≤ 256 for UintT/IntT and n ≤ 32 for BytesT Fixed
- *   - evaluate_literal_has_type no longer needs well_formed_type_value precondition
- *
- * Remaining work (ordered by risk):
+ * --- BLOCKER: safe_cast_implies_well_typed ---
+ *   Needed: safe_cast tv v = SOME v' ⇒ value_has_type tv v'
+ *   (converse of safe_cast_well_typed)
+ *   Blocks: append_element_preserves_type (in vyperAssignPreservesType),
+ *   bind_arguments_scope_well_typed variants, and any case using safe_cast.
  *
  * --- RISK 1: assign_subscripts preserves value_has_type ---
- * Risk: Deep recursive reasoning over nested subscript operations on
- *   arrays/structs/tuples. If the definition doesn't preserve the type
- *   invariant (e.g., inserting into sparse array breaks canonicity,
- *   replacing struct field changes key list), we'd need interpreter fixes.
- * Work:
- *   - Prove assign_subscripts tv v subs op = INL v' ∧
- *     value_has_type tv v ⇒ value_has_type tv v'
- *   - Handle each assign_op: Replace, Update, AppendOp, PopOp
+ *   Partial progress in vyperAssignPreservesTypeScript.sml:
+ *     PROVED: insert_sarray_SORTED, insert_sarray_sparse_has_type,
+ *       ADELKEY_SORTED, ADELKEY_sparse_has_type, TAKE_DROP_all_have_type,
+ *       array_set_index_DynArrayV, array_set_index_SArrayV,
+ *       FRONT_all_have_type, pop_element_preserves_type
+ *     CHEATED: append_element_preserves_type (needs safe_cast_implies_well_typed),
+ *       AFUPDKEY_struct_has_type (proof mechanics), assign_subscripts_preserves_type
  *
  * --- RISK 2: assign_target preserves storage_consistent ---
- * Risk: Combines roundtrip (already proved) with non-overlap layout
- *   property. well_formed_layout could be hard to state correctly
- *   (hashmap slots use keccak hashing — non-overlap is probabilistic).
- * Work:
- *   - Define storage_consistent cx st: for every storage variable,
- *     decode_value of its slot region produces a well-typed value.
- *     Separate predicate from state_well_typed (which doesn't take cx).
- *   - Define well_formed_layout cx: variable slot regions don't overlap.
- *   - Prove write_storage_slot preserves storage_consistent
- *     (from encode_decode_roundtrip_all + non-overlap)
- *   - Prove read_storage_slot returns well-typed values
- *   - Add storage_consistent + well_formed_layout to type_preservation
+ *   (unchanged — see vyperLookupStorageScript.sml for storage definitions)
  *
  * --- RISK 3: Builtin operation type preservation ---
- * Risk: ~30 builtin operations, each needs its own lemma. Low risk per
- *   operation but high volume. Could discover operations whose semantics
- *   don't match the type system.
- * Work:
- *   - Per-operation value_has_type lemma (only Add/uint done so far)
- *   - Unlocks: Builtin(39) case of type_preservation
+ *   ~30 builtin operations, each needs its own value_has_type lemma.
+ *   Only Add/uint done so far (bounded_int_op_unsigned/signed).
  *
  * --- RISK 4: ExtCall preserves storage_consistent ---
- * Risk: ExtCall replaces entire accounts + transient storage with the
- *   result of run_ext_call (opaque EVM execution). The returned state
- *   includes OUR contract's storage, which may have been modified by
- *   reentrant calls. storage_consistent for our contract could be
- *   violated. Proving preservation requires reasoning about EVM
- *   execution or Vyper's reentrancy guards. May need to assume
- *   storage_consistent as a postcondition, changing the theorem.
- * Work:
- *   - Determine if storage_consistent can be proved or must be assumed
- *   - Unlocks: Call ExtCall(43) case
+ *   May need to assume storage_consistent as a postcondition.
  *
- * --- LOW RISK: remaining cases (do in any order) ---
- *
- * Mechanical delegation (goals 17-20, 22-27):
- *   Targets, iterators — just unfold and apply IH. ~12 cheats.
- *
- * Statement cases needing IH only (goals 4-7, 12, 14):
- *   Return SOME, Raise, Assert, Log, Expr, If.
- *   Need env_consistent through push/pop_scope.
- *
- * Assignment statement cases (goals 8-11, 13, 29):
- *   AnnAssign, Assign, AugAssign, Append, For.
- *   Need new_variable/assign_target preservation (from Risk 1-2 above).
- *   Need env_consistent through assignments.
- *
- * Expression cases (goals 31-34, 36-44):
- *   Each needs its own argument. IfExp(34) easy. BareGlobalName(31),
- *   TopLevelName(32) like Name but immutables/storage. Subscript(37),
- *   Attribute(38) need compound type reasoning. StructLit(36) needs
- *   struct construction. IntCall(44) has state preservation done
- *   (intcall_state_preserved), needs return value typing.
+ * --- LOW RISK: remaining type_preservation cases ---
+ *   Mechanical: goals 17-20, 22-27 (targets, iterators, ~12 cheats)
+ *   IH-only: goals 4-7, 12, 14 (Return SOME, Raise, Assert, Log, If, Expr)
+ *   Assignment: goals 8-11, 13, 29 (AnnAssign, Assign, AugAssign, Append, For)
+ *   Expression: goals 31-34, 36-44 (various expr forms)
  *)
 
 Theory vyperTypeSoundness
