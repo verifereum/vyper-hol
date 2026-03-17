@@ -89,8 +89,7 @@ Definition satisfies_type_def:
   satisfies_type (ArrayV (DynArrayV vs)) (ArrayTV tv (Dynamic m)) =
     (LENGTH vs <= m /\ all_satisfy_type vs tv) /\
   satisfies_type (ArrayV (SArrayV al)) (ArrayTV tv (Fixed m)) =
-    (ALL_DISTINCT (MAP FST al) /\
-     EVERY (\(k,_). k < m) al /\
+    (LENGTH al <= m /\
      all_satisfy_type (MAP SND al) tv) /\
   satisfies_type (ArrayV (TupleV vs)) (TupleTV ts) =
     list_satisfies_type vs ts /\
@@ -547,11 +546,8 @@ Proof
       REWRITE_TAC[satisfies_type_def] >>
       simp[Once safe_cast_def, compatible_bound_def] >>
       rpt strip_tac >> gvs[]
-      (* SArrayV impossible case: n < LENGTH l contradicts pigeonhole *)
-      >- (imp_res_tac all_distinct_keys_length >> gvs[])
-      (* SArrayV: safe_cast_list on MAP SND *)
-      >- (`LENGTH l <= n` by (irule all_distinct_keys_length >> simp[]) >>
-          imp_res_tac all_satisfy_list_satisfies >>
+      (* SArrayV Fixed: safe_cast_list on MAP SND *)
+      >- (imp_res_tac all_satisfy_list_satisfies >>
           `safe_cast_list (REPLICATE (LENGTH l) t) (MAP SND l) [] =
            SOME (MAP SND l)`
             by (first_x_assum irule >> gvs[listTheory.LENGTH_MAP]) >>
@@ -585,6 +581,75 @@ Theorem safe_cast_satisfies_type:
   !tv v. satisfies_type v tv ==> safe_cast tv v = SOME v
 Proof
   metis_tac[safe_cast_satisfies_type_mutual]
+QED
+
+Theorem list_satisfies_replicate:
+  !vs tv. list_satisfies_type vs (REPLICATE (LENGTH vs) tv) <=>
+          all_satisfy_type vs tv
+Proof
+  Induct >> simp[Once satisfies_type_def, Once satisfies_type_def]
+QED
+
+Theorem list_satisfies_length:
+  !vs tvs. list_satisfies_type vs tvs ==> LENGTH vs = LENGTH tvs
+Proof
+  Induct >> Cases_on `tvs` >>
+  simp[Once satisfies_type_def] >> rpt strip_tac >> res_tac
+QED
+
+(* Converse: safe_cast success implies satisfies_type.
+ * P1: safe_cast_list produces REVERSE acc ++ rs where
+ * list_satisfies_type rs tvs. *)
+Theorem safe_cast_implies_satisfies_type_mutual:
+  (!tv v v'. safe_cast tv v = SOME v' ==> satisfies_type v' tv) /\
+  (!tvs vs acc vs'.
+     safe_cast_list tvs vs acc = SOME vs' ==>
+     ?rs. vs' = REVERSE acc ++ rs /\ list_satisfies_type rs tvs)
+Proof
+  ho_match_mp_tac safe_cast_ind >>
+  rpt conj_tac >> rpt gen_tac
+  >- suspend "P0"
+  >- suspend "P1_nil"
+  >- suspend "P1_cons"
+  >- simp[Once safe_cast_def]
+  >- simp[Once safe_cast_def]
+QED
+
+Resume safe_cast_implies_satisfies_type_mutual[P0]:
+  strip_tac >> rpt strip_tac >>
+  pop_assum mp_tac >>
+  simp[Once safe_cast_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[satisfies_type_def, compatible_bound_def] >>
+  (* compound types: IH already applied by gvs, resolve ZIP/MAP algebra *)
+  imp_res_tac list_satisfies_length >>
+  gvs[GSYM list_satisfies_replicate, zip_fst_snd,
+      listTheory.MAP_ZIP, listTheory.LENGTH_MAP,
+      rich_listTheory.LENGTH_REPLICATE]
+QED
+
+Resume safe_cast_implies_satisfies_type_mutual[P1_nil]:
+  strip_tac >> gvs[Once safe_cast_def] >>
+  simp[Once satisfies_type_def]
+QED
+
+Resume safe_cast_implies_satisfies_type_mutual[P1_cons]:
+  strip_tac >>
+  simp[Once safe_cast_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  rename1 `safe_cast tv v = SOME cv` >>
+  `satisfies_type cv tv` by res_tac >>
+  (* IH for tail *)
+  last_x_assum (qspec_then `cv` mp_tac) >> simp[] >>
+  strip_tac >> gvs[] >>
+  simp[Once satisfies_type_def]
+QED
+
+Finalise safe_cast_implies_satisfies_type_mutual
+
+Theorem safe_cast_implies_satisfies_type:
+  !tv v v'. safe_cast tv v = SOME v' ==> satisfies_type v' tv
+Proof
+  metis_tac[safe_cast_implies_satisfies_type_mutual]
 QED
 
 (* KEY LEMMA: bind_arguments produces a well-typed scope
@@ -828,6 +893,7 @@ Definition functions_well_typed_def:
         SOME (fm, args, dflts, ret, body) ==>
       ?env_body ret_tv.
         env_body.type_defs = get_tenv cx /\
+        env_body.global_types = FEMPTY /\
         evaluate_type (get_tenv cx) ret = SOME ret_tv /\
         well_typed_stmts env_body ret body /\
         well_typed_exprs
@@ -1084,6 +1150,47 @@ Proof
        env_consistent_def] >> metis_tac[]
 QED
 
+(* bind_arguments stores evaluate_type results *)
+Theorem bind_arguments_evaluate_type:
+  !tenv params vs sc n tv v.
+    bind_arguments tenv params vs = SOME sc /\
+    FLOOKUP sc n = SOME (tv, v) ==>
+    ?id typ. n = string_to_num id /\
+             MEM (id, typ) params /\
+             evaluate_type tenv typ = SOME tv
+Proof
+  Induct_on `params` >> simp[bind_arguments_def] >>
+  Cases >> simp[bind_arguments_def] >>
+  rpt gen_tac >>
+  Cases_on `vs` >> simp[bind_arguments_def] >>
+  simp[AllCaseEqs(), PULL_EXISTS] >>
+  rpt strip_tac >> gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `n = string_to_num q` >> gvs[]
+  >- (qexists_tac `q` >> qexists_tac `r` >> simp[])
+  >- (first_x_assum drule_all >> strip_tac >>
+      qexists_tac `id` >> qexists_tac `typ` >> simp[])
+QED
+
+(* env_consistent for callee after bind_arguments *)
+Theorem bind_arguments_env_consistent:
+  !tenv params vs sc env_body cx' st.
+    bind_arguments tenv params vs = SOME sc /\
+    env_body.type_defs = get_tenv cx' /\
+    tenv = get_tenv cx' /\
+    (!id typ. MEM (id, typ) params ==>
+       FLOOKUP env_body.var_types (string_to_num id) = SOME typ) /\
+    env_body.global_types = FEMPTY ==>
+    env_consistent env_body cx' (st with scopes := [sc])
+Proof
+  rpt strip_tac >>
+  simp[env_consistent_def] >> rpt strip_tac >>
+  (* Only var_types case remains (global_types = FEMPTY handled by simp) *)
+  gvs[lookup_scopes_def, AllCaseEqs()] >>
+  drule bind_arguments_evaluate_type >>
+  disch_then drule >> strip_tac >> gvs[] >>
+  res_tac >> gvs[]
+QED
+
 (* ===== IntCall helper for type preservation ===== *)
 
 (* Helper: state_well_typed is preserved through IntCall.
@@ -1095,7 +1202,10 @@ Theorem intcall_state_preserved:
        well_typed_exprs env0 es /\ env_consistent env0 cx st0 /\
        state_well_typed st0 /\ functions_well_typed cx /\
        eval_exprs cx es st0 = (INL vs0, st0') ==>
-       state_well_typed st0' /\ env_consistent env0 cx st0') /\
+       state_well_typed st0' /\ env_consistent env0 cx st0' /\
+       LIST_REL (\v e. !tyv.
+         evaluate_type (get_tenv cx) (expr_type e) = SOME tyv ==>
+         satisfies_type v tyv) vs0 es) /\
     (* IH for eval_exprs cxd needed_dflts (defaults) *)
     (!dflts_sub env0 st0 vs0 st0'.
        well_typed_exprs env0 dflts_sub /\
@@ -1104,7 +1214,11 @@ Theorem intcall_state_preserved:
        functions_well_typed (cx with stk updated_by CONS (src_id_opt, fn)) /\
        eval_exprs (cx with stk updated_by CONS (src_id_opt, fn))
          dflts_sub st0 = (INL vs0, st0') ==>
-       state_well_typed st0') /\
+       state_well_typed st0' /\
+       LIST_REL (\v e. !tyv.
+         evaluate_type (get_tenv (cx with stk updated_by CONS (src_id_opt, fn)))
+           (expr_type e) = SOME tyv ==>
+         satisfies_type v tyv) vs0 dflts_sub) /\
     (* IH for eval_stmts cxf body *)
     (!body env0 ret_ty st0 res0 st0'.
        well_typed_stmts env0 ret_ty body /\
@@ -1151,21 +1265,84 @@ Proof
   `state_well_typed s'⁴'` by
     (last_x_assum (qspecl_then [`env`, `s''`, `vs`, `s'⁴'`] mp_tac) >>
      simp[]) >>
-  (* Step 2: Apply IH_dflts (cheated: need env_consistent for empty env) *)
-  `state_well_typed s'⁵'` by cheat >>
+  (* Destructure fn_info *)
+  PairCases_on `fn_info` >> gvs[] >>
+  (* Step 2: Apply IH_dflts *)
+  `functions_well_typed (cx with stk updated_by CONS (src_id_opt, fn))` by
+    gvs[functions_well_typed_stk_irrelevant] >>
+  `well_typed_exprs
+     <|var_types := FEMPTY; global_types := FEMPTY;
+       toplevel_types := FEMPTY; type_defs := get_tenv cx|> fn_info2` by
+    (qpat_x_assum `functions_well_typed cx` mp_tac >>
+     simp[functions_well_typed_def] >>
+     disch_then (qspecl_then
+       [`src_id_opt`, `fn`, `ts`, `fn_info0`, `fn_info1`,
+        `fn_info2`, `fn_info3`, `fn_info4`]
+       mp_tac) >> simp[] >> strip_tac >> simp[]) >>
+  rename1 `eval_exprs _ (DROP drop_n _) s'⁴' = (INL dflt_vs, s'⁵')` >>
+  `well_typed_exprs
+     <|var_types := FEMPTY; global_types := FEMPTY;
+       toplevel_types := FEMPTY; type_defs := get_tenv cx|>
+     (DROP drop_n fn_info2)` by
+    (irule well_typed_exprs_DROP >> gvs[]) >>
+  `state_well_typed s'⁵'` by
+    (qpat_x_assum `!dflts_sub env0 st0 vs0 st0'. _`
+       (qspecl_then
+          [`DROP drop_n fn_info2`,
+           `<|var_types := FEMPTY; global_types := FEMPTY;
+              toplevel_types := FEMPTY;
+              type_defs := get_tenv cx|>`,
+           `s'⁴'`, `dflt_vs`, `s'⁵'`] mp_tac) >>
+     impl_tac >- (
+       simp[get_tenv_stk_irrelevant] >>
+       simp[env_consistent_def, finite_mapTheory.FLOOKUP_EMPTY,
+            get_tenv_stk_irrelevant]
+     ) >> simp[]) >>
+  (* Extract well_typed_stmts from functions_well_typed *)
+  `?env_body.
+     env_body.type_defs = get_tenv cx /\
+     env_body.global_types = FEMPTY /\
+     well_typed_stmts env_body fn_info3 fn_info4 /\
+     (!id typ. MEM (id, typ) fn_info1 ==>
+        FLOOKUP env_body.var_types (string_to_num id) = SOME typ)` by
+    (qpat_x_assum `functions_well_typed cx` mp_tac >>
+     simp[functions_well_typed_def] >>
+     disch_then (qspecl_then
+       [`src_id_opt`, `fn`, `ts`, `fn_info0`, `fn_info1`,
+        `fn_info2`, `fn_info3`, `fn_info4`] mp_tac) >>
+     simp[] >> strip_tac >> qexists_tac `env_body` >> simp[]) >>
+  (* state_well_typed for callee entry state *)
+  `state_well_typed (s'⁵' with scopes := [sc])` by
+    (simp[state_well_typed_def] >> gvs[state_well_typed_def] >>
+     (* scope_well_typed sc needs LIST_REL satisfies_type for args/defaults.
+        P8 now carries LIST_REL satisfies_type (Option 1 done), but
+        the LIST_REL is indexed by expr_type, not param_type.
+        Need: expr_type of each arg/default matches the param type.
+        This requires well_typed_expr(Call IntCall) to encode that
+        arg expression types match parameter types, or functions_well_typed
+        to encode that default expression types match parameter types. *)
+     cheat) >>
+  (* env_consistent for callee *)
+  `env_consistent env_body
+     (cx with stk updated_by CONS (src_id_opt, fn))
+     (s'⁵' with scopes := [sc])` by
+    (mp_tac (Q.SPECL [`get_tenv cx`, `fn_info1`, `vs ++ dflt_vs`, `sc`,
+                       `env_body`,
+                       `cx with stk updated_by CONS (src_id_opt, fn)`,
+                       `s'⁵'`]
+               bind_arguments_env_consistent) >>
+     simp[get_tenv_stk_irrelevant]) >>
   (* Step 3: Decompose the finally block *)
   drule finally_try_handle_pop_success >> strip_tac >> gvs[]
-  (* Case 1: body succeeded (INL) *)
-  >- (
-    rename1 `eval_stmts _ _ _ = (INL (), st_body)` >>
-    (* Apply IH_body (cheated: need well_typed_stmts and env_consistent) *)
-    `state_well_typed st_body` by cheat >>
-    gvs[state_well_typed_def]
-  )
-  (* Case 2: body raised ReturnException *)
-  >- (
-    rename1 `eval_stmts _ _ _ = (INR (ReturnException rv_val), st_body)` >>
-    `state_well_typed st_body` by cheat >>
+  (* Both cases: apply IH_body *)
+  >> (
+    rename1 `eval_stmts _ _ _ = (_, st_body)` >>
+    `state_well_typed st_body` by
+      (qpat_x_assum `!body env0 ret_ty st0 res0 st0'. _`
+         (qspecl_then
+            [`fn_info4`, `env_body`, `fn_info3`,
+             `s'⁵' with scopes := [sc]`] mp_tac) >>
+       simp[]) >>
     gvs[state_well_typed_def]
   )
 QED
@@ -1236,24 +1413,29 @@ Theorem type_preservation:
     state_well_typed st /\
     eval_for cx tyv nm body vs st = (res, st') ==>
     state_well_typed st') /\
-  (* P7: eval_expr *)
-  (!cx e. !env st v st' tv.
+  (* P7: eval_expr — general form covering all typed_value results *)
+  (!cx e. !env st tv st'.
     well_typed_expr env e /\
     env_consistent env cx st /\
     state_well_typed st /\
     functions_well_typed cx /\
-    eval_expr cx e st = (INL (Value v), st') /\
-    evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
-    satisfies_type v tv /\ state_well_typed st' /\
-    env_consistent env cx st') /\
-  (* P8: eval_exprs *)
+    eval_expr cx e st = (INL tv, st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    (!v st''. materialise cx tv st' = (INL v, st'') ==>
+       state_well_typed st'' /\ env_consistent env cx st'' /\
+       (!tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv ==>
+              satisfies_type v tyv))) /\
+  (* P8: eval_exprs — with LIST_REL satisfies_type *)
   (!cx es. !env st vs st'.
     well_typed_exprs env es /\
     env_consistent env cx st /\
     state_well_typed st /\
     functions_well_typed cx /\
     eval_exprs cx es st = (INL vs, st') ==>
-    state_well_typed st' /\ env_consistent env cx st')
+    state_well_typed st' /\ env_consistent env cx st' /\
+    LIST_REL (\v e. !tyv.
+      evaluate_type (get_tenv cx) (expr_type e) = SOME tyv ==>
+      satisfies_type v tyv) vs es)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac
   (* ===== P0: eval_stmt (goals 0-14) ===== *)
@@ -1296,12 +1478,14 @@ Proof
   (* ===== P7: eval_expr (goals 30-44) ===== *)
   (* 30: Name *)
   >- (rpt gen_tac >> strip_tac >>
+      rpt gen_tac >> strip_tac >>
       qpat_x_assum `eval_expr _ _ _ = _`
         (mp_tac o ONCE_REWRITE_RULE[evaluate_def]) >>
       simp[bind_def, get_scopes_def, lift_option_type_def,
            return_def, LET_THM] >>
       Cases_on `lookup_scopes_val (string_to_num id) st.scopes` >>
-      simp[return_def, raise_def] >> strip_tac >> rw[] >>
+      simp[return_def, raise_def] >> strip_tac >> gvs[] >>
+      simp[materialise_def, return_def] >> rpt strip_tac >> gvs[] >>
       gvs[well_typed_expr_def, expr_type_def] >>
       `EVERY scope_well_typed st.scopes` by fs[state_well_typed_def] >>
       imp_res_tac lookup_scopes_val_well_typed >>
@@ -1313,8 +1497,9 @@ Proof
   (* 34: IfExp *)          >- cheat
   (* 35: Literal *)
   >- (rpt gen_tac >> strip_tac >>
-      gvs[Once evaluate_def, return_def,
-           well_typed_expr_def, expr_type_def] >>
+      gvs[Once evaluate_def, return_def] >>
+      simp[materialise_def, return_def] >> rpt strip_tac >> gvs[] >>
+      gvs[well_typed_expr_def, expr_type_def] >>
       metis_tac[evaluate_literal_satisfies_type])
   (* 36: StructLit *)      >- cheat
   (* 37: Subscript *)      >- cheat
@@ -1326,6 +1511,26 @@ Proof
   (* 43: Call ExtCall *)   >- cheat
   (* 44: Call IntCall *)   >- cheat
   (* ===== P8: eval_exprs (goals 45-46) ===== *)
-  (* 45: [] *)             >- cheat
-  (* 46: e::es *)          >- cheat
+  (* 45: [] *)
+  >- (rpt gen_tac >> strip_tac >>
+      gvs[Once evaluate_def, return_def])
+  (* 46: e::es *)
+  >- (rpt gen_tac >> strip_tac >>
+      rpt gen_tac >> strip_tac >>
+      qpat_x_assum `eval_exprs _ _ _ = _`
+        (mp_tac o ONCE_REWRITE_RULE[evaluate_def]) >>
+      simp[bind_def, AllCaseEqs()] >> strip_tac >>
+      (* Now have: eval_expr cx e st = (INL tv, s1) /\
+                   materialise cx tv s1 = (INL v_hd, s2) /\
+                   eval_exprs cx es s2 = (INL vs_tl, s3) /\
+                   return (v_hd::vs_tl) s3 = (INL vs, st') *)
+      gvs[return_def, well_typed_expr_def] >>
+      (* P7 IH *)
+      qpat_x_assum `!env0 st0 tv0 st0'. well_typed_expr _ _ /\ _ ==> _`
+        (drule_at (Pos last)) >>
+      disch_then (qspec_then `env` mp_tac) >> simp[] >> strip_tac >>
+      first_x_assum drule >> strip_tac >>
+      (* P8 IH — match materialise in assumptions *)
+      first_x_assum drule_all >> simp[]
+    )
 QED
