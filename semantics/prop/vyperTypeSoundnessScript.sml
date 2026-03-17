@@ -7,36 +7,31 @@
  *   env_consistent      : typing_env → cx → st → bool (env matches runtime state)
  *   state_well_typed    : evaluation_state → bool (runtime values satisfy stored types)
  *   (uses value_has_type from vyperTypingTheory for value/type compatibility)
- *   type_preservation   : well_typed + consistent + eval ⇒ preserves types (36 CHEATS)
+ *   type_preservation   : well_typed + consistent + eval ⇒ preserves types
  *
  * PROOF STATUS:
- *   35/38 helper theorems verified, 3 cheated (safe_cast bridge x2,
- *   type_preservation).
- *   type_preservation has 47 inductive cases (from evaluate_ind).
+ *   All helper theorems verified. type_preservation has 47 inductive cases.
  *   10 proved: Pass, Continue, Break, Return NONE, eval_stmts [],
  *   eval_stmts s::ss, eval_targets [], eval_for [], Name,
  *   eval_exprs [], eval_exprs e::es.
- *   37 cheated (Literal regressed: needs well_formed_type_value).
+ *   37 cheated. intcall_state_preserved has 1 cheat.
  *
  * ===== TYPE SOUNDNESS ROADMAP =====
  *
  * DONE: Unified with value_has_type (from vyperTypingTheory).
  *   - Deleted satisfies_type_def (weaker duplicate lacking SArrayV canonicity)
  *   - scope_well_typed/imms_well_typed now use value_has_type
- *   - All helper theorems updated; 35/38 verified, 3 cheated
  *   - encode/decode roundtrip (vyperEncodeDecodeTheory) already proved
  *
- * OPEN: safe_cast bridge theorems (2 cheats)
- *   - safe_cast_well_typed_mutual: value_has_type tv v ⇒ safe_cast tv v = SOME v
- *     SArrayV case needs: canonical sparse array → safe_cast_list identity on values
- *   - safe_cast_implies_well_typed: safe_cast tv v = SOME v' ⇒ value_has_type tv v'
- *     Needs: safe_cast preserves SORTED, keys < n, and non-default entries
+ * DONE: safe_cast bridge theorems
+ *   - safe_cast_well_typed: value_has_type tv v ⇒ safe_cast tv v = SOME v
+ *   - safe_cast_well_typed_mutual: also covers safe_cast_list
+ *   - safe_cast_preserves_well_typed: safe_cast tv v = SOME v' ⇒ value_has_type tv v'
  *
- * OPEN: well_formed_type_value threading
- *   evaluate_literal_has_type now requires well_formed_type_value tv.
- *   Need to add well_formed_type_value to type_preservation hypotheses
- *   (all types in a well-formed program should satisfy this).
- *   Literal case (goal 35) temporarily cheated pending this.
+ * DONE: Typing consistency cleanup
+ *   - value_has_type now embeds m ≤ 256 for UintT/IntT (matching FlagTV, BytesT Fixed)
+ *   - well_typed_literal now embeds k ≤ 256 for UintT/IntT and n ≤ 32 for BytesT Fixed
+ *   - evaluate_literal_has_type no longer needs well_formed_type_value precondition
  *
  * Remaining work (ordered by risk):
  *
@@ -152,15 +147,16 @@ End
 Definition well_typed_literal_def:
   well_typed_literal (BaseT BoolT) (BoolL _) = T /\
   well_typed_literal (BaseT (UintT k)) (IntL n) =
-    within_int_bound (Unsigned k) n /\
+    (within_int_bound (Unsigned k) n /\ k ≤ 256) /\
   well_typed_literal (BaseT (IntT k)) (IntL n) =
-    within_int_bound (Signed k) n /\
+    (within_int_bound (Signed k) n /\ k ≤ 256) /\
   well_typed_literal (BaseT DecimalT) (DecimalL n) =
     within_int_bound (Signed 168) n /\
   well_typed_literal (BaseT (StringT n)) (StringL s) =
     (LENGTH s <= n) /\
   well_typed_literal (BaseT (BytesT bd)) (BytesL bs) =
-    compatible_bound bd (LENGTH bs) /\
+    (compatible_bound bd (LENGTH bs) /\
+     case bd of Fixed n => n ≤ 32 | _ => T) /\
   well_typed_literal _ _ = F
 End
 
@@ -461,8 +457,7 @@ QED
 Theorem evaluate_literal_has_type:
   ∀ty l tv.
     well_typed_literal ty l ∧
-    evaluate_type tenv ty = SOME tv ∧
-    well_formed_type_value tv ⇒
+    evaluate_type tenv ty = SOME tv ⇒
     value_has_type tv (evaluate_literal l)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -474,15 +469,14 @@ Proof
   REWRITE_TAC[value_has_type_def] >>
   simp[within_int_bound_def] >>
   TRY (Cases_on `b'` >>
-       gvs[compatible_bound_def, value_has_type_def,
-           well_formed_type_value_def]) >>
+       gvs[compatible_bound_def, value_has_type_def]) >>
   gvs[within_int_bound_def]
 QED
 
 (* Phase 2: bounded_int_op result has the bound's type *)
 Theorem bounded_int_op_unsigned:
   !k r v.
-    bounded_int_op (Unsigned k) r = INL v ==>
+    bounded_int_op (Unsigned k) r = INL v /\ k ≤ 256 ==>
     value_has_type (BaseTV (UintT k)) v
 Proof
   rw[bounded_int_op_def] >>
@@ -491,7 +485,7 @@ QED
 
 Theorem bounded_int_op_signed:
   !k r v.
-    bounded_int_op (Signed k) r = INL v ==>
+    bounded_int_op (Signed k) r = INL v /\ k ≤ 256 ==>
     value_has_type (BaseTV (IntT k)) v
 Proof
   rw[bounded_int_op_def] >> gvs[] >>

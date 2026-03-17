@@ -49,10 +49,10 @@ End
 Definition value_has_type_def:
   (* Unsigned integer *)
   value_has_type (BaseTV (UintT m)) (IntV i) =
-    (0 ≤ i ∧ Num i < 2 ** m) ∧
+    (0 ≤ i ∧ Num i < 2 ** m ∧ m ≤ 256) ∧
   (* Signed integer *)
   value_has_type (BaseTV (IntT m)) (IntV i) =
-    within_int_bound (Signed m) i ∧
+    (within_int_bound (Signed m) i ∧ m ≤ 256) ∧
   (* Decimal *)
   value_has_type (BaseTV DecimalT) (DecimalV d) =
     within_int_bound (Signed 168) d ∧
@@ -289,8 +289,8 @@ Theorem value_has_type_inv:
   (value_has_type tv NoneV ⇔ tv = NoneTV) ∧
   (value_has_type tv (BoolV b) ⇔ tv = BaseTV BoolT) ∧
   (value_has_type tv (IntV i) ⇔
-    (∃n. tv = BaseTV (UintT n) ∧ 0 ≤ i ∧ Num i < 2 ** n) ∨
-    (∃n. tv = BaseTV (IntT n) ∧ within_int_bound (Signed n) i)) ∧
+    (∃n. tv = BaseTV (UintT n) ∧ 0 ≤ i ∧ Num i < 2 ** n ∧ n ≤ 256) ∨
+    (∃n. tv = BaseTV (IntT n) ∧ within_int_bound (Signed n) i ∧ n ≤ 256)) ∧
   (value_has_type tv (DecimalV d) ⇔
     tv = BaseTV DecimalT ∧ within_int_bound (Signed 168) d) ∧
   (value_has_type tv (FlagV k) ⇔ ∃m. tv = FlagTV m ∧ k < 2 ** m ∧ m ≤ 256) ∧
