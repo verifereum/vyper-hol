@@ -1035,63 +1035,6 @@ Proof
   >> rpt CASE_TAC >> gvs[return_def, raise_def]
 QED
 
-(* ===== FEMPTY prepend: lookup/var/valid pass through FEMPTY :: scopes ===== *)
-
-(* TODO: this should be encapsulated more, with declare_name probably *)
-
-Theorem lookup_name_typed_fempty_prepend:
-  ∀st n.
-    lookup_name_typed (st with scopes := FEMPTY :: st.scopes) n =
-    lookup_name_typed st n
-Proof
-  simp[lookup_name_typed_def, lookup_scopes_def, finite_mapTheory.FLOOKUP_DEF]
-QED
-
-Theorem lookup_name_fempty_prepend:
-  ∀st n.
-    lookup_name (st with scopes := FEMPTY :: st.scopes) n =
-    lookup_name st n
-Proof
-  simp[lookup_name_typed_to_lookup_name, lookup_name_typed_fempty_prepend]
-QED
-
-Theorem var_in_scope_fempty_prepend:
-  ∀st n.
-    var_in_scope (st with scopes := FEMPTY :: st.scopes) n ⇔
-    var_in_scope st n
-Proof
-  simp[var_in_scope_def, lookup_name_fempty_prepend]
-QED
-
-Theorem fcs_fempty[local]:
-  ∀ni rest.
-    find_containing_scope ni (FEMPTY :: rest) =
-    OPTION_MAP (λ(pre,env,tv,v,post). (FEMPTY::pre,env,tv,v,post))
-               (find_containing_scope ni rest)
-Proof
-  simp[find_containing_scope_def, finite_mapTheory.FLOOKUP_DEF] >>
-  rpt gen_tac >>
-  Cases_on `find_containing_scope ni rest` >> simp[] >>
-  PairCases_on `x` >> simp[]
-QED
-
-Theorem update_name_fempty:
-  ∀st n v.
-    var_in_scope st n ⇒
-    update_name (st with scopes := FEMPTY :: st.scopes) n v =
-    (update_name st n v) with scopes :=
-      FEMPTY :: (update_name st n v).scopes
-Proof
-  simp[update_name_def, var_in_scope_def, lookup_name_def,
-       IS_SOME_lookup_scopes_val] >>
-  rpt strip_tac >>
-  `IS_SOME (find_containing_scope (string_to_num n) st.scopes)` by
-    (irule lookup_scopes_find_containing >> simp[]) >>
-  Cases_on `find_containing_scope (string_to_num n) st.scopes` >> gvs[] >>
-  PairCases_on `x` >>
-  simp[find_containing_scope_def, evaluation_state_component_equality]
-QED
-
 (* ============================================================ *)
 (* declare_name lemmas *)
 
