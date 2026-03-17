@@ -9,21 +9,103 @@
  *   env_consistent      : typing_env → cx → st → bool (env matches runtime state)
  *   state_well_typed    : evaluation_state → bool (runtime values satisfy stored types)
  *   satisfies_type      : value → type_value → bool (value matches resolved type)
- *   type_preservation   : well_typed + consistent + eval ⇒ preserves types (CHEATED)
- *
- * Operation-level helpers (proved):
- *   evaluate_literal_satisfies_type, bounded_int_op_unsigned/signed,
- *   evaluate_binop_add_uint, evaluate_builtin_bop_add_uint
- *
- * State helpers (proved):
- *   lookup_scopes_well_typed, lookup_scopes_val_well_typed
+ *   type_preservation   : well_typed + consistent + eval ⇒ preserves types (36 CHEATS)
  *
  * PROOF STATUS:
- *   type_preservation: Name and Literal cases proved by induction.
- *   11 cases cheated (BareGlobalName, TopLevelName, FlagMember, IfExp,
- *   StructLit, Subscript, Attribute, Builtin, TypeBuiltin, Pop, Call).
- *   Induction structure validated — IH provides env_consistent for
- *   intermediate states, enabling compositional proofs for IfExp etc.
+ *   type_preservation has 47 inductive cases (from evaluate_ind).
+ *   11 proved: Pass, Continue, Break, Return NONE, eval_stmts [],
+ *   eval_stmts s::ss, eval_targets [], eval_for [], Name, Literal,
+ *   eval_exprs [], eval_exprs e::es.
+ *   36 cheated (see individual goal comments in proof).
+ *
+ * ===== TYPE SOUNDNESS ROADMAP =====
+ *
+ * NEXT STEP: Move this file to semantics/prop/vyperTypeSoundnessScript.sml
+ *   and unify satisfies_type with value_has_type (from vyperTypingTheory).
+ *
+ *   value_has_type (in prop/vyperTypingScript.sml) is the correct typing
+ *   predicate — it includes SArrayV canonicity (SORTED, keys < n, no
+ *   default entries) and is used by the encode/decode roundtrip proof
+ *   (in prop/vyperEncodeDecodeScript.sml), which is ALREADY FULLY PROVED.
+ *
+ *   satisfies_type (in this file) is a weaker duplicate that lacks
+ *   canonicity. It should be deleted and replaced by value_has_type.
+ *
+ *   Migration steps:
+ *     1. Move file to semantics/prop/vyperTypeSoundnessScript.sml
+ *     2. Add vyperTyping, vyperEncodeDecode as ancestors
+ *     3. Delete satisfies_type_def and all its helpers
+ *     4. Rewrite state_well_typed, scope_well_typed, imms_well_typed
+ *        to use value_has_type
+ *     5. Update safe_cast bridge theorems for value_has_type
+ *     6. Update all proved cases and helpers
+ *
+ * After migration, remaining work (ordered by risk):
+ *
+ * --- RISK 1: assign_subscripts preserves value_has_type ---
+ * Risk: Deep recursive reasoning over nested subscript operations on
+ *   arrays/structs/tuples. If the definition doesn't preserve the type
+ *   invariant (e.g., inserting into sparse array breaks canonicity,
+ *   replacing struct field changes key list), we'd need interpreter fixes.
+ * Work:
+ *   - Prove assign_subscripts tv v subs op = INL v' ∧
+ *     value_has_type tv v ⇒ value_has_type tv v'
+ *   - Handle each assign_op: Replace, Update, AppendOp, PopOp
+ *
+ * --- RISK 2: assign_target preserves storage_consistent ---
+ * Risk: Combines roundtrip (already proved) with non-overlap layout
+ *   property. well_formed_layout could be hard to state correctly
+ *   (hashmap slots use keccak hashing — non-overlap is probabilistic).
+ * Work:
+ *   - Define storage_consistent cx st: for every storage variable,
+ *     decode_value of its slot region produces a well-typed value.
+ *     Separate predicate from state_well_typed (which doesn't take cx).
+ *   - Define well_formed_layout cx: variable slot regions don't overlap.
+ *   - Prove write_storage_slot preserves storage_consistent
+ *     (from encode_decode_roundtrip_all + non-overlap)
+ *   - Prove read_storage_slot returns well-typed values
+ *   - Add storage_consistent + well_formed_layout to type_preservation
+ *
+ * --- RISK 3: Builtin operation type preservation ---
+ * Risk: ~30 builtin operations, each needs its own lemma. Low risk per
+ *   operation but high volume. Could discover operations whose semantics
+ *   don't match the type system.
+ * Work:
+ *   - Per-operation value_has_type lemma (only Add/uint done so far)
+ *   - Unlocks: Builtin(39) case of type_preservation
+ *
+ * --- RISK 4: ExtCall preserves storage_consistent ---
+ * Risk: ExtCall replaces entire accounts + transient storage with the
+ *   result of run_ext_call (opaque EVM execution). The returned state
+ *   includes OUR contract's storage, which may have been modified by
+ *   reentrant calls. storage_consistent for our contract could be
+ *   violated. Proving preservation requires reasoning about EVM
+ *   execution or Vyper's reentrancy guards. May need to assume
+ *   storage_consistent as a postcondition, changing the theorem.
+ * Work:
+ *   - Determine if storage_consistent can be proved or must be assumed
+ *   - Unlocks: Call ExtCall(43) case
+ *
+ * --- LOW RISK: remaining cases (do in any order) ---
+ *
+ * Mechanical delegation (goals 17-20, 22-27):
+ *   Targets, iterators — just unfold and apply IH. ~12 cheats.
+ *
+ * Statement cases needing IH only (goals 4-7, 12, 14):
+ *   Return SOME, Raise, Assert, Log, Expr, If.
+ *   Need env_consistent through push/pop_scope.
+ *
+ * Assignment statement cases (goals 8-11, 13, 29):
+ *   AnnAssign, Assign, AugAssign, Append, For.
+ *   Need new_variable/assign_target preservation (from Risk 1-2 above).
+ *   Need env_consistent through assignments.
+ *
+ * Expression cases (goals 31-34, 36-44):
+ *   Each needs its own argument. IfExp(34) easy. BareGlobalName(31),
+ *   TopLevelName(32) like Name but immutables/storage. Subscript(37),
+ *   Attribute(38) need compound type reasoning. StructLit(36) needs
+ *   struct construction. IntCall(44) has state preservation done
+ *   (intcall_state_preserved), needs return value typing.
  *)
 
 Theory vyperTypeCheck
