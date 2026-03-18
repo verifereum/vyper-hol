@@ -100,7 +100,7 @@ Proof
   `MAP FDOM r.scopes = MAP FDOM st.scopes`
     by (drule (CONJUNCT1 vyperScopePreservationTheory.assign_target_preserves_scopes_dom) >> simp[]) >>
   `IS_SOME (lookup_scopes (string_to_num n) r.scopes) = IS_SOME (lookup_scopes (string_to_num n) st.scopes)`
-    by (simp[GSYM var_in_scope_lookup_name_typed, GSYM lookup_name_typed_def] >>
+    by (simp[GSYM var_in_scope_iff_lookup_name_typed, GSYM lookup_name_typed_def] >>
         irule var_in_scope_dom_iff >> simp[]) >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[] >-
   (* NONE case: no immutables for this target *)
@@ -169,7 +169,7 @@ Proof
        check_def, type_check_def, assert_def, ignore_bind_def, raise_def] >>
   Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
   gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
-  `var_in_scope r n` by simp[var_in_scope_lookup_name_typed, lookup_name_typed_def] >>
+  `var_in_scope r n` by simp[var_in_scope_iff_lookup_name_typed, lookup_name_typed_def] >>
   simp[update_target_name_replace, lookup_after_update]
 QED
 
@@ -217,6 +217,6 @@ Proof
        check_def, type_check_def, assert_def, ignore_bind_def, raise_def] >>
   Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
   gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
-  `var_in_scope st n` by simp[var_in_scope_lookup_name_typed, lookup_name_typed_def] >>
+  `var_in_scope st n` by simp[var_in_scope_iff_lookup_name_typed, lookup_name_typed_def] >>
   simp[valid_target_name_replace]
 QED
