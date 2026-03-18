@@ -358,6 +358,26 @@ Proof
   simp[Once assign_subscripts_def]
 QED
 
+Theorem array_set_index_preserves_type:
+  !tv av i v r.
+    array_set_index tv av i v = INL r /\
+    value_has_type tv (ArrayV av) /\
+    value_has_type (case tv of ArrayTV t _ => t | _ => NoneTV) v ==>
+    value_has_type tv r
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `tv` >> gvs[value_has_type_def] >>
+  Cases_on `av` >> gvs[value_has_type_def, array_set_index_def, AllCaseEqs()]
+  >- (
+    Cases_on `b` \\ TRY(gvs[value_has_type_def] \\ NO_TAC)
+    \\ irule array_set_index_DynArrayV
+    \\ simp[array_set_index_def]
+    \\ qexistsl_tac[`i`,`v`,`l`] \\ simp[] )
+  \\ rw[]
+  \\ simp[ADELKEY_SORTED, insert_sarray_SORTED]
+  \\ simp[ADELKEY_sparse_has_type, insert_sarray_sparse_has_type]
+QED
+
 Theorem assign_subscripts_preserves_type:
   !tv a subs ao v.
     assign_subscripts tv a subs ao = INL v /\
@@ -374,51 +394,58 @@ Theorem assign_subscripts_preserves_type:
                    value_has_type elem_tv nv) ==>
     value_has_type tv v
 Proof
-  ho_match_mp_tac assign_subscripts_ind >> rpt conj_tac
-  >- simp[Once assign_subscripts_def, leaf_type_def] (* Replace *)
+  ho_match_mp_tac assign_subscripts_ind >>
+  conj_tac >- simp[Once assign_subscripts_def, leaf_type_def] (* Replace *)
   (* Update *)
-  >- (rpt gen_tac >> simp[leaf_type_def] >>
+  >> conj_tac >- (rpt gen_tac >> simp[leaf_type_def] >>
       rpt strip_tac >>
       first_x_assum irule >>
       qexists_tac `a` >> gvs[])
   (* AppendOp *)
-  >- (rpt gen_tac >> simp[leaf_type_def] >>
+  >> conj_tac >- (rpt gen_tac >> simp[leaf_type_def] >>
       rpt strip_tac >> gvs[Once assign_subscripts_def] >>
       irule append_element_preserves_type >>
       gvs[] >> metis_tac[])
   (* PopOp *)
-  >- (rpt gen_tac >> simp[leaf_type_def, Once assign_subscripts_def] >>
+  >> conj_tac >- (rpt gen_tac >> simp[leaf_type_def, Once assign_subscripts_def] >>
       rpt strip_tac >>
       drule_all pop_element_preserves_type >> simp[])
   (* IntSubscript *)
-  >- (rpt gen_tac >> strip_tac >>
+  >> conj_tac >- (rpt gen_tac >> strip_tac >>
       rpt gen_tac >> strip_tac >>
       Cases_on `a` >> gvs[Once assign_subscripts_def] >>
-      rename1 `ArrayV av` >>
-      pop_assum mp_tac >>
+      (* Unfold the IntSubscript case for ArrayV *)
+      qpat_x_assum `_ = INL v` mp_tac >>
       simp[assign_subscripts_IntSubscript_ArrayV, LET_THM] >>
-      Cases_on `array_index tv av i` >> simp[] >>
-      rename1 `array_index tv av i = SOME elem` >>
       qabbrev_tac `elem_tv = case tv of ArrayTV t _ => t | _ => NoneTV` >>
-      Cases_on `assign_subscripts elem_tv elem subs ao` >> simp[] >>
-      rename1 `assign_subscripts elem_tv elem subs ao = INL new_elem` >>
-      strip_tac >>
-      `value_has_type elem_tv elem` by (
-        Cases_on `tv` >> gvs[Abbr `elem_tv`, value_has_type_def] >>
-        irule array_index_has_type >>
-        Cases_on `b` >> gvs[value_has_type_def] >> metis_tac[]) >>
-      `well_formed_type_value elem_tv` by (
-        Cases_on `tv` >> gvs[Abbr `elem_tv`, well_formed_type_value_def]) >>
-      `leaf_type tv (IntSubscript i::subs) = leaf_type elem_tv subs` by (
-        simp[leaf_type_def, Abbr `elem_tv`]) >>
-      `value_has_type elem_tv new_elem` by (
-        first_x_assum irule >> gvs[]) >>
-      Cases_on `tv` >> gvs[Abbr `elem_tv`, value_has_type_def] >>
-      Cases_on `b` >> gvs[value_has_type_def] >>
-      TRY (irule array_set_index_DynArrayV >> gvs[value_has_type_def] >> NO_TAC) >>
-      irule array_set_index_SArrayV >> gvs[value_has_type_def])
-  (* AttrSubscript *)
-  >- cheat
-  (* Error cases: 10 goals *)
-  >> simp[Once assign_subscripts_def]
+      (* Split on array_index and recursive assign_subscripts *)
+      simp[CaseEq"sum",CaseEq"option"]
+      >> gvs[] >> strip_tac >>
+      (* Now have: array_index = SOME, assign_subscripts elem = INL,
+         array_set_index = INL v *)
+      `well_formed_type_value elem_tv` by
+        (qpat_x_assum `Abbrev _` mp_tac >> simp[markerTheory.Abbrev_def] >>
+         Cases_on `tv` >> gvs[well_formed_type_value_def]) >>
+      Cases_on `tv` >> gvs[Abbr`elem_tv`, value_has_type_def,
+        well_formed_type_value_def, leaf_type_def] >>
+      (* Non-ArrayTV cases: array_set_index returns error *)
+      TRY (Cases_on `a'` >>
+           gvs[array_set_index_def, value_has_type_def, AllCaseEqs()] >> NO_TAC) >>
+      (* ArrayTV case: get value_has_type for element *)
+      drule array_index_has_type >> simp[] >> rpt strip_tac >>
+      (* Apply IH *)
+      gvs[] >>
+      sg `value_has_type t vj`
+      >- (
+        first_x_assum irule
+        \\ rpt strip_tac
+        \\ first_x_assum irule
+        \\ simp[Once assign_subscripts_def]
+        \\ goal_assum drule \\ simp[] )
+      \\ irule array_set_index_preserves_type
+      \\ simp[]
+      \\ goal_assum drule
+      \\ simp[] )
+  (* AttrSubscript + Error cases *)
+  >> cheat
 QED
