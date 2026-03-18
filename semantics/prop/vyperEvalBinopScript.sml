@@ -271,7 +271,9 @@ Theorem evaluate_binop_div_signed:
   ∀x y n tv.
     within_int_bound (Signed n) x ∧ within_int_bound (Signed n) y ∧
     within_int_bound (Signed n) (x quot y) ∧
-    y ≠ 0 ∧ n ≤ 256 ⇒
+    y ≠ 0 ∧ n ≤ 256 ∧
+    (* MIN_INT / -1 overflows — now correctly reverts *)
+    ¬(y = -1 ∧ x = -&(2 ** (n − 1))) ⇒
     evaluate_binop (Signed n) tv Div (IntV x) (IntV y) =
     INL (IntV (x quot y))
 Proof
@@ -417,11 +419,16 @@ Theorem evaluate_binop_udiv:
   ∀u tv x y.
     y ≠ 0 ⇒
     evaluate_binop u tv UDiv (IntV x) (IntV y) =
-    INL (IntV (if is_Unsigned u then (x / y) % &(2 ** int_bound_bits u)
-                 else signed_int_mod (int_bound_bits u) (x / y)))
+    INL (IntV (let q = w2i (word_quot ((i2w x):bytes32) ((i2w y):bytes32)) in
+               if is_Unsigned u then q % &(2 ** int_bound_bits u)
+               else signed_int_mod (int_bound_bits u) q))
 Proof
   Cases >> simp[vyperValueOperationTheory.evaluate_binop_def,
-                vyperValueOperationTheory.wrapped_int_op_def]
+                vyperValueOperationTheory.wrapped_int_op_def] >>
+  rpt strip_tac >>
+  `(i2w y):bytes32 ≠ 0w` by (
+    CCONTR_TAC >> fs[] >> fs[integer_wordTheory.word_0_w2i]) >>
+  simp[]
 QED
 
 (* ========= Shifts ========== *)

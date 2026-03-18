@@ -85,37 +85,43 @@ Proof
 QED
 
 Theorem case_Raise_dom[local]:
-  ∀cx e.
-    (∀st res st'. eval_expr cx e st = (res, st') ⇒
-       MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
+  ∀cx reason.
+    (∀e. reason = RaiseReason e ⇒
+       ∀st res st'. eval_expr cx e st = (res, st') ⇒
+         MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
-      eval_stmt cx (Raise e) st = (res, st') ⇒ preserves_scopes_dom st st'
+      eval_stmt cx (Raise reason) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
+  rpt gen_tac >> strip_tac >> Cases_on `reason` >>
   rpt strip_tac >> irule map_fdom_eq_preserves_dom >>
-  gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+  gvs[evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
   imp_res_tac get_Value_scopes >>
   imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes >> imp_res_tac lift_option_type_scopes >>
   imp_res_tac raise_scopes >> gvs[]
 QED
 
 Theorem case_Assert_dom[local]:
-  ∀cx e se.
+  ∀cx e reason.
     (∀st res st'. eval_expr cx e st = (res, st') ⇒
        MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
-    (∀st res st'. eval_expr cx se st = (res, st') ⇒
-       MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
+    (∀se. reason = AssertReason se ⇒
+       ∀st res st'. eval_expr cx se st = (res, st') ⇒
+         MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
-      eval_stmt cx (Assert e se) st = (res, st') ⇒ preserves_scopes_dom st st'
+      eval_stmt cx (Assert e reason) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
+  rpt gen_tac >> strip_tac >> Cases_on `reason` >>
   rpt strip_tac >> irule map_fdom_eq_preserves_dom >>
-  gvs[evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes >> gvs[] >>
-  qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
+  gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+  (* All cases: eval_expr produces the first state change *)
+  imp_res_tac get_Value_scopes >> gvs[] >>
+  qpat_x_assum `switch_BoolV _ _ _ _ = _` mp_tac >>
+  simp[switch_BoolV_def] >>
   rpt IF_CASES_TAC >> simp[return_def, raise_def, bind_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
   TRY (imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes >> gvs[]) >>
-  rpt (qpat_x_assum `∀st res st'. eval_expr cx e st = _ ⇒ _` (drule_then assume_tac) >>
-       qpat_x_assum `∀st res st'. eval_expr cx se st = _ ⇒ _` (drule_then assume_tac) >> gvs[])
+  (* AssertReason: chain eval_expr IH for e then e' *)
+  rpt (first_x_assum drule >> strip_tac >> gvs[])
 QED
 
 Theorem case_Log_dom[local]:
@@ -145,23 +151,6 @@ Proof
   imp_res_tac materialise_scopes >>
   imp_res_tac assign_target_preserves_scopes_dom >> gvs[] >>
   Cases_on `x` >> gvs[bind_def, ignore_bind_def, AllCaseEqs()] >>
-  imp_res_tac get_Value_scopes >> imp_res_tac return_scopes >>
-  imp_res_tac materialise_scopes >>
-  imp_res_tac assign_target_preserves_scopes_dom >> gvs[] >>
-  rpt (first_x_assum (drule_then assume_tac) >> gvs[])
-QED
-
-Theorem case_Assign_dom[local]:
-  ∀cx g e.
-    (∀st res st'. eval_target cx g st = (res, st') ⇒
-       MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
-    (∀st res st'. eval_expr cx e st = (res, st') ⇒
-       MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
-    ∀st res st'.
-      eval_stmt cx (Assign g e) st = (res, st') ⇒ preserves_scopes_dom st st'
-Proof
-  rpt strip_tac >> irule map_fdom_eq_preserves_dom >>
-  gvs[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
   imp_res_tac get_Value_scopes >> imp_res_tac return_scopes >>
   imp_res_tac materialise_scopes >>
   imp_res_tac assign_target_preserves_scopes_dom >> gvs[] >>
@@ -573,12 +562,36 @@ Proof
   (* Break *) >- gvs[evaluate_def, raise_def, preserves_scopes_dom_def]
   (* Return NONE *) >- gvs[evaluate_def, raise_def, preserves_scopes_dom_def]
   (* Return (SOME e) *) >- (drule_all case_Return_SOME_dom >> gvs[])
-  (* Raise *) >- (drule_all case_Raise_dom >> gvs[])
-  (* Assert *) >- (drule case_Assert_dom >> rpt strip_tac >> metis_tac[eval_expr_preserves_scopes_dom])
+  (* Raise RaiseBare *) >- gvs[evaluate_def, raise_def, preserves_scopes_dom_def]
+  (* Raise RaiseUnreachable *) >- gvs[evaluate_def, raise_def, preserves_scopes_dom_def]
+  (* Raise (RaiseReason e) *) >- (irule case_Raise_dom >> first_assum $ irule_at (Pos last) >> simp[])
+  (* Assert AssertBare *) >- (irule case_Assert_dom >> first_assum $ irule_at (Pos last) >> simp[])
+  (* Assert AssertUnreachable *) >- (irule case_Assert_dom >> first_assum $ irule_at (Pos last) >> simp[])
+  (* Assert (AssertReason se) *) >-
+    (irule map_fdom_eq_preserves_dom >>
+     qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+     simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[] >>
+     imp_res_tac get_Value_scopes >> gvs[] >>
+     qpat_x_assum `switch_BoolV _ _ _ _ = _` mp_tac >>
+     simp[switch_BoolV_def] >>
+     rpt IF_CASES_TAC >> simp[return_def, raise_def, bind_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[] >>
+     TRY (imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >>
+          imp_res_tac lift_option_type_scopes >> gvs[]) >>
+     rpt (first_x_assum drule >> strip_tac >> gvs[]))
   (* Log *) >- (drule_all case_Log_dom >> gvs[])
   (* AnnAssign *) >- (drule case_AnnAssign_dom >> simp[])
   (* Append *) >- (drule case_Append_dom >> rpt strip_tac >> metis_tac[eval_expr_preserves_scopes_dom])
-  (* Assign *) >- (drule case_Assign_dom >> rpt strip_tac >> metis_tac[eval_expr_preserves_scopes_dom])
+  (* Assign *) >-
+    (irule map_fdom_eq_preserves_dom >>
+     qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+     simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[] >>
+     imp_res_tac get_Value_scopes >> imp_res_tac return_scopes >>
+     imp_res_tac materialise_scopes >>
+     imp_res_tac assign_target_preserves_scopes_dom >> gvs[] >>
+     rpt (first_x_assum drule_all >> strip_tac >> gvs[]))
   (* AugAssign *) >- (drule case_AugAssign_dom >> rpt strip_tac >> metis_tac[eval_expr_preserves_scopes_dom])
   (* If *) >- (irule case_If_dom >> qexists_tac `cx` >> qexists_tac `e` >> qexists_tac `res` >> qexists_tac `ss` >> qexists_tac `ss'` >> metis_tac[])
   (* For *) >- (drule_all case_For_dom >> simp[])
