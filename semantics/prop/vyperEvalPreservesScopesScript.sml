@@ -19,7 +19,7 @@ Theorem preserves_scopes_dom_var_in_scope:
 Proof
   simp[preserves_scopes_dom_def] >> rpt strip_tac >-
   (* Empty scopes case: contradicts var_in_scope *)
-  gvs[var_in_scope_iff_lookup_scopes, lookup_scopes_def] >>
+  gvs[var_in_scope_lookup_name_typed, lookup_name_typed_def, lookup_scopes_def] >>
   (* Non-empty scopes case *)
   irule var_in_scope_scopes_subset >> metis_tac[]
 QED

@@ -476,8 +476,8 @@ Proof
   gvs[lookup_scopes_dom_iff]
 QED
 
-Theorem var_in_scope_iff_lookup_scopes:
-  ∀st n. var_in_scope st n ⇔ IS_SOME (lookup_scopes (string_to_num n) st.scopes)
+Theorem var_in_scope_iff_lookup_name:
+  ∀st n. var_in_scope st n ⇔ IS_SOME (lookup_name st n)
 Proof
   simp[var_in_scope_def, lookup_name_def, IS_SOME_lookup_scopes_val]
 QED
@@ -509,7 +509,7 @@ Theorem assign_target_scoped_var_implies_var_in_scope:
     ISL (FST (assign_target cx (BaseTargetV (ScopedVar n) sbs) ao st)) ⇒
     var_in_scope st n
 Proof
-  rw[var_in_scope_iff_lookup_scopes] >>
+  rw[var_in_scope_lookup_name_typed, lookup_name_typed_def] >>
   gvs[Once assign_target_def, bind_def, get_scopes_def, return_def,
       lift_option_def, lift_option_type_def, LET_THM] >>
   Cases_on `find_containing_scope (string_to_num n) st.scopes` >>
@@ -524,7 +524,7 @@ Theorem assign_target_name_replace:
       assign_target cx (BaseTargetV (ScopedVar n) []) (Replace v) st =
       (INL NONE, update_name st n v)
 Proof
-  rw[var_in_scope_iff_lookup_scopes] >>
+  rw[var_in_scope_lookup_name_typed, lookup_name_typed_def] >>
   `IS_SOME (find_containing_scope (string_to_num n) st.scopes)`
     by metis_tac[lookup_scopes_find_containing] >>
   Cases_on `find_containing_scope (string_to_num n) st.scopes` >- gvs[] >>
