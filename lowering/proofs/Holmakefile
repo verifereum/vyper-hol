@@ -1,0 +1,5 @@
+# Lowering proofs
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec \
+           ../../syntax ../../semantics \
+           ../../venom/defs \
+           ../defs
