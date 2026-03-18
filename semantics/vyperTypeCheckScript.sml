@@ -201,7 +201,13 @@ Definition env_item_type_def:
   env_item_type BlobBaseFee = BaseT (UintT 256) /\
   env_item_type GasPrice = BaseT (UintT 256) /\
   env_item_type PrevHash = BaseT (BytesT (Fixed 32)) /\
-  env_item_type ChainId = BaseT (UintT 256)
+  env_item_type ChainId = BaseT (UintT 256) /\
+  env_item_type Coinbase = BaseT AddressT /\
+  env_item_type GasLimit = BaseT (UintT 256) /\
+  env_item_type BaseFee = BaseT (UintT 256) /\
+  env_item_type PrevRandao = BaseT (UintT 256) /\
+  env_item_type TxOrigin = BaseT AddressT /\
+  env_item_type MsgGas = BaseT (UintT 256)
 End
 
 Definition account_item_type_def:
