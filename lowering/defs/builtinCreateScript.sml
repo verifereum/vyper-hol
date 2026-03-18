@@ -1,0 +1,188 @@
+(*
+ * Contract Creation Built-in Functions
+ *
+ * TOP-LEVEL:
+ *   compile_raw_create        — raw_create(bytecode, value, salt)
+ *   compile_check_create_result — validate CREATE result
+ *   compile_create_proxy      — create_minimal_proxy_to (EIP-1167)
+ *   compile_create_copy       — create_copy_of (extcodecopy + preamble)
+ *   compile_create_blueprint  — create_from_blueprint (ERC-5202, with ctor args)
+ *
+ * Each returns the new contract address.
+ * Salt parameter triggers CREATE2 instead of CREATE.
+ *
+ * Mirrors Python: ~/vyper/vyper/codegen_venom/builtins/create.py
+ *)
+
+Theory builtinCreate
+Ancestors
+  emitHelper context compileEnv venomInst
+
+(* ===== Check CREATE result ===== *)
+(* Mirrors Python: create.py _check_create_result
+   If revert_on_failure:
+     JNZ addr → ok_label / fail_label
+     fail: returndatacopy revert data, REVERT
+     ok: continue
+   Else: just return addr (0 on failure).
+   This matches the Python's branch+revert-bubble pattern. *)
+Definition compile_check_create_result_def:
+  compile_check_create_result result revert_on_failure st =
+    if revert_on_failure then
+      let (fail_lbl, st1) = fresh_label "create_fail" st in
+      let (ok_lbl, st2) = fresh_label "create_ok" st1 in
+      let (_, st3) = emit_inst JNZ
+        [result; Label ok_lbl; Label fail_lbl] [] st2 in
+      (* Failure path: bubble up revert data *)
+      let (_, st4) = new_block fail_lbl st3 in
+      let (rds, st5) = emit_op RETURNDATASIZE [] st4 in
+      let (_, st6) = emit_void RETURNDATACOPY [Lit 0w; Lit 0w; rds] st5 in
+      let (_, st7) = emit_inst REVERT [Lit 0w; rds] [] st6 in
+      (* Success path *)
+      let (_, st8) = new_block ok_lbl st7 in
+      (result, st8)
+    else
+      (result, st)
+End
+
+(* ===== raw_create ===== *)
+(* Mirrors Python: create.py lower_raw_create
+   Deploy arbitrary bytecode with optional ctor args.
+   CREATE(value, offset, size) or CREATE2(value, offset, size, salt) *)
+Definition compile_raw_create_def:
+  compile_raw_create code_ptr code_len value_op salt_opt
+                     revert_on_failure st =
+    let (result, st1) =
+      case salt_opt of
+        NONE => emit_op CREATE [value_op; code_ptr; code_len] st
+      | SOME salt_op => emit_op CREATE2 [value_op; code_ptr; code_len; salt_op] st in
+    compile_check_create_result result revert_on_failure st1
+End
+
+(* ===== create_minimal_proxy_to ===== *)
+(* Mirrors Python: create.py lower_create_minimal_proxy_to
+   EIP-1167 minimal proxy: deploys a small proxy contract that
+   delegatecalls to the target address.
+
+   Proxy bytecode layout (54 bytes total):
+   [loader: 9B] [forwarder_pre: 10B] [address: 20B] [forwarder_post: 15B]
+   Loader:        602d3d8160093d39f3
+   Forwarder_pre: 363d3d373d3d3d363d73
+   Forwarder_post: 5af43d82803e903d91602b57fd5bf3
+
+   Address must be left-aligned via SHL(96, addr).
+   Uses 3x MSTORE (96 bytes buffer) to write all components. *)
+Definition compile_create_proxy_def:
+  compile_create_proxy target_op value_op salt_opt revert_on_failure st =
+    (* Allocate 96-byte buffer for 3 x 32-byte stores *)
+        let (buf_alloc, st2) = compile_alloc_buffer 96 st in
+        let buf = buf_alloc.buf_operand in
+    (* Store preamble (loader + forwarder_pre = 19 bytes, left-aligned in 32B)
+       Exact bytes: 602d3d8160093d39f3 363d3d373d3d3d363d73 *)
+    let (_, st3) = emit_void MSTORE [buf;
+      Lit 0x602d3d8160093d39f3363d3d373d3d3d363d7300000000000000000000000000w] st2 in
+    (* Left-align target address: SHL(96, addr) — 20 bytes, left-aligned *)
+    let (aligned_target, st4) = emit_op SHL [Lit 96w; target_op] st3 in
+    (* Store aligned target at buf + 19 (preamble_length) *)
+    let (buf_preamble, st5) = emit_op ADD [buf; Lit 19w] st4 in
+    let (_, st6) = emit_void MSTORE [buf_preamble; aligned_target] st5 in
+    (* Store forwarder suffix at buf + 39 (preamble 19 + address 20) *)
+    let (buf_post, st7) = emit_op ADD [buf; Lit 39w] st6 in
+    (* Exact bytes: 5af43d82803e903d91602b57fd5bf3 (15 bytes) *)
+    let (_, st8) = emit_void MSTORE [buf_post;
+      Lit 0x5af43d82803e903d91602b57fd5bf30000000000000000000000000000000000w] st7 in
+    (* Create with 54 bytes total (19 + 20 + 15) *)
+    compile_raw_create buf (Lit 54w) value_op salt_opt revert_on_failure st8
+End
+
+(* ===== create_copy_of ===== *)
+(* Mirrors Python: create.py lower_create_copy_of
+   Clone existing contract bytecode:
+   1. Get code size via EXTCODESIZE, assert non-zero
+   2. Build 11-byte initcode preamble (PUSH3 codesize, codecopy, return)
+   3. Use MSIZE for buffer start (after all alloca buffers)
+   4. MSTORE preamble (with codesize embedded), EXTCODECOPY code after
+   5. CREATE/CREATE2 from buf at msize+21 with preamble_len+codesize
+
+   Preamble bytes (11): encodes PUSH3(sz) + CODECOPY + RETURN pattern.
+   Codesize is embedded in the preamble via SHL+OR. *)
+Definition compile_create_copy_def:
+  compile_create_copy target_op value_op salt_opt revert_on_failure st =
+    (* Get target code size *)
+    let (code_size, st1) = emit_op EXTCODESIZE [target_op] st in
+    (* Assert target has code *)
+    let (_, st2) = emit_void ASSERT [code_size] st1 in
+    (* Use MSIZE as buffer start (past all alloca buffers) *)
+    let (mem_ofst, st3) = emit_op MSIZE [] st2 in
+    (* Build preamble with embedded codesize: shift codesize into position.
+       Preamble template (11 bytes): 62 00 00 00 3d 81 60 0b 3d 39 f3
+       PUSH3(sz) RDS DUP2 PUSH1(0x0B) RDS CODECOPY RETURN
+       Codesize goes at bits [7*8:4*8] → SHL 56 bits. *)
+    let preamble_len = 11 in
+    let shl_bits = (preamble_len - 4) * 8 in  (* 56 bits *)
+    let (shifted_sz, st4) = emit_op SHL [Lit (n2w shl_bits); code_size] st3 in
+    (* OR with base constant: 0x620000003d81600b3d39f3 (right-aligned in 32B).
+       MSTORE stores this right-aligned: preamble occupies bytes 21..31.
+       SHL(56, codesize) places codesize at bytes 22-24 (PUSH3 argument). *)
+    let (preamble, st5) = emit_op OR
+      [Lit 0x000000000000000000000000000000000000000000620000003d81600b3d39f3w;
+       shifted_sz] st4 in
+    (* Store preamble at mem_ofst (32-byte word, preamble at bytes 21-31) *)
+    let (_, st6) = emit_void MSTORE [mem_ofst; preamble] st5 in
+    (* Copy target code to mem_ofst + 32 *)
+    let (code_dst, st7) = emit_op ADD [mem_ofst; Lit 32w] st6 in
+    let (_, st8) = emit_void EXTCODECOPY [target_op; code_dst; Lit 0w; code_size] st7 in
+    (* Buffer starts at mem_ofst + (32 - preamble_len) = mem_ofst + 21 *)
+    let (buf, st9) = emit_op ADD [mem_ofst; Lit 21w] st8 in
+    (* Total length = preamble_len + code_size *)
+    let (buf_len, st10) = emit_op ADD [code_size; Lit (n2w preamble_len)] st9 in
+    (* Create *)
+    let (result, st11) =
+      case salt_opt of
+        NONE => emit_op CREATE [value_op; buf; buf_len] st10
+      | SOME salt_op => emit_op CREATE2 [value_op; buf; buf_len; salt_op] st10 in
+    compile_check_create_result result revert_on_failure st11
+End
+
+(* ===== create_from_blueprint ===== *)
+(* Mirrors Python: create.py lower_create_from_blueprint
+   Deploy from ERC-5202 blueprint contract:
+   1. Read bytecode from blueprint (skipping code_offset prefix)
+   2. Append ABI-encoded ctor args if any (or raw args)
+   3. Use MSIZE for buffer start
+   4. CREATE or CREATE2
+
+   args_ptr / args_len: pre-encoded constructor arguments to append.
+     NONE means no ctor args.
+   code_offset_op: offset into blueprint code (usually 3 for ERC-5202).
+     Can be literal or runtime value. *)
+Definition compile_create_blueprint_def:
+  compile_create_blueprint target_op value_op salt_opt code_offset_op
+                           args_info revert_on_failure st =
+    (* Get blueprint code size, skipping preamble *)
+    let (full_size, st1) = emit_op EXTCODESIZE [target_op] st in
+    let (code_size, st2) = emit_op SUB [full_size; code_offset_op] st1 in
+    (* Assert blueprint has code after preamble (sgt because underflow) *)
+    let (has_code, st3) = emit_op SGT [code_size; Lit 0w] st2 in
+    let (_, st4) = emit_void ASSERT [has_code] st3 in
+    (* Use MSIZE for buffer start (past all alloca buffers) *)
+    let (mem_ofst, st5) = emit_op MSIZE [] st4 in
+    (* Copy blueprint code (skipping preamble) to mem_ofst *)
+    let (_, st6) = emit_void EXTCODECOPY
+      [target_op; mem_ofst; code_offset_op; code_size] st5 in
+    (* Append constructor args if present *)
+    let (total_len, st7) =
+      case args_info of
+        NONE => (code_size, st6)
+      | SOME (args_ptr, args_len) =>
+          let (args_dest, st_a) = emit_op ADD [mem_ofst; code_size] st6 in
+          let (_, st_b) = emit_void MCOPY [args_dest; args_ptr; args_len] st_a in
+          emit_op ADD [code_size; args_len] st_b in
+    (* Create *)
+    let (result, st8) =
+      case salt_opt of
+        NONE => emit_op CREATE [value_op; mem_ofst; total_len] st7
+      | SOME salt_op => emit_op CREATE2
+          [value_op; mem_ofst; total_len; salt_op] st7 in
+    compile_check_create_result result revert_on_failure st8
+End
