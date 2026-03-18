@@ -428,15 +428,15 @@ Proof
          Cases_on `tv` >> gvs[well_formed_type_value_def]) >>
       Cases_on `tv` >> gvs[Abbr`elem_tv`, value_has_type_def,
         well_formed_type_value_def, leaf_type_def] >>
-      (* Non-ArrayTV cases: array_set_index returns error *)
+      (* Non-ArrayTV: contradicts value_has_type or array_set_index *)
       TRY (Cases_on `a'` >>
-           gvs[array_set_index_def, value_has_type_def, AllCaseEqs()] >> NO_TAC) >>
+           gvs[value_has_type_def, array_set_index_def, AllCaseEqs(), LET_THM] >>
+           rpt IF_CASES_TAC >> gvs[] >> NO_TAC) >>
       (* ArrayTV case: get value_has_type for element *)
       drule array_index_has_type >> simp[] >> rpt strip_tac >>
       (* Apply IH *)
       gvs[] >>
-      sg `value_has_type t vj`
-      >- (
+      `value_has_type t vj` by (
         first_x_assum irule
         \\ rpt strip_tac
         \\ first_x_assum irule
@@ -446,6 +446,31 @@ Proof
       \\ simp[]
       \\ goal_assum drule
       \\ simp[] )
-  (* AttrSubscript + Error cases *)
-  >> cheat
+  (* AttrSubscript / StructV case *)
+  >> conj_tac >- (
+    rpt gen_tac >> strip_tac >>
+    rpt gen_tac >> strip_tac >>
+    gvs[assign_subscripts_AttrSubscript_StructV, AllCaseEqs(), LET_THM] >>
+    qabbrev_tac `field_tv = case tv of StructTV args =>
+      (case ALOOKUP args id of SOME t => t | NONE => NoneTV) | _ => NoneTV` >>
+    Cases_on `tv` >> gvs[Abbr`field_tv`, value_has_type_def,
+      well_formed_type_value_def, leaf_type_def] >>
+    `?ftv. ALOOKUP l id = SOME ftv /\ value_has_type ftv fv` by
+      (drule_all struct_field_has_type >> simp[]) >>
+    `well_formed_type_value ftv` by
+      (gvs[EVERY_MEM, MEM_MAP, PULL_EXISTS, FORALL_PROD] >>
+       drule ALOOKUP_MEM >> strip_tac >>
+       first_x_assum irule >> metis_tac[]) >>
+    `value_has_type ftv new_fv` by
+      (qpat_x_assum `_ ==> value_has_type _ new_fv` mp_tac >>
+       gvs[] >> strip_tac >>
+       first_x_assum irule >> gvs[] >>
+       rpt strip_tac >> first_x_assum irule >>
+       simp[Once assign_subscripts_def] >>
+       goal_assum drule >> simp[]) >>
+    irule AFUPDKEY_struct_has_type >> simp[] >>
+    qexists_tac `ftv` >> rpt strip_tac >>
+    drule_all struct_field_has_type >> strip_tac >> gvs[])
+  (* Error cases: assign_subscripts on non-matching value/subscript *)
+  >> simp[assign_subscripts_def]
 QED
