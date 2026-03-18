@@ -775,6 +775,7 @@ Datatype:
     global_types : (num |-> type);
     toplevel_types : ((num option # num) |-> type);
     type_defs : (num |-> type_args);
+    fn_sigs : ((num option # string) |-> (type list # type));
   |>
 End
 
@@ -833,10 +834,14 @@ Definition well_typed_expr_def:
   well_typed_expr env (Pop ty tgt) =
     (well_typed_target env tgt /\
      well_formed_type env.type_defs ty) /\
-  well_typed_expr env (Call ty (IntCall _) args drv) =
+  well_typed_expr env (Call ty (IntCall (src_id_opt, fn_name)) args drv) =
     (well_typed_exprs env args /\
      well_typed_opt env drv /\
-     well_formed_type env.type_defs ty) /\
+     well_formed_type env.type_defs ty /\
+     ?param_types ret_ty.
+       FLOOKUP env.fn_sigs (src_id_opt, fn_name) = SOME (param_types, ret_ty) /\
+       ty = ret_ty /\
+       MAP expr_type args = TAKE (LENGTH args) param_types) /\
   well_typed_expr env (Call ty (ExtCall _ (_, arg_types, ret_ty)) args drv) =
     (well_typed_exprs env args /\
      well_typed_opt env drv /\
@@ -959,6 +964,16 @@ End
  *   The call site's type annotation ty must match the function's declared
  *   return type ret — this is ensured by the Vyper compiler frontend.
  *)
+(* fn_sigs_consistent: static fn_sigs map agrees with runtime function lookup *)
+Definition fn_sigs_consistent_def:
+  fn_sigs_consistent fn_sigs cx <=>
+    !src_id_opt fn ts fm params dflts ret body.
+      get_module_code cx src_id_opt = SOME ts /\
+      lookup_callable_function cx.in_deploy fn ts =
+        SOME (fm, params, dflts, ret, body) ==>
+      FLOOKUP fn_sigs (src_id_opt, fn) = SOME (MAP SND params, ret)
+End
+
 Definition functions_well_typed_def:
   functions_well_typed cx <=>
     !src_id_opt fn ts fm args dflts ret body.
@@ -974,7 +989,8 @@ Definition functions_well_typed_def:
           <| var_types := FEMPTY;
              global_types := FEMPTY;
              toplevel_types := FEMPTY;
-             type_defs := get_tenv cx |> dflts /\
+             type_defs := get_tenv cx;
+             fn_sigs := FEMPTY |> dflts /\
         (!id typ. MEM (id, typ) args ==>
            FLOOKUP env_body.var_types (string_to_num id) = SOME typ)
 End
@@ -987,7 +1003,8 @@ Theorem env_consistent_empty:
       <| var_types := FEMPTY;
          global_types := FEMPTY;
          toplevel_types := FEMPTY;
-         type_defs := get_tenv cx |> cx st
+         type_defs := get_tenv cx;
+         fn_sigs := FEMPTY |> cx st
 Proof
   simp[env_consistent_def, finite_mapTheory.FLOOKUP_EMPTY]
 QED
@@ -1343,7 +1360,8 @@ Proof
     gvs[functions_well_typed_stk_irrelevant] >>
   `well_typed_exprs
      <|var_types := FEMPTY; global_types := FEMPTY;
-       toplevel_types := FEMPTY; type_defs := get_tenv cx|> fn_info2` by
+       toplevel_types := FEMPTY; type_defs := get_tenv cx;
+       fn_sigs := FEMPTY|> fn_info2` by
     (qpat_x_assum `functions_well_typed cx` mp_tac >>
      simp[functions_well_typed_def] >>
      disch_then (qspecl_then
@@ -1353,7 +1371,8 @@ Proof
   rename1 `eval_exprs _ (DROP drop_n _) s'⁴' = (INL dflt_vs, s'⁵')` >>
   `well_typed_exprs
      <|var_types := FEMPTY; global_types := FEMPTY;
-       toplevel_types := FEMPTY; type_defs := get_tenv cx|>
+       toplevel_types := FEMPTY; type_defs := get_tenv cx;
+       fn_sigs := FEMPTY|>
      (DROP drop_n fn_info2)` by
     (irule well_typed_exprs_DROP >> gvs[]) >>
   `state_well_typed s'⁵'` by
@@ -1362,7 +1381,8 @@ Proof
           [`DROP drop_n fn_info2`,
            `<|var_types := FEMPTY; global_types := FEMPTY;
               toplevel_types := FEMPTY;
-              type_defs := get_tenv cx|>`,
+              type_defs := get_tenv cx;
+              fn_sigs := FEMPTY|>`,
            `s'⁴'`, `dflt_vs`, `s'⁵'`] mp_tac) >>
      impl_tac >- (
        simp[get_tenv_stk_irrelevant] >>
