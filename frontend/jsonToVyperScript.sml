@@ -677,7 +677,7 @@ Definition translate_expr_def:
   (translate_expr ctx (JE_UnaryOp JUop_Not e ret_ty) =
     Builtin (BaseT BoolT) Not [translate_expr ctx e]) /\
   (translate_expr ctx (JE_UnaryOp JUop_Invert e ret_ty) =
-    Builtin (translate_type ret_ty) Not [translate_expr ctx e]) /\
+    Builtin (translate_type ret_ty) Invert [translate_expr ctx e]) /\
 
   (* IfExp (ternary) *)
   (translate_expr ctx (JE_IfExp test body orelse ret_ty) =
