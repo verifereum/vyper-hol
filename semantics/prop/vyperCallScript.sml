@@ -3,6 +3,48 @@ Theory vyperCall
 Ancestors
   vyperInterpreter
 
+Definition extcall_call_def:
+  extcall_call cx is_static (func_name, arg_types, ret_type) vs
+               (accounts : evm_accounts) (tStorage : transient_storage) =
+    case vs of
+    | [] => NONE
+    | target_v :: rest =>
+    case dest_AddressV target_v of
+    | NONE => NONE
+    | SOME target_addr =>
+    case (if is_static then SOME (NONE : num option, rest)
+          else case rest of
+               | [] => NONE
+               | val_v :: rest' =>
+                 case dest_NumV val_v of
+                 | NONE => NONE
+                 | SOME amount => SOME (SOME amount, rest')) of
+    | NONE => NONE
+    | SOME (value_opt, arg_vals) =>
+    case build_ext_calldata (get_tenv cx) func_name arg_types arg_vals of
+    | NONE => NONE
+    | SOME calldata =>
+    case run_ext_call cx.txn.target target_addr calldata value_opt
+                      accounts tStorage (vyper_to_tx_params cx.txn) of
+    | NONE => NONE
+    | SOME (success, returnData, accounts', tStorage') =>
+      if ¬success then NONE
+      else SOME (returnData, accounts', tStorage')
+End
+
+Definition extcall_result_def:
+  extcall_result cx is_static (func_name, arg_types, ret_type) vs
+                 (accounts : evm_accounts) (tStorage : transient_storage) =
+    case extcall_call cx is_static (func_name, arg_types, ret_type) vs
+                      accounts tStorage of
+    | NONE => NONE
+    | SOME (returnData, accounts', tStorage') =>
+      case evaluate_abi_decode_return (get_tenv cx) ret_type returnData of
+      | INR _ => NONE
+      | INL ret_val =>
+        SOME (ret_val, accounts', tStorage')
+End
+
 Theorem eval_expr_intcall_drv:
   ∀cx ty nsid es drv.
     eval_expr cx (Call ty (IntCall nsid) es drv) =

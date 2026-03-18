@@ -1,8 +1,18 @@
 Theory vyperAssignTarget
 Ancestors
-  vyperMisc vyperAST vyperValue vyperState vyperInterpreter
-  vyperScopePreservation vyperStatePreservation vyperLookup
+  vyperMisc vyperAST vyperValue vyperValueOperation vyperState vyperInterpreter
+  vyperScopePreservation vyperStatePreservation
+  vyperLookup vyperLookupStorage
   vyperImmutablesPreservation
+
+
+Theorem get_storage_backend_INL[local]:
+  ∀cx b st. ∃storage. get_storage_backend cx b st = (INL storage, st)
+Proof
+  Cases_on `b` >>
+  simp[get_storage_backend_def, bind_def, return_def,
+       get_accounts_def, get_transient_storage_def]
+QED
 
 (*********************************************************************************)
 (* Helper lemmas for immutables preservation *)
@@ -394,4 +404,77 @@ Proof
   simp[get_source_immutables_def, set_source_immutables_def,
        alistTheory.ALOOKUP_ADELKEY,
        finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem assign_target_toplevel_update:
+  ∀cx st src_id_opt n ty bop v1 v2 v.
+    lookup_toplevel_name cx st src_id_opt n = SOME (Value v1) ∧
+    evaluate_binop
+      (case type_to_int_bound ty of NONE => Unsigned 0 | SOME u => u)
+      NoneTV bop v1 v2 = INL v ∧
+    var_in_storage cx src_id_opt n ∧
+    storable_value cx src_id_opt n v ⇒
+    assign_target cx (BaseTargetV (TopLevelVar src_id_opt n) []) (Update ty bop v2) st =
+    (INL NONE, update_toplevel_name cx st src_id_opt n v)
+Proof
+  rw[var_in_storage_def] >>
+  gvs[lookup_toplevel_name_def, AllCaseEqs()] >>
+  `st' = st` by metis_tac[lookup_global_state] >> gvs[] >>
+  `storage_type_of cx src_id_opt n = SOME tv` by
+    simp[storage_type_of_def, storage_var_info_def] >>
+  `value_has_type tv v` by
+    (gvs[storable_value_def] >> first_x_assum drule >> simp[]) >>
+  `IS_SOME (encode_value tv v)` by
+    metis_tac[CONJUNCT1 vyperTypingTheory.value_has_type_equiv] >>
+  Cases_on `encode_value tv v` >> gvs[] >>
+  `∃storage. get_storage_backend cx b st = (INL storage, st)` by
+    metis_tac[get_storage_backend_INL] >>
+  simp[Once assign_target_def, bind_def, return_def, LET_THM,
+       listTheory.REVERSE_DEF, lift_option_type_def, optionTheory.OPTION_BIND_def,
+       assign_subscripts_def, lift_sum_def,
+       ignore_bind_def, assign_result_def] >>
+  gvs[AllCaseEqs()] >>
+  `ISL (FST (set_global cx src_id_opt (string_to_num n) v st))` by (
+    simp[Once set_global_def, bind_def, return_def, LET_THM,
+         lift_option_type_def, write_storage_slot_def, lift_option_def] >>
+    Cases_on `b` >>
+    gvs[set_storage_backend_def, bind_def, return_def,
+        update_transient_def, get_accounts_def, update_accounts_def, LET_THM]) >>
+  Cases_on `set_global cx src_id_opt (string_to_num n) v st` >>
+  Cases_on `q` >> gvs[update_toplevel_name_def]
+QED
+
+Theorem assign_target_toplevel_replace:
+  ∀cx st src_id_opt n v v0.
+    lookup_toplevel_name cx st src_id_opt n = SOME (Value v0) ∧
+    var_in_storage cx src_id_opt n ∧
+    storable_value cx src_id_opt n v ⇒
+    assign_target cx (BaseTargetV (TopLevelVar src_id_opt n) []) (Replace v) st =
+    (INL NONE, update_toplevel_name cx st src_id_opt n v)
+Proof
+  rw[var_in_storage_def] >>
+  gvs[lookup_toplevel_name_def, AllCaseEqs()] >>
+  `st' = st` by metis_tac[lookup_global_state] >> gvs[] >>
+  `storage_type_of cx src_id_opt n = SOME tv` by
+    simp[storage_type_of_def, storage_var_info_def] >>
+  `value_has_type tv v` by
+    (gvs[storable_value_def] >> first_x_assum drule >> simp[]) >>
+  `IS_SOME (encode_value tv v)` by
+    metis_tac[CONJUNCT1 vyperTypingTheory.value_has_type_equiv] >>
+  Cases_on `encode_value tv v` >> gvs[] >>
+  `∃storage. get_storage_backend cx b st = (INL storage, st)` by
+    metis_tac[get_storage_backend_INL] >>
+  simp[Once assign_target_def, bind_def, return_def, LET_THM,
+       listTheory.REVERSE_DEF, lift_option_type_def, optionTheory.OPTION_BIND_def,
+       assign_subscripts_def, lift_sum_def,
+       ignore_bind_def, assign_result_def] >>
+  gvs[AllCaseEqs()] >>
+  `ISL (FST (set_global cx src_id_opt (string_to_num n) v st))` by (
+    simp[Once set_global_def, bind_def, return_def, LET_THM,
+         lift_option_type_def, write_storage_slot_def, lift_option_def] >>
+    Cases_on `b` >>
+    gvs[set_storage_backend_def, bind_def, return_def,
+        update_transient_def, get_accounts_def, update_accounts_def, LET_THM]) >>
+  Cases_on `set_global cx src_id_opt (string_to_num n) v st` >>
+  Cases_on `q` >> gvs[update_toplevel_name_def]
 QED
