@@ -779,10 +779,24 @@ Datatype:
   |>
 End
 
+(* fn_sigs_consistent: for any function signature in fn_sigs,
+   the runtime lookup agrees *)
+Definition fn_sigs_consistent_def:
+  fn_sigs_consistent fn_sigs cx <=>
+    !src_id_opt fn param_types ret_ty.
+      FLOOKUP fn_sigs (src_id_opt, fn) = SOME (param_types, ret_ty) ==>
+      ?ts fm params dflts body.
+        get_module_code cx src_id_opt = SOME ts /\
+        lookup_callable_function cx.in_deploy fn ts =
+          SOME (fm, params, dflts, ret_ty, body) /\
+        param_types = MAP SND params
+End
+
 (* env_consistent: typing env matches runtime state *)
 Definition env_consistent_def:
   env_consistent env cx st <=>
     env.type_defs = get_tenv cx /\
+    fn_sigs_consistent env.fn_sigs cx /\
     (!id ty tv v.
        FLOOKUP env.var_types id = SOME ty /\
        lookup_scopes id st.scopes = SOME (tv, v) ==>
@@ -964,24 +978,16 @@ End
  *   The call site's type annotation ty must match the function's declared
  *   return type ret — this is ensured by the Vyper compiler frontend.
  *)
-(* fn_sigs_consistent: static fn_sigs map agrees with runtime function lookup *)
-Definition fn_sigs_consistent_def:
-  fn_sigs_consistent fn_sigs cx <=>
-    !src_id_opt fn ts fm params dflts ret body.
-      get_module_code cx src_id_opt = SOME ts /\
-      lookup_callable_function cx.in_deploy fn ts =
-        SOME (fm, params, dflts, ret, body) ==>
-      FLOOKUP fn_sigs (src_id_opt, fn) = SOME (MAP SND params, ret)
-End
-
 Definition functions_well_typed_def:
   functions_well_typed cx <=>
-    !src_id_opt fn ts fm args dflts ret body.
+    !src_id_opt fn ts fm args dflts ret body fn_sigs.
       get_module_code cx src_id_opt = SOME ts /\
       lookup_callable_function cx.in_deploy fn ts =
-        SOME (fm, args, dflts, ret, body) ==>
+        SOME (fm, args, dflts, ret, body) /\
+      fn_sigs_consistent fn_sigs cx ==>
       ?env_body ret_tv.
         env_body.type_defs = get_tenv cx /\
+        env_body.fn_sigs = fn_sigs /\
         env_body.global_types = FEMPTY /\
         evaluate_type (get_tenv cx) ret = SOME ret_tv /\
         well_typed_stmts env_body ret body /\
@@ -992,7 +998,9 @@ Definition functions_well_typed_def:
              type_defs := get_tenv cx;
              fn_sigs := FEMPTY |> dflts /\
         (!id typ. MEM (id, typ) args ==>
-           FLOOKUP env_body.var_types (string_to_num id) = SOME typ)
+           FLOOKUP env_body.var_types (string_to_num id) = SOME typ) /\
+        MAP expr_type dflts =
+          MAP SND (DROP (LENGTH args - LENGTH dflts) args)
 End
 
 (* Separate predicate: call site type annotations match function return types *)
@@ -1006,7 +1014,8 @@ Theorem env_consistent_empty:
          type_defs := get_tenv cx;
          fn_sigs := FEMPTY |> cx st
 Proof
-  simp[env_consistent_def, finite_mapTheory.FLOOKUP_EMPTY]
+  simp[env_consistent_def, finite_mapTheory.FLOOKUP_EMPTY,
+       fn_sigs_consistent_def]
 QED
 
 (* ===== Helper lemmas for type preservation ===== *)
@@ -1026,12 +1035,19 @@ Proof
   simp[get_tenv_def]
 QED
 
+Theorem fn_sigs_consistent_stk_irrelevant:
+  !sigs cx f. fn_sigs_consistent sigs (cx with stk updated_by f) <=>
+              fn_sigs_consistent sigs cx
+Proof
+  simp[fn_sigs_consistent_def, get_module_code_def]
+QED
+
 Theorem functions_well_typed_stk_irrelevant:
   !cx f. functions_well_typed (cx with stk updated_by f) <=>
          functions_well_typed cx
 Proof
   simp[functions_well_typed_def, get_module_code_def,
-       get_tenv_stk_irrelevant]
+       get_tenv_stk_irrelevant, fn_sigs_consistent_stk_irrelevant]
 QED
 
 (* state_well_typed depends only on scopes and immutables *)
@@ -1202,6 +1218,7 @@ Theorem env_consistent_scopes_only:
   !env cx st scopes.
     env_consistent env cx (st with scopes := scopes) <=>
     env.type_defs = get_tenv cx /\
+    fn_sigs_consistent env.fn_sigs cx /\
     (!id ty tv v.
        FLOOKUP env.var_types id = SOME ty /\
        lookup_scopes id scopes = SOME (tv, v) ==>
@@ -1222,6 +1239,7 @@ Theorem env_consistent_pop_function:
   !env cx st prev res st'.
     pop_function prev st = (res, st') /\
     env.type_defs = get_tenv cx /\
+    fn_sigs_consistent env.fn_sigs cx /\
     (!id ty tv v.
        FLOOKUP env.var_types id = SOME ty /\
        lookup_scopes id prev = SOME (tv, v) ==>
@@ -1265,6 +1283,7 @@ Theorem bind_arguments_env_consistent:
     bind_arguments tenv params vs = SOME sc /\
     env_body.type_defs = get_tenv cx' /\
     tenv = get_tenv cx' /\
+    fn_sigs_consistent env_body.fn_sigs cx' /\
     (!id typ. MEM (id, typ) params ==>
        FLOOKUP env_body.var_types (string_to_num id) = SOME typ) /\
     env_body.global_types = FEMPTY ==>
@@ -1281,8 +1300,33 @@ QED
 
 (* ===== IntCall helper for type preservation ===== *)
 
-(* Helper: state_well_typed is preserved through IntCall.
-   Takes simplified IHs as hypotheses. *)
+(* Helper: state_well_typed is preserved through IntCall. *)
+Theorem list_rel_typing_to_el:
+  !tenv params args vs dflts.
+    LIST_REL (\v e. !tv. evaluate_type tenv (expr_type e) = SOME tv ==>
+                         value_has_type tv v) vs args /\
+    MAP expr_type args = TAKE (LENGTH args) (MAP SND params) /\
+    LENGTH args <= LENGTH params ==>
+    !i tv. i < LENGTH args /\ i < LENGTH (vs ++ dflts) /\
+           evaluate_type tenv (SND (EL i params)) = SOME tv ==>
+           value_has_type tv (EL i (vs ++ dflts))
+Proof
+  rpt strip_tac >>
+  `LENGTH vs = LENGTH args` by
+    (qpat_x_assum `LIST_REL _ _ _` mp_tac >>
+     simp[listTheory.LIST_REL_EL_EQN]) >>
+  simp[rich_listTheory.EL_APPEND1] >>
+  qpat_x_assum `LIST_REL _ _ _` mp_tac >>
+  simp[listTheory.LIST_REL_EL_EQN] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  first_x_assum irule >>
+  `expr_type (EL i args) = SND (EL i params)` by
+    (`EL i (MAP expr_type args) = EL i (TAKE (LENGTH args) (MAP SND params))` by
+       metis_tac[] >>
+     gvs[listTheory.EL_MAP, rich_listTheory.EL_TAKE]) >>
+  gvs[]
+QED
+
 Theorem intcall_state_preserved:
   !cx src_id_opt fn es v17 env st v st' tv.
     (* IH for eval_exprs cx es (args) *)
@@ -1366,9 +1410,10 @@ Proof
      simp[functions_well_typed_def] >>
      disch_then (qspecl_then
        [`src_id_opt`, `fn`, `ts`, `fn_info0`, `fn_info1`,
-        `fn_info2`, `fn_info3`, `fn_info4`]
-       mp_tac) >> simp[] >> strip_tac >> simp[]) >>
-  rename1 `eval_exprs _ (DROP drop_n _) s'⁴' = (INL dflt_vs, s'⁵')` >>
+        `fn_info2`, `fn_info3`, `fn_info4`, `FEMPTY`]
+       mp_tac) >> simp[fn_sigs_consistent_def] >>
+     strip_tac >> simp[]) >>
+  qmatch_assum_abbrev_tac `eval_exprs _ (DROP drop_n _) s'⁴' = (INL dflt_vs, s'⁵')` >>
   `well_typed_exprs
      <|var_types := FEMPTY; global_types := FEMPTY;
        toplevel_types := FEMPTY; type_defs := get_tenv cx;
@@ -1387,11 +1432,12 @@ Proof
      impl_tac >- (
        simp[get_tenv_stk_irrelevant] >>
        simp[env_consistent_def, finite_mapTheory.FLOOKUP_EMPTY,
-            get_tenv_stk_irrelevant]
+            get_tenv_stk_irrelevant, fn_sigs_consistent_def]
      ) >> simp[]) >>
   (* Extract well_typed_stmts from functions_well_typed *)
   `?env_body.
      env_body.type_defs = get_tenv cx /\
+     env_body.fn_sigs = env.fn_sigs /\
      env_body.global_types = FEMPTY /\
      well_typed_stmts env_body fn_info3 fn_info4 /\
      (!id typ. MEM (id, typ) fn_info1 ==>
@@ -1400,14 +1446,16 @@ Proof
      simp[functions_well_typed_def] >>
      disch_then (qspecl_then
        [`src_id_opt`, `fn`, `ts`, `fn_info0`, `fn_info1`,
-        `fn_info2`, `fn_info3`, `fn_info4`] mp_tac) >>
-     simp[] >> strip_tac >> qexists_tac `env_body` >> simp[]) >>
-  (* state_well_typed for callee entry state *)
+        `fn_info2`, `fn_info3`, `fn_info4`, `env.fn_sigs`] mp_tac) >>
+     impl_tac >- fs[env_consistent_def] >>
+     strip_tac >> qexists_tac `env_body` >> simp[]) >>
+  `scope_well_typed sc` by
+    suspend "difficulty" >>
   `state_well_typed (s'⁵' with scopes := [sc])` by
-    (simp[state_well_typed_def] >> gvs[state_well_typed_def] >>
-     (* scope_well_typed sc: from bind_arguments + IH typing *)
-     irule (SIMP_RULE std_ss [] (Q.SPEC `get_tenv cx` bind_arguments_scope_well_typed)) >>
-     simp[] >> cheat (* TODO: connect IH typing to EL precondition *)) >>
+    (irule state_well_typed_with_scopes >>
+     simp[] >>
+     qpat_x_assum `state_well_typed s'⁵'` mp_tac >>
+     simp[state_well_typed_def]) >>
   (* env_consistent for callee *)
   `env_consistent env_body
      (cx with stk updated_by CONS (src_id_opt, fn))
@@ -1417,7 +1465,11 @@ Proof
                        `cx with stk updated_by CONS (src_id_opt, fn)`,
                        `s'⁵'`]
                bind_arguments_env_consistent) >>
-     simp[get_tenv_stk_irrelevant]) >>
+     simp[get_tenv_stk_irrelevant, fn_sigs_consistent_stk_irrelevant] >>
+     `fn_sigs_consistent env.fn_sigs cx` by
+       (qpat_x_assum `env_consistent env cx _` mp_tac >>
+        simp[env_consistent_def]) >>
+     gvs[]) >>
   (* Step 3: Decompose the finally block *)
   drule finally_try_handle_pop_success >> strip_tac >> gvs[]
   (* Both cases: apply IH_body *)
@@ -1432,6 +1484,63 @@ Proof
     fs[state_well_typed_def]
   )
 QED
+
+Resume intcall_state_preserved[difficulty]:
+  match_mp_tac bind_arguments_scope_well_typed >>
+  (* Get LIST_REL for args *)
+  `LIST_REL (\v e. !tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv ==>
+                          value_has_type tyv v) vs es` by
+    (last_x_assum (qspecl_then [`env`, `s''`, `vs`, `s'⁴'`] mp_tac) >>
+     simp[well_typed_expr_def]) >>
+  (* Get param type correspondence from fn_sigs *)
+  `MAP expr_type es = TAKE (LENGTH es) (MAP SND fn_info1)` by
+    (qpat_x_assum `well_typed_expr _ _` mp_tac >>
+     simp[Once well_typed_expr_def] >> strip_tac >>
+     qpat_x_assum `env_consistent env cx _` mp_tac >>
+     simp[env_consistent_def, fn_sigs_consistent_def] >>
+     strip_tac >> first_x_assum drule >> strip_tac >> gvs[]) >>
+  qexists_tac `get_tenv cx` >>
+  qexists_tac `fn_info1` >>
+  qexists_tac `vs ++ dflt_vs` >>
+  simp[] >>
+  rpt gen_tac >>
+  strip_tac >>
+  Cases_on `i < LENGTH es`
+  >- (irule (INST_TYPE[alpha|->``:string``]list_rel_typing_to_el) >>
+      simp[] >>
+      qexists_tac `es` >>
+      qexists_tac `fn_info1` >>
+      qexists_tac `get_tenv cx` >>
+      simp[]) >>
+  first_x_assum $ drule_at (Pat`eval_exprs`) >>
+  simp[] >>
+  disch_then $ drule_at Any >>
+  impl_tac >- (
+    qmatch_goalsub_abbrev_tac`env_consistent _ cxx`
+    \\ qspec_then`cxx`mp_tac env_consistent_empty
+    \\ simp[Abbr`cxx`, get_tenv_stk_irrelevant] )
+  \\ simp[get_tenv_stk_irrelevant]
+  \\ gvs[listTheory.LIST_REL_EL_EQN]
+  \\ simp[rich_listTheory.EL_APPEND2]
+  \\ rpt strip_tac
+  \\ first_x_assum irule
+  \\ simp[listTheory.EL_DROP]
+  \\ sg `MAP expr_type fn_info2 = MAP SND (DROP (LENGTH fn_info1 - LENGTH fn_info2) fn_info1)` >- (
+    qpat_x_assum `functions_well_typed _` mp_tac >>
+    simp_tac std_ss [functions_well_typed_def, functions_well_typed_stk_irrelevant] >>
+    disch_then (qspecl_then [`src_id_opt`, `fn`, `ts`, `fn_info0`, `fn_info1`,
+      `fn_info2`, `fn_info3`, `fn_info4`, `FEMPTY`] mp_tac) >>
+    impl_tac >- simp[fn_sigs_consistent_def] >> simp[] >>
+    strip_tac)
+  \\ pop_assum mp_tac
+  \\ simp[listTheory.LIST_EQ_REWRITE]
+  \\ simp[listTheory.EL_MAP]
+  \\ simp[listTheory.EL_DROP]
+  \\ rw[]
+  \\ gvs[Abbr`drop_n`]
+QED
+
+Finalise intcall_state_preserved
 
 (* ===== Type preservation by mutual induction ===== *)
 (*
