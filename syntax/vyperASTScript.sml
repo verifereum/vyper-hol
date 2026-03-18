@@ -92,6 +92,12 @@ Datatype:
   | GasPrice
   | PrevHash
   | ChainId
+  | Coinbase
+  | GasLimit
+  | BaseFee
+  | PrevRandao
+  | TxOrigin
+  | MsgGas
 End
 
 Datatype:
@@ -124,7 +130,9 @@ Datatype:
   = Len
   | Not
   | Neg
+  | Invert
   | Keccak256
+  | Sha256
   | AsWeiValue denomination
   | Concat num (* dynamic bound for return type *)
   | Slice num (* ditto *)
@@ -228,6 +236,16 @@ Datatype:
 End
 
 Datatype:
+  assert_reason
+  = AssertBare                (* simple assert, no reason *)
+  | AssertUnreachable         (* assert UNREACHABLE → INVALID opcode *)
+  | AssertReason expr         (* assert with Error(string) reason *)
+  ;
+  raise_reason
+  = RaiseBare                 (* bare raise: revert 0,0 *)
+  | RaiseUnreachable          (* raise UNREACHABLE → INVALID opcode *)
+  | RaiseReason expr          (* raise with Error(string) reason *)
+  ;
   stmt
   = Pass
   | Continue
@@ -235,9 +253,9 @@ Datatype:
   | Expr expr
   | For identifier type iterator num (stmt list)
   | If expr (stmt list) (stmt list)
-  | Assert expr expr
+  | Assert expr assert_reason
   | Log nsid (expr list)
-  | Raise expr
+  | Raise raise_reason
   | Return (expr option)
   | Assign assignment_target expr
   | AugAssign type base_assignment_target binop expr
