@@ -16,11 +16,12 @@
  *
  * REMAINING WORK (ordered by risk):
  *
- * --- BLOCKER: safe_cast_implies_well_typed ---
- *   Needed: safe_cast tv v = SOME v' ⇒ value_has_type tv v'
- *   (converse of safe_cast_well_typed)
- *   Blocks: append_element_preserves_type (in vyperAssignPreservesType),
- *   bind_arguments_scope_well_typed variants, and any case using safe_cast.
+ * --- RESOLVED: safe_cast type preservation ---
+ *   safe_cast_preserves_well_typed: value_has_type tv v ∧ safe_cast tv v = SOME v'
+ *     ⇒ value_has_type tv v'  (trivially from safe_cast_well_typed: cast is identity)
+ *   NOTE: the stronger "safe_cast tv v = SOME v' ⇒ value_has_type tv v'" is FALSE
+ *   for SArrayV (sparse arrays can have default values that violate sparse_has_type).
+ *   In well-typed programs, inputs already satisfy value_has_type, so safe_cast_preserves_well_typed suffices.
  *
  * --- RISK 1: assign_subscripts preserves value_has_type ---
  *   Partial progress in vyperAssignPreservesTypeScript.sml:

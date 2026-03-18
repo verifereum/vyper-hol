@@ -17,7 +17,7 @@ Theory vyperAssignPreservesType
 Ancestors
   vyperTyping vyperValueOperation vyperState vyperTypeSoundness
 Libs
-  sortingTheory alistTheory listTheory
+  sortingTheory alistTheory listTheory pairTheory
 
 (* ===== insert_sarray helpers ===== *)
 
@@ -292,40 +292,133 @@ QED
 
 (* ===== Main theorem: assign_subscripts preserves value_has_type ===== *)
 
+(* leaf_type: the type at the leaf of a subscript chain.
+   Used to state the base condition for assign_subscripts_preserves_type:
+   the caller provides that the base operation is well-typed at the LEAF type,
+   not the top-level type. *)
+Definition leaf_type_def:
+  leaf_type tv [] = tv /\
+  leaf_type (ArrayTV t _) (IntSubscript _ :: rest) = leaf_type t rest /\
+  leaf_type (StructTV l) (AttrSubscript id :: rest) =
+    (case ALOOKUP l id of SOME t => leaf_type t rest | NONE => NoneTV) /\
+  leaf_type _ (_ :: _) = NoneTV
+End
+
 (* assign_subscripts requires:
    - well_formed_type_value tv (for default_value typing in SArrayV)
-   - The leaf operation preserves typing (Replace/Update/AppendOp/PopOp)
-   For Replace: caller ensures new value has the right type.
-   For Update: caller ensures binop preserves types.
-   For AppendOp: new element must have element type.
+   - The leaf operation preserves typing (at the leaf type, not tv)
+   For Replace: caller ensures new value has the leaf type.
+   For Update: caller ensures binop result has the leaf type.
+   For AppendOp: new element must have element type of the leaf array.
    For PopOp: no extra condition needed. *)
+Theorem assign_subscripts_IntSubscript_ArrayV[local]:
+  !tv av idx rest ao.
+  assign_subscripts tv (ArrayV av) (IntSubscript idx::rest) ao =
+    (let
+       elem_tv =
+         case tv of
+           ArrayTV t v9 => t
+         | BaseTV v6 => NoneTV
+         | TupleTV v7 => NoneTV
+         | StructTV v10 => NoneTV
+         | FlagTV v11 => NoneTV
+         | NoneTV => NoneTV
+     in
+       case array_index tv av idx of
+         NONE => INR (RuntimeError "assign_subscripts array_index")
+       | SOME v =>
+           case assign_subscripts elem_tv v rest ao of
+             INL vj => array_set_index tv av idx vj
+           | INR err => INR err)
+Proof
+  simp[Once assign_subscripts_def]
+QED
+
+Theorem assign_subscripts_AttrSubscript_StructV[local]:
+  !tv al fld rest ao.
+  assign_subscripts tv (StructV al) (AttrSubscript fld::rest) ao =
+    (case ALOOKUP al fld of
+       NONE => INR (TypeError "assign_subscripts AttrSubscript")
+     | SOME fv =>
+         let
+           ftv =
+             case tv of
+               StructTV args =>
+                 (case ALOOKUP args fld of NONE => NoneTV | SOME t => t)
+             | BaseTV v6 => NoneTV
+             | TupleTV v7 => NoneTV
+             | ArrayTV v8 v9 => NoneTV
+             | FlagTV v11 => NoneTV
+             | NoneTV => NoneTV
+         in
+           case assign_subscripts ftv fv rest ao of
+             INL new_fv => INL (StructV (AFUPDKEY fld (K new_fv) al))
+           | INR err => INR err)
+Proof
+  simp[Once assign_subscripts_def]
+QED
 
 Theorem assign_subscripts_preserves_type:
   !tv a subs ao v.
     assign_subscripts tv a subs ao = INL v /\
     value_has_type tv a /\
     well_formed_type_value tv /\
-    (* Base cases delegate to caller *)
-    (subs = [] /\ (?nv. ao = Replace nv) ==> value_has_type tv v) /\
-    (subs = [] /\ (?ty bop nv. ao = Update ty bop nv) ==> value_has_type tv v) /\
-    (subs = [] /\ (?nv. ao = AppendOp nv) ==>
-       ?elem_tv n. tv = ArrayTV elem_tv (Dynamic n) /\
+    (* Base conditions at the leaf type *)
+    (!nv. ao = Replace nv ==> value_has_type (leaf_type tv subs) nv) /\
+    (!ty bop nv. ao = Update ty bop nv ==>
+       !la lv. value_has_type (leaf_type tv subs) la /\
+               assign_subscripts (leaf_type tv subs) la [] (Update ty bop nv) = INL lv ==>
+               value_has_type (leaf_type tv subs) lv) /\
+    (!nv. ao = AppendOp nv ==>
+       ?elem_tv n. leaf_type tv subs = ArrayTV elem_tv (Dynamic n) /\
                    value_has_type elem_tv nv) ==>
     value_has_type tv v
 Proof
-  (* Base cases and error cases solved by TRY block.
-     Remaining: IntSubscript on ArrayV, AttrSubscript on StructV.
-     Proof sketch for IntSubscript:
-       1. Cases_on tv = ArrayTV elem_tv bd
-       2. array_index_has_type gives value_has_type elem_tv v'
-       3. well_formed_type_value elem_tv from well_formed_type_value tv
-       4. IH gives value_has_type elem_tv vj
-       5. array_set_index_{DynArrayV,SArrayV} gives value_has_type tv result
-     Proof sketch for AttrSubscript:
-       1. Cases_on tv = StructTV ftypes
-       2. struct_field_has_type gives value_has_type field_tv v'
-       3. well_formed_type_value field_tv from well_formed_type_value tv
-       4. IH gives value_has_type field_tv v''
-       5. AFUPDKEY_struct_has_type gives struct_has_type ftypes (AFUPDKEY ...) *)
-  cheat
+  ho_match_mp_tac assign_subscripts_ind >> rpt conj_tac
+  >- simp[Once assign_subscripts_def, leaf_type_def] (* Replace *)
+  (* Update *)
+  >- (rpt gen_tac >> simp[leaf_type_def] >>
+      rpt strip_tac >>
+      first_x_assum irule >>
+      qexists_tac `a` >> gvs[])
+  (* AppendOp *)
+  >- (rpt gen_tac >> simp[leaf_type_def] >>
+      rpt strip_tac >> gvs[Once assign_subscripts_def] >>
+      irule append_element_preserves_type >>
+      gvs[] >> metis_tac[])
+  (* PopOp *)
+  >- (rpt gen_tac >> simp[leaf_type_def, Once assign_subscripts_def] >>
+      rpt strip_tac >>
+      drule_all pop_element_preserves_type >> simp[])
+  (* IntSubscript *)
+  >- (rpt gen_tac >> strip_tac >>
+      rpt gen_tac >> strip_tac >>
+      Cases_on `a` >> gvs[Once assign_subscripts_def] >>
+      rename1 `ArrayV av` >>
+      pop_assum mp_tac >>
+      simp[assign_subscripts_IntSubscript_ArrayV, LET_THM] >>
+      Cases_on `array_index tv av i` >> simp[] >>
+      rename1 `array_index tv av i = SOME elem` >>
+      qabbrev_tac `elem_tv = case tv of ArrayTV t _ => t | _ => NoneTV` >>
+      Cases_on `assign_subscripts elem_tv elem subs ao` >> simp[] >>
+      rename1 `assign_subscripts elem_tv elem subs ao = INL new_elem` >>
+      strip_tac >>
+      `value_has_type elem_tv elem` by (
+        Cases_on `tv` >> gvs[Abbr `elem_tv`, value_has_type_def] >>
+        irule array_index_has_type >>
+        Cases_on `b` >> gvs[value_has_type_def] >> metis_tac[]) >>
+      `well_formed_type_value elem_tv` by (
+        Cases_on `tv` >> gvs[Abbr `elem_tv`, well_formed_type_value_def]) >>
+      `leaf_type tv (IntSubscript i::subs) = leaf_type elem_tv subs` by (
+        simp[leaf_type_def, Abbr `elem_tv`]) >>
+      `value_has_type elem_tv new_elem` by (
+        first_x_assum irule >> gvs[]) >>
+      Cases_on `tv` >> gvs[Abbr `elem_tv`, value_has_type_def] >>
+      Cases_on `b` >> gvs[value_has_type_def] >>
+      TRY (irule array_set_index_DynArrayV >> gvs[value_has_type_def] >> NO_TAC) >>
+      irule array_set_index_SArrayV >> gvs[value_has_type_def])
+  (* AttrSubscript *)
+  >- cheat
+  (* Error cases: 10 goals *)
+  >> simp[Once assign_subscripts_def]
 QED
