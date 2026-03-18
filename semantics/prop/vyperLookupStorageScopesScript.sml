@@ -214,3 +214,12 @@ Theorem var_in_scope_update_toplevel_name:
 Proof
   simp[var_in_scope_def, lookup_name_update_toplevel_name]
 QED
+
+(* lookup_toplevel_name is independent of tl_scopes *)
+Theorem lookup_toplevel_name_tl_scopes:
+  ∀cx st mid m.
+    lookup_toplevel_name cx (tl_scopes st) mid m =
+    lookup_toplevel_name cx st mid m
+Proof
+  rpt gen_tac >> simp[tl_scopes_def, lookup_toplevel_name_scopes]
+QED
