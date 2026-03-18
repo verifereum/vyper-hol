@@ -228,6 +228,7 @@ QED
 
 Theorem step_alloca_preserves:!fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\ is_alloca_op inst.inst_opcode ==>
+    s'.vs_memory = s.vs_memory /\
     s'.vs_transient = s.vs_transient /\
     s'.vs_accounts = s.vs_accounts /\
     s'.vs_logs = s.vs_logs /\

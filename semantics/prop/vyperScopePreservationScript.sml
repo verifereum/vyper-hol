@@ -1,6 +1,6 @@
 Theory vyperScopePreservation
 Ancestors
-  vyperAST vyperMisc vyperState vyperValue vyperInterpreter vyperLookup vyperLookupStorage vyperImmutablesPreservation
+  vyperAST vyperMisc vyperState vyperValue vyperInterpreter vyperImmutablesPreservation
 
 (* ===== Lemmas about scopes preservation ===== *)
 
@@ -248,15 +248,18 @@ Proof
   gvs[]
 QED
 
-Theorem find_containing_scope_map_fdom:
+Theorem find_containing_scope_map_fdom[local]:
   ∀id sc pre env tv v rest a'.
     find_containing_scope id sc = SOME (pre, env, tv, v, rest) ⇒
     MAP FDOM (pre ++ env |+ (id, a') :: rest) = MAP FDOM sc
 Proof
-  rpt strip_tac >>
-  drule find_containing_scope_structure >> strip_tac >>
-  gvs[] >>
-  `id IN FDOM env` by gvs[finite_mapTheory.FLOOKUP_DEF] >>
+  Induct_on `sc` >- rw[find_containing_scope_def] >>
+  rpt gen_tac >> simp[find_containing_scope_def] >>
+  Cases_on `FLOOKUP h id` >> simp[] >-
+  (strip_tac >> PairCases_on `z` >> gvs[] >>
+   first_x_assum drule >> simp[]) >>
+  Cases_on `x` >> strip_tac >> gvs[] >>
+  `id ∈ FDOM env` by gvs[finite_mapTheory.FLOOKUP_DEF] >>
   gvs[pred_setTheory.ABSORPTION_RWT]
 QED
 
@@ -445,21 +448,6 @@ Proof
   >> TRY (first_x_assum drule >> gvs[] >> NO_TAC)
   >> rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])
   >> imp_res_tac assign_result_scopes >> gvs[]
-QED
-
-Theorem assign_target_preserves_scopes_dom_lookup:
-  (∀cx av ao st res st'.
-     assign_target cx av ao st = (INL res, st') ⇒
-     (∀n. IS_SOME (lookup_scopes n st.scopes) ⇔ IS_SOME (lookup_scopes n st'.scopes))) ∧
-  (∀cx gvs vs st res st'.
-     assign_targets cx gvs vs st = (INL res, st') ⇒
-     (∀n. IS_SOME (lookup_scopes n st.scopes) ⇔ IS_SOME (lookup_scopes n st'.scopes)))
-Proof
-  conj_tac >> rpt strip_tac >-
-  (drule (CONJUNCT1 assign_target_preserves_scopes_dom) >> strip_tac >>
-   metis_tac[lookup_scopes_dom_iff]) >>
-  drule (CONJUNCT2 assign_target_preserves_scopes_dom) >> strip_tac >>
-  metis_tac[lookup_scopes_dom_iff]
 QED
 
 Theorem new_variable_scope_property:

@@ -876,7 +876,7 @@ QED
 
 (* Specialized lookup_toplevel_name_after_update for integer types.
    These combine storable_value_transfer with lookup_toplevel_name_after_update
-   into a single conditional rewrite whose conditions are more easilt
+   into a single conditional rewrite whose conditions are more easily
    checkable. *)
 
 Theorem lookup_toplevel_name_after_update_uint:
@@ -907,4 +907,32 @@ Proof
   irule lookup_toplevel_name_after_update >> simp[] >>
   irule storable_value_transfer_int >>
   simp[]
+QED
+
+Theorem lookup_global_stk[local]:
+  ∀cx s mid id st.
+    lookup_global (cx with stk := s) mid id st =
+    lookup_global cx mid id st
+Proof
+  rpt gen_tac >>
+  simp[lookup_global_def, bind_def, get_module_code_def,
+       lift_option_type_def, return_def, raise_def, ignore_bind_def,
+       get_immutables_def, get_address_immutables_def,
+       lookup_var_slot_from_layout_def, get_tenv_def,
+       read_storage_slot_def, get_storage_backend_def,
+       get_accounts_def, get_transient_storage_def, lift_option_def] >>
+  rpt BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
+  simp[get_storage_backend_def, get_address_immutables_def,
+       bind_def, get_accounts_def, get_transient_storage_def,
+       lift_option_def, return_def, raise_def]
+QED
+
+(* lookup_toplevel_name is independent of cx.stk *)
+Theorem lookup_toplevel_name_stk:
+  ∀cx s st mid m.
+    lookup_toplevel_name (cx with stk := s) st mid m =
+    lookup_toplevel_name cx st mid m
+Proof
+  rpt gen_tac >>
+  simp[lookup_toplevel_name_def, lookup_global_stk]
 QED

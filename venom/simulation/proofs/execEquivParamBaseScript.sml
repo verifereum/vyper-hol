@@ -450,7 +450,7 @@ Theorem vsr_exec_alloca:
       (exec_alloca inst s1 alloc_size alloc_id)
       (exec_alloca inst s2 alloc_size alloc_id)
 Proof
-  rw[exec_alloca_def, LET_THM] >>
+  rw[exec_alloca_def, next_alloca_offset_def, LET_THM] >>
   imp_res_tac vsr_R_ok_fields >> gvs[] >>
   rpt CASE_TAC >> gvs[lift_result_def] >>
   ext_call_result_tac ()

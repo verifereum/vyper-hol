@@ -164,6 +164,18 @@ Proof
   PairCases_on `x` >> simp[lookup_toplevel_name_scopes]
 QED
 
+(* lookup_toplevel_name is independent of declare_name *)
+Theorem lookup_toplevel_name_declare_name:
+  ∀cx st n ty v mid m.
+    lookup_toplevel_name cx (declare_name st n ty v) mid m =
+    lookup_toplevel_name cx st mid m
+Proof
+  rpt gen_tac >>
+  simp[declare_name_def] >>
+  Cases_on `st.scopes` >>
+  simp[lookup_toplevel_name_scopes]
+QED
+
 Theorem update_toplevel_name_preserves_scopes:
   ∀cx st mid n v.
     (update_toplevel_name cx st mid n v).scopes = st.scopes
@@ -173,16 +185,25 @@ Proof
   imp_res_tac set_global_scopes >> simp[]
 QED
 
+(* lookup_name_typed is independent of update_toplevel_name *)
+Theorem lookup_name_typed_update_toplevel_name:
+  ∀cx st mid n v m.
+    lookup_name_typed (update_toplevel_name cx st mid n v) m =
+    lookup_name_typed st m
+Proof
+  rpt gen_tac >>
+  `(update_toplevel_name cx st mid n v).scopes = st.scopes`
+    by simp[update_toplevel_name_preserves_scopes] >>
+  simp[lookup_name_typed_def]
+QED
+
 (* lookup_name is independent of update_toplevel_name *)
 Theorem lookup_name_update_toplevel_name:
   ∀cx st mid n v m.
     lookup_name (update_toplevel_name cx st mid n v) m =
     lookup_name st m
 Proof
-  rpt gen_tac >>
-  `(update_toplevel_name cx st mid n v).scopes = st.scopes`
-    by simp[update_toplevel_name_preserves_scopes] >>
-  simp[lookup_name_def]
+  simp[lookup_name_typed_to_lookup_name, lookup_name_typed_update_toplevel_name]
 QED
 
 (* var_in_scope is independent of update_toplevel_name *)
@@ -192,4 +213,13 @@ Theorem var_in_scope_update_toplevel_name:
     var_in_scope st m
 Proof
   simp[var_in_scope_def, lookup_name_update_toplevel_name]
+QED
+
+(* lookup_toplevel_name is independent of tl_scopes *)
+Theorem lookup_toplevel_name_tl_scopes:
+  ∀cx st mid m.
+    lookup_toplevel_name cx (tl_scopes st) mid m =
+    lookup_toplevel_name cx st mid m
+Proof
+  rpt gen_tac >> simp[tl_scopes_def, lookup_toplevel_name_scopes]
 QED
