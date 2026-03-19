@@ -846,7 +846,7 @@ Definition well_typed_expr_def:
      well_formed_type env.type_defs ty /\
      well_formed_type env.type_defs target_ty) /\
   well_typed_expr env (Pop ty tgt) =
-    (well_typed_target env tgt /\
+    (?arr_ty. well_typed_target env tgt arr_ty /\
      well_formed_type env.type_defs ty) /\
   well_typed_expr env (Call ty (IntCall (src_id_opt, fn_name)) args drv) =
     (well_typed_exprs env args /\
@@ -863,16 +863,19 @@ Definition well_typed_expr_def:
   well_typed_expr env (Call ty Send args drv) =
     (well_typed_exprs env args /\
      LENGTH args = 2 /\ ty = NoneT) /\
-  well_typed_target env (NameTarget id) =
-    (string_to_num id IN FDOM env.var_types) /\
-  well_typed_target env (BareGlobalNameTarget id) =
-    (string_to_num id IN FDOM env.global_types) /\
-  well_typed_target env (TopLevelNameTarget (src_id_opt, id)) =
-    ((src_id_opt, string_to_num id) IN FDOM env.toplevel_types) /\
-  well_typed_target env (SubscriptTarget tgt e) =
-    (well_typed_target env tgt /\ well_typed_expr env e) /\
-  well_typed_target env (AttributeTarget tgt _) =
-    well_typed_target env tgt /\
+  well_typed_target env (NameTarget id) ty =
+    (FLOOKUP env.var_types (string_to_num id) = SOME ty) /\
+  well_typed_target env (BareGlobalNameTarget id) ty =
+    (FLOOKUP env.global_types (string_to_num id) = SOME ty) /\
+  well_typed_target env (TopLevelNameTarget (src_id_opt, id)) ty =
+    (FLOOKUP env.toplevel_types (src_id_opt, string_to_num id) = SOME ty) /\
+  well_typed_target env (SubscriptTarget tgt e) ty =
+    (?tgt_ty. well_typed_target env tgt tgt_ty /\
+     well_typed_expr env e /\
+     subscript_type_ok tgt_ty (expr_type e) ty) /\
+  well_typed_target env (AttributeTarget tgt id) ty =
+    (?tgt_ty. well_typed_target env tgt tgt_ty /\
+     attribute_type_ok env.type_defs tgt_ty id ty) /\
   well_typed_exprs env [] = T /\
   well_typed_exprs env (e::es) =
     (well_typed_expr env e /\ well_typed_exprs env es) /\
@@ -884,7 +887,7 @@ Definition well_typed_expr_def:
 Termination
   WF_REL_TAC `measure (\x. case x of
     | INL (_, e) => expr_size e
-    | INR (INL (_, tgt)) => base_assignment_target_size tgt
+    | INR (INL (_, tgt, _)) => base_assignment_target_size tgt
     | INR (INR (INL (_, es))) => expr4_size es
     | INR (INR (INR (INL (_, opt)))) => expr3_size opt
     | INR (INR (INR (INR (_, kes)))) => expr1_size kes)`
@@ -906,10 +909,13 @@ End
 
 (* well_typed for assignment targets (base + tuple) *)
 Definition well_typed_atarget_def:
-  well_typed_atarget env (BaseTarget bt) =
-    well_typed_target env bt /\
-  well_typed_atarget env (TupleTarget tgts) =
-    EVERY (well_typed_atarget env) tgts
+  well_typed_atarget env (BaseTarget bt) ty =
+    well_typed_target env bt ty /\
+  well_typed_atarget env (TupleTarget tgts) ty =
+    (?tys. LIST_REL (\tgt ty. well_typed_atarget env tgt ty) tgts tys /\
+           ty = TupleT tys)
+Termination
+  WF_REL_TAC`measure (λ(_,t,_). assignment_target_size t)`
 End
 
 Definition well_typed_stmt_def:
@@ -934,13 +940,13 @@ Definition well_typed_stmt_def:
     (well_typed_expr env e /\
      well_formed_type env.type_defs typ) /\
   well_typed_stmt env ret_ty (Append bt e) =
-    (well_typed_target env bt /\
+    (?arr_ty. well_typed_target env bt arr_ty /\
      well_typed_expr env e) /\
   well_typed_stmt env ret_ty (Assign tgt e) =
-    (well_typed_atarget env tgt /\
+    (well_typed_atarget env tgt (expr_type e) /\
      well_typed_expr env e) /\
   well_typed_stmt env ret_ty (AugAssign ty bt bop e) =
-    (well_typed_target env bt /\
+    (well_typed_target env bt ty /\
      well_typed_expr env e /\
      well_formed_type env.type_defs ty) /\
   well_typed_stmt env ret_ty (If e ss1 ss2) =
@@ -1834,6 +1840,148 @@ Proof
   \\ first_x_assum drule \\ gvs[]
 QED
 
+(*
+Theorem assign_targets_well_typed:
+  !cx gvs vs st res st' env.
+    assign_targets cx gvs vs st = (res, st') /\
+    state_well_typed st /\ env_consistent env cx st /\
+    LIST_REL (\gv v. !st res st'.
+      assign_target cx gv (Replace v) st = (res, st') /\
+      state_well_typed st /\ env_consistent env cx st ==>
+      state_well_typed st' /\ env_consistent env cx st') gvs vs ==>
+    state_well_typed st' /\ env_consistent env cx st'
+Proof
+  Induct_on`gvs` \\ simp[assign_target_def, return_def]
+  \\ rpt gen_tac \\ strip_tac
+  \\ BasicProvers.VAR_EQ_TAC
+  \\ qhdtm_x_assum`assign_targets`mp_tac
+  \\ simp_tac std_ss [assign_target_def]
+  \\ simp_tac std_ss [unitbind_apply, AllCaseEqs()]
+  \\ reverse strip_tac
+  \\ first_x_assum drule
+  >- ( last_x_assum kall_tac \\ gvs[] )
+  \\ first_x_assum drule
+  \\ ntac 2 strip_tac \\ gvs[]
+  \\ first_x_assum drule
+  \\ gvs[]
+QED
+*)
+
+(* TODO: move *)
+Theorem eval_targets_length:
+  !a b c d e.
+  eval_targets a b c = (INL d, e)
+  ==> LENGTH b = LENGTH d
+Proof
+  Induct_on`b` \\ rw[evaluate_def, return_def]
+  \\ gvs[bind_apply, AllCaseEqs(), return_def]
+  \\ first_x_assum drule \\ rw[]
+QED
+
+Theorem values_have_types_LIST_REL:
+  !tys tvs. values_have_types tys tvs =
+  LIST_REL value_has_type tys tvs
+Proof
+  Induct \\ rw[value_has_type_def]
+  \\ Cases_on`tvs` \\ gvs[value_has_type_def]
+QED
+
+Theorem assign_target_well_typed:
+  (!g. !cx tgt st0 st1 v st res st' env ty.
+    eval_target cx g st0 = (INL tgt, st1) /\
+    well_typed_atarget env g ty /\
+    assign_target cx tgt (Replace v) st = (res, st') /\
+    state_well_typed st /\
+    env_consistent env cx st /\
+    (?tyv. evaluate_type (get_tenv cx) ty = SOME tyv /\
+           value_has_type tyv v) ==>
+    state_well_typed st' /\ env_consistent env cx st') /\
+  (!gs. !cx gvs st0 st1 vs st res st' env tys.
+    eval_targets cx gs st0 = (INL gvs, st1) /\
+    LIST_REL (well_typed_atarget env) gs tys /\
+    assign_targets cx gvs vs st = (res, st') /\
+    state_well_typed st /\
+    env_consistent env cx st /\
+    LIST_REL (\ty v. ?tyv. evaluate_type (get_tenv cx) ty = SOME tyv /\
+              value_has_type tyv v) tys vs ==>
+    state_well_typed st' /\ env_consistent env cx st')
+Proof
+  ho_match_mp_tac assignment_target_induction
+  \\ conj_tac
+  >- (
+    simp[evaluate_def]
+    \\ rpt gen_tac
+    \\ simp[bind_def, CaseEq"prod", CaseEq"sum"]
+    \\ strip_tac
+    \\ pairarg_tac \\ gvs[return_def]
+    \\ Cases_on`loc` \\ gvs[assign_target_def]
+    \\ gvs[bind_apply, CaseEq"prod", CaseEq"sum", unitbind_apply]
+    \\ TRY(drule get_scopes_result \\ simp[])
+    \\ TRY(drule lift_option_type_state \\ simp[])
+    \\ TRY(drule get_immutables_state \\ simp[])
+    \\ TRY(drule lift_sum_state \\ simp[])
+    \\ TRY(drule lookup_global_state \\ simp[])
+    \\ TRY(
+      gvs[bind_def, CaseEq"prod",CaseEq"sum"]
+      \\ TRY(drule lift_option_state \\ simp[])
+      \\ pairarg_tac \\ gvs[bind_apply,CaseEq"prod",CaseEq"sum",unitbind_apply]
+      \\ gvs[set_scopes_def, return_def]
+      \\ TRY(drule lift_sum_state \\ simp[])
+      \\ ntac 3 strip_tac \\ gvs[]
+      \\ drule assign_result_state
+      \\ strip_tac \\ gvs[]
+      \\ cheat)
+    \\ cheat )
+ \\ conj_tac
+ >- (
+   rpt gen_tac \\ strip_tac
+   \\ rpt gen_tac
+   \\ simp[evaluate_def, bind_apply, return_def, AllCaseEqs()]
+   \\ strip_tac \\ gvs[]
+   \\ first_x_assum drule
+   \\ gvs[well_typed_atarget_def, SF ETA_ss]
+   \\ Cases_on`v` \\ gvs[assign_target_def, raise_def]
+   \\ Cases_on`a` \\ gvs[assign_target_def, raise_def]
+   \\ gvs[unitbind_apply, AllCaseEqs(), return_def,
+          type_check_def, assert_def]
+   \\ disch_then $ drule_then drule \\ gvs[]
+   \\ gvs[evaluate_type_def, AllCaseEqs(), PULL_EXISTS]
+   \\ gvs[evaluate_types_OPT_MMAP, OPT_MMAP_SOME_IFF]
+   \\ gvs[listTheory.LIST_REL_EL_EQN, listTheory.EVERY_EL]
+   \\ disch_then irule
+   \\ drule eval_targets_length
+   \\ simp[] \\ strip_tac
+   \\ rpt strip_tac
+   \\ gvs[optionTheory.IS_SOME_EXISTS, listTheory.EL_MAP, PULL_EXISTS]
+   \\ gvs[value_has_type_def,
+          values_have_types_LIST_REL, listTheory.LIST_REL_EL_EQN]
+   \\ gvs[listTheory.EL_MAP]
+   \\ first_x_assum drule
+   \\ first_x_assum drule
+   \\ rw[] \\ gvs[])
+ \\ conj_tac
+ >- ( simp[evaluate_def, return_def, assign_target_def] )
+ \\ rpt gen_tac \\ strip_tac
+ \\ rpt gen_tac
+ \\ simp_tac std_ss [evaluate_def, bind_apply, AllCaseEqs(), return_def]
+ \\ strip_tac
+ \\ rpt BasicProvers.VAR_EQ_TAC
+ \\ first_x_assum drule
+ \\ Cases_on`tys` \\ fs[]
+ \\ disch_then drule
+ \\ BasicProvers.VAR_EQ_TAC
+ \\ reverse $ fs[assign_target_def, unitbind_apply, AllCaseEqs()]
+ >- (
+   rpt BasicProvers.VAR_EQ_TAC
+   \\ first_x_assum $ funpow 2 drule_then drule
+   \\ simp[] )
+ \\ disch_then drule
+ \\ gvs[]
+ \\ disch_then irule
+ \\ first_x_assum irule
+ \\ rpt(goal_assum $ drule_at Any)
+QED
+
 (* eval_expr and related functions never return ReturnException *)
 Theorem evaluate_no_return:
   (* P0: eval_stmt — can return ReturnException, so T *)
@@ -2144,7 +2292,7 @@ Theorem type_preservation:
     state_well_typed st') /\
   (* P3: eval_target *)
   (!cx g. !env st res st'.
-    well_typed_atarget env g /\
+    (?ty. well_typed_atarget env g ty) /\
     env_consistent env cx st /\
     state_well_typed st /\
     functions_well_typed cx /\
@@ -2152,7 +2300,7 @@ Theorem type_preservation:
     state_well_typed st' /\ env_consistent env cx st') /\
   (* P4: eval_targets *)
   (!cx gs. !env st res st'.
-    EVERY (well_typed_atarget env) gs /\
+    EVERY (\g. ?ty. well_typed_atarget env g ty) gs /\
     env_consistent env cx st /\
     state_well_typed st /\
     functions_well_typed cx /\
@@ -2160,7 +2308,7 @@ Theorem type_preservation:
     state_well_typed st' /\ env_consistent env cx st') /\
   (* P5: eval_base_target *)
   (!cx bt. !env st res st'.
-    well_typed_target env bt /\
+    (?ty. well_typed_target env bt ty) /\
     env_consistent env cx st /\
     state_well_typed st /\
     functions_well_typed cx /\
@@ -2334,8 +2482,27 @@ Resume type_preservation[assign]:
   \\ rewrite_tac[bind_def, ignore_bind_def, CaseEq"sum", CaseEq"prod"]
   \\ simp_tac std_ss []
   \\ strip_tac
-  \\ first_x_assum drule_all
+  \\ first_x_assum $ drule_at Any
+  \\ simp_tac std_ss [PULL_EXISTS]
+  \\ disch_then drule_all
   \\ strip_tac
+  \\ qpat_x_assum`_ = (res,_)`mp_tac
+  \\ simp_tac std_ss [sum_CASE_rator, CaseEq"sum", CaseEq"prod"]
+  \\ reverse strip_tac
+  >- (
+    first_x_assum(qspec_then`ARB`kall_tac)
+    \\ gvs[] \\ rw[]
+    \\ imp_res_tac evaluate_no_return
+    \\ gvs[] )
+  \\ pop_assum mp_tac
+  \\ simp_tac std_ss [bind_apply, AllCaseEqs(), return_def]
+  \\ BasicProvers.VAR_EQ_TAC
+  \\ first_x_assum drule
+  \\ disch_then $ funpow 3 drule_then drule
+  \\ ntac 2 strip_tac \\ gvs[]
+  \\ TRY ( drule materialise_error
+           \\ drule materialise_state \\ rw[] )
+  \\ TRY ( rw[] \\ drule (cj 8 evaluate_no_return) \\ rw[] \\ NO_TAC )
   \\ cheat
 QED
 
