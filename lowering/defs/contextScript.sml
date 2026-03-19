@@ -28,6 +28,8 @@
 Theory context
 Ancestors
   emitHelper compileEnv venomInst
+Libs
+  monadsyntax
 
 (* data_location, word_scale, is_slot_addressed now in compileEnvScript
    (shared so exprLowering can use them without circular dependency) *)
@@ -124,18 +126,18 @@ End
             F in runtime context — LocCode store is invalid (read-only).
    Mirrors Python: context.py ptr_store + is_ctor dispatch. *)
 Definition compile_ptr_store_def:
-  compile_ptr_store is_ctor LocMemory dst val st =
-    emit_void MSTORE [dst; val] st ∧
-  compile_ptr_store is_ctor LocStorage dst val st =
-    emit_void SSTORE [dst; val] st ∧
-  compile_ptr_store is_ctor LocTransient dst val st =
-    emit_void TSTORE [dst; val] st ∧
-  compile_ptr_store is_ctor LocCode dst val st =
+  compile_ptr_store is_ctor LocMemory dst val =
+    emit_void MSTORE [dst; val] ∧
+  compile_ptr_store is_ctor LocStorage dst val =
+    emit_void SSTORE [dst; val] ∧
+  compile_ptr_store is_ctor LocTransient dst val =
+    emit_void TSTORE [dst; val] ∧
+  compile_ptr_store is_ctor LocCode dst val =
     (if is_ctor then emit_void ISTORE [dst; val]
-     else emit_void INVALID []) st ∧  (* runtime: code is read-only *)
+     else emit_void INVALID []) ∧  (* runtime: code is read-only *)
   (* Python raises CompilerPanic("cannot store to: CALLDATA").
      Emit INVALID instead of silent no-op. Unreachable for well-typed programs. *)
-  compile_ptr_store is_ctor LocCalldata _ _ st = emit_void INVALID [] st
+  compile_ptr_store is_ctor LocCalldata _ _ = emit_void INVALID []
 End
 
 (* ===== Memory Copy ===== *)
@@ -143,56 +145,58 @@ End
 (* Copy memory region via MCOPY (Cancun+).
    Mirrors Python: context.py copy_memory *)
 Definition compile_copy_memory_def:
-  compile_copy_memory dst src 0 st = ((), st) ∧
-  compile_copy_memory dst src size st =
-    emit_void MCOPY [dst; src; Lit (n2w size)] st
+  compile_copy_memory dst src 0 = return () ∧
+  compile_copy_memory dst src size =
+    emit_void MCOPY [dst; src; Lit (n2w size)]
 End
 
 (* Parameterized word-copy loop between two address spaces.
    Mirrors Python: context.py _word_copy_loop
    Used for storage↔memory and transient↔memory bulk copies. *)
 Definition compile_word_copy_loop_def:
-  compile_word_copy_loop src_op dst_op word_count load_loc store_loc is_ctor st =
+  compile_word_copy_loop src_op dst_op word_count load_loc store_loc is_ctor =
     let src_scale = word_scale load_loc in
     let dst_scale = word_scale store_loc in
-    (* Create blocks: cond, body, exit *)
-    let (cond_lbl, st1) = fresh_label "wcopy_cond" st in
-    let (body_lbl, st2) = fresh_label "wcopy_body" st1 in
-    let (exit_lbl, st3) = fresh_label "wcopy_exit" st2 in
-    (* Initialize counter *)
-    let (counter_var, st4) = fresh_var st3 in
-    let (_, st5) = emit_inst ASSIGN [Lit 0w] [counter_var] st4 in
-    let (_, st6) = emit_inst JMP [Label cond_lbl] [] st5 in
-    (* Cond block *)
-    let (_, st7) = new_block cond_lbl st6 in
-    let (done_op, st8) = emit_op EQ [Var counter_var; Lit (n2w word_count)] st7 in
-    let (_, st9) = emit_inst JNZ [done_op; Label exit_lbl; Label body_lbl] [] st8 in
-    (* Body block *)
-    let (_, st10) = new_block body_lbl st9 in
-    (* Compute source offset *)
-    let (src_off, st11) =
-      if src_scale = 1 then
-        emit_op ADD [src_op; Var counter_var] st10
-      else
-        let (scaled, st_a) = emit_op MUL [Var counter_var; Lit (n2w src_scale)] st10 in
-        emit_op ADD [src_op; scaled] st_a in
-    (* Load from source *)
-    let (val_loaded, st12) = compile_ptr_load is_ctor load_loc src_off st11 in
-    (* Compute dest offset *)
-    let (dst_off, st13) =
-      if dst_scale = 1 then
-        emit_op ADD [dst_op; Var counter_var] st12
-      else
-        let (scaled, st_a) = emit_op MUL [Var counter_var; Lit (n2w dst_scale)] st12 in
-        emit_op ADD [dst_op; scaled] st_a in
-    (* Store to dest *)
-    let (_, st14) = compile_ptr_store is_ctor store_loc dst_off val_loaded st13 in
-    (* Increment counter *)
-    let (new_ctr, st15) = emit_op ADD [Var counter_var; Lit 1w] st14 in
-    let (_, st16) = emit_inst ASSIGN [new_ctr] [counter_var] st15 in
-    let (_, st17) = emit_inst JMP [Label cond_lbl] [] st16 in
-    (* Exit block *)
-    new_block exit_lbl st17
+    do
+      (* Create blocks: cond, body, exit *)
+      cond_lbl <- fresh_label "wcopy_cond";
+      body_lbl <- fresh_label "wcopy_body";
+      exit_lbl <- fresh_label "wcopy_exit";
+      (* Initialize counter *)
+      counter_var <- fresh_var;
+      emit_inst ASSIGN [Lit 0w] [counter_var];
+      emit_inst JMP [Label cond_lbl] [];
+      (* Cond block *)
+      new_block cond_lbl;
+      done_op <- emit_op EQ [Var counter_var; Lit (n2w word_count)];
+      emit_inst JNZ [done_op; Label exit_lbl; Label body_lbl] [];
+      (* Body block *)
+      new_block body_lbl;
+      (* Compute source offset *)
+      src_off <- (if src_scale = 1 then
+        emit_op ADD [src_op; Var counter_var]
+      else do
+        scaled <- emit_op MUL [Var counter_var; Lit (n2w src_scale)];
+        emit_op ADD [src_op; scaled]
+      od);
+      (* Load from source *)
+      val_loaded <- compile_ptr_load is_ctor load_loc src_off;
+      (* Compute dest offset *)
+      dst_off <- (if dst_scale = 1 then
+        emit_op ADD [dst_op; Var counter_var]
+      else do
+        scaled <- emit_op MUL [Var counter_var; Lit (n2w dst_scale)];
+        emit_op ADD [dst_op; scaled]
+      od);
+      (* Store to dest *)
+      compile_ptr_store is_ctor store_loc dst_off val_loaded;
+      (* Increment counter *)
+      new_ctr <- emit_op ADD [Var counter_var; Lit 1w];
+      emit_inst ASSIGN [new_ctr] [counter_var];
+      emit_inst JMP [Label cond_lbl] [];
+      (* Exit block *)
+      new_block exit_lbl
+    od
 End
 
 (* ===== Store Memory ===== *)
@@ -211,48 +215,49 @@ End
    For layout-aware copy when src_typ ≠ dst_typ, see
    compile_store_memory_typed and compile_assign_value. *)
 Definition compile_store_memory_def:
-  compile_store_memory val_op dst_op is_prim_word mem_size st =
+  compile_store_memory val_op dst_op is_prim_word mem_size =
     if is_prim_word then
-      emit_void MSTORE [dst_op; val_op] st
+      emit_void MSTORE [dst_op; val_op]
     else
-      compile_copy_memory dst_op val_op mem_size st
+      compile_copy_memory dst_op val_op mem_size
 End
 
 (* ===== Load from Storage/Transient to Memory ===== *)
 (* Mirrors Python: context.py _load_storage_to_memory *)
 Definition compile_storage_to_memory_def:
-  compile_storage_to_memory slot buf word_count st =
-    compile_word_copy_loop slot buf word_count LocStorage LocMemory F st
+  compile_storage_to_memory slot buf word_count =
+    compile_word_copy_loop slot buf word_count LocStorage LocMemory F
 End
 
 (* Mirrors Python: context.py _store_memory_to_storage *)
 Definition compile_memory_to_storage_def:
-  compile_memory_to_storage buf slot word_count st =
-    compile_word_copy_loop buf slot word_count LocMemory LocStorage F st
+  compile_memory_to_storage buf slot word_count =
+    compile_word_copy_loop buf slot word_count LocMemory LocStorage F
 End
 
 (* Mirrors Python: context.py _load_transient_to_memory *)
 Definition compile_transient_to_memory_def:
-  compile_transient_to_memory slot buf word_count st =
-    compile_word_copy_loop slot buf word_count LocTransient LocMemory F st
+  compile_transient_to_memory slot buf word_count =
+    compile_word_copy_loop slot buf word_count LocTransient LocMemory F
 End
 
 (* Mirrors Python: context.py _store_memory_to_transient *)
 Definition compile_memory_to_transient_def:
-  compile_memory_to_transient buf slot word_count st =
-    compile_word_copy_loop buf slot word_count LocMemory LocTransient F st
+  compile_memory_to_transient buf slot word_count =
+    compile_word_copy_loop buf slot word_count LocMemory LocTransient F
 End
 
 (* ===== Allocate Buffer ===== *)
 (* Allocate memory buffer with provenance tracking.
-   Returns (buffer # compile_state).
+   Returns buffer in monad.
    buffer.buf_operand is the IR operand; buffer.buf_size is the allocation size.
    Use base_ptr buf for a LocatedValue with provenance.
    Mirrors Python: context.py allocate_buffer → Buffer *)
 Definition compile_alloc_buffer_def:
-  compile_alloc_buffer size st =
-    let (op, st1) = emit_op ALLOCA [Lit (n2w size); Lit 0w] st in
-    (<| buf_operand := op; buf_size := size |>, st1)
+  compile_alloc_buffer size =
+    do op <- emit_op ALLOCA [Lit (n2w size); Lit 0w];
+       return <| buf_operand := op; buf_size := size |>
+    od
 End
 
 (* ===== Load/Store Storage ===== *)
@@ -260,51 +265,61 @@ End
    Primitive: sload directly.
    Complex: allocate buffer, copy from storage to memory. *)
 Definition compile_load_storage_def:
-  compile_load_storage slot is_prim_word word_count alloca_size st =
+  compile_load_storage slot is_prim_word word_count alloca_size =
     if is_prim_word then
-      emit_op SLOAD [slot] st
+      emit_op SLOAD [slot]
     else if word_count = 1 then
-            let (buf_op_alloc, st2) = compile_alloc_buffer alloca_size st in
-            let buf_op = buf_op_alloc.buf_operand in
-      let (loaded, st3) = emit_op SLOAD [slot] st2 in
-      let (_, st4) = emit_void MSTORE [buf_op; loaded] st3 in
-      (buf_op, st4)
+      do buf_op_alloc <- compile_alloc_buffer alloca_size;
+         let buf_op = buf_op_alloc.buf_operand in
+         do loaded <- emit_op SLOAD [slot];
+            emit_void MSTORE [buf_op; loaded];
+            return buf_op
+         od
+      od
     else
-            let (buf_op_alloc, st2) = compile_alloc_buffer alloca_size st in
-            let buf_op = buf_op_alloc.buf_operand in
-      let (_, st3) = compile_storage_to_memory slot buf_op word_count st2 in
-      (buf_op, st3)
+      do buf_op_alloc <- compile_alloc_buffer alloca_size;
+         let buf_op = buf_op_alloc.buf_operand in
+         do compile_storage_to_memory slot buf_op word_count;
+            return buf_op
+         od
+      od
 End
 
 (* Mirrors Python: context.py store_storage *)
 Definition compile_store_storage_def:
-  compile_store_storage val slot is_prim_word word_count st =
+  compile_store_storage val slot is_prim_word word_count =
     if is_prim_word then
-      emit_void SSTORE [slot; val] st
+      emit_void SSTORE [slot; val]
     else if word_count = 1 then
-      let (loaded, st1) = emit_op MLOAD [val] st in
-      emit_void SSTORE [slot; loaded] st1
+      do loaded <- emit_op MLOAD [val];
+         emit_void SSTORE [slot; loaded]
+      od
     else
-      let (_, st1) = compile_memory_to_storage val slot word_count st in
-      ((), st1)
+      do _ <- compile_memory_to_storage val slot word_count;
+         return ()
+      od
 End
 
 (* ===== Load/Store Transient ===== *)
 Definition compile_load_transient_def:
-  compile_load_transient slot is_prim_word word_count alloca_size st =
+  compile_load_transient slot is_prim_word word_count alloca_size =
     if is_prim_word then
-      emit_op TLOAD [slot] st
+      emit_op TLOAD [slot]
     else if word_count = 1 then
-            let (buf_op_alloc, st2) = compile_alloc_buffer alloca_size st in
-            let buf_op = buf_op_alloc.buf_operand in
-      let (loaded, st3) = emit_op TLOAD [slot] st2 in
-      let (_, st4) = emit_void MSTORE [buf_op; loaded] st3 in
-      (buf_op, st4)
+      do buf_op_alloc <- compile_alloc_buffer alloca_size;
+         let buf_op = buf_op_alloc.buf_operand in
+         do loaded <- emit_op TLOAD [slot];
+            emit_void MSTORE [buf_op; loaded];
+            return buf_op
+         od
+      od
     else
-            let (buf_op_alloc, st2) = compile_alloc_buffer alloca_size st in
-            let buf_op = buf_op_alloc.buf_operand in
-      let (_, st3) = compile_transient_to_memory slot buf_op word_count st2 in
-      (buf_op, st3)
+      do buf_op_alloc <- compile_alloc_buffer alloca_size;
+         let buf_op = buf_op_alloc.buf_operand in
+         do compile_transient_to_memory slot buf_op word_count;
+            return buf_op
+         od
+      od
 End
 
 (* Mirrors Python: context.py code_to_memory
@@ -312,27 +327,29 @@ End
    Python: code_to_memory always calls dload, even in ctor context.
    ILOAD is only used for single-word immutables in load_immutable_ctor. *)
 Definition compile_code_to_memory_def:
-  compile_code_to_memory offset dst word_count st =
-    if word_count = 0 then ((), st)
+  compile_code_to_memory (offset:operand) (dst:operand) (word_count:num) =
+    if word_count = 0 then (return () : unit compiler)
     else
-      let (_, st1) = compile_word_copy_loop offset dst word_count
-                       LocCode LocMemory F st in
-      ((), st1)
+      do compile_word_copy_loop offset dst word_count LocCode LocMemory F;
+         return ()
+      od
 End
 
 (* ===== Load/Store Immutables ===== *)
 (* Mirrors Python: context.py load_immutable
    is_ctor: T → ILOAD (ctor staging), F → DLOAD (deployed bytecode). *)
 Definition compile_load_immutable_def:
-  compile_load_immutable offset is_prim_word word_count alloca_size is_ctor st =
+  compile_load_immutable offset is_prim_word word_count alloca_size is_ctor =
     if is_prim_word then
-      (if is_ctor then emit_op ILOAD [offset] st
-       else emit_op DLOAD [offset] st)
+      (if is_ctor then emit_op ILOAD [offset]
+       else emit_op DLOAD [offset])
     else
-            let (buf_op_alloc, st2) = compile_alloc_buffer alloca_size st in
-            let buf_op = buf_op_alloc.buf_operand in
-      let (_, st3) = compile_code_to_memory offset buf_op word_count st2 in
-      (buf_op, st3)
+      do buf_op_alloc <- compile_alloc_buffer alloca_size;
+         let buf_op = buf_op_alloc.buf_operand in
+         do compile_code_to_memory offset buf_op word_count;
+            return buf_op
+         od
+      od
 End
 
 (* ===== Materialize to Memory ===== *)
@@ -344,16 +361,16 @@ End
    Mirrors Python: context.py unwrap() for complex types. *)
 Definition compile_materialize_to_memory_def:
   compile_materialize_to_memory val_op src_loc is_prim word_count
-                                alloca_size is_ctor st =
-    if is_prim then (val_op, st)
+                                alloca_size is_ctor =
+    if is_prim then return val_op
     else case src_loc of
        LocStorage =>
-         compile_load_storage val_op F word_count alloca_size st
+         compile_load_storage val_op F word_count alloca_size
      | LocTransient =>
-         compile_load_transient val_op F word_count alloca_size st
+         compile_load_transient val_op F word_count alloca_size
      | LocCode =>
-         compile_load_immutable val_op F word_count alloca_size is_ctor st
-     | _ => (val_op, st)
+         compile_load_immutable val_op F word_count alloca_size is_ctor
+     | _ => return val_op
 End
 
 (* ===== Nonreentrant Lock ===== *)
@@ -361,32 +378,34 @@ End
    is_view: T for view functions — check lock but don't acquire it.
    Python: if func_t.mutability != VIEW: STORE(key, temp_value) *)
 Definition compile_nonreentrant_lock_def:
-  compile_nonreentrant_lock nkey use_transient is_view st =
+  compile_nonreentrant_lock nkey use_transient is_view =
     if use_transient then
-      let (current, st1) = emit_op TLOAD [Lit (n2w nkey)] st in
-      let (locked, st2) = emit_op EQ [current; Lit 1w] st1 in
-      let (not_locked, st3) = emit_op ISZERO [locked] st2 in
-      let (_, st4) = emit_void ASSERT [not_locked] st3 in
-      if is_view then ((), st4)
-      else emit_void TSTORE [Lit (n2w nkey); Lit 1w] st4
+      do current <- emit_op TLOAD [Lit (n2w nkey)];
+         locked <- emit_op EQ [current; Lit 1w];
+         not_locked <- emit_op ISZERO [locked];
+         emit_void ASSERT [not_locked];
+         if is_view then return ()
+         else emit_void TSTORE [Lit (n2w nkey); Lit 1w]
+      od
     else
-      let (current, st1) = emit_op SLOAD [Lit (n2w nkey)] st in
-      let (locked, st2) = emit_op EQ [current; Lit 2w] st1 in
-      let (not_locked, st3) = emit_op ISZERO [locked] st2 in
-      let (_, st4) = emit_void ASSERT [not_locked] st3 in
-      if is_view then ((), st4)
-      else emit_void SSTORE [Lit (n2w nkey); Lit 2w] st4
+      do current <- emit_op SLOAD [Lit (n2w nkey)];
+         locked <- emit_op EQ [current; Lit 2w];
+         not_locked <- emit_op ISZERO [locked];
+         emit_void ASSERT [not_locked];
+         if is_view then return ()
+         else emit_void SSTORE [Lit (n2w nkey); Lit 2w]
+      od
 End
 
 (* Python: if func_t.mutability == VIEW: return (no unlock needed)
    is_view: T → no-op *)
 Definition compile_nonreentrant_unlock_def:
-  compile_nonreentrant_unlock nkey use_transient is_view st =
-    if is_view then ((), st)
+  compile_nonreentrant_unlock nkey use_transient is_view =
+    if is_view then return ()
     else if use_transient then
-      emit_void TSTORE [Lit (n2w nkey); Lit 0w] st
+      emit_void TSTORE [Lit (n2w nkey); Lit 0w]
     else
-      emit_void SSTORE [Lit (n2w nkey); Lit 3w] st
+      emit_void SSTORE [Lit (n2w nkey); Lit 3w]
 End
 
 (* ===== Zero Memory ===== *)
@@ -395,22 +414,23 @@ End
    i: current word index, words: total words to zero.
    Mirrors Python: context.py zero_memory *)
 Definition compile_zero_memory_loop_def:
-  compile_zero_memory_loop ptr_op i words st =
-    if i >= words then ((), st)
+  compile_zero_memory_loop ptr_op i words =
+    if i >= words then return ()
     else
-      let (dst, st1) = if i = 0 then (ptr_op, st)
-                        else emit_op ADD [ptr_op; Lit (n2w (i * 32))] st in
-      let (_, st2) = emit_void MSTORE [dst; Lit 0w] st1 in
-      compile_zero_memory_loop ptr_op (i + 1) words st2
+      do dst <- (if i = 0 then return ptr_op
+                 else emit_op ADD [ptr_op; Lit (n2w (i * 32))]);
+         emit_void MSTORE [dst; Lit 0w];
+         compile_zero_memory_loop ptr_op (i + 1) words
+      od
 Termination
-  WF_REL_TAC `measure (λ(ptr,i,words,st). words - i)`
+  WF_REL_TAC `measure (λ(ptr,i,words). words - i)`
 End
 
 Definition compile_zero_memory_def:
-  compile_zero_memory ptr_op 0 st = ((), st) ∧
-  compile_zero_memory ptr_op size st =
+  compile_zero_memory ptr_op 0 = return () ∧
+  compile_zero_memory ptr_op size =
     let words = (size + 31) DIV 32 in
-    compile_zero_memory_loop ptr_op 0 words st
+    compile_zero_memory_loop ptr_op 0 words
 End
 
 (* ===== Bytestring Operations ===== *)
@@ -443,37 +463,45 @@ End
    word_count: storage_size_in_words (number of 32-byte slots to copy).
    Mirrors Python: context.py ensure_in_memory *)
 Definition compile_ensure_in_memory_def:
-  compile_ensure_in_memory ptr_op loc mem_bytes word_count is_ctor st =
+  compile_ensure_in_memory ptr_op loc mem_bytes word_count is_ctor =
     case loc of
-      LocMemory => (ptr_op, st)
+      LocMemory => return ptr_op
     | LocStorage =>
-        let (buf_op_alloc, st1) = compile_alloc_buffer (mem_bytes + 32) st in
-        let buf_op = buf_op_alloc.buf_operand in
-        let (_, st2) = compile_storage_to_memory ptr_op buf_op word_count st1 in
-        (buf_op, st2)
+        do buf_op_alloc <- compile_alloc_buffer (mem_bytes + 32);
+           let buf_op = buf_op_alloc.buf_operand in
+           do compile_storage_to_memory ptr_op buf_op word_count;
+              return buf_op
+           od
+        od
     | LocTransient =>
-        let (buf_op_alloc, st1) = compile_alloc_buffer (mem_bytes + 32) st in
-        let buf_op = buf_op_alloc.buf_operand in
-        let (_, st2) = compile_transient_to_memory ptr_op buf_op word_count st1 in
-        (buf_op, st2)
+        do buf_op_alloc <- compile_alloc_buffer (mem_bytes + 32);
+           let buf_op = buf_op_alloc.buf_operand in
+           do compile_transient_to_memory ptr_op buf_op word_count;
+              return buf_op
+           od
+        od
     | LocCode =>
         (* Always DLOAD: code_to_memory reads from code section.
            Mirrors Python: ensure_bytestring_in_memory → code_to_memory → dload. *)
-        let (buf_op_alloc, st1) = compile_alloc_buffer (mem_bytes + 32) st in
-        let buf_op = buf_op_alloc.buf_operand in
-        let (_, st2) = compile_code_to_memory ptr_op buf_op word_count st1 in
-        (buf_op, st2)
+        do buf_op_alloc <- compile_alloc_buffer (mem_bytes + 32);
+           let buf_op = buf_op_alloc.buf_operand in
+           do compile_code_to_memory ptr_op buf_op word_count;
+              return buf_op
+           od
+        od
     | LocCalldata =>
         (* Load actual length from calldata (ptr_op points to length word).
            Allocate buffer, copy length + data. mem_bytes is max size. *)
-        let (len_op, st1) = emit_op CALLDATALOAD [ptr_op] st in
-        let (buf_op_alloc, st2) = compile_alloc_buffer (mem_bytes + 32) st1 in
-        let buf_op = buf_op_alloc.buf_operand in
-        let (_, st3) = emit_void MSTORE [buf_op; len_op] st2 in
-        let (data_ptr, st4) = emit_op ADD [buf_op; Lit 32w] st3 in
-        let (src_data, st5) = emit_op ADD [ptr_op; Lit 32w] st4 in
-        let (_, st6) = emit_void CALLDATACOPY [data_ptr; src_data; len_op] st5 in
-        (buf_op, st6)
+        do len_op <- emit_op CALLDATALOAD [ptr_op];
+           buf_op_alloc <- compile_alloc_buffer (mem_bytes + 32);
+           let buf_op = buf_op_alloc.buf_operand in
+           do emit_void MSTORE [buf_op; len_op];
+              data_ptr <- emit_op ADD [buf_op; Lit 32w];
+              src_data <- emit_op ADD [ptr_op; Lit 32w];
+              emit_void CALLDATACOPY [data_ptr; src_data; len_op];
+              return buf_op
+           od
+        od
 End
 
 (* ===== Slot-to-Memory Copy ===== *)
@@ -501,28 +529,32 @@ End
 (* ===== Load Calldata ===== *)
 (* Mirrors Python: context.py load_calldata *)
 Definition compile_load_calldata_def:
-  compile_load_calldata offset is_prim_word word_count alloca_size st =
+  compile_load_calldata offset is_prim_word word_count alloca_size =
     if is_prim_word then
-      emit_op CALLDATALOAD [offset] st
+      emit_op CALLDATALOAD [offset]
     else if word_count = 1 then
-            let (buf_op_alloc, st2) = compile_alloc_buffer alloca_size st in
-            let buf_op = buf_op_alloc.buf_operand in
-      let (loaded, st3) = emit_op CALLDATALOAD [offset] st2 in
-      let (_, st4) = emit_void MSTORE [buf_op; loaded] st3 in
-      (buf_op, st4)
+      do buf_op_alloc <- compile_alloc_buffer alloca_size;
+         let buf_op = buf_op_alloc.buf_operand in
+         do loaded <- emit_op CALLDATALOAD [offset];
+            emit_void MSTORE [buf_op; loaded];
+            return buf_op
+         od
+      od
     else
-            let (buf_op_alloc, st2) = compile_alloc_buffer alloca_size st in
-            let buf_op = buf_op_alloc.buf_operand in
-      (* calldatacopy from offset to buf, size bytes *)
-      let (_, st3) = emit_void CALLDATACOPY [buf_op; offset; Lit (n2w alloca_size)] st2 in
-      (buf_op, st3)
+      do buf_op_alloc <- compile_alloc_buffer alloca_size;
+         let buf_op = buf_op_alloc.buf_operand in
+         do (* calldatacopy from offset to buf, size bytes *)
+            emit_void CALLDATACOPY [buf_op; offset; Lit (n2w alloca_size)];
+            return buf_op
+         od
+      od
 End
 
 (* ===== Copy Memory Dynamic ===== *)
 (* Mirrors Python: context.py copy_memory_dynamic *)
 Definition compile_copy_memory_dynamic_def:
-  compile_copy_memory_dynamic dst src length_op st =
-    emit_void MCOPY [dst; src; length_op] st
+  compile_copy_memory_dynamic dst src length_op =
+    emit_void MCOPY [dst; src; length_op]
 End
 
 (* NOTE: compile_load_by_loc deleted — duplicate of compile_ptr_load *)
@@ -530,9 +562,9 @@ End
 (* ===== With Byte Offset ===== *)
 (* Add byte offset to base pointer. Mirrors Python: context.py _with_byte_offset *)
 Definition compile_with_byte_offset_def:
-  compile_with_byte_offset base 0 st = (base, st) ∧
-  compile_with_byte_offset base offset st =
-    emit_op ADD [base; Lit (n2w offset)] st
+  compile_with_byte_offset base 0 = return base ∧
+  compile_with_byte_offset base offset =
+    emit_op ADD [base; Lit (n2w offset)]
 End
 
 (* ===== Store Memory for Bytestrings ===== *)
@@ -540,17 +572,19 @@ End
    Mirrors Python: context.py store_memory for _BytestringT.
    Placed before typed copy defs since they dispatch to it. *)
 Definition compile_store_bytestring_def:
-  compile_store_bytestring val_op dst_op st =
-    (* Load actual length from val *)
-    let (src_len, st1) = emit_op MLOAD [val_op] st in
-    (* ceil32(length) = (length + 31) & ~31 *)
-    let (padded_len, st2) = emit_op ADD [src_len; Lit 31w] st1 in
-    (* ~31 = 0xffffffffffffffe0 *)
-    let mask = i2w (- &32) : bytes32 in
-    let (rounded, st3) = emit_op AND [padded_len; Lit mask] st2 in
-    (* Total copy: 32 (length word) + ceil32(length) *)
-    let (copy_len, st4) = emit_op ADD [rounded; Lit 32w] st3 in
-    emit_void MCOPY [dst_op; val_op; copy_len] st4
+  compile_store_bytestring val_op dst_op =
+    do (* Load actual length from val *)
+       src_len <- emit_op MLOAD [val_op];
+       (* ceil32(length) = (length + 31) & ~31 *)
+       padded_len <- emit_op ADD [src_len; Lit 31w];
+       (* ~31 = 0xffffffffffffffe0 *)
+       let mask = i2w (- &32) : bytes32 in
+       do rounded <- emit_op AND [padded_len; Lit mask];
+          (* Total copy: 32 (length word) + ceil32(length) *)
+          copy_len <- emit_op ADD [rounded; Lit 32w];
+          emit_void MCOPY [dst_op; val_op; copy_len]
+       od
+    od
 End
 
 (* ===== Layout-Aware Memory Copy ===== *)
@@ -571,141 +605,140 @@ End
    Mirrors Python: context.py _store_memory_typed (recursive) *)
 val compile_store_memory_typed_defn = Defn.Hol_defn "compile_store_memory_typed" `
   (* Top-level dispatch *)
-  compile_store_memory_typed cenv dst dst_ty src src_ty st =
+  compile_store_memory_typed cenv dst dst_ty src src_ty =
     (if is_word_type dst_ty then
-      let (val_op, st1) = emit_op MLOAD [src] st in
-      emit_void MSTORE [dst; val_op] st1
+      do val_op <- emit_op MLOAD [src];
+         emit_void MSTORE [dst; val_op]
+      od
     else if is_bytestring_type dst_ty ∧ is_bytestring_type src_ty then
-      compile_store_bytestring src dst st
+      compile_store_bytestring src dst
     else
       case (dst_ty, src_ty) of
         (ArrayT dst_elem (Dynamic dst_cap), ArrayT src_elem (Dynamic _)) =>
-          compile_copy_dynarray_typed cenv dst dst_elem dst_cap src src_elem st
+          compile_copy_dynarray_typed cenv dst dst_elem dst_cap src src_elem
       | (ArrayT dst_elem (Fixed n), ArrayT src_elem (Fixed _)) =>
-          compile_copy_sarray_typed cenv dst dst_elem src src_elem n st
+          compile_copy_sarray_typed cenv dst dst_elem src src_elem n
       | (TupleT dst_tys, TupleT src_tys) =>
-          compile_typed_copy_fields cenv dst src dst_tys src_tys 0 0 st
+          compile_typed_copy_fields cenv dst src dst_tys src_tys 0 0
       | (StructT dst_name, StructT src_name) =>
           let dst_fields = cenv.ce_struct_fields dst_name in
           let src_fields = cenv.ce_struct_fields src_name in
           compile_struct_typed_copy cenv
-            dst src dst_fields src_fields 0 0 st
+            dst src dst_fields src_fields 0 0
       | _ =>
-          compile_copy_memory dst src (type_memory_bytes cenv dst_ty) st) ∧
+          compile_copy_memory dst src (type_memory_bytes cenv dst_ty)) ∧
 
   (* Tuple/struct per-field copy: recursive per-field.
      Mirrors Python: _store_memory_typed TupleT branch. *)
   compile_typed_copy_fields cenv dst src [] (src_tys : type list)
-                            dst_off src_off st = ((), st) ∧
+                            dst_off src_off = return () ∧
   compile_typed_copy_fields cenv dst src (dst_ty::dst_rest) []
-                            dst_off src_off st = ((), st) ∧
+                            dst_off src_off = return () ∧
   compile_typed_copy_fields cenv dst src (dst_ty::dst_rest) (src_ty::src_rest)
-                            dst_off src_off st =
-    (let (dst_ptr, st1) = compile_with_byte_offset dst dst_off st in
-     let (src_ptr, st2) = compile_with_byte_offset src src_off st1 in
-     let dst_sz = type_memory_bytes cenv dst_ty in
-     let src_sz = type_memory_bytes cenv src_ty in
-     (* Recurse into compile_store_memory_typed for full type-aware copy *)
-     let (_, st3) = compile_store_memory_typed cenv dst_ptr dst_ty src_ptr src_ty st2 in
-     compile_typed_copy_fields cenv dst src dst_rest src_rest
-                               (dst_off + dst_sz) (src_off + src_sz) st3) ∧
+                            dst_off src_off =
+    (do dst_ptr <- compile_with_byte_offset dst dst_off;
+        src_ptr <- compile_with_byte_offset src src_off;
+        let dst_sz = type_memory_bytes cenv dst_ty in
+        let src_sz = type_memory_bytes cenv src_ty in
+        do (* Recurse into compile_store_memory_typed for full type-aware copy *)
+           compile_store_memory_typed cenv dst_ptr dst_ty src_ptr src_ty;
+           compile_typed_copy_fields cenv dst src dst_rest src_rest
+                               (dst_off + dst_sz) (src_off + src_sz)
+        od
+     od) ∧
 
   (* SArray typed copy: fast path or per-element loop.
      Mirrors Python: context.py _copy_sarray_memory_typed *)
-  compile_copy_sarray_typed cenv dst dst_elem_ty src src_elem_ty count st =
+  compile_copy_sarray_typed cenv dst dst_elem_ty src src_elem_ty count =
     (let dst_elem_sz = type_memory_bytes cenv dst_elem_ty in
     let src_elem_sz = type_memory_bytes cenv src_elem_ty in
     if dst_elem_sz = src_elem_sz ∧ ¬is_abi_dynamic (cenv_sft cenv) dst_elem_ty then
-      compile_copy_memory dst src (count * dst_elem_sz) st
+      compile_copy_memory dst src (count * dst_elem_sz)
     else
-      let (cond_lbl, st1) = fresh_label "typed_sa_cond" st in
-      let (body_lbl, st2) = fresh_label "typed_sa_body" st1 in
-      let (exit_lbl, st3) = fresh_label "typed_sa_exit" st2 in
-      let (counter, st4) = fresh_var st3 in
-      let (_, st5) = emit_inst ASSIGN [Lit 0w] [counter] st4 in
-      let (_, st6) = emit_inst JMP [Label cond_lbl] [] st5 in
-      let (_, st7) = new_block cond_lbl st6 in
-      let (lt_op, st8) = emit_op LT [Var counter; Lit (n2w count)] st7 in
-      let (done_op, st9) = emit_op ISZERO [lt_op] st8 in
-      let (_, st10) = emit_inst JNZ [done_op; Label exit_lbl; Label body_lbl]
-                                [] st9 in
-      let (_, st11) = new_block body_lbl st10 in
-      let (src_off, st12) = emit_op MUL [Var counter;
-                                          Lit (n2w src_elem_sz)] st11 in
-      let (dst_off, st13) = emit_op MUL [Var counter;
-                                          Lit (n2w dst_elem_sz)] st12 in
-      let (src_elem, st14) = emit_op ADD [src; src_off] st13 in
-      let (dst_elem, st15) = emit_op ADD [dst; dst_off] st14 in
-      (* Recurse on element type for full type-aware copy *)
-      let (_, st16) = compile_store_memory_typed cenv
-                        dst_elem dst_elem_ty src_elem src_elem_ty st15 in
-      let (new_ctr, st17) = emit_op ADD [Var counter; Lit 1w] st16 in
-      let (_, st18) = emit_inst ASSIGN [new_ctr] [counter] st17 in
-      let (_, st19) = emit_inst JMP [Label cond_lbl] [] st18 in
-      let (_, st20) = new_block exit_lbl st19 in
-      ((), st20)) ∧
+      do cond_lbl <- fresh_label "typed_sa_cond";
+         body_lbl <- fresh_label "typed_sa_body";
+         exit_lbl <- fresh_label "typed_sa_exit";
+         counter <- fresh_var;
+         emit_inst ASSIGN [Lit 0w] [counter];
+         emit_inst JMP [Label cond_lbl] [];
+         new_block cond_lbl;
+         lt_op <- emit_op LT [Var counter; Lit (n2w count)];
+         done_op <- emit_op ISZERO [lt_op];
+         emit_inst JNZ [done_op; Label exit_lbl; Label body_lbl] [];
+         new_block body_lbl;
+         src_off <- emit_op MUL [Var counter; Lit (n2w src_elem_sz)];
+         dst_off <- emit_op MUL [Var counter; Lit (n2w dst_elem_sz)];
+         src_elem <- emit_op ADD [src; src_off];
+         dst_elem <- emit_op ADD [dst; dst_off];
+         (* Recurse on element type for full type-aware copy *)
+         compile_store_memory_typed cenv dst_elem dst_elem_ty src_elem src_elem_ty;
+         new_ctr <- emit_op ADD [Var counter; Lit 1w];
+         emit_inst ASSIGN [new_ctr] [counter];
+         emit_inst JMP [Label cond_lbl] [];
+         _ <- new_block exit_lbl;
+         return ()
+      od) ∧
 
   (* DynArray typed copy: length + capacity check + per-element loop.
      Mirrors Python: context.py _copy_dynarray_memory_typed *)
   compile_copy_dynarray_typed cenv dst dst_elem_ty dst_capacity
-                              src src_elem_ty st =
+                              src src_elem_ty =
     (let dst_elem_sz = type_memory_bytes cenv dst_elem_ty in
     let src_elem_sz = type_memory_bytes cenv src_elem_ty in
-    let (length, st1) = emit_op MLOAD [src] st in
-    let (too_long, st2) = emit_op GT [length; Lit (n2w dst_capacity)] st1 in
-    let (ok, st3) = emit_op ISZERO [too_long] st2 in
-    let (_, st4) = emit_void ASSERT [ok] st3 in
-    let (_, st5) = emit_void MSTORE [dst; length] st4 in
-    let (src_data, st6) = emit_op ADD [src; Lit 32w] st5 in
-    let (dst_data, st7) = emit_op ADD [dst; Lit 32w] st6 in
-    if dst_elem_sz = src_elem_sz ∧ dst_elem_ty = src_elem_ty then
-      let (data_sz, st8) = emit_op MUL [length; Lit (n2w dst_elem_sz)] st7 in
-      compile_copy_memory_dynamic dst_data src_data data_sz st8
-    else
-      let (cond_lbl, st8) = fresh_label "typed_dyn_cond" st7 in
-      let (body_lbl, st9) = fresh_label "typed_dyn_body" st8 in
-      let (exit_lbl, st10) = fresh_label "typed_dyn_exit" st9 in
-      let (counter, st11) = fresh_var st10 in
-      let (_, st12) = emit_inst ASSIGN [Lit 0w] [counter] st11 in
-      let (_, st13) = emit_inst JMP [Label cond_lbl] [] st12 in
-      let (_, st14) = new_block cond_lbl st13 in
-      let (lt_op, st15) = emit_op LT [Var counter; length] st14 in
-      let (done_op, st16) = emit_op ISZERO [lt_op] st15 in
-      let (_, st17) = emit_inst JNZ [done_op; Label exit_lbl; Label body_lbl]
-                                [] st16 in
-      let (_, st18) = new_block body_lbl st17 in
-      let (src_off, st19) = emit_op MUL [Var counter;
-                                          Lit (n2w src_elem_sz)] st18 in
-      let (dst_off, st20) = emit_op MUL [Var counter;
-                                          Lit (n2w dst_elem_sz)] st19 in
-      let (src_elem, st21) = emit_op ADD [src_data; src_off] st20 in
-      let (dst_elem, st22) = emit_op ADD [dst_data; dst_off] st21 in
-      (* Recurse on element type for full type-aware copy *)
-      let (_, st23) = compile_store_memory_typed cenv
-                        dst_elem dst_elem_ty src_elem src_elem_ty st22 in
-      let (new_ctr, st24) = emit_op ADD [Var counter; Lit 1w] st23 in
-      let (_, st25) = emit_inst ASSIGN [new_ctr] [counter] st24 in
-      let (_, st26) = emit_inst JMP [Label cond_lbl] [] st25 in
-      let (_, st27) = new_block exit_lbl st26 in
-      ((), st27)) ∧
+    do length <- emit_op MLOAD [src];
+       too_long <- emit_op GT [length; Lit (n2w dst_capacity)];
+       ok <- emit_op ISZERO [too_long];
+       emit_void ASSERT [ok];
+       emit_void MSTORE [dst; length];
+       src_data <- emit_op ADD [src; Lit 32w];
+       dst_data <- emit_op ADD [dst; Lit 32w];
+       if dst_elem_sz = src_elem_sz ∧ dst_elem_ty = src_elem_ty then
+         do data_sz <- emit_op MUL [length; Lit (n2w dst_elem_sz)];
+            compile_copy_memory_dynamic dst_data src_data data_sz
+         od
+       else
+         do cond_lbl <- fresh_label "typed_dyn_cond";
+            body_lbl <- fresh_label "typed_dyn_body";
+            exit_lbl <- fresh_label "typed_dyn_exit";
+            counter <- fresh_var;
+            emit_inst ASSIGN [Lit 0w] [counter];
+            emit_inst JMP [Label cond_lbl] [];
+            new_block cond_lbl;
+            lt_op <- emit_op LT [Var counter; length];
+            done_op <- emit_op ISZERO [lt_op];
+            emit_inst JNZ [done_op; Label exit_lbl; Label body_lbl] [];
+            new_block body_lbl;
+            src_off <- emit_op MUL [Var counter; Lit (n2w src_elem_sz)];
+            dst_off <- emit_op MUL [Var counter; Lit (n2w dst_elem_sz)];
+            src_elem <- emit_op ADD [src_data; src_off];
+            dst_elem <- emit_op ADD [dst_data; dst_off];
+            (* Recurse on element type for full type-aware copy *)
+            compile_store_memory_typed cenv dst_elem dst_elem_ty src_elem src_elem_ty;
+            new_ctr <- emit_op ADD [Var counter; Lit 1w];
+            emit_inst ASSIGN [new_ctr] [counter];
+            emit_inst JMP [Label cond_lbl] [];
+            _ <- new_block exit_lbl;
+            return ()
+         od
+    od) ∧
 
   (* Struct per-field copy: per-field by name, fully recursive.
      Each field recurses into compile_store_memory_typed for layout-aware copy.
      Mirrors Python: _store_memory_typed StructT branch. *)
   compile_struct_typed_copy cenv dst src [] src_fields
-                            dst_off src_off st = ((), st) ∧
+                            dst_off src_off = return () ∧
   compile_struct_typed_copy cenv dst src ((name, dst_fty, dst_sz)::dst_rest)
-                            src_fields dst_off src_off st =
+                            src_fields dst_off src_off =
     (let (src_fty, src_sz) = (case ALOOKUP src_fields name of
                                 SOME (ft, sz) => (ft, sz)
                               | NONE => (dst_fty, dst_sz)) in
-     let (dst_ptr, st1) = compile_with_byte_offset dst dst_off st in
-     let (src_ptr, st2) = compile_with_byte_offset src src_off st1 in
-     (* Recurse into compile_store_memory_typed for full type-aware copy *)
-     let (_, st3) = compile_store_memory_typed cenv
-                      dst_ptr dst_fty src_ptr src_fty st2 in
-     compile_struct_typed_copy cenv dst src dst_rest src_fields
-                               (dst_off + dst_sz) (src_off + src_sz) st3)
+     do dst_ptr <- compile_with_byte_offset dst dst_off;
+        src_ptr <- compile_with_byte_offset src src_off;
+        (* Recurse into compile_store_memory_typed for full type-aware copy *)
+        compile_store_memory_typed cenv dst_ptr dst_fty src_ptr src_fty;
+        compile_struct_typed_copy cenv dst src dst_rest src_fields
+                               (dst_off + dst_sz) (src_off + src_sz)
+     od)
 `;
 
 (* Termination: struct recursion through cenv.ce_struct_fields requires
@@ -721,13 +754,14 @@ val _ = Defn.save_defn compile_store_memory_typed_defn;
 (* Mirrors Python: stmt.py _encode_log_topic
    Primitive words: use directly. Bytestrings: keccak256 hash. *)
 Definition compile_encode_log_topic_def:
-  compile_encode_log_topic val_op is_bytestring st =
+  compile_encode_log_topic val_op is_bytestring =
     if is_bytestring then
-      let (data_ptr, st1) = emit_op ADD [val_op; Lit 32w] st in
-      let (length, st2) = emit_op MLOAD [val_op] st1 in
-      emit_op SHA3 [data_ptr; length] st2
+      do data_ptr <- emit_op ADD [val_op; Lit 32w];
+         length <- emit_op MLOAD [val_op];
+         emit_op SHA3 [data_ptr; length]
+      od
     else
-      (val_op, st)
+      return val_op
 End
 
 (* compile_store_bytestring moved before typed copy defs (forward ref) *)
@@ -737,115 +771,123 @@ End
    Primitive types: mload the value.
    Complex types: return the pointer. *)
 Definition compile_load_memory_def:
-  compile_load_memory ptr_op is_prim_word st =
+  compile_load_memory ptr_op is_prim_word =
     if is_prim_word then
-      emit_op MLOAD [ptr_op] st
+      emit_op MLOAD [ptr_op]
     else
-      (ptr_op, st)
+      return ptr_op
 End
 
 (* ===== Store Transient ===== *)
 (* Full store_transient: primitive vs complex.
    Mirrors Python: context.py store_transient *)
 Definition compile_store_transient_def:
-  compile_store_transient val slot is_prim_word word_count st =
+  compile_store_transient val slot is_prim_word word_count =
     if is_prim_word then
-      emit_void TSTORE [slot; val] st
+      emit_void TSTORE [slot; val]
     else if word_count = 1 then
-      let (loaded, st1) = emit_op MLOAD [val] st in
-      emit_void TSTORE [slot; loaded] st1
+      do loaded <- emit_op MLOAD [val];
+         emit_void TSTORE [slot; loaded]
+      od
     else
-      let (_, st1) = compile_memory_to_transient val slot word_count st in
-      ((), st1)
+      do _ <- compile_memory_to_transient val slot word_count;
+         return ()
+      od
 End
 
 Definition compile_dynarray_to_storage_def:
-  compile_dynarray_to_storage src_ptr dst_slot elem_words elem_mem_size transient st =
-    (* Load length *)
-    let (len_op, st1) = emit_op MLOAD [src_ptr] st in
-    (* Create loop blocks *)
-    let (cond_lbl, st2) = fresh_label "dyn_cond" st1 in
-    let (body_lbl, st3) = fresh_label "dyn_body" st2 in
-    let (exit_lbl, st4) = fresh_label "dyn_exit" st3 in
-    (* Entry: counter = 0 *)
-    let (counter, st5) = fresh_var st4 in
-    let (_, st6) = emit_inst ASSIGN [Lit 0w] [counter] st5 in
-    let (_, st7) = emit_inst JMP [Label cond_lbl] [] st6 in
-    (* Cond: counter < length *)
-    let (_, st8) = new_block cond_lbl st7 in
-    let (lt_op, st9) = emit_op LT [Var counter; len_op] st8 in
-    let (done_op, st10) = emit_op ISZERO [lt_op] st9 in
-    let (_, st11) = emit_inst JNZ [done_op; Label exit_lbl; Label body_lbl] [] st10 in
-    (* Body: copy one element *)
-    let (_, st12) = new_block body_lbl st11 in
-    if elem_words = 1 then
-      (* Simple case: single word per element.
-         src_offset = 32 + counter * 32, dst = dst_slot + 1 + counter *)
-      let (mul_op, st13) = emit_op MUL [Var counter; Lit 32w] st12 in
-      let (src_off, st14) = emit_op ADD [Lit 32w; mul_op] st13 in
-      let (src_elem, st15) = emit_op ADD [src_ptr; src_off] st14 in
-      let (val_op, st16) = emit_op MLOAD [src_elem] st15 in
-      let (slot_off, st17) = emit_op ADD [Var counter; Lit 1w] st16 in
-      let (dst_elem, st18) = emit_op ADD [dst_slot; slot_off] st17 in
-      let (_, st19) = (if transient then emit_void TSTORE [dst_elem; val_op]
-                       else emit_void SSTORE [dst_elem; val_op]) st18 in
-      (* Increment counter *)
-      let (new_ctr, st20) = emit_op ADD [Var counter; Lit 1w] st19 in
-      let (_, st21) = emit_inst ASSIGN [new_ctr] [counter] st20 in
-      let (_, st22) = emit_inst JMP [Label cond_lbl] [] st21 in
-      (* Exit: store length *)
-      let (_, st23) = new_block exit_lbl st22 in
-      (if transient then emit_void TSTORE [dst_slot; len_op]
-       else emit_void SSTORE [dst_slot; len_op]) st23
-    else
-      (* Multi-word elements: src_offset = 32 + counter * elem_mem_size,
-         dst_slot_i = dst_slot + 1 + counter * elem_words.
-         Uses word_copy_loop for each element.
-         Mirrors Python: stmt.py _copy_dynarray_to_storage complex case *)
-      let (mul_op, st13) = emit_op MUL [Var counter; Lit (n2w elem_mem_size)] st12 in
-      let (src_off, st14) = emit_op ADD [Lit 32w; mul_op] st13 in
-      let (src_elem, st15) = emit_op ADD [src_ptr; src_off] st14 in
-      let (slot_mul, st16) = emit_op MUL [Var counter; Lit (n2w elem_words)] st15 in
-      let (slot_off, st17) = emit_op ADD [Lit 1w; slot_mul] st16 in
-      let (dst_elem, st18) = emit_op ADD [dst_slot; slot_off] st17 in
-      let (_, st19) = compile_word_copy_loop src_elem dst_elem elem_words
+  compile_dynarray_to_storage src_ptr dst_slot elem_words elem_mem_size transient =
+    do (* Load length *)
+       len_op <- emit_op MLOAD [src_ptr];
+       (* Create loop blocks *)
+       cond_lbl <- fresh_label "dyn_cond";
+       body_lbl <- fresh_label "dyn_body";
+       exit_lbl <- fresh_label "dyn_exit";
+       (* Entry: counter = 0 *)
+       counter <- fresh_var;
+       emit_inst ASSIGN [Lit 0w] [counter];
+       emit_inst JMP [Label cond_lbl] [];
+       (* Cond: counter < length *)
+       new_block cond_lbl;
+       lt_op <- emit_op LT [Var counter; len_op];
+       done_op <- emit_op ISZERO [lt_op];
+       emit_inst JNZ [done_op; Label exit_lbl; Label body_lbl] [];
+       (* Body: copy one element *)
+       new_block body_lbl;
+       if elem_words = 1 then
+         (* Simple case: single word per element.
+            src_offset = 32 + counter * 32, dst = dst_slot + 1 + counter *)
+         do mul_op <- emit_op MUL [Var counter; Lit 32w];
+            src_off <- emit_op ADD [Lit 32w; mul_op];
+            src_elem <- emit_op ADD [src_ptr; src_off];
+            val_op <- emit_op MLOAD [src_elem];
+            slot_off <- emit_op ADD [Var counter; Lit 1w];
+            dst_elem <- emit_op ADD [dst_slot; slot_off];
+            (if transient then emit_void TSTORE [dst_elem; val_op]
+             else emit_void SSTORE [dst_elem; val_op]);
+            (* Increment counter *)
+            new_ctr <- emit_op ADD [Var counter; Lit 1w];
+            emit_inst ASSIGN [new_ctr] [counter];
+            emit_inst JMP [Label cond_lbl] [];
+            (* Exit: store length *)
+            new_block exit_lbl;
+            (if transient then emit_void TSTORE [dst_slot; len_op]
+             else emit_void SSTORE [dst_slot; len_op])
+         od
+       else
+         (* Multi-word elements: src_offset = 32 + counter * elem_mem_size,
+            dst_slot_i = dst_slot + 1 + counter * elem_words.
+            Uses word_copy_loop for each element.
+            Mirrors Python: stmt.py _copy_dynarray_to_storage complex case *)
+         do mul_op <- emit_op MUL [Var counter; Lit (n2w elem_mem_size)];
+            src_off <- emit_op ADD [Lit 32w; mul_op];
+            src_elem <- emit_op ADD [src_ptr; src_off];
+            slot_mul <- emit_op MUL [Var counter; Lit (n2w elem_words)];
+            slot_off <- emit_op ADD [Lit 1w; slot_mul];
+            dst_elem <- emit_op ADD [dst_slot; slot_off];
+            compile_word_copy_loop src_elem dst_elem elem_words
                          LocMemory (if transient then LocTransient else LocStorage)
-                         F st18 in
-      (* Increment counter *)
-      let (new_ctr, st20) = emit_op ADD [Var counter; Lit 1w] st19 in
-      let (_, st21) = emit_inst ASSIGN [new_ctr] [counter] st20 in
-      let (_, st22) = emit_inst JMP [Label cond_lbl] [] st21 in
-      (* Exit: store length *)
-      let (_, st23) = new_block exit_lbl st22 in
-      (if transient then emit_void TSTORE [dst_slot; len_op]
-       else emit_void SSTORE [dst_slot; len_op]) st23
+                         F;
+            (* Increment counter *)
+            new_ctr <- emit_op ADD [Var counter; Lit 1w];
+            emit_inst ASSIGN [new_ctr] [counter];
+            emit_inst JMP [Label cond_lbl] [];
+            (* Exit: store length *)
+            new_block exit_lbl;
+            (if transient then emit_void TSTORE [dst_slot; len_op]
+             else emit_void SSTORE [dst_slot; len_op])
+         od
+    od
 End
 
 (* Helper: ILOAD word-by-word to memory buffer (ctor, no immutables_alloca).
    Python: load_immutable_ctor without alloca uses iload per word.
    Can't use compile_word_copy_loop because LocCode dispatches to DLOAD. *)
 Definition compile_iload_to_memory_def:
-  compile_iload_to_memory src_offset dst_buf 0 st = ((), st) ∧
-  compile_iload_to_memory src_offset dst_buf (SUC n) st =
+  compile_iload_to_memory src_offset dst_buf 0 = return () ∧
+  compile_iload_to_memory src_offset dst_buf (SUC n) =
     let byte_off = n * 32 in
-    let (imm_off, st1) = emit_op ADD [src_offset; Lit (n2w byte_off)] st in
-    let (word_op, st2) = emit_op ILOAD [imm_off] st1 in
-    let (mem_ptr, st3) = emit_op ADD [dst_buf; Lit (n2w byte_off)] st2 in
-    let (_, st4) = emit_void MSTORE [mem_ptr; word_op] st3 in
-    compile_iload_to_memory src_offset dst_buf n st4
+    do imm_off <- emit_op ADD [src_offset; Lit (n2w byte_off)];
+       word_op <- emit_op ILOAD [imm_off];
+       mem_ptr <- emit_op ADD [dst_buf; Lit (n2w byte_off)];
+       emit_void MSTORE [mem_ptr; word_op];
+       compile_iload_to_memory src_offset dst_buf n
+    od
 End
 
 (* Helper: copy from GEP-based source to memory buffer, word by word.
    Mirrors the loop in Python load_immutable_ctor for complex types. *)
 Definition compile_gep_to_memory_def:
-  compile_gep_to_memory src_base src_offset dst_buf 0 st = ((), st) ∧
-  compile_gep_to_memory src_base src_offset dst_buf (SUC n) st =
-    let (imm_off, st1) = emit_op ADD [src_offset; Lit (n2w (n * 32))] st in
-    let (ptr, st2) = emit_op GEP [src_base; imm_off] st1 in
-    let (word_op, st3) = emit_op MLOAD [ptr] st2 in
-    let (mem_ptr, st4) = emit_op ADD [dst_buf; Lit (n2w (n * 32))] st3 in
-    let (_, st5) = emit_void MSTORE [mem_ptr; word_op] st4 in
-    compile_gep_to_memory src_base src_offset dst_buf n st5
+  compile_gep_to_memory src_base src_offset dst_buf 0 = return () ∧
+  compile_gep_to_memory src_base src_offset dst_buf (SUC n) =
+    let byte_off_val = n * 32 in
+    do imm_off <- emit_op ADD [src_offset; Lit (n2w byte_off_val)];
+       ptr <- emit_op GEP [src_base; imm_off];
+       word_op <- emit_op MLOAD [ptr];
+       mem_ptr <- emit_op ADD [dst_buf; Lit (n2w byte_off_val)];
+       emit_void MSTORE [mem_ptr; word_op];
+       compile_gep_to_memory src_base src_offset dst_buf n
+    od
 End
 
 (* ===== Load Immutable (Constructor) ===== *)
@@ -858,29 +900,32 @@ End
    has no direct Python equivalent; Python always uses iload/dload. *)
 Definition compile_load_immutable_ctor_def:
   compile_load_immutable_ctor offset is_prim_word word_count alloca_size
-                              imm_alloca_opt st =
+                              imm_alloca_opt =
     case imm_alloca_opt of
       NONE =>
         (* No immutables_alloca: use ILOAD (ctor pseudo-instruction).
            Python: load_immutable_ctor without alloca uses iload, NOT dload.
            DLOAD reads deployed CODE — doesn't exist during constructor. *)
         if is_prim_word then
-          emit_op ILOAD [offset] st
+          emit_op ILOAD [offset]
         else
-                    let (buf_op_alloc, st2) = compile_alloc_buffer alloca_size st in
-                    let buf_op = buf_op_alloc.buf_operand in
-          (* Use iload_to_memory — word_copy_loop with LocCode uses DLOAD *)
-          let (_, st3) =
-            compile_iload_to_memory offset buf_op word_count st2 in
-          (buf_op, st3)
+          do buf_op_alloc <- compile_alloc_buffer alloca_size;
+             let buf_op = buf_op_alloc.buf_operand in
+             do (* Use iload_to_memory — word_copy_loop with LocCode uses DLOAD *)
+                compile_iload_to_memory offset buf_op word_count;
+                return buf_op
+             od
+          od
     | SOME imm_alloca =>
       if is_prim_word then
-        let (ptr, st1) = emit_op GEP [imm_alloca; offset] st in
-        emit_op MLOAD [ptr] st1
+        do ptr <- emit_op GEP [imm_alloca; offset];
+           emit_op MLOAD [ptr]
+        od
       else
-                let (buf_op_alloc, st2) = compile_alloc_buffer alloca_size st in
-                let buf_op = buf_op_alloc.buf_operand in
-        let (_, st3) =
-          compile_gep_to_memory imm_alloca offset buf_op word_count st2 in
-        (buf_op, st3)
+        do buf_op_alloc <- compile_alloc_buffer alloca_size;
+           let buf_op = buf_op_alloc.buf_operand in
+           do compile_gep_to_memory imm_alloca offset buf_op word_count;
+              return buf_op
+           od
+        od
 End

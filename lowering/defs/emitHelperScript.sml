@@ -13,53 +13,62 @@
 Theory emitHelper
 Ancestors
   compileEnv venomInst
+Libs
+  monadsyntax
 
 (* Emit instruction with fresh output variable, return the output as operand *)
 Definition emit_op_def:
-  emit_op opc ops st =
-    let (id, st1) = fresh_id st in
-    let (out, st2) = fresh_var st1 in
-    let (_, st3) = emit (mk_inst id opc ops [out]) st2 in
-    (Var out, st3)
+  emit_op opc ops =
+    do id <- fresh_id;
+       out <- fresh_var;
+       emit (mk_inst id opc ops [out]);
+       return (Var out)
+    od
 End
 
 (* Emit instruction with no output *)
 Definition emit_void_def:
-  emit_void opc ops st =
-    let (id, st1) = fresh_id st in
-    emit (mk_inst id opc ops []) st1
+  emit_void opc ops =
+    do id <- fresh_id;
+       emit (mk_inst id opc ops [])
+    od
 End
 
 (* Emit instruction with explicit output list *)
 Definition emit_inst_def:
-  emit_inst opc ops outs st =
-    let (id, st1) = fresh_id st in
-    emit (mk_inst id opc ops outs) st1
+  emit_inst opc ops outs =
+    do id <- fresh_id;
+       emit (mk_inst id opc ops outs)
+    od
 End
 
 (* Allocate n fresh variable names, returning them as a list *)
 Definition fresh_vars_def:
-  fresh_vars (0:num) (st:compile_state) = ([] : string list, st) ∧
-  fresh_vars (SUC n) st =
-    let (v, st1) = fresh_var st in
-    let (vs, st2) = fresh_vars n st1 in
-    (v :: vs, st2)
+  fresh_vars (0:num) = return ([] : string list) ∧
+  fresh_vars (SUC n) =
+    do v <- fresh_var;
+       vs <- fresh_vars n;
+       return (v :: vs)
+    od
 End
 
 (* Emit instruction with n fresh outputs, return outputs as operand list.
    Used for multi-return INVOKE. *)
 Definition emit_multi_op_def:
-  emit_multi_op opc ops n st =
-    let (outs, st1) = fresh_vars n st in
-    let (_, st2) = emit_inst opc ops outs st1 in
-    (MAP Var outs, st2)
+  emit_multi_op opc ops n =
+    do outs <- fresh_vars n;
+       emit_inst opc ops outs;
+       return (MAP Var outs)
+    od
 End
 
 (* Emit JMP to target only if current block is not already terminated.
    Mirrors Python: if not bb.is_terminated: bb.append_instruction("jmp", target)
    Used after if/else branches and loop bodies to avoid malformed basic blocks. *)
 Definition emit_jmp_if_not_terminated_def:
-  emit_jmp_if_not_terminated target_lbl (cs:compile_state) =
-    if block_is_terminated cs then ((), cs)
-    else emit_inst JMP [Label target_lbl] [] cs
+  emit_jmp_if_not_terminated target_lbl =
+    do cs <- comp_get;
+       if block_is_terminated cs then return ()
+       else emit_inst JMP [Label target_lbl] []
+    od
 End
