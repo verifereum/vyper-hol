@@ -103,7 +103,7 @@ Theorem compile_pass_correct:
     st' = st ∧
     state_rel cenv cx es ss
 Proof
-  rw[compile_stmt_def]
+  rw[compile_stmt_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
 QED
 
 (* --- Expr statement: side-effect expression --- *)
@@ -290,11 +290,11 @@ Theorem compile_break_correct:
     run_inst_seq (emitted_insts st st') ss =
       OK (jump_to exit_lbl ss)
 Proof
-  rw[compile_stmt_def, emit_inst_def, comp_bind_def,
-     fresh_id_def, emit_def, venomInstTheory.mk_inst_def]
+  rw[compile_stmt_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+     fresh_id_def, emit_def, venomInstTheory.mk_inst_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
   >> simp[emitted_insts_def, rich_listTheory.DROP_APPEND1,
-          rich_listTheory.DROP_LENGTH_NIL]
-  >> simp[run_inst_seq_def, step_inst_base_def]
+          rich_listTheory.DROP_LENGTH_NIL, comp_return_def, comp_bind_def, comp_ignore_bind_def]
+  >> simp[run_inst_seq_def, step_inst_base_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
 QED
 
 (* --- Continue: jumps to increment label --- *)
@@ -305,9 +305,9 @@ Theorem compile_continue_correct:
     run_inst_seq (emitted_insts st st') ss =
       OK (jump_to incr_lbl ss)
 Proof
-  rw[compile_stmt_def, emit_inst_def, comp_bind_def,
-     fresh_id_def, emit_def, venomInstTheory.mk_inst_def]
+  rw[compile_stmt_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+     fresh_id_def, emit_def, venomInstTheory.mk_inst_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
   >> simp[emitted_insts_def, rich_listTheory.DROP_APPEND1,
-          rich_listTheory.DROP_LENGTH_NIL]
-  >> simp[run_inst_seq_def, step_inst_base_def]
+          rich_listTheory.DROP_LENGTH_NIL, comp_return_def, comp_bind_def, comp_ignore_bind_def]
+  >> simp[run_inst_seq_def, step_inst_base_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
 QED

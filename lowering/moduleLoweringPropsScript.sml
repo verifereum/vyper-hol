@@ -55,7 +55,7 @@ Theorem compile_decode_args_nil:
   ∀ cenv offset load_opc hi_op base_adj st.
     compile_decode_args cenv [] offset load_opc hi_op base_adj st = ((), st)
 Proof
-  simp[compile_decode_args_def]
+  simp[compile_decode_args_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
 QED
 
 (* Arg decoding stores each param at its alloca location *)
@@ -120,7 +120,7 @@ Theorem compile_init_kwargs_nil:
   ∀ cenv offset from_cd hi_op st.
     compile_init_kwargs cenv [] offset from_cd hi_op st = ((), st)
 Proof
-  simp[compile_init_kwargs_def]
+  simp[compile_init_kwargs_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
 QED
 
 (* Kwargs initialization stores defaults *)

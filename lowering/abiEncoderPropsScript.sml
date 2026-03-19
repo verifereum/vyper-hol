@@ -126,7 +126,7 @@ Theorem compile_get_element_ptr_zero:
   ∀ parent_ptr st.
     compile_get_element_ptr parent_ptr 0 st = (parent_ptr, st)
 Proof
-  simp[compile_get_element_ptr_def]
+  simp[compile_get_element_ptr_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
 QED
 
 (* get_element_ptr at non-zero offset adds offset *)

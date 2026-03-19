@@ -206,12 +206,13 @@ QED
 
 (* empty: zero-initializes a primitive value *)
 Theorem compile_builtin_empty_prim_correct:
-  ∀ ss st op st'.
+  ∀ st op st'.
     compile_builtin_empty_prim st = (op, st')
     ⇒
     op = Lit 0w ∧ emitted_insts st st' = []
 Proof
-  rw[compile_builtin_empty_prim_def, emitted_insts_def]
+  rw[compile_builtin_empty_prim_def, emitted_insts_def, comp_return_def,
+     comp_bind_def, comp_ignore_bind_def]
 QED
 
 (* ===== Misc Builtins ===== *)

@@ -107,7 +107,7 @@ Theorem run_inst_seq_append:
     run_inst_seq is1 ss = OK ss' ⇒
     run_inst_seq (is1 ++ is2) ss = run_inst_seq is2 ss'
 Proof
-  Induct_on `is1` >> rw[run_inst_seq_def] >>
+  Induct_on `is1` >> rw[run_inst_seq_def, comp_return_def, comp_bind_def, comp_ignore_bind_def] >>
   Cases_on `step_inst_base h ss` >> gvs[]
 QED
 
@@ -117,7 +117,7 @@ Theorem run_inst_seq_append_err:
     (∀s. run_inst_seq is1 ss ≠ OK s) ⇒
     run_inst_seq (is1 ++ is2) ss = run_inst_seq is1 ss
 Proof
-  Induct_on `is1` >> rw[run_inst_seq_def] >>
+  Induct_on `is1` >> rw[run_inst_seq_def, comp_return_def, comp_bind_def, comp_ignore_bind_def] >>
   Cases_on `step_inst_base h ss` >> gvs[]
 QED
 
@@ -128,10 +128,10 @@ Theorem emit_op_extends:
     st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' ∧
     same_blocks st st'
 Proof
-  rw[emit_op_def, comp_bind_def, fresh_id_def, fresh_var_def,
+  rw[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
      emit_def, comp_return_def, venomInstTheory.mk_inst_def]
   >> simp[emitted_insts_def, same_blocks_def,
-          rich_listTheory.DROP_APPEND1, rich_listTheory.DROP_LENGTH_NIL]
+          rich_listTheory.DROP_APPEND1, rich_listTheory.DROP_LENGTH_NIL, comp_return_def, comp_bind_def, comp_ignore_bind_def]
 QED
 
 (* emit_void extends instructions: appends exactly one instruction *)
@@ -141,10 +141,10 @@ Theorem emit_void_extends:
     st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' ∧
     same_blocks st st'
 Proof
-  rw[emit_void_def, comp_bind_def, fresh_id_def,
-     emit_def, venomInstTheory.mk_inst_def]
+  rw[emit_void_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def,
+     emit_def, venomInstTheory.mk_inst_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
   >> simp[emitted_insts_def, same_blocks_def,
-          rich_listTheory.DROP_APPEND1, rich_listTheory.DROP_LENGTH_NIL]
+          rich_listTheory.DROP_APPEND1, rich_listTheory.DROP_LENGTH_NIL, comp_return_def, comp_bind_def, comp_ignore_bind_def]
 QED
 
 (* emitted_insts composition through intermediate state *)
@@ -156,7 +156,7 @@ Theorem emitted_insts_append:
     emitted_insts st st2 =
       emitted_insts st st1 ++ emitted_insts st1 st2
 Proof
-  rw[emitted_insts_def]
+  rw[emitted_insts_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
   >> pop_assum (fn th => SUBST_ALL_TAC th)
   >> pop_assum (fn th =>
        `LENGTH st.cs_current_insts ≤ LENGTH st1.cs_current_insts` by
@@ -240,7 +240,7 @@ Proof
   Cases_on `b`
   >> simp[step_inst_base_def, exec_pure1_def, eval_operand_def,
           val_to_w256_def, update_var_def, venomInstTheory.mk_inst_def,
-          venomExecSemanticsTheory.bool_to_word_def]
+          venomExecSemanticsTheory.bool_to_word_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
 QED
 
 (* ASSERT instruction: non-zero → OK (no-op), zero → Abort *)
@@ -249,7 +249,7 @@ Theorem assert_true_correct:
     eval_operand op ss = SOME v ∧ v ≠ 0w ⇒
     step_inst_base (mk_inst inst_id ASSERT [op] []) ss = OK ss
 Proof
-  simp[step_inst_base_def, venomInstTheory.mk_inst_def]
+  simp[step_inst_base_def, venomInstTheory.mk_inst_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
 QED
 
 Theorem assert_false_correct:
@@ -258,7 +258,7 @@ Theorem assert_false_correct:
     step_inst_base (mk_inst inst_id ASSERT [op] []) ss =
       Abort Revert_abort (revert_state (set_returndata [] ss))
 Proof
-  simp[step_inst_base_def, venomInstTheory.mk_inst_def]
+  simp[step_inst_base_def, venomInstTheory.mk_inst_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
 QED
 
 (* emit_void ASSERT: emits one ASSERT instruction *)
@@ -269,8 +269,8 @@ Theorem emit_void_assert_inst:
                        cs_current_insts := st.cs_current_insts ++
                          [mk_inst st.cs_next_id ASSERT [op] []] |>)
 Proof
-  simp[emit_void_def, comp_bind_def, fresh_id_def,
-       emit_def, venomInstTheory.mk_inst_def]
+  simp[emit_void_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def,
+       emit_def, venomInstTheory.mk_inst_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
 QED
 
 (* --- Not (boolean negation) --- compositional proof *)

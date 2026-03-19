@@ -153,7 +153,7 @@ Theorem compile_nonreentrant_unlock_view:
   ∀ nkey st.
     compile_nonreentrant_unlock nkey F T st = ((), st)
 Proof
-  simp[compile_nonreentrant_unlock_def]
+  simp[compile_nonreentrant_unlock_def, comp_return_def]
 QED
 
 (* ===== Memory Copy ===== *)
@@ -163,7 +163,7 @@ Theorem compile_copy_memory_zero:
   ∀ dst src st.
     compile_copy_memory dst src 0 st = ((), st)
 Proof
-  simp[compile_copy_memory_def]
+  simp[compile_copy_memory_def, comp_return_def]
 QED
 
 (* Memory copy correctness *)
@@ -185,7 +185,7 @@ Theorem compile_zero_memory_zero:
   ∀ ptr_op st.
     compile_zero_memory ptr_op 0 st = ((), st)
 Proof
-  simp[compile_zero_memory_def]
+  simp[compile_zero_memory_def, comp_return_def]
 QED
 
 (* Zero memory correctness *)
