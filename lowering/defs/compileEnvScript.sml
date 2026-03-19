@@ -21,6 +21,8 @@ Theory compileEnv
 Ancestors
   valueEncoding venomExecSemantics venomInst
   vyperState vyperContext
+Libs
+  monadsyntax
 
 (* ===== Variable Location ===== *)
 
@@ -315,6 +317,47 @@ Definition comp_bind_def:
     let (a, cs') = m cs in f a cs'
 End
 
+Definition comp_ignore_bind_def:
+  comp_ignore_bind (m:'a compiler) (f:'b compiler) =
+    comp_bind m (λ_. f)
+End
+
+(* Read the current compile state *)
+Definition comp_get_def:
+  comp_get (cs:compile_state) = (cs, cs)
+End
+
+(* Modify the compile state *)
+Definition comp_set_def:
+  comp_set (cs':compile_state) (_:compile_state) = ((), cs')
+End
+
+(* Congruence rule for comp_bind — needed for recursive definitions using the monad *)
+Theorem comp_bind_cong[defncong]:
+  ∀m1 m2 f1 f2.
+    (m1 = m2) ∧ (∀x. f1 x = f2 x) ⇒
+    comp_bind m1 f1 = comp_bind m2 f2
+Proof
+  rw[comp_bind_def, FUN_EQ_THM, pairTheory.FORALL_PROD]
+  >> rw[]
+QED
+
+Theorem comp_ignore_bind_cong[defncong]:
+  ∀m1 m2 f1 f2.
+    (m1 = m2) ∧ (f1 = f2) ⇒
+    comp_ignore_bind m1 f1 = comp_ignore_bind m2 f2
+Proof
+  rw[]
+QED
+
+val () = declare_monad ("compilation",
+  { bind = ``comp_bind``, unit = ``comp_return``,
+    ignorebind = SOME ``comp_ignore_bind``, choice = NONE,
+    fail = NONE, guard = NONE
+  });
+val () = enable_monad "compilation";
+val () = enable_monadsyntax ();
+
 (* Fresh SSA variable name *)
 Definition fresh_var_def:
   fresh_var (cs:compile_state) =
@@ -330,16 +373,6 @@ Definition fresh_label_def:
     let name = "@" ++ suffix ++ "_" ++ (toString n) in
     (name, cs with cs_next_label := n + 1)
 End
-
-(* Congruence rule for comp_bind — needed for recursive definitions using the monad *)
-Theorem comp_bind_cong[defncong]:
-  ∀m1 m2 f1 f2.
-    (m1 = m2) ∧ (∀x. f1 x = f2 x) ⇒
-    comp_bind m1 f1 = comp_bind m2 f2
-Proof
-  rw[comp_bind_def, FUN_EQ_THM, pairTheory.FORALL_PROD]
-  >> rw[]
-QED
 
 (* Fresh instruction ID *)
 Definition fresh_id_def:
