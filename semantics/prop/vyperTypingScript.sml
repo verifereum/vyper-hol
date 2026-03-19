@@ -16,9 +16,18 @@
 Theory vyperTyping
 Ancestors
   vyperStorage vyperValue vyperMisc
-  list sorting
+  vyperState[ignore_grammar] list sorting
 Libs
   wordsLib
+
+(* leaf_type: the type at the leaf of a subscript chain *)
+Definition leaf_type_def:
+  leaf_type tv [] = tv /\
+  leaf_type (ArrayTV t _) (vyperState$IntSubscript _ :: rest) = leaf_type t rest /\
+  leaf_type (StructTV l) (vyperState$AttrSubscript id :: rest) =
+    (case ALOOKUP l id of SOME t => leaf_type t rest | NONE => NoneTV) /\
+  leaf_type _ (_ :: _) = NoneTV
+End
 
 (* Well-formedness of type_values for storage operations.
    Ensures type_slot_size tv ≤ dimword(:256) for all well-formed types. *)

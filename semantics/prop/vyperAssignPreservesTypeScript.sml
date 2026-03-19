@@ -292,18 +292,6 @@ QED
 
 (* ===== Main theorem: assign_subscripts preserves value_has_type ===== *)
 
-(* leaf_type: the type at the leaf of a subscript chain.
-   Used to state the base condition for assign_subscripts_preserves_type:
-   the caller provides that the base operation is well-typed at the LEAF type,
-   not the top-level type. *)
-Definition leaf_type_def:
-  leaf_type tv [] = tv /\
-  leaf_type (ArrayTV t _) (IntSubscript _ :: rest) = leaf_type t rest /\
-  leaf_type (StructTV l) (AttrSubscript id :: rest) =
-    (case ALOOKUP l id of SOME t => leaf_type t rest | NONE => NoneTV) /\
-  leaf_type _ (_ :: _) = NoneTV
-End
-
 (* assign_subscripts requires:
    - well_formed_type_value tv (for default_value typing in SArrayV)
    - The leaf operation preserves typing (at the leaf type, not tv)

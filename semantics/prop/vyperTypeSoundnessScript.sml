@@ -876,7 +876,8 @@ Definition well_typed_expr_def:
   well_typed_target env (SubscriptTarget tgt e) ty =
     (?tgt_ty. well_typed_target env tgt tgt_ty /\
      well_typed_expr env e /\
-     subscript_type_ok tgt_ty (expr_type e) ty) /\
+     subscript_type_ok tgt_ty (expr_type e) ty /\
+     ~is_TupleT tgt_ty) /\
   well_typed_target env (AttributeTarget tgt id) ty =
     (?tgt_ty. well_typed_target env tgt tgt_ty /\
      attribute_type_ok env.type_defs tgt_ty id ty) /\
@@ -1958,6 +1959,106 @@ Proof
   \\ goal_assum drule
   \\ imp_res_tac alistTheory.ALOOKUP_MEM
   \\ goal_assum drule
+QED
+
+(* loc_type: the runtime type stored at a target location *)
+Definition loc_type_def:
+  loc_type cx st (ScopedVar s) tv =
+    (?a. lookup_scopes (string_to_num s) st.scopes = SOME (tv, a)) /\
+  loc_type cx st (ImmutableVar s) tv =
+    (?imms a. get_immutables cx (current_module cx) st = (INL imms, st) /\
+              FLOOKUP imms (string_to_num s) = SOME (tv, a)) /\
+  loc_type cx st (TopLevelVar src s) tv = F
+End
+
+(* TODO: move *)
+
+Theorem leaf_type_NoneTV[simp]:
+  leaf_type NoneTV x = NoneTV
+Proof
+  Cases_on`x` \\ rw[leaf_type_def]
+QED
+
+(* Connection between AST target type and runtime leaf type.
+   For a base target b with type ty, if eval_base_target returns (loc, sbs),
+   and the base variable at loc has runtime type tv (connected via
+   env_consistent), then evaluate_type ty = leaf_type tv (REVERSE sbs). *)
+Theorem leaf_type_append:
+  !tv subs1 subs2. leaf_type tv (subs1 ++ subs2) = leaf_type (leaf_type tv subs1) subs2
+Proof
+  ho_match_mp_tac leaf_type_ind
+  \\ rw[leaf_type_def]
+  >> CASE_TAC >> gvs[leaf_type_def]
+QED
+
+Theorem eval_base_target_type_connection:
+  !b cx st0 loc sbs st1 env ty tv.
+    eval_base_target cx b st0 = (INL (loc, sbs), st1) /\
+    well_typed_target env b ty /\
+    env_consistent env cx st0 /\
+    loc_type cx st0 loc tv ==>
+    ?tyv. evaluate_type (get_tenv cx) ty = SOME tyv /\
+          tyv = leaf_type tv (REVERSE sbs)
+Proof
+  Induct
+  (* NameTarget *)
+  >- (rw[Once evaluate_def, bind_apply, AllCaseEqs(), unitbind_apply,
+         get_scopes_def, return_def, type_check_def, assert_def,
+         well_typed_expr_def, loc_type_def, leaf_type_def,
+         optionTheory.IS_SOME_EXISTS, pairTheory.EXISTS_PROD]
+      >> gvs[env_consistent_def]
+      >> first_x_assum drule
+      >> disch_then drule >> simp[]
+      >> gvs[loc_type_def])
+  (* BareGlobalNameTarget *)
+  >- (
+    simp[Once evaluate_def, bind_apply, AllCaseEqs(), unitbind_apply,
+         return_def, type_check_def, assert_def, option_CASE_rator,
+         well_typed_expr_def, loc_type_def, leaf_type_def,
+         get_immutables_def, get_address_immutables_def, lift_option_def,
+         optionTheory.IS_SOME_EXISTS, pairTheory.EXISTS_PROD]
+    >> rpt strip_tac >> gvs[env_consistent_def, raise_def, return_def]
+    >> first_x_assum drule
+    >> disch_then drule >> simp[]
+    >> gvs[loc_type_def, leaf_type_def]
+    >> gvs[get_immutables_def, bind_apply, AllCaseEqs(), return_def]
+    >> gvs[get_address_immutables_def, lift_option_def, return_def] )
+  (* TopLevelNameTarget *)
+  >- (
+    simp[pairTheory.FORALL_PROD] >>
+    rw[Once evaluate_def, return_def, well_typed_expr_def, loc_type_def]
+    >> gvs[loc_type_def] )
+  (* SubscriptTarget *)
+  >- (
+    rpt gen_tac >> strip_tac >>
+    gvs[Once evaluate_def, bind_apply, AllCaseEqs(),
+        well_typed_expr_def, loc_type_def,
+        bind_def, option_CASE_rator] >>
+    pairarg_tac \\ gvs[bind_apply, AllCaseEqs(),return_def, leaf_type_append]
+    >> first_x_assum drule_all >> strip_tac >>
+    gvs[lift_option_type_def, option_CASE_rator, AllCaseEqs(), raise_def]
+    >> gvs[return_def] >>
+    Cases_on`tgt_ty` >> gvs[subscript_type_ok_def] >>
+    gvs[Once evaluate_type_def] >>
+    gvs[CaseEq"option"] >>
+    pop_assum(SUBST_ALL_TAC o SYM) >>
+    cheat)
+  (* AttributeTarget *)
+  >> (
+    rpt gen_tac >> strip_tac >>
+    gvs[Once evaluate_def, bind_apply, AllCaseEqs(),
+        well_typed_expr_def, loc_type_def] >>
+    gvs[bind_def, AllCaseEqs()] >>
+    pairarg_tac >> gvs[return_def] >>
+    first_x_assum drule_all >> strip_tac >>
+    Cases_on`tgt_ty` >>
+    gvs[attribute_type_ok_def, leaf_type_def] >>
+    gvs[leaf_type_append, leaf_type_def] >>
+    BasicProvers.EVERY_CASE_TAC >> gvs[evaluate_type_def] >>
+    gvs[AllCaseEqs()] >>
+    qpat_x_assum`StructTV _ = leaf_type _ _`(assume_tac o SYM) >>
+    gvs[leaf_type_def] >>
+    cheat)
 QED
 
 Theorem assign_target_well_typed:
