@@ -53,7 +53,7 @@ Theory vyperTypeSoundness
 Ancestors
   vyperAST vyperValue vyperValueOperation vyperMisc
   vyperInterpreter vyperState vyperContext
-  vyperTyping vyperEncodeDecode
+  vyperStatePreservation vyperTyping vyperEncodeDecode
 
 (* ===== Type Classification Helpers ===== *)
 
@@ -1330,23 +1330,25 @@ QED
 Theorem intcall_state_preserved:
   !cx src_id_opt fn es v17 env st v st' tv.
     (* IH for eval_exprs cx es (args) *)
-    (!env0 st0 vs0 st0'.
+    (!env0 st0 res0 st0'.
        well_typed_exprs env0 es /\ env_consistent env0 cx st0 /\
        state_well_typed st0 /\ functions_well_typed cx /\
-       eval_exprs cx es st0 = (INL vs0, st0') ==>
+       eval_exprs cx es st0 = (res0, st0') ==>
        state_well_typed st0' /\ env_consistent env0 cx st0' /\
+       !vs0. res0 = INL vs0 ==>
        LIST_REL (\v e. !tyv.
          evaluate_type (get_tenv cx) (expr_type e) = SOME tyv ==>
          value_has_type tyv v) vs0 es) /\
     (* IH for eval_exprs cxd needed_dflts (defaults) *)
-    (!dflts_sub env0 st0 vs0 st0'.
+    (!dflts_sub env0 st0 res0 st0'.
        well_typed_exprs env0 dflts_sub /\
        env_consistent env0 (cx with stk updated_by CONS (src_id_opt, fn)) st0 /\
        state_well_typed st0 /\
        functions_well_typed (cx with stk updated_by CONS (src_id_opt, fn)) /\
        eval_exprs (cx with stk updated_by CONS (src_id_opt, fn))
-         dflts_sub st0 = (INL vs0, st0') ==>
+         dflts_sub st0 = (res0, st0') ==>
        state_well_typed st0' /\
+       !vs0. res0 = INL vs0 ==>
        LIST_REL (\v e. !tyv.
          evaluate_type (get_tenv (cx with stk updated_by CONS (src_id_opt, fn)))
            (expr_type e) = SOME tyv ==>
@@ -1395,7 +1397,7 @@ Proof
   (* Step 1: Apply IH_args *)
   `well_typed_exprs env es` by gvs[well_typed_expr_def] >>
   `state_well_typed s'⁴'` by
-    (last_x_assum (qspecl_then [`env`, `s''`, `vs`, `s'⁴'`] mp_tac) >>
+    (last_x_assum (qspecl_then [`env`, `s''`, `INL vs`, `s'⁴'`] mp_tac) >>
      simp[]) >>
   (* Destructure fn_info *)
   PairCases_on `fn_info` >> gvs[] >>
@@ -1421,14 +1423,14 @@ Proof
      (DROP drop_n fn_info2)` by
     (irule well_typed_exprs_DROP >> gvs[]) >>
   `state_well_typed s'⁵'` by
-    (qpat_x_assum `!dflts_sub env0 st0 vs0 st0'. _`
+    (qpat_x_assum `!dflts_sub env0 st0 res0 st0'. _`
        (qspecl_then
           [`DROP drop_n fn_info2`,
            `<|var_types := FEMPTY; global_types := FEMPTY;
               toplevel_types := FEMPTY;
               type_defs := get_tenv cx;
               fn_sigs := FEMPTY|>`,
-           `s'⁴'`, `dflt_vs`, `s'⁵'`] mp_tac) >>
+           `s'⁴'`, `INL dflt_vs`, `s'⁵'`] mp_tac) >>
      impl_tac >- (
        simp[get_tenv_stk_irrelevant] >>
        simp[env_consistent_def, finite_mapTheory.FLOOKUP_EMPTY,
@@ -1490,7 +1492,7 @@ Resume intcall_state_preserved[difficulty]:
   (* Get LIST_REL for args *)
   `LIST_REL (\v e. !tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv ==>
                           value_has_type tyv v) vs es` by
-    (last_x_assum (qspecl_then [`env`, `s''`, `vs`, `s'⁴'`] mp_tac) >>
+    (last_x_assum (qspecl_then [`env`, `s''`, `INL vs`, `s'⁴'`] mp_tac) >>
      simp[well_typed_expr_def]) >>
   (* Get param type correspondence from fn_sigs *)
   `MAP expr_type es = TAKE (LENGTH es) (MAP SND fn_info1)` by
@@ -1542,6 +1544,21 @@ QED
 
 Finalise intcall_state_preserved
 
+(* TODO: move these helpers *)
+Theorem bind_apply:
+  !f g s. (do v <- f; g v od) s =
+    case f s of (INL v,s') => g v s' | (INR e,s') => (INR e,s')
+Proof
+  rpt gen_tac >> simp[bind_def, pairTheory.UNCURRY]
+QED
+
+Theorem unitbind_apply:
+  !f g s. (do f; g od) s =
+    case f s of (INL x,s') => g s' | (INR e,s') => (INR e,s')
+Proof
+  EVAL_TAC >> simp[bind_def]
+QED
+
 (* ===== Type preservation by mutual induction ===== *)
 (*
  * Uses evaluate_ind (9 predicates, 47 hypotheses).
@@ -1560,11 +1577,216 @@ Finalise intcall_state_preserved
  *   results satisfy types ∧ state_well_typed st'
  *)
 
-Theorem unitbind_apply:
-  !f g s. (do f; g od) s =
-    case f s of (INL x,s') => g s' | (INR e,s') => (INR e,s')
+(* TODO: these no-return theorems should probably be moved *)
+
+Theorem lift_option_error:
+  lift_option x y z = (INR e, s) ==>
+  e = Error (RuntimeError y)
 Proof
-  EVAL_TAC >> simp[bind_def]
+  rw[lift_option_def, CaseEq"option", option_CASE_rator, return_def, raise_def]
+QED
+
+Theorem lift_sum_error:
+  lift_sum x y = (INR e, s) ==>
+  (∃m. e = Error m)
+Proof
+  rw[lift_sum_def, CaseEq"sum", sum_CASE_rator, return_def, raise_def]
+QED
+
+Theorem lift_option_type_error:
+  lift_option_type x z y = (INR e, s) ==>
+  e = Error (TypeError z)
+Proof
+  rw[lift_option_type_def, CaseEq"option", option_CASE_rator, return_def, raise_def]
+QED
+
+Theorem assign_result_error:
+  assign_result a b c d e = (INR x, y) ==>
+  (∃m. x = Error m)
+Proof
+  Cases_on`b` \\ rw[assign_result_def, return_def, bind_apply]
+  \\ gvs[CaseEq"prod", CaseEq"sum"]
+  \\ TRY(drule lift_sum_error \\ rw[])
+QED
+
+Theorem get_immutables_error:
+  get_immutables x y z = (INR e, s) ==>
+  (∃m. e = Error (RuntimeError m))
+Proof
+  rw[get_immutables_def, bind_apply, AllCaseEqs(), return_def,
+     get_address_immutables_def]
+  \\ drule lift_option_error \\ rw[]
+QED
+
+Theorem get_storage_backend_no_error[simp]:
+  get_storage_backend x y z ≠ (INR e, s)
+Proof
+  Cases_on`y` \\ rw[get_storage_backend_def, bind_apply, AllCaseEqs(), return_def]
+  \\ gvs[get_accounts_def, get_transient_storage_def, return_def]
+QED
+
+Theorem read_storage_slot_error:
+  read_storage_slot x y z w a = (INR e, s) ==>
+  (∃m. e = Error (RuntimeError m))
+Proof
+  rw[read_storage_slot_def, bind_apply, AllCaseEqs()]
+  \\ TRY (drule lift_option_error \\ rw[]) \\ gvs[]
+QED
+
+Theorem lookup_global_error:
+  lookup_global a b c d = (INR e, f) ==>
+  (∃m. e = Error m)
+Proof
+  rw[lookup_global_def, bind_apply, AllCaseEqs(), option_CASE_rator,
+     raise_def, return_def]
+  >> TRY (drule lift_option_type_error \\ rw[])
+  \\ TRY (drule get_immutables_error \\ rw[])
+  \\ gvs[var_decl_info_CASE_rator, prod_CASE_rator, AllCaseEqs(),
+         bind_apply, return_def]
+  >> TRY (drule lift_option_type_error \\ rw[])
+  \\ gvs[type_value_CASE_rator, AllCaseEqs(), bind_apply, return_def]
+  \\ drule read_storage_slot_error \\ rw[]
+QED
+
+Theorem set_storage_backend_no_error[simp]:
+  set_storage_backend a b c d ≠ (INR e, f)
+Proof
+  Cases_on `b` \\ rw[set_storage_backend_def]
+  \\ gvs[update_transient_def, return_def]
+  \\ gvs[bind_apply, AllCaseEqs(), get_accounts_def, return_def]
+  \\ gvs[update_accounts_def, return_def]
+QED
+
+Theorem write_storage_slot_error:
+  write_storage_slot a b c d e f = (INR g, h) ==>
+  ?m. g = Error m
+Proof
+  rw[write_storage_slot_def, bind_apply, AllCaseEqs()] \\ gvs[]
+  \\ TRY (drule lift_option_error \\ rw[])
+QED
+
+Theorem set_global_error:
+  set_global a b c d e = (INR x, y) ==>
+  ∃t. x = Error t
+Proof
+  rw[set_global_def, bind_apply, AllCaseEqs()]
+  \\ TRY(drule lift_option_type_error \\ rw[])
+  \\ gvs[option_CASE_rator, AllCaseEqs(), raise_def]
+  \\ gvs[var_decl_info_CASE_rator, AllCaseEqs(), prod_CASE_rator, raise_def]
+  \\ gvs[bind_apply, AllCaseEqs()]
+  \\ TRY(drule lift_option_type_error \\ rw[])
+  \\ drule write_storage_slot_error \\ rw[]
+QED
+
+Theorem resolve_array_element_error:
+  ∀a b c d e f g h. resolve_array_element a b c d e f = (INR g, h)
+  ==> ?m. g = Error m
+Proof
+  ho_match_mp_tac resolve_array_element_ind
+  \\ rw[resolve_array_element_def, raise_def, return_def]
+  \\ gvs[bind_apply, AllCaseEqs(), bound_CASE_rator, unitbind_apply,
+         return_def, check_def, assert_def, raise_def]
+  \\ first_x_assum irule
+  \\ TRY(qexists_tac`0` \\ simp[] \\ goal_assum drule)
+  \\ qexists_tac`1` \\ simp[]
+  \\ gvs[wordsTheory.word_add_n2w]
+  \\ goal_assum drule
+QED
+
+(* assign_target never returns ReturnException *)
+Theorem assign_target_no_return:
+  (!cx tgt ao st res st'.
+    assign_target cx tgt ao st = (res, st') ==>
+    !v. res <> INR (ReturnException v)) /\
+  (!cx tgts vs st res st'.
+    assign_targets cx tgts vs st = (res, st') ==>
+    !v. res <> INR (ReturnException v))
+Proof
+  ho_match_mp_tac assign_target_ind
+  \\ conj_tac >- (
+    rw[assign_target_def, bind_apply, CaseEq"prod", CaseEq"sum"]
+    \\ drule get_scopes_result \\ rw[]
+    \\ gvs[bind_def, ignore_bind_def, CaseEq"prod", CaseEq"sum"]
+    \\ TRY (drule lift_option_error \\ rw[])
+    \\ pairarg_tac \\ gvs[bind_apply, CaseEq"prod", CaseEq"sum"]
+    \\ gvs[set_scopes_def, get_scopes_def, return_def]
+    \\ TRY (drule lift_sum_error \\ rw[])
+    \\ strip_tac \\ gvs[]
+    \\ drule assign_result_error \\ rw[])
+  \\ conj_tac >- (
+    rw[assign_target_def, bind_apply, AllCaseEqs()]
+    \\ TRY (drule lift_option_type_error \\ rw[])
+    \\ TRY (drule lookup_global_error \\ rw[])
+    \\ gvs[toplevel_value_CASE_rator, AllCaseEqs(),
+           bind_apply, unitbind_apply]
+    \\ TRY (drule lift_option_type_error \\ rw[])
+    \\ TRY (drule lift_sum_error \\ rw[])
+    \\ TRY (drule set_global_error \\ rw[])
+    \\ TRY (strip_tac \\ gvs[] \\ drule assign_result_error \\ rw[])
+    \\ gvs[bind_def, ignore_bind_def, prod_CASE_rator, AllCaseEqs()]
+    \\ TRY (drule lift_option_type_error \\ rw[])
+    \\ TRY (drule resolve_array_element_error \\ rw[])
+    \\ pairarg_tac \\ gvs[]
+    \\ gvs[bind_def, ignore_bind_def, prod_CASE_rator, AllCaseEqs(),
+           type_value_CASE_rator, bound_CASE_rator,
+           assign_operation_CASE_rator, return_def, check_def,
+           assert_def]
+    \\ TRY (drule lift_option_type_error \\ rw[])
+    \\ TRY (drule lift_sum_error \\ rw[])
+    \\ TRY (drule write_storage_slot_error \\ rw[])
+    \\ TRY (drule read_storage_slot_error \\ rw[])
+    \\ TRY (strip_tac \\ gvs[] \\ drule assign_result_error \\ rw[])
+    \\ pairarg_tac \\ gvs[bind_apply, AllCaseEqs()]
+    \\ TRY (drule lift_option_type_error \\ rw[])
+    \\ TRY (drule lift_sum_error \\ rw[])
+    \\ TRY (drule write_storage_slot_error \\ rw[])
+    \\ TRY (drule read_storage_slot_error \\ rw[])
+    \\ strip_tac \\ gvs[] \\ drule assign_result_error \\ rw[])
+  \\ cheat
+QED
+
+(* eval_expr and related functions never return ReturnException *)
+Theorem evaluate_no_return:
+  (* P0: eval_stmt — can return ReturnException, so T *)
+  (!cx s st res st'. eval_stmt cx s st = (res,st') ==> T) /\
+  (* P1: eval_stmts — can return ReturnException, so T *)
+  (!cx ss st res st'. eval_stmts cx ss st = (res,st') ==> T) /\
+  (* P2: eval_iterator *)
+  (!cx it st res st'.
+    eval_iterator cx it st = (res, st') ==>
+    !v. res <> INR (ReturnException v)) /\
+  (* P3: eval_target *)
+  (!cx g st res st'.
+    eval_target cx g st = (res, st') ==>
+    !v. res <> INR (ReturnException v)) /\
+  (* P4: eval_targets *)
+  (!cx gs st res st'.
+    eval_targets cx gs st = (res, st') ==>
+    !v. res <> INR (ReturnException v)) /\
+  (* P5: eval_base_target *)
+  (!cx bt st res st'.
+    eval_base_target cx bt st = (res, st') ==>
+    !v. res <> INR (ReturnException v)) /\
+  (* P6: eval_for — can return ReturnException, so T *)
+  (!cx tyv nm body vs st res st'. eval_for cx tyv nm body vs st = (res, st') ==> T) /\
+  (* P7: eval_expr *)
+  (!cx e st res st'.
+    eval_expr cx e st = (res, st') ==>
+    !v. res <> INR (ReturnException v)) /\
+  (* P8: eval_exprs *)
+  (!cx es st res st'.
+    eval_exprs cx es st = (res, st') ==>
+    !v. res <> INR (ReturnException v))
+Proof
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
+  (* stmt/stmts/for cases: trivial *)
+  TRY (simp[] >> NO_TAC) >>
+  rpt gen_tac >>
+  TRY strip_tac >>
+  rpt gen_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def,
+       return_def, raise_def, pairTheory.UNCURRY, LET_THM] >>
+  cheat
 QED
 
 Theorem type_preservation:
@@ -1596,50 +1818,61 @@ Theorem type_preservation:
     eval_iterator cx it st = (res, st') ==>
     state_well_typed st') /\
   (* P3: eval_target *)
-  (!cx g. !st res st'.
+  (!cx g. !env st res st'.
+    well_typed_atarget env g /\
+    env_consistent env cx st /\
     state_well_typed st /\
+    functions_well_typed cx /\
     eval_target cx g st = (res, st') ==>
-    state_well_typed st') /\
+    state_well_typed st' /\ env_consistent env cx st') /\
   (* P4: eval_targets *)
-  (!cx gs. !st res st'.
+  (!cx gs. !env st res st'.
+    EVERY (well_typed_atarget env) gs /\
+    env_consistent env cx st /\
     state_well_typed st /\
+    functions_well_typed cx /\
     eval_targets cx gs st = (res, st') ==>
-    state_well_typed st') /\
+    state_well_typed st' /\ env_consistent env cx st') /\
   (* P5: eval_base_target *)
-  (!cx bt. !st res st'.
+  (!cx bt. !env st res st'.
+    well_typed_target env bt /\
+    env_consistent env cx st /\
     state_well_typed st /\
+    functions_well_typed cx /\
     eval_base_target cx bt st = (res, st') ==>
-    state_well_typed st') /\
+    state_well_typed st' /\ env_consistent env cx st') /\
   (* P6: eval_for *)
   (!cx tyv nm body vs. !st res st'.
     state_well_typed st /\
     eval_for cx tyv nm body vs st = (res, st') ==>
     state_well_typed st') /\
-  (* P7: eval_expr — general form covering all typed_value results *)
-  (!cx e. !env st tv st'.
+  (* P7: eval_expr — covers both success and failure *)
+  (!cx e. !env st res st'.
     well_typed_expr env e /\
     env_consistent env cx st /\
     state_well_typed st /\
     functions_well_typed cx /\
-    eval_expr cx e st = (INL tv, st') ==>
+    eval_expr cx e st = (res, st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\
-    (!v st''. materialise cx tv st' = (INL v, st'') ==>
-       state_well_typed st'' /\ env_consistent env cx st'' /\
-       (!tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv ==>
-              value_has_type tyv v))) /\
+    (!tv. res = INL tv ==>
+       (!v st''. materialise cx tv st' = (INL v, st'') ==>
+          state_well_typed st'' /\ env_consistent env cx st'' /\
+          (!tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv ==>
+                 value_has_type tyv v)))) /\
   (* P8: eval_exprs — with LIST_REL satisfies_type *)
-  (!cx es. !env st vs st'.
+  (* P8: eval_exprs — covers both success and failure *)
+  (!cx es. !env st res st'.
     well_typed_exprs env es /\
     env_consistent env cx st /\
     state_well_typed st /\
     functions_well_typed cx /\
-    eval_exprs cx es st = (INL vs, st') ==>
+    eval_exprs cx es st = (res, st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\
-    LIST_REL (\v e. !tyv.
-      evaluate_type (get_tenv cx) (expr_type e) = SOME tyv ==>
-      value_has_type tyv v) vs es)
+    (!vs. res = INL vs ==>
+      LIST_REL (\v e. !tyv.
+        evaluate_type (get_tenv cx) (expr_type e) = SOME tyv ==>
+        value_has_type tyv v) vs es))
 Proof
-
   ho_match_mp_tac evaluate_ind >> rpt conj_tac
   (* ===== P0: eval_stmt (goals 0-14) ===== *)
   (* 0: Pass *)
@@ -1662,7 +1895,7 @@ Proof
   (* 7: Log *)           >- cheat
   (* 8: AnnAssign *)     >- cheat
   (* 9: Append *)        >- cheat
-  (* 10: Assign *)       >- cheat
+  (* 10: Assign *)       >- suspend "assign"
   (* 11: AugAssign *)    >- cheat
   (* 12: If *)           >- cheat
   (* 13: For *)          >- cheat
@@ -1749,22 +1982,36 @@ Proof
   >- (rpt gen_tac >> strip_tac >>
       gvs[Once evaluate_def, return_def])
   (* 46: e::es *)
-  >- (rpt gen_tac >> strip_tac >>
-      rpt gen_tac >> strip_tac >>
-      qpat_x_assum `eval_exprs _ _ _ = _`
-        (mp_tac o ONCE_REWRITE_RULE[evaluate_def]) >>
-      simp[bind_def, AllCaseEqs()] >> strip_tac >>
-      (* Now have: eval_expr cx e st = (INL tv, s1) /\
-                   materialise cx tv s1 = (INL v_hd, s2) /\
-                   eval_exprs cx es s2 = (INL vs_tl, s3) /\
-                   return (v_hd::vs_tl) s3 = (INL vs, st') *)
-      gvs[return_def, well_typed_expr_def] >>
-      (* P7 IH *)
-      qpat_x_assum `!env0 st0 tv0 st0'. well_typed_expr _ _ /\ _ ==> _`
-        (drule_at (Pos last)) >>
-      disch_then (qspec_then `env` mp_tac) >> simp[] >> strip_tac >>
-      first_x_assum drule >> strip_tac >>
-      (* P8 IH — match materialise in assumptions *)
-      first_x_assum drule_all >> simp[]
-    )
+  >- suspend "P8cons"
 QED
+
+Resume type_preservation[P8cons]:
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_exprs _ _ _ = _`
+    (mp_tac o ONCE_REWRITE_RULE[evaluate_def]) >>
+  qpat_x_assum`well_typed_exprs _ _`mp_tac >>
+  rewrite_tac[well_typed_expr_def] >> strip_tac >>
+  first_x_assum $ funpow 3 drule_then drule >> strip_tac >>
+  simp[bind_apply] >>
+  simp[CaseEq"prod",CaseEq"sum"] >>
+  reverse strip_tac \\ gvs[return_def]
+  >- ( drule materialise_state \\ rw[] )
+  >- ( first_x_assum $ funpow 5 drule_then drule \\ rw[] )
+  \\ first_x_assum drule_all \\ rw[]
+QED
+
+Resume type_preservation[assign]:
+  rpt gen_tac \\ strip_tac
+  \\ rpt gen_tac
+  \\ rewrite_tac[well_typed_stmt_def]
+  \\ rewrite_tac[evaluate_def]
+  \\ rewrite_tac[bind_def, ignore_bind_def, CaseEq"sum", CaseEq"prod"]
+  \\ simp_tac std_ss []
+  \\ strip_tac
+  \\ first_x_assum drule_all
+  \\ strip_tac
+  \\ cheat
+QED
+
+Finalise type_preservation
