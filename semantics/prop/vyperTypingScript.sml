@@ -15,7 +15,8 @@
 
 Theory vyperTyping
 Ancestors
-  vyperStorage vyperValue vyperMisc sorting
+  vyperStorage vyperValue vyperMisc
+  list sorting
 Libs
   wordsLib
 
@@ -43,6 +44,23 @@ Definition well_formed_type_value_def:
   well_formed_type_value (FlagTV m) = (m ≤ 256) ∧
   well_formed_type_value _ = T
 End
+
+Theorem evaluate_type_well_formed:
+  (!tenv ty tv. evaluate_type tenv ty = SOME tv ==>
+    well_formed_type_value tv) /\
+  (!tenv tys acc tvs. evaluate_types tenv tys acc = SOME tvs ==>
+    EVERY well_formed_type_value acc ==>
+    EVERY well_formed_type_value tvs)
+Proof
+  ho_match_mp_tac evaluate_type_ind
+  >> simp[evaluate_type_def, AllCaseEqs(), well_formed_type_value_def,
+          PULL_EXISTS]
+  >> rpt strip_tac >> gvs[well_formed_type_value_def]
+  >> res_tac >> gvs[]
+  >> gvs[EVERY_MEM, MEM_ZIP, PULL_EXISTS, EL_MAP]
+  >> gvs[evaluate_types_OPT_MMAP, OPT_MMAP_SOME_IFF]
+  >> gvs[ZIP_MAP, MAP_MAP_o, combinTheory.o_DEF, MEM_MAP, PULL_EXISTS]
+QED
 
 (* ===== value_has_type: structural characterization of encode_value success ===== *)
 
