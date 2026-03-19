@@ -10,6 +10,8 @@
 Theory builtinHashing
 Ancestors
   emitHelper context compileEnv venomInst
+Libs
+  monadsyntax
 
 (* ===== keccak256 ===== *)
 (* Mirrors Python: hashing.py lower_keccak256
@@ -18,28 +20,31 @@ Ancestors
 
 (* compile_keccak256_word: hash a 32-byte word value *)
 Definition compile_keccak256_word_def:
-  compile_keccak256_word val_op st =
-        let (buf_alloc, st2) = compile_alloc_buffer 32 st in
-        let buf = buf_alloc.buf_operand in
-    let (_, st3) = emit_void MSTORE [buf; val_op] st2 in
-    emit_op SHA3 [buf; Lit 32w] st3
+  compile_keccak256_word val_op =
+    do buf_alloc <- compile_alloc_buffer 32;
+       buf <- return buf_alloc.buf_operand;
+       emit_void MSTORE [buf; val_op];
+       emit_op SHA3 [buf; Lit 32w]
+    od
 End
 
 (* compile_keccak256_bytes: hash a bytestring (ptr to [length][data]) *)
 Definition compile_keccak256_bytes_def:
-  compile_keccak256_bytes ptr_op st =
-    let (length, st1) = emit_op MLOAD [ptr_op] st in
-    let (data_ptr, st2) = emit_op ADD [ptr_op; Lit 32w] st1 in
-    emit_op SHA3 [data_ptr; length] st2
+  compile_keccak256_bytes ptr_op =
+    do length <- emit_op MLOAD [ptr_op];
+       data_ptr <- emit_op ADD [ptr_op; Lit 32w];
+       emit_op SHA3 [data_ptr; length]
+    od
 End
 
 (* compile_keccak256_bytesm: hash a bytesM value (only first m bytes) *)
 Definition compile_keccak256_bytesm_def:
-  compile_keccak256_bytesm val_op (m:num) st =
-        let (buf_alloc, st2) = compile_alloc_buffer 32 st in
-        let buf = buf_alloc.buf_operand in
-    let (_, st3) = emit_void MSTORE [buf; val_op] st2 in
-    emit_op SHA3 [buf; Lit (n2w m)] st3
+  compile_keccak256_bytesm val_op (m:num) =
+    do buf_alloc <- compile_alloc_buffer 32;
+       buf <- return buf_alloc.buf_operand;
+       emit_void MSTORE [buf; val_op];
+       emit_op SHA3 [buf; Lit (n2w m)]
+    od
 End
 
 (* ===== sha256 ===== *)
@@ -48,44 +53,47 @@ End
 
 (* compile_sha256_word: hash a 32-byte word value *)
 Definition compile_sha256_word_def:
-  compile_sha256_word val_op st =
-        let (in_buf_alloc, st1) = compile_alloc_buffer 32 st in
-        let in_buf = in_buf_alloc.buf_operand in
-    let (_, st2) = emit_void MSTORE [in_buf; val_op] st1 in
-        let (out_buf_alloc, st3) = compile_alloc_buffer 32 st2 in
-        let out_buf = out_buf_alloc.buf_operand in
-    let (gas_op, st4) = emit_op GAS [] st3 in
-    let (success, st5) = emit_op STATICCALL
-      [gas_op; Lit 2w; in_buf; Lit 32w; out_buf; Lit 32w] st4 in
-    let (_, st6) = emit_void ASSERT [success] st5 in
-    emit_op MLOAD [out_buf] st6
+  compile_sha256_word val_op =
+    do in_buf_alloc <- compile_alloc_buffer 32;
+       in_buf <- return in_buf_alloc.buf_operand;
+       emit_void MSTORE [in_buf; val_op];
+       out_buf_alloc <- compile_alloc_buffer 32;
+       out_buf <- return out_buf_alloc.buf_operand;
+       gas_op <- emit_op GAS [];
+       success <- emit_op STATICCALL
+         [gas_op; Lit 2w; in_buf; Lit 32w; out_buf; Lit 32w];
+       emit_void ASSERT [success];
+       emit_op MLOAD [out_buf]
+    od
 End
 
 (* compile_sha256_bytes: hash a bytestring (ptr to [length][data]) *)
 Definition compile_sha256_bytes_def:
-  compile_sha256_bytes ptr_op st =
-    let (length, st1) = emit_op MLOAD [ptr_op] st in
-    let (data_ptr, st2) = emit_op ADD [ptr_op; Lit 32w] st1 in
-        let (out_buf_alloc, st3) = compile_alloc_buffer 32 st2 in
-        let out_buf = out_buf_alloc.buf_operand in
-    let (gas_op, st4) = emit_op GAS [] st3 in
-    let (success, st5) = emit_op STATICCALL
-      [gas_op; Lit 2w; data_ptr; length; out_buf; Lit 32w] st4 in
-    let (_, st6) = emit_void ASSERT [success] st5 in
-    emit_op MLOAD [out_buf] st6
+  compile_sha256_bytes ptr_op =
+    do length <- emit_op MLOAD [ptr_op];
+       data_ptr <- emit_op ADD [ptr_op; Lit 32w];
+       out_buf_alloc <- compile_alloc_buffer 32;
+       out_buf <- return out_buf_alloc.buf_operand;
+       gas_op <- emit_op GAS [];
+       success <- emit_op STATICCALL
+         [gas_op; Lit 2w; data_ptr; length; out_buf; Lit 32w];
+       emit_void ASSERT [success];
+       emit_op MLOAD [out_buf]
+    od
 End
 
 (* compile_sha256_bytesm: hash a bytesM value (only first m bytes) *)
 Definition compile_sha256_bytesm_def:
-  compile_sha256_bytesm val_op (m:num) st =
-        let (in_buf_alloc, st1) = compile_alloc_buffer 32 st in
-        let in_buf = in_buf_alloc.buf_operand in
-    let (_, st2) = emit_void MSTORE [in_buf; val_op] st1 in
-        let (out_buf_alloc, st3) = compile_alloc_buffer 32 st2 in
-        let out_buf = out_buf_alloc.buf_operand in
-    let (gas_op, st4) = emit_op GAS [] st3 in
-    let (success, st5) = emit_op STATICCALL
-      [gas_op; Lit 2w; in_buf; Lit (n2w m); out_buf; Lit 32w] st4 in
-    let (_, st6) = emit_void ASSERT [success] st5 in
-    emit_op MLOAD [out_buf] st6
+  compile_sha256_bytesm val_op (m:num) =
+    do in_buf_alloc <- compile_alloc_buffer 32;
+       in_buf <- return in_buf_alloc.buf_operand;
+       emit_void MSTORE [in_buf; val_op];
+       out_buf_alloc <- compile_alloc_buffer 32;
+       out_buf <- return out_buf_alloc.buf_operand;
+       gas_op <- emit_op GAS [];
+       success <- emit_op STATICCALL
+         [gas_op; Lit 2w; in_buf; Lit (n2w m); out_buf; Lit 32w];
+       emit_void ASSERT [success];
+       emit_op MLOAD [out_buf]
+    od
 End
