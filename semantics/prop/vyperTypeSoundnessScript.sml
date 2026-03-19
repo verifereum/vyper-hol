@@ -51,9 +51,13 @@
 
 Theory vyperTypeSoundness
 Ancestors
+  list rich_list pred_set prim_rec sorting relation
   vyperAST vyperValue vyperValueOperation vyperMisc
   vyperInterpreter vyperState vyperContext
-  vyperStatePreservation vyperTyping vyperEncodeDecode
+  vyperStatePreservation
+  vyperScopePreservation
+  vyperImmutablesPreservation
+  vyperTyping vyperEncodeDecode
 
 (* ===== Type Classification Helpers ===== *)
 
@@ -1886,6 +1890,76 @@ Proof
   \\ Cases_on`tvs` \\ gvs[value_has_type_def]
 QED
 
+Theorem set_global_well_typed:
+  !cx src n v st res st' env.
+    set_global cx src n v st = (res, st') /\
+    state_well_typed st /\ env_consistent env cx st ==>
+    state_well_typed st' /\ env_consistent env cx st'
+Proof
+  rpt strip_tac
+  >> imp_res_tac set_global_scopes
+  >> imp_res_tac set_global_immutables
+  >> gvs[state_well_typed_def, env_consistent_def]
+  >> metis_tac[]
+QED
+
+Theorem write_storage_slot_well_typed:
+  !cx is_trans slot tv v st res st' env.
+    write_storage_slot cx is_trans slot tv v st = (res, st') /\
+    state_well_typed st /\ env_consistent env cx st ==>
+    state_well_typed st' /\ env_consistent env cx st'
+Proof
+  rpt strip_tac
+  >> imp_res_tac write_storage_slot_scopes
+  >> imp_res_tac write_storage_slot_immutables
+  >> gvs[state_well_typed_def, env_consistent_def]
+  >> metis_tac[]
+QED
+
+Theorem set_immutable_error_state:
+  !cx src n tv v st e st'.
+    set_immutable cx src n tv v st = (INR e, st') ==> st' = st
+Proof
+  rw[set_immutable_def, bind_apply, AllCaseEqs(),
+     get_address_immutables_def, set_address_immutables_def,
+     return_def]
+  >> imp_res_tac lift_option_state >> simp[]
+QED
+
+Theorem set_immutable_well_typed:
+  !cx src n tv v st st' env.
+    set_immutable cx src n tv v st = (INL (), st') /\
+    state_well_typed st /\ env_consistent env cx st /\
+    value_has_type tv v /\
+    (?old_v. FLOOKUP (get_source_immutables src
+      (case ALOOKUP st.immutables cx.txn.target of
+         SOME m => m | NONE => [])) n = SOME (tv, old_v)) ==>
+    state_well_typed st' /\ env_consistent env cx st'
+Proof
+  simp[set_immutable_def]
+  \\ rpt gen_tac
+  \\ simp[bind_apply, AllCaseEqs()]
+  \\ strip_tac
+  \\ gvs[set_address_immutables_def, return_def]
+  \\ gvs[state_well_typed_def, env_consistent_def]
+  \\ gvs[get_address_immutables_def, lift_option_def]
+  \\ gvs[AllCaseEqs(), option_CASE_rator, raise_def, return_def]
+  \\ gvs[EVERY_MEM, alistTheory.MEM_ADELKEY, pairTheory.FORALL_PROD]
+  \\ gvs[get_source_immutables_def, set_source_immutables_def]
+  \\ gvs[alistTheory.ALOOKUP_ADELKEY]
+  \\ gvs[imms_well_typed_def]
+  \\ rw[]
+  \\ gvs[finite_mapTheory.FLOOKUP_UPDATE, CaseEq"bool"]
+  \\ gvs[alistTheory.ALOOKUP_ADELKEY]
+  \\ res_tac
+  \\ last_x_assum irule
+  \\ goal_assum $ drule_at Any
+  \\ TRY CASE_TAC \\ gvs[]
+  \\ goal_assum drule
+  \\ imp_res_tac alistTheory.ALOOKUP_MEM
+  \\ goal_assum drule
+QED
+
 Theorem assign_target_well_typed:
   (!g. !cx tgt st0 st1 v st res st' env ty.
     eval_target cx g st0 = (INL tgt, st1) /\
@@ -1921,6 +1995,7 @@ Proof
     \\ TRY(drule get_immutables_state \\ simp[])
     \\ TRY(drule lift_sum_state \\ simp[])
     \\ TRY(drule lookup_global_state \\ simp[])
+    \\ TRY(drule assign_result_state \\ simp[])
     \\ TRY(
       gvs[bind_def, CaseEq"prod",CaseEq"sum"]
       \\ TRY(drule lift_option_state \\ simp[])
@@ -1930,8 +2005,48 @@ Proof
       \\ ntac 3 strip_tac \\ gvs[]
       \\ drule assign_result_state
       \\ strip_tac \\ gvs[]
-      \\ cheat)
-    \\ cheat )
+      \\ suspend "replace")
+    >- (
+      rpt(disch_then strip_assume_tac) \\ gvs[]
+      \\ funpow 2 drule_then irule set_immutable_well_typed
+      \\ gvs[]
+      \\ suspend "set_immutable" )
+    \\ imp_res_tac set_immutable_error_state >- gvs[]
+    \\ ntac 2 strip_tac
+    \\ gvs[toplevel_value_CASE_rator, AllCaseEqs(), bind_apply, unitbind_apply]
+    \\ TRY(drule lift_option_type_state \\ simp[])
+    \\ TRY(drule lift_sum_state \\ simp[])
+    \\ TRY(drule assign_result_state \\ simp[])
+    \\ rpt (disch_then strip_assume_tac) \\ gvs[]
+    \\ TRY(drule_all write_storage_slot_well_typed)
+    \\ TRY(drule_all set_global_well_typed) \\ gvs[]
+    >- (
+      reverse $ gvs[prod_CASE_rator, bind_def, AllCaseEqs()]
+      \\ TRY(drule lift_option_type_state \\ simp[])
+      \\ pairarg_tac \\ strip_tac \\ gvs[]
+      \\ reverse $ gvs[prod_CASE_rator, bind_def, AllCaseEqs()]
+      \\ TRY(drule lift_option_type_state \\ simp[])
+      \\ pairarg_tac \\ strip_tac \\ gvs[]
+      \\ gvs[bind_apply, AllCaseEqs(), unitbind_apply]
+      \\ imp_res_tac lift_option_type_state \\ gvs[]
+      \\ TRY(drule lift_sum_state \\ simp[])
+      \\ TRY(drule read_storage_slot_state \\ simp[])
+      \\ TRY(drule assign_result_state \\ simp[])
+      \\ rpt (disch_then strip_assume_tac) \\ gvs[]
+      \\ TRY(drule_all write_storage_slot_well_typed)
+      \\ simp[])
+   \\ reverse $ gvs[bind_def, AllCaseEqs()]
+   >- ( drule resolve_array_element_state \\ rw[] )
+   \\ pairarg_tac
+   \\ gvs[type_value_CASE_rator, AllCaseEqs(), bind_apply, unitbind_apply,
+          bound_CASE_rator]
+   \\ imp_res_tac read_storage_slot_state
+   \\ imp_res_tac lift_sum_state
+   \\ imp_res_tac resolve_array_element_state
+   \\ imp_res_tac assign_result_state
+   \\ gvs[]
+   \\ imp_res_tac write_storage_slot_well_typed
+   \\ gvs[])
  \\ conj_tac
  >- (
    rpt gen_tac \\ strip_tac
@@ -1981,6 +2096,16 @@ Proof
  \\ first_x_assum irule
  \\ rpt(goal_assum $ drule_at Any)
 QED
+
+Resume assign_target_well_typed[replace]:
+  cheat
+QED
+
+Resume assign_target_well_typed[set_immutable]:
+  cheat
+QED
+
+Finalise assign_target_well_typed
 
 (* eval_expr and related functions never return ReturnException *)
 Theorem evaluate_no_return:
