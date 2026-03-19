@@ -1693,6 +1693,73 @@ Proof
   \\ goal_assum drule
 QED
 
+Theorem materialise_error:
+  materialise a b c = (INR e, s) ==>
+  ?m. e = Error m
+Proof
+  Cases_on`b` \\ rw[materialise_def, return_def, raise_def, bind_apply]
+  \\ gvs[AllCaseEqs()]
+  \\ drule read_storage_slot_error \\ rw[]
+QED
+
+Theorem get_Value_error:
+  get_Value a b = (INR e, s) ==>
+  e = Error (TypeError "not Value")
+Proof
+  Cases_on`a` \\ rw[get_Value_def, return_def, raise_def]
+QED
+
+Theorem lookup_flag_mem_error:
+  lookup_flag_mem cx nsid mid st = (INR e, s) ==>
+  ?m. e = Error (TypeError m)
+Proof
+  Cases_on `nsid`
+  \\ rw[lookup_flag_mem_def, option_CASE_rator, AllCaseEqs(),
+        return_def, raise_def]
+QED
+
+Theorem check_array_bounds_error:
+  check_array_bounds cx tv v st = (INR e, s) ==>
+  ?m. e = Error m
+Proof
+  rw[oneline check_array_bounds_def, bind_apply, AllCaseEqs(),
+     value_CASE_rator, toplevel_value_CASE_rator, return_def,
+     bound_CASE_rator]
+  \\ gvs[check_def, assert_def, raise_def]
+QED
+
+Theorem get_accounts_no_error[simp]:
+  get_accounts st <> (INR e, s)
+Proof
+  rw[get_accounts_def, return_def]
+QED
+
+Theorem toplevel_array_length_error:
+  toplevel_array_length cx tv st = (INR e, s) ==>
+  ?m. e = Error (TypeError m)
+Proof
+  rw[oneline toplevel_array_length_def, bind_apply, AllCaseEqs(),
+     toplevel_value_CASE_rator, value_CASE_rator, array_value_CASE_rator,
+     bound_CASE_rator, return_def, raise_def]
+QED
+
+Theorem transfer_value_error:
+  transfer_value a b c d = (INR e, s) ==>
+  ?m. e = Error m
+Proof
+  rw[transfer_value_def, bind_apply, unitbind_apply, AllCaseEqs(),
+     return_def, raise_def, check_def, assert_def,
+     update_accounts_def, get_accounts_def]
+QED
+
+Theorem switch_BoolV_error:
+  switch_BoolV v f g st = (INR e, s) ==>
+  f st <> (INR e, s) /\ g st <> (INR e, s) ==>
+  ?m. e = Error m
+Proof
+  rw[switch_BoolV_def, raise_def]
+QED
+
 (* assign_target never returns ReturnException *)
 Theorem assign_target_no_return:
   (!cx tgt ao st res st'.
@@ -1742,7 +1809,29 @@ Proof
     \\ TRY (drule write_storage_slot_error \\ rw[])
     \\ TRY (drule read_storage_slot_error \\ rw[])
     \\ strip_tac \\ gvs[] \\ drule assign_result_error \\ rw[])
-  \\ cheat
+  (* ImmutableVar *)
+  \\ conj_tac >- (
+    rw[assign_target_def, bind_apply, AllCaseEqs()]
+    \\ TRY (drule get_immutables_error \\ rw[])
+    \\ TRY (drule lift_option_type_error \\ rw[])
+    \\ TRY (drule lift_sum_error \\ rw[])
+    \\ gvs[set_immutable_def, bind_apply, AllCaseEqs(),
+           set_address_immutables_def, return_def,
+           get_address_immutables_def, unitbind_apply]
+    \\ TRY (drule lift_option_error \\ rw[])
+    \\ strip_tac \\ gvs[]
+    \\ drule assign_result_error \\ rw[])
+  (* TupleTargetV Replace (ArrayV (TupleV vs)) *)
+  \\ conj_tac >- (
+    rw[assign_target_def, bind_apply, AllCaseEqs(), unitbind_apply,
+       assert_def, return_def]
+    \\ strip_tac \\ gvs[type_check_def, assert_def]
+    \\ first_x_assum drule \\ rw[])
+  (* remaining catch-alls + assign_targets *)
+  \\ simp[assign_target_def, raise_def, return_def, bind_apply,
+          AllCaseEqs(), unitbind_apply, assert_def]
+  \\ rpt strip_tac \\ gvs[]
+  \\ first_x_assum drule \\ gvs[]
 QED
 
 (* eval_expr and related functions never return ReturnException *)
@@ -1778,16 +1867,252 @@ Theorem evaluate_no_return:
     eval_exprs cx es st = (res, st') ==>
     !v. res <> INR (ReturnException v))
 Proof
-  ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
-  (* stmt/stmts/for cases: trivial *)
-  TRY (simp[] >> NO_TAC) >>
-  rpt gen_tac >>
-  TRY strip_tac >>
-  rpt gen_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def,
-       return_def, raise_def, pairTheory.UNCURRY, LET_THM] >>
-  cheat
+  ho_match_mp_tac evaluate_ind
+  (* P0: eval_stmt cases 0-14 — all trivial *)
+  >> conj_tac >- simp[] (* Pass *)
+  >> conj_tac >- simp[] (* Continue *)
+  >> conj_tac >- simp[] (* Break *)
+  >> conj_tac >- simp[] (* Return NONE *)
+  >> conj_tac >- simp[] (* Return SOME *)
+  >> conj_tac >- simp[] (* Raise *)
+  >> conj_tac >- simp[] (* Assert *)
+  >> conj_tac >- simp[] (* Log *)
+  >> conj_tac >- simp[] (* AnnAssign *)
+  >> conj_tac >- simp[] (* Append *)
+  >> conj_tac >- simp[] (* Assign *)
+  >> conj_tac >- simp[] (* AugAssign *)
+  >> conj_tac >- simp[] (* If *)
+  >> conj_tac >- simp[] (* For *)
+  >> conj_tac >- simp[] (* Expr *)
+  (* P1: eval_stmts 15-16 — trivial *)
+  >> conj_tac >- simp[] (* [] *)
+  >> conj_tac >- simp[] (* s::ss *)
+  (* P2: eval_iterator 17-18 *)
+  (* P2: eval_iterator *)
+  >> conj_tac >- suspend "Array"
+  >> conj_tac >- suspend "Range"
+  (* P3: eval_target *)
+  >> conj_tac >- suspend "BaseTarget"
+  >> conj_tac >- suspend "TupleTarget"
+  (* P4: eval_targets *)
+  >> conj_tac >- suspend "targets_nil"
+  >> conj_tac >- suspend "targets_cons"
+  (* P5: eval_base_target *)
+  >> conj_tac >- suspend "NameTarget"
+  >> conj_tac >- suspend "BareGlobalNameTarget"
+  >> conj_tac >- suspend "TopLevelNameTarget"
+  >> conj_tac >- suspend "AttributeTarget"
+  >> conj_tac >- suspend "SubscriptTarget"
+  (* P6: eval_for — trivial *)
+  >> conj_tac >- simp[]
+  >> conj_tac >- simp[]
+  (* P7: eval_expr *)
+  >> conj_tac >- suspend "Name_nr"
+  >> conj_tac >- suspend "BareGlobalName_nr"
+  >> conj_tac >- suspend "TopLevelName_nr"
+  >> conj_tac >- suspend "FlagMember_nr"
+  >> conj_tac >- suspend "IfExp_nr"
+  >> conj_tac >- suspend "Literal_nr"
+  >> conj_tac >- suspend "StructLit_nr"
+  >> conj_tac >- suspend "Subscript_nr"
+  >> conj_tac >- suspend "Attribute_nr"
+  >> conj_tac >- suspend "Builtin_nr"
+  >> conj_tac >- suspend "Pop_nr"
+  >> conj_tac >- suspend "TypeBuiltin_nr"
+  >> conj_tac >- suspend "Send_nr"
+  >> conj_tac >- suspend "ExtCall_nr"
+  >> conj_tac >- suspend "IntCall_nr"
+  (* P8: eval_exprs *)
+  >> conj_tac >- suspend "exprs_nil_nr"
+  >> suspend "exprs_cons_nr"
 QED
+
+(* --- Resume blocks for evaluate_no_return --- *)
+
+(* Most cases follow the same pattern: unfold, use error lemmas + IH *)
+val enr_tac =
+  rw[Once evaluate_def, bind_apply, AllCaseEqs(),
+     return_def, raise_def, unitbind_apply,
+     get_scopes_def, type_check_def, assert_def,
+     get_address_immutables_def, check_def,
+     option_CASE_rator, sum_CASE_rator]
+  >> TRY (first_x_assum drule >> rw[])
+  >> TRY (drule lift_option_type_error >> rw[])
+  >> TRY (drule lift_option_error >> rw[])
+  >> TRY (drule lift_sum_error >> rw[])
+  >> TRY (drule assign_target_no_return >> rw[])
+  >> TRY (drule assign_result_error >> rw[])
+  >> TRY (drule read_storage_slot_error >> rw[])
+  >> TRY (drule write_storage_slot_error >> rw[])
+  >> TRY (drule set_global_error >> rw[])
+  >> TRY (drule lookup_global_error >> rw[])
+  >> TRY (drule get_immutables_error >> rw[])
+  >> TRY (drule materialise_error >> rw[])
+  >> TRY (drule get_Value_error >> rw[])
+  >> TRY (drule lookup_flag_mem_error >> rw[])
+  >> TRY (drule check_array_bounds_error >> rw[])
+  >> TRY (drule toplevel_array_length_error >> rw[])
+  >> TRY (drule switch_BoolV_error >> simp[] >> rw[])
+
+Resume evaluate_no_return[Array]:
+  enr_tac
+QED
+
+Resume evaluate_no_return[Range]:
+  enr_tac
+  >> first_x_assum drule_all \\ rw[]
+QED
+
+Resume evaluate_no_return[BaseTarget]:
+  enr_tac
+  >> gvs[bind_def, AllCaseEqs(), prod_CASE_rator]
+  >> TRY pairarg_tac \\ gvs[return_def]
+  >> first_x_assum drule_all \\ rw[]
+QED
+
+Resume evaluate_no_return[TupleTarget]:
+  enr_tac
+QED
+
+Resume evaluate_no_return[targets_nil]: enr_tac
+QED
+
+Resume evaluate_no_return[targets_cons]:
+  enr_tac
+  >> first_x_assum drule_all \\ rw[]
+QED
+
+Resume evaluate_no_return[NameTarget]:
+  enr_tac
+QED
+
+Resume evaluate_no_return[BareGlobalNameTarget]: enr_tac
+QED
+
+Resume evaluate_no_return[TopLevelNameTarget]: enr_tac
+QED
+
+Resume evaluate_no_return[AttributeTarget]:
+  enr_tac
+  >> gvs[bind_def, AllCaseEqs(), prod_CASE_rator]
+  >> TRY pairarg_tac \\ gvs[return_def]
+  >> first_x_assum drule_all \\ rw[]
+QED
+
+Resume evaluate_no_return[SubscriptTarget]:
+  enr_tac
+  >> gvs[bind_def, AllCaseEqs(), prod_CASE_rator]
+  >> TRY pairarg_tac \\ gvs[return_def]
+  >> pop_assum mp_tac \\ enr_tac
+  >> first_x_assum drule_all \\ rw[]
+QED
+
+Resume evaluate_no_return[Name_nr]: enr_tac
+QED
+
+Resume evaluate_no_return[BareGlobalName_nr]: enr_tac
+QED
+
+Resume evaluate_no_return[TopLevelName_nr]:
+  enr_tac \\ strip_tac \\ enr_tac
+QED
+
+Resume evaluate_no_return[FlagMember_nr]:
+  enr_tac
+  >> strip_tac >> gvs[]
+  >> drule lookup_flag_mem_error >> rw[]
+QED
+
+Resume evaluate_no_return[IfExp_nr]:
+  enr_tac
+  \\ strip_tac \\ enr_tac
+  \\ TRY(first_x_assum drule_all)
+  \\ rw[]
+  \\ goal_assum $ drule_at Any
+QED
+
+Resume evaluate_no_return[Literal_nr]: enr_tac
+QED
+
+Resume evaluate_no_return[StructLit_nr]: enr_tac
+QED
+
+Resume evaluate_no_return[Subscript_nr]:
+  enr_tac
+  \\ first_x_assum drule_all \\ rw[]
+  \\ gvs[bind_def, AllCaseEqs(), prod_CASE_rator, return_def]
+  \\ enr_tac
+QED
+
+Resume evaluate_no_return[Attribute_nr]: enr_tac
+QED
+
+Resume evaluate_no_return[Builtin_nr]:
+  enr_tac \\ strip_tac \\ gvs[]
+QED
+
+Resume evaluate_no_return[Pop_nr]:
+  enr_tac
+  >> gvs[bind_def, AllCaseEqs(), prod_CASE_rator]
+  >> TRY pairarg_tac \\ gvs[return_def]
+  >> pop_assum mp_tac \\ enr_tac
+  \\ strip_tac
+  \\ drule $ cj 1 assign_target_no_return
+  \\ rw[]
+QED
+
+Resume evaluate_no_return[TypeBuiltin_nr]:
+  enr_tac \\ strip_tac \\ gvs[]
+QED
+
+Resume evaluate_no_return[Send_nr]:
+  enr_tac \\ strip_tac \\ gvs[]
+  \\ drule transfer_value_error \\ rw[]
+QED
+
+Resume evaluate_no_return[ExtCall_nr]:
+  enr_tac
+  \\ gvs[bind_def, COND_RATOR, return_def, AllCaseEqs()]
+  \\ strip_tac \\ gvs[get_transient_storage_def, return_def] \\ enr_tac
+  \\ TRY pairarg_tac \\ gvs[]
+  \\ pop_assum mp_tac \\ enr_tac
+  \\ gvs[update_transient_def, update_accounts_def,
+         get_transient_storage_def, return_def]
+  >- (goal_assum drule_all)
+  \\ gvs[lift_sum_runtime_def, CaseEq"sum", return_def, raise_def,
+         sum_CASE_rator]
+  \\ pairarg_tac
+  \\ gvs[unitbind_apply, AllCaseEqs(), bind_apply,
+         assert_def, return_def]
+  \\ pop_assum mp_tac \\ enr_tac
+  \\ rpt(goal_assum $ drule_at Any)
+  \\ gvs[update_transient_def, update_accounts_def, return_def]
+QED
+
+(* TODO: move *)
+Theorem exception_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vyperState",Tyop="exception"}));
+
+Resume evaluate_no_return[IntCall_nr]:
+  enr_tac \\ strip_tac \\ gvs[]
+  \\ gvs[finally_def, AllCaseEqs(), unitbind_apply, return_def,
+         pop_function_def, set_scopes_def, raise_def, try_def,
+         push_function_def]
+  \\ gvs[oneline handle_function_def, AllCaseEqs(),
+         exception_CASE_rator, return_def, raise_def]
+  \\ first_x_assum drule_all \\ rw[]
+QED
+
+Resume evaluate_no_return[exprs_nil_nr]: enr_tac
+QED
+
+Resume evaluate_no_return[exprs_cons_nr]:
+  enr_tac \\ strip_tac \\ gvs[]
+  \\ first_x_assum drule_all \\ rw[]
+QED
+
+Finalise evaluate_no_return
 
 Theorem type_preservation:
   (* P0: eval_stmt — state + env preserved, return exceptions well-typed *)

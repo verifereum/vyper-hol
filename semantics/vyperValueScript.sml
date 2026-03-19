@@ -171,6 +171,10 @@ Theorem value_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="vyperValue",Tyop="value"}));
 
+Theorem array_value_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vyperValue",Tyop="array_value"}));
+
 val from_to_value_thm = cv_typeLib.from_to_thm_for “:value”;
 val from_value = from_to_value_thm |> concl |> rator |> rand
 val to_value = from_to_value_thm |> concl |> rand
