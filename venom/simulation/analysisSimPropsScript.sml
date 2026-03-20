@@ -296,3 +296,20 @@ Theorem transfer_sound_exit:
 Proof
   ACCEPT_TAC transfer_sound_exit
 QED
+
+(* After running a block OK, the successor block is in cfg_dfs_pre *)
+Theorem successor_in_cfg_dfs_pre:
+  !fn bb fuel ctx s v.
+    fn_inst_wf fn /\ ALL_DISTINCT (fn_labels fn) /\
+    (!bb. MEM bb fn.fn_blocks ==>
+      !i. i < LENGTH bb.bb_instructions - 1 ==>
+        ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+    MEM bb fn.fn_blocks /\
+    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+    s.vs_inst_idx = 0 /\
+    run_block fuel ctx bb s = OK v
+    ==>
+    MEM v.vs_current_bb (cfg_analyze fn).cfg_dfs_pre
+Proof
+  ACCEPT_TAC analysisSimProofsTheory.successor_in_cfg_dfs_pre
+QED

@@ -12,7 +12,7 @@
 
 Theory venomExecProofs
 Ancestors
-  venomExecSemantics venomInst venomState rich_list list
+  venomExecSemantics venomInst venomState venomWf rich_list list
 
 (* ==========================================================================
    bool_to_word Properties
@@ -453,4 +453,152 @@ Proof
     metis_tac[EL_TAKE, DECIDE ``n < SUC n``]
   ) >>
   simp[]
+QED
+
+(* ==========================================================================
+   Shared block-level semantic theorems
+   ========================================================================== *)
+
+(* Terminator OK preserves vs_vars *)
+Theorem step_terminator_preserves_vars:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    is_terminator inst.inst_opcode ==>
+    !v. lookup_var v s' = lookup_var v s
+Proof
+  rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE` by (
+    Cases_on `inst.inst_opcode` >> fs[is_terminator_def]) >>
+  fs[step_inst_non_invoke] >>
+  Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
+  fs[step_inst_base_def, LET_THM] >>
+  rpt (BasicProvers.PURE_FULL_CASE_TAC >>
+       fs[jump_to_def, halt_state_def, revert_state_def,
+          set_returndata_def, lookup_var_def]) >>
+  rw[]
+QED
+
+(* MEM + ALL_DISTINCT labels ==> lookup_block finds the block *)
+Theorem MEM_lookup_block:
+  !lbl bbs (bb:basic_block).
+    MEM bb bbs /\ bb.bb_label = lbl /\
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) ==>
+    lookup_block lbl bbs = SOME bb
+Proof
+  Induct_on `bbs` >> simp[lookup_block_def, FIND_thm] >>
+  rpt strip_tac >> gvs[MEM_MAP] >> rw[] >> gvs[lookup_block_def]
+QED
+
+Theorem extract_labels_eq_map:
+  !ops lbls. EVERY (\op. IS_SOME (get_label op)) ops /\
+    extract_labels ops = SOME lbls ==>
+    MAP (THE o get_label) ops = lbls
+Proof
+  Induct >> rw[extract_labels_def] >>
+  Cases_on `h` >> fs[get_label_def, extract_labels_def] >>
+  Cases_on `extract_labels ops` >> fs[]
+QED
+
+(* After a well-formed terminator executes OK without halting,
+   vs_current_bb is in get_successors of that instruction. *)
+Theorem step_inst_base_term_succs:
+  !inst s s'.
+    inst_wf inst /\ is_terminator inst.inst_opcode /\
+    step_inst_base inst s = OK s' /\ ~s'.vs_halted ==>
+    MEM s'.vs_current_bb (get_successors inst)
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  fs[is_terminator_def] >>
+  fs[step_inst_base_def, inst_wf_def, get_successors_def,
+     get_label_def, AllCaseEqs(), jump_to_def, is_terminator_def] >>
+  gvs[]
+  >- (Cases_on `c` >> fs[get_label_def])
+  >- (Cases_on `c` >> fs[get_label_def])
+  >- (
+    `MAP (THE o get_label) label_ops = labels` by
+      metis_tac[extract_labels_eq_map] >>
+    `FILTER IS_SOME (MAP get_label label_ops) = MAP get_label label_ops` by
+      simp[FILTER_EQ_ID, EVERY_MAP] >>
+    `MAP THE (MAP get_label label_ops) = labels` by
+      fs[MAP_MAP_o] >>
+    Cases_on `IS_SOME (get_label sel)` >> asm_rewrite_tac[MAP, MEM] >>
+    fs[MEM_EL] >> metis_tac[MEM_EL])
+QED
+
+(* run_block OK with vs_inst_idx=0 implies nonempty block *)
+Theorem run_block_ok_nonempty:
+  !fuel ctx bb s v. s.vs_inst_idx = 0 /\ run_block fuel ctx bb s = OK v ==>
+    bb.bb_instructions <> []
+Proof
+  rpt gen_tac >> strip_tac >>
+  spose_not_then assume_tac >>
+  `bb.bb_instructions = []` by fs[] >>
+  qpat_x_assum `run_block _ _ _ _ = OK _` mp_tac >>
+  simp[Once run_block_def, get_instruction_def]
+QED
+
+(* After run_block OK, vs_current_bb is in bb_succs bb *)
+Theorem run_block_current_bb_in_succs:
+  !fuel ctx bb s s1.
+    EVERY inst_wf bb.bb_instructions /\
+    (!i. i < LENGTH bb.bb_instructions - 1 ==>
+       ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+    bb.bb_instructions <> [] /\
+    s.vs_inst_idx = 0 /\
+    run_block fuel ctx bb s = OK s1 ==>
+    MEM s1.vs_current_bb (bb_succs bb)
+Proof
+  rpt strip_tac >>
+  `!n fuel ctx s.
+     n = LENGTH bb.bb_instructions - s.vs_inst_idx /\
+     s.vs_inst_idx <= LENGTH bb.bb_instructions /\
+     run_block fuel ctx bb s = OK s1 ==>
+     MEM s1.vs_current_bb (bb_succs bb)`
+    suffices_by (
+      disch_then (qspecl_then
+        [`LENGTH bb.bb_instructions`, `fuel`, `ctx`, `s`] mp_tac) >>
+      simp[]) >>
+  completeInduct_on `n` >> rpt strip_tac >>
+  qabbrev_tac `i = s'.vs_inst_idx` >>
+  Cases_on `i >= LENGTH bb.bb_instructions`
+  >- (
+    qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
+    ONCE_REWRITE_TAC[run_block_def] >>
+    simp[get_instruction_def]
+  ) >>
+  `i < LENGTH bb.bb_instructions` by fs[] >>
+  qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
+  ONCE_REWRITE_TAC[run_block_def] >>
+  simp[get_instruction_def] >>
+  Cases_on `step_inst fuel' ctx' (EL i bb.bb_instructions) s'` >>
+  gvs[]
+  >- (
+    strip_tac >>
+    Cases_on `is_terminator (EL i bb.bb_instructions).inst_opcode` >> gvs[]
+    >- (
+      Cases_on `v.vs_halted` >> gvs[] >>
+      `~(i < LENGTH bb.bb_instructions - 1)` by metis_tac[] >>
+      `i = PRE (LENGTH bb.bb_instructions)` by fs[] >> gvs[] >>
+      `inst_wf (EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions)` by
+        (fs[EVERY_EL]) >>
+      `(EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions).inst_opcode
+         <> INVOKE` by
+        (CCONTR_TAC >> gvs[is_terminator_def]) >>
+      `step_inst_base
+         (EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions) s' = OK s1` by
+        gvs[step_inst_non_invoke] >>
+      drule_all step_inst_base_term_succs >> strip_tac >>
+      simp[bb_succs_def] >>
+      Cases_on `bb.bb_instructions` >> gvs[LAST_EL, MEM_nub, MEM_REVERSE]
+    )
+    >- (
+      qpat_x_assum `!m. m < _ ==> _`
+        (qspec_then `LENGTH bb.bb_instructions - SUC i` mp_tac) >>
+      impl_tac >- simp[Abbr `i`] >>
+      disch_then (qspecl_then [`fuel'`, `ctx'`,
+        `v with vs_inst_idx := SUC i`] mp_tac) >>
+      simp[]
+    )
+  )
 QED

@@ -460,24 +460,20 @@ QED
 (* Unconditional edge symmetry: removes MEM-in-fn_labels precondition.
    If label is NOT in fn_labels, succs is [] and preds side is vacuously false. *)
 Theorem cfg_edge_symmetry_uncond_proof:
-  !fn.
-    wf_function fn ==>
-    !a b. MEM b (cfg_succs_of (cfg_analyze fn) a) <=>
-          MEM a (cfg_preds_of (cfg_analyze fn) b)
+  !fn a b. MEM b (cfg_succs_of (cfg_analyze fn) a) <=>
+           MEM a (cfg_preds_of (cfg_analyze fn) b)
 Proof
-  rpt strip_tac >> EQ_TAC >> strip_tac
-  >- (`MEM a (fn_labels fn)` by
-        (CCONTR_TAC >>
-         `fmap_lookup_list (build_succs fn.fn_blocks) a = []` by
-           (irule cfg_succs_of_not_in_labels >>
-            fs[venomInstTheory.fn_labels_def]) >>
-         fs[cfgDefsTheory.cfg_succs_of_def, cfg_succs_build]) >>
-      `MEM b (fn_labels fn)` by metis_tac[cfg_analyze_succ_labels_proof] >>
-      metis_tac[cfg_analyze_edge_symmetry_proof])
-  >- (`MEM a (fn_labels fn)` by metis_tac[cfg_analyze_pred_labels_proof] >>
-      `MEM b (fn_labels fn)` by
-        (`cfg_preds_of (cfg_analyze fn) b <> []` by
-           (CCONTR_TAC >> fs[]) >>
-         metis_tac[cfg_analyze_preds_domain_proof]) >>
-      metis_tac[cfg_analyze_edge_symmetry_proof])
+  rpt gen_tac >>
+  simp[cfg_analyze_succs, cfg_analyze_preds, mem_build_preds] >>
+  eq_tac >> rpt strip_tac
+  >- (
+    `?blk. MEM blk fn.fn_blocks /\ blk.bb_label = a` by (
+      spose_not_then strip_assume_tac >>
+      `~MEM a (MAP (\bb. bb.bb_label) fn.fn_blocks)` by (
+        simp[MEM_MAP] >> metis_tac[]) >>
+      `fmap_lookup_list (build_succs fn.fn_blocks) a = []` by
+        metis_tac[cfg_succs_of_not_in_labels] >>
+      fs[]) >>
+    qexists_tac `blk` >> fs[])
+  >- metis_tac[]
 QED

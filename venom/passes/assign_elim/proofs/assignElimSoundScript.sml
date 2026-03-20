@@ -47,16 +47,6 @@ Proof
   Cases_on `step_inst fuel ctx inst s` >> simp[run_insts_def]
 QED
 
-(* lift_result reflexive for reflexive relations *)
-Theorem lift_result_eq[local]:
-  !R_ok R_term r.
-    (!s. R_ok s s) /\ (!s. R_term s s) ==>
-    lift_result R_ok R_term r r
-Proof
-  rpt strip_tac >>
-  Cases_on `r` >> simp[lift_result_def]
-QED
-
 (* copy_sound_opt + unwrap_copies lookup → eval equality *)
 Theorem copy_sound_opt_eval[local]:
   !v s x op.
@@ -158,7 +148,7 @@ Proof
   qabbrev_tac `v = df_at NONE (copy_prop_analyze fn) bb.bb_label idx` >>
   Cases_on `inst.inst_opcode = PHI` >- (
     simp[assign_subst_inst_def, assign_elim_inst_def] >>
-    DISJ2_TAC >> irule lift_result_eq >>
+    DISJ2_TAC >> irule passSimulationPropsTheory.lift_result_refl >>
     simp[state_equiv_refl, execution_equiv_refl]
   ) >>
   Cases_on `is_forwardable_assign (phi_used_vars fn) inst` >- (
@@ -195,7 +185,7 @@ Proof
   ) >>
   (* Non-forwardable, non-PHI: both apply same substitution *)
   simp[assign_elim_inst_def, assign_subst_inst_def] >>
-  DISJ2_TAC >> irule lift_result_eq >>
+  DISJ2_TAC >> irule passSimulationPropsTheory.lift_result_refl >>
   simp[state_equiv_refl, execution_equiv_refl]
 QED
 
@@ -301,24 +291,6 @@ QED
 
 (* Terminator OK preserves vars. JMP/JNZI/DJMP only modify
    vs_current_bb/vs_prev_bb/vs_inst_idx, not vs_vars. *)
-Theorem step_terminator_preserves_vars[local]:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    is_terminator inst.inst_opcode ==>
-    !v. lookup_var v s' = lookup_var v s
-Proof
-  rpt strip_tac >>
-  `inst.inst_opcode <> INVOKE` by (
-    Cases_on `inst.inst_opcode` >> fs[is_terminator_def]) >>
-  fs[step_inst_non_invoke] >>
-  Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
-  fs[step_inst_base_def, LET_THM] >>
-  rpt (BasicProvers.PURE_FULL_CASE_TAC >>
-       fs[jump_to_def, halt_state_def, revert_state_def,
-          set_returndata_def, lookup_var_def]) >>
-  rw[]
-QED
-
 (* Helper: ASSIGN step semantics *)
 Theorem step_assign_result[local]:
   !fuel ctx inst src_op dst s s'.
@@ -368,7 +340,7 @@ Proof
     `!v. ~MEM v inst.inst_outputs ==>
          lookup_var v s' = lookup_var v s` by (
       Cases_on `is_terminator inst.inst_opcode`
-      >- metis_tac[step_terminator_preserves_vars]
+      >- metis_tac[venomExecPropsTheory.step_terminator_preserves_vars]
       >- metis_tac[step_preserves_non_output_vars]) >>
     IF_CASES_TAC
     >- (

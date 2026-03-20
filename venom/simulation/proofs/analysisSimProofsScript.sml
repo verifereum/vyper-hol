@@ -1126,3 +1126,31 @@ Proof
   \\ REWRITE_TAC [venomWfTheory.fn_inst_wf_def]
   \\ disch_then drule \\ disch_then drule \\ simp_tac std_ss []
 QED
+
+(* After running a block OK, the successor block is in cfg_dfs_pre *)
+Theorem successor_in_cfg_dfs_pre:
+  !fn bb fuel ctx s v.
+    fn_inst_wf fn /\ ALL_DISTINCT (fn_labels fn) /\
+    (!bb. MEM bb fn.fn_blocks ==>
+      !i. i < LENGTH bb.bb_instructions - 1 ==>
+        ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+    MEM bb fn.fn_blocks /\
+    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+    s.vs_inst_idx = 0 /\
+    run_block fuel ctx bb s = OK v
+    ==>
+    MEM v.vs_current_bb (cfg_analyze fn).cfg_dfs_pre
+Proof
+  rpt strip_tac >>
+  `bb.bb_instructions <> []` by
+    metis_tac[venomExecProofsTheory.run_block_ok_nonempty] >>
+  `EVERY inst_wf bb.bb_instructions` by
+    (fs[venomWfTheory.fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
+  `!i. i < LENGTH bb.bb_instructions - 1 ==>
+       ~is_terminator (EL i bb.bb_instructions).inst_opcode` by metis_tac[] >>
+  `MEM v.vs_current_bb (bb_succs bb)` by
+    metis_tac[venomExecProofsTheory.run_block_current_bb_in_succs] >>
+  `MEM v.vs_current_bb (cfg_succs_of (cfg_analyze fn) bb.bb_label)` by
+    metis_tac[cfgHelpersTheory.bb_succs_in_cfg_succs] >>
+  imp_res_tac cfg_dfs_pre_succs_closed >> fs[EVERY_MEM]
+QED

@@ -15,10 +15,11 @@
  * predicate so it appears as a disjunct.
  *
  * Preconditions:
+ *   wf_function fn — well-formed function (unique labels, entry, bb_well_formed)
  *   fn_inst_wf fn — all instructions structurally well-formed
- *   ALL_DISTINCT (fn_labels fn) — unique block labels
  *   s.vs_inst_idx = 0 — standard execution entry point
  *   fn_entry_label fn = SOME s.vs_current_bb — execution starts at entry
+ *   non-terminator interior — no non-last instruction is a terminator
  *   operand_cond — no instruction in the substituted function reads
  *     an eliminated variable (holds in SSA form)
  *)
@@ -33,8 +34,8 @@ Theorem assign_elim_function_correct:
     let result = copy_prop_analyze fn in
     let fn_subst = analysis_function_transform NONE result
                      (\v inst. [assign_subst_inst v inst]) fn in
+    wf_function fn /\
     fn_inst_wf fn /\
-    ALL_DISTINCT (fn_labels fn) /\
     s.vs_inst_idx = 0 /\
     fn_entry_label fn = SOME s.vs_current_bb /\
     (!bb. MEM bb fn.fn_blocks ==>

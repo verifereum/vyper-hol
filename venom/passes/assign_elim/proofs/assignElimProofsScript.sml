@@ -112,208 +112,6 @@ QED
 
 (* After run_block OK (non-halted), soundness transfers from entry to exit.
    Requires: no non-last instruction is a terminator. *)
-Theorem run_block_exit_sound[local]:
-  !(sound : 'a -> venom_state -> bool) (transfer : 'b -> instruction -> 'a -> 'a)
-   run_ctx bottom result bb fuel ctx s s1.
-    transfer_sound sound transfer run_ctx /\
-    (!v s k. sound v s ==> sound v (s with vs_inst_idx := k)) /\
-    (!idx. SUC idx <= LENGTH bb.bb_instructions ==>
-       df_at bottom result bb.bb_label (SUC idx) =
-       transfer run_ctx (EL idx bb.bb_instructions)
-         (df_at bottom result bb.bb_label idx)) /\
-    (!i. i < LENGTH bb.bb_instructions - 1 ==>
-       ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
-    sound (df_at bottom result bb.bb_label 0) s /\
-    s.vs_inst_idx = 0 /\
-    run_block fuel ctx bb s = OK s1 ==>
-    sound (df_at bottom result bb.bb_label (LENGTH bb.bb_instructions)) s1
-Proof
-  rpt strip_tac >>
-  `!n fuel ctx s.
-     n = LENGTH bb.bb_instructions - s.vs_inst_idx /\
-     s.vs_inst_idx <= LENGTH bb.bb_instructions /\
-     sound (df_at bottom result bb.bb_label s.vs_inst_idx) s /\
-     run_block fuel ctx bb s = OK s1 ==>
-     sound (df_at bottom result bb.bb_label (LENGTH bb.bb_instructions)) s1`
-    suffices_by (
-      disch_then (qspecl_then
-        [`LENGTH bb.bb_instructions`, `fuel`, `ctx`, `s`] mp_tac) >>
-      simp[]) >>
-  completeInduct_on `n` >> rpt strip_tac >>
-  qabbrev_tac `i = s'.vs_inst_idx` >>
-  Cases_on `i >= LENGTH bb.bb_instructions`
-  >- (
-    `i = LENGTH bb.bb_instructions` by fs[] >>
-    qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
-    ONCE_REWRITE_TAC[run_block_def] >>
-    simp[get_instruction_def]
-  ) >>
-  `i < LENGTH bb.bb_instructions` by fs[] >>
-  qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
-  ONCE_REWRITE_TAC[run_block_def] >>
-  simp[get_instruction_def] >>
-  Cases_on `step_inst fuel' ctx' (EL i bb.bb_instructions) s'` >>
-  gvs[]
-  >- (
-    Cases_on `is_terminator (EL i bb.bb_instructions).inst_opcode`
-    >- (
-      (* Terminator: must be last instruction *)
-      `~(i < LENGTH bb.bb_instructions - 1)` by metis_tac[] >>
-      `SUC i = LENGTH bb.bb_instructions` by fs[] >>
-      Cases_on `v.vs_halted` >> gvs[] >>
-      strip_tac >> gvs[] >>
-      `df_at bottom result bb.bb_label (SUC i) =
-       transfer run_ctx (EL i bb.bb_instructions)
-         (df_at bottom result bb.bb_label i)` by
-        (first_x_assum match_mp_tac >> fs[]) >>
-      fs[transfer_sound_def] >>
-      metis_tac[]
-    )
-    >- (
-      (* Non-terminator: recurse with IH *)
-      strip_tac >>
-      `SUC i <= LENGTH bb.bb_instructions` by fs[] >>
-      (* Apply IH *)
-      qpat_x_assum `!m. m < _ ==> _`
-        (qspec_then `LENGTH bb.bb_instructions - SUC i` mp_tac) >>
-      impl_tac >- simp[Abbr `i`] >>
-      disch_then (qspecl_then [`fuel'`, `ctx'`,
-        `v with vs_inst_idx := SUC i`] mp_tac) >>
-      simp[] >>
-      disch_then match_mp_tac >>
-      `df_at bottom result bb.bb_label (SUC i) =
-       transfer run_ctx (EL i bb.bb_instructions)
-         (df_at bottom result bb.bb_label i)` by res_tac >>
-      `sound (transfer run_ctx (EL i bb.bb_instructions)
-                (df_at bottom result bb.bb_label i)) v` by
-        metis_tac[transfer_sound_def] >>
-      metis_tac[]
-    )
-  )
-QED
-
-Theorem extract_labels_eq_map[local]:
-  !ops lbls. EVERY (\op. IS_SOME (get_label op)) ops /\
-    extract_labels ops = SOME lbls ==>
-    MAP (THE o get_label) ops = lbls
-Proof
-  Induct >> rw[extract_labels_def] >>
-  Cases_on `h` >> fs[get_label_def, extract_labels_def] >>
-  Cases_on `extract_labels ops` >> fs[]
-QED
-
-(* After a well-formed terminator executes OK without halting,
-   vs_current_bb is in get_successors of that instruction. *)
-Theorem step_inst_base_term_succs[local]:
-  !inst s s'.
-    inst_wf inst /\ is_terminator inst.inst_opcode /\
-    step_inst_base inst s = OK s' /\ ~s'.vs_halted ==>
-    MEM s'.vs_current_bb (get_successors inst)
-Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >>
-  fs[is_terminator_def] >>
-  fs[step_inst_base_def, inst_wf_def, get_successors_def,
-     get_label_def, AllCaseEqs(), jump_to_def, is_terminator_def] >>
-  gvs[]
-  (* JNZ cases: c is Var or Lit, so get_label c = NONE *)
-  >- (Cases_on `c` >> fs[get_label_def])
-  >- (Cases_on `c` >> fs[get_label_def])
-  (* DJMP case *)
-  >- (
-    `MAP (THE o get_label) label_ops = labels` by
-      metis_tac[extract_labels_eq_map] >>
-    `FILTER IS_SOME (MAP get_label label_ops) = MAP get_label label_ops` by
-      simp[FILTER_EQ_ID, EVERY_MAP] >>
-    `MAP THE (MAP get_label label_ops) = labels` by
-      fs[MAP_MAP_o] >>
-    Cases_on `IS_SOME (get_label sel)` >> asm_rewrite_tac[MAP, MEM] >>
-    fs[MEM_EL] >> metis_tac[MEM_EL])
-QED
-
-(* After run_block OK, vs_current_bb is in bb_succs bb *)
-Theorem run_block_current_bb_in_succs[local]:
-  !fuel ctx bb s s1.
-    EVERY inst_wf bb.bb_instructions /\
-    (!i. i < LENGTH bb.bb_instructions - 1 ==>
-       ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
-    bb.bb_instructions <> [] /\
-    s.vs_inst_idx = 0 /\
-    run_block fuel ctx bb s = OK s1 ==>
-    MEM s1.vs_current_bb (bb_succs bb)
-Proof
-  rpt strip_tac >>
-  `!n fuel ctx s.
-     n = LENGTH bb.bb_instructions - s.vs_inst_idx /\
-     s.vs_inst_idx <= LENGTH bb.bb_instructions /\
-     run_block fuel ctx bb s = OK s1 ==>
-     MEM s1.vs_current_bb (bb_succs bb)`
-    suffices_by (
-      disch_then (qspecl_then
-        [`LENGTH bb.bb_instructions`, `fuel`, `ctx`, `s`] mp_tac) >>
-      simp[]) >>
-  completeInduct_on `n` >> rpt strip_tac >>
-  qabbrev_tac `i = s'.vs_inst_idx` >>
-  Cases_on `i >= LENGTH bb.bb_instructions`
-  >- (
-    qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
-    ONCE_REWRITE_TAC[run_block_def] >>
-    simp[get_instruction_def]
-  ) >>
-  `i < LENGTH bb.bb_instructions` by fs[] >>
-  qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
-  ONCE_REWRITE_TAC[run_block_def] >>
-  simp[get_instruction_def] >>
-  Cases_on `step_inst fuel' ctx' (EL i bb.bb_instructions) s'` >>
-  gvs[]
-  >- (
-    strip_tac >>
-    Cases_on `is_terminator (EL i bb.bb_instructions).inst_opcode` >> gvs[]
-    >- (
-      (* Terminator: must be last instruction *)
-      Cases_on `v.vs_halted` >> gvs[] >>
-      `~(i < LENGTH bb.bb_instructions - 1)` by metis_tac[] >>
-      `i = PRE (LENGTH bb.bb_instructions)` by fs[] >> gvs[] >>
-      `inst_wf (EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions)` by
-        (fs[EVERY_EL]) >>
-      `(EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions).inst_opcode
-         <> INVOKE` by
-        (CCONTR_TAC >> gvs[is_terminator_def]) >>
-      `step_inst_base
-         (EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions) s' = OK s1` by
-        gvs[step_inst_non_invoke] >>
-      drule_all step_inst_base_term_succs >> strip_tac >>
-      simp[bb_succs_def] >>
-      Cases_on `bb.bb_instructions` >> gvs[LAST_EL, MEM_nub, MEM_REVERSE]
-    )
-    >- (
-      (* Non-terminator: recurse with IH *)
-      qpat_x_assum `!m. m < _ ==> _`
-        (qspec_then `LENGTH bb.bb_instructions - SUC i` mp_tac) >>
-      impl_tac >- simp[Abbr `i`] >>
-      disch_then (qspecl_then [`fuel'`, `ctx'`,
-        `v with vs_inst_idx := SUC i`] mp_tac) >>
-      simp[]
-    )
-  )
-QED
-
-(* bb_succs of a member block are contained in cfg_succs_of *)
-Theorem bb_succs_in_cfg_succs[local]:
-  !fn bb lbl.
-    ALL_DISTINCT (fn_labels fn) /\
-    MEM bb fn.fn_blocks /\
-    MEM lbl (bb_succs bb) ==>
-    MEM lbl (cfg_succs_of (cfg_analyze fn) bb.bb_label)
-Proof
-  rpt strip_tac >>
-  simp[cfgHelpersTheory.cfg_analyze_succs] >>
-  `fmap_lookup_list (build_succs fn.fn_blocks) bb.bb_label = bb_succs bb` by (
-    irule cfg_succs_of_build_succs >>
-    fs[fn_labels_def]) >>
-  fs[]
-QED
-
 (* Fixpoint property of copy_prop analysis *)
 Triviality copy_prop_is_fixpoint[local]:
   !fn. fn_inst_wf fn ==>
@@ -335,7 +133,7 @@ Proof
         SPEC ``Forward : direction`` |>
         SIMP_RULE std_ss [dfAnalyzeDefsTheory.direction_case_def]) >>
       rw[copy_prop_join_absorption] >>
-      metis_tac[cfg_edge_symmetry])
+      metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond])
   >>
   qexistsl_tac [
     `copy_prop_measure_inv fn`,
@@ -361,53 +159,6 @@ QED
    imp_res_tac intra_fwd / boundary_fixpoint_fwd when is_fixpoint
    is an assumption. *)
 val _ = delsimps ["is_fixpoint_def"];
-
-Triviality run_block_ok_nonempty[local]:
-  !fuel ctx bb s v. s.vs_inst_idx = 0 /\ run_block fuel ctx bb s = OK v ==>
-    bb.bb_instructions <> []
-Proof
-  rpt gen_tac >> strip_tac >>
-  spose_not_then assume_tac >>
-  `bb.bb_instructions = []` by fs[] >>
-  qpat_x_assum `run_block _ _ _ _ = OK _` mp_tac >>
-  simp[Once run_block_def, get_instruction_def]
-QED
-
-(* After running a block OK, the successor block is in cfg_dfs_pre *)
-Triviality successor_in_cfg_dfs_pre[local]:
-  !fn bb fuel ctx s v.
-    fn_inst_wf fn /\ ALL_DISTINCT (fn_labels fn) /\
-    (!bb. MEM bb fn.fn_blocks ==>
-      !i. i < LENGTH bb.bb_instructions - 1 ==>
-        ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
-    MEM bb fn.fn_blocks /\
-    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
-    s.vs_inst_idx = 0 /\
-    run_block fuel ctx bb s = OK v
-    ==>
-    MEM v.vs_current_bb (cfg_analyze fn).cfg_dfs_pre
-Proof
-  rpt strip_tac >>
-  `bb.bb_instructions <> []` by metis_tac[run_block_ok_nonempty] >>
-  `EVERY inst_wf bb.bb_instructions` by (fs[fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
-  `!i. i < LENGTH bb.bb_instructions - 1 ==>
-       ~is_terminator (EL i bb.bb_instructions).inst_opcode` by metis_tac[] >>
-  `MEM v.vs_current_bb (bb_succs bb)` by metis_tac[run_block_current_bb_in_succs] >>
-  `MEM v.vs_current_bb (cfg_succs_of (cfg_analyze fn) bb.bb_label)` by
-    metis_tac[bb_succs_in_cfg_succs] >>
-  imp_res_tac analysisSimPropsTheory.cfg_dfs_pre_succs_closed >> fs[EVERY_MEM]
-QED
-
-(* MEM + ALL_DISTINCT labels ==> lookup_block finds the block *)
-Triviality MEM_lookup_block[local]:
-  !lbl bbs (bb:basic_block).
-    MEM bb bbs /\ bb.bb_label = lbl /\
-    ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) ==>
-    lookup_block lbl bbs = SOME bb
-Proof
-  Induct_on `bbs` >> simp[lookup_block_def, FIND_thm] >>
-  rpt strip_tac >> gvs[MEM_MAP] >> rw[] >> gvs[lookup_block_def]
-QED
 
 (* ===== Pre-instantiated dataflow theorems for copy_prop ===== *)
 (* These eliminate the generic polymorphic parameters so drule/drule_all
@@ -583,6 +334,7 @@ Triviality copy_prop_exit_sound[local]:
       (df_analyze Forward NONE copy_prop_join copy_prop_transfer
          copy_prop_edge_transfer (phi_used_vars fn)
          (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn) /\
+    wf_function fn /\
     fn_inst_wf fn /\ ALL_DISTINCT (fn_labels fn) /\
     (!bb. MEM bb fn.fn_blocks ==>
       !i. i < LENGTH bb.bb_instructions - 1 ==>
@@ -607,17 +359,51 @@ Triviality copy_prop_exit_sound[local]:
         bb.bb_label (LENGTH bb.bb_instructions)) v
 Proof
   rpt strip_tac >>
-  match_mp_tac (INST_TYPE [beta |-> ``:(string -> bool)``] run_block_exit_sound) >>
-  MAP_EVERY qexists_tac [`copy_prop_transfer`, `phi_used_vars fn`,
-    `fuel`, `ctx`, `s`] >>
-  rpt conj_tac
-  >- metis_tac[copy_prop_transfer_sound]
-  >- (rpt strip_tac >> metis_tac[copy_sound_opt_inst_idx])
-  >- (rpt strip_tac >> imp_res_tac intra_fwd >> simp_tac std_ss [])
-  >- metis_tac[]
-  >- metis_tac[]
-  >- first_assum ACCEPT_TAC
-  >> first_assum ACCEPT_TAC
+  `bb.bb_instructions <> []` by
+    metis_tac[venomExecPropsTheory.run_block_ok_nonempty] >>
+  (* Find the terminator index *)
+  qabbrev_tac `ti = PRE (LENGTH bb.bb_instructions)` >>
+  `ti < LENGTH bb.bb_instructions` by
+    (Cases_on `bb.bb_instructions` >> fs[Abbr `ti`]) >>
+  `is_terminator (EL ti bb.bb_instructions).inst_opcode` by (
+    `bb_well_formed bb` by (fs[wf_function_def] >> metis_tac[]) >>
+    fs[bb_well_formed_def, Abbr `ti`] >>
+    Cases_on `bb.bb_instructions` >> fs[LAST_EL]) >>
+  `!j. j < ti ==> ~is_terminator (EL j bb.bb_instructions).inst_opcode` by (
+    rpt strip_tac >> first_x_assum (qspec_then `bb` mp_tac) >>
+    (impl_tac >- first_assum ACCEPT_TAC) >>
+    disch_then (qspec_then `j` mp_tac) >>
+    impl_tac >- fs[Abbr `ti`] >> simp[]) >>
+  `SUC ti = LENGTH bb.bb_instructions` by
+    (Cases_on `bb.bb_instructions` >> fs[Abbr `ti`]) >>
+  (* Use transfer_sound_exit *)
+  `copy_sound_opt
+     (df_at NONE
+       (df_analyze Forward NONE copy_prop_join copy_prop_transfer
+          copy_prop_edge_transfer (phi_used_vars fn)
+          (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn)
+       bb.bb_label (SUC ti)) v` by (
+    mp_tac (ISPECL [
+      ``state_equiv {} : venom_state -> venom_state -> bool``,
+      ``execution_equiv {} : venom_state -> venom_state -> bool``,
+      ``copy_sound_opt``,
+      ``copy_prop_transfer``,
+      ``phi_used_vars fn``,
+      ``bb : basic_block``,
+      ``NONE : copy_lattice option``,
+      ``df_analyze Forward NONE copy_prop_join copy_prop_transfer
+          copy_prop_edge_transfer (phi_used_vars fn)
+          (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn``]
+      analysisSimPropsTheory.transfer_sound_exit) >>
+    impl_tac >- (
+      rpt conj_tac
+      >- simp[state_equiv_execution_equiv_valid_state_rel]
+      >- metis_tac[copy_prop_transfer_sound]
+      >- (rpt strip_tac >> metis_tac[copy_sound_opt_state_equiv])
+      >- (rpt strip_tac >> imp_res_tac intra_fwd >> simp_tac std_ss [])) >>
+    disch_then (qspecl_then [`fuel`, `ctx`, `s`, `v`, `ti`] mp_tac) >>
+    simp[]) >>
+  metis_tac[]
 QED
 
 (* If one predecessor boundary is sound/non-NONE, then copy_prop_joined is sound.
@@ -665,6 +451,7 @@ Triviality successor_entry_sound[local]:
       (df_process_block Forward NONE copy_prop_join copy_prop_transfer
          copy_prop_edge_transfer pv ev (cfg_analyze fn) fn.fn_blocks)
       (cfg_analyze fn).cfg_dfs_pre result /\
+    wf_function fn /\
     fn_inst_wf fn /\ ALL_DISTINCT (fn_labels fn) /\
     (!bb. MEM bb fn.fn_blocks ==>
       !i. i < LENGTH bb.bb_instructions - 1 ==>
@@ -679,12 +466,12 @@ Triviality successor_entry_sound[local]:
     copy_sound_opt (df_at NONE result v.vs_current_bb 0) v
 Proof
   rpt gen_tac >> simp_tac std_ss [LET_THM] >> strip_tac >>
-  `bb.bb_instructions <> []` by metis_tac[run_block_ok_nonempty] >>
+  `bb.bb_instructions <> []` by metis_tac[venomExecPropsTheory.run_block_ok_nonempty] >>
   `EVERY inst_wf bb.bb_instructions` by (fs[fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
   `!i. i < LENGTH bb.bb_instructions - 1 ==>
        ~is_terminator (EL i bb.bb_instructions).inst_opcode` by metis_tac[] >>
   `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
-    (irule MEM_lookup_block >> simp[GSYM fn_labels_def]) >>
+    (irule venomExecPropsTheory.MEM_lookup_block >> simp[GSYM fn_labels_def]) >>
   `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by metis_tac[] >>
   (* Normalize: use bb.bb_label everywhere instead of s.vs_current_bb *)
   qpat_x_assum `bb.bb_label = s.vs_current_bb`
@@ -703,13 +490,13 @@ Proof
      bb.bb_label) v` by metis_tac[copy_sound_join_right] >>
   (* Step 5: Successor location *)
   `MEM v.vs_current_bb (bb_succs bb)` by
-    metis_tac[run_block_current_bb_in_succs] >>
+    metis_tac[venomExecPropsTheory.run_block_current_bb_in_succs] >>
   `MEM v.vs_current_bb (cfg_succs_of (cfg_analyze fn) bb.bb_label)` by
-    metis_tac[bb_succs_in_cfg_succs] >>
+    metis_tac[cfgAnalysisPropsTheory.bb_succs_in_cfg_succs] >>
   `MEM v.vs_current_bb (cfg_analyze fn).cfg_dfs_pre` by
     (imp_res_tac analysisSimPropsTheory.cfg_dfs_pre_succs_closed >> gvs[EVERY_MEM]) >>
   `MEM bb.bb_label (cfg_preds_of (cfg_analyze fn) v.vs_current_bb)` by
-    metis_tac[cfg_edge_symmetry] >>
+    metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
   (* Step 6: Successor entry via inter-block transfer (no lookup_block needed) *)
   mp_tac (Q.SPECL [`fn`, `v.vs_current_bb`] copy_prop_inter_fwd_gen) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
@@ -764,6 +551,7 @@ Theorem assign_subst_function_eq[local]:
     let result = copy_prop_analyze fn in
     let fn_subst = analysis_function_transform NONE result
                      (\v inst. [assign_subst_inst v inst]) fn in
+    wf_function fn /\
     fn_inst_wf fn /\
     ALL_DISTINCT (fn_labels fn) /\
     s.vs_inst_idx = 0 /\
@@ -807,7 +595,7 @@ Proof
           metis_tac[REWRITE_RULE [SIMP_RULE std_ss [LET_THM]
             copy_prop_analyze_def] copy_sound_opt_at_entry])
       >- (rpt strip_tac >> rpt conj_tac
-          >- metis_tac[successor_in_cfg_dfs_pre]
+          >- metis_tac[analysisSimPropsTheory.successor_in_cfg_dfs_pre]
           >- (mp_tac (SIMP_RULE std_ss [LET_THM] successor_entry_sound) >>
               disch_then irule >> rpt conj_tac >>
               TRY (first_assum ACCEPT_TAC) >>
@@ -841,8 +629,8 @@ Theorem assign_elim_function_correct_proof:
     let result = copy_prop_analyze fn in
     let fn_subst = analysis_function_transform NONE result
                      (\v inst. [assign_subst_inst v inst]) fn in
+    wf_function fn /\
     fn_inst_wf fn /\
-    ALL_DISTINCT (fn_labels fn) /\
     s.vs_inst_idx = 0 /\
     fn_entry_label fn = SOME s.vs_current_bb /\
     (!bb. MEM bb fn.fn_blocks ==>
@@ -863,7 +651,7 @@ Proof
     (ISPECL [``fuel:num``, ``ctx:ir_context``,
              ``fn:ir_function``, ``s:venom_state``]
      assign_subst_function_eq)) >>
-  impl_tac >- simp[] >>
+  impl_tac >- (fs[wf_function_def]) >>
   strip_tac >- (
     (* Phase 1 gave Error — just forward it *)
     simp[]
