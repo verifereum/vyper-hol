@@ -240,12 +240,16 @@ Datatype:
   = AssertBare                (* simple assert, no reason *)
   | AssertUnreachable         (* assert UNREACHABLE → INVALID opcode *)
   | AssertReason expr         (* assert with Error(string) reason *)
-  ;
+End
+
+Datatype:
   raise_reason
   = RaiseBare                 (* bare raise: revert 0,0 *)
   | RaiseUnreachable          (* raise UNREACHABLE → INVALID opcode *)
   | RaiseReason expr          (* raise with Error(string) reason *)
-  ;
+End
+
+Datatype:
   stmt
   = Pass
   | Continue
