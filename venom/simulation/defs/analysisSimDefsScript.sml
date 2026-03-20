@@ -7,7 +7,8 @@
  *
  * TOP-LEVEL:
  *   run_insts                       — sequential step_inst over a list
- *   analysis_inst_simulates         — per-instruction simulation
+ *   inst_transform_structural       — structural constraints (term/INVOKE/safe)
+ *   analysis_inst_simulates         — per-instruction simulation (error ∨ lift_result)
  *   analysis_block_transform        — block transform using FLAT ∘ MAPi
  *   analysis_function_transform     — function transform
  *   analysis_block_transform_widen  — widen variant
@@ -21,7 +22,7 @@
 
 Theory analysisSimDefs
 Ancestors
-  dfAnalyzeDefs dfAnalyzeWidenDefs passSimulationDefs indexedLists
+  dfAnalyzeDefs dfAnalyzeWidenDefs passSimulationDefs indexedLists venomWf
 
 (* 1:1 simulation helper (used by analysis_inst_simulates_from_1 corollary).
    f : 'a → inst → inst maps each instruction to a single replacement.
@@ -34,7 +35,8 @@ Definition analysis_inst_simulates_1_def:
     (sound : 'a -> venom_state -> bool)
     (f : 'a -> instruction -> instruction) <=>
     (!v fuel ctx inst s.
-       sound v s ==>
+       sound v s /\ inst_wf inst ==>
+       (?e. step_inst fuel ctx inst s = Error e) \/
        lift_result R_ok R_term
          (step_inst fuel ctx inst s) (step_inst fuel ctx (f v inst) s)) /\
     (!v inst. is_terminator inst.inst_opcode ==>
@@ -89,35 +91,39 @@ Definition run_insts_def:
     | other => other
 End
 
-(* Per-instruction simulation: f maps each instruction (given a lattice
-   value) to a replacement list. Structural constraints ensure the
-   transformed block is well-formed for run_block:
+(* Structural constraints on instruction transform function f.
+   Ensures the transformed block is well-formed for run_block:
    - Terminators map to a single terminator (may change opcode, e.g. JNZ→JMP)
    - INVOKE maps to a single INVOKE (may change operands)
-   - Non-term non-INVOKE expand to only non-term non-INVOKE
-   The simulation clause relates one original step_inst to sequential
-   execution of the replacement list via run_insts. *)
-Definition analysis_inst_simulates_def:
-  analysis_inst_simulates R_ok R_term
-    (sound : 'a -> venom_state -> bool)
-    (f : 'a -> instruction -> instruction list) <=>
-    (* Simulation: original step relates to sequential replacement *)
-    (!fuel ctx v inst s.
-       sound v s ==>
-       lift_result R_ok R_term
-         (step_inst fuel ctx inst s)
-         (run_insts fuel ctx (f v inst) s)) /\
-    (* Terminators map to a single terminator *)
+   - Non-term non-INVOKE expand to only non-term non-INVOKE *)
+Definition inst_transform_structural_def:
+  inst_transform_structural (f : 'a -> instruction -> instruction list) <=>
     (!v inst. is_terminator inst.inst_opcode ==>
        ?inst'. f v inst = [inst'] /\ is_terminator inst'.inst_opcode) /\
-    (* INVOKE preserved as INVOKE *)
     (!v inst. inst.inst_opcode = INVOKE ==>
        ?inst'. f v inst = [inst'] /\ inst'.inst_opcode = INVOKE) /\
-    (* Safe expansion: non-preserved produce only non-preserved *)
     (!v inst.
        ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE ==>
        EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
              (f v inst))
+End
+
+(* Per-instruction simulation: f maps each instruction (given a lattice
+   value) to a replacement list. The simulation clause says: for
+   well-formed instructions under sound lattice values, either the
+   original errors or the original and replacement are related by
+   lift_result. inst_wf is always available from fn_inst_wf. *)
+Definition analysis_inst_simulates_def:
+  analysis_inst_simulates R_ok R_term
+    (sound : 'a -> venom_state -> bool)
+    (f : 'a -> instruction -> instruction list) <=>
+    (!fuel ctx v inst s.
+       sound v s /\ inst_wf inst ==>
+       (?e. step_inst fuel ctx inst s = Error e) \/
+       lift_result R_ok R_term
+         (step_inst fuel ctx inst s)
+         (run_insts fuel ctx (f v inst) s)) /\
+    inst_transform_structural f
 End
 
 (* Transform a block using per-instruction analysis values.

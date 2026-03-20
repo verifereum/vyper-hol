@@ -164,7 +164,10 @@ Definition is_forwardable_assign_def:
     inst.inst_opcode = ASSIGN /\
     (case (inst.inst_operands, inst.inst_outputs) of
        ([src_op], [out]) =>
-         (case src_op of Var v => v NOTIN phi_vars | _ => T) /\
+         (case src_op of
+            Var v => v NOTIN phi_vars
+          | Lit _ => T
+          | Label _ => F) /\
          out NOTIN phi_vars
      | _ => F)
 End

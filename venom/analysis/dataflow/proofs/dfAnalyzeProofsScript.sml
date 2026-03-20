@@ -646,15 +646,8 @@ Theorem df_fixpoint_fold_submap[local]:
       MEM lbl all_lbls /\
       lookup_block lbl bbs = SOME bb
     ==>
-      let neighbors = (case dir of Forward => cfg_preds_of cfg lbl
-                                 | Backward => cfg_succs_of cfg lbl) in
-      let edge_vals = MAP (λnbr. edge_transfer ctx nbr lbl
-                            (df_boundary bottom result nbr)) neighbors in
-      let joined = (case edge_vals of
-                      [] => (case entry_val of NONE => bottom
-                             | SOME (ev_lbl, v) =>
-                                 if lbl = ev_lbl then v else bottom)
-                    | _ => FOLDL join bottom edge_vals) in
+      let joined = df_joined_val dir bottom join edge_transfer ctx
+                                 entry_val cfg result lbl in
       let (fv, im) = df_fold_block dir (transfer ctx) lbl
                         bb.bb_instructions joined in
         im ⊑ result.ds_inst /\
@@ -666,7 +659,7 @@ Proof
   fs[worklistDefsTheory.is_fixpoint_def] >>
   first_x_assum (qspec_then `lbl` mp_tac) >> simp[] >>
   (* Expand process *)
-  simp[df_process_block_def] >>
+  simp[df_process_block_def, df_joined_val_def] >>
   pairarg_tac >> simp[] >>
   (* lookup_block lbl bbs = SOME bb, so instrs = bb.bb_instructions *)
   strip_tac >>
@@ -721,18 +714,8 @@ Theorem df_fixpoint_at[local]:
     MEM lbl all_lbls /\
     lookup_block lbl bbs = SOME bb /\
     instrs = bb.bb_instructions /\
-    joined = (case MAP (λnbr. edge_transfer ctx nbr lbl
-                         (df_boundary bottom result nbr))
-                   (case dir of Forward => cfg_preds_of cfg lbl
-                              | Backward => cfg_succs_of cfg lbl) of
-                [] => (case entry_val of NONE => bottom
-                       | SOME (ev_lbl, v) =>
-                           if lbl = ev_lbl then v else bottom)
-              | _ => FOLDL join bottom
-                       (MAP (λnbr. edge_transfer ctx nbr lbl
-                               (df_boundary bottom result nbr))
-                            (case dir of Forward => cfg_preds_of cfg lbl
-                                       | Backward => cfg_succs_of cfg lbl)))
+    joined = df_joined_val dir bottom join edge_transfer ctx
+                           entry_val cfg result lbl
     ==>
       (dir = Forward ==>
         df_at bottom result lbl 0 = joined /\
@@ -843,20 +826,8 @@ Theorem df_at_inter_transfer_proof:
     let all_lbls = cfg.cfg_dfs_pre in
     let result = df_analyze dir bottom join transfer edge_transfer
                             ctx entry_val fn in
-    let neighbors =
-      (case dir of
-         Forward => cfg_preds_of cfg lbl
-       | Backward => cfg_succs_of cfg lbl) in
-    let edge_vals = MAP (λnbr.
-          edge_transfer ctx nbr lbl
-            (df_boundary bottom result nbr)) neighbors in
-    let joined =
-      (case edge_vals of
-         [] => (case entry_val of
-                  NONE => bottom
-                | SOME (ev_lbl, v) =>
-                    if lbl = ev_lbl then v else bottom)
-       | _ => FOLDL join bottom edge_vals) in
+    let joined = df_joined_val dir bottom join edge_transfer ctx
+                               entry_val cfg result lbl in
       is_fixpoint process all_lbls result /\
       MEM lbl all_lbls /\
       lookup_block lbl bbs = SOME bb
@@ -866,13 +837,13 @@ Theorem df_at_inter_transfer_proof:
       (dir = Backward ==>
         df_at bottom result lbl (LENGTH bb.bb_instructions) = joined)
 Proof
-  rpt gen_tac >> simp[] >> strip_tac >>
+  rpt gen_tac >> simp[df_joined_val_def] >> strip_tac >>
   mp_tac (SIMP_RULE std_ss [LET_THM] df_fixpoint_at) >>
   disch_then (qspecl_then [`dir`, `bottom`, `join`, `transfer`, `edge_transfer`,
     `ctx`, `entry_val`, `cfg_analyze fn`, `fn.fn_blocks`, `lbl`,
     `df_analyze dir bottom join transfer edge_transfer ctx entry_val fn`,
     `(cfg_analyze fn).cfg_dfs_pre`, `bb`] mp_tac) >>
-  simp[]
+  simp[df_joined_val_def]
 QED
 
 (* Boundary fixpoint: at fixpoint, boundary(lbl) = join(boundary(lbl), exit_val).
@@ -1024,6 +995,22 @@ Proof
   disch_then irule >> rw[finite_mapTheory.FLOOKUP_DEF]
 QED
 
+(* FOLDL preserves P with generalized accumulator *)
+Theorem foldl_preserves_P[local]:
+  !f xs (a:'a). P a /\ (!x y. P x /\ P y ==> P (f x y)) /\
+    EVERY P xs ==> P (FOLDL f a xs)
+Proof
+  gen_tac >> Induct >> rw[]
+QED
+
+(* P for case xs of [] => bottom | _::_ => FOLDL join bottom xs *)
+Theorem case_foldl_P[local]:
+  !xs. P bottom /\ (!a b. P a /\ P b ==> P (join a b)) /\ EVERY P xs ==>
+    P (case xs of [] => bottom | v2::v3 => FOLDL join bottom xs)
+Proof
+  Cases >> rw[] >> irule foldl_preserves_P >> fs[]
+QED
+
 (* df_process_block preserves element-level P for inst and boundary maps *)
 Theorem df_process_P[local]:
   !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbl st.
@@ -1043,49 +1030,57 @@ Theorem df_process_P[local]:
            ==> P v)
 Proof
   rpt gen_tac >> strip_tac >>
-  simp[dfAnalyzeDefsTheory.df_process_block_def, LET_THM] >>
-  pairarg_tac >> simp[] >>
+  simp[dfAnalyzeDefsTheory.df_process_block_def, dfAnalyzeDefsTheory.df_joined_val_def, LET_THM] >>
+  pairarg_tac >> simp[]
   (* Establish P for all edge_transfer values *)
-  sg `!nbr. P (edge_transfer ctx nbr lbl (df_boundary bottom st nbr))`
+  \\ sg `!nbr. P (edge_transfer ctx nbr lbl (df_boundary bottom st nbr))`
   >- (rw[dfAnalyzeDefsTheory.df_boundary_def] >>
-      Cases_on `FLOOKUP st.ds_boundary nbr` >> fs[] >> res_tac >> fs[]) >>
-  sg `!nbrs. EVERY P (MAP (\nbr. edge_transfer ctx nbr lbl
+      Cases_on `FLOOKUP st.ds_boundary nbr` >> fs[] >> res_tac >> fs[])
+  \\ sg `!nbrs. EVERY P (MAP (\nbr. edge_transfer ctx nbr lbl
       (df_boundary bottom st nbr)) nbrs)`
-  >- (Induct >> rw[]) >>
-  qabbrev_tac `evs = MAP (\nbr. edge_transfer ctx nbr lbl
+  >- (Induct >> rw[])
+  \\ qabbrev_tac `evs = MAP (\nbr. edge_transfer ctx nbr lbl
       (df_boundary bottom st nbr)) (case dir of Forward => cfg_preds_of cfg lbl
-        | Backward => cfg_succs_of cfg lbl)` >>
+        | Backward => cfg_succs_of cfg lbl)`
+  (* Helper: EVERY P for the evs list *)
+  \\ `EVERY P evs` by
+    (qpat_x_assum `Abbrev (evs = _)`
+       (mp_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     disch_then SUBST1_TAC >>
+     simp[listTheory.EVERY_MAP, listTheory.EVERY_MEM])
+  (* Also establish P for edge_transfers with arbitrary label *)
+  \\ `!l nbr. P (edge_transfer ctx nbr l (df_boundary bottom st nbr))` by
+    (rpt gen_tac >>
+     qpat_x_assum `!src dst a. P a ==> P (edge_transfer _ _ _ _)` irule >>
+     rw[dfAnalyzeDefsTheory.df_boundary_def] >>
+     Cases_on `FLOOKUP st.ds_boundary nbr` >> fs[] >> res_tac >> fs[])
+  \\ `!l. EVERY P (MAP (\nbr. edge_transfer ctx nbr l
+       (df_boundary bottom st nbr))
+       (case dir of Forward => cfg_preds_of cfg l
+                   | Backward => cfg_succs_of cfg l))` by
+    (gen_tac >> simp[listTheory.EVERY_MAP, listTheory.EVERY_MEM])
   (* Establish P(init_val) for df_fold_block_P *)
-  sg `P (case evs of
-       [] => (case entry_val of NONE => bottom
-              | SOME (ev_lbl, v) => if lbl = ev_lbl then v else bottom)
-     | v4::v5 => FOLDL join bottom evs)`
-  >- (Cases_on `evs` >> simp[]
-      >- (Cases_on `entry_val` >> fs[] >> Cases_on `x` >> rw[] >> fs[])
-      >> irule (prove(``!xs a. P a /\ (!x y. P x /\ P y ==> P (f x y)) /\
-           EVERY P xs ==> P (FOLDL f a xs)``,
-           Induct >> rw[] >> first_x_assum irule >> fs[] >> metis_tac[]))
-      >> rpt conj_tac
-      >- (`P h` suffices_by metis_tac[] >>
-          qpat_x_assum `!nbrs. EVERY P _` (qspec_then
-            `case dir of Forward => cfg_preds_of cfg lbl
-                        | Backward => cfg_succs_of cfg lbl` mp_tac) >>
-          qpat_x_assum `Abbrev _` mp_tac >>
-          simp[markerTheory.Abbrev_def] >>
-          disch_then (SUBST1_TAC o SYM) >> simp[listTheory.EVERY_DEF])
-      >- metis_tac[]
-      >> (qpat_x_assum `!nbrs. EVERY P _` (qspec_then
-            `case dir of Forward => cfg_preds_of cfg lbl
-                        | Backward => cfg_succs_of cfg lbl` mp_tac) >>
-          qpat_x_assum `Abbrev _` mp_tac >>
-          simp[markerTheory.Abbrev_def] >>
-          disch_then (SUBST1_TAC o SYM) >> simp[listTheory.EVERY_DEF])) >>
+  \\ qmatch_asmsub_abbrev_tac `df_fold_block _ _ _ _ joined_val`
+  \\ sg `P joined_val`
+  >- (qunabbrev_tac `joined_val` >>
+      Cases_on `entry_val` >> simp[]
+      >- (irule case_foldl_P >> fs[])
+      >> Cases_on `x` >> simp[] >>
+      IF_CASES_TAC >> simp[]
+      >- (qpat_x_assum `lbl = _` (SUBST_ALL_TAC o SYM) >>
+          qpat_x_assum `∀a b. P a ∧ P b ⇒ P (join a b)`
+            (fn th => irule th >> assume_tac th) >>
+          conj_tac
+          >- (qpat_x_assum `case _ of NONE => T | _ => _` mp_tac >> simp[])
+          >> irule case_foldl_P >> fs[] >>
+          simp[listTheory.EVERY_MAP, listTheory.EVERY_MEM])
+      >> irule case_foldl_P >> fs[])
   (* Apply df_fold_block_P *)
-  drule_all df_fold_block_P >> strip_tac >>
-  conj_tac
+  \\ drule_all df_fold_block_P >> strip_tac
+  \\ conj_tac
   >- (rw[finite_mapTheory.FLOOKUP_FUNION] >>
       Cases_on `FLOOKUP inst_map k` >> fs[] >> metis_tac[])
-  >> rw[finite_mapTheory.FLOOKUP_UPDATE] >>
+  \\ rw[finite_mapTheory.FLOOKUP_UPDATE] >>
      fs[dfAnalyzeDefsTheory.df_boundary_def] >>
      Cases_on `FLOOKUP st.ds_boundary k` >> fs[] >> metis_tac[]
 QED
@@ -1285,7 +1280,7 @@ Proof
           edge_transfer ctx entry_val (cfg_analyze fn) fn.fn_blocks lbl st` by
           fs[markerTheory.Abbrev_def] >>
         pop_assum SUBST_ALL_TAC >>
-        fs[dfAnalyzeDefsTheory.df_process_block_def] >>
+        fs[dfAnalyzeDefsTheory.df_process_block_def, dfAnalyzeDefsTheory.df_joined_val_def] >>
         pairarg_tac >> fs[finite_mapTheory.FLOOKUP_UPDATE] >>
         Cases_on `lbl = k` >> fs[]
         >- (`P (df_boundary bottom st k)` by
@@ -1383,7 +1378,7 @@ Proof
           edge_transfer ctx entry_val (cfg_analyze fn) fn.fn_blocks lbl st` by
           fs[markerTheory.Abbrev_def] >>
         pop_assum SUBST_ALL_TAC >>
-        fs[dfAnalyzeDefsTheory.df_process_block_def] >>
+        fs[dfAnalyzeDefsTheory.df_process_block_def, dfAnalyzeDefsTheory.df_joined_val_def] >>
         pairarg_tac >> fs[finite_mapTheory.FLOOKUP_UPDATE] >>
         Cases_on `lbl = k` >> fs[]
         >- (`P (df_boundary bottom st k)` by
@@ -1491,7 +1486,7 @@ Proof
           edge_transfer ctx entry_val (cfg_analyze fn) fn.fn_blocks lbl st` by
           fs[markerTheory.Abbrev_def] >>
         pop_assum SUBST_ALL_TAC >>
-        fs[dfAnalyzeDefsTheory.df_process_block_def] >>
+        fs[dfAnalyzeDefsTheory.df_process_block_def, dfAnalyzeDefsTheory.df_joined_val_def] >>
         pairarg_tac >> fs[finite_mapTheory.FLOOKUP_UPDATE] >>
         Cases_on `lbl = k` >> fs[]
         >- (`P (df_boundary bottom st k)` by
@@ -1556,7 +1551,7 @@ Theorem df_process_inflationary_proof:
                        (df_boundary bottom st2 lbl))) in
     !lbl st. leq st (process lbl st)
 Proof
-  rw[df_process_block_def, df_boundary_def] >>
+  rw[df_process_block_def, df_joined_val_def, df_boundary_def] >>
   pairarg_tac >> rw[] >>
   Cases_on `lbl = lbl'` >>
   fs[finite_mapTheory.FLOOKUP_UPDATE, relationTheory.reflexive_def]
@@ -1577,7 +1572,7 @@ Theorem df_process_block_boundary[local]:
                         ctx entry_val cfg bbs lbl st) l =
     df_boundary bottom st l
 Proof
-  rw[df_process_block_def, df_boundary_def] >>
+  rw[df_process_block_def, df_joined_val_def, df_boundary_def] >>
   pairarg_tac >> rw[finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
@@ -1654,12 +1649,12 @@ Proof
         ctx entry_val cfg bbs lbl st) l = df_boundary bottom st l` by
     (rw[] >> irule df_process_block_boundary >> rw[]) >>
   (* Expand process b st = st *)
-  qpat_x_assum `_ = st` mp_tac >> simp[df_process_block_def] >>
+  qpat_x_assum `_ = st` mp_tac >> simp[df_process_block_def, df_joined_val_def] >>
   pairarg_tac >> strip_tac >>
   qabbrev_tac `nbrs_b = case dir of Forward => cfg_preds_of cfg b
                                    | Backward => cfg_succs_of cfg b` >>
   (* Expand process b (process lbl st) *)
-  simp[df_process_block_def] >>
+  simp[df_process_block_def, df_joined_val_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
   (* Neighbors see same boundaries *)
   `!nbr. MEM nbr nbrs_b ==>
@@ -1686,9 +1681,32 @@ Proof
    MAP (λnbr. edge_transfer ctx nbr b (df_boundary bottom st nbr)) nbrs_b` by
     (irule listTheory.MAP_CONG >> rw[]) >>
   fs[] >>
-  `final_val' = final_val` by fs[] >>
-  `inst_map' = inst_map` by fs[] >>
-  ntac 2 (pop_assum SUBST_ALL_TAC) >>
+  `final_val' = final_val /\ inst_map' = inst_map` by (
+    (* Both df_fold_block calls for b have same joined expr once we show
+       the ev_lbl branch MAP (cfg_preds ev_lbl on modified state) equals
+       the one on st. Case-split to handle the nested case/if. *)
+    qpat_x_assum `df_fold_block _ _ b _ _ = (final_val', _)` mp_tac >>
+    Cases_on `entry_val` >> simp[]
+    >- (strip_tac >> fs[])
+    >> Cases_on `x` >> simp[] >>
+    reverse IF_CASES_TAC >> simp[]
+    >- (strip_tac >> fs[])
+    (* b = ev_lbl case: cfg_preds ev_lbl = cfg_preds b = nbrs_b by Abbrev *)
+    >> pop_assum (SUBST_ALL_TAC o SYM) >>
+    `MAP (λnbr. edge_transfer ctx nbr b
+          (df_boundary bottom
+            (st with <| ds_inst := inst_map'' ⊌ st.ds_inst;
+                        ds_boundary := st.ds_boundary |+
+                          (lbl, join (df_boundary bottom st lbl) final_val'') |>) nbr))
+        (case dir of Forward => cfg_preds_of cfg b
+                   | Backward => cfg_succs_of cfg b) =
+     MAP (λnbr. edge_transfer ctx nbr b (df_boundary bottom st nbr))
+        (case dir of Forward => cfg_preds_of cfg b
+                   | Backward => cfg_succs_of cfg b)` by
+      (irule listTheory.MAP_CONG >> rw[] >>
+       Cases_on `dir` >> fs[markerTheory.Abbrev_def]) >>
+    fs[]) >>
+  gvs[] >>
   (* From process b st = st: record equality gives component equalities *)
   `inst_map ⊌ st.ds_inst = st.ds_inst` by
     (qpat_x_assum `<|ds_inst := _; ds_boundary := _|> = st` mp_tac >>
@@ -1792,7 +1810,7 @@ Proof
   qabbrev_tac `nbrs = case dir of Forward => cfg_preds_of cfg lbl
                                  | Backward => cfg_succs_of cfg lbl` >>
   (* Expand both: process lbl (process lbl st) and RHS process lbl st *)
-  simp[df_process_block_def] >>
+  simp[df_process_block_def, df_joined_val_def] >>
   (* First pairarg_tac handles the outer fold (for process lbl applied to
      the result of the inner process). Need to handle naming carefully. *)
   pairarg_tac >> simp[] >>
@@ -1822,9 +1840,27 @@ Proof
     (irule listTheory.MAP_CONG >> rw[]) >>
   (* Now this MAP equality lets fs rewrite the outer fold's input *)
   fs[] >>
-  (* Both folds have same input, so same output *)
-  `final_val = final_val' /\ inst_map = inst_map'` by fs[] >>
-  ntac 2 (pop_assum (SUBST_ALL_TAC o SYM)) >>
+  (* Both folds have same input, so same output.
+     Case-split on entry_val to handle ev_lbl branch MAP. *)
+  `final_val = final_val' /\ inst_map = inst_map'` by (
+    qpat_x_assum `df_fold_block _ _ lbl _ _ = (final_val, _)` mp_tac >>
+    Cases_on `entry_val` >> simp[]
+    >- (strip_tac >> fs[])
+    >> Cases_on `x` >> simp[] >>
+    reverse IF_CASES_TAC >> simp[]
+    >- (strip_tac >> fs[])
+    >> pop_assum (SUBST_ALL_TAC o SYM) >>
+    `MAP (λnbr. edge_transfer ctx nbr lbl
+          (df_boundary bottom
+            (st with <| ds_inst := inst_map' ⊌ st.ds_inst;
+                        ds_boundary := st.ds_boundary |+
+                          (lbl, join (df_boundary bottom st lbl) final_val') |>) nbr))
+        nbrs =
+     MAP (λnbr. edge_transfer ctx nbr lbl (df_boundary bottom st nbr))
+        nbrs` by
+      (irule listTheory.MAP_CONG >> rw[]) >>
+    fs[]) >>
+  gvs[] >>
   simp[df_state_component_equality] >> conj_tac
   >- metis_tac[finite_mapTheory.FUNION_ASSOC, finite_mapTheory.FUNION_IDEMPOT]
   >- rw[df_boundary_def, finite_mapTheory.FLOOKUP_UPDATE]

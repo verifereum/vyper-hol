@@ -1382,3 +1382,19 @@ Proof
       ])
 QED
 
+(* bb_succs of a member block are contained in cfg_succs_of *)
+Theorem bb_succs_in_cfg_succs:
+  !fn bb lbl.
+    ALL_DISTINCT (fn_labels fn) /\
+    MEM bb fn.fn_blocks /\
+    MEM lbl (bb_succs bb) ==>
+    MEM lbl (cfg_succs_of (cfg_analyze fn) bb.bb_label)
+Proof
+  rpt strip_tac >>
+  simp[cfg_analyze_succs] >>
+  `fmap_lookup_list (build_succs fn.fn_blocks) bb.bb_label = bb_succs bb` by (
+    irule cfg_succs_of_build_succs >>
+    fs[venomInstTheory.fn_labels_def]) >>
+  fs[]
+QED
+

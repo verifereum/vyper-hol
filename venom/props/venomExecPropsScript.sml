@@ -220,3 +220,62 @@ Theorem lookup_function_MEM:
 Proof
   ACCEPT_TAC venomInstTheory.lookup_function_MEM
 QED
+
+(* ==========================================================================
+   Shared block-level semantic theorems
+   ========================================================================== *)
+
+Theorem step_terminator_preserves_vars:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    is_terminator inst.inst_opcode ==>
+    !v. lookup_var v s' = lookup_var v s
+Proof
+  ACCEPT_TAC venomExecProofsTheory.step_terminator_preserves_vars
+QED
+
+Theorem MEM_lookup_block:
+  !lbl bbs (bb:basic_block).
+    MEM bb bbs /\ bb.bb_label = lbl /\
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) ==>
+    lookup_block lbl bbs = SOME bb
+Proof
+  ACCEPT_TAC venomExecProofsTheory.MEM_lookup_block
+QED
+
+Theorem extract_labels_eq_map:
+  !ops lbls. EVERY (\op. IS_SOME (get_label op)) ops /\
+    extract_labels ops = SOME lbls ==>
+    MAP (THE o get_label) ops = lbls
+Proof
+  ACCEPT_TAC venomExecProofsTheory.extract_labels_eq_map
+QED
+
+Theorem step_inst_base_term_succs:
+  !inst s s'.
+    inst_wf inst /\ is_terminator inst.inst_opcode /\
+    step_inst_base inst s = OK s' /\ ~s'.vs_halted ==>
+    MEM s'.vs_current_bb (get_successors inst)
+Proof
+  ACCEPT_TAC venomExecProofsTheory.step_inst_base_term_succs
+QED
+
+Theorem run_block_ok_nonempty:
+  !fuel ctx bb s v. s.vs_inst_idx = 0 /\ run_block fuel ctx bb s = OK v ==>
+    bb.bb_instructions <> []
+Proof
+  ACCEPT_TAC venomExecProofsTheory.run_block_ok_nonempty
+QED
+
+Theorem run_block_current_bb_in_succs:
+  !fuel ctx bb s s1.
+    EVERY inst_wf bb.bb_instructions /\
+    (!i. i < LENGTH bb.bb_instructions - 1 ==>
+       ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+    bb.bb_instructions <> [] /\
+    s.vs_inst_idx = 0 /\
+    run_block fuel ctx bb s = OK s1 ==>
+    MEM s1.vs_current_bb (bb_succs bb)
+Proof
+  ACCEPT_TAC venomExecProofsTheory.run_block_current_bb_in_succs
+QED
