@@ -84,20 +84,8 @@ Theorem df_at_inter_transfer:
     let all_lbls = cfg.cfg_dfs_pre in
     let result = df_analyze dir bottom join transfer edge_transfer
                             ctx entry_val fn in
-    let neighbors =
-      (case dir of
-         Forward => cfg_preds_of cfg lbl
-       | Backward => cfg_succs_of cfg lbl) in
-    let edge_vals = MAP (λnbr.
-          edge_transfer ctx nbr lbl
-            (df_boundary bottom result nbr)) neighbors in
-    let joined =
-      (case edge_vals of
-         [] => (case entry_val of
-                  NONE => bottom
-                | SOME (ev_lbl, v) =>
-                    if lbl = ev_lbl then v else bottom)
-       | _ => FOLDL join bottom edge_vals) in
+    let joined = df_joined_val dir bottom join edge_transfer ctx
+                               entry_val cfg result lbl in
       is_fixpoint process all_lbls result /\
       MEM lbl all_lbls /\
       lookup_block lbl bbs = SOME bb

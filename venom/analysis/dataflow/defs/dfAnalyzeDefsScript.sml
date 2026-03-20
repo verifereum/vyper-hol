@@ -116,9 +116,12 @@ End
    (backward), use this value instead of bottom. For forward analyses,
    the entry block has no predecessors and needs a different initial value
    (e.g. [] for var_def, {entry} for dominators). *)
-Definition df_process_block_def:
-  df_process_block dir bottom join transfer edge_transfer
-                   ctx entry_val cfg bbs lbl (st : 'a df_state) =
+(* Compute the joined input value for a block from its neighbors'
+   boundaries plus the entry_val at the entry block.
+   Factored out so theorem statements can reference it by name. *)
+Definition df_joined_val_def:
+  df_joined_val dir bottom join edge_transfer ctx entry_val cfg
+               (st : 'a df_state) lbl =
     let neighbors =
       (case dir of
          Forward => cfg_preds_of cfg lbl
@@ -126,13 +129,19 @@ Definition df_process_block_def:
     let edge_vals = MAP (λnbr.
           edge_transfer ctx nbr lbl
             (df_boundary bottom st nbr)) neighbors in
-    let joined =
-      (case edge_vals of
-         [] => (case entry_val of
-                  NONE => bottom
-                | SOME (ev_lbl, v) =>
-                    if lbl = ev_lbl then v else bottom)
-       | _ => FOLDL join bottom edge_vals) in
+    let base =
+      (case edge_vals of [] => bottom | _ => FOLDL join bottom edge_vals) in
+    case entry_val of
+      NONE => base
+    | SOME (ev_lbl, v) =>
+        if lbl = ev_lbl then join v base else base
+End
+
+Definition df_process_block_def:
+  df_process_block dir bottom join transfer edge_transfer
+                   ctx entry_val cfg bbs lbl (st : 'a df_state) =
+    let joined = df_joined_val dir bottom join edge_transfer ctx
+                               entry_val cfg st lbl in
     let instrs =
       (case lookup_block lbl bbs of
          NONE => []
