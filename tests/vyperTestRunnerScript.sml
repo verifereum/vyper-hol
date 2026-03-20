@@ -73,7 +73,7 @@ Definition find_deploy_function_name_def:
   find_deploy_function_name (_::ts) = find_deploy_function_name ts
 End
 
-val () = cv_auto_trans find_deploy_function_name_def;
+(* val () = cv_auto_trans find_deploy_function_name_def; *)
 
 Definition find_args_by_name_def:
   find_args_by_name n [] = [] ∧
@@ -169,7 +169,7 @@ Definition run_deployment_def:
   in (sns, res)
 End
 
-val () = cv_auto_trans run_deployment_def;
+(* val () = cv_auto_trans run_deployment_def; *)
 
 Definition run_call_def:
   run_call sns am ct = let
@@ -304,7 +304,7 @@ Definition run_trace_def:
                   else INR (Error $ RuntimeError "output mismatch"))
 End
 
-val () = cv_auto_trans run_trace_def;
+(* val () = cv_auto_trans run_trace_def; *)
 
 Definition run_test_loop_def:
   run_test_loop snss am [] = INL () ∧
@@ -314,11 +314,11 @@ Definition run_test_loop_def:
      | (_, INR ex) => INR ex
 End
 
-val () = cv_auto_trans run_test_loop_def;
+(* val () = cv_auto_trans run_test_loop_def; *)
 
 Definition run_test_def:
   run_test trs = run_test_loop []
     initial_machine_state trs
 End
 
-val () = cv_auto_trans run_test_def;
+(* val () = cv_auto_trans run_test_def; *)
