@@ -45,7 +45,7 @@ val widen_entry_sound = SIMP_RULE (srw_ss()) [LET_THM]
 
 (* Successors of cfg_dfs_pre labels are in cfg_dfs_pre.
    Follows from dfs_pre_walk_closure + dfs_pre_walk_visited_eq. *)
-Triviality cfg_dfs_pre_succs_closed:
+Theorem cfg_dfs_pre_succs_closed:
   !fn lbl.
     MEM lbl (cfg_analyze fn).cfg_dfs_pre ==>
     EVERY (\t. MEM t (cfg_analyze fn).cfg_dfs_pre)
@@ -274,7 +274,7 @@ Proof
 QED
 
 (* Helper: apply transfer_sound to get soundness at SUC idx *)
-Triviality transfer_sound_step:
+Theorem transfer_sound_step:
   !sound transfer run_ctx inst fuel ctx s s' v_in v_out.
     transfer_sound sound transfer run_ctx /\
     sound v_in s /\
@@ -291,7 +291,7 @@ QED
    
    Note: concludes at SUC of the terminator index, NOT at LENGTH.
    For well-formed blocks where the terminator is last, SUC exit = LENGTH. *)
-Triviality transfer_sound_exit:
+Theorem transfer_sound_exit:
   !R_ok R_term sound transfer run_ctx bb bottom result.
     valid_state_rel R_ok R_term /\
     transfer_sound sound transfer run_ctx /\

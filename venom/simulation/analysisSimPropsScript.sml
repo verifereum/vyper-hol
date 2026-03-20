@@ -250,3 +250,49 @@ Theorem analysis_function_transform_compare:
 Proof
   ACCEPT_TAC analysis_function_transform_compare_proof
 QED
+
+(* DFS pre-order is closed under successors *)
+Theorem cfg_dfs_pre_succs_closed:
+  !fn lbl.
+    MEM lbl (cfg_analyze fn).cfg_dfs_pre ==>
+    EVERY (\t. MEM t (cfg_analyze fn).cfg_dfs_pre)
+          (cfg_succs_of (cfg_analyze fn) lbl)
+Proof
+  ACCEPT_TAC cfg_dfs_pre_succs_closed
+QED
+
+(* Transfer-sound single step: sound at idx + step_inst OK → sound at SUC idx *)
+Theorem transfer_sound_step:
+  !sound transfer run_ctx inst fuel ctx s s' v_in v_out.
+    transfer_sound sound transfer run_ctx /\
+    sound v_in s /\
+    step_inst fuel ctx inst s = OK s' /\
+    v_out = transfer run_ctx inst v_in ==>
+    sound v_out s'
+Proof
+  ACCEPT_TAC transfer_sound_step
+QED
+
+(* Transfer-sound chain: running original block from sound entry gives
+   sound exit value at SUC terminator-index. *)
+Theorem transfer_sound_exit:
+  !R_ok R_term sound transfer run_ctx bb bottom result.
+    valid_state_rel R_ok R_term /\
+    transfer_sound sound transfer run_ctx /\
+    (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
+    (!idx. SUC idx <= LENGTH bb.bb_instructions ==>
+       df_at bottom result bb.bb_label (SUC idx) =
+       transfer run_ctx (EL idx bb.bb_instructions)
+         (df_at bottom result bb.bb_label idx))
+  ==>
+    !fuel ctx s v i.
+      s.vs_inst_idx = 0 /\
+      sound (df_at bottom result bb.bb_label 0) s /\
+      run_block fuel ctx bb s = OK v /\
+      i < LENGTH bb.bb_instructions /\
+      is_terminator (EL i bb.bb_instructions).inst_opcode /\
+      (!j. j < i ==> ~is_terminator (EL j bb.bb_instructions).inst_opcode) ==>
+      sound (df_at bottom result bb.bb_label (SUC i)) v
+Proof
+  ACCEPT_TAC transfer_sound_exit
+QED
