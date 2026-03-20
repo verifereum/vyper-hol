@@ -4,49 +4,61 @@
  * TOP-LEVEL:
  *   typing_env          : static type environment (var_types, global_types, etc.)
  *   well_typed_expr     : typing_env → expr → bool (static type consistency)
+ *   well_typed_stmt     : typing_env → ty → stmt → bool
  *   env_consistent      : typing_env → cx → st → bool (env matches runtime state)
  *   state_well_typed    : evaluation_state → bool (runtime values satisfy stored types)
- *   (uses value_has_type from vyperTypingTheory for value/type compatibility)
+ *   functions_well_typed: cx → bool (callable functions have well-typed bodies)
  *   type_preservation   : well_typed + consistent + eval ⇒ preserves types
  *
- * PROOF STATUS (this file):
- *   type_preservation: 10/47 cases proved, 37 cheated.
- *   intcall_state_preserved: 1 internal cheat (EL precondition for bind_arguments).
- *   All other helper theorems verified.
+ * KEY HELPERS (proved):
+ *   assign_target_well_typed    : assign_target preserves state_well_typed + env_consistent
+ *   assign_target_no_return     : assign_target never returns ReturnException
+ *   evaluate_no_return          : eval_expr and related never return ReturnException
+ *   eval_base_target_type_connection : connects AST target type to runtime type
+ *   intcall_state_preserved     : internal call preserves state (1 cheat: EL precondition)
+ *   set_immutable_well_typed    : set_immutable preserves state_well_typed + env_consistent
+ *   set_global_well_typed       : set_global preserves state_well_typed + env_consistent
+ *   write_storage_slot_well_typed : storage writes preserve state_well_typed + env_consistent
+ *   (uses value_has_type from vyperTypingTheory for value/type compatibility)
+ *   (uses assign_subscripts_preserves_type from vyperAssignPreservesTypeTheory)
  *
- * REMAINING WORK (ordered by risk):
+ * PROOF STATUS:
+ *   type_preservation: 14/47 cases proved, 33 cheated.
+ *     Proved: 0-3 (Pass/Continue/Break/Return NONE), 10 (Assign),
+ *             15-16 (eval_stmts), 21 (eval_targets []), 28 (eval_for []),
+ *             30 (Name), 45-46 (eval_exprs)
  *
- * --- RESOLVED: safe_cast type preservation ---
- *   safe_cast_preserves_well_typed: value_has_type tv v ∧ safe_cast tv v = SOME v'
- *     ⇒ value_has_type tv v'  (trivially from safe_cast_well_typed: cast is identity)
- *   NOTE: the stronger "safe_cast tv v = SOME v' ⇒ value_has_type tv v'" is FALSE
- *   for SArrayV (sparse arrays can have default values that violate sparse_has_type).
- *   In well-typed programs, inputs already satisfy value_has_type, so safe_cast_preserves_well_typed suffices.
+ * REMAINING CHEATS (33, ordered by risk):
  *
- * --- RISK 1: assign_subscripts preserves value_has_type ---
- *   Partial progress in vyperAssignPreservesTypeScript.sml:
- *     PROVED: insert_sarray_SORTED, insert_sarray_sparse_has_type,
- *       ADELKEY_SORTED, ADELKEY_sparse_has_type, TAKE_DROP_all_have_type,
- *       array_set_index_DynArrayV, array_set_index_SArrayV,
- *       FRONT_all_have_type, pop_element_preserves_type
- *     CHEATED: append_element_preserves_type (needs safe_cast_implies_well_typed),
- *       AFUPDKEY_struct_has_type (proof mechanics), assign_subscripts_preserves_type
+ * --- HIGH RISK: complex control flow ---
+ *   44: Call IntCall — function lookup, push/pop scope, bind_arguments,
+ *       recursive eval_stmts, return value handling
+ *   13: For — eval_iterator + eval_for with scope manipulation
+ *   29: eval_for v::vs — new_variable, eval_stmts body, Continue/Break
  *
- * --- RISK 2: assign_target preserves storage_consistent ---
- *   (unchanged — see vyperLookupStorageScript.sml for storage definitions)
+ * --- MEDIUM RISK: need evaluate_type propagation (validates existential P7) ---
+ *   37: Subscript — subscript_type_ok must preserve evaluate_type success
+ *   38: Attribute — attribute_type_ok must preserve evaluate_type success
+ *   36: StructLit — struct type evaluation
  *
- * --- RISK 3: Builtin operation type preservation ---
- *   ~30 builtin operations, each needs its own value_has_type lemma.
- *   Only Add/uint done so far (bounded_int_op_unsigned/signed).
+ * --- MEDIUM RISK: builtin/call operations ---
+ *   39: Builtin — ~30 builtin ops, each needs value_has_type lemma
+ *   40: Pop, 41: TypeBuiltin — array/type operations
+ *   42: Call Send, 43: Call ExtCall — external interactions
  *
- * --- RISK 4: ExtCall preserves storage_consistent ---
- *   May need to assume storage_consistent as a postcondition.
+ * --- LOW RISK: simple control flow (use IH directly) ---
+ *   4: Return SOME, 5: Raise, 6: Assert, 7: Log, 14: Expr
+ *   8: AnnAssign, 9: Append, 11: AugAssign, 12: If
  *
- * --- LOW RISK: remaining type_preservation cases ---
- *   Mechanical: goals 17-20, 22-27 (targets, iterators, ~12 cheats)
- *   IH-only: goals 4-7, 12, 14 (Return SOME, Raise, Assert, Log, If, Expr)
- *   Assignment: goals 8-11, 13, 29 (AnnAssign, Assign, AugAssign, Append, For)
- *   Expression: goals 31-34, 36-44 (various expr forms)
+ * --- LOW RISK: mechanical (read-only state preservation) ---
+ *   17-18: eval_iterator (Array, Range)
+ *   19-20: eval_target (BaseTarget, TupleTarget)
+ *   22: eval_targets (g::gs)
+ *   23-27: eval_base_target (5 constructor cases)
+ *
+ * --- LOW RISK: expr cases similar to proved Name case ---
+ *   31: BareGlobalName, 32: TopLevelName, 33: FlagMember
+ *   34: IfExp, 35: Literal
  *)
 
 Theory vyperTypeSoundness
@@ -2489,7 +2501,7 @@ Proof
   (* 10: Assign *)       >- suspend "assign"
   (* 11: AugAssign *)    >- cheat
   (* 12: If *)           >- cheat
-  (* 13: For *)          >- cheat
+  (* 13: For *)          >- suspend"For"
   (* 14: Expr *)         >- cheat
   (* ===== P1: eval_stmts (goals 15-16) ===== *)
   (* 15: [] *)
@@ -2536,7 +2548,7 @@ Proof
   (* 28: [] *)
   >- (rpt gen_tac >> strip_tac >>
       gvs[Once evaluate_def, return_def])
-  (* 29: v::vs *)        >- cheat
+  (* 29: v::vs *)        >- suspend"cons"
   (* ===== P7: eval_expr (goals 30-44) ===== *)
   (* 30: Name *)
   >- (rpt gen_tac >> strip_tac >>
@@ -2560,20 +2572,48 @@ Proof
   (* 35: Literal — TODO: needs well_formed_type_value hypothesis *)
   >- cheat
   (* 36: StructLit *)      >- cheat
-  (* 37: Subscript *)      >- cheat
-  (* 38: Attribute *)      >- cheat
+  (* 37: Subscript *)      >- suspend"Subscript"
+  (* 38: Attribute *)      >- suspend"Attribute"
   (* 39: Builtin *)        >- cheat
   (* 40: Pop *)            >- cheat
   (* 41: TypeBuiltin *)    >- cheat
-  (* 42: Call Send *)      >- cheat
-  (* 43: Call ExtCall *)   >- cheat
-  (* 44: Call IntCall *)   >- cheat
+  (* 42: Call Send *)      >- suspend"Send"
+  (* 43: Call ExtCall *)   >- suspend"ExtCall"
+  (* 44: Call IntCall *)   >- suspend"IntCall"
   (* ===== P8: eval_exprs (goals 45-46) ===== *)
   (* 45: [] *)
   >- (rpt gen_tac >> strip_tac >>
       gvs[Once evaluate_def, return_def])
   (* 46: e::es *)
   >- suspend "P8cons"
+QED
+
+Resume type_preservation[cons]:
+  cheat
+QED
+
+Resume type_preservation[Send]:
+  cheat
+QED
+
+Resume type_preservation[ExtCall]:
+  cheat
+QED
+
+Resume type_preservation[IntCall]:
+  cheat
+QED
+
+Resume type_preservation[For]:
+  cheat
+QED
+
+Resume type_preservation[Attribute]:
+  cheat
+QED
+
+Resume type_preservation[Subscript]:
+  cheat
 QED
 
 Resume type_preservation[P8cons]:
