@@ -23,7 +23,7 @@ Libs
 (* leaf_type: the type at the leaf of a subscript chain *)
 Definition leaf_type_def:
   leaf_type tv [] = tv /\
-  leaf_type (ArrayTV t _) (vyperState$IntSubscript _ :: rest) = leaf_type t rest /\
+  leaf_type (ArrayTV t _) (_ :: rest) = leaf_type t rest /\
   leaf_type (StructTV l) (vyperState$AttrSubscript id :: rest) =
     (case ALOOKUP l id of SOME t => leaf_type t rest | NONE => NoneTV) /\
   leaf_type _ (_ :: _) = NoneTV
