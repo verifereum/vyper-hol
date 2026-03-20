@@ -4,4 +4,4 @@
 #   ../../.. = project root
 # analysisSimDefs depends on dfAnalyzeDefs + passSimulationDefs + indexedLists
 INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../../syntax ../../../semantics \
-           ../../analysis/dataflow/defs ../../analysis/cfg/defs
+           ../../defs ../../analysis/dataflow/defs ../../analysis/cfg/defs
