@@ -2613,7 +2613,35 @@ Resume type_preservation[Attribute]:
 QED
 
 Resume type_preservation[Subscript]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum`well_typed_expr _ (Subscript _ _ _)`mp_tac >>
+  rewrite_tac[well_typed_expr_def] >> strip_tac >>
+  qpat_x_assum`eval_expr _ (Subscript _ _ _) _ = _`mp_tac >>
+  rewrite_tac[evaluate_def] >>
+  rewrite_tac[bind_def, ignore_bind_def, CaseEq"sum", CaseEq"prod"] >>
+  simp_tac std_ss [] >>
+  strip_tac >>
+  (* Apply IH_e: state preservation through eval_expr e *)
+  first_x_assum $ funpow 4 drule_then drule >>
+  strip_tac >>
+  (* Case split on eval_expr e result *)
+  reverse(Cases_on`x`) >- (last_x_assum kall_tac >> gvs[])
+  (* Apply IH_e': state preservation through eval_expr e' *)
+  >> first_x_assum drule
+  >> disch_then $ funpow 3 drule_then drule
+  >> gvs[bind_apply, AllCaseEqs(), sum_CASE_rator,
+         prod_CASE_rator, return_def, raise_def]
+  >> imp_res_tac lift_sum_state
+  >> imp_res_tac lift_option_state
+  >> imp_res_tac read_storage_slot_state
+  >> imp_res_tac check_array_bounds_state
+  >> imp_res_tac lift_option_type_state
+  >> imp_res_tac get_Value_state
+  >> gvs[expr_type_def, materialise_def, return_def]
+  >> rpt(gen_tac ORELSE disch_then strip_assume_tac)
+  >> imp_res_tac materialise_state >> gvs[]
+  >> cheat
 QED
 
 Resume type_preservation[P8cons]:
