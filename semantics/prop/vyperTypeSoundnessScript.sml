@@ -52,11 +52,11 @@
 Theory vyperTypeSoundness
 Ancestors
   list rich_list pred_set prim_rec sorting relation
+  finite_map combin option pair
   vyperAST vyperValue vyperValueOperation vyperMisc
   vyperInterpreter vyperState vyperContext
-  vyperStatePreservation
-  vyperScopePreservation
-  vyperImmutablesPreservation
+  vyperStatePreservation vyperScopePreservation
+  vyperLookup vyperImmutablesPreservation
   vyperTyping vyperEncodeDecode
 
 (* ===== Type Classification Helpers ===== *)
@@ -1983,6 +1983,51 @@ QED
    For a base target b with type ty, if eval_base_target returns (loc, sbs),
    and the base variable at loc has runtime type tv (connected via
    env_consistent), then evaluate_type ty = leaf_type tv (REVERSE sbs). *)
+Theorem evaluate_type_mono:
+  (!tenv ty tv k.
+    evaluate_type (tenv \\ k) ty = SOME tv ==>
+    evaluate_type tenv ty = SOME tv) /\
+  (!tenv ts acc tvs k.
+    evaluate_types (tenv \\ k) ts acc = SOME tvs ==>
+    evaluate_types tenv ts acc = SOME tvs)
+Proof
+  ho_match_mp_tac evaluate_type_ind
+  (* BaseT *)
+  >> conj_tac >- simp[evaluate_type_def]
+  (* TupleT *)
+  >> conj_tac >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    gvs[evaluate_type_def, AllCaseEqs()] >>
+    first_x_assum drule >> simp[])
+  (* ArrayT *)
+  >> conj_tac >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    gvs[evaluate_type_def, AllCaseEqs()] >>
+    first_x_assum drule >> simp[])
+  (* StructT *)
+  >> conj_tac >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    gvs[evaluate_type_def, AllCaseEqs(), DOMSUB_FLOOKUP_THM, DOMSUB_COMMUTES] >>
+    first_x_assum drule >>
+    strip_tac \\ goal_assum drule >> gvs[])
+  (* FlagT *)
+  >> conj_tac >- (
+    rpt gen_tac >> rpt gen_tac >>
+    simp[evaluate_type_def, AllCaseEqs(), DOMSUB_FLOOKUP_THM] >>
+    rpt strip_tac >> gvs[])
+  (* NoneT *)
+  >> conj_tac >- simp[evaluate_type_def]
+  (* evaluate_types [] *)
+  >> conj_tac >- simp[evaluate_type_def]
+  (* evaluate_types cons *)
+  >> rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[evaluate_type_def, AllCaseEqs()] >>
+  strip_tac >>
+  first_x_assum (fn th => drule (cj 1 th)) >> strip_tac >> simp[] >>
+  first_x_assum drule >> simp[] >>
+  disch_then irule >> goal_assum drule
+QED
+
 Theorem leaf_type_append:
   !tv subs1 subs2. leaf_type tv (subs1 ++ subs2) = leaf_type (leaf_type tv subs1) subs2
 Proof
@@ -1992,24 +2037,23 @@ Proof
 QED
 
 Theorem eval_base_target_type_connection:
-  !b cx st0 loc sbs st1 env ty tv.
+  !b cx st0 loc sbs st1 env st ty tv.
     eval_base_target cx b st0 = (INL (loc, sbs), st1) /\
     well_typed_target env b ty /\
-    env_consistent env cx st0 /\
-    loc_type cx st0 loc tv ==>
+    env_consistent env cx st /\
+    loc_type cx st loc tv ==>
     ?tyv. evaluate_type (get_tenv cx) ty = SOME tyv /\
           tyv = leaf_type tv (REVERSE sbs)
 Proof
   Induct
   (* NameTarget *)
-  >- (rw[Once evaluate_def, bind_apply, AllCaseEqs(), unitbind_apply,
-         get_scopes_def, return_def, type_check_def, assert_def,
-         well_typed_expr_def, loc_type_def, leaf_type_def,
-         optionTheory.IS_SOME_EXISTS, pairTheory.EXISTS_PROD]
-      >> gvs[env_consistent_def]
-      >> first_x_assum drule
-      >> disch_then drule >> simp[]
-      >> gvs[loc_type_def])
+  >- (rpt gen_tac >> strip_tac >>
+      gvs[Once evaluate_def, bind_apply, AllCaseEqs(), unitbind_apply,
+          get_scopes_def, return_def, type_check_def, assert_def,
+          well_typed_expr_def, loc_type_def, leaf_type_def] >>
+      gvs[env_consistent_def] >>
+      first_x_assum drule >>
+      disch_then drule >> simp[])
   (* BareGlobalNameTarget *)
   >- (
     simp[Once evaluate_def, bind_apply, AllCaseEqs(), unitbind_apply,
@@ -2019,10 +2063,11 @@ Proof
          optionTheory.IS_SOME_EXISTS, pairTheory.EXISTS_PROD]
     >> rpt strip_tac >> gvs[env_consistent_def, raise_def, return_def]
     >> first_x_assum drule
-    >> disch_then drule >> simp[]
+    >> disch_then irule >> simp[]
     >> gvs[loc_type_def, leaf_type_def]
     >> gvs[get_immutables_def, bind_apply, AllCaseEqs(), return_def]
-    >> gvs[get_address_immutables_def, lift_option_def, return_def] )
+    >> gvs[get_address_immutables_def, lift_option_def, return_def]
+    >> gvs[AllCaseEqs(), option_CASE_rator, raise_def, return_def] )
   (* TopLevelNameTarget *)
   >- (
     simp[pairTheory.FORALL_PROD] >>
@@ -2042,7 +2087,7 @@ Proof
     gvs[Once evaluate_type_def] >>
     gvs[CaseEq"option"] >>
     pop_assum(SUBST_ALL_TAC o SYM) >>
-    cheat)
+    simp[leaf_type_def])
   (* AttributeTarget *)
   >> (
     rpt gen_tac >> strip_tac >>
@@ -2057,8 +2102,17 @@ Proof
     BasicProvers.EVERY_CASE_TAC >> gvs[evaluate_type_def] >>
     gvs[AllCaseEqs()] >>
     qpat_x_assum`StructTV _ = leaf_type _ _`(assume_tac o SYM) >>
-    gvs[leaf_type_def] >>
-    cheat)
+    gvs[leaf_type_def, env_consistent_def] >>
+    gvs[evaluate_types_OPT_MMAP, OPT_MMAP_SOME_IFF] >>
+    simp[ZIP_MAP, MAP_MAP_o, combinTheory.o_DEF] >>
+    simp[pairTheory.LAMBDA_PROD, alistTheory.ALOOKUP_MAP] >>
+    gvs[EVERY_MAP] >>
+    drule alistTheory.ALOOKUP_MEM >>
+    gvs[EVERY_MEM] >>
+    strip_tac \\ first_x_assum drule >>
+    rw[optionTheory.IS_SOME_EXISTS] >> rw[] >>
+    irule (cj 1 evaluate_type_mono) >>
+    goal_assum drule)
 QED
 
 Theorem assign_target_well_typed:
@@ -2199,7 +2253,20 @@ Proof
 QED
 
 Resume assign_target_well_typed[replace]:
-  cheat
+  qmatch_asmsub_rename_tac`get_scopes st`
+  \\ qmatch_asmsub_rename_tac`string_to_num s`
+  \\ qmatch_asmsub_rename_tac`assign_subscripts tv a`
+  \\ sg `lookup_scopes (string_to_num s) st.scopes = SOME (tv,a)`
+  >- (
+    gvs[get_scopes_def, return_def, lift_option_def, option_CASE_rator]
+    >> gvs[AllCaseEqs(), return_def, raise_def]
+    >> irule find_containing_scope_lookup
+    >> goal_assum drule )
+  \\ `loc_type cx st (ScopedVar s) tv` by rw[loc_type_def]
+  \\ gvs[well_typed_atarget_def]
+  \\ drule_all eval_base_target_type_connection
+  \\ strip_tac \\ gvs[]
+  \\ cheat
 QED
 
 Resume assign_target_well_typed[set_immutable]:
