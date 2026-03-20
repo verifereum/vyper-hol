@@ -15,7 +15,7 @@
 
 Theory vyperAssignPreservesType
 Ancestors
-  vyperTyping vyperValueOperation vyperState vyperTypeSoundness
+  vyperTyping vyperValueOperation vyperState
 Libs
   sortingTheory alistTheory listTheory pairTheory
 

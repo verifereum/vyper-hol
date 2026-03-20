@@ -15,7 +15,7 @@
 
 Theory vyperTyping
 Ancestors
-  vyperStorage vyperValue vyperMisc
+  vyperStorage vyperValue vyperValueOperation vyperMisc
   vyperState[ignore_grammar] list sorting
 Libs
   wordsLib
@@ -346,4 +346,242 @@ Proof
 QED
 
 (* Helper: values_have_types transfer, assuming element-wise transfer *)
+
+(* ===== safe_cast preserves well-typedness ===== *)
+
+(* ZIP (MAP FST l, MAP SND l) = l *)
+val zip_fst_snd = listTheory.ZIP_UNZIP
+  |> ONCE_REWRITE_RULE[listTheory.UNZIP_MAP];
+
+(* Helper: distinct keys < n means length ≤ n (pigeonhole) *)
+Theorem all_distinct_keys_length:
+  !l (n:num). ALL_DISTINCT (MAP FST l) /\ EVERY (\(k, _). k < n) l ==>
+              LENGTH l <= n
+Proof
+  rpt strip_tac >>
+  `CARD (set (MAP FST l)) = LENGTH l`
+    by simp[listTheory.ALL_DISTINCT_CARD_LIST_TO_SET] >>
+  `set (MAP FST l) SUBSET count n`
+    by (simp[pred_setTheory.SUBSET_DEF, listTheory.MEM_MAP,
+             PULL_EXISTS, pairTheory.FORALL_PROD] >>
+        gvs[listTheory.EVERY_MEM, pairTheory.FORALL_PROD] >> metis_tac[]) >>
+  `CARD (set (MAP FST l)) <= CARD (count n)`
+    by (irule pred_setTheory.CARD_SUBSET >>
+        simp[pred_setTheory.FINITE_COUNT]) >>
+  gvs[pred_setTheory.CARD_COUNT]
+QED
+
+Theorem sparse_has_type_all_have_type:
+  !tv n sparse. sparse_has_type tv n sparse ==>
+    all_have_type tv (MAP SND sparse)
+Proof
+  Induct_on `sparse` >>
+  simp[Once value_has_type_def, Once value_has_type_def] >>
+  Cases >> simp[Once value_has_type_def, all_have_type_EVERY] >>
+  rpt strip_tac >> res_tac >> gvs[all_have_type_EVERY]
+QED
+
+Theorem SORTED_lt_ALL_DISTINCT:
+  !l : num list. SORTED $< l ==> ALL_DISTINCT l
+Proof
+  metis_tac[sortingTheory.SORTED_ALL_DISTINCT,
+            relationTheory.irreflexive_def,
+            relationTheory.transitive_def,
+            prim_recTheory.LESS_REFL,
+            arithmeticTheory.LESS_TRANS]
+QED
+
+Theorem sparse_has_type_length:
+  !tv n sparse. sparse_has_type tv n sparse /\
+    SORTED $< (MAP FST sparse) ==> LENGTH sparse <= n
+Proof
+  rpt strip_tac >>
+  imp_res_tac SORTED_lt_ALL_DISTINCT >>
+  `ALL_DISTINCT (MAP FST sparse)` by gvs[listTheory.MAP_MAP_o] >>
+  irule all_distinct_keys_length >> simp[] >>
+  pop_assum kall_tac >> pop_assum kall_tac >>
+  Induct_on `sparse` >> simp[Once value_has_type_def] >>
+  Cases >> simp[Once value_has_type_def]
+QED
+
+Theorem all_have_type_values_have_types_replicate:
+  !tv vs. all_have_type tv vs ==>
+    values_have_types (REPLICATE (LENGTH vs) tv) vs
+Proof
+  Induct_on `vs` >> simp[Once value_has_type_def, Once value_has_type_def]
+QED
+
+Theorem struct_has_type_map_fst:
+  !ftypes fields. struct_has_type ftypes fields ==>
+    MAP FST fields = MAP FST ftypes
+Proof
+  Induct >> Cases_on `fields` >>
+  simp[Once value_has_type_def] >>
+  Cases >> Cases_on `h` >>
+  simp[Once value_has_type_def]
+QED
+
+Theorem struct_has_type_values_have_types:
+  !ftypes fields. struct_has_type ftypes fields ==>
+    values_have_types (MAP SND ftypes) (MAP SND fields)
+Proof
+  Induct >> Cases_on `fields` >>
+  simp[Once value_has_type_def, Once value_has_type_def] >>
+  Cases >> Cases_on `h` >>
+  simp[Once value_has_type_def, Once value_has_type_def]
+QED
+
+Theorem safe_cast_list_identity:
+  !tvs vs acc.
+    values_have_types tvs vs /\
+    (!tv v. MEM tv tvs /\ value_has_type tv v ==> safe_cast tv v = SOME v) ==>
+    safe_cast_list tvs vs acc = SOME (REVERSE acc ++ vs)
+Proof
+  Induct >> Cases_on `vs` >> simp[Once value_has_type_def] >>
+  rpt strip_tac >> simp[Once safe_cast_def]
+QED
+
+Theorem safe_cast_list_identity_nil:
+  !tvs vs.
+    values_have_types tvs vs /\
+    (!tv v. MEM tv tvs /\ value_has_type tv v ==> safe_cast tv v = SOME v) ==>
+    safe_cast_list tvs vs [] = SOME vs
+Proof
+  rpt strip_tac >> drule_all safe_cast_list_identity >> simp[]
+QED
+
+Theorem MEM_type_value_size_TupleTV:
+  !tvs tv. MEM tv tvs ==> type_value_size tv < type_value_size (TupleTV tvs)
+Proof
+  Induct >> simp[type_value_size_def] >>
+  rpt strip_tac >> gvs[type_value_size_def] >> res_tac >> simp[]
+QED
+
+Theorem type_value1_size_MEM:
+  !fields nm tv. MEM (nm,tv) fields ==>
+    type_value_size tv < type_value1_size fields
+Proof
+  Induct >> simp[] >> Cases >> simp[type_value_size_def] >>
+  rpt strip_tac >> gvs[] >> res_tac >> simp[]
+QED
+
+Theorem MEM_type_value_size_StructTV:
+  !fields nm tv. MEM (nm,tv) fields ==>
+    type_value_size tv < type_value_size (StructTV fields)
+Proof
+  rpt strip_tac >> simp[type_value_size_def] >>
+  imp_res_tac type_value1_size_MEM >> simp[]
+QED
+
+Theorem ArrayTV_type_value_size:
+  !tv b. type_value_size tv < type_value_size (ArrayTV tv b)
+Proof
+  Cases_on `b` >> simp[type_value_size_def]
+QED
+
+Theorem safe_cast_well_typed_tuple_helper:
+  !tvs l.
+    (!tv'. type_value_size tv' < list_size type_value_size tvs + 1 ==>
+           !v'. value_has_type tv' v' ==> safe_cast tv' v' = SOME v') ==>
+    values_have_types tvs l ==>
+    safe_cast_list tvs l [] = SOME l
+Proof
+  rpt strip_tac >>
+  irule safe_cast_list_identity_nil >> simp[] >>
+  rpt strip_tac >> first_x_assum irule >>
+  imp_res_tac MEM_type_value_size_TupleTV >> gvs[]
+QED
+
+Theorem safe_cast_well_typed_struct_helper:
+  !ftypes l.
+    (!tv'. type_value_size tv' <
+           list_size (pair_size (list_size char_size) type_value_size) ftypes + 1 ==>
+           !v'. value_has_type tv' v' ==> safe_cast tv' v' = SOME v') ==>
+    struct_has_type ftypes l ==>
+    MAP FST l = MAP FST ftypes ==>
+    safe_cast_list (MAP SND ftypes) (MAP SND l) [] = SOME (MAP SND l)
+Proof
+  rpt strip_tac >>
+  irule safe_cast_list_identity_nil >>
+  imp_res_tac struct_has_type_values_have_types >> simp[] >>
+  rpt strip_tac >> first_x_assum irule >>
+  `?nm. MEM (nm, tv) ftypes` by (
+    qpat_x_assum `MEM _ _` mp_tac >>
+    simp[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >>
+    metis_tac[]) >>
+  imp_res_tac MEM_type_value_size_StructTV >> gvs[]
+QED
+
+Theorem safe_cast_well_typed:
+  !tv v. value_has_type tv v ==> safe_cast tv v = SOME v
+Proof
+  completeInduct_on `type_value_size tv` >>
+  rpt gen_tac >> rpt strip_tac >>
+  rename1 `value_has_type tv val` >>
+  `!tv'. type_value_size tv' < type_value_size tv ==>
+         !v'. value_has_type tv' v' ==> safe_cast tv' v' = SOME v'`
+    by (rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  Cases_on `val` >> gvs[value_has_type_inv] >>
+  TRY (simp[Once safe_cast_def, within_int_bound_def] >> NO_TAC) >>
+  TRY (simp[Once safe_cast_def] >> NO_TAC)
+  >- (rename1 `ArrayV av` >> Cases_on `av` >> gvs[value_has_type_inv] >>
+      simp[Once safe_cast_def] >>
+      TRY (imp_res_tac sparse_has_type_all_have_type >>
+           imp_res_tac sparse_has_type_length >> simp[]) >>
+      TRY (drule_all safe_cast_well_typed_tuple_helper >> simp[] >> NO_TAC) >>
+      (`values_have_types (REPLICATE (LENGTH l) tv0) l`
+        by (irule all_have_type_values_have_types_replicate >> simp[]) >>
+       `!tv v. MEM tv (REPLICATE (LENGTH l) tv0) /\
+               value_has_type tv v ==> safe_cast tv v = SOME v`
+         by (rpt strip_tac >> gvs[rich_listTheory.MEM_REPLICATE] >>
+             first_x_assum irule >> simp[]) >>
+       drule_all safe_cast_list_identity_nil >> simp[zip_fst_snd]
+       ORELSE
+       (`values_have_types (REPLICATE (LENGTH (MAP SND l)) tv0) (MAP SND l)`
+          by (irule all_have_type_values_have_types_replicate >> simp[]) >>
+        `!tv v. MEM tv (REPLICATE (LENGTH (MAP SND l)) tv0) /\
+                value_has_type tv v ==> safe_cast tv v = SOME v`
+          by (rpt strip_tac >> gvs[rich_listTheory.MEM_REPLICATE] >>
+              first_x_assum irule >> simp[]) >>
+        drule_all safe_cast_list_identity_nil >> simp[zip_fst_snd])))
+  >> (simp[Once safe_cast_def] >>
+      imp_res_tac struct_has_type_map_fst >> simp[] >>
+      imp_res_tac struct_has_type_values_have_types >>
+      `!tv v. MEM tv (MAP SND ftypes) /\
+              value_has_type tv v ==> safe_cast tv v = SOME v`
+        by (rpt strip_tac >> first_x_assum irule >>
+            `?nm. MEM (nm, tv) ftypes` by (
+              qpat_x_assum `MEM _ (MAP _ _)` mp_tac >>
+              simp[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >>
+              metis_tac[]) >>
+            imp_res_tac MEM_type_value_size_StructTV >> gvs[]) >>
+      drule_all safe_cast_list_identity_nil >> strip_tac >>
+      `MAP FST ftypes = MAP FST l` by gvs[] >>
+      gvs[zip_fst_snd])
+QED
+
+Theorem safe_cast_well_typed_mutual:
+  (!tv v. value_has_type tv v ==> safe_cast tv v = SOME v) /\
+  (!tvs vs acc.
+     values_have_types tvs vs ==>
+     safe_cast_list tvs vs acc = SOME (REVERSE acc ++ vs))
+Proof
+  conj_tac >- metis_tac[safe_cast_well_typed] >>
+  rpt strip_tac >> irule safe_cast_list_identity >> simp[] >>
+  rpt strip_tac >> irule safe_cast_well_typed >> simp[]
+QED
+
+Theorem values_have_types_length:
+  !tvs vs. values_have_types tvs vs ==> LENGTH vs = LENGTH tvs
+Proof
+  Induct >> Cases_on `vs` >> simp[Once value_has_type_def]
+QED
+
+Theorem safe_cast_preserves_well_typed:
+  !tv v v'. value_has_type tv v /\ safe_cast tv v = SOME v' ==>
+    value_has_type tv v'
+Proof
+  rpt strip_tac >>
+  imp_res_tac safe_cast_well_typed >> gvs[]
+QED
 
