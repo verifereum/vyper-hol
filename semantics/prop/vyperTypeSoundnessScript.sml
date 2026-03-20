@@ -571,7 +571,8 @@ Definition well_typed_expr_def:
   well_typed_expr env (TopLevelName ty (src_id_opt, id)) =
     (FLOOKUP env.toplevel_types (src_id_opt, string_to_num id) = SOME ty) /\
   well_typed_expr env (FlagMember ty _ _) =
-    is_flag_type ty /\
+    (is_flag_type ty /\
+     well_formed_type env.type_defs ty) /\
   well_typed_expr env (IfExp ty cond e1 e2) =
     (well_typed_expr env cond /\
      well_typed_expr env e1 /\
@@ -579,10 +580,12 @@ Definition well_typed_expr_def:
      expr_type cond = BaseT BoolT /\
      expr_type e1 = ty /\ expr_type e2 = ty) /\
   well_typed_expr env (Literal ty l) =
-    well_typed_literal ty l /\
+    (well_typed_literal ty l /\
+     well_formed_type env.type_defs ty) /\
   well_typed_expr env (StructLit ty _ kes) =
     (well_typed_named_exprs env kes /\
-     is_struct_type ty) /\
+     is_struct_type ty /\
+     well_formed_type env.type_defs ty) /\
   well_typed_expr env (Subscript ty e1 e2) =
     (well_typed_expr env e1 /\
      well_typed_expr env e2 /\
@@ -592,7 +595,8 @@ Definition well_typed_expr_def:
      attribute_type_ok env.type_defs (expr_type e) id ty) /\
   well_typed_expr env (Builtin ty blt es) =
     (well_typed_exprs env es /\
-     well_typed_builtin_app ty blt (MAP expr_type es)) /\
+     well_typed_builtin_app ty blt (MAP expr_type es) /\
+     well_formed_type env.type_defs ty) /\
   well_typed_expr env (TypeBuiltin ty _ target_ty es) =
     (well_typed_exprs env es /\
      well_formed_type env.type_defs ty /\
@@ -2445,9 +2449,8 @@ Theorem type_preservation:
     (!tv. res = INL tv ==>
        (!v st''. materialise cx tv st' = (INL v, st'') ==>
           state_well_typed st'' /\ env_consistent env cx st'' /\
-          (!tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv ==>
+          (?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
                  value_has_type tyv v)))) /\
-  (* P8: eval_exprs — with LIST_REL satisfies_type *)
   (* P8: eval_exprs — covers both success and failure *)
   (!cx es. !env st res st'.
     well_typed_exprs env es /\
@@ -2457,8 +2460,8 @@ Theorem type_preservation:
     eval_exprs cx es st = (res, st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\
     (!vs. res = INL vs ==>
-      LIST_REL (\v e. !tyv.
-        evaluate_type (get_tenv cx) (expr_type e) = SOME tyv ==>
+      LIST_REL (\v e. ?tyv.
+        evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
         value_has_type tyv v) vs es))
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac
@@ -2610,15 +2613,28 @@ Resume type_preservation[assign]:
     \\ imp_res_tac evaluate_no_return
     \\ gvs[] )
   \\ pop_assum mp_tac
-  \\ simp_tac std_ss [bind_apply, AllCaseEqs(), return_def]
+  \\ simp_tac std_ss [bind_apply, return_def]
+  \\ CASE_TAC
   \\ BasicProvers.VAR_EQ_TAC
   \\ first_x_assum drule
-  \\ disch_then $ funpow 3 drule_then drule
-  \\ ntac 2 strip_tac \\ gvs[]
-  \\ TRY ( drule materialise_error
-           \\ drule materialise_state \\ rw[] )
-  \\ TRY ( rw[] \\ drule (cj 8 evaluate_no_return) \\ rw[] \\ NO_TAC )
-  \\ cheat
+  \\ disch_then $ funpow 4 drule_then drule
+  \\ strip_tac
+  \\ reverse CASE_TAC
+  >- ( rw[] \\ drule (cj 8 evaluate_no_return) \\ rw[] )
+  \\ CASE_TAC \\ gvs[]
+  \\ reverse CASE_TAC
+  >- ( drule materialise_error
+       \\ drule materialise_state \\ rw[]  \\ gvs[] )
+  \\ CASE_TAC
+  \\ strip_tac \\ gvs[]
+  \\ funpow 2 drule_then drule (cj 1 assign_target_well_typed)
+  \\ strip_tac
+  \\ qmatch_asmsub_rename_tac`assign_target _ _ _ _ = (_,atr)`
+  \\ qmatch_asmsub_rename_tac`_ = (res,stf)`
+  \\ `stf = atr` by gvs[CaseEq"sum"] \\ gvs[]
+  \\ rw[] \\ gvs[CaseEq"sum"]
+  \\ imp_res_tac assign_target_no_return
+  \\ gvs[]
 QED
 
 Finalise type_preservation
