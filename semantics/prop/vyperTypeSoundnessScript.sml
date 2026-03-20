@@ -1791,7 +1791,8 @@ Theorem eval_base_target_type_connection:
     env_consistent env cx st /\
     loc_type cx st loc tv ==>
     ?tyv. evaluate_type (get_tenv cx) ty = SOME tyv /\
-          tyv = leaf_type tv (REVERSE sbs)
+          tyv = leaf_type tv (REVERSE sbs) /\
+          well_formed_type_value tv
 Proof
   Induct
   (* NameTarget *)
@@ -1801,7 +1802,8 @@ Proof
           well_typed_expr_def, loc_type_def, leaf_type_def] >>
       gvs[env_consistent_def] >>
       first_x_assum drule >>
-      disch_then drule >> simp[])
+      disch_then drule >> simp[] >>
+      MATCH_ACCEPT_TAC (cj 1 evaluate_type_well_formed))
   (* BareGlobalNameTarget *)
   >- (
     simp[Once evaluate_def, bind_apply, AllCaseEqs(), unitbind_apply,
@@ -1809,13 +1811,17 @@ Proof
          well_typed_expr_def, loc_type_def, leaf_type_def,
          get_immutables_def, get_address_immutables_def, lift_option_def,
          optionTheory.IS_SOME_EXISTS, pairTheory.EXISTS_PROD]
-    >> rpt strip_tac >> gvs[env_consistent_def, raise_def, return_def]
-    >> first_x_assum drule
-    >> disch_then irule >> simp[]
+    >> rpt gen_tac
+    >> strip_tac >> gvs[env_consistent_def, raise_def, return_def]
+    >> first_assum $ drule_then (irule_at(Pos(el 1)))
     >> gvs[loc_type_def, leaf_type_def]
     >> gvs[get_immutables_def, bind_apply, AllCaseEqs(), return_def]
     >> gvs[get_address_immutables_def, lift_option_def, return_def]
-    >> gvs[AllCaseEqs(), option_CASE_rator, raise_def, return_def] )
+    >> gvs[AllCaseEqs(), option_CASE_rator, raise_def, return_def]
+    >> irule (cj 1 evaluate_type_well_formed)
+    >> first_x_assum(drule_at_then Any drule)
+    >> strip_tac
+    >> goal_assum drule )
   (* TopLevelNameTarget *)
   >- (
     simp[pairTheory.FORALL_PROD] >>
@@ -1834,7 +1840,7 @@ Proof
     Cases_on`tgt_ty` >> gvs[subscript_type_ok_def] >>
     gvs[Once evaluate_type_def] >>
     gvs[CaseEq"option"] >>
-    pop_assum(SUBST_ALL_TAC o SYM) >>
+    qpat_x_assum`_ = leaf_type _ _`(SUBST_ALL_TAC o SYM) >>
     simp[leaf_type_def])
   (* AttributeTarget *)
   >> (
@@ -2002,8 +2008,6 @@ QED
 
 Resume assign_target_well_typed[replace]:
   qmatch_asmsub_rename_tac`get_scopes st`
-  \\ qmatch_asmsub_rename_tac`string_to_num s`
-  \\ qmatch_asmsub_rename_tac`assign_subscripts tv a`
   \\ sg `lookup_scopes (string_to_num s) st.scopes = SOME (tv,a)`
   >- (
     gvs[get_scopes_def, return_def, lift_option_def, option_CASE_rator]
@@ -2014,11 +2018,81 @@ Resume assign_target_well_typed[replace]:
   \\ gvs[well_typed_atarget_def]
   \\ drule_all eval_base_target_type_connection
   \\ strip_tac \\ gvs[]
-  \\ cheat
+  \\ drule_at Any lookup_scopes_well_typed
+  \\ impl_tac >- gvs[state_well_typed_def]
+  \\ gvs[lift_sum_def, sum_CASE_rator, AllCaseEqs(), raise_def, return_def]
+  \\ strip_tac
+  \\ drule assign_subscripts_preserves_type
+  \\ simp[] \\ strip_tac
+  \\ gvs[lift_option_def, option_CASE_rator, AllCaseEqs(),
+         return_def, raise_def]
+  \\ conj_tac
+  >- (
+    irule state_well_typed_with_scopes
+    \\ drule find_containing_scope_structure
+    \\ strip_tac
+    \\ gvs[state_well_typed_def]
+    \\ gvs[scope_well_typed_def, FLOOKUP_UPDATE]
+    \\ rw[] \\ rw[]
+    \\ first_x_assum irule
+    \\ goal_assum drule )
+  \\ irule (iffRL $ cj 1 env_consistent_scopes_only)
+  \\ gvs[env_consistent_def]
+  \\ rw[]
+  \\ TRY (
+       first_x_assum irule
+       \\ goal_assum drule \\ rw[])
+  \\ drule find_containing_scope_structure
+  \\ strip_tac \\ gvs[]
+  \\ Cases_on`string_to_num s = id`
+  >- (
+    drule find_containing_scope_pre_none \\ strip_tac
+    \\ drule lookup_scopes_update
+    \\ strip_tac \\ gvs[]
+    \\ first_x_assum (drule_then irule)
+    \\ goal_assum drule )
+  \\ drule lookup_scopes_update_other
+  \\ strip_tac
+  \\ first_x_assum(drule_then irule)
+  \\ gvs[]
 QED
 
 Resume assign_target_well_typed[set_immutable]:
-  cheat
+  (* Extract FLOOKUP from lift_option_type *)
+  gvs[get_immutables_def, bind_apply, AllCaseEqs(), return_def]
+  \\ gvs[lift_option_type_def, lift_sum_def,
+         option_CASE_rator, sum_CASE_rator, AllCaseEqs(),
+         return_def, raise_def]
+  \\ gvs[lift_option_type_def, lift_sum_def,
+         option_CASE_rator, sum_CASE_rator, AllCaseEqs(),
+         return_def, raise_def,
+         get_address_immutables_def, lift_option_def]
+  \\ conj_tac
+  (* Conjunct 1: ∃old_v. FLOOKUP ... = SOME (FST tva, old_v) *)
+  >- (qexists_tac`SND tva` \\ Cases_on`tva` \\ gvs[])
+  (* Conjunct 2: value_has_type (FST tva) a' *)
+  \\ `loc_type cx s'³' (ImmutableVar s) (FST tva)` by
+       (rw[loc_type_def, get_immutables_def, bind_apply, return_def,
+           get_address_immutables_def, lift_option_def, option_CASE_rator]
+        \\ qexists_tac`SND tva` \\ Cases_on`tva` \\ gvs[])
+  \\ gvs[well_typed_atarget_def]
+  \\ drule_all eval_base_target_type_connection
+  \\ strip_tac \\ gvs[]
+  (* Get value_has_type (FST tva) (SND tva) from imms_well_typed *)
+  \\ sg `value_has_type (FST tva) (SND tva)`
+  >- (
+       gvs[state_well_typed_def, EVERY_MEM, FORALL_PROD] >>
+       `imms_well_typed imms'` by
+         (first_x_assum irule >>
+          drule alistTheory.ALOOKUP_MEM >> strip_tac >>
+          goal_assum drule) >>
+       gvs[imms_well_typed_def, get_source_immutables_def] >>
+       Cases_on`tva` >> gvs[] >>
+       Cases_on`ALOOKUP imms' (current_module cx)` >> gvs[] >>
+       first_x_assum irule >>
+       goal_assum drule >> goal_assum drule)
+  \\ drule assign_subscripts_preserves_type
+  \\ simp[]
 QED
 
 Finalise assign_target_well_typed

@@ -94,7 +94,7 @@ End
 (****************************************)
 (* Helpers *)
 
-Theorem lookup_scopes_update_other[local]:
+Theorem lookup_scopes_update_other:
   ∀pre n1 n2 env v rest.
     n1 ≠ n2 ⇒
     lookup_scopes n2 (pre ⧺ env |+ (n1, v) :: rest) =
@@ -105,7 +105,7 @@ Proof
   simp[lookup_scopes_def]
 QED
 
-Theorem lookup_scopes_val_update_other[local]:
+Theorem lookup_scopes_val_update_other:
   ∀pre n1 n2 env v rest.
     n1 ≠ n2 ⇒
     lookup_scopes_val n2 (pre ⧺ env |+ (n1, v) :: rest) =
@@ -168,7 +168,7 @@ Proof
   Cases_on `x` >> simp[]
 QED
 
-Theorem lookup_scopes_update[local]:
+Theorem lookup_scopes_update:
   ∀id pre env v rest.
     lookup_scopes id pre = NONE ⇒
     lookup_scopes id (pre ++ env |+ (id,v) :: rest) = SOME v
@@ -190,7 +190,7 @@ Proof
   Cases_on `x` >> simp[lookup_scopes_def]
 QED
 
-Theorem find_containing_scope_structure[local]:
+Theorem find_containing_scope_structure:
   ∀id sc pre env tv v rest.
     find_containing_scope id sc = SOME (pre, env, tv, v, rest) ⇒
     sc = pre ++ env :: rest ∧ FLOOKUP env id = SOME (tv, v)
@@ -223,7 +223,7 @@ Proof
   PairCases_on `x` >> drule find_containing_scope_lookup >> simp[]
 QED
 
-Theorem lookup_scopes_update_preserves[local]:
+Theorem lookup_scopes_update_preserves:
   ∀n pre env id v rest.
     FLOOKUP env id = SOME w ⇒
     (IS_SOME (lookup_scopes n (pre ++ [env] ++ rest)) ⇔
