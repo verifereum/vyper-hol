@@ -2,6 +2,7 @@ Theory vyperEvalPreservesScopes
 Ancestors
   vyperState vyperInterpreter vyperLookup
   vyperEvalExprPreservesScopesDom vyperScopePreservation
+  vyperMisc vyperStatePreservation
 
 Definition preserves_scopes_dom_def:
   preserves_scopes_dom st st' ⇔
@@ -288,6 +289,53 @@ Proof
   gvs[preserves_scopes_dom_def] >> strip_tac >> gvs[]
 QED
 
+Theorem case_If_map_fdom[local]:
+  ∀cx e ss1 ss2.
+    (∀s'' tv t s3 x t'.
+       eval_expr cx e s'' = (INL tv, t) ∧ push_scope s3 = (INL x,t') ⇒
+       ∀st res st'. eval_stmts cx ss1 st = (res, st') ⇒ preserves_scopes_dom st st') ∧
+    (∀s'' tv t s3 x t'.
+       eval_expr cx e s'' = (INL tv, t) ∧ push_scope s3 = (INL x,t') ⇒
+       ∀st res st'. eval_stmts cx ss2 st = (res, st') ⇒ preserves_scopes_dom st st') ∧
+    (∀st res st'. eval_expr cx e st = (res, st') ⇒
+       MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
+    ∀st res st'.
+      eval_stmt cx (If e ss1 ss2) st = (res, st') ⇒
+      MAP FDOM st.scopes = MAP FDOM st'.scopes
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), push_scope_def, return_def] >>
+  strip_tac >> gvs[] >>
+  rename1 `eval_expr cx e st = (INL tv, s_expr)` >>
+  `MAP FDOM st.scopes = MAP FDOM s_expr.scopes` by
+    (qpat_x_assum `∀st res st'. eval_expr _ _ _ = _ ⇒ _` drule >> simp[]) >>
+  `MAP FDOM st'.scopes = MAP FDOM s_expr.scopes` suffices_by simp[] >>
+  `∀st res st'. eval_stmts cx ss1 st = (res, st') ⇒ preserves_scopes_dom st st'` by
+    (rpt strip_tac >>
+     qpat_x_assum `∀s'' tv t s3 t'. _ ⇒ ∀st res st'. eval_stmts _ ss1 _ = _ ⇒ _`
+       (qspecl_then [`st`, `tv`, `s_expr`, `s_expr`, `s_expr with scopes updated_by CONS FEMPTY`] mp_tac) >>
+     simp[push_scope_def, return_def]) >>
+  `∀st res st'. eval_stmts cx ss2 st = (res, st') ⇒ preserves_scopes_dom st st'` by
+    (rpt strip_tac >>
+     qpat_x_assum `∀s'' tv t s3 t'. _ ⇒ ∀st res st'. eval_stmts _ ss2 _ = _ ⇒ _`
+       (qspecl_then [`st`, `tv`, `s_expr`, `s_expr`, `s_expr with scopes updated_by CONS FEMPTY`] mp_tac) >>
+     simp[push_scope_def, return_def]) >>
+  `TL (s_expr with scopes updated_by CONS FEMPTY).scopes = s_expr.scopes` by simp[] >>
+  drule finally_pop_scope_preserves_tl_dom >> simp[] >> strip_tac >>
+  first_x_assum irule >> rpt strip_tac >>
+  gvs[switch_BoolV_def, raise_def] >>
+  Cases_on `tv = Value (BoolV T)` >> gvs[]
+  >- (rpt strip_tac >>
+      first_x_assum drule >> strip_tac >>
+      gvs[preserves_scopes_dom_def]) >>
+  Cases_on `tv = Value (BoolV F)` >> gvs[raise_def]
+  >- (rpt strip_tac >>
+      qpat_x_assum `∀st res st'. eval_stmts _ ss2 _ = _ ⇒ _` drule >>
+      strip_tac >> gvs[preserves_scopes_dom_def]) >>
+  gvs[raise_def]
+QED
+
 Theorem case_For_dom[local]:
   ∀cx id typ it n body.
     (* IH for eval_for: conditional on lift_option_type, eval_iterator and check succeeding *)
@@ -397,6 +445,29 @@ Proof
   rpt IF_CASES_TAC >> simp[return_def, raise_def] >> rpt strip_tac >> gvs[]
 QED
 
+Theorem try_body_preserves_tl_dom'[local]:
+  ∀cx body.
+    (∀st res st'. eval_stmts cx body st = (res, st') ⇒
+       preserves_scopes_dom st st') ⇒
+    ∀st1 res1 st1'.
+      (try (do x <- eval_stmts cx body; return F od) handle_loop_exception)
+        st1 = (res1, st1') ⇒
+      MAP FDOM (TL st1.scopes) = MAP FDOM (TL st1'.scopes)
+Proof
+  rpt strip_tac >>
+  gvs[try_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def] >>
+  TRY (first_x_assum drule >> simp[preserves_scopes_dom_def] >> NO_TAC) >>
+  gvs[handle_loop_exception_def, return_def, raise_def] >>
+  first_x_assum drule >> simp[preserves_scopes_dom_def] >> strip_tac >>
+  TRY (simp[] >> NO_TAC) >>
+  gvs[] >>
+  TRY (qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
+       rpt IF_CASES_TAC >> simp[return_def, raise_def] >>
+       rpt strip_tac >> gvs[] >> NO_TAC) >>
+  TRY (gvs[return_def] >> NO_TAC) >>
+  rpt strip_tac >> gvs[]
+QED
+
 Theorem case_eval_for_cons_dom[local]:
   ∀cx nm tyv body v vs.
     (* IH for eval_for: conditional on push_scope_with_var succeeding and finally succeeding with broke=F *)
@@ -446,6 +517,37 @@ Proof
   simp[finally_def, AllCaseEqs(), bind_def, ignore_bind_def, pop_scope_def, return_def, raise_def] >>
   strip_tac >> first_x_assum drule >> strip_tac >>
   Cases_on `st.scopes` >> Cases_on `tl` >> gvs[]
+QED
+
+Theorem eval_for_map_fdom[local]:
+  ∀cx tyv nm body vs.
+    (∀st res st'. eval_stmts cx body st = (res, st') ⇒
+       preserves_scopes_dom st st') ⇒
+    ∀st res st'.
+      eval_for cx tyv nm body vs st = (res, st') ⇒
+      MAP FDOM st.scopes = MAP FDOM st'.scopes
+Proof
+  gen_tac >> gen_tac >> gen_tac >> gen_tac >>
+  Induct
+  (* [] case *)
+  >- (rpt strip_tac >> gvs[evaluate_def, return_def]) >>
+  rpt strip_tac >>
+  (* v::vs case *)
+  qpat_x_assum `eval_for _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, push_scope_with_var_def,
+       return_def, AllCaseEqs()] >>
+  strip_tac >> gvs[]
+  (* common: establish try_body preserves TL *)
+  >> (
+    `MAP FDOM s''.scopes = MAP FDOM st.scopes` by (
+      drule finally_pop_scope_preserves_tl_dom >> simp[] >>
+      disch_then irule >> rpt strip_tac >>
+      drule_all try_body_preserves_tl_dom' >> simp[]) >>
+    (* Goal 2 (error): trivial since st' not involved *)
+    TRY (gvs[] >> NO_TAC) >>
+    (* Goal 1 (success): case split on broke *)
+    Cases_on `broke` >> gvs[return_def] >>
+    first_x_assum drule >> simp[])
 QED
 
 Theorem case_Array_iterator_dom[local]:
@@ -628,6 +730,8 @@ QED
    Main theorems
    ------------------------------------------------------------------------ *)
 
+
+
 Theorem eval_stmts_preserves_scopes_dom:
   ∀cx st st' ss res.
     eval_stmts cx ss st = (res, st') ⇒
@@ -673,6 +777,22 @@ QED
 (* New entries in HEAD scope are not in any TAIL scope.
    The key property: new_variable checks IS_NONE (lookup_scopes id env)
    before adding, and TAIL FDOMs are preserved throughout evaluation. *)
+
+Theorem new_variable_new_not_in_tail:
+  ∀name tv v st res st' nm.
+  new_variable name tv v st = (res, st') ∧ st.scopes ≠ [] ∧
+  nm ∈ FDOM (HD st'.scopes) ∧ nm ∉ FDOM (HD st.scopes) ⇒
+  lookup_scopes nm (TL st'.scopes) = NONE
+Proof
+  rpt strip_tac >>
+  fs[new_variable_def, get_scopes_def, bind_apply, type_check_def,
+     ignore_bind_apply, vyperStateTheory.assert_def] >>
+  Cases_on `st.scopes` >> fs[] >>
+  fs[set_scopes_def, return_def, raise_def] >>
+  gvs[AllCaseEqs()] >>
+  fs[lookup_scopes_def, finite_mapTheory.FLOOKUP_DEF]
+QED
+
 Theorem new_in_head_mutual[local]:
   (!cx s st res st'. eval_stmt cx s st = (res, st') ==>
     st.scopes <> [] ==>
@@ -749,58 +869,172 @@ Proof
       imp_res_tac eval_exprs_preserves_scopes_dom >>
       imp_res_tac push_log_scopes >> gvs[]) >>
     Cases_on`st.scopes` >> Cases_on`st'.scopes` >> gvs[])
-  >> conj_tac >- ( (* AnnAssign — key case: new_variable adds to HEAD *)
+  >> conj_tac >- ( (* AnnAssign *)
     rpt strip_tac >>
-    qpat_x_assum`eval_stmt _ _ _ = _`mp_tac >>
-    simp[Once evaluate_def, bind_def, AllCaseEqs(),
-         new_variable_def, get_scopes_def, set_scopes_def,
-         type_check_def, return_def, raise_def,
-         lift_option_type_def] >>
+    qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+    simp[Once evaluate_def, bind_apply] >>
+    simp[AllCaseEqs(), PULL_EXISTS] >>
     rpt strip_tac >> gvs[] >>
+    (* error cases: scopes unchanged, contradiction *)
+    TRY (imp_res_tac eval_expr_preserves_scopes_dom >>
+         imp_res_tac materialise_scopes >> gvs[] >>
+         Cases_on `st.scopes` >> Cases_on `s'³'.scopes` >> gvs[] >> NO_TAC) >>
+    (* success case: apply new_variable_new_not_in_tail *)
     imp_res_tac eval_expr_preserves_scopes_dom >>
     imp_res_tac materialise_scopes >> gvs[] >>
-    Cases_on`st.scopes` >> gvs[] >>
-    gvs[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-    gvs[lookup_scopes_none_iff_fdom, listTheory.EVERY_MEM,
-        finite_mapTheory.FDOM_FUPDATE] >> cheat)
-  >> conj_tac >- cheat (* Append *)
-  >> conj_tac >- cheat (* Assign *)
-  >> conj_tac >- cheat (* AugAssign *)
-  >> conj_tac >- cheat (* If *)
-  >> conj_tac >- cheat (* For *)
-  >> conj_tac >- cheat (* Expr *)
+    imp_res_tac materialise_state >> gvs[] >>
+    imp_res_tac lift_option_type_state >> gvs[] >>
+    (*
+    imp_res_tac new_variable_state >> gvs[] >>
+    *)
+    TRY (
+      irule new_variable_new_not_in_tail >> gvs[] >>
+      goal_assum (drule_at(Pat`new_variable`))) >>
+    qmatch_assum_rename_tac`MAP FDOM s1.scopes = MAP FDOM s2.scopes` >>
+    Cases_on`s1.scopes` \\ Cases_on`s2.scopes` \\ gvs[])
+  >> conj_tac >- ( (* Append *)
+    rpt strip_tac >>
+    sg `MAP FDOM st.scopes = MAP FDOM st'.scopes`
+    >- (
+      qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      TRY pairarg_tac >> gvs[bind_apply, return_def, AllCaseEqs(),
+                             ignore_bind_apply] >>
+      imp_res_tac eval_expr_preserves_scopes_dom >>
+      imp_res_tac eval_base_target_preserves_scopes_dom >>
+      imp_res_tac materialise_scopes >>
+      imp_res_tac get_Value_scopes >>
+      imp_res_tac return_scopes >>
+      imp_res_tac (cj 1 assign_target_preserves_scopes_dom) >> gvs[]) >>
+    Cases_on `st.scopes` >> Cases_on `st'.scopes` >> gvs[])
+  >> conj_tac >- ( (* Assign *)
+    rpt strip_tac >>
+    sg `MAP FDOM st.scopes = MAP FDOM st'.scopes`
+    >- (
+      qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_apply, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      imp_res_tac eval_expr_preserves_scopes_dom >>
+      imp_res_tac (cj 4 scopes_dom_mutual) >>
+      imp_res_tac materialise_scopes >>
+      imp_res_tac (cj 1 assign_target_preserves_scopes_dom) >>
+      gvs[return_def] ) >>
+    Cases_on `st.scopes` >> Cases_on `st'.scopes` >> gvs[])
+  >> conj_tac >- ( (* AugAssign *)
+    rpt strip_tac >>
+    sg `MAP FDOM st.scopes = MAP FDOM st'.scopes`
+    >- (
+      qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_apply, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      TRY pairarg_tac >> gvs[bind_apply, return_def, AllCaseEqs(),
+                             ignore_bind_apply] >>
+      imp_res_tac eval_expr_preserves_scopes_dom >>
+      imp_res_tac eval_base_target_preserves_scopes_dom >>
+      imp_res_tac materialise_scopes >>
+      imp_res_tac get_Value_scopes >>
+      imp_res_tac lift_option_type_scopes >>
+      imp_res_tac (cj 1 assign_target_preserves_scopes_dom) >>
+      gvs[return_def]) >>
+    Cases_on `st.scopes` >> Cases_on `st'.scopes` >> gvs[])
+  >> conj_tac >- ( (* If *)
+    rpt strip_tac >>
+    `MAP FDOM st.scopes = MAP FDOM st'.scopes` by (
+      irule case_If_map_fdom >>
+      qexists_tac `cx` >> qexists_tac `e` >> qexists_tac `res` >>
+      qexists_tac `ss` >> qexists_tac `ss'` >>
+      metis_tac[scopes_dom_mutual, eval_expr_preserves_scopes_dom]) >>
+    Cases_on `st.scopes` >> Cases_on `st'.scopes` >> gvs[])
+  >> conj_tac >- ( (* For *)
+    rpt strip_tac >>
+    `MAP FDOM st.scopes = MAP FDOM st'.scopes` by (
+      qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      imp_res_tac lift_option_type_scopes >>
+      imp_res_tac (cj 3 scopes_dom_mutual) >> (* eval_iterator *)
+      imp_res_tac check_scopes >> imp_res_tac type_check_scopes >> gvs[] >>
+      gvs[ignore_bind_apply, check_def, AllCaseEqs(), assert_def] >>
+      irule eval_for_map_fdom >>
+      goal_assum $ drule_at Any >>
+      rpt strip_tac >> drule eval_stmts_preserves_scopes_dom >> simp[]) >>
+    Cases_on `st.scopes` >> Cases_on `st'.scopes` >> gvs[])
+  >> conj_tac >- ( (* Expr *)
+    rpt strip_tac >>
+    sg `MAP FDOM st.scopes = MAP FDOM st'.scopes`
+    >- (
+      qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_apply, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      imp_res_tac eval_expr_preserves_scopes_dom >>
+      imp_res_tac get_Value_scopes >>
+      imp_res_tac return_scopes >>
+      imp_res_tac check_scopes >>
+      imp_res_tac type_check_scopes >> gvs[]) >>
+    Cases_on `st.scopes` >> Cases_on `st'.scopes` >> gvs[])
   >> conj_tac >- (rpt strip_tac >> gvs[evaluate_def, return_def]) (* stmts [] *)
-  >> conj_tac >- cheat (* stmts s::ss *)
-  >> conj_tac >- cheat (* Array *)
-  >> conj_tac >- cheat (* Range *)
-  >> conj_tac >- cheat (* BaseTarget *)
-  >> conj_tac >- cheat (* TupleTarget *)
-  >> conj_tac >- cheat (* targets [] *)
-  >> conj_tac >- cheat (* targets g::gs *)
-  >> conj_tac >- cheat (* NameTarget *)
-  >> conj_tac >- cheat (* BareGlobalNameTarget *)
-  >> conj_tac >- cheat (* TopLevelNameTarget *)
-  >> conj_tac >- cheat (* AttributeTarget *)
-  >> conj_tac >- cheat (* SubscriptTarget *)
+  >> conj_tac >- ( (* stmts s::ss *)
+    rpt strip_tac >>
+    (* Unfold eval_stmts to get s_mid *)
+    qpat_x_assum `eval_stmts _ _ _ = _` mp_tac >>
+    simp[Once evaluate_def, ignore_bind_apply, bind_def, AllCaseEqs()] >>
+    reverse (rpt strip_tac >> gvs[])
+    >- ( first_x_assum (drule_then irule) >> rw[] ) >>
+    (* Now: eval_stmt cx s st = (INL x, s_mid), eval_stmts cx ss s_mid = (res, st') *)
+    rename1 `eval_stmt cx s st = (INL _, s_mid)` >>
+    (* Case split: is id in HD s_mid.scopes? *)
+    Cases_on `id ∈ FDOM (HD s_mid.scopes)`
+    (* Case 1: id ∈ FDOM (HD s_mid.scopes) — new entry came from s *)
+    >- (
+      (* IH_s gives: lookup_scopes id (TL s_mid.scopes) = NONE *)
+      first_x_assum drule >>
+      disch_then(qspec_then `id` mp_tac) >> simp[] >> strip_tac >>
+      (* IH_ss: eval_stmts preserves scopes_dom *)
+      imp_res_tac (cj 2 scopes_dom_mutual) >>
+      gvs[preserves_scopes_dom_def] >>
+      (* TL s_mid.scopes = TL st'.scopes (MAP FDOM) *)
+      imp_res_tac lookup_scopes_none_map_fdom >> gvs[]) >>
+    (* Case 2: id ∉ FDOM (HD s_mid.scopes) — new entry came from ss *)
+    last_x_assum $ drule_then (drule_then irule) >> gvs[] >>
+    drule (cj 1 scopes_dom_mutual) >>
+    rw[preserves_scopes_dom_def])
+  >> conj_tac >- simp[] (* Array: T *)
+  >> conj_tac >- simp[] (* Range: T *)
+  >> conj_tac >- simp[] (* BaseTarget: T *)
+  >> conj_tac >- simp[] (* TupleTarget: T *)
+  >> conj_tac >- simp[] (* targets []: T *)
+  >> conj_tac >- simp[] (* targets g::gs: T *)
+  >> conj_tac >- simp[] (* NameTarget: T *)
+  >> conj_tac >- simp[] (* BareGlobalNameTarget: T *)
+  >> conj_tac >- simp[] (* TopLevelNameTarget: T *)
+  >> conj_tac >- simp[] (* AttributeTarget: T *)
+  >> conj_tac >- simp[] (* SubscriptTarget: T *)
   >> conj_tac >- (rpt strip_tac >> gvs[evaluate_def, return_def]) (* for [] *)
-  >> conj_tac >- cheat (* for v::vs *)
-  >> conj_tac >- cheat
-  >> conj_tac >- cheat
-  >> conj_tac >- cheat
-  >> conj_tac >- cheat
-  >> conj_tac >- cheat
-  >> conj_tac >- cheat
-  >> conj_tac >- cheat
-  >> conj_tac >- cheat
-  >> conj_tac >- cheat
-  >> conj_tac >- cheat
-  >> conj_tac >- cheat
-  >> conj_tac >- cheat
-  >> conj_tac >- cheat
-  >> conj_tac >- cheat
-  >> conj_tac >- cheat
-  >> conj_tac >- rw[evaluate_def]
-  >> rw[evaluate_def]
+  >> conj_tac >- ( (* for v::vs *)
+    rpt strip_tac >>
+    `MAP FDOM st.scopes = MAP FDOM st'.scopes` by
+      (irule eval_for_map_fdom >>
+       goal_assum $ drule_at Any >> rw[] >>
+       metis_tac[scopes_dom_mutual]) >>
+    Cases_on `st.scopes` >> Cases_on `st'.scopes` >> gvs[])
+  >> conj_tac >- simp[] (* Name: T *)
+  >> conj_tac >- simp[] (* BareGlobalName: T *)
+  >> conj_tac >- simp[] (* TopLevelName: T *)
+  >> conj_tac >- simp[] (* FlagMember: T *)
+  >> conj_tac >- simp[] (* IfExp: T *)
+  >> conj_tac >- simp[] (* Literal: T *)
+  >> conj_tac >- simp[] (* StructLit: T *)
+  >> conj_tac >- simp[] (* Subscript: T *)
+  >> conj_tac >- simp[] (* Attribute: T *)
+  >> conj_tac >- simp[] (* Builtin: T *)
+  >> conj_tac >- simp[] (* Pop: T *)
+  >> conj_tac >- simp[] (* TypeBuiltin: T *)
+  >> conj_tac >- simp[] (* Send: T *)
+  >> conj_tac >- simp[] (* ExtCall: T *)
+  >> conj_tac >- simp[] (* IntCall: T *)
+  >> conj_tac >- simp[] (* exprs []: T *)
+  >> simp[] (* exprs e::es: T *)
 QED
 
 Theorem eval_stmts_new_in_head_not_in_tail:
