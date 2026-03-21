@@ -733,6 +733,7 @@ Definition well_typed_stmt_def:
   well_typed_stmt env ret_ty (For id typ it n body) =
     (well_formed_type env.type_defs typ /\
      well_typed_iterator env it /\
+     string_to_num id NOTIN FDOM env.var_types /\
      well_typed_stmts
        (env with var_types updated_by (flip FUPDATE (string_to_num id, typ)))
        ret_ty body) /\
@@ -1051,12 +1052,27 @@ Theorem env_consistent_pop_scope:
   !env nm typ cx st.
     env_consistent (env with var_types updated_by flip $|+ (nm, typ)) cx st /\
     st.scopes <> [] /\
+    nm NOTIN FDOM env.var_types /\
     (!id. id IN FDOM (HD st.scopes) /\ id <> nm ==>
           lookup_scopes id (TL st.scopes) = NONE)
     ==>
     env_consistent env cx (st with scopes := TL st.scopes)
 Proof
-  cheat
+  rpt strip_tac >>
+  fs[env_consistent_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  conj_tac
+  (* var_types conjunct *)
+  >- (
+    rpt strip_tac >>
+    `id <> nm` by (strip_tac >> gvs[finite_mapTheory.FLOOKUP_DEF]) >>
+    Cases_on `id IN FDOM (HD st.scopes)`
+    >- (first_x_assum drule >> simp[] >> strip_tac >> gvs[]) >>
+    last_x_assum irule >>
+    qexists_tac`id` >> rw[] >>
+    Cases_on`st.scopes` >>
+    gvs[lookup_scopes_def, FLOOKUP_DEF]) >>
+  (* global_types conjunct *)
+  rpt strip_tac >> res_tac
 QED
 
 (* bind_arguments stores evaluate_type results *)
@@ -2471,6 +2487,7 @@ Theorem type_preservation:
     functions_well_typed cx /\
     evaluate_type (get_tenv cx) typ = SOME tyv /\
     EVERY (value_has_type tyv) vs /\
+    nm NOTIN FDOM env.var_types /\
     eval_for cx tyv nm body vs st = (res, st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\
     !v ret_tv. res = INR (ReturnException v) /\
@@ -2676,22 +2693,62 @@ Resume type_preservation[cons]:
     strip_tac >> gvs[] >>
     gvs[finally_def, try_def, AllCaseEqs(), bind_apply,
         ignore_bind_apply, return_def, pop_scope_def, raise_def] >>
-    cheat ) >>
+    gvs[handle_loop_exception_def, return_def, raise_def, AllCaseEqs()] >>
+    gvs[COND_RATOR, AllCaseEqs(), return_def, raise_def] >>
+    first_x_assum $ drule_at Any >>
+    impl_tac >- (
+      gvs[push_scope_with_var_def, return_def,
+          state_well_typed_def, scope_well_typed_def,
+          FLOOKUP_UPDATE, env_consistent_def,
+          lookup_scopes_def] >>
+      conj_tac >> rpt gen_tac >>
+      Cases_on `nm = id` >> strip_tac >> gvs[] >>
+      first_x_assum (drule_then irule) >>
+      goal_assum drule) >>
+    strip_tac >>
+    conj_tac >- gvs[state_well_typed_def] >>
+    `s'' with scopes := tl = s'' with scopes := TL s''.scopes` by gvs[] >>
+    pop_assum SUBST_ALL_TAC >>
+    irule env_consistent_pop_scope >> simp[] >>
+    goal_assum $ drule_at Any >> rw[] >>
+    drule eval_stmts_new_in_head_not_in_tail >>
+    simp[push_scope_with_var_def, return_def, FDOM_FUPDATE] >>
+    strip_tac >> first_x_assum irule >>
+    gvs[push_scope_with_var_def, return_def, FDOM_FUPDATE] ) >>
   strip_tac >>
   first_x_assum $ drule_at(Pat`eval_for`) >>
   gvs[] >>
-  disch_then drule >>
+  disch_then (qspecl_then [`env`, `typ`, `ret_ty`] mp_tac) >>
+  simp[] >>
   disch_then irule >>
-  gvs[finally_def, try_def, ignore_bind_apply,
-      raise_def, return_def, pop_scope_def] >>
-  ntac 2 (pop_assum mp_tac) >>
-  CASE_TAC >>
-  simp[AllCaseEqs(), PULL_EXISTS] >>
-  rpt gen_tac >>
-  qmatch_goalsub_abbrev_tac`aaa ∧ bbb ∧ _ ==> _` >>
+  (* Need: env_consistent env cx r ∧ state_well_typed r *)
+  (* r comes from finally (try body handle_loop_exception) pop_scope y = (INL F, r) *)
+  (* Same push/pop argument as broke=T case *)
+  (* First apply IH_body to get state after body, then pop_scope *)
+  gvs[finally_def, try_def, AllCaseEqs(), bind_apply,
+      ignore_bind_apply, return_def, pop_scope_def, raise_def] >>
+  gvs[handle_loop_exception_def, return_def, raise_def, AllCaseEqs()] >>
+  gvs[COND_RATOR, AllCaseEqs(), return_def, raise_def] >>
+  first_x_assum $ drule_at Any >>
+  (impl_tac >- (
+    gvs[push_scope_with_var_def, return_def,
+        state_well_typed_def, scope_well_typed_def,
+        FLOOKUP_UPDATE, env_consistent_def,
+        lookup_scopes_def] >>
+    conj_tac >> rpt gen_tac >>
+    Cases_on `nm = id` >> strip_tac >> gvs[] >>
+    first_x_assum (drule_then irule) >>
+    goal_assum drule)) >>
   strip_tac >>
-  BasicProvers.VAR_EQ_TAC >> strip_tac >>
-  cheat
+  (conj_tac >- gvs[state_well_typed_def]) >>
+  `s'' with scopes := tl = s'' with scopes := TL s''.scopes` by gvs[] >>
+  pop_assum SUBST_ALL_TAC >>
+  irule env_consistent_pop_scope >> simp[] >>
+  goal_assum $ drule_at Any >> rw[] >>
+  drule eval_stmts_new_in_head_not_in_tail >>
+  simp[push_scope_with_var_def, return_def, FDOM_FUPDATE] >>
+  strip_tac >> first_x_assum irule >>
+  gvs[push_scope_with_var_def, return_def, FDOM_FUPDATE]
 QED
 
 Resume type_preservation[Send]:
