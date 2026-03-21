@@ -15,7 +15,7 @@
  *   assign_target_no_return     : assign_target never returns ReturnException
  *   evaluate_no_return          : eval_expr and related never return ReturnException
  *   eval_base_target_type_connection : connects AST target type to runtime type
- *   intcall_state_preserved     : internal call preserves state (1 cheat: EL precondition)
+ *   IntCall (suspension)        : internal call type preservation (WIP)
  *   set_immutable_well_typed    : set_immutable preserves state_well_typed + env_consistent
  *   set_global_well_typed       : set_global preserves state_well_typed + env_consistent
  *   write_storage_slot_well_typed : storage writes preserve state_well_typed + env_consistent
@@ -1146,222 +1146,6 @@ Proof
   gvs[]
 QED
 
-Theorem intcall_state_preserved:
-  !cx src_id_opt fn es v17 env st v st' tv.
-    (* IH for eval_exprs cx es (args) *)
-    (!env0 st0 res0 st0'.
-       well_typed_exprs env0 es /\ env_consistent env0 cx st0 /\
-       state_well_typed st0 /\ functions_well_typed cx /\
-       eval_exprs cx es st0 = (res0, st0') ==>
-       state_well_typed st0' /\ env_consistent env0 cx st0' /\
-       !vs0. res0 = INL vs0 ==>
-       LIST_REL (\v e. !tyv.
-         evaluate_type (get_tenv cx) (expr_type e) = SOME tyv ==>
-         value_has_type tyv v) vs0 es) /\
-    (* IH for eval_exprs cxd needed_dflts (defaults) *)
-    (!dflts_sub env0 st0 res0 st0'.
-       well_typed_exprs env0 dflts_sub /\
-       env_consistent env0 (cx with stk updated_by CONS (src_id_opt, fn)) st0 /\
-       state_well_typed st0 /\
-       functions_well_typed (cx with stk updated_by CONS (src_id_opt, fn)) /\
-       eval_exprs (cx with stk updated_by CONS (src_id_opt, fn))
-         dflts_sub st0 = (res0, st0') ==>
-       state_well_typed st0' /\
-       !vs0. res0 = INL vs0 ==>
-       LIST_REL (\v e. !tyv.
-         evaluate_type (get_tenv (cx with stk updated_by CONS (src_id_opt, fn)))
-           (expr_type e) = SOME tyv ==>
-         value_has_type tyv v) vs0 dflts_sub) /\
-    (* IH for eval_stmts cxf body *)
-    (!body env0 ret_ty st0 res0 st0'.
-       well_typed_stmts env0 ret_ty body /\
-       env_consistent env0 (cx with stk updated_by CONS (src_id_opt, fn)) st0 /\
-       state_well_typed st0 /\
-       functions_well_typed (cx with stk updated_by CONS (src_id_opt, fn)) /\
-       eval_stmts (cx with stk updated_by CONS (src_id_opt, fn))
-         body st0 = (res0, st0') ==>
-       state_well_typed st0') ==>
-    well_typed_expr env (Call v16 (IntCall (src_id_opt, fn)) es v17) /\
-    env_consistent env cx st /\
-    state_well_typed st /\
-    functions_well_typed cx /\
-    eval_expr cx (Call v16 (IntCall (src_id_opt, fn)) es v17) st =
-      (INL (Value v), st') ==>
-    state_well_typed st'
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _`
-    (mp_tac o ONCE_REWRITE_RULE[evaluate_def]) >>
-  simp[bind_def, ignore_bind_def, LET_THM,
-       check_def, assert_def, lift_option_type_def,
-       type_check_def, get_scopes_def, push_function_def,
-       return_def, raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  (* Simplify option wrappers using qmatch *)
-  qpat_x_assum `option_CASE (get_module_code _ _) _ _ _ = _` mp_tac >>
-  CASE_TAC >> simp[return_def, raise_def] >> strip_tac >> gvs[] >>
-  rename1 `get_module_code cx src_id_opt = SOME ts` >>
-  qpat_x_assum `option_CASE (lookup_callable_function _ _ _) _ _ _ = _` mp_tac >>
-  CASE_TAC >> simp[return_def, raise_def] >> strip_tac >> gvs[] >>
-  rename1 `lookup_callable_function _ _ _ = SOME fn_info` >>
-  qpat_x_assum `option_CASE (bind_arguments _ _ _) _ _ _ = _` mp_tac >>
-  CASE_TAC >> simp[return_def, raise_def] >> strip_tac >> gvs[] >>
-  rename1 `bind_arguments _ _ _ = SOME sc` >>
-  qpat_x_assum `option_CASE (evaluate_type _ _) _ _ _ = _` mp_tac >>
-  CASE_TAC >> simp[return_def, raise_def] >> strip_tac >> gvs[] >>
-  rename1 `evaluate_type _ _ = SOME ret_tv` >>
-  qpat_x_assum `option_CASE (safe_cast _ _) _ _ _ = _` mp_tac >>
-  CASE_TAC >> simp[return_def, raise_def] >> strip_tac >> gvs[] >>
-  rename1 `safe_cast _ _ = SOME crv` >>
-  (* Step 1: Apply IH_args *)
-  `well_typed_exprs env es` by gvs[well_typed_expr_def] >>
-  `state_well_typed s'⁴'` by
-    (last_x_assum (qspecl_then [`env`, `s''`, `INL vs`, `s'⁴'`] mp_tac) >>
-     simp[]) >>
-  (* Destructure fn_info *)
-  PairCases_on `fn_info` >> gvs[] >>
-  (* Step 2: Apply IH_dflts *)
-  `functions_well_typed (cx with stk updated_by CONS (src_id_opt, fn))` by
-    gvs[functions_well_typed_stk_irrelevant] >>
-  `well_typed_exprs
-     <|var_types := FEMPTY; global_types := FEMPTY;
-       toplevel_types := FEMPTY; type_defs := get_tenv cx;
-       fn_sigs := FEMPTY|> fn_info2` by
-    (qpat_x_assum `functions_well_typed cx` mp_tac >>
-     simp[functions_well_typed_def] >>
-     disch_then (qspecl_then
-       [`src_id_opt`, `fn`, `ts`, `fn_info0`, `fn_info1`,
-        `fn_info2`, `fn_info3`, `fn_info4`, `FEMPTY`]
-       mp_tac) >> simp[fn_sigs_consistent_def] >>
-     strip_tac >> simp[]) >>
-  qmatch_assum_abbrev_tac `eval_exprs _ (DROP drop_n _) s'⁴' = (INL dflt_vs, s'⁵')` >>
-  `well_typed_exprs
-     <|var_types := FEMPTY; global_types := FEMPTY;
-       toplevel_types := FEMPTY; type_defs := get_tenv cx;
-       fn_sigs := FEMPTY|>
-     (DROP drop_n fn_info2)` by
-    (irule well_typed_exprs_DROP >> gvs[]) >>
-  `state_well_typed s'⁵'` by
-    (qpat_x_assum `!dflts_sub env0 st0 res0 st0'. _`
-       (qspecl_then
-          [`DROP drop_n fn_info2`,
-           `<|var_types := FEMPTY; global_types := FEMPTY;
-              toplevel_types := FEMPTY;
-              type_defs := get_tenv cx;
-              fn_sigs := FEMPTY|>`,
-           `s'⁴'`, `INL dflt_vs`, `s'⁵'`] mp_tac) >>
-     impl_tac >- (
-       simp[get_tenv_stk_irrelevant] >>
-       simp[env_consistent_def, finite_mapTheory.FLOOKUP_EMPTY,
-            get_tenv_stk_irrelevant, fn_sigs_consistent_def]
-     ) >> simp[]) >>
-  (* Extract well_typed_stmts from functions_well_typed *)
-  `?env_body.
-     env_body.type_defs = get_tenv cx /\
-     env_body.fn_sigs = env.fn_sigs /\
-     env_body.global_types = FEMPTY /\
-     well_typed_stmts env_body fn_info3 fn_info4 /\
-     (!id typ. MEM (id, typ) fn_info1 ==>
-        FLOOKUP env_body.var_types (string_to_num id) = SOME typ)` by
-    (qpat_x_assum `functions_well_typed cx` mp_tac >>
-     simp[functions_well_typed_def] >>
-     disch_then (qspecl_then
-       [`src_id_opt`, `fn`, `ts`, `fn_info0`, `fn_info1`,
-        `fn_info2`, `fn_info3`, `fn_info4`, `env.fn_sigs`] mp_tac) >>
-     impl_tac >- fs[env_consistent_def] >>
-     strip_tac >> qexists_tac `env_body` >> simp[]) >>
-  `scope_well_typed sc` by
-    suspend "difficulty" >>
-  `state_well_typed (s'⁵' with scopes := [sc])` by
-    (irule state_well_typed_with_scopes >>
-     simp[] >>
-     qpat_x_assum `state_well_typed s'⁵'` mp_tac >>
-     simp[state_well_typed_def]) >>
-  (* env_consistent for callee *)
-  `env_consistent env_body
-     (cx with stk updated_by CONS (src_id_opt, fn))
-     (s'⁵' with scopes := [sc])` by
-    (mp_tac (Q.SPECL [`get_tenv cx`, `fn_info1`, `vs ++ dflt_vs`, `sc`,
-                       `env_body`,
-                       `cx with stk updated_by CONS (src_id_opt, fn)`,
-                       `s'⁵'`]
-               bind_arguments_env_consistent) >>
-     simp[get_tenv_stk_irrelevant, fn_sigs_consistent_stk_irrelevant] >>
-     `fn_sigs_consistent env.fn_sigs cx` by
-       (qpat_x_assum `env_consistent env cx _` mp_tac >>
-        simp[env_consistent_def]) >>
-     gvs[]) >>
-  (* Step 3: Decompose the finally block *)
-  drule finally_try_handle_pop_success >> strip_tac >> gvs[]
-  (* Both cases: apply IH_body *)
-  >> (
-    rename1 `eval_stmts _ _ _ = (_, st_body)` >>
-    `state_well_typed st_body` by
-      (qpat_x_assum `!body env0 ret_ty st0 res0 st0'. _`
-         (qspecl_then
-            [`fn_info4`, `env_body`, `fn_info3`,
-             `s'⁵' with scopes := [sc]`] mp_tac) >>
-       simp[]) >>
-    fs[state_well_typed_def]
-  )
-QED
-
-Resume intcall_state_preserved[difficulty]:
-  match_mp_tac bind_arguments_scope_well_typed >>
-  (* Get LIST_REL for args *)
-  `LIST_REL (\v e. !tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv ==>
-                          value_has_type tyv v) vs es` by
-    (last_x_assum (qspecl_then [`env`, `s''`, `INL vs`, `s'⁴'`] mp_tac) >>
-     simp[well_typed_expr_def]) >>
-  (* Get param type correspondence from fn_sigs *)
-  `MAP expr_type es = TAKE (LENGTH es) (MAP SND fn_info1)` by
-    (qpat_x_assum `well_typed_expr _ _` mp_tac >>
-     simp[Once well_typed_expr_def] >> strip_tac >>
-     qpat_x_assum `env_consistent env cx _` mp_tac >>
-     simp[env_consistent_def, fn_sigs_consistent_def] >>
-     strip_tac >> first_x_assum drule >> strip_tac >> gvs[]) >>
-  qexists_tac `get_tenv cx` >>
-  qexists_tac `fn_info1` >>
-  qexists_tac `vs ++ dflt_vs` >>
-  simp[] >>
-  rpt gen_tac >>
-  strip_tac >>
-  Cases_on `i < LENGTH es`
-  >- (irule (INST_TYPE[alpha|->``:string``]list_rel_typing_to_el) >>
-      simp[] >>
-      qexists_tac `es` >>
-      qexists_tac `fn_info1` >>
-      qexists_tac `get_tenv cx` >>
-      simp[]) >>
-  first_x_assum $ drule_at (Pat`eval_exprs`) >>
-  simp[] >>
-  disch_then $ drule_at Any >>
-  impl_tac >- (
-    qmatch_goalsub_abbrev_tac`env_consistent _ cxx`
-    \\ qspec_then`cxx`mp_tac env_consistent_empty
-    \\ simp[Abbr`cxx`, get_tenv_stk_irrelevant] )
-  \\ simp[get_tenv_stk_irrelevant]
-  \\ gvs[listTheory.LIST_REL_EL_EQN]
-  \\ simp[rich_listTheory.EL_APPEND2]
-  \\ rpt strip_tac
-  \\ first_x_assum irule
-  \\ simp[listTheory.EL_DROP]
-  \\ sg `MAP expr_type fn_info2 = MAP SND (DROP (LENGTH fn_info1 - LENGTH fn_info2) fn_info1)` >- (
-    qpat_x_assum `functions_well_typed _` mp_tac >>
-    simp_tac std_ss [functions_well_typed_def, functions_well_typed_stk_irrelevant] >>
-    disch_then (qspecl_then [`src_id_opt`, `fn`, `ts`, `fn_info0`, `fn_info1`,
-      `fn_info2`, `fn_info3`, `fn_info4`, `FEMPTY`] mp_tac) >>
-    impl_tac >- simp[fn_sigs_consistent_def] >> simp[] >>
-    strip_tac)
-  \\ pop_assum mp_tac
-  \\ simp[listTheory.LIST_EQ_REWRITE]
-  \\ simp[listTheory.EL_MAP]
-  \\ simp[listTheory.EL_DROP]
-  \\ rw[]
-  \\ gvs[Abbr`drop_n`]
-QED
-
-Finalise intcall_state_preserved
 
 (* ===== Type preservation by mutual induction ===== *)
 (*
@@ -2760,6 +2544,88 @@ Resume type_preservation[ExtCall]:
 QED
 
 Resume type_preservation[IntCall]:
+  rpt gen_tac >> strip_tac >>
+  simp_tac std_ss [well_typed_expr_def] >>
+  rpt gen_tac >> strip_tac >>
+  (* Unfold eval_expr for IntCall *)
+  qpat_x_assum `eval_expr _ _ _ = _`
+    (mp_tac o ONCE_REWRITE_RULE[evaluate_def]) >>
+  simp_tac std_ss [bind_apply, ignore_bind_apply, AllCaseEqs(),
+                   PULL_EXISTS] >>
+  rpt gen_tac >>
+  reverse(disch_then strip_assume_tac)
+  (* Error cases from first batch of checks *)
+  >- (
+    rpt(first_x_assum(qspec_then`ARB`kall_tac))
+    \\ gvs[check_def, assert_def] )
+  >- (
+    rpt(first_x_assum(qspec_then`ARB`kall_tac))
+    \\ imp_res_tac lift_option_type_state
+    \\ gvs[check_def, assert_def] )
+  >- (
+    rpt(first_x_assum(qspec_then`ARB`kall_tac))
+    \\ imp_res_tac lift_option_type_state
+    \\ gvs[check_def, assert_def]) >>
+  (* LET bindings for destructuring fn_info *)
+  qmatch_goalsub_abbrev_tac`P` >>
+  qpat_x_assum`LET _ _ _ = _` mp_tac >>
+  BasicProvers.LET_ELIM_TAC >>
+  qunabbrev_tac`P` >>
+  (* Continue decomposing *)
+  qpat_x_assum`_ = (res,_)`mp_tac >>
+  simp_tac std_ss [bind_apply, ignore_bind_apply, AllCaseEqs(),
+                   PULL_EXISTS] >>
+  rpt gen_tac >>
+  reverse(disch_then strip_assume_tac)
+  (* Error from type_check or eval_exprs args *)
+  >- (
+    rpt(first_x_assum(qspec_then`ARB`kall_tac))
+    \\ imp_res_tac lift_option_type_state
+    \\ imp_res_tac type_check_state
+    \\ gvs[check_def, assert_def] )
+  >- (
+    (* eval_exprs cx es failed — use IH_args for state_well_typed + env_consistent *)
+    first_x_assum $ drule_at(Pat`eval_exprs`) >>
+    rpt(first_x_assum(qspec_then`ARB`kall_tac))
+    \\ imp_res_tac lift_option_type_state
+    \\ imp_res_tac type_check_state
+    \\ gvs[check_def, assert_def]
+    \\ disch_then irule \\ rw[]
+    \\ goal_assum drule
+    \\ goal_assum (drule_at Any)
+    \\ gvs[]
+    \\ goal_assum drule ) >>
+  (* eval_exprs cx es succeeded — continue *)
+  qmatch_goalsub_abbrev_tac`P` >>
+  qpat_x_assum`LET _ _ _ = _` mp_tac >>
+  BasicProvers.LET_ELIM_TAC >>
+  qunabbrev_tac`P` >>
+  qpat_x_assum`_ = (res,_)`mp_tac >>
+  simp_tac std_ss [bind_apply, ignore_bind_apply, AllCaseEqs(),
+                   PULL_EXISTS] >>
+  rpt gen_tac >>
+  reverse(disch_then strip_assume_tac)
+  >- (
+    (* eval_exprs cxd needed_dflts failed *)
+    (* Use IH_args for env_consistent env cx after args eval *)
+    first_x_assum $ drule_at(Pat`eval_exprs`) >>
+    first_x_assum $ drule_at(Pat`eval_exprs`) >>
+    rpt(first_x_assum(qspec_then`ARB`kall_tac))
+    \\ imp_res_tac lift_option_type_state
+    \\ imp_res_tac type_check_state
+    \\ gvs[check_def, assert_def]
+    \\ disch_then drule
+    \\ gvs[] \\ strip_tac
+    \\ disch_then drule
+    \\ disch_then drule
+    \\ gvs[]
+    \\ disch_then drule_all
+    \\ strip_tac
+    \\ first_x_assum drule
+    \\ gvs[]
+    \\ disch_then drule
+    \\ disch_then drule
+    \\ cheat ) >>
   cheat
 QED
 
