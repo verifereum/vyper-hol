@@ -18,14 +18,12 @@
 Theory stmtLowering
 Ancestors
   exprLowering context compileEnv venomInst abiEncoder
+Libs
+  monadsyntax
 
 (* ===== Target Compilation ===== *)
 
 (* ===== Statement Compilation ===== *)
-
-(* All compile_stmt / compile_stmts use explicit state passing for
-   recursive calls, same pattern as compile_expr. Non-recursive helpers
-   use explicit let-threading style. *)
 
 (* Loop context: tracks break/continue targets *)
 Datatype:
@@ -42,14 +40,15 @@ End
 (* Evaluate all log arg expressions in AST order.
    Returns list of (operand, type) pairs preserving AST order. *)
 Definition compile_log_eval_all_def:
-  compile_log_eval_all cenv [] st = ([] : (operand # type) list, st) ∧
-  compile_log_eval_all cenv (e::es) st =
+  compile_log_eval_all cenv [] = return ([] : (operand # type) list) ∧
+  compile_log_eval_all cenv (e::es) =
     (let arg_ty = expr_type e in
-     let (v, st1) = lower_value compile_expr cenv arg_ty e st in
-     let (rest, st2) = compile_log_eval_all cenv es st1 in
-     ((v, arg_ty) :: rest, st2))
+     do v <- lower_value compile_expr cenv arg_ty e;
+        rest <- compile_log_eval_all cenv es;
+        return ((v, arg_ty) :: rest)
+     od)
 Termination
-  WF_REL_TAC `measure (λ(cenv,es,st). LENGTH es)`
+  WF_REL_TAC `measure (λ(cenv,es). LENGTH es)`
 End
 
 (* Split already-evaluated operands into indexed topics and non-indexed data.
@@ -70,33 +69,34 @@ End
 (* Hash indexed topic operands (bytestrings need keccak256).
    Input: list of (operand, is_bytestring) *)
 Definition compile_log_topic_ops_def:
-  compile_log_topic_ops [] st = ([] : operand list, st) ∧
-  compile_log_topic_ops (x :: rest) st =
-    (let (topic_op, st1) = compile_encode_log_topic (FST x) (SND x) st in
-     let (rest_ops, st2) = compile_log_topic_ops rest st1 in
-     (topic_op :: rest_ops, st2))
+  compile_log_topic_ops [] = return ([] : operand list) ∧
+  compile_log_topic_ops (x :: rest) =
+    do topic_op <- compile_encode_log_topic (FST x) (SND x);
+       rest_ops <- compile_log_topic_ops rest;
+       return (topic_op :: rest_ops)
+    od
 Termination
-  WF_REL_TAC `measure (λ(ops,st). LENGTH ops)`
+  WF_REL_TAC `measure (λops. LENGTH ops)`
 End
 
 (* Store already-evaluated data operands to buffer.
    Input: list of (operand, type) *)
 Definition compile_log_store_data_def:
-  compile_log_store_data cenv [] buf_op offset st = ((), st) ∧
-  compile_log_store_data cenv (x :: rest) buf_op offset st =
+  compile_log_store_data cenv [] buf_op offset = return () ∧
+  compile_log_store_data cenv (x :: rest) buf_op offset =
     (let v = FST x in let arg_ty = SND x in
      let mem_size = type_memory_bytes cenv arg_ty in
      let is_prim = is_word_type arg_ty in
-     let (dst, st1) = if offset = 0 then (buf_op, st)
-                       else emit_op ADD [buf_op; Lit (n2w offset)] st in
-     let (_, st2) =
-       if is_prim then emit_void MSTORE [dst; v] st1
-       else if is_bytestring_type arg_ty then
-         compile_store_bytestring v dst st1
-       else emit_void MCOPY [dst; v; Lit (n2w mem_size)] st1 in
-     compile_log_store_data cenv rest buf_op (offset + mem_size) st2)
+     do dst <- (if offset = 0 then return buf_op
+                else emit_op ADD [buf_op; Lit (n2w offset)]);
+        (if is_prim then emit_void MSTORE [dst; v]
+         else if is_bytestring_type arg_ty then
+           compile_store_bytestring v dst
+         else emit_void MCOPY [dst; v; Lit (n2w mem_size)]);
+        compile_log_store_data cenv rest buf_op (offset + mem_size)
+     od)
 Termination
-  WF_REL_TAC `measure (λ(cenv,ops,buf,off,st). LENGTH ops)`
+  WF_REL_TAC `measure (λ(cenv,ops,buf,off). LENGTH ops)`
 End
 
 (* Extract target name as string for metadata lookup *)
@@ -138,7 +138,7 @@ End
    msg_type: type of the message (usually StringT).
    msg_enc_info: ABI encoding info for the message type. *)
 Definition compile_revert_with_reason_def:
-  compile_revert_with_reason cenv msg_op msg_type msg_mem_size st =
+  compile_revert_with_reason cenv msg_op msg_type msg_mem_size =
     (* Wrap message type as tuple: (msg_type,) for ABI encoding.
        Mirrors Python: wrapped_typ = TupleT((msg_typ,)) *)
     let wrapped_type = TupleT [msg_type] in
@@ -146,24 +146,24 @@ Definition compile_revert_with_reason_def:
     let wrapped_abi_size = abi_size_bound (cenv_sft cenv) wrapped_type in
     (* Allocate buffer: 32 (selector word) + encoded payload *)
     let buf_size = 32 + wrapped_abi_size in
-    let (buf_op_alloc, st2) = compile_alloc_buffer buf_size st in
-    let buf_op = buf_op_alloc.buf_operand in
-    (* Store Error(string) selector at buf: 0x08c379a0 *)
-    let selector = 0x08c379a0w : bytes32 in
-    let (_, st3) = emit_void MSTORE [buf_op; Lit selector] st2 in
-    (* Payload starts at buf + 32 *)
-    let (payload_buf, st4) = emit_op ADD [buf_op; Lit 32w] st3 in
-    (* Store message pointer into a tuple buffer (single-element tuple) *)
-    let (tuple_buf_alloc, st5) = compile_alloc_buffer msg_mem_size st4 in
-    let tuple_buf = tuple_buf_alloc.buf_operand in
-    let (_, st6) = compile_copy_memory tuple_buf msg_op msg_mem_size st5 in
-    (* ABI encode the wrapped tuple to payload buffer *)
-    let (encoded_len, st7) =
-      compile_abi_encode_to_buf payload_buf tuple_buf wrapped_enc_info st6 in
-    (* Revert from buf+28 (selector at bytes 0-3) with length 4 + encoded_len *)
-    let (revert_offset, st8) = emit_op ADD [buf_op; Lit 28w] st7 in
-    let (revert_len, st9) = emit_op ADD [Lit 4w; encoded_len] st8 in
-    emit_inst REVERT [revert_offset; revert_len] [] st9
+    do buf_op_alloc <- compile_alloc_buffer buf_size;
+       buf_op <- return buf_op_alloc.buf_operand;
+       (* Store Error(string) selector at buf: 0x08c379a0 *)
+       emit_void MSTORE [buf_op; Lit (0x08c379a0w : bytes32)];
+       (* Payload starts at buf + 32 *)
+       payload_buf <- emit_op ADD [buf_op; Lit 32w];
+       (* Store message pointer into a tuple buffer (single-element tuple) *)
+       tuple_buf_alloc <- compile_alloc_buffer msg_mem_size;
+       tuple_buf <- return tuple_buf_alloc.buf_operand;
+       compile_copy_memory tuple_buf msg_op msg_mem_size;
+       (* ABI encode the wrapped tuple to payload buffer *)
+       encoded_len <-
+         compile_abi_encode_to_buf payload_buf tuple_buf wrapped_enc_info;
+       (* Revert from buf+28 (selector at bytes 0-3) with length 4 + encoded_len *)
+       revert_offset <- emit_op ADD [buf_op; Lit 28w];
+       revert_len <- emit_op ADD [Lit 4w; encoded_len];
+       emit_inst REVERT [revert_offset; revert_len] []
+    od
 End
 
 (* ===== Internal Return ===== *)
@@ -185,53 +185,55 @@ End
    so for stack-returned tuples all elements are word-type. Complex elements
    always use memory return (returns_count = 0). *)
 Definition compile_load_tuple_elements_def:
-  compile_load_tuple_elements cenv base_op [] offset st = ([], st) ∧
-  compile_load_tuple_elements cenv base_op (ty :: tys) offset st =
-    let (elem_ptr, st1) =
-      if offset = 0 then (base_op, st)
-      else emit_op ADD [base_op; Lit (n2w offset)] st in
-    let elem_size = type_memory_bytes cenv ty in
-    let (val_op, st2) = emit_op MLOAD [elem_ptr] st1 in
-    let (rest, st3) = compile_load_tuple_elements cenv base_op tys
-                        (offset + elem_size) st2 in
-    (val_op :: rest, st3)
+  compile_load_tuple_elements cenv base_op [] offset = return [] ∧
+  compile_load_tuple_elements cenv base_op (ty :: tys) offset =
+    (let elem_size = type_memory_bytes cenv ty in
+     do elem_ptr <-
+          (if offset = 0 then return base_op
+           else emit_op ADD [base_op; Lit (n2w offset)]);
+        val_op <- emit_op MLOAD [elem_ptr];
+        rest <- compile_load_tuple_elements cenv base_op tys
+                  (offset + elem_size);
+        return (val_op :: rest)
+     od)
 End
 
 Definition compile_internal_return_def:
   compile_internal_return cenv ret_val return_pc returns_count
-                          ret_type src_type elem_types return_buf st =
+                          ret_type src_type elem_types return_buf =
     if returns_count > 0 then
       (* Stack return: pass ret_val(s) on stack *)
       case ret_val of
-        NONE => emit_inst RET [return_pc] [] st
+        NONE => emit_inst RET [return_pc] []
       | SOME val_op =>
           if returns_count = 1 then
             (* Single value: RET val, return_pc *)
-            emit_inst RET [val_op; return_pc] [] st
+            emit_inst RET [val_op; return_pc] []
           else
             (* Tuple/struct: load each element from memory, pass all on stack.
                NOTE: returns_count > 1 only for TupleT with all word types
                (from returns_stack_count), so all elements are 32 bytes. *)
-            let (elems, st1) = compile_load_tuple_elements cenv val_op
-                                 elem_types 0 st in
-            emit_inst RET (elems ++ [return_pc]) [] st1
+            do elems <- compile_load_tuple_elements cenv val_op
+                          elem_types 0;
+               emit_inst RET (elems ++ [return_pc]) []
+            od
     else
       case return_buf of
         SOME buf_op =>
           (case ret_val of
-             NONE => emit_inst RET [return_pc] [] st
+             NONE => emit_inst RET [return_pc] []
            | SOME val_op =>
                (* Memory return: layout-aware copy to caller's buffer.
                   Uses compile_store_memory_typed to handle type
                   mismatch between source and declared return type.
                   Mirrors Python: ctx.store_memory(ret_val, return_buffer,
                     ret_typ, src_typ=ret_src_typ) *)
-               let (_, st1) =
-                 compile_store_memory_typed cenv buf_op ret_type
-                                            val_op src_type st in
-               emit_inst RET [return_pc] [] st1)
+               do compile_store_memory_typed cenv buf_op ret_type
+                                             val_op src_type;
+                  emit_inst RET [return_pc] []
+               od)
       | NONE =>
-          emit_inst RET [return_pc] [] st
+          emit_inst RET [return_pc] []
 End
 
 (* ===== External Return ===== *)
@@ -240,34 +242,37 @@ End
 Definition compile_external_return_def:
   compile_external_return ret_val is_prim_word is_raw_return
                           (ret_enc_info:abi_enc_info)
-                          max_return_size is_nonreentrant nkey use_transient is_view st =
+                          max_return_size is_nonreentrant nkey use_transient is_view =
     (* Nonreentrant unlock (view functions skip) *)
-    let (_, st1) =
-      if is_nonreentrant then compile_nonreentrant_unlock nkey use_transient is_view st
-      else ((), st) in
-    case ret_val of
-      NONE => emit_inst STOP [] [] st1
-    | SOME val_op =>
-        if is_raw_return then
-          (* Raw return: val is ptr to [length][data] *)
-          let (return_len, st2) = emit_op MLOAD [val_op] st1 in
-          let (return_offset, st3) = emit_op ADD [val_op; Lit 32w] st2 in
-          emit_inst RETURN [return_offset; return_len] [] st3
-        else if is_prim_word then
-          (* Primitive word: direct mstore + return 32 bytes *)
-                    let (buf_op_alloc, st3) = compile_alloc_buffer 32 st1 in
-                    let buf_op = buf_op_alloc.buf_operand in
-          let (_, st4) = emit_void MSTORE [buf_op; val_op] st3 in
-          emit_inst RETURN [buf_op; Lit 32w] [] st4
-        else
-          (* Complex: ABI encode to buffer, RETURN encoded_len bytes.
-             Mirrors Python: stmt.py lower_Return → context.py _return_external
-             Uses compile_abi_encode_to_buf for proper ABI encoding. *)
-                    let (buf_op_alloc, st3) = compile_alloc_buffer max_return_size st1 in
-                    let buf_op = buf_op_alloc.buf_operand in
-          let (encoded_len, st4) =
-            compile_abi_encode_to_buf buf_op val_op ret_enc_info st3 in
-          emit_inst RETURN [buf_op; encoded_len] [] st4
+    do (if is_nonreentrant then compile_nonreentrant_unlock nkey use_transient is_view
+        else return ());
+       (case ret_val of
+          NONE => emit_inst STOP [] []
+        | SOME val_op =>
+            if is_raw_return then
+              (* Raw return: val is ptr to [length][data] *)
+              do return_len <- emit_op MLOAD [val_op];
+                 return_offset <- emit_op ADD [val_op; Lit 32w];
+                 emit_inst RETURN [return_offset; return_len] []
+              od
+            else if is_prim_word then
+              (* Primitive word: direct mstore + return 32 bytes *)
+              do buf_op_alloc <- compile_alloc_buffer 32;
+                 buf_op <- return buf_op_alloc.buf_operand;
+                 emit_void MSTORE [buf_op; val_op];
+                 emit_inst RETURN [buf_op; Lit 32w] []
+              od
+            else
+              (* Complex: ABI encode to buffer, RETURN encoded_len bytes.
+                 Mirrors Python: stmt.py lower_Return → context.py _return_external
+                 Uses compile_abi_encode_to_buf for proper ABI encoding. *)
+              do buf_op_alloc <- compile_alloc_buffer max_return_size;
+                 buf_op <- return buf_op_alloc.buf_operand;
+                 encoded_len <-
+                   compile_abi_encode_to_buf buf_op val_op ret_enc_info;
+                 emit_inst RETURN [buf_op; encoded_len] []
+              od)
+    od
 End
 
 (* ===== Get Target Ptr ===== *)
@@ -278,35 +283,35 @@ End
    AttributeTarget) to correctly resolve element/field types. *)
 Definition compile_get_target_ptr_def:
   (* Name target: local variable in memory *)
-  compile_get_target_ptr cenv (NameTarget id) st =
+  compile_get_target_ptr cenv (NameTarget id) =
     (case FLOOKUP cenv.ce_vars id of
        SOME (MemLoc offset _) =>
-         ((Lit (n2w offset), SOME LocMemory, cenv.ce_var_type id), st)
+         return (Lit (n2w offset), SOME LocMemory, cenv.ce_var_type id)
      | SOME (PtrVar ptr_op _) =>
-         ((ptr_op, SOME LocMemory, cenv.ce_var_type id), st)
+         return (ptr_op, SOME LocMemory, cenv.ce_var_type id)
      | SOME (ImmutableLoc offset) =>
-         ((Lit (n2w offset), SOME LocCode, cenv.ce_var_type id), st)
-     | _ => ((Lit 0w, NONE, NONE), st)) ∧
+         return (Lit (n2w offset), SOME LocCode, cenv.ce_var_type id)
+     | _ => return (Lit 0w, NONE, NONE)) ∧
   (* BareGlobalName: immutable in constructor *)
-  compile_get_target_ptr cenv (BareGlobalNameTarget id) st =
+  compile_get_target_ptr cenv (BareGlobalNameTarget id) =
     (case FLOOKUP cenv.ce_vars id of
        SOME (ImmutableLoc offset) =>
-         ((Lit (n2w offset), SOME LocCode, cenv.ce_var_type id), st)
-     | _ => ((Lit 0w, NONE, NONE), st)) ∧
+         return (Lit (n2w offset), SOME LocCode, cenv.ce_var_type id)
+     | _ => return (Lit 0w, NONE, NONE)) ∧
   (* TopLevelName: storage or transient variable *)
-  compile_get_target_ptr cenv (TopLevelNameTarget nsid) st =
+  compile_get_target_ptr cenv (TopLevelNameTarget nsid) =
     (let name = nsid_to_string nsid in
      case FLOOKUP cenv.ce_vars name of
        SOME (StorageLoc slot) =>
-         ((Lit slot, SOME LocStorage, cenv.ce_var_type name), st)
+         return (Lit slot, SOME LocStorage, cenv.ce_var_type name)
      | SOME (TransientLoc slot) =>
-         ((Lit slot, SOME LocTransient, cenv.ce_var_type name), st)
-     | _ => ((Lit 0w, NONE, NONE), st)) ∧
+         return (Lit slot, SOME LocTransient, cenv.ce_var_type name)
+     | _ => return (Lit 0w, NONE, NONE)) ∧
   (* Subscript target: compute element pointer from base + index.
      Uses compile_array_subscript for location-aware access.
      Mirrors Python: _get_target_ptr → Expr(target).lower().ptr()
      Uses base_type from recursive call instead of root variable lookup. *)
-  compile_get_target_ptr cenv (SubscriptTarget bt idx_e) st =
+  compile_get_target_ptr cenv (SubscriptTarget bt idx_e) =
     (let var_name = target_to_string bt in
      (* HashMap dispatch: uses compile_mapping_subscript for keccak256 slot.
         Mirrors Python: Expr(target, self.ctx).lower().ptr() which goes
@@ -316,71 +321,79 @@ Definition compile_get_target_ptr_def:
         - Recursively evaluate base target to get intermediate slot
         - Then keccak256(intermediate_slot || key) for outer subscript *)
      if cenv.ce_is_hashmap var_name then
-       let (key_op, st1) = lower_value compile_expr cenv (BaseT (UintT 256)) idx_e st in
-       (* Get base slot: for NameTarget, direct lookup.
-          For SubscriptTarget (nested hashmap), recurse to get intermediate slot. *)
-       let (base_slot, st2) =
-         (case bt of
-            NameTarget _ =>
-              (case FLOOKUP cenv.ce_vars var_name of
-                 SOME (StorageLoc slot) => (Lit slot, st1)
-               | _ => (Lit 0w, st1))
-          | _ =>
-              let ((base_op, _, _), st_r) =
-                compile_get_target_ptr cenv bt st1 in
-              (base_op, st_r)) in
-       let (slot_op, st3) = compile_mapping_subscript base_slot key_op st2 in
-       (* HashMap values are always in storage.
-          TODO: Value type not tracked — returns NONE for type. *)
-       ((slot_op, SOME LocStorage, NONE), st3)
+       do key_op <- lower_value compile_expr cenv (BaseT (UintT 256)) idx_e;
+          (* Get base slot: for NameTarget, direct lookup.
+             For SubscriptTarget (nested hashmap), recurse to get intermediate slot. *)
+          base_slot <-
+            (case bt of
+               NameTarget _ =>
+                 return (case FLOOKUP cenv.ce_vars var_name of
+                           SOME (StorageLoc slot) => Lit slot
+                         | _ => Lit 0w)
+             | _ =>
+                 do result <- compile_get_target_ptr cenv bt;
+                    return (FST result)
+                 od);
+          slot_op <- compile_mapping_subscript base_slot key_op;
+          (* HashMap values are always in storage.
+             TODO: Value type not tracked — returns NONE for type. *)
+          return (slot_op, SOME LocStorage, NONE)
+       od
      else
-     let ((base_op, loc_opt, base_type_opt), st1) =
-           compile_get_target_ptr cenv bt st in
-     let (idx_op, st2) = lower_value compile_expr cenv (BaseT (UintT 256)) idx_e st1 in
-     let loc = (case loc_opt of SOME l => l | NONE => LocMemory) in
-     let is_dynamic = (case base_type_opt of
-                         SOME (ArrayT _ (Dynamic _)) => T
-                       | _ => F) in
-     let elem_ty = (case base_type_opt of
-                      SOME (ArrayT t _) => t
-                    | _ => BaseT (UintT 256)) in
-     let ws = word_scale loc in
-     let elem_size = elem_size_in_location cenv loc elem_ty in
-     let static_count = (case base_type_opt of
-                           SOME (ArrayT _ (Fixed n)) => n
-                         | _ => 0) in
-     let is_signed_idx = is_signed_type (expr_type idx_e) in
-     let load_opc = (case loc of
-                       LocStorage => SLOAD
-                     | LocTransient => TLOAD
-                     | _ => MLOAD) in
-     let (elem_ptr, st3) =
-       compile_array_subscript base_op idx_op is_dynamic static_count
-                               ws elem_size is_signed_idx load_opc st2 in
-     ((elem_ptr, loc_opt, SOME elem_ty), st3)) ∧
+     do result <- compile_get_target_ptr cenv bt;
+        base_op <- return (FST result);
+        loc_opt <- return (FST (SND result));
+        base_type_opt <- return (SND (SND result));
+        idx_op <- lower_value compile_expr cenv (BaseT (UintT 256)) idx_e;
+        loc <- return (case loc_opt of SOME l => l | NONE => LocMemory);
+        is_dynamic <- return (case base_type_opt of
+                                SOME (ArrayT _ (Dynamic _)) => T
+                              | _ => F);
+        elem_ty <- return (case base_type_opt of
+                             SOME (ArrayT t _) => t
+                           | _ => BaseT (UintT 256));
+        ws <- return (word_scale loc);
+        elem_sz <- return (elem_size_in_location cenv loc elem_ty);
+        static_count <- return (case base_type_opt of
+                                  SOME (ArrayT _ (Fixed n)) => n
+                                | _ => 0);
+        is_signed_idx <- return (is_signed_type (expr_type idx_e));
+        load_opc <- return (case loc of
+                              LocStorage => SLOAD
+                            | LocTransient => TLOAD
+                            | _ => MLOAD);
+        elem_ptr <-
+          compile_array_subscript base_op idx_op is_dynamic static_count
+                                  ws elem_sz is_signed_idx load_opc;
+        return (elem_ptr, loc_opt, SOME elem_ty)
+     od) ∧
   (* Attribute target: add struct field offset to base.
      Mirrors Python: _get_target_ptr for struct.field
      Uses base_type from recursive call to resolve struct name. *)
-  compile_get_target_ptr cenv (AttributeTarget bt field) st =
-    (let ((base_op, loc_opt, base_type_opt), st1) =
-           compile_get_target_ptr cenv bt st in
-     let struct_name = (case base_type_opt of
-                          SOME (StructT sn) => sn
-                        | _ => "") in
-     let fields = cenv.ce_struct_fields struct_name in
-     let is_storage = (case loc_opt of
-                         SOME LocStorage => T
-                       | SOME LocTransient => T
-                       | _ => F) in
-     let field_offset =
-       if is_storage then struct_field_offset_slots fields field
-       else struct_field_offset fields field in
-     let field_type = (case ALOOKUP fields field of
-                         SOME (fty, _) => SOME fty | NONE => NONE) in
-     if field_offset = 0 then ((base_op, loc_opt, field_type), st1)
-     else
-       let (ptr, st2) = emit_op ADD [base_op; Lit (n2w field_offset)] st1 in
-       ((ptr, loc_opt, field_type), st2))
+  compile_get_target_ptr cenv (AttributeTarget bt field) =
+    do result <- compile_get_target_ptr cenv bt;
+       base_op <- return (FST result);
+       loc_opt <- return (FST (SND result));
+       base_type_opt <- return (SND (SND result));
+       struct_name <- return (case base_type_opt of
+                                SOME (StructT sn) => sn
+                              | _ => "");
+       fields <- return (cenv.ce_struct_fields struct_name);
+       is_storage <- return (case loc_opt of
+                               SOME LocStorage => T
+                             | SOME LocTransient => T
+                             | _ => F);
+       field_offset <- return
+         (if is_storage then struct_field_offset_slots fields field
+          else struct_field_offset fields field);
+       field_type <- return (case ALOOKUP fields field of
+                               SOME (fty, _) => SOME fty | NONE => NONE);
+       if field_offset = 0 then return (base_op, loc_opt, field_type)
+       else
+         do ptr <- emit_op ADD [base_op; Lit (n2w field_offset)];
+            return (ptr, loc_opt, field_type)
+         od
+    od
 End
 
 (* ===== Assign Value ===== *)
@@ -406,95 +419,108 @@ Definition compile_assign_value_def:
   compile_assign_value cenv dst_op dst_loc val_op is_prim_word
                        (src_loc : data_location option)
                        (dst_ty : type) (src_ty : type)
-                       (dynarray_info : (num # num) option) mem_size st =
+                       (dynarray_info : (num # num) option) mem_size =
     case dst_loc of
       LocMemory =>
-        if is_prim_word then emit_void MSTORE [dst_op; val_op] st
+        if is_prim_word then emit_void MSTORE [dst_op; val_op]
         else if src_loc = SOME LocMemory then
           (* Both memory: stage through temp buffer for overlap safety.
              Python: flat copy src→tmp (preserving src layout), then
              typed copy tmp→dst (converting layout if needed).
              Mirrors Python: stmt.py _copy_complex_type + _store_complex_type *)
           let src_mem_size = type_memory_bytes cenv src_ty in
-          let (tmp_op_alloc, st2) = compile_alloc_buffer src_mem_size st in
-          let tmp_op = tmp_op_alloc.buf_operand in
-          (* Step 1: flat copy src→tmp (preserving src layout) *)
-          let (_, st3) = compile_copy_memory tmp_op val_op src_mem_size st2 in
-          (* Step 2: typed copy or flat copy tmp→dst *)
-          if dst_ty ≠ src_ty then
-            compile_store_memory_typed cenv dst_op dst_ty tmp_op src_ty st3
-          else
-            compile_copy_memory dst_op tmp_op mem_size st3
+          do tmp_op_alloc <- compile_alloc_buffer src_mem_size;
+             tmp_op <- return tmp_op_alloc.buf_operand;
+             (* Step 1: flat copy src→tmp (preserving src layout) *)
+             compile_copy_memory tmp_op val_op src_mem_size;
+             (* Step 2: typed copy or flat copy tmp→dst *)
+             if dst_ty ≠ src_ty then
+               compile_store_memory_typed cenv dst_op dst_ty tmp_op src_ty
+             else
+               compile_copy_memory dst_op tmp_op mem_size
+          od
         else if dst_ty ≠ src_ty then
           (* Different layouts: use typed copy (no staging needed — src is
              from a fresh buffer or non-memory source).
              Mirrors Python: context.py store_memory src_typ != typ *)
-          compile_store_memory_typed cenv dst_op dst_ty val_op src_ty st
+          compile_store_memory_typed cenv dst_op dst_ty val_op src_ty
         else
           (* Same layout, non-aliasing → flat copy *)
-          compile_copy_memory dst_op val_op mem_size st
+          compile_copy_memory dst_op val_op mem_size
     | LocStorage =>
         (* Normalize source layout when types differ (non-bytestring).
            Storage/transient only understand destination layout, so convert
            src→dst layout in memory first.
            Mirrors Python: stmt.py _store_complex_type normalization *)
-        let (val_op', st') =
-          if ¬is_prim_word ∧ dst_ty ≠ src_ty
-             ∧ ¬(is_bytestring_type dst_ty ∧ is_bytestring_type src_ty) then
-            let (norm_alloc, st1) = compile_alloc_buffer mem_size st in
-            let (_, st2) = compile_store_memory_typed cenv
-                             norm_alloc.buf_operand dst_ty val_op src_ty st1 in
-            (norm_alloc.buf_operand, st2)
-          else (val_op, st) in
-        if is_prim_word then emit_void SSTORE [dst_op; val_op'] st'
-        else
-          (case dynarray_info of
-             SOME (ew, ems) =>
-               (* DynArray→storage: copy only length + actual elements.
-                  Mirrors Python: context.py _copy_dynarray_to_storage *)
-               compile_dynarray_to_storage val_op' dst_op ew ems F st'
-           | NONE =>
-             if mem_size ≤ 32 then
-               let (loaded, st1) = emit_op MLOAD [val_op'] st' in
-               emit_void SSTORE [dst_op; loaded] st1
-             else
-               let (_, st1) = compile_memory_to_storage val_op' dst_op
-                                                        (mem_size DIV 32) st' in
-               ((), st1))
+        do val_op' <-
+             (if ¬is_prim_word ∧ dst_ty ≠ src_ty
+                 ∧ ¬(is_bytestring_type dst_ty ∧ is_bytestring_type src_ty) then
+                do norm_alloc <- compile_alloc_buffer mem_size;
+                   compile_store_memory_typed cenv
+                     norm_alloc.buf_operand dst_ty val_op src_ty;
+                   return norm_alloc.buf_operand
+                od
+              else return val_op);
+           if is_prim_word then emit_void SSTORE [dst_op; val_op']
+           else
+             (case dynarray_info of
+                SOME (ew, ems) =>
+                  (* DynArray→storage: copy only length + actual elements.
+                     Mirrors Python: context.py _copy_dynarray_to_storage *)
+                  compile_dynarray_to_storage val_op' dst_op ew ems F
+              | NONE =>
+                if mem_size ≤ 32 then
+                  do loaded <- emit_op MLOAD [val_op'];
+                     emit_void SSTORE [dst_op; loaded]
+                  od
+                else
+                  do compile_memory_to_storage val_op' dst_op
+                                               (mem_size DIV 32);
+                     return ()
+                  od)
+        od
     | LocTransient =>
-        let (val_op', st') =
-          if ¬is_prim_word ∧ dst_ty ≠ src_ty
-             ∧ ¬(is_bytestring_type dst_ty ∧ is_bytestring_type src_ty) then
-            let (norm_alloc, st1) = compile_alloc_buffer mem_size st in
-            let (_, st2) = compile_store_memory_typed cenv
-                             norm_alloc.buf_operand dst_ty val_op src_ty st1 in
-            (norm_alloc.buf_operand, st2)
-          else (val_op, st) in
-        if is_prim_word then emit_void TSTORE [dst_op; val_op'] st'
-        else
-          (case dynarray_info of
-             SOME (ew, ems) =>
-               compile_dynarray_to_storage val_op' dst_op ew ems T st'
-           | NONE =>
-             if mem_size ≤ 32 then
-               let (loaded, st1) = emit_op MLOAD [val_op'] st' in
-               emit_void TSTORE [dst_op; loaded] st1
-             else
-               let (_, st1) = compile_memory_to_transient val_op' dst_op
-                                                          (mem_size DIV 32) st' in
-               ((), st1))
+        do val_op' <-
+             (if ¬is_prim_word ∧ dst_ty ≠ src_ty
+                 ∧ ¬(is_bytestring_type dst_ty ∧ is_bytestring_type src_ty) then
+                do norm_alloc <- compile_alloc_buffer mem_size;
+                   compile_store_memory_typed cenv
+                     norm_alloc.buf_operand dst_ty val_op src_ty;
+                   return norm_alloc.buf_operand
+                od
+              else return val_op);
+           if is_prim_word then emit_void TSTORE [dst_op; val_op']
+           else
+             (case dynarray_info of
+                SOME (ew, ems) =>
+                  compile_dynarray_to_storage val_op' dst_op ew ems T
+              | NONE =>
+                if mem_size ≤ 32 then
+                  do loaded <- emit_op MLOAD [val_op'];
+                     emit_void TSTORE [dst_op; loaded]
+                  od
+                else
+                  do compile_memory_to_transient val_op' dst_op
+                                                 (mem_size DIV 32);
+                     return ()
+                  od)
+        od
     | LocCode =>
-        if is_prim_word then emit_void ISTORE [dst_op; val_op] st
+        if is_prim_word then emit_void ISTORE [dst_op; val_op]
         else if mem_size ≤ 32 then
-          let (loaded, st1) = emit_op MLOAD [val_op] st in
-          emit_void ISTORE [dst_op; loaded] st1
+          do loaded <- emit_op MLOAD [val_op];
+             emit_void ISTORE [dst_op; loaded]
+          od
         else
-          let (_, st1) = compile_word_copy_loop val_op dst_op
-                           (mem_size DIV 32) LocMemory LocCode T st in
-          ((), st1)
+          do compile_word_copy_loop val_op dst_op
+               (mem_size DIV 32) LocMemory LocCode T;
+             return ()
+          od
     | LocCalldata =>
         (* Calldata is read-only — store is invalid *)
-        let (_, st') = emit_inst INVALID [] [] st in ((), st')
+        do emit_inst INVALID [] [];
+           return ()
+        od
 End
 
 (* ===== Tuple unpack: two-pass for overlap safety ===== *)
@@ -504,38 +530,39 @@ End
    Uses type_memory_bytes per element for proper stride.
    Mirrors Python: stmt.py _lower_tuple_unpack pass 1 *)
 Definition compile_tuple_load_all_def:
-  compile_tuple_load_all cenv src_op [] offset st = ([], st) ∧
-  compile_tuple_load_all cenv src_op (ty :: tys) offset st =
-    let mem_size = type_memory_bytes cenv ty in
-    let (src_elem, st0) =
-      if offset = 0 then (src_op, st)
-      else emit_op ADD [src_op; Lit (n2w offset)] st in
-    let (elem_op, st1) =
-      if is_word_type ty then emit_op MLOAD [src_elem] st0
-      else (src_elem, st0) in  (* complex: return pointer *)
-    let (rest_ops, st2) = compile_tuple_load_all cenv src_op tys
-                            (offset + mem_size) st1 in
-    (elem_op :: rest_ops, st2)
+  compile_tuple_load_all cenv src_op [] offset = return [] ∧
+  compile_tuple_load_all cenv src_op (ty :: tys) offset =
+    (let mem_size = type_memory_bytes cenv ty in
+     do src_elem <-
+          (if offset = 0 then return src_op
+           else emit_op ADD [src_op; Lit (n2w offset)]);
+        elem_op <-
+          (if is_word_type ty then emit_op MLOAD [src_elem]
+           else return src_elem);  (* complex: return pointer *)
+        rest_ops <- compile_tuple_load_all cenv src_op tys
+                      (offset + mem_size);
+        return (elem_op :: rest_ops)
+     od)
 End
 
 (* Store a single value to a target at a given location.
    Dispatches store opcode based on location.
    Mirrors Python: ctx.ptr_store dispatching by location. *)
 Definition compile_store_at_loc_def:
-  compile_store_at_loc dst_op val_op NONE st =
-    emit_void MSTORE [dst_op; val_op] st ∧
-  compile_store_at_loc dst_op val_op (SOME LocMemory) st =
-    emit_void MSTORE [dst_op; val_op] st ∧
-  compile_store_at_loc dst_op val_op (SOME LocStorage) st =
-    emit_void SSTORE [dst_op; val_op] st ∧
-  compile_store_at_loc dst_op val_op (SOME LocTransient) st =
-    emit_void TSTORE [dst_op; val_op] st ∧
-  compile_store_at_loc dst_op val_op (SOME LocCode) st =
+  compile_store_at_loc dst_op val_op NONE =
+    emit_void MSTORE [dst_op; val_op] ∧
+  compile_store_at_loc dst_op val_op (SOME LocMemory) =
+    emit_void MSTORE [dst_op; val_op] ∧
+  compile_store_at_loc dst_op val_op (SOME LocStorage) =
+    emit_void SSTORE [dst_op; val_op] ∧
+  compile_store_at_loc dst_op val_op (SOME LocTransient) =
+    emit_void TSTORE [dst_op; val_op] ∧
+  compile_store_at_loc dst_op val_op (SOME LocCode) =
     (* Code location: use ISTORE for immutables in constructor context *)
-    emit_void ISTORE [dst_op; val_op] st ∧
-  compile_store_at_loc dst_op val_op (SOME LocCalldata) st =
+    emit_void ISTORE [dst_op; val_op] ∧
+  compile_store_at_loc dst_op val_op (SOME LocCalldata) =
     (* Calldata is read-only — emit INVALID *)
-    emit_void INVALID [] st
+    emit_void INVALID []
 End
 
 (* Pass 2: store loaded values to targets.
@@ -549,27 +576,32 @@ End
    Tuple elements are memory pointers → src_loc = SOME LocMemory.
    Mirrors Python: stmt.py _lower_tuple_unpack pass 2 *)
 Definition compile_tuple_store_all_def:
-  compile_tuple_store_all cenv [] [] [] st = ((), st) ∧
-  compile_tuple_store_all cenv (src_ty :: src_tys) (BaseTarget bt :: targets) (val_op :: vals) st =
-    (let ((dst_op, loc_opt, dst_ty_opt), st1) = compile_get_target_ptr cenv bt st in
-     let dst_loc = (case loc_opt of SOME l => l | NONE => LocMemory) in
-     (* dst_ty from target, falls back to src_ty if unknown *)
-     let dst_ty = (case dst_ty_opt of SOME t => t | NONE => src_ty) in
-     let is_prim = is_word_type dst_ty in
-     let mem_sz = type_memory_bytes cenv dst_ty in
-     (* Tuple elements: prim values are stack (src_loc=NONE), complex
-        pointers are into the already-staged buffer (src_loc=NONE to skip
-        re-staging in compile_assign_value, since the entire source tuple
-        is already staged). Mirrors Python pass 2 which calls
-        _store_complex_type directly (no staging wrapper). *)
-     let (_, st2) = compile_assign_value cenv dst_op dst_loc val_op is_prim
-                      NONE dst_ty src_ty NONE mem_sz st1 in
-     compile_tuple_store_all cenv src_tys targets vals st2) ∧
+  compile_tuple_store_all cenv [] [] [] = return () ∧
+  compile_tuple_store_all cenv (src_ty :: src_tys) (BaseTarget bt :: targets) (val_op :: vals) =
+    do result <- compile_get_target_ptr cenv bt;
+       dst_op <- return (FST result);
+       loc_opt <- return (FST (SND result));
+       dst_ty_opt <- return (SND (SND result));
+       dst_loc <- return (case loc_opt of SOME l => l | NONE => LocMemory);
+       (* dst_ty from target, falls back to src_ty if unknown *)
+       dst_ty <- return (case dst_ty_opt of SOME t => t | NONE => src_ty);
+       is_prim <- return (is_word_type dst_ty);
+       mem_sz <- return (type_memory_bytes cenv dst_ty);
+       (* Tuple elements: prim values are stack (src_loc=NONE), complex
+          pointers are into the already-staged buffer (src_loc=NONE to skip
+          re-staging in compile_assign_value, since the entire source tuple
+          is already staged). Mirrors Python pass 2 which calls
+          _store_complex_type directly (no staging wrapper). *)
+       compile_assign_value cenv dst_op dst_loc val_op is_prim
+                     NONE dst_ty src_ty NONE mem_sz;
+       compile_tuple_store_all cenv src_tys targets vals
+    od ∧
   (* Non-BaseTarget element: emit INVALID (shouldn't occur in valid AST) *)
-  compile_tuple_store_all cenv (_ :: tys) (_ :: targets) (_ :: vals) st =
-    (let (_, st1) = emit_void INVALID [] st in
-     compile_tuple_store_all cenv tys targets vals st1) ∧
-  compile_tuple_store_all cenv _ _ _ st = ((), st)
+  compile_tuple_store_all cenv (_ :: tys) (_ :: targets) (_ :: vals) =
+    do emit_void INVALID [];
+       compile_tuple_store_all cenv tys targets vals
+    od ∧
+  compile_tuple_store_all cenv _ _ _ = return ()
 End
 
 (* Two-pass tuple unpack: load ALL values first, then store ALL.
@@ -578,7 +610,7 @@ End
    tuple to temp buffer first to prevent aliasing corruption.
    Mirrors Python: stmt.py _lower_tuple_unpack *)
 Definition compile_tuple_unpack_def:
-  compile_tuple_unpack cenv ty targets src_op st =
+  compile_tuple_unpack cenv ty targets src_op =
     let elem_types = (case ty of
         TupleT tys => tys
       | StructT name =>
@@ -589,16 +621,17 @@ Definition compile_tuple_unpack_def:
        We always stage when complex members exist (conservative but correct). *)
     let has_complex = EXISTS (λt. ¬is_word_type t) elem_types in
     let total_mem = SUM (MAP (type_memory_bytes cenv) elem_types) in
-    let (staged_op, st0) =
-      if has_complex ∧ total_mem > 0 then
-        let (staged_buf, st_s) = compile_alloc_buffer total_mem st in
-        let staged_ptr = staged_buf.buf_operand in
-        let (_, st_s2) = emit_void MCOPY [staged_ptr; src_op;
-                                          Lit (n2w total_mem)] st_s in
-        (staged_ptr, st_s2)
-      else (src_op, st) in
-    let (vals, st1) = compile_tuple_load_all cenv staged_op elem_types 0 st0 in
-    compile_tuple_store_all cenv elem_types targets vals st1
+    do staged_op <-
+         (if has_complex ∧ total_mem > 0 then
+            do staged_buf <- compile_alloc_buffer total_mem;
+               staged_ptr <- return staged_buf.buf_operand;
+               emit_void MCOPY [staged_ptr; src_op; Lit (n2w total_mem)];
+               return staged_ptr
+            od
+          else return src_op);
+       vals <- compile_tuple_load_all cenv staged_op elem_types 0;
+       compile_tuple_store_all cenv elem_types targets vals
+    od
 End
 
 (* ===== Range Loop Bound Checks ===== *)
@@ -609,18 +642,18 @@ End
    Mirrors Python: stmt.py _lower_range_loop bound checks *)
 Definition compile_range_bound_checks_def:
   compile_range_bound_checks start_op end_op rounds_op rounds_bound
-                             is_signed st =
-    (* Check start <= end *)
-    let (invalid_order, st1) =
-      if is_signed then emit_op SGT [start_op; end_op] st
-      else emit_op GT [start_op; end_op] st in
-    let (valid_order, st2) = emit_op ISZERO [invalid_order] st1 in
-    let (_, st3) = emit_void ASSERT [valid_order] st2 in
-    (* Check rounds <= rounds_bound *)
-    let (invalid_rounds, st4) = emit_op GT [rounds_op;
-                                            Lit (n2w rounds_bound)] st3 in
-    let (valid_rounds, st5) = emit_op ISZERO [invalid_rounds] st4 in
-    emit_void ASSERT [valid_rounds] st5
+                             is_signed =
+    do (* Check start <= end *)
+       invalid_order <-
+         (if is_signed then emit_op SGT [start_op; end_op]
+          else emit_op GT [start_op; end_op]);
+       valid_order <- emit_op ISZERO [invalid_order];
+       emit_void ASSERT [valid_order];
+       (* Check rounds <= rounds_bound *)
+       invalid_rounds <- emit_op GT [rounds_op; Lit (n2w rounds_bound)];
+       valid_rounds <- emit_op ISZERO [invalid_rounds];
+       emit_void ASSERT [valid_rounds]
+    od
 End
 
 (* ===== Iter Loop Element Copy ===== *)
@@ -641,7 +674,7 @@ End
 Definition compile_iter_elem_copy_def:
   compile_iter_elem_copy cenv elem_ptr item_ptr elem_size
                          loc is_slot_addressed
-                         (target_ty : type) (elem_ty : type) st =
+                         (target_ty : type) (elem_ty : type) =
     if is_slot_addressed then
       if elem_size = 1 then
         (* Single slot: load from storage/transient, mstore to memory *)
@@ -649,12 +682,14 @@ Definition compile_iter_elem_copy_def:
                                  | LocTransient => TLOAD
                                  | LocCode => DLOAD
                                  | _ => MLOAD in
-        let (val_op, st1) = emit_op load_opc [elem_ptr] st in
-        emit_void MSTORE [item_ptr; val_op] st1
+        do val_op <- emit_op load_opc [elem_ptr];
+           emit_void MSTORE [item_ptr; val_op]
+        od
       else
         (* Multi-slot: use compile_slot_to_memory from contextScript *)
-        let (_, st1) = compile_slot_to_memory elem_ptr item_ptr elem_size loc st in
-        ((), st1)
+        do compile_slot_to_memory elem_ptr item_ptr elem_size loc;
+           return ()
+        od
     else if loc ≠ LocMemory then
       (* Non-memory, byte-addressed: calldata/code/immutables.
          For ≤32B, single load+mstore. For >32B, location-specific bulk copy.
@@ -664,33 +699,35 @@ Definition compile_iter_elem_copy_def:
                           LocCalldata => CALLDATALOAD
                         | LocCode => DLOAD
                         | _ => MLOAD in
-        let (val_op, st1) = emit_op load_opc [elem_ptr] st in
-        emit_void MSTORE [item_ptr; val_op] st1
+        do val_op <- emit_op load_opc [elem_ptr];
+           emit_void MSTORE [item_ptr; val_op]
+        od
       else
         (case loc of
            LocCalldata =>
-             emit_void CALLDATACOPY [item_ptr; elem_ptr; Lit (n2w elem_size)] st
+             emit_void CALLDATACOPY [item_ptr; elem_ptr; Lit (n2w elem_size)]
          | LocCode =>
-             emit_void CODECOPY [item_ptr; elem_ptr; Lit (n2w elem_size)] st
+             emit_void CODECOPY [item_ptr; elem_ptr; Lit (n2w elem_size)]
          | _ =>
-             compile_copy_memory item_ptr elem_ptr elem_size st)
+             compile_copy_memory item_ptr elem_ptr elem_size)
     else if is_word_type target_ty then
       (* Memory, primitive word: mload + mstore *)
-      let (val_op, st1) = emit_op MLOAD [elem_ptr] st in
-      emit_void MSTORE [item_ptr; val_op] st1
+      do val_op <- emit_op MLOAD [elem_ptr];
+         emit_void MSTORE [item_ptr; val_op]
+      od
     else if target_ty ≠ elem_ty then
       (* Memory, complex, type mismatch: layout-aware copy.
          Handles cases like DynArray[Bytes[540]] → Bytes[704].
          Mirrors Python: self.ctx.store_memory(elem_addr, dst, target_type,
                           src_typ=array_typ.value_type) *)
-      compile_store_memory_typed cenv item_ptr target_ty elem_ptr elem_ty st
+      compile_store_memory_typed cenv item_ptr target_ty elem_ptr elem_ty
     else if is_bytestring_type target_ty then
       (* Memory, bytestring, same type: copy actual runtime length.
          Mirrors Python: store_memory → _BytestringT branch *)
-      compile_store_bytestring elem_ptr item_ptr st
+      compile_store_bytestring elem_ptr item_ptr
     else
       (* Memory, complex, same type: flat copy *)
-      compile_copy_memory item_ptr elem_ptr elem_size st
+      compile_copy_memory item_ptr elem_ptr elem_size
 End
 
 (* infer_array_location, infer_array_is_dynamic defined in exprLoweringScript.
@@ -701,12 +738,14 @@ End
 
 Definition compile_stmt_def:
   (* Pass: no-op *)
-  compile_stmt cenv lctx ty (Pass : stmt) st = ((), st) ∧
+  compile_stmt cenv lctx ty (Pass : stmt) = return () ∧
 
   (* Expression statement: compile for side effects, discard result.
      Use expr_type e, not function return type ty. *)
-  compile_stmt cenv lctx ty (Expr e) st =
-    (let (_, st1) = compile_expr cenv (expr_type e) e st in ((), st1)) ∧
+  compile_stmt cenv lctx ty (Expr e) =
+    do compile_expr cenv (expr_type e) e;
+       return ()
+    od ∧
 
   (* AnnAssign: variable declaration with initialization.
      Variable is already in ce_vars (alloca pre-allocated).
@@ -714,101 +753,116 @@ Definition compile_stmt_def:
      dst_ty = vtyp (declared type), src_ty = expr_type e (expression type).
      These may differ for subtype assignments (e.g. Bytes[540] → Bytes[704]).
      Mirrors Python: stmt.py lower_AnnAssign → _assign_value *)
-  compile_stmt cenv lctx ty (AnnAssign id vtyp e) st =
+  compile_stmt cenv lctx ty (AnnAssign id vtyp e) =
     (let src_ty = expr_type e in
-     let ((val_op, src_loc), st1) = lower_value_with_loc compile_expr cenv vtyp e st in
-     case FLOOKUP cenv.ce_vars id of
-       SOME (MemLoc offset _) =>
-         let is_prim = is_word_type vtyp in
-         let mem_size = type_memory_bytes cenv vtyp in
-         let da_info = (case vtyp of
-            ArrayT elem_ty (Dynamic _) =>
-              let ems = type_memory_bytes cenv elem_ty in
-              SOME ((ems + 31) DIV 32, ems)
-          | _ => NONE) in
-         compile_assign_value cenv (Lit (n2w offset)) LocMemory val_op
-                              is_prim src_loc vtyp src_ty da_info mem_size st1
-     | _ => ((), st1)) ∧
+     do vlwl_result <- lower_value_with_loc compile_expr cenv vtyp e;
+        val_op <- return (FST vlwl_result);
+        src_loc <- return (SND vlwl_result);
+        (case FLOOKUP cenv.ce_vars id of
+           SOME (MemLoc offset _) =>
+             let is_prim = is_word_type vtyp in
+             let mem_size = type_memory_bytes cenv vtyp in
+             let da_info = (case vtyp of
+                ArrayT elem_ty (Dynamic _) =>
+                  let ems = type_memory_bytes cenv elem_ty in
+                  SOME ((ems + 31) DIV 32, ems)
+              | _ => NONE) in
+             compile_assign_value cenv (Lit (n2w offset)) LocMemory val_op
+                                  is_prim src_loc vtyp src_ty da_info mem_size
+         | _ => return ())
+     od) ∧
 
   (* Assign: store to target (memory, storage, transient, code).
-     RHS evaluated before LHS target (matches Python eval order).
+     LHS target evaluated before RHS expr (matches interpreter eval order).
      dst_ty from compile_get_target_ptr (target's declared type),
      src_ty from expr_type e (expression's type). These may differ
      for subtype assignments (e.g., DynArray[Bytes[540]] → DynArray[Bytes[704]]).
      Mirrors Python: stmt.py lower_Assign with _assign_value *)
-  compile_stmt cenv lctx ty (Assign (BaseTarget bt) e) st =
+  compile_stmt cenv lctx ty (Assign (BaseTarget bt) e) =
     (let src_ty = expr_type e in
-     let ((val_op, src_loc), st1) = lower_value_with_loc compile_expr cenv src_ty e st in
-     let ((dst_op, dst_loc_opt, dst_ty_opt), st2) = compile_get_target_ptr cenv bt st1 in
-     (* dst_ty: target's declared type. Falls back to src_ty if unknown. *)
-     let dst_ty = (case dst_ty_opt of SOME t => t | NONE => src_ty) in
-     let is_prim = is_word_type dst_ty in
-     let mem_size = type_memory_bytes cenv dst_ty in
-     let da_info = (case dst_ty of
-        ArrayT elem_ty (Dynamic _) =>
-          let ems = type_memory_bytes cenv elem_ty in
-          SOME ((ems + 31) DIV 32, ems)
-      | _ => NONE) in
-     case dst_loc_opt of
-       SOME loc => compile_assign_value cenv dst_op loc val_op is_prim
-                    src_loc dst_ty src_ty da_info mem_size st2
-     | NONE => ((), st2)) ∧
+     do tgt_result <- compile_get_target_ptr cenv bt;
+        dst_op <- return (FST tgt_result);
+        dst_loc_opt <- return (FST (SND tgt_result));
+        dst_ty_opt <- return (SND (SND tgt_result));
+        vlwl_result <- lower_value_with_loc compile_expr cenv src_ty e;
+        val_op <- return (FST vlwl_result);
+        src_loc <- return (SND vlwl_result);
+        (* dst_ty: target's declared type. Falls back to src_ty if unknown. *)
+        dst_ty <- return (case dst_ty_opt of SOME t => t | NONE => src_ty);
+        is_prim <- return (is_word_type dst_ty);
+        mem_size <- return (type_memory_bytes cenv dst_ty);
+        da_info <- return (case dst_ty of
+           ArrayT elem_ty (Dynamic _) =>
+             let ems = type_memory_bytes cenv elem_ty in
+             SOME ((ems + 31) DIV 32, ems)
+         | _ => NONE);
+        (case dst_loc_opt of
+           SOME loc => compile_assign_value cenv dst_op loc val_op is_prim
+                        src_loc dst_ty src_ty da_info mem_size
+         | NONE => return ())
+     od) ∧
 
   (* AugAssign: load + binop + store.
      Handles memory, storage, transient targets.
      Mirrors Python: stmt.py lower_AugAssign *)
-  compile_stmt cenv lctx ty (AugAssign target_ty bt bop e) st =
-    (let ((dst_op, dst_loc_opt, _), st1) = compile_get_target_ptr cenv bt st in
-     (* Python order: get_target → load current → eval RHS → binop → store *)
-     let load_opc = (case dst_loc_opt of
-                       SOME LocStorage => SLOAD
-                     | SOME LocTransient => TLOAD
-                     | _ => MLOAD) in
-     let store_opc = (case dst_loc_opt of
-                        SOME LocStorage => SSTORE
-                      | SOME LocTransient => TSTORE
-                      | _ => MSTORE) in
-     let (cur_op, st2) = emit_op load_opc [dst_op] st1 in
-     let (rhs_op, st3) = lower_value compile_expr cenv target_ty e st2 in
-     let (res_op, st4) = compile_binop bop cur_op rhs_op target_ty st3 in
-     emit_void store_opc [dst_op; res_op] st4) ∧
+  compile_stmt cenv lctx ty (AugAssign target_ty bt bop e) =
+    do tgt_result <- compile_get_target_ptr cenv bt;
+       dst_op <- return (FST tgt_result);
+       dst_loc_opt <- return (FST (SND tgt_result));
+       (* Python order: get_target → load current → eval RHS → binop → store *)
+       load_opc <- return (case dst_loc_opt of
+                             SOME LocStorage => SLOAD
+                           | SOME LocTransient => TLOAD
+                           | _ => MLOAD);
+       store_opc <- return (case dst_loc_opt of
+                              SOME LocStorage => SSTORE
+                            | SOME LocTransient => TSTORE
+                            | _ => MSTORE);
+       cur_op <- emit_op load_opc [dst_op];
+       rhs_op <- lower_value compile_expr cenv target_ty e;
+       res_op <- compile_binop bop cur_op rhs_op target_ty;
+       emit_void store_opc [dst_op; res_op]
+    od ∧
 
   (* Assert: evaluate condition, handle failure.
      Three cases: bare assert, UNREACHABLE, or with reason string.
      Mirrors Python: stmt.py lower_Assert, _assert_with_reason *)
-  compile_stmt cenv lctx ty (Assert cond_e AssertBare) st =
+  compile_stmt cenv lctx ty (Assert cond_e AssertBare) =
     (* Bare assert: revert 0,0 on failure *)
-    (let (cond_op, st1) = lower_value compile_expr cenv (BaseT BoolT) cond_e st in
-     let (ok_lbl, st2) = fresh_label "assert_ok" st1 in
-     let (fail_lbl, st3) = fresh_label "assert_fail" st2 in
-     let (_, st4) = emit_inst JNZ [cond_op; Label ok_lbl; Label fail_lbl] [] st3 in
-     let (_, st5) = new_block fail_lbl st4 in
-     let (_, st6) = emit_inst REVERT [Lit 0w; Lit 0w] [] st5 in
-     let (_, st7) = new_block ok_lbl st6 in
-     ((), st7)) ∧
-  compile_stmt cenv lctx ty (Assert cond_e AssertUnreachable) st =
+    do cond_op <- lower_value compile_expr cenv (BaseT BoolT) cond_e;
+       ok_lbl <- fresh_label "assert_ok";
+       fail_lbl <- fresh_label "assert_fail";
+       emit_inst JNZ [cond_op; Label ok_lbl; Label fail_lbl] [];
+       new_block fail_lbl;
+       emit_inst REVERT [Lit 0w; Lit 0w] [];
+       new_block ok_lbl;
+       return ()
+    od ∧
+  compile_stmt cenv lctx ty (Assert cond_e AssertUnreachable) =
     (* UNREACHABLE: INVALID opcode on failure *)
-    (let (cond_op, st1) = lower_value compile_expr cenv (BaseT BoolT) cond_e st in
-     let (ok_lbl, st2) = fresh_label "assert_ok" st1 in
-     let (fail_lbl, st3) = fresh_label "assert_fail" st2 in
-     let (_, st4) = emit_inst JNZ [cond_op; Label ok_lbl; Label fail_lbl] [] st3 in
-     let (_, st5) = new_block fail_lbl st4 in
-     let (_, st6) = emit_inst INVALID [] [] st5 in
-     let (_, st7) = new_block ok_lbl st6 in
-     ((), st7)) ∧
-  compile_stmt cenv lctx ty (Assert cond_e (AssertReason reason_e)) st =
+    do cond_op <- lower_value compile_expr cenv (BaseT BoolT) cond_e;
+       ok_lbl <- fresh_label "assert_ok";
+       fail_lbl <- fresh_label "assert_fail";
+       emit_inst JNZ [cond_op; Label ok_lbl; Label fail_lbl] [];
+       new_block fail_lbl;
+       emit_inst INVALID [] [];
+       new_block ok_lbl;
+       return ()
+    od ∧
+  compile_stmt cenv lctx ty (Assert cond_e (AssertReason reason_e)) =
     (* Assert with reason: compile reason, encode Error(string), revert *)
-    (let (cond_op, st1) = lower_value compile_expr cenv (BaseT BoolT) cond_e st in
-     let (ok_lbl, st2) = fresh_label "assert_ok" st1 in
-     let (fail_lbl, st3) = fresh_label "assert_fail" st2 in
-     let (_, st4) = emit_inst JNZ [cond_op; Label ok_lbl; Label fail_lbl] [] st3 in
-     let (_, st5) = new_block fail_lbl st4 in
-     let reason_ty = expr_type reason_e in
-     let msg_mem_size = type_memory_bytes cenv reason_ty in
-     let (msg_op, st6) = lower_value compile_expr cenv reason_ty reason_e st5 in
-     let (_, st7) = compile_revert_with_reason cenv msg_op reason_ty msg_mem_size st6 in
-     let (_, st8) = new_block ok_lbl st7 in
-     ((), st8)) ∧
+    do cond_op <- lower_value compile_expr cenv (BaseT BoolT) cond_e;
+       ok_lbl <- fresh_label "assert_ok";
+       fail_lbl <- fresh_label "assert_fail";
+       emit_inst JNZ [cond_op; Label ok_lbl; Label fail_lbl] [];
+       new_block fail_lbl;
+       reason_ty <- return (expr_type reason_e);
+       msg_mem_size <- return (type_memory_bytes cenv reason_ty);
+       msg_op <- lower_value compile_expr cenv reason_ty reason_e;
+       compile_revert_with_reason cenv msg_op reason_ty msg_mem_size;
+       new_block ok_lbl;
+       return ()
+    od ∧
 
   (* Log: event emission with indexed topics + ABI-encoded data.
      Mirrors Python: stmt.py lower_Log.
@@ -819,207 +873,226 @@ Definition compile_stmt_def:
      3. Hash bytestring topics
      4. Store data to buffer, ABI-encode
      5. Emit LOG *)
-  compile_stmt cenv lctx ty (Log event_id args) st =
+  compile_stmt cenv lctx ty (Log event_id args) =
     (let event_name = nsid_to_string event_id in
      let (event_hash, indexed_flags, topic_bs_flags) =
        cenv.ce_event_info event_name in
-     let (eval_ops, st1) = compile_log_eval_all cenv args st in
-     let (raw_topics, data_ops) = split_log_ops eval_ops indexed_flags in
-     let (topic_ops, st2) = compile_log_topic_ops raw_topics st1 in
-     let all_topics = Lit (n2w event_hash) :: topic_ops in
-     let n_topics = LENGTH all_topics in
-     if NULL data_ops then
-       emit_inst (LOG : opcode)
-         (Lit (n2w n_topics) :: Lit 0w :: Lit 0w :: all_topics) [] st2
-     else
-       let data_types = MAP SND data_ops in
-       let data_tuple_t = TupleT data_types in
-       let data_mem_size = SUM (MAP (type_memory_bytes cenv) data_types) in
-              let (data_buf_alloc, st3) = compile_alloc_buffer (MAX 32 data_mem_size) st2 in
-              let data_buf = data_buf_alloc.buf_operand in
-       let (_, st4) = compile_log_store_data cenv data_ops data_buf 0 st3 in
-       let abi_size = abi_size_bound (cenv_sft cenv) data_tuple_t in
-       let data_enc_info = type_to_abi_enc_info cenv data_tuple_t in
-              let (abi_buf_alloc, st6) = compile_alloc_buffer (MAX 32 abi_size) st4 in
-              let abi_buf = abi_buf_alloc.buf_operand in
-       let (encoded_len, st7) =
-         compile_abi_encode_to_buf abi_buf data_buf data_enc_info st6 in
-       emit_inst (LOG : opcode)
-         (Lit (n2w n_topics) :: abi_buf :: encoded_len :: all_topics) [] st7) ∧
+     do eval_ops <- compile_log_eval_all cenv args;
+        log_split <- return (split_log_ops eval_ops indexed_flags);
+        raw_topics <- return (FST log_split);
+        data_ops <- return (SND log_split);
+        topic_ops <- compile_log_topic_ops raw_topics;
+        all_topics <- return (Lit (n2w event_hash) :: topic_ops);
+        n_topics <- return (LENGTH all_topics);
+        if NULL data_ops then
+          emit_inst (LOG : opcode)
+            (Lit (n2w n_topics) :: Lit 0w :: Lit 0w :: all_topics) []
+        else
+          let data_types = MAP SND data_ops in
+          let data_tuple_t = TupleT data_types in
+          let data_mem_size = SUM (MAP (type_memory_bytes cenv) data_types) in
+          do data_buf_alloc <- compile_alloc_buffer (MAX 32 data_mem_size);
+             data_buf <- return data_buf_alloc.buf_operand;
+             compile_log_store_data cenv data_ops data_buf 0;
+             abi_size <- return (abi_size_bound (cenv_sft cenv) data_tuple_t);
+             data_enc_info <- return (type_to_abi_enc_info cenv data_tuple_t);
+             abi_buf_alloc <- compile_alloc_buffer (MAX 32 abi_size);
+             abi_buf <- return abi_buf_alloc.buf_operand;
+             encoded_len <-
+               compile_abi_encode_to_buf abi_buf data_buf data_enc_info;
+             emit_inst (LOG : opcode)
+               (Lit (n2w n_topics) :: abi_buf :: encoded_len :: all_topics) []
+          od
+     od) ∧
 
 
   (* Raise: revert with optional reason.
      Mirrors Python: stmt.py lower_Raise
      Three cases: bare raise (revert 0,0), UNREACHABLE (INVALID),
      or with reason (Error(string) encoding). *)
-  compile_stmt cenv lctx ty (Raise RaiseBare) st =
-    emit_inst REVERT [Lit 0w; Lit 0w] [] st ∧
-  compile_stmt cenv lctx ty (Raise RaiseUnreachable) st =
-    emit_inst INVALID [] [] st ∧
-  compile_stmt cenv lctx ty (Raise (RaiseReason reason_e)) st =
+  compile_stmt cenv lctx ty (Raise RaiseBare) =
+    emit_inst REVERT [Lit 0w; Lit 0w] [] ∧
+  compile_stmt cenv lctx ty (Raise RaiseUnreachable) =
+    emit_inst INVALID [] [] ∧
+  compile_stmt cenv lctx ty (Raise (RaiseReason reason_e)) =
     (let reason_ty = expr_type reason_e in
      let msg_mem_size = type_memory_bytes cenv reason_ty in
-     let (msg_op, st1) = lower_value compile_expr cenv reason_ty reason_e st in
-     compile_revert_with_reason cenv msg_op reason_ty msg_mem_size st1) ∧
+     do msg_op <- lower_value compile_expr cenv reason_ty reason_e;
+        compile_revert_with_reason cenv msg_op reason_ty msg_mem_size
+     od) ∧
 
   (* Return NONE: emit STOP for external (with unlock), RET for internal.
      Mirrors Python: stmt.py lower_Return → _lower_external_return (unlocks first) *)
-  compile_stmt cenv lctx ty (Return NONE) st =
+  compile_stmt cenv lctx ty (Return NONE) =
     (case FLOOKUP cenv.ce_vars "__return_pc__" of
        SOME (MemLoc rpc_off _) =>
          (* Internal: ret to return_pc *)
-         let (rpc, st1) = emit_op MLOAD [Lit (n2w rpc_off)] st in
-         emit_inst RET [rpc] [] st1
+         do rpc <- emit_op MLOAD [Lit (n2w rpc_off)];
+            emit_inst RET [rpc] []
+         od
      | _ =>
          (* External: nonreentrant unlock + STOP *)
-         let (is_nonreentrant, nkey, use_transient, is_view) = cenv.ce_nonreentrant in
-         let (_, st1) =
-           if is_nonreentrant then compile_nonreentrant_unlock nkey use_transient is_view st
-           else ((), st) in
-         emit_inst STOP [] [] st1) ∧
+         let (is_nonreentrant, nkey, use_transient, is_view) =
+           cenv.ce_nonreentrant in
+         do (if is_nonreentrant then
+               compile_nonreentrant_unlock nkey use_transient is_view
+             else return ());
+            emit_inst STOP [] []
+         od) ∧
 
   (* Return (SOME e): compile value, dispatch internal vs external.
      Mirrors Python: stmt.py lower_Return.
      Internal functions: uses compile_internal_return with returns_count from cenv.
      External functions: uses compile_external_return with ABI encoding. *)
-  compile_stmt cenv lctx ty (Return (SOME e)) st =
-    (let (val_op, st1) = lower_value compile_expr cenv ty e st in
-     let is_prim = is_word_type ty in
-     let mem_size = type_memory_bytes cenv ty in
-     case FLOOKUP cenv.ce_vars "__return_pc__" of
-       SOME (MemLoc rpc_off _) =>
-         (* Internal return: dispatch via compile_internal_return.
-            Handles single-value, tuple, and memory return paths. *)
-         let (rpc, st2) = emit_op MLOAD [Lit (n2w rpc_off)] st1 in
-         (* Load return buffer pointer from __return_buf__ local.
-            The PARAM for the caller's buffer is stored there at function entry.
-            compile_internal_return dispatches MCOPY for complex types. *)
-         let (ret_buf, st2a) =
-           (case FLOOKUP cenv.ce_vars "__return_buf__" of
-              SOME (MemLoc rbuf_off _) =>
-                let (buf_ptr, st_r) =
-                  emit_op MLOAD [Lit (n2w rbuf_off)] st2
-                in (SOME buf_ptr, st_r)
-            | _ => (NONE, st2)) in
-         (* elem_types: for tuple/struct returns, use element types.
-            Python: hasattr(ret_typ, "tuple_items") matches TupleT + StructT.
-            Mirrors Python: stmt.py _lower_internal_return *)
-         let elem_types = (case ty of
-             TupleT tys => tys
-           | StructT name =>
-               MAP (FST o SND) (cenv.ce_struct_fields name)
-           | _ => []) in
-         let src_ty = expr_type e in
-         compile_internal_return cenv (SOME val_op) rpc
-           cenv.ce_returns_count ty src_ty elem_types ret_buf st2a
-     | _ =>
-         (* External return: ABI encoding + nonreentrant unlock.
-            Mirrors Python: stmt.py _lower_external_return which unlocks
-            before encoding/returning.
-            Normalize when ret_src_typ ≠ ret_typ for non-prim,
-            non-bytestring-to-bytestring. Python lines 936-945. *)
-         let is_prim = is_word_type ty in
-         let src_ty = expr_type e in
-         let needs_normalize =
-           (¬is_prim ∧
-            ¬(is_bytestring_type ty ∧ is_bytestring_type src_ty) ∧
-            src_ty ≠ ty) in
-         let (ret_op, st1a) =
-           if needs_normalize then
-             let norm_size = type_memory_bytes cenv ty in
-             let (norm_buf, st_n) = compile_alloc_buffer norm_size st1 in
-             let norm_ptr = norm_buf.buf_operand in
-             let (_, st_n2) =
-               compile_store_memory_typed cenv norm_ptr ty val_op src_ty st_n in
-             (norm_ptr, st_n2)
-           else (val_op, st1) in
-         let (is_nonreentrant, nkey, use_transient, is_view) = cenv.ce_nonreentrant in
-         compile_external_return (SOME ret_op) is_prim F
-           cenv.ce_ret_enc_info cenv.ce_max_return_size
-           is_nonreentrant nkey use_transient is_view st1a) ∧
+  compile_stmt cenv lctx ty (Return (SOME e)) =
+    do val_op <- lower_value compile_expr cenv ty e;
+       (case FLOOKUP cenv.ce_vars "__return_pc__" of
+          SOME (MemLoc rpc_off _) =>
+            (* Internal return: dispatch via compile_internal_return.
+               Handles single-value, tuple, and memory return paths. *)
+            do rpc <- emit_op MLOAD [Lit (n2w rpc_off)];
+               (* Load return buffer pointer from __return_buf__ local.
+                  The PARAM for the caller's buffer is stored there at function entry.
+                  compile_internal_return dispatches MCOPY for complex types. *)
+               ret_buf <-
+                 (case FLOOKUP cenv.ce_vars "__return_buf__" of
+                    SOME (MemLoc rbuf_off _) =>
+                      do buf_ptr <- emit_op MLOAD [Lit (n2w rbuf_off)];
+                         return (SOME buf_ptr)
+                      od
+                  | _ => return NONE);
+               (* elem_types: for tuple/struct returns, use element types.
+                  Python: hasattr(ret_typ, "tuple_items") matches TupleT + StructT.
+                  Mirrors Python: stmt.py _lower_internal_return *)
+               elem_types <- return (case ty of
+                   TupleT tys => tys
+                 | StructT name =>
+                     MAP (FST o SND) (cenv.ce_struct_fields name)
+                 | _ => []);
+               src_ty <- return (expr_type e);
+               compile_internal_return cenv (SOME val_op) rpc
+                 cenv.ce_returns_count ty src_ty elem_types ret_buf
+            od
+        | _ =>
+            (* External return: ABI encoding + nonreentrant unlock.
+               Mirrors Python: stmt.py _lower_external_return which unlocks
+               before encoding/returning.
+               Normalize when ret_src_typ ≠ ret_typ for non-prim,
+               non-bytestring-to-bytestring. Python lines 936-945. *)
+            let is_prim = is_word_type ty in
+            let src_ty = expr_type e in
+            let needs_normalize =
+              (¬is_prim ∧
+               ¬(is_bytestring_type ty ∧ is_bytestring_type src_ty) ∧
+               src_ty ≠ ty) in
+            let nr_info = cenv.ce_nonreentrant in
+            let is_nonreentrant = FST nr_info in
+            let nkey = FST (SND nr_info) in
+            let use_transient = FST (SND (SND nr_info)) in
+            let is_view = SND (SND (SND nr_info)) in
+            do ret_op <-
+                 (if needs_normalize then
+                    let norm_size = type_memory_bytes cenv ty in
+                    do norm_buf <- compile_alloc_buffer norm_size;
+                       norm_ptr <- return norm_buf.buf_operand;
+                       compile_store_memory_typed cenv norm_ptr ty val_op src_ty;
+                       return norm_ptr
+                    od
+                  else return val_op);
+               compile_external_return (SOME ret_op) is_prim F
+                 cenv.ce_ret_enc_info cenv.ce_max_return_size
+                 is_nonreentrant nkey use_transient is_view
+            od)
+    od ∧
 
   (* Append: dynarray append — location-aware.
      Delegates to compile_dynarray_append for correct opcode dispatch.
      Mirrors Python: expr.py _lower_dynarray_append *)
-  compile_stmt cenv lctx ty (Append target val_e) st =
+  compile_stmt cenv lctx ty (Append target val_e) =
     (let target_op = compile_target_base cenv target in
      let target_name = target_to_string target in
      (* Use array element type, not threading ty.
         Python: elem_typ = darray_typ.value_type *)
      let elem_ty = (case cenv.ce_var_type target_name of
                       SOME (ArrayT t _) => t | _ => ty) in
-     let (val_op, st1) = lower_value compile_expr cenv elem_ty val_e st in
      let is_prim = is_word_type elem_ty in
-     (* Stage complex elements through temp buffer to guard against aliasing
-        (e.g., arr.append(arr[0])). MemoryCopyElisionPass elides when safe.
-        Mirrors Python: if not elem_typ._is_prim_word: stage through temp_buf *)
-     let (staged_val, st1) =
-       if is_prim then (val_op, st1)
-       else
-         let mem_sz = type_memory_bytes cenv elem_ty in
-         let (tmp_alloc, st_t) = compile_alloc_buffer mem_sz st1 in
-         let (_, st_t2) = compile_copy_memory tmp_alloc.buf_operand val_op
-                            mem_sz st_t in
-         (tmp_alloc.buf_operand, st_t2)
-     in
      let capacity = cenv.ce_dynarray_capacity target_name in
      let loc = infer_array_location cenv (target_to_expr target) in
      let ws = word_scale loc in
      let elem_size = elem_size_in_location cenv loc elem_ty in
      let load_opc = load_opc_for loc in
      let store_opc = store_opc_for loc in
-     let src_elem_ty = expr_type val_e in
-     (* For storage/transient destination with type mismatch,
-        normalize source layout to destination layout in memory first.
-        Without this, word_copy_loop reads source-layout bytes into
-        destination-layout storage slots, corrupting data.
-        Mirrors Python: if data_loc in (STORAGE, TRANSIENT) and
-        elem_src_typ != elem_typ: normalize through store_memory *)
-     let (staged_val, src_elem_ty, st1) =
-       if is_prim ∨ loc = LocMemory ∨ src_elem_ty = elem_ty then
-         (staged_val, src_elem_ty, st1)
-       else
-         let norm_sz = type_memory_bytes cenv elem_ty in
-         let (norm_alloc, st_n) = compile_alloc_buffer norm_sz st1 in
-         let (_, st_n2) = compile_store_memory_typed cenv
-                            norm_alloc.buf_operand elem_ty
-                            staged_val src_elem_ty st_n in
-         (norm_alloc.buf_operand, elem_ty, st_n2)
-     in
-     compile_dynarray_append cenv target_op staged_val ws elem_size
-                                  elem_ty src_elem_ty
-                                  capacity is_prim
-                                  load_opc store_opc st1) ∧
+     do val_op_raw <- lower_value compile_expr cenv elem_ty val_e;
+        (* Stage complex elements through temp buffer to guard against aliasing
+           (e.g., arr.append(arr[0])). MemoryCopyElisionPass elides when safe.
+           Mirrors Python: if not elem_typ._is_prim_word: stage through temp_buf *)
+        staged_val <-
+          (if is_prim then return val_op_raw
+           else
+             let mem_sz = type_memory_bytes cenv elem_ty in
+             do tmp_alloc <- compile_alloc_buffer mem_sz;
+                compile_copy_memory tmp_alloc.buf_operand val_op_raw mem_sz;
+                return tmp_alloc.buf_operand
+             od);
+        src_elem_ty <- return (expr_type val_e);
+        (* For storage/transient destination with type mismatch,
+           normalize source layout to destination layout in memory first.
+           Without this, word_copy_loop reads source-layout bytes into
+           destination-layout storage slots, corrupting data.
+           Mirrors Python: if data_loc in (STORAGE, TRANSIENT) and
+           elem_src_typ != elem_typ: normalize through store_memory *)
+        norm_result <-
+          (if is_prim ∨ loc = LocMemory ∨ src_elem_ty = elem_ty then
+             return (staged_val, src_elem_ty)
+           else
+             let norm_sz = type_memory_bytes cenv elem_ty in
+             do norm_alloc <- compile_alloc_buffer norm_sz;
+                compile_store_memory_typed cenv
+                  norm_alloc.buf_operand elem_ty
+                  staged_val src_elem_ty;
+                return (norm_alloc.buf_operand, elem_ty)
+             od);
+        final_val <- return (FST norm_result);
+        final_src_ty <- return (SND norm_result);
+        compile_dynarray_append cenv target_op final_val ws elem_size
+                                     elem_ty final_src_ty
+                                     capacity is_prim
+                                     load_opc store_opc
+     od) ∧
 
   (* Assign with TupleTarget: tuple unpacking.
      Mirrors Python: stmt.py _lower_tuple_unpack
      First evaluate RHS, then assign each element to its target. *)
-  compile_stmt cenv lctx ty (Assign (TupleTarget targets) e) st =
-    (let (src_op, st1) = lower_value compile_expr cenv ty e st in
-     compile_tuple_unpack cenv ty targets src_op st1) ∧
+  compile_stmt cenv lctx ty (Assign (TupleTarget targets) e) =
+    do src_op <- lower_value compile_expr cenv ty e;
+       compile_tuple_unpack cenv ty targets src_op
+    od ∧
 
   (* If: multi-block control flow *)
-  compile_stmt cenv lctx ty (If cond_e then_body else_body) st =
-    (let (cond_op, st1) = lower_value compile_expr cenv (BaseT BoolT) cond_e st in
-     let (then_lbl, st2) = fresh_label "then" st1 in
-     let (else_lbl, st3) = fresh_label "else" st2 in
-     let (exit_lbl, st4) = fresh_label "if_exit" st3 in
-     let (_, st5) = emit_inst JNZ [cond_op; Label then_lbl; Label else_lbl] [] st4 in
-     (* Then branch — only JMP to exit if not already terminated (e.g. by Return) *)
-     let (_, st6) = new_block then_lbl st5 in
-     let (_, st7) = compile_stmts cenv lctx ty then_body st6 in
-     let then_terminated = block_is_terminated st7 in
-     let (_, st8) = emit_jmp_if_not_terminated exit_lbl st7 in
-     (* Else branch — same terminator check *)
-     let (_, st9) = new_block else_lbl st8 in
-     let (_, st10) = compile_stmts cenv lctx ty else_body st9 in
-     let else_terminated = block_is_terminated st10 in
-     let (_, st11) = emit_jmp_if_not_terminated exit_lbl st10 in
-     (* Exit block: only needed if at least one branch is non-terminated.
-        Mirrors Python: stmt.py L488-494 *)
-     if ¬then_terminated ∨ ¬else_terminated then
-       let (_, st12) = new_block exit_lbl st11 in ((), st12)
-     else ((), st11)) ∧
+  compile_stmt cenv lctx ty (If cond_e then_body else_body) =
+    do cond_op <- lower_value compile_expr cenv (BaseT BoolT) cond_e;
+       then_lbl <- fresh_label "then";
+       else_lbl <- fresh_label "else";
+       exit_lbl <- fresh_label "if_exit";
+       emit_inst JNZ [cond_op; Label then_lbl; Label else_lbl] [];
+       (* Then branch — only JMP to exit if not already terminated (e.g. by Return) *)
+       new_block then_lbl;
+       compile_stmts cenv lctx ty then_body;
+       cs_after_then <- comp_get;
+       then_terminated <- return (block_is_terminated cs_after_then);
+       emit_jmp_if_not_terminated exit_lbl;
+       (* Else branch — same terminator check *)
+       new_block else_lbl;
+       compile_stmts cenv lctx ty else_body;
+       cs_after_else <- comp_get;
+       else_terminated <- return (block_is_terminated cs_after_else);
+       emit_jmp_if_not_terminated exit_lbl;
+       (* Exit block: only needed if at least one branch is non-terminated.
+          Mirrors Python: stmt.py L488-494 *)
+       if ¬then_terminated ∨ ¬else_terminated then
+         do new_block exit_lbl; return () od
+       else return ()
+    od ∧
 
   (* For: range loop — for id in range(start, end) with bound n
      Creates 5-block CFG: entry → cond → body → incr → exit
@@ -1034,55 +1107,56 @@ Definition compile_stmt_def:
      signed. If violated, the loop would run ~2^256 iterations until fuel exhausts.
      Vyper's type checker guarantees this for static ranges (both are literals).
      Mirrors Python: stmt.py _lower_range_loop *)
-  compile_stmt cenv lctx ty (For id fty (Range start_e end_e) bound body) st =
-    (let (start_op, st1) = lower_value compile_expr cenv fty start_e st in
-     let (end_op, st2) = lower_value compile_expr cenv fty end_e st1 in
-     let is_signed = is_signed_type fty in
-     let (entry_lbl, st3) = fresh_label "for_entry" st2 in
-     let (cond_lbl, st4) = fresh_label "for_cond" st3 in
-     let (body_lbl, st5) = fresh_label "for_body" st4 in
-     let (incr_lbl, st6) = fresh_label "for_incr" st5 in
-     let (exit_lbl, st7) = fresh_label "for_exit" st6 in
-     (* Jump to entry *)
-     let (_, st8) = emit_inst JMP [Label entry_lbl] [] st7 in
-     (* Entry: initialize counter, bound checks for dynamic ranges *)
-     let (_, st9) = new_block entry_lbl st8 in
-     let (counter_var, st10) = fresh_var st9 in
-     let (_, st11) = emit_inst ASSIGN [start_op] [counter_var] st10 in
-     (* Compute rounds and end_val.
-        If bound > 0, this is a dynamic range: rounds = end - start.
-        Otherwise static: end_val = end_op directly. *)
-     let (end_val, st12) =
-       if bound > 0 then
-         let (rounds, st_r1) = emit_op SUB [end_op; start_op] st11 in
-         let (_, st_r2) = compile_range_bound_checks start_op end_op rounds
-                                                      bound is_signed st_r1 in
-         emit_op ADD [start_op; rounds] st_r2
-       else
-         (end_op, st11) in
-     let (_, st13) = emit_inst JMP [Label cond_lbl] [] st12 in
-     (* Cond: check counter != end *)
-     let (_, st14) = new_block cond_lbl st13 in
-     let (done_op, st15) = emit_op EQ [Var counter_var; end_val] st14 in
-     let (_, st16) = emit_inst JNZ [done_op; Label exit_lbl; Label body_lbl] [] st15 in
-     (* Body: store counter to loop var, execute body *)
-     let (_, st17) = new_block body_lbl st16 in
-     let (_, st18) =
-       (case FLOOKUP cenv.ce_vars id of
-          SOME (MemLoc offset _) =>
-            emit_void MSTORE [Lit (n2w offset); Var counter_var] st17
-        | _ => ((), st17)) in
-     let loop_ctx = InLoop exit_lbl incr_lbl in
-     let (_, st19) = compile_stmts cenv loop_ctx ty body st18 in
-     (* Only JMP to incr if body didn't terminate (e.g. via break/return) *)
-     let (_, st20) = emit_jmp_if_not_terminated incr_lbl st19 in
-     (* Incr: counter = counter + 1 *)
-     let (_, st21) = new_block incr_lbl st20 in
-     let (new_counter, st22) = emit_op ADD [Var counter_var; Lit 1w] st21 in
-     let (_, st23) = emit_inst ASSIGN [new_counter] [counter_var] st22 in
-     let (_, st24) = emit_inst JMP [Label cond_lbl] [] st23 in
-     (* Exit block *)
-     let (_, st25) = new_block exit_lbl st24 in ((), st25)) ∧
+  compile_stmt cenv lctx ty (For id fty (Range start_e end_e) bound body) =
+    (let is_signed = is_signed_type fty in
+     do start_op <- lower_value compile_expr cenv fty start_e;
+        end_op <- lower_value compile_expr cenv fty end_e;
+        entry_lbl <- fresh_label "for_entry";
+        cond_lbl <- fresh_label "for_cond";
+        body_lbl <- fresh_label "for_body";
+        incr_lbl <- fresh_label "for_incr";
+        exit_lbl <- fresh_label "for_exit";
+        (* Jump to entry *)
+        emit_inst JMP [Label entry_lbl] [];
+        (* Entry: initialize counter, bound checks for dynamic ranges *)
+        new_block entry_lbl;
+        counter_var <- fresh_var;
+        emit_inst ASSIGN [start_op] [counter_var];
+        (* Compute rounds and end_val.
+           If bound > 0, this is a dynamic range: rounds = end - start.
+           Otherwise static: end_val = end_op directly. *)
+        end_val <-
+          (if bound > 0 then
+             do rounds <- emit_op SUB [end_op; start_op];
+                compile_range_bound_checks start_op end_op rounds
+                                            bound is_signed;
+                emit_op ADD [start_op; rounds]
+             od
+           else
+             return end_op);
+        emit_inst JMP [Label cond_lbl] [];
+        (* Cond: check counter != end *)
+        new_block cond_lbl;
+        done_op <- emit_op EQ [Var counter_var; end_val];
+        emit_inst JNZ [done_op; Label exit_lbl; Label body_lbl] [];
+        (* Body: store counter to loop var, execute body *)
+        new_block body_lbl;
+        (case FLOOKUP cenv.ce_vars id of
+           SOME (MemLoc offset _) =>
+             emit_void MSTORE [Lit (n2w offset); Var counter_var]
+         | _ => return ());
+        compile_stmts cenv (InLoop exit_lbl incr_lbl) ty body;
+        (* Only JMP to incr if body didn't terminate (e.g. via break/return) *)
+        emit_jmp_if_not_terminated incr_lbl;
+        (* Incr: counter = counter + 1 *)
+        new_block incr_lbl;
+        new_counter <- emit_op ADD [Var counter_var; Lit 1w];
+        emit_inst ASSIGN [new_counter] [counter_var];
+        emit_inst JMP [Label cond_lbl] [];
+        (* Exit block *)
+        new_block exit_lbl;
+        return ()
+     od) ∧
 
   (* For: iter loop — for id in array
      Creates 5-block CFG: entry → cond → body → incr → exit
@@ -1100,106 +1174,106 @@ Definition compile_stmt_def:
      array during the loop, so this is correct for well-typed programs.
      Correctness theorem needs precondition: loop body does not modify arr_e.
      Mirrors Python: stmt.py _lower_iter_loop *)
-  compile_stmt cenv lctx ty (For id fty (Array arr_e) bound body) st =
-    (let (arr_vv, st1) = compile_expr cenv (expr_type arr_e) arr_e st in
-     let arr_op = vv_operand arr_vv in
-     (* Determine location from array expression (not loop variable!).
-        Mirrors Python: array_vv.location or node.iter._expr_info.location.
-        Storage/transient: word_scale=1, slot-addressed.
-        Memory: word_scale=32, byte-addressed. *)
-     let is_dynamic = infer_array_is_dynamic cenv arr_e in
+  compile_stmt cenv lctx ty (For id fty (Array arr_e) bound body) =
+    (let is_dynamic = infer_array_is_dynamic cenv arr_e in
      let loc = infer_array_location cenv arr_e in
      let slot_addr = is_slot_addressed loc in
      let ws = word_scale loc in
      let elem_size = elem_size_in_location cenv loc fty in
      let load_opc = load_opc_for loc in
-     (* Load array length *)
-     let (len_op, st2) =
-       if is_dynamic then emit_op load_opc [arr_op] st1
-       else (Lit (n2w bound), st1) in
-     (* Bound check for DynArrays: length <= bound *)
-     let (_, st2a) =
-       if is_dynamic ∧ bound > 0 then
-         let (invalid, st_b1) = emit_op GT [len_op; Lit (n2w bound)] st2 in
-         let (valid, st_b2) = emit_op ISZERO [invalid] st_b1 in
-         emit_void ASSERT [valid] st_b2
-       else ((), st2) in
-     let (entry_lbl, st3) = fresh_label "iter_entry" st2a in
-     let (cond_lbl, st4) = fresh_label "iter_cond" st3 in
-     let (body_lbl, st5) = fresh_label "iter_body" st4 in
-     let (incr_lbl, st6) = fresh_label "iter_incr" st5 in
-     let (exit_lbl, st7) = fresh_label "iter_exit" st6 in
-     (* Jump to entry *)
-     let (_, st8) = emit_inst JMP [Label entry_lbl] [] st7 in
-     (* Entry: initialize index = 0 *)
-     let (_, st9) = new_block entry_lbl st8 in
-     let (idx_var, st10) = fresh_var st9 in
-     let (_, st11) = emit_inst ASSIGN [Lit 0w] [idx_var] st10 in
-     let (_, st12) = emit_inst JMP [Label cond_lbl] [] st11 in
-     (* Cond: check index == length *)
-     let (_, st13) = new_block cond_lbl st12 in
-     let (done_op, st14) = emit_op EQ [Var idx_var; len_op] st13 in
-     let (_, st15) = emit_inst JNZ [done_op; Label exit_lbl; Label body_lbl] [] st14 in
-     (* Body: compute element address, copy to loop var, execute body *)
-     let (_, st16) = new_block body_lbl st15 in
-     (* offset_base: skip length word for DynArray *)
-     let offset_base = if is_dynamic then ws else 0 in
-     let (idx_offset, st17) = emit_op MUL [Var idx_var;
-                                           Lit (n2w elem_size)] st16 in
-     let (total_offset, st18) =
-       if offset_base > 0 then
-         emit_op ADD [Lit (n2w offset_base); idx_offset] st17
-       else (idx_offset, st17) in
-     let (elem_ptr, st19) = emit_op ADD [arr_op; total_offset] st18 in
-     (* Copy element to loop variable (in memory).
-        target_ty = fty (loop variable type), elem_ty = array value_type.
-        These can differ (e.g., for x: Bytes[704] in arr where
-        arr: DynArray[Bytes[540], 10]).
-        Mirrors Python: store_memory(elem_addr, dst, target_type,
-                         src_typ=array_typ.value_type) *)
-     let arr_elem_ty = (case expr_type arr_e of
-                           ArrayT et _ => et | _ => fty) in
-     let (_, st20) =
-       (case FLOOKUP cenv.ce_vars id of
-          SOME (MemLoc off _) =>
-            compile_iter_elem_copy cenv elem_ptr (Lit (n2w off)) elem_size
-                                   loc slot_addr fty arr_elem_ty st19
-        | _ => ((), st19)) in
-     let loop_ctx = InLoop exit_lbl incr_lbl in
-     let (_, st21) = compile_stmts cenv loop_ctx ty body st20 in
-     (* Only JMP to incr if body didn't terminate *)
-     let (_, st22) = emit_jmp_if_not_terminated incr_lbl st21 in
-     (* Incr: index = index + 1 *)
-     let (_, st23) = new_block incr_lbl st22 in
-     let (new_idx, st24) = emit_op ADD [Var idx_var; Lit 1w] st23 in
-     let (_, st25) = emit_inst ASSIGN [new_idx] [idx_var] st24 in
-     let (_, st26) = emit_inst JMP [Label cond_lbl] [] st25 in
-     (* Exit block *)
-     let (_, st27) = new_block exit_lbl st26 in ((), st27)) ∧
+     do arr_vv <- compile_expr cenv (expr_type arr_e) arr_e;
+        arr_op <- return (vv_operand arr_vv);
+        (* Load array length *)
+        len_op <-
+          (if is_dynamic then emit_op load_opc [arr_op]
+           else return (Lit (n2w bound)));
+        (* Bound check for DynArrays: length <= bound *)
+        (if is_dynamic ∧ bound > 0 then
+           do invalid <- emit_op GT [len_op; Lit (n2w bound)];
+              valid <- emit_op ISZERO [invalid];
+              emit_void ASSERT [valid]
+           od
+         else return ());
+        entry_lbl <- fresh_label "iter_entry";
+        cond_lbl <- fresh_label "iter_cond";
+        body_lbl <- fresh_label "iter_body";
+        incr_lbl <- fresh_label "iter_incr";
+        exit_lbl <- fresh_label "iter_exit";
+        (* Jump to entry *)
+        emit_inst JMP [Label entry_lbl] [];
+        (* Entry: initialize index = 0 *)
+        new_block entry_lbl;
+        idx_var <- fresh_var;
+        emit_inst ASSIGN [Lit 0w] [idx_var];
+        emit_inst JMP [Label cond_lbl] [];
+        (* Cond: check index == length *)
+        new_block cond_lbl;
+        done_op <- emit_op EQ [Var idx_var; len_op];
+        emit_inst JNZ [done_op; Label exit_lbl; Label body_lbl] [];
+        (* Body: compute element address, copy to loop var, execute body *)
+        new_block body_lbl;
+        (* offset_base: skip length word for DynArray *)
+        offset_base <- return (if is_dynamic then ws else 0);
+        idx_offset <- emit_op MUL [Var idx_var; Lit (n2w elem_size)];
+        total_offset <-
+          (if offset_base > 0 then
+             emit_op ADD [Lit (n2w offset_base); idx_offset]
+           else return idx_offset);
+        elem_ptr <- emit_op ADD [arr_op; total_offset];
+        (* Copy element to loop variable (in memory).
+           target_ty = fty (loop variable type), elem_ty = array value_type.
+           These can differ (e.g., for x: Bytes[704] in arr where
+           arr: DynArray[Bytes[540], 10]).
+           Mirrors Python: store_memory(elem_addr, dst, target_type,
+                            src_typ=array_typ.value_type) *)
+        arr_elem_ty <- return (case expr_type arr_e of
+                                  ArrayT et _ => et | _ => fty);
+        (case FLOOKUP cenv.ce_vars id of
+           SOME (MemLoc off _) =>
+             compile_iter_elem_copy cenv elem_ptr (Lit (n2w off)) elem_size
+                                    loc slot_addr fty arr_elem_ty
+         | _ => return ());
+        compile_stmts cenv (InLoop exit_lbl incr_lbl) ty body;
+        (* Only JMP to incr if body didn't terminate *)
+        emit_jmp_if_not_terminated incr_lbl;
+        (* Incr: index = index + 1 *)
+        new_block incr_lbl;
+        new_idx <- emit_op ADD [Var idx_var; Lit 1w];
+        emit_inst ASSIGN [new_idx] [idx_var];
+        emit_inst JMP [Label cond_lbl] [];
+        (* Exit block *)
+        new_block exit_lbl;
+        return ()
+     od) ∧
 
   (* Break: jump to loop exit *)
-  compile_stmt cenv (InLoop exit_lbl _) ty Break st =
-    emit_inst JMP [Label exit_lbl] [] st ∧
+  compile_stmt cenv (InLoop exit_lbl _) ty Break =
+    emit_inst JMP [Label exit_lbl] [] ∧
 
   (* Continue: jump to loop increment *)
-  compile_stmt cenv (InLoop _ incr_lbl) ty Continue st =
-    emit_inst JMP [Label incr_lbl] [] st ∧
+  compile_stmt cenv (InLoop _ incr_lbl) ty Continue =
+    emit_inst JMP [Label incr_lbl] [] ∧
 
   (* Catch-all for unsupported statements: emit INVALID *)
-  compile_stmt cenv lctx ty _ st =
-    (let (_, st') = emit_inst INVALID [] [] st in ((), st')) ∧
+  compile_stmt cenv lctx ty _ =
+    do emit_inst INVALID [] [];
+       return ()
+    od ∧
 
   (* Compile a list of statements.
      Skips dead code after terminating statements (return, raise, break, continue).
      Mirrors Python: stmt.py _lower_body with is_terminated check *)
-  compile_stmts cenv lctx ty [] st = ((), st) ∧
-  compile_stmts cenv lctx ty (s::ss) st =
-    (if block_is_terminated st then ((), st)
-     else
-       let (_, st1) = compile_stmt cenv lctx ty s st in
-       compile_stmts cenv lctx ty ss st1)
+  compile_stmts cenv lctx ty [] = return () ∧
+  compile_stmts cenv lctx ty (s::ss) =
+    do cs <- comp_get;
+       if block_is_terminated cs then return ()
+       else
+         do compile_stmt cenv lctx ty s;
+            compile_stmts cenv lctx ty ss
+         od
+    od
 Termination
   WF_REL_TAC `measure (λx. case x of
-    INL (cenv, lctx, ty, s, st) => 2 * stmt_size s + 2
-  | INR (cenv, lctx, ty, ss, st) => 2 * list_size stmt_size ss + 1)`
+    INL (cenv, lctx, ty, s) => 2 * stmt_size s + 2
+  | INR (cenv, lctx, ty, ss) => 2 * list_size stmt_size ss + 1)`
 End
