@@ -900,12 +900,12 @@ Definition translate_stmt_def:
   (translate_stmt ctx (JS_Expr e) = Expr (translate_expr ctx e)) /\
   (translate_stmt ctx (JS_Return NONE) = Return NONE) /\
   (translate_stmt ctx (JS_Return (SOME e)) = Return (SOME (translate_expr ctx e))) /\
-  (translate_stmt ctx (JS_Raise NONE) = Raise (Literal (BaseT (StringT 0)) (StringL ""))) /\
-  (translate_stmt ctx (JS_Raise (SOME e)) = Raise (translate_expr ctx e)) /\
+  (translate_stmt ctx (JS_Raise NONE) = Raise RaiseBare) /\
+  (translate_stmt ctx (JS_Raise (SOME e)) = Raise (RaiseReason (translate_expr ctx e))) /\
   (translate_stmt ctx (JS_Assert test NONE) =
-    Assert (translate_expr ctx test) (Literal (BaseT (StringT 0)) (StringL ""))) /\
+    Assert (translate_expr ctx test) AssertBare) /\
   (translate_stmt ctx (JS_Assert test (SOME msg)) =
-    Assert (translate_expr ctx test) (translate_expr ctx msg)) /\
+    Assert (translate_expr ctx test) (AssertReason (translate_expr ctx msg))) /\
   (translate_stmt ctx (JS_Log event args) =
     Log (json_nsid_to_nsid (FST ctx) event) (MAP (translate_expr ctx) args)) /\
   (translate_stmt ctx (JS_If test body orelse) =
