@@ -42,7 +42,7 @@ Ancestors
 (* If a variable is not live-after at index idx, then no later
    instruction in the block reads it without an intervening write. *)
 Definition liveness_sound_for_block_def:
-  liveness_sound_for_block (lr : liveness_result) bb <=>
+  liveness_sound_for_block lr bb <=>
     !idx v.
       idx < LENGTH bb.bb_instructions ==>
       let live = live_after_at lr bb.bb_label idx

@@ -11,30 +11,24 @@ Ancestors
   cfgAnalysis
   (* fcg *)
   fcgAnalysis
-  (* dataflow *)
-  dfIterateProps
-  latticeProps
-  worklistProps
-  dfHelperProps
-  dfAnalyzeProps
-  dfAnalyzeWidenProps
+  (* dataflow framework *)
+  dataflowAnalysis
   (* liveness *)
   livenessAnalysis
-  livenessGenericDefs
   (* dfg *)
   dfgAnalysis
   (* dominators *)
   dominatorAnalysis
-  (* base pointer analysis *)
-  basePtrProps
+  (* base pointer *)
+  basePtrAnalysis
   (* available expression *)
   availExprAnalysis
   (* stack order *)
-  stackOrderProps
+  stackOrderAnalysis
   (* memory alias *)
-  memAliasProps
+  memAliasAnalysis
   (* memory SSA *)
-  memSSAProps
+  memSSAAnalysis
   (* variable definition *)
   varDefAnalysis
   (* variable range *)

@@ -12,7 +12,7 @@ Theory valueRangeProofs
 Ancestors
   valueRangeDefs
 Libs
-  integerTheory integer_wordTheory
+  integerTheory integer_wordTheory fcpLib wordsTheory
 
 (* ===== Partial Order ===== *)
 
@@ -99,7 +99,8 @@ QED
 Theorem vr_widen_upper_new:
   ∀old new. vr_leq new (vr_widen old new)
 Proof
-  Cases >> Cases >> rw[vr_widen_def, vr_leq_def] >> rw[]
+  Cases >> Cases >> rw[vr_widen_def, vr_leq_def] >>
+  intLib.ARITH_TAC
 QED
 
 (* Widening result: either TOP, or old, or new *)
@@ -168,4 +169,61 @@ Proof
   Cases >> Cases >>
   rw[in_range_def, vr_intersect_def, integerTheory.INT_MIN, integerTheory.INT_MAX] >>
   rw[] >> intLib.ARITH_TAC
+QED
+
+(* Intersect introduction: if w is in both ranges, it's in the intersect *)
+Theorem in_range_intersect_intro:
+  ∀a b w.
+    in_range a w ∧ in_range b w ⇒
+    in_range (vr_intersect a b) w
+Proof
+  Cases >> Cases >>
+  rw[in_range_def, vr_intersect_def, integerTheory.INT_MIN, integerTheory.INT_MAX] >>
+  rw[] >> intLib.ARITH_TAC
+QED
+
+val dim256 = fcpLib.INDEX_CONV ``dimindex(:256)``;
+
+(* w2i bounds specialized to :256 *)
+Theorem w2i_bounds_256[local]:
+  ∀w : 256 word.
+    -&INT_MIN (:256) ≤ w2i w ∧ w2i w ≤ &UINT_MAX (:256)
+Proof
+  gen_tac >>
+  mp_tac (Q.SPEC `w` (INST_TYPE [alpha |-> ``:256``] w2i_ge)) >>
+  mp_tac (Q.SPEC `w` (INST_TYPE [alpha |-> ``:256``] w2i_le)) >>
+  simp[INT_MIN_def, INT_MAX_def, UINT_MAX_def,
+       wordsTheory.INT_MIN_def, dimword_def, dim256] >>
+  qabbrev_tac `n = w2n w` >>
+  qabbrev_tac `m = w2n (-w)` >>
+  simp[w2i_def, dim256, dimword_def] >>
+  IF_CASES_TAC >> intLib.ARITH_TAC
+QED
+
+(* Clamp introduction: if w is in the range and within bounds, it's in the clamp. *)
+Theorem in_range_clamp_intro:
+  ∀r lo_opt hi_opt (w : 256 word).
+    in_range r w ∧
+    (∀lo. lo_opt = SOME lo ⇒ lo ≤ w2i w) ∧
+    (∀hi. hi_opt = SOME hi ⇒ w2i w ≤ hi) ⇒
+    in_range (vr_clamp r lo_opt hi_opt) w
+Proof
+  Cases >> rpt strip_tac
+  >- ((* VR_Top *)
+      Cases_on `lo_opt` >> Cases_on `hi_opt` >>
+      simp[vr_clamp_def, LET_THM, in_range_def,
+           INT256_MIN_def, UINT256_MAX_def] >>
+      rpt strip_tac >> fs[] >>
+      rpt IF_CASES_TAC >> fs[in_range_def] >>
+      mp_tac (Q.SPEC `w` w2i_bounds_256) >>
+      simp[integer_wordTheory.INT_MIN] >>
+      intLib.ARITH_TAC)
+  >- ((* VR_Bottom *)
+      simp[in_range_def, vr_clamp_def])
+  >> (* VR_Range *)
+  Cases_on `lo_opt` >> Cases_on `hi_opt` >>
+  simp[vr_clamp_def, LET_THM, integerTheory.INT_MAX,
+       integerTheory.INT_MIN] >>
+  rpt strip_tac >> fs[in_range_def] >>
+  rpt IF_CASES_TAC >> fs[in_range_def] >> intLib.ARITH_TAC
 QED

@@ -360,3 +360,25 @@ Theorem df_analyze_boundary_invariant_restricted:
 Proof
   ACCEPT_TAC (dfAnalyzeProofsTheory.df_analyze_boundary_invariant_restricted)
 QED
+
+(* df_fold_block keys: all instruction-map keys produced by df_fold_block
+   have the given label as their first component *)
+Theorem df_fold_block_keys:
+  !dir transfer lbl instrs init_val final_val inst_map.
+    df_fold_block dir transfer lbl instrs init_val = (final_val, inst_map) ==>
+    !k. FLOOKUP inst_map k <> NONE ==> FST k = lbl
+Proof
+  ACCEPT_TAC dfAnalyzeProofsTheory.df_fold_block_keys
+QED
+
+(* df_fold_block forward invariant: if P is preserved by each transfer step,
+   then P holds for the final value and all instruction-map values *)
+Theorem df_fold_block_forward_invariant:
+  !transfer lbl instrs init_val fv im P.
+    df_fold_block Forward transfer lbl instrs init_val = (fv, im) /\
+    P init_val /\
+    (!inst v. MEM inst instrs /\ P v ==> P (transfer inst v)) ==>
+    P fv /\ !k v. FLOOKUP im k = SOME v ==> P v
+Proof
+  ACCEPT_TAC dfAnalyzeProofsTheory.df_fold_block_forward_invariant
+QED
