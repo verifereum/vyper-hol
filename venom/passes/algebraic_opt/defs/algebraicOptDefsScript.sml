@@ -26,38 +26,16 @@
 
 Theory algebraicOptDefs
 Ancestors
-  passSimulationDefs dfgDefs dfgAnalysisProps rangeAnalysisDefs
+  passSimulationDefs passSharedDefs dfgDefs dfgAnalysisProps rangeAnalysisDefs
   venomExecSemantics venomInst
 Libs
   pred_setTheory integerTheory
 
 (* ===== Utilities ===== *)
 
-Definition is_lit_op_def:
-  is_lit_op (Lit _) = T /\
-  is_lit_op _ = F
-End
-
-Definition lit_eq_def:
-  lit_eq op v <=>
-    case op of Lit w => (w = v) | _ => F
-End
-
 Definition ao_fresh_var_def:
   ao_fresh_var (id:num) (suffix:string) =
     STRCAT "ao_" (STRCAT (toString id) (STRCAT "_" suffix))
-End
-
-(* Power-of-two check: w ≠ 0 ∧ w AND (w - 1) = 0 *)
-Definition is_power_of_two_def:
-  is_power_of_two (w : bytes32) <=>
-    w <> 0w /\ word_and w (w - 1w) = 0w
-End
-
-(* Integer log2: find n such that 2^n = w. Returns 0 for non-powers. *)
-Definition word_log2_def:
-  word_log2 (w : bytes32) : bytes32 =
-    n2w (LOG2 (w2n w))
 End
 
 (* Truthy instructions: can accept a truthy value (0/nonzero).
@@ -89,16 +67,6 @@ Definition ao_all_truthy_def:
         EVERY (\use. is_truthy_inst use.inst_opcode)
               (dfg_get_uses dfg out_var)
     | _ => F
-End
-
-(* Flip comparison opcode: GT↔LT, SGT↔SLT.
-   Matches Python flip_comparison_opcode. *)
-Definition flip_comparison_opcode_def:
-  flip_comparison_opcode GT = (LT : opcode) /\
-  flip_comparison_opcode LT = GT /\
-  flip_comparison_opcode SGT = SLT /\
-  flip_comparison_opcode SLT = SGT /\
-  flip_comparison_opcode opc = opc (* shouldn't happen *)
 End
 
 (* ===== Offset Conversion ===== *)
@@ -558,6 +526,45 @@ Definition ao_opt_cmp_range_def:
     | _ => NONE
 End
 
+(* Helper: prefer_iszero + almost_always with val=0
+   gt x 0 in iszero context → iszero(iszero(x)) *)
+Definition ao_cmp_prefer_iz_zero_def:
+  ao_cmp_prefer_iz_zero id op1 inst =
+    let tmp = ao_fresh_var id "iz" in
+    [<| inst_id := id; inst_opcode := ISZERO;
+        inst_operands := [op1]; inst_outputs := [tmp] |>;
+     inst with <| inst_opcode := ISZERO;
+                  inst_operands := [Var tmp] |>]
+End
+
+(* Helper: prefer_iszero + almost_always with val=-1
+   slt x MAX in iszero context → iszero(iszero(not(x))) *)
+Definition ao_cmp_prefer_iz_max_def:
+  ao_cmp_prefer_iz_max id op1 inst =
+    let inner = ao_fresh_var id "not" in
+    let tmp = ao_fresh_var id "iz" in
+    [<| inst_id := id; inst_opcode := NOT;
+        inst_operands := [op1]; inst_outputs := [inner] |>;
+     <| inst_id := id; inst_opcode := ISZERO;
+        inst_operands := [Var inner]; inst_outputs := [tmp] |>;
+     inst with <| inst_opcode := ISZERO;
+                  inst_operands := [Var tmp] |>]
+End
+
+(* Helper: prefer_iszero + almost_always with general val
+   cmp x val in iszero context → iszero(iszero(xor(x, val))) *)
+Definition ao_cmp_prefer_iz_general_def:
+  ao_cmp_prefer_iz_general id op1 op2 inst =
+    let inner = ao_fresh_var id "xor" in
+    let tmp = ao_fresh_var id "iz" in
+    [<| inst_id := id; inst_opcode := XOR;
+        inst_operands := [op1; op2]; inst_outputs := [inner] |>;
+     <| inst_id := id; inst_opcode := ISZERO;
+        inst_operands := [Var inner]; inst_outputs := [tmp] |>;
+     inst with <| inst_opcode := ISZERO;
+                  inst_operands := [Var tmp] |>]
+End
+
 (*
  * Main comparator optimization.
  * Python: _optimize_comparator_instruction.
@@ -621,29 +628,11 @@ Definition ao_opt_comparator_def:
             let id = inst.inst_id in
             let val_w = case op2 of Lit w => w | _ => 0w in
             if val_w = 0w then
-              let tmp = ao_fresh_var id "iz" in
-              [<| inst_id := id; inst_opcode := ISZERO;
-                  inst_operands := [op1]; inst_outputs := [tmp] |>;
-               inst with <| inst_opcode := ISZERO;
-                            inst_operands := [Var tmp] |>]
+              ao_cmp_prefer_iz_zero id op1 inst
             else if val_w = 0w - 1w then
-              let inner = ao_fresh_var id "not" in
-              let tmp = ao_fresh_var id "iz" in
-              [<| inst_id := id; inst_opcode := NOT;
-                  inst_operands := [op1]; inst_outputs := [inner] |>;
-               <| inst_id := id; inst_opcode := ISZERO;
-                  inst_operands := [Var inner]; inst_outputs := [tmp] |>;
-               inst with <| inst_opcode := ISZERO;
-                            inst_operands := [Var tmp] |>]
+              ao_cmp_prefer_iz_max id op1 inst
             else
-              let inner = ao_fresh_var id "xor" in
-              let tmp = ao_fresh_var id "iz" in
-              [<| inst_id := id; inst_opcode := XOR;
-                  inst_operands := [op1; op2]; inst_outputs := [inner] |>;
-               <| inst_id := id; inst_opcode := ISZERO;
-                  inst_operands := [Var inner]; inst_outputs := [tmp] |>;
-               inst with <| inst_opcode := ISZERO;
-                            inst_operands := [Var tmp] |>]
+              ao_cmp_prefer_iz_general id op1 op2 inst
           (* gt x 0 → iszero(iszero(x)). Only for unsigned GT with literal 0. *)
           else if opc = GT /\ lit_eq op2 0w then
             let id = inst.inst_id in
@@ -727,11 +716,6 @@ End
  * This is a separate pass because it modifies two instructions
  * (the comparator and its consumer).
  *)
-
-Definition is_comparator_def:
-  is_comparator (opc : opcode) <=>
-    (opc = GT \/ opc = LT \/ opc = SGT \/ opc = SLT)
-End
 
 (*
  * Scan instructions for comparator flip opportunities.

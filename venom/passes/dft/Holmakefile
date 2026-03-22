@@ -1,2 +1,2 @@
 # DFT pass: public API
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../../syntax ../../../semantics ../../simulation ../../simulation/defs defs proofs
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../../syntax ../../../semantics ../../simulation ../../simulation/defs ../shared ../shared/defs defs proofs

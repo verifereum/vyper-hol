@@ -15,17 +15,12 @@
 
 Theory affineFoldingDefs
 Ancestors
-  passSimulationDefs dfgDefs dfgAnalysisProps
+  passSimulationDefs passSharedDefs dfgDefs dfgAnalysisProps
   venomExecSemantics venomInst
 Libs
   pred_setTheory
 
 (* ===== Utilities ===== *)
-
-Definition is_lit_op_af_def:
-  is_lit_op_af (Lit _) = T /\
-  is_lit_op_af _ = F
-End
 
 (* PUSH instruction byte width.
    Python: _push_size(value) — 0 for PUSH0, else ceil(bit_length / 8). *)
@@ -92,8 +87,8 @@ Definition transfer_sub_def:
 End
 
 (* Transfer function for ASSIGN: propagate unchanged. *)
-Definition transfer_assign_vi_def:
-  transfer_assign_vi src = src
+Definition transfer_assign_def:
+  transfer_assign src = src
 End
 
 (* ===== Forward VarInfo Computation ===== *)
@@ -128,7 +123,7 @@ Definition af_compute_info_step_def:
         else if inst.inst_opcode = ASSIGN then
           (case inst.inst_operands of
              [src] =>
-               (out_var, transfer_assign_vi (vi_lookup info src)) :: info
+               (out_var, transfer_assign (vi_lookup info src)) :: info
            | _ => (out_var, VarInfo (SOME out_op) 0w) :: info)
         else
           (out_var, VarInfo (SOME out_op) 0w) :: info
@@ -153,8 +148,8 @@ Definition af_extract_val_lit_def:
   af_extract_val_lit inst =
     case inst.inst_operands of
       [op1; op2] =>
-        if is_lit_op_af op2 /\ ~is_lit_op_af op1 then SOME (op1, op2)
-        else if is_lit_op_af op1 /\ ~is_lit_op_af op2 then SOME (op2, op1)
+        if is_lit_op op2 /\ ~is_lit_op op1 then SOME (op1, op2)
+        else if is_lit_op op1 /\ ~is_lit_op op2 then SOME (op2, op1)
         else NONE
     | _ => NONE
 End
@@ -197,6 +192,18 @@ Termination
   >> qexists_tac `prod.inst_id` >> simp[]
 End
 
+(* Extract immediate base and literal for SUB [op1; op2].
+   SUB: op2 must be literal, op1 must not be. *)
+Definition af_extract_sub_val_lit_def:
+  af_extract_sub_val_lit inst =
+    case inst.inst_operands of
+      [op1; op2] =>
+        if is_lit_op op2 /\ ~is_lit_op op1 then
+          SOME (op1, op2)
+        else NONE
+    | _ => NONE
+End
+
 (*
  * Lattice-driven affine chain folding for a single instruction.
  * Returns SOME result if rewrite applied, NONE otherwise.
@@ -220,12 +227,7 @@ Definition af_rewrite_inst_def:
                      if inst.inst_opcode = ADD then
                        af_extract_val_lit inst
                      else
-                       case inst.inst_operands of
-                         [op1; op2] =>
-                           if is_lit_op_af op2 /\ ~is_lit_op_af op1 then
-                             SOME (op1, op2)
-                           else NONE
-                       | _ => NONE in
+                       af_extract_sub_val_lit inst in
                    case extract of
                      NONE => NONE
                    | SOME (imm_base, curr_lit_op) =>
