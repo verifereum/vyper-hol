@@ -130,7 +130,6 @@ Datatype:
   = Len
   | Not
   | Neg
-  | Invert
   | Keccak256
   | Sha256
   | AsWeiValue denomination

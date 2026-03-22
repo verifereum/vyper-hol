@@ -473,7 +473,6 @@ Definition builtin_args_length_ok_def:
   builtin_args_length_ok Len n = (n = 1n) ∧
   builtin_args_length_ok Not n = (n = 1) ∧
   builtin_args_length_ok Neg n = (n = 1) ∧
-  builtin_args_length_ok Invert n = (n = 1) ∧
   builtin_args_length_ok Keccak256 n = (n = 1) ∧
   builtin_args_length_ok Sha256 n = (n = 1) ∧
   builtin_args_length_ok (Uint2Str _) n = (n = 1) ∧
