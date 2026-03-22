@@ -92,7 +92,19 @@ Termination
       CARD (FDOM dfg.dfg_defs DIFF set visited) * 2 + 1
   | INR (dfg, visited, inst) =>
       CARD (FDOM dfg.dfg_defs DIFF set visited) * 2 + 2)` >>
-  cheat
+  rpt strip_tac >> (
+    `v IN FDOM dfg.dfg_defs` by
+      fs[dfgDefsTheory.dfg_get_def_def, finite_mapTheory.FLOOKUP_DEF] >>
+    `CARD (FDOM dfg.dfg_defs DIFF set (v::visited)) <
+     CARD (FDOM dfg.dfg_defs DIFF set visited)` by (
+      irule pred_setTheory.CARD_PSUBSET >>
+      conj_tac >- simp[pred_setTheory.FINITE_DIFF, finite_mapTheory.FDOM_FINITE] >>
+      simp[pred_setTheory.PSUBSET_DEF] >>
+      conj_tac
+      >- (simp[pred_setTheory.SUBSET_DEF, pred_setTheory.IN_DIFF] >> metis_tac[])
+      >- (simp[pred_setTheory.EXTENSION, pred_setTheory.IN_DIFF] >>
+          qexists_tac `v` >> simp[])) >>
+    decide_tac)
 End
 
 Definition mk_expr_def:
