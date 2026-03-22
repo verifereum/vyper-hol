@@ -3,8 +3,11 @@
  *
  * Ports vyper/venom/passes/algebraic_optimization.py to HOL4.
  *
- * Reduces algebraically evaluatable expressions via peephole rules.
- * Split into per-opcode-group helpers to keep definitions small.
+ * Reduces algebraically evaluatable expressions via:
+ *   - Iszero chain optimization (forward-computed targets)
+ *   - Producer-based pattern matching (balance→selfbalance, signextend nesting)
+ *   - Per-opcode peephole rules
+ *   - Comparator boundary rewrites with iszero insertion/removal
  *
  * IMPORTANT: Python IR reverses operands from EVM stack order.
  * HOL4 uses semantic (EVM) order. So Python operands[0] = HOL4 op2,
@@ -13,9 +16,10 @@
  *   SUB → op1 - op2, DIV → op1 / op2, GT → op1 > op2, etc.
  *
  * TOP-LEVEL:
+ *   ao_transform_function     — function-level transform
  *   ao_peephole_inst          — main peephole dispatch
  *   ao_handle_offset_inst     — add(lit,label) → offset
- *   ao_transform_function     — function-level transform
+ *   ao_opt_producer           — producer-based pattern rewrites
  *
  * Source: vyper/venom/passes/algebraic_optimization.py
  *)
@@ -117,33 +121,140 @@ Definition ao_handle_offset_inst_def:
     else inst
 End
 
-(* ===== Iszero Chain ===== *)
+(* ===== Forward Iszero Target Computation ===== *)
 
-(* Walk iszero chain via DFG with visited-set termination (no fuel).
-   Terminates because each step adds an inst_id to visited,
-   and dfg_def_ids is finite. *)
-Definition ao_get_iszero_chain_def:
-  ao_get_iszero_chain dfg visited op =
+(*
+ * Compute iszero chain targets in a forward pass.
+ *
+ * iszero_targets: maps variable name → chain (operand list)
+ *   where chain = [root; 1st_iszero_out; 2nd; ...; final_out]
+ *
+ * For iszero chains:
+ *   If inst is iszero with input inp:
+ *     prev = targets[inp] if inp is a variable in targets, else [inp]
+ *     targets[output] = prev ++ [Var output]
+ *)
+Definition ao_compute_iszero_step_def:
+  ao_compute_iszero_step targets (inst : instruction) =
+    if inst.inst_opcode = ISZERO then
+      case (inst.inst_operands, inst.inst_outputs) of
+        ([inp], [out_var]) =>
+          let prev =
+            case inp of
+              Var v => (case ALOOKUP targets v of
+                          SOME chain => chain
+                        | NONE => [inp])
+            | _ => [inp] in
+          (out_var, SNOC (Var out_var) prev) :: targets
+      | _ => targets
+    else targets
+End
+
+Definition ao_compute_iszero_targets_def:
+  ao_compute_iszero_targets (insts : instruction list) =
+    FOLDL ao_compute_iszero_step [] insts
+End
+
+Definition ao_compute_fn_iszero_targets_def:
+  ao_compute_fn_iszero_targets fn =
+    ao_compute_iszero_targets (fn_insts fn)
+End
+
+(* ===== Iszero Chain Resolution ===== *)
+
+(*
+ * Resolve iszero chain for a single operand at a specific use site.
+ *
+ * Python: _rewrite_iszero_uses processes each non-iszero instruction.
+ * For each operand that is a chain output:
+ *   chain = (root, 1st_iszero_out, ..., op)
+ *   depth = len(chain) - 1
+ *   For truthy contexts (jnz, assert, assert_unreachable): keep = depth % 2
+ *   For other contexts: keep = 2 - depth % 2
+ *   If keep < depth: replace op with chain[keep]
+ *
+ * Note: iszero uses are skipped (they preserve the chain).
+ *)
+Definition ao_resolve_iszero_op_def:
+  ao_resolve_iszero_op targets use_opcode op =
     case op of
       Var v =>
-        (case dfg_get_def dfg v of
-           SOME inst =>
-             if inst.inst_id IN visited then []
-             else if inst.inst_opcode = ISZERO then
-               (case inst.inst_operands of
-                  [src] => inst :: ao_get_iszero_chain dfg
-                                    (inst.inst_id INSERT visited) src
-                | _ => [])
-             else []
-         | NONE => [])
-    | _ => []
-Termination
-  WF_REL_TAC `inv_image $< (\(dfg,visited,_). CARD (dfg_def_ids dfg DIFF visited))`
-  >> rpt strip_tac
-  >> imp_res_tac dfg_get_def_implies_dfg_def_ids
-  >> irule CARD_PSUBSET
-  >> simp[FINITE_DIFF, dfg_def_ids_finite, PSUBSET_DEF, SUBSET_DEF, EXTENSION]
-  >> qexists_tac `inst.inst_id` >> simp[]
+        (case ALOOKUP targets v of
+           NONE => op
+         | SOME chain =>
+             (* Skip iszero uses *)
+             if use_opcode = ISZERO then op
+             else
+               let depth = LENGTH chain - 1 in
+               let keep =
+                 if use_opcode = JNZ \/ use_opcode = ASSERT \/
+                    use_opcode = ASSERT_UNREACHABLE then
+                   depth MOD 2
+                 else
+                   2 - depth MOD 2 in
+               if keep < depth /\ keep < LENGTH chain then
+                 EL keep chain
+               else op)
+    | _ => op
+End
+
+(* Apply iszero resolution to all operands of an instruction *)
+Definition ao_resolve_iszero_inst_def:
+  ao_resolve_iszero_inst targets inst =
+    inst with inst_operands :=
+      MAP (ao_resolve_iszero_op targets inst.inst_opcode) inst.inst_operands
+End
+
+(* ===== Producer-Based Rules ===== *)
+
+(*
+ * Python: _rewrite_or_skip_producer(inst) — pattern matching on producers.
+ * Returns SOME result if rewrite applied or opcode should be skipped.
+ * Returns NONE to fall through to local peephole rules.
+ *
+ * Rules:
+ *   balance(address()) → selfbalance()
+ *   extcodesize → skip (no optimizations)
+ *   signextend(n, signextend(m, x)) where n >= m → assign(x)
+ *)
+Definition ao_opt_producer_def:
+  ao_opt_producer dfg inst =
+    if inst.inst_opcode = BALANCE then
+      case inst.inst_operands of
+        [op] =>
+          (case op of
+             Var v =>
+               (case dfg_get_def dfg v of
+                  SOME producer =>
+                    if producer.inst_opcode = ADDRESS then
+                      SOME [inst with <| inst_opcode := SELFBALANCE;
+                                         inst_operands := [] |>]
+                    else SOME [inst]  (* no other rules for balance *)
+                | NONE => SOME [inst])
+           | _ => SOME [inst])
+      | _ => SOME [inst]
+    else if inst.inst_opcode = EXTCODESIZE then
+      SOME [inst]  (* no optimizations for extcodesize *)
+    else if inst.inst_opcode = SIGNEXTEND then
+      case inst.inst_operands of
+        [Lit w; x] =>
+          (case x of
+             Var v =>
+               (case dfg_get_def dfg v of
+                  SOME producer =>
+                    if producer.inst_opcode = SIGNEXTEND then
+                      (case producer.inst_operands of
+                         [Lit inner_w; _] =>
+                           if w >= inner_w then
+                             SOME [inst with <| inst_opcode := ASSIGN;
+                                                inst_operands := [x] |>]
+                           else NONE
+                       | _ => NONE)
+                    else NONE
+                | NONE => NONE)
+           | _ => NONE)
+      | _ => NONE
+    else NONE
 End
 
 (* ===== Per-Opcode Peephole Helpers ===== *)
@@ -176,32 +287,12 @@ Definition ao_opt_shift_def:
     | _ => [inst]
 End
 
-(* Helper: nested signextend check *)
-Definition ao_opt_signextend_nested_def:
-  ao_opt_signextend_nested dfg w x inst =
-    case x of
-      Var v =>
-        (case dfg_get_def dfg v of
-           SOME producer =>
-             if producer.inst_opcode = SIGNEXTEND then
-               (case producer.inst_operands of
-                  [Lit inner_w; _] =>
-                    if w >= inner_w then
-                      [inst with <| inst_opcode := ASSIGN;
-                                    inst_operands := [x] |>]
-                    else [inst]
-                | _ => [inst])
-             else [inst]
-         | NONE => [inst])
-    | _ => [inst]
-End
-
 (* Signextend: signextend(n >= 31, x) → x
    Range-based: if x is already in valid signed range for (n+1) bytes → x
-   Nested: signextend(n, signextend(m, x)) where n >= m → x
-   HOL4 order: [n; x] *)
+   HOL4 order: [n; x]
+   Note: nested signextend is handled by producer rules *)
 Definition ao_opt_signextend_def:
-  ao_opt_signextend dfg ra lbl idx inst =
+  ao_opt_signextend ra lbl idx inst =
     case inst.inst_operands of
       [n_op; x] =>
         (case n_op of
@@ -209,10 +300,6 @@ Definition ao_opt_signextend_def:
              if w >= 31w then
                [inst with <| inst_opcode := ASSIGN; inst_operands := [x] |>]
              else
-               (* Range-based elimination: if x is in signed range for (n+1) bytes,
-                  signextend is a no-op.
-                  Python: n = n_op.value; bits = 8*(n+1);
-                  signed_min = -(1 << (bits-1)); signed_max = (1 << (bits-1)) - 1 *)
                let n = w2n w in
                if n < 31 then
                  let x_range = range_get_range ra lbl idx x in
@@ -222,12 +309,9 @@ Definition ao_opt_signextend_def:
                    let signed_max = &(2 ** (bits - 1)) - 1 in
                    if vr_lo x_range >= signed_min /\ vr_hi x_range <= signed_max then
                      [inst with <| inst_opcode := ASSIGN; inst_operands := [x] |>]
-                   else
-                     ao_opt_signextend_nested dfg w x inst
-                 else
-                   ao_opt_signextend_nested dfg w x inst
-               else
-                 ao_opt_signextend_nested dfg w x inst
+                   else [inst]
+                 else [inst]
+               else [inst]
          | _ => [inst])
     | _ => [inst]
 End
@@ -321,22 +405,17 @@ Definition ao_opt_muldiv_def:
         (* MOD/SMOD: x % 1 = 0 (divisor = op2 = 1) *)
         else if (opc = Mod \/ opc = SMOD) /\ lit_eq op2 1w then
           [inst with <| inst_opcode := ASSIGN; inst_operands := [Lit 0w] |>]
-        (* Power-of-two reductions: op2 is the literal (divisor/multiplier)
-           Python operands[0] = HOL4 op2 for MUL (commutative, pre-flipped)
-           For DIV/MOD: op2 = divisor *)
+        (* Power-of-two reductions: op2 is the literal (divisor/multiplier) *)
         else (case op2 of
           Lit w =>
             if is_power_of_two w then
               let n = word_log2 w in
-              (* x % (2^n) → x & (2^n - 1) *)
               if opc = Mod then
                 [inst with <| inst_opcode := AND;
                               inst_operands := [op1; Lit (w - 1w)] |>]
-              (* x / (2^n) → x >> n. HOL4 SHR: [shift; value] *)
               else if opc = Div then
                 [inst with <| inst_opcode := SHR;
                               inst_operands := [Lit n; op1] |>]
-              (* x * (2^n) → x << n. HOL4 SHL: [shift; value] *)
               else if opc = MUL then
                 [inst with <| inst_opcode := SHL;
                               inst_operands := [Lit n; op1] |>]
@@ -347,8 +426,7 @@ Definition ao_opt_muldiv_def:
 End
 
 (* Or: x | MAX → MAX, x | 0 → x, x | nonzero_lit → 1 (truthy context)
-   Commutative: after pre-flip, literal at op2.
-   Python: uses DFG to check if all uses are truthy. *)
+   Commutative: after pre-flip, literal at op2. *)
 Definition ao_opt_or_def:
   ao_opt_or dfg inst =
     case inst.inst_operands of
@@ -402,50 +480,13 @@ End
 (*
  * Comparator optimizations (GT, LT, SGT, SLT).
  * HOL4 order: [op1; op2] where GT = op1 > op2.
- * Python: operands[-1] = a (text first) = HOL4 op1,
- *         operands[-2] = b (text second) = HOL4 op2.
  *
- * Python boundary values:
- *   int_bounds(256, signed=False) = (0, 2^256 - 1)
- *   int_bounds(256, signed=True)  = (-2^255, 2^255 - 1)
- *   NOTE: Python returns hi=2^256 for unsigned, which wraps to 0 via wrap256.
- *   This is a Python compiler bug — we replicate it for byte-for-byte equivalence.
- *
- * For GT (is_gt=T, signed=F): lo=0, hi=2^256-1
- *   almost_always=lo=0, never=hi=2^256-1 (wraps!), almost_never=hi-1
- *   NOTE: unsigned never=2^256-1 (MAX_UINT256), wrap256(MAX_UINT256+1)=0
- *         lit_eq(ops[0], never) checks operands[0]=HOL4 op2 against MAX.
- *         But unsigned GT almost_always=0, so lit_eq(ops[0], 0) fires BEFORE
- *         the gt-x-0 rule. This is the Python wrapping bug.
- *
- * For LT (is_gt=F, signed=F): lo=0, hi=2^256-1
- *   almost_always=hi=2^256-1 (wraps to MAX), never=lo=0
- *
- * For SGT (is_gt=T, signed=T): lo=-2^255, hi=2^255-1
- *   almost_always=lo=-2^255, never=hi=2^255-1
- *
- * For SLT (is_gt=F, signed=T): lo=-2^255, hi=2^255-1
- *   almost_always=hi=2^255-1, never=lo=-2^255
+ * Boundary values:
+ *   For GT (is_gt=T): almost_always=lo, never=hi, almost_never=hi-1
+ *   For LT (is_gt=F): almost_always=hi, never=lo, almost_never=lo+1
+ *   unsigned: lo=0, hi=MAX_UINT256
+ *   signed: lo=INT256_MIN, hi=INT256_MAX
  *)
-
-(* Helper: compute (almost_always, never, almost_never) boundary words.
-   Returns (almost_always, never, almost_never).
-   Python: lo, hi = int_bounds(256, signed)
-           if is_gt: almost_always=lo, never=hi; almost_never=hi-1
-           else:     almost_always=hi, never=lo; almost_never=lo+1
-
-   For unsigned (signed=F):
-     lo=0w, hi=0w-1w (MAX_UINT256).
-     NOTE: Python int_bounds returns hi=2^256 for unsigned, wrap256 wraps to 0.
-     We use 0w-1w=MAX_UINT256 as never for unsigned GT (matches Python wrap256
-     behavior: wrap256(2^256) = 0, but lit_eq checks the wrapped value).
-     Actually, Python's never for unsigned GT is 2^256, which wraps to 0.
-     The lit_eq(operands[0], never) becomes lit_eq(operands[0], 0) — matches
-     the "almost_always" case too. This causes the Python bug where gt x 0
-     hits the "never" branch first. We replicate this.
-
-   For signed (signed=T):
-     lo = i2w(INT256_MIN), hi = i2w(INT256_MAX). *)
 
 (* Unsigned boundaries *)
 Definition ao_unsigned_boundaries_def:
@@ -466,8 +507,7 @@ Definition ao_signed_boundaries_def:
 End
 
 (* Helper: validate range for comparison.
-   Python guards: unsigned requires lo >= 0, signed requires hi <= MAX_INT256.
-   If guard fails, lit is set to None and range optimization is skipped. *)
+   Python guards: unsigned requires lo >= 0, signed requires hi <= MAX_INT256. *)
 Definition ao_range_valid_for_cmp_def:
   ao_range_valid_for_cmp var_range (signed : bool) =
     if vr_is_top var_range then F
@@ -476,29 +516,19 @@ Definition ao_range_valid_for_cmp_def:
 End
 
 (* Helper: wrap literal for comparison.
-   Python: wrap256(lit, signed=signed). For signed: signed interpretation.
-   For unsigned: unsigned interpretation (mod 2^256).
-   We use w2i which gives signed interpretation of the word. *)
+   Python: wrap256(lit, signed=signed). *)
 Definition ao_wrap_lit_def:
   ao_wrap_lit (w : bytes32) (signed : bool) : int =
     if signed then w2i w else &(w2n w)
 End
 
 (* Range-based comparator optimization.
-   Python: check if literal vs variable comparison can be folded.
-   HOL4 order: [op1; op2] = [a; b] where GT → a > b, LT → a < b.
-   Python: a_op = operands[-1] = HOL4 op1, b_op = operands[-2] = HOL4 op2.
-
-   For GT (a > b): always true if a.lo > b (var > lit), always false if a.hi <= b
-   For LT (a < b): always true if a.hi < b (var < lit), always false if a.lo >= b
-   When op1 is lit and op2 is var: lit vs var
-   When op1 is var and op2 is lit: var vs lit *)
+   Python: _try_range_cmp. *)
 Definition ao_opt_cmp_range_def:
   ao_opt_cmp_range ra lbl idx inst is_gt signed =
     case inst.inst_operands of
       [op1; op2] =>
     if is_lit_op op1 /\ ~is_lit_op op2 then
-      (* op1 is literal (=a), op2 is variable (=b): lit cmp var *)
       let var_range = range_get_range ra lbl idx op2 in
       if ~ao_range_valid_for_cmp var_range signed then NONE
       else
@@ -512,7 +542,6 @@ Definition ao_opt_cmp_range_def:
           else if lit_val >= vr_hi var_range then SOME (Lit 0w)
           else NONE
     else if ~is_lit_op op1 /\ is_lit_op op2 then
-      (* op1 is variable (=a), op2 is literal (=b): var cmp lit *)
       let var_range = range_get_range ra lbl idx op1 in
       if ~ao_range_valid_for_cmp var_range signed then NONE
       else
@@ -529,8 +558,15 @@ Definition ao_opt_cmp_range_def:
     | _ => NONE
 End
 
-(* Main comparator optimization.
-   Python _optimize_comparator_instruction. *)
+(*
+ * Main comparator optimization.
+ * Python: _optimize_comparator_instruction.
+ *
+ * Updated to match new Python:
+ *   - almost_never with never=0 → iszero(x)
+ *   - almost_never with never=-1 → iszero(not(x))
+ *   - prefer_iszero + almost_always uses xor/not pattern (not eq)
+ *)
 Definition ao_opt_comparator_def:
   ao_opt_comparator dfg ra lbl idx inst =
     let opc = inst.inst_opcode in
@@ -555,32 +591,60 @@ Definition ao_opt_comparator_def:
           let prefer_iszero = ao_all_prefer_iszero dfg inst in
           (* Boundary checks: Python checks operands[0] = HOL4 op2 for lit *)
           if ~is_lit_op op2 then [inst]
-          (* never: cmp x never → 0. Python: lit_eq(operands[0], never) *)
+          (* never: cmp x never → 0. *)
           else if lit_eq op2 never then
             [inst with <| inst_opcode := ASSIGN; inst_operands := [Lit 0w] |>]
           (* almost_never: cmp x almost_never → eq(x, never).
-             Python: operands[0] = HOL4 op2 = almost_never.
-             Replaces with eq [operands[1], IRLiteral(never)] =
-             eq [HOL4 op1, Lit never] in Python order.
-             HOL4 EQ: [op1; op2]. Python eq operands[0]=never=HOL4 op2,
-             operands[1]=original operands[1]=HOL4 op1.
-             So HOL4: EQ [op1; Lit never]. *)
+             Special cases for never=0 and never=-1. *)
           else if lit_eq op2 almost_never then
-            [inst with <| inst_opcode := EQ;
-                          inst_operands := [op1; Lit never] |>]
-          (* prefer_iszero + almost_always: cmp x 0 (for unsigned GT) etc.
-             Python: add_before eq, then iszero.
-             e.g. gt x 0 → tmp=eq(x,0); iszero(tmp) *)
+            if never = 0w then
+              (* eq x 0 → iszero(x) *)
+              [inst with <| inst_opcode := ISZERO;
+                            inst_operands := [op1] |>]
+            else if never = 0w - 1w then
+              (* eq x (-1) → iszero(not(x)) *)
+              let id = inst.inst_id in
+              let tmp = ao_fresh_var id "not" in
+              [<| inst_id := id; inst_opcode := NOT;
+                  inst_operands := [op1]; inst_outputs := [tmp] |>;
+               inst with <| inst_opcode := ISZERO;
+                            inst_operands := [Var tmp] |>]
+            else
+              [inst with <| inst_opcode := EQ;
+                            inst_operands := [op1; Lit never] |>]
+          (* prefer_iszero + almost_always:
+             Python produces iszero(iszero(inner)) where:
+             - val=0: inner=x
+             - val=-1: inner=not(x)
+             - else: inner=xor(val, x) *)
           else if prefer_iszero /\ lit_eq op2 almost_always then
             let id = inst.inst_id in
-            let tmp = ao_fresh_var id "eq" in
-            [<| inst_id := id; inst_opcode := EQ;
-                inst_operands := [op1; op2]; inst_outputs := [tmp] |>;
-             inst with <| inst_opcode := ISZERO;
-                          inst_operands := [Var tmp] |>]
-          (* gt x 0 → iszero(iszero(x)). Only for unsigned GT with literal 0.
-             Python: opcode == "gt" and lit_eq(operands[0], 0).
-             operands[0] = HOL4 op2. So op2 = 0. *)
+            let val_w = case op2 of Lit w => w | _ => 0w in
+            if val_w = 0w then
+              let tmp = ao_fresh_var id "iz" in
+              [<| inst_id := id; inst_opcode := ISZERO;
+                  inst_operands := [op1]; inst_outputs := [tmp] |>;
+               inst with <| inst_opcode := ISZERO;
+                            inst_operands := [Var tmp] |>]
+            else if val_w = 0w - 1w then
+              let inner = ao_fresh_var id "not" in
+              let tmp = ao_fresh_var id "iz" in
+              [<| inst_id := id; inst_opcode := NOT;
+                  inst_operands := [op1]; inst_outputs := [inner] |>;
+               <| inst_id := id; inst_opcode := ISZERO;
+                  inst_operands := [Var inner]; inst_outputs := [tmp] |>;
+               inst with <| inst_opcode := ISZERO;
+                            inst_operands := [Var tmp] |>]
+            else
+              let inner = ao_fresh_var id "xor" in
+              let tmp = ao_fresh_var id "iz" in
+              [<| inst_id := id; inst_opcode := XOR;
+                  inst_operands := [op1; op2]; inst_outputs := [inner] |>;
+               <| inst_id := id; inst_opcode := ISZERO;
+                  inst_operands := [Var inner]; inst_outputs := [tmp] |>;
+               inst with <| inst_opcode := ISZERO;
+                            inst_operands := [Var tmp] |>]
+          (* gt x 0 → iszero(iszero(x)). Only for unsigned GT with literal 0. *)
           else if opc = GT /\ lit_eq op2 0w then
             let id = inst.inst_id in
             let tmp = ao_fresh_var id "iz" in
@@ -596,13 +660,17 @@ End
 
 (* ===== Main Dispatch ===== *)
 
+(*
+ * Python: _rewrite_local dispatches to per-opcode rules.
+ * Pre-flip is applied before dispatch, post-flip after.
+ *)
 Definition ao_peephole_inst_def:
   ao_peephole_inst (dfg : dfg_analysis) ra lbl idx inst =
     let opc = inst.inst_opcode in
     if inst.inst_outputs = [] then [inst]
     else if opc = ASSIGN \/ opc = PHI \/ opc = PARAM then [inst]
     else if opc = SHL \/ opc = SHR \/ opc = SAR then ao_opt_shift inst
-    else if opc = SIGNEXTEND then ao_opt_signextend dfg ra lbl idx inst
+    else if opc = SIGNEXTEND then ao_opt_signextend ra lbl idx inst
     else if opc = Exp then ao_opt_exp inst
     else if opc = GEP then ao_opt_gep inst
     else if opc = ADD \/ opc = SUB \/ opc = XOR then ao_opt_addsub inst
@@ -619,7 +687,7 @@ End
 (* ===== Operand Flipping ===== *)
 
 (* Pre-peephole flip: for commutative ops, put literal at op2 (= Python operands[0]).
-   This matches Python's _flip_operands which puts literal at Python operands[0].
+   This matches Python's normalization which puts literal at Python operands[0].
    Since HOL4 op2 = Python operands[0] (reversed order), we flip literal TO op2. *)
 Definition ao_pre_flip_inst_def:
   ao_pre_flip_inst inst =
@@ -635,7 +703,7 @@ Definition ao_pre_flip_inst_def:
 End
 
 (* Post-peephole flip: for commutative ops, put literal at op1 (= Python operands[1]).
-   This matches Python's _flip_for_codesize which puts literal at Python operands[1]. *)
+   This matches Python's _flip_inst which puts literal at Python operands[1]. *)
 Definition ao_post_flip_inst_def:
   ao_post_flip_inst inst =
     case inst.inst_operands of
@@ -649,98 +717,15 @@ Definition ao_post_flip_inst_def:
     | _ => inst
 End
 
-(* ===== Iszero Chain Optimization ===== *)
-
-(*
- * Build chain map: for each iszero in the block, map its output var
- * to the iszero chain behind it.
- *
- * Chain is in HOL4 walk order: [nearest, ..., deepest].
- * Python reverses: [deepest, ..., nearest], then indexes chain[keep_count].
- * In HOL4: Python chain[k] = EL (chain_len - 1 - k) of HOL4 chain.
- *)
-Definition ao_build_chain_map_def:
-  ao_build_chain_map dfg [] = [] /\
-  ao_build_chain_map dfg ((inst : instruction) :: rest) =
-    if inst.inst_opcode = ISZERO then
-      case (inst.inst_operands, inst.inst_outputs) of
-        ([src_op], [out_var]) =>
-          let chain = ao_get_iszero_chain dfg {} src_op in
-          if chain = [] then ao_build_chain_map dfg rest
-          else (out_var, chain) :: ao_build_chain_map dfg rest
-      | _ => ao_build_chain_map dfg rest
-    else ao_build_chain_map dfg rest
-End
-
-(*
- * Resolve a single operand for a specific use instruction.
- * Each use instruction gets its own replacement based on its opcode's
- * truthy/non-truthy status — this is the key difference from the old
- * batch replacement that conflated per-use replacements.
- *
- * Note: is_truthy_inst includes ISZERO here, but we explicitly skip
- * ISZERO uses (they keep the chain as-is), matching Python behavior
- * where iszero uses are skipped before the truthy check.
- *)
-Definition ao_resolve_operand_def:
-  ao_resolve_operand chain_map use_opcode op =
-    case op of
-      Var v =>
-        (case ALOOKUP chain_map v of
-           NONE => op
-         | SOME chain =>
-             let chain_len = LENGTH chain in
-             (* Skip iszero uses — they keep the chain as-is *)
-             if use_opcode = ISZERO then op
-             else
-               let keep_count =
-                 if is_truthy_inst use_opcode then
-                   1 - chain_len MOD 2
-                 else
-                   1 + chain_len MOD 2 in
-               if keep_count >= chain_len then op
-               else
-                 let idx = chain_len - 1 - keep_count in
-                 if idx < chain_len then
-                   case (EL idx chain).inst_operands of
-                     [src] => src
-                   | _ => op
-                 else op)
-    | _ => op
-End
-
-(*
- * Apply iszero chain optimization to a single instruction.
- * Each instruction's operands are resolved based on THAT instruction's
- * opcode, matching Python's per-use update_operands behavior.
- *)
-Definition ao_optimize_iszero_inst_def:
-  ao_optimize_iszero_inst chain_map inst =
-    inst with inst_operands :=
-      MAP (ao_resolve_operand chain_map inst.inst_opcode) inst.inst_operands
-End
-
-(*
- * Apply iszero chain optimization to a block.
- *)
-Definition ao_optimize_iszero_block_def:
-  ao_optimize_iszero_block dfg bb =
-    let chain_map = ao_build_chain_map dfg bb.bb_instructions in
-    bb with bb_instructions :=
-      MAP (ao_optimize_iszero_inst chain_map) bb.bb_instructions
-End
-
 (* ===== Comparator Iszero Flip Mini-Pass ===== *)
 
 (*
- * Ports Python lines 481-531 of algebraic_optimization.py.
  * For comparators with single use: if use is iszero (with non-assert
  * downstream), remove the iszero and flip strict→non-strict (e.g. GT→LT
  * with val+1). If use is assert, insert iszero before assert and flip.
  *
- * 2-phase approach: scan all instructions for qualifying patterns,
- * then FLAT MAP to apply changes. Needed because this modifies two
- * instructions (the comparator and its consumer).
+ * This is a separate pass because it modifies two instructions
+ * (the comparator and its consumer).
  *)
 
 Definition is_comparator_def:
@@ -774,7 +759,7 @@ Definition ao_cmp_flip_scan_def:
             let (_, never, _) =
               if signed then ao_signed_boundaries is_gt
               else ao_unsigned_boundaries is_gt in
-            (* Guard: skip if literal = never boundary (already handled by peephole) *)
+            (* Guard: skip if literal = never boundary *)
             if w = never then (flips, removes, inserts)
             else
               let new_w = if is_gt then w + 1w else w - 1w in
@@ -787,7 +772,6 @@ Definition ao_cmp_flip_scan_def:
                      (* iszero→assert is already optimal: skip *)
                      else if (HD n_uses).inst_opcode = ASSERT then
                        (flips, removes, inserts)
-                     (* Remove iszero: flip comparator, convert iszero to ASSIGN *)
                      else
                        ((inst.inst_id, new_opc, new_w, op1) :: flips,
                         after.inst_id :: removes,
@@ -801,12 +785,7 @@ Definition ao_cmp_flip_scan_def:
     | _ => (flips, removes, inserts)
 End
 
-(*
- * Apply cmp_flip changes to a single instruction.
- *   - flips: update opcode + operands
- *   - removes: convert iszero to ASSIGN (keeps operands = pass-through)
- *   - inserts: prepend iszero before assert + update assert operand
- *)
+(* Apply cmp_flip changes to a single instruction. *)
 Definition ao_cmp_flip_apply_inst_def:
   ao_cmp_flip_apply_inst flips removes inserts inst =
     case ALOOKUP flips inst.inst_id of
@@ -815,12 +794,10 @@ Definition ao_cmp_flip_apply_inst_def:
                       inst_operands := [orig_op1; Lit new_w] |>]
     | NONE =>
         if MEM inst.inst_id removes then
-          (* Remove iszero: convert to ASSIGN (pass through operand) *)
           [inst with <| inst_opcode := ASSIGN |>]
         else
           case ALOOKUP inserts inst.inst_id of
             SOME (cmp_out, fresh, cmp_id) =>
-              (* Insert iszero before assert, update assert operand *)
               [<| inst_id := cmp_id; inst_opcode := ISZERO;
                   inst_operands := [Var cmp_out];
                   inst_outputs := [fresh] |>;
@@ -828,14 +805,12 @@ Definition ao_cmp_flip_apply_inst_def:
           | NONE => [inst]
 End
 
-(*
- * Apply cmp_flip to a function: scan all instructions, then FLAT MAP per block.
- *)
+(* Apply cmp_flip to a function: scan all instructions, then FLAT MAP per block. *)
 Definition ao_cmp_flip_function_def:
   ao_cmp_flip_function dfg fn =
     let all_insts = fn_insts fn in
     let (flips, removes, inserts) = ao_cmp_flip_scan dfg all_insts in
-    if NULL flips then fn  (* fast path: nothing to do *)
+    if NULL flips then fn
     else
       fn with fn_blocks :=
         MAP (\bb. bb with bb_instructions :=
@@ -846,45 +821,58 @@ End
 
 (* ===== Block and Function Transform ===== *)
 
-Definition ao_peephole_block_def:
-  ao_peephole_block dfg ra bb =
+(*
+ * Per-instruction transform pipeline (matches Python _rewrite_all):
+ * 1. Resolve iszero operands (from forward-computed targets)
+ * 2. Try producer rules (balance→selfbalance, signextend nesting)
+ * 3. Pre-flip + peephole + post-flip
+ *)
+Definition ao_transform_inst_def:
+  ao_transform_inst dfg ra lbl idx targets inst =
+    let inst0 = ao_resolve_iszero_inst targets inst in
+    if inst0.inst_outputs = [] then [inst0]
+    else if inst0.inst_opcode = ASSIGN \/ inst0.inst_opcode = PHI \/
+            inst0.inst_opcode = PARAM then [inst0]
+    else
+      case ao_opt_producer dfg inst0 of
+        SOME result => MAP ao_post_flip_inst result
+      | NONE =>
+          let inst1 = ao_pre_flip_inst inst0 in
+          let result = ao_peephole_inst dfg ra lbl idx inst1 in
+          MAP ao_post_flip_inst result
+End
+
+Definition ao_transform_block_def:
+  ao_transform_block dfg ra targets bb =
     bb with bb_instructions :=
       FLAT (MAPi (\idx inst.
-        let inst' = ao_handle_offset_inst inst in
-        let inst'' = ao_pre_flip_inst inst' in
-        let result = ao_peephole_inst dfg ra bb.bb_label idx inst'' in
-        MAP ao_post_flip_inst result)
+        ao_transform_inst dfg ra bb.bb_label idx targets inst)
         bb.bb_instructions)
 End
 
 (*
- * Full pass: peephole → cmp_flip → iszero chains → peephole → cmp_flip.
- * Matches Python: _handle_offset(); _algebraic_opt(); _optimize_iszero_chains(); _algebraic_opt()
- * cmp_flip is integrated into each _algebraic_opt call (lines 481-531).
- * Note: offset is folded into peephole_block.
+ * Full pass structure (matches Python run_pass):
+ *   1. Handle offset conversion (add(lit,label) → offset)
+ *   2. Compute iszero targets
+ *   3. Single rewrite pass: iszero resolution + producer + peephole
+ *   4. Comparator iszero flip (separate mini-pass)
  *)
 Definition ao_transform_function_def:
   ao_transform_function fn =
-    let dfg = dfg_build_function fn in
-    let ra = range_analyze fn in
-    (* Pass 1a: peephole *)
-    let fn1 = fn with fn_blocks :=
-      MAP (ao_peephole_block dfg ra) fn.fn_blocks in
-    (* Pass 1b: comparator iszero flip (needs fresh DFG) *)
-    let dfg1b = dfg_build_function fn1 in
-    let fn1b = ao_cmp_flip_function dfg1b fn1 in
-    (* Pass 2: iszero chain optimization (needs fresh DFG) *)
-    let dfg2 = dfg_build_function fn1b in
-    let fn2 = fn1b with fn_blocks :=
-      MAP (ao_optimize_iszero_block dfg2) fn1b.fn_blocks in
-    (* Pass 3a: second peephole (needs fresh DFG + range) *)
-    let dfg3 = dfg_build_function fn2 in
-    let ra3 = range_analyze fn2 in
-    let fn3 = fn2 with fn_blocks :=
-      MAP (ao_peephole_block dfg3 ra3) fn2.fn_blocks in
-    (* Pass 3b: second comparator iszero flip *)
-    let dfg3b = dfg_build_function fn3 in
-    ao_cmp_flip_function dfg3b fn3
+    (* Phase 1: offset conversion *)
+    let fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks in
+    (* Phase 2: compute iszero targets *)
+    let targets = ao_compute_fn_iszero_targets fn0 in
+    (* Phase 3: main rewrite pass *)
+    let dfg = dfg_build_function fn0 in
+    let ra = range_analyze fn0 in
+    let fn1 = fn0 with fn_blocks :=
+      MAP (ao_transform_block dfg ra targets) fn0.fn_blocks in
+    (* Phase 4: comparator iszero flip *)
+    let dfg1 = dfg_build_function fn1 in
+    ao_cmp_flip_function dfg1 fn1
 End
 
 Definition ao_transform_context_def:
