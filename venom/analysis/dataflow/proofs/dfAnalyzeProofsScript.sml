@@ -315,7 +315,7 @@ QED
 (* --- DFS/CFG closure lemmas for restricted fixpoint --- *)
 
 (* cfg_dfs_pre only contains block labels *)
-Theorem cfg_dfs_pre_subset_fn_labels[local]:
+Theorem cfg_dfs_pre_subset_fn_labels:
   !fn lbl. wf_function fn /\
     MEM lbl (cfg_analyze fn).cfg_dfs_pre ==>
     MEM lbl (fn_labels fn)
@@ -439,6 +439,209 @@ Proof
   simp[markerTheory.Abbrev_def] >> rpt conj_tac
   >- metis_tac[fn_labels_succs_closed]
   >- (rw[listTheory.EVERY_MEM] >> metis_tac[cfg_dfs_pre_subset_fn_labels])
+QED
+
+(* --- Backward analysis: closure lemmas and convenience wrappers --- *)
+
+(* cfg_dfs_post only contains block labels *)
+Theorem cfg_dfs_post_subset_fn_labels:
+  !fn lbl. wf_function fn /\
+    MEM lbl (cfg_analyze fn).cfg_dfs_post ==>
+    MEM lbl (fn_labels fn)
+Proof
+  rw[cfgDefsTheory.cfg_analyze_def] >>
+  Cases_on `entry_block fn` >> fs[] >>
+  pairarg_tac >> fs[] >> pairarg_tac >> fs[] >>
+  `(λa b. MEM b (fmap_lookup_list (build_succs fn.fn_blocks) a))^*
+     x.bb_label lbl` by
+    metis_tac[cfgHelpersTheory.dfs_post_walk_sound_thm, pairTheory.SND] >>
+  `MEM x fn.fn_blocks` by
+    (fs[venomWfTheory.wf_function_def, venomWfTheory.fn_has_entry_def,
+        venomInstTheory.entry_block_def] >>
+     Cases_on `fn.fn_blocks` >> fs[]) >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+    fs[venomWfTheory.wf_function_def, venomInstTheory.fn_labels_def] >>
+  `MEM x.bb_label (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+    (rw[listTheory.MEM_MAP] >> metis_tac[]) >>
+  rw[venomInstTheory.fn_labels_def] >>
+  metis_tac[cfgHelpersTheory.rtc_build_succs_closed,
+            venomWfTheory.wf_function_def, venomInstTheory.fn_labels_def,
+            venomWfTheory.fn_succs_closed_def]
+QED
+
+(* fn_labels closed under cfg_preds_of for well-formed functions *)
+Theorem fn_labels_preds_closed:
+  !fn lbl. wf_function fn /\ MEM lbl (fn_labels fn) ==>
+    EVERY (\l. MEM l (fn_labels fn))
+      (cfg_preds_of (cfg_analyze fn) lbl)
+Proof
+  rw[listTheory.EVERY_MEM] >> rpt strip_tac >>
+  fs[cfgHelpersTheory.cfg_analyze_preds, cfgHelpersTheory.mem_build_preds] >>
+  fs[venomInstTheory.fn_labels_def, listTheory.MEM_MAP] >>
+  metis_tac[]
+QED
+
+(* Preds of any label are fn_labels — no wf_function or MEM needed *)
+Theorem preds_subset_fn_labels:
+  !fn lbl. EVERY (\l. MEM l (fn_labels fn))
+             (cfg_preds_of (cfg_analyze fn) lbl)
+Proof
+  rw[listTheory.EVERY_MEM] >> rpt strip_tac >>
+  fs[cfgHelpersTheory.cfg_analyze_preds, cfgHelpersTheory.mem_build_preds] >>
+  fs[venomInstTheory.fn_labels_def, listTheory.MEM_MAP] >>
+  metis_tac[]
+QED
+
+(* Backward analysis fixpoint: convenience theorem for well-formed functions *)
+Theorem df_analyze_fixpoint_backward:
+  !(bottom : 'a) join transfer edge_transfer ctx
+   entry_val fn (m : 'a df_state -> num) b (P : 'a df_state -> bool).
+    let cfg = cfg_analyze fn in
+    let bbs = fn.fn_blocks in
+    let process = df_process_block Backward bottom join transfer edge_transfer
+                                   ctx entry_val cfg bbs in
+    let st0 = init_df_state bottom (MAP (\bb. bb.bb_label) bbs) in
+      wf_function fn /\
+      (!lbl st. MEM lbl (fn_labels fn) /\ P st /\ process lbl st <> st ==>
+                m st < m (process lbl st)) /\
+      (!lbl st. MEM lbl (fn_labels fn) /\ P st ==> P (process lbl st)) /\
+      (case entry_val of NONE => P st0
+       | SOME (lbl, v) =>
+           P (st0 with ds_boundary := st0.ds_boundary |+ (lbl, v))) /\
+      (!x. P x ==> m x <= b) /\
+      wl_deps_complete process (cfg_preds_of cfg)
+    ==>
+      is_fixpoint process cfg.cfg_dfs_pre
+        (df_analyze Backward bottom join transfer edge_transfer ctx
+                    entry_val fn)
+Proof
+  rpt gen_tac >> simp_tac std_ss [LET_THM] >> strip_tac >>
+  `is_fixpoint
+     (df_process_block Backward bottom join transfer edge_transfer ctx
+        entry_val (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
+     (df_analyze Backward bottom join transfer edge_transfer ctx entry_val fn)`
+   suffices_by simp[] >>
+  irule (SIMP_RULE std_ss [LET_THM] df_analyze_fixpoint_process_restricted) >>
+  conj_tac >- fs[] >>
+  qexistsl_tac [`P`, `b`, `m`, `\lbl. MEM lbl (fn_labels fn)`] >>
+  simp[] >> rpt conj_tac
+  >- metis_tac[fn_labels_preds_closed]
+  >- (rw[listTheory.EVERY_MEM] >> metis_tac[cfg_dfs_post_subset_fn_labels])
+QED
+
+(* Backward analysis state-level invariant *)
+Theorem df_analyze_invariant_backward:
+  !(bottom : 'a) join transfer edge_transfer ctx
+   entry_val fn (m : 'a df_state -> num) b (Q : 'a df_state -> bool).
+    let cfg = cfg_analyze fn in
+    let bbs = fn.fn_blocks in
+    let process = df_process_block Backward bottom join transfer edge_transfer
+                                   ctx entry_val cfg bbs in
+    let st0 = init_df_state bottom (MAP (\bb. bb.bb_label) bbs) in
+    let result = df_analyze Backward bottom join transfer edge_transfer
+                            ctx entry_val fn in
+      wf_function fn /\
+      (!lbl st. MEM lbl (fn_labels fn) /\ Q st /\ process lbl st <> st ==>
+                m st < m (process lbl st)) /\
+      (!lbl st. MEM lbl (fn_labels fn) /\ Q st ==> Q (process lbl st)) /\
+      (case entry_val of NONE => Q st0
+       | SOME (lbl, v) =>
+           Q (st0 with ds_boundary := st0.ds_boundary |+ (lbl, v))) /\
+      (!x. Q x ==> m x <= b)
+    ==>
+      Q result
+Proof
+  rpt gen_tac >> simp_tac std_ss [LET_THM] >> strip_tac >>
+  simp[dfAnalyzeDefsTheory.df_analyze_def] >>
+  qmatch_goalsub_abbrev_tac `wl_iterate process deps wl0 st0'` >>
+  `Q (SND (wl_iterate process deps wl0 st0'))`
+    suffices_by simp[] >>
+  irule (SIMP_RULE std_ss [LET_THM]
+    worklistProofsTheory.wl_iterate_invariant_process_restricted) >>
+  conj_tac
+  >- (simp[markerTheory.Abbrev_def] >>
+      Cases_on `entry_val` >> fs[] >> Cases_on `x` >> fs[]) >>
+  qexistsl_tac [`b`, `m`, `\lbl. MEM lbl (fn_labels fn)`] >>
+  simp[markerTheory.Abbrev_def] >> rpt conj_tac
+  >- metis_tac[fn_labels_preds_closed]
+  >- (rw[listTheory.EVERY_MEM] >> metis_tac[cfg_dfs_post_subset_fn_labels])
+QED
+
+(* Backward analysis state-level invariant: no wf_function required.
+   Q must be preserved for ALL labels (not just fn_labels). *)
+Theorem df_analyze_invariant_backward_nwf:
+  !(bottom : 'a) join transfer edge_transfer ctx
+   entry_val fn (m : 'a df_state -> num) b (Q : 'a df_state -> bool).
+    let cfg = cfg_analyze fn in
+    let bbs = fn.fn_blocks in
+    let process = df_process_block Backward bottom join transfer edge_transfer
+                                   ctx entry_val cfg bbs in
+    let st0 = init_df_state bottom (MAP (\bb. bb.bb_label) bbs) in
+    let result = df_analyze Backward bottom join transfer edge_transfer
+                            ctx entry_val fn in
+      (!lbl st. Q st /\ process lbl st <> st ==>
+                m st < m (process lbl st)) /\
+      (!lbl st. Q st ==> Q (process lbl st)) /\
+      (case entry_val of NONE => Q st0
+       | SOME (lbl, v) =>
+           Q (st0 with ds_boundary := st0.ds_boundary |+ (lbl, v))) /\
+      (!x. Q x ==> m x <= b)
+    ==>
+      Q result
+Proof
+  rpt gen_tac >> simp_tac std_ss [LET_THM] >> strip_tac >>
+  simp[dfAnalyzeDefsTheory.df_analyze_def] >>
+  qmatch_goalsub_abbrev_tac `wl_iterate process deps wl0 st0'` >>
+  `Q (SND (wl_iterate process deps wl0 st0'))`
+    suffices_by simp[] >>
+  irule (SIMP_RULE std_ss [LET_THM]
+    worklistProofsTheory.wl_iterate_invariant_process_proof) >>
+  conj_tac
+  >- (simp[markerTheory.Abbrev_def] >>
+      Cases_on `entry_val` >> fs[] >> Cases_on `x` >> fs[])
+  >> simp[markerTheory.Abbrev_def] >>
+  qexistsl_tac [`b`, `m`] >> simp[]
+QED
+
+(* Backward analysis state-level invariant with valid_lbl restriction.
+   Q only needs to be preserved for valid labels, but valid_lbl must
+   cover dfs_post and be deps-closed. *)
+Theorem df_analyze_invariant_backward_restricted:
+  !(bottom : 'a) join transfer edge_transfer ctx
+   entry_val fn (m : 'a df_state -> num) b
+   (Q : 'a df_state -> bool) (valid_lbl : string -> bool).
+    let cfg = cfg_analyze fn in
+    let bbs = fn.fn_blocks in
+    let process = df_process_block Backward bottom join transfer edge_transfer
+                                   ctx entry_val cfg bbs in
+    let st0 = init_df_state bottom (MAP (\bb. bb.bb_label) bbs) in
+    let result = df_analyze Backward bottom join transfer edge_transfer
+                            ctx entry_val fn in
+      (!lbl st. valid_lbl lbl /\ Q st /\ process lbl st <> st ==>
+                m st < m (process lbl st)) /\
+      (!lbl st. valid_lbl lbl /\ Q st ==> Q (process lbl st)) /\
+      (case entry_val of NONE => Q st0
+       | SOME (lbl, v) =>
+           Q (st0 with ds_boundary := st0.ds_boundary |+ (lbl, v))) /\
+      (!x. Q x ==> m x <= b) /\
+      EVERY valid_lbl cfg.cfg_dfs_post /\
+      (!lbl. valid_lbl lbl ==>
+             EVERY valid_lbl (cfg_preds_of cfg lbl))
+    ==>
+      Q result
+Proof
+  rpt gen_tac >> simp_tac std_ss [LET_THM] >> strip_tac >>
+  simp[dfAnalyzeDefsTheory.df_analyze_def] >>
+  qmatch_goalsub_abbrev_tac `wl_iterate process deps wl0 st0'` >>
+  `Q (SND (wl_iterate process deps wl0 st0'))`
+    suffices_by simp[] >>
+  irule (SIMP_RULE std_ss [LET_THM]
+    worklistProofsTheory.wl_iterate_invariant_process_restricted) >>
+  conj_tac
+  >- (simp[markerTheory.Abbrev_def] >>
+      Cases_on `entry_val` >> fs[] >> Cases_on `x` >> fs[])
+  >> qexistsl_tac [`b`, `m`, `valid_lbl`] >>
+  simp[markerTheory.Abbrev_def]
 QED
 
 (* ===== Fold helpers: structural properties of df_fold_forward/backward ===== *)
@@ -1962,6 +2165,40 @@ Proof
   simp[finite_mapTheory.FDOM_FEMPTY, pred_setTheory.UNION_EMPTY]
 QED
 
+Theorem df_fold_backward_fdom:
+  !instrs transfer lbl idx acc inst_map fv im.
+    df_fold_backward transfer lbl instrs idx acc inst_map = (fv, im) ==>
+    FDOM im = FDOM inst_map UNION
+              IMAGE (\j. (lbl, idx + j)) (count (LENGTH instrs + 1))
+Proof
+  Induct >>
+  rw[df_fold_backward_def]
+  >- (rw[finite_mapTheory.FDOM_FUPDATE,
+         pred_setTheory.EXTENSION, pred_setTheory.IN_INSERT,
+         pred_setTheory.IN_UNION, pred_setTheory.IN_IMAGE,
+         pred_setTheory.IN_COUNT] >>
+      Cases_on `x` >> EQ_TAC >> rw[] >> fs[])
+  >> rw[LET_THM] >> pairarg_tac >> fs[] >>
+     first_x_assum drule >> strip_tac >>
+     rw[finite_mapTheory.FDOM_FUPDATE,
+        pred_setTheory.EXTENSION, pred_setTheory.IN_INSERT,
+        pred_setTheory.IN_UNION, pred_setTheory.IN_IMAGE,
+        pred_setTheory.IN_COUNT] >>
+     Cases_on `x` >> EQ_TAC >> rw[] >> fs[] >>
+     TRY DECIDE_TAC >>
+     Cases_on `j` >> fs[] >> disj2_tac >> qexists_tac `n` >> DECIDE_TAC
+QED
+
+Theorem df_fold_block_fdom_backward:
+  !transfer lbl instrs init_val fv im.
+    df_fold_block Backward transfer lbl instrs init_val = (fv, im) ==>
+    FDOM im = IMAGE (\i. (lbl, i)) (count (LENGTH instrs + 1))
+Proof
+  rw[df_fold_block_def] >>
+  drule df_fold_backward_fdom >>
+  simp[finite_mapTheory.FDOM_FEMPTY, pred_setTheory.UNION_EMPTY]
+QED
+
 (* --- Valid inst keys: generic definitions and properties --- *)
 
 Definition df_valid_inst_keys_def:
@@ -2033,6 +2270,23 @@ Theorem df_fold_block_fdom_subset:
     FDOM im SUBSET df_valid_inst_keys bbs
 Proof
   rw[] >> drule df_fold_block_fdom >> rw[] >>
+  rw[df_valid_inst_keys_def, pred_setTheory.SUBSET_DEF,
+     pred_setTheory.IN_BIGUNION, listTheory.MEM_MAP,
+     pred_setTheory.IN_IMAGE, pred_setTheory.IN_COUNT] >>
+  qexists_tac `IMAGE (\i. (bb.bb_label, i))
+    (count (LENGTH bb.bb_instructions + 1))` >>
+  rw[pred_setTheory.IN_IMAGE, pred_setTheory.IN_COUNT] >>
+  qexists_tac `bb` >> rw[]
+QED
+
+Theorem df_fold_block_fdom_subset_backward:
+  !bbs lbl bb init_val transfer fv im.
+    MEM bb bbs /\ bb.bb_label = lbl /\
+    df_fold_block Backward transfer lbl bb.bb_instructions init_val =
+      (fv, im) ==>
+    FDOM im SUBSET df_valid_inst_keys bbs
+Proof
+  rw[] >> drule df_fold_block_fdom_backward >> rw[] >>
   rw[df_valid_inst_keys_def, pred_setTheory.SUBSET_DEF,
      pred_setTheory.IN_BIGUNION, listTheory.MEM_MAP,
      pred_setTheory.IN_IMAGE, pred_setTheory.IN_COUNT] >>
