@@ -11,3 +11,10 @@ Theorem sue_expand_function_correct:
 Proof
   ACCEPT_TAC sue_expand_function_correct_proof
 QED
+
+(* SingleUseExpansion establishes single_use_form *)
+Theorem sue_establishes_single_use:
+  !fn. single_use_form (sue_expand_function fn)
+Proof
+  ACCEPT_TAC sue_establishes_single_use_form
+QED
