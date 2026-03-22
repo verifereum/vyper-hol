@@ -1,7 +1,7 @@
 Theory vyperValue
 Ancestors
   alist arithmetic finite_map list pair rich_list
-  cv cv_std vfmState vyperAST vyperMisc
+  cv cv_std vfmConstants vfmState vyperAST vyperMisc
 Libs
   cv_transLib wordsLib
 
@@ -29,17 +29,50 @@ Datatype:
   | InterfaceArgs (interface_func list)
 End
 
+Definition type_slot_size_def:
+  type_slot_size (BaseTV (BytesT (Dynamic n))) = 1 + word_size n /\
+  type_slot_size (BaseTV (StringT n)) = 1 + word_size n /\
+  type_slot_size (BaseTV _) = 1 /\
+  type_slot_size (FlagTV _) = 1 /\
+  type_slot_size NoneTV = 0 /\
+  type_slot_size (TupleTV tvs) = type_slot_size_list tvs /\
+  type_slot_size (ArrayTV tv (Fixed n)) = n * type_slot_size tv /\
+  type_slot_size (ArrayTV tv (Dynamic n)) = 1 + n * type_slot_size tv /\
+  type_slot_size (StructTV fields) = type_slot_size_fields fields /\
+  type_slot_size_list [] = 0 /\
+  type_slot_size_list (tv::tvs) = type_slot_size tv + type_slot_size_list tvs /\
+  type_slot_size_fields [] = 0 /\
+  type_slot_size_fields ((_, tv)::fields) = type_slot_size tv + type_slot_size_fields fields
+End
+val () = cv_auto_trans type_slot_size_def;
+
 Definition evaluate_type_def:
   evaluate_type tenv (BaseT bt) =
-    (if bt = IntT 0 then NONE
-     else SOME $ BaseTV bt) ∧
+    (case bt of
+     | IntT m => if 0 < m ∧ m ≤ 256 then SOME (BaseTV bt) else NONE
+     | UintT m => if m ≤ 256 then SOME (BaseTV bt) else NONE
+     | BytesT (Fixed n) => if n ≤ 32 then SOME (BaseTV bt) else NONE
+     | BytesT (Dynamic n) =>
+       let tv = BaseTV bt in
+       if n < dimword(:256) ∧ type_slot_size tv ≤ dimword(:256)
+       then SOME tv else NONE
+     | StringT n =>
+       let tv = BaseTV bt in
+       if n < dimword(:256) ∧ type_slot_size tv ≤ dimword(:256)
+       then SOME tv else NONE
+     | _ => SOME (BaseTV bt)) ∧
   evaluate_type tenv (TupleT ts) =
     (case evaluate_types tenv ts [] of
      | NONE => NONE
-     | SOME tvs => SOME $ TupleTV tvs) ∧
+     | SOME tvs =>
+       let tv = TupleTV tvs in
+       if type_slot_size tv ≤ dimword(:256) then SOME tv else NONE) ∧
   evaluate_type tenv (ArrayT t bd) =
     (case evaluate_type tenv t of
-     | SOME tv => SOME $ ArrayTV tv bd
+     | SOME tv =>
+       let atv = ArrayTV tv bd in
+       if 0 < type_slot_size tv ∧ type_slot_size atv ≤ dimword(:256)
+       then SOME atv else NONE
      | _ => NONE) ∧
   evaluate_type tenv (StructT id) =
   (let nid = string_to_num id in
@@ -47,7 +80,9 @@ Definition evaluate_type_def:
    | SOME $ StructArgs args =>
      (let names = MAP FST args in
       case evaluate_types (tenv \\ nid) (MAP SND args) []
-      of SOME tvs => SOME $ StructTV (ZIP (names, tvs))
+      of SOME tvs =>
+        let tv = StructTV (ZIP (names, tvs)) in
+        if type_slot_size tv ≤ dimword(:256) then SOME tv else NONE
        | _ => NONE)
    | _ => NONE) ∧
   evaluate_type tenv (FlagT id) =
@@ -170,6 +205,10 @@ End
 Theorem value_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="vyperValue",Tyop="value"}));
+
+Theorem array_value_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vyperValue",Tyop="array_value"}));
 
 val from_to_value_thm = cv_typeLib.from_to_thm_for “:value”;
 val from_value = from_to_value_thm |> concl |> rator |> rand

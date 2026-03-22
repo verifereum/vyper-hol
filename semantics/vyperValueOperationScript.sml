@@ -655,11 +655,11 @@ Definition safe_cast_def:
   case t of
   | BaseTV (UintT n) =>
     (case v of
-     | IntV _ => SOME v
+     | IntV i => if within_int_bound (Unsigned n) i then SOME v else NONE
      | _ => NONE)
   | BaseTV (IntT n) =>
     (case v of
-     | IntV _ => SOME v
+     | IntV i => if within_int_bound (Signed n) i then SOME v else NONE
      | _ => NONE)
   | BaseTV BoolT =>
     (case v of
@@ -667,7 +667,7 @@ Definition safe_cast_def:
      | _ => NONE)
   | BaseTV DecimalT =>
     (case v of
-     | DecimalV _ => SOME v
+     | DecimalV d => if within_int_bound (Signed 168) d then SOME v else NONE
      | _ => NONE)
   | BaseTV (StringT n) =>
     (case v of
@@ -689,7 +689,7 @@ Definition safe_cast_def:
      | _ => NONE)
   | FlagTV n =>
     (case v of
-     | FlagV _ => SOME v
+     | FlagV m => if m < 2 ** n then SOME v else NONE
      | _ => NONE)
   | TupleTV ts =>
     (case v of

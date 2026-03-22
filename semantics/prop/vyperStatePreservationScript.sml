@@ -188,3 +188,9 @@ Proof
   imp_res_tac get_storage_backend_state >> gvs[] >>
   Cases_on `v16` >> gvs[return_def, raise_def]
 QED
+
+Theorem handle_loop_exception_state:
+  handle_loop_exception e s = (r, s') ==> s' = s
+Proof
+  rw[handle_loop_exception_def, return_def, raise_def]
+QED
