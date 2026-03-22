@@ -1,2 +1,2 @@
-# Pass shared definitions
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../../../syntax ../../../../semantics ../../../defs ../../../analysis/shared
+# Pass shared shared/defs definitions
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../../../syntax ../../../../semantics ../../../defs ../../../analysis/shared ../../../analysis/shared/defs

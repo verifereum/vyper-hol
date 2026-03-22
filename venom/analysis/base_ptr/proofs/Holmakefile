@@ -1,0 +1,5 @@
+# Base pointer analysis proofs
+# From base_ptr/proofs/:
+#   ../../..  = venom/
+#   ../../../.. = project root
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics ../../shared ../../shared/defs ../../cfg/defs ../../dataflow/defs ../defs

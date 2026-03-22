@@ -1,0 +1,5 @@
+# Shared analysis proofs (memory location properties)
+# From shared/proofs/:
+#   ../../..  = venom/
+#   ../../../.. = project root
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics ../defs
