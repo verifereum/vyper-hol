@@ -61,9 +61,9 @@ End
    - for non-last instructions: live_after[idx] = live_before[idx+1]
    - for last instruction: live_after = block out_vars *)
 Definition live_after_at_def:
-  live_after_at (lr : liveness_result) lbl idx n_insts =
+  live_after_at lr lbl idx n_insts =
     if idx + 1 < n_insts then live_vars_at lr lbl (idx + 1)
-    else out_vars_of lr lbl
+    else live_vars_at lr lbl n_insts
 End
 
 (* ===== MSIZE fence computation ===== *)
@@ -74,7 +74,7 @@ End
 
 (* Does this block contain a surviving (live-output) MSIZE? *)
 Definition block_has_live_msize_def:
-  block_has_live_msize (lr : liveness_result) bb =
+  block_has_live_msize lr bb =
     let n = LENGTH bb.bb_instructions in
     EXISTS (\(idx, inst).
       inst.inst_opcode = MSIZE /\
@@ -106,7 +106,7 @@ End
 (* Is there a surviving MSIZE after instruction at index idx in
    this block? Only counts MSIZEs whose output is live. *)
 Definition has_live_msize_after_def:
-  has_live_msize_after (lr : liveness_result) bb_label n_insts
+  has_live_msize_after lr bb_label n_insts
                        bb_insts idx =
     EXISTS (\(j, inst).
       inst.inst_opcode = MSIZE /\
@@ -128,7 +128,7 @@ End
 (* ===== Function-level transform ===== *)
 
 Definition remove_unused_block_def:
-  remove_unused_block (lr : liveness_result) (fence : num -> bool) bb =
+  remove_unused_block lr (fence : num -> bool) bb =
     let n = LENGTH bb.bb_instructions in
     bb with bb_instructions :=
       MAPi (\idx inst.

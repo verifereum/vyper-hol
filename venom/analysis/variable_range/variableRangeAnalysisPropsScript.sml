@@ -11,7 +11,7 @@
 
 Theory variableRangeAnalysisProps
 Ancestors
-  valueRangeDefs rangeEvalDefs rangeAnalysisDefs rangeAnalysisProofs
+  valueRangeDefs rangeEvalDefs rangeAnalysisDefs rangeAnalysisProofs venomWf
 
 (* Block-level soundness of the analysis output: if the analysis's entry
    state for block lbl is sound for a concrete state s, and running the
@@ -20,10 +20,14 @@ Ancestors
 
    The consumer chains this along an execution path:
      entry_sound(lbl_0) → exit_sound(lbl_0) → entry_sound(lbl_1) → ... *)
+(* Requires bb_well_formed and vs_inst_idx = 0; without these the statement
+   is false — see counterexample in rangeAnalysisProofsScript.sml. *)
 Theorem range_analyze_block_sound:
   ∀fn lbl bb fuel ctx s s'.
     let ra = range_analyze fn in
     lookup_block lbl fn.fn_blocks = SOME bb ∧
+    bb_well_formed bb ∧
+    s.vs_inst_idx = 0 ∧
     in_range_state (range_entry_state ra lbl) s.vs_vars ∧
     run_block fuel ctx bb s = OK s' ⇒
     in_range_state (range_exit_state ra lbl) s'.vs_vars

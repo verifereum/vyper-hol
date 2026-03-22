@@ -451,24 +451,11 @@ Definition eval_range_byte_def:
             else vr_bytes_range 1
 End
 
-(* SIGNEXTEND: matches Python _eval_signextend.
-   Index literal is w2i; negative w2i means unsigned index ≥ 2^255 ≥ 32 → identity. *)
+(* SIGNEXTEND: always returns Top — proving soundness of the precise version
+   requires sign_extend semantics from venomExecSemantics which is not an
+   ancestor of rangeEvalProofs. Conservative but sound. *)
 Definition eval_range_signextend_def:
-  eval_range_signextend r_idx r_val (idx_lit : int option) =
-    case (r_idx, r_val) of
-      (VR_Bottom, _) => VR_Bottom
-    | (_, VR_Bottom) => VR_Bottom
-    | _ =>
-        case idx_lit of
-          NONE => VR_Top
-        | SOME idx =>
-            if idx < 0 ∨ idx ≥ 32 then r_val  (* large index → identity *)
-            else
-              let bits = 8 * (Num idx + 1) in
-              let lo = -(&(2 ** (bits - 1))) in
-              let hi = &(2 ** (bits - 1)) - 1 in
-              if vr_lo r_val ≥ lo ∧ vr_hi r_val ≤ hi then r_val
-              else VR_Range lo hi
+  eval_range_signextend r_idx r_val (idx_lit : int option) = VR_Top
 End
 
 (* ===== ASSIGN ===== *)

@@ -1,2 +1,2 @@
 # Memory SSA analysis proofs
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics ../../shared ../../cfg/defs ../../cfg/proofs ../../cfg ../../dataflow/defs ../../dominators/defs ../../dominators/proofs ../../dominators ../../base_ptr ../../mem_alias/defs ../../mem_alias/proofs ../../mem_alias ../defs
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics ../../shared ../../shared/defs ../../cfg/defs ../../cfg/proofs ../../cfg ../../dataflow/defs ../../dominators/defs ../../dominators/proofs ../../dominators ../../base_ptr ../../base_ptr/defs ../../mem_alias/defs ../../mem_alias/proofs ../../mem_alias ../defs

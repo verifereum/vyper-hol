@@ -1,28 +1,28 @@
 (*
  * Stack Order Analysis — Consumer-Facing Properties
  *
- * API for the DFT (code generation) pass.
- * Proved in proofs/stackOrderProofsScript.sml, imported via ACCEPT_TAC.
- *
- *   so_get_stack_sound      — from_to invariant preserved, merged is distinct
- *   so_merge_prefix         — merge result is prefix of each input
- *   so_from_to_includes_live — from_to query includes liveness input vars
- *   so_from_to_includes_base — from_to query includes base map entries
+ * from_to_wf preservation is FALSE even with single_use_form.
+ * See proofs/stackOrderCexScript.sml (Counterexample 2) for mechanical proof.
  *)
 
 Theory stackOrderProps
 Ancestors
-  stackOrderProofs
+  stackOrderProofs cfgAnalysisProps
+
+Theorem so_analyze_block_needed_distinct:
+  ∀cfg lr from_to lbl insts needed stack.
+    (needed, stack) = so_analyze_block cfg lr from_to lbl insts ⇒
+    ALL_DISTINCT needed
+Proof
+  ACCEPT_TAC so_analyze_block_needed_distinct_proof
+QED
 
 Theorem so_get_stack_sound:
   ∀fn cfg lr from_to lbl merged from_to'.
     wf_function fn ∧
     cfg = cfg_analyze fn ∧
-    lr = liveness_analyze fn ∧
-    from_to_wf lr from_to ∧
     (merged, from_to') = so_get_stack cfg lr fn from_to lbl ⇒
-    ALL_DISTINCT merged ∧
-    from_to_wf lr from_to'
+    ALL_DISTINCT merged
 Proof
   ACCEPT_TAC so_get_stack_sound_proof
 QED
@@ -52,3 +52,5 @@ Theorem so_from_to_includes_base:
 Proof
   ACCEPT_TAC so_from_to_includes_base_proof
 QED
+
+

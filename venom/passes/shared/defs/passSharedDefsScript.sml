@@ -234,3 +234,26 @@ Definition transitive_use_vars_def:
       SOME (INR result) => result
     | _ => vars
 End
+
+(* ===== Single Use Form ===== *)
+
+(* Count uses of variable v across non-ASSIGN instructions in a block.
+   ASSIGN is exempt: it's a copy instruction that doesn't consume
+   a stack slot in EVM codegen. *)
+Definition var_use_count_block_def:
+  var_use_count_block v bb =
+    LENGTH (FILTER (\inst.
+      inst.inst_opcode <> ASSIGN /\
+      MEM (Var v) inst.inst_operands)
+      bb.bb_instructions)
+End
+
+(* Single Use Form: each variable is used at most once across all
+   non-ASSIGN instructions in the entire function.
+   Established by SingleUseExpansion pass, required by DFT/venom_to_assembly.
+   Python docstring: "each variable is used at most once (by any opcode
+   besides a simple assignment)" *)
+Definition single_use_form_def:
+  single_use_form fn <=>
+    !v. SUM (MAP (var_use_count_block v) fn.fn_blocks) <= 1
+End

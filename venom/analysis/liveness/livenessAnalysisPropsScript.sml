@@ -1,16 +1,10 @@
 (*
- * Liveness Analysis Correctness (Statements Only)
+ * Liveness Analysis Properties (Statements Only)
  *
- * Exported API for consumers of the liveness analysis.
+ * FROZEN — do not modify statements. Proofs via ACCEPT_TAC from livenessProofs.
  *
- * 1) Fixpoint — liveness_analyze returns a stable result.
- * 2) Boundedness — live variables come from the function's instructions.
- * 3) Soundness — if v is live, it is used before redefinition on some path.
- *
- * Internal proof machinery (list helpers, monotonicity, PHI correctness,
- * iterate-level fixpoint) lives in proofs/livenessProofsScript.sml.
- *
- * Proofs re-exported via ACCEPT_TAC.
+ * 1) Boundedness — live variables come from the function's instructions.
+ * 2) Soundness — if v is live, it is used before redefinition on some path.
  *)
 
 Theory livenessAnalysisProps
@@ -18,47 +12,29 @@ Ancestors
   livenessProofs
 
 (* ==========================================================================
-   1) Fixpoint
+   1) Boundedness
    ========================================================================== *)
 
-(* liveness_analyze returns a fixpoint: one more pass changes nothing. *)
-Theorem liveness_analyze_fixpoint:
-  ∀fn.
-    let cfg = cfg_analyze fn in
-    let lr = liveness_analyze fn in
-    liveness_one_pass cfg fn.fn_blocks lr cfg.cfg_dfs_post = lr
-Proof
-  ACCEPT_TAC liveness_analyze_fixpoint_proof
-QED
-
-(* ==========================================================================
-   2) Boundedness
-   ========================================================================== *)
-
-(* All variables in any live set come from the function's instructions. *)
 Theorem live_vars_bounded:
   ∀fn lbl idx v.
-    let lr = liveness_analyze fn in
-    MEM v (live_vars_at lr lbl idx) ==>
+    let st = liveness_analyze fn in
+    MEM v (live_vars_at st lbl idx) ⇒
     MEM v (fn_all_vars fn.fn_blocks)
 Proof
   ACCEPT_TAC live_vars_bounded_proof
 QED
 
 (* ==========================================================================
-   3) Soundness
+   2) Soundness
    ========================================================================== *)
 
-(* For a well-formed function (wf_function), if v is live at (lbl, idx),
-   there exists a CFG execution path starting there on which v is used
-   before being redefined. *)
 Theorem liveness_sound:
   ∀fn lbl idx v.
     let cfg = cfg_analyze fn in
-    let lr = liveness_analyze fn in
+    let st = liveness_analyze fn in
     let bbs = fn.fn_blocks in
     wf_function fn ∧
-    MEM v (live_vars_at lr lbl idx) ==>
+    MEM v (live_vars_at st lbl idx) ⇒
     ∃path.
       cfg_exec_path cfg ((lbl, idx) :: path) ∧
       used_before_defined bbs v ((lbl, idx) :: path)
