@@ -33,5 +33,7 @@ Ancestors
   varDefAnalysis
   (* variable range *)
   variableRangeAnalysis
+  (* readonly memory args *)
+  readonlyMemoryArgsProps
   (* analysis-driven simulation bridge *)
   analysisSimProps
