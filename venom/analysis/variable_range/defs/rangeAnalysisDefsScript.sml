@@ -160,6 +160,8 @@ Definition range_apply_compare_def:
           if ¬(((op = LT) ∧ is_true) ∨ (¬(op = LT) ∧ ¬is_true)) ∨
              w2i w ≤ 0 ∨ w2i w > INT256_MAX then rs
           else range_narrow_var rs v (w2i w) op is_true 0 max_bound T
+        else if ¬(op = SLT ∨ op = SGT) ∧
+                (w2i w ≤ 0 ∨ w2i w > INT256_MAX) then rs
         else
           range_narrow_var rs v (w2i w) op is_true min_bound max_bound T
     | (Lit w, Var v) =>
@@ -168,6 +170,8 @@ Definition range_apply_compare_def:
           if ¬((¬(op = LT) ∧ is_true) ∨ ((op = LT) ∧ ¬is_true)) ∨
              w2i w ≤ 0 ∨ w2i w > INT256_MAX then rs
           else range_narrow_var rs v (w2i w) op is_true 0 max_bound F
+        else if ¬(op = SLT ∨ op = SGT) ∧
+                (w2i w ≤ 0 ∨ w2i w > INT256_MAX) then rs
         else
           range_narrow_var rs v (w2i w) op is_true min_bound max_bound F
     | _ => rs
@@ -219,14 +223,18 @@ End
    handled by edge_transfer (PHI renaming per edge before join). *)
 Definition range_evaluate_inst_def:
   range_evaluate_inst dfg inst (rs : range_state) =
-    if inst.inst_opcode = PHI ∨ inst.inst_outputs = [] then rs
+    if inst.inst_opcode = PHI then
+      (case inst.inst_outputs of
+         [out] => rs \\ out
+       | _ => FEMPTY)
+    else if inst.inst_outputs = [] then rs
     else
       let ranges = MAP (operand_range rs) inst.inst_operands in
       let lits = MAP operand_lit inst.inst_operands in
       let result_range = eval_range inst.inst_opcode ranges lits in
       case inst.inst_outputs of
         [out] => rs_write rs out result_range
-      | _ => rs
+      | _ => FEMPTY
 End
 
 (* ===== Option-wrapped lattice for df_analyze_widen ===== *)
@@ -240,23 +248,30 @@ Definition range_unwrap_def:
   range_unwrap (SOME rs) = rs
 End
 
-(* Option-wrapped join: NONE is identity (unprocessed blocks don't
-   contribute to join). Normalizes after joining. *)
+(* Option-wrapped join: NONE is bottom (unprocessed blocks don't
+   contribute to join). Always normalizes the result to strip VR_Top entries,
+   ensuring absorption: join(join(a,b),b) = join(a,b). *)
 Definition range_join_opt_def:
-  range_join_opt NONE x = x ∧
-  range_join_opt x NONE = x ∧
+  range_join_opt NONE NONE = NONE ∧
+  range_join_opt NONE (SOME x) = SOME (range_normalize x) ∧
+  range_join_opt (SOME x) NONE = SOME (range_normalize x) ∧
   range_join_opt (SOME a) (SOME b) =
     SOME (range_normalize (range_join_two a b))
 End
 
-(* Option-wrapped widening. No normalization after widening —
-   matches Python _widen_states which returns directly.
-   (range_join_opt normalizes; this asymmetry is intentional.) *)
+(* Option-wrapped widening.
+   Any disagreement → SOME FEMPTY (no variable constraints).
+   Agreement → identity (fixpoint reached).
+   This is sound because FEMPTY is trivially satisfiable by any environment.
+   Convergence: FEMPTY is absorbing under widen_opt, so once entry reaches
+   FEMPTY it stays FEMPTY, guaranteeing fixpoint after O(threshold) visits. *)
 Definition range_widen_opt_def:
-  range_widen_opt NONE x = x ∧
-  range_widen_opt x NONE = x ∧
+  range_widen_opt NONE NONE = NONE ∧
+  range_widen_opt NONE (SOME x) = SOME FEMPTY ∧
+  range_widen_opt (SOME x) NONE = SOME FEMPTY ∧
   range_widen_opt (SOME old_st) (SOME new_st) =
-    SOME (range_widen_states old_st new_st)
+    if old_st = new_st then SOME old_st
+    else SOME FEMPTY
 End
 
 (* Option-wrapped per-instruction transfer.

@@ -167,6 +167,10 @@ Definition bb_well_formed_def:
   bb_well_formed bb <=>
     bb.bb_instructions <> [] /\
     is_terminator (LAST bb.bb_instructions).inst_opcode /\
+    (* Terminator only at end *)
+    (!i. i < LENGTH bb.bb_instructions /\
+         is_terminator (EL i bb.bb_instructions).inst_opcode ==>
+         i = PRE (LENGTH bb.bb_instructions)) /\
     (* PHI instructions form a prefix of the block *)
     (!i j. i < j /\ j < LENGTH bb.bb_instructions /\
            (EL j bb.bb_instructions).inst_opcode = PHI ==>
@@ -181,14 +185,23 @@ Definition fn_succs_closed_def:
       MEM succ (fn_labels fn)
 End
 
+(* All instruction ids across all blocks are distinct. *)
+Definition fn_inst_ids_distinct_def:
+  fn_inst_ids_distinct fn <=>
+    ALL_DISTINCT
+      (FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) fn.fn_blocks))
+End
+
 (* Structural well-formedness for IR functions:
- * unique labels, has entry, blocks well-formed, successor labels exist. *)
+ * unique labels, has entry, blocks well-formed, successor labels exist,
+ * instruction ids are globally unique. *)
 Definition wf_function_def:
   wf_function fn <=>
     ALL_DISTINCT (fn_labels fn) /\
     fn_has_entry fn /\
     (!bb. MEM bb fn.fn_blocks ==> bb_well_formed bb) /\
-    fn_succs_closed fn
+    fn_succs_closed fn /\
+    fn_inst_ids_distinct fn
 End
 
 (* ==========================================================================
@@ -234,9 +247,7 @@ Definition ctx_wf_def:
 End
 
 (* Every INVOKE instruction's first operand is a Label naming a
- * function in the context.
- * TODO: candidate for inclusion in ctx_wf once we have a
- * ctx_wf => fn_wf => bb_wf => inst_wf hierarchy. *)
+ * function in the context. *)
 Definition wf_invoke_targets_def:
   wf_invoke_targets ctx <=>
     (!func inst.

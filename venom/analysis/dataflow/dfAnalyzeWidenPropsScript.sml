@@ -152,6 +152,79 @@ Proof
   ACCEPT_TAC df_process_widen_inflationary_proof
 QED
 
+(* Visit-count-based convergence: no leq/bounded_measure needed.
+   Instead, the user provides P and K such that after K visits to any label
+   under P, processing that label is the identity.
+   Plus: deps closure (successors of dfs_pre stay in dfs_pre). *)
+Theorem df_analyze_widen_fixpoint_by_visits:
+  !(dir : direction) (bottom : 'a) join widen threshold
+   transfer edge_transfer ctx entry_val fn
+   (K : num) (P : 'a df_widen_state -> bool).
+    let cfg = cfg_analyze fn in
+    let bbs = fn.fn_blocks in
+    let process = df_process_block_widen dir bottom join widen threshold
+                    transfer edge_transfer ctx entry_val cfg bbs in
+    let deps = (case dir of
+                  Forward => cfg_succs_of cfg
+                | Backward => cfg_preds_of cfg) in
+    let all_lbls = cfg.cfg_dfs_pre in
+      (!a b. MEM b (cfg_succs_of cfg a) <=> MEM a (cfg_preds_of cfg b)) /\
+      (!a b. join (join a b) b = join a b) /\
+      (!a b. widen (widen a b) b = widen a b) /\
+      (!a. widen a a = a) /\
+      (!lbl st. P st ==> P (process lbl st)) /\
+      (case entry_val of
+         NONE => P (init_df_widen_state bottom (MAP (\bb. bb.bb_label) bbs))
+       | SOME (lbl, v) =>
+           P ((init_df_widen_state bottom (MAP (\bb. bb.bb_label) bbs)) with
+              dws_boundary :=
+                (init_df_widen_state bottom
+                  (MAP (\bb. bb.bb_label) bbs)).dws_boundary |+ (lbl, v))) /\
+      (!lbl st. P st /\ df_widen_visits st lbl >= K ==>
+                process lbl st = st) /\
+      (!lbl. MEM lbl all_lbls ==>
+             EVERY (\s. MEM s all_lbls) (deps lbl))
+    ==>
+      is_fixpoint process all_lbls
+        (df_analyze_widen dir bottom join widen threshold
+           transfer edge_transfer ctx entry_val fn)
+Proof
+  ACCEPT_TAC dfAnalyzeWidenProofsTheory.df_analyze_widen_fixpoint_by_visits
+QED
+
+(* Variant: takes wl_deps_complete directly — no widen idempotence needed *)
+Theorem df_analyze_widen_fixpoint_by_visits_no_idem:
+  !(dir : direction) (bottom : 'a) join widen threshold
+   transfer edge_transfer ctx entry_val fn
+   (K : num) (P : 'a df_widen_state -> bool).
+    let cfg = cfg_analyze fn in
+    let bbs = fn.fn_blocks in
+    let process = df_process_block_widen dir bottom join widen threshold
+                    transfer edge_transfer ctx entry_val cfg bbs in
+    let deps = (case dir of
+                  Forward => cfg_succs_of cfg
+                | Backward => cfg_preds_of cfg) in
+    let all_lbls = cfg.cfg_dfs_pre in
+      (!lbl st. P st ==> P (process lbl st)) /\
+      (case entry_val of
+         NONE => P (init_df_widen_state bottom (MAP (\bb. bb.bb_label) bbs))
+       | SOME (lbl, v) =>
+           P ((init_df_widen_state bottom (MAP (\bb. bb.bb_label) bbs)) with
+              dws_boundary := (init_df_widen_state bottom
+                (MAP (\bb. bb.bb_label) bbs)).dws_boundary |+ (lbl, v))) /\
+      (!lbl st. P st /\ df_widen_visits st lbl >= K ==>
+                process lbl st = st) /\
+      (!lbl. MEM lbl all_lbls ==>
+             EVERY (\s. MEM s all_lbls) (deps lbl)) /\
+      wl_deps_complete process deps
+    ==>
+      is_fixpoint process all_lbls
+        (df_analyze_widen dir bottom join widen threshold
+           transfer edge_transfer ctx entry_val fn)
+Proof
+  ACCEPT_TAC dfAnalyzeWidenProofsTheory.df_analyze_widen_fixpoint_by_visits_no_idem
+QED
+
 (* CFG preds/succs inverse → deps complete for widening process.
    Join absorption needed for self-stability (same as base variant). *)
 Theorem df_process_widen_deps_complete:
@@ -170,4 +243,34 @@ Theorem df_process_widen_deps_complete:
     wl_deps_complete process deps
 Proof
   ACCEPT_TAC df_process_widen_deps_complete_proof
+QED
+Theorem df_widen_entry_sound:
+  !(dir : direction) (bottom : 'a) join widen threshold
+   transfer edge_transfer ctx entry_val fn
+   (sound : 'a -> 'b -> bool)
+   (leq : 'a df_widen_state -> 'a df_widen_state -> bool)
+   m b (Q : 'a df_widen_state -> bool).
+    let cfg = cfg_analyze fn in
+    let bbs = fn.fn_blocks in
+    let process = df_process_block_widen dir bottom join widen threshold
+                    transfer edge_transfer ctx entry_val cfg bbs in
+    let st0 = init_df_widen_state bottom (MAP (\bb. bb.bb_label) bbs) in
+    let result = df_analyze_widen dir bottom join widen threshold
+                   transfer edge_transfer ctx entry_val fn in
+      (!a b s. sound a s ==> sound (join a b) s) /\
+      (!a b s. sound a s ==> sound (widen a b) s) /\
+      (!s. sound bottom s) /\
+      (case entry_val of NONE => T
+       | SOME (lbl, v) => !s. sound v s) /\
+      (* convergence *)
+      (!lbl st. Q st ==> leq st (process lbl st)) /\
+      (!lbl st. Q st ==> Q (process lbl st)) /\
+      (case entry_val of NONE => Q st0
+       | SOME (lbl, v) =>
+           Q (st0 with dws_boundary := st0.dws_boundary |+ (lbl, v))) /\
+      bounded_measure Q leq m b
+    ==>
+      (!lbl s. sound (df_widen_entry bottom result lbl) s)
+Proof
+  ACCEPT_TAC dfAnalyzeWidenProofsTheory.df_widen_entry_sound_proof
 QED

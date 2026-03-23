@@ -219,6 +219,7 @@ Definition mem_ssa_process_frontiers_def:
 End
 
 (* Worklist iteration for phi placement.
+ * LIFO order: Python uses worklist.pop() + append() (stack).
  * fuel bounds total iterations (at most |blocks| phis can be inserted). *)
 Definition mem_ssa_insert_phis_def:
   mem_ssa_insert_phis ms cfg dom ef 0 wl = ms ∧
@@ -226,7 +227,7 @@ Definition mem_ssa_insert_phis_def:
   mem_ssa_insert_phis ms cfg dom ef (SUC fuel) (b::wl) =
     let frontiers = frontier_of dom b in
     let (ms', new_wl) = mem_ssa_process_frontiers ms cfg dom ef frontiers in
-    mem_ssa_insert_phis ms' cfg dom ef fuel (wl ++ new_wl)
+    mem_ssa_insert_phis ms' cfg dom ef fuel (new_wl ++ wl)
 End
 
 (* ==========================================================================

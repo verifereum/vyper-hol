@@ -382,10 +382,19 @@ Theorem bb_well_formed_subst_label:
     bb_well_formed bb ==>
     bb_well_formed (subst_label_block old new bb)
 Proof
-  rw[bb_well_formed_def, subst_label_block_def] >-
-   rw[subst_label_inst_def] >>
-  `j < LENGTH (MAP (subst_label_inst old new) bb.bb_instructions)` by rw[] >>
-  fs[EL_MAP, subst_label_inst_def] >> metis_tac[]
+  rw[bb_well_formed_def, subst_label_block_def] >>
+  gvs[LAST_MAP, EL_MAP, subst_label_inst_fields] >>
+  metis_tac[]
+QED
+
+Triviality ALL_DISTINCT_FLAT_MAP_FILTER:
+  !P f l. ALL_DISTINCT (FLAT (MAP f l)) ==>
+          ALL_DISTINCT (FLAT (MAP f (FILTER P l)))
+Proof
+  gen_tac >> gen_tac >> Induct >> rw[FILTER] >>
+  fs[ALL_DISTINCT_APPEND] >> rw[] >> strip_tac >>
+  `MEM e (FLAT (MAP f l))` suffices_by metis_tac[] >>
+  fs[MEM_FLAT, MEM_MAP, MEM_FILTER] >> metis_tac[]
 QED
 
 Theorem wf_function_remove_block:
@@ -402,14 +411,16 @@ Proof
     Cases_on `fn.fn_blocks` >> fs[] >>
     fs[fn_entry_label_def, entry_block_def] >>
     rw[FILTER_NEQ_NIL] >> qexists_tac `h` >> rw[]) >-
-   (fs[MEM_remove_block_iff] >> metis_tac[]) >>
-  fs[fn_succs_closed_def, fn_labels_def] >>
-  rw[MEM_remove_block_iff] >>
-  rw[fn_labels_remove_block, MEM_FILTER] >>
-  `MEM bb fn.fn_blocks` by fs[MEM_remove_block_iff] >>
-  `MEM succ (MAP (\bb. bb.bb_label) fn.fn_blocks)` by metis_tac[] >>
-  rw[] >> CCONTR_TAC >> fs[] >>
-  first_x_assum (qspec_then `bb` mp_tac) >> rw[MEM_remove_block_iff]
+   (fs[MEM_remove_block_iff] >> metis_tac[]) >-
+   (fs[fn_succs_closed_def, fn_labels_def] >>
+    rw[MEM_remove_block_iff] >>
+    rw[fn_labels_remove_block, MEM_FILTER] >>
+    `MEM bb fn.fn_blocks` by fs[MEM_remove_block_iff] >>
+    `MEM succ (MAP (\bb. bb.bb_label) fn.fn_blocks)` by metis_tac[] >>
+    rw[] >> CCONTR_TAC >> fs[] >>
+    first_x_assum (qspec_then `bb` mp_tac) >> rw[MEM_remove_block_iff]) >>
+  fs[fn_inst_ids_distinct_def, remove_block_def] >>
+  irule ALL_DISTINCT_FLAT_MAP_FILTER >> simp[]
 QED
 
 Theorem entry_block_remove_neq:

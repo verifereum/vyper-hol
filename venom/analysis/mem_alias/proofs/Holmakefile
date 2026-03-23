@@ -1,2 +1,2 @@
 # Memory alias analysis proofs
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics ../../shared ../../cfg/defs ../../dataflow/defs ../../base_ptr ../defs
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics ../../shared ../../shared/defs ../../cfg/defs ../../dataflow/defs ../../base_ptr ../../base_ptr/defs ../defs
