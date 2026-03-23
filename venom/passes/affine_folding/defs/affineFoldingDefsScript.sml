@@ -218,9 +218,9 @@ Definition af_rewrite_inst_def:
          | SOME vi =>
              case vi_base vi of
                NONE => NONE
-             | SOME base =>
-                 if base = Var out_var then NONE
-                 else case base of
+             | SOME vi_b =>
+                 if vi_b = Var out_var then NONE
+                 else case vi_b of
                    Label _ => NONE
                  | _ =>
                    let extract =
@@ -231,20 +231,20 @@ Definition af_rewrite_inst_def:
                    case extract of
                      NONE => NONE
                    | SOME (imm_base, curr_lit_op) =>
-                       if base = imm_base then NONE
+                       if vi_b = imm_base then NONE
                        else
                          let eff_base = af_effective_base dfg {}
-                                          imm_base base in
+                                          imm_base vi_b in
                          if eff_base = imm_base then NONE
                          else
                            let offset = vi_offset vi in
                            let eff_offset_opt =
-                             if eff_base = base then SOME offset
+                             if eff_base = vi_b then SOME offset
                              else case eff_base of
                                Var ev =>
                                  (case ALOOKUP var_info ev of
                                     SOME evi =>
-                                      if vi_base evi = SOME base then
+                                      if vi_base evi = SOME vi_b then
                                         SOME (offset - vi_offset evi)
                                       else NONE
                                   | NONE => NONE)
