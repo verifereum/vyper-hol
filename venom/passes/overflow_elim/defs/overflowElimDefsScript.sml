@@ -2,7 +2,7 @@
  * Overflow Check Elimination — Definitions
  *
  * Ports vyper/venom/passes/overflow_elimination.py to HOL4.
- * Upstream commit: 41b8507d6
+ * Upstream: vyperlang/vyper@41b8507d6
  *
  * Eliminates redundant arithmetic overflow/underflow check assertions
  * when variable range analysis proves they always pass.
