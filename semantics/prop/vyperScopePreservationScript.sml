@@ -1,6 +1,7 @@
 Theory vyperScopePreservation
 Ancestors
   vyperAST vyperMisc vyperState vyperValue vyperInterpreter vyperImmutablesPreservation
+  vyperStatePreservation
 
 (* ===== Lemmas about scopes preservation ===== *)
 
@@ -378,38 +379,49 @@ val peel_tac =
   gvs(AllCaseEqs() :: PULL_EXISTS :: pairTheory.UNCURRY_DEF :: monad_defs) >>
   MAP_EVERY (fn th => TRY (imp_res_tac th)) scopes_thms >> gvs[];
 
-Theorem assign_target_toplevel_scopes:
+Theorem assign_target_toplevel_scopes_immutables:
   ∀cx src_id_opt id is ao st res st'.
     assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) is) ao st = (res, st') ⇒
-    st'.scopes = st.scopes
+    st'.scopes = st.scopes ∧ st'.immutables = st.immutables
 Proof
   rpt gen_tac >> strip_tac
   >> gvs(Once assign_target_def :: pairTheory.UNCURRY_DEF ::
          AllCaseEqs() :: PULL_EXISTS :: monad_defs)
   >> imp_res_tac lookup_global_scopes
+  >> imp_res_tac lookup_global_immutables
   >> gvs[option_CASE_rator, CaseEq"option", raise_def, return_def,
          toplevel_value_CASE_rator, type_value_CASE_rator,
          CaseEq"toplevel_value", CaseEq"type_value", bind_def,
-         CaseEq"sum", ignore_bind_def, CaseEq"prod", sum_CASE_rator]
+         CaseEq"sum", ignore_bind_def, CaseEq"prod", sum_CASE_rator,
+         CaseEq"var_decl_info"]
   >> imp_res_tac assign_result_scopes
   >> imp_res_tac set_global_scopes
+  >> imp_res_tac set_global_immutables
   >> imp_res_tac resolve_array_element_scopes
+  >> imp_res_tac resolve_array_element_state
+  >> imp_res_tac assign_result_state
   >> gvs[]
   >> pairarg_tac
   >> gvs[bind_def, AllCaseEqs(), option_CASE_rator, raise_def, return_def,
          type_value_CASE_rator, sum_CASE_rator, bound_CASE_rator,
          assign_operation_CASE_rator, assert_def]
   >> imp_res_tac write_storage_slot_scopes
+  >> imp_res_tac write_storage_slot_immutables
   >> imp_res_tac read_storage_slot_scopes
+  >> imp_res_tac read_storage_slot_immutables
   >> imp_res_tac assign_result_scopes
-  >> imp_res_tac get_storage_backend_scopes
+  >> imp_res_tac assign_result_state
+  >> imp_res_tac get_storage_backend_state
   >> gvs[]
   >> pairarg_tac
   >> gvs[bind_def, AllCaseEqs(), sum_CASE_rator, option_CASE_rator,
          return_def, raise_def]
   >> imp_res_tac assign_result_scopes
+  >> imp_res_tac assign_result_state
   >> imp_res_tac write_storage_slot_scopes
+  >> imp_res_tac write_storage_slot_immutables
   >> imp_res_tac read_storage_slot_scopes
+  >> imp_res_tac read_storage_slot_immutables
   >> gvs[]
 QED
 
@@ -431,12 +443,12 @@ Proof
   (* TopLevelVar *)
   >> conj_tac >- (
     rpt gen_tac >> strip_tac >>
-    imp_res_tac assign_target_toplevel_scopes >> gvs[]
+    imp_res_tac assign_target_toplevel_scopes_immutables >> gvs[]
     )
   (* remaining cases: ImmutableVar, TupleTargetV, assign_targets *)
   >> rpt conj_tac
   >> rpt gen_tac
-  >> TRY (strip_tac >> imp_res_tac assign_target_toplevel_scopes >> gvs[] >> NO_TAC)
+  >> TRY (strip_tac >> imp_res_tac assign_target_toplevel_scopes_immutables >> gvs[] >> NO_TAC)
   >> simp[Once assign_target_def, bind_def, return_def, raise_def, check_def, type_check_def, assert_def,
           ignore_bind_def, lift_option_def, lift_option_type_def, lift_sum_def, get_scopes_def, set_scopes_def,
           get_immutables_def, get_address_immutables_def, set_immutable_def,
