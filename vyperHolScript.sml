@@ -10,3 +10,5 @@ Ancestors
   venomPassesHol
   (* analysis roll-up *)
   venomAnalysisHol
+  (* lowering *)
+  vyperLoweringHol

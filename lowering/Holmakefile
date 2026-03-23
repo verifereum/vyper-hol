@@ -1,0 +1,5 @@
+# Lowering: top-level props
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec \
+           ../syntax ../semantics \
+           ../venom/defs \
+           defs proofs
