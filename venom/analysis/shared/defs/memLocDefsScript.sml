@@ -1,7 +1,7 @@
 (*
  * Memory Location Types for Alias Analysis
  *
- * Ported from vyper/venom/memory_location.py.
+ * Upstream: vyperlang/vyper@cff4f6822 (alloca-only)
  *
  * TOP-LEVEL:
  *   allocation, mem_loc,

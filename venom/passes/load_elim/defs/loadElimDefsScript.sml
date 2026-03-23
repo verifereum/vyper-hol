@@ -1,7 +1,7 @@
 (*
  * Load Elimination — Definitions
  *
- * Ports vyper/venom/passes/load_elimination.py to HOL4.
+ * Upstream: vyperlang/vyper@cff4f6822 (bp_analyze ctx removal)
  *
  * Eliminates redundant loads by tracking available values at each
  * memory location via a set-valued lattice. At join points, value

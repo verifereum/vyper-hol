@@ -1,6 +1,8 @@
 (*
  * Venom Semantics
  *
+ * Upstream: vyperlang/vyper@cff4f6822 (sunset palloca/calloca)
+ *
  * This theory defines the operational semantics for Venom IR execution.
  * It includes the effects system and instruction stepping.
  *)

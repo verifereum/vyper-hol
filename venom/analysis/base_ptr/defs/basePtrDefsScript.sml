@@ -1,7 +1,7 @@
 (*
  * Base Pointer Analysis — Definitions
  *
- * Ported from vyper/venom/analysis/base_ptr_analysis.py.
+ * Upstream: vyperlang/vyper@c58034a22 (add/sub propagation, ctx removal)
  * Forward flow analysis: traces memory/storage pointers back to
  * their base allocation (alloca).
  *

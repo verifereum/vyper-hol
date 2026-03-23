@@ -1,7 +1,7 @@
 (*
  * Memory Copy Elision — Definitions
  *
- * Ports vyper/venom/passes/memory_copy_elision.py to HOL4.
+ * Upstream: vyperlang/vyper@cff4f6822 (bp_analyze ctx removal)
  *
  * Eliminates redundant memory copies by tracking which memory
  * locations already contain the expected data.

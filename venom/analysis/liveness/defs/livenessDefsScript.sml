@@ -1,6 +1,8 @@
 (*
  * Liveness Analysis — Definitions
  *
+ * Upstream: vyperlang/vyper@d21ee3ba9 (positional phi substitution)
+ *
  * Backward liveness analysis via generic df_analyze framework.
  *
  * TOP-LEVEL:

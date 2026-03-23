@@ -1,7 +1,7 @@
 (*
  * Concretize Memory Locations — Definitions
  *
- * Ports vyper/venom/passes/concretize_mem_loc.py to HOL4.
+ * Upstream: vyperlang/vyper@cff4f6822 (alloca-only)
  *
  * Replaces abstract memory allocation instructions (alloca)
  * with concrete ASSIGN of computed memory offsets, and replaces

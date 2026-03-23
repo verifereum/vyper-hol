@@ -1,6 +1,8 @@
 (*
  * Venom Instructions
  *
+ * Upstream: vyperlang/vyper@cff4f6822 (sunset palloca/calloca)
+ *
  * This theory defines the instruction set for Venom IR.
  *)
 

@@ -22,7 +22,7 @@
  *   m2v_fix_add_inst            — convert add to GEP for escaped allocas
  *   m2v_transform_function      — function-level transform
  *
- * Upstream: vyper-ref cff4f6822 (palloca/calloca sunset)
+ * Upstream: vyperlang/vyper@cff4f6822 (alloca-only)
  *)
 
 Theory mem2varDefs

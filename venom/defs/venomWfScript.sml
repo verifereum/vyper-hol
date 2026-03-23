@@ -1,6 +1,8 @@
 (*
  * Venom Well-Formedness Predicates
  *
+ * Upstream: vyperlang/vyper@cff4f6822 (sunset palloca/calloca)
+ *
  * This theory defines structural well-formedness for Venom IR functions
  * and contexts: entry blocks, block structure, successor closure, and
  * context-level invariants.
