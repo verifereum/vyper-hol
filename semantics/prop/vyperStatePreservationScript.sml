@@ -194,3 +194,14 @@ Theorem handle_loop_exception_state:
 Proof
   rw[handle_loop_exception_def, return_def, raise_def]
 QED
+
+Theorem new_variable_immutables:
+  !id tv v st res st'.
+    new_variable id tv v st = (res, st') ==>
+    st'.immutables = st.immutables
+Proof
+  rw[new_variable_def, bind_def, get_scopes_def, return_def,
+     type_check_def, assert_def, set_scopes_def, raise_def,
+     ignore_bind_def, AllCaseEqs()] >>
+  Cases_on `st.scopes` >> gvs[raise_def, return_def, set_scopes_def]
+QED
