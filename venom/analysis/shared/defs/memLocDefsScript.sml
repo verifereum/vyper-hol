@@ -19,7 +19,7 @@ Ancestors
 
 (* ===== Allocation and Pointer Types ===== *)
 
-(* An allocation is identified by the alloca/palloca instruction that created it *)
+(* An allocation is identified by the alloca instruction that created it *)
 Datatype:
   allocation = Allocation num   (* inst_id *)
 End

@@ -451,7 +451,7 @@ Definition copy_elision_function_def:
   copy_elision_function prog_ctx fn =
     let cfg = cfg_analyze fn in
     let dfg = dfg_build_function fn in
-    let bp = bp_analyze prog_ctx cfg fn in
+    let bp = bp_analyze cfg fn in
     let aliases = memory_alias_analyze bp fn in
     let ctx = <| ce_aliases := aliases; ce_bp := bp;
                  ce_dfg := dfg |> in

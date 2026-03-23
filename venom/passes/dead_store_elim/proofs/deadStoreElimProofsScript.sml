@@ -16,7 +16,7 @@ Ancestors
 Theorem dse_function_space_correct_proof:
   !analysis_fn cfg aliases bp space fuel ctx fn s.
     (!fn'. all_dead_stores (analysis_fn space fn')
-             (cfg_analyze fn') aliases (bp_analyze ctx (cfg_analyze fn') fn')
+             (cfg_analyze fn') aliases (bp_analyze (cfg_analyze fn') fn')
              space fn') ==>
     lift_result (dse_equiv space) (dse_equiv space)
       (run_function fuel ctx fn s)
@@ -30,7 +30,7 @@ Theorem dse_function_correct_proof:
   !analysis_fn aliases fuel ctx fn s.
     (!space fn'.
       all_dead_stores (analysis_fn space fn')
-        (cfg_analyze fn') aliases (bp_analyze ctx (cfg_analyze fn') fn')
+        (cfg_analyze fn') aliases (bp_analyze (cfg_analyze fn') fn')
         space fn') ==>
     lift_result dse_all_equiv dse_all_equiv
       (run_function fuel ctx fn s)
