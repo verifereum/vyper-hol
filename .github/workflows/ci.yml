@@ -109,3 +109,12 @@ jobs:
           targets=$(echo "$tests" | tail -n +$((start + 1)) | head -n $per_group | sed 's/Script\.sml/Theory.uo/' | tr '\n' ' ')
           echo "Building: $targets"
           Holmake --qof $targets
+
+  ci-success:
+    if: always()
+    runs-on: ubuntu-latest
+    needs: [build, vyper-tests]
+    steps:
+      - name: Check all jobs succeeded
+        if: ${{ contains(needs.*.result, 'failure') }}
+        run: exit 1
