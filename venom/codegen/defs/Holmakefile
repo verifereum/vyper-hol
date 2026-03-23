@@ -1,0 +1,8 @@
+# Venom codegen definitions
+# From codegen/defs/ relative paths:
+#   ../../defs  = venom/defs     (venomInst, venomState, venomEffects)
+#   ../../..    = project root   (syntax/, semantics/)
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec \
+           ../../defs ../../passes/shared/defs \
+           ../../analysis/liveness/defs ../../analysis/cfg/defs \
+           ../../analysis/dfg/defs ../../../syntax ../../../semantics
