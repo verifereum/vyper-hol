@@ -1,3 +1,0 @@
-Theory floatAllocas
-Ancestors
-  floatAllocasDefs floatAllocasCorrectness
