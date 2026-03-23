@@ -9,6 +9,7 @@ INCLUDES = \
   phi_elimination \
   revert_to_assert \
   assert_elim \
+  overflow_elim \
   literals_codesize \
   remove_unused \
   concretize_mem_loc \
