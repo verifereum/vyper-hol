@@ -44,3 +44,6 @@ Ancestors
   sccp
   (* interprocedural *)
   functionInliner
+  (* invoke copy forwarding *)
+  internalReturnCopyFwdProofs
+  readonlyInvokeCopyFwdProofs

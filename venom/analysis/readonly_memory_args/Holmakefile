@@ -1,0 +1,2 @@
+# Readonly memory args analysis
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../../syntax ../../../semantics ../shared ../shared/defs ../cfg/defs ../dataflow/defs ../base_ptr ../base_ptr/defs ../dfg/defs defs

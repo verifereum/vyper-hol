@@ -33,4 +33,7 @@ INCLUDES = \
   assign_elim \
   cse \
   sccp \
-  function_inliner
+  function_inliner \
+  invoke_copy_fwd_common \
+  internal_return_copy_fwd \
+  readonly_invoke_copy_fwd
