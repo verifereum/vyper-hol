@@ -28,7 +28,7 @@ Theorem subst_operand_eval:
     eval_operand new_op s = eval_operand (Var old) s ==>
     eval_operand (subst_operand old new_op op) s = eval_operand op s
 Proof
-  Cases_on `op` >> rw[subst_operand_def, eval_operand_def] >> rw[]
+  Cases_on `op` >> rw[subst_operand_def, eval_operand_def]
 QED
 
 Theorem subst_op_map_eval:
@@ -339,7 +339,7 @@ Proof
 QED
 
 (* Stronger version: inst_wf handles structural positions, only PHI excluded.
-   Strategy: structural opcodes (PARAM, ALLOCA, PALLOCA, CALLOCA, LOG,
+   Strategy: structural opcodes (PARAM, ALLOCA, LOG,
    JMP, JNZ, DJMP, OFFSET, INVOKE) handled by inst_wf + definition unfolding.
    All other non-PHI opcodes handled by step_inst_base_operands_irrelevant_safe
    (which only needs eval_operand equivalence). *)
@@ -375,9 +375,8 @@ Proof
          (irule subst_operands_map_id >> simp[subst_op_map_def]) >>
        simp[] >> NO_TAC) >>
   gvs[subst_operands_map_def, subst_op_map_def] >|
-  [(* CALLOCA: resolve is_alloca_op *)
-   `inst.inst_opcode = ALLOCA \/ inst.inst_opcode = PALLOCA \/
-    inst.inst_opcode = CALLOCA` by
+  [(* ALLOCA: resolve is_alloca_op *)
+   `inst.inst_opcode = ALLOCA` by
      (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]) >>
    gvs[inst_wf_def, subst_op_map_def, step_inst_def, exec_alloca_def] >>
    simp[Once step_inst_base_def, SimpLHS] >>

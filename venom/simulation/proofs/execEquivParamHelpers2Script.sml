@@ -91,7 +91,7 @@ QED
 Theorem vsr_step_inst_alloca:
   !R_ok R_term inst s1 s2.
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
-    MEM inst.inst_opcode [ALLOCA;PALLOCA;CALLOCA] ==>
+    inst.inst_opcode = ALLOCA ==>
     lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[step_inst_base_def] >>
