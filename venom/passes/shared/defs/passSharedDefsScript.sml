@@ -17,6 +17,12 @@
  *   subst_operand         — substitute a variable in an operand
  *   subst_operands        — substitute a variable across all operands
  *   subst_operands_map    — substitute multiple variables via fmap
+ *   is_lit_op             — check if operand is a literal
+ *   lit_eq                — check if operand is a literal with a specific value
+ *   is_power_of_two       — power-of-two check for bytes32
+ *   word_log2             — integer log2 for bytes32
+ *   is_comparator         — comparator opcode check (GT, LT, SGT, SLT)
+ *   flip_comparison_opcode — flip comparison opcode (GT↔LT, SGT↔SLT)
  *)
 
 Theory passSharedDefs
@@ -233,6 +239,47 @@ Definition transitive_use_vars_def:
                 (INL vars) of
       SOME (INR result) => result
     | _ => vars
+End
+
+(* ===== General IR Utilities ===== *)
+
+(* Check if operand is a literal *)
+Definition is_lit_op_def:
+  is_lit_op (Lit _) = T /\
+  is_lit_op _ = F
+End
+
+(* Check if operand is a literal with a specific value *)
+Definition lit_eq_def:
+  lit_eq op v <=>
+    case op of Lit w => (w = v) | _ => F
+End
+
+(* Power-of-two check: w ≠ 0 ∧ w AND (w - 1) = 0 *)
+Definition is_power_of_two_def:
+  is_power_of_two (w : bytes32) <=>
+    w <> 0w /\ word_and w (w - 1w) = 0w
+End
+
+(* Integer log2: find n such that 2^n = w. Returns 0 for non-powers. *)
+Definition word_log2_def:
+  word_log2 (w : bytes32) : bytes32 =
+    n2w (LOG2 (w2n w))
+End
+
+(* Comparator opcode check *)
+Definition is_comparator_def:
+  is_comparator (opc : opcode) <=>
+    (opc = GT \/ opc = LT \/ opc = SGT \/ opc = SLT)
+End
+
+(* Flip comparison opcode: GT↔LT, SGT↔SLT *)
+Definition flip_comparison_opcode_def:
+  flip_comparison_opcode GT = (LT : opcode) /\
+  flip_comparison_opcode LT = GT /\
+  flip_comparison_opcode SGT = SLT /\
+  flip_comparison_opcode SLT = SGT /\
+  flip_comparison_opcode opc = opc
 End
 
 (* ===== Single Use Form ===== *)

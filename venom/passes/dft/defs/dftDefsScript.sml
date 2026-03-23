@@ -19,7 +19,7 @@
 
 Theory dftDefs
 Ancestors
-  venomEffects venomWf stackOrderDefs livenessDefs
+  venomEffects venomWf stackOrderDefs livenessDefs passSharedDefs
 
 (* ===== Effect Enumeration (deterministic) ===== *)
 
@@ -181,24 +181,14 @@ End
 (* ===== Operand Flipping ===== *)
 
 (* Python: inst.flippable = is_commutative or is_comparator.
-   is_commutative is inherited from venomEffectsTheory. *)
-Definition is_comparator_def:
-  is_comparator op <=>
-    op = GT \/ op = LT \/ op = SGT \/ op = SLT
-End
+   is_commutative is inherited from venomEffectsTheory.
+   is_comparator is inherited from passSharedDefsTheory. *)
 
 Definition is_flippable_def:
   is_flippable op <=> is_commutative op \/ is_comparator op
 End
 
-(* Python: flip_comparison_opcode swaps GT↔LT, SGT↔SLT *)
-Definition flip_comparison_opcode_def:
-  flip_comparison_opcode GT = LT ∧
-  flip_comparison_opcode LT = GT ∧
-  flip_comparison_opcode SGT = SLT ∧
-  flip_comparison_opcode SLT = SGT ∧
-  flip_comparison_opcode op = op  (* identity for non-comparators *)
-End
+(* flip_comparison_opcode is inherited from passSharedDefsTheory *)
 
 Definition flip_operands_def:
   flip_operands inst =
