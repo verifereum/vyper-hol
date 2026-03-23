@@ -40,8 +40,8 @@ QED
 (* Transfer function only modifies the output variable's pointer set.
  * Needed for any analysis that reasons about variables not defined by inst. *)
 Theorem bp_handle_inst_other_var:
-  ∀ctx result inst c r v.
-    bp_handle_inst ctx result inst = (c, r) ∧
+  ∀result inst c r v.
+    bp_handle_inst result inst = (c, r) ∧
     inst_output inst ≠ SOME v ⇒
     bp_get_ptrs r v = bp_get_ptrs result v
 Proof
@@ -50,8 +50,8 @@ QED
 
 (* No-output instructions don't modify the pointer map at all. *)
 Theorem bp_handle_inst_no_output_unchanged:
-  ∀ctx result inst c r.
-    bp_handle_inst ctx result inst = (c, r) ∧
+  ∀result inst c r.
+    bp_handle_inst result inst = (c, r) ∧
     inst_output inst = NONE ⇒
     r = result
 Proof

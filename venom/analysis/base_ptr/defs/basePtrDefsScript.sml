@@ -3,7 +3,7 @@
  *
  * Ported from vyper/venom/analysis/base_ptr_analysis.py.
  * Forward flow analysis: traces memory/storage pointers back to
- * their base allocation (alloca/palloca).
+ * their base allocation (alloca).
  *
  * TOP-LEVEL:
  *   ptr, offset_by,
@@ -61,35 +61,24 @@ Definition bp_get_ptrs_def:
     | NONE => {}
 End
 
-(* ===== Cross-Function Helpers ===== *)
-
-(* Find a palloca instruction with a given alloca_id in a function.
- * Scans all blocks' instructions for a PALLOCA with matching inst_id.
- * Matches Python IRFunction.get_palloca_inst. *)
-Definition find_palloca_inst_def:
-  find_palloca_inst fn alloca_id =
-    FIND (λinst. inst.inst_opcode = PALLOCA ∧ inst.inst_id = alloca_id)
-         (FLAT (MAP (λbb. bb.bb_instructions) fn.fn_blocks))
-End
-
 (* ===== Transfer Function ===== *)
 
 (* Process a single instruction, updating the pointer map.
- * ctx: program context (needed for calloca cross-function lookup)
  * Returns (changed, new_result).
  * Matches Python _handle_inst. *)
 Definition bp_handle_inst_def:
-  bp_handle_inst ctx (result : bp_result) inst =
+  bp_handle_inst (result : bp_result) inst =
     case inst_output inst of
       NONE => (F, result)
     | SOME out =>
         let original = bp_get_ptrs result out in
         let new_result =
           case inst.inst_opcode of
-            (* alloca/palloca: fresh allocation at offset 0 *)
+            (* alloca: fresh allocation at offset 0 *)
             ALLOCA => result |+ (out, {ptr_from_alloca inst})
-          | PALLOCA => result |+ (out, {ptr_from_alloca inst})
-            (* gep: base + offset. operands = [base_var, offset_operand] *)
+            (* gep/add: base + offset. operands = [base_var, offset_operand]
+             * add propagates pointers when one operand is a tracked pointer
+             * and the other is a literal offset. Matches Python (c58034a22). *)
           | GEP =>
               (case inst.inst_operands of
                  [Var base_var; offset_op] =>
@@ -97,6 +86,47 @@ Definition bp_handle_inst_def:
                    let off = case offset_op of Lit n => SOME (w2n n)
                                              | _ => NONE in
                    result |+ (out, IMAGE (λp. offset_by p off) base_ptrs)
+               | _ => result)
+            (* add/sub: pointer arithmetic. Matches Python (c58034a22).
+             * HOL semantic order: [lhs; rhs].
+             * Python stack order: rhs, lhs = inst.operands.
+             * Exact offset when one side is pointer + other is literal.
+             * Unknown offset when both are vars but one is pointer.
+             * SUB: only lhs can be pointer (ptr - offset). *)
+          | ADD =>
+              (case inst.inst_operands of
+                 [Var lhs; Lit rhs] =>
+                   let ptrs = bp_get_ptrs result lhs in
+                   if ptrs ≠ {} then
+                     result |+ (out, IMAGE (λp. offset_by p (SOME (w2n rhs))) ptrs)
+                   else result
+               | [Lit lhs; Var rhs] =>
+                   let ptrs = bp_get_ptrs result rhs in
+                   if ptrs ≠ {} then
+                     result |+ (out, IMAGE (λp. offset_by p (SOME (w2n lhs))) ptrs)
+                   else result
+               | [Var lhs; Var rhs] =>
+                   let p_lhs = bp_get_ptrs result lhs in
+                   let p_rhs = bp_get_ptrs result rhs in
+                   if p_lhs ≠ {} ∧ p_rhs = {} then
+                     result |+ (out, IMAGE (λp. offset_by p NONE) p_lhs)
+                   else if p_lhs = {} ∧ p_rhs ≠ {} then
+                     result |+ (out, IMAGE (λp. offset_by p NONE) p_rhs)
+                   else result
+               | _ => result)
+          | SUB =>
+              (case inst.inst_operands of
+                 [Var lhs; Lit _] =>
+                   let ptrs = bp_get_ptrs result lhs in
+                   if ptrs ≠ {} then
+                     (* sub ptr literal: same alloca, unknown offset *)
+                     result |+ (out, IMAGE (λp. offset_by p NONE) ptrs)
+                   else result
+               | [Var lhs; Var _] =>
+                   let ptrs = bp_get_ptrs result lhs in
+                   if ptrs ≠ {} then
+                     result |+ (out, IMAGE (λp. offset_by p NONE) ptrs)
+                   else result
                | _ => result)
             (* phi: union of all operand pointer sets *)
           | PHI =>
@@ -107,20 +137,6 @@ Definition bp_handle_inst_def:
           | ASSIGN =>
               (case inst.inst_operands of
                  [Var src] => result |+ (out, bp_get_ptrs result src)
-               | _ => result)
-            (* calloca: cross-function allocation.
-             * operands = [size, Lit alloca_id, Label callee_label]
-             * Look up callee's palloca instruction and use its allocation. *)
-          | CALLOCA =>
-              (case inst.inst_operands of
-                 [_; Lit alloca_id; Label callee_label] =>
-                   (case lookup_function callee_label ctx.ctx_functions of
-                      SOME callee =>
-                        (case find_palloca_inst callee (w2n alloca_id) of
-                           SOME palloca =>
-                             result |+ (out, {ptr_from_alloca palloca})
-                         | NONE => result)
-                    | NONE => result)
                | _ => result)
             (* all other opcodes: don't update pointer info *)
           | _ => result
@@ -134,10 +150,10 @@ End
 (* Process all instructions in a block, accumulating the result.
  * Returns (changed, result). *)
 Definition bp_process_block_def:
-  bp_process_block ctx result [] = (F, result) ∧
-  bp_process_block ctx result (inst::insts) =
-    let (c1, r1) = bp_handle_inst ctx result inst in
-    let (c2, r2) = bp_process_block ctx r1 insts in
+  bp_process_block result [] = (F, result) ∧
+  bp_process_block result (inst::insts) =
+    let (c1, r1) = bp_handle_inst result inst in
+    let (c2, r2) = bp_process_block r1 insts in
     (c1 ∨ c2, r2)
 End
 
@@ -146,28 +162,28 @@ End
 (* One pass over all blocks in DFS pre-order.
  * Returns (changed, result). *)
 Definition bp_one_pass_aux_def:
-  bp_one_pass_aux ctx fn result [] = (F, result) ∧
-  bp_one_pass_aux ctx fn result (lbl::lbls) =
+  bp_one_pass_aux fn result [] = (F, result) ∧
+  bp_one_pass_aux fn result (lbl::lbls) =
     case FIND (λbb. bb.bb_label = lbl) fn.fn_blocks of
-      NONE => bp_one_pass_aux ctx fn result lbls
+      NONE => bp_one_pass_aux fn result lbls
     | SOME bb =>
-        let (c1, r1) = bp_process_block ctx result bb.bb_instructions in
-        let (c2, r2) = bp_one_pass_aux ctx fn r1 lbls in
+        let (c1, r1) = bp_process_block result bb.bb_instructions in
+        let (c2, r2) = bp_one_pass_aux fn r1 lbls in
         (c1 ∨ c2, r2)
 End
 
 Definition bp_one_pass_def:
-  bp_one_pass ctx fn order result =
-    bp_one_pass_aux ctx fn result order
+  bp_one_pass fn order result =
+    bp_one_pass_aux fn result order
 End
 
 (* Top-level analysis: iterate one-pass until fixpoint.
  * Uses df_iterate (WHILE-based). *)
 Definition bp_analyze_def:
-  bp_analyze ctx cfg fn =
+  bp_analyze cfg fn =
     let order = cfg.cfg_dfs_pre in
     let init : bp_result = FEMPTY in
-    df_iterate (λr. SND (bp_one_pass ctx fn order r)) init
+    df_iterate (λr. SND (bp_one_pass fn order r)) init
 End
 
 (* ===== Memory Location Queries ===== *)
