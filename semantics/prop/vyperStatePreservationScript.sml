@@ -195,6 +195,24 @@ Proof
   rw[handle_loop_exception_def, return_def, raise_def]
 QED
 
+Theorem update_accounts_immutables:
+  !f st res st'. update_accounts f st = (res, st') ==> st'.immutables = st.immutables
+Proof
+  rw[update_accounts_def, return_def] >> gvs[]
+QED
+
+Theorem update_transient_immutables:
+  !f st res st'. update_transient f st = (res, st') ==> st'.immutables = st.immutables
+Proof
+  rw[update_transient_def, return_def] >> gvs[]
+QED
+
+Theorem lift_sum_runtime_state:
+  !x st res st'. lift_sum_runtime x st = (res, st') ==> st' = st
+Proof
+  rw[lift_sum_runtime_def] >> Cases_on `x` >> fs[return_def, raise_def]
+QED
+
 Theorem new_variable_immutables:
   !id tv v st res st'.
     new_variable id tv v st = (res, st') ==>

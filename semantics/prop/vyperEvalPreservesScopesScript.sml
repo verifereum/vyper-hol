@@ -1574,7 +1574,93 @@ Proof
     gvs[] >> first_x_assum drule_all >> rw[] >>
     gvs[preserves_tv_def] ) >>
   (* ExtCall *)
-  conj_tac >- cheat >>
+  conj_tac >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    pop_assum mp_tac >>
+    simp_tac std_ss [evaluate_def, bind_apply, ignore_bind_apply] >>
+    BasicProvers.TOP_CASE_TAC >> first_x_assum drule >> strip_tac >>
+    reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
+    first_x_assum drule >> strip_tac >>
+    BasicProvers.TOP_CASE_TAC >> imp_res_tac check_state >>
+    BasicProvers.VAR_EQ_TAC >>
+    reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
+    first_x_assum drule >> strip_tac >>
+    BasicProvers.TOP_CASE_TAC >> imp_res_tac lift_option_type_state >>
+    reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
+    BasicProvers.VAR_EQ_TAC >>
+    first_x_assum drule >> strip_tac >>
+    simp[bind_def] >>
+    BasicProvers.TOP_CASE_TAC >>
+    qmatch_assum_rename_tac`_ r = (_, rrr)` >>
+    sg `rrr = r` >- (
+      first_x_assum(qspec_then`ARB`kall_tac) >>
+      gvs[COND_RATOR, AllCaseEqs(), return_def, ignore_bind_apply,
+          bind_apply] >>
+      imp_res_tac check_state >>
+      imp_res_tac lift_option_type_state >>
+      rw[] >> gvs[] ) >>
+    BasicProvers.VAR_EQ_TAC >>
+    reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
+    pairarg_tac >>
+    BasicProvers.VAR_EQ_TAC >>
+    simp_tac std_ss [] >>
+    simp[bind_apply] >>
+    BasicProvers.TOP_CASE_TAC >>
+    first_x_assum drule >>
+    simp_tac std_ss [] >>
+    strip_tac >>
+    imp_res_tac lift_option_state >>
+    BasicProvers.VAR_EQ_TAC >>
+    reverse BasicProvers.TOP_CASE_TAC >- ( rw[] >> rw[] ) >>
+    first_x_assum drule >> strip_tac >>
+    BasicProvers.TOP_CASE_TAC >>
+    imp_res_tac get_accounts_state >>
+    BasicProvers.VAR_EQ_TAC >>
+    reverse BasicProvers.TOP_CASE_TAC >- ( rw[] >> rw[] ) >>
+    first_x_assum drule >> strip_tac >>
+    BasicProvers.TOP_CASE_TAC >>
+    imp_res_tac get_transient_storage_state >>
+    BasicProvers.VAR_EQ_TAC >>
+    reverse BasicProvers.TOP_CASE_TAC >- ( rw[] >> rw[] ) >>
+    first_x_assum drule >> strip_tac >>
+    BasicProvers.TOP_CASE_TAC >>
+    imp_res_tac lift_option_state >>
+    BasicProvers.VAR_EQ_TAC >>
+    reverse BasicProvers.TOP_CASE_TAC >- ( rw[] >> rw[] ) >>
+    BasicProvers.VAR_EQ_TAC >>
+    pairarg_tac >>
+    BasicProvers.VAR_EQ_TAC >>
+    simp_tac std_ss [] >>
+    simp[ignore_bind_apply] >>
+    BasicProvers.TOP_CASE_TAC >>
+    imp_res_tac check_state >>
+    BasicProvers.VAR_EQ_TAC >>
+    reverse BasicProvers.TOP_CASE_TAC >- ( rw[] >> rw[] ) >>
+    BasicProvers.TOP_CASE_TAC >>
+    imp_res_tac update_accounts_scopes >>
+    imp_res_tac update_accounts_immutables >>
+    BasicProvers.VAR_EQ_TAC >>
+    reverse BasicProvers.TOP_CASE_TAC >- (
+      rw[] >> gvs[preserves_tv_def] ) >>
+    BasicProvers.TOP_CASE_TAC >>
+    imp_res_tac update_transient_scopes >>
+    imp_res_tac update_transient_immutables >>
+    reverse BasicProvers.TOP_CASE_TAC >- (
+      rw[] >> gvs[preserves_tv_def] ) >>
+    reverse IF_CASES_TAC >- (
+      simp[bind_apply, AllCaseEqs(), return_def] >>
+      rw[] >> imp_res_tac lift_sum_runtime_state >> gvs[] >>
+      irule preserves_tv_trans >>
+      goal_assum drule >>
+      gvs[preserves_tv_def] ) >>
+    strip_tac >> gvs[] >>
+    first_x_assum drule_all >>
+    rw[] >>
+    irule preserves_tv_trans >>
+    goal_assum drule >>
+    irule preserves_tv_trans >>
+    goal_assum $ drule_at Any >>
+    gvs[preserves_tv_def]) >>
   (* IntCall *)
   conj_tac >- cheat >>
   (* eval_exprs [] *)
