@@ -66,10 +66,7 @@ Theorem block_sim_function:
       lift_result R_ok R_term (run_function fuel ctx fn s)
                  (run_function fuel ctx (function_map_transform bt fn) s)
 Proof
-  (* Old proof (unconditional lift_result, no error disjunct):
   ACCEPT_TAC block_sim_function_proof
-  *)
-  cheat
 QED
 
 (* Reachability-guarded version: entry block unconditional, non-entry needs prev_bb *)
