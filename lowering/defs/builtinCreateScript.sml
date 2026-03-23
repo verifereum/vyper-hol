@@ -2,11 +2,14 @@
  * Contract Creation Built-in Functions
  *
  * TOP-LEVEL:
- *   compile_raw_create        — raw_create(bytecode, value, salt)
- *   compile_check_create_result — validate CREATE result
+ *   compile_raw_create        — full raw_create with optional ctor args
  *   compile_create_proxy      — create_minimal_proxy_to (EIP-1167)
  *   compile_create_copy       — create_copy_of (extcodecopy + preamble)
  *   compile_create_blueprint  — create_from_blueprint (ERC-5202, with ctor args)
+ *
+ * Helper:
+ *   compile_create_dispatch   — inner CREATE/CREATE2 + result check
+ *   compile_check_create_result — validate CREATE result
  *
  * Each returns the new contract address.
  * Salt parameter triggers CREATE2 instead of CREATE.
@@ -16,7 +19,7 @@
 
 Theory builtinCreate
 Ancestors
-  emitHelper context compileEnv venomInst
+  emitHelper context abiEncoder compileEnv venomInst
 Libs
   monadsyntax
 
@@ -48,12 +51,11 @@ Definition compile_check_create_result_def:
       return result
 End
 
-(* ===== raw_create ===== *)
-(* Mirrors Python: create.py lower_raw_create
-   Deploy arbitrary bytecode with optional ctor args.
-   CREATE(value, offset, size) or CREATE2(value, offset, size, salt) *)
-Definition compile_raw_create_def:
-  compile_raw_create code_ptr code_len value_op salt_opt
+(* ===== CREATE/CREATE2 dispatch ===== *)
+(* Inner dispatch: emit CREATE or CREATE2 + check result.
+   Used by compile_raw_create, compile_create_proxy, compile_create_copy. *)
+Definition compile_create_dispatch_def:
+  compile_create_dispatch code_ptr code_len value_op salt_opt
                      revert_on_failure =
     do result <-
          (case salt_opt of
@@ -61,6 +63,50 @@ Definition compile_raw_create_def:
           | SOME salt_op => emit_op CREATE2
               [value_op; code_ptr; code_len; salt_op]);
        compile_check_create_result result revert_on_failure
+    od
+End
+
+(* ===== raw_create ===== *)
+(* Full raw_create pipeline with optional ABI-encoded constructor arguments.
+   Mirrors Python: create.py lower_raw_create
+
+   bytecode_op: pointer to bytestring [length][data] in memory.
+     Caller must materialize from storage/transient before calling.
+     Python copies bytecode to a fresh buffer to avoid overlap with
+     subsequent expressions (value, salt, ctor args). We take the
+     bytecode already materialized to memory.
+   ctor_args_info: NONE for no ctor args, or
+     SOME (args_ptr, args_enc_info, abi_size, bytecode_maxlen) for ctor args.
+     args_ptr: pointer to ctor args tuple in Vyper memory layout.
+     args_enc_info: ABI encoding info for the ctor args tuple type.
+     abi_size: abi_type.size_bound() for the ctor args tuple.
+     bytecode_maxlen: max length of bytecode (for buffer sizing). *)
+Definition compile_raw_create_def:
+  compile_raw_create bytecode_op value_op salt_opt
+                     revert_on_failure ctor_args_info =
+    do (* Get bytecode length and data pointer *)
+       bytecode_len <- emit_op MLOAD [bytecode_op];
+       bytecode_ptr <- emit_op ADD [bytecode_op; Lit 32w];
+       (case ctor_args_info of
+          NONE =>
+            (* No ctor args: CREATE directly from bytecode *)
+            compile_create_dispatch bytecode_ptr bytecode_len
+              value_op salt_opt revert_on_failure
+        | SOME (args_ptr, args_enc_info, abi_size, bytecode_maxlen) =>
+            (* With ctor args: alloc buffer, copy bytecode, ABI-encode args, append *)
+            do buf_alloc <- compile_alloc_buffer (bytecode_maxlen + abi_size);
+               buf <- return buf_alloc.buf_operand;
+               (* Copy bytecode to buffer *)
+               compile_copy_memory_dynamic buf bytecode_ptr bytecode_len;
+               (* ABI encode ctor args after bytecode *)
+               args_start <- emit_op ADD [buf; bytecode_len];
+               args_len <- compile_abi_encode_to_buf args_start args_ptr
+                             args_enc_info;
+               (* Total length = bytecode_len + args_len *)
+               total_len <- emit_op ADD [bytecode_len; args_len];
+               compile_create_dispatch buf total_len
+                 value_op salt_opt revert_on_failure
+            od)
     od
 End
 
@@ -97,7 +143,7 @@ Definition compile_create_proxy_def:
        emit_void MSTORE [buf_post;
          Lit 0x5af43d82803e903d91602b57fd5bf30000000000000000000000000000000000w];
        (* Create with 54 bytes total (19 + 20 + 15) *)
-       compile_raw_create buf (Lit 54w) value_op salt_opt revert_on_failure
+       compile_create_dispatch buf (Lit 54w) value_op salt_opt revert_on_failure
     od
 End
 

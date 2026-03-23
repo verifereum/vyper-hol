@@ -285,7 +285,11 @@ Datatype:
        (is_nonreentrant, nkey, use_transient, is_view).
        Python: stmt.py _lower_external_return calls emit_nonreentrant_unlock.
        is_nonreentrant is the boolean flag — nkey CAN be 0 for the first lock slot. *)
-    ce_nonreentrant : (bool # num # bool # bool)
+    ce_nonreentrant : (bool # num # bool # bool);
+    (* Raw return: T for @raw_return decorated functions (proxy patterns).
+       Bypasses ABI encoding, returns bytes directly.
+       Mirrors Python: func_t.do_raw_return *)
+    ce_raw_return : bool
   |>
 End
 

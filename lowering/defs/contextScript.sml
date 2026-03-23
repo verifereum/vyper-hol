@@ -204,13 +204,8 @@ End
    Mirrors Python: context.py store_memory
    Primitive word types: direct mstore.
    Complex types: memory copy (val is src ptr).
-   KNOWN BUG: Missing bytestring case. Python has 3 cases:
-   1. prim_word → MSTORE
-   2. _BytestringT → dynamic copy: 32 + ceil32(actual_length)
-   3. other complex → MCOPY of mem_bytes_required (static)
-   This function only handles cases 1 and 3. Case 2 is in
-   compile_store_bytestring (contextScript.sml:476). Callers
-   must dispatch to the correct function for bytestrings. *)
+   Bytestring case handled separately in compile_store_bytestring.
+   Callers must dispatch bytestrings to compile_store_bytestring. *)
 (* Simple store memory (no typed copy). Used when src_typ = dst_typ.
    For layout-aware copy when src_typ ≠ dst_typ, see
    compile_store_memory_typed and compile_assign_value. *)
@@ -350,27 +345,6 @@ Definition compile_load_immutable_def:
             return buf_op
          od
       od
-End
-
-(* ===== Materialize to Memory ===== *)
-(* Materialize a complex value from its source location to memory if needed.
-   For primitive types or already-in-memory: returns val_op unchanged.
-   For storage/transient: allocates buffer, copies to memory, returns buffer ptr.
-   For code: allocates buffer, copies via DLOAD/ILOAD loop, returns buffer ptr.
-   is_ctor: T in constructor context — LocCode uses ILOAD instead of DLOAD.
-   Mirrors Python: context.py unwrap() for complex types. *)
-Definition compile_materialize_to_memory_def:
-  compile_materialize_to_memory val_op src_loc is_prim word_count
-                                alloca_size is_ctor =
-    if is_prim then return val_op
-    else case src_loc of
-       LocStorage =>
-         compile_load_storage val_op F word_count alloca_size
-     | LocTransient =>
-         compile_load_transient val_op F word_count alloca_size
-     | LocCode =>
-         compile_load_immutable val_op F word_count alloca_size is_ctor
-     | _ => return val_op
 End
 
 (* ===== Nonreentrant Lock ===== *)

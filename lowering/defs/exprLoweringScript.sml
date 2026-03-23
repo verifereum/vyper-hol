@@ -1808,6 +1808,8 @@ Definition compile_make_array_def:
        dst <- (if data_offset = 0 then return buf_op
                else emit_op ADD [buf_op; Lit (n2w data_offset)]);
        (if is_prim then emit_void MSTORE [dst; v]
+        else if is_bytestring_type e_ty then
+          compile_store_bytestring v dst
         else emit_void MCOPY [dst; v; Lit (n2w elem_size)]);
        compile_make_array cfn cenv es elem_size has_length_word alloca_size
                           buf_op (cur_idx + 1)
@@ -1959,6 +1961,8 @@ Definition compile_struct_lit_def:
                else emit_op ADD [buf_op; Lit (n2w cur_offset)]);
        v <- lower_value cfn cenv e_ty e;
        (if is_prim then emit_void MSTORE [dst; v]
+        else if is_bytestring_type e_ty then
+          compile_store_bytestring v dst
         else emit_void MCOPY [dst; v; Lit (n2w field_size)]);
        compile_struct_lit cfn cenv ty rest buf_op (cur_offset + field_size)
     od
@@ -2139,6 +2143,18 @@ End
    NOTE: Python only allows ~ on uint256, bytes32, FlagT.
    The catch-all relies on the Vyper type checker to prevent
    ~ on signed types where NOT has surprising semantics. *)
+(* Store a list of word operands sequentially at 32-byte intervals.
+   Used to stage ctor args into a tuple buffer for ABI encoding. *)
+Definition compile_store_words_def:
+  compile_store_words buf_op ([] : operand list) offset = return () ∧
+  compile_store_words buf_op (v::vs) offset =
+    do dst <- (if offset = (0:num) then return buf_op
+               else emit_op ADD [buf_op; Lit (n2w offset)]);
+       emit_void MSTORE [dst; v];
+       compile_store_words buf_op vs (offset + 32)
+    od
+End
+
 Definition compile_invert_def:
   compile_invert v (FlagT flag_name) cenv =
     (let n_members = cenv.ce_flag_n_members flag_name in
@@ -2315,18 +2331,23 @@ val compile_expr_defn = Defn.Hol_defn "compile_expr" `
           as_stack_val ret_ty (compile_binop op v1 v2 op_ty st2))
      | Not =>
          (let e1 = HD args in
-          let (v, st1) = lower_value compile_expr cenv (BaseT BoolT) e1 st in
-          as_stack_val ret_ty (emit_op ISZERO [v] st1))
+          let e_ty = expr_type e1 in
+          let (v, st1) = lower_value compile_expr cenv e_ty e1 st in
+          (* Not is overloaded: ISZERO for booleans, bitwise NOT/XOR otherwise.
+             Mirrors interpreter evaluate_builtin Not cases. *)
+          if e_ty = BaseT BoolT then
+            as_stack_val ret_ty (emit_op ISZERO [v] st1)
+          else
+            as_stack_val ret_ty (compile_invert v e_ty cenv st1))
      | Neg =>
          (let e1 = HD args in
           let neg_ty = expr_type e1 in
           let (v, st1) = lower_value compile_expr cenv neg_ty e1 st in
           as_stack_val ret_ty (compile_neg v neg_ty st1))
-     | Invert =>
+     | Abs =>
          (let e1 = HD args in
-          let inv_ty = expr_type e1 in
-          let (v, st1) = lower_value compile_expr cenv inv_ty e1 st in
-          as_stack_val ret_ty (compile_invert v inv_ty cenv st1))
+          let (v, st1) = lower_value compile_expr cenv ty e1 st in
+          as_stack_val ret_ty (compile_builtin_abs v st1))
      | Env item => as_stack_val ret_ty (compile_env_var item st)
      | Acc item =>
          (let e1 = HD args in
@@ -2513,7 +2534,152 @@ val compile_expr_defn = Defn.Hol_defn "compile_expr" `
                     let (buf_op_alloc, st2) = compile_alloc_buffer total_size st in
                     let buf_op = buf_op_alloc.buf_operand in
           as_ptr_val ret_ty LocMemory (compile_make_array compile_expr cenv args elem_sz has_lw total_size
-                             buf_op 0 st2))) ∧
+                             buf_op 0 st2))
+     (* ===== System builtins ===== *)
+     | RawCall is_dlg is_stc max_outsize revert_on_failure =>
+         (let to_e = HD args in let data_e = EL 1 args in
+          let gas_e = EL 2 args in let value_e = EL 3 args in
+          let (to_op, st1) = lower_value compile_expr cenv ty to_e st in
+          let (data_vv, st2) = compile_expr cenv (expr_type data_e) data_e st1 in
+          let (data_mem, st2a) = unwrap_value cenv data_vv st2 in
+          let (data_len, st3) = emit_op MLOAD [data_mem] st2a in
+          let (data_ptr, st4) = emit_op ADD [data_mem; Lit 32w] st3 in
+          let (gas_op, st5) = lower_value compile_expr cenv ty gas_e st4 in
+          let (value_op, st6) = lower_value compile_expr cenv ty value_e st5 in
+          let call_ty = (if is_dlg then DelegateCall
+                         else if is_stc then StaticCall
+                         else RegularCall) in
+          if max_outsize > 0 then
+            as_ptr_val ret_ty LocMemory
+              (compile_raw_call to_op data_ptr data_len gas_op value_op
+                call_ty max_outsize revert_on_failure st6)
+          else
+            as_stack_val ret_ty
+              (compile_raw_call to_op data_ptr data_len gas_op value_op
+                call_ty max_outsize revert_on_failure st6))
+     | RawLog =>
+         (let data_e = HD args in let topic_es = TL args in
+          let (data_vv, st1) = compile_expr cenv (expr_type data_e) data_e st in
+          let (data_mem, st1a) = unwrap_value cenv data_vv st1 in
+          let (data_len, st2) = emit_op MLOAD [data_mem] st1a in
+          let (data_ptr, st3) = emit_op ADD [data_mem; Lit 32w] st2 in
+          let (topic_ops, st4) =
+            compile_multi_exprs compile_expr cenv topic_es st3 in
+          let n_topics = LENGTH topic_es in
+          let (_, st5) = compile_raw_log n_topics data_ptr data_len topic_ops st4 in
+          (StackValue ret_ty (Lit 0w), st5))
+     | RawRevert =>
+         (let data_e = HD args in
+          let (data_vv, st1) = compile_expr cenv (expr_type data_e) data_e st in
+          let (data_mem, st1a) = unwrap_value cenv data_vv st1 in
+          let (_, st2) = compile_raw_revert data_mem st1a in
+          (StackValue ret_ty (Lit 0w), st2))
+     | SelfDestruct =>
+         (let to_e = HD args in
+          let (to_op, st1) = lower_value compile_expr cenv ty to_e st in
+          let (_, st2) = compile_selfdestruct to_op st1 in
+          (StackValue ret_ty (Lit 0w), st2))
+     (* ===== Contract creation builtins ===== *)
+     | RawCreate revert_on_failure has_salt =>
+         (let blob_e = HD args in let value_e = EL 1 args in
+          let (blob_vv, st1) = compile_expr cenv (expr_type blob_e) blob_e st in
+          let (blob_op, st1a) = unwrap_value cenv blob_vv st1 in
+          let (value_op, st2) = lower_value compile_expr cenv ty value_e st1a in
+          let salt_offset = if has_salt then 1 else 0 in
+          let (salt_opt, st3) =
+            (if has_salt then
+               let (s, st') = lower_value compile_expr cenv ty (EL 2 args) st2 in
+               (SOME s, st')
+             else (NONE, st2)) in
+          let ctor_args = DROP (2 + salt_offset) args in
+          let (ctor_info, st4) =
+            (if ctor_args = [] then (NONE, st3)
+             else
+               (* ABI-encode ctor args: stage to memory, encode *)
+               let ctor_types = MAP expr_type ctor_args in
+               let enc_ty = TupleT ctor_types in
+               let enc_info = type_to_abi_enc_info cenv enc_ty in
+               let abi_size = abi_size_bound (cenv_sft cenv) enc_ty in
+               let bytecode_maxlen = 24576 (* EIP-170 max code size *) in
+               let (args_vv, st3a) =
+                 compile_multi_exprs compile_expr cenv ctor_args st3 in
+               (* Stage ctor args to a temp tuple buffer *)
+               let total_bytes = LENGTH ctor_args * 32 in
+               let (tmp_alloc, st3b) = compile_alloc_buffer total_bytes st3a in
+               let tmp = tmp_alloc.buf_operand in
+               let (_, st3c) = compile_store_words tmp args_vv 0 st3b in
+               (SOME (tmp, enc_info, abi_size, bytecode_maxlen), st3c)) in
+          as_stack_val ret_ty
+            (compile_raw_create blob_op value_op salt_opt
+              revert_on_failure ctor_info st4))
+     | CreateMinimalProxy revert_on_failure has_salt =>
+         (let target_e = HD args in let value_e = EL 1 args in
+          let (target_op, st1) = lower_value compile_expr cenv ty target_e st in
+          let (value_op, st2) = lower_value compile_expr cenv ty value_e st1 in
+          let (salt_opt, st3) =
+            (if has_salt then
+               let (s, st') = lower_value compile_expr cenv ty (EL 2 args) st2 in
+               (SOME s, st')
+             else (NONE, st2)) in
+          as_stack_val ret_ty
+            (compile_create_proxy target_op value_op salt_opt
+              revert_on_failure st3))
+     | CreateCopyOf revert_on_failure has_salt =>
+         (let target_e = HD args in let value_e = EL 1 args in
+          let (target_op, st1) = lower_value compile_expr cenv ty target_e st in
+          let (value_op, st2) = lower_value compile_expr cenv ty value_e st1 in
+          let (salt_opt, st3) =
+            (if has_salt then
+               let (s, st') = lower_value compile_expr cenv ty (EL 2 args) st2 in
+               (SOME s, st')
+             else (NONE, st2)) in
+          as_stack_val ret_ty
+            (compile_create_copy target_op value_op salt_opt
+              revert_on_failure st3))
+     | CreateFromBlueprint revert_on_failure raw_args has_salt =>
+         (let target_e = HD args in let value_e = EL 1 args in
+          let code_offset_e = EL 2 args in
+          let (target_op, st1) = lower_value compile_expr cenv ty target_e st in
+          let (value_op, st2) = lower_value compile_expr cenv ty value_e st1 in
+          let (code_offset_op, st3) =
+            lower_value compile_expr cenv ty code_offset_e st2 in
+          let salt_offset = if has_salt then 1 else 0 in
+          let (salt_opt, st4) =
+            (if has_salt then
+               let (s, st') = lower_value compile_expr cenv ty (EL 3 args) st3 in
+               (SOME s, st')
+             else (NONE, st3)) in
+          let ctor_args = DROP (3 + salt_offset) args in
+          let (args_info, st5) =
+            (if ctor_args = [] then (NONE, st4)
+             else if raw_args then
+               (* Raw args: already ABI-encoded, just get ptr + len *)
+               let raw_e = HD ctor_args in
+               let (raw_vv, st4a) = compile_expr cenv (expr_type raw_e) raw_e st4 in
+               let (raw_mem, st4b) = unwrap_value cenv raw_vv st4a in
+               let (raw_len, st4c) = emit_op MLOAD [raw_mem] st4b in
+               let (raw_ptr, st4d) = emit_op ADD [raw_mem; Lit 32w] st4c in
+               (SOME (raw_ptr, raw_len), st4d)
+             else
+               (* ABI-encode ctor args *)
+               let ctor_types = MAP expr_type ctor_args in
+               let enc_ty = TupleT ctor_types in
+               let enc_info = type_to_abi_enc_info cenv enc_ty in
+               let abi_size = abi_size_bound (cenv_sft cenv) enc_ty in
+               let (args_ops, st4a) =
+                 compile_multi_exprs compile_expr cenv ctor_args st4 in
+               let total_bytes = LENGTH ctor_args * 32 in
+               let (tmp_alloc, st4b) = compile_alloc_buffer total_bytes st4a in
+               let tmp = tmp_alloc.buf_operand in
+               let (_, st4c) = compile_store_words tmp args_ops 0 st4b in
+               let (buf_alloc, st4d) = compile_alloc_buffer abi_size st4c in
+               let buf = buf_alloc.buf_operand in
+               let (enc_len, st4e) =
+                 compile_abi_encode_to_buf buf tmp enc_info st4d in
+               (SOME (buf, enc_len), st4e)) in
+          as_stack_val ret_ty
+            (compile_create_blueprint target_op value_op salt_opt
+              code_offset_op args_info revert_on_failure st5))) ∧
 
   compile_type_builtin_dispatch cenv vv_ty ty tb ret_ty args st =
     if F then

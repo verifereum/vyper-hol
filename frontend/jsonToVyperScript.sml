@@ -344,6 +344,46 @@ End
 
 val () = cv_auto_trans denomination_of_expr_def;
 
+(* ===== Keyword Argument Helpers ===== *)
+
+(* Extract boolean kwarg: ALOOKUP on (name, expr) list, pattern match BoolL *)
+Definition kwarg_bool_def:
+  kwarg_bool key (kwargs : (identifier # expr) list) default =
+    case ALOOKUP kwargs key of
+      SOME (Literal _ (BoolL b)) => b
+    | _ => default
+End
+
+val () = cv_auto_trans kwarg_bool_def;
+
+(* Extract numeric kwarg: pattern match IntL *)
+Definition kwarg_num_def:
+  kwarg_num key (kwargs : (identifier # expr) list) (default : num) =
+    case ALOOKUP kwargs key of
+      SOME (Literal _ (IntL n)) => if n >= 0 then Num n else default
+    | _ => default
+End
+
+val () = cv_auto_trans kwarg_num_def;
+
+(* Extract expression kwarg with default *)
+Definition kwarg_expr_def:
+  kwarg_expr key (kwargs : (identifier # expr) list) default =
+    case ALOOKUP kwargs key of
+      SOME e => e
+    | NONE => default
+End
+
+val () = cv_auto_trans kwarg_expr_def;
+
+(* Check if kwarg is present *)
+Definition has_kwarg_def:
+  has_kwarg key (kwargs : (identifier # expr) list) =
+    IS_SOME (ALOOKUP kwargs key)
+End
+
+val () = cv_auto_trans has_kwarg_def;
+
 Definition make_builtin_call_def:
   make_builtin_call name args kwargs ret_ty =
     let ty = translate_type ret_ty in
@@ -407,6 +447,74 @@ Definition make_builtin_call_def:
       TypeBuiltin ty Extract32 (translate_type ret_ty) args
     else if name = "method_id" then
       Builtin ty MethodId args
+    (* System builtins *)
+    else if name = "raw_call" then
+      let is_delegate = kwarg_bool "is_delegate_call" kwargs F in
+      let is_static = kwarg_bool "is_static_call" kwargs F in
+      let max_outsize = kwarg_num "max_outsize" kwargs 0 in
+      let revert = kwarg_bool "revert_on_failure" kwargs T in
+      let gas_e = kwarg_expr "gas" kwargs (Builtin ty (Env MsgGas) []) in
+      let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
+      Builtin ty (RawCall is_delegate is_static max_outsize revert)
+        (args ++ [gas_e; value_e])
+    else if name = "raw_log" then
+      Builtin ty RawLog args
+    else if name = "raw_revert" then
+      Builtin ty RawRevert args
+    else if name = "selfdestruct" then
+      Builtin ty SelfDestruct args
+    else if name = "abs" then
+      Builtin ty Abs args
+    (* Contract creation builtins — kwargs extracted, positional args reordered *)
+    else if name = "raw_create" then
+      let revert = kwarg_bool "revert_on_failure" kwargs T in
+      let has_salt = has_kwarg "salt" kwargs in
+      let salt_args = (case ALOOKUP kwargs "salt" of
+                         SOME e => [e] | NONE => []) in
+      let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
+      (* args = blob :: ctor_args → reorder to blob :: value :: [salt] ++ ctor_args *)
+      (case args of
+         (blob_e :: ctor_args) =>
+           Builtin ty (RawCreate revert has_salt)
+             (blob_e :: value_e :: salt_args ++ ctor_args)
+       | _ => Builtin ty (RawCreate revert has_salt) (value_e :: salt_args))
+    else if name = "create_minimal_proxy_to" ∨ name = "create_forwarder_to" then
+      let revert = kwarg_bool "revert_on_failure" kwargs T in
+      let has_salt = has_kwarg "salt" kwargs in
+      let salt_args = (case ALOOKUP kwargs "salt" of
+                         SOME e => [e] | NONE => []) in
+      let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
+      (case args of
+         (target_e :: _) =>
+           Builtin ty (CreateMinimalProxy revert has_salt)
+             (target_e :: value_e :: salt_args)
+       | _ => Builtin ty (CreateMinimalProxy revert has_salt) (value_e :: salt_args))
+    else if name = "create_copy_of" then
+      let revert = kwarg_bool "revert_on_failure" kwargs T in
+      let has_salt = has_kwarg "salt" kwargs in
+      let salt_args = (case ALOOKUP kwargs "salt" of
+                         SOME e => [e] | NONE => []) in
+      let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
+      (case args of
+         (target_e :: _) =>
+           Builtin ty (CreateCopyOf revert has_salt)
+             (target_e :: value_e :: salt_args)
+       | _ => Builtin ty (CreateCopyOf revert has_salt) (value_e :: salt_args))
+    else if name = "create_from_blueprint" then
+      let revert = kwarg_bool "revert_on_failure" kwargs T in
+      let raw_args = kwarg_bool "raw_args" kwargs F in
+      let has_salt = has_kwarg "salt" kwargs in
+      let salt_args = (case ALOOKUP kwargs "salt" of
+                         SOME e => [e] | NONE => []) in
+      let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
+      let code_offset_e = kwarg_expr "code_offset" kwargs (Literal (BaseT (UintT 256)) (IntL 3)) in
+      (* args = target :: ctor_args → reorder *)
+      (case args of
+         (target_e :: ctor_args) =>
+           Builtin ty (CreateFromBlueprint revert raw_args has_salt)
+             (target_e :: value_e :: code_offset_e :: salt_args ++ ctor_args)
+       | _ => Builtin ty (CreateFromBlueprint revert raw_args has_salt)
+                (value_e :: code_offset_e :: salt_args))
     (* Struct constructor, cast, or regular call *)
     else (case ret_ty of
           | JT_Struct _ => StructLit ty (NONE, name) kwargs

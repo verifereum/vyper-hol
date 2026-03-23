@@ -999,7 +999,7 @@ Definition compile_stmt_def:
                        return norm_ptr
                     od
                   else return val_op);
-               compile_external_return (SOME ret_op) is_prim F
+               compile_external_return (SOME ret_op) is_prim cenv.ce_raw_return
                  cenv.ce_ret_enc_info cenv.ce_max_return_size
                  is_nonreentrant nkey use_transient is_view
             od)

@@ -473,6 +473,7 @@ Definition builtin_args_length_ok_def:
   builtin_args_length_ok Len n = (n = 1n) ∧
   builtin_args_length_ok Not n = (n = 1) ∧
   builtin_args_length_ok Neg n = (n = 1) ∧
+  builtin_args_length_ok Abs n = (n = 1) ∧
   builtin_args_length_ok Keccak256 n = (n = 1) ∧
   builtin_args_length_ok Sha256 n = (n = 1) ∧
   builtin_args_length_ok (Uint2Str _) n = (n = 1) ∧
@@ -494,7 +495,17 @@ Definition builtin_args_length_ok_def:
   builtin_args_length_ok ECRecover n = (n = 4) ∧
   builtin_args_length_ok ECAdd n = (n = 2) ∧
   builtin_args_length_ok ECMul n = (n = 2) ∧
-  builtin_args_length_ok PowMod256 n = (n = 2)
+  builtin_args_length_ok PowMod256 n = (n = 2) ∧
+  (* System builtins *)
+  builtin_args_length_ok (RawCall _ _ _ _) n = (n = 4) ∧
+  builtin_args_length_ok RawLog n = (1 ≤ n ∧ n ≤ 5) ∧
+  builtin_args_length_ok RawRevert n = (n = 1) ∧
+  builtin_args_length_ok SelfDestruct n = (n = 1) ∧
+  (* Create builtins — variable args due to optional salt + ctor args *)
+  builtin_args_length_ok (RawCreate _ _) n = (2 ≤ n) ∧
+  builtin_args_length_ok (CreateMinimalProxy _ _) n = (2 ≤ n ∧ n ≤ 3) ∧
+  builtin_args_length_ok (CreateCopyOf _ _) n = (2 ≤ n ∧ n ≤ 3) ∧
+  builtin_args_length_ok (CreateFromBlueprint _ _ _) n = (3 ≤ n)
 End
 
 val () = cv_auto_trans builtin_args_length_ok_def;
