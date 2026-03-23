@@ -8,6 +8,7 @@
 Theory venomInstProofs
 Ancestors
   venomExecSemantics venomEffects stateEquiv stateEquivProofs
+  vfmStaticCalls
 
 open stateEquivProofsTheory
 open finite_mapTheory
@@ -339,29 +340,6 @@ fun step_inst_lift_from_all_tac field_fn =
 (* ===== EVM Static-Mode Invariant (upstream dependency) =============== *)
 (* ===================================================================== *)
 
-(* EVM static-mode invariant: when the top context has static=T,
-   `run` preserves rollback state fields and produces no logs.
-   Follows from assert_not_static guarding every state-modifying
-   operation in verifereum (SSTORE, TSTORE, LOG, SELFDESTRUCT,
-   CREATE, CALL-with-value).
-
-   Upstream: https://github.com/verifereum/verifereum/issues/100
-   Once proven there, import and remove cheat. *)
-Theorem run_static_preserves:
-  !es result final_state ctxt rb.
-    run es = SOME (result, final_state) /\
-    es.contexts = [(ctxt, rb)] /\
-    ctxt.msgParams.static = T ==>
-    final_state.rollback.accounts = es.rollback.accounts /\
-    final_state.rollback.tStorage = es.rollback.tStorage /\
-    final_state.rollback.toDelete = es.rollback.toDelete /\
-    (case final_state.contexts of
-       [(ctxt', _)] => ctxt'.logs = []
-     | _ => T)
-Proof
-  cheat
-QED
-
 (* ---- STATICCALL Helper ----
    STATICCALL goes through exec_ext_call with value=0w, is_static=T.
    transfer_value with 0 is identity, run_static_preserves gives
@@ -383,9 +361,10 @@ Proof
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
   Cases_on `result` >> gvs[] >>
   Cases_on `y` >> gvs[] >>
-  drule run_static_preserves >>
+  drule vfmStaticCallsTheory.run_static_preserves >>
   simp[vfmContextTheory.initial_context_def,
        vfmContextTheory.initial_msg_params_def,
+       vfmContextTheory.empty_return_destination_def,
        make_rollback_def, vfmExecutionTheory.transfer_value_def] >>
   strip_tac >> gvs[]
 QED

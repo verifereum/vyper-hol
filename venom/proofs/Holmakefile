@@ -1,2 +1,2 @@
 # Venom IR proofs
-INCLUDES = ../defs
+INCLUDES = ../defs $(VFMDIR)/spec/prop
