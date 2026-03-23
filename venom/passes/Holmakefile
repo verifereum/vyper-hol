@@ -18,6 +18,7 @@ INCLUDES = \
   branch_opt \
   single_use_expansion \
   assert_combiner \
+  affine_folding \
   algebraic_opt \
   mem2var \
   tail_merge \

@@ -1,0 +1,3 @@
+Theory affineFolding
+Ancestors
+  affineFoldingDefs affineFoldingCorrectness
