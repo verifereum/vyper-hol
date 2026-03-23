@@ -18,7 +18,7 @@ Theory stackOrderCex
 Ancestors
   stackOrderDefs livenessDefs passSharedDefs
 Libs
-  finite_mapTheory listTheory
+  finite_mapTheory listTheory venomInstTheory
 
 (* =====================================================================
    KEY LEMMA 1: so_analyze_block puts "x" in needed

@@ -14,8 +14,6 @@ Ancestors
   concretizeMemLoc
   (* lower dload/dloadbytes *)
   lowerDload
-  (* float allocas to entry *)
-  floatAllocas
   (* fix free var space memory locations *)
   fixMemLocations
   (* branch optimization *)

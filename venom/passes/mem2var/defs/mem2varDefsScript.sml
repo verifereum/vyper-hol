@@ -5,17 +5,11 @@
  *
  * Promotes memory operations to variable operations where safe:
  *   - alloca only used by mstore/mload/return → promote to variable
- *   - palloca only used by mstore/mload → promote (stack params)
- *   - calloca → fix add instructions to GEP
  *
  * For alloca promotion (size = 32):
  *   mstore [alloca_addr; val]  → assign [val] → [alloca_var]
  *   mload [alloca_addr]        → assign [alloca_var] → [orig_out]
  *   return with alloca_addr    → insert mstore before, keep return
- *
- * For palloca promotion:
- *   - Stack-passed: palloca → assign [param_var]
- *   - Memory-passed: insert mload after palloca
  *
  * For any alloca used by add: convert add to GEP (pointer arithmetic).
  *
@@ -24,11 +18,11 @@
  * TOP-LEVEL:
  *   m2v_can_promote_alloca      — check if alloca uses are all mstore/mload/return
  *   m2v_has_escape_use          — check for add/phi/assign uses (escaping)
- *   m2v_promote_alloca          — promote a single alloca
- *   m2v_fix_adds                — convert add to GEP for escaped allocas
+ *   m2v_promote_inst            — promote a single alloca use
+ *   m2v_fix_add_inst            — convert add to GEP for escaped allocas
  *   m2v_transform_function      — function-level transform
  *
- * Source: vyper/venom/passes/mem2var.py
+ * Upstream: vyperlang/vyper@cff4f6822 (alloca-only)
  *)
 
 Theory mem2varDefs
@@ -68,14 +62,7 @@ Definition m2v_can_promote_alloca_def:
     EXISTS (\inst. inst.inst_opcode = MSTORE) uses
 End
 
-(* Check if all uses are mstore/mload (palloca promotable).
-   Python uses all2 which requires non-empty. *)
-Definition m2v_can_promote_palloca_def:
-  m2v_can_promote_palloca uses <=>
-    uses <> [] /\
-    EVERY (\inst. inst.inst_opcode = MSTORE \/
-                  inst.inst_opcode = MLOAD) uses
-End
+
 
 (* ===== Promotion Transform ===== *)
 
@@ -199,47 +186,20 @@ End
 (* ===== Function-Level Transform ===== *)
 
 (*
- * Process all instructions in a function:
- *   - For each ALLOCA: check uses, promote if possible, fix adds otherwise
- *   - For each PALLOCA: check uses, promote if possible
- *   - For each CALLOCA: fix adds
- *
- * This is a simplified model — the Python processes per-variable via DFG.
- * The HOL4 model builds the DFG then applies transforms.
- *)
-Definition m2v_process_alloca_def:
-  m2v_process_alloca dfg counter inst =
-    case inst.inst_outputs of
-      [alloca_out] =>
-        let uses = dfg_get_uses dfg alloca_out in
-        let size_val = case inst.inst_operands of
-                         Lit w :: _ => w2n w | _ => 0 in
-        if m2v_has_escape_use uses then
-          (* Address escapes — just fix adds to GEP *)
-          (counter, NONE)
-        else if m2v_can_promote_alloca uses then
-          let var = m2v_fresh_var alloca_out counter in
-          (counter + 1, SOME (var, alloca_out, size_val))
-        else
-          (counter, NONE)
-    | _ => (counter, NONE)
-End
-
-(*
  * Transform function: collect promotion info, then rewrite instructions.
  *
  * Two-pass approach:
- *   1. Scan for alloca instructions, determine promotions
+ *   1. Scan ALLOCA instructions, determine promotions vs escapes
  *   2. Rewrite all instructions according to promotion decisions
+ *
+ * Post-sunset: only ALLOCA, no PALLOCA/CALLOCA.
  *)
 Definition m2v_transform_function_def:
   m2v_transform_function fn =
     let dfg = dfg_build_function fn in
-    (* Collect alloca/palloca/calloca instructions *)
+    (* Collect alloca instructions *)
     let alloca_insts = FILTER (\i : instruction.
-      i.inst_opcode = ALLOCA \/
-      i.inst_opcode = PALLOCA \/
-      i.inst_opcode = CALLOCA)
+      i.inst_opcode = ALLOCA)
       (fn_insts fn) in
     (* Build promotion map + escaped alloca outputs in one pass *)
     let scan_result = FOLDL (\(ctr, promos, escaped) (i : instruction).
@@ -250,11 +210,7 @@ Definition m2v_transform_function_def:
                            Lit w :: _ => w2n w | _ => 0 in
           if m2v_has_escape_use uses then
             (ctr, promos, alloca_out :: escaped)
-          else if (i.inst_opcode = ALLOCA /\
-                   m2v_can_promote_alloca uses) \/
-                  (i.inst_opcode = PALLOCA /\
-                   m2v_can_promote_palloca uses)
-          then
+          else if m2v_can_promote_alloca uses then
             let var = m2v_fresh_var alloca_out ctr in
             (ctr + 1, (alloca_out, var, size_val) :: promos, escaped)
           else

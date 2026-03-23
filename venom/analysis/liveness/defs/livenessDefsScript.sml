@@ -1,6 +1,8 @@
 (*
  * Liveness Analysis — Definitions
  *
+ * Upstream: vyperlang/vyper@d21ee3ba9 (positional phi substitution)
+ *
  * Backward liveness analysis via generic df_analyze framework.
  *
  * TOP-LEVEL:
@@ -41,19 +43,51 @@ End
    PHI-aware edge transfer
    ========================================================================== *)
 
+(* Collect PHI instructions from the start of a block *)
+Definition collect_phis_def:
+  collect_phis [] = [] ∧
+  collect_phis (inst :: rest) =
+    if inst.inst_opcode = PHI then inst :: collect_phis rest
+    else []
+End
+
+(* Build operand→phi_index map from a list of PHIs.
+ * Each PHI operand (from all sources) maps to its phi's index.
+ * Also record the matching operand from src_label for each phi. *)
+Definition build_phi_maps_def:
+  build_phi_maps src_label phis =
+    let indexed = MAPi (λi phi. (i, phi)) phis in
+    FOLDL (λ(op_map, matching) (i, phi).
+      let pairs = phi_pairs phi.inst_operands in
+      let op_map' = FOLDL (λm (l,v). m |+ (v, i)) op_map pairs in
+      let src_var = FIND (λ(l,v). l = src_label) pairs in
+      let matching' = case src_var of
+                        SOME (_, v) => matching |+ (i, v)
+                      | NONE => matching in
+      (op_map', matching'))
+    (FEMPTY : (string, num) fmap, FEMPTY : (num, string) fmap) indexed
+End
+
+(* Positional substitution: walk liveness, replace phi-related entries
+ * with the source-matching operand (deduplicated by phi index).
+ * Matches Python d21ee3ba9 fix. *)
 Definition input_vars_from_def:
   input_vars_from src_label target_instrs base_liveness =
-    FOLDL
-      (λlive inst.
-        if inst.inst_opcode ≠ PHI then live
-        else
-          let pairs = phi_pairs inst.inst_operands in
-          let add_vars = MAP SND (FILTER (λ(l,v). l = src_label) pairs) in
-          let rm_vars  = MAP SND (FILTER (λ(l,v). l ≠ src_label) pairs) in
-          let live' = FILTER (λv. ¬MEM v rm_vars) live in
-          list_union live' add_vars)
-      base_liveness
-      target_instrs
+    let phis = collect_phis target_instrs in
+    if NULL phis then base_liveness
+    else
+      let (op_map, matching) = build_phi_maps src_label phis in
+      let (result, placed) = FOLDL (λ(acc, placed) v.
+        case FLOOKUP op_map v of
+          SOME phi_idx =>
+            if phi_idx ∈ placed then (acc, placed)
+            else
+              (case FLOOKUP matching phi_idx of
+                 SOME src_v => (acc ++ [src_v], phi_idx INSERT placed)
+               | NONE => (acc, placed))
+        | NONE => (acc ++ [v], placed))
+        ([], {} : num set) base_liveness in
+      result
 End
 
 Definition liveness_edge_transfer_def:

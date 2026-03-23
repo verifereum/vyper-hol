@@ -667,7 +667,7 @@ QED
 Triviality step_inst_alloca_equiv:
   !vars inst s1 s2.
     state_equiv vars s1 s2 /\
-    MEM inst.inst_opcode [ALLOCA; PALLOCA; CALLOCA] ==>
+    inst.inst_opcode = ALLOCA ==>
     result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
@@ -800,7 +800,7 @@ Proof
       drule_all step_inst_delegatecall_equiv >> simp[],
     `MEM inst.inst_opcode [CREATE;CREATE2]` by simp[] >>
       drule_all step_inst_create_equiv >> simp[],
-    `MEM inst.inst_opcode [ALLOCA;PALLOCA;CALLOCA]` by simp[] >>
+    `inst.inst_opcode = ALLOCA` by simp[] >>
       drule_all step_inst_alloca_equiv >> simp[],
     (* INVOKE: handled in module sem, falls to Error in step_inst_base.
        Explicit so new opcode additions cause proof failure here. *)

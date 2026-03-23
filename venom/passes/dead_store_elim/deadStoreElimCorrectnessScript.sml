@@ -24,7 +24,7 @@ Theorem dse_function_correct:
   !analysis_fn aliases fuel ctx fn s.
     (!space fn'.
       all_dead_stores (analysis_fn space fn')
-        (cfg_analyze fn') aliases (bp_analyze ctx (cfg_analyze fn') fn')
+        (cfg_analyze fn') aliases (bp_analyze (cfg_analyze fn') fn')
         space fn') ==>
     lift_result dse_all_equiv dse_all_equiv
       (run_function fuel ctx fn s)

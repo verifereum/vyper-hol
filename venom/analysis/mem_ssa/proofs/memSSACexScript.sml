@@ -22,7 +22,7 @@
  *)
 Theory memSSACex
 Ancestors
-  memSSAProofs basePtrDefs memLocDefs dominatorDefs
+  memSSAProofs basePtrDefs memLocDefs dominatorDefs memSSADefs cfgDefs venomInst venomWf venomState
 Libs
   alistTheory finite_mapTheory listTheory pred_setTheory
 

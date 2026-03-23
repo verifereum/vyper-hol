@@ -15,7 +15,7 @@ Ancestors
 
 Libs
   listTheory rich_listTheory pred_setTheory arithmeticTheory venomInstTheory
-  finite_mapTheory pairTheory
+  finite_mapTheory pairTheory indexedListsTheory
   cfgHelpersTheory venomStateTheory
   dfHelperDefsTheory dfAnalyzeDefsTheory dfAnalyzePropsTheory
 
@@ -37,7 +37,107 @@ Proof
   ho_match_mp_tac phi_pairs_ind >>
   rw[phi_pairs_def, operand_vars_def, operand_var_def] >>
   rpt strip_tac >>
-  TRY (Cases_on `operand_var v1`) >> fs[] >> metis_tac[]
+  TRY (Cases_on `operand_var v1`) >> fs[]
+QED
+
+(* Helper: collect_phis returns PHI instructions that are in the original list *)
+Theorem collect_phis_mem[local]:
+  ∀instrs inst. MEM inst (collect_phis instrs) ==>
+    MEM inst instrs ∧ inst.inst_opcode = PHI
+Proof
+  Induct >> simp[collect_phis_def] >>
+  rpt gen_tac >> Cases_on `h.inst_opcode = PHI` >> simp[] >>
+  strip_tac >> gvs[]
+QED
+
+(* Helper: FOLDL in input_vars_from only produces elements from base or matching *)
+Theorem input_vars_foldl_mem[local]:
+  ∀base acc placed op_map matching v.
+    MEM v (FST (FOLDL (λ(acc, placed) w.
+      case FLOOKUP op_map w of
+        NONE => (acc ++ [w], placed)
+      | SOME phi_idx =>
+          if phi_idx ∈ placed then (acc, placed)
+          else case FLOOKUP matching phi_idx of
+                 SOME src_v => (acc ++ [src_v], phi_idx INSERT placed)
+               | NONE => (acc, placed))
+      (acc, placed) base)) ==>
+    MEM v acc ∨ MEM v base ∨ ∃i. FLOOKUP matching i = SOME v
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  Cases_on `FLOOKUP op_map h` >> simp[]
+  >- (strip_tac >>
+      first_x_assum drule >> strip_tac >> gvs[MEM_APPEND] >> metis_tac[])
+  >- (rename1 `FLOOKUP op_map h = SOME phi_idx` >>
+      Cases_on `phi_idx ∈ placed` >> simp[]
+      >- (strip_tac >> first_x_assum drule >> metis_tac[])
+      >- (Cases_on `FLOOKUP matching phi_idx` >> simp[]
+          >- (strip_tac >> first_x_assum drule >> metis_tac[])
+          >- (rename1 `FLOOKUP matching phi_idx = SOME src_v` >>
+              strip_tac >> first_x_assum drule >> strip_tac >>
+              gvs[MEM_APPEND] >> metis_tac[])))
+QED
+
+(* FIND produces a member satisfying the predicate *)
+Theorem find_some_mem[local]:
+  ∀P ls x. FIND P ls = SOME x ==> MEM x ls ∧ P x
+Proof
+  Induct_on `ls` >> simp[FIND_thm] >> rpt gen_tac >>
+  Cases_on `P h` >> simp[] >> strip_tac >> gvs[] >> res_tac >> simp[]
+QED
+
+(* Helper: FOLDL over indexed phis preserves matching invariant *)
+Theorem foldl_phi_matching_inv[local]:
+  ∀phis n acc_op acc_m src i v.
+    FLOOKUP (SND (FOLDL
+      (λ(op_map,matching) (j,phi).
+        (FOLDL (λm (l,w). m |+ (w, j)) op_map (phi_pairs phi.inst_operands),
+         case FIND (λ(l,w). l = src) (phi_pairs phi.inst_operands) of
+           NONE => matching
+         | SOME (_, w) => matching |+ (j, w)))
+      (acc_op, acc_m) (MAPi (λk phi. (n + k, phi)) phis))) i = SOME v ==>
+    FLOOKUP acc_m i = SOME v ∨
+    ∃phi. MEM phi phis ∧ MEM (src, v) (phi_pairs phi.inst_operands)
+Proof
+  Induct_on `phis` >- simp[MAPi_def] >>
+  rpt gen_tac >>
+  simp[MAPi_def, combinTheory.o_DEF] >>
+  `MAPi (λk phi'. (n + SUC k, phi')) phis =
+   MAPi (λk phi'. (SUC n + k, phi')) phis` by
+    (irule MAPi_CONG >> simp[]) >>
+  pop_assum SUBST1_TAC >>
+  strip_tac >>
+  first_x_assum (qspecl_then [
+    `SUC n`,
+    `FOLDL (λm (l,w). m |+ (w, n)) acc_op (phi_pairs h.inst_operands)`,
+    `case FIND (λ(l,w). l = src) (phi_pairs h.inst_operands) of
+       NONE => acc_m | SOME (_, w) => acc_m |+ (n, w)`,
+    `src`, `i`, `v`] mp_tac) >>
+  impl_tac >- simp[] >>
+  strip_tac >> gvs[]
+  >- ((* Case: FLOOKUP acc_m' i = SOME v, trace through FIND *)
+      Cases_on `FIND (λ(l,w). l = src) (phi_pairs h.inst_operands)`
+      (* NONE: acc_m' = acc_m, immediate *)
+      >- gvs[]
+      (* SOME: acc_m' = acc_m |+ (n, SND x) *)
+      >- (PairCases_on `x` >> gvs[FLOOKUP_UPDATE] >>
+          Cases_on `n = i` >> gvs[] >>
+          (* n = i: v came from FIND result *)
+          disj2_tac >> qexists_tac `h` >> simp[] >>
+          drule_then strip_assume_tac find_some_mem >> gvs[]))
+  >- (disj2_tac >> metis_tac[])
+QED
+
+(* Helper: build_phi_maps matching values correspond to phi pairs.
+   Uses MEM (not EL) for cleaner interface. *)
+Theorem build_phi_maps_matching_mem[local]:
+  ∀src phis i v.
+    FLOOKUP (SND (build_phi_maps src phis)) i = SOME v ==>
+    ∃phi. MEM phi phis ∧ MEM (src, v) (phi_pairs phi.inst_operands)
+Proof
+  rw[build_phi_maps_def, LET_THM] >>
+  qspecl_then [`phis`, `0`, `FEMPTY`, `FEMPTY`, `src`, `i`, `v`]
+    mp_tac foldl_phi_matching_inv >> simp[]
 QED
 
 Theorem input_vars_from_phi_correct_proof[local]:
@@ -47,21 +147,22 @@ Theorem input_vars_from_phi_correct_proof[local]:
     ∃inst. MEM inst instrs ∧ inst.inst_opcode = PHI ∧
            MEM (src_label, v) (phi_pairs inst.inst_operands)
 Proof
-  Induct_on `instrs` >- simp[input_vars_from_def] >>
-  rpt gen_tac >> simp[Once input_vars_from_def] >> strip_tac >>
-  rename1 `MEM v bse ∨ _` >>
-  first_x_assum (qspecl_then [`src_label`,
-    `if h.inst_opcode <> PHI then bse
-     else list_union
-       (FILTER (\v. ¬MEM v (MAP SND (FILTER (\(l,v). l <> src_label)
-          (phi_pairs h.inst_operands)))) bse)
-       (MAP SND (FILTER (\(l,v). l = src_label)
-          (phi_pairs h.inst_operands)))`, `v`] mp_tac) >>
-  impl_tac >- fs[input_vars_from_def] >>
-  strip_tac >> Cases_on `h.inst_opcode = PHI` >>
-  fs[list_union_mem, MEM_FILTER, MEM_MAP] >>
-  TRY (metis_tac[input_vars_from_def]) >>
-  disj2_tac >> qexists_tac `h` >> Cases_on `y` >> gvs[]
+  rpt gen_tac >> simp[input_vars_from_def, LET_THM] >>
+  Cases_on `NULL (collect_phis instrs)` >- simp[] >>
+  Cases_on `build_phi_maps src_label (collect_phis instrs)` >>
+  rename1 `build_phi_maps _ _ = (op_map, matching)` >> simp[] >>
+  (* Normalize (λ(r,p). r) to FST so drule input_vars_foldl_mem matches *)
+  `(λ(result:string list, placed:num -> bool). result) = FST` by
+    simp[FUN_EQ_THM, FORALL_PROD] >>
+  pop_assum (fn th => REWRITE_TAC [th]) >>
+  strip_tac >>
+  drule input_vars_foldl_mem >> strip_tac >> gvs[] >>
+  qspecl_then [`src_label`, `collect_phis instrs`, `i`, `v`]
+    mp_tac build_phi_maps_matching_mem >>
+  impl_tac >- gvs[] >>
+  strip_tac >>
+  disj2_tac >> qexists_tac `phi` >> simp[] >>
+  metis_tac[collect_phis_mem]
 QED
 
 Theorem input_vars_from_vars_bounded[local]:
@@ -201,8 +302,7 @@ Proof
   `FILTER (\v. ~MEM v (a ++ FILTER (\v. ~MEM v a) b)) b = []` suffices_by
     simp[] >>
   simp[FILTER_EQ_NIL, EVERY_MEM] >>
-  rpt strip_tac >> simp[MEM_FILTER, MEM_APPEND] >>
-  Cases_on `MEM e a` >> simp[]
+  rpt strip_tac >> simp[MEM_FILTER, MEM_APPEND]
 QED
 
 (* list_union as set union *)
@@ -415,16 +515,14 @@ Theorem block_instrs_some[local]:
   ∀lbl bbs bb. lookup_block lbl bbs = SOME bb ==>
     block_instrs lbl bbs = bb.bb_instructions
 Proof
-  simp_tac std_ss [block_instrs_def] >> rpt strip_tac >>
-  asm_simp_tac std_ss []
+  simp_tac std_ss [block_instrs_def]
 QED
 
 Theorem block_instrs_none[local]:
   ∀lbl bbs. lookup_block lbl bbs = NONE ==>
     block_instrs lbl bbs = []
 Proof
-  simp_tac std_ss [block_instrs_def] >> rpt strip_tac >>
-  asm_simp_tac std_ss []
+  simp_tac std_ss [block_instrs_def]
 QED
 
 Theorem not_fn_labels_lookup_none[local]:
@@ -623,14 +721,119 @@ Proof
   rw[df_process_block_def, df_joined_val_def] >>
   simp_tac std_ss [LET_THM, direction_case_def] >>
   rw[block_instrs_def] >>
-  simp[liveness_joined_def, LET_THM] >>
-  Cases_on `MAP (\nbr. liveness_edge_transfer fn.fn_blocks nbr lbl
-                  (df_boundary [] st nbr))
-                (cfg_succs_of (cfg_analyze fn) lbl)` >> simp[]
+  simp[liveness_joined_def, LET_THM]
 QED
 
 val input_vars_from_let =
   SIMP_RULE std_ss [LET_THM] input_vars_from_def;
+
+(* Helper: accumulator elements persist through the FOLDL *)
+Theorem foldl_acc_persists[local]:
+  ∀base acc placed op_map matching v.
+    MEM v acc ==>
+    MEM v (FST (FOLDL (λ(acc, placed) w.
+      case FLOOKUP op_map w of
+        NONE => (acc ++ [w], placed)
+      | SOME phi_idx =>
+          if phi_idx ∈ placed then (acc, placed)
+          else case FLOOKUP matching phi_idx of
+                 SOME src_v => (acc ++ [src_v], phi_idx INSERT placed)
+               | NONE => (acc, placed))
+      (acc, placed) base))
+Proof
+  Induct >> rw[] >>
+  Cases_on `FLOOKUP op_map h` >> simp[] >>
+  Cases_on `x ∈ placed` >> simp[] >>
+  Cases_on `FLOOKUP matching x` >> simp[]
+QED
+
+(* Tight upper bound: FOLDL result elements come from acc, passthrough, or replacement *)
+Theorem foldl_mem_tight[local]:
+  ∀base acc placed op_map matching v.
+    MEM v (FST (FOLDL (λ(acc, placed) w.
+      case FLOOKUP op_map w of
+        NONE => (acc ++ [w], placed)
+      | SOME phi_idx =>
+          if phi_idx ∈ placed then (acc, placed)
+          else case FLOOKUP matching phi_idx of
+                 SOME src_v => (acc ++ [src_v], phi_idx INSERT placed)
+               | NONE => (acc, placed))
+      (acc, placed) base)) ==>
+    MEM v acc ∨
+    (MEM v base ∧ FLOOKUP op_map v = NONE) ∨
+    (∃idx w. MEM w base ∧ FLOOKUP op_map w = SOME idx ∧
+             FLOOKUP matching idx = SOME v)
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  Cases_on `FLOOKUP op_map h` >> simp[]
+  >- (strip_tac >> first_x_assum drule >> strip_tac >>
+      gvs[MEM_APPEND] >> metis_tac[])
+  >- (Cases_on `x ∈ placed` >> simp[]
+      >- (strip_tac >> first_x_assum drule >> strip_tac >>
+          gvs[] >> metis_tac[MEM])
+      >- (Cases_on `FLOOKUP matching x` >> simp[]
+          >- (strip_tac >> first_x_assum drule >> strip_tac >>
+              gvs[] >> metis_tac[MEM])
+          >- (strip_tac >> first_x_assum drule >> strip_tac >>
+              gvs[MEM_APPEND] >> metis_tac[MEM])))
+QED
+
+(* Lower bound: passthrough elements survive *)
+Theorem foldl_passthrough[local]:
+  ∀base acc placed op_map matching w.
+    MEM w base ∧ FLOOKUP op_map w = NONE ==>
+    MEM w (FST (FOLDL (λ(acc, placed) w.
+      case FLOOKUP op_map w of
+        NONE => (acc ++ [w], placed)
+      | SOME phi_idx =>
+          if phi_idx ∈ placed then (acc, placed)
+          else case FLOOKUP matching phi_idx of
+                 SOME src_v => (acc ++ [src_v], phi_idx INSERT placed)
+               | NONE => (acc, placed))
+      (acc, placed) base))
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >> gvs[]
+  >- (irule foldl_acc_persists >> simp[])
+  >- (
+    qmatch_goalsub_abbrev_tac `FOLDL _ init _` >>
+    first_x_assum (qspecl_then [`FST init`, `SND init`,
+      `op_map`, `matching`, `w`] mp_tac) >>
+    simp[Abbr`init`, PAIR])
+QED
+
+(* Lower bound: replacement elements appear (or idx already placed) *)
+Theorem foldl_replacement[local]:
+  ∀base acc placed op_map matching idx src_v.
+    (∃w. MEM w base ∧ FLOOKUP op_map w = SOME idx) ∧
+    FLOOKUP matching idx = SOME src_v ==>
+    MEM src_v (FST (FOLDL (λ(acc, placed) w.
+      case FLOOKUP op_map w of
+        NONE => (acc ++ [w], placed)
+      | SOME phi_idx =>
+          if phi_idx ∈ placed then (acc, placed)
+          else case FLOOKUP matching phi_idx of
+                 SOME src_v => (acc ++ [src_v], phi_idx INSERT placed)
+               | NONE => (acc, placed))
+      (acc, placed) base)) ∨ idx ∈ placed
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >> gvs[]
+  >- ((* w = h: op_map h = SOME idx *)
+      Cases_on `idx ∈ placed` >> simp[] >>
+      irule foldl_acc_persists >> simp[])
+  >- ((* MEM w base': abbreviate init, use IH via FST/SND *)
+      qmatch_goalsub_abbrev_tac `FOLDL _ init _` >>
+      first_x_assum (qspecl_then [`FST init`, `SND init`,
+        `op_map`, `matching`, `idx`, `src_v`] mp_tac) >>
+      simp[PAIR] >>
+      impl_tac >- (simp[Abbr`init`] >> metis_tac[]) >>
+      strip_tac >> gvs[] >>
+      (* Right disjunct case: idx ∈ SND init *)
+      simp[Abbr`init`] >>
+      Cases_on `FLOOKUP op_map h` >> gvs[] >>
+      Cases_on `x ∈ placed` >> gvs[] >>
+      Cases_on `FLOOKUP matching x` >> gvs[IN_INSERT] >>
+      irule foldl_acc_persists >> simp[])
+QED
 
 (* input_vars_from is monotone in base *)
 Theorem input_vars_from_mono[local]:
@@ -639,26 +842,24 @@ Theorem input_vars_from_mono[local]:
     set (input_vars_from lbl instrs a) SUBSET
     set (input_vars_from lbl instrs b)
 Proof
-  Induct >> simp[input_vars_from_def] >>
-  rpt strip_tac >>
-  first_x_assum (qspecl_then [`lbl`,
-    `if h.inst_opcode <> PHI then a
-     else list_union
-       (FILTER (\v. ~MEM v (MAP SND
-          (FILTER (\(l,v). l <> lbl) (phi_pairs h.inst_operands)))) a)
-       (MAP SND (FILTER (\(l,v). l = lbl) (phi_pairs h.inst_operands)))`,
-    `if h.inst_opcode <> PHI then b
-     else list_union
-       (FILTER (\v. ~MEM v (MAP SND
-          (FILTER (\(l,v). l <> lbl) (phi_pairs h.inst_operands)))) b)
-       (MAP SND (FILTER (\(l,v). l = lbl) (phi_pairs h.inst_operands)))`]
-    mp_tac) >>
-  impl_tac
-  >- (Cases_on `h.inst_opcode = PHI` >> simp[] >>
-      simp[list_union_set, UNION_SUBSET, SUBSET_UNION] >>
-      rw[LIST_TO_SET_FILTER, SUBSET_DEF, IN_INTER] >>
-      metis_tac[SUBSET_DEF])
-  >> simp[GSYM input_vars_from_let]
+  rpt gen_tac >> simp[input_vars_from_def, LET_THM] >>
+  Cases_on `NULL (collect_phis instrs)` >- simp[] >>
+  Cases_on `build_phi_maps lbl (collect_phis instrs)` >>
+  rename1 `_ = (op_map, matching)` >> simp[] >>
+  (* Normalize UNCURRY to FST *)
+  `(λ(result:string list, placed:num -> bool). result) = FST` by
+    simp[FUN_EQ_THM, FORALL_PROD] >>
+  pop_assum (fn th => REWRITE_TAC [th]) >>
+  strip_tac >> simp[SUBSET_DEF] >> rpt strip_tac >>
+  drule foldl_mem_tight >> strip_tac >> gvs[]
+  >- ((* passthrough: v ∈ a, op_map v = NONE → v passes through in b too *)
+      irule foldl_passthrough >> metis_tac[SUBSET_DEF])
+  >- ((* replacement: ∃idx w. w ∈ a, op_map w = SOME idx, matching idx = SOME v *)
+      `MEM w b` by metis_tac[SUBSET_DEF] >>
+      qspecl_then [`b`, `[]`, `{}`, `op_map`, `matching`, `idx`, `x`]
+        mp_tac foldl_replacement >>
+      impl_tac >- (simp[] >> metis_tac[]) >>
+      simp[])
 QED
 
 (* edge_transfer is set-monotone *)
@@ -830,8 +1031,7 @@ Theorem inv_fdom_subset[local]:
     set (cfg_analyze fn).cfg_dfs_post × {0n}
 Proof
   rpt strip_tac >>
-  pop_assum (strip_assume_tac o REWRITE_RULE [liveness_state_inv_def]) >>
-  metis_tac[]
+  pop_assum (strip_assume_tac o REWRITE_RULE [liveness_state_inv_def])
 QED
 
 (* Element-level FDOM subset from invariant *)
@@ -1653,38 +1853,8 @@ Definition liveness_sound_inv_def:
 End
 
 (* input_vars_from membership: if v is in the output, either v was in the
-   base liveness (and survived PHI processing) or v is a PHI operand *)
-(* Step function for input_vars_from FOLDL *)
-Theorem input_vars_from_step[local]:
-  ∀src_lbl h instrs live.
-    input_vars_from src_lbl (h::instrs) live =
-    input_vars_from src_lbl instrs
-      (if h.inst_opcode <> PHI then live
-       else list_union
-         (FILTER (\v. ~MEM v (MAP SND (FILTER (\(l,v). l <> src_lbl)
-           (phi_pairs h.inst_operands)))) live)
-         (MAP SND (FILTER (\(l,v). l = src_lbl)
-           (phi_pairs h.inst_operands))))
-Proof
-  simp[input_vars_from_def, LET_THM]
-QED
-
-Theorem input_vars_from_mem_step[local]:
-  ∀v src_lbl inst live.
-    MEM v (if inst.inst_opcode <> PHI then live
-           else list_union
-             (FILTER (\v. ~MEM v (MAP SND (FILTER (\(l,v). l <> src_lbl)
-               (phi_pairs inst.inst_operands)))) live)
-             (MAP SND (FILTER (\(l,v). l = src_lbl)
-               (phi_pairs inst.inst_operands)))) ⇒
-    MEM v live ∨
-    (inst.inst_opcode = PHI ∧
-     MEM (src_lbl, v) (phi_pairs inst.inst_operands))
-Proof
-  rpt gen_tac >> Cases_on `inst.inst_opcode = PHI` >> simp[list_union_mem_proof, MEM_FILTER, MEM_MAP] >>
-  rpt strip_tac >> gvs[] >> PairCases_on `y` >> gvs[]
-QED
-
+   base liveness (and survived PHI processing) or v is a PHI operand.
+   Proved via input_vars_from_phi_correct_proof (same statement). *)
 Theorem input_vars_from_mem[local]:
   ∀instrs v src_lbl live.
     MEM v (input_vars_from src_lbl instrs live) ⇒
@@ -1692,16 +1862,7 @@ Theorem input_vars_from_mem[local]:
     ∃inst. MEM inst instrs ∧ inst.inst_opcode = PHI ∧
            MEM (src_lbl, v) (phi_pairs inst.inst_operands)
 Proof
-  Induct >> rpt gen_tac
-  >- simp[input_vars_from_def]
-  >- (
-    REWRITE_TAC [input_vars_from_step] >> strip_tac >>
-    first_x_assum drule >> strip_tac
-    >- (
-      drule input_vars_from_mem_step >> strip_tac
-      >- simp[]
-      >- (disj2_tac >> qexists_tac `h` >> fs[]))
-    >- (disj2_tac >> metis_tac[MEM]))
+  metis_tac[input_vars_from_phi_correct_proof]
 QED
 
 (* ===== Path construction helpers ===== *)
@@ -1723,7 +1884,7 @@ Proof
   `h = (lbl, SUC s)` by (
     qpat_x_assum `_ = h::t` (mp_tac o SYM) >>
     simp[GENLIST_CONS, combinTheory.o_DEF]) >>
-  rw[cfg_exec_path_def] >> simp[ADD1]
+  rw[cfg_exec_path_def]
 QED
 
 Theorem cfg_exec_path_extend[local]:
@@ -1739,8 +1900,7 @@ Proof
   Cases_on `path`
   >- (gvs[cfg_exec_path_def]) >>
   gvs[cfg_exec_path_def] >>
-  PairCases_on `h` >> gvs[cfg_exec_path_def] >>
-  first_x_assum irule >> simp[]
+  PairCases_on `h` >> gvs[cfg_exec_path_def]
 QED
 
 Theorem not_var_defined_at_phi[local]:
@@ -1750,8 +1910,7 @@ Theorem not_var_defined_at_phi[local]:
     (EL idx bb.bb_instructions).inst_opcode = PHI ==>
     ¬var_defined_at bbs lbl idx v
 Proof
-  rw[var_defined_at_def] >>
-  imp_res_tac lookup_block_unique >> gvs[]
+  rw[var_defined_at_def]
 QED
 
 Theorem used_before_defined_witness[local]:
