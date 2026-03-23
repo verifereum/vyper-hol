@@ -42,3 +42,5 @@ Ancestors
   assignElim
   cse
   sccp
+  (* interprocedural *)
+  functionInliner

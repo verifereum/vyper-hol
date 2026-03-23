@@ -32,4 +32,5 @@ INCLUDES = \
   memory_copy_elision \
   assign_elim \
   cse \
-  sccp
+  sccp \
+  function_inliner
