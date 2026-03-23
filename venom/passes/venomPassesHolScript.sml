@@ -24,6 +24,8 @@ Ancestors
   singleUseExpansion
   (* assert combiner *)
   assertCombiner
+  (* affine folding *)
+  affineFolding
   (* algebraic optimization *)
   algebraicOpt
   (* mem2var promotion *)
