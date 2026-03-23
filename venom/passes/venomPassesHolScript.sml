@@ -9,6 +9,7 @@ Ancestors
   rta
   (* simple rewrite passes *)
   assertElim
+  overflowElim
   literalsCodesize
   removeUnused
   concretizeMemLoc
