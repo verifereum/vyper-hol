@@ -91,22 +91,22 @@ Definition getter_def:
   let (args, ret, exp) =
     build_getter ne kt vt 0
   in
-    (View, args, [], ret, [Return $ SOME exp])
+    (View, F, args, [], ret, [Return $ SOME exp])
 End
 
 val () = cv_auto_trans getter_def;
 
 Definition lookup_function_def:
-  lookup_function src_id_opt name Deploy [] = SOME (Payable, [], [], NoneT, []) ∧
+  lookup_function src_id_opt name Deploy [] = SOME (Payable, F, [], [], NoneT, []) ∧
   lookup_function src_id_opt name vis [] = NONE ∧
-  lookup_function src_id_opt name vis (FunctionDecl fv fm id args dflts ret body :: ts) =
-  (if id = name ∧ vis = fv then SOME (fm, args, dflts, ret, body)
+  lookup_function src_id_opt name vis (FunctionDecl fv fm nr id args dflts ret body :: ts) =
+  (if id = name ∧ vis = fv then SOME (fm, nr, args, dflts, ret, body)
    else lookup_function src_id_opt name vis ts) ∧
   lookup_function src_id_opt name External (VariableDecl Public mut id typ :: ts) =
   (if id = name then
     let ne = TopLevelName NoneT (src_id_opt, id) in
     if ¬is_ArrayT typ
-    then SOME (View, [], [], typ, [Return (SOME ne)])
+    then SOME (View, F, [], [], typ, [Return (SOME ne)])
     else SOME $ getter ne (BaseT (UintT 256)) (Type (ArrayT_type typ))
    else lookup_function src_id_opt name External ts) ∧
   lookup_function src_id_opt name External (HashMapDecl Public _ id kt vt :: ts) =
@@ -332,12 +332,12 @@ QED
 (* Extract callable functions - for termination proof *)
 (* Internal and Deploy are separate so we can order Internal before Deploy *)
 Definition dest_Internal_Fn_def:
-  dest_Internal_Fn (FunctionDecl Internal _ fn _ dflts _ ss) = [(fn, (dflts, ss))] ∧
+  dest_Internal_Fn (FunctionDecl Internal _ _ fn _ dflts _ ss) = [(fn, (dflts, ss))] ∧
   dest_Internal_Fn _ = []
 End
 
 Definition dest_Deploy_Fn_def:
-  dest_Deploy_Fn (FunctionDecl Deploy _ fn _ dflts _ ss) = [(fn, (dflts, ss))] ∧
+  dest_Deploy_Fn (FunctionDecl Deploy _ _ fn _ dflts _ ss) = [(fn, (dflts, ss))] ∧
   dest_Deploy_Fn _ = []
 End
 
@@ -445,27 +445,27 @@ QED
 
 (* lookup_function with Internal finds body via ALOOKUP on dest_Internal_Fn *)
 Theorem lookup_function_Internal_imp_ALOOKUP:
-  ∀src_id_opt fn vis ts v w x y z.
-  lookup_function src_id_opt fn vis ts = SOME (v,w,x,y,z) ∧ vis = Internal ⇒
+  ∀src_id_opt fn vis ts v nr w x y z.
+  lookup_function src_id_opt fn vis ts = SOME (v,nr,w,x,y,z) ∧ vis = Internal ⇒
   (x, z) = ([], []) ∨ ALOOKUP (FLAT (MAP dest_Internal_Fn ts)) fn = SOME (x, z)
 Proof
   ho_match_mp_tac lookup_function_ind
   \\ rw[lookup_function_def, dest_Internal_Fn_def]
   \\ gvs[dest_Internal_Fn_def]
-  \\ rename1 `FunctionDecl fv _ _ _ _ _ _`
+  \\ rename1 `FunctionDecl fv _ _ _ _ _ _ _`
   \\ Cases_on `fv` \\ gvs[dest_Internal_Fn_def]
 QED
 
 (* lookup_function with Deploy finds body via ALOOKUP on dest_Deploy_Fn *)
 Theorem lookup_function_Deploy_imp_ALOOKUP:
-  ∀src_id_opt fn vis ts v w x y z.
-  lookup_function src_id_opt fn vis ts = SOME (v,w,x,y,z) ∧ vis = Deploy ⇒
+  ∀src_id_opt fn vis ts v nr w x y z.
+  lookup_function src_id_opt fn vis ts = SOME (v,nr,w,x,y,z) ∧ vis = Deploy ⇒
   (x, z) = ([], []) ∨ ALOOKUP (FLAT (MAP dest_Deploy_Fn ts)) fn = SOME (x, z)
 Proof
   ho_match_mp_tac lookup_function_ind
   \\ rw[lookup_function_def, dest_Deploy_Fn_def]
   \\ gvs[dest_Deploy_Fn_def]
-  \\ rename1 `FunctionDecl fv _ _ _ _ _ _`
+  \\ rename1 `FunctionDecl fv _ _ _ _ _ _ _`
   \\ Cases_on `fv` \\ gvs[dest_Deploy_Fn_def]
 QED
 
@@ -478,7 +478,7 @@ Proof
   ho_match_mp_tac lookup_function_ind
   \\ rw[lookup_function_def, dest_Internal_Fn_def]
   \\ gvs[dest_Internal_Fn_def]
-  \\ rename1 `FunctionDecl fv _ _ _ _ _ _`
+  \\ rename1 `FunctionDecl fv _ _ _ _ _ _ _`
   \\ Cases_on `fv` \\ gvs[dest_Internal_Fn_def]
 QED
 
@@ -486,8 +486,8 @@ QED
 (* This works because module_fns orders Internal entries before Deploy entries, *)
 (* matching lookup_callable_function which tries Internal first. *)
 Theorem lookup_callable_function_eq_ALOOKUP_module_fns:
-  ∀in_deploy fn ts src_id v w x y z.
-  lookup_callable_function in_deploy fn ts = SOME (v,w,x,y,z) ∧ (x, z) ≠ ([], []) ⇒
+  ∀in_deploy fn ts src_id v nr w x y z.
+  lookup_callable_function in_deploy fn ts = SOME (v,nr,w,x,y,z) ∧ (x, z) ≠ ([], []) ⇒
   ALOOKUP (module_fns src_id ts) (src_id, fn) = SOME (x, z)
 Proof
   rpt gen_tac
@@ -756,6 +756,35 @@ val () = check_array_bounds_def
   |> SRULE [bind_def, FUN_EQ_THM, LET_THM, check_def,
             toplevel_value_CASE_rator]
   |> cv_auto_trans;
+
+(* ===== Reentrancy Lock Helpers ===== *)
+(* Vyper's @nonreentrant uses transient storage (EIP-1153 on Cancun+).
+   Lock values: 0 = unlocked (final), 1 = locked (temp).
+   On entry: assert TLOAD(slot) ≠ 1, then TSTORE(slot, 1).
+   On exit: TSTORE(slot, 0).
+   For view functions: only check, don't acquire/release. *)
+
+(* Check and acquire the reentrancy lock.
+   Directly accesses transient storage (address -> bytes32 -> bytes32). *)
+Definition acquire_nonreentrant_lock_def:
+  acquire_nonreentrant_lock (addr : address) (slot : num) (is_view : bool)
+    (st : evaluation_state) =
+  let current = st.tStorage addr (n2w slot) in
+  if current = 1w then (INR (Error (RuntimeError "nonreentrant lock")), st)
+  else if is_view then (INL (), st)
+  else (INL (), st with tStorage := (addr =+ (n2w slot =+ 1w) (st.tStorage addr)) st.tStorage)
+End
+
+(* cv_auto_trans not possible: tStorage has function type *)
+
+(* Release the reentrancy lock *)
+Definition release_nonreentrant_lock_def:
+  release_nonreentrant_lock (addr : address) (slot : num)
+    (st : evaluation_state) =
+  (INL (), st with tStorage := (addr =+ (n2w slot =+ 0w) (st.tStorage addr)) st.tStorage)
+End
+
+(* cv_auto_trans not possible: tStorage has function type *)
 
 (* top-level definition of the Vyper interpreter *)
 
@@ -1044,7 +1073,9 @@ Definition evaluate_def:
     check (¬MEM (src_id_opt, fn) cx.stk) "recursion";
     ts <- lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code";
     tup <- lift_option_type (lookup_callable_function cx.in_deploy fn ts) "IntCall lookup_function";
-    stup <<- SND tup; args <<- FST stup; sstup <<- SND stup;
+    (* tup = (mut, nr, args, dflts, ret, body) *)
+    mut <<- FST tup; stup <<- SND tup; nr <<- FST stup; stup2 <<- SND stup;
+    args <<- FST stup2; sstup <<- SND stup2;
     dflts <<- FST sstup; sstup2 <<- SND sstup;
     ret <<- FST $ sstup2; body <<- SND $ sstup2;
     type_check (LENGTH es ≤ LENGTH args ∧
@@ -1059,9 +1090,23 @@ Definition evaluate_def:
     prev <- get_scopes;
     rtv <- lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret";
     cxf <- push_function (src_id_opt, fn) env cx;
+    is_view <<- (mut = View ∨ mut = Pure);
+    (* Acquire reentrancy lock if nonreentrant *)
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+     else return ());
     rv <- finally
       (try (do eval_stmts cxf body; return NoneV od) handle_function)
-      (pop_function prev);
+      (do pop_function prev;
+          (* Release reentrancy lock if nonreentrant and not view *)
+          if nr ∧ ¬is_view then
+            case cx.nonreentrant_slot of
+            | NONE => return ()
+            | SOME slot => release_nonreentrant_lock cx.txn.target slot
+          else return ()
+       od);
     crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
     return $ Value crv
   od ∧
@@ -1116,7 +1161,7 @@ Termination
     \\ TRY (qpat_x_assum`OUTR _ _ = _`kall_tac)
     \\ gvs[CaseEq"option"]
     \\ simp[bound_def]
-    \\ qmatch_asmsub_rename_tac`lookup_callable_function _ fn ts = SOME (_, args, dflts, ret, bdy)`
+    \\ qmatch_asmsub_rename_tac`lookup_callable_function _ fn ts = SOME (_, _, args, dflts, ret, bdy)`
     \\ Cases_on`(dflts, bdy) = ([], [])`
     >- gvs[bound_def]
     \\ `(dflts, bdy) <> ([], [])` by (strip_tac >> gvs[])
@@ -1185,6 +1230,18 @@ End
 
 val () = cv_auto_trans initial_immutables_def;
 
+(* Look up the nonreentrant key slot from the transient storage layout.
+   In Python, this is the entry with key (NONE, "$.nonreentrant_key"). *)
+Definition lookup_nonreentrant_slot_def:
+  lookup_nonreentrant_slot layouts addr =
+    case ALOOKUP layouts addr of
+    | NONE => NONE
+    | SOME (_, transient_layout) =>
+        ALOOKUP transient_layout (NONE, "$.nonreentrant_key")
+End
+
+val () = cv_auto_trans lookup_nonreentrant_slot_def;
+
 Definition initial_evaluation_context_def:
   initial_evaluation_context srcs layouts tx =
   <| sources := srcs
@@ -1192,6 +1249,7 @@ Definition initial_evaluation_context_def:
    ; txn := tx
    ; stk := [(NONE, tx.function_name)]
    ; in_deploy := F
+   ; nonreentrant_slot := lookup_nonreentrant_slot layouts tx.target
    |>
 End
 
@@ -1328,7 +1386,7 @@ Definition evaluate_defaults_def:
 End
 
 Definition call_external_function_def:
-  call_external_function am cx mut ts all_mods args dflts vals body ret =
+  call_external_function am cx nr mut ts all_mods args dflts vals body ret =
   let all_tenv = type_env_all_modules all_mods in
   let n_provided = LENGTH vals in
   let n_expected = LENGTH args in
@@ -1351,18 +1409,35 @@ Definition call_external_function_def:
    let srcs = am.sources in
    let exps = am.exports in
    let layouts = am.layouts in
+   let is_view = (mut = View ∨ mut = Pure) in
+   let lock_action = if nr then
+     case cx.nonreentrant_slot of
+     | NONE => (λst. (INR $ Error (RuntimeError "nonreentrant slot missing"), st))
+     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+     else (λst. (INL (), st)) in
+   let unlock_action = if nr ∧ ¬is_view then
+     case cx.nonreentrant_slot of
+     | NONE => (λst. (INL (), st))
+     | SOME slot => release_nonreentrant_lock cx.txn.target slot
+     else (λst. (INL (), st)) in
    let (res, st) =
-     (case do send_call_value mut cx; eval_stmts cx body od st
+     (case do lock_action; send_call_value mut cx; eval_stmts cx body od st
       of
-       | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs exps layouts st)
+       | (INL (), st) =>
+           (case unlock_action st of
+            | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs exps layouts st)
+            | (INR e, st) => (INR e, am))
        | (INR (ReturnException v), st) =>
-           (let am = abstract_machine_from_state srcs exps layouts st in
-            case evaluate_type all_tenv ret
-            of NONE => (INR (Error (RuntimeError "eval ret")), am)
-             | SOME tv =>
-            case safe_cast tv v
-            of NONE => (INR (Error (RuntimeError "ext cast ret")), am)
-             | SOME v => (INL v, am))
+           (case unlock_action st of
+            | (INL (), st) =>
+              (let am = abstract_machine_from_state srcs exps layouts st in
+               case evaluate_type all_tenv ret
+               of NONE => (INR (Error (RuntimeError "eval ret")), am)
+                | SOME tv =>
+               case safe_cast tv v
+               of NONE => (INR (Error (RuntimeError "ext cast ret")), am)
+                | SOME v => (INL v, am))
+            | (INR e, st) => (INR e, am))
        | (INR e, st) => (INR e, am)) in
     (res, st (* transient storage cleared separately via ClearTransientStorage action *)))
 End
@@ -1413,8 +1488,8 @@ Definition call_external_def:
    | SOME ts =>
   case lookup_exported_function cx am tx.function_name
   of NONE => (INR $ Error (RuntimeError "call lookup_function"), am)
-   | SOME (mut, args, dflts, ret, body) =>
-       call_external_function am cx mut ts all_mods args dflts tx.args body ret
+   | SOME (mut, nr, args, dflts, ret, body) =>
+       call_external_function am cx nr mut ts all_mods args dflts tx.args body ret
 End
 
 Definition load_contract_def:
@@ -1429,10 +1504,10 @@ Definition load_contract_def:
                       exports updated_by CONS (addr, exps) |> in
   case lookup_function NONE tx.function_name Deploy ts of
      | NONE => INR $ Error (RuntimeError "no constructor")
-     | SOME (mut, args, dflts, ret, body) =>
+     | SOME (mut, nr, args, dflts, ret, body) =>
        let cx = (initial_evaluation_context ((addr,mods)::am.sources) am.layouts tx)
                 with in_deploy := T in
-       case call_external_function am cx mut ts mods args dflts tx.args body ret
+       case call_external_function am cx nr mut ts mods args dflts tx.args body ret
          of (INR e, _) => INR e
        (* TODO: update balances on return *)
           | (_, am) => INL (am with sources updated_by CONS (addr, mods))

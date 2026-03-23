@@ -1116,6 +1116,7 @@ Definition translate_toplevel_def:
     SOME (FunctionDecl
       (translate_visibility decs)
       (translate_mutability decs)
+      (MEM "nonreentrant" decs)
       name
       (translate_args_with_types args arg_tys)
       (MAP (translate_expr ctx) defaults)

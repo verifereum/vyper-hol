@@ -66,6 +66,7 @@ Datatype:
   ; sources: (address, (num option, toplevel list) alist) alist
   ; layouts: (address, storage_layout # storage_layout) alist  (* (storage, transient) *)
   ; in_deploy: bool  (* T when executing during deployment, allows calling Deploy functions *)
+  ; nonreentrant_slot: num option  (* SOME slot if contract has reentrancy lock in transient storage *)
   |>
 End
 
@@ -82,6 +83,7 @@ Definition empty_evaluation_context_def:
   ; sources := []
   ; layouts := []
   ; in_deploy := F
+  ; nonreentrant_slot := NONE
   |>
 End
 
