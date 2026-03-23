@@ -1,7 +1,7 @@
 (*
  * Concretize Memory Locations — Definitions
  *
- * Upstream: vyperlang/vyper@cff4f6822 (alloca-only)
+ * Upstream: vyperlang/vyper@8780b3134 (alloca_id removal)
  *
  * Replaces abstract memory allocation instructions (alloca)
  * with concrete ASSIGN of computed memory offsets, and replaces

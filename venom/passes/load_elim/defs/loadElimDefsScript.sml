@@ -1,7 +1,7 @@
 (*
  * Load Elimination — Definitions
  *
- * Upstream: vyperlang/vyper@cff4f6822 (bp_analyze ctx removal)
+ * Upstream: vyperlang/vyper@8780b3134 (remove alloca_id)
  *
  * Eliminates redundant loads by tracking available values at each
  * memory location via a set-valued lattice. At join points, value

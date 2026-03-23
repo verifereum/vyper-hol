@@ -1,7 +1,7 @@
 (*
  * Venom Well-Formedness Predicates
  *
- * Upstream: vyperlang/vyper@cff4f6822 (sunset palloca/calloca)
+ * Upstream: vyperlang/vyper@8780b3134 (alloca_id removal)
  *
  * This theory defines structural well-formedness for Venom IR functions
  * and contexts: entry blocks, block structure, successor closure, and
@@ -133,8 +133,8 @@ Definition inst_wf_def:
     | PARAM => ∃idx. inst.inst_operands = [Lit idx] ∧
                      LENGTH inst.inst_outputs = 1
     (* ---- Allocation ---- *)
-    | ALLOCA => ∃sz id. inst.inst_operands = [Lit sz; Lit id] ∧
-                        LENGTH inst.inst_outputs = 1
+    | ALLOCA => ∃sz. inst.inst_operands = [Lit sz] ∧
+                     LENGTH inst.inst_outputs = 1
     (* ---- External calls ---- *)
     | CALL => LENGTH inst.inst_operands = 7 ∧ LENGTH inst.inst_outputs = 1
     | STATICCALL => LENGTH inst.inst_operands = 6 ∧ LENGTH inst.inst_outputs = 1

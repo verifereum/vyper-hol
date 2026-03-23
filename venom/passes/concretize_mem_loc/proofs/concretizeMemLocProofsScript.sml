@@ -50,18 +50,15 @@ Definition mem_byte_at_def:
     if i < LENGTH mem then EL i mem else 0w
 End
 
-(* Find the alloca_id for a variable in a function.
-   Returns SOME id if some alloca/palloca/calloca produces [v]
-   with alloca_id operand. *)
-Definition fn_alloca_id_of_var_def:
-  fn_alloca_id_of_var fn v =
+(* Find the inst_id for an alloca that produces variable v.
+   Returns SOME inst_id if some alloca instruction produces [v].
+   Post alloca_id removal: keyed by inst_id, not operand. *)
+Definition fn_alloca_inst_id_of_var_def:
+  fn_alloca_inst_id_of_var fn v =
     case FIND (\inst. is_alloca_op inst.inst_opcode /\
                       inst.inst_outputs = [v])
               (FLAT (MAP (\bb. bb.bb_instructions) fn.fn_blocks)) of
-      SOME inst =>
-        (case inst.inst_operands of
-           _ :: Lit alloc_id :: _ => SOME (w2n alloc_id)
-         | _ => NONE)
+      SOME inst => SOME inst.inst_id
     | NONE => NONE
 End
 
@@ -114,7 +111,7 @@ End
    s1.vs_allocas tracks all allocations.
 
    "Activated" = the alloca instruction has executed, meaning the
-   alloc_id is in s1.vs_allocas and s2 has the ASSIGN result.
+   inst_id is in s1.vs_allocas and s2 has the ASSIGN result.
 
    Initially (before any alloca executes), s1.vs_allocas = FEMPTY,
    so the activated clauses are vacuous and the relation reduces to
@@ -127,24 +124,24 @@ Definition mem_remap_equiv_def:
          v NOTIN pointer_derived_vars fn amap ==>
          lookup_var v s1 = lookup_var v s2) /\
     (* 2a. Activated alloca vars: s2 has concrete offset *)
-    (!v addr alloc_id.
+    (!v addr aid.
        FLOOKUP amap v = SOME addr /\
-       fn_alloca_id_of_var fn v = SOME alloc_id /\
-       alloc_id IN FDOM s1.vs_allocas ==>
+       fn_alloca_inst_id_of_var fn v = SOME aid /\
+       aid IN FDOM s1.vs_allocas ==>
        lookup_var v s2 = SOME addr) /\
     (* 2b. Non-activated alloca vars agree *)
     (!v. v IN FDOM amap ==>
-       case fn_alloca_id_of_var fn v of
+       case fn_alloca_inst_id_of_var fn v of
          NONE => lookup_var v s1 = lookup_var v s2
-       | SOME alloc_id =>
-           alloc_id NOTIN FDOM s1.vs_allocas ==>
+       | SOME aid =>
+           aid NOTIN FDOM s1.vs_allocas ==>
            lookup_var v s1 = lookup_var v s2) /\
     (* 3. Memory content for activated allocations *)
-    (!alloc_id orig_off sz.
-       FLOOKUP s1.vs_allocas alloc_id = SOME (orig_off, sz) ==>
+    (!aid orig_off sz.
+       FLOOKUP s1.vs_allocas aid = SOME (orig_off, sz) ==>
        !v addr.
          FLOOKUP amap v = SOME addr /\
-         fn_alloca_id_of_var fn v = SOME alloc_id ==>
+         fn_alloca_inst_id_of_var fn v = SOME aid ==>
          !i. i < sz ==>
            mem_byte_at s1.vs_memory (orig_off + i) =
            mem_byte_at s2.vs_memory (w2n addr + i)) /\
@@ -181,7 +178,7 @@ QED
 
 (* Preconditions:
    - venom_wf ctx: eliminates Error branches from step_inst.
-   - ssa_form fn: fn_alloca_id_of_var is unambiguous.
+   - ssa_form fn: fn_alloca_inst_id_of_var is unambiguous.
    - pointer_confined fn amap: pointer-derived vars only used as
      memory addresses, ensuring control flow is identical.
 

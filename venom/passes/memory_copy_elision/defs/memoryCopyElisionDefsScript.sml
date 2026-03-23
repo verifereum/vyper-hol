@@ -1,7 +1,7 @@
 (*
  * Memory Copy Elision — Definitions
  *
- * Upstream: vyperlang/vyper@cff4f6822 (bp_analyze ctx removal)
+ * Upstream: vyperlang/vyper@8780b3134 (remove alloca_id)
  *
  * Eliminates redundant memory copies by tracking which memory
  * locations already contain the expected data.
