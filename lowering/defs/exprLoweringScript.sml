@@ -1809,7 +1809,7 @@ Definition compile_make_array_def:
                else emit_op ADD [buf_op; Lit (n2w data_offset)]);
        (if is_prim then emit_void MSTORE [dst; v]
         else if is_bytestring_type e_ty then
-          do compile_store_bytestring v dst; return () od
+          compile_store_bytestring v dst
         else emit_void MCOPY [dst; v; Lit (n2w elem_size)]);
        compile_make_array cfn cenv es elem_size has_length_word alloca_size
                           buf_op (cur_idx + 1)
@@ -1962,7 +1962,7 @@ Definition compile_struct_lit_def:
        v <- lower_value cfn cenv e_ty e;
        (if is_prim then emit_void MSTORE [dst; v]
         else if is_bytestring_type e_ty then
-          do compile_store_bytestring v dst; return () od
+          compile_store_bytestring v dst
         else emit_void MCOPY [dst; v; Lit (n2w field_size)]);
        compile_struct_lit cfn cenv ty rest buf_op (cur_offset + field_size)
     od
