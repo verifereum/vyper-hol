@@ -127,7 +127,7 @@ Definition compute_vyper_args_def:
        which is the maximum encoding size for this type. *)
     bound = vyper_abi_size_bound tenv (TupleT vyTys);
     padded = PAD_RIGHT 0w bound cd;
-    vyArgsTenvOpt = if
+    argsOpt = if
       static_length abiTupTy ≤ LENGTH cd ∧
       valid_enc abiTupTy padded
     then let
@@ -137,10 +137,12 @@ Definition compute_vyper_args_def:
       vyArgs = (case OPTION_BIND vyArgsTv
                   (λtv. OPTION_BIND vyArgsTup (extract_elements tv))
                   of NONE => [] | SOME ls => ls)
-      in SOME (vyArgs, tenv) else NONE;
+      in SOME vyArgs else NONE;
   in
-    (vyArgsTenvOpt, SND vyTysRet)
+    (argsOpt, tenv, SND vyTysRet)
 End
+
+val () = cv_auto_trans compute_vyper_args_def;
 
 Definition run_deployment_def:
   run_deployment am dt = let
@@ -151,7 +153,7 @@ Definition run_deployment_def:
     argTys = find_args_by_name name dt.contractAbi;
     ar = compute_vyper_args all_mods ts Deploy name argTys dt.callData;
     res = case FST ar of NONE => INR (Error $ RuntimeError "run_deployment args")
-          | SOME (args, _) => let
+          | SOME args => let
     tx = <| sender := dt.deployer
           ; target := dt.deployedAddress
           ; function_name := name
@@ -164,7 +166,12 @@ Definition run_deployment_def:
           ; blob_base_fee := dt.blobBaseFee
           ; gas_price := dt.gasPrice
           ; chain_id := dt.chainId
-          ; is_creation := T |>;
+          ; is_creation := T
+          ; coinbase := 0w
+          ; gas_limit := 0
+          ; base_fee := 0
+          ; prev_randao := 0
+          ; origin := dt.deployer |>;
     in load_contract am tx dt.sourceAst dt.sourceExports
   in (sns, res)
 End
@@ -189,10 +196,12 @@ Definition run_call_def:
          | NONE => case ALOOKUP all_mods NONE of SOME ts => ts | _ => [];
     ar = compute_vyper_args all_mods ts External name argTys (DROP 4 ct.callData);
     retTys = SND (SND fna);
+    tenv = FST (SND ar);
+    retTypes = SND (SND ar);
   in
     case FST ar of NONE => ((INR (Error $ RuntimeError "run_call args"), am),
-                            (retTys, (SND ar, FEMPTY)))
-  | SOME (args, tenv) => let
+                            (retTys, (retTypes, FEMPTY)))
+  | SOME args => let
     tx = <| sender := ct.sender
           ; target := ct.target
           ; function_name := name
@@ -205,10 +214,15 @@ Definition run_call_def:
           ; blob_base_fee := ct.blobBaseFee
           ; gas_price := ct.gasPrice
           ; chain_id := ct.chainId
-          ; is_creation := F |>;
+          ; is_creation := F
+          ; coinbase := 0w
+          ; gas_limit := ct.gasLimit
+          ; base_fee := 0
+          ; prev_randao := 0
+          ; origin := ct.sender |>;
     (* TODO: set static based on ct.static *)
     (* TODO: set env data somewhere? *)
-  in (call_external am tx, (retTys, (SND ar, tenv)))
+  in (call_external am tx, (retTys, (retTypes, tenv)))
 End
 
 val () = cv_auto_trans run_call_def;

@@ -396,68 +396,7 @@ Proof
   imp_res_tac get_Value_immutables >> imp_res_tac materialise_state >> gvs[]
 QED
 
-(* ----- Case 6: Raise e ----- *)
-Theorem case_Raise_imm_dom[local]:
-  ∀cx e.
-    (∀st res st'. eval_expr cx e st = (res,st') ⇒
-       preserves_immutables_dom cx st st') ⇒
-    ∀st res st'.
-      eval_stmt cx (Raise e) st = (res, st') ⇒
-      preserves_immutables_dom cx st st'
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, AllCaseEqs(), raise_def,
-       lift_option_def, lift_option_type_def, return_def] >>
-  rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
-  imp_res_tac get_Value_immutables >> imp_res_tac materialise_state >> gvs[] >>
-  irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
-  gvs[preserves_immutables_dom_eq] >>
-  Cases_on `dest_StringV v''` >>
-  gvs[return_def, raise_def, preserves_immutables_dom_eq]
-QED
-
-(* ----- Case 7: Assert e se ----- *)
-Theorem case_Assert_imm_dom[local]:
-  ∀cx e se.
-    (∀st res st'. eval_expr cx e st = (res,st') ⇒
-       preserves_immutables_dom cx st st') ∧
-    (∀s'' tv t. eval_expr cx e s'' = (INL tv,t) ⇒
-       ∀st res st'. eval_expr cx se st = (res,st') ⇒
-         preserves_immutables_dom cx st st') ⇒
-    ∀st res st'.
-      eval_stmt cx (Assert e se) st = (res, st') ⇒
-      preserves_immutables_dom cx st st'
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def] >>
-  Cases_on `eval_expr cx e st` >> Cases_on `q` >>
-  simp[return_def, raise_def, preserves_immutables_dom_refl] >>
-  (* Derive unconditional IH for se from the conditional one *)
-  sg `∀st res st'. eval_expr cx se st = (res,st') ⇒
-        preserves_immutables_dom cx st st'`
-  >- (rpt strip_tac >> gvs[] >>
-      first_x_assum (drule_then (fn th =>
-        first_x_assum (fn th2 => mp_tac (MATCH_MP th th2)))) >>
-      simp[])
-  >> strip_tac >>
-  irule preserves_immutables_dom_trans >> qexists_tac `r` >> conj_tac
-  >- gvs[]
-  >> qpat_x_assum `switch_BoolV _ _ _ _ = _` mp_tac >>
-     simp[switch_BoolV_def] >>
-     IF_CASES_TAC >> simp[return_def, raise_def, preserves_immutables_dom_refl] >>
-     IF_CASES_TAC >> simp[raise_def, preserves_immutables_dom_refl] >>
-     simp[bind_def, AllCaseEqs(), return_def, raise_def,
-          lift_option_def, lift_option_type_def] >>
-     rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
-     imp_res_tac get_Value_immutables >> imp_res_tac materialise_state >> gvs[] >>
-     irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
-     gvs[preserves_immutables_dom_eq] >>
-     Cases_on `dest_StringV sv` >>
-     gvs[return_def, raise_def, preserves_immutables_dom_eq]
-QED
-
+(* ----- Case 6: Raise reason ----- *)
 (* ----- Case 8: Log id es ----- *)
 Theorem case_Log_imm_dom[local]:
   ∀cx id es.
@@ -547,11 +486,13 @@ Proof
 QED
 
 (* ----- Case 11: Assign g e ----- *)
+(* Eval order: eval_target → eval_expr → materialise → assign_target *)
 Theorem case_Assign_imm_dom[local]:
   ∀cx g e.
     (∀st res st'. eval_target cx g st = (res,st') ⇒
        preserves_immutables_dom cx st st') ∧
-    (∀s'' gv t. eval_target cx g s'' = (INL gv,t) ⇒
+    (∀s'' gv t'.
+       eval_target cx g s'' = (INL gv,t') ⇒
        ∀st res st'. eval_expr cx e st = (res,st') ⇒
          preserves_immutables_dom cx st st') ⇒
     ∀st res st'.
@@ -564,19 +505,12 @@ Proof
   PURE_REWRITE_TAC [ignore_bind_def] >>
   simp[bind_def, AllCaseEqs(), return_def, raise_def] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
-  imp_res_tac get_Value_immutables >> imp_res_tac materialise_state >> gvs[] >>
+  imp_res_tac materialise_state >> gvs[] >>
+  (* Derive unconditional eval_expr IH from eval_target success *)
+  first_x_assum drule >> strip_tac >>
   imp_res_tac (cj 1 assign_target_imm_dom_any) >>
-  first_x_assum (qspecl_then [`st`, `gv`, `s''`] mp_tac) >> simp[] >>
-  strip_tac >>
-  irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
-  conj_tac >- gvs[] >>
-  TRY (irule preserves_immutables_dom_trans >> qexists_tac `s'⁴'` >> conj_tac
-    >- (irule preserves_immutables_dom_trans >> qexists_tac `s'³'` >>
-        gvs[preserves_immutables_dom_eq])
-    >> gvs[] >> NO_TAC) >>
-  TRY (irule preserves_immutables_dom_trans >> qexists_tac `s'³'` >>
-       gvs[preserves_immutables_dom_eq] >> NO_TAC) >>
-  gvs[]
+  (* Chain: st →(eval_target) s'' →(eval_expr) s'³' →(assign) s'⁵' *)
+  metis_tac[preserves_immutables_dom_trans]
 QED
 
 (* ----- Case 12: AugAssign bt bop e ----- *)
@@ -769,10 +703,7 @@ Proof
   simp[AllCaseEqs()] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_refl, return_def, raise_def] >>
   imp_res_tac get_Value_immutables >>
-  imp_res_tac materialise_state >> gvs[] >> (
-    irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
-    conj_tac >- gvs[] >>
-    irule preserves_immutables_dom_eq >> gvs[])
+  imp_res_tac materialise_state >> gvs[]
 QED
 
 (* ----- Case 19: eval_iterator (Range e1 e2) ----- *)
@@ -1861,8 +1792,43 @@ Proof
   >- gvs[evaluate_def, raise_def, preserves_immutables_dom_refl]
   >- gvs[evaluate_def, raise_def, preserves_immutables_dom_refl]
   >- (drule_all case_Return_SOME_imm_dom >> simp[])
-  >- (drule_all case_Raise_imm_dom >> simp[])
-  >- (drule_all case_Assert_imm_dom >> simp[])
+  (* Raise RaiseBare *)
+  >- gvs[evaluate_def, raise_def, preserves_immutables_dom_refl]
+  (* Raise RaiseUnreachable *)
+  >- gvs[evaluate_def, raise_def, preserves_immutables_dom_refl]
+  (* Raise (RaiseReason e): only eval_expr changes state *)
+  >- (qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs(), raise_def, return_def] >>
+      rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
+      imp_res_tac get_Value_state >> imp_res_tac lift_option_type_state >> gvs[])
+  (* Assert e AssertBare / AssertUnreachable: only eval_expr changes state *)
+  >- (qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
+      qpat_x_assum `switch_BoolV _ _ _ _ = _` mp_tac >>
+      simp[switch_BoolV_def, return_def, raise_def] >>
+      rpt IF_CASES_TAC >> simp[return_def, raise_def] >>
+      rpt strip_tac >> gvs[])
+  >- (qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
+      qpat_x_assum `switch_BoolV _ _ _ _ = _` mp_tac >>
+      simp[switch_BoolV_def, return_def, raise_def] >>
+      rpt IF_CASES_TAC >> simp[return_def, raise_def] >>
+      rpt strip_tac >> gvs[])
+  (* Assert e (AssertReason se): chain eval_expr e → eval_expr se *)
+  >- (qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
+      imp_res_tac get_Value_state >> gvs[] >>
+      qpat_x_assum `switch_BoolV _ _ _ _ = _` mp_tac >>
+      simp[switch_BoolV_def, return_def, raise_def] >>
+      rpt IF_CASES_TAC >> simp[return_def, raise_def, bind_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      TRY (imp_res_tac get_Value_state >> imp_res_tac lift_option_type_state >> gvs[]) >>
+      irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
+      first_x_assum drule_all >> strip_tac >>
+      first_x_assum drule >> simp[])
   >- (drule_all case_Log_imm_dom >> simp[])
   >- (drule_all case_AnnAssign_imm_dom >> simp[])
   >- (drule_all case_Append_imm_dom >> simp[])

@@ -1,7 +1,7 @@
 Theory vyperContext
 Ancestors
   arithmetic alist combin option list finite_map pair rich_list
-  cv cv_std vfmState vfmCompute[ignore_grammar]
+  cv cv_std vfmState vfmCompute[ignore_grammar] sha2
   vyperAST vyperABI vyperMisc vyperValue vyperValueOperation vyperStorage
 Libs
   cv_transLib wordsLib
@@ -24,6 +24,13 @@ Datatype:
   ; gas_price: num
   ; chain_id: num
   ; is_creation: bool
+  (* Block context fields *)
+  ; coinbase: address
+  ; gas_limit: num
+  ; base_fee: num
+  ; prev_randao: num
+  (* Transaction origin *)
+  ; origin: address
   |>
 End
 
@@ -41,7 +48,12 @@ Definition empty_call_txn_def:
     blob_base_fee := 0;
     gas_price := 0;
     chain_id := 0;
-    is_creation := F
+    is_creation := F;
+    coinbase := 0w;
+    gas_limit := 0;
+    base_fee := 0;
+    prev_randao := 0;
+    origin := 0w
   |>
 End
 
@@ -345,6 +357,7 @@ End
 val () = cv_auto_trans evaluate_ecmul_def;
 
 Definition evaluate_builtin_def:
+  evaluate_builtin cx _ ty Not [BoolV b] = INL (BoolV (¬b)) ∧
   evaluate_builtin cx _ ty Not [IntV i] =
     (case type_to_int_bound ty of
        SOME u =>
@@ -367,6 +380,10 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ _ Keccak256 [StringV s] = INL $ BytesV $
     Keccak_256_w64 (MAP (n2w o ORD) s) ∧
   (* TODO: reject BytesV with invalid bounds for Keccak256 *)
+  evaluate_builtin cx _ _ Sha256 [BytesV ls] = INL $ BytesV $
+    word_to_bytes (SHA_256_bytes ls : bytes32) F ∧
+  evaluate_builtin cx _ _ Sha256 [StringV s] = INL $ BytesV $
+    word_to_bytes (SHA_256_bytes (MAP (n2w o ORD) s) : bytes32) F ∧
   evaluate_builtin cx _ _ (Uint2Str n) [IntV i] =
     INL $ StringV (num_to_dec_string (Num i)) ∧
   evaluate_builtin cx _ _ (AsWeiValue dn) [v] = evaluate_as_wei_value dn v ∧
@@ -394,6 +411,11 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx _ _ (Env BlobBaseFee) [] = INL $ IntV &cx.txn.blob_base_fee ∧
   evaluate_builtin cx _ _ (Env GasPrice) [] = INL $ IntV &cx.txn.gas_price ∧
   evaluate_builtin cx _ _ (Env ChainId) [] = INL $ IntV &cx.txn.chain_id ∧
+  evaluate_builtin cx _ _ (Env Coinbase) [] = INL $ AddressV cx.txn.coinbase ∧
+  evaluate_builtin cx _ _ (Env GasLimit) [] = INL $ IntV &cx.txn.gas_limit ∧
+  evaluate_builtin cx _ _ (Env BaseFee) [] = INL $ IntV &cx.txn.base_fee ∧
+  evaluate_builtin cx _ _ (Env PrevRandao) [] = INL $ IntV &cx.txn.prev_randao ∧
+  evaluate_builtin cx _ _ (Env TxOrigin) [] = INL $ AddressV cx.txn.origin ∧
   evaluate_builtin cx _ _ (Env PrevHash) [] = evaluate_block_hash cx.txn (cx.txn.block_number - 1) ∧
   evaluate_builtin cx _ _ BlockHash [IntV i] =
     evaluate_block_hash cx.txn (Num i) ∧
@@ -452,6 +474,7 @@ Definition builtin_args_length_ok_def:
   builtin_args_length_ok Not n = (n = 1) ∧
   builtin_args_length_ok Neg n = (n = 1) ∧
   builtin_args_length_ok Keccak256 n = (n = 1) ∧
+  builtin_args_length_ok Sha256 n = (n = 1) ∧
   builtin_args_length_ok (Uint2Str _) n = (n = 1) ∧
   builtin_args_length_ok (AsWeiValue _) n = (n = 1) ∧
   builtin_args_length_ok (Concat _) n = (2 ≤ n) ∧
