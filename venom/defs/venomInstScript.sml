@@ -39,7 +39,7 @@ Datatype:
     (* SSA/IR-specific *)
     | PHI | PARAM | ASSIGN | NOP
     (* Allocation (Vyper-specific stack slots) *)
-    | ALLOCA | PALLOCA | CALLOCA | GEP
+    | ALLOCA | GEP
     (* Internal function calls *)
     | INVOKE
     (* Environment *)
@@ -355,11 +355,9 @@ Definition is_mem_write_op_def:
   is_mem_write_op _ = F
 End
 
-(* Allocation opcodes: modify vs_memory AND vs_allocas *)
+(* Allocation opcodes: modify vs_allocas *)
 Definition is_alloca_op_def:
   is_alloca_op ALLOCA = T /\
-  is_alloca_op PALLOCA = T /\
-  is_alloca_op CALLOCA = T /\
   is_alloca_op _ = F
 End
 

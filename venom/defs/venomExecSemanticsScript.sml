@@ -949,13 +949,12 @@ Definition step_inst_base_def:
         | _ => Error "create2 requires 4 operands")
 
     (* ----------------------------------------------------------------
-       Memory Allocation
+       Memory Allocation: ALLOCA
 
-       All three variants are identical at runtime: bump-allocate in
-       vs_memory and record in vs_allocas. The distinction is metadata
-       for the compiler (PALLOCA=param, CALLOCA=caller-side staging).
+       Bump-allocate a region in the alloca area (beyond vs_memory)
+       and record in vs_allocas.
 
-       Operands: [Lit size, Lit alloca_id] (CALLOCA has Label callee too)
+       Operands: [Lit size, Lit alloca_id]
        Output: [out] = base address (word256) of allocated region
        ---------------------------------------------------------------- *)
     | ALLOCA =>
@@ -963,18 +962,6 @@ Definition step_inst_base_def:
           [Lit alloc_size; Lit alloc_id] =>
             exec_alloca inst s alloc_size alloc_id
         | _ => Error "alloca requires 2 literal operands")
-
-    | PALLOCA =>
-        (case inst.inst_operands of
-          [Lit alloc_size; Lit alloc_id] =>
-            exec_alloca inst s alloc_size alloc_id
-        | _ => Error "palloca requires 2 literal operands")
-
-    | CALLOCA =>
-        (case inst.inst_operands of
-          Lit alloc_size :: Lit alloc_id :: _ =>  (* Label callee ignored at runtime *)
-            exec_alloca inst s alloc_size alloc_id
-        | _ => Error "calloca requires literal size and id")
 
     (* Default - truly unknown opcode *)
     | _ => Error "unknown opcode"

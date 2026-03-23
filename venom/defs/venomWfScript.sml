@@ -133,10 +133,6 @@ Definition inst_wf_def:
     (* ---- Allocation ---- *)
     | ALLOCA => ∃sz id. inst.inst_operands = [Lit sz; Lit id] ∧
                         LENGTH inst.inst_outputs = 1
-    | PALLOCA => ∃sz id. inst.inst_operands = [Lit sz; Lit id] ∧
-                         LENGTH inst.inst_outputs = 1
-    | CALLOCA => ∃sz id rest. inst.inst_operands = Lit sz :: Lit id :: rest ∧
-                              LENGTH inst.inst_outputs = 1
     (* ---- External calls ---- *)
     | CALL => LENGTH inst.inst_operands = 7 ∧ LENGTH inst.inst_outputs = 1
     | STATICCALL => LENGTH inst.inst_operands = 6 ∧ LENGTH inst.inst_outputs = 1
