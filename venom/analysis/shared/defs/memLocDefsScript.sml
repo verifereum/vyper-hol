@@ -1,7 +1,7 @@
 (*
  * Memory Location Types for Alias Analysis
  *
- * Upstream: vyperlang/vyper@cff4f6822 (alloca-only)
+ * Upstream: vyperlang/vyper@8780b3134 (remove alloca_id)
  *
  * TOP-LEVEL:
  *   allocation, mem_loc,

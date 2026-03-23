@@ -217,10 +217,10 @@ QED
    ================================================================ *)
 
 Theorem exec_alloca_idx[local]:
-  !inst s alloc_size alloc_id n.
-    exec_alloca inst (s with vs_inst_idx := n) alloc_size alloc_id =
+  !inst s alloc_size n.
+    exec_alloca inst (s with vs_inst_idx := n) alloc_size =
     exec_result_map (\s'. s' with vs_inst_idx := n)
-                    (exec_alloca inst s alloc_size alloc_id)
+                    (exec_alloca inst s alloc_size)
 Proof
   rpt gen_tac >> simp[exec_alloca_def, next_alloca_offset_def, LET_THM] >>
   EVERY_CASE_TAC >> simp[exec_result_map_def] >>

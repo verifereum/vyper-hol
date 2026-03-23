@@ -1,7 +1,7 @@
 (*
  * Venom Instructions
  *
- * Upstream: vyperlang/vyper@cff4f6822 (sunset palloca/calloca)
+ * Upstream: vyperlang/vyper@8780b3134 (alloca_id removal)
  *
  * This theory defines the instruction set for Venom IR.
  *)

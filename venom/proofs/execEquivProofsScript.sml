@@ -650,11 +650,11 @@ QED
 
 (* Helper: exec_alloca preserves equiv (operands are literals) *)
 Triviality exec_alloca_equiv:
-  !vars inst s1 s2 alloc_size alloc_id.
+  !vars inst s1 s2 alloc_size.
     state_equiv vars s1 s2 ==>
     result_equiv vars
-      (exec_alloca inst s1 alloc_size alloc_id)
-      (exec_alloca inst s2 alloc_size alloc_id)
+      (exec_alloca inst s1 alloc_size)
+      (exec_alloca inst s2 alloc_size)
 Proof
   rw[exec_alloca_def, LET_THM] >>
   rpt CASE_TAC >> gvs[result_equiv_def] >>

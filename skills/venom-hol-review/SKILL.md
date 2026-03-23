@@ -55,6 +55,28 @@ Failures to catch:
 
 **Props vs proofs**: A props theorem may inline its proof (instead of `ACCEPT_TAC`) only if the proof is a trivial one-liner (e.g. `rw[foo_def]`). But if a theorem's proof is that trivial, question whether it needs to be an exported theorem at all — consumers can just `rw[foo_def]` themselves. Export theorems that save non-trivial work or that name a useful fact for `irule`/`drule`.
 
+## Upstream commit tracking
+
+Every compiler-related definition file (`*DefsScript.sml`) in `venom/passes/`, `venom/analysis/`, and `venom/defs/` **must** include an upstream commit header in its file comment block:
+
+```sml
+(*
+ * Pass Name — Definitions
+ *
+ * Upstream: vyperlang/vyper@<commit-hash> (<brief description>)
+ *)
+```
+
+- The commit hash identifies the Python source this file was ported from or last synced against.
+- Update the hash when syncing upstream changes (e.g. `alloca_id` removal, operand changes).
+- The description should be the most recent significant upstream change affecting the file.
+- Proof files (`*ProofsScript.sml`, `*PropsScript.sml`) do NOT need the header — only definition files that port Python logic.
+
+**Review check**: When reviewing a PR that ports or syncs upstream changes, verify:
+1. All modified defs files have an updated `Upstream:` header.
+2. The commit hash actually exists in `vyperlang/vyper`.
+3. The description matches the change (not stale from a previous sync).
+
 ## Termination
 
 - Prefer proper termination over fuel. Mutual recursion with list helper > FOLDL for HOL4's termination checker.
