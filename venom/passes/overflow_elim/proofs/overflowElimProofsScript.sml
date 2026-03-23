@@ -16,18 +16,6 @@ Theory overflowElimProofs
 Ancestors
   overflowElimDefs analysisSimProps passSimulationProps
 
-(* The eliminated assert's operand is always nonzero when
-   range analysis proves the arithmetic is safe. *)
-Theorem overflow_elim_inst_simulates:
-  !dfg ra lbl idx inst fuel ctx s.
-    overflow_elim_inst dfg ra lbl idx inst <> inst ==>
-    step_inst fuel ctx inst s <> Error "assert" ==>
-    step_inst fuel ctx (overflow_elim_inst dfg ra lbl idx inst) s =
-    step_inst fuel ctx inst s
-Proof
-  cheat
-QED
-
 Theorem overflow_elim_function_correct_proof:
   !fuel ctx fn s.
     fn_inst_wf fn /\ s.vs_inst_idx = 0 ==>
