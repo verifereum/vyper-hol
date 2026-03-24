@@ -421,6 +421,39 @@ Definition make_builtin_call_def:
     else if name = "min" then Builtin ty (Bop Min) args
     else if name = "max" then Builtin ty (Bop Max) args
     else if name = "send" then Call ty Send args NONE
+    (* ===== Chain interaction builtins ===== *)
+    (* raw_call(to, data, max_outsize=0, gas=gas, value=0,
+                is_delegate_call=F, is_static_call=F, revert_on_failure=T)
+       Convention: args in Call = [to_addr; data_bytes; value] *)
+    else if name = "raw_call" then
+      let flags = <| rcf_max_outsize := kwarg_num "max_outsize" kwargs 0;
+                     rcf_is_delegate := kwarg_bool "is_delegate_call" kwargs F;
+                     rcf_is_static := kwarg_bool "is_static_call" kwargs F;
+                     rcf_revert_on_failure := kwarg_bool "revert_on_failure" kwargs T |> in
+      let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
+      Call ty (RawCallTarget flags) (args ++ [value_e]) NONE
+    else if name = "raw_log" then Call ty RawLog args NONE
+    else if name = "raw_revert" then Call ty RawRevert args NONE
+    else if name = "selfdestruct" then Call ty SelfDestructTarget args NONE
+    else if name = "create_minimal_proxy_to" ∨ name = "create_forwarder_to" then
+      let rof = kwarg_bool "revert_on_failure" kwargs T in
+      let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
+      Call ty (CreateTarget CreateMinimalProxy rof) (args ++ [value_e]) NONE
+    else if name = "create_copy_of" then
+      let rof = kwarg_bool "revert_on_failure" kwargs T in
+      let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
+      Call ty (CreateTarget CreateCopyOf rof) (args ++ [value_e]) NONE
+    else if name = "create_from_blueprint" then
+      let rof = kwarg_bool "revert_on_failure" kwargs T in
+      let code_offset = kwarg_num "code_offset" kwargs 3 in
+      let raw_args_flag = kwarg_bool "raw_args" kwargs F in
+      let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
+      Call ty (CreateTarget (CreateFromBlueprint code_offset raw_args_flag) rof) (args ++ [value_e]) NONE
+    else if name = "raw_create" then
+      let rof = kwarg_bool "revert_on_failure" kwargs T in
+      let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
+      Call ty (CreateTarget RawCreate rof) (args ++ [value_e]) NONE
+    else if name = "abs" then Builtin ty Abs args
     else if name = "as_wei_value" then
       (case args of
          (v::d::_) =>
@@ -447,74 +480,6 @@ Definition make_builtin_call_def:
       TypeBuiltin ty Extract32 (translate_type ret_ty) args
     else if name = "method_id" then
       Builtin ty MethodId args
-    (* System builtins *)
-    else if name = "raw_call" then
-      let is_delegate = kwarg_bool "is_delegate_call" kwargs F in
-      let is_static = kwarg_bool "is_static_call" kwargs F in
-      let max_outsize = kwarg_num "max_outsize" kwargs 0 in
-      let revert = kwarg_bool "revert_on_failure" kwargs T in
-      let gas_e = kwarg_expr "gas" kwargs (Builtin ty (Env MsgGas) []) in
-      let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
-      Builtin ty (RawCall is_delegate is_static max_outsize revert)
-        (args ++ [gas_e; value_e])
-    else if name = "raw_log" then
-      Builtin ty RawLog args
-    else if name = "raw_revert" then
-      Builtin ty RawRevert args
-    else if name = "selfdestruct" then
-      Builtin ty SelfDestruct args
-    else if name = "abs" then
-      Builtin ty Abs args
-    (* Contract creation builtins — kwargs extracted, positional args reordered *)
-    else if name = "raw_create" then
-      let revert = kwarg_bool "revert_on_failure" kwargs T in
-      let has_salt = has_kwarg "salt" kwargs in
-      let salt_args = (case ALOOKUP kwargs "salt" of
-                         SOME e => [e] | NONE => []) in
-      let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
-      (* args = blob :: ctor_args → reorder to blob :: value :: [salt] ++ ctor_args *)
-      (case args of
-         (blob_e :: ctor_args) =>
-           Builtin ty (RawCreate revert has_salt)
-             (blob_e :: value_e :: salt_args ++ ctor_args)
-       | _ => Builtin ty (RawCreate revert has_salt) (value_e :: salt_args))
-    else if name = "create_minimal_proxy_to" ∨ name = "create_forwarder_to" then
-      let revert = kwarg_bool "revert_on_failure" kwargs T in
-      let has_salt = has_kwarg "salt" kwargs in
-      let salt_args = (case ALOOKUP kwargs "salt" of
-                         SOME e => [e] | NONE => []) in
-      let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
-      (case args of
-         (target_e :: _) =>
-           Builtin ty (CreateMinimalProxy revert has_salt)
-             (target_e :: value_e :: salt_args)
-       | _ => Builtin ty (CreateMinimalProxy revert has_salt) (value_e :: salt_args))
-    else if name = "create_copy_of" then
-      let revert = kwarg_bool "revert_on_failure" kwargs T in
-      let has_salt = has_kwarg "salt" kwargs in
-      let salt_args = (case ALOOKUP kwargs "salt" of
-                         SOME e => [e] | NONE => []) in
-      let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
-      (case args of
-         (target_e :: _) =>
-           Builtin ty (CreateCopyOf revert has_salt)
-             (target_e :: value_e :: salt_args)
-       | _ => Builtin ty (CreateCopyOf revert has_salt) (value_e :: salt_args))
-    else if name = "create_from_blueprint" then
-      let revert = kwarg_bool "revert_on_failure" kwargs T in
-      let raw_args = kwarg_bool "raw_args" kwargs F in
-      let has_salt = has_kwarg "salt" kwargs in
-      let salt_args = (case ALOOKUP kwargs "salt" of
-                         SOME e => [e] | NONE => []) in
-      let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
-      let code_offset_e = kwarg_expr "code_offset" kwargs (Literal (BaseT (UintT 256)) (IntL 3)) in
-      (* args = target :: ctor_args → reorder *)
-      (case args of
-         (target_e :: ctor_args) =>
-           Builtin ty (CreateFromBlueprint revert raw_args has_salt)
-             (target_e :: value_e :: code_offset_e :: salt_args ++ ctor_args)
-       | _ => Builtin ty (CreateFromBlueprint revert raw_args has_salt)
-                (value_e :: code_offset_e :: salt_args))
     (* Struct constructor, cast, or regular call *)
     else (case ret_ty of
           | JT_Struct _ => StructLit ty (NONE, name) kwargs
