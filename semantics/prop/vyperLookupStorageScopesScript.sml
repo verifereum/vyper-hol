@@ -214,3 +214,14 @@ Theorem lookup_toplevel_name_tl_scopes:
 Proof
   rpt gen_tac >> simp[tl_scopes_def, lookup_toplevel_name_scopes]
 QED
+
+Theorem lookup_toplevel_name_open_scope:
+  ∀cx st mid n.
+    lookup_toplevel_name cx (open_scope st) mid n =
+    lookup_toplevel_name cx st mid n
+Proof
+  rpt gen_tac >>
+  `open_scope st = st with scopes := CONS FEMPTY st.scopes` by
+    simp[open_scope_def, evaluation_state_component_equality] >>
+  simp[lookup_toplevel_name_scopes]
+QED
