@@ -38,12 +38,10 @@ Proof
   ACCEPT_TAC lift_result_trans_proof
 QED
 
-(* inst_sim_block_sim removed — likely false without valid_state_rel (L177).
-   inst_sim_block_sim_proof was removed from passSimulationProofsScript.sml.
-   block_sim_function below is the correct replacement. *)
-
 (* Per-fn-block sim + valid_state_rel + operand cond ⟹ function sim.
-   Block sim only required at vs_inst_idx = 0 (entry invariant). *)
+   Block sim only required at vs_inst_idx = 0 (entry invariant).
+   Per-block condition allows error disjunct: if any block errors in
+   the original, the function errors. *)
 Theorem block_sim_function:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool) bt fn.
@@ -54,6 +52,7 @@ Theorem block_sim_function:
     (!bb. MEM bb fn.fn_blocks ==>
       !fuel ctx s.
         s.vs_inst_idx = 0 ==>
+        (?e. run_block fuel ctx bb s = Error e) \/
         lift_result R_ok R_term (run_block fuel ctx bb s)
                                  (run_block fuel ctx (bt bb) s)) /\
     (!bb inst x.
@@ -63,6 +62,7 @@ Theorem block_sim_function:
   ==>
     !fuel ctx s.
       s.vs_inst_idx = 0 ==>
+      (?e. run_function fuel ctx fn s = Error e) \/
       lift_result R_ok R_term (run_function fuel ctx fn s)
                  (run_function fuel ctx (function_map_transform bt fn) s)
 Proof
@@ -98,9 +98,6 @@ Theorem block_sim_function_reachable:
 Proof
   ACCEPT_TAC block_sim_function_reachable_proof
 QED
-
-(* conditional_inst_sim removed — proof was removed from passSimulationProofs *)
-(* block_sim_compose removed — proof was removed from passSimulationProofs *)
 
 Theorem lift_result_implies_pass_correct:
   !fresh exec1 exec2.

@@ -117,12 +117,21 @@ QED
  * If a is not a function label, succs is [] so the LHS is vacuously false;
  * symmetrically for the RHS. *)
 Theorem cfg_edge_symmetry_uncond:
-  !fn.
-    wf_function fn ==>
-    !a b. MEM b (cfg_succs_of (cfg_analyze fn) a) <=>
-          MEM a (cfg_preds_of (cfg_analyze fn) b)
+  !fn a b. MEM b (cfg_succs_of (cfg_analyze fn) a) <=>
+           MEM a (cfg_preds_of (cfg_analyze fn) b)
 Proof
   ACCEPT_TAC cfg_edge_symmetry_uncond_proof
+QED
+
+(* bb_succs of a member block are contained in cfg_succs_of *)
+Theorem bb_succs_in_cfg_succs:
+  !fn bb lbl.
+    ALL_DISTINCT (fn_labels fn) /\
+    MEM bb fn.fn_blocks /\
+    MEM lbl (bb_succs bb) ==>
+    MEM lbl (cfg_succs_of (cfg_analyze fn) bb.bb_label)
+Proof
+  ACCEPT_TAC cfgHelpersTheory.bb_succs_in_cfg_succs
 QED
 
 (* ==========================================================================
@@ -218,3 +227,10 @@ QED
  * DFS preorder: [entry,s,b,a]. a→b is non-back, but INDEX_OF "a"=3 > INDEX_OF "b"=2. *)
 Triviality ce_preorder_order_false =
   cfgCorrectnessProofTheory.ce_preorder_order_false
+
+(* cfg_analyze succs: the succs map is built from fn.fn_blocks *)
+Theorem cfg_analyze_succs:
+  !fn. cfg_succs_of (cfg_analyze fn) = fmap_lookup_list (build_succs fn.fn_blocks)
+Proof
+  ACCEPT_TAC cfgHelpersTheory.cfg_analyze_succs
+QED

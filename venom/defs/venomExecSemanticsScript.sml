@@ -1,6 +1,8 @@
 (*
  * Venom Semantics
  *
+ * Upstream: vyperlang/vyper@8780b3134 (alloca_id removal)
+ *
  * This theory defines the operational semantics for Venom IR execution.
  * It includes the effects system and instruction stepping.
  *)
@@ -448,15 +450,16 @@ Definition exec_create_def:
 End
 
 (* Bump-allocate: record region in vs_allocas without touching vs_memory.
-   Memory is extended lazily by mstore when the region is actually written. *)
+   Memory is extended lazily by mstore when the region is actually written.
+   Keyed by inst.inst_id (HOL4 analog of Python Allocation identity). *)
 Definition exec_alloca_def:
-  exec_alloca inst s alloc_size alloc_id =
+  exec_alloca inst s alloc_size =
     case inst.inst_outputs of
       [out] =>
         let offset = next_alloca_offset s in
         let sz = w2n alloc_size in
         let s' = s with
-          vs_allocas := s.vs_allocas |+ (w2n alloc_id, (offset, sz))
+          vs_allocas := s.vs_allocas |+ (inst.inst_id, (offset, sz))
         in
         OK (update_var out (n2w offset) s')
     | _ => Error "alloca requires single output"
@@ -949,32 +952,19 @@ Definition step_inst_base_def:
         | _ => Error "create2 requires 4 operands")
 
     (* ----------------------------------------------------------------
-       Memory Allocation
+       Memory Allocation: ALLOCA
 
-       All three variants are identical at runtime: bump-allocate in
-       vs_memory and record in vs_allocas. The distinction is metadata
-       for the compiler (PALLOCA=param, CALLOCA=caller-side staging).
+       Bump-allocate a region in the alloca area (beyond vs_memory)
+       and record in vs_allocas.
 
-       Operands: [Lit size, Lit alloca_id] (CALLOCA has Label callee too)
+       Operands: [Lit size]
        Output: [out] = base address (word256) of allocated region
        ---------------------------------------------------------------- *)
     | ALLOCA =>
         (case inst.inst_operands of
-          [Lit alloc_size; Lit alloc_id] =>
-            exec_alloca inst s alloc_size alloc_id
-        | _ => Error "alloca requires 2 literal operands")
-
-    | PALLOCA =>
-        (case inst.inst_operands of
-          [Lit alloc_size; Lit alloc_id] =>
-            exec_alloca inst s alloc_size alloc_id
-        | _ => Error "palloca requires 2 literal operands")
-
-    | CALLOCA =>
-        (case inst.inst_operands of
-          Lit alloc_size :: Lit alloc_id :: _ =>  (* Label callee ignored at runtime *)
-            exec_alloca inst s alloc_size alloc_id
-        | _ => Error "calloca requires literal size and id")
+          [Lit alloc_size] =>
+            exec_alloca inst s alloc_size
+        | _ => Error "alloca requires 1 literal operand")
 
     (* Default - truly unknown opcode *)
     | _ => Error "unknown opcode"

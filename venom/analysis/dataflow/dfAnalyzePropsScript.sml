@@ -84,20 +84,8 @@ Theorem df_at_inter_transfer:
     let all_lbls = cfg.cfg_dfs_pre in
     let result = df_analyze dir bottom join transfer edge_transfer
                             ctx entry_val fn in
-    let neighbors =
-      (case dir of
-         Forward => cfg_preds_of cfg lbl
-       | Backward => cfg_succs_of cfg lbl) in
-    let edge_vals = MAP (λnbr.
-          edge_transfer ctx nbr lbl
-            (df_boundary bottom result nbr)) neighbors in
-    let joined =
-      (case edge_vals of
-         [] => (case entry_val of
-                  NONE => bottom
-                | SOME (ev_lbl, v) =>
-                    if lbl = ev_lbl then v else bottom)
-       | _ => FOLDL join bottom edge_vals) in
+    let joined = df_joined_val dir bottom join edge_transfer ctx
+                               entry_val cfg result lbl in
       is_fixpoint process all_lbls result /\
       MEM lbl all_lbls /\
       lookup_block lbl bbs = SOME bb
@@ -371,4 +359,26 @@ Theorem df_analyze_boundary_invariant_restricted:
       (!lbl. P (df_boundary bottom result lbl))
 Proof
   ACCEPT_TAC (dfAnalyzeProofsTheory.df_analyze_boundary_invariant_restricted)
+QED
+
+(* df_fold_block keys: all instruction-map keys produced by df_fold_block
+   have the given label as their first component *)
+Theorem df_fold_block_keys:
+  !dir transfer lbl instrs init_val final_val inst_map.
+    df_fold_block dir transfer lbl instrs init_val = (final_val, inst_map) ==>
+    !k. FLOOKUP inst_map k <> NONE ==> FST k = lbl
+Proof
+  ACCEPT_TAC dfAnalyzeProofsTheory.df_fold_block_keys
+QED
+
+(* df_fold_block forward invariant: if P is preserved by each transfer step,
+   then P holds for the final value and all instruction-map values *)
+Theorem df_fold_block_forward_invariant:
+  !transfer lbl instrs init_val fv im P.
+    df_fold_block Forward transfer lbl instrs init_val = (fv, im) /\
+    P init_val /\
+    (!inst v. MEM inst instrs /\ P v ==> P (transfer inst v)) ==>
+    P fv /\ !k v. FLOOKUP im k = SOME v ==> P v
+Proof
+  ACCEPT_TAC dfAnalyzeProofsTheory.df_fold_block_forward_invariant
 QED

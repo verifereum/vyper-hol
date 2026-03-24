@@ -15,7 +15,7 @@
 
 Theory passSharedSubst
 Ancestors
-  passSharedDefs venomExecSemantics
+  passSharedDefs venomExecSemantics venomWf
 
 open venomStateTheory venomInstTheory;
 
@@ -28,7 +28,7 @@ Theorem subst_operand_eval:
     eval_operand new_op s = eval_operand (Var old) s ==>
     eval_operand (subst_operand old new_op op) s = eval_operand op s
 Proof
-  Cases_on `op` >> rw[subst_operand_def, eval_operand_def] >> rw[]
+  Cases_on `op` >> rw[subst_operand_def, eval_operand_def]
 QED
 
 Theorem subst_op_map_eval:
@@ -318,4 +318,97 @@ Proof
       rpt (CASE_TAC >> simp[])) >>
   imp_res_tac step_inst_base_operands_irrelevant >>
   simp[step_inst_non_invoke]
+QED
+
+(* Helper: subst_op_map preserves all-Label lists (from inst_wf DJMP) *)
+Triviality subst_op_map_preserves_labels:
+  !ops subs. EVERY (\op. IS_SOME (get_label op)) ops ==>
+    MAP (subst_op_map subs) ops = ops
+Proof
+  Induct >> rw[] >> Cases_on `h` >> gvs[get_label_def, subst_op_map_def]
+QED
+
+(* Helper: if MAP (subst_op_map subs) preserves operands, subst is identity *)
+Triviality subst_operands_map_id:
+  !subs inst. MAP (subst_op_map subs) inst.inst_operands = inst.inst_operands ==>
+    subst_operands_map subs inst = inst
+Proof
+  rw[subst_operands_map_def] >> Cases_on `inst` >>
+  gvs[venomInstTheory.instruction_fn_updates,
+      venomInstTheory.instruction_accessors]
+QED
+
+(* Stronger version: inst_wf handles structural positions, only PHI excluded.
+   Strategy: structural opcodes (PARAM, ALLOCA, LOG,
+   JMP, JNZ, DJMP, OFFSET, INVOKE) handled by inst_wf + definition unfolding.
+   All other non-PHI opcodes handled by step_inst_base_operands_irrelevant_safe
+   (which only needs eval_operand equivalence). *)
+Theorem subst_operands_map_correct_wf:
+  !fuel ctx inst s subs.
+    (!v new_op. FLOOKUP subs v = SOME new_op ==>
+                eval_operand new_op s = eval_operand (Var v) s) /\
+    inst_wf inst /\
+    inst.inst_opcode <> PHI ==>
+    step_inst fuel ctx (subst_operands_map subs inst) s =
+    step_inst fuel ctx inst s
+Proof
+  rpt strip_tac >>
+  `!op. eval_operand (subst_op_map subs op) s =
+        eval_operand op s` by
+    (rpt strip_tac >> irule subst_op_map_eval >> metis_tac[]) >>
+  (* Non-structural opcodes *)
+  Cases_on `inst.inst_opcode <> PARAM /\
+            ~is_alloca_op inst.inst_opcode /\
+            inst.inst_opcode <> LOG /\
+            inst.inst_opcode <> JMP /\
+            inst.inst_opcode <> JNZ /\
+            inst.inst_opcode <> DJMP /\
+            inst.inst_opcode <> OFFSET /\
+            inst.inst_opcode <> INVOKE`
+  >- (simp[subst_operands_map_def, step_inst_non_invoke] >>
+      irule step_inst_base_operands_irrelevant_safe >> gvs[])
+  >>
+  (* Structural: inst_wf resolves operand shapes *)
+  gvs[is_alloca_op_def] >> gvs[inst_wf_def] >>
+  (* Trivial: all Lit/Label operands => subst is identity *)
+  TRY (`subst_operands_map subs inst = inst` by
+         (irule subst_operands_map_id >> simp[subst_op_map_def]) >>
+       simp[] >> NO_TAC) >>
+  gvs[subst_operands_map_def, subst_op_map_def] >|
+  [(* ALLOCA: resolve is_alloca_op *)
+   `inst.inst_opcode = ALLOCA` by
+     (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]) >>
+   gvs[inst_wf_def, subst_op_map_def, step_inst_def, exec_alloca_def] >>
+   simp[Once step_inst_base_def, SimpLHS] >>
+   simp[Once step_inst_base_def, SimpRHS] >> simp[exec_alloca_def],
+   (* LOG *)
+   `rest <> []` by (Cases_on `rest` >> gvs[]) >>
+   simp[step_inst_non_invoke] >>
+   simp[Once step_inst_base_def] >>
+   simp[Once step_inst_base_def] >>
+   simp[GSYM listTheory.MAP_DROP, listTheory.EL_MAP,
+        rich_listTheory.MAP_HD] >>
+   `eval_operands (MAP (subst_op_map subs) (DROP 2 rest)) s =
+    eval_operands (DROP 2 rest) s` by
+     (irule eval_operands_map_thm >> metis_tac[]) >> simp[],
+   (* JNZ *)
+   simp[step_inst_non_invoke] >>
+   simp[Once step_inst_base_def] >>
+   simp[Once step_inst_base_def],
+   (* DJMP *)
+   imp_res_tac subst_op_map_preserves_labels >>
+   simp[step_inst_non_invoke] >>
+   simp[Once step_inst_base_def] >>
+   simp[Once step_inst_base_def],
+   (* OFFSET *)
+   simp[step_inst_non_invoke] >>
+   simp[Once step_inst_base_def] >>
+   simp[Once step_inst_base_def],
+   (* INVOKE *)
+   simp[step_inst_def, decode_invoke_def] >>
+   `eval_operands (MAP (subst_op_map subs) args) s =
+    eval_operands args s` by
+     (irule eval_operands_map_thm >> metis_tac[]) >>
+   simp[] >> rpt (CASE_TAC >> simp[])
+  ]
 QED

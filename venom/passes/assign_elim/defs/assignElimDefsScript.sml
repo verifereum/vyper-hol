@@ -74,7 +74,12 @@ Definition copy_prop_transfer_def:
                      (copies_opt : copy_lattice option) =
     let copies = case copies_opt of NONE => FEMPTY | SOME c => c in
     let killed = set (inst_defs inst) in
-    let copies' = DRESTRICT copies (COMPL killed) in
+    (* Kill entries whose key is in killed *)
+    let copies_k = DRESTRICT copies (COMPL killed) in
+    (* Also kill entries whose value references a killed variable *)
+    let copies' = DRESTRICT copies_k
+                    (COMPL {x | ?y. FLOOKUP copies_k x = SOME (Var y) /\
+                                    y IN killed}) in
     SOME (
     if is_forwardable_assign phi_vars inst then
       (case (inst.inst_operands, inst.inst_outputs) of

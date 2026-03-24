@@ -19,4 +19,5 @@ INCLUDES = \
   mem_ssa \
   var_definition \
   variable_range \
+  readonly_memory_args \
   ../simulation

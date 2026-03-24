@@ -9,13 +9,12 @@ Ancestors
   rta
   (* simple rewrite passes *)
   assertElim
+  overflowElim
   literalsCodesize
   removeUnused
   concretizeMemLoc
   (* lower dload/dloadbytes *)
   lowerDload
-  (* float allocas to entry *)
-  floatAllocas
   (* fix free var space memory locations *)
   fixMemLocations
   (* branch optimization *)
@@ -24,6 +23,8 @@ Ancestors
   singleUseExpansion
   (* assert combiner *)
   assertCombiner
+  (* affine folding *)
+  affineFolding
   (* algebraic optimization *)
   algebraicOpt
   (* mem2var promotion *)
@@ -41,3 +42,8 @@ Ancestors
   assignElim
   cse
   sccp
+  (* interprocedural *)
+  functionInliner
+  (* invoke copy forwarding *)
+  internalReturnCopyFwdProofs
+  readonlyInvokeCopyFwdProofs

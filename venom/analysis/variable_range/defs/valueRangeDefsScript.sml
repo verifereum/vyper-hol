@@ -170,7 +170,7 @@ Definition vr_widen_def:
     | (_, VR_Bottom) => old
     | (VR_Range lo1 hi1, VR_Range lo2 hi2) =>
         if lo2 < lo1 ∨ hi2 > hi1 then VR_Top
-        else new
+        else old
 End
 
 (* ===== Soundness Predicate ===== *)

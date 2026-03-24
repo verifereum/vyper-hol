@@ -444,11 +444,11 @@ Proof
 QED
 
 Theorem vsr_exec_alloca:
-  !R_ok R_term inst s1 s2 alloc_size alloc_id.
+  !R_ok R_term inst s1 s2 alloc_size.
     valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>
     lift_result R_ok R_term
-      (exec_alloca inst s1 alloc_size alloc_id)
-      (exec_alloca inst s2 alloc_size alloc_id)
+      (exec_alloca inst s1 alloc_size)
+      (exec_alloca inst s2 alloc_size)
 Proof
   rw[exec_alloca_def, next_alloca_offset_def, LET_THM] >>
   imp_res_tac vsr_R_ok_fields >> gvs[] >>

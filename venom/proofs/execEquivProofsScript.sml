@@ -650,11 +650,11 @@ QED
 
 (* Helper: exec_alloca preserves equiv (operands are literals) *)
 Triviality exec_alloca_equiv:
-  !vars inst s1 s2 alloc_size alloc_id.
+  !vars inst s1 s2 alloc_size.
     state_equiv vars s1 s2 ==>
     result_equiv vars
-      (exec_alloca inst s1 alloc_size alloc_id)
-      (exec_alloca inst s2 alloc_size alloc_id)
+      (exec_alloca inst s1 alloc_size)
+      (exec_alloca inst s2 alloc_size)
 Proof
   rw[exec_alloca_def, LET_THM] >>
   rpt CASE_TAC >> gvs[result_equiv_def] >>
@@ -667,7 +667,7 @@ QED
 Triviality step_inst_alloca_equiv:
   !vars inst s1 s2.
     state_equiv vars s1 s2 /\
-    MEM inst.inst_opcode [ALLOCA; PALLOCA; CALLOCA] ==>
+    inst.inst_opcode = ALLOCA ==>
     result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
@@ -800,7 +800,7 @@ Proof
       drule_all step_inst_delegatecall_equiv >> simp[],
     `MEM inst.inst_opcode [CREATE;CREATE2]` by simp[] >>
       drule_all step_inst_create_equiv >> simp[],
-    `MEM inst.inst_opcode [ALLOCA;PALLOCA;CALLOCA]` by simp[] >>
+    `inst.inst_opcode = ALLOCA` by simp[] >>
       drule_all step_inst_alloca_equiv >> simp[],
     (* INVOKE: handled in module sem, falls to Error in step_inst_base.
        Explicit so new opcode additions cause proof failure here. *)

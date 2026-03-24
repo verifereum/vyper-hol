@@ -190,9 +190,15 @@ Definition bound_def:
   stmt_bound ts (Return NONE) = 0 ∧
   stmt_bound ts (Return (SOME e)) =
     1 + expr_bound ts e ∧
-  stmt_bound ts (Raise e) =
+  stmt_bound ts (Raise RaiseBare) = 0 ∧
+  stmt_bound ts (Raise RaiseUnreachable) = 0 ∧
+  stmt_bound ts (Raise (RaiseReason e)) =
     1 + expr_bound ts e ∧
-  stmt_bound ts (Assert e1 e2) =
+  stmt_bound ts (Assert e1 AssertBare) =
+    1 + expr_bound ts e1 ∧
+  stmt_bound ts (Assert e1 AssertUnreachable) =
+    1 + expr_bound ts e1 ∧
+  stmt_bound ts (Assert e1 (AssertReason e2)) =
     1 + expr_bound ts e1
       + expr_bound ts e2 ∧
   stmt_bound ts (Log _ es) =
@@ -632,23 +638,21 @@ val () = cv_auto_trans make_call_tx_def;
 (* Build transaction_parameters from Vyper call_txn.
    These are the transaction-level parameters that persist across calls.
 
-   TODO: Some fields are not yet in call_txn and use defaults:
-   - origin should be original tx.origin, currently using txn.sender
-   - blockCoinBase, blockGasLimit, prevRandao, chainId need to be added *)
+   Maps call_txn fields to Verifereum transaction_parameters. *)
 Definition vyper_to_tx_params_def:
   vyper_to_tx_params (txn: call_txn) : transaction_parameters =
-    <| origin := txn.sender  (* TODO: track tx.origin separately *)
+    <| origin := txn.origin
      ; gasPrice := txn.gas_price
-     ; baseFeePerGas := 0
+     ; baseFeePerGas := txn.base_fee
      ; baseFeePerBlobGas := txn.blob_base_fee
      ; blockNumber := txn.block_number
      ; blockTimeStamp := txn.time_stamp
-     ; blockCoinBase := 0w   (* TODO: add to call_txn *)
-     ; blockGasLimit := 0    (* TODO: add to call_txn *)
-     ; prevRandao := 0w      (* TODO: add to call_txn *)
+     ; blockCoinBase := txn.coinbase
+     ; blockGasLimit := txn.gas_limit
+     ; prevRandao := n2w txn.prev_randao
      ; prevHashes := txn.block_hashes
      ; blobHashes := txn.blob_hashes
-     ; chainId := 0          (* TODO: add to call_txn *)
+     ; chainId := txn.chain_id
      ; authRefund := 0
      |>
 End
@@ -765,13 +769,29 @@ Definition evaluate_def:
     v <- materialise cx tv;
     raise $ ReturnException v
   od ∧
-  eval_stmt cx (Raise e) = do
+  eval_stmt cx (Raise RaiseBare) =
+    raise $ AssertException "" ∧
+  eval_stmt cx (Raise RaiseUnreachable) =
+    raise $ AssertException "UNREACHABLE" ∧
+  eval_stmt cx (Raise (RaiseReason e)) = do
     tv <- eval_expr cx e;
     v <- get_Value tv;
     s <- lift_option_type (dest_StringV v) "not StringV";
     raise $ AssertException s
   od ∧
-  eval_stmt cx (Assert e se) = do
+  eval_stmt cx (Assert e AssertBare) = do
+    tv <- eval_expr cx e;
+    switch_BoolV tv
+      (return ())
+      (raise $ AssertException "")
+  od ∧
+  eval_stmt cx (Assert e AssertUnreachable) = do
+    tv <- eval_expr cx e;
+    switch_BoolV tv
+      (return ())
+      (raise $ AssertException "UNREACHABLE")
+  od ∧
+  eval_stmt cx (Assert e (AssertReason se)) = do
     tv <- eval_expr cx e;
     switch_BoolV tv
       (return ())

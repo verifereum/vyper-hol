@@ -92,6 +92,12 @@ Datatype:
   | GasPrice
   | PrevHash
   | ChainId
+  | Coinbase
+  | GasLimit
+  | BaseFee
+  | PrevRandao
+  | TxOrigin
+  | MsgGas
 End
 
 Datatype:
@@ -124,7 +130,9 @@ Datatype:
   = Len
   | Not
   | Neg
+  | Abs           (* abs(x): absolute value with overflow check *)
   | Keccak256
+  | Sha256
   | AsWeiValue denomination
   | Concat num (* dynamic bound for return type *)
   | Slice num (* ditto *)
@@ -146,6 +154,26 @@ Datatype:
   | ECAdd        (* ecadd((x1,y1), (x2,y2)) -> (x3,y3) on BN254 *)
   | ECMul        (* ecmul((x,y), scalar) -> (x',y') on BN254 *)
   | PowMod256   (* pow_mod256(base, exp) -> (base ** exp) % 2^256 *)
+  (* System builtins — low-level EVM operations *)
+  | RawCall bool bool num bool
+      (* (is_delegate, is_static, max_outsize, revert_on_failure) *)
+      (* args = [to; data; gas; value] *)
+  | RawLog        (* args = data :: topics (n_topics = LENGTH args - 1) *)
+  | RawRevert     (* args = [data_bytes] *)
+  | SelfDestruct  (* args = [to_address] *)
+  (* Contract creation builtins *)
+  | RawCreate bool bool
+      (* (revert_on_failure, has_salt) *)
+      (* args = blob :: value :: [salt] ++ ctor_args *)
+  | CreateMinimalProxy bool bool
+      (* (revert_on_failure, has_salt) *)
+      (* args = [target; value] or [target; value; salt] *)
+  | CreateCopyOf bool bool
+      (* (revert_on_failure, has_salt) *)
+      (* args = [target; value] or [target; value; salt] *)
+  | CreateFromBlueprint bool bool bool
+      (* (revert_on_failure, raw_args, has_salt) *)
+      (* args = target :: value :: code_offset :: [salt] ++ ctor_args *)
 End
 
 (* Resolved external call signature: (func_name, arg_types, return_type) *)
@@ -161,7 +189,6 @@ Datatype:
                                  - extcall (F):    args = [target; value; arg1; arg2; ...]
                                  where target is address and value is uint256 to send *)
   | Send
-  (* TODO: external raw call *)
 End
 
 Datatype:
@@ -228,6 +255,20 @@ Datatype:
 End
 
 Datatype:
+  assert_reason
+  = AssertBare                (* simple assert, no reason *)
+  | AssertUnreachable         (* assert UNREACHABLE → INVALID opcode *)
+  | AssertReason expr         (* assert with Error(string) reason *)
+End
+
+Datatype:
+  raise_reason
+  = RaiseBare                 (* bare raise: revert 0,0 *)
+  | RaiseUnreachable          (* raise UNREACHABLE → INVALID opcode *)
+  | RaiseReason expr          (* raise with Error(string) reason *)
+End
+
+Datatype:
   stmt
   = Pass
   | Continue
@@ -235,9 +276,9 @@ Datatype:
   | Expr expr
   | For identifier type iterator num (stmt list)
   | If expr (stmt list) (stmt list)
-  | Assert expr expr
+  | Assert expr assert_reason
   | Log nsid (expr list)
-  | Raise expr
+  | Raise raise_reason
   | Return (expr option)
   | Assign assignment_target expr
   | AugAssign type base_assignment_target binop expr

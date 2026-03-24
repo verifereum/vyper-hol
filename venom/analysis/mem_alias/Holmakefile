@@ -1,2 +1,2 @@
 # Memory alias analysis: public API (props + analysis)
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../../syntax ../../../semantics ../shared ../cfg/defs ../dataflow/defs ../base_ptr defs proofs
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../../syntax ../../../semantics ../shared ../shared/defs ../cfg/defs ../dataflow/defs ../base_ptr ../base_ptr/defs defs proofs

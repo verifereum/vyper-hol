@@ -1,0 +1,2 @@
+# Readonly invoke arg copy forwarding
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../../syntax ../../../semantics ../../defs ../shared ../shared/defs ../../simulation ../../simulation/defs ../../analysis/cfg ../../analysis/cfg/defs ../../analysis/dfg/defs ../../analysis/base_ptr ../../analysis/base_ptr/defs ../../analysis/mem_alias ../../analysis/mem_alias/defs ../../analysis/dominators ../../analysis/dominators/defs ../../analysis/readonly_memory_args ../../analysis/readonly_memory_args/defs ../../analysis/shared/defs ../invoke_copy_fwd_common/defs defs proofs

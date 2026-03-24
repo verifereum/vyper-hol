@@ -863,7 +863,7 @@ Proof
   DECIDE_TAC
 QED
 
-Triviality index_of_hd_min:
+Theorem index_of_hd_min:
   !l (a:'a) b i j.
     ALL_DISTINCT l /\ l <> [] /\ HD l = a /\
     INDEX_OF a l = SOME j /\ INDEX_OF b l = SOME i /\ b <> a ==>
@@ -1382,3 +1382,529 @@ Proof
       ])
 QED
 
+
+(* ==========================================================================
+   DFS pre-order: path in output.
+   If target is in the pre-order output, there exists an LRC path from the
+   root to target whose intermediate nodes are all in the output.
+   ========================================================================== *)
+
+Theorem dfs_pre_walk_path_in_output:
+  (!succs (visited:string list) lbl target.
+    MEM target (SND (dfs_pre_walk succs visited lbl)) /\
+    ~MEM lbl visited ==>
+    ?ls. LRC (\a b. MEM b (fmap_lookup_list succs a)) ls lbl target /\
+         EVERY (\x. MEM x (SND (dfs_pre_walk succs visited lbl))) ls) /\
+  (!succs (visited:string list) lst target.
+    MEM target (SND (dfs_pre_walk_list succs visited lst)) ==>
+    ?s ls. MEM s lst /\
+           LRC (\a b. MEM b (fmap_lookup_list succs a)) ls s target /\
+           EVERY (\x. MEM x (SND (dfs_pre_walk_list succs visited lst))) ls)
+Proof
+  ho_match_mp_tac dfs_pre_walk_ind >> rpt conj_tac
+  >- ((* INL/P0: dfs_pre_walk succs visited lbl *)
+      (* Output = lbl :: orders where orders = SND(walk_list children) *)
+      rpt strip_tac >>
+      qpat_x_assum `MEM target (SND (dfs_pre_walk _ _ _))` mp_tac >>
+      simp[Once dfs_pre_walk_def, LET_THM] >>
+      Cases_on `dfs_pre_walk_list succs (set_insert lbl visited)
+                  (fmap_lookup_list succs lbl)` >>
+      simp[MEM] >>
+      strip_tac
+      >- ((* target = lbl *)
+          qexists_tac `[]` >> simp[LRC_def])
+      >- ((* target in list output *)
+          first_x_assum (qspecl_then [`set_insert lbl visited`,
+                                       `fmap_lookup_list succs lbl`] mp_tac) >>
+          simp[] >>
+          disch_then (qspec_then `target` mp_tac) >>
+          `SND (dfs_pre_walk_list succs (set_insert lbl visited)
+                  (fmap_lookup_list succs lbl)) = r` by simp[] >>
+          asm_rewrite_tac[] >> simp[] >> strip_tac >>
+          qexists_tac `lbl::ls` >>
+          simp[LRC_def] >>
+          conj_tac >- (qexists_tac `s` >> simp[]) >>
+          simp[EVERY_MEM] >> rpt strip_tac >>
+          simp[Once dfs_pre_walk_def, LET_THM] >>
+          `SND (dfs_pre_walk_list succs (set_insert lbl visited)
+                  (fmap_lookup_list succs lbl)) = r` by simp[] >>
+          simp[MEM] >>
+          `MEM x r` by (fs[EVERY_MEM] >> metis_tac[]) >> simp[]))
+  >- ((* NIL: dfs_pre_walk_list succs visited [] *)
+      simp[Once dfs_pre_walk_def])
+  >- ((* CONS: dfs_pre_walk_list succs visited (lbl::lst) *)
+      rpt strip_tac >>
+      qpat_x_assum `MEM target (SND (dfs_pre_walk_list _ _ (_::_)))` mp_tac >>
+      simp[Once dfs_pre_walk_def, LET_THM] >>
+      Cases_on `dfs_pre_walk succs visited lbl` >>
+      Cases_on `dfs_pre_walk_list succs q lst` >>
+      simp[MEM_APPEND] >>
+      strip_tac
+      >- ((* target in SND(dfs_pre_walk succs visited lbl) = r *)
+          Cases_on `MEM lbl visited`
+          >- (`r = []` by (
+                `SND (dfs_pre_walk succs visited lbl) = r` by simp[] >>
+                qpat_x_assum `dfs_pre_walk _ _ _ = _` mp_tac >>
+                simp[Once dfs_pre_walk_def]) >>
+              fs[])
+          >- (first_x_assum (qspec_then `target` mp_tac) >> simp[] >>
+              strip_tac >>
+              qexists_tac `lbl` >> qexists_tac `ls` >>
+              simp[] >>
+              fs[EVERY_MEM] >> rpt strip_tac >>
+              simp[Once dfs_pre_walk_def, LET_THM] >>
+              `dfs_pre_walk succs visited lbl = (q,r)` by simp[] >>
+              simp[MEM_APPEND] >>
+              metis_tac[]))
+      >- ((* target in SND(dfs_pre_walk_list succs q lst) = r' *)
+          first_x_assum (qspecl_then [`q`, `r`] mp_tac) >> simp[] >>
+          disch_then (qspec_then `target` mp_tac) >>
+          `SND (dfs_pre_walk_list succs q lst) = r'` by simp[] >>
+          asm_rewrite_tac[] >> simp[] >> strip_tac >>
+          qexists_tac `s` >> qexists_tac `ls` >>
+          simp[] >>
+          fs[EVERY_MEM] >> rpt strip_tac >>
+          simp[Once dfs_pre_walk_def, LET_THM] >>
+          `dfs_pre_walk succs visited lbl = (q,r)` by simp[] >>
+          simp[MEM_APPEND] >>
+          metis_tac[]))
+QED
+
+(* INDEX_OF for cons: non-head element has index 1 + its index in the tail *)
+Theorem index_of_cons:
+  !h (t:'a list) x i.
+    ALL_DISTINCT (h::t) /\ INDEX_OF x t = SOME i /\ x <> h ==>
+    INDEX_OF x (h::t) = SOME (i + 1)
+Proof
+  rpt strip_tac >>
+  `INDEX_OF x (h::t) = SOME (SUC i)` by (
+    fs[INDEX_OF_eq_SOME] >> rpt strip_tac >>
+    Cases_on `j` >> gvs[EL] >>
+    first_x_assum (qspec_then `n` mp_tac) >> simp[]
+  ) >>
+  fs[arithmeticTheory.ADD1]
+QED
+
+(* ==========================================================================
+   DFS pre-order avoiding path: if d has a higher pre-order index than target,
+   then there exists a path from root to target that avoids d.
+   Key for dominator pre-order proofs.
+
+   In pre-order, root = HD(output) has index 0. Higher index = discovered later.
+   If d is discovered after target, the DFS exploration path to target
+   never visited d, giving an avoiding path.
+   ========================================================================== *)
+
+Theorem dfs_pre_walk_avoiding_path:
+  (!succs (visited:string list) lbl target d i j.
+    MEM target (SND (dfs_pre_walk succs visited lbl)) /\
+    MEM d (SND (dfs_pre_walk succs visited lbl)) /\
+    ~MEM lbl visited /\
+    ALL_DISTINCT (SND (dfs_pre_walk succs visited lbl)) /\
+    d <> target /\ d <> lbl /\
+    INDEX_OF d (SND (dfs_pre_walk succs visited lbl)) = SOME i /\
+    INDEX_OF target (SND (dfs_pre_walk succs visited lbl)) = SOME j /\
+    i > j ==>
+    ?ls. LRC (\a b. MEM b (fmap_lookup_list succs a)) ls lbl target /\
+         ~MEM d ls) /\
+  (!succs (visited:string list) lst target d i j.
+    MEM target (SND (dfs_pre_walk_list succs visited lst)) /\
+    MEM d (SND (dfs_pre_walk_list succs visited lst)) /\
+    ALL_DISTINCT (SND (dfs_pre_walk_list succs visited lst)) /\
+    d <> target /\
+    INDEX_OF d (SND (dfs_pre_walk_list succs visited lst)) = SOME i /\
+    INDEX_OF target (SND (dfs_pre_walk_list succs visited lst)) = SOME j /\
+    i > j ==>
+    ?s ls. MEM s lst /\
+           LRC (\a b. MEM b (fmap_lookup_list succs a)) ls s target /\
+           ~MEM d ls)
+Proof
+  ho_match_mp_tac dfs_pre_walk_ind >> rpt conj_tac
+  >- ((* INL/P0: dfs_pre_walk succs visited lbl *)
+      (* Output = lbl :: orders where orders = SND(walk_list children) *)
+      rpt strip_tac >>
+      `SND (dfs_pre_walk succs visited lbl) =
+       lbl :: SND (dfs_pre_walk_list succs (set_insert lbl visited)
+                (fmap_lookup_list succs lbl))` by (
+        simp[Once dfs_pre_walk_def, LET_THM] >>
+        Cases_on `dfs_pre_walk_list succs (set_insert lbl visited)
+                    (fmap_lookup_list succs lbl)` >> simp[]) >>
+      qabbrev_tac `orders = SND (dfs_pre_walk_list succs (set_insert lbl visited)
+                                (fmap_lookup_list succs lbl))` >>
+      (* d ∈ orders since d ≠ lbl *)
+      `MEM d orders` by (
+        `MEM d (lbl :: orders)` by metis_tac[] >>
+        fs[MEM] >> metis_tac[]) >>
+      `ALL_DISTINCT (lbl :: orders)` by metis_tac[] >>
+      Cases_on `target = lbl`
+      >- ((* target = lbl: empty path avoids d since d ≠ lbl *)
+          qexists_tac `[]` >> simp[LRC_def])
+      >- ((* target ∈ orders: use P1 IH *)
+          sg `MEM target orders`
+          >- (`MEM target (lbl :: orders)` by metis_tac[] >>
+              fs[MEM] >> metis_tac[]) >>
+          sg `?id. INDEX_OF d orders = SOME id`
+          >- (Cases_on `INDEX_OF d orders` >> fs[INDEX_OF_eq_NONE]) >>
+          sg `?jt. INDEX_OF target orders = SOME jt`
+          >- (Cases_on `INDEX_OF target orders` >> fs[INDEX_OF_eq_NONE]) >>
+          sg `ALL_DISTINCT orders` >- fs[ALL_DISTINCT] >>
+          sg `INDEX_OF d (lbl :: orders) = SOME (id + 1)`
+          >- (irule index_of_cons >> simp[]) >>
+          sg `INDEX_OF target (lbl :: orders) = SOME (jt + 1)`
+          >- (irule index_of_cons >> simp[]) >>
+          sg `id + 1 = i /\ jt + 1 = j`
+          >- (`INDEX_OF d (lbl :: orders) = SOME i` by metis_tac[] >>
+              `INDEX_OF target (lbl :: orders) = SOME j` by metis_tac[] >>
+              fs[]) >>
+          sg `id > jt` >- simp[] >>
+          (* Use P1 IH: two-stage specialization *)
+          qpat_x_assum `!visited' lst. _`
+            (qspecl_then [`set_insert lbl visited`,
+                          `fmap_lookup_list succs lbl`] mp_tac) >>
+          (impl_tac >- simp[]) >> strip_tac >>
+          pop_assum (qspecl_then [`target`, `d`, `id`, `jt`] mp_tac) >>
+          simp[Abbr `orders`] >> strip_tac >>
+          qexists_tac `lbl::ls` >> simp[listTheory.LRC_def, listTheory.MEM] >>
+          qexists_tac `s` >> simp[]))
+  >- ((* NIL: dfs_pre_walk_list succs visited [] = (visited, []) *)
+      simp[Once dfs_pre_walk_def])
+  >- ((* CONS: dfs_pre_walk_list succs visited (lbl::lst) *)
+      rpt strip_tac >>
+      (* Decompose output into r ++ r' *)
+      `?q r. dfs_pre_walk succs visited lbl = (q,r)` by metis_tac[pairTheory.PAIR] >>
+      `?q' r'. dfs_pre_walk_list succs q lst = (q',r')` by metis_tac[pairTheory.PAIR] >>
+      `SND (dfs_pre_walk_list succs visited (lbl::lst)) = r ++ r'` by
+        simp[Once dfs_pre_walk_def, LET_THM] >>
+      `ALL_DISTINCT (r ++ r')` by metis_tac[] >>
+      `ALL_DISTINCT r /\ ALL_DISTINCT r' /\ !x. MEM x r ==> ~MEM x r'` by
+        metis_tac[ALL_DISTINCT_APPEND] >>
+      `MEM d (r ++ r')` by metis_tac[] >>
+      `MEM target (r ++ r')` by metis_tac[] >>
+      `INDEX_OF d (r ++ r') = SOME i` by metis_tac[] >>
+      `INDEX_OF target (r ++ r') = SOME j` by metis_tac[] >>
+      `SND (dfs_pre_walk succs visited lbl) = r` by simp[] >>
+      `SND (dfs_pre_walk_list succs q lst) = r'` by simp[] >>
+      fs[MEM_APPEND] >> gvs[]
+      >| [
+        (* CASE 1: d ∈ r, target ∈ r — use P0 IH *)
+        Cases_on `MEM lbl visited`
+        >- (`r = []` by (qpat_x_assum `dfs_pre_walk _ _ lbl = _` mp_tac >>
+              simp[Once dfs_pre_walk_def]) >> fs[])
+        >- (`INDEX_OF d (r ++ r') = INDEX_OF d r` by
+              metis_tac[index_of_append_left] >>
+            `INDEX_OF target (r ++ r') = INDEX_OF target r` by
+              metis_tac[index_of_append_left] >>
+            `INDEX_OF d r = SOME i` by fs[] >>
+            `INDEX_OF target r = SOME j` by fs[] >>
+            (* d ≠ lbl: if d = lbl then INDEX_OF d r = 0, but i > j >= 0
+               means target has index < 0, impossible. Actually d = lbl = HD r
+               has index 0, and i > j means j < 0. *)
+            `d <> lbl` by (
+              CCONTR_TAC >> gvs[] >>
+              mp_tac (INST_TYPE [alpha |-> ``:string``] index_of_hd_min
+                      |> Q.SPECL [`r`, `d`, `target`, `j`, `i`]) >>
+              simp[] >>
+              mp_tac (INST_TYPE [alpha |-> ``:string``] dfs_pre_walk_entry_hd
+                      |> Q.SPECL [`succs`, `visited`, `d`]) >> simp[]) >>
+            qpat_x_assum `!t d' i j. MEM t r /\ MEM d' r /\ ~MEM lbl visited /\ _ ==> _`
+              (qspecl_then [`target`, `d`, `i`, `j`] mp_tac) >>
+            simp[] >> strip_tac >>
+            qexists_tac `lbl` >> qexists_tac `ls` >> simp[]),
+        (* CASE 2: d ∈ r, target ∈ r' — impossible: j >= LENGTH r > i *)
+        Cases_on `INDEX_OF target r'` >> fs[INDEX_OF_eq_NONE] >>
+        `INDEX_OF target (r ++ r') = SOME (x + LENGTH r)` by
+          metis_tac[index_of_append_right] >>
+        `INDEX_OF d (r ++ r') = INDEX_OF d r` by
+          metis_tac[index_of_append_left] >>
+        `j = x + LENGTH r` by fs[] >>
+        `INDEX_OF d r = SOME i` by fs[] >>
+        `i < LENGTH r` by fs[INDEX_OF_eq_SOME] >>
+        fs[],
+        (* CASE 3: d ∈ r', target ∈ r — use path_in_output *)
+        `~MEM d r` by (
+          SPOSE_NOT_THEN ASSUME_TAC >> metis_tac[ALL_DISTINCT_APPEND]) >>
+        Cases_on `MEM lbl visited`
+        >- (`r = []` by (qpat_x_assum `dfs_pre_walk _ _ lbl = _` mp_tac >>
+              simp[Once dfs_pre_walk_def]) >> fs[])
+        >- (mp_tac (CONJUNCT1 dfs_pre_walk_path_in_output) >>
+            disch_then (qspecl_then [`succs`, `visited`, `lbl`, `target`] mp_tac) >>
+            simp[] >> strip_tac >>
+            qexists_tac `lbl` >> qexists_tac `ls` >> simp[listTheory.MEM] >>
+            fs[EVERY_MEM] >> metis_tac[]),
+        (* CASE 4: d ∈ r', target ∈ r' — use P1 IH *)
+        Cases_on `INDEX_OF d r'` >> fs[INDEX_OF_eq_NONE] >>
+        rename1 `INDEX_OF d r' = SOME id'` >>
+        Cases_on `INDEX_OF target r'` >> fs[INDEX_OF_eq_NONE] >>
+        rename1 `INDEX_OF target r' = SOME jt'` >>
+        `INDEX_OF d (r ++ r') = SOME (id' + LENGTH r)` by
+          metis_tac[index_of_append_right] >>
+        `INDEX_OF target (r ++ r') = SOME (jt' + LENGTH r)` by
+          metis_tac[index_of_append_right] >>
+        `i = id' + LENGTH r /\ j = jt' + LENGTH r` by fs[] >>
+        `id' > jt'` by fs[] >>
+        qpat_x_assum `!t' d' i' j'. MEM t' r' /\ MEM d' r' /\ d' <> t' /\ _ ==> _`
+          (qspecl_then [`target`, `d`, `id'`, `jt'`] mp_tac) >>
+        simp[] >> strip_tac >>
+        qexists_tac `s` >> qexists_tac `ls` >> simp[listTheory.MEM]
+      ])
+QED
+
+(* DFS tree parent: every non-root node in DFS pre-order output has a
+   predecessor (in the graph sense) that appears earlier in the output. *)
+Theorem dfs_pre_walk_has_pred:
+  (!succs (visited:string list) lbl target.
+    MEM target (SND (dfs_pre_walk succs visited lbl)) /\
+    ~MEM lbl visited /\
+    ALL_DISTINCT (SND (dfs_pre_walk succs visited lbl)) /\
+    target <> lbl ==>
+    ?p ip it.
+      MEM target (fmap_lookup_list succs p) /\
+      INDEX_OF p (SND (dfs_pre_walk succs visited lbl)) = SOME ip /\
+      INDEX_OF target (SND (dfs_pre_walk succs visited lbl)) = SOME it /\
+      ip < it) /\
+  (!succs (visited:string list) lst target.
+    MEM target (SND (dfs_pre_walk_list succs visited lst)) /\
+    ALL_DISTINCT (SND (dfs_pre_walk_list succs visited lst)) ==>
+    MEM target lst \/
+    ?p ip it.
+      MEM target (fmap_lookup_list succs p) /\
+      INDEX_OF p (SND (dfs_pre_walk_list succs visited lst)) = SOME ip /\
+      INDEX_OF target (SND (dfs_pre_walk_list succs visited lst)) = SOME it /\
+      ip < it)
+Proof
+  ho_match_mp_tac dfs_pre_walk_ind >> rpt conj_tac
+  >- ((* dfs_pre_walk succs visited lbl *)
+    rpt strip_tac >>
+    `SND (dfs_pre_walk succs visited lbl) =
+     lbl :: SND (dfs_pre_walk_list succs (set_insert lbl visited)
+                   (fmap_lookup_list succs lbl))` by (
+      simp[Once dfs_pre_walk_def, LET_THM] >>
+      Cases_on `dfs_pre_walk_list succs (set_insert lbl visited)
+                  (fmap_lookup_list succs lbl)` >> simp[]) >>
+    qabbrev_tac `orders = SND (dfs_pre_walk_list succs (set_insert lbl visited)
+                                 (fmap_lookup_list succs lbl))` >>
+    `MEM target orders` by fs[MEM] >>
+    `ALL_DISTINCT orders` by fs[ALL_DISTINCT] >>
+    (* Apply the list IH *)
+    first_x_assum (qspecl_then [`set_insert lbl visited`,
+                                 `fmap_lookup_list succs lbl`] mp_tac) >>
+    simp[] >> disch_then (qspec_then `target` mp_tac) >> simp[] >>
+    strip_tac
+    >- ((* target IN lst = fmap_lookup_list succs lbl *)
+      (* Predecessor is lbl, at index 0 in lbl::orders *)
+      qexists_tac `lbl` >>
+      `INDEX_OF lbl (lbl :: orders) = SOME 0` by
+        simp[INDEX_OF_def, listTheory.INDEX_FIND_def] >>
+      `?it. INDEX_OF target orders = SOME it` by (
+        Cases_on `INDEX_OF target orders` >> gvs[INDEX_OF_eq_NONE]) >>
+      `INDEX_OF target (lbl :: orders) = SOME (it + 1)` by (
+        irule index_of_cons >> fs[ALL_DISTINCT] >>
+        strip_tac >> gvs[]) >>
+      qexists_tac `0` >> qexists_tac `it + 1` >> simp[])
+    >- ((* p earlier in orders — IH gives INDEX_OF p orders = SOME ip etc. *)
+      (* Lift indices from orders to lbl::orders using index_of_cons *)
+      qexists_tac `p` >>
+      `p <> lbl` by (
+        strip_tac >> gvs[] >>
+        `MEM lbl orders` suffices_by fs[ALL_DISTINCT] >>
+        metis_tac[INDEX_OF_eq_NONE, optionTheory.NOT_NONE_SOME]) >>
+      `INDEX_OF p (lbl :: orders) = SOME (ip + 1)` by (
+        irule index_of_cons >> fs[ALL_DISTINCT]) >>
+      `INDEX_OF target (lbl :: orders) = SOME (it + 1)` by (
+        irule index_of_cons >> fs[ALL_DISTINCT]) >>
+      qexists_tac `ip + 1` >> qexists_tac `it + 1` >> simp[]))
+  >- ((* dfs_pre_walk_list succs visited [] *)
+    simp[Once dfs_pre_walk_def])
+  >- ((* dfs_pre_walk_list succs visited (lbl::lst) *)
+    rpt strip_tac >>
+    qpat_x_assum `MEM target (SND (dfs_pre_walk_list _ _ (_::_)))` mp_tac >>
+    simp[Once dfs_pre_walk_def, LET_THM] >>
+    Cases_on `dfs_pre_walk succs visited lbl` >>
+    Cases_on `dfs_pre_walk_list succs q lst` >>
+    simp[MEM_APPEND] >>
+    `SND (dfs_pre_walk_list succs visited (lbl::lst)) = r ++ r'` by (
+      simp[Once dfs_pre_walk_def, LET_THM]) >>
+    `ALL_DISTINCT (r ++ r')` by metis_tac[] >>
+    `ALL_DISTINCT r /\ ALL_DISTINCT r' /\ !x. MEM x r ==> ~MEM x r'` by (
+      pop_assum mp_tac >>
+      simp[ALL_DISTINCT_APPEND] >> metis_tac[]) >>
+    strip_tac
+    >- ((* target in r = SND(dfs_pre_walk succs visited lbl) *)
+      Cases_on `MEM lbl visited`
+      >- (`r = []` by (
+            `SND (dfs_pre_walk succs visited lbl) = r` by simp[] >>
+            qpat_x_assum `dfs_pre_walk _ _ _ = _` mp_tac >>
+            simp[Once dfs_pre_walk_def]) >>
+          fs[])
+      >- (
+        `SND (dfs_pre_walk succs visited lbl) = r` by simp[] >>
+        Cases_on `target = lbl`
+        >- (disj1_tac >> simp[])
+        >- (
+          (* IH for dfs_pre_walk gives p, ip, it in r *)
+          qpat_x_assum `!t. MEM t (SND _) /\ _ ==> _`
+            (qspec_then `target` mp_tac) >> simp[] >>
+          strip_tac >>
+          disj2_tac >>
+          qexists_tac `p` >> qexists_tac `ip` >> qexists_tac `it` >>
+          simp[] >>
+          (* Lift INDEX_OF from r to r ++ r' using index_of_append_left *)
+          `MEM p r` by metis_tac[INDEX_OF_eq_NONE, optionTheory.NOT_NONE_SOME] >>
+          `~MEM p r'` by metis_tac[] >>
+          `~MEM target r'` by metis_tac[] >>
+          metis_tac[index_of_append_left])))
+    >- ((* target in r' = SND(dfs_pre_walk_list succs q lst) *)
+      `SND (dfs_pre_walk_list succs q lst) = r'` by simp[] >>
+      (* IH for dfs_pre_walk_list *)
+      first_x_assum (qspecl_then [`q`, `r`] mp_tac) >> simp[] >>
+      disch_then (qspec_then `target` mp_tac) >> simp[] >>
+      strip_tac
+      >- ((* target IN lst *)
+        disj1_tac >> simp[])
+      >- ((* p earlier in r' with INDEX_OF p r' = SOME ip, etc. *)
+        disj2_tac >>
+        qexists_tac `p` >>
+        (* Lift INDEX_OF from r' to r ++ r' *)
+        `~MEM p r` by (
+          `MEM p r'` suffices_by metis_tac[] >>
+          metis_tac[INDEX_OF_eq_NONE, optionTheory.NOT_NONE_SOME]) >>
+        `~MEM target r` by metis_tac[] >>
+        `INDEX_OF p (r ++ r') = SOME (ip + LENGTH r)` by
+          metis_tac[index_of_append_right] >>
+        `INDEX_OF target (r ++ r') = SOME (it + LENGTH r)` by
+          metis_tac[index_of_append_right] >>
+        qexists_tac `ip + LENGTH r` >>
+        qexists_tac `it + LENGTH r` >> simp[])))
+QED
+
+(* Helper: INDEX_OF returning SOME implies MEM *)
+Triviality INDEX_OF_SOME_MEM:
+  !x l i. INDEX_OF x l = SOME i ==> MEM x l
+Proof
+  rpt strip_tac >> CCONTR_TAC >> fs[GSYM INDEX_OF_eq_NONE]
+QED
+
+(* Helper: MEM implies INDEX_OF returns SOME *)
+Triviality MEM_INDEX_OF:
+  !x l. MEM x l ==> ?i. INDEX_OF x l = SOME i
+Proof
+  rpt strip_tac >> Cases_on `INDEX_OF x l` >> gvs[INDEX_OF_eq_NONE]
+QED
+
+(* Case 1 helper for sublist_index_mono: sh = lh, sublist st lt *)
+Triviality sublist_index_mono_case1:
+  (!sl a b i j.
+    sublist sl lt /\ ALL_DISTINCT lt /\
+    INDEX_OF a sl = SOME i /\ INDEX_OF b sl = SOME j /\ i < j ==>
+    ?ia ib. INDEX_OF a lt = SOME ia /\ INDEX_OF b lt = SOME ib /\ ia < ib) ==>
+  !a b i j.
+    sublist st lt /\ ALL_DISTINCT (lh::lt) /\
+    INDEX_OF a (lh::st) = SOME i /\ INDEX_OF b (lh::st) = SOME j /\ i < j ==>
+    ?ia ib. INDEX_OF a (lh::lt) = SOME ia /\ INDEX_OF b (lh::lt) = SOME ib /\
+            ia < ib
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  sg `ALL_DISTINCT (lh::st)`
+  >- (irule rich_listTheory.sublist_ALL_DISTINCT >>
+      qexists_tac `lh::lt` >> simp[rich_listTheory.sublist_def]) >>
+  sg `INDEX_OF lh (lh::st) = SOME 0` >- EVAL_TAC >>
+  Cases_on `a = lh`
+  >- (
+    gvs[] >>
+    sg `b <> a`
+    >- (CCONTR_TAC >> gvs[]) >>
+    sg `MEM b st`
+    >- (qpat_x_assum `INDEX_OF b _ = SOME j`
+          (mp_tac o MATCH_MP INDEX_OF_SOME_MEM) >> simp[]) >>
+    sg `MEM b lt`
+    >- metis_tac[rich_listTheory.sublist_subset, SUBSET_DEF] >>
+    drule_then strip_assume_tac MEM_INDEX_OF >>
+    rename1 `INDEX_OF b lt = SOME ib` >>
+    qexists_tac `0` >> qexists_tac `ib + 1` >> simp[] >>
+    conj_tac >- EVAL_TAC >>
+    irule index_of_cons >> gvs[])
+  >>
+  Cases_on `b = lh`
+  >- gvs[]
+  >>
+  (* a <> lh, b <> lh: use IH *)
+  sg `MEM a st`
+  >- (sg `MEM a (lh::st)` >- metis_tac[INDEX_OF_SOME_MEM] >> gvs[]) >>
+  sg `MEM b st`
+  >- (sg `MEM b (lh::st)` >- metis_tac[INDEX_OF_SOME_MEM] >> gvs[]) >>
+  qpat_x_assum `MEM a st`
+    (fn th => strip_assume_tac (MATCH_MP MEM_INDEX_OF th)) >>
+  rename1 `INDEX_OF a st = SOME ix` >>
+  qpat_x_assum `MEM b st`
+    (fn th => strip_assume_tac (MATCH_MP MEM_INDEX_OF th)) >>
+  rename1 `INDEX_OF b st = SOME jx` >>
+  sg `INDEX_OF a (lh::st) = SOME (ix + 1)`
+  >- (irule index_of_cons >> gvs[]) >>
+  sg `INDEX_OF b (lh::st) = SOME (jx + 1)`
+  >- (irule index_of_cons >> gvs[]) >>
+  (* Save IH, then derive ix < jx with gvs *)
+  qpat_x_assum `!sl a b i j. _` mp_tac >>
+  gvs[] >> strip_tac >>
+  (* Now IH is back, and ix < jx is established *)
+  first_x_assum (qspecl_then [`st`, `a`, `b`, `ix`, `jx`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qexists_tac `ia + 1` >> qexists_tac `ib + 1` >> simp[] >>
+  conj_tac >- (irule index_of_cons >> gvs[]) >>
+  irule index_of_cons >> gvs[]
+QED
+
+(* Sublist preserves INDEX_OF ordering when the outer list is ALL_DISTINCT *)
+Theorem sublist_index_mono:
+  !sl l a b i j.
+    sublist sl l /\ ALL_DISTINCT l /\
+    INDEX_OF a sl = SOME i /\ INDEX_OF b sl = SOME j /\ i < j ==>
+    ?ia ib. INDEX_OF a l = SOME ia /\ INDEX_OF b l = SOME ib /\ ia < ib
+Proof
+  Induct_on `l`
+  >- (rpt gen_tac >> strip_tac >>
+      Cases_on `sl` >> gvs[rich_listTheory.sublist_def, INDEX_OF_eq_SOME])
+  >>
+  rpt gen_tac >> Cases_on `sl`
+  >- simp[INDEX_OF_eq_SOME]
+  >>
+  rename1 `sublist (sh::st) (lh::lt)` >>
+  simp[rich_listTheory.sublist_def] >> strip_tac
+  >- (
+    (* Case 1: sh = lh, sublist st lt *)
+    irule sublist_index_mono_case1 >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- gvs[] >>
+    qexistsl_tac [`i`, `j`, `st`] >> gvs[])
+  >> (
+    (* Case 2: sh <> lh, sublist (sh::st) lt — IH directly *)
+    sg `ALL_DISTINCT (lh::lt)` >- simp[] >>
+    sg `MEM a (sh::st)` >- metis_tac[INDEX_OF_SOME_MEM] >>
+    sg `MEM b (sh::st)` >- metis_tac[INDEX_OF_SOME_MEM] >>
+    sg `a <> lh`
+    >- (CCONTR_TAC >> gvs[] >>
+        imp_res_tac rich_listTheory.sublist_subset >> fs[SUBSET_DEF]) >>
+    sg `b <> lh`
+    >- (CCONTR_TAC >> gvs[] >>
+        imp_res_tac rich_listTheory.sublist_subset >> fs[SUBSET_DEF]) >>
+    first_x_assum (qspecl_then [`sh::st`, `a`, `b`, `i`, `j`] mp_tac) >>
+    simp[] >> strip_tac >>
+    qexists_tac `ia + 1` >> qexists_tac `ib + 1` >> simp[] >>
+    conj_tac >- (irule index_of_cons >> simp[]) >>
+    irule index_of_cons >> simp[])
+QED
+
+(* bb_succs of a member block are contained in cfg_succs_of *)
+Theorem bb_succs_in_cfg_succs:
+  !fn bb lbl.
+    ALL_DISTINCT (fn_labels fn) /\
+    MEM bb fn.fn_blocks /\
+    MEM lbl (bb_succs bb) ==>
+    MEM lbl (cfg_succs_of (cfg_analyze fn) bb.bb_label)
+Proof
+  rpt strip_tac >>
+  simp[cfg_analyze_succs] >>
+  `fmap_lookup_list (build_succs fn.fn_blocks) bb.bb_label = bb_succs bb` by (
+    irule cfg_succs_of_build_succs >>
+    fs[venomInstTheory.fn_labels_def]) >>
+  fs[]
+QED

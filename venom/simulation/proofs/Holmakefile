@@ -3,4 +3,4 @@
 INCLUDES = ../defs \
            ../../defs ../../props ../../proofs \
            ../../analysis/dataflow/defs ../../analysis/dataflow/proofs ../../analysis/dataflow \
-           ../../analysis/cfg/defs
+           ../../analysis/cfg/defs ../../analysis/cfg

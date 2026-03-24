@@ -19,6 +19,8 @@ Ancestors
 Theorem load_elim_one_correct_proof:
   !ctx ir_cfg fuel run_ctx fn s.
     let fresh = load_elim_one_fresh ctx ir_cfg fn in
+    fn_inst_wf fn /\ s.vs_inst_idx = 0 ==>
+    (?e. run_function fuel run_ctx fn s = Error e) \/
     lift_result (state_equiv fresh) (execution_equiv fresh)
       (run_function fuel run_ctx fn s)
       (run_function fuel run_ctx (load_elim_one ctx ir_cfg fn) s)
@@ -29,7 +31,9 @@ QED
 (* Function-level: composing 5 rounds, fresh vars accumulate *)
 Theorem load_elim_function_correct_proof:
   !fuel ir_ctx ctx fn s.
+    fn_inst_wf fn /\ s.vs_inst_idx = 0 ==>
     ?fresh.
+    (?e. run_function fuel ctx fn s = Error e) \/
     lift_result (state_equiv fresh) (execution_equiv fresh)
       (run_function fuel ctx fn s)
       (run_function fuel ctx (load_elim_function ir_ctx fn) s)

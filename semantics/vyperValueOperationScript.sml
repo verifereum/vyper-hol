@@ -237,8 +237,13 @@ Definition evaluate_binop_def:
        | _ => INR (TypeError "binop"))
      | Div => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
-           (if i2 = 0 then INR (RuntimeError "Div0") else
-            bounded_int_op u $
+           (if i2 = 0 then INR (RuntimeError "Div0")
+            (* Signed MIN_INT / -1 overflows: mathematical result is out of range.
+               Python codegen emits explicit check + REVERT for this case. *)
+            else if ¬is_Unsigned u ∧ i2 = -1 ∧
+                    i1 = -&(2 ** (int_bound_bits u - 1))
+            then INR (RuntimeError "Div overflow")
+            else bounded_int_op u $
               (if is_Unsigned u
                then &(w2n $ word_div ((i2w i1):bytes32) (i2w i2))
                else w2i $ word_quot ((i2w i1):bytes32) (i2w i2)))
@@ -264,7 +269,9 @@ Definition evaluate_binop_def:
      | UDiv => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
            if i2 = 0 then INR (RuntimeError "UDiv0") else
-           wrapped_int_op u (i1 / i2) | _ => INR (TypeError "binop"))
+           (* EVM SDIV/DIV: truncation toward zero, not floor division *)
+           wrapped_int_op u (w2i $ word_quot ((i2w i1):bytes32) (i2w i2))
+             | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | Mod => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
@@ -604,9 +611,15 @@ Definition evaluate_convert_def:
      if within_int_bound (Unsigned n) i
      then INL $ IntV i
      else INR (RuntimeError "convert flag uint bound")) ∧
-  evaluate_convert (IntV i) (BaseT (BytesT bd)) =
-  (* TODO: check and use type for width etc. *)
-    (if compatible_bound bd 32
+  (* IntV → BytesT: extract upper m bytes of big-endian 32-byte encoding.
+     For Fixed m: TAKE m gives bytesM. For Dynamic n: full 32 bytes if n >= 32.
+     Mirrors Python: convert.py _to_Bytes for integer sources. *)
+  evaluate_convert (IntV i) (BaseT (BytesT (Fixed m))) =
+    (if m ≤ 32
+     then INL $ BytesV (TAKE m (word_to_bytes_be ((i2w i):bytes32)))
+     else INR (RuntimeError "convert int to bytes")) ∧
+  evaluate_convert (IntV i) (BaseT (BytesT (Dynamic n))) =
+    (if n ≥ 32
      then INL $ BytesV (word_to_bytes_be ((i2w i):bytes32))
      else INR (RuntimeError "convert int to bytes")) ∧
   evaluate_convert (BytesV bs) (BaseT (StringT n)) =
@@ -623,13 +636,15 @@ Definition evaluate_convert_def:
      else INR (RuntimeError "convert string bytes")) ∧
   evaluate_convert (IntV i) (BaseT DecimalT) =
     bounded_decimal_op (i * 10000000000) ∧
+  (* Truncation toward zero, matching EVM SDIV semantics *)
   evaluate_convert (DecimalV i) (BaseT (IntT n)) =
-    (if within_int_bound (Signed 168) ((ABS i) / 10000000000)
-     then INL $ IntV (i / 10000000000)
+    (let r = SGN i * (ABS i / 10000000000) in
+     if within_int_bound (Signed n) r
+     then INL $ IntV r
      else INR (RuntimeError "convert decimal int")) ∧
   evaluate_convert (DecimalV i) (BaseT (UintT n)) =
-    (let r = i / 10000000000 in
-     if 0 ≤ i ∧ within_int_bound (Signed 168) r
+    (let r = SGN i * (ABS i / 10000000000) in
+     if 0 ≤ r ∧ within_int_bound (Unsigned n) r
      then INL $ IntV r
      else INR (RuntimeError "convert decimal uint")) ∧
   evaluate_convert _ _ = INR (TypeError "convert")

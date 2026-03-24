@@ -33,12 +33,13 @@ Definition vardef_joined_def:
     let cfg = cfg_analyze fn in
     let edge_vals = MAP (\nbr. df_boundary all_vars st nbr)
                         (cfg_preds_of cfg lbl) in
-    case edge_vals of
-      [] => (case fn_entry_label fn of
-               NONE => all_vars
-             | SOME ev_lbl =>
-                 if lbl = ev_lbl then [] else all_vars)
-    | v4::v5 => FOLDL list_intersect all_vars edge_vals
+    let base = (case edge_vals of
+                  [] => all_vars
+                | _ => FOLDL list_intersect all_vars edge_vals) in
+    case fn_entry_label fn of
+      NONE => base
+    | SOME ev_lbl =>
+        if lbl = ev_lbl then list_intersect [] base else base
 End
 
 (* State invariant for convergence:
@@ -401,25 +402,26 @@ QED
 Triviality vardef_joined_subset:
   !fn st lbl.
     vardef_state_inv fn st ==>
-    let edge_vals = MAP (\nbr. vardef_edge_transfer () nbr lbl
-          (df_boundary (fn_all_assignments fn) st nbr))
-          (cfg_preds_of (cfg_analyze fn) lbl) in
-    let joined = case edge_vals of
-          [] => (case OPTION_MAP (\lbl. (lbl, []:string list))
-                   (fn_entry_label fn) of
-                   NONE => fn_all_assignments fn
-                 | SOME (ev_lbl,v) =>
-                     if lbl = ev_lbl then v else fn_all_assignments fn)
-        | v4::v5 => FOLDL list_intersect (fn_all_assignments fn) edge_vals in
-    set joined SUBSET set (fn_all_assignments fn)
+    set (vardef_joined fn st lbl) SUBSET set (fn_all_assignments fn)
 Proof
-  rw[LET_THM, varDefDefsTheory.vardef_edge_transfer_def] >>
+  rw[vardef_joined_def, LET_THM,
+     varDefDefsTheory.vardef_edge_transfer_def] >>
   Cases_on `MAP (\nbr. df_boundary (fn_all_assignments fn) st nbr)
               (cfg_preds_of (cfg_analyze fn) lbl)`
   >- (* No predecessors *)
-     (simp[] >> Cases_on `fn_entry_label fn` >> simp[] >> rw[])
-  >- (* Has predecessors: FOLDL list_intersect *)
-     (simp[] >>
+     (simp[] >> Cases_on `fn_entry_label fn` >> simp[] >>
+      rw[dfHelperDefsTheory.list_intersect_def])
+  >- (* Has predecessors *)
+     (simp[] >> Cases_on `fn_entry_label fn` >> simp[]
+      >- ((* NONE: FOLDL list_intersect *)
+          irule pred_setTheory.SUBSET_TRANS >>
+          qexists_tac `set (list_intersect (fn_all_assignments fn) h)` >>
+          rw[foldl_list_intersect_subset, list_intersect_set,
+             pred_setTheory.INTER_SUBSET])
+      >> IF_CASES_TAC >> simp[]
+      >- ((* lbl = ev_lbl: list_intersect [] _ = [] *)
+          simp[dfHelperDefsTheory.list_intersect_def])
+      >> (* lbl ≠ ev_lbl: same as NONE *)
       irule pred_setTheory.SUBSET_TRANS >>
       qexists_tac `set (list_intersect (fn_all_assignments fn) h)` >>
       rw[foldl_list_intersect_subset, list_intersect_set,
@@ -435,7 +437,6 @@ Triviality vardef_joined_boundary_mono:
     SUBSET set (vardef_joined fn st lbl')
 Proof
   rw[vardef_joined_def, LET_THM] >>
-  Cases_on `cfg_preds_of (cfg_analyze fn) lbl'` >> simp[] >>
   (* Establish pointwise boundary subset *)
   `!nbr. set (df_boundary (fn_all_assignments fn)
      (st with ds_boundary := st.ds_boundary |+ (lbl, new_bv)) nbr)
@@ -443,7 +444,28 @@ Proof
     (gen_tac >> simp[dfAnalyzeDefsTheory.df_boundary_def,
        finite_mapTheory.FLOOKUP_UPDATE] >>
      rw[] >> fs[dfAnalyzeDefsTheory.df_boundary_def]) >>
-  (* acc mono + element mono via SUBSET_TRANS *)
+  Cases_on `fn_entry_label fn` >> simp[]
+  >- ((* NONE: same as old proof *)
+      Cases_on `cfg_preds_of (cfg_analyze fn) lbl'` >> simp[] >>
+      irule pred_setTheory.SUBSET_TRANS >>
+      qexists_tac `set (FOLDL list_intersect
+        (list_intersect (fn_all_assignments fn)
+           (df_boundary (fn_all_assignments fn) st h))
+        (MAP (\nbr. df_boundary (fn_all_assignments fn)
+           (st with ds_boundary := st.ds_boundary |+ (lbl,new_bv)) nbr) t))` >>
+      conj_tac
+      >- (irule foldl_list_intersect_acc_mono >>
+          rw[list_intersect_set, pred_setTheory.SUBSET_DEF,
+             pred_setTheory.IN_INTER] >>
+          metis_tac[pred_setTheory.SUBSET_DEF])
+      >- (irule foldl_list_intersect_mono >>
+          rw[listTheory.EL_MAP] >> metis_tac[]))
+  >> (* SOME ev_lbl *)
+  IF_CASES_TAC >> simp[]
+  >- ((* lbl' = ev_lbl: list_intersect [] _ = [] ⊆ anything *)
+      simp[dfHelperDefsTheory.list_intersect_def])
+  >> (* lbl' ≠ ev_lbl: same as NONE *)
+  Cases_on `cfg_preds_of (cfg_analyze fn) lbl'` >> simp[] >>
   irule pred_setTheory.SUBSET_TRANS >>
   qexists_tac `set (FOLDL list_intersect
     (list_intersect (fn_all_assignments fn)
@@ -475,12 +497,11 @@ Triviality vardef_process_eq:
                     (df_boundary (fn_all_assignments fn) st lbl) fv);
                 ds_inst := FUNION inst_map st.ds_inst|>
 Proof
-  rw[dfAnalyzeDefsTheory.df_process_block_def] >>
+  rw[dfAnalyzeDefsTheory.df_process_block_def,
+     dfAnalyzeDefsTheory.df_joined_val_def] >>
   simp_tac std_ss [LET_THM, dfAnalyzeDefsTheory.direction_case_def] >>
   rw[varDefDefsTheory.vardef_edge_transfer_def] >>
   simp[vardef_joined_def, LET_THM] >>
-  Cases_on `MAP (\nbr. df_boundary (fn_all_assignments fn) st nbr)
-                (cfg_preds_of (cfg_analyze fn) lbl)` >> simp[] >>
   Cases_on `fn_entry_label fn` >> simp[]
 QED
 
@@ -527,13 +548,25 @@ Triviality vardef_joined_is_filter:
     FILTER P (fn_all_assignments fn)
 Proof
   rw[vardef_joined_def, LET_THM] >>
+  Cases_on `fn_entry_label fn` >> simp[]
+  >- ((* NONE *)
+      Cases_on `MAP (\nbr. df_boundary (fn_all_assignments fn) st nbr)
+                    (cfg_preds_of (cfg_analyze fn) lbl)` >> simp[]
+      >- (qexists_tac `\x. T` >> rw[listTheory.FILTER_T])
+      >> simp[dfHelperDefsTheory.list_intersect_def] >>
+      qspecl_then [`t`, `FILTER (\x. MEM x h) (fn_all_assignments fn)`]
+        strip_assume_tac foldl_intersect_is_filter >>
+      qexists_tac `\x. P x /\ MEM x h` >>
+      simp[rich_listTheory.FILTER_FILTER])
+  >> (* SOME ev_lbl *)
+  IF_CASES_TAC >> simp[]
+  >- ((* lbl = ev_lbl: list_intersect [] _ = [] = FILTER (\x.F) *)
+      simp[dfHelperDefsTheory.list_intersect_def] >>
+      qexists_tac `\x. F` >> rw[listTheory.FILTER_F])
+  >> (* lbl ≠ ev_lbl: same as NONE *)
   Cases_on `MAP (\nbr. df_boundary (fn_all_assignments fn) st nbr)
                 (cfg_preds_of (cfg_analyze fn) lbl)` >> simp[]
-  >- (Cases_on `fn_entry_label fn` >> simp[]
-      >- (qexists_tac `\x. T` >> rw[listTheory.FILTER_T])
-      >> rw[]
-      >- (qexists_tac `\x. F` >> rw[listTheory.FILTER_F])
-      >- (qexists_tac `\x. T` >> rw[listTheory.FILTER_T]))
+  >- (qexists_tac `\x. T` >> rw[listTheory.FILTER_T])
   >> simp[dfHelperDefsTheory.list_intersect_def] >>
   qspecl_then [`t`, `FILTER (\x. MEM x h) (fn_all_assignments fn)`]
     strip_assume_tac foldl_intersect_is_filter >>
@@ -566,14 +599,7 @@ Proof
     `\v. set v SUBSET set (fn_all_assignments fn)` mp_tac) >>
   simp[varDefDefsTheory.vardef_edge_transfer_def] >>
   impl_tac >- (conj_tac
-    >- (simp[vardef_joined_def, LET_THM] >>
-        Cases_on `MAP (\nbr. df_boundary (fn_all_assignments fn) st nbr)
-                      (cfg_preds_of (cfg_analyze fn) lbl)` >> simp[] >-
-          (Cases_on `fn_entry_label fn` >> simp[] >> rw[]) >>
-        irule pred_setTheory.SUBSET_TRANS >>
-        qexists_tac `set (list_intersect (fn_all_assignments fn) h)` >>
-        rw[foldl_list_intersect_subset, list_intersect_set,
-           pred_setTheory.INTER_SUBSET])
+    >- metis_tac[vardef_joined_subset]
     >- metis_tac[vardef_transfer_subset]) >>
   strip_tac >>
   drule df_fold_block_fdom >> strip_tac >>
@@ -1557,16 +1583,7 @@ Triviality vardef_at_inter[local]:
     MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
     lookup_block lbl fn.fn_blocks = SOME bb ==>
     df_at (fn_all_assignments fn) (vardef_analyze fn) lbl 0 =
-    let preds = cfg_preds_of (cfg_analyze fn) lbl in
-    let edge_vals = MAP (\nbr. df_boundary (fn_all_assignments fn)
-                                  (vardef_analyze fn) nbr) preds in
-    case edge_vals of
-      [] => (case OPTION_MAP (\lbl. (lbl, [] : string list))
-                    (fn_entry_label fn) of
-               NONE => fn_all_assignments fn
-             | SOME (ev_lbl, v) =>
-                 if lbl = ev_lbl then v else fn_all_assignments fn)
-    | v4::v5 => FOLDL list_intersect (fn_all_assignments fn) edge_vals
+    vardef_joined fn (vardef_analyze fn) lbl
 Proof
   rpt strip_tac >>
   `is_fixpoint
@@ -1582,8 +1599,10 @@ Proof
     `fn`, `lbl`, `bb`]
     mp_tac (SIMP_RULE std_ss [LET_THM] dfAnalyzePropsTheory.df_at_inter_transfer) >>
   simp[dfAnalyzeDefsTheory.direction_case_def,
+       dfAnalyzeDefsTheory.df_joined_val_def,
        varDefDefsTheory.vardef_edge_transfer_def,
-       vardef_analyze_unfold, LET_THM]
+       vardef_joined_def, vardef_analyze_unfold, LET_THM] >>
+  Cases_on `fn_entry_label fn` >> simp[]
 QED
 
 (* Transfer decomposition: v in transfer output => v in input or in inst_defs *)
@@ -1666,29 +1685,42 @@ Triviality vardef_joined_in_pred_boundary[local]:
     MEM v (df_boundary (fn_all_assignments fn) (vardef_analyze fn) pred)
 Proof
   rpt strip_tac >>
-  (* Get SOME bb from <> NONE *)
   `?bb. lookup_block lbl fn.fn_blocks = SOME bb` by
     (Cases_on `lookup_block lbl fn.fn_blocks` >> fs[]) >>
-  (* Apply vardef_at_inter via mp_tac *)
   qspecl_then [`fn`, `lbl`, `bb`] mp_tac vardef_at_inter >>
   simp[LET_THM] >> strip_tac >>
-  (* edge_vals = MAP ... preds is non-empty since MEM pred preds *)
-  qabbrev_tac `edge_vals = MAP (\nbr. df_boundary (fn_all_assignments fn)
-                                  (vardef_analyze fn) nbr)
-                               (cfg_preds_of (cfg_analyze fn) lbl)` >>
-  Cases_on `edge_vals`
-  >- (fs[markerTheory.Abbrev_def] >>
-      Cases_on `cfg_preds_of (cfg_analyze fn) lbl` >> fs[]) >>
-  (* df_at lbl 0 = FOLDL list_intersect bottom (h::t) *)
-  (* fs[] unfolds to FOLDL ... (list_intersect bottom h) t *)
-  (* Instead: v in FOLDL over h::t means v in each element *)
-  `MEM v (FOLDL list_intersect (fn_all_assignments fn) (h::t))` by fs[] >>
+  (* MEM v (df_at lbl 0) → MEM v (vardef_joined ...) *)
+  `MEM v (vardef_joined fn (vardef_analyze fn) lbl)` by fs[] >>
+  (* Move MEM v joined to goal as implication, expand, handle entry_label *)
+  pop_assum mp_tac >>
+  simp_tac std_ss [vardef_joined_def, LET_THM] >>
+  Cases_on `fn_entry_label fn` >> simp[]
+  >- ((* NONE: MEM v (case MAP of [] => all | _::_ => FOLDL) ==> goal *)
+      Cases_on `MAP (\nbr. df_boundary (fn_all_assignments fn)
+                    (vardef_analyze fn) nbr)
+                   (cfg_preds_of (cfg_analyze fn) lbl)` >> simp[]
+      >- (Cases_on `cfg_preds_of (cfg_analyze fn) lbl` >> fs[]) >>
+      strip_tac >>
+      `!x. MEM x (h::t) ==> MEM v x` by
+        metis_tac[foldl_intersect_mem_each, listTheory.FOLDL] >>
+      `MEM (df_boundary (fn_all_assignments fn)
+              (vardef_analyze fn) pred) (h::t)` by
+        (qpat_x_assum `MAP _ _ = h::t` (SUBST1_TAC o SYM) >>
+         simp[listTheory.MEM_MAP] >> qexists_tac `pred` >> simp[]) >>
+      metis_tac[])
+  >> (* SOME ev_lbl *)
+  IF_CASES_TAC >> simp[dfHelperDefsTheory.list_intersect_def] >>
+  (* lbl ≠ ev_lbl: same as NONE *)
+  Cases_on `MAP (\nbr. df_boundary (fn_all_assignments fn)
+                    (vardef_analyze fn) nbr)
+                   (cfg_preds_of (cfg_analyze fn) lbl)` >> simp[]
+  >- (Cases_on `cfg_preds_of (cfg_analyze fn) lbl` >> fs[]) >>
+  strip_tac >>
   `!x. MEM x (h::t) ==> MEM v x` by
-    metis_tac[foldl_intersect_mem_each] >>
-  (* boundary(pred) is in h::t via the MAP equation *)
-  `MEM (df_boundary (fn_all_assignments fn) (vardef_analyze fn) pred) (h::t)` by
-    (qpat_x_assum `Abbrev _`
-       (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+    metis_tac[foldl_intersect_mem_each, listTheory.FOLDL] >>
+  `MEM (df_boundary (fn_all_assignments fn)
+          (vardef_analyze fn) pred) (h::t)` by
+    (qpat_x_assum `MAP _ _ = h::t` (SUBST1_TAC o SYM) >>
      simp[listTheory.MEM_MAP] >> qexists_tac `pred` >> simp[]) >>
   metis_tac[]
 QED
@@ -1835,7 +1867,8 @@ Proof
   >- ((* P preserved *)
       rpt gen_tac >> strip_tac >> conj_tac
       >- (fs[markerTheory.Abbrev_def] >> metis_tac[vardef_inv_preserved])
-      >> fs[markerTheory.Abbrev_def, dfAnalyzeDefsTheory.df_process_block_def]
+      >> fs[markerTheory.Abbrev_def, dfAnalyzeDefsTheory.df_process_block_def,
+            dfAnalyzeDefsTheory.df_joined_val_def]
       >> pairarg_tac >> simp[finite_mapTheory.FLOOKUP_UPDATE]
       >> Cases_on `lbl = (HD fn.fn_blocks).bb_label` >> simp[]
       >> simp[dfAnalyzeDefsTheory.df_boundary_def,

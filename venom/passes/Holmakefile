@@ -9,15 +9,16 @@ INCLUDES = \
   phi_elimination \
   revert_to_assert \
   assert_elim \
+  overflow_elim \
   literals_codesize \
   remove_unused \
   concretize_mem_loc \
   lower_dload \
-  float_allocas \
   fix_mem_locations \
   branch_opt \
   single_use_expansion \
   assert_combiner \
+  affine_folding \
   algebraic_opt \
   mem2var \
   tail_merge \
@@ -31,4 +32,8 @@ INCLUDES = \
   memory_copy_elision \
   assign_elim \
   cse \
-  sccp
+  sccp \
+  function_inliner \
+  invoke_copy_fwd_common \
+  internal_return_copy_fwd \
+  readonly_invoke_copy_fwd

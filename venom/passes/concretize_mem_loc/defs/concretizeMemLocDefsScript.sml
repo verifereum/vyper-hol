@@ -1,14 +1,11 @@
 (*
  * Concretize Memory Locations — Definitions
  *
- * Ports vyper/venom/passes/concretize_mem_loc.py to HOL4.
+ * Upstream: vyperlang/vyper@8780b3134 (alloca_id removal)
  *
- * Replaces abstract memory allocation instructions (alloca, palloca)
+ * Replaces abstract memory allocation instructions (alloca)
  * with concrete ASSIGN of computed memory offsets, and replaces
  * GEP (get element pointer) with ADD.
- *
- * Orphaned callocas (not in allocation map) are NOPped along with
- * all their transitive uses, matching Python's _remove_unused_calloca.
  *
  * TOP-LEVEL:
  *   mem_liveness_analyze  — MemLiveness analysis (liveat ∩ used)
@@ -451,36 +448,12 @@ End
    Function-Level Transform
    ========================================================================= *)
 
-(* Variables defined by orphaned callocas (not in alloc map) *)
-Definition orphaned_calloca_vars_def:
-  orphaned_calloca_vars (amap : alloc_map) fn =
-    FLAT (MAP (\bb.
-      FLAT (MAP (\inst.
-        if inst.inst_opcode = CALLOCA then
-          case inst.inst_outputs of
-            [out] =>
-              if FLOOKUP amap out = NONE then [out] else []
-          | _ => []
-        else [])
-        bb.bb_instructions))
-      fn.fn_blocks)
-End
-
-(* Two-phase transform:
-   1. Compute orphaned calloca vars + transitive uses → dead_vars
-   2. NOP dead-var instructions, concretize the rest.
-   Matches Python _handle_bb + _remove_unused_calloca. *)
+(* Function-level: concretize all instructions + clear NOPs.
+   Post-sunset: no calloca orphan handling needed. *)
 Definition concretize_function_def:
   concretize_function amap fn =
-    let orphans = orphaned_calloca_vars amap fn in
-    let dead_vars = transitive_use_vars fn orphans in
     clear_nops_function
       (function_map_transform
-        (block_map_transform (\inst.
-          if EXISTS (\v. MEM v dead_vars) inst.inst_outputs \/
-             EXISTS (\op. case op of Var v => MEM v dead_vars | _ => F)
-                    inst.inst_operands
-          then mk_nop_inst inst
-          else concretize_inst amap inst))
+        (block_map_transform (concretize_inst amap))
         fn)
 End
