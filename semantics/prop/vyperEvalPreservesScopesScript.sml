@@ -1102,8 +1102,10 @@ QED
 
 Definition preserves_tv_def:
   preserves_tv cx st st' ⇔
-    (∀id tv v. lookup_scopes id st.scopes = SOME (tv, v) ⇒
-               ∃v'. lookup_scopes id st'.scopes = SOME (tv, v')) ∧
+    LENGTH st'.scopes = LENGTH st.scopes ∧
+    (∀i id tv v. i < LENGTH st.scopes ∧
+                 FLOOKUP (EL i st.scopes) id = SOME (tv, v) ⇒
+                 ∃v'. FLOOKUP (EL i st'.scopes) id = SOME (tv, v')) ∧
     (∀src id tv v.
        FLOOKUP (get_source_immutables src
          (case ALOOKUP st.immutables cx.txn.target of
@@ -1133,7 +1135,7 @@ Theorem preserves_tv_trans:
     preserves_tv cx st2 st3 ⇒
     preserves_tv cx st1 st3
 Proof
-  simp[preserves_tv_def] >> metis_tac[]
+  simp[preserves_tv_def]
 QED
 
 Theorem preserves_tv_eq:
@@ -1171,26 +1173,23 @@ Proof
   drule_all lookup_scopes_none_map_fdom >> gvs[]
 QED
 
-(* After eval_stmts under a pushed FEMPTY scope, popping the scope preserves tv.
-   Uses eval_stmts_preserves_scopes_len (scopes length preserved) and
-   lookup_scopes_not_in_new_head (new head entries don't shadow tail). *)
-Theorem eval_stmts_scope_bracket_preserves_tv:
-  ∀cx ss st res st'.
-    eval_stmts cx ss (st with scopes updated_by CONS FEMPTY) = (res, st') ∧
-    preserves_tv cx (st with scopes updated_by CONS FEMPTY) st' ⇒
+(* Generalized version: after eval_stmts under a pushed scope sc,
+   popping preserves tv. For ids not in FDOM sc, uses
+   lookup_scopes_not_in_new_head. For ids in FDOM sc, uses
+   eval_stmts_preserves_tail_lookup (the body finds them in the head
+   first, so the tail entry is unchanged). *)
+Theorem eval_stmts_scope_bracket_gen_preserves_tv:
+  ∀cx ss sc st res st'.
+    eval_stmts cx ss (st with scopes updated_by CONS sc) = (res, st') ∧
+    preserves_tv cx (st with scopes updated_by CONS sc) st' ⇒
     preserves_tv cx st (st' with scopes := TL st'.scopes)
 Proof
-  rw[preserves_tv_def] >>
-  `lookup_scopes id (FEMPTY::st.scopes) = SOME (tv,v)`
-  by gvs[lookup_scopes_def] >>
-  first_x_assum drule >>
-  `st with scopes updated_by CONS FEMPTY =
-   st with scopes := FEMPTY :: st.scopes` by
-   simp[evaluation_state_component_equality] >>
-  gvs[] >> drule lookup_scopes_not_in_new_head >>
-  simp[] >> disch_then drule >>
-  drule eval_stmts_preserves_scopes_len >> rw[] >>
-  Cases_on`st'.scopes` \\ gvs[lookup_scopes_def]
+  rw[]
+  \\ drule eval_stmts_preserves_scopes_len \\ rw[]
+  \\ gvs[preserves_tv_def] \\ rw[]
+  \\ Cases_on`st'.scopes` \\ gvs[]
+  \\ first_x_assum(qspec_then`SUC i`mp_tac)
+  \\ rw[]
 QED
 
 Theorem new_variable_preserves_tv:
@@ -1204,6 +1203,8 @@ Proof
   gvs[set_scopes_def, return_def] >>
   gvs[preserves_tv_def, lookup_scopes_def, type_check_def,
       assert_def, AllCaseEqs()] >>
+  rw[finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on`i` \\ gvs[] >>
   rw[finite_mapTheory.FLOOKUP_UPDATE] >> gvs[]
 QED
 
@@ -1227,11 +1228,14 @@ Proof
       bind_apply, ignore_bind_apply, AllCaseEqs()] >>
     imp_res_tac lift_sum_state >> gvs[] >>
     imp_res_tac assign_result_state >> gvs[] >>
-    gvs[preserves_tv_def] >> rw[] >>
-    drule_all lookup_scopes_fupdate_preserves_tv >>
-    rw[] >>
-    once_rewrite_tac[rich_listTheory.CONS_APPEND] >>
-    rewrite_tac[listTheory.APPEND_ASSOC] >> rw[]) >>
+    gvs[preserves_tv_def] >>
+    drule find_containing_scope_structure >> rw[] >>
+    Cases_on`i < LENGTH pre` \\ gvs[rich_listTheory.EL_APPEND1] >>
+    Cases_on`i > LENGTH pre` \\
+    gvs[rich_listTheory.EL_APPEND, rich_listTheory.EL_CONS,
+        arithmeticTheory.PRE_SUB1] >>
+    `i = LENGTH pre` by gvs[] >> gvs[] >>
+    gvs[finite_mapTheory.FLOOKUP_UPDATE] >> rw[] >> gvs[]) >>
   conj_tac >- (
     (* TopLevelVar *)
     rpt strip_tac >>
@@ -1378,10 +1382,28 @@ Proof
         return_def] >>
     TRY ( drule eval_stmts_preserves_scopes_len \\ rw[] \\ NO_TAC ) >>
     strip_tac >>
-    drule eval_stmts_scope_bracket_preserves_tv >>
+    drule eval_stmts_scope_bracket_gen_preserves_tv >>
     rw[] >> metis_tac[preserves_tv_trans]) >>
   (* For *)
-  conj_tac >- cheat >>
+  conj_tac >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    pop_assum mp_tac >>
+    simp_tac std_ss [evaluate_def, bind_apply, ignore_bind_apply, LET_THM] >>
+    BasicProvers.TOP_CASE_TAC >>
+    imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
+    reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >> gvs[] >>
+    first_x_assum drule >> strip_tac >>
+    BasicProvers.TOP_CASE_TAC >>
+    first_x_assum drule >> strip_tac >>
+    reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
+    CASE_TAC >>
+    imp_res_tac check_state >> gvs[] >>
+    reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
+    gvs[] >> strip_tac >>
+    first_x_assum drule_all >>
+    strip_tac >>
+    irule preserves_tv_trans >> goal_assum drule >>
+    simp[]) >>
   (* Expr *)
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
@@ -1474,7 +1496,47 @@ Proof
   (* eval_for [] *)
   conj_tac >- rw[evaluate_def, return_def] >>
   (* eval_for v::vs *)
-  conj_tac >- cheat >>
+  conj_tac >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    pop_assum mp_tac >>
+    simp_tac std_ss [evaluate_def, bind_apply, ignore_bind_apply] >>
+    (* push_scope_with_var *)
+    BasicProvers.TOP_CASE_TAC >>
+    reverse BasicProvers.TOP_CASE_TAC >- (
+      rw[] >> gvs[push_scope_with_var_def, return_def]) >>
+    first_x_assum drule >> strip_tac >>
+    first_x_assum drule >> strip_tac >>
+    CASE_TAC >>
+    CASE_TAC >- (
+      first_x_assum drule >>
+      reverse $ rw[return_def]
+      >- (
+        first_x_assum drule >>
+        gvs[finally_def, try_def, ignore_bind_apply] >>
+        gvs[AllCaseEqs(), return_def, raise_def, pop_scope_def,
+            push_scope_with_var_def] >>
+        first_x_assum drule >> rw[] >>
+        irule preserves_tv_trans >>
+        goal_assum $ drule_at Any >>
+        drule eval_stmts_scope_bracket_gen_preserves_tv >> gvs[] >>
+        imp_res_tac handle_loop_exception_state >> gvs[])
+      >- (
+        gvs[finally_def, try_def, ignore_bind_apply] >>
+        gvs[AllCaseEqs(), return_def, raise_def, pop_scope_def,
+            push_scope_with_var_def] >>
+        first_x_assum drule >> rw[] >>
+        imp_res_tac handle_loop_exception_state >> gvs[] >>
+        drule eval_stmts_scope_bracket_gen_preserves_tv >> gvs[])) >>
+    rw[] >>
+    first_x_assum(qspec_then`ARB`kall_tac) >>
+    gvs[finally_def, try_def, AllCaseEqs(), ignore_bind_apply,
+        return_def, pop_scope_def, raise_def] >>
+    imp_res_tac eval_stmts_preserves_scopes_len >>
+    gvs[push_scope_with_var_def, return_def] >>
+    imp_res_tac handle_loop_exception_state >> gvs[] >>
+    first_x_assum drule >> rw[] >>
+    drule eval_stmts_scope_bracket_gen_preserves_tv >>
+    rw[]) >>
   (* Name *)
   conj_tac >- (
     rpt gen_tac >> strip_tac >>
@@ -1793,18 +1855,4 @@ Proof
    first_x_assum drule_all >> strip_tac >>
    irule preserves_tv_trans >> first_assum (irule_at Any) >>
    gvs[return_def])
-QED
-
-(* If id is in the head scope, then lookup_scopes id in the TAIL is
-   unchanged by eval_stmts. This is because set_variable uses
-   find_containing_scope which finds id in the head first, so updates
-   only the head. new_variable only adds to the head. *)
-Theorem eval_stmts_preserves_tail_lookup:
-  ∀cx ss st res st' sc rest id tv v.
-    eval_stmts cx ss (st with scopes := sc::rest) = (res, st') ∧
-    id ∈ FDOM sc ∧
-    lookup_scopes id rest = SOME (tv, v) ⇒
-    lookup_scopes id (TL st'.scopes) = SOME (tv, v)
-Proof
-  cheat
 QED
