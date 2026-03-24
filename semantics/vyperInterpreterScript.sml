@@ -765,26 +765,45 @@ val () = check_array_bounds_def
    For view functions: only check, don't acquire/release. *)
 
 (* Check and acquire the reentrancy lock.
-   Directly accesses transient storage (address -> bytes32 -> bytes32). *)
+   Uses monadic transient storage accessors for cv_auto_trans compatibility. *)
 Definition acquire_nonreentrant_lock_def:
-  acquire_nonreentrant_lock (addr : address) (slot : num) (is_view : bool)
-    (st : evaluation_state) =
-  let current = st.tStorage addr (n2w slot) in
-  if current = 1w then (INR (Error (RuntimeError "nonreentrant lock")), st)
-  else if is_view then (INL (), st)
-  else (INL (), st with tStorage := (addr =+ (n2w slot =+ 1w) (st.tStorage addr)) st.tStorage)
+  acquire_nonreentrant_lock (addr : address) (slot : num) (is_view : bool) = do
+    tStore <- get_transient_storage;
+    current <<- vfmState$lookup_storage (n2w slot)
+                  (vfmExecution$lookup_transient_storage addr tStore);
+    if current = 1w then raise (Error (RuntimeError "nonreentrant lock"))
+    else if is_view then return ()
+    else update_transient
+      (vfmExecution$update_transient_storage addr
+         (vfmState$update_storage (n2w slot) 1w
+            (vfmExecution$lookup_transient_storage addr tStore)))
+  od
 End
 
-(* cv_auto_trans not possible: tStorage has function type *)
+val () = acquire_nonreentrant_lock_def
+  |> SRULE [vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+            FUN_EQ_THM, LET_THM, COND_RATOR,
+            get_transient_storage_def, update_transient_def,
+            vyperStateTheory.return_def, vyperStateTheory.raise_def]
+  |> cv_auto_trans;
 
 (* Release the reentrancy lock *)
 Definition release_nonreentrant_lock_def:
-  release_nonreentrant_lock (addr : address) (slot : num)
-    (st : evaluation_state) =
-  (INL (), st with tStorage := (addr =+ (n2w slot =+ 0w) (st.tStorage addr)) st.tStorage)
+  release_nonreentrant_lock (addr : address) (slot : num) = do
+    tStore <- get_transient_storage;
+    update_transient
+      (vfmExecution$update_transient_storage addr
+         (vfmState$update_storage (n2w slot) 0w
+            (vfmExecution$lookup_transient_storage addr tStore)))
+  od
 End
 
-(* cv_auto_trans not possible: tStorage has function type *)
+val () = release_nonreentrant_lock_def
+  |> SRULE [vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+            FUN_EQ_THM, LET_THM,
+            get_transient_storage_def, update_transient_def,
+            vyperStateTheory.return_def]
+  |> cv_auto_trans;
 
 (* top-level definition of the Vyper interpreter *)
 
