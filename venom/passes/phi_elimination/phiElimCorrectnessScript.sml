@@ -30,12 +30,6 @@ QED
 
 (* ===== Obligations ===== *)
 
-Theorem phi_elim_establishes_no_phi:
-  ∀fn. no_phi_insts (transform_function fn)
-Proof
-  cheat
-QED
-
 Theorem phi_elim_preserves_ssa_form:
   ∀fn. ssa_form fn ⇒ ssa_form (transform_function fn)
 Proof

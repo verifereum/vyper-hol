@@ -6,7 +6,7 @@
 
 Theory cfgNormCorrectness
 Ancestors
-  cfgNormProof
+  cfgNormProof cfgWf
 
 Theorem cfg_norm_pass_correct:
   !func s fuel ctx.
@@ -25,8 +25,8 @@ QED
 
 (* ===== Obligations ===== *)
 
-Theorem cfg_norm_establishes_no_critical_edges:
-  ∀func. wf_function func ⇒ no_critical_edges (cfg_norm_fn func)
+Theorem cfg_norm_establishes_normalized_cfg:
+  ∀func. wf_function func ⇒ is_normalized_cfg (cfg_norm_fn func)
 Proof
   cheat
 QED

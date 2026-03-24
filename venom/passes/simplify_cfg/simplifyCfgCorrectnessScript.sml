@@ -6,7 +6,7 @@
 
 Theory simplifyCfgCorrectness
 Ancestors
-  simplifyCfgProof
+  simplifyCfgProof cfgWf
 
 Theorem simplify_cfg_pass_correct:
   !func s fuel ctx.
