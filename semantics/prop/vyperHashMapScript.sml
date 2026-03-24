@@ -2,24 +2,26 @@
  * vyperHashMapScript.sml
  *
  * High-level HashMap API for Vyper semantics.
- * Provides state-level lookup/update operations for HashMaps,
+ * Provides state-level operations on HashMapRef values,
  * abstracting away storage slots and encoding details.
  *
- * Analogous to vyperArrayScript.sml: treats HashMaps as
- * abstract key-value objects accessed through the interpreter state.
+ * Ref-level API (operates on HashMapRef values directly):
+ *   hashmap_index_def          - apply key to nested HashMap → new HashMapRef
+ *   read_hashmap_def           - read value from leaf HashMap in state
+ *   write_hashmap_def          - write value to leaf HashMap in state
+ *   is_leaf_hashmap_ref_def    - ref maps keys to storable values
+ *   hashmap_ref_storable_def   - value is storable at ref's value type
+ *   hashmap_ref_no_collision_def - no Keccak collision for ref
+ *   hashmap_ref_distinct_keys_def - two keys encode differently for ref
  *
- * TOP-LEVEL:
- *   is_leaf_hashmap_def        - variable is a (leaf) HashMap
- *   hashmap_value_tv_def      - value type_value of HashMap entries
- *   hashmap_key_type_def      - key type of HashMap
- *   hashmap_storable_def      - value is storable in HashMap
- *   hashmap_distinct_keys_def - two keys encode differently
- *   lookup_hashmap_def        - read value at HashMap key
- *   update_hashmap_def        - write value at HashMap key
- *   hashmap_no_collision_def  - no-collision property
+ *   write_hashmap_some                - write succeeds for storable values
+ *   read_hashmap_after_write_same     - read at same key returns written value
+ *   read_hashmap_after_write_other    - read at different key is unchanged
  *
- *   lookup_hashmap_after_update_same  - read-after-write at same key
- *   lookup_hashmap_after_update_other - read-after-write at different key
+ * Name-level API (convenience wrappers using variable names):
+ *   is_leaf_hashmap_def        - variable is a leaf HashMap
+ *   lookup_hashmap_def         - read via variable name
+ *   update_hashmap_def         - write via variable name
  *)
 
 Theory vyperHashMap
@@ -44,7 +46,158 @@ Definition set_storage_def:
        st.accounts)
 End
 
-(* ===== Variable classification ===== *)
+Theorem get_storage_after_set:
+  ∀cx st b s'. get_storage cx (set_storage cx st b s') b = s'
+Proof
+  rpt gen_tac \\ Cases_on `b`
+  \\ simp[get_storage_def, set_storage_def, combinTheory.APPLY_UPDATE_THM]
+QED
+
+(* ===== Ref-level: indexing ===== *)
+
+Definition hashmap_index_def:
+  hashmap_index (HashMapRef is_t bslot kt (HashMapT kt' vt')) kv =
+    SOME (HashMapRef is_t
+      (hashmap_slot bslot (encode_hashmap_key kt kv)) kt' vt') ∧
+  hashmap_index _ _ = NONE
+End
+
+(* ===== Ref-level: predicates ===== *)
+
+Definition is_leaf_hashmap_ref_def[simp]:
+  is_leaf_hashmap_ref cx (HashMapRef _ _ _ (Type t)) =
+    (case evaluate_type (get_tenv cx) t of
+     | SOME tv => well_formed_type_value tv
+     | NONE => F) ∧
+  is_leaf_hashmap_ref cx (HashMapRef _ _ _ (HashMapT _ _)) = F ∧
+  is_leaf_hashmap_ref _ (Value _) = F ∧
+  is_leaf_hashmap_ref _ (ArrayRef _ _ _ _) = F
+End
+
+Definition hashmap_ref_value_tv_def:
+  hashmap_ref_value_tv cx (HashMapRef _ _ _ (Type t)) =
+    evaluate_type (get_tenv cx) t ∧
+  hashmap_ref_value_tv _ _ = NONE
+End
+
+Definition hashmap_ref_storable_def:
+  hashmap_ref_storable cx (HashMapRef _ _ _ (Type t)) v =
+    (case evaluate_type (get_tenv cx) t of
+     | SOME tv => value_has_type tv v
+     | NONE => T) ∧
+  hashmap_ref_storable _ _ _ = T
+End
+
+Definition hashmap_ref_no_collision_def:
+  hashmap_ref_no_collision cx (HashMapRef _ bslot kt (Type t)) =
+    (∀tv. evaluate_type (get_tenv cx) t = SOME tv ⇒
+          no_hashmap_collision bslot kt tv) ∧
+  hashmap_ref_no_collision _ _ = F
+End
+
+Definition hashmap_ref_distinct_keys_def:
+  hashmap_ref_distinct_keys (HashMapRef _ _ kt _) kv1 kv2 =
+    (encode_hashmap_key kt kv1 ≠ encode_hashmap_key kt kv2) ∧
+  hashmap_ref_distinct_keys _ _ _ = F
+End
+
+(* ===== Ref-level: read and write ===== *)
+
+Definition read_hashmap_def:
+  read_hashmap cx st (HashMapRef is_t bslot kt (Type t)) kv =
+    (case evaluate_type (get_tenv cx) t of
+     | SOME tv =>
+         hashmap_read (get_storage cx st is_t) bslot kt tv kv
+     | NONE => NONE) ∧
+  read_hashmap _ _ _ _ = NONE
+End
+
+Definition write_hashmap_def:
+  write_hashmap cx st (HashMapRef is_t bslot kt (Type t)) kv v =
+    (case evaluate_type (get_tenv cx) t of
+     | SOME tv =>
+         (case hashmap_write (get_storage cx st is_t) bslot kt tv kv v of
+          | SOME storage' => SOME (set_storage cx st is_t storage')
+          | NONE => NONE)
+     | NONE => NONE) ∧
+  write_hashmap _ _ _ _ _ = NONE
+End
+
+(* ===== Ref-level: theorems ===== *)
+
+Theorem write_hashmap_some:
+  ∀cx st href kv v.
+    is_leaf_hashmap_ref cx href ∧
+    hashmap_ref_storable cx href v ⇒
+    ∃st'. write_hashmap cx st href kv v = SOME st'
+Proof
+  rpt gen_tac \\ Cases_on `href` \\ simp[is_leaf_hashmap_ref_def]
+  \\ rename1 `HashMapRef _ _ _ vt`
+  \\ Cases_on `vt` \\ simp[is_leaf_hashmap_ref_def]
+  \\ simp[write_hashmap_def, hashmap_ref_storable_def, AllCaseEqs()]
+  \\ CASE_TAC \\ simp[]
+  \\ rpt strip_tac
+  \\ drule hashmap_write_some \\ strip_tac \\ gvs[AllCaseEqs()]
+QED
+
+Theorem read_hashmap_after_write_same:
+  ∀cx st st' href kv v.
+    is_leaf_hashmap_ref cx href ∧
+    hashmap_ref_storable cx href v ∧
+    write_hashmap cx st href kv v = SOME st' ⇒
+    read_hashmap cx st' href kv = SOME v
+Proof
+  rpt gen_tac \\ Cases_on `href` \\ simp[is_leaf_hashmap_ref_def]
+  \\ rename1 `HashMapRef _ _ _ vt`
+  \\ Cases_on `vt` \\ simp[is_leaf_hashmap_ref_def]
+  \\ simp[write_hashmap_def, read_hashmap_def, hashmap_ref_storable_def, AllCaseEqs()]
+  \\ CASE_TAC \\ simp[]
+  \\ rpt strip_tac \\ gvs[get_storage_after_set]
+  \\ drule_all hashmap_read_after_write_same \\ strip_tac
+  \\ gvs[hashmap_write_def, AllCaseEqs()]
+QED
+
+Theorem read_hashmap_after_write_other:
+  ∀cx st st' href kv1 kv2 v.
+    is_leaf_hashmap_ref cx href ∧
+    hashmap_ref_no_collision cx href ∧
+    hashmap_ref_storable cx href v ∧
+    hashmap_ref_distinct_keys href kv1 kv2 ∧
+    write_hashmap cx st href kv1 v = SOME st' ⇒
+    read_hashmap cx st' href kv2 = read_hashmap cx st href kv2
+Proof
+  rpt gen_tac \\ Cases_on `href` \\ simp[is_leaf_hashmap_ref_def]
+  \\ rename1 `HashMapRef _ _ _ vt`
+  \\ Cases_on `vt` \\ simp[is_leaf_hashmap_ref_def]
+  \\ simp[write_hashmap_def, read_hashmap_def, hashmap_ref_storable_def,
+          hashmap_ref_no_collision_def, hashmap_ref_distinct_keys_def,
+          AllCaseEqs()]
+  \\ CASE_TAC \\ simp[]
+  \\ rpt strip_tac \\ gvs[get_storage_after_set]
+  \\ drule_all no_hashmap_collision_imp \\ strip_tac
+  \\ drule_all hashmap_read_after_write_other
+  \\ gvs[hashmap_write_def, AllCaseEqs()]
+QED
+
+(* ===== Ref-level: hashmap_index properties ===== *)
+
+Theorem hashmap_index_some:
+  ∀is_t bslot kt kt' vt' kv.
+    hashmap_index (HashMapRef is_t bslot kt (HashMapT kt' vt')) kv =
+    SOME (HashMapRef is_t
+      (hashmap_slot bslot (encode_hashmap_key kt kv)) kt' vt')
+Proof
+  simp[hashmap_index_def]
+QED
+
+Theorem hashmap_index_leaf:
+  ∀is_t bslot kt t kv.
+    hashmap_index (HashMapRef is_t bslot kt (Type t)) kv = NONE
+Proof
+  simp[hashmap_index_def]
+QED
+
+(* ===== Name-level: variable classification ===== *)
 
 Definition is_leaf_hashmap_def:
   is_leaf_hashmap cx mid n ⇔
@@ -58,105 +211,20 @@ Definition is_leaf_hashmap_def:
     well_formed_type_value tv
 End
 
-Definition hashmap_value_tv_def:
-  hashmap_value_tv cx mid n =
-    case get_module_code cx mid of
-    | SOME code =>
-        (case find_var_decl_by_num (string_to_num n) code of
-         | SOME (HashMapVarDecl _ _ (Type t), _) =>
-             evaluate_type (get_tenv cx) t
-         | _ => NONE)
-    | NONE => NONE
-End
-
-Definition hashmap_key_type_def:
-  hashmap_key_type cx mid n =
-    case get_module_code cx mid of
-    | SOME code =>
-        (case find_var_decl_by_num (string_to_num n) code of
-         | SOME (HashMapVarDecl _ kt _, _) => SOME kt
-         | _ => NONE)
-    | NONE => NONE
-End
-
-Definition hashmap_storable_def:
-  hashmap_storable cx mid n v ⇔
-    ∀tv. hashmap_value_tv cx mid n = SOME tv ⇒ value_has_type tv v
-End
-
-Definition hashmap_distinct_keys_def:
-  hashmap_distinct_keys cx mid n kv1 kv2 ⇔
-    ∀kt. hashmap_key_type cx mid n = SOME kt ⇒
-         encode_hashmap_key kt kv1 ≠ encode_hashmap_key kt kv2
-End
-
-(* ===== High-level HashMap operations ===== *)
-
-Definition lookup_hashmap_def:
-  lookup_hashmap cx st mid n kv =
-    case lookup_toplevel_name cx st mid n of
-    | SOME (HashMapRef is_transient bslot kt (Type t)) =>
-        (case evaluate_type (get_tenv cx) t of
-         | SOME tv =>
-             hashmap_read (get_storage cx st is_transient) bslot kt tv kv
-         | NONE => NONE)
-    | _ => NONE
-End
-
-Definition update_hashmap_def:
-  update_hashmap cx st mid n kv v =
-    case lookup_toplevel_name cx st mid n of
-    | SOME (HashMapRef is_transient bslot kt (Type t)) =>
-        (case evaluate_type (get_tenv cx) t of
-         | SOME tv =>
-             (case hashmap_write (get_storage cx st is_transient) bslot kt tv kv v of
-              | SOME storage' => SOME (set_storage cx st is_transient storage')
-              | NONE => NONE)
-         | NONE => NONE)
-    | _ => NONE
-End
-
-Definition hashmap_no_collision_def:
-  hashmap_no_collision cx mid n ⇔
-  ∀st base kt t tv is_transient.
-    lookup_toplevel_name cx st mid n =
-      SOME (HashMapRef is_transient base kt (Type t)) ∧
-    evaluate_type (get_tenv cx) t = SOME tv ⇒
-    no_hashmap_collision base kt tv
-End
-
-(* ===== Accessor lemmas ===== *)
-
-Theorem get_storage_backend_eq:
-  ∀cx st b. get_storage_backend cx b st = (INL (get_storage cx st b), st)
-Proof
-  rpt gen_tac \\ Cases_on `b` \\ EVAL_TAC
-QED
-
-Theorem get_storage_after_set:
-  ∀cx st b s'. get_storage cx (set_storage cx st b s') b = s'
-Proof
-  rpt gen_tac \\ Cases_on `b`
-  \\ simp[get_storage_def, set_storage_def, combinTheory.APPLY_UPDATE_THM]
-QED
-
-(* ===== lookup_toplevel_name for HashMaps ===== *)
-
-Theorem lookup_toplevel_name_hashmap:
+Theorem is_leaf_hashmap_lookup:
   ∀cx st mid n.
     is_leaf_hashmap cx mid n ⇒
-    ∃is_transient base kt t tv.
-      lookup_toplevel_name cx st mid n =
-        SOME (HashMapRef is_transient base kt (Type t)) ∧
-      evaluate_type (get_tenv cx) t = SOME tv ∧
-      well_formed_type_value tv
+    ∃href.
+      lookup_toplevel_name cx st mid n = SOME href ∧
+      is_leaf_hashmap_ref cx href
 Proof
   rw[is_leaf_hashmap_def, lookup_toplevel_name_def]
   \\ simp[Once lookup_global_def, bind_def, return_def,
-          lift_option_type_def, LET_THM, raise_def, AllCaseEqs()]
+          lift_option_type_def, LET_THM, raise_def, AllCaseEqs(),
+          is_leaf_hashmap_ref_def]
 QED
 
-Theorem lookup_toplevel_name_hashmap_state_independent:
+Theorem is_leaf_hashmap_lookup_state_independent:
   ∀cx st1 st2 mid n.
     is_leaf_hashmap cx mid n ⇒
     lookup_toplevel_name cx st1 mid n = lookup_toplevel_name cx st2 mid n
@@ -166,147 +234,81 @@ Proof
           lift_option_type_def, LET_THM, raise_def, AllCaseEqs()]
 QED
 
-Theorem lookup_toplevel_name_after_set_storage:
-  ∀cx st mid n b s'.
-    is_leaf_hashmap cx mid n ⇒
-    lookup_toplevel_name cx (set_storage cx st b s') mid n =
-    lookup_toplevel_name cx st mid n
-Proof
-  rpt strip_tac
-  \\ irule lookup_toplevel_name_hashmap_state_independent
-  \\ simp[]
-QED
+(* ===== Name-level: operations as wrappers ===== *)
 
-Theorem is_leaf_hashmap_value_tv:
-  ∀cx mid n.
-    is_leaf_hashmap cx mid n ⇒
-    ∃tv. hashmap_value_tv cx mid n = SOME tv ∧ well_formed_type_value tv
-Proof
-  rw[is_leaf_hashmap_def]
-  \\ simp[hashmap_value_tv_def]
-  \\ metis_tac[]
-QED
+Definition lookup_hashmap_def:
+  lookup_hashmap cx st mid n kv =
+    case lookup_toplevel_name cx st mid n of
+    | SOME href => read_hashmap cx st href kv
+    | NONE => NONE
+End
 
-Theorem is_leaf_hashmap_key_type:
-  ∀cx mid n.
-    is_leaf_hashmap cx mid n ⇒
-    ∃kt. hashmap_key_type cx mid n = SOME kt
-Proof
-  rw[is_leaf_hashmap_def]
-  \\ simp[hashmap_key_type_def]
-  \\ metis_tac[]
-QED
+Definition update_hashmap_def:
+  update_hashmap cx st mid n kv v =
+    case lookup_toplevel_name cx st mid n of
+    | SOME href => write_hashmap cx st href kv v
+    | NONE => NONE
+End
 
-(* ===== Helper: extract hashmap_value_tv from is_leaf_hashmap + lookup ===== *)
-
-Theorem is_leaf_hashmap_lookup_tv[local]:
-  ∀cx st mid n is_transient bslot kt t tv.
-    is_leaf_hashmap cx mid n ∧
-    lookup_toplevel_name cx st mid n =
-      SOME (HashMapRef is_transient bslot kt (Type t)) ∧
-    evaluate_type (get_tenv cx) t = SOME tv ⇒
-    hashmap_value_tv cx mid n = SOME tv ∧
-    well_formed_type_value tv
-Proof
-  rw[is_leaf_hashmap_def, hashmap_value_tv_def, lookup_toplevel_name_def,
-     AllCaseEqs()]
-  \\ gvs[Once lookup_global_def, bind_def, return_def,
-         lift_option_type_def, LET_THM, raise_def, AllCaseEqs()]
-QED
-
-Theorem is_leaf_hashmap_lookup_kt[local]:
-  ∀cx st mid n is_transient bslot kt t.
-    is_leaf_hashmap cx mid n ∧
-    lookup_toplevel_name cx st mid n =
-      SOME (HashMapRef is_transient bslot kt (Type t)) ⇒
-    hashmap_key_type cx mid n = SOME kt
-Proof
-  rw[is_leaf_hashmap_def, hashmap_key_type_def, lookup_toplevel_name_def,
-     AllCaseEqs()]
-  \\ gvs[Once lookup_global_def, bind_def, return_def,
-         lift_option_type_def, LET_THM, raise_def, AllCaseEqs()]
-QED
-
-(* ===== update_hashmap success ===== *)
+(* ===== Name-level: derived theorems ===== *)
 
 Theorem update_hashmap_some:
   ∀cx st mid n kv v.
     is_leaf_hashmap cx mid n ∧
-    hashmap_storable cx mid n v ⇒
+    hashmap_ref_storable cx (THE (lookup_toplevel_name cx st mid n)) v ⇒
     ∃st'. update_hashmap cx st mid n kv v = SOME st'
 Proof
-  rw[is_leaf_hashmap_def, hashmap_storable_def]
-  \\ simp[update_hashmap_def, lookup_toplevel_name_def,
-          Once lookup_global_def, bind_def, return_def,
-          lift_option_type_def, LET_THM, raise_def]
-  \\ `value_has_type tv v` by (
-    first_x_assum irule \\ simp[hashmap_value_tv_def])
-  \\ drule hashmap_write_some \\ strip_tac \\ gvs[AllCaseEqs()]
+  rpt strip_tac
+  \\ drule is_leaf_hashmap_lookup
+  \\ disch_then (qspec_then `st` strip_assume_tac) \\ gvs[]
+  \\ simp[update_hashmap_def]
+  \\ irule write_hashmap_some \\ simp[]
 QED
-
-(* ===== Read after write: same key ===== *)
 
 Theorem lookup_hashmap_after_update_same:
   ∀cx st st' mid n kv v.
     is_leaf_hashmap cx mid n ∧
-    hashmap_storable cx mid n v ∧
+    hashmap_ref_storable cx (THE (lookup_toplevel_name cx st mid n)) v ∧
     update_hashmap cx st mid n kv v = SOME st' ⇒
     lookup_hashmap cx st' mid n kv = SOME v
 Proof
   rpt strip_tac
-  \\ drule lookup_toplevel_name_hashmap
-  \\ disch_then (qspec_then `st` strip_assume_tac)
-  \\ gvs[update_hashmap_def, AllCaseEqs()]
-  \\ `lookup_toplevel_name cx (set_storage cx st is_transient storage') mid n =
-      lookup_toplevel_name cx st mid n` by
-    (irule lookup_toplevel_name_after_set_storage \\ simp[])
-  \\ simp[lookup_hashmap_def, get_storage_after_set]
-  \\ `value_has_type tv v` by (
-    gvs[hashmap_storable_def, is_leaf_hashmap_def, hashmap_value_tv_def,
-        lookup_toplevel_name_def, AllCaseEqs()]
-    \\ gvs[Once lookup_global_def, bind_def, return_def,
-           lift_option_type_def, LET_THM, raise_def, AllCaseEqs()])
-  \\ drule_all hashmap_read_after_write_same \\ strip_tac
-  \\ gvs[hashmap_write_def, AllCaseEqs()]
+  \\ drule is_leaf_hashmap_lookup
+  \\ disch_then (qspec_then `st` strip_assume_tac) \\ gvs[]
+  \\ gvs[update_hashmap_def]
+  \\ `lookup_toplevel_name cx st' mid n = SOME href` by (
+    qpat_x_assum `write_hashmap _ _ _ _ _ = _` mp_tac
+    \\ Cases_on `href`
+    \\ simp[write_hashmap_def, AllCaseEqs(), set_storage_def]
+    \\ rename1 `HashMapRef _ _ _ vt`
+    \\ Cases_on `vt` \\ simp[write_hashmap_def, AllCaseEqs()]
+    \\ rpt strip_tac
+    \\ metis_tac[is_leaf_hashmap_lookup_state_independent])
+  \\ simp[lookup_hashmap_def]
+  \\ drule_all read_hashmap_after_write_same \\ simp[]
 QED
-
-(* ===== Read after write: different key ===== *)
 
 Theorem lookup_hashmap_after_update_other:
   ∀cx st st' mid n kv1 kv2 v.
     is_leaf_hashmap cx mid n ∧
-    hashmap_no_collision cx mid n ∧
-    hashmap_storable cx mid n v ∧
-    hashmap_distinct_keys cx mid n kv1 kv2 ∧
+    hashmap_ref_no_collision cx (THE (lookup_toplevel_name cx st mid n)) ∧
+    hashmap_ref_storable cx (THE (lookup_toplevel_name cx st mid n)) v ∧
+    hashmap_ref_distinct_keys (THE (lookup_toplevel_name cx st mid n)) kv1 kv2 ∧
     update_hashmap cx st mid n kv1 v = SOME st' ⇒
     lookup_hashmap cx st' mid n kv2 = lookup_hashmap cx st mid n kv2
 Proof
   rpt strip_tac
-  \\ drule lookup_toplevel_name_hashmap
-  \\ disch_then (qspec_then `st` strip_assume_tac)
-  \\ gvs[update_hashmap_def, AllCaseEqs()]
-  \\ `lookup_toplevel_name cx (set_storage cx st is_transient storage') mid n =
-      lookup_toplevel_name cx st mid n` by
-    (irule lookup_toplevel_name_after_set_storage \\ simp[])
-  \\ simp[lookup_hashmap_def, get_storage_after_set]
-  \\ `value_has_type tv v` by (
-    gvs[hashmap_storable_def, is_leaf_hashmap_def, hashmap_value_tv_def,
-        lookup_toplevel_name_def, AllCaseEqs()]
-    \\ gvs[Once lookup_global_def, bind_def, return_def,
-           lift_option_type_def, LET_THM, raise_def, AllCaseEqs()])
-  \\ rename1 `hashmap_write _ bslot' kt tv kv1 v`
-  \\ qpat_x_assum `hashmap_no_collision _ _ _`
-     (mp_tac o REWRITE_RULE [hashmap_no_collision_def])
-  \\ disch_then (qspecl_then [`st`, `bslot'`, `kt`, `t`, `tv`, `is_transient`] mp_tac)
-  \\ simp[] \\ strip_tac
-  \\ `hashmap_key_type cx mid n = SOME kt` by (
-    gvs[is_leaf_hashmap_def, hashmap_key_type_def,
-        lookup_toplevel_name_def, AllCaseEqs()]
-    \\ gvs[Once lookup_global_def, bind_def, return_def,
-           lift_option_type_def, LET_THM, raise_def, AllCaseEqs()])
-  \\ `encode_hashmap_key kt kv1 ≠ encode_hashmap_key kt kv2` by
-    gvs[hashmap_distinct_keys_def]
-  \\ drule_all no_hashmap_collision_imp \\ strip_tac
-  \\ drule_all hashmap_read_after_write_other
-  \\ gvs[hashmap_write_def, AllCaseEqs()]
+  \\ drule is_leaf_hashmap_lookup
+  \\ disch_then (qspec_then `st` strip_assume_tac) \\ gvs[]
+  \\ gvs[update_hashmap_def, lookup_hashmap_def]
+  \\ `lookup_toplevel_name cx st' mid n = SOME href` by (
+    qpat_x_assum `write_hashmap _ _ _ _ _ = _` mp_tac
+    \\ Cases_on `href`
+    \\ simp[write_hashmap_def, AllCaseEqs(), set_storage_def]
+    \\ rename1 `HashMapRef _ _ _ vt`
+    \\ Cases_on `vt` \\ simp[write_hashmap_def, AllCaseEqs()]
+    \\ rpt strip_tac
+    \\ metis_tac[is_leaf_hashmap_lookup_state_independent])
+  \\ simp[]
+  \\ drule_all read_hashmap_after_write_other \\ simp[]
 QED
