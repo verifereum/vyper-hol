@@ -338,3 +338,35 @@ Definition venom_wf_def:
     (∀fn. MEM fn ctx.ctx_functions ==>
           wf_function fn ∧ fn_inst_wf fn)
 End
+
+(* ==========================================================================
+   Additional structural predicates for pass obligations.
+   ========================================================================== *)
+
+(* All blocks in the function are reachable from the entry. *)
+Definition all_reachable_def:
+  all_reachable fn ⇔
+    ∀bb. MEM bb fn.fn_blocks ⇒ fn_reachable fn bb.bb_label
+End
+
+(* A critical edge is an edge from a block with >1 successor to a block
+   with >1 predecessor. A normalized CFG has no critical edges. *)
+Definition no_critical_edges_def:
+  no_critical_edges fn ⇔
+    ∀bb succ_bb.
+      MEM bb fn.fn_blocks ∧
+      MEM succ_bb fn.fn_blocks ∧
+      MEM succ_bb.bb_label (bb_succs bb) ∧
+      LENGTH (bb_succs bb) > 1 ⇒
+      LENGTH (FILTER (λb. MEM succ_bb.bb_label (bb_succs b))
+                     fn.fn_blocks) ≤ 1
+End
+
+(* No PHI instructions remain in the function. *)
+Definition no_phi_insts_def:
+  no_phi_insts fn ⇔
+    ∀bb inst.
+      MEM bb fn.fn_blocks ∧
+      MEM inst bb.bb_instructions ⇒
+      inst.inst_opcode ≠ PHI
+End

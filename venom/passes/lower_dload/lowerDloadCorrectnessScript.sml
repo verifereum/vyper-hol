@@ -7,7 +7,7 @@
 
 Theory lowerDloadCorrectness
 Ancestors
-  lowerDloadProofs
+  lowerDloadProofs venomWf
 
 Theorem lower_dload_function_correct:
   !fuel ctx fn s.
@@ -17,4 +17,18 @@ Theorem lower_dload_function_correct:
       (run_function fuel ctx (lower_dload_function fn) s)
 Proof
   ACCEPT_TAC lower_dload_function_correct_proof
+QED
+
+(* ===== Obligations ===== *)
+
+Theorem lower_dload_preserves_ssa_form:
+  ∀fn. ssa_form fn ⇒ ssa_form (lower_dload_function fn)
+Proof
+  cheat
+QED
+
+Theorem lower_dload_preserves_wf_function:
+  ∀fn. wf_function fn ⇒ wf_function (lower_dload_function fn)
+Proof
+  cheat
 QED

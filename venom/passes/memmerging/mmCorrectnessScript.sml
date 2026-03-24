@@ -354,3 +354,7 @@ Theorem mm_pass_correct:
 Proof
   cheat
 QED
+
+(* NOTE: ssa_form/wf_function obligation theorems for memmerging belong
+   in a separate file that can import both mmTransform and venomWf,
+   since adding venomWf here causes name conflicts with transform_function. *)

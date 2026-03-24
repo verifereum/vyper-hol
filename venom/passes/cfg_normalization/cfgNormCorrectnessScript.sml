@@ -22,3 +22,23 @@ Theorem cfg_norm_pass_correct:
 Proof
   ACCEPT_TAC cfg_norm_fn_correct
 QED
+
+(* ===== Obligations ===== *)
+
+Theorem cfg_norm_establishes_no_critical_edges:
+  ∀func. wf_function func ⇒ no_critical_edges (cfg_norm_fn func)
+Proof
+  cheat
+QED
+
+Theorem cfg_norm_preserves_ssa_form:
+  ∀func. ssa_form func ∧ wf_function func ⇒ ssa_form (cfg_norm_fn func)
+Proof
+  cheat
+QED
+
+Theorem cfg_norm_preserves_wf_function:
+  ∀func. wf_function func ⇒ wf_function (cfg_norm_fn func)
+Proof
+  cheat
+QED

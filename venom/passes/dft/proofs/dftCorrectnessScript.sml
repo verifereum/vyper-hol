@@ -133,3 +133,25 @@ Theorem dft_pass_correct:
 Proof
   cheat
 QED
+
+(* ===== Obligations ===== *)
+
+(* DFT only reorders instructions within blocks — no new outputs. *)
+Theorem dft_preserves_ssa_form:
+  ∀fn. ssa_form fn ⇒ ssa_form (dft_fn fn)
+Proof
+  cheat
+QED
+
+Theorem dft_preserves_wf_function:
+  ∀fn. wf_function fn ⇒ wf_function (dft_fn fn)
+Proof
+  cheat
+QED
+
+(* DFT is the only pass that runs after SUE — must preserve sue form. *)
+Theorem dft_preserves_single_use_form:
+  ∀fn. single_use_form fn ⇒ single_use_form (dft_fn fn)
+Proof
+  cheat
+QED
