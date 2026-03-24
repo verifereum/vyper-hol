@@ -1,338 +1,312 @@
 (*
  * vyperHashMapScript.sml
  *
- * Properties of Vyper HashMap values backed by storage slots.
- * Analogous to vyperArrayScript.sml but for storage-backed HashMaps.
+ * High-level HashMap API for Vyper semantics.
+ * Provides state-level lookup/update operations for HashMaps,
+ * abstracting away storage slots and encoding details.
+ *
+ * Analogous to vyperArrayScript.sml: treats HashMaps as
+ * abstract key-value objects accessed through the interpreter state.
  *
  * TOP-LEVEL:
- *   hashmap_slot_for_def    - compute storage slot for a key
- *   hashmap_read_def        - read value at a HashMap key
- *   hashmap_write_def       - write value at a HashMap key
- *   hashmap_slots_disjoint_def - two keys have non-overlapping slot ranges
- *   no_hashmap_collision_def   - all distinct encoded keys have disjoint slots
+ *   is_leaf_hashmap_def        - variable is a (leaf) HashMap
+ *   hashmap_value_tv_def      - value type_value of HashMap entries
+ *   hashmap_key_type_def      - key type of HashMap
+ *   hashmap_storable_def      - value is storable in HashMap
+ *   hashmap_distinct_keys_def - two keys encode differently
+ *   lookup_hashmap_def        - read value at HashMap key
+ *   update_hashmap_def        - write value at HashMap key
+ *   hashmap_no_collision_def  - no-collision property
  *
- *   hashmap_write_some             - write succeeds for well-typed values
- *   hashmap_read_after_write_same  - read at same key returns written value
- *   hashmap_read_after_write_other - read at different key is unchanged
+ *   lookup_hashmap_after_update_same  - read-after-write at same key
+ *   lookup_hashmap_after_update_other - read-after-write at different key
  *)
 
 Theory vyperHashMap
 Ancestors
-  vyperEncodeDecode vyperTyping vyperState
+  vyperHashMapStorage vyperLookupStorage vyperState
 Libs
   wordsLib
 
-(* ===== Shorthand Definitions ===== *)
+(* ===== Non-monadic storage accessors ===== *)
 
-(* Compute the storage slot for a HashMap entry *)
-Definition hashmap_slot_for_def:
-  hashmap_slot_for base kt kv =
-    hashmap_slot base (encode_hashmap_key kt kv)
+Definition get_storage_def:
+  get_storage cx (st : evaluation_state) T = st.tStorage cx.txn.target ∧
+  get_storage cx st F = (st.accounts cx.txn.target).storage
 End
 
-(* Read a value from a HashMap entry in storage *)
-Definition hashmap_read_def:
-  hashmap_read storage base kt tv kv =
-    decode_value storage (w2n (hashmap_slot_for base kt kv)) tv
+Definition set_storage_def:
+  set_storage cx (st : evaluation_state) T storage' =
+    (st with tStorage := (cx.txn.target =+ storage') st.tStorage) ∧
+  set_storage cx st F storage' =
+    (st with accounts :=
+       (cx.txn.target =+ (st.accounts cx.txn.target with storage := storage'))
+       st.accounts)
 End
 
-(* Write a value to a HashMap entry in storage, returning updated storage *)
-Definition hashmap_write_def:
-  hashmap_write storage base kt tv kv v =
-    case encode_value tv v of
-    | SOME writes =>
-        SOME (apply_writes (hashmap_slot_for base kt kv) writes storage)
+(* ===== Variable classification ===== *)
+
+Definition is_leaf_hashmap_def:
+  is_leaf_hashmap cx mid n ⇔
+  ∃code is_transient kt t id offset tv.
+    get_module_code cx mid = SOME code ∧
+    find_var_decl_by_num (string_to_num n) code =
+      SOME (HashMapVarDecl is_transient kt (Type t), id) ∧
+    lookup_var_slot_from_layout cx is_transient mid id = SOME offset ∧
+    offset < dimword(:256) ∧
+    evaluate_type (get_tenv cx) t = SOME tv ∧
+    well_formed_type_value tv
+End
+
+Definition hashmap_value_tv_def:
+  hashmap_value_tv cx mid n =
+    case get_module_code cx mid of
+    | SOME code =>
+        (case find_var_decl_by_num (string_to_num n) code of
+         | SOME (HashMapVarDecl _ _ (Type t), _) =>
+             evaluate_type (get_tenv cx) t
+         | _ => NONE)
     | NONE => NONE
 End
 
-(* ===== Collision-Freedom Definitions ===== *)
-
-(* Two HashMap keys have non-overlapping storage slot ranges.
-   A value of type tv occupies type_slot_size tv consecutive slots starting
-   at the computed slot. Two keys are disjoint when their ranges don't overlap
-   and both fit within the 256-bit address space. *)
-Definition hashmap_slots_disjoint_def:
-  hashmap_slots_disjoint base kt tv kv1 kv2 ⇔
-    let s1 = w2n (hashmap_slot_for base kt kv1) in
-    let s2 = w2n (hashmap_slot_for base kt kv2) in
-      s1 + type_slot_size tv ≤ dimword(:256) ∧
-      s2 + type_slot_size tv ≤ dimword(:256) ∧
-      (s1 + type_slot_size tv ≤ s2 ∨ s2 + type_slot_size tv ≤ s1)
+Definition hashmap_key_type_def:
+  hashmap_key_type cx mid n =
+    case get_module_code cx mid of
+    | SOME code =>
+        (case find_var_decl_by_num (string_to_num n) code of
+         | SOME (HashMapVarDecl _ kt _, _) => SOME kt
+         | _ => NONE)
+    | NONE => NONE
 End
 
-(* Global no-collision property: all pairs of keys with distinct encodings
-   have disjoint slot ranges. This is an assumption about Keccak-256
-   collision resistance combined with slot range non-overlap. *)
-Definition no_hashmap_collision_def:
-  no_hashmap_collision base kt tv ⇔
-    ∀kv1 kv2. encode_hashmap_key kt kv1 ≠ encode_hashmap_key kt kv2 ⇒
-      hashmap_slots_disjoint base kt tv kv1 kv2
+Definition hashmap_storable_def:
+  hashmap_storable cx mid n v ⇔
+    ∀tv. hashmap_value_tv cx mid n = SOME tv ⇒ value_has_type tv v
 End
 
-(* ===== Basic Properties ===== *)
+Definition hashmap_distinct_keys_def:
+  hashmap_distinct_keys cx mid n kv1 kv2 ⇔
+    ∀kt. hashmap_key_type cx mid n = SOME kt ⇒
+         encode_hashmap_key kt kv1 ≠ encode_hashmap_key kt kv2
+End
 
-Theorem hashmap_slots_disjoint_sym:
-  ∀base kt tv kv1 kv2.
-    hashmap_slots_disjoint base kt tv kv1 kv2 ⇔
-    hashmap_slots_disjoint base kt tv kv2 kv1
+(* ===== High-level HashMap operations ===== *)
+
+Definition lookup_hashmap_def:
+  lookup_hashmap cx st mid n kv =
+    case lookup_toplevel_name cx st mid n of
+    | SOME (HashMapRef is_transient bslot kt (Type t)) =>
+        (case evaluate_type (get_tenv cx) t of
+         | SOME tv =>
+             hashmap_read (get_storage cx st is_transient) bslot kt tv kv
+         | NONE => NONE)
+    | _ => NONE
+End
+
+Definition update_hashmap_def:
+  update_hashmap cx st mid n kv v =
+    case lookup_toplevel_name cx st mid n of
+    | SOME (HashMapRef is_transient bslot kt (Type t)) =>
+        (case evaluate_type (get_tenv cx) t of
+         | SOME tv =>
+             (case hashmap_write (get_storage cx st is_transient) bslot kt tv kv v of
+              | SOME storage' => SOME (set_storage cx st is_transient storage')
+              | NONE => NONE)
+         | NONE => NONE)
+    | _ => NONE
+End
+
+Definition hashmap_no_collision_def:
+  hashmap_no_collision cx mid n ⇔
+  ∀st base kt t tv is_transient.
+    lookup_toplevel_name cx st mid n =
+      SOME (HashMapRef is_transient base kt (Type t)) ∧
+    evaluate_type (get_tenv cx) t = SOME tv ⇒
+    no_hashmap_collision base kt tv
+End
+
+(* ===== Accessor lemmas ===== *)
+
+Theorem get_storage_backend_eq:
+  ∀cx st b. get_storage_backend cx b st = (INL (get_storage cx st b), st)
 Proof
-  rw[hashmap_slots_disjoint_def, LET_THM]
+  rpt gen_tac \\ Cases_on `b` \\ EVAL_TAC
+QED
+
+Theorem get_storage_after_set:
+  ∀cx st b s'. get_storage cx (set_storage cx st b s') b = s'
+Proof
+  rpt gen_tac \\ Cases_on `b`
+  \\ simp[get_storage_def, set_storage_def, combinTheory.APPLY_UPDATE_THM]
+QED
+
+(* ===== lookup_toplevel_name for HashMaps ===== *)
+
+Theorem lookup_toplevel_name_hashmap:
+  ∀cx st mid n.
+    is_leaf_hashmap cx mid n ⇒
+    ∃is_transient base kt t tv.
+      lookup_toplevel_name cx st mid n =
+        SOME (HashMapRef is_transient base kt (Type t)) ∧
+      evaluate_type (get_tenv cx) t = SOME tv ∧
+      well_formed_type_value tv
+Proof
+  rw[is_leaf_hashmap_def, lookup_toplevel_name_def]
+  \\ simp[Once lookup_global_def, bind_def, return_def,
+          lift_option_type_def, LET_THM, raise_def, AllCaseEqs()]
+QED
+
+Theorem lookup_toplevel_name_hashmap_state_independent:
+  ∀cx st1 st2 mid n.
+    is_leaf_hashmap cx mid n ⇒
+    lookup_toplevel_name cx st1 mid n = lookup_toplevel_name cx st2 mid n
+Proof
+  rw[is_leaf_hashmap_def]
+  \\ simp[lookup_toplevel_name_def, lookup_global_def, bind_def, return_def,
+          lift_option_type_def, LET_THM, raise_def, AllCaseEqs()]
+QED
+
+Theorem lookup_toplevel_name_after_set_storage:
+  ∀cx st mid n b s'.
+    is_leaf_hashmap cx mid n ⇒
+    lookup_toplevel_name cx (set_storage cx st b s') mid n =
+    lookup_toplevel_name cx st mid n
+Proof
+  rpt strip_tac
+  \\ irule lookup_toplevel_name_hashmap_state_independent
+  \\ simp[]
+QED
+
+Theorem is_leaf_hashmap_value_tv:
+  ∀cx mid n.
+    is_leaf_hashmap cx mid n ⇒
+    ∃tv. hashmap_value_tv cx mid n = SOME tv ∧ well_formed_type_value tv
+Proof
+  rw[is_leaf_hashmap_def]
+  \\ simp[hashmap_value_tv_def]
   \\ metis_tac[]
 QED
 
-Theorem no_hashmap_collision_imp:
-  ∀base kt tv kv1 kv2.
-    no_hashmap_collision base kt tv ∧
-    encode_hashmap_key kt kv1 ≠ encode_hashmap_key kt kv2 ⇒
-    hashmap_slots_disjoint base kt tv kv1 kv2
+Theorem is_leaf_hashmap_key_type:
+  ∀cx mid n.
+    is_leaf_hashmap cx mid n ⇒
+    ∃kt. hashmap_key_type cx mid n = SOME kt
 Proof
-  rw[no_hashmap_collision_def]
+  rw[is_leaf_hashmap_def]
+  \\ simp[hashmap_key_type_def]
+  \\ metis_tac[]
 QED
 
-Theorem hashmap_slot_for_eq:
-  ∀base kt kv1 kv2.
-    encode_hashmap_key kt kv1 = encode_hashmap_key kt kv2 ⇒
-    hashmap_slot_for base kt kv1 = hashmap_slot_for base kt kv2
+(* ===== Helper: extract hashmap_value_tv from is_leaf_hashmap + lookup ===== *)
+
+Theorem is_leaf_hashmap_lookup_tv[local]:
+  ∀cx st mid n is_transient bslot kt t tv.
+    is_leaf_hashmap cx mid n ∧
+    lookup_toplevel_name cx st mid n =
+      SOME (HashMapRef is_transient bslot kt (Type t)) ∧
+    evaluate_type (get_tenv cx) t = SOME tv ⇒
+    hashmap_value_tv cx mid n = SOME tv ∧
+    well_formed_type_value tv
 Proof
-  rw[hashmap_slot_for_def]
+  rw[is_leaf_hashmap_def, hashmap_value_tv_def, lookup_toplevel_name_def,
+     AllCaseEqs()]
+  \\ gvs[Once lookup_global_def, bind_def, return_def,
+         lift_option_type_def, LET_THM, raise_def, AllCaseEqs()]
 QED
 
-Theorem hashmap_read_eq_slot:
-  ∀storage base kt tv kv.
-    hashmap_read storage base kt tv kv =
-    decode_value storage (w2n (hashmap_slot_for base kt kv)) tv
+Theorem is_leaf_hashmap_lookup_kt[local]:
+  ∀cx st mid n is_transient bslot kt t.
+    is_leaf_hashmap cx mid n ∧
+    lookup_toplevel_name cx st mid n =
+      SOME (HashMapRef is_transient bslot kt (Type t)) ⇒
+    hashmap_key_type cx mid n = SOME kt
 Proof
-  rw[hashmap_read_def]
+  rw[is_leaf_hashmap_def, hashmap_key_type_def, lookup_toplevel_name_def,
+     AllCaseEqs()]
+  \\ gvs[Once lookup_global_def, bind_def, return_def,
+         lift_option_type_def, LET_THM, raise_def, AllCaseEqs()]
 QED
 
-(* ===== Write Success ===== *)
+(* ===== update_hashmap success ===== *)
 
-Theorem hashmap_write_some:
-  ∀storage base kt tv kv v.
-    value_has_type tv v ⇒
-    ∃storage'. hashmap_write storage base kt tv kv v = SOME storage'
+Theorem update_hashmap_some:
+  ∀cx st mid n kv v.
+    is_leaf_hashmap cx mid n ∧
+    hashmap_storable cx mid n v ⇒
+    ∃st'. update_hashmap cx st mid n kv v = SOME st'
 Proof
-  rw[hashmap_write_def]
-  \\ `IS_SOME (encode_value tv v)` by
-    metis_tac[CONJUNCT1 value_has_type_equiv]
-  \\ Cases_on `encode_value tv v` \\ gvs[]
+  rw[is_leaf_hashmap_def, hashmap_storable_def]
+  \\ simp[update_hashmap_def, lookup_toplevel_name_def,
+          Once lookup_global_def, bind_def, return_def,
+          lift_option_type_def, LET_THM, raise_def]
+  \\ `value_has_type tv v` by (
+    first_x_assum irule \\ simp[hashmap_value_tv_def])
+  \\ drule hashmap_write_some \\ strip_tac \\ gvs[AllCaseEqs()]
 QED
 
-(* ===== Read After Write: Same Key ===== *)
+(* ===== Read after write: same key ===== *)
 
-Theorem hashmap_read_after_write_same:
-  ∀storage base kt tv kv v.
-    value_has_type tv v ∧ well_formed_type_value tv ⇒
-    ∃storage'.
-      hashmap_write storage base kt tv kv v = SOME storage' ∧
-      hashmap_read storage' base kt tv kv = SOME v
-Proof
-  rw[hashmap_write_def, hashmap_read_def]
-  \\ `IS_SOME (encode_value tv v)` by
-    metis_tac[CONJUNCT1 value_has_type_equiv]
-  \\ Cases_on `encode_value tv v` \\ gvs[]
-  \\ `encode_decode_roundtrip_ok tv v` by
-    metis_tac[encode_decode_roundtrip_all]
-  \\ fs[encode_decode_roundtrip_ok_def]
-  \\ metis_tac[wordsTheory.n2w_w2n]
-QED
-
-(* ===== Read After Write: Different Key ===== *)
-
-Theorem decode_value_disjoint_writes_word[local]:
-  ∀tv writes (slot1:bytes32) (slot2:bytes32) storage sz.
-    (∀wr_off. MEM wr_off (MAP FST writes) ⇒ wr_off < sz) ∧
-    w2n slot1 + sz ≤ dimword(:256) ∧
-    w2n slot2 + type_slot_size tv ≤ dimword(:256) ∧
-    (w2n slot1 + sz ≤ w2n slot2 ∨ w2n slot2 + type_slot_size tv ≤ w2n slot1) ⇒
-    decode_value (apply_writes slot1 writes storage) (w2n slot2) tv =
-    decode_value storage (w2n slot2) tv
-Proof
-  rpt gen_tac \\ strip_tac
-  \\ `decode_value (apply_writes (n2w (w2n slot1)) writes storage)
-        (w2n slot2) tv =
-      decode_value storage (w2n slot2) tv` suffices_by simp[wordsTheory.n2w_w2n]
-  \\ irule decode_value_disjoint_writes
-  \\ simp[] \\ qexists_tac `sz` \\ fs[]
-QED
-
-Theorem hashmap_read_after_write_other:
-  ∀storage storage' base kt tv kv1 kv2 v.
-    hashmap_write storage base kt tv kv1 v = SOME storage' ∧
-    value_has_type tv v ∧
-    hashmap_slots_disjoint base kt tv kv1 kv2 ⇒
-    hashmap_read storage' base kt tv kv2 =
-    hashmap_read storage base kt tv kv2
-Proof
-  rw[hashmap_write_def, hashmap_read_def, AllCaseEqs(),
-     hashmap_slots_disjoint_def, LET_THM]
-  \\ irule decode_value_disjoint_writes_word
-  \\ simp[]
-  \\ qexists_tac `type_slot_size tv`
-  \\ simp[]
-  \\ drule (CONJUNCT1 encode_writes_bounded) \\ simp[]
-QED
-
-(* Variant using no_hashmap_collision *)
-Theorem hashmap_read_after_write_other_no_collision:
-  ∀storage storage' base kt tv kv1 kv2 v.
-    hashmap_write storage base kt tv kv1 v = SOME storage' ∧
-    value_has_type tv v ∧
-    no_hashmap_collision base kt tv ∧
-    encode_hashmap_key kt kv1 ≠ encode_hashmap_key kt kv2 ⇒
-    hashmap_read storage' base kt tv kv2 =
-    hashmap_read storage base kt tv kv2
+Theorem lookup_hashmap_after_update_same:
+  ∀cx st st' mid n kv v.
+    is_leaf_hashmap cx mid n ∧
+    hashmap_storable cx mid n v ∧
+    update_hashmap cx st mid n kv v = SOME st' ⇒
+    lookup_hashmap cx st' mid n kv = SOME v
 Proof
   rpt strip_tac
-  \\ irule hashmap_read_after_write_other
-  \\ metis_tac[no_hashmap_collision_imp]
+  \\ drule lookup_toplevel_name_hashmap
+  \\ disch_then (qspec_then `st` strip_assume_tac)
+  \\ gvs[update_hashmap_def, AllCaseEqs()]
+  \\ `lookup_toplevel_name cx (set_storage cx st is_transient storage') mid n =
+      lookup_toplevel_name cx st mid n` by
+    (irule lookup_toplevel_name_after_set_storage \\ simp[])
+  \\ simp[lookup_hashmap_def, get_storage_after_set]
+  \\ `value_has_type tv v` by (
+    gvs[hashmap_storable_def, is_leaf_hashmap_def, hashmap_value_tv_def,
+        lookup_toplevel_name_def, AllCaseEqs()]
+    \\ gvs[Once lookup_global_def, bind_def, return_def,
+           lift_option_type_def, LET_THM, raise_def, AllCaseEqs()])
+  \\ drule_all hashmap_read_after_write_same \\ strip_tac
+  \\ gvs[hashmap_write_def, AllCaseEqs()]
 QED
 
-(* ===== compute_hashmap_slot Properties ===== *)
+(* ===== Read after write: different key ===== *)
 
-Theorem compute_hashmap_slot_nil:
-  ∀slot. compute_hashmap_slot slot [] [] = SOME slot
+Theorem lookup_hashmap_after_update_other:
+  ∀cx st st' mid n kv1 kv2 v.
+    is_leaf_hashmap cx mid n ∧
+    hashmap_no_collision cx mid n ∧
+    hashmap_storable cx mid n v ∧
+    hashmap_distinct_keys cx mid n kv1 kv2 ∧
+    update_hashmap cx st mid n kv1 v = SOME st' ⇒
+    lookup_hashmap cx st' mid n kv2 = lookup_hashmap cx st mid n kv2
 Proof
-  simp[compute_hashmap_slot_def]
-QED
-
-Theorem compute_hashmap_slot_single:
-  ∀slot kt k.
-    subscript_to_value k = SOME kv ⇒
-    compute_hashmap_slot slot [kt] [k] =
-    SOME (hashmap_slot slot (encode_hashmap_key kt kv))
-Proof
-  rw[compute_hashmap_slot_def]
-QED
-
-Theorem compute_hashmap_slot_cons:
-  ∀slot kt kts k ks kv.
-    subscript_to_value k = SOME kv ⇒
-    compute_hashmap_slot slot (kt::kts) (k::ks) =
-    compute_hashmap_slot (hashmap_slot slot (encode_hashmap_key kt kv)) kts ks
-Proof
-  rw[compute_hashmap_slot_def]
-QED
-
-Theorem compute_hashmap_slot_length_mismatch:
-  ∀slot kt kts.
-    LENGTH kts ≠ 0 ⇒
-    compute_hashmap_slot slot (kt::kts) [] = NONE
-Proof
-  simp[compute_hashmap_slot_def]
-QED
-
-Theorem compute_hashmap_slot_none_bad_subscript:
-  ∀slot kt kts k ks.
-    subscript_to_value k = NONE ⇒
-    compute_hashmap_slot slot (kt::kts) (k::ks) = NONE
-Proof
-  rw[compute_hashmap_slot_def]
-QED
-
-Theorem compute_hashmap_slot_some_length:
-  ∀slot kts ks result.
-    compute_hashmap_slot slot kts ks = SOME result ⇒
-    LENGTH kts = LENGTH ks
-Proof
-  ho_match_mp_tac compute_hashmap_slot_ind
-  \\ rw[compute_hashmap_slot_def]
-  \\ gvs[AllCaseEqs()]
-QED
-
-Theorem compute_hashmap_slot_append:
-  ∀slot kts1 ks1 kts2 ks2 mid_slot.
-    compute_hashmap_slot slot kts1 ks1 = SOME mid_slot ⇒
-    compute_hashmap_slot slot (kts1 ++ kts2) (ks1 ++ ks2) =
-    compute_hashmap_slot mid_slot kts2 ks2
-Proof
-  ho_match_mp_tac compute_hashmap_slot_ind
-  \\ rw[compute_hashmap_slot_def]
-  \\ gvs[AllCaseEqs()]
-QED
-
-(* ===== hashmap_slot properties ===== *)
-
-(* hashmap_slot is deterministic in its arguments *)
-Theorem hashmap_slot_cong:
-  ∀base k1 k2. k1 = k2 ⇒ hashmap_slot base k1 = hashmap_slot base k2
-Proof
-  simp[]
-QED
-
-(* hashmap_slot unfolds to keccak256 of concatenated bytes *)
-Theorem hashmap_slot_unfold:
-  ∀base k.
-    hashmap_slot base k =
-    word_of_bytes_be (Keccak_256_w64 (word_to_bytes_be base ++ word_to_bytes_be k))
-Proof
-  simp[vyperStorageTheory.hashmap_slot_def]
-QED
-
-(* ===== evaluate_subscript for HashMaps ===== *)
-
-Theorem evaluate_subscript_hashmap_nested:
-  ∀tenv tv base is_transient slot kt kt' vt' kv.
-    evaluate_subscript tenv tv
-      (HashMapRef is_transient slot kt (HashMapT kt' vt')) kv =
-    INL (INL (HashMapRef is_transient
-      (hashmap_slot slot (encode_hashmap_key kt kv)) kt' vt'))
-Proof
-  rw[evaluate_subscript_def]
-QED
-
-Theorem evaluate_subscript_hashmap_leaf:
-  ∀tenv tv base is_transient slot kt t kv result_tv.
-    evaluate_type tenv t = SOME result_tv ⇒
-    evaluate_subscript tenv tv
-      (HashMapRef is_transient slot kt (Type t)) kv =
-    INL (INR (is_transient,
-              hashmap_slot slot (encode_hashmap_key kt kv),
-              result_tv))
-Proof
-  rw[evaluate_subscript_def]
-QED
-
-(* ===== encode_hashmap_key Properties ===== *)
-
-Theorem encode_hashmap_key_int[simp]:
-  ∀i kt. encode_hashmap_key kt (IntV i) = (i2w i : bytes32)
-Proof
-  simp[vyperStorageTheory.encode_hashmap_key_def]
-QED
-
-Theorem encode_hashmap_key_flag[simp]:
-  ∀n kt. encode_hashmap_key kt (FlagV n) = (n2w n : bytes32)
-Proof
-  simp[vyperStorageTheory.encode_hashmap_key_def]
-QED
-
-Theorem encode_hashmap_key_bool[simp]:
-  ∀b kt. encode_hashmap_key kt (BoolV b) = if b then 1w else (0w : bytes32)
-Proof
-  simp[vyperStorageTheory.encode_hashmap_key_def]
-QED
-
-(* ===== split_hashmap_subscripts properties ===== *)
-
-Theorem split_hashmap_subscripts_type:
-  ∀t subs. split_hashmap_subscripts (Type t) subs = SOME (t, [], subs)
-Proof
-  simp[split_hashmap_subscripts_def]
-QED
-
-Theorem split_hashmap_subscripts_hashmap_nil:
-  ∀kt vt. split_hashmap_subscripts (HashMapT kt vt) [] = NONE
-Proof
-  simp[split_hashmap_subscripts_def]
-QED
-
-Theorem split_hashmap_subscripts_some_key_types_length:
-  ∀vt subs t kts remaining.
-    split_hashmap_subscripts vt subs = SOME (t, kts, remaining) ⇒
-    LENGTH kts + LENGTH remaining + 1 ≤ LENGTH subs + 1
-Proof
-  ho_match_mp_tac split_hashmap_subscripts_ind
-  \\ rw[split_hashmap_subscripts_def]
-  \\ gvs[AllCaseEqs()]
+  rpt strip_tac
+  \\ drule lookup_toplevel_name_hashmap
+  \\ disch_then (qspec_then `st` strip_assume_tac)
+  \\ gvs[update_hashmap_def, AllCaseEqs()]
+  \\ `lookup_toplevel_name cx (set_storage cx st is_transient storage') mid n =
+      lookup_toplevel_name cx st mid n` by
+    (irule lookup_toplevel_name_after_set_storage \\ simp[])
+  \\ simp[lookup_hashmap_def, get_storage_after_set]
+  \\ `value_has_type tv v` by (
+    gvs[hashmap_storable_def, is_leaf_hashmap_def, hashmap_value_tv_def,
+        lookup_toplevel_name_def, AllCaseEqs()]
+    \\ gvs[Once lookup_global_def, bind_def, return_def,
+           lift_option_type_def, LET_THM, raise_def, AllCaseEqs()])
+  \\ rename1 `hashmap_write _ bslot' kt tv kv1 v`
+  \\ qpat_x_assum `hashmap_no_collision _ _ _`
+     (mp_tac o REWRITE_RULE [hashmap_no_collision_def])
+  \\ disch_then (qspecl_then [`st`, `bslot'`, `kt`, `t`, `tv`, `is_transient`] mp_tac)
+  \\ simp[] \\ strip_tac
+  \\ `hashmap_key_type cx mid n = SOME kt` by (
+    gvs[is_leaf_hashmap_def, hashmap_key_type_def,
+        lookup_toplevel_name_def, AllCaseEqs()]
+    \\ gvs[Once lookup_global_def, bind_def, return_def,
+           lift_option_type_def, LET_THM, raise_def, AllCaseEqs()])
+  \\ `encode_hashmap_key kt kv1 ≠ encode_hashmap_key kt kv2` by
+    gvs[hashmap_distinct_keys_def]
+  \\ drule_all no_hashmap_collision_imp \\ strip_tac
+  \\ drule_all hashmap_read_after_write_other
+  \\ gvs[hashmap_write_def, AllCaseEqs()]
 QED
