@@ -3,16 +3,7 @@ Ancestors
   vyperMisc vyperAST vyperValue vyperValueOperation vyperState vyperInterpreter
   vyperScopePreservation vyperStatePreservation
   vyperLookup vyperLookupStorage
-  vyperImmutablesPreservation
-
-
-Theorem get_storage_backend_INL[local]:
-  ∀cx b st. ∃storage. get_storage_backend cx b st = (INL storage, st)
-Proof
-  Cases_on `b` >>
-  simp[get_storage_backend_def, bind_def, return_def,
-       get_accounts_def, get_transient_storage_def]
-QED
+  vyperImmutablesPreservation vyperStorageBackend
 
 (*********************************************************************************)
 (* Helper lemmas for immutables preservation *)

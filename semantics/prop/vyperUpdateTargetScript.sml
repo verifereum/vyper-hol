@@ -1,6 +1,6 @@
 Theory vyperUpdateTarget
 Ancestors
-  vyperMisc vyperContext vyperState vyperInterpreter vyperLookup vyperLookupStorage vyperAssignTarget
+  vyperMisc vyperContext vyperState vyperStatePreservation vyperStorageBackend vyperInterpreter vyperLookup vyperLookupStorage vyperAssignTarget
 
 Definition update_target_def:
   update_target cx st av ao = SND (assign_target cx av ao st)
@@ -219,4 +219,93 @@ Proof
   gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
   `var_in_scope st n` by simp[var_in_scope_iff_lookup_name_typed, lookup_name_typed_def] >>
   simp[valid_target_name_replace]
+QED
+
+Theorem valid_target_toplevel_subscripts:
+  ∀cx st src_id_opt n sbs ao var_tv a a'.
+    var_in_storage cx src_id_opt n ∧
+    lookup_toplevel_name cx st src_id_opt n = SOME (Value a) ∧
+    storage_type_of cx src_id_opt n = SOME var_tv ∧
+    assign_subscripts var_tv a (REVERSE sbs) ao = INL a' ∧
+    storable_value cx src_id_opt n a' ⇒
+    valid_target cx st (BaseTargetV (TopLevelVar src_id_opt n) sbs) ao
+Proof
+  rpt strip_tac >>
+  simp[valid_target_def] >>
+  fs[var_in_storage_def] >>
+  fs[lookup_toplevel_name_def, AllCaseEqs()] >>
+  rename1 `lookup_global cx src_id_opt (string_to_num n) st = (INL (Value a), st')` >>
+  `st' = st` by metis_tac[lookup_global_state] >> gvs[] >>
+  `var_tv = tv` by
+    (qpat_x_assum `storage_type_of _ _ _ = _` mp_tac >>
+     simp[storage_type_of_def, storage_var_info_def]) >>
+  gvs[] >>
+  `value_has_type tv a'` by
+    (gvs[storable_value_def] >> first_x_assum drule >> simp[]) >>
+  `IS_SOME (encode_value tv a')` by
+    metis_tac[CONJUNCT1 vyperTypingTheory.value_has_type_equiv] >>
+  Cases_on `encode_value tv a'` >> gvs[] >>
+  `∃storage. get_storage_backend cx b st = (INL storage, st)` by
+    metis_tac[get_storage_backend_INL] >>
+  simp[Once assign_target_def, bind_def, return_def, LET_THM,
+       lift_option_type_def, optionTheory.OPTION_BIND_def,
+       lift_sum_def,
+       ignore_bind_def] >>
+  gvs[AllCaseEqs()] >>
+  `ISL (FST (set_global cx src_id_opt (string_to_num n) a' st))` by (
+    simp[Once set_global_def, bind_def, return_def, LET_THM,
+         lift_option_type_def, write_storage_slot_def, lift_option_def] >>
+    Cases_on `b` >>
+    gvs[set_storage_backend_def, bind_def, return_def,
+        update_transient_def, get_accounts_def, update_accounts_def, LET_THM]) >>
+  Cases_on `set_global cx src_id_opt (string_to_num n) a' st` >>
+  Cases_on `q` >> gvs[] >>
+  Cases_on `ao` >>
+  gvs[assign_result_def, return_def, bind_def, lift_sum_def] >>
+  drule assign_subscripts_PopOp_assign_result >> strip_tac >>
+  gvs[] >>
+  Cases_on `popped_value v` >>
+  gvs[return_def, raise_def]
+QED
+
+Theorem update_target_toplevel_subscripts:
+  ∀cx st src_id_opt n sbs ao var_tv a a'.
+    var_in_storage cx src_id_opt n ∧
+    lookup_toplevel_name cx st src_id_opt n = SOME (Value a) ∧
+    storage_type_of cx src_id_opt n = SOME var_tv ∧
+    assign_subscripts var_tv a (REVERSE sbs) ao = INL a' ∧
+    storable_value cx src_id_opt n a' ⇒
+    update_target cx st (BaseTargetV (TopLevelVar src_id_opt n) sbs) ao =
+      update_toplevel_name cx st src_id_opt n a'
+Proof
+  rpt strip_tac >>
+  simp[update_target_def] >>
+  fs[var_in_storage_def] >>
+  fs[lookup_toplevel_name_def, AllCaseEqs()] >>
+  rename1 `lookup_global cx src_id_opt (string_to_num n) st = (INL (Value a), st')` >>
+  `st' = st` by metis_tac[lookup_global_state] >> gvs[] >>
+  `var_tv = tv` by
+    (qpat_x_assum `storage_type_of _ _ _ = _` mp_tac >>
+     simp[storage_type_of_def, storage_var_info_def]) >>
+  gvs[] >>
+  `value_has_type tv a'` by
+    (gvs[storable_value_def] >> first_x_assum drule >> simp[]) >>
+  `IS_SOME (encode_value tv a')` by
+    metis_tac[CONJUNCT1 vyperTypingTheory.value_has_type_equiv] >>
+  Cases_on `encode_value tv a'` >> gvs[] >>
+  `∃storage. get_storage_backend cx b st = (INL storage, st)` by
+    metis_tac[get_storage_backend_INL] >>
+  simp[Once assign_target_def, bind_def, return_def, LET_THM,
+       lift_option_type_def, optionTheory.OPTION_BIND_def,
+       lift_sum_def,
+       ignore_bind_def] >>
+  gvs[AllCaseEqs()] >>
+  Cases_on `set_global cx src_id_opt (string_to_num n) a' st` >>
+  Cases_on `q` >> gvs[update_toplevel_name_def] >>
+  Cases_on `ao` >>
+  gvs[assign_result_def, return_def, bind_def, lift_sum_def] >>
+  drule assign_subscripts_PopOp_assign_result >> strip_tac >>
+  gvs[] >>
+  Cases_on `popped_value v` >>
+  gvs[return_def, raise_def]
 QED

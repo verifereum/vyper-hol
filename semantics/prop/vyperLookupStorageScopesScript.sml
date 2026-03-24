@@ -57,15 +57,6 @@ Proof
   Cases_on `q` >> simp[return_def, raise_def]
 QED
 
-Theorem get_storage_backend_scopes_fst[local]:
-  ∀cx is_t st s. get_storage_backend cx is_t (st with scopes := s) =
-    (FST (get_storage_backend cx is_t st), st with scopes := s)
-Proof
-  rpt gen_tac >> Cases_on `is_t` >>
-  simp[get_storage_backend_def, bind_def,
-       get_transient_storage_def, get_accounts_def, return_def]
-QED
-
 Theorem read_storage_slot_scopes[local]:
   ∀cx is_t slot tv st s.
     read_storage_slot cx is_t slot tv (st with scopes := s) =
