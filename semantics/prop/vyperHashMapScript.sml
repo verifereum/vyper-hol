@@ -115,76 +115,49 @@ Definition write_hashmap_def:
     (case evaluate_type (get_tenv cx) t of
      | SOME tv =>
          (case hashmap_write (get_storage cx st is_t) bslot kt tv kv v of
-          | SOME storage' => SOME (set_storage cx st is_t storage')
-          | NONE => NONE)
-     | NONE => NONE) ∧
-  write_hashmap _ _ _ _ _ = NONE
+          | SOME storage' => set_storage cx st is_t storage'
+          | NONE => st)
+     | NONE => st) ∧
+  write_hashmap _ st _ _ _ = st
 End
 
 (* ===== Ref-level: theorems ===== *)
 
-Theorem write_hashmap_some:
+Theorem read_hashmap_after_write_same:
   ∀cx st href kv v.
     is_leaf_hashmap_ref cx href ∧
     hashmap_ref_storable cx href v ⇒
-    ∃st'. write_hashmap cx st href kv v = SOME st'
-Proof
-  rpt gen_tac \\ Cases_on `href` \\ simp[]
-  \\ rename1 `HashMapRef _ _ _ vt` \\ Cases_on `vt` \\ simp[]
-  \\ simp[write_hashmap_def, hashmap_ref_storable_def, AllCaseEqs()]
-  \\ CASE_TAC \\ simp[] \\ rpt strip_tac
-  \\ drule hashmap_write_some \\ strip_tac \\ gvs[AllCaseEqs()]
-QED
-
-Theorem read_hashmap_after_write_same:
-  ∀cx st st' href kv v.
-    is_leaf_hashmap_ref cx href ∧
-    hashmap_ref_storable cx href v ∧
-    write_hashmap cx st href kv v = SOME st' ⇒
-    read_hashmap cx st' href kv = SOME v
+    read_hashmap cx (write_hashmap cx st href kv v) href kv = SOME v
 Proof
   rpt gen_tac \\ Cases_on `href` \\ simp[]
   \\ rename1 `HashMapRef _ _ _ vt` \\ Cases_on `vt` \\ simp[]
   \\ simp[write_hashmap_def, read_hashmap_def, hashmap_ref_storable_def,
           AllCaseEqs()]
-  \\ CASE_TAC \\ simp[] \\ rpt strip_tac \\ gvs[get_storage_after_set]
+  \\ CASE_TAC \\ simp[] \\ rpt strip_tac
+  \\ `∃s'. hashmap_write (get_storage cx st b) c t x kv v = SOME s'` by
+       (irule hashmap_write_some \\ simp[])
+  \\ gvs[get_storage_after_set]
   \\ drule_all hashmap_read_write_same \\ simp[]
 QED
 
 Theorem read_hashmap_after_write_other:
-  ∀cx st st' href kv1 kv2 v.
+  ∀cx st href kv1 kv2 v.
     is_leaf_hashmap_ref cx href ∧
     hashmap_ref_no_collision cx href ∧
     hashmap_ref_storable cx href v ∧
-    hashmap_ref_distinct_keys href kv1 kv2 ∧
-    write_hashmap cx st href kv1 v = SOME st' ⇒
-    read_hashmap cx st' href kv2 = read_hashmap cx st href kv2
+    hashmap_ref_distinct_keys href kv1 kv2 ⇒
+    read_hashmap cx (write_hashmap cx st href kv1 v) href kv2 =
+      read_hashmap cx st href kv2
 Proof
   rpt gen_tac \\ Cases_on `href` \\ simp[]
   \\ rename1 `HashMapRef _ _ _ vt` \\ Cases_on `vt` \\ simp[]
   \\ simp[write_hashmap_def, read_hashmap_def, hashmap_ref_storable_def,
           hashmap_ref_no_collision_def, hashmap_ref_distinct_keys_def,
           AllCaseEqs()]
-  \\ CASE_TAC \\ simp[] \\ rpt strip_tac \\ gvs[get_storage_after_set]
+  \\ CASE_TAC \\ simp[] \\ rpt strip_tac
+  \\ CASE_TAC \\ gvs[get_storage_after_set]
   \\ drule_all no_hashmap_collision_imp \\ strip_tac
   \\ drule_all hashmap_read_after_write_other \\ simp[]
-QED
-
-(* ===== Ref-level: hashmap_index properties ===== *)
-
-Theorem hashmap_index_some:
-  ∀is_t bslot kt kt' vt' kv.
-    hashmap_index (HashMapRef is_t bslot kt (HashMapT kt' vt')) kv =
-    SOME (HashMapRef is_t (hashmap_slot_for bslot kt kv) kt' vt')
-Proof
-  simp[hashmap_index_def]
-QED
-
-Theorem hashmap_index_leaf:
-  ∀is_t bslot kt t kv.
-    hashmap_index (HashMapRef is_t bslot kt (Type t)) kv = NONE
-Proof
-  simp[hashmap_index_def]
 QED
 
 (* ===== Name-level: variable classification ===== *)
@@ -237,55 +210,41 @@ Definition update_hashmap_def:
   update_hashmap cx st mid n kv v =
     case lookup_toplevel_name cx st mid n of
     | SOME href => write_hashmap cx st href kv v
-    | NONE => NONE
+    | NONE => st
 End
 
 (* ===== Name-level: derived theorems ===== *)
 
-Theorem update_hashmap_some:
+Theorem lookup_hashmap_after_update_same:
   ∀cx st mid n kv v.
     is_leaf_hashmap cx mid n ∧
     hashmap_ref_storable cx (THE (lookup_toplevel_name cx st mid n)) v ⇒
-    ∃st'. update_hashmap cx st mid n kv v = SOME st'
-Proof
-  rpt strip_tac
-  \\ drule is_leaf_hashmap_lookup
-  \\ disch_then (qspec_then `st` strip_assume_tac) \\ gvs[]
-  \\ simp[update_hashmap_def]
-  \\ irule write_hashmap_some \\ simp[]
-QED
-
-Theorem lookup_hashmap_after_update_same:
-  ∀cx st st' mid n kv v.
-    is_leaf_hashmap cx mid n ∧
-    hashmap_ref_storable cx (THE (lookup_toplevel_name cx st mid n)) v ∧
-    update_hashmap cx st mid n kv v = SOME st' ⇒
-    lookup_hashmap cx st' mid n kv = SOME v
+    lookup_hashmap cx (update_hashmap cx st mid n kv v) mid n kv = SOME v
 Proof
   rpt strip_tac
   \\ drule is_leaf_hashmap_lookup
   \\ disch_then (qspec_then `st` strip_assume_tac) \\ gvs[]
   \\ gvs[update_hashmap_def]
-  \\ `lookup_toplevel_name cx st' mid n = SOME href` by
+  \\ `lookup_toplevel_name cx (write_hashmap cx st href kv v) mid n = SOME href` by
     metis_tac[is_leaf_hashmap_lookup_state_independent]
   \\ simp[lookup_hashmap_def]
   \\ drule_all read_hashmap_after_write_same \\ simp[]
 QED
 
 Theorem lookup_hashmap_after_update_other:
-  ∀cx st st' mid n kv1 kv2 v.
+  ∀cx st mid n kv1 kv2 v.
     is_leaf_hashmap cx mid n ∧
     hashmap_ref_no_collision cx (THE (lookup_toplevel_name cx st mid n)) ∧
     hashmap_ref_storable cx (THE (lookup_toplevel_name cx st mid n)) v ∧
-    hashmap_ref_distinct_keys (THE (lookup_toplevel_name cx st mid n)) kv1 kv2 ∧
-    update_hashmap cx st mid n kv1 v = SOME st' ⇒
-    lookup_hashmap cx st' mid n kv2 = lookup_hashmap cx st mid n kv2
+    hashmap_ref_distinct_keys (THE (lookup_toplevel_name cx st mid n)) kv1 kv2 ⇒
+    lookup_hashmap cx (update_hashmap cx st mid n kv1 v) mid n kv2 =
+      lookup_hashmap cx st mid n kv2
 Proof
   rpt strip_tac
   \\ drule is_leaf_hashmap_lookup
   \\ disch_then (qspec_then `st` strip_assume_tac) \\ gvs[]
   \\ gvs[update_hashmap_def, lookup_hashmap_def]
-  \\ `lookup_toplevel_name cx st' mid n = SOME href` by
+  \\ `lookup_toplevel_name cx (write_hashmap cx st href kv1 v) mid n = SOME href` by
     metis_tac[is_leaf_hashmap_lookup_state_independent]
   \\ simp[]
   \\ drule_all read_hashmap_after_write_other \\ simp[]
