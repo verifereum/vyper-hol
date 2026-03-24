@@ -873,6 +873,35 @@ Proof
       imp_res_tac lift_option_type_scopes >>
       imp_res_tac raise_scopes >> gvs[]) >>
     Cases_on`st.scopes` >> Cases_on`st'.scopes` >> gvs[])
+  >> conj_tac >- (
+    rw[evaluate_def, bind_apply] >>
+    `MAP FDOM st.scopes = MAP FDOM st'.scopes` by (
+      gvs[AllCaseEqs(),raise_def] >>
+      imp_res_tac get_Value_state >>
+      imp_res_tac lift_option_type_state >> gvs[] >>
+      drule eval_expr_preserves_scopes_dom >> rw[]) >>
+    Cases_on`st.scopes` >> Cases_on`st'.scopes` >> gvs[])
+  >> conj_tac >- (
+    rw[evaluate_def, bind_apply] >>
+    `MAP FDOM st.scopes = MAP FDOM st'.scopes` by (
+      gvs[AllCaseEqs(),switch_BoolV_def, raise_def, COND_RATOR, return_def] >>
+      drule eval_expr_preserves_scopes_dom >> rw[]) >>
+    Cases_on`st.scopes` >> Cases_on`st'.scopes` >> gvs[])
+  >> conj_tac >- (
+    rw[evaluate_def, bind_apply] >>
+    `MAP FDOM st.scopes = MAP FDOM st'.scopes` by (
+      gvs[AllCaseEqs(),switch_BoolV_def, raise_def, COND_RATOR, return_def] >>
+      drule eval_expr_preserves_scopes_dom >> rw[]) >>
+    Cases_on`st.scopes` >> Cases_on`st'.scopes` >> gvs[])
+  >> conj_tac >- (
+    rw[evaluate_def, bind_apply] >>
+    `MAP FDOM st.scopes = MAP FDOM st'.scopes` by (
+      gvs[AllCaseEqs(),raise_def, switch_BoolV_def, COND_RATOR,
+          bind_apply, return_def] >>
+      imp_res_tac get_Value_state >>
+      imp_res_tac lift_option_type_state >> gvs[] >>
+      imp_res_tac eval_expr_preserves_scopes_dom >> rw[]) >>
+    Cases_on`st.scopes` >> Cases_on`st'.scopes` >> gvs[])
   >> conj_tac >- ( (* Log *)
     rpt strip_tac >>
     `MAP FDOM st.scopes = MAP FDOM st'.scopes` by (
@@ -1328,6 +1357,42 @@ Proof
     gvs[bind_apply, AllCaseEqs(), raise_def] >>
     imp_res_tac lift_option_type_state >>
     imp_res_tac get_Value_state >> gvs[] ) >>
+  conj_tac >- (
+    rw[evaluate_def] >>
+    gvs[bind_apply, switch_BoolV_def, COND_RATOR, return_def,
+        raise_def, AllCaseEqs()] >>
+    imp_res_tac lift_option_type_state >>
+    imp_res_tac get_Value_state >> gvs[] >>
+    first_x_assum drule_all >>
+    first_x_assum drule_all >> rw[] >>
+    metis_tac[preserves_tv_trans] ) >>
+  conj_tac >- (
+    rw[evaluate_def] >>
+    gvs[bind_apply, switch_BoolV_def, COND_RATOR, return_def,
+        raise_def, AllCaseEqs()] >>
+    imp_res_tac lift_option_type_state >>
+    imp_res_tac get_Value_state >> gvs[] >>
+    first_x_assum drule_all >>
+    first_x_assum drule_all >> rw[] >>
+    metis_tac[preserves_tv_trans] ) >>
+  conj_tac >- (
+    rw[evaluate_def] >>
+    gvs[bind_apply, switch_BoolV_def, COND_RATOR, return_def,
+        raise_def, AllCaseEqs()] >>
+    imp_res_tac lift_option_type_state >>
+    imp_res_tac get_Value_state >> gvs[] >>
+    first_x_assum drule_all >>
+    first_x_assum drule_all >> rw[] >>
+    metis_tac[preserves_tv_trans] ) >>
+  conj_tac >- (
+    rw[evaluate_def] >>
+    gvs[bind_apply, switch_BoolV_def, COND_RATOR, return_def,
+        raise_def, AllCaseEqs()] >>
+    imp_res_tac lift_option_type_state >>
+    imp_res_tac get_Value_state >> gvs[] >>
+    first_x_assum drule_all >>
+    first_x_assum drule_all >> rw[] >>
+    metis_tac[preserves_tv_trans] ) >>
   conj_tac >- (
     rw[evaluate_def] >>
     gvs[bind_apply, switch_BoolV_def, COND_RATOR, return_def,
