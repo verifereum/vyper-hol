@@ -56,8 +56,7 @@ QED
 
 Definition hashmap_index_def:
   hashmap_index (HashMapRef is_t bslot kt (HashMapT kt' vt')) kv =
-    SOME (HashMapRef is_t
-      (hashmap_slot bslot (encode_hashmap_key kt kv)) kt' vt') ∧
+    SOME (HashMapRef is_t (hashmap_slot_for bslot kt kv) kt' vt') ∧
   hashmap_index _ _ = NONE
 End
 
@@ -176,8 +175,7 @@ QED
 Theorem hashmap_index_some:
   ∀is_t bslot kt kt' vt' kv.
     hashmap_index (HashMapRef is_t bslot kt (HashMapT kt' vt')) kv =
-    SOME (HashMapRef is_t
-      (hashmap_slot bslot (encode_hashmap_key kt kv)) kt' vt')
+    SOME (HashMapRef is_t (hashmap_slot_for bslot kt kv) kt' vt')
 Proof
   simp[hashmap_index_def]
 QED
