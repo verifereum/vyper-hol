@@ -203,7 +203,13 @@ Definition env_item_type_def:
   env_item_type BlobBaseFee = BaseT (UintT 256) /\
   env_item_type GasPrice = BaseT (UintT 256) /\
   env_item_type PrevHash = BaseT (BytesT (Fixed 32)) /\
-  env_item_type ChainId = BaseT (UintT 256)
+  env_item_type ChainId = BaseT (UintT 256) /\
+  env_item_type Coinbase = BaseT AddressT /\
+  env_item_type GasLimit = BaseT (UintT 256) /\
+  env_item_type BaseFee = BaseT (UintT 256) /\
+  env_item_type PrevRandao = BaseT (UintT 256) /\
+  env_item_type TxOrigin = BaseT AddressT /\
+  env_item_type MsgGas = BaseT (UintT 256)
 End
 
 Definition account_item_type_def:
@@ -304,7 +310,22 @@ Definition well_typed_builtin_app_def:
   (* PowMod256: 2x uint256 -> uint256 *)
   well_typed_builtin_app ty PowMod256 ts =
     (ts = [BaseT (UintT 256); BaseT (UintT 256)] /\
-     ty = BaseT (UintT 256))
+     ty = BaseT (UintT 256)) /\
+  (* Abs: numeric -> same type *)
+  well_typed_builtin_app ty Abs ts =
+    (ts = [ty] /\ is_numeric_type ty) /\
+  (* Sha256: bytes/string -> bytes32 *)
+  well_typed_builtin_app ty Sha256 ts =
+    (LENGTH ts = 1 /\ ty = BaseT (BytesT (Fixed 32))) /\
+  (* System builtins — permissive typing for now *)
+  well_typed_builtin_app ty (RawCall _ _ _ _) ts = T /\
+  well_typed_builtin_app ty RawLog ts = T /\
+  well_typed_builtin_app ty RawRevert ts = T /\
+  well_typed_builtin_app ty SelfDestruct ts = T /\
+  well_typed_builtin_app ty (RawCreate _ _) ts = T /\
+  well_typed_builtin_app ty (CreateMinimalProxy _ _) ts = T /\
+  well_typed_builtin_app ty (CreateCopyOf _ _) ts = T /\
+  well_typed_builtin_app ty (CreateFromBlueprint _ _ _) ts = T
 End
 
 (* ===== Type well-formedness ===== *)
@@ -704,9 +725,17 @@ Definition well_typed_stmt_def:
     (ret_ty = NoneT) /\
   well_typed_stmt env ret_ty (Return (SOME e)) =
     (well_typed_expr env e /\ expr_type e = ret_ty) /\
-  well_typed_stmt env ret_ty (Raise e) =
+  well_typed_stmt env ret_ty (Raise RaiseBare) = T /\
+  well_typed_stmt env ret_ty (Raise RaiseUnreachable) = T /\
+  well_typed_stmt env ret_ty (Raise (RaiseReason e)) =
     well_typed_expr env e /\
-  well_typed_stmt env ret_ty (Assert e se) =
+  well_typed_stmt env ret_ty (Assert e AssertBare) =
+    (well_typed_expr env e /\
+     expr_type e = BaseT BoolT) /\
+  well_typed_stmt env ret_ty (Assert e AssertUnreachable) =
+    (well_typed_expr env e /\
+     expr_type e = BaseT BoolT) /\
+  well_typed_stmt env ret_ty (Assert e (AssertReason se)) =
     (well_typed_expr env e /\
      well_typed_expr env se /\
      expr_type e = BaseT BoolT) /\
@@ -1967,6 +1996,10 @@ Proof
   >> conj_tac >- simp[] (* Return NONE *)
   >> conj_tac >- simp[] (* Return SOME *)
   >> conj_tac >- simp[] (* Raise *)
+  >> conj_tac >- simp[] (* Raise *)
+  >> conj_tac >- simp[] (* Raise *)
+  >> conj_tac >- simp[] (* Assert *)
+  >> conj_tac >- simp[] (* Assert *)
   >> conj_tac >- simp[] (* Assert *)
   >> conj_tac >- simp[] (* Log *)
   >> conj_tac >- simp[] (* AnnAssign *)
@@ -2320,8 +2353,12 @@ Proof
           well_typed_stmt_def, Once evaluate_type_def,
           value_has_type_def])
   (* 4: Return SOME *)   >- suspend "ReturnSome"
-  (* 5: Raise *)         >- suspend "Raise"
-  (* 6: Assert *)        >- suspend "Assert"
+  (* 5: Raise *)         >- suspend "Raise1"
+  (* 5: Raise *)         >- suspend "Raise2"
+  (* 5: Raise *)         >- suspend "Raise3"
+  (* 6: Assert *)        >- suspend "Assert1"
+  (* 6: Assert *)        >- suspend "Assert2"
+  (* 6: Assert *)        >- suspend "Assert3"
   (* 7: Log *)           >- suspend "Log"
   (* 8: AnnAssign *)     >- suspend "AnnAssign"
   (* 9: Append *)        >- suspend "Append"
@@ -2815,29 +2852,62 @@ Resume type_preservation[ReturnSome]:
   imp_res_tac materialise_error >> gvs[] >>
   drule (cj 8 evaluate_no_return) >> gvs[]
 QED
+
 (* Common pattern for simple stmt cases:
    1. Strip, unfold well_typed_stmt and eval_stmt
    2. Decompose monadic chain with rewrite_tac
    3. Apply IH on sub-expressions via funpow N drule_then drule
    4. gvs to decompose remaining, imp_res_tac for state lemmas
    5. drule evaluate_no_return for ReturnException contradiction *)
-Resume type_preservation[Raise]:
+Resume type_preservation[Raise1]:
   rpt gen_tac >> strip_tac >>
   rpt gen_tac >> strip_tac >>
   gvs[well_typed_stmt_def] >>
   qpat_x_assum`eval_stmt _ _ _ = _`mp_tac >>
+  rewrite_tac[evaluate_def, raise_def] >>
+  rewrite_tac[bind_def, ignore_bind_def, CaseEq"sum", CaseEq"prod"] >>
+  simp_tac std_ss [] >> strip_tac >> gvs[]
+QED
+
+Resume type_preservation[Raise2]:
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  gvs[well_typed_stmt_def] >>
+  qpat_x_assum`eval_stmt _ _ _ = _`mp_tac >>
+  rewrite_tac[evaluate_def, raise_def] >>
+  rewrite_tac[bind_def, ignore_bind_def, CaseEq"sum", CaseEq"prod"] >>
+  simp_tac std_ss [] >> strip_tac >> gvs[]
+QED
+
+Resume type_preservation[Raise3]:
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> rewrite_tac[well_typed_stmt_def] >>
   rewrite_tac[evaluate_def] >>
   rewrite_tac[bind_def, ignore_bind_def, CaseEq"sum", CaseEq"prod"] >>
   simp_tac std_ss [] >> strip_tac >>
-  first_x_assum $ funpow 3 drule_then drule >> strip_tac >>
-  gvs[bind_apply, AllCaseEqs(), return_def, raise_def,
-      lift_option_type_def, option_CASE_rator] >>
-  imp_res_tac get_Value_state >> gvs[] >>
-  TRY (drule get_Value_error >> rw[] >> NO_TAC) >>
-  drule (cj 8 evaluate_no_return) >> gvs[]
+  first_x_assum $ drule_all >>
+  pop_assum mp_tac >> reverse CASE_TAC >> strip_tac >> gvs[]
+  >- ( rw[] \\ drule (cj 8 evaluate_no_return) \\ rw[] ) >>
+  strip_tac >> pop_assum kall_tac >>
+  gvs[bind_apply] >>
+  gvs[AllCaseEqs(), bind_apply, raise_def] >>
+  imp_res_tac get_Value_state >>
+  imp_res_tac lift_option_type_state >> gvs[] >>
+  rw[] >>
+  imp_res_tac get_Value_error >>
+  gvs[lift_option_type_def, AllCaseEqs(),
+      option_CASE_rator, raise_def, return_def]
 QED
 
-Resume type_preservation[Assert]:
+Resume type_preservation[Assert1]:
+  cheat
+QED
+
+Resume type_preservation[Assert2]:
+  cheat
+QED
+
+Resume type_preservation[Assert3]:
   cheat
 QED
 
