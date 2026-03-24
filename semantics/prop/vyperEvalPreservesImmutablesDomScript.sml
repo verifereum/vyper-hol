@@ -22,7 +22,7 @@ Ancestors
 
 Definition preserves_immutables_dom_def:
   preserves_immutables_dom cx (st:evaluation_state) (st':evaluation_state) ⇔
-    (∀tgt. IS_SOME (ALOOKUP st.immutables tgt) ⇒
+    (∀tgt. IS_SOME (ALOOKUP st.immutables tgt) ⇔
            IS_SOME (ALOOKUP st'.immutables tgt)) ∧
     (∀src n imms imms'.
        ALOOKUP st.immutables cx.txn.target = SOME imms ∧
@@ -44,8 +44,7 @@ Theorem preserves_immutables_dom_trans[local]:
     preserves_immutables_dom cx st1 st3
 Proof
   rw[preserves_immutables_dom_def] >>
-  `IS_SOME (ALOOKUP st2.immutables cx.txn.target)` by (first_x_assum irule >> simp[]) >>
-  Cases_on `ALOOKUP st2.immutables cx.txn.target` >> gvs[]
+  gvs[optionTheory.IS_SOME_EXISTS]
 QED
 
 Theorem preserves_immutables_dom_eq[local]:
@@ -1898,7 +1897,7 @@ QED
 Theorem eval_expr_preserves_immutables_addr_dom:
   ∀cx e st res st'.
     eval_expr cx e st = (res, st') ⇒
-    ∀tgt. IS_SOME (ALOOKUP st.immutables tgt) ⇒ IS_SOME (ALOOKUP st'.immutables tgt)
+    ∀tgt. IS_SOME (ALOOKUP st.immutables tgt) ⇔ IS_SOME (ALOOKUP st'.immutables tgt)
 Proof
   metis_tac[immutables_dom_mutual, preserves_immutables_dom_def]
 QED
@@ -1937,10 +1936,23 @@ Proof
   rw[preserves_immutables_dom_def]
 QED
 
+Theorem eval_exprs_preserves_immutables_dom:
+  ∀cx es st res st'.
+    eval_exprs cx es st = (res, st') ⇒
+    ∀src n imms imms'.
+      ALOOKUP st.immutables cx.txn.target = SOME imms ∧
+      ALOOKUP st'.immutables cx.txn.target = SOME imms' ⇒
+      (IS_SOME (FLOOKUP (get_source_immutables src imms) n) ⇔
+       IS_SOME (FLOOKUP (get_source_immutables src imms') n))
+Proof
+  rpt strip_tac >> drule (cj 9 immutables_dom_mutual) >>
+  rw[preserves_immutables_dom_def]
+QED
+
 Theorem eval_exprs_preserves_immutables_addr_dom:
   ∀cx es st res st'.
     eval_exprs cx es st = (res, st') ⇒
-    ∀tgt. IS_SOME (ALOOKUP st.immutables tgt) ⇒ IS_SOME (ALOOKUP st'.immutables tgt)
+    ∀tgt. IS_SOME (ALOOKUP st.immutables tgt) ⇔ IS_SOME (ALOOKUP st'.immutables tgt)
 Proof
   metis_tac[immutables_dom_mutual, preserves_immutables_dom_def]
 QED
@@ -1948,7 +1960,7 @@ QED
 Theorem eval_stmts_preserves_immutables_addr_dom:
   ∀cx ss st res st'.
     eval_stmts cx ss st = (res, st') ⇒
-    ∀tgt. IS_SOME (ALOOKUP st.immutables tgt) ⇒ IS_SOME (ALOOKUP st'.immutables tgt)
+    ∀tgt. IS_SOME (ALOOKUP st.immutables tgt) ⇔ IS_SOME (ALOOKUP st'.immutables tgt)
 Proof
   metis_tac[immutables_dom_mutual, preserves_immutables_dom_def]
 QED

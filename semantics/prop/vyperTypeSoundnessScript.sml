@@ -69,7 +69,8 @@ Ancestors
   vyperInterpreter vyperState vyperContext
   vyperStatePreservation vyperScopePreservation
   vyperLookup vyperImmutablesPreservation
-  vyperEvalPreservesScopes
+  vyperEvalExprPreservesScopesDom
+  vyperEvalPreservesScopes vyperEvalPreservesImmutablesDom
   vyperTyping vyperEncodeDecode vyperAssignPreservesType
 
 (* ===== Type Classification Helpers ===== *)
@@ -1102,6 +1103,93 @@ Proof
     gvs[lookup_scopes_def, FLOOKUP_DEF]) >>
   (* global_types conjunct *)
   rpt strip_tac >> res_tac
+QED
+
+(* env_consistent is preserved by evaluation steps that preserve tv and
+   scope domains. Uses preserves_tv (per-scope FLOOKUP preservation) and
+   MAP FDOM equality to show lookup_scopes finds the same position with
+   the same tv after evaluation. *)
+Theorem lookup_scopes_EL:
+  !scopes id tv v.
+    lookup_scopes id scopes = SOME (tv, v) ==>
+    ?i. i < LENGTH scopes /\
+        FLOOKUP (EL i scopes) id = SOME (tv, v) /\
+        !j. j < i ==> FLOOKUP (EL j scopes) id = NONE
+Proof
+  Induct >> simp[lookup_scopes_def] >>
+  rpt gen_tac >> Cases_on `FLOOKUP h id` >> simp[]
+  >- (strip_tac >> res_tac >>
+      qexists_tac `SUC i` >> simp[] >>
+      Cases >> simp[])
+  >> strip_tac >> qexists_tac `0` >> simp[]
+QED
+
+Theorem lookup_scopes_from_EL:
+  !scopes id tvv i.
+    i < LENGTH scopes /\
+    FLOOKUP (EL i scopes) id = SOME tvv /\
+    (!j. j < i ==> FLOOKUP (EL j scopes) id = NONE) ==>
+    lookup_scopes id scopes = SOME tvv
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `i` >> gvs[lookup_scopes_def, AllCaseEqs()] >>
+  first_assum(qspec_then`0`mp_tac) >> simp_tac (srw_ss())[] >>
+  strip_tac >> first_x_assum irule >>
+  goal_assum $ drule_at Any >> rw[] >>
+  first_x_assum(qspec_then`SUC j`mp_tac) >> rw[]
+QED
+
+Theorem env_consistent_preserves_tv:
+  !env cx st st'.
+    env_consistent env cx st /\
+    preserves_tv cx st st' /\
+    MAP FDOM st'.scopes = MAP FDOM st.scopes /\
+    (!src n. IS_SOME (FLOOKUP (get_source_immutables src
+        (case ALOOKUP st'.immutables cx.txn.target of
+           SOME m => m | NONE => [])) n) ==>
+             IS_SOME (FLOOKUP (get_source_immutables src
+        (case ALOOKUP st.immutables cx.txn.target of
+           SOME m => m | NONE => [])) n)) ==>
+    env_consistent env cx st'
+Proof
+  rw[env_consistent_def] >- (
+    (* var_types clause *)
+    drule_at Any lookup_scopes_EL >> strip_tac >>
+    rename1 `FLOOKUP (EL i st'.scopes) id = SOME (tv, v)` >>
+    `i < LENGTH st.scopes` by gvs[preserves_tv_def] >>
+    `FDOM (EL i st'.scopes) = FDOM (EL i st.scopes)` by (
+      imp_res_tac listTheory.MAP_EQ_EVERY2 >>
+      gvs[listTheory.LIST_REL_EL_EQN, preserves_tv_def]) >>
+    `?tv0v0. FLOOKUP (EL i st.scopes) id = SOME tv0v0` by
+      gvs[finite_mapTheory.FLOOKUP_DEF, PULL_EXISTS] >>
+    `!j. j < i ==> FLOOKUP (EL j st.scopes) id = NONE` by (
+      rpt strip_tac >>
+      `FDOM (EL j st'.scopes) = FDOM (EL j st.scopes)` by (
+        imp_res_tac listTheory.MAP_EQ_EVERY2 >>
+        gvs[listTheory.LIST_REL_EL_EQN, preserves_tv_def]) >>
+      `FLOOKUP (EL j st'.scopes) id = NONE` by res_tac >>
+      gvs[finite_mapTheory.FLOOKUP_DEF] >>
+      first_x_assum drule >> rw[]) >>
+    `lookup_scopes id st.scopes = SOME tv0v0` by (
+      irule lookup_scopes_from_EL >>
+      goal_assum drule >> simp[]) >>
+    PairCases_on`tv0v0` >>
+    `evaluate_type (get_tenv cx) ty = SOME tv0v00` by res_tac >>
+    `?v0'. FLOOKUP (EL i st'.scopes) id = SOME (tv0v00, v0')` by
+      gvs[preserves_tv_def] >>
+    gvs[])
+  (* global_types clause *)
+  >> gvs[IS_SOME_EXISTS, PULL_EXISTS]
+  >> first_x_assum drule >> strip_tac
+  >> rename1 `FLOOKUP _ id = SOME old_entry`
+  >> Cases_on `old_entry`
+  >> rename1 `FLOOKUP _ id = SOME (tv0, v0)`
+  >> `evaluate_type (get_tenv cx) ty = SOME tv0` by res_tac
+  >> `∃v'. FLOOKUP (get_source_immutables (current_module cx)
+       (case ALOOKUP st'.immutables cx.txn.target of
+          SOME m => m | NONE => [])) id = SOME (tv0, v')` by
+     gvs[preserves_tv_def]
+  >> gvs[]
 QED
 
 (* bind_arguments stores evaluate_type results *)
@@ -2662,7 +2750,89 @@ Resume type_preservation[IntCall]:
     \\ gvs[]
     \\ disch_then drule
     \\ disch_then drule
-    \\ cheat ) >>
+    \\ gvs[lift_option_type_def, AllCaseEqs(),option_CASE_rator,
+           raise_def,return_def]
+    \\ PairCases_on`tup`
+    \\ drule(iffLR functions_well_typed_def)
+    \\ disch_then $ drule_then drule
+    \\ disch_then(qspec_then`env.fn_sigs`mp_tac)
+    \\ impl_tac >- gvs[env_consistent_def]
+    \\ strip_tac
+    \\ qmatch_asmsub_abbrev_tac`well_typed_exprs empty_env tup2`
+    \\ gvs[Abbr`stup`,Abbr`sstup`]
+    \\ sg `well_typed_exprs empty_env needed_dflts`
+    >- (
+      simp[Abbr`needed_dflts`]
+      \\ irule well_typed_exprs_DROP
+      \\ rw[] )
+    \\ disch_then drule
+    \\ impl_tac
+    >- (
+      conj_tac
+      >- (
+        qunabbrev_tac`empty_env`
+        \\ `get_tenv cx = get_tenv cxd` by rw[Abbr`cxd`, get_tenv_stk_irrelevant]
+        \\ rw[]
+        \\ irule env_consistent_empty )
+      \\ simp[functions_well_typed_stk_irrelevant, Abbr`cxd`] )
+    \\ rw[]
+    \\ irule env_consistent_preserves_tv
+    \\ goal_assum $ drule_at Any
+    \\ conj_tac
+    >- (
+      rpt gen_tac >>
+      drule eval_exprs_preserves_immutables_addr_dom >>
+      drule eval_exprs_preserves_immutables_dom >>
+      simp[Abbr`cxd`] >>
+      rpt strip_tac >>
+      first_x_assum(irule o iffRL) >>
+      pop_assum mp_tac \\ CASE_TAC
+      >- rw[get_source_immutables_def] >>
+      gvs[IS_SOME_EXISTS] >>
+      CASE_TAC >>
+      metis_tac[NOT_SOME_NONE])
+    >> conj_tac >- (
+      drule_then (irule o SYM) eval_exprs_preserves_scopes_dom ) >>
+    drule (cj 9 eval_preserves_tv) >>
+    rw[preserves_tv_def, Abbr`cxd`]) >>
+  pop_assum mp_tac >>
+  simp_tac std_ss [LET_THM, bind_apply] >>
+  BasicProvers.TOP_CASE_TAC >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  imp_res_tac lift_option_type_state >>
+  imp_res_tac type_check_state >>
+  imp_res_tac check_state >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  rpt (first_x_assum drule >> strip_tac) >>
+  strip_tac >>
+  unabbrev_all_tac >>
+  qpat_x_assum`!_. _`mp_tac >>
+  qhdtm_x_assum`type_check`mp_tac >>
+  PairCases_on`tup` >>
+  simp_tac (srw_ss()) [] >>
+  strip_tac >> disch_then drule >>
+  disch_then drule >>
+  qpat_x_assum`_ = (INL dflt_vs,_)`mp_tac >>
+  simp_tac (srw_ss()) [] >>
+  strip_tac >> disch_then drule >>
+  strip_tac >>
+  qpat_x_assum`!_. _`(fn th => mp_tac th >> CHANGED_TAC(simp_tac(srw_ss())[]))
+  >> disch_then drule >>
+  disch_then drule >>
+  strip_tac >>
+  qpat_x_assum`!_. _`(fn th => mp_tac th >> CHANGED_TAC(simp_tac(srw_ss())[]))
+  >> disch_then drule >>
+  disch_then drule >>
+  disch_then drule >>
+  disch_then drule >>
+  disch_then drule >>
+  disch_then drule >>
+  simp_tac std_ss [] >>
+  strip_tac >>
+  qpat_x_assum`_ = (res,_)`mp_tac >>
+  simp_tac (srw_ss())[] >>
+  first_x_assum(drule_at(Pat`eval_exprs`)) >>
+  simp_tac (srw_ss()) [functions_well_typed_stk_irrelevant] >>
   cheat
 QED
 
