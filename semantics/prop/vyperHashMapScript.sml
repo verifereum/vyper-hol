@@ -5,6 +5,9 @@
  * Provides state-level operations on HashMapRef values,
  * abstracting away storage slots and encoding details.
  *
+ * Builds on vyperHashMapStorageTheory which provides storage-level
+ * hashmap_read/hashmap_write and their read-after-write properties.
+ *
  * Ref-level API (operates on HashMapRef values directly):
  *   hashmap_index_def          - apply key to nested HashMap → new HashMapRef
  *   read_hashmap_def           - read value from leaf HashMap in state
@@ -13,10 +16,6 @@
  *   hashmap_ref_storable_def   - value is storable at ref's value type
  *   hashmap_ref_no_collision_def - no Keccak collision for ref
  *   hashmap_ref_distinct_keys_def - two keys encode differently for ref
- *
- *   write_hashmap_some                - write succeeds for storable values
- *   read_hashmap_after_write_same     - read at same key returns written value
- *   read_hashmap_after_write_other    - read at different key is unchanged
  *
  * Name-level API (convenience wrappers using variable names):
  *   is_leaf_hashmap_def        - variable is a leaf HashMap
@@ -131,12 +130,10 @@ Theorem write_hashmap_some:
     hashmap_ref_storable cx href v ⇒
     ∃st'. write_hashmap cx st href kv v = SOME st'
 Proof
-  rpt gen_tac \\ Cases_on `href` \\ simp[is_leaf_hashmap_ref_def]
-  \\ rename1 `HashMapRef _ _ _ vt`
-  \\ Cases_on `vt` \\ simp[is_leaf_hashmap_ref_def]
+  rpt gen_tac \\ Cases_on `href` \\ simp[]
+  \\ rename1 `HashMapRef _ _ _ vt` \\ Cases_on `vt` \\ simp[]
   \\ simp[write_hashmap_def, hashmap_ref_storable_def, AllCaseEqs()]
-  \\ CASE_TAC \\ simp[]
-  \\ rpt strip_tac
+  \\ CASE_TAC \\ simp[] \\ rpt strip_tac
   \\ drule hashmap_write_some \\ strip_tac \\ gvs[AllCaseEqs()]
 QED
 
@@ -147,14 +144,12 @@ Theorem read_hashmap_after_write_same:
     write_hashmap cx st href kv v = SOME st' ⇒
     read_hashmap cx st' href kv = SOME v
 Proof
-  rpt gen_tac \\ Cases_on `href` \\ simp[is_leaf_hashmap_ref_def]
-  \\ rename1 `HashMapRef _ _ _ vt`
-  \\ Cases_on `vt` \\ simp[is_leaf_hashmap_ref_def]
-  \\ simp[write_hashmap_def, read_hashmap_def, hashmap_ref_storable_def, AllCaseEqs()]
-  \\ CASE_TAC \\ simp[]
-  \\ rpt strip_tac \\ gvs[get_storage_after_set]
-  \\ drule_all hashmap_read_after_write_same \\ strip_tac
-  \\ gvs[hashmap_write_def, AllCaseEqs()]
+  rpt gen_tac \\ Cases_on `href` \\ simp[]
+  \\ rename1 `HashMapRef _ _ _ vt` \\ Cases_on `vt` \\ simp[]
+  \\ simp[write_hashmap_def, read_hashmap_def, hashmap_ref_storable_def,
+          AllCaseEqs()]
+  \\ CASE_TAC \\ simp[] \\ rpt strip_tac \\ gvs[get_storage_after_set]
+  \\ drule_all hashmap_read_write_same \\ simp[]
 QED
 
 Theorem read_hashmap_after_write_other:
@@ -166,17 +161,14 @@ Theorem read_hashmap_after_write_other:
     write_hashmap cx st href kv1 v = SOME st' ⇒
     read_hashmap cx st' href kv2 = read_hashmap cx st href kv2
 Proof
-  rpt gen_tac \\ Cases_on `href` \\ simp[is_leaf_hashmap_ref_def]
-  \\ rename1 `HashMapRef _ _ _ vt`
-  \\ Cases_on `vt` \\ simp[is_leaf_hashmap_ref_def]
+  rpt gen_tac \\ Cases_on `href` \\ simp[]
+  \\ rename1 `HashMapRef _ _ _ vt` \\ Cases_on `vt` \\ simp[]
   \\ simp[write_hashmap_def, read_hashmap_def, hashmap_ref_storable_def,
           hashmap_ref_no_collision_def, hashmap_ref_distinct_keys_def,
           AllCaseEqs()]
-  \\ CASE_TAC \\ simp[]
-  \\ rpt strip_tac \\ gvs[get_storage_after_set]
+  \\ CASE_TAC \\ simp[] \\ rpt strip_tac \\ gvs[get_storage_after_set]
   \\ drule_all no_hashmap_collision_imp \\ strip_tac
-  \\ drule_all hashmap_read_after_write_other
-  \\ gvs[hashmap_write_def, AllCaseEqs()]
+  \\ drule_all hashmap_read_after_write_other \\ simp[]
 QED
 
 (* ===== Ref-level: hashmap_index properties ===== *)
@@ -276,14 +268,8 @@ Proof
   \\ drule is_leaf_hashmap_lookup
   \\ disch_then (qspec_then `st` strip_assume_tac) \\ gvs[]
   \\ gvs[update_hashmap_def]
-  \\ `lookup_toplevel_name cx st' mid n = SOME href` by (
-    qpat_x_assum `write_hashmap _ _ _ _ _ = _` mp_tac
-    \\ Cases_on `href`
-    \\ simp[write_hashmap_def, AllCaseEqs(), set_storage_def]
-    \\ rename1 `HashMapRef _ _ _ vt`
-    \\ Cases_on `vt` \\ simp[write_hashmap_def, AllCaseEqs()]
-    \\ rpt strip_tac
-    \\ metis_tac[is_leaf_hashmap_lookup_state_independent])
+  \\ `lookup_toplevel_name cx st' mid n = SOME href` by
+    metis_tac[is_leaf_hashmap_lookup_state_independent]
   \\ simp[lookup_hashmap_def]
   \\ drule_all read_hashmap_after_write_same \\ simp[]
 QED
@@ -301,14 +287,8 @@ Proof
   \\ drule is_leaf_hashmap_lookup
   \\ disch_then (qspec_then `st` strip_assume_tac) \\ gvs[]
   \\ gvs[update_hashmap_def, lookup_hashmap_def]
-  \\ `lookup_toplevel_name cx st' mid n = SOME href` by (
-    qpat_x_assum `write_hashmap _ _ _ _ _ = _` mp_tac
-    \\ Cases_on `href`
-    \\ simp[write_hashmap_def, AllCaseEqs(), set_storage_def]
-    \\ rename1 `HashMapRef _ _ _ vt`
-    \\ Cases_on `vt` \\ simp[write_hashmap_def, AllCaseEqs()]
-    \\ rpt strip_tac
-    \\ metis_tac[is_leaf_hashmap_lookup_state_independent])
+  \\ `lookup_toplevel_name cx st' mid n = SOME href` by
+    metis_tac[is_leaf_hashmap_lookup_state_independent]
   \\ simp[]
   \\ drule_all read_hashmap_after_write_other \\ simp[]
 QED

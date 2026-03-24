@@ -129,6 +129,20 @@ Proof
   \\ metis_tac[wordsTheory.n2w_w2n]
 QED
 
+(* Direct implication form: given a successful write, read returns the value *)
+Theorem hashmap_read_write_same:
+  ∀storage storage' base kt tv kv v.
+    hashmap_write storage base kt tv kv v = SOME storage' ∧
+    value_has_type tv v ∧ well_formed_type_value tv ⇒
+    hashmap_read storage' base kt tv kv = SOME v
+Proof
+  rw[hashmap_write_def, hashmap_read_def, AllCaseEqs()]
+  \\ `encode_decode_roundtrip_ok tv v` by
+    metis_tac[encode_decode_roundtrip_all]
+  \\ fs[encode_decode_roundtrip_ok_def]
+  \\ metis_tac[wordsTheory.n2w_w2n]
+QED
+
 (* ===== Read After Write: Different Key ===== *)
 
 Theorem decode_value_disjoint_writes_word[local]:
