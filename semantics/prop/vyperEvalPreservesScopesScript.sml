@@ -1119,6 +1119,14 @@ Proof
   simp[preserves_tv_def]
 QED
 
+Theorem preserves_tv_txn_eq:
+  ∀cx cx' st st'.
+    cx.txn = cx'.txn ⇒
+    (preserves_tv cx st st' ⇔ preserves_tv cx' st st')
+Proof
+  simp[preserves_tv_def]
+QED
+
 Theorem preserves_tv_trans:
   ∀cx st1 st2 st3.
     preserves_tv cx st1 st2 ∧
@@ -1259,6 +1267,14 @@ Proof
   >> first_x_assum drule
   >> first_x_assum drule
   >> metis_tac[preserves_tv_trans]
+QED
+
+(* TODO: move *)
+Theorem handle_function_state:
+  handle_function x y = (a,b) ==> b = y
+Proof
+  simp[oneline handle_function_def]
+  >> CASE_TAC >> rw[raise_def, return_def]
 QED
 
 Theorem eval_preserves_tv:
@@ -1662,7 +1678,110 @@ Proof
     goal_assum $ drule_at Any >>
     gvs[preserves_tv_def]) >>
   (* IntCall *)
-  conj_tac >- cheat >>
+  conj_tac >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    pop_assum mp_tac >>
+    simp_tac std_ss [evaluate_def, bind_apply, ignore_bind_apply] >>
+    (* check recursion *)
+    BasicProvers.TOP_CASE_TAC >>
+    imp_res_tac check_state >> BasicProvers.VAR_EQ_TAC >>
+    reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
+    (* lift_option_type get_module_code *)
+    BasicProvers.TOP_CASE_TAC >>
+    imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
+    reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
+    (* lift_option_type lookup_callable_function *)
+    BasicProvers.TOP_CASE_TAC >>
+    imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
+    reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
+    (* LET bindings *)
+    BasicProvers.LET_ELIM_TAC >>
+    BasicProvers.VAR_EQ_TAC >>
+    first_x_assum $ funpow 2 drule_then drule >>
+    simp_tac std_ss [] >> strip_tac >>
+    first_x_assum $ funpow 2 drule_then drule >>
+    simp_tac std_ss [] >> strip_tac >>
+    first_x_assum $ funpow 2 drule_then drule >>
+    simp_tac std_ss [] >> strip_tac >>
+    qpat_x_assum`_ = (_ ,_)`mp_tac >>
+    simp_tac std_ss [ignore_bind_apply] >>
+    (* type_check *)
+    BasicProvers.TOP_CASE_TAC >>
+    imp_res_tac type_check_state >> BasicProvers.VAR_EQ_TAC >>
+    reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
+    (* eval_exprs cx es — consume IH *)
+    simp_tac std_ss [bind_apply] >>
+    BasicProvers.TOP_CASE_TAC >>
+    rev_full_simp_tac std_ss [] >>
+    first_x_assum drule >> strip_tac >>
+    first_x_assum drule >> strip_tac >>
+    first_x_assum drule_all >> strip_tac >>
+    reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
+    BasicProvers.LET_ELIM_TAC >>
+    qpat_x_assum`_ = (_ ,_)`mp_tac >>
+    simp_tac std_ss [bind_apply] >>
+    (* eval_exprs cxd needed_dflts — consume IH *)
+    BasicProvers.TOP_CASE_TAC >>
+    first_x_assum drule_all >> strip_tac >>
+    sg `preserves_tv cx r r'` >- (
+      irule preserves_tv_trans >>
+      goal_assum drule >>
+      irule (iffRL preserves_tv_txn_eq) >>
+      goal_assum $ drule_at Any >>
+      simp[Abbr`cxd`]) >>
+    reverse BasicProvers.TOP_CASE_TAC >- ( rw[] >> rw[] ) >>
+    BasicProvers.LET_ELIM_TAC >>
+    first_x_assum $ drule_then drule >> strip_tac >>
+    qpat_x_assum`_ = (_ ,_)`mp_tac >>
+    simp_tac std_ss [bind_apply] >>
+    (* lift_option_type bind_arguments *)
+    BasicProvers.TOP_CASE_TAC >>
+    imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
+    BasicProvers.VAR_EQ_TAC >>
+    reverse BasicProvers.TOP_CASE_TAC >- ( rw[] >> rw[] ) >>
+    (* get_scopes *)
+    simp_tac (srw_ss()) [get_scopes_def, return_def] >>
+    (* lift_option_type evaluate_type *)
+    BasicProvers.TOP_CASE_TAC >>
+    imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC >>
+    reverse BasicProvers.TOP_CASE_TAC >- ( rw[] >> rw[] ) >>
+    (* push_function *)
+    BasicProvers.TOP_CASE_TAC >>
+    reverse BasicProvers.TOP_CASE_TAC >- (
+      rw[] >> gvs[push_function_def, return_def] ) >>
+    first_x_assum drule >>
+    simp_tac (srw_ss()) [get_scopes_def, return_def] >>
+    disch_then $ drule_then drule >>
+    strip_tac >>
+    (* finally (try eval_stmts handle_function) (pop_function prev) *)
+    simp[finally_def, try_def, ignore_bind_apply] >>
+    CASE_TAC >>
+    first_x_assum drule >> strip_tac >>
+    CASE_TAC >> gvs[return_def]
+    >- (
+      rw[pop_function_def, set_scopes_def, return_def,
+         lift_option_type_def] >>
+      gvs[AllCaseEqs(), option_CASE_rator, raise_def, return_def] >>
+      irule preserves_tv_trans >>
+      goal_assum drule >>
+      gvs[push_function_def, return_def] >>
+      drule_at Any (iffRL preserves_tv_txn_eq) >>
+      disch_then(qspec_then`cx`mp_tac) >>
+      simp[Abbr`cxd`] >>
+      rw[preserves_tv_def] ) >>
+    CASE_TAC >>
+    imp_res_tac handle_function_state >> gvs[] >>
+    CASE_TAC >>
+    gvs[pop_function_def, set_scopes_def, return_def, raise_def] >>
+    CASE_TAC >> gvs[] >> TRY CASE_TAC >> imp_res_tac lift_option_type_state >>
+    gvs[] >> TRY CASE_TAC >> gvs[] >> rw[] >>
+    irule preserves_tv_trans >>
+    goal_assum drule >>
+    gvs[push_function_def, return_def] >>
+    drule_at Any (iffRL preserves_tv_txn_eq) >>
+    disch_then(qspec_then`cx`mp_tac) >>
+    simp[Abbr`cxd`] >>
+    rw[preserves_tv_def]) >>
   (* eval_exprs [] *)
   conj_tac >- rw[evaluate_def, return_def] >>
   (* eval_exprs e::es *)
