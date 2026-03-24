@@ -231,3 +231,41 @@ Definition fn_all_vars_def:
       bb.bb_instructions))
     func.fn_blocks)
 End
+
+(* ===== Instruction ID Deduplication ===== *)
+
+(* All instruction IDs in a function. *)
+Definition fn_inst_ids_def:
+  fn_inst_ids func =
+    FLAT (MAP (λbb. MAP (λi. i.inst_id) bb.bb_instructions) func.fn_blocks)
+End
+
+(* Max instruction ID in a function, or 0 if empty. *)
+Definition fn_max_inst_id_def:
+  fn_max_inst_id func =
+    FOLDL MAX 0 (fn_inst_ids func)
+End
+
+(* Assign fresh IDs to instructions whose ID is duplicated.
+   Keeps the first occurrence of each ID, reassigns subsequent duplicates
+   using a counter starting above the current max. *)
+Definition renumber_inst_ids_block_def:
+  renumber_inst_ids_block (next, seen) bb =
+    let (next', seen', insts') = FOLDL (λ(n, s, acc) inst.
+      if MEM inst.inst_id s then
+        (n + 1n, n :: s, acc ++ [inst with inst_id := n])
+      else
+        (n, inst.inst_id :: s, acc ++ [inst]))
+      (next, seen, []) bb.bb_instructions in
+    ((next', seen'), bb with bb_instructions := insts')
+End
+
+Definition renumber_fn_inst_ids_def:
+  renumber_fn_inst_ids func =
+    let start = fn_max_inst_id func + 1 in
+    let ((_, _), bbs') = FOLDL (λ(st, acc) bb.
+      let (st', bb') = renumber_inst_ids_block st bb in
+      (st', acc ++ [bb']))
+      ((start, []), []) func.fn_blocks in
+    func with fn_blocks := bbs'
+End
