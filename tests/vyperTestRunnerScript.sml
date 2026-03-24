@@ -117,7 +117,7 @@ Definition compute_vyper_args_def:
   compute_vyper_args all_mods ts vis name argTys cd = let
     abiTupTy = Tuple argTys;
     vyTysRet = case lookup_function NONE name vis ts
-                of SOME (_,args,_,ret,_) => (MAP SND args, ret)
+                of SOME (_,_,args,_,ret,_) => (MAP SND args, ret)
                   | NONE => ([], NoneT);
     vyTys = TAKE (LENGTH argTys) (FST vyTysRet);
     (* Use combined type env from all modules so cross-module types work *)
