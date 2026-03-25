@@ -1,7 +1,7 @@
 (*
  * Venom Well-Formedness Predicates
  *
- * Upstream: vyperlang/vyper@8780b3134 (alloca_id removal)
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  *
  * This theory defines structural well-formedness for Venom IR functions
  * and contexts: entry blocks, block structure, successor closure, and
@@ -60,7 +60,6 @@ Definition inst_wf_def:
     | SAR => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
     | SIGNEXTEND => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
     | BYTE => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
-    | GEP => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
     (* ---- exec_pure1: 1 operand, 1 output ---- *)
     | ISZERO => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
     | NOT => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1

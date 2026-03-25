@@ -1,5 +1,8 @@
 # Venom IR core
 # proofs/ discovered transitively via props/ -> ../proofs
+# NOTE: analysis/ and passes/ are included from root Holmakefile because
+# their leaf dirs include ../../ (back to venom/) creating a cycle.
+# Fix by replacing ../../ with ../../defs ../../props in leaf Holmakefiles.
 INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec $(HOLDIR)/examples/Crypto/Keccak \
            ../syntax ../semantics \
-           defs props
+           defs props codegen

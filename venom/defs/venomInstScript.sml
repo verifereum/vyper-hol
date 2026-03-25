@@ -1,7 +1,7 @@
 (*
  * Venom Instructions
  *
- * Upstream: vyperlang/vyper@8780b3134 (alloca_id removal)
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  *
  * This theory defines the instruction set for Venom IR.
  *)
@@ -41,7 +41,7 @@ Datatype:
     (* SSA/IR-specific *)
     | PHI | PARAM | ASSIGN | NOP
     (* Allocation (Vyper-specific stack slots) *)
-    | ALLOCA | GEP
+    | ALLOCA
     (* Internal function calls *)
     | INVOKE
     (* Environment *)
@@ -300,7 +300,7 @@ Definition is_effect_free_op_def:
   is_effect_free_op SAR = T /\
   is_effect_free_op SIGNEXTEND = T /\
   is_effect_free_op BYTE = T /\
-  is_effect_free_op GEP = T /\
+
   (* State reads (exec_read0/1) *)
   is_effect_free_op MLOAD = T /\
   is_effect_free_op SLOAD = T /\

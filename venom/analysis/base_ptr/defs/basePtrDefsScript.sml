@@ -1,7 +1,7 @@
 (*
  * Base Pointer Analysis — Definitions
  *
- * Upstream: vyperlang/vyper@c58034a22 (add/sub propagation, ctx removal)
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  * Forward flow analysis: traces memory/storage pointers back to
  * their base allocation (alloca).
  *
@@ -76,17 +76,6 @@ Definition bp_handle_inst_def:
           case inst.inst_opcode of
             (* alloca: fresh allocation at offset 0 *)
             ALLOCA => result |+ (out, {ptr_from_alloca inst})
-            (* gep/add: base + offset. operands = [base_var, offset_operand]
-             * add propagates pointers when one operand is a tracked pointer
-             * and the other is a literal offset. Matches Python (c58034a22). *)
-          | GEP =>
-              (case inst.inst_operands of
-                 [Var base_var; offset_op] =>
-                   let base_ptrs = bp_get_ptrs result base_var in
-                   let off = case offset_op of Lit n => SOME (w2n n)
-                                             | _ => NONE in
-                   result |+ (out, IMAGE (λp. offset_by p off) base_ptrs)
-               | _ => result)
             (* add/sub: pointer arithmetic. Matches Python (c58034a22).
              * HOL semantic order: [lhs; rhs].
              * Python stack order: rhs, lhs = inst.operands.

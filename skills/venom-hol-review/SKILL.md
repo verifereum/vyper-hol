@@ -53,6 +53,12 @@ Failures to catch:
 - Separate statement file (API) from proof file (implementation). Statements use `ACCEPT_TAC proof_thm`. Shared definitions in a common ancestor to avoid circular deps.
 - Every exporting API theory must be listed as an ancestor in `vyperHolScript.sml` so it is included in the top-level build.
 
+## Holmakefile conventions
+
+- **Daughter directories only**: A Holmakefile should include its direct children, not grandchildren. Transitive deps are discovered automatically by Holmake.
+- **No external `proofs/` includes**: Don't include `proofs/` directories outside the current directory tree. Props theories already depend on proofs transitively, so including `../proofs` is redundant. Stylistically cleaner to keep Holmakefiles minimal.
+- **No cycles**: If `A/Holmakefile` includes `B/` and `B/Holmakefile` includes `A/`, Holmake will report an INCLUDES chain loop. Fix by including specific subdirectories (`A/defs`, `A/props`) instead of the parent.
+
 **Props vs proofs**: A props theorem may inline its proof (instead of `ACCEPT_TAC`) only if the proof is a trivial one-liner (e.g. `rw[foo_def]`). But if a theorem's proof is that trivial, question whether it needs to be an exported theorem at all — consumers can just `rw[foo_def]` themselves. Export theorems that save non-trivial work or that name a useful fact for `irule`/`drule`.
 
 ## Upstream commit tracking

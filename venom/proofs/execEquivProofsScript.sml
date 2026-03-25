@@ -106,7 +106,7 @@ Triviality step_inst_pure2_equiv:
     MEM inst.inst_opcode
       [ADD; SUB; MUL; Div; SDIV; Mod; SMOD; Exp;
        AND; OR; XOR; SHL; SHR; SAR; SIGNEXTEND; BYTE;
-       EQ; LT; GT; SLT; SGT; GEP] ==>
+       EQ; LT; GT; SLT; SGT] ==>
     result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rw[] >> simp[step_inst_base_def] >>
@@ -735,7 +735,7 @@ Proof
   (* Dispatch: derive MEM for the opcode's category, then use helper *)
   FIRST [
     `MEM inst.inst_opcode [ADD;SUB;MUL;Div;SDIV;Mod;SMOD;Exp;
-       AND;OR;XOR;SHL;SHR;SAR;SIGNEXTEND;BYTE;EQ;LT;GT;SLT;SGT;GEP]`
+       AND;OR;XOR;SHL;SHR;SAR;SIGNEXTEND;BYTE;EQ;LT;GT;SLT;SGT]`
        by simp[] >>
       drule_all step_inst_pure2_equiv >> simp[],
     `MEM inst.inst_opcode [NOT;ISZERO]` by simp[] >>

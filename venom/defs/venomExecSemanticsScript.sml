@@ -1,7 +1,7 @@
 (*
  * Venom Semantics
  *
- * Upstream: vyperlang/vyper@8780b3134 (alloca_id removal)
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  *
  * This theory defines the operational semantics for Venom IR execution.
  * It includes the effects system and instruction stepping.
@@ -759,9 +759,6 @@ Definition step_inst_base_def:
             if account_empty acct then 0w
             else word_of_bytes T (0w:bytes32)
                    (Keccak_256_w64 acct.code)) inst s
-
-    (* Allocation pointer arithmetic - GEP is base + offset, pure *)
-    | GEP => exec_pure2 word_add inst s
 
     (* Immutables - separate from memory, used during constructor *)
     | ILOAD => exec_read1

@@ -1,7 +1,7 @@
 (*
  * Fix Memory Locations Pass — Correctness Statement
  *
- * Replacing FREE_VAR_SPACE literals with pinned alloca+GEP preserves
+ * Replacing FREE_VAR_SPACE literals with pinned alloca+ADD preserves
  * function semantics modulo fresh temporary variables.
  *)
 
