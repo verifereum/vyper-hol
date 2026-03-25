@@ -15,7 +15,7 @@
  *   assign_target_no_return     : assign_target never returns ReturnException
  *   evaluate_no_return          : eval_expr and related never return ReturnException
  *   eval_base_target_type_connection : connects AST target type to runtime type
- *   IntCall (suspension)        : internal call type preservation (WIP)
+ *   IntCall                     : internal call type preservation (6 sub-proofs)
  *   set_immutable_well_typed    : set_immutable preserves state_well_typed + env_consistent
  *   set_global_well_typed       : set_global preserves state_well_typed + env_consistent
  *   write_storage_slot_well_typed : storage writes preserve state_well_typed + env_consistent
@@ -23,32 +23,42 @@
  *   (uses assign_subscripts_preserves_type from vyperAssignPreservesTypeTheory)
  *
  * PROOF STATUS:
- *   type_preservation: 14/47 cases proved, 33 cheated.
- *     Proved: 0-3 (Pass/Continue/Break/Return NONE), 10 (Assign),
- *             15-16 (eval_stmts), 21 (eval_targets []), 28 (eval_for []),
- *             30 (Name), 45-46 (eval_exprs)
+ *   type_preservation: 33 Resume blocks still cheated (out of 47 total).
+ *     Proved inline: Pass, Continue, Break, Return NONE,
+ *                    eval_stmts nil/cons, eval_targets nil, eval_for nil,
+ *                    eval_exprs nil, Name
+ *     Proved via Resume: ReturnSome, Raise1/2/3, IntCall (6 sub-proofs),
+ *                        eval_for cons, P8cons (eval_exprs cons), assign
+ *     Partial (trailing cheat): Subscript
  *
- * REMAINING CHEATS (33, ordered by risk):
+ * REMAINING CHEATS (33 Resume blocks + 1 helper, ordered by risk):
  *
- * --- HIGH RISK: complex control flow ---
- *   44: Call IntCall — function lookup, push/pop scope, bind_arguments,
- *       recursive eval_stmts, return value handling
- *   13: For — eval_iterator + eval_for with scope manipulation
- *   29: eval_for v::vs — new_variable, eval_stmts body, Continue/Break
+ * --- HIGHEST RISK: evaluate_builtin type preservation ---
+ *   39: Builtin — ~43 cases of evaluate_builtin, needs per-builtin
+ *       value_has_type lemma. System builtins (RawCall, RawLog, etc.) have
+ *       permissive typing (well_typed_builtin_app = T) — fundamental gap.
+ *   41: TypeBuiltin — evaluate_type_builtin (Empty, Convert, AbiDecode, etc.)
  *
- * --- MEDIUM RISK: need evaluate_type propagation (validates existential P7) ---
- *   37: Subscript — subscript_type_ok must preserve evaluate_type success
- *   38: Attribute — attribute_type_ok must preserve evaluate_type success
+ * --- HIGH RISK: external calls ---
+ *   43: Call ExtCall — needs evaluate_abi_decode_return to produce well-typed
+ *       values (ABI decode correctness)
+ *   42: Call Send — transfer_value state preservation
+ *
+ * --- MEDIUM RISK: decode/subscript/attribute ---
+ *   decode_value_well_typed (helper) — mutual induction over 5 decode fns,
+ *       currently cheated, used only by read_storage_slot_well_typed (unused)
+ *   37: Subscript — partial proof, trailing cheat needs value_has_type for
+ *       result after array index or storage read
+ *   38: Attribute — attribute access typing
  *   36: StructLit — struct type evaluation
  *
- * --- MEDIUM RISK: builtin/call operations ---
- *   39: Builtin — ~30 builtin ops, each needs value_has_type lemma
- *   40: Pop, 41: TypeBuiltin — array/type operations
- *   42: Call Send, 43: Call ExtCall — external interactions
+ * --- MEDIUM RISK: control flow ---
+ *   13: For — eval_iterator + scope manipulation
+ *   40: Pop — array pop typing
  *
- * --- LOW RISK: simple control flow (use IH directly) ---
- *   4: Return SOME, 5: Raise, 6: Assert, 7: Log, 14: Expr
- *   8: AnnAssign, 9: Append, 11: AugAssign, 12: If
+ * --- LOW RISK: simple stmt cases (follow Raise/ReturnSome pattern) ---
+ *   6: Assert1/2/3, 7: Log, 8: AnnAssign, 9: Append,
+ *   11: AugAssign, 12: If, 14: Expr
  *
  * --- LOW RISK: mechanical (read-only state preservation) ---
  *   17-18: eval_iterator (Array, Range)
@@ -439,7 +449,9 @@ QED
  *   Derived from type preservation.
  *)
 
-(* Phase 2: Operation-level helpers (TODO) *)
+(* Phase 2: Operation-level helpers
+ * Done: evaluate_literal_has_type, evaluate_builtin_bop_add_uint
+ * TODO: general evaluate_builtin type preservation (all ~43 cases) *)
 
 Theorem evaluate_literal_has_type:
   ∀ty l tv.
