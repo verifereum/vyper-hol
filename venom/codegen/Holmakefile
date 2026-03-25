@@ -1,0 +1,9 @@
+# Venom codegen correctness theorems
+# From codegen/ relative paths:
+#   defs/       = codegen definitions + asm interpreter + relations
+#   ../defs     = venom/defs (venomInst, venomState, venomExecSemantics)
+#   ../..       = project root (syntax/, semantics/)
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec \
+           defs ../defs ../passes/shared/defs \
+           ../analysis/liveness/defs ../analysis/cfg/defs \
+           ../analysis/dfg/defs ../../syntax ../../semantics
