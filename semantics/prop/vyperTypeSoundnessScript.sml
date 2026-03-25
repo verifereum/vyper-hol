@@ -512,6 +512,61 @@ QED
  * Needed for IntCall return path.
  *)
 
+(* Combined args + defaults typing: if args are well-typed (LIST_REL with vs)
+   and defaults are well-typed (LIST_REL with dflt_vs), and their expr_types
+   align with the parameter types, then all elements of vs ++ dflt_vs
+   satisfy the corresponding parameter types. *)
+Theorem args_dflts_typing_to_el:
+  !tenv (params: (string # type) list) args vs dflt_vs needed_dflts.
+    LIST_REL (\v e. ?tv. evaluate_type tenv (expr_type e) = SOME tv /\
+                         value_has_type tv v) vs args /\
+    LIST_REL (\v e. ?tv. evaluate_type tenv (expr_type e) = SOME tv /\
+                         value_has_type tv v) dflt_vs needed_dflts /\
+    MAP expr_type args = TAKE (LENGTH args) (MAP SND params) /\
+    MAP expr_type needed_dflts =
+      MAP SND (DROP (LENGTH args) params) /\
+    LENGTH args + LENGTH needed_dflts = LENGTH params ==>
+    !i tv. i < LENGTH params /\ i < LENGTH (vs ++ dflt_vs) /\
+           evaluate_type tenv (SND (EL i params)) = SOME tv ==>
+           value_has_type tv (EL i (vs ++ dflt_vs))
+Proof
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `LENGTH vs = LENGTH args` by
+    (qpat_x_assum `LIST_REL _ vs args` mp_tac >>
+     simp[listTheory.LIST_REL_EL_EQN]) >>
+  `LENGTH dflt_vs = LENGTH needed_dflts` by
+    (qpat_x_assum `LIST_REL _ dflt_vs needed_dflts` mp_tac >>
+     simp[listTheory.LIST_REL_EL_EQN]) >>
+  Cases_on `i < LENGTH args`
+  >- (
+    (* i < LENGTH args: use first LIST_REL *)
+    simp[rich_listTheory.EL_APPEND1] >>
+    qpat_x_assum `LIST_REL _ vs args` mp_tac >>
+    simp[listTheory.LIST_REL_EL_EQN] >> strip_tac >>
+    first_x_assum drule >> strip_tac >>
+    `expr_type (EL i args) = SND (EL i params)` by (
+      `EL i (MAP expr_type args) = EL i (TAKE (LENGTH args) (MAP SND params))` by
+        metis_tac[] >>
+      gvs[listTheory.EL_MAP, rich_listTheory.EL_TAKE]) >>
+    gvs[])
+  >- (
+    (* i >= LENGTH args: use second LIST_REL *)
+    `i >= LENGTH vs` by simp[] >>
+    `i - LENGTH vs < LENGTH dflt_vs` by DECIDE_TAC >>
+    simp[rich_listTheory.EL_APPEND2] >>
+    qpat_x_assum `LIST_REL _ dflt_vs needed_dflts` mp_tac >>
+    simp[listTheory.LIST_REL_EL_EQN] >> strip_tac >> gvs[] >>
+    `expr_type (EL (i - LENGTH vs) needed_dflts) = SND (EL i params)` by (
+      `EL (i - LENGTH args) (MAP expr_type needed_dflts) =
+       EL (i - LENGTH args) (MAP SND (DROP (LENGTH args) params))` by
+        metis_tac[] >>
+      gvs[listTheory.EL_MAP, listTheory.EL_DROP]) >>
+    first_x_assum (qspec_then `i - LENGTH args` mp_tac) >>
+    impl_tac >- simp[] >>
+    strip_tac >> gvs[])
+QED
+
 (* KEY LEMMA: bind_arguments on well-typed values produces a well-typed scope. *)
 Theorem bind_arguments_scope_well_typed:
   !tenv params vs sc.
@@ -2749,7 +2804,11 @@ Resume type_preservation[IntCall]:
   qpat_x_assum`!_. _`(fn th => mp_tac th >> CHANGED_TAC(simp_tac(srw_ss())[]))
   >> rpt(disch_then drule) >> simp_tac(srw_ss())[] >> strip_tac >>
   sg`∀res s. eval_exprs cxd needed_dflts s6 = (res, s) ==>
-             env_consistent env cx s ∧ state_well_typed s`
+             env_consistent env cx s ∧ state_well_typed s ∧
+             ∀dflt_vs. res = INL dflt_vs ⇒
+               LIST_REL (λv e. ∃tv.
+                 evaluate_type (get_tenv cx) (expr_type e) = SOME tv ∧
+                 value_has_type tv v) dflt_vs needed_dflts`
   >- (
     rpt gen_tac \\ strip_tac >>
     last_x_assum(qspec_then`ARB`kall_tac) >>
@@ -2778,6 +2837,7 @@ Resume type_preservation[IntCall]:
         \\ rw[]
         \\ irule env_consistent_empty )
       \\ simp[functions_well_typed_stk_irrelevant, Abbr`cxd`] )
+    \\ simp[Abbr`cxd`, get_tenv_stk_irrelevant]
     \\ rw[]
     \\ irule env_consistent_preserves_tv
     \\ goal_assum $ drule_at Any
@@ -2786,7 +2846,6 @@ Resume type_preservation[IntCall]:
       rpt gen_tac >>
       drule eval_exprs_preserves_immutables_addr_dom >>
       drule eval_exprs_preserves_immutables_dom >>
-      simp[Abbr`cxd`] >>
       rpt strip_tac >>
       first_x_assum(irule o iffRL) >>
       pop_assum mp_tac \\ CASE_TAC
@@ -2797,7 +2856,7 @@ Resume type_preservation[IntCall]:
     >> conj_tac >- (
       drule_then (irule o SYM) eval_exprs_preserves_scopes_dom ) >>
     drule (cj 9 eval_preserves_tv) >>
-    rw[preserves_tv_def, Abbr`cxd`]) >>
+    rw[preserves_tv_def]) >>
   reverse(disch_then strip_assume_tac)
   >- (
     (* eval_exprs cxd needed_dflts failed *)
@@ -2838,7 +2897,191 @@ Resume type_preservation[IntCall]:
        >> pop_assum mp_tac >> rw[push_function_def,return_def] ) >>
   first_x_assum drule >>
   rpt BasicProvers.VAR_EQ_TAC >>
-  cheat
+  strip_tac >>
+  `env_consistent env cx r ∧ state_well_typed r` by (
+    first_x_assum (qspecl_then [`INL dflt_vs`, `r`] mp_tac) >> simp[]) >>
+  gvs[push_function_def, return_def] >>
+  simp[finally_def, try_def, ignore_bind_apply] >>
+  BasicProvers.CASE_TAC >>
+  last_x_assum(qspec_then`ARB`kall_tac) >>
+  first_x_assum(drule_at Any) >>
+  simp[functions_well_typed_stk_irrelevant] >>
+  `get_module_code cx src_id_opt = SOME ts` by
+    gvs[lift_option_type_def, option_CASE_rator, AllCaseEqs(),
+        return_def, raise_def] >>
+  `lookup_callable_function cx.in_deploy fn ts = SOME (tup0,tup1,tup2,tup3,tup4)` by
+    gvs[lift_option_type_def, option_CASE_rator, AllCaseEqs(),
+        return_def, raise_def] >>
+  drule (iffLR functions_well_typed_def) >>
+  disch_then $ drule_then drule >>
+  disch_then (qspec_then `env.fn_sigs` mp_tac) >>
+  impl_tac >- gvs[env_consistent_def] >>
+  strip_tac >>
+  `bind_arguments (get_tenv cx) tup1 (vs ⧺ dflt_vs) = SOME x'` by
+    gvs[lift_option_type_def, option_CASE_rator, AllCaseEqs(),
+        return_def, raise_def] >>
+  `evaluate_type (get_tenv cx) tup3 = SOME x'³'` by
+    gvs[lift_option_type_def, option_CASE_rator, AllCaseEqs(),
+        return_def, raise_def] >>
+  `env_consistent env_body (cx with stk updated_by CONS (src_id_opt,fn))
+     (r with scopes := [x'])` by (
+    irule bind_arguments_env_consistent >>
+    simp[get_tenv_stk_irrelevant, fn_sigs_consistent_stk_irrelevant] >>
+    reverse conj_tac >- gvs[env_consistent_def] >>
+    goal_assum drule >>
+    goal_assum drule) >>
+  `state_well_typed (r with scopes := [x'])` by (
+    irule state_well_typed_with_scopes >>
+    gvs[state_well_typed_def] >>
+    irule bind_arguments_scope_well_typed >>
+    goal_assum $ drule_at Any >> rw[] >>
+    irule args_dflts_typing_to_el >>
+    simp[] >>
+    goal_assum $ drule_at(Pat`LIST_REL _ vs`) >>
+    goal_assum $ drule_at(Pat`LIST_REL _ dflt_vs`) >>
+    suspend "IntCall1") >>
+  suspend "IntCall2"
+QED
+
+Resume type_preservation[IntCall1]:
+  qexists_tac`tup1` >> gvs[] >>
+  `fn_sigs_consistent env.fn_sigs cx` by gvs[env_consistent_def] >>
+  gvs[fn_sigs_consistent_def] >>
+  first_x_assum drule_all >> strip_tac >> gvs[] >>
+  gvs[type_check_def, assert_def] >>
+  simp[listTheory.MAP_DROP] >>
+  rw[DROP_DROP_T] >>
+  AP_THM_TAC \\ AP_TERM_TAC >>
+  imp_res_tac eval_exprs_length >> gvs[] >>
+  `LENGTH dflts ≤ LENGTH params` suffices_by gvs[] >>
+  first_x_assum(mp_tac o Q.AP_TERM`LENGTH`) >>
+  simp[]
+QED
+
+Resume type_preservation[IntCall2]:
+  disch_then (qspecl_then [`env_body`, `tup3`] mp_tac) >>
+  simp[functions_well_typed_stk_irrelevant] >>
+  strip_tac >>
+  strip_tac >>
+  simp[pop_function_def, set_scopes_def, return_def, raise_def] >>
+  Cases_on `q` >> gvs[return_def]
+  >- (
+    (* q = INL (): body completed normally, rv = NoneV *)
+    gvs[handle_function_def, return_def, raise_def] >>
+    simp[lift_option_type_def, option_CASE_rator, return_def, raise_def] >>
+    gvs[pop_function_def, return_def, set_scopes_def, lift_option_type_def] >>
+    qmatch_asmsub_abbrev_tac`(option_CASE _ _ _) rst` >>
+    `state_well_typed rst` by
+      gvs[Abbr`rst`, state_well_typed_def] >>
+    `env_consistent env cx rst` by (
+      irule env_consistent_preserves_tv >>
+      goal_assum $ drule_at Any >>
+      simp[Abbr`rst`] >>
+      conj_tac >- suspend "IntCall3" >>
+      suspend "IntCall4"
+    ) >>
+    qpat_x_assum`_ = (res,_)`mp_tac >>
+    CASE_TAC >> gvs[return_def, raise_def]
+    >- (rw[] \\ rw[]) >>
+    strip_tac \\ rpt BasicProvers.VAR_EQ_TAC >>
+    simp[] >> rpt strip_tac >>
+    simp[expr_type_def] >>
+    suspend "IntCall66")
+  >- (
+    (* q = INR e: body raised exception *)
+    qmatch_asmsub_rename_tac`handle_function x rst` >>
+    gvs[pop_function_def, return_def, set_scopes_def, raise_def] >>
+    qabbrev_tac`rsr = rst with scopes := r.scopes` >>
+    `state_well_typed rsr` by
+      gvs[Abbr`rsr`, state_well_typed_def] >>
+    `env_consistent env cx rsr` by (
+      irule env_consistent_preserves_tv >>
+      goal_assum $ drule_at Any >>
+      simp[Abbr`rsr`] >>
+      conj_tac >- (
+        rpt gen_tac >> strip_tac >>
+        drule eval_stmts_preserves_immutables_addr_dom >>
+        simp[] >> strip_tac >>
+        drule eval_stmts_preserves_immutables_dom >>
+        simp[] >> strip_tac >>
+        Cases_on `ALOOKUP r.immutables cx.txn.target`
+        >- (
+          (* NONE: contradiction *)
+          first_x_assum (qspec_then `cx.txn.target` mp_tac) >> simp[] >>
+          strip_tac >>
+          gvs[get_source_immutables_def])
+        >- (
+          (* SOME x: use source biconditional *)
+          rename1 `ALOOKUP r.immutables cx.txn.target = SOME imms` >>
+          first_x_assum (qspec_then `cx.txn.target` mp_tac) >> simp[] >>
+          strip_tac >>
+          Cases_on `ALOOKUP rst.immutables cx.txn.target` >> gvs[])
+      ) >>
+      simp[preserves_tv_def] >>
+      drule (cj 2 eval_preserves_tv) >>
+      simp[preserves_tv_def]
+    ) >>
+    Cases_on `x` >> gvs[handle_function_def, return_def, raise_def] >>
+    gvs[lift_option_type_def] >>
+    Cases_on `safe_cast ret_tv v` >> gvs[return_def, raise_def] >>
+    rw[] >>
+    imp_res_tac materialise_state >> gvs[] >>
+    rw[expr_type_def] >>
+    suspend "IntCall6" )
+QED
+
+Resume type_preservation[IntCall6]:
+  `fn_sigs_consistent env.fn_sigs cx` by gvs[env_consistent_def] >>
+  gvs[fn_sigs_consistent_def] >>
+  first_x_assum drule >>
+  simp[] >> rw[] >> gvs[] >>
+  gvs[materialise_def, return_def] >>
+  irule safe_cast_preserves_well_typed >>
+  goal_assum drule >>
+  first_x_assum irule >>
+  rw[get_tenv_stk_irrelevant]
+QED
+
+Resume type_preservation[IntCall66]:
+  `fn_sigs_consistent env.fn_sigs cx` by gvs[env_consistent_def] >>
+  gvs[fn_sigs_consistent_def] >>
+  first_x_assum drule >>
+  simp[] >> rw[] >>
+  gvs[materialise_def, return_def] >>
+  irule safe_cast_preserves_well_typed >>
+  goal_assum drule >>
+  gvs[safe_cast_def] >>
+  gvs[AllCaseEqs()] >>
+  simp[value_has_type_def]
+QED
+
+Resume type_preservation[IntCall3]:
+  rpt gen_tac >> strip_tac >>
+  drule eval_stmts_preserves_immutables_addr_dom >>
+  simp[] >> strip_tac >>
+  drule eval_stmts_preserves_immutables_dom >>
+  simp[] >> strip_tac >>
+  Cases_on `ALOOKUP r.immutables cx.txn.target`
+  >- (
+    (* NONE: contradiction *)
+    first_x_assum (qspec_then `cx.txn.target` mp_tac) >> simp[] >>
+    strip_tac >>
+    gvs[get_source_immutables_def])
+  >- (
+    (* SOME x: use source biconditional *)
+    rename1 `ALOOKUP r.immutables cx.txn.target = SOME imms` >>
+    first_x_assum (qspec_then `cx.txn.target` mp_tac) >> simp[] >>
+    strip_tac >>
+    Cases_on `ALOOKUP r''.immutables cx.txn.target` >> gvs[] >>
+    rename1 `ALOOKUP r''.immutables cx.txn.target = SOME imms'` >>
+    first_x_assum (qspecl_then [`src`, `n`, `imms`, `imms'`] mp_tac) >>
+    simp[get_source_immutables_def])
+QED
+
+Resume type_preservation[IntCall4]:
+  simp[preserves_tv_def] >>
+  drule (cj 2 eval_preserves_tv) >>
+  simp[preserves_tv_def]
 QED
 
 Resume type_preservation[For]:
