@@ -8,7 +8,7 @@
 
 Theory assertElimCorrectness
 Ancestors
-  assertElimProofs
+  assertElimProofs venomWf
 
 Theorem assert_elim_function_correct:
   !fuel ctx fn s.
@@ -19,4 +19,18 @@ Theorem assert_elim_function_correct:
       (run_function fuel ctx (assert_elim_function fn) s)
 Proof
   ACCEPT_TAC assert_elim_function_correct_proof
+QED
+
+(* ===== Obligations ===== *)
+
+Theorem assert_elim_preserves_ssa_form:
+  ∀fn. ssa_form fn ⇒ ssa_form (assert_elim_function fn)
+Proof
+  cheat
+QED
+
+Theorem assert_elim_preserves_wf_function:
+  ∀fn. wf_function fn ⇒ wf_function (assert_elim_function fn)
+Proof
+  cheat
 QED

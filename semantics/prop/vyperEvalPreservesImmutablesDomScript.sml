@@ -1,6 +1,6 @@
 Theory vyperEvalPreservesImmutablesDom
 Ancestors
-  vyperMisc vyperAST vyperValue vyperContext vyperState vyperInterpreter
+  vyperMisc vyperAST vyperValue vyperContext vyperState vyperStorageBackend vyperInterpreter
   vyperLookup vyperScopePreservation vyperStatePreservation
   vyperAssignTarget vyperEvalExprPreservesScopesDom
   vyperImmutablesPreservation
@@ -1889,6 +1889,63 @@ Proof
   >- (drule_all case_Send_imm_dom >> simp[])
   >- (drule_all case_ExtCall_imm_dom >> simp[])
   >- (drule_all case_IntCall_imm_dom >> simp[])
+  (* ===== Chain interaction builtins (unguarded eval_exprs IH) ===== *)
+  (* All 5 cases: eval_exprs first, then pure/state ops that preserve immutables.
+     Pattern: unfold, case-split, apply IH via drule, close failure paths,
+     use transitivity + _eq for success path. *)
+  (* RawCallTarget *)
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
+           check_def, type_check_def, assert_def, lift_option_def, lift_option_type_def,
+           get_accounts_def, get_transient_storage_def, option_CASE_rator] >>
+      rpt strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
+      first_x_assum drule >> strip_tac >>
+      TRY (gvs[] >> NO_TAC) >>
+      pairarg_tac >>
+      gvs[update_accounts_def, update_transient_def, bind_def, ignore_bind_def,
+          return_def, raise_def, AllCaseEqs(), assert_def, COND_RATOR, CaseEq"bool"] >>
+      irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
+      irule preserves_immutables_dom_eq >> gvs[])
+  (* RawLog *)
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
+           check_def, type_check_def, assert_def, lift_option_def, lift_option_type_def,
+           push_log_def, option_CASE_rator] >>
+      rpt strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
+      first_x_assum drule >> strip_tac >>
+      TRY (gvs[] >> NO_TAC) >>
+      irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
+      irule preserves_immutables_dom_eq >> gvs[])
+  (* RawRevert *)
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
+           check_def, type_check_def, assert_def] >>
+      rpt strip_tac >> gvs[] >>
+      first_x_assum drule >> gvs[])
+  (* SelfDestructTarget *)
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
+           check_def, type_check_def, assert_def, lift_option_def, lift_option_type_def,
+           get_accounts_def, option_CASE_rator] >>
+      rpt strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
+      first_x_assum drule >> strip_tac >>
+      TRY (gvs[] >> NO_TAC) >>
+      imp_res_tac transfer_value_immutables >>
+      irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
+      irule preserves_immutables_dom_eq >> gvs[])
+  (* CreateTarget *)
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
+           check_def, type_check_def, assert_def, lift_option_def, lift_option_type_def,
+           get_accounts_def, update_accounts_def, option_CASE_rator, COND_RATOR] >>
+      rpt strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
+      first_x_assum drule >> strip_tac >>
+      TRY (gvs[] >> NO_TAC) >>
+      TRY (imp_res_tac transfer_value_immutables >>
+           irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
+           irule preserves_immutables_dom_eq >> gvs[] >> NO_TAC) >>
+      irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
+      irule preserves_immutables_dom_eq >> gvs[])
   >- gvs[evaluate_def, return_def, preserves_immutables_dom_refl]
   >- (drule_all case_eval_exprs_cons_imm_dom >> simp[])
 QED

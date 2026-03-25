@@ -1,6 +1,6 @@
 Theory singleUseExpansionCorrectness
 Ancestors
-  singleUseExpansionProofs
+  singleUseExpansionProofs venomWf
 
 Theorem sue_expand_function_correct:
   !fuel ctx fn s.
@@ -12,9 +12,23 @@ Proof
   ACCEPT_TAC sue_expand_function_correct_proof
 QED
 
-(* SingleUseExpansion establishes single_use_form *)
+(* ===== Obligations ===== *)
+
+(* SUE establishes single_use_form *)
 Theorem sue_establishes_single_use:
   !fn. single_use_form (sue_expand_function fn)
 Proof
   ACCEPT_TAC sue_establishes_single_use_form
+QED
+
+Theorem sue_preserves_ssa_form:
+  ∀fn. ssa_form fn ⇒ ssa_form (sue_expand_function fn)
+Proof
+  cheat
+QED
+
+Theorem sue_preserves_wf_function:
+  ∀fn. wf_function fn ⇒ wf_function (sue_expand_function fn)
+Proof
+  cheat
 QED

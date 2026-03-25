@@ -1,7 +1,8 @@
 Theory vyperLookupStorage
 
 Ancestors
-  vyperLookup vyperMisc vyperContext vyperState vyperStorage vyperInterpreter
+  vyperLookup vyperMisc vyperContext vyperState vyperStorage vyperStorageBackend
+  vyperInterpreter
   vyperValue vyperValueOperation vyperTyping vyperEncodeDecode
 Libs
   wordsLib
@@ -527,15 +528,6 @@ Proof
   simp[bind_def, return_def, lift_option_def]
 QED
 
-(* Helper: get_storage_backend always succeeds *)
-Theorem get_storage_backend_INL[local]:
-  ∀cx b st. ∃storage. get_storage_backend cx b st = (INL storage, st)
-Proof
-  rpt gen_tac >> Cases_on `b` >>
-  simp[get_storage_backend_def, get_accounts_def,
-       get_transient_storage_def, bind_def, return_def]
-QED
-
 (* Helper: extract slots_in_range from storage_var_in_range *)
 Theorem storage_var_in_range_slots[local]:
   ∀cx st mid n b offset tv storage.
@@ -628,46 +620,6 @@ Theorem storable_value_same_type:
     storable_value cx mid n v'
 Proof
   rw[storable_value_def]
-QED
-
-Theorem get_after_set_storage_backend[local]:
-  ∀cx is_transient storage' st.
-    get_storage_backend cx is_transient
-      (SND (set_storage_backend cx is_transient storage' st)) =
-    (INL storage', SND (set_storage_backend cx is_transient storage' st))
-Proof
-  Cases_on `is_transient` >>
-  rw[get_storage_backend_def, set_storage_backend_def,
-     bind_def, return_def, get_accounts_def, update_accounts_def,
-     get_transient_storage_def, update_transient_def,
-     vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def,
-     vfmExecutionTheory.lookup_transient_storage_def,
-     vfmExecutionTheory.update_transient_storage_def,
-     combinTheory.APPLY_UPDATE_THM]
-QED
-
-Theorem get_after_set_other_backend[local]:
-  ∀cx b1 b2 storage' st.
-    b1 ≠ b2 ⇒
-    FST (get_storage_backend cx b2
-      (SND (set_storage_backend cx b1 storage' st))) =
-    FST (get_storage_backend cx b2 st)
-Proof
-  Cases_on `b1` >> Cases_on `b2` >> gvs[] >>
-  simp[get_storage_backend_def, set_storage_backend_def,
-       bind_def, return_def, get_accounts_def, update_accounts_def,
-       get_transient_storage_def, update_transient_def,
-       vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def,
-       vfmExecutionTheory.lookup_transient_storage_def,
-       vfmExecutionTheory.update_transient_storage_def]
-QED
-
-Theorem get_storage_backend_INL[local]:
-  ∀cx b st. ∃storage. get_storage_backend cx b st = (INL storage, st)
-Proof
-  Cases_on `b` >>
-  simp[get_storage_backend_def, bind_def, return_def,
-       get_accounts_def, get_transient_storage_def]
 QED
 
 Theorem lookup_toplevel_name_after_update_core[local]:

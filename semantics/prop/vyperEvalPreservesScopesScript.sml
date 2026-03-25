@@ -633,6 +633,12 @@ Proof
   >- (drule eval_expr_preserves_scopes_dom >> gvs[])
   >- (drule eval_expr_preserves_scopes_dom >> gvs[])
   >- (drule eval_expr_preserves_scopes_dom >> gvs[])
+  (* chain interaction builtins *)
+  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
+  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
+  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
+  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
+  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
   >- (drule eval_exprs_preserves_scopes_dom >> gvs[])
   >- (drule eval_exprs_preserves_scopes_dom >> gvs[])
 QED

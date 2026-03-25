@@ -21,3 +21,17 @@ Theorem remove_unused_function_correct:
 Proof
   rpt strip_tac >> irule remove_unused_function_correct_proof >> simp[]
 QED
+
+(* ===== Obligations ===== *)
+
+Theorem remove_unused_preserves_ssa_form:
+  ∀fn. ssa_form fn ⇒ ssa_form (remove_unused_function fn)
+Proof
+  cheat
+QED
+
+Theorem remove_unused_preserves_wf_function:
+  ∀fn. wf_function fn ⇒ wf_function (remove_unused_function fn)
+Proof
+  cheat
+QED

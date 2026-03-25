@@ -7,7 +7,7 @@
 
 Theory literalsCodesizeCorrectness
 Ancestors
-  literalsCodesizeProofs
+  literalsCodesizeProofs venomWf
 
 Theorem lit_codesize_function_correct:
   !fuel ctx fn s.
@@ -16,4 +16,18 @@ Theorem lit_codesize_function_correct:
       (run_function fuel ctx (lit_codesize_function fn) s)
 Proof
   ACCEPT_TAC lit_codesize_function_correct_proof
+QED
+
+(* ===== Obligations ===== *)
+
+Theorem lit_codesize_preserves_ssa_form:
+  ∀fn. ssa_form fn ⇒ ssa_form (lit_codesize_function fn)
+Proof
+  cheat
+QED
+
+Theorem lit_codesize_preserves_wf_function:
+  ∀fn. wf_function fn ⇒ wf_function (lit_codesize_function fn)
+Proof
+  cheat
 QED

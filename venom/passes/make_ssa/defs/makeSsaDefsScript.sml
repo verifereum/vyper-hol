@@ -448,7 +448,8 @@ Definition make_ssa_fn_def:
         let bbs3 = remove_degenerate_phis bbs2 in
         (* 4. Ensure PHIs are at top of blocks *)
         let bbs4 = ensure_well_formed bbs3 in
-        func with fn_blocks := bbs4
+        (* 5. Deduplicate instruction IDs (PHIs were inserted with id=0) *)
+        renumber_fn_inst_ids (func with fn_blocks := bbs4)
 End
 
 (* Transform all functions in context.
