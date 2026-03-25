@@ -1,6 +1,6 @@
 Theory branchOptCorrectness
 Ancestors
-  branchOptProofs
+  branchOptProofs venomWf
 
 Theorem branch_opt_function_correct:
   !fuel ctx live_at fn s.
@@ -10,4 +10,18 @@ Theorem branch_opt_function_correct:
       (run_function fuel ctx (branch_opt_function live_at fn) s)
 Proof
   ACCEPT_TAC branch_opt_function_correct_proof
+QED
+
+(* ===== Obligations ===== *)
+
+Theorem branch_opt_preserves_ssa_form:
+  ∀fn live_at. ssa_form fn ⇒ ssa_form (branch_opt_function live_at fn)
+Proof
+  cheat
+QED
+
+Theorem branch_opt_preserves_wf_function:
+  ∀fn live_at. wf_function fn ⇒ wf_function (branch_opt_function live_at fn)
+Proof
+  cheat
 QED

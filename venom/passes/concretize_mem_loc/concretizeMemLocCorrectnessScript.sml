@@ -25,3 +25,17 @@ Theorem concretize_function_correct:
 Proof
   ACCEPT_TAC concretize_function_correct_proof
 QED
+
+(* ===== Obligations ===== *)
+
+Theorem concretize_preserves_ssa_form:
+  ∀amap fn. ssa_form fn ⇒ ssa_form (concretize_function amap fn)
+Proof
+  cheat
+QED
+
+Theorem concretize_preserves_wf_function:
+  ∀amap fn. wf_function fn ⇒ wf_function (concretize_function amap fn)
+Proof
+  cheat
+QED

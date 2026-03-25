@@ -1,6 +1,6 @@
 Theory algebraicOptCorrectness
 Ancestors
-  algebraicOptProofs
+  algebraicOptProofs venomWf
 
 (* Algebraic optimization preserves function execution semantics:
    running a function before and after the transform produces
@@ -12,4 +12,18 @@ Theorem ao_transform_function_correct:
       (run_function fuel ctx (ao_transform_function fn) s)
 Proof
   ACCEPT_TAC ao_transform_function_correct_proof
+QED
+
+(* ===== Obligations ===== *)
+
+Theorem ao_preserves_ssa_form:
+  ∀fn. ssa_form fn ⇒ ssa_form (ao_transform_function fn)
+Proof
+  cheat
+QED
+
+Theorem ao_preserves_wf_function:
+  ∀fn. wf_function fn ⇒ wf_function (ao_transform_function fn)
+Proof
+  cheat
 QED

@@ -51,3 +51,17 @@ Theorem assign_elim_function_correct:
 Proof
   ACCEPT_TAC assign_elim_function_correct_proof
 QED
+
+(* ===== Obligations ===== *)
+
+Theorem assign_elim_preserves_ssa_form:
+  ∀fn. ssa_form fn ⇒ ssa_form (assign_elim_function fn)
+Proof
+  cheat
+QED
+
+Theorem assign_elim_preserves_wf_function:
+  ∀fn. wf_function fn ⇒ wf_function (assign_elim_function fn)
+Proof
+  cheat
+QED

@@ -23,3 +23,17 @@ Theorem sccp_function_correct:
 Proof
   ACCEPT_TAC sccp_function_correct_proof
 QED
+
+(* ===== Obligations ===== *)
+
+Theorem sccp_preserves_ssa_form:
+  ∀fn fn'. ssa_form fn ∧ sccp_function fn = SOME fn' ⇒ ssa_form fn'
+Proof
+  cheat
+QED
+
+Theorem sccp_preserves_wf_function:
+  ∀fn fn'. wf_function fn ∧ sccp_function fn = SOME fn' ⇒ wf_function fn'
+Proof
+  cheat
+QED

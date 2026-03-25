@@ -7,7 +7,7 @@
 
 Theory memoryCopyElisionCorrectness
 Ancestors
-  memoryCopyElisionProofs
+  memoryCopyElisionProofs venomWf
 
 Theorem copy_elision_function_correct:
   !fuel ctx fn s.
@@ -18,4 +18,18 @@ Theorem copy_elision_function_correct:
       (run_function fuel ctx (copy_elision_function ctx fn) s)
 Proof
   ACCEPT_TAC copy_elision_function_correct_proof
+QED
+
+(* ===== Obligations ===== *)
+
+Theorem copy_elision_preserves_ssa_form:
+  ∀ctx fn. ssa_form fn ⇒ ssa_form (copy_elision_function ctx fn)
+Proof
+  cheat
+QED
+
+Theorem copy_elision_preserves_wf_function:
+  ∀ctx fn. wf_function fn ⇒ wf_function (copy_elision_function ctx fn)
+Proof
+  cheat
 QED

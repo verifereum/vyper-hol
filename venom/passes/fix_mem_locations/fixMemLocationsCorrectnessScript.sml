@@ -7,7 +7,7 @@
 
 Theory fixMemLocationsCorrectness
 Ancestors
-  fixMemLocationsProofs
+  fixMemLocationsProofs venomWf
 
 Theorem fix_mem_function_correct:
   !fuel ctx fn s.
@@ -17,4 +17,18 @@ Theorem fix_mem_function_correct:
       (run_function fuel ctx (fix_mem_function fn) s)
 Proof
   ACCEPT_TAC fix_mem_function_correct_proof
+QED
+
+(* ===== Obligations ===== *)
+
+Theorem fix_mem_preserves_ssa_form:
+  ∀fn. ssa_form fn ⇒ ssa_form (fix_mem_function fn)
+Proof
+  cheat
+QED
+
+Theorem fix_mem_preserves_wf_function:
+  ∀fn. wf_function fn ⇒ wf_function (fix_mem_function fn)
+Proof
+  cheat
 QED
