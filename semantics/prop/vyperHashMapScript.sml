@@ -62,7 +62,7 @@ End
 
 (* ===== Ref-level: predicates ===== *)
 
-Definition is_leaf_hashmap_ref_def[simp]:
+Definition is_leaf_hashmap_ref_def:
   is_leaf_hashmap_ref cx (HashMapRef _ _ _ (Type t)) =
     (case evaluate_type (get_tenv cx) t of
      | SOME tv => well_formed_type_value tv
@@ -129,8 +129,9 @@ Theorem read_hashmap_after_write_same:
     hashmap_ref_storable cx href v ⇒
     read_hashmap cx (write_hashmap cx st href kv v) href kv = SOME v
 Proof
-  rpt gen_tac \\ Cases_on `href` \\ simp[]
-  \\ rename1 `HashMapRef _ _ _ vt` \\ Cases_on `vt` \\ simp[]
+  rpt gen_tac \\ Cases_on `href` \\ simp[is_leaf_hashmap_ref_def]
+  \\ rename1 `HashMapRef _ _ _ vt` \\ Cases_on `vt`
+  \\ simp[is_leaf_hashmap_ref_def]
   \\ simp[write_hashmap_def, read_hashmap_def, hashmap_ref_storable_def,
           AllCaseEqs()]
   \\ CASE_TAC \\ simp[] \\ rpt strip_tac
@@ -149,8 +150,9 @@ Theorem read_hashmap_after_write_other:
     read_hashmap cx (write_hashmap cx st href kv1 v) href kv2 =
       read_hashmap cx st href kv2
 Proof
-  rpt gen_tac \\ Cases_on `href` \\ simp[]
-  \\ rename1 `HashMapRef _ _ _ vt` \\ Cases_on `vt` \\ simp[]
+  rpt gen_tac \\ Cases_on `href` \\ simp[is_leaf_hashmap_ref_def]
+  \\ rename1 `HashMapRef _ _ _ vt` \\ Cases_on `vt`
+  \\ simp[is_leaf_hashmap_ref_def]
   \\ simp[write_hashmap_def, read_hashmap_def, hashmap_ref_storable_def,
           hashmap_ref_no_collision_def, hashmap_ref_distinct_keys_def,
           AllCaseEqs()]
