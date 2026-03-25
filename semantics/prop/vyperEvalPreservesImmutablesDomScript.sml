@@ -318,6 +318,58 @@ Proof
   Cases_on `exc` >> simp[handle_function_def, return_def, raise_def]
 QED
 
+Theorem acquire_nonreentrant_lock_immutables[local]:
+  ∀addr slot is_view st res st'.
+    acquire_nonreentrant_lock addr slot is_view st = (res, st') ⇒
+    st'.immutables = st.immutables
+Proof
+  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
+     get_transient_storage_def, update_transient_def,
+     return_def, raise_def, LET_THM]
+  \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]
+QED
+
+Theorem release_nonreentrant_lock_immutables[local]:
+  ∀addr slot st res st'.
+    release_nonreentrant_lock addr slot st = (res, st') ⇒
+    st'.immutables = st.immutables
+Proof
+  rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
+     get_transient_storage_def, update_transient_def,
+     return_def, raise_def, LET_THM]
+  \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]
+QED
+
+Theorem lock_acquire_cond_immutables[local]:
+  ∀nr slot_opt addr is_view s res s'.
+    (if nr then
+       case slot_opt of
+         NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock addr slot is_view
+     else return ()) s = (res, s') ⇒
+    s'.immutables = s.immutables
+Proof
+  rpt gen_tac \\ strip_tac
+  \\ Cases_on `nr` \\ gvs[return_def]
+  \\ Cases_on `slot_opt` \\ gvs[raise_def]
+  \\ imp_res_tac acquire_nonreentrant_lock_immutables
+QED
+
+Theorem finally_lock_release_immutables[local]:
+  ∀nr mut slot_opt addr s res s'.
+    (if nr ∧ mut ≠ View ∧ mut ≠ Pure then
+       case slot_opt of
+         NONE => return ()
+       | SOME slot => release_nonreentrant_lock addr slot
+     else return ()) s = (res, s') ⇒
+    s'.immutables = s.immutables
+Proof
+  rpt gen_tac \\ strip_tac
+  \\ Cases_on `nr ∧ mut ≠ View ∧ mut ≠ Pure` \\ gvs[return_def]
+  \\ Cases_on `slot_opt` \\ gvs[return_def]
+  \\ imp_res_tac release_nonreentrant_lock_immutables
+QED
+
 Theorem preserves_immutables_dom_txn_eq[local]:
   ∀cx cx' st st'.
     cx'.txn = cx.txn ⇒
@@ -1614,27 +1666,29 @@ QED
 Theorem case_IntCall_imm_dom[local]:
   ∀cx src_id_opt fn es vs st res st'.
   eval_expr cx (Call _ (IntCall (src_id_opt,fn)) es vs) st = (res,st') ⇒
-  (∀s'' x t s'³' ts t' s'⁴' tup t'' stup args sstup dflts sstup2 ret body' s'⁵'
-      x' t'³'.
+  (∀s'' x t s'³' ts t' s'⁴' tup t'' mut stup nr stup2 args sstup dflts sstup2 ret
+      body' s'⁵' x' t'³'.
     check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s'³' =
     (INL ts,t') ∧
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
-      "IntCall lookup_function" s'⁴' = (INL tup,t'') ∧ stup = SND tup ∧
-    args = FST stup ∧ sstup = SND stup ∧ dflts = FST sstup ∧
+      "IntCall lookup_function" s'⁴' = (INL tup,t'') ∧ mut = FST tup ∧
+    stup = SND tup ∧ (nr ⇔ FST stup) ∧ stup2 = SND stup ∧
+    args = FST stup2 ∧ sstup = SND stup2 ∧ dflts = FST sstup ∧
     sstup2 = SND sstup ∧ ret = FST sstup2 ∧ body' = SND sstup2 ∧
     type_check (LENGTH es ≤ LENGTH args ∧ LENGTH args − LENGTH es ≤ LENGTH dflts)
       "IntCall args length" s'⁵' = (INL x',t'³') ⇒
     ∀st res st'.
       eval_exprs cx es st = (res,st') ⇒ preserves_immutables_dom cx st st') ⇒
-  (∀s'' x t s'³' ts t' s'⁴' tup t'' stup args sstup dflts sstup2 ret body' s'⁵'
-      x' t'³' s'⁶' vs t'⁴' es' cx'.
+  (∀s'' x t s'³' ts t' s'⁴' tup t'' mut stup nr stup2 args sstup dflts sstup2 ret
+      body' s'⁵' x' t'³' s'⁶' vs t'⁴' es' cx'.
     check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s'³' =
     (INL ts,t') ∧
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
-      "IntCall lookup_function" s'⁴' = (INL tup,t'') ∧ stup = SND tup ∧
-    args = FST stup ∧ sstup = SND stup ∧ dflts = FST sstup ∧
+      "IntCall lookup_function" s'⁴' = (INL tup,t'') ∧ mut = FST tup ∧
+    stup = SND tup ∧ (nr ⇔ FST stup) ∧ stup2 = SND stup ∧
+    args = FST stup2 ∧ sstup = SND stup2 ∧ dflts = FST sstup ∧
     sstup2 = SND sstup ∧ ret = FST sstup2 ∧ body' = SND sstup2 ∧
     type_check (LENGTH es ≤ LENGTH args ∧ LENGTH args − LENGTH es ≤ LENGTH dflts)
       "IntCall args length" s'⁵' = (INL x',t'³') ∧
@@ -1643,15 +1697,17 @@ Theorem case_IntCall_imm_dom[local]:
     cx' = cx with stk updated_by CONS (src_id_opt,fn) ⇒
     ∀st res st'.
       eval_exprs cx' es' st = (res,st') ⇒ preserves_immutables_dom cx' st st') ⇒
-  (∀s'' x t s'³' ts t' s'⁴' tup t'' stup args sstup dflts sstup2 ret ss s'⁵' x'
-      t'³' s'⁶' vs t'⁴' needed_dflts cxd s'⁷' dflt_vs t'⁵' all_tenv s'⁸' env
-      t'⁶' s'⁹' prev t'⁷' s'¹⁰' rtv t'⁸' s'¹¹' cx' t'⁹'.
+  (∀s'' x t s'³' ts t' s'⁴' tup t'' mut stup nr stup2 args sstup dflts sstup2 ret
+      ss s'⁵' x' t'³' s'⁶' vs t'⁴' needed_dflts cxd s'⁷' dflt_vs t'⁵'
+      all_tenv s'⁸' env t'⁶' s'⁹' prev t'⁷' s'¹⁰' rtv t'⁸' is_view s'¹¹' lk t'⁹'
+      s'¹²' cx' t'¹⁰'.
     check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s'³' =
     (INL ts,t') ∧
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
-      "IntCall lookup_function" s'⁴' = (INL tup,t'') ∧ stup = SND tup ∧
-    args = FST stup ∧ sstup = SND stup ∧ dflts = FST sstup ∧
+      "IntCall lookup_function" s'⁴' = (INL tup,t'') ∧ mut = FST tup ∧
+    stup = SND tup ∧ (nr ⇔ FST stup) ∧ stup2 = SND stup ∧
+    args = FST stup2 ∧ sstup = SND stup2 ∧ dflts = FST sstup ∧
     sstup2 = SND sstup ∧ ret = FST sstup2 ∧ ss = SND sstup2 ∧
     type_check (LENGTH es ≤ LENGTH args ∧ LENGTH args − LENGTH es ≤ LENGTH dflts)
       "IntCall args length" s'⁵' = (INL x',t'³') ∧
@@ -1664,8 +1720,14 @@ Theorem case_IntCall_imm_dom[local]:
       "IntCall bind_arguments" s'⁸' = (INL env,t'⁶') ∧
     get_scopes s'⁹' = (INL prev,t'⁷') ∧
     lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret" s'¹⁰' =
-    (INL rtv,t'⁸') ∧
-    push_function (src_id_opt,fn) env cx s'¹¹' = (INL cx',t'⁹') ⇒
+    (INL rtv,t'⁸') ∧ (is_view ⇔ mut = View ∨ mut = Pure) ∧
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot =>
+         acquire_nonreentrant_lock cx.txn.target slot is_view
+     else return ()) s'¹¹' = (INL lk,t'⁹') ∧
+    push_function (src_id_opt,fn) env cx s'¹²' = (INL cx',t'¹⁰') ⇒
     ∀st res st'.
       eval_stmts cx' ss st = (res,st') ⇒ preserves_immutables_dom cx' st st') ⇒
   preserves_immutables_dom cx st st'
@@ -1742,7 +1804,23 @@ Proof
   \\ reverse BasicProvers.TOP_CASE_TAC
   >- (rpt(last_x_assum(qspec_then`ARB`kall_tac))
       \\ strip_tac \\ gvs[get_scopes_def, return_def])
-  \\ first_x_assum $ drule_then drule
+  (* Peel lock_acquire *)
+  \\ rewrite_tac[bind_def, ignore_bind_def, COND_RATOR]
+  \\ BasicProvers.TOP_CASE_TAC
+  \\ reverse BasicProvers.TOP_CASE_TAC
+  >- (rpt(last_x_assum(qspec_then`ARB`kall_tac))
+      \\ strip_tac \\ gvs[get_scopes_def, return_def]
+      \\ Cases_on `FST (SND x'')` \\ gvs[return_def]
+      \\ Cases_on `cx.nonreentrant_slot` \\ gvs[raise_def]
+      \\ imp_res_tac acquire_nonreentrant_lock_immutables
+      \\ irule preserves_immutables_dom_trans
+      \\ first_assum (irule_at Any)
+      \\ irule preserves_immutables_dom_eq \\ gvs[])
+  (* Lock succeeded — undo COND_RATOR so lock assumption matches IH form *)
+  \\ qpat_x_assum `(if _ then _ else _) = _`
+       (assume_tac o ONCE_REWRITE_RULE [GSYM COND_RATOR])
+  (* match IH3: get_scopes, evaluate_type, lock *)
+  \\ first_x_assum $ funpow 2 drule_then drule
   \\ simp[bind_def, push_function_def, return_def, finally_def, try_def]
   \\ CASE_TAC
   \\ disch_then drule
@@ -1756,7 +1834,10 @@ Proof
         return_def, ignore_bind_def]
     \\ imp_res_tac lift_option_same_state >> imp_res_tac lift_option_type_same_state
     \\ imp_res_tac handle_function_immutables
-    \\ gvs[raise_def] )
+    \\ imp_res_tac release_nonreentrant_lock_immutables
+    \\ imp_res_tac finally_lock_release_immutables
+    \\ gvs[raise_def, return_def]
+    \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[return_def]) )
   \\ gvs[get_scopes_def, return_def]
   \\ irule preserves_immutables_dom_trans
   \\ goal_assum drule
@@ -1770,6 +1851,7 @@ Proof
   \\ irule preserves_immutables_dom_trans
   \\ goal_assum $ drule_at Any
   \\ rw[preserves_immutables_dom_def]
+  \\ imp_res_tac lock_acquire_cond_immutables
   \\ gvs[]
 QED
 
