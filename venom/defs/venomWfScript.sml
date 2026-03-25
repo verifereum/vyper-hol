@@ -255,7 +255,9 @@ End
 (* Every variable use is dominated by its definition.
    Standard SSA property: if instruction inst in block bb uses Var v,
    then v is defined by some instruction in some block def_bb, and
-   def_bb dominates bb. *)
+   def_bb dominates bb.  When def and use are in the same block, the
+   def must appear at a strictly earlier index (intra-block ordering).
+   This is the standard formulation: "every def reaches its use." *)
 Definition def_dominates_uses_def:
   def_dominates_uses fn <=>
     !bb inst v.
@@ -266,7 +268,11 @@ Definition def_dominates_uses_def:
         MEM def_bb fn.fn_blocks /\
         MEM def_inst def_bb.bb_instructions /\
         MEM v def_inst.inst_outputs /\
-        fn_dominates fn def_bb.bb_label bb.bb_label
+        fn_dominates fn def_bb.bb_label bb.bb_label /\
+        (def_bb = bb ==>
+          ?i j. i < j /\ j < LENGTH bb.bb_instructions /\
+                EL i bb.bb_instructions = def_inst /\
+                EL j bb.bb_instructions = inst)
 End
 
 (* Well-formed SSA: unique definitions AND definitions dominate uses. *)
