@@ -65,7 +65,7 @@ Proof
     qexists_tac `func` >> simp[]) >>
   conj_tac >- simp[transform_function_def] >>
   simp[transform_function_is_function_map_transform] >>
-  irule block_sim_function_reachable >>
+  irule block_sim_function_pointwise_reachable >>
   simp[state_equiv_execution_equiv_valid_state_rel, transform_block_label,
        state_equiv_def, execution_equiv_def] >>
   (* Per-block simulation — only remaining goal *)
