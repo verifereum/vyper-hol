@@ -1065,6 +1065,104 @@ Definition evaluate_def:
     crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
     return $ Value crv
   od ∧
+  (* ===== Chain interaction builtins ===== *)
+  (* raw_call(to, data, max_outsize=0, value=0, is_delegate_call=F, is_static_call=F, revert_on_failure=T)
+     args = [to_addr; data_bytes; value] *)
+  eval_expr cx (Call ty (RawCallTarget flags) es _) = do
+    vs <- eval_exprs cx es;
+    check (LENGTH vs = 3) "raw_call args";
+    target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "raw_call target";
+    calldata <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_call data";
+    amount <- lift_option_type (dest_NumV (EL 2 vs)) "raw_call value";
+    value_opt <<- if flags.rcf_is_static then NONE else SOME amount;
+    (* delegate_call not yet supported in semantics *)
+    check (¬flags.rcf_is_delegate) "raw_call delegate unsupported";
+    accounts <- get_accounts;
+    tStorage <- get_transient_storage;
+    txParams <<- vyper_to_tx_params cx.txn;
+    caller <<- cx.txn.target;
+    result <- lift_option
+      (run_ext_call caller target_addr calldata value_opt accounts tStorage txParams)
+      "raw_call run failed";
+    (success, returnData, accounts', tStorage') <<- result;
+    update_accounts (K accounts');
+    update_transient (K tStorage');
+    if flags.rcf_revert_on_failure then do
+      check success "raw_call reverted";
+      if flags.rcf_max_outsize = 0 then return $ Value NoneV
+      else return $ Value $ BytesV (TAKE flags.rcf_max_outsize returnData)
+    od else
+      if flags.rcf_max_outsize = 0 then return $ Value $ BoolV success
+      else return $ Value $ ArrayV $ TupleV [BoolV success;
+             BytesV (TAKE flags.rcf_max_outsize returnData)]
+  od ∧
+  (* raw_log(topics_list, data)
+     args = [topics_array; data_bytes] *)
+  eval_expr cx (Call _ RawLog es _) = do
+    vs <- eval_exprs cx es;
+    check (LENGTH vs = 2) "raw_log args";
+    topics <- lift_option_type (dest_ArrayV (EL 0 vs)) "raw_log topics";
+    data <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_log data";
+    topic_vals <<- (case topics of
+       TupleV vs => vs | DynArrayV vs => vs | _ => []);
+    check (LENGTH topic_vals ≤ 4) "raw_log too many topics";
+    (* Store as raw log: nsid = (NONE,"raw_log"), values = topic bytes ++ [data] *)
+    push_log ((NONE,"raw_log"), topic_vals ++ [BytesV data]);
+    return $ Value NoneV
+  od ∧
+  (* raw_revert(data) — terminus *)
+  eval_expr cx (Call _ RawRevert es _) = do
+    vs <- eval_exprs cx es;
+    check (LENGTH vs = 1) "raw_revert args";
+    raise $ Error $ RuntimeError "raw_revert"
+  od ∧
+  (* selfdestruct(to) — terminus *)
+  eval_expr cx (Call _ SelfDestructTarget es _) = do
+    vs <- eval_exprs cx es;
+    check (LENGTH vs = 1) "selfdestruct args";
+    target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "selfdestruct target";
+    accounts <- get_accounts;
+    self_acct <<- lookup_account cx.txn.target accounts;
+    balance <<- self_acct.balance;
+    (* Transfer all balance to target *)
+    transfer_value cx.txn.target target_addr balance;
+    (* Zero out sender balance (handled by transfer_value if target ≠ self) *)
+    (* Note: post-Cancun, selfdestruct only sends balance, does not delete account
+       unless in same transaction as creation. We model the simple case. *)
+    return $ Value NoneV
+  od ∧
+  (* create_*(target, *ctor_args, value=0, ...)
+     At the semantic level, we model CREATE as an oracle: given initcode + value,
+     it returns a new address. We use Verifereum's run_create infrastructure.
+     args = [target_or_bytecode; ctor_arg1; ...; ctor_argN; value]
+     For simplicity, we model all create variants identically:
+     the initcode construction differences are codegen-level concerns. *)
+  eval_expr cx (Call ty (CreateTarget kind rof) es _) = do
+    vs <- eval_exprs cx es;
+    check (vs ≠ []) "create no args";
+    (* Last arg is value *)
+    amount <- lift_option_type (dest_NumV (LAST vs)) "create value";
+    (* For now, model create as an opaque operation that transfers value
+       and returns a fresh address. The actual initcode construction
+       (minimal proxy bytecode, extcodecopy, blueprint extraction)
+       happens at the codegen/Venom level. *)
+    target_addr <- lift_option_type (dest_AddressV (HD vs)) "create target";
+    accounts <- get_accounts;
+    self_acct <<- lookup_account cx.txn.target accounts;
+    check (amount ≤ self_acct.balance) "create insufficient balance";
+    (* Use Verifereum's address_for_create with sender's nonce *)
+    new_addr <<- vfmContext$address_for_create cx.txn.target self_acct.nonce;
+    (* Transfer value from self to new contract *)
+    if amount > 0 then
+      transfer_value cx.txn.target new_addr amount
+    else return ();
+    (* Increment sender nonce *)
+    update_accounts (vfmExecution$increment_nonce cx.txn.target);
+    if rof then
+      return $ Value $ AddressV new_addr
+    else
+      return $ Value $ AddressV new_addr
+  od ∧
   eval_exprs cx [] = return [] ∧
   eval_exprs cx (e::es) = do
     tv <- eval_expr cx e;
