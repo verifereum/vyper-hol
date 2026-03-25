@@ -25,9 +25,9 @@
 
 Theory vyperHashMap
 Ancestors
-  vyperHashMapStorage vyperLookupStorage vyperState
+  vyperHashMapStorage vyperLookupStorage vyperState vyperArith
 Libs
-  wordsLib
+  wordsLib wordsTheory integerTheory integer_wordTheory
 
 (* ===== Non-monadic storage accessors ===== *)
 
@@ -158,6 +158,59 @@ Proof
   \\ CASE_TAC \\ gvs[get_storage_after_set]
   \\ drule_all no_hashmap_collision_imp \\ strip_tac
   \\ drule_all hashmap_read_after_write_other \\ simp[]
+QED
+
+(* ===== Key typing and distinct-key derivation ===== *)
+
+Definition hashmap_key_typed_def:
+  hashmap_key_typed (BaseT (UintT n)) (IntV i) = (n ≤ 256 ∧ 0 ≤ i ∧ Num i < 2 ** n) ∧
+  hashmap_key_typed (BaseT (IntT n)) (IntV i) = (n ≤ 256 ∧ within_int_bound (Signed n) i) ∧
+  hashmap_key_typed (BaseT BoolT) (BoolV _) = T ∧
+  hashmap_key_typed (FlagT _) (FlagV k) = (k < dimword (:256)) ∧
+  hashmap_key_typed _ _ = F
+End
+
+Theorem encode_hashmap_key_typed_inj:
+  ∀kt kv1 kv2.
+    hashmap_key_typed kt kv1 ∧ hashmap_key_typed kt kv2 ∧ kv1 ≠ kv2 ⇒
+    encode_hashmap_key kt kv1 ≠ encode_hashmap_key kt kv2
+Proof
+  rpt gen_tac \\ strip_tac
+  \\ Cases_on `kt` \\ gvs[hashmap_key_typed_def]
+  \\ TRY (rename1 `BaseT bt` \\ Cases_on `bt` \\ gvs[hashmap_key_typed_def])
+  \\ Cases_on `kv1` \\ Cases_on `kv2` \\ gvs[hashmap_key_typed_def]
+  (* UintT: i2w injectivity for non-negative integers *)
+  >- (spose_not_then strip_assume_tac
+      \\ `i = &(Num i) ∧ i' = &(Num i')` by fs[INT_OF_NUM]
+      \\ ntac 2 (pop_assum (SUBST_ALL_TAC))
+      \\ gvs[i2w_pos, n2w_11, dimword_def, INT_OF_NUM_EQ]
+      \\ `Num i < 2 ** 256 ∧ Num i' < 2 ** 256` by
+           (conj_tac \\ irule arithmeticTheory.LESS_LESS_EQ_TRANS
+            \\ qexists_tac `2 ** n`
+            \\ simp[arithmeticTheory.EXP_BASE_LE_MONO])
+      \\ fs[arithmeticTheory.LESS_MOD])
+  (* IntT: i2w injectivity for signed integers via w2i *)
+  >- (spose_not_then strip_assume_tac
+      \\ `INT_MIN (:256) ≤ i ∧ i ≤ INT_MAX (:256)` by
+           (irule within_int_bound_in_word_range
+            \\ qexists_tac `n` \\ simp[])
+      \\ `INT_MIN (:256) ≤ i' ∧ i' ≤ INT_MAX (:256)` by
+           (irule within_int_bound_in_word_range
+            \\ qexists_tac `n` \\ simp[])
+      \\ `w2i (i2w i : 256 word) = i` by (irule w2i_i2w \\ simp[])
+      \\ `w2i (i2w i' : 256 word) = i'` by (irule w2i_i2w \\ simp[])
+      \\ gvs[])
+  (* BoolT: trivial *)
+  >- (Cases_on `b` \\ Cases_on `b'` \\ gvs[])
+QED
+
+Theorem hashmap_ref_distinct_keys_typed:
+  ∀is_t bslot kt vt kv1 kv2.
+    hashmap_key_typed kt kv1 ∧ hashmap_key_typed kt kv2 ∧ kv1 ≠ kv2 ⇒
+    hashmap_ref_distinct_keys (HashMapRef is_t bslot kt vt) kv1 kv2
+Proof
+  simp[hashmap_ref_distinct_keys_def]
+  \\ metis_tac[encode_hashmap_key_typed_inj]
 QED
 
 (* ===== Name-level: variable classification ===== *)
