@@ -1,6 +1,10 @@
 Theory vyperArray
+
 Ancestors
-  vyperValueOperation vyperState vyperInterpreter
+  vyperValueOperation vyperState vyperInterpreter vyperLookupStorageScopes
+
+Libs
+  BasicProvers
 
 Definition array_is_mutable_def[simp]:
   array_is_mutable (DynArrayV _) = T ∧
@@ -16,6 +20,23 @@ End
 
 Definition valid_index_def[simp]:
   valid_index tv a (i:int) ⇔ 0 ≤ i ∧ i < &array_length tv a
+End
+
+(* ============================================================
+   array_set: extract the resulting array_value from array_set_index
+
+   When array_is_mutable a ∧ valid_index tv a k, we have:
+     array_set_index tv a k v = INL (ArrayV (array_set tv a k v))
+
+   This lets the simplifier eliminate case expressions over
+   array_set_index without introducing existentials.
+   ============================================================ *)
+
+Definition array_set_def:
+  array_set tv a k v =
+    case array_set_index tv a k v of
+      INL (ArrayV a') => a'
+    | _ => a
 End
 
 (* ===== Helper Lemmas for insert_sarray ===== *)
@@ -254,4 +275,175 @@ Proof
   qexists_tac `av'` >>
   simp[Once assign_subscripts_def, assign_subscripts_def] >>
   metis_tac[array_index_after_set_same]
+QED
+
+Theorem array_set_index_is_mutable:
+  ∀tv a i v a'.
+    array_set_index tv a i v = INL (ArrayV a') ⇒
+    array_is_mutable a'
+Proof
+  rpt gen_tac >> Cases_on `a` >>
+  FULL_SIMP_TAC (srw_ss()) [array_set_index_def, LET_THM, array_is_mutable_def] >>
+  rpt (PURE_TOP_CASE_TAC >> FULL_SIMP_TAC (srw_ss()) [array_is_mutable_def])
+QED
+
+Theorem valid_index_after_set_index:
+  ∀tv a a' i j v.
+    valid_index tv a j ∧
+    array_set_index tv a i v = INL (ArrayV a') ⇒
+    valid_index tv a' j
+Proof
+  rw[valid_index_def] >>
+  drule array_length_after_set >> simp[]
+QED
+
+(* Key theorem: array_set_index returns INL (ArrayV (array_set ...)) *)
+Theorem array_set_index_INL:
+  ∀tv a k v.
+    array_is_mutable a ∧ valid_index tv a k ⇒
+    array_set_index tv a k v = INL (ArrayV (array_set tv a k v))
+Proof
+  rpt strip_tac >>
+  drule_all array_set_index_valid >>
+  disch_then (qspec_then `v` strip_assume_tac) >>
+  gvs[array_set_def]
+QED
+
+(* Properties of array_set *)
+Theorem array_set_is_mutable:
+  ∀tv a k v.
+    array_is_mutable a ∧ valid_index tv a k ⇒
+    array_is_mutable (array_set tv a k v)
+Proof
+  rpt strip_tac >>
+  drule_all array_set_index_INL >>
+  metis_tac[array_set_index_is_mutable]
+QED
+
+Theorem array_set_valid_index:
+  ∀tv a k v j.
+    array_is_mutable a ∧ valid_index tv a k ∧ valid_index tv a j ⇒
+    valid_index tv (array_set tv a k v) j
+Proof
+  rpt strip_tac >>
+  irule valid_index_after_set_index >>
+  qexists_tac `a` >> qexists_tac `k` >> qexists_tac `v` >>
+  simp[array_set_index_INL]
+QED
+
+Theorem array_set_length:
+  ∀tv a k v.
+    array_is_mutable a ∧ valid_index tv a k ⇒
+    array_length tv (array_set tv a k v) = array_length tv a
+Proof
+  rpt strip_tac >>
+  irule array_length_after_set >>
+  qexists_tac `k` >> qexists_tac `v` >>
+  simp[array_set_index_INL]
+QED
+
+Theorem array_set_index_same:
+  ∀tv a k v.
+    array_is_mutable a ∧ valid_index tv a k ⇒
+    array_index tv (array_set tv a k v) k = SOME v
+Proof
+  rpt strip_tac >>
+  drule_all array_set_index_INL >>
+  disch_then (qspec_then `v` mp_tac) >>
+  metis_tac[array_index_after_set_same]
+QED
+
+Theorem array_set_index_other:
+  ∀tv a k v j.
+    array_is_mutable a ∧ valid_index tv a k ∧ j ≠ k ⇒
+    array_index tv (array_set tv a k v) j = array_index tv a j
+Proof
+  rpt strip_tac >>
+  drule_all array_set_index_INL >>
+  strip_tac >>
+  irule array_index_after_set_other >>
+  metis_tac[]
+QED
+
+(* ============================================================
+   Constructor-specific evaluation for concrete arrays.
+
+   Unlike array_index_def / array_set_index_def, these only fire when the
+   array argument is a concrete SArrayV or DynArrayV constructor, so
+   they are safe to include in the simplifier for mixed abstract/concrete
+   goals.
+   ============================================================ *)
+
+Theorem array_index_sarray:
+  ∀t n al i.
+    array_index (ArrayTV t (Fixed n)) (SArrayV al) i =
+    if 0 ≤ i ∧ Num i < n then
+      case ALOOKUP al (Num i) of NONE => SOME (default_value t) | SOME v => SOME v
+    else NONE
+Proof
+  rw[array_index_def, LET_THM] >>
+  every_case_tac >> gvs[]
+QED
+
+Theorem array_index_dyn:
+  ∀tv ls i.
+    array_index tv (DynArrayV ls) i =
+    if 0 ≤ i then oEL (Num i) ls else NONE
+Proof
+  rw[array_index_def, LET_THM]
+QED
+
+Theorem array_set_sarray:
+  ∀t n al k v.
+    0 ≤ k ∧ Num k < n ⇒
+    array_set (ArrayTV t (Fixed n)) (SArrayV al) k v =
+    SArrayV (if v = default_value t then ADELKEY (Num k) al
+             else insert_sarray (Num k) v al)
+Proof
+  rw[array_set_def, array_set_index_def, LET_THM]
+QED
+
+Theorem array_set_dyn:
+  ∀tv ls k v.
+    0 ≤ k ∧ Num k < LENGTH ls ⇒
+    array_set tv (DynArrayV ls) k v =
+    DynArrayV (TAKE (Num k) ls ++ [v] ++ DROP (SUC (Num k)) ls)
+Proof
+  rw[array_set_def, array_set_index_def, LET_THM]
+QED
+
+(* assign_subscripts with Replace reduces to INL (ArrayV (array_set ...)) *)
+Theorem assign_subscripts_replace_INL:
+  ∀tv a k v.
+    array_is_mutable a ∧ valid_index tv a k ⇒
+    assign_subscripts tv (ArrayV a) [IntSubscript k] (Replace v) =
+    INL (ArrayV (array_set tv a k v))
+Proof
+  simp[assign_subscripts_array_replace, array_set_index_INL]
+QED
+
+(* assign_subscripts with Update — computes everything inline, no existentials *)
+Theorem assign_subscripts_update_INL:
+  ∀tv a k ty bop v.
+    array_is_mutable a ∧ valid_index tv a k ∧
+    IS_SOME (type_to_int_bound ty) ∧
+    ISL (evaluate_binop (THE (type_to_int_bound ty)) NoneTV bop
+           (THE (array_index tv a k)) v) ⇒
+    assign_subscripts tv (ArrayV a) [IntSubscript k] (Update ty bop v) =
+    INL (ArrayV (array_set tv a k
+           (OUTL (evaluate_binop (THE (type_to_int_bound ty)) NoneTV bop
+                    (THE (array_index tv a k)) v))))
+Proof
+  rpt strip_tac >>
+  `IS_SOME (array_index tv a k)` by simp[array_index_valid] >> let
+    val int_sub_clause = cj 5 assign_subscripts_def
+    val update_clause = cj 2 assign_subscripts_def
+  in
+    ONCE_REWRITE_TAC [int_sub_clause] >>
+    REWRITE_TAC [update_clause] >>
+    simp[LET_THM, array_set_index_INL] >>
+    Cases_on `array_index tv a k` >> fs[] >>
+    Cases_on `type_to_int_bound ty` >> fs[] >>
+    Cases_on `evaluate_binop x' NoneTV bop x v` >> fs[]
+  end
 QED

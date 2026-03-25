@@ -1,6 +1,6 @@
 Theory vyperStatePreservation
 Ancestors
-  vyperAST vyperValue vyperState vyperInterpreter vyperLookup vyperImmutablesPreservation
+  vyperAST vyperValue vyperState vyperStorageBackend vyperInterpreter vyperLookup vyperImmutablesPreservation
 
 (* ===== Lemmas about state preservation ===== *)
 
@@ -70,13 +70,6 @@ Theorem get_transient_storage_state:
   !st res st'. get_transient_storage st = (res, st') ==> st' = st
 Proof
   rw[get_transient_storage_def, return_def]
-QED
-
-Theorem get_storage_backend_state:
-  !cx is_trans st res st'. get_storage_backend cx is_trans st = (res, st') ==> st' = st
-Proof
-  Cases_on `is_trans` >>
-  rw[get_storage_backend_def, bind_def, get_transient_storage_def, get_accounts_def, return_def]
 QED
 
 Theorem read_storage_slot_state:

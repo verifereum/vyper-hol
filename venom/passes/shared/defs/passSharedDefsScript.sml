@@ -284,22 +284,33 @@ End
 
 (* ===== Single Use Form ===== *)
 
-(* Count uses of variable v across non-ASSIGN instructions in a block.
-   ASSIGN is exempt: it's a copy instruction that doesn't consume
-   a stack slot in EVM codegen. *)
+(* Opcodes exempt from the single-use count. These are all instructions
+   that SingleUseExpansion skips (sue_should_skip) because they don't go
+   through normal EVM stack scheduling:
+   - ASSIGN: copy instruction, no stack slot consumed
+   - PHI: pseudo-instruction, lowered to parallel copies on CFG edges
+   - PARAM: pseudo-instruction, lowered to stack input
+   - OFFSET: handled specially in venom_to_assembly (direct label+offset emit) *)
+Definition sue_count_exempt_def:
+  sue_count_exempt ASSIGN = T /\
+  sue_count_exempt PHI = T /\
+  sue_count_exempt PARAM = T /\
+  sue_count_exempt OFFSET = T /\
+  sue_count_exempt _ = F
+End
+
+(* Count uses of variable v across non-exempt instructions in a block. *)
 Definition var_use_count_block_def:
   var_use_count_block v bb =
     LENGTH (FILTER (\inst.
-      inst.inst_opcode <> ASSIGN /\
+      ~sue_count_exempt inst.inst_opcode /\
       MEM (Var v) inst.inst_operands)
       bb.bb_instructions)
 End
 
 (* Single Use Form: each variable is used at most once across all
-   non-ASSIGN instructions in the entire function.
-   Established by SingleUseExpansion pass, required by DFT/venom_to_assembly.
-   Python docstring: "each variable is used at most once (by any opcode
-   besides a simple assignment)" *)
+   non-exempt instructions in the entire function.
+   Established by SingleUseExpansion pass, required by DFT/venom_to_assembly. *)
 Definition single_use_form_def:
   single_use_form fn <=>
     !v. SUM (MAP (var_use_count_block v) fn.fn_blocks) <= 1
