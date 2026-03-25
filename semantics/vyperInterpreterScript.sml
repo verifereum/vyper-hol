@@ -1108,14 +1108,16 @@ Definition evaluate_def:
     env <- lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs)) "IntCall bind_arguments";
     prev <- get_scopes;
     rtv <- lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret";
-    cxf <- push_function (src_id_opt, fn) env cx;
     is_view <<- (mut = View ∨ mut = Pure);
-    (* Acquire reentrancy lock if nonreentrant *)
+    (* Acquire reentrancy lock BEFORE push_function so scopes are
+       unmodified if lock acquire fails (preserves scopes_dom property).
+       Lock operates only on transient storage, independent of scopes. *)
     (if nr then
        case cx.nonreentrant_slot of
        | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
      else return ());
+    cxf <- push_function (src_id_opt, fn) env cx;
     rv <- finally
       (try (do eval_stmts cxf body; return NoneV od) handle_function)
       (do pop_function prev;

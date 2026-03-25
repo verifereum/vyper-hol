@@ -664,14 +664,14 @@ Definition apply_vals_def:
       env <- lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs)) "IntCall bind_arguments";
       prev <- get_scopes;
       rtv <- lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret";
-      cxf <- push_function src_fn env (cx with stk updated_by TL);
       is_view <<- (mut = View ∨ mut = Pure);
-      (* Acquire reentrancy lock if nonreentrant *)
+      (* Acquire lock BEFORE push_function so scopes are unmodified on failure *)
       (if nr then
          case cx.nonreentrant_slot of
          | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
        else return ());
+      cxf <- push_function src_fn env (cx with stk updated_by TL);
       return (prev, cxf, body, rtv, is_view) od st
      of (INR ex, st) => apply_exc (cx with stk updated_by TL) ex st k
       | (INL (prev, cxf, body, rtv, is_view), st) =>
