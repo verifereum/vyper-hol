@@ -120,8 +120,9 @@ Theorem codegen_fn_correct:
         ∃es' exc. run es = SOME (INR (SOME exc), es') ∧
                   exc ≠ Reverted ∧
                   final_state_rel vs' es'
-    (* OK/Error/IntRet: no claim (fuel exhaustion, continuation, etc.) *)
-    | _ => T
+    | OK _ => T           (* continuation — not a final result *)
+    | IntRet _ _ => T    (* internal return — handled by caller *)
+    | Error _ => T       (* execution error — no EVM correspondence *)
 Proof
   cheat
 QED
