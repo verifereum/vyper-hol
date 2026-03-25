@@ -183,30 +183,39 @@ QED
 
 (* ===== Forward Simulation ===== *)
 
-(* If asm execution halts, EVM execution of the assembled bytecode
-   also halts with a corresponding result.
+(* If asm execution halts (via asm_steps), EVM execution of the
+   assembled bytecode also halts with a corresponding result.
 
-   Direction: asm terminates ⇒ EVM terminates with matching result.
-   The converse would require reasoning about gas.
+   Uses asm_steps (step-counted) for natural composition with
+   gen_fn_simulation. Direction: asm terminates ⇒ EVM terminates.
 
-   Gas condition: EVM must have enough gas for all N steps. This is
-   abstracted as run terminating (not NONE). If EVM runs out of gas
-   mid-execution, run still terminates (with an exception), so the
-   "run es ≠ NONE" condition is always satisfiable for finite programs. *)
+   label_offsets and offset_to_pc are derived from prog
+   (compute_label_offsets, build_offset_to_pc). They appear as
+   parameters because gen_fn_simulation also parameterizes over them.
+
+   Gas condition: sufficient_gas is necessary but not sufficient.
+   The full proof requires gas sufficiency across all steps.
+   Exact formulation refined during proof. *)
 Theorem asm_bytecode_sim:
-  ∀fuel prog as es.
+  ∀n prog label_offsets offset_to_pc as es.
     asm_wf prog ∧
-    asm_evm_rel prog as es ⇒
+    label_offsets = SND (compute_label_offsets prog) ∧
+    offset_to_pc = build_offset_to_pc prog ∧
+    asm_evm_rel prog as es ∧
+    sufficient_gas es ⇒
     (* Halt: asm halts cleanly ⇒ EVM halts cleanly *)
-    (∀as'. run_asm fuel prog as = AsmHalt as' ⇒
+    (∀as'. asm_steps label_offsets offset_to_pc prog n as =
+             AsmHalt as' ⇒
        ∃es'. run es = SOME (INR NONE, es') ∧
              asm_evm_rel prog as' es') ∧
     (* Revert: asm reverts ⇒ EVM reverts *)
-    (∀as'. run_asm fuel prog as = AsmRevert as' ⇒
+    (∀as'. asm_steps label_offsets offset_to_pc prog n as =
+             AsmRevert as' ⇒
        ∃es'. run es = SOME (INR (SOME Reverted), es') ∧
              asm_evm_rel prog as' es') ∧
     (* Fault: asm faults ⇒ EVM faults (non-revert exception) *)
-    (∀as'. run_asm fuel prog as = AsmFault as' ⇒
+    (∀as'. asm_steps label_offsets offset_to_pc prog n as =
+             AsmFault as' ⇒
        ∃es' exc. run es = SOME (INR (SOME exc), es') ∧
                  exc ≠ Reverted ∧
                  asm_evm_rel prog as' es')

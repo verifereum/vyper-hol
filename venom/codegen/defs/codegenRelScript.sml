@@ -4,17 +4,24 @@
  * Defines the relations connecting Venom IR state, plan_state
  * (stack model abstraction), asm execution state, and EVM state.
  *
- * Three levels:
+ * Three layers:
  *   1. plan_state_rel: plan_state accurately tracks the asm stack
- *   2. venom_asm_rel:  Venom variables ↔ asm stack (via plan_state)
+ *      (loop invariant for block-by-block simulation)
+ *   2. venom_asm_rel:  full Venom ↔ asm state relation (uses plan_state)
  *   3. asm_evm_rel:    asm execution ↔ EVM bytecode execution
  *
+ * Terminal state relations (no plan_state, no memory details):
+ *   venom_asm_terminal_rel — observable effects match at halt/revert
+ *   asm_venom_result_rel   — result type + terminal state
+ *
  * TOP-LEVEL:
- *   plan_stack_rel    — ps_stack matches concrete stack
- *   plan_spill_rel    — ps_spilled matches memory contents
- *   venom_asm_rel     — full Venom ↔ asm state relation
- *   asm_evm_rel       — asm ↔ EVM bytecode state relation
- *   asm_pc_to_offset  — asm index → byte offset
+ *   plan_stack_rel          — ps_stack matches concrete stack
+ *   plan_spill_rel          — ps_spilled matches memory contents
+ *   venom_asm_rel           — full Venom ↔ asm state relation
+ *   venom_asm_terminal_rel  — shared state match (for terminal results)
+ *   fn_init_ps              — initial plan state with params pre-loaded
+ *   asm_evm_rel             — asm ↔ EVM bytecode state relation
+ *   asm_pc_to_offset        — asm index → byte offset
  *)
 
 Theory codegenRel
@@ -47,12 +54,13 @@ End
 
 (* Each spilled operand's value is stored at its memory offset.
    Spill slots hold 32-byte big-endian values.
-   Memory is assumed large enough (spill writes expand it). *)
+   word_of_bytes on a short list zero-pads implicitly (accumulator 0w),
+   so no memory length assertion is needed here — that's an
+   implementation detail of MSTORE having expanded memory. *)
 Definition plan_spill_rel_def:
   plan_spill_rel label_offsets vs ps_spilled asm_memory ⇔
     ∀op off.
       FLOOKUP ps_spilled op = SOME off ⇒
-      off + 32 ≤ LENGTH asm_memory ∧
       ∃v. operand_val vs label_offsets op = SOME v ∧
           word_of_bytes T (0w:bytes32)
             (TAKE 32 (DROP off asm_memory)) = v
@@ -66,25 +74,62 @@ Definition read_byte_def:
     if i < LENGTH mem then EL i mem else (0w : byte)
 End
 
-(* Memory below fn_eom is shared between Venom and asm.
-   Memory at/above fn_eom is the spill region (asm-only).
-   Uses zero-padded reads: unallocated memory is implicitly zero. *)
+(* Memories agree outside the spill region [sa_fn_eom, sa_next_offset).
+   The spill allocator starts at sa_fn_eom and grows upward to
+   sa_next_offset. This range may contain active or freed spill data
+   that differs between Venom and asm. Everywhere else must agree:
+   - below sa_fn_eom: user memory
+   - at/above sa_next_offset: both zero or user-written *)
 Definition memory_rel_def:
-  memory_rel fn_eom venom_mem asm_mem ⇔
-    ∀i. i < fn_eom ⇒
+  memory_rel (alloc : spill_alloc) venom_mem asm_mem ⇔
+    ∀i. ¬(alloc.sa_fn_eom ≤ i ∧ i < alloc.sa_next_offset) ⇒
       read_byte i venom_mem = read_byte i asm_mem
 End
 
+(* ===== Spill Safety Conditions ===== *)
+
+(* A Venom step doesn't modify memory in the spill region.
+   Checked post-hoc: spill region bytes unchanged from vs to vs'.
+   Required per-instruction so plan_spill_rel is maintained.
+   For Vyper-generated code, the memory allocator places all user
+   allocations below fn_eom, so this holds. For arbitrary Venom
+   programs, it must be assumed. *)
+Definition step_mem_safe_def:
+  step_mem_safe (alloc : spill_alloc) vs vs' ⇔
+    ∀i. alloc.sa_fn_eom ≤ i ∧ i < alloc.sa_next_offset ⇒
+      read_byte i vs.vs_memory = read_byte i vs'.vs_memory
+End
+
+(* Memory is pre-expanded to cover the spill high-water mark.
+   Ensures MSIZE agrees between Venom and asm from the start.
+   Established at context entry by emitting a memory-touching op
+   up to the maximum sa_next_offset across all functions.
+   spill_hwm is the maximum sa_next_offset reached during execution
+   (known from codegen output, since spill allocation is deterministic). *)
+Definition spill_mem_covered_def:
+  spill_mem_covered spill_hwm (mem : byte list) ⇔
+    spill_hwm ≤ LENGTH mem
+End
+
 (* Full Venom ↔ asm state relation.
-   Parameterized by:
-     label_offsets — from compute_label_offsets on the assembled program
-     fn_eom       — function end-of-memory (spill region starts here)
-     ps           — plan_state tracking the stack abstraction *)
+   This is the LOOP INVARIANT for block-by-block simulation.
+   Parameterized by plan_state which tracks stack layout.
+   NOT used for terminal states — see venom_asm_terminal_rel.
+
+   Memory model:
+   - plan_spill_rel: active spill slots have correct values
+   - memory_rel: memories agree outside [sa_fn_eom, sa_next_offset)
+   - step_mem_safe: Venom steps don't modify the spill region
+   - spill_mem_covered: initial memory covers spill high-water mark
+
+   The spill region boundary (sa_fn_eom) comes from the pipeline
+   (concretize_mem_loc sets it). step_mem_safe and spill_mem_covered
+   are preconditions on the input program / initial state. *)
 Definition venom_asm_rel_def:
-  venom_asm_rel label_offsets fn_eom ps vs as ⇔
+  venom_asm_rel label_offsets ps vs as ⇔
     plan_stack_rel label_offsets vs ps.ps_stack as.as_stack ∧
     plan_spill_rel label_offsets vs ps.ps_spilled as.as_memory ∧
-    memory_rel fn_eom vs.vs_memory as.as_memory ∧
+    memory_rel ps.ps_alloc vs.vs_memory as.as_memory ∧
     (* Shared mutable state *)
     as.as_accounts = vs.vs_accounts ∧
     as.as_transient = vs.vs_transient ∧
@@ -96,6 +141,40 @@ Definition venom_asm_rel_def:
     as.as_block_ctx = vs.vs_block_ctx ∧
     as.as_code = vs.vs_code ∧
     as.as_prev_hashes = vs.vs_prev_hashes
+End
+
+(* Terminal state: observable effects match at halt/revert.
+   No plan_state, no stack layout, no memory details.
+   Only what matters for the end-to-end theorem. *)
+Definition venom_asm_terminal_rel_def:
+  venom_asm_terminal_rel vs as ⇔
+    as.as_accounts = vs.vs_accounts ∧
+    as.as_transient = vs.vs_transient ∧
+    as.as_returndata = vs.vs_returndata ∧
+    as.as_logs = vs.vs_logs
+End
+
+(* venom_asm_rel implies venom_asm_terminal_rel (for proof use) *)
+Theorem venom_asm_rel_terminal:
+  ∀lo ps vs as.
+    venom_asm_rel lo ps vs as ⇒
+    venom_asm_terminal_rel vs as
+Proof
+  rw[venom_asm_rel_def, venom_asm_terminal_rel_def]
+QED
+
+(* ===== Function Entry ===== *)
+
+(* Initial plan state with function parameters pre-loaded on ps_stack.
+   At function entry, the asm stack has args (first param deepest,
+   last param TOS). prepare_params_plan in generate_block_plan
+   records these in ps_stack then pops dead params.
+   This definition captures the stack state BEFORE dead-param cleanup. *)
+Definition fn_init_ps_def:
+  fn_init_ps fn fn_eom =
+    let params = get_params (HD fn.fn_blocks).bb_instructions in
+    (init_plan_state fn_eom) with
+      ps_stack := MAP (λinst. Var (HD inst.inst_outputs)) params
 End
 
 (* ===== Asm State ↔ EVM Bytecode State ===== *)
@@ -145,16 +224,17 @@ End
 
 (* ===== Result Correspondence ===== *)
 
-(* asm_result corresponds to Venom exec_result *)
+(* asm_result corresponds to Venom exec_result.
+   Uses terminal_rel: at halt/revert, only observable effects matter. *)
 Definition asm_venom_result_rel_def:
-  asm_venom_result_rel label_offsets fn_eom ps ar vr ⇔
+  asm_venom_result_rel ar vr ⇔
     case (ar, vr) of
       (AsmHalt as, Halt vs) =>
-        venom_asm_rel label_offsets fn_eom ps vs as
+        venom_asm_terminal_rel vs as
     | (AsmRevert as, Abort Revert_abort vs) =>
-        venom_asm_rel label_offsets fn_eom ps vs as
+        venom_asm_terminal_rel vs as
     | (AsmFault as, Abort ExHalt_abort vs) =>
-        venom_asm_rel label_offsets fn_eom ps vs as
+        venom_asm_terminal_rel vs as
     | _ => F
 End
 

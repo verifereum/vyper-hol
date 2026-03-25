@@ -19,20 +19,27 @@ Ancestors
 (* ===== Initial State Correspondence ===== *)
 
 (* At function entry: Venom state and EVM state agree on shared fields,
-   EVM stack holds function arguments matching PARAM instructions,
-   memory below fn_eom is shared. *)
+   EVM stack holds function arguments matching PARAM variables,
+   all memory is shared (no spill slots allocated yet). *)
 Definition initial_state_rel_def:
-  initial_state_rel fn fn_eom vs es ⇔
+  initial_state_rel fn vs es ⇔
     (case es.contexts of
        (ctxt, rb) :: _ =>
+         (* Stack has function arguments matching PARAM variables.
+            First param deepest, last param TOS. *)
+         let params = get_params (HD fn.fn_blocks).bb_instructions in
+         LENGTH params = LENGTH ctxt.stack ∧
+         (∀i. i < LENGTH params ⇒
+            FLOOKUP vs.vs_vars (HD (EL i params).inst_outputs) =
+              SOME (EL i (REVERSE ctxt.stack))) ∧
          (* Environment must match *)
          rb.accounts = vs.vs_accounts ∧
          rb.tStorage = vs.vs_transient ∧
          ctxt.returnData = vs.vs_returndata ∧
          ctxt.logs = vs.vs_logs ∧
-         (* Memory below fn_eom is shared *)
-         (∀i. i < fn_eom ⇒
-            read_byte i vs.vs_memory = read_byte i ctxt.memory) ∧
+         (* Memory fully shared at function entry (no spills yet).
+            read_byte zero-pads, so this handles different lengths. *)
+         (∀i. read_byte i vs.vs_memory = read_byte i ctxt.memory) ∧
          (* EVM starts at pc = 0 *)
          ctxt.pc = 0
      | [] => F)
@@ -61,18 +68,38 @@ End
    Preconditions:
      - codegen_ready_fn: SSA, SUE, normalized CFG, valid opcodes
      - codegen succeeds (SOME bytecode)
-     - initial states correspond
-     - sufficient gas on EVM side (abstracted as run terminating)
+     - initial states correspond (stack has args, shared state matches)
+     - sufficient gas on EVM side
+     - spill safety: Venom execution doesn't clobber spill region
+     - spill coverage: initial memory covers spill high-water mark
+
+   Gas: sufficient_gas es is necessary but not sufficient. The full
+   proof requires gas for all steps. Exact formulation refined at
+   proof time.
+
+   Spill safety: step_mem_safe for every Venom step. This is a
+   property of the INPUT PROGRAM — the codegen can't establish it.
+   For Vyper-generated code, the memory allocator ensures fn_eom is
+   above all user allocations. For other frontends, must be assumed.
 
    Note: this theorem covers a single function. Multi-function
    contexts compose via the dispatch mechanism (selector table). *)
 Theorem codegen_fn_correct:
-  ∀fuel ctx fn fn_eom data_seg bytecode vs es.
+  ∀fuel ctx fn fn_eom data_seg bytecode spill_hwm vs es.
     codegen_ready_fn fn ∧
     codegen (ctx with ctx_functions := [fn])
             (FEMPTY |+ (fn.fn_name, fn_eom))
             data_seg = SOME bytecode ∧
-    initial_state_rel fn fn_eom vs es ∧
+    initial_state_rel fn vs es ∧
+    sufficient_gas es ∧
+    (* Spill safety: Venom execution doesn't clobber [fn_eom, spill_hwm) *)
+    (∀inst vs1 vs2 fuel'.
+       step_inst fuel' ctx inst vs1 = OK vs2 ⇒
+       step_mem_safe <| sa_fn_eom := fn_eom;
+                        sa_next_offset := spill_hwm;
+                        sa_free_slots := [] |> vs1 vs2) ∧
+    (* MSIZE: initial memory covers spill high-water mark *)
+    spill_mem_covered spill_hwm vs.vs_memory ∧
     (case es.contexts of
        (ctxt, rb) :: _ =>
          ctxt.msgParams.code = bytecode ∧
