@@ -1,6 +1,6 @@
 Theory affineFoldingCorrectness
 Ancestors
-  affineFoldingProofs
+  affineFoldingProofs venomWf
 
 (* Affine folding preserves function execution semantics:
    running a function before and after the transform produces
@@ -12,4 +12,18 @@ Theorem af_transform_function_correct:
       (run_function fuel ctx (af_transform_function fn) s)
 Proof
   ACCEPT_TAC af_transform_function_correct_proof
+QED
+
+(* ===== Obligations ===== *)
+
+Theorem af_preserves_ssa_form:
+  ∀fn. ssa_form fn ⇒ ssa_form (af_transform_function fn)
+Proof
+  cheat
+QED
+
+Theorem af_preserves_wf_function:
+  ∀fn. wf_function fn ⇒ wf_function (af_transform_function fn)
+Proof
+  cheat
 QED

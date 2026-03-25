@@ -6,7 +6,7 @@
 
 Theory cfgNormCorrectness
 Ancestors
-  cfgNormProof
+  cfgNormProof cfgWf
 
 Theorem cfg_norm_pass_correct:
   !func s fuel ctx.
@@ -21,4 +21,24 @@ Theorem cfg_norm_pass_correct:
         (run_function fuel' ctx func' s)
 Proof
   ACCEPT_TAC cfg_norm_fn_correct
+QED
+
+(* ===== Obligations ===== *)
+
+Theorem cfg_norm_establishes_normalized_cfg:
+  ∀func. wf_function func ⇒ is_normalized_cfg (cfg_norm_fn func)
+Proof
+  cheat
+QED
+
+Theorem cfg_norm_preserves_ssa_form:
+  ∀func. ssa_form func ∧ wf_function func ⇒ ssa_form (cfg_norm_fn func)
+Proof
+  cheat
+QED
+
+Theorem cfg_norm_preserves_wf_function:
+  ∀func. wf_function func ⇒ wf_function (cfg_norm_fn func)
+Proof
+  cheat
 QED

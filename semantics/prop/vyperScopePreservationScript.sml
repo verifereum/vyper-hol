@@ -1,6 +1,6 @@
 Theory vyperScopePreservation
 Ancestors
-  vyperAST vyperMisc vyperState vyperValue vyperInterpreter vyperImmutablesPreservation
+  vyperAST vyperMisc vyperState vyperStorageBackend vyperValue vyperInterpreter vyperImmutablesPreservation
   vyperStatePreservation
 
 (* ===== Lemmas about scopes preservation ===== *)
@@ -107,21 +107,6 @@ Theorem update_accounts_scopes:
   !f st res st'. update_accounts f st = (res, st') ==> st'.scopes = st.scopes
 Proof
   rw[update_accounts_def, return_def] >> simp[]
-QED
-
-Theorem get_storage_backend_scopes:
-  !cx is_trans st res st'. get_storage_backend cx is_trans st = (res, st') ==> st'.scopes = st.scopes
-Proof
-  Cases_on `is_trans` >>
-  rw[get_storage_backend_def, bind_def, get_transient_storage_def, get_accounts_def, return_def]
-QED
-
-Theorem set_storage_backend_scopes:
-  !cx is_trans storage' st res st'. set_storage_backend cx is_trans storage' st = (res, st') ==> st'.scopes = st.scopes
-Proof
-  Cases_on `is_trans` >>
-  rw[set_storage_backend_def, bind_def, update_transient_def, get_accounts_def,
-     update_accounts_def, return_def] >> simp[]
 QED
 
 Theorem read_storage_slot_scopes:

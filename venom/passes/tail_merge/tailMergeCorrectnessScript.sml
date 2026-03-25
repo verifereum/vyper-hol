@@ -18,3 +18,17 @@ Theorem tail_merge_pass_correct:
 Proof
   ACCEPT_TAC tail_merge_fn_correct
 QED
+
+(* ===== Obligations ===== *)
+
+Theorem tail_merge_preserves_ssa_form:
+  ∀func. ssa_form func ∧ wf_function func ⇒ ssa_form (tail_merge_fn func)
+Proof
+  cheat
+QED
+
+Theorem tail_merge_preserves_wf_function:
+  ∀func. wf_function func ⇒ wf_function (tail_merge_fn func)
+Proof
+  cheat
+QED

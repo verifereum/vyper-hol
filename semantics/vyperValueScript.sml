@@ -384,3 +384,17 @@ Definition dest_StringV_def:
 End
 
 val () = cv_auto_trans dest_StringV_def;
+
+Definition dest_BytesV_def:
+  dest_BytesV (BytesV bs) = SOME bs ∧
+  dest_BytesV _ = NONE
+End
+
+val () = cv_auto_trans dest_BytesV_def;
+
+Definition dest_ArrayV_def:
+  dest_ArrayV (ArrayV av) = SOME av ∧
+  dest_ArrayV _ = NONE
+End
+
+val () = cv_auto_trans dest_ArrayV_def;

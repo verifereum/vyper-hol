@@ -12,7 +12,7 @@
 
 Theory rtaCorrectness
 Ancestors
-  rtaDefs rtaCorrectnessProofs
+  rtaDefs rtaCorrectnessProofs venomWf
   crossBlockSimProps passSimulationProps
   stateEquiv stateEquivProps execEquivProps
   venomExecProps venomExecSemantics venomInst venomState
@@ -35,4 +35,18 @@ Theorem rta_pass_correct:
             (\fuel. run_function fuel ctx fn' s)
 Proof
   ACCEPT_TAC rta_pass_correct_proof
+QED
+
+(* ===== Obligations ===== *)
+
+Theorem rta_preserves_ssa_form:
+  ∀fn. ssa_form fn ⇒ ssa_form (transform_function fn)
+Proof
+  cheat
+QED
+
+Theorem rta_preserves_wf_function:
+  ∀fn. wf_function fn ⇒ wf_function (transform_function fn)
+Proof
+  cheat
 QED

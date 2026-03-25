@@ -59,6 +59,12 @@ Datatype:
   | TypeBuiltinK type_builtin type eval_continuation
   | CallSendK eval_continuation
   | ExtCallK bool identifier (type list) type (expr option) eval_continuation
+  (* Chain interaction builtin continuations *)
+  | RawCallK type raw_call_flags eval_continuation
+  | RawLogK eval_continuation
+  | RawRevertK eval_continuation
+  | SelfDestructK eval_continuation
+  | CreateK type create_kind bool eval_continuation
   | IntCallK (num |-> type_args) (num option # identifier) ((identifier # type) list) (expr list) type (stmt list) eval_continuation
   | IntCallK1 (num |-> type_args) (num option # identifier) ((identifier # type) list) (value list) type (stmt list) eval_continuation
   | IntCallK2 (scope list) type_value eval_continuation
@@ -193,6 +199,17 @@ Definition eval_expr_cps_def:
      | (INL (), st) => eval_exprs_cps cx9 es st (CallSendK k)) ∧
   eval_expr_cps cx10 (Call _ (ExtCall is_static (func_name, arg_types, ret_type)) es drv) st k =
     eval_exprs_cps cx10 es st (ExtCallK is_static func_name arg_types ret_type drv k) ∧
+  (* Chain interaction builtins *)
+  eval_expr_cps cx10 (Call ty (RawCallTarget flags) es _) st k =
+    eval_exprs_cps cx10 es st (RawCallK ty flags k) ∧
+  eval_expr_cps cx10 (Call _ RawLog es _) st k =
+    eval_exprs_cps cx10 es st (RawLogK k) ∧
+  eval_expr_cps cx10 (Call _ RawRevert es _) st k =
+    eval_exprs_cps cx10 es st (RawRevertK k) ∧
+  eval_expr_cps cx10 (Call _ SelfDestructTarget es _) st k =
+    eval_exprs_cps cx10 es st (SelfDestructK k) ∧
+  eval_expr_cps cx10 (Call ty (CreateTarget kind rof) es _) st k =
+    eval_exprs_cps cx10 es st (CreateK ty kind rof k) ∧
   eval_expr_cps cx10 (Call _ (IntCall (ns, fn)) es _) st k =
     (case do
       check (no_recursion (ns, fn) cx10.stk) "recursion";
@@ -394,6 +411,11 @@ Definition apply_exc_def:
   apply_exc cx ex st (TypeBuiltinK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CallSendK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (ExtCallK _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (RawCallK _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (RawLogK k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (RawRevertK k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (SelfDestructK k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (CreateK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IntCallK _ _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IntCallK1 _ _ _ _ _ _ k) = AK (cx with stk updated_by TL) (ApplyExc ex) st k ∧
   apply_exc cx ex st (IntCallK2 prev rtv k) =
@@ -651,6 +673,85 @@ Definition apply_vals_def:
      of (INR ex, st) => apply_exc (cx with stk updated_by TL) ex st k
       | (INL (prev, cxf, body, rtv), st) =>
           eval_stmts_cps cxf body st (IntCallK2 prev rtv k)) ∧
+  (* ===== Chain interaction builtins ===== *)
+  apply_vals cx vs st (RawCallK ty flags k) =
+    (case do
+      check (LENGTH vs = 3) "raw_call args";
+      target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "raw_call target";
+      calldata <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_call data";
+      amount <- lift_option_type (dest_NumV (EL 2 vs)) "raw_call value";
+      value_opt <<- if flags.rcf_is_static then NONE else SOME amount;
+      check (¬flags.rcf_is_delegate) "raw_call delegate unsupported";
+      accounts <- get_accounts;
+      tStorage <- get_transient_storage;
+      txParams <<- vyper_to_tx_params cx.txn;
+      caller <<- cx.txn.target;
+      result <- lift_option
+        (run_ext_call caller target_addr calldata value_opt accounts tStorage txParams)
+        "raw_call run failed";
+      (success, returnData, accounts', tStorage') <<- result;
+      update_accounts (K accounts');
+      update_transient (K tStorage');
+      if flags.rcf_revert_on_failure then do
+        check success "raw_call reverted";
+        if flags.rcf_max_outsize = 0 then return $ Value NoneV
+        else return $ Value $ BytesV (TAKE flags.rcf_max_outsize returnData)
+      od else
+        if flags.rcf_max_outsize = 0 then return $ Value $ BoolV success
+        else return $ Value $ ArrayV $ TupleV [BoolV success;
+               BytesV (TAKE flags.rcf_max_outsize returnData)]
+    od st
+    of (INR ex, st) => AK cx (ApplyExc ex) st k
+     | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
+  apply_vals cx vs st (RawLogK k) =
+    (case do
+      check (LENGTH vs = 2) "raw_log args";
+      topics <- lift_option_type (dest_ArrayV (EL 0 vs)) "raw_log topics";
+      data <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_log data";
+      topic_vals <<- (case topics of
+         TupleV tvs => tvs | DynArrayV tvs => tvs | _ => []);
+      check (LENGTH topic_vals ≤ 4) "raw_log too many topics";
+      push_log ((NONE,"raw_log"), topic_vals ++ [BytesV data]);
+      return $ Value NoneV
+    od st
+    of (INR ex, st) => AK cx (ApplyExc ex) st k
+     | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
+  apply_vals cx vs st (RawRevertK k) =
+    (case do
+      check (LENGTH vs = 1) "raw_revert args";
+      raise $ Error $ RuntimeError "raw_revert"
+    od st
+    of (INR ex, st) => AK cx (ApplyExc ex) st k
+     | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
+  apply_vals cx vs st (SelfDestructK k) =
+    (case do
+      check (LENGTH vs = 1) "selfdestruct args";
+      target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "selfdestruct target";
+      accounts <- get_accounts;
+      self_acct <<- lookup_account cx.txn.target accounts;
+      balance <<- self_acct.balance;
+      transfer_value cx.txn.target target_addr balance;
+      return $ Value NoneV
+    od st
+    of (INR ex, st) => AK cx (ApplyExc ex) st k
+     | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
+  apply_vals cx vs st (CreateK ty kind rof k) =
+    (case do
+      check (vs ≠ []) "create no args";
+      amount <- lift_option_type (dest_NumV (LAST vs)) "create value";
+      target_addr <- lift_option_type (dest_AddressV (HD vs)) "create target";
+      accounts <- get_accounts;
+      self_acct <<- lookup_account cx.txn.target accounts;
+      check (amount ≤ self_acct.balance) "create insufficient balance";
+      new_addr <<- vfmContext$address_for_create cx.txn.target self_acct.nonce;
+      if amount > 0 then
+        transfer_value cx.txn.target new_addr amount
+      else return ();
+      update_accounts (vfmExecution$increment_nonce cx.txn.target);
+      return $ Value $ AddressV new_addr
+    od st
+    of (INR ex, st) => AK cx (ApplyExc ex) st k
+     | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
   apply_vals cx vs st DoneK = AK cx (ApplyVals vs) st DoneK ∧
   apply_vals cx vs st _ =
     AK cx (ApplyExc $ Error (TypeError "apply_vals k")) st DoneK
@@ -1337,6 +1438,18 @@ Proof
     \\ gvs[pop_function_def, return_def, raise_def]
     \\ gvs[option_CASE_rator, sum_CASE_rator]
     \\ ntac 6 CASE_TAC )
+  (* ===== Chain interaction builtins ===== *)
+  (* All 5 new cases: CPS eval_exprs then continuation matches big-step body.
+     Pattern: unfold both sides, use IH for eval_exprs, match continuation bodies. *)
+  (* Chain interaction builtins: all use same tactic.
+     CPS evals exprs then calls apply_vals which matches big-step body. *)
+  \\ rpt (conj_tac >- (
+    rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
+    \\ gvs[prod_CASE_rator, sum_CASE_rator, cont_def]
+    \\ CASE_TAC \\ gvs[]
+    \\ CASE_TAC \\ gvs[]
+    \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
+          apply_exc_def, apply_vals_def, ignore_bind_def, bind_def]))
   \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, return_def] (* eval_exprs [] *)
   (* eval_exprs (e::es) *)
   \\ rw[eval_expr_cps_def, evaluate_def, bind_def]

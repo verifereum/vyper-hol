@@ -8,3 +8,4 @@ Ancestors
   vyperLookupStorageScopes
   vyperTypeSoundness
   vyperUpdateTarget
+  vyperHashMap

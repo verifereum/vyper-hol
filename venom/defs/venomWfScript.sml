@@ -218,6 +218,62 @@ Definition ssa_form_def:
       inst1 = inst2
 End
 
+(* CFG edge relation on block labels within a function. *)
+Definition fn_cfg_edge_def:
+  fn_cfg_edge fn a b <=>
+    ?bb. MEM bb fn.fn_blocks /\ bb.bb_label = a /\ MEM b (bb_succs bb)
+End
+
+(* A block label is reachable from the entry block via CFG edges.
+   Uses RTC (reflexive-transitive closure). *)
+Definition fn_reachable_def:
+  fn_reachable fn lbl <=>
+    ?entry. fn_entry_label fn = SOME entry /\ RTC (fn_cfg_edge fn) entry lbl
+End
+
+(* A path through the function's CFG.
+   Every consecutive pair (a,b) in the path is a CFG edge. *)
+Definition is_fn_path_def:
+  is_fn_path fn [] = T /\
+  is_fn_path fn [l] = T /\
+  is_fn_path fn (l1 :: l2 :: rest) =
+    (fn_cfg_edge fn l1 l2 /\ is_fn_path fn (l2 :: rest))
+End
+
+(* Block d dominates block n in function fn: d is on every CFG path from
+   the entry to n. *)
+Definition fn_dominates_def:
+  fn_dominates fn d n <=>
+    fn_reachable fn n /\
+    !path. is_fn_path fn path /\
+           path <> [] /\
+           (?entry. fn_entry_label fn = SOME entry /\ HD path = entry) /\
+           LAST path = n ==>
+           MEM d path
+End
+
+(* Every variable use is dominated by its definition.
+   Standard SSA property: if instruction inst in block bb uses Var v,
+   then v is defined by some instruction in some block def_bb, and
+   def_bb dominates bb. *)
+Definition def_dominates_uses_def:
+  def_dominates_uses fn <=>
+    !bb inst v.
+      MEM bb fn.fn_blocks /\
+      MEM inst bb.bb_instructions /\
+      MEM (Var v) inst.inst_operands ==>
+      ?def_bb def_inst.
+        MEM def_bb fn.fn_blocks /\
+        MEM def_inst def_bb.bb_instructions /\
+        MEM v def_inst.inst_outputs /\
+        fn_dominates fn def_bb.bb_label bb.bb_label
+End
+
+(* Well-formed SSA: unique definitions AND definitions dominate uses. *)
+Definition wf_ssa_def:
+  wf_ssa fn <=> ssa_form fn /\ def_dominates_uses fn
+End
+
 (* Check if instruction is a PHI. *)
 Definition is_phi_inst_def:
   is_phi_inst inst <=> inst.inst_opcode = PHI
@@ -282,3 +338,5 @@ Definition venom_wf_def:
     (∀fn. MEM fn ctx.ctx_functions ==>
           wf_function fn ∧ fn_inst_wf fn)
 End
+
+

@@ -27,3 +27,17 @@ Theorem phi_elim_pass_correct:
 Proof
   ACCEPT_TAC phi_elimination_correct
 QED
+
+(* ===== Obligations ===== *)
+
+Theorem phi_elim_preserves_ssa_form:
+  ∀fn. ssa_form fn ⇒ ssa_form (transform_function fn)
+Proof
+  cheat
+QED
+
+Theorem phi_elim_preserves_wf_function:
+  ∀fn. wf_function fn ⇒ wf_function (transform_function fn)
+Proof
+  cheat
+QED

@@ -291,7 +291,7 @@ Definition inline_one_site_def:
             SOME ret_bb =>
               fix_inline_phis bb_lbl ret_lbl ret_bb caller'
           | NONE => caller' in
-        SOME (caller'',
+        SOME (renumber_fn_inst_ids caller'',
               ist with <| is_inline_count := ist.is_inline_count + 1;
                           is_label_counter := ist.is_label_counter + 1 |>)
 End
