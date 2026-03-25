@@ -8,4 +8,5 @@ INCLUDES = $(HOLDIR)/examples/Crypto/Keccak $(VFMDIR)/util $(VFMDIR)/spec \
            venom venom/analysis \
            venom/passes \
            venom/codegen \
+           venom/codegen/proofs \
            lowering

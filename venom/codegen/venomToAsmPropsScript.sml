@@ -1,5 +1,5 @@
 (*
- * Venom IR → Assembly Correctness
+ * Venom IR → Assembly Correctness — Theorem Statements
  *
  * Simulation: for each Venom execution step, the generated asm
  * instructions (from stackPlanGen + planExec) preserve venom_asm_rel.
@@ -16,7 +16,7 @@
  *   gen_fn_simulation       — function-level simulation
  *)
 
-Theory venomToAsm
+Theory venomToAsmProps
 Ancestors
   codegenRel
 

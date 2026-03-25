@@ -19,7 +19,7 @@
 
 Theory codegenRel
 Ancestors
-  asmSem stackPlanGen
+  asmWf asmSem stackPlanGen
 
 (* ===== Operand Evaluation in Venom State ===== *)
 
@@ -46,14 +46,16 @@ Definition plan_stack_rel_def:
 End
 
 (* Each spilled operand's value is stored at its memory offset.
-   Spill slots hold 32-byte big-endian values. *)
+   Spill slots hold 32-byte big-endian values.
+   Memory is assumed large enough (spill writes expand it). *)
 Definition plan_spill_rel_def:
   plan_spill_rel label_offsets vs ps_spilled asm_memory ⇔
     ∀op off.
       FLOOKUP ps_spilled op = SOME off ⇒
+      off + 32 ≤ LENGTH asm_memory ∧
       ∃v. operand_val vs label_offsets op = SOME v ∧
           word_of_bytes T (0w:bytes32)
-            (read_bytes off 32 asm_memory) = v
+            (TAKE 32 (DROP off asm_memory)) = v
 End
 
 (* ===== Venom State ↔ Asm State ===== *)
@@ -105,19 +107,39 @@ Definition asm_pc_to_offset_def:
 End
 
 (* EVM context matches asm_state.
-   The only difference is how PC is tracked:
-   asm uses instruction index, EVM uses byte offset. *)
+   Assumes single-frame execution (head of contexts list).
+   Key differences from raw EVM:
+     - PC: asm uses instruction index, EVM uses byte offset
+     - Code/parsed: EVM needs bytecode and pre-parsed opname map
+   Gas is NOT tracked here — see sufficient_gas for step preconditions. *)
 Definition asm_evm_rel_def:
   asm_evm_rel prog as es ⇔
     (case es.contexts of
        (ctxt, rb) :: _ =>
+         (* Code and parsed map match assembled program *)
+         ctxt.msgParams.code = assemble prog ∧
+         ctxt.msgParams.parsed =
+           parse_code 0 FEMPTY (assemble prog) ∧
+         (* Stack, memory, PC *)
          ctxt.stack = as.as_stack ∧
          ctxt.memory = as.as_memory ∧
          ctxt.pc = asm_pc_to_offset prog as.as_pc ∧
+         (* Return data and logs *)
          ctxt.returnData = as.as_returndata ∧
          ctxt.logs = as.as_logs ∧
+         (* Rollback state *)
          rb.accounts = as.as_accounts ∧
          rb.tStorage = as.as_transient
+     | [] => F)
+End
+
+(* Sufficient gas for at least one EVM step.
+   The amount needed depends on the instruction; this just asserts
+   gasUsed hasn't exceeded gasLimit. Per-opcode gas is left to proofs. *)
+Definition sufficient_gas_def:
+  sufficient_gas es ⇔
+    (case es.contexts of
+       (ctxt, rb) :: _ => ctxt.gasUsed ≤ ctxt.msgParams.gasLimit
      | [] => F)
 End
 

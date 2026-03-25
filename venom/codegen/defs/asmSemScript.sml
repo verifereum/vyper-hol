@@ -16,7 +16,6 @@
  *   asm_state, asm_result    — execution state and result types
  *   asm_step                 — single instruction step
  *   run_asm                  — fuel-based execution
- *   build_offset_to_pc       — byte_offset → asm_index map
  *)
 
 Theory asmSem
@@ -53,34 +52,16 @@ End
 
 (* ===== Pre-computation ===== *)
 
-(* Byte offset → asm instruction index (inverse of instruction layout) *)
-Definition build_offset_to_pc_def:
-  build_offset_to_pc prog =
-    FST (FOLDL (λ(m, off) (i, inst).
-      (m |+ (off, i), off + asm_inst_size inst))
-    (FEMPTY : (num, num) fmap, 0n)
-    (MAPi (λi inst. (i, inst)) prog))
-End
 
-(* ===== Memory Helpers (pure, on byte lists) ===== *)
+(* ===== Memory Helpers (pure, matching vfm structure) ===== *)
 
-Definition read_bytes_def:
-  read_bytes offset sz (mem : byte list) =
-    TAKE sz (DROP offset mem ++ REPLICATE sz 0w)
-End
-
-Definition write_bytes_def:
-  write_bytes offset (data : byte list) mem =
-    let needed = offset + LENGTH data in
-    let expanded = if needed > LENGTH mem
-                   then mem ++ REPLICATE (needed - LENGTH mem) 0w
-                   else mem in
-    TAKE offset expanded ++ data ++ DROP (offset + LENGTH data) expanded
-End
-
-Definition w256_to_bytes_def:
-  w256_to_bytes (w : bytes32) : byte list =
-    MAP (λi. (w2w (w >>> (i * 8))) : byte) (REVERSE (GENLIST I 32))
+(* Expand memory to at least `needed` bytes (zero-fill).
+   Matches vfm's expand_memory: memory only grows, never shrinks.
+   After expansion, TAKE/DROP work without bounds issues. *)
+Definition asm_expand_memory_def:
+  asm_expand_memory needed (mem : byte list) =
+    if needed ≤ LENGTH mem then mem
+    else mem ++ REPLICATE (needed - LENGTH mem) (0w : byte)
 End
 
 (* ===== Stack Operation Helpers ===== *)
@@ -180,9 +161,13 @@ Definition asm_mload_def:
   asm_mload s =
     case s.as_stack of
       offset :: stk =>
+        let off = w2n offset in
+        let mem = asm_expand_memory (off + 32) s.as_memory in
         let v = word_of_bytes T (0w:bytes32)
-                  (read_bytes (w2n offset) 32 s.as_memory) in
-        AsmOK (asm_next (s with as_stack := v :: stk))
+                  (TAKE 32 (DROP off mem)) in
+        AsmOK (asm_next (s with <|
+          as_stack := v :: stk;
+          as_memory := mem |>))
     | _ => AsmError "mload: stack underflow"
 End
 
@@ -190,10 +175,13 @@ Definition asm_mstore_def:
   asm_mstore s =
     case s.as_stack of
       offset :: value :: stk =>
+        let off = w2n offset in
+        let bytes = word_to_bytes value T in
+        let mem = asm_expand_memory (off + 32) s.as_memory in
         AsmOK (asm_next (s with <|
           as_stack := stk;
-          as_memory := write_bytes (w2n offset)
-                         (w256_to_bytes value) s.as_memory |>))
+          as_memory :=
+            TAKE off mem ++ bytes ++ DROP (off + 32) mem |>))
     | _ => AsmError "mstore: stack underflow"
 End
 
@@ -276,8 +264,12 @@ Definition asm_return_op_def:
   asm_return_op s =
     case s.as_stack of
       off_w :: sz_w :: stk =>
-        let rd = read_bytes (w2n off_w) (w2n sz_w) s.as_memory in
-        AsmHalt (s with <| as_stack := stk; as_returndata := rd |>)
+        let off = w2n off_w in
+        let sz = w2n sz_w in
+        let mem = asm_expand_memory (off + sz) s.as_memory in
+        let rd = TAKE sz (DROP off mem) in
+        AsmHalt (s with <|
+          as_stack := stk; as_returndata := rd; as_memory := mem |>)
     | _ => AsmError "return: stack underflow"
 End
 
@@ -285,8 +277,12 @@ Definition asm_revert_op_def:
   asm_revert_op s =
     case s.as_stack of
       off_w :: sz_w :: stk =>
-        let rd = read_bytes (w2n off_w) (w2n sz_w) s.as_memory in
-        AsmRevert (s with <| as_stack := stk; as_returndata := rd |>)
+        let off = w2n off_w in
+        let sz = w2n sz_w in
+        let mem = asm_expand_memory (off + sz) s.as_memory in
+        let rd = TAKE sz (DROP off mem) in
+        AsmRevert (s with <|
+          as_stack := stk; as_returndata := rd; as_memory := mem |>)
     | _ => AsmError "revert: stack underflow"
 End
 
@@ -300,12 +296,16 @@ Definition asm_log_def:
       let sz = EL 1 s.as_stack in
       let topics = TAKE n (DROP 2 s.as_stack) in
       let stk = DROP (n + 2) s.as_stack in
-      let data = read_bytes (w2n offset) (w2n sz) s.as_memory in
+      let off = w2n offset in
+      let size = w2n sz in
+      let mem = asm_expand_memory (off + size) s.as_memory in
+      let data = TAKE size (DROP off mem) in
       let ev = <| logger := w2w s.as_call_ctx.cc_address;
                   topics := topics;
                   data := data |> in
       AsmOK (asm_next (s with <|
         as_stack := stk;
+        as_memory := mem;
         as_logs := s.as_logs ++ [ev] |>))
 End
 
@@ -315,22 +315,36 @@ Definition asm_sha3_def:
   asm_sha3 s =
     case s.as_stack of
       off_w :: sz_w :: stk =>
-        let bs = read_bytes (w2n off_w) (w2n sz_w) s.as_memory in
+        let off = w2n off_w in
+        let sz = w2n sz_w in
+        let mem = asm_expand_memory (off + sz) s.as_memory in
+        let bs = TAKE sz (DROP off mem) in
         let h = word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs) in
-        AsmOK (asm_next (s with as_stack := h :: stk))
+        AsmOK (asm_next (s with <|
+          as_stack := h :: stk;
+          as_memory := mem |>))
     | _ => AsmError "sha3: stack underflow"
 End
 
 (* ===== Copy Operations ===== *)
 
+(* Copy from source to memory. Source is read with zero-padding
+   (calldatacopy, codecopy read from potentially short sources).
+   Destination in memory is expanded then written. *)
 Definition asm_copy_to_mem_def:
   asm_copy_to_mem (src : byte list) s =
     case s.as_stack of
       destOff :: srcOff :: sz :: stk =>
-        let bytes = read_bytes (w2n srcOff) (w2n sz) src in
+        let doff = w2n destOff in
+        let soff = w2n srcOff in
+        let size = w2n sz in
+        let src_expanded = asm_expand_memory (soff + size) src in
+        let bytes = TAKE size (DROP soff src_expanded) in
+        let mem = asm_expand_memory (doff + size) s.as_memory in
         AsmOK (asm_next (s with <|
           as_stack := stk;
-          as_memory := write_bytes (w2n destOff) bytes s.as_memory |>))
+          as_memory :=
+            TAKE doff mem ++ bytes ++ DROP (doff + size) mem |>))
     | _ => AsmError "copy: stack underflow"
 End
 
@@ -339,14 +353,18 @@ Definition asm_returndatacopy_def:
   asm_returndatacopy s =
     case s.as_stack of
       destOff :: srcOff :: sz :: stk =>
-        if w2n srcOff + w2n sz > LENGTH s.as_returndata then
+        let soff = w2n srcOff in
+        let size = w2n sz in
+        if soff + size > LENGTH s.as_returndata then
           AsmFault s
         else
-          let bytes = TAKE (w2n sz)
-                        (DROP (w2n srcOff) s.as_returndata) in
+          let doff = w2n destOff in
+          let bytes = TAKE size (DROP soff s.as_returndata) in
+          let mem = asm_expand_memory (doff + size) s.as_memory in
           AsmOK (asm_next (s with <|
             as_stack := stk;
-            as_memory := write_bytes (w2n destOff) bytes s.as_memory |>))
+            as_memory :=
+              TAKE doff mem ++ bytes ++ DROP (doff + size) mem |>))
     | _ => AsmError "returndatacopy: stack underflow"
 End
 
@@ -356,10 +374,16 @@ Definition asm_extcodecopy_def:
     case s.as_stack of
       addr :: destOff :: srcOff :: sz :: stk =>
         let code = (lookup_account (w2w addr) s.as_accounts).code in
-        let bytes = read_bytes (w2n srcOff) (w2n sz) code in
+        let soff = w2n srcOff in
+        let size = w2n sz in
+        let doff = w2n destOff in
+        let src_expanded = asm_expand_memory (soff + size) code in
+        let bytes = TAKE size (DROP soff src_expanded) in
+        let mem = asm_expand_memory (doff + size) s.as_memory in
         AsmOK (asm_next (s with <|
           as_stack := stk;
-          as_memory := write_bytes (w2n destOff) bytes s.as_memory |>))
+          as_memory :=
+            TAKE doff mem ++ bytes ++ DROP (doff + size) mem |>))
     | _ => AsmError "extcodecopy: stack underflow"
 End
 
@@ -475,7 +499,10 @@ Definition extract_asm_result_def:
              if success then final_state.rollback.tStorage
              else s.as_transient in
            let ret_bytes = TAKE retSize returndata in
-           let new_memory = write_bytes retOff ret_bytes s.as_memory in
+           let mem = asm_expand_memory (retOff + retSize) s.as_memory in
+           let new_memory =
+             TAKE retOff mem ++ ret_bytes ++
+             DROP (retOff + retSize) mem in
            let s' = s with <|
              as_returndata := returndata;
              as_accounts := accounts;
@@ -492,7 +519,10 @@ Definition asm_exec_call_def:
   asm_exec_call is_static s =
     case s.as_stack of
       gas :: addr_w :: value :: ao :: as_ :: ro :: rs :: stk =>
-        let calldata = read_bytes (w2n ao) (w2n as_) s.as_memory in
+        let aoff = w2n ao in
+        let asz = w2n as_ in
+        let mem = asm_expand_memory (aoff + asz) s.as_memory in
+        let calldata = TAKE asz (DROP aoff mem) in
         let target : address = w2w addr_w in
         let code = (lookup_account target s.as_accounts).code in
         let evm_s = make_asm_call_state s target (w2n gas)
@@ -510,7 +540,10 @@ Definition asm_exec_staticcall_def:
   asm_exec_staticcall s =
     case s.as_stack of
       gas :: addr_w :: ao :: as_ :: ro :: rs :: stk =>
-        let calldata = read_bytes (w2n ao) (w2n as_) s.as_memory in
+        let aoff = w2n ao in
+        let asz = w2n as_ in
+        let mem = asm_expand_memory (aoff + asz) s.as_memory in
+        let calldata = TAKE asz (DROP aoff mem) in
         let target : address = w2w addr_w in
         let code = (lookup_account target s.as_accounts).code in
         let evm_s = make_asm_call_state s target (w2n gas)
@@ -528,7 +561,10 @@ Definition asm_exec_delegatecall_def:
   asm_exec_delegatecall s =
     case s.as_stack of
       gas :: addr_w :: ao :: as_ :: ro :: rs :: stk =>
-        let calldata = read_bytes (w2n ao) (w2n as_) s.as_memory in
+        let aoff = w2n ao in
+        let asz = w2n as_ in
+        let mem = asm_expand_memory (aoff + asz) s.as_memory in
+        let calldata = TAKE asz (DROP aoff mem) in
         let target : address = w2w addr_w in
         let code = (lookup_account target s.as_accounts).code in
         let evm_s = make_asm_delegatecall_state s target
@@ -547,7 +583,10 @@ Definition asm_exec_create_def:
   asm_exec_create s =
     case s.as_stack of
       value :: offset :: sz :: stk =>
-        let init_code = read_bytes (w2n offset) (w2n sz) s.as_memory in
+        let off = w2n offset in
+        let size = w2n sz in
+        let mem = asm_expand_memory (off + size) s.as_memory in
+        let init_code = TAKE size (DROP off mem) in
         let sender = s.as_call_ctx.cc_address in
         let nonce = (lookup_account sender s.as_accounts).nonce in
         let new_addr = address_for_create sender nonce in
@@ -568,7 +607,10 @@ Definition asm_exec_create2_def:
   asm_exec_create2 s =
     case s.as_stack of
       value :: offset :: sz :: salt :: stk =>
-        let init_code = read_bytes (w2n offset) (w2n sz) s.as_memory in
+        let off = w2n offset in
+        let size = w2n sz in
+        let mem = asm_expand_memory (off + size) s.as_memory in
+        let init_code = TAKE size (DROP off mem) in
         let sender = s.as_call_ctx.cc_address in
         let new_addr = address_for_create2 sender salt init_code in
         let gas = s.as_call_ctx.cc_gas -
@@ -635,8 +677,11 @@ Definition asm_step_bitwise_def:
       SOME (asm_binop (λn w. word_lsr w (w2n n)) s) else
     if name = "SAR" then
       SOME (asm_binop (λn w. word_asr w (w2n n)) s) else
-    if name = "SIGNEXTEND" then SOME (asm_binop sign_extend s) else
-    if name = "BYTE" then SOME (asm_binop evm_byte s) else
+    if name = "SIGNEXTEND" then
+      SOME (asm_binop vfmExecution$sign_extend s) else
+    if name = "BYTE" then
+      SOME (asm_binop
+        (λi w. if w2n i < 32 then w2w (get_byte i w T) else 0w) s) else
     NONE
 End
 
@@ -704,7 +749,7 @@ Definition asm_step_context_def:
       SOME (asm_push_val (n2w (LENGTH s.as_call_ctx.cc_calldata)) s) else
     if name = "CALLDATALOAD" then SOME (asm_state_unop (λoff s.
       word_of_bytes T (0w:bytes32)
-        (read_bytes (w2n off) 32 s.as_call_ctx.cc_calldata)) s) else
+        (take_pad_0 32 (DROP (w2n off) s.as_call_ctx.cc_calldata))) s) else
     if name = "ORIGIN" then
       SOME (asm_push_val (w2w s.as_tx_ctx.tc_origin) s) else
     if name = "GASPRICE" then
