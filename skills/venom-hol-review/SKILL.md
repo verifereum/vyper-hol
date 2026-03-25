@@ -82,6 +82,17 @@ Every compiler-related definition file (`*DefsScript.sml`) in `venom/passes/`, `
 - Prefer proper termination over fuel. Mutual recursion with list helper > FOLDL for HOL4's termination checker.
 - Cheated termination produces unsound induction principle and **Holmake won't report it as CHEATED** ([HOL#1832](https://github.com/HOL-Theorem-Prover/HOL/issues/1832)).
 
+## LLM artifacts
+
+Read all modified files and check for agent artifacts that don't belong in committed code:
+
+- **Internal task IDs or tracking**: references like "P0", "T5", "Phase 2", "Step 3" that come from an agent's internal planning, not the code's design
+- **Process narration**: "Let me...", "Now I'll...", "First we..." — comments that narrate authoring rather than explain the code
+- **Markup leakage**: markdown formatting, XML tags, or prompt fragments in SML comments
+- **Agent infrastructure references**: paths like `.agent-files/`, `.local/`, task file names, handoff slugs — anything from the agent's working environment
+
+The test: would a human author have written this comment? If it only makes sense in the context of an agent session, remove it.
+
 ## PR response
 
 Reply to each unaddressed comment with addressing commit hash. Resolve own threads. Leave others' threads for them to resolve.
