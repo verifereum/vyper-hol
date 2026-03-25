@@ -1,6 +1,5 @@
-# Venom codegen correctness theorem statements (Props)
-# Proof files are in proofs/ subdirectory.
+# Venom codegen correctness theorem statements (Props) and proofs
 INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec \
-           defs ../defs ../passes/shared/defs \
+           defs proofs ../defs ../passes/shared/defs \
            ../analysis/liveness/defs ../analysis/cfg/defs \
            ../analysis/dfg/defs ../../syntax ../../semantics
