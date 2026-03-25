@@ -19,10 +19,8 @@
 
 Theory asmToBytecodeProofs
 Ancestors
-  codegenRel
-Libs
-  listTheory rich_listTheory finite_mapTheory indexedListsTheory pairTheory
-  optionTheory symbolResolveTheory codegenRelTheory asmSemTheory
+  codegenRel symbolResolve asmSem
+  list rich_list finite_map indexedLists pair option
 
 (* ===== FOLDL Helper Lemmas ===== *)
 

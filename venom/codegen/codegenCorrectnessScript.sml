@@ -32,7 +32,8 @@ Definition initial_state_rel_def:
          (∀i. i < LENGTH params ⇒
             FLOOKUP vs.vs_vars (HD (EL i params).inst_outputs) =
               SOME (EL i (REVERSE ctxt.stack))) ∧
-         (* Environment must match *)
+         (* Environment must match.
+            rb.accounts includes contract storage (per-account). *)
          rb.accounts = vs.vs_accounts ∧
          rb.tStorage = vs.vs_transient ∧
          ctxt.returnData = vs.vs_returndata ∧
@@ -105,19 +106,22 @@ Theorem codegen_fn_correct:
          ctxt.msgParams.code = bytecode ∧
          ctxt.msgParams.parsed = parse_code 0 FEMPTY bytecode
      | [] => F) ⇒
+    case run_function fuel ctx fn vs of
     (* Halt: Venom halts ⇒ EVM halts with matching state *)
-    (∀vs'. run_function fuel ctx fn vs = Halt vs' ⇒
-       ∃es'. run es = SOME (INR NONE, es') ∧
-             final_state_rel vs' es') ∧
+      Halt vs' =>
+        ∃es'. run es = SOME (INR NONE, es') ∧
+              final_state_rel vs' es'
     (* Revert: Venom reverts ⇒ EVM reverts with matching state *)
-    (∀vs'. run_function fuel ctx fn vs = Abort Revert_abort vs' ⇒
-       ∃es'. run es = SOME (INR (SOME Reverted), es') ∧
-             final_state_rel vs' es') ∧
+    | Abort Revert_abort vs' =>
+        ∃es'. run es = SOME (INR (SOME Reverted), es') ∧
+              final_state_rel vs' es'
     (* Exceptional halt: Venom aborts ⇒ EVM faults *)
-    (∀vs'. run_function fuel ctx fn vs = Abort ExHalt_abort vs' ⇒
-       ∃es' exc. run es = SOME (INR (SOME exc), es') ∧
-                 exc ≠ Reverted ∧
-                 final_state_rel vs' es')
+    | Abort ExHalt_abort vs' =>
+        ∃es' exc. run es = SOME (INR (SOME exc), es') ∧
+                  exc ≠ Reverted ∧
+                  final_state_rel vs' es'
+    (* OK/Error/IntRet: no claim (fuel exhaustion, continuation, etc.) *)
+    | _ => T
 Proof
   cheat
 QED

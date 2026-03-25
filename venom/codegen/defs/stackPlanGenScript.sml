@@ -283,7 +283,9 @@ End
 Definition codegen_ready_fn_def:
   codegen_ready_fn fn ⇔
     wf_function fn ∧
+    fn_inst_wf fn ∧
     ssa_form fn ∧
+    def_dominates_uses fn ∧
     single_use_form fn ∧
     cfg_is_normalized (cfg_analyze fn) fn ∧
     EVERY (λbb. EVERY codegen_ready_inst bb.bb_instructions) fn.fn_blocks

@@ -50,6 +50,7 @@ Failures to catch:
 ## File structure
 
 - Modern syntax: `Theory` / `Ancestors`, no `open` / `export_theory()`.
+- **Ancestors vs Libs**: Theories (anything ending in `Theory`) go in `Ancestors`, never in `Libs`. Only non-theory libraries belong in `Libs` (e.g. `Defn`, `TotalDefn`, `pairLib`, `BasicProvers`, `intLib`, `fcpLib`, `pred_setLib`). Note: `Ancestors` opens only the *named* theories' namespaces — transitive ancestors are loaded but not opened. If you need theorems from `finite_mapTheory`, list `finite_map` in `Ancestors` even if it's a transitive ancestor of another listed theory.
 - Separate statement file (API) from proof file (implementation). Statements use `ACCEPT_TAC proof_thm`. Shared definitions in a common ancestor to avoid circular deps.
 - Every exporting API theory must be listed as an ancestor in `vyperHolScript.sml` so it is included in the top-level build.
 

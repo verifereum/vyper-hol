@@ -287,13 +287,15 @@ When proving properties about `ALOOKUP` on mapped or filtered lists:
 
 Use modern syntax for HOL4 script files. Scripts should start with the `Theory` keyword and use `Ancestors` and `Libs` to specify dependencies, rather than using `open` explicitly.
 
+**Ancestors vs Libs**: Theories (anything ending in `Theory`) go in `Ancestors`, never in `Libs`. Only non-theory libraries belong in `Libs` (e.g. `Defn`, `TotalDefn`, `pairLib`, `BasicProvers`). Note: `Ancestors` opens only the *named* theories — transitive ancestors are loaded but not opened. List a theory explicitly if you need its theorem names in scope.
+
 Example:
 ```sml
 Theory myTheory
 Ancestors
-  parentTheory1 parentTheory2
+  parentTheory1 parentTheory2 finite_map
 Libs
-  someLib
+  pairLib
 
 (* definitions and theorems here *)
 ```
