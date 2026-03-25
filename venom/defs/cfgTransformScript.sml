@@ -231,3 +231,27 @@ Definition fn_all_vars_def:
       bb.bb_instructions))
     func.fn_blocks)
 End
+
+(* ===== Instruction ID Renumbering ===== *)
+
+(* Assign sequential IDs to instructions within a block, starting from n.
+   Returns (next_id, updated_block). *)
+Definition renumber_block_inst_ids_def:
+  renumber_block_inst_ids n bb =
+    let (n', insts') = FOLDL (λ(id, acc) inst.
+      (id + 1n, acc ++ [inst with inst_id := id]))
+      (n, []) bb.bb_instructions in
+    (n', bb with bb_instructions := insts')
+End
+
+(* Assign sequential IDs to all instructions across all blocks.
+   Threads the counter so IDs are globally unique.
+   Establishes fn_inst_ids_distinct by construction. *)
+Definition renumber_fn_inst_ids_def:
+  renumber_fn_inst_ids func =
+    let (_, bbs') = FOLDL (λ(n, acc) bb.
+      let (n', bb') = renumber_block_inst_ids n bb in
+      (n', acc ++ [bb']))
+      (0n, []) func.fn_blocks in
+    func with fn_blocks := bbs'
+End

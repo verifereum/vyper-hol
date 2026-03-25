@@ -373,12 +373,92 @@ Proof
   first_x_assum (qspec_then `st` mp_tac) >> simp[check_def, type_check_def, assert_def, return_def]
 QED
 
+(* ===== Chain interaction builtins (unguarded eval_exprs IH) ===== *)
+
+(* RawCallTarget *)
+Theorem case_RawCallTarget_dom[local]:
+  ∀cx ty flags es v0.
+    (∀st res st'. eval_exprs cx es st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
+    ∀st res st'.
+      eval_expr cx (Call ty (RawCallTarget flags) es v0) st = (res,st') ⇒
+      MAP FDOM st.scopes = MAP FDOM st'.scopes
+Proof
+  rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
+       check_def, type_check_def, assert_def, lift_option_def, lift_option_type_def,
+       get_accounts_def, get_transient_storage_def, option_CASE_rator] >>
+  strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
+  pairarg_tac >> gvs[update_accounts_def, update_transient_def, bind_def,
+       ignore_bind_def, return_def, raise_def, AllCaseEqs(), assert_def,
+       COND_RATOR, CaseEq"bool"]
+QED
+
+(* RawLog *)
+Theorem case_RawLog_dom[local]:
+  ∀cx v0 es v1.
+    (∀st res st'. eval_exprs cx es st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
+    ∀st res st'.
+      eval_expr cx (Call v0 RawLog es v1) st = (res,st') ⇒
+      MAP FDOM st.scopes = MAP FDOM st'.scopes
+Proof
+  rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
+       check_def, type_check_def, assert_def, lift_option_def, lift_option_type_def,
+       push_log_def, option_CASE_rator] >>
+  strip_tac >> gvs[AllCaseEqs(), return_def, raise_def]
+QED
+
+(* RawRevert *)
+Theorem case_RawRevert_dom[local]:
+  ∀cx v0 es v1.
+    (∀st res st'. eval_exprs cx es st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
+    ∀st res st'.
+      eval_expr cx (Call v0 RawRevert es v1) st = (res,st') ⇒
+      MAP FDOM st.scopes = MAP FDOM st'.scopes
+Proof
+  rpt strip_tac >>
+  gvs[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
+      check_def, type_check_def, assert_def]
+QED
+
+(* SelfDestructTarget *)
+Theorem case_SelfDestructTarget_dom[local]:
+  ∀cx v0 es v1.
+    (∀st res st'. eval_exprs cx es st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
+    ∀st res st'.
+      eval_expr cx (Call v0 SelfDestructTarget es v1) st = (res,st') ⇒
+      MAP FDOM st.scopes = MAP FDOM st'.scopes
+Proof
+  rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
+       check_def, type_check_def, assert_def, lift_option_def, lift_option_type_def,
+       get_accounts_def, option_CASE_rator] >>
+  strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac transfer_value_scopes >> gvs[]
+QED
+
+(* CreateTarget *)
+Theorem case_CreateTarget_dom[local]:
+  ∀cx ty kind rof es v0.
+    (∀st res st'. eval_exprs cx es st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
+    ∀st res st'.
+      eval_expr cx (Call ty (CreateTarget kind rof) es v0) st = (res,st') ⇒
+      MAP FDOM st.scopes = MAP FDOM st'.scopes
+Proof
+  rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
+       check_def, type_check_def, assert_def, lift_option_def, lift_option_type_def,
+       get_accounts_def, update_accounts_def, option_CASE_rator, COND_RATOR] >>
+  strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac transfer_value_scopes >> gvs[]
+QED
+
 (* Goal 17: ExtCall (exact evaluate_ind shape) *)
 (* ========================================================================
    Helper lemmas for evaluate_ind cases (P8: eval_exprs)
    ======================================================================== *)
 
-(* Goal 19: eval_exprs [] (no IH) *)
+(* Goal 24: eval_exprs [] (no IH) *)
 Theorem case_eval_exprs_nil_dom[local]:
   ∀cx st res st'.
     eval_exprs cx [] st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
@@ -446,6 +526,11 @@ Proof
     ACCEPT_TAC case_Send_dom >-
     suspend "ExtCall" >-
     suspend "IntCall" >-
+    ACCEPT_TAC case_RawCallTarget_dom >-
+    ACCEPT_TAC case_RawLog_dom >-
+    ACCEPT_TAC case_RawRevert_dom >-
+    ACCEPT_TAC case_SelfDestructTarget_dom >-
+    ACCEPT_TAC case_CreateTarget_dom >-
     ACCEPT_TAC case_eval_exprs_nil_dom >-
     ACCEPT_TAC case_eval_exprs_cons_dom
   ) >>

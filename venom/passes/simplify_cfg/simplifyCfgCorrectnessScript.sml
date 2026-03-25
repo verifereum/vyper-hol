@@ -6,7 +6,7 @@
 
 Theory simplifyCfgCorrectness
 Ancestors
-  simplifyCfgProof
+  simplifyCfgProof cfgWf
 
 Theorem simplify_cfg_pass_correct:
   !func s fuel ctx.
@@ -18,4 +18,24 @@ Theorem simplify_cfg_pass_correct:
         (run_function fuel' ctx func' s)
 Proof
   ACCEPT_TAC simplify_cfg_fn_correct
+QED
+
+(* ===== Obligations ===== *)
+
+Theorem simplify_cfg_establishes_all_reachable:
+  ∀func. wf_function func ⇒ all_reachable (simplify_cfg_fn func)
+Proof
+  cheat
+QED
+
+Theorem simplify_cfg_preserves_ssa_form:
+  ∀func. ssa_form func ∧ wf_function func ⇒ ssa_form (simplify_cfg_fn func)
+Proof
+  cheat
+QED
+
+Theorem simplify_cfg_preserves_wf_function:
+  ∀func. wf_function func ⇒ wf_function (simplify_cfg_fn func)
+Proof
+  cheat
 QED

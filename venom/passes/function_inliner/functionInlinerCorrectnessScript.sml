@@ -15,3 +15,14 @@ Theorem function_inliner_pass_correct:
 Proof
   ACCEPT_TAC function_inliner_correct
 QED
+
+(* ===== Obligations ===== *)
+
+(* Inliner preserves wf_function for all functions in context. *)
+Theorem function_inliner_preserves_wf_function:
+  ∀ctx threshold.
+    EVERY wf_function ctx.ctx_functions ⇒
+    EVERY wf_function (function_inliner_ctx threshold ctx).ctx_functions
+Proof
+  cheat
+QED

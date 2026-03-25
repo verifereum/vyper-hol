@@ -7,3 +7,4 @@ Ancestors
   vyperEvalPureExpr
   vyperLookupStorageScopes
   vyperUpdateTarget
+  vyperHashMap

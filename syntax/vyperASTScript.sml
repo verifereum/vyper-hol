@@ -154,30 +154,29 @@ Datatype:
   | ECAdd        (* ecadd((x1,y1), (x2,y2)) -> (x3,y3) on BN254 *)
   | ECMul        (* ecmul((x,y), scalar) -> (x',y') on BN254 *)
   | PowMod256   (* pow_mod256(base, exp) -> (base ** exp) % 2^256 *)
-  (* System builtins — low-level EVM operations *)
-  | RawCall bool bool num bool
-      (* (is_delegate, is_static, max_outsize, revert_on_failure) *)
-      (* args = [to; data; gas; value] *)
-  | RawLog        (* args = data :: topics (n_topics = LENGTH args - 1) *)
-  | RawRevert     (* args = [data_bytes] *)
-  | SelfDestruct  (* args = [to_address] *)
-  (* Contract creation builtins *)
-  | RawCreate bool bool
-      (* (revert_on_failure, has_salt) *)
-      (* args = blob :: value :: [salt] ++ ctor_args *)
-  | CreateMinimalProxy bool bool
-      (* (revert_on_failure, has_salt) *)
-      (* args = [target; value] or [target; value; salt] *)
-  | CreateCopyOf bool bool
-      (* (revert_on_failure, has_salt) *)
-      (* args = [target; value] or [target; value; salt] *)
-  | CreateFromBlueprint bool bool bool
-      (* (revert_on_failure, raw_args, has_salt) *)
-      (* args = target :: value :: code_offset :: [salt] ++ ctor_args *)
 End
 
 (* Resolved external call signature: (func_name, arg_types, return_type) *)
 Type ext_call_sig = “:identifier # (type list) # type”;
+
+Datatype:
+  raw_call_flags = <|
+    rcf_max_outsize: num
+  ; rcf_is_delegate: bool
+  ; rcf_is_static: bool
+  ; rcf_revert_on_failure: bool
+  |>
+End
+
+(* Which variant of CREATE to use *)
+Datatype:
+  create_kind
+  = CreateMinimalProxy  (* create_minimal_proxy_to(target) *)
+  | CreateCopyOf        (* create_copy_of(target) *)
+  | CreateFromBlueprint num bool (* code_offset, raw_args *)
+                        (* create_from_blueprint(target, *args) *)
+  | RawCreate           (* raw_create(bytecode, *args) *)
+End
 
 Datatype:
   call_target
@@ -189,6 +188,23 @@ Datatype:
                                  - extcall (F):    args = [target; value; arg1; arg2; ...]
                                  where target is address and value is uint256 to send *)
   | Send
+  (* raw_call(to, data, max_outsize=0, gas=gas, value=0, ...)
+     args = [to_addr; data_bytes; value]
+     Keyword args (compile-time constants) are in raw_call_flags *)
+  | RawCallTarget raw_call_flags
+  (* raw_log(topics, data)
+     args = [data_bytes; topic1; ...; topicN] where N ≤ 4 *)
+  | RawLog
+  (* raw_revert(data) — terminus
+     args = [data_bytes] *)
+  | RawRevert
+  (* selfdestruct(to) — terminus
+     args = [to_addr] *)
+  | SelfDestructTarget
+  (* create_*(target, *ctor_args, value=0, salt=NONE, revert_on_failure=T)
+     args = [target_or_bytecode; ctor_arg1; ...; value]
+     salt: NONE = CREATE, SOME s = CREATE2 with salt s *)
+  | CreateTarget create_kind bool (* revert_on_failure *)
 End
 
 Datatype:

@@ -338,3 +338,5 @@ Definition venom_wf_def:
     (∀fn. MEM fn ctx.ctx_functions ==>
           wf_function fn ∧ fn_inst_wf fn)
 End
+
+

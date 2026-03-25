@@ -18,7 +18,7 @@
 
 Theory deadStoreElimCorrectness
 Ancestors
-  deadStoreElimProofs
+  deadStoreElimProofs venomWf
 
 Theorem dse_function_correct:
   !analysis_fn aliases fuel ctx fn s.
@@ -31,4 +31,18 @@ Theorem dse_function_correct:
       (run_function fuel ctx (dse_function analysis_fn fn) s)
 Proof
   ACCEPT_TAC dse_function_correct_proof
+QED
+
+(* ===== Obligations ===== *)
+
+Theorem dse_preserves_ssa_form:
+  ∀analysis_fn fn. ssa_form fn ⇒ ssa_form (dse_function analysis_fn fn)
+Proof
+  cheat
+QED
+
+Theorem dse_preserves_wf_function:
+  ∀analysis_fn fn. wf_function fn ⇒ wf_function (dse_function analysis_fn fn)
+Proof
+  cheat
 QED
