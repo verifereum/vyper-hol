@@ -26,31 +26,9 @@
 Theory vyperHashMap
 Ancestors
   vyperHashMapStorage vyperLookupStorage vyperState vyperArith
+  vyperStorageBackend
 Libs
   wordsLib wordsTheory integerTheory integer_wordTheory
-
-(* ===== Non-monadic storage accessors ===== *)
-
-Definition get_storage_def:
-  get_storage cx (st : evaluation_state) T = st.tStorage cx.txn.target ∧
-  get_storage cx st F = (st.accounts cx.txn.target).storage
-End
-
-Definition set_storage_def:
-  set_storage cx (st : evaluation_state) T storage' =
-    (st with tStorage := (cx.txn.target =+ storage') st.tStorage) ∧
-  set_storage cx st F storage' =
-    (st with accounts :=
-       (cx.txn.target =+ (st.accounts cx.txn.target with storage := storage'))
-       st.accounts)
-End
-
-Theorem get_storage_after_set:
-  ∀cx st b s'. get_storage cx (set_storage cx st b s') b = s'
-Proof
-  rpt gen_tac \\ Cases_on `b`
-  \\ simp[get_storage_def, set_storage_def, combinTheory.APPLY_UPDATE_THM]
-QED
 
 (* ===== Ref-level: indexing ===== *)
 
