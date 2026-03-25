@@ -2729,46 +2729,49 @@ Resume type_preservation[IntCall]:
   simp_tac std_ss [bind_apply, ignore_bind_apply, AllCaseEqs(),
                    PULL_EXISTS] >>
   rpt gen_tac >>
-  reverse(disch_then strip_assume_tac)
+  qmatch_goalsub_rename_tac`eval_exprs _ _ s6` >>
+  imp_res_tac lift_option_type_state >>
+  imp_res_tac type_check_state >>
+  imp_res_tac check_state >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  PairCases_on`tup` >>
+  rpt (first_x_assum drule >> strip_tac) >>
+  qpat_x_assum`!_. _`mp_tac >>
+  qhdtm_x_assum`type_check`mp_tac >>
+  simp_tac (srw_ss()) [Abbr`dflts`,Abbr`sstup`,Abbr`stup`,Abbr`args`] >>
+  strip_tac >> disch_then drule >>
+  qpat_x_assum`Abbrev(needed_dflts = _)`mp_tac >>
+  simp_tac std_ss [] >>
+  strip_tac >> disch_then drule >>
+  strip_tac >>
+  qpat_x_assum`!_. _`(fn th => mp_tac th >> CHANGED_TAC(simp_tac(srw_ss())[]))
+  >> disch_then drule >> disch_then drule >> strip_tac >>
+  qpat_x_assum`!_. _`(fn th => mp_tac th >> CHANGED_TAC(simp_tac(srw_ss())[]))
+  >> rpt(disch_then drule) >> simp_tac(srw_ss())[] >> strip_tac >>
+  sg`∀res s. eval_exprs cxd needed_dflts s6 = (res, s) ==>
+             env_consistent env cx s ∧ state_well_typed s`
   >- (
-    (* eval_exprs cxd needed_dflts failed *)
-    (* Use IH_args for env_consistent env cx after args eval *)
-    first_x_assum $ drule_at(Pat`eval_exprs`) >>
-    first_x_assum $ drule_at(Pat`eval_exprs`) >>
-    rpt(first_x_assum(qspec_then`ARB`kall_tac))
-    \\ imp_res_tac lift_option_type_state
-    \\ imp_res_tac type_check_state
-    \\ gvs[check_def, assert_def]
-    \\ disch_then drule
-    \\ gvs[] \\ strip_tac
-    \\ disch_then drule
-    \\ disch_then drule
-    \\ gvs[]
-    \\ disch_then drule_all
-    \\ strip_tac
-    \\ first_x_assum drule
-    \\ gvs[]
-    \\ disch_then drule
-    \\ disch_then drule
-    \\ gvs[lift_option_type_def, AllCaseEqs(),option_CASE_rator,
-           raise_def,return_def]
-    \\ PairCases_on`tup`
-    \\ drule(iffLR functions_well_typed_def)
+    rpt gen_tac \\ strip_tac >>
+    last_x_assum(qspec_then`ARB`kall_tac) >>
+    gvs[lift_option_type_def, AllCaseEqs(),option_CASE_rator,
+        raise_def,return_def,Abbr`sstup2`] >>
+    drule(iffLR functions_well_typed_def)
     \\ disch_then $ drule_then drule
     \\ disch_then(qspec_then`env.fn_sigs`mp_tac)
     \\ impl_tac >- gvs[env_consistent_def]
     \\ strip_tac
     \\ qmatch_asmsub_abbrev_tac`well_typed_exprs empty_env tup2`
-    \\ gvs[Abbr`stup`,Abbr`sstup`]
     \\ sg `well_typed_exprs empty_env needed_dflts`
     >- (
       simp[Abbr`needed_dflts`]
       \\ irule well_typed_exprs_DROP
       \\ rw[] )
-    \\ disch_then drule
+    >> first_x_assum drule
+    \\ disch_then(drule_at Any)
     \\ impl_tac
     >- (
-      conj_tac
+      simp[]
+      >> conj_tac
       >- (
         qunabbrev_tac`empty_env`
         \\ `get_tenv cx = get_tenv cxd` by rw[Abbr`cxd`, get_tenv_stk_irrelevant]
@@ -2795,44 +2798,46 @@ Resume type_preservation[IntCall]:
       drule_then (irule o SYM) eval_exprs_preserves_scopes_dom ) >>
     drule (cj 9 eval_preserves_tv) >>
     rw[preserves_tv_def, Abbr`cxd`]) >>
+  reverse(disch_then strip_assume_tac)
+  >- (
+    (* eval_exprs cxd needed_dflts failed *)
+    (* Use IH_args for env_consistent env cx after args eval *)
+    first_x_assum $ drule_at(Pat`eval_exprs`) >>
+    rpt BasicProvers.VAR_EQ_TAC >>
+    first_x_assum $ drule_at(Pat`env_consistent`) >>
+    disch_then kall_tac >>
+    gvs[] ) >>
   pop_assum mp_tac >>
   simp_tac std_ss [LET_THM, bind_apply] >>
   BasicProvers.TOP_CASE_TAC >>
   rpt BasicProvers.VAR_EQ_TAC >>
   imp_res_tac lift_option_type_state >>
-  imp_res_tac type_check_state >>
-  imp_res_tac check_state >>
   rpt BasicProvers.VAR_EQ_TAC >>
-  rpt (first_x_assum drule >> strip_tac) >>
+  last_x_assum $ drule_at(Pat`eval_exprs`) >>
   strip_tac >>
+  reverse BasicProvers.TOP_CASE_TAC
+  >- ( strip_tac \\ rpt BasicProvers.VAR_EQ_TAC \\ simp[] ) >>
+  BasicProvers.TOP_CASE_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >- (
+    pop_assum mp_tac \\ simp_tac (srw_ss()) [get_scopes_def, return_def] ) >>
+  BasicProvers.TOP_CASE_TAC >>
+  first_x_assum drule >>
+  disch_then drule >> strip_tac >>
+  imp_res_tac lift_option_type_state >>
+  imp_res_tac get_scopes_result >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC
+  >- ( strip_tac \\ rpt BasicProvers.VAR_EQ_TAC \\ simp[] ) >>
   unabbrev_all_tac >>
-  qpat_x_assum`!_. _`mp_tac >>
-  qhdtm_x_assum`type_check`mp_tac >>
-  PairCases_on`tup` >>
-  simp_tac (srw_ss()) [] >>
-  strip_tac >> disch_then drule >>
-  disch_then drule >>
-  qpat_x_assum`_ = (INL dflt_vs,_)`mp_tac >>
-  simp_tac (srw_ss()) [] >>
-  strip_tac >> disch_then drule >>
-  strip_tac >>
-  qpat_x_assum`!_. _`(fn th => mp_tac th >> CHANGED_TAC(simp_tac(srw_ss())[]))
-  >> disch_then drule >>
-  disch_then drule >>
-  strip_tac >>
-  qpat_x_assum`!_. _`(fn th => mp_tac th >> CHANGED_TAC(simp_tac(srw_ss())[]))
-  >> disch_then drule >>
-  disch_then drule >>
-  disch_then drule >>
-  disch_then drule >>
-  disch_then drule >>
-  disch_then drule >>
-  simp_tac std_ss [] >>
-  strip_tac >>
-  qpat_x_assum`_ = (res,_)`mp_tac >>
-  simp_tac (srw_ss())[] >>
-  first_x_assum(drule_at(Pat`eval_exprs`)) >>
-  simp_tac (srw_ss()) [functions_well_typed_stk_irrelevant] >>
+  ntac 2 (pop_assum mp_tac) >> simp_tac std_ss [] >>
+  ntac 2 strip_tac >>
+  first_x_assum $ drule_at(Pat`lift_option_type`) >> strip_tac >>
+  BasicProvers.TOP_CASE_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC
+  >- ( strip_tac \\ rpt BasicProvers.VAR_EQ_TAC \\ simp[]
+       >> pop_assum mp_tac >> rw[push_function_def,return_def] ) >>
+  first_x_assum drule >>
+  rpt BasicProvers.VAR_EQ_TAC >>
   cheat
 QED
 
