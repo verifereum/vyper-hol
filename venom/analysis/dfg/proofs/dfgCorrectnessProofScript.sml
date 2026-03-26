@@ -7,7 +7,7 @@
 
 Theory dfgCorrectnessProof
 Ancestors
-  dfgDefs list finite_map pred_set
+  dfgDefs list finite_map pred_set venomState
 
 (* --------------------------------------------------------------------------
    Well-formedness preservation
@@ -556,8 +556,6 @@ QED
 (* --------------------------------------------------------------------------
    normalize_operand preserves eval_operand
    -------------------------------------------------------------------------- *)
-
-open venomStateTheory
 
 (* Semantic DFG well-formedness: for every variable defined by an ASSIGN
    instruction in the DFG, the variable's value equals the ASSIGN source's

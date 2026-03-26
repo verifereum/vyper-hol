@@ -42,10 +42,9 @@ Theory passSharedProps
 Ancestors
   passSharedDefs venomExecSemantics venomEffects stateEquiv venomInstProofs
   passSharedField passSharedTransfer passSharedVarFrame passSharedFrame
-  passSharedSubst instIdxIndep
-
-open venomStateTheory venomInstTheory venomWfTheory pred_setTheory
-     listTheory rich_listTheory;
+  passSharedSubst instIdxIndep venomState venomInst venomWf
+Libs
+  pred_setTheory listTheory rich_listTheory
 
 (* ===================================================================== *)
 (* ===== Well-formedness shape lemmas ================================== *)

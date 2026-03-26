@@ -6,7 +6,9 @@
 
 Theory passSimulationProps
 Ancestors
-  passSimulationProofs analysisSimDefs
+  passSimulationProofs analysisSimDefs venomWf venomInst passSimulationDefs
+Libs
+  indexedListsTheory listTheory
 
 (* ===== Utilities ===== *)
 
@@ -309,9 +311,6 @@ Proof
   ACCEPT_TAC mapi_transform_fn_insts_trace_proof
 QED
 
-open indexedListsTheory listTheory venomWfTheory venomInstTheory
-     passSimulationDefsTheory;
-
 (* LAST of MAPi equals f applied to last element *)
 Theorem last_mapi:
   !(f:num -> 'a -> 'b) (l:'a list).
@@ -523,8 +522,6 @@ Proof
   >- (irule mapi_transform_fn_inst_ids >> simp[] >>
       fs[wf_function_def])
 QED
-
-open analysisSimDefsTheory;
 
 (* General: FLAT (MAPi (\i x. [f i x]) l) = MAPi f l *)
 Theorem flat_mapi_singleton:

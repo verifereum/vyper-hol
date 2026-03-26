@@ -5,9 +5,7 @@
 Theory passSharedField
 Ancestors
   passSharedDefs venomExecSemantics venomEffects venomInstProps
-
-open venomStateTheory venomInstTheory venomExecSemanticsTheory
-     venomEffectsTheory passSharedDefsTheory venomInstPropsTheory;
+  venomState venomInst
 
 (* Upstream-style tactic *)
 val field_tac =
