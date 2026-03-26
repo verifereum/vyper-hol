@@ -11,7 +11,6 @@
  *   assign_subscripts_replace_preserves_type - single-subscript Replace variant
  *   assign_subscripts_update_preserves_type - single-subscript Update variant
  *   assign_subscripts_replace_preserves_type_gen - general Replace variant
- *   assign_subscripts_update_preserves_type_gen - general Update variant
  *
  * Helper:
  *   SORTED_insert_sarray - insert_sarray preserves SORTED on keys
@@ -371,26 +370,4 @@ Proof
   \\ qspecl_then [`subs`, `tv`, `v`, `Replace new_val`, `v'`]
        mp_tac assign_subscripts_preserves_type
   \\ simp[assign_subscripts_def]
-QED
-
-Theorem assign_subscripts_update_preserves_type_gen:
-  ∀subs tv v ty bop v_rhs v'.
-    well_formed_type_value tv ∧
-    value_has_type tv v ∧
-    (∀old_v new_v.
-       value_has_type (subscript_type tv subs) old_v ∧
-       evaluate_binop
-         (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-         NoneTV bop old_v v_rhs = INL new_v ⇒
-       value_has_type (subscript_type tv subs) new_v) ∧
-    assign_subscripts tv v subs (Update ty bop v_rhs) = INL v' ⇒
-    value_has_type tv v'
-Proof
-  rpt strip_tac
-  \\ qspecl_then [`subs`, `tv`, `v`, `Update ty bop v_rhs`, `v'`]
-       mp_tac assign_subscripts_preserves_type
-  \\ simp[assign_subscripts_def, AllCaseEqs(), LET_THM]
-  \\ rpt strip_tac \\ gvs[]
-  \\ first_x_assum irule
-  \\ first_x_assum ACCEPT_TAC
 QED
