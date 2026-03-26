@@ -385,3 +385,22 @@ Proof
   \\ rw[split_hashmap_subscripts_def]
   \\ gvs[AllCaseEqs()]
 QED
+
+(* ===== Subscript-to-value list conversion ===== *)
+
+Definition subscripts_to_values_def:
+  subscripts_to_values [] = SOME [] ∧
+  subscripts_to_values (s::ss) =
+    case (subscript_to_value s, subscripts_to_values ss) of
+    | (SOME v, SOME vs) => SOME (v :: vs)
+    | _ => NONE
+End
+
+Theorem subscripts_to_values_length:
+  ∀subs vs.
+    subscripts_to_values subs = SOME vs ⇒ LENGTH subs = LENGTH vs
+Proof
+  Induct >> rw[subscripts_to_values_def] >>
+  gvs[AllCaseEqs()] >>
+  first_x_assum drule >> simp[]
+QED

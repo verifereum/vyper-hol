@@ -2,7 +2,7 @@ Theory vyperLookupStorage
 
 Ancestors
   vyperLookup vyperMisc vyperContext vyperState vyperStorage vyperStorageBackend
-  vyperInterpreter
+  vyperInterpreter vyperStatePreservation
   vyperValue vyperValueOperation vyperTyping vyperEncodeDecode
 Libs
   wordsLib
@@ -887,4 +887,26 @@ Theorem lookup_toplevel_name_stk:
 Proof
   rpt gen_tac >>
   simp[lookup_toplevel_name_def, lookup_global_stk]
+QED
+
+(* ===== Connecting lookup_toplevel_name with lookup_global ===== *)
+
+Theorem lookup_toplevel_name_lookup_global:
+  ∀cx st src_id_opt n href0.
+    lookup_toplevel_name cx st src_id_opt n = SOME href0 ⇒
+    lookup_global cx src_id_opt (string_to_num n) st = (INL href0, st)
+Proof
+  rw[lookup_toplevel_name_def] >>
+  Cases_on `lookup_global cx src_id_opt (string_to_num n) st` >>
+  Cases_on `q` >> gvs[] >>
+  drule lookup_global_state >> simp[]
+QED
+
+Theorem lookup_global_get_module_code:
+  ∀cx src_id_opt n st href0.
+    lookup_global cx src_id_opt n st = (INL href0, st) ⇒
+    ∃code. get_module_code cx src_id_opt = SOME code
+Proof
+  rw[lookup_global_def, bind_def, lift_option_type_def, raise_def] >>
+  Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def]
 QED

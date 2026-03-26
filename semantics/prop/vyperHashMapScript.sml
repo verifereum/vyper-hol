@@ -27,7 +27,7 @@
 Theory vyperHashMap
 Ancestors
   vyperHashMapStorage vyperLookupStorage vyperState vyperArith
-  vyperStorageBackend
+  vyperStorageBackend vyperInterpreter
 Libs
   wordsLib wordsTheory integerTheory integer_wordTheory
 
@@ -212,6 +212,16 @@ QED
 
 (* ===== Name-level: variable classification ===== *)
 
+Definition var_is_hashmap_def:
+  var_is_hashmap cx mid n ⇔
+  ∃code is_transient kt vt id offset.
+    get_module_code cx mid = SOME code ∧
+    find_var_decl_by_num (string_to_num n) code =
+      SOME (HashMapVarDecl is_transient kt vt, id) ∧
+    lookup_var_slot_from_layout cx is_transient mid id = SOME offset ∧
+    offset < dimword(:256)
+End
+
 Definition is_leaf_hashmap_def:
   is_leaf_hashmap cx mid n ⇔
   ∃code is_transient kt t id offset tv.
@@ -298,4 +308,93 @@ Proof
     metis_tac[is_leaf_hashmap_lookup_state_independent]
   \\ simp[]
   \\ drule_all read_hashmap_after_write_other \\ simp[]
+QED
+
+(* ===== Indexing chains for nested HashMaps ===== *)
+
+Definition hashmap_index_chain_def:
+  hashmap_index_chain href [] = SOME href ∧
+  hashmap_index_chain href (kv::kvs) =
+    case hashmap_index href kv of
+    | SOME href' => hashmap_index_chain href' kvs
+    | NONE => NONE
+End
+
+(* check_array_bounds is a no-op for HashMapRef *)
+Theorem check_array_bounds_hashmap:
+  check_array_bounds cx (HashMapRef is_t slot kt vt) kv st = (INL (), st)
+Proof
+  Cases_on `kv` >> rw[check_array_bounds_def, return_def]
+QED
+
+(* value_to_key / subscript_to_value / encode_hashmap_key connection *)
+Theorem encode_hashmap_key_value_to_key:
+  ∀kv key kt.
+    value_to_key kv = SOME key ⇒
+    ∃v. subscript_to_value key = SOME v ∧
+        encode_hashmap_key kt v = encode_hashmap_key kt kv
+Proof
+  Cases_on `kv` >>
+  simp[value_to_key_def, subscript_to_value_def] >>
+  rw[] >> simp[integer_wordTheory.i2w_def]
+QED
+
+(* Bridge: hashmap_index_chain + split_hashmap_subscripts + compute_hashmap_slot *)
+Theorem hashmap_chain_split_compute:
+  ∀keys vt subs is_t base_slot kt cx href_leaf last_kv.
+    hashmap_index_chain (HashMapRef is_t base_slot kt vt) keys = SOME href_leaf ∧
+    is_leaf_hashmap_ref cx href_leaf ∧
+    subscripts_to_values subs = SOME (keys ++ [last_kv]) ⇒
+    ∃final_type key_types slot_leaf kt_leaf tv_leaf.
+      href_leaf = HashMapRef is_t slot_leaf kt_leaf (Type final_type) ∧
+      evaluate_type (get_tenv cx) final_type = SOME tv_leaf ∧
+      split_hashmap_subscripts vt (TL subs) = SOME (final_type, key_types, []) ∧
+      compute_hashmap_slot base_slot (kt :: key_types) subs =
+        SOME (hashmap_slot_for slot_leaf kt_leaf last_kv)
+Proof
+  Induct >- (
+    (* Base case: keys = [] *)
+    rw[hashmap_index_chain_def] >>
+    Cases_on `vt` >> gvs[is_leaf_hashmap_ref_def] >>
+    Cases_on `evaluate_type (get_tenv cx) t` >> gvs[is_leaf_hashmap_ref_def] >>
+    Cases_on `subs` >- gvs[subscripts_to_values_def] >>
+    rename1 `subscripts_to_values (sub :: rest)` >>
+    `LENGTH rest = 0` by
+      (drule subscripts_to_values_length >> simp[]) >>
+    Cases_on `rest` >> gvs[] >>
+    gvs[subscripts_to_values_def] >>
+    gvs[AllCaseEqs()] >>
+    simp[split_hashmap_subscripts_def,
+         compute_hashmap_slot_def, hashmap_slot_for_def]
+  ) >>
+  (* Inductive case: keys = k :: keys' *)
+  rw[] >>
+  gvs[hashmap_index_chain_def] >>
+  Cases_on `hashmap_index (HashMapRef is_t base_slot kt vt) h` >> gvs[] >>
+  Cases_on `vt` >> gvs[hashmap_index_def] >>
+  rename1 `HashMapT kt' vt'` >>
+  gvs[hashmap_index_def] >>
+  (* subs must be non-empty *)
+  Cases_on `subs` >- gvs[subscripts_to_values_def] >>
+  rename1 `subscripts_to_values (sub :: rest)` >>
+  qpat_x_assum `subscripts_to_values _ = _` mp_tac >>
+  simp[subscripts_to_values_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  (* rest must be non-empty *)
+  Cases_on `rest` >- (
+    gvs[subscripts_to_values_def] >>
+    `LENGTH keys = 0` by (drule subscripts_to_values_length >> simp[]) >>
+    Cases_on `keys` >> gvs[]
+  ) >>
+  rename1 `_ (sub2 :: rest')` >>
+  (* Apply IH *)
+  first_x_assum (qspecl_then [`vt'`, `sub2 :: rest'`, `is_t`,
+    `hashmap_slot_for base_slot kt h`, `kt'`, `cx`, `href_leaf`, `last_kv`]
+    mp_tac) >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`final_type`, `kt' :: key_types`, `slot_leaf`, `kt_leaf`,
+                `tv_leaf`] >>
+  simp[split_hashmap_subscripts_def] >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [compute_hashmap_slot_def])) >>
+  gvs[hashmap_slot_for_def]
 QED

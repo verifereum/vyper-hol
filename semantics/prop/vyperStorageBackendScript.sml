@@ -154,3 +154,33 @@ Proof
        vfmExecutionTheory.lookup_transient_storage_def,
        vfmExecutionTheory.update_transient_storage_def]
 QED
+
+(* ===== Equational characterizations of storage slot operations ===== *)
+
+Theorem read_storage_slot_eq:
+  ∀cx is_t slot tv st.
+    read_storage_slot cx is_t slot tv st =
+    (case decode_value (get_storage cx st is_t) (w2n slot) tv of
+     | SOME v => (INL v, st)
+     | NONE => (INR (Error (RuntimeError "read_storage_slot decode")), st))
+Proof
+  rw[read_storage_slot_def, bind_def, get_storage_backend_eq,
+     lift_option_def, return_def, raise_def] >>
+  Cases_on `decode_value (get_storage cx st is_t) (w2n slot) tv` >>
+  simp[return_def, raise_def]
+QED
+
+Theorem write_storage_slot_eq:
+  ∀cx is_t slot tv v st.
+    write_storage_slot cx is_t slot tv v st =
+    (case encode_value tv v of
+     | SOME writes =>
+         (INL (), set_storage cx st is_t
+           (apply_writes slot writes (get_storage cx st is_t)))
+     | NONE => (INR (Error (RuntimeError "write_storage_slot encode")), st))
+Proof
+  rw[write_storage_slot_def, bind_def, get_storage_backend_eq,
+     lift_option_def, return_def, raise_def, set_storage_backend_eq] >>
+  Cases_on `encode_value tv v` >>
+  simp[return_def, raise_def, bind_def, set_storage_backend_eq]
+QED
