@@ -18,9 +18,9 @@ Theory passSimulationProofs
 Ancestors
   passSimulationDefs execEquivParamProofs execEquivParamBase execEquivParamDefs
   stateEquivProps execEquivProps stateEquiv venomInst venomExecSemantics
-  venomExecProofs
+  venomExecProofs venomWf
 Libs
-  listTheory
+  listTheory indexedListsTheory
 
 Theorem lookup_block_MEM[local]:
   !lbl bbs bb. lookup_block lbl bbs = SOME bb ==> MEM bb bbs
@@ -80,12 +80,66 @@ Proof
   fs[lift_result_def] >> metis_tac[]
 QED
 
-(* Relational block sim ⟹ function sim. Most general lifting theorem.
-   Per-block sim takes R-related states directly. No triangle composition,
-   no valid_state_rel. Minimal R requirements: reflexivity, R_ok ⊆ R_term,
-   and control-flow field agreement.
-   vs_inst_idx = 0 precondition: 1:N expansion changes block length, so
-   simulation is false at arbitrary idx (see counterexampleScript.sml). *)
+
+(* Backward compatibility: same-state per-block sim + valid_state_rel →
+   R-related per-block sim. Packages the triangle composition for one block.
+   Lets existing passes (which prove same-state block sim) use
+   block_sim_function without changing their per-block proofs. *)
+Theorem same_state_to_rel_block_sim_proof:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool) fn bb bt_bb.
+    valid_state_rel R_ok R_term /\
+    (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
+    (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
+    (!bb inst x. MEM bb fn.fn_blocks /\
+       MEM inst bb.bb_instructions /\ MEM (Var x) inst.inst_operands ==>
+       !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
+    MEM bb fn.fn_blocks /\
+    (!fuel ctx s. s.vs_inst_idx = 0 ==>
+      (?e. run_block fuel ctx bb s = Error e) \/
+      lift_result R_ok R_term (run_block fuel ctx bb s)
+                               (run_block fuel ctx bt_bb s))
+  ==>
+    !fuel ctx s1 s2. R_ok s1 s2 /\ s1.vs_inst_idx = 0 ==>
+      (?e. run_block fuel ctx bb s1 = Error e) \/
+      lift_result R_ok R_term (run_block fuel ctx bb s1)
+                               (run_block fuel ctx bt_bb s2)
+Proof
+  rpt gen_tac >> strip_tac >>
+  (* Same-code R_ok preservation (universal form) *)
+  `!fuel ctx bb' s1 s2.
+     MEM bb' fn.fn_blocks /\ R_ok s1 s2 ==>
+     lift_result R_ok R_term (run_block fuel ctx bb' s1)
+                              (run_block fuel ctx bb' s2)` by
+    (match_mp_tac (cj 1 run_block_preserves_R_proof) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  (* Same-code: run_block bb s1 ~ run_block bb s2 *)
+  `lift_result R_ok R_term (run_block fuel ctx bb s1)
+                            (run_block fuel ctx bb s2)` by metis_tac[] >>
+  `s2.vs_inst_idx = 0` by
+    metis_tac[vsr_R_ok_fields] >>
+  (* Per-block sim on s2 *)
+  first_x_assum (qspecl_then [`fuel`, `ctx`, `s2`] mp_tac) >> simp[] >>
+  strip_tac
+  >- (
+    (* Error case: run_block bb s2 = Error e *)
+    Cases_on `run_block fuel ctx bb s1` >> gvs[lift_result_def] >>
+    DISJ1_TAC >> metis_tac[]
+  )
+  >>
+  (* Compose triangle: s1 ~R~ s2 (same-code) then s2 ~R~ bt_bb s2 *)
+  DISJ2_TAC >>
+  irule lift_result_trans_proof >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qexists_tac `run_block fuel ctx bb s2` >> simp[]
+QED
+
+(* Per-fn-block sim → function sim via valid_state_rel triangle.
+   Corollary of block_sim_function_proof + same_state_to_rel_block_sim_proof.
+   Operand condition: fn's blocks don't read variables that disagree under R_ok.
+   vs_inst_idx = 0 precondition: required because 1:N expansion (FLAT) changes
+   block length; false at arbitrary idx (see counterexampleScript.sml). *)
 Theorem block_sim_function_proof:
   !R_ok R_term bt fn.
     (!s. R_ok s s) /\
@@ -228,55 +282,6 @@ Proof
     qpat_x_assum `!ctx' s1' s2'. _ ==> _ \/ lift_result _ _ (run_function _ _ fn _) _`
       (qspecl_then [`ctx`, `v`, `v'`] mp_tac) >> simp[]
   )
-QED
-
-(* Triangle combiner: same-state per-block sim + valid_state_rel ⟹
-   R-related per-block sim. Lets existing passes (which prove same-state
-   block sim) use block_sim_function without changing their proofs.
-   Composes same-code preservation (run_block_preserves_R) with
-   diff-code simulation via lift_result_trans. *)
-Theorem same_state_to_rel_block_sim_proof:
-  !(R_ok : venom_state -> venom_state -> bool)
-   (R_term : venom_state -> venom_state -> bool) fn bb bt_bb.
-    valid_state_rel R_ok R_term /\
-    (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
-    (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
-    (!bb inst x. MEM bb fn.fn_blocks /\
-       MEM inst bb.bb_instructions /\ MEM (Var x) inst.inst_operands ==>
-       !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
-    MEM bb fn.fn_blocks /\
-    (!fuel ctx s. s.vs_inst_idx = 0 ==>
-      (?e. run_block fuel ctx bb s = Error e) \/
-      lift_result R_ok R_term (run_block fuel ctx bb s)
-                               (run_block fuel ctx bt_bb s))
-  ==>
-    !fuel ctx s1 s2. R_ok s1 s2 /\ s1.vs_inst_idx = 0 ==>
-      (?e. run_block fuel ctx bb s1 = Error e) \/
-      lift_result R_ok R_term (run_block fuel ctx bb s1)
-                               (run_block fuel ctx bt_bb s2)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `!fuel ctx bb' s1 s2.
-     MEM bb' fn.fn_blocks /\ R_ok s1 s2 ==>
-     lift_result R_ok R_term (run_block fuel ctx bb' s1)
-                              (run_block fuel ctx bb' s2)` by
-    (match_mp_tac (cj 1 run_block_preserves_R_proof) >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  rpt gen_tac >> strip_tac >>
-  `lift_result R_ok R_term (run_block fuel ctx bb s1)
-                            (run_block fuel ctx bb s2)` by metis_tac[] >>
-  `s2.vs_inst_idx = 0` by metis_tac[vsr_R_ok_fields] >>
-  first_x_assum (qspecl_then [`fuel`, `ctx`, `s2`] mp_tac) >> simp[] >>
-  strip_tac
-  >- (
-    Cases_on `run_block fuel ctx bb s1` >> gvs[lift_result_def] >>
-    DISJ1_TAC >> metis_tac[]
-  )
-  >>
-  DISJ2_TAC >>
-  irule lift_result_trans_proof >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  qexists_tac `run_block fuel ctx bb s2` >> simp[]
 QED
 
 (* Pointwise version: per-block sim proved on a single state (not R-related pair).
@@ -464,4 +469,145 @@ Proof
   rw[pass_correct_def] >> (
     metis_tac[result_equiv_terminates]
   )
+QED
+
+
+(* ===== Structural preservation for function_map_transform ===== *)
+
+(* General theorem: function_map_transform preserves wf_function
+   given per-block preconditions. *)
+Theorem fmt_preserves_wf_function_proof:
+  !bt fn.
+    (!bb. (bt bb).bb_label = bb.bb_label) /\
+    (!bb. bb_well_formed bb ==> bb_well_formed (bt bb)) /\
+    (!bb. bb_succs (bt bb) = bb_succs bb) /\
+    fn_inst_ids_distinct (function_map_transform bt fn)
+    ==>
+    wf_function fn ==> wf_function (function_map_transform bt fn)
+Proof
+  rw[wf_function_def, function_map_transform_def] >>
+  gvs[fn_labels_def, MAP_MAP_o, fn_has_entry_def,
+      MEM_MAP, fn_succs_closed_def, combinTheory.o_DEF] >>
+  rpt strip_tac >> gvs[] >> res_tac >> metis_tac[]
+QED
+
+(* General theorem: function_map_transform preserves ssa_form
+   given per-block instruction preservation precondition. *)
+Theorem fmt_preserves_ssa_form_proof:
+  !bt fn.
+    fn_insts (function_map_transform bt fn) = fn_insts fn
+    ==>
+    ssa_form fn ==> ssa_form (function_map_transform bt fn)
+Proof
+  simp[ssa_form_def]
+QED
+
+(* If we remove instructions, SSA is trivially preserved:
+   any two same-output instructions in the subset were in the original. *)
+Theorem ssa_form_subset_proof:
+  !fn fn'.
+    ssa_form fn /\
+    (!inst. MEM inst (fn_insts fn') ==> MEM inst (fn_insts fn))
+    ==>
+    ssa_form fn'
+Proof
+  simp[ssa_form_def]
+QED
+
+(* ALL_DISTINCT (MAP f l) means f is injective on l *)
+Theorem all_distinct_map_inj[local]:
+  !f l x y. ALL_DISTINCT (MAP f l) /\ MEM x l /\ MEM y l /\
+             f x = f y ==> x = y
+Proof
+  rpt strip_tac >> gvs[MEM_EL] >>
+  `n < LENGTH (MAP f l) /\ n' < LENGTH (MAP f l)` by simp[] >>
+  `EL n (MAP f l) = EL n' (MAP f l)` by gvs[EL_MAP] >>
+  `n = n'` by metis_tac[ALL_DISTINCT_EL_IMP] >>
+  gvs[]
+QED
+
+Theorem fn_insts_blocks_flat[local]:
+  !l. fn_insts_blocks l = FLAT (MAP (\bb. bb.bb_instructions) l)
+Proof
+  Induct >> simp[fn_insts_blocks_def]
+QED
+
+Theorem fn_inst_ids_eq_map[local]:
+  !fn. ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) <=>
+       fn_inst_ids_distinct fn
+Proof
+  simp[fn_inst_ids_distinct_def, fn_insts_def, fn_insts_blocks_flat,
+       MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF]
+QED
+
+(* General SSA preservation for 1:1 transforms that preserve IDs and
+   either preserve or clear outputs. Covers MAPi-based transforms
+   like load_elim, copy_elision, etc. *)
+Theorem ssa_form_preserved_by_output_subset_proof:
+  !fn fn'.
+    ssa_form fn /\ fn_inst_ids_distinct fn /\
+    fn_inst_ids_distinct fn' /\
+    (!inst. MEM inst (fn_insts fn') ==>
+      ?orig. MEM orig (fn_insts fn) /\
+             inst.inst_id = orig.inst_id /\
+             (inst.inst_outputs = orig.inst_outputs \/
+              inst.inst_outputs = []))
+    ==>
+    ssa_form fn'
+Proof
+  rpt strip_tac >> fs[ssa_form_def] >> rpt strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn'))`
+    by metis_tac[fn_inst_ids_eq_map] >>
+  `?orig1. MEM orig1 (fn_insts fn) /\ inst1.inst_id = orig1.inst_id /\
+           inst1.inst_outputs = orig1.inst_outputs`
+    by (first_x_assum (qspec_then `inst1` mp_tac) >> simp[] >>
+        strip_tac >> gvs[] >> metis_tac[]) >>
+  `?orig2. MEM orig2 (fn_insts fn) /\ inst2.inst_id = orig2.inst_id /\
+           inst2.inst_outputs = orig2.inst_outputs`
+    by (first_x_assum (qspec_then `inst2` mp_tac) >> simp[] >>
+        strip_tac >> gvs[] >> metis_tac[]) >>
+  `orig1 = orig2` by metis_tac[] >>
+  metis_tac[all_distinct_map_inj]
+QED
+
+(* General SSA preservation for function_map_transform:
+   if each output instruction traces to an original with same id and
+   preserved-or-cleared outputs, SSA is preserved. *)
+Theorem fmt_preserves_ssa_form_general_proof:
+  !bt fn.
+    (!bb inst. MEM bb fn.fn_blocks /\
+               MEM inst (bt bb).bb_instructions ==>
+      ?orig. MEM orig bb.bb_instructions /\
+             inst.inst_id = orig.inst_id /\
+             (inst.inst_outputs = orig.inst_outputs \/
+              inst.inst_outputs = [])) /\
+    fn_inst_ids_distinct (function_map_transform bt fn) /\
+    fn_inst_ids_distinct fn /\ ssa_form fn
+    ==>
+    ssa_form (function_map_transform bt fn)
+Proof
+  rpt strip_tac >>
+  irule ssa_form_preserved_by_output_subset_proof >>
+  simp[] >> qexists_tac `fn` >> simp[] >>
+  fs[fn_insts_def, fn_insts_blocks_flat, function_map_transform_def] >>
+  rpt strip_tac >> gvs[MEM_FLAT, MEM_MAP] >>
+  first_x_assum (qspecl_then [`y`, `inst`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qexists_tac `orig` >> simp[] >> metis_tac[]
+QED
+
+(* MAPi transform: each instruction traces to an original *)
+Theorem mapi_transform_fn_insts_trace_proof:
+  !h fn inst.
+    MEM inst (fn_insts (function_map_transform
+      (\bb. bb with bb_instructions :=
+        MAPi (\idx i. h bb idx i) bb.bb_instructions) fn)) ==>
+    ?bb idx. MEM bb fn.fn_blocks /\
+             idx < LENGTH bb.bb_instructions /\
+             inst = h bb idx (EL idx bb.bb_instructions)
+Proof
+  rpt strip_tac >>
+  fs[fn_insts_def, fn_insts_blocks_flat, function_map_transform_def,
+     MEM_FLAT, MEM_MAP] >>
+  gvs[MEM_MAPi] >> metis_tac[]
 QED

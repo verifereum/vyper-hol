@@ -69,7 +69,7 @@ val () = cv_auto_trans compute_selector_names_def;
 
 Definition find_deploy_function_name_def:
   find_deploy_function_name [] = "__init__" ∧
-  find_deploy_function_name ((FunctionDecl Deploy _ name _ _ _ _)::_) = name ∧
+  find_deploy_function_name ((FunctionDecl Deploy _ _ name _ _ _ _)::_) = name ∧
   find_deploy_function_name (_::ts) = find_deploy_function_name ts
 End
 
@@ -117,7 +117,7 @@ Definition compute_vyper_args_def:
   compute_vyper_args all_mods ts vis name argTys cd = let
     abiTupTy = Tuple argTys;
     vyTysRet = case lookup_function NONE name vis ts
-                of SOME (_,args,_,ret,_) => (MAP SND args, ret)
+                of SOME (_,_,args,_,ret,_) => (MAP SND args, ret)
                   | NONE => ([], NoneT);
     vyTys = TAKE (LENGTH argTys) (FST vyTysRet);
     (* Use combined type env from all modules so cross-module types work *)

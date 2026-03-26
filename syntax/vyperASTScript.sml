@@ -336,7 +336,8 @@ End
 
 Datatype:
   toplevel
-  = FunctionDecl function_visibility function_mutability identifier (argument list) (expr list) type (stmt list)
+  = FunctionDecl function_visibility function_mutability bool (* nonreentrant *)
+      identifier (argument list) (expr list) type (stmt list)
   | VariableDecl variable_visibility variable_mutability identifier type
   | HashMapDecl variable_visibility bool (* transient? *) identifier type value_type
   | StructDecl identifier (argument list)
