@@ -224,3 +224,9 @@ Theorem lift_result_implies_pass_correct:
 Proof
   ACCEPT_TAC lift_result_implies_pass_correct_proof
 QED
+
+Theorem state_equiv_execution_equiv_valid_state_rel:
+  !vars. valid_state_rel (state_equiv vars) (execution_equiv vars)
+Proof
+  ACCEPT_TAC execEquivParamPropsTheory.state_equiv_execution_equiv_valid_state_rel
+QED

@@ -10,8 +10,9 @@
  * all ~90 opcodes is expensive (~25s).
  *
  * TOP-LEVEL EXPORTS:
- *   step_inst_base_ok_transfer — OK transfers across agreeing states
- *   step_inst_base_output_determined_fields — per-field output determinism
+ *   step_inst_base_ok_transfer - OK transfers across agreeing states
+ *   step_inst_base_output_determined_fields - per-field output determinism
+ *   step_inst_base_effect_free_output_determined_vars - effect-free ops: output vars determined by operands + read state
  *)
 
 Theory passSharedTransfer
@@ -208,6 +209,63 @@ Proof
        exec_write2_def] >>
   Cases_on `inst.inst_opcode` >>
   gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+      read_effects_def, write_effects_def,
+      all_effects_def, empty_effects_def] >>
+  rpt strip_tac >>
+  gvs[AllCaseEqs()] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+  transfer_close_tac
+QED
+
+(* Output variable determinism for effect-free ops: if operands and
+   read-state agree, the output variable values agree.
+   Restricted to is_effect_free_op because write-only ops (MSTORE etc)
+   don't write to vs_vars, so the conclusion is not provable for them. *)
+Theorem step_inst_base_effect_free_output_determined_vars:
+  !inst s1 s2 v1 v2.
+    step_inst_base inst s1 = OK v1 /\
+    step_inst_base inst s2 = OK v2 /\
+    is_effect_free_op inst.inst_opcode /\
+    inst.inst_opcode <> NOP /\
+    (!op. MEM op inst.inst_operands ==>
+          eval_operand op s1 = eval_operand op s2) /\
+    (inst.inst_opcode = PHI ==> s1.vs_prev_bb = s2.vs_prev_bb) /\
+    (inst.inst_opcode = PARAM ==> s1.vs_params = s2.vs_params) /\
+    (inst.inst_opcode = OFFSET ==> s1.vs_label_offsets = s2.vs_label_offsets) /\
+    s1.vs_call_ctx = s2.vs_call_ctx /\
+    s1.vs_tx_ctx = s2.vs_tx_ctx /\
+    s1.vs_block_ctx = s2.vs_block_ctx /\
+    s1.vs_data_section = s2.vs_data_section /\
+    s1.vs_code = s2.vs_code /\
+    s1.vs_prev_hashes = s2.vs_prev_hashes /\
+    (Eff_MEMORY IN read_effects inst.inst_opcode ==>
+       s1.vs_memory = s2.vs_memory) /\
+    (Eff_MSIZE IN read_effects inst.inst_opcode ==>
+       s1.vs_memory = s2.vs_memory) /\
+    (Eff_TRANSIENT IN read_effects inst.inst_opcode ==>
+       s1.vs_transient = s2.vs_transient) /\
+    (Eff_STORAGE IN read_effects inst.inst_opcode ==>
+       s1.vs_accounts = s2.vs_accounts) /\
+    (Eff_BALANCE IN read_effects inst.inst_opcode ==>
+       s1.vs_accounts = s2.vs_accounts) /\
+    (Eff_EXTCODE IN read_effects inst.inst_opcode ==>
+       s1.vs_accounts = s2.vs_accounts) /\
+    (Eff_IMMUTABLES IN read_effects inst.inst_opcode ==>
+       s1.vs_immutables = s2.vs_immutables) /\
+    (Eff_RETURNDATA IN read_effects inst.inst_opcode ==>
+       s1.vs_returndata = s2.vs_returndata) /\
+    (Eff_LOG IN read_effects inst.inst_opcode ==>
+       s1.vs_logs = s2.vs_logs) ==>
+    !v. MEM v inst.inst_outputs ==> lookup_var v v1 = lookup_var v v2
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `step_inst_base _ s1 = _` mp_tac >>
+  qpat_x_assum `step_inst_base _ s2 = _` mp_tac >>
+  simp[step_inst_base_def, exec_pure1_def, exec_pure2_def,
+       exec_pure3_def, exec_read0_def, exec_read1_def,
+       exec_write2_def] >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[is_effect_free_op_def, is_terminator_def,
       read_effects_def, write_effects_def,
       all_effects_def, empty_effects_def] >>
   rpt strip_tac >>
