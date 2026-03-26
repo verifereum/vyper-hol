@@ -44,7 +44,40 @@ Ancestors
   passSharedField passSharedTransfer passSharedVarFrame passSharedFrame
   passSharedSubst instIdxIndep
 
-open venomStateTheory venomInstTheory;
+open venomStateTheory venomInstTheory venomWfTheory pred_setTheory
+     listTheory rich_listTheory;
+
+(* ===================================================================== *)
+(* ===== Well-formedness shape lemmas ================================== *)
+(* ===================================================================== *)
+
+(* Read-1 opcodes: 1 operand, 1 output *)
+Theorem inst_wf_read1_shape:
+  !inst. inst_wf inst /\
+    inst.inst_opcode IN {MLOAD; SLOAD; TLOAD; DLOAD; CALLDATALOAD} ==>
+    ?addr_op out_var. inst.inst_operands = [addr_op] /\
+                      inst.inst_outputs = [out_var]
+Proof
+  rpt strip_tac >>
+  gvs[inst_wf_def, IN_INSERT, NOT_IN_EMPTY] >>
+  Cases_on `inst.inst_operands` >> fs[] >>
+  Cases_on `t` >> fs[] >>
+  Cases_on `inst.inst_outputs` >> fs[] >>
+  Cases_on `t` >> fs[]
+QED
+
+(* Store opcodes: 2 operands *)
+Theorem inst_wf_store_shape:
+  !inst. inst_wf inst /\
+    inst.inst_opcode IN {MSTORE; SSTORE; TSTORE} ==>
+    ?op1 op2. inst.inst_operands = [op1; op2]
+Proof
+  rpt strip_tac >>
+  gvs[inst_wf_def, IN_INSERT, NOT_IN_EMPTY] >>
+  Cases_on `inst.inst_operands` >> fs[] >>
+  Cases_on `t` >> fs[] >>
+  Cases_on `t'` >> fs[]
+QED
 
 (* ===================================================================== *)
 (* ===== Instruction builders (trivial) ================================ *)
@@ -490,6 +523,267 @@ Proof
        clear_nops_function_def] >>
   rewrite_tac[GSYM clear_nops_function_def] >>
   first_x_assum irule >> simp[]
+QED
+
+(* ===================================================================== *)
+(* ===== clear_nops structural preservation ============================ *)
+(* ===================================================================== *)
+
+(* LAST of FILTER P l = LAST l when l non-empty and P holds on LAST *)
+Triviality last_filter_last:
+  !P l. l <> [] /\ P (LAST l) ==> LAST (FILTER P l) = LAST l
+Proof
+  rpt strip_tac >>
+  `l = FRONT l ++ [LAST l]` by metis_tac[APPEND_FRONT_LAST] >>
+  `FILTER P l = FILTER P (FRONT l) ++ FILTER P [LAST l]` by
+    metis_tac[FILTER_APPEND_DISTRIB] >>
+  `FILTER P [LAST l] = [LAST l]` by simp[] >>
+  simp[LAST_APPEND_NOT_NIL]
+QED
+
+(* Terminators are not NOP *)
+Triviality terminator_not_nop:
+  !op. is_terminator op ==> op <> NOP
+Proof
+  Cases >> simp[is_terminator_def]
+QED
+
+(* ALL_DISTINCT (MAP f l) ==> ALL_DISTINCT (MAP f (FILTER P l)) *)
+Triviality all_distinct_map_filter:
+  !f P l. ALL_DISTINCT (MAP f l) ==> ALL_DISTINCT (MAP f (FILTER P l))
+Proof
+  Induct_on `l` >> simp[] >> rpt strip_tac >>
+  IF_CASES_TAC >> fs[MEM_MAP, MEM_FILTER] >> metis_tac[]
+QED
+
+(* FILTER prefix property: if Q forms a prefix (downward-closed by index) in l
+   and all Q-elements pass P, then Q forms a prefix in FILTER P l. *)
+Triviality filter_preserves_prefix:
+  !P Q l.
+    (!x. Q x ==> P x) /\
+    (!i j. i < j /\ j < LENGTH l /\ Q (EL j l) ==> Q (EL i l))
+    ==>
+    !i j. i < j /\ j < LENGTH (FILTER P l) /\
+          Q (EL j (FILTER P l)) ==> Q (EL i (FILTER P l))
+Proof
+  ntac 2 gen_tac >> Induct >> simp[] >>
+  rpt strip_tac >>
+  (* Derive prefix property for l from h::l *)
+  `!i' j'. i' < j' /\ j' < LENGTH l /\ Q (EL j' l) ==> Q (EL i' l)` by
+    (rpt strip_tac >>
+     qpat_x_assum `!i j. i < j /\ _ ==> _`
+       (qspecl_then [`SUC i'`, `SUC j'`] mp_tac) >> simp[]) >>
+  (* Apply IH to get prefix property for FILTER P l *)
+  `!i' j'. i' < j' /\ j' < LENGTH (FILTER P l) /\ Q (EL j' (FILTER P l))
+           ==> Q (EL i' (FILTER P l))` by metis_tac[] >>
+  IF_CASES_TAC >> gvs[]
+  (* P h: h :: FILTER P l *)
+  >- (Cases_on `i` >> gvs[]
+      >- (Cases_on `j` >> gvs[] >>
+          `MEM (EL n (FILTER P l)) (FILTER P l)` by metis_tac[MEM_EL] >>
+          fs[MEM_FILTER] >>
+          `?k. k < LENGTH l /\ EL k l = EL n (FILTER P l)` by metis_tac[MEM_EL] >>
+          qpat_x_assum `!i j. i < j /\ j < SUC _ /\ Q (h::l)❲j❳ ==> _`
+            (qspecl_then [`0`, `SUC k`] mp_tac) >> simp[])
+      >- (Cases_on `j` >> gvs[] >> metis_tac[]))
+  (* ~P h: FILTER P l directly *)
+  >- metis_tac[]
+QED
+
+(* clear_nops_block preserves bb_well_formed.
+   Strategy: decompose insts = FRONT insts ++ [LAST insts],
+   then FILTER = FILTER(FRONT) ++ [LAST] since LAST is terminator (not NOP). *)
+(* filter_preserves_prefix fully specialized for clear_nops PHI prefix.
+   P = not-NOP, Q = is-PHI. Built at ML level to avoid parser issues. *)
+local
+  val x = mk_var("x", ``:instruction``)
+  val opcode = #1 (dest_comb ``(z:instruction).inst_opcode``)
+  val phi_check = mk_abs(x, mk_eq(mk_comb(opcode, x), ``PHI``))
+  val nop_check = mk_abs(x, mk_neg(mk_eq(mk_comb(opcode, x), ``NOP``)))
+in
+  val filter_preserves_phi_prefix = filter_preserves_prefix
+    |> INST_TYPE [alpha |-> ``:instruction``]
+    |> ISPECL [nop_check, phi_check]
+    |> SIMP_RULE (srw_ss()) []
+end;
+
+(* General: bb_well_formed preserved by length-preserving transforms
+   that preserve terminator and PHI status at each position *)
+Theorem bb_well_formed_transfer:
+  !insts insts'.
+    LENGTH insts' = LENGTH insts /\
+    (!i. i < LENGTH insts ==>
+       (is_terminator (EL i insts').inst_opcode <=>
+        is_terminator (EL i insts).inst_opcode)) /\
+    (!i. i < LENGTH insts ==>
+       ((EL i insts').inst_opcode = PHI <=>
+        (EL i insts).inst_opcode = PHI))
+    ==>
+    bb_well_formed (bb with bb_instructions := insts) ==>
+    bb_well_formed (bb with bb_instructions := insts')
+Proof
+  rpt strip_tac >>
+  fs[bb_well_formed_def] >>
+  sg `insts' <> []` >- (Cases_on `insts'` >> fs[]) >>
+  sg `PRE (LENGTH insts) < LENGTH insts`
+  >- (Cases_on `insts` >> fs[]) >>
+  sg `LAST insts = EL (PRE (LENGTH insts)) insts` >- fs[LAST_EL] >>
+  sg `LAST insts' = EL (PRE (LENGTH insts)) insts'` >- fs[LAST_EL] >>
+  rpt conj_tac >> rpt strip_tac >> res_tac >> fs[]
+QED
+
+Theorem clear_nops_block_preserves_wf:
+  !bb. bb_well_formed bb ==> bb_well_formed (clear_nops_block bb)
+Proof
+  rpt strip_tac >>
+  fs[bb_well_formed_def, clear_nops_block_def] >>
+  qmatch_goalsub_abbrev_tac `FILTER P _` >>
+  qabbrev_tac `insts = bb.bb_instructions` >>
+  qabbrev_tac `filt = FILTER P insts` >>
+  (* LAST is terminator hence not NOP, so it passes filter *)
+  `P (LAST insts)` by
+    (simp[Abbr `P`] >> metis_tac[terminator_not_nop]) >>
+  (* Decompose: insts = FRONT ++ [LAST], filt = FILTER(FRONT) ++ [LAST] *)
+  `insts = FRONT insts ++ [LAST insts]` by metis_tac[APPEND_FRONT_LAST] >>
+  `filt = FILTER P (FRONT insts) ++ [LAST insts]` by
+    (simp[Abbr `filt`] >>
+     `FILTER P insts = FILTER P (FRONT insts) ++ FILTER P [LAST insts]` by
+       metis_tac[FILTER_APPEND_DISTRIB] >>
+     simp[]) >>
+  qabbrev_tac `fpre = FILTER P (FRONT insts)` >>
+  rpt conj_tac
+  (* 1. non-empty *)
+  >- simp[]
+  (* 2. LAST is terminator *)
+  >- simp[LAST_APPEND_NOT_NIL]
+  (* 3. terminator only at end *)
+  >- (rpt strip_tac >>
+      `LENGTH filt = SUC (LENGTH fpre)` by simp[] >>
+      Cases_on `i = LENGTH fpre` >- simp[] >>
+      `i < LENGTH fpre` by decide_tac >>
+      `EL i filt = EL i fpre` by simp[EL_APPEND1] >>
+      `MEM (EL i fpre) fpre` by metis_tac[MEM_EL] >>
+      `MEM (EL i fpre) (FRONT insts)` by fs[MEM_FILTER, Abbr `fpre`] >>
+      `?k. k < LENGTH (FRONT insts) /\ EL k (FRONT insts) = EL i fpre`
+        by metis_tac[MEM_EL] >>
+      `LENGTH (FRONT insts) = PRE (LENGTH insts)` by simp[FRONT_LENGTH] >>
+      `k < LENGTH insts` by decide_tac >>
+      `EL k (FRONT insts) = EL k insts`
+        by (irule EL_FRONT >> simp[NULL_EQ]) >>
+      `k = PRE (LENGTH insts)` by metis_tac[] >>
+      decide_tac)
+  (* 4. PHI prefix *)
+  >- (simp_tac std_ss [Abbr `filt`, Abbr `P`, Abbr `insts`] >>
+      match_mp_tac filter_preserves_phi_prefix >> fs[])
+QED
+
+(* clear_nops_block preserves bb_succs *)
+Triviality clear_nops_succs:
+  !bb. bb_well_formed bb ==> bb_succs (clear_nops_block bb) = bb_succs bb
+Proof
+  rpt strip_tac >>
+  fs[bb_well_formed_def, clear_nops_block_def, bb_succs_def] >>
+  `(LAST bb.bb_instructions).inst_opcode <> NOP` by
+    metis_tac[terminator_not_nop] >>
+  `FILTER (\inst. inst.inst_opcode <> NOP) bb.bb_instructions <> []` by
+    (CCONTR_TAC >> fs[FILTER_EQ_NIL, EVERY_MEM] >>
+     `MEM (LAST bb.bb_instructions) bb.bb_instructions` by
+       metis_tac[MEM_LAST_NOT_NIL] >>
+     metis_tac[]) >>
+  `LAST (FILTER (\inst. inst.inst_opcode <> NOP) bb.bb_instructions) =
+   LAST bb.bb_instructions` by
+    (irule last_filter_last >> simp[]) >>
+  Cases_on `FILTER (\inst. inst.inst_opcode <> NOP) bb.bb_instructions` >> fs[] >>
+  Cases_on `bb.bb_instructions` >> fs[]
+QED
+
+(* clear_nops_function preserves fn_labels *)
+Triviality clear_nops_fn_labels:
+  !fn. fn_labels (clear_nops_function fn) = fn_labels fn
+Proof
+  simp[fn_labels_def, clear_nops_function_def, MAP_MAP_o, combinTheory.o_DEF,
+       clear_nops_block_def]
+QED
+
+(* clear_nops_function preserves fn_has_entry *)
+Triviality clear_nops_fn_has_entry:
+  !fn. fn_has_entry (clear_nops_function fn) = fn_has_entry fn
+Proof
+  simp[fn_has_entry_def, clear_nops_function_def]
+QED
+
+(* clear_nops_function preserves fn_inst_ids_distinct.
+   Key: ALL_DISTINCT (MAP f l) preserved by FILTER via all_distinct_map_filter,
+   extended to FLAT structure by induction on blocks. *)
+Triviality flat_map_filter_all_distinct:
+  !f P g (ls:'a list).
+    ALL_DISTINCT (FLAT (MAP (\x. MAP f (g x)) ls)) ==>
+    ALL_DISTINCT (FLAT (MAP (\x. MAP f (FILTER P (g x))) ls))
+Proof
+  ntac 3 gen_tac >> Induct >> simp[] >> rpt strip_tac >>
+  fs[ALL_DISTINCT_APPEND] >> rpt conj_tac
+  >- (irule all_distinct_map_filter >> simp[])
+  >- (rpt strip_tac >>
+      fs[MEM_FLAT, MEM_MAP, PULL_EXISTS, MEM_FILTER] >>
+      CCONTR_TAC >> fs[] >> res_tac >> fs[MEM_MAP] >> metis_tac[])
+QED
+
+Triviality clear_nops_fn_inst_ids_distinct:
+  !fn. fn_inst_ids_distinct fn ==>
+       fn_inst_ids_distinct (clear_nops_function fn)
+Proof
+  simp[fn_inst_ids_distinct_def, clear_nops_function_def, clear_nops_block_def,
+       MAP_MAP_o, combinTheory.o_DEF] >>
+  metis_tac[flat_map_filter_all_distinct]
+QED
+
+(* Main result *)
+Theorem clear_nops_function_preserves_wf:
+  !fn. wf_function fn ==> wf_function (clear_nops_function fn)
+Proof
+  rpt strip_tac >> fs[wf_function_def] >> rpt conj_tac
+  >- simp[clear_nops_fn_labels]
+  >- simp[clear_nops_fn_has_entry, clear_nops_function_def]
+  >- (rpt strip_tac >>
+      fs[clear_nops_function_def, MEM_MAP] >>
+      rename1 `clear_nops_block bb0` >>
+      irule clear_nops_block_preserves_wf >> metis_tac[])
+  >- (fs[fn_succs_closed_def, clear_nops_fn_labels] >>
+      rpt strip_tac >>
+      fs[clear_nops_function_def, MEM_MAP] >>
+      rename1 `clear_nops_block bb0` >>
+      `bb_succs (clear_nops_block bb0) = bb_succs bb0` by
+        (irule clear_nops_succs >> metis_tac[]) >>
+      metis_tac[])
+  >- (irule clear_nops_fn_inst_ids_distinct >> simp[])
+QED
+
+(* fn_insts_blocks is FLAT (MAP bb_instructions) *)
+Theorem fn_insts_blocks_flat[local]:
+  !l. fn_insts_blocks l = FLAT (MAP (\bb. bb.bb_instructions) l)
+Proof
+  Induct >> simp[fn_insts_blocks_def]
+QED
+
+(* clear_nops_function only removes instructions *)
+Theorem clear_nops_fn_insts_subset:
+  !fn inst. MEM inst (fn_insts (clear_nops_function fn)) ==>
+            MEM inst (fn_insts fn)
+Proof
+  rpt strip_tac >>
+  fs[fn_insts_def, fn_insts_blocks_flat, clear_nops_function_def,
+     MEM_FLAT, MEM_MAP] >>
+  qexists_tac `y.bb_instructions` >>
+  (conj_tac >- metis_tac[]) >>
+  gvs[clear_nops_block_def, MEM_FILTER]
+QED
+
+Theorem clear_nops_function_preserves_ssa:
+  !fn. ssa_form fn ==> ssa_form (clear_nops_function fn)
+Proof
+  rpt strip_tac >>
+  irule passSimulationProofsTheory.ssa_form_subset_proof >>
+  qexists_tac `fn` >> simp[clear_nops_fn_insts_subset]
 QED
 
 (* ===================================================================== *)
