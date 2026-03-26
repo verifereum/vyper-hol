@@ -1,6 +1,7 @@
 (*
  * Assembly IR Types
  *
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  * Intermediate representation between Venom codegen and EVM bytecode.
  * Defines assembly instruction types and the stack operation plan type.
  *
@@ -162,7 +163,6 @@ Definition venom_to_evm_name_def:
   venom_to_evm_name ASSERT = NONE ∧
   venom_to_evm_name ASSERT_UNREACHABLE = NONE ∧
   venom_to_evm_name ALLOCA = NONE ∧
-  venom_to_evm_name GEP = NONE ∧
   venom_to_evm_name OFFSET = NONE ∧
   venom_to_evm_name SINK = NONE ∧
   venom_to_evm_name DLOAD = NONE ∧

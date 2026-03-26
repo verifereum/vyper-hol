@@ -1,6 +1,7 @@
 (*
  * Stack Plan Generation — Per-Instruction/Block/Function
  *
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  * Port of _generate_evm_for_instruction, _generate_evm_for_basicblock_r,
  * generate_evm_assembly from venom_to_assembly.py.
  *
@@ -262,11 +263,10 @@ End
 (* Opcodes that should never appear at codegen time.
    These must be eliminated by earlier passes:
      ALLOCA — eliminated by mem2var / memory layout
-     GEP    — eliminated by lower passes
      SINK   — test-only pseudo-instruction
      DLOAD, DLOADBYTES — lowered by lower_dload pass *)
 Definition is_pre_codegen_opcode_def:
-  is_pre_codegen_opcode opc ⇔ MEM opc [ALLOCA; GEP; SINK; DLOAD; DLOADBYTES]
+  is_pre_codegen_opcode opc ⇔ MEM opc [ALLOCA; SINK; DLOAD; DLOADBYTES]
 End
 
 (* =========================================================================

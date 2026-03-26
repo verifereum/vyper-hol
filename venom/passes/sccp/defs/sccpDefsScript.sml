@@ -1,6 +1,7 @@
 (*
  * Sparse Conditional Constant Propagation — Definitions
  *
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  * Ports vyper/venom/passes/sccp/ to HOL4.
  *
  * Implements the Wegman-Zadeck SCCP algorithm using the generic
@@ -224,11 +225,6 @@ Definition sccp_transfer_inst_def:
        | (_, outs) =>
            lat with sl_vals :=
              FOLDL (\l v. l |+ (v, CL_Bottom)) lat.sl_vals outs)
-    else if inst.inst_opcode = GEP then
-      (case inst.inst_outputs of
-         [out] => lat with sl_vals := lat.sl_vals |+ (out, CL_Bottom)
-       | outs => lat with sl_vals :=
-                   FOLDL (\l v. l |+ (v, CL_Bottom)) lat.sl_vals outs)
     else
       (case inst.inst_outputs of
          [out] =>

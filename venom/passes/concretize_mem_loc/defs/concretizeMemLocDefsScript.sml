@@ -1,11 +1,10 @@
 (*
  * Concretize Memory Locations — Definitions
  *
- * Upstream: vyperlang/vyper@8780b3134 (alloca_id removal)
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  *
  * Replaces abstract memory allocation instructions (alloca)
- * with concrete ASSIGN of computed memory offsets, and replaces
- * GEP (get element pointer) with ADD.
+ * with concrete ASSIGN of computed memory offsets.
  *
  * TOP-LEVEL:
  *   mem_liveness_analyze  — MemLiveness analysis (liveat ∩ used)
@@ -439,8 +438,6 @@ Definition concretize_inst_def:
               SOME addr => mk_assign_inst inst (Lit addr)
             | NONE => mk_nop_inst inst)
        | _ => inst)
-    else if inst.inst_opcode = GEP then
-      inst with inst_opcode := ADD
     else inst
 End
 
