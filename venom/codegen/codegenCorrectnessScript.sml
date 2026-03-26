@@ -1,0 +1,190 @@
+(*
+ * Codegen End-to-End Correctness — Theorem Statements
+ *
+ * Composes venomToAsm and asmToBytecode to state: if Venom IR
+ * execution halts/reverts, then EVM execution of the codegen output
+ * (byte list) produces a corresponding result.
+ *
+ * Stated modulo gas.
+ *
+ * TOP-LEVEL:
+ *   codegen_correct    — whole-context correctness (run_context vs run)
+ *   codegen_fn_correct — per-function correctness (run_function vs run)
+ *)
+
+Theory codegenCorrectness
+Ancestors
+  asmToBytecodeProps venomToAsmProps codegen
+
+(* ===== Initial State Correspondence ===== *)
+
+(* At function entry: Venom state and EVM state agree on shared fields,
+   EVM stack holds function arguments matching PARAM variables,
+   all memory is shared (no spill slots allocated yet). *)
+Definition initial_state_rel_def:
+  initial_state_rel fn vs es ⇔
+    (case es.contexts of
+       (ctxt, rb) :: _ =>
+         (* Stack has function arguments matching PARAM variables.
+            First param deepest, last param TOS. *)
+         let params = get_params (HD fn.fn_blocks).bb_instructions in
+         LENGTH params = LENGTH ctxt.stack ∧
+         (∀i. i < LENGTH params ⇒
+            FLOOKUP vs.vs_vars (HD (EL i params).inst_outputs) =
+              SOME (EL i (REVERSE ctxt.stack))) ∧
+         (* Environment must match.
+            rb.accounts includes contract storage (per-account). *)
+         rb.accounts = vs.vs_accounts ∧
+         rb.tStorage = vs.vs_transient ∧
+         ctxt.returnData = vs.vs_returndata ∧
+         ctxt.logs = vs.vs_logs ∧
+         (* Memory fully shared at function entry (no spills yet).
+            read_byte zero-pads, so this handles different lengths. *)
+         (∀i. read_byte i vs.vs_memory = read_byte i ctxt.memory) ∧
+         (* EVM starts at pc = 0 *)
+         ctxt.pc = 0
+     | [] => F)
+End
+
+(* ===== Return Value Correspondence ===== *)
+
+(* After execution: return data and side effects match. *)
+Definition final_state_rel_def:
+  final_state_rel vs es ⇔
+    (case es.contexts of
+       (ctxt, rb) :: _ =>
+         ctxt.returnData = vs.vs_returndata ∧
+         ctxt.logs = vs.vs_logs ∧
+         rb.accounts = vs.vs_accounts ∧
+         rb.tStorage = vs.vs_transient
+     | [] => F)
+End
+
+(* ===== Per-Function Codegen Correctness ===== *)
+
+(* If codegen produces bytecode for a function, and the function
+   halts/reverts in the Venom semantics, then EVM execution of
+   the bytecode produces a corresponding result.
+
+   Preconditions:
+     - codegen_ready_fn: SSA, SUE, normalized CFG, valid opcodes
+     - codegen succeeds (SOME bytecode)
+     - initial states correspond (stack has args, shared state matches)
+     - sufficient gas on EVM side
+     - spill safety: Venom execution doesn't clobber spill region
+     - spill coverage: initial memory covers spill high-water mark
+
+   Gas: sufficient_gas es is necessary but not sufficient. The full
+   proof requires gas for all steps. Exact formulation refined at
+   proof time.
+
+   Spill safety: step_mem_safe for every Venom step. This is a
+   property of the INPUT PROGRAM — the codegen can't establish it.
+   For Vyper-generated code, the memory allocator ensures fn_eom is
+   above all user allocations. For other frontends, must be assumed.
+
+   Note: this theorem covers a single function. Multi-function
+   contexts compose via the dispatch mechanism (selector table). *)
+Theorem codegen_fn_correct:
+  ∀fuel ctx fn fn_eom data_seg bytecode spill_hwm vs es.
+    codegen_ready_fn fn ∧
+    codegen (ctx with ctx_functions := [fn])
+            (FEMPTY |+ (fn.fn_name, fn_eom))
+            data_seg = SOME bytecode ∧
+    initial_state_rel fn vs es ∧
+    sufficient_gas es ∧
+    (* Spill safety: Venom execution doesn't clobber [fn_eom, spill_hwm) *)
+    (∀inst vs1 vs2 fuel'.
+       step_inst fuel' ctx inst vs1 = OK vs2 ⇒
+       step_mem_safe <| sa_fn_eom := fn_eom;
+                        sa_next_offset := spill_hwm;
+                        sa_free_slots := [] |> vs1 vs2) ∧
+    (* MSIZE: initial memory covers spill high-water mark *)
+    spill_mem_covered spill_hwm vs.vs_memory ∧
+    (case es.contexts of
+       (ctxt, rb) :: _ =>
+         ctxt.msgParams.code = bytecode ∧
+         ctxt.msgParams.parsed = parse_code 0 FEMPTY bytecode
+     | [] => F) ⇒
+    case run_function fuel ctx fn vs of
+    (* Halt: Venom halts ⇒ EVM halts with matching state *)
+      Halt vs' =>
+        ∃es'. run es = SOME (INR NONE, es') ∧
+              final_state_rel vs' es'
+    (* Revert: Venom reverts ⇒ EVM reverts with matching state *)
+    | Abort Revert_abort vs' =>
+        ∃es'. run es = SOME (INR (SOME Reverted), es') ∧
+              final_state_rel vs' es'
+    (* Exceptional halt: Venom aborts ⇒ EVM faults *)
+    | Abort ExHalt_abort vs' =>
+        ∃es' exc. run es = SOME (INR (SOME exc), es') ∧
+                  exc ≠ Reverted ∧
+                  final_state_rel vs' es'
+    | OK _ => F           (* impossible: run_function never returns OK *)
+    | IntRet _ _ => T    (* internal return — handled by caller *)
+    | Error _ => T       (* execution error — no EVM correspondence *)
+Proof
+  cheat
+QED
+
+(* ===== Whole-Context Codegen Correctness ===== *)
+
+(* Initial state correspondence at context entry: Venom initial state
+   and EVM execution state agree on environment, memory, calldata, etc.
+   No function params on the EVM stack (entry starts with empty stack). *)
+Definition initial_ctx_rel_def:
+  initial_ctx_rel ctx vs es ⇔
+    (case es.contexts of
+       (ctxt, rb) :: _ =>
+         rb.accounts = vs.vs_accounts ∧
+         rb.tStorage = vs.vs_transient ∧
+         ctxt.returnData = vs.vs_returndata ∧
+         ctxt.logs = vs.vs_logs ∧
+         ctxt.stack = [] ∧
+         (∀i. read_byte i vs.vs_memory = read_byte i ctxt.memory) ∧
+         ctxt.pc = 0
+     | [] => F)
+End
+
+(* Top-level codegen correctness: if a well-formed Venom context is
+   compiled to bytecode, and run_context halts/reverts, then EVM
+   execution of the bytecode produces a corresponding result.
+
+   This composes codegen_fn_correct with run_context's dispatch to
+   the entry function. *)
+Theorem codegen_correct:
+  ∀fuel ctx fn_eom_map data_seg bytecode spill_hwm vs es.
+    codegen_ready ctx ∧
+    ctx_wf ctx ∧
+    codegen ctx fn_eom_map data_seg = SOME bytecode ∧
+    initial_ctx_rel ctx vs es ∧
+    sufficient_gas es ∧
+    (∀fn inst vs1 vs2 fuel'.
+       MEM fn ctx.ctx_functions ∧
+       step_inst fuel' ctx inst vs1 = OK vs2 ⇒
+       step_mem_safe <| sa_fn_eom := 0;
+                        sa_next_offset := spill_hwm;
+                        sa_free_slots := [] |> vs1 vs2) ∧
+    spill_mem_covered spill_hwm vs.vs_memory ∧
+    (case es.contexts of
+       (ctxt, rb) :: _ =>
+         ctxt.msgParams.code = bytecode ∧
+         ctxt.msgParams.parsed = parse_code 0 FEMPTY bytecode
+     | [] => F) ⇒
+    case run_context fuel ctx vs of
+      Halt vs' =>
+        ∃es'. run es = SOME (INR NONE, es') ∧
+              final_state_rel vs' es'
+    | Abort Revert_abort vs' =>
+        ∃es'. run es = SOME (INR (SOME Reverted), es') ∧
+              final_state_rel vs' es'
+    | Abort ExHalt_abort vs' =>
+        ∃es' exc. run es = SOME (INR (SOME exc), es') ∧
+                  exc ≠ Reverted ∧
+                  final_state_rel vs' es'
+    | OK _ => F
+    | IntRet _ _ => F    (* top-level function should not RET *)
+    | Error _ => T
+Proof
+  cheat
+QED

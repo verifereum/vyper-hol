@@ -161,6 +161,20 @@ Definition encode_inst_def:
 End
 
 (* =========================================================================
+   Byte Offset → Instruction Index (inverse of layout)
+   ========================================================================= *)
+
+(* Maps byte offsets to instruction indices. Companion to
+   compute_label_offsets; both use asm_inst_size. *)
+Definition build_offset_to_pc_def:
+  build_offset_to_pc prog =
+    FST (FOLDL (λ(m, off) (i, inst).
+      (m |+ (off, i), off + asm_inst_size inst))
+    (FEMPTY : (num, num) fmap, 0n)
+    (MAPi (λi inst. (i, inst)) prog))
+End
+
+(* =========================================================================
    Top-Level Assembly
    ========================================================================= *)
 

@@ -12,3 +12,5 @@ Ancestors
   venomAnalysisHol
   (* lowering *)
   vyperLoweringHol
+  (* codegen *)
+  venomToAsmProps asmToBytecodeProps codegenCorrectness
