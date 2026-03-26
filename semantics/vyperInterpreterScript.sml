@@ -1531,14 +1531,14 @@ Definition call_external_function_def:
    let is_view = (mut = View ∨ mut = Pure) in
    let lock_action = if nr then
      case cx.nonreentrant_slot of
-     | NONE => (λst. (INR $ Error (RuntimeError "nonreentrant slot missing"), st))
+     | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
      | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
-     else (λst. (INL (), st)) in
+     else return () in
    let unlock_action = if nr ∧ ¬is_view then
      case cx.nonreentrant_slot of
-     | NONE => (λst. (INL (), st))
+     | NONE => return ()
      | SOME slot => release_nonreentrant_lock cx.txn.target slot
-     else (λst. (INL (), st)) in
+     else return () in
    let (res, st) =
      (case do lock_action; send_call_value mut cx; eval_stmts cx body od st
       of
