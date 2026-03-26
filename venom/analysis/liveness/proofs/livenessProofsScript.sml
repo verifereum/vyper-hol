@@ -140,6 +140,8 @@ Proof
     mp_tac foldl_phi_matching_inv >> simp[]
 QED
 
+(* input_vars_from correctness: every output variable either came from
+   the base set or corresponds to a PHI operand in the instruction list *)
 Theorem input_vars_from_phi_correct_proof:
   ∀src_label instrs base v.
     MEM v (input_vars_from src_label instrs base) ==>
@@ -1867,6 +1869,8 @@ QED
 
 (* ===== Path construction helpers ===== *)
 
+(* Intra-block path: consecutive indices within a single block form
+   a valid execution path *)
 Theorem cfg_exec_path_intra:
   ∀n lbl s cfg.
     cfg_exec_path cfg (GENLIST (\i. (lbl:string, s + i)) (SUC n))
@@ -1887,6 +1891,8 @@ Proof
   rw[cfg_exec_path_def]
 QED
 
+(* Extending an execution path: append a valid continuation that starts
+   either at the next index in the same block or at index 0 of a successor *)
 Theorem cfg_exec_path_extend:
   ∀path lbl2 idx2 suffix cfg.
     cfg_exec_path cfg path ∧ path <> [] ∧
@@ -1924,6 +1930,7 @@ Proof
   rw[used_before_defined_def] >> qexists_tac `k` >> simp[]
 QED
 
+(* Prepending positions that don't define v preserves used-before-defined *)
 Theorem used_before_defined_prepend:
   ∀prefix bbs v suffix.
     used_before_defined bbs v suffix ∧
@@ -1996,6 +2003,9 @@ Proof
   metis_tac[use_in_block_path_aux]
 QED
 
+(* Cross-block path construction: if v is not killed from idx to block end,
+   and a use-before-def path exists from successor entry, then a
+   use-before-def path exists from (lbl, idx) *)
 Theorem cross_block_path:
   ∀bbs cfg lr fn bb lbl idx succ_lbl succ_path v.
     wf_function fn ∧ cfg = cfg_analyze fn ∧ bbs = fn.fn_blocks ∧
@@ -2742,7 +2752,6 @@ Proof
     simp_tac std_ss [LET_THM] >> simp[])
 QED
 
-
 (* Forward propagation of "not live": if v is not live at the start of
    a range and no instruction in the range defines v, then v is not live
    at any point in the range. Contrapositive of live_vars_at_propagate_range. *)
@@ -2827,75 +2836,3 @@ Proof
   >- (disj2_tac >> qexists_tac `i` >> simp[])
 QED
 
-
-(* ===================================================================
-   Backward fold monotonicity
-   =================================================================== *)
-
-(* Generic: if transfer is set-monotone, backward fold is set-monotone *)
-Triviality fold_backward_set_mono[local]:
-  !instrs transfer lbl idx a b im_a im_b fva fvb ima imb.
-    (!inst v w. set v SUBSET set w ==>
-       set (transfer inst v) SUBSET set (transfer inst w)) /\
-    set a SUBSET set b /\
-    (!k va. FLOOKUP im_a k = SOME va ==>
-       ?vb. FLOOKUP im_b k = SOME vb /\ set va SUBSET set vb) /\
-    df_fold_backward transfer lbl instrs idx a im_a = (fva, ima) /\
-    df_fold_backward transfer lbl instrs idx b im_b = (fvb, imb)
-    ==>
-    set fva SUBSET set fvb /\
-    !k va. FLOOKUP ima k = SOME va ==>
-      ?vb. FLOOKUP imb k = SOME vb /\ set va SUBSET set vb
-Proof
-  Induct
-  (* Base case: [] *)
-  >- (simp[dfAnalyzeDefsTheory.df_fold_backward_def] >>
-      rpt gen_tac >> strip_tac >> gvs[] >>
-      rpt strip_tac >>
-      gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
-      Cases_on `(lbl,idx) = k` >> gvs[] >> metis_tac[])
-  (* Inductive case: h::instrs *)
-  >> rpt gen_tac >> strip_tac >>
-  gvs[dfAnalyzeDefsTheory.df_fold_backward_def, LET_THM] >>
-  qabbrev_tac `fa_rest = df_fold_backward transfer lbl instrs (idx+1) a im_a` >>
-  qabbrev_tac `fb_rest = df_fold_backward transfer lbl instrs (idx+1) b im_b` >>
-  Cases_on `fa_rest` >> Cases_on `fb_rest` >>
-  gvs[] >>
-  first_x_assum
-    (qspecl_then [`transfer`, `lbl`, `idx + 1`,
-      `a`, `b`, `im_a`, `im_b`,
-      `q`, `q'`, `r`, `r'`] mp_tac) >>
-  impl_tac >- gvs[] >> strip_tac >>
-  conj_tac >- metis_tac[] >>
-  rpt strip_tac >>
-  gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
-  Cases_on `(lbl,idx) = k` >> gvs[] >> metis_tac[]
-QED
-
-(* Specialized for liveness: backward fold from larger input gives
-   set-larger output *)
-Triviality liveness_fold_block_mono[local]:
-  !bbs lbl instrs a b.
-    set a SUBSET set b ==>
-    set (FST (df_fold_block Backward
-              (liveness_transfer bbs) lbl instrs a)) SUBSET
-    set (FST (df_fold_block Backward
-              (liveness_transfer bbs) lbl instrs b))
-Proof
-  rpt strip_tac >>
-  simp[dfAnalyzeDefsTheory.df_fold_block_def] >>
-  qabbrev_tac `fa = df_fold_backward (liveness_transfer bbs)
-                       lbl instrs 0 a FEMPTY` >>
-  qabbrev_tac `fb = df_fold_backward (liveness_transfer bbs)
-                       lbl instrs 0 b FEMPTY` >>
-  Cases_on `fa` >> Cases_on `fb` >> simp[] >>
-  qspecl_then [`instrs`, `liveness_transfer bbs`, `lbl`, `0`,
-    `a`, `b`, `FEMPTY`, `FEMPTY`, `q`, `q'`, `r`, `r'`]
-    mp_tac fold_backward_set_mono >>
-  unabbrev_all_tac >> simp[finite_mapTheory.FLOOKUP_EMPTY] >>
-  strip_tac >>
-  `!inst v w. set v SUBSET set w ==>
-     set (liveness_transfer bbs inst v) SUBSET
-     set (liveness_transfer bbs inst w)` by metis_tac[liveness_transfer_mono] >>
-  gvs[]
-QED
