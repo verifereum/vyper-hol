@@ -551,3 +551,58 @@ Proof
   rw[dfg_build_function_def, dfg_build_insts_def] >>
   irule build_insts_rev_ids_complete >> simp[MEM_REVERSE]
 QED
+
+
+(* --------------------------------------------------------------------------
+   normalize_operand preserves eval_operand
+   -------------------------------------------------------------------------- *)
+
+open venomStateTheory
+
+(* Semantic DFG well-formedness: for every variable defined by an ASSIGN
+   instruction in the DFG, the variable's value equals the ASSIGN source's
+   value. This holds at any program point where all preceding ASSIGNs
+   have been executed (i.e., within the same basic block after the
+   defining instruction, or in any dominated block in SSA form). *)
+Definition dfg_assigns_sound_def:
+  dfg_assigns_sound dfg s <=>
+    !v inst. FLOOKUP dfg.dfg_defs v = SOME inst /\
+             inst.inst_opcode = ASSIGN ==>
+      case inst.inst_operands of
+        [op] => lookup_var v s = eval_operand op s
+      | _ => T
+End
+
+(* normalize_operand preserves eval_operand under DFG soundness.
+   Key infrastructure: enables connecting lattice-tracked values
+   (which use normalized operands) to actual runtime values. *)
+Theorem normalize_operand_eval_proof:
+  !dfg visited op s.
+    dfg_assigns_sound dfg s ==>
+    eval_operand (normalize_operand dfg visited op) s = eval_operand op s
+Proof
+  ho_match_mp_tac normalize_operand_ind >>
+  rpt conj_tac
+  >- (
+    (* Case: Var v *)
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    simp[Once normalize_operand_def] >>
+    IF_CASES_TAC >> simp[] >>
+    Cases_on `FLOOKUP dfg.dfg_defs dfg'` >> simp[] >>
+    rename1 `FLOOKUP _ _ = SOME inst` >>
+    IF_CASES_TAC >> simp[] >>
+    Cases_on `inst.inst_operands` >> simp[] >>
+    Cases_on `t` >> simp[] >>
+    rename1 `inst.inst_operands = [src_op]` >>
+    (* Apply IH *)
+    first_x_assum (qspecl_then [`inst`, `src_op`, `[]`] mp_tac) >>
+    simp[] >> disch_then (qspec_then `s` mp_tac) >> simp[] >>
+    strip_tac >>
+    (* dfg_assigns_sound gives: lookup_var dfg' s = eval_operand src_op s *)
+    fs[dfg_assigns_sound_def] >>
+    first_x_assum (qspecl_then [`dfg'`, `inst`] mp_tac) >>
+    simp[eval_operand_def]
+  )
+  >- simp[normalize_operand_def, eval_operand_def]
+  >- simp[normalize_operand_def, eval_operand_def]
+QED
