@@ -1,2 +1,2 @@
 # Memory SSA analysis definitions
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics ../../shared ../../shared/defs ../../cfg/defs ../../dataflow/defs ../../dominators/defs ../../base_ptr ../../base_ptr/defs ../../mem_alias/defs
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../../defs ../../../../syntax ../../../../semantics ../../shared ../../shared/defs ../../cfg/defs ../../dataflow/defs ../../dominators/defs ../../base_ptr ../../base_ptr/defs ../../mem_alias/defs

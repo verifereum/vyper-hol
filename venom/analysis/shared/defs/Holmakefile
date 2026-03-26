@@ -1,5 +1,5 @@
 # Shared analysis definitions (memory locations)
 # From shared/defs/:
-#   ../../..  = venom/
+#   ../../../defs  = venom/defs
 #   ../../../.. = project root
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../../defs ../../../../syntax ../../../../semantics
