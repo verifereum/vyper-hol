@@ -86,39 +86,50 @@ Proof
   >- (simp[extract_labels_def] >> res_tac >> simp[])
 QED
 
-local
-  val ops_tac =
-    rpt strip_tac >> simp[] >>
-    Cases_on `inst.inst_operands` >> simp[] >>
-    Cases_on `t` >> simp[] >>
-    Cases_on `t'` >> simp[] >>
-    TRY (Cases_on `t` >> simp[])
-in
-  val exec_pure1_map = prove(
-    ``!g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
-      exec_pure1 h (inst with inst_operands := MAP g inst.inst_operands) s =
-      exec_pure1 h inst s``, simp[exec_pure1_def] >> ops_tac)
-  val exec_pure2_map = prove(
-    ``!g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
-      exec_pure2 h (inst with inst_operands := MAP g inst.inst_operands) s =
-      exec_pure2 h inst s``, simp[exec_pure2_def] >> ops_tac)
-  val exec_pure3_map = prove(
-    ``!g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
-      exec_pure3 h (inst with inst_operands := MAP g inst.inst_operands) s =
-      exec_pure3 h inst s``, simp[exec_pure3_def] >> ops_tac)
-  val exec_read0_map = prove(
-    ``!g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
-      exec_read0 h (inst with inst_operands := MAP g inst.inst_operands) s =
-      exec_read0 h inst s``, simp[exec_read0_def] >> ops_tac)
-  val exec_read1_map = prove(
-    ``!g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
-      exec_read1 h (inst with inst_operands := MAP g inst.inst_operands) s =
-      exec_read1 h inst s``, simp[exec_read1_def] >> ops_tac)
-  val exec_write2_map = prove(
-    ``!g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
-      exec_write2 h (inst with inst_operands := MAP g inst.inst_operands) s =
-      exec_write2 h inst s``, simp[exec_write2_def] >> ops_tac)
-end;
+val ops_tac =
+  rpt strip_tac >> simp[] >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `t'` >> simp[] >>
+  TRY (Cases_on `t` >> simp[]);
+
+Triviality exec_pure1_map[local]:
+  !g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
+    exec_pure1 h (inst with inst_operands := MAP g inst.inst_operands) s =
+    exec_pure1 h inst s
+Proof simp[exec_pure1_def] >> ops_tac
+QED
+Triviality exec_pure2_map[local]:
+  !g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
+    exec_pure2 h (inst with inst_operands := MAP g inst.inst_operands) s =
+    exec_pure2 h inst s
+Proof simp[exec_pure2_def] >> ops_tac
+QED
+Triviality exec_pure3_map[local]:
+  !g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
+    exec_pure3 h (inst with inst_operands := MAP g inst.inst_operands) s =
+    exec_pure3 h inst s
+Proof simp[exec_pure3_def] >> ops_tac
+QED
+Triviality exec_read0_map[local]:
+  !g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
+    exec_read0 h (inst with inst_operands := MAP g inst.inst_operands) s =
+    exec_read0 h inst s
+Proof simp[exec_read0_def] >> ops_tac
+QED
+Triviality exec_read1_map[local]:
+  !g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
+    exec_read1 h (inst with inst_operands := MAP g inst.inst_operands) s =
+    exec_read1 h inst s
+Proof simp[exec_read1_def] >> ops_tac
+QED
+Triviality exec_write2_map[local]:
+  !g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
+    exec_write2 h (inst with inst_operands := MAP g inst.inst_operands) s =
+    exec_write2 h inst s
+Proof simp[exec_write2_def] >> ops_tac
+QED
+
 val exec_map_thms = [exec_pure1_map, exec_pure2_map, exec_pure3_map,
                      exec_read0_map, exec_read1_map, exec_write2_map];
 
@@ -144,71 +155,83 @@ Proof
 QED
 
 (* Positional exec_* thms: arbitrary new_ops with per-element eval agreement *)
-local
-  fun exec_pos_prove def =
-    rpt strip_tac >>
-    `eval_operands new_ops st = eval_operands inst.inst_operands st` by
-      (irule eval_operands_positional >> simp[]) >>
-    simp[def] >>
-    pop_assum mp_tac >> simp[eval_operands_def] >>
-    Cases_on `new_ops` >> Cases_on `inst.inst_operands` >> gvs[eval_operands_def] >>
-    TRY (Cases_on `t` >> Cases_on `t'` >> gvs[eval_operands_def]) >>
-    TRY (Cases_on `t''` >> Cases_on `t` >> gvs[eval_operands_def] >>
-         TRY (Cases_on `t'` >> Cases_on `t''` >> gvs[eval_operands_def])) >>
-    TRY (Cases_on `t` >> Cases_on `t''` >> gvs[eval_operands_def] >>
-         TRY (Cases_on `t'` >> Cases_on `t` >> gvs[eval_operands_def])) >>
-    rpt strip_tac >> gvs[] >>
-    rpt (BasicProvers.EVERY_CASE_TAC >> gvs[]);
-  val hyps = ``LENGTH new_ops = LENGTH inst.inst_operands /\
-    (!i. i < LENGTH inst.inst_operands ==>
-         eval_operand (EL i new_ops) (st:venom_state) =
-         eval_operand (EL i inst.inst_operands) st)``;
-in
-  val exec_pure1_pos = prove(``!f inst new_ops st. ^hyps ==>
+fun exec_pos_prove def =
+  rpt strip_tac >>
+  `eval_operands new_ops st = eval_operands inst.inst_operands st` by
+    (irule eval_operands_positional >> simp[]) >>
+  simp[def] >>
+  pop_assum mp_tac >> simp[eval_operands_def] >>
+  Cases_on `new_ops` >> Cases_on `inst.inst_operands` >> gvs[eval_operands_def] >>
+  TRY (Cases_on `t` >> Cases_on `t'` >> gvs[eval_operands_def]) >>
+  TRY (Cases_on `t''` >> Cases_on `t` >> gvs[eval_operands_def] >>
+       TRY (Cases_on `t'` >> Cases_on `t''` >> gvs[eval_operands_def])) >>
+  TRY (Cases_on `t` >> Cases_on `t''` >> gvs[eval_operands_def] >>
+       TRY (Cases_on `t'` >> Cases_on `t` >> gvs[eval_operands_def])) >>
+  rpt strip_tac >> gvs[] >>
+  rpt (BasicProvers.EVERY_CASE_TAC >> gvs[]);
+
+val hyps = ``LENGTH new_ops = LENGTH inst.inst_operands /\
+  (!i. i < LENGTH inst.inst_operands ==>
+       eval_operand (EL i new_ops) (st:venom_state) =
+       eval_operand (EL i inst.inst_operands) st)``;
+
+Theorem exec_pure1_pos[local] =
+  prove(``!f inst new_ops st. ^hyps ==>
     exec_pure1 f (inst with inst_operands := new_ops) st = exec_pure1 f inst st``,
     exec_pos_prove exec_pure1_def)
-  val exec_pure2_pos = prove(``!f inst new_ops st. ^hyps ==>
+Theorem exec_pure2_pos[local] =
+  prove(``!f inst new_ops st. ^hyps ==>
     exec_pure2 f (inst with inst_operands := new_ops) st = exec_pure2 f inst st``,
     exec_pos_prove exec_pure2_def)
-  val exec_pure3_pos = prove(``!f inst new_ops st. ^hyps ==>
+Theorem exec_pure3_pos[local] =
+  prove(``!f inst new_ops st. ^hyps ==>
     exec_pure3 f (inst with inst_operands := new_ops) st = exec_pure3 f inst st``,
     exec_pos_prove exec_pure3_def)
-  val exec_read0_pos = prove(``!f inst new_ops st. ^hyps ==>
+Theorem exec_read0_pos[local] =
+  prove(``!f inst new_ops st. ^hyps ==>
     exec_read0 f (inst with inst_operands := new_ops) st = exec_read0 f inst st``,
     exec_pos_prove exec_read0_def)
-  val exec_read1_pos = prove(``!f inst new_ops st. ^hyps ==>
+Theorem exec_read1_pos[local] =
+  prove(``!f inst new_ops st. ^hyps ==>
     exec_read1 f (inst with inst_operands := new_ops) st = exec_read1 f inst st``,
     exec_pos_prove exec_read1_def)
-  val exec_write2_pos = prove(``!f inst new_ops st. ^hyps ==>
+Theorem exec_write2_pos[local] =
+  prove(``!f inst new_ops st. ^hyps ==>
     exec_write2 f (inst with inst_operands := new_ops) st = exec_write2 f inst st``,
     exec_pos_prove exec_write2_def)
-end;
+
 val exec_pos_thms = [exec_pure1_pos, exec_pure2_pos, exec_pure3_pos,
                      exec_read0_pos, exec_read1_pos, exec_write2_pos];
 
-val exec_create_inst_operands = prove(
-  ``!inst ops s v o' sz salt.
+Triviality exec_create_inst_operands[local]:
+  !inst ops s v o' sz salt.
     exec_create (inst with inst_operands := ops) s v o' sz salt =
-    exec_create inst s v o' sz salt``,
-  rw[exec_create_def]);
-val exec_ext_call_inst_operands = prove(
-  ``!inst ops s g a v ao as' ro rs is_s.
+    exec_create inst s v o' sz salt
+Proof rw[exec_create_def]
+QED
+Triviality exec_ext_call_inst_operands[local]:
+  !inst ops s g a v ao as' ro rs is_s.
     exec_ext_call (inst with inst_operands := ops) s g a v ao as' ro rs is_s =
-    exec_ext_call inst s g a v ao as' ro rs is_s``,
-  rw[exec_ext_call_def]);
-val exec_delegatecall_inst_operands = prove(
-  ``!inst ops s g a ao as' ro rs.
+    exec_ext_call inst s g a v ao as' ro rs is_s
+Proof rw[exec_ext_call_def]
+QED
+Triviality exec_delegatecall_inst_operands[local]:
+  !inst ops s g a ao as' ro rs.
     exec_delegatecall (inst with inst_operands := ops) s g a ao as' ro rs =
-    exec_delegatecall inst s g a ao as' ro rs``,
-  rw[exec_delegatecall_def]);
+    exec_delegatecall inst s g a ao as' ro rs
+Proof rw[exec_delegatecall_def]
+QED
+
 val exec_inst_operands_thms = [exec_create_inst_operands,
   exec_ext_call_inst_operands, exec_delegatecall_inst_operands];
 
-val eval_operands_map_thm = prove(
-  ``!g ops s.
+Triviality eval_operands_map_thm[local]:
+  !g ops s.
     (!op. eval_operand (g op) s = eval_operand op s) ==>
-    eval_operands (MAP g ops) s = eval_operands ops s``,
-  ntac 2 strip_tac >> Induct_on `ops` >> rw[eval_operands_def]);
+    eval_operands (MAP g ops) s = eval_operands ops s
+Proof
+  ntac 2 strip_tac >> Induct_on `ops` >> rw[eval_operands_def]
+QED
 
 val label_op_tac =
   ONCE_ASM_REWRITE_TAC[step_inst_base_def] >>
@@ -495,11 +518,8 @@ fun inst_eval_tac (asl, g) = let
   fun go n = if n > 6 then ALL_TAC else inst_at n >> go (n+1)
 in go 0 (asl, g) end handle _ => ALL_TAC (asl, g);
 
-(* Non-structural case: step_inst_base with positional operand agreement.
-   Proved at ML level (like exec_pos_thms) to avoid Script-level timeout. *)
-local
-  val step_inst_base_pos_safe = prove(``
-    !inst new_ops st.
+Triviality step_inst_base_pos_safe[local]:
+  !inst new_ops st.
     inst_wf inst /\
     ~is_alloca_op inst.inst_opcode /\
     inst.inst_opcode <> PARAM /\
@@ -515,27 +535,26 @@ local
          eval_operand (EL i new_ops) (st:venom_state) =
          eval_operand (EL i inst.inst_operands) st) ==>
     step_inst_base (inst with inst_operands := new_ops) st =
-    step_inst_base inst st``,
-    rpt strip_tac >>
-    `eval_operands new_ops st = eval_operands inst.inst_operands st` by
-      (irule eval_operands_positional >> simp[]) >>
-    CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [step_inst_base_def])) >>
-    simp (exec_pos_thms @ exec_inst_operands_thms) >>
-    CONV_TAC (RHS_CONV (ONCE_REWRITE_CONV [step_inst_base_def])) >>
-    simp[] >>
-    Cases_on `inst.inst_operands` >> Cases_on `new_ops` >> gvs[] >>
-    inst_eval_tac >> gvs[] >>
-    TRY (Cases_on `t` >> Cases_on `t'` >> gvs[] >> inst_eval_tac >> gvs[]) >>
-    TRY (Cases_on `t''` >> Cases_on `t` >> gvs[] >> inst_eval_tac >> gvs[]) >>
-    TRY (Cases_on `t'` >> Cases_on `t''` >> gvs[] >> inst_eval_tac >> gvs[]) >>
-    TRY (Cases_on `t` >> Cases_on `t'` >> gvs[] >> inst_eval_tac >> gvs[]) >>
-    TRY (Cases_on `t''` >> Cases_on `t` >> gvs[] >> inst_eval_tac >> gvs[]) >>
-    TRY (Cases_on `t'` >> Cases_on `t''` >> gvs[] >> inst_eval_tac >> gvs[]) >>
-    TRY (Cases_on `t` >> Cases_on `t'` >> gvs[] >> inst_eval_tac >> gvs[]) >>
-    TRY (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def, inst_wf_def]))
-in
-  val step_inst_base_pos_safe = step_inst_base_pos_safe
-end;
+    step_inst_base inst st
+Proof
+  rpt strip_tac >>
+  `eval_operands new_ops st = eval_operands inst.inst_operands st` by
+    (irule eval_operands_positional >> simp[]) >>
+  CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [step_inst_base_def])) >>
+  simp (exec_pos_thms @ exec_inst_operands_thms) >>
+  CONV_TAC (RHS_CONV (ONCE_REWRITE_CONV [step_inst_base_def])) >>
+  simp[] >>
+  Cases_on `inst.inst_operands` >> Cases_on `new_ops` >> gvs[] >>
+  inst_eval_tac >> gvs[] >>
+  TRY (Cases_on `t` >> Cases_on `t'` >> gvs[] >> inst_eval_tac >> gvs[]) >>
+  TRY (Cases_on `t''` >> Cases_on `t` >> gvs[] >> inst_eval_tac >> gvs[]) >>
+  TRY (Cases_on `t'` >> Cases_on `t''` >> gvs[] >> inst_eval_tac >> gvs[]) >>
+  TRY (Cases_on `t` >> Cases_on `t'` >> gvs[] >> inst_eval_tac >> gvs[]) >>
+  TRY (Cases_on `t''` >> Cases_on `t` >> gvs[] >> inst_eval_tac >> gvs[]) >>
+  TRY (Cases_on `t'` >> Cases_on `t''` >> gvs[] >> inst_eval_tac >> gvs[]) >>
+  TRY (Cases_on `t` >> Cases_on `t'` >> gvs[] >> inst_eval_tac >> gvs[]) >>
+  TRY (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def, inst_wf_def])
+QED
 
 (*
  * step_inst_operands_equiv: replacing operands with evaluation-equivalent
