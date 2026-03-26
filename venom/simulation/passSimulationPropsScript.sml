@@ -6,7 +6,9 @@
 
 Theory passSimulationProps
 Ancestors
-  passSimulationProofs
+  passSimulationProofs analysisSimDefs venomWf venomInst passSimulationDefs
+Libs
+  indexedListsTheory listTheory
 
 (* ===== Utilities ===== *)
 
@@ -223,4 +225,400 @@ Theorem lift_result_implies_pass_correct:
     pass_correct fresh exec1 exec2
 Proof
   ACCEPT_TAC lift_result_implies_pass_correct_proof
+QED
+
+(* General: function_map_transform preserves wf_function
+   given per-block label/succs/bb_well_formed + inst_ids_distinct *)
+Theorem fmt_preserves_wf_function:
+  !bt fn.
+    (!bb. (bt bb).bb_label = bb.bb_label) /\
+    (!bb. bb_well_formed bb ==> bb_well_formed (bt bb)) /\
+    (!bb. bb_succs (bt bb) = bb_succs bb) /\
+    fn_inst_ids_distinct (function_map_transform bt fn)
+    ==>
+    wf_function fn ==> wf_function (function_map_transform bt fn)
+Proof
+  ACCEPT_TAC fmt_preserves_wf_function_proof
+QED
+
+(* General: function_map_transform preserves ssa_form
+   given instruction set equality *)
+Theorem fmt_preserves_ssa_form:
+  !bt fn.
+    fn_insts (function_map_transform bt fn) = fn_insts fn
+    ==>
+    ssa_form fn ==> ssa_form (function_map_transform bt fn)
+Proof
+  ACCEPT_TAC fmt_preserves_ssa_form_proof
+QED
+
+(* General SSA preservation for function_map_transform:
+   per-instruction trace-back with id + output preservation *)
+Theorem fmt_preserves_ssa_form_general:
+  !bt fn.
+    (!bb inst. MEM bb fn.fn_blocks /\
+               MEM inst (bt bb).bb_instructions ==>
+      ?orig. MEM orig bb.bb_instructions /\
+             inst.inst_id = orig.inst_id /\
+             (inst.inst_outputs = orig.inst_outputs \/
+              inst.inst_outputs = [])) /\
+    fn_inst_ids_distinct (function_map_transform bt fn) /\
+    fn_inst_ids_distinct fn /\ ssa_form fn
+    ==>
+    ssa_form (function_map_transform bt fn)
+Proof
+  ACCEPT_TAC fmt_preserves_ssa_form_general_proof
+QED
+
+(* Instruction removal preserves SSA *)
+Theorem ssa_form_subset:
+  !fn fn'.
+    ssa_form fn /\
+    (!inst. MEM inst (fn_insts fn') ==> MEM inst (fn_insts fn))
+    ==>
+    ssa_form fn'
+Proof
+  ACCEPT_TAC ssa_form_subset_proof
+QED
+
+(* General SSA preservation for 1:1 transforms that preserve IDs and
+   either preserve or clear outputs *)
+Theorem ssa_form_preserved_by_output_subset:
+  !fn fn'.
+    ssa_form fn /\ fn_inst_ids_distinct fn /\
+    fn_inst_ids_distinct fn' /\
+    (!inst. MEM inst (fn_insts fn') ==>
+      ?orig. MEM orig (fn_insts fn) /\
+             inst.inst_id = orig.inst_id /\
+             (inst.inst_outputs = orig.inst_outputs \/
+              inst.inst_outputs = []))
+    ==>
+    ssa_form fn'
+Proof
+  ACCEPT_TAC ssa_form_preserved_by_output_subset_proof
+QED
+
+(* MAPi transform: each instruction traces to an original *)
+Theorem mapi_transform_fn_insts_trace:
+  !h fn inst.
+    MEM inst (fn_insts (function_map_transform
+      (\bb. bb with bb_instructions :=
+        MAPi (\idx i. h bb idx i) bb.bb_instructions) fn)) ==>
+    ?bb idx. MEM bb fn.fn_blocks /\
+             idx < LENGTH bb.bb_instructions /\
+             inst = h bb idx (EL idx bb.bb_instructions)
+Proof
+  ACCEPT_TAC mapi_transform_fn_insts_trace_proof
+QED
+
+(* LAST of MAPi equals f applied to last element *)
+Theorem last_mapi:
+  !(f:num -> 'a -> 'b) (l:'a list).
+    l <> [] ==>
+    LAST (MAPi f l) = f (PRE (LENGTH l)) (LAST l)
+Proof
+  rpt strip_tac >>
+  `0 < LENGTH l` by (Cases_on `l` >> fs[]) >>
+  `MAPi f l <> []`
+    by metis_tac[LENGTH_MAPi, LENGTH_NIL,
+                 DECIDE ``0n < n ==> n <> 0n``] >>
+  simp[LAST_EL, LENGTH_MAPi, EL_MAPi]
+QED
+
+(* Helpers for mapi_transform_bb_well_formed — standalone to avoid dispatch issues *)
+Triviality mapi_bb_nonempty[local]:
+  !(f:num -> instruction -> instruction) l.
+    l <> [] ==> MAPi f l <> []
+Proof
+  Cases_on `l` >> fs[MAPi_def]
+QED
+
+Triviality mapi_bb_last_term[local]:
+  !(f:num -> instruction -> instruction) l.
+    l <> [] /\
+    is_terminator (LAST l).inst_opcode /\
+    (!i. i < LENGTH l /\ is_terminator (EL i l).inst_opcode ==>
+         is_terminator (f i (EL i l)).inst_opcode)
+    ==>
+    is_terminator (LAST (MAPi f l)).inst_opcode
+Proof
+  rpt strip_tac >>
+  qspecl_then [`f`, `l`] mp_tac last_mapi >> impl_tac >- fs[] >>
+  strip_tac >> fs[] >>
+  `LAST l = EL (PRE (LENGTH l)) l` by simp[LAST_EL] >> fs[] >>
+  first_x_assum match_mp_tac >>
+  Cases_on `l` >> fs[]
+QED
+
+Triviality mapi_bb_only_last_term[local]:
+  !(f:num -> instruction -> instruction) l.
+    (!i. i < LENGTH l /\ is_terminator (EL i l).inst_opcode ==>
+         i = PRE (LENGTH l)) /\
+    (!i. i < LENGTH l /\ ~is_terminator (EL i l).inst_opcode ==>
+         ~is_terminator (f i (EL i l)).inst_opcode)
+    ==>
+    !i. i < LENGTH l /\ is_terminator (EL i (MAPi f l)).inst_opcode ==>
+        i = PRE (LENGTH l)
+Proof
+  rpt strip_tac >> gvs[EL_MAPi, LENGTH_MAPi] >> CCONTR_TAC >>
+  `~is_terminator (EL i l).inst_opcode`
+    by (strip_tac >> res_tac >> fs[]) >>
+  res_tac
+QED
+
+Triviality mapi_bb_phi_prefix[local]:
+  !(f:num -> instruction -> instruction) l.
+    (!i j. i < j /\ j < LENGTH l /\ (EL j l).inst_opcode = PHI ==>
+           (EL i l).inst_opcode = PHI) /\
+    (!i. i < LENGTH l /\ (EL i l).inst_opcode = PHI ==>
+         (f i (EL i l)).inst_opcode = PHI) /\
+    (!i. i < LENGTH l /\ (EL i l).inst_opcode <> PHI ==>
+         (f i (EL i l)).inst_opcode <> PHI)
+    ==>
+    !i j. i < j /\ j < LENGTH l /\
+          (EL j (MAPi f l)).inst_opcode = PHI ==>
+          (f i (EL i l)).inst_opcode = PHI
+Proof
+  rpt strip_tac >> gvs[EL_MAPi, LENGTH_MAPi] >>
+  `(EL j l).inst_opcode = PHI`
+    by (CCONTR_TAC >> res_tac >> fs[]) >>
+  first_x_assum match_mp_tac >>
+  first_x_assum (qspecl_then [`i`, `j`] mp_tac) >> simp[]
+QED
+
+(* bb_well_formed preservation for MAPi instruction transforms *)
+Theorem mapi_transform_bb_well_formed:
+  !f bb.
+    bb_well_formed bb /\
+    (!i. i < LENGTH bb.bb_instructions /\
+         is_terminator (EL i bb.bb_instructions).inst_opcode ==>
+         is_terminator (f i (EL i bb.bb_instructions)).inst_opcode) /\
+    (!i. i < LENGTH bb.bb_instructions /\
+         ~is_terminator (EL i bb.bb_instructions).inst_opcode ==>
+         ~is_terminator (f i (EL i bb.bb_instructions)).inst_opcode) /\
+    (!i. i < LENGTH bb.bb_instructions /\
+         (EL i bb.bb_instructions).inst_opcode = PHI ==>
+         (f i (EL i bb.bb_instructions)).inst_opcode = PHI) /\
+    (!i. i < LENGTH bb.bb_instructions /\
+         (EL i bb.bb_instructions).inst_opcode <> PHI ==>
+         (f i (EL i bb.bb_instructions)).inst_opcode <> PHI)
+    ==>
+    bb_well_formed (bb with bb_instructions := MAPi f bb.bb_instructions)
+Proof
+  rpt strip_tac >> fs[bb_well_formed_def, LENGTH_MAPi] >>
+  rpt conj_tac
+  >- (Cases_on `bb.bb_instructions` >> fs[MAPi_def])
+  >- (irule mapi_bb_last_term >> metis_tac[])
+  >- (match_mp_tac (SPEC_ALL mapi_bb_only_last_term) >> metis_tac[])
+  >- (match_mp_tac (SPEC_ALL mapi_bb_phi_prefix) >> metis_tac[])
+QED
+
+(* bb_succs preserved when terminators are unchanged and
+   non-terminators map to non-terminators *)
+Theorem mapi_transform_bb_succs:
+  !f bb.
+    (!i inst. is_terminator inst.inst_opcode ==> f i inst = inst) /\
+    (!i inst. ~is_terminator inst.inst_opcode ==>
+              ~is_terminator (f i inst).inst_opcode)
+    ==>
+    bb_succs (bb with bb_instructions := MAPi f bb.bb_instructions) =
+    bb_succs bb
+Proof
+  rpt strip_tac >>
+  Cases_on `bb.bb_instructions` >> simp[bb_succs_def, MAPi_def] >>
+  qspecl_then [`f`, `h::t`] mp_tac last_mapi >> simp[] >> strip_tac >>
+  fs[] >>
+  Cases_on `is_terminator (LAST (h::t)).inst_opcode`
+  >- (res_tac >> fs[])
+  >- (`~is_terminator (f (LENGTH t) (LAST (h::t))).inst_opcode`
+        by metis_tac[] >>
+      fs[get_successors_def, is_terminator_def])
+QED
+
+(* fn_inst_ids_distinct preserved when inst_id preserved *)
+Theorem mapi_transform_fn_inst_ids:
+  !f fn.
+    (!i inst. (f i inst).inst_id = inst.inst_id) /\
+    fn_inst_ids_distinct fn
+    ==>
+    fn_inst_ids_distinct (function_map_transform
+      (\bb. bb with bb_instructions := MAPi f bb.bb_instructions) fn)
+Proof
+  rpt strip_tac >>
+  fs[fn_inst_ids_distinct_def, function_map_transform_def,
+     MAP_MAP_o, combinTheory.o_DEF] >>
+  qmatch_asmsub_abbrev_tac `ALL_DISTINCT (FLAT (MAP g _))` >>
+  qmatch_goalsub_abbrev_tac `ALL_DISTINCT (FLAT (MAP g' _))` >>
+  `g = g'` by (unabbrev_all_tac >> simp[FUN_EQ_THM, MAP_EQ_f]) >>
+  fs[]
+QED
+
+(* Per-block variant: inst_id condition may depend on the block.
+   Needed when the MAPi transform varies per block (e.g. analysis-driven). *)
+Theorem mapi_transform_fn_inst_ids_bb:
+  !(g : basic_block -> num -> instruction -> instruction) fn.
+    (!bb i inst. (g bb i inst).inst_id = inst.inst_id) /\
+    fn_inst_ids_distinct fn
+    ==>
+    fn_inst_ids_distinct (function_map_transform
+      (\bb. bb with bb_instructions := MAPi (g bb) bb.bb_instructions) fn)
+Proof
+  rpt strip_tac >>
+  fs[fn_inst_ids_distinct_def, function_map_transform_def,
+     MAP_MAP_o, combinTheory.o_DEF] >>
+  qmatch_asmsub_abbrev_tac `ALL_DISTINCT (FLAT (MAP h _))` >>
+  qmatch_goalsub_abbrev_tac `ALL_DISTINCT (FLAT (MAP h' _))` >>
+  `h = h'` by (unabbrev_all_tac >> simp[FUN_EQ_THM, MAP_EQ_f]) >>
+  fs[]
+QED
+
+(* Per-block variant of preserves_wf: transform may vary per block.
+   Conditions on g : basic_block -> num -> instruction -> instruction. *)
+Theorem mapi_transform_preserves_wf_bb:
+  !(g : basic_block -> num -> instruction -> instruction) fn.
+    (!bb i inst. (g bb i inst).inst_id = inst.inst_id) /\
+    (!bb i inst. is_terminator inst.inst_opcode ==> g bb i inst = inst) /\
+    (!bb i inst. ~is_terminator inst.inst_opcode ==>
+                 ~is_terminator (g bb i inst).inst_opcode) /\
+    (!bb i inst. inst.inst_opcode = PHI ==> (g bb i inst).inst_opcode = PHI) /\
+    (!bb i inst. inst.inst_opcode <> PHI ==> (g bb i inst).inst_opcode <> PHI)
+    ==>
+    wf_function fn ==>
+    wf_function (function_map_transform
+      (\bb. bb with bb_instructions := MAPi (g bb) bb.bb_instructions) fn)
+Proof
+  rpt strip_tac >>
+  irule fmt_preserves_wf_function >> simp[] >> rpt conj_tac
+  >- (rpt strip_tac >> irule mapi_transform_bb_succs >> simp[] >>
+      metis_tac[])
+  >- (rpt strip_tac >> irule mapi_transform_bb_well_formed >> simp[] >>
+      metis_tac[])
+  >- (irule mapi_transform_fn_inst_ids_bb >> simp[] >>
+      fs[wf_function_def])
+QED
+
+(* Combined: MAPi transform preserves wf_function.
+   Conditions: inst_id preserved, terminators unchanged (identity),
+   non-terminators stay non-terminators, PHI/non-PHI preserved. *)
+Theorem mapi_transform_preserves_wf:
+  !f fn.
+    (!i inst. (f i inst).inst_id = inst.inst_id) /\
+    (!i inst. is_terminator inst.inst_opcode ==> f i inst = inst) /\
+    (!i inst. ~is_terminator inst.inst_opcode ==>
+              ~is_terminator (f i inst).inst_opcode) /\
+    (!i inst. inst.inst_opcode = PHI ==> (f i inst).inst_opcode = PHI) /\
+    (!i inst. inst.inst_opcode <> PHI ==> (f i inst).inst_opcode <> PHI)
+    ==>
+    wf_function fn ==>
+    wf_function (function_map_transform
+      (\bb. bb with bb_instructions := MAPi f bb.bb_instructions) fn)
+Proof
+  rpt strip_tac >>
+  irule fmt_preserves_wf_function >> simp[] >> rpt conj_tac
+  >- (rpt strip_tac >> irule mapi_transform_bb_succs >> simp[] >>
+      metis_tac[])
+  >- (rpt strip_tac >> irule mapi_transform_bb_well_formed >> simp[] >>
+      metis_tac[])
+  >- (irule mapi_transform_fn_inst_ids >> simp[] >>
+      fs[wf_function_def])
+QED
+
+(* General: FLAT (MAPi (\i x. [f i x]) l) = MAPi f l *)
+Theorem flat_mapi_singleton:
+  !(f:num -> 'a -> 'b) (l:'a list).
+    FLAT (MAPi (\i x. [f i x]) l) = MAPi f l
+Proof
+  Induct_on `l`
+  >- simp[MAPi_def]
+  >- (rpt strip_tac >> simp[MAPi_def, combinTheory.o_DEF] >>
+      first_x_assum (qspec_then `\n x. f (SUC n) x` mp_tac) >>
+      strip_tac >>
+      irule MAPi_CONG >> simp[])
+QED
+
+(* analysis_block_transform with singleton f = MAPi transform *)
+Theorem abt_singleton_eq_mapi:
+  !bottom result (f : 'a -> instruction -> instruction) bb.
+    analysis_block_transform bottom result (\ll inst. [f ll inst]) bb =
+    bb with bb_instructions :=
+      MAPi (\idx inst. f (df_at bottom result bb.bb_label idx) inst)
+           bb.bb_instructions
+Proof
+  simp[analysis_block_transform_def, flat_mapi_singleton]
+QED
+
+(* Function-level: analysis_function_transform with singleton = fmt with MAPi *)
+Theorem aft_singleton_eq_fmt_mapi:
+  !bottom result (f : 'a -> instruction -> instruction) fn.
+    analysis_function_transform bottom result (\v inst. [f v inst]) fn =
+    function_map_transform
+      (\bb. bb with bb_instructions :=
+        MAPi (\idx inst. f (df_at bottom result bb.bb_label idx) inst)
+             bb.bb_instructions) fn
+Proof
+  simp[analysis_function_transform_def, function_map_transform_def,
+       ir_function_component_equality] >>
+  simp[MAP_EQ_f, abt_singleton_eq_mapi]
+QED
+
+(* ===== block_map_transform (MAP) toolkit ===== *)
+
+(* block_map_transform = MAPi with index-ignoring function *)
+Theorem bmt_eq_mapi[local]:
+  !f bb. block_map_transform f bb =
+         bb with bb_instructions := MAPi (\i x. f x) bb.bb_instructions
+Proof
+  simp[block_map_transform_def]
+QED
+
+(* WF preservation for function_map_transform (block_map_transform f) *)
+Theorem map_transform_preserves_wf:
+  !f fn.
+    (!inst. (f inst).inst_id = inst.inst_id) /\
+    (!inst. is_terminator inst.inst_opcode ==> f inst = inst) /\
+    (!inst. ~is_terminator inst.inst_opcode ==>
+            ~is_terminator (f inst).inst_opcode) /\
+    (!inst. inst.inst_opcode = PHI ==> (f inst).inst_opcode = PHI) /\
+    (!inst. inst.inst_opcode <> PHI ==> (f inst).inst_opcode <> PHI) /\
+    wf_function fn ==>
+    wf_function (function_map_transform (block_map_transform f) fn)
+Proof
+  rpt strip_tac >>
+  `function_map_transform (block_map_transform f) fn =
+   function_map_transform
+     (\bb. bb with bb_instructions := MAPi (\i x. f x) bb.bb_instructions) fn`
+    by (simp[function_map_transform_def, ir_function_component_equality,
+             MAP_EQ_f, bmt_eq_mapi]) >>
+  pop_assum (fn th => REWRITE_TAC [th]) >>
+  irule mapi_transform_preserves_wf >> simp[]
+QED
+
+(* SSA preservation for function_map_transform (block_map_transform f) *)
+Theorem map_transform_preserves_ssa:
+  !f fn.
+    (!inst. (f inst).inst_id = inst.inst_id) /\
+    (!inst. inst.inst_outputs = (f inst).inst_outputs \/
+            (f inst).inst_outputs = []) /\
+    wf_function fn /\ ssa_form fn ==>
+    ssa_form (function_map_transform (block_map_transform f) fn)
+Proof
+  rpt strip_tac >>
+  `function_map_transform (block_map_transform f) fn =
+   function_map_transform
+     (\bb. bb with bb_instructions := MAPi (\i x. f x) bb.bb_instructions) fn`
+    by (simp[function_map_transform_def, ir_function_component_equality,
+             MAP_EQ_f, bmt_eq_mapi]) >>
+  pop_assum (fn th => REWRITE_TAC [th]) >>
+  irule fmt_preserves_ssa_form_general >> simp[] >>
+  rpt conj_tac
+  >- (rpt strip_tac >> fs[MEM_MAP] >>
+      qexists_tac `y` >> simp[] >> metis_tac[])
+  >- fs[wf_function_def]
+  >- (`fn_inst_ids_distinct fn` by fs[wf_function_def] >>
+      fs[fn_inst_ids_distinct_def, function_map_transform_def,
+         block_map_transform_def, MAP_MAP_o, combinTheory.o_DEF] >>
+      qmatch_asmsub_abbrev_tac `ALL_DISTINCT (FLAT (MAP g _))` >>
+      qmatch_goalsub_abbrev_tac `ALL_DISTINCT (FLAT (MAP g' _))` >>
+      `g = g'` by (unabbrev_all_tac >> simp[FUN_EQ_THM, MAP_EQ_f]) >>
+      fs[])
 QED
