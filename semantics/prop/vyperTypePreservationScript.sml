@@ -1,5 +1,5 @@
 (*
- * vyperStorableValuePropsScript.sml
+ * vyperTypePreservationScript.sml
  *
  * Type preservation lemmas for storable value mutation operations.
  * Shows that array_set_index and assign_subscripts preserve value_has_type.
@@ -20,7 +20,7 @@
  *   all_have_type_TAKE_DROP - TAKE/[v]/DROP preserves all_have_type
  *)
 
-Theory vyperStorableValueProps
+Theory vyperTypePreservation
 
 Ancestors
   vyperArray vyperTyping vyperValueOperation vyperState
