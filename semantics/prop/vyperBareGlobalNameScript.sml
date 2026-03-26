@@ -2,7 +2,7 @@ Theory vyperBareGlobalName
 
 Ancestors
   vyperLookup vyperUpdateTarget vyperState vyperScopePreservation
-  vyperLookupStorage vyperImmutablesPreservation
+  vyperLookupStorage vyperImmutablesPreservation vyperMisc
 
 Definition lookup_immutable_def:
   lookup_immutable cx (st:evaluation_state) mid n =
@@ -185,6 +185,27 @@ Proof
   Cases_on `st.scopes` >> simp[]
 QED
 
+(* lookup_bare_global_name after update_bare_global_name (different name) *)
+Theorem lookup_bare_global_name_update_bare_global_name_neq:
+  ∀cx st n1 n2 v.
+    n1 ≠ n2 ⇒
+    lookup_bare_global_name cx (update_bare_global_name cx st n2 v) n1 =
+    lookup_bare_global_name cx st n1
+Proof
+  rpt strip_tac >>
+  `string_to_num n1 ≠ string_to_num n2` by metis_tac[string_to_num_inj] >>
+  simp[update_bare_global_name_def] >>
+  Cases_on `lookup_bare_global_name cx st n2` >> simp[] >>
+  PairCases_on `x` >> simp[] >>
+  gvs[lookup_bare_global_name_def, lookup_immutable_def] >>
+  simp[set_immutable_def, get_address_immutables_def, lift_option_def,
+       set_address_immutables_def, bind_def, return_def] >>
+  gvs[AllCaseEqs()] >>
+  simp[return_def, get_source_immutables_def, set_source_immutables_def,
+       alistTheory.ALOOKUP_ADELKEY,
+       finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
 (* lookup_bare_global_name after update_bare_global_name (same name) *)
 Theorem lookup_bare_global_name_after_update:
   ∀cx st n tv v v'.
@@ -199,6 +220,21 @@ Proof
   gvs[AllCaseEqs()] >>
   simp[return_def, set_source_immutables_def,
        get_source_immutables_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+(* lookup_bare_global_name after update_bare_global_name (same name, unconditional) *)
+Theorem lookup_bare_global_name_update_bare_global_name:
+  ∀cx st n v'.
+    lookup_bare_global_name cx (update_bare_global_name cx st n v') n =
+    case lookup_bare_global_name cx st n of
+      SOME (tv, _) => SOME (tv, v')
+    | NONE => NONE
+Proof
+  rpt gen_tac >>
+  Cases_on `lookup_bare_global_name cx st n` >-
+    simp[update_bare_global_name_def] >>
+  PairCases_on `x` >>
+  simp[lookup_bare_global_name_after_update]
 QED
 
 (* lookup_bare_global_name through update_toplevel_name:
