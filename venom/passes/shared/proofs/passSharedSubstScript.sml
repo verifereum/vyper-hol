@@ -15,9 +15,9 @@
 
 Theory passSharedSubst
 Ancestors
-  passSharedDefs venomExecSemantics venomWf
-
-open venomStateTheory venomInstTheory listTheory rich_listTheory;
+  passSharedDefs venomExecSemantics venomWf venomState venomInst
+Libs
+  listTheory rich_listTheory
 
 (* ===================================================================== *)
 (* ===== Operand eval preservation ===================================== *)

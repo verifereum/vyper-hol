@@ -43,9 +43,7 @@ Theory passSharedProps
 Ancestors
   passSharedDefs venomExecSemantics venomEffects stateEquiv venomInstProofs
   passSharedField passSharedTransfer passSharedVarFrame passSharedFrame
-  passSharedSubst instIdxIndep
-
-open venomStateTheory venomInstTheory;
+  passSharedSubst instIdxIndep venomState venomInst
 
 (* ===================================================================== *)
 (* ===== Instruction builders (trivial) ================================ *)

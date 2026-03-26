@@ -17,10 +17,8 @@
 
 Theory passSharedTransfer
 Ancestors
-  passSharedDefs venomExecSemantics venomEffects
-
-open venomStateTheory venomInstTheory venomExecSemanticsTheory
-     venomEffectsTheory venomInstPropsTheory;
+  passSharedDefs venomExecSemantics venomEffects venomState venomInst
+  venomInstProps
 
 (* Helper: eval_operands agreement from pointwise eval_operand agreement *)
 Theorem eval_operands_agree_lem[local]:
@@ -274,4 +272,4 @@ Proof
   transfer_close_tac
 QED
 
-val _ = export_theory();
+
