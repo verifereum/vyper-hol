@@ -40,6 +40,13 @@ Definition lookup_bare_global_name_def:
   lookup_bare_global_name cx st n = lookup_immutable cx st (current_module cx) n
 End
 
+Definition is_immutable_def:
+  is_immutable cx n =
+    case get_module_code cx (current_module cx) of
+      NONE => F
+    | SOME ts => is_immutable_decl (string_to_num n) ts
+End
+
 (* For convenience, we define the case st.scopes = [] in such a way
    that looking up after update returns the updated variable value. *)
 (* update_name: update the value of a scoped variable, preserving its type.
@@ -55,6 +62,14 @@ Definition update_name_def:
         case st.scopes of
         | [] => st with scopes := [FEMPTY |+ (n, (ARB, v))]
         | h :: t => st with scopes := (h |+ (n, (ARB, v))) :: t
+End
+
+Definition update_bare_global_name_def:
+  update_bare_global_name cx st n v =
+    case lookup_bare_global_name cx st n of
+    | NONE => st
+    | SOME (tv, _) =>
+      SND (set_immutable cx (current_module cx) (string_to_num n) tv v st)
 End
 
 (* declare_name: like update_name but for creating new variables with an
@@ -1169,4 +1184,76 @@ Theorem lookup_name_empty_scopes:
   ∀st n. st.scopes = [] ⇒ lookup_name st n = NONE
 Proof
   simp[lookup_name_typed_to_lookup_name, lookup_name_typed_empty_scopes]
+QED
+
+(**********************************************************************)
+(* Low-level lemmas about assign_target for ImmutableVar *)
+
+Theorem assign_target_immutable_subscripts_state:
+  ∀cx st n sbs ao tv a a'.
+    lookup_bare_global_name cx st n = SOME (tv, a) ∧
+    assign_subscripts tv a (REVERSE sbs) ao = INL a' ⇒
+    SND (assign_target cx (BaseTargetV (ImmutableVar n) sbs) ao st) =
+    update_bare_global_name cx st n a'
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[lookup_bare_global_name_def, lookup_immutable_def] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[] >>
+  simp[Once assign_target_def, LET_THM, bind_def,
+       get_immutables_def, get_address_immutables_def,
+       lift_option_def, return_def, lift_option_type_def, lift_sum_def] >>
+  simp[set_immutable_def, bind_def, get_address_immutables_def,
+       lift_option_def, return_def, set_address_immutables_def,
+       ignore_bind_def, LET_THM] >>
+  simp[update_bare_global_name_def, lookup_bare_global_name_def,
+       lookup_immutable_def, set_immutable_def, bind_def,
+       get_address_immutables_def, lift_option_def, return_def,
+       set_address_immutables_def, LET_THM] >>
+  Cases_on `ao` >>
+  simp[assign_result_def, return_def, bind_def, lift_sum_def] >>
+  rpt (CASE_TAC >> gvs[return_def, raise_def])
+QED
+
+Theorem assign_target_immutable_subscripts_valid:
+  ∀cx st n sbs ao tv a a'.
+    lookup_bare_global_name cx st n = SOME (tv, a) ∧
+    assign_subscripts tv a (REVERSE sbs) ao = INL a' ⇒
+    ISL (FST (assign_target cx (BaseTargetV (ImmutableVar n) sbs) ao st))
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[lookup_bare_global_name_def, lookup_immutable_def] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[] >>
+  simp[Once assign_target_def, LET_THM, bind_def,
+       get_immutables_def, get_address_immutables_def,
+       lift_option_def, return_def, lift_option_type_def, lift_sum_def] >>
+  simp[set_immutable_def, bind_def, get_address_immutables_def,
+       lift_option_def, return_def, set_address_immutables_def,
+       ignore_bind_def, LET_THM] >>
+  Cases_on `ao` >>
+  simp[assign_result_def, return_def, bind_def, lift_sum_def] >>
+  drule assign_subscripts_PopOp_assign_result >> strip_tac >>
+  gvs[return_def, raise_def] >>
+  Cases_on `popped_value v` >> gvs[return_def]
+QED
+
+(**********************************************************************)
+(* valid_target / update_target lemmas for ImmutableVar *)
+
+Theorem valid_target_immutable_subscripts:
+  ∀cx st n sbs ao tv a a'.
+    lookup_bare_global_name cx st n = SOME (tv, a) ∧
+    assign_subscripts tv a (REVERSE sbs) ao = INL a' ⇒
+    valid_target cx st (BaseTargetV (ImmutableVar n) sbs) ao
+Proof
+  metis_tac[valid_target_def, assign_target_immutable_subscripts_valid]
+QED
+
+Theorem update_target_immutable_subscripts:
+  ∀cx st n sbs ao tv a a'.
+    lookup_bare_global_name cx st n = SOME (tv, a) ∧
+    assign_subscripts tv a (REVERSE sbs) ao = INL a' ⇒
+    update_target cx st (BaseTargetV (ImmutableVar n) sbs) ao =
+    update_bare_global_name cx st n a'
+Proof
+  metis_tac[update_target_def, assign_target_immutable_subscripts_state]
 QED
