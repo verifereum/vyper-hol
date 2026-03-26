@@ -26,6 +26,38 @@ Proof
   \\ simp[get_storage_def, set_storage_def, combinTheory.APPLY_UPDATE_THM]
 QED
 
+Theorem get_storage_after_set_other:
+  ∀cx st b1 b2 s'. b1 ≠ b2 ⇒
+  get_storage cx (set_storage cx st b1 s') b2 = get_storage cx st b2
+Proof
+  Cases_on `b1` \\ Cases_on `b2` \\ gvs[]
+  \\ simp[get_storage_def, set_storage_def, combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem get_storage_scopes:
+  ∀cx st s b. get_storage cx (st with scopes := s) b = get_storage cx st b
+Proof
+  rpt gen_tac \\ Cases_on `b` \\ simp[get_storage_def]
+QED
+
+Theorem set_storage_scopes:
+  ∀cx st b s'. (set_storage cx st b s').scopes = st.scopes
+Proof
+  rpt gen_tac \\ Cases_on `b` \\ simp[set_storage_def]
+QED
+
+Theorem set_storage_immutables:
+  ∀cx st b s'. (set_storage cx st b s').immutables = st.immutables
+Proof
+  rpt gen_tac \\ Cases_on `b` \\ simp[set_storage_def]
+QED
+
+Theorem set_storage_logs:
+  ∀cx st b s'. (set_storage cx st b s').logs = st.logs
+Proof
+  rpt gen_tac \\ Cases_on `b` \\ simp[set_storage_def]
+QED
+
 (* ===== Connecting monadic and non-monadic ===== *)
 
 Theorem get_storage_backend_eq:
