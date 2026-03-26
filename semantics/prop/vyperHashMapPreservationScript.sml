@@ -206,3 +206,106 @@ Proof
   \\ simp[write_hashmap_def, read_hashmap_def]
   \\ rpt (CASE_TAC \\ simp[get_storage_after_set_other])
 QED
+
+(* ===== lookup_toplevel_name preservation under write_hashmap ===== *)
+
+(* Helper: get_immutables pair preserved by set_storage *)
+Triviality get_immutables_set_storage[local]:
+  ∀cx mid st b s'.
+    get_immutables cx mid (set_storage cx st b s') =
+    (FST (get_immutables cx mid st), set_storage cx st b s')
+Proof
+  rpt gen_tac
+  \\ simp[vyperStateTheory.get_immutables_def, vyperStateTheory.bind_def,
+          vyperStateTheory.get_address_immutables_def,
+          vyperStateTheory.lift_option_def, vyperStateTheory.return_def, vyperStateTheory.raise_def, set_storage_immutables]
+  \\ rpt CASE_TAC \\ gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+QED
+
+(* Helper: read_storage_slot FST preserved by set_storage under disjointness *)
+Triviality read_storage_slot_set_storage_fst[local]:
+  ∀cx is_t off tv st b storage' bslot kt hm_tv kv v.
+    hashmap_write (get_storage cx st b) bslot kt hm_tv kv v = SOME storage' ∧
+    value_has_type hm_tv v ∧
+    (b = is_t ⇒
+     off < dimword(:256) ∧
+     hashmap_var_slots_disjoint bslot kt hm_tv kv off tv) ⇒
+    FST (read_storage_slot cx is_t (n2w off) tv (set_storage cx st b storage')) =
+    FST (read_storage_slot cx is_t (n2w off) tv st)
+Proof
+  rpt gen_tac \\ strip_tac
+  \\ simp[vyperStateTheory.read_storage_slot_def, vyperStateTheory.bind_def,
+          get_storage_backend_eq, vyperStateTheory.lift_option_def]
+  \\ Cases_on `b = is_t`
+  >- (gvs[get_storage_after_set, wordsTheory.w2n_n2w]
+      \\ drule_all vyperHashMapStorageTheory.decode_value_after_hashmap_write
+      \\ strip_tac \\ gvs[]
+      \\ CASE_TAC \\ simp[vyperStateTheory.return_def, vyperStateTheory.raise_def])
+  \\ `get_storage cx (set_storage cx st b storage') is_t =
+      get_storage cx st is_t` by
+       (irule get_storage_after_set_other \\ simp[])
+  \\ gvs[] \\ CASE_TAC \\ simp[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+QED
+
+Theorem lookup_toplevel_name_write_hashmap:
+  ∀cx st b bslot kt t kv v mid m.
+    (∀tv. evaluate_type (get_tenv cx) t = SOME tv ⇒ value_has_type tv v) ∧
+    (∀tv var_b var_off var_tv.
+       evaluate_type (get_tenv cx) t = SOME tv ∧
+       storage_var_info cx mid m = SOME (var_b, var_off, var_tv) ∧
+       b = var_b ⇒
+       var_off < dimword(:256) ∧
+       hashmap_var_slots_disjoint bslot kt tv kv var_off var_tv) ⇒
+    lookup_toplevel_name cx
+      (write_hashmap cx st (HashMapRef b bslot kt (Type t)) kv v) mid m =
+    lookup_toplevel_name cx st mid m
+Proof
+  rpt gen_tac \\ strip_tac
+  \\ simp[vyperLookupStorageTheory.lookup_toplevel_name_def, write_hashmap_def]
+  \\ CASE_TAC \\ simp[]
+  \\ CASE_TAC \\ simp[]
+  (* Reduce to FST equality *)
+  \\ `FST (lookup_global cx mid (string_to_num m) (set_storage cx st b x')) =
+      FST (lookup_global cx mid (string_to_num m) st)` suffices_by
+     (strip_tac
+      \\ Cases_on `lookup_global cx mid (string_to_num m) (set_storage cx st b x')`
+      \\ Cases_on `lookup_global cx mid (string_to_num m) st`
+      \\ gvs[] \\ Cases_on `q` \\ Cases_on `q'` \\ gvs[])
+  (* Prove FST equality following lookup_global_scopes_fst pattern *)
+  \\ simp[vyperStateTheory.lookup_global_def, vyperStateTheory.bind_def,
+          vyperStateTheory.lift_option_type_def, vyperStateTheory.return_def, vyperStateTheory.raise_def, vyperStateTheory.ignore_bind_def]
+  \\ Cases_on `get_module_code cx mid`
+  \\ simp[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+  \\ rename1 `get_module_code cx mid = SOME modcode`
+  \\ Cases_on `find_var_decl_by_num (string_to_num m) modcode` \\ simp[]
+  >- (* Immutables branch *)
+     (simp[vyperStateTheory.bind_def, vyperStateTheory.lift_option_type_def, vyperStateTheory.return_def, vyperStateTheory.raise_def,
+           get_immutables_set_storage]
+      \\ Cases_on `get_immutables cx mid st` \\ simp[]
+      \\ Cases_on `q` \\ simp[]
+      \\ rpt CASE_TAC \\ gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def])
+  \\ rename1 `SOME found` \\ PairCases_on `found`
+  \\ Cases_on `found0` \\ simp[vyperStateTheory.bind_def]
+  >- (* StorageVarDecl branch *)
+     (Cases_on `lookup_var_slot_from_layout cx b' mid found1`
+      \\ simp[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+      \\ Cases_on `evaluate_type (get_tenv cx) t'`
+      \\ simp[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+      \\ rename1 `SOME tv'`
+      (* Establish FST read_storage_slot equality before tv' case split *)
+      \\ `FST (read_storage_slot cx b' (n2w x'') tv'
+               (set_storage cx st b x')) =
+          FST (read_storage_slot cx b' (n2w x'') tv' st)` by
+         (irule read_storage_slot_set_storage_fst
+          \\ qexistsl_tac [`bslot`, `x`, `kt`, `kv`, `v`]
+          \\ simp[]
+          \\ strip_tac
+          \\ first_x_assum (qspecl_then [`x`, `b'`, `x''`, `tv'`] mp_tac)
+          \\ simp[vyperLookupStorageTheory.storage_var_info_def])
+      \\ Cases_on `tv'`
+      \\ simp[vyperStateTheory.bind_def, vyperStateTheory.return_def, vyperStateTheory.raise_def]
+      \\ rpt CASE_TAC \\ gvs[])
+  (* HashMapVarDecl branch *)
+  \\ Cases_on `lookup_var_slot_from_layout cx b' mid found1`
+  \\ simp[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+QED

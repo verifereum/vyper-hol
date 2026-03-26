@@ -1,127 +1,133 @@
-# Plan: HashMap Preservation Theorems
+# Plan: lookup_toplevel_name_write_hashmap
 
-## Goal
-Prove preservation theorems for `write_hashmap` and `update_hashmap` (state field preservation),
-and independence theorems for `read_hashmap` and `lookup_hashmap` (scopes independence).
+## Problem
 
-## Architecture
+`lookup_toplevel_name cx st mid m` may read from storage when `m` is a
+`StorageVarDecl` variable (non-array).  `write_hashmap cx st href kv v`
+modifies storage.  We need a condition under which the lookup is unchanged.
 
-**New file:** `semantics/prop/vyperHashMapPreservationScript.sml`
-- Ancestors: `vyperHashMap vyperLookupStorageScopes vyperStorageBackend`
+## Key Observations
 
-**Foundation additions to:** `semantics/prop/vyperStorageBackendScript.sml`
-- `set_storage` field preservation lemmas (needed by write_hashmap proofs)
+1. **`write_hashmap`** modifies storage at Keccak-derived slots:
+   `hashmap_slot_for bslot kt kv + offset` for `offset < type_slot_size tv`.
 
-## Phase 1: Foundation — set_storage field preservation
+2. **`lookup_toplevel_name`** goes through `lookup_global`, which has three branches:
+   - *Immutables*: reads `st.immutables` — unaffected by storage writes.
+   - *HashMapVarDecl*: computes slot and returns `HashMapRef` — no storage read.
+   - *StorageVarDecl*:
+     - *ArrayTV*: returns `ArrayRef` — no storage read.
+     - *Non-ArrayTV*: calls `read_storage_slot`, which does `decode_value` on storage.
 
-Add to `vyperStorageBackendScript.sml`:
+3. Only the StorageVarDecl/non-ArrayTV case reads storage, and only on one backend.
+   If that backend differs from the hashmap's, or the slot ranges are disjoint,
+   `decode_value` returns the same result.
 
-1. **`set_storage_scopes`**: `(set_storage cx st b s').scopes = st.scopes`
-   - Proof: Cases on `b`, simp with set_storage_def
+## Definitions
 
-2. **`set_storage_immutables`**: `(set_storage cx st b s').immutables = st.immutables`
-   - Proof: Same pattern
+### `hashmap_var_slots_disjoint` (in vyperHashMapStorageScript.sml)
 
-3. **`set_storage_logs`**: `(set_storage cx st b s').logs = st.logs`
-   - Proof: Same pattern
+Per-key disjointness between a hashmap entry's slot range and a variable's slot
+range.  Structurally parallel to the existing `hashmap_slots_disjoint` (which
+captures key-to-key disjointness within the same hashmap).
 
-4. **`get_storage_after_set_other`**: `b1 ≠ b2 ⇒ get_storage cx (set_storage cx st b1 s') b2 = get_storage cx st b2`
-   - Proof: Cases on b1, b2, simp
+```sml
+hashmap_var_slots_disjoint bslot kt hm_tv kv var_off var_tv ⇔
+  let hm_off = w2n (hashmap_slot_for bslot kt kv) in
+    hm_off + type_slot_size hm_tv ≤ dimword(:256) ∧
+    var_off + type_slot_size var_tv ≤ dimword(:256) ∧
+    (hm_off + type_slot_size hm_tv ≤ var_off ∨
+     var_off + type_slot_size var_tv ≤ hm_off)
+```
 
-## Phase 2: write_hashmap state field preservation
+### `no_hashmap_var_collision` (in vyperHashMapStorageScript.sml)
 
-In `vyperHashMapPreservationScript.sml`:
+All-keys variant, analogous to `no_hashmap_collision`.
+Captures the Keccak collision-freedom assumption for hashmap-vs-variable slots.
 
-5. **`write_hashmap_scopes`**: `(write_hashmap cx st href kv v).scopes = st.scopes`
-   - Proof: Cases on href/vt, simp with write_hashmap_def, set_storage_scopes, AllCaseEqs
+```sml
+no_hashmap_var_collision bslot kt hm_tv var_off var_tv ⇔
+  ∀kv. hashmap_var_slots_disjoint bslot kt hm_tv kv var_off var_tv
+```
 
-6. **`write_hashmap_immutables`**: `(write_hashmap cx st href kv v).immutables = st.immutables`
-   - Proof: Same pattern with set_storage_immutables
+## Theorems
 
-7. **`write_hashmap_logs`**: `(write_hashmap cx st href kv v).logs = st.logs`
-   - Proof: Same pattern with set_storage_logs
+### Storage-level helper: `decode_value_after_hashmap_write`
 
-## Phase 3: Scope operations preserved by write_hashmap
+In vyperHashMapStorageScript.sml (alongside existing `hashmap_read_after_write_other`):
 
-8. **`lookup_name_write_hashmap`**: `lookup_name (write_hashmap cx st href kv v) m = lookup_name st m`
-   - Proof: simp[lookup_name_def, write_hashmap_scopes]
+```
+hashmap_write storage base kt hm_tv kv v = SOME storage' ∧
+value_has_type hm_tv v ∧
+hashmap_var_slots_disjoint base kt hm_tv kv var_off var_tv ⇒
+decode_value storage' var_off var_tv = decode_value storage var_off var_tv
+```
 
-9. **`lookup_name_typed_write_hashmap`**: `lookup_name_typed (write_hashmap cx st href kv v) m = lookup_name_typed st m`
-   - Proof: simp[lookup_name_typed_def, write_hashmap_scopes]
+Proof: Expand `hashmap_write_def`, apply `decode_value_disjoint_writes_word` with
+`sz = type_slot_size hm_tv`, discharge write-offset bound via `encode_writes_bounded`.
+Same proof pattern as `hashmap_read_after_write_other`.
 
-10. **`var_in_scope_write_hashmap`**: `var_in_scope (write_hashmap cx st href kv v) m ⇔ var_in_scope st m`
-    - Proof: simp[var_in_scope_def, lookup_name_write_hashmap]
+### Main theorem: `lookup_toplevel_name_write_hashmap`
 
-## Phase 4: lookup_toplevel_name preserved by write_hashmap
+In vyperHashMapPreservationScript.sml:
 
-11. **`lookup_toplevel_name_write_hashmap`**: `lookup_toplevel_name cx (write_hashmap cx st href kv v) mid m = lookup_toplevel_name cx st mid m`
-    - Key insight: write_hashmap changes accounts/tStorage but lookup_toplevel_name
-      goes through lookup_global which reads immutables (unchanged) and storage slots.
-      For HashMapVarDecl variables, lookup_global doesn't read storage — just computes slot.
-      For StorageVarDecl/immutable variables, lookup_global reads from storage slots.
-    - However, `write_hashmap` calls `set_storage` which replaces the full storage backend,
-      so StorageVarDecl reads from the same modified storage. The slots written by hashmap_write
-      (keccak-based) are different from regular variable slots, but proving this requires
-      collision assumptions.
-    - **Approach**: Prove this via the `lookup_global_scopes_fst` pattern but for storage.
-      Actually, lookup_global for HashMapVarDecl is state-independent; for StorageVarDecl
-      it reads specific storage slots. We'd need `hashmap_write` to be transparent to those slots.
-    - **DEFERRED**: This requires non-trivial storage-slot-disjointness conditions.
-      Instead, rely on `is_leaf_hashmap_lookup_state_independent` for hashmap lookups.
+```
+∀cx st b bslot kt t kv v mid m.
+  (∀tv var_b var_off var_tv.
+     evaluate_type (get_tenv cx) t = SOME tv ∧
+     storage_var_info cx mid m = SOME (var_b, var_off, var_tv) ∧
+     b = var_b ⇒
+     hashmap_var_slots_disjoint bslot kt tv kv var_off var_tv) ⇒
+  lookup_toplevel_name cx
+    (write_hashmap cx st (HashMapRef b bslot kt (Type t)) kv v) mid m =
+  lookup_toplevel_name cx st mid m
+```
 
-## Phase 5: update_hashmap state field preservation
+The precondition is vacuously true when:
+- Variable `m` is not a StorageVarDecl (storage_var_info returns NONE)
+- The hashmap and variable are on different backends (b ≠ var_b)
 
-12. **`update_hashmap_scopes`**: `(update_hashmap cx st mid n kv v).scopes = st.scopes`
-    - Proof: simp[update_hashmap_def], CASE_TAC, use write_hashmap_scopes
+Proof outline:
+1. Expand `write_hashmap_def`; CASE_TAC on `evaluate_type` and `hashmap_write`.
+   - NONE cases: state is unchanged, trivial.
+   - SOME cases: state is `set_storage cx st b storage'`.
+2. Expand `lookup_toplevel_name_def` → `lookup_global`.
+3. Case-split through `lookup_global` (follow `lookup_global_scopes_fst` template):
+   - *Immutables*: `set_storage` preserves immutables → same result.
+   - *HashMapVarDecl*: no storage read → same result.
+   - *StorageVarDecl / ArrayTV*: no storage read → same result.
+   - *StorageVarDecl / non-ArrayTV*: use `read_storage_slot` preservation:
+     - If `is_transient ≠ b`: `get_storage_after_set_other` → same storage.
+     - If `is_transient = b`: `get_storage_after_set` + `decode_value_after_hashmap_write`
+       → same `decode_value` under the disjointness precondition.
 
-13. **`update_hashmap_immutables`**: `(update_hashmap cx st mid n kv v).immutables = st.immutables`
-    - Proof: Same pattern
+Local helpers needed:
+- `get_immutables_set_storage_fst[local]`: FST of get_immutables unchanged after set_storage
+- `get_immutables_set_storage_snd[local]`: SND tracks the modified state
+- `read_storage_slot_set_storage_fst[local]`: FST of read_storage_slot under disjointness
 
-14. **`update_hashmap_logs`**: `(update_hashmap cx st mid n kv v).logs = st.logs`
-    - Proof: Same pattern
+### Corollary: `update_hashmap_preserves_lookup`
 
-## Phase 6: Scope operations preserved by update_hashmap
+```
+∀cx st mid_h n_h kv v mid m.
+  is_leaf_hashmap cx mid_h n_h ∧
+  (∀href tv var_b var_off var_tv.
+     lookup_toplevel_name cx st mid_h n_h = SOME href ∧
+     hashmap_ref_value_tv cx href = SOME tv ∧
+     storage_var_info cx mid m = SOME (var_b, var_off, var_tv) ∧
+     hashmap_ref_is_t href = var_b ⇒
+     hashmap_var_slots_disjoint (hashmap_ref_bslot href) (hashmap_ref_kt href)
+       tv kv var_off var_tv) ⇒
+  lookup_toplevel_name cx (update_hashmap cx st mid_h n_h kv v) mid m =
+  lookup_toplevel_name cx st mid m
+```
 
-15. **`lookup_name_update_hashmap`**: `lookup_name (update_hashmap cx st mid n kv v) m = lookup_name st m`
-    - Proof: simp[lookup_name_def, update_hashmap_scopes]
+Actually, this corollary is complex because it needs to extract fields from href.
+It may be simpler to just use `update_hashmap_def` + `lookup_toplevel_name_write_hashmap`
+directly. Defer the corollary — prove `lookup_toplevel_name_write_hashmap` first.
 
-16. **`lookup_name_typed_update_hashmap`**: `lookup_name_typed (update_hashmap cx st mid n kv v) m = lookup_name_typed st m`
+## File Changes
 
-17. **`var_in_scope_update_hashmap`**: `var_in_scope (update_hashmap cx st mid n kv v) m ⇔ var_in_scope st m`
-
-## Phase 7: read_hashmap/lookup_hashmap scopes independence
-
-18. **`read_hashmap_scopes`**: `read_hashmap cx (st with scopes := s) href kv = read_hashmap cx st href kv`
-    - Proof: Cases on href/vt, simp with read_hashmap_def, get_storage_def
-
-19. **`lookup_hashmap_scopes`**: `lookup_hashmap cx (st with scopes := s) mid n kv = lookup_hashmap cx st mid n kv`
-    - Proof: simp[lookup_hashmap_def, lookup_toplevel_name_scopes, read_hashmap_scopes]
-
-## Phase 8: lookup_hashmap scope operation independence
-
-20. **`lookup_hashmap_update_name`**: `lookup_hashmap cx (update_name st n v) mid m kv = lookup_hashmap cx st mid m kv`
-    - Proof: Via lookup_toplevel_name_update_name + read_hashmap_scopes pattern
-
-21. **`lookup_hashmap_declare_name`**: similar
-
-22. **`lookup_hashmap_open_scope`**: similar
-
-23. **`lookup_hashmap_tl_scopes`**: similar
-
-## Phase 9: Cross-backend independence for read_hashmap after write_hashmap
-
-24. **`read_hashmap_after_write_other_backend`**:
-    `href1.is_t ≠ href2.is_t ⇒
-     read_hashmap cx (write_hashmap cx st href1 kv1 v) href2 kv2 = read_hashmap cx st href2 kv2`
-    - Proof: Different backends don't interfere, use get_storage_after_set_other
-
-## Summary
-
-| Phase | Count | File |
-|-------|-------|------|
-| 1. set_storage foundations | 4 | vyperStorageBackendScript.sml |
-| 2-4. write_hashmap preservation | 6 | vyperHashMapPreservationScript.sml |
-| 5-6. update_hashmap preservation | 6 | vyperHashMapPreservationScript.sml |
-| 7-8. read/lookup_hashmap independence | 6 | vyperHashMapPreservationScript.sml |
-| 9. cross-backend | 1 | vyperHashMapPreservationScript.sml |
-| **Total** | **23** | |
+| File | Changes |
+|------|---------|
+| `semantics/prop/vyperHashMapStorageScript.sml` | Add `hashmap_var_slots_disjoint`, `no_hashmap_var_collision`, `decode_value_after_hashmap_write` |
+| `semantics/prop/vyperHashMapPreservationScript.sml` | Add `lookup_toplevel_name_write_hashmap` |
