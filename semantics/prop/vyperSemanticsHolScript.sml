@@ -8,3 +8,4 @@ Ancestors
   vyperLookupStorageScopes
   vyperBareGlobalName
   vyperHashMap
+  vyperTypePreservation
