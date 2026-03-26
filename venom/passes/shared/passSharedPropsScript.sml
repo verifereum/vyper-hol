@@ -29,6 +29,7 @@
  *   Transfer/determinism:
  *     step_inst_base_ok_transfer           — OK transfers across agreeing states
  *     step_inst_base_output_determined_fields — per-field output determinism
+ *     step_inst_base_effect_free_output_determined_vars — effect-free: output vars determined by operands + read state
  *
  *   Variable frame:
  *     step_inst_base_var_frame_full        — step_inst_base preserves non-output vars
@@ -848,3 +849,6 @@ Theorem step_inst_var_frame_full =
 (* Commutativity *)
 Theorem effects_independent_commute =
   passSharedFrameTheory.effects_independent_commute
+
+Theorem step_inst_base_effect_free_output_determined_vars =
+  passSharedTransferTheory.step_inst_base_effect_free_output_determined_vars

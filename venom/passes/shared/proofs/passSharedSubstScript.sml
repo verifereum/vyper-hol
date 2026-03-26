@@ -15,9 +15,9 @@
 
 Theory passSharedSubst
 Ancestors
-  passSharedDefs venomExecSemantics venomWf
-
-open venomStateTheory venomInstTheory;
+  passSharedDefs venomExecSemantics venomWf venomState venomInst
+Libs
+  listTheory rich_listTheory
 
 (* ===================================================================== *)
 (* ===== Operand eval preservation ===================================== *)
@@ -86,65 +86,152 @@ Proof
   >- (simp[extract_labels_def] >> res_tac >> simp[])
 QED
 
-local
-  val ops_tac =
-    rpt strip_tac >> simp[] >>
-    Cases_on `inst.inst_operands` >> simp[] >>
-    Cases_on `t` >> simp[] >>
-    Cases_on `t'` >> simp[] >>
-    TRY (Cases_on `t` >> simp[])
-in
-  val exec_pure1_map = prove(
-    ``!g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
-      exec_pure1 h (inst with inst_operands := MAP g inst.inst_operands) s =
-      exec_pure1 h inst s``, simp[exec_pure1_def] >> ops_tac)
-  val exec_pure2_map = prove(
-    ``!g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
-      exec_pure2 h (inst with inst_operands := MAP g inst.inst_operands) s =
-      exec_pure2 h inst s``, simp[exec_pure2_def] >> ops_tac)
-  val exec_pure3_map = prove(
-    ``!g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
-      exec_pure3 h (inst with inst_operands := MAP g inst.inst_operands) s =
-      exec_pure3 h inst s``, simp[exec_pure3_def] >> ops_tac)
-  val exec_read0_map = prove(
-    ``!g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
-      exec_read0 h (inst with inst_operands := MAP g inst.inst_operands) s =
-      exec_read0 h inst s``, simp[exec_read0_def] >> ops_tac)
-  val exec_read1_map = prove(
-    ``!g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
-      exec_read1 h (inst with inst_operands := MAP g inst.inst_operands) s =
-      exec_read1 h inst s``, simp[exec_read1_def] >> ops_tac)
-  val exec_write2_map = prove(
-    ``!g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
-      exec_write2 h (inst with inst_operands := MAP g inst.inst_operands) s =
-      exec_write2 h inst s``, simp[exec_write2_def] >> ops_tac)
-end;
+val ops_tac =
+  rpt strip_tac >> simp[] >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `t'` >> simp[] >>
+  TRY (Cases_on `t` >> simp[]);
+
+Triviality exec_pure1_map[local]:
+  !g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
+    exec_pure1 h (inst with inst_operands := MAP g inst.inst_operands) s =
+    exec_pure1 h inst s
+Proof simp[exec_pure1_def] >> ops_tac
+QED
+Triviality exec_pure2_map[local]:
+  !g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
+    exec_pure2 h (inst with inst_operands := MAP g inst.inst_operands) s =
+    exec_pure2 h inst s
+Proof simp[exec_pure2_def] >> ops_tac
+QED
+Triviality exec_pure3_map[local]:
+  !g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
+    exec_pure3 h (inst with inst_operands := MAP g inst.inst_operands) s =
+    exec_pure3 h inst s
+Proof simp[exec_pure3_def] >> ops_tac
+QED
+Triviality exec_read0_map[local]:
+  !g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
+    exec_read0 h (inst with inst_operands := MAP g inst.inst_operands) s =
+    exec_read0 h inst s
+Proof simp[exec_read0_def] >> ops_tac
+QED
+Triviality exec_read1_map[local]:
+  !g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
+    exec_read1 h (inst with inst_operands := MAP g inst.inst_operands) s =
+    exec_read1 h inst s
+Proof simp[exec_read1_def] >> ops_tac
+QED
+Triviality exec_write2_map[local]:
+  !g h inst s. (!op. eval_operand (g op) s = eval_operand op s) ==>
+    exec_write2 h (inst with inst_operands := MAP g inst.inst_operands) s =
+    exec_write2 h inst s
+Proof simp[exec_write2_def] >> ops_tac
+QED
+
 val exec_map_thms = [exec_pure1_map, exec_pure2_map, exec_pure3_map,
                      exec_read0_map, exec_read1_map, exec_write2_map];
 
-val exec_create_inst_operands = prove(
-  ``!inst ops s v o' sz salt.
+(* ===================================================================== *)
+(* ===== Positional operand equivalence ================================ *)
+(* ===================================================================== *)
+
+(* Per-element eval_operand agreement implies eval_operands agreement *)
+Theorem eval_operands_positional:
+  !ops1 ops2 st. LENGTH ops1 = LENGTH ops2 /\
+    (!i. i < LENGTH ops1 ==>
+         eval_operand (EL i ops1) st = eval_operand (EL i ops2) st) ==>
+    eval_operands ops1 st = eval_operands ops2 st
+Proof
+  Induct >> simp[eval_operands_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `ops2` >> gvs[eval_operands_def] >>
+  `eval_operand h st = eval_operand h' st` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `eval_operands ops1 st = eval_operands t st` by (
+    first_x_assum irule >> simp[] >>
+    rpt strip_tac >> first_x_assum (qspec_then `SUC i` mp_tac) >> simp[]) >>
+  simp[]
+QED
+
+(* Positional exec_* thms: arbitrary new_ops with per-element eval agreement *)
+fun exec_pos_prove def =
+  rpt strip_tac >>
+  `eval_operands new_ops st = eval_operands inst.inst_operands st` by
+    (irule eval_operands_positional >> simp[]) >>
+  simp[def] >>
+  pop_assum mp_tac >> simp[eval_operands_def] >>
+  Cases_on `new_ops` >> Cases_on `inst.inst_operands` >> gvs[eval_operands_def] >>
+  TRY (Cases_on `t` >> Cases_on `t'` >> gvs[eval_operands_def]) >>
+  TRY (Cases_on `t''` >> Cases_on `t` >> gvs[eval_operands_def] >>
+       TRY (Cases_on `t'` >> Cases_on `t''` >> gvs[eval_operands_def])) >>
+  TRY (Cases_on `t` >> Cases_on `t''` >> gvs[eval_operands_def] >>
+       TRY (Cases_on `t'` >> Cases_on `t` >> gvs[eval_operands_def])) >>
+  rpt strip_tac >> gvs[] >>
+  rpt (BasicProvers.EVERY_CASE_TAC >> gvs[]);
+
+val hyps = ``LENGTH new_ops = LENGTH inst.inst_operands /\
+  (!i. i < LENGTH inst.inst_operands ==>
+       eval_operand (EL i new_ops) (st:venom_state) =
+       eval_operand (EL i inst.inst_operands) st)``;
+
+Theorem exec_pure1_pos[local] =
+  prove(``!f inst new_ops st. ^hyps ==>
+    exec_pure1 f (inst with inst_operands := new_ops) st = exec_pure1 f inst st``,
+    exec_pos_prove exec_pure1_def)
+Theorem exec_pure2_pos[local] =
+  prove(``!f inst new_ops st. ^hyps ==>
+    exec_pure2 f (inst with inst_operands := new_ops) st = exec_pure2 f inst st``,
+    exec_pos_prove exec_pure2_def)
+Theorem exec_pure3_pos[local] =
+  prove(``!f inst new_ops st. ^hyps ==>
+    exec_pure3 f (inst with inst_operands := new_ops) st = exec_pure3 f inst st``,
+    exec_pos_prove exec_pure3_def)
+Theorem exec_read0_pos[local] =
+  prove(``!f inst new_ops st. ^hyps ==>
+    exec_read0 f (inst with inst_operands := new_ops) st = exec_read0 f inst st``,
+    exec_pos_prove exec_read0_def)
+Theorem exec_read1_pos[local] =
+  prove(``!f inst new_ops st. ^hyps ==>
+    exec_read1 f (inst with inst_operands := new_ops) st = exec_read1 f inst st``,
+    exec_pos_prove exec_read1_def)
+Theorem exec_write2_pos[local] =
+  prove(``!f inst new_ops st. ^hyps ==>
+    exec_write2 f (inst with inst_operands := new_ops) st = exec_write2 f inst st``,
+    exec_pos_prove exec_write2_def)
+
+val exec_pos_thms = [exec_pure1_pos, exec_pure2_pos, exec_pure3_pos,
+                     exec_read0_pos, exec_read1_pos, exec_write2_pos];
+
+Triviality exec_create_inst_operands[local]:
+  !inst ops s v o' sz salt.
     exec_create (inst with inst_operands := ops) s v o' sz salt =
-    exec_create inst s v o' sz salt``,
-  rw[exec_create_def]);
-val exec_ext_call_inst_operands = prove(
-  ``!inst ops s g a v ao as' ro rs is_s.
+    exec_create inst s v o' sz salt
+Proof rw[exec_create_def]
+QED
+Triviality exec_ext_call_inst_operands[local]:
+  !inst ops s g a v ao as' ro rs is_s.
     exec_ext_call (inst with inst_operands := ops) s g a v ao as' ro rs is_s =
-    exec_ext_call inst s g a v ao as' ro rs is_s``,
-  rw[exec_ext_call_def]);
-val exec_delegatecall_inst_operands = prove(
-  ``!inst ops s g a ao as' ro rs.
+    exec_ext_call inst s g a v ao as' ro rs is_s
+Proof rw[exec_ext_call_def]
+QED
+Triviality exec_delegatecall_inst_operands[local]:
+  !inst ops s g a ao as' ro rs.
     exec_delegatecall (inst with inst_operands := ops) s g a ao as' ro rs =
-    exec_delegatecall inst s g a ao as' ro rs``,
-  rw[exec_delegatecall_def]);
+    exec_delegatecall inst s g a ao as' ro rs
+Proof rw[exec_delegatecall_def]
+QED
+
 val exec_inst_operands_thms = [exec_create_inst_operands,
   exec_ext_call_inst_operands, exec_delegatecall_inst_operands];
 
-val eval_operands_map_thm = prove(
-  ``!g ops s.
+Triviality eval_operands_map_thm[local]:
+  !g ops s.
     (!op. eval_operand (g op) s = eval_operand op s) ==>
-    eval_operands (MAP g ops) s = eval_operands ops s``,
-  ntac 2 strip_tac >> Induct_on `ops` >> rw[eval_operands_def]);
+    eval_operands (MAP g ops) s = eval_operands ops s
+Proof
+  ntac 2 strip_tac >> Induct_on `ops` >> rw[eval_operands_def]
+QED
 
 val label_op_tac =
   ONCE_ASM_REWRITE_TAC[step_inst_base_def] >>
@@ -411,4 +498,174 @@ Proof
      (irule eval_operands_map_thm >> metis_tac[]) >>
    simp[] >> rpt (CASE_TAC >> simp[])
   ]
+QED
+
+(* ===================================================================== *)
+(* ===== General positional operand replacement ======================== *)
+(* ===================================================================== *)
+
+(* ML tactic: find the eval_operand universal hypothesis and instantiate at
+   indices 0..max_idx. Uses ASSUME (non-consuming) so the original stays. *)
+fun inst_eval_tac (asl, g) = let
+  val eval_hyp = valOf (List.find (fn a =>
+    is_forall a andalso
+    can (find_term (fn t => (fst(dest_const t) = "eval_operand") handle _ => false)) a andalso
+    not (can (find_term (fn t => (fst(dest_const t) = "Label") handle _ => false)) a)
+    ) asl)
+  val th = ASSUME eval_hyp
+  fun inst_at n = ASSUME_TAC (SIMP_RULE (srw_ss()) []
+    (SPEC (numSyntax.mk_numeral (Arbnum.fromInt n)) th))
+  fun go n = if n > 6 then ALL_TAC else inst_at n >> go (n+1)
+in go 0 (asl, g) end handle _ => ALL_TAC (asl, g);
+
+Triviality step_inst_base_pos_safe[local]:
+  !inst new_ops st.
+    inst_wf inst /\
+    ~is_alloca_op inst.inst_opcode /\
+    inst.inst_opcode <> PARAM /\
+    inst.inst_opcode <> PHI /\
+    inst.inst_opcode <> INVOKE /\
+    inst.inst_opcode <> LOG /\
+    inst.inst_opcode <> JMP /\
+    inst.inst_opcode <> JNZ /\
+    inst.inst_opcode <> DJMP /\
+    inst.inst_opcode <> OFFSET /\
+    LENGTH new_ops = LENGTH inst.inst_operands /\
+    (!i. i < LENGTH inst.inst_operands ==>
+         eval_operand (EL i new_ops) (st:venom_state) =
+         eval_operand (EL i inst.inst_operands) st) ==>
+    step_inst_base (inst with inst_operands := new_ops) st =
+    step_inst_base inst st
+Proof
+  rpt strip_tac >>
+  `eval_operands new_ops st = eval_operands inst.inst_operands st` by
+    (irule eval_operands_positional >> simp[]) >>
+  CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [step_inst_base_def])) >>
+  simp (exec_pos_thms @ exec_inst_operands_thms) >>
+  CONV_TAC (RHS_CONV (ONCE_REWRITE_CONV [step_inst_base_def])) >>
+  simp[] >>
+  Cases_on `inst.inst_operands` >> Cases_on `new_ops` >> gvs[] >>
+  inst_eval_tac >> gvs[] >>
+  TRY (Cases_on `t` >> Cases_on `t'` >> gvs[] >> inst_eval_tac >> gvs[]) >>
+  TRY (Cases_on `t''` >> Cases_on `t` >> gvs[] >> inst_eval_tac >> gvs[]) >>
+  TRY (Cases_on `t'` >> Cases_on `t''` >> gvs[] >> inst_eval_tac >> gvs[]) >>
+  TRY (Cases_on `t` >> Cases_on `t'` >> gvs[] >> inst_eval_tac >> gvs[]) >>
+  TRY (Cases_on `t''` >> Cases_on `t` >> gvs[] >> inst_eval_tac >> gvs[]) >>
+  TRY (Cases_on `t'` >> Cases_on `t''` >> gvs[] >> inst_eval_tac >> gvs[]) >>
+  TRY (Cases_on `t` >> Cases_on `t'` >> gvs[] >> inst_eval_tac >> gvs[]) >>
+  TRY (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def, inst_wf_def])
+QED
+
+(*
+ * step_inst_operands_equiv: replacing operands with evaluation-equivalent
+ * ones preserves step_inst semantics.
+ *
+ * Hypotheses:
+ *   - inst_wf: well-formed instruction (gives operand count/shape)
+ *   - LENGTH: new_ops same length as original
+ *   - eval agreement: per-element eval_operand agreement
+ *   - label preservation: Label operands structurally preserved
+ *   - HD preservation for LOG: first operand (topic count Lit) preserved
+ *   - excluded: PHI (not executable), ALLOCA/PALLOCA/CALLOCA (need Lit),
+ *     PARAM (needs Lit)
+ *)
+Theorem step_inst_operands_equiv:
+  !fuel ctx inst new_ops st.
+    inst_wf inst /\
+    ~is_alloca_op inst.inst_opcode /\
+    inst.inst_opcode <> PARAM /\
+    inst.inst_opcode <> PHI /\
+    LENGTH new_ops = LENGTH inst.inst_operands /\
+    (!i. i < LENGTH inst.inst_operands ==>
+         eval_operand (EL i new_ops) st = eval_operand (EL i inst.inst_operands) st) /\
+    (!i. i < LENGTH inst.inst_operands ==>
+         !lbl. EL i inst.inst_operands = Label lbl ==> EL i new_ops = Label lbl) /\
+    (inst.inst_opcode = LOG ==> HD new_ops = HD inst.inst_operands) ==>
+    step_inst fuel ctx (inst with inst_operands := new_ops) st =
+    step_inst fuel ctx inst st
+Proof
+  rpt strip_tac >>
+  (* INVOKE: decode label + eval_operands on args *)
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- (gvs[inst_wf_def] >>
+      Cases_on `new_ops` >> gvs[] >>
+      `h = Label lbl` by
+        (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+      gvs[] >>
+      `eval_operands t st = eval_operands args st` by (
+        irule eval_operands_positional >> simp[] >>
+        rpt strip_tac >>
+        qpat_x_assum `!j. j < SUC _ ==> eval_operand _ _ = _`
+          (qspec_then `SUC i` mp_tac) >> simp[]) >>
+      simp[step_inst_def, decode_invoke_def] >>
+      rpt (CASE_TAC >> simp[])) >>
+  simp[step_inst_non_invoke] >>
+  (* Non-structural: use ML-level step_inst_base_pos_safe *)
+  Cases_on `inst.inst_opcode <> LOG /\ inst.inst_opcode <> JMP /\
+            inst.inst_opcode <> JNZ /\ inst.inst_opcode <> DJMP /\
+            inst.inst_opcode <> OFFSET`
+  >- (irule step_inst_base_pos_safe >> simp[]) >>
+  (* Structural opcodes: LOG, JMP, JNZ, DJMP, OFFSET *)
+  gvs[] >> gvs[inst_wf_def]
+  >- ( (* LOG: Lit tc :: rest *)
+      Cases_on `new_ops` >> gvs[] >>
+      `eval_operand (HD t) st = eval_operand (HD rest) st` by (
+        qpat_x_assum `!i. _ ==> eval_operand _ _ = _`
+          (qspec_then `1` mp_tac) >> simp[] >>
+        Cases_on `t` >> Cases_on `rest` >> gvs[]) >>
+      `eval_operand (EL 1 t) st = eval_operand (EL 1 rest) st` by (
+        qpat_x_assum `!i. _ ==> eval_operand _ _ = _`
+          (qspec_then `2` mp_tac) >> simp[]) >>
+      `eval_operands (DROP 2 t) st = eval_operands (DROP 2 rest) st` by (
+        irule eval_operands_positional >> simp[LENGTH_DROP] >>
+        rpt strip_tac >>
+        `EL i (DROP 2 t) = EL (i + 2) t` by (irule EL_DROP >> simp[]) >>
+        `EL i (DROP 2 rest) = EL (i + 2) rest` by (irule EL_DROP >> simp[]) >>
+        simp[] >>
+        qpat_x_assum `!i. _ ==> eval_operand _ _ = _`
+          (qspec_then `SUC (i + 2)` mp_tac) >> simp[]) >>
+      simp[Once step_inst_base_def, SimpLHS] >>
+      simp[Once step_inst_base_def, SimpRHS])
+  >- ( (* JMP: [Label lbl] *)
+      Cases_on `new_ops` >> gvs[] >>
+      simp[Once step_inst_base_def, SimpLHS] >>
+      simp[Once step_inst_base_def, SimpRHS])
+  >- ( (* JNZ: [c; Label l1; Label l2] *)
+      `EL 1 new_ops = Label l1` by (
+        qpat_x_assum `!i. _ ==> !lbl. _ ==> _`
+          (qspec_then `1` mp_tac) >> simp[]) >>
+      `EL 2 new_ops = Label l2` by (
+        qpat_x_assum `!i. _ ==> !lbl. _ ==> _`
+          (qspec_then `2` mp_tac) >> simp[]) >>
+      `eval_operand (HD new_ops) st = eval_operand c st` by (
+        qpat_x_assum `!i. _ ==> eval_operand _ _ = _`
+          (qspec_then `0` mp_tac) >> simp[]) >>
+      gvs[LENGTH_EQ_NUM_compute] >>
+      simp[Once step_inst_base_def, SimpLHS] >>
+      simp[Once step_inst_base_def, SimpRHS])
+  >- ( (* DJMP: sel :: label_ops, need t = label_ops *)
+      Cases_on `new_ops` >> gvs[] >>
+      `t = label_ops` by (
+        irule LIST_EQ >> simp[] >> rpt strip_tac >>
+        rename1 `x < LENGTH label_ops` >>
+        `(\op. IS_SOME (get_label op)) (EL x label_ops)` by
+          (irule (iffLR EVERY_EL) >> simp[]) >> fs[] >>
+        Cases_on `EL x label_ops` >> gvs[get_label_def] >>
+        first_x_assum (qspec_then `SUC x` mp_tac) >> simp[]) >>
+      `eval_operand h st = eval_operand sel st` by (
+        qpat_x_assum `!i. _ ==> eval_operand _ _ = _`
+          (qspec_then `0` mp_tac) >> simp[]) >>
+      gvs[] >>
+      simp[Once step_inst_base_def, SimpLHS] >>
+      simp[Once step_inst_base_def, SimpRHS])
+  >> ( (* OFFSET: [op; Label lbl] *)
+      `EL 1 new_ops = Label lbl` by (
+        qpat_x_assum `!i. _ ==> !lbl. _ ==> _`
+          (qspec_then `1` mp_tac) >> simp[]) >>
+      `eval_operand (HD new_ops) st = eval_operand op st` by (
+        qpat_x_assum `!i. _ ==> eval_operand _ _ = _`
+          (qspec_then `0` mp_tac) >> simp[]) >>
+      gvs[LENGTH_EQ_NUM_compute] >>
+      simp[Once step_inst_base_def, SimpLHS] >>
+      simp[Once step_inst_base_def, SimpRHS])
 QED

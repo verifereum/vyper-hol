@@ -227,6 +227,12 @@ Proof
   ACCEPT_TAC lift_result_implies_pass_correct_proof
 QED
 
+Theorem state_equiv_execution_equiv_valid_state_rel:
+  !vars. valid_state_rel (state_equiv vars) (execution_equiv vars)
+Proof
+  ACCEPT_TAC execEquivParamPropsTheory.state_equiv_execution_equiv_valid_state_rel
+QED
+
 (* General: function_map_transform preserves wf_function
    given per-block label/succs/bb_well_formed + inst_ids_distinct *)
 Theorem fmt_preserves_wf_function:
@@ -325,7 +331,7 @@ Proof
   simp[LAST_EL, LENGTH_MAPi, EL_MAPi]
 QED
 
-(* Helpers for mapi_transform_bb_well_formed — standalone to avoid dispatch issues *)
+(* Helpers for mapi_transform_bb_well_formed - standalone to avoid dispatch issues *)
 Triviality mapi_bb_nonempty[local]:
   !(f:num -> instruction -> instruction) l.
     l <> [] ==> MAPi f l <> []
