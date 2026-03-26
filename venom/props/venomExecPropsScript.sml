@@ -279,3 +279,59 @@ Theorem run_block_current_bb_in_succs:
 Proof
   ACCEPT_TAC venomExecProofsTheory.run_block_current_bb_in_succs
 QED
+
+Theorem step_inst_base_term_prev_bb:
+  !inst s s'.
+    is_terminator inst.inst_opcode /\
+    step_inst_base inst s = OK s' ==>
+    s'.vs_prev_bb = SOME s.vs_current_bb
+Proof
+  ACCEPT_TAC venomExecProofsTheory.step_inst_base_term_prev_bb
+QED
+
+Theorem run_block_ok_prev_bb:
+  !fuel ctx bb s s1.
+    EVERY inst_wf bb.bb_instructions /\
+    (!i. i < LENGTH bb.bb_instructions - 1 ==>
+       ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+    bb.bb_instructions <> [] /\
+    s.vs_inst_idx = 0 /\
+    run_block fuel ctx bb s = OK s1 ==>
+    s1.vs_prev_bb = SOME s.vs_current_bb
+Proof
+  ACCEPT_TAC venomExecProofsTheory.run_block_ok_prev_bb
+QED
+
+Theorem run_block_preserves_non_output_vars:
+  !fuel ctx bb s s'.
+    run_block fuel ctx bb s = OK s' ==>
+    !v. ~MEM v (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) ==>
+    lookup_var v s' = lookup_var v s
+Proof
+  ACCEPT_TAC venomExecProofsTheory.run_block_preserves_non_output_vars
+QED
+
+Theorem run_block_same_insts:
+  !fuel ctx bb1 bb2 s.
+    s.vs_inst_idx < LENGTH bb1.bb_instructions /\
+    LENGTH bb2.bb_instructions = LENGTH bb1.bb_instructions /\
+    (!i. s.vs_inst_idx <= i /\ i < LENGTH bb1.bb_instructions ==>
+      EL i bb1.bb_instructions = EL i bb2.bb_instructions) ==>
+    run_block fuel ctx bb1 s = run_block fuel ctx bb2 s
+Proof
+  ACCEPT_TAC venomExecProofsTheory.run_block_same_insts
+QED
+
+Theorem fuel_mono:
+  (!n m ctx inst s r.
+     step_inst n ctx inst s = r /\ (!e. r <> Error e) /\ n <= m ==>
+     step_inst m ctx inst s = r) /\
+  (!n m ctx bb s r.
+     run_block n ctx bb s = r /\ (!e. r <> Error e) /\ n <= m ==>
+     run_block m ctx bb s = r) /\
+  (!n m ctx fn s r.
+     run_function n ctx fn s = r /\ (!e. r <> Error e) /\ n <= m ==>
+     run_function m ctx fn s = r)
+Proof
+  ACCEPT_TAC venomExecProofsTheory.fuel_mono
+QED
