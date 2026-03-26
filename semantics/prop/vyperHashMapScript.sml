@@ -16,6 +16,7 @@
  *   hashmap_ref_storable_def   - value is storable at ref's value type
  *   hashmap_ref_no_collision_def - no Keccak collision for ref
  *   hashmap_ref_distinct_keys_def - two keys encode differently for ref
+ *   hashmap_ref_no_var_collision_def - hashmap slots disjoint from storage var
  *
  * Name-level API (convenience wrappers using variable names):
  *   is_leaf_hashmap_def        - variable is a leaf HashMap
@@ -75,6 +76,22 @@ Definition hashmap_ref_distinct_keys_def:
   hashmap_ref_distinct_keys (HashMapRef _ _ kt _) kv1 kv2 =
     (encode_hashmap_key kt kv1 ≠ encode_hashmap_key kt kv2) ∧
   hashmap_ref_distinct_keys _ _ _ = F
+End
+
+(* No collision between a hashmap ref and a storage variable.
+   For ALL keys of the hashmap, the entry's slot range is disjoint from
+   variable m's slot range in module mid'.
+   Analogous to hashmap_ref_no_collision (within-hashmap), but between
+   a hashmap and a regular storage variable. *)
+Definition hashmap_ref_no_var_collision_def:
+  hashmap_ref_no_var_collision cx (HashMapRef b bslot kt (Type t)) mid' m =
+    (∀tv var_b var_off var_tv.
+       evaluate_type (get_tenv cx) t = SOME tv ∧
+       storage_var_info cx mid' m = SOME (var_b, var_off, var_tv) ∧
+       b = var_b ⇒
+       var_off < dimword(:256) ∧
+       no_hashmap_var_collision bslot kt tv var_off var_tv) ∧
+  hashmap_ref_no_var_collision _ _ _ _ = T
 End
 
 (* ===== Ref-level: read and write ===== *)

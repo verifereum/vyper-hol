@@ -7,6 +7,7 @@
  * - read_hashmap/lookup_hashmap are independent of scopes
  * - lookup_hashmap is independent of scope operations
  * - read_hashmap after write to different backend is unchanged
+ * - write_hashmap/update_hashmap preserve lookup_toplevel_name (slot disjointness)
  *
  * TOP-LEVEL:
  *   write_hashmap_scopes, write_hashmap_immutables, write_hashmap_logs
@@ -17,6 +18,7 @@
  *   lookup_hashmap_update_name, lookup_hashmap_declare_name
  *   lookup_hashmap_open_scope, lookup_hashmap_tl_scopes
  *   read_hashmap_after_write_other_backend
+ *   lookup_toplevel_name_write_hashmap, lookup_toplevel_name_update_hashmap
  *)
 
 Theory vyperHashMapPreservation
@@ -308,4 +310,28 @@ Proof
   (* HashMapVarDecl branch *)
   \\ Cases_on `lookup_var_slot_from_layout cx b' mid found1`
   \\ simp[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+QED
+
+Theorem lookup_toplevel_name_update_hashmap:
+  ∀cx st mid n kv v mid' m.
+    is_leaf_hashmap cx mid n ∧
+    hashmap_ref_storable cx (THE (lookup_toplevel_name cx st mid n)) v ∧
+    hashmap_ref_no_var_collision cx
+      (THE (lookup_toplevel_name cx st mid n)) mid' m ⇒
+    lookup_toplevel_name cx (update_hashmap cx st mid n kv v) mid' m =
+    lookup_toplevel_name cx st mid' m
+Proof
+  rpt gen_tac \\ strip_tac
+  \\ drule is_leaf_hashmap_lookup
+  \\ disch_then (qspec_then `st` strip_assume_tac) \\ gvs[]
+  \\ Cases_on `href` \\ gvs[is_leaf_hashmap_ref_def]
+  \\ rename1 `HashMapRef _ _ _ vt` \\ Cases_on `vt`
+  \\ gvs[is_leaf_hashmap_ref_def]
+  \\ gvs[update_hashmap_def]
+  \\ irule lookup_toplevel_name_write_hashmap
+  \\ gvs[hashmap_ref_storable_def, hashmap_ref_no_var_collision_def]
+  \\ conj_tac
+  >- (rpt strip_tac \\ res_tac
+      \\ gvs[vyperHashMapStorageTheory.no_hashmap_var_collision_def])
+  \\ rpt strip_tac \\ gvs[]
 QED
