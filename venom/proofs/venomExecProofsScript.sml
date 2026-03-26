@@ -12,7 +12,7 @@
 
 Theory venomExecProofs
 Ancestors
-  venomExecSemantics venomInst venomState venomWf rich_list list
+  venomExecSemantics venomInst venomInstProofs venomState venomWf rich_list list
 
 (* ==========================================================================
    bool_to_word Properties
@@ -526,6 +526,22 @@ Proof
     fs[MEM_EL] >> metis_tac[MEM_EL])
 QED
 
+(* After a terminator step_inst_base returns OK,
+   vs_prev_bb = SOME (input vs_current_bb).
+   Only JMP/JNZ/DJMP return OK; all use jump_to which sets this. *)
+Theorem step_inst_base_term_prev_bb:
+  !inst s s'.
+    is_terminator inst.inst_opcode /\
+    step_inst_base inst s = OK s' ==>
+    s'.vs_prev_bb = SOME s.vs_current_bb
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  fs[is_terminator_def] >>
+  fs[step_inst_base_def, AllCaseEqs(), jump_to_def] >>
+  gvs[]
+QED
+
 (* run_block OK with vs_inst_idx=0 implies nonempty block *)
 Theorem run_block_ok_nonempty:
   !fuel ctx bb s v. s.vs_inst_idx = 0 /\ run_block fuel ctx bb s = OK v ==>
@@ -599,6 +615,329 @@ Proof
       disch_then (qspecl_then [`fuel'`, `ctx'`,
         `v with vs_inst_idx := SUC i`] mp_tac) >>
       simp[]
+    )
+  )
+QED
+
+(* After run_block OK, vs_prev_bb = SOME (initial vs_current_bb).
+   Terminators (JMP/JNZ/DJMP) all use jump_to which sets vs_prev_bb. *)
+Theorem run_block_ok_prev_bb:
+  !fuel ctx bb s s1.
+    EVERY inst_wf bb.bb_instructions /\
+    (!i. i < LENGTH bb.bb_instructions - 1 ==>
+       ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+    bb.bb_instructions <> [] /\
+    s.vs_inst_idx = 0 /\
+    run_block fuel ctx bb s = OK s1 ==>
+    s1.vs_prev_bb = SOME s.vs_current_bb
+Proof
+  rpt strip_tac >>
+  `!n fuel ctx s'.
+     n = LENGTH bb.bb_instructions - s'.vs_inst_idx /\
+     s'.vs_inst_idx <= LENGTH bb.bb_instructions /\
+     s'.vs_current_bb = s.vs_current_bb /\
+     run_block fuel ctx bb s' = OK s1 ==>
+     s1.vs_prev_bb = SOME s.vs_current_bb`
+    suffices_by (
+      disch_then (qspecl_then
+        [`LENGTH bb.bb_instructions`, `fuel`, `ctx`, `s`] mp_tac) >>
+      simp[]) >>
+  completeInduct_on `n` >> rpt strip_tac >>
+  qabbrev_tac `i = s'.vs_inst_idx` >>
+  Cases_on `i >= LENGTH bb.bb_instructions`
+  >- (
+    qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
+    ONCE_REWRITE_TAC[run_block_def] >>
+    simp[get_instruction_def]
+  ) >>
+  `i < LENGTH bb.bb_instructions` by fs[] >>
+  qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
+  ONCE_REWRITE_TAC[run_block_def] >>
+  simp[get_instruction_def] >>
+  Cases_on `step_inst fuel' ctx' (EL i bb.bb_instructions) s'` >>
+  gvs[]
+  >- (
+    strip_tac >>
+    Cases_on `is_terminator (EL i bb.bb_instructions).inst_opcode` >> gvs[]
+    >- (
+      Cases_on `v.vs_halted` >> gvs[] >>
+      `~(i < LENGTH bb.bb_instructions - 1)` by metis_tac[] >>
+      `i = PRE (LENGTH bb.bb_instructions)` by fs[] >> gvs[] >>
+      `(EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions).inst_opcode
+         <> INVOKE` by
+        (CCONTR_TAC >> gvs[is_terminator_def]) >>
+      `step_inst_base
+         (EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions) s' = OK s1` by
+        gvs[step_inst_non_invoke] >>
+      drule_all step_inst_base_term_prev_bb >> simp[]
+    )
+    >- (
+      `v.vs_current_bb = s'.vs_current_bb` by
+        (drule_all step_preserves_control_flow >> simp[]) >>
+      qpat_x_assum `!m. m < _ ==> _`
+        (qspec_then `LENGTH bb.bb_instructions - SUC i` mp_tac) >>
+      impl_tac >- simp[Abbr `i`] >>
+      disch_then (qspecl_then [`fuel'`, `ctx'`,
+        `v with vs_inst_idx := SUC i`] mp_tac) >>
+      simp[]
+    )
+  )
+QED
+
+(* ==========================================================================
+   Variable Preservation Across Block Execution
+
+   If a variable v is not in ANY instruction's outputs within a block,
+   then run_block preserves lookup_var v.
+   ========================================================================== *)
+
+Theorem run_block_preserves_non_output_vars:
+  !fuel ctx bb s s'.
+    run_block fuel ctx bb s = OK s' ==>
+    !v. ~MEM v (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) ==>
+    lookup_var v s' = lookup_var v s
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  (* Strong induction on remaining instructions *)
+  `!n f c st st'.
+     n = LENGTH bb.bb_instructions - st.vs_inst_idx /\
+     run_block f c bb st = OK st' ==>
+     lookup_var v st' = lookup_var v st`
+    suffices_by (
+      disch_then (qspecl_then
+        [`LENGTH bb.bb_instructions - s.vs_inst_idx`,
+         `fuel`, `ctx`, `s`, `s'`] mp_tac) >>
+      simp[]) >>
+  completeInduct_on `n` >> rw[] >>
+  qabbrev_tac `idx = st.vs_inst_idx` >>
+  (* Case split: idx past end or within block *)
+  Cases_on `idx >= LENGTH bb.bb_instructions`
+  >- (
+    qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
+    ONCE_REWRITE_TAC[run_block_def] >>
+    simp[get_instruction_def]
+  ) >>
+  `idx < LENGTH bb.bb_instructions` by fs[] >>
+  qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
+  ONCE_REWRITE_TAC[run_block_def] >>
+  simp[get_instruction_def] >>
+  Cases_on `step_inst f c (EL idx bb.bb_instructions) st` >> gvs[] >>
+  Cases_on `is_terminator (EL idx bb.bb_instructions).inst_opcode` >> gvs[]
+  >- (
+    (* Terminator: halted contradicts OK, so st' = v' *)
+    Cases_on `v'.vs_halted` >> gvs[] >>
+    metis_tac[step_terminator_preserves_vars]
+  ) >>
+  (* Non-terminator: step preserves v, then IH *)
+  strip_tac >>
+  `~MEM v (EL idx bb.bb_instructions).inst_outputs` by (
+    fs[MEM_FLAT, MEM_MAP] >> metis_tac[MEM_EL]) >>
+  `lookup_var v v' = lookup_var v st` by
+    metis_tac[step_preserves_non_output_vars] >>
+  `lookup_var v st' = lookup_var v (v' with vs_inst_idx := SUC idx)` by (
+    first_x_assum (qspec_then `LENGTH bb.bb_instructions - SUC idx` mp_tac) >>
+    (impl_tac >- simp[Abbr `idx`]) >>
+    disch_then (qspecl_then [`f`, `c`,
+      `v' with vs_inst_idx := SUC idx`, `st'`] mp_tac) >>
+    simp[]) >>
+  fs[lookup_var_def]
+QED
+
+(* ==========================================================================
+   Block Equivalence Under Shared Instructions
+
+   If two blocks agree on all instructions from current index onwards
+   (within bb1's range), then run_block gives the same result.
+   ========================================================================== *)
+
+Theorem run_block_same_insts:
+  !fuel ctx bb1 bb2 s.
+    s.vs_inst_idx < LENGTH bb1.bb_instructions /\
+    LENGTH bb2.bb_instructions = LENGTH bb1.bb_instructions /\
+    (!i. s.vs_inst_idx <= i /\ i < LENGTH bb1.bb_instructions ==>
+      EL i bb1.bb_instructions = EL i bb2.bb_instructions) ==>
+    run_block fuel ctx bb1 s = run_block fuel ctx bb2 s
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!n f c st.
+     n = LENGTH bb1.bb_instructions - st.vs_inst_idx /\
+     st.vs_inst_idx < LENGTH bb1.bb_instructions /\
+     (!i. st.vs_inst_idx <= i /\ i < LENGTH bb1.bb_instructions ==>
+       EL i bb1.bb_instructions = EL i bb2.bb_instructions) ==>
+     run_block f c bb1 st = run_block f c bb2 st`
+    suffices_by (
+      disch_then (qspecl_then
+        [`LENGTH bb1.bb_instructions - s.vs_inst_idx`,
+         `fuel`, `ctx`, `s`] mp_tac) >> simp[]) >>
+  completeInduct_on `n` >> rw[] >>
+  qabbrev_tac `idx = st.vs_inst_idx` >>
+  `idx < LENGTH bb2.bb_instructions` by simp[Abbr `idx`] >>
+  `EL idx bb1.bb_instructions = EL idx bb2.bb_instructions` by (
+    first_x_assum (qspec_then `idx` mp_tac) >> simp[Abbr `idx`]) >>
+  (* Expand run_block on both sides; both see the same instruction *)
+  ONCE_REWRITE_TAC[run_block_def] >>
+  simp[get_instruction_def] >>
+  (* Case split on step_inst result — common to both sides *)
+  Cases_on `step_inst f c (EL idx bb2.bb_instructions) st` >> simp[] >>
+  (* OK case: check terminator *)
+  Cases_on `is_terminator (EL idx bb2.bb_instructions).inst_opcode` >>
+  simp[] >>
+  (* Non-terminator: apply IH or show idx was last instruction *)
+  Cases_on `SUC idx < LENGTH bb1.bb_instructions`
+  >- (
+    qpat_x_assum `!m. m < _ ==> _` (qspec_then
+      `LENGTH bb1.bb_instructions - SUC idx` mp_tac) >>
+    (impl_tac >- simp[Abbr `idx`]) >>
+    disch_then (qspecl_then [`f`, `c`,
+      `v with vs_inst_idx := SUC idx`] mp_tac) >>
+    simp[Abbr `idx`]) >>
+  (* idx was last instruction: both blocks have no instruction at SUC idx *)
+  `~(SUC idx < LENGTH bb2.bb_instructions)` by simp[] >>
+  simp[Once run_block_def, get_instruction_def] >>
+  simp[Once run_block_def, get_instruction_def]
+QED
+
+(* ==========================================================================
+   Fuel Monotonicity
+   ==========================================================================
+   If a computation terminates with result R (not Error) using fuel n,
+   then it also terminates with R using any fuel m >= n.
+   This is the key compositionality property for simulation proofs where
+   the transformed program may use different fuel than the original.
+   ========================================================================== *)
+
+Theorem fuel_mono:
+  (!n m ctx inst s r.
+     step_inst n ctx inst s = r /\ (!e. r <> Error e) /\ n <= m ==>
+     step_inst m ctx inst s = r) /\
+  (!n m ctx bb s r.
+     run_block n ctx bb s = r /\ (!e. r <> Error e) /\ n <= m ==>
+     run_block m ctx bb s = r) /\
+  (!n m ctx fn s r.
+     run_function n ctx fn s = r /\ (!e. r <> Error e) /\ n <= m ==>
+     run_function m ctx fn s = r)
+Proof
+  (* Reshape for run_defs_ind: P(fuel, ctx, X, s) = !m r. ... *)
+  `(!fuel ctx inst s.
+      !m r. step_inst fuel ctx inst s = r /\ (!e. r <> Error e) /\
+             fuel <= m ==> step_inst m ctx inst s = r) /\
+   (!fuel ctx bb s.
+      !m r. run_block fuel ctx bb s = r /\ (!e. r <> Error e) /\
+             fuel <= m ==> run_block m ctx bb s = r) /\
+   (!fuel ctx fn s.
+      !m r. run_function fuel ctx fn s = r /\ (!e. r <> Error e) /\
+             fuel <= m ==> run_function m ctx fn s = r)`
+    suffices_by (rpt strip_tac >> res_tac >> simp[]) >>
+  ho_match_mp_tac run_defs_ind >> rpt conj_tac
+  (* --- step_inst case --- *)
+  >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    Cases_on `inst.inst_opcode = INVOKE`
+    >- (
+      qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+      ASM_REWRITE_TAC[step_inst_def] >>
+      BasicProvers.every_case_tac >> gvs[] >> strip_tac >> gvs[] >>
+      (* Derive run_function m = run_function fuel for the callee *)
+      first_x_assum (qspecl_then [`(q, r')`, `q`, `r'`, `x'`, `x`, `x''`] mp_tac) >>
+      simp[] >>
+      disch_then (qspecl_then [`m`, `run_function fuel ctx x' x''`] mp_tac) >>
+      simp[] >> strip_tac >> fs[] >> gvs[]
+    )
+    >- gvs[step_inst_non_invoke]
+  )
+  (* --- run_block case --- *)
+  >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
+    simp[Once run_block_def] >>
+    Cases_on `get_instruction bb s.vs_inst_idx`
+    >- (simp[] >> strip_tac >> gvs[]) >>
+    rename1 `SOME inst` >> simp[] >>
+    (* Derive step_inst fuel_mono from step_inst IH *)
+    `!si_r. step_inst fuel ctx inst s = si_r /\ (!e. si_r <> Error e) ==>
+            step_inst m ctx inst s = si_r` by
+      (rpt strip_tac >>
+       qpat_x_assum `!inst'. _ ==> _` (qspec_then `inst` mp_tac) >> simp[] >>
+       disch_then (qspecl_then [`m`, `si_r`] mp_tac) >> simp[]) >>
+    Cases_on `step_inst fuel ctx inst s` >> simp[]
+    >- (
+      `step_inst m ctx inst s = OK v` by
+        (first_x_assum (qspec_then `OK v` mp_tac) >> simp[]) >>
+      Cases_on `is_terminator inst.inst_opcode` >> simp[]
+      >- (strip_tac >> gvs[] >> simp[Once run_block_def])
+      >- (
+        strip_tac >> simp[Once run_block_def] >>
+        (* Use run_block continuation IH *)
+        qpat_x_assum `!inst' s''. _ /\ _ /\ _ ==> _`
+          (qspecl_then [`inst`, `v`] mp_tac) >> simp[] >>
+        disch_then (qspecl_then [`m`, `r`] mp_tac) >> simp[]
+      )
+    )
+    >- (`step_inst m ctx inst s = Halt v` by
+          (first_x_assum (qspec_then `Halt v` mp_tac) >> simp[]) >>
+        strip_tac >> gvs[] >> simp[Once run_block_def])
+    >- (`step_inst m ctx inst s = Abort a v` by
+          (first_x_assum (qspec_then `Abort a v` mp_tac) >> simp[]) >>
+        strip_tac >> gvs[] >> simp[Once run_block_def])
+    >- (`step_inst m ctx inst s = IntRet l v` by
+          (first_x_assum (qspec_then `IntRet l v` mp_tac) >> simp[]) >>
+        strip_tac >> gvs[] >> simp[Once run_block_def])
+  )
+  (* --- run_function case --- *)
+  >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    Cases_on `fuel`
+    >- gvs[run_function_def] >>
+    rename1 `SUC fuel'` >>
+    (* Expand source run_function assumption, simplify case SUC *)
+    qpat_x_assum `run_function _ _ _ _ = _`
+      (fn th => assume_tac (SIMP_RULE (srw_ss()) []
+        (ONCE_REWRITE_RULE [run_function_def] th))) >>
+    Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> fs[] >>
+    rename1 `SOME bb` >>
+    (* Case split on run_block to learn what r is *)
+    Cases_on `run_block fuel' ctx bb s` >> gvs[]
+    (* -- OK case -- *)
+    >- (
+      Cases_on `v.vs_halted` >> gvs[]
+      (* halted: r = Halt v *)
+      >- (
+        Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
+        `run_block m'' ctx bb s = OK v` by
+          (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
+        simp[Once run_function_def]
+      )
+      (* not halted: r = run_function fuel' ctx fn v *)
+      >- (
+        Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
+        `run_block m'' ctx bb s = OK v` by
+          (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
+        simp[Once run_function_def] >>
+        (* Use run_function recursive IH *)
+        first_x_assum (qspec_then `v` mp_tac) >> simp[] >>
+        disch_then (qspec_then `m''` mp_tac) >> simp[]
+      )
+    )
+    (* -- Halt case: r = Halt v -- *)
+    >- (
+      Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
+      `run_block m'' ctx bb s = Halt v` by
+        (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
+      simp[Once run_function_def]
+    )
+    (* -- Abort case -- *)
+    >- (
+      Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
+      `run_block m'' ctx bb s = Abort a v` by
+        (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
+      simp[Once run_function_def]
+    )
+    (* -- IntRet case -- *)
+    >- (
+      Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
+      `run_block m'' ctx bb s = IntRet l v` by
+        (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
+      simp[Once run_function_def]
     )
   )
 QED
