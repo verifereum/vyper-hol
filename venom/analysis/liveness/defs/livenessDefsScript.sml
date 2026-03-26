@@ -51,15 +51,15 @@ Definition collect_phis_def:
     else []
 End
 
-(* Build operand→phi_index map from a list of PHIs.
- * Each PHI operand (from all sources) maps to its phi's index.
+(* Build output→phi_index map from a list of PHIs.
+ * Each PHI output variable maps to its phi's index.
  * Also record the matching operand from src_label for each phi. *)
 Definition build_phi_maps_def:
   build_phi_maps src_label phis =
     let indexed = MAPi (λi phi. (i, phi)) phis in
     FOLDL (λ(op_map, matching) (i, phi).
       let pairs = phi_pairs phi.inst_operands in
-      let op_map' = FOLDL (λm (l,v). m |+ (v, i)) op_map pairs in
+      let op_map' = FOLDL (λm v. m |+ (v, i)) op_map phi.inst_outputs in
       let src_var = FIND (λ(l,v). l = src_label) pairs in
       let matching' = case src_var of
                         SOME (_, v) => matching |+ (i, v)
