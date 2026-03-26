@@ -309,3 +309,25 @@ Proof
   Cases_on `popped_value v` >>
   gvs[return_def, raise_def]
 QED
+
+(**********************************************************************)
+(* valid_target / update_target lemmas for ImmutableVar *)
+
+Theorem valid_target_immutable_subscripts:
+  ∀cx st n sbs ao tv a a'.
+    lookup_bare_global_name cx st n = SOME (tv, a) ∧
+    assign_subscripts tv a (REVERSE sbs) ao = INL a' ⇒
+    valid_target cx st (BaseTargetV (ImmutableVar n) sbs) ao
+Proof
+  metis_tac[valid_target_def, assign_target_immutable_subscripts_valid]
+QED
+
+Theorem update_target_immutable_subscripts:
+  ∀cx st n sbs ao tv a a'.
+    lookup_bare_global_name cx st n = SOME (tv, a) ∧
+    assign_subscripts tv a (REVERSE sbs) ao = INL a' ⇒
+    update_target cx st (BaseTargetV (ImmutableVar n) sbs) ao =
+    update_bare_global_name cx st n a'
+Proof
+  metis_tac[update_target_def, assign_target_immutable_subscripts_state]
+QED
