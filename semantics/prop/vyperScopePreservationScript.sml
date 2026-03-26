@@ -499,3 +499,38 @@ Proof
   fs[finally_def, set_scopes_def, AllCaseEqs(), ignore_bind_def, return_def, raise_def, bind_def] >>
   gvs[]
 QED
+
+(* Generalization: handler = do set_scopes prev; g od, where g preserves scopes *)
+Theorem finally_set_scopes_then_dom:
+  ∀f g prev s res s'.
+    finally f (do set_scopes prev; g od) s = (res, s') ⇒
+    (∀s res s'. g s = (res, s') ⇒ s'.scopes = s.scopes) ⇒
+    MAP FDOM s'.scopes = MAP FDOM prev
+Proof
+  rpt strip_tac >>
+  fs[finally_def, set_scopes_def, AllCaseEqs(),
+     ignore_bind_def, return_def, raise_def, bind_def] >>
+  gvs[] >> first_x_assum drule >> gvs[]
+QED
+
+Theorem acquire_nonreentrant_lock_scopes:
+  ∀addr slot is_view st res st'.
+    acquire_nonreentrant_lock addr slot is_view st = (res, st') ⇒
+    st'.scopes = st.scopes
+Proof
+  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
+     get_transient_storage_def, update_transient_def,
+     return_def, raise_def, LET_THM]
+  \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]
+QED
+
+Theorem release_nonreentrant_lock_scopes:
+  ∀addr slot st res st'.
+    release_nonreentrant_lock addr slot st = (res, st') ⇒
+    st'.scopes = st.scopes
+Proof
+  rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
+     get_transient_storage_def, update_transient_def,
+     return_def, raise_def, LET_THM]
+  \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]
+QED
