@@ -1177,16 +1177,38 @@ Proof
   simp[ssa_form_def]
 QED
 
-(* If we remove instructions, SSA is trivially preserved:
-   any two same-output instructions in the subset were in the original. *)
-Theorem ssa_form_subset_proof:
+(* sublist preserves through FLAT *)
+Theorem flat_sublist[local]:
+  !(p : 'a list list) (q : 'a list list).
+    sublist p q ==> sublist (FLAT p) (FLAT q)
+Proof
+  Induct >> simp[rich_listTheory.sublist_def] >>
+  rpt strip_tac >>
+  fs[rich_listTheory.sublist_append_extend] >>
+  `sublist (FLAT p) (FLAT y)` by metis_tac[] >>
+  `sublist (h ++ FLAT p) (h ++ FLAT y)`
+    by (irule rich_listTheory.sublist_append_pair >>
+        simp[rich_listTheory.sublist_refl]) >>
+  simp[listTheory.FLAT_APPEND] >>
+  once_rewrite_tac[GSYM APPEND_ASSOC] >>
+  irule rich_listTheory.sublist_append_include >> simp[]
+QED
+
+(* If instructions are a sublist, SSA is preserved (sublist means
+   order-preserving without duplication). *)
+Theorem ssa_form_sublist_proof:
   !fn fn'.
     ssa_form fn /\
-    (!inst. MEM inst (fn_insts fn') ==> MEM inst (fn_insts fn))
+    sublist (fn_insts fn') (fn_insts fn)
     ==>
     ssa_form fn'
 Proof
-  simp[ssa_form_def]
+  rpt strip_tac >> fs[ssa_form_def] >>
+  irule rich_listTheory.sublist_ALL_DISTINCT >>
+  qexists_tac `FLAT (MAP (\i. i.inst_outputs) (fn_insts fn))` >>
+  simp[] >>
+  irule flat_sublist >>
+  irule rich_listTheory.MAP_SUBLIST >> simp[]
 QED
 
 (* ALL_DISTINCT (MAP f l) means f is injective on l *)
@@ -1201,6 +1223,30 @@ Proof
   gvs[]
 QED
 
+(* If FLAT(MAP f l) is ALL_DISTINCT and v appears in both f(x) and f(y)
+   for x,y in l, then x = y. *)
+Theorem all_distinct_flat_map_mem_unique[local]:
+  !l f x y v.
+    ALL_DISTINCT (FLAT (MAP f l)) /\ MEM x l /\ MEM y l /\
+    MEM v (f x) /\ MEM v (f y) ==> x = y
+Proof
+  rpt strip_tac >>
+  `?l1 l2. l = l1 ++ x::l2` by metis_tac[MEM_SPLIT] >>
+  gvs[MAP_APPEND, FLAT_APPEND, ALL_DISTINCT_APPEND] >>
+  `MEM y l1 \/ y = x \/ MEM y l2` by gvs[MEM_APPEND] >> gvs[] >>
+  metis_tac[MEM_FLAT, MEM_MAP]
+QED
+
+(* If FLAT(MAP f l) is ALL_DISTINCT and MEM x l, then f(x) is ALL_DISTINCT. *)
+Theorem all_distinct_flat_map_segment[local]:
+  !l f x.
+    ALL_DISTINCT (FLAT (MAP f l)) /\ MEM x l ==> ALL_DISTINCT (f x)
+Proof
+  rpt strip_tac >>
+  `?l1 l2. l = l1 ++ x::l2` by metis_tac[MEM_SPLIT] >>
+  gvs[MAP_APPEND, FLAT_APPEND, ALL_DISTINCT_APPEND]
+QED
+
 Theorem fn_insts_blocks_flat[local]:
   !l. fn_insts_blocks l = FLAT (MAP (\bb. bb.bb_instructions) l)
 Proof
@@ -1213,6 +1259,39 @@ Theorem fn_inst_ids_eq_map[local]:
 Proof
   simp[fn_inst_ids_distinct_def, fn_insts_def, fn_insts_blocks_flat,
        MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF]
+QED
+
+(* General list lemma: ALL_DISTINCT(FLAT(MAP f l')) when each element
+   of l' traces to an element of l with same or empty f-values,
+   and g is injective on l'. *)
+Theorem all_distinct_flat_map_traced[local]:
+  !(l' : 'a list) l (f : 'a -> 'b list) (g : 'a -> 'c).
+    ALL_DISTINCT (FLAT (MAP f l)) /\
+    ALL_DISTINCT (MAP g l') /\
+    (!x. MEM x l' ==> ?y. MEM y l /\ g x = g y /\ (f x = f y \/ f x = []))
+    ==>
+    ALL_DISTINCT (FLAT (MAP f l'))
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  simp[ALL_DISTINCT_APPEND] >> rpt conj_tac
+  (* ALL_DISTINCT (f h) *)
+  >- (`?orig. MEM orig l /\ (f h = f orig \/ f h = [])` by metis_tac[] >>
+      gvs[] >- metis_tac[all_distinct_flat_map_segment] >> simp[])
+  (* ALL_DISTINCT (FLAT (MAP f l')) by IH *)
+  >- metis_tac[]
+  (* Disjointness: MEM e (f h) ==> ~MEM e (FLAT (MAP f l')) *)
+  >> rpt strip_tac >>
+  spose_not_then strip_assume_tac >>
+  `?orig. MEM orig l /\ g h = g orig /\ f h = f orig`
+    by (first_x_assum (qspec_then `h` mp_tac) >> simp[] >>
+        strip_tac >> gvs[] >> metis_tac[]) >>
+  `?z. MEM z l' /\ MEM e (f z)`
+    by (fs[MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+  `?worig. MEM worig l /\ g z = g worig /\ f z = f worig`
+    by (first_x_assum (qspec_then `z` mp_tac) >> simp[] >>
+        strip_tac >> gvs[] >> metis_tac[]) >>
+  `orig = worig` by metis_tac[all_distinct_flat_map_mem_unique] >>
+  metis_tac[MEM_MAP]
 QED
 
 (* General SSA preservation for 1:1 transforms that preserve IDs and
@@ -1230,19 +1309,12 @@ Theorem ssa_form_preserved_by_output_subset_proof:
     ==>
     ssa_form fn'
 Proof
-  rpt strip_tac >> fs[ssa_form_def] >> rpt strip_tac >>
-  `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn'))`
-    by metis_tac[fn_inst_ids_eq_map] >>
-  `?orig1. MEM orig1 (fn_insts fn) /\ inst1.inst_id = orig1.inst_id /\
-           inst1.inst_outputs = orig1.inst_outputs`
-    by (first_x_assum (qspec_then `inst1` mp_tac) >> simp[] >>
-        strip_tac >> gvs[] >> metis_tac[]) >>
-  `?orig2. MEM orig2 (fn_insts fn) /\ inst2.inst_id = orig2.inst_id /\
-           inst2.inst_outputs = orig2.inst_outputs`
-    by (first_x_assum (qspec_then `inst2` mp_tac) >> simp[] >>
-        strip_tac >> gvs[] >> metis_tac[]) >>
-  `orig1 = orig2` by metis_tac[] >>
-  metis_tac[all_distinct_map_inj]
+  rpt strip_tac >> fs[ssa_form_def] >>
+  irule (INST_TYPE [gamma |-> ``:num``] all_distinct_flat_map_traced) >>
+  qexists_tac `\(i:instruction). i.inst_id` >>
+  qexists_tac `fn_insts fn` >>
+  fs[fn_inst_ids_distinct_def, fn_insts_def, fn_insts_blocks_flat,
+     MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF]
 QED
 
 (* General SSA preservation for function_map_transform:

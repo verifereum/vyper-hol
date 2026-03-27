@@ -505,15 +505,15 @@ Proof
   ACCEPT_TAC fmt_preserves_ssa_form_general_proof
 QED
 
-(* Instruction removal preserves SSA *)
-Theorem ssa_form_subset:
+(* Instruction sublist preserves SSA *)
+Theorem ssa_form_sublist:
   !fn fn'.
     ssa_form fn /\
-    (!inst. MEM inst (fn_insts fn') ==> MEM inst (fn_insts fn))
+    sublist (fn_insts fn') (fn_insts fn)
     ==>
     ssa_form fn'
 Proof
-  ACCEPT_TAC ssa_form_subset_proof
+  ACCEPT_TAC ssa_form_sublist_proof
 QED
 
 (* General SSA preservation for 1:1 transforms that preserve IDs and
