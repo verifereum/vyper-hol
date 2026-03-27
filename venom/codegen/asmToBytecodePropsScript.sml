@@ -16,25 +16,22 @@
  *   - PC related by asm_pc_to_offset (sum of instruction sizes)
  *   - code = assemble prog, parsed = parse_code thereof
  *
- * Modulo gas (asm interpreter ignores gas entirely).
+ * Gas: disjunctive - either results correspond, or EVM returns OutOfGas.
  *
  * TOP-LEVEL:
- *   asm_bytecode_step_ok     — single step: AsmOK → EVM continues
- *   asm_bytecode_step_halt   — single step: AsmHalt → EVM halts
- *   asm_bytecode_step_revert — single step: AsmRevert → EVM reverts
- *   asm_bytecode_sim         — forward simulation (asm terminates ⇒ EVM matches)
+ *   asm_bytecode_sim         - forward simulation (asm terminates => EVM matches)
  *
  * STRUCTURAL:
- *   offset_to_pc_inverse     — byte offset → asm index round-trips
- *   label_offset_consistent  — labels resolve to correct byte offsets
- *   encode_inst_length       — encode_inst produces asm_inst_size bytes
- *   encode_at                — bytes at offset match encode_inst
- *   assemble_parse_correct   — parse_code gives right opname at each position
+ *   offset_to_pc_inverse     - byte offset -> asm index round-trips
+ *   label_offset_consistent  - labels resolve to correct byte offsets
+ *   encode_inst_length       - encode_inst produces asm_inst_size bytes
+ *   encode_at                - bytes at offset match encode_inst
+ *   assemble_parse_correct   - parse_code gives right opname at each position
  *)
 
 Theory asmToBytecodeProps
 Ancestors
-  codegenRel
+  codegenRel vfmExecution
 
 (* ===== Structural Properties ===== *)
 
@@ -117,108 +114,30 @@ Proof
   cheat
 QED
 
-(* ===== Step Correspondence ===== *)
-
-(* Single step (continuation): if asm takes one step producing AsmOK,
-   the EVM takes one step on the assembled bytecode reaching a related
-   state. 1 asm instruction = 1 EVM instruction (both step once).
-
-   Modulo gas: assumes sufficient gas for the EVM step. *)
-Theorem asm_bytecode_step_ok:
-  ∀prog as es.
-    asm_wf prog ∧
-    asm_evm_rel prog as es ∧
-    sufficient_gas es ∧
-    as.as_pc < LENGTH prog ∧
-    ¬ is_data_inst (EL as.as_pc prog) ⇒
-    let label_offsets = SND (compute_label_offsets prog) in
-    let otp = build_offset_to_pc prog in
-    let inst = EL as.as_pc prog in
-    ∀as'.
-      asm_step label_offsets otp inst as = AsmOK as' ⇒
-      ∃es'. step es = (INL (), es') ∧
-            asm_evm_rel prog as' es'
-Proof
-  cheat
-QED
-
-(* Single step (halt): asm produces AsmHalt ⇒ EVM finishes cleanly *)
-Theorem asm_bytecode_step_halt:
-  ∀prog as es.
-    asm_wf prog ∧
-    asm_evm_rel prog as es ∧
-    sufficient_gas es ∧
-    as.as_pc < LENGTH prog ∧
-    ¬ is_data_inst (EL as.as_pc prog) ⇒
-    let label_offsets = SND (compute_label_offsets prog) in
-    let otp = build_offset_to_pc prog in
-    let inst = EL as.as_pc prog in
-    ∀as'.
-      asm_step label_offsets otp inst as = AsmHalt as' ⇒
-      ∃es'. step es = (INR NONE, es') ∧
-            asm_evm_rel prog as' es'
-Proof
-  cheat
-QED
-
-(* Single step (revert): asm produces AsmRevert ⇒ EVM reverts *)
-Theorem asm_bytecode_step_revert:
-  ∀prog as es.
-    asm_wf prog ∧
-    asm_evm_rel prog as es ∧
-    sufficient_gas es ∧
-    as.as_pc < LENGTH prog ∧
-    ¬ is_data_inst (EL as.as_pc prog) ⇒
-    let label_offsets = SND (compute_label_offsets prog) in
-    let otp = build_offset_to_pc prog in
-    let inst = EL as.as_pc prog in
-    ∀as'.
-      asm_step label_offsets otp inst as = AsmRevert as' ⇒
-      ∃es' exc. step es = (INR (SOME exc), es') ∧
-                exc = Reverted ∧
-                asm_evm_rel prog as' es'
-Proof
-  cheat
-QED
-
 (* ===== Forward Simulation ===== *)
 
-(* If asm execution halts (via asm_steps), EVM execution of the
-   assembled bytecode also halts with a corresponding result.
-
-   Uses asm_steps (step-counted) for natural composition with
-   gen_fn_simulation. Direction: asm terminates ⇒ EVM terminates.
-
-   label_offsets and offset_to_pc are derived from prog
-   (compute_label_offsets, build_offset_to_pc). They appear as
-   parameters because gen_fn_simulation also parameterizes over them.
-
-   Gas condition: sufficient_gas is necessary but not sufficient.
-   The full proof requires gas sufficiency across all steps.
-   Exact formulation refined during proof. *)
+(* Assembly -> EVM bytecode forward simulation.
+   Either execution results correspond, or EVM ran out of gas. *)
 Theorem asm_bytecode_sim:
   ∀n prog label_offsets offset_to_pc as es.
     asm_wf prog ∧
     label_offsets = SND (compute_label_offsets prog) ∧
     offset_to_pc = build_offset_to_pc prog ∧
-    asm_evm_rel prog as es ∧
-    sufficient_gas es ⇒
-    (* Halt: asm halts cleanly ⇒ EVM halts cleanly *)
-    (∀as'. asm_steps label_offsets offset_to_pc prog n as =
-             AsmHalt as' ⇒
-       ∃es'. run es = SOME (INR NONE, es') ∧
-             asm_evm_rel prog as' es') ∧
-    (* Revert: asm reverts ⇒ EVM reverts *)
-    (∀as'. asm_steps label_offsets offset_to_pc prog n as =
-             AsmRevert as' ⇒
-       ∃es'. run es = SOME (INR (SOME Reverted), es') ∧
-             asm_evm_rel prog as' es') ∧
-    (* Fault: asm faults ⇒ EVM faults (non-revert exception) *)
-    (∀as'. asm_steps label_offsets offset_to_pc prog n as =
-             AsmFault as' ⇒
-       ∃es' exc. run es = SOME (INR (SOME exc), es') ∧
-                 exc ≠ Reverted ∧
-                 asm_evm_rel prog as' es')
+    asm_evm_rel prog as es ⇒
+    (∃es'. run es = SOME (INR (SOME OutOfGas), es')) ∨
+    ((∀as'. asm_steps label_offsets offset_to_pc prog n as =
+              AsmHalt as' ⇒
+        ∃es'. run es = SOME (INR NONE, es') ∧
+              asm_evm_rel prog as' es') ∧
+     (∀as'. asm_steps label_offsets offset_to_pc prog n as =
+              AsmRevert as' ⇒
+        ∃es'. run es = SOME (INR (SOME Reverted), es') ∧
+              asm_evm_rel prog as' es') ∧
+     (∀as'. asm_steps label_offsets offset_to_pc prog n as =
+              AsmFault as' ⇒
+        ∃es' exc. run es = SOME (INR (SOME exc), es') ∧
+                  exc ≠ Reverted ∧
+                  asm_evm_rel prog as' es'))
 Proof
   cheat
 QED

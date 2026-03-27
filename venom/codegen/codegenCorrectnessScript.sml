@@ -14,7 +14,7 @@
 
 Theory codegenCorrectness
 Ancestors
-  asmToBytecodeProps venomToAsmProps codegen
+  asmToBytecodeProps venomToAsmProps codegen vfmExecution
 
 (* ===== Initial State Correspondence ===== *)
 
@@ -70,13 +70,11 @@ End
      - codegen_ready_fn: SSA, SUE, normalized CFG, valid opcodes
      - codegen succeeds (SOME bytecode)
      - initial states correspond (stack has args, shared state matches)
-     - sufficient gas on EVM side
      - spill safety: Venom execution doesn't clobber spill region
      - spill coverage: initial memory covers spill high-water mark
 
-   Gas: sufficient_gas es is necessary but not sufficient. The full
-   proof requires gas for all steps. Exact formulation refined at
-   proof time.
+   Gas: disjunctive — either results correspond, or EVM returns OutOfGas.
+   No gas precondition needed.
 
    Spill safety: step_mem_safe for every Venom step. This is a
    property of the INPUT PROGRAM — the codegen can't establish it.
@@ -92,37 +90,32 @@ Theorem codegen_fn_correct:
             (FEMPTY |+ (fn.fn_name, fn_eom))
             data_seg = SOME bytecode ∧
     initial_state_rel fn vs es ∧
-    sufficient_gas es ∧
-    (* Spill safety: Venom execution doesn't clobber [fn_eom, spill_hwm) *)
     (∀inst vs1 vs2 fuel'.
        step_inst fuel' ctx inst vs1 = OK vs2 ⇒
        step_mem_safe <| sa_fn_eom := fn_eom;
                         sa_next_offset := spill_hwm;
                         sa_free_slots := [] |> vs1 vs2) ∧
-    (* MSIZE: initial memory covers spill high-water mark *)
     spill_mem_covered spill_hwm vs.vs_memory ∧
     (case es.contexts of
        (ctxt, rb) :: _ =>
          ctxt.msgParams.code = bytecode ∧
          ctxt.msgParams.parsed = parse_code 0 FEMPTY bytecode
      | [] => F) ⇒
-    case run_function fuel ctx fn vs of
-    (* Halt: Venom halts ⇒ EVM halts with matching state *)
-      Halt vs' =>
-        ∃es'. run es = SOME (INR NONE, es') ∧
-              final_state_rel vs' es'
-    (* Revert: Venom reverts ⇒ EVM reverts with matching state *)
-    | Abort Revert_abort vs' =>
-        ∃es'. run es = SOME (INR (SOME Reverted), es') ∧
-              final_state_rel vs' es'
-    (* Exceptional halt: Venom aborts ⇒ EVM faults *)
-    | Abort ExHalt_abort vs' =>
-        ∃es' exc. run es = SOME (INR (SOME exc), es') ∧
-                  exc ≠ Reverted ∧
-                  final_state_rel vs' es'
-    | OK _ => F           (* impossible: run_function never returns OK *)
-    | IntRet _ _ => T    (* internal return — handled by caller *)
-    | Error _ => T       (* execution error — no EVM correspondence *)
+    (∃es'. run es = SOME (INR (SOME OutOfGas), es')) ∨
+    (case run_function fuel ctx fn vs of
+       Halt vs' =>
+         ∃es'. run es = SOME (INR NONE, es') ∧
+               final_state_rel vs' es'
+     | Abort Revert_abort vs' =>
+         ∃es'. run es = SOME (INR (SOME Reverted), es') ∧
+               final_state_rel vs' es'
+     | Abort ExHalt_abort vs' =>
+         ∃es' exc. run es = SOME (INR (SOME exc), es') ∧
+                   exc ≠ Reverted ∧
+                   final_state_rel vs' es'
+     | OK _ => F
+     | IntRet _ _ => T
+     | Error _ => T)
 Proof
   cheat
 QED
@@ -158,7 +151,6 @@ Theorem codegen_correct:
     ctx_wf ctx ∧
     codegen ctx fn_eom_map data_seg = SOME bytecode ∧
     initial_ctx_rel ctx vs es ∧
-    sufficient_gas es ∧
     (∀fn inst vs1 vs2 fuel'.
        MEM fn ctx.ctx_functions ∧
        step_inst fuel' ctx inst vs1 = OK vs2 ⇒
@@ -171,20 +163,21 @@ Theorem codegen_correct:
          ctxt.msgParams.code = bytecode ∧
          ctxt.msgParams.parsed = parse_code 0 FEMPTY bytecode
      | [] => F) ⇒
-    case run_context fuel ctx vs of
-      Halt vs' =>
-        ∃es'. run es = SOME (INR NONE, es') ∧
-              final_state_rel vs' es'
-    | Abort Revert_abort vs' =>
-        ∃es'. run es = SOME (INR (SOME Reverted), es') ∧
-              final_state_rel vs' es'
-    | Abort ExHalt_abort vs' =>
-        ∃es' exc. run es = SOME (INR (SOME exc), es') ∧
-                  exc ≠ Reverted ∧
-                  final_state_rel vs' es'
-    | OK _ => F
-    | IntRet _ _ => F    (* top-level function should not RET *)
-    | Error _ => T
+    (∃es'. run es = SOME (INR (SOME OutOfGas), es')) ∨
+    (case run_context fuel ctx vs of
+       Halt vs' =>
+         ∃es'. run es = SOME (INR NONE, es') ∧
+               final_state_rel vs' es'
+     | Abort Revert_abort vs' =>
+         ∃es'. run es = SOME (INR (SOME Reverted), es') ∧
+               final_state_rel vs' es'
+     | Abort ExHalt_abort vs' =>
+         ∃es' exc. run es = SOME (INR (SOME exc), es') ∧
+                   exc ≠ Reverted ∧
+                   final_state_rel vs' es'
+     | OK _ => F
+     | IntRet _ _ => F
+     | Error _ => T)
 Proof
   cheat
 QED

@@ -190,7 +190,7 @@ End
    Key differences from raw EVM:
      - PC: asm uses instruction index, EVM uses byte offset
      - Code/parsed: EVM needs bytecode and pre-parsed opname map
-   Gas is NOT tracked here — see sufficient_gas for step preconditions. *)
+   Gas is NOT tracked — correctness theorems use OOG disjunction. *)
 Definition asm_evm_rel_def:
   asm_evm_rel prog as es ⇔
     (case es.contexts of
@@ -212,15 +212,10 @@ Definition asm_evm_rel_def:
      | [] => F)
 End
 
-(* Sufficient gas for at least one EVM step.
-   The amount needed depends on the instruction; this just asserts
-   gasUsed hasn't exceeded gasLimit. Per-opcode gas is left to proofs. *)
-Definition sufficient_gas_def:
-  sufficient_gas es ⇔
-    (case es.contexts of
-       (ctxt, rb) :: _ => ctxt.gasUsed ≤ ctxt.msgParams.gasLimit
-     | [] => F)
-End
+(* Gas model: Venom IR does not track gas. EVM does.
+   Correctness theorems use a disjunctive form:
+     "either results correspond, or EVM ran out of gas (OutOfGas)."
+   No gas precondition is needed — the OOG disjunct absorbs it. *)
 
 (* ===== Result Correspondence ===== *)
 
