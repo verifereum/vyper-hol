@@ -291,7 +291,7 @@ fun mk_JTL_VariableDecl (name, ty, is_public, is_immutable, is_transient, valopt
 fun mk_JTL_HashMapDecl (name, kt, vt, is_public, is_transient) =
   list_mk_comb(JTL_HashMapDecl_tm,
     [fromMLstring name, kt, vt, mk_bool is_public, mk_bool is_transient])
-val event_arg_ty = pairSyntax.mk_prod(json_arg_ty, boolSyntax.bool)
+val event_arg_ty = pairSyntax.mk_prod(json_arg_ty, Type.bool)
 fun mk_JTL_EventDef (name, args) =
   list_mk_comb(JTL_EventDef_tm, [fromMLstring name, mk_list(args, event_arg_ty)])
 fun mk_JTL_StructDef (name, args) =
