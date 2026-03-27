@@ -291,8 +291,9 @@ fun mk_JTL_VariableDecl (name, ty, is_public, is_immutable, is_transient, valopt
 fun mk_JTL_HashMapDecl (name, kt, vt, is_public, is_transient) =
   list_mk_comb(JTL_HashMapDecl_tm,
     [fromMLstring name, kt, vt, mk_bool is_public, mk_bool is_transient])
+val event_arg_ty = pairSyntax.mk_prod(json_arg_ty, boolSyntax.bool)
 fun mk_JTL_EventDef (name, args) =
-  list_mk_comb(JTL_EventDef_tm, [fromMLstring name, mk_list(args, json_arg_ty)])
+  list_mk_comb(JTL_EventDef_tm, [fromMLstring name, mk_list(args, event_arg_ty)])
 fun mk_JTL_StructDef (name, args) =
   list_mk_comb(JTL_StructDef_tm, [fromMLstring name, mk_list(args, json_arg_ty)])
 fun mk_JTL_FlagDef (name, members) =
@@ -1063,13 +1064,60 @@ val json_toplevel : term decoder = achoose "toplevel" [
       )
     ),
 
-  (* EventDef *)
+  (* EventDef — detect indexed(type) annotations *)
+  let
+    (* An event arg is an AnnAssign where the annotation may be
+       indexed(type), i.e. a Call node with func.id = "indexed".
+       In that case, the actual type is the first arg of the Call. *)
+    val json_event_arg : term decoder = achoose "json_event_arg" [
+      (* New format: ast_type = "arg" *)
+      check_ast_type "arg" $
+        orElse(
+          (* indexed: annotation is Call to "indexed" *)
+          JSONDecode.map (fn (name, ty) =>
+            pairSyntax.mk_pair(mk_JArg(name, ty), boolSyntax.T)) $
+          tuple2 (field "arg" string,
+                  field "annotation" $
+                    check_ast_type "Call" $
+                      andThen (field "func" $ check_ast_type "Name" $
+                               field "id" string)
+                        (fn f => if f = "indexed"
+                                 then field "args" $ sub 0 ast_type
+                                 else fail "not indexed")),
+          (* non-indexed: bare annotation *)
+          JSONDecode.map (fn (name, ty) =>
+            pairSyntax.mk_pair(mk_JArg(name, ty), boolSyntax.F)) $
+          tuple2 (field "arg" string, field "annotation" ast_type)),
+      (* Old format: ast_type = "AnnAssign" *)
+      check_ast_type "AnnAssign" $
+        orElse(
+          (* indexed *)
+          JSONDecode.map (fn (name, ty) =>
+            pairSyntax.mk_pair(mk_JArg(name, ty), boolSyntax.T)) $
+          field "target" $
+            tuple2 (check_ast_type "Name" $ field "id" string,
+                    field "type" $
+                      check_ast_type "Call" $
+                        andThen (field "func" $ check_ast_type "Name" $
+                                 field "id" string)
+                          (fn f => if f = "indexed"
+                                   then field "args" $ sub 0 json_type
+                                   else fail "not indexed")),
+          (* non-indexed *)
+          JSONDecode.map (fn (name, ty) =>
+            pairSyntax.mk_pair(mk_JArg(name, ty), boolSyntax.F)) $
+          field "target" $
+            tuple2 (check_ast_type "Name" $ field "id" string,
+                    field "type" json_type))
+    ]
+  in
   check_ast_type "EventDef" $
     JSONDecode.map (fn (name, args) => mk_JTL_EventDef(name, args)) $
     tuple2 (field "name" string,
             field "body" $ orElse(
-              array json_arg,
-              sub 0 (check_ast_type "Pass" (succeed [])))),
+              array json_event_arg,
+              sub 0 (check_ast_type "Pass" (succeed []))))
+  end,
 
   (* StructDef *)
   check_ast_type "StructDef" $
