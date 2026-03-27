@@ -7,6 +7,8 @@
 Theory execEquivParamProps
 Ancestors
   execEquivParamProofs
+Libs
+  pred_setTheory
 
 Theorem step_inst_preserves_R:
   !(R_ok : venom_state -> venom_state -> bool)
@@ -42,8 +44,47 @@ Proof
   ACCEPT_TAC run_block_preserves_R_proof
 QED
 
+Theorem run_block_same_preserves_RQ:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool)
+   (Q : venom_state -> venom_state -> bool)
+   bb fuel ctx s1 s2.
+    valid_state_rel R_ok R_term /\
+    R_ok s1 s2 /\ Q s1 s2 /\
+    s1.vs_inst_idx = s2.vs_inst_idx /\
+    (!inst. MEM inst bb.bb_instructions ==>
+            inst.inst_opcode <> INVOKE) /\
+    (!i s1' s2'. i < LENGTH bb.bb_instructions /\
+       R_ok s1' s2' /\ Q s1' s2' /\
+       s1'.vs_inst_idx = i /\ s2'.vs_inst_idx = i ==>
+       !x. MEM (Var x) (EL i bb.bb_instructions).inst_operands ==>
+           lookup_var x s1' = lookup_var x s2') /\
+    (!i s1' s2' v1 v2.
+       i < LENGTH bb.bb_instructions /\
+       ~is_terminator (EL i bb.bb_instructions).inst_opcode /\
+       R_ok s1' s2' /\ Q s1' s2' /\
+       s1'.vs_inst_idx = i /\ s2'.vs_inst_idx = i /\
+       step_inst fuel ctx (EL i bb.bb_instructions) s1' = OK v1 /\
+       step_inst fuel ctx (EL i bb.bb_instructions) s2' = OK v2 /\
+       R_ok v1 v2 ==>
+       Q (v1 with vs_inst_idx := SUC i)
+         (v2 with vs_inst_idx := SUC i)) ==>
+    lift_result R_ok R_term
+      (run_block fuel ctx bb s1)
+      (run_block fuel ctx bb s2)
+Proof
+  ACCEPT_TAC run_block_same_preserves_RQ_proof
+QED
+
 Theorem state_equiv_execution_equiv_valid_state_rel:
   !vars. valid_state_rel (state_equiv vars) (execution_equiv vars)
 Proof
   ACCEPT_TAC state_equiv_execution_equiv_valid_state_rel_proof
+QED
+
+Theorem valid_state_rel_mixed:
+  !vars vars'. vars SUBSET vars' ==>
+    valid_state_rel (state_equiv vars) (execution_equiv vars')
+Proof
+  ACCEPT_TAC valid_state_rel_mixed_proof
 QED

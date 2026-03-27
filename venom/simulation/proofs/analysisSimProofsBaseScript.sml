@@ -1262,7 +1262,11 @@ QED
    step_inst_idx_indep, we factor out the idx shift and apply the
    simulation at the natural state where soundness holds. *)
 
-Theorem analysis_block_sim:
+(* Core block simulation theorem.
+   Uses per-block transfer_sound_wf (restricted to well-formed instructions) for
+   maximum generality. analysis_block_sim (below) wraps this with the
+   stronger but more common transfer_sound hypothesis. *)
+Theorem analysis_block_sim_wf:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (sound : 'a -> venom_state -> bool)
@@ -1276,7 +1280,12 @@ Theorem analysis_block_sim:
     (!inst x.
        MEM inst bb.bb_instructions /\ MEM (Var x) inst.inst_operands ==>
        !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
-    transfer_sound sound transfer run_ctx /\
+    (* transfer_sound_wf restricted to block instructions *)
+    (!fuel ctx' v inst s s'.
+       MEM inst bb.bb_instructions /\
+       inst_wf inst /\ sound v s /\
+       step_inst fuel ctx' inst s = OK s' ==>
+       sound (transfer run_ctx inst v) s') /\
     (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
     (!idx. SUC idx <= LENGTH bb.bb_instructions ==>
        df_at bottom result bb.bb_label (SUC idx) =
@@ -1476,10 +1485,11 @@ Proof
     `step_inst fuel ctx inst (s' with vs_inst_idx := 0) =
      OK (v' with vs_inst_idx := 0)` by
       (irule step_inst_at_0 >> fs[]) >>
+    `MEM inst bb.bb_instructions` by metis_tac[EL_MEM] >>
     `sound (transfer run_ctx inst v) (v' with vs_inst_idx := 0)` by (
-      qpat_x_assum `transfer_sound _ _ _` mp_tac >>
-      simp[transfer_sound_def] >> disch_then irule >>
-      qexistsl_tac [`fuel`, `ctx`, `s' with vs_inst_idx := 0`] >> fs[]) >>
+      first_assum (qspecl_then [`fuel`, `ctx`, `v`, `inst`,
+          `s' with vs_inst_idx := 0`, `v' with vs_inst_idx := 0`] mp_tac) >>
+      simp[]) >>
     `transfer run_ctx inst v = df_at bottom result bb.bb_label (SUC i)` by (
       `SUC i <= LENGTH bb.bb_instructions` by fs[] >>
       qpat_x_assum `!idx. SUC idx <= _ ==> _` (qspec_then `i` mp_tac) >>
@@ -1591,9 +1601,13 @@ Proof
           (qpat_x_assum `!idx. SUC idx <= _ ==> _`
             (qspec_then `i` mp_tac) >> simp[]) >>
         pop_assum SUBST1_TAC >>
-        irule transfer_sound_at_0 >>
-        simp[Abbr `v`, Abbr `inst`] >>
-        qexistsl_tac [`fuel`, `ctx`, `s'`] >> simp[]) >>
+        `MEM inst bb.bb_instructions` by metis_tac[EL_MEM] >>
+        `step_inst fuel ctx inst (s' with vs_inst_idx := 0) =
+         OK (st1 with vs_inst_idx := 0)` by
+          (irule step_inst_at_0 >> fs[]) >>
+        first_assum (qspecl_then [`fuel`, `ctx`, `v`, `inst`,
+          `s' with vs_inst_idx := 0`, `st1 with vs_inst_idx := 0`] mp_tac) >>
+        simp[Abbr `v`, Abbr `inst`]) >>
       (* Transfer soundness from st1 to st2 via R_ok *)
       `R_ok (st1 with vs_inst_idx := 0) (st2 with vs_inst_idx := 0)` by (
         match_mp_tac (Q.SPECL [`R_ok`, `R_term`] R_ok_idx_change) >>
@@ -1668,6 +1682,129 @@ Proof
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
     qexists_tac `run_insts fuel ctx (f v inst) s'` >> gvs[])
+QED
+
+(* Backward-compatible wrapper: transfer_sound => transfer_sound_wf *)
+Theorem analysis_block_sim:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool)
+   (sound : 'a -> venom_state -> bool)
+   (f : 'a -> instruction -> instruction list) bb
+   (bottom : 'a) (result : 'a df_state) transfer run_ctx.
+    valid_state_rel R_ok R_term /\
+    (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
+    (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
+    analysis_inst_simulates R_ok R_term sound f /\
+    EVERY inst_wf bb.bb_instructions /\
+    (!inst x.
+       MEM inst bb.bb_instructions /\ MEM (Var x) inst.inst_operands ==>
+       !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
+    transfer_sound sound transfer run_ctx /\
+    (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
+    (!idx. SUC idx <= LENGTH bb.bb_instructions ==>
+       df_at bottom result bb.bb_label (SUC idx) =
+       transfer run_ctx (EL idx bb.bb_instructions)
+         (df_at bottom result bb.bb_label idx))
+  ==>
+    !fuel ctx s.
+      s.vs_inst_idx = 0 /\
+      sound (df_at bottom result bb.bb_label 0) s ==>
+      (?e. run_block fuel ctx bb s = Error e) \/
+      lift_result R_ok R_term
+        (run_block fuel ctx bb s)
+        (run_block fuel ctx
+           (analysis_block_transform bottom result f bb) s)
+Proof
+  rpt strip_tac >>
+  mp_tac analysis_block_sim_wf >>
+  disch_then (qspecl_then [`R_ok`, `R_term`, `sound`, `f`, `bb`, `bottom`,
+    `result`, `transfer`, `run_ctx`] mp_tac) >>
+  impl_tac >- (
+    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+    rpt strip_tac >>
+    fs[transfer_sound_def] >> res_tac) >>
+  disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac) >>
+  simp[]
+QED
+
+(* Variant of analysis_block_sim_wf with a state_inv threaded alongside sound.
+   Per-inst sim gets both sound v s AND state_inv s.
+   Uses transfer_sound_wf (not transfer_sound) and requires inst_wf in
+   the state_inv preservation hypothesis. *)
+Theorem analysis_block_sim_inv:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool)
+   (sound : 'a -> venom_state -> bool)
+   (state_inv : venom_state -> bool)
+   (f : 'a -> instruction -> instruction list) bb
+   (bottom : 'a) (result : 'a df_state) transfer run_ctx.
+    valid_state_rel R_ok R_term /\
+    (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
+    (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
+    (* Per-inst sim with both sound AND state_inv *)
+    (!fuel ctx v inst s.
+       sound v s /\ state_inv (s with vs_inst_idx := 0) /\ inst_wf inst ==>
+       (?e. step_inst fuel ctx inst s = Error e) \/
+       lift_result R_ok R_term (step_inst fuel ctx inst s)
+         (run_insts fuel ctx (f v inst) s)) /\
+    inst_transform_structural f /\
+    EVERY inst_wf bb.bb_instructions /\
+    (!inst x.
+       MEM inst bb.bb_instructions /\ MEM (Var x) inst.inst_operands ==>
+       !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
+    transfer_sound_wf sound transfer run_ctx /\
+    (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
+    (!idx. SUC idx <= LENGTH bb.bb_instructions ==>
+       df_at bottom result bb.bb_label (SUC idx) =
+       transfer run_ctx (EL idx bb.bb_instructions)
+         (df_at bottom result bb.bb_label idx)) /\
+    (* state_inv preserved through well-formed step_inst from this block *)
+    (!fuel ctx inst s s'.
+       MEM inst bb.bb_instructions /\
+       inst_wf inst /\
+       state_inv (s with vs_inst_idx := 0) /\
+       step_inst fuel ctx inst s = OK s' ==>
+       state_inv (s' with vs_inst_idx := 0)) /\
+    (* state_inv preserved through R_ok *)
+    (!s1 s2. R_ok s1 s2 /\ state_inv s1 ==> state_inv s2)
+  ==>
+    !fuel ctx s.
+      s.vs_inst_idx = 0 /\
+      sound (df_at bottom result bb.bb_label 0) s /\
+      state_inv s ==>
+      (?e. run_block fuel ctx bb s = Error e) \/
+      lift_result R_ok R_term
+        (run_block fuel ctx bb s)
+        (run_block fuel ctx
+           (analysis_block_transform bottom result f bb) s)
+Proof
+  rpt strip_tac
+  \\ qabbrev_tac `sound' = \(v:'a) s. sound v s /\
+       state_inv (s with vs_inst_idx := 0)`
+  \\ qspecl_then [`R_ok`, `R_term`, `sound'`, `f`, `bb`, `bottom`,
+       `result`, `transfer`, `run_ctx`] mp_tac analysis_block_sim_wf
+  \\ impl_tac
+  >- (
+    rpt conj_tac \\ TRY (first_assum ACCEPT_TAC)
+    (* analysis_inst_simulates for sound' *)
+    >- (simp[analysis_inst_simulates_def, Abbr `sound'`]
+        \\ rpt strip_tac \\ res_tac)
+    (* transfer_sound_wf for sound' *)
+    >- (rpt strip_tac \\ gvs[Abbr `sound'`] \\ conj_tac
+        >- (fs[transfer_sound_wf_def] \\ res_tac)
+        \\ res_tac)
+    (* sound' preserved by R_ok *)
+    \\ rpt strip_tac \\ gvs[Abbr `sound'`] \\ conj_tac >- res_tac
+    \\ qspecl_then [`R_ok`, `R_term`, `s1`, `s2`, `0`]
+         mp_tac R_ok_idx_change \\ simp[]
+    \\ disch_tac \\ res_tac)
+  (* Apply result to our goal *)
+  \\ disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac)
+  \\ simp[Abbr `sound'`]
+  \\ disch_then irule
+  \\ `s with vs_inst_idx := 0 = s` by
+       (Cases_on `s` \\ gvs[venom_state_fn_updates])
+  \\ gvs[]
 QED
 
 (* Variant of analysis_block_sim with universal soundness instead of

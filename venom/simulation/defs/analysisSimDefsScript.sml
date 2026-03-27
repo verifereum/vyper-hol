@@ -61,6 +61,18 @@ Definition transfer_sound_def:
       sound (transfer ctx inst v) s'
 End
 
+(* transfer_sound restricted to well-formed instructions.
+   Strictly weaker than transfer_sound (extra inst_wf hypothesis).
+   Useful when soundness depends on structural properties (e.g. DFG)
+   that only hold for well-formed instructions. *)
+Definition transfer_sound_wf_def:
+  transfer_sound_wf (sound : 'a -> venom_state -> bool)
+                    (transfer : 'ctx -> instruction -> 'a -> 'a) ctx <=>
+    !fuel run_ctx v inst s s'.
+      inst_wf inst /\ sound v s /\ step_inst fuel run_ctx inst s = OK s' ==>
+      sound (transfer ctx inst v) s'
+End
+
 (* Edge transfer soundness: edge_transfer preserves soundness for states
    that actually flow along edge (src → dst).
    vs_prev_bb = SOME src identifies the edge taken. This is set by
