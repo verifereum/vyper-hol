@@ -6,7 +6,7 @@
  * generate_evm_assembly from venom_to_assembly.py.
  *
  * TOP-LEVEL:
- *   generate_context_plan — plan for entire ir_context
+ *   generate_context_plan — plan for entire venom_context
  *)
 
 Theory stackPlanGen

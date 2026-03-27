@@ -51,7 +51,7 @@ End
    Used for statements that create multi-block CFGs (If, For).
    The ctx parameter supplies the function-call context (for INVOKE). *)
 Definition run_compiled_blocks_def:
-  run_compiled_blocks (ctx:ir_context) (st:compile_state) (st':compile_state)
+  run_compiled_blocks (ctx:venom_context) (st:compile_state) (st':compile_state)
                       (ss:venom_state) fuel =
     let fn = assemble_function st st' in
     let entry_idx = LENGTH st.cs_current_insts in
