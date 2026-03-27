@@ -1218,6 +1218,9 @@ Definition evaluate_def:
     check (amount ≤ self_acct.balance) "create insufficient balance";
     (* Use Verifereum's address_for_create with sender's nonce *)
     new_addr <<- vfmContext$address_for_create cx.txn.target self_acct.nonce;
+    (* Check for address collision (EIP-684) *)
+    existing <<- lookup_account new_addr accounts;
+    check (¬vfmExecution$account_already_created existing) "address collision";
     (* Transfer value from self to new contract *)
     if amount > 0 then
       transfer_value cx.txn.target new_addr amount

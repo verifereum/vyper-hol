@@ -769,6 +769,8 @@ Definition apply_vals_def:
       self_acct <<- lookup_account cx.txn.target accounts;
       check (amount ≤ self_acct.balance) "create insufficient balance";
       new_addr <<- vfmContext$address_for_create cx.txn.target self_acct.nonce;
+      existing <<- lookup_account new_addr accounts;
+      check (¬vfmExecution$account_already_created existing) "address collision";
       if amount > 0 then
         transfer_value cx.txn.target new_addr amount
       else return ();
