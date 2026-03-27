@@ -1,5 +1,9 @@
-# Lowering: top-level props
+# Lowering: top-level props + e2e correctness
 INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec \
            ../syntax ../semantics \
            ../venom/defs \
+           ../venom/compiler \
+           ../venom/codegen \
+           ../venom/simulation/defs \
+           ../venom/props \
            defs proofs

@@ -45,6 +45,14 @@ Failures to catch:
 
 **Completeness**: For each map/relation check domain, range, inverse, and symmetry. If you have a postorder property, state the preorder version too.
 
+**No catch-alls**: Never use `| _ => T` or `| _ => F` in theorem conclusions. Catch-alls hide missing cases and mask wrong pattern coverage. Enumerate every constructor explicitly — if a case is impossible, state `F` for it with a comment saying why. If a case is uninteresting, state `T` for it explicitly. The reader must see that every case was considered.
+```sml
+(* Bad *)  | _ => T
+(* Good *) | (INR BreakException, _) => F      (* never escapes call_external *)
+           | (INR ContinueException, _) => F   (* never escapes call_external *)
+           | (INR (ReturnException _), _) => F  (* caught by call_external_function *)
+```
+
 **Pruning**: Delete trivially true or practically useless theorems (e.g. acyclic ordering when all real CFGs have cycles).
 
 ## File structure

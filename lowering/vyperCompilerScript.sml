@@ -1,0 +1,81 @@
+(*
+ * Vyper-to-Venom Compilation (Top-Level Definition)
+ *
+ * Upstream: vyperlang/vyper@a7f7bf133 (split algebraic/affine passes)
+ *
+ * Wraps the compilation monad into a pure function:
+ *   vyper_module -> venom_context option
+ *
+ * The compilation monad (compileEnv) builds up a compile_state
+ * containing emitted blocks. This file defines:
+ *   - initial_compile_state: starting state for the monad
+ *   - extract_context: compile_state -> venom_context
+ *   - run_lowering: run the monad, extract context
+ *
+ * TOP-LEVEL:
+ *   run_lowering -- run compilation monad, produce venom_context
+ *)
+
+Theory vyperCompiler
+Ancestors
+  moduleLowering
+  compileEnv
+  venomInst
+
+(* ===== Compile State Initialization ===== *)
+
+(* Initial compile state: all counters at 0, no blocks, entry block label. *)
+Definition initial_compile_state_def:
+  initial_compile_state (entry_label : string) : compile_state =
+    <| cs_next_var := 0;
+       cs_next_label := 0;
+       cs_next_id := 0;
+       cs_current_bb := entry_label;
+       cs_current_insts := [];
+       cs_blocks := FEMPTY
+    |>
+End
+
+(* ===== Context Extraction ===== *)
+
+(* Extract a venom_context from the final compile state.
+   Collects all finalized blocks plus the current (open) block
+   into a single function. The entry function is the one whose
+   entry block matches the initial current_bb. *)
+Definition extract_context_def:
+  extract_context (entry_label : string) (st : compile_state) : venom_context =
+    let current_bb = <| bb_label := st.cs_current_bb;
+                        bb_instructions := REVERSE st.cs_current_insts |> in
+    let finalized = MAP SND (fmap_to_alist st.cs_blocks) in
+    let all_blocks = finalized ++ [current_bb] in
+    <| ctx_functions :=
+         [<| fn_name := entry_label;
+             fn_blocks := all_blocks |>];
+       ctx_entry := SOME entry_label
+    |>
+End
+
+(* ===== Top-Level Compilation ===== *)
+
+(* Run the compilation monad and extract a venom_context.
+   This is the pure function composition:
+     1. Initialize compile state
+     2. Run compile_generate_runtime in the monad
+     3. Extract the resulting context
+
+   The arguments mirror compile_generate_runtime's parameters.
+   A higher-level wrapper that extracts these from a vyper_module
+   is left for future work (requires formalizing the module
+   metadata extraction that Python does in VenomCompiler.__init__). *)
+Definition run_lowering_def:
+  run_lowering selectors external_fns internal_fns
+               fallback_fn dispatch_strategy
+               bucket_count fn_metadata_bytes
+               (entry_label : string) =
+    let st0 = initial_compile_state entry_label in
+    let ((), st1) =
+      compile_generate_runtime selectors external_fns internal_fns
+        fallback_fn dispatch_strategy bucket_count fn_metadata_bytes st0
+    in
+    extract_context entry_label st1
+End
