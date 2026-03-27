@@ -778,12 +778,25 @@ Proof
   gvs[clear_nops_block_def, MEM_FILTER]
 QED
 
+(* Helper: clear_nops produces a sublist of instructions *)
+Theorem clear_nops_fn_insts_sublist[local]:
+  !blocks. sublist
+    (fn_insts_blocks (MAP clear_nops_block blocks))
+    (fn_insts_blocks blocks)
+Proof
+  Induct >> simp[fn_insts_blocks_def, rich_listTheory.sublist_def] >>
+  gen_tac >>
+  irule rich_listTheory.sublist_append_pair >>
+  simp[clear_nops_block_def, rich_listTheory.FILTER_sublist]
+QED
+
 Theorem clear_nops_function_preserves_ssa:
   !fn. ssa_form fn ==> ssa_form (clear_nops_function fn)
 Proof
   rpt strip_tac >>
-  irule passSimulationProofsTheory.ssa_form_subset_proof >>
-  qexists_tac `fn` >> simp[clear_nops_fn_insts_subset]
+  irule passSimulationProofsTheory.ssa_form_sublist_proof >>
+  qexists_tac `fn` >> simp[fn_insts_def, clear_nops_function_def] >>
+  simp[clear_nops_fn_insts_sublist]
 QED
 
 (* ===================================================================== *)
