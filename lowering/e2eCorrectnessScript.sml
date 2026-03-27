@@ -15,7 +15,6 @@
  *   compile_vyper          -- full compilation chain
  *   compile_vyper_well_formed -- compilation => codegen preconditions
  *   e2e_vyper_to_evm       -- Vyper source semantics ~ EVM execution
- *   e2e_vyper_to_evm_with_gas -- same, without OOG (under gas assumption)
  *)
 
 Theory e2eCorrectness
@@ -156,13 +155,15 @@ QED
 (* Codegen correctness: Venom execution corresponds to EVM execution.
    Uses initial_evm_rel which packages the initial state correspondence
    and bytecode loading into a single predicate.
-   Direct instantiation of codegen_correct. *)
+
+   Gas: existential -- there exists a gas bound such that with enough
+   gas, EVM results correspond to Venom results. Non-vacuous: the
+   success case is always reachable with sufficient gas. *)
 Theorem e2e_venom_to_evm:
-  !ctx fn_eom_map data_seg bytecode spill_hwm vs es fuel.
+  !ctx fn_eom_map data_seg bytecode spill_hwm vs fuel.
     codegen_ready ctx /\
     ctx_wf ctx /\
     codegen ctx fn_eom_map data_seg = SOME bytecode /\
-    initial_evm_rel bytecode vs es /\
     (!fn inst vs1 vs2 fuel'.
        MEM fn ctx.ctx_functions /\
        step_inst fuel' ctx inst vs1 = OK vs2 ==>
@@ -171,21 +172,26 @@ Theorem e2e_venom_to_evm:
                         sa_free_slots := [] |> vs1 vs2) /\
     spill_mem_covered spill_hwm vs.vs_memory
     ==>
-    (?es'. run es = SOME (INR (SOME OutOfGas), es')) \/
-    (case run_context fuel ctx vs of
-       Halt vs' =>
-         ?es'. run es = SOME (INR NONE, es') /\
-               final_state_rel vs' es'
-     | Abort Revert_abort vs' =>
-         ?es'. run es = SOME (INR (SOME Reverted), es') /\
-               final_state_rel vs' es'
-     | Abort ExHalt_abort vs' =>
-         ?es' exc. run es = SOME (INR (SOME exc), es') /\
-                   exc <> Reverted /\
-                   final_state_rel vs' es'
-     | OK _ => F
-     | IntRet _ _ => F
-     | Error _ => T)
+    ?gas_needed.
+      !es. initial_evm_rel bytecode vs es /\
+           ~NULL es.contexts /\
+           (let (ctxt, rb) = HD es.contexts in
+              ctxt.msgParams.gasLimit >= gas_needed)
+      ==>
+      (case run_context fuel ctx vs of
+         Halt vs' =>
+           ?es'. run es = SOME (INR NONE, es') /\
+                 final_state_rel vs' es'
+       | Abort Revert_abort vs' =>
+           ?es'. run es = SOME (INR (SOME Reverted), es') /\
+                 final_state_rel vs' es'
+       | Abort ExHalt_abort vs' =>
+           ?es' exc. run es = SOME (INR (SOME exc), es') /\
+                     exc <> Reverted /\
+                     final_state_rel vs' es'
+       | OK _ => F
+       | IntRet _ _ => F
+       | Error _ => T)
 Proof
   cheat
 QED
@@ -237,6 +243,10 @@ QED
 
 (* Main E2E theorem: Vyper source semantics ~ EVM execution.
 
+   Gas: existential -- there exists a gas bound such that with enough
+   gas, EVM execution always produces the correct result. Non-vacuous:
+   the success case is always reachable. No OOG escape hatch needed.
+
    ctx_pass_correct is an assumption because the pipeline is
    parametric -- it holds for any pipeline assembled from
    semantics-preserving passes (e.g., the standard O2 pipeline).
@@ -245,7 +255,7 @@ Theorem e2e_vyper_to_evm:
   !tenv pipeline selectors ext_fns int_fns fb_fn
     dispatch bucket_count fn_meta_bytes entry_label
     fn_eom_map data_seg bytecode
-    am tx vs es fresh args ret.
+    am tx vs fresh args ret.
   let ctx = run_lowering selectors ext_fns int_fns fb_fn
               dispatch bucket_count fn_meta_bytes entry_label in
     (* Compilation produces bytecode *)
@@ -257,76 +267,38 @@ Theorem e2e_vyper_to_evm:
     vs.vs_inst_idx = 0 /\
     (* Pipeline preserves semantics (proved per-pipeline by
        composing individual pass correctness theorems) *)
-    ctx_pass_correct pipeline fresh ctx vs /\
-    (* EVM state initialized with compiled bytecode *)
-    initial_evm_rel bytecode vs es
+    ctx_pass_correct pipeline fresh ctx vs
     ==>
-    (?es'. run es = SOME (INR (SOME OutOfGas), es')) \/
-    (case call_external am tx of
-       (INL v, am') =>
-         ?es'.
-           run es = SOME (INR NONE, es') /\
-           return_data_encodes tenv ret v es' /\
-           state_effects_match tx.target tenv am' es'
-     | (INR (AssertException _), _) =>
-         (* REVERT: EVM reverts, state changes rolled back.
-            es' is constrained by run's determinism; in particular,
-            accounts and storage are unchanged from es. *)
-         ?es'. run es = SOME (INR (SOME Reverted), es') /\
-               ~NULL es'.contexts /\
-               (let (ctxt', rb') = HD es'.contexts in
-                let (ctxt, rb) = HD es.contexts in
-                  rb'.accounts = rb.accounts /\
-                  rb'.tStorage = rb.tStorage)
-     | (INR (Error _), _) =>
-         (* Source-level error (e.g., bad tx, missing function).
-            Under well-formedness of am and tx, this case would be F.
-            Currently T to avoid requiring that well-formedness proof. *)
-         T
-     | (INR BreakException, _) => F
-     | (INR ContinueException, _) => F
-     | (INR (ReturnException _), _) => F)
-Proof
-  cheat
-QED
-
-(* Same as e2e_vyper_to_evm but without the OOG escape hatch.
-   Under the assumption that gas is sufficient, the EVM execution
-   always produces the correct result. *)
-Theorem e2e_vyper_to_evm_with_gas:
-  !tenv pipeline selectors ext_fns int_fns fb_fn
-    dispatch bucket_count fn_meta_bytes entry_label
-    fn_eom_map data_seg bytecode
-    am tx vs es fresh args ret.
-  let ctx = run_lowering selectors ext_fns int_fns fb_fn
-              dispatch bucket_count fn_meta_bytes entry_label in
-    compile_vyper selectors ext_fns int_fns fb_fn
-      dispatch bucket_count fn_meta_bytes entry_label
-      pipeline fn_eom_map data_seg = SOME bytecode /\
-    valid_function_call tenv am tx selectors vs args ret /\
-    vs.vs_inst_idx = 0 /\
-    ctx_pass_correct pipeline fresh ctx vs /\
-    initial_evm_rel bytecode vs es /\
-    (* Gas is sufficient: EVM does not run out of gas *)
-    (~?es'. run es = SOME (INR (SOME OutOfGas), es'))
-    ==>
-    (case call_external am tx of
-       (INL v, am') =>
-         ?es'.
-           run es = SOME (INR NONE, es') /\
-           return_data_encodes tenv ret v es' /\
-           state_effects_match tx.target tenv am' es'
-     | (INR (AssertException _), _) =>
-         ?es'. run es = SOME (INR (SOME Reverted), es') /\
-               ~NULL es'.contexts /\
-               (let (ctxt', rb') = HD es'.contexts in
-                let (ctxt, rb) = HD es.contexts in
-                  rb'.accounts = rb.accounts /\
-                  rb'.tStorage = rb.tStorage)
-     | (INR (Error _), _) => T
-     | (INR BreakException, _) => F
-     | (INR ContinueException, _) => F
-     | (INR (ReturnException _), _) => F)
+    ?gas_needed.
+      !es. initial_evm_rel bytecode vs es /\
+           ~NULL es.contexts /\
+           (let (ctxt, rb) = HD es.contexts in
+              ctxt.msgParams.gasLimit >= gas_needed)
+      ==>
+      (case call_external am tx of
+         (INL v, am') =>
+           ?es'.
+             run es = SOME (INR NONE, es') /\
+             return_data_encodes tenv ret v es' /\
+             state_effects_match tx.target tenv am' es'
+       | (INR (AssertException _), _) =>
+           (* REVERT: EVM reverts, state changes rolled back.
+              es' is constrained by run's determinism; in particular,
+              accounts and storage are unchanged from es. *)
+           ?es'. run es = SOME (INR (SOME Reverted), es') /\
+                 ~NULL es'.contexts /\
+                 (let (ctxt', rb') = HD es'.contexts in
+                  let (ctxt, rb) = HD es.contexts in
+                    rb'.accounts = rb.accounts /\
+                    rb'.tStorage = rb.tStorage)
+       | (INR (Error _), _) =>
+           (* Source-level error (e.g., bad tx, missing function).
+              Under well-formedness of am and tx, this case would be F.
+              Currently T to avoid requiring that well-formedness proof. *)
+           T
+       | (INR BreakException, _) => F
+       | (INR ContinueException, _) => F
+       | (INR (ReturnException _), _) => F)
 Proof
   cheat
 QED

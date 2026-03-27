@@ -117,26 +117,30 @@ QED
 (* ===== Forward Simulation ===== *)
 
 (* Assembly -> EVM bytecode forward simulation.
-   Either execution results correspond, or EVM ran out of gas. *)
+   Either execution results correspond, or EVM hits an exception.
+   With asm_stack_bounded, StackOverflow is ruled out; remaining
+   exceptions include OutOfGas, WriteInStaticContext, OutOfBoundsRead. *)
 Theorem asm_bytecode_sim:
-  ∀n prog label_offsets offset_to_pc as es.
-    asm_wf prog ∧
-    label_offsets = SND (compute_label_offsets prog) ∧
-    offset_to_pc = build_offset_to_pc prog ∧
-    asm_evm_rel prog as es ⇒
-    (∃es'. run es = SOME (INR (SOME OutOfGas), es')) ∨
-    ((∀as'. asm_steps label_offsets offset_to_pc prog n as =
-              AsmHalt as' ⇒
-        ∃es'. run es = SOME (INR NONE, es') ∧
-              asm_evm_rel prog as' es') ∧
-     (∀as'. asm_steps label_offsets offset_to_pc prog n as =
-              AsmRevert as' ⇒
-        ∃es'. run es = SOME (INR (SOME Reverted), es') ∧
-              asm_evm_rel prog as' es') ∧
-     (∀as'. asm_steps label_offsets offset_to_pc prog n as =
-              AsmFault as' ⇒
-        ∃es' exc. run es = SOME (INR (SOME exc), es') ∧
-                  exc ≠ Reverted ∧
+  !n prog label_offsets offset_to_pc as es.
+    asm_wf prog /\
+    asm_stack_bounded label_offsets offset_to_pc prog (LENGTH as.as_stack) /\
+    label_offsets = SND (compute_label_offsets prog) /\
+    offset_to_pc = build_offset_to_pc prog /\
+    asm_evm_rel prog as es ==>
+    (?es' exc. run es = SOME (INR (SOME exc), es') /\
+               exc <> StackOverflow) \/
+    ((!as'. asm_steps label_offsets offset_to_pc prog n as =
+              AsmHalt as' ==>
+        ?es'. run es = SOME (INR NONE, es') /\
+              asm_evm_rel prog as' es') /\
+     (!as'. asm_steps label_offsets offset_to_pc prog n as =
+              AsmRevert as' ==>
+        ?es'. run es = SOME (INR (SOME Reverted), es') /\
+              asm_evm_rel prog as' es') /\
+     (!as'. asm_steps label_offsets offset_to_pc prog n as =
+              AsmFault as' ==>
+        ?es' exc. run es = SOME (INR (SOME exc), es') /\
+                  exc <> Reverted /\
                   asm_evm_rel prog as' es'))
 Proof
   cheat

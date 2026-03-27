@@ -239,6 +239,26 @@ End
      INR (SOME Reverted) = revert
      INR (SOME exc)    = exceptional halt (OOG, invalid, etc.)
    INL never appears in run output (OWHILE exits on INR). *)
+(* ===== Stack Boundedness ===== *)
+
+(* The generated asm program never exceeds the EVM stack limit (1024).
+   Stated operationally: for any reachable AsmOK state, the stack has
+   fewer than stack_limit elements.
+
+   NOTE: If this fails, the correct fix is to spill excess stack values
+   to memory (extending the spiller). Currently the compiler has no
+   stack-depth-aware spilling — it only spills for DUP/SWAP range (16).
+   Adding depth-aware spilling is an algorithmic change to the codegen. *)
+Definition asm_stack_bounded_def:
+  asm_stack_bounded lo otp prog init_depth ⇔
+    ∀n as as'.
+      LENGTH as.as_stack = init_depth ∧
+      asm_steps lo otp prog n as = AsmOK as' ⇒
+      LENGTH as'.as_stack < vfmConstants$stack_limit
+End
+
+(* ===== Asm ↔ EVM Result Correspondence ===== *)
+
 Definition asm_evm_result_rel_def:
   asm_evm_result_rel prog ar er ⇔
     case (ar, er) of
