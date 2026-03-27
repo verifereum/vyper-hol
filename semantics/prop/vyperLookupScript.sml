@@ -1,7 +1,7 @@
 Theory vyperLookup
 Ancestors
-  vyperMisc vyperContext vyperState vyperStorage vyperInterpreter vyperValue vyperValueOperation
-  vyperTyping vyperEncodeDecode
+  vyperMisc vyperContext vyperState vyperStorage vyperInterpreter vyperValue
+  vyperValueOperation vyperTyping vyperEncodeDecode
 Libs
   wordsLib
 
@@ -27,17 +27,6 @@ End
 
 Definition tl_scopes_def:
   tl_scopes st = st with scopes := TL st.scopes
-End
-
-Definition lookup_immutable_def:
-  lookup_immutable cx (st:evaluation_state) mid n =
-  case ALOOKUP st.immutables cx.txn.target of
-  | SOME imms => FLOOKUP (get_source_immutables mid imms) (string_to_num n)
-  | NONE => NONE
-End
-
-Definition lookup_bare_global_name_def:
-  lookup_bare_global_name cx st n = lookup_immutable cx st (current_module cx) n
 End
 
 (* For convenience, we define the case st.scopes = [] in such a way
@@ -714,15 +703,6 @@ Proof
    simp[lookup_after_update]
 QED
 
-Theorem immutables_preserved_after_update:
-  ∀st n v. (update_name st n v).immutables = st.immutables
-Proof
-  rw[update_name_def, LET_THM] >>
-  Cases_on `find_containing_scope (string_to_num n) st.scopes` >-
-   (Cases_on `st.scopes` >> simp[evaluation_state_accfupds]) >>
-  PairCases_on `x` >> simp[evaluation_state_accfupds]
-QED
-
 Theorem scopes_nonempty_after_update:
   ∀st n v. (update_name st n v).scopes ≠ []
 Proof
@@ -730,20 +710,6 @@ Proof
   Cases_on `find_containing_scope (string_to_num n) st.scopes` >-
    (Cases_on `st.scopes` >> gvs[evaluation_state_accfupds]) >>
   PairCases_on `x` >> simp[evaluation_state_accfupds]
-QED
-
-Theorem lookup_immutable_after_set_immutable:
-  ∀cx n tv v st st'.
-    set_immutable cx (current_module cx) (string_to_num n) tv v st = (INL (), st') ⇒
-    lookup_immutable cx st' (current_module cx) n = SOME (tv, v)
-Proof
-  rw[set_immutable_def, lookup_immutable_def,
-     bind_def, LET_THM, get_address_immutables_def,
-     set_address_immutables_def, lift_option_def] >>
-  Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[return_def, raise_def] >>
-  simp[get_source_immutables_def, set_source_immutables_def,
-       alistTheory.ALOOKUP_ADELKEY,
-       finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 (* ===== lookup_in_current_scope to lookup_name_typed ===== *)
@@ -973,20 +939,6 @@ Proof
   rpt (simp[Once find_containing_scope_def] >>
        Cases_on `find_containing_scope (string_to_num n) t` >> gvs[] >>
        TRY (PairCases_on `x'` >> gvs[]))
-QED
-
-Theorem lookup_immutable_tl_scopes:
-  ∀cx st mid n. lookup_immutable cx (tl_scopes st) mid n = lookup_immutable cx st mid n
-Proof
-  rw[lookup_immutable_def, tl_scopes_def]
-QED
-
-Theorem lookup_immutable_preserved_after_update:
-  ∀cx st n v mid k.
-    lookup_immutable cx (update_name st n v) mid k =
-    lookup_immutable cx st mid k
-Proof
-  rw[lookup_immutable_def, immutables_preserved_after_update]
 QED
 
 (* ===== update_name frame: other variables preserved ===== *)

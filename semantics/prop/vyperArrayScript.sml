@@ -1,7 +1,7 @@
 Theory vyperArray
 
 Ancestors
-  vyperValueOperation vyperState vyperInterpreter vyperLookupStorageScopes
+  vyperValue vyperValueOperation vyperState vyperInterpreter vyperLookupStorageScopes
 
 Libs
   BasicProvers
@@ -446,4 +446,25 @@ Proof
     Cases_on `type_to_int_bound ty` >> fs[] >>
     Cases_on `evaluate_binop x' NoneTV bop x v` >> fs[]
   end
+QED
+
+(* ============================================================
+   make_array_value properties — abstract characterization
+
+   These lemmas let callers reason about make_array_value results
+   (mutability, length) without expanding into the sparse SArrayV
+   representation, preventing unwanted interaction with
+   array_set_sarray / insert_sarray_def.
+   ============================================================ *)
+
+Theorem make_array_value_is_mutable:
+  ∀t n vs. array_is_mutable (make_array_value t (Fixed n) vs)
+Proof
+  simp[make_array_value_def]
+QED
+
+Theorem make_array_value_length:
+  ∀t n vs. array_length (ArrayTV t (Fixed n)) (make_array_value t (Fixed n) vs) = n
+Proof
+  simp[make_array_value_def]
 QED
