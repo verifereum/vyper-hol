@@ -98,37 +98,39 @@ Definition inst_wf_def:
     | CALLDATALOAD => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
     | EXTCODESIZE => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
     | EXTCODEHASH => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
-    (* ---- exec_write2: 2 operands ---- *)
-    | MSTORE => LENGTH inst.inst_operands = 2
-    | SSTORE => LENGTH inst.inst_operands = 2
-    | TSTORE => LENGTH inst.inst_operands = 2
-    | ISTORE => LENGTH inst.inst_operands = 2
-    (* ---- 3 operands, no output constraint ---- *)
-    | MCOPY => LENGTH inst.inst_operands = 3
-    | CALLDATACOPY => LENGTH inst.inst_operands = 3
-    | RETURNDATACOPY => LENGTH inst.inst_operands = 3
-    | DLOADBYTES => LENGTH inst.inst_operands = 3
-    | CODECOPY => LENGTH inst.inst_operands = 3
-    (* ---- 4 operands ---- *)
-    | EXTCODECOPY => LENGTH inst.inst_operands = 4
+    (* ---- exec_write2: 2 operands, no output ---- *)
+    | MSTORE => LENGTH inst.inst_operands = 2 /\ inst.inst_outputs = []
+    | SSTORE => LENGTH inst.inst_operands = 2 /\ inst.inst_outputs = []
+    | TSTORE => LENGTH inst.inst_operands = 2 /\ inst.inst_outputs = []
+    | ISTORE => LENGTH inst.inst_operands = 2 /\ inst.inst_outputs = []
+    (* ---- copy/bulk ops: no output ---- *)
+    | MCOPY => LENGTH inst.inst_operands = 3 /\ inst.inst_outputs = []
+    | CALLDATACOPY => LENGTH inst.inst_operands = 3 /\ inst.inst_outputs = []
+    | RETURNDATACOPY => LENGTH inst.inst_operands = 3 /\ inst.inst_outputs = []
+    | DLOADBYTES => LENGTH inst.inst_operands = 3 /\ inst.inst_outputs = []
+    | CODECOPY => LENGTH inst.inst_operands = 3 /\ inst.inst_outputs = []
+    (* ---- 4 operands, no output ---- *)
+    | EXTCODECOPY => LENGTH inst.inst_operands = 4 /\ inst.inst_outputs = []
     (* ---- SHA3: 2 operands, 1 output ---- *)
     | SHA3 => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
     (* ---- Control flow ---- *)
-    | JMP => ∃lbl. inst.inst_operands = [Label lbl]
-    | JNZ => ∃c l1 l2. inst.inst_operands = [c; Label l1; Label l2]
+    | JMP => ∃lbl. inst.inst_operands = [Label lbl] /\ inst.inst_outputs = []
+    | JNZ => ∃c l1 l2. inst.inst_operands = [c; Label l1; Label l2] /\
+                        inst.inst_outputs = []
     | DJMP => ∃sel label_ops.
                inst.inst_operands = sel :: label_ops ∧
-               EVERY (λop. IS_SOME (get_label op)) label_ops
-    | RET => T
-    | RETURN => LENGTH inst.inst_operands = 2
-    | REVERT => LENGTH inst.inst_operands = 2
-    | STOP => T
-    | SINK => T
+               EVERY (λop. IS_SOME (get_label op)) label_ops /\
+               inst.inst_outputs = []
+    | RET => inst.inst_outputs = []
+    | RETURN => LENGTH inst.inst_operands = 2 /\ inst.inst_outputs = []
+    | REVERT => LENGTH inst.inst_operands = 2 /\ inst.inst_outputs = []
+    | STOP => inst.inst_outputs = []
+    | SINK => inst.inst_outputs = []
     (* ---- SSA ---- *)
     | PHI => LENGTH inst.inst_outputs = 1 ∧
              phi_well_formed inst.inst_operands
     | ASSIGN => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
-    | NOP => T
+    | NOP => inst.inst_outputs = []
     | PARAM => ∃idx. inst.inst_operands = [Lit idx] ∧
                      LENGTH inst.inst_outputs = 1
     (* ---- Allocation ---- *)
@@ -144,13 +146,14 @@ Definition inst_wf_def:
     | OFFSET => ∃op lbl. inst.inst_operands = [op; Label lbl] ∧
                          LENGTH inst.inst_outputs = 1
     | LOG => ∃tc rest. inst.inst_operands = Lit tc :: rest ∧
-                       LENGTH rest = w2n tc + 2
-    | SELFDESTRUCT => LENGTH inst.inst_operands = 1
-    | INVALID => T
+                       LENGTH rest = w2n tc + 2 /\ inst.inst_outputs = []
+    | SELFDESTRUCT => LENGTH inst.inst_operands = 1 /\ inst.inst_outputs = []
+    | INVALID => inst.inst_outputs = []
     (* ---- Assertions ---- *)
-    | ASSERT => LENGTH inst.inst_operands = 1
-    | ASSERT_UNREACHABLE => LENGTH inst.inst_operands = 1
-    (* ---- INVOKE: Label + args ---- *)
+    | ASSERT => LENGTH inst.inst_operands = 1 /\ inst.inst_outputs = []
+    | ASSERT_UNREACHABLE => LENGTH inst.inst_operands = 1 /\ inst.inst_outputs = []
+    (* ---- INVOKE: Label + args, outputs unconstrained (matches callee return
+       arity which can be 0, 1, or more - see check_venom._collect_ret_arities) ---- *)
     | INVOKE => ∃lbl args. inst.inst_operands = Label lbl :: args
 End
 
