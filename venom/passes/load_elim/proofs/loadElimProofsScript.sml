@@ -36,7 +36,7 @@ Theorem load_elim_function_correct_proof:
     (?e. run_function fuel ctx fn s = Error e) \/
     lift_result (state_equiv fresh) (execution_equiv fresh)
       (run_function fuel ctx fn s)
-      (run_function fuel ctx (load_elim_function ir_ctx fn) s)
+      (run_function fuel ctx (load_elim_function fn) s)
 Proof
   cheat
 QED

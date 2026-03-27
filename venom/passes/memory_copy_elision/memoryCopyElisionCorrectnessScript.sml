@@ -15,7 +15,7 @@ Theorem copy_elision_function_correct:
     (?e. run_function fuel ctx fn s = Error e) \/
     lift_result (state_equiv {}) (execution_equiv {})
       (run_function fuel ctx fn s)
-      (run_function fuel ctx (copy_elision_function ctx fn) s)
+      (run_function fuel ctx (copy_elision_function fn) s)
 Proof
   ACCEPT_TAC copy_elision_function_correct_proof
 QED
@@ -23,13 +23,13 @@ QED
 (* ===== Obligations ===== *)
 
 Theorem copy_elision_preserves_ssa_form:
-  ∀ctx fn. ssa_form fn ⇒ ssa_form (copy_elision_function ctx fn)
+  ∀fn. ssa_form fn ⇒ ssa_form (copy_elision_function fn)
 Proof
   cheat
 QED
 
 Theorem copy_elision_preserves_wf_function:
-  ∀ctx fn. wf_function fn ⇒ wf_function (copy_elision_function ctx fn)
+  ∀fn. wf_function fn ⇒ wf_function (copy_elision_function fn)
 Proof
   cheat
 QED
