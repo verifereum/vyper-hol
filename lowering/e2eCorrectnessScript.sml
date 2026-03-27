@@ -17,7 +17,7 @@
 
 Theory e2eCorrectness
 Ancestors
-  vyperLoweringCorrect
+  vyperLoweringCorrect vfmExecution
   venomPipelineCorrect
   passSimulationDefs
   codegenCorrectness
@@ -108,7 +108,6 @@ Theorem e2e_venom_to_evm:
     ctx_wf ctx /\
     codegen ctx fn_eom_map data_seg = SOME bytecode /\
     initial_ctx_rel ctx vs es /\
-    sufficient_gas es /\
     (!fn inst vs1 vs2 fuel'.
        MEM fn ctx.ctx_functions /\
        step_inst fuel' ctx inst vs1 = OK vs2 ==>
@@ -122,20 +121,21 @@ Theorem e2e_venom_to_evm:
          ctxt.msgParams.parsed = parse_code 0 FEMPTY bytecode
      | [] => F)
     ==>
-    case run_context fuel ctx vs of
-      Halt vs' =>
-        ?es'. run es = SOME (INR NONE, es') /\
-              final_state_rel vs' es'
-    | Abort Revert_abort vs' =>
-        ?es'. run es = SOME (INR (SOME Reverted), es') /\
-              final_state_rel vs' es'
-    | Abort ExHalt_abort vs' =>
-        ?es' exc. run es = SOME (INR (SOME exc), es') /\
-                  exc <> Reverted /\
-                  final_state_rel vs' es'
-    | OK _ => F
-    | IntRet _ _ => F
-    | Error _ => T
+    (?es'. run es = SOME (INR (SOME OutOfGas), es')) \/
+    (case run_context fuel ctx vs of
+       Halt vs' =>
+         ?es'. run es = SOME (INR NONE, es') /\
+               final_state_rel vs' es'
+     | Abort Revert_abort vs' =>
+         ?es'. run es = SOME (INR (SOME Reverted), es') /\
+               final_state_rel vs' es'
+     | Abort ExHalt_abort vs' =>
+         ?es' exc. run es = SOME (INR (SOME exc), es') /\
+                   exc <> Reverted /\
+                   final_state_rel vs' es'
+     | OK _ => F
+     | IntRet _ _ => F
+     | Error _ => T)
 Proof
   metis_tac[codegen_correct]
 QED
@@ -209,25 +209,25 @@ Theorem e2e_vyper_to_evm:
     ctx_pass_correct pipeline fresh ctx vs /\
     (* EVM state initialized with compiled bytecode *)
     initial_ctx_rel ctx' vs es /\
-    sufficient_gas es /\
     (case es.contexts of
        (ctxt, rb) :: _ =>
          ctxt.msgParams.code = bytecode /\
          ctxt.msgParams.parsed = parse_code 0 FEMPTY bytecode
      | [] => F)
     ==>
-    case call_external am tx of
-      (INL v, am') =>
-        ?es'.
-          run es = SOME (INR NONE, es') /\
-          return_data_encodes tenv ret v es' /\
-          state_effects_match tx.target tenv am' es'
-    | (INR (AssertException _), _) =>
-        ?es'. run es = SOME (INR (SOME Reverted), es')
-    | (INR (Error _), _) => T
-    | (INR BreakException, _) => F
-    | (INR ContinueException, _) => F
-    | (INR (ReturnException _), _) => F
+    (?es'. run es = SOME (INR (SOME OutOfGas), es')) \/
+    (case call_external am tx of
+       (INL v, am') =>
+         ?es'.
+           run es = SOME (INR NONE, es') /\
+           return_data_encodes tenv ret v es' /\
+           state_effects_match tx.target tenv am' es'
+     | (INR (AssertException _), _) =>
+         ?es'. run es = SOME (INR (SOME Reverted), es')
+     | (INR (Error _), _) => T
+     | (INR BreakException, _) => F
+     | (INR ContinueException, _) => F
+     | (INR (ReturnException _), _) => F)
 Proof
   cheat
 QED
