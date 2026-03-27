@@ -349,13 +349,13 @@ QED
    FIND Lemmas
    ========================================================================== *)
 
-Triviality FIND_MEM:
+Theorem FIND_MEM:
   !P l x. FIND P l = SOME x ==> MEM x l
 Proof
   Induct_on `l` >> simp[FIND_thm] >> rw[] >> metis_tac[]
 QED
 
-Triviality FIND_P:
+Theorem FIND_P:
   !P l x. FIND P l = SOME x ==> P x
 Proof
   Induct_on `l` >> simp[FIND_thm] >> rw[] >> metis_tac[]
@@ -376,6 +376,14 @@ Theorem lookup_block_MEM:
     lookup_block lbl bbs = SOME bb ==> MEM bb bbs
 Proof
   rw[lookup_block_def] >> drule FIND_MEM >> simp[]
+QED
+
+(* lookup_block returns a block whose label matches the query *)
+Theorem lookup_block_label:
+  !lbl bbs bb.
+    lookup_block lbl bbs = SOME bb ==> bb.bb_label = lbl
+Proof
+  rw[lookup_block_def] >> drule FIND_P >> simp[]
 QED
 
 Theorem run_block_invoke_cases:

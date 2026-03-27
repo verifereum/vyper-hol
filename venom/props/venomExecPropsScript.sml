@@ -134,11 +134,30 @@ QED
    Lookup Helpers
    ========================================================================== *)
 
+Theorem FIND_MEM:
+  !P l x. FIND P l = SOME x ==> MEM x l
+Proof
+  ACCEPT_TAC venomExecProofsTheory.FIND_MEM
+QED
+
+Theorem FIND_P:
+  !P l x. FIND P l = SOME x ==> P x
+Proof
+  ACCEPT_TAC venomExecProofsTheory.FIND_P
+QED
+
 Theorem lookup_block_MEM:
   !lbl bbs bb.
     lookup_block lbl bbs = SOME bb ==> MEM bb bbs
 Proof
   ACCEPT_TAC venomExecProofsTheory.lookup_block_MEM
+QED
+
+Theorem lookup_block_label:
+  !lbl bbs bb.
+    lookup_block lbl bbs = SOME bb ==> bb.bb_label = lbl
+Proof
+  ACCEPT_TAC venomExecProofsTheory.lookup_block_label
 QED
 
 Theorem block_step_prefix_same:
