@@ -106,8 +106,7 @@ End
      The last PARAM gets a Label operand (return PC). Python assigns it
      because labels are addresses at runtime. Our eval_operand returns
      NONE for Labels — the correctness proof must show this assign is
-     dead code (output unused after RET → JMP), or eval_operand must
-     be extended to resolve Labels via vs_label_offsets.
+     dead code (output unused after RET → JMP).
    RET → assign return values to INVOKE outputs, then JMP to return block.
    Others → unchanged. *)
 Definition rewrite_inline_inst_def:
