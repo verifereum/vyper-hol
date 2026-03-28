@@ -13,6 +13,8 @@
  *   write_hashmap_scopes, write_hashmap_immutables, write_hashmap_logs
  *   update_hashmap_scopes, update_hashmap_immutables, update_hashmap_logs
  *   lookup_name_write_hashmap, lookup_name_typed_write_hashmap, var_in_scope_write_hashmap
+ *   lookup_name_tl_scopes_write_hashmap, var_in_scope_tl_scopes_write_hashmap
+ *   scopes_nonempty_tl_scopes_write_hashmap
  *   lookup_name_update_hashmap, lookup_name_typed_update_hashmap, var_in_scope_update_hashmap
  *   read_hashmap_scopes, lookup_hashmap_scopes
  *   lookup_hashmap_update_name, lookup_hashmap_declare_name
@@ -80,6 +82,33 @@ Theorem var_in_scope_write_hashmap:
     var_in_scope st m
 Proof
   simp[var_in_scope_def, lookup_name_write_hashmap]
+QED
+
+(* tl_scopes composed with write_hashmap — scope operations see through
+   the write because write_hashmap preserves scopes. *)
+
+Theorem lookup_name_tl_scopes_write_hashmap:
+  ∀cx st href kv v n.
+    lookup_name (tl_scopes (write_hashmap cx st href kv v)) n =
+    lookup_name (tl_scopes st) n
+Proof
+  simp[lookup_name_def, tl_scopes_def, write_hashmap_scopes]
+QED
+
+Theorem var_in_scope_tl_scopes_write_hashmap:
+  ∀cx st href kv v n.
+    var_in_scope (tl_scopes (write_hashmap cx st href kv v)) n ⇔
+    var_in_scope (tl_scopes st) n
+Proof
+  simp[var_in_scope_def, lookup_name_def, tl_scopes_def, write_hashmap_scopes]
+QED
+
+Theorem scopes_nonempty_tl_scopes_write_hashmap:
+  ∀cx st href kv v.
+    (tl_scopes (write_hashmap cx st href kv v)).scopes ≠ [] ⇔
+    (tl_scopes st).scopes ≠ []
+Proof
+  simp[tl_scopes_def, write_hashmap_scopes]
 QED
 
 (* ===== update_hashmap state field preservation ===== *)
@@ -207,6 +236,30 @@ Proof
   \\ Cases_on `vt1` \\ Cases_on `vt2`
   \\ simp[write_hashmap_def, read_hashmap_def]
   \\ rpt (CASE_TAC \\ simp[get_storage_after_set_other])
+QED
+
+(* Same-backend, different-ref independence: writing to one HashMapRef
+   does not affect reading from a different HashMapRef on the same backend,
+   provided their storage slots are disjoint. *)
+Theorem read_hashmap_after_write_other_ref:
+  ∀cx st b bslot1 bslot2 kt1 kt2 t1 t2 kv1 kv2 v tv1 tv2.
+    evaluate_type (get_tenv cx) t1 = SOME tv1 ∧
+    evaluate_type (get_tenv cx) t2 = SOME tv2 ∧
+    value_has_type tv1 v ∧
+    hashmap_var_slots_disjoint bslot1 kt1 tv1 kv1
+      (w2n (hashmap_slot_for bslot2 kt2 kv2)) tv2 ⇒
+    read_hashmap cx
+      (write_hashmap cx st (HashMapRef b bslot1 kt1 (Type t1)) kv1 v)
+      (HashMapRef b bslot2 kt2 (Type t2)) kv2 =
+    read_hashmap cx st (HashMapRef b bslot2 kt2 (Type t2)) kv2
+Proof
+  rpt gen_tac \\ strip_tac
+  \\ ONCE_REWRITE_TAC [write_hashmap_def] \\ simp[]
+  \\ CASE_TAC \\ simp[]
+  \\ ONCE_REWRITE_TAC [read_hashmap_def] \\ simp[get_storage_after_set]
+  \\ REWRITE_TAC [vyperHashMapStorageTheory.hashmap_read_def]
+  \\ drule_all vyperHashMapStorageTheory.decode_value_after_hashmap_write
+  \\ simp[]
 QED
 
 (* ===== lookup_toplevel_name preservation under write_hashmap ===== *)
