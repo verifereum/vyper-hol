@@ -11,6 +11,7 @@
  *   same_state_to_rel_block_sim_proof - same-state to R-related (triangle combiner)
  *   block_sim_function_pointwise_proof - corollary: valid_state_rel + pointwise block sim
  *   block_sim_function_pointwise_reachable_proof - pointwise + reachability guard
+ *   block_sim_function_rel_proof - relational block sim ==> function sim (no valid_state_rel)
  *   two_state_block_sim_function_proof - two-state block sim, no operand condition
  *   block_sim_function_unconditional_proof - no error disjunct
  *   lift_result_mono_proof       - monotonicity for lift_result
@@ -89,10 +90,13 @@ Proof
 QED
 
 
+
+
 (* Backward compatibility: same-state per-block sim + valid_state_rel →
    R-related per-block sim. Packages the triangle composition for one block.
    Lets existing passes (which prove same-state block sim) use
-   block_sim_function without changing their per-block proofs. *)
+   block_sim_function_rel without changing their per-block proofs. *)
+
 Theorem same_state_to_rel_block_sim_proof:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool) fn bb bt_bb.
@@ -144,7 +148,7 @@ Proof
 QED
 
 (* Per-fn-block sim → function sim via valid_state_rel triangle.
-   Corollary of block_sim_function_proof + same_state_to_rel_block_sim_proof.
+   Corollary of block_sim_function_rel_proof + same_state_to_rel_block_sim_proof.
    Operand condition: fn's blocks don't read variables that disagree under R_ok.
    vs_inst_idx = 0 precondition: required because 1:N expansion (FLAT) changes
    block length; false at arbitrary idx (see counterexampleScript.sml). *)
@@ -212,6 +216,10 @@ Proof
     first_x_assum irule >> metis_tac[]
   )
 QED
+
+(* Alias for backward compatibility *)
+Theorem block_sim_function_rel_proof =
+  block_sim_function_proof
 
 (* Like block_sim_function_proof but R_ok reflexivity is conditional on
    a state predicate P. P must be preserved by block execution when R_ok holds.
@@ -321,7 +329,7 @@ Theorem block_sim_function_pointwise_proof:
                  (run_function fuel ctx (function_map_transform bt fn) s)
 Proof
   rpt gen_tac >> strip_tac >>
-  match_mp_tac block_sim_function_proof >> rpt conj_tac
+  match_mp_tac block_sim_function_rel_proof >> rpt conj_tac
   >- (irule vsr_R_ok_refl >> metis_tac[])
   >- (rpt strip_tac >> irule vsr_R_ok_R_term >> metis_tac[])
   >- (rpt strip_tac >> imp_res_tac
@@ -1155,7 +1163,7 @@ Theorem fmt_preserves_wf_function_proof:
   !bt fn.
     (!bb. (bt bb).bb_label = bb.bb_label) /\
     (!bb. bb_well_formed bb ==> bb_well_formed (bt bb)) /\
-    (!bb. bb_succs (bt bb) = bb_succs bb) /\
+    (!bb. bb_well_formed bb ==> bb_succs (bt bb) = bb_succs bb) /\
     fn_inst_ids_distinct (function_map_transform bt fn)
     ==>
     wf_function fn ==> wf_function (function_map_transform bt fn)

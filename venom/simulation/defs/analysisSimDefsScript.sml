@@ -73,6 +73,38 @@ Definition transfer_sound_wf_def:
       sound (transfer ctx inst v) s'
 End
 
+(* Block-restricted transfer soundness: like transfer_sound_wf but
+   the instruction is known to be from a specific block's instructions.
+   Strictly weaker than transfer_sound_wf (extra MEM hypothesis).
+   Essential for passes where soundness depends on SSA properties
+   (e.g. load_elim) that only hold for block-local instructions. *)
+Definition transfer_sound_block_def:
+  transfer_sound_block (sound : 'a -> venom_state -> bool)
+                       (transfer : 'ctx -> instruction -> 'a -> 'a) ctx fn <=>
+    !fuel run_ctx v inst s s' bb.
+      MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+      inst_wf inst /\ sound v s /\ step_inst fuel run_ctx inst s = OK s' ==>
+      sound (transfer ctx inst v) s'
+End
+
+(* Block-restricted transfer soundness with state invariant.
+   Like transfer_sound_block but includes state_inv in precondition.
+   Needed when transfer soundness depends on state properties beyond
+   what 'sound' captures (e.g. dfg_assigns_sound for load_elim).
+   Uses state_inv (s with vs_inst_idx := 0) to match the normalized
+   form used internally by analysis_block_sim. *)
+Definition transfer_sound_block_inv_def:
+  transfer_sound_block_inv (sound : 'a -> venom_state -> bool)
+    (state_inv : venom_state -> bool)
+    (transfer : 'ctx -> instruction -> 'a -> 'a) ctx fn <=>
+    !fuel run_ctx v inst s s' bb.
+      MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+      inst_wf inst /\ sound v s /\
+      state_inv (s with vs_inst_idx := 0) /\
+      step_inst fuel run_ctx inst s = OK s' ==>
+      sound (transfer ctx inst v) s'
+End
+
 (* Edge transfer soundness: edge_transfer preserves soundness for states
    that actually flow along edge (src → dst).
    vs_prev_bb = SOME src identifies the edge taken. This is set by

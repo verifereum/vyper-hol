@@ -212,6 +212,35 @@ Proof
   ACCEPT_TAC block_sim_function_pointwise_reachable_proof
 QED
 
+(* Relational block sim -> function sim. No triangle, no valid_state_rel.
+   Per-block sim takes R-related states directly. *)
+Theorem block_sim_function_rel:
+  !R_ok R_term bt fn.
+    (!s. R_ok s s) /\
+    (!s1 s2. R_ok s1 s2 ==> R_term s1 s2) /\
+    (!s1 s2. R_ok s1 s2 ==>
+      s1.vs_current_bb = s2.vs_current_bb /\
+      s1.vs_inst_idx = s2.vs_inst_idx /\
+      s1.vs_halted = s2.vs_halted) /\
+    (!bb. (bt bb).bb_label = bb.bb_label) /\
+    (!bb. MEM bb fn.fn_blocks ==>
+      !fuel ctx s1 s2.
+        R_ok s1 s2 /\ s1.vs_inst_idx = 0 ==>
+        (?e. run_block fuel ctx bb s1 = Error e) \/
+        lift_result R_ok R_term
+          (run_block fuel ctx bb s1)
+          (run_block fuel ctx (bt bb) s2))
+  ==>
+    !fuel ctx s.
+      s.vs_inst_idx = 0 ==>
+      (?e. run_function fuel ctx fn s = Error e) \/
+      lift_result R_ok R_term
+        (run_function fuel ctx fn s)
+        (run_function fuel ctx (function_map_transform bt fn) s)
+Proof
+  ACCEPT_TAC block_sim_function_rel_proof
+QED
+
 (* Two-state variant: per-block sim takes related states, no operand condition *)
 Theorem two_state_block_sim_function:
   !(R_ok : venom_state -> venom_state -> bool)
@@ -468,7 +497,7 @@ Theorem fmt_preserves_wf_function:
   !bt fn.
     (!bb. (bt bb).bb_label = bb.bb_label) /\
     (!bb. bb_well_formed bb ==> bb_well_formed (bt bb)) /\
-    (!bb. bb_succs (bt bb) = bb_succs bb) /\
+    (!bb. bb_well_formed bb ==> bb_succs (bt bb) = bb_succs bb) /\
     fn_inst_ids_distinct (function_map_transform bt fn)
     ==>
     wf_function fn ==> wf_function (function_map_transform bt fn)
@@ -545,6 +574,8 @@ Theorem mapi_transform_fn_insts_trace:
 Proof
   ACCEPT_TAC mapi_transform_fn_insts_trace_proof
 QED
+
+
 
 (* LAST of MAPi equals f applied to last element *)
 Theorem last_mapi:
@@ -723,13 +754,9 @@ Theorem mapi_transform_preserves_wf_bb:
       (\bb. bb with bb_instructions := MAPi (g bb) bb.bb_instructions) fn)
 Proof
   rpt strip_tac >>
-  irule fmt_preserves_wf_function >> simp[] >> rpt conj_tac
-  >- (rpt strip_tac >> irule mapi_transform_bb_succs >> simp[] >>
-      metis_tac[])
-  >- (rpt strip_tac >> irule mapi_transform_bb_well_formed >> simp[] >>
-      metis_tac[])
-  >- (irule mapi_transform_fn_inst_ids_bb >> simp[] >>
-      fs[wf_function_def])
+  irule fmt_preserves_wf_function >> simp[] >>
+  metis_tac[mapi_transform_bb_succs, mapi_transform_bb_well_formed,
+            mapi_transform_fn_inst_ids_bb, wf_function_def]
 QED
 
 (* Combined: MAPi transform preserves wf_function.
@@ -749,14 +776,12 @@ Theorem mapi_transform_preserves_wf:
       (\bb. bb with bb_instructions := MAPi f bb.bb_instructions) fn)
 Proof
   rpt strip_tac >>
-  irule fmt_preserves_wf_function >> simp[] >> rpt conj_tac
-  >- (rpt strip_tac >> irule mapi_transform_bb_succs >> simp[] >>
-      metis_tac[])
-  >- (rpt strip_tac >> irule mapi_transform_bb_well_formed >> simp[] >>
-      metis_tac[])
-  >- (irule mapi_transform_fn_inst_ids >> simp[] >>
-      fs[wf_function_def])
+  irule fmt_preserves_wf_function >> simp[] >>
+  metis_tac[mapi_transform_bb_succs, mapi_transform_bb_well_formed,
+            mapi_transform_fn_inst_ids, wf_function_def]
 QED
+
+
 
 (* General: FLAT (MAPi (\i x. [f i x]) l) = MAPi f l *)
 Theorem flat_mapi_singleton:
@@ -794,6 +819,96 @@ Proof
   simp[analysis_function_transform_def, function_map_transform_def,
        ir_function_component_equality] >>
   simp[MAP_EQ_f, abt_singleton_eq_mapi]
+QED
+
+(* Helper: MAPi preserving inst_id gives same id list *)
+Triviality map_inst_id_mapi_eq[local]:
+  !f g l.
+    (!v inst. (f v inst).inst_id = inst.inst_id) ==>
+    MAP (\i. i.inst_id) (MAPi (\idx inst. f (g idx) inst) l) =
+    MAP (\i. i.inst_id) l
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[MAP_MAPi, combinTheory.o_DEF, MAP_EQ_f]
+QED
+
+(* WF preservation for analysis_function_transform with singleton *)
+Theorem aft_singleton_preserves_wf:
+  !bottom result (f : 'a -> instruction -> instruction) fn.
+    (!v inst. (f v inst).inst_id = inst.inst_id) /\
+    (!v inst. is_terminator inst.inst_opcode ==> f v inst = inst) /\
+    (!v inst. ~is_terminator inst.inst_opcode ==>
+              ~is_terminator (f v inst).inst_opcode) /\
+    (!v inst. inst.inst_opcode = PHI ==> (f v inst).inst_opcode = PHI) /\
+    (!v inst. inst.inst_opcode <> PHI ==> (f v inst).inst_opcode <> PHI) /\
+    wf_function fn ==>
+    wf_function (analysis_function_transform bottom result
+                   (\v inst. [f v inst]) fn)
+Proof
+  rpt strip_tac >>
+  ONCE_REWRITE_TAC[aft_singleton_eq_fmt_mapi] >>
+  irule fmt_preserves_wf_function >> simp[] >>
+  rpt conj_tac
+  >- (rpt strip_tac >> irule mapi_transform_bb_well_formed >> simp[])
+  >- (rpt strip_tac >> irule mapi_transform_bb_succs >> simp[])
+  >> (* fn_inst_ids_distinct *)
+  fs[wf_function_def, fn_inst_ids_distinct_def, function_map_transform_def,
+     MAP_MAP_o, combinTheory.o_DEF, analysis_block_transform_def,
+     map_inst_id_mapi_eq]
+QED
+
+(* fn_inst_wf preservation for analysis_function_transform with singleton *)
+Theorem aft_singleton_preserves_inst_wf:
+  !bottom result (f : 'a -> instruction -> instruction) fn.
+    (!v inst. inst_wf inst ==> inst_wf (f v inst)) /\
+    fn_inst_wf fn ==>
+    fn_inst_wf (analysis_function_transform bottom result
+                  (\v inst. [f v inst]) fn)
+Proof
+  rpt strip_tac >>
+  simp[analysis_function_transform_def,
+       fn_inst_wf_def, function_map_transform_def] >>
+  rpt strip_tac >> gvs[MEM_MAP] >>
+  gvs[analysis_block_transform_def, MEM_FLAT, MEM_MAPi] >>
+  first_x_assum irule >>
+  gvs[fn_inst_wf_def] >>
+  first_x_assum irule >>
+  metis_tac[MEM_EL]
+QED
+
+(* fn_labels preservation for analysis_function_transform *)
+Theorem aft_preserves_labels:
+  !bottom result f fn.
+    fn_labels (analysis_function_transform bottom result f fn) = fn_labels fn
+Proof
+  simp[analysis_function_transform_def, function_map_transform_def,
+       fn_labels_def, MAP_MAP_o, combinTheory.o_DEF,
+       analysis_block_transform_def]
+QED
+
+(* fn_entry_label preservation for analysis_function_transform *)
+Theorem aft_preserves_entry_label:
+  !bottom result f fn.
+    fn_entry_label (analysis_function_transform bottom result f fn) =
+    fn_entry_label fn
+Proof
+  simp[analysis_function_transform_def, function_map_transform_def,
+       fn_entry_label_def, entry_block_def] >>
+  Cases_on `fn.fn_blocks` >>
+  simp[analysis_block_transform_def]
+QED
+
+(* wf_function implies non-terminator prefix — useful across all passes *)
+Theorem wf_non_terminator_prefix:
+  !fn. wf_function fn ==>
+    !bb. MEM bb fn.fn_blocks ==>
+      !i. i < LENGTH bb.bb_instructions - 1 ==>
+        ~is_terminator (EL i bb.bb_instructions).inst_opcode
+Proof
+  rw[wf_function_def] >> rpt strip_tac >>
+  res_tac >> fs[bb_well_formed_def] >>
+  `i = PRE (LENGTH bb.bb_instructions)` by (first_x_assum irule >> simp[]) >>
+  fs[]
 QED
 
 (* ===== block_map_transform (MAP) toolkit ===== *)
