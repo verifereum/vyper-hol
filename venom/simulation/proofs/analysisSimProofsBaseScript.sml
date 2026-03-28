@@ -1807,6 +1807,88 @@ Proof
   \\ gvs[]
 QED
 
+(* Variant of analysis_block_sim_inv with block-restricted transfer soundness.
+   The transfer_sound hypothesis only needs to hold for instructions that are
+   in the block's bb_instructions (and from a block in fn.fn_blocks).
+   Essential for passes where soundness depends on SSA/DFG properties
+   that only hold for block-local instructions. *)
+Theorem analysis_block_sim_inv_block:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool)
+   (sound : 'a -> venom_state -> bool)
+   (state_inv : venom_state -> bool)
+   (f : 'a -> instruction -> instruction list) bb fn
+   (bottom : 'a) (result : 'a df_state) transfer run_ctx.
+    valid_state_rel R_ok R_term /\
+    (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
+    (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
+    (* Per-inst sim with both sound AND state_inv *)
+    (!fuel ctx v inst s.
+       sound v s /\ state_inv (s with vs_inst_idx := 0) /\ inst_wf inst ==>
+       (?e. step_inst fuel ctx inst s = Error e) \/
+       lift_result R_ok R_term (step_inst fuel ctx inst s)
+         (run_insts fuel ctx (f v inst) s)) /\
+    inst_transform_structural f /\
+    EVERY inst_wf bb.bb_instructions /\
+    (!inst x.
+       MEM inst bb.bb_instructions /\ MEM (Var x) inst.inst_operands ==>
+       !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
+    MEM bb fn.fn_blocks /\
+    transfer_sound_block_inv sound state_inv transfer run_ctx fn /\
+    (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
+    (!idx. SUC idx <= LENGTH bb.bb_instructions ==>
+       df_at bottom result bb.bb_label (SUC idx) =
+       transfer run_ctx (EL idx bb.bb_instructions)
+         (df_at bottom result bb.bb_label idx)) /\
+    (* state_inv preserved through well-formed step_inst from this block *)
+    (!fuel ctx inst s s'.
+       MEM inst bb.bb_instructions /\
+       inst_wf inst /\
+       state_inv (s with vs_inst_idx := 0) /\
+       step_inst fuel ctx inst s = OK s' ==>
+       state_inv (s' with vs_inst_idx := 0)) /\
+    (* state_inv preserved through R_ok *)
+    (!s1 s2. R_ok s1 s2 /\ state_inv s1 ==> state_inv s2)
+  ==>
+    !fuel ctx s.
+      s.vs_inst_idx = 0 /\
+      sound (df_at bottom result bb.bb_label 0) s /\
+      state_inv s ==>
+      (?e. run_block fuel ctx bb s = Error e) \/
+      lift_result R_ok R_term
+        (run_block fuel ctx bb s)
+        (run_block fuel ctx
+           (analysis_block_transform bottom result f bb) s)
+Proof
+  rpt strip_tac
+  \\ qabbrev_tac `sound' = \(v:'a) s. sound v s /\
+       state_inv (s with vs_inst_idx := 0)`
+  \\ qspecl_then [`R_ok`, `R_term`, `sound'`, `f`, `bb`, `bottom`,
+       `result`, `transfer`, `run_ctx`] mp_tac analysis_block_sim_wf
+  \\ impl_tac
+  >- (
+    rpt conj_tac \\ TRY (first_assum ACCEPT_TAC)
+    (* analysis_inst_simulates for sound' *)
+    >- (simp[analysis_inst_simulates_def, Abbr `sound'`]
+        \\ rpt strip_tac \\ res_tac)
+    (* block-restricted transfer_sound for sound' *)
+    >- (rpt strip_tac \\ gvs[Abbr `sound'`] \\ conj_tac
+        >- (fs[transfer_sound_block_inv_def] \\ res_tac)
+        \\ res_tac)
+    (* sound' preserved by R_ok *)
+    \\ rpt strip_tac \\ gvs[Abbr `sound'`] \\ conj_tac >- res_tac
+    \\ qspecl_then [`R_ok`, `R_term`, `s1`, `s2`, `0`]
+         mp_tac R_ok_idx_change \\ simp[]
+    \\ disch_tac \\ res_tac)
+  (* Apply result to our goal *)
+  \\ disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac)
+  \\ simp[Abbr `sound'`]
+  \\ disch_then irule
+  \\ `s with vs_inst_idx := 0 = s` by
+       (Cases_on `s` \\ gvs[venom_state_fn_updates])
+  \\ gvs[]
+QED
+
 (* Variant of analysis_block_sim with universal soundness instead of
    transfer_sound + chain. Drops R_ok-monotonicity of sound and
    sound(df_at 0, s) precondition since universal soundness subsumes both. *)
