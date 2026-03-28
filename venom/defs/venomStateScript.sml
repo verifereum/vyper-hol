@@ -98,7 +98,7 @@ Datatype:
     vs_logs : event list;            (* Log/event accumulator *)
     vs_immutables : (num, bytes32) fmap; (* Immutable storage (ILOAD/ISTORE) *)
     vs_data_section : byte list;     (* Read-only data section (DLOAD/DLOADBYTES) *)
-    vs_label_offsets : (string, bytes32) fmap; (* Label→address map (OFFSET) *)
+    vs_labels : (string, bytes32) fmap; (* Label->address map for data offset labels *)
     vs_code : byte list;             (* Own bytecode (CODECOPY/EXTCODECOPY) *)
     vs_params : bytes32 list;        (* Function parameters (read by PARAM) *)
     vs_prev_hashes : bytes32 list;  (* Recent block hashes for EVM BLOCKHASH *)
@@ -158,7 +158,7 @@ Definition init_venom_state_def:
     vs_logs := [];
     vs_immutables := FEMPTY;
     vs_data_section := [];
-    vs_label_offsets := FEMPTY;
+    vs_labels := FEMPTY;
     vs_code := [];
     vs_params := [];
     vs_prev_hashes := [];
@@ -303,11 +303,13 @@ End
    Operand Evaluation
    -------------------------------------------------------------------------- *)
 
-(* Evaluate an operand to a value (NONE if variable not defined) *)
+(* Evaluate an operand to a value.
+   Labels resolve via vs_labels (data offset labels like "code_end").
+   Returns NONE if variable not defined or label not in map. *)
 Definition eval_operand_def:
   eval_operand (Lit v) s = SOME v /\
   eval_operand (Var x) s = lookup_var x s /\
-  eval_operand (Label _) s = NONE
+  eval_operand (Label lbl) s = FLOOKUP s.vs_labels lbl
 End
 
 (* Get label from operand *)
