@@ -208,16 +208,13 @@ End
    SSA and instruction predicates (general IR concepts)
    ========================================================================== *)
 
-(* SSA form: each variable is defined at most once across all instructions. *)
+(* SSA form: each variable is defined at most once across all instructions.
+   Every output variable name appears at most once across all instruction
+   output lists. This is the textbook definition: every variable has exactly
+   one definition point, including multi-output instructions like INVOKE. *)
 Definition ssa_form_def:
   ssa_form fn <=>
-    !v inst1 inst2.
-      MEM inst1 (fn_insts fn) /\
-      MEM inst2 (fn_insts fn) /\
-      inst1.inst_outputs = [v] /\
-      inst2.inst_outputs = [v]
-      ==>
-      inst1 = inst2
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (fn_insts fn)))
 End
 
 (* CFG edge relation on block labels within a function. *)

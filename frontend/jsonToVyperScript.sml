@@ -1105,7 +1105,7 @@ Definition translate_toplevel_def:
       (translate_value_type val_ty))) /\
 
   (translate_toplevel ctx (JTL_EventDef name args) =
-    SOME (EventDecl name (MAP translate_arg args))) /\
+    SOME (EventDecl name (MAP (λ(a,idx). (translate_arg a, idx)) args))) /\
 
   (translate_toplevel ctx (JTL_StructDef name args) =
     SOME (StructDecl name (MAP translate_arg args))) /\

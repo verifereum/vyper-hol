@@ -341,7 +341,7 @@ Datatype:
   | VariableDecl variable_visibility variable_mutability identifier type
   | HashMapDecl variable_visibility bool (* transient? *) identifier type value_type
   | StructDecl identifier (argument list)
-  | EventDecl identifier (argument list)
+  | EventDecl identifier ((argument # bool) list)  (* bool = indexed *)
   | FlagDecl identifier (identifier list)
   | InterfaceDecl identifier (interface_func list)
 End

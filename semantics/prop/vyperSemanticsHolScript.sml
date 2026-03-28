@@ -6,5 +6,5 @@ Ancestors
   vyperEvalPreservesNameTarget
   vyperEvalPureExpr
   vyperLookupStorageScopes
-  vyperUpdateTarget
+  vyperBareGlobalName
   vyperHashMap
