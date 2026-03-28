@@ -47,7 +47,7 @@ Definition valid_state_rel_def:
       s1.vs_logs = s2.vs_logs /\
       s1.vs_immutables = s2.vs_immutables /\
       s1.vs_data_section = s2.vs_data_section /\
-      s1.vs_label_offsets = s2.vs_label_offsets /\
+      s1.vs_labels = s2.vs_labels /\
       s1.vs_code = s2.vs_code /\
       s1.vs_prev_hashes = s2.vs_prev_hashes /\
       s1.vs_allocas = s2.vs_allocas) /\
@@ -65,7 +65,7 @@ Definition valid_state_rel_def:
       s1.vs_logs = s2.vs_logs /\
       s1.vs_immutables = s2.vs_immutables /\
       s1.vs_data_section = s2.vs_data_section /\
-      s1.vs_label_offsets = s2.vs_label_offsets /\
+      s1.vs_labels = s2.vs_labels /\
       s1.vs_code = s2.vs_code /\
       s1.vs_prev_hashes = s2.vs_prev_hashes /\
       s1.vs_allocas = s2.vs_allocas) /\
@@ -107,7 +107,7 @@ Definition valid_state_rel_def:
       t1.vs_logs = t2.vs_logs /\
       t1.vs_immutables = t2.vs_immutables /\
       t1.vs_data_section = t2.vs_data_section /\
-      t1.vs_label_offsets = t2.vs_label_offsets /\
+      t1.vs_labels = t2.vs_labels /\
       t1.vs_code = t2.vs_code /\
       t1.vs_prev_hashes = t2.vs_prev_hashes /\
       t1.vs_allocas = t2.vs_allocas
@@ -127,7 +127,7 @@ Definition valid_state_rel_def:
       t1.vs_logs = t2.vs_logs /\
       t1.vs_immutables = t2.vs_immutables /\
       t1.vs_data_section = t2.vs_data_section /\
-      t1.vs_label_offsets = t2.vs_label_offsets /\
+      t1.vs_labels = t2.vs_labels /\
       t1.vs_code = t2.vs_code /\
       t1.vs_prev_hashes = t2.vs_prev_hashes /\
       t1.vs_allocas = t2.vs_allocas

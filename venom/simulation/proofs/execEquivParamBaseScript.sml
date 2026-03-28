@@ -60,7 +60,7 @@ Theorem vsr_R_ok_fields:
     s1.vs_logs = s2.vs_logs /\
     s1.vs_immutables = s2.vs_immutables /\
     s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_label_offsets = s2.vs_label_offsets /\
+    s1.vs_labels = s2.vs_labels /\
     s1.vs_code = s2.vs_code /\
     s1.vs_prev_hashes = s2.vs_prev_hashes /\
     s1.vs_allocas = s2.vs_allocas
@@ -82,7 +82,7 @@ Theorem vsr_R_term_fields:
     s1.vs_logs = s2.vs_logs /\
     s1.vs_immutables = s2.vs_immutables /\
     s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_label_offsets = s2.vs_label_offsets /\
+    s1.vs_labels = s2.vs_labels /\
     s1.vs_code = s2.vs_code /\
     s1.vs_prev_hashes = s2.vs_prev_hashes /\
     s1.vs_allocas = s2.vs_allocas

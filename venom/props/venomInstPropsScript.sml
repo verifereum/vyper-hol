@@ -215,7 +215,7 @@ Theorem step_mem_write_preserves:!fuel ctx inst s s'.
     s'.vs_block_ctx = s.vs_block_ctx /\
     s'.vs_code = s.vs_code /\
     s'.vs_data_section = s.vs_data_section /\
-    s'.vs_label_offsets = s.vs_label_offsets /\
+    s'.vs_labels = s.vs_labels /\
     s'.vs_params = s.vs_params /\
     s'.vs_prev_hashes = s.vs_prev_hashes /\
     s'.vs_current_bb = s.vs_current_bb /\
@@ -240,7 +240,7 @@ Theorem step_alloca_preserves:!fuel ctx inst s s'.
     s'.vs_block_ctx = s.vs_block_ctx /\
     s'.vs_code = s.vs_code /\
     s'.vs_data_section = s.vs_data_section /\
-    s'.vs_label_offsets = s.vs_label_offsets /\
+    s'.vs_labels = s.vs_labels /\
     s'.vs_params = s.vs_params /\
     s'.vs_prev_hashes = s.vs_prev_hashes /\
     s'.vs_current_bb = s.vs_current_bb /\
@@ -261,7 +261,7 @@ Theorem step_ext_call_preserves:!fuel ctx inst s s'.
     s'.vs_block_ctx = s.vs_block_ctx /\
     s'.vs_code = s.vs_code /\
     s'.vs_data_section = s.vs_data_section /\
-    s'.vs_label_offsets = s.vs_label_offsets /\
+    s'.vs_labels = s.vs_labels /\
     s'.vs_params = s.vs_params /\
     s'.vs_prev_hashes = s.vs_prev_hashes /\
     s'.vs_current_bb = s.vs_current_bb /\
@@ -384,12 +384,12 @@ Proof
   ACCEPT_TAC venomInstProofsTheory.step_preserves_data_section
 QED
 
-Theorem step_preserves_label_offsets:!fuel ctx inst s s'.
+Theorem step_preserves_labels:!fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\
     ~is_terminator inst.inst_opcode ==>
-    s'.vs_label_offsets = s.vs_label_offsets
+    s'.vs_labels = s.vs_labels
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_preserves_label_offsets
+  ACCEPT_TAC venomInstProofsTheory.step_preserves_labels
 QED
 
 Theorem step_preserves_params:!fuel ctx inst s s'.
