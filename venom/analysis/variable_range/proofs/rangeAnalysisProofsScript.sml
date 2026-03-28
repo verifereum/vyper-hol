@@ -1721,7 +1721,8 @@ Proof
   rpt gen_tac >> Cases_on `op` >>
   simp[operand_range_def, eval_operand_def, lookup_var_def] >> rpt strip_tac
   >- (gvs[] >> simp[in_range_constant])
-  >> irule rs_lookup_in_range >> qexists_tac `s.vs_vars` >> fs[]
+  >- (irule rs_lookup_in_range >> qexists_tac `s.vs_vars` >> fs[])
+  >> simp[in_range_top]
 QED
 
 (* operand_lit is sound: if eval_operand gives SOME w and

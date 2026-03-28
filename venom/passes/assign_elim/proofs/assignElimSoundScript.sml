@@ -286,7 +286,8 @@ Proof
     first_x_assum irule >> fs[]) >>
   `FLOOKUP copies x = SOME op` by fs[] >>
   res_tac >>
-  Cases_on `op` >> fs[eval_operand_def, lookup_var_def]
+  Cases_on `op` >> fs[eval_operand_def, lookup_var_def] >>
+  imp_res_tac venomExecPropsTheory.step_inst_preserves_labels_always >> fs[]
 QED
 
 (* Terminator OK preserves vars. JMP/JNZI/DJMP only modify
