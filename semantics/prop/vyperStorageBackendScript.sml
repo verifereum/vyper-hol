@@ -40,19 +40,19 @@ Proof
   rpt gen_tac \\ Cases_on `b` \\ simp[get_storage_def]
 QED
 
-Theorem set_storage_scopes:
+Theorem set_storage_scopes[simp]:
   ∀cx st b s'. (set_storage cx st b s').scopes = st.scopes
 Proof
   rpt gen_tac \\ Cases_on `b` \\ simp[set_storage_def]
 QED
 
-Theorem set_storage_immutables:
+Theorem set_storage_immutables[simp]:
   ∀cx st b s'. (set_storage cx st b s').immutables = st.immutables
 Proof
   rpt gen_tac \\ Cases_on `b` \\ simp[set_storage_def]
 QED
 
-Theorem set_storage_logs:
+Theorem set_storage_logs[simp]:
   ∀cx st b s'. (set_storage cx st b s').logs = st.logs
 Proof
   rpt gen_tac \\ Cases_on `b` \\ simp[set_storage_def]
