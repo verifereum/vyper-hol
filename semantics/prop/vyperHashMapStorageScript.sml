@@ -61,6 +61,27 @@ Definition no_hashmap_collision_def:
       hashmap_slots_disjoint base kt tv kv1 kv2
 End
 
+(* ===== Hashmap-vs-variable slot disjointness ===== *)
+
+(* A hashmap entry at key kv has non-overlapping storage slots with a
+   regular variable at offset var_off.  Analogous to hashmap_slots_disjoint
+   but between a hashmap entry and a sequentially-assigned variable slot. *)
+Definition hashmap_var_slots_disjoint_def:
+  hashmap_var_slots_disjoint bslot kt hm_tv kv var_off var_tv ⇔
+    let hm_off = w2n (hashmap_slot_for bslot kt kv) in
+      hm_off + type_slot_size hm_tv ≤ dimword(:256) ∧
+      var_off + type_slot_size var_tv ≤ dimword(:256) ∧
+      (hm_off + type_slot_size hm_tv ≤ var_off ∨
+       var_off + type_slot_size var_tv ≤ hm_off)
+End
+
+(* All keys produce disjoint slots from a given variable.
+   Analogous to no_hashmap_collision (all-keys variant of hashmap_slots_disjoint). *)
+Definition no_hashmap_var_collision_def:
+  no_hashmap_var_collision bslot kt hm_tv var_off var_tv ⇔
+    ∀kv. hashmap_var_slots_disjoint bslot kt hm_tv kv var_off var_tv
+End
+
 (* ===== Basic Properties ===== *)
 
 Theorem hashmap_slots_disjoint_sym:
@@ -192,6 +213,28 @@ Proof
   rpt strip_tac
   \\ irule hashmap_read_after_write_other
   \\ metis_tac[no_hashmap_collision_imp]
+QED
+
+(* ===== Hashmap write preserves decode at disjoint variable slots ===== *)
+
+Theorem decode_value_after_hashmap_write:
+  ∀storage storage' base kt hm_tv kv v var_off var_tv.
+    hashmap_write storage base kt hm_tv kv v = SOME storage' ∧
+    value_has_type hm_tv v ∧
+    hashmap_var_slots_disjoint base kt hm_tv kv var_off var_tv ⇒
+    decode_value storage' var_off var_tv = decode_value storage var_off var_tv
+Proof
+  rpt gen_tac \\ strip_tac
+  \\ gvs[hashmap_write_def, AllCaseEqs(),
+         hashmap_var_slots_disjoint_def, LET_THM]
+  \\ ONCE_REWRITE_TAC [GSYM wordsTheory.n2w_w2n]
+  \\ irule decode_value_disjoint_writes
+  \\ imp_res_tac (CONJUNCT1 encode_writes_bounded)
+  \\ `w2n (hashmap_slot_for base' kt kv) < dimword(:256)`
+       by simp[wordsTheory.w2n_lt]
+  \\ simp[]
+  \\ qexists_tac `type_slot_size hm_tv`
+  \\ fs[]
 QED
 
 (* ===== compute_hashmap_slot Properties ===== *)
@@ -341,4 +384,23 @@ Proof
   ho_match_mp_tac split_hashmap_subscripts_ind
   \\ rw[split_hashmap_subscripts_def]
   \\ gvs[AllCaseEqs()]
+QED
+
+(* ===== Subscript-to-value list conversion ===== *)
+
+Definition subscripts_to_values_def:
+  subscripts_to_values [] = SOME [] ∧
+  subscripts_to_values (s::ss) =
+    case (subscript_to_value s, subscripts_to_values ss) of
+    | (SOME v, SOME vs) => SOME (v :: vs)
+    | _ => NONE
+End
+
+Theorem subscripts_to_values_length:
+  ∀subs vs.
+    subscripts_to_values subs = SOME vs ⇒ LENGTH subs = LENGTH vs
+Proof
+  Induct >> rw[subscripts_to_values_def] >>
+  gvs[AllCaseEqs()] >>
+  first_x_assum drule >> simp[]
 QED
