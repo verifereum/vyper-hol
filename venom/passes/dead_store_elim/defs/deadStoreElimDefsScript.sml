@@ -277,7 +277,7 @@ Definition dse_equiv_def:
     s1.vs_logs = s2.vs_logs /\
     s1.vs_immutables = s2.vs_immutables /\
     s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_label_offsets = s2.vs_label_offsets /\
+    s1.vs_labels = s2.vs_labels /\
     s1.vs_code = s2.vs_code /\
     s1.vs_params = s2.vs_params /\
     s1.vs_prev_hashes = s2.vs_prev_hashes /\
@@ -296,7 +296,7 @@ Definition dse_all_equiv_def:
     s1.vs_logs = s2.vs_logs /\
     s1.vs_immutables = s2.vs_immutables /\
     s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_label_offsets = s2.vs_label_offsets /\
+    s1.vs_labels = s2.vs_labels /\
     s1.vs_code = s2.vs_code /\
     s1.vs_params = s2.vs_params /\
     s1.vs_prev_hashes = s2.vs_prev_hashes /\

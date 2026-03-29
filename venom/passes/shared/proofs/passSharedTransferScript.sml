@@ -96,7 +96,6 @@ Theorem step_inst_base_ok_transfer:
           eval_operand op s = eval_operand op s') /\
     (inst.inst_opcode = PHI ==> s.vs_prev_bb = s'.vs_prev_bb) /\
     (inst.inst_opcode = PARAM ==> s.vs_params = s'.vs_params) /\
-    (inst.inst_opcode = OFFSET ==> s.vs_label_offsets = s'.vs_label_offsets) /\
     (inst.inst_opcode = RETURNDATACOPY ==>
        s.vs_returndata = s'.vs_returndata) ==>
     ?v'. step_inst_base inst s' = OK v'
@@ -145,11 +144,11 @@ Theorem step_inst_base_output_determined_fields:
           eval_operand op s1 = eval_operand op s2) /\
     (inst.inst_opcode = PHI ==> s1.vs_prev_bb = s2.vs_prev_bb) /\
     (inst.inst_opcode = PARAM ==> s1.vs_params = s2.vs_params) /\
-    (inst.inst_opcode = OFFSET ==> s1.vs_label_offsets = s2.vs_label_offsets) /\
     s1.vs_call_ctx = s2.vs_call_ctx /\
     s1.vs_tx_ctx = s2.vs_tx_ctx /\
     s1.vs_block_ctx = s2.vs_block_ctx /\
     s1.vs_data_section = s2.vs_data_section /\
+    s1.vs_labels = s2.vs_labels /\
     s1.vs_code = s2.vs_code /\
     s1.vs_prev_hashes = s2.vs_prev_hashes /\
     (* Read-field agreements: individual effect conditions (not grouped) *)
@@ -229,11 +228,11 @@ Theorem step_inst_base_effect_free_output_determined_vars:
           eval_operand op s1 = eval_operand op s2) /\
     (inst.inst_opcode = PHI ==> s1.vs_prev_bb = s2.vs_prev_bb) /\
     (inst.inst_opcode = PARAM ==> s1.vs_params = s2.vs_params) /\
-    (inst.inst_opcode = OFFSET ==> s1.vs_label_offsets = s2.vs_label_offsets) /\
     s1.vs_call_ctx = s2.vs_call_ctx /\
     s1.vs_tx_ctx = s2.vs_tx_ctx /\
     s1.vs_block_ctx = s2.vs_block_ctx /\
     s1.vs_data_section = s2.vs_data_section /\
+    s1.vs_labels = s2.vs_labels /\
     s1.vs_code = s2.vs_code /\
     s1.vs_prev_hashes = s2.vs_prev_hashes /\
     (Eff_MEMORY IN read_effects inst.inst_opcode ==>

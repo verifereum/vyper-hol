@@ -486,6 +486,26 @@ Proof
   rw[]
 QED
 
+(* step_inst ALWAYS preserves vs_labels (both terminator and non-terminator) *)
+Theorem step_inst_preserves_labels_always:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ==> s'.vs_labels = s.vs_labels
+Proof
+  rpt strip_tac >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- (
+    `inst.inst_opcode <> INVOKE` by (
+      Cases_on `inst.inst_opcode` >> fs[is_terminator_def]) >>
+    fs[step_inst_non_invoke] >>
+    Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
+    fs[step_inst_base_def, LET_THM] >>
+    rpt (BasicProvers.PURE_FULL_CASE_TAC >>
+         fs[jump_to_def, halt_state_def, revert_state_def,
+            set_returndata_def]) >>
+    rw[])
+  >- metis_tac[step_preserves_labels]
+QED
+
 (* MEM + ALL_DISTINCT labels ==> lookup_block finds the block *)
 Theorem MEM_lookup_block:
   !lbl bbs (bb:basic_block).

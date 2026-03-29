@@ -823,21 +823,12 @@ Definition step_inst_base_def:
             | _ => Error "undefined operand")
         | _ => Error "extcodecopy requires 4 operands")
 
-    (* Label offset computation - resolves label address + operand offset.
+    (* Label offset computation - semantically identical to ADD.
+       Kept as separate opcode for codegen: venom_to_assembly emits PUSH_OFST
+       for OFFSET, letting the assembler resolve the label. At IR level,
+       labels resolve via vs_labels (eval_operand handles Label operands).
        Operand order matches Python builder: offset(operand, label). *)
-    | OFFSET =>
-        (case inst.inst_operands of
-          [offset_op; Label lbl] =>
-            (case eval_operand offset_op s of
-              SOME off =>
-                (case inst.inst_outputs of
-                  [out] =>
-                    (case FLOOKUP s.vs_label_offsets lbl of
-                      SOME lbl_addr => OK (update_var out (lbl_addr + off) s)
-                    | NONE => Error "offset: unknown label")
-                | _ => Error "offset requires single output")
-            | NONE => Error "offset: undefined operand")
-        | _ => Error "offset requires operand and label")
+    | OFFSET => exec_pure2 word_add inst s
 
     (* Logging - variable operand count.
        Semantic order: log topic_count, offset, size, topic_0, ..., topic_{n-1}

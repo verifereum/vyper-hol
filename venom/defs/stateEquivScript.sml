@@ -53,6 +53,10 @@ Ancestors
  *   - vs_accounts  : Account states (including persistent storage)
  *   - vs_returndata: Return value or revert reason
  *   - vs_halted    : Whether execution halted
+ *   - vs_transient : Transient storage (persists across successful subcalls,
+ *                    rolled back on revert, cleared at tx boundary)
+ *   - vs_immutables: Immutable storage (written by ISTORE in constructor,
+ *                    baked into deployed bytecode, read-only at runtime)
  *
  * USE FOR: Proving that two executions have the same external effect,
  * regardless of how they got there.
@@ -63,7 +67,9 @@ Definition observable_equiv_def:
     s1.vs_accounts = s2.vs_accounts /\
     s1.vs_returndata = s2.vs_returndata /\
     s1.vs_halted = s2.vs_halted /\
-    s1.vs_logs = s2.vs_logs
+    s1.vs_logs = s2.vs_logs /\
+    s1.vs_transient = s2.vs_transient /\
+    s1.vs_immutables = s2.vs_immutables
 End
 
 (* ==========================================================================
@@ -93,7 +99,7 @@ Definition execution_equiv_def:
     s1.vs_logs = s2.vs_logs /\
     s1.vs_immutables = s2.vs_immutables /\
     s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_label_offsets = s2.vs_label_offsets /\
+    s1.vs_labels = s2.vs_labels /\
     s1.vs_code = s2.vs_code /\
     s1.vs_params = s2.vs_params /\
     s1.vs_prev_hashes = s2.vs_prev_hashes /\

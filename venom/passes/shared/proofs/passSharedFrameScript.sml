@@ -26,8 +26,8 @@ open venomStateTheory venomInstTheory venomExecSemanticsTheory
 (* spa N = metis_tac using conjunct N of step_inst_preserves_all.
    ~100x faster than metis_tac[step_inst_preserves_all].
    Conjunct map: 1-prev_bb 2-current_bb 3-inst_idx 4-halted
-   5-call_ctx 6-tx_ctx 7-block_ctx 8-data_section 9-label_offsets
-   10-code 11-params 12-prev_hashes 13-memory 14-immutables
+   5-call_ctx 6-tx_ctx 7-block_ctx 8-data_section
+   9-labels 10-code 11-params 12-prev_hashes 13-memory 14-immutables
    15-returndata 16-transient 17-accounts 18-logs *)
 (* fast_conj: solve a conjunction goal where each conjunct is in assumptions.
    Much faster than fs[]/gvs[] when assumption count is high. *)
@@ -39,7 +39,7 @@ fun spa n =
   ORELSE metis_tac[cj n step_inst_preserves_all];
 fun spa_e n extras = metis_tac (cj n step_inst_preserves_all :: extras);
 
-(* spa_assume_a: for unconditional conjuncts 1-12 (group A fields).
+(* spa_assume_a: for unconditional conjuncts 1-12 (group A fields, including labels).
    Single impl_tac since there's only one antecedent. *)
 fun spa_assume_a n inst_q s_q s'_q =
   mp_tac (Q.SPECL [`fuel`, `ctx`, inst_q, s_q, s'_q]
@@ -47,7 +47,7 @@ fun spa_assume_a n inst_q s_q s'_q =
   (impl_tac >- fast_conj) >>
   strip_tac;
 
-(* spa_assume: for conditional conjuncts 13-18 (group B fields).
+(* spa_assume: for conditional conjuncts 13-18 (group B fields, including memory).
    Two impl_tacs: main precondition + field-specific condition. *)
 fun spa_assume n inst_q s_q s'_q =
   mp_tac (Q.SPECL [`fuel`, `ctx`, inst_q, s_q, s'_q]
@@ -138,7 +138,7 @@ Definition commute_equiv_def:
     s1.vs_logs = s2.vs_logs /\
     s1.vs_immutables = s2.vs_immutables /\
     s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_label_offsets = s2.vs_label_offsets /\
+    s1.vs_labels = s2.vs_labels /\
     s1.vs_code = s2.vs_code /\
     s1.vs_params = s2.vs_params /\
     s1.vs_prev_hashes = s2.vs_prev_hashes
@@ -180,10 +180,13 @@ Proof
   Induct >> rw[eval_operands_def] >>
   `eval_operands ops s1 = eval_operands ops s2` by
     (first_x_assum irule >> gvs[] >> metis_tac[]) >>
-  Cases_on `h` >> gvs[eval_operand_def] >>
-  `lookup_var s s1 = lookup_var s s2` by
-    gvs[state_equiv_def, execution_equiv_def] >>
-  gvs[]
+  Cases_on `h` >> gvs[eval_operand_def]
+  >- (`lookup_var s s1 = lookup_var s s2` by
+        gvs[state_equiv_def, execution_equiv_def] >>
+      gvs[])
+  >- (`s1.vs_labels = s2.vs_labels` by
+        gvs[state_equiv_def, execution_equiv_def] >>
+      gvs[])
 QED
 
 (* setup_callee on state_equiv states gives same result *)
@@ -474,7 +477,8 @@ Theorem step_inst_base_abort_input_equiv[local]:
     step_inst_base inst s1 = Abort a s1' /\
     ~is_terminator inst.inst_opcode /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) /\
-    s1.vs_returndata = s2.vs_returndata ==>
+    s1.vs_returndata = s2.vs_returndata /\
+    s1.vs_labels = s2.vs_labels ==>
     ?s2'. step_inst_base inst s2 = Abort a s2'
 Proof
   rpt strip_tac >>
@@ -515,6 +519,8 @@ Proof
       metis_tac[pred_setTheory.IN_DISJOINT] >>
     gvs[inst_defs_def] >>
     irule (GSYM step_preserves_non_output_vars) >> metis_tac[]) >>
+  `v.vs_labels = s.vs_labels` by
+    metis_tac[step_preserves_labels] >>
   imp_res_tac step_inst_base_abort_opcode >> gvs[]
   >- (
     (* ASSERT *)
@@ -599,7 +605,8 @@ QED
 (* Helper: eval_operand agrees when lookup_var agrees on Var operands *)
 Theorem eval_operand_agree[local]:
   !op s s'.
-    (!x. MEM (Var x) [op] ==> lookup_var x s = lookup_var x s') ==>
+    (!x. MEM (Var x) [op] ==> lookup_var x s = lookup_var x s') /\
+    s.vs_labels = s'.vs_labels ==>
     eval_operand op s = eval_operand op s'
 Proof
   Cases >> rw[eval_operand_def]
@@ -608,7 +615,8 @@ QED
 (* eval_operands agrees when all Var operands have same lookup *)
 Theorem eval_operands_agree[local]:
   !ops s s'.
-    (!x. MEM (Var x) ops ==> lookup_var x s = lookup_var x s') ==>
+    (!x. MEM (Var x) ops ==> lookup_var x s = lookup_var x s') /\
+    s.vs_labels = s'.vs_labels ==>
     eval_operands ops s = eval_operands ops s'
 Proof
   Induct >> rw[eval_operands_def] >>
@@ -646,11 +654,9 @@ Theorem step_preserves_transfer_ctx[local]:
     step_inst fuel ctx inst s = OK v /\
     ~is_terminator inst.inst_opcode ==>
     v.vs_prev_bb = s.vs_prev_bb /\
-    v.vs_params = s.vs_params /\
-    v.vs_label_offsets = s.vs_label_offsets
+    v.vs_params = s.vs_params
 Proof
-  metis_tac[step_preserves_control_flow, step_preserves_params,
-            step_preserves_label_offsets]
+  metis_tac[step_preserves_control_flow, step_preserves_params]
 QED
 
 (* Empty write_effects implies not ext_call *)
@@ -709,6 +715,8 @@ Proof
       gvs[inst_defs_def] >>
       metis_tac[pred_setTheory.IN_DISJOINT]) >>
     metis_tac[step_preserves_non_output_vars]) >>
+  `v_b.vs_labels = s.vs_labels` by
+    metis_tac[step_preserves_labels] >>
   `!op. MEM op inst_a.inst_operands ==>
         eval_operand op s = eval_operand op v_b` by (
     rpt strip_tac >>
@@ -721,8 +729,6 @@ Proof
     metis_tac[step_preserves_control_flow] >>
   `v_b.vs_params = s.vs_params` by
     metis_tac[step_preserves_params] >>
-  `v_b.vs_label_offsets = s.vs_label_offsets` by
-    metis_tac[step_preserves_label_offsets] >>
   `inst_a.inst_opcode = RETURNDATACOPY ==>
    s.vs_returndata = v_b.vs_returndata` by (
     strip_tac >> gvs[] >>
@@ -865,7 +871,7 @@ val eq_tac =
    2. strip_tac >> eq_tac: conditional preconditions (PHI, PARAM, OFFSET)
    3. strip_tac >> first_assum CONTR_TAC: antecedent contradicts assumptions *)
 (* derive_field_eq: derive s.FIELD = v.FIELD via step_inst_preserves_all.
-   spa_n: conjunct number (13-18)
+   spa_n: conjunct number (14-18)
    For spa_n=17 (accounts): impl_tac is a conjunction, handle with conj_tac *)
 fun derive_field_eq spa_n other_inst other_s other_s' =
   mp_tac (Q.SPECL [`fuel`, `ctx`, other_inst, other_s, other_s']
@@ -980,21 +986,21 @@ fun odc_tac conj_n inst_q s_q v_q vr_q vcr_q other_inst =
   strip_tac;
 
 
-(* bulk_a: establish group A (1-12) field preservation facts for inst on s→s'.
-   Unconditional — always succeed. Adds 12 assumptions of the form s'.field = s.field.
+(* bulk_a: establish group A (1-11) field preservation facts for inst on s→s'.
+   Unconditional — always succeed. Adds 11 assumptions of the form s'.field = s.field.
    Required by odc_conj_tac to discharge context field preconditions of odf. *)
 fun bulk_a inst_q s_q s'_q =
   EVERY (List.map (fn n => spa_assume_a n inst_q s_q s'_q)
          [1,2,3,4,5,6,7,8,9,10,11,12]);
 
-(* bulk_b: establish group B (13-18) field preservation facts for inst on s→s'.
+(* bulk_b: establish group B (12-17) field preservation facts for inst on s→s'.
    Conditional on Eff_X NOTIN write_effects. TRY each — if the effect IS in write,
    the fact can't be established, and we skip it. *)
 fun bulk_b inst_q s_q s'_q =
   EVERY (List.map (fn n => TRY (spa_assume n inst_q s_q s'_q))
          [13,14,15,16,17,18]);
 
-(* bulk_all: establish all 18 field preservation facts for inst on s→s'. *)
+(* bulk_all: establish all 17 field preservation facts for inst on s→s'. *)
 fun bulk_all inst_q s_q s'_q =
   bulk_a inst_q s_q s'_q >> bulk_b inst_q s_q s'_q;
 
@@ -1232,6 +1238,9 @@ Proof
   (* Convert to step_inst_base *)
   `step_inst_base inst1 s = OK v1` by gvs[step_inst_non_invoke] >>
   `step_inst_base inst2 s = OK v2` by gvs[step_inst_non_invoke] >>
+  (* Labels preserved by step *)
+  `v1.vs_labels = s.vs_labels` by metis_tac[step_preserves_labels] >>
+  `v2.vs_labels = s.vs_labels` by metis_tac[step_preserves_labels] >>
   (* Operand agreement: inst2 on v1 vs s *)
   `!op. MEM op inst2.inst_operands ==>
         eval_operand op s = eval_operand op v1` by (
@@ -1255,9 +1264,6 @@ Proof
     metis_tac[step_preserves_control_flow] >>
   `v1.vs_params = s.vs_params /\ v2.vs_params = s.vs_params` by
     metis_tac[step_preserves_params] >>
-  `v1.vs_label_offsets = s.vs_label_offsets /\
-   v2.vs_label_offsets = s.vs_label_offsets` by
-    metis_tac[step_preserves_label_offsets] >>
   (* Returndata agreement (needed for RETURNDATACOPY) *)
   `inst2.inst_opcode = RETURNDATACOPY ==>
    s.vs_returndata = v1.vs_returndata` by (
