@@ -11,7 +11,7 @@
  * stack plan / plan executor stages.
  *
  * TOP-LEVEL:
- *   codegen — ir_context → data_section list → byte list option
+ *   codegen — venom_context → data_section list → byte list option
  *)
 
 Theory codegen
@@ -23,7 +23,7 @@ Ancestors
    ========================================================================= *)
 
 Definition codegen_def:
-  codegen (ctx : ir_context)
+  codegen (ctx : venom_context)
           (fn_eom_map : (string, num) fmap)
           (data_seg : data_section list) : byte list option =
     case generate_context_plan ctx fn_eom_map of

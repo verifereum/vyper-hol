@@ -326,7 +326,7 @@ End
    Returns map from function name → list of bools (T = readonly). *)
 Definition rma_analyze_def:
   rma_analyze (fn_meta : (string, invoke_fn_meta) fmap)
-              (ctx : ir_context) =
+              (ctx : venom_context) =
     let functions = ctx.ctx_functions in
     let infos = FOLDL (\fm fn.
       fm |+ (fn.fn_name, collect_param_info fn_meta fn))

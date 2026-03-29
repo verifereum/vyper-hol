@@ -162,7 +162,7 @@ End
    -------------------------------------------------------------------------- *)
 
 Datatype:
-  ir_context = <|
+  venom_context = <|
     ctx_functions : ir_function list;
     ctx_entry : string option
   |>

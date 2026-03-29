@@ -1385,6 +1385,7 @@ Datatype:
   ; accounts: evm_accounts
   ; layouts: (address, storage_layout # storage_layout) alist  (* (storage, transient) *)
   ; tStorage: transient_storage
+  ; logs: log list
   |>
 End
 
@@ -1396,6 +1397,7 @@ Definition initial_machine_state_def:
   ; accounts := empty_accounts
   ; layouts := []
   ; tStorage := empty_transient_storage
+  ; logs := []
   |>
 End
 
@@ -1419,6 +1421,7 @@ Definition abstract_machine_from_state_def:
    ; accounts := st.accounts
    ; layouts := layouts
    ; tStorage := st.tStorage
+   ; logs := st.logs
    |> : abstract_machine
 End
 

@@ -114,7 +114,7 @@ Proof
 QED
 
 Triviality run_block_fuel_mono_lem:
-  !n (ctx:ir_context) (bb:basic_block) (st:venom_state) f.
+  !n (ctx:venom_context) (bb:basic_block) (st:venom_state) f.
     n = LENGTH bb.bb_instructions - st.vs_inst_idx ==>
     (!e. run_block f ctx bb st <> Error e) ==>
     (!ctx' fn' s'. terminates (run_function f ctx' fn' s') ==>

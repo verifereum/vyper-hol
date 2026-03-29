@@ -448,7 +448,7 @@ End
 (* ===== Function-level transform ===== *)
 
 Definition copy_elision_function_def:
-  copy_elision_function prog_ctx fn =
+  copy_elision_function fn =
     let cfg = cfg_analyze fn in
     let dfg = dfg_build_function fn in
     let bp = bp_analyze cfg fn in

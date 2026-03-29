@@ -552,7 +552,7 @@ End
    Re-analysis is sound because PHIs/ASSIGNs/NOPs from other rounds
    have no memory effects and don't match the current round's opcodes. *)
 Definition load_elim_function_def:
-  load_elim_function ir_ctx fn =
+  load_elim_function fn =
     let ir_cfg = cfg_analyze fn in
     let bp = bp_analyze ir_cfg fn in
     let mem_aliases = memory_alias_analyze bp fn in

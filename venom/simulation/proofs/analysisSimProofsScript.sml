@@ -2188,7 +2188,7 @@ Theorem fwd_successor_entry_sound:
     MEM s.vs_current_bb cfg.cfg_dfs_pre /\
     s.vs_inst_idx = 0 /\
     sound (df_at bottom result s.vs_current_bb 0) s /\
-    (run_block : num -> ir_context -> basic_block -> venom_state -> exec_result)
+    (run_block : num -> venom_context -> basic_block -> venom_state -> exec_result)
       fuel run_ctx bb s = OK v /\
     (* H1: transfer sound *)
     transfer_sound sound transfer ctx /\
