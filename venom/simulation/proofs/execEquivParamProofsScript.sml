@@ -98,7 +98,6 @@ Proof
     irule vsr_step_inst_data_copy >> simp[] >> metis_tac[],
     irule vsr_step_inst_extcodecopy >> simp[] >> metis_tac[],
     irule vsr_step_inst_copy >> simp[] >> metis_tac[],
-    irule vsr_step_inst_offset >> simp[] >> metis_tac[],
     irule vsr_step_inst_param >> simp[] >> metis_tac[],
     irule vsr_step_inst_ret >> simp[] >> metis_tac[],
     irule vsr_step_inst_log >> simp[] >> metis_tac[],

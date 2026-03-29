@@ -93,7 +93,7 @@ Theorem step_inst_preserves_all:
     s'.vs_tx_ctx = s.vs_tx_ctx /\
     s'.vs_block_ctx = s.vs_block_ctx /\
     s'.vs_data_section = s.vs_data_section /\
-    s'.vs_label_offsets = s.vs_label_offsets /\
+    s'.vs_labels = s.vs_labels /\
     s'.vs_code = s.vs_code /\
     s'.vs_params = s.vs_params /\
     s'.vs_prev_hashes = s.vs_prev_hashes /\
@@ -117,7 +117,7 @@ Proof
   metis_tac[step_preserves_control_flow, step_preserves_halted,
             step_preserves_call_ctx, step_preserves_tx_ctx,
             step_preserves_block_ctx, step_preserves_data_section,
-            step_preserves_label_offsets, step_preserves_code,
+            step_preserves_code, step_preserves_labels,
             step_preserves_params, step_preserves_prev_hashes,
             write_effects_sound_memory, write_effects_sound_immutables,
             write_effects_sound_returndata,

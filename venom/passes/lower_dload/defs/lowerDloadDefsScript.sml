@@ -4,21 +4,26 @@
  * Ports vyper/venom/passes/lower_dload.py to HOL4.
  *
  * Lowers dload and dloadbytes instructions to their EVM equivalents:
- *   dload ptr        → alloca 32; add ptr code_end; codecopy dst add_out 32; mload dst
- *   dloadbytes dst src size → add src code_end; codecopy dst code_ptr size
+ *   dload ptr        -> alloca 32; add ptr code_end; codecopy dst add_out 32; mload dst
+ *   dloadbytes dst src size -> add src code_end; codecopy dst code_ptr size
  *
- * No analysis needed — pure per-instruction expansion (1:N).
- * Framework: function_map_transform with FLAT ∘ MAP.
+ * Matches Python: emits ADD [ptr; Label "code_end"]. Labels resolve via
+ * vs_labels (eval_operand handles Label operands). Correctness requires
+ * code_layout_valid: vs_labels "code_end" = code/data boundary.
+ *
+ * No analysis needed - pure per-instruction expansion (1:N).
+ * Framework: function_map_transform with FLAT o MAP.
  *
  * TOP-LEVEL:
- *   lower_dload_inst      — per-instruction expansion
- *   lower_dload_block     — block-level transform
- *   lower_dload_function  — function-level transform
- *   lower_dload_context   — context-level transform
+ *   lower_dload_inst      - per-instruction expansion
+ *   lower_dload_block     - block-level transform
+ *   lower_dload_function  - function-level transform
+ *   lower_dload_context   - context-level transform
+ *   code_layout_valid     - precondition for correctness
  *
  * Helper:
- *   ld_alloca_var         — fresh variable name for alloca output
- *   ld_add_var            — fresh variable name for add output
+ *   ld_alloca_var         - fresh variable name for alloca output
+ *   ld_add_var            - fresh variable name for add output
  *
  * Source: vyper/venom/passes/lower_dload.py
  *)
@@ -46,20 +51,19 @@ End
  * Expand a single instruction.
  *
  * dload [ptr] with output [out]:
- *   1. alloca [Lit 32w]             → [alloca_var]    (allocate temp memory)
- *   2. add [ptr; Label "code_end"]  → [add_var]       (compute code offset)
- *   3. codecopy [Var alloca_var; Var add_var; Lit 32w] (copy code → memory)
- *   4. mload [Var alloca_var]       → [out]           (read from memory)
+ *   1. alloca [Lit 32w]                       -> [alloca_var]  (allocate temp memory)
+ *   2. add [ptr; Label "code_end"]            -> [add_var]     (ptr + code_end)
+ *   3. codecopy [Var alloca_var; Var add_var; Lit 32w]         (copy code -> memory)
+ *   4. mload [Var alloca_var]                 -> [out]         (read from memory)
  *
  * dloadbytes [dst; src; size] (HOL4 semantic order: dst, src, size):
- *   1. add [src; Label "code_end"]  → [add_var]       (compute code offset)
- *   2. codecopy [dst; Var add_var; size]               (copy code → memory)
+ *   1. add [src; Label "code_end"]            -> [add_var]     (src + code_end)
+ *   2. codecopy [dst; Var add_var; size]                       (copy code -> memory)
  *
  * All other instructions pass through unchanged.
  *
- * Note: ADD with Label operand requires label resolution (done by codegen).
- * The HOL4 eval_operand returns NONE for Labels. Correctness proof requires
- * a semantic extension or precondition about label resolution.
+ * Labels resolve via vs_labels (eval_operand handles Label operands).
+ * Correctness requires code_layout_valid s.
  *)
 Definition lower_dload_inst_def:
   lower_dload_inst inst =
@@ -114,6 +118,21 @@ End
 Definition lower_dload_context_def:
   lower_dload_context ctx =
     ctx with ctx_functions := MAP lower_dload_function ctx.ctx_functions
+End
+
+(* ===== Code Layout Precondition ===== *)
+
+(* Precondition for lower_dload correctness:
+   1. vs_data_section is a suffix of vs_code
+   2. vs_labels maps "code_end" to the boundary between bytecode and data
+
+   Discharged by codegen: the assembler produces bytecode ++ data_section_bytes
+   and sets code_end = LENGTH bytecode in the label map. *)
+Definition code_layout_valid_def:
+  code_layout_valid s <=>
+    (?prefix. s.vs_code = prefix ++ s.vs_data_section) /\
+    FLOOKUP s.vs_labels "code_end" =
+      SOME (n2w (LENGTH s.vs_code - LENGTH s.vs_data_section))
 End
 
 (* ===== Fresh Variable Tracking ===== *)

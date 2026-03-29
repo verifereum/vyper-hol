@@ -237,9 +237,10 @@ val label_op_tac =
   ONCE_ASM_REWRITE_TAC[step_inst_base_def] >>
   simp[extract_labels_map] >>
   Cases_on `inst.inst_operands` >> simp[] >>
-  BasicProvers.EVERY_CASE_TAC >> gvs[] >>
-  TRY (first_x_assum (qspec_then `Lit c` mp_tac) >> simp[]) >>
-  TRY (first_x_assum (qspec_then `Var vn` mp_tac) >> simp[]);
+  TRY (BasicProvers.EVERY_CASE_TAC >> gvs[] >>
+       TRY (first_x_assum (qspec_then `Lit c` mp_tac) >> simp[]) >>
+       TRY (first_x_assum (qspec_then `Var vn` mp_tac) >> simp[]) >>
+       NO_TAC);
 
 Theorem step_inst_base_operands_irrelevant_safe[local]:
   !g inst s.
@@ -250,8 +251,7 @@ Theorem step_inst_base_operands_irrelevant_safe[local]:
     inst.inst_opcode <> LOG /\
     inst.inst_opcode <> JMP /\
     inst.inst_opcode <> JNZ /\
-    inst.inst_opcode <> DJMP /\
-    inst.inst_opcode <> OFFSET ==>
+    inst.inst_opcode <> DJMP ==>
     step_inst_base (inst with inst_operands := MAP g inst.inst_operands) s =
     step_inst_base inst s
 Proof
@@ -271,24 +271,51 @@ Proof
   TRY (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def])
 QED
 
+Triviality step_inst_base_jnz_map[local]:
+  !g inst s.
+    inst.inst_opcode = JNZ /\
+    (!op. eval_operand (g op) s = eval_operand op s) /\
+    (!lbl. g (Label lbl) = Label lbl) /\
+    (!op. (!lbl. op <> Label lbl) ==> (!lbl. g op <> Label lbl)) ==>
+    step_inst_base (inst with inst_operands := MAP g inst.inst_operands) s =
+    step_inst_base inst s
+Proof
+  rpt strip_tac >>
+  ONCE_REWRITE_TAC[step_inst_base_def] >> gvs[] >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  (* pos 1: case on operand, then TOP_CASE_TAC for g(non-Label) *)
+  Cases_on `h'` >> simp[] >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[] >>
+       BasicProvers.TOP_CASE_TAC >> gvs[] >>
+       BasicProvers.TOP_CASE_TAC >> gvs[] >> NO_TAC) >>
+  (* pos 2: Cases_on t' reuses h' and t *)
+  Cases_on `t'` >> simp[] >>
+  Cases_on `h'` >> simp[] >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[] >>
+       BasicProvers.TOP_CASE_TAC >> gvs[] >>
+       BasicProvers.TOP_CASE_TAC >> gvs[] >> NO_TAC) >>
+  Cases_on `t` >> simp[]
+QED
+
 Theorem step_inst_base_operands_irrelevant_label[local]:
   !g inst s.
     (!op. eval_operand (g op) s = eval_operand op s) /\
     (!lbl. g (Label lbl) = Label lbl) /\
     (!op. (!lbl. op <> Label lbl) ==> (!lbl. g op <> Label lbl)) /\
     (inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
-     inst.inst_opcode = DJMP \/ inst.inst_opcode = OFFSET) ==>
+     inst.inst_opcode = DJMP) ==>
     step_inst_base (inst with inst_operands := MAP g inst.inst_operands) s =
     step_inst_base inst s
 Proof
   rpt strip_tac >> gvs[]
   >- label_op_tac
-  >- label_op_tac
+  >- (irule step_inst_base_jnz_map >> simp[])
+  (* DJMP: extract_labels preserved, then ASM_REWRITE *)
   >- (`!ops. extract_labels (MAP g ops) = extract_labels ops` by
         (strip_tac >> irule extract_labels_map >> simp[]) >>
       ASM_REWRITE_TAC[step_inst_base_def] >>
       Cases_on `inst.inst_operands` >> simp[])
-  >- label_op_tac
 QED
 
 Theorem step_inst_base_operands_irrelevant[local]:
@@ -305,7 +332,7 @@ Theorem step_inst_base_operands_irrelevant[local]:
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
-            inst.inst_opcode = DJMP \/ inst.inst_opcode = OFFSET`
+            inst.inst_opcode = DJMP`
   >- (irule step_inst_base_operands_irrelevant_label >> simp[])
   >> (irule step_inst_base_operands_irrelevant_safe >> gvs[])
 QED
@@ -348,7 +375,8 @@ Theorem subst_operands_correct:
     inst.inst_opcode <> PHI /\
     inst.inst_opcode <> PARAM /\
     ~is_alloca_op inst.inst_opcode /\
-    inst.inst_opcode <> LOG ==>
+    inst.inst_opcode <> LOG /\
+    (!lbl. new_op <> Label lbl) ==>
     step_inst fuel ctx (subst_operands old new_op inst) s =
     step_inst fuel ctx inst s
 Proof
@@ -361,8 +389,7 @@ Proof
     simp[subst_operand_def] >>
   `!op. (!lbl. op <> Label lbl) ==>
         !lbl. subst_operand old new_op op <> Label lbl` by (
-    Cases >> simp[subst_operand_def] >> rw[] >>
-    Cases_on `new_op` >> gvs[eval_operand_def]) >>
+    Cases >> simp[subst_operand_def] >> rw[]) >>
   simp[subst_operands_def] >>
   Cases_on `inst.inst_opcode = INVOKE`
   >- (drule_then assume_tac decode_invoke_map >>
@@ -377,7 +404,8 @@ Theorem subst_operands_map_correct:
   !fuel ctx inst s subs.
     (!v new_op. FLOOKUP subs v = SOME new_op ==>
                 IS_SOME (eval_operand new_op s) /\
-                eval_operand new_op s = eval_operand (Var v) s) /\
+                eval_operand new_op s = eval_operand (Var v) s /\
+                (!lbl. new_op <> Label lbl)) /\
     inst.inst_opcode <> PHI /\
     inst.inst_opcode <> PARAM /\
     ~is_alloca_op inst.inst_opcode /\
@@ -396,7 +424,7 @@ Proof
     Cases >> simp[subst_op_map_def] >> rw[] >>
     rename1 `FLOOKUP subs vn` >> CASE_TAC >> simp[] >>
     rename1 `FLOOKUP subs vn = SOME nop` >>
-    res_tac >> Cases_on `nop` >> gvs[eval_operand_def]) >>
+    first_x_assum drule >> simp[]) >>
   simp[subst_operands_map_def] >>
   Cases_on `inst.inst_opcode = INVOKE`
   >- (drule_then assume_tac decode_invoke_map >>
@@ -427,7 +455,8 @@ QED
 
 (* Stronger version: inst_wf handles structural positions, only PHI excluded.
    Strategy: structural opcodes (PARAM, ALLOCA, LOG,
-   JMP, JNZ, DJMP, OFFSET, INVOKE) handled by inst_wf + definition unfolding.
+   JMP, JNZ, DJMP, INVOKE) handled by inst_wf + definition unfolding.
+   OFFSET is exec_pure2 (positional), handled by step_inst_base_operands_irrelevant_safe.
    All other non-PHI opcodes handled by step_inst_base_operands_irrelevant_safe
    (which only needs eval_operand equivalence). *)
 Theorem subst_operands_map_correct_wf:
@@ -450,7 +479,6 @@ Proof
             inst.inst_opcode <> JMP /\
             inst.inst_opcode <> JNZ /\
             inst.inst_opcode <> DJMP /\
-            inst.inst_opcode <> OFFSET /\
             inst.inst_opcode <> INVOKE`
   >- (simp[subst_operands_map_def, step_inst_non_invoke] >>
       irule step_inst_base_operands_irrelevant_safe >> gvs[])
@@ -484,10 +512,6 @@ Proof
    simp[Once step_inst_base_def],
    (* DJMP *)
    imp_res_tac subst_op_map_preserves_labels >>
-   simp[step_inst_non_invoke] >>
-   simp[Once step_inst_base_def] >>
-   simp[Once step_inst_base_def],
-   (* OFFSET *)
    simp[step_inst_non_invoke] >>
    simp[Once step_inst_base_def] >>
    simp[Once step_inst_base_def],
@@ -529,7 +553,6 @@ Triviality step_inst_base_pos_safe[local]:
     inst.inst_opcode <> JMP /\
     inst.inst_opcode <> JNZ /\
     inst.inst_opcode <> DJMP /\
-    inst.inst_opcode <> OFFSET /\
     LENGTH new_ops = LENGTH inst.inst_operands /\
     (!i. i < LENGTH inst.inst_operands ==>
          eval_operand (EL i new_ops) (st:venom_state) =
@@ -602,10 +625,9 @@ Proof
   simp[step_inst_non_invoke] >>
   (* Non-structural: use ML-level step_inst_base_pos_safe *)
   Cases_on `inst.inst_opcode <> LOG /\ inst.inst_opcode <> JMP /\
-            inst.inst_opcode <> JNZ /\ inst.inst_opcode <> DJMP /\
-            inst.inst_opcode <> OFFSET`
+            inst.inst_opcode <> JNZ /\ inst.inst_opcode <> DJMP`
   >- (irule step_inst_base_pos_safe >> simp[]) >>
-  (* Structural opcodes: LOG, JMP, JNZ, DJMP, OFFSET *)
+  (* Structural opcodes: LOG, JMP, JNZ, DJMP *)
   gvs[] >> gvs[inst_wf_def]
   >- ( (* LOG: Lit tc :: rest *)
       Cases_on `new_ops` >> gvs[] >>
@@ -643,7 +665,7 @@ Proof
       gvs[LENGTH_EQ_NUM_compute] >>
       simp[Once step_inst_base_def, SimpLHS] >>
       simp[Once step_inst_base_def, SimpRHS])
-  >- ( (* DJMP: sel :: label_ops, need t = label_ops *)
+  >> ( (* DJMP: sel :: label_ops, need t = label_ops *)
       Cases_on `new_ops` >> gvs[] >>
       `t = label_ops` by (
         irule LIST_EQ >> simp[] >> rpt strip_tac >>
@@ -656,16 +678,6 @@ Proof
         qpat_x_assum `!i. _ ==> eval_operand _ _ = _`
           (qspec_then `0` mp_tac) >> simp[]) >>
       gvs[] >>
-      simp[Once step_inst_base_def, SimpLHS] >>
-      simp[Once step_inst_base_def, SimpRHS])
-  >> ( (* OFFSET: [op; Label lbl] *)
-      `EL 1 new_ops = Label lbl` by (
-        qpat_x_assum `!i. _ ==> !lbl. _ ==> _`
-          (qspec_then `1` mp_tac) >> simp[]) >>
-      `eval_operand (HD new_ops) st = eval_operand op st` by (
-        qpat_x_assum `!i. _ ==> eval_operand _ _ = _`
-          (qspec_then `0` mp_tac) >> simp[]) >>
-      gvs[LENGTH_EQ_NUM_compute] >>
       simp[Once step_inst_base_def, SimpLHS] >>
       simp[Once step_inst_base_def, SimpRHS])
 QED

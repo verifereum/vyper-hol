@@ -301,7 +301,7 @@ Theorem step_inst_base_preserves_all[local]:
     s'.vs_block_ctx = s.vs_block_ctx /\
     s'.vs_code = s.vs_code /\
     s'.vs_data_section = s.vs_data_section /\
-    s'.vs_label_offsets = s.vs_label_offsets /\
+    s'.vs_labels = s.vs_labels /\
     s'.vs_params = s.vs_params /\
     s'.vs_prev_hashes = s.vs_prev_hashes /\
     s'.vs_halted = s.vs_halted /\
@@ -594,12 +594,12 @@ Proof
   step_inst_lift_from_all_tac `\s:venom_state. s.vs_data_section`
 QED
 
-Theorem step_preserves_label_offsets:
+Theorem step_preserves_labels:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\
-    ~is_terminator inst.inst_opcode ==> s'.vs_label_offsets = s.vs_label_offsets
+    ~is_terminator inst.inst_opcode ==> s'.vs_labels = s.vs_labels
 Proof
-  step_inst_lift_from_all_tac `\s:venom_state. s.vs_label_offsets`
+  step_inst_lift_from_all_tac `\s:venom_state. s.vs_labels`
 QED
 
 Theorem step_preserves_params:
@@ -699,7 +699,7 @@ Theorem step_mem_write_preserves:
     s'.vs_block_ctx = s.vs_block_ctx /\
     s'.vs_code = s.vs_code /\
     s'.vs_data_section = s.vs_data_section /\
-    s'.vs_label_offsets = s.vs_label_offsets /\
+    s'.vs_labels = s.vs_labels /\
     s'.vs_params = s.vs_params /\
     s'.vs_prev_hashes = s.vs_prev_hashes /\
     s'.vs_current_bb = s.vs_current_bb /\
@@ -725,7 +725,7 @@ Theorem step_alloca_preserves:
     s'.vs_block_ctx = s.vs_block_ctx /\
     s'.vs_code = s.vs_code /\
     s'.vs_data_section = s.vs_data_section /\
-    s'.vs_label_offsets = s.vs_label_offsets /\
+    s'.vs_labels = s.vs_labels /\
     s'.vs_params = s.vs_params /\
     s'.vs_prev_hashes = s.vs_prev_hashes /\
     s'.vs_current_bb = s.vs_current_bb /\
@@ -747,7 +747,7 @@ Theorem step_ext_call_preserves:
     s'.vs_block_ctx = s.vs_block_ctx /\
     s'.vs_code = s.vs_code /\
     s'.vs_data_section = s.vs_data_section /\
-    s'.vs_label_offsets = s.vs_label_offsets /\
+    s'.vs_labels = s.vs_labels /\
     s'.vs_params = s.vs_params /\
     s'.vs_prev_hashes = s.vs_prev_hashes /\
     s'.vs_current_bb = s.vs_current_bb /\

@@ -9,7 +9,7 @@
 
 Theory venomInstProps
 Ancestors
-  venomInstProofs
+  venomInstProofs venomWf
 
 Theorem is_effect_free_not_terminator:!op. is_effect_free_op op ==> ~is_terminator op
 Proof
@@ -215,7 +215,7 @@ Theorem step_mem_write_preserves:!fuel ctx inst s s'.
     s'.vs_block_ctx = s.vs_block_ctx /\
     s'.vs_code = s.vs_code /\
     s'.vs_data_section = s.vs_data_section /\
-    s'.vs_label_offsets = s.vs_label_offsets /\
+    s'.vs_labels = s.vs_labels /\
     s'.vs_params = s.vs_params /\
     s'.vs_prev_hashes = s.vs_prev_hashes /\
     s'.vs_current_bb = s.vs_current_bb /\
@@ -240,7 +240,7 @@ Theorem step_alloca_preserves:!fuel ctx inst s s'.
     s'.vs_block_ctx = s.vs_block_ctx /\
     s'.vs_code = s.vs_code /\
     s'.vs_data_section = s.vs_data_section /\
-    s'.vs_label_offsets = s.vs_label_offsets /\
+    s'.vs_labels = s.vs_labels /\
     s'.vs_params = s.vs_params /\
     s'.vs_prev_hashes = s.vs_prev_hashes /\
     s'.vs_current_bb = s.vs_current_bb /\
@@ -261,7 +261,7 @@ Theorem step_ext_call_preserves:!fuel ctx inst s s'.
     s'.vs_block_ctx = s.vs_block_ctx /\
     s'.vs_code = s.vs_code /\
     s'.vs_data_section = s.vs_data_section /\
-    s'.vs_label_offsets = s.vs_label_offsets /\
+    s'.vs_labels = s.vs_labels /\
     s'.vs_params = s.vs_params /\
     s'.vs_prev_hashes = s.vs_prev_hashes /\
     s'.vs_current_bb = s.vs_current_bb /\
@@ -384,12 +384,12 @@ Proof
   ACCEPT_TAC venomInstProofsTheory.step_preserves_data_section
 QED
 
-Theorem step_preserves_label_offsets:!fuel ctx inst s s'.
+Theorem step_preserves_labels:!fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\
     ~is_terminator inst.inst_opcode ==>
-    s'.vs_label_offsets = s.vs_label_offsets
+    s'.vs_labels = s.vs_labels
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_preserves_label_offsets
+  ACCEPT_TAC venomInstProofsTheory.step_preserves_labels
 QED
 
 Theorem step_preserves_params:!fuel ctx inst s s'.
@@ -446,5 +446,122 @@ Theorem step_effect_free_same_value:!fuel ctx inst1 inst2 s s1 s2.
     state_equiv {} s1 s2
 Proof
   ACCEPT_TAC venomInstProofsTheory.step_effect_free_same_value
+QED
+
+(* ===== Effect-free instructions succeed when operands are defined ===== *)
+
+(* Effect-free non-PHI non-PARAM instructions succeed when inst_wf holds
+   and all operands evaluate to SOME.
+   - PHI excluded: needs prev_bb/resolve_phi (runtime state)
+   - PARAM excluded: needs vs_params index in range (runtime state)
+   - OFFSET: vacuously true (Label operand has eval_operand = NONE) *)
+(* Helpers: exec_pureN/readN succeed with correct arity and defined operands.
+   Pattern: decompose lists by LENGTH, establish eval_operand <> NONE via
+   metis_tac before case-splitting on option values. *)
+Theorem exec_pure1_ok[local]:
+  !f inst s.
+    LENGTH inst.inst_operands = 1 /\ LENGTH inst.inst_outputs = 1 /\
+    (!op. MEM op inst.inst_operands ==> eval_operand op s <> NONE) ==>
+    ?s'. exec_pure1 f inst s = OK s'
+Proof
+  rpt strip_tac >>
+  simp[venomExecSemanticsTheory.exec_pure1_def] >>
+  Cases_on `inst.inst_operands` >> fs[] >> Cases_on `t` >> fs[] >>
+  Cases_on `inst.inst_outputs` >> fs[] >> Cases_on `t` >> fs[] >>
+  `eval_operand h s <> NONE` by metis_tac[] >>
+  Cases_on `eval_operand h s` >> fs[]
+QED
+
+Theorem exec_pure2_ok[local]:
+  !f inst s.
+    LENGTH inst.inst_operands = 2 /\ LENGTH inst.inst_outputs = 1 /\
+    (!op. MEM op inst.inst_operands ==> eval_operand op s <> NONE) ==>
+    ?s'. exec_pure2 f inst s = OK s'
+Proof
+  rpt strip_tac >>
+  simp[venomExecSemanticsTheory.exec_pure2_def] >>
+  Cases_on `inst.inst_operands` >> fs[] >> Cases_on `t` >> fs[] >>
+  Cases_on `t'` >> fs[] >>
+  Cases_on `inst.inst_outputs` >> fs[] >> Cases_on `t` >> fs[] >>
+  `eval_operand h s <> NONE` by metis_tac[] >>
+  `eval_operand h' s <> NONE` by metis_tac[] >>
+  Cases_on `eval_operand h s` >> fs[] >>
+  Cases_on `eval_operand h' s` >> fs[]
+QED
+
+Theorem exec_pure3_ok[local]:
+  !f inst s.
+    LENGTH inst.inst_operands = 3 /\ LENGTH inst.inst_outputs = 1 /\
+    (!op. MEM op inst.inst_operands ==> eval_operand op s <> NONE) ==>
+    ?s'. exec_pure3 f inst s = OK s'
+Proof
+  rpt strip_tac >>
+  simp[venomExecSemanticsTheory.exec_pure3_def] >>
+  Cases_on `inst.inst_operands` >> fs[] >> Cases_on `t` >> fs[] >>
+  Cases_on `t'` >> gvs[] >>
+  Cases_on `inst.inst_outputs` >> fs[] >> Cases_on `t` >> fs[] >>
+  `eval_operand h s <> NONE` by metis_tac[] >>
+  `eval_operand h' s <> NONE` by metis_tac[] >>
+  `eval_operand h'' s <> NONE` by metis_tac[] >>
+  Cases_on `eval_operand h s` >> fs[] >>
+  Cases_on `eval_operand h' s` >> fs[] >>
+  Cases_on `eval_operand h'' s` >> fs[]
+QED
+
+Theorem exec_read0_ok[local]:
+  !f inst s. LENGTH inst.inst_outputs = 1 ==> ?s'. exec_read0 f inst s = OK s'
+Proof
+  rpt strip_tac >>
+  simp[venomExecSemanticsTheory.exec_read0_def] >>
+  Cases_on `inst.inst_outputs` >> fs[] >> Cases_on `t` >> fs[]
+QED
+
+Theorem exec_read1_ok[local]:
+  !f inst s.
+    LENGTH inst.inst_operands = 1 /\ LENGTH inst.inst_outputs = 1 /\
+    (!op. MEM op inst.inst_operands ==> eval_operand op s <> NONE) ==>
+    ?s'. exec_read1 f inst s = OK s'
+Proof
+  rpt strip_tac >>
+  simp[venomExecSemanticsTheory.exec_read1_def] >>
+  Cases_on `inst.inst_operands` >> fs[] >> Cases_on `t` >> fs[] >>
+  Cases_on `inst.inst_outputs` >> fs[] >> Cases_on `t` >> fs[] >>
+  `eval_operand h s <> NONE` by metis_tac[] >>
+  Cases_on `eval_operand h s` >> fs[]
+QED
+
+Theorem effect_free_step_inst_base_ok:
+  !inst s.
+    inst_wf inst /\
+    is_effect_free_op inst.inst_opcode /\
+    inst.inst_opcode <> PHI /\
+    inst.inst_opcode <> PARAM /\
+    (!op. MEM op inst.inst_operands ==> eval_operand op s <> NONE) ==>
+    ?s'. step_inst_base inst s = OK s'
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  fs[venomInstTheory.is_effect_free_op_def, venomWfTheory.inst_wf_def] >>
+  fs[venomExecSemanticsTheory.step_inst_base_def,
+     venomStateTheory.eval_operand_def] >>
+  TRY (irule exec_pure2_ok >> fs[] >> NO_TAC) >>
+  TRY (irule exec_pure1_ok >> fs[] >> NO_TAC) >>
+  TRY (irule exec_pure3_ok >> fs[] >> NO_TAC) >>
+  TRY (irule exec_read0_ok >> fs[] >> NO_TAC) >>
+  TRY (irule exec_read1_ok >> fs[] >> NO_TAC) >>
+  (* NOP: step_inst_base = OK s trivially *)
+  TRY (simp[] >> NO_TAC) >>
+  (* OFFSET: Label operand contradicts eval_operand assumption *)
+  TRY (`eval_operand (Label lbl) s <> NONE` by (fs[] >> metis_tac[]) >>
+       fs[venomStateTheory.eval_operand_def] >> NO_TAC) >>
+  (* ASSIGN/SHA3: inline operand decomposition *)
+  Cases_on `inst.inst_operands` >> fs[] >> Cases_on `t` >> fs[] >>
+  Cases_on `inst.inst_outputs` >> fs[] >>
+  TRY (Cases_on `t` >> fs[]) >>
+  TRY (Cases_on `t'` >> fs[]) >>
+  (`eval_operand h s <> NONE` by metis_tac[]) >>
+  Cases_on `eval_operand h s` >> fs[] >>
+  TRY ((`eval_operand h' s <> NONE` by metis_tac[]) >>
+       Cases_on `eval_operand h' s` >> fs[])
 QED
 

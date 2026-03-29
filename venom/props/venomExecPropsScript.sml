@@ -253,6 +253,13 @@ Proof
   ACCEPT_TAC venomExecProofsTheory.step_terminator_preserves_vars
 QED
 
+Theorem step_inst_preserves_labels_always:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ==> s'.vs_labels = s.vs_labels
+Proof
+  ACCEPT_TAC venomExecProofsTheory.step_inst_preserves_labels_always
+QED
+
 Theorem MEM_lookup_block:
   !lbl bbs (bb:basic_block).
     MEM bb bbs /\ bb.bb_label = lbl /\
