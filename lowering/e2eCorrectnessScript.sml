@@ -396,8 +396,6 @@ Theorem e2e_vyper_to_evm_O2:
     am tx vs args ret.
   let pipeline = venom_pipeline ircf_global ricf_global threshold
         (o2_fn_passes make_ssa ircf ricf dse_analysis amap live_at) in
-  let ctx = run_lowering selectors ext_fns int_fns fb_fn
-              dispatch bucket_count fn_meta_bytes entry_label in
     compile_vyper selectors ext_fns int_fns fb_fn
       dispatch bucket_count fn_meta_bytes entry_label
       pipeline fn_eom_map data_seg = SOME bytecode /\
