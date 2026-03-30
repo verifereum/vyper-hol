@@ -143,9 +143,11 @@ Definition copy_fact_invalidate_def:
     else DRESTRICT cfl
       { k | (* Keep if dest doesn't alias the write *)
             ~ma_may_alias aliases k write_loc /\
-            (* For mcopy: also keep if source doesn't alias the write.
-               Non-mcopy copies have source in a different address space
-               (calldataspace etc.), so memory writes can't clobber them. *)
+            (* Source aliasing only matters for MCOPY: its source is in
+               memory, so a memory write could clobber it.  Non-MCOPY
+               copy opcodes (CALLDATACOPY, DLOADBYTES, CODECOPY,
+               RETURNDATACOPY) read from a different address space, so
+               a memory write cannot affect their source — keep entry. *)
             (case FLOOKUP cfl k of
                SOME cf =>
                  if cf.cf_opcode = MCOPY then

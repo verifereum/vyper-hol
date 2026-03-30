@@ -17,13 +17,14 @@
  *   m2v_can_promote_alloca      — check if alloca uses are all mstore/mload/return
  *   m2v_promote_inst            — promote a single alloca use
  *   m2v_transform_function      — function-level transform
+ *   m2v_equiv                   — equivalence relation (ignores memory)
  *
  * Upstream: vyperlang/vyper@8780b3134 (remove alloca_id)
  *)
 
 Theory mem2varDefs
 Ancestors
-  passSimulationDefs dfgDefs venomExecSemantics venomInst
+  passSimulationDefs dfgDefs venomExecSemantics venomInst stateEquiv
 Libs
   pred_setTheory finite_mapTheory
 
@@ -136,7 +137,7 @@ Definition m2v_transform_function_def:
             (ctr + 1, (alloca_out, var, size_val) :: promos)
           else
             (ctr, promos)
-      | _ => (ctr, promos))
+        | _ => (ctr, promos))
       (0, []) alloca_insts in
     let promo_list = SND scan_result in
     (* Rewrite instructions *)
@@ -148,4 +149,69 @@ Definition m2v_transform_function_def:
       MAP (\bb. bb with bb_instructions :=
         FLAT (MAP rewrite_inst bb.bb_instructions))
       fn.fn_blocks
+End
+
+(* ===== Equivalence Relation ===== *)
+
+(*
+ * m2v_equiv: State equivalence ignoring vs_memory.
+ *
+ * mem2var promotes MSTORE→ASSIGN, so memory genuinely differs after
+ * transformation (alloca regions are not written in the transformed code).
+ * This relation captures everything that IS preserved:
+ *   - All variables (except fresh alloca promotion vars)
+ *   - All non-memory state fields
+ *   - Control flow fields (usable as both R_ok and R_term in lift_result)
+ *
+ * The `vars` parameter excludes fresh variables introduced by promotion
+ * (the alloca_N_M naming scheme). These variables exist only in the
+ * transformed state.
+ *
+ * This is the same relation as icf_equiv (invokeCopyFwdCommon) but
+ * with variable exclusion, defined here to avoid cross-pass dependency.
+ *)
+Definition m2v_equiv_def:
+  m2v_equiv vars s1 s2 <=>
+    (!v. v NOTIN vars ==> lookup_var v s1 = lookup_var v s2) /\
+    s1.vs_current_bb = s2.vs_current_bb /\
+    s1.vs_inst_idx = s2.vs_inst_idx /\
+    s1.vs_prev_bb = s2.vs_prev_bb /\
+    s1.vs_transient = s2.vs_transient /\
+    s1.vs_halted = s2.vs_halted /\
+    s1.vs_returndata = s2.vs_returndata /\
+    s1.vs_accounts = s2.vs_accounts /\
+    s1.vs_call_ctx = s2.vs_call_ctx /\
+    s1.vs_tx_ctx = s2.vs_tx_ctx /\
+    s1.vs_block_ctx = s2.vs_block_ctx /\
+    s1.vs_logs = s2.vs_logs /\
+    s1.vs_immutables = s2.vs_immutables /\
+    s1.vs_data_section = s2.vs_data_section /\
+    s1.vs_labels = s2.vs_labels /\
+    s1.vs_code = s2.vs_code /\
+    s1.vs_params = s2.vs_params /\
+    s1.vs_prev_hashes = s2.vs_prev_hashes /\
+    s1.vs_allocas = s2.vs_allocas
+End
+
+(* Fresh variables introduced by the transform *)
+Definition m2v_fresh_vars_def:
+  m2v_fresh_vars fn =
+    let dfg = dfg_build_function fn in
+    let alloca_insts = FILTER (\i : instruction.
+      i.inst_opcode = ALLOCA)
+      (fn_insts fn) in
+    let scan_result = FOLDL (\(ctr, fresh) (i : instruction).
+      case i.inst_outputs of
+        [alloca_out] =>
+          let uses = dfg_get_uses dfg alloca_out in
+          let size_val = case i.inst_operands of
+                           Lit w :: _ => w2n w | _ => 0 in
+          if m2v_can_promote_alloca uses then
+            let var = m2v_fresh_var alloca_out ctr in
+            (ctr + 1, var INSERT fresh)
+          else
+            (ctr, fresh)
+        | _ => (ctr, fresh))
+      (0, {}) alloca_insts in
+    SND scan_result
 End
