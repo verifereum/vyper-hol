@@ -43,6 +43,17 @@ Definition offset_by_def:
   offset_by (Ptr alloc _) _ = Ptr alloc NONE
 End
 
+(* Subtract from a pointer's offset.
+ * Matches Python offset_by(-delta) for SUB instructions.
+ * Guarded: exact when offset ≥ delta, unknown otherwise
+ * (negative offsets are meaningless for memory locations). *)
+Definition sub_offset_by_def:
+  sub_offset_by (Ptr alloc (SOME base)) (SOME n) =
+    (if n ≤ base then Ptr alloc (SOME (base - n))
+     else Ptr alloc NONE) /\
+  sub_offset_by (Ptr alloc _) _ = Ptr alloc NONE
+End
+
 (* Create a pointer from an alloca instruction *)
 Definition ptr_from_alloca_def:
   ptr_from_alloca inst = Ptr (Allocation (inst.inst_id)) (SOME 0)
@@ -105,16 +116,16 @@ Definition bp_handle_inst_def:
                | _ => result)
           | SUB =>
               (case inst.inst_operands of
-                 [Var lhs; Lit _] =>
+                 [Var lhs; Lit rhs] =>
                    let ptrs = bp_get_ptrs result lhs in
                    if ptrs ≠ {} then
-                     (* sub ptr literal: same alloca, unknown offset *)
-                     result |+ (out, IMAGE (λp. offset_by p NONE) ptrs)
+                     result |+ (out, IMAGE (λp. sub_offset_by p (SOME (w2n rhs))) ptrs)
                    else result
-               | [Var lhs; Var _] =>
-                   let ptrs = bp_get_ptrs result lhs in
-                   if ptrs ≠ {} then
-                     result |+ (out, IMAGE (λp. offset_by p NONE) ptrs)
+               | [Var lhs; Var rhs] =>
+                   let p_lhs = bp_get_ptrs result lhs in
+                   let p_rhs = bp_get_ptrs result rhs in
+                   if p_lhs ≠ {} ∧ p_rhs = {} then
+                     result |+ (out, IMAGE (λp. offset_by p NONE) p_lhs)
                    else result
                | _ => result)
             (* phi: union of all operand pointer sets *)
