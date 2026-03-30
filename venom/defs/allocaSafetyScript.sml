@@ -112,81 +112,104 @@ End
  * internal memory, not world state. The value is only observable
  * if later read by RETURN/LOG/CALL — tracked transitively. *)
 Definition observable_operands_def:
-  observable_operands (inst : instruction) =
+  observable_operands (inst : instruction) : operand set option =
     case inst.inst_opcode of
     (* SSTORE [key; value] — both key and value stored to world state *)
-    | SSTORE => set inst.inst_operands
+    | SSTORE => SOME (set inst.inst_operands)
     (* TSTORE [key; value] — both stored to transient storage *)
-    | TSTORE => set inst.inst_operands
+    | TSTORE => SOME (set inst.inst_operands)
     (* ISTORE [key; value] — both stored to immutable storage *)
-    | ISTORE => set inst.inst_operands
-    (* LOG [tc; offset; size; topic1; topic2; ...] —
-     * topics are observable values; offset/size are memory addresses *)
+    | ISTORE => SOME (set inst.inst_operands)
+    (* LOG [Lit tc; offset; size; topic1; topic2; ...] —
+     * topics are observable values; offset/size are memory addresses.
+     * tc must be a literal (topic count). Malformed → NONE. *)
     | LOG => (case inst.inst_operands of
-                Lit tc :: _ :: _ :: topics => set topics
-              | _ => {})
+                Lit tc :: _ :: _ :: topics => SOME (set topics)
+              | _ => NONE)
     (* CALL [gas; addr; value; argsOff; argsLen; retOff; retLen]
-     * value (operand 2) is ETH transferred — observable.
-     * gas, addr also observable (affect external behavior).
+     * gas, addr, value are observable (ETH transfer, external behavior).
      * argsOff/argsLen/retOff/retLen are memory addresses. *)
     | CALL => (case inst.inst_operands of
-                 gas :: addr :: value :: _ => {gas; addr; value}
-               | _ => set inst.inst_operands)
+                 gas :: addr :: value :: _ => SOME {gas; addr; value}
+               | _ => NONE)
     (* STATICCALL [gas; addr; argsOff; argsLen; retOff; retLen] *)
     | STATICCALL => (case inst.inst_operands of
-                       gas :: addr :: _ => {gas; addr}
-                     | _ => set inst.inst_operands)
+                       gas :: addr :: _ => SOME {gas; addr}
+                     | _ => NONE)
     (* DELEGATECALL [gas; addr; argsOff; argsLen; retOff; retLen] *)
     | DELEGATECALL => (case inst.inst_operands of
-                         gas :: addr :: _ => {gas; addr}
-                       | _ => set inst.inst_operands)
+                         gas :: addr :: _ => SOME {gas; addr}
+                       | _ => NONE)
     (* CREATE [value; offset; size] — value is observable *)
     | CREATE => (case inst.inst_operands of
-                   value :: _ => {value}
-                 | _ => {})
+                   value :: _ => SOME {value}
+                 | _ => NONE)
     (* CREATE2 [value; offset; size; salt] — value and salt observable *)
     | CREATE2 => (case inst.inst_operands of
-                    value :: _ :: _ :: salt :: _ => {value; salt}
-                  | _ => set inst.inst_operands)
+                    value :: _ :: _ :: salt :: _ => SOME {value; salt}
+                  | _ => NONE)
     (* SELFDESTRUCT [beneficiary] — address is observable *)
-    | SELFDESTRUCT => set inst.inst_operands
+    | SELFDESTRUCT => SOME (set inst.inst_operands)
     (* ---- Non-observable: all remaining opcodes ----
      * Pure/comparison/bitwise/reads/context/memory/bulk-copy/hash/
      * control-flow/SSA/special — none store operand values to world state.
      * See comment above for complete enumeration. *)
-    | ADD => {} | SUB => {} | MUL => {} | Div => {} | Mod => {}
-    | SDIV => {} | SMOD => {} | Exp => {}
-    | EQ => {} | LT => {} | GT => {} | SLT => {} | SGT => {}
-    | AND => {} | OR => {} | XOR => {} | NOT => {}
-    | SHL => {} | SHR => {} | SAR => {} | SIGNEXTEND => {} | BYTE => {}
-    | ISZERO => {} | ADDMOD => {} | MULMOD => {}
-    | MLOAD => {} | SLOAD => {} | TLOAD => {} | ILOAD => {} | DLOAD => {}
-    | BLOCKHASH => {} | BLOBHASH => {} | BALANCE => {}
-    | CALLDATALOAD => {} | EXTCODESIZE => {} | EXTCODEHASH => {}
-    | CALLER => {} | ADDRESS => {} | CALLVALUE => {} | GAS => {}
-    | ORIGIN => {} | GASPRICE => {} | CHAINID => {} | COINBASE => {}
-    | TIMESTAMP => {} | NUMBER => {} | PREVRANDAO => {} | GASLIMIT => {}
-    | BASEFEE => {} | BLOBBASEFEE => {} | CALLDATASIZE => {}
-    | RETURNDATASIZE => {} | MSIZE => {} | CODESIZE => {} | SELFBALANCE => {}
-    | MSTORE => {} | MCOPY => {} | CALLDATACOPY => {} | RETURNDATACOPY => {}
-    | DLOADBYTES => {} | CODECOPY => {} | EXTCODECOPY => {}
-    | SHA3 => {}
-    | JMP => {} | JNZ => {} | DJMP => {} | RETURN => {} | REVERT => {}
-    | STOP => {} | SINK => {} | RET => {}
-    | PHI => {} | ASSIGN => {} | NOP => {} | PARAM => {} | ALLOCA => {}
-    | OFFSET => {} | INVOKE => {} | ASSERT => {} | ASSERT_UNREACHABLE => {}
-    | INVALID => {}
+    | ADD => SOME {} | SUB => SOME {} | MUL => SOME {}
+    | Div => SOME {} | Mod => SOME {}
+    | SDIV => SOME {} | SMOD => SOME {} | Exp => SOME {}
+    | EQ => SOME {} | LT => SOME {} | GT => SOME {}
+    | SLT => SOME {} | SGT => SOME {}
+    | AND => SOME {} | OR => SOME {} | XOR => SOME {} | NOT => SOME {}
+    | SHL => SOME {} | SHR => SOME {} | SAR => SOME {}
+    | SIGNEXTEND => SOME {} | BYTE => SOME {}
+    | ISZERO => SOME {} | ADDMOD => SOME {} | MULMOD => SOME {}
+    | MLOAD => SOME {} | SLOAD => SOME {} | TLOAD => SOME {}
+    | ILOAD => SOME {} | DLOAD => SOME {}
+    | BLOCKHASH => SOME {} | BLOBHASH => SOME {} | BALANCE => SOME {}
+    | CALLDATALOAD => SOME {} | EXTCODESIZE => SOME {}
+    | EXTCODEHASH => SOME {}
+    | CALLER => SOME {} | ADDRESS => SOME {} | CALLVALUE => SOME {}
+    | GAS => SOME {}
+    | ORIGIN => SOME {} | GASPRICE => SOME {} | CHAINID => SOME {}
+    | COINBASE => SOME {}
+    | TIMESTAMP => SOME {} | NUMBER => SOME {} | PREVRANDAO => SOME {}
+    | GASLIMIT => SOME {}
+    | BASEFEE => SOME {} | BLOBBASEFEE => SOME {}
+    | CALLDATASIZE => SOME {}
+    | RETURNDATASIZE => SOME {} | MSIZE => SOME {} | CODESIZE => SOME {}
+    | SELFBALANCE => SOME {}
+    | MSTORE => SOME {} | MCOPY => SOME {} | CALLDATACOPY => SOME {}
+    | RETURNDATACOPY => SOME {}
+    | DLOADBYTES => SOME {} | CODECOPY => SOME {} | EXTCODECOPY => SOME {}
+    | SHA3 => SOME {}
+    | JMP => SOME {} | JNZ => SOME {} | DJMP => SOME {}
+    | RETURN => SOME {} | REVERT => SOME {}
+    | STOP => SOME {} | SINK => SOME {} | RET => SOME {}
+    | PHI => SOME {} | ASSIGN => SOME {} | NOP => SOME {}
+    | PARAM => SOME {} | ALLOCA => SOME {}
+    | OFFSET => SOME {} | INVOKE => SOME {}
+    | ASSERT => SOME {} | ASSERT_UNREACHABLE => SOME {}
+    | INVALID => SOME {}
 End
 
 (* ===== Instruction-Level Safety ===== *)
 
-(* An instruction is alloca-safe if no alloca-derived variable appears
- * in an observable value position. *)
+(* An instruction is alloca-safe if it is well-formed (observable_operands
+ * returns SOME) and no alloca-derived variable appears in an observable
+ * value position. *)
 Definition alloca_safe_inst_def:
   alloca_safe_inst fn inst ⇔
-    ∀v. alloca_derived fn v ⇒
-        Var v ∉ observable_operands inst
+    case observable_operands inst of
+    | NONE => F
+    | SOME obs => ∀v. alloca_derived fn v ⇒ Var v ∉ obs
 End
+
+(* inst_wf guarantees observable_operands succeeds. *)
+Theorem inst_wf_observable_operands:
+  ∀inst. inst_wf inst ⇒ IS_SOME (observable_operands inst)
+Proof
+  cheat
+QED
 
 (* ===== Function-Level Safety ===== *)
 
