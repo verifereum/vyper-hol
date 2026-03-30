@@ -96,25 +96,37 @@ End
 
 (* ===== Soundness Theorems ===== *)
 
-(* Transfer function preserves bp_ptr_sound through a successful step. *)
+(* Transfer function preserves bp_ptr_sound through a successful step.
+   Fresh-output precondition: the output variable must not already
+   have pointer info. Under SSA (each variable defined once) this
+   is automatic. Without SSA, stale pointers for re-defined variables
+   would be unsound. *)
 Theorem bp_handle_inst_sound:
   ∀bp inst c bp' fuel ctx s s'.
     bp_ptr_sound bp s ∧
     bp_handle_inst bp inst = (c, bp') ∧
     step_inst fuel ctx inst s = OK s' ∧
-    inst_wf inst ⇒
+    inst_wf inst ∧
+    (∀out. inst_output inst = SOME out ⇒ bp_get_ptrs bp out = {}) ⇒
     bp_ptr_sound bp' s'
 Proof
   cheat
 QED
 
-(* Block-level: processing a block preserves soundness through run_block. *)
+(* Block-level: processing a block preserves soundness through run_block.
+   Fresh-output: no instruction's output variable has prior pointer info
+   at the time that instruction is processed. Under SSA this is automatic. *)
 Theorem bp_process_block_sound:
   ∀bp bb c bp' fuel ctx s s'.
     bp_ptr_sound bp s ∧
     bp_process_block bp bb.bb_instructions = (c, bp') ∧
     run_block fuel ctx bb s = OK s' ∧
-    (∀inst. MEM inst bb.bb_instructions ⇒ inst_wf inst) ⇒
+    (∀inst. MEM inst bb.bb_instructions ⇒ inst_wf inst) ∧
+    (* SSA-like: each output variable is fresh (not already tracked) *)
+    ALL_DISTINCT (FLAT (MAP (λi. i.inst_outputs) bb.bb_instructions)) ∧
+    (∀inst out. MEM inst bb.bb_instructions ∧
+               inst_output inst = SOME out ⇒
+               bp_get_ptrs bp out = {}) ⇒
     bp_ptr_sound bp' s'
 Proof
   cheat
@@ -126,7 +138,8 @@ QED
 Theorem bp_ptr_from_op_sound:
   ∀bp v aid off s.
     bp_ptr_sound bp s ∧
-    bp_ptr_from_op bp (Var v) = SOME (Ptr (Allocation aid) (SOME off)) ⇒
+    bp_ptr_from_op bp (Var v) = SOME (Ptr (Allocation aid) (SOME off)) ∧
+    IS_SOME (eval_operand (Var v) s) ⇒
     ∃base sz.
       FLOOKUP s.vs_allocas aid = SOME (base, sz) ∧
       eval_operand (Var v) s = SOME (n2w (base + off))
@@ -143,7 +156,8 @@ Theorem bp_segment_from_ops_sound:
     bp_segment_from_ops bp ops = ml ∧
     ml_is_fixed ml ∧
     ml.ml_alloca = SOME (Allocation aid) ∧
-    ml.ml_offset = SOME off ⇒
+    ml.ml_offset = SOME off ∧
+    IS_SOME (eval_operand ops.iao_ofst s) ⇒
     ∃base sz.
       FLOOKUP s.vs_allocas aid = SOME (base, sz) ∧
       eval_operand ops.iao_ofst s = SOME (n2w (base + off))
