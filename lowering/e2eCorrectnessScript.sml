@@ -14,8 +14,8 @@
  *   state_unchanged        -- rollback state unchanged (for reverts)
  *   initial_evm_rel        -- EVM state initialized with bytecode
  *   valid_function_call    -- source function callable with given args
- *   compile_vyper          -- full compilation chain
- *   compile_vyper_well_formed -- compilation => codegen preconditions
+ *   compile_vyper_raw      -- full compilation chain (exploded args)
+ *   compile_vyper_raw_well_formed -- compilation => codegen preconditions
  *   e2e_vyper_to_evm       -- Vyper source semantics ~ EVM execution
  *)
 
@@ -215,8 +215,8 @@ End
 
 (* Full compilation: lowering + pass pipeline + codegen.
    Pipeline is a parameter -- instantiate for O2, O3, Os, etc. *)
-Definition compile_vyper_def:
-  compile_vyper selectors ext_fns int_fns fb_fn
+Definition compile_vyper_raw_def:
+  compile_vyper_raw selectors ext_fns int_fns fb_fn
                 dispatch bucket_count fn_meta_bytes entry_label
                 (pipeline : venom_context -> venom_context)
                 fn_eom_map data_seg =
@@ -296,14 +296,14 @@ QED
    whole-context case, meaning no user memory overlaps spills).
    spill_mem_covered holds because the entry code expands
    memory to cover the maximum spill offset. *)
-Theorem compile_vyper_well_formed:
+Theorem compile_vyper_raw_well_formed:
   !selectors ext_fns int_fns fb_fn dispatch
     bucket_count fn_meta_bytes entry_label
     pipeline fn_eom_map data_seg bytecode fresh vs.
   let ctx = run_lowering selectors ext_fns int_fns fb_fn
               dispatch bucket_count fn_meta_bytes entry_label in
   let ctx' = pipeline ctx in
-    compile_vyper selectors ext_fns int_fns fb_fn
+    compile_vyper_raw selectors ext_fns int_fns fb_fn
       dispatch bucket_count fn_meta_bytes entry_label
       pipeline fn_eom_map data_seg = SOME bytecode /\
     ctx_pass_correct pipeline fresh ctx vs
@@ -357,7 +357,7 @@ Theorem e2e_vyper_to_evm:
   let ctx = run_lowering selectors ext_fns int_fns fb_fn
               dispatch bucket_count fn_meta_bytes entry_label in
     (* Compilation produces bytecode *)
-    compile_vyper selectors ext_fns int_fns fb_fn
+    compile_vyper_raw selectors ext_fns int_fns fb_fn
       dispatch bucket_count fn_meta_bytes entry_label
       pipeline fn_eom_map data_seg = SOME bytecode /\
     (* Source function exists, calldata valid, selector routes *)
@@ -396,7 +396,7 @@ Theorem e2e_vyper_to_evm_O2:
     am tx vs args ret.
   let pipeline = venom_pipeline ircf_global ricf_global threshold
         (o2_fn_passes make_ssa ircf ricf dse_analysis amap live_at) in
-    compile_vyper selectors ext_fns int_fns fb_fn
+    compile_vyper_raw selectors ext_fns int_fns fb_fn
       dispatch bucket_count fn_meta_bytes entry_label
       pipeline fn_eom_map data_seg = SOME bytecode /\
     valid_function_call tenv am tx selectors
