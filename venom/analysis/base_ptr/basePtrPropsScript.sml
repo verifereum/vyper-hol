@@ -121,6 +121,7 @@ Theorem bp_process_block_sound:
     bp_ptr_sound bp s ∧
     bp_process_block bp bb.bb_instructions = (c, bp') ∧
     run_block fuel ctx bb s = OK s' ∧
+    s.vs_inst_idx = 0 ∧
     (∀inst. MEM inst bb.bb_instructions ⇒ inst_wf inst) ∧
     (* SSA-like: each output variable is fresh (not already tracked) *)
     ALL_DISTINCT (FLAT (MAP (λi. i.inst_outputs) bb.bb_instructions)) ∧
