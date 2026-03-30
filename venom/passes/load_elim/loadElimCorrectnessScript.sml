@@ -7,11 +7,12 @@
 
 Theory loadElimCorrectness
 Ancestors
-  loadElimProofs venomWf
+  loadElimProofs venomWf basePtrProps
 
 Theorem load_elim_function_correct:
-  !fuel ir_ctx ctx fn s.
-    fn_inst_wf fn /\ s.vs_inst_idx = 0 ==>
+  !fuel ir_ctx ctx fn s bp.
+    fn_inst_wf fn /\ s.vs_inst_idx = 0 /\
+    bp_ptr_sound bp s /\ bp_ptrs_bounded bp s ==>
     ?fresh.
     (?e. run_function fuel ctx fn s = Error e) \/
     lift_result (state_equiv fresh) (execution_equiv fresh)

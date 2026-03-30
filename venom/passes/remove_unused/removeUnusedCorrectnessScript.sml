@@ -9,11 +9,12 @@
 
 Theory removeUnusedCorrectness
 Ancestors
-  removeUnusedProofs
+  removeUnusedProofs allocaSafety
 
 Theorem remove_unused_function_correct:
   !fuel ctx fn s.
-    venom_wf ctx /\ wf_function fn /\ fn_inst_wf fn ==>
+    venom_wf ctx /\ wf_function fn /\ fn_inst_wf fn /\
+    alloca_safe_fn fn ==>
     let elim = remove_unused_eliminated_vars fn in
     lift_result (state_equiv elim) (execution_equiv elim)
       (run_function fuel ctx fn s)

@@ -13,6 +13,7 @@
 Theory loadElimProofs
 Ancestors
   loadElimDefs analysisSimProps passSimulationProps
+  basePtrProps
 
 (* Per-round correctness: load_elim_one preserves semantics modulo
    the fresh variables it introduces via PHI insertion. *)
@@ -28,10 +29,14 @@ Proof
   cheat
 QED
 
-(* Function-level: composing 5 rounds, fresh vars accumulate *)
+(* Function-level: composing 5 rounds, fresh vars accumulate.
+ * bp_ptrs_bounded: load forwarding correctness depends on aliasing
+ * analysis precision. Without bounded offsets, sub_offset_by returns
+ * NONE → conservative aliasing → fewer forwards → not byte-for-byte. *)
 Theorem load_elim_function_correct_proof:
-  !fuel ir_ctx ctx fn s.
-    fn_inst_wf fn /\ s.vs_inst_idx = 0 ==>
+  !fuel ir_ctx ctx fn s bp.
+    fn_inst_wf fn /\ s.vs_inst_idx = 0 /\
+    bp_ptr_sound bp s /\ bp_ptrs_bounded bp s ==>
     ?fresh.
     (?e. run_function fuel ctx fn s = Error e) \/
     lift_result (state_equiv fresh) (execution_equiv fresh)
