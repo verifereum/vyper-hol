@@ -26,6 +26,20 @@ Proof
   ACCEPT_TAC concretize_function_correct_proof
 QED
 
+(* pointer_confined is strictly stronger than alloca_safe_fn:
+ * pointer-derived vars can only appear in memory ops or ADD,
+ * which excludes all observable operand positions.
+ * Precondition: amap covers all alloca outputs in fn. *)
+Theorem pointer_confined_implies_alloca_safe:
+  ∀fn amap.
+    pointer_confined fn amap ∧
+    (∀inst. MEM inst (fn_insts fn) ∧ inst.inst_opcode = ALLOCA ⇒
+       ∀out. inst_output inst = SOME out ⇒ out ∈ FDOM amap) ⇒
+    alloca_safe_fn fn
+Proof
+  ACCEPT_TAC pointer_confined_implies_alloca_safe
+QED
+
 (* ===== Obligations ===== *)
 
 Theorem concretize_preserves_ssa_form:

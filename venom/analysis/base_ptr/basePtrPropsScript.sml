@@ -94,6 +94,28 @@ Definition bp_ptr_sound_def:
       ∃p. p ∈ bp_get_ptrs bp v ∧ ptr_matches_var p v s
 End
 
+(* ===== Buffer Safety: Pointer Offsets Within Alloca Bounds ===== *)
+
+(* Every tracked pointer with a known offset has that offset within
+ * the alloca's allocated size. Needed for byte-for-byte precision
+ * of aliasing analysis (sub_offset_by stays non-negative).
+ *
+ * Without this: analysis is sound but conservative (NONE for OOB).
+ * With this: analysis matches Python precision for valid programs.
+ *
+ * Discharged by construction from Vyper→Venom lowering:
+ * all pointer arithmetic uses compile-time-known offsets within
+ * the alloca's declared size.
+ *
+ *)
+Definition bp_ptrs_bounded_def:
+  bp_ptrs_bounded (bp : bp_result) (s : venom_state) ⇔
+    ∀v aid off.
+      Ptr (Allocation aid) (SOME off) ∈ bp_get_ptrs bp v ⇒
+      ∀base sz.
+        FLOOKUP s.vs_allocas aid = SOME (base, sz) ⇒ off ≤ sz
+End
+
 (* ===== Soundness Theorems ===== *)
 
 (* Transfer function preserves bp_ptr_sound through a successful step.
