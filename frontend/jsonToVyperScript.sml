@@ -1082,6 +1082,7 @@ Definition translate_toplevel_def:
       (translate_visibility decs)
       (translate_mutability decs)
       (MEM "nonreentrant" decs)
+      (MEM "raw_return" decs)
       name
       (translate_args_with_types args arg_tys)
       (MAP (translate_expr ctx) defaults)

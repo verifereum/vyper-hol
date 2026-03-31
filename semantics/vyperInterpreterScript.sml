@@ -99,7 +99,7 @@ val () = cv_auto_trans getter_def;
 Definition lookup_function_def:
   lookup_function src_id_opt name Deploy [] = SOME (Payable, F, [], [], NoneT, []) ∧
   lookup_function src_id_opt name vis [] = NONE ∧
-  lookup_function src_id_opt name vis (FunctionDecl fv fm nr id args dflts ret body :: ts) =
+  lookup_function src_id_opt name vis (FunctionDecl fv fm nr _ id args dflts ret body :: ts) =
   (if id = name ∧ vis = fv then SOME (fm, nr, args, dflts, ret, body)
    else lookup_function src_id_opt name vis ts) ∧
   lookup_function src_id_opt name External (VariableDecl Public mut id typ _ :: ts) =
@@ -332,12 +332,12 @@ QED
 (* Extract callable functions - for termination proof *)
 (* Internal and Deploy are separate so we can order Internal before Deploy *)
 Definition dest_Internal_Fn_def:
-  dest_Internal_Fn (FunctionDecl Internal _ _ fn _ dflts _ ss) = [(fn, (dflts, ss))] ∧
+  dest_Internal_Fn (FunctionDecl Internal _ _ _ fn _ dflts _ ss) = [(fn, (dflts, ss))] ∧
   dest_Internal_Fn _ = []
 End
 
 Definition dest_Deploy_Fn_def:
-  dest_Deploy_Fn (FunctionDecl Deploy _ _ fn _ dflts _ ss) = [(fn, (dflts, ss))] ∧
+  dest_Deploy_Fn (FunctionDecl Deploy _ _ _ fn _ dflts _ ss) = [(fn, (dflts, ss))] ∧
   dest_Deploy_Fn _ = []
 End
 
@@ -452,7 +452,7 @@ Proof
   ho_match_mp_tac lookup_function_ind
   \\ rw[lookup_function_def, dest_Internal_Fn_def]
   \\ gvs[dest_Internal_Fn_def]
-  \\ rename1 `FunctionDecl fv _ _ _ _ _ _ _`
+  \\ rename1 `FunctionDecl fv _ _ _ _ _ _ _ _`
   \\ Cases_on `fv` \\ gvs[dest_Internal_Fn_def]
 QED
 
@@ -465,7 +465,7 @@ Proof
   ho_match_mp_tac lookup_function_ind
   \\ rw[lookup_function_def, dest_Deploy_Fn_def]
   \\ gvs[dest_Deploy_Fn_def]
-  \\ rename1 `FunctionDecl fv _ _ _ _ _ _ _`
+  \\ rename1 `FunctionDecl fv _ _ _ _ _ _ _ _`
   \\ Cases_on `fv` \\ gvs[dest_Deploy_Fn_def]
 QED
 
@@ -478,7 +478,7 @@ Proof
   ho_match_mp_tac lookup_function_ind
   \\ rw[lookup_function_def, dest_Internal_Fn_def]
   \\ gvs[dest_Internal_Fn_def]
-  \\ rename1 `FunctionDecl fv _ _ _ _ _ _ _`
+  \\ rename1 `FunctionDecl fv _ _ _ _ _ _ _ _`
   \\ Cases_on `fv` \\ gvs[dest_Internal_Fn_def]
 QED
 

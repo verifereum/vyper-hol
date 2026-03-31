@@ -79,3 +79,24 @@ Definition run_lowering_def:
     in
     extract_context entry_label st1
 End
+
+(* Run the deploy compilation monad and extract a venom_context.
+   Mirrors Python's generate_deploy_venom():
+   - Constructor body (if present) with is_ctor_context=True
+   - Internal fns reachable from constructor (is_ctor_context=True)
+   - Deploy epilogue: codecopy runtime + return *)
+Definition run_deploy_lowering_def:
+  run_deploy_lowering has_constructor runtime_size immutables_len
+                       constructor_args data_size
+                       ctor_internal_fns
+                       cenv body is_payable is_nonreentrant
+                       nkey use_transient
+                       (entry_label : string) =
+    let st0 = initial_compile_state entry_label in
+    let ((), st1) =
+      compile_generate_deploy has_constructor runtime_size immutables_len
+        constructor_args data_size ctor_internal_fns
+        cenv body is_payable is_nonreentrant nkey use_transient st0
+    in
+    extract_context entry_label st1
+End

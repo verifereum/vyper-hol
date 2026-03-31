@@ -146,7 +146,7 @@ Definition assign_nkeys_def:
   assign_nkeys ([] : toplevel list) (next : num) = (K 0n : string -> num) ∧
   assign_nkeys (top :: rest) next =
     case top of
-      FunctionDecl _ _ T fname _ _ _ _ =>
+      FunctionDecl _ _ T _ fname _ _ _ _ =>
         let nkey_map = assign_nkeys rest (next + 1) in
         (λn. if n = fname then next else nkey_map n)
     | _ => assign_nkeys rest next
@@ -154,28 +154,35 @@ End
 
 (* ===== Function Classification ===== *)
 
+(* Classify functions into external, internal, fallback, and constructor.
+   Deploy (__init__) goes into a separate ctor slot, NOT into internal fns.
+   In Python, runtime and deploy are separate IRContexts:
+   - Runtime: external fns + internal fns (is_ctor_context=False)
+   - Deploy: __init__ + ctor-reachable internal fns (is_ctor_context=True)
+   raw_return is threaded through the tuples for ce_raw_return. *)
 Definition classify_function_def:
-  classify_function (FunctionDecl vis mut nr fname fargs dflts ret body)
-    (exts, ints, fb) =
+  classify_function (FunctionDecl vis mut nr rr fname fargs dflts ret body)
+    (exts, ints, fb, ctor) =
     (case vis of
        External =>
          if fname = "__default__" then
-           (exts, ints,
-            SOME (External, mut, nr, fname, fargs, dflts, ret, body))
+           (exts, ints, SOME (mut, nr, rr, fname, fargs, dflts, ret, body),
+            ctor)
          else
-           ((External, mut, nr, fname, fargs, dflts, ret, body) :: exts,
-            ints, fb)
+           ((mut, nr, rr, fname, fargs, dflts, ret, body) :: exts,
+            ints, fb, ctor)
      | Internal =>
          (exts,
-          (Internal, mut, nr, fname, fargs, dflts, ret, body) :: ints, fb)
+          (mut, nr, rr, fname, fargs, dflts, ret, body) :: ints,
+          fb, ctor)
      | Deploy =>
-         (exts,
-          (Deploy, mut, nr, fname, fargs, dflts, ret, body) :: ints, fb)) ∧
+         (exts, ints, fb,
+          SOME (mut, nr, rr, fname, fargs, dflts, ret, body))) ∧
   classify_function _ acc = acc
 End
 
 Definition classify_functions_def:
-  classify_functions tops = FOLDR classify_function ([], [], NONE) tops
+  classify_functions tops = FOLDR classify_function ([], [], NONE, NONE) tops
 End
 
 (* ===== Memory Allocation ===== *)
@@ -243,7 +250,7 @@ Definition build_method_id_map_def:
   build_method_id_map tenv (top :: rest) =
     let rest_map = build_method_id_map tenv rest in
     case top of
-      FunctionDecl External _ _ fname fargs _ _ _ =>
+      FunctionDecl External _ _ _ fname fargs _ _ _ =>
         let abi_types = vyper_to_abi_types tenv (MAP SND fargs) in
         let sel_bytes = function_selector fname abi_types in
         let sel_num = w2n (calldata_method_id sel_bytes) in
@@ -259,7 +266,7 @@ Definition build_func_info_def:
   build_func_info sft (top :: rest) =
     let rest_map = build_func_info sft rest in
     case top of
-      FunctionDecl vis _ _ fname fargs _ ret _ =>
+      FunctionDecl vis _ _ _ fname fargs _ ret _ =>
         if vis = External then rest_map
         else
           let fn_lbl = "fn_" ++ fname in
@@ -366,16 +373,11 @@ Definition build_compile_env_def:
        ce_ret_enc_info := AbiPrimWord;
        ce_ret_dec_info := DecPrimWord NoClamp;
        ce_max_return_size := 0;
-       (* TODO: In Python, is_ctor_context is True for __init__ AND
-          internal functions reachable from __init__. This only catches
-          __init__ itself (vis = Deploy). Internal fns called from ctor
-          that use immutables (ILOAD/ISTORE) will get wrong codegen.
-          Fix: add ctor-reachability flag to AST from Python. *)
+       (* Default: overridden by package_internal_fn for ctor context *)
        ce_is_ctor := (vis = Deploy);
        ce_func_info := func_info;
        ce_nonreentrant := (F, 0n, use_transient_locks, mut = View);
-       (* TODO: should be per-function (func_t.do_raw_return in Python).
-          @raw_return not yet supported. *)
+       (* Default: overridden by package_*_fn from FunctionDecl raw_return field *)
        ce_raw_return := F
     |> : compile_env
 End
@@ -422,12 +424,13 @@ End
 
 Definition package_external_fn_def:
   package_external_fn tops use_trans nkey_map
-    (_, mut, nr, fname, fargs, dflts, ret, body) =
+    (mut, nr, rr, fname, fargs, dflts, ret, body) =
     let entry_lbl = "fn_" ++ fname in
     let cenv_base = build_compile_env tops
                       External mut fname fargs ret body use_trans in
-    let cenv = if ret ≠ NoneT then update_cenv_ret_abi cenv_base ret
-               else cenv_base in
+    let cenv0 = cenv_base with ce_raw_return := rr in
+    let cenv = if ret ≠ NoneT then update_cenv_ret_abi cenv0 ret
+               else cenv0 in
     let nkey = nkey_map fname in
     let cenv_final = update_cenv_nonreentrant cenv nr nkey use_trans
                        (mut = View) in
@@ -440,35 +443,42 @@ Definition package_external_fn_def:
      body, SOME ret)
 End
 
+(* Package an internal function for compilation.
+   is_ctor_context: T in deploy context (internal fns called from __init__),
+                    F in runtime context.
+   Mirrors Python: _generate_internal_function(is_ctor_context=...) *)
 Definition package_internal_fn_def:
-  package_internal_fn tops use_trans nkey_map
-    (vis, mut, nr, fname, fargs, _, ret, body) =
+  package_internal_fn tops use_trans nkey_map is_ctor_context
+    (mut, nr, rr, fname, fargs, _, ret, body) =
     let fn_lbl = "fn_" ++ fname in
     let sft = make_struct_fields_map tops in
     let sft_types = (λname. MAP (FST o SND) (sft name)) in
-    let cenv = build_compile_env tops
-                 vis mut fname fargs ret body use_trans in
+    let vis = if is_ctor_context then Deploy else Internal in
+    let cenv = (build_compile_env tops
+                  vis mut fname fargs ret body use_trans)
+                 with <| ce_is_ctor := is_ctor_context;
+                         ce_raw_return := rr |> in
     let rc = returns_stack_count sft_types ret in
     let has_ret_buf = (rc = 0 ∧ ret ≠ NoneT) in
     let nkey = nkey_map fname in
     let cenv_final = update_cenv_nonreentrant cenv nr nkey use_trans
                        (mut = View) in
     let is_view = (mut = View) in
-    let is_ctor = (vis = Deploy) in
     let pvs = compute_pass_via_stack (MAP SND fargs) rc in
     let params = ZIP (MAP FST fargs, pvs) in
     (fn_lbl, cenv_final, params, has_ret_buf,
      nr, nkey, use_trans, is_view,
-     is_ctor, 0n, 0n,
+     is_ctor_context, 0n, 0n,
      body, SOME ret)
 End
 
 Definition package_fallback_fn_def:
   package_fallback_fn tops use_trans nkey_map NONE = NONE ∧
   package_fallback_fn tops use_trans nkey_map
-    (SOME (_, mut, nr, fname, fargs, _, ret, body)) =
-    let cenv = build_compile_env tops
-                 External mut fname fargs ret body use_trans in
+    (SOME (mut, nr, rr, fname, fargs, _, ret, body)) =
+    let cenv = (build_compile_env tops
+                  External mut fname fargs ret body use_trans)
+                 with ce_raw_return := rr in
     let nkey = nkey_map fname in
     let is_payable = (mut = Payable) in
     let is_view = (mut = View) in
@@ -476,39 +486,95 @@ Definition package_fallback_fn_def:
           body, if ret = NoneT then NONE else SOME ret)
 End
 
+(* ===== Constructor Packaging ===== *)
+
+(* Package the constructor for deploy-phase compilation.
+   ctor_fn: the Deploy function from classify_functions.
+   Returns: (cenv, args, is_payable, is_nr, nkey, use_trans, body, ret). *)
+Definition package_constructor_def:
+  package_constructor tops use_trans nkey_map
+    (mut, nr, rr, fname, fargs, _, ret, body) =
+    let cenv = (build_compile_env tops
+                  Deploy mut fname fargs ret body use_trans)
+                 with <| ce_is_ctor := T; ce_raw_return := rr |> in
+    let nkey = nkey_map fname in
+    let cenv_final = update_cenv_nonreentrant cenv nr nkey use_trans
+                       (mut = View) in
+    let pos_args = build_positional_args cenv_final fargs in
+    (cenv_final, pos_args, (mut = Payable), nr, nkey, use_trans, body, ret)
+End
+
 (* ===== Full Compilation ===== *)
 
 (* compile_vyper: the top-level compiler function.
 
+   Two-phase compilation matching Python's module.py:
+   Phase 1 (runtime): selector dispatch + external fns + internal fns (is_ctor=F)
+   Phase 2 (deploy):  __init__ + ctor-reachable internal fns (is_ctor=T)
+
+   Returns: SOME (deploy_bytecode, runtime_bytecode) or NONE on codegen failure.
+
    Takes:
    - tops: Vyper AST (toplevel list, with storage slots annotated)
-   - pipeline: Venom optimization passes (e.g., venom_pipeline ... o2_fn_passes)
+   - pipeline: Venom optimization passes
    - data_seg: data section (immutables)
    - dispatch_strategy: "linear", "sparse", or "dense"
+   - immutables_len: total size of immutables section (bytes)
 
-   Storage/transient slots are read from VariableDecl/HashMapDecl in the AST
-   (set during JSON translation via annotate_slots).
-   fn_eom is internal to the Venom pipeline — codegen defaults to 0. *)
+   Storage/transient slots come from the annotated AST.
+   fn_eom is internal to the Venom pipeline (codegen defaults to 0).
+   raw_return is per-function (from @raw_return decorator). *)
 Definition compile_vyper_def:
   compile_vyper (tops : toplevel list)
                 (pipeline : venom_context -> venom_context)
                 (data_seg : data_section list)
-                (dispatch_strategy : string) =
+                (dispatch_strategy : string)
+                (immutables_len : num) =
     let tenv = type_env tops in
     let nkey_map = assign_nkeys tops 0 in
     let use_trans = F in
-    let (ext_fns, int_fns, fb_fn) = classify_functions tops in
+    let (ext_fns, int_fns, fb_fn, ctor_fn) = classify_functions tops in
+    (* Phase 1: Runtime *)
     let selectors = build_selectors tenv ext_fns in
     let external_fns = MAP (package_external_fn tops use_trans nkey_map)
                            ext_fns in
-    let internal_fns = MAP (package_internal_fn tops use_trans nkey_map)
-                           int_fns in
+    let runtime_int_fns = MAP (package_internal_fn tops use_trans nkey_map F)
+                              int_fns in
     let fallback_fn = package_fallback_fn tops use_trans nkey_map fb_fn in
     let entry_label = "__entry" in
-    let ctx = run_lowering selectors external_fns internal_fns fallback_fn
-                dispatch_strategy 0 0 entry_label in
-    let ctx' = pipeline ctx in
-    codegen ctx' FEMPTY data_seg
+    let runtime_ctx = run_lowering selectors external_fns runtime_int_fns
+                        fallback_fn dispatch_strategy 0 0 entry_label in
+    let runtime_ctx' = pipeline runtime_ctx in
+    case codegen runtime_ctx' FEMPTY data_seg of
+      NONE => NONE
+    | SOME runtime_bytecode =>
+    (* Phase 2: Deploy *)
+    let has_constructor = IS_SOME ctor_fn in
+    (* Deploy internal fns: is_ctor_context = T
+       Conservative: all internal fns are ctor-reachable.
+       TODO: compute actual reachability from __init__. *)
+    let deploy_int_fns = MAP (package_internal_fn tops use_trans nkey_map T)
+                             int_fns in
+    let (ctor_cenv, ctor_args, ctor_payable, ctor_nr, ctor_nkey,
+         ctor_trans, ctor_body, ctor_ret) =
+      case ctor_fn of
+        SOME cf => package_constructor tops use_trans nkey_map cf
+      | NONE => (ARB, ([] : (string # bool # bool # num # abi_dec_info) list),
+                 F, F, 0n, F, ([] : stmt list), NoneT) in
+    let deploy_ctx = run_deploy_lowering has_constructor
+                       (LENGTH runtime_bytecode) immutables_len
+                       ctor_args 0 deploy_int_fns
+                       ctor_cenv ctor_body ctor_payable ctor_nr
+                       ctor_nkey ctor_trans "__deploy" in
+    let deploy_ctx' = pipeline deploy_ctx in
+    let deploy_data =
+      <| ds_label := "runtime_begin";
+         ds_items := [DataBytes runtime_bytecode] |>
+      :: data_seg in
+    case codegen deploy_ctx' FEMPTY deploy_data of
+      NONE => NONE
+    | SOME deploy_bytecode =>
+      SOME (deploy_bytecode, runtime_bytecode)
 End
 
 val _ = export_theory();
