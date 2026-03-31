@@ -105,7 +105,17 @@ End
    Key: checks operand POSITION, not just instruction type.
    MSTORE [addr, value] — pointer in addr (position 0) is fine,
    pointer in value (position 1) is rejected because it could be
-   MLOAD'd back and escape through non-memory operations. *)
+   MLOAD'd back and escape through non-memory operations.
+
+   Limitation: rejects programs that apply non-linear operations to
+   pointers (AND for alignment, MUL for scaling, EQ for comparison).
+   These break the alloca remapping theorem because e.g.
+   AND(base+delta, mask) gives different results for different bases.
+   pointer_confined correctly rejects them: the pointer-derived var
+   appears in a non-mem, non-preserving instruction.
+   Vyper never does this — alloca offsets are only manipulated via ADD.
+   If future IR needs pointer alignment, the remapping approach would
+   need extension (e.g. alignment-preserving remap constraints). *)
 Definition pointer_confined_def:
   pointer_confined fn (roots : string set) <=>
     let pv = pointer_derived_vars fn roots in
