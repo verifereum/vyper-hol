@@ -21,6 +21,7 @@
 Theory moduleLowering
 Ancestors
   stmtLowering exprLowering context abiEncoder compileEnv venomInst
+  jumptableUtils
 Libs
   monadsyntax
 
@@ -165,10 +166,41 @@ Definition compile_selector_dispatch_sparse_def:
     od
 End
 
+(* Emit data sections for dense dispatch from precomputed bucket info.
+   entry_info: method_id -> (label, min_calldatasize, is_nonpayable). *)
+Definition emit_dense_data_sections_def:
+  emit_dense_data_sections ([] : dense_bucket list) _ _ = return () ∧
+  emit_dense_data_sections (db :: rest) fn_metadata_bytes entry_info =
+    let sorted_mids = method_ids_image_order db.db_method_ids db.db_magic in
+    do (* Emit per-bucket data section *)
+       emit_data_section ("bucket_" ++ toString db.db_id);
+       FOLDL (λm mid.
+         do m;
+            let (lbl, min_cds, is_np) = entry_info mid in
+            let metadata_val = min_cds + (if is_np then 1 else 0) in
+            let b0 = (mid DIV (2 ** 24)) MOD 256 in
+            let b1 = (mid DIV (2 ** 16)) MOD 256 in
+            let b2 = (mid DIV (2 ** 8)) MOD 256 in
+            let b3 = mid MOD 256 in
+            do emit_data_item (DataBytes [n2w b0; n2w b1; n2w b2; n2w b3]);
+               emit_data_item (DataLabel lbl);
+               emit_data_item (DataBytes (GENLIST (λi.
+                 n2w ((metadata_val DIV
+                       (2 ** ((fn_metadata_bytes - 1 - i) * 8))) MOD 256))
+                 fn_metadata_bytes))
+            od
+         od)
+         (return ()) sorted_mids;
+       emit_dense_data_sections rest fn_metadata_bytes entry_info
+    od
+End
+
 (* ===== Dense Jumptable Dispatch ===== *)
 Definition compile_selector_dispatch_dense_def:
   compile_selector_dispatch_dense selectors bucket_count
                                   fn_metadata_bytes
+                                  dense_buckets
+                                  (entry_info : num -> string # num # bool)
                                   entry_point_labels fallback_lbl =
     let sz_bucket_header = 5 in
     let bits_magic = 24 in
@@ -234,10 +266,23 @@ Definition compile_selector_dispatch_dense_def:
        emit_void ASSERT [ok];
        (* Step 6: DJMP to function label *)
        emit_inst DJMP (function_label :: MAP (λl. Label l) entry_point_labels)
-                 []
-       (* TODO: emit BUCKET_HEADERS and per-bucket data sections for dense dispatch.
-          Requires computing jumptable_info (magic, bucket_size, method_ids_image_order)
-          from the selector list — currently these are computed externally in Python. *)
+                 [];
+       (* Step 7: Emit data sections *)
+       let sorted_buckets = QSORT (λb1 b2. b1.db_id ≤ b2.db_id)
+                                   dense_buckets in
+       do emit_data_section "BUCKET_HEADERS";
+          FOLDL (λm db.
+            do m;
+               let magic_hi = (db.db_magic DIV 256) MOD 256 in
+               let magic_lo = db.db_magic MOD 256 in
+               do emit_data_item (DataBytes [n2w magic_hi; n2w magic_lo]);
+                  emit_data_item (DataLabel ("bucket_" ++ toString db.db_id));
+                  emit_data_item (DataBytes [n2w (LENGTH db.db_method_ids)])
+               od
+            od)
+            (return ()) sorted_buckets;
+          emit_dense_data_sections sorted_buckets fn_metadata_bytes entry_info
+       od
     od
 End
 
@@ -598,7 +643,9 @@ Definition compile_generate_runtime_def:
                                            bool # bool # stmt list #
                                            type option) option)
                            dispatch_strategy
-                           bucket_count fn_metadata_bytes =
+                           bucket_count fn_metadata_bytes
+                           dense_buckets
+                           (entry_info : num -> string # num # bool) =
     let linear_sels = MAP (λ(sel,lbl,_). (sel,lbl)) selectors in
     do fallback_lbl <- fresh_label "fallback";
        (* Selector dispatch *)
@@ -609,7 +656,8 @@ Definition compile_generate_runtime_def:
         | "dense" =>
             let entry_lbls = MAP (λ(_,lbl,_). lbl) selectors in
             compile_selector_dispatch_dense selectors
-              bucket_count fn_metadata_bytes entry_lbls fallback_lbl
+              bucket_count fn_metadata_bytes
+              dense_buckets entry_info entry_lbls fallback_lbl
         | _ =>
             compile_selector_dispatch_linear linear_sels fallback_lbl);
        (* Generate external function bodies *)

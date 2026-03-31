@@ -34,11 +34,14 @@ Ancestors
    Pipeline is a parameter -- instantiate for O2, O3, Os, etc. *)
 Definition compile_vyper_raw_def:
   compile_vyper_raw selectors ext_fns int_fns fb_fn
-                dispatch bucket_count fn_meta_bytes entry_label
+                dispatch bucket_count fn_meta_bytes
+                dense_buckets entry_info
+                entry_label
                 (pipeline : venom_context -> venom_context)
                 fn_eom_map =
     let (ctx, data_seg) = run_lowering selectors ext_fns int_fns fb_fn
-                            dispatch bucket_count fn_meta_bytes entry_label in
+                            dispatch bucket_count fn_meta_bytes
+                            dense_buckets entry_info entry_label in
     let ctx' = pipeline ctx in
     codegen ctx' fn_eom_map data_seg
 End
@@ -115,13 +118,15 @@ QED
    memory to cover the maximum spill offset. *)
 Theorem compile_vyper_raw_well_formed:
   !selectors ext_fns int_fns fb_fn dispatch
-    bucket_count fn_meta_bytes entry_label
+    bucket_count fn_meta_bytes dense_buckets entry_info entry_label
     pipeline fn_eom_map bytecode fresh vs.
   let (ctx, _) = run_lowering selectors ext_fns int_fns fb_fn
-                   dispatch bucket_count fn_meta_bytes entry_label in
+                   dispatch bucket_count fn_meta_bytes
+                   dense_buckets entry_info entry_label in
   let ctx' = pipeline ctx in
     compile_vyper_raw selectors ext_fns int_fns fb_fn
-      dispatch bucket_count fn_meta_bytes entry_label
+      dispatch bucket_count fn_meta_bytes
+      dense_buckets entry_info entry_label
       pipeline fn_eom_map = SOME bytecode /\
     ctx_pass_correct pipeline fresh ctx vs
     ==>
@@ -168,14 +173,16 @@ QED
    See e2e_vyper_to_evm_O2 for a concrete instance. *)
 Theorem e2e_vyper_to_evm:
   !tenv event_info pipeline selectors ext_fns int_fns fb_fn
-    dispatch bucket_count fn_meta_bytes entry_label
-    fn_eom_map bytecode
+    dispatch bucket_count fn_meta_bytes dense_buckets entry_info
+    entry_label fn_eom_map bytecode
     am tx vs fresh args ret.
   let (ctx, _) = run_lowering selectors ext_fns int_fns fb_fn
-                   dispatch bucket_count fn_meta_bytes entry_label in
+                   dispatch bucket_count fn_meta_bytes
+                   dense_buckets entry_info entry_label in
     (* Compilation produces bytecode *)
     compile_vyper_raw selectors ext_fns int_fns fb_fn
-      dispatch bucket_count fn_meta_bytes entry_label
+      dispatch bucket_count fn_meta_bytes
+      dense_buckets entry_info entry_label
       pipeline fn_eom_map = SOME bytecode /\
     (* Source function exists, calldata valid, selector routes *)
     valid_function_call tenv am tx selectors
@@ -206,7 +213,8 @@ QED
    are parameters of the pass sequence. *)
 Theorem e2e_vyper_to_evm_O2:
   !tenv event_info selectors ext_fns int_fns fb_fn
-    dispatch bucket_count fn_meta_bytes entry_label
+    dispatch bucket_count fn_meta_bytes dense_buckets entry_info
+    entry_label
     ircf_global ricf_global threshold
     make_ssa ircf ricf dse_analysis amap live_at
     fn_eom_map bytecode
@@ -214,7 +222,8 @@ Theorem e2e_vyper_to_evm_O2:
   let pipeline = venom_pipeline ircf_global ricf_global threshold
         (o2_fn_passes make_ssa ircf ricf dse_analysis amap live_at) in
     compile_vyper_raw selectors ext_fns int_fns fb_fn
-      dispatch bucket_count fn_meta_bytes entry_label
+      dispatch bucket_count fn_meta_bytes
+      dense_buckets entry_info entry_label
       pipeline fn_eom_map = SOME bytecode /\
     valid_function_call tenv am tx selectors
       vs.vs_call_ctx.cc_calldata args ret /\
@@ -248,8 +257,11 @@ Theorem compile_vyper_runtime_bytecode:
     let external_fns = MAP (package_external_fn tops F nkey_map) ext_fns in
     let runtime_int_fns = MAP (package_internal_fn tops F nkey_map F) int_fns in
     let fallback_fn = package_fallback_fn tops F nkey_map fb_fn in
+    let (bucket_count, fn_meta_bytes, dense_buckets, entry_info) =
+      compute_dense_dispatch_info selectors external_fns in
       compile_vyper_raw selectors external_fns runtime_int_fns fallback_fn
-        dispatch_strategy 0 0 "__entry" pipeline FEMPTY
+        dispatch_strategy bucket_count fn_meta_bytes
+        dense_buckets entry_info "__entry" pipeline FEMPTY
         = SOME runtime_bc
 Proof
   simp[compile_vyper_def, compile_vyper_raw_def, pairTheory.UNCURRY]

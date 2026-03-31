@@ -74,11 +74,14 @@ Definition run_lowering_def:
   run_lowering selectors external_fns internal_fns
                fallback_fn dispatch_strategy
                bucket_count fn_metadata_bytes
+               dense_buckets
+               (entry_info : num -> string # num # bool)
                (entry_label : string) =
     let st0 = initial_compile_state entry_label in
     let ((), st1) =
       compile_generate_runtime selectors external_fns internal_fns
-        fallback_fn dispatch_strategy bucket_count fn_metadata_bytes st0
+        fallback_fn dispatch_strategy bucket_count fn_metadata_bytes
+        dense_buckets entry_info st0
     in
     extract_context entry_label st1  (* returns (venom_context, data_section list) *)
 End

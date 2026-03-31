@@ -23,6 +23,7 @@ Ancestors
   venomPipeline
   codegen
   selectorDispatch
+  jumptableUtils
   vyperContext
   compileEnv
   vyperAST
@@ -537,6 +538,39 @@ End
    Storage/transient slots come from the annotated AST.
    fn_eom is internal to the Venom pipeline (codegen defaults to 0).
    raw_return is per-function (from @raw_return decorator). *)
+(* Build entry_info map from packaged external functions.
+   Each packaged fn has (entry_lbl, cenv, pos_args, min_cds,
+   is_payable, nr, nkey, use_trans, is_view, body, ret).
+   entry_info: method_id -> (label, min_cds, is_nonpayable). *)
+Definition build_dense_entry_info_def:
+  build_dense_entry_info [] [] = (K ("", 0n, F) : num -> string # num # bool) /\
+  build_dense_entry_info ((sel_num, _, _) :: srest)
+    ((entry_lbl, _, _, min_cds, is_payable, _, _, _, _, _, _) :: erest) =
+    (let rest_map = build_dense_entry_info srest erest in
+     (\n. if n = sel_num then (entry_lbl, min_cds, ~is_payable)
+          else rest_map n)) /\
+  build_dense_entry_info _ _ = K ("", 0n, F)
+End
+
+(* Compute dense dispatch parameters from selectors and ext fn info.
+   Returns (bucket_count, fn_metadata_bytes, dense_buckets, entry_info). *)
+Definition compute_dense_dispatch_info_def:
+  compute_dense_dispatch_info
+    (selectors : (num # string # bool) list)
+    (external_fns : (string # compile_env #
+                     (string # bool # bool # num # abi_dec_info) list #
+                     num # bool # bool # num # bool # bool #
+                     stmt list # type option) list) =
+    let method_ids = MAP FST selectors in
+    let entry_info = build_dense_entry_info selectors external_fns in
+    let min_cds_values = MAP (λ(_, _, _, min_cds, _, _, _, _, _, _, _).
+                               min_cds) external_fns in
+    let fn_meta_bytes = compute_fn_metadata_bytes min_cds_values in
+    case generate_dense_jumptable_info method_ids of
+      NONE => (1, fn_meta_bytes, ([] : dense_bucket list), entry_info)
+    | SOME (nb, buckets) => (nb, fn_meta_bytes, buckets, entry_info)
+End
+
 Definition compile_vyper_def:
   compile_vyper (tops : toplevel list)
                 (pipeline : venom_context -> venom_context)
@@ -555,9 +589,13 @@ Definition compile_vyper_def:
                               int_fns in
     let fallback_fn = package_fallback_fn tops use_trans nkey_map fb_fn in
     let entry_label = "__entry" in
+    (* Compute dense dispatch parameters (only used when dispatch = "dense") *)
+    let (bucket_count, fn_meta_bytes, dense_buckets, entry_info) =
+      compute_dense_dispatch_info selectors external_fns in
     let (runtime_ctx, runtime_data) =
       run_lowering selectors external_fns runtime_int_fns
-        fallback_fn dispatch_strategy 0 0 entry_label in
+        fallback_fn dispatch_strategy bucket_count fn_meta_bytes
+        dense_buckets entry_info entry_label in
     let runtime_ctx' = pipeline runtime_ctx in
     case codegen runtime_ctx' FEMPTY runtime_data of
       NONE => NONE
