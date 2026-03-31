@@ -257,17 +257,23 @@ Theorem compile_vyper_runtime_bytecode:
     let external_fns = MAP (package_external_fn tops F nkey_map) ext_fns in
     let runtime_int_fns = MAP (package_internal_fn tops F nkey_map F) int_fns in
     let fallback_fn = package_fallback_fn tops F nkey_map fb_fn in
-    let (bucket_count, fn_meta_bytes, dense_buckets, entry_info) =
-      compute_dense_dispatch_info selectors external_fns in
-      compile_vyper_raw selectors external_fns runtime_int_fns fallback_fn
-        dispatch_strategy bucket_count fn_meta_bytes
-        dense_buckets entry_info "__entry" pipeline FEMPTY
-        = SOME runtime_bc
+      ?bucket_count fn_meta_bytes dense_buckets entry_info.
+        compile_vyper_raw selectors external_fns runtime_int_fns fallback_fn
+          dispatch_strategy bucket_count fn_meta_bytes
+          dense_buckets entry_info "__entry" pipeline FEMPTY
+          = SOME runtime_bc
 Proof
   simp[compile_vyper_def, compile_vyper_raw_def, pairTheory.UNCURRY]
   \\ rpt strip_tac
   \\ rpt (pairarg_tac \\ gvs[])
   \\ gvs[AllCaseEqs()]
+  \\ rpt (FIRST [pairarg_tac \\ gvs[AllCaseEqs()],
+                CASE_TAC \\ gvs[AllCaseEqs()]])
+  (* The hypothesis contains run_lowering with specific computed params.
+     Extract them as witnesses for the existential. *)
+  \\ qmatch_assum_abbrev_tac `codegen (pipeline (FST (run_lowering _ _ _ _ _ bc fmb db ei _))) _ _ = _`
+  \\ MAP_EVERY qexists_tac [`bc`, `fmb`, `db`, `ei`]
+  \\ gvs[]
 QED
 
 (* Deploy-phase correctness: the deploy bytecode, when executed on
