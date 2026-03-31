@@ -116,9 +116,19 @@ End
 
 (* ===== Event Info ===== *)
 
+(* Compute event topic0 hash: keccak256 of event signature.
+   Event signature format: "EventName(type1,type2,...)"
+   Same as function_signature from contractABI. *)
+Definition event_hash_def:
+  event_hash tenv ename (arg_types : type list) =
+    let abi_types = vyper_to_abi_types tenv arg_types in
+    let sig_str = function_signature ename abi_types in
+    let hash_bytes = Keccak_256_w64 (MAP (n2w o ORD) sig_str) in
+    w2n (word_of_bytes_be hash_bytes : bytes32)
+End
+
 (* Build event info from EventDecl.
    Result: event_name → (event_hash, indexed_flags, topic_is_bytestring)
-   event_hash: placeholder 0 (real value requires keccak256 of signature)
    indexed_flags: bool list from EventDecl annotations
    topic_is_bytestring: whether each indexed arg is bytes/string *)
 Definition is_bytestring_type_def:
@@ -135,25 +145,28 @@ Definition event_topic_bs_def:
 End
 
 Definition build_event_info_aux_def:
-  build_event_info_aux ename args_indexed
+  build_event_info_aux tenv ename args_indexed
     (eim : string -> num # bool list # bool list) =
+    let arg_types = MAP (SND o FST) args_indexed in
+    let ehash = event_hash tenv ename arg_types in
     let indexed_flags = MAP SND args_indexed in
     let topic_bs = event_topic_bs args_indexed in
-    (λn. if n = ename then (0n, indexed_flags, topic_bs) else eim n)
+    (λn. if n = ename then (ehash, indexed_flags, topic_bs) else eim n)
 End
 
 Definition build_event_info_def:
-  build_event_info ([] : toplevel list)
+  build_event_info tenv ([] : toplevel list)
     (eim : string -> num # bool list # bool list) = eim ∧
-  build_event_info (top :: rest) eim =
+  build_event_info tenv (top :: rest) eim =
     case top of
       EventDecl ename args_indexed =>
-        build_event_info rest (build_event_info_aux ename args_indexed eim)
-    | _ => build_event_info rest eim
+        build_event_info tenv rest
+          (build_event_info_aux tenv ename args_indexed eim)
+    | _ => build_event_info tenv rest eim
 End
 
 Definition make_event_info_def:
-  make_event_info tops = build_event_info tops (K (0, [], []))
+  make_event_info tenv tops = build_event_info tenv tops (K (0, [], []))
 End
 
 (* ===== Storage Layout ===== *)
@@ -332,18 +345,21 @@ End
 (* Collect local variable declarations (AnnAssign) from a statement list.
    Walks into If/For/nested blocks. Each AnnAssign declares a local
    that Python pre-allocates before lowering the body. *)
-(* Collect locals from a single statement *)
-Definition collect_locals_stmt_def:
-  collect_locals_stmt (AnnAssign id ty _) = [(id, ty)] ∧
-  collect_locals_stmt _ = ([] : (string # type) list)
-End
-
-(* Collect all local variable declarations from a statement list.
-   Walks into If/For blocks to find nested AnnAssign declarations. *)
+(* Collect all local variable declarations (AnnAssign) from a statement list.
+   Walks into If/For blocks to find nested declarations.
+   Vyper variables are function-scoped, so Python pre-allocates all
+   locals at function entry regardless of nesting. *)
 Definition collect_locals_def:
   collect_locals ([] : stmt list) = ([] : (string # type) list) ∧
-  collect_locals (st :: rest) =
-    collect_locals_stmt st ++ collect_locals rest
+  collect_locals (AnnAssign id ty _ :: rest) =
+    (id, ty) :: collect_locals rest ∧
+  collect_locals (If _ then_stmts else_stmts :: rest) =
+    collect_locals then_stmts ++
+    collect_locals else_stmts ++
+    collect_locals rest ∧
+  collect_locals (For _ _ _ _ for_body :: rest) =
+    collect_locals for_body ++ collect_locals rest ∧
+  collect_locals (_ :: rest) = collect_locals rest
 End
 
 (* ===== Dynamic Array Capacity ===== *)
@@ -443,8 +459,8 @@ Definition build_compile_env_def:
     let combined_layout = FUNION storage_layout transient_layout in
     let var_type_map = build_var_type_map tops in
     let is_hashmap = build_is_hashmap tops in
-    let event_info = make_event_info tops in
     let tenv = type_env tops in
+    let event_info = make_event_info tenv tops in
     let is_external = (vis = External) in
     let rc = returns_stack_count sft_types ret_type in
     let has_return_buf = (rc = 0 ∧ ret_type ≠ NoneT) in
