@@ -264,7 +264,9 @@ Proof
 QED
 
 (* Unconditional version: when per-block sim gives lift_result (no error
-   disjunct), function-level sim also gives unconditional lift_result. *)
+   disjunct), function-level sim also gives unconditional lift_result.
+   Uses triangle pattern (same-code R_ok preservation + per-block sim +
+   transitivity) and induction on fuel. *)
 Theorem block_sim_function_unconditional:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool) bt fn.
@@ -338,7 +340,11 @@ Proof
 QED
 
 (* Invariant-carrying version with direct run_block_preserves_R obligation.
-   Strictly more general than block_sim_function_inv. *)
+   Strictly more general than block_sim_function_inv: replaces operand
+   agreement on fn' with a direct run_block_preserves_R precondition,
+   and drops the unused operand agreement on fn.
+   Use when the transform introduces fresh variable operands that are
+   defined before use within blocks (e.g., branch_opt's ISZERO insertion). *)
 Theorem block_sim_function_inv_rbpr:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool) bt fn
@@ -373,8 +379,11 @@ Proof
   ACCEPT_TAC block_sim_function_inv_rbpr_proof
 QED
 
-(* Cross-state variant: single cross-state per-block sim obligation.
-   Strictly more general than rbpr. *)
+(* Cross-state variant: single cross-state per-block sim obligation replaces
+   both per-block sim and preserves_R. Strictly more general than rbpr.
+   The caller proves: for R_ok-related states with Inv, running original block
+   on s1 and transformed block on s2 gives R_ok-related results.
+   This can be proved via triangle in either direction, or directly. *)
 Theorem block_sim_function_inv_cross:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool) bt fn
