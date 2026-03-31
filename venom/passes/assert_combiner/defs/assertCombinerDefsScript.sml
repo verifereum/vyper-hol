@@ -1,6 +1,8 @@
 (*
  * Assert Combiner Pass — Definitions
  *
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
+ *
  * Ports vyper/venom/passes/assert_combiner.py to HOL4.
  *
  * Combines consecutive `assert iszero(x)` instructions into a single
@@ -52,11 +54,19 @@ End
 (* ===== Analysis Helpers ===== *)
 
 (* Check if an instruction is safe to appear between two asserts.
-   Must not be a terminator, volatile, or have effects. *)
+   Must not be a terminator, volatile, or have effects.
+   ALLOCA excluded: it modifies vs_allocas (non-variable state),
+   breaking execution_equiv in the deferred-abort case.
+   PHI/PARAM/OFFSET excluded: they can fail even when operands evaluate
+   (PHI needs vs_prev_bb, PARAM needs index in range, OFFSET needs label map). *)
 Definition ac_is_safe_between_def:
   ac_is_safe_between inst <=>
     ~is_terminator inst.inst_opcode /\
     ~ac_is_volatile inst.inst_opcode /\
+    inst.inst_opcode <> ALLOCA /\
+    inst.inst_opcode <> PHI /\
+    inst.inst_opcode <> PARAM /\
+    inst.inst_opcode <> OFFSET /\
     write_effects inst.inst_opcode = {} /\
     read_effects inst.inst_opcode = {}
 End
@@ -226,4 +236,22 @@ End
 Definition ac_transform_context_def:
   ac_transform_context ctx =
     ctx with ctx_functions := MAP ac_transform_function ctx.ctx_functions
+End
+
+(* ===== Fresh Variable Tracking ===== *)
+
+(* Fresh variables introduced by merging within a single block. *)
+Definition ac_fresh_vars_block_def:
+  ac_fresh_vars_block dfg bb =
+    let candidates = ac_scan_block dfg bb.bb_instructions NONE in
+    set (FLAT (MAP (\mc.
+      [ac_or_var mc.mc_second_id; ac_iz_var mc.mc_second_id])
+      candidates))
+End
+
+(* Fresh variables in a function. *)
+Definition ac_fresh_vars_fn_def:
+  ac_fresh_vars_fn fn =
+    let dfg = dfg_build_function fn in
+    BIGUNION (set (MAP (ac_fresh_vars_block dfg) fn.fn_blocks))
 End
