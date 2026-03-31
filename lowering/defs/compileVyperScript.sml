@@ -100,7 +100,7 @@ Definition package_external_fn_def:
     (_, mut, nr, fname, fargs, dflts, ret, body) =
     let entry_lbl = "fn_" ++ fname in
     let cenv_base = build_compile_env tops External mut fname
-                      fargs ret use_trans in
+                      fargs ret body use_trans in
     let cenv = if ret ≠ NoneT then update_cenv_ret_abi cenv_base ret
                else cenv_base in
     let nkey = nkey_map fname in
@@ -123,7 +123,7 @@ Definition package_internal_fn_def:
   package_internal_fn tops use_trans nkey_map
     (vis, mut, nr, fname, fargs, _, ret, body) =
     let fn_lbl = "fn_" ++ fname in
-    let cenv = build_compile_env tops vis mut fname fargs ret use_trans in
+    let cenv = build_compile_env tops vis mut fname fargs ret body use_trans in
     let sft_types = (λname. MAP (FST o SND)
                       (make_struct_fields_map tops name)) in
     let rc = returns_stack_count sft_types ret in
@@ -148,7 +148,7 @@ Definition package_fallback_fn_def:
   package_fallback_fn tops use_trans nkey_map
     (SOME (_, mut, nr, fname, fargs, _, ret, body)) =
     let cenv = build_compile_env tops External mut fname
-                 fargs ret use_trans in
+                 fargs ret body use_trans in
     let nkey = nkey_map fname in
     let is_payable = (mut = Payable) in
     let is_view = (mut = View) in

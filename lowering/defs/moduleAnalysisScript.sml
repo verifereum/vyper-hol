@@ -24,6 +24,8 @@ Theory moduleAnalysis
 Ancestors
   exprLowering
   compileEnv
+  selectorDispatch
+  vyperContext
   vyperAST
 
 (* ===== Struct Fields ===== *)
@@ -325,6 +327,94 @@ Definition build_positional_args_def:
     MAP (build_positional_arg cenv) args
 End
 
+(* ===== Local Variable Collection ===== *)
+
+(* Collect local variable declarations (AnnAssign) from a statement list.
+   Walks into If/For/nested blocks. Each AnnAssign declares a local
+   that Python pre-allocates before lowering the body. *)
+(* Collect locals from a single statement *)
+Definition collect_locals_stmt_def:
+  collect_locals_stmt (AnnAssign id ty _) = [(id, ty)] ∧
+  collect_locals_stmt _ = ([] : (string # type) list)
+End
+
+(* Collect all local variable declarations from a statement list.
+   Walks into If/For blocks to find nested AnnAssign declarations. *)
+Definition collect_locals_def:
+  collect_locals ([] : stmt list) = ([] : (string # type) list) ∧
+  collect_locals (st :: rest) =
+    collect_locals_stmt st ++ collect_locals rest
+End
+
+(* ===== Dynamic Array Capacity ===== *)
+
+(* Extract dynamic array capacity from a type.
+   Returns SOME n for ArrayT _ (Dynamic n), NONE otherwise. *)
+Definition dynarray_capacity_of_type_def:
+  dynarray_capacity_of_type (ArrayT _ (Dynamic n)) = SOME n ∧
+  dynarray_capacity_of_type _ = NONE
+End
+
+(* Build dynarray_capacity map from variable declarations + locals.
+   Maps variable name → max capacity for dynamic arrays. *)
+Definition build_dynarray_capacity_def:
+  build_dynarray_capacity ([] : (string # type) list) = (K 0n : string -> num) ∧
+  build_dynarray_capacity ((vname, ty) :: rest) =
+    let rest_map = build_dynarray_capacity rest in
+    case dynarray_capacity_of_type ty of
+      SOME n => (λs. if s = vname then n else rest_map s)
+    | NONE => rest_map
+End
+
+(* Collect module-level variable declarations as (name, type) pairs *)
+Definition collect_module_vars_def:
+  collect_module_vars ([] : toplevel list) = ([] : (string # type) list) ∧
+  collect_module_vars (top :: rest) =
+    let here = (case top of
+        VariableDecl _ _ vname ty => [(vname, ty)]
+      | _ => []) in
+    here ++ collect_module_vars rest
+End
+
+(* ===== Method ID Map ===== *)
+
+(* Build method_id map: func_name → selector num.
+   Uses function_selector and calldata_method_id from selectorDispatch. *)
+Definition build_method_id_map_def:
+  build_method_id_map tenv ([] : toplevel list) = (K 0n : string -> num) ∧
+  build_method_id_map tenv (top :: rest) =
+    let rest_map = build_method_id_map tenv rest in
+    case top of
+      FunctionDecl External _ _ fname fargs _ _ _ =>
+        let abi_types = vyper_to_abi_types tenv (MAP SND fargs) in
+        let sel_bytes = function_selector fname abi_types in
+        let sel_num = w2n (calldata_method_id sel_bytes) in
+        (λs. if s = fname then sel_num else rest_map s)
+    | _ => rest_map
+End
+
+(* ===== Internal Function Info ===== *)
+
+(* Build func_info map: fn_label → (returns_count, return_buf_size, pass_via_stack).
+   Iterates over internal/deploy functions, computes calling convention. *)
+Definition build_func_info_def:
+  build_func_info sft ([] : toplevel list) =
+    (K (0n, 0n, [] : bool list) : string -> num # num # bool list) ∧
+  build_func_info sft (top :: rest) =
+    let rest_map = build_func_info sft rest in
+    case top of
+      FunctionDecl vis _ _ fname fargs _ ret _ =>
+        if vis = External then rest_map
+        else
+          let fn_lbl = "fn_" ++ fname in
+          let arg_types = MAP SND fargs in
+          let ret_mem = type_mem_bytes sft ret in
+          let info = compute_func_info (λn. MAP (FST o SND) (sft n))
+                       ret ret_mem arg_types in
+          (λs. if s = fn_lbl then info else rest_map s)
+    | _ => rest_map
+End
+
 (* ===== Compile Env Construction ===== *)
 
 (* Build a compile_env for a function given module-level metadata.
@@ -332,15 +422,16 @@ End
    Arguments:
    - tops: full toplevel list (for module-level metadata)
    - vis: function visibility (External/Internal/Deploy)
+   - mut: function mutability
    - func_name: function name
    - args: function arguments
    - ret_type: return type
-   - body: function body (for local variable discovery -- future)
+   - body: function body (for local variable discovery)
    - use_transient_locks: whether to use transient storage for locks *)
 Definition build_compile_env_def:
   build_compile_env tops vis (mut : function_mutability) func_name
     (args : (string # type) list) (ret_type : type)
-    (use_transient_locks : bool) =
+    (body : stmt list) (use_transient_locks : bool) =
     let sft = make_struct_fields_map tops in
     let sft_types = (λname. MAP (FST o SND) (sft name)) in
     let (flag_member_id, flag_n_members) = make_flag_info tops in
@@ -353,29 +444,45 @@ Definition build_compile_env_def:
     let var_type_map = build_var_type_map tops in
     let is_hashmap = build_is_hashmap tops in
     let event_info = make_event_info tops in
+    let tenv = type_env tops in
     let is_external = (vis = External) in
     let rc = returns_stack_count sft_types ret_type in
     let has_return_buf = (rc = 0 ∧ ret_type ≠ NoneT) in
     (* Allocate memory for arguments *)
     let (arg_vars, args_end) = allocate_args sft args 0 FEMPTY in
+    (* Allocate memory for local variables *)
+    let locals = collect_locals body in
+    let (local_vars, locals_end) = allocate_args sft locals args_end arg_vars in
     (* For internal functions, allocate special vars *)
     let (all_vars, total_mem) =
-      if is_external then (arg_vars, args_end)
-      else allocate_internal_special_vars has_return_buf args_end arg_vars in
+      if is_external then (local_vars, locals_end)
+      else allocate_internal_special_vars has_return_buf locals_end local_vars in
     (* Return buffer offset *)
     let ret_buf = if has_return_buf then
                     SOME (total_mem : num) (* placeholder *)
                   else NONE in
     let nr_info = (F, 0n, use_transient_locks, mut = View) in
+    (* Dynamic array capacity: from module vars + local vars *)
+    let all_decls = collect_module_vars tops ++ args ++ locals in
+    let dynarray_cap = build_dynarray_capacity all_decls in
+    (* Method ID map *)
+    let method_id_map = build_method_id_map tenv tops in
+    (* Internal function info *)
+    let func_info = build_func_info sft tops in
+    (* Variable type map: combine module-level + args + locals *)
+    let local_var_type = (λn.
+          case ALOOKUP (REVERSE (args ++ locals)) n of
+            SOME ty => SOME ty
+          | NONE => var_type_map n) in
     <| ce_vars := all_vars;
        ce_storage_layout := combined_layout;
        ce_module := NONE;
        ce_struct_fields := sft;
-       ce_dynarray_capacity := K 0;
-       ce_method_id := K 0;
+       ce_dynarray_capacity := dynarray_cap;
+       ce_method_id := method_id_map;
        ce_flag_member_id := flag_member_id;
        ce_flag_n_members := flag_n_members;
-       ce_var_type := var_type_map;
+       ce_var_type := local_var_type;
        ce_is_hashmap := is_hashmap;
        ce_event_info := event_info;
        ce_returns_count := rc;
@@ -385,7 +492,7 @@ Definition build_compile_env_def:
        ce_ret_dec_info := DecPrimWord NoClamp;
        ce_max_return_size := 0;
        ce_is_ctor := (vis = Deploy);
-       ce_func_info := K (0, 0, []);  (* populated per-function later *)
+       ce_func_info := func_info;
        ce_nonreentrant := nr_info;
        ce_raw_return := F
     |> : compile_env
