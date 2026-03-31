@@ -189,8 +189,11 @@ Definition dense_bucket_items_def:
     dense_bucket_items rest fn_metadata_bytes entry_map
 End
 
-(* Build all data sections for dense dispatch.
-   Returns list of data_section: BUCKET_HEADERS + per-bucket sections. *)
+(* Build all data sections for dense dispatch (pure version).
+   Returns list of data_section: BUCKET_HEADERS + per-bucket sections.
+   The monad-based emit_dense_data_sections in moduleLowering performs
+   the same computation within the compile monad. This pure version
+   is for specification and correctness proofs. *)
 Definition build_dense_data_sections_def:
   build_dense_data_sections (buckets : dense_bucket list)
       fn_metadata_bytes
@@ -206,8 +209,9 @@ Definition build_dense_data_sections_def:
     header_sec :: bucket_secs
 End
 
-(* Build data sections for sparse dispatch.
-   BUCKET_HEADERS: one 2-byte DataLabel per bucket (bucket code block label). *)
+(* Build data sections for sparse dispatch (pure version).
+   BUCKET_HEADERS: one 2-byte DataLabel per bucket (bucket code block label).
+   For specification; actual emission is inline in compile_selector_dispatch_sparse. *)
 Definition build_sparse_data_sections_def:
   build_sparse_data_sections (bucket_labels : string list) =
     [<| ds_label := "BUCKET_HEADERS";
