@@ -4,7 +4,7 @@
  * Per-block simulation: transform_block preserves execution semantics
  * when vs_prev_bb is set (reachable non-entry blocks).
  *
- * Uses lift_result for compatibility with block_sim_function_reachable.
+ * Uses lift_result for compatibility with block_sim_function_pointwise_reachable.
  *
  * ============================================================================
  * STRUCTURE OVERVIEW
@@ -247,7 +247,7 @@ QED
    Per-Block Simulation (KEY THEOREM)
 
    This is the main block-level correctness theorem.
-   Uses lift_result for direct integration with block_sim_function_reachable.
+   Uses lift_result for direct integration with block_sim_function_pointwise_reachable.
    Guarded by vs_prev_bb <> NONE (satisfied for all reachable non-entry blocks).
    ========================================================================== *)
 
