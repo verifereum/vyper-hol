@@ -23,41 +23,37 @@ Ancestors
 (* ===== Context-Level Pass Correctness ===== *)
 
 (* A context-level pass: transforms a context, preserves semantics.
-   fresh = set of vars that may differ between original and transformed. *)
+   R_ok/R_term are the per-state relations for OK/terminal results. *)
 Definition ctx_pass_correct_def:
-  ctx_pass_correct (p : venom_context -> venom_context) fresh ctx s <=>
-    pass_correct fresh
+  ctx_pass_correct (p : venom_context -> venom_context) R_ok R_term ctx s <=>
+    pass_correct R_ok R_term
       (\fuel. run_context fuel ctx s)
       (\fuel. run_context fuel (p ctx) s)
 End
 
 (* ===== Composition Infrastructure ===== *)
 
-(* pass_correct is transitive (fresh vars accumulate via union).
-   Proof sketch: terminates iff chains by transitivity of iff;
-   result_equiv chains via result_equiv_trans + subset monotonicity. *)
+(* pass_correct is transitive when relations compose.
+   R12_ok/R12_term must contain the relational composition of the
+   individual relations (R1 then R2). *)
 Theorem pass_correct_trans:
-  !fresh1 fresh2 exec1 exec2 exec3.
-    pass_correct fresh1 exec1 exec2 /\
-    pass_correct fresh2 exec2 exec3 ==>
-    pass_correct (fresh1 UNION fresh2) exec1 exec3
+  !R1_ok R1_term R2_ok R2_term R12_ok R12_term exec1 exec2 exec3.
+    (!s1 s2 s3. R1_ok s1 s2 /\ R2_ok s2 s3 ==> R12_ok s1 s3) /\
+    (!s1 s2 s3. R1_term s1 s2 /\ R2_term s2 s3 ==> R12_term s1 s3) /\
+    pass_correct R1_ok R1_term exec1 exec2 /\
+    pass_correct R2_ok R2_term exec2 exec3 ==>
+    pass_correct R12_ok R12_term exec1 exec3
 Proof
   cheat
 QED
 
-(* Sequential composition of context transforms.
-   Each pass is correct when applied to the context produced
-   by all preceding passes (FOLDL-indexed precondition). *)
-Theorem compose_passes_correct:
-  !passes fresh_sets ctx s.
-    LENGTH fresh_sets = LENGTH passes /\
-    (!i. i < LENGTH passes ==>
-      let ctx_i = FOLDL (\c p. p c) ctx (TAKE i passes) in
-      ctx_pass_correct (EL i passes) (EL i fresh_sets) ctx_i s)
-  ==>
-    pass_correct (BIGUNION (set fresh_sets))
-      (\fuel. run_context fuel ctx s)
-      (\fuel. run_context fuel (FOLDL (\c p. p c) ctx passes) s)
+(* Corollary: state_equiv/execution_equiv accumulate via union. *)
+Theorem pass_correct_trans_equiv:
+  !fresh1 fresh2 exec1 exec2 exec3.
+    pass_correct (state_equiv fresh1) (execution_equiv fresh1) exec1 exec2 /\
+    pass_correct (state_equiv fresh2) (execution_equiv fresh2) exec2 exec3 ==>
+    pass_correct (state_equiv (fresh1 UNION fresh2))
+                 (execution_equiv (fresh1 UNION fresh2)) exec1 exec3
 Proof
   cheat
 QED
@@ -66,33 +62,18 @@ QED
 
 (* Lift function-level correctness to context level.
    If every function in the context is correctly transformed by f,
-   then apply_ctx_fn_transform f is a correct context transform. *)
+   then apply_ctx_fn_transform f is a correct context transform.
+   Uses same ctx on both sides (callees not transformed in callee lookup). *)
 Theorem apply_ctx_fn_transform_correct:
-  !f ctx s fresh.
+  !f ctx s R_ok R_term.
     (!fn. MEM fn ctx.ctx_functions ==>
       !fuel s'.
         s'.vs_inst_idx = 0 ==>
-        pass_correct fresh
+        pass_correct R_ok R_term
           (\fuel. run_function fuel ctx fn s')
           (\fuel. run_function fuel ctx (f fn) s'))
   ==>
-    ctx_pass_correct (apply_ctx_fn_transform f) fresh ctx s
-Proof
-  cheat
-QED
-
-(* Lift lift_result to pass_correct *)
-Theorem lift_result_to_pass_correct:
-  !vars fn fn' ctx s.
-    (!fuel.
-      s.vs_inst_idx = 0 ==>
-      lift_result (state_equiv vars) (execution_equiv vars)
-        (run_function fuel ctx fn s)
-        (run_function fuel ctx fn' s))
-  ==>
-    pass_correct vars
-      (\fuel. run_function fuel ctx fn s)
-      (\fuel. run_function fuel ctx fn' s)
+    ctx_pass_correct (apply_ctx_fn_transform f) R_ok R_term ctx s
 Proof
   cheat
 QED
@@ -110,42 +91,56 @@ Theorem venom_pipeline_correct:
      * change alloca layout (remove_unused, function_inliner). *)
     EVERY alloca_safe_fn ctx.ctx_functions /\
     ctx_pass_correct (apply_ctx_fn_transform simplify_cfg_fn)
-                     fresh_cfg ctx s /\
+                     (state_equiv fresh_cfg) (execution_equiv fresh_cfg)
+                     ctx s /\
     (let ctx1 = apply_ctx_fn_transform simplify_cfg_fn ctx in
      ctx_pass_correct (apply_ctx_fn_transform ircf_global)
-                      fresh_ircf ctx1 s) /\
+                      (state_equiv fresh_ircf) (execution_equiv fresh_ircf)
+                      ctx1 s) /\
     (let ctx2 = apply_ctx_fn_transform ircf_global
                   (apply_ctx_fn_transform simplify_cfg_fn ctx) in
      ctx_pass_correct (apply_ctx_fn_transform ricf_global)
-                      fresh_ricf ctx2 s) /\
+                      (state_equiv fresh_ricf) (execution_equiv fresh_ricf)
+                      ctx2 s) /\
     (let ctx3 = apply_ctx_fn_transform ricf_global
                   (apply_ctx_fn_transform ircf_global
                     (apply_ctx_fn_transform simplify_cfg_fn ctx)) in
      ctx_pass_correct (function_inliner_ctx threshold)
-                      fresh_inl ctx3 s) /\
+                      (state_equiv fresh_inl) (execution_equiv fresh_inl)
+                      ctx3 s) /\
     (let ctx4 = function_inliner_ctx threshold
                   (apply_ctx_fn_transform ricf_global
                     (apply_ctx_fn_transform ircf_global
                       (apply_ctx_fn_transform simplify_cfg_fn ctx))) in
      ctx_pass_correct (apply_ctx_fn_transform fn_pipeline)
-                      fresh_fn ctx4 s)
+                      (state_equiv fresh_fn) (execution_equiv fresh_fn)
+                      ctx4 s)
   ==>
     ctx_pass_correct
       (venom_pipeline ircf_global ricf_global threshold fn_pipeline)
-      (fresh_cfg UNION fresh_ircf UNION fresh_ricf UNION
-       fresh_inl UNION fresh_fn)
+      (state_equiv (fresh_cfg UNION fresh_ircf UNION fresh_ricf UNION
+                    fresh_inl UNION fresh_fn))
+      (execution_equiv (fresh_cfg UNION fresh_ircf UNION fresh_ricf UNION
+                        fresh_inl UNION fresh_fn))
       ctx s
 Proof
   cheat
 QED
 
-(* pass_correct implies observable equivalence of terminal results *)
+(* pass_correct implies observable equivalence when R_ok/R_term
+   imply observable equivalence. *)
 Theorem pass_correct_implies_observable:
-  !fresh exec1 exec2 fuel fuel'.
-    pass_correct fresh exec1 exec2 /\
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool) exec1 exec2 fuel fuel'.
+    (!s1 s2. R_ok s1 s2 ==> observable_equiv s1 s2) /\
+    (!s1 s2. R_term s1 s2 ==> observable_equiv s1 s2) /\
+    pass_correct R_ok R_term exec1 exec2 /\
     terminates (exec1 fuel) /\ terminates (exec2 fuel') ==>
     observable_result_equiv (exec1 fuel) (exec2 fuel')
 Proof
   rw[pass_correct_def] >>
-  metis_tac[result_equiv_implies_observable_result]
+  first_x_assum drule_all >> strip_tac >>
+  Cases_on `exec1 fuel` >> Cases_on `exec2 fuel'` >>
+  gvs[lift_result_def, observable_result_equiv_def] >>
+  metis_tac[]
 QED

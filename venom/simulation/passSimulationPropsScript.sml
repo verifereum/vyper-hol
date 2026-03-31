@@ -473,14 +473,15 @@ QED
 (* ===== Bridge ===== *)
 
 Theorem lift_result_implies_pass_correct:
-  !fresh exec1 exec2.
-    (!fuel. result_equiv fresh (exec1 fuel) (exec2 fuel)) /\
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool) exec1 exec2.
+    (!fuel. lift_result R_ok R_term (exec1 fuel) (exec2 fuel)) /\
     (!fuel fuel'. terminates (exec1 fuel) /\ terminates (exec1 fuel') ==>
                   exec1 fuel = exec1 fuel') /\
     (!fuel fuel'. terminates (exec2 fuel) /\ terminates (exec2 fuel') ==>
                   exec2 fuel = exec2 fuel')
   ==>
-    pass_correct fresh exec1 exec2
+    pass_correct R_ok R_term exec1 exec2
 Proof
   ACCEPT_TAC lift_result_implies_pass_correct_proof
 QED
@@ -489,6 +490,58 @@ Theorem state_equiv_execution_equiv_valid_state_rel:
   !vars. valid_state_rel (state_equiv vars) (execution_equiv vars)
 Proof
   ACCEPT_TAC execEquivParamPropsTheory.state_equiv_execution_equiv_valid_state_rel
+QED
+
+(* ===== Dual-context module simulation ===== *)
+
+(* Module-level simulation with different contexts and callee IH.
+   Proves ALL function pairs (looked up by name from ctx1/ctx2) are
+   related, given per-block simulation with callee IH.
+   Enables module-level lifting where callees are also transformed. *)
+Theorem module_sim_dual_ctx:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool) ctx1 ctx2.
+    (!s. R_ok s s) /\
+    (!s1 s2. R_ok s1 s2 ==> R_term s1 s2) /\
+    (!s1 s2. R_ok s1 s2 ==>
+      s1.vs_current_bb = s2.vs_current_bb /\
+      s1.vs_inst_idx = s2.vs_inst_idx /\
+      s1.vs_halted = s2.vs_halted) /\
+    (!fn_name fn1 fn2.
+       lookup_function fn_name ctx1.ctx_functions = SOME fn1 /\
+       lookup_function fn_name ctx2.ctx_functions = SOME fn2 ==>
+       !lbl. IS_SOME (lookup_block lbl fn1.fn_blocks) <=>
+             IS_SOME (lookup_block lbl fn2.fn_blocks)) /\
+    (!fn_name fn1 fn2 lbl bb1 bb2 fuel s1 s2.
+       lookup_function fn_name ctx1.ctx_functions = SOME fn1 /\
+       lookup_function fn_name ctx2.ctx_functions = SOME fn2 /\
+       lookup_block lbl fn1.fn_blocks = SOME bb1 /\
+       lookup_block lbl fn2.fn_blocks = SOME bb2 /\
+       R_ok s1 s2 /\ s1.vs_inst_idx = 0 /\
+       (!callee_name cfn1 cfn2 cs1 cs2.
+          lookup_function callee_name ctx1.ctx_functions = SOME cfn1 /\
+          lookup_function callee_name ctx2.ctx_functions = SOME cfn2 /\
+          R_ok cs1 cs2 /\ cs1.vs_inst_idx = 0 ==>
+          (?e. run_function fuel ctx1 cfn1 cs1 = Error e) \/
+          lift_result R_ok R_term
+            (run_function fuel ctx1 cfn1 cs1)
+            (run_function fuel ctx2 cfn2 cs2))
+       ==>
+       (?e. run_block fuel ctx1 bb1 s1 = Error e) \/
+       lift_result R_ok R_term
+         (run_block fuel ctx1 bb1 s1)
+         (run_block fuel ctx2 bb2 s2))
+  ==>
+    !fn_name fn1 fn2 fuel s1 s2.
+      lookup_function fn_name ctx1.ctx_functions = SOME fn1 /\
+      lookup_function fn_name ctx2.ctx_functions = SOME fn2 /\
+      R_ok s1 s2 /\ s1.vs_inst_idx = 0 ==>
+      (?e. run_function fuel ctx1 fn1 s1 = Error e) \/
+      lift_result R_ok R_term
+        (run_function fuel ctx1 fn1 s1)
+        (run_function fuel ctx2 fn2 s2)
+Proof
+  ACCEPT_TAC module_sim_dual_ctx_proof
 QED
 
 (* General: function_map_transform preserves wf_function

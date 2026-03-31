@@ -17,7 +17,7 @@
  *   inst_simulates           — per-instruction simulation predicate
  *   block_simulates          — whole-block simulation predicate
  *   terminates               — execution terminates (not Error)
- *   pass_correct             — combined termination + result equivalence
+ *   pass_correct             — combined termination + result equivalence (R_ok, R_term)
  *)
 
 Theory passSimulationDefs
@@ -73,14 +73,20 @@ End
 
 (* Two executions (parameterized by fuel) are pass-correct:
    1. Termination equivalence: original terminates iff transformed terminates
-   2. Result equivalence: when both terminate, results are equivalent
-      (modulo fresh variables introduced by the transformation)
-   Usage: pass_correct fresh (\fuel. run_function fuel ctx fn s)
-                              (\fuel. run_function fuel ctx fn' s) *)
+   2. Result equivalence: when both terminate, results are related
+
+   Parameterized by R_ok (OK/continuation relation) and R_term
+   (Halt/Revert/terminal relation).  Passes that only introduce
+   fresh variables instantiate with state_equiv/execution_equiv.
+   Passes with custom relations (e.g. lower_dload) use their own.
+
+   Usage: pass_correct (state_equiv vars) (execution_equiv vars)
+            (\fuel. run_function fuel ctx fn s)
+            (\fuel. run_function fuel ctx fn' s) *)
 Definition pass_correct_def:
-  pass_correct fresh exec1 exec2 <=>
+  pass_correct R_ok R_term exec1 exec2 <=>
     ((?fuel. terminates (exec1 fuel)) <=> (?fuel'. terminates (exec2 fuel'))) /\
     (!fuel fuel'.
        terminates (exec1 fuel) /\ terminates (exec2 fuel') ==>
-       result_equiv fresh (exec1 fuel) (exec2 fuel'))
+       lift_result R_ok R_term (exec1 fuel) (exec2 fuel'))
 End
