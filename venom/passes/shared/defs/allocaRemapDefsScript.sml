@@ -9,15 +9,20 @@
  * TOP-LEVEL:
  *   mem_byte_at           — safe memory byte access (0w for OOB)
  *   fn_alloca_id_of_var   — find alloca inst_id that produces a variable
- *   alloca_mem_agrees     — memory content at corresponding alloca
- *                           offsets agrees between two states
+ *   in_alloca_region      — address falls within an alloca region
+ *   allocas_non_overlapping — alloca regions don't overlap in a state
+ *   alloca_mem_agrees     — memory at alloca regions corresponds
  *   alloca_remap_rel      — full state relation for remapping
  *
- * The key invariant: under pointer_confined, execution is insensitive
- * to concrete alloca base addresses. alloca_remap_rel captures what
- * must hold: non-pointer vars agree, pointer vars may differ (but
- * only in address positions), and memory content at corresponding
- * offsets is byte-identical.
+ * Design: alloca_remap_rel captures what must hold for execution under
+ * pointer_confined to be insensitive to alloca base addresses:
+ *   - Non-pointer vars agree (clause 1)
+ *   - Alloca output vars hold remapped offsets (clause 2)
+ *   - Memory at alloca regions corresponds (clause 3)
+ *   - Memory OUTSIDE alloca regions is identical (clause 4)
+ *   - Alloca regions don't overlap in either state (clause 5)
+ *   - Alloca maps have same domain and sizes (clause 6)
+ *   - Scalar state fields agree (clause 7)
  *)
 
 Theory allocaRemapDefs
@@ -46,6 +51,24 @@ Definition fn_alloca_id_of_var_def:
     | NONE => NONE
 End
 
+(* Address falls within some alloca region in a state. *)
+Definition in_alloca_region_def:
+  in_alloca_region s i <=>
+    ?aid off sz.
+      FLOOKUP s.vs_allocas aid = SOME (off, sz) /\
+      off <= i /\ i < off + sz
+End
+
+(* Alloca regions in a state are pairwise non-overlapping. *)
+Definition allocas_non_overlapping_def:
+  allocas_non_overlapping s <=>
+    !aid1 aid2 off1 sz1 off2 sz2.
+      FLOOKUP s.vs_allocas aid1 = SOME (off1, sz1) /\
+      FLOOKUP s.vs_allocas aid2 = SOME (off2, sz2) /\
+      aid1 <> aid2 ==>
+      off1 + sz1 <= off2 \/ off2 + sz2 <= off1
+End
+
 (* ===== Alloca Remap ===== *)
 
 (* An alloca_remap maps instruction IDs to new base offsets. *)
@@ -65,13 +88,7 @@ End
 
 (* ===== Full Remapping Relation ===== *)
 
-(* Two states are related under alloca remapping when:
-   1. Non-pointer-derived variables agree
-   2. Alloca output variables hold remapped offsets
-   3. Memory content at alloca regions agrees
-   4. Alloca maps have same domain and compatible sizes
-   5. Scalar state fields agree
-
+(* Two states are related under alloca remapping.
    fn determines pointer_derived_vars; roots = alloca output variables;
    remap maps alloca inst_ids to new base offsets. *)
 Definition alloca_remap_rel_def:
@@ -89,13 +106,23 @@ Definition alloca_remap_rel_def:
        lookup_var v s2 = SOME (n2w new_off)) /\
     (* 3. Memory content at alloca regions agrees *)
     alloca_mem_agrees remap s1 s2 /\
-    (* 4. Alloca maps have same domain and sizes *)
+    (* 4. Memory OUTSIDE alloca regions is byte-identical.
+       Required for non-pointer memory access (e.g. MLOAD [Lit 0x100w])
+       to produce the same result in both states. *)
+    (!i. ~in_alloca_region s1 i ==>
+         mem_byte_at s1.vs_memory i = mem_byte_at s2.vs_memory i) /\
+    (* 5. Alloca regions are non-overlapping in both states.
+       Required for mstore within one region to not corrupt
+       another region's correspondence. *)
+    allocas_non_overlapping s1 /\
+    allocas_non_overlapping s2 /\
+    (* 6. Alloca maps have same domain and sizes *)
     FDOM s1.vs_allocas = FDOM s2.vs_allocas /\
     (!aid off1 sz1 off2 sz2.
       FLOOKUP s1.vs_allocas aid = SOME (off1, sz1) /\
       FLOOKUP s2.vs_allocas aid = SOME (off2, sz2) ==>
       sz1 = sz2) /\
-    (* 5. Scalar state fields agree *)
+    (* 7. Scalar state fields agree *)
     s1.vs_halted = s2.vs_halted /\
     s1.vs_returndata = s2.vs_returndata /\
     s1.vs_accounts = s2.vs_accounts /\
