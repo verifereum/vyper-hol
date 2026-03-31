@@ -131,6 +131,12 @@ Definition mem_write_ops_def:
              SOME <| iao_ofst := dst; iao_size := SOME (Lit 32w);
                      iao_max_size := SOME (Lit 32w) |>
          | _ => NONE)
+    | MSTORE8 =>
+        (case inst.inst_operands of
+           [dst; _] =>
+             SOME <| iao_ofst := dst; iao_size := SOME (Lit 1w);
+                     iao_max_size := SOME (Lit 1w) |>
+         | _ => NONE)
     | ISTORE =>
         (case inst.inst_operands of
            [dst; _] =>

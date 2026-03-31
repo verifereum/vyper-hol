@@ -71,7 +71,7 @@ QED
 (* Store opcodes: 2 operands *)
 Theorem inst_wf_store_shape:
   !inst. inst_wf inst /\
-    inst.inst_opcode IN {MSTORE; SSTORE; TSTORE} ==>
+    inst.inst_opcode IN {MSTORE; MSTORE8; SSTORE; TSTORE} ==>
     ?op1 op2. inst.inst_operands = [op1; op2]
 Proof
   rpt strip_tac >>

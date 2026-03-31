@@ -188,13 +188,13 @@ Triviality step_inst_write2_equiv:
   !vars inst s1 s2.
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
-    MEM inst.inst_opcode [MSTORE; SSTORE; TSTORE] ==>
+    MEM inst.inst_opcode [MSTORE; MSTORE8; SSTORE; TSTORE] ==>
     result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rw[] >> simp[step_inst_base_def] >>
   irule exec_write2_result_equiv >> simp[] >> rw[] >>
-  FIRST [irule mstore_preserves, irule sstore_preserves,
-         irule tstore_preserves] >> simp[]
+  FIRST [irule mstore_preserves, irule mstore8_preserves,
+         irule sstore_preserves, irule tstore_preserves] >> simp[]
 QED
 
 (* Terminators without operands: STOP, SINK *)
@@ -740,7 +740,7 @@ Proof
       by simp[] >> drule_all step_inst_read1_equiv >> simp[],
     `inst.inst_opcode = EXTCODEHASH` by simp[] >>
       drule_all step_inst_extcodehash_equiv >> simp[],
-    `MEM inst.inst_opcode [MSTORE;SSTORE;TSTORE]` by simp[] >>
+    `MEM inst.inst_opcode [MSTORE;MSTORE8;SSTORE;TSTORE]` by simp[] >>
       drule_all step_inst_write2_equiv >> simp[],
     `MEM inst.inst_opcode [STOP;SINK]` by simp[] >>
       drule_all step_inst_terminator_equiv >> simp[],

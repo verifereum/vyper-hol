@@ -278,6 +278,16 @@ Proof
   vsr_reconstruct_R_ok_tac `s1` `s2`
 QED
 
+Theorem vsr_mstore8:
+  !R_ok R_term off v s1 s2.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>
+    R_ok (mstore8 off v s1) (mstore8 off v s2)
+Proof
+  rw[mstore8_def, LET_THM] >>
+  imp_res_tac vsr_R_ok_fields >> gvs[] >>
+  vsr_reconstruct_R_ok_tac `s1` `s2`
+QED
+
 Theorem vsr_sstore:
   !R_ok R_term k v s1 s2.
     valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>

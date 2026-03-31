@@ -150,7 +150,7 @@ val write_finish_tac =
       extract_venom_result_def] >>
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  simp[update_var_def, mstore_def, sstore_def, tstore_def,
+  simp[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
        write_memory_with_expansion_def, mcopy_def,
        contract_storage_def, revert_state_def,
        lookup_var_def, FLOOKUP_UPDATE, eval_operands_def];
@@ -162,6 +162,24 @@ val step_specific_write_tac =
 Theorem step_mstore_preserves:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\ inst.inst_opcode = MSTORE ==>
+    s'.vs_transient = s.vs_transient /\
+    s'.vs_accounts = s.vs_accounts /\
+    s'.vs_logs = s.vs_logs /\
+    s'.vs_immutables = s.vs_immutables /\
+    s'.vs_returndata = s.vs_returndata /\
+    s'.vs_allocas = s.vs_allocas /\
+    s'.vs_halted = s.vs_halted /\
+    s'.vs_current_bb = s.vs_current_bb /\
+    s'.vs_inst_idx = s.vs_inst_idx /\
+    s'.vs_prev_bb = s.vs_prev_bb /\
+    (!v. lookup_var v s' = lookup_var v s)
+Proof
+  step_specific_write_tac
+QED
+
+Theorem step_mstore8_preserves:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\ inst.inst_opcode = MSTORE8 ==>
     s'.vs_transient = s.vs_transient /\
     s'.vs_accounts = s.vs_accounts /\
     s'.vs_logs = s.vs_logs /\
@@ -284,7 +302,7 @@ val step_base_field_tac =
      extract_venom_result_def] >>
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  fs[update_var_def, mstore_def, sstore_def, tstore_def,
+  fs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
      write_memory_with_expansion_def, mcopy_def,
      revert_state_def, eval_operands_def,
      lookup_var_def, FLOOKUP_UPDATE];
@@ -387,7 +405,7 @@ val step_base_static_field_tac =
      exec_create_def, extract_venom_result_def] >>
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  simp[update_var_def, mstore_def, sstore_def, tstore_def,
+  simp[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
        write_memory_with_expansion_def, mcopy_def,
        contract_storage_def] >>
   imp_res_tac exec_ext_call_static_preserves >> gvs[];
@@ -791,12 +809,13 @@ QED
 Theorem step_write2_preserves_all_vars:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\
-    (inst.inst_opcode = MSTORE \/ inst.inst_opcode = SSTORE \/
-     inst.inst_opcode = TSTORE) ==>
+    (inst.inst_opcode = MSTORE \/ inst.inst_opcode = MSTORE8 \/
+     inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE) ==>
     !v. lookup_var v s' = lookup_var v s
 Proof
   rpt strip_tac >> gvs[] >>
   imp_res_tac step_mstore_preserves >> gvs[] >>
+  imp_res_tac step_mstore8_preserves >> gvs[] >>
   imp_res_tac step_sstore_preserves >> gvs[] >>
   imp_res_tac step_tstore_preserves >> gvs[]
 QED
