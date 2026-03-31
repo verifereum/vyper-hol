@@ -39,7 +39,7 @@
 
 Theory concretizeMemLocProofs
 Ancestors
-  concretizeMemLocDefs passSimulationProps venomWf
+  concretizeMemLocDefs passSimulationProps venomWf allocaSafety
 
 (* ===== Helpers ===== *)
 
@@ -154,6 +154,23 @@ Definition mem_remap_equiv_def:
     s1.vs_block_ctx = s2.vs_block_ctx /\
     s1.vs_logs = s2.vs_logs
 End
+
+(* ===== pointer_confined implies alloca_safe ===== *)
+
+(* pointer_confined is strictly stronger than alloca_safe_fn:
+ * pointer-derived vars can only appear in memory ops or ADD,
+ * which excludes all observable operand positions.
+ *
+ * Precondition: amap covers all alloca outputs in fn. *)
+Theorem pointer_confined_implies_alloca_safe:
+  ∀fn amap.
+    pointer_confined fn amap ∧
+    (∀inst. MEM inst (fn_insts fn) ∧ inst.inst_opcode = ALLOCA ⇒
+       ∀out. inst_output inst = SOME out ⇒ out ∈ FDOM amap) ⇒
+    alloca_safe_fn fn
+Proof
+  cheat
+QED
 
 (* ===== Allocator soundness ===== *)
 

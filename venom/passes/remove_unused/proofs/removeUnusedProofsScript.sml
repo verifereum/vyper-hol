@@ -36,6 +36,7 @@
 Theory removeUnusedProofs
 Ancestors
   removeUnusedDefs passSimulationProps venomInstProps venomWf
+  allocaSafety
 
 (* ===== Liveness soundness predicate ===== *)
 
@@ -142,10 +143,14 @@ Proof
   cheat
 QED
 
-(* Full iteration correctness *)
+(* Full iteration correctness.
+ * alloca_safe_fn: removing dead ALLOCAs changes alloca layout
+ * (bump allocator assigns different bases to subsequent ALLOCAs).
+ * Without non-escape, pointer values in observable state would differ. *)
 Theorem remove_unused_function_correct_proof:
   !fuel ctx fn s.
-    venom_wf ctx /\ wf_function fn /\ fn_inst_wf fn ==>
+    venom_wf ctx /\ wf_function fn /\ fn_inst_wf fn /\
+    alloca_safe_fn fn ==>
     let elim = remove_unused_eliminated_vars fn in
     lift_result (state_equiv elim) (execution_equiv elim)
       (run_function fuel ctx fn s)

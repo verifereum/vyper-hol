@@ -27,6 +27,9 @@
  *   icf_get_invoke_callee    — resolve invoke callee name
  *   icf_has_src_clobber      — check for source clobber between copy and uses
  *
+ * Proof:
+ *   icf_equiv                — state equiv allowing vs_memory to differ
+ *
  * Helper:
  *   icf_iter_use_positions   — iterate use positions for a variable
  *)
@@ -275,4 +278,81 @@ Definition icf_alias_use_positions_def:
     FLAT (MAP (\v. MAP (\(inst, pos). (v, inst, pos))
                        (icf_use_positions dfg v))
       (SET_TO_LIST aliases))
+End
+
+(* ===== Memory Address Position Check ===== *)
+
+(* Check whether operand position `pos` of `opc` is a memory address position,
+   i.e., the value is used solely as a memory address (w2n addr) and never
+   computed upon.  Forwarding a pointer at such a position is safe: the
+   instruction will read/write at the substituted address rather than
+   performing arithmetic on the pointer value.
+
+   Derived from step_inst_base semantics (venomExecSemanticsScript.sml)
+   and mem_write_ops/mem_read_ops (memLocDefsScript.sml).
+
+   INVOKE is excluded: callee parameter usage is interprocedural and
+   requires separate analysis (see ricf). *)
+Definition is_mem_addr_position_def:
+  is_mem_addr_position opc (pos : num) <=>
+    (* Memory read/write — single-address operands *)
+    (opc = MLOAD  /\ pos = 0) \/   (* mload [addr] *)
+    (opc = MSTORE /\ pos = 0) \/   (* mstore [addr; val] *)
+    (opc = ISTORE /\ pos = 0) \/   (* istore [addr; val] — immutable space *)
+    (* Bulk copy — dst and src addresses *)
+    (opc = MCOPY         /\ pos = 0) \/  (* mcopy [dst; src; sz] *)
+    (opc = MCOPY         /\ pos = 1) \/
+    (opc = CALLDATACOPY  /\ pos = 0) \/  (* calldatacopy [dst; cdsrc; sz] *)
+    (opc = DLOADBYTES    /\ pos = 0) \/  (* dloadbytes [dst; dsrc; sz] *)
+    (opc = CODECOPY      /\ pos = 0) \/  (* codecopy [dst; csrc; sz] *)
+    (opc = RETURNDATACOPY /\ pos = 0) \/ (* returndatacopy [dst; rdsrc; sz] *)
+    (opc = EXTCODECOPY   /\ pos = 1) \/  (* extcodecopy [addr; dst; src; sz] *)
+    (* External calls — memory offset operands only *)
+    (opc = CALL         /\ pos = 3) \/  (* call [gas;addr;val;argsOff;as;retOff;rs] *)
+    (opc = CALL         /\ pos = 5) \/
+    (opc = STATICCALL   /\ pos = 2) \/  (* staticcall [gas;addr;argsOff;as;retOff;rs] *)
+    (opc = STATICCALL   /\ pos = 4) \/
+    (opc = DELEGATECALL /\ pos = 2) \/  (* delegatecall [gas;addr;argsOff;as;retOff;rs] *)
+    (opc = DELEGATECALL /\ pos = 4) \/
+    (* Create — init code memory region *)
+    (opc = CREATE  /\ pos = 1) \/       (* create [val; off; sz] *)
+    (opc = CREATE2 /\ pos = 1) \/       (* create2 [val; off; sz; salt] *)
+    (* Hash / terminator reads *)
+    (opc = SHA3    /\ pos = 0) \/       (* sha3 [off; sz] *)
+    (opc = RETURN  /\ pos = 0) \/       (* return [off; sz] *)
+    (opc = REVERT  /\ pos = 0) \/       (* revert [off; sz] *)
+    (* Log — operand 0 is Lit topic_count, operand 1 is memory offset *)
+    (opc = LOG     /\ pos = 1)          (* log [tc; off; sz; topics...] *)
+End
+
+(* ===== Proof Equivalence Relation ===== *)
+
+(* State equivalence allowing vs_memory to differ.
+   Both copy forwarding passes NOP mcopy instructions, removing a memory
+   write to the dst allocation. The forwarding preconditions ensure no
+   instruction reads from that memory after the rewrite, so the memory
+   difference is at a dead location.
+   Includes control flow fields so it can serve as both R_ok and R_term
+   in lift_result. *)
+Definition icf_equiv_def:
+  icf_equiv s1 s2 <=>
+    (!v. lookup_var v s1 = lookup_var v s2) /\
+    s1.vs_current_bb = s2.vs_current_bb /\
+    s1.vs_inst_idx = s2.vs_inst_idx /\
+    s1.vs_prev_bb = s2.vs_prev_bb /\
+    s1.vs_transient = s2.vs_transient /\
+    s1.vs_halted = s2.vs_halted /\
+    s1.vs_returndata = s2.vs_returndata /\
+    s1.vs_accounts = s2.vs_accounts /\
+    s1.vs_call_ctx = s2.vs_call_ctx /\
+    s1.vs_tx_ctx = s2.vs_tx_ctx /\
+    s1.vs_block_ctx = s2.vs_block_ctx /\
+    s1.vs_logs = s2.vs_logs /\
+    s1.vs_immutables = s2.vs_immutables /\
+    s1.vs_data_section = s2.vs_data_section /\
+    s1.vs_labels = s2.vs_labels /\
+    s1.vs_code = s2.vs_code /\
+    s1.vs_params = s2.vs_params /\
+    s1.vs_prev_hashes = s2.vs_prev_hashes /\
+    s1.vs_allocas = s2.vs_allocas
 End

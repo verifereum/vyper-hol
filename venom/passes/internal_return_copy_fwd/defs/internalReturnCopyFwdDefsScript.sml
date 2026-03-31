@@ -128,8 +128,9 @@ Definition ircf_try_forward_def:
     if copy_idx >= LENGTH insts then NONE else
     let copy_inst = EL copy_idx insts in
     if copy_inst.inst_opcode <> MCOPY then NONE else
+    (* HOL4 EVM order: [dst; src; size].  Python order: [size; src; dst]. *)
     case copy_inst.inst_operands of
-      [Lit size_val; Var src; Var dst] =>
+      [Var dst; Var src; Lit size_val] =>
              let dst_root = icf_assign_root ctx.icf_dfg {} dst in
              let src_root = icf_assign_root ctx.icf_dfg {} src in
              if dst_root = src_root then NONE else
@@ -150,12 +151,21 @@ Definition ircf_try_forward_def:
                     icf_alias_use_positions ctx.icf_dfg dst_aliases in
                   (* Check all non-assign, non-copy uses are in same BB,
                      after copy, no PHI *)
+                  (* pos = 0 is mcopy dst in HOL4 EVM order [dst;src;size] *)
                   let rewrite_uses = FILTER (\(v, inst, (pos : num)).
                     ~icf_is_assign_output_use inst pos /\
-                    ~(inst.inst_opcode = MCOPY /\ pos = 2 /\
+                    ~(inst.inst_opcode = MCOPY /\ pos = 0 /\
                       inst.inst_id = copy_inst.inst_id))
                     use_positions in
                   if EXISTS (\(v, inst, (pos : num)). inst.inst_opcode = PHI)
+                     rewrite_uses then NONE
+                  else
+                  (* Reject if any rewrite use is NOT at a memory address
+                     operand position.  Non-address uses (e.g. ADD) would
+                     compute on the raw pointer value, which differs
+                     between src and dst allocas. *)
+                  if EXISTS (\(v, inst, (pos : num)).
+                       ~is_mem_addr_position inst.inst_opcode pos)
                      rewrite_uses then NONE
                   else
                   (* All rewrite uses must be in same block *)
