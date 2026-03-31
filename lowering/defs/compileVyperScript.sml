@@ -349,6 +349,8 @@ Definition build_compile_env_def:
           | NONE => var_type_map n) in
     <| ce_vars := all_vars;
        ce_storage_layout := storage_layout;
+       (* TODO: NONE = main module. For multi-module (imports), should
+          be SOME src_id. Currently single-module only. *)
        ce_module := NONE;
        ce_struct_fields := sft;
        ce_dynarray_capacity := dynarray_cap;
@@ -364,9 +366,16 @@ Definition build_compile_env_def:
        ce_ret_enc_info := AbiPrimWord;
        ce_ret_dec_info := DecPrimWord NoClamp;
        ce_max_return_size := 0;
+       (* TODO: In Python, is_ctor_context is True for __init__ AND
+          internal functions reachable from __init__. This only catches
+          __init__ itself (vis = Deploy). Internal fns called from ctor
+          that use immutables (ILOAD/ISTORE) will get wrong codegen.
+          Fix: add ctor-reachability flag to AST from Python. *)
        ce_is_ctor := (vis = Deploy);
        ce_func_info := func_info;
        ce_nonreentrant := (F, 0n, use_transient_locks, mut = View);
+       (* TODO: should be per-function (func_t.do_raw_return in Python).
+          @raw_return not yet supported. *)
        ce_raw_return := F
     |> : compile_env
 End

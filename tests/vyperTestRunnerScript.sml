@@ -147,7 +147,7 @@ val () = cv_auto_trans compute_vyper_args_def;
 Definition run_deployment_def:
   run_deployment am dt = let
     sns = compute_selector_names dt.contractAbi;
-    all_mods = dt.sourceAst;
+    all_mods = annotate_sources_slots dt.storageLayout dt.sourceAst;
     ts = case ALOOKUP all_mods NONE of SOME ts => ts | NONE => [];
     name = find_deploy_function_name ts;
     argTys = find_args_by_name name dt.contractAbi;
@@ -172,7 +172,7 @@ Definition run_deployment_def:
           ; base_fee := 0
           ; prev_randao := 0
           ; origin := dt.deployer |>;
-    in load_contract am tx dt.sourceAst dt.sourceExports
+    in load_contract am tx all_mods dt.sourceExports
   in (sns, res)
 End
 
