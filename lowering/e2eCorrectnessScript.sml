@@ -237,9 +237,8 @@ QED
    compile_vyper_raw with matching arguments. This connects
    the high-level two-phase API to the existing e2e correctness. *)
 Theorem compile_vyper_runtime_bytecode:
-  !tops pipeline data_seg dispatch_strategy immutables_len
-   deploy_bc runtime_bc.
-    compile_vyper tops pipeline data_seg dispatch_strategy immutables_len
+  !tops pipeline data_seg dispatch_strategy deploy_bc runtime_bc.
+    compile_vyper tops pipeline data_seg dispatch_strategy
       = SOME (deploy_bc, runtime_bc)
     ==>
     let tenv = type_env tops in
@@ -265,9 +264,8 @@ QED
    - RETURNs it
    The deployed code equals runtime_bc. *)
 Theorem e2e_deploy_correctness:
-  !tops pipeline data_seg dispatch_strategy immutables_len
-   deploy_bc runtime_bc.
-    compile_vyper tops pipeline data_seg dispatch_strategy immutables_len
+  !tops pipeline data_seg dispatch_strategy deploy_bc runtime_bc.
+    compile_vyper tops pipeline data_seg dispatch_strategy
       = SOME (deploy_bc, runtime_bc)
     ==>
     (* The deploy bytecode, when executed in creation context,

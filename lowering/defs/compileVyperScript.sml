@@ -99,6 +99,17 @@ Definition build_var_type_map_def:
     | _ => build_var_type_map rest
 End
 
+(* Sum of memory_bytes_required for all immutable variables.
+   Mirrors Python: module_t.immutable_section_bytes. *)
+Definition compute_immutables_len_def:
+  compute_immutables_len sft ([] : toplevel list) = (0 : num) ∧
+  compute_immutables_len sft (top :: rest) =
+    (case top of
+       VariableDecl _ Immutable _ ty _ =>
+         type_mem_bytes sft ty + compute_immutables_len sft rest
+     | _ => compute_immutables_len sft rest)
+End
+
 Definition build_is_hashmap_def:
   build_is_hashmap ([] : toplevel list) = (K F : string -> bool) ∧
   build_is_hashmap (top :: rest) =
@@ -517,9 +528,14 @@ End
    Takes:
    - tops: Vyper AST (toplevel list, with storage slots annotated)
    - pipeline: Venom optimization passes
-   - data_seg: data section (immutables)
    - dispatch_strategy: "linear", "sparse", or "dense"
-   - immutables_len: total size of immutables section (bytes)
+
+   Derived from AST (not external inputs):
+   - immutables_len: sum of memory_bytes_required for Immutable vars
+   - deploy data section: [runtime_bytecode] (built internally)
+
+   data_seg: runtime data sections (selector buckets for sparse/dense dispatch).
+   TODO: build these during lowering instead of taking as parameter.
 
    Storage/transient slots come from the annotated AST.
    fn_eom is internal to the Venom pipeline (codegen defaults to 0).
@@ -528,9 +544,10 @@ Definition compile_vyper_def:
   compile_vyper (tops : toplevel list)
                 (pipeline : venom_context -> venom_context)
                 (data_seg : data_section list)
-                (dispatch_strategy : string)
-                (immutables_len : num) =
+                (dispatch_strategy : string) =
     let tenv = type_env tops in
+    let sft = make_struct_fields_map tops in
+    let immutables_len = compute_immutables_len sft tops in
     let nkey_map = assign_nkeys tops 0 in
     let use_trans = F in
     let (ext_fns, int_fns, fb_fn, ctor_fn) = classify_functions tops in
@@ -568,9 +585,8 @@ Definition compile_vyper_def:
                        ctor_nkey ctor_trans "__deploy" in
     let deploy_ctx' = pipeline deploy_ctx in
     let deploy_data =
-      <| ds_label := "runtime_begin";
-         ds_items := [DataBytes runtime_bytecode] |>
-      :: data_seg in
+      [<| ds_label := "runtime_begin";
+          ds_items := [DataBytes runtime_bytecode] |>] in
     case codegen deploy_ctx' FEMPTY deploy_data of
       NONE => NONE
     | SOME deploy_bytecode =>
