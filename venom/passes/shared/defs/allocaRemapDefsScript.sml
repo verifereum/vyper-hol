@@ -9,10 +9,11 @@
  * TOP-LEVEL:
  *   mem_byte_at           — safe memory byte access (0w for OOB)
  *   fn_alloca_id_of_var   — find alloca inst_id that produces a variable
- *   in_alloca_region      — address falls within an alloca region
+ *   in_alloca_region        — address falls within an alloca region
  *   allocas_non_overlapping — alloca regions don't overlap in a state
- *   alloca_mem_agrees     — memory at alloca regions corresponds
- *   alloca_remap_rel      — full state relation for remapping
+ *   ptrs_in_alloca_bounds  — pointer-derived values within alloca regions
+ *   alloca_mem_agrees       — memory at alloca regions corresponds
+ *   alloca_remap_rel        — full state relation for remapping
  *
  * Design: alloca_remap_rel captures what must hold for execution under
  * pointer_confined to be insensitive to alloca base addresses:
@@ -67,6 +68,18 @@ Definition allocas_non_overlapping_def:
       FLOOKUP s.vs_allocas aid2 = SOME (off2, sz2) /\
       aid1 <> aid2 ==>
       off1 + sz1 <= off2 \/ off2 + sz2 <= off1
+End
+
+(* Every pointer-derived variable's runtime value falls within some
+   alloca region. Required for memory operations through pointer
+   addresses to be covered by alloca_mem_agrees.
+   Analysis-independent — doesn't reference bp_result.
+   bp_ptrs_bounded (from base_ptr analysis) implies this. *)
+Definition ptrs_in_alloca_bounds_def:
+  ptrs_in_alloca_bounds fn (roots : string set) s <=>
+    let pv = pointer_derived_vars fn roots in
+    !v w. v IN pv /\ lookup_var v s = SOME w ==>
+      in_alloca_region s (w2n w)
 End
 
 (* ===== Alloca Remap ===== *)

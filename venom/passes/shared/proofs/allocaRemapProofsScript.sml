@@ -168,6 +168,8 @@ Theorem step_inst_base_preserves_remap:
   !fn roots remap inst s1 s2 v1.
     alloca_remap_rel fn roots remap s1 s2 /\
     pointer_confined fn roots /\
+    ptrs_in_alloca_bounds fn roots s1 /\
+    ptrs_in_alloca_bounds fn roots s2 /\
     step_inst_base inst s1 = OK v1 /\
     ~is_alloca_op inst.inst_opcode /\
     ~is_terminator inst.inst_opcode /\
@@ -236,6 +238,8 @@ Theorem return_revert_remap:
   !fn roots remap inst s1 s2.
     alloca_remap_rel fn roots remap s1 s2 /\
     pointer_confined fn roots /\
+    ptrs_in_alloca_bounds fn roots s1 /\
+    ptrs_in_alloca_bounds fn roots s2 /\
     (inst.inst_opcode = RETURN \/ inst.inst_opcode = REVERT) /\
     (?bb. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions) ==>
     (* Size operand agrees (non-pointer) *)
@@ -269,6 +273,8 @@ Theorem run_block_preserves_remap:
   !fn roots remap bb fuel ctx s1 s2.
     alloca_remap_rel fn roots remap s1 s2 /\
     pointer_confined fn roots /\
+    ptrs_in_alloca_bounds fn roots s1 /\
+    ptrs_in_alloca_bounds fn roots s2 /\
     MEM bb fn.fn_blocks ==>
     ?remap'.
       FDOM remap SUBSET FDOM remap' /\
