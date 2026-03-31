@@ -155,6 +155,10 @@ Definition compile_selector_dispatch_sparse_def:
             jumpdest <- emit_op MLOAD [Lit 0w];
             emit_inst DJMP
               (jumpdest :: MAP (λl. Label l) full_target_list) [];
+            (* Data section: BUCKET_HEADERS with 2-byte label refs *)
+            emit_data_section "BUCKET_HEADERS";
+            FOLDL (λm lbl. do m; emit_data_item (DataLabel lbl) od)
+                  (return ()) full_target_list;
             create_bucket_blocks method_id bucket_lbls
               buckets fallback_lbl
          od
@@ -231,6 +235,9 @@ Definition compile_selector_dispatch_dense_def:
        (* Step 6: DJMP to function label *)
        emit_inst DJMP (function_label :: MAP (λl. Label l) entry_point_labels)
                  []
+       (* TODO: emit BUCKET_HEADERS and per-bucket data sections for dense dispatch.
+          Requires computing jumptable_info (magic, bucket_size, method_ids_image_order)
+          from the selector list — currently these are computed externally in Python. *)
     od
 End
 

@@ -92,8 +92,8 @@ Theorem vyper_to_venom_correct:
     bucket_count fn_meta_bytes entry_label
     vs am tx sel fn_lbl htz
     args dflts ret body mut nr.
-  let ctx = run_lowering selectors ext_fns int_fns fb_fn
-              dispatch bucket_count fn_meta_bytes entry_label in
+  let (ctx, _) = run_lowering selectors ext_fns int_fns fb_fn
+                   dispatch bucket_count fn_meta_bytes entry_label in
     (* tx targets a known external function *)
     lookup_exported_function
       (initial_evaluation_context am.sources am.layouts tx) am

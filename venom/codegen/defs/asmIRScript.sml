@@ -17,7 +17,7 @@
 
 Theory asmIR
 Ancestors
-  stackModel venomEffects cfgTransform
+  stackModel venomEffects cfgTransform venomInst
 
 (* =========================================================================
    Assembly Instructions
@@ -189,21 +189,9 @@ Definition label_of_def:
 End
 
 (* =========================================================================
-   Data Segment Types
-   Port of DataItem/DataSection from vyper/venom/context.py.
-   Data items are either raw bytes or label references (resolved later).
+   Data Segment Assembly
+   data_item/data_section types are in venomInstTheory.
    ========================================================================= *)
-
-Datatype:
-  data_item = DataBytes (word8 list) | DataLabel string
-End
-
-Datatype:
-  data_section = <|
-    ds_label : string;
-    ds_items : data_item list
-  |>
-End
 
 (* Convert data segment to assembly instructions *)
 Definition data_section_asm_def:

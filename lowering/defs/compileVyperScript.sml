@@ -534,16 +534,12 @@ End
    - immutables_len: sum of memory_bytes_required for Immutable vars
    - deploy data section: [runtime_bytecode] (built internally)
 
-   data_seg: runtime data sections (selector buckets for sparse/dense dispatch).
-   TODO: build these during lowering instead of taking as parameter.
-
    Storage/transient slots come from the annotated AST.
    fn_eom is internal to the Venom pipeline (codegen defaults to 0).
    raw_return is per-function (from @raw_return decorator). *)
 Definition compile_vyper_def:
   compile_vyper (tops : toplevel list)
                 (pipeline : venom_context -> venom_context)
-                (data_seg : data_section list)
                 (dispatch_strategy : string) =
     let tenv = type_env tops in
     let sft = make_struct_fields_map tops in
@@ -559,10 +555,11 @@ Definition compile_vyper_def:
                               int_fns in
     let fallback_fn = package_fallback_fn tops use_trans nkey_map fb_fn in
     let entry_label = "__entry" in
-    let runtime_ctx = run_lowering selectors external_fns runtime_int_fns
-                        fallback_fn dispatch_strategy 0 0 entry_label in
+    let (runtime_ctx, runtime_data) =
+      run_lowering selectors external_fns runtime_int_fns
+        fallback_fn dispatch_strategy 0 0 entry_label in
     let runtime_ctx' = pipeline runtime_ctx in
-    case codegen runtime_ctx' FEMPTY data_seg of
+    case codegen runtime_ctx' FEMPTY runtime_data of
       NONE => NONE
     | SOME runtime_bytecode =>
     (* Phase 2: Deploy *)
@@ -578,13 +575,15 @@ Definition compile_vyper_def:
         SOME cf => package_constructor tops use_trans nkey_map cf
       | NONE => (ARB, ([] : (string # bool # bool # num # abi_dec_info) list),
                  F, F, 0n, F, ([] : stmt list), NoneT) in
-    let deploy_ctx = run_deploy_lowering has_constructor
-                       (LENGTH runtime_bytecode) immutables_len
-                       ctor_args 0 deploy_int_fns
-                       ctor_cenv ctor_body ctor_payable ctor_nr
-                       ctor_nkey ctor_trans "__deploy" in
+    let (deploy_ctx, deploy_data_base) =
+      run_deploy_lowering has_constructor
+        (LENGTH runtime_bytecode) immutables_len
+        ctor_args 0 deploy_int_fns
+        ctor_cenv ctor_body ctor_payable ctor_nr
+        ctor_nkey ctor_trans "__deploy" in
     let deploy_ctx' = pipeline deploy_ctx in
     let deploy_data =
+      deploy_data_base ++
       [<| ds_label := "runtime_begin";
           ds_items := [DataBytes runtime_bytecode] |>] in
     case codegen deploy_ctx' FEMPTY deploy_data of

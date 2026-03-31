@@ -36,9 +36,9 @@ Definition compile_vyper_raw_def:
   compile_vyper_raw selectors ext_fns int_fns fb_fn
                 dispatch bucket_count fn_meta_bytes entry_label
                 (pipeline : venom_context -> venom_context)
-                fn_eom_map data_seg =
-    let ctx = run_lowering selectors ext_fns int_fns fb_fn
-                dispatch bucket_count fn_meta_bytes entry_label in
+                fn_eom_map =
+    let (ctx, data_seg) = run_lowering selectors ext_fns int_fns fb_fn
+                            dispatch bucket_count fn_meta_bytes entry_label in
     let ctx' = pipeline ctx in
     codegen ctx' fn_eom_map data_seg
 End
@@ -116,13 +116,13 @@ QED
 Theorem compile_vyper_raw_well_formed:
   !selectors ext_fns int_fns fb_fn dispatch
     bucket_count fn_meta_bytes entry_label
-    pipeline fn_eom_map data_seg bytecode fresh vs.
-  let ctx = run_lowering selectors ext_fns int_fns fb_fn
-              dispatch bucket_count fn_meta_bytes entry_label in
+    pipeline fn_eom_map bytecode fresh vs.
+  let (ctx, _) = run_lowering selectors ext_fns int_fns fb_fn
+                   dispatch bucket_count fn_meta_bytes entry_label in
   let ctx' = pipeline ctx in
     compile_vyper_raw selectors ext_fns int_fns fb_fn
       dispatch bucket_count fn_meta_bytes entry_label
-      pipeline fn_eom_map data_seg = SOME bytecode /\
+      pipeline fn_eom_map = SOME bytecode /\
     ctx_pass_correct pipeline fresh ctx vs
     ==>
     codegen_ready ctx' /\ ctx_wf ctx' /\
@@ -169,14 +169,14 @@ QED
 Theorem e2e_vyper_to_evm:
   !tenv event_info pipeline selectors ext_fns int_fns fb_fn
     dispatch bucket_count fn_meta_bytes entry_label
-    fn_eom_map data_seg bytecode
+    fn_eom_map bytecode
     am tx vs fresh args ret.
-  let ctx = run_lowering selectors ext_fns int_fns fb_fn
-              dispatch bucket_count fn_meta_bytes entry_label in
+  let (ctx, _) = run_lowering selectors ext_fns int_fns fb_fn
+                   dispatch bucket_count fn_meta_bytes entry_label in
     (* Compilation produces bytecode *)
     compile_vyper_raw selectors ext_fns int_fns fb_fn
       dispatch bucket_count fn_meta_bytes entry_label
-      pipeline fn_eom_map data_seg = SOME bytecode /\
+      pipeline fn_eom_map = SOME bytecode /\
     (* Source function exists, calldata valid, selector routes *)
     valid_function_call tenv am tx selectors
       vs.vs_call_ctx.cc_calldata args ret /\
@@ -209,13 +209,13 @@ Theorem e2e_vyper_to_evm_O2:
     dispatch bucket_count fn_meta_bytes entry_label
     ircf_global ricf_global threshold
     make_ssa ircf ricf dse_analysis amap live_at
-    fn_eom_map data_seg bytecode
+    fn_eom_map bytecode
     am tx vs args ret.
   let pipeline = venom_pipeline ircf_global ricf_global threshold
         (o2_fn_passes make_ssa ircf ricf dse_analysis amap live_at) in
     compile_vyper_raw selectors ext_fns int_fns fb_fn
       dispatch bucket_count fn_meta_bytes entry_label
-      pipeline fn_eom_map data_seg = SOME bytecode /\
+      pipeline fn_eom_map = SOME bytecode /\
     valid_function_call tenv am tx selectors
       vs.vs_call_ctx.cc_calldata args ret /\
     vs.vs_inst_idx = 0
@@ -237,8 +237,8 @@ QED
    compile_vyper_raw with matching arguments. This connects
    the high-level two-phase API to the existing e2e correctness. *)
 Theorem compile_vyper_runtime_bytecode:
-  !tops pipeline data_seg dispatch_strategy deploy_bc runtime_bc.
-    compile_vyper tops pipeline data_seg dispatch_strategy
+  !tops pipeline dispatch_strategy deploy_bc runtime_bc.
+    compile_vyper tops pipeline dispatch_strategy
       = SOME (deploy_bc, runtime_bc)
     ==>
     let tenv = type_env tops in
@@ -249,10 +249,11 @@ Theorem compile_vyper_runtime_bytecode:
     let runtime_int_fns = MAP (package_internal_fn tops F nkey_map F) int_fns in
     let fallback_fn = package_fallback_fn tops F nkey_map fb_fn in
       compile_vyper_raw selectors external_fns runtime_int_fns fallback_fn
-        dispatch_strategy 0 0 "__entry" pipeline FEMPTY data_seg
+        dispatch_strategy 0 0 "__entry" pipeline FEMPTY
         = SOME runtime_bc
 Proof
-  rw[compile_vyper_def, compile_vyper_raw_def]
+  simp[compile_vyper_def, compile_vyper_raw_def, pairTheory.UNCURRY]
+  \\ rpt strip_tac
   \\ rpt (pairarg_tac \\ gvs[])
   \\ gvs[AllCaseEqs()]
 QED
@@ -264,8 +265,8 @@ QED
    - RETURNs it
    The deployed code equals runtime_bc. *)
 Theorem e2e_deploy_correctness:
-  !tops pipeline data_seg dispatch_strategy deploy_bc runtime_bc.
-    compile_vyper tops pipeline data_seg dispatch_strategy
+  !tops pipeline dispatch_strategy deploy_bc runtime_bc.
+    compile_vyper tops pipeline dispatch_strategy
       = SOME (deploy_bc, runtime_bc)
     ==>
     (* The deploy bytecode, when executed in creation context,

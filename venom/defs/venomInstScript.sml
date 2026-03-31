@@ -169,6 +169,21 @@ Datatype:
 End
 
 (* --------------------------------------------------------------------------
+   Data segment types (shared between lowering and codegen)
+   -------------------------------------------------------------------------- *)
+
+Datatype:
+  data_item = DataBytes (word8 list) | DataLabel string
+End
+
+Datatype:
+  data_section = <|
+    ds_label : string;
+    ds_items : data_item list
+  |>
+End
+
+(* --------------------------------------------------------------------------
    Operand helpers
    -------------------------------------------------------------------------- *)
 
