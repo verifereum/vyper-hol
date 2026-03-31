@@ -1,5 +1,5 @@
 INCLUDES = $(VFMDIR) \
-  ../defs ../simulation/defs ../props \
+  ../defs ../simulation/defs ../simulation ../simulation/proofs ../props \
   ../passes/phi_elimination/defs \
   ../passes/assign_elim/defs \
   ../passes/revert_to_assert/defs \

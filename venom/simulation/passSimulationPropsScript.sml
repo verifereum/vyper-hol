@@ -544,6 +544,58 @@ Proof
   ACCEPT_TAC module_sim_dual_ctx_proof
 QED
 
+(* Bidirectional dual-context module simulation.
+   Conclusion: both error OR lift_result.
+   Gives termination equivalence directly. *)
+Theorem module_sim_dual_ctx_bidir:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool) ctx1 ctx2.
+    (!s. R_ok s s) /\
+    (!s1 s2. R_ok s1 s2 ==> R_term s1 s2) /\
+    (!s1 s2. R_ok s1 s2 ==>
+      s1.vs_current_bb = s2.vs_current_bb /\
+      s1.vs_inst_idx = s2.vs_inst_idx /\
+      s1.vs_halted = s2.vs_halted) /\
+    (!fn_name fn1 fn2.
+       lookup_function fn_name ctx1.ctx_functions = SOME fn1 /\
+       lookup_function fn_name ctx2.ctx_functions = SOME fn2 ==>
+       !lbl. IS_SOME (lookup_block lbl fn1.fn_blocks) <=>
+             IS_SOME (lookup_block lbl fn2.fn_blocks)) /\
+    (!fn_name fn1 fn2 lbl bb1 bb2 fuel s1 s2.
+       lookup_function fn_name ctx1.ctx_functions = SOME fn1 /\
+       lookup_function fn_name ctx2.ctx_functions = SOME fn2 /\
+       lookup_block lbl fn1.fn_blocks = SOME bb1 /\
+       lookup_block lbl fn2.fn_blocks = SOME bb2 /\
+       R_ok s1 s2 /\ s1.vs_inst_idx = 0 /\
+       (!callee_name cfn1 cfn2 cs1 cs2.
+          lookup_function callee_name ctx1.ctx_functions = SOME cfn1 /\
+          lookup_function callee_name ctx2.ctx_functions = SOME cfn2 /\
+          R_ok cs1 cs2 /\ cs1.vs_inst_idx = 0 ==>
+          ((?e1. run_function fuel ctx1 cfn1 cs1 = Error e1) /\
+           (?e2. run_function fuel ctx2 cfn2 cs2 = Error e2)) \/
+          lift_result R_ok R_term
+            (run_function fuel ctx1 cfn1 cs1)
+            (run_function fuel ctx2 cfn2 cs2))
+       ==>
+       ((?e1. run_block fuel ctx1 bb1 s1 = Error e1) /\
+        (?e2. run_block fuel ctx2 bb2 s2 = Error e2)) \/
+       lift_result R_ok R_term
+         (run_block fuel ctx1 bb1 s1)
+         (run_block fuel ctx2 bb2 s2))
+  ==>
+    !fn_name fn1 fn2 fuel s1 s2.
+      lookup_function fn_name ctx1.ctx_functions = SOME fn1 /\
+      lookup_function fn_name ctx2.ctx_functions = SOME fn2 /\
+      R_ok s1 s2 /\ s1.vs_inst_idx = 0 ==>
+      ((?e1. run_function fuel ctx1 fn1 s1 = Error e1) /\
+       (?e2. run_function fuel ctx2 fn2 s2 = Error e2)) \/
+      lift_result R_ok R_term
+        (run_function fuel ctx1 fn1 s1)
+        (run_function fuel ctx2 fn2 s2)
+Proof
+  ACCEPT_TAC module_sim_dual_ctx_bidir_proof
+QED
+
 (* General: function_map_transform preserves wf_function
    given per-block label/succs/bb_well_formed + inst_ids_distinct *)
 Theorem fmt_preserves_wf_function:

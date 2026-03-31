@@ -408,6 +408,18 @@ Proof
   gvs[lookup_function_def] >> res_tac >> simp[]
 QED
 
+(* lookup_function commutes with MAP when f preserves fn_name *)
+Theorem lookup_function_map:
+  !name fns g.
+    (!fn. (g fn).fn_name = fn.fn_name) ==>
+    lookup_function name (MAP g fns) =
+      OPTION_MAP g (lookup_function name fns)
+Proof
+  Induct_on `fns` >>
+  rw[lookup_function_def, FIND_thm] >>
+  gvs[lookup_function_def]
+QED
+
 (* Get instruction at index in a block *)
 Definition get_instruction_def:
   get_instruction bb idx =
