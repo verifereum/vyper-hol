@@ -21,8 +21,7 @@
  *   block_sim_function_error_proof - error disjunct + block_inv stable under R_ok
  *   block_sim_function_error_bb_proof - error + vs_current_bb = bb.bb_label
  *   lift_result_implies_pass_correct_proof - same-fuel lift_result to pass_correct bridge
- *   block_sim_function_dual_ctx_proof - per-block sim with different ctx + callee IH
- *   module_sim_dual_ctx_bidir_proof    - bidirectional dual-ctx (both-error or lift_result)
+ *   module_sim_dual_ctx_proof      - bidirectional dual-ctx (both-error or lift_result)
  *)
 
 Theory passSimulationProofs
@@ -1160,112 +1159,9 @@ QED
 
 (* ===== Dual-context module simulation ===== *)
 
-(* Module-level simulation with different contexts.
-   Proves that ALL function pairs (looked up by name from ctx1/ctx2)
-   are related, given per-block simulation with a callee IH.
-
-   The conclusion quantifies over all function pairs, so the fuel
-   induction provides the callee IH at each step.
-
-   When ctx1 = ctx2 with matching functions, this degenerates to
-   block_sim_function_proof. *)
+(* Bidirectional: both error or lift_result. Gives termination equivalence.
+   Fuel induction provides callee IH at each step. *)
 Theorem module_sim_dual_ctx_proof:
-  !(R_ok : venom_state -> venom_state -> bool)
-   (R_term : venom_state -> venom_state -> bool) ctx1 ctx2.
-    (!s. R_ok s s) /\
-    (!s1 s2. R_ok s1 s2 ==> R_term s1 s2) /\
-    (!s1 s2. R_ok s1 s2 ==>
-      s1.vs_current_bb = s2.vs_current_bb /\
-      s1.vs_inst_idx = s2.vs_inst_idx /\
-      s1.vs_halted = s2.vs_halted) /\
-    (* Contexts have matching labels for corresponding functions *)
-    (!fn_name fn1 fn2.
-       lookup_function fn_name ctx1.ctx_functions = SOME fn1 /\
-       lookup_function fn_name ctx2.ctx_functions = SOME fn2 ==>
-       !lbl. IS_SOME (lookup_block lbl fn1.fn_blocks) <=>
-             IS_SOME (lookup_block lbl fn2.fn_blocks)) /\
-    (* Per-block sim with callee IH *)
-    (!fn_name fn1 fn2 lbl bb1 bb2 fuel s1 s2.
-       lookup_function fn_name ctx1.ctx_functions = SOME fn1 /\
-       lookup_function fn_name ctx2.ctx_functions = SOME fn2 /\
-       lookup_block lbl fn1.fn_blocks = SOME bb1 /\
-       lookup_block lbl fn2.fn_blocks = SOME bb2 /\
-       R_ok s1 s2 /\ s1.vs_inst_idx = 0 /\
-       (* Callee IH: all functions in both contexts are related *)
-       (!callee_name cfn1 cfn2 cs1 cs2.
-          lookup_function callee_name ctx1.ctx_functions = SOME cfn1 /\
-          lookup_function callee_name ctx2.ctx_functions = SOME cfn2 /\
-          R_ok cs1 cs2 /\ cs1.vs_inst_idx = 0 ==>
-          (?e. run_function fuel ctx1 cfn1 cs1 = Error e) \/
-          lift_result R_ok R_term
-            (run_function fuel ctx1 cfn1 cs1)
-            (run_function fuel ctx2 cfn2 cs2))
-       ==>
-       (?e. run_block fuel ctx1 bb1 s1 = Error e) \/
-       lift_result R_ok R_term
-         (run_block fuel ctx1 bb1 s1)
-         (run_block fuel ctx2 bb2 s2))
-  ==>
-    !fn_name fn1 fn2 fuel s1 s2.
-      lookup_function fn_name ctx1.ctx_functions = SOME fn1 /\
-      lookup_function fn_name ctx2.ctx_functions = SOME fn2 /\
-      R_ok s1 s2 /\ s1.vs_inst_idx = 0 ==>
-      (?e. run_function fuel ctx1 fn1 s1 = Error e) \/
-      lift_result R_ok R_term
-        (run_function fuel ctx1 fn1 s1)
-        (run_function fuel ctx2 fn2 s2)
-Proof
-  rpt gen_tac >> strip_tac >>
-  Induct_on `fuel` >> rw[]
-  >- (DISJ1_TAC >> simp[run_function_def])
-  >>
-  `s2.vs_current_bb = s1.vs_current_bb` by metis_tac[] >>
-  `s2.vs_inst_idx = 0` by metis_tac[] >>
-  ONCE_REWRITE_TAC[run_function_def] >>
-  (* Rewrite fn2 side to use s1.vs_current_bb *)
-  qpat_x_assum `s2.vs_current_bb = _`
-    (fn th => PURE_REWRITE_TAC[th]) >>
-  Cases_on `lookup_block s1.vs_current_bb fn1.fn_blocks`
-  >- (DISJ1_TAC >> gvs[])
-  >>
-  rename1 `lookup_block _ fn1.fn_blocks = SOME bb1` >>
-  (* Get matching block from fn2 via label correspondence *)
-  `IS_SOME (lookup_block s1.vs_current_bb fn2.fn_blocks)` by
-    (qpat_assum `!fn_name fn1 fn2. _ ==> !lbl. _`
-       (qspecl_then [`fn_name`, `fn1`, `fn2`] mp_tac) >>
-     simp[] >>
-     disch_then (qspec_then `s1.vs_current_bb` mp_tac) >>
-     simp[optionTheory.IS_SOME_DEF]) >>
-  fs[optionTheory.IS_SOME_EXISTS] >>
-  rename1 `lookup_block _ fn2.fn_blocks = SOME bb2` >>
-  gvs[] >>
-  (* Apply per-block hypothesis *)
-  first_x_assum (qspecl_then
-    [`fn_name`, `fn1`, `fn2`, `s1.vs_current_bb`,
-     `bb1`, `bb2`, `fuel`, `s1`, `s2`] mp_tac) >> simp[] >>
-  impl_tac
-  >- ((* Discharge callee IH from induction hypothesis *)
-      rpt gen_tac >> strip_tac >>
-      first_x_assum irule >> metis_tac[])
-  >>
-  strip_tac
-  >- (DISJ1_TAC >> qexists_tac `e` >> simp[])
-  >>
-  Cases_on `run_block fuel ctx1 bb1 s1` >>
-  Cases_on `run_block fuel ctx2 bb2 s2` >>
-  gvs[lift_result_def]
-  >- (
-    `v'.vs_halted <=> v.vs_halted` by metis_tac[] >>
-    Cases_on `v.vs_halted` >> fs[] >>
-    gvs[lift_result_def] >>
-    `v.vs_inst_idx = 0 /\ v'.vs_inst_idx = 0` by
-      metis_tac[run_block_OK_inst_idx_0] >>
-    first_x_assum irule >> metis_tac[]
-  )
-QED
-
-(* Bidirectional: both error or lift_result. Gives termination equivalence. *)
-Theorem module_sim_dual_ctx_bidir_proof:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool) ctx1 ctx2.
     (!s. R_ok s s) /\

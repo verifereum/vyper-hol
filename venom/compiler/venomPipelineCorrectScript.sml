@@ -6,10 +6,11 @@
  * Instantiated for each optimization level.
  *
  * TOP-LEVEL:
- *   pass_correct_trans             -- binary transitivity
- *   compose_passes_correct         -- FOLDL of any correct pass list
- *   apply_ctx_fn_transform_correct -- lift function-level to context-level
- *   venom_pipeline_correct         -- parameterized pipeline instantiation
+ *   pass_correct_trans             -- binary transitivity (relational composition)
+ *   pass_correct_trans_equiv       -- corollary for state_equiv/execution_equiv (union)
+ *   apply_ctx_fn_transform_correct -- lift per-block dual-ctx sim to ctx_pass_correct
+ *   venom_pipeline_correct         -- 5-phase pipeline composition
+ *   pass_correct_implies_observable -- pass_correct to observable_result_equiv
  *)
 
 Theory venomPipelineCorrect
@@ -101,21 +102,8 @@ Proof
   irule run_function_fuel_mono >> gvs[terminates_def]
 QED
 
-(* Helper: fuel_mono_eq for run_context *)
-Triviality run_context_fuel_eq:
-  !f1 f2 ctx s.
-    terminates (run_context f1 ctx s) /\
-    terminates (run_context f2 ctx s) ==>
-    run_context f1 ctx s = run_context f2 ctx s
-Proof
-  rpt strip_tac >>
-  `f1 <= f2 \/ f2 <= f1` by simp[] >> gvs[] >|
-  [`f2 = f1 + (f2 - f1)` by simp[] >> metis_tac[run_context_fuel_mono],
-   `f1 = f2 + (f1 - f2)` by simp[] >> metis_tac[run_context_fuel_mono]]
-QED
-
 (* Lift per-block dual-context simulation to context-level pass_correct.
-   Uses module_sim_dual_ctx_bidir (bidirectional: both-error or lift_result)
+   Uses module_sim_dual_ctx (bidirectional: both-error or lift_result)
    to get termination equivalence.
 
    Preconditions:
@@ -187,7 +175,7 @@ Triviality ctx_fn_transform_module_sim:
 Proof
   rpt gen_tac >> strip_tac >>
   qspecl_then [`R_ok`, `R_term`, `ctx`, `apply_ctx_fn_transform f ctx`]
-    mp_tac module_sim_dual_ctx_bidir >>
+    mp_tac module_sim_dual_ctx >>
   impl_tac >- (
     rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
     (* Block label correspondence *)
@@ -397,9 +385,8 @@ QED
 Theorem venom_pipeline_correct:
   !ircf_global ricf_global threshold fn_pipeline ctx s
     fresh_cfg fresh_ircf fresh_ricf fresh_inl fresh_fn.
-    (* Alloca safety: pointers don't escape to observable channels.
-     * Precondition on initial context; consumed by passes that
-     * change alloca layout (remove_unused, function_inliner). *)
+    (* Alloca safety: not used directly by this composition proof;
+     * consumed by function_inliner_pass_correct when instantiated. *)
     EVERY alloca_safe_fn ctx.ctx_functions /\
     ctx_pass_correct (apply_ctx_fn_transform simplify_cfg_fn)
                      (state_equiv fresh_cfg) (execution_equiv fresh_cfg)
