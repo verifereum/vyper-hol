@@ -338,8 +338,8 @@ Datatype:
   toplevel
   = FunctionDecl function_visibility function_mutability bool (* nonreentrant *)
       identifier (argument list) (expr list) type (stmt list)
-  | VariableDecl variable_visibility variable_mutability identifier type
-  | HashMapDecl variable_visibility bool (* transient? *) identifier type value_type
+  | VariableDecl variable_visibility variable_mutability identifier type (num option) (* storage/transient slot *)
+  | HashMapDecl variable_visibility bool (* transient? *) identifier type value_type (num option) (* slot *)
   | StructDecl identifier (argument list)
   | EventDecl identifier ((argument # bool) list)  (* bool = indexed *)
   | FlagDecl identifier (identifier list)

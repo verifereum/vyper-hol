@@ -288,11 +288,11 @@ val () = cv_auto_trans lookup_var_slot_from_layout_def;
 (* Find var decl by num key (comparing string_to_num of each id) *)
 Definition find_var_decl_by_num_def:
   find_var_decl_by_num n [] = NONE ∧
-  find_var_decl_by_num n (VariableDecl _ mut vid typ :: ts) =
+  find_var_decl_by_num n (VariableDecl _ mut vid typ _ :: ts) =
     (if (mut = Storage ∨ mut = Transient) ∧ string_to_num vid = n
      then SOME (StorageVarDecl (mut = Transient) typ, vid)
      else find_var_decl_by_num n ts) ∧
-  find_var_decl_by_num n (HashMapDecl _ is_transient vid kt vt :: ts) =
+  find_var_decl_by_num n (HashMapDecl _ is_transient vid kt vt _ :: ts) =
     (if string_to_num vid = n then SOME (HashMapVarDecl is_transient kt vt, vid)
      else find_var_decl_by_num n ts) ∧
   find_var_decl_by_num n (_ :: ts) = find_var_decl_by_num n ts
