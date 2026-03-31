@@ -6,8 +6,8 @@
  *
  * TOP-LEVEL:
  *   alloca_derived       — set of variables that may hold alloca-derived pointers
- *   observable_operands  — operand positions whose values reach external state
- *   alloca_safe_inst     — instruction doesn't leak alloca pointers to observable channels
+ *   sensitive_operands   — operand positions where pointer values affect observable output
+ *   alloca_safe_inst     — instruction doesn't leak alloca pointers to sensitive channels
  *   alloca_safe_fn       — function-level: no alloca pointer leaks
  *
  * Design decision: stated as a precondition on pass correctness theorems.
@@ -21,15 +21,19 @@ Ancestors
 
 (* ===== Alloca-Derived Variables ===== *)
 
-(* A variable is alloca-derived if its value may contain an alloca pointer.
- * This is the transitive closure of pointer propagation through the IR.
+(* A variable is alloca-derived if its value may hold an alloca pointer.
+ * Def-use reachability from ALLOCA outputs: any instruction that
+ * consumes an alloca-derived input may produce an alloca-derived output.
  *
- * ALLOCA output is alloca-derived (base case).
- * ADD/SUB on a pointer produces a pointer (pointer arithmetic).
- * ASSIGN/PHI transparently forward values (including pointers).
+ * This over-approximates (e.g. ISZERO of a pointer isn't a pointer),
+ * which is safe — makes alloca_safe_fn a stronger precondition.
+ * Under-approximation would be unsound.
  *
- * Over-approximation: safe to include non-pointer variables.
- * Under-approximation would be unsound. *)
+ * Compare bp_handle_inst which only tracks {ALLOCA,ADD,SUB,PHI,ASSIGN}.
+ * That's sound for Vyper (lowering never stores pointers to memory)
+ * but not in general (MLOAD of a stored pointer, INVOKE returning one).
+ * alloca_derived is the sound specification; bp analysis is the
+ * efficient-but-Vyper-specific implementation. *)
 Inductive alloca_derived:
   (* Base: ALLOCA output *)
   (∀fn inst out.
@@ -38,122 +42,102 @@ Inductive alloca_derived:
      inst_output inst = SOME out ⇒
      alloca_derived fn out)
   ∧
-  (* ADD: pointer arithmetic *)
+  (* Propagation: any instruction consuming an alloca-derived input *)
   (∀fn inst out v.
      MEM inst (fn_insts fn) ∧
-     inst.inst_opcode = ADD ∧
-     inst_output inst = SOME out ∧
-     MEM (Var v) inst.inst_operands ∧
-     alloca_derived fn v ⇒
-     alloca_derived fn out)
-  ∧
-  (* SUB: pointer arithmetic *)
-  (∀fn inst out v.
-     MEM inst (fn_insts fn) ∧
-     inst.inst_opcode = SUB ∧
-     inst_output inst = SOME out ∧
-     MEM (Var v) inst.inst_operands ∧
-     alloca_derived fn v ⇒
-     alloca_derived fn out)
-  ∧
-  (* ASSIGN: transparent forwarding *)
-  (∀fn inst out v.
-     MEM inst (fn_insts fn) ∧
-     inst.inst_opcode = ASSIGN ∧
-     inst_output inst = SOME out ∧
-     MEM (Var v) inst.inst_operands ∧
-     alloca_derived fn v ⇒
-     alloca_derived fn out)
-  ∧
-  (* PHI: any source may carry a pointer *)
-  (∀fn inst out v.
-     MEM inst (fn_insts fn) ∧
-     inst.inst_opcode = PHI ∧
      inst_output inst = SOME out ∧
      MEM (Var v) inst.inst_operands ∧
      alloca_derived fn v ⇒
      alloca_derived fn out)
 End
 
-(* ===== Observable Value Positions ===== *)
+(* ===== Sensitive Operand Positions ===== *)
 
-(* Operands at these positions have their VALUES stored to external state
- * (storage, transient storage, logs, cross-contract calls). If an
- * alloca-derived pointer reaches one of these positions, the observable
- * output depends on the concrete alloca layout.
+(* Operand positions where a pointer-derived value affects observable
+ * output. Two categories:
  *
- * Memory offset operands (MLOAD, MSTORE, RETURN, etc.) are NOT observable
- * — they determine WHERE to read/write memory, but the pointer value
- * itself doesn't escape. The memory CONTENTS may escape, not the address.
+ * 1. Direct external effect: operand value stored to world state
+ *    (SSTORE, TSTORE, ISTORE), sent externally (CALL value/gas/addr,
+ *    CREATE value, LOG topics, SELFDESTRUCT), or determines external
+ *    output shape (RETURN/REVERT/LOG/CALL size/length args).
+ *
+ * 2. Memory laundering: MSTORE value can be loaded back via MLOAD,
+ *    reaching external state indirectly.
+ *
+ * Memory OFFSET operands are NOT sensitive — they determine WHERE
+ * to read/write, but the pointer value itself doesn't escape.
+ * Taint propagation through alloca_derived handles indirect flows.
  *
  * Operand positions use HOL4/EVM semantic order (not Python stack order).
+ * Returns NONE for malformed operand lists.
  *
- * Non-observable opcodes (empty set):
- *   - Pure arithmetic: ADD SUB MUL Div Mod SDIV SMOD Exp
- *   - Comparison: EQ LT GT SLT SGT
- *   - Bitwise: AND OR XOR NOT SHL SHR SAR SIGNEXTEND BYTE
- *   - Unary: ISZERO
- *   - 3-arg: ADDMOD MULMOD
- *   - Reads: MLOAD SLOAD TLOAD ILOAD DLOAD BLOCKHASH BLOBHASH
- *            BALANCE CALLDATALOAD EXTCODESIZE EXTCODEHASH
- *   - Context reads: CALLER ADDRESS CALLVALUE GAS ORIGIN GASPRICE
- *            CHAINID COINBASE TIMESTAMP NUMBER PREVRANDAO GASLIMIT
- *            BASEFEE BLOBBASEFEE CALLDATASIZE RETURNDATASIZE MSIZE
- *            CODESIZE SELFBALANCE
- *   - Memory writes: MSTORE (offset operand, not value-to-world)
- *   - Bulk copies: MCOPY CALLDATACOPY RETURNDATACOPY DLOADBYTES
- *            CODECOPY EXTCODECOPY (memory addresses, not values)
- *   - Hash: SHA3 (memory offset + size)
- *   - Control flow: JMP JNZ DJMP RETURN REVERT STOP SINK RET
- *   - SSA: PHI ASSIGN NOP PARAM ALLOCA
- *   - Other: OFFSET INVOKE ASSERT ASSERT_UNREACHABLE INVALID
- *
- * MSTORE is NOT observable: MSTORE [offset; value] writes to
- * internal memory, not world state. The value is only observable
- * if later read by RETURN/LOG/CALL — tracked transitively. *)
-Definition observable_operands_def:
-  observable_operands (inst : instruction) : operand set option =
+ * Non-sensitive opcodes (SOME {}): pure arithmetic, comparisons,
+ * bitwise, reads, context reads, control flow, SSA, bulk copies
+ * from external sources (calldatacopy, returndatacopy, codecopy,
+ * extcodecopy, dloadbytes). These either have no side effects or
+ * copy from sources that cannot contain alloca pointers. *)
+Definition sensitive_operands_def:
+  sensitive_operands (inst : instruction) : operand set option =
     case inst.inst_opcode of
-    (* SSTORE [key; value] — both key and value stored to world state *)
+    (* ---- World state writes: all operands sensitive ---- *)
     | SSTORE => SOME (set inst.inst_operands)
-    (* TSTORE [key; value] — both stored to transient storage *)
     | TSTORE => SOME (set inst.inst_operands)
-    (* ISTORE [key; value] — both stored to immutable storage *)
     | ISTORE => SOME (set inst.inst_operands)
-    (* LOG [Lit tc; offset; size; topic1; topic2; ...] —
-     * topics are observable values; offset/size are memory addresses.
-     * tc must be a literal (topic count). Malformed → NONE. *)
+    | SELFDESTRUCT => SOME (set inst.inst_operands)
+    (* ---- Memory value write: laundering channel ---- *)
+    (* MSTORE [offset; value] — value enters memory, can be
+     * loaded back via MLOAD and reach external state. *)
+    | MSTORE => (case inst.inst_operands of
+                   [_; value] => SOME {value}
+                 | _ => NONE)
+    (* ---- External output shape: size/length operands ---- *)
+    (* RETURN [offset; sz] — sz determines return data length *)
+    | RETURN => (case inst.inst_operands of
+                   [_; sz] => SOME {sz}
+                 | _ => NONE)
+    (* REVERT [offset; sz] — sz determines revert data length *)
+    | REVERT => (case inst.inst_operands of
+                   [_; sz] => SOME {sz}
+                 | _ => NONE)
+    (* SHA3 [offset; sz] — sz affects hash output *)
+    | SHA3 => (case inst.inst_operands of
+                 [_; sz] => SOME {sz}
+               | _ => NONE)
+    (* MCOPY [dest; src; sz] — sz determines copy extent *)
+    | MCOPY => (case inst.inst_operands of
+                  [_; _; sz] => SOME {sz}
+                | _ => NONE)
+    (* LOG [Lit tc; offset; size; topic1; ...] —
+     * size determines log data length; topics are external values.
+     * tc must be a literal. Malformed → NONE. *)
     | LOG => (case inst.inst_operands of
-                Lit tc :: _ :: _ :: topics => SOME (set topics)
+                Lit _ :: _ :: sz :: topics => SOME (sz INSERT set topics)
               | _ => NONE)
-    (* CALL [gas; addr; value; argsOff; argsLen; retOff; retLen]
-     * gas, addr, value are observable (ETH transfer, external behavior).
-     * argsOff/argsLen/retOff/retLen are memory addresses. *)
+    (* ---- External calls: value/gas/addr + size args ---- *)
+    (* CALL [gas; addr; value; argsOff; argsLen; retOff; retLen] *)
     | CALL => (case inst.inst_operands of
-                 gas :: addr :: value :: _ => SOME {gas; addr; value}
+                 [gas; addr; value; _; argsLen; _; retLen] =>
+                   SOME {gas; addr; value; argsLen; retLen}
                | _ => NONE)
     (* STATICCALL [gas; addr; argsOff; argsLen; retOff; retLen] *)
     | STATICCALL => (case inst.inst_operands of
-                       gas :: addr :: _ => SOME {gas; addr}
+                       [gas; addr; _; argsLen; _; retLen] =>
+                         SOME {gas; addr; argsLen; retLen}
                      | _ => NONE)
     (* DELEGATECALL [gas; addr; argsOff; argsLen; retOff; retLen] *)
     | DELEGATECALL => (case inst.inst_operands of
-                         gas :: addr :: _ => SOME {gas; addr}
+                         [gas; addr; _; argsLen; _; retLen] =>
+                           SOME {gas; addr; argsLen; retLen}
                        | _ => NONE)
-    (* CREATE [value; offset; size] — value is observable *)
+    (* CREATE [value; offset; size] — value + size sensitive *)
     | CREATE => (case inst.inst_operands of
-                   value :: _ => SOME {value}
+                   [value; _; sz] => SOME {value; sz}
                  | _ => NONE)
-    (* CREATE2 [value; offset; size; salt] — value and salt observable *)
+    (* CREATE2 [value; offset; sz; salt] — value, sz, salt sensitive *)
     | CREATE2 => (case inst.inst_operands of
-                    value :: _ :: _ :: salt :: _ => SOME {value; salt}
+                    [value; _; sz; salt] => SOME {value; sz; salt}
                   | _ => NONE)
-    (* SELFDESTRUCT [beneficiary] — address is observable *)
-    | SELFDESTRUCT => SOME (set inst.inst_operands)
-    (* ---- Non-observable: all remaining opcodes ----
-     * Pure/comparison/bitwise/reads/context/memory/bulk-copy/hash/
-     * control-flow/SSA/special — none store operand values to world state.
-     * See comment above for complete enumeration. *)
+    (* ---- Non-sensitive: no operand values reach external state ---- *)
     | ADD => SOME {} | SUB => SOME {} | MUL => SOME {}
     | Div => SOME {} | Mod => SOME {}
     | SDIV => SOME {} | SMOD => SOME {} | Exp => SOME {}
@@ -178,12 +162,9 @@ Definition observable_operands_def:
     | CALLDATASIZE => SOME {}
     | RETURNDATASIZE => SOME {} | MSIZE => SOME {} | CODESIZE => SOME {}
     | SELFBALANCE => SOME {}
-    | MSTORE => SOME {} | MCOPY => SOME {} | CALLDATACOPY => SOME {}
-    | RETURNDATACOPY => SOME {}
+    | CALLDATACOPY => SOME {} | RETURNDATACOPY => SOME {}
     | DLOADBYTES => SOME {} | CODECOPY => SOME {} | EXTCODECOPY => SOME {}
-    | SHA3 => SOME {}
     | JMP => SOME {} | JNZ => SOME {} | DJMP => SOME {}
-    | RETURN => SOME {} | REVERT => SOME {}
     | STOP => SOME {} | SINK => SOME {} | RET => SOME {}
     | PHI => SOME {} | ASSIGN => SOME {} | NOP => SOME {}
     | PARAM => SOME {} | ALLOCA => SOME {}
@@ -194,19 +175,19 @@ End
 
 (* ===== Instruction-Level Safety ===== *)
 
-(* An instruction is alloca-safe if it is well-formed (observable_operands
- * returns SOME) and no alloca-derived variable appears in an observable
- * value position. *)
+(* An instruction is alloca-safe if it is well-formed (sensitive_operands
+ * returns SOME) and no alloca-derived variable appears in a sensitive
+ * operand position. *)
 Definition alloca_safe_inst_def:
   alloca_safe_inst fn inst ⇔
-    case observable_operands inst of
+    case sensitive_operands inst of
     | NONE => F
-    | SOME obs => ∀v. alloca_derived fn v ⇒ Var v ∉ obs
+    | SOME sens => ∀v. alloca_derived fn v ⇒ Var v ∉ sens
 End
 
-(* inst_wf guarantees observable_operands succeeds. *)
-Theorem inst_wf_observable_operands:
-  ∀inst. inst_wf inst ⇒ IS_SOME (observable_operands inst)
+(* inst_wf guarantees sensitive_operands succeeds. *)
+Theorem inst_wf_sensitive_operands:
+  ∀inst. inst_wf inst ⇒ IS_SOME (sensitive_operands inst)
 Proof
   cheat
 QED
