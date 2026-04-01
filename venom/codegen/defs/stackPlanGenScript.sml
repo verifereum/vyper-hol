@@ -647,7 +647,7 @@ fun fn_plan_obl_tac () =
 val (fn_plan_aux_eqs, fn_plan_aux_ind) =
   Defn.tprove(fn_plan_defn, fn_plan_obl_tac());
 
-Theorem generate_fn_plan_aux_def = fn_plan_aux_eqs
+Theorem generate_fn_plan_aux_def[compute] = fn_plan_aux_eqs
 Theorem generate_fn_plan_aux_ind = fn_plan_aux_ind
 
 (* =========================================================================
