@@ -83,6 +83,13 @@ End
    Usage: pass_correct (state_equiv vars) (execution_equiv vars)
             (\fuel. run_function fuel ctx fn s)
             (\fuel. run_function fuel ctx fn' s) *)
+(* Sequential composition of state relations.
+   rel_seq R1 R2 s1 s3 holds when there exists an intermediate s2
+   with R1 s1 s2 and R2 s2 s3.  Identity element: (=). *)
+Definition rel_seq_def:
+  rel_seq (R1 : 'a -> 'a -> bool) R2 s1 s3 <=> ?s2. R1 s1 s2 /\ R2 s2 s3
+End
+
 Definition pass_correct_def:
   pass_correct R_ok R_term exec1 exec2 <=>
     ((?fuel. terminates (exec1 fuel)) <=> (?fuel'. terminates (exec2 fuel'))) /\

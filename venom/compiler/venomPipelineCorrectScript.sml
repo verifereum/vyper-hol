@@ -56,24 +56,46 @@ Proof
   gvs[lift_result_def] >> metis_tac[]
 QED
 
-(* Corollary: state_equiv/execution_equiv accumulate via union. *)
-Theorem pass_correct_trans_equiv:
-  !fresh1 fresh2 exec1 exec2 exec3.
-    pass_correct (state_equiv fresh1) (execution_equiv fresh1) exec1 exec2 /\
-    pass_correct (state_equiv fresh2) (execution_equiv fresh2) exec2 exec3 ==>
-    pass_correct (state_equiv (fresh1 UNION fresh2))
-                 (execution_equiv (fresh1 UNION fresh2)) exec1 exec3
+(* ===== rel_seq helpers ===== *)
+
+Triviality rel_seq_id_l:
+  rel_seq (=) R = R
 Proof
-  rpt strip_tac >>
-  irule pass_correct_trans >>
-  MAP_EVERY qexists_tac
-    [`state_equiv fresh1`, `execution_equiv fresh1`,
-     `state_equiv fresh2`, `execution_equiv fresh2`, `exec2`] >>
-  simp[] >> rpt conj_tac >> rpt strip_tac
-  >- (irule state_equiv_trans >> qexists_tac `s2` >>
-      metis_tac[state_equiv_subset, pred_setTheory.SUBSET_UNION])
-  >- (irule execution_equiv_trans >> qexists_tac `s2` >>
-      metis_tac[execution_equiv_subset, pred_setTheory.SUBSET_UNION])
+  simp[FUN_EQ_THM, rel_seq_def]
+QED
+
+Triviality rel_seq_id_r:
+  rel_seq R (=) = R
+Proof
+  simp[FUN_EQ_THM, rel_seq_def]
+QED
+
+Triviality rel_seq_assoc:
+  rel_seq (rel_seq R1 R2) R3 = rel_seq R1 (rel_seq R2 R3)
+Proof
+  simp[FUN_EQ_THM, rel_seq_def] >> metis_tac[]
+QED
+
+Triviality foldl_rel_seq_acc:
+  !Rs (R : 'a -> 'a -> bool).
+    FOLDL rel_seq R Rs = rel_seq R (FOLDL rel_seq (=) Rs)
+Proof
+  Induct >- simp[rel_seq_id_r] >>
+  rpt gen_tac >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [listTheory.FOLDL])) >>
+  CONV_TAC (RAND_CONV (RAND_CONV
+    (ONCE_REWRITE_CONV [listTheory.FOLDL]))) >>
+  PURE_REWRITE_TAC [rel_seq_id_l] >>
+  pop_assum (fn ih => PURE_ONCE_REWRITE_TAC [ih]) >>
+  simp[rel_seq_assoc]
+QED
+
+Triviality foldl_rel_seq_cons:
+  FOLDL rel_seq (=) (R::Rs) = rel_seq R (FOLDL rel_seq (=) Rs)
+Proof
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [listTheory.FOLDL])) >>
+  PURE_REWRITE_TAC[rel_seq_id_l] >>
+  MATCH_ACCEPT_TAC (SPEC_ALL foldl_rel_seq_acc)
 QED
 
 (* ===== Lifting Infrastructure ===== *)
@@ -377,70 +399,135 @@ Proof
   )
 QED
 
+(* ===== N-ary Pipeline Composition ===== *)
+
+(* Determinism: same exec at two terminating fuels gives same result *)
+Triviality run_context_fuel_eq:
+  !fuel fuel' ctx s.
+    terminates (run_context fuel ctx s) /\
+    terminates (run_context fuel' ctx s) ==>
+    run_context fuel ctx s = run_context fuel' ctx s
+Proof
+  rpt strip_tac >>
+  `fuel <= fuel' \/ fuel' <= fuel` by simp[] >|
+  [all_tac, `fuel' <= fuel` by simp[]] >>
+  imp_res_tac arithmeticTheory.LESS_EQUAL_ADD >> gvs[] >>
+  metis_tac[run_context_fuel_mono]
+QED
+
+(* Compose a list of context-level passes into a single pass_correct.
+   Each pass i is correct w.r.t. the context produced by passes 0..i-1.
+   Relations compose via FOLDL rel_seq. *)
+Theorem compose_passes_correct:
+  !passes R_oks R_terms ctx s.
+    LENGTH R_oks = LENGTH passes /\ LENGTH R_terms = LENGTH passes /\
+    (!i. i < LENGTH passes ==>
+      ctx_pass_correct (EL i passes) (EL i R_oks) (EL i R_terms)
+        (FOLDL (\c p. p c) ctx (TAKE i passes)) s)
+    ==>
+    pass_correct (FOLDL rel_seq (=) R_oks) (FOLDL rel_seq (=) R_terms)
+      (\fuel. run_context fuel ctx s)
+      (\fuel. run_context fuel (FOLDL (\c p. p c) ctx passes) s)
+Proof
+  Induct
+  >- (
+    rpt gen_tac >> strip_tac >> gvs[] >>
+    simp[pass_correct_def] >> rpt gen_tac >> strip_tac >>
+    `run_context fuel ctx s = run_context fuel' ctx s` by
+      metis_tac[run_context_fuel_eq] >>
+    Cases_on `run_context fuel' ctx s` >> gvs[lift_result_def]
+  )
+  >- (
+    rpt gen_tac >> strip_tac
+    >> Cases_on `R_oks` >- gvs[]
+    >> Cases_on `R_terms` >- gvs[]
+    >> PURE_REWRITE_TAC [foldl_rel_seq_cons]
+    >> gvs[]
+    >> rename1 `pass_correct
+        (rel_seq R_ok_hd (FOLDL _ _ R_oks_tl))
+        (rel_seq R_term_hd (FOLDL _ _ R_terms_tl))`
+    >> qspecl_then
+      [`R_ok_hd`, `R_term_hd`,
+       `FOLDL rel_seq (=) R_oks_tl`, `FOLDL rel_seq (=) R_terms_tl`,
+       `rel_seq R_ok_hd (FOLDL rel_seq (=) R_oks_tl)`,
+       `rel_seq R_term_hd (FOLDL rel_seq (=) R_terms_tl)`,
+       `\fuel. run_context fuel ctx s`,
+       `\fuel. run_context fuel
+         ((h : venom_context -> venom_context) ctx) s`,
+       `\fuel. run_context fuel
+         (FOLDL (\c p. p c)
+           ((h : venom_context -> venom_context) ctx) passes) s`]
+      mp_tac pass_correct_trans
+    >> impl_tac >- (
+      simp[rel_seq_def]
+      >> conj_tac >- metis_tac[]
+      >> conj_tac >- metis_tac[]
+      >> conj_tac >- (
+        first_x_assum (qspec_then `0` mp_tac) >> simp[ctx_pass_correct_def]
+      )
+      >> first_x_assum irule >> simp[]
+      >> rpt strip_tac
+      >> first_x_assum (qspec_then `SUC i` mp_tac) >> simp[]
+    )
+    >> simp[]
+  )
+QED
+
 (* ===== Pipeline Correctness ===== *)
 
 (* The full pipeline preserves semantics, parameterized by the
    per-function pass sequence. Each phase's correctness is a
-   precondition; the theorem composes them. *)
+   precondition; the theorem composes them via rel_seq. *)
 Theorem venom_pipeline_correct:
   !ircf_global ricf_global threshold fn_pipeline ctx s
-    fresh_cfg fresh_ircf fresh_ricf fresh_inl fresh_fn.
-    (* Alloca safety: not used directly by this composition proof;
-     * consumed by function_inliner_pass_correct when instantiated. *)
-    EVERY alloca_safe_fn ctx.ctx_functions /\
+    R_ok_cfg R_term_cfg R_ok_ircf R_term_ircf R_ok_ricf R_term_ricf
+    R_ok_inl R_term_inl R_ok_fn R_term_fn.
     ctx_pass_correct (apply_ctx_fn_transform simplify_cfg_fn)
-                     (state_equiv fresh_cfg) (execution_equiv fresh_cfg)
-                     ctx s /\
+                     R_ok_cfg R_term_cfg ctx s /\
     (let ctx1 = apply_ctx_fn_transform simplify_cfg_fn ctx in
      ctx_pass_correct (apply_ctx_fn_transform ircf_global)
-                      (state_equiv fresh_ircf) (execution_equiv fresh_ircf)
-                      ctx1 s) /\
+                      R_ok_ircf R_term_ircf ctx1 s) /\
     (let ctx2 = apply_ctx_fn_transform ircf_global
                   (apply_ctx_fn_transform simplify_cfg_fn ctx) in
      ctx_pass_correct (apply_ctx_fn_transform ricf_global)
-                      (state_equiv fresh_ricf) (execution_equiv fresh_ricf)
-                      ctx2 s) /\
+                      R_ok_ricf R_term_ricf ctx2 s) /\
     (let ctx3 = apply_ctx_fn_transform ricf_global
                   (apply_ctx_fn_transform ircf_global
                     (apply_ctx_fn_transform simplify_cfg_fn ctx)) in
      ctx_pass_correct (function_inliner_ctx threshold)
-                      (state_equiv fresh_inl) (execution_equiv fresh_inl)
-                      ctx3 s) /\
+                      R_ok_inl R_term_inl ctx3 s) /\
     (let ctx4 = function_inliner_ctx threshold
                   (apply_ctx_fn_transform ricf_global
                     (apply_ctx_fn_transform ircf_global
                       (apply_ctx_fn_transform simplify_cfg_fn ctx))) in
      ctx_pass_correct (apply_ctx_fn_transform fn_pipeline)
-                      (state_equiv fresh_fn) (execution_equiv fresh_fn)
-                      ctx4 s)
+                      R_ok_fn R_term_fn ctx4 s)
   ==>
     ctx_pass_correct
       (venom_pipeline ircf_global ricf_global threshold fn_pipeline)
-      (state_equiv (fresh_cfg UNION fresh_ircf UNION fresh_ricf UNION
-                    fresh_inl UNION fresh_fn))
-      (execution_equiv (fresh_cfg UNION fresh_ircf UNION fresh_ricf UNION
-                        fresh_inl UNION fresh_fn))
+      (FOLDL rel_seq (=) [R_ok_cfg; R_ok_ircf; R_ok_ricf; R_ok_inl; R_ok_fn])
+      (FOLDL rel_seq (=) [R_term_cfg; R_term_ircf; R_term_ricf;
+                          R_term_inl; R_term_fn])
       ctx s
 Proof
   simp[ctx_pass_correct_def, venom_pipeline_def] >>
   rpt strip_tac >>
-  (* Abbreviate intermediate exec functions *)
-  qabbrev_tac `e1 = \fuel. run_context fuel
-    (apply_ctx_fn_transform simplify_cfg_fn ctx) s` >>
-  qabbrev_tac `e2 = \fuel. run_context fuel
-    (apply_ctx_fn_transform ircf_global
-      (apply_ctx_fn_transform simplify_cfg_fn ctx)) s` >>
-  qabbrev_tac `e3 = \fuel. run_context fuel
-    (apply_ctx_fn_transform ricf_global
-      (apply_ctx_fn_transform ircf_global
-        (apply_ctx_fn_transform simplify_cfg_fn ctx))) s` >>
-  qabbrev_tac `e4 = \fuel. run_context fuel
-    (function_inliner_ctx threshold
-      (apply_ctx_fn_transform ricf_global
-        (apply_ctx_fn_transform ircf_global
-          (apply_ctx_fn_transform simplify_cfg_fn ctx)))) s` >>
-  (* Chain phases using pass_correct_trans_equiv *)
-  metis_tac[pass_correct_trans_equiv]
+  qspecl_then
+    [`[apply_ctx_fn_transform simplify_cfg_fn;
+       apply_ctx_fn_transform ircf_global;
+       apply_ctx_fn_transform ricf_global;
+       function_inliner_ctx threshold;
+       apply_ctx_fn_transform fn_pipeline]`,
+     `[R_ok_cfg; R_ok_ircf; R_ok_ricf; R_ok_inl; R_ok_fn]`,
+     `[R_term_cfg; R_term_ircf; R_term_ricf; R_term_inl; R_term_fn]`,
+     `ctx`, `s`] mp_tac compose_passes_correct >>
+  simp[] >>
+  impl_tac >- (
+    rpt strip_tac >>
+    `i = 0 \/ i = 1 \/ i = 2 \/ i = 3 \/ i = 4` by simp[] >>
+    gvs[ctx_pass_correct_def]
+  ) >>
+  simp[]
 QED
 
 (* pass_correct implies observable equivalence when R_ok/R_term
