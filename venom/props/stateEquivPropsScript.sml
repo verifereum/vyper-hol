@@ -147,6 +147,14 @@ Proof
   ACCEPT_TAC stateEquivProofsTheory.mstore_preserves
 QED
 
+Theorem mstore8_preserves:
+  !vars offset v s1 s2.
+    state_equiv vars s1 s2 ==>
+    state_equiv vars (mstore8 offset v s1) (mstore8 offset v s2)
+Proof
+  ACCEPT_TAC stateEquivProofsTheory.mstore8_preserves
+QED
+
 (* Storage store preserves state_equiv *)
 Theorem sstore_preserves:
   !vars key v s1 s2.

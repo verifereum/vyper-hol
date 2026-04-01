@@ -22,7 +22,7 @@ Ancestors
   venomPipeline venomInst
   passSimulationDefs passSimulationProps crossBlockSimProps
   stateEquiv stateEquivProps
-  allocaSafety
+  pointerConfinedDefs
   venomExecSemantics
 
 (* ===== Context-Level Pass Correctness ===== *)
@@ -486,6 +486,11 @@ Theorem venom_pipeline_correct:
   !ircf_global ricf_global threshold fn_pipeline ctx s
     R_ok_cfg R_term_cfg R_ok_ircf R_term_ircf R_ok_ricf R_term_ricf
     R_ok_inl R_term_inl R_ok_fn R_term_fn.
+    (* Pointer confinement: alloca pointers don't escape to
+     * observable channels. Precondition on initial context;
+     * consumed by passes that change alloca layout
+     * (remove_unused, function_inliner). *)
+    EVERY alloca_pointer_confined ctx.ctx_functions /\
     ctx_pass_correct (apply_ctx_fn_transform simplify_cfg_fn)
                      R_ok_cfg R_term_cfg ctx s /\
     (let ctx1 = apply_ctx_fn_transform simplify_cfg_fn ctx in

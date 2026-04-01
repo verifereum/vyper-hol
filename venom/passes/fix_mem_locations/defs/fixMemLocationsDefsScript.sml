@@ -70,6 +70,7 @@ End
  *)
 Definition mem_write_offset_idx_def:
   mem_write_offset_idx MSTORE = SOME 0n /\    (* [offset; value] *)
+  mem_write_offset_idx MSTORE8 = SOME 0n /\   (* [offset; value] *)
   mem_write_offset_idx ISTORE = SOME 0n /\    (* [offset; value] *)
   mem_write_offset_idx MCOPY = SOME 0n /\     (* [dst; src; size] *)
   mem_write_offset_idx CALLDATACOPY = SOME 0n /\

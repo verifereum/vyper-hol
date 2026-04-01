@@ -109,8 +109,8 @@ QED
 
 Theorem step_write2_preserves_all_vars:!fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\
-    (inst.inst_opcode = MSTORE \/ inst.inst_opcode = SSTORE \/
-     inst.inst_opcode = TSTORE) ==>
+    (inst.inst_opcode = MSTORE \/ inst.inst_opcode = MSTORE8 \/
+     inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE) ==>
     !v. lookup_var v s' = lookup_var v s
 Proof
   ACCEPT_TAC venomInstProofsTheory.step_write2_preserves_all_vars
@@ -131,6 +131,23 @@ Theorem step_mstore_preserves:!fuel ctx inst s s'.
     (!v. lookup_var v s' = lookup_var v s)
 Proof
   ACCEPT_TAC venomInstProofsTheory.step_mstore_preserves
+QED
+
+Theorem step_mstore8_preserves:!fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\ inst.inst_opcode = MSTORE8 ==>
+    s'.vs_transient = s.vs_transient /\
+    s'.vs_accounts = s.vs_accounts /\
+    s'.vs_logs = s.vs_logs /\
+    s'.vs_immutables = s.vs_immutables /\
+    s'.vs_returndata = s.vs_returndata /\
+    s'.vs_allocas = s.vs_allocas /\
+    s'.vs_halted = s.vs_halted /\
+    s'.vs_current_bb = s.vs_current_bb /\
+    s'.vs_inst_idx = s.vs_inst_idx /\
+    s'.vs_prev_bb = s.vs_prev_bb /\
+    (!v. lookup_var v s' = lookup_var v s)
+Proof
+  ACCEPT_TAC venomInstProofsTheory.step_mstore8_preserves
 QED
 
 Theorem step_sstore_preserves:!fuel ctx inst s s'.

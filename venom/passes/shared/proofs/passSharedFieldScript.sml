@@ -17,7 +17,7 @@ val field_tac =
      exec_alloca_def, extract_venom_result_def] >>
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  fs[update_var_def, mstore_def, sstore_def, tstore_def,
+  fs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
      write_memory_with_expansion_def, mcopy_def,
      contract_storage_def, contract_transient_def];
 

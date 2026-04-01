@@ -185,6 +185,20 @@ Definition asm_mstore_def:
     | _ => AsmError "mstore: stack underflow"
 End
 
+Definition asm_mstore8_def:
+  asm_mstore8 s =
+    case s.as_stack of
+      offset :: value :: stk =>
+        let off = w2n offset in
+        let b : word8 = w2w value in
+        let mem = asm_expand_memory (off + 1) s.as_memory in
+        AsmOK (asm_next (s with <|
+          as_stack := stk;
+          as_memory :=
+            TAKE off mem ++ [b] ++ DROP (off + 1) mem |>))
+    | _ => AsmError "mstore8: stack underflow"
+End
+
 Definition asm_sload_def:
   asm_sload s =
     case s.as_stack of
@@ -690,6 +704,7 @@ Definition asm_step_memory_def:
     if name = "POP" then SOME (asm_pop s) else
     if name = "MLOAD" then SOME (asm_mload s) else
     if name = "MSTORE" then SOME (asm_mstore s) else
+    if name = "MSTORE8" then SOME (asm_mstore8 s) else
     if name = "MCOPY" then SOME (asm_copy_to_mem s.as_memory s) else
     if name = "MSIZE" then
       SOME (asm_push_val (n2w (LENGTH s.as_memory)) s) else

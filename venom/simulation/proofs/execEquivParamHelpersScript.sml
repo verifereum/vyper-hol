@@ -110,13 +110,14 @@ QED
 Theorem vsr_step_inst_write2:
   !R_ok R_term inst s1 s2.
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
-    MEM inst.inst_opcode [MSTORE;SSTORE;TSTORE] /\
+    MEM inst.inst_opcode [MSTORE;MSTORE8;SSTORE;TSTORE] /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
     lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[step_inst_base_def] >>
   vsr_irule vsr_exec_write2 >> simp[] >> rw[] >>
-  FIRST [vsr_irule vsr_mstore, vsr_irule vsr_sstore, vsr_irule vsr_tstore] >>
+  FIRST [vsr_irule vsr_mstore, vsr_irule vsr_mstore8,
+         vsr_irule vsr_sstore, vsr_irule vsr_tstore] >>
   simp[]
 QED
 

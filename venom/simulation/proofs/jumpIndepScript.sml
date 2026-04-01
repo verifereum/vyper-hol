@@ -111,6 +111,15 @@ Theorem mstore_jump[local]:
 Proof simp[mstore_def, LET_THM]
 QED
 
+Theorem mstore8_jump[local]:
+  !off v s pb cb idx.
+    mstore8 off v (s with <|vs_prev_bb := pb; vs_current_bb := cb;
+                             vs_inst_idx := idx|>) =
+    (mstore8 off v s) with <|vs_prev_bb := pb; vs_current_bb := cb;
+                              vs_inst_idx := idx|>
+Proof simp[mstore8_def, LET_THM]
+QED
+
 Theorem sstore_jump[local]:
   !k v s pb cb idx.
     sstore k v (s with <|vs_prev_bb := pb; vs_current_bb := cb;
@@ -166,7 +175,7 @@ QED
 val jmp_rw = [eval_op_jump, eval_ops_jump, update_var_jump,
               write_mem_jump, read_mem_jump,
               halt_state_jump, revert_state_jump, set_returndata_jump,
-              mstore_jump, sstore_jump, tstore_jump, mcopy_jump,
+              mstore_jump, mstore8_jump, sstore_jump, tstore_jump, mcopy_jump,
               mload_jump, sload_jump, tload_jump,
               instIdxIndepTheory.exec_result_map_def];
 

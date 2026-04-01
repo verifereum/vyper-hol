@@ -241,10 +241,10 @@ val ld_classify_one_tac =
     irule exec_read1_ld_ok >> rpt (first_assum (irule_at Any)) >>
     rw[sload_def, tload_def, contract_storage_def, contract_transient_def] >>
     gvs[ld_ok_def] >> NO_TAC) >>
-  (* exec_write2: MSTORE/SSTORE/TSTORE *)
+  (* exec_write2: MSTORE/MSTORE8/SSTORE/TSTORE *)
   TRY (
     irule exec_write2_ld_ok >> rpt (first_assum (irule_at Any)) >>
-    simp[mstore_def, sstore_def, tstore_def, LET_THM] >>
+    simp[mstore_def, mstore8_def, sstore_def, tstore_def, LET_THM] >>
     rpt strip_tac >> fs[ld_ok_def, lookup_var_def] >> NO_TAC) >>
   (* NOP: OK s unchanged *)
   TRY (gvs[] >> NO_TAC) >>

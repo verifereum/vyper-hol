@@ -199,6 +199,14 @@ Proof
   rw[state_equiv_def, execution_equiv_def, mstore_def, lookup_var_def]
 QED
 
+Theorem mstore8_preserves:
+  !vars offset v s1 s2.
+    state_equiv vars s1 s2 ==>
+    state_equiv vars (mstore8 offset v s1) (mstore8 offset v s2)
+Proof
+  rw[state_equiv_def, execution_equiv_def, mstore8_def, lookup_var_def]
+QED
+
 Theorem sstore_preserves:
   !vars key v s1 s2.
     state_equiv vars s1 s2 ==>
