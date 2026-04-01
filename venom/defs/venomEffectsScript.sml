@@ -97,6 +97,7 @@ Definition write_effects_def:
   write_effects TSTORE = {Eff_TRANSIENT} /\
   (* Memory writes *)
   write_effects MSTORE = {Eff_MEMORY; Eff_MSIZE} /\
+  write_effects MSTORE8 = {Eff_MEMORY; Eff_MSIZE} /\
   write_effects ISTORE = {Eff_IMMUTABLES; Eff_MEMORY; Eff_MSIZE} /\
   (* External calls *)
   write_effects CALL = all_effects DIFF {Eff_IMMUTABLES} /\

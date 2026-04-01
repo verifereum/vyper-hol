@@ -29,7 +29,7 @@ Datatype:
     (* Bitwise *)
     | AND | OR | XOR | NOT | SHL | SHR | SAR | SIGNEXTEND | BYTE
     (* Memory *)
-    | MLOAD | MSTORE | MCOPY | MSIZE
+    | MLOAD | MSTORE | MSTORE8 | MCOPY | MSIZE
     (* Storage *)
     | SLOAD | SSTORE
     (* Transient storage *)
@@ -249,6 +249,7 @@ Definition is_volatile_def:
   is_volatile ISTORE = T /\
   is_volatile TSTORE = T /\
   is_volatile MSTORE = T /\
+  is_volatile MSTORE8 = T /\
   is_volatile CALLDATACOPY = T /\
   is_volatile MCOPY = T /\
   is_volatile EXTCODECOPY = T /\
@@ -348,6 +349,7 @@ End
 (* Memory-writing opcodes: modify vs_memory (and possibly output var) *)
 Definition is_mem_write_op_def:
   is_mem_write_op MSTORE = T /\
+  is_mem_write_op MSTORE8 = T /\
   is_mem_write_op MCOPY = T /\
   is_mem_write_op CALLDATACOPY = T /\
   is_mem_write_op RETURNDATACOPY = T /\

@@ -234,6 +234,16 @@ Definition mstore_def:
     s with vs_memory := TAKE offset expanded ++ bytes ++ DROP (offset + 32) expanded
 End
 
+(* Store a single byte to memory (low byte of value) *)
+Definition mstore8_def:
+  mstore8 offset (value:bytes32) s =
+    let b : word8 = w2w value in
+    let mem = s.vs_memory in
+    let needed = (offset + 1) - LENGTH mem in
+    let expanded = if needed > 0 then mem ++ REPLICATE needed 0w else mem in
+    s with vs_memory := TAKE offset expanded ++ [b] ++ DROP (offset + 1) expanded
+End
+
 (* Contract storage: stored in the current account within vs_accounts.
    sload/sstore read/write through vs_accounts directly. *)
 Definition contract_storage_def:

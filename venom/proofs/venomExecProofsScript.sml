@@ -229,7 +229,7 @@ Proof
           extract_venom_result_def] >>
      strip_tac >> gvs[AllCaseEqs()] >>
      rpt (pairarg_tac >> gvs[AllCaseEqs()]) >>
-     gvs[update_var_def, mstore_def, sstore_def, tstore_def,
+     gvs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
          write_memory_with_expansion_def, mcopy_def, revert_state_def]
 QED
 
@@ -301,7 +301,7 @@ Proof
   gvs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
       exec_read0_def, exec_read1_def, exec_write2_def,
       update_var_def, AllCaseEqs(), jump_to_def,
-      mstore_def, mload_def, sstore_def, sload_def,
+      mstore_def, mstore8_def, mload_def, sstore_def, sload_def,
       tstore_def, tload_def, write_memory_with_expansion_def,
       mcopy_def, exec_alloca_def,
       exec_ext_call_def, exec_delegatecall_def, exec_create_def] >>

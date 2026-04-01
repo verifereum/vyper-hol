@@ -44,6 +44,7 @@ Definition evm_opcode_table_def:
     ("CHAINID", 0x46w); ("SELFBALANCE", 0x47w); ("BASEFEE", 0x48w);
     ("BLOBHASH", 0x49w); ("BLOBBASEFEE", 0x4Aw);
     ("POP", 0x50w); ("MLOAD", 0x51w); ("MSTORE", 0x52w);
+    ("MSTORE8", 0x53w);
     ("SLOAD", 0x54w); ("SSTORE", 0x55w);
     ("JUMP", 0x56w); ("JUMPI", 0x57w);
     ("MSIZE", 0x59w); ("GAS", 0x5Aw); ("JUMPDEST", 0x5Bw);

@@ -511,6 +511,7 @@ Definition step_inst_base_def:
        our model uses semantic order for readability. *)
     | MLOAD => exec_read1 (\addr s. mload (w2n addr) s) inst s
     | MSTORE => exec_write2 (\addr val s. mstore (w2n addr) val s) inst s
+    | MSTORE8 => exec_write2 (\addr val s. mstore8 (w2n addr) val s) inst s
     | MCOPY =>
         (case inst.inst_operands of
           [op_dst; op_src; op_size] =>
@@ -979,7 +980,7 @@ Proof
      extract_venom_result_def] >>
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  fs[update_var_def, mstore_def, sstore_def, tstore_def,
+  fs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
      write_memory_with_expansion_def, mcopy_def,
      revert_state_def, eval_operands_def]
 QED

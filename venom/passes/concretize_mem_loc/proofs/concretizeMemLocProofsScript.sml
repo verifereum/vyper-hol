@@ -39,7 +39,7 @@
 
 Theory concretizeMemLocProofs
 Ancestors
-  concretizeMemLocDefs passSimulationProps venomWf allocaSafety
+  concretizeMemLocDefs passSimulationProps venomWf pointerConfinedDefs
 
 (* ===== Helpers ===== *)
 
@@ -62,44 +62,19 @@ Definition fn_alloca_inst_id_of_var_def:
     | NONE => NONE
 End
 
-(* Variables whose values may differ due to memory remapping.
-   Includes alloca output vars (in FDOM amap) and all vars
-   transitively derived from them (ADD of pointer
-   with offset, etc.). Uses transitive_use_vars from passSharedDefs. *)
-Definition pointer_derived_vars_def:
-  pointer_derived_vars fn (amap : alloc_map) =
-    set (transitive_use_vars fn (SET_TO_LIST (FDOM amap)))
+(* ===== Concretize-specific pointer wrappers ===== *)
+
+(* pointer_derived_vars and pointer_confined are in pointerConfinedDefs,
+   parameterized by roots : string set. For concretize, roots = FDOM amap.
+   Abbreviations for readability: *)
+Definition concretize_pointer_derived_def:
+  concretize_pointer_derived fn (amap : alloc_map) =
+    pointer_derived_vars fn (FDOM amap)
 End
 
-(* ===== Pointer confinement ===== *)
-
-(* Pointer-derived variables are only used as memory addresses.
-   Every instruction that reads a pointer-derived var must be either:
-   - a memory operation (has mem_write_ops or mem_read_ops), or
-   - pointer arithmetic (ADD) whose output is also pointer-derived
-   This ensures pointer values never affect control flow or
-   observable scalar results.
-
-   Without this, a program could compare two pointers:
-     %cmp = EQ %ptr1, %ptr2  (unchanged by concretize_inst)
-     JNZ %cmp, label
-   The pointer values differ between original and transformed,
-   so %cmp differs, and control flow diverges → theorem is FALSE.
-
-   Always true for Vyper-compiled code: alloca outputs are abstract
-   memory offsets used only for MSTORE/MLOAD/MCOPY via ADD. *)
-Definition pointer_confined_def:
-  pointer_confined fn (amap : alloc_map) <=>
-    let pv = pointer_derived_vars fn amap in
-    !bb inst v.
-      MEM bb fn.fn_blocks /\
-      MEM inst bb.bb_instructions /\
-      MEM (Var v) inst.inst_operands /\
-      v IN pv ==>
-      mem_write_ops inst <> NONE \/
-      mem_read_ops inst <> NONE \/
-      inst.inst_opcode = ADD /\
-        set inst.inst_outputs SUBSET pv
+Definition concretize_pointer_confined_def:
+  concretize_pointer_confined fn (amap : alloc_map) <=>
+    pointer_confined fn (FDOM amap)
 End
 
 (* ===== Memory remapping relation ===== *)
@@ -121,7 +96,7 @@ Definition mem_remap_equiv_def:
   mem_remap_equiv (amap : alloc_map) fn s1 s2 <=>
     (* 1. Non-pointer-derived variables agree *)
     (!v. v NOTIN FDOM amap /\
-         v NOTIN pointer_derived_vars fn amap ==>
+         v NOTIN concretize_pointer_derived fn amap ==>
          lookup_var v s1 = lookup_var v s2) /\
     (* 2a. Activated alloca vars: s2 has concrete offset *)
     (!v addr aid.
@@ -154,23 +129,6 @@ Definition mem_remap_equiv_def:
     s1.vs_block_ctx = s2.vs_block_ctx /\
     s1.vs_logs = s2.vs_logs
 End
-
-(* ===== pointer_confined implies alloca_safe ===== *)
-
-(* pointer_confined is strictly stronger than alloca_safe_fn:
- * pointer-derived vars can only appear in memory ops or ADD,
- * which excludes all observable operand positions.
- *
- * Precondition: amap covers all alloca outputs in fn. *)
-Theorem pointer_confined_implies_alloca_safe:
-  ∀fn amap.
-    pointer_confined fn amap ∧
-    (∀inst. MEM inst (fn_insts fn) ∧ inst.inst_opcode = ALLOCA ⇒
-       ∀out. inst_output inst = SOME out ⇒ out ∈ FDOM amap) ⇒
-    alloca_safe_fn fn
-Proof
-  cheat
-QED
 
 (* ===== Allocator soundness ===== *)
 
@@ -221,7 +179,7 @@ QED
 Theorem concretize_function_correct_proof:
   !amap fn fuel ctx s1 s2.
     venom_wf ctx /\ ssa_form fn /\
-    pointer_confined fn amap /\
+    concretize_pointer_confined fn amap /\
     mem_remap_equiv amap fn s1 s2 ==>
     lift_result
       (mem_remap_equiv amap fn)

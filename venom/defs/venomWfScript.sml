@@ -100,6 +100,7 @@ Definition inst_wf_def:
     | EXTCODEHASH => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
     (* ---- exec_write2: 2 operands, no output ---- *)
     | MSTORE => LENGTH inst.inst_operands = 2 /\ inst.inst_outputs = []
+    | MSTORE8 => LENGTH inst.inst_operands = 2 /\ inst.inst_outputs = []
     | SSTORE => LENGTH inst.inst_operands = 2 /\ inst.inst_outputs = []
     | TSTORE => LENGTH inst.inst_operands = 2 /\ inst.inst_outputs = []
     | ISTORE => LENGTH inst.inst_operands = 2 /\ inst.inst_outputs = []

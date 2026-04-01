@@ -7,7 +7,7 @@ Ancestors
 Theorem function_inliner_pass_correct:
   ∀ctx s fuel threshold.
     EVERY wf_function ctx.ctx_functions ∧
-    EVERY alloca_safe_fn ctx.ctx_functions ⇒
+    EVERY alloca_pointer_confined ctx.ctx_functions ⇒
     let ctx' = function_inliner_ctx threshold ctx in
     ∃fuel'.
       result_equiv {}
