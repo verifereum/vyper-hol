@@ -229,12 +229,13 @@ End
 (* ===== Component Theorems ===== *)
 
 (* Pipeline preserves Venom semantics.
-   Follows from ctx_pass_correct -> pass_correct -> result_equiv.
-   result_equiv preserves all observable state including returndata,
+   Follows from ctx_pass_correct -> pass_correct -> lift_result.
+   lift_result preserves all observable state including returndata,
    accounts, transient, and logs (via execution_equiv). *)
 Theorem e2e_venom_pipeline:
   !ctx pipeline fresh vs.
-    ctx_pass_correct pipeline fresh ctx vs
+    ctx_pass_correct pipeline (state_equiv fresh) (execution_equiv fresh)
+      ctx vs
     ==>
     !fuel. ?fuel'.
       result_equiv fresh
@@ -306,7 +307,8 @@ Theorem compile_vyper_well_formed:
     compile_vyper selectors ext_fns int_fns fb_fn
       dispatch bucket_count fn_meta_bytes entry_label
       pipeline fn_eom_map data_seg = SOME bytecode /\
-    ctx_pass_correct pipeline fresh ctx vs
+    ctx_pass_correct pipeline (state_equiv fresh) (execution_equiv fresh)
+      ctx vs
     ==>
     codegen_ready ctx' /\ ctx_wf ctx' /\
     ?spill_hwm.
@@ -366,7 +368,8 @@ Theorem e2e_vyper_to_evm:
     vs.vs_inst_idx = 0 /\
     (* Pipeline preserves semantics (proved per-pipeline by
        composing individual pass correctness theorems) *)
-    ctx_pass_correct pipeline fresh ctx vs
+    ctx_pass_correct pipeline (state_equiv fresh) (execution_equiv fresh)
+      ctx vs
     ==>
     ?gas_needed.
       !es. initial_evm_rel bytecode vs es /\
