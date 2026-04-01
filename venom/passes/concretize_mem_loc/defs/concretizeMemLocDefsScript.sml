@@ -31,8 +31,8 @@ Type alloc_map = ``:(string, 256 word) fmap``
 Definition find_base_allocas_def:
   find_base_allocas (bpr : bp_result) op =
     case op of
-      Var v => IMAGE (\p. case p of Ptr alloc _ => alloc)
-                     (bp_get_ptrs bpr v)
+      Var v => set (nub (MAP (\p. case p of Ptr alloc _ => alloc)
+                             (bp_get_ptrs bpr v)))
     | _ => {}
 End
 

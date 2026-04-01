@@ -40,7 +40,7 @@ Proof
 QED
 
 Theorem bp_get_ptrs_fempty:
-  ∀v. bp_get_ptrs FEMPTY v = {}
+  ∀v. bp_get_ptrs FEMPTY v = []
 Proof
   rw[bp_get_ptrs_def, FLOOKUP_DEF]
 QED
@@ -90,8 +90,8 @@ End
    since the analysis runs over all blocks including unexecuted ones. *)
 Definition bp_ptr_sound_def:
   bp_ptr_sound (bp : bp_result) (s : venom_state) ⇔
-    ∀v. bp_get_ptrs bp v ≠ {} ∧ IS_SOME (lookup_var v s) ⇒
-      ∃p. p ∈ bp_get_ptrs bp v ∧ ptr_matches_var p v s
+    ∀v. bp_get_ptrs bp v ≠ [] ∧ IS_SOME (lookup_var v s) ⇒
+      ∃p. MEM p (bp_get_ptrs bp v) ∧ ptr_matches_var p v s
 End
 
 (* ===== Buffer Safety: Pointer Offsets Within Alloca Bounds ===== *)
@@ -111,7 +111,7 @@ End
 Definition bp_ptrs_bounded_def:
   bp_ptrs_bounded (bp : bp_result) (s : venom_state) ⇔
     ∀v aid off.
-      Ptr (Allocation aid) (SOME off) ∈ bp_get_ptrs bp v ⇒
+      MEM (Ptr (Allocation aid) (SOME off)) (bp_get_ptrs bp v) ⇒
       ∀base sz.
         FLOOKUP s.vs_allocas aid = SOME (base, sz) ⇒ off ≤ sz
 End
@@ -129,7 +129,7 @@ Theorem bp_handle_inst_sound:
     bp_handle_inst bp inst = (c, bp') ∧
     step_inst fuel ctx inst s = OK s' ∧
     inst_wf inst ∧
-    (∀out. inst_output inst = SOME out ⇒ bp_get_ptrs bp out = {}) ⇒
+    (∀out. inst_output inst = SOME out ⇒ bp_get_ptrs bp out = []) ⇒
     bp_ptr_sound bp' s'
 Proof
   cheat
@@ -149,7 +149,7 @@ Theorem bp_process_block_sound:
     ALL_DISTINCT (FLAT (MAP (λi. i.inst_outputs) bb.bb_instructions)) ∧
     (∀inst out. MEM inst bb.bb_instructions ∧
                inst_output inst = SOME out ⇒
-               bp_get_ptrs bp out = {}) ⇒
+               bp_get_ptrs bp out = []) ⇒
     bp_ptr_sound bp' s'
 Proof
   cheat
