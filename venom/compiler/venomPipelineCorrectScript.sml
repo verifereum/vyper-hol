@@ -5,12 +5,16 @@
  * semantics-preserving context transforms preserves semantics.
  * Instantiated for each optimization level.
  *
+ * Relations compose via rel_seq: FOLDL rel_seq (=) [R1; R2; ...; RN].
+ * Each pass keeps its own R_ok/R_term pair; no UNION of variable sets.
+ *
  * TOP-LEVEL:
  *   pass_correct_trans             -- binary transitivity (relational composition)
- *   pass_correct_trans_equiv       -- corollary for state_equiv/execution_equiv (union)
  *   apply_ctx_fn_transform_correct -- lift per-block dual-ctx sim to ctx_pass_correct
+ *   compose_passes_correct         -- N-ary pipeline composition via list induction
  *   venom_pipeline_correct         -- 5-phase pipeline composition
  *   pass_correct_implies_observable -- pass_correct to observable_result_equiv
+ *   rel_seq_preserves_observable   -- rel_seq of obs-preserving rels preserves obs
  *)
 
 Theory venomPipelineCorrect
@@ -545,4 +549,30 @@ Proof
   first_x_assum drule_all >> strip_tac >>
   Cases_on `exec1 fuel` >> Cases_on `exec2 fuel'` >>
   gvs[lift_result_def, observable_result_equiv_def, terminates_def]
+QED
+
+(* rel_seq of observable-equiv-preserving relations preserves observable_equiv.
+   Used to discharge pass_correct_implies_observable for composed pipelines. *)
+Theorem rel_seq_preserves_observable:
+  (!s1 s2. R1 s1 s2 ==> observable_equiv s1 s2) /\
+  (!s1 s2. R2 s1 s2 ==> observable_equiv s1 s2) ==>
+  (!s1 s2. rel_seq R1 R2 s1 s2 ==> observable_equiv s1 s2)
+Proof
+  rw[rel_seq_def] >> metis_tac[observable_equiv_trans]
+QED
+
+(* FOLDL rel_seq (=) Rs preserves observable_equiv when each Ri does. *)
+Theorem foldl_rel_seq_preserves_observable:
+  !Rs.
+    EVERY (\R. !s1 s2. R s1 s2 ==> observable_equiv s1 s2) Rs ==>
+    (!s1 s2. FOLDL rel_seq (=) Rs s1 s2 ==> observable_equiv s1 s2)
+Proof
+  Induct >- simp[observable_equiv_refl] >>
+  rpt gen_tac >> simp[] >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `FOLDL _ _ _ _ _` mp_tac >>
+  PURE_ONCE_REWRITE_TAC[foldl_rel_seq_acc] >>
+  simp[rel_seq_def] >> rpt strip_tac >>
+  irule observable_equiv_trans >>
+  metis_tac[]
 QED

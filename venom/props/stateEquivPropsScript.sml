@@ -259,6 +259,22 @@ Proof
   rw[state_equiv_def]
 QED
 
+(* observable_equiv is an equivalence relation (conjunction of field equalities) *)
+
+Theorem observable_equiv_refl:
+  !s. observable_equiv s s
+Proof
+  simp[observable_equiv_def]
+QED
+
+Theorem observable_equiv_trans:
+  !s1 s2 s3.
+    observable_equiv s1 s2 /\ observable_equiv s2 s3 ==>
+    observable_equiv s1 s3
+Proof
+  simp[observable_equiv_def]
+QED
+
 (* Lift through exec_result: result_equiv implies observable result equiv *)
 
 Definition observable_result_equiv_def:

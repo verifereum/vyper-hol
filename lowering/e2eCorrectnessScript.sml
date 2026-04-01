@@ -228,21 +228,28 @@ End
 
 (* ===== Component Theorems ===== *)
 
-(* Pipeline preserves Venom semantics.
-   Follows from ctx_pass_correct -> pass_correct -> lift_result.
-   lift_result preserves all observable state including returndata,
-   accounts, transient, and logs (via execution_equiv). *)
+(* Pipeline preserves observable semantics.
+   Given ctx_pass_correct with R_ok/R_term that each imply
+   observable_equiv, every terminating execution of the original
+   context has a fuel for the transformed context with
+   observably equivalent results. *)
 Theorem e2e_venom_pipeline:
-  !ctx pipeline fresh vs.
-    ctx_pass_correct pipeline (state_equiv fresh) (execution_equiv fresh)
-      ctx vs
+  !(R_ok : venom_state -> venom_state -> bool) R_term ctx pipeline vs fuel.
+    (!s1 s2. R_ok s1 s2 ==> observable_equiv s1 s2) /\
+    (!s1 s2. R_term s1 s2 ==> observable_equiv s1 s2) /\
+    ctx_pass_correct pipeline R_ok R_term ctx vs /\
+    terminates (run_context fuel ctx vs)
     ==>
-    !fuel. ?fuel'.
-      result_equiv fresh
-        (run_context fuel ctx vs)
-        (run_context fuel' (pipeline ctx) vs)
+    ?fuel'. observable_result_equiv
+              (run_context fuel ctx vs)
+              (run_context fuel' (pipeline ctx) vs)
 Proof
-  cheat
+  rw[ctx_pass_correct_def] >> strip_tac >>
+  `?fuel'. terminates (run_context fuel' (pipeline ctx) vs)` by
+    (gvs[pass_correct_def] >> metis_tac[]) >>
+  qexists_tac `fuel'` >>
+  irule pass_correct_implies_observable >>
+  metis_tac[]
 QED
 
 (* Codegen correctness: Venom execution corresponds to EVM execution.
@@ -300,15 +307,13 @@ QED
 Theorem compile_vyper_well_formed:
   !selectors ext_fns int_fns fb_fn dispatch
     bucket_count fn_meta_bytes entry_label
-    pipeline fn_eom_map data_seg bytecode fresh vs.
+    pipeline fn_eom_map data_seg bytecode vs.
   let ctx = run_lowering selectors ext_fns int_fns fb_fn
               dispatch bucket_count fn_meta_bytes entry_label in
   let ctx' = pipeline ctx in
     compile_vyper selectors ext_fns int_fns fb_fn
       dispatch bucket_count fn_meta_bytes entry_label
-      pipeline fn_eom_map data_seg = SOME bytecode /\
-    ctx_pass_correct pipeline (state_equiv fresh) (execution_equiv fresh)
-      ctx vs
+      pipeline fn_eom_map data_seg = SOME bytecode
     ==>
     codegen_ready ctx' /\ ctx_wf ctx' /\
     ?spill_hwm.
@@ -350,12 +355,16 @@ QED
    parametric -- it holds for any pipeline assembled from
    semantics-preserving passes (e.g., the standard O2 pipeline).
    It is proved per-pipeline by composing individual pass proofs.
+   The R_ok/R_term relations are the composed per-pass relations
+   (via FOLDL rel_seq); the caller must show they imply
+   observable_equiv (via foldl_rel_seq_preserves_observable).
    See e2e_vyper_to_evm_O2 for a concrete instance. *)
 Theorem e2e_vyper_to_evm:
   !tenv event_info pipeline selectors ext_fns int_fns fb_fn
     dispatch bucket_count fn_meta_bytes entry_label
     fn_eom_map data_seg bytecode
-    am tx vs fresh args ret.
+    (R_ok : venom_state -> venom_state -> bool) R_term
+    am tx vs args ret.
   let ctx = run_lowering selectors ext_fns int_fns fb_fn
               dispatch bucket_count fn_meta_bytes entry_label in
     (* Compilation produces bytecode *)
@@ -366,10 +375,10 @@ Theorem e2e_vyper_to_evm:
     valid_function_call tenv am tx selectors
       vs.vs_call_ctx.cc_calldata args ret /\
     vs.vs_inst_idx = 0 /\
-    (* Pipeline preserves semantics (proved per-pipeline by
-       composing individual pass correctness theorems) *)
-    ctx_pass_correct pipeline (state_equiv fresh) (execution_equiv fresh)
-      ctx vs
+    (* Pipeline preserves observable semantics *)
+    ctx_pass_correct pipeline R_ok R_term ctx vs /\
+    (!s1 s2. R_ok s1 s2 ==> observable_equiv s1 s2) /\
+    (!s1 s2. R_term s1 s2 ==> observable_equiv s1 s2)
     ==>
     ?gas_needed.
       !es. initial_evm_rel bytecode vs es /\
