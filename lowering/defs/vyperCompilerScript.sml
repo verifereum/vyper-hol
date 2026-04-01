@@ -32,7 +32,7 @@ Definition initial_compile_state_def:
        cs_next_id := 0;
        cs_current_bb := entry_label;
        cs_current_insts := [];
-       cs_blocks := FEMPTY;
+       cs_blocks := [];
        cs_data_sections := []
     |>
 End
@@ -48,7 +48,7 @@ Definition extract_context_def:
       : venom_context # data_section list =
     let current_bb = <| bb_label := st.cs_current_bb;
                         bb_instructions := REVERSE st.cs_current_insts |> in
-    let finalized = MAP SND (fmap_to_alist st.cs_blocks) in
+    let finalized = st.cs_blocks in
     let all_blocks = finalized ++ [current_bb] in
     (<| ctx_functions :=
           [<| fn_name := entry_label;
