@@ -650,15 +650,15 @@ Definition compile_generate_runtime_def:
     do fallback_lbl <- fresh_label "fallback";
        (* Selector dispatch *)
        (case dispatch_strategy of
-          "sparse" =>
+          Sparse =>
             compile_selector_dispatch_sparse selectors
               bucket_count fallback_lbl
-        | "dense" =>
+        | Dense =>
             let entry_lbls = MAP (λ(_,lbl,_). lbl) selectors in
             compile_selector_dispatch_dense selectors
               bucket_count fn_metadata_bytes
               dense_buckets entry_info entry_lbls fallback_lbl
-        | _ =>
+        | Linear =>
             compile_selector_dispatch_linear linear_sels fallback_lbl);
        (* Generate external function bodies *)
        compile_external_fn_bodies external_fns;

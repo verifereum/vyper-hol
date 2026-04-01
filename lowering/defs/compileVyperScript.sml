@@ -28,6 +28,12 @@ Ancestors
   compileEnv
   vyperAST
 
+(* ===== Dispatch Strategy ===== *)
+
+Datatype:
+  dispatch_strategy = Linear | Sparse | Dense
+End
+
 (* ===== Struct Fields Map ===== *)
 
 (* Compute memory bytes for a type given a struct field map.
@@ -529,7 +535,7 @@ End
    Takes:
    - tops: Vyper AST (toplevel list, with storage slots annotated)
    - pipeline: Venom optimization passes
-   - dispatch_strategy: "linear", "sparse", or "dense"
+   - dispatch_strategy: Linear, Sparse, or Dense
 
    Derived from AST (not external inputs):
    - immutables_len: sum of memory_bytes_required for Immutable vars
@@ -555,7 +561,7 @@ End
 Definition compile_vyper_def:
   compile_vyper (tops : toplevel list)
                 (pipeline : venom_context -> venom_context)
-                (dispatch_strategy : string) =
+                dispatch_strategy =
     let tenv = type_env tops in
     let sft = make_struct_fields_map tops in
     let immutables_len = compute_immutables_len sft tops in
@@ -574,18 +580,19 @@ Definition compile_vyper_def:
     let method_ids = MAP FST selectors in
     let entry_info = build_dense_entry_info selectors external_fns in
     let (bucket_count, fn_meta_bytes, dense_buckets) =
-      if dispatch_strategy = "dense" then
-        let min_cds_values = MAP (λ(_, _, _, min_cds, _, _, _, _, _, _, _).
-                                   min_cds) external_fns in
-        let fn_mb = compute_fn_metadata_bytes min_cds_values in
-        (case generate_dense_jumptable_info method_ids of
-           NONE => (1, fn_mb, ([] : dense_bucket list))
-         | SOME (nb, buckets) => (nb, fn_mb, buckets))
-      else if dispatch_strategy = "sparse" then
-        let (nb, _) = generate_sparse_jumptable_buckets method_ids in
-        (nb, 0, [])
-      else
-        (0, 0, []) in
+      (case dispatch_strategy of
+         Dense =>
+           let min_cds_values = MAP (λ(_, _, _, min_cds, _, _, _, _, _, _, _).
+                                      min_cds) external_fns in
+           let fn_mb = compute_fn_metadata_bytes min_cds_values in
+           (case generate_dense_jumptable_info method_ids of
+              NONE => (1, fn_mb, ([] : dense_bucket list))
+            | SOME (nb, buckets) => (nb, fn_mb, buckets))
+       | Sparse =>
+           let (nb, _) = generate_sparse_jumptable_buckets method_ids in
+           (nb, 0, [])
+       | Linear =>
+           (0, 0, [])) in
     let (runtime_ctx, runtime_data) =
       run_lowering selectors external_fns runtime_int_fns
         fallback_fn dispatch_strategy bucket_count fn_meta_bytes
