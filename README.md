@@ -14,7 +14,7 @@ These script files are intended to be read as a formal specification of Vyper (o
 
 The main function for executing Vyper statements is `eval_stmts` defined in `vyperInterpreter` (specifically `evaluate_def`). Top-level entry points are `load_contract` and `call_external`, defined in the same theory. Examples of calling these functions and executing the interpreter can be found in `vyperTestRunner`, which defines functions such as `run_call` used in evaluating the formal semantics on the Vyper language test suite.
 
-The interpreter operates on abstract syntax (defined in `vyperAST`) and produces effects on an abstract machine state (`abstract_machine`, defined in `vyperInterpreter`) that represents the Ethereum virtual machine.
+The interpreter operates on abstract syntax (defined in `vyperAST`) and an evaluation state (`evaluation_state`, defined in `vyperState`) representing the mutable EVM state. Top-level entry-points use an `abstract_machine` wrapper (defined in `vyperInterpreter`) that packages the evaluation state with contract source code and other static data.
 
 ## Repository Structure
 
@@ -25,6 +25,7 @@ The repository is organised into the following directories:
 - **`semantics/`** — Vyper semantics, organised across several theories covering values and types, value-level operations, storage encoding, ABI encoding, evaluation context and builtins, interpreter state and monad, the definitional interpreter itself, and a CPS/small-step version for efficient execution
   - **`semantics/prop/`** — Properties of the semantics (scope preservation, state preservation, etc.)
 - **`tests/`** — Test infrastructure and generated test scripts from the Vyper test suite
+- **`lowering/`** — Vyper-to-Venom IR compiler definition and correctness proofs
 - **`venom/`** — Venom IR semantics and compiler pass proofs
   - **`venom/passes/`** — Individual compiler passes
 
@@ -49,6 +50,7 @@ The semantics is organised into layers:
 - **Evaluation context** — the non-stateful environment for the interpreter, containing the transaction information, source code of existing contracts, and semantics for builtins that depend on this context (e.g., `msg.sender`, `block.number`, `ecrecover`).
 - **Interpreter state** — the stateful machinery for the interpreter, including a state-exception monad, the mutable state (EVM accounts, variable scopes, immutables, logs, transient storage), and operations for reading/writing storage, variables, and globals. Assignment to nested targets (e.g., `x[3].n = 9`) is also handled at this level.
 - **Interpreter** — the main definitional interpreter (`evaluate_def`), function lookup and calling conventions, the termination proof, and the top-level entry-points.
+- **Type checking** — partial type-checking definitions (`vyperTypeCheck`), including `satisfies_type`, `well_typed_expr`, and related predicates.
 
 The interpreter is written in a state-exception monad. Exceptions are used for semantic errors (e.g., looking up a variable that was not bound), legitimate runtime exceptions (e.g., failed assertions), and control flow for internal function calls and loops (`return`, `break`, `continue`).
 
@@ -66,46 +68,21 @@ The test infrastructure defines functions for re-running execution traces from t
 
 The decoding of JSON into our AST type is somewhat ad-hoc, in part because the JSON format is not fully specified. In future work, we might formalise more of the front-end or elaboration process, including parsing and type-checking, so that we can run source code directly. For now, we rely on an external front-end (e.g., as used in Vyper's test export process) and decode its output to construct terms in our formal syntax.
 
-## What is Missing
+## Current Limitations
 
-The focus of this work so far has been the core execution semantics of Vyper contract code, as abstract syntax, for external calls into a single contract. Therefore, the main limitations are _calls to other contracts_ (and other chain interaction like deploying contracts during execution), and _elaboration into abstract syntax_ done by the Vyper compiler front-end. Our intention is to remove all these limitations in future work to build a comprehensive and definitive formal semantics for the entire Vyper language.
+The formal semantics covers the core Vyper language including external calls (`staticcall`, `extcall`), reentrancy protection (`@nonreentrant`), `raw_call`, contract creation builtins, transient storage, and module imports. The main limitation is the **front-end**: there is no formal parser (we operate on abstract syntax exported as JSON, [#46](https://github.com/verifereum/vyper-hol/issues/46)) and type-checking is partial ([#47](https://github.com/verifereum/vyper-hol/issues/47)). A small number of minor features remain unimplemented: `print`, `msg.gas`, and the `gas=` parameter for external calls ([#98](https://github.com/verifereum/vyper-hol/issues/98)).
 
-Here are the specific aspects of Vyper that are currently not part of the formal model:
-
-- Chain interaction ([#37](https://github.com/verifereum/vyper-hol/issues/37))
-    - external contract calls: `staticcall`, `extcall`, and `extcall` with `value=` (sending ETH) are implemented, but the `gas=` parameter is not yet supported; `default_return_value=` is supported ([#38](https://github.com/verifereum/vyper-hol/issues/38))
-    - `print` (which uses external calls under the hood) ([#38](https://github.com/verifereum/vyper-hol/issues/38))
-    - gas modeling for `msg.gas` and external call gas limits ([#98](https://github.com/verifereum/vyper-hol/issues/98))
-    - [chain interaction builtins](https://docs.vyperlang.org/en/latest/built-in-functions.html#chain-interaction) (`create_minimal_proxy_to`, `create_copy_of`, `create_from_blueprint`, `raw_call`, etc.) and `@raw_return` ([#39](https://github.com/verifereum/vyper-hol/issues/39))
-    - non-reentrancy checking (`@nonreentrant`) ([#40](https://github.com/verifereum/vyper-hol/issues/40))
-- Compiler front-end
-    - concrete syntax, i.e., parsing ([#46](https://github.com/verifereum/vyper-hol/issues/46))
-    - type-checking (the interpreter can fail during execution on badly-typed input) ([#47](https://github.com/verifereum/vyper-hol/issues/47))
-    - some constant expression evaluation is still performed by the JSON front-end rather than formally; formalising this processing is tracked in [#135](https://github.com/verifereum/vyper-hol/issues/135)
-
-## Outcomes, Challenges, and Next Steps
+## Outcomes and Next Steps
 
 The main outcomes of this work so far are:
 - We have defined a formal executable specification of a subset of Vyper in higher-order logic,
-- which passes the `functional/codegen` section of the Vyper language test suite, modulo the exclusions listed above.
+- which passes the `functional/codegen` section of the Vyper language test suite, modulo the minor exclusions listed above.
 
-Passing a substantial portion of the official test suite means our formal semantics is a solid foundation for future work on formal verification for Vyper including both proving properties about the language and producing a verified compiler and other verified tools. In addition to the test executions, we have proved a number of properties about the semantics, including totality of the language (the interpreter always terminates), scope and state preservation properties for the evaluator (in `semantics/prop/`), and correctness of two Venom IR compiler passes (phi elimination and revert-to-assert, in `venom/passes/`).
+Passing a substantial portion of the official test suite means our formal semantics is a solid foundation for future work on formal verification for Vyper including both proving properties about the language and producing a verified compiler and other verified tools. In addition to the test executions, we have proved a number of properties about the semantics, including totality of the language (the interpreter always terminates), scope and state preservation properties for the evaluator (in `semantics/prop/`), and correctness proofs for several Venom IR compiler passes (in `venom/passes/`). The `lowering/` directory contains a Vyper-to-Venom IR compiler definition with end-to-end correctness proofs in progress.
 
 It should also be noted that the export of the test suite in a format consumable by others was motivated in part by this project.
 
-In achieving these outcomes, some of the technical details were more complex than expected. These include
-- Assignment targets: in the official documentation for Vyper, as well as in the [Ivy interpreter](https://github.com/cyberthirst/ivy/) for Vyper, it can appear that the left-hand-sides of assignment operations (e.g., the `x[3].n` in `x[3].n = 9`) are arbitrary expressions. However, they are in fact a restricted subset (consider that `foo(x)[9] = 1` is invalid). This is made more explicit in our syntax, which has a separate syntactic category for assignment targets.
-- The need for a small-step semantics for `cv_compute`, and the somewhat non-trivial termination argument for the semantics. The difficulty here was mostly due to pushing some of the edges of HOL4's libraries for defining functions and for providing fast execution for logical definitions.
-
-Next steps (all can be done in parallel):
-- Complete remaining external call features: `gas=` parameter, `print`, and gas modeling ([#38](https://github.com/verifereum/vyper-hol/issues/38), [#98](https://github.com/verifereum/vyper-hol/issues/98)).
-- Add remaining chain interaction features: `@nonreentrant`, `raw_call`, contract creation builtins ([#39](https://github.com/verifereum/vyper-hol/issues/39), [#40](https://github.com/verifereum/vyper-hol/issues/40)).
-- Prove safety properties about the language: arithmetic safety, array bounds, type preservation, etc. ([#90](https://github.com/verifereum/vyper-hol/issues/90)).
-- Possibly revisit some of the design decisions in the semantics. For example, currently, runtime values carry some typing information (e.g., bit size for integers), but we could try leaving this information entirely in the syntax and not in the runtime values, which could simplify some operations like implicit casting ([#45](https://github.com/verifereum/vyper-hol/issues/45)).
-- Formalise more of the front-end aspects of the language -- type-checking, parsing, etc. -- noted as missing above.
-- Continue work on verifying the Vyper compiler.
-
-For a live roadmap and current tasks, see the [issue tracker](https://github.com/verifereum/vyper-hol/issues)
+Next steps include formalising the front-end (parsing and full type-checking), proving safety properties about the language ([#90](https://github.com/verifereum/vyper-hol/issues/90)), and continuing work on verifying the Vyper compiler. For a live roadmap and current tasks, see the [issue tracker](https://github.com/verifereum/vyper-hol/issues).
 
 ## Dependencies and How to Run
 
