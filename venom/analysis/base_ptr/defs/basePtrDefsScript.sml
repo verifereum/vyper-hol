@@ -62,14 +62,14 @@ End
 (* ===== Analysis State ===== *)
 
 (* Map from variable name to set of possible base pointers *)
-Type bp_result = ``:(string, ptr set) fmap``
+Type bp_result = ``:(string, ptr list) fmap``
 
 (* Lookup possible pointers for a variable. Empty set if not tracked. *)
 Definition bp_get_ptrs_def:
   bp_get_ptrs (result : bp_result) v =
     case FLOOKUP result v of
       SOME ptrs => ptrs
-    | NONE => {}
+    | NONE => []
 End
 
 (* ===== Transfer Function ===== *)
@@ -86,7 +86,7 @@ Definition bp_handle_inst_def:
         let new_result =
           case inst.inst_opcode of
             (* alloca: fresh allocation at offset 0 *)
-            ALLOCA => result |+ (out, {ptr_from_alloca inst})
+            ALLOCA => result |+ (out, [ptr_from_alloca inst])
             (* add/sub: pointer arithmetic. Matches Python (c58034a22).
              * HOL semantic order: [lhs; rhs].
              * Python stack order: rhs, lhs = inst.operands.
@@ -97,41 +97,41 @@ Definition bp_handle_inst_def:
               (case inst.inst_operands of
                  [Var lhs; Lit rhs] =>
                    let ptrs = bp_get_ptrs result lhs in
-                   if ptrs ≠ {} then
-                     result |+ (out, IMAGE (λp. offset_by p (SOME (w2n rhs))) ptrs)
+                   if ptrs ≠ [] then
+                     result |+ (out, MAP (λp. offset_by p (SOME (w2n rhs))) ptrs)
                    else result
                | [Lit lhs; Var rhs] =>
                    let ptrs = bp_get_ptrs result rhs in
-                   if ptrs ≠ {} then
-                     result |+ (out, IMAGE (λp. offset_by p (SOME (w2n lhs))) ptrs)
+                   if ptrs ≠ [] then
+                     result |+ (out, MAP (λp. offset_by p (SOME (w2n lhs))) ptrs)
                    else result
                | [Var lhs; Var rhs] =>
                    let p_lhs = bp_get_ptrs result lhs in
                    let p_rhs = bp_get_ptrs result rhs in
-                   if p_lhs ≠ {} ∧ p_rhs = {} then
-                     result |+ (out, IMAGE (λp. offset_by p NONE) p_lhs)
-                   else if p_lhs = {} ∧ p_rhs ≠ {} then
-                     result |+ (out, IMAGE (λp. offset_by p NONE) p_rhs)
+                   if p_lhs ≠ [] ∧ p_rhs = [] then
+                     result |+ (out, MAP (λp. offset_by p NONE) p_lhs)
+                   else if p_lhs = [] ∧ p_rhs ≠ [] then
+                     result |+ (out, MAP (λp. offset_by p NONE) p_rhs)
                    else result
                | _ => result)
           | SUB =>
               (case inst.inst_operands of
                  [Var lhs; Lit rhs] =>
                    let ptrs = bp_get_ptrs result lhs in
-                   if ptrs ≠ {} then
-                     result |+ (out, IMAGE (λp. sub_offset_by p (SOME (w2n rhs))) ptrs)
+                   if ptrs ≠ [] then
+                     result |+ (out, MAP (λp. sub_offset_by p (SOME (w2n rhs))) ptrs)
                    else result
                | [Var lhs; Var rhs] =>
                    let p_lhs = bp_get_ptrs result lhs in
                    let p_rhs = bp_get_ptrs result rhs in
-                   if p_lhs ≠ {} ∧ p_rhs = {} then
-                     result |+ (out, IMAGE (λp. offset_by p NONE) p_lhs)
+                   if p_lhs ≠ [] ∧ p_rhs = [] then
+                     result |+ (out, MAP (λp. offset_by p NONE) p_lhs)
                    else result
                | _ => result)
             (* phi: union of all operand pointer sets *)
           | PHI =>
               let vars = MAP SND (phi_pairs inst.inst_operands) in
-              let all_ptrs = BIGUNION (set (MAP (bp_get_ptrs result) vars)) in
+              let all_ptrs = nub (FLAT (MAP (bp_get_ptrs result) vars)) in
               result |+ (out, all_ptrs)
             (* assign: propagate pointers from source variable *)
           | ASSIGN =>
@@ -194,9 +194,9 @@ Definition bp_ptr_from_op_def:
   bp_ptr_from_op (result : bp_result) op =
     case op of
       Var v =>
-        let ptrs = bp_get_ptrs result v in
-        if CARD ptrs = 1 then SOME (CHOICE ptrs)
-        else NONE
+        (case bp_get_ptrs result v of
+           [p] => SOME p
+         | _ => NONE)
     | _ => NONE
 End
 

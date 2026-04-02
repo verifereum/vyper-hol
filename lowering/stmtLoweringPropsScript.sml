@@ -33,7 +33,7 @@ Definition assemble_blocks_def:
   assemble_blocks (st':compile_state) =
     let current_bb = <| bb_label := st'.cs_current_bb;
                         bb_instructions := st'.cs_current_insts |> in
-    let finalized = MAP SND (fmap_to_alist st'.cs_blocks) in
+    let finalized = st'.cs_blocks in
     finalized ++ [current_bb]
 End
 

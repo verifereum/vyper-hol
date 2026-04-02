@@ -143,7 +143,7 @@ Theorem allocate_with_livesets_non_overlapping:
                            MAP (\(a,l,s). (a,l,s)) to_alloc) /\
       MEM (a2, ls2, sz2) (MAP (\(a,l,p,s). (a,l,s)) already ++
                            MAP (\(a,l,s). (a,l,s)) to_alloc) /\
-      ls1 INTER ls2 <> {} ==>
+      sinter inst_addr_to ls1 ls2 <> [] ==>
       p1 + sz1 <= p2 \/ p2 + sz2 <= p1
 Proof
   cheat

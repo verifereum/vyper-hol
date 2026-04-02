@@ -15,11 +15,14 @@
  *   calldata_method_id   -- extract 4-byte selector from calldata
  *   calldata_encodes     -- calldata = selector ++ abi_encode(args)
  *   selector_matches     -- selector table entry matches a function
+ *
+ * Jumptable utilities (dense_bucket, generate_dense_jumptable_info, etc.)
+ * are in jumptableUtilsTheory.
  *)
 
 Theory selectorDispatch
 Ancestors
-  moduleLowering
+  jumptableUtils
   compileEnv
   vyperABI
   contractABI
@@ -92,18 +95,4 @@ End
    The sparse and dense strategies have analogous properties but with
    different CFG structures (buckets, jumptables). *)
 
-(* Placeholder for per-strategy routing proofs. The actual proofs
-   require reasoning about run_block on the compiled CFG, showing
-   that the SHR/EQ/JNZ instruction sequence correctly routes. *)
-Theorem linear_dispatch_reaches_label:
-  !selectors fallback_lbl sel fn_lbl ctx fuel vs st st'.
-    compile_selector_dispatch_linear selectors fallback_lbl st =
-      ((), st') /\
-    LENGTH vs.vs_call_ctx.cc_calldata >= 4 /\
-    MEM (sel, fn_lbl) selectors /\
-    calldata_method_id vs.vs_call_ctx.cc_calldata = n2w sel
-    ==>
-    T
-Proof
-  cheat
-QED
+val _ = export_theory();

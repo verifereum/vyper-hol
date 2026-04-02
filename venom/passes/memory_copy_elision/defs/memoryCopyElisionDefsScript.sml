@@ -173,7 +173,7 @@ Definition copy_fact_resolve_def:
              its identity, and only fixed-size copies are tracked."
              No explicit size check needed. *)
           let norm_src =
-            normalize_operand dfg {} src_cf.cf_source in
+            normalize_operand dfg [] src_cf.cf_source in
           (src_cf.cf_opcode, norm_src)
       | NONE => (inst_opcode, src)
     else (inst_opcode, src)
@@ -266,7 +266,7 @@ Definition copy_elision_inst_def:
   copy_elision_inst bp dfg (cfl_opt : copy_fact_lattice) inst =
     let cfl = unwrap_copy_facts cfl_opt in
     let equiv = operand_equiv dfg in
-    let norm = normalize_operand dfg {} in
+    let norm = normalize_operand dfg [] in
     if inst.inst_opcode = INVOKE then inst
     else if inst.inst_opcode = MCOPY then
       case inst.inst_operands of

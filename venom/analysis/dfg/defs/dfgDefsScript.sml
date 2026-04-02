@@ -177,20 +177,20 @@ End
    strictly decreases. *)
 Definition normalize_operand_def:
   normalize_operand (dfg : dfg_analysis) visited (Var v) =
-    (if v IN visited then Var v
+    (if MEM v visited then Var v
      else case FLOOKUP dfg.dfg_defs v of
        SOME inst =>
          if inst.inst_opcode = ASSIGN then
            (case inst.inst_operands of
-              [op] => normalize_operand dfg (v INSERT visited) op
+              [op] => normalize_operand dfg (v :: visited) op
             | _ => Var v)
          else Var v
      | NONE => Var v) /\
   normalize_operand dfg visited op = op
 Termination
   WF_REL_TAC `measure (\(dfg, visited, op).
-    CARD (FDOM dfg.dfg_defs DIFF visited))`
-  >> rw[]
+    CARD (FDOM dfg.dfg_defs DIFF set visited))`
+  >> rw[Excl"CARD_DIFF"]
   >> irule pred_setTheory.CARD_PSUBSET >> conj_tac
   >- simp[pred_setTheory.FINITE_DIFF, finite_mapTheory.FDOM_FINITE]
   >> simp[pred_setTheory.PSUBSET_DEF, pred_setTheory.SUBSET_DEF,
@@ -202,6 +202,6 @@ End
    through ASSIGN chain traversal. *)
 Definition operand_equiv_def:
   operand_equiv dfg op1 op2 =
-    (normalize_operand dfg {} op1 = normalize_operand dfg {} op2)
+    (normalize_operand dfg [] op1 = normalize_operand dfg [] op2)
 End
 

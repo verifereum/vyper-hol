@@ -80,13 +80,13 @@ Definition input_vars_from_def:
       let (result, placed) = FOLDL (λ(acc, placed) v.
         case FLOOKUP op_map v of
           SOME phi_idx =>
-            if phi_idx ∈ placed then (acc, placed)
+            if MEM phi_idx placed then (acc, placed)
             else
               (case FLOOKUP matching phi_idx of
-                 SOME src_v => (acc ++ [src_v], phi_idx INSERT placed)
+                 SOME src_v => (acc ++ [src_v], phi_idx :: placed)
                | NONE => (acc, placed))
         | NONE => (acc ++ [v], placed))
-        ([], {} : num set) base_liveness in
+        ([], [] : num list) base_liveness in
       result
 End
 

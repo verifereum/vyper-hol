@@ -99,17 +99,17 @@ val () = cv_auto_trans getter_def;
 Definition lookup_function_def:
   lookup_function src_id_opt name Deploy [] = SOME (Payable, F, [], [], NoneT, []) ∧
   lookup_function src_id_opt name vis [] = NONE ∧
-  lookup_function src_id_opt name vis (FunctionDecl fv fm nr id args dflts ret body :: ts) =
+  lookup_function src_id_opt name vis (FunctionDecl fv fm nr _ id args dflts ret body :: ts) =
   (if id = name ∧ vis = fv then SOME (fm, nr, args, dflts, ret, body)
    else lookup_function src_id_opt name vis ts) ∧
-  lookup_function src_id_opt name External (VariableDecl Public mut id typ :: ts) =
+  lookup_function src_id_opt name External (VariableDecl Public mut id typ _ :: ts) =
   (if id = name then
     let ne = TopLevelName NoneT (src_id_opt, id) in
     if ¬is_ArrayT typ
     then SOME (View, F, [], [], typ, [Return (SOME ne)])
     else SOME $ getter ne (BaseT (UintT 256)) (Type (ArrayT_type typ))
    else lookup_function src_id_opt name External ts) ∧
-  lookup_function src_id_opt name External (HashMapDecl Public _ id kt vt :: ts) =
+  lookup_function src_id_opt name External (HashMapDecl Public _ id kt vt _ :: ts) =
   (if id = name then SOME $ getter (TopLevelName NoneT (src_id_opt, id)) kt vt
    else lookup_function src_id_opt name External ts) ∧
   lookup_function src_id_opt name vis (_ :: ts) =
@@ -332,12 +332,12 @@ QED
 (* Extract callable functions - for termination proof *)
 (* Internal and Deploy are separate so we can order Internal before Deploy *)
 Definition dest_Internal_Fn_def:
-  dest_Internal_Fn (FunctionDecl Internal _ _ fn _ dflts _ ss) = [(fn, (dflts, ss))] ∧
+  dest_Internal_Fn (FunctionDecl Internal _ _ _ fn _ dflts _ ss) = [(fn, (dflts, ss))] ∧
   dest_Internal_Fn _ = []
 End
 
 Definition dest_Deploy_Fn_def:
-  dest_Deploy_Fn (FunctionDecl Deploy _ _ fn _ dflts _ ss) = [(fn, (dflts, ss))] ∧
+  dest_Deploy_Fn (FunctionDecl Deploy _ _ _ fn _ dflts _ ss) = [(fn, (dflts, ss))] ∧
   dest_Deploy_Fn _ = []
 End
 
@@ -452,7 +452,7 @@ Proof
   ho_match_mp_tac lookup_function_ind
   \\ rw[lookup_function_def, dest_Internal_Fn_def]
   \\ gvs[dest_Internal_Fn_def]
-  \\ rename1 `FunctionDecl fv _ _ _ _ _ _ _`
+  \\ rename1 `FunctionDecl fv _ _ _ _ _ _ _ _`
   \\ Cases_on `fv` \\ gvs[dest_Internal_Fn_def]
 QED
 
@@ -465,7 +465,7 @@ Proof
   ho_match_mp_tac lookup_function_ind
   \\ rw[lookup_function_def, dest_Deploy_Fn_def]
   \\ gvs[dest_Deploy_Fn_def]
-  \\ rename1 `FunctionDecl fv _ _ _ _ _ _ _`
+  \\ rename1 `FunctionDecl fv _ _ _ _ _ _ _ _`
   \\ Cases_on `fv` \\ gvs[dest_Deploy_Fn_def]
 QED
 
@@ -478,7 +478,7 @@ Proof
   ho_match_mp_tac lookup_function_ind
   \\ rw[lookup_function_def, dest_Internal_Fn_def]
   \\ gvs[dest_Internal_Fn_def]
-  \\ rename1 `FunctionDecl fv _ _ _ _ _ _ _`
+  \\ rename1 `FunctionDecl fv _ _ _ _ _ _ _ _`
   \\ Cases_on `fv` \\ gvs[dest_Internal_Fn_def]
 QED
 
@@ -581,7 +581,7 @@ val () = cv_auto_trans exactly_one_option_def;
 (* Check whether variable n is declared as Immutable (not Constant) in toplevels *)
 Definition is_immutable_decl_def:
   is_immutable_decl n [] = F ∧
-  is_immutable_decl n (VariableDecl _ Immutable vid _ :: ts) =
+  is_immutable_decl n (VariableDecl _ Immutable vid _ _ :: ts) =
     (if string_to_num vid = n then T else is_immutable_decl n ts) ∧
   is_immutable_decl n (_ :: ts) = is_immutable_decl n ts
 End
@@ -1327,7 +1327,7 @@ val () = cv_auto_trans flag_value_def;
 (* Initialize immutables for a single module's toplevels *)
 Definition initial_immutables_module_def:
   initial_immutables_module env src_id_opt [] acc = SOME acc ∧
-  initial_immutables_module env src_id_opt (VariableDecl _ Immutable id typ :: ts) acc =
+  initial_immutables_module env src_id_opt (VariableDecl _ Immutable id typ _ :: ts) acc =
   (case evaluate_type env typ of
    | NONE => NONE
    | SOME tv =>
@@ -1450,7 +1450,7 @@ val () = cv_auto_trans merge_constants_def;
    same runtime storage). *)
 Definition constants_env_def:
   constants_env _ _ _ _ [] acc = SOME acc ∧
-  constants_env cx am addr src_id_opt ((VariableDecl vis (Constant e) id typ)::ts) acc =
+  constants_env cx am addr src_id_opt ((VariableDecl vis (Constant e) id typ _)::ts) acc =
     (case evaluate_type (get_tenv cx) typ of
      | NONE => NONE
      | SOME tv =>
