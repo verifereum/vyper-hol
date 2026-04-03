@@ -13,16 +13,20 @@
  *   ma_mark_volatile_preserves_wf — marking volatile preserves well-formedness
  *
  * Soundness:
- *   memloc_runtime_region    — interpret mem_loc as runtime byte range
- *   regions_disjoint         — two byte ranges don't overlap
- *   ma_may_alias_sound       — ¬ma_may_alias ⟹ runtime disjointness
- *   ma_may_alias_sound_no_alloca — simplified: both ml_alloca = NONE
- *   allocas_non_overlapping_invariant — bump allocation preserves disjointness
+ *   ma_may_alias_sound            — ¬ma_may_alias ⟹ runtime disjointness
+ *   ma_may_alias_sound_no_alloca  — simplified: both ml_alloca = NONE
+ *
+ * Bridge (analysis → runtime):
+ *   bp_segment_from_ops_runtime_region — connects analysis mem_loc to runtime region
+ *
+ * General memory properties (allocas_non_overlapping, regions_disjoint,
+ * mload_mstore_disjoint) are in venomMemProps — not analysis-specific.
+ * memloc_runtime_region is in memLocDefs.
  *)
 
 Theory memAliasProps
 Ancestors
-  memAliasDefs memAliasProofs basePtrProps venomExecSemantics venomState
+  memAliasDefs memAliasProofs basePtrProps venomMemProps memLocDefs
 
 (* ===== Structural Properties ===== *)
 
@@ -81,51 +85,21 @@ Theorem ma_mark_volatile_preserves_wf:
 Proof ACCEPT_TAC memAliasProofsTheory.ma_mark_volatile_preserves_wf
 QED
 
-(* ===== Soundness Definitions ===== *)
-
-(* Interpret a mem_loc as a runtime byte range (start, size).
-   - ml_alloca = NONE: start = ml_offset (absolute address)
-   - ml_alloca = SOME (Allocation aid): start = alloca_base + ml_offset
-   Returns NONE when offset/size unknown or alloca not yet executed. *)
-Definition memloc_runtime_region_def:
-  memloc_runtime_region (ml : mem_loc) (s : venom_state) =
-    case (ml.ml_offset, ml.ml_size, ml.ml_alloca) of
-      (SOME off, SOME sz, NONE) => SOME (off : num, sz : num)
-    | (SOME off, SOME sz, SOME (Allocation aid)) =>
-        (case FLOOKUP s.vs_allocas aid of
-           SOME p => SOME (FST p + off : num, sz)
-         | NONE => NONE)
-    | _ => NONE
-End
-
-Definition regions_disjoint_def:
-  regions_disjoint (start1 : num, sz1 : num) (start2, sz2) ⇔
-    sz1 = 0 ∨ sz2 = 0 ∨ start1 + sz1 ≤ start2 ∨ start2 + sz2 ≤ start1
-End
-
 (* ===== Soundness Theorems ===== *)
 
 (* ¬ma_may_alias ⟹ runtime regions are disjoint.
-   Preconditions:
-   - wf_alias_sets: analysis produced valid results
-   - allocas don't overlap: guaranteed by bump allocation (exec_alloca) *)
+   Uses allocas_non_overlapping and regions_disjoint from venomMemDefs. *)
 Theorem ma_may_alias_sound:
-  ∀sets loc1 loc2 s.
+  ∀sets loc1 loc2 s r1 r2.
     wf_alias_sets sets ∧
     ¬ma_may_alias sets loc1 loc2 ∧
-    (* Distinct allocas have non-overlapping regions *)
-    (∀aid1 aid2 b1 s1 b2 s2.
-       aid1 ≠ aid2 ∧
-       FLOOKUP s.vs_allocas aid1 = SOME (b1, s1) ∧
-       FLOOKUP s.vs_allocas aid2 = SOME (b2, s2) ⇒
-       b1 + s1 ≤ b2 ∨ b2 + s2 ≤ b1) ⇒
-    case (memloc_runtime_region loc1 s, memloc_runtime_region loc2 s) of
-      (SOME r1, SOME r2) => regions_disjoint r1 r2
-    | (SOME _, NONE) => T   (* loc2 region unknown — no claim *)
-    | (NONE, SOME _) => T   (* loc1 region unknown — no claim *)
-    | (NONE, NONE) => T     (* both regions unknown — no claim *)
-Proof
-  cheat
+    allocas_non_overlapping s ∧
+    memloc_within_alloca loc1 s ∧
+    memloc_within_alloca loc2 s ∧
+    memloc_runtime_region loc1 s = SOME r1 ∧
+    memloc_runtime_region loc2 s = SOME r2 ⇒
+    regions_disjoint r1 r2
+Proof ACCEPT_TAC memAliasProofsTheory.ma_may_alias_sound_proof
 QED
 
 (* Simplified: both locations have ml_alloca = NONE (absolute addresses).
@@ -140,28 +114,21 @@ Theorem ma_may_alias_sound_no_alloca:
     regions_disjoint
       (THE loc1.ml_offset, THE loc1.ml_size)
       (THE loc2.ml_offset, THE loc2.ml_size)
-Proof
-  cheat
+Proof ACCEPT_TAC memAliasProofsTheory.ma_may_alias_sound_no_alloca_proof
 QED
 
-(* Bump allocation preserves the invariant that distinct allocas
-   have disjoint memory regions. exec_alloca appends at
-   next_alloca_offset which is ≥ all existing (offset + size). *)
-Theorem allocas_non_overlapping_invariant:
-  ∀fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' ∧
-    (* Invariant holds before the step *)
-    (∀a1 a2 b1 sz1 b2 sz2.
-       a1 ≠ a2 ∧
-       FLOOKUP s.vs_allocas a1 = SOME (b1, sz1) ∧
-       FLOOKUP s.vs_allocas a2 = SOME (b2, sz2) ⇒
-       b1 + sz1 ≤ b2 ∨ b2 + sz2 ≤ b1) ⇒
-    (* Invariant holds after the step *)
-    (∀a1 a2 b1 sz1 b2 sz2.
-       a1 ≠ a2 ∧
-       FLOOKUP s'.vs_allocas a1 = SOME (b1, sz1) ∧
-       FLOOKUP s'.vs_allocas a2 = SOME (b2, sz2) ⇒
-       b1 + sz1 ≤ b2 ∨ b2 + sz2 ≤ b1)
-Proof
-  cheat
+(* ===== Bridge: Analysis → Runtime ===== *)
+
+(* When bp_segment_from_ops produces a fixed mem_loc (known offset + size),
+ * memloc_runtime_region returns the matching runtime region. *)
+Theorem bp_segment_from_ops_runtime_region:
+  ∀bp ops ml s.
+    bp_ptr_sound bp s ∧
+    bp_segment_from_ops bp ops = ml ∧
+    ml_is_fixed ml ∧
+    IS_SOME (eval_operand ops.iao_ofst s) ⇒
+    ∃addr.
+      eval_operand ops.iao_ofst s = SOME (n2w addr) ∧
+      memloc_runtime_region ml s = SOME (addr, THE ml.ml_size)
+Proof ACCEPT_TAC memAliasProofsTheory.bp_segment_from_ops_runtime_region_proof
 QED

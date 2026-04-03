@@ -12,6 +12,9 @@
  *   bp_ptr_from_op, bp_segment_from_ops,
  *   bp_get_write_location, bp_get_read_location
  *
+ * Soundness specifications:
+ *   ptr_matches_var, bp_ptr_sound, bp_ptrs_bounded
+ *
  * Helper:
  *   phi_operand_vars
  *
@@ -23,7 +26,7 @@
 
 Theory basePtrDefs
 Ancestors
-  memLocDefs cfgDefs dfIterateDefs venomEffects
+  memLocDefs cfgDefs dfIterateDefs venomEffects venomState
 
 (* ===== Pointer Type ===== *)
 
@@ -220,6 +223,42 @@ Definition bp_segment_from_ops_def:
              <| ml_offset := off; ml_size := size;
                 ml_alloca := SOME alloc; ml_volatile := F |>)
     | Label _ => ml_undefined
+End
+
+(* ===== Soundness Specifications ===== *)
+
+(* A pointer correctly describes a variable's runtime value.
+   Known offset: v holds n2w(alloca_base + off).
+   Unknown offset: v holds n2w(alloca_base + delta) for some delta. *)
+Definition ptr_matches_var_def:
+  ptr_matches_var (Ptr (Allocation aid) (SOME off)) v s =
+    (∃base sz.
+       FLOOKUP s.vs_allocas aid = SOME (base, sz) ∧
+       lookup_var v s = SOME (n2w (base + off))) ∧
+  ptr_matches_var (Ptr (Allocation aid) NONE) v s =
+    (∃base sz delta.
+       FLOOKUP s.vs_allocas aid = SOME (base, sz) ∧
+       lookup_var v s = SOME (n2w (base + delta)))
+End
+
+(* Every tracked variable with a defined runtime value matches some
+   pointer in its tracked set (over-approximation soundness).
+   Variables that are undefined (not yet assigned) are unconstrained
+   since the analysis runs over all blocks including unexecuted ones. *)
+Definition bp_ptr_sound_def:
+  bp_ptr_sound (bp : bp_result) (s : venom_state) ⇔
+    ∀v. bp_get_ptrs bp v ≠ [] ∧ IS_SOME (lookup_var v s) ⇒
+      ∃p. MEM p (bp_get_ptrs bp v) ∧ ptr_matches_var p v s
+End
+
+(* Every tracked pointer with a known offset has that offset within
+ * the alloca's allocated size. *)
+Definition bp_ptrs_bounded_def:
+  bp_ptrs_bounded (bp : bp_result) (s : venom_state) ⇔
+    ∀v aid off.
+      MEM (Ptr (Allocation aid) (SOME off)) (bp_get_ptrs bp v) ⇒
+      ∀base sz.
+        FLOOKUP s.vs_allocas aid = SOME (base, sz) ⇒ off ≤ sz
 End
 
 (* ===== Write Location ===== *)
