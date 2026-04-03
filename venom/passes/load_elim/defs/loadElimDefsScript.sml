@@ -238,7 +238,7 @@ Definition load_transfer_def:
     let ll = unwrap_load_lattice ll_opt in
     let cfg = ctx.lctx_config in
     let op = inst.inst_opcode in
-    let norm = normalize_operand ctx.lctx_dfg {} in
+    let norm = normalize_operand ctx.lctx_dfg [] in
     let bp = ctx.lctx_bp in
     let addr_sp = ctx.lctx_addr_space in
     SOME (
@@ -388,7 +388,7 @@ End
 (* Collect all PHI actions for multi-value loads in the function. *)
 Definition collect_phi_actions_def:
   collect_phi_actions max_id ctx ir_cfg (result : load_lattice df_state) fn =
-    let norm = normalize_operand ctx.lctx_dfg {} in
+    let norm = normalize_operand ctx.lctx_dfg [] in
     let bp = ctx.lctx_bp in
     let addr_sp = ctx.lctx_addr_space in
     FLAT (MAP (\bb.
@@ -454,7 +454,7 @@ Definition load_elim_inst_def:
                  (ll_opt : load_lattice) inst =
     let ll = unwrap_load_lattice ll_opt in
     let cfg = ctx.lctx_config in
-    let norm = normalize_operand ctx.lctx_dfg {} in
+    let norm = normalize_operand ctx.lctx_dfg [] in
     let bp = ctx.lctx_bp in
     let addr_sp = ctx.lctx_addr_space in
     if inst.inst_opcode = INVOKE then inst

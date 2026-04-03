@@ -173,9 +173,9 @@ signature vyperASTSyntax = sig
   val mk_uint      : term -> term
   val mk_int       : term -> term
   val mk_bytes     : term -> term
-  val mk_FunctionDecl : term -> term -> term -> term -> term -> term -> term -> term -> term
-  val mk_VariableDecl : term * term * term * term -> term
-  val mk_HashMapDecl  : term * term * term * term * term -> term
+  val mk_FunctionDecl : term -> term -> term -> term -> term -> term -> term -> term -> term -> term
+  val mk_VariableDecl : term * term * term * term * term -> term
+  val mk_HashMapDecl  : term * term * term * term * term * term -> term
   val mk_String    : term -> term
   val mk_Bytes     : term -> term
   val mk_BytesM    : term -> term

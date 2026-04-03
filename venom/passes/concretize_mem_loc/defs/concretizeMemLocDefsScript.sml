@@ -15,12 +15,26 @@
 
 Theory concretizeMemLocDefs
 Ancestors
-  passSimulationDefs passSharedDefs basePtrDefs cfgDefs
+  passSimulationDefs passSharedDefs basePtrDefs cfgDefs enumeral toto
 
 (* ===== Allocation map ===== *)
 
 (* Maps alloca output variable names to their concrete memory offsets *)
 Type alloc_map = ``:(string, 256 word) fmap``
+
+(* ===== Sorted list comparators for allocation and inst_addr ===== *)
+
+Definition alloc_cmp_def:
+  alloc_cmp (Allocation m) (Allocation n) = apto numto m n
+End
+
+Definition alloc_to_def:
+  alloc_to = TO alloc_cmp
+End
+
+Definition inst_addr_to_def:
+  inst_addr_to = stringto lextoto numto
+End
 
 (* =========================================================================
    Helpers: memory read/write queries for MemLiveness
@@ -31,13 +45,14 @@ Type alloc_map = ``:(string, 256 word) fmap``
 Definition find_base_allocas_def:
   find_base_allocas (bpr : bp_result) op =
     case op of
-      Var v => IMAGE (\p. case p of Ptr alloc _ => alloc)
-                     (bp_get_ptrs bpr v)
-    | _ => {}
+      Var v => incr_ssort alloc_to
+                 (MAP (\p. case p of Ptr alloc _ => alloc)
+                      (bp_get_ptrs bpr v))
+    | _ => []
 End
 
 Definition find_base_allocas_opt_def:
-  find_base_allocas_opt bpr NONE = {} /\
+  find_base_allocas_opt bpr NONE = [] /\
   find_base_allocas_opt bpr (SOME op) = find_base_allocas bpr op
 End
 
@@ -90,11 +105,11 @@ End
    ========================================================================= *)
 
 Type inst_addr = ``:string # num``
-Type ml_state[pp] = ``:(inst_addr, allocation set) fmap``
+Type ml_state[pp] = ``:(inst_addr, allocation list) fmap``
 
 Definition ml_lookup_def:
   ml_lookup (st : ml_state) (addr : inst_addr) =
-    case FLOOKUP st addr of SOME s => s | NONE => {}
+    case FLOOKUP st addr of SOME s => s | NONE => []
 End
 
 (* ===== liveat helpers ===== *)
@@ -106,9 +121,9 @@ Definition ml_kill_write_def:
     case alloca_sizes alloc of
       NONE => live
     | SOME asz =>
-        if alloc IN live /\ wsz = asz /\ alloc NOTIN read_allocas
-        then live DELETE alloc
-        else if alloc IN read_allocas then alloc INSERT live
+        if MEM alloc live /\ wsz = asz /\ ~MEM alloc read_allocas
+        then sdiff alloc_to live [alloc]
+        else if MEM alloc read_allocas then smerge alloc_to [alloc] live
         else live
 End
 
@@ -119,14 +134,16 @@ Definition ml_liveat_inst_def:
                  idx inst live (la : ml_state) =
     let write_allocas = find_base_allocas_opt bpr (inst_write_op inst) in
     let read_allocas = find_base_allocas_opt bpr (inst_read_op inst) in
-    let live1 = live UNION read_allocas in
+    let live1 = smerge alloc_to live read_allocas in
     (* INVOKE: add callee mems_used + all operand base ptrs *)
     let live2 =
       if inst.inst_opcode = INVOKE then
         (case inst.inst_operands of
            Label callee_lbl :: _ =>
-             live1 UNION mems_used callee_lbl UNION
-             BIGUNION (set (MAP (find_base_allocas bpr) inst.inst_operands))
+             smerge alloc_to live1
+               (smerge alloc_to (mems_used callee_lbl)
+                 (FOLDL (smerge alloc_to) []
+                   (MAP (find_base_allocas bpr) inst.inst_operands)))
          | _ => live1)
       else live1 in
     let la' = la |+ ((bb_label, idx), live2) in
@@ -135,7 +152,7 @@ Definition ml_liveat_inst_def:
       NONE => live2
     | SOME wsz =>
         FOLDL (ml_kill_write alloca_sizes read_allocas wsz)
-              live2 (SET_TO_LIST write_allocas) in
+              live2 write_allocas in
     (live3, la')
 End
 
@@ -157,8 +174,8 @@ Definition ml_liveat_block_def:
   ml_liveat_block bpr mems_used alloca_sizes cfg
                   (liveat : ml_state) bb =
     let succs = cfg_succs_of cfg bb.bb_label in
-    let live_init = BIGUNION (set (MAP
-      (\lbl. ml_lookup liveat (lbl, 0)) succs)) in
+    let live_init = FOLDL (smerge alloc_to) []
+      (MAP (\lbl. ml_lookup liveat (lbl, 0)) succs) in
     let before = ml_lookup liveat (bb.bb_label, 0) in
     let indexed = MAPi (\i inst. (i, inst)) bb.bb_instructions in
     let (_, liveat') = ml_liveat_insts_rev bpr mems_used
@@ -173,12 +190,13 @@ End
 Definition ml_used_inst_def:
   ml_used_inst bpr mems_used bb_label
                idx inst cur_used (us : ml_state) =
-    let new_used = cur_used UNION
-      BIGUNION (set (MAP (find_base_allocas bpr) inst.inst_operands)) in
+    let new_used = smerge alloc_to cur_used
+      (FOLDL (smerge alloc_to) []
+        (MAP (find_base_allocas bpr) inst.inst_operands)) in
     let new_used2 =
       if inst.inst_opcode = INVOKE then
         (case inst.inst_operands of
-           Label callee_lbl :: _ => new_used UNION mems_used callee_lbl
+           Label callee_lbl :: _ => smerge alloc_to new_used (mems_used callee_lbl)
          | _ => new_used)
       else new_used in
     (new_used2, us |+ ((bb_label, idx), new_used2))
@@ -200,8 +218,8 @@ Definition ml_used_block_def:
   ml_used_block bpr mems_used live_pallocas cfg
                 (used : ml_state) bb fn_blocks =
     let preds = cfg_preds_of cfg bb.bb_label in
-    let used_init = live_pallocas UNION
-      BIGUNION (set (MAP (\lbl.
+    let used_init = smerge alloc_to live_pallocas
+      (FOLDL (smerge alloc_to) [] (MAP (\lbl.
         case FIND (\b. b.bb_label = lbl) fn_blocks of
           NONE => ml_lookup used (lbl, 0)
         | SOME pred_bb =>
@@ -278,11 +296,11 @@ Definition ml_livesets_insts_def:
   ml_livesets_insts bb_label liveat used ls [] = ls /\
   ml_livesets_insts bb_label liveat used ls ((idx, inst) :: rest) =
     let addr = (bb_label, idx) in
-    let both = ml_lookup liveat addr INTER ml_lookup used addr in
+    let both = sinter alloc_to (ml_lookup liveat addr) (ml_lookup used addr) in
     let ls' = FOLDL (\m alloc.
-      let cur = case FLOOKUP m alloc of SOME s => s | NONE => {} in
-      m |+ (alloc, addr INSERT cur))
-      ls (SET_TO_LIST both) in
+      let cur = case FLOOKUP m alloc of SOME s => s | NONE => [] in
+      m |+ (alloc, smerge inst_addr_to [addr] cur))
+      ls both in
     ml_livesets_insts bb_label liveat used ls' rest
 End
 
@@ -291,7 +309,7 @@ Definition ml_compute_livesets_def:
     FOLDL (\ls bb.
       ml_livesets_insts bb.bb_label liveat used ls
         (MAPi (\i inst. (i, inst)) bb.bb_instructions))
-      (FEMPTY : (allocation, inst_addr set) fmap)
+      (FEMPTY : (allocation, inst_addr list) fmap)
       fn.fn_blocks
 End
 
@@ -302,9 +320,9 @@ Definition ml_mark_stores_insts_def:
     let write_allocas = find_base_allocas_opt bpr (inst_write_op inst) in
     let addr = (bb_label, idx) in
     let ls' = FOLDL (\m alloc.
-      let cur = case FLOOKUP m alloc of SOME s => s | NONE => {} in
-      m |+ (alloc, addr INSERT cur))
-      ls (SET_TO_LIST write_allocas) in
+      let cur = case FLOOKUP m alloc of SOME s => s | NONE => [] in
+      m |+ (alloc, smerge inst_addr_to [addr] cur))
+      ls write_allocas in
     ml_mark_stores_insts bpr bb_label ls' rest
 End
 
@@ -375,7 +393,7 @@ Definition allocate_with_livesets_def:
     let reserved = global_reserved ++
       MAP (\(_, _, pos, asz). (pos, asz))
         (FILTER (\(_, other_live, _, _).
-           other_live INTER live_insts <> {}) already) in
+           sinter inst_addr_to other_live live_insts <> []) already) in
     let (pos, _) = allocate_one reserved sz in
     allocate_with_livesets global_reserved
       (already ++ [(alloc, live_insts, pos, sz)])
@@ -393,10 +411,9 @@ Definition compute_alloc_map_def:
     let ls = mem_liveness_analyze bpr mems_used alloca_sz_opt
                live_pallocas cfg fn in
     let items = fmap_to_alist ls in
-    let already = FILTER (\(alloc, _). alloc IN FDOM pre_allocated) items in
-    let to_alloc = FILTER (\(alloc, _). alloc NOTIN FDOM pre_allocated)
-                     items in
-    let sorted = QSORT (\(_, s1) (_, s2). CARD s1 <= CARD s2)
+    let pre_allocated_dom = FDOM pre_allocated in
+    let (already, to_alloc) = PARTITION (\(alloc, _). alloc IN pre_allocated_dom) items in
+    let sorted = QSORT (\(_, s1) (_, s2). LENGTH s1 <= LENGTH s2)
                    to_alloc in
     let already_info = MAP (\(alloc, live).
       let pos = case FLOOKUP pre_allocated alloc of

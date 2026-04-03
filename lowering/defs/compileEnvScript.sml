@@ -303,7 +303,8 @@ Datatype:
     cs_next_id : num;
     cs_current_bb : string;
     cs_current_insts : instruction list;   (* reversed *)
-    cs_blocks : (string, basic_block) fmap  (* completed blocks *)
+    cs_blocks : basic_block list;            (* completed blocks *)
+    cs_data_sections : data_section list    (* reversed; data segment for codegen *)
   |>
 End
 
@@ -397,7 +398,7 @@ Definition new_block_def:
     let old_bb = <| bb_label := cs.cs_current_bb;
                     bb_instructions := cs.cs_current_insts |> in
     (cs.cs_current_bb,
-     cs with <| cs_blocks := cs.cs_blocks |+ (cs.cs_current_bb, old_bb);
+     cs with <| cs_blocks := old_bb :: cs.cs_blocks;
                 cs_current_bb := label;
                 cs_current_insts := [] |>)
 End
@@ -409,6 +410,25 @@ Definition block_is_terminated_def:
     case cs.cs_current_insts of
       [] => F
     | insts => is_terminator (LAST insts).inst_opcode
+End
+
+(* Start a new data section with the given label.
+   Mirrors Python: ctx.append_data_section(IRLabel(name)). *)
+Definition emit_data_section_def:
+  emit_data_section (label:string) (cs:compile_state) =
+    ((), cs with cs_data_sections :=
+      <| ds_label := label; ds_items := [] |> :: cs.cs_data_sections)
+End
+
+(* Append a data item to the most recent data section.
+   Mirrors Python: ctx.append_data_item(...). *)
+Definition emit_data_item_def:
+  emit_data_item (item:data_item) (cs:compile_state) =
+    case cs.cs_data_sections of
+      [] => ((), cs)  (* no section open — silently ignore *)
+    | sec :: rest =>
+        ((), cs with cs_data_sections :=
+          (sec with ds_items := sec.ds_items ++ [item]) :: rest)
 End
 
 (* ===== State Relation ===== *)

@@ -57,9 +57,9 @@ Theorem input_vars_foldl_mem[local]:
       case FLOOKUP op_map w of
         NONE => (acc ++ [w], placed)
       | SOME phi_idx =>
-          if phi_idx ∈ placed then (acc, placed)
+          if MEM phi_idx placed then (acc, placed)
           else case FLOOKUP matching phi_idx of
-                 SOME src_v => (acc ++ [src_v], phi_idx INSERT placed)
+                 SOME src_v => (acc ++ [src_v], phi_idx::placed)
                | NONE => (acc, placed))
       (acc, placed) base)) ==>
     MEM v acc ∨ MEM v base ∨ ∃i. FLOOKUP matching i = SOME v
@@ -69,7 +69,7 @@ Proof
   >- (strip_tac >>
       first_x_assum drule >> strip_tac >> gvs[MEM_APPEND] >> metis_tac[])
   >- (rename1 `FLOOKUP op_map h = SOME phi_idx` >>
-      Cases_on `phi_idx ∈ placed` >> simp[]
+      Cases_on `MEM phi_idx placed` >> simp[]
       >- (strip_tac >> first_x_assum drule >> metis_tac[])
       >- (Cases_on `FLOOKUP matching phi_idx` >> simp[]
           >- (strip_tac >> first_x_assum drule >> metis_tac[])
@@ -153,10 +153,7 @@ Proof
   Cases_on `NULL (collect_phis instrs)` >- simp[] >>
   Cases_on `build_phi_maps src_label (collect_phis instrs)` >>
   rename1 `build_phi_maps _ _ = (op_map, matching)` >> simp[] >>
-  (* Normalize (λ(r,p). r) to FST so drule input_vars_foldl_mem matches *)
-  `(λ(result:string list, placed:num -> bool). result) = FST` by
-    simp[FUN_EQ_THM, FORALL_PROD] >>
-  pop_assum (fn th => REWRITE_TAC [th]) >>
+  simp[Once UNCURRY] >>
   strip_tac >>
   drule input_vars_foldl_mem >> strip_tac >> gvs[] >>
   qspecl_then [`src_label`, `collect_phis instrs`, `i`, `v`]
@@ -737,15 +734,15 @@ Theorem foldl_acc_persists[local]:
       case FLOOKUP op_map w of
         NONE => (acc ++ [w], placed)
       | SOME phi_idx =>
-          if phi_idx ∈ placed then (acc, placed)
+          if MEM phi_idx placed then (acc, placed)
           else case FLOOKUP matching phi_idx of
-                 SOME src_v => (acc ++ [src_v], phi_idx INSERT placed)
+                 SOME src_v => (acc ++ [src_v], phi_idx::placed)
                | NONE => (acc, placed))
       (acc, placed) base))
 Proof
   Induct >> rw[] >>
   Cases_on `FLOOKUP op_map h` >> simp[] >>
-  Cases_on `x ∈ placed` >> simp[] >>
+  Cases_on `MEM x placed` >> simp[] >>
   Cases_on `FLOOKUP matching x` >> simp[]
 QED
 
@@ -756,9 +753,9 @@ Theorem foldl_mem_tight[local]:
       case FLOOKUP op_map w of
         NONE => (acc ++ [w], placed)
       | SOME phi_idx =>
-          if phi_idx ∈ placed then (acc, placed)
+          if MEM phi_idx placed then (acc, placed)
           else case FLOOKUP matching phi_idx of
-                 SOME src_v => (acc ++ [src_v], phi_idx INSERT placed)
+                 SOME src_v => (acc ++ [src_v], phi_idx::placed)
                | NONE => (acc, placed))
       (acc, placed) base)) ==>
     MEM v acc ∨
@@ -770,7 +767,7 @@ Proof
   Cases_on `FLOOKUP op_map h` >> simp[]
   >- (strip_tac >> first_x_assum drule >> strip_tac >>
       gvs[MEM_APPEND] >> metis_tac[])
-  >- (Cases_on `x ∈ placed` >> simp[]
+  >- (Cases_on `MEM x placed` >> simp[]
       >- (strip_tac >> first_x_assum drule >> strip_tac >>
           gvs[] >> metis_tac[MEM])
       >- (Cases_on `FLOOKUP matching x` >> simp[]
@@ -788,9 +785,9 @@ Theorem foldl_passthrough[local]:
       case FLOOKUP op_map w of
         NONE => (acc ++ [w], placed)
       | SOME phi_idx =>
-          if phi_idx ∈ placed then (acc, placed)
+          if MEM phi_idx placed then (acc, placed)
           else case FLOOKUP matching phi_idx of
-                 SOME src_v => (acc ++ [src_v], phi_idx INSERT placed)
+                 SOME src_v => (acc ++ [src_v], phi_idx::placed)
                | NONE => (acc, placed))
       (acc, placed) base))
 Proof
@@ -812,15 +809,15 @@ Theorem foldl_replacement[local]:
       case FLOOKUP op_map w of
         NONE => (acc ++ [w], placed)
       | SOME phi_idx =>
-          if phi_idx ∈ placed then (acc, placed)
+          if MEM phi_idx placed then (acc, placed)
           else case FLOOKUP matching phi_idx of
-                 SOME src_v => (acc ++ [src_v], phi_idx INSERT placed)
+                 SOME src_v => (acc ++ [src_v], phi_idx::placed)
                | NONE => (acc, placed))
-      (acc, placed) base)) ∨ idx ∈ placed
+      (acc, placed) base)) ∨ MEM idx placed
 Proof
   Induct >> simp[] >> rpt gen_tac >> strip_tac >> gvs[]
   >- ((* w = h: op_map h = SOME idx *)
-      Cases_on `idx ∈ placed` >> simp[] >>
+      Cases_on `MEM idx placed` >> simp[] >>
       irule foldl_acc_persists >> simp[])
   >- ((* MEM w base': abbreviate init, use IH via FST/SND *)
       qmatch_goalsub_abbrev_tac `FOLDL _ init _` >>
@@ -832,7 +829,7 @@ Proof
       (* Right disjunct case: idx ∈ SND init *)
       simp[Abbr`init`] >>
       Cases_on `FLOOKUP op_map h` >> gvs[] >>
-      Cases_on `x ∈ placed` >> gvs[] >>
+      Cases_on `MEM x placed` >> gvs[] >>
       Cases_on `FLOOKUP matching x` >> gvs[IN_INSERT] >>
       irule foldl_acc_persists >> simp[])
 QED
@@ -848,17 +845,14 @@ Proof
   Cases_on `NULL (collect_phis instrs)` >- simp[] >>
   Cases_on `build_phi_maps lbl (collect_phis instrs)` >>
   rename1 `_ = (op_map, matching)` >> simp[] >>
-  (* Normalize UNCURRY to FST *)
-  `(λ(result:string list, placed:num -> bool). result) = FST` by
-    simp[FUN_EQ_THM, FORALL_PROD] >>
-  pop_assum (fn th => REWRITE_TAC [th]) >>
+  simp[Ntimes UNCURRY 2] >>
   strip_tac >> simp[SUBSET_DEF] >> rpt strip_tac >>
   drule foldl_mem_tight >> strip_tac >> gvs[]
   >- ((* passthrough: v ∈ a, op_map v = NONE → v passes through in b too *)
       irule foldl_passthrough >> metis_tac[SUBSET_DEF])
   >- ((* replacement: ∃idx w. w ∈ a, op_map w = SOME idx, matching idx = SOME v *)
       `MEM w b` by metis_tac[SUBSET_DEF] >>
-      qspecl_then [`b`, `[]`, `{}`, `op_map`, `matching`, `idx`, `x`]
+      qspecl_then [`b`, `[]`, `[]`, `op_map`, `matching`, `idx`, `x`]
         mp_tac foldl_replacement >>
       impl_tac >- (simp[] >> metis_tac[]) >>
       simp[])
@@ -2589,9 +2583,7 @@ Proof
   Cases_on `NULL (collect_phis instrs)` >- simp[] >>
   Cases_on `build_phi_maps src_lbl (collect_phis instrs)` >>
   rename1 `_ = (op_map, matching)` >> simp[] >>
-  `(\(result:string list, placed:num -> bool). result) = FST` by
-    simp[FUN_EQ_THM, FORALL_PROD] >>
-  pop_assum (fn th => REWRITE_TAC [th]) >>
+  simp[Once UNCURRY] >>
   `FLOOKUP op_map v = NONE` by (
     Cases_on `FLOOKUP op_map v` >> simp[] >>
     `FLOOKUP (FST (build_phi_maps src_lbl (collect_phis instrs))) v = SOME x` by
@@ -2835,4 +2827,3 @@ Proof
     simp[] >> metis_tac[DECIDE ``SUC i <= k ==> i <= k``])
   >- (disj2_tac >> qexists_tac `i` >> simp[])
 QED
-

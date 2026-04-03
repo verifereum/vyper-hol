@@ -1082,6 +1082,7 @@ Definition translate_toplevel_def:
       (translate_visibility decs)
       (translate_mutability decs)
       (MEM "nonreentrant" decs)
+      (MEM "raw_return" decs)
       name
       (translate_args_with_types args arg_tys)
       (MAP (translate_expr ctx) defaults)
@@ -1094,7 +1095,8 @@ Definition translate_toplevel_def:
       (translate_var_mutability ctx is_immutable is_transient
         (case const_val of SOME _ => T | NONE => F) const_val)
       name
-      (translate_type ty))) /\
+      (translate_type ty)
+      NONE)) /\
 
   (translate_toplevel ctx (JTL_HashMapDecl name key_ty val_ty is_public is_transient) =
     SOME (HashMapDecl
@@ -1102,7 +1104,8 @@ Definition translate_toplevel_def:
       is_transient
       name
       (translate_type key_ty)
-      (translate_value_type val_ty))) /\
+      (translate_value_type val_ty)
+      NONE)) /\
 
   (translate_toplevel ctx (JTL_EventDef name args) =
     SOME (EventDecl name (MAP (λ(a,idx). (translate_arg a, idx)) args))) /\
@@ -1462,6 +1465,36 @@ End
 
 val () = cv_auto_trans main_toplevels_def;
 
+(* ===== Annotate Storage Slots ===== *)
+
+(* Look up a variable's slot from the storage layout.
+   Keys are (module_alias_opt, var_name). For main module, alias = NONE. *)
+Definition lookup_slot_def:
+  lookup_slot (layout : json_storage_layout)
+              (alias : string option) (name : string) =
+    case ALOOKUP layout.storage (alias, name) of
+      SOME info => SOME info.slot
+    | NONE =>
+        case ALOOKUP layout.transient (alias, name) of
+          SOME info => SOME info.slot
+        | NONE => NONE
+End
+
+(* Annotate a toplevel list with storage/transient slots from the layout.
+   Only VariableDecl (Storage/Transient) and HashMapDecl get slots.
+   Invariant: SOME slot <=> variable is Storage or Transient. *)
+Definition annotate_slots_def:
+  annotate_slots layout alias ([] : toplevel list) = ([] : toplevel list) ∧
+  annotate_slots layout alias (VariableDecl vis mut name ty _ :: rest) =
+    VariableDecl vis mut name ty (lookup_slot layout alias name) ::
+    annotate_slots layout alias rest ∧
+  annotate_slots layout alias (HashMapDecl vis is_trans name kt vt _ :: rest) =
+    HashMapDecl vis is_trans name kt vt (lookup_slot layout alias name) ::
+    annotate_slots layout alias rest ∧
+  annotate_slots layout alias (top :: rest) =
+    top :: annotate_slots layout alias rest
+End
+
 (* Translate annotated AST, returning:
    - sources: (source_id, toplevels) alist
    - exports: func_name -> source_id
@@ -1476,4 +1509,17 @@ Definition translate_annotated_ast_def:
     let sources = (NONE, translate_module main) :: MAP (translate_imported_module main_src_id) imports in
     let exports = extract_exports main imports in
     SOME (sources, exports, import_map)
+End
+
+(* Annotate all sources with storage slots from json_storage_layout.
+   Main module (NONE key) uses alias = NONE.
+   Imported modules use their alias from import_map (reversed). *)
+Definition annotate_sources_slots_def:
+  annotate_sources_slots layout [] = [] ∧
+  annotate_sources_slots layout ((src_id, tops) :: rest) =
+    (* For main module src_id = NONE, alias = NONE.
+       For imported modules, alias matching is by variable name
+       (the layout keys use the original alias, not source_id). *)
+    (src_id, annotate_slots layout NONE tops) ::
+    annotate_sources_slots layout rest
 End

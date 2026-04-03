@@ -32,7 +32,8 @@ Definition initial_compile_state_def:
        cs_next_id := 0;
        cs_current_bb := entry_label;
        cs_current_insts := [];
-       cs_blocks := FEMPTY
+       cs_blocks := [];
+       cs_data_sections := []
     |>
 End
 
@@ -43,16 +44,18 @@ End
    into a single function. The entry function is the one whose
    entry block matches the initial current_bb. *)
 Definition extract_context_def:
-  extract_context (entry_label : string) (st : compile_state) : venom_context =
+  extract_context (entry_label : string) (st : compile_state)
+      : venom_context # data_section list =
     let current_bb = <| bb_label := st.cs_current_bb;
                         bb_instructions := REVERSE st.cs_current_insts |> in
-    let finalized = MAP SND (fmap_to_alist st.cs_blocks) in
+    let finalized = st.cs_blocks in
     let all_blocks = finalized ++ [current_bb] in
-    <| ctx_functions :=
-         [<| fn_name := entry_label;
-             fn_blocks := all_blocks |>];
-       ctx_entry := SOME entry_label
-    |>
+    (<| ctx_functions :=
+          [<| fn_name := entry_label;
+              fn_blocks := all_blocks |>];
+        ctx_entry := SOME entry_label
+     |>,
+     REVERSE st.cs_data_sections)
 End
 
 (* ===== Top-Level Compilation ===== *)
@@ -71,11 +74,35 @@ Definition run_lowering_def:
   run_lowering selectors external_fns internal_fns
                fallback_fn dispatch_strategy
                bucket_count fn_metadata_bytes
+               dense_buckets
+               (entry_info : num -> string # num # bool)
                (entry_label : string) =
     let st0 = initial_compile_state entry_label in
     let ((), st1) =
       compile_generate_runtime selectors external_fns internal_fns
-        fallback_fn dispatch_strategy bucket_count fn_metadata_bytes st0
+        fallback_fn dispatch_strategy bucket_count fn_metadata_bytes
+        dense_buckets entry_info st0
+    in
+    extract_context entry_label st1  (* returns (venom_context, data_section list) *)
+End
+
+(* Run the deploy compilation monad and extract a venom_context.
+   Mirrors Python's generate_deploy_venom():
+   - Constructor body (if present) with is_ctor_context=True
+   - Internal fns reachable from constructor (is_ctor_context=True)
+   - Deploy epilogue: codecopy runtime + return *)
+Definition run_deploy_lowering_def:
+  run_deploy_lowering has_constructor runtime_size immutables_len
+                       constructor_args data_size
+                       ctor_internal_fns
+                       cenv body is_payable is_nonreentrant
+                       nkey use_transient
+                       (entry_label : string) =
+    let st0 = initial_compile_state entry_label in
+    let ((), st1) =
+      compile_generate_deploy has_constructor runtime_size immutables_len
+        constructor_args data_size ctor_internal_fns
+        cenv body is_payable is_nonreentrant nkey use_transient st0
     in
     extract_context entry_label st1
 End
