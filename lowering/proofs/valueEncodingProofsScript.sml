@@ -213,3 +213,177 @@ Proof
   >> simp[byteTheory.word_of_bytes_be_def,
           vfmTypesTheory.word_to_bytes_word_of_bytes_256]
 QED
+
+(* ===== Layer 1: mstore / mem_word_at interaction ===== *)
+
+(* mstore at offset, then read mem_word_at same offset, gets original word back.
+   Works at the venom_state level. *)
+Theorem mstore_mem_word_at_same_proof:
+  ∀ off (w:bytes32) s.
+    mem_word_at off (mstore off w s).vs_memory = w
+Proof
+  cheat
+QED
+
+(* mstore at off2 preserves mem_word_at at off1 when regions don't overlap.
+   Regions are [off1, off1+32) and [off2, off2+32). *)
+Theorem mstore_mem_word_at_disjoint_proof:
+  ∀ off1 off2 (w:bytes32) s.
+    (off1 + 32 ≤ off2 ∨ off2 + 32 ≤ off1) ⇒
+    mem_word_at off1 (mstore off2 w s).vs_memory =
+    mem_word_at off1 s.vs_memory
+Proof
+  cheat
+QED
+
+(* mstore at off2 preserves mem_bytes_at at off1 when regions don't overlap.
+   Regions are [off1, off1+len) and [off2, off2+32). *)
+Theorem mstore_mem_bytes_at_disjoint_proof:
+  ∀ off1 len off2 (w:bytes32) s.
+    (off1 + len ≤ off2 ∨ off2 + 32 ≤ off1) ⇒
+    mem_bytes_at off1 len (mstore off2 w s).vs_memory =
+    mem_bytes_at off1 len s.vs_memory
+Proof
+  cheat
+QED
+
+(* mstore establishes val_in_memory for primitive (word-sized) values.
+   The value must be one that val_in_memory checks via mem_word_at
+   (BoolV, IntV, FlagV, DecimalV). *)
+Theorem mstore_establishes_val_in_memory_prim_proof:
+  ∀ off v s ty.
+    ((∃ b. v = BoolV b) ∨ (∃ n. v = IntV n) ∨
+     (∃ k. v = FlagV k) ∨ (∃ n. v = DecimalV n)) ⇒
+    val_in_memory ty v off (mstore off (val_to_w256 v) s).vs_memory
+Proof
+  cheat
+QED
+
+(* NOTE: mstore_preserves_val_in_memory_prim was removed as redundant —
+   subsumed by mstore_preserves_val_in_memory conjunct 1 + val_in_memory_prim. *)
+
+(* ===== Layer 2: type_memory_size properties ===== *)
+
+(* Primitive base types always occupy 32 bytes in memory.
+   Excludes dynamic bytes and strings which have variable size. *)
+Theorem type_memory_size_prim_proof:
+  ∀ bt.
+    (∀ n. bt ≠ BytesT (Dynamic n)) ∧
+    (∀ n. bt ≠ StringT n) ⇒
+    type_memory_size (BaseTV bt) = 32
+Proof
+  Cases >> simp[type_memory_size_def] >>
+  Cases_on `b` >> simp[type_memory_size_def]
+QED
+
+(* FlagTV always 32 bytes *)
+Theorem type_memory_size_flag_proof:
+  ∀ name. type_memory_size (FlagTV name) = 32
+Proof
+  simp[type_memory_size_def]
+QED
+
+(* ===== Layer 2: val_in_memory compound disjointness ===== *)
+
+(* Core disjointness theorem: writing 32 bytes outside the region
+   [off, off + type_memory_size ty) preserves val_in_memory.
+
+   This is the key theorem for compound types. It requires mutual
+   induction on val_in_memory's recursive structure (val, fields,
+   elems, kvs, tuple). *)
+Theorem mstore_preserves_val_in_memory_proof:
+  (∀ ty v off mem off2 (w:bytes32).
+    val_in_memory ty v off mem ∧
+    (off2 + 32 ≤ off ∨ off + type_memory_size ty ≤ off2) ⇒
+    val_in_memory ty v off (mstore off2 w (s with vs_memory := mem)).vs_memory) ∧
+  (∀ fields field_tvs off mem off2 (w:bytes32).
+    fields_in_memory fields field_tvs off mem ∧
+    (off2 + 32 ≤ off ∨ off + type_memory_size_fields field_tvs ≤ off2) ⇒
+    fields_in_memory fields field_tvs off
+      (mstore off2 w (s with vs_memory := mem)).vs_memory) ∧
+  (∀ vs off tv mem off2 (w:bytes32).
+    elems_in_memory vs off tv mem ∧
+    (off2 + 32 ≤ off ∨
+     off + LENGTH vs * type_memory_size tv ≤ off2) ⇒
+    elems_in_memory vs off tv
+      (mstore off2 w (s with vs_memory := mem)).vs_memory) ∧
+  (∀ (kvs : (num # value) list) base_off tv mem off2 (w:bytes32).
+    kvs_in_memory kvs base_off tv mem ∧
+    (∀ k v. MEM (k,v) kvs ⇒
+      off2 + 32 ≤ base_off + k * type_memory_size tv ∨
+      base_off + k * type_memory_size tv + type_memory_size tv ≤ off2) ⇒
+    kvs_in_memory kvs base_off tv
+      (mstore off2 w (s with vs_memory := mem)).vs_memory) ∧
+  (∀ vs tvs off mem off2 (w:bytes32).
+    tuple_in_memory vs tvs off mem ∧
+    (off2 + 32 ≤ off ∨ off + type_memory_size_list tvs ≤ off2) ⇒
+    tuple_in_memory vs tvs off
+      (mstore off2 w (s with vs_memory := mem)).vs_memory)
+Proof
+  cheat
+QED
+
+(* ===== Layer 2: val_in_memory decomposition lemmas ===== *)
+
+(* These are essentially the definition clauses restated as rewrite-friendly
+   biconditionals. They simplify consumer proofs by eliminating case splits
+   on ty that the definition introduces. *)
+
+(* Struct decomposition: val_in_memory for StructV unfolds to fields_in_memory *)
+Theorem val_in_memory_struct_proof:
+  ∀ fields field_tvs offset mem.
+    val_in_memory (StructTV field_tvs) (StructV fields) offset mem ⇔
+    fields_in_memory fields field_tvs offset mem
+Proof
+  simp[val_in_memory_def]
+QED
+
+(* DynArray decomposition *)
+Theorem val_in_memory_dynarray_proof:
+  ∀ vs elem_tv bound offset mem.
+    val_in_memory (ArrayTV elem_tv (Dynamic bound))
+                  (ArrayV (DynArrayV vs)) offset mem ⇔
+    (mem_word_at offset mem = n2w (LENGTH vs) ∧
+     elems_in_memory vs (offset + 32) elem_tv mem)
+Proof
+  simp[val_in_memory_def]
+QED
+
+(* SArray decomposition *)
+Theorem val_in_memory_sarray_proof:
+  ∀ kvs elem_tv bound offset mem.
+    val_in_memory (ArrayTV elem_tv (Fixed bound))
+                  (ArrayV (SArrayV kvs)) offset mem ⇔
+    kvs_in_memory kvs offset elem_tv mem
+Proof
+  simp[val_in_memory_def]
+QED
+
+(* Tuple decomposition *)
+Theorem val_in_memory_tuple_proof:
+  ∀ vs tvs offset mem.
+    val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) offset mem ⇔
+    tuple_in_memory vs tvs offset mem
+Proof
+  simp[val_in_memory_def]
+QED
+
+(* BytesV with fixed bytes type: word encoding *)
+Theorem val_in_memory_fixed_bytes_proof:
+  ∀ bs n offset mem.
+    val_in_memory (BaseTV (BytesT (Fixed n))) (BytesV bs) offset mem ⇔
+    (mem_word_at offset mem =
+     typed_val_to_w256 (BaseTV (BytesT (Fixed n))) (BytesV bs))
+Proof
+  simp[val_in_memory_def]
+QED
+
+(* BytesV with AddressT: word encoding *)
+Theorem val_in_memory_address_proof:
+  ∀ bs offset mem.
+    val_in_memory (BaseTV AddressT) (BytesV bs) offset mem ⇔
+    (mem_word_at offset mem =
+     typed_val_to_w256 (BaseTV AddressT) (BytesV bs))
+Proof
+  simp[val_in_memory_def]
+QED
