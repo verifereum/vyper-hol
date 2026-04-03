@@ -13,16 +13,27 @@
  *   ma_mark_volatile_preserves_wf — marking volatile preserves well-formedness
  *
  * Soundness:
+ *   allocas_non_overlapping  — distinct allocas have disjoint regions
  *   memloc_runtime_region    — interpret mem_loc as runtime byte range
  *   regions_disjoint         — two byte ranges don't overlap
  *   ma_may_alias_sound       — ¬ma_may_alias ⟹ runtime disjointness
  *   ma_may_alias_sound_no_alloca — simplified: both ml_alloca = NONE
- *   allocas_non_overlapping_invariant — bump allocation preserves disjointness
+ *   allocas_non_overlapping_empty     — base case (no allocas)
+ *   allocas_non_overlapping_step_inst — preserved by step_inst
+ *   allocas_non_overlapping_run_block — preserved by run_block
+ *
+ * Bridge (analysis → runtime):
+ *   bp_segment_from_ops_runtime_region — connects analysis mem_loc to runtime region
+ *
+ * Memory operation independence:
+ *   mload_mstore_disjoint   — disjoint 32-byte write doesn't affect 32-byte read
+ *   mload_mstore8_disjoint  — disjoint 1-byte write doesn't affect 32-byte read
  *)
 
 Theory memAliasProps
 Ancestors
   memAliasDefs memAliasProofs basePtrProps venomExecSemantics venomState
+  passSharedDefs finite_map
 
 (* ===== Structural Properties ===== *)
 
@@ -81,6 +92,27 @@ Theorem ma_mark_volatile_preserves_wf:
 Proof ACCEPT_TAC memAliasProofsTheory.ma_mark_volatile_preserves_wf
 QED
 
+(* ===== Alloca Non-Overlapping Invariant ===== *)
+
+(* Distinct allocas have disjoint memory regions.
+ * Guaranteed by bump allocation: exec_alloca places each new alloca
+ * at next_alloca_offset which is ≥ all existing (offset + size). *)
+Definition allocas_non_overlapping_def:
+  allocas_non_overlapping (s : venom_state) ⇔
+    ∀a1 a2 b1 sz1 b2 sz2.
+      a1 ≠ a2 ∧
+      FLOOKUP s.vs_allocas a1 = SOME (b1, sz1) ∧
+      FLOOKUP s.vs_allocas a2 = SOME (b2, sz2) ⇒
+      b1 + sz1 ≤ b2 ∨ b2 + sz2 ≤ b1
+End
+
+(* Base case: no allocas → trivially non-overlapping *)
+Theorem allocas_non_overlapping_empty:
+  ∀s. s.vs_allocas = FEMPTY ⇒ allocas_non_overlapping s
+Proof
+  rw[allocas_non_overlapping_def, FLOOKUP_DEF]
+QED
+
 (* ===== Soundness Definitions ===== *)
 
 (* Interpret a mem_loc as a runtime byte range (start, size).
@@ -108,22 +140,15 @@ End
 (* ¬ma_may_alias ⟹ runtime regions are disjoint.
    Preconditions:
    - wf_alias_sets: analysis produced valid results
-   - allocas don't overlap: guaranteed by bump allocation (exec_alloca) *)
+   - allocas_non_overlapping: guaranteed by bump allocation *)
 Theorem ma_may_alias_sound:
-  ∀sets loc1 loc2 s.
+  ∀sets loc1 loc2 s r1 r2.
     wf_alias_sets sets ∧
     ¬ma_may_alias sets loc1 loc2 ∧
-    (* Distinct allocas have non-overlapping regions *)
-    (∀aid1 aid2 b1 s1 b2 s2.
-       aid1 ≠ aid2 ∧
-       FLOOKUP s.vs_allocas aid1 = SOME (b1, s1) ∧
-       FLOOKUP s.vs_allocas aid2 = SOME (b2, s2) ⇒
-       b1 + s1 ≤ b2 ∨ b2 + s2 ≤ b1) ⇒
-    case (memloc_runtime_region loc1 s, memloc_runtime_region loc2 s) of
-      (SOME r1, SOME r2) => regions_disjoint r1 r2
-    | (SOME _, NONE) => T   (* loc2 region unknown — no claim *)
-    | (NONE, SOME _) => T   (* loc1 region unknown — no claim *)
-    | (NONE, NONE) => T     (* both regions unknown — no claim *)
+    allocas_non_overlapping s ∧
+    memloc_runtime_region loc1 s = SOME r1 ∧
+    memloc_runtime_region loc2 s = SOME r2 ⇒
+    regions_disjoint r1 r2
 Proof
   cheat
 QED
@@ -144,24 +169,70 @@ Proof
   cheat
 QED
 
-(* Bump allocation preserves the invariant that distinct allocas
-   have disjoint memory regions. exec_alloca appends at
-   next_alloca_offset which is ≥ all existing (offset + size). *)
-Theorem allocas_non_overlapping_invariant:
+(* ===== Alloca Invariant Preservation ===== *)
+
+(* step_inst preserves allocas_non_overlapping.
+ * Only ALLOCA modifies vs_allocas; exec_alloca places new allocation
+ * at next_alloca_offset ≥ all existing (offset + size). *)
+Theorem allocas_non_overlapping_step_inst:
   ∀fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' ∧
-    (* Invariant holds before the step *)
-    (∀a1 a2 b1 sz1 b2 sz2.
-       a1 ≠ a2 ∧
-       FLOOKUP s.vs_allocas a1 = SOME (b1, sz1) ∧
-       FLOOKUP s.vs_allocas a2 = SOME (b2, sz2) ⇒
-       b1 + sz1 ≤ b2 ∨ b2 + sz2 ≤ b1) ⇒
-    (* Invariant holds after the step *)
-    (∀a1 a2 b1 sz1 b2 sz2.
-       a1 ≠ a2 ∧
-       FLOOKUP s'.vs_allocas a1 = SOME (b1, sz1) ∧
-       FLOOKUP s'.vs_allocas a2 = SOME (b2, sz2) ⇒
-       b1 + sz1 ≤ b2 ∨ b2 + sz2 ≤ b1)
+    allocas_non_overlapping s ⇒
+    allocas_non_overlapping s'
+Proof
+  cheat
+QED
+
+(* run_block preserves allocas_non_overlapping. *)
+Theorem allocas_non_overlapping_run_block:
+  ∀fuel ctx bb s s'.
+    run_block fuel ctx bb s = OK s' ∧
+    allocas_non_overlapping s ⇒
+    allocas_non_overlapping s'
+Proof
+  cheat
+QED
+
+(* ===== Bridge: Analysis → Runtime ===== *)
+
+(* When bp_segment_from_ops produces a fixed mem_loc (known offset + size),
+ * memloc_runtime_region returns the matching runtime region.
+ * The existential addr connects eval_operand (word) to the region (num).
+ * Consumers connect to mload/mstore via: step_inst uses w2n(eval_operand)
+ * which equals addr when addr < dimword(:256) (always true for
+ * realistic allocas since memory is ≪ 2^256). *)
+Theorem bp_segment_from_ops_runtime_region:
+  ∀bp ops ml s.
+    bp_ptr_sound bp s ∧
+    bp_segment_from_ops bp ops = ml ∧
+    ml_is_fixed ml ∧
+    IS_SOME (eval_operand ops.iao_ofst s) ⇒
+    ∃addr.
+      eval_operand ops.iao_ofst s = SOME (n2w addr) ∧
+      memloc_runtime_region ml s = SOME (addr, THE ml.ml_size)
+Proof
+  cheat
+QED
+
+(* ===== Memory Operation Independence ===== *)
+
+(* Writing 32 bytes at off1 doesn't affect reading 32 bytes at off2
+ * when the regions don't overlap.
+ * Key lemma for load_elim, MCE, mem2var proofs. *)
+Theorem mload_mstore_disjoint:
+  ∀off1 off2 val s.
+    regions_disjoint (off1, 32) (off2, 32) ⇒
+    mload off2 (mstore off1 val s) = mload off2 s
+Proof
+  cheat
+QED
+
+(* Writing 1 byte at off1 doesn't affect reading 32 bytes at off2
+ * when the regions don't overlap. *)
+Theorem mload_mstore8_disjoint:
+  ∀off1 off2 val s.
+    regions_disjoint (off1, 1) (off2, 32) ⇒
+    mload off2 (mstore8 off1 val s) = mload off2 s
 Proof
   cheat
 QED

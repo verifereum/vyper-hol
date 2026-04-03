@@ -94,6 +94,13 @@ Definition bp_ptr_sound_def:
       ∃p. MEM p (bp_get_ptrs bp v) ∧ ptr_matches_var p v s
 End
 
+(* Initialization: analysis starts from FEMPTY, which is trivially sound. *)
+Theorem bp_ptr_sound_init:
+  ∀s. bp_ptr_sound FEMPTY s
+Proof
+  rw[bp_ptr_sound_def, bp_get_ptrs_def, FLOOKUP_DEF]
+QED
+
 (* ===== Buffer Safety: Pointer Offsets Within Alloca Bounds ===== *)
 
 (* Every tracked pointer with a known offset has that offset within
