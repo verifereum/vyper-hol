@@ -20,7 +20,7 @@
 Theory basePtrProps
 Ancestors
   basePtrDefs basePtrProofs venomExecSemantics venomWf passSharedDefs
-  finite_map
+  memLocDefs finite_map
 Libs
   pred_setLib
 

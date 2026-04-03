@@ -26,7 +26,7 @@
 
 Theory memAliasProps
 Ancestors
-  memAliasDefs memAliasProofs basePtrProps venomMemProps
+  memAliasDefs memAliasProofs basePtrProps venomMemProps memLocDefs
 
 (* ===== Structural Properties ===== *)
 
@@ -146,7 +146,7 @@ Theorem bp_segment_from_ops_runtime_region:
   ∀bp ops ml s.
     bp_ptr_sound bp s ∧
     bp_segment_from_ops bp ops = ml ∧
-    IS_SOME ml.ml_offset ∧ IS_SOME ml.ml_size ∧
+    ml_is_fixed ml ∧
     IS_SOME (eval_operand ops.iao_ofst s) ⇒
     ∃addr.
       eval_operand ops.iao_ofst s = SOME (n2w addr) ∧

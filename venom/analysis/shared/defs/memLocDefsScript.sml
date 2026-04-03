@@ -6,7 +6,7 @@
  * TOP-LEVEL:
  *   allocation, mem_loc,
  *   ml_empty, ml_undefined,
- *   completely_contains, may_overlap, mk_volatile,
+ *   completely_contains, may_overlap, mk_volatile, ml_is_fixed,
  *   inst_access_ops, mem_write_ops, mem_read_ops
  *
  * Divergences from Python:
@@ -96,6 +96,11 @@ End
 
 Definition mk_volatile_def:
   mk_volatile loc = loc with ml_volatile := T
+End
+
+(* Memory location has known offset and size *)
+Definition ml_is_fixed_def:
+  ml_is_fixed loc ⇔ IS_SOME loc.ml_offset ∧ IS_SOME loc.ml_size
 End
 
 (* ===== Memory Access Dispatch Tables ===== *)

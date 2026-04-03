@@ -8,7 +8,6 @@
  *   is_removable          — instruction can be NOP'd if output unused
  *   mk_nop_inst           — replace instruction with NOP
  *   mk_assign_inst        — replace instruction with ASSIGN from operand
- *   ml_is_fixed           — memory location has known offset + size
  *   is_copy_opcode        — bulk memory copy opcodes (MCOPY, etc.)
  *   is_store_opcode       — single-word store opcodes (MSTORE, etc.)
  *   load_opcode_addr_space  — map load opcode to address space
@@ -180,14 +179,7 @@ Definition is_forwardable_assign_def:
      | _ => F)
 End
 
-(* ===== Memory location helpers ===== *)
-
-(* A memory location is "fixed" when it has known offset + size.
-   Python: MemoryLocation.is_fixed. Only fixed locations are tracked
-   as lattice keys in analyses. *)
-Definition ml_is_fixed_def:
-  ml_is_fixed loc <=> IS_SOME loc.ml_offset /\ IS_SOME loc.ml_size
-End
+(* ml_is_fixed moved to memLocDefs (lives with the mem_loc type) *)
 
 (* ===== NOP clearing ===== *)
 
