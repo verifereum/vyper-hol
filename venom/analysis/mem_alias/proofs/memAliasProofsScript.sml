@@ -7,7 +7,7 @@
 
 Theory memAliasProofs
 Ancestors
-  memAliasDefs memLocDefs memLocProps
+  memAliasDefs memLocDefs memLocProps basePtrDefs venomMemDefs venomExecSemantics
 Libs
   finite_mapTheory alistTheory listTheory pairTheory
 
@@ -1006,4 +1006,45 @@ Theorem ma_mark_volatile_is_volatile:
 Proof
   rw[ma_mark_volatile_def, mk_volatile_def, LET_THM] >>
   BasicProvers.EVERY_CASE_TAC >> gvs[]
+QED
+
+(* ===== Soundness ===== *)
+
+Theorem ma_may_alias_sound_proof:
+  ∀sets loc1 loc2 s r1 r2.
+    wf_alias_sets sets ∧
+    ¬ma_may_alias sets loc1 loc2 ∧
+    allocas_non_overlapping s ∧
+    memloc_runtime_region loc1 s = SOME r1 ∧
+    memloc_runtime_region loc2 s = SOME r2 ⇒
+    regions_disjoint r1 r2
+Proof
+  cheat
+QED
+
+Theorem ma_may_alias_sound_no_alloca_proof:
+  ∀sets loc1 loc2.
+    wf_alias_sets sets ∧
+    ¬ma_may_alias sets loc1 loc2 ∧
+    loc1.ml_alloca = NONE ∧ loc2.ml_alloca = NONE ∧
+    IS_SOME loc1.ml_offset ∧ IS_SOME loc1.ml_size ∧
+    IS_SOME loc2.ml_offset ∧ IS_SOME loc2.ml_size ⇒
+    regions_disjoint
+      (THE loc1.ml_offset, THE loc1.ml_size)
+      (THE loc2.ml_offset, THE loc2.ml_size)
+Proof
+  cheat
+QED
+
+Theorem bp_segment_from_ops_runtime_region_proof:
+  ∀bp ops ml s.
+    bp_ptr_sound bp s ∧
+    bp_segment_from_ops bp ops = ml ∧
+    ml_is_fixed ml ∧
+    IS_SOME (eval_operand ops.iao_ofst s) ⇒
+    ∃addr.
+      eval_operand ops.iao_ofst s = SOME (n2w addr) ∧
+      memloc_runtime_region ml s = SOME (addr, THE ml.ml_size)
+Proof
+  cheat
 QED

@@ -7,6 +7,7 @@
  *   allocation, mem_loc,
  *   ml_empty, ml_undefined,
  *   completely_contains, may_overlap, mk_volatile, ml_is_fixed,
+ *   memloc_runtime_region,
  *   inst_access_ops, mem_write_ops, mem_read_ops
  *
  * Divergences from Python:
@@ -15,7 +16,7 @@
 
 Theory memLocDefs
 Ancestors
-  venomInst
+  venomInst venomState finite_map
 
 (* ===== Allocation and Pointer Types ===== *)
 
@@ -101,6 +102,23 @@ End
 (* Memory location has known offset and size *)
 Definition ml_is_fixed_def:
   ml_is_fixed loc ⇔ IS_SOME loc.ml_offset ∧ IS_SOME loc.ml_size
+End
+
+(* ===== Runtime Region ===== *)
+
+(* Interpret a mem_loc as a runtime byte range (start, size).
+   - ml_alloca = NONE: start = ml_offset (absolute address)
+   - ml_alloca = SOME (Allocation aid): start = alloca_base + ml_offset
+   Returns NONE when offset/size unknown or alloca not yet executed. *)
+Definition memloc_runtime_region_def:
+  memloc_runtime_region (ml : mem_loc) (s : venom_state) =
+    case (ml.ml_offset, ml.ml_size, ml.ml_alloca) of
+      (SOME off, SOME sz, NONE) => SOME (off : num, sz : num)
+    | (SOME off, SOME sz, SOME (Allocation aid)) =>
+        (case FLOOKUP s.vs_allocas aid of
+           SOME p => SOME (FST p + off : num, sz)
+         | NONE => NONE)
+    | _ => NONE
 End
 
 (* ===== Memory Access Dispatch Tables ===== *)
