@@ -102,3 +102,12 @@ Theorem resolving_block_sim_function:
 Proof
   ACCEPT_TAC resolving_block_sim_function_proof
 QED
+
+(* Fuel monotonicity: terminated results are stable under added fuel *)
+Theorem run_function_fuel_mono:
+  !fuel ctx fn s.
+    terminates (run_function fuel ctx fn s) ==>
+    !k. run_function (fuel + k) ctx fn s = run_function fuel ctx fn s
+Proof
+  ACCEPT_TAC crossBlockSimProofsTheory.run_function_fuel_mono
+QED

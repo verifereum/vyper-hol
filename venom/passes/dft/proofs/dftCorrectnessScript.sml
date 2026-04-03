@@ -127,7 +127,7 @@ Theorem dft_pass_correct:
         lift_result (state_equiv {}) (execution_equiv {})
           (run_block fuel ctx bb s)
           (run_block fuel ctx (dft_block order bb) s)) ==>
-    pass_correct {}
+    pass_correct (state_equiv {}) (execution_equiv {})
       (\fuel. run_function fuel ctx fn s)
       (\fuel. run_function fuel ctx (dft_fn fn) s)
 Proof
