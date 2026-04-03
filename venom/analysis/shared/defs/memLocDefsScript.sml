@@ -7,7 +7,7 @@
  *   allocation, mem_loc,
  *   ml_empty, ml_undefined,
  *   completely_contains, may_overlap, mk_volatile, ml_is_fixed,
- *   memloc_runtime_region,
+ *   memloc_runtime_region, memloc_within_alloca,
  *   inst_access_ops, mem_write_ops, mem_read_ops
  *
  * Divergences from Python:
@@ -119,6 +119,22 @@ Definition memloc_runtime_region_def:
            SOME p => SOME (FST p + off : num, sz)
          | NONE => NONE)
     | _ => NONE
+End
+
+(* Access region fits within its alloca's allocated bounds.
+ * Trivially true for ml_alloca = NONE (absolute addresses).
+ * For alloca-backed locations: offset + access_size ≤ alloca_size.
+ * Guaranteed by Vyper's compile-time-known offsets within declared sizes.
+ * Without this, different-alloca "no alias" is unsound (out-of-bounds
+ * accesses from one alloca can reach into another's region). *)
+Definition memloc_within_alloca_def:
+  memloc_within_alloca (ml : mem_loc) (s : venom_state) ⇔
+    case (ml.ml_offset, ml.ml_size, ml.ml_alloca) of
+      (SOME off, SOME sz, SOME (Allocation aid)) =>
+        (case FLOOKUP s.vs_allocas aid of
+           SOME p => off + sz ≤ SND p
+         | NONE => T)
+    | _ => T
 End
 
 (* ===== Memory Access Dispatch Tables ===== *)

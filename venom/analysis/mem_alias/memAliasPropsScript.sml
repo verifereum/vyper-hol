@@ -94,6 +94,8 @@ Theorem ma_may_alias_sound:
     wf_alias_sets sets ∧
     ¬ma_may_alias sets loc1 loc2 ∧
     allocas_non_overlapping s ∧
+    memloc_within_alloca loc1 s ∧
+    memloc_within_alloca loc2 s ∧
     memloc_runtime_region loc1 s = SOME r1 ∧
     memloc_runtime_region loc2 s = SOME r2 ⇒
     regions_disjoint r1 r2
