@@ -179,7 +179,6 @@ Definition is_forwardable_assign_def:
      | _ => F)
 End
 
-(* ml_is_fixed moved to memLocDefs (lives with the mem_loc type) *)
 
 (* ===== NOP clearing ===== *)
 
