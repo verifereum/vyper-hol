@@ -124,9 +124,35 @@ End
 (* Access region fits within its alloca's allocated bounds.
  * Trivially true for ml_alloca = NONE (absolute addresses).
  * For alloca-backed locations: offset + access_size ≤ alloca_size.
- * Guaranteed by Vyper's compile-time-known offsets within declared sizes.
- * Without this, different-alloca "no alias" is unsound (out-of-bounds
- * accesses from one alloca can reach into another's region). *)
+ *
+ * PROOF OBLIGATION: This is NOT a general Venom property. It holds
+ * because Vyper's lowering generates ALLOCAs sized to cover all
+ * accesses (struct layouts, ABI buffers, etc.). Arbitrary Venom
+ * programs can have OOB alloca accesses.
+ *
+ * Without this, may_overlap's "different allocas → no overlap"
+ * (which Python assumes unconditionally) is unsound: OOB accesses
+ * from one alloca can reach into another's contiguous region.
+ * Counterexample: a1=[0,10), a2=[10,20), access from a1 at
+ * offset=15 size=10 → runtime [15,25) overlaps a2's [10,20).
+ *
+ * Discharge path:
+ *   1. Vyper→Venom lowering establishes this for well-typed programs
+ *      (lowering controls both ALLOCA sizes and access offsets).
+ *   2. Optimization passes receive it as a precondition.
+ *   3. A correct pass (one that preserves memory access semantics)
+ *      preserves this — but "correct" here means the pass's state
+ *      relation must preserve vs_allocas AND the transformed
+ *      function's bp analysis must produce in-bounds mem_locs.
+ *      This couples pass correctness with analysis soundness.
+ *   4. Only passes using alias analysis (load_elim, DSE, MCE,
+ *      mem2var, concretize) actually need to discharge this.
+ *
+ * The coupling in (3) is inherent: may_overlap returns F for
+ * different allocas without checking bounds (matching Python),
+ * so soundness requires the caller to establish bounds.
+ * Python gets this "for free" because it controls code generation.
+ *)
 Definition memloc_within_alloca_def:
   memloc_within_alloca (ml : mem_loc) (s : venom_state) ⇔
     case (ml.ml_offset, ml.ml_size, ml.ml_alloca) of
