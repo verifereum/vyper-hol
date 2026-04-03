@@ -22,7 +22,7 @@ Ancestors
   venomPipelineCorrect
   passSimulationDefs
   codegenCorrectness
-  stateEquivProps
+  stateEquiv stateEquivProps
   venomExecSemantics
   vyperABI
   compileEnv compileVyper
@@ -64,11 +64,17 @@ Theorem e2e_venom_pipeline:
               (run_context fuel ctx vs)
               (run_context fuel' (pipeline ctx) vs)
 Proof
-  rw[ctx_pass_correct_def] >> strip_tac >>
+  simp[ctx_pass_correct_def, pass_correct_def] >>
+  rpt strip_tac >>
   `?fuel'. terminates (run_context fuel' (pipeline ctx) vs)` by
-    (gvs[pass_correct_def] >> metis_tac[]) >>
+    (gvs[] >> metis_tac[]) >>
   qexists_tac `fuel'` >>
-  irule pass_correct_implies_observable >>
+  first_x_assum drule_all >> strip_tac >>
+  `!r1 r2. lift_result R_ok R_term r1 r2 ==>
+           observable_result_equiv r1 r2` by
+    (rpt gen_tac >> Cases_on `r1` >> Cases_on `r2` >>
+     fs[lift_result_def, observable_result_equiv_def] >>
+     metis_tac[]) >>
   metis_tac[]
 QED
 
