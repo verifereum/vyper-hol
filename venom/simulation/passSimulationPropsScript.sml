@@ -263,6 +263,7 @@ Proof
   ACCEPT_TAC two_state_block_sim_function_proof
 QED
 
+
 (* Unconditional version: when per-block sim gives lift_result (no error
    disjunct), function-level sim also gives unconditional lift_result.
    Uses triangle pattern (same-code R_ok preservation + per-block sim +
@@ -478,6 +479,7 @@ Theorem block_sim_function_error_bb:
 Proof
   ACCEPT_TAC block_sim_function_error_bb_proof
 QED
+
 
 (* ===== Bridge ===== *)
 

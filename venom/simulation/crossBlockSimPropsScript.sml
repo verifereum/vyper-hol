@@ -111,3 +111,21 @@ Theorem run_function_fuel_mono:
 Proof
   ACCEPT_TAC crossBlockSimProofsTheory.run_function_fuel_mono
 QED
+
+(* Determinism: if a run_function call terminates at two different fuel
+   values, the results are identical. Corollary of fuel monotonicity. *)
+Theorem run_function_deterministic:
+  !fuel fuel' ctx fn s.
+    terminates (run_function fuel ctx fn s) /\
+    terminates (run_function fuel' ctx fn s) ==>
+    run_function fuel ctx fn s = run_function fuel' ctx fn s
+Proof
+  rpt strip_tac >>
+  Cases_on `fuel <= fuel'`
+  >- (
+    `?k. fuel' = fuel + k` by (qexists_tac `fuel' - fuel` >> simp[]) >>
+    metis_tac[run_function_fuel_mono]
+  ) >>
+  `?k. fuel = fuel' + k` by (qexists_tac `fuel - fuel'` >> simp[]) >>
+  metis_tac[run_function_fuel_mono]
+QED

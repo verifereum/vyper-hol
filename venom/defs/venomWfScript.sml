@@ -275,9 +275,25 @@ Definition def_dominates_uses_def:
                 EL j bb.bb_instructions = inst)
 End
 
-(* Well-formed SSA: unique definitions AND definitions dominate uses. *)
+(* Within a block, non-PHI definitions strictly precede uses of the same
+   variable.  Standard SSA invariant: a use at index idx_use of variable v
+   requires v's (non-PHI) definition at idx_def < idx_use in the same block. *)
+Definition defs_before_uses_def:
+  defs_before_uses fn <=>
+    !bb idx_def idx_use v.
+      MEM bb fn.fn_blocks /\
+      idx_def < LENGTH bb.bb_instructions /\
+      idx_use < LENGTH bb.bb_instructions /\
+      (EL idx_def bb.bb_instructions).inst_opcode <> PHI /\
+      MEM v (EL idx_def bb.bb_instructions).inst_outputs /\
+      MEM (Var v) (EL idx_use bb.bb_instructions).inst_operands ==>
+      idx_def < idx_use
+End
+
+(* Well-formed SSA: unique definitions AND definitions dominate uses
+   AND within-block definitions precede uses. *)
 Definition wf_ssa_def:
-  wf_ssa fn <=> ssa_form fn /\ def_dominates_uses fn
+  wf_ssa fn <=> ssa_form fn /\ def_dominates_uses fn /\ defs_before_uses fn
 End
 
 (* Check if instruction is a PHI. *)

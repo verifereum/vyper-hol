@@ -361,3 +361,85 @@ Theorem fuel_mono:
 Proof
   ACCEPT_TAC venomExecProofsTheory.fuel_mono
 QED
+
+Theorem step_inst_base_nonerr_var_fdom:
+  !inst s x.
+    inst_wf inst /\
+    ~MEM inst.inst_opcode [NOP; PHI; STOP; SINK; INVALID;
+      CALLER; ADDRESS; CALLVALUE; GAS; GASLIMIT;
+      ORIGIN; GASPRICE; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; CHAINID;
+      SELFBALANCE; BASEFEE; BLOBBASEFEE; CALLDATASIZE; RETURNDATASIZE;
+      CODESIZE; MSIZE] /\
+    MEM (Var x) inst.inst_operands /\
+    (!e. step_inst_base inst s <> Error e) ==>
+    x IN FDOM s.vs_vars
+Proof
+  ACCEPT_TAC venomExecProofsTheory.step_inst_base_nonerr_var_fdom
+QED
+
+Theorem step_inst_base_fdom:
+  !inst s s'.
+    step_inst_base inst s = OK s' /\
+    inst_wf inst /\
+    ~is_terminator inst.inst_opcode ==>
+    FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs
+Proof
+  ACCEPT_TAC venomExecProofsTheory.step_inst_base_fdom
+QED
+
+Theorem step_inst_fdom:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    inst_wf inst /\
+    ~is_terminator inst.inst_opcode ==>
+    FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs
+Proof
+  ACCEPT_TAC venomExecProofsTheory.step_inst_fdom
+QED
+
+Theorem bind_outputs_fdom:
+  !outs vals s s'.
+    bind_outputs outs vals s = SOME s' ==>
+    FDOM s'.vs_vars = FDOM s.vs_vars UNION set outs
+Proof
+  ACCEPT_TAC venomExecProofsTheory.bind_outputs_fdom
+QED
+
+(* Non-INVOKE step_inst is context-independent *)
+Theorem step_inst_ctx_irrel:
+  !fuel ctx1 ctx2 inst s.
+    inst.inst_opcode <> INVOKE ==>
+    step_inst fuel ctx1 inst s = step_inst fuel ctx2 inst s
+Proof
+  rw[Once venomExecSemanticsTheory.step_inst_def] >>
+  rw[Once venomExecSemanticsTheory.step_inst_def]
+QED
+
+(* Non-terminator at idx < LENGTH means SUC idx < LENGTH *)
+Theorem non_terminator_not_last:
+  !bb idx.
+    bb_well_formed bb /\ idx < LENGTH bb.bb_instructions /\
+    ~is_terminator (EL idx bb.bb_instructions).inst_opcode ==>
+    SUC idx < LENGTH bb.bb_instructions
+Proof
+  rpt strip_tac >> fs[venomWfTheory.bb_well_formed_def] >>
+  `idx <> PRE (LENGTH bb.bb_instructions)` by (
+    strip_tac >>
+    `LAST bb.bb_instructions = EL idx bb.bb_instructions` by
+      metis_tac[listTheory.LAST_EL] >>
+    metis_tac[]) >>
+  simp[]
+QED
+
+(* setup_callee gives a clean initial callee state *)
+Theorem setup_callee_props:
+  !fn args s cs.
+    setup_callee fn args s = SOME cs ==>
+    cs.vs_inst_idx = 0 /\ FDOM cs.vs_vars = {} /\
+    fn_entry_label fn = SOME cs.vs_current_bb
+Proof
+  simp[venomExecSemanticsTheory.setup_callee_def] >>
+  rpt strip_tac >> gvs[] >>
+  simp[venomInstTheory.fn_entry_label_def,
+       venomInstTheory.entry_block_def]
+QED

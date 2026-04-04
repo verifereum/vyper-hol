@@ -397,6 +397,108 @@ Proof
   >> fs[AllCaseEqs()]
 QED
 
+(* Like transfer_sound_exit but uses transfer_sound_wf + EVERY inst_wf.
+   Useful when the soundness predicate needs inst_wf to derive facts
+   about operand well-formedness (e.g. operands in FDOM). *)
+Theorem transfer_sound_exit_wf:
+  !R_ok R_term sound transfer run_ctx bb bottom result.
+    valid_state_rel R_ok R_term /\
+    transfer_sound_wf sound transfer run_ctx /\
+    EVERY inst_wf bb.bb_instructions /\
+    (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
+    (!idx. SUC idx <= LENGTH bb.bb_instructions ==>
+       df_at bottom result bb.bb_label (SUC idx) =
+       transfer run_ctx (EL idx bb.bb_instructions)
+         (df_at bottom result bb.bb_label idx))
+  ==>
+    !fuel ctx s v i.
+      s.vs_inst_idx = 0 /\
+      sound (df_at bottom result bb.bb_label 0) s /\
+      run_block fuel ctx bb s = OK v /\
+      i < LENGTH bb.bb_instructions /\
+      is_terminator (EL i bb.bb_instructions).inst_opcode /\
+      (!j. j < i ==> ~is_terminator (EL j bb.bb_instructions).inst_opcode) ==>
+      sound (df_at bottom result bb.bb_label (SUC i)) v
+Proof
+  rpt strip_tac >>
+  `!n fuel ctx s.
+     n = i + 1 - s.vs_inst_idx /\
+     s.vs_inst_idx <= i /\
+     sound (df_at bottom result bb.bb_label s.vs_inst_idx)
+           (s with vs_inst_idx := 0) /\
+     run_block fuel ctx bb s = OK v ==>
+     sound (df_at bottom result bb.bb_label (SUC i)) v`
+    suffices_by (
+      disch_then (qspecl_then
+        [`i + 1`, `fuel`, `ctx`, `s`] mp_tac) >>
+      `s with vs_inst_idx := 0 = s` by
+        fs[venom_state_component_equality] >> simp[]) >>
+  completeInduct_on `n` >> rpt strip_tac >>
+  qabbrev_tac `idx = s'.vs_inst_idx` >>
+  `idx < LENGTH bb.bb_instructions` by decide_tac >>
+  qabbrev_tac `inst = EL idx bb.bb_instructions` >>
+  `inst_wf inst` by metis_tac[EVERY_EL, markerTheory.Abbrev_def] >>
+  `run_block fuel' ctx' bb s' =
+   case step_inst fuel' ctx' inst s' of
+     OK s'' =>
+       if is_terminator inst.inst_opcode then
+         if s''.vs_halted then Halt s'' else OK s''
+       else run_block fuel' ctx' bb (s'' with vs_inst_idx := SUC idx)
+   | Halt s'' => Halt s''
+   | Abort a s'' => Abort a s''
+   | IntRet rv ss => IntRet rv ss
+   | Error e => Error e` by (
+    CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+    simp[get_instruction_def, Abbr `inst`, Abbr `idx`]) >>
+  pop_assum (fn th => FULL_SIMP_TAC std_ss [th]) >>
+  Cases_on `step_inst fuel' ctx' inst s'` >> fs[]
+  >- (
+    rename1 `OK s''` >>
+    Cases_on `idx = i`
+    >- (
+      `is_terminator inst.inst_opcode` by fs[Abbr `inst`] >>
+      Cases_on `s''.vs_halted` >- fs[] >>
+      fs[] >>
+      `inst.inst_opcode <> INVOKE` by
+        (strip_tac >> fs[is_terminator_def]) >>
+      `step_inst_base inst s' = OK v` by
+        metis_tac[step_inst_non_invoke] >>
+      `step_inst_base inst (s' with vs_inst_idx := 0) = OK v` by
+        metis_tac[term_step_base_idx_0] >>
+      `step_inst fuel' ctx' inst (s' with vs_inst_idx := 0) = OK v` by
+        metis_tac[step_inst_non_invoke] >>
+      metis_tac[transfer_sound_wf_def]
+    )
+    >- (
+      `idx < i` by decide_tac >>
+      `~is_terminator inst.inst_opcode` by
+        (qpat_x_assum `!j. j < i ==> _` (qspec_then `idx` mp_tac) >>
+         simp[Abbr `inst`]) >>
+      fs[] >>
+      `step_inst fuel' ctx' inst (s' with vs_inst_idx := 0) =
+       OK (s'' with vs_inst_idx := 0)` by (
+        Cases_on `inst.inst_opcode = INVOKE`
+        >- (mp_tac (Q.SPECL [`fuel'`, `ctx'`, `inst`, `s'`, `0`]
+              analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only) >>
+            simp[])
+        >- (mp_tac (Q.SPECL [`fuel'`, `ctx'`, `inst`, `s'`, `0`]
+              analysisSimProofsBaseTheory.step_inst_idx_indep) >>
+            simp[instIdxIndepTheory.exec_result_map_def])) >>
+      `SUC idx <= LENGTH bb.bb_instructions` by decide_tac >>
+      `sound (df_at bottom result bb.bb_label (SUC idx))
+             (s'' with vs_inst_idx := 0)` by
+        metis_tac[transfer_sound_wf_def, markerTheory.Abbrev_def] >>
+      first_x_assum (qspec_then `i + 1 - SUC idx` mp_tac) >>
+      impl_tac >- decide_tac >>
+      disch_then (qspecl_then [`fuel'`, `ctx'`,
+        `s'' with vs_inst_idx := SUC idx`] mp_tac) >>
+      simp[] >>
+      metis_tac[transfer_sound_wf_def, markerTheory.Abbrev_def]
+    )
+  )
+  >> fs[AllCaseEqs()]
+QED
+
 
 (* ===== End-to-end dataflow pass correctness =====
  *
