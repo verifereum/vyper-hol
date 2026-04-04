@@ -74,7 +74,9 @@ End
    alloca region. Required for memory operations through pointer
    addresses to be covered by alloca_mem_agrees.
    Analysis-independent — doesn't reference bp_result.
-   bp_ptrs_bounded (from base_ptr analysis) implies this. *)
+   bp_ptrs_bounded (from base_ptr analysis) implies pointer offsets
+   are within alloca regions (though the exact bridge is indirect —
+   bp_ptrs_bounded is per-access, this is per-variable). *)
 Definition ptrs_in_alloca_bounds_def:
   ptrs_in_alloca_bounds fn (roots : string set) s <=>
     let pv = pointer_derived_vars fn roots in

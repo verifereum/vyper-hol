@@ -11,7 +11,7 @@ Ancestors
  *   ensures this doesn't affect observable output. *)
 Theorem m2v_transform_function_correct_proof:
   !fuel ctx fn s bp.
-    bp_ptr_sound bp s /\ bp_ptrs_bounded bp s /\
+    bp_ptr_sound bp s /\ bp_ptrs_bounded bp fn s /\
     alloca_pointer_confined fn ==>
     lift_result (state_equiv {}) (execution_equiv {})
       (run_function fuel ctx fn s)
