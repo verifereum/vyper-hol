@@ -184,3 +184,17 @@ Definition remove_unused_eliminated_vars_def:
       FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))
       fn'.fn_blocks))
 End
+
+Definition remove_unused_context_def:
+  remove_unused_context ctx =
+    ctx with ctx_functions := MAP remove_unused_function ctx.ctx_functions
+End
+
+(* All eliminated vars across all functions in a context.
+   Covers callee Halt/Abort propagation: a callee's eliminated vars
+   may appear in the Halt state, so the top-level relation must
+   forgive differences in ANY function's eliminated vars. *)
+Definition remove_unused_all_eliminated_def:
+  remove_unused_all_eliminated ctx =
+    BIGUNION (set (MAP remove_unused_eliminated_vars ctx.ctx_functions))
+End

@@ -1,39 +1,15 @@
 (*
- * SCCP — Correctness Statement
+ * SCCP — Correctness (API)
  *
- * Replacing variable operands with known constants and folding
- * constant branches preserves semantics under SSA form.
- * SSA guarantees each variable has a unique definition point,
- * so the dataflow fixpoint correctly characterizes runtime values.
- *
- * Returns NONE on static assertion failure (compile error).
+ * Pure re-exports from proofs/sccpCorrectnessProofs.
  *)
 
 Theory sccpCorrectness
 Ancestors
-  sccpProofs venomWf
+  sccpCorrectnessProofs
 
-Theorem sccp_function_correct:
-  !fuel ctx fn fn' s.
-    ssa_form fn /\
-    sccp_function fn = SOME fn' ==>
-    lift_result (state_equiv {}) (execution_equiv {})
-      (run_function fuel ctx fn s)
-      (run_function fuel ctx fn' s)
-Proof
-  ACCEPT_TAC sccp_function_correct_proof
-QED
+Theorem sccp_pass_correct_fn =
+  sccpCorrectnessProofsTheory.sccp_pass_correct_fn
 
-(* ===== Obligations ===== *)
-
-Theorem sccp_preserves_ssa_form:
-  ∀fn fn'. ssa_form fn ∧ sccp_function fn = SOME fn' ⇒ ssa_form fn'
-Proof
-  cheat
-QED
-
-Theorem sccp_preserves_wf_function:
-  ∀fn fn'. wf_function fn ∧ sccp_function fn = SOME fn' ⇒ wf_function fn'
-Proof
-  cheat
-QED
+Theorem sccp_pass_correct =
+  sccpCorrectnessProofsTheory.sccp_pass_correct

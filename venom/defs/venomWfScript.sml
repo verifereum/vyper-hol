@@ -275,7 +275,9 @@ Definition def_dominates_uses_def:
                 EL j bb.bb_instructions = inst)
 End
 
-(* Well-formed SSA: unique definitions AND definitions dominate uses. *)
+(* Well-formed SSA: unique definitions AND definitions dominate uses.
+   Within-block ordering follows from def_dominates_uses + fn_inst_ids_distinct
+   (part of wf_function). *)
 Definition wf_ssa_def:
   wf_ssa fn <=> ssa_form fn /\ def_dominates_uses fn
 End

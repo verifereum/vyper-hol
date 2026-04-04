@@ -12,7 +12,7 @@
 
 Theory venomExecProofs
 Ancestors
-  venomExecSemantics venomInst venomInstProofs venomState venomWf rich_list list
+  venomExecSemantics venomInst venomInstProofs venomState venomWf rich_list list finite_map
 
 (* ==========================================================================
    bool_to_word Properties
@@ -969,3 +969,522 @@ Proof
     )
   )
 QED
+
+
+(* ==========================================================================
+   Operand FDOM Properties
+   ========================================================================== *)
+
+
+
+(* For non-excluded opcodes with inst_wf:
+   if a Var operand is not in FDOM (eval returns NONE), step_inst_base returns Error.
+   Contrapositive: non-Error implies all Var operands are in FDOM. *)
+Triviality eval_operands_mem_none[local]:
+  !ops s op. MEM op ops /\ eval_operand op s = NONE ==>
+    eval_operands ops s = NONE
+Proof
+  Induct >> simp[eval_operands_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `op = h` >> gvs[] >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  metis_tac[optionTheory.NOT_NONE_SOME]
+QED
+
+
+
+(* General: if eval_operands returns NONE for the full operand list,
+   step_inst_base returns Error for non-excluded opcodes.
+   Note: DJMP/OFFSET excluded because they don't eval all operands via
+   eval_operands (DJMP uses extract_labels, OFFSET has Label operand).
+   JMP/PARAM/ALLOCA also excluded because their operands are Lit/Label only. *)
+(* Split into two parts to stay under 5s per tactic step *)
+
+(* Part 1: "uniform" opcodes that go through exec_pure/read/write wrappers *)
+Triviality step_inst_base_operands_none_uniform[local]:
+  !inst s.
+    MEM inst.inst_opcode [ADD; SUB; MUL; Div; SDIV; Mod; SMOD; Exp;
+      ADDMOD; MULMOD; EQ; LT; GT; SLT; SGT; ISZERO;
+      AND; OR; XOR; NOT; SHL; SHR; SAR; SIGNEXTEND; BYTE;
+      MLOAD; MSTORE; MSTORE8; SLOAD; SSTORE; TLOAD; TSTORE;
+      BLOCKHASH; BLOBHASH; BALANCE; CALLDATALOAD;
+      EXTCODESIZE; EXTCODEHASH; ILOAD; DLOAD] /\
+    inst_wf inst /\
+    eval_operands inst.inst_operands s = NONE ==>
+    ?e. step_inst_base inst s = Error e
+Proof
+  rpt strip_tac >> gvs[MEM] >>
+  gvs[inst_wf_def, LENGTH_EQ_NUM_compute,
+      step_inst_base_def,
+      exec_pure1_def, exec_pure2_def, exec_pure3_def,
+      exec_read1_def, exec_write2_def,
+      eval_operands_def, eval_operand_def, lookup_var_def] >>
+  BasicProvers.every_case_tac >> gvs[]
+QED
+
+(* Part 2: custom opcodes with inline operand handling.
+   JNZ excluded: its Label operands cause eval_operands=NONE but
+   step_inst_base only evaluates the condition, so it can succeed. *)
+Triviality step_inst_base_operands_none_custom[local]:
+  !inst s.
+    MEM inst.inst_opcode [MCOPY; ISTORE; RET; RETURN; REVERT;
+      ASSIGN; INVOKE; CALLDATACOPY; RETURNDATACOPY; CODECOPY;
+      EXTCODECOPY; SHA3; CALL; STATICCALL; DELEGATECALL;
+      CREATE; CREATE2; SELFDESTRUCT; ASSERT; ASSERT_UNREACHABLE;
+      DLOADBYTES] /\
+    inst_wf inst /\
+    eval_operands inst.inst_operands s = NONE ==>
+    ?e. step_inst_base inst s = Error e
+Proof
+  rpt strip_tac >> gvs[MEM] >>
+  gvs[inst_wf_def, LENGTH_EQ_NUM_compute,
+      step_inst_base_def,
+      eval_operands_def, eval_operand_def, lookup_var_def] >>
+  BasicProvers.every_case_tac >> gvs[]
+QED
+
+(* Part 3: LOG — needs special handling because inst_wf gives parametric-length
+   operand list (Lit tc :: rest with LENGTH rest = w2n tc + 2).
+   The key insight: eval_operand (Lit tc) s = SOME tc always, so
+   eval_operands returning NONE means some element of rest evals to NONE.
+   step_inst_base for LOG evaluates all of rest, so it must hit the NONE and error. *)
+Triviality step_inst_base_operands_none_log[local]:
+  !inst s.
+    inst.inst_opcode = LOG /\
+    inst_wf inst /\
+    eval_operands inst.inst_operands s = NONE ==>
+    ?e. step_inst_base inst s = Error e
+Proof
+  rpt strip_tac >>
+  gvs[inst_wf_def] >>
+  (* Now: inst.inst_operands = Lit tc :: rest, LENGTH rest = w2n tc + 2,
+     eval_operands (Lit tc :: rest) s = NONE *)
+  (* Lit tc always evaluates, so eval_operands rest s = NONE *)
+  gvs[eval_operands_def, eval_operand_def] >>
+  (* rest has length >= 2, so destructure it *)
+  `?h1 h2 tl. rest = h1 :: h2 :: tl` by
+    (Cases_on `rest` >> gvs[] >>
+     Cases_on `t` >> gvs[]) >>
+  gvs[step_inst_base_def, eval_operands_def] >>
+  BasicProvers.every_case_tac >> gvs[]
+QED
+
+Triviality step_inst_base_operands_none[local]:
+  !inst s.
+    inst_wf inst /\
+    ~MEM inst.inst_opcode [NOP; PHI; STOP; SINK; INVALID;
+      CALLER; ADDRESS; CALLVALUE; GAS; GASLIMIT;
+      ORIGIN; GASPRICE; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; CHAINID;
+      SELFBALANCE; BASEFEE; BLOBBASEFEE; CALLDATASIZE; RETURNDATASIZE;
+      CODESIZE; MSIZE;
+      DJMP; JMP; JNZ; PARAM; ALLOCA; OFFSET] /\
+    eval_operands inst.inst_operands s = NONE ==>
+    ?e. step_inst_base inst s = Error e
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[MEM] >>
+  metis_tac[step_inst_base_operands_none_uniform,
+            step_inst_base_operands_none_custom,
+            step_inst_base_operands_none_log, MEM]
+QED
+
+Theorem step_inst_base_nonerr_var_fdom:
+  !inst s x.
+    inst_wf inst /\
+    ~MEM inst.inst_opcode [NOP; PHI; STOP; SINK; INVALID;
+      CALLER; ADDRESS; CALLVALUE; GAS; GASLIMIT;
+      ORIGIN; GASPRICE; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; CHAINID;
+      SELFBALANCE; BASEFEE; BLOBBASEFEE; CALLDATASIZE; RETURNDATASIZE;
+      CODESIZE; MSIZE] /\
+    MEM (Var x) inst.inst_operands /\
+    (!e. step_inst_base inst s <> Error e) ==>
+    x IN FDOM s.vs_vars
+Proof
+  SPOSE_NOT_THEN STRIP_ASSUME_TAC >>
+  `eval_operand (Var x) s = NONE` by
+    simp[eval_operand_def, lookup_var_def, finite_mapTheory.flookup_thm] >>
+  qpat_x_assum `!e. _ <> _` mp_tac >> simp[] >>
+  imp_res_tac eval_operands_mem_none >>
+  (* DJMP: Var x is sel => eval NONE => Error;
+     Var x in label_ops => contradicts EVERY IS_SOME get_label *)
+  Cases_on `inst.inst_opcode = DJMP` >-
+    (gvs[inst_wf_def] >>
+     (* gvs splits MEM: subgoals with sel=Var x close via step_inst_base *)
+     TRY (gvs[step_inst_base_def, eval_operand_def, lookup_var_def] >> NO_TAC) >>
+     (* remaining: MEM Var x label_ops contradicts EVERY IS_SOME get_label *)
+     gvs[listTheory.EVERY_MEM] >> res_tac >> fs[get_label_def]) >>
+  (* JMP/PARAM/ALLOCA: no Var operands possible *)
+  Cases_on `inst.inst_opcode = JMP` >-
+    gvs[inst_wf_def, LENGTH_EQ_NUM_compute, MEM] >>
+  Cases_on `inst.inst_opcode = PARAM` >-
+    gvs[inst_wf_def, LENGTH_EQ_NUM_compute, MEM] >>
+  Cases_on `inst.inst_opcode = ALLOCA` >-
+    gvs[inst_wf_def, LENGTH_EQ_NUM_compute, MEM] >>
+  (* OFFSET: Var x must be offset_op, eval_operand NONE => Error *)
+  Cases_on `inst.inst_opcode = OFFSET` >-
+    gvs[inst_wf_def, LENGTH_EQ_NUM_compute, MEM, step_inst_base_def,
+        exec_pure2_def] >>
+  (* JNZ: ops = [c; Label l1; Label l2], only Var is c, eval_operand c NONE => Error *)
+  Cases_on `inst.inst_opcode = JNZ` >-
+    (gvs[inst_wf_def, LENGTH_EQ_NUM_compute, MEM, step_inst_base_def,
+        eval_operand_def, lookup_var_def] >>
+     BasicProvers.every_case_tac >> gvs[]) >>
+  (* All other opcodes: use step_inst_base_operands_none *)
+  `~MEM inst.inst_opcode [NOP; PHI; STOP; SINK; INVALID;
+      CALLER; ADDRESS; CALLVALUE; GAS; GASLIMIT;
+      ORIGIN; GASPRICE; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; CHAINID;
+      SELFBALANCE; BASEFEE; BLOBBASEFEE; CALLDATASIZE; RETURNDATASIZE;
+      CODESIZE; MSIZE; DJMP; JMP; JNZ; PARAM; ALLOCA; OFFSET]` by
+    gvs[MEM] >>
+  drule_all step_inst_base_operands_none >> metis_tac[]
+QED
+
+(* ==========================================================================
+   FDOM Monotonicity for step_inst_base
+
+   After a successful non-terminator step_inst_base:
+   1. All existing FDOM vars remain in FDOM
+   2. All inst_outputs are in FDOM
+   Combined: FDOM s'.vs_vars = FDOM s.vs_vars ∪ set inst.inst_outputs
+
+   Proof by opcode case split, grouped to stay under 5s per step.
+   Every non-terminator opcode with outputs uses update_var, giving |+.
+   Every non-terminator opcode without outputs preserves vs_vars.
+   ========================================================================== *)
+
+(* Helper: update_var adds output to FDOM and preserves existing *)
+Triviality update_var_fdom[local]:
+  !x v s. FDOM (update_var x v s).vs_vars = x INSERT FDOM s.vs_vars
+Proof
+  simp[update_var_def, finite_mapTheory.FDOM_FUPDATE]
+QED
+
+(* Helper: FOLDL update_var adds all outputs *)
+Triviality foldl_update_var_fdom[local]:
+  !kvs s.
+    FDOM (FOLDL (\s' (k,v). update_var k v s') s kvs).vs_vars =
+    FDOM s.vs_vars UNION set (MAP FST kvs)
+Proof
+  Induct >> simp[pairTheory.FORALL_PROD] >>
+  rpt gen_tac >> simp[update_var_def, finite_mapTheory.FDOM_FUPDATE] >>
+  simp[pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+
+(* extract_venom_result preserves vs_vars *)
+Triviality extract_venom_result_preserves_vars[local]:
+  !s out ro rs r output s'.
+    extract_venom_result s out ro rs r = SOME (output, s') ==>
+    s'.vs_vars = s.vs_vars
+Proof
+  rpt gen_tac >>
+  simp[extract_venom_result_def] >>
+  BasicProvers.every_case_tac >> simp[] >>
+  strip_tac >> gvs[]
+QED
+
+(* All groups share this tactic pattern *)
+fun prove_fdom_group opcode_list = prove(
+  ``!inst s s'.
+     MEM inst.inst_opcode ^opcode_list /\
+     inst_wf inst /\ step_inst_base inst s = OK s' ==>
+     FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs``,
+  rpt strip_tac >> gvs[MEM] >>
+  gvs[inst_wf_def, LENGTH_EQ_NUM_compute,
+      step_inst_base_def, exec_pure2_def, exec_pure1_def, exec_pure3_def,
+      exec_read0_def, exec_read1_def, exec_write2_def,
+      exec_alloca_def,
+      mstore_def, mstore8_def, sstore_def, tstore_def] >>
+  BasicProvers.every_case_tac >>
+  gvs[update_var_def, finite_mapTheory.FDOM_FUPDATE] >>
+  simp[pred_setTheory.EXTENSION] >> metis_tac[]);
+
+val step_inst_base_fdom_pure2 = prove_fdom_group
+  ``[ADD; SUB; MUL; Div; SDIV; Mod; SMOD; Exp;
+     ADDMOD; MULMOD; EQ; LT; GT; SLT; SGT;
+     AND; OR; XOR; SHL; SHR; SAR; SIGNEXTEND; BYTE]``;
+
+val step_inst_base_fdom_pure1 = prove_fdom_group
+  ``[ISZERO; NOT]``;
+
+val step_inst_base_fdom_read0 = prove_fdom_group
+  ``[CALLER; ADDRESS; CALLVALUE; GAS; GASLIMIT;
+     ORIGIN; GASPRICE; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; CHAINID;
+     SELFBALANCE; BASEFEE; BLOBBASEFEE; CALLDATASIZE; RETURNDATASIZE;
+     CODESIZE; MSIZE]``;
+
+val step_inst_base_fdom_read1 = prove_fdom_group
+  ``[MLOAD; SLOAD; TLOAD; ILOAD; DLOAD;
+     CALLDATALOAD; BALANCE; BLOCKHASH; BLOBHASH;
+     EXTCODESIZE; EXTCODEHASH]``;
+
+val step_inst_base_fdom_write2 = prove_fdom_group
+  ``[MSTORE; MSTORE8; SSTORE; TSTORE; ISTORE]``;
+
+(* Zero-output group needs a different tactic: the state changes are
+   to memory/storage/logs, not vs_vars, so record accessor simp suffices *)
+val step_inst_base_fdom_no_output = prove(
+  ``!inst s s'.
+     MEM inst.inst_opcode [NOP; MCOPY; LOG; CALLDATACOPY; CODECOPY;
+       RETURNDATACOPY; EXTCODECOPY; DLOADBYTES;
+       ASSERT; ASSERT_UNREACHABLE] /\
+     inst_wf inst /\ step_inst_base inst s = OK s' ==>
+     FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs``,
+  rpt strip_tac >> gvs[MEM] >>
+  gvs[inst_wf_def, LENGTH_EQ_NUM_compute, step_inst_base_def] >>
+  BasicProvers.every_case_tac >>
+  gvs[mstore_def, sstore_def, tstore_def,
+      mcopy_def, write_memory_with_expansion_def]);
+
+val step_inst_base_fdom_custom1 = prove_fdom_group
+  ``[ASSIGN; PHI; SHA3; PARAM; ALLOCA; OFFSET]``;
+
+(* External calls: extract_venom_result preserves vs_vars, then update_var adds output *)
+val step_inst_base_fdom_external = prove(
+  ``!inst s s'.
+     MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] /\
+     inst_wf inst /\ step_inst_base inst s = OK s' ==>
+     FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs``,
+  rpt strip_tac >> gvs[MEM] >>
+  gvs[inst_wf_def, LENGTH_EQ_NUM_compute, step_inst_base_def] >>
+  BasicProvers.every_case_tac >>
+  gvs[exec_ext_call_def, exec_delegatecall_def, exec_create_def] >>
+  BasicProvers.every_case_tac >> gvs[] >>
+  imp_res_tac extract_venom_result_preserves_vars >> gvs[] >>
+  gvs[update_var_def, finite_mapTheory.FDOM_FUPDATE] >>
+  simp[pred_setTheory.EXTENSION] >> metis_tac[]);
+
+(* INVOKE: step_inst_base returns Error, so premise is vacuously false *)
+val step_inst_base_fdom_invoke = prove(
+  ``!inst s s'.
+     inst.inst_opcode = INVOKE /\
+     inst_wf inst /\ step_inst_base inst s = OK s' ==>
+     FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs``,
+  rpt strip_tac >> gvs[step_inst_base_def]);
+
+(* Main theorem: combine all parts *)
+Theorem step_inst_base_fdom:
+  !inst s s'.
+    step_inst_base inst s = OK s' /\
+    inst_wf inst /\
+    ~is_terminator inst.inst_opcode ==>
+    FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  metis_tac[step_inst_base_fdom_pure2,
+            step_inst_base_fdom_pure1,
+            step_inst_base_fdom_read0,
+            step_inst_base_fdom_read1,
+            step_inst_base_fdom_write2,
+            step_inst_base_fdom_no_output,
+            step_inst_base_fdom_custom1,
+            step_inst_base_fdom_external,
+            step_inst_base_fdom_invoke,
+            MEM]
+QED
+
+(* bind_outputs FDOM: outputs added to vs_vars *)
+Theorem bind_outputs_fdom:
+  !outs vals s s'.
+    bind_outputs outs vals s = SOME s' ==>
+    FDOM s'.vs_vars = FDOM s.vs_vars UNION set outs
+Proof
+  simp[bind_outputs_def] >> rpt strip_tac >>
+  BasicProvers.every_case_tac >> gvs[] >>
+  metis_tac[foldl_update_var_fdom, listTheory.MAP_ZIP]
+QED
+
+(* Lift to step_inst: covers both INVOKE and non-INVOKE *)
+Theorem step_inst_fdom:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    inst_wf inst /\
+    ~is_terminator inst.inst_opcode ==>
+    FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- (
+    (* INVOKE case: merge_callee preserves vs_vars, bind_outputs adds outputs *)
+    gvs[Once step_inst_def] >>
+    BasicProvers.every_case_tac >> gvs[] >>
+    imp_res_tac bind_outputs_fdom >>
+    gvs[merge_callee_state_def])
+  >- (
+    (* Non-INVOKE: delegate to step_inst_base_fdom *)
+    `step_inst_base inst s = OK s'` by gvs[step_inst_non_invoke] >>
+    metis_tac[step_inst_base_fdom])
+QED
+
+
+
+(* ALL_DISTINCT distributes through FLAT: each member is ALL_DISTINCT *)
+Triviality all_distinct_flat_mem:
+  !ls l. ALL_DISTINCT (FLAT ls) /\ MEM l ls ==> ALL_DISTINCT l
+Proof
+  Induct >> simp[] >> rpt strip_tac >> gvs[ALL_DISTINCT_APPEND]
+QED
+
+(* Same instruction record at two positions in same block ⟹ same index.
+   Uses fn_inst_ids_distinct (part of wf_function). *)
+Theorem inst_ids_el_eq:
+  !fn bb j idx.
+    fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\
+    j < LENGTH bb.bb_instructions /\
+    idx < LENGTH bb.bb_instructions /\
+    EL j bb.bb_instructions = EL idx bb.bb_instructions ==>
+    j = idx
+Proof
+  rpt strip_tac >>
+  fs[fn_inst_ids_distinct_def] >>
+  `MEM (MAP (\i. i.inst_id) bb.bb_instructions)
+       (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) fn.fn_blocks)` by
+    (simp[MEM_MAP] >> metis_tac[]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[all_distinct_flat_mem] >>
+  `ALL_DISTINCT bb.bb_instructions` by metis_tac[ALL_DISTINCT_MAP] >>
+  metis_tac[ALL_DISTINCT_EL_IMP]
+QED
+
+(* ===== CFG path / dominance helpers ===== *)
+
+Theorem is_fn_path_rtc:
+  !fn path. is_fn_path fn path /\ path <> [] ==>
+    (fn_cfg_edge fn)^* (HD path) (LAST path)
+Proof
+  Induct_on `path` >> simp[is_fn_path_def] >>
+  rpt strip_tac >> Cases_on `path` >> gvs[is_fn_path_def] >>
+  irule (CONJUNCT2 (SPEC_ALL relationTheory.RTC_RULES)) >>
+  qexists_tac `h'` >> simp[]
+QED
+
+Theorem rtc_to_fn_path:
+  !fn x y. (fn_cfg_edge fn)^* x y ==>
+    ?path. is_fn_path fn path /\ path <> [] /\ HD path = x /\ LAST path = y
+Proof
+  gen_tac >> ho_match_mp_tac relationTheory.RTC_INDUCT >> rw[]
+  >- (qexists_tac `[x]` >> simp[is_fn_path_def])
+  >- (qexists_tac `x::path` >> Cases_on `path` >> gvs[is_fn_path_def])
+QED
+
+Theorem is_fn_path_prefix:
+  !fn path d. is_fn_path fn path /\ MEM d path ==>
+    ?pre. is_fn_path fn (pre ++ [d]) /\ HD (pre ++ [d]) = HD path
+Proof
+  Induct_on `path` >> simp[] >> rpt strip_tac >> gvs[]
+  >- (qexists_tac `[]` >> simp[is_fn_path_def])
+  >- (Cases_on `path` >> gvs[is_fn_path_def]
+      >- (qexists_tac `[h]` >> simp[is_fn_path_def])
+      >- (first_x_assum (qspecl_then [`fn`, `d`] mp_tac) >> simp[] >>
+          strip_tac >> qexists_tac `h::pre` >>
+          Cases_on `pre` >> gvs[is_fn_path_def]))
+QED
+
+Theorem fn_dominates_dom_reachable:
+  !fn d n. fn_dominates fn d n ==> fn_reachable fn d
+Proof
+  rw[fn_dominates_def, fn_reachable_def] >>
+  qexists_tac `entry` >> simp[] >>
+  drule rtc_to_fn_path >> strip_tac >>
+  `MEM d path` by (first_x_assum irule >> simp[] >> metis_tac[]) >>
+  drule_all is_fn_path_prefix >> strip_tac >>
+  drule is_fn_path_rtc >>
+  simp[listTheory.APPEND_eq_NIL]
+QED
+
+Theorem is_fn_path_snoc:
+  !fn path lbl. is_fn_path fn path /\ path <> [] /\
+    fn_cfg_edge fn (LAST path) lbl ==>
+    is_fn_path fn (path ++ [lbl])
+Proof
+  Induct_on `path` >> simp[is_fn_path_def] >>
+  rpt strip_tac >> Cases_on `path` >> gvs[is_fn_path_def]
+QED
+
+Theorem fn_dominates_predecessor:
+  !fn d n p.
+    fn_dominates fn d n /\ d <> n /\
+    fn_cfg_edge fn p n /\ fn_reachable fn p ==>
+    fn_dominates fn d p
+Proof
+  rw[fn_dominates_def] >> rpt strip_tac >>
+  `is_fn_path fn (path ++ [n])` by (
+    irule is_fn_path_snoc >> simp[]) >>
+  `MEM d (path ++ [n])` by (
+    first_x_assum (qspec_then `path ++ [n]` mp_tac) >>
+    impl_tac >- (
+      simp[listTheory.LAST_APPEND_CONS] >>
+      Cases_on `path` >> gvs[]) >>
+    simp[]) >>
+  gvs[listTheory.MEM_APPEND]
+QED
+
+(* ===== General wf_function helpers ===== *)
+
+Theorem terminator_no_outputs:
+  !inst. is_terminator inst.inst_opcode /\ inst_wf inst ==>
+    inst.inst_outputs = []
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  gvs[inst_wf_def]
+QED
+
+Theorem same_label_same_block:
+  !f bb1 bb2.
+    wf_function f /\ MEM bb1 f.fn_blocks /\ MEM bb2 f.fn_blocks /\
+    bb1.bb_label = bb2.bb_label ==>
+    bb1 = bb2
+Proof
+  rpt strip_tac >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) f.fn_blocks)` by
+    fs[wf_function_def, fn_labels_def] >>
+  `lookup_block bb1.bb_label f.fn_blocks = SOME bb1` by
+    (irule MEM_lookup_block >> simp[]) >>
+  `lookup_block bb1.bb_label f.fn_blocks = SOME bb2` by
+    (irule MEM_lookup_block >> gvs[]) >>
+  gvs[]
+QED
+
+Theorem phi_before_non_phi:
+  !bb i idx.
+    bb_well_formed bb /\
+    i < LENGTH bb.bb_instructions /\
+    idx < LENGTH bb.bb_instructions /\
+    (EL i bb.bb_instructions).inst_opcode = PHI /\
+    (EL idx bb.bb_instructions).inst_opcode <> PHI ==>
+    i < idx
+Proof
+  rpt strip_tac >>
+  CCONTR_TAC >> fs[arithmeticTheory.NOT_LESS] >>
+  `idx = i \/ idx < i` by DECIDE_TAC
+  >- gvs[]
+  >- (fs[bb_well_formed_def] >> metis_tac[])
+QED
+
+(* ===== FDOM monotonicity helpers ===== *)
+
+Theorem lookup_var_fdom:
+  !x s s'.
+    lookup_var x s' = lookup_var x s /\ x IN FDOM s.vs_vars ==>
+    x IN FDOM s'.vs_vars
+Proof
+  rw[lookup_var_def] >>
+  `FLOOKUP s.vs_vars x <> NONE` by metis_tac[flookup_thm] >>
+  Cases_on `FLOOKUP s.vs_vars x` >> gvs[flookup_thm]
+QED
+
+Theorem fn_reachable_step:
+  !f lbl lbl'.
+    fn_reachable f lbl /\ fn_cfg_edge f lbl lbl' ==>
+    fn_reachable f lbl'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `fn_reachable _ _`
+    (strip_assume_tac o REWRITE_RULE[fn_reachable_def]) >>
+  simp[fn_reachable_def] >>
+  metis_tac[relationTheory.RTC_CASES2]
+QED
+
+

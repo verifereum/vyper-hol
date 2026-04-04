@@ -4,7 +4,7 @@
 
 Theory singleUseExpansionProofs
 Ancestors
-  singleUseExpansionDefs passSharedDefs passSharedSubst
+  singleUseExpansionDefs passSharedDefs passSharedProps
   passSimulationDefs passSimulationProofs
   stateEquiv stateEquivProps execEquivParamProofs analysisSimProofsBase
   venomWf venomInstProps dfgAnalysisProps
@@ -1217,7 +1217,7 @@ Proof
     `step_inst fuel ctx (inst with inst_operands := new_ops) st' =
      step_inst fuel ctx inst st'` by (
       qspecl_then [`fuel`, `ctx`, `inst`, `new_ops`, `st'`]
-        mp_tac passSharedSubstTheory.step_inst_operands_equiv >>
+        mp_tac passSharedPropsTheory.step_inst_operands_equiv >>
       impl_tac >- gvs[] >>
       simp[]) >>
     (* Step J: lift_result from step_inst_preserves_R *)

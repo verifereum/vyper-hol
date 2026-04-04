@@ -306,3 +306,14 @@ Proof
             state_equiv_implies_observable]
 QED
 
+(* Empty excluded set means full equality *)
+Theorem state_equiv_empty_eq:
+  !s1 s2. state_equiv {} s1 s2 ==> s1 = s2
+Proof
+  rpt strip_tac >>
+  fs[state_equiv_def, execution_equiv_def] >>
+  simp[venomStateTheory.venom_state_component_equality] >>
+  simp[finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM] >>
+  fs[venomStateTheory.lookup_var_def]
+QED
+

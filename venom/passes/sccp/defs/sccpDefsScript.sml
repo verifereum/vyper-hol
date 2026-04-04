@@ -182,7 +182,9 @@ End
    PHIs are handled in edge_transfer; terminators update sl_targets. *)
 Definition sccp_transfer_inst_def:
   sccp_transfer_inst (fn : ir_function) inst (lat : sccp_lattice) =
-    if inst.inst_opcode = PHI then lat
+    if inst.inst_opcode = PHI then
+      lat with sl_vals :=
+        FOLDL (\l v. l |+ (v, CL_Bottom)) lat.sl_vals inst.inst_outputs
     else if is_terminator inst.inst_opcode then
       (* Terminator: determine outgoing executable edges *)
       if inst.inst_opcode = JMP then
@@ -370,6 +372,14 @@ End
    Returns SOME fn' with the optimized function otherwise.
    Uses df_at per instruction: each sccp_inst gets the lattice
    value just before that instruction (pre-instruction fixpoint). *)
+(* Soundness: every constant in the lattice matches the concrete state.
+   Proof predicate for simulation proofs. *)
+Definition const_sound_def:
+  const_sound (st : const_lattice) (s : venom_state) <=>
+    !v c. FLOOKUP st v = SOME (CL_Const c) ==>
+      FLOOKUP s.vs_vars v = SOME c
+End
+
 Definition sccp_function_def:
   sccp_function fn =
     let result = sccp_df_analyze fn in
@@ -377,4 +387,10 @@ Definition sccp_function_def:
     else SOME (clear_nops_function
       (analysis_function_transform sccp_bottom result
         (\lat inst. [sccp_inst lat.sl_vals inst]) fn))
+End
+
+Definition sccp_context_def:
+  sccp_context ctx =
+    ctx with ctx_functions :=
+      MAP (\fn. case sccp_function fn of NONE => fn | SOME fn' => fn') ctx.ctx_functions
 End
