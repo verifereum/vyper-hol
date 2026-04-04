@@ -1259,3 +1259,71 @@ Proof
     simp[sccp_fn_entry_label] >>
   gvs[fn_entry_label_def, entry_block_def, listTheory.NULL_EQ]
 QED
+
+(* ================================================================= *)
+(*  Context-level pass_correct                                       *)
+(* ================================================================= *)
+
+Theorem sccp_pass_correct:
+  !ctx entry.
+    venom_wf ctx /\
+    (!f. MEM f ctx.ctx_functions ==> wf_ssa f) /\
+    lookup_function entry ctx.ctx_functions <> NONE ==>
+    let ctx' = sccp_context ctx in
+    ?f f'.
+      lookup_function entry ctx.ctx_functions = SOME f /\
+      lookup_function entry ctx'.ctx_functions = SOME f' /\
+      !s. s.vs_inst_idx = 0 /\ fn_entry_label f = SOME s.vs_current_bb /\
+          FDOM s.vs_vars = {} ==>
+          pass_correct (state_equiv {}) (execution_equiv {})
+            (\fuel. run_function fuel ctx f s)
+            (\fuel. run_function fuel ctx' f' s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[LET_THM] >>
+  Cases_on `lookup_function entry ctx.ctx_functions` >> fs[] >>
+  rename1 `lookup_function entry ctx.ctx_functions = SOME f` >>
+  qexists_tac `sccp_fn f` >>
+  conj_tac >- (
+    simp[sccp_context_def, sccp_fn_def] >>
+    metis_tac[lookup_function_sccp_context]) >>
+  rpt strip_tac >>
+  `MEM f ctx.ctx_functions` by metis_tac[lookup_function_MEM] >>
+  `wf_function f /\ fn_inst_wf f` by fs[venom_wf_def] >>
+  `wf_ssa f` by metis_tac[] >>
+  irule lift_result_implies_pass_correct >>
+  simp[] >> rpt conj_tac
+  >- (
+    rpt strip_tac >>
+    `!e. run_function fuel ctx f s <> Error e` by
+      (Cases_on `run_function fuel ctx f s` >> fs[terminates_def]) >>
+    `!e. run_function fuel' ctx f s <> Error e` by
+      (Cases_on `run_function fuel' ctx f s` >> fs[terminates_def]) >>
+    Cases_on `fuel <= fuel'`
+    >- metis_tac[fuel_mono]
+    >- (`fuel' <= fuel` by simp[] >> metis_tac[fuel_mono]))
+  >- (
+    rpt strip_tac >>
+    `!e. run_function fuel (sccp_context ctx) (sccp_fn f) s <> Error e` by
+      (Cases_on `run_function fuel (sccp_context ctx) (sccp_fn f) s` >>
+       fs[terminates_def]) >>
+    `!e. run_function fuel' (sccp_context ctx) (sccp_fn f) s <> Error e` by
+      (Cases_on `run_function fuel' (sccp_context ctx) (sccp_fn f) s` >>
+       fs[terminates_def]) >>
+    Cases_on `fuel <= fuel'`
+    >- metis_tac[fuel_mono]
+    >- (`fuel' <= fuel` by simp[] >> metis_tac[fuel_mono]))
+  >- (
+    gen_tac >>
+    mp_tac (Q.SPECL [`fuel`, `ctx`] sccp_run_function_equiv) >>
+    simp[] >> disch_then (qspecl_then [`f`, `s`] mp_tac) >>
+    simp[] >>
+    (impl_tac >- (
+      rpt conj_tac
+      >- metis_tac[nophi_inv_entry]
+      >- (irule strict_dom_vars_defined_entry >> metis_tac[])
+      >- (simp[fn_reachable_def] >> metis_tac[relationTheory.RTC_REFL]))) >>
+    simp[result_equiv_is_lift_result])
+QED
+
+
