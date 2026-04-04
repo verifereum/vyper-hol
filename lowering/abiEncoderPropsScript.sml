@@ -17,7 +17,7 @@
 
 Theory abiEncoderProps
 Ancestors
-  exprLoweringProps
+  exprLoweringProps emitHelper emitHelperProps
   abiEncoder compileEnv
   venomExecSemantics venomState venomInst
   valueEncoding
@@ -34,7 +34,45 @@ Theorem compile_abi_int_clamp_correct:
       run_inst_seq (emitted_insts st st') ss = OK ss' ∨
       run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof
-  cheat
+  rw[compile_abi_int_clamp_def] >>
+  gvs[comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  drule emitted_insts_emit_op >>
+  pop_assum mp_tac >>
+  drule emitted_insts_emit_op >>
+  rpt strip_tac >>
+  qmatch_asmsub_rename_tac`emitted_insts st st1` >>
+  qmatch_asmsub_rename_tac`emitted_insts st1 st2` >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  qspecl_then[`st`,`st1`,`st2`]mp_tac emitted_insts_append >>
+  (impl_tac >- rw[]) >> strip_tac >>
+  qspecl_then[`st`,`st2`,`st'`]mp_tac emitted_insts_append >>
+  (impl_tac >- rw[]) >> strip_tac >>
+  gvs[] >>
+  irule run_pure2_assert_ok_or_revert >>
+  TRY (
+    qmatch_goalsub_abbrev_tac`mk_inst _ SIGNEXTEND [op1; op2]` >>
+    qspecl_then[`op1`,`op2`]mp_tac step_SIGNEXTEND >>
+    disch_then (drule_at Any) >>
+    simp[Abbr`op1`, eval_operand_def] >> disch_then kall_tac ) >>
+  unabbrev_all_tac >>
+  TRY (
+    qmatch_goalsub_abbrev_tac`mk_inst _ SHR [op1; op2]` >>
+    qspecl_then[`op1`,`op2`]mp_tac step_SHR >>
+    disch_then (drule_at Any) >>
+    simp[Abbr`op1`, eval_operand_def] >> disch_then kall_tac ) >>
+  unabbrev_all_tac >>
+  qmatch_goalsub_abbrev_tac`step_inst_base _ ssu` >>
+  TRY (
+    qmatch_goalsub_abbrev_tac`mk_inst _ EQ [op1; op2]` >>
+    qspecl_then[`op1`,`op2`]mp_tac step_EQ >>
+    CONV_TAC(LAND_CONV(RESORT_FORALL_CONV(sort_vars["ss"]))) >>
+    disch_then(qspec_then`ssu`mp_tac) >>
+    simp[Abbr`op2`, eval_operand_def, Abbr`ssu`, lookup_var_update_var] >>
+    NO_TAC (* TODO: continue once we have fresh var assumption *) ) >>
+  cheat (* need fresh var assumption *)
+  (* assert_ok_or_revert *)
 QED
 
 (* Bytes clamping: rejects values with non-zero high bits *)
