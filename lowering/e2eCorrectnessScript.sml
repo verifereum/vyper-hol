@@ -1,15 +1,21 @@
 (*
  * End-to-End Vyper-to-EVM Correctness
  *
- * Composes three legs:
+ * TOP-LEVEL theorem: vyper_call_correct
+ *   When EVM execution enters compiled Vyper bytecode (via CALL at
+ *   any point in the call stack), the result corresponds to the
+ *   Vyper source semantics (call_external).
+ *
+ * Internal proof structure (not visible in the top-level statement):
  *   1. vyper_to_venom_correct: call_external ~ run_context
  *   2. venom_pipeline_correct: run_context ~ run_context o pipeline
  *   3. codegen_correct: run_context ~ EVM run
  *
  * TOP-LEVEL:
- *   compile_vyper_raw      -- full compilation chain (exploded args)
- *   compile_vyper_raw_well_formed -- compilation => codegen preconditions
- *   e2e_vyper_to_evm       -- Vyper source semantics ~ EVM execution
+ *   run_call                -- EVM execution of a single call frame
+ *   call_state_rel          -- pre-call Vyper/EVM state correspondence
+ *   vyper_call_correct      -- main correctness theorem
+ *   compile_vyper_raw       -- full compilation chain (exploded args)
  *
  * Definitions (return_data_encodes, log_entry_corresponds,
  * state_effects_match, etc.) are in e2eDefsTheory.
@@ -27,6 +33,204 @@ Ancestors
   vyperABI
   compileEnv compileVyper
   venomInst
+
+(* =====================================================================
+   Call-Level Correctness (Main Theorem)
+   ===================================================================== *)
+
+(* ===== run_call: EVM execution of a single call frame ===== *)
+
+(* Execute the current call frame until it completes.
+   Keeps stepping while: execution hasn't aborted (ISL r) AND the
+   context stack is at least as deep as when we started (our frame
+   hasn't been popped yet).
+
+   Returns SOME es' when the frame completes:
+   - Normal case (depth > 1): our frame was popped by handle_exception,
+     result incorporated into the caller's context. es' has the
+     caller's context on top with returndata set, success flag pushed
+     on stack, accounts updated or rolled back.
+   - Outermost frame (depth = 1): handle_exception reraises, result
+     is (INR exc_opt, es').
+   - vfm_abort: hard abort, returns (INR exc_opt, es') with our
+     frame still on the stack.
+   Returns NONE only for non-termination (impossible with finite gas). *)
+Definition run_call_def:
+  run_call es =
+    let depth = LENGTH es.contexts in
+    OWHILE (λ(r, s). ISL r ∧ LENGTH s.contexts ≥ depth)
+           (step o SND)
+           (INL (), es)
+End
+
+(* ===== Pre-call state correspondence ===== *)
+
+(* The EVM is starting a fresh call to compiled Vyper bytecode, and
+   the runtime state corresponds to the Vyper abstract machine / tx.
+   Covers: fresh call frame setup, account/storage correspondence,
+   call parameters, block/chain context, type environment, and
+   source deployment. *)
+Definition call_state_rel_def:
+  call_state_rel (program : toplevel list) bytecode am tx tenv
+                 (ctxt : context) (rb : rollback_state)
+                 (txp : transaction_parameters) ⇔
+    (* Fresh call frame: bytecode loaded, pc=0, empty stack *)
+    ctxt.msgParams.code = bytecode ∧
+    ctxt.msgParams.parsed = parse_code 0 FEMPTY bytecode ∧
+    ctxt.pc = 0 ∧
+    ctxt.stack = [] ∧
+    ctxt.logs = [] ∧
+    ctxt.returnData = [] ∧
+    ctxt.memory = [] ∧
+    (* Accounts and transient storage match *)
+    rb.accounts = am.accounts ∧
+    rb.tStorage = am.tStorage ∧
+    (* Call parameters match *)
+    ctxt.msgParams.caller = tx.sender ∧
+    ctxt.msgParams.callee = tx.target ∧
+    ctxt.msgParams.value = tx.value ∧
+    (* Block and chain context match *)
+    txp.origin = tx.origin ∧
+    txp.gasPrice = tx.gas_price ∧
+    txp.baseFeePerGas = tx.base_fee ∧
+    txp.blockNumber = tx.block_number ∧
+    txp.blockTimeStamp = tx.time_stamp ∧
+    txp.blockCoinBase = tx.coinbase ∧
+    txp.blockGasLimit = tx.gas_limit ∧
+    txp.chainId = tx.chain_id ∧
+    txp.blobHashes = tx.blob_hashes ∧
+    txp.baseFeePerBlobGas = tx.blob_base_fee ∧
+    (* Type environment is derived from program *)
+    tenv = type_env program ∧
+    (* Source is deployed at target address *)
+    (∃mods. ALOOKUP am.sources tx.target = SOME mods)
+End
+
+(* ===== Valid call ===== *)
+
+(* The calldata encodes a valid call to an exported function of
+   the Vyper program. Binds ret (return type) which is needed
+   by the postcondition for ABI encoding of the return value. *)
+Definition valid_vyper_call_def:
+  valid_vyper_call am tx tenv calldata ret ⇔
+    ∃mut nr args dflts body.
+      lookup_exported_function
+        (initial_evaluation_context am.sources am.layouts tx) am
+        tx.function_name = SOME (mut, nr, args, dflts, ret, body) ∧
+      calldata_encodes tenv tx.function_name (MAP SND args) tx.args
+        calldata
+End
+
+(* ===== Post-call result correspondence ===== *)
+
+(* Relates the result of call_external to the EVM state after
+   run_call completes. Takes both the starting state es and final
+   state es_f, making preserved/changed fields explicit.
+
+   Handles both outermost (r = INR exc_opt) and inner
+   (r = INL (), frame popped) calls.
+
+   Key uniformities across both cases:
+   - Returndata: always in (FST (HD es_f.contexts)).returnData
+     (callee's context for outermost; caller's after set_return_data
+     for inner — handle_exception copies it before popping)
+   - Accounts on success: es_f.rollback.accounts = am'.accounts
+     (update_accounts modifies rollback; pop doesn't change it
+     on success)
+   - Accounts on revert: outermost leaves dirty accounts (caller
+     handles rollback via r = INR (SOME Reverted)); inner has
+     pop_and_incorporate_context restore pre-call rollback
+   - Logs: callee's new EVM logs appended to the caller's pre-call
+     logs. For outermost, pre-call logs are [] (callee's context
+     started empty). For inner, they come from HD (TL es.contexts).
+   - txParams: unchanged *)
+
+(* Helper: the caller's logs before the call.
+   Outermost (no caller): [].
+   Inner: logs from the caller's context in the original state. *)
+Definition caller_pre_logs_def:
+  caller_pre_logs [] = ([] : event list) ∧
+  caller_pre_logs (((ctxt : context), rb) :: _) = ctxt.logs
+End
+
+Definition call_result_matches_def:
+  call_result_matches tenv event_info am tx ret r es es_f ⇔
+    ∃ctxt_hd rb_hd accts tstor accs tdel md.
+    (* es_f is es with contexts, rollback, msdomain updated.
+       txParams preserved. Deeper contexts preserved. *)
+    es_f = es with <|
+      contexts := (ctxt_hd, rb_hd) :: TL (TL es.contexts);
+      rollback := es.rollback with <|
+        accounts := accts; tStorage := tstor;
+        accesses := accs; toDelete := tdel
+      |>;
+      msdomain := md
+    |> ∧
+    case call_external am tx of
+      (INL v, am') =>
+        (* EVM indicates success *)
+        (r = INR NONE ∨
+         (r = INL () ∧
+          ¬NULL ctxt_hd.stack ∧ HD ctxt_hd.stack = 1w)) ∧
+        (* Returndata encodes the return value *)
+        return_data_encodes tenv ret v es_f ∧
+        (* Accounts and transient storage committed *)
+        accts = am'.accounts ∧ tstor = am'.tStorage ∧
+        (* Callee's new logs correspond to Vyper's logs *)
+        (∃evm_logs.
+           ctxt_hd.logs =
+             caller_pre_logs (TL es.contexts) ++ evm_logs ∧
+           logs_correspond event_info tenv tx.target
+             am'.logs evm_logs)
+    | (INR (AssertException _), _) =>
+        (* Outermost: r signals revert, caller handles rollback.
+           Inner: frame popped, caller sees 0w on stack,
+           accounts rolled back by pop_and_incorporate_context. *)
+        r = INR (SOME Reverted) ∨
+        (r = INL () ∧
+         ¬NULL ctxt_hd.stack ∧ HD ctxt_hd.stack = 0w ∧
+         accts = am.accounts ∧ tstor = am.tStorage)
+    | (INR (Error _), _) => T
+    | (INR BreakException, _) => F
+    | (INR ContinueException, _) => F
+    | (INR (ReturnException _), _) => F
+End
+
+(* ===== Main Correctness Theorem ===== *)
+
+(* Compiler correctness for a single external call.
+
+   When EVM execution enters compiled Vyper bytecode (at any point
+   in the call stack), the result corresponds to the Vyper source
+   semantics (call_external am tx).
+
+   Covers both outermost calls (rest = [], as in a transaction) and
+   inner calls (rest ≠ [], as in a CALL from another contract).
+   The pipeline and all Venom-internal details are hidden in the proof.
+
+   Gas is existential: there exists a gas bound such that with enough
+   gas, EVM execution produces the correct result. *)
+Theorem vyper_call_correct:
+  ∀program pipeline dispatch_strategy runtime_bc
+   am tx tenv ret ctxt rb rest es event_info.
+    (∃deploy_bc.
+       compile_vyper program pipeline dispatch_strategy
+         = SOME (deploy_bc, runtime_bc)) ∧
+    es.contexts = (ctxt, rb) :: rest ∧
+    call_state_rel program runtime_bc am tx tenv
+      ctxt rb es.txParams ∧
+    valid_vyper_call am tx tenv ctxt.msgParams.data ret
+    ⇒
+    ∃gas_needed.
+      ctxt.msgParams.gasLimit ≥ gas_needed ⇒
+      ∃r es_final.
+        run_call es = SOME (r, es_final) ∧
+        call_result_matches tenv event_info am tx ret r es es_final
+Proof
+  cheat
+QED
+
+(* ===================================================================== *)
 
 (* ===== Full Compilation ===== *)
 
