@@ -129,28 +129,30 @@ QED
 
 Theorem mstore_preserves_val_in_memory:
   (∀ ty v off mem off2 (w:bytes32).
-    val_in_memory ty v off mem ∧
+    val_in_memory ty v off mem ∧ val_wf ty v ∧
     (off2 + 32 ≤ off ∨ off + type_memory_size ty ≤ off2) ⇒
     val_in_memory ty v off (mstore off2 w (s with vs_memory := mem)).vs_memory) ∧
   (∀ fields field_tvs off mem off2 (w:bytes32).
     fields_in_memory fields field_tvs off mem ∧
+    fields_val_wf fields field_tvs ∧
     (off2 + 32 ≤ off ∨ off + type_memory_size_fields field_tvs ≤ off2) ⇒
     fields_in_memory fields field_tvs off
       (mstore off2 w (s with vs_memory := mem)).vs_memory) ∧
   (∀ vs off tv mem off2 (w:bytes32).
-    elems_in_memory vs off tv mem ∧
+    elems_in_memory vs off tv mem ∧ elems_val_wf vs tv ∧
     (off2 + 32 ≤ off ∨ off + LENGTH vs * type_memory_size tv ≤ off2) ⇒
     elems_in_memory vs off tv
       (mstore off2 w (s with vs_memory := mem)).vs_memory) ∧
   (∀ (kvs : (num # value) list) base_off tv mem off2 (w:bytes32).
     kvs_in_memory kvs base_off tv mem ∧
+    (∀ k v. MEM (k,v) kvs ⇒ val_wf tv v) ∧
     (∀ k v. MEM (k,v) kvs ⇒
       off2 + 32 ≤ base_off + k * type_memory_size tv ∨
       base_off + k * type_memory_size tv + type_memory_size tv ≤ off2) ⇒
     kvs_in_memory kvs base_off tv
       (mstore off2 w (s with vs_memory := mem)).vs_memory) ∧
   (∀ vs tvs off mem off2 (w:bytes32).
-    tuple_in_memory vs tvs off mem ∧
+    tuple_in_memory vs tvs off mem ∧ tuple_val_wf vs tvs ∧
     (off2 + 32 ≤ off ∨ off + type_memory_size_list tvs ≤ off2) ⇒
     tuple_in_memory vs tvs off
       (mstore off2 w (s with vs_memory := mem)).vs_memory)
