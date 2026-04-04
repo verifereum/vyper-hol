@@ -12,7 +12,7 @@
 
 Theory venomExecProofs
 Ancestors
-  venomExecSemantics venomInst venomInstProofs venomState venomWf rich_list list
+  venomExecSemantics venomInst venomInstProofs venomState venomWf rich_list list finite_map
 
 (* ==========================================================================
    bool_to_word Properties
@@ -1346,3 +1346,145 @@ Proof
   `ALL_DISTINCT bb.bb_instructions` by metis_tac[ALL_DISTINCT_MAP] >>
   metis_tac[ALL_DISTINCT_EL_IMP]
 QED
+
+(* ===== CFG path / dominance helpers ===== *)
+
+Theorem is_fn_path_rtc:
+  !fn path. is_fn_path fn path /\ path <> [] ==>
+    (fn_cfg_edge fn)^* (HD path) (LAST path)
+Proof
+  Induct_on `path` >> simp[is_fn_path_def] >>
+  rpt strip_tac >> Cases_on `path` >> gvs[is_fn_path_def] >>
+  irule (CONJUNCT2 (SPEC_ALL relationTheory.RTC_RULES)) >>
+  qexists_tac `h'` >> simp[]
+QED
+
+Theorem rtc_to_fn_path:
+  !fn x y. (fn_cfg_edge fn)^* x y ==>
+    ?path. is_fn_path fn path /\ path <> [] /\ HD path = x /\ LAST path = y
+Proof
+  gen_tac >> ho_match_mp_tac relationTheory.RTC_INDUCT >> rw[]
+  >- (qexists_tac `[x]` >> simp[is_fn_path_def])
+  >- (qexists_tac `x::path` >> Cases_on `path` >> gvs[is_fn_path_def])
+QED
+
+Theorem is_fn_path_prefix:
+  !fn path d. is_fn_path fn path /\ MEM d path ==>
+    ?pre. is_fn_path fn (pre ++ [d]) /\ HD (pre ++ [d]) = HD path
+Proof
+  Induct_on `path` >> simp[] >> rpt strip_tac >> gvs[]
+  >- (qexists_tac `[]` >> simp[is_fn_path_def])
+  >- (Cases_on `path` >> gvs[is_fn_path_def]
+      >- (qexists_tac `[h]` >> simp[is_fn_path_def])
+      >- (first_x_assum (qspecl_then [`fn`, `d`] mp_tac) >> simp[] >>
+          strip_tac >> qexists_tac `h::pre` >>
+          Cases_on `pre` >> gvs[is_fn_path_def]))
+QED
+
+Theorem fn_dominates_dom_reachable:
+  !fn d n. fn_dominates fn d n ==> fn_reachable fn d
+Proof
+  rw[fn_dominates_def, fn_reachable_def] >>
+  qexists_tac `entry` >> simp[] >>
+  drule rtc_to_fn_path >> strip_tac >>
+  `MEM d path` by (first_x_assum irule >> simp[] >> metis_tac[]) >>
+  drule_all is_fn_path_prefix >> strip_tac >>
+  drule is_fn_path_rtc >>
+  simp[listTheory.APPEND_eq_NIL]
+QED
+
+Theorem is_fn_path_snoc:
+  !fn path lbl. is_fn_path fn path /\ path <> [] /\
+    fn_cfg_edge fn (LAST path) lbl ==>
+    is_fn_path fn (path ++ [lbl])
+Proof
+  Induct_on `path` >> simp[is_fn_path_def] >>
+  rpt strip_tac >> Cases_on `path` >> gvs[is_fn_path_def]
+QED
+
+Theorem fn_dominates_predecessor:
+  !fn d n p.
+    fn_dominates fn d n /\ d <> n /\
+    fn_cfg_edge fn p n /\ fn_reachable fn p ==>
+    fn_dominates fn d p
+Proof
+  rw[fn_dominates_def] >> rpt strip_tac >>
+  `is_fn_path fn (path ++ [n])` by (
+    irule is_fn_path_snoc >> simp[]) >>
+  `MEM d (path ++ [n])` by (
+    first_x_assum (qspec_then `path ++ [n]` mp_tac) >>
+    impl_tac >- (
+      simp[listTheory.LAST_APPEND_CONS] >>
+      Cases_on `path` >> gvs[]) >>
+    simp[]) >>
+  gvs[listTheory.MEM_APPEND]
+QED
+
+(* ===== General wf_function helpers ===== *)
+
+Theorem terminator_no_outputs:
+  !inst. is_terminator inst.inst_opcode /\ inst_wf inst ==>
+    inst.inst_outputs = []
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  gvs[inst_wf_def]
+QED
+
+Theorem same_label_same_block:
+  !f bb1 bb2.
+    wf_function f /\ MEM bb1 f.fn_blocks /\ MEM bb2 f.fn_blocks /\
+    bb1.bb_label = bb2.bb_label ==>
+    bb1 = bb2
+Proof
+  rpt strip_tac >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) f.fn_blocks)` by
+    fs[wf_function_def, fn_labels_def] >>
+  `lookup_block bb1.bb_label f.fn_blocks = SOME bb1` by
+    (irule MEM_lookup_block >> simp[]) >>
+  `lookup_block bb1.bb_label f.fn_blocks = SOME bb2` by
+    (irule MEM_lookup_block >> gvs[]) >>
+  gvs[]
+QED
+
+Theorem phi_before_non_phi:
+  !bb i idx.
+    bb_well_formed bb /\
+    i < LENGTH bb.bb_instructions /\
+    idx < LENGTH bb.bb_instructions /\
+    (EL i bb.bb_instructions).inst_opcode = PHI /\
+    (EL idx bb.bb_instructions).inst_opcode <> PHI ==>
+    i < idx
+Proof
+  rpt strip_tac >>
+  CCONTR_TAC >> fs[arithmeticTheory.NOT_LESS] >>
+  `idx = i \/ idx < i` by DECIDE_TAC
+  >- gvs[]
+  >- (fs[bb_well_formed_def] >> metis_tac[])
+QED
+
+(* ===== FDOM monotonicity helpers ===== *)
+
+Theorem lookup_var_fdom:
+  !x s s'.
+    lookup_var x s' = lookup_var x s /\ x IN FDOM s.vs_vars ==>
+    x IN FDOM s'.vs_vars
+Proof
+  rw[lookup_var_def] >>
+  `FLOOKUP s.vs_vars x <> NONE` by metis_tac[flookup_thm] >>
+  Cases_on `FLOOKUP s.vs_vars x` >> gvs[flookup_thm]
+QED
+
+Theorem fn_reachable_step:
+  !f lbl lbl'.
+    fn_reachable f lbl /\ fn_cfg_edge f lbl lbl' ==>
+    fn_reachable f lbl'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `fn_reachable _ _`
+    (strip_assume_tac o REWRITE_RULE[fn_reachable_def]) >>
+  simp[fn_reachable_def] >>
+  metis_tac[relationTheory.RTC_CASES2]
+QED
+
+
