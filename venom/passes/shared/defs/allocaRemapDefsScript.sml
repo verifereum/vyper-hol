@@ -119,10 +119,11 @@ Definition alloca_remap_rel_def:
        lookup_var v s2 = SOME (n2w new_off)) /\
     (* 3. Memory content at alloca regions agrees *)
     alloca_mem_agrees remap s1 s2 /\
-    (* 4. Memory OUTSIDE alloca regions is byte-identical.
-       Required for non-pointer memory access (e.g. MLOAD [Lit 0x100w])
-       to produce the same result in both states. *)
-    (!i. ~in_alloca_region s1 i ==>
+    (* 4. Memory OUTSIDE alloca regions (in BOTH states) is byte-identical.
+       Two-sided: a position inside s2's alloca but outside s1's may
+       differ, and vice versa. Required for non-pointer memory access
+       (e.g. MLOAD [Lit 0x100w]) to produce the same result. *)
+    (!i. ~in_alloca_region s1 i /\ ~in_alloca_region s2 i ==>
          mem_byte_at s1.vs_memory i = mem_byte_at s2.vs_memory i) /\
     (* 5. Alloca regions are non-overlapping in both states.
        Required for mstore within one region to not corrupt
