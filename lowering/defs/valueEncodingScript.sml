@@ -5,6 +5,7 @@
  *   val_to_w256     : value → bytes32 (primitive word encoding)
  *   w256_to_val     : bytes32 → type_value → value (decode)
  *   val_in_memory   : value → num → byte list → bool (compound types in memory)
+ *   val_wf          : type_value → value → bool (value fits type's memory footprint)
  *
  * Helper:
  *   bool_to_w256, int_to_w256 — sub-cases of val_to_w256
@@ -261,6 +262,88 @@ Termination
         list_size (pair_size (K 0) value_size) kvs
     (* tuple_in_memory *)
     | INR (INR (INR (INR (vs, _, _, _)))) => list_size value_size vs`
+  >> simp[basicSizeTheory.pair_size_def, listTheory.list_size_def,
+          value_size_def]
+  >> Induct >> simp[listTheory.list_size_def, basicSizeTheory.pair_size_def]
+  >> Cases >> simp[basicSizeTheory.pair_size_def]
+End
+
+(* ===== Value Well-Formedness for Memory Layout ===== *)
+
+(* val_wf ty v: value v fits within type_memory_size ty bytes.
+   Needed as precondition for disjointness preservation (mstore_preserves_val_in_memory).
+   The issue: for dynamic BytesT/StringT, val_in_memory permits data of any LENGTH,
+   but type_memory_size computes from the declared capacity.
+   Similarly, DynArray length and SArray indices must fit the declared bound.
+   For well-typed programs this always holds; val_wf makes it explicit. *)
+Definition val_wf_def:
+  val_wf ty (BoolV _) = (32 ≤ type_memory_size ty) ∧
+  val_wf ty (IntV _) = (32 ≤ type_memory_size ty) ∧
+  val_wf ty (FlagV _) = (32 ≤ type_memory_size ty) ∧
+  val_wf ty (DecimalV _) = (32 ≤ type_memory_size ty) ∧
+  (* BytesV: fixed/address → 32-byte word, always fits.
+     Dynamic bytes → actual data must fit type capacity. *)
+  val_wf ty (BytesV bs) =
+    (case ty of
+       BaseTV (BytesT (Fixed _)) => T
+     | BaseTV AddressT => T
+     | _ => LENGTH bs + 32 ≤ type_memory_size ty) ∧
+  (* StringV: length-prefixed layout, data must fit *)
+  val_wf ty (StringV s) = (LENGTH s + 32 ≤ type_memory_size ty) ∧
+  val_wf ty NoneV = T ∧
+  (* Compound types: recursive well-formedness on sub-values *)
+  val_wf ty (StructV fields) =
+    (case ty of
+       StructTV field_tvs => fields_val_wf fields field_tvs
+     | _ => F) ∧
+  val_wf ty (ArrayV (DynArrayV vs)) =
+    (case ty of
+       ArrayTV elem_tv (Dynamic n) =>
+         LENGTH vs ≤ n ∧ elems_val_wf vs elem_tv
+     | _ => F) ∧
+  val_wf ty (ArrayV (SArrayV kvs)) =
+    (case ty of
+       ArrayTV elem_tv (Fixed bound) =>
+         kvs_val_wf kvs elem_tv bound
+     | _ => F) ∧
+  val_wf ty (ArrayV (TupleV vs)) =
+    (case ty of
+       TupleTV tvs => tuple_val_wf vs tvs
+     | _ => F) ∧
+  (* fields: each field well-formed with its type — F if types run out *)
+  fields_val_wf [] _ = T ∧
+  fields_val_wf ((_, v) :: rest) field_tvs =
+    (case field_tvs of
+       (_, tv) :: tvs => val_wf tv v ∧ fields_val_wf rest tvs
+     | [] => F) ∧
+  (* elements: homogeneous type *)
+  elems_val_wf [] _ = T ∧
+  elems_val_wf (v :: vs) tv = (val_wf tv v ∧ elems_val_wf vs tv) ∧
+  (* kv elements: index < bound, value well-formed *)
+  kvs_val_wf ([] : (num # value) list) _ _ = T ∧
+  kvs_val_wf ((k:num, v) :: rest) tv bound =
+    (k < bound ∧ val_wf tv v ∧ kvs_val_wf rest tv bound) ∧
+  (* tuple: heterogeneous types — F if types run out *)
+  tuple_val_wf [] _ = T ∧
+  tuple_val_wf (v :: vs) tvs =
+    (case tvs of
+       tv :: tvs' => val_wf tv v ∧ tuple_val_wf vs tvs'
+     | [] => F)
+Termination
+  WF_REL_TAC `measure $ λx.
+    case x of
+    (* val_wf *)
+      INL (_, v) => value_size v
+    (* fields_val_wf *)
+    | INR (INL (fields, _)) =>
+        list_size (pair_size (list_size char_size) value_size) fields
+    (* elems_val_wf *)
+    | INR (INR (INL (vs, _))) => list_size value_size vs
+    (* kvs_val_wf *)
+    | INR (INR (INR (INL (kvs, _, _)))) =>
+        list_size (pair_size (K 0) value_size) kvs
+    (* tuple_val_wf *)
+    | INR (INR (INR (INR (vs, _)))) => list_size value_size vs`
   >> simp[basicSizeTheory.pair_size_def, listTheory.list_size_def,
           value_size_def]
   >> Induct >> simp[listTheory.list_size_def, basicSizeTheory.pair_size_def]
