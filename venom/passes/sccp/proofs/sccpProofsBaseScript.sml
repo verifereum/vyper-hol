@@ -35,7 +35,7 @@ Ancestors
   venomWf venomExecSemantics venomInst venomInstProps venomExecProps venomState
   dfAnalyzeDefs dfAnalyzeProofs
   cfgAnalysisProps cfgDefs
-  passSharedDefs passSharedSubst
+  passSharedDefs passSharedProps
   stateEquiv stateEquivProps
   execEquivParamBase execEquivParamProps
   finite_map worklistDefs worklistProofs

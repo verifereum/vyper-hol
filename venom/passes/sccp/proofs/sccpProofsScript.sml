@@ -12,7 +12,7 @@ Ancestors
   venomWf venomExecSemantics venomInst
   dfAnalyzeDefs dfAnalyzeProofs
   cfgAnalysisProps cfgDefs
-  passSharedDefs passSharedSubst venomInstProps venomExecProps
+  passSharedDefs passSharedProps venomInstProps venomExecProps
   stateEquiv stateEquivProps
   execEquivParamBase execEquivParamProps
   passSimulationDefs passSimulationProps passSimulationProofs

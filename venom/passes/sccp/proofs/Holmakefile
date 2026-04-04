@@ -1,7 +1,7 @@
 INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec \
            ../../../../syntax ../../../../semantics \
            ../../../defs ../../../proofs ../../../props \
-           ../../shared/defs ../../shared/proofs \
+           ../../shared ../../shared/defs \
            ../../../simulation ../../../simulation/defs ../../../simulation/proofs \
            ../../../analysis/dataflow/defs ../../../analysis/dataflow/proofs \
            ../../../analysis/cfg/defs ../../../analysis/cfg/proofs \

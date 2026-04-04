@@ -12,7 +12,7 @@
 Theory sccpSound
 Ancestors
   sccpDefs analysisSimProps passSimulationProps venomWf venomInstProps
-  cfgAnalysisProps passSharedSubst
+  cfgAnalysisProps passSharedProps
   venomState venomInst analysisSimDefs passSimulationDefs
   stateEquiv stateEquivProps execEquivParamDefs execEquivParamProps
   venomExecSemantics venomExecProofs passSharedDefs
@@ -176,7 +176,7 @@ Proof
    subst_operands_map subs inst` by
     simp[subst_operands_map_def] >>
   pop_assum (fn th => REWRITE_TAC [th]) >>
-  irule subst_operands_map_correct_wf >>
+  irule subst_operands_map_correct >>
   simp[Abbr `subs`] >> rpt strip_tac >>
   `FINITE {v' | ?c. FLOOKUP st v' = SOME (CL_Const c)}`
     by simp[const_subst_fmap_finite] >>
