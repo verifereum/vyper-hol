@@ -31,7 +31,7 @@
 Theory copyFwdEquiv
 Ancestors
   allocaRemapDefs pointerConfinedDefs memLocDefs
-  venomExecSemantics stateEquiv invokeCopyFwdCommonDefs
+  venomExecSemantics venomState stateEquiv invokeCopyFwdCommonDefs
 
 (* =========================================================================
    1. Cross-State Memory Region Equivalence
@@ -95,10 +95,10 @@ QED
 (* mcopy does not modify bytes outside [dst, dst+sz).
    (It may expand memory with zeros, but those are beyond existing size.) *)
 Theorem mcopy_preserves_disjoint:
-  ∀s dst src sz addr.
-    (addr + sz ≤ dst ∨ dst + sz ≤ addr) ⇒
+  ∀s dst src sz addr region_sz.
+    (addr + region_sz ≤ dst ∨ dst + sz ≤ addr) ⇒
     let s' = mcopy dst src sz s in
-    ∀i. i < sz ⇒
+    ∀i. i < region_sz ⇒
       mem_byte_at s'.vs_memory (addr + i) =
       mem_byte_at s.vs_memory (addr + i)
 Proof
@@ -155,16 +155,6 @@ Theorem sha3_cross_equiv:
     data1 = data2
 Proof
   rpt strip_tac >> imp_res_tac cross_equiv_take_drop >> fs[]
-QED
-
-(* RETURN/REVERT: cross-equivalent regions produce same returndata. *)
-Theorem return_data_cross_equiv:
-  ∀mem1 addr1 mem2 addr2 sz.
-    cross_mem_region_equiv mem1 addr1 mem2 addr2 sz ⇒
-    TAKE sz (DROP addr1 mem1 ++ REPLICATE sz 0w) =
-    TAKE sz (DROP addr2 mem2 ++ REPLICATE sz 0w)
-Proof
-  rpt strip_tac >> imp_res_tac cross_equiv_take_drop
 QED
 
 (* =========================================================================
@@ -265,7 +255,11 @@ Theorem copy_fwd_read_equiv:
     (* dst_var and src_var point to the right addresses *)
     lookup_var dst_var s1 = SOME (n2w dst_addr) ∧
     lookup_var src_var s2 = SOME (n2w src_addr) ∧
-    (* Region is large enough *)
+    (* Read size within alloca bounds *)
+    (∀sz_op. mem_read_ops i_orig = SOME <| iao_ofst := Var dst_var;
+               iao_size := SOME sz_op; iao_max_size := _ |> ⇒
+             ∀sz_val. eval_operand sz_op s1 = SOME sz_val ⇒
+                      w2n sz_val ≤ alloca_sz) ∧
     alloca_sz ≥ 32 ⇒
     ∀s1' s2'.
       step_inst_base i_orig s1 = OK s1' ∧
@@ -294,7 +288,11 @@ Theorem copy_fwd_write_equiv:
       step_inst_base i_orig s1 = OK s1' ∧
       step_inst_base i_xfrm s2 = OK s2' ⇒
       observable_equiv s1' s2' ∧
-      (∀v. lookup_var v s1' = lookup_var v s2')
+      (∀v. lookup_var v s1' = lookup_var v s2') ∧
+      (* Invariant preserved: cross-equiv still holds for src region,
+         and dst/src cross-equiv updated for the new memory contents *)
+      cross_mem_region_equiv
+        s1'.vs_memory src_addr s2'.vs_memory src_addr alloca_sz
 Proof
   cheat
 QED
@@ -339,10 +337,14 @@ Theorem copy_fwd_rel_preserved_identical_inst:
     step_inst_base inst s1 = OK s1' ∧
     step_inst_base inst s2 = OK s2' ∧
     (* Instruction doesn't write to src or dst regions *)
-    (∀addr sz. mem_write_ops inst = SOME <| iao_ofst := addr |> ⇒
-      ∀a. eval_operand addr s1 = SOME a ⇒
-        (w2n a + alloca_sz ≤ dst_addr ∨ dst_addr + alloca_sz ≤ w2n a) ∧
-        (w2n a + alloca_sz ≤ src_addr ∨ src_addr + alloca_sz ≤ w2n a)) ⇒
+    (∀ofst write_sz.
+      mem_write_ops inst = SOME <| iao_ofst := ofst;
+        iao_size := SOME write_sz; iao_max_size := _ |> ⇒
+      ∀a wsz.
+        eval_operand ofst s1 = SOME a ∧
+        eval_operand write_sz s1 = SOME wsz ⇒
+        (w2n a + w2n wsz ≤ dst_addr ∨ dst_addr + alloca_sz ≤ w2n a) ∧
+        (w2n a + w2n wsz ≤ src_addr ∨ src_addr + alloca_sz ≤ w2n a)) ⇒
     copy_fwd_rel dst_addr src_addr alloca_sz s1' s2'
 Proof
   cheat
