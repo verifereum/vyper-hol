@@ -19,7 +19,7 @@ Ancestors
   removeUnusedProofs removeUnusedDefs
   passSimulationDefs passSimulationProps analysisSimProps
   livenessProofs livenessDefs
-  dfAnalyzeProofs dfAnalyzeDefs dfAnalyzeProps dfHelperProofs
+  dfAnalyzeDefs dfAnalyzeProps dfHelperProps
   venomInstProps venomWf venomExecProps
   stateEquiv stateEquivProps stateEquivProofs
   execEquivProps cfgTransformProps cfgDefs
@@ -35,7 +35,7 @@ Theorem foldl_list_union_acc[local]:
   !l v acc. MEM v acc ==> MEM v (FOLDL list_union acc l)
 Proof
   Induct_on `l` >> simp[] >> rpt strip_tac >>
-  first_x_assum irule >> simp[list_union_mem_proof]
+  first_x_assum irule >> simp[list_union_mem]
 QED
 
 (* Element in a component list is in FOLDL list_union *)
@@ -44,7 +44,7 @@ Theorem mem_foldl_list_union[local]:
                MEM v (FOLDL list_union acc l)
 Proof
   Induct_on `l` >> simp[] >> rpt strip_tac >> gvs[]
-  >- (irule foldl_list_union_acc >> simp[list_union_mem_proof])
+  >- (irule foldl_list_union_acc >> simp[list_union_mem])
   >- (first_x_assum irule >> metis_tac[])
 QED
 

@@ -11,7 +11,7 @@
 
 Theory sccpConvergence
 Ancestors
-  sccpDefs dfAnalyzeProofs cfgAnalysisProps
+  sccpDefs dfAnalyzeProps cfgAnalysisProps
   venomInst venomWf venomState finite_map list pred_set arithmetic
   dfAnalyzeDefs latticeDefs worklistDefs option
 Libs
@@ -1131,7 +1131,7 @@ Triviality sccp_fold_inv[local]:
       FDOM v.sl_vals SUBSET bound_v /\ v.sl_targets SUBSET bound_t)
 Proof
   rpt strip_tac >>
-  drule (dfAnalyzeProofsTheory.df_fold_block_forward_invariant
+  drule (dfAnalyzePropsTheory.df_fold_block_forward_invariant
          |> REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
   disch_then (qspec_then
     `\v. FDOM v.sl_vals SUBSET bound_v /\ v.sl_targets SUBSET bound_t`
@@ -1536,7 +1536,7 @@ Proof
   gen_tac >> strip_tac >>
   simp[sccp_df_analyze_def, df_analyze_def, LET_THM] >>
   CONV_TAC (DEPTH_CONV (PairRules.PBETA_CONV)) >> simp[] >>
-  irule worklistProofsTheory.wl_iterate_invariant_process_restricted >>
+  irule worklistPropsTheory.wl_iterate_invariant_process_restricted >>
   conj_tac
   >- (mp_tac (SPEC_ALL sccp_measure_inv_initial) >>
       Cases_on `fn_entry_label fn` >> simp[] >> metis_tac[])

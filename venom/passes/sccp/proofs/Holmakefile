@@ -3,7 +3,8 @@ INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec \
            ../../../defs ../../../proofs ../../../props \
            ../../shared ../../shared/defs \
            ../../../simulation ../../../simulation/defs ../../../simulation/proofs \
-           ../../../analysis/dataflow/defs ../../../analysis/dataflow/proofs \
+           ../../../analysis/dataflow/defs ../../../analysis/dataflow \
            ../../../analysis/cfg/defs \
            ../../../analysis/shared/defs \
+           ../../../compiler \
            ../defs

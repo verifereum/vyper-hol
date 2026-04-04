@@ -10,13 +10,13 @@ Ancestors
   analysisSimDefs analysisSimProps analysisSimProofsBase
   sccpDefs sccpSound sccpConvergence
   venomWf venomExecSemantics venomInst
-  dfAnalyzeDefs dfAnalyzeProofs
+  dfAnalyzeDefs dfAnalyzeProps
   cfgAnalysisProps cfgDefs
   passSharedDefs passSharedProps venomInstProps venomExecProps
   stateEquiv stateEquivProps
   execEquivParamBase execEquivParamProps
   passSimulationDefs passSimulationProps passSimulationProofs
-  finite_map worklistDefs worklistProofs venomState
+  finite_map worklistDefs worklistProps venomState
   list
 
 (* state_equiv {} implies full equality of venom_state *)

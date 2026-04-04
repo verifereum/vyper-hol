@@ -15,7 +15,7 @@ Ancestors
   removeUnusedProofs removeUnusedDefs
   passSimulationDefs passSimulationProps analysisSimProps
   livenessProofs livenessDefs
-  dfAnalyzeProofs dfAnalyzeDefs dfAnalyzeProps dfHelperProofs
+  dfAnalyzeDefs dfAnalyzeProps dfHelperProps
   venomInstProps venomWf venomExecProps
   stateEquiv stateEquivProps stateEquivProofs
   execEquivProps cfgTransformProps cfgDefs

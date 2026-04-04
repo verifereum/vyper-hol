@@ -33,12 +33,12 @@ Ancestors
   analysisSimDefs analysisSimProps analysisSimProofsBase
   passSimulationDefs passSimulationProps
   venomWf venomExecSemantics venomInst venomInstProps venomExecProps venomState
-  dfAnalyzeDefs dfAnalyzeProofs
+  dfAnalyzeDefs dfAnalyzeProps
   cfgAnalysisProps cfgDefs
   passSharedDefs passSharedProps
   stateEquiv stateEquivProps
   execEquivParamBase execEquivParamProps
-  finite_map worklistDefs worklistProofs
+  finite_map worklistDefs worklistProps
   list
 
 (* ===== Counterexample infrastructure ===== *)
@@ -252,15 +252,15 @@ QED
 (* Forward-specialized fixpoint/transfer theorems *)
 val intra_fwd = SIMP_RULE (srw_ss()) []
   (Q.SPEC `Forward` (SIMP_RULE (srw_ss()) [LET_THM]
-    dfAnalyzeProofsTheory.df_at_intra_transfer_proof));
+    dfAnalyzePropsTheory.df_at_intra_transfer));
 
 val boundary_fixpoint_fwd = SIMP_RULE (srw_ss()) []
   (Q.SPEC `Forward` (SIMP_RULE (srw_ss()) [LET_THM]
-    dfAnalyzeProofsTheory.df_boundary_fixpoint_proof));
+    dfAnalyzePropsTheory.df_boundary_fixpoint));
 
 val inter_fwd = SIMP_RULE (srw_ss()) []
   (Q.SPEC `Forward` (SIMP_RULE (srw_ss()) [LET_THM]
-    dfAnalyzeProofsTheory.df_at_inter_transfer_proof));
+    dfAnalyzePropsTheory.df_at_inter_transfer));
 
 val _ = delsimps ["is_fixpoint_def"];
 
@@ -287,9 +287,9 @@ Proof
   gen_tac >> strip_tac >>
   simp[sccp_df_analyze_def, df_analyze_def, LET_THM] >>
   CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >> simp[] >>
-  irule worklistProofsTheory.wl_iterate_fixpoint_process_restricted >>
+  irule worklistPropsTheory.wl_iterate_fixpoint_process_restricted >>
   conj_tac
-  >- (rw[] >> metis_tac[dfAnalyzeProofsTheory.cfg_dfs_pre_mem_post]) >>
+  >- (rw[] >> metis_tac[dfAnalyzePropsTheory.cfg_dfs_pre_mem_post]) >>
   conj_tac >- (
   qexistsl_tac [
     `sccp_measure_inv fn`,
@@ -324,7 +324,7 @@ Proof
      simp[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond]) >>
   rpt strip_tac >>
   irule (SIMP_RULE (srw_ss()) [LET_THM] (Q.SPEC `Forward`
-    dfAnalyzeProofsTheory.df_process_deps_complete_proof)) >>
+    dfAnalyzePropsTheory.df_process_deps_complete)) >>
   simp[sccpConvergenceTheory.sccp_join_absorption]
 QED
 
@@ -2674,7 +2674,7 @@ Proof
     metis_tac[venomExecPropsTheory.MEM_lookup_block, fn_labels_def] >>
   `?bb'. lookup_block v.vs_current_bb f.fn_blocks = SOME bb'` by (
     `MEM v.vs_current_bb (fn_labels f)` by
-      metis_tac[dfAnalyzeProofsTheory.cfg_dfs_pre_subset_fn_labels,
+      metis_tac[dfAnalyzePropsTheory.cfg_dfs_pre_subset_fn_labels,
                 listTheory.MEM_FLAT, listTheory.MEM] >>
     metis_tac[fn_labels_lookup_block]) >>
   (* bb.bb_label is predecessor of v.vs_current_bb *)
