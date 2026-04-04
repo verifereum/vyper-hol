@@ -17,7 +17,7 @@ Ancestors
   dfAnalyzeWidenProofs dfAnalyzeWidenDefs
   passSimulationDefs passSimulationProofs execEquivParamProofs
   execEquivParamBase stateEquiv venomExecSemantics venomInst instIdxIndep
-  venomState cfgAnalysisProps
+  venomState venomWf cfgAnalysisProps
 Libs
   listTheory finite_mapTheory pred_setTheory stringTheory
 
@@ -499,6 +499,45 @@ Proof
   >> fs[AllCaseEqs()]
 QED
 
+(* Like transfer_sound_exit_wf but derives the terminator index from
+   bb_well_formed, concluding at LENGTH bb.bb_instructions. *)
+Theorem transfer_sound_exit_wf_len:
+  !R_ok R_term sound transfer run_ctx bb bottom result.
+    valid_state_rel R_ok R_term /\
+    transfer_sound_wf sound transfer run_ctx /\
+    EVERY inst_wf bb.bb_instructions /\
+    bb_well_formed bb /\
+    (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
+    (!idx. SUC idx <= LENGTH bb.bb_instructions ==>
+       df_at bottom result bb.bb_label (SUC idx) =
+       transfer run_ctx (EL idx bb.bb_instructions)
+         (df_at bottom result bb.bb_label idx))
+  ==>
+    !fuel ctx s v.
+      s.vs_inst_idx = 0 /\
+      sound (df_at bottom result bb.bb_label 0) s /\
+      run_block fuel ctx bb s = OK v ==>
+      sound (df_at bottom result bb.bb_label (LENGTH bb.bb_instructions)) v
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `bb.bb_instructions <> []` by fs[bb_well_formed_def] >>
+  `SUC (PRE (LENGTH bb.bb_instructions)) = LENGTH bb.bb_instructions` by
+    (Cases_on `bb.bb_instructions` >> fs[]) >>
+  `PRE (LENGTH bb.bb_instructions) < LENGTH bb.bb_instructions` by
+    (Cases_on `bb.bb_instructions` >> fs[]) >>
+  `is_terminator
+    (EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions).inst_opcode` by
+    (fs[bb_well_formed_def] >>
+     Cases_on `bb.bb_instructions` >> fs[listTheory.LAST_EL]) >>
+  `!j. j < PRE (LENGTH bb.bb_instructions) ==>
+    ~is_terminator (EL j bb.bb_instructions).inst_opcode` by
+    (fs[bb_well_formed_def] >>
+     rpt strip_tac >> CCONTR_TAC >> fs[] >> res_tac >> fs[]) >>
+  `sound (df_at bottom result bb.bb_label
+      (SUC (PRE (LENGTH bb.bb_instructions)))) v` suffices_by metis_tac[] >>
+  irule (REWRITE_RULE [GSYM AND_IMP_INTRO] transfer_sound_exit_wf) >>
+  simp[] >> metis_tac[]
+QED
 
 (* ===== End-to-end dataflow pass correctness =====
  *
