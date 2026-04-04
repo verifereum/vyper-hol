@@ -26,9 +26,10 @@ Ancestors
 
 (* Integer clamping: either accepts or reverts *)
 Theorem compile_abi_int_clamp_correct:
-  ∀ val_op bits is_signed ss st st'.
+  ∀ val_op bits is_signed ss st st' w.
     compile_abi_int_clamp val_op bits is_signed st = ((), st') ∧
-    eval_operand val_op ss = SOME w
+    eval_operand val_op ss = SOME w ∧
+    fresh_vars_wrt st ss
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∨
@@ -63,16 +64,31 @@ Proof
     disch_then (drule_at Any) >>
     simp[Abbr`op1`, eval_operand_def] >> disch_then kall_tac ) >>
   unabbrev_all_tac >>
-  qmatch_goalsub_abbrev_tac`step_inst_base _ ssu` >>
   TRY (
+    qmatch_goalsub_abbrev_tac`step_inst_base _ ssu` >>
     qmatch_goalsub_abbrev_tac`mk_inst _ EQ [op1; op2]` >>
     qspecl_then[`op1`,`op2`]mp_tac step_EQ >>
     CONV_TAC(LAND_CONV(RESORT_FORALL_CONV(sort_vars["ss"]))) >>
     disch_then(qspec_then`ssu`mp_tac) >>
     simp[Abbr`op2`, eval_operand_def, Abbr`ssu`, lookup_var_update_var] >>
-    NO_TAC (* TODO: continue once we have fresh var assumption *) ) >>
-  cheat (* need fresh var assumption *)
-  (* assert_ok_or_revert *)
+    drule_then drule eval_operand_update_fresh >> simp[] >>
+    ntac 2 (disch_then kall_tac) ) >>
+  unabbrev_all_tac >>
+  TRY (
+    qmatch_goalsub_abbrev_tac`step_inst_base _ ssu` >>
+    qmatch_goalsub_abbrev_tac`mk_inst _ ISZERO [op1]` >>
+    qspecl_then[`op1`]mp_tac step_ISZERO >>
+    CONV_TAC(LAND_CONV(RESORT_FORALL_CONV(sort_vars["ss"]))) >>
+    disch_then(qspec_then`ssu`mp_tac) >>
+    simp[Abbr`op1`, eval_operand_def, Abbr`ssu`, lookup_var_update_var] >>
+    drule_then drule eval_operand_update_fresh >> simp[] >>
+    ntac 2 (disch_then kall_tac) ) >>
+  unabbrev_all_tac >>
+  simp[RIGHT_OR_EXISTS_THM] >>
+  qmatch_goalsub_abbrev_tac`step_inst_base _ sss` >>
+  qexists_tac`revert_state (set_returndata [] sss)` >>
+  irule assert_ok_or_revert >>
+  rw[eval_operand_def, Abbr`sss`, lookup_var_update_var]
 QED
 
 (* Bytes clamping: rejects values with non-zero high bits *)

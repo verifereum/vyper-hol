@@ -206,21 +206,19 @@ QED
 
 (* ASSERT with zero condition: Abort Revert *)
 Theorem assert_revert:
-  ∀ op1 id ss.
-    eval_operand op1 ss = SOME 0w ⇒
-    step_inst_base (mk_inst id ASSERT [op1] []) ss =
-      Abort Revert_abort (revert_state (set_returndata [] ss))
+  ∀ op1 id ss rs.
+    eval_operand op1 ss = SOME 0w ∧ rs = revert_state (set_returndata [] ss) ⇒
+    step_inst_base (mk_inst id ASSERT [op1] []) ss = Abort Revert_abort rs
 Proof
   rw[step_inst_base_def]
 QED
 
 (* ASSERT either succeeds or reverts (disjunctive form) *)
 Theorem assert_ok_or_revert:
-  ∀ op1 v id ss.
-    eval_operand op1 ss = SOME v ⇒
+  ∀ op1 v id ss rs.
+    eval_operand op1 ss = SOME v ∧ rs = revert_state (set_returndata [] ss) ⇒
     step_inst_base (mk_inst id ASSERT [op1] []) ss = OK ss ∨
-    step_inst_base (mk_inst id ASSERT [op1] []) ss =
-      Abort Revert_abort (revert_state (set_returndata [] ss))
+    step_inst_base (mk_inst id ASSERT [op1] []) ss = Abort Revert_abort rs
 Proof
   rw[step_inst_base_def]
 QED
@@ -414,6 +412,80 @@ QED
 
 (* Chaining: emitted_insts through sequential emit_op calls *)
 Theorem emitted_insts_seq2 = emitted_insts_append;
+
+(* ===== Fresh variable invariant ===== *)
+
+(* Compiler's fresh variable counter is ahead of all %-named vars in the
+   venom state. Ensures emit_op/emit_void produce names that don't alias
+   any existing operand. *)
+Definition fresh_vars_wrt_def:
+  fresh_vars_wrt (st:compile_state) (ss:venom_state) ⇔
+    ∀ n. n ≥ st.cs_next_var ⇒
+      STRING #"%" (toString n) ∉ FDOM ss.vs_vars
+End
+
+(* fresh_vars_wrt preserved by update_var of a name below the counter *)
+Theorem fresh_vars_wrt_update_var:
+  ∀ st ss name n w.
+    fresh_vars_wrt st ss ∧
+    name = STRING #"%" (toString n) ∧
+    n < st.cs_next_var ⇒
+    fresh_vars_wrt st (update_var name w ss)
+Proof
+  rw[fresh_vars_wrt_def, update_var_def]
+QED
+
+(* fresh_vars_wrt preserved when counter advances past the written var *)
+Theorem fresh_vars_wrt_advance:
+  ∀ st st' ss name n w.
+    fresh_vars_wrt st ss ∧
+    name = STRING #"%" (toString n) ∧
+    n = st.cs_next_var ∧
+    st'.cs_next_var > st.cs_next_var ⇒
+    fresh_vars_wrt st' (update_var name w ss)
+Proof
+  rw[fresh_vars_wrt_def, update_var_def]
+QED
+
+(* fresh_vars_wrt preserved by mstore (memory doesn't affect vs_vars) *)
+Theorem fresh_vars_wrt_mstore:
+  ∀ st ss addr val.
+    fresh_vars_wrt st ss ⇒
+    fresh_vars_wrt st (mstore addr val ss)
+Proof
+  rw[fresh_vars_wrt_def, mstore_def]
+QED
+
+(* fresh_vars_wrt: an operand that evaluates in ss doesn't alias fresh vars *)
+Theorem fresh_vars_wrt_eval_operand:
+  ∀ st ss op v x n.
+    fresh_vars_wrt st ss ∧
+    eval_operand op ss = SOME v ∧
+    n ≥ st.cs_next_var ∧
+    op = Var x ⇒
+    x ≠ STRING #"%" (toString n)
+Proof
+  rw[fresh_vars_wrt_def, eval_operand_def] >>
+  strip_tac >> gvs[eval_operand_def, lookup_var_def] >>
+  first_x_assum drule >>
+  gvs[finite_mapTheory.TO_FLOOKUP]
+QED
+
+(* eval_operand preserved through update_var when the written name
+   doesn't alias op. Hypotheses ensure non-aliasing via freshness. *)
+Theorem eval_operand_update_fresh:
+  ∀ op v w name n ss st.
+    eval_operand op ss = SOME v ∧
+    fresh_vars_wrt st ss ∧
+    name = STRING #"%" (toString n) ∧
+    n ≥ st.cs_next_var ⇒
+    eval_operand op (update_var name w ss) = SOME v
+Proof
+  Cases >> rw[eval_operand_def, lookup_var_update_var] >>
+  drule fresh_vars_wrt_eval_operand >>
+  simp[eval_operand_def] >>
+  disch_then drule >> rw[]
+QED
 
 (* ===== Fresh variable name properties ===== *)
 
