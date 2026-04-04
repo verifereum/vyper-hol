@@ -10,15 +10,15 @@
  * - INVOKE: callee name preserved + fuel IH → callee equality
  *
  * sccp_inst_step_correct_cond needs all Var operands in FDOM, which
- * follows from wf_ssa (def_dominates_uses + defs_before_uses) and
- * FDOM monotonicity through execution.
+ * follows from wf_ssa (def_dominates_uses) + fn_inst_ids_distinct
+ * (from wf_function) and FDOM monotonicity through execution.
  *)
 
 Theory sccpCorrectness
 Ancestors
   sccpProofs sccpProofsBase sccpDefs sccpSound sccpConvergence
   analysisSimDefs analysisSimProps
-  venomWf venomExecSemantics venomInst venomInstProps venomExecProps
+  venomWf venomExecSemantics venomExecProofs venomInst venomInstProps venomExecProps
   passSharedDefs passSharedProps
   stateEquiv stateEquivProps
   passSimulationDefs passSimulationProps passSimulationProofs
@@ -443,20 +443,7 @@ QED
 (*  Part 5: Operand vars in FDOM at each instruction                 *)
 (* ================================================================= *)
 
-(* PHI instructions always have non-empty outputs (from inst_wf) *)
-Triviality phi_has_outputs:
-  !inst. inst_wf inst /\ inst.inst_opcode = PHI ==>
-    inst.inst_outputs <> []
-Proof
-  rw[inst_wf_def] >> Cases_on `inst.inst_outputs` >> fs[]
-QED
-
-(* Under wf_ssa: given def at position i and use at position idx in same block,
-   with i < j and EL j = EL idx (from def_dominates_uses), we get i < idx.
-   Case 1: EL idx has outputs → SSA uniqueness gives j = idx → i < idx.
-   Case 2: EL idx has no outputs → EL idx not PHI (inst_wf) →
-           if EL i is PHI: PHI prefix gives i < idx
-           if EL i is not PHI: defs_before_uses gives i < idx *)
+(* PHI before non-PHI in well-formed blocks *)
 Triviality phi_before_non_phi:
   !bb i idx.
     bb_well_formed bb /\
@@ -473,71 +460,10 @@ Proof
   >- (fs[bb_well_formed_def] >> metis_tac[])
 QED
 
-Triviality empty_outputs_not_phi:
-  !inst. inst_wf inst /\ inst.inst_outputs = [] ==>
-    inst.inst_opcode <> PHI
-Proof
-  rpt strip_tac >> gvs[inst_wf_def]
-QED
-
-(* Under SSA, if two positions in the same block have the same
-   instruction record with non-empty outputs, they must be the same
-   position (output uniqueness). *)
-Triviality ssa_same_inst_same_idx:
-  !f bb j idx.
-    ssa_form f /\ MEM bb f.fn_blocks /\
-    j < LENGTH bb.bb_instructions /\
-    idx < LENGTH bb.bb_instructions /\
-    EL j bb.bb_instructions = EL idx bb.bb_instructions /\
-    (EL idx bb.bb_instructions).inst_outputs <> [] ==>
-    j = idx
-Proof
-  rpt strip_tac >>
-  spose_not_then assume_tac >>
-  Cases_on `(EL j bb.bb_instructions).inst_outputs` >> gvs[] >>
-  metis_tac[sccpProofsBaseTheory.ssa_no_output_overlap_inst, MEM]
-QED
-
-(* Under wf_ssa: given def at position i and use at position idx in same block,
-   with i < j and EL j = EL idx (from def_dominates_uses), we get i < idx.
-   Case 1: EL idx has outputs → SSA uniqueness gives j = idx → i < idx.
-   Case 2: EL idx has no outputs → EL idx not PHI (inst_wf) →
-           if EL i is PHI: PHI prefix gives i < idx
-           if EL i is not PHI: defs_before_uses gives i < idx *)
-Triviality def_before_use_same_block:
-  !f bb i j idx v.
-    ssa_form f /\ defs_before_uses f /\
-    MEM bb f.fn_blocks /\ bb_well_formed bb /\
-    fn_inst_wf f /\
-    i < j /\ j < LENGTH bb.bb_instructions /\
-    idx < LENGTH bb.bb_instructions /\
-    EL j bb.bb_instructions = EL idx bb.bb_instructions /\
-    MEM v (EL i bb.bb_instructions).inst_outputs /\
-    MEM (Var v) (EL idx bb.bb_instructions).inst_operands ==>
-    i < idx
-Proof
-  rpt strip_tac >>
-  `i < LENGTH bb.bb_instructions` by simp[] >>
-  `inst_wf (EL idx bb.bb_instructions)` by
-    metis_tac[fn_inst_wf_def, MEM_EL] >>
-  Cases_on `(EL idx bb.bb_instructions).inst_outputs = []` >>
-  Cases_on `(EL i bb.bb_instructions).inst_opcode = PHI`
-  >- metis_tac[phi_before_non_phi, empty_outputs_not_phi]
-  >- (fs[defs_before_uses_def] >>
-      first_x_assum irule >> qexistsl_tac [`bb`, `v`] >> simp[])
-  >- metis_tac[ssa_same_inst_same_idx]
-  >- metis_tac[ssa_same_inst_same_idx]
-QED
-
-(* operand_vars_in_fdom: under wf_ssa + strict_dom_vars_defined +
-   intra-block outputs in FDOM, all Var operands at instruction idx
-   are in FDOM.
-   
-   Same block case uses def_dominates_uses to get the def position.
-   For non-PHI defs: defs_before_uses gives idx_def < idx directly.
-   For PHI defs: the ∃i j clause from def_dominates_uses gives i < j
-   with EL j = EL idx. Output uniqueness (PHI has non-empty outputs)
-   gives j = idx, hence i < idx. *)
+(* Under wf_ssa + wf_function + strict_dom_vars_defined + intra-block
+   outputs in FDOM, all Var operands at instruction idx are in FDOM.
+   def_dominates_uses gives i < j with EL j = EL idx in same-block case.
+   inst_ids_el_eq (from fn_inst_ids_distinct) gives j = idx, hence i < idx. *)
 Triviality operand_vars_in_fdom:
   !f bb idx s.
     wf_ssa f /\ wf_function f /\ fn_inst_wf f /\
@@ -554,7 +480,6 @@ Proof
   fs[wf_ssa_def] >>
   `MEM (EL idx bb.bb_instructions) bb.bb_instructions` by
     metis_tac[MEM_EL] >>
-  `bb_well_formed bb` by metis_tac[wf_function_def] >>
   fs[def_dominates_uses_def] >>
   first_x_assum (qspecl_then [`bb`, `EL idx bb.bb_instructions`, `v`]
     mp_tac) >>
@@ -564,40 +489,11 @@ Proof
     (* Same block: def_bb = bb by label uniqueness *)
     `def_bb = bb` by metis_tac[same_label_same_block] >>
     gvs[] >>
-    (* After gvs: we have i, j with i < j < LENGTH bb.bb_instructions,
-       EL i has v as output, EL j = EL idx (the use instruction). *)
-    `inst_wf (EL idx bb.bb_instructions)` by
-      metis_tac[fn_inst_wf_def, MEM_EL] >>
-    (* Show i < idx, then use intra-block hypothesis *)
-    `i < idx` suffices_by (
-      strip_tac >>
-      qpat_x_assum `!j' v'. j' < idx /\ _ ==> _`
-        (qspecl_then [`i`, `v`] mp_tac) >>
-      simp[]) >>
-    Cases_on `(EL idx bb.bb_instructions).inst_outputs = []`
-    >- (
-      (* EL idx has no outputs. Since PHI has 1 output, EL idx is not PHI. *)
-      `(EL idx bb.bb_instructions).inst_opcode <> PHI` by
-        metis_tac[phi_has_outputs] >>
-      Cases_on `(EL i bb.bb_instructions).inst_opcode = PHI`
-      >- (
-        (* PHI def at i, non-PHI at idx: PHI prefix gives i < idx.
-           Contrapositive of bb_well_formed PHI prefix clause:
-           if EL i is PHI and EL idx is not, then ¬(idx < i), and since
-           EL i ≠ EL idx, i ≠ idx, hence i < idx. *)
-        `i < LENGTH bb.bb_instructions` by simp[] >>
-        `~(idx < i)` by (
-          strip_tac >> fs[bb_well_formed_def] >> metis_tac[]) >>
-        `i <> idx` by (strip_tac >> gvs[]) >>
-        simp[])
-      >- (
-        (* Non-PHI def: defs_before_uses gives i < idx directly *)
-        fs[defs_before_uses_def] >>
-        first_x_assum irule >> qexistsl_tac [`bb`, `v`] >> simp[]))
-    >- (
-      (* EL idx has outputs: SSA uniqueness gives j = idx *)
-      `j = idx` by metis_tac[ssa_same_inst_same_idx] >>
-      simp[]))
+    (* i < j, EL j = EL idx. fn_inst_ids_distinct gives j = idx. *)
+    `fn_inst_ids_distinct f` by fs[wf_function_def] >>
+    `j = idx` by metis_tac[inst_ids_el_eq] >>
+    gvs[] >>
+    first_x_assum irule >> simp[] >> metis_tac[])
   >- (
     (* Different block: strict_dom_vars_defined *)
     fs[strict_dom_vars_defined_def] >>

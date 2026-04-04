@@ -1318,3 +1318,31 @@ Proof
 QED
 
 
+
+(* ALL_DISTINCT distributes through FLAT: each member is ALL_DISTINCT *)
+Triviality all_distinct_flat_mem:
+  !ls l. ALL_DISTINCT (FLAT ls) /\ MEM l ls ==> ALL_DISTINCT l
+Proof
+  Induct >> simp[] >> rpt strip_tac >> gvs[ALL_DISTINCT_APPEND]
+QED
+
+(* Same instruction record at two positions in same block ⟹ same index.
+   Uses fn_inst_ids_distinct (part of wf_function). *)
+Theorem inst_ids_el_eq:
+  !fn bb j idx.
+    fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\
+    j < LENGTH bb.bb_instructions /\
+    idx < LENGTH bb.bb_instructions /\
+    EL j bb.bb_instructions = EL idx bb.bb_instructions ==>
+    j = idx
+Proof
+  rpt strip_tac >>
+  fs[fn_inst_ids_distinct_def] >>
+  `MEM (MAP (\i. i.inst_id) bb.bb_instructions)
+       (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) fn.fn_blocks)` by
+    (simp[MEM_MAP] >> metis_tac[]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[all_distinct_flat_mem] >>
+  `ALL_DISTINCT bb.bb_instructions` by metis_tac[ALL_DISTINCT_MAP] >>
+  metis_tac[ALL_DISTINCT_EL_IMP]
+QED

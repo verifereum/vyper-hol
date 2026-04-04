@@ -2377,11 +2377,8 @@ Theorem cx_ru_fn1_wf_ssa[local]:
 Proof
   simp[venomWfTheory.wf_ssa_def, cx_ru_fn1_def,
        venomWfTheory.ssa_form_def,
-       venomWfTheory.def_dominates_uses_def,
-       venomWfTheory.defs_before_uses_def] >>
-  EVAL_TAC >> simp[] >> rpt strip_tac >> gvs[] >>
-  (* No variable uses exist, so def_dominates_uses intra-block is vacuous *)
-  Cases_on `idx_use` >> fs[] >> Cases_on `n` >> fs[]
+       venomWfTheory.def_dominates_uses_def] >>
+  EVAL_TAC >> simp[] >> rpt strip_tac >> gvs[]
 QED
 
 (* pass_correct {} is FALSE between fn1 and fn2.

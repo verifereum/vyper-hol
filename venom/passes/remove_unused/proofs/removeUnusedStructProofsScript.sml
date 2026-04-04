@@ -923,32 +923,6 @@ Proof
   conj_tac >> irule rui_not_nop_identity_ssa >> simp[]
 QED
 
-Theorem rusp_preserves_defs_before_uses[local]:
-  !func.
-    wf_function func /\ wf_ssa func /\ ssa_form func ==>
-    defs_before_uses (remove_unused_single_pass func)
-Proof
-  rw[defs_before_uses_def] >> rpt gen_tac >>
-  rename1 `MEM bk (remove_unused_single_pass _).fn_blocks` >>
-  rpt strip_tac >>
-  CCONTR_TAC >> gvs[arithmeticTheory.NOT_LESS] >>
-  Cases_on `idx_use < idx_def`
-  >- (qspecl_then [`func`, `bk`, `idx_use`, `idx_def`] mp_tac
-        rusp_block_el_mono >>
-      (impl_tac >- gvs[]) >> strip_tac >>
-      gvs[wf_ssa_def] >>
-      qpat_x_assum `defs_before_uses _` mp_tac >>
-      simp[defs_before_uses_def] >>
-      qexistsl_tac [`ob`, `m2`, `m1`, `v`] >> gvs[])
-  >- (`idx_use = idx_def` by gvs[] >> gvs[] >>
-      qspecl_then [`func`, `bk`, `idx_def`] mp_tac rusp_block_el_original >>
-      (impl_tac >- gvs[]) >> strip_tac >>
-      gvs[wf_ssa_def] >>
-      qpat_x_assum `defs_before_uses _` mp_tac >>
-      simp[defs_before_uses_def] >>
-      qexistsl_tac [`ob`, `m`, `m`, `v`] >> gvs[])
-QED
-
 (* wf_ssa preserved *)
 Theorem rusp_preserves_wf_ssa[local]:
   !fn. wf_function fn /\ wf_ssa fn /\ ssa_form fn /\
@@ -958,7 +932,6 @@ Proof
   rpt strip_tac >> simp[wf_ssa_def] >> rpt conj_tac
   >- metis_tac[rusp_preserves_ssa_form, wf_ssa_def]
   >- metis_tac[rusp_preserves_def_dominates_uses]
-  >- metis_tac[rusp_preserves_defs_before_uses, wf_ssa_def]
 QED
 
 (* Forward preservation: all structural + SSA properties are preserved
