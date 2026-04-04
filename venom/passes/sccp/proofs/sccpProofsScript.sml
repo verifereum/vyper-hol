@@ -48,7 +48,7 @@ Definition nophi_inv_def:
 End
 
 (* Entry state trivially satisfies nophi invariant *)
-Triviality nophi_inv_entry[local]:
+Theorem nophi_inv_entry:
   !f s.
     fn_entry_label f = SOME s.vs_current_bb /\
     FDOM s.vs_vars = {} ==>
