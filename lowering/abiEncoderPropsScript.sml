@@ -17,7 +17,7 @@
 
 Theory abiEncoderProps
 Ancestors
-  exprLoweringProps
+  exprLoweringProps emitHelper emitHelperProps
   abiEncoder compileEnv
   venomExecSemantics venomState venomInst
   valueEncoding
@@ -26,29 +26,136 @@ Ancestors
 
 (* Integer clamping: either accepts or reverts *)
 Theorem compile_abi_int_clamp_correct:
-  ∀ val_op bits is_signed ss st st'.
+  ∀ val_op bits is_signed ss st st' w.
     compile_abi_int_clamp val_op bits is_signed st = ((), st') ∧
-    eval_operand val_op ss = SOME w
+    eval_operand val_op ss = SOME w ∧
+    fresh_vars_wrt st ss
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∨
       run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof
-  cheat
+  rw[compile_abi_int_clamp_def] >>
+  gvs[comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  drule emitted_insts_emit_op >>
+  pop_assum mp_tac >>
+  drule emitted_insts_emit_op >>
+  rpt strip_tac >>
+  qmatch_asmsub_rename_tac`emitted_insts st st1` >>
+  qmatch_asmsub_rename_tac`emitted_insts st1 st2` >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  qspecl_then[`st`,`st1`,`st2`]mp_tac emitted_insts_append >>
+  (impl_tac >- rw[]) >> strip_tac >>
+  qspecl_then[`st`,`st2`,`st'`]mp_tac emitted_insts_append >>
+  (impl_tac >- rw[]) >> strip_tac >>
+  gvs[] >>
+  irule run_pure2_assert_ok_or_revert >>
+  TRY (
+    qmatch_goalsub_abbrev_tac`mk_inst _ SIGNEXTEND [op1; op2]` >>
+    qspecl_then[`op1`,`op2`]mp_tac step_SIGNEXTEND >>
+    disch_then (drule_at Any) >>
+    simp[Abbr`op1`, eval_operand_def] >> disch_then kall_tac ) >>
+  unabbrev_all_tac >>
+  TRY (
+    qmatch_goalsub_abbrev_tac`mk_inst _ SHR [op1; op2]` >>
+    qspecl_then[`op1`,`op2`]mp_tac step_SHR >>
+    disch_then (drule_at Any) >>
+    simp[Abbr`op1`, eval_operand_def] >> disch_then kall_tac ) >>
+  unabbrev_all_tac >>
+  TRY (
+    qmatch_goalsub_abbrev_tac`step_inst_base _ ssu` >>
+    qmatch_goalsub_abbrev_tac`mk_inst _ EQ [op1; op2]` >>
+    qspecl_then[`op1`,`op2`]mp_tac step_EQ >>
+    CONV_TAC(LAND_CONV(RESORT_FORALL_CONV(sort_vars["ss"]))) >>
+    disch_then(qspec_then`ssu`mp_tac) >>
+    simp[Abbr`op2`, eval_operand_def, Abbr`ssu`, lookup_var_update_var] >>
+    drule_then drule eval_operand_update_fresh >> simp[] >>
+    ntac 2 (disch_then kall_tac) ) >>
+  unabbrev_all_tac >>
+  TRY (
+    qmatch_goalsub_abbrev_tac`step_inst_base _ ssu` >>
+    qmatch_goalsub_abbrev_tac`mk_inst _ ISZERO [op1]` >>
+    qspecl_then[`op1`]mp_tac step_ISZERO >>
+    CONV_TAC(LAND_CONV(RESORT_FORALL_CONV(sort_vars["ss"]))) >>
+    disch_then(qspec_then`ssu`mp_tac) >>
+    simp[Abbr`op1`, eval_operand_def, Abbr`ssu`, lookup_var_update_var] >>
+    drule_then drule eval_operand_update_fresh >> simp[] >>
+    ntac 2 (disch_then kall_tac) ) >>
+  unabbrev_all_tac >>
+  simp[RIGHT_OR_EXISTS_THM] >>
+  qmatch_goalsub_abbrev_tac`step_inst_base _ sss` >>
+  qexists_tac`revert_state (set_returndata [] sss)` >>
+  irule assert_ok_or_revert >>
+  rw[eval_operand_def, Abbr`sss`, lookup_var_update_var]
 QED
 
 (* Bytes clamping: rejects values with non-zero high bits *)
 Theorem compile_abi_bytes_clamp_correct:
-  ∀ val_op m ss st st'.
+  ∀ val_op m ss st st' w.
     compile_abi_bytes_clamp val_op m st = ((), st') ∧
     eval_operand val_op ss = SOME w ∧
-    m ≤ 32
+    fresh_vars_wrt st ss
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∨
       run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof
-  cheat
+  rw[compile_abi_bytes_clamp_def] >>
+  gvs[comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  drule emitted_insts_emit_op >>
+  pop_assum mp_tac >>
+  drule emitted_insts_emit_op >>
+  rpt strip_tac >>
+  qmatch_asmsub_rename_tac`emitted_insts st st1` >>
+  qmatch_asmsub_rename_tac`emitted_insts st1 st2` >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  qspecl_then[`st`,`st1`,`st2`]mp_tac emitted_insts_append >>
+  (impl_tac >- rw[]) >> strip_tac >>
+  qspecl_then[`st`,`st2`,`st'`]mp_tac emitted_insts_append >>
+  (impl_tac >- rw[]) >> strip_tac >>
+  gvs[] >>
+  irule run_pure2_assert_ok_or_revert >>
+  TRY (
+    qmatch_goalsub_abbrev_tac`mk_inst _ SIGNEXTEND [op1; op2]` >>
+    qspecl_then[`op1`,`op2`]mp_tac step_SIGNEXTEND >>
+    disch_then (drule_at Any) >>
+    simp[Abbr`op1`, eval_operand_def] >> disch_then kall_tac ) >>
+  unabbrev_all_tac >>
+  TRY (
+    qmatch_goalsub_abbrev_tac`mk_inst _ SHL [op1; op2]` >>
+    qspecl_then[`op1`,`op2`]mp_tac step_SHL >>
+    disch_then (drule_at Any) >>
+    simp[Abbr`op1`, eval_operand_def] >> disch_then kall_tac ) >>
+  unabbrev_all_tac >>
+  TRY (
+    qmatch_goalsub_abbrev_tac`step_inst_base _ ssu` >>
+    qmatch_goalsub_abbrev_tac`mk_inst _ EQ [op1; op2]` >>
+    qspecl_then[`op1`,`op2`]mp_tac step_EQ >>
+    CONV_TAC(LAND_CONV(RESORT_FORALL_CONV(sort_vars["ss"]))) >>
+    disch_then(qspec_then`ssu`mp_tac) >>
+    simp[Abbr`op2`, eval_operand_def, Abbr`ssu`, lookup_var_update_var] >>
+    drule_then drule eval_operand_update_fresh >> simp[] >>
+    ntac 2 (disch_then kall_tac) ) >>
+  unabbrev_all_tac >>
+  TRY (
+    qmatch_goalsub_abbrev_tac`step_inst_base _ ssu` >>
+    qmatch_goalsub_abbrev_tac`mk_inst _ ISZERO [op1]` >>
+    qspecl_then[`op1`]mp_tac step_ISZERO >>
+    CONV_TAC(LAND_CONV(RESORT_FORALL_CONV(sort_vars["ss"]))) >>
+    disch_then(qspec_then`ssu`mp_tac) >>
+    simp[Abbr`op1`, eval_operand_def, Abbr`ssu`, lookup_var_update_var] >>
+    drule_then drule eval_operand_update_fresh >> simp[] >>
+    ntac 2 (disch_then kall_tac) ) >>
+  unabbrev_all_tac >>
+  simp[RIGHT_OR_EXISTS_THM] >>
+  qmatch_goalsub_abbrev_tac`step_inst_base _ sss` >>
+  qexists_tac`revert_state (set_returndata [] sss)` >>
+  irule assert_ok_or_revert >>
+  rw[eval_operand_def, Abbr`sss`, lookup_var_update_var]
 QED
 
 (* ===== Static Encode/Decode ===== *)
