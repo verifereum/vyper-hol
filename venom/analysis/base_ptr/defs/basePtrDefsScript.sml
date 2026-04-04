@@ -251,14 +251,26 @@ Definition bp_ptr_sound_def:
       ∃p. MEM p (bp_get_ptrs bp v) ∧ ptr_matches_var p v s
 End
 
-(* Every tracked pointer with a known offset has that offset within
- * the alloca's allocated size. *)
+(* Every memory access through an alloca-backed pointer is fully within
+ * the alloca's allocated region (accounting for access size).
+ *
+ * Strengthened from the earlier "off ≤ sz" formulation which only
+ * checked the pointer offset, not the access extent. The full check
+ * "off + access_size ≤ alloca_size" is needed by ma_may_alias_sound:
+ * without it, an access from one alloca could extend into an adjacent
+ * alloca's region, breaking the "different allocas → disjoint" guarantee.
+ *
+ * Discharge path: Vyper→Venom lowering generates ALLOCAs sized to cover
+ * all accesses (struct layouts, ABI buffers). Passes that preserve
+ * memory access semantics preserve this automatically. *)
 Definition bp_ptrs_bounded_def:
-  bp_ptrs_bounded (bp : bp_result) (s : venom_state) ⇔
-    ∀v aid off.
-      MEM (Ptr (Allocation aid) (SOME off)) (bp_get_ptrs bp v) ⇒
-      ∀base sz.
-        FLOOKUP s.vs_allocas aid = SOME (base, sz) ⇒ off ≤ sz
+  bp_ptrs_bounded (bp : bp_result) (fn : ir_function) (s : venom_state) ⇔
+    ∀bb inst ops ml.
+      MEM bb fn.fn_blocks ∧ MEM inst bb.bb_instructions ∧
+      (mem_write_ops inst = SOME ops ∨ mem_read_ops inst = SOME ops) ∧
+      bp_segment_from_ops bp ops = ml ∧
+      IS_SOME ml.ml_alloca ⇒
+      memloc_within_alloca ml s
 End
 
 (* ===== Write Location ===== *)

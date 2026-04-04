@@ -30,7 +30,7 @@ QED
  * to determine that no later load reads from the same location. *)
 Theorem dse_function_correct_proof:
   !analysis_fn aliases fuel ctx fn s bp.
-    bp_ptr_sound bp s /\ bp_ptrs_bounded bp s /\
+    bp_ptr_sound bp s /\ bp_ptrs_bounded bp fn s /\
     (!space fn'.
       all_dead_stores (analysis_fn space fn')
         (cfg_analyze fn') aliases (bp_analyze (cfg_analyze fn') fn')
