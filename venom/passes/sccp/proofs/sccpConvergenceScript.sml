@@ -11,7 +11,7 @@
 
 Theory sccpConvergence
 Ancestors
-  sccpDefs dfAnalyzeProofs cfgHelpers cfgAnalysisProps
+  sccpDefs dfAnalyzeProofs cfgAnalysisProps
   venomInst venomWf venomState finite_map list pred_set arithmetic
   dfAnalyzeDefs latticeDefs worklistDefs option
 Libs

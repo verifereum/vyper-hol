@@ -4,6 +4,6 @@ INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec \
            ../../shared ../../shared/defs \
            ../../../simulation ../../../simulation/defs ../../../simulation/proofs \
            ../../../analysis/dataflow/defs ../../../analysis/dataflow/proofs \
-           ../../../analysis/cfg/defs ../../../analysis/cfg/proofs \
+           ../../../analysis/cfg/defs \
            ../../../analysis/shared/defs \
            ../defs
