@@ -20,7 +20,7 @@ Ancestors
   exprLoweringProps emitHelper emitHelperProps
   abiEncoder compileEnv
   venomExecSemantics venomState venomInst
-  valueEncoding
+  valueEncoding valueEncodingProps
 
 (* ===== ABI Clamping ===== *)
 
@@ -165,13 +165,17 @@ Theorem compile_abi_encode_static_correct:
   ∀ src_op dst_op ss st st' v dst.
     compile_abi_encode_static src_op dst_op st = ((), st') ∧
     eval_operand src_op ss = SOME v ∧
-    eval_operand dst_op ss = SOME (n2w dst)
+    eval_operand dst_op ss = SOME dst
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      mload dst ss' = v
+      mload (w2n dst) ss' = v
 Proof
-  cheat
+  rw[compile_abi_encode_static_def] >>
+  drule emitted_insts_emit_void >>
+  rw[run_inst_seq_def] >>
+  drule_all_then (CHANGED_TAC o simp o single) step_MSTORE >>
+  simp[GSYM mem_word_at_eq_mload, mstore_mem_word_at_same]
 QED
 
 (* Static ABI decoding: MLOAD + clamp *)
