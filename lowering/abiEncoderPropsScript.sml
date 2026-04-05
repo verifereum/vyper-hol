@@ -22,7 +22,7 @@ Ancestors
   valueEncoding valueEncodingProps
   vyperABI vyperTyping contractABI
 Libs
-  dep_rewrite
+  dep_rewrite wordsLib
 
 (* ===== ABI Clamping ===== *)
 
@@ -251,19 +251,26 @@ Proof
   TRY (
     qpat_x_assum`word_of_bytes _ _ _ = _`(SUBST_ALL_TAC o SYM) >>
     irule $ GSYM word_bytes_roundtrip >>
-    simp[] )
+    simp[dividesTheory.divides_def] >> NO_TAC)
   >- (
     Cases_on`b` \\ gvs[value_has_type_def, is_word_type_def] >>
     gvs[PAD_RIGHT, REPLICATE_GENLIST, TAKE_LENGTH_TOO_LONG,
         byteTheory.word_of_bytes_be_def] >>
-    cheat (* word_of_bytes inj *) ) >>
+    drule_at Any word_of_bytes_be_inj >>
+    simp[dividesTheory.divides_def] ) >>
   gvs[GSYM wordsTheory.w2w_def] >>
   qmatch_goalsub_abbrev_tac`word_to_bytes www` >>
   qmatch_asmsub_abbrev_tac`word_of_bytes _ _ _ = ww1` >>
-  `www = ww1` by cheat (* w2w word_of_bytes *) >>
+  `www = ww1` by (
+    rw[Abbr`www`] >> gvs[byteTheory.word_of_bytes_be_def] >>
+    drule_at Any word_of_bytes_be_inj >>
+    rw[bitstringTheory.length_pad_left] >>
+    simp[GSYM byteTheory.word_of_bytes_be_def] >>
+    DEP_REWRITE_TAC[w2w_word_of_bytes_be_pad_left] >>
+    simp[dividesTheory.divides_def] ) >>
   gvs[Abbr`www`] >>
   irule $ GSYM word_bytes_roundtrip >>
-  rw[]
+  rw[dividesTheory.divides_def]
 QED
 
 (* ===== Element Pointer ===== *)
