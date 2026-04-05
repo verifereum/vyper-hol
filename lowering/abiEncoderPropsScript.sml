@@ -6,10 +6,8 @@
  *   compile_abi_bytes_clamp_correct   — bytes clamping rejects dirty high bits
  *   compile_abi_encode_static_correct — static type writes word to dst
  *   compile_abi_decode_static_correct — static type reads + clamps
- *   compile_abi_encode_tuple_correct  — tuple encoding with head/tail
- *   compile_abi_decode_tuple_correct  — tuple decoding with validation
- *   compile_abi_encode_bytestring_correct — length-prefixed encoding
  *   compile_get_element_ptr_correct   — element pointer arithmetic
+ *   compile_abi_zero_pad_correct      — zero-pad bytestring to 32-byte boundary
  *
  * Source: abi/abi_encoder.py, abi/abi_decoder.py
  * Lowering: abiEncoderScript.sml
@@ -192,44 +190,6 @@ Proof
   cheat
 QED
 
-(* ===== Bytestring Encode ===== *)
-
-(* Bytestring encoding: copies length + data + zero-pads *)
-Theorem compile_abi_encode_bytestring_correct:
-  ∀ src_ptr dst head_offset ss st op st'.
-    compile_abi_encode_bytestring src_ptr dst head_offset st = (op, st')
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss'
-Proof
-  cheat
-QED
-
-(* ===== Tuple Encode/Decode ===== *)
-
-(* Tuple encoding *)
-Theorem compile_abi_encode_tuple_correct:
-  ∀ src_ptr dst_ptr types sizes ss st op st'.
-    compile_abi_encode_tuple src_ptr dst_ptr types sizes st = (op, st')
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss'
-Proof
-  cheat
-QED
-
-(* Tuple decoding with validation *)
-Theorem compile_abi_decode_tuple_correct:
-  ∀ src_base dst_ptr hi_op types sizes ss st st'.
-    compile_abi_decode_tuple src_base dst_ptr hi_op types sizes st = ((), st')
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∨
-      run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
-Proof
-  cheat
-QED
-
 (* ===== Element Pointer ===== *)
 
 (* get_element_ptr at offset 0 returns parent *)
@@ -267,17 +227,4 @@ Proof
   cheat
 QED
 
-(* ===== Bool Decode ===== *)
 
-(* Bool decode: clamps to 0 or 1 *)
-Theorem compile_abi_decode_bool_correct:
-  ∀ src_op dst_op ss st st'.
-    compile_abi_decode_bool src_op dst_op st = ((), st') ∧
-    eval_operand src_op ss = SOME w
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∨
-      run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
-Proof
-  cheat
-QED
