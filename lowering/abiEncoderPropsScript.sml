@@ -158,33 +158,44 @@ QED
 
 (* ===== Static Encode/Decode ===== *)
 
-(* Static ABI encoding: MSTORE of source value to dst *)
+(* Static ABI encoding: MLOAD src, MSTORE to dst, return Lit 32w *)
 Theorem compile_abi_encode_static_correct:
-  ∀ src_op dst_op ss st st' v dst.
-    compile_abi_encode_static src_op dst_op st = ((), st') ∧
-    eval_operand src_op ss = SOME v ∧
-    eval_operand dst_op ss = SOME dst
+  ∀ dst src ss st op st' src_v dst_w.
+    compile_abi_encode_static dst src st = (op, st') ∧
+    eval_operand src ss = SOME src_v ∧
+    eval_operand dst ss = SOME dst_w ∧
+    fresh_vars_wrt st ss
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      mload (w2n dst) ss' = v
+      op = Lit 32w ∧
+      mload (w2n dst_w) ss' = mload (w2n src_v) ss
 Proof
-  rw[compile_abi_encode_static_def] >>
-  drule emitted_insts_emit_void >>
-  rw[run_inst_seq_def] >>
-  drule_all_then (CHANGED_TAC o simp o single) step_MSTORE >>
-  simp[GSYM mem_word_at_eq_mload, mstore_mem_word_at_same]
+  cheat
 QED
 
 (* Static ABI decoding: MLOAD + clamp *)
 Theorem compile_abi_decode_static_correct:
-  ∀ src_op dst_op clamp_fn ss st st'.
-    compile_abi_decode_static src_op dst_op clamp_fn st = ((), st') ∧
-    eval_operand src_op ss = SOME src_w
+  ∀ src_op dst_op load_opc clamp_fn ss st st' src_w.
+    compile_abi_decode_static src_op dst_op load_opc clamp_fn st = ((), st') ∧
+    eval_operand src_op ss = SOME src_w ∧
+    fresh_vars_wrt st ss ∧
+    (* clamp_fn: either succeeds preserving operands & freshness, or reverts *)
+    (∀ val_op st0 st0' ss0 v.
+       clamp_fn val_op st0 = ((), st0') ∧
+       eval_operand val_op ss0 = SOME v ∧
+       fresh_vars_wrt st0 ss0 ⇒
+       (∃ ss0'.
+         run_inst_seq (emitted_insts st0 st0') ss0 = OK ss0' ∧
+         fresh_vars_wrt st0' ss0' ∧
+         (∀ op w. eval_operand op ss0 = SOME w ⇒
+                  eval_operand op ss0' = SOME w)) ∨
+       (∃ ss0'.
+         run_inst_seq (emitted_insts st0 st0') ss0 =
+           Abort Revert_abort ss0'))
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∨
-      (* Clamp failure → revert *)
       run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof
   cheat

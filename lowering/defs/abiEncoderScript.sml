@@ -118,14 +118,17 @@ End
 
 (* ===== ABI Encode (static types) ===== *)
 Definition compile_abi_encode_static_def:
-  compile_abi_encode_static src_op dst_op =
-    emit_void MSTORE [dst_op; src_op]
+  compile_abi_encode_static dst src =
+    do val_op <- emit_op MLOAD [src];
+       emit_void MSTORE [dst; val_op];
+       return (Lit 32w)
+    od
 End
 
 (* ===== ABI Decode (standalone helpers) ===== *)
 Definition compile_abi_decode_static_def:
-  compile_abi_decode_static src_op dst_op clamp_fn =
-    do val_op <- emit_op MLOAD [src_op];
+  compile_abi_decode_static src_op dst_op load_opc clamp_fn =
+    do val_op <- emit_op load_opc [src_op];
        clamp_fn val_op;
        emit_void MSTORE [dst_op; val_op]
     od
@@ -160,10 +163,7 @@ Definition compile_abi_encode_child_def:
 
   compile_abi_encode_to_buf (dst:operand) (src:operand)
                             AbiPrimWord =
-    (do val_op <- emit_op MLOAD [src];
-        emit_void MSTORE [dst; val_op];
-        return (Lit 32w)
-     od) ∧
+    (compile_abi_encode_static dst src) ∧
 
   compile_abi_encode_to_buf dst src (AbiBytestring max_len) =
     (let mem_size = 32 + ((max_len + 31) DIV 32) * 32 in
@@ -333,10 +333,8 @@ End
 Definition compile_abi_decode_to_buf_def:
   compile_abi_decode_to_buf (dst:operand) (src_op:operand) (load_opc:opcode)
                             (hi_op:operand) (DecPrimWord clamp_info) =
-    (do val_op <- emit_op load_opc [src_op];
-        compile_abi_clamp_basetype val_op clamp_info;
-        emit_void MSTORE [dst; val_op]
-     od) ∧
+    (compile_abi_decode_static src_op dst load_opc
+       (λval_op. compile_abi_clamp_basetype val_op clamp_info)) ∧
 
   compile_abi_decode_to_buf dst src_op load_opc hi_op
                             (DecBytestring max_len) =
