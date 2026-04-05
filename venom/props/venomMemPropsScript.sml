@@ -15,7 +15,10 @@
 
 Theory venomMemProps
 Ancestors
+  list byte words
   venomMemDefs venomMemProofs venomExecSemantics
+Libs
+  wordsLib
 
 Theorem allocas_non_overlapping_empty:
   ∀s. s.vs_allocas = FEMPTY ⇒ allocas_non_overlapping s
@@ -50,4 +53,19 @@ Theorem mload_mstore8_disjoint:
     regions_disjoint (off1, 1) (off2, 32) ⇒
     mload off2 (mstore8 off1 val s) = mload off2 s
 Proof ACCEPT_TAC venomMemProofsTheory.mload_mstore8_disjoint_proof
+QED
+
+(* Key property: converting 32 bytes to a word and back is identity.
+   Moved from mmCopyEquivScript for wider reuse. *)
+Theorem word_bytes_roundtrip:
+  ∀ bytes.
+    LENGTH bytes = 32 ⇒
+    word_to_bytes (word_of_bytes T (0w:bytes32) bytes) T = bytes
+Proof
+  rw[LIST_EQ_REWRITE, LENGTH_word_to_bytes]
+  >> fs[]
+  >> rw[word_to_bytes_def]
+  >> simp[EL_word_to_bytes_aux]
+  >> simp[get_byte_word_of_bytes_be]
+  >> simp[first_byte_at_0w, dimword_def]
 QED

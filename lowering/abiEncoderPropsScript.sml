@@ -15,10 +15,14 @@
 
 Theory abiEncoderProps
 Ancestors
+  list rich_list
   exprLoweringProps emitHelper emitHelperProps
   abiEncoder compileEnv
-  venomExecSemantics venomState venomInst
+  venomExecSemantics venomState venomInst venomMemProps
   valueEncoding valueEncodingProps
+  vyperABI vyperTyping contractABI
+Libs
+  dep_rewrite
 
 (* ===== ABI Clamping ===== *)
 
@@ -199,6 +203,67 @@ Theorem compile_abi_decode_static_correct:
       run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof
   cheat
+QED
+
+(* ===== ABI Encoding / Memory Correspondence ===== *)
+
+(* For primitive word types, the Vyper memory representation (val_in_memory)
+   is exactly the ABI encoding (enc). This is the key bridge between the
+   source semantics and the ABI spec.
+
+   val_in_memory says: mem_word_at off mem = val_to_w256 v
+   enc says: enc abi_type abi_val = word_to_bytes (some_word) T
+
+   These are the same 32 bytes, connected by word_bytes_roundtrip:
+     word_to_bytes (word_of_bytes T 0w bs) T = bs  (when LENGTH bs = 32)
+
+   Precondition off + 32 ≤ LENGTH mem ensures mem_bytes_at returns
+   real memory (no zero-padding from REPLICATE). *)
+Theorem val_in_memory_prim_enc:
+  ∀ bt v off mem av.
+    val_in_memory (BaseTV bt) v off mem ∧
+    off + 32 ≤ LENGTH mem ∧
+    is_word_type (BaseT bt) ∧
+    value_has_type (BaseTV bt) v ∧
+    vyper_to_abi_base bt v = SOME av
+    ⇒
+    mem_bytes_at off 32 mem = enc (vyper_base_to_abi_type bt) av
+Proof
+  (* Case split on bt and v. For each case:
+     1. val_in_memory gives mem_word_at off mem = val_to_w256 v
+     2. Unfold mem_word_at: word_of_bytes T 0w (mem_bytes_at off 32 mem) = w
+     3. Apply word_bytes_roundtrip: word_to_bytes w T = mem_bytes_at off 32 mem
+     4. Unfold enc/enc_number: enc at av = word_to_bytes w' T
+     5. Show w = w' by connecting val_to_w256 to the ABI value *)
+  Cases_on `bt` >> Cases_on `v` >>
+  simp[val_in_memory_def, is_word_type_def, vyper_to_abi_base_def,
+       vyper_base_to_abi_type_def, enc_def, enc_number_def,
+       mem_word_at_def, mem_bytes_at_def, val_to_w256_def] >>
+  rw[] >> rw[enc_def] >> gvs[value_has_type_def, TAKE_APPEND] >>
+  gvs[typed_val_to_w256_def] >>
+  full_simp_tac bool_ss [GSYM arithmeticTheory.SUB_EQ_0] >> gvs[] >>
+  TRY (
+    `n2w (Num i): bytes32 = i2w i` by (
+      rw[integer_wordTheory.i2w_def] >>
+      Cases_on`i=0` \\ gvs[] >>
+      `F` suffices_by rw[] >>
+      intLib.COOPER_TAC) >> gvs[]) >>
+  TRY (
+    qpat_x_assum`word_of_bytes _ _ _ = _`(SUBST_ALL_TAC o SYM) >>
+    irule $ GSYM word_bytes_roundtrip >>
+    simp[] )
+  >- (
+    Cases_on`b` \\ gvs[value_has_type_def, is_word_type_def] >>
+    gvs[PAD_RIGHT, REPLICATE_GENLIST, TAKE_LENGTH_TOO_LONG,
+        byteTheory.word_of_bytes_be_def] >>
+    cheat (* word_of_bytes inj *) ) >>
+  gvs[GSYM wordsTheory.w2w_def] >>
+  qmatch_goalsub_abbrev_tac`word_to_bytes www` >>
+  qmatch_asmsub_abbrev_tac`word_of_bytes _ _ _ = ww1` >>
+  `www = ww1` by cheat (* w2w word_of_bytes *) >>
+  gvs[Abbr`www`] >>
+  irule $ GSYM word_bytes_roundtrip >>
+  rw[]
 QED
 
 (* ===== Element Pointer ===== *)
