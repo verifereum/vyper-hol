@@ -63,17 +63,17 @@ Definition build_struct_fields_one_def:
 End
 
 Definition build_struct_fields_map_def:
-  build_struct_fields_map [] (sft : string -> (string # type # num) list) = sft ∧
+  build_struct_fields_map [] (sft : (string, (string # type # num) list) fmap) = sft ∧
   build_struct_fields_map (top :: rest) sft =
     case top of
       StructDecl sname args =>
         build_struct_fields_map rest
-          (λn. if n = sname then build_struct_fields_one sft args else sft n)
+          (sft |+ (sname, build_struct_fields_one (get_struct_fields sft) args))
     | _ => build_struct_fields_map rest sft
 End
 
 Definition make_struct_fields_map_def:
-  make_struct_fields_map tops = build_struct_fields_map tops (K [])
+  make_struct_fields_map tops = build_struct_fields_map tops FEMPTY
 End
 
 (* ===== Simple AST Extractors ===== *)
@@ -303,7 +303,7 @@ Definition build_positional_arg_def:
     let is_prim = is_word_type ty in
     let is_dyn = is_abi_dynamic (cenv_sft cenv) ty in
     let abi_sz = abi_embedded_static_size (cenv_sft cenv) ty in
-    let dec = type_to_abi_dec_info cenv ty in
+    let dec = type_to_abi_dec_info cenv.ce_struct_fields cenv ty in
     (name, is_prim, is_dyn, abi_sz, dec)
 End
 
@@ -347,7 +347,8 @@ Definition build_compile_env_def:
     (args : (string # type) list) (ret_type : type)
     (body : stmt list) (use_transient_locks : bool) =
     let sft = make_struct_fields_map tops in
-    let sft_types = (λname. MAP (FST o SND) (sft name)) in
+    let sft_fn = get_struct_fields sft in
+    let sft_types = (λname. MAP (FST o SND) (sft_fn name)) in
     let (flag_member_id, flag_n_members) = build_flag_info tops (K (K 0)) (K 0) in
     let storage_layout = extract_layout tops in
     let var_type_map = build_var_type_map tops in
@@ -357,9 +358,9 @@ Definition build_compile_env_def:
     let is_external = (vis = External) in
     let rc = returns_stack_count sft_types ret_type in
     let has_return_buf = (rc = 0 ∧ ret_type ≠ NoneT) in
-    let (arg_vars, args_end) = allocate_args sft args 0 FEMPTY in
+    let (arg_vars, args_end) = allocate_args sft_fn args 0 FEMPTY in
     let locals = collect_locals body in
-    let (local_vars, locals_end) = allocate_args sft locals args_end arg_vars in
+    let (local_vars, locals_end) = allocate_args sft_fn locals args_end arg_vars in
     let (all_vars, total_mem) =
       if is_external then (local_vars, locals_end)
       else allocate_internal_special_vars has_return_buf locals_end local_vars in
@@ -367,7 +368,7 @@ Definition build_compile_env_def:
     let all_decls = collect_module_vars tops ++ args ++ locals in
     let dynarray_cap = build_dynarray_capacity all_decls in
     let method_id_map = build_method_id_map tenv tops in
-    let func_info = build_func_info sft tops in
+    let func_info = build_func_info sft_fn tops in
     let local_var_type = (λn.
           case ALOOKUP (REVERSE (args ++ locals)) n of
             SOME ty => SOME ty
@@ -402,8 +403,8 @@ End
 
 Definition update_cenv_ret_abi_def:
   update_cenv_ret_abi cenv ret_type =
-    let enc_info = type_to_abi_enc_info cenv ret_type in
-    let dec_info = type_to_abi_dec_info cenv ret_type in
+    let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv ret_type in
+    let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv ret_type in
     let max_ret = abi_size_bound (cenv_sft cenv) ret_type in
     cenv with <| ce_ret_enc_info := enc_info;
                  ce_ret_dec_info := dec_info;
@@ -470,7 +471,8 @@ Definition package_internal_fn_def:
     (mut, nr, rr, fname, fargs, _, ret, body) =
     let fn_lbl = "fn_" ++ fname in
     let sft = make_struct_fields_map tops in
-    let sft_types = (λname. MAP (FST o SND) (sft name)) in
+    let sft_fn = get_struct_fields sft in
+    let sft_types = (λname. MAP (FST o SND) (sft_fn name)) in
     let vis = if is_ctor_context then Deploy else Internal in
     let cenv = (build_compile_env tops
                   vis mut fname fargs ret body use_trans)
@@ -564,7 +566,8 @@ Definition compile_vyper_def:
                 dispatch_strategy =
     let tenv = type_env tops in
     let sft = make_struct_fields_map tops in
-    let immutables_len = compute_immutables_len sft tops in
+    let sft_fn = get_struct_fields sft in
+    let immutables_len = compute_immutables_len sft_fn tops in
     let nkey_map = assign_nkeys tops 0 in
     let use_trans = F in
     let (ext_fns, int_fns, fb_fn, ctor_fn) = classify_functions tops in
