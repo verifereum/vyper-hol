@@ -114,7 +114,7 @@ Proof
   rw[apply_ctx_fn_transform_def] >> irule lookup_function_map >> simp[]
 QED
 
-(* Helper: run_context fuel_mono from run_function fuel_mono *)
+(* Helper: run_context fuel_mono from run_blocks fuel_mono *)
 Triviality run_context_fuel_mono:
   !fuel ctx s.
     terminates (run_context fuel ctx s) ==>
@@ -125,7 +125,7 @@ Proof
   Cases_on `ctx.ctx_entry` >> gvs[terminates_def] >>
   Cases_on `lookup_function x ctx.ctx_functions` >> gvs[terminates_def] >>
   Cases_on `entry_block x'` >> gvs[terminates_def] >>
-  irule run_function_fuel_mono >> gvs[terminates_def]
+  irule run_blocks_fuel_mono >> gvs[terminates_def]
 QED
 
 (* Lift per-block dual-context simulation to context-level pass_correct.
@@ -172,32 +172,32 @@ Triviality ctx_fn_transform_module_sim:
       (!callee_name cfn cs1 cs2.
         lookup_function callee_name ctx.ctx_functions = SOME cfn /\
         R_ok cs1 cs2 /\ cs1.vs_inst_idx = 0 ==>
-        ((?e1. run_function fuel ctx cfn cs1 = Error e1) /\
-         (?e2. run_function fuel (apply_ctx_fn_transform f ctx)
+        ((?e1. run_blocks fuel ctx cfn cs1 = Error e1) /\
+         (?e2. run_blocks fuel (apply_ctx_fn_transform f ctx)
                  (f cfn) cs2 = Error e2)) \/
         lift_result R_ok R_term
-          (run_function fuel ctx cfn cs1)
-          (run_function fuel (apply_ctx_fn_transform f ctx)
+          (run_blocks fuel ctx cfn cs1)
+          (run_blocks fuel (apply_ctx_fn_transform f ctx)
             (f cfn) cs2))
       ==>
-      ((?e1. run_block fuel ctx bb1 s1 = Error e1) /\
-       (?e2. run_block fuel (apply_ctx_fn_transform f ctx)
+      ((?e1. exec_block fuel ctx bb1 s1 = Error e1) /\
+       (?e2. exec_block fuel (apply_ctx_fn_transform f ctx)
                bb2 s2 = Error e2)) \/
       lift_result R_ok R_term
-        (run_block fuel ctx bb1 s1)
-        (run_block fuel (apply_ctx_fn_transform f ctx) bb2 s2))
+        (exec_block fuel ctx bb1 s1)
+        (exec_block fuel (apply_ctx_fn_transform f ctx) bb2 s2))
   ==>
     !fn_name fn1 fn2 fuel s1 s2.
       lookup_function fn_name ctx.ctx_functions = SOME fn1 /\
       lookup_function fn_name
         (apply_ctx_fn_transform f ctx).ctx_functions = SOME fn2 /\
       R_ok s1 s2 /\ s1.vs_inst_idx = 0 ==>
-      ((?e1. run_function fuel ctx fn1 s1 = Error e1) /\
-       (?e2. run_function fuel (apply_ctx_fn_transform f ctx)
+      ((?e1. run_blocks fuel ctx fn1 s1 = Error e1) /\
+       (?e2. run_blocks fuel (apply_ctx_fn_transform f ctx)
                fn2 s2 = Error e2)) \/
       lift_result R_ok R_term
-        (run_function fuel ctx fn1 s1)
-        (run_function fuel (apply_ctx_fn_transform f ctx) fn2 s2)
+        (run_blocks fuel ctx fn1 s1)
+        (run_blocks fuel (apply_ctx_fn_transform f ctx) fn2 s2)
 Proof
   rpt gen_tac >> strip_tac >>
   qspecl_then [`R_ok`, `R_term`, `ctx`, `apply_ctx_fn_transform f ctx`]
@@ -276,20 +276,20 @@ Theorem apply_ctx_fn_transform_correct:
       (!callee_name cfn cs1 cs2.
         lookup_function callee_name ctx.ctx_functions = SOME cfn /\
         R_ok cs1 cs2 /\ cs1.vs_inst_idx = 0 ==>
-        ((?e1. run_function fuel ctx cfn cs1 = Error e1) /\
-         (?e2. run_function fuel (apply_ctx_fn_transform f ctx)
+        ((?e1. run_blocks fuel ctx cfn cs1 = Error e1) /\
+         (?e2. run_blocks fuel (apply_ctx_fn_transform f ctx)
                  (f cfn) cs2 = Error e2)) \/
         lift_result R_ok R_term
-          (run_function fuel ctx cfn cs1)
-          (run_function fuel (apply_ctx_fn_transform f ctx)
+          (run_blocks fuel ctx cfn cs1)
+          (run_blocks fuel (apply_ctx_fn_transform f ctx)
             (f cfn) cs2))
       ==>
-      ((?e1. run_block fuel ctx bb1 s1 = Error e1) /\
-       (?e2. run_block fuel (apply_ctx_fn_transform f ctx)
+      ((?e1. exec_block fuel ctx bb1 s1 = Error e1) /\
+       (?e2. exec_block fuel (apply_ctx_fn_transform f ctx)
                bb2 s2 = Error e2)) \/
       lift_result R_ok R_term
-        (run_block fuel ctx bb1 s1)
-        (run_block fuel (apply_ctx_fn_transform f ctx) bb2 s2))
+        (exec_block fuel ctx bb1 s1)
+        (exec_block fuel (apply_ctx_fn_transform f ctx) bb2 s2))
   ==>
     ctx_pass_correct (apply_ctx_fn_transform f) R_ok R_term ctx s
 Proof
@@ -336,18 +336,18 @@ Proof
   gvs[] >>
   `entry_bb = HD entry_fn.fn_blocks` by gvs[entry_block_def, listTheory.NULL_EQ] >>
   gvs[] >>
-  (* Both sides call run_function with same initial state (R_ok reflexive) *)
+  (* Both sides call run_blocks with same initial state (R_ok reflexive) *)
   PURE_REWRITE_TAC [GSYM terminates_def] >>
   qabbrev_tac `s0 = s with <| vs_prev_bb := NONE;
     vs_current_bb := (HD entry_fn.fn_blocks).bb_label;
     vs_inst_idx := 0 |>` >>
   (* Get the bidir simulation result for the entry function *)
   `!fuel.
-     ((?e1. run_function fuel ctx entry_fn s0 = Error e1) /\
-      (?e2. run_function fuel ctx2 (f entry_fn) s0 = Error e2)) \/
+     ((?e1. run_blocks fuel ctx entry_fn s0 = Error e1) /\
+      (?e2. run_blocks fuel ctx2 (f entry_fn) s0 = Error e2)) \/
      lift_result R_ok R_term
-       (run_function fuel ctx entry_fn s0)
-       (run_function fuel ctx2 (f entry_fn) s0)` by (
+       (run_blocks fuel ctx entry_fn s0)
+       (run_blocks fuel ctx2 (f entry_fn) s0)` by (
     gen_tac >>
     first_x_assum (qspecl_then
       [`entry_name`, `entry_fn`, `f entry_fn`, `fuel`, `s0`, `s0`] mp_tac) >>
@@ -359,46 +359,46 @@ Proof
     eq_tac >> strip_tac
     >- (
       (* Forward: left terminates => right terminates *)
-      rename1 `terminates (run_function fuel0 ctx entry_fn s0)` >>
+      rename1 `terminates (run_blocks fuel0 ctx entry_fn s0)` >>
       first_x_assum (qspec_then `fuel0` mp_tac) >>
       strip_tac >- gvs[terminates_def] >>
       qexists_tac `fuel0` >>
-      Cases_on `run_function fuel0 ctx entry_fn s0` >>
-      Cases_on `run_function fuel0 ctx2 (f entry_fn) s0` >>
+      Cases_on `run_blocks fuel0 ctx entry_fn s0` >>
+      Cases_on `run_blocks fuel0 ctx2 (f entry_fn) s0` >>
       gvs[terminates_def, lift_result_def]
     )
     >- (
       (* Backward: right terminates => left terminates *)
-      rename1 `terminates (run_function fuel0 ctx2 (f entry_fn) s0)` >>
+      rename1 `terminates (run_blocks fuel0 ctx2 (f entry_fn) s0)` >>
       first_x_assum (qspec_then `fuel0` mp_tac) >>
       strip_tac >- gvs[terminates_def] >>
       qexists_tac `fuel0` >>
-      Cases_on `run_function fuel0 ctx entry_fn s0` >>
-      Cases_on `run_function fuel0 ctx2 (f entry_fn) s0` >>
+      Cases_on `run_blocks fuel0 ctx entry_fn s0` >>
+      Cases_on `run_blocks fuel0 ctx2 (f entry_fn) s0` >>
       gvs[terminates_def, lift_result_def]
     )
   )
   >- (
     (* lift_result for all fuel/fuel' pairs *)
     rpt strip_tac >>
-    rename1 `terminates (run_function fuel1 ctx entry_fn s0)` >>
-    rename1 `terminates (run_function fuel2 ctx2 (f entry_fn) s0)` >>
+    rename1 `terminates (run_blocks fuel1 ctx entry_fn s0)` >>
+    rename1 `terminates (run_blocks fuel2 ctx2 (f entry_fn) s0)` >>
     (* At fuel1: left terminates, so bidir gives lift_result *)
     first_x_assum (qspec_then `fuel1` mp_tac) >>
     strip_tac >- gvs[terminates_def] >>
     (* right also terminates at fuel1 *)
-    `terminates (run_function fuel1 ctx2 (f entry_fn) s0)` by (
-      Cases_on `run_function fuel1 ctx entry_fn s0` >>
-      Cases_on `run_function fuel1 ctx2 (f entry_fn) s0` >>
+    `terminates (run_blocks fuel1 ctx2 (f entry_fn) s0)` by (
+      Cases_on `run_blocks fuel1 ctx entry_fn s0` >>
+      Cases_on `run_blocks fuel1 ctx2 (f entry_fn) s0` >>
       gvs[terminates_def, lift_result_def]) >>
     (* By fuel_mono: right@fuel1 = right@fuel2 *)
-    `run_function fuel1 ctx2 (f entry_fn) s0 =
-     run_function fuel2 ctx2 (f entry_fn) s0` by (
+    `run_blocks fuel1 ctx2 (f entry_fn) s0 =
+     run_blocks fuel2 ctx2 (f entry_fn) s0` by (
       `fuel1 <= fuel2 \/ fuel2 <= fuel1` by simp[] >> gvs[]
       >- (`fuel2 = fuel1 + (fuel2 - fuel1)` by simp[] >>
-          metis_tac[run_function_fuel_mono])
+          metis_tac[run_blocks_fuel_mono])
       >- (`fuel1 = fuel2 + (fuel1 - fuel2)` by simp[] >>
-          metis_tac[run_function_fuel_mono])) >>
+          metis_tac[run_blocks_fuel_mono])) >>
     gvs[]
   )
 QED

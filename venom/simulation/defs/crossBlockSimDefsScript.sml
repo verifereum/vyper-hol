@@ -44,13 +44,13 @@ Definition resolves_to_def:
       lookup_block v.vs_current_bb bbs1 = SOME bb /\
       !fuel ctx.
         resolves_to R_ok R_term bbs1 bbs2 n
-          (run_block fuel ctx bb (v with vs_inst_idx := 0)) r2) \/
+          (exec_block fuel ctx bb (v with vs_inst_idx := 0)) r2) \/
     (* Transformed continues: symmetric *)
     (?v bb. r2 = OK v /\ ~v.vs_halted /\
       lookup_block v.vs_current_bb bbs2 = SOME bb /\
       !fuel ctx.
         resolves_to R_ok R_term bbs1 bbs2 n
-          r1 (run_block fuel ctx bb (v with vs_inst_idx := 0))))
+          r1 (exec_block fuel ctx bb (v with vs_inst_idx := 0))))
 End
 
 (* Existential wrapper: block results are related with some resolution bound *)

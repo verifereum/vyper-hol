@@ -62,12 +62,12 @@ Proof
   cheat
 QED
 
-(* Block-level: processing a block preserves soundness through run_block. *)
+(* Block-level: processing a block preserves soundness through exec_block. *)
 Theorem bp_process_block_sound_proof:
   ∀bp bb c bp' fuel ctx s s'.
     bp_ptr_sound bp s ∧
     bp_process_block bp bb.bb_instructions = (c, bp') ∧
-    run_block fuel ctx bb s = OK s' ∧
+    exec_block fuel ctx bb s = OK s' ∧
     s.vs_inst_idx = 0 ∧
     (∀inst. MEM inst bb.bb_instructions ⇒ inst_wf inst) ∧
     ALL_DISTINCT (FLAT (MAP (λi. i.inst_outputs) bb.bb_instructions)) ∧

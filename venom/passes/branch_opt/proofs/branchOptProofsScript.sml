@@ -95,9 +95,9 @@ Proof
 QED
 
 (* Shared helper: two blocks that agree on instructions 0..N-2 produce
-   related run_block results. Parameterized over relations R_ok/R_term
+   related exec_block results. Parameterized over relations R_ok/R_term
    (must be reflexive). Carries a predicate P through the prefix. *)
-Theorem run_block_agree_prefix[local]:
+Theorem exec_block_agree_prefix[local]:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    bb bb' fuel ctx s (P : venom_state -> bool).
@@ -120,11 +120,11 @@ Theorem run_block_agree_prefix[local]:
           st.vs_inst_idx = LENGTH bb.bb_instructions - 1 /\
           st.vs_inst_idx < LENGTH bb'.bb_instructions ==>
       lift_result R_ok R_term
-        (run_block fuel ctx bb st)
-        (run_block fuel ctx bb' st)) ==>
+        (exec_block fuel ctx bb st)
+        (exec_block fuel ctx bb' st)) ==>
     lift_result R_ok R_term
-      (run_block fuel ctx bb s)
-      (run_block fuel ctx bb' s)
+      (exec_block fuel ctx bb s)
+      (exec_block fuel ctx bb' s)
 Proof
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `N = LENGTH bb.bb_instructions` >>
@@ -134,8 +134,8 @@ Proof
      st.vs_inst_idx < N /\
      P st ==>
      lift_result R_ok R_term
-       (run_block fuel ctx bb st)
-       (run_block fuel ctx bb' st)`
+       (exec_block fuel ctx bb st)
+       (exec_block fuel ctx bb' st)`
     suffices_by (
       disch_then (qspecl_then [`N`, `s`] mp_tac) >>
       simp[Abbr `N`]) >>
@@ -147,7 +147,7 @@ Proof
       qpat_x_assum `!i. i < _ - 1 ==> _` (qspec_then `idx` mp_tac) >>
       simp[Abbr `idx`]) >>
     `idx < LENGTH bb'.bb_instructions` by simp[Abbr `idx`] >>
-    ONCE_REWRITE_TAC[run_block_def] >>
+    ONCE_REWRITE_TAC[exec_block_def] >>
     simp[venomInstTheory.get_instruction_def] >>
     Cases_on `step_inst fuel ctx (EL idx bb.bb_instructions) st` >>
     simp[lift_result_refl] >>
@@ -168,7 +168,7 @@ Proof
 QED
 
 (* Corollary: P=T specialization — no predicate preservation needed. *)
-Theorem run_block_agree_prefix_noP[local]:
+Theorem exec_block_agree_prefix_noP[local]:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    bb bb' fuel ctx s.
@@ -181,22 +181,22 @@ Theorem run_block_agree_prefix_noP[local]:
     (!st. st.vs_inst_idx = LENGTH bb.bb_instructions - 1 /\
           st.vs_inst_idx < LENGTH bb'.bb_instructions ==>
       lift_result R_ok R_term
-        (run_block fuel ctx bb st)
-        (run_block fuel ctx bb' st)) ==>
+        (exec_block fuel ctx bb st)
+        (exec_block fuel ctx bb' st)) ==>
     lift_result R_ok R_term
-      (run_block fuel ctx bb s)
-      (run_block fuel ctx bb' s)
+      (exec_block fuel ctx bb s)
+      (exec_block fuel ctx bb' s)
 Proof
   rpt strip_tac >>
   qspecl_then [`R_ok`, `R_term`, `bb`, `bb'`, `fuel`, `ctx`, `s`, `\s. T`]
-    mp_tac run_block_agree_prefix >>
+    mp_tac exec_block_agree_prefix >>
   simp[]
 QED
 
 (* Corollary: replace the last instruction of a block.
    Both terminators produce the same step_inst_base result under invariant P.
    Parameterized over R_ok/R_term (must be reflexive). *)
-Theorem run_block_replace_last[local]:
+Theorem exec_block_replace_last[local]:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    bb new_last fuel ctx s (P : venom_state -> bool).
@@ -219,8 +219,8 @@ Theorem run_block_replace_last[local]:
       step_inst_base (LAST bb.bb_instructions) st =
       step_inst_base new_last st) ==>
     lift_result R_ok R_term
-      (run_block fuel ctx bb s)
-      (run_block fuel ctx
+      (exec_block fuel ctx bb s)
+      (exec_block fuel ctx
         (bb with bb_instructions := FRONT bb.bb_instructions ++ [new_last]) s)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -233,7 +233,7 @@ Proof
     simp[Abbr `bb'`, LENGTH_FRONT_APPEND1] >>
   `!n st. n = N - st.vs_inst_idx /\ st.vs_inst_idx < N /\ P st ==>
      lift_result R_ok R_term
-       (run_block fuel ctx bb st) (run_block fuel ctx bb' st)`
+       (exec_block fuel ctx bb st) (exec_block fuel ctx bb' st)`
     suffices_by (
       disch_then (qspecl_then [`N`, `s`] mp_tac) >> simp[]) >>
   completeInduct_on `n` >> rw[] >>
@@ -242,7 +242,7 @@ Proof
     `EL st.vs_inst_idx bb'.bb_instructions =
      EL st.vs_inst_idx bb.bb_instructions` by
       simp[Abbr `bb'`, EL_FRONT_APPEND1] >>
-    ONCE_REWRITE_TAC[run_block_def] >>
+    ONCE_REWRITE_TAC[exec_block_def] >>
     simp[venomInstTheory.get_instruction_def] >>
     Cases_on `step_inst fuel ctx (EL st.vs_inst_idx bb.bb_instructions) st` >>
     simp[lift_result_refl] >>
@@ -259,7 +259,7 @@ Proof
     simp[LAST_EL, PRE_SUB1] >>
   `EL st.vs_inst_idx bb'.bb_instructions = new_last` by
     simp[Abbr `bb'`, Abbr `N`, EL_LAST_FRONT_APPEND1] >>
-  ONCE_REWRITE_TAC[run_block_def] >>
+  ONCE_REWRITE_TAC[exec_block_def] >>
   simp[venomInstTheory.get_instruction_def, step_inst_non_invoke] >>
   (`step_inst_base (LAST bb.bb_instructions) st =
    step_inst_base new_last st` by metis_tac[]) >>
@@ -289,12 +289,12 @@ Theorem bo_block_sim_iszero_removal[local]:
     let new_term = (LAST bb.bb_instructions) with inst_operands :=
       [new_cond; Label snd_lbl; Label fst_lbl] in
     lift_result (state_equiv {}) (execution_equiv {})
-      (run_block fuel ctx bb s)
-      (run_block fuel ctx
+      (exec_block fuel ctx bb s)
+      (exec_block fuel ctx
         (bb with bb_instructions := FRONT bb.bb_instructions ++ [new_term]) s)
 Proof
   rpt gen_tac >> strip_tac >> simp[] >>
-  irule run_block_replace_last >>
+  irule exec_block_replace_last >>
   simp[venomInstTheory.is_terminator_def, state_equiv_refl,
        execution_equiv_refl] >>
   qexists_tac `bo_iszero_inv dfg` >> simp[] >>
@@ -333,13 +333,13 @@ Theorem jnz_iszero_insertion_core[local]:
     LENGTH bb'.bb_instructions = N + 1
   ==>
     lift_result (state_equiv {tmp}) (execution_equiv {tmp})
-      (run_block fuel ctx bb st) (run_block fuel ctx bb' st)
+      (exec_block fuel ctx bb st) (exec_block fuel ctx bb' st)
 Proof
   rpt strip_tac >>
   sg `bb.bb_instructions <> []`
     >- (Cases_on `bb.bb_instructions` >> fs[]) >>
   (* Unroll both run_blocks once *)
-  ONCE_REWRITE_TAC[run_block_def] >>
+  ONCE_REWRITE_TAC[exec_block_def] >>
   (* gvs substitutes EL(N-1) = LAST into goal, enabling step_inst resolution *)
   gvs[venomInstTheory.get_instruction_def, step_inst_non_invoke,
       venomInstTheory.is_terminator_def, EL_APPEND1, EL_APPEND2,
@@ -352,8 +352,8 @@ Proof
   (* SOME case: simplify original's case expression *)
   rename1 `FLOOKUP st.vs_vars v = SOME val` >>
   Cases_on `val = 0w` >> simp[jump_to_def] >>
-  (* Unroll transformed run_block for the JNZ step *)
-  ONCE_REWRITE_TAC[run_block_def] >>
+  (* Unroll transformed exec_block for the JNZ step *)
+  ONCE_REWRITE_TAC[exec_block_def] >>
   gvs[venomInstTheory.get_instruction_def, step_inst_non_invoke,
       venomInstTheory.is_terminator_def, EL_APPEND2,
       listTheory.LENGTH_FRONT,
@@ -381,8 +381,8 @@ Theorem bo_block_sim_iszero_insertion[local]:
     let new_term = (LAST bb.bb_instructions) with inst_operands :=
       [Var tmp; Label snd_lbl; Label fst_lbl] in
     lift_result (state_equiv {tmp}) (execution_equiv {tmp})
-      (run_block fuel ctx bb s)
-      (run_block fuel ctx
+      (exec_block fuel ctx bb s)
+      (exec_block fuel ctx
         (bb with bb_instructions := FRONT bb.bb_instructions ++ [iz; new_term]) s)
 Proof
   rpt gen_tac >> strip_tac >> simp[] >>
@@ -402,7 +402,7 @@ Proof
   sg `bb'.bb_instructions = FRONT bb.bb_instructions ++ [iz; new_term]`
     >- simp[Abbr `bb'`] >>
   sg `LENGTH bb'.bb_instructions = N + 1` >- simp[] >>
-  irule run_block_agree_prefix_noP >>
+  irule exec_block_agree_prefix_noP >>
   simp[state_equiv_refl, execution_equiv_refl] >>
   conj_tac >- (rpt strip_tac >> simp[EL_APPEND1] >>
     irule rich_listTheory.EL_FRONT >> simp[NULL_EQ]) >>
@@ -486,8 +486,8 @@ Theorem bo_block_sim[local]:
        bo_iszero_inv dfg (st' with vs_inst_idx := SUC st.vs_inst_idx)) ==>
     lift_result (state_equiv (bo_fresh_vars_fn fn))
                (execution_equiv (bo_fresh_vars_fn fn))
-      (run_block fuel ctx bb s)
-      (run_block fuel ctx (branch_opt_block dfg live_at bb) s)
+      (exec_block fuel ctx bb s)
+      (exec_block fuel ctx (branch_opt_block dfg live_at bb) s)
 Proof
   rpt strip_tac >> gvs[] >>
   simp[branch_opt_block_def, LET_THM] >>
@@ -553,8 +553,8 @@ Theorem bo_cross_block_sim[local]:
        bo_iszero_inv dfg (st' with vs_inst_idx := SUC st.vs_inst_idx)) ==>
     lift_result (state_equiv (bo_fresh_vars_fn fn))
                (execution_equiv (bo_fresh_vars_fn fn))
-      (run_block fuel ctx bb s1)
-      (run_block fuel ctx (branch_opt_block dfg live_at bb) s2)
+      (exec_block fuel ctx bb s1)
+      (exec_block fuel ctx (branch_opt_block dfg live_at bb) s2)
 Proof
   rpt strip_tac >> gvs[] >>
   qspecl_then [`state_equiv (bo_fresh_vars_fn fn)`,
@@ -562,12 +562,12 @@ Proof
     mp_tac lift_result_trans >>
   (impl_tac >- metis_tac[state_equiv_trans, execution_equiv_trans]) >>
   disch_then irule >>
-  qexists_tac `run_block fuel ctx bb s2` >>
+  qexists_tac `exec_block fuel ctx bb s2` >>
   conj_tac
   >- (
     qspecl_then [`state_equiv (bo_fresh_vars_fn fn)`,
                   `execution_equiv (bo_fresh_vars_fn fn)`,
-                  `fn`] mp_tac (cj 1 run_block_preserves_R) >>
+                  `fn`] mp_tac (cj 1 exec_block_preserves_R) >>
     simp[state_equiv_execution_equiv_valid_state_rel] >>
     impl_tac
     >- (
@@ -607,13 +607,13 @@ Theorem branch_opt_function_correct_proof:
     (!bb fuel' ctx' s0 s0'.
        MEM bb fn.fn_blocks /\
        bo_iszero_inv dfg s0 /\ s0.vs_inst_idx = 0 /\
-       run_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
+       exec_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
        bo_iszero_inv dfg s0') /\
     (* Inv preservation across transformed blocks *)
     (!bb fuel' ctx' s0 s0'.
        MEM bb fn'.fn_blocks /\
        bo_iszero_inv dfg s0 /\ s0.vs_inst_idx = 0 /\
-       run_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
+       exec_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
        bo_iszero_inv dfg s0') /\
     (* Inv preservation within block prefix (both original and transformed) *)
     (!bb fuel' ctx' st st' inst.
@@ -627,8 +627,8 @@ Theorem branch_opt_function_correct_proof:
     s.vs_inst_idx = 0 ==>
     lift_result (state_equiv (bo_fresh_vars_fn fn))
                (execution_equiv (bo_fresh_vars_fn fn))
-      (run_function fuel ctx fn s)
-      (run_function fuel ctx fn' s)
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx fn' s)
 Proof
   simp_tac std_ss [LET_THM] >> rpt strip_tac >>
   ONCE_REWRITE_TAC[branch_opt_as_fmt] >>

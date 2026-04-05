@@ -772,7 +772,7 @@ Proof
       simp[] >> metis_tac[])
 QED
 
-(* Bridge: run_insts prefix simulation implies run_block simulation
+(* Bridge: run_insts prefix simulation implies exec_block simulation
    when both blocks share the same terminator and start from the same state *)
 Triviality front_el_eq[local]:
   !(bb:'a list). bb <> [] ==>
@@ -781,7 +781,7 @@ Proof
   rpt strip_tac >> simp[] >> metis_tac[EL_FRONT, NULL_EQ]
 QED
 
-Triviality run_insts_front_sim_run_block_fail[local]:
+Triviality run_insts_front_sim_exec_block_fail[local]:
   !fuel ctx bb1 bb2 s V.
     bb1.bb_instructions <> [] /\ bb2.bb_instructions <> [] /\
     EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
@@ -795,8 +795,8 @@ Triviality run_insts_front_sim_run_block_fail[local]:
       (run_insts fuel ctx (FRONT bb2.bb_instructions) s)
   ==>
     lift_result (state_equiv V) (execution_equiv UNIV)
-      (run_block fuel ctx bb1 s)
-      (run_block fuel ctx bb2 s)
+      (exec_block fuel ctx bb1 s)
+      (exec_block fuel ctx bb2 s)
 Proof
   rpt strip_tac >>
   Q.SUBGOAL_THEN `s with vs_inst_idx := 0 = s` ASSUME_TAC
@@ -805,9 +805,9 @@ Proof
   >- (strip_tac >>
       Cases_on `run_insts fuel ctx (FRONT bb1.bb_instructions) s` >>
       gvs[lift_result_def]) >>
-  (* Chain: run_block bb1 ~ run_insts FRONT bb1 ~ run_insts FRONT bb2 ~ run_block bb2 *)
+  (* Chain: exec_block bb1 ~ run_insts FRONT bb1 ~ run_insts FRONT bb2 ~ exec_block bb2 *)
   mp_tac (Q.SPECL [`state_equiv V`, `execution_equiv UNIV`,
-                    `FRONT bb1.bb_instructions`] run_block_prefix_fail_lift) >>
+                    `FRONT bb1.bb_instructions`] exec_block_prefix_fail_lift) >>
   simp[valid_state_rel_UNIV] >>
   disch_then (qspecl_then [`fuel`, `ctx`, `bb1`, `s`, `0`] mp_tac) >>
   simp[LENGTH_FRONT] >>
@@ -815,7 +815,7 @@ Proof
     >- (rpt strip_tac >> irule (GSYM EL_FRONT) >> simp[NULL_EQ, LENGTH_FRONT])
     >- gvs[])) >> strip_tac >>
   mp_tac (Q.SPECL [`state_equiv V`, `execution_equiv UNIV`,
-                    `FRONT bb2.bb_instructions`] run_insts_lift_run_block) >>
+                    `FRONT bb2.bb_instructions`] run_insts_lift_exec_block) >>
   simp[valid_state_rel_UNIV] >>
   disch_then (qspecl_then [`fuel`, `ctx`, `bb2`, `s`, `0`] mp_tac) >>
   simp[LENGTH_FRONT] >>
@@ -880,7 +880,7 @@ Proof
   rpt strip_tac >> fs[lookup_var_def]
 QED
 
-Triviality run_insts_front_sim_run_block_ok[local]:
+Triviality run_insts_front_sim_exec_block_ok[local]:
   !fuel ctx bb1 bb2 s s1' s2' V.
     bb1.bb_instructions <> [] /\ bb2.bb_instructions <> [] /\
     LAST bb1.bb_instructions = LAST bb2.bb_instructions /\
@@ -896,8 +896,8 @@ Triviality run_insts_front_sim_run_block_ok[local]:
     (!x. MEM (Var x) (LAST bb1.bb_instructions).inst_operands ==> x NOTIN V)
   ==>
     lift_result (state_equiv V) (execution_equiv UNIV)
-      (run_block fuel ctx bb1 s)
-      (run_block fuel ctx bb2 s)
+      (exec_block fuel ctx bb1 s)
+      (exec_block fuel ctx bb2 s)
 Proof
   rpt strip_tac >>
   Q.SUBGOAL_THEN `s with vs_inst_idx := 0 = s` ASSUME_TAC
@@ -906,21 +906,21 @@ Proof
   >- metis_tac[run_insts_preserves_idx] >>
   Q.SUBGOAL_THEN `s2'.vs_inst_idx = 0` ASSUME_TAC
   >- metis_tac[run_insts_preserves_idx] >>
-  (* Advance run_block past prefix to terminator position *)
-  Q.SUBGOAL_THEN `run_block fuel ctx bb1 s =
-       run_block fuel ctx bb1
+  (* Advance exec_block past prefix to terminator position *)
+  Q.SUBGOAL_THEN `exec_block fuel ctx bb1 s =
+       exec_block fuel ctx bb1
          (s1' with vs_inst_idx := LENGTH (FRONT bb1.bb_instructions))`
   ASSUME_TAC
   >- (mp_tac (Q.SPECL [`FRONT bb1.bb_instructions`, `fuel`, `ctx`,
-                        `bb1`, `s`, `0`, `s1'`] run_block_skip_prefix) >>
+                        `bb1`, `s`, `0`, `s1'`] exec_block_skip_prefix) >>
       simp[LENGTH_FRONT] >> disch_then match_mp_tac >>
       rpt strip_tac >> irule (GSYM EL_FRONT) >> simp[NULL_EQ, LENGTH_FRONT]) >>
-  Q.SUBGOAL_THEN `run_block fuel ctx bb2 s =
-       run_block fuel ctx bb2
+  Q.SUBGOAL_THEN `exec_block fuel ctx bb2 s =
+       exec_block fuel ctx bb2
          (s2' with vs_inst_idx := LENGTH (FRONT bb2.bb_instructions))`
   ASSUME_TAC
   >- (mp_tac (Q.SPECL [`FRONT bb2.bb_instructions`, `fuel`, `ctx`,
-                        `bb2`, `s`, `0`, `s2'`] run_block_skip_prefix) >>
+                        `bb2`, `s`, `0`, `s2'`] exec_block_skip_prefix) >>
       simp[LENGTH_FRONT] >> disch_then match_mp_tac >>
       rpt strip_tac >> irule (GSYM EL_FRONT) >> simp[NULL_EQ, LENGTH_FRONT]) >>
   ntac 2 (pop_assum (fn th => REWRITE_TAC[th])) >>
@@ -937,9 +937,9 @@ Proof
   ASSUME_TAC >- metis_tac[EL_LENGTH_SNOC, SNOC_LAST_FRONT] >>
   Q.SUBGOAL_THEN `(LAST bb2.bb_instructions).inst_opcode <> INVOKE` ASSUME_TAC
   >- (strip_tac >> gvs[venomInstTheory.is_terminator_def]) >>
-  (* Unfold run_block at terminator position *)
-  CONV_TAC (RATOR_CONV (RAND_CONV (ONCE_REWRITE_CONV [run_block_def]))) >>
-  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+  (* Unfold exec_block at terminator position *)
+  CONV_TAC (RATOR_CONV (RAND_CONV (ONCE_REWRITE_CONV [exec_block_def]))) >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
   simp[venomInstTheory.get_instruction_def,
        venomExecSemanticsTheory.step_inst_non_invoke] >>
   Q.SUBGOAL_THEN `is_terminator (LAST bb2.bb_instructions).inst_opcode`
@@ -949,7 +949,7 @@ Proof
   irule terminator_halted_wrap_lift_result >> simp[]
 QED
 
-Triviality run_insts_front_sim_run_block[local]:
+Triviality run_insts_front_sim_exec_block[local]:
   !fuel ctx bb1 bb2 s V.
     bb1.bb_instructions <> [] /\ bb2.bb_instructions <> [] /\
     LAST bb1.bb_instructions = LAST bb2.bb_instructions /\
@@ -965,8 +965,8 @@ Triviality run_insts_front_sim_run_block[local]:
     (!x. MEM (Var x) (LAST bb1.bb_instructions).inst_operands ==> x NOTIN V)
   ==>
     lift_result (state_equiv V) (execution_equiv UNIV)
-      (run_block fuel ctx bb1 s)
-      (run_block fuel ctx bb2 s)
+      (exec_block fuel ctx bb1 s)
+      (exec_block fuel ctx bb2 s)
 Proof
   rpt strip_tac >>
   Cases_on `?s1'. run_insts fuel ctx (FRONT bb1.bb_instructions) s = OK s1'`
@@ -974,8 +974,8 @@ Proof
     gvs[] >>
     Cases_on `run_insts fuel ctx (FRONT bb2.bb_instructions) s` >>
     gvs[lift_result_def] >>
-    irule run_insts_front_sim_run_block_ok >> simp[] >> metis_tac[])
-  >- (irule run_insts_front_sim_run_block_fail >> simp[] >> metis_tac[])
+    irule run_insts_front_sim_exec_block_ok >> simp[] >> metis_tac[])
+  >- (irule run_insts_front_sim_exec_block_fail >> simp[] >> metis_tac[])
 QED
 
 (* The FRONT of the AC transform is the FOLDL on the FRONT of the original *)
@@ -1107,8 +1107,8 @@ Theorem ac_block_sim_same_nonempty[local]:
     lift_result
       (state_equiv V)
       (execution_equiv UNIV)
-      (run_block fuel ctx bb s)
-      (run_block fuel ctx (ac_transform_block dfg bb) s)
+      (exec_block fuel ctx bb s)
+      (exec_block fuel ctx (ac_transform_block dfg bb) s)
 Proof
   rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   (Q.SUBGOAL_THEN `bb.bb_instructions <> []` ASSUME_TAC >- fs[bb_well_formed_def]) >>
@@ -1148,7 +1148,7 @@ Proof
                  (FRONT bb.bb_instructions))`
     ASSUME_TAC
   >- simp[FRONT_APPEND] >>
-  match_mp_tac run_insts_front_sim_run_block >>
+  match_mp_tac run_insts_front_sim_exec_block >>
   pop_assum (fn front_eq => REWRITE_TAC[front_eq]) >>
   simp[] >> rpt conj_tac
   >- (simp[EVERY_MEM] >> metis_tac[front_not_terminator])
@@ -1184,8 +1184,8 @@ Theorem ac_block_sim_same[local]:
     lift_result
       (state_equiv V)
       (execution_equiv UNIV)
-      (run_block fuel ctx bb s)
-      (run_block fuel ctx (ac_transform_block dfg bb) s)
+      (exec_block fuel ctx bb s)
+      (exec_block fuel ctx (ac_transform_block dfg bb) s)
 Proof
   rpt strip_tac >>
   Cases_on `ac_scan_block dfg bb.bb_instructions NONE = []`
@@ -1409,8 +1409,8 @@ Triviality ac_block_sim_same_from_fn[local]:
     lift_result
       (state_equiv (ac_fresh_vars_fn fn))
       (execution_equiv UNIV)
-      (run_block fuel ctx bb s)
-      (run_block fuel ctx (ac_transform_block (dfg_build_function fn) bb) s)
+      (exec_block fuel ctx bb s)
+      (exec_block fuel ctx (ac_transform_block (dfg_build_function fn) bb) s)
 Proof
   rpt strip_tac >>
   irule ac_block_sim_same >> rpt conj_tac >>
@@ -1463,16 +1463,16 @@ Theorem ac_block_sim[local]:
     lift_result
       (state_equiv (ac_fresh_vars_fn fn))
       (execution_equiv UNIV)
-      (run_block fuel ctx bb s1)
-      (run_block fuel ctx (ac_transform_block dfg bb) s2)
+      (exec_block fuel ctx bb s1)
+      (exec_block fuel ctx (ac_transform_block dfg bb) s2)
 Proof
   rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   (* Step 1: state_equiv gives result_equiv for original block *)
   (Q.SUBGOAL_THEN
     `result_equiv (ac_fresh_vars_fn fn)
-       (run_block fuel ctx bb s1) (run_block fuel ctx bb s2)`
+       (exec_block fuel ctx bb s1) (exec_block fuel ctx bb s2)`
     ASSUME_TAC >-
-    (irule run_block_result_equiv >> simp[] >> conj_tac
+    (irule exec_block_result_equiv >> simp[] >> conj_tac
      >- metis_tac[]
      >- (irule safe_assert_term_no_invoke >>
          simp[EVERY_MEM] >> metis_tac[]))) >>
@@ -1480,8 +1480,8 @@ Proof
   (Q.SUBGOAL_THEN
     `lift_result (state_equiv (ac_fresh_vars_fn fn))
        (execution_equiv UNIV)
-       (run_block fuel ctx bb s2)
-       (run_block fuel ctx (ac_transform_block (dfg_build_function fn) bb) s2)`
+       (exec_block fuel ctx bb s2)
+       (exec_block fuel ctx (ac_transform_block (dfg_build_function fn) bb) s2)`
     ASSUME_TAC >-
     (irule ac_block_sim_same_from_fn >> simp[] >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
@@ -1496,7 +1496,7 @@ Proof
   rpt conj_tac
   >- metis_tac[execution_equiv_trans]
   >- metis_tac[state_equiv_trans]
-  >- (qexists_tac `run_block fuel ctx bb s2` >>
+  >- (qexists_tac `exec_block fuel ctx bb s2` >>
       metis_tac[lift_result_weaken_UNIV])
 QED
 
@@ -1527,7 +1527,7 @@ Theorem ac_transform_function_correct_proof:
        (!bb' inst x. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
           MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0)) /\
        s0.vs_inst_idx = 0 /\
-       run_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
+       exec_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
        ac_inv fn dfg s0' /\
        (!bb' inst x. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
           MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0'))) /\
@@ -1538,15 +1538,15 @@ Theorem ac_transform_function_correct_proof:
        (!bb' inst x. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
           MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0)) /\
        s0.vs_inst_idx = 0 /\
-       run_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
+       exec_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
        ac_inv fn dfg s0' /\
        (!bb' inst x. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
           MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0'))) /\
     s.vs_inst_idx = 0 ==>
     lift_result (state_equiv (ac_fresh_vars_fn fn))
                (execution_equiv UNIV)
-      (run_function fuel ctx fn s)
-      (run_function fuel ctx fn' s)
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx fn' s)
 Proof
   simp_tac std_ss [LET_THM] >> rpt strip_tac >>
   ONCE_REWRITE_TAC[ac_transform_as_fmt] >>

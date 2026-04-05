@@ -89,7 +89,7 @@ Proof
 QED
 
 (* ==========================================================================
-   block_step / run_block Properties
+   block_step / exec_block Properties
    ========================================================================== *)
 
 Theorem block_step_increments_idx:
@@ -101,24 +101,24 @@ Proof
   ACCEPT_TAC venomExecProofsTheory.block_step_increments_idx
 QED
 
-Theorem run_block_OK_not_halted:
-  !fuel ctx bb s v. run_block fuel ctx bb s = OK v ==> ~v.vs_halted
+Theorem exec_block_OK_not_halted:
+  !fuel ctx bb s v. exec_block fuel ctx bb s = OK v ==> ~v.vs_halted
 Proof
-  ACCEPT_TAC venomExecProofsTheory.run_block_OK_not_halted
+  ACCEPT_TAC venomExecProofsTheory.exec_block_OK_not_halted
 QED
 
-Theorem run_block_OK_inst_idx_0:
-  !fuel ctx bb s v. run_block fuel ctx bb s = OK v ==> v.vs_inst_idx = 0
+Theorem exec_block_OK_inst_idx_0:
+  !fuel ctx bb s v. exec_block fuel ctx bb s = OK v ==> v.vs_inst_idx = 0
 Proof
-  ACCEPT_TAC venomExecProofsTheory.run_block_OK_inst_idx_0
+  ACCEPT_TAC venomExecProofsTheory.exec_block_OK_inst_idx_0
 QED
 
-Theorem run_block_ok_sets_prev_bb:
+Theorem exec_block_ok_sets_prev_bb:
   !fuel ctx bb s s'.
-    run_block fuel ctx bb s = OK s' ==>
+    exec_block fuel ctx bb s = OK s' ==>
     s'.vs_prev_bb <> NONE
 Proof
-  ACCEPT_TAC venomExecProofsTheory.run_block_ok_sets_prev_bb
+  ACCEPT_TAC venomExecProofsTheory.exec_block_ok_sets_prev_bb
 QED
 
 Theorem step_inst_preserves_prev_bb:
@@ -213,21 +213,21 @@ Proof
   ACCEPT_TAC venomExecProofsTheory.step_inst_base_IntRet_not_INVOKE
 QED
 
-(* For non-INVOKE blocks, run_block unfolds through block_step *)
-Theorem run_block_block_step:
+(* For non-INVOKE blocks, exec_block unfolds through block_step *)
+Theorem exec_block_block_step:
   !fuel ctx bb s.
     EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions ==>
-    run_block fuel ctx bb s =
+    exec_block fuel ctx bb s =
       let (r, t) = block_step bb s in
       case r of
         OK s' => if t then (if s'.vs_halted then Halt s' else OK s')
-                 else run_block fuel ctx bb s'
+                 else exec_block fuel ctx bb s'
       | Halt s' => Halt s'
       | Abort a s' => Abort a s'
       | Error e => Error e
       | IntRet vals s' => IntRet vals s'
 Proof
-  ACCEPT_TAC venomExecProofsTheory.run_block_block_step
+  ACCEPT_TAC venomExecProofsTheory.exec_block_block_step
 QED
 
 (* ==========================================================================
@@ -286,24 +286,24 @@ Proof
   ACCEPT_TAC venomExecProofsTheory.step_inst_base_term_succs
 QED
 
-Theorem run_block_ok_nonempty:
-  !fuel ctx bb s v. s.vs_inst_idx = 0 /\ run_block fuel ctx bb s = OK v ==>
+Theorem exec_block_ok_nonempty:
+  !fuel ctx bb s v. s.vs_inst_idx = 0 /\ exec_block fuel ctx bb s = OK v ==>
     bb.bb_instructions <> []
 Proof
-  ACCEPT_TAC venomExecProofsTheory.run_block_ok_nonempty
+  ACCEPT_TAC venomExecProofsTheory.exec_block_ok_nonempty
 QED
 
-Theorem run_block_current_bb_in_succs:
+Theorem exec_block_current_bb_in_succs:
   !fuel ctx bb s s1.
     EVERY inst_wf bb.bb_instructions /\
     (!i. i < LENGTH bb.bb_instructions - 1 ==>
        ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
     bb.bb_instructions <> [] /\
     s.vs_inst_idx = 0 /\
-    run_block fuel ctx bb s = OK s1 ==>
+    exec_block fuel ctx bb s = OK s1 ==>
     MEM s1.vs_current_bb (bb_succs bb)
 Proof
-  ACCEPT_TAC venomExecProofsTheory.run_block_current_bb_in_succs
+  ACCEPT_TAC venomExecProofsTheory.exec_block_current_bb_in_succs
 QED
 
 Theorem step_inst_base_term_prev_bb:
@@ -315,37 +315,37 @@ Proof
   ACCEPT_TAC venomExecProofsTheory.step_inst_base_term_prev_bb
 QED
 
-Theorem run_block_ok_prev_bb:
+Theorem exec_block_ok_prev_bb:
   !fuel ctx bb s s1.
     EVERY inst_wf bb.bb_instructions /\
     (!i. i < LENGTH bb.bb_instructions - 1 ==>
        ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
     bb.bb_instructions <> [] /\
     s.vs_inst_idx = 0 /\
-    run_block fuel ctx bb s = OK s1 ==>
+    exec_block fuel ctx bb s = OK s1 ==>
     s1.vs_prev_bb = SOME s.vs_current_bb
 Proof
-  ACCEPT_TAC venomExecProofsTheory.run_block_ok_prev_bb
+  ACCEPT_TAC venomExecProofsTheory.exec_block_ok_prev_bb
 QED
 
-Theorem run_block_preserves_non_output_vars:
+Theorem exec_block_preserves_non_output_vars:
   !fuel ctx bb s s'.
-    run_block fuel ctx bb s = OK s' ==>
+    exec_block fuel ctx bb s = OK s' ==>
     !v. ~MEM v (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) ==>
     lookup_var v s' = lookup_var v s
 Proof
-  ACCEPT_TAC venomExecProofsTheory.run_block_preserves_non_output_vars
+  ACCEPT_TAC venomExecProofsTheory.exec_block_preserves_non_output_vars
 QED
 
-Theorem run_block_same_insts:
+Theorem exec_block_same_insts:
   !fuel ctx bb1 bb2 s.
     s.vs_inst_idx < LENGTH bb1.bb_instructions /\
     LENGTH bb2.bb_instructions = LENGTH bb1.bb_instructions /\
     (!i. s.vs_inst_idx <= i /\ i < LENGTH bb1.bb_instructions ==>
       EL i bb1.bb_instructions = EL i bb2.bb_instructions) ==>
-    run_block fuel ctx bb1 s = run_block fuel ctx bb2 s
+    exec_block fuel ctx bb1 s = exec_block fuel ctx bb2 s
 Proof
-  ACCEPT_TAC venomExecProofsTheory.run_block_same_insts
+  ACCEPT_TAC venomExecProofsTheory.exec_block_same_insts
 QED
 
 Theorem fuel_mono:
@@ -353,11 +353,11 @@ Theorem fuel_mono:
      step_inst n ctx inst s = r /\ (!e. r <> Error e) /\ n <= m ==>
      step_inst m ctx inst s = r) /\
   (!n m ctx bb s r.
-     run_block n ctx bb s = r /\ (!e. r <> Error e) /\ n <= m ==>
-     run_block m ctx bb s = r) /\
+     exec_block n ctx bb s = r /\ (!e. r <> Error e) /\ n <= m ==>
+     exec_block m ctx bb s = r) /\
   (!n m ctx fn s r.
-     run_function n ctx fn s = r /\ (!e. r <> Error e) /\ n <= m ==>
-     run_function m ctx fn s = r)
+     run_blocks n ctx fn s = r /\ (!e. r <> Error e) /\ n <= m ==>
+     run_blocks m ctx fn s = r)
 Proof
   ACCEPT_TAC venomExecProofsTheory.fuel_mono
 QED

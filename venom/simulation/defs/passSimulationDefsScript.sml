@@ -60,8 +60,8 @@ End
 Definition block_simulates_def:
   block_simulates R_ok R_term bt <=>
     !fuel ctx bb s.
-      lift_result R_ok R_term (run_block fuel ctx bb s)
-                               (run_block fuel ctx (bt bb) s)
+      lift_result R_ok R_term (exec_block fuel ctx bb s)
+                               (exec_block fuel ctx (bt bb) s)
 End
 
 (* ===== Pass correctness predicates ===== *)
@@ -81,8 +81,8 @@ End
    Passes with custom relations (e.g. lower_dload) use their own.
 
    Usage: pass_correct (state_equiv vars) (execution_equiv vars)
-            (\fuel. run_function fuel ctx fn s)
-            (\fuel. run_function fuel ctx fn' s) *)
+            (\fuel. run_blocks fuel ctx fn s)
+            (\fuel. run_blocks fuel ctx fn' s) *)
 (* Sequential composition of state relations.
    rel_seq R1 R2 s1 s3 holds when there exists an intermediate s2
    with R1 s1 s2 and R2 s2 s3.  Identity element: (=). *)

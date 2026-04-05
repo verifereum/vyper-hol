@@ -356,7 +356,7 @@ Proof
       gvs[setup_callee_update_var] >>
       Cases_on `setup_callee callee_fn args st` >> gvs[] >>
       rename1 `SOME callee_s` >>
-      Cases_on `run_function fuel ctx callee_fn callee_s` >> gvs[] >>
+      Cases_on `run_blocks fuel ctx callee_fn callee_s` >> gvs[] >>
       rename1 `IntRet vals callee_s'` >>
       gvs[merge_callee_update_var] >>
       Cases_on `LENGTH inst.inst_outputs = LENGTH vals`

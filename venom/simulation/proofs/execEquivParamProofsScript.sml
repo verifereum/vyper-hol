@@ -3,7 +3,7 @@
  *
  * TOP-LEVEL:
  *   step_inst_preserves_R_proof                          — master theorem
- *   run_block_preserves_R_proof                          — mutual: run_block + run_function
+ *   exec_block_preserves_R_proof                          — mutual: exec_block + run_blocks
  *   state_equiv_execution_equiv_valid_state_rel_proof    — instantiation
  *)
 
@@ -20,7 +20,7 @@ open execEquivParamLib
 (* Master theorem: step_inst preserves any valid (R_ok, R_term) pair.
    Non-INVOKE: step_inst_non_invoke reduces to step_inst_base, dispatch to helpers.
    INVOKE: identical callee state (setup_callee from R_ok + same args) →
-   same run_function result → merge_callee_state + bind_outputs preserve R_ok. *)
+   same run_blocks result → merge_callee_state + bind_outputs preserve R_ok. *)
 Theorem step_inst_preserves_R_proof:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool) fuel ctx inst s1 s2.
@@ -53,13 +53,13 @@ Proof
     gvs[] >>
     Cases_on `setup_callee callee_fn args s2` >> gvs[lift_result_def] >>
     rename1 `setup_callee _ _ _ = SOME callee_s` >>
-    (* Same callee state → same run_function result *)
-    Cases_on `run_function fuel ctx callee_fn callee_s` >> gvs[lift_result_def]
+    (* Same callee state → same run_blocks result *)
+    Cases_on `run_blocks fuel ctx callee_fn callee_s` >> gvs[lift_result_def]
     >- metis_tac[vsr_R_term_refl]
     >- metis_tac[vsr_R_term_refl]
     >- (
       (* IntRet: merge_callee + bind_outputs preserve R_ok *)
-      rename1 `run_function _ _ _ _ = IntRet vals callee_s'` >>
+      rename1 `run_blocks _ _ _ _ = IntRet vals callee_s'` >>
       sg `OPTREL R_ok
             (bind_outputs inst.inst_outputs vals (merge_callee_state s1 callee_s'))
             (bind_outputs inst.inst_outputs vals (merge_callee_state s2 callee_s'))`
@@ -110,15 +110,15 @@ Proof
   ]
 QED
 
-(* run_block/run_function preserve R. Mutual induction via run_block_ind.
-   New run_block is simpler (no INVOKE special case - step_inst handles it).
+(* exec_block/run_blocks preserve R. Mutual induction via exec_block_ind.
+   New exec_block is simpler (no INVOKE special case - step_inst handles it).
    Uses vs_inst_idx := SUC s.vs_inst_idx (not next_inst). *)
 
-(* Generalized: run_block preserves R with auxiliary invariant Q.
+(* Generalized: exec_block preserves R with auxiliary invariant Q.
    Q tracks additional agreement (e.g., fresh variable agreement) that R_ok
    alone doesn't capture. Operand agreement uses R_ok AND Q; Q is preserved
    by non-terminator steps. *)
-Theorem run_block_same_preserves_RQ_proof:
+Theorem exec_block_same_preserves_RQ_proof:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (Q : venom_state -> venom_state -> bool)
@@ -146,8 +146,8 @@ Theorem run_block_same_preserves_RQ_proof:
        Q (v1 with vs_inst_idx := SUC i)
          (v2 with vs_inst_idx := SUC i)) ==>
     lift_result R_ok R_term
-      (run_block fuel ctx bb s1)
-      (run_block fuel ctx bb s2)
+      (exec_block fuel ctx bb s1)
+      (exec_block fuel ctx bb s2)
 Proof
   rpt gen_tac >> strip_tac >>
   ntac 6 (pop_assum mp_tac) >>
@@ -155,8 +155,8 @@ Proof
   ho_match_mp_tac (cj 2 run_defs_ind) >>
   qexists_tac `\fuel ctx inst s. T` >>
   qexists_tac `\fuel ctx fn s. T` >> rw[] >>
-  simp[Once run_block_def] >>
-  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+  simp[Once exec_block_def] >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
   `s1.vs_inst_idx = s2.vs_inst_idx` by
     (imp_res_tac vsr_R_ok_fields >> gvs[]) >>
   gvs[] >>
@@ -184,7 +184,7 @@ Proof
   qpat_x_assum `inst = _` SUBST_ALL_TAC >>
   (* Apply IH: spec s'' := v, discharge step_inst guard *)
   qpat_x_assum `!s''. _ ==> !s2'. _ ==> _ ==> _ ==> _ ==>
-    lift_result _ _ (run_block _ _ _ _) (run_block _ _ _ _)`
+    lift_result _ _ (exec_block _ _ _ _) (exec_block _ _ _ _)`
     (qspec_then `v` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   disch_then (qspec_then `v' with vs_inst_idx := SUC s2.vs_inst_idx` mp_tac) >>
@@ -196,9 +196,9 @@ Proof
   >- (irule vsr_inst_idx_R_ok >> metis_tac[])
 QED
 
-(* Helper: run_block preserves R. By induction on the instruction list via
+(* Helper: exec_block preserves R. By induction on the instruction list via
    run_defs_ind, using step_inst_preserves_R at each step. *)
-Triviality run_block_preserves_R_helper:
+Triviality exec_block_preserves_R_helper:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool) fn.
     valid_state_rel R_ok R_term /\
@@ -211,8 +211,8 @@ Triviality run_block_preserves_R_helper:
   ==>
     !fuel ctx bb s1 s2.
        MEM bb fn.fn_blocks /\ R_ok s1 s2 ==>
-       lift_result R_ok R_term (run_block fuel ctx bb s1)
-                                (run_block fuel ctx bb s2)
+       lift_result R_ok R_term (exec_block fuel ctx bb s1)
+                                (exec_block fuel ctx bb s2)
 Proof
   rpt gen_tac >> strip_tac >>
   rpt gen_tac >> strip_tac >>
@@ -221,8 +221,8 @@ Proof
   ho_match_mp_tac (cj 2 run_defs_ind) >>
   qexists_tac `\fuel ctx inst s. T` >>
   qexists_tac `\fuel ctx fn s. T` >> rw[] >>
-  simp[Once run_block_def] >>
-  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+  simp[Once exec_block_def] >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
   `s1.vs_inst_idx = s2.vs_inst_idx` by
     (imp_res_tac vsr_R_ok_fields >> gvs[]) >>
   gvs[] >>
@@ -245,7 +245,7 @@ Proof
   first_x_assum irule >> irule vsr_inst_idx_R_ok >> simp[] >> metis_tac[]
 QED
 
-Theorem run_block_preserves_R_proof:
+Theorem exec_block_preserves_R_proof:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool) fn.
     valid_state_rel R_ok R_term /\
@@ -258,23 +258,23 @@ Theorem run_block_preserves_R_proof:
   ==>
     (!fuel ctx bb s1 s2.
        MEM bb fn.fn_blocks /\ R_ok s1 s2 ==>
-       lift_result R_ok R_term (run_block fuel ctx bb s1)
-                                (run_block fuel ctx bb s2)) /\
+       lift_result R_ok R_term (exec_block fuel ctx bb s1)
+                                (exec_block fuel ctx bb s2)) /\
     (!fuel ctx s1 s2.
        R_ok s1 s2 ==>
-       lift_result R_ok R_term (run_function fuel ctx fn s1)
-                                (run_function fuel ctx fn s2))
+       lift_result R_ok R_term (run_blocks fuel ctx fn s1)
+                                (run_blocks fuel ctx fn s2))
 Proof
   rpt gen_tac >> strip_tac >>
   conj_tac
   >- (rpt strip_tac >>
-      drule_all run_block_preserves_R_helper >> simp[])
+      drule_all exec_block_preserves_R_helper >> simp[])
   >>
   Induct_on `fuel` >> rw[]
-  >- simp[run_function_def, lift_result_def]
+  >- simp[run_blocks_def, lift_result_def]
   >>
-  simp[Once run_function_def] >>
-  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_function_def])) >>
+  simp[Once run_blocks_def] >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_def])) >>
   `s1.vs_current_bb = s2.vs_current_bb` by
     (imp_res_tac vsr_R_ok_fields >> gvs[]) >>
   gvs[] >>
@@ -283,11 +283,11 @@ Proof
   rename1 `lookup_block _ _ = SOME bb` >>
   `MEM bb fn.fn_blocks` by
     (fs[lookup_block_def] >> metis_tac[FIND_MEM]) >>
-  `lift_result R_ok R_term (run_block fuel ctx bb s1)
-     (run_block fuel ctx bb s2)` by
-    (drule_all run_block_preserves_R_helper >> simp[]) >>
-  Cases_on `run_block fuel ctx bb s1` >>
-  Cases_on `run_block fuel ctx bb s2` >>
+  `lift_result R_ok R_term (exec_block fuel ctx bb s1)
+     (exec_block fuel ctx bb s2)` by
+    (drule_all exec_block_preserves_R_helper >> simp[]) >>
+  Cases_on `exec_block fuel ctx bb s1` >>
+  Cases_on `exec_block fuel ctx bb s2` >>
   gvs[lift_result_def] >>
   `v.vs_halted <=> v'.vs_halted` by
     (imp_res_tac vsr_R_ok_fields >> gvs[]) >>

@@ -9,7 +9,7 @@
  *   - NOT case: NOT(~w) = w  →  word_1comp (word_1comp w) = w
  *   - SHL case: (w>>>tz)<<<tz = w when trailing_zeros w = tz
  *
- * Lifting: step_inst equality implies run_block equality (by induction
+ * Lifting: step_inst equality implies exec_block equality (by induction
  * on instruction execution), then block_sim_function gives function level.
  * No analysis framework needed — this is a pure semantic identity.
  *)
@@ -29,12 +29,12 @@ Proof
   cheat
 QED
 
-(* Per-block: MAP lit_codesize_inst preserves run_block.
+(* Per-block: MAP lit_codesize_inst preserves exec_block.
    Follows from lit_codesize_inst_step_eq by induction on execution. *)
 Theorem lit_codesize_block_eq:
   !fuel ctx bb s.
-    run_block fuel ctx (block_map_transform lit_codesize_inst bb) s =
-    run_block fuel ctx bb s
+    exec_block fuel ctx (block_map_transform lit_codesize_inst bb) s =
+    exec_block fuel ctx bb s
 Proof
   cheat
 QED
@@ -43,8 +43,8 @@ QED
 Theorem lit_codesize_function_correct_proof:
   !fuel ctx fn s.
     lift_result (state_equiv {}) (execution_equiv {})
-      (run_function fuel ctx fn s)
-      (run_function fuel ctx (lit_codesize_function fn) s)
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (lit_codesize_function fn) s)
 Proof
   cheat
 QED

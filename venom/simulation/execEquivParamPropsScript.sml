@@ -21,7 +21,7 @@ Proof
   ACCEPT_TAC step_inst_preserves_R_proof
 QED
 
-Theorem run_block_preserves_R:
+Theorem exec_block_preserves_R:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool) fn.
     valid_state_rel R_ok R_term /\
@@ -34,17 +34,17 @@ Theorem run_block_preserves_R:
   ==>
     (!fuel ctx bb s1 s2.
        MEM bb fn.fn_blocks /\ R_ok s1 s2 ==>
-       lift_result R_ok R_term (run_block fuel ctx bb s1)
-                                (run_block fuel ctx bb s2)) /\
+       lift_result R_ok R_term (exec_block fuel ctx bb s1)
+                                (exec_block fuel ctx bb s2)) /\
     (!fuel ctx s1 s2.
        R_ok s1 s2 ==>
-       lift_result R_ok R_term (run_function fuel ctx fn s1)
-                                (run_function fuel ctx fn s2))
+       lift_result R_ok R_term (run_blocks fuel ctx fn s1)
+                                (run_blocks fuel ctx fn s2))
 Proof
-  ACCEPT_TAC run_block_preserves_R_proof
+  ACCEPT_TAC exec_block_preserves_R_proof
 QED
 
-Theorem run_block_same_preserves_RQ:
+Theorem exec_block_same_preserves_RQ:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (Q : venom_state -> venom_state -> bool)
@@ -70,10 +70,10 @@ Theorem run_block_same_preserves_RQ:
        Q (v1 with vs_inst_idx := SUC i)
          (v2 with vs_inst_idx := SUC i)) ==>
     lift_result R_ok R_term
-      (run_block fuel ctx bb s1)
-      (run_block fuel ctx bb s2)
+      (exec_block fuel ctx bb s1)
+      (exec_block fuel ctx bb s2)
 Proof
-  ACCEPT_TAC run_block_same_preserves_RQ_proof
+  ACCEPT_TAC exec_block_same_preserves_RQ_proof
 QED
 
 Theorem state_equiv_execution_equiv_valid_state_rel:
