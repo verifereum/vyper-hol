@@ -6,10 +6,8 @@
  *   compile_abi_bytes_clamp_correct   — bytes clamping rejects dirty high bits
  *   compile_abi_encode_static_correct — static type writes word to dst
  *   compile_abi_decode_static_correct — static type reads + clamps
- *   compile_abi_encode_tuple_correct  — tuple encoding with head/tail
- *   compile_abi_decode_tuple_correct  — tuple decoding with validation
- *   compile_abi_encode_bytestring_correct — length-prefixed encoding
  *   compile_get_element_ptr_correct   — element pointer arithmetic
+ *   compile_abi_zero_pad_correct      — zero-pad bytestring to 32-byte boundary
  *
  * Source: abi/abi_encoder.py, abi/abi_decoder.py
  * Lowering: abiEncoderScript.sml
@@ -17,10 +15,14 @@
 
 Theory abiEncoderProps
 Ancestors
+  list rich_list
   exprLoweringProps emitHelper emitHelperProps
   abiEncoder compileEnv
-  venomExecSemantics venomState venomInst
-  valueEncoding
+  venomExecSemantics venomState venomInst venomMemProps
+  valueEncoding valueEncodingProps
+  vyperABI vyperTyping contractABI
+Libs
+  dep_rewrite wordsLib
 
 (* ===== ABI Clamping ===== *)
 
@@ -160,70 +162,115 @@ QED
 
 (* ===== Static Encode/Decode ===== *)
 
-(* Static ABI encoding: MSTORE of source value to dst *)
+(* Static ABI encoding: MLOAD src, MSTORE to dst, return Lit 32w *)
 Theorem compile_abi_encode_static_correct:
-  ∀ src_op dst_op ss st st' v dst.
-    compile_abi_encode_static src_op dst_op st = ((), st') ∧
-    eval_operand src_op ss = SOME v ∧
-    eval_operand dst_op ss = SOME (n2w dst)
+  ∀ dst src ss st op st' src_v dst_w.
+    compile_abi_encode_static dst src st = (op, st') ∧
+    eval_operand src ss = SOME src_v ∧
+    eval_operand dst ss = SOME dst_w ∧
+    fresh_vars_wrt st ss
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      mload dst ss' = v
+      op = Lit 32w ∧
+      mload (w2n dst_w) ss' = mload (w2n src_v) ss
 Proof
   cheat
 QED
 
 (* Static ABI decoding: MLOAD + clamp *)
 Theorem compile_abi_decode_static_correct:
-  ∀ src_op dst_op clamp_fn ss st st'.
-    compile_abi_decode_static src_op dst_op clamp_fn st = ((), st') ∧
-    eval_operand src_op ss = SOME src_w
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∨
-      (* Clamp failure → revert *)
-      run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
-Proof
-  cheat
-QED
-
-(* ===== Bytestring Encode ===== *)
-
-(* Bytestring encoding: copies length + data + zero-pads *)
-Theorem compile_abi_encode_bytestring_correct:
-  ∀ src_ptr dst head_offset ss st op st'.
-    compile_abi_encode_bytestring src_ptr dst head_offset st = (op, st')
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss'
-Proof
-  cheat
-QED
-
-(* ===== Tuple Encode/Decode ===== *)
-
-(* Tuple encoding *)
-Theorem compile_abi_encode_tuple_correct:
-  ∀ src_ptr dst_ptr types sizes ss st op st'.
-    compile_abi_encode_tuple src_ptr dst_ptr types sizes st = (op, st')
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss'
-Proof
-  cheat
-QED
-
-(* Tuple decoding with validation *)
-Theorem compile_abi_decode_tuple_correct:
-  ∀ src_base dst_ptr hi_op types sizes ss st st'.
-    compile_abi_decode_tuple src_base dst_ptr hi_op types sizes st = ((), st')
+  ∀ src_op dst_op load_opc clamp_fn ss st st' src_w.
+    compile_abi_decode_static src_op dst_op load_opc clamp_fn st = ((), st') ∧
+    eval_operand src_op ss = SOME src_w ∧
+    fresh_vars_wrt st ss ∧
+    (* clamp_fn: either succeeds preserving operands & freshness, or reverts *)
+    (∀ val_op st0 st0' ss0 v.
+       clamp_fn val_op st0 = ((), st0') ∧
+       eval_operand val_op ss0 = SOME v ∧
+       fresh_vars_wrt st0 ss0 ⇒
+       (∃ ss0'.
+         run_inst_seq (emitted_insts st0 st0') ss0 = OK ss0' ∧
+         fresh_vars_wrt st0' ss0' ∧
+         (∀ op w. eval_operand op ss0 = SOME w ⇒
+                  eval_operand op ss0' = SOME w)) ∨
+       (∃ ss0'.
+         run_inst_seq (emitted_insts st0 st0') ss0 =
+           Abort Revert_abort ss0'))
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∨
       run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof
   cheat
+QED
+
+(* ===== ABI Encoding / Memory Correspondence ===== *)
+
+(* For primitive word types, the Vyper memory representation (val_in_memory)
+   is exactly the ABI encoding (enc). This is the key bridge between the
+   source semantics and the ABI spec.
+
+   val_in_memory says: mem_word_at off mem = val_to_w256 v
+   enc says: enc abi_type abi_val = word_to_bytes (some_word) T
+
+   These are the same 32 bytes, connected by word_bytes_roundtrip:
+     word_to_bytes (word_of_bytes T 0w bs) T = bs  (when LENGTH bs = 32)
+
+   Precondition off + 32 ≤ LENGTH mem ensures mem_bytes_at returns
+   real memory (no zero-padding from REPLICATE). *)
+Theorem val_in_memory_prim_enc:
+  ∀ bt v off mem av.
+    val_in_memory (BaseTV bt) v off mem ∧
+    off + 32 ≤ LENGTH mem ∧
+    is_word_type (BaseT bt) ∧
+    value_has_type (BaseTV bt) v ∧
+    vyper_to_abi_base bt v = SOME av
+    ⇒
+    mem_bytes_at off 32 mem = enc (vyper_base_to_abi_type bt) av
+Proof
+  (* Case split on bt and v. For each case:
+     1. val_in_memory gives mem_word_at off mem = val_to_w256 v
+     2. Unfold mem_word_at: word_of_bytes T 0w (mem_bytes_at off 32 mem) = w
+     3. Apply word_bytes_roundtrip: word_to_bytes w T = mem_bytes_at off 32 mem
+     4. Unfold enc/enc_number: enc at av = word_to_bytes w' T
+     5. Show w = w' by connecting val_to_w256 to the ABI value *)
+  Cases_on `bt` >> Cases_on `v` >>
+  simp[val_in_memory_def, is_word_type_def, vyper_to_abi_base_def,
+       vyper_base_to_abi_type_def, enc_def, enc_number_def,
+       mem_word_at_def, mem_bytes_at_def, val_to_w256_def] >>
+  rw[] >> rw[enc_def] >> gvs[value_has_type_def, TAKE_APPEND] >>
+  gvs[typed_val_to_w256_def] >>
+  full_simp_tac bool_ss [GSYM arithmeticTheory.SUB_EQ_0] >> gvs[] >>
+  TRY (
+    `n2w (Num i): bytes32 = i2w i` by (
+      rw[integer_wordTheory.i2w_def] >>
+      Cases_on`i=0` \\ gvs[] >>
+      `F` suffices_by rw[] >>
+      intLib.COOPER_TAC) >> gvs[]) >>
+  TRY (
+    qpat_x_assum`word_of_bytes _ _ _ = _`(SUBST_ALL_TAC o SYM) >>
+    irule $ GSYM word_bytes_roundtrip >>
+    simp[dividesTheory.divides_def] >> NO_TAC)
+  >- (
+    Cases_on`b` \\ gvs[value_has_type_def, is_word_type_def] >>
+    gvs[PAD_RIGHT, REPLICATE_GENLIST, TAKE_LENGTH_TOO_LONG,
+        byteTheory.word_of_bytes_be_def] >>
+    drule_at Any word_of_bytes_be_inj >>
+    simp[dividesTheory.divides_def] ) >>
+  gvs[GSYM wordsTheory.w2w_def] >>
+  qmatch_goalsub_abbrev_tac`word_to_bytes www` >>
+  qmatch_asmsub_abbrev_tac`word_of_bytes _ _ _ = ww1` >>
+  `www = ww1` by (
+    rw[Abbr`www`] >> gvs[byteTheory.word_of_bytes_be_def] >>
+    drule_at Any word_of_bytes_be_inj >>
+    rw[bitstringTheory.length_pad_left] >>
+    simp[GSYM byteTheory.word_of_bytes_be_def] >>
+    DEP_REWRITE_TAC[w2w_word_of_bytes_be_pad_left] >>
+    simp[dividesTheory.divides_def] ) >>
+  gvs[Abbr`www`] >>
+  irule $ GSYM word_bytes_roundtrip >>
+  rw[dividesTheory.divides_def]
 QED
 
 (* ===== Element Pointer ===== *)
@@ -263,17 +310,4 @@ Proof
   cheat
 QED
 
-(* ===== Bool Decode ===== *)
 
-(* Bool decode: clamps to 0 or 1 *)
-Theorem compile_abi_decode_bool_correct:
-  ∀ src_op dst_op ss st st'.
-    compile_abi_decode_bool src_op dst_op st = ((), st') ∧
-    eval_operand src_op ss = SOME w
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∨
-      run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
-Proof
-  cheat
-QED
