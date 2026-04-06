@@ -173,9 +173,49 @@ Theorem compile_abi_encode_static_correct:
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
       op = Lit 32w ∧
-      mload (w2n dst_w) ss' = mload (w2n src_v) ss
+      mload (w2n dst_w) ss' = mload (w2n src_v) ss ∧
+      same_blocks st st' ∧
+      st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' ∧
+      fresh_vars_wrt st' ss'
 Proof
-  cheat
+  rpt gen_tac >>
+  simp[compile_abi_encode_static_def, comp_return_def,
+       comp_ignore_bind_def, comp_bind_def] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  strip_tac >> gvs[] >>
+  drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
+  drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  qmatch_goalsub_rename_tac`emitted_insts st st2` >>
+  qmatch_asmsub_rename_tac`emitted_insts st1 st2` >>
+  qspecl_then[`st`,`st1`,`st2`]mp_tac emitted_insts_append >>
+  impl_tac >- gvs[] >> rw[] >>
+  rw[run_inst_seq_def] >>
+  qspec_then`src`mp_tac step_MLOAD >>
+  disch_then drule >> rw[] >> pop_assum kall_tac >>
+  qspec_then`dst`mp_tac eval_operand_update_fresh >>
+  disch_then drule >>
+  qmatch_goalsub_abbrev_tac`update_var nv w` >>
+  disch_then(qspecl_then[`w`,`nv`]mp_tac) >>
+  disch_then drule >>
+  simp[Abbr`nv`] >> strip_tac >>
+  drule step_MSTORE >>
+  qmatch_goalsub_abbrev_tac`update_var nv` >>
+  disch_then(qspec_then`Var nv`mp_tac) >>
+  simp[eval_operand_def, lookup_var_update_var] >>
+  strip_tac >>
+  drule emit_void_extends >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  reverse conj_tac >- (
+    gvs[same_blocks_def] >>
+    irule fresh_vars_wrt_mstore >>
+    irule fresh_vars_wrt_update_var >>
+    reverse conj_asm2_tac >- (
+      irule fresh_vars_wrt_emit_void >>
+      goal_assum drule >>
+      gvs[fresh_vars_wrt_def] ) >>
+    gvs[Abbr`nv`, fresh_vars_wrt_def]) >>
+  irule mload_mstore_same
 QED
 
 (* Static ABI decoding: MLOAD + clamp *)
@@ -272,6 +312,271 @@ Proof
   irule $ GSYM word_bytes_roundtrip >>
   rw[dividesTheory.divides_def]
 QED
+
+(* ===== Single-block predicate ===== *)
+
+(* Identifies abi_enc_info values whose compilation produces only
+   single-block code (no JMP/JNZ/new_block). Excludes AbiDynArray
+   with dynamic elements, which uses compile_abi_encode_dyn_loop. *)
+Definition single_block_enc_info_def:
+  single_block_enc_info AbiPrimWord = T ∧
+  single_block_enc_info (AbiBytestring _) = T ∧
+  single_block_enc_info (AbiCopy _) = T ∧
+  single_block_enc_info (AbiDynArray ei _ _ is_dyn) =
+    (¬is_dyn ∧ single_block_enc_info ei) ∧
+  single_block_enc_info (AbiComplex elems) =
+    EVERY (λ(ei,_,_,_). single_block_enc_info ei) elems
+End
+
+(* ===== Recursive ABI Encode Correctness (single-block) ===== *)
+
+(* Mutual induction over compile_abi_encode_child / compile_abi_encode_to_buf /
+   compile_abi_encode_complex_elems.
+
+   For single-block enc_info values:
+   - Emitted instructions run successfully via run_inst_seq
+   - Destination memory contains the ABI encoding
+   - Memory frame: only [dst, dst+size) is modified
+   - Operand frame: all pre-existing operands still evaluate
+   - Freshness preserved
+
+   Preconditions:
+   - fresh_vars_wrt st ss (compiler names don't alias runtime vars)
+   - val_in_memory at source (Vyper value is in memory)
+   - destination pre-allocated (dst + max_size ≤ LENGTH vs_memory)
+   - value_has_type (value is well-typed)
+   - has_type for ABI value (needed for enc properties)
+*)
+
+Theorem compile_abi_encode_to_buf_correct:
+  (* compile_abi_encode_child — P0: static case only for single_block *)
+  (∀ dst child_ptr enc_info is_dyn static_ofst dyn_ofst_ptr
+     st op st' ss
+     dst_addr child_addr ty tv v tenv av at.
+    compile_abi_encode_child dst child_ptr enc_info
+      is_dyn static_ofst dyn_ofst_ptr st = (op, st') ∧
+    ¬is_dyn ∧
+    single_block_enc_info enc_info ∧
+    eval_operand dst ss = SOME (n2w dst_addr) ∧
+    eval_operand child_ptr ss = SOME (n2w child_addr) ∧
+    fresh_vars_wrt st ss ∧
+    evaluate_type tenv ty = SOME tv ∧
+    dst_addr + static_ofst + LENGTH (enc at av) ≤ LENGTH ss.vs_memory ∧
+    child_addr + type_memory_size tv ≤ LENGTH ss.vs_memory ∧
+    val_in_memory tv v child_addr ss.vs_memory ∧
+    value_has_type tv v ∧
+    vyper_to_abi tenv ty v = SOME av ∧
+    has_type at av ∧
+    at = vyper_to_abi_type tenv ty
+    ⇒
+    ∃ ss'.
+      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+      same_blocks st st' ∧
+      st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' ∧
+      fresh_vars_wrt st' ss' ∧
+      mem_bytes_at (dst_addr + static_ofst) (LENGTH (enc at av))
+        ss'.vs_memory = enc at av ∧
+      (∀ op w. eval_operand op ss = SOME w ⇒
+               eval_operand op ss' = SOME w) ∧
+      (∀ a. a < LENGTH ss.vs_memory ∧
+            (a < dst_addr + static_ofst ∨
+             a ≥ dst_addr + static_ofst + LENGTH (enc at av)) ⇒
+            EL a ss'.vs_memory = EL a ss.vs_memory) ∧
+      LENGTH ss'.vs_memory ≥ LENGTH ss.vs_memory) ∧
+
+  (* compile_abi_encode_to_buf — P1 *)
+  (∀ dst src enc_info st op st' ss
+     dst_addr src_addr ty tv v tenv av at.
+    compile_abi_encode_to_buf dst src enc_info st = (op, st') ∧
+    single_block_enc_info enc_info ∧
+    eval_operand dst ss = SOME (n2w dst_addr) ∧
+    eval_operand src ss = SOME (n2w src_addr) ∧
+    fresh_vars_wrt st ss ∧
+    evaluate_type tenv ty = SOME tv ∧
+    dst_addr + LENGTH (enc at av) ≤ LENGTH ss.vs_memory ∧
+    src_addr + type_memory_size tv ≤ LENGTH ss.vs_memory ∧
+    val_in_memory tv v src_addr ss.vs_memory ∧
+    value_has_type tv v ∧
+    vyper_to_abi tenv ty v = SOME av ∧
+    has_type at av ∧
+    at = vyper_to_abi_type tenv ty
+    ⇒
+    ∃ ss'.
+      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+      same_blocks st st' ∧
+      st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' ∧
+      fresh_vars_wrt st' ss' ∧
+      mem_bytes_at dst_addr (LENGTH (enc at av)) ss'.vs_memory =
+        enc at av ∧
+      eval_operand op ss' = SOME (n2w (LENGTH (enc at av))) ∧
+      (∀ op w. eval_operand op ss = SOME w ⇒
+               eval_operand op ss' = SOME w) ∧
+      (∀ a. a < LENGTH ss.vs_memory ∧
+            (a < dst_addr ∨ a ≥ dst_addr + LENGTH (enc at av)) ⇒
+            EL a ss'.vs_memory = EL a ss.vs_memory) ∧
+      LENGTH ss'.vs_memory ≥ LENGTH ss.vs_memory) ∧
+
+  (* compile_abi_encode_complex_elems — P2: static elements *)
+  (∀ dst src elems src_offset head_offset dyn_ptr
+     st op st' ss
+     dst_addr src_addr tys tvs vs tenv avs ats.
+    compile_abi_encode_complex_elems dst src elems
+      src_offset head_offset dyn_ptr st = (op, st') ∧
+    EVERY (λ(ei,_,_,is_dyn). single_block_enc_info ei ∧ ¬is_dyn) elems ∧
+    eval_operand dst ss = SOME (n2w dst_addr) ∧
+    eval_operand src ss = SOME (n2w src_addr) ∧
+    fresh_vars_wrt st ss ∧
+    (* elems, tys, tvs, vs, avs, ats are parallel lists *)
+    LENGTH tys = LENGTH elems ∧
+    LENGTH tvs = LENGTH elems ∧
+    LENGTH vs = LENGTH elems ∧
+    LENGTH avs = LENGTH elems ∧
+    LENGTH ats = LENGTH elems ∧
+    has_types ats avs ∧
+    ¬any_dynamic ats ∧
+    (* Types evaluate correctly *)
+    (∀ i. i < LENGTH elems ⇒
+       evaluate_type tenv (EL i tys) = SOME (EL i tvs)) ∧
+    (* Memory and type preconditions for all elements *)
+    dst_addr + head_offset +
+      SUM (MAP (λ(_,abi_sz,_,_). abi_sz) elems) ≤ LENGTH ss.vs_memory ∧
+    (∀ i. i < LENGTH elems ⇒
+       let (ei, abi_sz, mem_sz, _) = EL i elems in
+       let tv = EL i tvs in let v = EL i vs in
+         val_in_memory tv v (src_addr + src_offset +
+           SUM (MAP (λ(_,_,msz,_). msz) (TAKE i elems))) ss.vs_memory ∧
+         value_has_type tv v)
+    ⇒
+    ∃ ss'.
+      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+      same_blocks st st' ∧
+      st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' ∧
+      fresh_vars_wrt st' ss' ∧
+      mem_bytes_at (dst_addr + head_offset)
+        (SUM (MAP (λ(_,abi_sz,_,_). abi_sz) elems)) ss'.vs_memory =
+        FLAT (MAP2 enc ats avs) ∧
+      (∀ op w. eval_operand op ss = SOME w ⇒
+               eval_operand op ss' = SOME w) ∧
+      (∀ a. a < LENGTH ss.vs_memory ∧
+            (a < dst_addr + head_offset ∨
+             a ≥ dst_addr + head_offset +
+               SUM (MAP (λ(_,abi_sz,_,_). abi_sz) elems)) ⇒
+            EL a ss'.vs_memory = EL a ss.vs_memory) ∧
+      LENGTH ss'.vs_memory ≥ LENGTH ss.vs_memory) ∧
+
+  (* compile_abi_encode_dyn_loop — excluded by single_block_enc_info,
+     trivially true *)
+  (∀ (dst:operand) (src:operand) (elem_info:abi_enc_info)
+     (elem_abi_sz:num) (elem_mem_sz:num) (len_op:operand). T)
+Proof
+  ho_match_mp_tac compile_abi_encode_child_ind >>
+  (* P0: compile_abi_encode_child *)
+  conj_tac >- suspend "child" >>
+  (* P1: compile_abi_encode_to_buf: AbiPrimWord *)
+  conj_tac >- suspend "prim" >>
+  (* P1: compile_abi_encode_to_buf: AbiBytestring *)
+  conj_tac >- suspend "bytestring" >>
+  (* P1: compile_abi_encode_to_buf: AbiCopy *)
+  conj_tac >- suspend "copy" >>
+  (* P1: compile_abi_encode_to_buf: AbiDynArray *)
+  conj_tac >- suspend "dynarray" >>
+  (* P1: compile_abi_encode_to_buf: AbiComplex [] *)
+  conj_tac >- suspend "complex_nil" >>
+  (* P1: compile_abi_encode_to_buf: AbiComplex (non-empty) *)
+  conj_tac >- suspend "complex_cons" >>
+  (* P2: compile_abi_encode_complex_elems: [] *)
+  conj_tac >- suspend "elems_nil" >>
+  (* P2: compile_abi_encode_complex_elems: cons *)
+  conj_tac >- suspend "elems_cons" >>
+  (* P3: compile_abi_encode_dyn_loop *)
+  suspend "dyn_loop"
+QED
+
+Resume compile_abi_encode_to_buf_correct[child]:
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!d. ~ ~ is_dyn ==> _` kall_tac >>
+  gvs[compile_abi_encode_child_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> gvs[] >>
+  reverse (Cases_on `static_ofst = 0`) >> gvs[]
+  >- (
+    (* static_ofst ≠ 0: emit_op ADD first *)
+    drule emit_op_ADD_correct >>
+    disch_then drule >>
+    simp[eval_operand_def] >>
+    simp[Once wordsTheory.word_add_n2w] >>
+    strip_tac >>
+    suspend"childADD") >>
+  (* static_ofst = 0: child_dst = dst, directly apply IH *)
+  gvs[comp_return_def] >>
+  first_x_assum drule_all >>
+  strip_tac >>
+  goal_assum drule >> gvs[] >>
+  rpt strip_tac >>
+  first_x_assum irule >> gvs[]
+QED
+
+Resume compile_abi_encode_to_buf_correct[childADD]:
+  first_x_assum $ drule_then drule >>
+  first_assum drule >> strip_tac >>
+  disch_then drule >> gvs[] >>
+  disch_then drule >> gvs[] >>
+  disch_then drule >>
+  `ss'.vs_memory = ss.vs_memory` by gvs[LIST_EQ_REWRITE] >>
+  gvs[] >>
+  disch_then drule >> gvs[] >>
+  strip_tac >>
+  qspec_then`st`mp_tac emitted_insts_append >>
+  disch_then $ drule_at Any >> impl_keep_tac
+  >- ( drule emitted_insts_emit_op >> rw[] ) >> rw[] >>
+  qmatch_goalsub_abbrev_tac`run_inst_seq (is1 ++ is2)` >>
+  qspec_then`is1`mp_tac run_inst_seq_append >>
+  disch_then drule >> simp[] >> strip_tac >>
+  conj_tac >- gvs[same_blocks_def] >>
+  first_x_assum MATCH_ACCEPT_TAC
+QED
+
+Resume compile_abi_encode_to_buf_correct[prim]:
+  rpt gen_tac >> strip_tac >>
+  gvs[compile_abi_encode_child_def] >>
+  drule_all compile_abi_encode_static_correct >>
+  strip_tac >> simp[] >>
+  cheat
+QED
+
+Resume compile_abi_encode_to_buf_correct[bytestring]:
+  cheat
+QED
+
+Resume compile_abi_encode_to_buf_correct[copy]:
+  cheat
+QED
+
+Resume compile_abi_encode_to_buf_correct[dynarray]:
+  cheat
+QED
+
+Resume compile_abi_encode_to_buf_correct[complex_nil]:
+  cheat
+QED
+
+Resume compile_abi_encode_to_buf_correct[complex_cons]:
+  cheat
+QED
+
+Resume compile_abi_encode_to_buf_correct[elems_nil]:
+  cheat
+QED
+
+Resume compile_abi_encode_to_buf_correct[elems_cons]:
+  cheat
+QED
+
+Resume compile_abi_encode_to_buf_correct[dyn_loop]:
+  cheat
+QED
+
+Finalise compile_abi_encode_to_buf_correct
 
 (* ===== Element Pointer ===== *)
 

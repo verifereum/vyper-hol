@@ -55,6 +55,13 @@ Theorem mload_mstore8_disjoint:
 Proof ACCEPT_TAC venomMemProofsTheory.mload_mstore8_disjoint_proof
 QED
 
+Theorem mload_mstore_same:
+  ∀off val s.
+    mload off (mstore off val s) = val
+Proof
+  ACCEPT_TAC venomMemProofsTheory.mload_mstore_same_proof
+QED
+
 (* Key property: converting bytes to a word and back is identity.
    Generalised from mmCopyEquivScript for wider reuse. *)
 Theorem word_bytes_roundtrip:
