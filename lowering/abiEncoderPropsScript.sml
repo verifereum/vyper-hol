@@ -215,7 +215,7 @@ Proof
       goal_assum drule >>
       gvs[fresh_vars_wrt_def] ) >>
     gvs[Abbr`nv`, fresh_vars_wrt_def]) >>
-  cheat (* mload_mstore_same *)
+  irule mload_mstore_same
 QED
 
 (* Static ABI decoding: MLOAD + clamp *)
