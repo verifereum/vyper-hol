@@ -162,6 +162,14 @@ QED
 
 (* ===== Static Encode/Decode ===== *)
 
+(* TODO: move *)
+Theorem mem_bytes_at_from_EL:
+  n < LENGTH ls ==>
+  [EL n ls] = mem_bytes_at n 1 ls
+Proof
+  rw[mem_bytes_at_def, TAKE_APPEND]
+QED
+
 (* Static ABI encoding: MLOAD src, MSTORE to dst, return Lit 32w *)
 Theorem compile_abi_encode_static_correct:
   ∀ dst src ss st op st' src_v dst_w.
@@ -176,7 +184,12 @@ Theorem compile_abi_encode_static_correct:
       mload (w2n dst_w) ss' = mload (w2n src_v) ss ∧
       same_blocks st st' ∧
       st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' ∧
-      fresh_vars_wrt st' ss'
+      fresh_vars_wrt st' ss' ∧
+      (∀ op w. eval_operand op ss = SOME w ⇒ eval_operand op ss' = SOME w) ∧
+      (∀ a. a < LENGTH ss.vs_memory ∧
+            (a < w2n dst_w ∨ a ≥ w2n dst_w + 32) ⇒
+            EL a ss'.vs_memory = EL a ss.vs_memory) ∧
+      LENGTH ss'.vs_memory ≥ LENGTH ss.vs_memory
 Proof
   rpt gen_tac >>
   simp[compile_abi_encode_static_def, comp_return_def,
@@ -206,8 +219,9 @@ Proof
   strip_tac >>
   drule emit_void_extends >> strip_tac >>
   drule emit_op_extends >> strip_tac >>
-  reverse conj_tac >- (
-    gvs[same_blocks_def] >>
+  conj_tac >- irule mload_mstore_same >>
+  conj_tac >- gvs[same_blocks_def] >>
+  conj_tac >- (
     irule fresh_vars_wrt_mstore >>
     irule fresh_vars_wrt_update_var >>
     reverse conj_asm2_tac >- (
@@ -215,7 +229,30 @@ Proof
       goal_assum drule >>
       gvs[fresh_vars_wrt_def] ) >>
     gvs[Abbr`nv`, fresh_vars_wrt_def]) >>
-  irule mload_mstore_same
+  conj_tac >- (
+    rpt strip_tac >>
+    irule eval_operand_mstore >>
+    irule eval_operand_update_fresh >>
+    gvs[Abbr`nv`] >>
+    goal_assum $ drule_at Any >> rw[] ) >>
+  reverse conj_asm2_tac >- rw[mstore_def, update_var_def] >>
+  qx_gen_tac`off` >>
+  qmatch_goalsub_abbrev_tac`_ ∧ rng` >>
+  strip_tac >>
+  drule mem_bytes_at_from_EL >>
+  qmatch_asmsub_abbrev_tac`LENGTH mm ≥ _` >>
+  `off < LENGTH mm` by gvs[] >>
+  drule mem_bytes_at_from_EL >>
+  ntac 2 strip_tac >>
+  qmatch_goalsub_abbrev_tac`aa = ab` >>
+  `[aa] = [ab]` suffices_by rw[] >>
+  qpat_x_assum`[_] = _`SUBST_ALL_TAC >>
+  qpat_x_assum`[_] = _`SUBST_ALL_TAC >>
+  qunabbrev_tac`mm` >>
+  `ss.vs_memory = (update_var nv w ss).vs_memory` by rw[update_var_def] >>
+  pop_assum SUBST1_TAC >>
+  irule mstore_mem_bytes_at_disjoint >>
+  gvs[Abbr`rng`]
 QED
 
 (* Static ABI decoding: MLOAD + clamp *)
