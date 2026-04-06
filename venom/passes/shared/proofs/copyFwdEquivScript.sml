@@ -256,8 +256,8 @@ Theorem copy_fwd_read_equiv:
     lookup_var dst_var s1 = SOME (n2w dst_addr) ∧
     lookup_var src_var s2 = SOME (n2w src_addr) ∧
     (* Read size within alloca bounds *)
-    (∀sz_op. mem_read_ops i_orig = SOME <| iao_ofst := Var dst_var;
-               iao_size := SOME sz_op; iao_max_size := _ |> ⇒
+    (∀sz_op max_sz. mem_read_ops i_orig = SOME <| iao_ofst := Var dst_var;
+               iao_size := SOME sz_op; iao_max_size := max_sz |> ⇒
              ∀sz_val. eval_operand sz_op s1 = SOME sz_val ⇒
                       w2n sz_val ≤ alloca_sz) ∧
     alloca_sz ≥ 32 ⇒
@@ -337,9 +337,9 @@ Theorem copy_fwd_rel_preserved_identical_inst:
     step_inst_base inst s1 = OK s1' ∧
     step_inst_base inst s2 = OK s2' ∧
     (* Instruction doesn't write to src or dst regions *)
-    (∀ofst write_sz.
+    (∀ofst write_sz max_sz.
       mem_write_ops inst = SOME <| iao_ofst := ofst;
-        iao_size := SOME write_sz; iao_max_size := _ |> ⇒
+        iao_size := SOME write_sz; iao_max_size := max_sz |> ⇒
       ∀a wsz.
         eval_operand ofst s1 = SOME a ∧
         eval_operand write_sz s1 = SOME wsz ⇒
