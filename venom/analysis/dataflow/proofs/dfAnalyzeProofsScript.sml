@@ -2155,6 +2155,72 @@ Proof
      Cases_on `j` >> fs[] >> disj2_tac >> qexists_tac `n` >> DECIDE_TAC
 QED
 
+Theorem df_fold_forward_append:
+  !l1 f lbl l2 idx acc im.
+    df_fold_forward f lbl (l1 ++ l2) idx acc im =
+      let (mid, im1) = df_fold_forward f lbl l1 idx acc im in
+      df_fold_forward f lbl l2 (idx + LENGTH l1) mid im1
+Proof
+  Induct >> simp[df_fold_forward_def, LET_THM] >>
+  rpt gen_tac
+  >- (Cases_on `l2` >>
+      simp[df_fold_forward_def, LET_THM,
+           finite_mapTheory.FUPDATE_EQ])
+  >- (Cases_on `df_fold_forward f lbl l1 (idx + 1) (f h acc)
+                  (im |+ ((lbl, idx), acc))` >>
+      `idx + (LENGTH l1 + 1) = idx + SUC (LENGTH l1)` by DECIDE_TAC >>
+      simp[])
+QED
+
+(* The full fold's inst_map at position idx+n equals the prefix fold's
+   accumulator output. This bridges df_fold_forward_at with intermediate
+   fold values, avoiding the need for df_fold_forward_at_gen on non-FEMPTY
+   initial maps. *)
+(* The full fold's inst_map at split position n equals the prefix fold's
+   accumulator output. Both folds are deterministic and process the same
+   first n instructions, so their intermediate values at each step match. *)
+Theorem df_fold_forward_midpoint:
+  !f lbl instrs idx acc fv im n.
+    df_fold_forward f lbl instrs idx acc FEMPTY = (fv, im) /\
+    n <= LENGTH instrs ==>
+    ?mid im_pre.
+      df_fold_forward f lbl (TAKE n instrs) idx acc FEMPTY = (mid, im_pre) /\
+      FLOOKUP im (lbl, idx + n) = SOME mid
+Proof
+  Induct_on `n` >> rpt gen_tac >> strip_tac
+  >- (
+    (* Base: n=0 — TAKE 0 = [], fold returns (acc, FEMPTY |+ ((lbl,idx),acc)) *)
+    simp[listTheory.TAKE_def, df_fold_forward_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+    drule df_fold_forward_at >> simp[])
+  >- (
+    (* Step: n → SUC n *)
+    `n <= LENGTH instrs` by fs[] >>
+    first_x_assum (qspecl_then [`f`, `lbl`, `instrs`, `idx`, `acc`,
+      `fv`, `im`] mp_tac) >>
+    impl_tac >- fs[] >> strip_tac >>
+    (* mid is the prefix fold result at position n *)
+    (* Now extend by one more instruction *)
+    `SUC n <= LENGTH instrs` by fs[] >>
+    `n < LENGTH instrs` by fs[] >>
+    qpat_assum `df_fold_forward _ _ instrs _ _ _ = _`
+      (strip_assume_tac o MATCH_MP df_fold_forward_at) >>
+    (* FLOOKUP im (lbl, idx + SUC n) = SOME (f (EL n instrs) (THE (FLOOKUP im (lbl, idx + n)))) *)
+    `FLOOKUP im (lbl, idx + SUC n) =
+       SOME (f (EL n instrs) (THE (FLOOKUP im (lbl, idx + n))))` by
+      (first_x_assum (qspec_then `n` mp_tac) >> simp[]) >>
+    `THE (FLOOKUP im (lbl, idx + n)) = mid` by fs[] >>
+    (* TAKE (SUC n) = TAKE n ++ [EL n instrs] *)
+    `TAKE (SUC n) instrs = TAKE n instrs ++ [EL n instrs]` by
+      simp[GSYM listTheory.SNOC_APPEND, rich_listTheory.SNOC_EL_TAKE] >>
+    pop_assum (fn th => REWRITE_TAC[th]) >>
+    REWRITE_TAC[df_fold_forward_append] >>
+    simp[LET_THM, df_fold_forward_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+    qexistsl_tac [`f (EL n instrs) mid`,
+      `im_pre |+ ((lbl, idx + n), mid) |+ ((lbl, idx + SUC n), f (EL n instrs) mid)`] >>
+    fs[])
+QED
+
 Theorem df_fold_block_fdom:
   !transfer lbl instrs init_val fv im.
     df_fold_block Forward transfer lbl instrs init_val = (fv, im) ==>

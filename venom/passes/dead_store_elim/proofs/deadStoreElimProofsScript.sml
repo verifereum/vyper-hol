@@ -26,11 +26,11 @@ Proof
 QED
 
 (* Combined: after all 3 spaces, use dse_all_equiv.
- * bp_access_bounded: dead store detection depends on aliasing analysis
+ * bp_ptrs_bounded: dead store detection depends on aliasing analysis
  * to determine that no later load reads from the same location. *)
 Theorem dse_function_correct_proof:
   !analysis_fn aliases fuel ctx fn s bp.
-    bp_ptr_sound bp s /\ bp_access_bounded bp fn s /\
+    bp_ptr_sound bp s /\ bp_ptrs_bounded bp fn s /\
     (!space fn'.
       all_dead_stores (analysis_fn space fn')
         (cfg_analyze fn') aliases (bp_analyze (cfg_analyze fn') fn')

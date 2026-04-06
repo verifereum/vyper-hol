@@ -27,6 +27,7 @@
 
 Theory valueEncodingProps
 Ancestors
+  list rich_list
   valueEncoding valueEncodingProofs
 
 (* ===== val_to_w256 agrees with encode_base_to_slot ===== *)
@@ -95,6 +96,27 @@ Theorem mstore_mem_word_at_disjoint:
 Proof ACCEPT_TAC mstore_mem_word_at_disjoint_proof
 QED
 
+(* Splitting mem_bytes_at into adjacent regions *)
+Theorem mem_bytes_at_split:
+  ∀ offset m n mem.
+    offset + (m + n) ≤ LENGTH mem ⇒
+    mem_bytes_at offset (m + n) mem =
+      mem_bytes_at offset m mem ++ mem_bytes_at (offset + m) n mem
+Proof
+  rw[mem_bytes_at_def] >>
+  `LENGTH (DROP offset mem) ≥ m + n` by simp[LENGTH_DROP] >>
+  `TAKE (m + n) (DROP offset mem ++ REPLICATE (m + n) 0w) =
+   TAKE (m + n) (DROP offset mem)` by
+    simp[TAKE_APPEND1] >>
+  `TAKE m (DROP offset mem ++ REPLICATE m 0w) =
+   TAKE m (DROP offset mem)` by
+    simp[TAKE_APPEND1] >>
+  `TAKE n (DROP (offset + m) mem ++ REPLICATE n 0w) =
+   TAKE n (DROP (offset + m) mem)` by
+    simp[TAKE_APPEND1, LENGTH_DROP] >>
+  simp[TAKE_SUM, DROP_DROP, TAKE_APPEND]
+QED
+
 Theorem mstore_mem_bytes_at_disjoint:
   ∀ off1 len off2 (w:bytes32) s.
     (off1 + len ≤ off2 ∨ off2 + 32 ≤ off1) ⇒
@@ -129,28 +151,30 @@ QED
 
 Theorem mstore_preserves_val_in_memory:
   (∀ ty v off mem off2 (w:bytes32).
-    val_in_memory ty v off mem ∧
+    val_in_memory ty v off mem ∧ val_wf ty v ∧
     (off2 + 32 ≤ off ∨ off + type_memory_size ty ≤ off2) ⇒
     val_in_memory ty v off (mstore off2 w (s with vs_memory := mem)).vs_memory) ∧
   (∀ fields field_tvs off mem off2 (w:bytes32).
     fields_in_memory fields field_tvs off mem ∧
+    fields_val_wf fields field_tvs ∧
     (off2 + 32 ≤ off ∨ off + type_memory_size_fields field_tvs ≤ off2) ⇒
     fields_in_memory fields field_tvs off
       (mstore off2 w (s with vs_memory := mem)).vs_memory) ∧
   (∀ vs off tv mem off2 (w:bytes32).
-    elems_in_memory vs off tv mem ∧
+    elems_in_memory vs off tv mem ∧ elems_val_wf vs tv ∧
     (off2 + 32 ≤ off ∨ off + LENGTH vs * type_memory_size tv ≤ off2) ⇒
     elems_in_memory vs off tv
       (mstore off2 w (s with vs_memory := mem)).vs_memory) ∧
   (∀ (kvs : (num # value) list) base_off tv mem off2 (w:bytes32).
     kvs_in_memory kvs base_off tv mem ∧
+    (∀ k v. MEM (k,v) kvs ⇒ val_wf tv v) ∧
     (∀ k v. MEM (k,v) kvs ⇒
       off2 + 32 ≤ base_off + k * type_memory_size tv ∨
       base_off + k * type_memory_size tv + type_memory_size tv ≤ off2) ⇒
     kvs_in_memory kvs base_off tv
       (mstore off2 w (s with vs_memory := mem)).vs_memory) ∧
   (∀ vs tvs off mem off2 (w:bytes32).
-    tuple_in_memory vs tvs off mem ∧
+    tuple_in_memory vs tvs off mem ∧ tuple_val_wf vs tvs ∧
     (off2 + 32 ≤ off ∨ off + type_memory_size_list tvs ≤ off2) ⇒
     tuple_in_memory vs tvs off
       (mstore off2 w (s with vs_memory := mem)).vs_memory)

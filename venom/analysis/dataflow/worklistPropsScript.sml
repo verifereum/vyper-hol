@@ -66,3 +66,38 @@ Theorem wl_iterate_invariant:
 Proof
   ACCEPT_TAC wl_iterate_invariant_proof
 QED
+
+(* Fixpoint with process-level termination and restricted valid labels.
+   Like wl_iterate_fixpoint but P/measure only need to hold for valid_lbl. *)
+Theorem wl_iterate_fixpoint_process_restricted:
+  !m b (process : 'b -> 'a -> 'a) deps wl0 st0 all_lbls
+   (P : 'a -> bool) (valid_lbl : 'b -> bool).
+    (!lbl st. valid_lbl lbl /\ P st /\ process lbl st <> st ==>
+              m st < m (process lbl st)) /\
+    (!lbl st. valid_lbl lbl /\ P st ==> P (process lbl st)) /\
+    P st0 /\
+    (!x. P x ==> m x <= b) /\
+    wl_deps_complete process deps /\
+    (!lbl. MEM lbl all_lbls ==> MEM lbl wl0) /\
+    EVERY valid_lbl wl0 /\
+    (!lbl. valid_lbl lbl ==> EVERY valid_lbl (deps lbl)) ==>
+    is_fixpoint process all_lbls (SND (wl_iterate process deps wl0 st0))
+Proof
+  ACCEPT_TAC wl_iterate_fixpoint_process_restricted
+QED
+
+(* Invariant with process-level termination and restricted valid labels. *)
+Theorem wl_iterate_invariant_process_restricted:
+  !m b (process : 'b -> 'a -> 'a) deps wl0 st0
+   (P : 'a -> bool) (valid_lbl : 'b -> bool).
+    (!lbl st. valid_lbl lbl /\ P st /\ process lbl st <> st ==>
+              m st < m (process lbl st)) /\
+    (!lbl st. valid_lbl lbl /\ P st ==> P (process lbl st)) /\
+    P st0 /\
+    (!x. P x ==> m x <= b) /\
+    EVERY valid_lbl wl0 /\
+    (!lbl. valid_lbl lbl ==> EVERY valid_lbl (deps lbl)) ==>
+    P (SND (wl_iterate process deps wl0 st0))
+Proof
+  ACCEPT_TAC wl_iterate_invariant_process_restricted
+QED

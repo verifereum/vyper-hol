@@ -541,6 +541,7 @@ Proof
   (* Remaining cases: Halt/Abort/IntRet/Error — closed by gvs *)
 QED
 
+
 (* Unconditional version: when per-block sim gives lift_result (no error
    disjunct), function-level sim also gives unconditional lift_result.
    Direct fuel induction (same structure as block_sim_function_proof). *)

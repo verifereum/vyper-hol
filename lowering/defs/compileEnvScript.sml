@@ -235,7 +235,7 @@ Datatype:
     ce_storage_layout : (string, bytes32) fmap;
     ce_module : num option;
     (* Struct metadata: struct_name → list of (field_name, member_type, memory_bytes) *)
-    ce_struct_fields : string -> (string # type # num) list;
+    ce_struct_fields : (string, (string # type # num) list) fmap;
     (* DynArray metadata: target_name → max capacity *)
     ce_dynarray_capacity : string -> num;
     (* Method ID lookup: func_name → 4-byte keccak selector as num *)
@@ -291,6 +291,14 @@ Datatype:
        Mirrors Python: func_t.do_raw_return *)
     ce_raw_return : bool
   |>
+End
+
+(* Lookup struct fields, defaulting to [] for unknown structs *)
+Definition get_struct_fields_def:
+  get_struct_fields (sfields : (string, (string # type # num) list) fmap) name =
+    case FLOOKUP sfields name of
+      SOME fields => fields
+    | NONE => []
 End
 
 (* ===== Compilation State (monad state) ===== *)
@@ -708,7 +716,7 @@ End
    Used as the sft parameter for is_abi_dynamic/abi_static_size/abi_size_bound.
    Extracts just the type from (name, type, byte_size) triples. *)
 Definition cenv_sft_def:
-  cenv_sft cenv name = MAP (FST o SND) (cenv.ce_struct_fields name)
+  cenv_sft cenv name = MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields name)
 End
 
 (* True for types that fit in a single EVM word (≤ 256 bits).
@@ -893,7 +901,7 @@ Definition type_memory_bytes_def:
   type_memory_bytes cenv (ArrayT elem_ty (Dynamic n)) =
     32 + n * type_memory_bytes cenv elem_ty ∧
   type_memory_bytes cenv (StructT name) =
-    SUM (MAP (SND o SND) (cenv.ce_struct_fields name)) ∧
+    SUM (MAP (SND o SND) (get_struct_fields cenv.ce_struct_fields name)) ∧
   type_memory_bytes cenv (TupleT tys) =
     SUM (MAP (type_memory_bytes cenv) tys) ∧
   type_memory_bytes cenv NoneT = 0

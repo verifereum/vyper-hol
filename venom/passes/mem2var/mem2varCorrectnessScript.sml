@@ -4,7 +4,7 @@ Ancestors
 
 Theorem m2v_transform_function_correct:
   !fuel ctx fn s bp.
-    bp_ptr_sound bp s /\ bp_access_bounded bp fn s /\
+    bp_ptr_sound bp s /\ bp_ptrs_bounded bp fn s /\
     alloca_pointer_confined fn ==>
     lift_result (state_equiv {}) (execution_equiv {})
       (run_function fuel ctx fn s)

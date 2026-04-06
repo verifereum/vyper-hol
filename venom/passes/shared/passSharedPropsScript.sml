@@ -20,6 +20,7 @@
  *     subst_op_map_eval_operands   — map substitution preserves eval_operands
  *     subst_operands_correct       — single substitution preserves step_inst
  *     subst_operands_map_correct   — map substitution preserves step_inst
+ *     step_inst_operands_equiv     — positional operand equivalence preserves step_inst
  *
  *   State preservation:
  *     step_inst_preserves_all              — 18-conjunct field preservation
@@ -867,3 +868,7 @@ Theorem effects_independent_commute =
 
 Theorem step_inst_base_effect_free_output_determined_vars =
   passSharedTransferTheory.step_inst_base_effect_free_output_determined_vars
+
+(* Operand equivalence *)
+Theorem step_inst_operands_equiv =
+  passSharedSubstTheory.step_inst_operands_equiv

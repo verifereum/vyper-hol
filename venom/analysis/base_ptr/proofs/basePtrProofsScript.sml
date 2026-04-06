@@ -15,6 +15,8 @@ Theory basePtrProofs
 Ancestors
   basePtrDefs venomExecSemantics venomWf memLocDefs venomInstProofs
   finite_map list
+Libs
+  finite_mapTheory
 
 (* Transfer function only modifies the output variable's pointer set. *)
 Theorem bp_handle_inst_other_var_proof:
@@ -60,6 +62,15 @@ Proof
   rw[venomInstTheory.inst_output_def] >>
   Cases_on `inst.inst_outputs` >> gvs[] >>
   Cases_on `t` >> gvs[]
+QED
+
+(* is_terminator + inst_wf ⇒ inst_outputs = [] *)
+Theorem terminator_no_outputs[local]:
+  ∀inst. inst_wf inst ∧ is_terminator inst.inst_opcode ⇒
+    inst.inst_outputs = []
+Proof
+  rpt strip_tac >> Cases_on `inst.inst_opcode` >>
+  gvs[venomInstTheory.is_terminator_def, venomWfTheory.inst_wf_def]
 QED
 
 (* FOLDL update_var preserves lookup for vars not in output list *)
@@ -209,9 +220,7 @@ Proof
   Cases_on `off` >> rw[ptr_matches_var_def] >> strip_tac >> gvs[]
 QED
 
-(* Frame lemma: bp_ptr_sound witness + preservation for unchanged variables.
-   Alloca condition is weakened: only requires preservation for aids already
-   in vs_allocas. This supports INVOKE, which can ADD new alloca entries. *)
+(* Frame lemma: bp_ptr_sound witness + preservation for unchanged variables. *)
 Theorem bp_ptr_sound_frame[local]:
   ∀bp bp' v s s'.
     bp_ptr_sound bp s ∧
@@ -219,8 +228,7 @@ Theorem bp_ptr_sound_frame[local]:
     bp_get_ptrs bp' v ≠ [] ∧
     bp_get_ptrs bp' v = bp_get_ptrs bp v ∧
     lookup_var v s' = lookup_var v s ∧
-    (∀aid off. MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ∧
-       FLOOKUP s.vs_allocas aid ≠ NONE ⇒
+    (∀aid off. MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ⇒
        FLOOKUP s'.vs_allocas aid = FLOOKUP s.vs_allocas aid) ⇒
     ∃p. MEM p (bp_get_ptrs bp' v) ∧ ptr_matches_var p v s'
 Proof
@@ -231,8 +239,7 @@ Proof
   qexists_tac `p` >> gvs[] >>
   irule ptr_matches_var_preserved >> qexistsl_tac [`s`, `v`] >> simp[] >>
   rpt strip_tac >> gvs[] >>
-  first_x_assum irule >>
-  metis_tac[ptr_matches_var_alloca_exists]
+  first_x_assum irule >> metis_tac[]
 QED
 
 (* resolve_phi produces a Var operand that is among phi_pairs *)
@@ -368,13 +375,10 @@ Theorem bp_handle_inst_sound_proof:
     bp_handle_inst bp inst = (c, bp') ∧
     step_inst fuel ctx inst s = OK s' ∧
     inst_wf inst ∧
-    (* All output variables have empty ptrs in bp *)
-    (∀out. MEM out inst.inst_outputs ⇒ bp_get_ptrs bp out = []) ∧
-    (* Allocation entries referenced by bp are preserved (weakened for INVOKE) *)
-    (∀v aid off. MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ∧
-       FLOOKUP s.vs_allocas aid ≠ NONE ⇒
+    (∀out. inst_output inst = SOME out ⇒ bp_get_ptrs bp out = []) ∧
+    (inst_output inst = NONE ⇒ inst.inst_outputs = []) ∧
+    (∀v aid off. MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ⇒
        FLOOKUP s'.vs_allocas aid = FLOOKUP s.vs_allocas aid) ∧
-    (* PHI: every defined phi source must have tracked ptrs *)
     (∀v. inst.inst_opcode = PHI ∧
          MEM v (MAP SND (phi_pairs inst.inst_operands)) ∧
          IS_SOME (lookup_var v s) ⇒
@@ -385,20 +389,14 @@ Proof
   rw[bp_ptr_sound_def] >> rpt strip_tac >>
   Cases_on `inst_output inst`
   >- (
-    (* NONE: bp' = bp unchanged (includes INVOKE with multi-output) *)
+    (* NONE: bp' = bp unchanged. inst.inst_outputs = [] by precondition. *)
     imp_res_tac bp_handle_inst_no_output_unchanged_proof >> gvs[] >>
-    (* If v is an inst_output: bp_get_ptrs bp v = [] → contradiction *)
-    reverse (Cases_on `MEM v inst.inst_outputs`)
-    >- (
-      (* v not in outputs: lookup preserved, use frame *)
-      irule bp_ptr_sound_frame >> simp[] >>
-      qexistsl_tac [`bp`, `s`] >> simp[] >>
-      (conj_tac >- metis_tac[]) >>
-      irule step_inst_preserves_lookup >>
-      qexistsl_tac [`ctx`, `fuel`, `inst`] >> simp[])
-    >- (
-      (* v in outputs: bp_get_ptrs bp v = [] contradicts ≠ [] *)
-      `bp_get_ptrs bp v = []` by metis_tac[] >> gvs[])
+    `inst.inst_outputs = []` by metis_tac[] >>
+    irule bp_ptr_sound_frame >> simp[] >>
+    qexistsl_tac [`bp`, `s`] >> simp[] >>
+    (conj_tac >- metis_tac[]) >>
+    irule step_inst_preserves_lookup >>
+    qexistsl_tac [`ctx`, `fuel`, `inst`] >> simp[]
   ) >>
   rename1 `SOME out` >>
   Cases_on `v = out`
@@ -639,8 +637,8 @@ Theorem bp_handle_inst_sound_in_block[local]:
     step_inst fuel ctx inst s = OK s' ∧
     inst_wf inst ∧
     (∀out. MEM out inst.inst_outputs ⇒ bp_get_ptrs bp out = []) ∧
-    (∀v aid off. MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ∧
-       FLOOKUP s.vs_allocas aid ≠ NONE ⇒
+    (inst_output inst = NONE ⇒ inst.inst_outputs = []) ∧
+    (∀v aid off. MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ⇒
        FLOOKUP s'.vs_allocas aid = FLOOKUP s.vs_allocas aid) ∧
     (∀v. inst.inst_opcode = PHI ∧
        MEM v (MAP SND (phi_pairs inst.inst_operands)) ∧
@@ -651,7 +649,10 @@ Proof
   rpt strip_tac >>
   irule bp_handle_inst_sound_proof >>
   qexistsl_tac [`bp`, `c`, `ctx`, `fuel`, `inst`, `s`] >>
-  ASM_REWRITE_TAC[]
+  ASM_REWRITE_TAC[] >> rpt conj_tac >> rpt strip_tac >>
+  TRY (first_x_assum irule >>
+       imp_res_tac inst_wf_outputs_some >> gvs[] >> NO_TAC) >>
+  metis_tac[]
 QED
 
 (* Generalized block-level lemma: from arbitrary index to end.
@@ -668,6 +669,8 @@ Theorem bp_process_block_sound_gen[local]:
       (DROP s0.vs_inst_idx bb.bb_instructions))) ∧
     (∀inst out. MEM inst (DROP s0.vs_inst_idx bb.bb_instructions) ∧
        MEM out inst.inst_outputs ⇒ bp_get_ptrs bp0 out = []) ∧
+    (∀inst. MEM inst (DROP s0.vs_inst_idx bb.bb_instructions) ∧
+       inst_output inst = NONE ⇒ inst.inst_outputs = []) ∧
     (∀inst. MEM inst (DROP s0.vs_inst_idx bb.bb_instructions) ⇒
        inst_wf inst) ∧
     (∀inst v aid off. MEM inst (DROP s0.vs_inst_idx bb.bb_instructions) ∧
@@ -681,14 +684,7 @@ Theorem bp_process_block_sound_gen[local]:
        inst.inst_opcode = PHI ∧
        MEM v (MAP SND (phi_pairs inst.inst_operands)) ∧
        IS_SOME (lookup_var v s0) ⇒
-       bp_get_ptrs bp0 v ≠ []) ∧
-    (* INVOKE: step_inst preserves pre-existing alloca entries *)
-    (∀inst si si' aid.
-       MEM inst (DROP s0.vs_inst_idx bb.bb_instructions) ∧
-       inst.inst_opcode = INVOKE ∧
-       step_inst fuel ctx inst si = OK si' ∧
-       FLOOKUP si.vs_allocas aid ≠ NONE ⇒
-       FLOOKUP si'.vs_allocas aid = FLOOKUP si.vs_allocas aid) ⇒
+       bp_get_ptrs bp0 v ≠ []) ⇒
     bp_ptr_sound bp' s'
 Proof
   Induct_on `n`
@@ -749,28 +745,38 @@ Proof
                         GSYM venomExecSemanticsTheory.exec_result_distinct])
 QED
 
-(* Helper: derive per-instruction alloca condition from block-level hypotheses.
-   For non-INVOKE: uses step_inst_alloca_flookup.
-   For INVOKE: uses the block-level INVOKE alloca preservation precondition. *)
+(* INVOKE preserves caller's vs_allocas: merge_callee_state keeps caller's,
+   bind_outputs only does update_var which doesn't touch vs_allocas. *)
+Theorem step_inst_invoke_preserves_allocas[local]:
+  ∀fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ∧
+    inst.inst_opcode = INVOKE ⇒
+    s'.vs_allocas = s.vs_allocas
+Proof
+  rpt strip_tac >>
+  gvs[Once venomExecSemanticsTheory.step_inst_def, AllCaseEqs()] >>
+  gvs[venomExecSemanticsTheory.bind_outputs_def, AllCaseEqs()] >>
+  gvs[foldl_update_var_allocas,
+      venomExecSemanticsTheory.merge_callee_state_def]
+QED
+
+(* Helper: derive per-instruction alloca FLOOKUP preservation.
+   INVOKE: full vs_allocas preserved (merge_callee_state keeps caller's).
+   ALLOCA: only inst_id entry changes.
+   Other: full vs_allocas preserved. *)
 Theorem step_alloca_from_block[local]:
   ∀fuel ctx inst s0 s1 bp insts.
     step_inst fuel ctx inst s0 = OK s1 ∧
     MEM inst insts ∧
     (∀i v aid off. MEM i insts ∧ i.inst_opcode = ALLOCA ∧
        MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ⇒
-       aid ≠ i.inst_id) ∧
-    (∀i si si' aid.
-       MEM i insts ∧ i.inst_opcode = INVOKE ∧
-       step_inst fuel ctx i si = OK si' ∧
-       FLOOKUP si.vs_allocas aid ≠ NONE ⇒
-       FLOOKUP si'.vs_allocas aid = FLOOKUP si.vs_allocas aid) ⇒
-    ∀v aid off. MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ∧
-       FLOOKUP s0.vs_allocas aid ≠ NONE ⇒
+       aid ≠ i.inst_id) ⇒
+    ∀v aid off. MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ⇒
        FLOOKUP s1.vs_allocas aid = FLOOKUP s0.vs_allocas aid
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode = INVOKE`
-  >- (res_tac >> gvs[])
+  >- (drule_all step_inst_invoke_preserves_allocas >> simp[])
   >- (
     `inst.inst_opcode = ALLOCA ⇒ aid ≠ inst.inst_id` by metis_tac[] >>
     metis_tac[step_inst_alloca_flookup])
@@ -803,7 +809,6 @@ Resume bp_process_block_sound_gen[terminator]:
   `s1.vs_allocas = s0.vs_allocas` by
     metis_tac[step_inst_allocas, is_terminator_not_alloca_invoke] >>
   BasicProvers.VAR_EQ_TAC >>
-  (* Apply bp_handle_inst_sound_in_block BEFORE dissolving Abbrev *)
   irule bp_handle_inst_sound_in_block >>
   qexistsl_tac [`bp0`, `c1`, `ctx`, `fuel`, `inst`, `s0`] >>
   gvs[markerTheory.Abbrev_def] >>
@@ -812,8 +817,7 @@ Resume bp_process_block_sound_gen[terminator]:
   >- ((* output freshness *) metis_tac[])
 QED
 
-(* After bp_handle_inst, output ptrs for other instructions stay empty.
-   MEM-based: handles INVOKE multi-output (inst_output = NONE). *)
+(* After bp_handle_inst, output ptrs for other instructions stay empty. *)
 Theorem bp_handle_inst_output_ptrs_tail[local]:
   ∀bp0 inst c r insts i out.
     bp_handle_inst bp0 inst = (c, r) ∧
@@ -830,7 +834,6 @@ Proof
     qpat_x_assum `ALL_DISTINCT _` mp_tac >>
     simp[ALL_DISTINCT_APPEND, MEM_FLAT, MEM_MAP] >>
     metis_tac[]) >>
-  (* inst_output inst ≠ SOME out *)
   `inst_output inst ≠ SOME out` by (
     strip_tac >>
     gvs[venomInstTheory.inst_output_def] >>
@@ -961,22 +964,25 @@ Resume bp_process_block_sound_gen[non_terminator]:
   (* Step 1: simplify run_block assumption *)
   qpat_x_assum `(if _ then _ else _) = OK _` mp_tac >>
   ASM_REWRITE_TAC[] >> strip_tac >>
-  (* Now have: run_block fuel ctx bb (s1 with vs_inst_idx := SUC ...) = OK s' *)
   (* Step 2: establish bp_ptr_sound r1 s1 *)
-  (* Alloca preservation for this step — inline proof *)
-  `∀v aid off. MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp0 v) ∧
-     FLOOKUP s0.vs_allocas aid ≠ NONE ⇒
+  (* Alloca preservation for this step *)
+  `∀v aid off. MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp0 v) ⇒
      FLOOKUP s1.vs_allocas aid = FLOOKUP s0.vs_allocas aid` by (
     rpt strip_tac >>
     Cases_on `inst.inst_opcode = INVOKE`
-    >- (res_tac >> gvs[])
+    >- (drule_all step_inst_invoke_preserves_allocas >> simp[])
     >- (
       `inst.inst_opcode = ALLOCA ⇒ aid ≠ inst.inst_id` by metis_tac[] >>
       metis_tac[step_inst_alloca_flookup])) >>
   `bp_ptr_sound r1 s1` by (
     irule bp_handle_inst_sound_in_block >>
     qexistsl_tac [`bp0`, `c1`, `ctx`, `fuel`, `inst`, `s0`] >>
-    ASM_REWRITE_TAC[] >> metis_tac[]) >>
+    ASM_REWRITE_TAC[] >> rpt conj_tac
+    >- (rpt strip_tac >> first_x_assum irule >> first_assum ACCEPT_TAC)
+    >- (strip_tac >> first_x_assum irule >> ASM_REWRITE_TAC[])
+    >- (rpt strip_tac >> first_x_assum irule >> first_assum ACCEPT_TAC)
+    >- (rpt strip_tac >> first_x_assum irule >> ASM_REWRITE_TAC[])
+  ) >>
   (* Get inst_eq without Abbrev wrapper *)
   `inst = EL s0.vs_inst_idx bb.bb_instructions` by
     fs[markerTheory.Abbrev_def] >>
@@ -1025,7 +1031,16 @@ Resume bp_process_block_sound_gen[non_terminator]:
           metis_tac[MEM]
         ])) >>
       DISCH_TAC >> first_assum ACCEPT_TAC) >>
-    conj_tac >- (                        (* 9 *)
+    conj_tac >- (                        (* 9: inst_output NONE → [] *)
+      rpt strip_tac >>
+      qpat_assum `!inst'. MEM inst' (DROP _ _) /\ inst_output _ = NONE ==> _`
+        (qspec_then `inst'` mp_tac) >>
+      (impl_tac >- (
+        qpat_x_assum `DROP _ _ = _ :: _`
+          (fn eq => PURE_REWRITE_TAC [eq]) >>
+        REWRITE_TAC[MEM] >> DISJ2_TAC >> first_assum ACCEPT_TAC)) >>
+      strip_tac >> ASM_REWRITE_TAC[]) >>
+    conj_tac >- (                        (* 10 *)
       rpt strip_tac >>
       qpat_assum `!i. MEM i (DROP s0.vs_inst_idx _) ==> _`
         (qspec_then `inst'` mp_tac) >>
@@ -1053,7 +1068,7 @@ Resume bp_process_block_sound_gen[non_terminator]:
       ASM_REWRITE_TAC[MAP, ALL_DISTINCT]
       >- (DISCH_TAC >> pop_assum (ACCEPT_TAC o CONJUNCT2))
       >> (DISCH_TAC >> first_assum ACCEPT_TAC)) >>
-    conj_tac >- (                        (* 12 *)
+    conj_tac >- (                        (* 13 *)
       rpt strip_tac >>
       rename1 `MEM inst2 (DROP _ _)` >>
       rename1 `MEM v2 (MAP SND _)` >>
@@ -1097,18 +1112,8 @@ Resume bp_process_block_sound_gen[non_terminator]:
         qpat_x_assum `inst2 = _` (fn eq =>
           PURE_ONCE_REWRITE_TAC[GSYM eq]) >>
         ASM_REWRITE_TAC[])) >>
-    (* 13 *)
-    rpt strip_tac >>
-    qpat_assum `∀inst si si' aid. _`
-      (fn th => mp_tac (Q.SPECL [`inst'`, `si`, `si'`, `aid`] th)) >>
-    impl_tac >- (
-      rpt conj_tac
-      >- (qpat_assum `DROP _ _ = _ :: _`
-            (fn eq => PURE_ONCE_REWRITE_TAC [eq]) >>
-          REWRITE_TAC[MEM] >> DISJ2_TAC >> first_assum ACCEPT_TAC)
-      >> first_assum ACCEPT_TAC) >>
-    DISCH_TAC >> first_assum ACCEPT_TAC) >>
-  strip_tac >> first_assum ACCEPT_TAC
+  strip_tac >> first_assum ACCEPT_TAC) >>
+  strip_tac
 QED
 
 Finalise bp_process_block_sound_gen;
@@ -1123,29 +1128,22 @@ Theorem bp_process_block_sound_proof:
     (∀inst. MEM inst bb.bb_instructions ⇒ inst_wf inst) ∧
     ALL_DISTINCT (FLAT (MAP (λi. i.inst_outputs) bb.bb_instructions)) ∧
     (∀inst out. MEM inst bb.bb_instructions ∧
-               MEM out inst.inst_outputs ⇒
+               inst_output inst = SOME out ⇒
                bp_get_ptrs bp out = []) ∧
-    (* ALLOCA freshness: inst_ids don't collide with initial bp pointers *)
+    (∀inst. MEM inst bb.bb_instructions ∧
+           inst_output inst = NONE ⇒ inst.inst_outputs = []) ∧
+    ctx_inst_ids_distinct ctx ∧
     (∀inst v aid off. MEM inst bb.bb_instructions ∧
        inst.inst_opcode = ALLOCA ∧
        MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ⇒
        aid ≠ inst.inst_id) ∧
-    (* ALLOCA inst_ids within the block are pairwise distinct *)
     ALL_DISTINCT (MAP (λi. i.inst_id)
       (FILTER (λi. i.inst_opcode = ALLOCA) bb.bb_instructions)) ∧
-    (* PHI sources that are defined must have tracked ptrs *)
     (∀inst v. MEM inst bb.bb_instructions ∧
        inst.inst_opcode = PHI ∧
        MEM v (MAP SND (phi_pairs inst.inst_operands)) ∧
        IS_SOME (lookup_var v s) ⇒
-       bp_get_ptrs bp v ≠ []) ∧
-    (* INVOKE preserves pre-existing alloca entries *)
-    (∀inst si si' aid.
-       MEM inst bb.bb_instructions ∧
-       inst.inst_opcode = INVOKE ∧
-       step_inst fuel ctx inst si = OK si' ∧
-       FLOOKUP si.vs_allocas aid ≠ NONE ⇒
-       FLOOKUP si'.vs_allocas aid = FLOOKUP si.vs_allocas aid) ⇒
+       bp_get_ptrs bp v ≠ []) ⇒
     bp_ptr_sound bp' s'
 Proof
   rpt strip_tac >>
@@ -1153,7 +1151,13 @@ Proof
   qexistsl_tac [`bb`, `bp`, `c`, `ctx`, `fuel`,
                  `LENGTH bb.bb_instructions`, `s`] >>
   simp[DROP_0] >>
-  rpt conj_tac >> rpt strip_tac >> res_tac >> fs[]
+  rpt conj_tac >> rpt strip_tac >>
+  TRY (res_tac >> fs[] >> NO_TAC) >>
+  (* Bridge inst_output → MEM: use SOME case + NONE case *)
+  Cases_on `inst_output inst`
+  >- (`inst.inst_outputs = []` by res_tac >> gvs[])
+  >- (`inst_wf inst` by res_tac >>
+      imp_res_tac inst_wf_outputs_some >> gvs[] >> res_tac)
 QED
 
 (* Singleton pointer ⇒ exact runtime address. *)

@@ -15,7 +15,9 @@
 Theory venomMemProofs
 Ancestors
   venomMemDefs venomExecSemantics venomState venomInstProofs
-  finite_map list rich_list
+  finite_map list rich_list words byte
+Libs
+  wordsLib
 
 (* ===================================================================
    Infrastructure: dimindex, word_to_bytes length
@@ -552,4 +554,30 @@ Theorem allocas_non_overlapping_run_block_proof:
     allocas_non_overlapping s'
 Proof
   metis_tac[alloca_inv_run_block_proof, alloca_inv_def]
+QED
+
+Theorem did8[local] = EVAL``dimindex(:256) DIV 8``
+
+Theorem mload_mstore_same_proof:
+  ∀off val s.
+    mload off (mstore off val s) = val
+Proof
+  simp[mload_def, mstore_def] >>
+  rpt gen_tac >>
+  rewrite_tac[TAKE_APPEND] >>
+  rewrite_tac[DROP_APPEND, DROP_TAKE_EQ_NIL] >>
+  simp_tac (std_ss ++ listSimps.LIST_ss)
+    [LENGTH_word_to_bytes, LENGTH_TAKE_EQ] >>
+  IF_CASES_TAC >- (
+    simp_tac (std_ss ++ listSimps.LIST_ss)
+      [did8,
+       iterateTheory.ADD_SUBR2, TAKE_APPEND,
+       LENGTH_word_to_bytes] >>
+    simp[LENGTH_word_to_bytes, TAKE_LENGTH_TOO_LONG]) >>
+  IF_CASES_TAC >- (
+    simp_tac (std_ss ++ listSimps.LIST_ss)
+      [LENGTH_REPLICATE, did8, DROP_APPEND, DROP_LENGTH_TOO_LONG] >>
+    simp[iterateTheory.ADD_SUBR2, TAKE_APPEND,
+         TAKE_LENGTH_TOO_LONG, DROP_LENGTH_TOO_LONG] ) >>
+  fs[]
 QED

@@ -382,3 +382,66 @@ Theorem df_fold_block_forward_invariant:
 Proof
   ACCEPT_TAC dfAnalyzeProofsTheory.df_fold_block_forward_invariant
 QED
+
+(* cfg_dfs_pre membership implies cfg_dfs_post membership *)
+Theorem cfg_dfs_pre_mem_post:
+  !fn lbl.
+    MEM lbl (cfg_analyze fn).cfg_dfs_pre ==>
+    MEM lbl (cfg_analyze fn).cfg_dfs_post
+Proof
+  ACCEPT_TAC dfAnalyzeProofsTheory.cfg_dfs_pre_mem_post
+QED
+
+(* cfg_dfs_pre labels are a subset of fn_labels for well-formed functions *)
+Theorem cfg_dfs_pre_subset_fn_labels:
+  !fn lbl. wf_function fn /\
+    MEM lbl (cfg_analyze fn).cfg_dfs_pre ==>
+    MEM lbl (fn_labels fn)
+Proof
+  ACCEPT_TAC dfAnalyzeProofsTheory.cfg_dfs_pre_subset_fn_labels
+QED
+
+(* Forward fold: FLOOKUP structure for each instruction index *)
+Theorem df_fold_forward_at:
+  !transfer lbl instrs idx acc fv im.
+    df_fold_forward transfer lbl instrs idx acc FEMPTY = (fv, im) ==>
+    FLOOKUP im (lbl, idx) = SOME acc /\
+    (!i. i < LENGTH instrs ==>
+      FLOOKUP im (lbl, idx + SUC i) =
+        SOME (transfer (EL i instrs)
+                       (THE (FLOOKUP im (lbl, idx + i))))) /\
+    fv = THE (FLOOKUP im (lbl, idx + LENGTH instrs))
+Proof
+  ACCEPT_TAC dfAnalyzeProofsTheory.df_fold_forward_at
+QED
+
+(* FOLDL with FEMPTY yields only the initial value *)
+Theorem foldl_fempty_val:
+  !ls bot k v.
+    FLOOKUP (FOLDL (\m l. m |+ (l, bot)) FEMPTY ls) k = SOME v ==> v = bot
+Proof
+  ACCEPT_TAC dfAnalyzeProofsTheory.foldl_fempty_val
+QED
+
+(* df_fold_block FDOM structure for forward direction *)
+Theorem df_fold_block_fdom:
+  !transfer lbl instrs init_val fv im.
+    df_fold_block Forward transfer lbl instrs init_val = (fv, im) ==>
+    FDOM im = IMAGE (\i. (lbl, i)) (count (LENGTH instrs + 1))
+Proof
+  ACCEPT_TAC dfAnalyzeProofsTheory.df_fold_block_fdom
+QED
+
+(* df_valid_inst_keys is always finite *)
+Theorem df_valid_inst_keys_finite:
+  !bbs. FINITE (df_valid_inst_keys bbs)
+Proof
+  ACCEPT_TAC dfAnalyzeProofsTheory.df_valid_inst_keys_finite
+QED
+
+(* df_valid_inst_keys cardinality bounded by df_total_inst_slots *)
+Theorem df_valid_inst_keys_card:
+  !bbs. CARD (df_valid_inst_keys bbs) <= df_total_inst_slots bbs
+Proof
+  ACCEPT_TAC dfAnalyzeProofsTheory.df_valid_inst_keys_card
+QED

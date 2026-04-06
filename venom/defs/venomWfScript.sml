@@ -275,7 +275,9 @@ Definition def_dominates_uses_def:
                 EL j bb.bb_instructions = inst)
 End
 
-(* Well-formed SSA: unique definitions AND definitions dominate uses. *)
+(* Well-formed SSA: unique definitions AND definitions dominate uses.
+   Within-block ordering follows from def_dominates_uses + fn_inst_ids_distinct
+   (part of wf_function). *)
 Definition wf_ssa_def:
   wf_ssa fn <=> ssa_form fn /\ def_dominates_uses fn
 End
@@ -304,6 +306,16 @@ End
 (* Well-formed context. *)
 Definition ctx_wf_def:
   ctx_wf ctx <=> ctx_distinct_fn_names ctx /\ ctx_has_entry ctx
+End
+
+(* All instruction ids across all functions in the context are distinct.
+   Matches Python: inst_id is a global counter across the whole module. *)
+Definition ctx_inst_ids_distinct_def:
+  ctx_inst_ids_distinct ctx ⇔
+    ALL_DISTINCT
+      (FLAT (MAP (λfn.
+        FLAT (MAP (λbb. MAP (λi. i.inst_id) bb.bb_instructions)
+          fn.fn_blocks)) ctx.ctx_functions))
 End
 
 (* Every INVOKE instruction's first operand is a Label naming a
@@ -341,6 +353,7 @@ Definition venom_wf_def:
   venom_wf ctx ⇔
     ctx_wf ctx ∧
     wf_invoke_targets ctx ∧
+    ctx_inst_ids_distinct ctx ∧
     (∀fn. MEM fn ctx.ctx_functions ==>
           wf_function fn ∧ fn_inst_wf fn)
 End
