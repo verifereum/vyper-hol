@@ -31,7 +31,8 @@
 Theory copyFwdEquiv
 Ancestors
   allocaRemapDefs pointerConfinedDefs memLocDefs
-  venomExecSemantics venomState stateEquiv invokeCopyFwdCommonDefs
+  venomExecSemantics venomState stateEquiv
+  finite_map
 
 (* =========================================================================
    1. Cross-State Memory Region Equivalence
@@ -116,9 +117,10 @@ Theorem copy_fwd_cross_equiv:
                            <| vs_memory := mem |>).vs_memory in
     cross_mem_region_equiv mem_after_copy dst_addr mem src_addr sz
 Proof
-  rw[cross_mem_region_equiv_def] >> rpt strip_tac >>
-  (* dst+i in post-copy = src+i in pre-copy = src+i in original mem *)
-  assume_tac (SPEC_ALL mcopy_establishes_equiv) >> fs[]
+  rw[cross_mem_region_equiv_def, LET_THM] >> rpt strip_tac >>
+  mp_tac (Q.SPECL [`<| vs_memory := mem |>`, `dst_addr`, `src_addr`, `sz`]
+    mcopy_establishes_equiv) >> simp[LET_THM] >>
+  disch_then drule >> simp[]
 QED
 
 (* =========================================================================
@@ -214,15 +216,6 @@ Theorem copy_fwd_rel_observable_equiv:
     observable_equiv s1 s2
 Proof
   rw[copy_fwd_rel_def, observable_equiv_def]
-QED
-
-(* copy_fwd_rel implies icf_equiv (memory allowed to differ) *)
-Theorem copy_fwd_rel_icf_equiv:
-  ∀dst src sz s1 s2.
-    copy_fwd_rel dst src sz s1 s2 ⇒
-    icf_equiv s1 s2
-Proof
-  rw[copy_fwd_rel_def, icf_equiv_def]
 QED
 
 (* =========================================================================
@@ -366,8 +359,9 @@ Theorem assign_transparent:
     step_inst_base inst s = OK s' ⇒
     lookup_var out s' = lookup_var v s
 Proof
-  rw[step_inst_base_def, eval_operand_def, update_var_def, lookup_var_def] >>
-  simp[FLOOKUP_UPDATE]
+  rpt strip_tac >>
+  gvs[step_inst_base_def, eval_operand_def, lookup_var_def] >>
+  Cases_on `FLOOKUP s.vs_vars v` >> gvs[update_var_def, FLOOKUP_UPDATE]
 QED
 
 Theorem phi_transparent:
@@ -379,8 +373,7 @@ Theorem phi_transparent:
     step_inst_base inst s = OK s' ⇒
     lookup_var out s' = lookup_var v s
 Proof
-  rw[step_inst_base_def] >> gvs[eval_operand_def, update_var_def, lookup_var_def] >>
-  simp[FLOOKUP_UPDATE]
+  rpt strip_tac >>
+  gvs[step_inst_base_def, eval_operand_def, lookup_var_def] >>
+  Cases_on `FLOOKUP s.vs_vars v` >> gvs[update_var_def, FLOOKUP_UPDATE]
 QED
-
-End
