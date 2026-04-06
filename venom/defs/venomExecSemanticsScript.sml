@@ -1027,8 +1027,8 @@ Definition merge_callee_state_def:
       vs_accounts   := callee.vs_accounts;
       vs_returndata := callee.vs_returndata;
       vs_logs       := callee.vs_logs;
-      vs_immutables := callee.vs_immutables;
-      vs_allocas    := callee.vs_allocas
+      vs_immutables := callee.vs_immutables
+      (* vs_allocas NOT copied — caller keeps its own frame's allocas *)
     |>
 End
 
@@ -1042,7 +1042,8 @@ Definition setup_callee_def:
       vs_current_bb := (HD fn.fn_blocks).bb_label;
       vs_inst_idx   := 0;
       vs_prev_bb    := NONE;
-      vs_halted     := F
+      vs_halted     := F;
+      vs_allocas    := FEMPTY    (* callee starts with no allocas *)
     |>)
 End
 
