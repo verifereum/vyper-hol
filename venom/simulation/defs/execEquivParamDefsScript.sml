@@ -50,7 +50,8 @@ Definition valid_state_rel_def:
       s1.vs_labels = s2.vs_labels /\
       s1.vs_code = s2.vs_code /\
       s1.vs_prev_hashes = s2.vs_prev_hashes /\
-      s1.vs_allocas = s2.vs_allocas) /\
+      s1.vs_allocas = s2.vs_allocas /\
+      s1.vs_alloca_next = s2.vs_alloca_next) /\
     (* R_term preserves execution-relevant fields (may omit control flow) *)
     (!s1 s2. R_term s1 s2 ==>
       s1.vs_call_ctx = s2.vs_call_ctx /\
@@ -68,7 +69,8 @@ Definition valid_state_rel_def:
       s1.vs_labels = s2.vs_labels /\
       s1.vs_code = s2.vs_code /\
       s1.vs_prev_hashes = s2.vs_prev_hashes /\
-      s1.vs_allocas = s2.vs_allocas) /\
+      s1.vs_allocas = s2.vs_allocas /\
+      s1.vs_alloca_next = s2.vs_alloca_next) /\
     (* Both closed under var update *)
     (!s1 s2 x v. R_ok s1 s2 ==>
                   R_ok (update_var x v s1) (update_var x v s2)) /\
@@ -110,7 +112,8 @@ Definition valid_state_rel_def:
       t1.vs_labels = t2.vs_labels /\
       t1.vs_code = t2.vs_code /\
       t1.vs_prev_hashes = t2.vs_prev_hashes /\
-      t1.vs_allocas = t2.vs_allocas
+      t1.vs_allocas = t2.vs_allocas /\
+      t1.vs_alloca_next = t2.vs_alloca_next
       ==> R_ok t1 t2) /\
     (* Reconstruction for R_term (same but R_term-tracked fields only) *)
     (!s1 s2 t1 t2. R_term s1 s2 /\
@@ -130,6 +133,7 @@ Definition valid_state_rel_def:
       t1.vs_labels = t2.vs_labels /\
       t1.vs_code = t2.vs_code /\
       t1.vs_prev_hashes = t2.vs_prev_hashes /\
-      t1.vs_allocas = t2.vs_allocas
+      t1.vs_allocas = t2.vs_allocas /\
+      t1.vs_alloca_next = t2.vs_alloca_next
       ==> R_term t1 t2)
 End

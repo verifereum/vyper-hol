@@ -458,9 +458,10 @@ Definition exec_alloca_def:
       [out] =>
         let offset = next_alloca_offset s in
         let sz = w2n alloc_size in
-        let s' = s with
-          vs_allocas := s.vs_allocas |+ (inst.inst_id, (offset, sz))
-        in
+        let s' = s with <|
+          vs_allocas := s.vs_allocas |+ (inst.inst_id, (offset, sz));
+          vs_alloca_next := offset + sz
+        |> in
         OK (update_var out (n2w offset) s')
     | _ => Error "alloca requires single output"
 End
@@ -1027,7 +1028,8 @@ Definition merge_callee_state_def:
       vs_accounts   := callee.vs_accounts;
       vs_returndata := callee.vs_returndata;
       vs_logs       := callee.vs_logs;
-      vs_immutables := callee.vs_immutables
+      vs_immutables := callee.vs_immutables;
+      vs_alloca_next := callee.vs_alloca_next
       (* vs_allocas NOT copied — caller keeps its own frame's allocas *)
     |>
 End

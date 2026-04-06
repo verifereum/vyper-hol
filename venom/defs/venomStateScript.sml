@@ -102,7 +102,8 @@ Datatype:
     vs_code : byte list;             (* Own bytecode (CODECOPY/EXTCODECOPY) *)
     vs_params : bytes32 list;        (* Function parameters (read by PARAM) *)
     vs_prev_hashes : bytes32 list;  (* Recent block hashes for EVM BLOCKHASH *)
-    vs_allocas : (num, num # num) fmap  (* inst_id -> (offset, size) *)
+    vs_allocas : (num, num # num) fmap;  (* inst_id -> (offset, size) *)
+    vs_alloca_next : num  (* bump pointer: next free alloca offset *)
   |>
 End
 
@@ -162,7 +163,8 @@ Definition init_venom_state_def:
     vs_code := [];
     vs_params := [];
     vs_prev_hashes := [];
-    vs_allocas := FEMPTY
+    vs_allocas := FEMPTY;
+    vs_alloca_next := 0
   |>
 End
 
@@ -211,10 +213,7 @@ End
 (* Next free alloca offset: past all existing allocas and physical memory.
    ALLOCA uses this as a bump pointer without extending vs_memory. *)
 Definition next_alloca_offset_def:
-  next_alloca_offset s =
-    FOLDL (\m (k,(off,sz)). MAX m (off + sz))
-          (LENGTH s.vs_memory)
-          (fmap_to_alist s.vs_allocas)
+  next_alloca_offset s = MAX s.vs_alloca_next (LENGTH s.vs_memory)
 End
 
 (* Load a 32-byte word from memory (big-endian) *)
