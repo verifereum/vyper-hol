@@ -389,11 +389,13 @@ Theorem compile_abi_encode_to_buf_correct:
   (* compile_abi_encode_child — P0: static case only for single_block *)
   (∀ dst child_ptr enc_info is_dyn static_ofst dyn_ofst_ptr
      st op st' ss
-     dst_addr child_addr ty tv v tenv av at.
+     dst_addr child_addr ty tv v tenv av at
+     (sfields : (string, (string # type # num) list) fmap) cenv.
     compile_abi_encode_child dst child_ptr enc_info
       is_dyn static_ofst dyn_ofst_ptr st = (op, st') ∧
     ¬is_dyn ∧
     single_block_enc_info enc_info ∧
+    enc_info = type_to_abi_enc_info sfields cenv ty ∧
     eval_operand dst ss = SOME (n2w dst_addr) ∧
     eval_operand child_ptr ss = SOME (n2w child_addr) ∧
     fresh_vars_wrt st ss ∧
@@ -423,9 +425,11 @@ Theorem compile_abi_encode_to_buf_correct:
 
   (* compile_abi_encode_to_buf — P1 *)
   (∀ dst src enc_info st op st' ss
-     dst_addr src_addr ty tv v tenv av at.
+     dst_addr src_addr ty tv v tenv av at
+     (sfields : (string, (string # type # num) list) fmap) cenv.
     compile_abi_encode_to_buf dst src enc_info st = (op, st') ∧
     single_block_enc_info enc_info ∧
+    enc_info = type_to_abi_enc_info sfields cenv ty ∧
     eval_operand dst ss = SOME (n2w dst_addr) ∧
     eval_operand src ss = SOME (n2w src_addr) ∧
     fresh_vars_wrt st ss ∧
@@ -456,10 +460,14 @@ Theorem compile_abi_encode_to_buf_correct:
   (* compile_abi_encode_complex_elems — P2: static elements *)
   (∀ dst src elems src_offset head_offset dyn_ptr
      st op st' ss
-     dst_addr src_addr tys tvs vs tenv avs ats.
+     dst_addr src_addr tys tvs vs tenv avs ats
+     (sfields : (string, (string # type # num) list) fmap) cenv.
     compile_abi_encode_complex_elems dst src elems
       src_offset head_offset dyn_ptr st = (op, st') ∧
     EVERY (λ(ei,_,_,is_dyn). single_block_enc_info ei ∧ ¬is_dyn) elems ∧
+    (* enc_info correspondence per element *)
+    (∀ i. i < LENGTH elems ⇒
+       FST (EL i elems) = type_to_abi_enc_info sfields cenv (EL i tys)) ∧
     eval_operand dst ss = SOME (n2w dst_addr) ∧
     eval_operand src ss = SOME (n2w src_addr) ∧
     fresh_vars_wrt st ss ∧
@@ -546,7 +554,10 @@ Resume compile_abi_encode_to_buf_correct[child]:
     suspend"childADD") >>
   (* static_ofst = 0: child_dst = dst, directly apply IH *)
   gvs[comp_return_def] >>
-  first_x_assum drule_all >>
+  first_x_assum $ drule_then (drule_at Any) >>
+  rpt(disch_then $ drule_at Any) >>
+  disch_then(qspecl_then[`sfields`,`cenv`]mp_tac) >>
+  impl_tac >- rw[] >>
   strip_tac >>
   goal_assum drule >> gvs[] >>
   rpt strip_tac >>
@@ -554,14 +565,15 @@ Resume compile_abi_encode_to_buf_correct[child]:
 QED
 
 Resume compile_abi_encode_to_buf_correct[childADD]:
-  first_x_assum $ drule_then drule >>
+  first_x_assum $ drule_then $ drule_at Any >>
   first_assum drule >> strip_tac >>
-  disch_then drule >> gvs[] >>
-  disch_then drule >> gvs[] >>
-  disch_then drule >>
   `ss'.vs_memory = ss.vs_memory` by gvs[LIST_EQ_REWRITE] >>
-  gvs[] >>
-  disch_then drule >> gvs[] >>
+  disch_then (drule_at Any) >>
+  disch_then (drule_at Any) >>
+  disch_then (drule_at Any) >> gvs[] >>
+  disch_then (drule_at Any) >> gvs[] >>
+  disch_then(qspecl_then[`sfields`,`cenv`]mp_tac) >>
+  impl_tac >- rw[] >>
   strip_tac >>
   qspec_then`st`mp_tac emitted_insts_append >>
   disch_then $ drule_at Any >> impl_keep_tac
