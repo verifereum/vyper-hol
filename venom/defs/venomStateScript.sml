@@ -339,3 +339,10 @@ Definition eval_operands_def:
           NONE => NONE
         | SOME vs => SOME (v::vs)
 End
+
+(* Record update identity: s with vs_inst_idx := 0 = s when already 0 *)
+Theorem inst_idx_update_id[simp]:
+  s.vs_inst_idx = 0 ==> s with vs_inst_idx := 0 = s
+Proof
+  rw[fetch "-" "venom_state_component_equality"]
+QED

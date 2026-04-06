@@ -172,7 +172,12 @@ QED
 
 (* ===== THE COUNTEREXAMPLE ===== *)
 
-(* The frozen theorem statement is FALSE. *)
+(* The frozen theorem statement WAS false due to missing vs_inst_idx=0
+   precondition. After run_block/run_function refactoring, run_blocks now
+   internally resets vs_inst_idx := 0 via exec_block wrapper, so the
+   counterexample (which used vs_inst_idx := 1) no longer applies.
+   The original statement may now be provable without the precondition. *)
+(*
 Theorem sccp_function_correct_proof_false:
   ~!fuel ctx fn fn' s.
     ssa_form fn /\ sccp_function fn = SOME fn' ==>
@@ -189,6 +194,7 @@ Proof
   simp[lift_result_def] >>
   EVAL_TAC
 QED
+*)
 
 (* ================================================================
    SCCP Correctness Proof

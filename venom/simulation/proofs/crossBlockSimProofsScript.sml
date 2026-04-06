@@ -37,7 +37,7 @@ Triviality step_inst_invoke_fuel_0:
     ?e. step_inst 0 ctx inst s = Error e
 Proof
   rw[step_inst_def, run_blocks_def] >>
-  BasicProvers.EVERY_CASE_TAC >> fs[]
+  BasicProvers.EVERY_CASE_TAC
 QED
 
 (* ===== General fuel monotonicity for run_blocks ===== *)
@@ -169,33 +169,34 @@ Proof
   >- fs[Once run_blocks_def, terminates_def]
   >- (
     rename1 `SUC f` >>
+    qabbrev_tac `s0 = s with vs_inst_idx := 0` >>
     `run_blocks (SUC f) ctx fn s =
      case lookup_block s.vs_current_bb fn.fn_blocks of
        NONE => Error "block not found"
      | SOME bb =>
-         case exec_block f ctx bb s of
+         case exec_block f ctx bb s0 of
            OK s' => if s'.vs_halted then Halt s'
                     else run_blocks f ctx fn s'
          | IntRet vals s' => IntRet vals s'
          | Halt s' => Halt s'
          | Abort a s' => Abort a s'
-         | Error e => Error e` by simp[Once run_blocks_def] >>
+         | Error e => Error e` by simp[Once run_blocks_def, Abbr `s0`] >>
     Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
     >- gvs[terminates_def]
     >- (
       rename1 `_ = SOME bb` >>
-      `!e. exec_block f ctx bb s <> Error e` by
+      `!e. exec_block f ctx bb s0 <> Error e` by
         (spose_not_then strip_assume_tac >> gvs[terminates_def]) >>
       `!ctx' fn' s'. terminates (run_blocks f ctx' fn' s') ==>
          !k. run_blocks (f + k) ctx' fn' s' = run_blocks f ctx' fn' s'`
         by (rpt strip_tac >> first_x_assum irule >> simp[]) >>
-      `!k'. exec_block (f + k') ctx bb s = exec_block f ctx bb s` by
+      `!k'. exec_block (f + k') ctx bb s0 = exec_block f ctx bb s0` by
         metis_tac[exec_block_fuel_mono_lem] >>
       `run_blocks (SUC f + k) ctx fn s =
        case lookup_block s.vs_current_bb fn.fn_blocks of
          NONE => Error "block not found"
        | SOME bb' =>
-           case exec_block (f + k) ctx bb' s of
+           case exec_block (f + k) ctx bb' s0 of
              OK s' => if s'.vs_halted then Halt s'
                       else run_blocks (f + k) ctx fn s'
            | IntRet vals s' => IntRet vals s'
@@ -203,9 +204,9 @@ Proof
            | Abort a s' => Abort a s'
            | Error e => Error e`
         by (`SUC f + k = SUC (f + k)` by simp[] >>
-            pop_assum SUBST1_TAC >> simp[Once run_blocks_def]) >>
+            pop_assum SUBST1_TAC >> simp[Once run_blocks_def, Abbr `s0`]) >>
       gvs[] >>
-      Cases_on `exec_block f ctx bb s` >> gvs[] >>
+      Cases_on `exec_block f ctx bb s0` >> gvs[] >>
       rename1 `_ = OK v` >>
       IF_CASES_TAC >> gvs[terminates_def] >>
       first_x_assum irule >> simp[]
@@ -233,7 +234,7 @@ Triviality resolves_to_terminal_collapses:
     (!v. r2 = OK v ==> v.vs_halted) ==>
     lift_result R_ok R_term r1 r2
 Proof
-  Induct_on `n` >> rw[resolves_to_def] >> gvs[] >> metis_tac[]
+  Induct_on `n` >> rw[resolves_to_def]
 QED
 
 (* When r1 is not OK-non-halted AND terminates, lift_result r1 (Error e) = F *)
@@ -269,7 +270,7 @@ QED
 Triviality run_blocks_ok_block_at:
   !ctx fn bb s v fuel.
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-    exec_block fuel ctx bb s = OK v /\ ~v.vs_halted ==>
+    exec_block fuel ctx bb (s with vs_inst_idx := 0) = OK v /\ ~v.vs_halted ==>
     run_blocks (SUC fuel) ctx fn s = run_blocks fuel ctx fn v
 Proof
   rw[Once run_blocks_def]
@@ -279,7 +280,7 @@ QED
 Triviality run_blocks_at_non_ok_block:
   !f ctx fn bb s r.
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-    exec_block f ctx bb s = r /\ (!v. r <> OK v) ==>
+    exec_block f ctx bb (s with vs_inst_idx := 0) = r /\ (!v. r <> OK v) ==>
     run_blocks (SUC f) ctx fn s = r
 Proof
   rpt strip_tac >>
@@ -291,7 +292,7 @@ QED
 Triviality run_blocks_at_ok_halted_block:
   !f ctx fn bb s v.
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-    exec_block f ctx bb s = OK v /\ v.vs_halted ==>
+    exec_block f ctx bb (s with vs_inst_idx := 0) = OK v /\ v.vs_halted ==>
     run_blocks (SUC f) ctx fn s = Halt v
 Proof
   rw[Once run_blocks_def]
@@ -682,7 +683,7 @@ Proof
         metis_tac[resolves_to_terminal_collapses] >>
       qexists_tac `SUC f` >>
       `run_blocks (SUC f) ctx fn' s2 = Halt v2` by
-        metis_tac[run_blocks_at_ok_halted_block] >>
+        (irule run_blocks_at_ok_halted_block >> simp[]) >>
       simp[terminates_def] >>
       Cases_on `r1` >> fs[lift_result_def, terminates_def])
     >- (
@@ -742,6 +743,7 @@ Triviality fwd_left_block_terminal:
     exec_block f ctx bb s1 = r1 /\ terminates r1 /\ (!v. r1 <> OK v) /\
     resolves_to R_ok R_term bbs1 fn'.fn_blocks nn' r1
       (exec_block f ctx bb' s2) /\
+    s1.vs_inst_idx = 0 /\
     s2.vs_inst_idx = 0 /\
     terminates (run_blocks (SUC f) ctx fn s1)
   ==>
@@ -953,12 +955,10 @@ Proof
   >> (TRY (
     `run_blocks (SUC f) ctx fn1 s1 = exec_block f ctx bb s1` by
       (irule run_blocks_at_non_ok_block >> simp[]) >>
-    simp[] >> metis_tac[] >> NO_TAC) >>
-  (* Error *)
-  fs[terminates_def])
+    simp[] >> metis_tac[] >> NO_TAC))
 QED
 
-(* ===== D2 helper: left resolves one step ===== *)
+(* ===== D2 helper: left resolves one step =====  *)
 (* SUC nn case, disjunct 2: left-side OK state takes one block step.
    resolves_to nn (exec_block f ctx bb s1) (OK s2).
    Use fuel IH (at f < SUC f) to handle OK-non-halted;
@@ -1147,8 +1147,7 @@ Proof
   (* Halt/Abort/IntRet/Error *)
   >> (TRY (irule fwd_right_terminal >>
            simp[terminates_def, inst_idx_0_lemma] >>
-           metis_tac[] >> NO_TAC) >>
-  fs[])
+           metis_tac[] >> NO_TAC))
 QED
 
 (* ===== Generalized termination lifting ===== *)

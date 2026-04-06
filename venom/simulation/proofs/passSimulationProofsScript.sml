@@ -87,7 +87,7 @@ Theorem lift_result_weaken_proof:
 Proof
   rpt strip_tac >>
   Cases_on `r1` >> Cases_on `r2` >>
-  fs[lift_result_def] >> metis_tac[]
+  fs[lift_result_def]
 QED
 
 
@@ -642,7 +642,7 @@ Theorem lift_result_mono_proof:
     lift_result R1 T1 r1 r2 ==>
     lift_result R2 T2 r1 r2
 Proof
-  Cases_on `r1` >> Cases_on `r2` >> simp[lift_result_def] >> metis_tac[]
+  Cases_on `r1` >> Cases_on `r2` >> simp[lift_result_def]
 QED
 
 (* --------------------------------------------------------------------------
@@ -965,7 +965,7 @@ QED
 Triviality lookup_block_label[local]:
   !lbl bbs bb. lookup_block lbl bbs = SOME bb ==> bb.bb_label = lbl
 Proof
-  Induct_on `bbs` >> rw[lookup_block_def, FIND_thm] >> fs[]
+  Induct_on `bbs` >> rw[lookup_block_def, FIND_thm]
 QED
 
 (* Strengthened: exposes s.vs_current_bb = bb.bb_label in handlers *)

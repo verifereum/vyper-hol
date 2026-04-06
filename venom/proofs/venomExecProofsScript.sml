@@ -924,21 +924,21 @@ Proof
     Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> fs[] >>
     rename1 `SOME bb` >>
     (* Case split on exec_block to learn what r is *)
-    Cases_on `exec_block fuel' ctx bb s` >> gvs[]
+    Cases_on `exec_block fuel' ctx bb (s with vs_inst_idx := 0)` >> gvs[]
     (* -- OK case -- *)
     >- (
       Cases_on `v.vs_halted` >> gvs[]
       (* halted: r = Halt v *)
       >- (
         Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
-        `exec_block m'' ctx bb s = OK v` by
+        `exec_block m'' ctx bb (s with vs_inst_idx := 0) = OK v` by
           (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
         simp[Once run_blocks_def]
       )
       (* not halted: r = run_blocks fuel' ctx fn v *)
       >- (
         Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
-        `exec_block m'' ctx bb s = OK v` by
+        `exec_block m'' ctx bb (s with vs_inst_idx := 0) = OK v` by
           (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
         simp[Once run_blocks_def] >>
         (* Use run_blocks recursive IH *)
@@ -949,21 +949,21 @@ Proof
     (* -- Halt case: r = Halt v -- *)
     >- (
       Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
-      `exec_block m'' ctx bb s = Halt v` by
+      `exec_block m'' ctx bb (s with vs_inst_idx := 0) = Halt v` by
         (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
       simp[Once run_blocks_def]
     )
     (* -- Abort case -- *)
     >- (
       Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
-      `exec_block m'' ctx bb s = Abort a v` by
+      `exec_block m'' ctx bb (s with vs_inst_idx := 0) = Abort a v` by
         (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
       simp[Once run_blocks_def]
     )
     (* -- IntRet case -- *)
     >- (
       Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
-      `exec_block m'' ctx bb s = IntRet l v` by
+      `exec_block m'' ctx bb (s with vs_inst_idx := 0) = IntRet l v` by
         (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
       simp[Once run_blocks_def]
     )

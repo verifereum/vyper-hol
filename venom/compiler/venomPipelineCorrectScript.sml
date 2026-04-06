@@ -120,11 +120,11 @@ Triviality run_context_fuel_mono:
     terminates (run_context fuel ctx s) ==>
     !k. run_context (fuel + k) ctx s = run_context fuel ctx s
 Proof
-  simp[run_context_def] >>
+  simp[run_context_def, run_function_def] >>
   rpt gen_tac >> strip_tac >> gen_tac >>
   Cases_on `ctx.ctx_entry` >> gvs[terminates_def] >>
   Cases_on `lookup_function x ctx.ctx_functions` >> gvs[terminates_def] >>
-  Cases_on `entry_block x'` >> gvs[terminates_def] >>
+  Cases_on `fn_entry_label x'` >> gvs[terminates_def] >>
   irule run_blocks_fuel_mono >> gvs[terminates_def]
 QED
 
@@ -309,7 +309,7 @@ Proof
     (simp[Abbr `ctx2`, apply_ctx_fn_transform_def] >>
      gen_tac >> irule lookup_function_map >> simp[]) >>
   (* Unfold run_context on both sides, substitute ctx2 facts *)
-  simp[run_context_def] >>
+  simp[run_context_def, run_function_def, fn_entry_label_def] >>
   Cases_on `ctx.ctx_entry` >> gvs[terminates_def] >>
   rename1 `ctx.ctx_entry = SOME entry_name` >>
   Cases_on `lookup_function entry_name ctx.ctx_functions` >>

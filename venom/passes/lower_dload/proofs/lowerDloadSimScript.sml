@@ -1026,6 +1026,7 @@ Proof
   Induct_on `fuel`
   >- (rw[] >> ONCE_REWRITE_TAC [run_blocks_def] >> simp[lift_result_def]) >>
   rpt strip_tac >>
+  `s2.vs_inst_idx = 0` by fs[ld_ok_def] >>
   ONCE_REWRITE_TAC [run_blocks_def] >> simp[] >>
   (Q.SUBGOAL_THEN `s2.vs_current_bb = s1.vs_current_bb`
     SUBST_ALL_TAC >- fs[ld_ok_def]) >>
