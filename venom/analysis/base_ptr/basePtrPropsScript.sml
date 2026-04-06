@@ -3,7 +3,7 @@
  *
  * Public API for base pointer analysis consumers.
  * Re-exports proven properties from basePtrProofs via ACCEPT_TAC.
- * Soundness definitions (ptr_matches_var, bp_ptr_sound, bp_ptrs_bounded)
+ * Soundness definitions (ptr_matches_var, bp_ptr_sound, bp_access_bounded)
  * are in basePtrDefs.
  *
  * Frame/lookup:
@@ -80,9 +80,9 @@ Theorem bp_handle_inst_sound:
     bp_handle_inst bp inst = (c, bp') ∧
     step_inst fuel ctx inst s = OK s' ∧
     inst_wf inst ∧
-    (∀out. inst_output inst = SOME out ⇒ bp_get_ptrs bp out = []) ∧
-    (inst_output inst = NONE ⇒ inst.inst_outputs = []) ∧
-    (∀v aid off. MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ⇒
+    (∀out. MEM out inst.inst_outputs ⇒ bp_get_ptrs bp out = []) ∧
+    (∀v aid off. MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ∧
+       FLOOKUP s.vs_allocas aid ≠ NONE ⇒
        FLOOKUP s'.vs_allocas aid = FLOOKUP s.vs_allocas aid) ∧
     (∀v. inst.inst_opcode = PHI ∧
          MEM v (MAP SND (phi_pairs inst.inst_operands)) ∧
@@ -102,7 +102,7 @@ Theorem bp_process_block_sound:
     (∀inst. MEM inst bb.bb_instructions ⇒ inst_wf inst) ∧
     ALL_DISTINCT (FLAT (MAP (λi. i.inst_outputs) bb.bb_instructions)) ∧
     (∀inst out. MEM inst bb.bb_instructions ∧
-               inst_output inst = SOME out ⇒
+               MEM out inst.inst_outputs ⇒
                bp_get_ptrs bp out = []) ∧
     (* ALLOCA freshness: inst_ids don't collide with initial bp pointers *)
     (∀inst v aid off. MEM inst bb.bb_instructions ∧
@@ -112,14 +112,19 @@ Theorem bp_process_block_sound:
     (* ALLOCA inst_ids within the block are pairwise distinct *)
     ALL_DISTINCT (MAP (λi. i.inst_id)
       (FILTER (λi. i.inst_opcode = ALLOCA) bb.bb_instructions)) ∧
-    (* No INVOKE in block *)
-    (∀inst. MEM inst bb.bb_instructions ⇒ inst.inst_opcode ≠ INVOKE) ∧
     (* PHI sources that are defined must have tracked ptrs *)
     (∀inst v. MEM inst bb.bb_instructions ∧
        inst.inst_opcode = PHI ∧
        MEM v (MAP SND (phi_pairs inst.inst_operands)) ∧
        IS_SOME (lookup_var v s) ⇒
-       bp_get_ptrs bp v ≠ []) ⇒
+       bp_get_ptrs bp v ≠ []) ∧
+    (* INVOKE preserves pre-existing alloca entries *)
+    (∀inst si si' aid.
+       MEM inst bb.bb_instructions ∧
+       inst.inst_opcode = INVOKE ∧
+       step_inst fuel ctx inst si = OK si' ∧
+       FLOOKUP si.vs_allocas aid ≠ NONE ⇒
+       FLOOKUP si'.vs_allocas aid = FLOOKUP si.vs_allocas aid) ⇒
     bp_ptr_sound bp' s'
 Proof ACCEPT_TAC basePtrProofsTheory.bp_process_block_sound_proof
 QED

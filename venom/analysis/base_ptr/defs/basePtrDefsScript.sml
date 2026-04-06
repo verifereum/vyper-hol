@@ -13,7 +13,7 @@
  *   bp_get_write_location, bp_get_read_location
  *
  * Soundness specifications:
- *   ptr_matches_var, bp_ptr_sound, bp_ptrs_bounded
+ *   ptr_matches_var, bp_ptr_sound, bp_access_bounded
  *
  * Helper:
  *   phi_operand_vars
@@ -251,16 +251,6 @@ Definition bp_ptr_sound_def:
       ∃p. MEM p (bp_get_ptrs bp v) ∧ ptr_matches_var p v s
 End
 
-(* Every tracked pointer with a known offset has that offset within
- * the alloca's allocated size. *)
-Definition bp_ptrs_bounded_def:
-  bp_ptrs_bounded (bp : bp_result) (s : venom_state) ⇔
-    ∀v aid off.
-      MEM (Ptr (Allocation aid) (SOME off)) (bp_get_ptrs bp v) ⇒
-      ∀base sz.
-        FLOOKUP s.vs_allocas aid = SOME (base, sz) ⇒ off ≤ sz
-End
-
 (* ===== Write Location ===== *)
 
 (* Get the memory location written by an instruction in a given address space.
@@ -410,5 +400,20 @@ Definition bp_get_read_location_def:
            | _ => ml_empty)
         else ml_empty
     | _ => ml_empty  (* Immutables handled by Memory case *)
+End
+
+(* Every memory access derived from the pointer analysis is within
+ * its alloca's allocated region: offset + access_size ≤ alloca_size.
+ *
+ * This is per-instruction (not per-pointer) because access size
+ * comes from the instruction opcode, not the pointer itself.
+ * Quantifies over all instructions in a function's basic blocks. *)
+Definition bp_access_bounded_def:
+  bp_access_bounded (bp : bp_result) (fn : ir_function) (s : venom_state) ⇔
+    ∀bb inst.
+      MEM bb fn.fn_blocks ∧
+      MEM inst bb.bb_instructions ⇒
+      memloc_within_alloca (bp_get_write_location bp inst AddrSp_Memory) s ∧
+      memloc_within_alloca (bp_get_read_location bp inst AddrSp_Memory) s
 End
 

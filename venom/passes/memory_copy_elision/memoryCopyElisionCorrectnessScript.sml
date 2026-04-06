@@ -12,7 +12,7 @@ Ancestors
 Theorem copy_elision_function_correct:
   !fuel ctx fn s bp.
     fn_inst_wf fn /\ s.vs_inst_idx = 0 /\
-    bp_ptr_sound bp s /\ bp_ptrs_bounded bp s ==>
+    bp_ptr_sound bp s /\ bp_access_bounded bp fn s ==>
     (?e. run_function fuel ctx fn s = Error e) \/
     lift_result (state_equiv {}) (execution_equiv {})
       (run_function fuel ctx fn s)

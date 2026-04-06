@@ -2,11 +2,14 @@
  * Venom Memory Proofs
  *
  * TOP-LEVEL:
- *   allocas_non_overlapping_empty_proof     — base case
- *   allocas_non_overlapping_step_inst_proof — preserved by step_inst
- *   allocas_non_overlapping_run_block_proof — preserved by run_block
- *   mload_mstore_disjoint_proof             — 32-byte write/read independence
- *   mload_mstore8_disjoint_proof            — 1-byte write / 32-byte read
+ *   alloca_inv_empty_proof                  — alloca_inv for empty allocas
+ *   alloca_inv_step_inst_proof               — alloca_inv preserved by step_inst
+ *   alloca_inv_run_block_proof               — alloca_inv preserved by run_block
+ *   allocas_non_overlapping_empty_proof      — base case (backward compat)
+ *   allocas_non_overlapping_step_inst_proof  — preserved by step_inst (needs alloca_inv)
+ *   allocas_non_overlapping_run_block_proof  — preserved by run_block (needs alloca_inv)
+ *   mload_mstore_disjoint_proof              — 32-byte write/read independence
+ *   mload_mstore8_disjoint_proof             — 1-byte write / 32-byte read
  *)
 
 Theory venomMemProofs
@@ -176,12 +179,6 @@ QED
    Memory disjointness: mload after mstore on disjoint regions
    =================================================================== *)
 
-Theorem allocas_non_overlapping_empty_proof:
-  !s. s.vs_allocas = FEMPTY ==> allocas_non_overlapping s
-Proof
-  rw[allocas_non_overlapping_def, FLOOKUP_DEF]
-QED
-
 Theorem mload_mstore_disjoint_proof:
   !off1 off2 val s.
     regions_disjoint (off1, 32) (off2, 32) ==>
@@ -238,61 +235,55 @@ Proof
 QED
 
 (* ===================================================================
-   allocas_non_overlapping preservation
+   allocas_non_overlapping + alloca_next_valid preservation
    =================================================================== *)
 
-(* FOLDL MAX >= init: accumulator only grows *)
-Theorem foldl_max_ge_init[local]:
-  !(l : (num # num # num) list) acc.
-    acc <= FOLDL (\m (k,off,sz). MAX m (off + sz)) acc l
-Proof
-  Induct >> rw[] >> PairCases_on `h` >> rw[] >>
-  irule arithmeticTheory.LESS_EQ_TRANS >>
-  qexists_tac `MAX acc (h1 + h2)` >>
-  simp[arithmeticTheory.MAX_LE] >>
-  first_x_assum (qspec_then `MAX acc (h1 + h2)` assume_tac) >> fs[]
-QED
+(* Combined alloca invariant: non-overlapping + bump pointer valid *)
+Definition alloca_inv_def:
+  alloca_inv s <=> allocas_non_overlapping s /\ alloca_next_valid s
+End
 
-(* next_alloca_offset >= base + sz for any existing alloca *)
+(* next_alloca_offset >= base + sz for any existing alloca (conditional) *)
 Theorem next_alloca_offset_ge[local]:
   !s aid base sz.
+    alloca_next_valid s /\
     FLOOKUP s.vs_allocas aid = SOME (base, sz) ==>
     base + sz <= next_alloca_offset s
 Proof
-  rw[next_alloca_offset_def] >>
-  `aid IN FDOM s.vs_allocas /\ s.vs_allocas ' aid = (base', sz)` by
-    fs[FLOOKUP_DEF] >>
-  `MEM (aid, base', sz) (fmap_to_alist s.vs_allocas)` by
-    metis_tac[alistTheory.MEM_fmap_to_alist] >>
-  pop_assum mp_tac >>
-  qspec_tac (`LENGTH s.vs_memory`, `acc`) >>
-  qspec_tac (`fmap_to_alist s.vs_allocas`, `l`) >>
-  Induct >> rw[] >> simp[] >>
-  irule arithmeticTheory.LESS_EQ_TRANS >>
-  qexists_tac `MAX acc (base' + sz)` >> conj_tac
-  >- simp[arithmeticTheory.MAX_LE]
-  >- metis_tac[foldl_max_ge_init]
+  rw[alloca_next_valid_def, next_alloca_offset_def] >>
+  res_tac >> fs[]
 QED
 
-(* Helper: exec_alloca preserves allocas_non_overlapping *)
-Theorem exec_alloca_preserves_non_overlapping[local]:
+(* exec_alloca preserves alloca_inv *)
+Theorem exec_alloca_preserves_inv[local]:
   !inst s s' alloc_size.
     exec_alloca inst s alloc_size = OK s' /\
-    allocas_non_overlapping s ==>
-    allocas_non_overlapping s'
+    alloca_inv s ==>
+    alloca_inv s'
 Proof
-  rw[exec_alloca_def, allocas_non_overlapping_def, LET_THM,
-     update_var_def] >>
+  rw[exec_alloca_def, LET_THM] >>
   Cases_on `inst.inst_outputs` >> gvs[] >>
   Cases_on `t` >> gvs[] >>
-  rpt strip_tac >>
-  gvs[FLOOKUP_UPDATE] >>
+  fs[alloca_inv_def, allocas_non_overlapping_def,
+     alloca_next_valid_def, update_var_def] >>
+  rpt strip_tac >> gvs[FLOOKUP_UPDATE] >>
   rpt (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
-  metis_tac[next_alloca_offset_ge]
+  res_tac >> fs[next_alloca_offset_def, arithmeticTheory.MAX_DEF]
 QED
 
-(* Non-ALLOCA, non-INVOKE step_inst preserves vs_allocas *)
-(* Strengthened: covers ALL result types (OK, Halt, Abort, IntRet), not just OK *)
+(* exec_alloca: vs_alloca_next monotone *)
+Theorem exec_alloca_next_mono[local]:
+  !inst s s' alloc_size.
+    exec_alloca inst s alloc_size = OK s' ==>
+    s.vs_alloca_next <= s'.vs_alloca_next
+Proof
+  rw[exec_alloca_def, LET_THM, update_var_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  simp[next_alloca_offset_def, arithmeticTheory.MAX_DEF]
+QED
+
+(* Non-ALLOCA, non-INVOKE step_inst_base preserves vs_allocas *)
 Theorem step_inst_base_preserves_allocas[local]:
   !inst (s:venom_state) s'.
     (step_inst_base inst s = OK s' \/
@@ -318,138 +309,247 @@ Proof
       lookup_var_def, FLOOKUP_UPDATE, halt_state_def, set_returndata_def]
 QED
 
-(* Result-state predicate: extract state from any non-Error result *)
-Definition result_allocas_ok_def:
-  result_allocas_ok (OK s') = allocas_non_overlapping s' /\
-  result_allocas_ok (IntRet vals s') = allocas_non_overlapping s' /\
-  result_allocas_ok (Halt s') = allocas_non_overlapping s' /\
-  result_allocas_ok (Abort a s') = allocas_non_overlapping s' /\
-  result_allocas_ok (Error e) = T
-End
-
-(* Lifted to result_allocas_ok for use in joint proof *)
-Theorem exec_alloca_result_allocas_ok[local]:
-  !inst (s:venom_state) alloc_size.
-    allocas_non_overlapping s ==>
-    result_allocas_ok (exec_alloca inst s alloc_size)
+(* Same for vs_alloca_next *)
+Theorem step_inst_base_preserves_alloca_next[local]:
+  !inst (s:venom_state) s'.
+    (step_inst_base inst s = OK s' \/
+     step_inst_base inst s = Halt s' \/
+     (?a. step_inst_base inst s = Abort a s') \/
+     (?v. step_inst_base inst s = IntRet v s')) /\
+    inst.inst_opcode <> INVOKE /\
+    inst.inst_opcode <> ALLOCA ==>
+    s'.vs_alloca_next = s.vs_alloca_next
 Proof
-  rw[exec_alloca_def] >>
-  BasicProvers.EVERY_CASE_TAC >> gvs[result_allocas_ok_def] >>
-  `exec_alloca inst s alloc_size =
-     OK (update_var h (n2w (next_alloca_offset s))
-       (s with vs_allocas :=
-          s.vs_allocas |+ (inst.inst_id, (next_alloca_offset s, w2n alloc_size))))` by
-    simp[exec_alloca_def] >>
-  metis_tac[exec_alloca_preserves_non_overlapping]
+  rpt strip_tac >>
+  fs[step_inst_base_def, AllCaseEqs()] >>
+  gvs[AllCaseEqs(),
+      exec_pure1_def, exec_pure2_def, exec_pure3_def,
+      exec_read0_def, exec_read1_def, exec_write2_def,
+      exec_ext_call_def, exec_delegatecall_def,
+      exec_create_def, extract_venom_result_def, exec_alloca_def] >>
+  gvs[AllCaseEqs()] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+  gvs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
+      write_memory_with_expansion_def, mcopy_def,
+      revert_state_def, eval_operands_def, jump_to_def,
+      lookup_var_def, FLOOKUP_UPDATE, halt_state_def, set_returndata_def]
 QED
 
-(* FOLDL of update_var preserves vs_allocas *)
-Theorem foldl_update_var_allocas[local]:
-  !kvs base. (FOLDL (\s' (k,v). update_var k v s') base kvs).vs_allocas =
-             base.vs_allocas
+(* Combined *)
+Theorem step_inst_base_preserves_alloca_fields[local]:
+  !inst (s:venom_state) s'.
+    (step_inst_base inst s = OK s' \/
+     step_inst_base inst s = Halt s' \/
+     (?a. step_inst_base inst s = Abort a s') \/
+     (?v. step_inst_base inst s = IntRet v s')) /\
+    inst.inst_opcode <> INVOKE /\
+    inst.inst_opcode <> ALLOCA ==>
+    s'.vs_allocas = s.vs_allocas /\
+    s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  metis_tac[step_inst_base_preserves_allocas,
+            step_inst_base_preserves_alloca_next]
+QED
+
+(* Result predicate: alloca_inv + monotonicity *)
+Definition result_alloca_inv_def:
+  result_alloca_inv n0 (OK s') =
+    (alloca_inv s' /\ n0 <= s'.vs_alloca_next) /\
+  result_alloca_inv n0 (IntRet vals s') =
+    (alloca_inv s' /\ n0 <= s'.vs_alloca_next) /\
+  result_alloca_inv n0 (Halt s') =
+    (alloca_inv s' /\ n0 <= s'.vs_alloca_next) /\
+  result_alloca_inv n0 (Abort a s') =
+    (alloca_inv s' /\ n0 <= s'.vs_alloca_next) /\
+  result_alloca_inv n0 (Error e) = T
+End
+
+(* exec_alloca lifted to result *)
+Theorem exec_alloca_result_inv[local]:
+  !inst (s:venom_state) alloc_size.
+    alloca_inv s ==>
+    result_alloca_inv s.vs_alloca_next (exec_alloca inst s alloc_size)
+Proof
+  rw[exec_alloca_def] >>
+  BasicProvers.EVERY_CASE_TAC >> gvs[result_alloca_inv_def] >>
+  `exec_alloca inst s alloc_size =
+     OK (update_var h (n2w (next_alloca_offset s))
+       (s with <| vs_allocas :=
+          s.vs_allocas |+ (inst.inst_id, (next_alloca_offset s, w2n alloc_size));
+          vs_alloca_next := next_alloca_offset s + w2n alloc_size |>))` by
+    simp[exec_alloca_def] >>
+  metis_tac[exec_alloca_preserves_inv, exec_alloca_next_mono]
+QED
+
+(* FOLDL of update_var preserves vs_allocas and vs_alloca_next *)
+Theorem foldl_update_var_alloca_fields[local]:
+  !kvs base.
+    (FOLDL (\s' (k,v). update_var k v s') base kvs).vs_allocas =
+      base.vs_allocas /\
+    (FOLDL (\s' (k,v). update_var k v s') base kvs).vs_alloca_next =
+      base.vs_alloca_next
 Proof
   Induct >> rw[] >> Cases_on `h` >> rw[update_var_def]
 QED
 
-Theorem setup_callee_preserves_allocas[local]:
-  !fn args s s'. setup_callee fn args s = SOME s' /\
-    allocas_non_overlapping s ==> allocas_non_overlapping s'
+Theorem setup_callee_inv[local]:
+  !fn args s s'.
+    setup_callee fn args s = SOME s' ==>
+    alloca_inv s' /\ s'.vs_alloca_next = s.vs_alloca_next
 Proof
-  rw[setup_callee_def, allocas_non_overlapping_def] >>
-  BasicProvers.EVERY_CASE_TAC >> gvs[] >> metis_tac[]
+  rw[setup_callee_def, alloca_inv_def, allocas_non_overlapping_def,
+     alloca_next_valid_def] >>
+  BasicProvers.EVERY_CASE_TAC >> gvs[FLOOKUP_DEF]
 QED
 
-Theorem merge_callee_preserves_allocas[local]:
-  !caller callee. allocas_non_overlapping callee ==>
-    allocas_non_overlapping (merge_callee_state caller callee)
+Theorem merge_callee_inv[local]:
+  !caller callee.
+    alloca_inv caller /\
+    caller.vs_alloca_next <= callee.vs_alloca_next ==>
+    alloca_inv (merge_callee_state caller callee)
 Proof
-  rw[allocas_non_overlapping_def, merge_callee_state_def]
+  rw[alloca_inv_def, allocas_non_overlapping_def,
+     alloca_next_valid_def, merge_callee_state_def] >>
+  res_tac >> fs[]
 QED
 
-Theorem foldl_update_var_preserves_allocas[local]:
-  !kvs base. allocas_non_overlapping base ==>
-    allocas_non_overlapping (FOLDL (\s' (k,v). update_var k v s') base kvs)
+Theorem foldl_update_var_inv[local]:
+  !kvs base.
+    alloca_inv base ==>
+    alloca_inv (FOLDL (\s' (k,v). update_var k v s') base kvs)
 Proof
-  rw[allocas_non_overlapping_def, foldl_update_var_allocas]
+  rw[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def] >>
+  gvs[foldl_update_var_alloca_fields] >> metis_tac[]
 QED
 
-Theorem vs_allocas_eq_preserves[local]:
-  !s s'. s'.vs_allocas = s.vs_allocas /\ allocas_non_overlapping s ==>
-    allocas_non_overlapping s'
+Theorem alloca_fields_eq_inv[local]:
+  !s s'.
+    s'.vs_allocas = s.vs_allocas /\
+    s'.vs_alloca_next = s.vs_alloca_next /\
+    alloca_inv s ==>
+    alloca_inv s'
 Proof
-  rw[allocas_non_overlapping_def]
+  rw[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def] >>
+  metis_tac[]
 QED
 
-(* Joint induction: step_inst/run_block/run_function all preserve allocas_non_overlapping *)
-Theorem allocas_non_overlapping_joint[local]:
+(* Monotonicity: weaker n0 is easier to satisfy *)
+Theorem result_alloca_inv_mono[local]:
+  !n0 n1 r. n0 <= n1 /\ result_alloca_inv n1 r ==> result_alloca_inv n0 r
+Proof
+  rpt gen_tac >> Cases_on `r` >> rw[result_alloca_inv_def]
+QED
+
+(* Joint induction: step_inst/run_block/run_function preserve alloca_inv *)
+Theorem alloca_inv_joint[local]:
   (!fuel ctx inst s.
-     allocas_non_overlapping s ==>
-     result_allocas_ok (step_inst fuel ctx inst s)) /\
+     alloca_inv s ==>
+     result_alloca_inv s.vs_alloca_next (step_inst fuel ctx inst s)) /\
   (!fuel ctx bb s.
-     allocas_non_overlapping s ==>
-     result_allocas_ok (run_block fuel ctx bb s)) /\
+     alloca_inv s ==>
+     result_alloca_inv s.vs_alloca_next (run_block fuel ctx bb s)) /\
   (!fuel ctx fn s.
-     allocas_non_overlapping s ==>
-     result_allocas_ok (run_function fuel ctx fn s))
+     alloca_inv s ==>
+     result_alloca_inv s.vs_alloca_next (run_function fuel ctx fn s))
 Proof
   ho_match_mp_tac run_defs_ind >> rpt conj_tac >> rpt strip_tac
   >- (
     (* P0: step_inst *)
     Cases_on `inst.inst_opcode = INVOKE`
     >- (
-      simp[Once step_inst_def] >>
-      BasicProvers.EVERY_CASE_TAC >> gvs[result_allocas_ok_def] >>
-      imp_res_tac setup_callee_preserves_allocas >> gvs[] >>
+      ONCE_REWRITE_TAC[step_inst_def] >> simp[] >>
+      rpt (BasicProvers.TOP_CASE_TAC >> gvs[result_alloca_inv_def]) >>
+      imp_res_tac setup_callee_inv >> gvs[] >>
       gvs[bind_outputs_def, AllCaseEqs()] >>
-      irule foldl_update_var_preserves_allocas >>
-      irule merge_callee_preserves_allocas >> gvs[]
+      conj_tac
+      >- (irule foldl_update_var_inv >>
+          irule merge_callee_inv >> gvs[])
+      >- gvs[foldl_update_var_alloca_fields, merge_callee_state_def]
     )
     >> Cases_on `inst.inst_opcode = ALLOCA`
     >- (
-      simp[Once step_inst_def, step_inst_base_def] >>
+      ONCE_REWRITE_TAC[step_inst_def] >> simp[step_inst_base_def] >>
       gvs[venomInstTheory.is_alloca_op_def] >>
-      BasicProvers.EVERY_CASE_TAC >> gvs[result_allocas_ok_def] >>
-      metis_tac[exec_alloca_result_allocas_ok]
+      rpt (BasicProvers.TOP_CASE_TAC >> gvs[result_alloca_inv_def]) >>
+      metis_tac[exec_alloca_result_inv]
     )
     >> (
-      `step_inst fuel ctx inst s = step_inst_base inst s` by
-        fs[Once step_inst_def] >>
+      (`step_inst fuel ctx inst s = step_inst_base inst s` by
+        (ONCE_REWRITE_TAC[step_inst_def] >> simp[])) >>
       Cases_on `step_inst_base inst s` >>
-      gvs[result_allocas_ok_def] >>
-      imp_res_tac step_inst_base_preserves_allocas >>
-      metis_tac[vs_allocas_eq_preserves]
+      gvs[result_alloca_inv_def] >>
+      imp_res_tac step_inst_base_preserves_alloca_fields >>
+      imp_res_tac alloca_fields_eq_inv >> gvs[]
     )
   )
   >- (
     (* P1: run_block *)
-    simp[Once run_block_def] >>
-    BasicProvers.EVERY_CASE_TAC >> gvs[result_allocas_ok_def] >>
-    first_x_assum irule >>
-    irule vs_allocas_eq_preserves >> simp[] >> metis_tac[]
+    ONCE_REWRITE_TAC[run_block_def] >> simp[] >>
+    rpt (BasicProvers.TOP_CASE_TAC >> gvs[result_alloca_inv_def]) >>
+    (* Remaining: recursive case, ¬is_terminator *)
+    `alloca_inv (v with vs_inst_idx := SUC s.vs_inst_idx)` by
+      (irule alloca_fields_eq_inv >> qexists_tac `v` >> simp[]) >>
+    first_x_assum drule >> strip_tac >>
+    irule result_alloca_inv_mono >>
+    qexists_tac `v.vs_alloca_next` >> gvs[]
   )
   >- (
     (* P2: run_function *)
-    simp[Once run_function_def] >>
-    BasicProvers.EVERY_CASE_TAC >> gvs[result_allocas_ok_def] >>
-    first_x_assum drule >> simp[result_allocas_ok_def] >> strip_tac >>
-    first_x_assum irule >> gvs[]
+    ONCE_REWRITE_TAC[run_function_def] >> simp[] >>
+    rpt (BasicProvers.TOP_CASE_TAC >> gvs[result_alloca_inv_def]) >>
+    irule result_alloca_inv_mono >>
+    qexists_tac `v.vs_alloca_next` >> gvs[]
   )
 QED
 
+(* ===== Exported theorems ===== *)
+
+Theorem allocas_non_overlapping_empty_proof:
+  !s. s.vs_allocas = FEMPTY ==> allocas_non_overlapping s
+Proof
+  rw[allocas_non_overlapping_def, FLOOKUP_DEF]
+QED
+
+Theorem alloca_inv_empty_proof:
+  !s. s.vs_allocas = FEMPTY ==> alloca_inv s
+Proof
+  rw[alloca_inv_def, allocas_non_overlapping_def,
+     alloca_next_valid_def, FLOOKUP_DEF]
+QED
+
+Theorem alloca_inv_step_inst_proof:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    alloca_inv s ==>
+    alloca_inv s'
+Proof
+  metis_tac[alloca_inv_joint, result_alloca_inv_def]
+QED
+
+Theorem alloca_inv_run_block_proof:
+  !fuel ctx bb s s'.
+    run_block fuel ctx bb s = OK s' /\
+    alloca_inv s ==>
+    alloca_inv s'
+Proof
+  metis_tac[alloca_inv_joint, result_alloca_inv_def]
+QED
+
+(* Backward-compatible: allocas_non_overlapping preserved under alloca_inv *)
 Theorem allocas_non_overlapping_step_inst_proof:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\
-    allocas_non_overlapping s ==>
+    alloca_inv s ==>
     allocas_non_overlapping s'
 Proof
-  metis_tac[allocas_non_overlapping_joint, result_allocas_ok_def]
+  metis_tac[alloca_inv_step_inst_proof, alloca_inv_def]
 QED
 
 Theorem allocas_non_overlapping_run_block_proof:
   !fuel ctx bb s s'.
     run_block fuel ctx bb s = OK s' /\
-    allocas_non_overlapping s ==>
+    alloca_inv s ==>
     allocas_non_overlapping s'
 Proof
-  metis_tac[allocas_non_overlapping_joint, result_allocas_ok_def]
+  metis_tac[alloca_inv_run_block_proof, alloca_inv_def]
 QED
