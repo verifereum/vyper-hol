@@ -173,9 +173,49 @@ Theorem compile_abi_encode_static_correct:
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
       op = Lit 32w ∧
-      mload (w2n dst_w) ss' = mload (w2n src_v) ss
+      mload (w2n dst_w) ss' = mload (w2n src_v) ss ∧
+      same_blocks st st' ∧
+      st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' ∧
+      fresh_vars_wrt st' ss'
 Proof
-  cheat
+  rpt gen_tac >>
+  simp[compile_abi_encode_static_def, comp_return_def,
+       comp_ignore_bind_def, comp_bind_def] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  strip_tac >> gvs[] >>
+  drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
+  drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  qmatch_goalsub_rename_tac`emitted_insts st st2` >>
+  qmatch_asmsub_rename_tac`emitted_insts st1 st2` >>
+  qspecl_then[`st`,`st1`,`st2`]mp_tac emitted_insts_append >>
+  impl_tac >- gvs[] >> rw[] >>
+  rw[run_inst_seq_def] >>
+  qspec_then`src`mp_tac step_MLOAD >>
+  disch_then drule >> rw[] >> pop_assum kall_tac >>
+  qspec_then`dst`mp_tac eval_operand_update_fresh >>
+  disch_then drule >>
+  qmatch_goalsub_abbrev_tac`update_var nv w` >>
+  disch_then(qspecl_then[`w`,`nv`]mp_tac) >>
+  disch_then drule >>
+  simp[Abbr`nv`] >> strip_tac >>
+  drule step_MSTORE >>
+  qmatch_goalsub_abbrev_tac`update_var nv` >>
+  disch_then(qspec_then`Var nv`mp_tac) >>
+  simp[eval_operand_def, lookup_var_update_var] >>
+  strip_tac >>
+  drule emit_void_extends >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  reverse conj_tac >- (
+    gvs[same_blocks_def] >>
+    irule fresh_vars_wrt_mstore >>
+    irule fresh_vars_wrt_update_var >>
+    reverse conj_asm2_tac >- (
+      irule fresh_vars_wrt_emit_void >>
+      goal_assum drule >>
+      gvs[fresh_vars_wrt_def] ) >>
+    gvs[Abbr`nv`, fresh_vars_wrt_def]) >>
+  cheat (* mload_mstore_same *)
 QED
 
 (* Static ABI decoding: MLOAD + clamp *)
@@ -497,6 +537,10 @@ Resume compile_abi_encode_to_buf_correct[childADD]:
 QED
 
 Resume compile_abi_encode_to_buf_correct[prim]:
+  rpt gen_tac >> strip_tac >>
+  gvs[compile_abi_encode_child_def] >>
+  drule_all compile_abi_encode_static_correct >>
+  strip_tac >> simp[] >>
   cheat
 QED
 

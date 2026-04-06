@@ -403,6 +403,7 @@ Theorem emitted_insts_emit_void:
     emitted_insts st st' =
       [mk_inst st.cs_next_id opc ops []] ∧
     st'.cs_next_id = st.cs_next_id + 1 ∧
+    st'.cs_next_var = st.cs_next_var ∧
     st'.cs_current_insts = st.cs_current_insts ++
       [mk_inst st.cs_next_id opc ops []]
 Proof
