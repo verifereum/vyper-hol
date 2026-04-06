@@ -332,6 +332,7 @@ Theorem compile_abi_encode_to_buf_correct:
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
       same_blocks st st' ∧
+      st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' ∧
       fresh_vars_wrt st' ss' ∧
       mem_bytes_at (dst_addr + static_ofst) (LENGTH (enc at av))
         ss'.vs_memory = enc at av ∧
@@ -363,6 +364,7 @@ Theorem compile_abi_encode_to_buf_correct:
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
       same_blocks st st' ∧
+      st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' ∧
       fresh_vars_wrt st' ss' ∧
       mem_bytes_at dst_addr (LENGTH (enc at av)) ss'.vs_memory =
         enc at av ∧
@@ -408,6 +410,7 @@ Theorem compile_abi_encode_to_buf_correct:
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
       same_blocks st st' ∧
+      st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' ∧
       fresh_vars_wrt st' ss' ∧
       mem_bytes_at (dst_addr + head_offset)
         (SUM (MAP (λ(_,abi_sz,_,_). abi_sz) elems)) ss'.vs_memory =
@@ -458,7 +461,12 @@ Resume compile_abi_encode_to_buf_correct[child]:
   reverse (Cases_on `static_ofst = 0`) >> gvs[]
   >- (
     (* static_ofst ≠ 0: emit_op ADD first *)
-    cheat) >>
+    drule emit_op_ADD_correct >>
+    disch_then drule >>
+    simp[eval_operand_def] >>
+    simp[Once wordsTheory.word_add_n2w] >>
+    strip_tac >>
+    suspend"childADD") >>
   (* static_ofst = 0: child_dst = dst, directly apply IH *)
   gvs[comp_return_def] >>
   first_x_assum drule_all >>
@@ -466,6 +474,26 @@ Resume compile_abi_encode_to_buf_correct[child]:
   goal_assum drule >> gvs[] >>
   rpt strip_tac >>
   first_x_assum irule >> gvs[]
+QED
+
+Resume compile_abi_encode_to_buf_correct[childADD]:
+  first_x_assum $ drule_then drule >>
+  first_assum drule >> strip_tac >>
+  disch_then drule >> gvs[] >>
+  disch_then drule >> gvs[] >>
+  disch_then drule >>
+  `ss'.vs_memory = ss.vs_memory` by gvs[LIST_EQ_REWRITE] >>
+  gvs[] >>
+  disch_then drule >> gvs[] >>
+  strip_tac >>
+  qspec_then`st`mp_tac emitted_insts_append >>
+  disch_then $ drule_at Any >> impl_keep_tac
+  >- ( drule emitted_insts_emit_op >> rw[] ) >> rw[] >>
+  qmatch_goalsub_abbrev_tac`run_inst_seq (is1 ++ is2)` >>
+  qspec_then`is1`mp_tac run_inst_seq_append >>
+  disch_then drule >> simp[] >> strip_tac >>
+  conj_tac >- gvs[same_blocks_def] >>
+  first_x_assum MATCH_ACCEPT_TAC
 QED
 
 Resume compile_abi_encode_to_buf_correct[prim]:
