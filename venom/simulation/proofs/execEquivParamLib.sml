@@ -45,7 +45,8 @@ val vsr_R_ok_fields_thm = prove(
     s1.vs_labels = s2.vs_labels /\
     s1.vs_code = s2.vs_code /\
     s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_allocas = s2.vs_allocas``,
+    s1.vs_allocas = s2.vs_allocas /\
+    s1.vs_alloca_next = s2.vs_alloca_next``,
   rw[valid_state_rel_def])
 
 val vsr_R_term_fields_thm = prove(
@@ -65,7 +66,8 @@ val vsr_R_term_fields_thm = prove(
     s1.vs_labels = s2.vs_labels /\
     s1.vs_code = s2.vs_code /\
     s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_allocas = s2.vs_allocas``,
+    s1.vs_allocas = s2.vs_allocas /\
+    s1.vs_alloca_next = s2.vs_alloca_next``,
   rw[valid_state_rel_def])
 
 (* irule that handles the ∃R_term / ∃R_ok from valid_state_rel *)
@@ -82,13 +84,13 @@ fun vsr_irule thm =
 fun vsr_reconstruct_R_ok_tac s1q s2q =
   drule_then irule vsr_reconstruct_R_ok >>
   imp_res_tac vsr_R_ok_fields_thm >>
-  simp[write_memory_with_expansion_def, LET_THM] >>
+  simp[write_memory_with_expansion_def, next_alloca_offset_def, LET_THM] >>
   qexistsl_tac [s1q, s2q] >> simp[]
 
 fun vsr_reconstruct_R_term_tac s1q s2q =
   drule_then irule vsr_reconstruct_R_term >>
   imp_res_tac vsr_R_term_fields_thm >>
-  simp[write_memory_with_expansion_def, LET_THM] >>
+  simp[write_memory_with_expansion_def, next_alloca_offset_def, LET_THM] >>
   qexistsl_tac [s1q, s2q] >> simp[]
 
 (* Terminal reconstruction: R_ok s1 s2 ⟹ R_term (f s1) (f s2)

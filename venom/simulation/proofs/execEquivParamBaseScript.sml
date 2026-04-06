@@ -63,7 +63,8 @@ Theorem vsr_R_ok_fields:
     s1.vs_labels = s2.vs_labels /\
     s1.vs_code = s2.vs_code /\
     s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_allocas = s2.vs_allocas
+    s1.vs_allocas = s2.vs_allocas /\
+    s1.vs_alloca_next = s2.vs_alloca_next
 Proof
   rw[valid_state_rel_def]
 QED
@@ -85,7 +86,8 @@ Theorem vsr_R_term_fields:
     s1.vs_labels = s2.vs_labels /\
     s1.vs_code = s2.vs_code /\
     s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_allocas = s2.vs_allocas
+    s1.vs_allocas = s2.vs_allocas /\
+    s1.vs_alloca_next = s2.vs_alloca_next
 Proof
   rw[valid_state_rel_def]
 QED
