@@ -11,6 +11,7 @@
  *   pointer_derived_vars     — variables reachable from roots via
  *                              pointer-preserving def-use chains
  *   pointer_confined         — pointer vars only in mem address positions
+ *   all_mem_via_pointer      — all memory ops address through pointer vars
  *   alloca_roots             — alloca output variables in a function
  *   alloca_pointer_confined  — pointer_confined specialized to alloca roots
  *
@@ -30,6 +31,20 @@
 Theory pointerConfinedDefs
 Ancestors
   passSharedDefs memLocDefs
+
+(* ===== Immutable Operations ===== *)
+
+(* ILOAD/ISTORE operate on vs_immutables (an fmap), NOT vs_memory.
+   mem_write_ops/mem_read_ops classify them as memory ops, but their
+   "address" is an immutables key, not a memory offset. Pointer-derived
+   vars must NEVER appear in ILOAD/ISTORE address positions — they would
+   write different fmap keys in remapped states, breaking vs_immutables
+   equality. True for Vyper: ILOAD/ISTORE use compile-time literal offsets. *)
+Definition is_immutable_op_def:
+  is_immutable_op ILOAD = T /\
+  is_immutable_op ISTORE = T /\
+  is_immutable_op _ = F
+End
 
 (* ===== Pointer-Preserving Operations ===== *)
 
@@ -124,10 +139,32 @@ Definition pointer_confined_def:
       MEM inst bb.bb_instructions /\
       MEM (Var v) inst.inst_operands /\
       v IN pv ==>
-      (?ops. mem_write_ops inst = SOME ops /\ Var v = ops.iao_ofst) \/
-      (?ops. mem_read_ops inst = SOME ops /\ Var v = ops.iao_ofst) \/
+      (?ops. mem_write_ops inst = SOME ops /\
+             ~is_immutable_op inst.inst_opcode /\ Var v = ops.iao_ofst) \/
+      (?ops. mem_read_ops inst = SOME ops /\
+             ~is_immutable_op inst.inst_opcode /\ Var v = ops.iao_ofst) \/
       (is_pointer_preserving_op inst.inst_opcode /\
         set inst.inst_outputs SUBSET pv)
+End
+
+(* ===== All Memory Via Pointer ===== *)
+
+(* Every memory operation's address operand is a pointer-derived variable.
+   Complementary to pointer_confined: pointer_confined says pointer vars
+   only appear in memory address positions; all_mem_via_pointer says
+   memory address positions only contain pointer vars.
+   Together: pointer-derived vars <=> memory address operands.
+   True for Vyper-compiled code (all memory goes through alloca).
+   Becomes false after concretize_mem_loc (which makes offsets literal). *)
+Definition all_mem_via_pointer_def:
+  all_mem_via_pointer fn (roots : string set) <=>
+    let pv = pointer_derived_vars fn roots in
+    !bb inst ops.
+      MEM bb fn.fn_blocks /\
+      MEM inst bb.bb_instructions /\
+      (mem_write_ops inst = SOME ops \/ mem_read_ops inst = SOME ops) /\
+      ~is_immutable_op inst.inst_opcode ==>
+      ?v. ops.iao_ofst = Var v /\ v IN pv
 End
 
 (* ===== Alloca Roots ===== *)
@@ -138,6 +175,57 @@ Definition alloca_roots_def:
     { out | ∃inst. MEM inst (fn_insts fn) ∧
                    inst.inst_opcode = ALLOCA ∧
                    inst_output inst = SOME out }
+End
+
+(* ===== Affine Pointer Operations ===== *)
+
+(* For ADD and SUB instructions, at most one operand is pointer-derived.
+   Prevents ADD(ptr1, ptr2) which produces a value with no well-defined
+   displacement from any single alloca region.
+   True for Vyper-compiled code: pointer arithmetic is always ptr + const
+   or ptr - const, never ptr + ptr or const - ptr. *)
+Definition affine_pointer_ops_def:
+  affine_pointer_ops fn (roots : string set) <=>
+    let pv = pointer_derived_vars fn roots in
+    !bb inst op1 op2.
+      MEM bb fn.fn_blocks /\
+      MEM inst bb.bb_instructions /\
+      (inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) /\
+      inst.inst_operands = [op1; op2] ==>
+      ~(?v1 v2. op1 = Var v1 /\ op2 = Var v2 /\ v1 IN pv /\ v2 IN pv) /\
+      (inst.inst_opcode = SUB ==>
+       !v. op2 = Var v ==> v NOTIN pv)
+End
+
+(* ===== PHI Pointer-Variable All-Var ===== *)
+
+(* For PHI instructions where any Var operand is pointer-derived,
+   ALL Var operands must also be pointer-derived, and all non-Label
+   operands must be Var (no Lit operands).
+   Labels are branch selectors (paired with the preceding value operand),
+   so they are fine.
+
+   This prevents two counterexamples:
+   1. PHI mixes a pv Var branch with a Lit branch: pointer_derived_vars
+      marks the output as pv (ANY pv input propagates), but the Lit branch
+      delivers a concrete value with no well-defined displacement.
+   2. PHI mixes a pv Var branch with a non-pv Var branch: the non-pv Var
+      has the same value in both states, but the displacement invariant
+      requires it to differ by the remap offset.
+
+   True for Vyper-compiled code: PHI operands come from SSA
+   construction, which never mixes alloca-derived and non-alloca-derived
+   values in the same PHI. *)
+Definition phi_pv_all_var_def:
+  phi_pv_all_var fn (roots : string set) <=>
+    let pv = pointer_derived_vars fn roots in
+    !bb inst.
+      MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+      inst.inst_opcode = PHI /\
+      (?v. MEM (Var v) inst.inst_operands /\ v IN pv) ==>
+      (!v. MEM (Var v) inst.inst_operands ==> v IN pv) /\
+      (!op. MEM op inst.inst_operands ==>
+           (?v. op = Var v) \/ (?l. op = Label l))
 End
 
 (* ===== Function-Level Pointer Confinement ===== *)

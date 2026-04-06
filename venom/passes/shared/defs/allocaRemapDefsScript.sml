@@ -28,7 +28,7 @@
 
 Theory allocaRemapDefs
 Ancestors
-  venomState pointerConfinedDefs
+  venomState venomExecSemantics pointerConfinedDefs
 
 (* ===== Memory Byte Access ===== *)
 
@@ -84,6 +84,66 @@ Definition ptrs_in_alloca_bounds_def:
       in_alloca_region s (w2n w)
 End
 
+(* Memory access through pointer-derived variables stays within alloca
+   bounds. For each instruction that reads or writes memory through a
+   pointer (as identified by mem_read_ops/mem_write_ops), the address
+   operand plus the access size fits within the alloca region containing
+   that address.
+   - For MLOAD/MSTORE (iao_size = SOME (Lit 32w)): addr + 32 <= off + sz
+   - For MSTORE8 (iao_size = SOME (Lit 1w)): addr + 1 <= off + sz
+   - For MCOPY/CODECOPY/etc. (iao_size = SOME size_op): addr + size <= off + sz
+   True for Vyper: allocas are 32-byte aligned, all accesses fit. *)
+Definition alloca_safe_access_def:
+  alloca_safe_access fn (roots : string set) s <=>
+    let pv = pointer_derived_vars fn roots in
+    (* All alloca regions fit within memory (no expansion on access) *)
+    (!aid off asz.
+      FLOOKUP s.vs_allocas aid = SOME (off, asz) ==>
+      off + asz <= LENGTH s.vs_memory) /\
+    (* Memory accesses through pointer-derived vars stay within alloca *)
+    (!bb inst ops v w sz_op sz_val aid off asz.
+      MEM bb fn.fn_blocks /\
+      MEM inst bb.bb_instructions /\
+      (mem_write_ops inst = SOME ops \/ mem_read_ops inst = SOME ops) /\
+      ops.iao_ofst = Var v /\ v IN pv /\
+      lookup_var v s = SOME w /\
+      FLOOKUP s.vs_allocas aid = SOME (off, asz) /\
+      off <= w2n w /\ w2n w < off + asz /\
+      ops.iao_max_size = SOME sz_op /\
+      eval_operand sz_op s = SOME sz_val ==>
+      w2n w + w2n sz_val <= off + asz)
+End
+
+(* ===== Pointer Arithmetic In-Region ===== *)
+
+(* Every pointer-preserving instruction (ADD/SUB/ASSIGN/PHI) in fn
+   produces output values that stay within the same alloca region as
+   the pointer input operand. For ADD(ptr, k): if ptr is in region
+   [off, off+asz), then ptr+k is also in [off, off+asz).
+   True for Vyper: all pointer offsets are compile-time bounded within
+   the alloca size (struct field offsets, array index * 32, etc.).
+   This is needed because the displacement invariant (clause 2b) requires
+   values to stay in their alloca region; otherwise, a value could "jump"
+   to a different alloca region after remapping. *)
+Definition pointer_arith_in_region_def:
+  pointer_arith_in_region fn (roots : string set) <=>
+    let pv = pointer_derived_vars fn roots in
+    !bb inst s v out w_out inp w_in aid off asz.
+      MEM bb fn.fn_blocks /\
+      MEM inst bb.bb_instructions /\
+      is_pointer_preserving_op inst.inst_opcode /\
+      step_inst_base inst s = OK v /\
+      inst.inst_outputs = [out] /\
+      out IN pv /\
+      lookup_var out v = SOME w_out /\
+      MEM (Var inp) inst.inst_operands /\
+      inp IN pv /\
+      lookup_var inp s = SOME w_in /\
+      FLOOKUP s.vs_allocas aid = SOME (off, asz) /\
+      off <= w2n w_in /\ w2n w_in < off + asz ==>
+      off <= w2n w_out /\ w2n w_out < off + asz
+End
+
 (* ===== Alloca Remap ===== *)
 
 (* An alloca_remap maps instruction IDs to new base offsets. *)
@@ -119,6 +179,25 @@ Definition alloca_remap_rel_def:
        FLOOKUP remap aid = SOME new_off ==>
        lookup_var v s1 = SOME (n2w orig_off) /\
        lookup_var v s2 = SOME (n2w new_off)) /\
+    (* 2b. ALL pointer-derived variables have corresponding values:
+       displacement from alloca base is the same in both states.
+       Root vars satisfy this trivially (displacement 0, from clause 2).
+       Derived vars (ADD/SUB of pointer + constant) are also constrained.
+       The containment bounds (orig_off <= w2n w1, etc.) ensure the
+       displacement word equation corresponds to natural-number subtraction
+       and that the aid is the unique alloca containing the pointer value. *)
+    (!v. v IN pv ==>
+       lookup_var v s1 = NONE /\ lookup_var v s2 = NONE \/
+       ?w1 w2 aid orig_off sz new_off.
+         FLOOKUP s1.vs_allocas aid = SOME (orig_off, sz) /\
+         FLOOKUP remap aid = SOME new_off /\
+         lookup_var v s1 = SOME w1 /\
+         lookup_var v s2 = SOME w2 /\
+         w1 - n2w orig_off = w2 - n2w new_off /\
+         orig_off <= w2n w1 /\ w2n w1 < orig_off + sz /\
+         new_off <= w2n w2 /\ w2n w2 < new_off + sz /\
+         orig_off + sz < dimword (:256) /\
+         new_off + sz < dimword (:256)) /\
     (* 3. Memory content at alloca regions agrees *)
     alloca_mem_agrees remap s1 s2 /\
     (* 4. Memory OUTSIDE alloca regions (in BOTH states) is byte-identical.
@@ -132,13 +211,15 @@ Definition alloca_remap_rel_def:
        another region's correspondence. *)
     allocas_non_overlapping s1 /\
     allocas_non_overlapping s2 /\
-    (* 6. Alloca maps have same domain and sizes *)
+    (* 6. Alloca maps: same domain, remap faithfully maps s1 IDs to s2 offsets *)
     FDOM s1.vs_allocas = FDOM s2.vs_allocas /\
-    (!aid off1 sz1 off2 sz2.
-      FLOOKUP s1.vs_allocas aid = SOME (off1, sz1) /\
-      FLOOKUP s2.vs_allocas aid = SOME (off2, sz2) ==>
-      sz1 = sz2) /\
-    (* 7. Scalar state fields agree *)
+    (!aid off1 sz new_off.
+      FLOOKUP s1.vs_allocas aid = SOME (off1, sz) /\
+      FLOOKUP remap aid = SOME new_off ==>
+      FLOOKUP s2.vs_allocas aid = SOME (new_off, sz)) /\
+    (* 7. Memory lengths agree (needed for MSIZE determinism) *)
+    LENGTH s1.vs_memory = LENGTH s2.vs_memory /\
+    (* 8. Scalar state fields agree *)
     s1.vs_halted = s2.vs_halted /\
     s1.vs_returndata = s2.vs_returndata /\
     s1.vs_accounts = s2.vs_accounts /\
