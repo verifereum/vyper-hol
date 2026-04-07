@@ -350,6 +350,11 @@ Proof
   rw[dividesTheory.divides_def]
 QED
 
+(* Memory length fits in a word — needed so w2n/n2w round-trips *)
+Definition venom_memory_bound_def:
+  venom_memory_bound ss ⇔ LENGTH ss.vs_memory < dimword(:256)
+End
+
 (* ===== Single-block predicate ===== *)
 
 (* Identifies abi_enc_info values whose compilation produces only
@@ -389,20 +394,22 @@ Theorem compile_abi_encode_to_buf_correct:
   (* compile_abi_encode_child — P0: static case only for single_block *)
   (∀ dst child_ptr enc_info is_dyn static_ofst dyn_ofst_ptr
      st op st' ss
-     dst_addr child_addr ty tv v tenv av at
+     dst_w child_w ty tv v tenv av at
      (sfields : (string, (string # type # num) list) fmap) cenv.
     compile_abi_encode_child dst child_ptr enc_info
       is_dyn static_ofst dyn_ofst_ptr st = (op, st') ∧
     ¬is_dyn ∧
     single_block_enc_info enc_info ∧
     enc_info = type_to_abi_enc_info sfields cenv ty ∧
-    eval_operand dst ss = SOME (n2w dst_addr) ∧
-    eval_operand child_ptr ss = SOME (n2w child_addr) ∧
+    sfields_tenv_consistent sfields tenv ∧
+    eval_operand dst ss = SOME dst_w ∧
+    eval_operand child_ptr ss = SOME child_w ∧
     fresh_vars_wrt st ss ∧
+    venom_memory_bound ss ∧
     evaluate_type tenv ty = SOME tv ∧
-    dst_addr + static_ofst + LENGTH (enc at av) ≤ LENGTH ss.vs_memory ∧
-    child_addr + type_memory_size tv ≤ LENGTH ss.vs_memory ∧
-    val_in_memory tv v child_addr ss.vs_memory ∧
+    w2n dst_w + static_ofst + LENGTH (enc at av) ≤ LENGTH ss.vs_memory ∧
+    w2n child_w + type_memory_size tv ≤ LENGTH ss.vs_memory ∧
+    val_in_memory tv v (w2n child_w) ss.vs_memory ∧
     value_has_type tv v ∧
     vyper_to_abi tenv ty v = SOME av ∧
     has_type at av ∧
@@ -413,30 +420,32 @@ Theorem compile_abi_encode_to_buf_correct:
       same_blocks st st' ∧
       st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' ∧
       fresh_vars_wrt st' ss' ∧
-      mem_bytes_at (dst_addr + static_ofst) (LENGTH (enc at av))
+      mem_bytes_at (w2n dst_w + static_ofst) (LENGTH (enc at av))
         ss'.vs_memory = enc at av ∧
       (∀ op w. eval_operand op ss = SOME w ⇒
                eval_operand op ss' = SOME w) ∧
       (∀ a. a < LENGTH ss.vs_memory ∧
-            (a < dst_addr + static_ofst ∨
-             a ≥ dst_addr + static_ofst + LENGTH (enc at av)) ⇒
+            (a < w2n dst_w + static_ofst ∨
+             a ≥ w2n dst_w + static_ofst + LENGTH (enc at av)) ⇒
             EL a ss'.vs_memory = EL a ss.vs_memory) ∧
       LENGTH ss'.vs_memory ≥ LENGTH ss.vs_memory) ∧
 
   (* compile_abi_encode_to_buf — P1 *)
   (∀ dst src enc_info st op st' ss
-     dst_addr src_addr ty tv v tenv av at
+     dst_w src_w ty tv v tenv av at
      (sfields : (string, (string # type # num) list) fmap) cenv.
     compile_abi_encode_to_buf dst src enc_info st = (op, st') ∧
     single_block_enc_info enc_info ∧
     enc_info = type_to_abi_enc_info sfields cenv ty ∧
-    eval_operand dst ss = SOME (n2w dst_addr) ∧
-    eval_operand src ss = SOME (n2w src_addr) ∧
+    sfields_tenv_consistent sfields tenv ∧
+    eval_operand dst ss = SOME dst_w ∧
+    eval_operand src ss = SOME src_w ∧
     fresh_vars_wrt st ss ∧
+    venom_memory_bound ss ∧
     evaluate_type tenv ty = SOME tv ∧
-    dst_addr + LENGTH (enc at av) ≤ LENGTH ss.vs_memory ∧
-    src_addr + type_memory_size tv ≤ LENGTH ss.vs_memory ∧
-    val_in_memory tv v src_addr ss.vs_memory ∧
+    w2n dst_w + LENGTH (enc at av) ≤ LENGTH ss.vs_memory ∧
+    w2n src_w + type_memory_size tv ≤ LENGTH ss.vs_memory ∧
+    val_in_memory tv v (w2n src_w) ss.vs_memory ∧
     value_has_type tv v ∧
     vyper_to_abi tenv ty v = SOME av ∧
     has_type at av ∧
@@ -447,20 +456,20 @@ Theorem compile_abi_encode_to_buf_correct:
       same_blocks st st' ∧
       st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' ∧
       fresh_vars_wrt st' ss' ∧
-      mem_bytes_at dst_addr (LENGTH (enc at av)) ss'.vs_memory =
+      mem_bytes_at (w2n dst_w) (LENGTH (enc at av)) ss'.vs_memory =
         enc at av ∧
       eval_operand op ss' = SOME (n2w (LENGTH (enc at av))) ∧
       (∀ op w. eval_operand op ss = SOME w ⇒
                eval_operand op ss' = SOME w) ∧
       (∀ a. a < LENGTH ss.vs_memory ∧
-            (a < dst_addr ∨ a ≥ dst_addr + LENGTH (enc at av)) ⇒
+            (a < w2n dst_w ∨ a ≥ w2n dst_w + LENGTH (enc at av)) ⇒
             EL a ss'.vs_memory = EL a ss.vs_memory) ∧
       LENGTH ss'.vs_memory ≥ LENGTH ss.vs_memory) ∧
 
   (* compile_abi_encode_complex_elems — P2: static elements *)
   (∀ dst src elems src_offset head_offset dyn_ptr
      st op st' ss
-     dst_addr src_addr tys tvs vs tenv avs ats
+     dst_w src_w tys tvs vs tenv avs ats
      (sfields : (string, (string # type # num) list) fmap) cenv.
     compile_abi_encode_complex_elems dst src elems
       src_offset head_offset dyn_ptr st = (op, st') ∧
@@ -468,9 +477,11 @@ Theorem compile_abi_encode_to_buf_correct:
     (* enc_info correspondence per element *)
     (∀ i. i < LENGTH elems ⇒
        FST (EL i elems) = type_to_abi_enc_info sfields cenv (EL i tys)) ∧
-    eval_operand dst ss = SOME (n2w dst_addr) ∧
-    eval_operand src ss = SOME (n2w src_addr) ∧
+    sfields_tenv_consistent sfields tenv ∧
+    eval_operand dst ss = SOME dst_w ∧
+    eval_operand src ss = SOME src_w ∧
     fresh_vars_wrt st ss ∧
+    venom_memory_bound ss ∧
     (* elems, tys, tvs, vs, avs, ats are parallel lists *)
     LENGTH tys = LENGTH elems ∧
     LENGTH tvs = LENGTH elems ∧
@@ -483,12 +494,12 @@ Theorem compile_abi_encode_to_buf_correct:
     (∀ i. i < LENGTH elems ⇒
        evaluate_type tenv (EL i tys) = SOME (EL i tvs)) ∧
     (* Memory and type preconditions for all elements *)
-    dst_addr + head_offset +
+    w2n dst_w + head_offset +
       SUM (MAP (λ(_,abi_sz,_,_). abi_sz) elems) ≤ LENGTH ss.vs_memory ∧
     (∀ i. i < LENGTH elems ⇒
        let (ei, abi_sz, mem_sz, _) = EL i elems in
        let tv = EL i tvs in let v = EL i vs in
-         val_in_memory tv v (src_addr + src_offset +
+         val_in_memory tv v (w2n src_w + src_offset +
            SUM (MAP (λ(_,_,msz,_). msz) (TAKE i elems))) ss.vs_memory ∧
          value_has_type tv v)
     ⇒
@@ -497,14 +508,14 @@ Theorem compile_abi_encode_to_buf_correct:
       same_blocks st st' ∧
       st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' ∧
       fresh_vars_wrt st' ss' ∧
-      mem_bytes_at (dst_addr + head_offset)
+      mem_bytes_at (w2n dst_w + head_offset)
         (SUM (MAP (λ(_,abi_sz,_,_). abi_sz) elems)) ss'.vs_memory =
         FLAT (MAP2 enc ats avs) ∧
       (∀ op w. eval_operand op ss = SOME w ⇒
                eval_operand op ss' = SOME w) ∧
       (∀ a. a < LENGTH ss.vs_memory ∧
-            (a < dst_addr + head_offset ∨
-             a ≥ dst_addr + head_offset +
+            (a < w2n dst_w + head_offset ∨
+             a ≥ w2n dst_w + head_offset +
                SUM (MAP (λ(_,abi_sz,_,_). abi_sz) elems)) ⇒
             EL a ss'.vs_memory = EL a ss.vs_memory) ∧
       LENGTH ss'.vs_memory ≥ LENGTH ss.vs_memory) ∧
@@ -556,7 +567,7 @@ Resume compile_abi_encode_to_buf_correct[child]:
   gvs[comp_return_def] >>
   first_x_assum $ drule_then (drule_at Any) >>
   rpt(disch_then $ drule_at Any) >>
-  disch_then(qspecl_then[`sfields`,`cenv`]mp_tac) >>
+  disch_then(qspecl_then[`cenv`]mp_tac) >>
   impl_tac >- rw[] >>
   strip_tac >>
   goal_assum drule >> gvs[] >>
@@ -573,7 +584,10 @@ Resume compile_abi_encode_to_buf_correct[childADD]:
   disch_then (drule_at Any) >> gvs[] >>
   disch_then (drule_at Any) >> gvs[] >>
   disch_then(qspecl_then[`sfields`,`cenv`]mp_tac) >>
-  impl_tac >- rw[] >>
+  impl_tac >- (
+    simp[] >>
+    gvs[venom_memory_bound_def] >>
+    Cases_on`dst_w` \\ gvs[wordsTheory.word_add_n2w] ) >>
   strip_tac >>
   qspec_then`st`mp_tac emitted_insts_append >>
   disch_then $ drule_at Any >> impl_keep_tac
@@ -582,7 +596,8 @@ Resume compile_abi_encode_to_buf_correct[childADD]:
   qspec_then`is1`mp_tac run_inst_seq_append >>
   disch_then drule >> simp[] >> strip_tac >>
   conj_tac >- gvs[same_blocks_def] >>
-  first_x_assum MATCH_ACCEPT_TAC
+  Cases_on`dst_w` \\ gvs[wordsTheory.word_add_n2w, venom_memory_bound_def]
+  >> first_x_assum MATCH_ACCEPT_TAC
 QED
 
 Resume compile_abi_encode_to_buf_correct[prim]:
@@ -590,7 +605,75 @@ Resume compile_abi_encode_to_buf_correct[prim]:
   gvs[compile_abi_encode_child_def] >>
   drule_all compile_abi_encode_static_correct >>
   strip_tac >> simp[] >>
-  cheat
+  drule mload_eq_mem_bytes_at_eq >> strip_tac >>
+  qmatch_goalsub_abbrev_tac`enc aty av` >>
+  Cases_on`is_dynamic aty`
+  >- (
+    `F` suffices_by rw[] >>
+    qhdtm_x_assum`type_to_abi_enc_info`mp_tac >>
+    qhdtm_x_assum`evaluate_type`mp_tac >>
+    qhdtm_x_assum`sfields_tenv_consistent`mp_tac >>
+    simp[sfields_tenv_consistent_def] >> strip_tac >>
+    qunabbrev_tac`aty` >> Cases_on`ty` >>
+    simp[exprLoweringTheory.type_to_abi_enc_info_def,
+         vyperValueTheory.evaluate_type_def, CaseEq"option"] >>
+    strip_tac >> gvs[]
+    >- (
+      Cases_on`b` \\ gvs[exprLoweringTheory.type_to_abi_enc_info_def] >>
+      Cases_on`b'` \\ gvs[exprLoweringTheory.type_to_abi_enc_info_def] )
+    >- (
+      Cases_on`b` \\ gvs[exprLoweringTheory.type_to_abi_enc_info_def] ) >>
+    Cases_on`v1` >> gvs[] >>
+    first_x_assum drule >>
+    rw[] >> rw[] ) >>
+  drule_all $ cj 1 enc_has_static_length >> strip_tac >>
+  `∀tys. ty ≠ TupleT tys` by (
+    rpt strip_tac >> gvs[exprLoweringTheory.type_to_abi_enc_info_def]) >>
+  `∀a b. ty ≠ ArrayT a b` by (
+    strip_tac >>
+    Cases >> rpt strip_tac >>
+    gvs[exprLoweringTheory.type_to_abi_enc_info_def]) >>
+  `ty ≠ NoneT` by cheat >> (* fix type_to_abi_enc_info on NoneT *)
+  `static_length aty = 32` by (
+    ntac 4 (pop_assum mp_tac) >>
+    qunabbrev_tac`aty` >>
+    Cases_on`ty` \\ simp[] >>
+    TRY (Cases_on`b`) >> simp[] >>
+    TRY (Cases_on`b'`) >> simp[] >>
+    qhdtm_x_assum`type_to_abi_enc_info`mp_tac >>
+    simp[exprLoweringTheory.type_to_abi_enc_info_def] >>
+    qhdtm_x_assum`sfields_tenv_consistent`mp_tac >>
+    simp[sfields_tenv_consistent_def] >>
+    CASE_TAC >> simp[] >>
+    strip_tac >>
+    reverse CASE_TAC >> simp[]
+    >- (
+      CASE_TAC >> simp[] >>
+      res_tac >> gs[vyperValueTheory.evaluate_type_def] ) >>
+    gvs[vyperValueTheory.evaluate_type_def] ) >>
+  simp[eval_operand_def] >>
+  reverse conj_tac >- first_x_assum MATCH_ACCEPT_TAC >>
+  qunabbrev_tac`aty` >>
+  Cases_on`∃n. ty = FlagT n` >- cheat >>
+  `∃bt. ty = BaseT bt` by (Cases_on`ty` \\ gvs[] >>
+     pop_assum mp_tac >> CASE_TAC >> gvs[] >>
+     CASE_TAC >> gvs[vyperValueTheory.evaluate_type_def] >>
+     gvs[exprLoweringTheory.type_to_abi_enc_info_def] >>
+     Cases_on`FLOOKUP sfields s` >> gvs[] >>
+     gvs[sfields_tenv_consistent_def] >>
+     first_x_assum drule >>
+     first_x_assum drule >>
+     rw[] ) >>
+  BasicProvers.VAR_EQ_TAC >>
+  simp[vyper_to_abi_type_def] >>
+  irule val_in_memory_prim_enc >>
+  gvs[vyperValueTheory.evaluate_type_def] >>
+  simp[PULL_EXISTS] >>
+  goal_assum $ drule_at Any >> simp[] >>
+  Cases_on`bt` >> gvs[type_memory_size_def, is_word_type_def] >>
+  Cases_on`b` >> gvs[type_memory_size_def, is_word_type_def] >>
+  gvs[exprLoweringTheory.type_to_abi_enc_info_def] >>
+  Cases_on`av` >> gvs[has_type_def]
 QED
 
 Resume compile_abi_encode_to_buf_correct[bytestring]:
