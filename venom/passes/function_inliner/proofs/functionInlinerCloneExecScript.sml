@@ -301,6 +301,122 @@ Proof
   >> simp[]
 QED
 
+(* step_inst_base preserves vs_allocas for non-ALLOCA opcodes.
+   Proof follows same pattern as step_inst_base_OK_preserves_halted
+   but needs imp_res_tac for extract_venom_result cases. *)
+Triviality extract_venom_result_preserves_allocas[local]:
+  !s ov ro rs rr output s'.
+    extract_venom_result s ov ro rs rr = SOME (output, s') ==>
+    s'.vs_allocas = s.vs_allocas
+Proof
+  rw[extract_venom_result_def] >>
+  BasicProvers.EVERY_CASE_TAC >> gvs[LET_THM] >>
+  gvs[write_memory_with_expansion_def]
+QED
+
+Triviality step_inst_base_no_alloca_preserves_allocas[local]:
+  !inst (s:venom_state) s'.
+    step_inst_base inst s = OK s' /\
+    inst.inst_opcode <> ALLOCA ==>
+    s'.vs_allocas = s.vs_allocas
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[] >>
+  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+  simp[step_inst_base_def, AllCaseEqs()] >> rw[] >>
+  gvs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+      exec_read0_def, exec_read1_def, exec_write2_def,
+      update_var_def, AllCaseEqs(), jump_to_def,
+      mstore_def, mstore8_def, mload_def, sstore_def, sload_def,
+      tstore_def, tload_def, write_memory_with_expansion_def,
+      mcopy_def,
+      exec_ext_call_def, exec_delegatecall_def,
+      exec_create_def] >>
+  imp_res_tac extract_venom_result_preserves_allocas >> gvs[update_var_def]
+QED
+
+(* FOLDL update_var preserves vs_allocas *)
+Triviality foldl_update_var_preserves_allocas[local]:
+  !pairs (s:venom_state).
+    (FOLDL (\s' (out,val). update_var out val s') s pairs).vs_allocas =
+    s.vs_allocas
+Proof
+  Induct >> simp[] >> Cases >> simp[update_var_def]
+QED
+
+(* bind_outputs preserves vs_allocas *)
+Triviality bind_outputs_preserves_allocas[local]:
+  !outs vals (s:venom_state) s'.
+    bind_outputs outs vals s = SOME s' ==> s'.vs_allocas = s.vs_allocas
+Proof
+  rw[bind_outputs_def] >> BasicProvers.EVERY_CASE_TAC >> gvs[] >>
+  simp[foldl_update_var_preserves_allocas]
+QED
+
+(* step_inst preserves vs_allocas for non-ALLOCA opcodes *)
+Triviality step_inst_no_alloca_preserves_allocas[local]:
+  !fuel ctx inst (s:venom_state) s'.
+    step_inst fuel ctx inst s = OK s' /\
+    inst.inst_opcode <> ALLOCA ==>
+    s'.vs_allocas = s.vs_allocas
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- (
+    (* INVOKE *)
+    qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+    simp[Once step_inst_def] >>
+    BasicProvers.EVERY_CASE_TAC >> gvs[] >>
+    strip_tac >>
+    imp_res_tac bind_outputs_preserves_allocas >>
+    gvs[merge_callee_state_def]
+  ) >>
+  (* Non-INVOKE: step_inst = step_inst_base *)
+  metis_tac[step_inst_non_invoke, step_inst_base_no_alloca_preserves_allocas]
+QED
+
+(* run_block preserves vs_allocas when all instructions have no ALLOCA *)
+Theorem run_block_no_alloca_preserves_allocas:
+  !fuel ctx bb (s:venom_state) s'.
+    run_block fuel ctx bb s = OK s' /\
+    EVERY (\i. i.inst_opcode <> ALLOCA) bb.bb_instructions ==>
+    s'.vs_allocas = s.vs_allocas
+Proof
+  ntac 3 gen_tac >>
+  completeInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
+  ONCE_REWRITE_TAC[run_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx`
+  >- simp[] >>
+  rename1 `_ = SOME inst` >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions` by
+    fs[get_instruction_def] >>
+  simp[] >>
+  `inst.inst_opcode <> ALLOCA` by
+    (gvs[get_instruction_def, EVERY_EL] >> metis_tac[EL_MAP]) >>
+  Cases_on `step_inst fuel ctx inst s`
+  >- (
+    rename1 `_ = OK s1` >>
+    simp[] >>
+    reverse (Cases_on `is_terminator inst.inst_opcode`) >> simp[]
+    >- (
+      strip_tac >>
+      `s1.vs_allocas = s.vs_allocas` by
+        metis_tac[step_inst_no_alloca_preserves_allocas] >>
+      `LENGTH bb.bb_instructions - SUC s.vs_inst_idx < v` by
+        decide_tac >>
+      first_x_assum drule >>
+      disch_then (qspecl_then [`bb`,
+        `s1 with vs_inst_idx := SUC s.vs_inst_idx`] mp_tac) >>
+      simp[] >> disch_then drule >> simp[]
+    ) >>
+    Cases_on `s1.vs_halted` >> simp[] >>
+    rw[] >> metis_tac[step_inst_no_alloca_preserves_allocas]
+  )
+  >> simp[]
+QED
+
 (* Clone block simulation: covers ALL blocks uniformly.
    - OK: clone produces OK with clone_rel_np preserved + current_bb corresponds
    - Halt/Abort: clone produces matching Halt/Abort with shared_globals_np
@@ -387,6 +503,13 @@ Theorem clone_execution_sim:
                 SOME bb) /\
        run_block fuel' ctx bb sd = OK sd' ==>
        !v. frame v ==> lookup_var v sd' = lookup_var v sd) /\
+    (* Allocas: clone block OK steps preserve vs_allocas *)
+    (!fuel' bb sd sd'.
+       (?lbl. MEM lbl (fn_labels callee) /\
+              lookup_block (STRCAT prefix lbl) caller_xf.fn_blocks =
+                SOME bb) /\
+       run_block fuel' ctx bb sd = OK sd' ==>
+       sd'.vs_allocas = sd.vs_allocas) /\
     (* State relation *)
     clone_rel_np prefix (fn_labels callee) s_callee s_clone /\
     s_clone.vs_inst_idx = 0 /\ s_callee.vs_inst_idx = 0 /\
@@ -401,6 +524,7 @@ Theorem clone_execution_sim:
           ~s_at_ret.vs_halted /\
           shared_globals_np s_callee' s_at_ret /\
           s_at_ret.vs_params = s_clone.vs_params /\
+          s_at_ret.vs_allocas = s_clone.vs_allocas /\
           (!v. frame v ==> lookup_var v s_at_ret = lookup_var v s_clone) /\
           (!i. i < LENGTH vals /\ i < LENGTH output_vars ==>
                lookup_var (EL i output_vars) s_at_ret =
@@ -453,7 +577,7 @@ Proof
       `sd'.vs_inst_idx = 0` by imp_res_tac run_block_OK_inst_idx_0 >>
       (* Frame for this block step: sd' preserves frame vars from s_clone *)
       `!v. frame v ==> lookup_var v sd' = lookup_var v s_clone` by (
-        qpat_x_assum `!fuel' bb sd sd'. _` (qspecl_then
+        qpat_x_assum `!fuel' bb sd sd'. _ ==> !v. _` (qspecl_then
           [`fuel`, `bb_clone`, `s_clone`, `sd'`] mp_tac) >>
         simp[] >> disch_then match_mp_tac >>
         qexists_tac `s_callee.vs_current_bb` >>
@@ -462,6 +586,16 @@ Proof
       ) >>
       `sc'.vs_params = s_callee.vs_params` by
         metis_tac[run_block_OK_preserves_params] >>
+      (* Allocas: block step preserves vs_allocas *)
+      `sd'.vs_allocas = s_clone.vs_allocas` by (
+        qpat_x_assum `!fuel' bb sd sd'. _ ==> sd'.vs_allocas = sd.vs_allocas`
+          (qspecl_then [`fuel`, `bb_clone`, `s_clone`, `sd'`] mp_tac) >>
+        simp[] >> disch_then match_mp_tac >>
+        qexists_tac `s_callee.vs_current_bb` >>
+        conj_tac >- (imp_res_tac lookup_block_mem_fn_labels >>
+                      first_assum ACCEPT_TAC) >>
+        first_assum ACCEPT_TAC
+      ) >>
       first_x_assum (qspecl_then [`ctx`, `callee`, `caller_xf`, `prefix`,
         `ret_lbl`, `frame`, `output_vars`, `args`, `sc'`, `sd'`] mp_tac) >>
       impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> fs[]) >>
@@ -491,6 +625,8 @@ Proof
           metis_tac[] >>
         `s_at_ret.vs_params = s_clone.vs_params` by
           metis_tac[run_block_OK_preserves_params] >>
+        `s_at_ret.vs_allocas = s_clone.vs_allocas` by
+          metis_tac[] >>
         rpt strip_tac >>
         qexistsl_tac [`SUC fuel + fuel_clone`, `s_at_ret`] >>
         conj_tac >- REFL_TAC >>
@@ -529,8 +665,17 @@ Proof
       imp_res_tac run_block_OK_preserves_params >>
     (* Frame: block step preserves frame vars *)
     `!v. frame v ==> lookup_var v sd' = lookup_var v s_clone` by (
-      qpat_x_assum `!fuel' bb sd sd'. _` (qspecl_then
+      qpat_x_assum `!fuel' bb sd sd'. _ ==> !v. _` (qspecl_then
         [`fuel`, `bb_clone`, `s_clone`, `sd'`] mp_tac) >>
+      simp[] >> disch_then match_mp_tac >>
+      qexists_tac `s_callee.vs_current_bb` >>
+      conj_tac >- (imp_res_tac lookup_block_mem_fn_labels >> first_assum ACCEPT_TAC) >>
+      first_assum ACCEPT_TAC
+    ) >>
+    (* Allocas: block step preserves vs_allocas *)
+    `sd'.vs_allocas = s_clone.vs_allocas` by (
+      qpat_x_assum `!fuel' bb sd sd'. _ ==> sd'.vs_allocas = sd.vs_allocas`
+        (qspecl_then [`fuel`, `bb_clone`, `s_clone`, `sd'`] mp_tac) >>
       simp[] >> disch_then match_mp_tac >>
       qexists_tac `s_callee.vs_current_bb` >>
       conj_tac >- (imp_res_tac lookup_block_mem_fn_labels >> first_assum ACCEPT_TAC) >>
@@ -597,6 +742,13 @@ Theorem clone_execution_sim_ext:
                 SOME bb) /\
        run_block fuel' ctx bb sd = OK sd' ==>
        !v. frame v ==> lookup_var v sd' = lookup_var v sd) /\
+    (* Allocas: clone block OK steps preserve vs_allocas *)
+    (!fuel' bb sd sd'.
+       (?lbl. MEM lbl (fn_labels callee) /\
+              lookup_block (STRCAT prefix lbl) caller_xf.fn_blocks =
+                SOME bb) /\
+       run_block fuel' ctx bb sd = OK sd' ==>
+       sd'.vs_allocas = sd.vs_allocas) /\
     (* Args preserved by frame *)
     (!i. i < LENGTH args ==>
          ?v. EL i invoke_ops = Var v /\ frame v \/
@@ -628,6 +780,7 @@ Theorem clone_execution_sim_ext:
           ~s_at_ret.vs_halted /\
           shared_globals_np s_callee' s_at_ret /\
           s_at_ret.vs_params = s_clone.vs_params /\
+          s_at_ret.vs_allocas = s_clone.vs_allocas /\
           (!v. frame v ==> lookup_var v s_at_ret = lookup_var v s_clone) /\
           (!i. i < LENGTH vals /\ i < LENGTH output_vars ==>
                lookup_var (EL i output_vars) s_at_ret =
@@ -672,7 +825,7 @@ Proof
       `sd'.vs_inst_idx = 0` by imp_res_tac run_block_OK_inst_idx_0 >>
       (* Frame: sd' preserves frame vars from s_clone *)
       `!v. frame v ==> lookup_var v sd' = lookup_var v s_clone` by (
-        qpat_x_assum `!fuel' bb sd sd'. _` (qspecl_then
+        qpat_x_assum `!fuel' bb sd sd'. _ ==> !v. _` (qspecl_then
           [`fuel`, `bb_clone`, `s_clone`, `sd'`] mp_tac) >>
         simp[] >> disch_then match_mp_tac >>
         qexists_tac `s_callee.vs_current_bb` >>
@@ -687,6 +840,16 @@ Proof
            eval_operand (EL i invoke_ops) sd' = SOME (EL i args) /\
            EL i sc'.vs_params = EL i args` by (
         rpt strip_tac >> metis_tac[eval_operand_def]
+      ) >>
+      (* Allocas: block step preserves vs_allocas *)
+      `sd'.vs_allocas = s_clone.vs_allocas` by (
+        qpat_x_assum `!fuel' bb sd sd'. _ ==> sd'.vs_allocas = sd.vs_allocas`
+          (qspecl_then [`fuel`, `bb_clone`, `s_clone`, `sd'`] mp_tac) >>
+        simp[] >> disch_then match_mp_tac >>
+        qexists_tac `s_callee.vs_current_bb` >>
+        conj_tac >- (imp_res_tac lookup_block_mem_fn_labels >>
+                      first_assum ACCEPT_TAC) >>
+        first_assum ACCEPT_TAC
       ) >>
       (* Apply IH *)
       first_x_assum (qspecl_then [`ctx`, `callee`, `caller_xf`, `prefix`,
@@ -719,6 +882,8 @@ Proof
           metis_tac[] >>
         `s_at_ret.vs_params = s_clone.vs_params` by
           metis_tac[run_block_OK_preserves_params] >>
+        `s_at_ret.vs_allocas = s_clone.vs_allocas` by
+          metis_tac[] >>
         rpt strip_tac >>
         qexistsl_tac [`SUC fuel + fuel_clone`, `s_at_ret`] >>
         conj_tac >- REFL_TAC >>
@@ -757,8 +922,17 @@ Proof
       imp_res_tac run_block_OK_preserves_params >>
     (* Frame: block step preserves frame vars *)
     `!v. frame v ==> lookup_var v sd' = lookup_var v s_clone` by (
-      qpat_x_assum `!fuel' bb sd sd'. _` (qspecl_then
+      qpat_x_assum `!fuel' bb sd sd'. _ ==> !v. _` (qspecl_then
         [`fuel`, `bb_clone`, `s_clone`, `sd'`] mp_tac) >>
+      simp[] >> disch_then match_mp_tac >>
+      qexists_tac `s_callee.vs_current_bb` >>
+      conj_tac >- (imp_res_tac lookup_block_mem_fn_labels >> first_assum ACCEPT_TAC) >>
+      first_assum ACCEPT_TAC
+    ) >>
+    (* Allocas: block step preserves vs_allocas *)
+    `sd'.vs_allocas = s_clone.vs_allocas` by (
+      qpat_x_assum `!fuel' bb sd sd'. _ ==> sd'.vs_allocas = sd.vs_allocas`
+        (qspecl_then [`fuel`, `bb_clone`, `s_clone`, `sd'`] mp_tac) >>
       simp[] >> disch_then match_mp_tac >>
       qexists_tac `s_callee.vs_current_bb` >>
       conj_tac >- (imp_res_tac lookup_block_mem_fn_labels >> first_assum ACCEPT_TAC) >>

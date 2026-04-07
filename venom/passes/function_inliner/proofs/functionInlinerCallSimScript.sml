@@ -1683,7 +1683,8 @@ Triviality setup_callee_fields[local]:
     callee_s.vs_returndata = s.vs_returndata /\
     callee_s.vs_logs = s.vs_logs /\
     callee_s.vs_immutables = s.vs_immutables /\
-    callee_s.vs_allocas = s.vs_allocas /\
+    callee_s.vs_allocas = FEMPTY /\
+    callee_s.vs_alloca_next = s.vs_alloca_next /\
     callee_s.vs_call_ctx = s.vs_call_ctx /\
     callee_s.vs_tx_ctx = s.vs_tx_ctx /\
     callee_s.vs_block_ctx = s.vs_block_ctx /\
@@ -2942,6 +2943,7 @@ Triviality intret_bridge[local]:
          lookup_var (EL i outs) s_at_ret = SOME (EL i vals)) /\
     (!v. isPREFIX prefix v ==> v IN excl_vars) /\
     ctx_fields_match s1_pre callee_s' /\
+    s_at_ret.vs_allocas = s_clone.vs_allocas /\
     ~s1_pre.vs_halted ==>
     execution_equiv excl_vars s_ok s_at_ret
 Proof
@@ -3462,6 +3464,13 @@ val cs10_discharge_tac : tactic =
      LENGTH/is_label_op *)
   conj_tac >- per_block_sim_tac >>
   conj_tac >- frame_tac >>
+  (* Allocas: clone block OK steps preserve vs_allocas *)
+  conj_tac >- (
+    rpt gen_tac >> strip_tac >>
+    irule run_block_no_alloca_preserves_allocas >>
+    first_assum (irule_at Any) >>
+    drule_all fn_no_alloca_lookup >> simp[]
+  ) >>
   conj_tac >- args_by_frame_tac >>
   (* Remaining: easy conjuncts + initial_args *)
   easy_and_initial_tac;

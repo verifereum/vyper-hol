@@ -1280,7 +1280,8 @@ Proof
   imp_res_tac sg_from_cr >> gvs[shared_globals_def] >>
   gvs[clone_instruction_def, next_alloca_offset_def] >>
   irule clone_rel_update_var >>
-  irule clone_rel_update_allocas >> simp[]
+  simp[clone_rel_def, shared_globals_def] >> rpt strip_tac >>
+  gvs[clone_rel_def, shared_globals_def]
 QED
 
 (* --- Main theorem --- *)

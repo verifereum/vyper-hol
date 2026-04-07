@@ -375,7 +375,7 @@ Definition shared_globals_np_def:
     s1.vs_returndata = s2.vs_returndata /\
     s1.vs_logs = s2.vs_logs /\
     s1.vs_immutables = s2.vs_immutables /\
-    s1.vs_allocas = s2.vs_allocas /\
+    s1.vs_alloca_next = s2.vs_alloca_next /\
     s1.vs_call_ctx = s2.vs_call_ctx /\
     s1.vs_tx_ctx = s2.vs_tx_ctx /\
     s1.vs_block_ctx = s2.vs_block_ctx /\

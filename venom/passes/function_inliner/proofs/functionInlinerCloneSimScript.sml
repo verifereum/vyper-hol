@@ -35,7 +35,7 @@ Definition shared_globals_def:
     s1.vs_returndata = s2.vs_returndata /\
     s1.vs_logs = s2.vs_logs /\
     s1.vs_immutables = s2.vs_immutables /\
-    s1.vs_allocas = s2.vs_allocas /\
+    s1.vs_alloca_next = s2.vs_alloca_next /\
     s1.vs_call_ctx = s2.vs_call_ctx /\
     s1.vs_tx_ctx = s2.vs_tx_ctx /\
     s1.vs_block_ctx = s2.vs_block_ctx /\
@@ -152,8 +152,15 @@ Proof
 QED
 
 Theorem shared_globals_update_allocas:
-  !s1 s2 al. shared_globals s1 s2 ==>
-    shared_globals (s1 with vs_allocas := al) (s2 with vs_allocas := al)
+  !s1 s2 al1 al2. shared_globals s1 s2 ==>
+    shared_globals (s1 with vs_allocas := al1) (s2 with vs_allocas := al2)
+Proof
+  rw[shared_globals_def]
+QED
+
+Theorem shared_globals_update_alloca_next:
+  !s1 s2 an. shared_globals s1 s2 ==>
+    shared_globals (s1 with vs_alloca_next := an) (s2 with vs_alloca_next := an)
 Proof
   rw[shared_globals_def]
 QED
@@ -273,10 +280,19 @@ Proof
 QED
 
 Theorem clone_rel_update_allocas:
-  !prefix labels s_callee s_clone al.
+  !prefix labels s_callee s_clone al1 al2.
     clone_rel prefix labels s_callee s_clone ==>
     clone_rel prefix labels
-      (s_callee with vs_allocas := al) (s_clone with vs_allocas := al)
+      (s_callee with vs_allocas := al1) (s_clone with vs_allocas := al2)
+Proof
+  simp[clone_rel_def, shared_globals_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem clone_rel_update_alloca_next:
+  !prefix labels s_callee s_clone an.
+    clone_rel prefix labels s_callee s_clone ==>
+    clone_rel prefix labels
+      (s_callee with vs_alloca_next := an) (s_clone with vs_alloca_next := an)
 Proof
   simp[clone_rel_def, shared_globals_def] >> rpt strip_tac >> gvs[]
 QED

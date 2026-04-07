@@ -83,7 +83,7 @@ Triviality foldl_update_var_fields[local]:
     s'.vs_immutables = s.vs_immutables /\ s'.vs_data_section = s.vs_data_section /\
     s'.vs_labels = s.vs_labels /\ s'.vs_code = s.vs_code /\
     s'.vs_params = s.vs_params /\ s'.vs_prev_hashes = s.vs_prev_hashes /\
-    s'.vs_allocas = s.vs_allocas
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next
 Proof
   Induct >- simp[] >>
   qx_gen_tac `p` >> PairCases_on `p` >> rpt strip_tac >>
@@ -105,7 +105,7 @@ Theorem bind_outputs_fields[local]:
     s'.vs_immutables = s.vs_immutables /\ s'.vs_data_section = s.vs_data_section /\
     s'.vs_labels = s.vs_labels /\ s'.vs_code = s.vs_code /\
     s'.vs_params = s.vs_params /\ s'.vs_prev_hashes = s.vs_prev_hashes /\
-    s'.vs_allocas = s.vs_allocas
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next
 Proof
   rw[bind_outputs_def] >> Cases_on `LENGTH outs = LENGTH vals` >> gvs[] >>
   mp_tac (SIMP_RULE (srw_ss()) [LET_THM] foldl_update_var_fields) >>
@@ -518,7 +518,8 @@ Triviality bind_outputs_merge_fields[local]:
     s_post.vs_returndata = callee_s.vs_returndata /\
     s_post.vs_logs = callee_s.vs_logs /\
     s_post.vs_immutables = callee_s.vs_immutables /\
-    s_post.vs_allocas = callee_s.vs_allocas /\
+    s_post.vs_allocas = s_pre.vs_allocas /\
+    s_post.vs_alloca_next = callee_s.vs_alloca_next /\
     (* non-var scalar fields from s_pre *)
     s_post.vs_params = s_pre.vs_params /\
     (s_post.vs_halted <=> s_pre.vs_halted)
@@ -603,6 +604,8 @@ Theorem invoke_clone_bridge:
          lookup_var (EL i outs) s_at_ret = SOME (EL i vals)) /\
     (* Callee preserves ctx_fields from caller *)
     ctx_fields_match s_pre1 callee_s' /\
+    (* Clone preserves allocas (vs_allocas is write-only, no ALLOCA in clone) *)
+    s_at_ret.vs_allocas = s_clone.vs_allocas /\
     (* Pre-INVOKE state not halted *)
     ~s_pre1.vs_halted ==>
     execution_equiv excl_vars s_post s_at_ret

@@ -765,7 +765,7 @@ Proof
 QED
 
 (* Helper: fn_no_alloca + lookup_block = no ALLOCA in the block *)
-Theorem fn_no_alloca_lookup[local]:
+Theorem fn_no_alloca_lookup:
   !fn lbl bb.
     fn_no_alloca fn /\
     lookup_block lbl fn.fn_blocks = SOME bb ==>
