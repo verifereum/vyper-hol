@@ -1027,13 +1027,14 @@ End
 Definition merge_callee_state_def:
   merge_callee_state caller callee =
     caller with <|
-      vs_memory      := callee.vs_memory;
-      vs_transient   := callee.vs_transient;
-      vs_accounts    := callee.vs_accounts;
-      vs_returndata  := callee.vs_returndata;
-      vs_logs        := callee.vs_logs;
-      vs_immutables  := callee.vs_immutables;
+      vs_memory     := callee.vs_memory;
+      vs_transient  := callee.vs_transient;
+      vs_accounts   := callee.vs_accounts;
+      vs_returndata := callee.vs_returndata;
+      vs_logs       := callee.vs_logs;
+      vs_immutables := callee.vs_immutables;
       vs_alloca_next := callee.vs_alloca_next
+      (* vs_allocas NOT copied — caller keeps its own frame's allocas *)
     |>
 End
 

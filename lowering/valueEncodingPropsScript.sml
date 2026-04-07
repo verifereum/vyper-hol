@@ -68,6 +68,15 @@ Proof
   ACCEPT_TAC mem_word_at_eq_mload_proof
 QED
 
+(* If mload at two addresses/states gives the same word,
+   the underlying 32 bytes are identical. *)
+Theorem mload_eq_mem_bytes_at_eq:
+  ∀ off1 off2 s1 s2.
+    mload off1 s1 = mload off2 s2 ⇒
+    mem_bytes_at off1 32 s1.vs_memory = mem_bytes_at off2 32 s2.vs_memory
+Proof ACCEPT_TAC mload_eq_mem_bytes_at_eq_proof
+QED
+
 (* ===== Primitive val_in_memory reduces to word check ===== *)
 
 Theorem val_in_memory_prim:
@@ -97,6 +106,11 @@ Proof ACCEPT_TAC mstore_mem_word_at_disjoint_proof
 QED
 
 (* Splitting mem_bytes_at into adjacent regions *)
+Theorem LENGTH_mem_bytes_at[simp]:
+  ∀ offset len mem. LENGTH (mem_bytes_at offset len mem) = len
+Proof ACCEPT_TAC LENGTH_mem_bytes_at_proof
+QED
+
 Theorem mem_bytes_at_split:
   ∀ offset m n mem.
     offset + (m + n) ≤ LENGTH mem ⇒

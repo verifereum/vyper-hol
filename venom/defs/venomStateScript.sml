@@ -102,7 +102,7 @@ Datatype:
     vs_code : byte list;             (* Own bytecode (CODECOPY/EXTCODECOPY) *)
     vs_params : bytes32 list;        (* Function parameters (read by PARAM) *)
     vs_prev_hashes : bytes32 list;  (* Recent block hashes for EVM BLOCKHASH *)
-    vs_allocas : (num, num # num) fmap; (* inst_id -> (offset, size), per frame *)
+    vs_allocas : (num, num # num) fmap;  (* inst_id -> (offset, size), per frame *)
     vs_alloca_next : num  (* bump pointer: next free alloca offset *)
   |>
 End
