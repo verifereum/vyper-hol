@@ -32,6 +32,7 @@
 
 Theory exprLowering
 Ancestors
+  pred_set list
   emitHelper compileEnv context valueEncoding venomInst vyperValueOperation
   builtinAbi builtinBytes builtinCreate
   builtinHashing builtinMath builtinMisc builtinSimple
@@ -859,34 +860,40 @@ End
    KNOWN LIMITATION: StructT uses AbiCopy fallback (no field type info).
    To encode structs properly, need ce_struct_field_types. *)
 Definition type_to_abi_enc_info_def:
-  type_to_abi_enc_info cenv (BaseT (BytesT (Dynamic n))) = AbiBytestring n ∧
-  type_to_abi_enc_info cenv (BaseT (StringT n)) = AbiBytestring n ∧
-  type_to_abi_enc_info cenv (ArrayT elem (Dynamic n)) =
-    AbiDynArray (type_to_abi_enc_info cenv elem)
+  type_to_abi_enc_info sfields cenv (BaseT (BytesT (Dynamic n))) = AbiBytestring n ∧
+  type_to_abi_enc_info sfields cenv (BaseT (StringT n)) = AbiBytestring n ∧
+  type_to_abi_enc_info sfields cenv (ArrayT elem (Dynamic n)) =
+    AbiDynArray (type_to_abi_enc_info sfields cenv elem)
       (abi_embedded_static_size (cenv_sft cenv) elem) (type_memory_bytes cenv elem)
       (is_abi_dynamic (cenv_sft cenv) elem) ∧
-  type_to_abi_enc_info cenv (ArrayT elem (Fixed n)) =
-    AbiComplex (GENLIST (K (type_to_abi_enc_info cenv elem,
+  type_to_abi_enc_info sfields cenv (ArrayT elem (Fixed n)) =
+    AbiComplex (GENLIST (K (type_to_abi_enc_info sfields cenv elem,
                               abi_embedded_static_size (cenv_sft cenv) elem,
                               type_memory_bytes cenv elem,
                               is_abi_dynamic (cenv_sft cenv) elem)) n) ∧
-  type_to_abi_enc_info cenv (TupleT tys) =
-    AbiComplex (MAP (λt. (type_to_abi_enc_info cenv t,
+  type_to_abi_enc_info sfields cenv (TupleT tys) =
+    AbiComplex (MAP (λt. (type_to_abi_enc_info sfields cenv t,
                           abi_embedded_static_size (cenv_sft cenv) t,
                           type_memory_bytes cenv t,
                           is_abi_dynamic (cenv_sft cenv) t)) tys) ∧
-  (* StructT uses per-field recursive encoding, same as TupleT.
-     Mirrors Python: StructT.abi_type is ABI_Tuple(field_types). *)
-  type_to_abi_enc_info cenv (StructT name) =
-    AbiComplex (MAP (λ(fn, fty, sz).
-                       (type_to_abi_enc_info cenv fty,
-                        abi_embedded_static_size (cenv_sft cenv) fty,
-                        type_memory_bytes cenv fty,
-                        is_abi_dynamic (cenv_sft cenv) fty))
-                    (cenv.ce_struct_fields name)) ∧
-  type_to_abi_enc_info cenv _ = AbiPrimWord
+  type_to_abi_enc_info sfields cenv (StructT name) =
+    (case FLOOKUP sfields name of
+       NONE => AbiPrimWord
+     | SOME fields =>
+         AbiComplex (MAP (λ(fn, fty, sz).
+                            (type_to_abi_enc_info (sfields \\ name) cenv fty,
+                             abi_embedded_static_size (cenv_sft cenv) fty,
+                             type_memory_bytes cenv fty,
+                             is_abi_dynamic (cenv_sft cenv) fty))
+                         fields)) ∧
+  type_to_abi_enc_info sfields cenv NoneT = AbiComplex [] ∧
+  type_to_abi_enc_info sfields cenv _ = AbiPrimWord
 Termination
-  cheat
+  WF_REL_TAC `inv_image ($< LEX $<) (λ(sfields, cenv, ty).
+    (CARD (FDOM sfields), type_size ty))`
+  \\ rw[finite_mapTheory.FDOM_DOMSUB, CARD_DELETE]
+  >- ( Cases_on`CARD (FDOM sfields)` \\ gvs[] )
+  \\ gvs[finite_mapTheory.TO_FLOOKUP]
 End
 
 (* ABI clamp info from type — used for decoding validation.
@@ -911,38 +918,42 @@ End
    Mirrors Python: construction of decode info for ABI decoding.
    StructT uses per-field recursive decoding. *)
 Definition type_to_abi_dec_info_def:
-  type_to_abi_dec_info cenv (BaseT (BytesT (Dynamic n))) = DecBytestring n ∧
-  type_to_abi_dec_info cenv (BaseT (StringT n)) = DecBytestring n ∧
-  type_to_abi_dec_info cenv (ArrayT elem (Dynamic n)) =
-    DecDynArray (type_to_abi_dec_info cenv elem)
+  type_to_abi_dec_info sfields cenv (BaseT (BytesT (Dynamic n))) = DecBytestring n ∧
+  type_to_abi_dec_info sfields cenv (BaseT (StringT n)) = DecBytestring n ∧
+  type_to_abi_dec_info sfields cenv (ArrayT elem (Dynamic n)) =
+    DecDynArray (type_to_abi_dec_info sfields cenv elem)
       (abi_embedded_static_size (cenv_sft cenv) elem) (type_memory_bytes cenv elem)
       (is_abi_dynamic (cenv_sft cenv) elem) n ∧
-  type_to_abi_dec_info cenv (ArrayT elem (Fixed n)) =
+  type_to_abi_dec_info sfields cenv (ArrayT elem (Fixed n)) =
     DecComplex (is_abi_dynamic (cenv_sft cenv) elem)
-      (GENLIST (K (type_to_abi_dec_info cenv elem,
+      (GENLIST (K (type_to_abi_dec_info sfields cenv elem,
                      abi_embedded_static_size (cenv_sft cenv) elem,
                      type_memory_bytes cenv elem)) n) ∧
-  type_to_abi_dec_info cenv (TupleT tys) =
+  type_to_abi_dec_info sfields cenv (TupleT tys) =
     DecComplex (EXISTS (is_abi_dynamic (cenv_sft cenv)) tys)
-      (MAP (λt. (type_to_abi_dec_info cenv t,
+      (MAP (λt. (type_to_abi_dec_info sfields cenv t,
                  abi_embedded_static_size (cenv_sft cenv) t,
                  type_memory_bytes cenv t)) tys) ∧
-  (* StructT uses per-field recursive decoding, same as TupleT.
-     Mirrors Python: StructT.abi_type is ABI_Tuple(field_types). *)
-  type_to_abi_dec_info cenv (StructT name) =
-    DecComplex (EXISTS (is_abi_dynamic (cenv_sft cenv)) (cenv_sft cenv name))
-      (MAP (λ(fn, fty, sz).
-              (type_to_abi_dec_info cenv fty,
-               abi_embedded_static_size (cenv_sft cenv) fty,
-               type_memory_bytes cenv fty))
-           (cenv.ce_struct_fields name)) ∧
-  type_to_abi_dec_info cenv (FlagT name) =
-    (* Flags are unsigned integers with n_members bits.
-       Mirrors Python: clamp_basetype → int_clamp(bits=n_members, signed=False) *)
+  type_to_abi_dec_info sfields cenv (StructT name) =
+    (case FLOOKUP sfields name of
+       NONE => DecPrimWord NoClamp
+     | SOME fields =>
+         DecComplex (EXISTS (is_abi_dynamic (cenv_sft cenv))
+                            (MAP (FST o SND) fields))
+           (MAP (λ(fn, fty, sz).
+                   (type_to_abi_dec_info (sfields \\ name) cenv fty,
+                    abi_embedded_static_size (cenv_sft cenv) fty,
+                    type_memory_bytes cenv fty))
+                fields)) ∧
+  type_to_abi_dec_info sfields cenv (FlagT name) =
     DecPrimWord (IntClamp (cenv.ce_flag_n_members name) F) ∧
-  type_to_abi_dec_info cenv ty = DecPrimWord (type_to_abi_clamp ty)
+  type_to_abi_dec_info sfields cenv ty = DecPrimWord (type_to_abi_clamp ty)
 Termination
-  cheat
+  WF_REL_TAC `inv_image ($< LEX $<) (λ(sfields, cenv, ty).
+    (CARD (FDOM sfields), type_size ty))`
+  \\ rw[finite_mapTheory.FDOM_DOMSUB, CARD_DELETE]
+  >- ( Cases_on`CARD (FDOM sfields)` \\ gvs[] )
+  \\ gvs[finite_mapTheory.TO_FLOOKUP]
 End
 
 (* Stage internal call arguments based on pass_via_stack classification.
@@ -1870,7 +1881,7 @@ Definition compile_subscript_def:
         od
     | SOME (StructT sname) =>
         let idx = literal_int_index idx_e in
-        let fld_info = cenv.ce_struct_fields sname in
+        let fld_info = get_struct_fields cenv.ce_struct_fields sname in
         do base_vv <- cfn cenv ty base_e;
            base_op <- return (vv_operand base_vv);
            base_loc <- return (case vv_location base_vv of
@@ -1935,7 +1946,7 @@ Definition compile_attribute_def:
                                    LocStorage => T
                                  | LocTransient => T
                                  | _ => F) in
-           let fields = cenv.ce_struct_fields struct_name in
+           let fields = get_struct_fields cenv.ce_struct_fields struct_name in
            let field_offset =
              if is_storage_loc then struct_field_offset_slots fields field
              else struct_field_offset fields field in
@@ -1954,7 +1965,7 @@ Definition compile_struct_lit_def:
     let e_ty = expr_type e in
     let is_prim = is_word_type e_ty in
     let struct_name = (case ty of StructT n => n | _ => "") in
-    let fld_info = cenv.ce_struct_fields struct_name in
+    let fld_info = get_struct_fields cenv.ce_struct_fields struct_name in
     let field_size = (case ALOOKUP fld_info fname of
         SOME (fty, sz) => sz | NONE => 32) in
     do dst <- (if cur_offset = 0 then return buf_op
@@ -2070,7 +2081,7 @@ Definition compile_call_def:
        let (_, st5) = compile_extcall_store_args cfn cenv func_args
                         arg_types args_buf 0 st4 in
        let args_abi_size = abi_size_bound (cenv_sft cenv) (TupleT arg_types) in
-       let args_enc_info = type_to_abi_enc_info cenv (TupleT arg_types) in
+       let args_enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT arg_types) in
        let wrapped_return = (case return_type of
                                TupleT ts =>
                                  if LENGTH ts > 1 then return_type
@@ -2088,7 +2099,7 @@ Definition compile_call_def:
              let (dop, st') = lower_value cfn cenv return_type def_e st6 in
              (T, dop, st')
          | NONE => (F, Lit 0w, st6) in
-       let ret_dec_info = type_to_abi_dec_info cenv wrapped_return in
+       let ret_dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv wrapped_return in
        let is_prim_return = is_word_type return_type in
        let (result_op, st8) =
          compile_external_call_kwargs addr_op args_buf args_abi_size
@@ -2234,7 +2245,7 @@ val compile_expr_defn = Defn.Hol_defn "compile_expr" `
        compile_attribute compile_expr cenv ret_ty ty base_e fld_name st
    | StructLit _ name fields =>
        (let struct_name = SND name in
-        let fld_info = cenv.ce_struct_fields struct_name in
+        let fld_info = get_struct_fields cenv.ce_struct_fields struct_name in
         let total_size = SUM (MAP (SND o SND) fld_info) in
                 let (buf_alloc, st2) = compile_alloc_buffer total_size st in
                 let buf = buf_alloc.buf_operand in
@@ -2571,7 +2582,7 @@ val compile_expr_defn = Defn.Hol_defn "compile_expr" `
          (let e1 = HD args in
           let src_ty = expr_type e1 in
           let enc_ty = TupleT [src_ty] in
-          let enc_info = type_to_abi_enc_info cenv enc_ty in
+          let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv enc_ty in
           let maxlen = abi_size_bound (cenv_sft cenv) enc_ty in
           if is_word_type src_ty then
             (* Prim word: stage to temp memory for encoder *)
@@ -2588,7 +2599,7 @@ val compile_expr_defn = Defn.Hol_defn "compile_expr" `
          (let e1 = HD args in
           let (data_vv, st1) = compile_expr cenv (expr_type e1) e1 st in
           let (data_op, st2) = unwrap_value cenv data_vv st1 in
-          let dec_info = type_to_abi_dec_info cenv ret_ty in
+          let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv ret_ty in
           let abi_min = abi_static_size (cenv_sft cenv) ret_ty in
           let abi_max = abi_size_bound (cenv_sft cenv) ret_ty in
           let out_size = type_memory_bytes cenv ret_ty in

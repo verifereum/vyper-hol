@@ -142,7 +142,7 @@ Definition compile_revert_with_reason_def:
     (* Wrap message type as tuple: (msg_type,) for ABI encoding.
        Mirrors Python: wrapped_typ = TupleT((msg_typ,)) *)
     let wrapped_type = TupleT [msg_type] in
-    let wrapped_enc_info = type_to_abi_enc_info cenv wrapped_type in
+    let wrapped_enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv wrapped_type in
     let wrapped_abi_size = abi_size_bound (cenv_sft cenv) wrapped_type in
     (* Allocate buffer: 32 (selector word) + encoded payload *)
     let buf_size = 32 + wrapped_abi_size in
@@ -378,7 +378,7 @@ Definition compile_get_target_ptr_def:
        struct_name <- return (case base_type_opt of
                                 SOME (StructT sn) => sn
                               | _ => "");
-       fields <- return (cenv.ce_struct_fields struct_name);
+       fields <- return (get_struct_fields cenv.ce_struct_fields struct_name);
        is_storage <- return (case loc_opt of
                                SOME LocStorage => T
                              | SOME LocTransient => T
@@ -614,7 +614,7 @@ Definition compile_tuple_unpack_def:
     let elem_types = (case ty of
         TupleT tys => tys
       | StructT name =>
-          MAP (FST o SND) (cenv.ce_struct_fields name)
+          MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields name)
       | _ => REPLICATE (LENGTH targets) (BaseT (UintT 256))) in
     (* Stage source tuple to prevent aliasing when complex members present.
        Python stages when source_is_memory_view ∧ any(!_is_prim_word).
@@ -895,7 +895,7 @@ Definition compile_stmt_def:
              data_buf <- return data_buf_alloc.buf_operand;
              compile_log_store_data cenv data_ops data_buf 0;
              abi_size <- return (abi_size_bound (cenv_sft cenv) data_tuple_t);
-             data_enc_info <- return (type_to_abi_enc_info cenv data_tuple_t);
+             data_enc_info <- return (type_to_abi_enc_info cenv.ce_struct_fields cenv data_tuple_t);
              abi_buf_alloc <- compile_alloc_buffer (MAX 32 abi_size);
              abi_buf <- return abi_buf_alloc.buf_operand;
              encoded_len <-
@@ -967,7 +967,7 @@ Definition compile_stmt_def:
                elem_types <- return (case ty of
                    TupleT tys => tys
                  | StructT name =>
-                     MAP (FST o SND) (cenv.ce_struct_fields name)
+                     MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields name)
                  | _ => []);
                src_ty <- return (expr_type e);
                compile_internal_return cenv (SOME val_op) rpc

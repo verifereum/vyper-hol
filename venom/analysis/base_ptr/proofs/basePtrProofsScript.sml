@@ -56,7 +56,14 @@ Theorem bp_handle_inst_sound_proof:
     bp_handle_inst bp inst = (c, bp') ∧
     step_inst fuel ctx inst s = OK s' ∧
     inst_wf inst ∧
-    (∀out. inst_output inst = SOME out ⇒ bp_get_ptrs bp out = []) ⇒
+    (∀out. inst_output inst = SOME out ⇒ bp_get_ptrs bp out = []) ∧
+    (inst_output inst = NONE ⇒ inst.inst_outputs = []) ∧
+    (∀v aid off. MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ⇒
+       FLOOKUP s'.vs_allocas aid = FLOOKUP s.vs_allocas aid) ∧
+    (∀v. inst.inst_opcode = PHI ∧
+         MEM v (MAP SND (phi_pairs inst.inst_operands)) ∧
+         IS_SOME (lookup_var v s) ⇒
+         bp_get_ptrs bp v ≠ []) ⇒
     bp_ptr_sound bp' s'
 Proof
   cheat
@@ -69,11 +76,24 @@ Theorem bp_process_block_sound_proof:
     bp_process_block bp bb.bb_instructions = (c, bp') ∧
     exec_block fuel ctx bb s = OK s' ∧
     s.vs_inst_idx = 0 ∧
+    bb_well_formed bb ∧
     (∀inst. MEM inst bb.bb_instructions ⇒ inst_wf inst) ∧
     ALL_DISTINCT (FLAT (MAP (λi. i.inst_outputs) bb.bb_instructions)) ∧
     (∀inst out. MEM inst bb.bb_instructions ∧
                inst_output inst = SOME out ⇒
-               bp_get_ptrs bp out = []) ⇒
+               bp_get_ptrs bp out = []) ∧
+    ctx_inst_ids_distinct ctx ∧
+    (∀inst v aid off. MEM inst bb.bb_instructions ∧
+       inst.inst_opcode = ALLOCA ∧
+       MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ⇒
+       aid ≠ inst.inst_id) ∧
+    ALL_DISTINCT (MAP (λi. i.inst_id)
+      (FILTER (λi. i.inst_opcode = ALLOCA) bb.bb_instructions)) ∧
+    (∀inst v. MEM inst bb.bb_instructions ∧
+       inst.inst_opcode = PHI ∧
+       MEM v (MAP SND (phi_pairs inst.inst_operands)) ∧
+       IS_SOME (lookup_var v s) ⇒
+       bp_get_ptrs bp v ≠ []) ⇒
     bp_ptr_sound bp' s'
 Proof
   cheat

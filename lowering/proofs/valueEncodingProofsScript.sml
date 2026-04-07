@@ -7,6 +7,7 @@
 Theory valueEncodingProofs
 Ancestors
   valueEncoding vyperStorage venomState
+  list rich_list venomMemProofs
 Libs
   blastLib
 
@@ -162,6 +163,13 @@ Proof
   ]
 QED
 
+Theorem LENGTH_mem_bytes_at_proof:
+  ∀ offset len mem. LENGTH (mem_bytes_at offset len mem) = len
+Proof
+  rw[mem_bytes_at_def, LENGTH_TAKE_EQ, LENGTH_DROP, LENGTH_APPEND,
+     LENGTH_REPLICATE]
+QED
+
 (* ===== mem_word_at = mload ===== *)
 
 Theorem mem_word_at_eq_mload_proof:
@@ -169,6 +177,17 @@ Theorem mem_word_at_eq_mload_proof:
     mem_word_at offset s.vs_memory = mload offset s
 Proof
   rw[mem_word_at_def, mload_def]
+QED
+
+Theorem mload_eq_mem_bytes_at_eq_proof:
+  ∀ off1 off2 s1 s2.
+    mload off1 s1 = mload off2 s2 ⇒
+    mem_bytes_at off1 32 s1.vs_memory =
+    mem_bytes_at off2 32 s2.vs_memory
+Proof
+  rw[mload_def, mem_bytes_at_def] >>
+  irule (INST_TYPE[alpha|->“:256”]word_of_bytes_be_inj_proof) >>
+  simp[dividesTheory.divides_def]
 QED
 
 (* ===== Primitive val_in_memory ===== *)
