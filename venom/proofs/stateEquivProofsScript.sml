@@ -99,7 +99,7 @@ QED
 
 Theorem result_equiv_abort[local,simp]:
   result_equiv vars (Abort a1 s1) (Abort a2 s2) =
-    ((a1 = a2) /\ execution_equiv vars s1 s2)
+    ((a1 = a2) /\ revert_equiv s1 s2)
 Proof
   rw[result_equiv_def]
 QED
@@ -149,7 +149,7 @@ Theorem result_equiv_trans:
     result_equiv vars r1 r3
 Proof
   Cases_on `r1` >> Cases_on `r2` >> Cases_on `r3` >>
-  gvs[result_equiv_def] >>
+  gvs[result_equiv_def, revert_equiv_def] >>
   metis_tac[state_equiv_trans, execution_equiv_trans]
 QED
 
