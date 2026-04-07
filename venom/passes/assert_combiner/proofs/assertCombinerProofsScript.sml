@@ -1107,6 +1107,7 @@ Theorem ac_block_sim_same_nonempty[local]:
     lift_result
       (state_equiv V)
       (execution_equiv UNIV)
+      (execution_equiv UNIV)
       (run_block fuel ctx bb s)
       (run_block fuel ctx (ac_transform_block dfg bb) s)
 Proof
@@ -1183,6 +1184,7 @@ Theorem ac_block_sim_same[local]:
     ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) ==>
     lift_result
       (state_equiv V)
+      (execution_equiv UNIV)
       (execution_equiv UNIV)
       (run_block fuel ctx bb s)
       (run_block fuel ctx (ac_transform_block dfg bb) s)

@@ -1314,7 +1314,7 @@ Triviality lift_result_halt_wrap[local]:
   !R_ok R_term r1 r2.
     valid_state_rel R_ok R_term ==>
     lift_result R_ok R_term R_term r1 r2 ==>
-    lift_result R_ok R_term
+    lift_result R_ok R_term R_term
       (case r1 of
          OK s'' => if s''.vs_halted then Halt s'' else OK s''
        | Halt s' => Halt s'
@@ -1340,11 +1340,11 @@ Triviality invoke_lift_result_idx_bridge[local]:
   !R_ok R_term fuel ctx inst1 inst2 s n.
     valid_state_rel R_ok R_term /\
     inst1.inst_opcode = INVOKE /\ inst2.inst_opcode = INVOKE /\
-    lift_result R_ok R_term
+    lift_result R_ok R_term R_term
       (step_inst fuel ctx inst1 s)
       (step_inst fuel ctx inst2 s)
   ==>
-    lift_result R_ok R_term
+    lift_result R_ok R_term R_term
       (step_inst fuel ctx inst1 (s with vs_inst_idx := n))
       (step_inst fuel ctx inst2 (s with vs_inst_idx := n))
 Proof
@@ -1506,7 +1506,7 @@ Triviality lift_result_case_map[local]:
     (!s1 s2. R_ok s1 s2 ==> lift_result R_ok R_term R_term (f s1) (g s2)) /\
     (!s1 s2. R_term s1 s2 ==> R_term (h1 s1) (h2 s2))
   ==>
-    lift_result R_ok R_term
+    lift_result R_ok R_term R_term
       (case r1 of
          OK s => f s
        | Halt s => Halt (h1 s)
@@ -1539,7 +1539,7 @@ Triviality sue_step_case_lift[local]:
     (!v1 v2 m1 m2. R_term v1 v2 ==>
        R_term (v1 with vs_inst_idx := m1) (v2 with vs_inst_idx := m2))
   ==>
-    lift_result R_ok R_term
+    lift_result R_ok R_term R_term
       (case step_inst fuel ctx inst1 (s1 with vs_inst_idx := n1) of
          OK s'' => f s'' | Halt s' => Halt s' | Abort a s' => Abort a s'
        | IntRet rv ss => IntRet rv ss | Error e => Error e)

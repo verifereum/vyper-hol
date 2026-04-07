@@ -499,6 +499,7 @@ Theorem run_block_preserves_remap:
       lift_result
         (alloca_remap_rel fn roots remap')
         (alloca_remap_rel fn roots remap')
+        (alloca_remap_rel fn roots remap')
         (run_block fuel ctx bb s1)
         (run_block fuel ctx bb s2)
 Proof
