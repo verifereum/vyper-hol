@@ -15,8 +15,6 @@ Theory basePtrProofs
 Ancestors
   basePtrDefs venomExecSemantics venomWf memLocDefs venomInstProofs
   finite_map list
-Libs
-  finite_mapTheory
 
 (* Transfer function only modifies the output variable's pointer set. *)
 Theorem bp_handle_inst_other_var_proof:
@@ -1035,7 +1033,7 @@ Resume bp_process_block_sound_gen[non_terminator]:
           (fn eq => PURE_REWRITE_TAC [eq]) >>
         REWRITE_TAC[MEM] >> ASM_REWRITE_TAC[])) >>
       strip_tac >> ASM_REWRITE_TAC[]) >>
-    conj_tac >- (                        (* 10 *)
+    conj_tac >- (                        (* 10: inst_wf *)
       rpt strip_tac >>
       qpat_assum `!i. MEM i (DROP s0.vs_inst_idx _) ==> _`
         (qspec_then `inst'` mp_tac) >>
@@ -1044,7 +1042,7 @@ Resume bp_process_block_sound_gen[non_terminator]:
           (fn eq => PURE_REWRITE_TAC [eq]) >>
         REWRITE_TAC[MEM] >> ASM_REWRITE_TAC[])) >>
       strip_tac >> ASM_REWRITE_TAC[]) >>
-    conj_tac >- (                        (* 10 *)
+    conj_tac >- (                        (* 11: alloca freshness *)
       rpt gen_tac >> strip_tac >>
       qpat_assum `DROP _ _ = _ :: _`
         (fn eq => RULE_ASSUM_TAC (PURE_ONCE_REWRITE_RULE [eq])) >>
@@ -1054,7 +1052,7 @@ Resume bp_process_block_sound_gen[non_terminator]:
         bp_handle_inst_alloca_freshness_tail) >>
       impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
       DISCH_TAC >> first_assum ACCEPT_TAC) >>
-    conj_tac >- (                        (* 11 *)
+    conj_tac >- (                        (* 12: ALL_DISTINCT alloca *)
       qpat_x_assum `ALL_DISTINCT (MAP _ (FILTER _ (DROP s0.vs_inst_idx _)))` mp_tac >>
       qpat_x_assum `DROP _ _ = _ :: _`
         (fn eq => PURE_REWRITE_TAC [eq]) >>
