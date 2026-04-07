@@ -5,5 +5,6 @@ INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec \
            ../venom/compiler \
            ../venom/codegen \
            ../venom/simulation/defs \
+           ../venom/simulation/proofs \
            ../venom/props \
            defs proofs

@@ -26,6 +26,7 @@ Theory emitHelperProps
 Ancestors
   exprLoweringProps emitHelper compileEnv
   venomExecSemantics venomState venomInst
+  instIdxIndep
 Libs
   intLib
 
@@ -534,6 +535,96 @@ Proof
      comp_ignore_bind_def, comp_return_def, emit_def, emitted_insts_def] >>
   gvs[rich_listTheory.DROP_LENGTH_APPEND, run_inst_seq_def] >>
   rw[eval_operand_def]
+QED
+
+(* ===== Layer 1: Connecting run_inst_seq to run_block ===== *)
+
+(* Running non-terminator, non-INVOKE instructions within a block:
+   If instructions at indices [idx .. idx + LENGTH insts) match `insts`,
+   and run_inst_seq succeeds, then run_block from idx reaches
+   idx + LENGTH insts with the same state.
+
+   This lets us "fast forward" through a prefix of a block's instructions
+   using run_inst_seq, then reason about the terminator separately. *)
+Theorem run_block_inst_seq_prefix:
+  ∀ insts fuel ctx bb idx ss ss'.
+    run_inst_seq insts ss = OK ss' ∧
+    EVERY (λi. ¬is_terminator i.inst_opcode) insts ∧
+    EVERY (λi. i.inst_opcode ≠ INVOKE) insts ∧
+    (∀ k. k < LENGTH insts ⇒
+          get_instruction bb (idx + k) = SOME (EL k insts))
+    ⇒
+    run_block fuel ctx bb (ss with vs_inst_idx := idx) =
+      run_block fuel ctx bb (ss' with vs_inst_idx := idx + LENGTH insts)
+Proof
+  Induct_on `insts` >>
+  rw[run_inst_seq_def] >>
+  Cases_on `step_inst_base h ss` >> gvs[] >>
+  simp[Once run_block_def] >>
+  CASE_TAC >- (first_x_assum(qspec_then`0`mp_tac) >> rw[]) >>
+  first_assum(qspec_then`0`mp_tac) >>
+  impl_tac >- rw[] >> simp_tac(srw_ss())[] >> strip_tac >> gvs[] >>
+  simp[Once step_inst_def] >>
+  drule step_inst_inst_idx_indep >>
+  simp[] >> disch_then kall_tac >>
+  simp[exec_result_map_def] >>
+  first_x_assum drule >>
+  `idx + SUC (LENGTH insts) = SUC idx + LENGTH insts` by simp[] >>
+  pop_assum SUBST_ALL_TAC >>
+  disch_then irule >>
+  rw[] >>
+  first_x_assum(qspec_then`SUC k`mp_tac) >>
+  rw[] >> gvs[arithmeticTheory.ADD1]
+QED
+
+(* Full single-block execution ending with JMP:
+   Non-terminator instructions followed by a JMP. *)
+Theorem run_block_inst_seq_jmp:
+  ∀ insts fuel ctx bb idx ss ss' target_lbl jmp_id.
+    run_inst_seq insts ss = OK ss' ∧
+    EVERY (λi. ¬is_terminator i.inst_opcode) insts ∧
+    EVERY (λi. i.inst_opcode ≠ INVOKE) insts ∧
+    (∀ k. k < LENGTH insts ⇒
+          get_instruction bb (idx + k) = SOME (EL k insts)) ∧
+    get_instruction bb (idx + LENGTH insts) =
+      SOME (mk_inst jmp_id JMP [Label target_lbl] []) ∧
+    ¬ss'.vs_halted
+    ⇒
+    run_block fuel ctx bb (ss with vs_inst_idx := idx) =
+      OK (jump_to target_lbl ss')
+Proof
+  rw[] >>
+  drule_all run_block_inst_seq_prefix >> simp[] >>
+  disch_then kall_tac >>
+  simp[Once run_defs] >>
+  simp[Once step_inst_def] >>
+  simp[step_inst_base_def, is_terminator_def, jump_to_def]
+QED
+
+(* Full single-block execution ending with JNZ *)
+Theorem run_block_inst_seq_jnz:
+  ∀ insts fuel ctx bb idx ss ss' cond_op cond_v
+    lbl_nz lbl_z jnz_id.
+    run_inst_seq insts ss = OK ss' ∧
+    EVERY (λi. ¬is_terminator i.inst_opcode) insts ∧
+    EVERY (λi. i.inst_opcode ≠ INVOKE) insts ∧
+    (∀ k. k < LENGTH insts ⇒
+          get_instruction bb (idx + k) = SOME (EL k insts)) ∧
+    get_instruction bb (idx + LENGTH insts) =
+      SOME (mk_inst jnz_id JNZ [cond_op; Label lbl_nz; Label lbl_z] []) ∧
+    eval_operand cond_op ss' = SOME cond_v ∧
+    ¬ss'.vs_halted
+    ⇒
+    run_block fuel ctx bb (ss with vs_inst_idx := idx) =
+      OK (jump_to (if cond_v ≠ 0w then lbl_nz else lbl_z) ss')
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all run_block_inst_seq_prefix >> simp[] >>
+  disch_then kall_tac >>
+  simp[Once run_defs] >>
+  simp[Once step_inst_def] >>
+  simp[step_inst_base_def, is_terminator_def, jump_to_def] >>
+  simp[eval_op_inst_idx] >> rw[]
 QED
 
 (* ===== Combined emit_op + step + frame lemmas ===== *)
