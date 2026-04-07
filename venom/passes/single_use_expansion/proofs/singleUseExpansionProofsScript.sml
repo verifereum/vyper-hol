@@ -1300,10 +1300,10 @@ QED
 
 Theorem lift_result_exec_result_map[local]:
   !R_ok R_term g r1 r2.
-    lift_result R_ok R_term r1 r2 /\
+    lift_result R_ok R_term R_term r1 r2 /\
     (!s1 s2. R_ok s1 s2 ==> R_ok (g s1) (g s2)) /\
     (!s1 s2. R_term s1 s2 ==> R_term (g s1) (g s2))
-  ==> lift_result R_ok R_term (exec_result_map g r1) (exec_result_map g r2)
+  ==> lift_result R_ok R_term R_term (exec_result_map g r1) (exec_result_map g r2)
 Proof
   Cases_on `r1` >> Cases_on `r2` >>
   simp[lift_result_def, exec_result_map_def]
@@ -1313,7 +1313,7 @@ QED
 Triviality lift_result_halt_wrap[local]:
   !R_ok R_term r1 r2.
     valid_state_rel R_ok R_term ==>
-    lift_result R_ok R_term r1 r2 ==>
+    lift_result R_ok R_term R_term r1 r2 ==>
     lift_result R_ok R_term
       (case r1 of
          OK s'' => if s''.vs_halted then Halt s'' else OK s''
@@ -1502,8 +1502,8 @@ QED
 Triviality lift_result_case_map[local]:
   !R_ok R_term r1 r2 f g h1 h2.
     valid_state_rel R_ok R_term /\
-    lift_result R_ok R_term r1 r2 /\
-    (!s1 s2. R_ok s1 s2 ==> lift_result R_ok R_term (f s1) (g s2)) /\
+    lift_result R_ok R_term R_term r1 r2 /\
+    (!s1 s2. R_ok s1 s2 ==> lift_result R_ok R_term R_term (f s1) (g s2)) /\
     (!s1 s2. R_term s1 s2 ==> R_term (h1 s1) (h2 s2))
   ==>
     lift_result R_ok R_term
@@ -1529,12 +1529,12 @@ QED
 Triviality sue_step_case_lift[local]:
   !R_ok R_term fuel ctx inst1 inst2 s1 s2 n1 n2 f g.
     valid_state_rel R_ok R_term /\
-    lift_result R_ok R_term (step_inst fuel ctx inst1 s1)
+    lift_result R_ok R_term R_term (step_inst fuel ctx inst1 s1)
                             (step_inst fuel ctx inst2 s2) /\
     ~is_terminator inst1.inst_opcode /\ ~is_terminator inst2.inst_opcode /\
     inst2.inst_opcode = inst1.inst_opcode /\
     (!v1 v2. R_ok v1 v2 ==>
-       lift_result R_ok R_term (f (v1 with vs_inst_idx := n1))
+       lift_result R_ok R_term R_term (f (v1 with vs_inst_idx := n1))
                                (g (v2 with vs_inst_idx := n2))) /\
     (!v1 v2 m1 m2. R_term v1 v2 ==>
        R_term (v1 with vs_inst_idx := m1) (v2 with vs_inst_idx := m2))

@@ -407,7 +407,7 @@ Theorem step_inst_base_ld_ok_terminator:
     is_terminator inst.inst_opcode /\
     ~reads_memory inst.inst_opcode /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) ==>
-    lift_result (ld_ok vars) (ld_equiv vars)
+    lift_result (ld_ok vars) (ld_equiv vars) (ld_equiv vars)
       (step_inst_base inst s1)
       (step_inst_base inst s2)
 Proof
@@ -422,7 +422,7 @@ Theorem ld_terminator_sim[local]:
     is_terminator inst.inst_opcode /\
     ~reads_memory inst.inst_opcode /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) ==>
-    lift_result (ld_ok vars) (ld_equiv vars)
+    lift_result (ld_ok vars) (ld_equiv vars) (ld_equiv vars)
       (step_inst fuel ctx inst s1)
       (step_inst fuel ctx inst s2)
 Proof

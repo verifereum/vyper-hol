@@ -340,8 +340,8 @@ QED
 
 Theorem lift_result_weaken_UNIV:
   !R vars r1 r2.
-    lift_result R (execution_equiv vars) r1 r2 ==>
-    lift_result R (execution_equiv UNIV) r1 r2
+    lift_result R (execution_equiv vars) (execution_equiv vars) r1 r2 ==>
+    lift_result R (execution_equiv UNIV) (execution_equiv UNIV) r1 r2
 Proof
   Cases_on `r1` >> Cases_on `r2` >>
   fs[lift_result_def, execution_equiv_weaken_UNIV] >>

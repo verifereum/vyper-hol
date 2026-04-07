@@ -132,7 +132,7 @@ Theorem ld_non_ok_inst_step[local]:
          w2n v + (LENGTH s1.vs_code - LENGTH s1.vs_data_section) <
            dimword(:256)) /\
     (!r. step_inst fuel ctx h s1 <> OK r) ==>
-    lift_result (ld_ok vars) (ld_equiv vars)
+    lift_result (ld_ok vars) (ld_equiv vars) (ld_equiv vars)
       (step_inst fuel ctx h s1)
       (run_insts fuel ctx (lower_dload_inst h) s2)
 Proof
@@ -213,7 +213,7 @@ Theorem ld_run_insts_sim_full[local]:
     (!inst. MEM inst insts /\ inst.inst_opcode = DLOAD ==>
             ld_alloca_var inst.inst_id IN vars) /\
     EVERY inst_wf insts ==>
-    lift_result (ld_ok vars) (ld_equiv vars)
+    lift_result (ld_ok vars) (ld_equiv vars) (ld_equiv vars)
       (run_insts fuel ctx insts s1)
       (run_insts fuel ctx (FLAT (MAP lower_dload_inst insts)) s2)
 Proof
@@ -322,7 +322,7 @@ Theorem ld_ok_terminator_idx_override[local]:
     ~reads_memory inst.inst_opcode /\
     inst.inst_opcode <> INVOKE /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) ==>
-    lift_result (ld_ok vars) (ld_equiv vars)
+    lift_result (ld_ok vars) (ld_equiv vars) (ld_equiv vars)
       (case step_inst_base inst (s1 with vs_inst_idx := n1) of
          OK s_out => if s_out.vs_halted then Halt s_out else OK s_out
        | Halt v => Halt v
@@ -349,7 +349,7 @@ Proof
    exec_result_map (\s'. s' with vs_inst_idx := 0) r2` by
     metis_tac[terminator_step_inst_base_idx_norm0] >>
   (* step_inst_base_ld_ok_terminator gives lift_result for r1, r2 *)
-  `lift_result (ld_ok vars) (ld_equiv vars) r1 r2` by
+  `lift_result (ld_ok vars) (ld_equiv vars) (ld_equiv vars) r1 r2` by
     (unabbrev_all_tac >> irule step_inst_base_ld_ok_terminator >> metis_tac[]) >>
   (* Now relate the idx-overridden versions to r1, r2 *)
   Cases_on `r1` >> Cases_on `r2` >> gvs[lift_result_def, exec_result_map_def] >>
@@ -672,7 +672,7 @@ Theorem ld_prefix_sim[local]:
        MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
        MEM (Var x) inst.inst_operands ==>
        x NOTIN vars) ==>
-    lift_result (ld_ok vars) (ld_equiv vars)
+    lift_result (ld_ok vars) (ld_equiv vars) (ld_equiv vars)
       (run_insts fuel ctx prefix s1)
       (run_insts fuel ctx (FLAT (MAP lower_dload_inst prefix)) s2)
 Proof
@@ -716,7 +716,7 @@ Theorem ld_run_block_terminator[local]:
     n2 < LENGTH bb2.bb_instructions /\
     EL n1 bb1.bb_instructions = inst /\
     EL n2 bb2.bb_instructions = inst ==>
-    lift_result (ld_ok vars) (ld_equiv vars)
+    lift_result (ld_ok vars) (ld_equiv vars) (ld_equiv vars)
       (run_block fuel ctx bb1 s1)
       (run_block fuel ctx bb2 s2)
 Proof
@@ -724,7 +724,7 @@ Proof
   ONCE_REWRITE_TAC[run_block_def] >>
   simp[get_instruction_def] >>
   ONCE_REWRITE_TAC[step_inst_def] >> simp[] >>
-  `lift_result (ld_ok vars) (ld_equiv vars)
+  `lift_result (ld_ok vars) (ld_equiv vars) (ld_equiv vars)
      (step_inst_base inst s1) (step_inst_base inst s2)` by
     (irule step_inst_base_ld_ok_terminator >> simp[]) >>
   Cases_on `step_inst_base inst s1` >>
@@ -752,7 +752,7 @@ Theorem ld_block_sim_ok[local]:
     term.inst_opcode <> INVOKE /\
     ~reads_memory term.inst_opcode /\
     (!x. MEM (Var x) term.inst_operands ==> x NOTIN vars) ==>
-    lift_result (ld_ok vars) (ld_equiv vars)
+    lift_result (ld_ok vars) (ld_equiv vars) (ld_equiv vars)
       (run_block fuel ctx bb s1)
       (run_block fuel ctx exp_bb s2)
 Proof
@@ -790,10 +790,10 @@ Theorem ld_block_sim_non_ok[local]:
     (!k. k < LENGTH prefix ==> EL k bb.bb_instructions = EL k prefix) /\
     (!k. k < LENGTH exp_prefix ==> EL k exp_bb.bb_instructions = EL k exp_prefix) /\
     (!s1_mid. run_insts fuel ctx prefix s1 <> OK s1_mid) /\
-    lift_result (ld_ok vars) (ld_equiv vars)
+    lift_result (ld_ok vars) (ld_equiv vars) (ld_equiv vars)
       (run_insts fuel ctx prefix s1)
       (run_insts fuel ctx exp_prefix s2) ==>
-    lift_result (ld_ok vars) (ld_equiv vars)
+    lift_result (ld_ok vars) (ld_equiv vars) (ld_equiv vars)
       (run_block fuel ctx bb s1)
       (run_block fuel ctx exp_bb s2)
 Proof
@@ -884,7 +884,7 @@ Theorem ld_block_sim[local]:
        MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
        MEM (Var x) inst.inst_operands ==>
        x NOTIN ld_fresh_vars_fn fn) ==>
-    lift_result (ld_ok (ld_exempt_vars_fn fn)) (ld_equiv (ld_exempt_vars_fn fn))
+    lift_result (ld_ok (ld_exempt_vars_fn fn)) (ld_equiv (ld_exempt_vars_fn fn)) (ld_equiv (ld_exempt_vars_fn fn))
       (run_block fuel ctx bb s1)
       (run_block fuel ctx (lower_dload_block bb) s2)
 Proof
@@ -970,7 +970,7 @@ Proof
       EL k exp_bb.bb_instructions = EL k exp_prefix` by
     (rpt strip_tac >> gvs[EL_APPEND1])) >>
   (* ld_run_insts_sim: apply ld_prefix_sim to prefix *)
-  `lift_result (ld_ok vars) (ld_equiv vars)
+  `lift_result (ld_ok vars) (ld_equiv vars) (ld_equiv vars)
       (run_insts fuel ctx prefix s1)
       (run_insts fuel ctx exp_prefix s2)` by
     (simp[Abbr `exp_prefix`] >>
@@ -982,7 +982,7 @@ Proof
     Cases_on `run_insts fuel ctx exp_prefix s2` >>
     fs[lift_result_def] >>
     rename1 `run_insts _ _ exp_prefix s2 = OK s2_mid` >>
-    `lift_result (ld_ok vars) (ld_equiv vars)
+    `lift_result (ld_ok vars) (ld_equiv vars) (ld_equiv vars)
        (run_block fuel ctx bb s1)
        (run_block fuel ctx exp_bb s2)` by
       (irule ld_block_sim_ok >>

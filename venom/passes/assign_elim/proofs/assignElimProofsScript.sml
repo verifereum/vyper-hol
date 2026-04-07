@@ -616,8 +616,8 @@ Theorem lift_result_weaken[local]:
   !R1_ok R2_ok R1_term R2_term r1 r2.
     (!s1 s2. R1_ok s1 s2 ==> R2_ok s1 s2) /\
     (!s1 s2. R1_term s1 s2 ==> R2_term s1 s2) /\
-    lift_result R1_ok R1_term r1 r2 ==>
-    lift_result R2_ok R2_term r1 r2
+    lift_result R1_ok R1_term R1_term r1 r2 ==>
+    lift_result R2_ok R2_term R2_term r1 r2
 Proof
   rpt strip_tac >>
   Cases_on `r1` >> Cases_on `r2` >> fs[lift_result_def]
