@@ -425,6 +425,13 @@ Proof
   gvs[lookup_function_def] >> res_tac >> simp[]
 QED
 
+Theorem lookup_block_MEM:
+  !lbl bbs bb. lookup_block lbl bbs = SOME bb ==> MEM bb bbs
+Proof
+  Induct_on `bbs` >> rw[lookup_block_def, FIND_thm] >>
+  gvs[lookup_block_def] >> res_tac >> simp[]
+QED
+
 (* lookup_function commutes with MAP when f preserves fn_name *)
 Theorem lookup_function_map:
   !name fns g.
