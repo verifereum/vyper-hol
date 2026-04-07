@@ -182,7 +182,7 @@ Datatype:
       (* name, type, is_public, is_immutable, is_transient, value (for constants) *)
   | JTL_HashMapDecl string json_type json_value_type bool bool
       (* name, key_type, value_type, is_public, is_transient *)
-  | JTL_EventDef string (json_arg list)
+  | JTL_EventDef string ((json_arg # bool) list)  (* bool = indexed *)
   | JTL_StructDef string (json_arg list)
   | JTL_FlagDef string (string list)                   (* name, member names *)
   | JTL_InterfaceDef string (json_interface_func list) (* name, function signatures *)

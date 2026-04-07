@@ -295,7 +295,7 @@ Definition evaluate_binop_def:
      | ExpMod => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
            (if u = Unsigned 256
-            then INL $ IntV (w2i (word_exp (i2w i1 : bytes32) (i2w i2)))
+            then INL $ IntV (&(w2n (word_exp (i2w i1 : bytes32) (i2w i2))))
             else INR (TypeError "ExpMod")) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | ShL => (case v1 of

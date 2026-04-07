@@ -65,9 +65,9 @@ Datatype:
   | RawRevertK eval_continuation
   | SelfDestructK eval_continuation
   | CreateK type create_kind bool eval_continuation
-  | IntCallK (num |-> type_args) (num option # identifier) ((identifier # type) list) (expr list) type (stmt list) eval_continuation
-  | IntCallK1 (num |-> type_args) (num option # identifier) ((identifier # type) list) (value list) type (stmt list) eval_continuation
-  | IntCallK2 (scope list) type_value eval_continuation
+  | IntCallK (num |-> type_args) (num option # identifier) ((identifier # type) list) (expr list) type (stmt list) bool function_mutability eval_continuation
+  | IntCallK1 (num |-> type_args) (num option # identifier) ((identifier # type) list) (value list) type (stmt list) bool function_mutability eval_continuation
+  | IntCallK2 (scope list) type_value bool bool eval_continuation
   | ExprsK (expr list) eval_continuation
   | ExprsK1 value eval_continuation
   | DoneK
@@ -215,17 +215,19 @@ Definition eval_expr_cps_def:
       check (no_recursion (ns, fn) cx10.stk) "recursion";
       ts <- lift_option_type (get_module_code cx10 ns) "IntCall get_module_code";
       tup <- lift_option_type (lookup_callable_function cx10.in_deploy fn ts) "IntCall lookup_function";
-      stup <<- SND tup; args <<- FST stup; sstup <<- SND stup;
+      (* tup = (mut, nr, args, dflts, ret, body) *)
+      mut <<- FST tup; stup <<- SND tup; nr <<- FST stup; stup2 <<- SND stup;
+      args <<- FST stup2; sstup <<- SND stup2;
       dflts <<- FST sstup; sstup2 <<- SND sstup;
       ret <<- FST $ sstup2; body <<- SND $ sstup2;
       type_check (LENGTH es ≤ LENGTH args ∧
            LENGTH args - LENGTH es ≤ LENGTH dflts) "IntCall args length";
       (* Use combined type env (may reference types from other modules) *)
       all_tenv <<- get_tenv cx10;
-      return (all_tenv, args, dflts, ret, body) od st
+      return (all_tenv, args, dflts, ret, body, nr, mut) od st
      of (INR ex, st) => AK cx10 (ApplyExc ex) st k
-      | (INL (all_tenv, args, dflts, ret, body), st) =>
-          eval_exprs_cps cx10 es st (IntCallK all_tenv (ns, fn) args dflts ret body k)) ∧
+      | (INL (all_tenv, args, dflts, ret, body, nr, mut), st) =>
+          eval_exprs_cps cx10 es st (IntCallK all_tenv (ns, fn) args dflts ret body nr mut k)) ∧
   eval_exprs_cps cx11 [] st k = AK cx11 (ApplyVals []) st k ∧
   eval_exprs_cps cx12 (e::es) st k =
     eval_expr_cps cx12 e st (ExprsK es k)
@@ -350,9 +352,15 @@ Definition apply_def:
     AK cx (ApplyExc $ Error (TypeError "not BoolV")) st (IfK2 k) ∧
   apply cx st (IfK1 _ ss1 ss2 k) =
     AK cx (ApplyExc $ Error (TypeError "not Value")) st (IfK2 k) ∧
-  apply cx st (IntCallK2 prev rtv k) =
+  apply cx st (IntCallK2 prev rtv nr is_view k) =
     liftk (cx with stk updated_by TL) (ApplyTv o Value)
       (do pop_function prev;
+          (* Release reentrancy lock if nonreentrant and not view *)
+          (if nr ∧ ¬is_view then
+             case cx.nonreentrant_slot of
+             | NONE => return ()
+             | SOME slot => release_nonreentrant_lock cx.txn.target slot
+           else return ());
           crv <- lift_option_type (safe_cast rtv NoneV) "IntCall cast ret";
           return crv od st) k ∧
   apply cx st DoneK = AK cx Apply st DoneK ∧
@@ -360,7 +368,8 @@ Definition apply_def:
 End
 
 val () = apply_def
-  |> SRULE [liftk1, ignore_bind_def, bind_def, prod_CASE_rator, sum_CASE_rator]
+  |> SRULE [liftk1, ignore_bind_def, bind_def, prod_CASE_rator, sum_CASE_rator,
+            COND_RATOR, option_CASE_rator]
   |> cv_auto_trans;
 
 Definition apply_exc_def:
@@ -416,11 +425,19 @@ Definition apply_exc_def:
   apply_exc cx ex st (RawRevertK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (SelfDestructK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CreateK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (IntCallK _ _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (IntCallK1 _ _ _ _ _ _ k) = AK (cx with stk updated_by TL) (ApplyExc ex) st k ∧
-  apply_exc cx ex st (IntCallK2 prev rtv k) =
+  apply_exc cx ex st (IntCallK _ _ _ _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (IntCallK1 _ _ _ _ _ _ _ _ k) = AK (cx with stk updated_by TL) (ApplyExc ex) st k ∧
+  apply_exc cx ex st (IntCallK2 prev rtv nr is_view k) =
     liftk (cx with stk updated_by TL) (ApplyTv o Value)
-      (do rv <- finally (handle_function ex) (pop_function prev);
+      (do rv <- finally (handle_function ex)
+            (do pop_function prev;
+                (* Release reentrancy lock if nonreentrant and not view *)
+                if nr ∧ ¬is_view then
+                  case cx.nonreentrant_slot of
+                  | NONE => return ()
+                  | SOME slot => release_nonreentrant_lock cx.txn.target slot
+                else return ()
+             od);
           crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
 	  return crv od st)
       k ∧
@@ -431,7 +448,8 @@ End
 
 val () = apply_exc_def
   |> SRULE [finally_def, bind_def, ignore_bind_def,
-            liftk1, prod_CASE_rator, sum_CASE_rator]
+            liftk1, prod_CASE_rator, sum_CASE_rator,
+            COND_RATOR, option_CASE_rator]
   |> cv_auto_trans;
 
 Definition apply_targets_def:
@@ -659,20 +677,27 @@ Definition apply_vals_def:
     of (INR ex, st) => AK cx (ApplyExc ex) st k
      | (INL (INL e), st) => eval_expr_cps cx e st k
      | (INL (INR tv), st) => AK cx (ApplyTv tv) st k) ∧
-  apply_vals cx vs st (IntCallK all_tenv src_fn args dflts ret body k) =
+  apply_vals cx vs st (IntCallK all_tenv src_fn args dflts ret body nr mut k) =
     eval_exprs_cps (cx with stk updated_by CONS src_fn)
       (DROP (LENGTH dflts - (LENGTH args - LENGTH vs)) dflts) st
-      (IntCallK1 all_tenv src_fn args vs ret body k) ∧
-  apply_vals cx dflt_vs st (IntCallK1 all_tenv src_fn args vs ret body k) =
+      (IntCallK1 all_tenv src_fn args vs ret body nr mut k) ∧
+  apply_vals cx dflt_vs st (IntCallK1 all_tenv src_fn args vs ret body nr mut k) =
     (case do
       env <- lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs)) "IntCall bind_arguments";
       prev <- get_scopes;
       rtv <- lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret";
+      is_view <<- (mut = View ∨ mut = Pure);
+      (* Acquire lock BEFORE push_function so scopes are unmodified on failure *)
+      (if nr then
+         case cx.nonreentrant_slot of
+         | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+       else return ());
       cxf <- push_function src_fn env (cx with stk updated_by TL);
-      return (prev, cxf, body, rtv) od st
+      return (prev, cxf, body, rtv, is_view) od st
      of (INR ex, st) => apply_exc (cx with stk updated_by TL) ex st k
-      | (INL (prev, cxf, body, rtv), st) =>
-          eval_stmts_cps cxf body st (IntCallK2 prev rtv k)) ∧
+      | (INL (prev, cxf, body, rtv, is_view), st) =>
+          eval_stmts_cps cxf body st (IntCallK2 prev rtv nr is_view k)) ∧
   (* ===== Chain interaction builtins ===== *)
   apply_vals cx vs st (RawCallK ty flags k) =
     (case do
@@ -744,6 +769,8 @@ Definition apply_vals_def:
       self_acct <<- lookup_account cx.txn.target accounts;
       check (amount ≤ self_acct.balance) "create insufficient balance";
       new_addr <<- vfmContext$address_for_create cx.txn.target self_acct.nonce;
+      existing <<- lookup_account new_addr accounts;
+      check (¬vfmExecution$account_already_created existing) "address collision";
       if amount > 0 then
         transfer_value cx.txn.target new_addr amount
       else return ();
@@ -765,9 +792,17 @@ Proof
   rw[UNCURRY]
 QED
 
+Triviality LET5_UNCURRY:
+  (let (x,y,z,w,v) = M in N x y z w v) =
+     let p = M; x = FST p; p = SND p; y = FST p; p = SND p;
+         z = FST p; p = SND p; w = FST p; v = SND p in N x y z w v
+Proof
+  rw[UNCURRY]
+QED
+
 val apply_vals_pre_def = apply_vals_def
   |> SRULE [liftk1, bind_def, ignore_bind_def, lift_option_def, lift_option_type_def, lift_option_type_def,
-            lift_sum_def, lift_sum_runtime_def, prod_CASE_rator, LET_RATOR, LET4_UNCURRY,
+            lift_sum_def, lift_sum_runtime_def, prod_CASE_rator, LET_RATOR, LET4_UNCURRY, LET5_UNCURRY,
             UNCURRY, sum_CASE_rator, option_CASE_rator, COND_RATOR]
   |> cv_auto_trans_pre "apply_vals_pre";
 
@@ -869,6 +904,7 @@ Theorem eval_cps_eq:
          of (INL vs, st1) => (AK cx (ApplyVals vs) st1)
           | (INR ex, st1) => (AK cx (ApplyExc ex) st1)
      ) k))
+(* CPS-big-step equivalence *)
 Proof
   ho_match_mp_tac evaluate_ind
   \\ conj_tac >- rw[eval_stmt_cps_def, evaluate_def, return_def] (* Pass *)
@@ -1396,7 +1432,6 @@ Proof
     \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_vals_def]
-    (* after eval_exprs for es, now in IntCallK: dispatch to eval defaults *)
     \\ drule eval_exprs_length \\ strip_tac
     \\ first_x_assum $ funpow 2 drule_then drule
     \\ simp_tac std_ss []
@@ -1405,39 +1440,52 @@ Proof
     \\ CASE_TAC
     \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def, o_DEF]
-    >> rw[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def]
+    >> rw[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def, ignore_bind_def, LET_THM]
     (* after eval_exprs for defaults, now in IntCallK1: bind_arguments etc *)
-    \\ BasicProvers.TOP_CASE_TAC
-    \\ gvs[CaseEq"prod",CaseEq"sum",return_def]
+    \\ gvs[CaseEq"prod", CaseEq"sum", return_def]
+    \\ TRY (simp[apply_exc_def, o_DEF] \\ NO_TAC)
     \\ TRY (
       gvs[o_DEF]
       \\ rw[Once OWHILE_THM, SimpRHS, stepk_def]
       \\ CHANGED_TAC $ gvs[apply_exc_def]
       \\ gvs[o_DEF]
       \\ rw[Once OWHILE_THM] \\ NO_TAC )
-    (* (expecting 1 subgoal) *)
+    \\ BasicProvers.TOP_CASE_TAC
+    \\ gvs[CaseEq"prod",CaseEq"sum",return_def]
+    \\ TRY (
+      gvs[o_DEF]
+      \\ rw[Once OWHILE_THM, SimpRHS, stepk_def]
+      \\ CHANGED_TAC $ gvs[apply_exc_def, o_DEF]
+      \\ gvs[o_DEF]
+      \\ rw[Once OWHILE_THM] \\ NO_TAC )
     \\ rw[return_def, finally_def, try_def, bind_def]
     \\ gvs[o_DEF]
+    (* Fire eval_stmts IH via drule chain *)
     \\ last_x_assum $ funpow 2 drule_then drule
-    \\ asm_simp_tac std_ss []
+    \\ asm_simp_tac std_ss [return_def]
     \\ disch_then $ funpow 6 drule_then drule
-    \\ simp_tac std_ss [] \\ disch_then kall_tac
-    \\ gvs[push_function_def, return_def, pop_function_def]
-    \\ CASE_TAC
-    \\ CASE_TAC
-    >- (
-      rw[Once OWHILE_THM, stepk_def, apply_def, liftk1,
-         ignore_bind_def, bind_def, pop_function_def]
-      \\ CASE_TAC
-      \\ rw[return_def]
-      \\ CASE_TAC
-      \\ gvs[o_DEF]
-      \\ ntac 3 CASE_TAC \\ gvs[] )
-    \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def, o_DEF, liftk1]
-    \\ rw[bind_def, ignore_bind_def, finally_def]
-    \\ gvs[pop_function_def, return_def, raise_def]
+    \\ simp_tac std_ss [return_def]
+    \\ TRY (disch_then drule \\ simp_tac std_ss [])
+    \\ disch_then kall_tac
+    (* Derive context facts from push_function *)
+    \\ qpat_x_assum `push_function _ _ _ _ = _` mp_tac
+    \\ simp[push_function_def, return_def]
+    \\ strip_tac \\ gvs[]
+    (* Case split on eval_stmts result *)
+    \\ CASE_TAC \\ CASE_TAC
+    \\ rw[Once OWHILE_THM, stepk_def]
+    (* Success: apply IntCallK2 — pop_function, lock release, safe_cast *)
+    \\ TRY (
+      rw[apply_def, liftk1, ignore_bind_def, bind_def,
+         pop_function_def, return_def, set_scopes_def]
+      \\ gvs[CaseEq"prod",CaseEq"sum",return_def,o_DEF]
+      \\ ntac 6 CASE_TAC \\ gvs[] \\ NO_TAC)
+    (* Exception: apply_exc IntCallK2 — finally(handler, pop + release), safe_cast *)
+    \\ rw[apply_exc_def, o_DEF, liftk1, bind_def, ignore_bind_def,
+          finally_def, return_def]
+    \\ gvs[pop_function_def, set_scopes_def, return_def, raise_def]
     \\ gvs[option_CASE_rator, sum_CASE_rator]
-    \\ ntac 6 CASE_TAC )
+    \\ ntac 8 CASE_TAC \\ gvs[] )
   (* ===== Chain interaction builtins ===== *)
   (* All 5 new cases: CPS eval_exprs then continuation matches big-step body.
      Pattern: unfold both sides, use IH for eval_exprs, match continuation bodies. *)
@@ -1593,16 +1641,21 @@ Proof
 QED
 
 val call_external_function_pre_def = call_external_function_def
-     |> SRULE [eval_stmts_eq_cont_cps, ignore_bind_def, bind_def]
+     |> SRULE [eval_stmts_eq_cont_cps,
+               vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+               vyperStateTheory.return_def, vyperStateTheory.raise_def,
+               LET_THM, COND_RATOR, option_CASE_rator,
+               get_transient_storage_def, update_transient_def]
      |> cv_auto_trans_pre "call_external_function_pre";
 
 Theorem call_external_function_pre[cv_pre]:
-  call_external_function_pre am cx mut ts all_mods args dflts vals body ret
+  call_external_function_pre am cx nr mut ts all_mods args dflts vals
+    (bod:stmt list) ret
 Proof
   rw[call_external_function_pre_def]
   \\ rw[cont_pre_IS_SOME_cont]
   \\ qmatch_goalsub_abbrev_tac`eval_stmts_cps cx ss st k`
-  \\ qspecl_then[`cx`,`ss`,`st`,`k`]mp_tac  $ cj 2 eval_cps_eq
+  \\ qspecl_then[`cx`,`ss`,`st`,`k`]mp_tac $ cj 2 eval_cps_eq
   \\ rw[]
   \\ CASE_TAC
   \\ CASE_TAC

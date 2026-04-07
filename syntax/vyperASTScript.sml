@@ -336,11 +336,13 @@ End
 
 Datatype:
   toplevel
-  = FunctionDecl function_visibility function_mutability identifier (argument list) (expr list) type (stmt list)
-  | VariableDecl variable_visibility variable_mutability identifier type
-  | HashMapDecl variable_visibility bool (* transient? *) identifier type value_type
+  = FunctionDecl function_visibility function_mutability bool (* nonreentrant *)
+      bool (* raw_return: @raw_return decorator, bypass ABI encoding *)
+      identifier (argument list) (expr list) type (stmt list)
+  | VariableDecl variable_visibility variable_mutability identifier type (num option) (* storage/transient slot *)
+  | HashMapDecl variable_visibility bool (* transient? *) identifier type value_type (num option) (* slot *)
   | StructDecl identifier (argument list)
-  | EventDecl identifier (argument list)
+  | EventDecl identifier ((argument # bool) list)  (* bool = indexed *)
   | FlagDecl identifier (identifier list)
   | InterfaceDecl identifier (interface_func list)
 End
