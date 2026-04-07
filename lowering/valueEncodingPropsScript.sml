@@ -48,11 +48,12 @@ Theorem w256_roundtrip:
   ∀ v tv w.
     encode_base_to_slot v tv = SOME w ∧
     (∀ i n. v = IntV i ∧ tv = BaseTV (UintT n) ⇒
-            0 ≤ i ∧ i < &(dimword (:256))) ∧
+            0 ≤ i ∧ i < &(2 ** n) ∧ n ≤ 256) ∧
     (∀ i n. v = IntV i ∧ tv = BaseTV (IntT n) ⇒
-            INT_MIN (:256) ≤ i ∧ i ≤ INT_MAX (:256)) ∧
-    (∀ k. v = FlagV k ⇒ k < dimword (:256)) ∧
-    (∀ n. v = DecimalV n ⇒ INT_MIN (:256) ≤ n ∧ n ≤ INT_MAX (:256))
+            0 < n ∧ n ≤ 256 ∧
+            -&(2 ** (n - 1)) ≤ i ∧ i < &(2 ** (n - 1))) ∧
+    (∀ k m. v = FlagV k ∧ tv = FlagTV m ⇒ k < 2 ** m ∧ m ≤ 256) ∧
+    (∀ n. v = DecimalV n ⇒ -&(2 ** 167) ≤ n ∧ n < &(2 ** 167))
     ⇒
     w256_to_val w tv = v
 Proof
