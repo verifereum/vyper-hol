@@ -1362,7 +1362,7 @@ Proof
                               (exec_block fuel ctx bb s2)` by (
     rpt strip_tac >>
     qspecl_then [`R_ok`, `R_term`, `fn`] mp_tac exec_block_preserves_R_proof >>
-    impl_tac >- (fs[] >> metis_tac[]) >> strip_tac >> metis_tac[]
+    impl_tac >- (fs[] >> metis_tac[]) >> strip_tac >> fs[] >> metis_tac[]
   ) >>
   (* Establish block correspondence as standalone fact *)
   `!lbl bb fuel ctx s1 s2.
@@ -1381,7 +1381,7 @@ Proof
     >- (
       `lift_result R_ok R_term R_term (exec_block fuel ctx bb s1)
          (exec_block fuel ctx bb s2)` by (
-        qpat_x_assum `!f c b a b'. MEM _ _ /\ R_ok _ _ ==> lift_result _ _ _ _`
+        qpat_x_assum `!f c b a b'. MEM _ _ /\ R_ok _ _ ==> lift_result _ _ _ _ _`
           (irule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
         simp[]
       ) >>
@@ -1451,7 +1451,7 @@ Proof
                               (exec_block fuel ctx bb s2)` by (
     rpt strip_tac >>
     qspecl_then [`R_ok`, `R_term`, `fn`] mp_tac exec_block_preserves_R_proof >>
-    impl_tac >- (fs[] >> metis_tac[]) >> strip_tac >> metis_tac[]
+    impl_tac >- (fs[] >> metis_tac[]) >> strip_tac >> fs[] >> metis_tac[]
   ) >>
   (* Establish backward block correspondence as standalone fact *)
   `!lbl bb2 fuel ctx s1 s2.
@@ -1476,7 +1476,7 @@ Proof
     (* Triangle: lift_result R_ok R_term R_term (bb s2) (bb s1) *)
     `lift_result R_ok R_term R_term (exec_block fuel ctx bb s2)
        (exec_block fuel ctx bb s1)` by (
-      qpat_x_assum `!f c b a b'. MEM _ _ /\ R_ok _ _ ==> lift_result _ _ _ _`
+      qpat_x_assum `!f c b a b'. MEM _ _ /\ R_ok _ _ ==> lift_result _ _ _ _ _`
         (irule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
       simp[]
     ) >>
@@ -1511,7 +1511,7 @@ Proof
     first_x_assum (qspecl_then [`fuel`, `0`, `ctx`, `s`, `s`] mp_tac) >>
     simp[resolves_to_def, lift_result_def] >> strip_tac >>
     qexists_tac `fuel'` >> simp[] >>
-    qpat_x_assum `lift_result _ _ _ _` mp_tac >>
+    qpat_x_assum `lift_result _ _ _ _ _` mp_tac >>
     Cases_on `run_blocks fuel' ctx fn s` >>
     Cases_on `run_blocks fuel ctx (function_map_transform bt fn) s` >>
     simp[lift_result_def]

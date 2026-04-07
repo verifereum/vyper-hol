@@ -96,5 +96,5 @@ Definition pass_correct_def:
     ((?fuel. terminates (exec1 fuel)) <=> (?fuel'. terminates (exec2 fuel'))) /\
     (!fuel fuel'.
        terminates (exec1 fuel) /\ terminates (exec2 fuel') ==>
-       lift_result R_ok R_term R_term R_abort (exec1 fuel) (exec2 fuel'))
+       lift_result R_ok R_term R_abort (exec1 fuel) (exec2 fuel'))
 End

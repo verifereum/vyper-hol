@@ -184,7 +184,7 @@ Proof
   qpat_x_assum `inst = _` SUBST_ALL_TAC >>
   (* Apply IH: spec s'' := v, discharge step_inst guard *)
   qpat_x_assum `!s''. _ ==> !s2'. _ ==> _ ==> _ ==> _ ==>
-    lift_result _ _ (exec_block _ _ _ _) (exec_block _ _ _ _)`
+    lift_result _ _ _ (exec_block _ _ _ _) (exec_block _ _ _ _)`
     (qspec_then `v` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   disch_then (qspec_then `v' with vs_inst_idx := SUC s2.vs_inst_idx` mp_tac) >>

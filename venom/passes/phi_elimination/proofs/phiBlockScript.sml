@@ -452,7 +452,7 @@ Proof
       TRY (`inst.inst_opcode = PHI` by fs[is_phi_inst_def] >>
            simp[Once step_inst_base_def] >> gvs[AllCaseEqs()] >> NO_TAC) >>
       (* For Error: resolve second side via lift_result assumption *)
-      TRY (qpat_x_assum `lift_result _ _ _ (step_inst_base _ _)` mp_tac >>
+      TRY (qpat_x_assum `lift_result _ _ _ (step_inst_base _ _) _` mp_tac >>
            Cases_on `step_inst_base (transform_inst dfg inst) s` >>
            simp[lift_result_def, execution_equiv_refl] >> NO_TAC) >>
       (* OK case: derive both sides return OK with same state *)
