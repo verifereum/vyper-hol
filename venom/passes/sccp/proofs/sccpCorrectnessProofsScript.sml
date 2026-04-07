@@ -1339,7 +1339,7 @@ Theorem sccp_pass_correct:
     ctx_pass_correct sccp_context (state_equiv {}) (execution_equiv {}) ctx s
 Proof
   rpt strip_tac >>
-  simp[ctx_pass_correct_def, run_context_def] >>
+  simp[ctx_pass_correct_def, run_context_def, run_function_def, fn_entry_label_def] >>
   `(sccp_context ctx).ctx_entry = ctx.ctx_entry` by simp[sccp_context_def] >>
   simp[] >>
   (Cases_on `ctx.ctx_entry` >- simp[pass_correct_def, terminates_def]) >>
