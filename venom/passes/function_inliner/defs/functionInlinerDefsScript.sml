@@ -113,15 +113,20 @@ Definition rewrite_inline_inst_def:
   rewrite_inline_inst invoke_ops invoke_outs return_label inst param_idx =
     if inst.inst_opcode = PARAM then
       if param_idx < LENGTH invoke_ops then
+        let op = EL param_idx invoke_ops in
+        (* Label operands (return PC) can't be evaluated — substitute
+           a dummy literal. The variable is dead after RET → JMP. *)
+        let op' = if is_label_op op then Lit 0w else op in
         ([inst with <| inst_opcode := ASSIGN;
-                       inst_operands := [EL param_idx invoke_ops] |>],
+                       inst_operands := [op'] |>],
          param_idx + 1)
       else
         ([inst], param_idx)
     else if inst.inst_opcode = RET then
-      let all_but_last =
-        TAKE (LENGTH inst.inst_operands - 1) inst.inst_operands in
-      let ret_vals = FILTER (λop. ¬is_label_op op) all_but_last in
+      (* In the HOL semantics, ALL RET operands are return values
+         (no return PC concept — INVOKE/IntRet handles return directly).
+         Map each return value to the corresponding INVOKE output. *)
+      let ret_vals = inst.inst_operands in
       let assigns = MAPi (λi rv.
         <| inst_id := 0;
            inst_opcode := ASSIGN;
@@ -314,12 +319,87 @@ Definition remove_function_def:
       FILTER (λf. f.fn_name ≠ name) ctx.ctx_functions
 End
 
+(* ===== Call Walk Termination Helpers ===== *)
+
+(* All function names mentioned in the FCG callees map (keys and values). *)
+Definition fcg_all_names_def:
+  fcg_all_names fcg =
+    FLAT (MAP (λ(k,v). k :: v) (fmap_to_alist fcg.fcg_callees))
+End
+
+(* Adding a name to visited can only decrease the FILTER count. *)
+Theorem fc_visited_mono[local]:
+  ∀x vis names.
+    LENGTH (FILTER (λn. ¬MEM n (x::vis)) names) ≤
+    LENGTH (FILTER (λn. ¬MEM n vis) names)
+Proof
+  rpt gen_tac >> irule listTheory.LENGTH_FILTER_LEQ_MONO >> simp[]
+QED
+
+(* General: if P ⊂ Q on a list (pointwise P⇒Q + witness), FILTER P < FILTER Q *)
+Theorem filter_strict_sub[local]:
+  ∀P Q names.
+    (∀x. P x ⇒ Q x) ∧ (∃x. MEM x names ∧ Q x ∧ ¬P x) ⇒
+    LENGTH (FILTER P names) < LENGTH (FILTER Q names)
+Proof
+  ntac 2 gen_tac >> Induct >> rw[] >> gvs[] >>
+  TRY (first_x_assum irule >> metis_tac[]) >>
+  simp[arithmeticTheory.LT_SUC_LE] >>
+  TRY (first_x_assum irule >> metis_tac[]) >>
+  irule listTheory.LENGTH_FILTER_LEQ_MONO >> simp[]
+QED
+
+(* If name is in the fcg_all_names but not in visited, adding it to
+   visited strictly decreases the FILTER count. *)
+Theorem fc_visited_shrink[local]:
+  ∀fn_name vis fcg.
+    MEM fn_name (fcg_all_names fcg) ∧ ¬MEM fn_name vis ⇒
+    LENGTH (FILTER (λn. ¬MEM n (fn_name::vis)) (fcg_all_names fcg)) <
+    LENGTH (FILTER (λn. ¬MEM n vis) (fcg_all_names fcg))
+Proof
+  rw[] >> irule filter_strict_sub >> rw[] >> metis_tac[]
+QED
+
+(* Length of callees is bounded by length of all names. *)
+Theorem callees_length_bound[local]:
+  ∀fcg fn_name.
+    fn_name ∈ FDOM fcg.fcg_callees ⇒
+    LENGTH (fcg_get_callees fcg fn_name) ≤ LENGTH (fcg_all_names fcg)
+Proof
+  rw[fcg_get_callees_def, finite_mapTheory.FLOOKUP_DEF, fcg_all_names_def] >>
+  irule arithmeticTheory.LESS_EQ_TRANS >>
+  qexists_tac `LENGTH (fn_name :: fcg.fcg_callees ' fn_name)` >> simp[] >>
+  `MEM (fn_name :: fcg.fcg_callees ' fn_name)
+       (MAP (\(k,v). k::v) (fmap_to_alist fcg.fcg_callees))`
+    by (simp[listTheory.MEM_MAP] >>
+        qexists_tac `(fn_name, fcg.fcg_callees ' fn_name)` >>
+        simp[alistTheory.MEM_fmap_to_alist]) >>
+  drule listTheory.SUM_MAP_MEM_bound >>
+  disch_then (qspec_then `LENGTH` mp_tac) >>
+  simp[rich_listTheory.LENGTH_FLAT]
+QED
+
+(* If fn_name is not in the FCG domain, its callees are empty. *)
+Theorem callees_empty_not_in_dom[local]:
+  ∀fcg fn_name.
+    fn_name ∉ FDOM fcg.fcg_callees ⇒
+    fcg_get_callees fcg fn_name = []
+Proof
+  rw[fcg_get_callees_def, finite_mapTheory.FLOOKUP_DEF]
+QED
+
 (* ===== Call Walk (Postorder DFS) ===== *)
 
 (* Postorder DFS over the call graph.
    Matches Python _build_call_walk: for each function, DFS into callees
-   first, then append self. Skips already-visited functions. *)
-Definition call_walk_dfs_def:
+   first, then append self. Skips already-visited functions.
+
+   Termination uses a flat numeric measure. The hard TC (TC 1, INR→INR)
+   requires proving that the WFREC auxiliary only grows the visited set.
+   We use Hol_defn + Defn.tprove for full SML-level control, following
+   the kapur_subra pattern from $HOLDIR/src/tfl/examples/. *)
+
+val call_walk_dfs_defn = Hol_defn "call_walk_dfs" `
   (call_walk_dfs fcg fn_name visited =
     if MEM fn_name visited then (visited, [])
     else
@@ -327,15 +407,265 @@ Definition call_walk_dfs_def:
       let callees = fcg_get_callees fcg fn_name in
       let (visited'', callee_walk) =
         call_walk_dfs_list fcg callees visited' in
-      (visited'', SNOC fn_name callee_walk)) ∧
-  (call_walk_dfs_list fcg [] visited = (visited, [])) ∧
+      (visited'', SNOC fn_name callee_walk)) /\
+  (call_walk_dfs_list fcg [] visited = (visited, [])) /\
   (call_walk_dfs_list fcg (fn_name::rest) visited =
     let (vis', walk1) = call_walk_dfs fcg fn_name visited in
     let (vis'', walk2) = call_walk_dfs_list fcg rest vis' in
-    (vis'', walk1 ++ walk2))
-Termination
-  cheat
-End
+    (vis'', walk1 ++ walk2))`;
+
+(* --- Set the measure relation --- *)
+
+val m_body = ``\x : (fcg_analysis # string # string list)
+                   + (fcg_analysis # string list # string list).
+  let names = case x of INL (fcg,_,_) => fcg_all_names fcg
+                      | INR (fcg,_,_) => fcg_all_names fcg in
+  let K = 2 * LENGTH names + 10 in
+  case x of
+    INL (fcg, fn_name, visited) =>
+      K * LENGTH (FILTER (\n. ~MEM n visited) names) + 3
+  | INR (fcg, list, visited) =>
+      K * LENGTH (FILTER (\n. ~MEM n visited) names) + 2 * LENGTH list + 2``;
+
+val R = ``measure ^m_body``;
+val defnR = Defn.set_reln call_walk_dfs_defn R;
+val tcs = Defn.tcs_of defnR;
+
+(* --- Prove TCs 0 and 2 (easy) --- *)
+
+(* Helper: a < b ==> k * (a+1) <= k * b *)
+val mult_mono_suc = prove(``!a b (k:num). a < b ==> k * (a + 1) <= k * b``,
+  rw[arithmeticTheory.LE_MULT_LCANCEL] >> DECIDE_TAC);
+
+(* TC 0: INR(callees, fn::vis) < INL(fn, vis)
+   After unfolding measure: K*FC(fn::vis) + 2*|callees| + 2 < K*FC(vis) + 3
+   Case fn IN FDOM: FC strict decrease absorbs 2*|callees| (bounded by |names|)
+   Case fn NOTIN FDOM: callees=[], FC mono gives K*FC' + 2 < K*FC + 3 *)
+val tc0 = List.nth(tcs, 0);
+val tc0_thm = prove(tc0,
+  REWRITE_TAC[prim_recTheory.measure_thm] >>
+  BETA_TAC >> rpt strip_tac >>
+  ASM_REWRITE_TAC[] >> BETA_TAC >>
+  simp_tac bool_ss [sumTheory.sum_case_def] >>
+  BETA_TAC >>
+  simp_tac bool_ss [pairTheory.pair_case_thm] >>
+  BETA_TAC >>
+  simp_tac bool_ss [LET_THM] >> BETA_TAC >>
+  Cases_on `fn_name IN FDOM fcg.fcg_callees`
+  >- (`MEM fn_name (fcg_all_names fcg)` by (
+        rw[fcg_all_names_def, listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+        qexists_tac `fn_name :: (fcg.fcg_callees ' fn_name)` >>
+        simp[] >>
+        qexists_tac `(fn_name, fcg.fcg_callees ' fn_name)` >>
+        simp[alistTheory.MEM_fmap_to_alist]) >>
+      `LENGTH (FILTER (\n. ~MEM n (fn_name::visited)) (fcg_all_names fcg)) <
+       LENGTH (FILTER (\n. ~MEM n visited) (fcg_all_names fcg))` by
+        (irule fc_visited_shrink >> simp[]) >>
+      imp_res_tac callees_length_bound >>
+      drule mult_mono_suc >>
+      disch_then (qspec_then `2 * LENGTH (fcg_all_names fcg) + 10` mp_tac) >>
+      REWRITE_TAC[arithmeticTheory.LEFT_ADD_DISTRIB,
+                  arithmeticTheory.MULT_RIGHT_1] >>
+      DECIDE_TAC)
+  >- (imp_res_tac callees_empty_not_in_dom >>
+      ASM_REWRITE_TAC[listTheory.LENGTH] >>
+      `LENGTH (FILTER (\n. ~MEM n (fn_name::visited)) (fcg_all_names fcg)) <=
+       LENGTH (FILTER (\n. ~MEM n visited) (fcg_all_names fcg))` by
+        (irule fc_visited_mono) >>
+      `(2 * LENGTH (fcg_all_names fcg) + 10) *
+       LENGTH (FILTER (\n. ~MEM n (fn_name::visited)) (fcg_all_names fcg)) <=
+       (2 * LENGTH (fcg_all_names fcg) + 10) *
+       LENGTH (FILTER (\n. ~MEM n visited) (fcg_all_names fcg))` by
+        (simp[arithmeticTheory.LE_MULT_LCANCEL]) >>
+      DECIDE_TAC));
+
+(* TC 2: INL(fn, vis) < INR(fn::rest, vis) — trivial from measure *)
+val tc2 = List.nth(tcs, 2);
+val tc2_thm = prove(tc2, simp[prim_recTheory.measure_thm]);
+
+(* --- Eliminate easy TCs, access aux function --- *)
+
+val defnR_1 = Defn.elim_tcs defnR [tc0_thm, tc2_thm];
+val SOME union_d = Defn.union_defn defnR_1;
+val SOME aux_d = Defn.aux_defn union_d;
+val [e_inl, e_nil, e_cons] = Defn.eqns_of aux_d;
+val SOME aux_ind = Defn.ind_of aux_d;
+
+(* e_cons has TC 1 as hypothesis; e_inl, e_nil are unconditional.
+   aux_ind provides induction with TC 1 as a condition on the INR-cons IH.
+   We prove visited-set monotonicity by this induction, deriving TC 1
+   from the INL IH (the kapur_subra pattern). *)
+
+(* Extract the aux-applied-to-R term from equations *)
+val aux_R = e_inl |> concl |> lhs |> rator;
+
+(* Discharge WF hypothesis from e_cons *)
+val tc3 = List.nth(tcs, 3);
+val tc3_thm = prove(tc3, simp[prim_recTheory.WF_measure]);
+val e_cons' = PROVE_HYP tc3_thm e_cons;
+
+(* --- Fn abbreviation: hides measure lambda inside a constant --- *)
+val Fn_def = Define `call_walk_Fn = ^aux_R`;
+val e_inl_fn = REWRITE_RULE [GSYM Fn_def] e_inl;
+val e_nil_fn = REWRITE_RULE [GSYM Fn_def] e_nil;
+val e_cons_fn = REWRITE_RULE [GSYM Fn_def] e_cons';
+val aux_ind_fn = REWRITE_RULE [GSYM Fn_def] aux_ind;
+val aux_ind_clean = PROVE_HYP tc3_thm aux_ind_fn;
+
+(* TC1-as-antecedent equation (avoids alpha-conversion, see LEARNINGS) *)
+val eqn_cons = REWRITE_RULE [GSYM Fn_def] (DISCH_ALL e_cons');
+
+(* --- FST helper lemmas (Fn-rewritten) --- *)
+val inl_fst_mem_fn = REWRITE_RULE [GSYM Fn_def] (prove(
+  ``!fcg fn_name visited.
+      MEM fn_name visited ==>
+      FST (^aux_R (INL (fcg, fn_name, visited))) = visited``,
+  rpt strip_tac >> ONCE_REWRITE_TAC[e_inl] >> ASM_REWRITE_TAC[] >> simp[]));
+
+val inl_fst_lemma_fn = REWRITE_RULE [GSYM Fn_def] (prove(
+  ``!fcg fn_name visited.
+      ~MEM fn_name visited ==>
+      FST (^aux_R (INL (fcg, fn_name, visited))) =
+      FST (^aux_R (INR (fcg, fcg_get_callees fcg fn_name, fn_name::visited)))``,
+  rpt strip_tac >>
+  ONCE_REWRITE_TAC[e_inl] >> ASM_REWRITE_TAC[] >>
+  Cases_on `^aux_R (INR (fcg, fcg_get_callees fcg fn_name, fn_name::visited))` >>
+  simp[]));
+
+val inr_nil_fst_fn = REWRITE_RULE [GSYM Fn_def] (prove(
+  ``!fcg visited. FST (^aux_R (INR (fcg, [], visited))) = visited``,
+  rpt strip_tac >> ONCE_REWRITE_TAC[e_nil] >> simp[]));
+
+(* --- General helper: FST distributes through double paired-let --- *)
+val fst_double_let = prove(
+  ``!(e1:'a#'b) (e2:'a -> 'c#'d) (g:'b -> 'd -> 'e).
+      FST (let (a,b) = e1 in let (c,d) = e2 a in (c, g b d)) = FST (e2 (FST e1))``,
+  rpt strip_tac >> Cases_on `e1` >> Cases_on `e2 q` >> simp[]);
+
+(* --- Monotonicity helpers --- *)
+val fc_le_from_mem_mono = prove(
+  ``!q vis (names:string list).
+      (!m. MEM m vis ==> MEM m q) ==>
+      LENGTH (FILTER (\n. ~MEM n q) names) <= LENGTH (FILTER (\n. ~MEM n vis) names)``,
+  rpt strip_tac >> irule listTheory.LENGTH_FILTER_LEQ_MONO >>
+  simp[] >> rpt strip_tac >> CCONTR_TAC >> full_simp_tac bool_ss [] >> res_tac);
+
+val le_mult_mono = prove(
+  ``!a b (k:num). a <= b ==> k * a <= k * b``,
+  rw[arithmeticTheory.LE_MULT_LCANCEL]);
+
+(* --- Measure unfolding tactic (used 3x) --- *)
+val unfold_measure_tac =
+  REWRITE_TAC[prim_recTheory.measure_thm] >> BETA_TAC >>
+  simp_tac bool_ss [sumTheory.sum_case_def] >> BETA_TAC >>
+  simp_tac bool_ss [pairTheory.pair_case_thm] >> BETA_TAC >>
+  simp_tac bool_ss [LET_THM] >> BETA_TAC >>
+  simp_tac bool_ss [listTheory.LENGTH] >> DECIDE_TAC;
+
+(* --- Prove visited-set monotonicity --- *)
+val sum_ty = type_of (e_inl |> concl |> lhs |> rand);
+
+fun SPLIT_CONJ_TAC th =
+  let val (a,b) = CONJ_PAIR th
+  in ASSUME_TAC a THEN ASSUME_TAC b end;
+
+val aux_mono = let
+  val mono_goal = ``!x (n:string).
+    (case x of INL (_,_,v1) => MEM n v1 | INR (_,_,v2) => MEM n v2) ==>
+    MEM n (FST (call_walk_Fn x))``
+in prove(mono_goal,
+  ho_match_mp_tac aux_ind_clean >> rpt conj_tac
+  (* INL case *)
+  >- (rpt strip_tac >>
+      gvs[sumTheory.sum_case_def, pairTheory.pair_case_thm] >>
+      Cases_on `MEM fn_name visited`
+      >- gvs[inl_fst_mem_fn]
+      >- (gvs[inl_fst_lemma_fn] >>
+          `MEM n (fn_name::visited)` by gvs[listTheory.MEM] >>
+          res_tac))
+  (* INR-nil case *)
+  >- (rpt strip_tac >>
+      gvs[sumTheory.sum_case_def, pairTheory.pair_case_thm, inr_nil_fst_fn])
+  (* INR-cons case *)
+  >- (rpt strip_tac >>
+      gvs[sumTheory.sum_case_def, pairTheory.pair_case_thm] >>
+      Cases_on `call_walk_Fn (INL (fcg, fn_name, visited))` >>
+      gvs[pairTheory.FST] >>
+      (* Step 1: MEM n visited => MEM n q via IH_INL *)
+      `MEM n q` by res_tac >>
+      (* Step 2: Prove measure condition to unlock IH_INR *)
+      `LENGTH (FILTER (\n'. ~MEM n' q) (fcg_all_names fcg)) <=
+       LENGTH (FILTER (\n'. ~MEM n' visited) (fcg_all_names fcg))` by
+        (match_mp_tac fc_le_from_mem_mono >> rpt strip_tac >> res_tac) >>
+      `LENGTH (FILTER (\n'. ~MEM n' q) (fcg_all_names fcg)) *
+       (2 * LENGTH (fcg_all_names fcg) + 10) <=
+       LENGTH (FILTER (\n'. ~MEM n' visited) (fcg_all_names fcg)) *
+       (2 * LENGTH (fcg_all_names fcg) + 10)` by
+        simp[arithmeticTheory.LE_MULT_RCANCEL] >>
+      (* Discharge measure condition in IH_INR *)
+      `!n'. MEM n' q ==>
+            MEM n' (FST (call_walk_Fn (INR (fcg,rest,q))))` by
+        (qpat_x_assum `_ ==> !n'. _` mp_tac >>
+         impl_tac >- DECIDE_TAC >> simp[]) >>
+      (* Step 3: Chain: MEM n q => MEM n (FST(INR(rest,q))) *)
+      `MEM n (FST (call_walk_Fn (INR (fcg, rest, q))))` by res_tac >>
+      (* Step 4: Rewrite goal using eqn_cons *)
+      mp_tac eqn_cons >>
+      (impl_tac >- (
+        rpt strip_tac >>
+        REV_FULL_SIMP_TAC bool_ss [] >>
+        full_simp_tac bool_ss [pairTheory.PAIR_EQ] >>
+        ASM_REWRITE_TAC[] >>
+        unfold_measure_tac)) >>
+      strip_tac >>
+      ASM_REWRITE_TAC[] >>
+      SIMP_TAC bool_ss [fst_double_let] >>
+      ASM_REWRITE_TAC[pairTheory.FST]))
+end;
+
+val aux_mono = PROVE_HYP tc3_thm aux_mono;
+
+(* --- Prove TC 1 using monotonicity ---
+   After unfolding measure, the goal is:
+     K*FC(vis') + 2*|rest| + 2 < K*FC(visited) + 2*|fn::rest| + 2
+   where FC(v) = |FILTER(¬MEM v) names|, K = 2*|names|+10.
+   aux_mono gives vis ⊆ vis' (MEM-wise) ⇒ FC(vis') ≤ FC(visited) ⇒ K*FC(vis') ≤ K*FC(visited).
+   Then DECIDE_TAC closes the additive gap from |rest| < |fn::rest|. *)
+val tc1 = List.nth(tcs, 1);
+val tc1_thm = prove(tc1,
+  REWRITE_TAC[prim_recTheory.measure_thm, GSYM Fn_def] >> BETA_TAC >>
+  simp_tac bool_ss [sumTheory.sum_case_def] >> BETA_TAC >>
+  simp_tac bool_ss [pairTheory.pair_case_thm] >> BETA_TAC >>
+  simp_tac bool_ss [LET_THM] >> BETA_TAC >>
+  rpt strip_tac >>
+  `call_walk_Fn (INL (fcg, fn_name, visited)) = (vis', walk1)` by
+    (ONCE_REWRITE_TAC[boolTheory.EQ_SYM_EQ] >> first_assum ACCEPT_TAC) >>
+  `(2 * LENGTH (fcg_all_names fcg) + 10) *
+   LENGTH (FILTER (\n. ~MEM n vis') (fcg_all_names fcg)) <=
+   (2 * LENGTH (fcg_all_names fcg) + 10) *
+   LENGTH (FILTER (\n. ~MEM n visited) (fcg_all_names fcg))` by
+    (match_mp_tac le_mult_mono >>
+     irule listTheory.LENGTH_FILTER_LEQ_MONO >>
+     simp[] >> rpt strip_tac >>
+     CCONTR_TAC >> full_simp_tac bool_ss [] >>
+     mp_tac (Q.SPECL [`INL (fcg, fn_name, visited)`, `x`] aux_mono) >>
+     simp_tac bool_ss [sumTheory.sum_case_def, pairTheory.pair_case_thm] >>
+     BETA_TAC >>
+     ASM_REWRITE_TAC[pairTheory.FST] >>
+     disch_tac >> res_tac) >>
+  simp_tac bool_ss [listTheory.LENGTH] >>
+  DECIDE_TAC);
+
+(* --- Complete the definition --- *)
+
+val (call_walk_dfs_def, call_walk_dfs_ind) =
+  Defn.tprove(call_walk_dfs_defn,
+    EXISTS_TAC R >>
+    REWRITE_TAC [tc0_thm, tc1_thm, tc2_thm, tc3_thm]);
+
+val _ = save_thm("call_walk_dfs_def", call_walk_dfs_def);
+val _ = save_thm("call_walk_dfs_ind", call_walk_dfs_ind);
+
 
 Definition build_call_walk_def:
   build_call_walk fcg entry_name =
