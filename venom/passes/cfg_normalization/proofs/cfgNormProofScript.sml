@@ -28,8 +28,8 @@ Theorem cfg_norm_fn_correct:
     let func' = cfg_norm_fn func in
     ?fresh fuel'.
       result_equiv fresh
-        (run_function fuel ctx func s)
-        (run_function fuel' ctx func' s)
+        (run_blocks fuel ctx func s)
+        (run_blocks fuel' ctx func' s)
 Proof
   cheat
 QED

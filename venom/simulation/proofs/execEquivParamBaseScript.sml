@@ -469,7 +469,7 @@ Proof
 QED
 
 (* ==========================================================================
-   Helpers for run_block_preserves_R
+   Helpers for exec_block_preserves_R
    ========================================================================== *)
 
 Theorem FIND_MEM:

@@ -17,8 +17,8 @@ Theorem cfg_norm_pass_correct:
     let func' = cfg_norm_fn func in
     ?fresh fuel'.
       result_equiv fresh
-        (run_function fuel ctx func s)
-        (run_function fuel' ctx func' s)
+        (run_blocks fuel ctx func s)
+        (run_blocks fuel' ctx func' s)
 Proof
   ACCEPT_TAC cfg_norm_fn_correct
 QED

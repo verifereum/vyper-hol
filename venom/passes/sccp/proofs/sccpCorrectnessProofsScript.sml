@@ -92,16 +92,16 @@ QED
 (*  Part 3: FDOM monotonicity and output tracking                    *)
 (* ================================================================= *)
 
-Theorem run_block_fdom_mono:
+Theorem exec_block_fdom_mono:
   !fuel ctx bb s s'.
-    run_block fuel ctx bb s = OK s' /\
+    exec_block fuel ctx bb s = OK s' /\
     bb_well_formed bb /\ EVERY inst_wf bb.bb_instructions ==>
     FDOM s.vs_vars SUBSET FDOM s'.vs_vars
 Proof
   rpt gen_tac >> strip_tac >>
   `!n f c st st'.
      n = LENGTH bb.bb_instructions - st.vs_inst_idx /\
-     run_block f c bb st = OK st' /\
+     exec_block f c bb st = OK st' /\
      bb_well_formed bb /\ EVERY inst_wf bb.bb_instructions ==>
      FDOM st.vs_vars SUBSET FDOM st'.vs_vars`
     suffices_by (
@@ -113,12 +113,12 @@ Proof
   qabbrev_tac `idx = st.vs_inst_idx` >>
   Cases_on `idx >= LENGTH bb.bb_instructions`
   >- (
-    qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
-    ONCE_REWRITE_TAC[run_block_def] >>
+    qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+    ONCE_REWRITE_TAC[exec_block_def] >>
     simp[get_instruction_def]) >>
   `idx < LENGTH bb.bb_instructions` by fs[] >>
-  qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
-  ONCE_REWRITE_TAC[run_block_def] >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  ONCE_REWRITE_TAC[exec_block_def] >>
   simp[get_instruction_def] >>
   Cases_on `step_inst f c (EL idx bb.bb_instructions) st` >> gvs[] >>
   Cases_on `is_terminator (EL idx bb.bb_instructions).inst_opcode` >> gvs[]
@@ -149,14 +149,14 @@ QED
 (* After running a block, non-terminator instruction outputs are in FDOM.
    Proof approach: completeInduct_on with rpt strip_tac (NOT rw[]).
    rw[] is too aggressive with arithmetic premises. *)
-(* Separate the induction to avoid scoping issues with outer run_block *)
-Theorem run_block_output_in_fdom_aux:
+(* Separate the induction to avoid scoping issues with outer exec_block *)
+Theorem exec_block_output_in_fdom_aux:
   !bb idx v n f c st st'.
     idx < LENGTH bb.bb_instructions /\
     ~is_terminator (EL idx bb.bb_instructions).inst_opcode /\
     MEM v (EL idx bb.bb_instructions).inst_outputs /\
     n = LENGTH bb.bb_instructions - st.vs_inst_idx /\
-    run_block f c bb st = OK st' /\
+    exec_block f c bb st = OK st' /\
     bb_well_formed bb /\ EVERY inst_wf bb.bb_instructions /\
     st.vs_inst_idx <= idx ==>
     v IN FDOM st'.vs_vars
@@ -167,8 +167,8 @@ Proof
   Cases_on `k >= LENGTH bb.bb_instructions`
   >- fs[Abbr `k`] >>
   `k < LENGTH bb.bb_instructions` by fs[] >>
-  qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
-  ONCE_REWRITE_TAC[run_block_def] >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  ONCE_REWRITE_TAC[exec_block_def] >>
   simp[get_instruction_def, Abbr `k`] >>
   Cases_on `step_inst f c (EL st.vs_inst_idx bb.bb_instructions) st` >>
   gvs[] >>
@@ -193,7 +193,7 @@ Proof
     `FDOM v'.vs_vars SUBSET FDOM st'.vs_vars` by (
       mp_tac (Q.SPECL [`f`, `c`, `bb`,
         `v' with vs_inst_idx := SUC st.vs_inst_idx`, `st'`]
-        run_block_fdom_mono) >>
+        exec_block_fdom_mono) >>
       simp[]) >>
     metis_tac[pred_setTheory.SUBSET_DEF]
   ) >>
@@ -207,9 +207,9 @@ Proof
   simp[]
 QED
 
-Theorem run_block_outputs_in_fdom:
+Theorem exec_block_outputs_in_fdom:
   !fuel ctx bb s s' idx v.
-    run_block fuel ctx bb s = OK s' /\
+    exec_block fuel ctx bb s = OK s' /\
     s.vs_inst_idx = 0 /\
     bb_well_formed bb /\
     EVERY inst_wf bb.bb_instructions /\
@@ -219,7 +219,7 @@ Theorem run_block_outputs_in_fdom:
     v IN FDOM s'.vs_vars
 Proof
   rpt gen_tac >> strip_tac >>
-  irule run_block_output_in_fdom_aux >>
+  irule exec_block_output_in_fdom_aux >>
   qexistsl_tac [`bb`, `ctx`, `fuel`, `idx`,
     `LENGTH bb.bb_instructions`, `s`] >>
   simp[]
@@ -263,7 +263,7 @@ Theorem strict_dom_vars_defined_preserved:
     wf_function f /\ ssa_form f /\
     MEM bb f.fn_blocks /\
     bb.bb_label = s.vs_current_bb /\
-    run_block fuel ctx bb s = OK s' /\
+    exec_block fuel ctx bb s = OK s' /\
     s.vs_inst_idx = 0 /\
     ~s'.vs_halted /\
     strict_dom_vars_defined f s /\
@@ -289,14 +289,14 @@ Proof
       `d_inst.inst_outputs = []` by
         metis_tac[terminator_no_outputs, EVERY_MEM] >>
       fs[]) >>
-    irule run_block_outputs_in_fdom >>
+    irule exec_block_outputs_in_fdom >>
     qexistsl_tac [`bb`, `ctx`, `fuel`, `idx`, `s`] >> simp[])
   >- (
     (* Case 2: d_bb is NOT the current block *)
     (* s'.vs_current_bb is a successor of bb *)
     `MEM s'.vs_current_bb (bb_succs bb)` by (
       mp_tac (Q.SPECL [`fuel`, `ctx`, `bb`, `s`, `s'`]
-        run_block_current_bb_in_succs) >>
+        exec_block_current_bb_in_succs) >>
       simp[] >> disch_then irule >>
       fs[bb_well_formed_def] >>
       rpt strip_tac >> spose_not_then assume_tac >>
@@ -311,7 +311,7 @@ Proof
     `v IN FDOM s.vs_vars` by metis_tac[] >>
     (* FDOM mono *)
     `FDOM s.vs_vars SUBSET FDOM s'.vs_vars` by
-      metis_tac[run_block_fdom_mono] >>
+      metis_tac[exec_block_fdom_mono] >>
     metis_tac[pred_setTheory.SUBSET_DEF])
 QED
 
@@ -366,7 +366,7 @@ QED
 (* ================================================================= *)
 
 (* Different blocks, different ctx, fuel-specific per-step equality *)
-Theorem run_block_eq_fuel:
+Theorem exec_block_eq_fuel:
   !n fuel ctx1 ctx2 bb1 bb2 s.
     n = LENGTH bb1.bb_instructions - s.vs_inst_idx /\
     LENGTH bb1.bb_instructions = LENGTH bb2.bb_instructions /\
@@ -378,15 +378,15 @@ Theorem run_block_eq_fuel:
       idx < LENGTH bb1.bb_instructions /\ s'.vs_inst_idx = idx ==>
       step_inst fuel ctx1 (EL idx bb1.bb_instructions) s' =
       step_inst fuel ctx2 (EL idx bb2.bb_instructions) s') ==>
-    run_block fuel ctx1 bb1 s = run_block fuel ctx2 bb2 s
+    exec_block fuel ctx1 bb1 s = exec_block fuel ctx2 bb2 s
 Proof
   Induct >> rpt gen_tac >> strip_tac
   >- (
     `s.vs_inst_idx >= LENGTH bb1.bb_instructions` by simp[] >>
-    ONCE_REWRITE_TAC[run_block_def] >>
+    ONCE_REWRITE_TAC[exec_block_def] >>
     simp[get_instruction_def])
   >>
-  ONCE_REWRITE_TAC[run_block_def] >>
+  ONCE_REWRITE_TAC[exec_block_def] >>
   `s.vs_inst_idx < LENGTH bb1.bb_instructions` by simp[] >>
   simp[get_instruction_def] >>
   `step_inst fuel ctx1 (EL s.vs_inst_idx bb1.bb_instructions) s =
@@ -404,7 +404,7 @@ Proof
 QED
 
 (* Same block, different ctx: per-step result_equiv => block result_equiv *)
-Theorem run_block_result_equiv_ctx:
+Theorem exec_block_result_equiv_ctx:
   !n fuel ctx1 ctx2 bb s.
     n = LENGTH bb.bb_instructions - s.vs_inst_idx /\
     (!idx s'.
@@ -413,15 +413,15 @@ Theorem run_block_result_equiv_ctx:
         (step_inst fuel ctx1 (EL idx bb.bb_instructions) s')
         (step_inst fuel ctx2 (EL idx bb.bb_instructions) s')) ==>
     result_equiv {}
-      (run_block fuel ctx1 bb s) (run_block fuel ctx2 bb s)
+      (exec_block fuel ctx1 bb s) (exec_block fuel ctx2 bb s)
 Proof
   Induct >> rpt gen_tac >> strip_tac
   >- (
     `s.vs_inst_idx >= LENGTH bb.bb_instructions` by simp[] >>
-    ONCE_REWRITE_TAC[run_block_def] >>
+    ONCE_REWRITE_TAC[exec_block_def] >>
     simp[get_instruction_def, result_equiv_def])
   >>
-  ONCE_REWRITE_TAC[run_block_def] >>
+  ONCE_REWRITE_TAC[exec_block_def] >>
   `s.vs_inst_idx < LENGTH bb.bb_instructions` by simp[] >>
   simp[get_instruction_def] >>
   `result_equiv {}
@@ -599,8 +599,8 @@ Theorem step_inst_invoke_result_equiv:
       FDOM callee_s.vs_vars = {} /\
       fn_entry_label f = SOME callee_s.vs_current_bb ==>
       result_equiv {}
-        (run_function fuel ctx f callee_s)
-        (run_function fuel (sccp_context ctx) (sccp_fn f) callee_s)) ==>
+        (run_blocks fuel ctx f callee_s)
+        (run_blocks fuel (sccp_context ctx) (sccp_fn f) callee_s)) ==>
     result_equiv {}
       (step_inst fuel ctx inst s)
       (step_inst fuel (sccp_context ctx) inst s)
@@ -648,11 +648,11 @@ Proof
     simp[setup_callee_def] >> strip_tac >> gvs[] >>
     simp[fn_entry_label_def, entry_block_def]) >>
   `result_equiv {}
-    (run_function fuel ctx f_callee callee_s)
-    (run_function fuel (sccp_context ctx) (sccp_fn f_callee) callee_s)` by
+    (run_blocks fuel ctx f_callee callee_s)
+    (run_blocks fuel (sccp_context ctx) (sccp_fn f_callee) callee_s)` by
     metis_tac[] >>
-  Cases_on `run_function fuel ctx f_callee callee_s` >>
-  Cases_on `run_function fuel (sccp_context ctx) (sccp_fn f_callee) callee_s` >>
+  Cases_on `run_blocks fuel ctx f_callee callee_s` >>
+  Cases_on `run_blocks fuel (sccp_context ctx) (sccp_fn f_callee) callee_s` >>
   gvs[result_equiv_def] >>
   TRY (imp_res_tac state_equiv_empty_eq >> gvs[] >>
        simp[result_equiv_def, state_equiv_refl, execution_equiv_refl] >>
@@ -666,10 +666,10 @@ Proof
   simp[result_equiv_def, state_equiv_refl, execution_equiv_refl]
 QED
 
-(* Step 2: Block-level ctx change via run_block_result_equiv_ctx *)
+(* Step 2: Block-level ctx change via exec_block_result_equiv_ctx *)
 (* Non-INVOKE: step_inst_ctx_irrel gives equality => result_equiv
    INVOKE: step_inst_invoke_result_equiv gives result_equiv *)
-Theorem run_block_ctx_change:
+Theorem exec_block_ctx_change:
   !fuel ctx bb s.
     (!f callee_s.
       MEM f ctx.ctx_functions /\
@@ -677,10 +677,10 @@ Theorem run_block_ctx_change:
       FDOM callee_s.vs_vars = {} /\
       fn_entry_label f = SOME callee_s.vs_current_bb ==>
       result_equiv {}
-        (run_function fuel ctx f callee_s)
-        (run_function fuel (sccp_context ctx) (sccp_fn f) callee_s)) ==>
+        (run_blocks fuel ctx f callee_s)
+        (run_blocks fuel (sccp_context ctx) (sccp_fn f) callee_s)) ==>
     result_equiv {}
-      (run_block fuel ctx bb s) (run_block fuel (sccp_context ctx) bb s)
+      (exec_block fuel ctx bb s) (exec_block fuel (sccp_context ctx) bb s)
 Proof
   rpt strip_tac >>
   `!idx s'. idx < LENGTH bb.bb_instructions /\ s'.vs_inst_idx = idx ==>
@@ -703,7 +703,7 @@ Proof
       simp[result_equiv_def, state_equiv_refl, execution_equiv_refl])) >>
   mp_tac (Q.SPECL [`LENGTH bb.bb_instructions - s.vs_inst_idx`,
     `fuel`, `ctx`, `sccp_context ctx`, `bb`, `s`]
-    run_block_result_equiv_ctx) >>
+    exec_block_result_equiv_ctx) >>
   simp[]
 QED
 
@@ -802,7 +802,7 @@ QED
    At non-PHI instructions, cond_const_sound is derived via
    nophi_phi_bottom_imp_cond (since all preceding PHIs have CL_Bottom
    by the phi_bottom tracker and bb_well_formed ensures PHIs are a prefix). *)
-Theorem sccp_run_block_eq:
+Theorem sccp_exec_block_eq:
   !n fuel ctx f bb s.
     n = LENGTH bb.bb_instructions - s.vs_inst_idx /\
     wf_function f /\ wf_ssa f /\ fn_inst_wf f /\
@@ -828,8 +828,8 @@ Theorem sccp_run_block_eq:
            MEM v (EL j bb.bb_instructions).inst_outputs ==>
            v IN FDOM s.vs_vars) /\
     lookup_block bb.bb_label f.fn_blocks = SOME bb ==>
-    run_block fuel ctx bb s =
-    run_block fuel ctx
+    exec_block fuel ctx bb s =
+    exec_block fuel ctx
       (analysis_block_transform sccp_bottom (sccp_df_analyze f)
         (\lat inst. [sccp_inst lat.sl_vals inst]) bb) s
 Proof
@@ -867,11 +867,11 @@ Proof
         (EL s.vs_inst_idx bb.bb_instructions)).inst_opcode =
    is_terminator (EL s.vs_inst_idx bb.bb_instructions).inst_opcode` by
     simp[sccp_inst_is_terminator] >>
-  (* Unfold run_block on both sides.
+  (* Unfold exec_block on both sides.
      Remove bb.bb_label = s.vs_current_bb to prevent simp from rewriting
      bb.bb_label -> s.vs_current_bb in the expanded abt_bb term. *)
   qpat_x_assum `bb.bb_label = s.vs_current_bb` (fn lbl_eq =>
-    ONCE_REWRITE_TAC[run_block_def] >>
+    ONCE_REWRITE_TAC[exec_block_def] >>
     simp[get_instruction_def, Abbr `abt_bb`, sccp_bt_el, sccp_bt_length] >>
     assume_tac lbl_eq) >>
   Cases_on `step_inst fuel ctx (EL s.vs_inst_idx bb.bb_instructions) s` >>
@@ -904,7 +904,7 @@ Proof
       >- suspend "sdom"))
 QED
 
-Resume sccp_run_block_eq[nophi]:
+Resume sccp_exec_block_eq[nophi]:
   (* nophi_sound at SUC idx.
      Rewrite s.vs_current_bb -> bb.bb_label first *)
   qpat_x_assum `bb.bb_label = s.vs_current_bb` (fn eq =>
@@ -930,7 +930,7 @@ Resume sccp_run_block_eq[nophi]:
     fs[lookup_var_def])
 QED
 
-Resume sccp_run_block_eq[phibot]:
+Resume sccp_exec_block_eq[phibot]:
   (* phi_bottom tracker at SUC s.vs_inst_idx *)
   rpt strip_tac >>
   qpat_x_assum `bb.bb_label = s.vs_current_bb` (fn eq =>
@@ -956,7 +956,7 @@ Resume sccp_run_block_eq[phibot]:
     metis_tac[sccp_transfer_non_output_flookup])
 QED
 
-Resume sccp_run_block_eq[fdom]:
+Resume sccp_exec_block_eq[fdom]:
   (* FDOM tracker *)
   rpt strip_tac >>
   Cases_on `j < s.vs_inst_idx`
@@ -964,14 +964,14 @@ Resume sccp_run_block_eq[fdom]:
   >- (`j = s.vs_inst_idx` by simp[] >> gvs[])
 QED
 
-Resume sccp_run_block_eq[sdom]:
+Resume sccp_exec_block_eq[sdom]:
   (* strict_dom_vars_defined preserved *)
   fs[strict_dom_vars_defined_def] >>
   rpt strip_tac >>
   fs[pred_setTheory.IN_UNION] >> res_tac >> simp[]
 QED
 
-Resume sccp_run_block_eq[nophi_mem]:
+Resume sccp_exec_block_eq[nophi_mem]:
   (* x IS an output of the current instruction.
      Case split: PHI gives contradiction, non-PHI uses cond_const_sound *)
   Cases_on `(EL s.vs_inst_idx bb.bb_instructions).inst_opcode = PHI`
@@ -1001,10 +1001,10 @@ Resume sccp_run_block_eq[nophi_mem]:
     fs[cond_const_sound_def])
 QED
 
-Finalise sccp_run_block_eq;
+Finalise sccp_exec_block_eq;
 
 (* Handle the case when inst_idx = 0 and block may be empty *)
-Theorem sccp_run_block_eq_entry:
+Theorem sccp_exec_block_eq_entry:
   !fuel ctx f bb s.
     wf_function f /\ wf_ssa f /\ fn_inst_wf f /\
     MEM bb f.fn_blocks /\ bb.bb_label = s.vs_current_bb /\
@@ -1012,8 +1012,8 @@ Theorem sccp_run_block_eq_entry:
     strict_dom_vars_defined f s /\ s.vs_inst_idx = 0 /\
     nophi_inv f s /\
     lookup_block bb.bb_label f.fn_blocks = SOME bb ==>
-    run_block fuel ctx bb s =
-    run_block fuel ctx
+    exec_block fuel ctx bb s =
+    exec_block fuel ctx
       (analysis_block_transform sccp_bottom (sccp_df_analyze f)
         (\lat inst. [sccp_inst lat.sl_vals inst]) bb) s
 Proof
@@ -1021,12 +1021,12 @@ Proof
   Cases_on `bb.bb_instructions`
   >- (
     (* Empty block — both sides behave the same *)
-    ONCE_REWRITE_TAC[run_block_def] >>
+    ONCE_REWRITE_TAC[exec_block_def] >>
     simp[get_instruction_def, analysis_block_transform_def])
   >>
   (* Non-empty block *)
   `0 < LENGTH bb.bb_instructions` by simp[] >>
-  irule sccp_run_block_eq >> simp[] >>
+  irule sccp_exec_block_eq >> simp[] >>
   fs[nophi_inv_def]
 QED
 
@@ -1074,11 +1074,11 @@ Theorem sccp_block_result_equiv_some:
       FDOM callee_s.vs_vars = {} /\
       fn_entry_label f' = SOME callee_s.vs_current_bb ==>
       result_equiv {}
-        (run_function fuel ctx f' callee_s)
-        (run_function fuel (sccp_context ctx) (sccp_fn f') callee_s)) ==>
+        (run_blocks fuel ctx f' callee_s)
+        (run_blocks fuel (sccp_context ctx) (sccp_fn f') callee_s)) ==>
     result_equiv {}
-      (run_block fuel ctx bb s)
-      (run_block fuel (sccp_context ctx)
+      (exec_block fuel ctx bb s)
+      (exec_block fuel (sccp_context ctx)
         (sccp_transform_block f bb) s)
 Proof
   rpt strip_tac >>
@@ -1087,19 +1087,19 @@ Proof
   qabbrev_tac `abt_bb = analysis_block_transform sccp_bottom
     (sccp_df_analyze f) (\lat inst. [sccp_inst lat.sl_vals inst]) bb` >>
   (* Phase 1: exact equality *)
-  `run_block fuel ctx bb s = run_block fuel ctx abt_bb s` by (
+  `exec_block fuel ctx bb s = exec_block fuel ctx abt_bb s` by (
     qunabbrev_tac `abt_bb` >>
-    irule sccp_run_block_eq_entry >> simp[]) >>
+    irule sccp_exec_block_eq_entry >> simp[]) >>
   (* Phase 1.5: clear_nops gives result_equiv *)
-  `result_equiv {} (run_block fuel ctx abt_bb s)
-    (run_block fuel ctx (sccp_transform_block f bb) s)` by (
+  `result_equiv {} (exec_block fuel ctx abt_bb s)
+    (exec_block fuel ctx (sccp_transform_block f bb) s)` by (
     `sccp_transform_block f bb = clear_nops_block abt_bb` by
       simp[Abbr `abt_bb`, sccp_transform_block_def] >>
     simp[] >> irule clear_nops_block_correct >> simp[]) >>
   (* Phase 2: ctx change gives result_equiv *)
-  `result_equiv {} (run_block fuel ctx (sccp_transform_block f bb) s)
-    (run_block fuel (sccp_context ctx) (sccp_transform_block f bb) s)` by (
-    irule run_block_ctx_change >>
+  `result_equiv {} (exec_block fuel ctx (sccp_transform_block f bb) s)
+    (exec_block fuel (sccp_context ctx) (sccp_transform_block f bb) s)` by (
+    irule exec_block_ctx_change >>
     first_x_assum ACCEPT_TAC) >>
   (* Compose *)
   metis_tac[result_equiv_trans]
@@ -1107,7 +1107,7 @@ QED
 
 (* Main theorem: result_equiv {} at every fuel, unconditionally.
    Key improvement: no Error∨ escape, enabling direct pass_correct. *)
-Theorem sccp_run_function_equiv:
+Theorem sccp_run_blocks_equiv:
   !fuel ctx.
     venom_wf ctx /\
     (!f. MEM f ctx.ctx_functions ==> wf_ssa f) ==>
@@ -1118,16 +1118,16 @@ Theorem sccp_run_function_equiv:
       strict_dom_vars_defined f s /\
       fn_reachable f s.vs_current_bb ==>
       result_equiv {}
-        (run_function fuel ctx f s)
-        (run_function fuel (sccp_context ctx) (sccp_fn f) s)
+        (run_blocks fuel ctx f s)
+        (run_blocks fuel (sccp_context ctx) (sccp_fn f) s)
 Proof
   Induct >> rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac
   >- (
     (* Base: fuel = 0 — both return Error "out of fuel" *)
-    ONCE_REWRITE_TAC[run_function_def] >> simp[result_equiv_def])
+    ONCE_REWRITE_TAC[run_blocks_def] >> simp[result_equiv_def])
   >>
   (* Inductive step *)
-  ONCE_REWRITE_TAC[run_function_def] >> simp[] >>
+  ONCE_REWRITE_TAC[run_blocks_def] >> simp[] >>
   Cases_on `lookup_block s.vs_current_bb f.fn_blocks`
   >- (
     (* NONE — both return Error "block not found" *)
@@ -1159,18 +1159,18 @@ Proof
   `!f' s'. MEM f' ctx.ctx_functions /\ s'.vs_inst_idx = 0 /\
     nophi_inv f' s' /\ strict_dom_vars_defined f' s' /\
     fn_reachable f' s'.vs_current_bb ==>
-    result_equiv {} (run_function fuel ctx f' s')
-      (run_function fuel (sccp_context ctx) (sccp_fn f') s')` by (
+    result_equiv {} (run_blocks fuel ctx f' s')
+      (run_blocks fuel (sccp_context ctx) (sccp_fn f') s')` by (
     rpt strip_tac >>
     first_x_assum (qspec_then `ctx` mp_tac) >>
     (impl_tac >- simp[]) >>
     disch_then (qspecl_then [`f'`, `s'`] mp_tac) >> simp[]) >>
-  (* Callee result_equiv — needed by run_block_ctx_change *)
+  (* Callee result_equiv — needed by exec_block_ctx_change *)
   `!f' callee_s. MEM f' ctx.ctx_functions /\
     callee_s.vs_inst_idx = 0 /\ FDOM callee_s.vs_vars = EMPTY /\
     fn_entry_label f' = SOME callee_s.vs_current_bb ==>
-    result_equiv {} (run_function fuel ctx f' callee_s)
-      (run_function fuel (sccp_context ctx) (sccp_fn f') callee_s)` by (
+    result_equiv {} (run_blocks fuel ctx f' callee_s)
+      (run_blocks fuel (sccp_context ctx) (sccp_fn f') callee_s)` by (
     rpt strip_tac >>
     `wf_function f'` by fs[venom_wf_def] >>
     `wf_ssa f'` by metis_tac[] >>
@@ -1181,13 +1181,13 @@ Proof
       s'.vs_inst_idx = 0 /\ nophi_inv f' s' /\ _ ==> _`
       (qspecl_then [`f'`, `callee_s`] mp_tac) >> simp[]) >>
   (* Establish result_equiv for the block *)
-  `result_equiv {} (run_block fuel ctx bb s)
-    (run_block fuel (sccp_context ctx) bt_bb s)` by (
+  `result_equiv {} (exec_block fuel ctx bb s)
+    (exec_block fuel (sccp_context ctx) bt_bb s)` by (
     Cases_on `sccp_function f`
     >- (
       (* NONE: bt_bb = bb, just ctx change *)
       `bt_bb = bb` by simp[Abbr `bt_bb`] >>
-      simp[] >> irule run_block_ctx_change >>
+      simp[] >> irule exec_block_ctx_change >>
       first_x_assum ACCEPT_TAC)
     >- (
       (* SOME: use extracted helper *)
@@ -1195,17 +1195,17 @@ Proof
       simp[] >> irule sccp_block_result_equiv_some >> simp[] >>
       first_x_assum ACCEPT_TAC)) >>
   (* Case split on original block result *)
-  Cases_on `run_block fuel ctx bb s` >>
-  Cases_on `run_block fuel (sccp_context ctx) bt_bb s` >>
+  Cases_on `exec_block fuel ctx bb s` >>
+  Cases_on `exec_block fuel (sccp_context ctx) bt_bb s` >>
   fs[result_equiv_def]
   >- (
     (* OK / OK — state_equiv {} implies equality, then recurse *)
     imp_res_tac state_equiv_empty_eq >> BasicProvers.VAR_EQ_TAC >>
-    rename1 `run_block fuel ctx bb s = OK s'` >>
+    rename1 `exec_block fuel ctx bb s = OK s'` >>
     Cases_on `s'.vs_halted` >> simp[]
     >- simp[result_equiv_def, execution_equiv_refl]
     >>
-    `s'.vs_inst_idx = 0` by metis_tac[run_block_OK_inst_idx_0] >>
+    `s'.vs_inst_idx = 0` by metis_tac[exec_block_OK_inst_idx_0] >>
     `nophi_inv f s'` by (
       simp[nophi_inv_def] >>
       mp_tac (Q.SPECL [`f`, `bb`, `fuel`, `ctx`, `s`, `s'`]
@@ -1217,7 +1217,7 @@ Proof
       (impl_tac >- fs[wf_ssa_def]) >> simp[]) >>
     `MEM s'.vs_current_bb (bb_succs bb)` by (
       mp_tac (Q.SPECL [`fuel`, `ctx`, `bb`, `s`, `s'`]
-        run_block_current_bb_in_succs) >>
+        exec_block_current_bb_in_succs) >>
       simp[] >> disch_then irule >>
       fs[bb_well_formed_def] >>
       rpt strip_tac >> CCONTR_TAC >> fs[] >> res_tac >> fs[]) >>
@@ -1277,8 +1277,8 @@ Theorem sccp_pass_correct_fn:
       !s. s.vs_inst_idx = 0 /\ fn_entry_label f = SOME s.vs_current_bb /\
           FDOM s.vs_vars = {} ==>
           pass_correct (state_equiv {}) (execution_equiv {})
-            (\fuel. run_function fuel ctx f s)
-            (\fuel. run_function fuel ctx' f' s)
+            (\fuel. run_blocks fuel ctx f s)
+            (\fuel. run_blocks fuel ctx' f' s)
 Proof
   rpt gen_tac >> strip_tac >>
   simp[LET_THM] >>
@@ -1296,27 +1296,27 @@ Proof
   simp[] >> rpt conj_tac
   >- (
     rpt strip_tac >>
-    `!e. run_function fuel ctx f s <> Error e` by
-      (Cases_on `run_function fuel ctx f s` >> fs[terminates_def]) >>
-    `!e. run_function fuel' ctx f s <> Error e` by
-      (Cases_on `run_function fuel' ctx f s` >> fs[terminates_def]) >>
+    `!e. run_blocks fuel ctx f s <> Error e` by
+      (Cases_on `run_blocks fuel ctx f s` >> fs[terminates_def]) >>
+    `!e. run_blocks fuel' ctx f s <> Error e` by
+      (Cases_on `run_blocks fuel' ctx f s` >> fs[terminates_def]) >>
     Cases_on `fuel <= fuel'`
     >- metis_tac[fuel_mono]
     >- (`fuel' <= fuel` by simp[] >> metis_tac[fuel_mono]))
   >- (
     rpt strip_tac >>
-    `!e. run_function fuel (sccp_context ctx) (sccp_fn f) s <> Error e` by
-      (Cases_on `run_function fuel (sccp_context ctx) (sccp_fn f) s` >>
+    `!e. run_blocks fuel (sccp_context ctx) (sccp_fn f) s <> Error e` by
+      (Cases_on `run_blocks fuel (sccp_context ctx) (sccp_fn f) s` >>
        fs[terminates_def]) >>
-    `!e. run_function fuel' (sccp_context ctx) (sccp_fn f) s <> Error e` by
-      (Cases_on `run_function fuel' (sccp_context ctx) (sccp_fn f) s` >>
+    `!e. run_blocks fuel' (sccp_context ctx) (sccp_fn f) s <> Error e` by
+      (Cases_on `run_blocks fuel' (sccp_context ctx) (sccp_fn f) s` >>
        fs[terminates_def]) >>
     Cases_on `fuel <= fuel'`
     >- metis_tac[fuel_mono]
     >- (`fuel' <= fuel` by simp[] >> metis_tac[fuel_mono]))
   >- (
     gen_tac >>
-    mp_tac (Q.SPECL [`fuel`, `ctx`] sccp_run_function_equiv) >>
+    mp_tac (Q.SPECL [`fuel`, `ctx`] sccp_run_blocks_equiv) >>
     simp[] >> disch_then (qspecl_then [`f`, `s`] mp_tac) >>
     simp[] >>
     (impl_tac >- (
@@ -1339,7 +1339,7 @@ Theorem sccp_pass_correct:
     ctx_pass_correct sccp_context (state_equiv {}) (execution_equiv {}) ctx s
 Proof
   rpt strip_tac >>
-  simp[ctx_pass_correct_def, run_context_def] >>
+  simp[ctx_pass_correct_def, run_context_def, run_function_def, fn_entry_label_def] >>
   `(sccp_context ctx).ctx_entry = ctx.ctx_entry` by simp[sccp_context_def] >>
   simp[] >>
   (Cases_on `ctx.ctx_entry` >- simp[pass_correct_def, terminates_def]) >>

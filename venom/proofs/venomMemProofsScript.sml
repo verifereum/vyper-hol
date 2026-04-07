@@ -4,7 +4,7 @@
  * TOP-LEVEL:
  *   allocas_non_overlapping_empty_proof     — base case
  *   allocas_non_overlapping_step_inst_proof — preserved by step_inst
- *   allocas_non_overlapping_run_block_proof — preserved by run_block
+ *   allocas_non_overlapping_exec_block_proof — preserved by exec_block
  *   mload_mstore_disjoint_proof             — 32-byte write/read independence
  *   mload_mstore8_disjoint_proof            — 1-byte write / 32-byte read
  *)
@@ -33,9 +33,9 @@ Proof
   cheat
 QED
 
-Theorem allocas_non_overlapping_run_block_proof:
+Theorem allocas_non_overlapping_exec_block_proof:
   ∀fuel ctx bb s s'.
-    run_block fuel ctx bb s = OK s' ∧
+    exec_block fuel ctx bb s = OK s' ∧
     allocas_non_overlapping s ⇒
     allocas_non_overlapping s'
 Proof

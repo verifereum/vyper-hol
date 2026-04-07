@@ -15,13 +15,13 @@ Theorem branch_opt_function_correct:
     (!bb fuel' ctx' s0 s0'.
        MEM bb fn.fn_blocks /\
        bo_iszero_inv dfg s0 /\ s0.vs_inst_idx = 0 /\
-       run_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
+       exec_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
        bo_iszero_inv dfg s0') /\
     (* Inv preservation across transformed blocks *)
     (!bb fuel' ctx' s0 s0'.
        MEM bb fn'.fn_blocks /\
        bo_iszero_inv dfg s0 /\ s0.vs_inst_idx = 0 /\
-       run_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
+       exec_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
        bo_iszero_inv dfg s0') /\
     (* Inv preservation within block prefix (both original and transformed) *)
     (!bb fuel' ctx' st st' inst.
@@ -35,8 +35,8 @@ Theorem branch_opt_function_correct:
     s.vs_inst_idx = 0 ==>
     lift_result (state_equiv (bo_fresh_vars_fn fn))
                (execution_equiv (bo_fresh_vars_fn fn))
-      (run_function fuel ctx fn s)
-      (run_function fuel ctx fn' s)
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx fn' s)
 Proof
   ACCEPT_TAC branch_opt_function_correct_proof
 QED

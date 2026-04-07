@@ -75,17 +75,17 @@ Theorem gen_block_simulation:
        step_inst fuel' ctx inst vs1 = OK vs2 ⇒
        step_mem_safe ps.ps_alloc vs1 vs2) ⇒
     (* OK case: block continues to next block, invariant maintained *)
-    (∀vs'. run_block fuel ctx bb vs = OK vs' ⇒
+    (∀vs'. exec_block fuel ctx bb vs = OK vs' ⇒
       ∃n as'.
         asm_steps label_offsets offset_to_pc prog n as = AsmOK as' ∧
         venom_asm_rel label_offsets ps' vs' as') ∧
     (* Halt case: observable effects match *)
-    (∀vs'. run_block fuel ctx bb vs = Halt vs' ⇒
+    (∀vs'. exec_block fuel ctx bb vs = Halt vs' ⇒
       ∃n as'.
         asm_steps label_offsets offset_to_pc prog n as = AsmHalt as' ∧
         venom_asm_terminal_rel vs' as') ∧
     (* Abort case *)
-    (∀a vs'. run_block fuel ctx bb vs = Abort a vs' ⇒
+    (∀a vs'. exec_block fuel ctx bb vs = Abort a vs' ⇒
       ∃n as'.
         ((a = Revert_abort ∧
           asm_steps label_offsets offset_to_pc prog n as =
@@ -126,12 +126,12 @@ Theorem gen_fn_simulation:
     (* MSIZE: initial memory covers max spill offset *)
     spill_mem_covered ps_final.ps_alloc.sa_next_offset vs.vs_memory ⇒
     (* Halt case *)
-    (∀vs'. run_function fuel ctx fn vs = Halt vs' ⇒
+    (∀vs'. run_blocks fuel ctx fn vs = Halt vs' ⇒
       ∃n as'.
         asm_steps label_offsets offset_to_pc prog n as = AsmHalt as' ∧
         venom_asm_terminal_rel vs' as') ∧
     (* Abort case *)
-    (∀a vs'. run_function fuel ctx fn vs = Abort a vs' ⇒
+    (∀a vs'. run_blocks fuel ctx fn vs = Abort a vs' ⇒
       ∃n as'.
         ((a = Revert_abort ∧
           asm_steps label_offsets offset_to_pc prog n as =

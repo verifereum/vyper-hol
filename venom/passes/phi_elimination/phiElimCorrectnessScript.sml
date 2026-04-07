@@ -22,8 +22,8 @@ Theorem phi_elim_pass_correct:
       MEM func' (transform_context ctx).ctx_functions /\
       func'.fn_name = fn_name /\
       lift_result (state_equiv {}) (execution_equiv {})
-        (run_function fuel ctx func s)
-        (run_function fuel ctx func' s)
+        (run_blocks fuel ctx func s)
+        (run_blocks fuel ctx func' s)
 Proof
   ACCEPT_TAC phi_elimination_correct
 QED

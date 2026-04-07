@@ -125,7 +125,7 @@ End
 
 (* Execute a list of instructions sequentially via step_inst.
    Does not handle INVOKE dispatch or inst_idx tracking — those are
-   managed by run_block. Used only in the simulation predicate to
+   managed by exec_block. Used only in the simulation predicate to
    state what the replacement instructions should compute. *)
 Definition run_insts_def:
   run_insts fuel ctx [] s = OK s /\
@@ -136,7 +136,7 @@ Definition run_insts_def:
 End
 
 (* Structural constraints on instruction transform function f.
-   Ensures the transformed block is well-formed for run_block:
+   Ensures the transformed block is well-formed for exec_block:
    - Terminators map to a single terminator (may change opcode, e.g. JNZ→JMP)
    - INVOKE maps to a single INVOKE (may change operands)
    - Non-term non-INVOKE expand to only non-term non-INVOKE *)

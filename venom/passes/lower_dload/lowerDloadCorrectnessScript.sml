@@ -25,8 +25,8 @@ Theorem lower_dload_function_correct:
     lift_result
       (ld_ok (ld_exempt_vars_fn fn))
       (ld_equiv (ld_exempt_vars_fn fn))
-      (run_function fuel ctx fn s)
-      (run_function fuel ctx (lower_dload_function fn) s)
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (lower_dload_function fn) s)
 Proof
   ACCEPT_TAC lowerDloadSimTheory.lower_dload_function_correct_proof
 QED

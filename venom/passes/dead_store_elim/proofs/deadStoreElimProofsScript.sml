@@ -19,8 +19,8 @@ Theorem dse_function_space_correct_proof:
              (cfg_analyze fn') aliases (bp_analyze (cfg_analyze fn') fn')
              space fn') ==>
     lift_result (dse_equiv space) (dse_equiv space)
-      (run_function fuel ctx fn s)
-      (run_function fuel ctx (dse_function_space analysis_fn space fn) s)
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (dse_function_space analysis_fn space fn) s)
 Proof
   cheat
 QED
@@ -36,8 +36,8 @@ Theorem dse_function_correct_proof:
         (cfg_analyze fn') aliases (bp_analyze (cfg_analyze fn') fn')
         space fn') ==>
     lift_result dse_all_equiv dse_all_equiv
-      (run_function fuel ctx fn s)
-      (run_function fuel ctx (dse_function analysis_fn fn) s)
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (dse_function analysis_fn fn) s)
 Proof
   cheat
 QED

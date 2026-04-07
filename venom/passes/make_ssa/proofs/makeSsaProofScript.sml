@@ -31,8 +31,8 @@ Theorem make_ssa_fn_correct:
                   pred_map succ_map live_in func in
     ?fresh fuel'.
       result_equiv fresh
-        (run_function fuel ctx func s)
-        (run_function fuel' ctx func' s)
+        (run_blocks fuel ctx func s)
+        (run_blocks fuel' ctx func' s)
 Proof
   cheat
 QED

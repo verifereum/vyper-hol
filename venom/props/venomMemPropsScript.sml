@@ -8,7 +8,7 @@
  * TOP-LEVEL:
  *   allocas_non_overlapping_empty     — base case (no allocas)
  *   allocas_non_overlapping_step_inst — preserved by step_inst
- *   allocas_non_overlapping_run_block — preserved by run_block
+ *   allocas_non_overlapping_exec_block — preserved by exec_block
  *   mload_mstore_disjoint            — disjoint 32-byte write/read independence
  *   mload_mstore8_disjoint           — disjoint 1-byte write / 32-byte read
  *)
@@ -30,12 +30,12 @@ Theorem allocas_non_overlapping_step_inst:
 Proof ACCEPT_TAC venomMemProofsTheory.allocas_non_overlapping_step_inst_proof
 QED
 
-Theorem allocas_non_overlapping_run_block:
+Theorem allocas_non_overlapping_exec_block:
   ∀fuel ctx bb s s'.
-    run_block fuel ctx bb s = OK s' ∧
+    exec_block fuel ctx bb s = OK s' ∧
     allocas_non_overlapping s ⇒
     allocas_non_overlapping s'
-Proof ACCEPT_TAC venomMemProofsTheory.allocas_non_overlapping_run_block_proof
+Proof ACCEPT_TAC venomMemProofsTheory.allocas_non_overlapping_exec_block_proof
 QED
 
 Theorem mload_mstore_disjoint:

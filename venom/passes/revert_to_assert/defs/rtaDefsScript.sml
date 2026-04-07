@@ -299,7 +299,7 @@ End
 
 (*
  * no_invoke_in_function: all blocks in fn have no INVOKE instructions.
- * Needed for fuel independence (run_block doesn't consume fuel without INVOKE).
+ * Needed for fuel independence (exec_block doesn't consume fuel without INVOKE).
  *)
 Definition no_invoke_in_function_def:
   no_invoke_in_function fn <=>

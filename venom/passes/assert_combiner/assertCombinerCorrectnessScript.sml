@@ -27,7 +27,7 @@ Theorem ac_transform_function_correct:
        (!bb' inst x. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
           MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0)) /\
        s0.vs_inst_idx = 0 /\
-       run_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
+       exec_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
        ac_inv fn dfg s0' /\
        (!bb' inst x. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
           MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0'))) /\
@@ -38,15 +38,15 @@ Theorem ac_transform_function_correct:
        (!bb' inst x. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
           MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0)) /\
        s0.vs_inst_idx = 0 /\
-       run_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
+       exec_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
        ac_inv fn dfg s0' /\
        (!bb' inst x. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
           MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0'))) /\
     s.vs_inst_idx = 0 ==>
     lift_result (state_equiv (ac_fresh_vars_fn fn))
                (execution_equiv UNIV)
-      (run_function fuel ctx fn s)
-      (run_function fuel ctx fn' s)
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx fn' s)
 Proof
   ACCEPT_TAC ac_transform_function_correct_proof
 QED
