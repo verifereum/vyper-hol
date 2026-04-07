@@ -45,13 +45,28 @@ Failures to catch:
 
 **Completeness**: For each map/relation check domain, range, inverse, and symmetry. If you have a postorder property, state the preorder version too.
 
+**No catch-alls**: Never use `| _ => T` or `| _ => F` in theorem conclusions. Catch-alls hide missing cases and mask wrong pattern coverage. Enumerate every constructor explicitly — if a case is impossible, state `F` for it with a comment saying why. If a case is uninteresting, state `T` for it explicitly. The reader must see that every case was considered.
+```sml
+(* Bad *)  | _ => T
+(* Good *) | (INR BreakException, _) => F      (* never escapes call_external *)
+           | (INR ContinueException, _) => F   (* never escapes call_external *)
+           | (INR (ReturnException _), _) => F  (* caught by call_external_function *)
+```
+
 **Pruning**: Delete trivially true or practically useless theorems (e.g. acyclic ordering when all real CFGs have cycles).
 
 ## File structure
 
 - Modern syntax: `Theory` / `Ancestors`, no `open` / `export_theory()`.
+- **Ancestors vs Libs**: Theories (anything ending in `Theory`) go in `Ancestors`, never in `Libs`. Only non-theory libraries belong in `Libs` (e.g. `Defn`, `TotalDefn`, `pairLib`, `BasicProvers`, `intLib`, `fcpLib`, `pred_setLib`). Note: `Ancestors` opens only the *named* theories' namespaces — transitive ancestors are loaded but not opened. If you need theorems from `finite_mapTheory`, list `finite_map` in `Ancestors` even if it's a transitive ancestor of another listed theory.
 - Separate statement file (API) from proof file (implementation). Statements use `ACCEPT_TAC proof_thm`. Shared definitions in a common ancestor to avoid circular deps.
 - Every exporting API theory must be listed as an ancestor in `vyperHolScript.sml` so it is included in the top-level build.
+
+## Holmakefile conventions
+
+- **Daughter directories only**: A Holmakefile should include its direct children, not grandchildren. Transitive deps are discovered automatically by Holmake.
+- **No external `proofs/` includes**: Don't include `proofs/` directories outside the current directory tree. Props theories already depend on proofs transitively, so including `../proofs` is redundant. Stylistically cleaner to keep Holmakefiles minimal.
+- **No cycles**: If `A/Holmakefile` includes `B/` and `B/Holmakefile` includes `A/`, Holmake will report an INCLUDES chain loop. Fix by including specific subdirectories (`A/defs`, `A/props`) instead of the parent.
 
 **Props vs proofs**: A props theorem may inline its proof (instead of `ACCEPT_TAC`) only if the proof is a trivial one-liner (e.g. `rw[foo_def]`). But if a theorem's proof is that trivial, question whether it needs to be an exported theorem at all — consumers can just `rw[foo_def]` themselves. Export theorems that save non-trivial work or that name a useful fact for `irule`/`drule`.
 
@@ -81,6 +96,17 @@ Every compiler-related definition file (`*DefsScript.sml`) in `venom/passes/`, `
 
 - Prefer proper termination over fuel. Mutual recursion with list helper > FOLDL for HOL4's termination checker.
 - Cheated termination produces unsound induction principle and **Holmake won't report it as CHEATED** ([HOL#1832](https://github.com/HOL-Theorem-Prover/HOL/issues/1832)).
+
+## LLM artifacts
+
+Read all modified files and check for agent artifacts that don't belong in committed code:
+
+- **Internal task IDs or tracking**: references like "P0", "T5", "Phase 2", "Step 3" that come from an agent's internal planning, not the code's design
+- **Process narration**: "Let me...", "Now I'll...", "First we..." — comments that narrate authoring rather than explain the code
+- **Markup leakage**: markdown formatting, XML tags, or prompt fragments in SML comments
+- **Agent infrastructure references**: paths like `.agent-files/`, `.local/`, task file names, handoff slugs — anything from the agent's working environment
+
+The test: would a human author have written this comment? If it only makes sense in the context of an agent session, remove it.
 
 ## PR response
 

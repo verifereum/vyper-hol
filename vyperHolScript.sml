@@ -10,5 +10,9 @@ Ancestors
   venomPassesHol
   (* analysis roll-up *)
   venomAnalysisHol
-  (* lowering *)
+  (* pipeline + codegen *)
+  venomPipelineCorrect
+  (* lowering + e2e *)
   vyperLoweringHol
+  (* codegen *)
+  venomToAsmProps asmToBytecodeProps codegenCorrectness
