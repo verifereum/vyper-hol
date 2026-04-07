@@ -1,2 +1,2 @@
 # Function inliner pass proofs
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../defs ../../../proofs ../../../props ../../../../syntax ../../../../frontend ../../../../semantics ../../../analysis/shared ../../../analysis/shared/defs ../../shared ../../shared/defs ../defs
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../defs ../../../proofs ../../../props ../../../../syntax ../../../../frontend ../../../../semantics ../defs ../../../analysis/fcg/proofs ../../../simulation/defs ../../../analysis/shared ../../../analysis/shared/defs ../../shared ../../shared/defs

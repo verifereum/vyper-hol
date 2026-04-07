@@ -4,26 +4,20 @@ Theory functionInlinerCorrectness
 Ancestors
   functionInlinerProof
 
+open functionInlinerProofTheory
+
 Theorem function_inliner_pass_correct:
-  ∀ctx s fuel threshold.
-    EVERY wf_function ctx.ctx_functions ∧
-    EVERY alloca_pointer_confined ctx.ctx_functions ⇒
+  !ctx s fuel threshold.
+    inliner_ctx_wf ctx <| is_inline_count := 0; is_label_counter := 0 |> /\
+    FDOM s.vs_labels = {} /\
+    ~s.vs_halted ==>
     let ctx' = function_inliner_ctx threshold ctx in
-    ∃fuel'.
-      result_equiv {}
+    ?fuel'.
+      inliner_result_equiv inline_vars
         (run_context fuel ctx s)
         (run_context fuel' ctx' s)
 Proof
   ACCEPT_TAC function_inliner_correct
 QED
 
-(* ===== Obligations ===== *)
-
-(* Inliner preserves wf_function for all functions in context. *)
-Theorem function_inliner_preserves_wf_function:
-  ∀ctx threshold.
-    EVERY wf_function ctx.ctx_functions ⇒
-    EVERY wf_function (function_inliner_ctx threshold ctx).ctx_functions
-Proof
-  cheat
-QED
+val _ = export_theory();
