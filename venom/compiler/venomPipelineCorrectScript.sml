@@ -53,8 +53,8 @@ Proof
   (* exec2 terminates at some fuel (from either direction) *)
   `?fuel2. terminates (exec2 fuel2)` by metis_tac[] >>
   (* Get lift_results for exec1-exec2 and exec2-exec3 *)
-  `lift_result R1_ok R1_term (exec1 fuel) (exec2 fuel2)` by metis_tac[] >>
-  `lift_result R2_ok R2_term (exec2 fuel2) (exec3 fuel')` by metis_tac[] >>
+  `lift_result R1_ok R1_term R1_term (exec1 fuel) (exec2 fuel2)` by metis_tac[] >>
+  `lift_result R2_ok R2_term R2_term (exec2 fuel2) (exec3 fuel')` by metis_tac[] >>
   (* Compose via case analysis *)
   Cases_on `exec1 fuel` >> Cases_on `exec2 fuel2` >> Cases_on `exec3 fuel'` >>
   gvs[lift_result_def] >> metis_tac[]
@@ -544,17 +544,20 @@ QED
    imply observable equivalence. *)
 Theorem pass_correct_implies_observable:
   !(R_ok : venom_state -> venom_state -> bool)
-   (R_term : venom_state -> venom_state -> bool) exec1 exec2 fuel fuel'.
+   (R_term : venom_state -> venom_state -> bool)
+   (R_abort : venom_state -> venom_state -> bool) exec1 exec2 fuel fuel'.
     (!s1 s2. R_ok s1 s2 ==> observable_equiv s1 s2) /\
     (!s1 s2. R_term s1 s2 ==> observable_equiv s1 s2) /\
-    pass_correct R_ok R_term R_term exec1 exec2 /\
+    (!s1 s2. R_abort s1 s2 ==> revert_equiv s1 s2) /\
+    pass_correct R_ok R_term R_abort exec1 exec2 /\
     terminates (exec1 fuel) /\ terminates (exec2 fuel') ==>
     observable_result_equiv (exec1 fuel) (exec2 fuel')
 Proof
   rw[pass_correct_def] >>
   first_x_assum drule_all >> strip_tac >>
   Cases_on `exec1 fuel` >> Cases_on `exec2 fuel'` >>
-  gvs[lift_result_def, observable_result_equiv_def, terminates_def]
+  gvs[lift_result_def, observable_result_equiv_def, revert_equiv_def,
+      terminates_def]
 QED
 
 (* rel_seq of observable-equiv-preserving relations preserves observable_equiv.

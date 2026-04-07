@@ -458,7 +458,7 @@ Proof
       (* OK case: derive both sides return OK with same state *)
       rename1 `step_inst_base inst s = OK s_orig` >>
       `step_inst_base (transform_inst dfg inst) s = OK s_orig` by (
-        qpat_x_assum `lift_result _ _ (OK _) _` mp_tac >>
+        qpat_x_assum `lift_result _ _ _ (OK _) _` mp_tac >>
         Cases_on `step_inst_base (transform_inst dfg inst) s` >>
         simp[lift_result_def] >>
         strip_tac >> imp_res_tac state_equiv_empty_eq >> fs[]) >>

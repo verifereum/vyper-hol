@@ -66,6 +66,7 @@ Proof
   irule lift_result_trans_proof >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   qexists_tac `case step_inst fuel ctx inst2 (s2 with vs_inst_idx := 0) of
     OK s'' => if s''.vs_halted then Halt s'' else OK s''
   | Halt s' => Halt s' | Abort a' s' => Abort a' s'
@@ -73,6 +74,7 @@ Proof
   conj_tac
   >- (
     irule lift_result_trans_proof >>
+    conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
     qexists_tac `case step_inst fuel ctx inst1 (s1 with vs_inst_idx := 0) of
@@ -157,6 +159,7 @@ Proof
     irule lift_result_trans_proof >>
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
     qexists_tac `step_inst fuel ctx inst1 s2_0` >>
     conj_tac >> first_assum ACCEPT_TAC) >>
   (* Unfold run_block to halted_wrap(step_inst inst s) *)
@@ -167,6 +170,7 @@ Proof
   irule lift_result_trans_proof >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   qexists_tac `case step_inst fuel ctx inst2 s2_0 of
     OK s'' => if s''.vs_halted then Halt s'' else OK s''
   | Halt s' => Halt s' | Abort a' s' => Abort a' s'
@@ -174,6 +178,7 @@ Proof
   conj_tac
   >- (
     irule lift_result_trans_proof >>
+    conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
     qexists_tac `case step_inst fuel ctx inst1 s1_0 of
@@ -454,7 +459,7 @@ Proof
        (s2 with vs_inst_idx := 0) = Error e`
   >- (
     DISJ1_TAC >> qpat_x_assum `?e. _` strip_assume_tac >>
-    qpat_x_assum `lift_result _ _ (run_insts _ _ f1_group _)
+    qpat_x_assum `lift_result _ _ _ (run_insts _ _ f1_group _)
       (run_insts _ _ f1_group _)` mp_tac >>
     qpat_assum `_ = Error e` (fn th => REWRITE_TAC[th]) >>
     strip_tac >> drule lift_result_error_left >> strip_tac >>
@@ -486,7 +491,7 @@ Proof
     (* Extract OK v2 from combined lift_result *)
     `?v2. run_insts fuel ctx f2_group (s2 with vs_inst_idx := 0) = OK v2 /\
           R_ok v1 v2` by (
-      qpat_assum `lift_result _ _ (run_insts _ _ f1_group _)
+      qpat_assum `lift_result _ _ _ (run_insts _ _ f1_group _)
         (run_insts _ _ f2_group _)` mp_tac >>
       qpat_assum `_ = OK v1` (fn th => REWRITE_TAC[th]) >>
       Cases_on `run_insts fuel ctx f2_group (s2 with vs_inst_idx := 0)` >>
@@ -532,7 +537,7 @@ Proof
     strip_tac >>
     qpat_x_assum `~(?v1. _ = OK v1)` mp_tac >> simp_tac (srw_ss()) [] >>
     (* From combined lift_result + OK v2, derive OK v1 *)
-    qpat_assum `lift_result _ _ (run_insts _ _ f1_group _)
+    qpat_assum `lift_result _ _ _ (run_insts _ _ f1_group _)
       (run_insts _ _ f2_group _)` mp_tac >>
     qpat_assum `_ = OK v2` (fn th => REWRITE_TAC[th]) >>
     Cases_on `run_insts fuel ctx f1_group (s1 with vs_inst_idx := 0)` >>
@@ -542,10 +547,12 @@ Proof
   \\ irule lift_result_trans_proof
   \\ conj_tac >- first_assum ACCEPT_TAC
   \\ conj_tac >- first_assum ACCEPT_TAC
+  \\ conj_tac >- first_assum ACCEPT_TAC
   \\ qexists_tac `run_insts fuel ctx f2_group (s2 with vs_inst_idx := 0)`
   \\ conj_tac
   >- (
     irule lift_result_trans_proof >>
+    conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
     qexists_tac `run_insts fuel ctx f1_group (s1 with vs_inst_idx := 0)` >>
@@ -786,7 +793,7 @@ Proof
           (bb with bb_instructions := FLAT (MAPi g2 bb.bb_instructions))
           (v2 with vs_inst_idx := j2 + LENGTH (f2 v inst)))` by (
     rpt strip_tac >>
-    qpat_x_assum `!a b. R_ok _ _ ==> _ \/ lift_result _ _ _ _`
+    qpat_x_assum `!a b. R_ok _ _ ==> _ \/ lift_result _ _ _ _ _`
       (qspecl_then [`v1`, `v2`] mp_tac) >>
     impl_tac >- first_assum ACCEPT_TAC >>
     qpat_assum `LENGTH (FLAT (TAKE (SUC i) (MAPi g1 _))) = _`
@@ -795,7 +802,7 @@ Proof
       (fn th => REWRITE_TAC [th]) >>
     simp_tac std_ss [])
   (* Kill OLD IH (TAKE SUC i form) — keep rewritten IH (j+len form) *)
-  \\ qpat_x_assum `!v1 v2. R_ok _ _ ==> _ \/ lift_result _ _
+  \\ qpat_x_assum `!v1 v2. R_ok _ _ ==> _ \/ lift_result _ _ _
        (run_block _ _ _ (v1 with vs_inst_idx := LENGTH (FLAT (TAKE (SUC i) _))))
        _` kall_tac
   (* Three-way case split *)
@@ -818,7 +825,7 @@ Proof
         REWRITE_TAC[run_insts_singleton]) >>
     `lift_result R_ok R_term R_term (step_inst fuel ctx inst1 s1_0)
        (step_inst fuel ctx inst1 s2_0)` by (
-      qpat_assum `lift_result _ _ (run_insts _ _ (f1 v inst) s1_0) _` mp_tac >>
+      qpat_assum `lift_result _ _ _ (run_insts _ _ (f1 v inst) s1_0) _` mp_tac >>
       qpat_assum `f1 v inst = _` (fn th => REWRITE_TAC[th]) >>
       REWRITE_TAC[run_insts_singleton]) >>
     `j1 < LENGTH (FLAT (MAPi g1 bb.bb_instructions))` by (
@@ -871,7 +878,7 @@ Proof
         REWRITE_TAC[run_insts_singleton]) >>
     `lift_result R_ok R_term R_term (step_inst fuel ctx inst1 s1_0)
        (step_inst fuel ctx inst1 s2_0)` by (
-      qpat_assum `lift_result _ _ (run_insts _ _ (f1 v inst) s1_0) _` mp_tac >>
+      qpat_assum `lift_result _ _ _ (run_insts _ _ (f1 v inst) s1_0) _` mp_tac >>
       qpat_assum `f1 v inst = _` (fn th => REWRITE_TAC[th]) >>
       REWRITE_TAC[run_insts_singleton]) >>
     `j1 < LENGTH (FLAT (MAPi g1 bb.bb_instructions))` by (
@@ -1015,6 +1022,7 @@ Proof
   `lift_result R_ok R_term R_term (run_block fuel ctx (bt1 bb) s1)
                             (run_block fuel ctx (bt2 bb) s2)` by (
     irule lift_result_trans_proof >>
+    conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
     qexists_tac `run_block fuel ctx (bt1 bb) s2` >>

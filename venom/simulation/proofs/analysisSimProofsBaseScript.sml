@@ -905,6 +905,7 @@ Proof
   \\ irule lift_result_trans_proof
   \\ conj_tac >- first_assum ACCEPT_TAC
   \\ conj_tac >- first_assum ACCEPT_TAC
+  \\ conj_tac >- first_assum ACCEPT_TAC
   \\ qexists_tac `run_block fuel ctx bb_short s'`
   \\ conj_tac >> first_assum ACCEPT_TAC
 QED
@@ -1246,7 +1247,7 @@ Proof
     (* IH lift_result: compose via transitivity *)
     DISJ2_TAC >>
     irule lift_result_trans_proof >>
-    conj_tac >- fs[] >> conj_tac >- fs[] >>
+    conj_tac >- fs[] >> conj_tac >- fs[] >> conj_tac >- fs[] >>
     qexists_tac `run_block fuel ctx bb (v2 with vs_inst_idx := SUC i)` >>
     fs[]
   )
@@ -1406,7 +1407,7 @@ Proof
     CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
     simp[get_instruction_def] >>
     irule lift_result_trans_proof >>
-    conj_tac >- fs[] >> conj_tac >- fs[] >>
+    conj_tac >- fs[] >> conj_tac >- fs[] >> conj_tac >- fs[] >>
     qexists_tac `case step_inst fuel ctx inst' (s' with vs_inst_idx := 0) of
        OK s'' => if s''.vs_halted then Halt s'' else OK s''
      | Halt s' => Halt s' | Abort a s' => Abort a s'
@@ -1414,7 +1415,7 @@ Proof
     conj_tac
     >- (
       irule lift_result_trans_proof >>
-      conj_tac >- fs[] >> conj_tac >- fs[] >>
+      conj_tac >- fs[] >> conj_tac >- fs[] >> conj_tac >- fs[] >>
       qexists_tac `case step_inst fuel ctx inst (s' with vs_inst_idx := 0) of
          OK s'' => if s''.vs_halted then Halt s'' else OK s''
        | Halt s' => Halt s' | Abort a s' => Abort a s'
@@ -1576,7 +1577,7 @@ Proof
       `st2.vs_inst_idx = s'.vs_inst_idx` by
         metis_tac[run_insts_preserves_idx] >>
       `R_ok st1 st2` by (
-        qpat_x_assum `lift_result _ _ (OK _) (OK _)` mp_tac >>
+        qpat_x_assum `lift_result _ _ _ (OK _) (OK _)` mp_tac >>
         simp[lift_result_def]) >>
       (* Skip past the f v inst prefix in the transformed block *)
       `run_block fuel ctx
@@ -1657,6 +1658,7 @@ Proof
     irule lift_result_trans_proof >>
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
     qexists_tac `run_insts fuel ctx (f v inst) s'` >> gvs[])
   >- (
     `~(?s0. run_insts fuel ctx (f v inst) s' = OK s0)` by
@@ -1669,6 +1671,7 @@ Proof
     irule lift_result_trans_proof >>
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
     qexists_tac `run_insts fuel ctx (f v inst) s'` >> gvs[])
   >- (
     `~(?s0. run_insts fuel ctx (f v inst) s' = OK s0)` by
@@ -1679,6 +1682,7 @@ Proof
           (s' with vs_inst_idx := j))` by (
       irule run_insts_lift_run_block >> fs[]) >>
     irule lift_result_trans_proof >>
+    conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
     qexists_tac `run_insts fuel ctx (f v inst) s'` >> gvs[])
@@ -2010,7 +2014,7 @@ Proof
     CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
     simp[get_instruction_def] >>
     irule lift_result_trans_proof >>
-    conj_tac >- fs[] >> conj_tac >- fs[] >>
+    conj_tac >- fs[] >> conj_tac >- fs[] >> conj_tac >- fs[] >>
     qexists_tac `case step_inst fuel ctx inst' (s' with vs_inst_idx := 0) of
        OK s'' => if s''.vs_halted then Halt s'' else OK s''
      | Halt s' => Halt s' | Abort a s' => Abort a s'
@@ -2018,7 +2022,7 @@ Proof
     conj_tac
     >- (
       irule lift_result_trans_proof >>
-      conj_tac >- fs[] >> conj_tac >- fs[] >>
+      conj_tac >- fs[] >> conj_tac >- fs[] >> conj_tac >- fs[] >>
       qexists_tac `case step_inst fuel ctx inst (s' with vs_inst_idx := 0) of
          OK s'' => if s''.vs_halted then Halt s'' else OK s''
        | Halt s' => Halt s' | Abort a s' => Abort a s'
@@ -2146,7 +2150,7 @@ Proof
       `st2.vs_inst_idx = s'.vs_inst_idx` by
         metis_tac[run_insts_preserves_idx] >>
       `R_ok st1 st2` by (
-        qpat_x_assum `lift_result _ _ (OK _) (OK _)` mp_tac >>
+        qpat_x_assum `lift_result _ _ _ (OK _) (OK _)` mp_tac >>
         simp[lift_result_def]) >>
       `run_block fuel ctx
          (bb with bb_instructions := FLAT (MAPi g bb.bb_instructions))
@@ -2196,6 +2200,7 @@ Proof
     irule lift_result_trans_proof >>
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
     qexists_tac `run_insts fuel ctx (f v inst) s'` >> gvs[])
   >- (
     `~(?s0. run_insts fuel ctx (f v inst) s' = OK s0)` by
@@ -2208,6 +2213,7 @@ Proof
     irule lift_result_trans_proof >>
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
     qexists_tac `run_insts fuel ctx (f v inst) s'` >> gvs[])
   >- (
     `~(?s0. run_insts fuel ctx (f v inst) s' = OK s0)` by
@@ -2218,6 +2224,7 @@ Proof
           (s' with vs_inst_idx := j))` by (
       irule run_insts_lift_run_block >> fs[]) >>
     irule lift_result_trans_proof >>
+    conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
     qexists_tac `run_insts fuel ctx (f v inst) s'` >> gvs[])
@@ -2344,6 +2351,7 @@ Proof
   `lift_result R_ok R_term R_term (run_block fuel ctx bb s1)
                             (run_block fuel ctx (bt bb) s2)` by (
     irule lift_result_trans_proof >>
+    conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
     qexists_tac `run_block fuel ctx bb s2` >>

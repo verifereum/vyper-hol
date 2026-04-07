@@ -394,7 +394,7 @@ QED
 Triviality lift_result_flip:
   !R_ok R_term r1 r2.
     lift_result R_ok R_term R_term r1 r2 <=>
-    lift_result (\a b. R_ok b a) (\a b. R_term b a) r2 r1
+    lift_result (\a b. R_ok b a) (\a b. R_term b a) (\a b. R_term b a) r2 r1
 Proof
   Cases_on `r1` >> Cases_on `r2` >> simp[lift_result_def] >> metis_tac[]
 QED
@@ -1382,7 +1382,7 @@ Proof
     >- (
       `lift_result R_ok R_term R_term (run_block fuel ctx bb s1)
          (run_block fuel ctx bb s2)` by (
-        qpat_x_assum `!f c b a b'. MEM _ _ /\ R_ok _ _ ==> lift_result _ _ _ _`
+        qpat_x_assum `!f c b a b'. MEM _ _ /\ R_ok _ _ ==> lift_result _ _ _ _ _`
           (irule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
         simp[]
       ) >>
@@ -1477,7 +1477,7 @@ Proof
     (* Triangle: lift_result R_ok R_term R_term (bb s2) (bb s1) *)
     `lift_result R_ok R_term R_term (run_block fuel ctx bb s2)
        (run_block fuel ctx bb s1)` by (
-      qpat_x_assum `!f c b a b'. MEM _ _ /\ R_ok _ _ ==> lift_result _ _ _ _`
+      qpat_x_assum `!f c b a b'. MEM _ _ /\ R_ok _ _ ==> lift_result _ _ _ _ _`
         (irule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
       simp[]
     ) >>
@@ -1512,7 +1512,7 @@ Proof
     first_x_assum (qspecl_then [`fuel`, `0`, `ctx`, `s`, `s`] mp_tac) >>
     simp[resolves_to_def, lift_result_def] >> strip_tac >>
     qexists_tac `fuel'` >> simp[] >>
-    qpat_x_assum `lift_result _ _ _ _` mp_tac >>
+    qpat_x_assum `lift_result _ _ _ _ _` mp_tac >>
     Cases_on `run_function fuel' ctx fn s` >>
     Cases_on `run_function fuel ctx (function_map_transform bt fn) s` >>
     simp[lift_result_def]

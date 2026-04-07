@@ -302,7 +302,7 @@ Proof
       qpat_x_assum `!bb fuel ctx s1 s2 s1' s2'. _ ==> P s1'`
         (qspecl_then [`bb`, `fuel`, `ctx`, `s1`, `s2`, `v`, `v'`] mp_tac) >>
       simp[]) >>
-    qpat_x_assum `!ctx' s1' s2'. _ ==> _ \/ lift_result _ _ (run_function _ _ fn _) _`
+    qpat_x_assum `!ctx' s1' s2'. _ ==> _ \/ lift_result _ _ _ (run_function _ _ fn _) _`
       (qspecl_then [`ctx`, `v`, `v'`] mp_tac) >> simp[]
   )
 QED

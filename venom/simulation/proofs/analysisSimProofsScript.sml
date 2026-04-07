@@ -703,6 +703,7 @@ Proof
     irule lift_result_trans_proof >>
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
     qexists_tac `run_block fuel run_ctx bb s2` >>
     conj_tac >> first_assum ACCEPT_TAC) >>
   (* Case split on run_block result *)
@@ -909,6 +910,7 @@ Proof
     irule lift_result_trans_proof >>
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
     qexists_tac `run_block fuel run_ctx bb s2` >>
     conj_tac >> first_assum ACCEPT_TAC) >>
   (* Case split on run_block result *)
@@ -1110,6 +1112,7 @@ Proof
   `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s1)
                             (run_block fuel run_ctx (bt bb) s2)` by (
     irule lift_result_trans_proof >>
+    conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
     qexists_tac `run_block fuel run_ctx bb s2` >>
@@ -1331,6 +1334,7 @@ Proof
     irule lift_result_trans_proof >>
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
     qexists_tac `run_block fuel run_ctx bb s2` >>
     conj_tac >> first_assum ACCEPT_TAC) >>
   Cases_on `run_block fuel run_ctx bb s1` >>
@@ -1506,6 +1510,7 @@ Proof
   `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s1)
                             (run_block fuel run_ctx (bt bb) s2)` by (
     irule lift_result_trans_proof >>
+    conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
     qexists_tac `run_block fuel run_ctx bb s2` >>
@@ -1945,9 +1950,11 @@ Proof
        irule lift_result_trans_proof
        \\ conj_tac >- first_assum ACCEPT_TAC
        \\ conj_tac >- first_assum ACCEPT_TAC
+       \\ conj_tac >- first_assum ACCEPT_TAC
        \\ qexists_tac `run_block fuel run_ctx (bt bb) s2`
        \\ conj_tac
        >- (irule lift_result_trans_proof
+           \\ conj_tac >- first_assum ACCEPT_TAC
            \\ conj_tac >- first_assum ACCEPT_TAC
            \\ conj_tac >- first_assum ACCEPT_TAC
            \\ qexists_tac `run_block fuel run_ctx bb s2`

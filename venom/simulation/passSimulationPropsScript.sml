@@ -27,7 +27,7 @@ Theorem lift_result_refl:
     (!s. R_ok s s) /\ (!s. R_term s s) ==>
     !r. lift_result R_ok R_term R_term r r
 Proof
-  ACCEPT_TAC lift_result_refl_proof
+  rpt strip_tac >> irule lift_result_refl_proof >> simp[]
 QED
 
 Theorem lift_result_trans:
@@ -39,7 +39,7 @@ Theorem lift_result_trans:
                lift_result R_ok R_term R_term r2 r3 ==>
                lift_result R_ok R_term R_term r1 r3
 Proof
-  ACCEPT_TAC lift_result_trans_proof
+  rpt strip_tac >> irule lift_result_trans_proof >> simp[] >> metis_tac[]
 QED
 
 (* lift_result covariant in both R_ok and R_term *)
@@ -50,10 +50,10 @@ Theorem lift_result_weaken:
    (R2' : venom_state -> venom_state -> bool).
     (!s1 s2. R1 s1 s2 ==> R1' s1 s2) /\
     (!s1 s2. R2 s1 s2 ==> R2' s1 s2) ==>
-    !r1 r2. lift_result R1 R2 r1 r2 ==>
-            lift_result R1' R2' r1 r2
+    !r1 r2. lift_result R1 R2 R2 r1 r2 ==>
+            lift_result R1' R2' R2' r1 r2
 Proof
-  ACCEPT_TAC lift_result_weaken_proof
+  rpt strip_tac >> irule lift_result_weaken_proof >> simp[] >> metis_tac[]
 QED
 
 (* ===== General (relational) block sim ⟹ function sim ===== *)
@@ -298,10 +298,10 @@ Theorem lift_result_mono:
   !R1 R2 T1 T2 r1 r2.
     (!s1 s2. R1 s1 s2 ==> R2 s1 s2) /\
     (!s1 s2. T1 s1 s2 ==> T2 s1 s2) /\
-    lift_result R1 T1 r1 r2 ==>
-    lift_result R2 T2 r1 r2
+    lift_result R1 T1 T1 r1 r2 ==>
+    lift_result R2 T2 T2 r1 r2
 Proof
-  ACCEPT_TAC lift_result_mono_proof
+  rpt strip_tac >> irule lift_result_weaken_proof >> simp[] >> metis_tac[]
 QED
 
 (* Invariant-carrying version: per-block sim only required when Inv holds.
@@ -494,7 +494,7 @@ Theorem lift_result_implies_pass_correct:
   ==>
     pass_correct R_ok R_term R_term exec1 exec2
 Proof
-  ACCEPT_TAC lift_result_implies_pass_correct_proof
+  rpt strip_tac >> irule lift_result_implies_pass_correct_proof >> simp[]
 QED
 
 Theorem state_equiv_execution_equiv_valid_state_rel:
