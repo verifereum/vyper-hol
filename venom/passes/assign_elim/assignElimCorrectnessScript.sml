@@ -44,10 +44,10 @@ Theorem assign_elim_function_correct:
     (!bb inst x.
        MEM bb fn_subst.fn_blocks /\ MEM inst bb.bb_instructions /\
        MEM (Var x) inst.inst_operands ==> x NOTIN elim) ==>
-    (?e. run_function fuel ctx fn s = Error e) \/
+    (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
-      (run_function fuel ctx fn s)
-      (run_function fuel ctx (assign_elim_function fn) s)
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (assign_elim_function fn) s)
 Proof
   ACCEPT_TAC assign_elim_function_correct_proof
 QED

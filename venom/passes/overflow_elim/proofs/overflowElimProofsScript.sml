@@ -19,10 +19,10 @@ Ancestors
 Theorem overflow_elim_function_correct_proof:
   !fuel ctx fn s.
     fn_inst_wf fn /\ s.vs_inst_idx = 0 ==>
-    (?e. run_function fuel ctx fn s = Error e) \/
+    (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
-      (run_function fuel ctx fn s)
-      (run_function fuel ctx (overflow_elim_function fn) s)
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (overflow_elim_function fn) s)
 Proof
   cheat
 QED

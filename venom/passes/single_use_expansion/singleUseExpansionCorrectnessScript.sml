@@ -14,8 +14,8 @@ Theorem sue_expand_function_correct:
     s.vs_inst_idx = 0 ==>
     lift_result (state_equiv (sue_fresh_vars_fn fn))
                (execution_equiv (sue_fresh_vars_fn fn)) (execution_equiv (sue_fresh_vars_fn fn))
-      (run_function fuel ctx fn s)
-      (run_function fuel ctx (sue_expand_function fn) s)
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (sue_expand_function fn) s)
 Proof
   ACCEPT_TAC sue_expand_function_correct_proof
 QED

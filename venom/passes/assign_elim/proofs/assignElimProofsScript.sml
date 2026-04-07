@@ -110,7 +110,7 @@ Proof
   Cases_on `op` >> fs[eval_operand_def, lookup_var_def]
 QED
 
-(* After run_block OK (non-halted), soundness transfers from entry to exit.
+(* After exec_block OK (non-halted), soundness transfers from entry to exit.
    Requires: no non-last instruction is a terminator. *)
 (* Fixpoint property of copy_prop analysis *)
 Triviality copy_prop_is_fixpoint[local]:
@@ -349,7 +349,7 @@ Triviality copy_prop_exit_sound[local]:
            (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn)
         bb.bb_label 0) s /\
     s.vs_inst_idx = 0 /\
-    run_block fuel ctx bb s = OK v
+    exec_block fuel ctx bb s = OK v
     ==>
     copy_sound_opt
       (df_at NONE
@@ -360,7 +360,7 @@ Triviality copy_prop_exit_sound[local]:
 Proof
   rpt strip_tac >>
   `bb.bb_instructions <> []` by
-    metis_tac[venomExecPropsTheory.run_block_ok_nonempty] >>
+    metis_tac[venomExecPropsTheory.exec_block_ok_nonempty] >>
   (* Find the terminator index *)
   qabbrev_tac `ti = PRE (LENGTH bb.bb_instructions)` >>
   `ti < LENGTH bb.bb_instructions` by
@@ -461,12 +461,12 @@ Triviality successor_entry_sound[local]:
     MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre /\
     s.vs_inst_idx = 0 /\
     copy_sound_opt (df_at NONE result s.vs_current_bb 0) s /\
-    run_block fuel ctx bb s = OK v
+    exec_block fuel ctx bb s = OK v
     ==>
     copy_sound_opt (df_at NONE result v.vs_current_bb 0) v
 Proof
   rpt gen_tac >> simp_tac std_ss [LET_THM] >> strip_tac >>
-  `bb.bb_instructions <> []` by metis_tac[venomExecPropsTheory.run_block_ok_nonempty] >>
+  `bb.bb_instructions <> []` by metis_tac[venomExecPropsTheory.exec_block_ok_nonempty] >>
   `EVERY inst_wf bb.bb_instructions` by (fs[fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
   `!i. i < LENGTH bb.bb_instructions - 1 ==>
        ~is_terminator (EL i bb.bb_instructions).inst_opcode` by metis_tac[] >>
@@ -490,7 +490,7 @@ Proof
      bb.bb_label) v` by metis_tac[copy_sound_join_right] >>
   (* Step 5: Successor location *)
   `MEM v.vs_current_bb (bb_succs bb)` by
-    metis_tac[venomExecPropsTheory.run_block_current_bb_in_succs] >>
+    metis_tac[venomExecPropsTheory.exec_block_current_bb_in_succs] >>
   `MEM v.vs_current_bb (cfg_succs_of (cfg_analyze fn) bb.bb_label)` by
     metis_tac[cfgAnalysisPropsTheory.bb_succs_in_cfg_succs] >>
   `MEM v.vs_current_bb (cfg_analyze fn).cfg_dfs_pre` by
@@ -560,10 +560,10 @@ Theorem assign_subst_function_eq[local]:
       !i. i < LENGTH bb.bb_instructions - 1 ==>
         ~is_terminator (EL i bb.bb_instructions).inst_opcode)
     ==>
-    (?e. run_function fuel ctx fn s = Error e) \/
+    (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
-      (run_function fuel ctx fn s)
-      (run_function fuel ctx fn_subst s)
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx fn_subst s)
 Proof
   rpt GEN_TAC >> simp_tac std_ss [LET_THM] >> rpt strip_tac
   (* Expand copy_prop_analyze in goal BEFORE adding framework *)
@@ -640,10 +640,10 @@ Theorem assign_elim_function_correct_proof:
        MEM bb fn_subst.fn_blocks /\ MEM inst bb.bb_instructions /\
        MEM (Var x) inst.inst_operands ==> x NOTIN elim)
     ==>
-    (?e. run_function fuel ctx fn s = Error e) \/
+    (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
-      (run_function fuel ctx fn s)
-      (run_function fuel ctx (assign_elim_function fn) s)
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (assign_elim_function fn) s)
 Proof
   rpt GEN_TAC >> simp_tac std_ss [LET_THM] >> rpt strip_tac >>
   (* Phase 1: fn → fn_subst gives state_equiv {} (or fn errors) *)
@@ -667,7 +667,7 @@ Proof
   (* Now: Phase 2 conclusion is disjunction about fn_subst → fn_elim *)
   strip_tac >- (
     (* Phase 2 gave Error on fn_subst *)
-    Cases_on `run_function fuel ctx fn s` >>
+    Cases_on `run_blocks fuel ctx fn s` >>
     fs[lift_result_def]
   ) >>
   (* Have: Phase 1 lift_result (∅), Phase 2 lift_result (elim) *)
@@ -680,8 +680,8 @@ Proof
   `assign_elim_function fn = clear_nops_function fn_elim` by
     simp[assign_elim_function_def, Abbr `fn_elim`] >>
   `result_equiv {}
-     (run_function fuel ctx fn_elim s)
-     (run_function fuel ctx (assign_elim_function fn) s)` by (
+     (run_blocks fuel ctx fn_elim s)
+     (run_blocks fuel ctx (assign_elim_function fn) s)` by (
     pop_assum (fn th => REWRITE_TAC [th]) >>
     irule clear_nops_function_correct >> simp[]) >>
   fs[result_equiv_is_lift_result] >>
@@ -689,8 +689,8 @@ Proof
   `lift_result (state_equiv (assign_elim_eliminated_vars fn))
      (execution_equiv (assign_elim_eliminated_vars fn))
                   (execution_equiv (assign_elim_eliminated_vars fn))
-     (run_function fuel ctx fn s)
-     (run_function fuel ctx
+     (run_blocks fuel ctx fn s)
+     (run_blocks fuel ctx
         (analysis_function_transform NONE (copy_prop_analyze fn)
            (\v inst. [assign_subst_inst v inst]) fn) s)` by (
     irule lift_result_weaken >>
@@ -702,12 +702,12 @@ Proof
   `lift_result (state_equiv (assign_elim_eliminated_vars fn))
      (execution_equiv (assign_elim_eliminated_vars fn))
                   (execution_equiv (assign_elim_eliminated_vars fn))
-     (run_function fuel ctx fn s)
-     (run_function fuel ctx fn_elim s)` by (
+     (run_blocks fuel ctx fn s)
+     (run_blocks fuel ctx fn_elim s)` by (
     irule lift_result_trans >>
     conj_tac >- (rpt strip_tac >> metis_tac[state_equiv_trans]) >>
     conj_tac >- (rpt strip_tac >> metis_tac[execution_equiv_trans]) >>
-    qexists_tac `run_function fuel ctx
+    qexists_tac `run_blocks fuel ctx
       (analysis_function_transform NONE (copy_prop_analyze fn)
          (\v inst. [assign_subst_inst v inst]) fn) s` >>
     simp[]) >>
@@ -715,7 +715,7 @@ Proof
   irule lift_result_trans >>
   conj_tac >- (rpt strip_tac >> metis_tac[state_equiv_trans]) >>
   conj_tac >- (rpt strip_tac >> metis_tac[execution_equiv_trans]) >>
-  qexists_tac `run_function fuel ctx fn_elim s` >>
+  qexists_tac `run_blocks fuel ctx fn_elim s` >>
   conj_tac >- first_assum ACCEPT_TAC >>
   irule lift_result_weaken >>
   qexistsl_tac [`state_equiv {}`, `execution_equiv {}`] >>

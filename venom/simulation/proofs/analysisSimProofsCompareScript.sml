@@ -82,7 +82,7 @@ Proof
     | Halt s' => Halt s' | Abort a' s' => Abort a' s'
     | IntRet rv ss => IntRet rv ss | Error e => Error e` >>
     conj_tac
-    >- (irule terminator_run_block_step_lift >> simp[])
+    >- (irule terminator_exec_block_step_lift >> simp[])
     >>
     (* halted_wrap preserves lift_result *)
     `inst1.inst_opcode <> INVOKE` by metis_tac[is_terminator_not_INVOKE] >>
@@ -99,7 +99,7 @@ Proof
       metis_tac[vsr_R_ok_R_term])
     >> TRY (irule R_term_idx_change_both >> metis_tac[]))
   >>
-  irule terminator_run_block_step_lift_rev >> simp[]
+  irule terminator_exec_block_step_lift_rev >> simp[]
 QED
 
 (* ===== Terminator case helper ===== *)
@@ -126,13 +126,13 @@ Triviality abc_terminator_case:
     lift_result R_ok R_term R_term (step_inst fuel ctx inst1 s1_0)
       (step_inst fuel ctx inst1 s2_0)
   ==>
-    (?e. run_block fuel ctx
+    (?e. exec_block fuel ctx
            (bb with bb_instructions := FLAT (MAPi g1 bb.bb_instructions))
            s1 = Error e) \/
     lift_result R_ok R_term R_term
-      (run_block fuel ctx
+      (exec_block fuel ctx
          (bb with bb_instructions := FLAT (MAPi g1 bb.bb_instructions)) s1)
-      (run_block fuel ctx
+      (exec_block fuel ctx
          (bb with bb_instructions := FLAT (MAPi g2 bb.bb_instructions)) s2)
 Proof
   rpt gen_tac >> DISCH_TAC >>
@@ -147,7 +147,7 @@ Proof
     `?e'. step_inst fuel ctx inst1 s1_0 = Error e'` by
       metis_tac[lift_result_error_left] >>
     DISJ1_TAC >>
-    ONCE_REWRITE_TAC[venomExecSemanticsTheory.run_block_def] >>
+    ONCE_REWRITE_TAC[venomExecSemanticsTheory.exec_block_def] >>
     simp[get_instruction_def] >>
     gvs[] >> imp_res_tac step_inst_error_idx_recover >> gvs[])
   >>
@@ -162,11 +162,11 @@ Proof
     conj_tac >- first_assum ACCEPT_TAC >>
     qexists_tac `step_inst fuel ctx inst1 s2_0` >>
     conj_tac >> first_assum ACCEPT_TAC) >>
-  (* Unfold run_block to halted_wrap(step_inst inst s) *)
-  ONCE_REWRITE_TAC[venomExecSemanticsTheory.run_block_def] >>
+  (* Unfold exec_block to halted_wrap(step_inst inst s) *)
+  ONCE_REWRITE_TAC[venomExecSemanticsTheory.exec_block_def] >>
   simp[get_instruction_def] >>
   DISJ2_TAC >>
-  (* Chain through s1_0/s2_0 using terminator_run_block_step_lift *)
+  (* Chain through s1_0/s2_0 using terminator_exec_block_step_lift *)
   irule lift_result_trans_proof >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -187,8 +187,8 @@ Proof
     | IntRet rv ss => IntRet rv ss | Error e => Error e` >>
     conj_tac
     >- (
-      (* run_block@s1 -> halted_wrap(inst1@s1_0) *)
-      gvs[] >> irule terminator_run_block_step_lift >> simp[venom_state_idx_self_update])
+      (* exec_block@s1 -> halted_wrap(inst1@s1_0) *)
+      gvs[] >> irule terminator_exec_block_step_lift >> simp[venom_state_idx_self_update])
     >>
     (* halted_wrap(inst1@s1_0) -> halted_wrap(inst2@s2_0) *)
     Cases_on `step_inst fuel ctx inst1 s1_0` >>
@@ -202,9 +202,9 @@ Proof
       metis_tac[vsr_R_ok_R_term])
     >> TRY (irule R_term_idx_change_both >> metis_tac[]))
   >>
-  (* halted_wrap(inst2@s2_0) -> run_block@s2:
+  (* halted_wrap(inst2@s2_0) -> exec_block@s2:
      Use reverse direction: lift_result(halted_wrap(inst@(s with idx:=j)))(halted_wrap(inst@s)) *)
-  gvs[] >> irule terminator_run_block_step_lift_rev >> simp[]
+  gvs[] >> irule terminator_exec_block_step_lift_rev >> simp[]
 QED
 
 (* ===== INVOKE case helper ===== *)
@@ -234,24 +234,24 @@ Triviality abc_invoke_case:
     (* IH_rest: after INVOKE OK/OK, remaining block simulates *)
     (!v1 v2.
        R_ok (v1 with vs_inst_idx := 0) (v2 with vs_inst_idx := 0) ==>
-       (?e. run_block fuel ctx
+       (?e. exec_block fuel ctx
               (bb with bb_instructions := FLAT (MAPi g1 bb.bb_instructions))
               (v1 with vs_inst_idx := j1_next) = Error e) \/
        lift_result R_ok R_term R_term
-         (run_block fuel ctx
+         (exec_block fuel ctx
             (bb with bb_instructions := FLAT (MAPi g1 bb.bb_instructions))
             (v1 with vs_inst_idx := j1_next))
-         (run_block fuel ctx
+         (exec_block fuel ctx
             (bb with bb_instructions := FLAT (MAPi g2 bb.bb_instructions))
             (v2 with vs_inst_idx := j2_next)))
   ==>
-    (?e. run_block fuel ctx
+    (?e. exec_block fuel ctx
            (bb with bb_instructions := FLAT (MAPi g1 bb.bb_instructions))
            s1 = Error e) \/
     lift_result R_ok R_term R_term
-      (run_block fuel ctx
+      (exec_block fuel ctx
          (bb with bb_instructions := FLAT (MAPi g1 bb.bb_instructions)) s1)
-      (run_block fuel ctx
+      (exec_block fuel ctx
          (bb with bb_instructions := FLAT (MAPi g2 bb.bb_instructions)) s2)
 Proof
   rpt gen_tac >> DISCH_TAC >>
@@ -270,7 +270,7 @@ Proof
        OK s'' => OK (s'' with vs_inst_idx := j1) | x => x` by (
       `s1 = s1_0 with vs_inst_idx := j1` by rw[venom_state_component_equality] >>
       pop_assum SUBST1_TAC >> simp[invoke_step_inst_idx_OK_only]) >>
-    ONCE_REWRITE_TAC[venomExecSemanticsTheory.run_block_def] >>
+    ONCE_REWRITE_TAC[venomExecSemanticsTheory.exec_block_def] >>
     simp[get_instruction_def])
   >>
   `lift_result R_ok R_term R_term (step_inst fuel ctx inst1 s2_0)
@@ -304,7 +304,7 @@ Proof
       `v2 with vs_inst_idx := 0 = v2` by rw[venom_state_component_equality] >>
       fs[]) >>
     DISCH_TAC >>
-    ONCE_REWRITE_TAC[venomExecSemanticsTheory.run_block_def] >>
+    ONCE_REWRITE_TAC[venomExecSemanticsTheory.exec_block_def] >>
     simp[get_instruction_def, is_terminator_def])
   (* Non-OK cases: Halt, Abort, IntRet, Error *)
   >> (
@@ -320,7 +320,7 @@ Proof
       `s2 = s2_0 with vs_inst_idx := j2` by rw[venom_state_component_equality] >>
       pop_assum SUBST1_TAC >> simp[invoke_step_inst_idx_OK_only]) >>
     DISJ2_TAC >>
-    ONCE_REWRITE_TAC[venomExecSemanticsTheory.run_block_def] >>
+    ONCE_REWRITE_TAC[venomExecSemanticsTheory.exec_block_def] >>
     simp[get_instruction_def, lift_result_def])
 QED
 
@@ -360,8 +360,8 @@ fun collapse_all_idx (asl, g) =
          >> collapse_all_idx) (asl, g)
   end;
 
-(* Error in run_insts prefix → Error in run_block *)
-Triviality run_block_prefix_error:
+(* Error in run_insts prefix → Error in exec_block *)
+Triviality exec_block_prefix_error:
   !R_ok R_term prefix fuel ctx bb s j e.
     valid_state_rel R_ok R_term /\
     j + LENGTH prefix <= LENGTH bb.bb_instructions /\
@@ -370,12 +370,12 @@ Triviality run_block_prefix_error:
     (!k. k < LENGTH prefix ==> EL (j + k) bb.bb_instructions = EL k prefix) /\
     run_insts fuel ctx prefix s = Error e
   ==>
-    ?e'. run_block fuel ctx bb (s with vs_inst_idx := j) = Error e'
+    ?e'. exec_block fuel ctx bb (s with vs_inst_idx := j) = Error e'
 Proof
   rpt strip_tac >>
   `~(?s'. run_insts fuel ctx prefix s = OK s')` by
     (pop_assum SUBST_ALL_TAC >> simp_tac (srw_ss()) []) >>
-  drule run_block_prefix_fail_lift >>
+  drule exec_block_prefix_fail_lift >>
   disch_then (qspecl_then [`prefix`, `fuel`, `ctx`, `bb`, `s`, `j`] mp_tac) >>
   simp[] >> strip_tac >>
   drule_all lift_result_error_left >>
@@ -419,24 +419,24 @@ Triviality abc_normal_case:
     (* IH_rest: after OK/OK, remaining block simulates *)
     (!v1 v2.
        R_ok (v1 with vs_inst_idx := 0) (v2 with vs_inst_idx := 0) ==>
-       (?e. run_block fuel ctx
+       (?e. exec_block fuel ctx
               (bb with bb_instructions := FLAT (MAPi g1 bb.bb_instructions))
               (v1 with vs_inst_idx := j1_next) = Error e) \/
        lift_result R_ok R_term R_term
-         (run_block fuel ctx
+         (exec_block fuel ctx
             (bb with bb_instructions := FLAT (MAPi g1 bb.bb_instructions))
             (v1 with vs_inst_idx := j1_next))
-         (run_block fuel ctx
+         (exec_block fuel ctx
             (bb with bb_instructions := FLAT (MAPi g2 bb.bb_instructions))
             (v2 with vs_inst_idx := j2_next)))
   ==>
-    (?e. run_block fuel ctx
+    (?e. exec_block fuel ctx
            (bb with bb_instructions := FLAT (MAPi g1 bb.bb_instructions))
            s1 = Error e) \/
     lift_result R_ok R_term R_term
-      (run_block fuel ctx
+      (exec_block fuel ctx
          (bb with bb_instructions := FLAT (MAPi g1 bb.bb_instructions)) s1)
-      (run_block fuel ctx
+      (exec_block fuel ctx
          (bb with bb_instructions := FLAT (MAPi g2 bb.bb_instructions)) s2)
 Proof
   rpt gen_tac >> DISCH_TAC >>
@@ -454,7 +454,7 @@ Proof
        (qunabbrev_tac `bb1` >> REWRITE_TAC abbrev_expand_thms)
   \\ `bb2.bb_instructions = FLAT (MAPi g2 bb.bb_instructions)` by
        (qunabbrev_tac `bb2` >> REWRITE_TAC abbrev_expand_thms)
-  (* Case 1: f1 on s2 errors → derive error on s1 → run_block error *)
+  (* Case 1: f1 on s2 errors → derive error on s1 → exec_block error *)
   \\ Cases_on `?e. run_insts fuel ctx f1_group
        (s2 with vs_inst_idx := 0) = Error e`
   >- (
@@ -464,7 +464,7 @@ Proof
     qpat_assum `_ = Error e` (fn th => REWRITE_TAC[th]) >>
     strip_tac >> drule lift_result_error_left >> strip_tac >>
     qspecl_then [`R_ok`, `R_term`, `f1_group`, `fuel`, `ctx`, `bb1`,
-      `s1 with vs_inst_idx := 0`, `j1`, `e'`] mp_tac run_block_prefix_error >>
+      `s1 with vs_inst_idx := 0`, `j1`, `e'`] mp_tac exec_block_prefix_error >>
     qpat_assum `bb1.bb_instructions = _` (fn th => REWRITE_TAC[th]) >>
     REWRITE_TAC abbrev_expand_thms >> collapse_all_idx >>
     disch_then irule >> rpt conj_tac >> first_assum ACCEPT_TAC)
@@ -496,31 +496,31 @@ Proof
       qpat_assum `_ = OK v1` (fn th => REWRITE_TAC[th]) >>
       Cases_on `run_insts fuel ctx f2_group (s2 with vs_inst_idx := 0)` >>
       simp_tac (srw_ss()) [lift_result_def]) >>
-    (* Rewrite run_block on both sides using skip_prefix *)
+    (* Rewrite exec_block on both sides using skip_prefix *)
     qsuff_tac
-      `(?e. run_block fuel ctx bb1
+      `(?e. exec_block fuel ctx bb1
               (v1 with vs_inst_idx := j1 + LENGTH f1_group) = Error e) \/
        lift_result R_ok R_term R_term
-         (run_block fuel ctx bb1
+         (exec_block fuel ctx bb1
             (v1 with vs_inst_idx := j1 + LENGTH f1_group))
-         (run_block fuel ctx bb2
+         (exec_block fuel ctx bb2
             (v2 with vs_inst_idx := j2 + LENGTH f2_group))`
     >- (
-      `run_block fuel ctx bb1 s1 =
-       run_block fuel ctx bb1
+      `exec_block fuel ctx bb1 s1 =
+       exec_block fuel ctx bb1
          (v1 with vs_inst_idx := j1 + LENGTH f1_group)` by (
         qspecl_then [`f1_group`, `fuel`, `ctx`, `bb1`,
           `s1 with vs_inst_idx := 0`, `j1`, `v1`]
-          mp_tac run_block_skip_prefix >>
+          mp_tac exec_block_skip_prefix >>
         qpat_assum `bb1.bb_instructions = _` (fn th => REWRITE_TAC[th]) >>
         REWRITE_TAC abbrev_expand_thms >> collapse_all_idx >>
         disch_then irule >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-      `run_block fuel ctx bb2 s2 =
-       run_block fuel ctx bb2
+      `exec_block fuel ctx bb2 s2 =
+       exec_block fuel ctx bb2
          (v2 with vs_inst_idx := j2 + LENGTH f2_group)` by (
         qspecl_then [`f2_group`, `fuel`, `ctx`, `bb2`,
           `s2 with vs_inst_idx := 0`, `j2`, `v2`]
-          mp_tac run_block_skip_prefix >>
+          mp_tac exec_block_skip_prefix >>
         qpat_assum `bb2.bb_instructions = _` (fn th => REWRITE_TAC[th]) >>
         REWRITE_TAC abbrev_expand_thms >> collapse_all_idx >>
         disch_then irule >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
@@ -543,7 +543,7 @@ Proof
     Cases_on `run_insts fuel ctx f1_group (s1 with vs_inst_idx := 0)` >>
     simp_tac (srw_ss()) [lift_result_def])
   \\ DISJ2_TAC
-  (* Chain: run_block bb1 s1 ~> f1 s1_0 ~> f2 s2_0 ~> run_block bb2 s2 *)
+  (* Chain: exec_block bb1 s1 ~> f1 s1_0 ~> f2 s2_0 ~> exec_block bb2 s2 *)
   \\ irule lift_result_trans_proof
   \\ conj_tac >- first_assum ACCEPT_TAC
   \\ conj_tac >- first_assum ACCEPT_TAC
@@ -558,7 +558,7 @@ Proof
     qexists_tac `run_insts fuel ctx f1_group (s1 with vs_inst_idx := 0)` >>
     conj_tac
     >- (
-      drule run_block_prefix_fail_lift >>
+      drule exec_block_prefix_fail_lift >>
       disch_then (qspecl_then [`f1_group`, `fuel`, `ctx`, `bb1`,
         `s1 with vs_inst_idx := 0`, `j1`] mp_tac) >>
       qpat_assum `bb1.bb_instructions = _`
@@ -566,7 +566,7 @@ Proof
       REWRITE_TAC abbrev_expand_thms >> collapse_all_idx >>
       disch_then irule >> rpt conj_tac >> first_assum ACCEPT_TAC)
     >> first_assum ACCEPT_TAC)
-  \\ drule run_insts_lift_run_block
+  \\ drule run_insts_lift_exec_block
   \\ disch_then (qspecl_then [`f2_group`, `fuel`, `ctx`, `bb2`,
        `s2 with vs_inst_idx := 0`, `j2`] mp_tac)
   \\ qpat_assum `bb2.bb_instructions = _`
@@ -604,11 +604,11 @@ Theorem analysis_block_compare:
   ==>
     !fuel ctx s.
       s.vs_inst_idx = 0 ==>
-      (?e. run_block fuel ctx
+      (?e. exec_block fuel ctx
              (analysis_block_transform bottom result f1 bb) s = Error e) \/
       lift_result R_ok R_term R_term
-        (run_block fuel ctx (analysis_block_transform bottom result f1 bb) s)
-        (run_block fuel ctx (analysis_block_transform bottom result f2 bb) s)
+        (exec_block fuel ctx (analysis_block_transform bottom result f1 bb) s)
+        (exec_block fuel ctx (analysis_block_transform bottom result f2 bb) s)
 Proof
   rpt strip_tac
   \\ simp[analysis_block_transform_def]
@@ -632,13 +632,13 @@ Proof
        s2.vs_inst_idx =
          LENGTH (FLAT (TAKE i (MAPi g2 bb.bb_instructions)))
        ==>
-       (?e. run_block fuel ctx
+       (?e. exec_block fuel ctx
               (bb with bb_instructions := FLAT (MAPi g1 bb.bb_instructions))
               s1 = Error e) \/
        lift_result R_ok R_term R_term
-         (run_block fuel ctx
+         (exec_block fuel ctx
             (bb with bb_instructions := FLAT (MAPi g1 bb.bb_instructions)) s1)
-         (run_block fuel ctx
+         (exec_block fuel ctx
             (bb with bb_instructions := FLAT (MAPi g2 bb.bb_instructions)) s2)`
   >- (
     disch_then (qspecl_then
@@ -656,7 +656,7 @@ Proof
     `TAKE (LENGTH bb.bb_instructions) (MAPi g1 bb.bb_instructions) =
      MAPi g1 bb.bb_instructions` by
       simp[TAKE_LENGTH_ID, indexedListsTheory.LENGTH_MAPi] >>
-    ONCE_REWRITE_TAC[venomExecSemanticsTheory.run_block_def] >>
+    ONCE_REWRITE_TAC[venomExecSemanticsTheory.exec_block_def] >>
     simp_tac std_ss [get_instruction_def] >>
     simp[]
   ]
@@ -736,17 +736,17 @@ Proof
   (* IH for SUC i *)
   \\ `!v1 v2.
      R_ok (v1 with vs_inst_idx := 0) (v2 with vs_inst_idx := 0) ==>
-     (?e. run_block fuel ctx
+     (?e. exec_block fuel ctx
             (bb with bb_instructions := FLAT (MAPi g1 bb.bb_instructions))
             (v1 with vs_inst_idx :=
                LENGTH (FLAT (TAKE (SUC i) (MAPi g1 bb.bb_instructions)))) =
           Error e) \/
      lift_result R_ok R_term R_term
-       (run_block fuel ctx
+       (exec_block fuel ctx
           (bb with bb_instructions := FLAT (MAPi g1 bb.bb_instructions))
           (v1 with vs_inst_idx :=
              LENGTH (FLAT (TAKE (SUC i) (MAPi g1 bb.bb_instructions)))))
-       (run_block fuel ctx
+       (exec_block fuel ctx
           (bb with bb_instructions := FLAT (MAPi g2 bb.bb_instructions))
           (v2 with vs_inst_idx :=
              LENGTH (FLAT (TAKE (SUC i) (MAPi g2 bb.bb_instructions)))))` by (
@@ -782,14 +782,14 @@ Proof
   (* Rewrite IH from TAKE(SUC i) form to j+len form *)
   \\ `!v1 v2.
      R_ok (v1 with vs_inst_idx := 0) (v2 with vs_inst_idx := 0) ==>
-     (?e. run_block fuel ctx
+     (?e. exec_block fuel ctx
             (bb with bb_instructions := FLAT (MAPi g1 bb.bb_instructions))
             (v1 with vs_inst_idx := j1 + LENGTH (f1 v inst)) = Error e) \/
      lift_result R_ok R_term R_term
-       (run_block fuel ctx
+       (exec_block fuel ctx
           (bb with bb_instructions := FLAT (MAPi g1 bb.bb_instructions))
           (v1 with vs_inst_idx := j1 + LENGTH (f1 v inst)))
-       (run_block fuel ctx
+       (exec_block fuel ctx
           (bb with bb_instructions := FLAT (MAPi g2 bb.bb_instructions))
           (v2 with vs_inst_idx := j2 + LENGTH (f2 v inst)))` by (
     rpt strip_tac >>
@@ -803,7 +803,7 @@ Proof
     simp_tac std_ss [])
   (* Kill OLD IH (TAKE SUC i form) — keep rewritten IH (j+len form) *)
   \\ qpat_x_assum `!v1 v2. R_ok _ _ ==> _ \/ lift_result _ _ _
-       (run_block _ _ _ (v1 with vs_inst_idx := LENGTH (FLAT (TAKE (SUC i) _))))
+       (exec_block _ _ _ (v1 with vs_inst_idx := LENGTH (FLAT (TAKE (SUC i) _))))
        _` kall_tac
   (* Three-way case split *)
   (* === Terminator case === *)
@@ -976,59 +976,59 @@ Triviality block_sim_function_compare_ind_step:
     (!bb. (bt2 bb).bb_label = bb.bb_label) /\
     (!fuel ctx bb s1 s2.
        MEM bb fn.fn_blocks /\ R_ok s1 s2 ==>
-       lift_result R_ok R_term R_term (run_block fuel ctx (bt1 bb) s1)
-                                (run_block fuel ctx (bt1 bb) s2)) /\
+       lift_result R_ok R_term R_term (exec_block fuel ctx (bt1 bb) s1)
+                                (exec_block fuel ctx (bt1 bb) s2)) /\
     (!lbl bb. lookup_block lbl fn.fn_blocks = SOME bb ==>
       !fuel ctx s.
         s.vs_inst_idx = 0 ==>
-        (?e. run_block fuel ctx (bt1 bb) s = Error e) \/
-        lift_result R_ok R_term R_term (run_block fuel ctx (bt1 bb) s)
-                                 (run_block fuel ctx (bt2 bb) s)) /\
+        (?e. exec_block fuel ctx (bt1 bb) s = Error e) \/
+        lift_result R_ok R_term R_term (exec_block fuel ctx (bt1 bb) s)
+                                 (exec_block fuel ctx (bt2 bb) s)) /\
     (!ctx s1 s2. R_ok s1 s2 /\ s1.vs_inst_idx = 0 ==>
-       (?e. run_function fuel ctx (function_map_transform bt1 fn) s1 = Error e) \/
+       (?e. run_blocks fuel ctx (function_map_transform bt1 fn) s1 = Error e) \/
        lift_result R_ok R_term R_term
-         (run_function fuel ctx (function_map_transform bt1 fn) s1)
-         (run_function fuel ctx (function_map_transform bt2 fn) s2))
+         (run_blocks fuel ctx (function_map_transform bt1 fn) s1)
+         (run_blocks fuel ctx (function_map_transform bt2 fn) s2))
   ==>
     !ctx s1 s2. R_ok s1 s2 /\ s1.vs_inst_idx = 0 ==>
-       (?e. run_function (SUC fuel) ctx
+       (?e. run_blocks (SUC fuel) ctx
               (function_map_transform bt1 fn) s1 = Error e) \/
        lift_result R_ok R_term R_term
-         (run_function (SUC fuel) ctx (function_map_transform bt1 fn) s1)
-         (run_function (SUC fuel) ctx (function_map_transform bt2 fn) s2)
+         (run_blocks (SUC fuel) ctx (function_map_transform bt1 fn) s1)
+         (run_blocks (SUC fuel) ctx (function_map_transform bt2 fn) s2)
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   `s1.vs_current_bb = s2.vs_current_bb` by metis_tac[] >>
   `s2.vs_inst_idx = 0` by metis_tac[] >>
-  ONCE_REWRITE_TAC[run_function_def] >>
+  ONCE_REWRITE_TAC[run_blocks_def] >>
   simp[function_map_transform_def, lookup_block_map_proof] >>
   Cases_on `lookup_block s2.vs_current_bb fn.fn_blocks`
   >- gvs[lift_result_def]
   >>
   rename1 `lookup_block _ _ = SOME bb` >>
   `MEM bb fn.fn_blocks` by metis_tac[venomExecProofsTheory.lookup_block_MEM] >>
-  `lift_result R_ok R_term R_term (run_block fuel ctx (bt1 bb) s1)
-                            (run_block fuel ctx (bt1 bb) s2)` by metis_tac[] >>
-  `(?e. run_block fuel ctx (bt1 bb) s2 = Error e) \/
-   lift_result R_ok R_term R_term (run_block fuel ctx (bt1 bb) s2)
-     (run_block fuel ctx (bt2 bb) s2)` by (
+  `lift_result R_ok R_term R_term (exec_block fuel ctx (bt1 bb) s1)
+                            (exec_block fuel ctx (bt1 bb) s2)` by metis_tac[] >>
+  `(?e. exec_block fuel ctx (bt1 bb) s2 = Error e) \/
+   lift_result R_ok R_term R_term (exec_block fuel ctx (bt1 bb) s2)
+     (exec_block fuel ctx (bt2 bb) s2)` by (
     qpat_assum `!lbl bb. lookup_block _ _ = SOME _ ==> _`
       (qspecl_then [`s2.vs_current_bb`, `bb`] mp_tac) >> simp[]) >>
-  Cases_on `?e. run_block fuel ctx (bt1 bb) s2 = Error e`
+  Cases_on `?e. exec_block fuel ctx (bt1 bb) s2 = Error e`
   >- (fs[] >> imp_res_tac lift_result_error_left >> gvs[])
   >>
-  `lift_result R_ok R_term R_term (run_block fuel ctx (bt1 bb) s2)
-                            (run_block fuel ctx (bt2 bb) s2)` by metis_tac[] >>
-  `lift_result R_ok R_term R_term (run_block fuel ctx (bt1 bb) s1)
-                            (run_block fuel ctx (bt2 bb) s2)` by (
+  `lift_result R_ok R_term R_term (exec_block fuel ctx (bt1 bb) s2)
+                            (exec_block fuel ctx (bt2 bb) s2)` by metis_tac[] >>
+  `lift_result R_ok R_term R_term (exec_block fuel ctx (bt1 bb) s1)
+                            (exec_block fuel ctx (bt2 bb) s2)` by (
     irule lift_result_trans_proof >>
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
-    qexists_tac `run_block fuel ctx (bt1 bb) s2` >>
+    qexists_tac `exec_block fuel ctx (bt1 bb) s2` >>
     conj_tac >> first_assum ACCEPT_TAC) >>
-  Cases_on `run_block fuel ctx (bt1 bb) s1` >>
-  Cases_on `run_block fuel ctx (bt2 bb) s2` >>
+  Cases_on `exec_block fuel ctx (bt1 bb) s1` >>
+  Cases_on `exec_block fuel ctx (bt2 bb) s2` >>
   gvs[lift_result_def]
   >>
   rename1 `R_ok v1 v2` >>
@@ -1040,7 +1040,7 @@ Proof
   `~v2.vs_halted` by metis_tac[] >> simp[lift_result_def] >>
   gvs[function_map_transform_def] >>
   `v1.vs_inst_idx = 0 /\ v2.vs_inst_idx = 0` by
-    metis_tac[venomExecProofsTheory.run_block_OK_inst_idx_0] >>
+    metis_tac[venomExecProofsTheory.exec_block_OK_inst_idx_0] >>
   qpat_assum `!ctx' s1' s2'. R_ok s1' s2' /\ _ ==> _`
     (qspecl_then [`ctx`, `v1`, `v2`] mp_tac) >>
   simp[]
@@ -1057,9 +1057,9 @@ Theorem block_sim_function_compare:
     (!lbl bb. lookup_block lbl fn.fn_blocks = SOME bb ==>
       !fuel ctx s.
         s.vs_inst_idx = 0 ==>
-        (?e. run_block fuel ctx (bt1 bb) s = Error e) \/
-        lift_result R_ok R_term R_term (run_block fuel ctx (bt1 bb) s)
-                                 (run_block fuel ctx (bt2 bb) s)) /\
+        (?e. exec_block fuel ctx (bt1 bb) s = Error e) \/
+        lift_result R_ok R_term R_term (exec_block fuel ctx (bt1 bb) s)
+                                 (exec_block fuel ctx (bt2 bb) s)) /\
     (!bb inst x.
        MEM bb (MAP bt1 fn.fn_blocks) /\ MEM inst bb.bb_instructions /\
        MEM (Var x) inst.inst_operands ==>
@@ -1067,10 +1067,10 @@ Theorem block_sim_function_compare:
   ==>
     !fuel ctx s.
       s.vs_inst_idx = 0 ==>
-      (?e. run_function fuel ctx (function_map_transform bt1 fn) s = Error e) \/
+      (?e. run_blocks fuel ctx (function_map_transform bt1 fn) s = Error e) \/
       lift_result R_ok R_term R_term
-        (run_function fuel ctx (function_map_transform bt1 fn) s)
-        (run_function fuel ctx (function_map_transform bt2 fn) s)
+        (run_blocks fuel ctx (function_map_transform bt1 fn) s)
+        (run_blocks fuel ctx (function_map_transform bt2 fn) s)
 Proof
   rpt gen_tac >> strip_tac >>
   `!s1 s2. R_ok s1 s2 ==> R_term s1 s2` by
@@ -1082,11 +1082,11 @@ Proof
       (REWRITE_RULE [GSYM AND_IMP_INTRO] vsr_R_ok_fields)) >>
   `!fuel ctx bb s1 s2.
      MEM bb fn.fn_blocks /\ R_ok s1 s2 ==>
-     lift_result R_ok R_term R_term (run_block fuel ctx (bt1 bb) s1)
-                              (run_block fuel ctx (bt1 bb) s2)` by (
+     lift_result R_ok R_term R_term (exec_block fuel ctx (bt1 bb) s1)
+                              (exec_block fuel ctx (bt1 bb) s2)` by (
     rpt strip_tac >>
     qspecl_then [`R_ok`, `R_term`, `function_map_transform bt1 fn`]
-      mp_tac (cj 1 run_block_preserves_R_proof) >>
+      mp_tac (cj 1 exec_block_preserves_R_proof) >>
     simp[function_map_transform_def] >>
     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
     disch_then (qspecl_then [`fuel`, `ctx`, `bt1 bb`, `s1`, `s2`] mp_tac) >>
@@ -1094,16 +1094,16 @@ Proof
     simp[]) >>
   qsuff_tac
     `!fuel ctx s1 s2. R_ok s1 s2 /\ s1.vs_inst_idx = 0 ==>
-       (?e. run_function fuel ctx (function_map_transform bt1 fn) s1 = Error e) \/
+       (?e. run_blocks fuel ctx (function_map_transform bt1 fn) s1 = Error e) \/
        lift_result R_ok R_term R_term
-         (run_function fuel ctx (function_map_transform bt1 fn) s1)
-         (run_function fuel ctx (function_map_transform bt2 fn) s2)`
+         (run_blocks fuel ctx (function_map_transform bt1 fn) s1)
+         (run_blocks fuel ctx (function_map_transform bt2 fn) s2)`
   >- (rpt strip_tac >>
       first_x_assum (qspecl_then [`fuel`, `ctx`, `s`, `s`] mp_tac) >>
       impl_tac >- (conj_tac >- (irule vsr_R_ok_refl >> metis_tac[]) >> simp[]) >>
       simp[]) >>
   Induct_on `fuel`
-  >- (rw[] >> simp[run_function_def, function_map_transform_def, lift_result_def])
+  >- (rw[] >> simp[run_blocks_def, function_map_transform_def, lift_result_def])
   >>
   rpt strip_tac >>
   irule (SIMP_RULE (srw_ss()) [] block_sim_function_compare_ind_step) >>

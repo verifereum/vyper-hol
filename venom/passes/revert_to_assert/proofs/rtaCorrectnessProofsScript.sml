@@ -88,7 +88,7 @@ Triviality identity_block_sim:
     transform_block fn bb = bb
   ==>
     resolving_block_sim R_ok R_term bbs1 bbs2
-      (run_block fuel ctx bb s) (run_block fuel ctx bb s)
+      (exec_block fuel ctx bb s) (exec_block fuel ctx bb s)
 Proof
   rw[resolving_block_sim_def] >>
   qexists_tac `0` >>
@@ -145,11 +145,11 @@ QED
 Triviality run_revert_block:
   !bb fuel ctx st.
     is_simple_revert_block bb /\ st.vs_inst_idx = 0 /\ ~st.vs_halted ==>
-    run_block fuel ctx bb st =
+    exec_block fuel ctx bb st =
       Abort Revert_abort (revert_state (set_returndata [] st))
 Proof
   rw[is_simple_revert_block_def] >>
-  simp[Once run_block_def, get_instruction_def] >>
+  simp[Once exec_block_def, get_instruction_def] >>
   `EL 0 bb.bb_instructions = HD bb.bb_instructions` by
     (Cases_on `bb.bb_instructions` >> fs[]) >>
   simp[step_inst_non_invoke, step_inst_base_def, eval_operand_def]
@@ -388,8 +388,8 @@ Proof
   ) >>
   qexists_tac `rbb` >> simp[] >>
   rpt gen_tac >>
-  (* Establish run_block result for the revert block *)
-  `!f c. run_block f c rbb
+  (* Establish exec_block result for the revert block *)
+  `!f c. exec_block f c rbb
     (st with <| vs_prev_bb := SOME st.vs_current_bb;
                 vs_current_bb := revert_lbl;
                 vs_inst_idx := 0 |>) =
@@ -435,7 +435,7 @@ Proof
   ) >>
   qexists_tac `rbb` >> simp[] >>
   rpt strip_tac >>
-  `run_block fuel ctx rbb
+  `exec_block fuel ctx rbb
     (st with <| vs_prev_bb := SOME st.vs_current_bb;
                 vs_current_bb := revert_lbl;
                 vs_inst_idx := 0 |>) =
@@ -462,7 +462,7 @@ Triviality pattern1_transformed_execution:
     eval_operand cond_op st = SOME cond /\
     ~st.vs_halted
   ==>
-    run_block fuel ctx bb st =
+    exec_block fuel ctx bb st =
       if cond = 0w then
         OK (jump_to if_zero (update_var tmp 1w st
               with vs_inst_idx := SUC (SUC st.vs_inst_idx)))
@@ -480,34 +480,34 @@ Proof
     simp[eval_operand_def, lookup_var_def, update_var_def,
          finite_mapTheory.FLOOKUP_UPDATE] >>
   imp_res_tac step_assert_behavior >>
-  (* Case split on cond, then unfold run_block *)
+  (* Case split on cond, then unfold exec_block *)
   Cases_on `cond = 0w` >> fs[bool_to_word_def]
   (* cond = 0w: ISZERO→1w, ASSERT passes, JMP to if_zero *)
   >- (
-    ONCE_REWRITE_TAC [run_block_def] >>
+    ONCE_REWRITE_TAC [exec_block_def] >>
     simp[get_instruction_def, mk_iszero_inst_def,
          step_inst_non_invoke, is_terminator_def] >> fs[] >>
-    ONCE_REWRITE_TAC [run_block_def] >>
+    ONCE_REWRITE_TAC [exec_block_def] >>
     simp[get_instruction_def, mk_assert_inst_def,
          step_inst_non_invoke, is_terminator_def] >> fs[] >>
-    ONCE_REWRITE_TAC [run_block_def] >>
+    ONCE_REWRITE_TAC [exec_block_def] >>
     simp[get_instruction_def, mk_jmp_inst_def,
          step_inst_non_invoke, step_jmp_behavior, is_terminator_def,
          jump_to_def, update_var_def]
   )
   (* cond <> 0w: ISZERO→0w, ASSERT fails→Abort *)
   >- (
-    ONCE_REWRITE_TAC [run_block_def] >>
+    ONCE_REWRITE_TAC [exec_block_def] >>
     simp[get_instruction_def, mk_iszero_inst_def,
          step_inst_non_invoke, is_terminator_def] >> fs[] >>
-    ONCE_REWRITE_TAC [run_block_def] >>
+    ONCE_REWRITE_TAC [exec_block_def] >>
     simp[get_instruction_def, mk_assert_inst_def,
          step_inst_non_invoke, is_terminator_def] >> fs[]
   )
 QED
 
 (* Pattern 1 full simulation: resolving_block_sim for the JNZ→ISZERO+ASSERT+JMP case.
-   Establishes both run_block results separately, then closes by case split. *)
+   Establishes both exec_block results separately, then closes by case split. *)
 Triviality pattern1_sim:
   !fn fresh bb inst cond_op if_zero if_nonzero st fuel ctx cond.
     Abbrev (inst = EL st.vs_inst_idx bb.bb_instructions) /\
@@ -527,25 +527,25 @@ Triviality pattern1_sim:
   ==>
     resolving_block_sim (state_equiv fresh) (execution_equiv fresh)
       fn.fn_blocks (MAP (transform_block fn) fn.fn_blocks)
-      (run_block fuel ctx bb st)
-      (run_block fuel ctx (transform_block fn bb) st)
+      (exec_block fuel ctx bb st)
+      (exec_block fuel ctx (transform_block fn bb) st)
 Proof
   rpt strip_tac >>
   qabbrev_tac `tmp = fresh_iszero_var inst.inst_id` >>
   `MEM inst bb.bb_instructions` by metis_tac[listTheory.MEM_EL, Abbr `inst`] >>
-  (* === Step 1: Establish original run_block result === *)
+  (* === Step 1: Establish original exec_block result === *)
   imp_res_tac step_jnz_general >>
   `inst.inst_opcode <> INVOKE` by (
     irule no_invoke_mem_inst >> metis_tac[]) >>
-  `run_block fuel ctx bb st =
+  `exec_block fuel ctx bb st =
      if cond <> 0w then OK (jump_to if_nonzero st)
      else OK (jump_to if_zero st)` by (
-    ONCE_REWRITE_TAC [run_block_def] >>
+    ONCE_REWRITE_TAC [exec_block_def] >>
     simp[get_instruction_def, step_inst_non_invoke,
          is_terminator_def, jump_to_def, update_var_def] >>
     Cases_on `cond = 0w` >> simp[]
   ) >>
-  (* === Step 2: Establish transformed run_block result === *)
+  (* === Step 2: Establish transformed exec_block result === *)
   `st.vs_inst_idx + 3 <= LENGTH (transform_block_insts fn bb.bb_instructions)` by (
     `st.vs_inst_idx + LENGTH (transform_pattern1 inst cond_op if_zero) <=
        LENGTH (transform_block_insts fn bb.bb_instructions)` suffices_by
@@ -582,7 +582,7 @@ Proof
     pop_assum (fn th => PURE_REWRITE_TAC [th]) >>
     simp[transform_pattern1_def, LET_THM]
   ) >>
-  `run_block fuel ctx (transform_block fn bb) st =
+  `exec_block fuel ctx (transform_block fn bb) st =
      if cond = 0w then
        OK (jump_to if_zero (update_var tmp 1w st
              with vs_inst_idx := SUC (SUC st.vs_inst_idx)))
@@ -597,9 +597,9 @@ Proof
     simp[]
   ) >>
   (* === Step 3: Case split and close === *)
-  (* Substitute run_block results into the goal before case splitting *)
-  qpat_x_assum `run_block fuel ctx bb st = _` (fn th => REWRITE_TAC [th]) >>
-  qpat_x_assum `run_block fuel ctx (transform_block fn bb) st = _`
+  (* Substitute exec_block results into the goal before case splitting *)
+  qpat_x_assum `exec_block fuel ctx bb st = _` (fn th => REWRITE_TAC [th]) >>
+  qpat_x_assum `exec_block fuel ctx (transform_block fn bb) st = _`
     (fn th => REWRITE_TAC [th]) >>
   (* Clean up: drop EL and step_inst_base assumptions that cause simp loops *)
   ntac 3 (pop_assum kall_tac) >> (* EL facts *)
@@ -633,11 +633,11 @@ Triviality rta_per_block_sim_gen:
   ==>
     resolving_block_sim (state_equiv fresh) (execution_equiv fresh)
       fn.fn_blocks (MAP (transform_block fn) fn.fn_blocks)
-      (run_block fuel ctx bb s)
-      (run_block fuel ctx (transform_block fn bb) s)
+      (exec_block fuel ctx bb s)
+      (exec_block fuel ctx (transform_block fn bb) s)
 Proof
   Induct_on `n` >> rpt strip_tac >>
-  rename1 `run_block fuel ctx bb st`
+  rename1 `exec_block fuel ctx bb st`
   (* === Base case: 0 = LENGTH - idx, i.e. idx >= LENGTH === *)
   >- (
     `~(st.vs_inst_idx < LENGTH bb.bb_instructions)` by simp[] >>
@@ -649,8 +649,8 @@ Proof
         fs[transform_jnz_def, get_instruction_def]
       ) >> simp[]
     ) >>
-    simp[Once run_block_def, get_instruction_def] >>
-    simp[transform_block_def, Once run_block_def, get_instruction_def] >>
+    simp[Once exec_block_def, get_instruction_def] >>
+    simp[transform_block_def, Once exec_block_def, get_instruction_def] >>
     rw[resolving_block_sim_def] >> qexists_tac `0` >>
     rw[resolves_to_def, lift_result_def]
   )
@@ -669,12 +669,12 @@ Proof
     `inst.inst_opcode <> INVOKE` by (
       irule no_invoke_mem_inst >> metis_tac[listTheory.MEM_EL]
     ) >>
-    (* Case split on transform_jnz BEFORE unfolding run_block *)
+    (* Case split on transform_jnz BEFORE unfolding exec_block *)
     Cases_on `transform_jnz fn inst`
     >- (
       (* transform_jnz = NONE: same instruction on both sides *)
       simp[transform_block_def] >>
-      ONCE_REWRITE_TAC [run_block_def] >>
+      ONCE_REWRITE_TAC [exec_block_def] >>
       simp[get_instruction_def] >>
       simp[step_inst_non_invoke] >>
       Cases_on `step_inst_base inst st` >> simp[]
@@ -726,7 +726,7 @@ Proof
         >- (
           (* eval_operand = NONE: both sides Error *)
           simp[transform_block_def] >>
-          ONCE_REWRITE_TAC [run_block_def] >>
+          ONCE_REWRITE_TAC [exec_block_def] >>
           simp[get_instruction_def] >>
           fs[] >>
           simp[transform_pattern1_def, LET_THM] >>
@@ -753,7 +753,7 @@ Proof
       (* === Pattern 2: is_revert_label fn if_zero === *)
       >- (
         simp[transform_block_def] >>
-        ONCE_REWRITE_TAC [run_block_def] >>
+        ONCE_REWRITE_TAC [exec_block_def] >>
         simp[get_instruction_def] >>
         fs[] >>
         simp[step_inst_non_invoke, is_terminator_def] >>
@@ -787,7 +787,7 @@ Proof
           >- (
             (* cond <> 0w: ASSERT passes, JMP to if_nonzero *)
             fs[] >>
-            ONCE_REWRITE_TAC [run_block_def] >>
+            ONCE_REWRITE_TAC [exec_block_def] >>
             simp[get_instruction_def] >>
             `st.vs_inst_idx + 2 <= LENGTH (transform_block_insts fn bb.bb_instructions)` by (
               `st.vs_inst_idx + LENGTH (transform_pattern2 inst cond_op if_nonzero) <=
@@ -829,8 +829,8 @@ Triviality rta_per_block_sim:
       MEM bb fn.fn_blocks /\ s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
       resolving_block_sim (state_equiv fresh) (execution_equiv fresh)
         fn.fn_blocks (MAP (transform_block fn) fn.fn_blocks)
-        (run_block fuel ctx bb s)
-        (run_block fuel ctx (transform_block fn bb) s)
+        (exec_block fuel ctx bb s)
+        (exec_block fuel ctx (transform_block fn bb) s)
 Proof
   rpt strip_tac >>
   irule rta_per_block_sim_gen >> simp[]
@@ -867,8 +867,8 @@ Theorem rta_pass_correct_proof:
       lookup_function entry ctx'.ctx_functions = SOME fn' /\
       !s. s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
           pass_correct (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
-            (\fuel. run_function fuel ctx fn s)
-            (\fuel. run_function fuel ctx fn' s)
+            (\fuel. run_blocks fuel ctx fn s)
+            (\fuel. run_blocks fuel ctx fn' s)
 Proof
   rw[LET_THM] >>
   (* Get fn from lookup *)
@@ -893,18 +893,17 @@ Proof
   ) >>
   (* Establish the _v2 conclusion *)
   `!ctx' s. s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
-    ((?fuel. terminates (run_function fuel ctx' fn s)) <=>
-     (?fuel'. terminates (run_function fuel' ctx'
+    ((?fuel. terminates (run_blocks fuel ctx' fn s)) <=>
+     (?fuel'. terminates (run_blocks fuel' ctx'
         (function_map_transform (transform_block fn) fn) s))) /\
     (!fuel fuel'.
-       terminates (run_function fuel ctx' fn s) /\
-       terminates (run_function fuel' ctx'
+       terminates (run_blocks fuel ctx' fn s) /\
+       terminates (run_blocks fuel' ctx'
          (function_map_transform (transform_block fn) fn) s) ==>
        lift_result (state_equiv (fresh_vars_in_context ctx))
          (execution_equiv (fresh_vars_in_context ctx))
-                  (execution_equiv (fresh_vars_in_context ctx))
-         (run_function fuel ctx' fn s)
-         (run_function fuel' ctx'
+         (run_blocks fuel ctx' fn s)
+         (run_blocks fuel' ctx'
            (function_map_transform (transform_block fn) fn) s))` by (
     qspecl_then [`state_equiv (fresh_vars_in_context ctx)`,
                  `execution_equiv (fresh_vars_in_context ctx)`,
@@ -928,8 +927,8 @@ Proof
         fs[fresh_vars_not_in_function_def, fresh_vars_not_in_block_def] >>
         metis_tac[]
       )
-      >- metis_tac[run_function_fuel_mono]
-      >- metis_tac[run_function_fuel_mono]
+      >- metis_tac[run_blocks_fuel_mono]
+      >- metis_tac[run_blocks_fuel_mono]
     ) >>
     metis_tac[]
   ) >>

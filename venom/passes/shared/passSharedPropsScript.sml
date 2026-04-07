@@ -38,6 +38,16 @@
  *
  *   Commutativity:
  *     effects_independent_commute          — independent instructions commute
+ *
+ *   Copy forwarding equivalence:
+ *     copy_fwd_cross_equiv                — mcopy vs nop establishes cross-region equiv
+ *     copy_fwd_rel_observable_equiv       — simulation invariant implies observable equiv
+ *     copy_fwd_read_equiv                 — rewritten read (dst→src) gives same output
+ *     copy_fwd_write_equiv                — rewritten write preserves observable + vars + src equiv
+ *     copy_fwd_terminator_equiv           — RETURN/REVERT with rewritten operand
+ *     copy_fwd_rel_preserved_identical_inst — identical non-clobbering inst preserves invariant
+ *     assign_transparent                  — ASSIGN forwards value unchanged
+ *     phi_transparent                     — PHI forwards value unchanged
  *)
 
 Theory passSharedProps
@@ -45,6 +55,7 @@ Ancestors
   passSharedDefs venomExecSemantics venomEffects stateEquiv venomInstProofs
   passSharedField passSharedTransfer passSharedVarFrame passSharedFrame
   passSharedSubst instIdxIndep venomState venomInst venomWf
+  copyFwdEquiv
 Libs
   pred_setTheory listTheory rich_listTheory
 
@@ -153,12 +164,12 @@ Triviality nop_skip_facts:
                     (TAKE (SUC s.vs_inst_idx) bb.bb_instructions)) =
      LENGTH (FILTER (\inst. inst.inst_opcode <> NOP)
                     (TAKE s.vs_inst_idx bb.bb_instructions))) /\
-    run_block fuel ctx bb s =
-    run_block fuel ctx bb (s with vs_inst_idx := SUC s.vs_inst_idx)
+    exec_block fuel ctx bb s =
+    exec_block fuel ctx bb (s with vs_inst_idx := SUC s.vs_inst_idx)
 Proof
   rpt strip_tac
   >- (irule filter_take_nop >> simp[])
-  >- (CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+  >- (CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
       simp[get_instruction_def, step_nop_identity] >> EVAL_TAC)
 QED
 
@@ -197,16 +208,16 @@ QED
 Triviality clear_nops_past_end:
   !fuel ctx bb s.
     ~(s.vs_inst_idx < LENGTH bb.bb_instructions) ==>
-    run_block fuel ctx (clear_nops_block bb)
+    exec_block fuel ctx (clear_nops_block bb)
       (s with vs_inst_idx :=
         LENGTH (FILTER (\inst. inst.inst_opcode <> NOP)
                        (TAKE s.vs_inst_idx bb.bb_instructions))) =
-    run_block fuel ctx bb s
+    exec_block fuel ctx bb s
 Proof
   rpt strip_tac >>
   `LENGTH bb.bb_instructions <= s.vs_inst_idx` by DECIDE_TAC >>
   imp_res_tac filter_take_all_nop >>
-  ONCE_REWRITE_TAC[run_block_def] >>
+  ONCE_REWRITE_TAC[exec_block_def] >>
   gvs[get_instruction_def, clear_nops_block_def]
 QED
 
@@ -215,34 +226,34 @@ Triviality clear_nops_nop_step:
   !fuel ctx bb s.
     s.vs_inst_idx < LENGTH bb.bb_instructions /\
     (EL s.vs_inst_idx bb.bb_instructions).inst_opcode = NOP /\
-    run_block fuel ctx (clear_nops_block bb)
+    exec_block fuel ctx (clear_nops_block bb)
       ((s with vs_inst_idx := SUC s.vs_inst_idx) with vs_inst_idx :=
         LENGTH (FILTER (\inst. inst.inst_opcode <> NOP)
                        (TAKE (SUC s.vs_inst_idx) bb.bb_instructions))) =
-    run_block fuel ctx bb (s with vs_inst_idx := SUC s.vs_inst_idx) ==>
-    run_block fuel ctx (clear_nops_block bb)
+    exec_block fuel ctx bb (s with vs_inst_idx := SUC s.vs_inst_idx) ==>
+    exec_block fuel ctx (clear_nops_block bb)
       (s with vs_inst_idx :=
         LENGTH (FILTER (\inst. inst.inst_opcode <> NOP)
                        (TAKE s.vs_inst_idx bb.bb_instructions))) =
-    run_block fuel ctx bb s
+    exec_block fuel ctx bb s
 Proof
   rpt strip_tac >>
   imp_res_tac nop_skip_facts >> gvs[]
 QED
 
 (* NOP removal preserves execution up to vs_inst_idx.
-   Why true: step_inst on NOP returns OK s (identity). run_block increments
+   Why true: step_inst on NOP returns OK s (identity). exec_block increments
    vs_inst_idx after each non-terminator, so skipping a NOP just skips an
    idx increment. For OK results (JMP/JNZ terminators), jump_to resets
    vs_inst_idx := 0 so state_equiv {} holds. For Halt/Revert, vs_inst_idx
    differs but execution_equiv {} ignores it.
 
-   Proof approach: induction on run_block (or on instruction list length).
+   Proof approach: induction on exec_block (or on instruction list length).
    Key facts: step_inst NOP = OK s (from step_inst_base_def),
    FILTER removes NOPs, result_equiv = lift_result state_equiv execution_equiv.
 
    The block-level result propagates to function-level by fuel induction:
-   run_function calls run_block then recurses. The OK case has vs_inst_idx=0
+   run_blocks calls exec_block then recurses. The OK case has vs_inst_idx=0
    (from jump_to), so the inductive hypothesis applies. Terminal cases use
    execution_equiv which ignores vs_inst_idx. *)
 (* Non-terminator step_inst at different idx: OK results agree modulo idx.
@@ -303,11 +314,11 @@ Proof
     Cases_on `setup_callee callee_fn args s` >>
     simp[result_equiv_def, revert_equiv_def] >>
     rename1 `setup_callee _ _ s = SOME callee_s` >>
-    Cases_on `run_function fuel ctx callee_fn callee_s` >>
-    simp[result_equiv_def, execution_equiv_def, revert_equiv_def, lookup_var_def,
+    Cases_on `run_blocks fuel ctx callee_fn callee_s` >>
+    simp[result_equiv_def, execution_equiv_def, lookup_var_def,
          venom_state_component_equality] >>
     (* IntRet case *)
-    rename1 `run_function _ _ _ _ = IntRet ret_vals callee_s'` >>
+    rename1 `run_blocks _ _ _ _ = IntRet ret_vals callee_s'` >>
     `merge_callee_state (s with vs_inst_idx := j) callee_s' =
      merge_callee_state s callee_s' with vs_inst_idx := j` by
       simp[merge_callee_state_def, venom_state_component_equality] >>
@@ -362,13 +373,13 @@ Proof
        lookup_var_def, venom_state_component_equality]
 QED
 
-(* Generalized: relates run_block at any idx to run_block on filtered block
+(* Generalized: relates exec_block at any idx to exec_block on filtered block
    at the corresponding filtered index. *)
 Triviality clear_nops_block_gen:
   !fuel ctx bb s.
     result_equiv {}
-      (run_block fuel ctx bb s)
-      (run_block fuel ctx (clear_nops_block bb)
+      (exec_block fuel ctx bb s)
+      (exec_block fuel ctx (clear_nops_block bb)
         (s with vs_inst_idx :=
           LENGTH (FILTER (\inst. inst.inst_opcode <> NOP)
                          (TAKE s.vs_inst_idx bb.bb_instructions))))
@@ -376,8 +387,8 @@ Proof
   ho_match_mp_tac (cj 2 run_defs_ind) >>
   qexists_tac `\fuel ctx inst s. T` >>
   qexists_tac `\fuel ctx fn s. T` >> rw[] >>
-  (* Unroll one step of run_block on the original side *)
-  simp[Once run_block_def] >>
+  (* Unroll one step of exec_block on the original side *)
+  simp[Once exec_block_def] >>
   Cases_on `get_instruction bb s.vs_inst_idx`
   >- (
     (* Past end: both sides get NONE *)
@@ -385,8 +396,8 @@ Proof
       fs[get_instruction_def] >>
     `LENGTH bb.bb_instructions <= s.vs_inst_idx` by DECIDE_TAC >>
     imp_res_tac filter_take_all_nop >>
-    simp[Once run_block_def, get_instruction_def, clear_nops_block_def,
-         result_equiv_def, revert_equiv_def]
+    simp[Once exec_block_def, get_instruction_def, clear_nops_block_def,
+         result_equiv_def]
   ) >>
   rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
   `s.vs_inst_idx < LENGTH bb.bb_instructions` by
@@ -419,7 +430,7 @@ Proof
     `inst.inst_opcode <> INVOKE` by
       (Cases_on `inst.inst_opcode` >> fs[is_terminator_def]) >>
     simp[step_inst_non_invoke] >>
-    simp[Once run_block_def, step_inst_non_invoke] >>
+    simp[Once exec_block_def, step_inst_non_invoke] >>
     irule step_inst_base_term_result_equiv >> simp[]
   ) >>
   (* Non-terminator case *)
@@ -428,13 +439,13 @@ Proof
   (* OK case: have step_inst ... (s with idx:=j) = OK (v with idx:=j) *)
   >- (
     strip_tac >>
-    CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+    CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
     simp[] >> fs[] >>
     first_x_assum match_mp_tac >> simp[]
   ) >>
   (* Non-OK cases: have result_equiv {} (step_inst ... shifted) (original) *)
   disch_then assume_tac >>
-  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
   simp[] >>
   Cases_on `step_inst fuel ctx inst (s with vs_inst_idx := j)` >>
   fs[result_equiv_def, execution_equiv_def, revert_equiv_def, lookup_var_def,
@@ -445,8 +456,8 @@ Theorem clear_nops_block_correct:
   !fuel ctx bb s.
     s.vs_inst_idx = 0 ==>
     result_equiv {}
-      (run_block fuel ctx bb s)
-      (run_block fuel ctx (clear_nops_block bb) s)
+      (exec_block fuel ctx bb s)
+      (exec_block fuel ctx (clear_nops_block bb) s)
 Proof
   rpt strip_tac >>
   mp_tac (Q.SPECL [`fuel`, `ctx`, `bb`, `s`] clear_nops_block_gen) >>
@@ -463,14 +474,14 @@ Proof
   rw[] >> fs[lookup_block_def, clear_nops_block_def]
 QED
 
-Triviality run_block_ok_inst_idx_0:
+Triviality exec_block_ok_inst_idx_0:
   !fuel ctx bb s v.
-    run_block fuel ctx bb s = OK v ==> v.vs_inst_idx = 0
+    exec_block fuel ctx bb s = OK v ==> v.vs_inst_idx = 0
 Proof
   ho_match_mp_tac (cj 2 run_defs_ind) >>
   qexists_tac `\fuel ctx inst s. T` >>
   qexists_tac `\fuel ctx fn s. T` >> rw[] >>
-  pop_assum mp_tac >> simp[Once run_block_def] >>
+  pop_assum mp_tac >> simp[Once exec_block_def] >>
   Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
   rename1 `SOME inst` >>
   Cases_on `step_inst fuel ctx inst s` >> simp[] >>
@@ -505,22 +516,22 @@ Theorem clear_nops_function_correct:
   !fuel ctx fn s.
     s.vs_inst_idx = 0 ==>
     result_equiv {}
-      (run_function fuel ctx fn s)
-      (run_function fuel ctx (clear_nops_function fn) s)
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (clear_nops_function fn) s)
 Proof
   Induct_on `fuel` >> rpt strip_tac >>
-  once_rewrite_tac[run_function_def] >>
+  once_rewrite_tac[run_blocks_def] >>
   simp[clear_nops_function_def, lookup_block_clear_nops] >>
   Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >>
   simp[result_equiv_def, revert_equiv_def] >>
   rename1 `SOME bb` >>
   mp_tac (Q.SPECL [`fuel`, `ctx`, `bb`, `s`] clear_nops_block_correct) >>
   simp[] >>
-  Cases_on `run_block fuel ctx bb s` >>
-  Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
-  simp[result_equiv_def, revert_equiv_def] >> strip_tac >>
+  Cases_on `exec_block fuel ctx bb s` >>
+  Cases_on `exec_block fuel ctx (clear_nops_block bb) s` >>
+  simp[result_equiv_def] >> strip_tac >>
   imp_res_tac state_equiv_empty_eq >>
-  imp_res_tac run_block_ok_inst_idx_0 >> gvs[] >>
+  imp_res_tac exec_block_ok_inst_idx_0 >> gvs[] >>
   rw[] >>
   simp[result_equiv_def, execution_equiv_def, revert_equiv_def, lookup_var_def,
        clear_nops_function_def] >>
@@ -872,3 +883,31 @@ Theorem step_inst_base_effect_free_output_determined_vars =
 (* Operand equivalence *)
 Theorem step_inst_operands_equiv =
   passSharedSubstTheory.step_inst_operands_equiv
+
+(* ===================================================================== *)
+(* ===== Copy forwarding equivalence =================================== *)
+(* ===================================================================== *)
+
+Theorem copy_fwd_cross_equiv =
+  copyFwdEquivTheory.copy_fwd_cross_equiv
+
+Theorem copy_fwd_rel_observable_equiv =
+  copyFwdEquivTheory.copy_fwd_rel_observable_equiv
+
+Theorem copy_fwd_read_equiv =
+  copyFwdEquivTheory.copy_fwd_read_equiv
+
+Theorem copy_fwd_write_equiv =
+  copyFwdEquivTheory.copy_fwd_write_equiv
+
+Theorem copy_fwd_terminator_equiv =
+  copyFwdEquivTheory.copy_fwd_terminator_equiv
+
+Theorem copy_fwd_rel_preserved_identical_inst =
+  copyFwdEquivTheory.copy_fwd_rel_preserved_identical_inst
+
+Theorem assign_transparent =
+  copyFwdEquivTheory.assign_transparent
+
+Theorem phi_transparent =
+  copyFwdEquivTheory.phi_transparent

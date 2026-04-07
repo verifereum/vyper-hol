@@ -246,8 +246,8 @@ Proof
     `setup_callee x args s1 = setup_callee x args s2`
       by (irule setup_callee_state_equiv >> metis_tac[]) >>
     Cases_on `setup_callee x args s2` >> gvs[result_equiv_def] >>
-    Cases_on `run_function fuel ctx x x'` >> simp[] >>
-    gvs[result_equiv_def, execution_equiv_refl, revert_equiv_def] >>
+    Cases_on `run_blocks fuel ctx x x'` >> simp[] >>
+    gvs[result_equiv_def, execution_equiv_refl] >>
     (* Only IntRet case remains *)
     `state_equiv vars (merge_callee_state s1 v)
                       (merge_callee_state s2 v)` by

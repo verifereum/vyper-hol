@@ -18,7 +18,7 @@
  *   exec_alloca_preserves_remap  — ALLOCA extends remap
  *   terminator_remap             — terminators: same control flow +
  *                                  observable result equiv for RETURN/REVERT
- *   run_block_preserves_remap    — block-level preservation
+ *   exec_block_preserves_remap    — block-level preservation
  *
  * Proof strategy (per instruction type under pointer_confined):
  *   - Non-pointer operands: values agree by clause 1 → same computation
@@ -479,13 +479,13 @@ QED
 
 (* ===== Block-Level Preservation ===== *)
 
-(* run_block preserves alloca_remap_rel.
+(* exec_block preserves alloca_remap_rel.
    By induction on block instructions:
    - Non-terminators: step_inst_base_preserves_remap (or exec_alloca)
    - JMP/JNZ/STOP/DJMP: terminator_control_flow_remap → same next block
    - RETURN/REVERT: return_revert_remap → equivalent halt/revert result
    remap' extends remap with any new alloca mappings from the block. *)
-Theorem run_block_preserves_remap:
+Theorem exec_block_preserves_remap:
   !fn roots remap bb fuel ctx s1 s2.
     alloca_remap_rel fn roots remap s1 s2 /\
     FINITE roots /\
@@ -500,8 +500,8 @@ Theorem run_block_preserves_remap:
         (alloca_remap_rel fn roots remap')
         (alloca_remap_rel fn roots remap')
         (alloca_remap_rel fn roots remap')
-        (run_block fuel ctx bb s1)
-        (run_block fuel ctx bb s2)
+        (exec_block fuel ctx bb s1)
+        (exec_block fuel ctx bb s2)
 Proof
   cheat
 QED

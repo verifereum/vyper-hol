@@ -20,8 +20,8 @@ Theorem tail_merge_fn_correct:
     wf_function func ==>
     let func' = tail_merge_fn func in
     result_equiv UNIV
-      (run_function fuel ctx func s)
-      (run_function fuel ctx func' s)
+      (run_blocks fuel ctx func s)
+      (run_blocks fuel ctx func' s)
 Proof
   cheat
 QED

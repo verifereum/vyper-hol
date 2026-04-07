@@ -67,10 +67,10 @@ Theorem sccp_function_lift_result:
     !fuel ctx s.
       s.vs_inst_idx = 0 /\
       nophi_inv f s ==>
-      (?e. run_function fuel ctx f s = Error e) \/
+      (?e. run_blocks fuel ctx f s = Error e) \/
       lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
-        (run_function fuel ctx f s)
-        (run_function fuel ctx
+        (run_blocks fuel ctx f s)
+        (run_blocks fuel ctx
           (analysis_function_transform sccp_bottom (sccp_df_analyze f)
             (\lat inst. [sccp_inst lat.sl_vals inst]) f) s)
 Proof
@@ -79,10 +79,10 @@ Proof
   >- (
     (* Base: fuel = 0 => Error "out of fuel" *)
     rpt strip_tac >>
-    ONCE_REWRITE_TAC[run_function_def] >> simp[])
+    ONCE_REWRITE_TAC[run_blocks_def] >> simp[])
   >>
   rpt strip_tac >>
-  ONCE_REWRITE_TAC[run_function_def] >> simp[] >>
+  ONCE_REWRITE_TAC[run_blocks_def] >> simp[] >>
   qabbrev_tac `fn' = analysis_function_transform sccp_bottom (sccp_df_analyze f)
     (\lat inst. [sccp_inst lat.sl_vals inst]) f` >>
   Cases_on `lookup_block s.vs_current_bb f.fn_blocks`
@@ -118,13 +118,13 @@ Proof
   strip_tac
   >- simp[]
   >>
-  (* lift_result for run_block *)
-  Cases_on `run_block fuel ctx bb s`
+  (* lift_result for exec_block *)
+  Cases_on `exec_block fuel ctx bb s`
   >> gvs[lift_result_def]
   >- (
-    (* run_block = OK v *)
-    rename1 `run_block fuel ctx bb s = OK v` >>
-    Cases_on `run_block fuel ctx bt_bb s`
+    (* exec_block = OK v *)
+    rename1 `exec_block fuel ctx bb s = OK v` >>
+    Cases_on `exec_block fuel ctx bt_bb s`
     >> gvs[lift_result_def, Abbr `bt_bb`]
     >- (
       (* Both OK *)
@@ -137,7 +137,7 @@ Proof
         fs[state_equiv_def])
       >>
       simp[] >>
-      `v.vs_inst_idx = 0` by metis_tac[run_block_OK_inst_idx_0] >>
+      `v.vs_inst_idx = 0` by metis_tac[exec_block_OK_inst_idx_0] >>
       `nophi_inv f v` by (
         simp[nophi_inv_def] >>
         mp_tac (Q.SPECL [`f`, `bb`, `fuel`, `ctx`, `s`, `v`]
@@ -148,7 +148,7 @@ Proof
       first_x_assum (qspecl_then [`ctx`, `v`] mp_tac) >>
       simp[]))
   >> (
-    Cases_on `run_block fuel ctx bt_bb s`
+    Cases_on `exec_block fuel ctx bt_bb s`
     >> gvs[lift_result_def, Abbr `bt_bb`])
 QED
 
@@ -161,10 +161,10 @@ Theorem sccp_function_lift_result_entry[local]:
       s.vs_inst_idx = 0 /\
       fn_entry_label f = SOME s.vs_current_bb /\
       FDOM s.vs_vars = {} ==>
-      (?e. run_function fuel ctx f s = Error e) \/
+      (?e. run_blocks fuel ctx f s = Error e) \/
       lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
-        (run_function fuel ctx f s)
-        (run_function fuel ctx
+        (run_blocks fuel ctx f s)
+        (run_blocks fuel ctx
           (analysis_function_transform sccp_bottom (sccp_df_analyze f)
             (\lat inst. [sccp_inst lat.sl_vals inst]) f) s)
 Proof

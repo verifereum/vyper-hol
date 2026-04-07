@@ -29,7 +29,7 @@ QED
  * Proof approach:
  *   1. Rewrite transform_function as function_map_transform
  *   2. irule block_sim_function_pointwise_reachable
- *   3. Entry block: identity (no single-origin PHIs) via run_block_transform_identity
+ *   3. Entry block: identity (no single-origin PHIs) via exec_block_transform_identity
  *   4. Non-entry blocks: phi_elim_block_sim (guarded by vs_prev_bb)
  *   5. Wrap with transform_context membership (MEM_MAP)
  *)
@@ -47,8 +47,8 @@ Theorem phi_elimination_correct:
       MEM func' (transform_context ctx).ctx_functions /\
       func'.fn_name = fn_name /\
       lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
-        (run_function fuel ctx func s)
-        (run_function fuel ctx func' s)
+        (run_blocks fuel ctx func s)
+        (run_blocks fuel ctx func' s)
 Proof
   rpt gen_tac >>
   DISCH_TAC >>
@@ -76,7 +76,7 @@ Proof
     `!idx inst. get_instruction (HD func.fn_blocks) idx = SOME inst ==>
        phi_single_origin (dfg_build_function func) inst = NONE` by
       (rpt strip_tac >> res_tac) >>
-    imp_res_tac run_block_transform_identity >>
+    imp_res_tac exec_block_transform_identity >>
     fs[] >>
     irule lift_result_refl >>
     simp[state_equiv_refl, execution_equiv_refl]) >>

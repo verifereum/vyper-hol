@@ -452,6 +452,29 @@ End
    and all offsets are within reasonable bounds.
    Prerequisite for ANY correctness proof about variable access — without this,
    writing one variable could corrupt another. *)
+(* Struct field map (sfields) agrees with type environment (tenv).
+   Both are built from the same toplevel declarations:
+   sfields = make_struct_fields_map tops, tenv = type_env tops.
+   This ensures type_to_abi_enc_info and vyper_to_abi_type/evaluate_type
+   see the same struct definitions. *)
+Definition sfields_tenv_consistent_def:
+  sfields_tenv_consistent sfields tenv ⇔
+    (* Every struct in tenv exists in sfields with matching field types *)
+    (∀ name args.
+       FLOOKUP tenv (string_to_num name) = SOME (StructArgs args) ⇒
+       ∃ fields.
+         FLOOKUP sfields name = SOME fields ∧
+         MAP FST fields = MAP FST args ∧
+         MAP (FST o SND) fields = MAP SND args) ∧
+    (* Every struct in sfields exists in tenv *)
+    (∀ name fields.
+       FLOOKUP sfields name = SOME fields ⇒
+       ∃ args.
+         FLOOKUP tenv (string_to_num name) = SOME (StructArgs args) ∧
+         MAP FST fields = MAP FST args ∧
+         MAP (FST o SND) fields = MAP SND args)
+End
+
 Definition well_formed_cenv_def:
   well_formed_cenv cenv ⇔
     (* MemLoc regions don't overlap *)

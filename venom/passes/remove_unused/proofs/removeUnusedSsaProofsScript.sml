@@ -781,10 +781,10 @@ Theorem remove_unused_single_pass_correct_ssa:
     s.vs_inst_idx = 0 /\
     fn_entry_label fn = SOME s.vs_current_bb ==>
     let elim = single_pass_nop_outputs fn in
-    (?e. run_function fuel ctx fn s = Error e) \/
+    (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
-      (run_function fuel ctx fn s)
-      (run_function fuel ctx (remove_unused_single_pass fn) s)
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (remove_unused_single_pass fn) s)
 Proof
   rpt strip_tac >> simp_tac std_ss [LET_THM] >>
   irule (SIMP_RULE std_ss [LET_THM] remove_unused_single_pass_correct_proof) >>

@@ -219,10 +219,10 @@ Theorem assign_nop_dead_writes_correct:
        MEM bb fn_subst.fn_blocks /\ MEM inst bb.bb_instructions /\
        MEM (Var x) inst.inst_operands ==> x NOTIN elim)
     ==>
-    (?e. run_function fuel ctx fn_subst s = Error e) \/
+    (?e. run_blocks fuel ctx fn_subst s = Error e) \/
     lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
-      (run_function fuel ctx fn_subst s)
-      (run_function fuel ctx fn_elim s)
+      (run_blocks fuel ctx fn_subst s)
+      (run_blocks fuel ctx fn_elim s)
 Proof
   rpt GEN_TAC >> simp_tac std_ss [LET_THM] >> rpt strip_tac >>
   mp_tac (ISPECL [

@@ -57,7 +57,7 @@ QED
  *     other side already terminal).
  *   Backward termination: symmetric.
  *   Result equiv: align fuels via fuel_mono, prove lift_result by
- *     induction. OK/OK case: triangle via run_block_preserves_R +
+ *     induction. OK/OK case: triangle via exec_block_preserves_R +
  *     block sim. Cross-result case: resolution produces matching
  *     terminal result.
  *)
@@ -73,8 +73,8 @@ Theorem resolving_block_sim_function:
     (!bb fuel ctx s.
        MEM bb fn.fn_blocks /\ s.vs_inst_idx = 0 ==>
        resolving_block_sim R_ok R_term fn.fn_blocks fn'.fn_blocks
-         (run_block fuel ctx bb s)
-         (run_block fuel ctx (bt bb) s)) /\
+         (exec_block fuel ctx bb s)
+         (exec_block fuel ctx (bt bb) s)) /\
     (* Operand agreement for state equiv propagation through original fn *)
     (!bb inst x.
        MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
@@ -82,50 +82,50 @@ Theorem resolving_block_sim_function:
        !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
     (* Fuel monotonicity *)
     (!fuel k ctx s.
-       terminates (run_function fuel ctx fn s) ==>
-       run_function (fuel + k) ctx fn s = run_function fuel ctx fn s) /\
+       terminates (run_blocks fuel ctx fn s) ==>
+       run_blocks (fuel + k) ctx fn s = run_blocks fuel ctx fn s) /\
     (!fuel k ctx s.
-       terminates (run_function fuel ctx fn' s) ==>
-       run_function (fuel + k) ctx fn' s = run_function fuel ctx fn' s)
+       terminates (run_blocks fuel ctx fn' s) ==>
+       run_blocks (fuel + k) ctx fn' s = run_blocks fuel ctx fn' s)
   ==>
     !ctx s. s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
     (* Termination equivalence *)
-    ((?fuel. terminates (run_function fuel ctx fn s)) <=>
-     (?fuel'. terminates (run_function fuel' ctx fn' s))) /\
+    ((?fuel. terminates (run_blocks fuel ctx fn s)) <=>
+     (?fuel'. terminates (run_blocks fuel' ctx fn' s))) /\
     (* Result equivalence when both terminate *)
     (!fuel fuel'.
-       terminates (run_function fuel ctx fn s) /\
-       terminates (run_function fuel' ctx fn' s) ==>
+       terminates (run_blocks fuel ctx fn s) /\
+       terminates (run_blocks fuel' ctx fn' s) ==>
        lift_result R_ok R_term R_term
-         (run_function fuel ctx fn s)
-         (run_function fuel' ctx fn' s))
+         (run_blocks fuel ctx fn s)
+         (run_blocks fuel' ctx fn' s))
 Proof
   ACCEPT_TAC resolving_block_sim_function_proof
 QED
 
 (* Fuel monotonicity: terminated results are stable under added fuel *)
-Theorem run_function_fuel_mono:
+Theorem run_blocks_fuel_mono:
   !fuel ctx fn s.
-    terminates (run_function fuel ctx fn s) ==>
-    !k. run_function (fuel + k) ctx fn s = run_function fuel ctx fn s
+    terminates (run_blocks fuel ctx fn s) ==>
+    !k. run_blocks (fuel + k) ctx fn s = run_blocks fuel ctx fn s
 Proof
-  ACCEPT_TAC crossBlockSimProofsTheory.run_function_fuel_mono
+  ACCEPT_TAC crossBlockSimProofsTheory.run_blocks_fuel_mono
 QED
 
-(* Determinism: if a run_function call terminates at two different fuel
+(* Determinism: if a run_blocks call terminates at two different fuel
    values, the results are identical. Corollary of fuel monotonicity. *)
-Theorem run_function_deterministic:
+Theorem run_blocks_deterministic:
   !fuel fuel' ctx fn s.
-    terminates (run_function fuel ctx fn s) /\
-    terminates (run_function fuel' ctx fn s) ==>
-    run_function fuel ctx fn s = run_function fuel' ctx fn s
+    terminates (run_blocks fuel ctx fn s) /\
+    terminates (run_blocks fuel' ctx fn s) ==>
+    run_blocks fuel ctx fn s = run_blocks fuel' ctx fn s
 Proof
   rpt strip_tac >>
   Cases_on `fuel <= fuel'`
   >- (
     `?k. fuel' = fuel + k` by (qexists_tac `fuel' - fuel` >> simp[]) >>
-    metis_tac[run_function_fuel_mono]
+    metis_tac[run_blocks_fuel_mono]
   ) >>
   `?k. fuel = fuel' + k` by (qexists_tac `fuel - fuel'` >> simp[]) >>
-  metis_tac[run_function_fuel_mono]
+  metis_tac[run_blocks_fuel_mono]
 QED

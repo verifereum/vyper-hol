@@ -886,6 +886,7 @@ Definition type_to_abi_enc_info_def:
                              type_memory_bytes cenv fty,
                              is_abi_dynamic (cenv_sft cenv) fty))
                          fields)) ∧
+  type_to_abi_enc_info sfields cenv NoneT = AbiComplex [] ∧
   type_to_abi_enc_info sfields cenv _ = AbiPrimWord
 Termination
   WF_REL_TAC `inv_image ($< LEX $<) (λ(sfields, cenv, ty).

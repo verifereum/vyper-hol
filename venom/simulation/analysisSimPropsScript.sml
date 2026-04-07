@@ -32,10 +32,10 @@ Theorem analysis_inst_sim_block_sim:
   ==>
     !fuel ctx s.
       s.vs_inst_idx = 0 ==>
-      (?e. run_block fuel ctx bb s = Error e) \/
+      (?e. exec_block fuel ctx bb s = Error e) \/
       lift_result R_ok R_term R_term
-        (run_block fuel ctx bb s)
-        (run_block fuel ctx
+        (exec_block fuel ctx bb s)
+        (exec_block fuel ctx
           (analysis_block_transform bottom result f bb) s)
 Proof
   ACCEPT_TAC analysis_inst_sim_block_sim_proof
@@ -80,10 +80,10 @@ Theorem analysis_inst_sim_block_sim_inv:
       s.vs_inst_idx = 0 /\
       sound (df_at bottom result bb.bb_label 0) s /\
       state_inv s ==>
-      (?e. run_block fuel ctx bb s = Error e) \/
+      (?e. exec_block fuel ctx bb s = Error e) \/
       lift_result R_ok R_term R_term
-        (run_block fuel ctx bb s)
-        (run_block fuel ctx
+        (exec_block fuel ctx bb s)
+        (exec_block fuel ctx
            (analysis_block_transform bottom result f bb) s)
 Proof
   rpt strip_tac >>
@@ -127,7 +127,7 @@ Theorem df_analysis_pass_correct_sound:
          MEM bb.bb_label cfg.cfg_dfs_pre /\
          s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
          sound (df_at bottom result bb.bb_label 0) s /\
-         run_block fuel run_ctx bb s = OK v ==>
+         exec_block fuel run_ctx bb s = OK v ==>
          MEM v.vs_current_bb cfg.cfg_dfs_pre /\
          sound (df_at bottom result v.vs_current_bb 0) v) /\
       analysis_inst_simulates R_ok R_term sound f /\
@@ -141,9 +141,9 @@ Theorem df_analysis_pass_correct_sound:
       !fuel ctx s.
         s.vs_inst_idx = 0 /\
         fn_entry_label fn = SOME s.vs_current_bb ==>
-        (?e. run_function fuel ctx fn s = Error e) \/
-        lift_result R_ok R_term R_term (run_function fuel ctx fn s)
-          (run_function fuel ctx (analysis_function_transform bottom result f fn) s)
+        (?e. run_blocks fuel ctx fn s = Error e) \/
+        lift_result R_ok R_term R_term (run_blocks fuel ctx fn s)
+          (run_blocks fuel ctx (analysis_function_transform bottom result f fn) s)
 Proof
   ACCEPT_TAC df_analysis_pass_correct_sound_proof
 QED
@@ -179,7 +179,7 @@ Theorem df_analysis_pass_correct_sound_inv2:
          s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
          sound (df_at bottom result bb.bb_label 0) s /\
          state_inv s /\
-         run_block fuel run_ctx bb s = OK v ==>
+         exec_block fuel run_ctx bb s = OK v ==>
          MEM v.vs_current_bb cfg.cfg_dfs_pre /\
          sound (df_at bottom result v.vs_current_bb 0) v /\
          state_inv v) /\
@@ -207,9 +207,9 @@ Theorem df_analysis_pass_correct_sound_inv2:
         s.vs_inst_idx = 0 /\
         fn_entry_label fn = SOME s.vs_current_bb /\
         state_inv s ==>
-        (?e. run_function fuel ctx' fn s = Error e) \/
-        lift_result R_ok R_term R_term (run_function fuel ctx' fn s)
-          (run_function fuel ctx' (analysis_function_transform bottom result f fn) s)
+        (?e. run_blocks fuel ctx' fn s = Error e) \/
+        lift_result R_ok R_term R_term (run_blocks fuel ctx' fn s)
+          (run_blocks fuel ctx' (analysis_function_transform bottom result f fn) s)
 Proof
   ACCEPT_TAC df_analysis_pass_correct_sound_inv2_proof
 QED
@@ -245,7 +245,7 @@ Theorem df_analysis_pass_correct_sound_inv3:
          s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
          sound (df_at bottom result bb.bb_label 0) s /\
          state_inv s /\
-         run_block fuel run_ctx bb s = OK v ==>
+         exec_block fuel run_ctx bb s = OK v ==>
          MEM v.vs_current_bb cfg.cfg_dfs_pre /\
          sound (df_at bottom result v.vs_current_bb 0) v /\
          state_inv v) /\
@@ -273,9 +273,9 @@ Theorem df_analysis_pass_correct_sound_inv3:
         s.vs_inst_idx = 0 /\
         fn_entry_label fn = SOME s.vs_current_bb /\
         state_inv s ==>
-        (?e. run_function fuel ctx' fn s = Error e) \/
-        lift_result R_ok R_term R_term (run_function fuel ctx' fn s)
-          (run_function fuel ctx' (analysis_function_transform bottom result f fn) s)
+        (?e. run_blocks fuel ctx' fn s = Error e) \/
+        lift_result R_ok R_term R_term (run_blocks fuel ctx' fn s)
+          (run_blocks fuel ctx' (analysis_function_transform bottom result f fn) s)
 Proof
   ACCEPT_TAC df_analysis_pass_correct_sound_inv3_proof
 QED
@@ -308,7 +308,7 @@ Theorem df_analysis_pass_correct_widen_sound:
          MEM bb.bb_label cfg.cfg_dfs_pre /\
          s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
          sound (df_widen_at bottom result bb.bb_label 0) s /\
-         run_block fuel run_ctx bb s = OK v ==>
+         exec_block fuel run_ctx bb s = OK v ==>
          MEM v.vs_current_bb cfg.cfg_dfs_pre /\
          sound (df_widen_at bottom result v.vs_current_bb 0) v) /\
       analysis_inst_simulates R_ok R_term sound f /\
@@ -322,9 +322,9 @@ Theorem df_analysis_pass_correct_widen_sound:
       !fuel ctx s.
         s.vs_inst_idx = 0 /\
         fn_entry_label fn = SOME s.vs_current_bb ==>
-        (?e. run_function fuel ctx fn s = Error e) \/
-        lift_result R_ok R_term R_term (run_function fuel ctx fn s)
-          (run_function fuel ctx
+        (?e. run_blocks fuel ctx fn s = Error e) \/
+        lift_result R_ok R_term R_term (run_blocks fuel ctx fn s)
+          (run_blocks fuel ctx
             (analysis_function_transform_widen bottom result f fn) s)
 Proof
   ACCEPT_TAC df_analysis_pass_correct_widen_sound_proof
@@ -358,7 +358,7 @@ Theorem df_analysis_pass_correct_widen_sound_inv:
          s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
          sound (df_widen_at bottom result bb.bb_label 0) s /\
          state_inv s /\
-         run_block fuel run_ctx bb s = OK v ==>
+         exec_block fuel run_ctx bb s = OK v ==>
          MEM v.vs_current_bb cfg.cfg_dfs_pre /\
          sound (df_widen_at bottom result v.vs_current_bb 0) v /\
          state_inv v) /\
@@ -376,9 +376,9 @@ Theorem df_analysis_pass_correct_widen_sound_inv:
         fn_entry_label fn = SOME s.vs_current_bb /\
         state_inv s /\
         sound (df_widen_at bottom result s.vs_current_bb 0) s ==>
-        (?e. run_function fuel ctx fn s = Error e) \/
-        lift_result R_ok R_term R_term (run_function fuel ctx fn s)
-          (run_function fuel ctx
+        (?e. run_blocks fuel ctx fn s = Error e) \/
+        lift_result R_ok R_term R_term (run_blocks fuel ctx fn s)
+          (run_blocks fuel ctx
             (analysis_function_transform_widen bottom result f fn) s)
 Proof
   ACCEPT_TAC df_analysis_pass_correct_widen_sound_inv_proof
@@ -412,7 +412,7 @@ Theorem df_analysis_pass_correct_widen_sound_inv2:
          s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
          sound (df_widen_at bottom result bb.bb_label 0) s /\
          state_inv s /\
-         run_block fuel run_ctx bb s = OK v ==>
+         exec_block fuel run_ctx bb s = OK v ==>
          MEM v.vs_current_bb cfg.cfg_dfs_pre /\
          sound (df_widen_at bottom result v.vs_current_bb 0) v /\
          state_inv v) /\
@@ -441,9 +441,9 @@ Theorem df_analysis_pass_correct_widen_sound_inv2:
         fn_entry_label fn = SOME s.vs_current_bb /\
         state_inv s /\
         sound (df_widen_at bottom result s.vs_current_bb 0) s ==>
-        (?e. run_function fuel ctx' fn s = Error e) \/
-        lift_result R_ok R_term R_term (run_function fuel ctx' fn s)
-          (run_function fuel ctx'
+        (?e. run_blocks fuel ctx' fn s = Error e) \/
+        lift_result R_ok R_term R_term (run_blocks fuel ctx' fn s)
+          (run_blocks fuel ctx'
             (analysis_function_transform_widen bottom result f fn) s)
 Proof
   ACCEPT_TAC df_analysis_pass_correct_widen_sound_inv2_proof
@@ -488,7 +488,7 @@ Theorem df_analysis_pass_correct_prepend:
          MEM bb.bb_label cfg.cfg_dfs_pre /\
          s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
          sound (df_at bottom result bb.bb_label 0) s /\
-         run_block fuel run_ctx bb s = OK v ==>
+         exec_block fuel run_ctx bb s = OK v ==>
          MEM v.vs_current_bb cfg.cfg_dfs_pre /\
          sound (df_at bottom result v.vs_current_bb 0) v) /\
       analysis_inst_simulates R_ok R_term sound f /\
@@ -514,9 +514,9 @@ Theorem df_analysis_pass_correct_prepend:
       !fuel ctx s.
         s.vs_inst_idx = 0 /\
         fn_entry_label fn = SOME s.vs_current_bb ==>
-        (?e. run_function fuel ctx fn s = Error e) \/
-        lift_result R_ok R_term R_term (run_function fuel ctx fn s)
-          (run_function fuel ctx fn' s)
+        (?e. run_blocks fuel ctx fn s = Error e) \/
+        lift_result R_ok R_term R_term (run_blocks fuel ctx fn s)
+          (run_blocks fuel ctx fn' s)
 Proof
   ACCEPT_TAC df_analysis_pass_correct_prepend_proof
 QED
@@ -553,10 +553,10 @@ Theorem analysis_function_transform_compare:
   ==>
     !fuel ctx s.
       s.vs_inst_idx = 0 ==>
-      (?e. run_function fuel ctx fn1 s = Error e) \/
+      (?e. run_blocks fuel ctx fn1 s = Error e) \/
       lift_result R_ok R_term R_term
-        (run_function fuel ctx fn1 s)
-        (run_function fuel ctx fn2 s)
+        (run_blocks fuel ctx fn1 s)
+        (run_blocks fuel ctx fn2 s)
 Proof
   ACCEPT_TAC analysis_function_transform_compare_proof
 QED
@@ -598,7 +598,7 @@ Theorem transfer_sound_exit:
     !fuel ctx s v i.
       s.vs_inst_idx = 0 /\
       sound (df_at bottom result bb.bb_label 0) s /\
-      run_block fuel ctx bb s = OK v /\
+      exec_block fuel ctx bb s = OK v /\
       i < LENGTH bb.bb_instructions /\
       is_terminator (EL i bb.bb_instructions).inst_opcode /\
       (!j. j < i ==> ~is_terminator (EL j bb.bb_instructions).inst_opcode) ==>
@@ -623,7 +623,7 @@ Theorem transfer_sound_exit_wf:
     !fuel ctx s v i.
       s.vs_inst_idx = 0 /\
       sound (df_at bottom result bb.bb_label 0) s /\
-      run_block fuel ctx bb s = OK v /\
+      exec_block fuel ctx bb s = OK v /\
       i < LENGTH bb.bb_instructions /\
       is_terminator (EL i bb.bb_instructions).inst_opcode /\
       (!j. j < i ==> ~is_terminator (EL j bb.bb_instructions).inst_opcode) ==>
@@ -646,7 +646,7 @@ Theorem successor_in_cfg_dfs_pre:
     MEM bb fn.fn_blocks /\
     MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
     s.vs_inst_idx = 0 /\
-    run_block fuel ctx bb s = OK v
+    exec_block fuel ctx bb s = OK v
     ==>
     MEM v.vs_current_bb (cfg_analyze fn).cfg_dfs_pre
 Proof
@@ -737,7 +737,7 @@ Theorem fwd_successor_entry_sound:
     MEM s.vs_current_bb cfg.cfg_dfs_pre /\
     s.vs_inst_idx = 0 /\
     sound (df_at bottom result s.vs_current_bb 0) s /\
-    run_block fuel run_ctx bb s = OK v /\
+    exec_block fuel run_ctx bb s = OK v /\
     (* H1: transfer_sound *)
     transfer_sound sound transfer ctx /\
     (* H2: valid_state_rel + sound respects R_ok *)

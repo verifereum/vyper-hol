@@ -81,8 +81,8 @@ Theorem dft_block_simulates:
     valid_topo_order bb.bb_instructions order eda
                      (dft_block order bb).bb_instructions ==>
     lift_result (state_equiv {}) (execution_equiv {}) revert_equiv
-      (run_block fuel ctx bb s)
-      (run_block fuel ctx (dft_block order bb) s)
+      (exec_block fuel ctx bb s)
+      (exec_block fuel ctx (dft_block order bb) s)
 Proof
   cheat
 QED
@@ -105,12 +105,12 @@ Theorem dft_function_correct:
       !fuel ctx s.
         s.vs_inst_idx = 0 ==>
         lift_result (state_equiv {}) (execution_equiv {}) revert_equiv
-          (run_block fuel ctx bb s)
-          (run_block fuel ctx (dft_block order bb) s)) /\
+          (exec_block fuel ctx bb s)
+          (exec_block fuel ctx (dft_block order bb) s)) /\
     s.vs_inst_idx = 0 ==>
     lift_result (state_equiv {}) (execution_equiv {}) revert_equiv
-      (run_function fuel ctx fn s)
-      (run_function fuel ctx (dft_fn fn) s)
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (dft_fn fn) s)
 Proof
   cheat
 QED
@@ -125,11 +125,11 @@ Theorem dft_pass_correct:
       !fuel ctx s.
         s.vs_inst_idx = 0 ==>
         lift_result (state_equiv {}) (execution_equiv {}) revert_equiv
-          (run_block fuel ctx bb s)
-          (run_block fuel ctx (dft_block order bb) s)) ==>
+          (exec_block fuel ctx bb s)
+          (exec_block fuel ctx (dft_block order bb) s)) ==>
     pass_correct (state_equiv {}) (execution_equiv {}) revert_equiv
-      (\fuel. run_function fuel ctx fn s)
-      (\fuel. run_function fuel ctx (dft_fn fn) s)
+      (\fuel. run_blocks fuel ctx fn s)
+      (\fuel. run_blocks fuel ctx (dft_fn fn) s)
 Proof
   cheat
 QED

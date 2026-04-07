@@ -365,8 +365,8 @@ Theorem phi_elim_block_sim:
        lookup_var src_var s' = NONE)
   ==>
     lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
-      (run_block fuel ctx bb s)
-      (run_block fuel ctx (transform_block dfg bb) s)
+      (exec_block fuel ctx bb s)
+      (exec_block fuel ctx (transform_block dfg bb) s)
 Proof
   rpt gen_tac >> strip_tac >>
   ntac 4 (pop_assum mp_tac) >> pop_assum kall_tac >>
@@ -377,9 +377,9 @@ Proof
   qexists_tac `\fuel ctx fn s. T` >> simp[] >>
   rpt gen_tac >> strip_tac >> rpt strip_tac >>
   CONV_TAC (RATOR_CONV (RAND_CONV
-    (SIMP_CONV (srw_ss()) [Once run_block_def]))) >>
+    (SIMP_CONV (srw_ss()) [Once exec_block_def]))) >>
   CONV_TAC (RAND_CONV
-    (SIMP_CONV (srw_ss()) [Once run_block_def])) >>
+    (SIMP_CONV (srw_ss()) [Once exec_block_def])) >>
   Cases_on `get_instruction bb s.vs_inst_idx` >- (
     `get_instruction (transform_block dfg bb) s.vs_inst_idx = NONE` by
       gvs[get_instruction_def, transform_block_def] >>

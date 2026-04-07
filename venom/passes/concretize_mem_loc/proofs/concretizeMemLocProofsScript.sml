@@ -161,7 +161,7 @@ QED
    All clauses are vacuously satisfied or reduce to equality.
 
    Does not use block_sim_function — vs_memory and vs_allocas differ,
-   violating valid_state_rel. Proof by custom induction on run_function.
+   violating valid_state_rel. Proof by custom induction on run_blocks.
 
    Key proof steps per instruction type:
    - ALLOCA→ASSIGN: sets different base offsets, extends s1 memory,
@@ -184,8 +184,8 @@ Theorem concretize_function_correct_proof:
     lift_result
       (mem_remap_equiv amap fn)
       (mem_remap_equiv amap fn)
-      (run_function fuel ctx fn s1)
-      (run_function fuel ctx (concretize_function amap fn) s2)
+      (run_blocks fuel ctx fn s1)
+      (run_blocks fuel ctx (concretize_function amap fn) s2)
 Proof
   cheat
 QED
