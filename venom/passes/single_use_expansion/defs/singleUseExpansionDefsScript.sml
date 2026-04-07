@@ -1,6 +1,8 @@
 (*
  * Single Use Expansion Pass — Definitions
  *
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
+ *
  * Ports vyper/venom/passes/single_use_expansion.py to HOL4.
  *
  * Transforms Venom IR to "single use" form:
@@ -172,6 +174,29 @@ Definition sue_fresh_vars_fn_def:
         MAPi (\idx op. sue_fresh_var inst.inst_id idx) inst.inst_operands)
         bb.bb_instructions))
       fn.fn_blocks))
+End
+
+(* sue_operands_wf: opcodes that ignore their operands must have no
+   operands.  This includes NOP/STOP/SINK/INVALID and all exec_read0
+   opcodes (CALLER, MSIZE, etc.) whose step_inst_base ignores operands.
+   Without this, SUE expansion could introduce assign errors for operands
+   the original instruction never evaluates, breaking semantic equivalence.
+   Trivially satisfied by the Vyper pipeline. *)
+Definition sue_operands_wf_def:
+  sue_operands_wf inst <=>
+    (inst.inst_opcode = NOP \/ inst.inst_opcode = STOP \/
+     inst.inst_opcode = SINK \/ inst.inst_opcode = INVALID \/
+     inst.inst_opcode = CALLER \/ inst.inst_opcode = CALLVALUE \/
+     inst.inst_opcode = CALLDATASIZE \/ inst.inst_opcode = ADDRESS \/
+     inst.inst_opcode = ORIGIN \/ inst.inst_opcode = GASPRICE \/
+     inst.inst_opcode = GAS \/ inst.inst_opcode = GASLIMIT \/
+     inst.inst_opcode = COINBASE \/ inst.inst_opcode = TIMESTAMP \/
+     inst.inst_opcode = NUMBER \/ inst.inst_opcode = PREVRANDAO \/
+     inst.inst_opcode = CHAINID \/ inst.inst_opcode = SELFBALANCE \/
+     inst.inst_opcode = BASEFEE \/ inst.inst_opcode = CODESIZE \/
+     inst.inst_opcode = RETURNDATASIZE \/ inst.inst_opcode = BLOBBASEFEE \/
+     inst.inst_opcode = MSIZE ==>
+     inst.inst_operands = [])
 End
 
 Definition sue_expand_context_def:

@@ -15,7 +15,7 @@ Ancestors
 Theorem concretize_function_correct:
   !amap fn fuel ctx s1 s2.
     venom_wf ctx /\ ssa_form fn /\
-    pointer_confined fn amap /\
+    concretize_pointer_confined fn amap /\
     mem_remap_equiv amap fn s1 s2 ==>
     lift_result
       (mem_remap_equiv amap fn)

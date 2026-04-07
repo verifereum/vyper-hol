@@ -21,6 +21,18 @@
  *   5. src doesn't alias dst (self-copy check)
  *   6. No mutable sibling arg in the same invoke has the same source root
  *
+ * SOUNDNESS NOTE (pointer arithmetic in callees):
+ *   RICF rewrites INVOKE operands: Var dst_alias → Var src_root.
+ *   The callee receives a different pointer value.  Even for "readonly"
+ *   parameters (no memory WRITE through the pointer), the callee may
+ *   compute on the pointer value itself (e.g. ADD %param, 32) and
+ *   return a different result.  A correct proof requires an additional
+ *   precondition: the callee uses the parameter ONLY at memory-address
+ *   operand positions (is_mem_addr_position).  This is an inter-
+ *   procedural property that cannot be checked from the call-site
+ *   alone; it requires whole-program analysis or a per-function
+ *   annotation.
+ *
  * Runs to local fixpoint (chained staging copies).
  *
  * TOP-LEVEL:
@@ -70,8 +82,9 @@ Definition ricf_try_forward_def:
     if copy_idx >= LENGTH insts then NONE else
     let copy_inst = EL copy_idx insts in
     if copy_inst.inst_opcode <> MCOPY then NONE else
+    (* HOL4 EVM order: [dst; src; size].  Python order: [size; src; dst]. *)
     case copy_inst.inst_operands of
-      [size_op; src_op; Var dst] =>
+      [Var dst; src_op; size_op] =>
         let root = icf_assign_root ctx.icf_dfg {} dst in
         (case dfg_get_def ctx.icf_dfg root of
            NONE => NONE
@@ -87,7 +100,8 @@ Definition ricf_try_forward_def:
                    NONE => NONE
                  | SOME sites =>
                      if icf_is_assign_output_use inst pos then SOME sites
-                     else if inst.inst_opcode = MCOPY /\ pos = 2 then
+                     (* pos = 0 is mcopy dst in HOL4 EVM order [dst;src;size] *)
+                     else if inst.inst_opcode = MCOPY /\ pos = 0 then
                        if inst.inst_id = copy_inst.inst_id then SOME sites
                        else NONE  (* other mcopy dst use *)
                      else if inst.inst_opcode = INVOKE /\

@@ -18,10 +18,11 @@
 
 Theory deadStoreElimCorrectness
 Ancestors
-  deadStoreElimProofs venomWf
+  deadStoreElimProofs venomWf basePtrProps
 
 Theorem dse_function_correct:
-  !analysis_fn aliases fuel ctx fn s.
+  !analysis_fn aliases fuel ctx fn s bp.
+    bp_ptr_sound bp s /\ bp_ptrs_bounded bp fn s /\
     (!space fn'.
       all_dead_stores (analysis_fn space fn')
         (cfg_analyze fn') aliases (bp_analyze (cfg_analyze fn') fn')

@@ -1,1 +1,1 @@
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../../syntax ../../../semantics ../../defs ../../simulation ../../simulation/defs ../../analysis/dfg ../../analysis/dfg/defs defs proofs
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../../syntax ../../../semantics ../../defs ../../simulation ../../simulation/defs ../../analysis/dfg ../../analysis/dfg/defs ../../analysis/base_ptr ../../analysis/base_ptr/defs ../../analysis/shared ../../analysis/shared/defs ../shared ../shared/defs defs proofs

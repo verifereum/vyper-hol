@@ -1,24 +1,30 @@
 (*
  * Lower DLOAD Pass — Definitions
  *
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  * Ports vyper/venom/passes/lower_dload.py to HOL4.
  *
  * Lowers dload and dloadbytes instructions to their EVM equivalents:
- *   dload ptr        → alloca 32; add ptr code_end; codecopy dst add_out 32; mload dst
- *   dloadbytes dst src size → add src code_end; codecopy dst code_ptr size
+ *   dload ptr        -> alloca 32; add ptr code_end; codecopy dst add_out 32; mload dst
+ *   dloadbytes dst src size -> add src code_end; codecopy dst code_ptr size
  *
- * No analysis needed — pure per-instruction expansion (1:N).
- * Framework: function_map_transform with FLAT ∘ MAP.
+ * Matches Python: emits ADD [ptr; Label "code_end"]. Labels resolve via
+ * vs_labels (eval_operand handles Label operands). Correctness requires
+ * code_layout_valid: vs_labels "code_end" = code/data boundary.
+ *
+ * No analysis needed - pure per-instruction expansion (1:N).
+ * Framework: function_map_transform with FLAT o MAP.
  *
  * TOP-LEVEL:
- *   lower_dload_inst      — per-instruction expansion
- *   lower_dload_block     — block-level transform
- *   lower_dload_function  — function-level transform
- *   lower_dload_context   — context-level transform
+ *   lower_dload_inst      - per-instruction expansion
+ *   lower_dload_block     - block-level transform
+ *   lower_dload_function  - function-level transform
+ *   lower_dload_context   - context-level transform
+ *   code_layout_valid     - precondition for correctness
  *
  * Helper:
- *   ld_alloca_var         — fresh variable name for alloca output
- *   ld_add_var            — fresh variable name for add output
+ *   ld_alloca_var         - fresh variable name for alloca output
+ *   ld_add_var            - fresh variable name for add output
  *
  * Source: vyper/venom/passes/lower_dload.py
  *)
@@ -46,20 +52,19 @@ End
  * Expand a single instruction.
  *
  * dload [ptr] with output [out]:
- *   1. alloca [Lit 32w]             → [alloca_var]    (allocate temp memory)
- *   2. add [ptr; Label "code_end"]  → [add_var]       (compute code offset)
- *   3. codecopy [Var alloca_var; Var add_var; Lit 32w] (copy code → memory)
- *   4. mload [Var alloca_var]       → [out]           (read from memory)
+ *   1. alloca [Lit 32w]                       -> [alloca_var]  (allocate temp memory)
+ *   2. add [ptr; Label "code_end"]            -> [add_var]     (ptr + code_end)
+ *   3. codecopy [Var alloca_var; Var add_var; Lit 32w]         (copy code -> memory)
+ *   4. mload [Var alloca_var]                 -> [out]         (read from memory)
  *
  * dloadbytes [dst; src; size] (HOL4 semantic order: dst, src, size):
- *   1. add [src; Label "code_end"]  → [add_var]       (compute code offset)
- *   2. codecopy [dst; Var add_var; size]               (copy code → memory)
+ *   1. add [src; Label "code_end"]            -> [add_var]     (src + code_end)
+ *   2. codecopy [dst; Var add_var; size]                       (copy code -> memory)
  *
  * All other instructions pass through unchanged.
  *
- * Note: ADD with Label operand requires label resolution (done by codegen).
- * The HOL4 eval_operand returns NONE for Labels. Correctness proof requires
- * a semantic extension or precondition about label resolution.
+ * Labels resolve via vs_labels (eval_operand handles Label operands).
+ * Correctness requires code_layout_valid s.
  *)
 Definition lower_dload_inst_def:
   lower_dload_inst inst =
@@ -116,9 +121,28 @@ Definition lower_dload_context_def:
     ctx with ctx_functions := MAP lower_dload_function ctx.ctx_functions
 End
 
-(* ===== Fresh Variable Tracking ===== *)
+(* ===== Code Layout Precondition ===== *)
 
-(* Fresh variables introduced by expanding a single instruction. *)
+(* Precondition for lower_dload correctness:
+   1. vs_data_section is a suffix of vs_code
+   2. vs_labels maps "code_end" to the boundary between bytecode and data
+
+   Discharged by codegen: the assembler produces bytecode ++ data_section_bytes
+   and sets code_end = LENGTH bytecode in the label map. *)
+Definition code_layout_valid_def:
+  code_layout_valid s <=>
+    (?prefix. s.vs_code = prefix ++ s.vs_data_section) /\
+    FLOOKUP s.vs_labels "code_end" =
+      SOME (n2w (LENGTH s.vs_code - LENGTH s.vs_data_section)) /\
+    LENGTH s.vs_code <= dimword(:256) DIV 2
+End
+
+(* ===== Variable Tracking ===== *)
+
+(* Fresh variables introduced by expanding a single instruction.
+   - DLOAD: two fresh intermediates (ld_alloca_var, ld_add_var)
+   - DLOADBYTES: one fresh intermediate (ld_add_var)
+   These variables do not exist in the original function. *)
 Definition ld_fresh_vars_inst_def:
   ld_fresh_vars_inst inst =
     if inst.inst_opcode = DLOAD then
@@ -128,10 +152,128 @@ Definition ld_fresh_vars_inst_def:
     else {}
 End
 
-(* Fresh variables in a function. *)
+(* Fresh variables in a function (from DLOAD/DLOADBYTES expansion only). *)
 Definition ld_fresh_vars_fn_def:
   ld_fresh_vars_fn fn =
     BIGUNION (set (MAP (\bb.
       BIGUNION (set (MAP ld_fresh_vars_inst bb.bb_instructions)))
       fn.fn_blocks))
+End
+
+(* Exempt variables: precisely the fresh intermediates introduced by lowering.
+   Under the ld_no_original_alloca precondition, no original ALLOCA
+   instructions exist, so the only differing variables are ld_alloca_var
+   and ld_add_var from the DLOAD/DLOADBYTES expansion. *)
+Definition ld_exempt_vars_fn_def:
+  ld_exempt_vars_fn fn = ld_fresh_vars_fn fn
+End
+
+(* No original ALLOCA instructions in the function.
+   Required because DLOAD expansion inserts new ALLOCAs that shift
+   next_alloca_offset, causing any pre-existing ALLOCA to produce
+   different addresses in the original vs expanded execution.
+   Satisfied by the pipeline: lower_dload runs before concretize_mem_loc,
+   but after mem2var which promotes ALLOCAs to variables; any remaining
+   ALLOCAs in the function would violate this precondition. *)
+Definition ld_no_original_alloca_def:
+  ld_no_original_alloca fn <=>
+    !bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
+      inst.inst_opcode <> ALLOCA
+End
+
+(* ===== Memory-Observing Opcode Exclusion ===== *)
+
+(* Opcodes excluded from lower_dload functions.
+   DLOAD expansion introduces ALLOCA+CODECOPY scratch that changes
+   vs_memory layout.  We exclude all opcodes whose behavior depends on
+   vs_memory, vs_allocas, or vs_returndata — fields that diverge.
+
+   Memory readers: MLOAD, MSIZE, SHA3, MCOPY, LOG
+   External calls: CALL, STATICCALL, DELEGATECALL, CREATE, CREATE2
+   INVOKE: callee inherits vs_memory → different returns on divergent memory
+   RETURNDATASIZE/RETURNDATACOPY: read vs_returndata (may differ)
+
+   NOT excluded (safe):
+   - MSTORE/CODECOPY/CALLDATACOPY/EXTCODECOPY: write-only to memory
+   - RETURN/REVERT: terminal; ld_equiv omits vs_returndata
+   - ALLOCA: output is exempt (in ld_exempt_vars_fn)
+   - DLOAD/DLOADBYTES: transformation targets *)
+Definition reads_memory_def:
+  reads_memory op <=>
+    op = MLOAD \/ op = MSIZE \/ op = SHA3 \/ op = MCOPY \/
+    op = LOG \/
+    op = CALL \/ op = STATICCALL \/ op = DELEGATECALL \/
+    op = CREATE \/ op = CREATE2 \/
+    op = INVOKE \/
+    op = RETURNDATASIZE \/ op = RETURNDATACOPY
+End
+
+Definition ld_no_mem_read_def:
+  ld_no_mem_read fn <=>
+    !bb inst.
+      MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
+      ~reads_memory inst.inst_opcode
+End
+
+(* ===== DLOAD pointer safety ===== *)
+
+(* The DLOAD lowering performs ptr + code_end in word arithmetic.
+   This overflows when w2n ptr + LENGTH prefix >= dimword(:256).
+   In Vyper, DLOAD operands are compile-time data section offsets (small).
+   We require the ptr operand (for DLOAD) or src operand (for DLOADBYTES)
+   evaluates to a value safe from overflow in any reachable state.
+
+   Sufficient static condition: the relevant operand is a Lit whose value
+   plus the code prefix length fits in a word. Since code_layout_valid
+   gives LENGTH prefix <= dimword(:256) DIV 2, requiring the literal
+   value < dimword(:256) DIV 2 ensures the sum < dimword(:256). *)
+Definition ld_dload_safe_def:
+  ld_dload_safe fn <=>
+    !bb inst.
+      MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
+      (inst.inst_opcode = DLOAD ==>
+        ?v. inst.inst_operands = [Lit v] /\
+            w2n v < dimword(:256) DIV 2) /\
+      (inst.inst_opcode = DLOADBYTES ==>
+        ?dst_op v size_op.
+          inst.inst_operands = [dst_op; Lit v; size_op] /\
+          w2n v < dimword(:256) DIV 2)
+End
+
+(* ===== Lower-DLOAD Equivalence ===== *)
+
+(* Tightest correct equivalence for lower_dload: everything in
+   execution_equiv except vs_memory, vs_allocas, and vs_returndata.
+
+   Why these are excluded:
+   - vs_memory: DLOAD lowering uses ALLOCA+CODECOPY as scratch space,
+     modifying memory beyond what the original DLOAD touches.
+   - vs_allocas: ALLOCA introduces new alloca entries.
+   - vs_returndata: RETURN/REVERT reads vs_memory to produce returndata;
+     since memory can differ, returndata can too.
+
+   All other fields are preserved:
+   - Variables (excluding fresh ld_alloca_*/ld_add_* introduced by lowering)
+   - Accounts, logs, transient, immutables (no instructions touch these)
+   - Context fields (call_ctx, tx_ctx, block_ctx)
+   - Data section, labels, code, params, prev_hashes (read-only) *)
+Definition ld_equiv_def:
+  ld_equiv vars s1 s2 <=>
+    (!v. v NOTIN vars ==> lookup_var v s1 = lookup_var v s2) /\
+    (* vs_memory OMITTED — DLOAD lowering uses scratch memory *)
+    s1.vs_transient = s2.vs_transient /\
+    s1.vs_halted = s2.vs_halted /\
+    (* vs_returndata OMITTED — RETURN reads from divergent memory *)
+    s1.vs_accounts = s2.vs_accounts /\
+    s1.vs_call_ctx = s2.vs_call_ctx /\
+    s1.vs_tx_ctx = s2.vs_tx_ctx /\
+    s1.vs_block_ctx = s2.vs_block_ctx /\
+    s1.vs_logs = s2.vs_logs /\
+    s1.vs_immutables = s2.vs_immutables /\
+    s1.vs_data_section = s2.vs_data_section /\
+    s1.vs_labels = s2.vs_labels /\
+    s1.vs_code = s2.vs_code /\
+    s1.vs_params = s2.vs_params /\
+    s1.vs_prev_hashes = s2.vs_prev_hashes
+    (* vs_allocas OMITTED — ALLOCA introduces new entries *)
 End

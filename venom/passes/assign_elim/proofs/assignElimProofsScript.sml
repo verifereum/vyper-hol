@@ -648,7 +648,7 @@ Proof
   rpt GEN_TAC >> simp_tac std_ss [LET_THM] >> rpt strip_tac >>
   (* Phase 1: fn → fn_subst gives state_equiv {} (or fn errors) *)
   mp_tac (SIMP_RULE std_ss [LET_THM]
-    (ISPECL [``fuel:num``, ``ctx:ir_context``,
+    (ISPECL [``fuel:num``, ``ctx:venom_context``,
              ``fn:ir_function``, ``s:venom_state``]
      assign_subst_function_eq)) >>
   impl_tac >- (fs[wf_function_def]) >>
@@ -660,7 +660,7 @@ Proof
   (* Need: Error fn ∨ lift_result state_equiv elim fn (assign_elim_function fn) *)
   (* Apply Phase 2 *)
   mp_tac (SIMP_RULE std_ss [LET_THM]
-    (ISPECL [``fuel:num``, ``ctx:ir_context``,
+    (ISPECL [``fuel:num``, ``ctx:venom_context``,
              ``fn:ir_function``, ``s:venom_state``]
      assign_nop_dead_writes_correct)) >>
   impl_tac >- (simp[] >> metis_tac[]) >>

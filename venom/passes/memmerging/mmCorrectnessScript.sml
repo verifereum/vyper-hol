@@ -354,7 +354,7 @@ Theorem mm_pass_correct:
                  MEM (Var x) inst.inst_operands ==>
       !s1 s2. state_equiv fresh s1 s2 ==>
         lookup_var x s1 = lookup_var x s2) ==>
-    pass_correct fresh
+    pass_correct (state_equiv fresh) (execution_equiv fresh)
       (\fuel. run_function fuel ctx fn s)
       (\fuel. run_function fuel ctx (transform_function fn) s)
 Proof

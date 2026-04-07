@@ -1,7 +1,7 @@
 (*
  * PHI Elimination Function-Level Correctness
  *
- * Uses block_sim_function_reachable from the simulation framework
+ * Uses block_sim_function_pointwise_reachable from the simulation framework
  * to lift per-block simulation (phi_elim_block_sim) to function level.
  *
  * Single top-level theorem: phi_elimination_context_correct.
@@ -28,7 +28,7 @@ QED
  *
  * Proof approach:
  *   1. Rewrite transform_function as function_map_transform
- *   2. irule block_sim_function_reachable
+ *   2. irule block_sim_function_pointwise_reachable
  *   3. Entry block: identity (no single-origin PHIs) via run_block_transform_identity
  *   4. Non-entry blocks: phi_elim_block_sim (guarded by vs_prev_bb)
  *   5. Wrap with transform_context membership (MEM_MAP)
@@ -65,7 +65,7 @@ Proof
     qexists_tac `func` >> simp[]) >>
   conj_tac >- simp[transform_function_def] >>
   simp[transform_function_is_function_map_transform] >>
-  irule block_sim_function_reachable >>
+  irule block_sim_function_pointwise_reachable >>
   simp[state_equiv_execution_equiv_valid_state_rel, transform_block_label,
        state_equiv_def, execution_equiv_def] >>
   (* Per-block simulation — only remaining goal *)

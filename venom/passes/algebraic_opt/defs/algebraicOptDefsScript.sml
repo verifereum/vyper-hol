@@ -1,6 +1,7 @@
 (*
  * Algebraic Optimization Pass — Definitions
  *
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  * Ports vyper/venom/passes/algebraic_optimization.py to HOL4.
  *
  * Reduces algebraically evaluatable expressions via:
@@ -236,7 +237,6 @@ End
  *   DIV [dividend; divisor]            — result = op1 / op2
  *   MOD [dividend; divisor]
  *   GT/LT/SGT/SLT [a; b]             — result = a > b (GT), a < b (LT)
- *   GEP [base; offset]
  *
  * For commutative ops (ADD, MUL, AND, OR, XOR, EQ):
  *   Python pre-flips literal to operands[0] (= HOL4 op2).
@@ -298,17 +298,6 @@ Definition ao_opt_exp_def:
           [inst with <| inst_opcode := ASSIGN; inst_operands := [Lit 1w] |>]
         else if lit_eq base_op 0w then              (* 0^x = iszero(x) *)
           [inst with <| inst_opcode := ISZERO; inst_operands := [exp_op] |>]
-        else [inst]
-    | _ => [inst]
-End
-
-(* GEP: gep(base, 0) → base *)
-Definition ao_opt_gep_def:
-  ao_opt_gep (inst : instruction) =
-    case inst.inst_operands of
-      [bop; goff] =>
-        if lit_eq goff 0w then
-          [inst with <| inst_opcode := ASSIGN; inst_operands := [bop] |>]
         else [inst]
     | _ => [inst]
 End
@@ -661,7 +650,6 @@ Definition ao_peephole_inst_def:
     else if opc = SHL \/ opc = SHR \/ opc = SAR then ao_opt_shift inst
     else if opc = SIGNEXTEND then ao_opt_signextend ra lbl idx inst
     else if opc = Exp then ao_opt_exp inst
-    else if opc = GEP then ao_opt_gep inst
     else if opc = ADD \/ opc = SUB \/ opc = XOR then ao_opt_addsub inst
     else if opc = AND then ao_opt_and inst
     else if opc = MUL \/ opc = Div \/ opc = SDIV \/

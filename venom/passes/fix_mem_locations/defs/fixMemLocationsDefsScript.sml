@@ -1,10 +1,11 @@
 (*
  * Fix Memory Locations Pass — Definitions
  *
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  * Ports vyper/venom/passes/fix_mem_locations.py to HOL4.
  *
  * Replaces hardcoded memory accesses to FREE_VAR_SPACE (offset 0)
- * and FREE_VAR_SPACE2 (offset 32) with pinned allocas + GEP offsets.
+ * and FREE_VAR_SPACE2 (offset 32) with pinned allocas + ADD offsets.
  * Creates two pinned allocas at function entry, then rewrites any
  * mstore/mload/etc targeting those fixed addresses to use alloca pointers.
  *
@@ -69,6 +70,7 @@ End
  *)
 Definition mem_write_offset_idx_def:
   mem_write_offset_idx MSTORE = SOME 0n /\    (* [offset; value] *)
+  mem_write_offset_idx MSTORE8 = SOME 0n /\   (* [offset; value] *)
   mem_write_offset_idx ISTORE = SOME 0n /\    (* [offset; value] *)
   mem_write_offset_idx MCOPY = SOME 0n /\     (* [dst; src; size] *)
   mem_write_offset_idx CALLDATACOPY = SOME 0n /\
@@ -172,9 +174,9 @@ End
 
 (*
  * Try to fix a memory offset operand by replacing a literal address
- * in the FREE_VAR_SPACE range with a GEP from the corresponding alloca.
+ * in the FREE_VAR_SPACE range with an ADD from the corresponding alloca.
  *
- * Returns SOME (gep_inst, new_op) if replacement needed, NONE otherwise.
+ * Returns SOME (add_inst, new_op) if replacement needed, NONE otherwise.
  *)
 Definition fix_offset_op_def:
   fix_offset_op inst_id alloca1 alloca2 op =
@@ -184,14 +186,14 @@ Definition fix_offset_op_def:
         if in_free_var free_var_space offset then
           let gep_v = fml_gep_var inst_id in
           let diff = offset - free_var_space in
-          SOME (<| inst_id := inst_id; inst_opcode := GEP;
+          SOME (<| inst_id := inst_id; inst_opcode := ADD;
                    inst_operands := [Var alloca1; Lit (n2w diff)];
                    inst_outputs := [gep_v] |>,
                 Var gep_v)
         else if in_free_var free_var_space2 offset then
           let gep_v = fml_gep_var inst_id in
           let diff = offset - free_var_space2 in
-          SOME (<| inst_id := inst_id; inst_opcode := GEP;
+          SOME (<| inst_id := inst_id; inst_opcode := ADD;
                    inst_operands := [Var alloca2; Lit (n2w diff)];
                    inst_outputs := [gep_v] |>,
                 Var gep_v)
@@ -201,7 +203,7 @@ End
 
 (*
  * Process a single instruction.
- * Returns a list of instructions: possibly a GEP prefix + the
+ * Returns a list of instructions: possibly an ADD prefix + the
  * (potentially modified) original instruction.
  *
  * Checks both write and read offsets. Write is checked first

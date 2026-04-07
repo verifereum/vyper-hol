@@ -9,7 +9,7 @@
 
 Theory functionInlinerProof
 Ancestors
-  functionInlinerDefs stateEquiv venomExecSemantics
+  functionInlinerDefs stateEquiv venomExecSemantics pointerConfinedDefs
 
 (* Inlining preserves execution semantics.
  * For any fuel where the original context terminates, there exists
@@ -18,10 +18,14 @@ Ancestors
  * Preconditions:
  *   - wf_function for all functions in context
  *   - no recursive calls (acyclic call graph)
+ *   - alloca_pointer_confined (all functions): inlining merges callee alloca
+ *     space into caller, changing alloca layout. Pointer confinement ensures
+ *     this doesn't affect observable output.
  *)
 Theorem function_inliner_correct:
   ∀ctx s fuel threshold.
-    EVERY wf_function ctx.ctx_functions ⇒
+    EVERY wf_function ctx.ctx_functions ∧
+    EVERY alloca_pointer_confined ctx.ctx_functions ⇒
     let ctx' = function_inliner_ctx threshold ctx in
     ∃fuel'.
       result_equiv {}

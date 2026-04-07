@@ -7,6 +7,8 @@
  * subsequent read before the location is overwritten or the
  * function terminates.
  *
+ * Upstream: vyperlang/vyper@8780b3134 (remove alloca_id)
+ *
  * Framework: analysis_inst_simulates + custom lifting.
  * Uses memory SSA analysis (memSSADefs) to identify dead stores.
  *
@@ -277,14 +279,20 @@ Definition dse_equiv_def:
     s1.vs_logs = s2.vs_logs /\
     s1.vs_immutables = s2.vs_immutables /\
     s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_label_offsets = s2.vs_label_offsets /\
+    s1.vs_labels = s2.vs_labels /\
     s1.vs_code = s2.vs_code /\
     s1.vs_params = s2.vs_params /\
     s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_allocas = s2.vs_allocas
+    s1.vs_allocas = s2.vs_allocas /\
+    s1.vs_current_bb = s2.vs_current_bb /\
+    s1.vs_inst_idx = s2.vs_inst_idx
 End
 
 (* After all 3 spaces: memory, transient, and accounts may differ *)
+(* Note: vs_current_bb and vs_inst_idx are excluded — they are internal
+   control-flow fields with no semantic meaning after function completion.
+   vs_memory, vs_transient, vs_accounts are excluded because each space
+   may differ at eliminated store locations. *)
 Definition dse_all_equiv_def:
   dse_all_equiv s1 s2 <=>
     (!v. lookup_var v s1 = lookup_var v s2) /\
@@ -296,7 +304,7 @@ Definition dse_all_equiv_def:
     s1.vs_logs = s2.vs_logs /\
     s1.vs_immutables = s2.vs_immutables /\
     s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_label_offsets = s2.vs_label_offsets /\
+    s1.vs_labels = s2.vs_labels /\
     s1.vs_code = s2.vs_code /\
     s1.vs_params = s2.vs_params /\
     s1.vs_prev_hashes = s2.vs_prev_hashes /\

@@ -866,7 +866,7 @@ Theorem rta_pass_correct_proof:
       lookup_function entry ctx.ctx_functions = SOME fn /\
       lookup_function entry ctx'.ctx_functions = SOME fn' /\
       !s. s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
-          pass_correct fresh
+          pass_correct (state_equiv fresh) (execution_equiv fresh)
             (\fuel. run_function fuel ctx fn s)
             (\fuel. run_function fuel ctx fn' s)
 Proof
@@ -933,7 +933,7 @@ Proof
     metis_tac[]
   ) >>
   (* Now prove pass_correct *)
-  rw[pass_correct_def, result_equiv_is_lift_result]
+  rw[pass_correct_def]
 QED
 
 val _ = export_theory();

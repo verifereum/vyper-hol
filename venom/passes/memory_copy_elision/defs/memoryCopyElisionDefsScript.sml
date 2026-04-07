@@ -143,9 +143,11 @@ Definition copy_fact_invalidate_def:
     else DRESTRICT cfl
       { k | (* Keep if dest doesn't alias the write *)
             ~ma_may_alias aliases k write_loc /\
-            (* For mcopy: also keep if source doesn't alias the write.
-               Non-mcopy copies have source in a different address space
-               (calldataspace etc.), so memory writes can't clobber them. *)
+            (* Source aliasing only matters for MCOPY: its source is in
+               memory, so a memory write could clobber it.  Non-MCOPY
+               copy opcodes (CALLDATACOPY, DLOADBYTES, CODECOPY,
+               RETURNDATACOPY) read from a different address space, so
+               a memory write cannot affect their source — keep entry. *)
             (case FLOOKUP cfl k of
                SOME cf =>
                  if cf.cf_opcode = MCOPY then
@@ -171,7 +173,7 @@ Definition copy_fact_resolve_def:
              its identity, and only fixed-size copies are tracked."
              No explicit size check needed. *)
           let norm_src =
-            normalize_operand dfg {} src_cf.cf_source in
+            normalize_operand dfg [] src_cf.cf_source in
           (src_cf.cf_opcode, norm_src)
       | NONE => (inst_opcode, src)
     else (inst_opcode, src)
@@ -264,7 +266,7 @@ Definition copy_elision_inst_def:
   copy_elision_inst bp dfg (cfl_opt : copy_fact_lattice) inst =
     let cfl = unwrap_copy_facts cfl_opt in
     let equiv = operand_equiv dfg in
-    let norm = normalize_operand dfg {} in
+    let norm = normalize_operand dfg [] in
     if inst.inst_opcode = INVOKE then inst
     else if inst.inst_opcode = MCOPY then
       case inst.inst_operands of
@@ -448,7 +450,7 @@ End
 (* ===== Function-level transform ===== *)
 
 Definition copy_elision_function_def:
-  copy_elision_function prog_ctx fn =
+  copy_elision_function fn =
     let cfg = cfg_analyze fn in
     let dfg = dfg_build_function fn in
     let bp = bp_analyze cfg fn in
